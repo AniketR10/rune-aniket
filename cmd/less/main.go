@@ -32,7 +32,7 @@ func (h ScannerHandler) WriteTo(w io.Writer) (written int64, err error) {
 	return written, nil
 }
 
-func (h ScannerHandler) OnReachedEnd() error {
+func (h ScannerHandler) OnEvent(ev *less.Event) error {
 	return nil
 }
 
