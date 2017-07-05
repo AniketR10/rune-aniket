@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"fmt"
 	"io"
 	"os"
 
@@ -22,17 +23,27 @@ func (h ScannerHandler) WriteTo(w io.Writer) (written int64, err error) {
 	var n int
 	for h.scanner.Scan() {
 		if err = h.scanner.Err(); err != nil {
-			return
+			return written, err
 		}
 		if n, err = w.Write([]byte(h.scanner.Text() + "\n")); err != nil {
 			return
 		}
 		written += int64(n)
 	}
-	return written, nil
+
+	// subsequent calls test
+	if written == 0 {
+		if n, err = w.Write([]byte("no more data\n")); err != nil {
+			return
+		}
+		written += int64(n)
+	}
+
+	return
 }
 
-func (h ScannerHandler) OnEvent(ev *less.Event) error {
+func (h ScannerHandler) OnSearch(l *less.Handle, text string) error {
+	l.Message(fmt.Sprintf("searching for %s..", text))
 	return nil
 }
 

@@ -4,25 +4,28 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"math"
 
 	termbox "github.com/nsf/termbox-go"
 )
 
 type Config struct {
-	tabspaces int
-	fg        termbox.Attribute
-	bg        termbox.Attribute
-	wrap      bool
-	debug     bool
+	tabspaces    int
+	fg           termbox.Attribute
+	bg           termbox.Attribute
+	messageWidth int8 // 0 - 100
+	wrap         bool
+	debug        bool
 	// TODO keyMap *KeyMap
 }
 
 var defaultConfig = Config{
-	tabspaces: 4,
-	fg:        termbox.ColorDefault,
-	bg:        termbox.ColorDefault,
-	wrap:      false,
-	debug:     false,
+	tabspaces:    4,
+	fg:           termbox.ColorDefault,
+	bg:           termbox.ColorDefault,
+	messageWidth: 70,
+	wrap:         false,
+	debug:        false,
 }
 
 type mode uint8
@@ -37,6 +40,7 @@ type Handle struct {
 	mode       mode
 	contentBuf *bytes.Buffer
 	cmdBuf     *bytes.Buffer
+	msgBuf     *bytes.Buffer
 	xcursor    int
 	ycursor    int
 	xoffset    int
@@ -51,15 +55,8 @@ type Handle struct {
 	config     *Config
 }
 
-type Event uint8
-
-const (
-	EOF Event = iota
-	Search
-)
-
 type Handler interface {
-	OnEvent(*Event) error
+	OnSearch(h *Handle, text string) error
 	io.WriterTo
 }
 
@@ -68,6 +65,7 @@ func New(handler Handler, config *Config) *Handle {
 	h.handler = handler
 	h.contentBuf = new(bytes.Buffer)
 	h.cmdBuf = new(bytes.Buffer)
+	h.msgBuf = new(bytes.Buffer)
 
 	if config == nil {
 		h.config = &defaultConfig
@@ -140,11 +138,15 @@ func (h *Handle) draw(data *bytes.Buffer, xoffset, yoffset, xstart, ystart, xwin
 		}
 	}
 
-	if err != io.EOF {
-		return x, y, err
+	if err == io.EOF {
+		// try to pull more content from handler
+		if err = h.pull(); err != nil {
+			return x, y, err
+		}
+		return x, y, nil
 	}
 
-	return x, y, nil
+	return x, y, err
 }
 
 func (h *Handle) setCell(x, y int, r rune) {
@@ -157,13 +159,22 @@ func (h *Handle) redraw() error {
 		return err
 	}
 
+	contentHeight := h.height - 1
+	messageWidth := int(float32(h.width) * float32(h.config.messageWidth) / 100)
+	actualMessageWidth := int(math.Min(float64(messageWidth), float64(h.msgBuf.Len())))
+	cmdBarWidth := h.width - actualMessageWidth
+
 	contentView := bytes.NewBuffer(h.contentBuf.Bytes())
-	if _, _, err = h.draw(contentView, h.xoffset, h.yoffset, 0, 0, h.width, h.height-1); err != nil {
+	if _, _, err = h.draw(contentView, h.xoffset, h.yoffset, 0, 0, h.width, contentHeight); err != nil {
 		return err
 	}
 
 	cmdView := bytes.NewBuffer(h.cmdBuf.Bytes())
-	if _, _, err = h.draw(cmdView, 0, 0, 0, h.height-1, h.width, 1); err != nil {
+	if _, _, err = h.draw(cmdView, 0, 0, 0, contentHeight, cmdBarWidth, 1); err != nil {
+		return err
+	}
+
+	if _, _, err = h.draw(h.msgBuf, 0, 0, cmdBarWidth, contentHeight, actualMessageWidth, 1); err != nil {
 		return err
 	}
 
@@ -265,16 +276,19 @@ func (h *Handle) setSearchMode() {
 // }
 
 // TODO jump from result to result
-func (h *Handle) resultsHandleEvent(ev termbox.Event) bool {
-	return false
+func (h *Handle) resultsHandleEvent(ev termbox.Event) (exit bool, err error) {
+	return false, nil
 }
 
-func (h *Handle) searchHandleEvent(ev termbox.Event) bool {
+func (h *Handle) searchHandleEvent(ev termbox.Event) (exit bool, err error) {
 	switch ev.Key {
 	case termbox.KeyEnter:
 		// TODO search occurrences
 		// TODO queue search event
 		// h.setResultsMode()
+		if err := h.handler.OnSearch(h, string(h.cmdBuf.Bytes()[1:])); err != nil {
+			return true, err
+		}
 		h.setNormalMode()
 	case termbox.KeyEsc:
 		h.setNormalMode()
@@ -282,10 +296,10 @@ func (h *Handle) searchHandleEvent(ev termbox.Event) bool {
 		h.cmdBuf.WriteRune(ev.Ch)
 	}
 
-	return false
+	return false, nil
 }
 
-func (h *Handle) normalHandleEvent(ev termbox.Event) bool {
+func (h *Handle) normalHandleEvent(ev termbox.Event) (exit bool, err error) {
 	switch ev.Type {
 	case termbox.EventResize:
 		// force set cursor
@@ -293,11 +307,11 @@ func (h *Handle) normalHandleEvent(ev termbox.Event) bool {
 	case termbox.EventKey:
 		switch ev.Key {
 		case termbox.KeyEsc:
-			return true
+			return true, nil
 		default:
 			switch ev.Ch {
 			case 'q':
-				return true
+				return true, nil
 			case '0':
 				h.xoffset = 0
 			case '$':
@@ -320,7 +334,12 @@ func (h *Handle) normalHandleEvent(ev termbox.Event) bool {
 		}
 	}
 
-	return false
+	return false, nil
+}
+
+func (h *Handle) Message(text string) {
+	h.msgBuf.Reset()
+	h.msgBuf.Write([]byte(text))
 }
 
 func (h *Handle) Run() error {
@@ -356,11 +375,17 @@ func (h *Handle) Run() error {
 		case termbox.EventKey:
 			switch h.mode {
 			case NormalMode:
-				exit = h.normalHandleEvent(ev)
+				if exit, err = h.normalHandleEvent(ev); err != nil {
+					return err
+				}
 			case SearchMode:
-				exit = h.searchHandleEvent(ev)
+				if exit, err = h.searchHandleEvent(ev); err != nil {
+					return err
+				}
 			case ResultsMode:
-				exit = h.resultsHandleEvent(ev)
+				if exit, err = h.resultsHandleEvent(ev); err != nil {
+					return err
+				}
 			}
 		case termbox.EventMouse:
 		case termbox.EventInterrupt:
@@ -369,8 +394,8 @@ func (h *Handle) Run() error {
 		}
 		h.normalizeOffsets()
 		if h.config.debug {
-			h.cmdBuf.Reset()
-			h.cmdBuf.Write([]byte(fmt.Sprintf("%+v", h)))
+			h.msgBuf.Reset()
+			h.msgBuf.Write([]byte(fmt.Sprintf("%+v", h)))
 		}
 	}
 	return nil
