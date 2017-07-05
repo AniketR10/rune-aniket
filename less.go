@@ -2,6 +2,7 @@ package less
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 
 	termbox "github.com/nsf/termbox-go"
@@ -12,6 +13,7 @@ type Config struct {
 	fg        termbox.Attribute
 	bg        termbox.Attribute
 	wrap      bool
+	debug     bool
 	// TODO keyMap *KeyMap
 }
 
@@ -20,6 +22,7 @@ var defaultConfig = Config{
 	fg:        termbox.ColorDefault,
 	bg:        termbox.ColorDefault,
 	wrap:      false,
+	debug:     false,
 }
 
 type mode uint8
@@ -34,6 +37,8 @@ type Handle struct {
 	mode       mode
 	contentBuf *bytes.Buffer
 	cmdBuf     *bytes.Buffer
+	xcursor    int
+	ycursor    int
 	xoffset    int
 	yoffset    int
 	xmaxoffset int
@@ -63,7 +68,6 @@ func New(handler Handler, config *Config) *Handle {
 	h.handler = handler
 	h.contentBuf = new(bytes.Buffer)
 	h.cmdBuf = new(bytes.Buffer)
-	h.setNormalMode()
 
 	if config == nil {
 		h.config = &defaultConfig
@@ -74,40 +78,65 @@ func New(handler Handler, config *Config) *Handle {
 	return h
 }
 
-func (h *Handle) draw(buf *bytes.Buffer, xi, yi, width, height int) (x, y int, err error) {
+// x/yoffset is the offset from the content
+// x/ystart is the offset in the cell grid
+// x/ywindow is the x and y max cells to write
+func (h *Handle) draw(data *bytes.Buffer, xoffset, yoffset, xstart, ystart, xwindow, ywindow int) (x, y int, err error) {
 	var c rune
-	x = xi
-	y = yi
+	x = xstart
+	y = ystart
 
-	// draw until we've reached window height
-	for y-yi < height {
-		if c, _, err = buf.ReadRune(); err != nil {
+	currxoffset := xoffset
+
+	// draw until we've filled all available cells
+	for y-ystart < ywindow {
+		if c, _, err = data.ReadRune(); err != nil {
 			break
 		}
 
-		// wrap
-		if x-xi == width {
+		// wrap or skip content
+		if x-xstart == xwindow {
 			if h.config.wrap {
 				y++
-				x = 0
-			} else if c == '\n' {
-				y++
-				x = 0
+				x = xstart
 			} else {
+				if c == '\n' {
+					y++
+					x = xstart
+					currxoffset = xoffset
+				}
 				continue
 			}
 		}
 
 		switch c {
 		case '\n':
-			y++
-			x = 0
+			if yoffset > 0 {
+				yoffset--
+			} else {
+				y++
+				x = xstart
+				currxoffset = xoffset
+			}
 		case '\t':
-			h.setCell(x, y, c)
-			x += h.config.tabspaces
+			if yoffset != 0 {
+				continue
+			}
+			if currxoffset <= 0 {
+				x += h.config.tabspaces
+			} else {
+				currxoffset -= h.config.tabspaces
+			}
 		default:
-			h.setCell(x, y, c)
-			x++
+			if yoffset != 0 {
+				continue
+			}
+			if currxoffset <= 0 {
+				h.setCell(x, y, c)
+				x++
+			} else {
+				currxoffset--
+			}
 		}
 	}
 
@@ -116,27 +145,6 @@ func (h *Handle) draw(buf *bytes.Buffer, xi, yi, width, height int) (x, y int, e
 	}
 
 	return x, y, nil
-}
-
-func seekBuffer(buf *bytes.Buffer, yoffset int) error {
-	var err error
-	var c rune
-	for yoffset > 0 {
-		if c, _, err = buf.ReadRune(); err != nil {
-			break
-		}
-
-		switch c {
-		case '\n':
-			yoffset--
-		}
-	}
-
-	if err != io.EOF {
-		return err
-	}
-
-	return nil
 }
 
 func (h *Handle) setCell(x, y int, r rune) {
@@ -149,23 +157,17 @@ func (h *Handle) redraw() error {
 		return err
 	}
 
-	var y int
 	contentView := bytes.NewBuffer(h.contentBuf.Bytes())
-	// FIXME xoffset is not used
-	// maybe this should be done inside draw in the form of some sort of skipping
-	if h.yoffset > 0 {
-		seekBuffer(contentView, h.yoffset)
-	}
-	if _, y, err = h.draw(contentView, 0, 0, h.width, h.height-1); err != nil {
+	if _, _, err = h.draw(contentView, h.xoffset, h.yoffset, 0, 0, h.width, h.height-1); err != nil {
 		return err
 	}
 
 	cmdView := bytes.NewBuffer(h.cmdBuf.Bytes())
-	if _, y, err = h.draw(cmdView, 0, y, h.width, 1); err != nil {
+	if _, _, err = h.draw(cmdView, 0, 0, 0, h.height-1, h.width, 1); err != nil {
 		return err
 	}
 
-	termbox.SetCursor(1, y)
+	termbox.SetCursor(h.xcursor, h.ycursor)
 	termbox.Flush()
 
 	return nil
@@ -196,8 +198,17 @@ func (h *Handle) calculate() error {
 		}
 	}
 
-	h.ymaxoffset = h.rows - h.height
-	h.xmaxoffset = h.columns - h.width
+	if h.rows <= h.height {
+		h.ymaxoffset = 0
+	} else {
+		h.ymaxoffset = h.rows - h.height
+	}
+
+	if h.columns >= h.width {
+		h.xmaxoffset = h.columns - h.width
+	} else {
+		h.xmaxoffset = 0
+	}
 
 	if err != io.EOF {
 		return err
@@ -234,6 +245,8 @@ func (h *Handle) normalizeOffsets() {
 }
 
 func (h *Handle) setNormalMode() {
+	h.xcursor = 1
+	h.ycursor = h.height - 1
 	h.cmdBuf.Reset()
 	h.cmdBuf.WriteRune(':')
 	h.mode = NormalMode
@@ -273,27 +286,37 @@ func (h *Handle) searchHandleEvent(ev termbox.Event) bool {
 }
 
 func (h *Handle) normalHandleEvent(ev termbox.Event) bool {
-	switch ev.Key {
-	case termbox.KeyEsc:
-		return true
-	default:
-		switch ev.Ch {
-		case 'q':
+	switch ev.Type {
+	case termbox.EventResize:
+		// force set cursor
+		h.setNormalMode()
+	case termbox.EventKey:
+		switch ev.Key {
+		case termbox.KeyEsc:
 			return true
-		case 'g':
-			h.yoffset = 0
-		case 'G':
-			h.yoffset = h.ymaxoffset
-		case 'j':
-			h.yoffset++
-		case 'k':
-			h.yoffset--
-		case 'h':
-			h.xoffset--
-		case 'l':
-			h.xoffset++
-		case '/':
-			h.setSearchMode()
+		default:
+			switch ev.Ch {
+			case 'q':
+				return true
+			case '0':
+				h.xoffset = 0
+			case '$':
+				h.xoffset = h.xmaxoffset
+			case 'g':
+				h.yoffset = 0
+			case 'G':
+				h.yoffset = h.ymaxoffset
+			case 'j':
+				h.yoffset++
+			case 'k':
+				h.yoffset--
+			case 'h':
+				h.xoffset--
+			case 'l':
+				h.xoffset++
+			case '/':
+				h.setSearchMode()
+			}
 		}
 	}
 
@@ -310,33 +333,45 @@ func (h *Handle) Run() error {
 
 	h.width, h.height = termbox.Size()
 
+	h.setNormalMode()
+
 	if err = h.pull(); err != nil {
 		return err
 	}
 
-	for shouldBreak := false; !shouldBreak; {
+	// main loop
+	for exit := false; !exit; {
 		if err = h.redraw(); err != nil {
 			return err
 		}
 
-		switch ev := termbox.PollEvent(); ev.Type {
+		ev := termbox.PollEvent()
+		switch ev.Type {
+		case termbox.EventError:
+			return ev.Err
 		case termbox.EventResize:
 			h.width, h.height = ev.Width, ev.Height
 			h.calculate()
+			fallthrough
 		case termbox.EventKey:
 			switch h.mode {
 			case NormalMode:
-				shouldBreak = h.normalHandleEvent(ev)
+				exit = h.normalHandleEvent(ev)
 			case SearchMode:
-				shouldBreak = h.searchHandleEvent(ev)
+				exit = h.searchHandleEvent(ev)
 			case ResultsMode:
-				shouldBreak = h.resultsHandleEvent(ev)
+				exit = h.resultsHandleEvent(ev)
 			}
-		case termbox.EventError:
-			return ev.Err
+		case termbox.EventMouse:
+		case termbox.EventInterrupt:
+		case termbox.EventRaw:
+		case termbox.EventNone:
 		}
-
 		h.normalizeOffsets()
+		if h.config.debug {
+			h.cmdBuf.Reset()
+			h.cmdBuf.Write([]byte(fmt.Sprintf("%+v", h)))
+		}
 	}
 	return nil
 }
