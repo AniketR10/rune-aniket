@@ -5,27 +5,34 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"strings"
 
 	termbox "github.com/nsf/termbox-go"
 )
 
+const bugMessage = "this is most likely a bug in the library. Please file bug at https://github.com/ernestrc/less/issues"
+
 type Config struct {
-	tabspaces    int
-	fg           termbox.Attribute
-	bg           termbox.Attribute
-	messageWidth int8 // 0 - 100
-	wrap         bool
-	debug        bool
+	tabspaces int
+	fg        termbox.Attribute
+	bg        termbox.Attribute
+	msgwidth  int8 // 0 - 100
+	wrap      bool
+	debug     bool
+	resfg     termbox.Attribute
+	resbg     termbox.Attribute
 	// TODO keyMap *KeyMap
 }
 
 var defaultConfig = Config{
-	tabspaces:    4,
-	fg:           termbox.ColorDefault,
-	bg:           termbox.ColorDefault,
-	messageWidth: 70,
-	wrap:         false,
-	debug:        false,
+	tabspaces: 4,
+	fg:        termbox.ColorDefault,
+	bg:        termbox.ColorDefault,
+	msgwidth:  70,
+	wrap:      false,
+	debug:     false,
+	resfg:     termbox.ColorDefault | termbox.AttrUnderline,
+	resbg:     termbox.ColorDefault,
 }
 
 type mode uint8
@@ -33,14 +40,19 @@ type mode uint8
 const (
 	NormalMode mode = iota
 	SearchMode
-	ResultsMode
 )
+
+type setting struct {
+	fg termbox.Attribute
+	bg termbox.Attribute
+}
 
 type Handle struct {
 	mode       mode
 	contentBuf *bytes.Buffer
 	cmdBuf     *bytes.Buffer
 	msgBuf     *bytes.Buffer
+	palette    map[int]setting
 	xcursor    int
 	ycursor    int
 	xoffset    int
@@ -73,6 +85,8 @@ func New(handler Handler, config *Config) *Handle {
 		h.config = config
 	}
 
+	h.palette = map[int]setting{}
+
 	return h
 }
 
@@ -87,7 +101,7 @@ func (h *Handle) draw(data *bytes.Buffer, xoffset, yoffset, xstart, ystart, xwin
 	currxoffset := xoffset
 
 	// draw until we've filled all available cells
-	for y-ystart < ywindow {
+	for i := 0; y-ystart < ywindow; i++ {
 		if c, _, err = data.ReadRune(); err != nil {
 			break
 		}
@@ -130,7 +144,7 @@ func (h *Handle) draw(data *bytes.Buffer, xoffset, yoffset, xstart, ystart, xwin
 				continue
 			}
 			if currxoffset <= 0 {
-				h.setCell(x, y, c)
+				h.setCell(x, y, i, c)
 				x++
 			} else {
 				currxoffset--
@@ -149,8 +163,9 @@ func (h *Handle) draw(data *bytes.Buffer, xoffset, yoffset, xstart, ystart, xwin
 	return x, y, err
 }
 
-func (h *Handle) setCell(x, y int, r rune) {
-	termbox.SetCell(x, y, r, h.config.fg, h.config.bg)
+func (h *Handle) setCell(x, y, i int, r rune) {
+	set := h.palette[i]
+	termbox.SetCell(x, y, r, set.fg, set.bg)
 }
 
 func (h *Handle) redraw() error {
@@ -160,9 +175,9 @@ func (h *Handle) redraw() error {
 	}
 
 	contentHeight := h.height - 1
-	messageWidth := int(float32(h.width) * float32(h.config.messageWidth) / 100)
-	actualMessageWidth := int(math.Min(float64(messageWidth), float64(h.msgBuf.Len())))
-	cmdBarWidth := h.width - actualMessageWidth
+	msgWindowWidth := int(float32(h.width) * float32(h.config.msgwidth) / 100)
+	msgwidth := int(math.Min(float64(msgWindowWidth), float64(h.msgBuf.Len())))
+	cmdBarWidth := h.width - msgwidth
 
 	contentView := bytes.NewBuffer(h.contentBuf.Bytes())
 	if _, _, err = h.draw(contentView, h.xoffset, h.yoffset, 0, 0, h.width, contentHeight); err != nil {
@@ -174,7 +189,7 @@ func (h *Handle) redraw() error {
 		return err
 	}
 
-	if _, _, err = h.draw(h.msgBuf, 0, 0, cmdBarWidth, contentHeight, actualMessageWidth, 1); err != nil {
+	if _, _, err = h.draw(h.msgBuf, 0, 0, cmdBarWidth, contentHeight, msgwidth, 1); err != nil {
 		return err
 	}
 
@@ -184,7 +199,7 @@ func (h *Handle) redraw() error {
 	return nil
 }
 
-func (h *Handle) calculate() error {
+func (h *Handle) calculateBounds() error {
 	var err error
 	var c rune
 	var currX int
@@ -234,8 +249,8 @@ func (h *Handle) pull() error {
 		return err
 	}
 
-	// scan buffer to calculate rows and columns and bounds
-	if err = h.calculate(); err != nil {
+	// scan buffer to calcuate rows and columns and bounds
+	if err = h.calculateBounds(); err != nil {
 		return err
 	}
 
@@ -255,9 +270,13 @@ func (h *Handle) normalizeOffsets() {
 	}
 }
 
-func (h *Handle) setNormalMode() {
+func (h *Handle) resetCursor() {
 	h.xcursor = 1
 	h.ycursor = h.height - 1
+}
+
+func (h *Handle) setNormalMode() {
+	h.resetCursor()
 	h.cmdBuf.Reset()
 	h.cmdBuf.WriteRune(':')
 	h.mode = NormalMode
@@ -269,30 +288,61 @@ func (h *Handle) setSearchMode() {
 	h.mode = SearchMode
 }
 
-// func (h *Handle) setResultsMode() {
-// 	h.cmdBuf.Reset()
-// 	h.cmdBuf.WriteRune('occurrences')
-// 	h.mode = ResultsMode
-// }
+// TODO add results to list so we can navigate them
+func (h *Handle) searchText(text string) error {
 
-// TODO jump from result to result
-func (h *Handle) resultsHandleEvent(ev termbox.Event) (exit bool, err error) {
-	return false, nil
+	if text == "" {
+		return nil
+	}
+
+	view := string(h.contentBuf.Bytes())
+	tlen := len(text)
+
+	a := 0
+	var i int
+	for {
+		if i = strings.Index(view, text); i == -1 {
+			break
+		}
+
+		// use anchor to translate index to original slice
+		a += i
+
+		for j, last := a, a+tlen; j < last; j++ {
+			h.palette[j] = setting{fg: h.config.resfg, bg: h.config.resbg}
+		}
+
+		view = view[i+tlen:]
+
+		// set next anchor
+		a += tlen
+	}
+
+	return nil
+}
+
+func (h *Handle) resetPalette() {
+	h.palette = map[int]setting{}
 }
 
 func (h *Handle) searchHandleEvent(ev termbox.Event) (exit bool, err error) {
 	switch ev.Key {
 	case termbox.KeyEnter:
-		// TODO search occurrences
-		// TODO queue search event
-		// h.setResultsMode()
-		if err := h.handler.OnSearch(h, string(h.cmdBuf.Bytes()[1:])); err != nil {
+		h.resetPalette()
+
+		text := string(h.cmdBuf.Bytes()[1:])
+
+		if err = h.handler.OnSearch(h, text); err != nil {
+			return true, err
+		}
+		if err = h.searchText(text); err != nil {
 			return true, err
 		}
 		h.setNormalMode()
 	case termbox.KeyEsc:
 		h.setNormalMode()
 	default:
+		h.xcursor++
 		h.cmdBuf.WriteRune(ev.Ch)
 	}
 
@@ -302,8 +352,7 @@ func (h *Handle) searchHandleEvent(ev termbox.Event) (exit bool, err error) {
 func (h *Handle) normalHandleEvent(ev termbox.Event) (exit bool, err error) {
 	switch ev.Type {
 	case termbox.EventResize:
-		// force set cursor
-		h.setNormalMode()
+		h.resetCursor()
 	case termbox.EventKey:
 		switch ev.Key {
 		case termbox.KeyEsc:
@@ -337,9 +386,9 @@ func (h *Handle) normalHandleEvent(ev termbox.Event) (exit bool, err error) {
 	return false, nil
 }
 
-func (h *Handle) Message(text string) {
+func (h *Handle) Message(text string, args ...interface{}) {
 	h.msgBuf.Reset()
-	h.msgBuf.Write([]byte(text))
+	h.msgBuf.Write([]byte(fmt.Sprintf(text, args...)))
 }
 
 func (h *Handle) Run() error {
@@ -370,7 +419,7 @@ func (h *Handle) Run() error {
 			return ev.Err
 		case termbox.EventResize:
 			h.width, h.height = ev.Width, ev.Height
-			h.calculate()
+			h.calculateBounds()
 			fallthrough
 		case termbox.EventKey:
 			switch h.mode {
@@ -380,10 +429,6 @@ func (h *Handle) Run() error {
 				}
 			case SearchMode:
 				if exit, err = h.searchHandleEvent(ev); err != nil {
-					return err
-				}
-			case ResultsMode:
-				if exit, err = h.resultsHandleEvent(ev); err != nil {
 					return err
 				}
 			}

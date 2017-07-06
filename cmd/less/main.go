@@ -2,7 +2,6 @@ package main
 
 import (
 	"bufio"
-	"fmt"
 	"io"
 	"os"
 
@@ -43,7 +42,7 @@ func (h ScannerHandler) WriteTo(w io.Writer) (written int64, err error) {
 }
 
 func (h ScannerHandler) OnSearch(l *less.Handle, text string) error {
-	l.Message(fmt.Sprintf("searching for %s..", text))
+	l.Message("searching for %s..", text)
 	return nil
 }
 
