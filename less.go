@@ -2,6 +2,7 @@ package less
 
 import (
 	"bytes"
+	"container/list"
 	"fmt"
 	"io"
 	"math"
@@ -31,7 +32,7 @@ var defaultConfig = Config{
 	msgwidth:  70,
 	wrap:      false,
 	debug:     false,
-	resfg:     termbox.ColorDefault | termbox.AttrUnderline,
+	resfg:     termbox.AttrReverse,
 	resbg:     termbox.ColorDefault,
 }
 
@@ -42,7 +43,9 @@ const (
 	SearchMode
 )
 
-type setting struct {
+type cell struct {
+	x  int
+	y  int
 	fg termbox.Attribute
 	bg termbox.Attribute
 }
@@ -52,7 +55,9 @@ type Handle struct {
 	contentBuf *bytes.Buffer
 	cmdBuf     *bytes.Buffer
 	msgBuf     *bytes.Buffer
-	palette    map[int]setting
+	reslist    *list.List
+	result     *list.Element
+	cells      map[int]cell
 	xcursor    int
 	ycursor    int
 	xoffset    int
@@ -78,14 +83,14 @@ func New(handler Handler, config *Config) *Handle {
 	h.contentBuf = new(bytes.Buffer)
 	h.cmdBuf = new(bytes.Buffer)
 	h.msgBuf = new(bytes.Buffer)
+	h.reslist = new(list.List)
+	h.cells = make(map[int]cell)
 
 	if config == nil {
 		h.config = &defaultConfig
 	} else {
 		h.config = config
 	}
-
-	h.palette = map[int]setting{}
 
 	return h
 }
@@ -164,7 +169,7 @@ func (h *Handle) draw(data *bytes.Buffer, xoffset, yoffset, xstart, ystart, xwin
 }
 
 func (h *Handle) setCell(x, y, i int, r rune) {
-	set := h.palette[i]
+	set := h.cells[i]
 	termbox.SetCell(x, y, r, set.fg, set.bg)
 }
 
@@ -205,7 +210,7 @@ func (h *Handle) calculateBounds() error {
 	var currX int
 	h.columns, h.rows = 0, 0
 	view := bytes.NewBuffer(h.contentBuf.Bytes())
-	for {
+	for i := 0; ; i++ {
 		if c, _, err = view.ReadRune(); err != nil {
 			break
 		}
@@ -222,6 +227,10 @@ func (h *Handle) calculateBounds() error {
 		default:
 			currX++
 		}
+
+		// collect x, y coordinates
+		prev := h.cells[i]
+		h.cells[i] = cell{fg: prev.fg, bg: prev.bg, x: currX, y: h.rows}
 	}
 
 	if h.rows <= h.height {
@@ -289,10 +298,12 @@ func (h *Handle) setSearchMode() {
 }
 
 // TODO add results to list so we can navigate them
-func (h *Handle) searchText(text string) error {
+func (h *Handle) searchText(text string) (cells map[int]cell, reslist *list.List, err error) {
+	reslist = h.reslist.Init()
+	cells = map[int]cell{}
 
 	if text == "" {
-		return nil
+		return
 	}
 
 	view := string(h.contentBuf.Bytes())
@@ -309,8 +320,17 @@ func (h *Handle) searchText(text string) error {
 		a += i
 
 		for j, last := a, a+tlen; j < last; j++ {
-			h.palette[j] = setting{fg: h.config.resfg, bg: h.config.resbg}
+			cells[j] = cell{
+				fg: h.config.resfg,
+				bg: h.config.resbg,
+				// use previous cells map to get x,y coordinates
+				x: h.cells[j].x,
+				y: h.cells[j].y,
+			}
 		}
+
+		// mark first cell as result index
+		reslist.PushBack(cells[a])
 
 		view = view[i+tlen:]
 
@@ -318,27 +338,22 @@ func (h *Handle) searchText(text string) error {
 		a += tlen
 	}
 
-	return nil
-}
-
-func (h *Handle) resetPalette() {
-	h.palette = map[int]setting{}
+	return
 }
 
 func (h *Handle) searchHandleEvent(ev termbox.Event) (exit bool, err error) {
 	switch ev.Key {
 	case termbox.KeyEnter:
-		h.resetPalette()
-
 		text := string(h.cmdBuf.Bytes()[1:])
 
 		if err = h.handler.OnSearch(h, text); err != nil {
 			return true, err
 		}
-		if err = h.searchText(text); err != nil {
+		if h.cells, h.reslist, err = h.searchText(text); err != nil {
 			return true, err
 		}
 		h.setNormalMode()
+		h.moveNextResult()
 	case termbox.KeyEsc:
 		h.setNormalMode()
 	default:
@@ -347,6 +362,40 @@ func (h *Handle) searchHandleEvent(ev termbox.Event) (exit bool, err error) {
 	}
 
 	return false, nil
+}
+
+func (h *Handle) movePrevResult() {
+	if h.result == nil {
+		h.result = h.reslist.Back()
+	} else {
+		h.result = h.result.Prev()
+	}
+
+	if h.result == nil {
+		h.Message("pattern not found")
+		return
+	}
+	h.setResultOffsets()
+}
+
+func (h *Handle) moveNextResult() {
+	if h.result == nil {
+		h.result = h.reslist.Front()
+	} else {
+		h.result = h.result.Next()
+	}
+
+	if h.result == nil {
+		h.Message("pattern not found")
+		return
+	}
+	h.setResultOffsets()
+}
+
+func (h *Handle) setResultOffsets() {
+	c := h.result.Value.(cell)
+	// go to result line
+	h.yoffset = c.y
 }
 
 func (h *Handle) normalHandleEvent(ev termbox.Event) (exit bool, err error) {
@@ -363,6 +412,10 @@ func (h *Handle) normalHandleEvent(ev termbox.Event) (exit bool, err error) {
 				return true, nil
 			case '0':
 				h.xoffset = 0
+			case 'N':
+				h.movePrevResult()
+			case 'n':
+				h.moveNextResult()
 			case '$':
 				h.xoffset = h.xmaxoffset
 			case 'g':
