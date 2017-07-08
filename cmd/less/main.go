@@ -47,7 +47,21 @@ func (h ScannerHandler) OnSearch(l *less.Handle, text string) error {
 }
 
 func main() {
-	handler := NewHandler(os.Stdin)
+
+	var input io.Reader
+	var err error
+
+	if len(os.Args) > 1 {
+		filename := os.Args[1]
+		if input, err = os.Open(filename); err != nil {
+			panic(err)
+		}
+	} else {
+		input = os.Stdin
+	}
+
+	handler := NewHandler(input)
+
 	handle := less.New(handler, nil)
 
 	if err := handle.Run(); err != nil {
