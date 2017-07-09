@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"io"
 	"os"
 
@@ -30,20 +31,7 @@ func (h ScannerHandler) WriteTo(w io.Writer) (written int64, err error) {
 		written += int64(n)
 	}
 
-	// subsequent calls test
-	if written == 0 {
-		if n, err = w.Write([]byte("no more data\n")); err != nil {
-			return
-		}
-		written += int64(n)
-	}
-
 	return
-}
-
-func (h ScannerHandler) OnSearch(l *less.Handle, text string) error {
-	l.Message("searching for %s..", text)
-	return nil
 }
 
 func main() {
@@ -61,10 +49,31 @@ func main() {
 	}
 
 	handler := NewHandler(input)
-
-	handle := less.New(handler, nil)
-
-	if err := handle.Run(); err != nil {
+	initContent := new(bytes.Buffer)
+	if _, err = handler.WriteTo(initContent); err != nil {
 		panic(err)
+	}
+
+	if err = less.Init(nil, initContent); err != nil {
+		panic(err)
+	}
+
+	defer less.Close()
+
+	var i int
+	for {
+		ev := less.PollEvent()
+
+		switch ev.Type {
+		case less.EOF:
+			i++
+			less.Message("dispatched EOF n %d", i)
+		case less.Search:
+			less.Message("dispatched search: %s..", ev.Data)
+		case less.Error:
+			panic(ev.Err)
+		case less.Exit:
+			return
+		}
 	}
 }

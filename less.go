@@ -6,34 +6,38 @@ import (
 	"fmt"
 	"io"
 	"math"
-	"strings"
 
 	termbox "github.com/nsf/termbox-go"
 )
 
-const bugMessage = "this is most likely a bug in the library. Please file bug at https://github.com/ernestrc/less/issues"
-
 type mode uint8
 
 const (
-	NormalMode mode = iota
-	SearchMode
+	normalMode mode = iota
+	searchMode
 )
 
 type cell struct {
+	i  int
 	x  int
 	y  int
 	fg termbox.Attribute
 	bg termbox.Attribute
 }
 
-type Handle struct {
+type handle struct {
 	mode       mode
 	contentBuf *bytes.Buffer
 	cmdBuf     *bytes.Buffer
 	msgBuf     *bytes.Buffer
-	reslist    *list.List
-	result     *list.Element
+	reslist    *list.List    // search result list
+	result     *list.Element // current focused result
+	search     []byte
+	evBuf      *list.List
+	evChan     chan Event
+	contChan   chan []byte
+	msgChan    chan []byte
+	delEOF     bool
 	cells      map[int]cell
 	xcursor    int
 	ycursor    int
@@ -45,37 +49,48 @@ type Handle struct {
 	width      int
 	columns    int
 	rows       int
-	handler    Handler
 	config     *Config
 }
 
-type Handler interface {
-	OnSearch(h *Handle, text string) error
-	io.WriterTo
+// EventType represents a less event
+type EventType uint8
+
+const (
+	// EOF is dispatched when user has reached end of buffer
+	EOF EventType = iota
+	// Search is dispatched when user has performed a text search
+	// `Data` field in `Event` struct will be set to the search text
+	Search
+	// Error is dispatched when there was an error
+	// `Err` field in `Event` struct will be set to the error that triggered event
+	Error
+	// Exit is dispatched when user wants to exit
+	Exit
+)
+
+// Event type represents a less event.
+type Event struct {
+	Type EventType
+	Data []byte
+	Err  error
 }
 
-func New(handler Handler, config *Config) *Handle {
-	h := new(Handle)
-	h.handler = handler
-	h.contentBuf = new(bytes.Buffer)
-	h.cmdBuf = new(bytes.Buffer)
-	h.msgBuf = new(bytes.Buffer)
-	h.reslist = new(list.List)
-	h.cells = make(map[int]cell)
+var (
+	h *handle
+)
 
-	if config == nil {
-		h.config = &defaultConfig
-	} else {
-		h.config = config
-	}
+func queueEvent(ev Event) {
+	h.evChan <- ev
+}
 
-	return h
+func sendError(err error) {
+	queueEvent(Event{Type: Error, Data: nil, Err: err})
 }
 
 // x/yoffset is the offset from the content
 // x/ystart is the offset in the cell grid
 // x/ywindow is the x and y max cells to write
-func (h *Handle) draw(data *bytes.Buffer, xoffset, yoffset, xstart, ystart, xwindow, ywindow int) (x, y int, err error) {
+func draw(data *bytes.Buffer, xoffset, yoffset, xstart, ystart, xwindow, ywindow int) (x, y int, err error) {
 	var c rune
 	x = xstart
 	y = ystart
@@ -126,7 +141,7 @@ func (h *Handle) draw(data *bytes.Buffer, xoffset, yoffset, xstart, ystart, xwin
 				continue
 			}
 			if currxoffset <= 0 {
-				h.setCell(x, y, i, c)
+				setCell(x, y, i, c)
 				x++
 			} else {
 				currxoffset--
@@ -134,44 +149,43 @@ func (h *Handle) draw(data *bytes.Buffer, xoffset, yoffset, xstart, ystart, xwin
 		}
 	}
 
-	if err == io.EOF {
-		// try to pull more content from handler
-		if err = h.pull(); err != nil {
-			return x, y, err
-		}
-		return x, y, nil
-	}
-
 	return x, y, err
 }
 
-func (h *Handle) setCell(x, y, i int, r rune) {
+func setCell(x, y, i int, r rune) {
 	set := h.cells[i]
 	termbox.SetCell(x, y, r, set.fg, set.bg)
 }
 
-func (h *Handle) redraw() error {
+func redraw() error {
 	var err error
 	if err = termbox.Clear(h.config.bg, h.config.bg); err != nil {
 		return err
 	}
 
-	contentHeight := h.height - 1
+	contentHeight := h.height - h.config.cmdBarHeight
 	msgWindowWidth := int(float32(h.width) * float32(h.config.msgwidth) / 100)
 	msgwidth := int(math.Min(float64(msgWindowWidth), float64(h.msgBuf.Len())))
 	cmdBarWidth := h.width - msgwidth
 
 	contentView := bytes.NewBuffer(h.contentBuf.Bytes())
-	if _, _, err = h.draw(contentView, h.xoffset, h.yoffset, 0, 0, h.width, contentHeight); err != nil {
-		return err
+	if _, _, err = draw(contentView, h.xoffset, h.yoffset, 0, 0, h.width, contentHeight); err != nil {
+		if err != io.EOF {
+			return err
+		}
+
+		if !h.delEOF {
+			h.delEOF = true
+			queueEvent(Event{Type: EOF})
+		}
 	}
 
 	cmdView := bytes.NewBuffer(h.cmdBuf.Bytes())
-	if _, _, err = h.draw(cmdView, 0, 0, 0, contentHeight, cmdBarWidth, 1); err != nil {
+	if _, _, err = draw(cmdView, 0, 0, 0, contentHeight, cmdBarWidth, 1); err != nil && err != io.EOF {
 		return err
 	}
 
-	if _, _, err = h.draw(h.msgBuf, 0, 0, cmdBarWidth, contentHeight, msgwidth, 1); err != nil {
+	if _, _, err = draw(h.msgBuf, 0, 0, cmdBarWidth, contentHeight, msgwidth, 1); err != nil && err != io.EOF {
 		return err
 	}
 
@@ -181,7 +195,7 @@ func (h *Handle) redraw() error {
 	return nil
 }
 
-func (h *Handle) calculateBounds() error {
+func calculateBounds() error {
 	var err error
 	var c rune
 	var currX int
@@ -207,13 +221,13 @@ func (h *Handle) calculateBounds() error {
 
 		// collect x, y coordinates
 		prev := h.cells[i]
-		h.cells[i] = cell{fg: prev.fg, bg: prev.bg, x: currX, y: h.rows}
+		h.cells[i] = cell{fg: prev.fg, bg: prev.bg, x: currX, y: h.rows, i: i}
 	}
 
 	if h.rows <= h.height {
 		h.ymaxoffset = 0
 	} else {
-		h.ymaxoffset = h.rows - h.height
+		h.ymaxoffset = h.rows - h.height + h.config.cmdBarHeight
 	}
 
 	if h.columns >= h.width {
@@ -229,21 +243,7 @@ func (h *Handle) calculateBounds() error {
 	return nil
 }
 
-func (h *Handle) pull() error {
-	var err error
-	if _, err = h.handler.WriteTo(h.contentBuf); err != nil {
-		return err
-	}
-
-	// scan buffer to calcuate rows and columns and bounds
-	if err = h.calculateBounds(); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (h *Handle) normalizeOffsets() {
+func normalizeOffsets() {
 	if h.xoffset < 0 {
 		h.xoffset = 0
 	} else if h.xoffset > h.xmaxoffset {
@@ -256,40 +256,54 @@ func (h *Handle) normalizeOffsets() {
 	}
 }
 
-func (h *Handle) resetCursor() {
+func resetCursor() {
 	h.xcursor = 1
 	h.ycursor = h.height - 1
 }
 
-func (h *Handle) setNormalMode() {
-	h.resetCursor()
+func setNormalMode() {
+	resetCursor()
 	h.cmdBuf.Reset()
 	h.cmdBuf.WriteRune(':')
-	h.mode = NormalMode
+	h.mode = normalMode
 }
 
-func (h *Handle) setSearchMode() {
+func setSearchMode() {
 	h.cmdBuf.Reset()
 	h.cmdBuf.WriteRune('/')
-	h.mode = SearchMode
+	h.mode = searchMode
 }
 
-// TODO add results to list so we can navigate them
-func (h *Handle) searchText(text string) (cells map[int]cell, reslist *list.List, err error) {
-	reslist = h.reslist.Init()
-	cells = map[int]cell{}
+func search(data []byte) {
+	// reset result cells bg/fg
+	for el := h.reslist.Front(); el != nil; el = el.Next() {
+		c := el.Value.(cell)
+		for i, slen := c.i, c.i+len(h.search); i < slen; i++ {
+			h.cells[i] = cell{
+				bg: h.config.bg,
+				fg: h.config.fg,
+				x:  h.cells[i].x,
+				y:  h.cells[i].y,
+				i:  i,
+			}
+		}
+	}
 
-	if text == "" {
+	h.reslist = h.reslist.Init()
+	h.result = nil
+	h.search = data
+
+	tlen := len(data)
+	if tlen == 0 {
 		return
 	}
 
-	view := string(h.contentBuf.Bytes())
-	tlen := len(text)
+	view := h.contentBuf.Bytes()
 
 	a := 0
 	var i int
 	for {
-		if i = strings.Index(view, text); i == -1 {
+		if i = bytes.Index(view, data); i == -1 {
 			break
 		}
 
@@ -297,17 +311,18 @@ func (h *Handle) searchText(text string) (cells map[int]cell, reslist *list.List
 		a += i
 
 		for j, last := a, a+tlen; j < last; j++ {
-			cells[j] = cell{
+			h.cells[j] = cell{
 				fg: h.config.resfg,
 				bg: h.config.resbg,
 				// use previous cells map to get x,y coordinates
 				x: h.cells[j].x,
 				y: h.cells[j].y,
+				i: j,
 			}
 		}
 
 		// mark first cell as result index
-		reslist.PushBack(cells[a])
+		h.reslist.PushBack(h.cells[a])
 
 		view = view[i+tlen:]
 
@@ -318,30 +333,30 @@ func (h *Handle) searchText(text string) (cells map[int]cell, reslist *list.List
 	return
 }
 
-func (h *Handle) searchHandleEvent(ev termbox.Event) (exit bool, err error) {
+func searchHandleEvent(ev termbox.Event) (exit bool, err error) {
 	switch ev.Key {
-	case termbox.KeyEnter:
-		text := string(h.cmdBuf.Bytes()[1:])
 
-		if err = h.handler.OnSearch(h, text); err != nil {
-			return true, err
-		}
-		if h.cells, h.reslist, err = h.searchText(text); err != nil {
-			return true, err
-		}
-		h.setNormalMode()
-		h.moveNextResult()
+	case termbox.KeyEnter:
+		data := h.cmdBuf.Bytes()[1:]
+		search(data)
+		setNormalMode()
+		moveNextResult()
+		queueEvent(Event{Type: Search, Data: data})
+
 	case termbox.KeyEsc:
-		h.setNormalMode()
+		setNormalMode()
+
 	default:
 		h.xcursor++
-		h.cmdBuf.WriteRune(ev.Ch)
+		if _, err = h.cmdBuf.WriteRune(ev.Ch); err != nil {
+			return
+		}
 	}
 
 	return false, nil
 }
 
-func (h *Handle) movePrevResult() {
+func movePrevResult() {
 	if h.result == nil {
 		h.result = h.reslist.Back()
 	} else {
@@ -349,13 +364,13 @@ func (h *Handle) movePrevResult() {
 	}
 
 	if h.result == nil {
-		h.Message("pattern not found")
+		setMessage([]byte("pattern not found"))
 		return
 	}
-	h.setResultOffsets()
+	setResultOffsets()
 }
 
-func (h *Handle) moveNextResult() {
+func moveNextResult() {
 	if h.result == nil {
 		h.result = h.reslist.Front()
 	} else {
@@ -363,22 +378,22 @@ func (h *Handle) moveNextResult() {
 	}
 
 	if h.result == nil {
-		h.Message("pattern not found")
+		setMessage([]byte("pattern not found"))
 		return
 	}
-	h.setResultOffsets()
+	setResultOffsets()
 }
 
-func (h *Handle) setResultOffsets() {
+func setResultOffsets() {
 	c := h.result.Value.(cell)
 	// go to result line
 	h.yoffset = c.y
 }
 
-func (h *Handle) normalHandleEvent(ev termbox.Event) (exit bool, err error) {
+func normalHandleEvent(ev termbox.Event) (exit bool, err error) {
 	switch ev.Type {
 	case termbox.EventResize:
-		h.resetCursor()
+		resetCursor()
 	case termbox.EventKey:
 		switch ev.Key {
 		case termbox.KeyEsc:
@@ -390,9 +405,9 @@ func (h *Handle) normalHandleEvent(ev termbox.Event) (exit bool, err error) {
 			case '0':
 				h.xoffset = 0
 			case 'N':
-				h.movePrevResult()
+				movePrevResult()
 			case 'n':
-				h.moveNextResult()
+				moveNextResult()
 			case '$':
 				h.xoffset = h.xmaxoffset
 			case 'g':
@@ -408,7 +423,7 @@ func (h *Handle) normalHandleEvent(ev termbox.Event) (exit bool, err error) {
 			case 'l':
 				h.xoffset++
 			case '/':
-				h.setSearchMode()
+				setSearchMode()
 			}
 		}
 	}
@@ -416,62 +431,161 @@ func (h *Handle) normalHandleEvent(ev termbox.Event) (exit bool, err error) {
 	return false, nil
 }
 
-func (h *Handle) Message(text string, args ...interface{}) {
+func setMessage(data []byte) {
 	h.msgBuf.Reset()
-	h.msgBuf.Write([]byte(fmt.Sprintf(text, args...)))
+	if _, err := h.msgBuf.Write(data); err != nil {
+		sendError(err)
+	}
 }
 
-func (h *Handle) Run() error {
-	var err error
-	if err = termbox.Init(); err != nil {
-		return err
+func setContent(data []byte) {
+	h.contentBuf.Reset()
+	h.delEOF = false
+
+	if _, err := h.contentBuf.Write(data); err != nil {
+		sendError(err)
+		return
 	}
 
-	defer termbox.Close()
+	// scan buffer to calcuate rows and columns and bounds
+	if err := calculateBounds(); err != nil {
+		sendError(err)
+		return
+	}
+
+	return
+}
+
+func run() {
+	var err error
+	var exit bool
+
+	if err = termbox.Init(); err != nil {
+		sendError(err)
+		return
+	}
 
 	h.width, h.height = termbox.Size()
 
-	h.setNormalMode()
+	setNormalMode()
 
-	if err = h.pull(); err != nil {
-		return err
+	if err = calculateBounds(); err != nil {
+		sendError(err)
+		return
 	}
 
-	// main loop
-	for exit := false; !exit; {
-		if err = h.redraw(); err != nil {
-			return err
+	termChan := make(chan termbox.Event)
+
+	go func() {
+		for {
+			termChan <- termbox.PollEvent()
+		}
+	}()
+
+receive:
+	for !exit {
+		if err = redraw(); err != nil {
+			break receive
 		}
 
-		ev := termbox.PollEvent()
-		switch ev.Type {
-		case termbox.EventError:
-			return ev.Err
-		case termbox.EventResize:
-			h.width, h.height = ev.Width, ev.Height
-			h.calculateBounds()
-			fallthrough
-		case termbox.EventKey:
-			switch h.mode {
-			case NormalMode:
-				if exit, err = h.normalHandleEvent(ev); err != nil {
-					return err
+		select {
+		case data := <-h.contChan:
+			setContent(data)
+		case data := <-h.msgChan:
+			setMessage(data)
+		case ev := <-termChan:
+			switch ev.Type {
+			case termbox.EventError:
+				err = ev.Err
+				break receive
+			case termbox.EventResize:
+				h.width, h.height = ev.Width, ev.Height
+				calculateBounds()
+				fallthrough
+			case termbox.EventKey:
+				switch h.mode {
+				case normalMode:
+					if exit, err = normalHandleEvent(ev); err != nil {
+						break receive
+					}
+				case searchMode:
+					if exit, err = searchHandleEvent(ev); err != nil {
+						break receive
+					}
 				}
-			case SearchMode:
-				if exit, err = h.searchHandleEvent(ev); err != nil {
-					return err
-				}
+			case termbox.EventMouse:
+			case termbox.EventInterrupt:
+			case termbox.EventRaw:
+			case termbox.EventNone:
 			}
-		case termbox.EventMouse:
-		case termbox.EventInterrupt:
-		case termbox.EventRaw:
-		case termbox.EventNone:
 		}
-		h.normalizeOffsets()
-		if h.config.debug {
-			h.msgBuf.Reset()
-			h.msgBuf.Write([]byte(fmt.Sprintf("%+v", h)))
-		}
+
+		normalizeOffsets()
+
+		//send:
+		// for next := h.evBuf.Front(); next != nil; next = next.Next() {
+		// 	select {
+		// 	case h.evChan <- next.Value.(Event):
+		// 		h.evBuf.Remove(next)
+		// 	default:
+		// 		break send
+		// 	}
+		// }
 	}
+
+	if err != nil {
+		sendError(err)
+	} else if exit {
+		queueEvent(Event{Type: Exit})
+	}
+}
+
+// Init initializes the library and takes control of stdout.
+// This function should be called before any other functions.
+func Init(config *Config, content *bytes.Buffer) error {
+	h = new(handle)
+	h.cmdBuf = new(bytes.Buffer)
+	h.msgBuf = new(bytes.Buffer)
+	h.reslist = new(list.List)
+	h.cells = make(map[int]cell)
+	h.evChan = make(chan Event)
+	h.msgChan = make(chan []byte)
+	h.contChan = make(chan []byte)
+	h.evBuf = new(list.List)
+
+	if config == nil {
+		h.config = &defaultConfig
+	} else {
+		h.config = config
+	}
+
+	if content != nil {
+		h.contentBuf = content
+	} else {
+		h.contentBuf = new(bytes.Buffer)
+	}
+
+	go run()
+
 	return nil
+}
+
+// PollEvent will block until there is an event dispatched
+func PollEvent() Event {
+	return <-h.evChan
+}
+
+// Message will draw a message on the bottom right corner
+func Message(text string, args ...interface{}) {
+	h.msgChan <- []byte(fmt.Sprintf(text, args...))
+}
+
+// Content will change the content of the buffer to `text`
+func Content(text string) {
+	h.contChan <- []byte(text)
+}
+
+// Close all resources
+func Close() {
+	termbox.Close()
 }
