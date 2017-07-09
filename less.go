@@ -336,6 +336,12 @@ func search(data []byte) {
 func searchHandleEvent(ev termbox.Event) (exit bool, err error) {
 	switch ev.Key {
 
+	case termbox.KeyBackspace:
+		fallthrough
+	case termbox.KeyBackspace2:
+		h.xcursor--
+		h.cmdBuf.Truncate(h.cmdBuf.Len() - 1)
+
 	case termbox.KeyEnter:
 		data := h.cmdBuf.Bytes()[1:]
 		search(data)
@@ -521,16 +527,6 @@ receive:
 		}
 
 		normalizeOffsets()
-
-		//send:
-		// for next := h.evBuf.Front(); next != nil; next = next.Next() {
-		// 	select {
-		// 	case h.evChan <- next.Value.(Event):
-		// 		h.evBuf.Remove(next)
-		// 	default:
-		// 		break send
-		// 	}
-		// }
 	}
 
 	if err != nil {
