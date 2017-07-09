@@ -17,38 +17,20 @@ const (
 	searchMode
 )
 
-type cell struct {
-	i  int
-	x  int
-	y  int
-	fg termbox.Attribute
-	bg termbox.Attribute
-}
-
 type handle struct {
 	mode       mode
-	contentBuf *bytes.Buffer
-	cmdBuf     *bytes.Buffer
-	msgBuf     *bytes.Buffer
-	reslist    *list.List    // search result list
-	result     *list.Element // current focused result
-	search     []byte
-	evBuf      *list.List
+	cmdWindow  *Window
+	cmdBuf     *Buffer
+	msgWindow  *Window
+	msgBuf     *Buffer
+	contBuf    *Buffer
+	contWindow *Window
 	evChan     chan Event
-	contChan   chan []byte
-	msgChan    chan []byte
 	delEOF     bool
-	cells      map[int]cell
 	xcursor    int
 	ycursor    int
-	xoffset    int
-	yoffset    int
-	xmaxoffset int
-	ymaxoffset int
 	height     int
 	width      int
-	columns    int
-	rows       int
 	config     *Config
 }
 
@@ -87,76 +69,6 @@ func sendError(err error) {
 	queueEvent(Event{Type: Error, Data: nil, Err: err})
 }
 
-// x/yoffset is the offset from the content
-// x/ystart is the offset in the cell grid
-// x/ywindow is the x and y max cells to write
-func draw(data *bytes.Buffer, xoffset, yoffset, xstart, ystart, xwindow, ywindow int) (x, y int, err error) {
-	var c rune
-	x = xstart
-	y = ystart
-
-	currxoffset := xoffset
-
-	// draw until we've filled all available cells
-	for i := 0; y-ystart < ywindow; i++ {
-		if c, _, err = data.ReadRune(); err != nil {
-			break
-		}
-
-		// wrap or skip content
-		if x-xstart == xwindow {
-			if h.config.Wrap {
-				y++
-				x = xstart
-			} else {
-				if c == '\n' {
-					y++
-					x = xstart
-					currxoffset = xoffset
-				}
-				continue
-			}
-		}
-
-		switch c {
-		case '\n':
-			if yoffset > 0 {
-				yoffset--
-			} else {
-				y++
-				x = xstart
-				currxoffset = xoffset
-			}
-		case '\t':
-			if yoffset != 0 {
-				continue
-			}
-			if currxoffset <= 0 {
-				x += h.config.Tabspaces
-			} else {
-				currxoffset -= h.config.Tabspaces
-			}
-		default:
-			if yoffset != 0 {
-				continue
-			}
-			if currxoffset <= 0 {
-				setCell(x, y, i, c)
-				x++
-			} else {
-				currxoffset--
-			}
-		}
-	}
-
-	return x, y, err
-}
-
-func setCell(x, y, i int, r rune) {
-	set := h.cells[i]
-	termbox.SetCell(x, y, r, set.fg, set.bg)
-}
-
 func redraw() error {
 	var err error
 	if err = termbox.Clear(h.config.Bg, h.config.Bg); err != nil {
@@ -168,8 +80,8 @@ func redraw() error {
 	msgwidth := int(math.Min(float64(msgWindowWidth), float64(h.msgBuf.Len())))
 	cmdBarWidth := h.width - msgwidth
 
-	contentView := bytes.NewBuffer(h.contentBuf.Bytes())
-	if _, _, err = draw(contentView, h.xoffset, h.yoffset, 0, 0, h.width, contentHeight); err != nil {
+	contentView := bytes.NewBuffer(h.content.contentBuf.Bytes())
+	if _, _, err = draw(contentView, h.content.cells, h.content.xoffset, h.content.yoffset, 0, 0, h.width, contentHeight); err != nil {
 		if err != io.EOF {
 			return err
 		}
@@ -181,11 +93,11 @@ func redraw() error {
 	}
 
 	cmdView := bytes.NewBuffer(h.cmdBuf.Bytes())
-	if _, _, err = draw(cmdView, 0, 0, 0, contentHeight, cmdBarWidth, 1); err != nil && err != io.EOF {
+	if _, _, err = draw(cmdView, nil, 0, 0, 0, contentHeight, cmdBarWidth, 1); err != nil && err != io.EOF {
 		return err
 	}
 
-	if _, _, err = draw(h.msgBuf, 0, 0, cmdBarWidth, contentHeight, msgwidth, 1); err != nil && err != io.EOF {
+	if _, _, err = draw(h.msgBuf, nil, 0, 0, cmdBarWidth, contentHeight, msgwidth, 1); err != nil && err != io.EOF {
 		return err
 	}
 
@@ -193,69 +105,6 @@ func redraw() error {
 	termbox.Flush()
 
 	return nil
-}
-
-func calculateBounds() error {
-	var err error
-	var c rune
-	var currX int
-	h.columns, h.rows = 0, 0
-	view := bytes.NewBuffer(h.contentBuf.Bytes())
-	for i := 0; ; i++ {
-		if c, _, err = view.ReadRune(); err != nil {
-			break
-		}
-
-		switch c {
-		case '\n':
-			h.rows++
-			if currX > h.columns {
-				h.columns = currX
-			}
-			currX = 0
-		case '\t':
-			currX += h.config.Tabspaces
-		default:
-			currX++
-		}
-
-		// collect x, y coordinates
-		prev := h.cells[i]
-		h.cells[i] = cell{fg: prev.fg, bg: prev.bg, x: currX, y: h.rows, i: i}
-	}
-
-	if h.rows <= h.height {
-		h.ymaxoffset = 0
-	} else {
-		h.ymaxoffset = h.rows - h.height + h.config.CmdBarHeight
-	}
-
-	if h.config.Wrap {
-		h.xmaxoffset = 0
-	} else if h.columns >= h.width {
-		h.xmaxoffset = h.columns - h.width
-	} else {
-		h.xmaxoffset = 0
-	}
-
-	if err != io.EOF {
-		return err
-	}
-
-	return nil
-}
-
-func normalizeOffsets() {
-	if h.xoffset < 0 {
-		h.xoffset = 0
-	} else if h.xoffset > h.xmaxoffset {
-		h.xoffset = h.xmaxoffset
-	}
-	if h.yoffset < 0 {
-		h.yoffset = 0
-	} else if h.yoffset > h.ymaxoffset {
-		h.yoffset = h.ymaxoffset
-	}
 }
 
 func resetCursor() {
@@ -274,65 +123,6 @@ func setSearchMode() {
 	h.cmdBuf.Reset()
 	h.cmdBuf.WriteRune('/')
 	h.mode = searchMode
-}
-
-func search(data []byte) {
-	// reset result cells bg/fg
-	for el := h.reslist.Front(); el != nil; el = el.Next() {
-		c := el.Value.(cell)
-		for i, slen := c.i, c.i+len(h.search); i < slen; i++ {
-			h.cells[i] = cell{
-				bg: h.config.Bg,
-				fg: h.config.Fg,
-				x:  h.cells[i].x,
-				y:  h.cells[i].y,
-				i:  i,
-			}
-		}
-	}
-
-	h.reslist = h.reslist.Init()
-	h.result = nil
-	h.search = data
-
-	tlen := len(data)
-	if tlen == 0 {
-		return
-	}
-
-	view := h.contentBuf.Bytes()
-
-	a := 0
-	var i int
-	for {
-		if i = bytes.Index(view, data); i == -1 {
-			break
-		}
-
-		// use anchor to translate index to original slice
-		a += i
-
-		for j, last := a, a+tlen; j < last; j++ {
-			h.cells[j] = cell{
-				fg: h.config.Resfg,
-				bg: h.config.Resbg,
-				// use previous cells map to get x,y coordinates
-				x: h.cells[j].x,
-				y: h.cells[j].y,
-				i: j,
-			}
-		}
-
-		// mark first cell as result index
-		h.reslist.PushBack(h.cells[a])
-
-		view = view[i+tlen:]
-
-		// set next anchor
-		a += tlen
-	}
-
-	return
 }
 
 func searchHandleEvent(ev termbox.Event) (exit bool, err error) {
@@ -549,7 +339,6 @@ func Init(config *Config, content *bytes.Buffer) error {
 	h.evChan = make(chan Event)
 	h.msgChan = make(chan []byte)
 	h.contChan = make(chan []byte)
-	h.evBuf = new(list.List)
 
 	if config == nil {
 		h.config = &defaultConfig
