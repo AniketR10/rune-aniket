@@ -105,7 +105,7 @@ func draw(data *bytes.Buffer, xoffset, yoffset, xstart, ystart, xwindow, ywindow
 
 		// wrap or skip content
 		if x-xstart == xwindow {
-			if h.config.wrap {
+			if h.config.Wrap {
 				y++
 				x = xstart
 			} else {
@@ -132,9 +132,9 @@ func draw(data *bytes.Buffer, xoffset, yoffset, xstart, ystart, xwindow, ywindow
 				continue
 			}
 			if currxoffset <= 0 {
-				x += h.config.tabspaces
+				x += h.config.Tabspaces
 			} else {
-				currxoffset -= h.config.tabspaces
+				currxoffset -= h.config.Tabspaces
 			}
 		default:
 			if yoffset != 0 {
@@ -159,12 +159,12 @@ func setCell(x, y, i int, r rune) {
 
 func redraw() error {
 	var err error
-	if err = termbox.Clear(h.config.bg, h.config.bg); err != nil {
+	if err = termbox.Clear(h.config.Bg, h.config.Bg); err != nil {
 		return err
 	}
 
-	contentHeight := h.height - h.config.cmdBarHeight
-	msgWindowWidth := int(float32(h.width) * float32(h.config.msgwidth) / 100)
+	contentHeight := h.height - h.config.CmdBarHeight
+	msgWindowWidth := int(float32(h.width) * float32(h.config.Msgwidth) / 100)
 	msgwidth := int(math.Min(float64(msgWindowWidth), float64(h.msgBuf.Len())))
 	cmdBarWidth := h.width - msgwidth
 
@@ -214,7 +214,7 @@ func calculateBounds() error {
 			}
 			currX = 0
 		case '\t':
-			currX += h.config.tabspaces
+			currX += h.config.Tabspaces
 		default:
 			currX++
 		}
@@ -227,10 +227,12 @@ func calculateBounds() error {
 	if h.rows <= h.height {
 		h.ymaxoffset = 0
 	} else {
-		h.ymaxoffset = h.rows - h.height + h.config.cmdBarHeight
+		h.ymaxoffset = h.rows - h.height + h.config.CmdBarHeight
 	}
 
-	if h.columns >= h.width {
+	if h.config.Wrap {
+		h.xmaxoffset = 0
+	} else if h.columns >= h.width {
 		h.xmaxoffset = h.columns - h.width
 	} else {
 		h.xmaxoffset = 0
@@ -280,8 +282,8 @@ func search(data []byte) {
 		c := el.Value.(cell)
 		for i, slen := c.i, c.i+len(h.search); i < slen; i++ {
 			h.cells[i] = cell{
-				bg: h.config.bg,
-				fg: h.config.fg,
+				bg: h.config.Bg,
+				fg: h.config.Fg,
 				x:  h.cells[i].x,
 				y:  h.cells[i].y,
 				i:  i,
@@ -312,8 +314,8 @@ func search(data []byte) {
 
 		for j, last := a, a+tlen; j < last; j++ {
 			h.cells[j] = cell{
-				fg: h.config.resfg,
-				bg: h.config.resbg,
+				fg: h.config.Resfg,
+				bg: h.config.Resbg,
 				// use previous cells map to get x,y coordinates
 				x: h.cells[j].x,
 				y: h.cells[j].y,

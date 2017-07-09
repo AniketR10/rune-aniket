@@ -3,26 +3,32 @@ package less
 import termbox "github.com/nsf/termbox-go"
 
 type Config struct {
-	tabspaces    int
-	fg           termbox.Attribute
-	bg           termbox.Attribute
-	msgwidth     int8 // 0 - 100%
-	cmdBarHeight int  // in cells
-	wrap         bool
-	debug        bool
-	resfg        termbox.Attribute
-	resbg        termbox.Attribute
+	Tabspaces    int
+	Fg           termbox.Attribute
+	Bg           termbox.Attribute
+	Msgwidth     int8 // 0 - 100%
+	CmdBarHeight int  // in cells
+	Wrap         bool
+	Debug        bool
+	Resfg        termbox.Attribute
+	Resbg        termbox.Attribute
 	// TODO keyMap *KeyMap
 }
 
 var defaultConfig = Config{
-	tabspaces:    4,
-	fg:           termbox.ColorDefault,
-	bg:           termbox.ColorDefault,
-	msgwidth:     70,
-	cmdBarHeight: 1,
-	wrap:         false,
-	debug:        false,
-	resfg:        termbox.AttrReverse,
-	resbg:        termbox.ColorDefault,
+	Tabspaces:    4,
+	Fg:           termbox.ColorDefault,
+	Bg:           termbox.ColorDefault,
+	Msgwidth:     70,
+	CmdBarHeight: 1,
+	Wrap:         false,
+	Debug:        false,
+	Resfg:        termbox.AttrReverse,
+	Resbg:        termbox.ColorDefault,
+}
+
+func NewConfig() *Config {
+	cfg := new(Config)
+	*cfg = defaultConfig
+	return cfg
 }

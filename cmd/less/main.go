@@ -3,6 +3,8 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"flag"
+	"fmt"
 	"io"
 	"os"
 
@@ -34,6 +36,8 @@ func (h ScannerHandler) WriteTo(w io.Writer) (written int64, err error) {
 	return
 }
 
+var wrap = flag.Bool("w", false, "wrap text")
+
 func main() {
 
 	var input io.Reader
@@ -44,9 +48,15 @@ func main() {
 		if input, err = os.Open(filename); err != nil {
 			panic(err)
 		}
+		flag.CommandLine.Parse(os.Args[2:])
 	} else {
 		input = os.Stdin
+		flag.Parse()
+
 	}
+
+	config := less.NewConfig()
+	config.Wrap = *wrap
 
 	handler := NewHandler(input)
 	initContent := new(bytes.Buffer)
@@ -54,11 +64,9 @@ func main() {
 		panic(err)
 	}
 
-	if err = less.Init(nil, initContent); err != nil {
+	if err = less.Init(config, initContent); err != nil {
 		panic(err)
 	}
-
-	defer less.Close()
 
 	var i int
 	for {
@@ -73,6 +81,8 @@ func main() {
 		case less.Error:
 			panic(ev.Err)
 		case less.Exit:
+			less.Close()
+			fmt.Println("bye!")
 			return
 		}
 	}
