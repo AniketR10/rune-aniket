@@ -9,6 +9,7 @@ import (
 	"os"
 
 	"github.com/ernestrc/less"
+	"github.com/ernestrc/less/config"
 )
 
 type ScannerHandler struct {
@@ -55,7 +56,7 @@ func main() {
 
 	}
 
-	config := less.NewConfig()
+	config := config.New()
 	config.Wrap = *wrap
 
 	handler := NewHandler(input)
@@ -64,7 +65,7 @@ func main() {
 		panic(err)
 	}
 
-	if err = less.Init(config, initContent); err != nil {
+	if err = less.Init(config, initContent.Bytes()); err != nil {
 		panic(err)
 	}
 

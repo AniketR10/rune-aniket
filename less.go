@@ -1,12 +1,12 @@
 package less
 
 import (
-	"bytes"
-	"container/list"
 	"fmt"
-	"io"
 	"math"
 
+	"github.com/ernestrc/less/buffer"
+	"github.com/ernestrc/less/config"
+	"github.com/ernestrc/less/window"
 	termbox "github.com/nsf/termbox-go"
 )
 
@@ -19,19 +19,22 @@ const (
 
 type handle struct {
 	mode       mode
-	cmdWindow  *Window
-	cmdBuf     *Buffer
-	msgWindow  *Window
-	msgBuf     *Buffer
-	contBuf    *Buffer
-	contWindow *Window
+	cmdWindow  *window.Window
+	cmdBuf     *buffer.Buffer
+	cmdChan    chan []byte
+	msgWindow  *window.Window
+	msgBuf     *buffer.Buffer
+	msgChan    chan []byte
+	contWindow *window.Window
+	contBuf    *buffer.Buffer
+	contChan   chan []byte
 	evChan     chan Event
 	delEOF     bool
 	xcursor    int
 	ycursor    int
 	height     int
 	width      int
-	config     *Config
+	config     *config.Config
 }
 
 // EventType represents a less event
@@ -61,48 +64,42 @@ var (
 	h *handle
 )
 
-func queueEvent(ev Event) {
+func sendEvent(ev Event) {
 	h.evChan <- ev
 }
 
 func sendError(err error) {
-	queueEvent(Event{Type: Error, Data: nil, Err: err})
+	sendEvent(Event{Type: Error, Data: nil, Err: err})
 }
 
 func redraw() error {
 	var err error
-	if err = termbox.Clear(h.config.Bg, h.config.Bg); err != nil {
+	if err = termbox.Clear(h.config.FG, h.config.BG); err != nil {
 		return err
 	}
 
-	contentHeight := h.height - h.config.CmdBarHeight
-	msgWindowWidth := int(float32(h.width) * float32(h.config.Msgwidth) / 100)
-	msgwidth := int(math.Min(float64(msgWindowWidth), float64(h.msgBuf.Len())))
-	cmdBarWidth := h.width - msgwidth
-
-	contentView := bytes.NewBuffer(h.content.contentBuf.Bytes())
-	if _, _, err = draw(contentView, h.content.cells, h.content.xoffset, h.content.yoffset, 0, 0, h.width, contentHeight); err != nil {
-		if err != io.EOF {
-			return err
-		}
-
-		if !h.delEOF {
-			h.delEOF = true
-			queueEvent(Event{Type: EOF})
-		}
-	}
-
-	cmdView := bytes.NewBuffer(h.cmdBuf.Bytes())
-	if _, _, err = draw(cmdView, nil, 0, 0, 0, contentHeight, cmdBarWidth, 1); err != nil && err != io.EOF {
+	if err = h.contWindow.Draw(); err != nil {
 		return err
 	}
 
-	if _, _, err = draw(h.msgBuf, nil, 0, 0, cmdBarWidth, contentHeight, msgwidth, 1); err != nil && err != io.EOF {
+	if !h.contWindow.CanMoveDown() && !h.delEOF {
+		h.delEOF = true
+		sendEvent(Event{Type: EOF})
+	}
+
+	if err = h.cmdWindow.Draw(); err != nil {
 		return err
+	}
+
+	if err = h.msgWindow.Draw(); err != nil {
+		return err
+
 	}
 
 	termbox.SetCursor(h.xcursor, h.ycursor)
-	termbox.Flush()
+	if err = termbox.Flush(); err != nil {
+		return err
+	}
 
 	return nil
 }
@@ -115,13 +112,17 @@ func resetCursor() {
 func setNormalMode() {
 	resetCursor()
 	h.cmdBuf.Reset()
-	h.cmdBuf.WriteRune(':')
+	if _, err := h.cmdBuf.WriteRune(':'); err != nil {
+		sendError(err)
+	}
 	h.mode = normalMode
 }
 
 func setSearchMode() {
 	h.cmdBuf.Reset()
-	h.cmdBuf.WriteRune('/')
+	if _, err := h.cmdBuf.WriteRune('/'); err != nil {
+		sendError(err)
+	}
 	h.mode = searchMode
 }
 
@@ -136,10 +137,11 @@ func searchHandleEvent(ev termbox.Event) (exit bool, err error) {
 
 	case termbox.KeyEnter:
 		data := h.cmdBuf.Bytes()[1:]
-		search(data)
+		h.contBuf.Search(data, h.contWindow.Cells(), h.config.FG,
+			h.config.BG, h.config.ResFG, h.config.ResBG)
 		setNormalMode()
 		moveNextResult()
-		queueEvent(Event{Type: Search, Data: data})
+		sendEvent(Event{Type: Search, Data: data})
 
 	case termbox.KeyEsc:
 		setNormalMode()
@@ -155,37 +157,26 @@ func searchHandleEvent(ev termbox.Event) (exit bool, err error) {
 }
 
 func movePrevResult() {
-	if h.result == nil {
-		h.result = h.reslist.Back()
-	} else {
-		h.result = h.result.Prev()
-	}
+	c, ok := h.contBuf.PrevResult()
 
-	if h.result == nil {
+	if !ok {
 		setMessage([]byte("pattern not found"))
 		return
 	}
-	setResultOffsets()
+
+	h.contWindow.MoveVertical(c.Y)
 }
 
 func moveNextResult() {
-	if h.result == nil {
-		h.result = h.reslist.Front()
-	} else {
-		h.result = h.result.Next()
-	}
+	c, ok := h.contBuf.NextResult()
 
-	if h.result == nil {
+	if !ok {
 		setMessage([]byte("pattern not found"))
 		return
 	}
-	setResultOffsets()
-}
 
-func setResultOffsets() {
-	c := h.result.Value.(cell)
 	// go to result line
-	h.yoffset = c.y
+	h.contWindow.MoveVertical(c.Y)
 }
 
 func normalHandleEvent(ev termbox.Event) (exit bool, err error) {
@@ -200,26 +191,26 @@ func normalHandleEvent(ev termbox.Event) (exit bool, err error) {
 			switch ev.Ch {
 			case 'q':
 				return true, nil
-			case '0':
-				h.xoffset = 0
 			case 'N':
 				movePrevResult()
 			case 'n':
 				moveNextResult()
+			case '0':
+				h.contWindow.MoveStartLine()
 			case '$':
-				h.xoffset = h.xmaxoffset
+				h.contWindow.MoveEndLine()
 			case 'g':
-				h.yoffset = 0
+				h.contWindow.MoveStartFile()
 			case 'G':
-				h.yoffset = h.ymaxoffset
+				h.contWindow.MoveEndFile()
 			case 'j':
-				h.yoffset++
+				h.contWindow.MoveDown()
 			case 'k':
-				h.yoffset--
+				h.contWindow.MoveUp()
 			case 'h':
-				h.xoffset--
+				h.contWindow.MoveLeft()
 			case 'l':
-				h.xoffset++
+				h.contWindow.MoveRight()
 			case '/':
 				setSearchMode()
 			}
@@ -234,24 +225,54 @@ func setMessage(data []byte) {
 	if _, err := h.msgBuf.Write(data); err != nil {
 		sendError(err)
 	}
+
+	if err := update(); err != nil {
+		sendError(err)
+		return
+	}
 }
 
 func setContent(data []byte) {
-	h.contentBuf.Reset()
+	h.contBuf.Reset()
 	h.delEOF = false
 
-	if _, err := h.contentBuf.Write(data); err != nil {
+	if _, err := h.contBuf.Write(data); err != nil {
 		sendError(err)
 		return
 	}
 
-	// scan buffer to calcuate rows and columns and bounds
-	if err := calculateBounds(); err != nil {
+	if err := update(); err != nil {
 		sendError(err)
 		return
 	}
 
 	return
+}
+
+// scan buffer to calcuate rows and columns and bounds
+func update() error {
+	var err error
+
+	contentHeight := h.height - h.config.CmdBarHeight
+	msgWindowWidth := int(float32(h.width) * float32(h.config.Msgwidth) / 100)
+	msgWidth := int(math.Min(float64(msgWindowWidth), float64(h.msgBuf.Len())))
+	cmdBarWidth := h.width - msgWidth
+
+	if err = h.contWindow.Resize(h.width, contentHeight, 0, 0); err != nil {
+		return err
+	}
+
+	if err = h.cmdWindow.Resize(cmdBarWidth,
+		h.config.CmdBarHeight, 0, contentHeight); err != nil {
+		return err
+	}
+
+	if err = h.msgWindow.Resize(msgWidth,
+		h.config.CmdBarHeight, cmdBarWidth, contentHeight); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func run() {
@@ -267,7 +288,7 @@ func run() {
 
 	setNormalMode()
 
-	if err = calculateBounds(); err != nil {
+	if err = update(); err != nil {
 		sendError(err)
 		return
 	}
@@ -281,7 +302,7 @@ func run() {
 	}()
 
 receive:
-	for !exit {
+	for !exit && err == nil {
 		if err = redraw(); err != nil {
 			break receive
 		}
@@ -298,18 +319,16 @@ receive:
 				break receive
 			case termbox.EventResize:
 				h.width, h.height = ev.Width, ev.Height
-				calculateBounds()
+				if err = update(); err != nil {
+					break receive
+				}
 				fallthrough
 			case termbox.EventKey:
 				switch h.mode {
 				case normalMode:
-					if exit, err = normalHandleEvent(ev); err != nil {
-						break receive
-					}
+					exit, err = normalHandleEvent(ev)
 				case searchMode:
-					if exit, err = searchHandleEvent(ev); err != nil {
-						break receive
-					}
+					exit, err = searchHandleEvent(ev)
 				}
 			case termbox.EventMouse:
 			case termbox.EventInterrupt:
@@ -317,39 +336,44 @@ receive:
 			case termbox.EventNone:
 			}
 		}
-
-		normalizeOffsets()
 	}
 
 	if err != nil {
 		sendError(err)
 	} else if exit {
-		queueEvent(Event{Type: Exit})
+		sendEvent(Event{Type: Exit})
 	}
 }
 
 // Init initializes the library and takes control of stdout.
 // This function should be called before any other functions.
-func Init(config *Config, content *bytes.Buffer) error {
+func Init(cfg *config.Config, content []byte) error {
 	h = new(handle)
-	h.cmdBuf = new(bytes.Buffer)
-	h.msgBuf = new(bytes.Buffer)
-	h.reslist = new(list.List)
-	h.cells = make(map[int]cell)
-	h.evChan = make(chan Event)
-	h.msgChan = make(chan []byte)
-	h.contChan = make(chan []byte)
 
-	if config == nil {
-		h.config = &defaultConfig
+	if cfg == nil {
+		h.config = config.New()
 	} else {
-		h.config = config
+		h.config = cfg
 	}
 
+	h.cmdBuf = buffer.New()
+	h.cmdWindow = window.New(h.cmdBuf, 1, true)
+	h.cmdChan = make(chan []byte)
+
+	h.msgBuf = buffer.New()
+	h.msgWindow = window.New(h.msgBuf, 1, true)
+	h.msgChan = make(chan []byte)
+
+	h.contBuf = buffer.New()
+	h.contWindow = window.New(h.contBuf, h.config.Tabspaces, h.config.Wrap)
+	h.contChan = make(chan []byte)
+
+	h.evChan = make(chan Event)
+
 	if content != nil {
-		h.contentBuf = content
-	} else {
-		h.contentBuf = new(bytes.Buffer)
+		if _, err := h.contBuf.Write(content); err != nil {
+			return err
+		}
 	}
 
 	go run()
