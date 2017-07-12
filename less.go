@@ -28,6 +28,7 @@ type handle struct {
 	contWindow *window.Window
 	contBuf    *buffer.Buffer
 	contChan   chan []byte
+	termChan   chan termbox.Event
 	evChan     chan Event
 	delEOF     bool
 	xcursor    int
@@ -35,6 +36,8 @@ type handle struct {
 	height     int
 	width      int
 	config     *config.Config
+	search     []byte
+	pending    []Event
 }
 
 // EventType represents a less event
@@ -65,7 +68,7 @@ var (
 )
 
 func sendEvent(ev Event) {
-	h.evChan <- ev
+	h.pending = append(h.pending, ev)
 }
 
 func sendError(err error) {
@@ -109,21 +112,25 @@ func resetCursor() {
 	h.ycursor = h.height - 1
 }
 
-func setNormalMode() {
+func setNormalMode() error {
 	resetCursor()
 	h.cmdBuf.Reset()
 	if _, err := h.cmdBuf.WriteRune(':'); err != nil {
-		sendError(err)
+		return err
 	}
 	h.mode = normalMode
+
+	return nil
 }
 
-func setSearchMode() {
+func setSearchMode() error {
 	h.cmdBuf.Reset()
 	if _, err := h.cmdBuf.WriteRune('/'); err != nil {
-		sendError(err)
+		return err
 	}
 	h.mode = searchMode
+
+	return nil
 }
 
 func searchHandleEvent(ev termbox.Event) (exit bool, err error) {
@@ -136,15 +143,21 @@ func searchHandleEvent(ev termbox.Event) (exit bool, err error) {
 		h.cmdBuf.Truncate(h.cmdBuf.Len() - 1)
 
 	case termbox.KeyEnter:
-		data := h.cmdBuf.Bytes()[1:]
-		h.contBuf.Search(data, h.contWindow.Cells(), h.config.FG,
+		h.search = h.cmdBuf.Bytes()[1:]
+		h.contBuf.Search(h.search, h.contWindow.Cells(), h.config.FG,
 			h.config.BG, h.config.ResFG, h.config.ResBG)
-		setNormalMode()
-		moveNextResult()
-		sendEvent(Event{Type: Search, Data: data})
+		if err = setNormalMode(); err != nil {
+			return
+		}
+		if err = moveNextResult(); err != nil {
+			return
+		}
+		sendEvent(Event{Type: Search, Data: h.search})
 
 	case termbox.KeyEsc:
-		setNormalMode()
+		if err = setNormalMode(); err != nil {
+			return
+		}
 
 	default:
 		h.xcursor++
@@ -153,30 +166,38 @@ func searchHandleEvent(ev termbox.Event) (exit bool, err error) {
 		}
 	}
 
-	return false, nil
+	return
 }
 
-func movePrevResult() {
+func movePrevResult() error {
 	c, ok := h.contBuf.PrevResult()
 
 	if !ok {
-		setMessage([]byte("pattern not found"))
-		return
+		if err := setMessage([]byte("pattern not found")); err != nil {
+			return err
+		}
+		return nil
 	}
 
 	h.contWindow.MoveVertical(c.Y)
+
+	return nil
 }
 
-func moveNextResult() {
+func moveNextResult() error {
 	c, ok := h.contBuf.NextResult()
 
 	if !ok {
-		setMessage([]byte("pattern not found"))
-		return
+		if err := setMessage([]byte("pattern not found")); err != nil {
+			return err
+		}
+		return nil
 	}
 
 	// go to result line
 	h.contWindow.MoveVertical(c.Y)
+
+	return nil
 }
 
 func normalHandleEvent(ev termbox.Event) (exit bool, err error) {
@@ -192,9 +213,9 @@ func normalHandleEvent(ev termbox.Event) (exit bool, err error) {
 			case 'q':
 				return true, nil
 			case 'N':
-				movePrevResult()
+				err = movePrevResult()
 			case 'n':
-				moveNextResult()
+				err = moveNextResult()
 			case '0':
 				h.contWindow.MoveStartLine()
 			case '$':
@@ -212,41 +233,45 @@ func normalHandleEvent(ev termbox.Event) (exit bool, err error) {
 			case 'l':
 				h.contWindow.MoveRight()
 			case '/':
-				setSearchMode()
+				err = setSearchMode()
 			}
 		}
 	}
 
-	return false, nil
+	return
 }
 
-func setMessage(data []byte) {
+func setMessage(data []byte) error {
 	h.msgBuf.Reset()
 	if _, err := h.msgBuf.Write(data); err != nil {
-		sendError(err)
+		return err
 	}
 
 	if err := update(); err != nil {
-		sendError(err)
-		return
+		return err
 	}
+
+	return nil
 }
 
-func setContent(data []byte) {
+func setContent(data []byte) error {
 	h.contBuf.Reset()
 	h.delEOF = false
 
 	if _, err := h.contBuf.Write(data); err != nil {
-		sendError(err)
-		return
+		return err
 	}
 
 	if err := update(); err != nil {
-		sendError(err)
-		return
+		return err
 	}
 
-	return
+	if len(h.search) != 0 {
+		h.contBuf.Search(h.search, h.contWindow.Cells(), h.config.FG,
+			h.config.BG, h.config.ResFG, h.config.ResBG)
+	}
+
+	return nil
 }
 
 // scan buffer to calcuate rows and columns and bounds
@@ -279,48 +304,41 @@ func run() {
 	var err error
 	var exit bool
 
-	if err = termbox.Init(); err != nil {
-		sendError(err)
-		return
-	}
-
-	h.width, h.height = termbox.Size()
-
-	setNormalMode()
-
-	if err = update(); err != nil {
-		sendError(err)
-		return
-	}
-
-	termChan := make(chan termbox.Event)
-
 	go func() {
 		for {
-			termChan <- termbox.PollEvent()
+			h.termChan <- termbox.PollEvent()
 		}
 	}()
 
-receive:
-	for !exit && err == nil {
+	for n := 0; !exit && err == nil || n != 0; n = len(h.pending) {
 		if err = redraw(); err != nil {
-			break receive
+			break
 		}
 
+		// dispatch outgoing events first if possible
+		if n != 0 {
+			select {
+			case h.evChan <- h.pending[0]:
+				h.pending = h.pending[1:]
+				continue
+			default:
+			}
+		}
+
+		// wait for data on user and term channels
 		select {
 		case data := <-h.contChan:
-			setContent(data)
+			err = setContent(data)
 		case data := <-h.msgChan:
-			setMessage(data)
-		case ev := <-termChan:
+			err = setMessage(data)
+		case ev := <-h.termChan:
 			switch ev.Type {
 			case termbox.EventError:
 				err = ev.Err
-				break receive
 			case termbox.EventResize:
 				h.width, h.height = ev.Width, ev.Height
 				if err = update(); err != nil {
-					break receive
+					break
 				}
 				fallthrough
 			case termbox.EventKey:
@@ -336,18 +354,23 @@ receive:
 			case termbox.EventNone:
 			}
 		}
-	}
 
-	if err != nil {
-		sendError(err)
-	} else if exit {
-		sendEvent(Event{Type: Exit})
+		if err != nil {
+			sendError(err)
+			// TODO close channels
+			err = nil
+		} else if exit {
+			sendEvent(Event{Type: Exit})
+			// TODO close channels
+		}
 	}
 }
 
 // Init initializes the library and takes control of stdout.
 // This function should be called before any other functions.
-func Init(cfg *config.Config, content []byte) error {
+func Init(cfg *config.Config, content string) error {
+	var err error
+
 	h = new(handle)
 
 	if cfg == nil {
@@ -370,11 +393,27 @@ func Init(cfg *config.Config, content []byte) error {
 
 	h.evChan = make(chan Event)
 
-	if content != nil {
-		if _, err := h.contBuf.Write(content); err != nil {
+	if content != "" {
+		if _, err = h.contBuf.Write([]byte(content)); err != nil {
 			return err
 		}
 	}
+
+	if err = termbox.Init(); err != nil {
+		return err
+	}
+
+	h.width, h.height = termbox.Size()
+
+	if err = setNormalMode(); err != nil {
+		return err
+	}
+
+	if err = update(); err != nil {
+		return err
+	}
+
+	h.termChan = make(chan termbox.Event)
 
 	go run()
 

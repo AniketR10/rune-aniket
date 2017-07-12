@@ -49,7 +49,9 @@ func main() {
 		if input, err = os.Open(filename); err != nil {
 			panic(err)
 		}
-		flag.CommandLine.Parse(os.Args[2:])
+		if err = flag.CommandLine.Parse(os.Args[2:]); err != nil {
+			panic(err)
+		}
 	} else {
 		input = os.Stdin
 		flag.Parse()
@@ -65,7 +67,7 @@ func main() {
 		panic(err)
 	}
 
-	if err = less.Init(config, initContent.Bytes()); err != nil {
+	if err = less.Init(config, string(initContent.Bytes())); err != nil {
 		panic(err)
 	}
 
