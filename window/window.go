@@ -5,6 +5,7 @@ import (
 	"io"
 
 	"github.com/ernestrc/fractal/buffer"
+	"github.com/ernestrc/fractal/config"
 	termbox "github.com/nsf/termbox-go"
 )
 
@@ -12,7 +13,6 @@ type Window struct {
 	buffer     *buffer.Buffer      // content buffer
 	cells      map[int]buffer.Cell // color information used for printing to window
 	wrap       bool                // wrap text
-	tabspaces  int                 // tab width
 	xmaxoffset int                 // max x content offset
 	ymaxoffset int                 // max y content offset
 	xoffset    int                 // current x content offset
@@ -21,15 +21,20 @@ type Window struct {
 	ystart     int                 // y offset from root window
 	height     int                 // window height
 	width      int                 // window width
+	config     *config.Config
 }
 
-func New(initial *buffer.Buffer, tabspaces int, wrap bool) *Window {
+func New(initial *buffer.Buffer, cfg *config.Config) *Window {
 	w := new(Window)
 	w.cells = make(map[int]buffer.Cell)
 
 	w.buffer = initial
-	w.tabspaces = tabspaces
-	w.wrap = wrap
+
+	if cfg == nil {
+		w.config = config.New()
+	} else {
+		w.config = cfg
+	}
 
 	return w
 }
@@ -156,7 +161,7 @@ func (w *Window) scanInput() error {
 			}
 			currX = 0
 		case '\t':
-			currX += w.tabspaces
+			currX += w.config.Tabspaces
 		default:
 			currX++
 		}
@@ -232,9 +237,9 @@ func (w *Window) Draw() error {
 				continue
 			}
 			if xoffset <= 0 {
-				x += w.tabspaces
+				x += w.config.Tabspaces
 			} else {
-				xoffset -= w.tabspaces
+				xoffset -= w.config.Tabspaces
 			}
 		default:
 			if yoffset != 0 {

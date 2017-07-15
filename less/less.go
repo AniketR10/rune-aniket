@@ -380,15 +380,15 @@ func Init(cfg *config.Config, content string) error {
 	}
 
 	h.cmdBuf = buffer.New()
-	h.cmdWindow = window.New(h.cmdBuf, 1, true)
+	h.cmdWindow = window.New(h.cmdBuf, h.config)
 	h.cmdChan = make(chan []byte)
 
 	h.msgBuf = buffer.New()
-	h.msgWindow = window.New(h.msgBuf, 1, true)
+	h.msgWindow = window.New(h.msgBuf, h.config)
 	h.msgChan = make(chan []byte)
 
 	h.contBuf = buffer.New()
-	h.contWindow = window.New(h.contBuf, h.config.Tabspaces, h.config.Wrap)
+	h.contWindow = window.New(h.contBuf, h.config)
 	h.contChan = make(chan []byte)
 
 	h.evChan = make(chan Event)
