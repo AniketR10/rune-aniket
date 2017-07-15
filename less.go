@@ -435,6 +435,16 @@ func Content(text string) {
 	h.contChan <- []byte(text)
 }
 
+// Width returns the terminal width
+func Width() int {
+	return h.width
+}
+
+// Height returns the terminal height
+func Height() int {
+	return h.height
+}
+
 // Close all resources
 func Close() {
 	termbox.Close()
