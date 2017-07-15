@@ -15,4 +15,4 @@
 
 cmd/less/*
 !cmd/less/*.go
-/less
+bin

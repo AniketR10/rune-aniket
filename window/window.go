@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"io"
 
-	"github.com/ernestrc/less/buffer"
+	"github.com/ernestrc/fractal/buffer"
 	termbox "github.com/nsf/termbox-go"
 )
 

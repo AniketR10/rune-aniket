@@ -8,8 +8,8 @@ import (
 	"io"
 	"os"
 
-	"github.com/ernestrc/less"
-	"github.com/ernestrc/less/config"
+	"github.com/ernestrc/fractal/config"
+	"github.com/ernestrc/fractal/less"
 )
 
 type ScannerHandler struct {

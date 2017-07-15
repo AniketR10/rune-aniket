@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"math"
 
-	"github.com/ernestrc/less/buffer"
-	"github.com/ernestrc/less/config"
-	"github.com/ernestrc/less/window"
+	"github.com/ernestrc/fractal/buffer"
+	"github.com/ernestrc/fractal/config"
+	"github.com/ernestrc/fractal/window"
 	termbox "github.com/nsf/termbox-go"
 )
 
