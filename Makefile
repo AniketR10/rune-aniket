@@ -10,7 +10,7 @@ EXEC=$(patsubst cmd/%/,$(TARGET)/%,$(EXECS))
 GEXEC=$(patsubst cmd/%/,$(GOBIN)/%,$(EXECS))
 
 
-.PHONY: clean install
+.PHONY: clean install test
 
 default: $(EXEC)
 

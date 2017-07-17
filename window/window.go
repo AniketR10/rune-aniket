@@ -9,6 +9,10 @@ import (
 	termbox "github.com/nsf/termbox-go"
 )
 
+type Drawable interface {
+	Draw() error
+}
+
 type Window struct {
 	buffer     *buffer.Buffer      // content buffer
 	cells      map[int]buffer.Cell // color information used for printing to window
@@ -127,11 +131,25 @@ func (w *Window) MoveStartFile() {
 	w.MoveVertical(0)
 }
 
-func (w *Window) Resize(width, height, xstart, ystart int) error {
+func (w *Window) Position() (x, y int) {
+	return w.xstart, w.ystart
+}
+
+func (w *Window) Move(x, y int) {
+	w.xstart = x
+	w.ystart = y
+}
+
+func (w *Window) Resize(width, height int) error {
+	if width == 0 {
+		width = 1
+	}
+	if height == 0 {
+		height = 1
+	}
+
 	w.width = width
 	w.height = height
-	w.xstart = xstart
-	w.ystart = ystart
 
 	if err := w.scanInput(); err != nil {
 		return err
@@ -140,9 +158,24 @@ func (w *Window) Resize(width, height, xstart, ystart int) error {
 	return nil
 }
 
+func (w *Window) Height() int {
+	return w.height
+}
+
+func (w *Window) Width() int {
+	return w.width
+}
+
 // TODO should create cells so that they are drawable already
 // then Draw shoul just take viewable cells and print them
 func (w *Window) scanInput() error {
+	// this window does not have a buffer assigned
+	if w.buffer == nil {
+		w.ymaxoffset = 0
+		w.xmaxoffset = 0
+		return nil
+	}
+
 	var err error
 	var c rune
 	var currX int
@@ -192,14 +225,29 @@ func (w *Window) scanInput() error {
 	return nil
 }
 
-// Draw returns number of lines written
+func (w *Window) SetBuffer(buf *buffer.Buffer) (orig *buffer.Buffer, err error) {
+	orig = w.buffer
+	w.buffer = buf
+
+	if err = w.scanInput(); err != nil {
+		return
+	}
+
+	return
+}
+
 func (w *Window) Draw() error {
+	if w.buffer == nil {
+		return nil
+	}
+
 	var r rune
 	var err error
 	x := w.xstart
 	y := w.ystart
 	xoffset := w.xoffset
 	yoffset := w.yoffset
+
 	view := bytes.NewBuffer(w.buffer.Bytes())
 
 	// draw until we've filled all available cells

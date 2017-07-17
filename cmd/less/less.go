@@ -10,6 +10,7 @@ import (
 
 	"github.com/ernestrc/fractal/config"
 	"github.com/ernestrc/fractal/less"
+	termbox "github.com/nsf/termbox-go"
 )
 
 type ScannerHandler struct {
@@ -38,6 +39,7 @@ func (h ScannerHandler) WriteTo(w io.Writer) (written int64, err error) {
 }
 
 var wrap = flag.Bool("w", false, "wrap text")
+var border = flag.Bool("b", false, "window borders")
 
 func main() {
 
@@ -60,6 +62,9 @@ func main() {
 
 	config := config.New()
 	config.Wrap = *wrap
+	if *border {
+		config.WindowBorder |= termbox.ColorWhite
+	}
 
 	handler := NewHandler(input)
 	initContent := new(bytes.Buffer)

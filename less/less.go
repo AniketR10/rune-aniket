@@ -262,10 +262,6 @@ func setContent(data []byte) error {
 		return err
 	}
 
-	if err := update(); err != nil {
-		return err
-	}
-
 	if len(h.search) != 0 {
 		h.contBuf.Search(h.search, h.contWindow.Cells(), h.config.FG,
 			h.config.BG, h.config.ResFG, h.config.ResBG)
@@ -283,17 +279,17 @@ func update() error {
 	msgWidth := int(math.Min(float64(msgWindowWidth), float64(h.msgBuf.Len())))
 	cmdBarWidth := h.width - msgWidth
 
-	if err = h.contWindow.Resize(h.width, contentHeight, 0, 0); err != nil {
+	if err = h.contWindow.Resize(h.width, contentHeight); err != nil {
 		return err
 	}
 
-	if err = h.cmdWindow.Resize(cmdBarWidth,
-		h.config.CmdBarHeight, 0, contentHeight); err != nil {
+	h.cmdWindow.Move(0, contentHeight)
+	if err = h.cmdWindow.Resize(cmdBarWidth, h.config.CmdBarHeight); err != nil {
 		return err
 	}
 
-	if err = h.msgWindow.Resize(msgWidth,
-		h.config.CmdBarHeight, cmdBarWidth, contentHeight); err != nil {
+	h.msgWindow.Move(cmdBarWidth, contentHeight)
+	if err = h.msgWindow.Resize(msgWidth, h.config.CmdBarHeight); err != nil {
 		return err
 	}
 

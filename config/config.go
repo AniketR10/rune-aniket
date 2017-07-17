@@ -12,6 +12,7 @@ type Config struct {
 	Debug        bool
 	ResFG        termbox.Attribute
 	ResBG        termbox.Attribute
+	WindowBorder termbox.Attribute
 	// TODO keyMap *KeyMap
 }
 
