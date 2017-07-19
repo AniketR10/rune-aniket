@@ -4,15 +4,15 @@ import (
 	"bytes"
 	"container/list"
 
-	termbox "github.com/nsf/termbox-go"
+	"github.com/ernestrc/fractal"
 )
 
 type Cell struct {
 	Idx int // index of the rune this Cell represents in the content buffer
 	X   int
 	Y   int
-	FG  termbox.Attribute
-	BG  termbox.Attribute
+	FG  fractal.Attribute
+	BG  fractal.Attribute
 }
 
 type Buffer struct {
@@ -93,7 +93,7 @@ func (b *Buffer) NextResult() (c Cell, ok bool) {
 
 // TODO should not know anything about palette
 func (b *Buffer) Search(text []byte, palette map[int]Cell,
-	fg, bg, resfg, resbg termbox.Attribute) {
+	fg, bg, resfg, resbg fractal.Attribute) {
 	// reset result Cells bg/fg
 	for el := b.reslist.Front(); el != nil; el = el.Next() {
 		c := el.Value.(Cell)

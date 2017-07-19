@@ -1,31 +1,31 @@
 package config
 
-import termbox "github.com/nsf/termbox-go"
+import fractal "github.com/ernestrc/fractal"
 
 type Config struct {
 	Tabspaces    int
-	FG           termbox.Attribute
-	BG           termbox.Attribute
+	FG           fractal.Attribute
+	BG           fractal.Attribute
 	Msgwidth     int8 // 0 - 100%
 	CmdBarHeight int  // in cells
 	Wrap         bool
 	Debug        bool
-	ResFG        termbox.Attribute
-	ResBG        termbox.Attribute
-	WindowBorder termbox.Attribute
+	ResFG        fractal.Attribute
+	ResBG        fractal.Attribute
+	WindowBorder fractal.Attribute
 	// TODO keyMap *KeyMap
 }
 
 var defaultConfig = Config{
 	Tabspaces:    8,
-	FG:           termbox.ColorDefault,
-	BG:           termbox.ColorDefault,
+	FG:           fractal.ColorDefault,
+	BG:           fractal.ColorDefault,
 	Msgwidth:     70,
 	CmdBarHeight: 1,
 	Wrap:         false,
 	Debug:        false,
-	ResFG:        termbox.AttrReverse,
-	ResBG:        termbox.ColorDefault,
+	ResFG:        fractal.AttrReverse,
+	ResBG:        fractal.ColorDefault,
 }
 
 func New() *Config {

@@ -1,6 +1,6 @@
 package window
 
-import "github.com/ernestrc/fractal/config"
+import "github.com/ernestrc/fractal"
 
 type splitdir uint8
 
@@ -9,49 +9,31 @@ const (
 	horizontal
 )
 
-// TODO type Attribute uint16
-// TODO
-// TODO type CellWriter interface {
-// TODO 	SetCell(x, y int, fg, bg Attribute) error
-// TODO }
-
-type tile interface {
-	Resize(width, height int) error
-	MoveTo(x, y int) error
-	Draw( /*w CellWriter*/ ) error
-	Height() int
-	Width() int
-	Position() (int, int)
-}
-
 type tnode struct {
 	x         int
 	y         int
 	width     int
 	height    int
-	tiles     []tile
+	tiles     []fractal.Window
 	direction splitdir
 }
 
 func newNode(direction splitdir, w *TiledWindow, x, y, width, height int) (t *tnode) {
 	t = new(tnode)
 	t.x, t.y, t.width, t.height = x, y, width, height
-	t.tiles = []tile{w}
+	t.tiles = []fractal.Window{w}
 	t.direction = direction
 	return
 }
 
 type TiledWindow struct {
-	Window
-	node *tnode
+	content fractal.Window
+	node    *tnode
 }
 
-func newTiledWindow(cfg *config.Config) (t *TiledWindow) {
-	if cfg == nil {
-		panic("configuration cannot be nil")
-	}
+func newTiledWindow(content fractal.Window) (t *TiledWindow) {
 	t = new(TiledWindow)
-	t.Init(nil, cfg)
+	t.content = content
 	return
 }
 
@@ -89,9 +71,9 @@ func (t *tnode) MoveTo(x, y int) error {
 	return t.Resize(t.width, t.height)
 }
 
-func (t *tnode) Draw( /*w CellWriter*/ ) (err error) {
+func (t *tnode) Draw(w fractal.CellWriter) (err error) {
 	for _, ti := range t.tiles {
-		if err = ti.Draw(); err != nil {
+		if err = ti.Draw(w); err != nil {
 			return
 		}
 	}
@@ -109,4 +91,28 @@ func (t *tnode) Width() int {
 
 func (t *tnode) Position() (int, int) {
 	return t.x, t.y
+}
+
+func (t *TiledWindow) Resize(width, height int) (err error) {
+	return t.content.Resize(width, height)
+}
+
+func (t *TiledWindow) MoveTo(x, y int) error {
+	return t.content.MoveTo(x, y)
+}
+
+func (t *TiledWindow) Draw(w fractal.CellWriter) (err error) {
+	return t.content.Draw(w)
+}
+
+func (t *TiledWindow) Height() int {
+	return t.content.Height()
+}
+
+func (t *TiledWindow) Width() int {
+	return t.content.Width()
+}
+
+func (t *TiledWindow) Position() (int, int) {
+	return t.content.Position()
 }

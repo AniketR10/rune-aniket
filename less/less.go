@@ -5,8 +5,9 @@ import (
 	"math"
 
 	"github.com/ernestrc/fractal/buffer"
-	"github.com/ernestrc/fractal/config"
-	"github.com/ernestrc/fractal/window"
+	"github.com/ernestrc/fractal/less/config"
+	term "github.com/ernestrc/fractal/termbox"
+	"github.com/ernestrc/fractal/viewer"
 	termbox "github.com/nsf/termbox-go"
 )
 
@@ -19,13 +20,13 @@ const (
 
 type handle struct {
 	mode       mode
-	cmdWindow  *window.Window
+	cmdViewer  *viewer.Viewer
 	cmdBuf     *buffer.Buffer
 	cmdChan    chan []byte
-	msgWindow  *window.Window
+	msgViewer  *viewer.Viewer
 	msgBuf     *buffer.Buffer
 	msgChan    chan []byte
-	contWindow *window.Window
+	contViewer *viewer.Viewer
 	contBuf    *buffer.Buffer
 	contChan   chan []byte
 	termChan   chan termbox.Event
@@ -64,7 +65,8 @@ type Event struct {
 }
 
 var (
-	h *handle
+	h      *handle
+	writer *term.TermboxWriter
 )
 
 func sendEvent(ev Event) {
@@ -77,24 +79,25 @@ func sendError(err error) {
 
 func redraw() error {
 	var err error
-	if err = termbox.Clear(h.config.FG, h.config.BG); err != nil {
+	if err = termbox.Clear(termbox.Attribute(h.config.FG),
+		termbox.Attribute(h.config.BG)); err != nil {
 		return err
 	}
 
-	if err = h.contWindow.Draw(); err != nil {
+	if err = h.contViewer.Draw(writer); err != nil {
 		return err
 	}
 
-	if !h.contWindow.CanMoveDown() && !h.delEOF {
+	if !h.contViewer.CanMoveDown() && !h.delEOF {
 		h.delEOF = true
 		sendEvent(Event{Type: EOF})
 	}
 
-	if err = h.cmdWindow.Draw(); err != nil {
+	if err = h.cmdViewer.Draw(writer); err != nil {
 		return err
 	}
 
-	if err = h.msgWindow.Draw(); err != nil {
+	if err = h.msgViewer.Draw(writer); err != nil {
 		return err
 
 	}
@@ -144,7 +147,7 @@ func searchHandleEvent(ev termbox.Event) (exit bool, err error) {
 
 	case termbox.KeyEnter:
 		h.search = h.cmdBuf.Bytes()[1:]
-		h.contBuf.Search(h.search, h.contWindow.Cells(), h.config.FG,
+		h.contBuf.Search(h.search, h.contViewer.Cells(), h.config.FG,
 			h.config.BG, h.config.ResFG, h.config.ResBG)
 		if err = setNormalMode(); err != nil {
 			return
@@ -179,7 +182,7 @@ func movePrevResult() error {
 		return nil
 	}
 
-	h.contWindow.MoveVertical(c.Y)
+	h.contViewer.MoveVertical(c.Y)
 
 	return nil
 }
@@ -195,7 +198,7 @@ func moveNextResult() error {
 	}
 
 	// go to result line
-	h.contWindow.MoveVertical(c.Y)
+	h.contViewer.MoveVertical(c.Y)
 
 	return nil
 }
@@ -217,21 +220,21 @@ func normalHandleEvent(ev termbox.Event) (exit bool, err error) {
 			case 'n':
 				err = moveNextResult()
 			case '0':
-				h.contWindow.MoveStartLine()
+				h.contViewer.MoveStartLine()
 			case '$':
-				h.contWindow.MoveEndLine()
+				h.contViewer.MoveEndLine()
 			case 'g':
-				h.contWindow.MoveStartFile()
+				h.contViewer.MoveStartFile()
 			case 'G':
-				h.contWindow.MoveEndFile()
+				h.contViewer.MoveEndFile()
 			case 'j':
-				h.contWindow.MoveDown()
+				h.contViewer.MoveDown()
 			case 'k':
-				h.contWindow.MoveUp()
+				h.contViewer.MoveUp()
 			case 'h':
-				h.contWindow.MoveLeft()
+				h.contViewer.MoveLeft()
 			case 'l':
-				h.contWindow.MoveRight()
+				h.contViewer.MoveRight()
 			case '/':
 				err = setSearchMode()
 			}
@@ -263,7 +266,7 @@ func setContent(data []byte) error {
 	}
 
 	if len(h.search) != 0 {
-		h.contBuf.Search(h.search, h.contWindow.Cells(), h.config.FG,
+		h.contBuf.Search(h.search, h.contViewer.Cells(), h.config.FG,
 			h.config.BG, h.config.ResFG, h.config.ResBG)
 	}
 
@@ -275,21 +278,21 @@ func update() error {
 	var err error
 
 	contentHeight := h.height - h.config.CmdBarHeight
-	msgWindowWidth := int(float32(h.width) * float32(h.config.Msgwidth) / 100)
-	msgWidth := int(math.Min(float64(msgWindowWidth), float64(h.msgBuf.Len())))
+	msgViewerWidth := int(float32(h.width) * float32(h.config.Msgwidth) / 100)
+	msgWidth := int(math.Min(float64(msgViewerWidth), float64(h.msgBuf.Len())))
 	cmdBarWidth := h.width - msgWidth
 
-	if err = h.contWindow.Resize(h.width, contentHeight); err != nil {
+	if err = h.contViewer.Resize(h.width, contentHeight); err != nil {
 		return err
 	}
 
-	h.cmdWindow.MoveTo(0, contentHeight)
-	if err = h.cmdWindow.Resize(cmdBarWidth, h.config.CmdBarHeight); err != nil {
+	h.cmdViewer.MoveTo(0, contentHeight)
+	if err = h.cmdViewer.Resize(cmdBarWidth, h.config.CmdBarHeight); err != nil {
 		return err
 	}
 
-	h.msgWindow.MoveTo(cmdBarWidth, contentHeight)
-	if err = h.msgWindow.Resize(msgWidth, h.config.CmdBarHeight); err != nil {
+	h.msgViewer.MoveTo(cmdBarWidth, contentHeight)
+	if err = h.msgViewer.Resize(msgWidth, h.config.CmdBarHeight); err != nil {
 		return err
 	}
 
@@ -376,15 +379,15 @@ func Init(cfg *config.Config, content string) error {
 	}
 
 	h.cmdBuf = buffer.New()
-	h.cmdWindow = window.New(h.cmdBuf, h.config)
+	h.cmdViewer = viewer.New(h.cmdBuf)
 	h.cmdChan = make(chan []byte)
 
 	h.msgBuf = buffer.New()
-	h.msgWindow = window.New(h.msgBuf, h.config)
+	h.msgViewer = viewer.New(h.msgBuf)
 	h.msgChan = make(chan []byte)
 
 	h.contBuf = buffer.New()
-	h.contWindow = window.New(h.contBuf, h.config)
+	h.contViewer = viewer.New(h.contBuf)
 	h.contChan = make(chan []byte)
 
 	h.evChan = make(chan Event)

@@ -1,19 +1,14 @@
-package window
+package viewer
 
 import (
 	"bytes"
 	"io"
 
+	"github.com/ernestrc/fractal"
 	"github.com/ernestrc/fractal/buffer"
-	"github.com/ernestrc/fractal/config"
-	termbox "github.com/nsf/termbox-go"
 )
 
-type Drawable interface {
-	Draw() error
-}
-
-type Window struct {
+type Viewer struct {
 	buffer     *buffer.Buffer      // content buffer
 	cells      map[int]buffer.Cell // color information used for printing to window
 	wrap       bool                // wrap text
@@ -25,80 +20,74 @@ type Window struct {
 	ystart     int                 // y offset from root window
 	height     int                 // window height
 	width      int                 // window width
-	config     *config.Config
+	Tabspaces  int
 }
 
-func (w *Window) Init(initial *buffer.Buffer, cfg *config.Config) {
+func (w *Viewer) Init(initial *buffer.Buffer) {
 	w.cells = make(map[int]buffer.Cell)
-
+	w.Tabspaces = 4
 	w.buffer = initial
-
-	if cfg == nil {
-		w.config = config.New()
-	} else {
-		w.config = cfg
-	}
 }
 
-func New(initial *buffer.Buffer, cfg *config.Config) *Window {
-	w := new(Window)
-	w.Init(initial, cfg)
+func New(initial *buffer.Buffer) *Viewer {
+	w := new(Viewer)
+	w.Init(initial)
 	return w
 }
 
-func (w *Window) Cells() map[int]buffer.Cell {
+func (w *Viewer) Cells() map[int]buffer.Cell {
 	return w.cells
 }
 
-func (w *Window) YOffset() int {
+func (w *Viewer) YOffset() int {
 	return w.yoffset
 }
 
-func (w *Window) XOffset() int {
+func (w *Viewer) XOffset() int {
 	return w.xoffset
 }
 
-func (w *Window) CanMoveUp() bool {
+func (w *Viewer) CanMoveUp() bool {
 	return w.yoffset > 0
 }
 
-func (w *Window) CanMoveDown() bool {
+func (w *Viewer) CanMoveDown() bool {
 	return w.yoffset < w.ymaxoffset
 }
 
-func (w *Window) CanMoveLeft() bool {
+func (w *Viewer) CanMoveLeft() bool {
 	return w.xoffset > 0
 }
 
-func (w *Window) CanMoveRight() bool {
+func (w *Viewer) CanMoveRight() bool {
 	return w.xoffset < w.xmaxoffset
 }
 
-func (w *Window) MoveUp() {
+func (w *Viewer) MoveUp() {
 	if w.CanMoveUp() {
 		w.yoffset--
 	}
 }
 
-func (w *Window) MoveDown() {
+func (w *Viewer) MoveDown() {
 	if w.CanMoveDown() {
 		w.yoffset += 1
 	}
 }
 
-func (w *Window) MoveLeft() {
+func (w *Viewer) MoveLeft() {
 	if w.CanMoveLeft() {
 		w.xoffset--
 	}
 }
 
-func (w *Window) MoveRight() {
+func (w *Viewer) MoveRight() {
 	if w.CanMoveRight() {
 		w.xoffset++
 	}
 }
 
-func (w *Window) MoveVertical(y int) {
+func (w *Viewer) MoveVertical(y int) {
 	if y > w.ymaxoffset {
 		y = w.ymaxoffset
 	} else if y < 0 {
@@ -108,7 +97,7 @@ func (w *Window) MoveVertical(y int) {
 	w.yoffset = y
 }
 
-func (w *Window) MoveHorizontal(x int) {
+func (w *Viewer) MoveHorizontal(x int) {
 	if x > w.xmaxoffset {
 		x = w.xmaxoffset
 	} else if x < 0 {
@@ -118,33 +107,33 @@ func (w *Window) MoveHorizontal(x int) {
 	w.xoffset = x
 }
 
-func (w *Window) MoveEndLine() {
+func (w *Viewer) MoveEndLine() {
 	w.MoveHorizontal(w.xmaxoffset)
 }
 
-func (w *Window) MoveStartLine() {
+func (w *Viewer) MoveStartLine() {
 	w.MoveHorizontal(0)
 }
 
-func (w *Window) MoveEndFile() {
+func (w *Viewer) MoveEndFile() {
 	w.MoveVertical(w.ymaxoffset)
 }
 
-func (w *Window) MoveStartFile() {
+func (w *Viewer) MoveStartFile() {
 	w.MoveVertical(0)
 }
 
-func (w *Window) Position() (x, y int) {
+func (w *Viewer) Position() (x, y int) {
 	return w.xstart, w.ystart
 }
 
-func (w *Window) MoveTo(x, y int) error {
+func (w *Viewer) MoveTo(x, y int) error {
 	w.xstart = x
 	w.ystart = y
 	return nil
 }
 
-func (w *Window) Resize(width, height int) error {
+func (w *Viewer) Resize(width, height int) error {
 	w.width = width
 	w.height = height
 
@@ -155,17 +144,17 @@ func (w *Window) Resize(width, height int) error {
 	return nil
 }
 
-func (w *Window) Height() int {
+func (w *Viewer) Height() int {
 	return w.height
 }
 
-func (w *Window) Width() int {
+func (w *Viewer) Width() int {
 	return w.width
 }
 
 // TODO should create cells so that they are drawable already
 // then Draw shoul just take viewable cells and print them
-func (w *Window) scanInput() error {
+func (w *Viewer) scanInput() error {
 	// this window does not have a buffer assigned
 	if w.buffer == nil {
 		w.ymaxoffset = 0
@@ -191,7 +180,7 @@ func (w *Window) scanInput() error {
 			}
 			currX = 0
 		case '\t':
-			currX += w.config.Tabspaces
+			currX += w.Tabspaces
 		default:
 			currX++
 		}
@@ -222,7 +211,7 @@ func (w *Window) scanInput() error {
 	return nil
 }
 
-func (w *Window) SetBuffer(buf *buffer.Buffer) (orig *buffer.Buffer, err error) {
+func (w *Viewer) SetBuffer(buf *buffer.Buffer) (orig *buffer.Buffer, err error) {
 	orig = w.buffer
 	w.buffer = buf
 
@@ -233,7 +222,7 @@ func (w *Window) SetBuffer(buf *buffer.Buffer) (orig *buffer.Buffer, err error) 
 	return
 }
 
-func (w *Window) Draw() error {
+func (w *Viewer) Draw(writer fractal.CellWriter) error {
 	if w.buffer == nil {
 		return nil
 	}
@@ -282,9 +271,9 @@ func (w *Window) Draw() error {
 				continue
 			}
 			if xoffset <= 0 {
-				x += w.config.Tabspaces
+				x += w.Tabspaces
 			} else {
-				xoffset -= w.config.Tabspaces
+				xoffset -= w.Tabspaces
 			}
 		default:
 			if yoffset != 0 {
@@ -295,7 +284,7 @@ func (w *Window) Draw() error {
 				continue
 			}
 			c := w.cells[i]
-			termbox.SetCell(x, y, r, c.FG, c.BG)
+			writer.SetCell(x, y, r, c.FG, c.BG)
 			x++
 		}
 	}

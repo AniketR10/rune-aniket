@@ -3,18 +3,46 @@ package window
 import (
 	"testing"
 
-	"github.com/ernestrc/fractal/config"
+	"github.com/ernestrc/fractal"
 )
 
-var cfg *config.Config = config.New()
+type noopWindow struct {
+	x, y, width, height int
+}
+
+func (t *noopWindow) Resize(width, height int) (err error) {
+	t.width, t.height = width, height
+	return nil
+}
+
+func (t *noopWindow) MoveTo(x, y int) error {
+	t.x, t.y = x, y
+	return nil
+}
+
+func (t *noopWindow) Draw(w fractal.CellWriter) (err error) {
+	return nil
+}
+
+func (t *noopWindow) Height() int {
+	return t.height
+}
+
+func (t *noopWindow) Width() int {
+	return t.width
+}
+
+func (t *noopWindow) Position() (int, int) {
+	return t.x, t.y
+}
 
 func TestNewManager(t *testing.T) {
-	m, e := NewManager(cfg, 10, 10)
+	m, e := NewManager(10, 10, &noopWindow{})
 	if e != nil {
 		t.Fatal(e)
 	}
 
-	if m.focus != m.root.tiles[0] || m.config != cfg || m.height != 10 || m.width != 10 {
+	if m.focus != m.root.tiles[0] || m.height != 10 || m.width != 10 {
 		t.Errorf("not initialized correcty: %+v", m)
 	}
 
@@ -24,7 +52,7 @@ func TestNewManager(t *testing.T) {
 }
 
 func TestGetFocus(t *testing.T) {
-	m, e := NewManager(cfg, 0, 0)
+	m, e := NewManager(0, 0, &noopWindow{})
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -65,12 +93,12 @@ func TestSplitVertical(t *testing.T) {
 	width := 100
 	height := 100
 
-	if m, e = NewManager(cfg, width, height); e != nil {
+	if m, e = NewManager(width, height, &noopWindow{}); e != nil {
 		t.Fatal(e)
 	}
 
 	var w1 *TiledWindow
-	if w1, e = m.SplitVertical(m.Root()); e != nil {
+	if w1, e = m.SplitVertical(m.Root(), &noopWindow{}); e != nil {
 		t.Fatal(e)
 	}
 
@@ -80,7 +108,7 @@ func TestSplitVertical(t *testing.T) {
 	testWindowPos(t, w1, 50, 0)
 
 	var w2 *TiledWindow
-	if w2, e = m.SplitVertical(w1); e != nil {
+	if w2, e = m.SplitVertical(w1, &noopWindow{}); e != nil {
 		t.Fatal(e)
 	}
 
@@ -93,7 +121,7 @@ func TestSplitVertical(t *testing.T) {
 	testWindowPos(t, w2, 66, 0)
 
 	var w3 *TiledWindow
-	if w3, e = m.SplitVertical(m.Root()); e != nil {
+	if w3, e = m.SplitVertical(m.Root(), &noopWindow{}); e != nil {
 		t.Fatal(e)
 	}
 
@@ -115,12 +143,12 @@ func TestSplitHorizontal(t *testing.T) {
 	width := 100
 	height := 100
 
-	if m, e = NewManager(cfg, width, height); e != nil {
+	if m, e = NewManager(width, height, &noopWindow{}); e != nil {
 		t.Fatal(e)
 	}
 
 	var w1 *TiledWindow
-	if w1, e = m.SplitHorizontal(m.Root()); e != nil {
+	if w1, e = m.SplitHorizontal(m.Root(), &noopWindow{}); e != nil {
 		t.Fatal(e)
 	}
 
@@ -130,7 +158,7 @@ func TestSplitHorizontal(t *testing.T) {
 	testWindowPos(t, w1, 0, 50)
 
 	var w2 *TiledWindow
-	if w2, e = m.SplitHorizontal(w1); e != nil {
+	if w2, e = m.SplitHorizontal(w1, &noopWindow{}); e != nil {
 		t.Fatal(e)
 	}
 
@@ -143,7 +171,7 @@ func TestSplitHorizontal(t *testing.T) {
 	testWindowPos(t, w2, 0, 66)
 
 	var w3 *TiledWindow
-	if w3, e = m.SplitHorizontal(m.Root()); e != nil {
+	if w3, e = m.SplitHorizontal(m.Root(), &noopWindow{}); e != nil {
 		t.Fatal(e)
 	}
 
@@ -166,19 +194,19 @@ func TestSplitHorizontalVertical(t *testing.T) {
 	width := 100
 	height := 100
 
-	if m, e = NewManager(cfg, width, height); e != nil {
+	if m, e = NewManager(width, height, &noopWindow{}); e != nil {
 		t.Fatal(e)
 	}
 
-	if w1, e = m.SplitVertical(m.Root()); e != nil {
+	if w1, e = m.SplitVertical(m.Root(), &noopWindow{}); e != nil {
 		t.Fatal(e)
 	}
 
-	if w2, e = m.SplitVertical(w1); e != nil {
+	if w2, e = m.SplitVertical(w1, &noopWindow{}); e != nil {
 		t.Fatal(e)
 	}
 
-	if w3, e = m.SplitVertical(m.Root()); e != nil {
+	if w3, e = m.SplitVertical(m.Root(), &noopWindow{}); e != nil {
 		t.Fatal(e)
 	}
 
@@ -192,7 +220,7 @@ func TestSplitHorizontalVertical(t *testing.T) {
 	testWindowPos(t, w2, 50, 0)
 	testWindowPos(t, w3, 75, 0)
 
-	if w4, e = m.SplitHorizontal(m.Root()); e != nil {
+	if w4, e = m.SplitHorizontal(m.Root(), &noopWindow{}); e != nil {
 		t.Fatal(e)
 	}
 
@@ -202,11 +230,11 @@ func TestSplitHorizontalVertical(t *testing.T) {
 	testWindowPos(t, m.Root(), 0, 0)
 	testWindowPos(t, w4, 0, 50)
 
-	if w5, e = m.SplitHorizontal(w1); e != nil {
+	if w5, e = m.SplitHorizontal(w1, &noopWindow{}); e != nil {
 		t.Fatal(e)
 	}
 
-	if w6, e = m.SplitHorizontal(w1); e != nil {
+	if w6, e = m.SplitHorizontal(w1, &noopWindow{}); e != nil {
 		t.Fatal(e)
 	}
 
@@ -223,11 +251,11 @@ func TestStackWhenNoSpace(t *testing.T) {
 	width := 1
 	height := 1
 
-	if m, e := NewManager(cfg, width, height); e != nil {
+	if m, e := NewManager(width, height, &noopWindow{}); e != nil {
 		t.Fatal(e)
 	} else {
-		w1, _ := m.SplitHorizontal(m.Root())
-		w2, _ := m.SplitVertical(w1)
+		w1, _ := m.SplitHorizontal(m.Root(), &noopWindow{})
+		w2, _ := m.SplitVertical(w1, &noopWindow{})
 
 		testWindowSize(t, m.Root(), 1, 0) // FIXME should be 1/1
 		testWindowSize(t, w1, 0, 0)
@@ -242,15 +270,15 @@ func TestStackWhenNoSpace(t *testing.T) {
 func setupTestCase(t *testing.T, gwidth, gheight int) (m *WindowManager, w1 *TiledWindow, w2 *TiledWindow) {
 	var e error
 
-	if m, e = NewManager(cfg, gwidth, gheight); e != nil {
+	if m, e = NewManager(gwidth, gheight, &noopWindow{}); e != nil {
 		t.Fatal(e)
 	}
 
-	if w1, e = m.SplitHorizontal(m.Root()); e != nil {
+	if w1, e = m.SplitHorizontal(m.Root(), &noopWindow{}); e != nil {
 		t.Fatal(e)
 	}
 
-	if w2, e = m.SplitVertical(w1); e != nil {
+	if w2, e = m.SplitVertical(w1, &noopWindow{}); e != nil {
 		t.Fatal(e)
 	}
 

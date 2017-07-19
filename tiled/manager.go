@@ -1,22 +1,20 @@
 package window
 
-import "github.com/ernestrc/fractal/config"
+import "github.com/ernestrc/fractal"
 
 type WindowManager struct {
 	root          *tnode
 	focus         *TiledWindow
-	config        *config.Config
 	width, height int
 	/* x, y   int */
 }
 
-func NewManager(cfg *config.Config, width, height int) (m *WindowManager, err error) {
+func NewManager(width, height int, content fractal.Window) (m *WindowManager, err error) {
 	m = new(WindowManager)
-	twin := newTiledWindow(cfg)
+	twin := newTiledWindow(content)
 	m.root = newNode(vertical, twin, 0, 0, width, height)
 	twin.node = m.root
 	m.focus = twin
-	m.config = cfg
 	m.width = width
 	m.height = height
 
@@ -31,29 +29,30 @@ func (m *WindowManager) GetFocus() *TiledWindow {
 	return m.focus
 }
 
-func (m *WindowManager) Draw() error {
-	return m.root.Draw()
+func (m *WindowManager) Draw(w fractal.CellWriter) error {
+	return m.root.Draw(w)
 }
 
 func (m *WindowManager) Close(win *TiledWindow) error {
 	panic("TODO: not implemented")
 }
 
-func (m *WindowManager) SplitVertical(tw *TiledWindow) (newtw *TiledWindow, err error) {
-	return m.split(tw, vertical)
+// note that the returned TiledWindow should be initialied by the caller
+func (m *WindowManager) SplitVertical(tw *TiledWindow, content fractal.Window) (newtw *TiledWindow, err error) {
+	return m.split(tw, vertical, content)
 }
 
-func (m *WindowManager) SplitHorizontal(tw *TiledWindow) (newtw *TiledWindow, err error) {
-	return m.split(tw, horizontal)
+func (m *WindowManager) SplitHorizontal(tw *TiledWindow, content fractal.Window) (newtw *TiledWindow, err error) {
+	return m.split(tw, horizontal, content)
 }
 
-func (m *WindowManager) split(tw *TiledWindow, direction splitdir) (newtw *TiledWindow, err error) {
+func (m *WindowManager) split(tw *TiledWindow, direction splitdir, content fractal.Window) (newtw *TiledWindow, err error) {
 	if tw == nil {
 		panic("trying to split a nil tile")
 	}
 
 	node := tw.node
-	newtw = newTiledWindow(m.config)
+	newtw = newTiledWindow(content)
 
 	if node.direction == direction {
 		newtw.node = node
@@ -62,10 +61,10 @@ func (m *WindowManager) split(tw *TiledWindow, direction splitdir) (newtw *Tiled
 		return
 	}
 
+	x, y := tw.Position()
 	// substitute window we are splitting over for a node
 	// which will contain the current window and a new one
-	nnode := newNode(direction, tw, tw.xstart, tw.ystart,
-		tw.width, tw.height)
+	nnode := newNode(direction, tw, x, y, tw.Width(), tw.Height())
 	nnode.tiles = append(nnode.tiles, newtw)
 	newtw.node = nnode
 

@@ -8,9 +8,9 @@ import (
 	"io"
 	"os"
 
-	"github.com/ernestrc/fractal/config"
+	"github.com/ernestrc/fractal"
 	"github.com/ernestrc/fractal/less"
-	termbox "github.com/nsf/termbox-go"
+	"github.com/ernestrc/fractal/less/config"
 )
 
 type ScannerHandler struct {
@@ -63,7 +63,7 @@ func main() {
 	config := config.New()
 	config.Wrap = *wrap
 	if *border {
-		config.WindowBorder |= termbox.ColorWhite
+		config.WindowBorder |= fractal.ColorWhite
 	}
 
 	handler := NewHandler(input)
