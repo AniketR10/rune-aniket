@@ -283,12 +283,12 @@ func update() error {
 		return err
 	}
 
-	h.cmdWindow.Move(0, contentHeight)
+	h.cmdWindow.MoveTo(0, contentHeight)
 	if err = h.cmdWindow.Resize(cmdBarWidth, h.config.CmdBarHeight); err != nil {
 		return err
 	}
 
-	h.msgWindow.Move(cmdBarWidth, contentHeight)
+	h.msgWindow.MoveTo(cmdBarWidth, contentHeight)
 	if err = h.msgWindow.Resize(msgWidth, h.config.CmdBarHeight); err != nil {
 		return err
 	}

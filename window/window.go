@@ -28,8 +28,7 @@ type Window struct {
 	config     *config.Config
 }
 
-func New(initial *buffer.Buffer, cfg *config.Config) *Window {
-	w := new(Window)
+func (w *Window) Init(initial *buffer.Buffer, cfg *config.Config) {
 	w.cells = make(map[int]buffer.Cell)
 
 	w.buffer = initial
@@ -39,7 +38,11 @@ func New(initial *buffer.Buffer, cfg *config.Config) *Window {
 	} else {
 		w.config = cfg
 	}
+}
 
+func New(initial *buffer.Buffer, cfg *config.Config) *Window {
+	w := new(Window)
+	w.Init(initial, cfg)
 	return w
 }
 
@@ -135,19 +138,13 @@ func (w *Window) Position() (x, y int) {
 	return w.xstart, w.ystart
 }
 
-func (w *Window) Move(x, y int) {
+func (w *Window) MoveTo(x, y int) error {
 	w.xstart = x
 	w.ystart = y
+	return nil
 }
 
 func (w *Window) Resize(width, height int) error {
-	if width == 0 {
-		width = 1
-	}
-	if height == 0 {
-		height = 1
-	}
-
 	w.width = width
 	w.height = height
 
