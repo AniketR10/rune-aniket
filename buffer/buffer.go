@@ -16,7 +16,6 @@ type Cell struct {
 }
 
 type Buffer struct {
-	// TODO next    *Buffer
 	data    *bytes.Buffer
 	reslist *list.List    // search result list
 	result  *list.Element // current focused result

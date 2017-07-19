@@ -66,7 +66,7 @@ type Event struct {
 
 var (
 	h      *handle
-	writer *term.TermboxWriter
+	writer term.TermboxWriter
 )
 
 func sendEvent(ev Event) {
@@ -84,7 +84,7 @@ func redraw() error {
 		return err
 	}
 
-	if err = h.contViewer.Draw(writer); err != nil {
+	if err = h.contViewer.Draw(&writer); err != nil {
 		return err
 	}
 
@@ -93,11 +93,11 @@ func redraw() error {
 		sendEvent(Event{Type: EOF})
 	}
 
-	if err = h.cmdViewer.Draw(writer); err != nil {
+	if err = h.cmdViewer.Draw(&writer); err != nil {
 		return err
 	}
 
-	if err = h.msgViewer.Draw(writer); err != nil {
+	if err = h.msgViewer.Draw(&writer); err != nil {
 		return err
 
 	}
