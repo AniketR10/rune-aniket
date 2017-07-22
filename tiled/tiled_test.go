@@ -20,7 +20,7 @@ func (t *noopWindow) MoveTo(x, y int) error {
 	return nil
 }
 
-func (t *noopWindow) Draw(w fractal.CellWriter) (err error) {
+func (t *noopWindow) Draw(w fractal.Writer) (err error) {
 	return nil
 }
 

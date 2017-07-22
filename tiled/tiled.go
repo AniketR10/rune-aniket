@@ -71,7 +71,7 @@ func (t *tnode) MoveTo(x, y int) error {
 	return t.Resize(t.width, t.height)
 }
 
-func (t *tnode) Draw(w fractal.CellWriter) (err error) {
+func (t *tnode) Draw(w fractal.Writer) (err error) {
 	for _, ti := range t.tiles {
 		if err = ti.Draw(w); err != nil {
 			return
@@ -101,7 +101,7 @@ func (t *TiledWindow) MoveTo(x, y int) error {
 	return t.content.MoveTo(x, y)
 }
 
-func (t *TiledWindow) Draw(w fractal.CellWriter) (err error) {
+func (t *TiledWindow) Draw(w fractal.Writer) (err error) {
 	return t.content.Draw(w)
 }
 

@@ -29,7 +29,7 @@ func (m *WindowManager) GetFocus() *TiledWindow {
 	return m.focus
 }
 
-func (m *WindowManager) Draw(w fractal.CellWriter) error {
+func (m *WindowManager) Draw(w fractal.Writer) error {
 	return m.root.Draw(w)
 }
 

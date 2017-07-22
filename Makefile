@@ -1,5 +1,9 @@
 CC=go
 
+ifndef GOBIN
+	GOBIN=$(GOPATH)/bin
+endif
+
 TARGET=bin
 PWD=$(shell pwd)
 SRC=$(wildcard **/*.go)
@@ -14,9 +18,9 @@ TEST=$(patsubst %_test.go,$(TARGET)/%_test,$(TESTSRC))
 
 .PHONY: clean install test
 
-default: $(EXEC)
+default: checkEnv $(EXEC)
 
-install: $(GEXEC) $(PKGS)
+install: checkEnv $(PKGS) $(GEXEC)
 
 test: $(TEST)
 
@@ -30,12 +34,17 @@ $(EXEC): $(EXECS) $(EXECSRC) $(SRC) $(TARGET)
 	@cd $< && $(CC) build -o $(PWD)/$(patsubst cmd/%,$(TARGET)/%,$@)
 
 $(PKGS): $(SRC)
-	@cd $@ && $(CC) install
+	@-cd $@ && $(CC) install
 
 $(GEXEC): $(EXECS)
 	@cd $< && $(CC) build -o $@
 
 $(TEST): $(TESTSRC) $(SRC)
-	-mkdir -p $(dir $@)
+	@mkdir -p $(dir $@)
 	@cd $(dir $<) && $(CC) test -i -o ../$@
-	./$@
+	@printf "%30s ⇒ " $@ && ./$@
+
+checkEnv:
+ifndef GOPATH
+	$(error GOPATH is undefined)
+endif
