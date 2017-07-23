@@ -62,7 +62,7 @@ func (b *Buffer) searchResults() *list.List {
 	return b.reslist
 }
 
-func (b *Buffer) search(text []byte, cellbuf map[int]fractal.Cell) {
+func (b *Buffer) search(text []byte, cellbuf []fractal.Cell) {
 	b.reslist = b.reslist.Init()
 	b.result = nil
 	b.searchText = text

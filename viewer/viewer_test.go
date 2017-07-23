@@ -9,7 +9,7 @@ import (
 
 var fortune = `Love in your heart wasn't put there to stay.
 Love isn't love 'til you give it away.
-		-- Oscar Hammerstein II`
+		-- Oscar Hammerstein 中国`
 
 var fortune_width = 44
 
@@ -107,8 +107,8 @@ func TestViewerDraw(t *testing.T) {
 		{viewer.MoveNextResult, "Love in your heart w"},
 		{viewer.MoveNextResult, " isn't love 'til you"},
 		{viewer.MovePrevResult, " in your heart wasn'"},
-		{func() { viewer.Search("II"); viewer.MoveNextResult() }, "Oscar Hammerstein II"},
-		{func() { viewer.Search("Oscar"); viewer.MoveNextResult() }, "Oscar Hammerstein II"},
+		{func() { viewer.Search("中国"); viewer.MoveNextResult() }, "Oscar Hammerstein 中国"},
+		{func() { viewer.Search("Oscar"); viewer.MoveNextResult() }, "Oscar Hammerstein 中国"},
 	}
 
 	for _, tcase := range tests {

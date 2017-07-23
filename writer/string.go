@@ -19,17 +19,13 @@ func New(width, height int) (t *StringWriter) {
 	return
 }
 
-func (w *StringWriter) Write(x, y int, ch rune) error {
+func (w *StringWriter) Write(x, y int, ch rune, fg, bg fractal.Attribute) error {
 	if x >= w.width || y >= w.height {
 		return nil
 	}
 	idx := y*w.width + x
-	w.cellbuf[idx] = fractal.Cell{Ch: ch}
+	w.cellbuf[idx] = fractal.Cell{X: x, Y: y, Ch: ch, Fg: fg, Bg: bg}
 	return nil
-}
-
-func (w *StringWriter) SetAttributes(x, y int, fg fractal.Attribute, bg fractal.Attribute) {
-	/* ignore */
 }
 
 func (w *StringWriter) Flush() (err error) {
@@ -48,6 +44,10 @@ func (w *StringWriter) Flush() (err error) {
 		}
 	}
 	return
+}
+
+func (w *StringWriter) Cells() []fractal.Cell {
+	return w.cellbuf
 }
 
 func (w *StringWriter) Clear(_, _ fractal.Attribute) (err error) {

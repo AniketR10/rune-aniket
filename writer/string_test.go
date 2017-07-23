@@ -9,13 +9,13 @@ func TestWriteFlush(t *testing.T) {
 	c := 'A'
 	for i := 0; i < width; i++ {
 		for j := 0; j < height; j++ {
-			writer.Write(j, i, c)
+			writer.Write(j, i, c, 0, 0)
 		}
 		c++
 	}
 
 	// should be fine to wtry to write
-	if err := writer.Write(width+1, height+1, '='); err != nil {
+	if err := writer.Write(width+1, height+1, '=', 0, 0); err != nil {
 		t.Fatal(err)
 	}
 

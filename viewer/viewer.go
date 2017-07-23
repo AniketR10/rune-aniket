@@ -2,23 +2,24 @@ package viewer
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 
 	"github.com/ernestrc/fractal"
 )
 
 type Viewer struct {
-	buffer     *Buffer              // content buffer
-	cells      map[int]fractal.Cell // FIXME mapping from content index to x, y coordinates
-	wrap       bool                 // wrap text
-	xmaxoffset int                  // max x content offset
-	ymaxoffset int                  // max y content offset
-	xoffset    int                  // current x content offset
-	yoffset    int                  // current y content offset
-	x          int                  // x offset from root window
-	y          int                  // y offset from root window
-	width      int                  // window width
-	height     int                  // window height
+	buffer     *Buffer        // content buffer
+	cells      []fractal.Cell // mapping from content index to x, y coordinates
+	wrap       bool           // wrap text
+	xmaxoffset int            // max x content offset
+	ymaxoffset int            // max y content offset
+	xoffset    int            // current x content offset
+	yoffset    int            // current y content offset
+	x          int            // x offset from root window
+	y          int            // y offset from root window
+	width      int            // window width
+	height     int            // window height
 	Tabspaces  int
 }
 
@@ -27,7 +28,11 @@ func (w *Viewer) Init(initial *Buffer, width, height int, tabspaces int, wrap bo
 	w.wrap = wrap
 	w.buffer = initial
 	w.width, w.height = width, height
-	w.cells = make(map[int]fractal.Cell)
+	if initial != nil {
+		w.cells = make([]fractal.Cell, initial.Len())
+	} else {
+		w.cells = make([]fractal.Cell, 0)
+	}
 }
 
 func New(initial *Buffer, width, height int, tabspaces int, wrap bool) *Viewer {
@@ -128,7 +133,7 @@ func (w *Viewer) moveResult(i int) {
 
 	if res.X >= w.xoffset+w.width {
 		// move to the minimal x to render search result
-		w.MoveHorizontal(res.X - w.width + len(w.buffer.searchText))
+		w.MoveHorizontal(res.X - w.width + len([]rune(string(w.buffer.searchText))))
 	} else if res.X < w.xoffset {
 		w.MoveHorizontal(res.X)
 	}
@@ -189,45 +194,81 @@ func (w *Viewer) cell(idx int) fractal.Cell {
 	return w.cells[idx]
 }
 
-// TODO add max width/height drawing and remove from Draw
-// so draw doesn't need to iterate the input again
-func (w *Viewer) Scan() error {
+func reserve(s []fractal.Cell, capacity int) []fractal.Cell {
+	slen := len(s)
+
+	if capacity <= len(s) {
+		return s
+	}
+
+	if capacity <= cap(s) {
+		return s[:capacity]
+	}
+
+	n := make([]fractal.Cell, capacity)
+	copied := copy(n, s)
+	if copied != slen {
+		panic(fmt.Sprintf("copy failed to copy all cells: did=%d; should=%d", copied, slen))
+	}
+
+	return n
+}
+
+func (w *Viewer) Scan() (err error) {
 	if w.buffer == nil {
 		w.ymaxoffset = 0
 		w.xmaxoffset = 0
 		return nil
 	}
 
-	var err error
-	var c rune
-	var currX int
+	w.cells = reserve(w.cells, w.buffer.Len())
+	ncells := w.cells[:0]
+
+	var r rune
+	var size int
 	columns, row := 0, 0
-	view := bytes.NewBuffer(w.buffer.Bytes())
-	for i := 0; ; i++ {
-		if c, _, err = view.ReadRune(); err != nil {
+
+	for view, x, i := bytes.NewBuffer(w.buffer.Bytes()), 0, 0; ; {
+		if r, size, err = view.ReadRune(); err != nil {
 			break
 		}
 
-		switch c {
+		var cell fractal.Cell
+
+		switch r {
 		case '\n':
 			row++
-			currX = 0
+			x = 0
+			cell = fractal.Cell{}
 		case '\t':
-			currX += w.Tabspaces
+			x += w.Tabspaces
+			cell = fractal.Cell{}
 		default:
-			w.cells[i] = fractal.Cell{
-				X:  currX,
+			cell = fractal.Cell{
+				X:  x,
 				Y:  row,
 				Fg: w.cells[i].Fg,
 				Bg: w.cells[i].Bg,
-				Ch: c,
+				Ch: r,
 			}
-			currX++
+			x++
 		}
-		if currX > columns {
-			columns = currX
+
+		ncells = append(ncells, cell)
+
+		// we want one cell per byte so that search and indexing is natural
+		for ; size > 1; size-- {
+			ncells = append(ncells, fractal.Cell{})
 		}
+
+		if x > columns {
+			columns = x
+		}
+
+		i += size
 	}
+
+	w.cells = ncells
 
 	rows := row + 1 // row is index starting at 0
 
@@ -245,11 +286,11 @@ func (w *Viewer) Scan() error {
 		w.xmaxoffset = 0
 	}
 
-	if err != io.EOF {
-		return err
+	if err == io.EOF {
+		return nil
 	}
 
-	return nil
+	return err
 }
 
 func (w *Viewer) SetBuffer(buf *Buffer) (orig *Buffer, err error) {
@@ -269,7 +310,7 @@ func (w *Viewer) Draw(writer fractal.Writer) (err error) {
 	xwindow := w.xoffset + w.width
 	ywindow := w.yoffset + w.height
 	for _, c = range w.cells {
-		if c.Y >= w.yoffset && c.Y < ywindow && c.X >= w.xoffset && c.X < xwindow {
+		if c.Ch != 0 && c.Y >= w.yoffset && c.Y < ywindow && c.X >= w.xoffset && c.X < xwindow {
 			x = c.X - w.xoffset + w.x
 			y = c.Y - w.yoffset + w.y
 			if err = writer.Write(x, y, c.Ch, c.Fg, c.Bg); err != nil {
@@ -281,7 +322,20 @@ func (w *Viewer) Draw(writer fractal.Writer) (err error) {
 	return nil
 }
 
+func (w *Viewer) resetCells() {
+	for i, c := range w.cells {
+		w.cells[i] = fractal.Cell{
+			Fg: 0,
+			Bg: 0,
+			Ch: c.Ch,
+			X:  c.X,
+			Y:  c.Y,
+		}
+	}
+}
+
 func (w *Viewer) Search(text string) int {
+	w.resetCells()
 	w.buffer.search([]byte(text), w.cells)
 	return w.buffer.reslist.Len()
 }
