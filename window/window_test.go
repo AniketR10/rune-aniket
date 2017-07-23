@@ -130,3 +130,64 @@ func TestWindowDraw(t *testing.T) {
 		}
 	}
 }
+
+var cjklef = `Love in your heart wasn't put there to stay.
+Love isn't love 'til you give it away.
+		-- Oscar Hammerstein 中国`
+
+func TestWindowDrawWrap(t *testing.T) {
+	width, height := 8, 2
+	tabspaces := 4
+	wrap := true
+	buf, window := newWindow(tabspaces, wrap, width, height)
+	buf.Write([]byte(fortune))
+	if err := window.Scan(); err != nil {
+		t.Fatal(err)
+	}
+
+	w := writer.New(width, height)
+
+	tests := []struct {
+		action   func()
+		expected string
+	}{
+		{nil, "Love in \nyour hea"},
+		{window.SeekUp, "Love in \nyour hea"},
+		{window.SeekLeft, "Love in \nyour hea"},
+		{window.SeekRight, "Love in \nyour hea"},
+		{window.SeekLeft, "Love in \nyour hea"},
+		{window.SeekDown, "Love isn\n't love "},
+		{window.SeekDown, "Love isn\n't love "},
+		{window.SeekRight, "Love isn\n't love "},
+		{window.SeekStartFile, "Love in \nyour hea"},
+		{window.SeekEndFile, "Love isn\n't love "},
+		{window.SeekStartLine, "Love isn\n't love "},
+		{window.SeekStartFile, "Love in \nyour hea"},
+		{func() { window.Move(1, 1) }, "        \n Love in"},
+		{func() { window.Move(0, 0) }, "Love in \nyour hea"},
+		{func() { window.Search("Love") }, "Love in \nyour hea"},
+		{window.SeekNextResult, "Love in \nyour hea"},
+		{func() { window.Resize(20, 1); w = writer.New(20, 1) }, "Love in your heart w"},
+		{func() { window.Search("you") }, "Love in your heart w"},
+		{window.SeekNextResult, "Love in your heart w"},
+	}
+
+	for _, tcase := range tests {
+		w.Clear(0, 0)
+		if tcase.action != nil {
+			tcase.action()
+		}
+
+		if err := window.Draw(w); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := w.Flush(); err != nil {
+			t.Fatal(err)
+		}
+
+		if w.String() != tcase.expected {
+			t.Errorf("expected: %q; found: %q", tcase.expected, w.String())
+		}
+	}
+}

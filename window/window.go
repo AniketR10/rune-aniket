@@ -169,9 +169,6 @@ func (w *Window) Resize(width, height int) error {
 	w.width = width
 	w.height = height
 
-	// avoid ending up in an illegal state
-	w.offset.X, w.offset.Y = 0, 0
-
 	if err := w.Scan(); err != nil {
 		return err
 	}
@@ -271,6 +268,7 @@ func (w *Window) Scan() (err error) {
 
 	rows := row + 1 // row is index starting at 0
 
+	// adjust max content offsets
 	if rows <= w.height {
 		w.maxoffset.Y = 0
 	} else {
@@ -284,6 +282,10 @@ func (w *Window) Scan() (err error) {
 	} else {
 		w.maxoffset.X = 0
 	}
+
+	// adjust offsets in case they became ilegal
+	w.SeekHorizontal(w.offset.X)
+	w.SeekVertical(w.offset.Y)
 
 	if err == io.EOF {
 		return nil
@@ -303,7 +305,7 @@ func (w *Window) SetBuffer(buf *Buffer) (orig *Buffer, err error) {
 	return
 }
 
-func (w *Window) Draw(writer fractal.Writer) (err error) {
+func (w *Window) draw(writer fractal.Writer) (err error) {
 	var x, y int
 	var c fractal.Cell
 	xwindow := w.offset.X + w.width
@@ -319,6 +321,40 @@ func (w *Window) Draw(writer fractal.Writer) (err error) {
 	}
 
 	return nil
+}
+
+func (w *Window) wrapdraw(writer fractal.Writer) (err error) {
+	var x, y, ywindow int
+	var c fractal.Cell
+	xwindow := w.width
+	wraps := 0
+	for _, c = range w.cells {
+		ywindow = w.offset.Y + w.height - wraps
+		if c.Ch != 0 && c.Y >= w.offset.Y && c.Y < ywindow {
+			x = c.X
+			if x >= xwindow {
+				for ; x >= xwindow; x -= xwindow {
+				}
+				if x == 0 {
+					wraps++
+				}
+			}
+			y = c.Y - w.offset.Y + w.position.Y + wraps
+			if err = writer.Write(x+w.position.X, y, c.Ch, c.Fg, c.Bg); err != nil {
+				return
+			}
+		}
+	}
+
+	return nil
+}
+
+func (w *Window) Draw(writer fractal.Writer) (err error) {
+	if w.wrap {
+		return w.wrapdraw(writer)
+	}
+
+	return w.draw(writer)
 }
 
 func (w *Window) resetCells() {
