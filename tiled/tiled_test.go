@@ -15,7 +15,7 @@ func (t *noopWindow) Resize(width, height int) (err error) {
 	return nil
 }
 
-func (t *noopWindow) MoveTo(x, y int) error {
+func (t *noopWindow) SetPosition(x, y int) error {
 	t.x, t.y = x, y
 	return nil
 }

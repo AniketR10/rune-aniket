@@ -18,9 +18,9 @@ TEST=$(patsubst %_test.go,$(TARGET)/%_test,$(TESTSRC))
 
 .PHONY: clean install test
 
-default: checkEnv $(EXEC)
+default: CHECK $(EXEC)
 
-install: checkEnv $(PKGS) $(GEXEC)
+install: CHECK $(PKGS) $(GEXEC)
 
 test: $(TEST)
 
@@ -39,12 +39,14 @@ $(PKGS): $(SRC)
 $(GEXEC): $(EXECS)
 	@cd $< && $(CC) build -o $@
 
-$(TEST): $(TESTSRC) $(SRC)
+$(TEST): $(TESTSRC) $(SRC) FORCE
 	@mkdir -p $(dir $@)
-	@cd $(dir $<) && $(CC) test -i -o ../$@
+	@cd $(patsubst bin/%,%,$(dir $@)) && $(CC) test -i -o ../$@
 	@printf "%30s ⇒ " $@ && ./$@
 
-checkEnv:
+FORCE:
+
+CHECK:
 ifndef GOPATH
 	$(error GOPATH is undefined)
 endif

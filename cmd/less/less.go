@@ -10,7 +10,6 @@ import (
 
 	"github.com/ernestrc/fractal"
 	"github.com/ernestrc/fractal/less"
-	"github.com/ernestrc/fractal/less/config"
 )
 
 type ScannerHandler struct {
@@ -60,7 +59,7 @@ func main() {
 
 	}
 
-	config := config.New()
+	config := less.DefaultConfig()
 	config.Wrap = *wrap
 	if *border {
 		config.WindowBorder |= fractal.ColorWhite

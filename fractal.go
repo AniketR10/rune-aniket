@@ -31,7 +31,7 @@ type Writer interface {
 // TODO change for component
 type Window interface {
 	Resize(width, height int) error
-	MoveTo(x, y int) error
+	SetPosition(x, y int) error
 	// TODO Flush
 	Draw(w Writer) error
 	Height() int

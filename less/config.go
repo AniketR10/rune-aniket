@@ -1,4 +1,4 @@
-package config
+package less
 
 import fractal "github.com/ernestrc/fractal"
 
@@ -28,7 +28,7 @@ var defaultConfig = Config{
 	ResBG:        fractal.ColorDefault,
 }
 
-func New() *Config {
+func DefaultConfig() *Config {
 	cfg := new(Config)
 	*cfg = defaultConfig
 	return cfg

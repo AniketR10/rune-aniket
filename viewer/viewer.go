@@ -5,38 +5,35 @@ import (
 	"io"
 
 	"github.com/ernestrc/fractal"
-	"github.com/ernestrc/fractal/buffer"
 )
 
 type Viewer struct {
-	buffer     *buffer.Buffer      // content buffer
-	cells      map[int]buffer.Cell // color information used for printing to window
-	wrap       bool                // wrap text
-	xmaxoffset int                 // max x content offset
-	ymaxoffset int                 // max y content offset
-	xoffset    int                 // current x content offset
-	yoffset    int                 // current y content offset
-	xstart     int                 // x offset from root window
-	ystart     int                 // y offset from root window
-	height     int                 // window height
-	width      int                 // window width
+	buffer     *Buffer              // content buffer
+	cells      map[int]fractal.Cell // FIXME mapping from content index to x, y coordinates
+	wrap       bool                 // wrap text
+	xmaxoffset int                  // max x content offset
+	ymaxoffset int                  // max y content offset
+	xoffset    int                  // current x content offset
+	yoffset    int                  // current y content offset
+	x          int                  // x offset from root window
+	y          int                  // y offset from root window
+	width      int                  // window width
+	height     int                  // window height
 	Tabspaces  int
 }
 
-func (w *Viewer) Init(initial *buffer.Buffer) {
-	w.cells = make(map[int]buffer.Cell)
-	w.Tabspaces = 4
+func (w *Viewer) Init(initial *Buffer, width, height int, tabspaces int, wrap bool) {
+	w.Tabspaces = tabspaces
+	w.wrap = wrap
 	w.buffer = initial
+	w.width, w.height = width, height
+	w.cells = make(map[int]fractal.Cell)
 }
 
-func New(initial *buffer.Buffer) *Viewer {
+func New(initial *Buffer, width, height int, tabspaces int, wrap bool) *Viewer {
 	w := new(Viewer)
-	w.Init(initial)
+	w.Init(initial, width, height, tabspaces, wrap)
 	return w
-}
-
-func (w *Viewer) Cells() map[int]buffer.Cell {
-	return w.cells
 }
 
 func (w *Viewer) YOffset() int {
@@ -71,7 +68,7 @@ func (w *Viewer) MoveUp() {
 
 func (w *Viewer) MoveDown() {
 	if w.CanMoveDown() {
-		w.yoffset += 1
+		w.yoffset++
 	}
 }
 
@@ -123,21 +120,57 @@ func (w *Viewer) MoveStartFile() {
 	w.MoveVertical(0)
 }
 
-func (w *Viewer) Position() (x, y int) {
-	return w.xstart, w.ystart
+func (w *Viewer) moveResult(i int) {
+
+	res := w.cells[i]
+
+	w.MoveVertical(res.Y)
+
+	if res.X >= w.xoffset+w.width {
+		// move to the minimal x to render search result
+		w.MoveHorizontal(res.X - w.width + len(w.buffer.searchText))
+	} else if res.X < w.xoffset {
+		w.MoveHorizontal(res.X)
+	}
 }
 
-func (w *Viewer) MoveTo(x, y int) error {
-	w.xstart = x
-	w.ystart = y
-	return nil
+func (w *Viewer) MoveNextResult() {
+	i, ok := w.buffer.nextResult()
+
+	if !ok {
+		return
+	}
+
+	w.moveResult(i)
+}
+
+func (w *Viewer) MovePrevResult() {
+	i, ok := w.buffer.prevResult()
+
+	if !ok {
+		return
+	}
+
+	w.moveResult(i)
+}
+
+func (w *Viewer) Position() (x, y int) {
+	return w.x, w.y
+}
+
+func (w *Viewer) SetPosition(x, y int) {
+	w.x = x
+	w.y = y
 }
 
 func (w *Viewer) Resize(width, height int) error {
 	w.width = width
 	w.height = height
 
-	if err := w.scanInput(); err != nil {
+	// avoid ending up in an illegal state
+	w.xoffset, w.yoffset = 0, 0
+
+	if err := w.Scan(); err != nil {
 		return err
 	}
 
@@ -152,10 +185,13 @@ func (w *Viewer) Width() int {
 	return w.width
 }
 
-// TODO should create cells so that they are drawable already
-// then Draw shoul just take viewable cells and print them
-func (w *Viewer) scanInput() error {
-	// this window does not have a buffer assigned
+func (w *Viewer) cell(idx int) fractal.Cell {
+	return w.cells[idx]
+}
+
+// TODO add max width/height drawing and remove from Draw
+// so draw doesn't need to iterate the input again
+func (w *Viewer) Scan() error {
 	if w.buffer == nil {
 		w.ymaxoffset = 0
 		w.xmaxoffset = 0
@@ -165,7 +201,7 @@ func (w *Viewer) scanInput() error {
 	var err error
 	var c rune
 	var currX int
-	columns, rows := 0, 0
+	columns, row := 0, 0
 	view := bytes.NewBuffer(w.buffer.Bytes())
 	for i := 0; ; i++ {
 		if c, _, err = view.ReadRune(); err != nil {
@@ -174,21 +210,26 @@ func (w *Viewer) scanInput() error {
 
 		switch c {
 		case '\n':
-			rows++
-			if currX > columns {
-				columns = currX
-			}
+			row++
 			currX = 0
 		case '\t':
 			currX += w.Tabspaces
 		default:
+			w.cells[i] = fractal.Cell{
+				X:  currX,
+				Y:  row,
+				Fg: w.cells[i].Fg,
+				Bg: w.cells[i].Bg,
+				Ch: c,
+			}
 			currX++
 		}
-
-		// collect x, y coordinates
-		prev := w.cells[i]
-		w.cells[i] = buffer.Cell{FG: prev.FG, BG: prev.BG, X: currX, Y: rows, Idx: i}
+		if currX > columns {
+			columns = currX
+		}
 	}
+
+	rows := row + 1 // row is index starting at 0
 
 	if rows <= w.height {
 		w.ymaxoffset = 0
@@ -211,87 +252,37 @@ func (w *Viewer) scanInput() error {
 	return nil
 }
 
-func (w *Viewer) SetBuffer(buf *buffer.Buffer) (orig *buffer.Buffer, err error) {
+func (w *Viewer) SetBuffer(buf *Buffer) (orig *Buffer, err error) {
 	orig = w.buffer
 	w.buffer = buf
 
-	if err = w.scanInput(); err != nil {
+	if err = w.Scan(); err != nil {
 		return
 	}
 
 	return
 }
 
-func (w *Viewer) Draw(writer fractal.CellWriter) error {
-	if w.buffer == nil {
-		return nil
-	}
-
-	var r rune
-	var err error
-	x := w.xstart
-	y := w.ystart
-	xoffset := w.xoffset
-	yoffset := w.yoffset
-
-	view := bytes.NewBuffer(w.buffer.Bytes())
-
-	// draw until we've filled all available cells
-	for i := 0; y-w.ystart < w.height; i++ {
-		if r, _, err = view.ReadRune(); err != nil {
-			break
-		}
-
-		// wrap or skip content
-		if x-w.xstart == w.width {
-			if w.wrap {
-				y++
-				x = w.xstart
-			} else {
-				if r == '\n' {
-					y++
-					x = w.xstart
-					xoffset = w.xoffset
-				}
-				continue
+func (w *Viewer) Draw(writer fractal.Writer) (err error) {
+	var x, y int
+	var c fractal.Cell
+	xwindow := w.xoffset + w.width
+	ywindow := w.yoffset + w.height
+	for _, c = range w.cells {
+		if c.Y >= w.yoffset && c.Y < ywindow && c.X >= w.xoffset && c.X < xwindow {
+			x = c.X - w.xoffset + w.x
+			y = c.Y - w.yoffset + w.y
+			writer.SetAttributes(x, y, c.Fg, c.Bg)
+			if err = writer.Write(x, y, c.Ch); err != nil {
+				return
 			}
-		}
-
-		switch r {
-		case '\n':
-			if yoffset > 0 {
-				yoffset--
-			} else {
-				y++
-				x = w.xstart
-				xoffset = w.xoffset
-			}
-		case '\t':
-			if yoffset != 0 {
-				continue
-			}
-			if xoffset <= 0 {
-				x += w.Tabspaces
-			} else {
-				xoffset -= w.Tabspaces
-			}
-		default:
-			if yoffset != 0 {
-				continue
-			}
-			if xoffset > 0 {
-				xoffset--
-				continue
-			}
-			c := w.cells[i]
-			writer.SetCell(x, y, r, c.FG, c.BG)
-			x++
 		}
 	}
 
-	if err == io.EOF {
-		return nil
-	}
+	return nil
+}
 
-	return err
+func (w *Viewer) Search(text string) int {
+	w.buffer.search([]byte(text), w.cells)
+	return w.buffer.reslist.Len()
 }

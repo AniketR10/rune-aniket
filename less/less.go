@@ -4,8 +4,7 @@ import (
 	"fmt"
 	"math"
 
-	"github.com/ernestrc/fractal/buffer"
-	"github.com/ernestrc/fractal/less/config"
+	"github.com/ernestrc/fractal"
 	term "github.com/ernestrc/fractal/termbox"
 	"github.com/ernestrc/fractal/viewer"
 	termbox "github.com/nsf/termbox-go"
@@ -19,16 +18,16 @@ const (
 )
 
 type handle struct {
-	mode       mode
 	cmdViewer  *viewer.Viewer
-	cmdBuf     *buffer.Buffer
+	cmdBuf     *viewer.Buffer
 	cmdChan    chan []byte
 	msgViewer  *viewer.Viewer
-	msgBuf     *buffer.Buffer
+	msgBuf     *viewer.Buffer
 	msgChan    chan []byte
 	contViewer *viewer.Viewer
-	contBuf    *buffer.Buffer
+	contBuf    *viewer.Buffer
 	contChan   chan []byte
+	mode       mode
 	termChan   chan termbox.Event
 	evChan     chan Event
 	delEOF     bool
@@ -36,9 +35,10 @@ type handle struct {
 	ycursor    int
 	height     int
 	width      int
-	config     *config.Config
-	search     []byte
+	config     *Config
+	search     string
 	pending    []Event
+	cells      map[int]fractal.Cell // color information used for printing to window
 }
 
 // EventType represents a less event
@@ -65,7 +65,7 @@ type Event struct {
 }
 
 var (
-	h      *handle
+	h      handle
 	writer term.TermboxWriter
 )
 
@@ -79,8 +79,7 @@ func sendError(err error) {
 
 func redraw() error {
 	var err error
-	if err = termbox.Clear(termbox.Attribute(h.config.FG),
-		termbox.Attribute(h.config.BG)); err != nil {
+	if err = writer.Clear(h.config.FG, h.config.BG); err != nil {
 		return err
 	}
 
@@ -103,7 +102,7 @@ func redraw() error {
 	}
 
 	termbox.SetCursor(h.xcursor, h.ycursor)
-	if err = termbox.Flush(); err != nil {
+	if err = writer.Flush(); err != nil {
 		return err
 	}
 
@@ -146,16 +145,14 @@ func searchHandleEvent(ev termbox.Event) (exit bool, err error) {
 		h.cmdBuf.Truncate(h.cmdBuf.Len() - 1)
 
 	case termbox.KeyEnter:
-		h.search = h.cmdBuf.Bytes()[1:]
-		h.contBuf.Search(h.search, h.contViewer.Cells(), h.config.FG,
-			h.config.BG, h.config.ResFG, h.config.ResBG)
+		bytes := h.cmdBuf.Bytes()[1:]
+		h.search = string(bytes)
+		h.contViewer.Search(h.search)
 		if err = setNormalMode(); err != nil {
 			return
 		}
-		if err = moveNextResult(); err != nil {
-			return
-		}
-		sendEvent(Event{Type: Search, Data: h.search})
+		h.contViewer.MoveNextResult()
+		sendEvent(Event{Type: Search, Data: bytes})
 
 	case termbox.KeyEsc:
 		if err = setNormalMode(); err != nil {
@@ -172,37 +169,6 @@ func searchHandleEvent(ev termbox.Event) (exit bool, err error) {
 	return
 }
 
-func movePrevResult() error {
-	c, ok := h.contBuf.PrevResult()
-
-	if !ok {
-		if err := setMessage([]byte("pattern not found")); err != nil {
-			return err
-		}
-		return nil
-	}
-
-	h.contViewer.MoveVertical(c.Y)
-
-	return nil
-}
-
-func moveNextResult() error {
-	c, ok := h.contBuf.NextResult()
-
-	if !ok {
-		if err := setMessage([]byte("pattern not found")); err != nil {
-			return err
-		}
-		return nil
-	}
-
-	// go to result line
-	h.contViewer.MoveVertical(c.Y)
-
-	return nil
-}
-
 func normalHandleEvent(ev termbox.Event) (exit bool, err error) {
 	switch ev.Type {
 	case termbox.EventResize:
@@ -216,9 +182,9 @@ func normalHandleEvent(ev termbox.Event) (exit bool, err error) {
 			case 'q':
 				return true, nil
 			case 'N':
-				err = movePrevResult()
+				h.contViewer.MovePrevResult()
 			case 'n':
-				err = moveNextResult()
+				h.contViewer.MoveNextResult()
 			case '0':
 				h.contViewer.MoveStartLine()
 			case '$':
@@ -266,8 +232,7 @@ func setContent(data []byte) error {
 	}
 
 	if len(h.search) != 0 {
-		h.contBuf.Search(h.search, h.contViewer.Cells(), h.config.FG,
-			h.config.BG, h.config.ResFG, h.config.ResBG)
+		h.contViewer.Search(h.search)
 	}
 
 	return nil
@@ -286,12 +251,12 @@ func update() error {
 		return err
 	}
 
-	h.cmdViewer.MoveTo(0, contentHeight)
+	h.cmdViewer.SetPosition(0, contentHeight)
 	if err = h.cmdViewer.Resize(cmdBarWidth, h.config.CmdBarHeight); err != nil {
 		return err
 	}
 
-	h.msgViewer.MoveTo(cmdBarWidth, contentHeight)
+	h.msgViewer.SetPosition(cmdBarWidth, contentHeight)
 	if err = h.msgViewer.Resize(msgWidth, h.config.CmdBarHeight); err != nil {
 		return err
 	}
@@ -367,27 +332,25 @@ func run() {
 
 // Init initializes the library and takes control of stdout.
 // This function should be called before any other functions.
-func Init(cfg *config.Config, content string) error {
+func Init(cfg *Config, content string) error {
 	var err error
 
-	h = new(handle)
-
 	if cfg == nil {
-		h.config = config.New()
+		h.config = DefaultConfig()
 	} else {
 		h.config = cfg
 	}
 
-	h.cmdBuf = buffer.New()
-	h.cmdViewer = viewer.New(h.cmdBuf)
+	h.cmdBuf = viewer.NewBuffer(h.config.ResFG, h.config.ResBG)
+	h.cmdViewer = viewer.New(h.cmdBuf, h.config.Tabspaces, h.config.Wrap)
 	h.cmdChan = make(chan []byte)
 
-	h.msgBuf = buffer.New()
-	h.msgViewer = viewer.New(h.msgBuf)
+	h.msgBuf = viewer.NewBuffer(h.config.ResFG, h.config.ResBG)
+	h.msgViewer = viewer.New(h.msgBuf, h.config.Tabspaces, h.config.Wrap)
 	h.msgChan = make(chan []byte)
 
-	h.contBuf = buffer.New()
-	h.contViewer = viewer.New(h.contBuf)
+	h.contBuf = viewer.NewBuffer(h.config.ResFG, h.config.ResBG)
+	h.contViewer = viewer.New(h.contBuf, h.config.Tabspaces, h.config.Wrap)
 	h.contChan = make(chan []byte)
 
 	h.evChan = make(chan Event)
@@ -413,6 +376,7 @@ func Init(cfg *config.Config, content string) error {
 	}
 
 	h.termChan = make(chan termbox.Event)
+	h.cells = make(map[int]fractal.Cell)
 
 	go run()
 
