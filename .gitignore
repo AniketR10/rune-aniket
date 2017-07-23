@@ -16,3 +16,4 @@
 cmd/less/*
 !cmd/less/*.go
 bin
+target
