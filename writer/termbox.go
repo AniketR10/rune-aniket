@@ -1,4 +1,4 @@
-package termbox
+package writer
 
 import (
 	"github.com/ernestrc/fractal"

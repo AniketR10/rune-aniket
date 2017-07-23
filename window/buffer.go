@@ -1,4 +1,4 @@
-package viewer
+package window
 
 import (
 	"bytes"
@@ -88,8 +88,10 @@ func (b *Buffer) search(text []byte, cellbuf []fractal.Cell) {
 				Fg: b.resfg,
 				Bg: b.resbg,
 				Ch: cellbuf[j].Ch,
-				X:  cellbuf[j].X,
-				Y:  cellbuf[j].Y,
+				Coordinates: fractal.Coordinates{
+					X: cellbuf[j].X,
+					Y: cellbuf[j].Y,
+				},
 			}
 		}
 

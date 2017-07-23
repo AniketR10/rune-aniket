@@ -24,7 +24,7 @@ func (w *StringWriter) Write(x, y int, ch rune, fg, bg fractal.Attribute) error 
 		return nil
 	}
 	idx := y*w.width + x
-	w.cellbuf[idx] = fractal.Cell{X: x, Y: y, Ch: ch, Fg: fg, Bg: bg}
+	w.cellbuf[idx] = fractal.Cell{Coordinates: fractal.Coordinates {X: x, Y: y}, Ch: ch, Fg: fg, Bg: bg}
 	return nil
 }
 

@@ -9,7 +9,7 @@ type WindowManager struct {
 	/* x, y   int */
 }
 
-func NewManager(width, height int, content fractal.Window) (m *WindowManager, err error) {
+func NewManager(width, height int, content fractal.Component) (m *WindowManager, err error) {
 	m = new(WindowManager)
 	twin := newTiledWindow(content)
 	m.root = newNode(vertical, twin, 0, 0, width, height)
@@ -38,15 +38,15 @@ func (m *WindowManager) Close(win *TiledWindow) error {
 }
 
 // note that the returned TiledWindow should be initialied by the caller
-func (m *WindowManager) SplitVertical(tw *TiledWindow, content fractal.Window) (newtw *TiledWindow, err error) {
+func (m *WindowManager) SplitVertical(tw *TiledWindow, content fractal.Component) (newtw *TiledWindow, err error) {
 	return m.split(tw, vertical, content)
 }
 
-func (m *WindowManager) SplitHorizontal(tw *TiledWindow, content fractal.Window) (newtw *TiledWindow, err error) {
+func (m *WindowManager) SplitHorizontal(tw *TiledWindow, content fractal.Component) (newtw *TiledWindow, err error) {
 	return m.split(tw, horizontal, content)
 }
 
-func (m *WindowManager) split(tw *TiledWindow, direction splitdir, content fractal.Window) (newtw *TiledWindow, err error) {
+func (m *WindowManager) split(tw *TiledWindow, direction splitdir, content fractal.Component) (newtw *TiledWindow, err error) {
 	if tw == nil {
 		panic("trying to split a nil tile")
 	}

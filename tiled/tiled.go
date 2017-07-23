@@ -10,28 +10,27 @@ const (
 )
 
 type tnode struct {
-	x         int
-	y         int
+	fractal.Coordinates
 	width     int
 	height    int
-	tiles     []fractal.Window
+	tiles     []fractal.Component
 	direction splitdir
 }
 
 func newNode(direction splitdir, w *TiledWindow, x, y, width, height int) (t *tnode) {
 	t = new(tnode)
-	t.x, t.y, t.width, t.height = x, y, width, height
-	t.tiles = []fractal.Window{w}
+	t.X, t.Y, t.width, t.height = x, y, width, height
+	t.tiles = []fractal.Component{w}
 	t.direction = direction
 	return
 }
 
 type TiledWindow struct {
-	content fractal.Window
+	content fractal.Component
 	node    *tnode
 }
 
-func newTiledWindow(content fractal.Window) (t *TiledWindow) {
+func newTiledWindow(content fractal.Component) (t *TiledWindow) {
 	t = new(TiledWindow)
 	t.content = content
 	return
@@ -52,22 +51,22 @@ func (t *tnode) Resize(width, height int) (err error) {
 			return
 		}
 		if t.direction == vertical {
-			if err = ti.SetPosition(t.x+i*width, t.y); err != nil {
+			if err = ti.Move(t.X+i*width, t.Y); err != nil {
 				return
 			}
 			continue
 		}
 
-		if err = ti.SetPosition(t.x, t.y+i*height); err != nil {
+		if err = ti.Move(t.X, t.Y+i*height); err != nil {
 			return
 		}
 	}
 	return
 }
 
-func (t *tnode) SetPosition(x, y int) error {
-	t.x = x
-	t.y = y
+func (t *tnode) Move(x, y int) error {
+	t.X = x
+	t.Y = y
 	return t.Resize(t.width, t.height)
 }
 
@@ -90,15 +89,15 @@ func (t *tnode) Width() int {
 }
 
 func (t *tnode) Position() (int, int) {
-	return t.x, t.y
+	return t.X, t.Y
 }
 
 func (t *TiledWindow) Resize(width, height int) (err error) {
 	return t.content.Resize(width, height)
 }
 
-func (t *TiledWindow) SetPosition(x, y int) error {
-	return t.content.SetPosition(x, y)
+func (t *TiledWindow) Move(x, y int) error {
+	return t.content.Move(x, y)
 }
 
 func (t *TiledWindow) Draw(w fractal.Writer) (err error) {

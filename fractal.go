@@ -20,37 +20,27 @@ const (
 	AttrReverse
 )
 
-// TODO Printer
 type Writer interface {
 	Write(x, y int, r rune, fg Attribute, bg Attribute) error
 	Flush() error
 	Clear(fg, bg Attribute) error
 }
 
-// TODO change for component
-type Window interface {
+type Component interface {
 	Resize(width, height int) error
-	SetPosition(x, y int) error
-	// TODO Flush
+	Move(x, y int) error
 	Draw(w Writer) error
 	Height() int
 	Width() int
 	Position() (int, int)
 }
 
-// TODO use
 type Coordinates struct {
-	x, y int
-}
-
-// TODO use
-type Attributes struct {
-	FG Attribute
-	BG Attribute
+	X, Y int
 }
 
 type Cell struct {
-	X, Y   int
+	Coordinates
 	Fg, Bg Attribute
 	Ch     rune
 }
