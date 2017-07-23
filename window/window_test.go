@@ -131,10 +131,6 @@ func TestWindowDraw(t *testing.T) {
 	}
 }
 
-var cjklef = `Love in your heart wasn't put there to stay.
-Love isn't love 'til you give it away.
-		-- Oscar Hammerstein 中国`
-
 func TestWindowDrawWrap(t *testing.T) {
 	width, height := 8, 2
 	tabspaces := 4
