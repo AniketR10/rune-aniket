@@ -22,8 +22,7 @@ const (
 
 // TODO Printer
 type Writer interface {
-	Write(x, y int, r rune) error
-	SetAttributes(x, y int, fg Attribute, bg Attribute)
+	Write(x, y int, r rune, fg Attribute, bg Attribute) error
 	Flush() error
 	Clear(fg, bg Attribute) error
 }

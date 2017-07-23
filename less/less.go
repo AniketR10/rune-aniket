@@ -5,8 +5,8 @@ import (
 	"math"
 
 	"github.com/ernestrc/fractal"
-	term "github.com/ernestrc/fractal/termbox"
 	"github.com/ernestrc/fractal/viewer"
+	term "github.com/ernestrc/fractal/writer/termbox"
 	termbox "github.com/nsf/termbox-go"
 )
 
@@ -342,15 +342,15 @@ func Init(cfg *Config, content string) error {
 	}
 
 	h.cmdBuf = viewer.NewBuffer(h.config.ResFG, h.config.ResBG)
-	h.cmdViewer = viewer.New(h.cmdBuf, h.config.Tabspaces, h.config.Wrap)
+	h.cmdViewer = viewer.New(h.cmdBuf, h.width, h.height, h.config.Tabspaces, h.config.Wrap)
 	h.cmdChan = make(chan []byte)
 
 	h.msgBuf = viewer.NewBuffer(h.config.ResFG, h.config.ResBG)
-	h.msgViewer = viewer.New(h.msgBuf, h.config.Tabspaces, h.config.Wrap)
+	h.msgViewer = viewer.New(h.msgBuf, h.width, h.height, h.config.Tabspaces, h.config.Wrap)
 	h.msgChan = make(chan []byte)
 
 	h.contBuf = viewer.NewBuffer(h.config.ResFG, h.config.ResBG)
-	h.contViewer = viewer.New(h.contBuf, h.config.Tabspaces, h.config.Wrap)
+	h.contViewer = viewer.New(h.contBuf, h.width, h.height, h.config.Tabspaces, h.config.Wrap)
 	h.contChan = make(chan []byte)
 
 	h.evChan = make(chan Event)

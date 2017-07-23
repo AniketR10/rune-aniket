@@ -272,8 +272,7 @@ func (w *Viewer) Draw(writer fractal.Writer) (err error) {
 		if c.Y >= w.yoffset && c.Y < ywindow && c.X >= w.xoffset && c.X < xwindow {
 			x = c.X - w.xoffset + w.x
 			y = c.Y - w.yoffset + w.y
-			writer.SetAttributes(x, y, c.Fg, c.Bg)
-			if err = writer.Write(x, y, c.Ch); err != nil {
+			if err = writer.Write(x, y, c.Ch, c.Fg, c.Bg); err != nil {
 				return
 			}
 		}
