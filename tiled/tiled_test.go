@@ -7,6 +7,7 @@ import (
 )
 
 type noopWindow struct {
+	fill                rune
 	x, y, width, height int
 }
 

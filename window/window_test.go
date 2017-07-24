@@ -79,7 +79,7 @@ func TestWindowDraw(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	w := writer.New(width, height)
+	w := writer.String(width, height)
 
 	tests := []struct {
 		action   func()
@@ -102,7 +102,7 @@ func TestWindowDraw(t *testing.T) {
 		{func() { window.Search("Love") }, "Love in \nLove isn"},
 		{window.SeekNextResult, "Love in \nLove isn"},
 		{window.SeekPrevResult, "Love in \nLove isn"},
-		{func() { window.Resize(20, 1); w = writer.New(20, 1) }, "Love in your heart w"},
+		{func() { window.Resize(20, 1); w = writer.String(20, 1) }, "Love in your heart w"},
 		{func() { window.Search("you") }, "Love in your heart w"},
 		{window.SeekNextResult, "Love in your heart w"},
 		{window.SeekNextResult, " isn't love 'til you"},
@@ -141,7 +141,7 @@ func TestWindowDrawWrap(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	w := writer.New(width, height)
+	w := writer.String(width, height)
 
 	tests := []struct {
 		action   func()
@@ -163,7 +163,7 @@ func TestWindowDrawWrap(t *testing.T) {
 		{func() { window.Move(0, 0) }, "Love in \nyour hea"},
 		{func() { window.Search("Love") }, "Love in \nyour hea"},
 		{window.SeekNextResult, "Love in \nyour hea"},
-		{func() { window.Resize(20, 1); w = writer.New(20, 1) }, "Love in your heart w"},
+		{func() { window.Resize(20, 1); w = writer.String(20, 1) }, "Love in your heart w"},
 		{func() { window.Search("you") }, "Love in your heart w"},
 		{window.SeekNextResult, "Love in your heart w"},
 	}
