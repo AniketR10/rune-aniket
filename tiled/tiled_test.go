@@ -1,4 +1,4 @@
-package window
+package tiled
 
 import (
 	"testing"
@@ -36,8 +36,8 @@ func (t *noopWindow) Position() (int, int) {
 	return t.x, t.y
 }
 
-func TestNewManager(t *testing.T) {
-	m, e := NewManager(10, 10, &noopWindow{})
+func TestNew(t *testing.T) {
+	m, e := New(10, 10, &noopWindow{})
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -52,7 +52,7 @@ func TestNewManager(t *testing.T) {
 }
 
 func TestGetFocus(t *testing.T) {
-	m, e := NewManager(0, 0, &noopWindow{})
+	m, e := New(0, 0, &noopWindow{})
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -93,7 +93,7 @@ func TestSplitVertical(t *testing.T) {
 	width := 100
 	height := 100
 
-	if m, e = NewManager(width, height, &noopWindow{}); e != nil {
+	if m, e = New(width, height, &noopWindow{}); e != nil {
 		t.Fatal(e)
 	}
 
@@ -143,7 +143,7 @@ func TestSplitHorizontal(t *testing.T) {
 	width := 100
 	height := 100
 
-	if m, e = NewManager(width, height, &noopWindow{}); e != nil {
+	if m, e = New(width, height, &noopWindow{}); e != nil {
 		t.Fatal(e)
 	}
 
@@ -194,7 +194,7 @@ func TestSplitHorizontalVertical(t *testing.T) {
 	width := 100
 	height := 100
 
-	if m, e = NewManager(width, height, &noopWindow{}); e != nil {
+	if m, e = New(width, height, &noopWindow{}); e != nil {
 		t.Fatal(e)
 	}
 
@@ -251,7 +251,7 @@ func TestStackWhenNoSpace(t *testing.T) {
 	width := 1
 	height := 1
 
-	if m, e := NewManager(width, height, &noopWindow{}); e != nil {
+	if m, e := New(width, height, &noopWindow{}); e != nil {
 		t.Fatal(e)
 	} else {
 		w1, _ := m.SplitHorizontal(m.Root(), &noopWindow{})
@@ -270,7 +270,7 @@ func TestStackWhenNoSpace(t *testing.T) {
 func setupTestCase(t *testing.T, gwidth, gheight int) (m *WindowManager, w1 *TiledWindow, w2 *TiledWindow) {
 	var e error
 
-	if m, e = NewManager(gwidth, gheight, &noopWindow{}); e != nil {
+	if m, e = New(gwidth, gheight, &noopWindow{}); e != nil {
 		t.Fatal(e)
 	}
 

@@ -1,4 +1,4 @@
-package window
+package tiled
 
 import "github.com/ernestrc/fractal"
 

@@ -1,4 +1,4 @@
-package window
+package tiled
 
 import "github.com/ernestrc/fractal"
 
@@ -9,7 +9,7 @@ type WindowManager struct {
 	/* x, y   int */
 }
 
-func NewManager(width, height int, content fractal.Component) (m *WindowManager, err error) {
+func New(width, height int, content fractal.Component) (m *WindowManager, err error) {
 	m = new(WindowManager)
 	twin := newTiledWindow(content)
 	m.root = newNode(vertical, twin, 0, 0, width, height)
