@@ -33,8 +33,8 @@ $(TARGET):
 $(EXEC): $(EXECS) $(EXECSRC) $(SRC) $(TARGET)
 	@cd $< && $(CC) build -o $(PWD)/$(patsubst cmd/%,$(TARGET)/%,$@)
 
-$(PKGS): $(SRC)
-	@-cd $@ && $(CC) install
+$(PKGS): $(SRC) FORCE
+	@cd $@ && $(CC) install
 
 $(GEXEC): $(EXECS)
 	@cd $< && $(CC) build -o $@
