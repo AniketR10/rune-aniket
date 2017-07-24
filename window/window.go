@@ -160,9 +160,10 @@ func (w *Window) Position() (x, y int) {
 	return w.position.X, w.position.Y
 }
 
-func (w *Window) Move(x, y int) {
+func (w *Window) Move(x, y int) error {
 	w.position.X = x
 	w.position.Y = y
+	return nil
 }
 
 func (w *Window) Resize(width, height int) error {
