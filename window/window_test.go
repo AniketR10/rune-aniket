@@ -28,12 +28,12 @@ func TestWindowNew(t *testing.T) {
 	}
 }
 
-func TestWindowScan(t *testing.T) {
+func TestWindowscan(t *testing.T) {
 	width, height := 8, 2
 	tabspaces := 4
 	buf, window := newWindow(tabspaces, false, width, height)
 	buf.Write([]byte(fortune))
-	if err := window.Scan(); err != nil {
+	if err := window.scan(); err != nil {
 		t.Fatal(err)
 	}
 
@@ -75,7 +75,7 @@ func TestWindowDraw(t *testing.T) {
 	wrap := false
 	buf, window := newWindow(tabspaces, wrap, width, height)
 	buf.Write([]byte(fortune))
-	if err := window.Scan(); err != nil {
+	if err := window.scan(); err != nil {
 		t.Fatal(err)
 	}
 
@@ -137,7 +137,7 @@ func TestWindowDrawWrap(t *testing.T) {
 	wrap := true
 	buf, window := newWindow(tabspaces, wrap, width, height)
 	buf.Write([]byte(fortune))
-	if err := window.Scan(); err != nil {
+	if err := window.scan(); err != nil {
 		t.Fatal(err)
 	}
 

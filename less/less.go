@@ -145,7 +145,8 @@ func searchHandleEvent(ev termbox.Event) (exit bool, err error) {
 		h.cmdBuf.Truncate(h.cmdBuf.Len() - 1)
 
 	case termbox.KeyEnter:
-		bytes := h.cmdBuf.Bytes()[1:]
+		str := h.cmdBuf.String()
+		bytes := []byte(str)[1:]
 		h.search = string(bytes)
 		h.contWindow.Search(h.search)
 		if err = setNormalMode(); err != nil {

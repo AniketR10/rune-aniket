@@ -169,7 +169,7 @@ func (w *Window) Resize(width, height int) error {
 	w.width = width
 	w.height = height
 
-	if err := w.Scan(); err != nil {
+	if err := w.scan(); err != nil {
 		return err
 	}
 
@@ -208,7 +208,7 @@ func reserve(s []fractal.Cell, capacity int) []fractal.Cell {
 	return n
 }
 
-func (w *Window) Scan() (err error) {
+func (w *Window) scan() (err error) {
 	if w.buffer == nil {
 		w.maxoffset.Y = 0
 		w.maxoffset.X = 0
@@ -222,7 +222,7 @@ func (w *Window) Scan() (err error) {
 	var size int
 	columns, row := 0, 0
 
-	for view, x, i := bytes.NewBuffer(w.buffer.Bytes()), 0, 0; ; {
+	for view, x, i := bytes.NewBuffer(w.buffer.bytes()), 0, 0; ; {
 		if r, size, err = view.ReadRune(); err != nil {
 			break
 		}
@@ -287,6 +287,9 @@ func (w *Window) Scan() (err error) {
 	w.SeekHorizontal(w.offset.X)
 	w.SeekVertical(w.offset.Y)
 
+	// mark buffer as scanned
+	w.buffer.markScanned()
+
 	if err == io.EOF {
 		return nil
 	}
@@ -298,9 +301,7 @@ func (w *Window) SetBuffer(buf *Buffer) (orig *Buffer, err error) {
 	orig = w.buffer
 	w.buffer = buf
 
-	if err = w.Scan(); err != nil {
-		return
-	}
+	buf.markUnscanned()
 
 	return
 }
@@ -350,6 +351,11 @@ func (w *Window) wrapdraw(writer fractal.Writer) (err error) {
 }
 
 func (w *Window) Draw(writer fractal.Writer) (err error) {
+	if !w.buffer.Scanned() {
+		if err = w.scan(); err != nil {
+			return
+		}
+	}
 	if w.wrap {
 		return w.wrapdraw(writer)
 	}
