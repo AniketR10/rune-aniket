@@ -22,6 +22,7 @@ func (t *noopWindow) Move(x, y int) error {
 }
 
 func (t *noopWindow) Draw(w fractal.Writer) (err error) {
+	// TODO
 	return nil
 }
 
@@ -43,23 +44,12 @@ func TestNew(t *testing.T) {
 		t.Fatal(e)
 	}
 
-	if m.focus != m.root.tiles[0] || m.height != 10 || m.width != 10 {
+	if m.height != 10 || m.width != 10 {
 		t.Errorf("not initialized correcty: %+v", m)
 	}
 
 	if m.root.Height() != 10 || m.root.Width() != 10 {
 		t.Errorf("root window not initialized correctly: %+v", m.root)
-	}
-}
-
-func TestGetFocus(t *testing.T) {
-	m, _, e := New(0, 0, &noopWindow{})
-	if e != nil {
-		t.Fatal(e)
-	}
-
-	if m.GetFocus() != m.root.tiles[0] {
-		t.Errorf("focus is not the root window: %+v", m)
 	}
 }
 

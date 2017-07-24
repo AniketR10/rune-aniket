@@ -4,7 +4,6 @@ import "github.com/ernestrc/fractal"
 
 type WindowManager struct {
 	root          *tnode
-	focus         *TiledWindow
 	width, height int
 	/* x, y   int */
 }
@@ -14,7 +13,6 @@ func New(width, height int, content fractal.Component) (m *WindowManager, root *
 	root = newTiledWindow(content)
 	m.root = newNode(vertical, root, 0, 0, width, height)
 	root.node = m.root
-	m.focus = root
 	m.width = width
 	m.height = height
 
@@ -23,10 +21,6 @@ func New(width, height int, content fractal.Component) (m *WindowManager, root *
 	}
 
 	return
-}
-
-func (m *WindowManager) GetFocus() *TiledWindow {
-	return m.focus
 }
 
 func (m *WindowManager) Draw(w fractal.Writer) error {
