@@ -9,12 +9,12 @@ type WindowManager struct {
 	/* x, y   int */
 }
 
-func New(width, height int, content fractal.Component) (m *WindowManager, err error) {
+func New(width, height int, content fractal.Component) (m *WindowManager, root *TiledWindow, err error) {
 	m = new(WindowManager)
-	twin := newTiledWindow(content)
-	m.root = newNode(vertical, twin, 0, 0, width, height)
-	twin.node = m.root
-	m.focus = twin
+	root = newTiledWindow(content)
+	m.root = newNode(vertical, root, 0, 0, width, height)
+	root.node = m.root
+	m.focus = root
 	m.width = width
 	m.height = height
 

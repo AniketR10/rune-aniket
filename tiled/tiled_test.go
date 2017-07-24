@@ -37,7 +37,7 @@ func (t *noopWindow) Position() (int, int) {
 }
 
 func TestNew(t *testing.T) {
-	m, e := New(10, 10, &noopWindow{})
+	m, _, e := New(10, 10, &noopWindow{})
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -52,7 +52,7 @@ func TestNew(t *testing.T) {
 }
 
 func TestGetFocus(t *testing.T) {
-	m, e := New(0, 0, &noopWindow{})
+	m, _, e := New(0, 0, &noopWindow{})
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -82,29 +82,26 @@ func testWindowPos(t *testing.T, w *TiledWindow, x, y int) {
 	}
 }
 
-func (m *WindowManager) Root() *TiledWindow {
-	return m.GetFocus()
-}
-
 func TestSplitVertical(t *testing.T) {
 	var m *WindowManager
+	var root *TiledWindow
 	var e error
 
 	width := 100
 	height := 100
 
-	if m, e = New(width, height, &noopWindow{}); e != nil {
+	if m, root, e = New(width, height, &noopWindow{}); e != nil {
 		t.Fatal(e)
 	}
 
 	var w1 *TiledWindow
-	if w1, e = m.SplitVertical(m.Root(), &noopWindow{}); e != nil {
+	if w1, e = m.SplitVertical(root, &noopWindow{}); e != nil {
 		t.Fatal(e)
 	}
 
-	testWindowSize(t, m.Root(), 50, height)
+	testWindowSize(t, root, 50, height)
 	testWindowSize(t, w1, 50, height)
-	testWindowPos(t, m.Root(), 0, 0)
+	testWindowPos(t, root, 0, 0)
 	testWindowPos(t, w1, 50, 0)
 
 	var w2 *TiledWindow
@@ -112,25 +109,25 @@ func TestSplitVertical(t *testing.T) {
 		t.Fatal(e)
 	}
 
-	testWindowSize(t, m.Root(), 33, height)
+	testWindowSize(t, root, 33, height)
 	testWindowSize(t, w1, 33, height)
 	testWindowSize(t, w2, 33, height)
 
-	testWindowPos(t, m.Root(), 0, 0)
+	testWindowPos(t, root, 0, 0)
 	testWindowPos(t, w1, 33, 0)
 	testWindowPos(t, w2, 66, 0)
 
 	var w3 *TiledWindow
-	if w3, e = m.SplitVertical(m.Root(), &noopWindow{}); e != nil {
+	if w3, e = m.SplitVertical(root, &noopWindow{}); e != nil {
 		t.Fatal(e)
 	}
 
-	testWindowSize(t, m.Root(), 25, height)
+	testWindowSize(t, root, 25, height)
 	testWindowSize(t, w3, 25, height)
 	testWindowSize(t, w1, 25, height)
 	testWindowSize(t, w2, 25, height)
 
-	testWindowPos(t, m.Root(), 0, 0)
+	testWindowPos(t, root, 0, 0)
 	testWindowPos(t, w1, 25, 0)
 	testWindowPos(t, w2, 50, 0)
 	testWindowPos(t, w3, 75, 0)
@@ -138,23 +135,24 @@ func TestSplitVertical(t *testing.T) {
 
 func TestSplitHorizontal(t *testing.T) {
 	var m *WindowManager
+	var root *TiledWindow
 	var e error
 
 	width := 100
 	height := 100
 
-	if m, e = New(width, height, &noopWindow{}); e != nil {
+	if m, root, e = New(width, height, &noopWindow{}); e != nil {
 		t.Fatal(e)
 	}
 
 	var w1 *TiledWindow
-	if w1, e = m.SplitHorizontal(m.Root(), &noopWindow{}); e != nil {
+	if w1, e = m.SplitHorizontal(root, &noopWindow{}); e != nil {
 		t.Fatal(e)
 	}
 
-	testWindowSize(t, m.Root(), width, 50)
+	testWindowSize(t, root, width, 50)
 	testWindowSize(t, w1, width, 50)
-	testWindowPos(t, m.Root(), 0, 0)
+	testWindowPos(t, root, 0, 0)
 	testWindowPos(t, w1, 0, 50)
 
 	var w2 *TiledWindow
@@ -162,25 +160,25 @@ func TestSplitHorizontal(t *testing.T) {
 		t.Fatal(e)
 	}
 
-	testWindowSize(t, m.Root(), width, 33)
+	testWindowSize(t, root, width, 33)
 	testWindowSize(t, w1, width, 33)
 	testWindowSize(t, w2, width, 33)
 
-	testWindowPos(t, m.Root(), 0, 0)
+	testWindowPos(t, root, 0, 0)
 	testWindowPos(t, w1, 0, 33)
 	testWindowPos(t, w2, 0, 66)
 
 	var w3 *TiledWindow
-	if w3, e = m.SplitHorizontal(m.Root(), &noopWindow{}); e != nil {
+	if w3, e = m.SplitHorizontal(root, &noopWindow{}); e != nil {
 		t.Fatal(e)
 	}
 
-	testWindowSize(t, m.Root(), width, 25)
+	testWindowSize(t, root, width, 25)
 	testWindowSize(t, w3, width, 25)
 	testWindowSize(t, w1, width, 25)
 	testWindowSize(t, w2, width, 25)
 
-	testWindowPos(t, m.Root(), 0, 0)
+	testWindowPos(t, root, 0, 0)
 	testWindowPos(t, w1, 0, 25)
 	testWindowPos(t, w2, 0, 50)
 	testWindowPos(t, w3, 0, 75)
@@ -188,17 +186,18 @@ func TestSplitHorizontal(t *testing.T) {
 
 func TestSplitHorizontalVertical(t *testing.T) {
 	var m *WindowManager
+	var root *TiledWindow
 	var e error
 	var w1, w2, w3, w4, w5, w6 *TiledWindow
 
 	width := 100
 	height := 100
 
-	if m, e = New(width, height, &noopWindow{}); e != nil {
+	if m, root, e = New(width, height, &noopWindow{}); e != nil {
 		t.Fatal(e)
 	}
 
-	if w1, e = m.SplitVertical(m.Root(), &noopWindow{}); e != nil {
+	if w1, e = m.SplitVertical(root, &noopWindow{}); e != nil {
 		t.Fatal(e)
 	}
 
@@ -206,28 +205,28 @@ func TestSplitHorizontalVertical(t *testing.T) {
 		t.Fatal(e)
 	}
 
-	if w3, e = m.SplitVertical(m.Root(), &noopWindow{}); e != nil {
+	if w3, e = m.SplitVertical(root, &noopWindow{}); e != nil {
 		t.Fatal(e)
 	}
 
-	testWindowSize(t, m.Root(), 25, height)
+	testWindowSize(t, root, 25, height)
 	testWindowSize(t, w1, 25, height)
 	testWindowSize(t, w2, 25, height)
 	testWindowSize(t, w3, 25, height)
 
-	testWindowPos(t, m.Root(), 0, 0)
+	testWindowPos(t, root, 0, 0)
 	testWindowPos(t, w1, 25, 0)
 	testWindowPos(t, w2, 50, 0)
 	testWindowPos(t, w3, 75, 0)
 
-	if w4, e = m.SplitHorizontal(m.Root(), &noopWindow{}); e != nil {
+	if w4, e = m.SplitHorizontal(root, &noopWindow{}); e != nil {
 		t.Fatal(e)
 	}
 
-	testWindowSize(t, m.Root(), 25, 50)
+	testWindowSize(t, root, 25, 50)
 	testWindowSize(t, w4, 25, 50)
 
-	testWindowPos(t, m.Root(), 0, 0)
+	testWindowPos(t, root, 0, 0)
 	testWindowPos(t, w4, 0, 50)
 
 	if w5, e = m.SplitHorizontal(w1, &noopWindow{}); e != nil {
@@ -251,30 +250,30 @@ func TestStackWhenNoSpace(t *testing.T) {
 	width := 1
 	height := 1
 
-	if m, e := New(width, height, &noopWindow{}); e != nil {
+	if m, root, e := New(width, height, &noopWindow{}); e != nil {
 		t.Fatal(e)
 	} else {
-		w1, _ := m.SplitHorizontal(m.Root(), &noopWindow{})
+		w1, _ := m.SplitHorizontal(root, &noopWindow{})
 		w2, _ := m.SplitVertical(w1, &noopWindow{})
 
-		testWindowSize(t, m.Root(), 1, 0) // FIXME should be 1/1
+		testWindowSize(t, root, 1, 0) // FIXME should be 1/1
 		testWindowSize(t, w1, 0, 0)
 		testWindowSize(t, w2, 0, 0)
 
-		testWindowPos(t, m.Root(), 0, 0)
+		testWindowPos(t, root, 0, 0)
 		testWindowPos(t, w1, 0, 0)
 		testWindowPos(t, w2, 0, 0)
 	}
 }
 
-func setupTestCase(t *testing.T, gwidth, gheight int) (m *WindowManager, w1 *TiledWindow, w2 *TiledWindow) {
+func setupTestCase(t *testing.T, gwidth, gheight int) (m *WindowManager, root *TiledWindow, w1 *TiledWindow, w2 *TiledWindow) {
 	var e error
 
-	if m, e = New(gwidth, gheight, &noopWindow{}); e != nil {
+	if m, root, e = New(gwidth, gheight, &noopWindow{}); e != nil {
 		t.Fatal(e)
 	}
 
-	if w1, e = m.SplitHorizontal(m.Root(), &noopWindow{}); e != nil {
+	if w1, e = m.SplitHorizontal(root, &noopWindow{}); e != nil {
 		t.Fatal(e)
 	}
 
@@ -286,13 +285,13 @@ func setupTestCase(t *testing.T, gwidth, gheight int) (m *WindowManager, w1 *Til
 }
 
 func TestResize(t *testing.T) {
-	m, w1, w2 := setupTestCase(t, 100, 100)
+	m, root, w1, w2 := setupTestCase(t, 100, 100)
 
-	testWindowSize(t, m.Root(), 100, 50)
+	testWindowSize(t, root, 100, 50)
 	testWindowSize(t, w1, 50, 50)
 	testWindowSize(t, w2, 50, 50)
 
-	testWindowPos(t, m.Root(), 0, 0)
+	testWindowPos(t, root, 0, 0)
 	testWindowPos(t, w1, 0, 50)
 	testWindowPos(t, w2, 50, 50)
 
@@ -300,49 +299,49 @@ func TestResize(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	testWindowSize(t, m.Root(), 50, 25)
+	testWindowSize(t, root, 50, 25)
 	testWindowSize(t, w1, 25, 25)
 	testWindowSize(t, w2, 25, 25)
 
-	testWindowPos(t, m.Root(), 0, 0)
+	testWindowPos(t, root, 0, 0)
 	testWindowPos(t, w1, 0, 25)
 	testWindowPos(t, w2, 25, 25)
 }
 
 func TestResizeRounding(t *testing.T) {
-	m, w1, w2 := setupTestCase(t, 3, 3)
-	testWindowSize(t, m.Root(), 3, 1)
+	m, root, w1, w2 := setupTestCase(t, 3, 3)
+	testWindowSize(t, root, 3, 1)
 	testWindowSize(t, w1, 1, 1)
 	testWindowSize(t, w2, 1, 1)
 
-	testWindowPos(t, m.Root(), 0, 0)
+	testWindowPos(t, root, 0, 0)
 	testWindowPos(t, w1, 0, 1)
 	testWindowPos(t, w2, 1, 1)
 
 	m.Resize(2, 2)
-	testWindowSize(t, m.Root(), 2, 1)
+	testWindowSize(t, root, 2, 1)
 	testWindowSize(t, w1, 1, 1)
 	testWindowSize(t, w2, 1, 1)
 
-	testWindowPos(t, m.Root(), 0, 0)
+	testWindowPos(t, root, 0, 0)
 	testWindowPos(t, w1, 0, 1)
 	testWindowPos(t, w2, 1, 1)
 
 	m.Resize(3, 3)
-	testWindowSize(t, m.Root(), 3, 1)
+	testWindowSize(t, root, 3, 1)
 	testWindowSize(t, w1, 1, 1)
 	testWindowSize(t, w2, 1, 1)
 
-	testWindowPos(t, m.Root(), 0, 0)
+	testWindowPos(t, root, 0, 0)
 	testWindowPos(t, w1, 0, 1)
 	testWindowPos(t, w2, 1, 1)
 
 	m.Resize(100, 100)
-	testWindowSize(t, m.Root(), 100, 50)
+	testWindowSize(t, root, 100, 50)
 	testWindowSize(t, w1, 50, 50)
 	testWindowSize(t, w2, 50, 50)
 
-	testWindowPos(t, m.Root(), 0, 0)
+	testWindowPos(t, root, 0, 0)
 	testWindowPos(t, w1, 0, 50)
 	testWindowPos(t, w2, 50, 50)
 }
