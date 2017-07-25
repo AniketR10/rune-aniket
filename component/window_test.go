@@ -1,4 +1,4 @@
-package window
+package component
 
 import (
 	"testing"
@@ -13,16 +13,18 @@ Love isn't love 'til you give it away.
 
 var fortune_width = 44
 
-func newWindow(tabspaces int, wrap bool, width, height int) (buf *Buffer, window *Window) {
-	buf = NewBuffer(0, 0)
-	window = New(buf, width, height, tabspaces, wrap)
+func newWindow(tabspaces int, wrap bool, width, height int) (buf *fractal.Buffer, window *Window) {
+	buf = &fractal.Buffer{}
+	window = NewWindow(buf, width, height)
+	window.Tabspaces = tabspaces
+	window.Wrap = wrap
 	return
 }
 
 func TestWindowNew(t *testing.T) {
 	buf, window := newWindow(5, true, 100, 100)
 	if window.cells == nil || window.buffer != buf ||
-		window.wrap != true || window.Tabspaces != 5 ||
+		window.Wrap != true || window.Tabspaces != 5 ||
 		window.width != 100 || window.height != 100 {
 		t.Errorf("window not initialized properly: %+v", window)
 	}

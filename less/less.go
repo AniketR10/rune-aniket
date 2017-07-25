@@ -5,7 +5,7 @@ import (
 	"math"
 
 	"github.com/ernestrc/fractal"
-	"github.com/ernestrc/fractal/window"
+	"github.com/ernestrc/fractal/component"
 	"github.com/ernestrc/fractal/writer"
 	termbox "github.com/nsf/termbox-go"
 )
@@ -18,14 +18,14 @@ const (
 )
 
 type handle struct {
-	cmdWindow  *window.Window
-	cmdBuf     *window.Buffer
+	cmdWindow  *component.Window
+	cmdBuf     fractal.Buffer
 	cmdChan    chan []byte
-	msgWindow  *window.Window
-	msgBuf     *window.Buffer
+	msgWindow  *component.Window
+	msgBuf     fractal.Buffer
 	msgChan    chan []byte
-	contWindow *window.Window
-	contBuf    *window.Buffer
+	contWindow *component.Window
+	contBuf    fractal.Buffer
 	contChan   chan []byte
 	mode       mode
 	termChan   chan termbox.Event
@@ -38,7 +38,7 @@ type handle struct {
 	config     *Config
 	search     string
 	pending    []Event
-	cells      map[int]fractal.Cell // color information used for printing to window
+	cells      map[int]fractal.Cell // color information used for printing to component
 }
 
 // EventType represents a less event
@@ -331,6 +331,12 @@ func run() {
 	}
 }
 
+func setupWindow(w *component.Window) {
+	w.ResultsFG = h.config.ResFG
+	w.ResultsBG = h.config.ResBG
+	w.Tabspaces, w.Wrap = h.config.Tabspaces, h.config.Wrap
+}
+
 // Init initializes the library and takes control of stdout.
 // This function should be called before any other functions.
 func Init(cfg *Config, content string) error {
@@ -341,19 +347,17 @@ func Init(cfg *Config, content string) error {
 	} else {
 		h.config = cfg
 	}
+	h.cmdWindow = component.NewWindow(&h.cmdBuf, h.width, h.height)
+	h.msgWindow = component.NewWindow(&h.msgBuf, h.width, h.height)
+	h.contWindow = component.NewWindow(&h.contBuf, h.width, h.height)
 
-	h.cmdBuf = window.NewBuffer(h.config.ResFG, h.config.ResBG)
-	h.cmdWindow = window.New(h.cmdBuf, h.width, h.height, h.config.Tabspaces, h.config.Wrap)
+	setupWindow(h.cmdWindow)
+	setupWindow(h.msgWindow)
+	setupWindow(h.contWindow)
+
 	h.cmdChan = make(chan []byte)
-
-	h.msgBuf = window.NewBuffer(h.config.ResFG, h.config.ResBG)
-	h.msgWindow = window.New(h.msgBuf, h.width, h.height, h.config.Tabspaces, h.config.Wrap)
 	h.msgChan = make(chan []byte)
-
-	h.contBuf = window.NewBuffer(h.config.ResFG, h.config.ResBG)
-	h.contWindow = window.New(h.contBuf, h.width, h.height, h.config.Tabspaces, h.config.Wrap)
 	h.contChan = make(chan []byte)
-
 	h.evChan = make(chan Event)
 
 	if content != "" {

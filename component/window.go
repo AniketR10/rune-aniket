@@ -1,4 +1,4 @@
-package window
+package component
 
 import (
 	"bytes"
@@ -9,20 +9,26 @@ import (
 )
 
 type Window struct {
-	buffer    *Buffer             // content buffer
-	cells     []fractal.Cell      // mapping from content index to x, y coordinates
-	wrap      bool                // wrap text
-	maxoffset fractal.Coordinates // max content offsets
-	offset    fractal.Coordinates // content offsets
-	position  fractal.Coordinates // position in the underlying writer
-	width     int                 // window width
-	height    int                 // window height
-	Tabspaces int
+	Wrap      bool              // lines longer than the width of the window will wrap and displaying continues on the next line. wrap text
+	Tabspaces int               // number of spaces to use when expanding tabs
+	ResultsFG fractal.Attribute // foreground attribute for search results
+	ResultsBG fractal.Attribute // background attribute for search results
+	buffer    *fractal.Buffer
+	cells     []fractal.Cell
+	maxoffset fractal.Coordinates
+	offset    fractal.Coordinates
+	position  fractal.Coordinates
+	width     int
+	height    int
 }
 
-func (w *Window) Init(initial *Buffer, width, height int, tabspaces int, wrap bool) {
-	w.Tabspaces = tabspaces
-	w.wrap = wrap
+func NewWindow(initial *fractal.Buffer, width, height int) *Window {
+	w := new(Window)
+	w.Init(initial, width, height)
+	return w
+}
+
+func (w *Window) Init(initial *fractal.Buffer, width, height int) {
 	w.buffer = initial
 	w.width, w.height = width, height
 	if initial != nil {
@@ -30,12 +36,9 @@ func (w *Window) Init(initial *Buffer, width, height int, tabspaces int, wrap bo
 	} else {
 		w.cells = make([]fractal.Cell, 0)
 	}
-}
 
-func New(initial *Buffer, width, height int, tabspaces int, wrap bool) *Window {
-	w := new(Window)
-	w.Init(initial, width, height, tabspaces, wrap)
-	return w
+	w.Tabspaces = 4
+	w.ResultsFG, w.ResultsBG = fractal.AttrReverse, fractal.AttrReverse
 }
 
 func (w *Window) YOffset() int {
@@ -130,14 +133,15 @@ func (w *Window) moveResult(i int) {
 
 	if res.X >= w.offset.X+w.width {
 		// move to the minimal x to render search result
-		w.SeekHorizontal(res.X - w.width + len([]rune(string(w.buffer.searchText))))
+		runes := []rune(string(w.buffer.SearchText()))
+		w.SeekHorizontal(res.X - w.width + len(runes))
 	} else if res.X < w.offset.X {
 		w.SeekHorizontal(res.X)
 	}
 }
 
 func (w *Window) SeekNextResult() {
-	i, ok := w.buffer.nextResult()
+	i, ok := w.buffer.NextResult()
 
 	if !ok {
 		return
@@ -147,7 +151,7 @@ func (w *Window) SeekNextResult() {
 }
 
 func (w *Window) SeekPrevResult() {
-	i, ok := w.buffer.prevResult()
+	i, ok := w.buffer.PrevResult()
 
 	if !ok {
 		return
@@ -223,7 +227,7 @@ func (w *Window) scan() (err error) {
 	var size int
 	columns, row := 0, 0
 
-	for view, x, i := bytes.NewBuffer(w.buffer.bytes()), 0, 0; ; {
+	for view, x, i := bytes.NewBuffer(w.buffer.Bytes()), 0, 0; ; {
 		if r, size, err = view.ReadRune(); err != nil {
 			break
 		}
@@ -276,7 +280,7 @@ func (w *Window) scan() (err error) {
 		w.maxoffset.Y = rows - w.height
 	}
 
-	if w.wrap {
+	if w.Wrap {
 		w.maxoffset.X = 0
 	} else if columns >= w.width {
 		w.maxoffset.X = columns - w.width
@@ -288,8 +292,7 @@ func (w *Window) scan() (err error) {
 	w.SeekHorizontal(w.offset.X)
 	w.SeekVertical(w.offset.Y)
 
-	// mark buffer as scanned
-	w.buffer.markScanned()
+	w.buffer.MarkScanned()
 
 	if err == io.EOF {
 		return nil
@@ -298,11 +301,11 @@ func (w *Window) scan() (err error) {
 	return err
 }
 
-func (w *Window) SetBuffer(buf *Buffer) (orig *Buffer, err error) {
+func (w *Window) SetBuffer(buf *fractal.Buffer) (orig *fractal.Buffer, err error) {
 	orig = w.buffer
 	w.buffer = buf
 
-	buf.markUnscanned()
+	buf.MarkUnscanned()
 
 	return
 }
@@ -357,7 +360,7 @@ func (w *Window) Draw(writer fractal.Writer) (err error) {
 			return
 		}
 	}
-	if w.wrap {
+	if w.Wrap {
 		return w.wrapdraw(writer)
 	}
 
@@ -380,6 +383,5 @@ func (w *Window) resetCells() {
 
 func (w *Window) Search(text string) int {
 	w.resetCells()
-	w.buffer.search([]byte(text), w.cells)
-	return w.buffer.reslist.Len()
+	return w.buffer.Search([]byte(text), w.cells, w.ResultsFG, w.ResultsBG)
 }

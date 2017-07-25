@@ -44,3 +44,5 @@ type Cell struct {
 	Fg, Bg Attribute
 	Ch     rune
 }
+
+type Factory func(buf *Buffer) Component

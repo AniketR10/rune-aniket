@@ -1,32 +1,39 @@
-package window
+package fractal
 
 import (
 	"bytes"
 	"container/list"
-
-	"github.com/ernestrc/fractal"
 )
 
-// Buffer is a write-only wrapper around bytes.Buffer that
-// keeps track of updates to the underlying buffer so
-// window and other components know when to re-scan
+// Buffer is a mutable write, immutable read wrapper of bytes.Buffer which:
+//
+// - keeps track of updates to the underlying buffer so
+//	 window and other components know when to re-scan
+//
+// - provides a cell-aware search API
+//
+// The zero value for Buffer is an empty buffer ready to use.
 type Buffer struct {
-	buffer       bytes.Buffer
-	reslist      *list.List    // search result list
-	result       *list.Element // current focused result
-	searchText   []byte        // search term
-	resfg, resbg fractal.Attribute
-	scanned      bool
+	buffer     bytes.Buffer
+	reslist    list.List     // search result list
+	result     *list.Element // current focused result
+	searchText []byte        // search term
+	scanned    bool
 }
 
-func NewBuffer(resfg, resbg fractal.Attribute) *Buffer {
-	b := new(Buffer)
-	b.reslist = new(list.List)
-	b.resfg, b.resbg = resfg, resbg
-	return b
+func (b *Buffer) Reset() {
+	b.buffer.Reset()
+	b.reslist.Init()
+	b.result = nil
+	b.searchText = nil
+	b.MarkUnscanned()
 }
 
-func (b *Buffer) prevResult() (int, bool) {
+func (b *Buffer) SearchText() []byte {
+	return b.searchText
+}
+
+func (b *Buffer) PrevResult() (int, bool) {
 	if b.result == nil {
 		b.result = b.reslist.Back()
 	} else {
@@ -40,7 +47,7 @@ func (b *Buffer) prevResult() (int, bool) {
 	return b.result.Value.(int), true
 }
 
-func (b *Buffer) nextResult() (int, bool) {
+func (b *Buffer) NextResult() (int, bool) {
 	if b.result == nil {
 		b.result = b.reslist.Front()
 	} else {
@@ -54,18 +61,18 @@ func (b *Buffer) nextResult() (int, bool) {
 	return b.result.Value.(int), true
 }
 
-func (b *Buffer) searchResults() *list.List {
-	return b.reslist
+func (b *Buffer) SearchResults() *list.List {
+	return &b.reslist
 }
 
-func (b *Buffer) search(text []byte, cellbuf []fractal.Cell) {
-	b.reslist = b.reslist.Init()
+func (b *Buffer) Search(text []byte, cellbuf []Cell, resfg, resbg Attribute) int {
+	b.reslist.Init()
 	b.result = nil
 	b.searchText = text
 
 	tlen := len(text)
 	if tlen == 0 {
-		return
+		return 0
 	}
 
 	view := b.buffer.Bytes()
@@ -80,11 +87,11 @@ func (b *Buffer) search(text []byte, cellbuf []fractal.Cell) {
 		a += i
 
 		for j, last := a, a+tlen; j < last; j++ {
-			cellbuf[j] = fractal.Cell{
-				Fg: b.resfg,
-				Bg: b.resbg,
+			cellbuf[j] = Cell{
+				Fg: resfg,
+				Bg: resbg,
 				Ch: cellbuf[j].Ch,
-				Coordinates: fractal.Coordinates{
+				Coordinates: Coordinates{
 					X: cellbuf[j].X,
 					Y: cellbuf[j].Y,
 				},
@@ -100,31 +107,23 @@ func (b *Buffer) search(text []byte, cellbuf []fractal.Cell) {
 		a += tlen
 	}
 
-	return
+	return b.reslist.Len()
 }
 
-func (b *Buffer) bytes() []byte {
+func (b *Buffer) Bytes() []byte {
 	return b.buffer.Bytes()
 }
 
-func (b *Buffer) markScanned() {
+func (b *Buffer) MarkScanned() {
 	b.scanned = true
 }
 
-func (b *Buffer) markUnscanned() {
+func (b *Buffer) MarkUnscanned() {
 	b.scanned = false
 }
 
 func (b *Buffer) Scanned() bool {
 	return b.scanned
-}
-
-func (b *Buffer) Reset() {
-	b.markUnscanned()
-	b.reslist = b.reslist.Init()
-	b.result = nil
-	b.searchText = nil
-	b.buffer.Reset()
 }
 
 func (b *Buffer) Len() int {
@@ -142,24 +141,24 @@ func (b *Buffer) String() string {
 	return b.buffer.String()
 }
 func (b *Buffer) Truncate(n int) {
-	b.markUnscanned()
+	b.MarkUnscanned()
 	b.buffer.Truncate(n)
 }
 
 func (b *Buffer) Write(p []byte) (n int, err error) {
-	b.markUnscanned()
+	b.MarkUnscanned()
 	return b.buffer.Write(p)
 }
 func (b *Buffer) WriteRune(r rune) (n int, err error) {
-	b.markUnscanned()
+	b.MarkUnscanned()
 	return b.buffer.WriteRune(r)
 }
 
 func (b *Buffer) WriteByte(c byte) error {
-	b.markUnscanned()
+	b.MarkUnscanned()
 	return b.buffer.WriteByte(c)
 }
 func (b *Buffer) WriteString(s string) (n int, err error) {
-	b.markUnscanned()
+	b.MarkUnscanned()
 	return b.buffer.WriteString(s)
 }
