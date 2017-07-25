@@ -22,17 +22,17 @@ type Window struct {
 	height    int
 }
 
-func NewWindow(initial *fractal.Buffer, width, height int) *Window {
+func NewWindow(buffer *fractal.Buffer, width, height int) *Window {
 	w := new(Window)
-	w.Init(initial, width, height)
+	w.Init(buffer, width, height)
 	return w
 }
 
-func (w *Window) Init(initial *fractal.Buffer, width, height int) {
-	w.buffer = initial
+func (w *Window) Init(buffer *fractal.Buffer, width, height int) {
+	w.buffer = buffer
 	w.width, w.height = width, height
-	if initial != nil {
-		w.cells = make([]fractal.Cell, initial.Len())
+	if buffer != nil {
+		w.cells = make([]fractal.Cell, buffer.Len())
 	} else {
 		w.cells = make([]fractal.Cell, 0)
 	}

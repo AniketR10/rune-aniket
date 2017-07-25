@@ -12,66 +12,70 @@ type List struct {
 	fractal.Coordinates
 }
 
-func (n *List) NewList(rowHeight, width, height int) (c *List) {
+func (l *List) NewList( /*rowHeight,*/ width, height int, factory fractal.Factory) (c *List) {
 	c = new(List)
-	c.children = make([]fractal.Component, height)
 	return
 }
 
-func (n *List) Clear() (err error) {
-	n.rows = n.rows[:0]
-	return n.Resize(n.width, n.height)
+func (l *List) Clear() (err error) {
+	l.rows = l.rows[:0]
+	return l.Resize(l.width, l.height)
 }
 
-func (n *List) Set(rows []*fractal.Buffer) (err error) {
-	n.rows = rows
-	return n.Resize(n.width, n.height)
+func (l *List) Set(rows []*fractal.Buffer) (err error) {
+	l.rows = rows
+	return l.Resize(l.width, l.height)
 }
 
-func (n *List) Add(content *fractal.Buffer) (err error) {
-	n.rows = append(n.rows, content)
-	return n.Resize(n.width, n.height)
+func (l *List) Add(content *fractal.Buffer) (err error) {
+	l.rows = append(l.rows, content)
+	return l.Resize(l.width, l.height)
 }
 
-func (n *List) Pop() (row *fractal.Buffer) {
-	n.rows, row = n.rows[1:], n.rows[0]
+func (l *List) Pop() (row *fractal.Buffer) {
+	l.rows, row = l.rows[1:], l.rows[0]
 	return
 }
 
-func (n *List) Rows() []*fractal.Buffer {
-	return n.rows
+func (l *List) Rows() []*fractal.Buffer {
+	return l.rows
 }
 
-func (n *List) Resize(width, height int) (err error) {
-	children := n.children[:0]
+func (l *List) Resize(width, height int) (err error) {
+	if l.children == nil {
+		l.children = make([]fractal.Component, height)
+	}
+	pchildren := l.children
+	pheight := l.height
+	l.children = l.children[:0]
+	l.width, l.height = width, height
 
 	var row fractal.Component
-	for i := 0; i < height && i < len(n.rows); i++ {
-		if n.height > i {
-			row = n.children[i]
+	for i := 0; i < l.height && i < len(l.rows); i++ {
+		if pheight > i {
+			// reuse component
+			row = pchildren[i]
 			if err = row.Resize(width, 1); err != nil {
 				return
 			}
 		} else {
-			row = n.factory(n.rows[i])
-			if err = row.Move(n.X, n.Y+i); err != nil {
+			// create new coponent
+			row = l.factory(l.rows[i])
+			if err = row.Move(l.X, l.Y+i); err != nil {
 				return
 			}
 		}
-		children = append(children, row)
+		l.children = append(l.children, row)
 	}
-
-	n.children = children
-	n.width, n.height = width, height
 
 	return
 }
 
-func (n *List) Move(x, y int) (err error) {
-	n.X, n.Y = x, y
+func (l *List) Move(x, y int) (err error) {
+	l.X, l.Y = x, y
 
-	for i, row := range n.children {
-		if err = row.Move(n.X, n.Y+i); err != nil {
+	for i, row := range l.children {
+		if err = row.Move(l.X, l.Y+i); err != nil {
 			return
 		}
 	}
@@ -79,8 +83,8 @@ func (n *List) Move(x, y int) (err error) {
 	return
 }
 
-func (n *List) Draw(w fractal.Writer) (err error) {
-	for _, row := range n.children {
+func (l *List) Draw(w fractal.Writer) (err error) {
+	for _, row := range l.children {
 		if err = row.Draw(w); err != nil {
 			return
 		}
@@ -89,14 +93,14 @@ func (n *List) Draw(w fractal.Writer) (err error) {
 	return
 }
 
-func (n *List) Height() int {
-	return n.height
+func (l *List) Height() int {
+	return l.height
 }
 
-func (n *List) Width() int {
-	return n.width
+func (l *List) Width() int {
+	return l.width
 }
 
-func (n *List) Position() (int, int) {
-	return n.X, n.Y
+func (l *List) Position() (int, int) {
+	return l.X, l.Y
 }

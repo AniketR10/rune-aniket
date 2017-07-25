@@ -1,4 +1,4 @@
-package tiled
+package component
 
 import (
 	"testing"
