@@ -27,6 +27,11 @@ type tnode struct {
 	parent    *tnode
 }
 
+type TiledWindow struct {
+	content fractal.Component
+	parent  *tnode
+}
+
 func newNode(direction splitdir, parent *tnode, w *TiledWindow, x, y, width, height int) (t *tnode) {
 	t = new(tnode)
 	t.X, t.Y, t.width, t.height = x, y, width, height
@@ -34,11 +39,6 @@ func newNode(direction splitdir, parent *tnode, w *TiledWindow, x, y, width, hei
 	t.direction = direction
 	t.parent = parent
 	return
-}
-
-type TiledWindow struct {
-	content fractal.Component
-	parent  *tnode
 }
 
 func newTiledWindow(content fractal.Component) (t *TiledWindow) {
@@ -172,30 +172,10 @@ func (t *TiledWindow) Position() (int, int) {
 	return t.content.Position()
 }
 
-// TODO conform to fractal.Component
 type WindowManager struct {
 	root          *tnode
 	width, height int
-	/* x, y   int */
-}
-
-func NewTiledManager(width, height int, content fractal.Component) (m *WindowManager, root *TiledWindow, err error) {
-	m = new(WindowManager)
-	root = newTiledWindow(content)
-	m.root = newNode(vertical, nil, root, 0, 0, width, height)
-	root.parent = m.root
-	m.width = width
-	m.height = height
-
-	if err = m.root.Resize(width, height); err != nil {
-		return
-	}
-
-	return
-}
-
-func (m *WindowManager) Draw(w fractal.Writer) error {
-	return m.root.Draw(w)
+	fractal.Coordinates
 }
 
 func (t *tnode) childIdx(comp linkedComponent) int {
@@ -206,6 +186,40 @@ func (t *tnode) childIdx(comp linkedComponent) int {
 	}
 
 	panic("corrupt node: window already closed or tile does not belong to this node")
+}
+
+func (m *WindowManager) split(tw *TiledWindow, direction splitdir, content fractal.Component) (newtw *TiledWindow, err error) {
+	if tw == nil {
+		panic("trying to split a nil tile")
+	}
+
+	node := tw.parent
+	newtw = newTiledWindow(content)
+
+	if node.direction == direction {
+		newtw.parent = node
+		node.tiles = append(node.tiles, newtw)
+		err = node.Resize(node.width, node.height)
+		return
+	}
+
+	x, y := tw.Position()
+	// substitute window we are splitting over for a node
+	// which will contain the current window and a new one
+	nnode := newNode(direction, node, tw, x, y, tw.Width(), tw.Height())
+	nnode.tiles = append(nnode.tiles, newtw)
+	newtw.parent = nnode
+
+	i := node.childIdx(tw)
+	node.tiles[i] = nnode
+	tw.parent = nnode
+	err = nnode.Resize(nnode.width, nnode.height)
+
+	return
+}
+
+func (m *WindowManager) Draw(w fractal.Writer) error {
+	return m.root.Draw(w)
 }
 
 func (m *WindowManager) Close(tw *TiledWindow) (err error) {
@@ -247,42 +261,43 @@ func (m *WindowManager) SplitHorizontal(tw *TiledWindow, content fractal.Compone
 	return m.split(tw, horizontal, content)
 }
 
-func (m *WindowManager) split(tw *TiledWindow, direction splitdir, content fractal.Component) (newtw *TiledWindow, err error) {
-	if tw == nil {
-		panic("trying to split a nil tile")
-	}
-
-	node := tw.parent
-	newtw = newTiledWindow(content)
-
-	if node.direction == direction {
-		newtw.parent = node
-		node.tiles = append(node.tiles, newtw)
-		err = node.Resize(node.width, node.height)
-		return
-	}
-
-	x, y := tw.Position()
-	// substitute window we are splitting over for a node
-	// which will contain the current window and a new one
-	nnode := newNode(direction, node, tw, x, y, tw.Width(), tw.Height())
-	nnode.tiles = append(nnode.tiles, newtw)
-	newtw.parent = nnode
-
-	i := node.childIdx(tw)
-	node.tiles[i] = nnode
-	tw.parent = nnode
-	err = nnode.Resize(nnode.width, nnode.height)
-
-	return
-}
-
 func (m *WindowManager) Resize(width, height int) (err error) {
 	m.width = width
 	m.height = height
 
 	if err = m.root.Resize(width, height); err != nil {
 		return err
+	}
+
+	return
+}
+
+func (m *WindowManager) Move(x, y int) error {
+	// TODO return t.content.Move(x, y)
+}
+
+func (m *WindowManager) Height() int {
+	return m.height
+}
+
+func (m *WindowManager) Width() int {
+	return m.width
+}
+
+func (m *WindowManager) Position() (int, int) {
+	return m.X, m.Y
+}
+
+func NewTiledManager(width, height int, content fractal.Component) (m *WindowManager, root *TiledWindow, err error) {
+	m = new(WindowManager)
+	root = newTiledWindow(content)
+	m.root = newNode(vertical, nil, root, 0, 0, width, height)
+	root.parent = m.root
+	m.width = width
+	m.height = height
+
+	if err = m.root.Resize(width, height); err != nil {
+		return
 	}
 
 	return
