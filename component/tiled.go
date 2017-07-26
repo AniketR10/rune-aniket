@@ -1,6 +1,10 @@
 package component
 
-import "github.com/ernestrc/fractal"
+import (
+	"fmt"
+
+	"github.com/ernestrc/fractal"
+)
 
 type splitdir uint8
 
@@ -9,25 +13,32 @@ const (
 	horizontal
 )
 
+type linkedComponent interface {
+	setParent(*tnode)
+	fractal.Component
+}
+
 type tnode struct {
 	fractal.Coordinates
 	width     int
 	height    int
-	tiles     []fractal.Component
+	tiles     []linkedComponent
 	direction splitdir
+	parent    *tnode
 }
 
-func newNode(direction splitdir, w *TiledWindow, x, y, width, height int) (t *tnode) {
+func newNode(direction splitdir, parent *tnode, w *TiledWindow, x, y, width, height int) (t *tnode) {
 	t = new(tnode)
 	t.X, t.Y, t.width, t.height = x, y, width, height
-	t.tiles = []fractal.Component{w}
+	t.tiles = []linkedComponent{w}
 	t.direction = direction
+	t.parent = parent
 	return
 }
 
 type TiledWindow struct {
 	content fractal.Component
-	node    *tnode
+	parent  *tnode
 }
 
 func newTiledWindow(content fractal.Component) (t *TiledWindow) {
@@ -36,32 +47,77 @@ func newTiledWindow(content fractal.Component) (t *TiledWindow) {
 	return
 }
 
-func (t *tnode) Resize(width, height int) (err error) {
-	t.height = height
-	t.width = width
+func (t *TiledWindow) setParent(parent *tnode) {
+	t.parent = parent
+}
 
-	if t.direction == vertical {
-		width /= len(t.tiles)
-	} else {
-		height /= len(t.tiles)
-	}
+func (t *tnode) setParent(parent *tnode) {
+	t.parent = parent
+}
+
+func (t *tnode) resizeHorizontal(len, width, height int) (err error) {
+	cheight := height / len
+	hspare := height - cheight*len
+
+	useSpareIdx := len - hspare
+	spareCell := 0
 
 	for i, ti := range t.tiles {
-		if err = ti.Resize(width, height); err != nil {
+		offset := ((i - useSpareIdx) * spareCell)
+		if err = ti.Move(t.X, (t.Y+i*cheight)+offset); err != nil {
 			return
 		}
-		if t.direction == vertical {
-			if err = ti.Move(t.X+i*width, t.Y); err != nil {
-				return
-			}
-			continue
+
+		if i == useSpareIdx {
+			spareCell = 1
 		}
 
-		if err = ti.Move(t.X, t.Y+i*height); err != nil {
+		if err = ti.Resize(width, cheight+spareCell); err != nil {
 			return
 		}
 	}
 	return
+}
+
+func (t *tnode) resizeVertical(len, width, height int) (err error) {
+	cwidth := width / len
+	wspare := width - cwidth*len
+
+	useSpareIdx := len - wspare
+	spareCell := 0
+
+	for i, ti := range t.tiles {
+		offset := ((i - useSpareIdx) * spareCell)
+		if err = ti.Move((t.X+i*cwidth)+offset, t.Y); err != nil {
+			return
+		}
+
+		if i == useSpareIdx {
+			spareCell = 1
+		}
+
+		if err = ti.Resize(cwidth+spareCell, height); err != nil {
+			return
+		}
+	}
+	return
+}
+
+func (t *tnode) Resize(width, height int) (err error) {
+	t.height = height
+	t.width = width
+
+	len := len(t.tiles)
+
+	if len == 0 {
+		panic(fmt.Sprintf("can't resize a tnode with no tiles: %[1]p: %+[1]v", t))
+	}
+
+	if t.direction == vertical {
+		return t.resizeVertical(len, width, height)
+	}
+
+	return t.resizeHorizontal(len, width, height)
 }
 
 func (t *tnode) Move(x, y int) error {
@@ -123,11 +179,11 @@ type WindowManager struct {
 	/* x, y   int */
 }
 
-func New(width, height int, content fractal.Component) (m *WindowManager, root *TiledWindow, err error) {
+func NewTiledManager(width, height int, content fractal.Component) (m *WindowManager, root *TiledWindow, err error) {
 	m = new(WindowManager)
 	root = newTiledWindow(content)
-	m.root = newNode(vertical, root, 0, 0, width, height)
-	root.node = m.root
+	m.root = newNode(vertical, nil, root, 0, 0, width, height)
+	root.parent = m.root
 	m.width = width
 	m.height = height
 
@@ -142,11 +198,47 @@ func (m *WindowManager) Draw(w fractal.Writer) error {
 	return m.root.Draw(w)
 }
 
-func (m *WindowManager) Close(win *TiledWindow) error {
-	panic("TODO: not implemented")
+func (t *tnode) childIdx(comp linkedComponent) int {
+	for i, t := range t.tiles {
+		if t == comp {
+			return i
+		}
+	}
+
+	panic("corrupt node: window already closed or tile does not belong to this node")
 }
 
-// note that the returned TiledWindow should be initialied by the caller
+func (m *WindowManager) Close(tw *TiledWindow) (err error) {
+	node := tw.parent
+
+	if node.parent == nil && len(node.tiles) == 1 {
+		panic("unsupported: trying to close last window: remove manager instead")
+	}
+
+	// remove window
+	i := node.childIdx(tw)
+	copy(node.tiles[i:], node.tiles[i+1:])
+	node.tiles[len(node.tiles)-1] = nil
+	node.tiles = node.tiles[:len(node.tiles)-1]
+
+	// add last component to parent node and remove itself
+	if node.parent != nil && len(node.tiles) == 1 {
+		parent := node.parent
+		child := node.tiles[0]
+
+		j := parent.childIdx(node)
+		parent.tiles[j] = child
+		child.setParent(parent)
+
+		// avoid memory leaks
+		node.parent = nil
+
+		return parent.Resize(parent.width, parent.height)
+	}
+
+	return node.Resize(node.width, node.height)
+}
+
 func (m *WindowManager) SplitVertical(tw *TiledWindow, content fractal.Component) (newtw *TiledWindow, err error) {
 	return m.split(tw, vertical, content)
 }
@@ -160,11 +252,11 @@ func (m *WindowManager) split(tw *TiledWindow, direction splitdir, content fract
 		panic("trying to split a nil tile")
 	}
 
-	node := tw.node
+	node := tw.parent
 	newtw = newTiledWindow(content)
 
 	if node.direction == direction {
-		newtw.node = node
+		newtw.parent = node
 		node.tiles = append(node.tiles, newtw)
 		err = node.Resize(node.width, node.height)
 		return
@@ -173,21 +265,13 @@ func (m *WindowManager) split(tw *TiledWindow, direction splitdir, content fract
 	x, y := tw.Position()
 	// substitute window we are splitting over for a node
 	// which will contain the current window and a new one
-	nnode := newNode(direction, tw, x, y, tw.Width(), tw.Height())
+	nnode := newNode(direction, node, tw, x, y, tw.Width(), tw.Height())
 	nnode.tiles = append(nnode.tiles, newtw)
-	newtw.node = nnode
+	newtw.parent = nnode
 
-	for i, t := range node.tiles {
-		if t == tw {
-			node.tiles[i] = nnode
-			goto exit
-		}
-	}
-
-	panic("corrupt node: tile does not belong to this node")
-
-exit:
-	tw.node = nnode
+	i := node.childIdx(tw)
+	node.tiles[i] = nnode
+	tw.parent = nnode
 	err = nnode.Resize(nnode.width, nnode.height)
 
 	return
