@@ -8,7 +8,7 @@ import (
 )
 
 func TestNew(t *testing.T) {
-	m, _, e := NewTiledManager(10, 10, &testComponent{})
+	m, _, e := NewTileManager(10, 10, &testComponent{})
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -16,13 +16,9 @@ func TestNew(t *testing.T) {
 	if m.height != 10 || m.width != 10 {
 		t.Errorf("not initialized correcty: %+v", m)
 	}
-
-	if m.root.Height() != 10 || m.root.Width() != 10 {
-		t.Errorf("root window not initialized correctly: %+v", m.root)
-	}
 }
 
-func testWindowSize(t *testing.T, w *TiledWindow, width, height int) {
+func testWindowSize(t *testing.T, w *Tile, width, height int) {
 	if w.Width() != width {
 		t.Errorf("window.Width(%d) != %d", w.Width(), width)
 	}
@@ -32,7 +28,7 @@ func testWindowSize(t *testing.T, w *TiledWindow, width, height int) {
 	}
 }
 
-func testWindowPos(t *testing.T, w *TiledWindow, x, y int) {
+func testWindowPos(t *testing.T, w *Tile, x, y int) {
 	xpos, ypos := w.Position()
 	if xpos != x {
 		t.Errorf("window.x(%d) != %d", xpos, x)
@@ -43,18 +39,18 @@ func testWindowPos(t *testing.T, w *TiledWindow, x, y int) {
 }
 
 func TestSplitVertical(t *testing.T) {
-	var m *WindowManager
-	var root *TiledWindow
+	var m *TileManager
+	var root *Tile
 	var e error
 
 	width := 100
 	height := 100
 
-	if m, root, e = NewTiledManager(width, height, &testComponent{}); e != nil {
+	if m, root, e = NewTileManager(width, height, &testComponent{}); e != nil {
 		t.Fatal(e)
 	}
 
-	var w1 *TiledWindow
+	var w1 *Tile
 	if w1, e = m.SplitVertical(root, &testComponent{}); e != nil {
 		t.Fatal(e)
 	}
@@ -64,7 +60,7 @@ func TestSplitVertical(t *testing.T) {
 	testWindowPos(t, root, 0, 0)
 	testWindowPos(t, w1, 50, 0)
 
-	var w2 *TiledWindow
+	var w2 *Tile
 	if w2, e = m.SplitVertical(w1, &testComponent{}); e != nil {
 		t.Fatal(e)
 	}
@@ -78,7 +74,7 @@ func TestSplitVertical(t *testing.T) {
 	testWindowPos(t, w1, 33, 0)
 	testWindowPos(t, w2, 66, 0)
 
-	var w3 *TiledWindow
+	var w3 *Tile
 	if w3, e = m.SplitVertical(root, &testComponent{}); e != nil {
 		t.Fatal(e)
 	}
@@ -95,18 +91,18 @@ func TestSplitVertical(t *testing.T) {
 }
 
 func TestSplitHorizontal(t *testing.T) {
-	var m *WindowManager
-	var root *TiledWindow
+	var m *TileManager
+	var root *Tile
 	var e error
 
 	width := 100
 	height := 100
 
-	if m, root, e = NewTiledManager(width, height, &testComponent{}); e != nil {
+	if m, root, e = NewTileManager(width, height, &testComponent{}); e != nil {
 		t.Fatal(e)
 	}
 
-	var w1 *TiledWindow
+	var w1 *Tile
 	if w1, e = m.SplitHorizontal(root, &testComponent{}); e != nil {
 		t.Fatal(e)
 	}
@@ -116,7 +112,7 @@ func TestSplitHorizontal(t *testing.T) {
 	testWindowPos(t, root, 0, 0)
 	testWindowPos(t, w1, 0, 50)
 
-	var w2 *TiledWindow
+	var w2 *Tile
 	if w2, e = m.SplitHorizontal(w1, &testComponent{}); e != nil {
 		t.Fatal(e)
 	}
@@ -129,7 +125,7 @@ func TestSplitHorizontal(t *testing.T) {
 	testWindowPos(t, w1, 0, 33)
 	testWindowPos(t, w2, 0, 66)
 
-	var w3 *TiledWindow
+	var w3 *Tile
 	if w3, e = m.SplitHorizontal(root, &testComponent{}); e != nil {
 		t.Fatal(e)
 	}
@@ -146,15 +142,15 @@ func TestSplitHorizontal(t *testing.T) {
 }
 
 func TestSplitHorizontalVertical(t *testing.T) {
-	var m *WindowManager
-	var root *TiledWindow
+	var m *TileManager
+	var root *Tile
 	var e error
-	var w1, w2, w3, w4, w5, w6 *TiledWindow
+	var w1, w2, w3, w4, w5, w6 *Tile
 
 	width := 100
 	height := 100
 
-	if m, root, e = NewTiledManager(width, height, &testComponent{}); e != nil {
+	if m, root, e = NewTileManager(width, height, &testComponent{}); e != nil {
 		t.Fatal(e)
 	}
 
@@ -211,7 +207,7 @@ func TestStackWhenNoSpace(t *testing.T) {
 	width := 1
 	height := 1
 
-	if m, root, e := NewTiledManager(width, height, &testComponent{}); e != nil {
+	if m, root, e := NewTileManager(width, height, &testComponent{}); e != nil {
 		t.Fatal(e)
 	} else {
 		w1, _ := m.SplitHorizontal(root, &testComponent{})
@@ -227,10 +223,10 @@ func TestStackWhenNoSpace(t *testing.T) {
 	}
 }
 
-func setupTestCase(t *testing.T, gwidth, gheight int) (m *WindowManager, root *TiledWindow, w1 *TiledWindow, w2 *TiledWindow) {
+func setupTestCase(t *testing.T, gwidth, gheight int) (m *TileManager, root *Tile, w1 *Tile, w2 *Tile) {
 	var e error
 
-	if m, root, e = NewTiledManager(gwidth, gheight, &testComponent{}); e != nil {
+	if m, root, e = NewTileManager(gwidth, gheight, &testComponent{}); e != nil {
 		t.Fatal(e)
 	}
 
@@ -307,17 +303,17 @@ func TestResizeRounding(t *testing.T) {
 	testWindowPos(t, w2, 50, 50)
 }
 
-func TestWindowManagerDraw(t *testing.T) {
+func TestTileManagerDraw(t *testing.T) {
 	width, height := 8, 4
 	w := writer.String(width, height)
-	m, root, err := NewTiledManager(width, height, &testComponent{fill: 'A'})
+	m, root, err := NewTileManager(width, height, &testComponent{fill: 'A'})
 
-	var m1 *TiledWindow
-	var m2 *TiledWindow
-	var m3 *TiledWindow
-	var m4 *TiledWindow
-	var m5 *TiledWindow
-	var m6 *TiledWindow
+	var m1 *Tile
+	var m2 *Tile
+	var m3 *Tile
+	var m4 *Tile
+	var m5 *Tile
+	var m6 *Tile
 
 	if err != nil {
 		t.Fatal(err)
@@ -370,25 +366,25 @@ ABCCDDEE
 ABZZDDXX
 ABZZDDXX`,
 		}, {
-			func() { err = m.Close(m5) }, `
+			func() { err = m5.Close() }, `
 ABCCDDEE
 ABCCDDEE
 ABZZDDEE
 ABZZDDEE`,
 		}, {
-			func() { err = m.Close(m2) }, `
+			func() { err = m2.Close() }, `
 ABZZDDEE
 ABZZDDEE
 ABZZDDEE
 ABZZDDEE`,
 		}, {
-			func() { err = m.Close(root) }, `
+			func() { err = root.Close() }, `
 BBZZDDEE
 BBZZDDEE
 BBZZDDEE
 BBZZDDEE`,
 		}, {
-			func() { err = m.Close(m1) }, `
+			func() { err = m1.Close() }, `
 ZZDDDEEE
 ZZDDDEEE
 ZZDDDEEE
@@ -400,19 +396,19 @@ ZZDDDEEE
 ZZAAAEEE
 ZZAAAEEE`,
 		}, {
-			func() { err = m.Close(m1) }, `
+			func() { err = m1.Close() }, `
 ZZDDDEEE
 ZZDDDEEE
 ZZDDDEEE
 ZZDDDEEE`,
 		}, {
-			func() { err = m.Close(m3) }, `
+			func() { err = m3.Close() }, `
 ZZZZEEEE
 ZZZZEEEE
 ZZZZEEEE
 ZZZZEEEE`,
 		}, {
-			func() { err = m.Close(m4) }, `
+			func() { err = m4.Close() }, `
 ZZZZZZZZ
 ZZZZZZZZ
 ZZZZZZZZ
@@ -436,7 +432,7 @@ ZZZZZZZZZZZZZZZZ
 YYYYYYYYXXXXXXXX
 YYYYYYYYXXXXXXXX`,
 		}, {
-			func() { err = m.Close(m6) }, `
+			func() { err = m6.Close() }, `
 YYYYYYYYXXXXXXXX
 YYYYYYYYXXXXXXXX
 YYYYYYYYXXXXXXXX
@@ -446,7 +442,7 @@ YYYYYYYYXXXXXXXX`,
 YYXX
 YYXX`,
 		}, {
-			func() { err = m.Close(m1) }, `
+			func() { err = m1.Close() }, `
 XXXX
 XXXX`,
 		},

@@ -14,55 +14,55 @@ const (
 )
 
 type linkedComponent interface {
-	setParent(*tnode)
+	setParent(*TileManager)
 	fractal.Component
 }
 
-type tnode struct {
+type TileManager struct {
 	fractal.Coordinates
 	width     int
 	height    int
-	tiles     []linkedComponent
+	children  []linkedComponent
 	direction splitdir
-	parent    *tnode
+	parent    *TileManager
 }
 
-type TiledWindow struct {
+type Tile struct {
 	content fractal.Component
-	parent  *tnode
+	parent  *TileManager
 }
 
-func newNode(direction splitdir, parent *tnode, w *TiledWindow, x, y, width, height int) (t *tnode) {
-	t = new(tnode)
+func newNode(direction splitdir, parent *TileManager, w *Tile, x, y, width, height int) (t *TileManager) {
+	t = new(TileManager)
 	t.X, t.Y, t.width, t.height = x, y, width, height
-	t.tiles = []linkedComponent{w}
+	t.children = []linkedComponent{w}
 	t.direction = direction
 	t.parent = parent
 	return
 }
 
-func newTiledWindow(content fractal.Component) (t *TiledWindow) {
-	t = new(TiledWindow)
+func newTile(content fractal.Component) (t *Tile) {
+	t = new(Tile)
 	t.content = content
 	return
 }
 
-func (t *TiledWindow) setParent(parent *tnode) {
+func (t *Tile) setParent(parent *TileManager) {
 	t.parent = parent
 }
 
-func (t *tnode) setParent(parent *tnode) {
+func (t *TileManager) setParent(parent *TileManager) {
 	t.parent = parent
 }
 
-func (t *tnode) resizeHorizontal(len, width, height int) (err error) {
+func (t *TileManager) resizeHorizontal(len, width, height int) (err error) {
 	cheight := height / len
 	hspare := height - cheight*len
 
 	useSpareIdx := len - hspare
 	spareCell := 0
 
-	for i, ti := range t.tiles {
+	for i, ti := range t.children {
 		offset := ((i - useSpareIdx) * spareCell)
 		if err = ti.Move(t.X, (t.Y+i*cheight)+offset); err != nil {
 			return
@@ -79,14 +79,14 @@ func (t *tnode) resizeHorizontal(len, width, height int) (err error) {
 	return
 }
 
-func (t *tnode) resizeVertical(len, width, height int) (err error) {
+func (t *TileManager) resizeVertical(len, width, height int) (err error) {
 	cwidth := width / len
 	wspare := width - cwidth*len
 
 	useSpareIdx := len - wspare
 	spareCell := 0
 
-	for i, ti := range t.tiles {
+	for i, ti := range t.children {
 		offset := ((i - useSpareIdx) * spareCell)
 		if err = ti.Move((t.X+i*cwidth)+offset, t.Y); err != nil {
 			return
@@ -103,14 +103,14 @@ func (t *tnode) resizeVertical(len, width, height int) (err error) {
 	return
 }
 
-func (t *tnode) Resize(width, height int) (err error) {
+func (t *TileManager) Resize(width, height int) (err error) {
 	t.height = height
 	t.width = width
 
-	len := len(t.tiles)
+	len := len(t.children)
 
 	if len == 0 {
-		panic(fmt.Sprintf("can't resize a tnode with no tiles: %[1]p: %+[1]v", t))
+		panic(fmt.Sprintf("can't resize a TileManager with no children: %[1]p: %+[1]v", t))
 	}
 
 	if t.direction == vertical {
@@ -120,14 +120,13 @@ func (t *tnode) Resize(width, height int) (err error) {
 	return t.resizeHorizontal(len, width, height)
 }
 
-func (t *tnode) Move(x, y int) error {
-	t.X = x
-	t.Y = y
+func (t *TileManager) Move(x, y int) error {
+	t.X, t.Y = x, y
 	return t.Resize(t.width, t.height)
 }
 
-func (t *tnode) Draw(w fractal.Writer) (err error) {
-	for _, ti := range t.tiles {
+func (t *TileManager) Draw(w fractal.Writer) (err error) {
+	for _, ti := range t.children {
 		if err = ti.Draw(w); err != nil {
 			return
 		}
@@ -136,50 +135,44 @@ func (t *tnode) Draw(w fractal.Writer) (err error) {
 	return
 }
 
-func (t *tnode) Height() int {
+func (t *TileManager) Height() int {
 	return t.height
 }
 
-func (t *tnode) Width() int {
+func (t *TileManager) Width() int {
 	return t.width
 }
 
-func (t *tnode) Position() (int, int) {
+func (t *TileManager) Position() (int, int) {
 	return t.X, t.Y
 }
 
-func (t *TiledWindow) Resize(width, height int) (err error) {
+func (t *Tile) Resize(width, height int) (err error) {
 	return t.content.Resize(width, height)
 }
 
-func (t *TiledWindow) Move(x, y int) error {
+func (t *Tile) Move(x, y int) error {
 	return t.content.Move(x, y)
 }
 
-func (t *TiledWindow) Draw(w fractal.Writer) (err error) {
+func (t *Tile) Draw(w fractal.Writer) (err error) {
 	return t.content.Draw(w)
 }
 
-func (t *TiledWindow) Height() int {
+func (t *Tile) Height() int {
 	return t.content.Height()
 }
 
-func (t *TiledWindow) Width() int {
+func (t *Tile) Width() int {
 	return t.content.Width()
 }
 
-func (t *TiledWindow) Position() (int, int) {
+func (t *Tile) Position() (int, int) {
 	return t.content.Position()
 }
 
-type WindowManager struct {
-	root          *tnode
-	width, height int
-	fractal.Coordinates
-}
-
-func (t *tnode) childIdx(comp linkedComponent) int {
-	for i, t := range t.tiles {
+func (t *TileManager) childIdx(comp linkedComponent) int {
+	for i, t := range t.children {
 		if t == comp {
 			return i
 		}
@@ -188,60 +181,56 @@ func (t *tnode) childIdx(comp linkedComponent) int {
 	panic("corrupt node: window already closed or tile does not belong to this node")
 }
 
-func (m *WindowManager) split(tw *TiledWindow, direction splitdir, content fractal.Component) (newtw *TiledWindow, err error) {
+func (m *TileManager) split(tw *Tile, direction splitdir, content fractal.Component) (t *Tile, err error) {
 	if tw == nil {
 		panic("trying to split a nil tile")
 	}
 
 	node := tw.parent
-	newtw = newTiledWindow(content)
+	t = newTile(content)
 
 	if node.direction == direction {
-		newtw.parent = node
-		node.tiles = append(node.tiles, newtw)
+		t.parent = node
+		node.children = append(node.children, t)
 		err = node.Resize(node.width, node.height)
 		return
 	}
 
 	x, y := tw.Position()
-	// substitute window we are splitting over for a node
-	// which will contain the current window and a new one
+	// substitute tile we are splitting over for a node
+	// which will contain the current tile and a new one
 	nnode := newNode(direction, node, tw, x, y, tw.Width(), tw.Height())
-	nnode.tiles = append(nnode.tiles, newtw)
-	newtw.parent = nnode
+	nnode.children = append(nnode.children, t)
+	t.parent = nnode
 
 	i := node.childIdx(tw)
-	node.tiles[i] = nnode
+	node.children[i] = nnode
 	tw.parent = nnode
 	err = nnode.Resize(nnode.width, nnode.height)
 
 	return
 }
 
-func (m *WindowManager) Draw(w fractal.Writer) error {
-	return m.root.Draw(w)
-}
-
-func (m *WindowManager) Close(tw *TiledWindow) (err error) {
+func (tw *Tile) Close() (err error) {
 	node := tw.parent
 
-	if node.parent == nil && len(node.tiles) == 1 {
+	if node.parent == nil && len(node.children) == 1 {
 		panic("unsupported: trying to close last window: remove manager instead")
 	}
 
 	// remove window
 	i := node.childIdx(tw)
-	copy(node.tiles[i:], node.tiles[i+1:])
-	node.tiles[len(node.tiles)-1] = nil
-	node.tiles = node.tiles[:len(node.tiles)-1]
+	copy(node.children[i:], node.children[i+1:])
+	node.children[len(node.children)-1] = nil
+	node.children = node.children[:len(node.children)-1]
 
 	// add last component to parent node and remove itself
-	if node.parent != nil && len(node.tiles) == 1 {
+	if node.parent != nil && len(node.children) == 1 {
 		parent := node.parent
-		child := node.tiles[0]
+		child := node.children[0]
 
 		j := parent.childIdx(node)
-		parent.tiles[j] = child
+		parent.children[j] = child
 		child.setParent(parent)
 
 		// avoid memory leaks
@@ -253,50 +242,22 @@ func (m *WindowManager) Close(tw *TiledWindow) (err error) {
 	return node.Resize(node.width, node.height)
 }
 
-func (m *WindowManager) SplitVertical(tw *TiledWindow, content fractal.Component) (newtw *TiledWindow, err error) {
+func (m *TileManager) SplitVertical(tw *Tile, content fractal.Component) (*Tile, error) {
 	return m.split(tw, vertical, content)
 }
 
-func (m *WindowManager) SplitHorizontal(tw *TiledWindow, content fractal.Component) (newtw *TiledWindow, err error) {
+func (m *TileManager) SplitHorizontal(tw *Tile, content fractal.Component) (*Tile, error) {
 	return m.split(tw, horizontal, content)
 }
 
-func (m *WindowManager) Resize(width, height int) (err error) {
+func NewTileManager(width, height int, content fractal.Component) (m *TileManager, root *Tile, err error) {
+	root = newTile(content)
+	m = newNode(vertical, nil, root, 0, 0, width, height)
+	root.parent = m
 	m.width = width
 	m.height = height
 
-	if err = m.root.Resize(width, height); err != nil {
-		return err
-	}
-
-	return
-}
-
-func (m *WindowManager) Move(x, y int) error {
-	// TODO return t.content.Move(x, y)
-}
-
-func (m *WindowManager) Height() int {
-	return m.height
-}
-
-func (m *WindowManager) Width() int {
-	return m.width
-}
-
-func (m *WindowManager) Position() (int, int) {
-	return m.X, m.Y
-}
-
-func NewTiledManager(width, height int, content fractal.Component) (m *WindowManager, root *TiledWindow, err error) {
-	m = new(WindowManager)
-	root = newTiledWindow(content)
-	m.root = newNode(vertical, nil, root, 0, 0, width, height)
-	root.parent = m.root
-	m.width = width
-	m.height = height
-
-	if err = m.root.Resize(width, height); err != nil {
+	if err = m.Resize(width, height); err != nil {
 		return
 	}
 
