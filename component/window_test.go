@@ -145,10 +145,7 @@ func TestWindowDrawWrap(t *testing.T) {
 
 	w := writer.String(width, height)
 
-	tests := []struct {
-		action   func()
-		expected string
-	}{
+	tests := []testCase{
 		{nil, "Love in \nyour hea"},
 		{window.SeekUp, "Love in \nyour hea"},
 		{window.SeekLeft, "Love in \nyour hea"},
@@ -165,27 +162,10 @@ func TestWindowDrawWrap(t *testing.T) {
 		{func() { window.Move(0, 0) }, "Love in \nyour hea"},
 		{func() { window.Search("Love") }, "Love in \nyour hea"},
 		{window.SeekNextResult, "Love in \nyour hea"},
-		{func() { window.Resize(20, 1); w = writer.String(20, 1) }, "Love in your heart w"},
+		{func() { window.Resize(20, 1); w.Resize(20, 1) }, "Love in your heart w"},
 		{func() { window.Search("you") }, "Love in your heart w"},
 		{window.SeekNextResult, "Love in your heart w"},
 	}
 
-	for _, tcase := range tests {
-		w.Clear(0, 0)
-		if tcase.action != nil {
-			tcase.action()
-		}
-
-		if err := window.Draw(w); err != nil {
-			t.Fatal(err)
-		}
-
-		if err := w.Flush(); err != nil {
-			t.Fatal(err)
-		}
-
-		if w.String() != tcase.expected {
-			t.Errorf("expected: %q; found: %q", tcase.expected, w.String())
-		}
-	}
+	testWorkflow(t, window, w, tests)
 }
