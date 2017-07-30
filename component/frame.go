@@ -33,7 +33,7 @@ func (f *Frame) SetContent(content fractal.Component) (err error) {
 	return
 }
 
-func (f *Frame) Resize(width, height int) error {
+func (f *Frame) Resize(width, height int) (err error) {
 	// deactivate frame if there's not space for content
 	if width < 3 || height < 3 {
 		f.bwidth, f.bheight = 0, 0
@@ -41,7 +41,12 @@ func (f *Frame) Resize(width, height int) error {
 		f.bwidth, f.bheight = 2, 2
 	}
 	f.width, f.height = width, height
-	return f.content.Resize(width-f.bwidth, height-f.bheight)
+
+	if err = f.content.Resize(width-f.bwidth, height-f.bheight); err != nil {
+		return
+	}
+
+	return f.Move(f.pos.X, f.pos.Y)
 }
 
 func (f *Frame) Move(x, y int) error {
@@ -51,6 +56,10 @@ func (f *Frame) Move(x, y int) error {
 }
 
 func (f *Frame) Draw(w fractal.Writer) (err error) {
+	if f.bwidth == 0 || f.bheight == 0 {
+		return f.content.Draw(w)
+	}
+
 	maxX, maxY := f.pos.X+f.width-1, f.pos.Y+f.height-1
 
 	for i := 0; i < maxX; i++ {
