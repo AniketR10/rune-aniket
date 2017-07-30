@@ -59,7 +59,7 @@ func (l *List) Resize(width, height int) (err error) {
 				return
 			}
 		} else {
-			// create new coponent
+			// create new component
 			row = l.factory(l.rows[i])
 			if err = row.Move(l.X, l.Y+i); err != nil {
 				return
