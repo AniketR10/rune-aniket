@@ -32,9 +32,9 @@ type Tile struct {
 	parent  *TileManager
 }
 
-func NewTileManager(width, height int, content fractal.Component) (m *TileManager, root *Tile, err error) {
+func NewTileManager(width, height, x, y int, content fractal.Component) (m *TileManager, root *Tile, err error) {
 	root = newTile(content)
-	m = newNode(vertical, nil, root, 0, 0, width, height)
+	m = newNode(vertical, nil, root, x, y, width, height)
 	root.parent = m
 	m.width = width
 	m.height = height

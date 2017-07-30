@@ -7,7 +7,7 @@ import (
 )
 
 func TestNew(t *testing.T) {
-	m, _, e := NewTileManager(10, 10, &testComponent{})
+	m, _, e := NewTileManager(10, 10, 0, 0, &testComponent{})
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -45,7 +45,7 @@ func TestSplitVertical(t *testing.T) {
 	width := 100
 	height := 100
 
-	if m, root, e = NewTileManager(width, height, &testComponent{}); e != nil {
+	if m, root, e = NewTileManager(width, height, 0, 0, &testComponent{}); e != nil {
 		t.Fatal(e)
 	}
 
@@ -97,7 +97,7 @@ func TestSplitHorizontal(t *testing.T) {
 	width := 100
 	height := 100
 
-	if m, root, e = NewTileManager(width, height, &testComponent{}); e != nil {
+	if m, root, e = NewTileManager(width, height, 0, 0, &testComponent{}); e != nil {
 		t.Fatal(e)
 	}
 
@@ -149,7 +149,7 @@ func TestSplitHorizontalVertical(t *testing.T) {
 	width := 100
 	height := 100
 
-	if m, root, e = NewTileManager(width, height, &testComponent{}); e != nil {
+	if m, root, e = NewTileManager(width, height, 0, 0, &testComponent{}); e != nil {
 		t.Fatal(e)
 	}
 
@@ -206,7 +206,7 @@ func TestStackWhenNoSpace(t *testing.T) {
 	width := 1
 	height := 1
 
-	if m, root, e := NewTileManager(width, height, &testComponent{}); e != nil {
+	if m, root, e := NewTileManager(width, height, 0, 0, &testComponent{}); e != nil {
 		t.Fatal(e)
 	} else {
 		w1, _ := m.SplitHorizontal(root, &testComponent{})
@@ -225,7 +225,7 @@ func TestStackWhenNoSpace(t *testing.T) {
 func setupTestCase(t *testing.T, gwidth, gheight int) (m *TileManager, root *Tile, w1 *Tile, w2 *Tile) {
 	var e error
 
-	if m, root, e = NewTileManager(gwidth, gheight, &testComponent{}); e != nil {
+	if m, root, e = NewTileManager(gwidth, gheight, 0, 0, &testComponent{}); e != nil {
 		t.Fatal(e)
 	}
 
@@ -305,7 +305,7 @@ func TestResizeRounding(t *testing.T) {
 func TestTileManagerDraw(t *testing.T) {
 	width, height := 8, 4
 	w := writer.String(width, height)
-	m, root, err := NewTileManager(width, height, &testComponent{fill: 'A'})
+	m, root, err := NewTileManager(width, height, 0, 0, &testComponent{fill: 'A'})
 
 	var m1 *Tile
 	var m2 *Tile
