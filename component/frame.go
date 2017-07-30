@@ -12,11 +12,15 @@ type Frame struct {
 
 func NewFrame(content fractal.Component, width, height, x, y int, fg, bg fractal.Attribute) (f *Frame, err error) {
 	f = new(Frame)
+	return f, f.Init(content, width, height, x, y, fg, bg)
+}
+
+func (f *Frame) Init(content fractal.Component, width, height, x, y int, fg, bg fractal.Attribute) (err error) {
 	f.Fg, f.Bg = fg, bg
 	f.pos.X, f.pos.Y = x, y
 	f.width, f.height = width, height
 
-	return f, f.SetContent(content)
+	return f.SetContent(content)
 }
 
 func (f *Frame) SetContent(content fractal.Component) (err error) {

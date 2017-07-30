@@ -1,91 +1,112 @@
 package component
 
-import "github.com/ernestrc/fractal"
+import (
+	"container/list"
+
+	"github.com/ernestrc/fractal"
+)
 
 const resfg, resbg = fractal.AttrReverse, fractal.AttrReverse
 
 type List struct {
-	factory       fractal.Factory
-	children      []fractal.Component
-	rows          []*fractal.Buffer
+	elementHeight int
 	width, height int
-	fractal.Coordinates
+	pos           fractal.Coordinates
+	offset        int
+	list.List     // list of fractal.Component
 }
 
-func (l *List) NewList( /*rowHeight,*/ width, height int, factory fractal.Factory) (c *List) {
-	c = new(List)
-	return
+func NewList(elementHeight, width, height, x, y int) (l *List) {
+	l = new(List)
+	l.Init(elementHeight, width, height, x, y)
+	return l
 }
 
-func (l *List) Clear() (err error) {
-	l.rows = l.rows[:0]
+func (l *List) Init(elementHeight, width, height, x, y int) {
+	if elementHeight <= 0 {
+		panic("element height cannot be smaller than or equal to 0")
+	}
+	l.elementHeight = elementHeight
+	l.width, l.height, l.pos.X, l.pos.Y = width, height, x, y
+	l.List.Init()
+}
+
+func (l *List) SetElementHeight(height int) (err error) {
+	l.elementHeight = height
 	return l.Resize(l.width, l.height)
 }
 
-func (l *List) Set(rows []*fractal.Buffer) (err error) {
-	l.rows = rows
-	return l.Resize(l.width, l.height)
+func (l *List) ElementHeight() int {
+	return l.elementHeight
 }
 
-func (l *List) Add(content *fractal.Buffer) (err error) {
-	l.rows = append(l.rows, content)
-	return l.Resize(l.width, l.height)
+func (l *List) CanSeekUp() bool {
+	return l.offset > 0
 }
 
-func (l *List) Pop() (row *fractal.Buffer) {
-	l.rows, row = l.rows[1:], l.rows[0]
-	return
+func (l *List) CanSeekDown() bool {
+	return l.offset < l.Len()-l.height/l.elementHeight
 }
 
-func (l *List) Rows() []*fractal.Buffer {
-	return l.rows
+func (l *List) SeekUp() {
+	if l.CanSeekUp() {
+		l.offset--
+	}
+}
+
+func (l *List) SeekDown() {
+	if l.CanSeekDown() {
+		l.offset++
+	}
+}
+
+func (l *List) SeekEnd() {
+	for l.CanSeekDown() {
+		l.offset++
+	}
+}
+
+func (l *List) SeekStart() {
+	l.offset = 0
 }
 
 func (l *List) Resize(width, height int) (err error) {
-	if l.children == nil {
-		l.children = make([]fractal.Component, height)
-	}
-	pchildren := l.children
-	pheight := l.height
-	l.children = l.children[:0]
 	l.width, l.height = width, height
-
-	var row fractal.Component
-	for i := 0; i < l.height && i < len(l.rows); i++ {
-		if pheight > i {
-			// reuse component
-			row = pchildren[i]
-			if err = row.Resize(width, 1); err != nil {
-				return
-			}
-		} else {
-			// create new component
-			row = l.factory(l.rows[i])
-			if err = row.Move(l.X, l.Y+i); err != nil {
-				return
-			}
+	var comp fractal.Component
+	for i, el := 0, l.Front(); el != nil; el, i = el.Next(), i+1 {
+		comp = el.Value.(fractal.Component)
+		if err = comp.Resize(l.width, l.elementHeight); err != nil {
+			return
 		}
-		l.children = append(l.children, row)
+		ypos := l.pos.Y + (i-l.offset)*l.elementHeight
+		if err = comp.Move(l.pos.X, ypos); err != nil {
+			return
+		}
 	}
-
 	return
 }
 
 func (l *List) Move(x, y int) (err error) {
-	l.X, l.Y = x, y
+	l.pos.X, l.pos.Y = x, y
 
-	for i, row := range l.children {
-		if err = row.Move(l.X, l.Y+i); err != nil {
-			return
-		}
-	}
-
-	return
+	return l.Resize(l.width, l.height)
 }
 
 func (l *List) Draw(w fractal.Writer) (err error) {
-	for _, row := range l.children {
-		if err = row.Draw(w); err != nil {
+	// API exposes internal list so we need
+	// to make sure that the elements are properly position and sized
+	// before drawing
+	if err = l.Resize(l.width, l.height); err != nil {
+		return
+	}
+
+	lastVisible := l.height/l.elementHeight + l.offset
+
+	for i, el := 0, l.Front(); i < lastVisible && el != nil; i, el = i+1, el.Next() {
+		if i < l.offset {
+			continue
+		}
+		if err = el.Value.(fractal.Component).Draw(w); err != nil {
 			return
 		}
 	}
@@ -102,5 +123,19 @@ func (l *List) Width() int {
 }
 
 func (l *List) Position() (int, int) {
-	return l.X, l.Y
+	return l.pos.X, l.pos.Y
+}
+
+func (l *List) PushBackList(other *List) {
+	if l == other {
+		panic("other list cannot be self: components can't be deep cloned")
+	}
+	l.List.PushBackList(&other.List)
+}
+
+func (l *List) PushFrontList(other *List) {
+	if l == other {
+		panic("other list cannot be self: components can't be deep cloned")
+	}
+	l.List.PushFrontList(&other.List)
 }

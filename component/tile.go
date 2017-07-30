@@ -32,6 +32,16 @@ type Tile struct {
 	parent  *TileManager
 }
 
+func NewTileManager(width, height int, content fractal.Component) (m *TileManager, root *Tile, err error) {
+	root = newTile(content)
+	m = newNode(vertical, nil, root, 0, 0, width, height)
+	root.parent = m
+	m.width = width
+	m.height = height
+
+	return m, root, m.Resize(width, height)
+}
+
 func newNode(direction splitdir, parent *TileManager, w *Tile, x, y, width, height int) (t *TileManager) {
 	t = new(TileManager)
 	t.pos.X, t.pos.Y, t.width, t.height = x, y, width, height
@@ -248,18 +258,4 @@ func (m *TileManager) SplitVertical(tw *Tile, content fractal.Component) (*Tile,
 
 func (m *TileManager) SplitHorizontal(tw *Tile, content fractal.Component) (*Tile, error) {
 	return m.split(tw, horizontal, content)
-}
-
-func NewTileManager(width, height int, content fractal.Component) (m *TileManager, root *Tile, err error) {
-	root = newTile(content)
-	m = newNode(vertical, nil, root, 0, 0, width, height)
-	root.parent = m
-	m.width = width
-	m.height = height
-
-	if err = m.Resize(width, height); err != nil {
-		return
-	}
-
-	return
 }
