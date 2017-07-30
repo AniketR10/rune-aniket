@@ -17,7 +17,7 @@ func TestNew(t *testing.T) {
 	}
 }
 
-func testWindowSize(t *testing.T, w *Tile, width, height int) {
+func testScrollSize(t *testing.T, w *Tile, width, height int) {
 	if w.Width() != width {
 		t.Errorf("window.Width(%d) != %d", w.Width(), width)
 	}
@@ -27,7 +27,7 @@ func testWindowSize(t *testing.T, w *Tile, width, height int) {
 	}
 }
 
-func testWindowPos(t *testing.T, w *Tile, x, y int) {
+func testScrollPos(t *testing.T, w *Tile, x, y int) {
 	xpos, ypos := w.Position()
 	if xpos != x {
 		t.Errorf("window.x(%d) != %d", xpos, x)
@@ -54,39 +54,39 @@ func TestSplitVertical(t *testing.T) {
 		t.Fatal(e)
 	}
 
-	testWindowSize(t, root, 50, height)
-	testWindowSize(t, w1, 50, height)
-	testWindowPos(t, root, 0, 0)
-	testWindowPos(t, w1, 50, 0)
+	testScrollSize(t, root, 50, height)
+	testScrollSize(t, w1, 50, height)
+	testScrollPos(t, root, 0, 0)
+	testScrollPos(t, w1, 50, 0)
 
 	var w2 *Tile
 	if w2, e = m.SplitVertical(w1, &testComponent{}); e != nil {
 		t.Fatal(e)
 	}
 
-	testWindowSize(t, root, 33, height)
-	testWindowSize(t, w1, 33, height)
+	testScrollSize(t, root, 33, height)
+	testScrollSize(t, w1, 33, height)
 	// 33 + 1 to use last cell available
-	testWindowSize(t, w2, 34, height)
+	testScrollSize(t, w2, 34, height)
 
-	testWindowPos(t, root, 0, 0)
-	testWindowPos(t, w1, 33, 0)
-	testWindowPos(t, w2, 66, 0)
+	testScrollPos(t, root, 0, 0)
+	testScrollPos(t, w1, 33, 0)
+	testScrollPos(t, w2, 66, 0)
 
 	var w3 *Tile
 	if w3, e = m.SplitVertical(root, &testComponent{}); e != nil {
 		t.Fatal(e)
 	}
 
-	testWindowSize(t, root, 25, height)
-	testWindowSize(t, w3, 25, height)
-	testWindowSize(t, w1, 25, height)
-	testWindowSize(t, w2, 25, height)
+	testScrollSize(t, root, 25, height)
+	testScrollSize(t, w3, 25, height)
+	testScrollSize(t, w1, 25, height)
+	testScrollSize(t, w2, 25, height)
 
-	testWindowPos(t, root, 0, 0)
-	testWindowPos(t, w1, 25, 0)
-	testWindowPos(t, w2, 50, 0)
-	testWindowPos(t, w3, 75, 0)
+	testScrollPos(t, root, 0, 0)
+	testScrollPos(t, w1, 25, 0)
+	testScrollPos(t, w2, 50, 0)
+	testScrollPos(t, w3, 75, 0)
 }
 
 func TestSplitHorizontal(t *testing.T) {
@@ -106,38 +106,38 @@ func TestSplitHorizontal(t *testing.T) {
 		t.Fatal(e)
 	}
 
-	testWindowSize(t, root, width, 50)
-	testWindowSize(t, w1, width, 50)
-	testWindowPos(t, root, 0, 0)
-	testWindowPos(t, w1, 0, 50)
+	testScrollSize(t, root, width, 50)
+	testScrollSize(t, w1, width, 50)
+	testScrollPos(t, root, 0, 0)
+	testScrollPos(t, w1, 0, 50)
 
 	var w2 *Tile
 	if w2, e = m.SplitHorizontal(w1, &testComponent{}); e != nil {
 		t.Fatal(e)
 	}
 
-	testWindowSize(t, root, width, 33)
-	testWindowSize(t, w1, width, 33)
-	testWindowSize(t, w2, width, 34)
+	testScrollSize(t, root, width, 33)
+	testScrollSize(t, w1, width, 33)
+	testScrollSize(t, w2, width, 34)
 
-	testWindowPos(t, root, 0, 0)
-	testWindowPos(t, w1, 0, 33)
-	testWindowPos(t, w2, 0, 66)
+	testScrollPos(t, root, 0, 0)
+	testScrollPos(t, w1, 0, 33)
+	testScrollPos(t, w2, 0, 66)
 
 	var w3 *Tile
 	if w3, e = m.SplitHorizontal(root, &testComponent{}); e != nil {
 		t.Fatal(e)
 	}
 
-	testWindowSize(t, root, width, 25)
-	testWindowSize(t, w3, width, 25)
-	testWindowSize(t, w1, width, 25)
-	testWindowSize(t, w2, width, 25)
+	testScrollSize(t, root, width, 25)
+	testScrollSize(t, w3, width, 25)
+	testScrollSize(t, w1, width, 25)
+	testScrollSize(t, w2, width, 25)
 
-	testWindowPos(t, root, 0, 0)
-	testWindowPos(t, w1, 0, 25)
-	testWindowPos(t, w2, 0, 50)
-	testWindowPos(t, w3, 0, 75)
+	testScrollPos(t, root, 0, 0)
+	testScrollPos(t, w1, 0, 25)
+	testScrollPos(t, w2, 0, 50)
+	testScrollPos(t, w3, 0, 75)
 }
 
 func TestSplitHorizontalVertical(t *testing.T) {
@@ -165,25 +165,25 @@ func TestSplitHorizontalVertical(t *testing.T) {
 		t.Fatal(e)
 	}
 
-	testWindowSize(t, root, 25, height)
-	testWindowSize(t, w1, 25, height)
-	testWindowSize(t, w2, 25, height)
-	testWindowSize(t, w3, 25, height)
+	testScrollSize(t, root, 25, height)
+	testScrollSize(t, w1, 25, height)
+	testScrollSize(t, w2, 25, height)
+	testScrollSize(t, w3, 25, height)
 
-	testWindowPos(t, root, 0, 0)
-	testWindowPos(t, w1, 25, 0)
-	testWindowPos(t, w2, 50, 0)
-	testWindowPos(t, w3, 75, 0)
+	testScrollPos(t, root, 0, 0)
+	testScrollPos(t, w1, 25, 0)
+	testScrollPos(t, w2, 50, 0)
+	testScrollPos(t, w3, 75, 0)
 
 	if w4, e = m.SplitHorizontal(root, &testComponent{}); e != nil {
 		t.Fatal(e)
 	}
 
-	testWindowSize(t, root, 25, 50)
-	testWindowSize(t, w4, 25, 50)
+	testScrollSize(t, root, 25, 50)
+	testScrollSize(t, w4, 25, 50)
 
-	testWindowPos(t, root, 0, 0)
-	testWindowPos(t, w4, 0, 50)
+	testScrollPos(t, root, 0, 0)
+	testScrollPos(t, w4, 0, 50)
 
 	if w5, e = m.SplitHorizontal(w1, &testComponent{}); e != nil {
 		t.Fatal(e)
@@ -193,13 +193,13 @@ func TestSplitHorizontalVertical(t *testing.T) {
 		t.Fatal(e)
 	}
 
-	testWindowSize(t, w1, 25, 33)
-	testWindowSize(t, w5, 25, 33)
-	testWindowSize(t, w6, 25, 34)
+	testScrollSize(t, w1, 25, 33)
+	testScrollSize(t, w5, 25, 33)
+	testScrollSize(t, w6, 25, 34)
 
-	testWindowPos(t, w1, 25, 0)
-	testWindowPos(t, w5, 25, 33)
-	testWindowPos(t, w6, 25, 66)
+	testScrollPos(t, w1, 25, 0)
+	testScrollPos(t, w5, 25, 33)
+	testScrollPos(t, w6, 25, 66)
 }
 
 func TestStackWhenNoSpace(t *testing.T) {
@@ -212,13 +212,13 @@ func TestStackWhenNoSpace(t *testing.T) {
 		w1, _ := m.SplitHorizontal(root, &testComponent{})
 		w2, _ := m.SplitVertical(w1, &testComponent{})
 
-		testWindowSize(t, root, 1, 0)
-		testWindowSize(t, w1, 0, 1)
-		testWindowSize(t, w2, 1, 1)
+		testScrollSize(t, root, 1, 0)
+		testScrollSize(t, w1, 0, 1)
+		testScrollSize(t, w2, 1, 1)
 
-		testWindowPos(t, root, 0, 0)
-		testWindowPos(t, w1, 0, 0)
-		testWindowPos(t, w2, 0, 0)
+		testScrollPos(t, root, 0, 0)
+		testScrollPos(t, w1, 0, 0)
+		testScrollPos(t, w2, 0, 0)
 	}
 }
 
@@ -243,63 +243,63 @@ func setupTestCase(t *testing.T, gwidth, gheight int) (m *TileManager, root *Til
 func TestResize(t *testing.T) {
 	m, root, w1, w2 := setupTestCase(t, 100, 100)
 
-	testWindowSize(t, root, 100, 50)
-	testWindowSize(t, w1, 50, 50)
-	testWindowSize(t, w2, 50, 50)
+	testScrollSize(t, root, 100, 50)
+	testScrollSize(t, w1, 50, 50)
+	testScrollSize(t, w2, 50, 50)
 
-	testWindowPos(t, root, 0, 0)
-	testWindowPos(t, w1, 0, 50)
-	testWindowPos(t, w2, 50, 50)
+	testScrollPos(t, root, 0, 0)
+	testScrollPos(t, w1, 0, 50)
+	testScrollPos(t, w2, 50, 50)
 
 	if err := m.Resize(50, 50); err != nil {
 		t.Fatal(err)
 	}
 
-	testWindowSize(t, root, 50, 25)
-	testWindowSize(t, w1, 25, 25)
-	testWindowSize(t, w2, 25, 25)
+	testScrollSize(t, root, 50, 25)
+	testScrollSize(t, w1, 25, 25)
+	testScrollSize(t, w2, 25, 25)
 
-	testWindowPos(t, root, 0, 0)
-	testWindowPos(t, w1, 0, 25)
-	testWindowPos(t, w2, 25, 25)
+	testScrollPos(t, root, 0, 0)
+	testScrollPos(t, w1, 0, 25)
+	testScrollPos(t, w2, 25, 25)
 }
 
 func TestResizeRounding(t *testing.T) {
 	m, root, w1, w2 := setupTestCase(t, 3, 3)
-	testWindowSize(t, root, 3, 1)
-	testWindowSize(t, w1, 1, 2)
-	testWindowSize(t, w2, 2, 2)
+	testScrollSize(t, root, 3, 1)
+	testScrollSize(t, w1, 1, 2)
+	testScrollSize(t, w2, 2, 2)
 
-	testWindowPos(t, root, 0, 0)
-	testWindowPos(t, w1, 0, 1)
-	testWindowPos(t, w2, 1, 1)
+	testScrollPos(t, root, 0, 0)
+	testScrollPos(t, w1, 0, 1)
+	testScrollPos(t, w2, 1, 1)
 
 	m.Resize(2, 2)
-	testWindowSize(t, root, 2, 1)
-	testWindowSize(t, w1, 1, 1)
-	testWindowSize(t, w2, 1, 1)
+	testScrollSize(t, root, 2, 1)
+	testScrollSize(t, w1, 1, 1)
+	testScrollSize(t, w2, 1, 1)
 
-	testWindowPos(t, root, 0, 0)
-	testWindowPos(t, w1, 0, 1)
-	testWindowPos(t, w2, 1, 1)
+	testScrollPos(t, root, 0, 0)
+	testScrollPos(t, w1, 0, 1)
+	testScrollPos(t, w2, 1, 1)
 
 	m.Resize(3, 3)
-	testWindowSize(t, root, 3, 1)
-	testWindowSize(t, w1, 1, 2)
-	testWindowSize(t, w2, 2, 2)
+	testScrollSize(t, root, 3, 1)
+	testScrollSize(t, w1, 1, 2)
+	testScrollSize(t, w2, 2, 2)
 
-	testWindowPos(t, root, 0, 0)
-	testWindowPos(t, w1, 0, 1)
-	testWindowPos(t, w2, 1, 1)
+	testScrollPos(t, root, 0, 0)
+	testScrollPos(t, w1, 0, 1)
+	testScrollPos(t, w2, 1, 1)
 
 	m.Resize(100, 100)
-	testWindowSize(t, root, 100, 50)
-	testWindowSize(t, w1, 50, 50)
-	testWindowSize(t, w2, 50, 50)
+	testScrollSize(t, root, 100, 50)
+	testScrollSize(t, w1, 50, 50)
+	testScrollSize(t, w2, 50, 50)
 
-	testWindowPos(t, root, 0, 0)
-	testWindowPos(t, w1, 0, 50)
-	testWindowPos(t, w2, 50, 50)
+	testScrollPos(t, root, 0, 0)
+	testScrollPos(t, w1, 0, 50)
+	testScrollPos(t, w2, 50, 50)
 }
 
 func TestTileManagerDraw(t *testing.T) {

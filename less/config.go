@@ -12,7 +12,7 @@ type Config struct {
 	Debug        bool
 	ResFG        fractal.Attribute
 	ResBG        fractal.Attribute
-	WindowBorder fractal.Attribute
+	ScrollBorder fractal.Attribute
 	// TODO keyMap *KeyMap
 }
 

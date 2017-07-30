@@ -106,6 +106,7 @@ func (f *Frame) Draw(w fractal.Writer) (err error) {
 func (f *Frame) Height() int {
 	return f.height
 }
+
 func (f *Frame) Width() int {
 	return f.width
 }

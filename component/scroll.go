@@ -8,7 +8,7 @@ import (
 	"github.com/ernestrc/fractal"
 )
 
-type Window struct {
+type Scroll struct {
 	Wrap      bool              // lines longer than the width of the window will wrap and displaying continues on the next line. wrap text
 	Tabspaces int               // number of spaces to use when expanding tabs
 	ResultsFG fractal.Attribute // foreground attribute for search results
@@ -22,13 +22,13 @@ type Window struct {
 	height    int
 }
 
-func NewWindow(buffer *fractal.Buffer, width, height int) *Window {
-	w := new(Window)
+func NewScroll(buffer *fractal.Buffer, width, height int) *Scroll {
+	w := new(Scroll)
 	w.Init(buffer, width, height)
 	return w
 }
 
-func (w *Window) Init(buffer *fractal.Buffer, width, height int) {
+func (w *Scroll) Init(buffer *fractal.Buffer, width, height int) {
 	w.buffer = buffer
 	w.width, w.height = width, height
 	if buffer != nil {
@@ -41,55 +41,55 @@ func (w *Window) Init(buffer *fractal.Buffer, width, height int) {
 	w.ResultsFG, w.ResultsBG = fractal.AttrReverse, fractal.AttrReverse
 }
 
-func (w *Window) YOffset() int {
+func (w *Scroll) YOffset() int {
 	return w.offset.Y
 }
 
-func (w *Window) XOffset() int {
+func (w *Scroll) XOffset() int {
 	return w.offset.X
 }
 
-func (w *Window) CanSeekUp() bool {
+func (w *Scroll) CanSeekUp() bool {
 	return w.offset.Y > 0
 }
 
-func (w *Window) CanSeekDown() bool {
+func (w *Scroll) CanSeekDown() bool {
 	return w.offset.Y < w.maxoffset.Y
 }
 
-func (w *Window) CanSeekLeft() bool {
+func (w *Scroll) CanSeekLeft() bool {
 	return w.offset.X > 0
 }
 
-func (w *Window) CanSeekRight() bool {
+func (w *Scroll) CanSeekRight() bool {
 	return w.offset.X < w.maxoffset.X
 }
 
-func (w *Window) SeekUp() {
+func (w *Scroll) SeekUp() {
 	if w.CanSeekUp() {
 		w.offset.Y--
 	}
 }
 
-func (w *Window) SeekDown() {
+func (w *Scroll) SeekDown() {
 	if w.CanSeekDown() {
 		w.offset.Y++
 	}
 }
 
-func (w *Window) SeekLeft() {
+func (w *Scroll) SeekLeft() {
 	if w.CanSeekLeft() {
 		w.offset.X--
 	}
 }
 
-func (w *Window) SeekRight() {
+func (w *Scroll) SeekRight() {
 	if w.CanSeekRight() {
 		w.offset.X++
 	}
 }
 
-func (w *Window) SeekVertical(y int) {
+func (w *Scroll) SeekVertical(y int) {
 	if y > w.maxoffset.Y {
 		y = w.maxoffset.Y
 	} else if y < 0 {
@@ -99,7 +99,7 @@ func (w *Window) SeekVertical(y int) {
 	w.offset.Y = y
 }
 
-func (w *Window) SeekHorizontal(x int) {
+func (w *Scroll) SeekHorizontal(x int) {
 	if x > w.maxoffset.X {
 		x = w.maxoffset.X
 	} else if x < 0 {
@@ -109,23 +109,23 @@ func (w *Window) SeekHorizontal(x int) {
 	w.offset.X = x
 }
 
-func (w *Window) SeekEndLine() {
+func (w *Scroll) SeekEndLine() {
 	w.SeekHorizontal(w.maxoffset.X)
 }
 
-func (w *Window) SeekStartLine() {
+func (w *Scroll) SeekStartLine() {
 	w.SeekHorizontal(0)
 }
 
-func (w *Window) SeekEndFile() {
+func (w *Scroll) SeekEndFile() {
 	w.SeekVertical(w.maxoffset.Y)
 }
 
-func (w *Window) SeekStartFile() {
+func (w *Scroll) SeekStartFile() {
 	w.SeekVertical(0)
 }
 
-func (w *Window) moveResult(i int) {
+func (w *Scroll) moveResult(i int) {
 
 	res := w.cells[i]
 
@@ -140,7 +140,7 @@ func (w *Window) moveResult(i int) {
 	}
 }
 
-func (w *Window) SeekNextResult() {
+func (w *Scroll) SeekNextResult() {
 	i, ok := w.buffer.NextResult()
 
 	if !ok {
@@ -150,7 +150,7 @@ func (w *Window) SeekNextResult() {
 	w.moveResult(i)
 }
 
-func (w *Window) SeekPrevResult() {
+func (w *Scroll) SeekPrevResult() {
 	i, ok := w.buffer.PrevResult()
 
 	if !ok {
@@ -160,17 +160,17 @@ func (w *Window) SeekPrevResult() {
 	w.moveResult(i)
 }
 
-func (w *Window) Position() (x, y int) {
+func (w *Scroll) Position() (x, y int) {
 	return w.position.X, w.position.Y
 }
 
-func (w *Window) Move(x, y int) error {
+func (w *Scroll) Move(x, y int) error {
 	w.position.X = x
 	w.position.Y = y
 	return nil
 }
 
-func (w *Window) Resize(width, height int) error {
+func (w *Scroll) Resize(width, height int) error {
 	w.width = width
 	w.height = height
 
@@ -181,15 +181,15 @@ func (w *Window) Resize(width, height int) error {
 	return nil
 }
 
-func (w *Window) Height() int {
+func (w *Scroll) Height() int {
 	return w.height
 }
 
-func (w *Window) Width() int {
+func (w *Scroll) Width() int {
 	return w.width
 }
 
-func (w *Window) cell(idx int) fractal.Cell {
+func (w *Scroll) cell(idx int) fractal.Cell {
 	return w.cells[idx]
 }
 
@@ -213,7 +213,7 @@ func reserve(s []fractal.Cell, capacity int) []fractal.Cell {
 	return n
 }
 
-func (w *Window) scan() (err error) {
+func (w *Scroll) scan() (err error) {
 	if w.buffer == nil {
 		w.maxoffset.Y = 0
 		w.maxoffset.X = 0
@@ -301,7 +301,7 @@ func (w *Window) scan() (err error) {
 	return err
 }
 
-func (w *Window) SetBuffer(buf *fractal.Buffer) (orig *fractal.Buffer, err error) {
+func (w *Scroll) SetBuffer(buf *fractal.Buffer) (orig *fractal.Buffer, err error) {
 	orig = w.buffer
 	w.buffer = buf
 
@@ -310,7 +310,7 @@ func (w *Window) SetBuffer(buf *fractal.Buffer) (orig *fractal.Buffer, err error
 	return
 }
 
-func (w *Window) draw(writer fractal.Writer) (err error) {
+func (w *Scroll) draw(writer fractal.Writer) (err error) {
 	var x, y int
 	var c fractal.Cell
 	xwindow := w.offset.X + w.width
@@ -328,7 +328,7 @@ func (w *Window) draw(writer fractal.Writer) (err error) {
 	return nil
 }
 
-func (w *Window) wrapdraw(writer fractal.Writer) (err error) {
+func (w *Scroll) wrapdraw(writer fractal.Writer) (err error) {
 	var x, y, ywindow int
 	var c fractal.Cell
 	xwindow := w.width
@@ -354,7 +354,7 @@ func (w *Window) wrapdraw(writer fractal.Writer) (err error) {
 	return nil
 }
 
-func (w *Window) Draw(writer fractal.Writer) (err error) {
+func (w *Scroll) Draw(writer fractal.Writer) (err error) {
 	if !w.buffer.Scanned() {
 		if err = w.scan(); err != nil {
 			return
@@ -367,7 +367,7 @@ func (w *Window) Draw(writer fractal.Writer) (err error) {
 	return w.draw(writer)
 }
 
-func (w *Window) resetCells() {
+func (w *Scroll) resetCells() {
 	for i, c := range w.cells {
 		w.cells[i] = fractal.Cell{
 			Fg: 0,
@@ -381,7 +381,7 @@ func (w *Window) resetCells() {
 	}
 }
 
-func (w *Window) Search(text string) int {
+func (w *Scroll) Search(text string) int {
 	w.resetCells()
 	return w.buffer.Search([]byte(text), w.cells, w.ResultsFG, w.ResultsBG)
 }

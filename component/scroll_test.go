@@ -13,16 +13,16 @@ Love isn't love 'til you give it away.
 
 var fortune_width = 44
 
-func newWindow(tabspaces int, wrap bool, width, height int) (buf *fractal.Buffer, window *Window) {
+func newScroll(tabspaces int, wrap bool, width, height int) (buf *fractal.Buffer, window *Scroll) {
 	buf = &fractal.Buffer{}
-	window = NewWindow(buf, width, height)
+	window = NewScroll(buf, width, height)
 	window.Tabspaces = tabspaces
 	window.Wrap = wrap
 	return
 }
 
-func TestWindowNew(t *testing.T) {
-	buf, window := newWindow(5, true, 100, 100)
+func TestScrollNew(t *testing.T) {
+	buf, window := newScroll(5, true, 100, 100)
 	if window.cells == nil || window.buffer != buf ||
 		window.Wrap != true || window.Tabspaces != 5 ||
 		window.width != 100 || window.height != 100 {
@@ -30,10 +30,10 @@ func TestWindowNew(t *testing.T) {
 	}
 }
 
-func TestWindowscan(t *testing.T) {
+func TestScrollscan(t *testing.T) {
 	width, height := 8, 2
 	tabspaces := 4
-	buf, window := newWindow(tabspaces, false, width, height)
+	buf, window := newScroll(tabspaces, false, width, height)
 	buf.Write([]byte(fortune))
 	if err := window.scan(); err != nil {
 		t.Fatal(err)
@@ -71,11 +71,11 @@ func TestWindowscan(t *testing.T) {
 	}
 }
 
-func TestWindowDraw(t *testing.T) {
+func TestScrollDraw(t *testing.T) {
 	width, height := 8, 2
 	tabspaces := 4
 	wrap := false
-	buf, window := newWindow(tabspaces, wrap, width, height)
+	buf, window := newScroll(tabspaces, wrap, width, height)
 	buf.Write([]byte(fortune))
 	if err := window.scan(); err != nil {
 		t.Fatal(err)
@@ -133,11 +133,11 @@ func TestWindowDraw(t *testing.T) {
 	}
 }
 
-func TestWindowDrawWrap(t *testing.T) {
+func TestScrollDrawWrap(t *testing.T) {
 	width, height := 8, 2
 	tabspaces := 4
 	wrap := true
-	buf, window := newWindow(tabspaces, wrap, width, height)
+	buf, window := newScroll(tabspaces, wrap, width, height)
 	buf.Write([]byte(fortune))
 	if err := window.scan(); err != nil {
 		t.Fatal(err)

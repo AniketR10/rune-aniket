@@ -62,7 +62,7 @@ func main() {
 	config := less.DefaultConfig()
 	config.Wrap = *wrap
 	if *border {
-		config.WindowBorder |= fractal.ColorWhite
+		config.ScrollBorder |= fractal.ColorWhite
 	}
 
 	handler := NewHandler(input)

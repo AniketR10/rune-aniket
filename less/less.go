@@ -18,13 +18,13 @@ const (
 )
 
 type handle struct {
-	cmdWindow  *component.Window
+	cmdScroll  *component.Scroll
 	cmdBuf     fractal.Buffer
 	cmdChan    chan []byte
-	msgWindow  *component.Window
+	msgScroll  *component.Scroll
 	msgBuf     fractal.Buffer
 	msgChan    chan []byte
-	contWindow *component.Window
+	contScroll *component.Scroll
 	contBuf    fractal.Buffer
 	contChan   chan []byte
 	mode       mode
@@ -83,20 +83,20 @@ func redraw() error {
 		return err
 	}
 
-	if err = h.contWindow.Draw(&w); err != nil {
+	if err = h.contScroll.Draw(&w); err != nil {
 		return err
 	}
 
-	if !h.contWindow.CanSeekDown() && !h.delEOF {
+	if !h.contScroll.CanSeekDown() && !h.delEOF {
 		h.delEOF = true
 		sendEvent(Event{Type: EOF})
 	}
 
-	if err = h.cmdWindow.Draw(&w); err != nil {
+	if err = h.cmdScroll.Draw(&w); err != nil {
 		return err
 	}
 
-	if err = h.msgWindow.Draw(&w); err != nil {
+	if err = h.msgScroll.Draw(&w); err != nil {
 		return err
 
 	}
@@ -148,11 +148,11 @@ func searchHandleEvent(ev termbox.Event) (exit bool, err error) {
 		str := h.cmdBuf.String()
 		bytes := []byte(str)[1:]
 		h.search = string(bytes)
-		h.contWindow.Search(h.search)
+		h.contScroll.Search(h.search)
 		if err = setNormalMode(); err != nil {
 			return
 		}
-		h.contWindow.SeekNextResult()
+		h.contScroll.SeekNextResult()
 		sendEvent(Event{Type: Search, Data: bytes})
 
 	case termbox.KeyEsc:
@@ -183,25 +183,25 @@ func normalHandleEvent(ev termbox.Event) (exit bool, err error) {
 			case 'q':
 				return true, nil
 			case 'N':
-				h.contWindow.SeekPrevResult()
+				h.contScroll.SeekPrevResult()
 			case 'n':
-				h.contWindow.SeekNextResult()
+				h.contScroll.SeekNextResult()
 			case '0':
-				h.contWindow.SeekStartLine()
+				h.contScroll.SeekStartLine()
 			case '$':
-				h.contWindow.SeekEndLine()
+				h.contScroll.SeekEndLine()
 			case 'g':
-				h.contWindow.SeekStartFile()
+				h.contScroll.SeekStartFile()
 			case 'G':
-				h.contWindow.SeekEndFile()
+				h.contScroll.SeekEndFile()
 			case 'j':
-				h.contWindow.SeekDown()
+				h.contScroll.SeekDown()
 			case 'k':
-				h.contWindow.SeekUp()
+				h.contScroll.SeekUp()
 			case 'h':
-				h.contWindow.SeekLeft()
+				h.contScroll.SeekLeft()
 			case 'l':
-				h.contWindow.SeekRight()
+				h.contScroll.SeekRight()
 			case '/':
 				err = setSearchMode()
 			}
@@ -233,7 +233,7 @@ func setContent(data []byte) error {
 	}
 
 	if len(h.search) != 0 {
-		h.contWindow.Search(h.search)
+		h.contScroll.Search(h.search)
 	}
 
 	return nil
@@ -244,21 +244,21 @@ func update() error {
 	var err error
 
 	contentHeight := h.height - h.config.CmdBarHeight
-	msgWindowWidth := int(float32(h.width) * float32(h.config.Msgwidth) / 100)
-	msgWidth := int(math.Min(float64(msgWindowWidth), float64(h.msgBuf.Len())))
+	msgScrollWidth := int(float32(h.width) * float32(h.config.Msgwidth) / 100)
+	msgWidth := int(math.Min(float64(msgScrollWidth), float64(h.msgBuf.Len())))
 	cmdBarWidth := h.width - msgWidth
 
-	if err = h.contWindow.Resize(h.width, contentHeight); err != nil {
+	if err = h.contScroll.Resize(h.width, contentHeight); err != nil {
 		return err
 	}
 
-	h.cmdWindow.Move(0, contentHeight)
-	if err = h.cmdWindow.Resize(cmdBarWidth, h.config.CmdBarHeight); err != nil {
+	h.cmdScroll.Move(0, contentHeight)
+	if err = h.cmdScroll.Resize(cmdBarWidth, h.config.CmdBarHeight); err != nil {
 		return err
 	}
 
-	h.msgWindow.Move(cmdBarWidth, contentHeight)
-	if err = h.msgWindow.Resize(msgWidth, h.config.CmdBarHeight); err != nil {
+	h.msgScroll.Move(cmdBarWidth, contentHeight)
+	if err = h.msgScroll.Resize(msgWidth, h.config.CmdBarHeight); err != nil {
 		return err
 	}
 
@@ -331,7 +331,7 @@ func run() {
 	}
 }
 
-func setupWindow(w *component.Window) {
+func setupScroll(w *component.Scroll) {
 	w.ResultsFG = h.config.ResFG
 	w.ResultsBG = h.config.ResBG
 	w.Tabspaces, w.Wrap = h.config.Tabspaces, h.config.Wrap
@@ -347,13 +347,13 @@ func Init(cfg *Config, content string) error {
 	} else {
 		h.config = cfg
 	}
-	h.cmdWindow = component.NewWindow(&h.cmdBuf, h.width, h.height)
-	h.msgWindow = component.NewWindow(&h.msgBuf, h.width, h.height)
-	h.contWindow = component.NewWindow(&h.contBuf, h.width, h.height)
+	h.cmdScroll = component.NewScroll(&h.cmdBuf, h.width, h.height)
+	h.msgScroll = component.NewScroll(&h.msgBuf, h.width, h.height)
+	h.contScroll = component.NewScroll(&h.contBuf, h.width, h.height)
 
-	setupWindow(h.cmdWindow)
-	setupWindow(h.msgWindow)
-	setupWindow(h.contWindow)
+	setupScroll(h.cmdScroll)
+	setupScroll(h.msgScroll)
+	setupScroll(h.contScroll)
 
 	h.cmdChan = make(chan []byte)
 	h.msgChan = make(chan []byte)
