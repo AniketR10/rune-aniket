@@ -3,13 +3,12 @@ package component
 import (
 	"testing"
 
-	"github.com/ernestrc/fractal"
 	"github.com/ernestrc/fractal/writer"
 )
 
 func TestNewFrame(t *testing.T) {
 	u := &testComponent{fill: '*'}
-	f, err := NewFrame(u, 8, 4, 1, 1, fractal.ColorWhite, fractal.ColorBlack)
+	f, err := NewFrame(u, 8, 4, 1, 1)
 
 	if err != nil {
 		t.Fatal(err)
@@ -26,15 +25,11 @@ func TestNewFrame(t *testing.T) {
 	if x, y := f.Position(); x != 1 || y != 1 {
 		t.Errorf("did not set position correctly")
 	}
-
-	if f.Bg != fractal.ColorBlack || f.Fg != fractal.ColorWhite {
-		t.Errorf("did not set attributes correctly")
-	}
 }
 
 func TestDrawFrame(t *testing.T) {
 	u := &testComponent{fill: 'X'}
-	f, err := NewFrame(u, 8, 4, 0, 0, fractal.ColorWhite, fractal.ColorBlack)
+	f, err := NewFrame(u, 8, 4, 0, 0)
 
 	if err != nil {
 		t.Fatal(err)

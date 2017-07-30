@@ -10,9 +10,9 @@ type Frame struct {
 	Fg, Bg          fractal.Attribute
 }
 
-func NewFrame(content fractal.Component, width, height, x, y int, fg, bg fractal.Attribute) (f *Frame, err error) {
+func NewFrame(content fractal.Component, width, height, x, y int) (f *Frame, err error) {
 	f = new(Frame)
-	return f, f.Init(content, width, height, x, y, fg, bg)
+	return f, f.Init(content, width, height, x, y, fractal.ColorDefault, fractal.ColorDefault)
 }
 
 func (f *Frame) Init(content fractal.Component, width, height, x, y int, fg, bg fractal.Attribute) (err error) {
