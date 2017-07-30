@@ -79,6 +79,12 @@ func TestDrawFrame(t *testing.T) {
     TT  
         
         `,
+		}, {
+			func() { f.Resize(8, 4); f.Move(0, 0) }, `
+┌──────┐
+│TTTTTT│
+│TTTTTT│
+└──────┘`,
 		},
 	}
 
