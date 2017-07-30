@@ -35,51 +35,58 @@ func TestDrawFrame(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	w := writer.String(8, 4)
+	w := writer.String(9, 5)
 
 	tests := []testCase{
 		{
 			nil, `
-┌──────┐
-│XXXXXX│
-│XXXXXX│
-└──────┘`,
+┌──────┐ 
+│XXXXXX│ 
+│XXXXXX│ 
+└──────┘ 
+         `,
 		}, {
 			func() { f.SetContent(&testComponent{fill: '*'}) }, `
-┌──────┐
-│******│
-│******│
-└──────┘`,
+┌──────┐ 
+│******│ 
+│******│ 
+└──────┘ 
+         `,
 		}, {
 			func() { f.Resize(4, 4) }, `
-┌──┐    
-│**│    
-│**│    
-└──┘    `,
+┌──┐     
+│**│     
+│**│     
+└──┘     
+         `,
 		}, {
 			func() { f.Move(4, 0) }, `
-    ┌──┐
-    │**│
-    │**│
-    └──┘`,
+    ┌──┐ 
+    │**│ 
+    │**│ 
+    └──┘ 
+         `,
 		}, {
 			func() { f.SetContent(&testComponent{fill: 'T'}) }, `
-    ┌──┐
-    │TT│
-    │TT│
-    └──┘`,
+    ┌──┐ 
+    │TT│ 
+    │TT│ 
+    └──┘ 
+         `,
 		}, {
 			func() { f.Resize(2, 2) }, `
-    TT  
-    TT  
-        
-        `,
+    TT   
+    TT   
+         
+         
+         `,
 		}, {
 			func() { f.Resize(8, 4); f.Move(0, 0) }, `
-┌──────┐
-│TTTTTT│
-│TTTTTT│
-└──────┘`,
+┌──────┐ 
+│TTTTTT│ 
+│TTTTTT│ 
+└──────┘ 
+         `,
 		},
 	}
 

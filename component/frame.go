@@ -66,20 +66,20 @@ func (f *Frame) Draw(w fractal.Writer) (err error) {
 
 	maxX, maxY := f.pos.X+f.width-1, f.pos.Y+f.height-1
 
-	for i := 0; i < maxX; i++ {
-		if err = w.Write(f.pos.X+i, f.pos.Y, '─', f.Fg, f.Bg); err != nil {
+	for i := f.pos.X; i < maxX; i++ {
+		if err = w.Write(i, f.pos.Y, '─', f.Fg, f.Bg); err != nil {
 			return
 		}
-		if err = w.Write(f.pos.X+i, maxY, '─', f.Fg, f.Bg); err != nil {
+		if err = w.Write(i, maxY, '─', f.Fg, f.Bg); err != nil {
 			return
 		}
 	}
 
-	for i := 0; i < maxY; i++ {
-		if err = w.Write(f.pos.X, f.pos.Y+i, '│', f.Fg, f.Bg); err != nil {
+	for i := f.pos.Y; i < maxY; i++ {
+		if err = w.Write(f.pos.X, i, '│', f.Fg, f.Bg); err != nil {
 			return
 		}
-		if err = w.Write(maxX, f.pos.Y+i, '│', f.Fg, f.Bg); err != nil {
+		if err = w.Write(maxX, i, '│', f.Fg, f.Bg); err != nil {
 			return
 		}
 	}
