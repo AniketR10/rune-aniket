@@ -19,7 +19,7 @@ type linkedComponent interface {
 }
 
 type TileManager struct {
-	fractal.Coordinates
+	pos       fractal.Coordinates
 	width     int
 	height    int
 	children  []linkedComponent
@@ -34,7 +34,7 @@ type Tile struct {
 
 func newNode(direction splitdir, parent *TileManager, w *Tile, x, y, width, height int) (t *TileManager) {
 	t = new(TileManager)
-	t.X, t.Y, t.width, t.height = x, y, width, height
+	t.pos.X, t.pos.Y, t.width, t.height = x, y, width, height
 	t.children = []linkedComponent{w}
 	t.direction = direction
 	t.parent = parent
@@ -64,7 +64,7 @@ func (t *TileManager) resizeHorizontal(len, width, height int) (err error) {
 
 	for i, ti := range t.children {
 		offset := ((i - useSpareIdx) * spareCell)
-		if err = ti.Move(t.X, (t.Y+i*cheight)+offset); err != nil {
+		if err = ti.Move(t.pos.X, (t.pos.Y+i*cheight)+offset); err != nil {
 			return
 		}
 
@@ -88,7 +88,7 @@ func (t *TileManager) resizeVertical(len, width, height int) (err error) {
 
 	for i, ti := range t.children {
 		offset := ((i - useSpareIdx) * spareCell)
-		if err = ti.Move((t.X+i*cwidth)+offset, t.Y); err != nil {
+		if err = ti.Move((t.pos.X+i*cwidth)+offset, t.pos.Y); err != nil {
 			return
 		}
 
@@ -121,7 +121,7 @@ func (t *TileManager) Resize(width, height int) (err error) {
 }
 
 func (t *TileManager) Move(x, y int) error {
-	t.X, t.Y = x, y
+	t.pos.X, t.pos.Y = x, y
 	return t.Resize(t.width, t.height)
 }
 
@@ -144,7 +144,7 @@ func (t *TileManager) Width() int {
 }
 
 func (t *TileManager) Position() (int, int) {
-	return t.X, t.Y
+	return t.pos.X, t.pos.Y
 }
 
 func (t *Tile) Resize(width, height int) (err error) {

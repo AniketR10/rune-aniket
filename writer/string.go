@@ -14,9 +14,13 @@ type StringWriter struct {
 
 func String(width, height int) (t *StringWriter) {
 	t = new(StringWriter)
-	t.width, t.height = width, height
-	t.cellbuf = make([]fractal.Cell, width*height)
+	t.Resize(width, height)
 	return
+}
+
+func (w *StringWriter) Resize(width, height int) {
+	w.width, w.height = width, height
+	w.cellbuf = make([]fractal.Cell, width*height)
 }
 
 func (w *StringWriter) Write(x, y int, ch rune, fg, bg fractal.Attribute) error {
