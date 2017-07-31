@@ -4,6 +4,7 @@ import "github.com/ernestrc/fractal"
 
 type Fill struct {
 	Ch                  rune
+	Bg, Fg              fractal.Attribute
 	x, y, width, height int
 }
 
@@ -20,7 +21,7 @@ func (t *Fill) Move(x, y int) error {
 func (t *Fill) Draw(w fractal.Writer) (err error) {
 	for tx := t.x + t.width - 1; tx >= t.x; tx-- {
 		for ty := t.y + t.height - 1; ty >= t.y; ty-- {
-			w.Write(tx, ty, t.Ch, 0, 0)
+			w.Write(tx, ty, t.Ch, t.Fg, t.Bg)
 		}
 	}
 	return nil
