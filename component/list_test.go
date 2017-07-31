@@ -44,13 +44,13 @@ func TestListDraw(t *testing.T) {
         
         `,
 		}, {
-			func() { l.PushBack(&testComponent{fill: 'X'}) }, `
+			func() { l.PushBack(&Fill{Ch: 'X'}) }, `
 XXXXXXXX
         
         
         `,
 		}, {
-			func() { l.PushBack(&testComponent{fill: 'Y'}) }, `
+			func() { l.PushBack(&Fill{Ch: 'Y'}) }, `
 XXXXXXXX
 YYYYYYYY
         
@@ -68,15 +68,15 @@ YYYYYYYY
         
         `,
 		}, {
-			func() { l.PushFront(&testComponent{fill: 'Z'}) }, `
+			func() { l.PushFront(&Fill{Ch: 'Z'}) }, `
 ZZZZZZZZ
 XXXXXXXX
 YYYYYYYY
         `,
 		}, {
 			func() {
-				l2.PushFront(&testComponent{fill: '$'})
-				l2.PushFront(&testComponent{fill: '#'})
+				l2.PushFront(&Fill{Ch: '$'})
+				l2.PushFront(&Fill{Ch: '#'})
 				l.PushBackList(l2)
 			}, `
 ZZZZZZZZ

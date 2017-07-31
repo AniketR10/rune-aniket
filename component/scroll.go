@@ -8,6 +8,7 @@ import (
 	"github.com/ernestrc/fractal"
 )
 
+// TODO add alignment
 type Scroll struct {
 	Wrap      bool              // lines longer than the width of the window will wrap and displaying continues on the next line. wrap text
 	Tabspaces int               // number of spaces to use when expanding tabs

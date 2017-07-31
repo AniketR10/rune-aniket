@@ -22,6 +22,10 @@ func NewList(elementHeight, width, height, x, y int) (l *List) {
 	return l
 }
 
+func (l *List) Reset() {
+	l.List.Init()
+}
+
 func (l *List) Init(elementHeight, width, height, x, y int) {
 	if elementHeight <= 0 {
 		panic("element height cannot be smaller than or equal to 0")

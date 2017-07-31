@@ -7,7 +7,7 @@ import (
 )
 
 func TestNew(t *testing.T) {
-	m, _, e := NewTileManager(10, 10, 0, 0, &testComponent{})
+	m, _, e := NewTileManager(10, 10, 0, 0, &Fill{})
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -45,12 +45,12 @@ func TestSplitVertical(t *testing.T) {
 	width := 100
 	height := 100
 
-	if m, root, e = NewTileManager(width, height, 0, 0, &testComponent{}); e != nil {
+	if m, root, e = NewTileManager(width, height, 0, 0, &Fill{}); e != nil {
 		t.Fatal(e)
 	}
 
 	var w1 *Tile
-	if w1, e = m.SplitVertical(root, &testComponent{}); e != nil {
+	if w1, e = m.SplitVertical(root, &Fill{}); e != nil {
 		t.Fatal(e)
 	}
 
@@ -60,7 +60,7 @@ func TestSplitVertical(t *testing.T) {
 	testScrollPos(t, w1, 50, 0)
 
 	var w2 *Tile
-	if w2, e = m.SplitVertical(w1, &testComponent{}); e != nil {
+	if w2, e = m.SplitVertical(w1, &Fill{}); e != nil {
 		t.Fatal(e)
 	}
 
@@ -74,7 +74,7 @@ func TestSplitVertical(t *testing.T) {
 	testScrollPos(t, w2, 66, 0)
 
 	var w3 *Tile
-	if w3, e = m.SplitVertical(root, &testComponent{}); e != nil {
+	if w3, e = m.SplitVertical(root, &Fill{}); e != nil {
 		t.Fatal(e)
 	}
 
@@ -97,12 +97,12 @@ func TestSplitHorizontal(t *testing.T) {
 	width := 100
 	height := 100
 
-	if m, root, e = NewTileManager(width, height, 0, 0, &testComponent{}); e != nil {
+	if m, root, e = NewTileManager(width, height, 0, 0, &Fill{}); e != nil {
 		t.Fatal(e)
 	}
 
 	var w1 *Tile
-	if w1, e = m.SplitHorizontal(root, &testComponent{}); e != nil {
+	if w1, e = m.SplitHorizontal(root, &Fill{}); e != nil {
 		t.Fatal(e)
 	}
 
@@ -112,7 +112,7 @@ func TestSplitHorizontal(t *testing.T) {
 	testScrollPos(t, w1, 0, 50)
 
 	var w2 *Tile
-	if w2, e = m.SplitHorizontal(w1, &testComponent{}); e != nil {
+	if w2, e = m.SplitHorizontal(w1, &Fill{}); e != nil {
 		t.Fatal(e)
 	}
 
@@ -125,7 +125,7 @@ func TestSplitHorizontal(t *testing.T) {
 	testScrollPos(t, w2, 0, 66)
 
 	var w3 *Tile
-	if w3, e = m.SplitHorizontal(root, &testComponent{}); e != nil {
+	if w3, e = m.SplitHorizontal(root, &Fill{}); e != nil {
 		t.Fatal(e)
 	}
 
@@ -149,19 +149,19 @@ func TestSplitHorizontalVertical(t *testing.T) {
 	width := 100
 	height := 100
 
-	if m, root, e = NewTileManager(width, height, 0, 0, &testComponent{}); e != nil {
+	if m, root, e = NewTileManager(width, height, 0, 0, &Fill{}); e != nil {
 		t.Fatal(e)
 	}
 
-	if w1, e = m.SplitVertical(root, &testComponent{}); e != nil {
+	if w1, e = m.SplitVertical(root, &Fill{}); e != nil {
 		t.Fatal(e)
 	}
 
-	if w2, e = m.SplitVertical(w1, &testComponent{}); e != nil {
+	if w2, e = m.SplitVertical(w1, &Fill{}); e != nil {
 		t.Fatal(e)
 	}
 
-	if w3, e = m.SplitVertical(root, &testComponent{}); e != nil {
+	if w3, e = m.SplitVertical(root, &Fill{}); e != nil {
 		t.Fatal(e)
 	}
 
@@ -175,7 +175,7 @@ func TestSplitHorizontalVertical(t *testing.T) {
 	testScrollPos(t, w2, 50, 0)
 	testScrollPos(t, w3, 75, 0)
 
-	if w4, e = m.SplitHorizontal(root, &testComponent{}); e != nil {
+	if w4, e = m.SplitHorizontal(root, &Fill{}); e != nil {
 		t.Fatal(e)
 	}
 
@@ -185,11 +185,11 @@ func TestSplitHorizontalVertical(t *testing.T) {
 	testScrollPos(t, root, 0, 0)
 	testScrollPos(t, w4, 0, 50)
 
-	if w5, e = m.SplitHorizontal(w1, &testComponent{}); e != nil {
+	if w5, e = m.SplitHorizontal(w1, &Fill{}); e != nil {
 		t.Fatal(e)
 	}
 
-	if w6, e = m.SplitHorizontal(w1, &testComponent{}); e != nil {
+	if w6, e = m.SplitHorizontal(w1, &Fill{}); e != nil {
 		t.Fatal(e)
 	}
 
@@ -206,11 +206,11 @@ func TestStackWhenNoSpace(t *testing.T) {
 	width := 1
 	height := 1
 
-	if m, root, e := NewTileManager(width, height, 0, 0, &testComponent{}); e != nil {
+	if m, root, e := NewTileManager(width, height, 0, 0, &Fill{}); e != nil {
 		t.Fatal(e)
 	} else {
-		w1, _ := m.SplitHorizontal(root, &testComponent{})
-		w2, _ := m.SplitVertical(w1, &testComponent{})
+		w1, _ := m.SplitHorizontal(root, &Fill{})
+		w2, _ := m.SplitVertical(w1, &Fill{})
 
 		testScrollSize(t, root, 1, 0)
 		testScrollSize(t, w1, 0, 1)
@@ -225,15 +225,15 @@ func TestStackWhenNoSpace(t *testing.T) {
 func setupTestCase(t *testing.T, gwidth, gheight int) (m *TileManager, root *Tile, w1 *Tile, w2 *Tile) {
 	var e error
 
-	if m, root, e = NewTileManager(gwidth, gheight, 0, 0, &testComponent{}); e != nil {
+	if m, root, e = NewTileManager(gwidth, gheight, 0, 0, &Fill{}); e != nil {
 		t.Fatal(e)
 	}
 
-	if w1, e = m.SplitHorizontal(root, &testComponent{}); e != nil {
+	if w1, e = m.SplitHorizontal(root, &Fill{}); e != nil {
 		t.Fatal(e)
 	}
 
-	if w2, e = m.SplitVertical(w1, &testComponent{}); e != nil {
+	if w2, e = m.SplitVertical(w1, &Fill{}); e != nil {
 		t.Fatal(e)
 	}
 
@@ -305,7 +305,7 @@ func TestResizeRounding(t *testing.T) {
 func TestTileManagerDraw(t *testing.T) {
 	width, height := 8, 4
 	w := writer.String(width, height)
-	m, root, err := NewTileManager(width, height, 0, 0, &testComponent{fill: 'A'})
+	m, root, err := NewTileManager(width, height, 0, 0, &Fill{Ch: 'A'})
 
 	var m1 *Tile
 	var m2 *Tile
@@ -326,37 +326,37 @@ AAAAAAAA
 AAAAAAAA
 AAAAAAAA`,
 		}, {
-			func() { m1, err = m.SplitVertical(root, &testComponent{fill: 'B'}) }, `
+			func() { m1, err = m.SplitVertical(root, &Fill{Ch: 'B'}) }, `
 AAAABBBB
 AAAABBBB
 AAAABBBB
 AAAABBBB`,
 		}, {
-			func() { m2, err = m.SplitVertical(m1, &testComponent{fill: 'C'}) }, `
+			func() { m2, err = m.SplitVertical(m1, &Fill{Ch: 'C'}) }, `
 AABBBCCC
 AABBBCCC
 AABBBCCC
 AABBBCCC`,
 		}, {
-			func() { m3, err = m.SplitVertical(m2, &testComponent{fill: 'D'}) }, `
+			func() { m3, err = m.SplitVertical(m2, &Fill{Ch: 'D'}) }, `
 AABBCCDD
 AABBCCDD
 AABBCCDD
 AABBCCDD`,
 		}, {
-			func() { m4, err = m.SplitVertical(m3, &testComponent{fill: 'E'}) }, `
+			func() { m4, err = m.SplitVertical(m3, &Fill{Ch: 'E'}) }, `
 ABCCDDEE
 ABCCDDEE
 ABCCDDEE
 ABCCDDEE`,
 		}, {
-			func() { m5, err = m.SplitHorizontal(m4, &testComponent{fill: 'X'}) }, `
+			func() { m5, err = m.SplitHorizontal(m4, &Fill{Ch: 'X'}) }, `
 ABCCDDEE
 ABCCDDEE
 ABCCDDXX
 ABCCDDXX`,
 		}, {
-			func() { m6, err = m.SplitHorizontal(m2, &testComponent{fill: 'Z'}) }, `
+			func() { m6, err = m.SplitHorizontal(m2, &Fill{Ch: 'Z'}) }, `
 ABCCDDEE
 ABCCDDEE
 ABZZDDXX
@@ -386,7 +386,7 @@ ZZDDDEEE
 ZZDDDEEE
 ZZDDDEEE`,
 		}, {
-			func() { m1, err = m.SplitHorizontal(m3, &testComponent{fill: 'A'}) }, `
+			func() { m1, err = m.SplitHorizontal(m3, &Fill{Ch: 'A'}) }, `
 ZZDDDEEE
 ZZDDDEEE
 ZZAAAEEE
@@ -410,13 +410,13 @@ ZZZZZZZZ
 ZZZZZZZZ
 ZZZZZZZZ`,
 		}, {
-			func() { m1, err = m.SplitHorizontal(m6, &testComponent{fill: 'Y'}) }, `
+			func() { m1, err = m.SplitHorizontal(m6, &Fill{Ch: 'Y'}) }, `
 ZZZZZZZZ
 ZZZZZZZZ
 YYYYYYYY
 YYYYYYYY`,
 		}, {
-			func() { m2, err = m.SplitVertical(m1, &testComponent{fill: 'X'}) }, `
+			func() { m2, err = m.SplitVertical(m1, &Fill{Ch: 'X'}) }, `
 ZZZZZZZZ
 ZZZZZZZZ
 YYYYXXXX

@@ -29,6 +29,7 @@ type Writer interface {
 type Component interface {
 	Resize(width, height int) error
 	Move(x, y int) error
+	// TODO enforce that children are always drawn first to avoid colisions
 	Draw(w Writer) error
 	Height() int
 	Width() int

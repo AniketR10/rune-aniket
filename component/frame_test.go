@@ -7,14 +7,14 @@ import (
 )
 
 func TestNewFrame(t *testing.T) {
-	u := &testComponent{fill: '*'}
+	u := &Fill{Ch: '*'}
 	f, err := NewFrame(u, 8, 4, 1, 1)
 
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if f.content.(*testComponent) != u {
+	if f.content.(*Fill) != u {
 		t.Errorf("did not set content correctly")
 	}
 
@@ -28,7 +28,7 @@ func TestNewFrame(t *testing.T) {
 }
 
 func TestDrawFrame(t *testing.T) {
-	u := &testComponent{fill: 'X'}
+	u := &Fill{Ch: 'X'}
 	f, err := NewFrame(u, 8, 4, 0, 0)
 
 	if err != nil {
@@ -46,7 +46,7 @@ func TestDrawFrame(t *testing.T) {
 └──────┘ 
          `,
 		}, {
-			func() { f.SetContent(&testComponent{fill: '*'}) }, `
+			func() { f.SetContent(&Fill{Ch: '*'}) }, `
 ┌──────┐ 
 │******│ 
 │******│ 
@@ -67,7 +67,7 @@ func TestDrawFrame(t *testing.T) {
     └──┘ 
          `,
 		}, {
-			func() { f.SetContent(&testComponent{fill: 'T'}) }, `
+			func() { f.SetContent(&Fill{Ch: 'T'}) }, `
     ┌──┐ 
     │TT│ 
     │TT│ 
