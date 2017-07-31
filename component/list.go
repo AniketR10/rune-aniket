@@ -44,6 +44,10 @@ func (l *List) ElementHeight() int {
 	return l.elementHeight
 }
 
+func (l *List) Offset() int {
+	return l.offset
+}
+
 func (l *List) CanSeekUp() bool {
 	return l.offset > 0
 }
