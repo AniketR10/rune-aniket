@@ -6,14 +6,15 @@ import (
 	"io"
 
 	"github.com/ernestrc/fractal"
+	termbox "github.com/nsf/termbox-go"
 )
 
 // TODO add alignment
 type Scroll struct {
 	Wrap      bool              // lines longer than the width of the window will wrap and displaying continues on the next line. wrap text
 	Tabspaces int               // number of spaces to use when expanding tabs
-	ResultsFG fractal.Attribute // foreground attribute for search results
-	ResultsBG fractal.Attribute // background attribute for search results
+	ResultsFG termbox.Attribute // foreground attribute for search results
+	ResultsBG termbox.Attribute // background attribute for search results
 	buffer    *fractal.Buffer
 	cells     []fractal.Cell
 	maxoffset fractal.Coordinates
@@ -39,7 +40,7 @@ func (w *Scroll) Init(buffer *fractal.Buffer, width, height int) {
 	}
 
 	w.Tabspaces = 4
-	w.ResultsFG, w.ResultsBG = fractal.AttrReverse, fractal.AttrReverse
+	w.ResultsFG, w.ResultsBG = termbox.AttrReverse, termbox.AttrReverse
 }
 
 func (w *Scroll) YOffset() int {

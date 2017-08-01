@@ -4,6 +4,7 @@ import (
 	"bytes"
 
 	"github.com/ernestrc/fractal"
+	termbox "github.com/nsf/termbox-go"
 )
 
 type StringWriter struct {
@@ -23,7 +24,7 @@ func (w *StringWriter) Resize(width, height int) {
 	w.cellbuf = make([]fractal.Cell, width*height)
 }
 
-func (w *StringWriter) Write(x, y int, ch rune, fg, bg fractal.Attribute) error {
+func (w *StringWriter) Write(x, y int, ch rune, fg, bg termbox.Attribute) error {
 	if x >= w.width || y >= w.height {
 		return nil
 	}
@@ -54,7 +55,7 @@ func (w *StringWriter) Cells() []fractal.Cell {
 	return w.cellbuf
 }
 
-func (w *StringWriter) Clear(_, _ fractal.Attribute) (err error) {
+func (w *StringWriter) Clear(_, _ termbox.Attribute) (err error) {
 	w.cellbuf = make([]fractal.Cell, w.width*w.height)
 	w.buffer.Reset()
 	return

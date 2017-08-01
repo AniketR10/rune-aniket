@@ -4,9 +4,10 @@ import (
 	"container/list"
 
 	"github.com/ernestrc/fractal"
+	termbox "github.com/nsf/termbox-go"
 )
 
-const resfg, resbg = fractal.AttrReverse, fractal.AttrReverse
+const resfg, resbg = termbox.AttrReverse, termbox.AttrReverse
 
 type List struct {
 	elementHeight int

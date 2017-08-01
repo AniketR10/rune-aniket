@@ -1,35 +1,16 @@
 package fractal
 
-type Attribute uint16
-
-const (
-	ColorDefault Attribute = iota
-	ColorBlack
-	ColorRed
-	ColorGreen
-	ColorYellow
-	ColorBlue
-	ColorMagenta
-	ColorCyan
-	ColorWhite
-)
-
-const (
-	AttrBold Attribute = 1 << (iota + 9)
-	AttrUnderline
-	AttrReverse
-)
+import termbox "github.com/nsf/termbox-go"
 
 type Writer interface {
-	Write(x, y int, r rune, fg Attribute, bg Attribute) error
+	Write(x, y int, r rune, fg termbox.Attribute, bg termbox.Attribute) error
 	Flush() error
-	Clear(fg, bg Attribute) error
+	Clear(fg, bg termbox.Attribute) error
 }
 
 type Component interface {
 	Resize(width, height int) error
 	Move(x, y int) error
-	// TODO enforce that children are always drawn first to avoid colisions
 	Draw(w Writer) error
 	Height() int
 	Width() int
@@ -42,6 +23,6 @@ type Coordinates struct {
 
 type Cell struct {
 	Coordinates
-	Fg, Bg Attribute
+	Fg, Bg termbox.Attribute
 	Ch     rune
 }

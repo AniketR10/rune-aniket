@@ -1,10 +1,13 @@
 package component
 
-import "github.com/ernestrc/fractal"
+import (
+	"github.com/ernestrc/fractal"
+	termbox "github.com/nsf/termbox-go"
+)
 
 type Fill struct {
 	Ch                  rune
-	Bg, Fg              fractal.Attribute
+	Bg, Fg              termbox.Attribute
 	x, y, width, height int
 }
 

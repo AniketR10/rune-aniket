@@ -8,8 +8,8 @@ import (
 	"io"
 	"os"
 
-	"github.com/ernestrc/fractal"
 	"github.com/ernestrc/fractal/less"
+	termbox "github.com/nsf/termbox-go"
 )
 
 type ScannerHandler struct {
@@ -62,7 +62,7 @@ func main() {
 	config := less.DefaultConfig()
 	config.Wrap = *wrap
 	if *border {
-		config.ScrollBorder |= fractal.ColorWhite
+		config.ScrollBorder |= termbox.ColorWhite
 	}
 
 	handler := NewHandler(input)

@@ -3,6 +3,8 @@ package fractal
 import (
 	"bytes"
 	"container/list"
+
+	termbox "github.com/nsf/termbox-go"
 )
 
 // Buffer is a mutable write, immutable read wrapper of bytes.Buffer which:
@@ -65,7 +67,7 @@ func (b *Buffer) SearchResults() *list.List {
 	return &b.reslist
 }
 
-func (b *Buffer) Search(text []byte, cellbuf []Cell, resfg, resbg Attribute) int {
+func (b *Buffer) Search(text []byte, cellbuf []Cell, resfg, resbg termbox.Attribute) int {
 	b.reslist.Init()
 	b.result = nil
 	b.searchText = text
