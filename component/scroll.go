@@ -24,13 +24,13 @@ type Scroll struct {
 	height    int
 }
 
-func NewScroll(buffer *fractal.Buffer, width, height int) *Scroll {
+func NewScroll(buffer *fractal.Buffer, width, height, x, y int) *Scroll {
 	w := new(Scroll)
-	w.Init(buffer, width, height)
+	w.Init(buffer, width, height, x, y)
 	return w
 }
 
-func (w *Scroll) Init(buffer *fractal.Buffer, width, height int) {
+func (w *Scroll) Init(buffer *fractal.Buffer, width, height, x, y int) {
 	w.buffer = buffer
 	w.width, w.height = width, height
 	if buffer != nil {
@@ -128,7 +128,6 @@ func (w *Scroll) SeekStartFile() {
 }
 
 func (w *Scroll) moveResult(i int) {
-
 	res := w.cells[i]
 
 	w.SeekVertical(res.Y)
@@ -143,6 +142,9 @@ func (w *Scroll) moveResult(i int) {
 }
 
 func (w *Scroll) SeekNextResult() {
+	if w.buffer == nil {
+		return
+	}
 	i, ok := w.buffer.NextResult()
 
 	if !ok {
@@ -153,6 +155,9 @@ func (w *Scroll) SeekNextResult() {
 }
 
 func (w *Scroll) SeekPrevResult() {
+	if w.buffer == nil {
+		return
+	}
 	i, ok := w.buffer.PrevResult()
 
 	if !ok {
@@ -189,10 +194,6 @@ func (w *Scroll) Height() int {
 
 func (w *Scroll) Width() int {
 	return w.width
-}
-
-func (w *Scroll) cell(idx int) fractal.Cell {
-	return w.cells[idx]
 }
 
 func reserve(s []fractal.Cell, capacity int) []fractal.Cell {
@@ -303,9 +304,10 @@ func (w *Scroll) scan() (err error) {
 	return err
 }
 
-func (w *Scroll) SetBuffer(buf *fractal.Buffer) (orig *fractal.Buffer, err error) {
+func (w *Scroll) SetBuffer(buf *fractal.Buffer) (orig *fractal.Buffer) {
 	orig = w.buffer
 	w.buffer = buf
+	// TODO should reset the rest of properties
 
 	buf.MarkUnscanned()
 
@@ -357,6 +359,9 @@ func (w *Scroll) wrapdraw(writer fractal.Writer) (err error) {
 }
 
 func (w *Scroll) Draw(writer fractal.Writer) (err error) {
+	if w.buffer == nil {
+		return nil
+	}
 	if !w.buffer.Scanned() {
 		if err = w.scan(); err != nil {
 			return
@@ -384,6 +389,13 @@ func (w *Scroll) resetCells() {
 }
 
 func (w *Scroll) Search(text string) int {
+	if w.buffer == nil {
+		return 0
+	}
 	w.resetCells()
 	return w.buffer.Search([]byte(text), w.cells, w.ResultsFG, w.ResultsBG)
+}
+
+func (w *Scroll) Cell(idx int) fractal.Cell {
+	return w.cells[idx]
 }

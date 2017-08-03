@@ -15,7 +15,7 @@ var fortune_width = 44
 
 func newScroll(tabspaces int, wrap bool, width, height int) (buf *fractal.Buffer, window *Scroll) {
 	buf = &fractal.Buffer{}
-	window = NewScroll(buf, width, height)
+	window = NewScroll(buf, width, height, 0, 0)
 	window.Tabspaces = tabspaces
 	window.Wrap = wrap
 	return
@@ -46,19 +46,19 @@ func TestScrollscan(t *testing.T) {
 
 	var loveL fractal.Cell
 
-	loveL = window.cell(0)
+	loveL = window.Cell(0)
 	if loveL.Y != 0 || loveL.X != 0 || loveL.Ch != 'L' {
 		t.Errorf("failed to set content: %+v: %c", loveL, loveL.Ch)
 	}
 
-	loveL = window.cell(fortune_width + 1)
+	loveL = window.Cell(fortune_width + 1)
 	if loveL.Y != 1 || loveL.X != 0 || loveL.Ch != 'L' {
 		t.Errorf("failed to scan newline: %+v: %c", loveL, loveL.Ch)
 	}
 
-	oscarO := window.cell(89)
-	if rune(fortune[89]) != window.cell(89).Ch {
-		t.Errorf("something is wrong with the cell mapping: fortune: %d, cell: %d", fortune[89], window.cell(89))
+	oscarO := window.Cell(89)
+	if rune(fortune[89]) != window.Cell(89).Ch {
+		t.Errorf("something is wrong with the cell mapping: fortune: %d, cell: %d", fortune[89], window.Cell(89))
 	}
 	if oscarO.Y != 2 || oscarO.X != tabspaces*2+3 || oscarO.Ch != 'O' {
 		t.Errorf("failed to scan newline: %+v: %c", oscarO, oscarO.Ch)
@@ -169,3 +169,14 @@ func TestScrollDrawWrap(t *testing.T) {
 
 	testWorkflow(t, window, w, tests)
 }
+
+func TestScrollNilBuffer(t *testing.T) {
+	scroll := NewScroll(nil, 10, 10, 0, 0)
+	scroll.SeekNextResult()
+	scroll.SeekPrevResult()
+	if r := scroll.Search("jfklwjl"); r != 0 {
+		t.Errorf("unexpected result for search: %d", r)
+	}
+}
+
+// TODO add tests for changing buffer
