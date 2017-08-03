@@ -14,11 +14,11 @@ EXEC=$(patsubst cmd/%/,$(TARGET)/%,$(EXECS))
 GEXEC=$(patsubst cmd/%/,$(GOBIN)/%,$(EXECS))
 TESTSRC=$(wildcard **/*_test.go)
 TEST=$(patsubst %_test.go,$(TARGET)/%_test,$(TESTSRC))
+TESTFLAGS=-i
 
+.PHONY: clean install test coverage
 
-.PHONY: clean install test
-
-default: CHECK $(EXEC)
+default: CHECK $(PKGS) $(EXEC)
 
 install: CHECK $(PKGS) $(GEXEC)
 
@@ -39,10 +39,21 @@ $(PKGS): $(SRC) FORCE
 $(GEXEC): $(EXECS)
 	@cd $< && $(CC) build -o $@
 
+ifeq ($(MAKECMDGOALS),coverage)
+TESTFLAGS += -cover
+endif
+
 $(TEST): $(TESTSRC) $(SRC) FORCE
 	@mkdir -p $(dir $@)
-	@cd $(patsubst bin/%,%,$(dir $@)) && $(CC) test -i -o ../$@
+	@cd $(patsubst bin/%,%,$(dir $@)) && $(CC) test $(TESTFLAGS) -o ../$@
+ifeq ($(MAKECMDGOALS),coverage)
+	@./$@ -test.coverprofile $@.coverage
+else
 	@printf "%30s ⇒ " $@ && ./$@
+endif
+
+coverage: $(TEST)
+	@for t in $(TEST); do go tool cover -html=$$t.coverage; done;
 
 FORCE:
 
