@@ -1,7 +1,7 @@
 package writer
 
 import (
-	termbox "github.com/nsf/termbox-go"
+	termbox "termbox"
 )
 
 type TermboxWriter struct {

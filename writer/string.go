@@ -4,7 +4,7 @@ import (
 	"bytes"
 
 	"github.com/ernestrc/fractal"
-	termbox "github.com/nsf/termbox-go"
+	termbox "termbox"
 )
 
 type StringWriter struct {

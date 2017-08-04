@@ -4,7 +4,7 @@ import (
 	"container/list"
 
 	"github.com/ernestrc/fractal"
-	termbox "github.com/nsf/termbox-go"
+	termbox "termbox"
 )
 
 const resfg, resbg = termbox.AttrReverse, termbox.AttrReverse

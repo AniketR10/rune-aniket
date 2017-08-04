@@ -7,7 +7,7 @@ import (
 	"github.com/ernestrc/fractal"
 	"github.com/ernestrc/fractal/component"
 	"github.com/ernestrc/fractal/writer"
-	termbox "github.com/nsf/termbox-go"
+	termbox "termbox"
 )
 
 type mode uint8

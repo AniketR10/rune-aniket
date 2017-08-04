@@ -1,6 +1,6 @@
 package fractal
 
-import termbox "github.com/nsf/termbox-go"
+import termbox "termbox"
 
 type Writer interface {
 	Write(x, y int, r rune, fg termbox.Attribute, bg termbox.Attribute) error

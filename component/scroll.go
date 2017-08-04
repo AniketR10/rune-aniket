@@ -6,7 +6,7 @@ import (
 	"io"
 
 	"github.com/ernestrc/fractal"
-	termbox "github.com/nsf/termbox-go"
+	termbox "termbox"
 )
 
 // TODO add alignment

@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"container/list"
 
-	termbox "github.com/nsf/termbox-go"
+	termbox "termbox"
 )
 
 // Buffer is a write-only wrapper of bytes.Buffer which

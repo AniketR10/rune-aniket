@@ -9,7 +9,7 @@ import (
 	"os"
 
 	"github.com/ernestrc/fractal/less"
-	termbox "github.com/nsf/termbox-go"
+	termbox "termbox"
 )
 
 type ScannerHandler struct {
