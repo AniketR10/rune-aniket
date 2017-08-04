@@ -7,12 +7,8 @@ import (
 	termbox "github.com/nsf/termbox-go"
 )
 
-// Buffer is a mutable write, immutable read wrapper of bytes.Buffer which:
-//
-// - keeps track of updates to the underlying buffer so
-//	 window and other components know when to re-scan
-//
-// - provides a cell-aware search API
+// Buffer is a write-only wrapper of bytes.Buffer which
+// provides a cell-aware search API.
 //
 // The zero value for Buffer is an empty buffer ready to use.
 type Buffer struct {
@@ -22,6 +18,8 @@ type Buffer struct {
 	searchText []byte        // search term
 	scanned    bool
 }
+
+// TODO provide WriteAt(idx, rune)
 
 func (b *Buffer) Reset() {
 	b.buffer.Reset()

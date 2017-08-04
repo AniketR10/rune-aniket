@@ -8,10 +8,14 @@ type Writer interface {
 	Clear(fg, bg termbox.Attribute) error
 }
 
+type Cursor interface {
+	SetCursor(x, y int)
+}
+
 type Component interface {
 	Resize(width, height int) error
 	Move(x, y int) error
-	Draw(w Writer) error
+	Draw(Writer) error
 	Height() int
 	Width() int
 	Position() (int, int)
@@ -25,4 +29,10 @@ type Cell struct {
 	Coordinates
 	Fg, Bg termbox.Attribute
 	Ch     rune
+}
+
+type Handler interface {
+	Component
+	Handle(termbox.Event) error
+	SetCursor(Cursor) error
 }

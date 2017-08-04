@@ -46,19 +46,19 @@ func TestScrollscan(t *testing.T) {
 
 	var loveL fractal.Cell
 
-	loveL = window.Cell(0)
+	loveL = window.CellAt(0)
 	if loveL.Y != 0 || loveL.X != 0 || loveL.Ch != 'L' {
 		t.Errorf("failed to set content: %+v: %c", loveL, loveL.Ch)
 	}
 
-	loveL = window.Cell(fortune_width + 1)
+	loveL = window.CellAt(fortune_width + 1)
 	if loveL.Y != 1 || loveL.X != 0 || loveL.Ch != 'L' {
 		t.Errorf("failed to scan newline: %+v: %c", loveL, loveL.Ch)
 	}
 
-	oscarO := window.Cell(89)
-	if rune(fortune[89]) != window.Cell(89).Ch {
-		t.Errorf("something is wrong with the cell mapping: fortune: %d, cell: %d", fortune[89], window.Cell(89))
+	oscarO := window.CellAt(89)
+	if rune(fortune[89]) != window.CellAt(89).Ch {
+		t.Errorf("something is wrong with the cell mapping: fortune: %d, cell: %d", fortune[89], window.CellAt(89))
 	}
 	if oscarO.Y != 2 || oscarO.X != tabspaces*2+3 || oscarO.Ch != 'O' {
 		t.Errorf("failed to scan newline: %+v: %c", oscarO, oscarO.Ch)
@@ -178,5 +178,33 @@ func TestScrollNilBuffer(t *testing.T) {
 		t.Errorf("unexpected result for search: %d", r)
 	}
 }
+
+// func TestScrollGetCell(t *testing.T) {
+// 	width, height := 8, 2
+// 	tabspaces := 4
+// 	buf, window := newScroll(tabspaces, false, width, height)
+// 	buf.Write([]byte(fortune))
+// 	if err := window.scan(); err != nil {
+// 		t.Fatal(err)
+// 	}
+//
+// 	var loveL fractal.Cell
+// 	var idx int
+//
+// 	idx, loveL = window.Cell(0, 0)
+// 	if idx != 0 || loveL.Ch != 'L' {
+// 		t.Errorf("failed to set content: %+v: %c", loveL, loveL.Ch)
+// 	}
+//
+// 	idx, loveL = window.Cell(0, 1)
+// 	if idx != fortune_width+1 || loveL.Ch != 'L' {
+// 		t.Errorf("failed to scan newline: %+v: %c", loveL, loveL.Ch)
+// 	}
+//
+// 	idx2, oscarO := window.Cell(2, tabspaces*2+3)
+// 	if idx2 != 89 || oscarO.Ch != 'O' {
+// 		t.Errorf("failed to scan newline: %+v: %c", oscarO, oscarO.Ch)
+// 	}
+// }
 
 // TODO add tests for changing buffer

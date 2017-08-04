@@ -396,6 +396,6 @@ func (w *Scroll) Search(text string) int {
 	return w.buffer.Search([]byte(text), w.cells, w.ResultsFG, w.ResultsBG)
 }
 
-func (w *Scroll) Cell(idx int) fractal.Cell {
+func (w *Scroll) CellAt(idx int) fractal.Cell {
 	return w.cells[idx]
 }

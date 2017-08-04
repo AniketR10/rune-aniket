@@ -170,7 +170,7 @@ func searchHandleEvent(ev termbox.Event) (exit bool, err error) {
 	return
 }
 
-func normalHandleEvent(ev termbox.Event) (exit bool, err error) {
+func normalHandleEvent(ev termbox.Event) (handled bool, err error) {
 	switch ev.Type {
 	case termbox.EventResize:
 		resetCursor()
@@ -347,9 +347,9 @@ func Init(cfg *Config, content string) error {
 	} else {
 		h.config = cfg
 	}
-	h.cmdScroll = component.NewScroll(&h.cmdBuf, h.width, h.height)
-	h.msgScroll = component.NewScroll(&h.msgBuf, h.width, h.height)
-	h.contScroll = component.NewScroll(&h.contBuf, h.width, h.height)
+	h.cmdScroll = component.NewScroll(&h.cmdBuf, h.width, h.height, 0, 0)
+	h.msgScroll = component.NewScroll(&h.msgBuf, h.width, h.height, 0, 0)
+	h.contScroll = component.NewScroll(&h.contBuf, h.width, h.height, 0, 0)
 
 	setupScroll(h.cmdScroll)
 	setupScroll(h.msgScroll)
