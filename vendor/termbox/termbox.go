@@ -80,6 +80,10 @@ var (
 	}
 )
 
+func Outbuf() *bytes.Buffer {
+	return &outbuf
+}
+
 func write_cursor(x, y int) {
 	outbuf.WriteString("\033[")
 	outbuf.Write(strconv.AppendUint(intbuf, uint64(y+1), 10))

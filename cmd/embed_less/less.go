@@ -1,0 +1,59 @@
+package main
+
+import (
+	"fmt"
+	"log"
+	"os"
+	"os/exec"
+	"termbox"
+
+	"github.com/ernestrc/fractal/handler"
+	"github.com/ernestrc/fractal/writer"
+)
+
+var (
+	width, height int
+	w             writer.TermboxWriter
+	e             handler.Embed
+)
+
+func main() {
+	var err error
+
+	if len(os.Args) == 1 {
+		fmt.Printf("usage: %s <filename>", os.Args[0])
+		os.Exit(1)
+	}
+
+	filename := os.Args[1]
+	c := exec.Command("less", filename)
+
+	if err = termbox.Init(); err != nil {
+		log.Fatal(err)
+	}
+
+	defer termbox.Close()
+
+	width, height = termbox.Size()
+
+	if err = e.Init(0, 0, width, height, c); err != nil {
+		log.Fatal(err)
+	}
+
+	data := make([]byte, 1024*4)
+
+	for {
+		data = data[:cap(data)]
+		if err = e.Draw(&w); err != nil {
+			log.Fatal(err)
+		}
+		if err = termbox.Flush(); err != nil {
+			log.Fatal(err)
+		}
+		ev := termbox.PollRawEvent(data)
+		data = data[:ev.N]
+		if err = e.HandleRaw(data); err != nil {
+			log.Fatal(err)
+		}
+	}
+}
