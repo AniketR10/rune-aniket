@@ -4,12 +4,18 @@ import (
 	"bufio"
 	"bytes"
 	"flag"
-	"fmt"
 	"io"
+	"log"
 	"os"
 
-	"github.com/ernestrc/fractal/less"
-	termbox "termbox"
+	"github.com/ernestrc/fractal"
+	"github.com/ernestrc/fractal/handler"
+
+	"termbox"
+)
+
+var (
+	less *handler.Less
 )
 
 type ScannerHandler struct {
@@ -37,6 +43,17 @@ func (h ScannerHandler) WriteTo(w io.Writer) (written int64, err error) {
 	return
 }
 
+func (h ScannerHandler) Handle(ev handler.LessEvent) error {
+	switch ev.Type {
+	case handler.EOF:
+		less.SetMessage("EOF")
+	case handler.Search:
+		less.SetMessage("search pattern: %s..", ev.Data)
+	}
+
+	return nil
+}
+
 var wrap = flag.Bool("w", false, "wrap text")
 var border = flag.Bool("b", false, "window borders")
 
@@ -48,10 +65,10 @@ func main() {
 	if len(os.Args) > 1 {
 		filename := os.Args[1]
 		if input, err = os.Open(filename); err != nil {
-			panic(err)
+			log.Fatal(err)
 		}
 		if err = flag.CommandLine.Parse(os.Args[2:]); err != nil {
-			panic(err)
+			log.Fatal(err)
 		}
 	} else {
 		input = os.Stdin
@@ -59,38 +76,30 @@ func main() {
 
 	}
 
-	config := less.DefaultConfig()
+	config := handler.DefaultLessConfig()
 	config.Wrap = *wrap
 	if *border {
 		config.ScrollBorder |= termbox.ColorWhite
 	}
 
-	handler := NewHandler(input)
+	h := NewHandler(input)
 	initContent := new(bytes.Buffer)
-	if _, err = handler.WriteTo(initContent); err != nil {
-		panic(err)
+	if _, err = h.WriteTo(initContent); err != nil {
+		log.Fatal(err)
 	}
 
-	if err = less.Init(config, string(initContent.Bytes())); err != nil {
-		panic(err)
+	if less, err = handler.NewLess(string(initContent.Bytes()), h.Handle, config); err != nil {
+		log.Fatal(err)
 	}
 
-	var i int
-	for {
-		ev := less.PollEvent()
-
-		switch ev.Type {
-		case less.EOF:
-			i++
-			less.Message("dispatched EOF n %d", i)
-		case less.Search:
-			less.Message("dispatched search: %s..", ev.Data)
-		case less.Error:
-			panic(ev.Err)
-		case less.Exit:
-			less.Close()
-			fmt.Println("bye!")
-			return
-		}
+	if err = fractal.Init(); err != nil {
+		log.Fatal(err)
 	}
+
+	defer fractal.Close()
+
+	if err = fractal.Run(less); err != nil {
+		log.Fatal(err)
+	}
+
 }

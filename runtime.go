@@ -56,8 +56,7 @@ func run(root Handler, termw Writer) (err error) {
 		}
 	}()
 
-	var exit bool
-	for !exit && err == nil {
+	for root.IsActive() && err == nil {
 		if err = redraw(root, termw); err != nil {
 			return
 		}
@@ -69,6 +68,7 @@ func run(root Handler, termw Writer) (err error) {
 			}
 		case ev := <-ichan:
 			switch ev.Type {
+			case termbox.EventInterrupt:
 			case termbox.EventError:
 				err = ev.Err
 			case termbox.EventResize:

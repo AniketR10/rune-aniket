@@ -32,6 +32,7 @@ type Cell struct {
 
 type Handler interface {
 	Component
+	// TODO custom key event
 	Handle(termbox.Event) error
 	GetCursor() Coordinates
 	GetAttr() (fg termbox.Attribute, bg termbox.Attribute)
@@ -46,6 +47,9 @@ func Init() error {
 	if err := termbox.Init(); err != nil {
 		return fmt.Errorf("failed termbox init: %v", err)
 	}
+
+	echan = make(chan termbox.Event)
+	ichan = make(chan termbox.Event)
 
 	return nil
 }
