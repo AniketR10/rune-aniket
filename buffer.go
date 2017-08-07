@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"container/list"
 
-	termbox "termbox"
+	"termbox"
 )
 
 // Buffer is a write-only wrapper of bytes.Buffer which

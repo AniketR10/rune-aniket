@@ -3,7 +3,7 @@ package component
 import (
 	"testing"
 
-	"github.com/ernestrc/fractal/writer"
+	"github.com/ernestrc/fractal"
 )
 
 func TestNew(t *testing.T) {
@@ -304,7 +304,7 @@ func TestResizeRounding(t *testing.T) {
 
 func TestTileManagerDraw(t *testing.T) {
 	width, height := 8, 4
-	w := writer.String(width, height)
+	w := fractal.String(width, height)
 	m, root, err := NewTileManager(width, height, 0, 0, &Fill{Ch: 'A'})
 
 	var m1 *Tile

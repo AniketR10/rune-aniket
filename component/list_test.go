@@ -3,7 +3,7 @@ package component
 import (
 	"testing"
 
-	"github.com/ernestrc/fractal/writer"
+	"github.com/ernestrc/fractal"
 )
 
 func TestNewList(t *testing.T) {
@@ -34,7 +34,7 @@ func TestListDraw(t *testing.T) {
 	l := NewList(1, 8, 4, 0, 0)
 	l2 := NewList(1, 8, 4, 0, 0)
 
-	w := writer.String(8, 4)
+	w := fractal.String(8, 4)
 
 	tests := []testCase{
 		{

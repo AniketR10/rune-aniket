@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	"github.com/ernestrc/fractal"
-	"github.com/ernestrc/fractal/writer"
 )
 
 var fortune = `Love in your heart wasn't put there to stay.
@@ -81,7 +80,7 @@ func TestScrollDraw(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	w := writer.String(width, height)
+	w := fractal.String(width, height)
 
 	tests := []struct {
 		action   func()
@@ -104,7 +103,7 @@ func TestScrollDraw(t *testing.T) {
 		{func() { window.Search("Love") }, "Love in \nLove isn"},
 		{window.SeekNextResult, "Love in \nLove isn"},
 		{window.SeekPrevResult, "Love in \nLove isn"},
-		{func() { window.Resize(20, 1); w = writer.String(20, 1) }, "Love in your heart w"},
+		{func() { window.Resize(20, 1); w = fractal.String(20, 1) }, "Love in your heart w"},
 		{func() { window.Search("you") }, "Love in your heart w"},
 		{window.SeekNextResult, "Love in your heart w"},
 		{window.SeekNextResult, " isn't love 'til you"},
@@ -143,7 +142,7 @@ func TestScrollDrawWrap(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	w := writer.String(width, height)
+	w := fractal.String(width, height)
 
 	tests := []testCase{
 		{nil, "Love in \nyour hea"},

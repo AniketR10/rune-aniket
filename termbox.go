@@ -1,7 +1,7 @@
-package writer
+package fractal
 
 import (
-	termbox "termbox"
+	"termbox"
 )
 
 type TermboxWriter struct {
@@ -16,9 +16,8 @@ func (w *TermboxWriter) Write(x, y int, ch rune, fg, bg termbox.Attribute) error
 	return nil
 }
 
-func (w *TermboxWriter) Flush() (err error) {
-	err = termbox.Flush()
-	return
+func (w *TermboxWriter) Flush() error {
+	return termbox.Flush()
 }
 
 func (w *TermboxWriter) Clear(fg, bg termbox.Attribute) (err error) {

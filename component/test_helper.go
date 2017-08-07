@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"github.com/ernestrc/fractal"
-	"github.com/ernestrc/fractal/writer"
 )
 
 type testCase struct {
@@ -13,7 +12,7 @@ type testCase struct {
 	expected string
 }
 
-func testWorkflow(t *testing.T, m fractal.Component, w *writer.StringWriter, cases []testCase) {
+func testWorkflow(t *testing.T, m fractal.Component, w *fractal.StringWriter, cases []testCase) {
 	var err error
 
 	for _, tcase := range cases {

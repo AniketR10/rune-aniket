@@ -1,8 +1,9 @@
 package component
 
 import (
+	"termbox"
+
 	"github.com/ernestrc/fractal"
-	termbox "termbox"
 )
 
 type Frame struct {

@@ -3,8 +3,9 @@ package component
 import (
 	"container/list"
 
+	"termbox"
+
 	"github.com/ernestrc/fractal"
-	termbox "termbox"
 )
 
 const resfg, resbg = termbox.AttrReverse, termbox.AttrReverse

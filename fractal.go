@@ -1,15 +1,14 @@
 package fractal
 
-import termbox "termbox"
+import (
+	"fmt"
+	"termbox"
+)
 
 type Writer interface {
 	Write(x, y int, r rune, fg termbox.Attribute, bg termbox.Attribute) error
 	Flush() error
 	Clear(fg, bg termbox.Attribute) error
-}
-
-type Cursor interface {
-	SetCursor(x, y int)
 }
 
 type Component interface {
@@ -34,5 +33,31 @@ type Cell struct {
 type Handler interface {
 	Component
 	Handle(termbox.Event) error
-	SetCursor(Cursor) error
+	GetCursor() Coordinates
+	GetAttr() (fg termbox.Attribute, bg termbox.Attribute)
+	IsActive() bool
+}
+
+func Channel() <-chan termbox.Event {
+	return echan
+}
+
+func Init() error {
+	if err := termbox.Init(); err != nil {
+		return fmt.Errorf("failed termbox init: %v", err)
+	}
+
+	return nil
+}
+
+func Run(root Handler) (err error) {
+	return run(root, &TermboxWriter{})
+}
+
+func Size() (width int, height int) {
+	return termbox.Size()
+}
+
+func Close() {
+	termbox.Close()
 }

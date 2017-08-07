@@ -3,7 +3,7 @@ package component
 import (
 	"testing"
 
-	"github.com/ernestrc/fractal/writer"
+	"github.com/ernestrc/fractal"
 )
 
 func TestNewFrame(t *testing.T) {
@@ -35,7 +35,7 @@ func TestDrawFrame(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	w := writer.String(9, 5)
+	w := fractal.String(9, 5)
 
 	tests := []testCase{
 		{
