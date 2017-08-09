@@ -8,10 +8,10 @@ TARGET=bin
 PWD=$(shell pwd)
 SRC=$(wildcard **/*.go)
 PKGS=$(sort $(dir $(SRC)))
-EXECS=$(sort $(dir $(wildcard cmd/*/)))
-EXECSRC=$(wildcard cmd/**/*.go)
-EXEC=$(patsubst cmd/%/,$(TARGET)/%,$(EXECS))
-GEXEC=$(patsubst cmd/%/,$(GOBIN)/%,$(EXECS))
+EXECS=$(sort $(dir $(wildcard examples/*/)))
+EXECSRC=$(wildcard examples/**/*.go)
+EXEC=$(patsubst examples/%/,$(TARGET)/%,$(EXECS))
+GEXEC=$(patsubst examples/%/,$(GOBIN)/%,$(EXECS))
 TESTSRC=$(wildcard **/*_test.go)
 TEST=$(patsubst %_test.go,$(TARGET)/%_test,$(TESTSRC))
 TESTFLAGS=-i
@@ -31,7 +31,7 @@ $(TARGET):
 	@mkdir $(TARGET)
 
 $(EXEC): $(EXECS) $(EXECSRC) $(SRC) $(TARGET)
-	@for b in $(EXECS); do cd ./$$b && $(CC) build -o $(PWD)/$(patsubst cmd/%,$(TARGET)/%,$@) && cd $(PWD); done;
+	@for b in $(EXECS); do cd ./$$b && $(CC) build -o $(PWD)/$(patsubst examples/%,$(TARGET)/%,$@) && cd $(PWD); done;
 
 $(PKGS): $(SRC) FORCE
 	@cd $@ && $(CC) install

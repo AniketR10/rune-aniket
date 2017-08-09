@@ -28,8 +28,8 @@ func redraw(root Handler, termw Writer) (err error) {
 		return fmt.Errorf("failed to draw root handler: %v", err)
 	}
 
-	cursor := root.GetCursor()
-	termbox.SetCursor(cursor.X, cursor.Y)
+	//  cursor := root.GetCursor()
+	//  termbox.SetCursor(cursor.X, cursor.Y)
 
 	if err = termw.Flush(); err != nil {
 		return err
@@ -50,8 +50,10 @@ func run(root Handler, termw Writer) (err error) {
 		return err
 	}
 
+	var exit bool
+
 	go func() {
-		for {
+		for !exit {
 			ichan <- termbox.PollEvent()
 		}
 	}()
@@ -83,6 +85,11 @@ func run(root Handler, termw Writer) (err error) {
 			}
 		}
 	}
+
+	// stop polling events
+	exit = true
+	termbox.Interrupt()
+	<-ichan
 
 	return nil
 }
