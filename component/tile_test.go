@@ -7,7 +7,7 @@ import (
 )
 
 func TestNew(t *testing.T) {
-	m, _, e := NewTileManager(10, 10, 0, 0, &Fill{})
+	m, _, e := NewTileNode(10, 10, 0, 0, &Fill{})
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -37,176 +37,11 @@ func testScrollPos(t *testing.T, w *Tile, x, y int) {
 	}
 }
 
-func TestSplitVertical(t *testing.T) {
-	var m *TileManager
-	var root *Tile
-	var e error
-
-	width := 100
-	height := 100
-
-	if m, root, e = NewTileManager(width, height, 0, 0, &Fill{}); e != nil {
-		t.Fatal(e)
-	}
-
-	var w1 *Tile
-	if w1, e = m.SplitVertical(root, &Fill{}); e != nil {
-		t.Fatal(e)
-	}
-
-	testScrollSize(t, root, 50, height)
-	testScrollSize(t, w1, 50, height)
-	testScrollPos(t, root, 0, 0)
-	testScrollPos(t, w1, 50, 0)
-
-	var w2 *Tile
-	if w2, e = m.SplitVertical(w1, &Fill{}); e != nil {
-		t.Fatal(e)
-	}
-
-	testScrollSize(t, root, 33, height)
-	testScrollSize(t, w1, 33, height)
-	// 33 + 1 to use last cell available
-	testScrollSize(t, w2, 34, height)
-
-	testScrollPos(t, root, 0, 0)
-	testScrollPos(t, w1, 33, 0)
-	testScrollPos(t, w2, 66, 0)
-
-	var w3 *Tile
-	if w3, e = m.SplitVertical(root, &Fill{}); e != nil {
-		t.Fatal(e)
-	}
-
-	testScrollSize(t, root, 25, height)
-	testScrollSize(t, w3, 25, height)
-	testScrollSize(t, w1, 25, height)
-	testScrollSize(t, w2, 25, height)
-
-	testScrollPos(t, root, 0, 0)
-	testScrollPos(t, w1, 25, 0)
-	testScrollPos(t, w2, 50, 0)
-	testScrollPos(t, w3, 75, 0)
-}
-
-func TestSplitHorizontal(t *testing.T) {
-	var m *TileManager
-	var root *Tile
-	var e error
-
-	width := 100
-	height := 100
-
-	if m, root, e = NewTileManager(width, height, 0, 0, &Fill{}); e != nil {
-		t.Fatal(e)
-	}
-
-	var w1 *Tile
-	if w1, e = m.SplitHorizontal(root, &Fill{}); e != nil {
-		t.Fatal(e)
-	}
-
-	testScrollSize(t, root, width, 50)
-	testScrollSize(t, w1, width, 50)
-	testScrollPos(t, root, 0, 0)
-	testScrollPos(t, w1, 0, 50)
-
-	var w2 *Tile
-	if w2, e = m.SplitHorizontal(w1, &Fill{}); e != nil {
-		t.Fatal(e)
-	}
-
-	testScrollSize(t, root, width, 33)
-	testScrollSize(t, w1, width, 33)
-	testScrollSize(t, w2, width, 34)
-
-	testScrollPos(t, root, 0, 0)
-	testScrollPos(t, w1, 0, 33)
-	testScrollPos(t, w2, 0, 66)
-
-	var w3 *Tile
-	if w3, e = m.SplitHorizontal(root, &Fill{}); e != nil {
-		t.Fatal(e)
-	}
-
-	testScrollSize(t, root, width, 25)
-	testScrollSize(t, w3, width, 25)
-	testScrollSize(t, w1, width, 25)
-	testScrollSize(t, w2, width, 25)
-
-	testScrollPos(t, root, 0, 0)
-	testScrollPos(t, w1, 0, 25)
-	testScrollPos(t, w2, 0, 50)
-	testScrollPos(t, w3, 0, 75)
-}
-
-func TestSplitHorizontalVertical(t *testing.T) {
-	var m *TileManager
-	var root *Tile
-	var e error
-	var w1, w2, w3, w4, w5, w6 *Tile
-
-	width := 100
-	height := 100
-
-	if m, root, e = NewTileManager(width, height, 0, 0, &Fill{}); e != nil {
-		t.Fatal(e)
-	}
-
-	if w1, e = m.SplitVertical(root, &Fill{}); e != nil {
-		t.Fatal(e)
-	}
-
-	if w2, e = m.SplitVertical(w1, &Fill{}); e != nil {
-		t.Fatal(e)
-	}
-
-	if w3, e = m.SplitVertical(root, &Fill{}); e != nil {
-		t.Fatal(e)
-	}
-
-	testScrollSize(t, root, 25, height)
-	testScrollSize(t, w1, 25, height)
-	testScrollSize(t, w2, 25, height)
-	testScrollSize(t, w3, 25, height)
-
-	testScrollPos(t, root, 0, 0)
-	testScrollPos(t, w1, 25, 0)
-	testScrollPos(t, w2, 50, 0)
-	testScrollPos(t, w3, 75, 0)
-
-	if w4, e = m.SplitHorizontal(root, &Fill{}); e != nil {
-		t.Fatal(e)
-	}
-
-	testScrollSize(t, root, 25, 50)
-	testScrollSize(t, w4, 25, 50)
-
-	testScrollPos(t, root, 0, 0)
-	testScrollPos(t, w4, 0, 50)
-
-	if w5, e = m.SplitHorizontal(w1, &Fill{}); e != nil {
-		t.Fatal(e)
-	}
-
-	if w6, e = m.SplitHorizontal(w1, &Fill{}); e != nil {
-		t.Fatal(e)
-	}
-
-	testScrollSize(t, w1, 25, 33)
-	testScrollSize(t, w5, 25, 33)
-	testScrollSize(t, w6, 25, 34)
-
-	testScrollPos(t, w1, 25, 0)
-	testScrollPos(t, w5, 25, 33)
-	testScrollPos(t, w6, 25, 66)
-}
-
 func TestStackWhenNoSpace(t *testing.T) {
 	width := 1
 	height := 1
 
-	if m, root, e := NewTileManager(width, height, 0, 0, &Fill{}); e != nil {
+	if m, root, e := NewTileNode(width, height, 0, 0, &Fill{}); e != nil {
 		t.Fatal(e)
 	} else {
 		w1, _ := m.SplitHorizontal(root, &Fill{})
@@ -222,10 +57,10 @@ func TestStackWhenNoSpace(t *testing.T) {
 	}
 }
 
-func setupTestCase(t *testing.T, gwidth, gheight int) (m *TileManager, root *Tile, w1 *Tile, w2 *Tile) {
+func setupTestCase(t *testing.T, gwidth, gheight int) (m *TileNode, root *Tile, w1 *Tile, w2 *Tile) {
 	var e error
 
-	if m, root, e = NewTileManager(gwidth, gheight, 0, 0, &Fill{}); e != nil {
+	if m, root, e = NewTileNode(gwidth, gheight, 0, 0, &Fill{}); e != nil {
 		t.Fatal(e)
 	}
 
@@ -238,6 +73,109 @@ func setupTestCase(t *testing.T, gwidth, gheight int) (m *TileManager, root *Til
 	}
 
 	return
+}
+
+func TestNeighbours(t *testing.T) {
+	m, root, w1, w2 := setupTestCase(t, 100, 100)
+
+	if root.TileUp() != nil {
+		t.Errorf("%+v vs nil", root.TileUp())
+	}
+
+	if root.TileLeft() != nil {
+		t.Errorf("%+v vs nil", root.TileLeft())
+	}
+
+	if root.TileRight() != nil {
+		t.Errorf("%+v vs nil", root.TileRight())
+	}
+
+	if root.TileDown() != w1 {
+		t.Errorf("%+v vs %+v", root.TileDown(), w1)
+	}
+
+	if w1.TileUp() != root {
+		t.Errorf("%+v vs %+v", w1.TileUp(), root)
+	}
+
+	if w2.TileUp() != root {
+		t.Errorf("%+v vs %+v", w2.TileUp(), root)
+	}
+
+	if w1.TileLeft() != nil {
+		t.Errorf("%+v vs nil", w1.TileLeft())
+	}
+
+	if w2.TileRight() != nil {
+		t.Errorf("%+v vs nil", w1.TileRight())
+	}
+
+	if w1.TileRight() != w2 {
+		t.Errorf("%+v vs %+v", w1.TileRight(), w2)
+	}
+
+	if w2.TileLeft() != w1 {
+		t.Errorf("%+v vs %+v", w2.TileLeft(), w1)
+	}
+
+	w3, err := m.SplitVertical(w1, &Fill{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if w1.TileRight() != w3 {
+		t.Errorf("%+v vs %+v", w1.TileRight(), w3)
+	}
+
+	if w2.TileLeft() != w3 {
+		t.Errorf("%+v vs %+v", w2.TileLeft(), w3)
+	}
+
+	if w3.TileLeft() != w1 {
+		t.Errorf("%+v vs %+v", w3.TileLeft(), w1)
+	}
+
+	if w3.TileRight() != w2 {
+		t.Errorf("%+v vs %+v", w3.TileRight(), w2)
+	}
+
+	w4, err2 := m.SplitHorizontal(w3, &Fill{})
+	if err2 != nil {
+		t.Fatal(err2)
+	}
+
+	w5, err3 := m.SplitVertical(w4, &Fill{})
+	if err3 != nil {
+		t.Fatal(err3)
+	}
+
+	if w5.TileRight() != w2 {
+		t.Errorf("%+v vs %+v", w5.TileRight(), w2)
+	}
+
+	if w2.TileLeft() != w5 {
+		t.Errorf("%+v vs %+v", w2.TileLeft(), w5)
+	}
+
+	if w5.TileUp() != w3 {
+		t.Errorf("%+v vs %+v", w5.TileUp(), w3)
+	}
+
+	if w3.TileDown() != w4 {
+		t.Errorf("%+v vs %+v", w3.TileDown(), w5)
+	}
+
+	if w5.TileDown() != nil {
+		t.Errorf("%+v vs %+v", w5.TileDown(), nil)
+	}
+
+	if w5.TileLeft() != w4 {
+		t.Errorf("%+v vs %+v", w5.TileLeft(), w4)
+	}
+
+	if w4.TileRight() != w5 {
+		t.Errorf("%+v vs %+v", w4.TileRight(), w5)
+	}
 }
 
 func TestResize(t *testing.T) {
@@ -302,10 +240,10 @@ func TestResizeRounding(t *testing.T) {
 	testScrollPos(t, w2, 50, 50)
 }
 
-func TestTileManagerDraw(t *testing.T) {
+func TestTileNodeDraw(t *testing.T) {
 	width, height := 8, 4
 	w := fractal.String(width, height)
-	m, root, err := NewTileManager(width, height, 0, 0, &Fill{Ch: 'A'})
+	m, root, err := NewTileNode(width, height, 0, 0, &Fill{Ch: 'A'})
 
 	var m1 *Tile
 	var m2 *Tile
@@ -441,6 +379,22 @@ YYXX`,
 			func() { err = m1.Close() }, `
 XXXX
 XXXX`,
+		}, {
+			func() { _, err = m.SplitVertical(m2, &Fill{Ch: 'Z'}) }, `
+XXZZ
+XXZZ`,
+		}, {
+			func() { err = m.Resize(8, 4); w.Resize(8, 4) }, `
+XXXXZZZZ
+XXXXZZZZ
+XXXXZZZZ
+XXXXZZZZ`,
+		}, {
+			func() { _, err = m.SplitVertical(m2, &Fill{Ch: 'I'}) }, `
+XXIIIZZZ
+XXIIIZZZ
+XXIIIZZZ
+XXIIIZZZ`,
 		},
 	}
 

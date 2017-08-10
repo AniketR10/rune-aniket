@@ -14,27 +14,28 @@ const (
 )
 
 type linkedComponent interface {
-	setParent(*TileManager)
+	setParent(*TileNode)
+	getParent() *TileNode
 	fractal.Component
 }
 
-type TileManager struct {
+type TileNode struct {
 	pos       fractal.Coordinates
 	width     int
 	height    int
 	children  []linkedComponent
 	direction splitdir
-	parent    *TileManager
+	parent    *TileNode
 }
 
 type Tile struct {
 	content fractal.Component
-	parent  *TileManager
+	parent  *TileNode
 }
 
-func NewTileManager(width, height, x, y int, content fractal.Component) (m *TileManager, root *Tile, err error) {
+func NewTileNode(width, height, x, y int, content fractal.Component) (m *TileNode, root *Tile, err error) {
 	root = newTile(content)
-	m = newNode(vertical, nil, root, x, y, width, height)
+	m = newTileNode(vertical, nil, root, x, y, width, height)
 	root.parent = m
 	m.width = width
 	m.height = height
@@ -42,8 +43,8 @@ func NewTileManager(width, height, x, y int, content fractal.Component) (m *Tile
 	return m, root, m.Resize(width, height)
 }
 
-func newNode(direction splitdir, parent *TileManager, w *Tile, x, y, width, height int) (t *TileManager) {
-	t = new(TileManager)
+func newTileNode(direction splitdir, parent *TileNode, w *Tile, x, y, width, height int) (t *TileNode) {
+	t = new(TileNode)
 	t.pos.X, t.pos.Y, t.width, t.height = x, y, width, height
 	t.children = []linkedComponent{w}
 	t.direction = direction
@@ -57,15 +58,15 @@ func newTile(content fractal.Component) (t *Tile) {
 	return
 }
 
-func (t *Tile) setParent(parent *TileManager) {
+func (t *Tile) setParent(parent *TileNode) {
 	t.parent = parent
 }
 
-func (t *TileManager) setParent(parent *TileManager) {
+func (t *TileNode) setParent(parent *TileNode) {
 	t.parent = parent
 }
 
-func (t *TileManager) resizeHorizontal(len, width, height int) (err error) {
+func (t *TileNode) resizeHorizontal(len, width, height int) (err error) {
 	cheight := height / len
 	hspare := height - cheight*len
 
@@ -89,7 +90,7 @@ func (t *TileManager) resizeHorizontal(len, width, height int) (err error) {
 	return
 }
 
-func (t *TileManager) resizeVertical(len, width, height int) (err error) {
+func (t *TileNode) resizeVertical(len, width, height int) (err error) {
 	cwidth := width / len
 	wspare := width - cwidth*len
 
@@ -113,14 +114,14 @@ func (t *TileManager) resizeVertical(len, width, height int) (err error) {
 	return
 }
 
-func (t *TileManager) Resize(width, height int) (err error) {
+func (t *TileNode) Resize(width, height int) (err error) {
 	t.height = height
 	t.width = width
 
 	len := len(t.children)
 
 	if len == 0 {
-		panic(fmt.Sprintf("can't resize a TileManager with no children: %[1]p: %+[1]v", t))
+		panic(fmt.Sprintf("can't resize a TileNode with no children: %[1]p: %+[1]v", t))
 	}
 
 	if t.direction == vertical {
@@ -130,12 +131,12 @@ func (t *TileManager) Resize(width, height int) (err error) {
 	return t.resizeHorizontal(len, width, height)
 }
 
-func (t *TileManager) Move(x, y int) error {
+func (t *TileNode) Move(x, y int) error {
 	t.pos.X, t.pos.Y = x, y
 	return t.Resize(t.width, t.height)
 }
 
-func (t *TileManager) Draw(w fractal.Writer) (err error) {
+func (t *TileNode) Draw(w fractal.Writer) (err error) {
 	for _, ti := range t.children {
 		if err = ti.Draw(w); err != nil {
 			return
@@ -145,15 +146,15 @@ func (t *TileManager) Draw(w fractal.Writer) (err error) {
 	return
 }
 
-func (t *TileManager) Height() int {
+func (t *TileNode) Height() int {
 	return t.height
 }
 
-func (t *TileManager) Width() int {
+func (t *TileNode) Width() int {
 	return t.width
 }
 
-func (t *TileManager) Position() (int, int) {
+func (t *TileNode) Position() (int, int) {
 	return t.pos.X, t.pos.Y
 }
 
@@ -181,7 +182,7 @@ func (t *Tile) Position() (int, int) {
 	return t.content.Position()
 }
 
-func (t *TileManager) childIdx(comp linkedComponent) int {
+func (t *TileNode) childIdx(comp linkedComponent) int {
 	for i, t := range t.children {
 		if t == comp {
 			return i
@@ -191,17 +192,26 @@ func (t *TileManager) childIdx(comp linkedComponent) int {
 	panic("corrupt node: window already closed or tile does not belong to this node")
 }
 
-func (m *TileManager) split(tw *Tile, direction splitdir, content fractal.Component) (t *Tile, err error) {
+func (m *TileNode) split(tw *Tile, direction splitdir, content fractal.Component) (t *Tile, err error) {
 	if tw == nil {
 		panic("trying to split a nil tile")
 	}
 
 	node := tw.parent
 	t = newTile(content)
+	i := node.childIdx(tw)
 
 	if node.direction == direction {
 		t.parent = node
-		node.children = append(node.children, t)
+		target := i + 1 // target position
+
+		if target == len(node.children) {
+			node.children = append(node.children, t)
+		} else {
+			node.children = append(node.children, nil)
+			copy(node.children[target+1:], node.children[target:])
+			node.children[target] = t
+		}
 		err = node.Resize(node.width, node.height)
 		return
 	}
@@ -209,11 +219,10 @@ func (m *TileManager) split(tw *Tile, direction splitdir, content fractal.Compon
 	x, y := tw.Position()
 	// substitute tile we are splitting over for a node
 	// which will contain the current tile and a new one
-	nnode := newNode(direction, node, tw, x, y, tw.Width(), tw.Height())
+	nnode := newTileNode(direction, node, tw, x, y, tw.Width(), tw.Height())
 	nnode.children = append(nnode.children, t)
 	t.parent = nnode
 
-	i := node.childIdx(tw)
 	node.children[i] = nnode
 	tw.parent = nnode
 	err = nnode.Resize(nnode.width, nnode.height)
@@ -252,10 +261,117 @@ func (tw *Tile) Close() (err error) {
 	return node.Resize(node.width, node.height)
 }
 
-func (m *TileManager) SplitVertical(tw *Tile, content fractal.Component) (*Tile, error) {
+func (m *TileNode) SplitVertical(tw *Tile, content fractal.Component) (*Tile, error) {
 	return m.split(tw, vertical, content)
 }
 
-func (m *TileManager) SplitHorizontal(tw *Tile, content fractal.Component) (*Tile, error) {
+func (m *TileNode) SplitHorizontal(tw *Tile, content fractal.Component) (*Tile, error) {
 	return m.split(tw, horizontal, content)
+}
+
+func (t *Tile) Content() fractal.Component {
+	return t.content
+}
+
+// LeftMostTile will return the left-most tile in the node
+// if node's split is horizontal, or the top-most tile if the node's split is vertical
+func (t *TileNode) LeftMostTile() *Tile {
+	if len(t.children) == 0 {
+		return nil
+	}
+
+	if tile, ok := t.children[0].(*Tile); ok {
+		return tile
+	}
+
+	return t.children[0].(*TileNode).LeftMostTile()
+}
+
+// RightMostTile will return the right-most tile in the node
+// if node's split is horizontal, or the bottom-most tile if the node's split is vertical
+func (t *TileNode) RightMostTile() *Tile {
+	len := len(t.children)
+	if len == 0 {
+		return nil
+	}
+
+	idx := len - 1
+	if tile, ok := t.children[idx].(*Tile); ok {
+		return tile
+	}
+
+	return t.children[idx].(*TileNode).RightMostTile()
+}
+
+func (t *TileNode) getParent() *TileNode {
+	return t.parent
+}
+
+func (t *Tile) getParent() *TileNode {
+	return t.parent
+}
+
+func tileLeftDir(l linkedComponent, direction splitdir) *Tile {
+	node := l.getParent()
+
+	if node == nil {
+		return nil
+	}
+
+	i := node.childIdx(l)
+	if i == 0 {
+		return tileLeftDir(node, direction)
+	}
+
+	if node.direction == direction {
+		link := node.children[i-1]
+
+		if t, ok := link.(*Tile); ok {
+			return t
+		}
+
+		return link.(*TileNode).RightMostTile()
+	}
+
+	return tileLeftDir(node, direction)
+}
+
+func tileRightDir(l linkedComponent, direction splitdir) *Tile {
+	node := l.getParent()
+	if node == nil {
+		return nil
+	}
+
+	i := node.childIdx(l)
+	if i == len(node.children)-1 {
+		return tileRightDir(node, direction)
+	}
+
+	if node.direction == direction {
+		link := node.children[i+1]
+
+		if t, ok := link.(*Tile); ok {
+			return t
+		}
+
+		return link.(*TileNode).LeftMostTile()
+	}
+
+	return tileRightDir(node, direction)
+}
+
+func (t *Tile) TileLeft() *Tile {
+	return tileLeftDir(t, vertical)
+}
+
+func (t *Tile) TileRight() *Tile {
+	return tileRightDir(t, vertical)
+}
+
+func (t *Tile) TileUp() *Tile {
+	return tileLeftDir(t, horizontal)
+}
+
+func (t *Tile) TileDown() *Tile {
+	return tileRightDir(t, horizontal)
 }
