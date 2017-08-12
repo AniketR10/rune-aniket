@@ -381,3 +381,20 @@ func NewLess(content string, handler LessHandler, cfg *LessConfig) (*Less, error
 
 	return l, nil
 }
+
+func (l *Less) Man() string {
+	return `
+q: exit
+j: scroll down
+k: scroll up
+l: scroll right
+h: scroll left
+/: enter search mode
+G: scroll to end of file
+g: scroll to start of file
+$: scroll to end of line
+0: scroll to start of line
+n: scroll to next search result
+n: scroll to prev search result
+`
+}

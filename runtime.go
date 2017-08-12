@@ -50,6 +50,8 @@ func run(root Handler, termw Writer) (err error) {
 		return err
 	}
 
+	termbox.SetInputMode(termbox.InputAlt)
+
 	var exit bool
 
 	go func() {

@@ -33,23 +33,24 @@ type Tile struct {
 	parent  *TileNode
 }
 
-func NewTileNode(width, height, x, y int, content fractal.Component) (m *TileNode, root *Tile, err error) {
-	root = newTile(content)
-	m = newTileNode(vertical, nil, root, x, y, width, height)
-	root.parent = m
-	m.width = width
-	m.height = height
-
-	return m, root, m.Resize(width, height)
+func (t *TileNode) Init(width, height, x, y int, content fractal.Component) (*Tile, error) {
+	root := newTile(content)
+	t.initNode(vertical, nil, root, x, y, width, height)
+	root.parent = t
+	return root, t.Resize(width, height)
 }
 
-func newTileNode(direction splitdir, parent *TileNode, w *Tile, x, y, width, height int) (t *TileNode) {
-	t = new(TileNode)
+func NewTileNode(width, height, x, y int, content fractal.Component) (*TileNode, *Tile, error) {
+	t := new(TileNode)
+	root, err := t.Init(width, height, x, y, content)
+	return t, root, err
+}
+
+func (t *TileNode) initNode(direction splitdir, parent *TileNode, w *Tile, x, y, width, height int) {
 	t.pos.X, t.pos.Y, t.width, t.height = x, y, width, height
 	t.children = []linkedComponent{w}
 	t.direction = direction
 	t.parent = parent
-	return
 }
 
 func newTile(content fractal.Component) (t *Tile) {
@@ -219,7 +220,8 @@ func (m *TileNode) split(tw *Tile, direction splitdir, content fractal.Component
 	x, y := tw.Position()
 	// substitute tile we are splitting over for a node
 	// which will contain the current tile and a new one
-	nnode := newTileNode(direction, node, tw, x, y, tw.Width(), tw.Height())
+	nnode := new(TileNode)
+	nnode.initNode(direction, node, tw, x, y, tw.Width(), tw.Height())
 	nnode.children = append(nnode.children, t)
 	t.parent = nnode
 
@@ -319,21 +321,17 @@ func tileLeftDir(l linkedComponent, direction splitdir) *Tile {
 	}
 
 	i := node.childIdx(l)
-	if i == 0 {
+	if i == 0 || node.direction != direction {
 		return tileLeftDir(node, direction)
 	}
 
-	if node.direction == direction {
-		link := node.children[i-1]
+	link := node.children[i-1]
 
-		if t, ok := link.(*Tile); ok {
-			return t
-		}
-
-		return link.(*TileNode).RightMostTile()
+	if t, ok := link.(*Tile); ok {
+		return t
 	}
 
-	return tileLeftDir(node, direction)
+	return link.(*TileNode).RightMostTile()
 }
 
 func tileRightDir(l linkedComponent, direction splitdir) *Tile {
@@ -343,21 +341,17 @@ func tileRightDir(l linkedComponent, direction splitdir) *Tile {
 	}
 
 	i := node.childIdx(l)
-	if i == len(node.children)-1 {
+	if i == len(node.children)-1 || node.direction != direction {
 		return tileRightDir(node, direction)
 	}
 
-	if node.direction == direction {
-		link := node.children[i+1]
+	link := node.children[i+1]
 
-		if t, ok := link.(*Tile); ok {
-			return t
-		}
-
-		return link.(*TileNode).LeftMostTile()
+	if t, ok := link.(*Tile); ok {
+		return t
 	}
 
-	return tileRightDir(node, direction)
+	return link.(*TileNode).LeftMostTile()
 }
 
 func (t *Tile) TileLeft() *Tile {
@@ -374,4 +368,8 @@ func (t *Tile) TileUp() *Tile {
 
 func (t *Tile) TileDown() *Tile {
 	return tileRightDir(t, horizontal)
+}
+
+func (t *TileNode) Len() int {
+	return len(t.children)
 }

@@ -30,6 +30,11 @@ type Cell struct {
 	Ch     rune
 }
 
+type Help struct {
+	Summary int
+	Keys    int
+}
+
 type Handler interface {
 	Component
 	// TODO custom key event
@@ -37,6 +42,7 @@ type Handler interface {
 	GetCursor() Coordinates
 	GetAttr() (fg termbox.Attribute, bg termbox.Attribute)
 	IsActive() bool
+	Man() string
 }
 
 func Channel() <-chan termbox.Event {
