@@ -368,6 +368,14 @@ func (t *Tile) TileDown() *Tile {
 	return tileRightDir(t, horizontal)
 }
 
-func (t *TileNode) Len() int {
-	return len(t.children)
+func (t *TileNode) Len() (len int) {
+	for _, c := range t.children {
+		if _, ok := c.(*Tile); ok {
+			len++
+		} else {
+			len += c.(*TileNode).Len()
+		}
+	}
+
+	return
 }

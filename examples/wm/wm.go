@@ -10,6 +10,8 @@ import (
 	"github.com/ernestrc/fractal"
 )
 
+const border = true
+
 func readFile(f io.Reader) (string, error) {
 	var buf bytes.Buffer
 	if _, err := buf.ReadFrom(f); err != nil {
@@ -62,7 +64,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	wm, _ = fractal.NewWindowManager(l1)
+	wm, _ = fractal.NewWindowManager(l1, border)
 
 	if _, err = wm.SplitHorizontal(l2); err != nil {
 		log.Fatal(err)

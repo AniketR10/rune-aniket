@@ -74,6 +74,12 @@ func setupTestCase(t *testing.T, gwidth, gheight int) (m *TileNode, root *Tile, 
 
 	return
 }
+func TestLen(t *testing.T) {
+	m, _, _, _ := setupTestCase(t, 100, 100)
+	if len := m.Len(); len != 3 {
+		t.Errorf("len should be 3; found: %d", len)
+	}
+}
 
 func TestNeighbours(t *testing.T) {
 	m, root, w1, w2 := setupTestCase(t, 100, 100)

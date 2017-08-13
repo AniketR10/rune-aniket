@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-func moveEvent(ch rune) termbox.Event {
+func altEvent(ch rune) termbox.Event {
 	return termbox.Event{
 		Type: termbox.EventKey,
 		Mod:  termbox.ModAlt,
@@ -13,10 +13,10 @@ func moveEvent(ch rune) termbox.Event {
 	}
 }
 
-func prepareTest() (*StringWriter, *Tile, *WindowManager) {
+func prepareTest(border bool, root Handler) (*StringWriter, *Tile, *WindowManager) {
 	width, height := 8, 4
 	writer := NewStringWriter(width, height)
-	handler, tile := NewWindowManager(NewTestHandler())
+	handler, tile := NewWindowManager(root, border)
 
 	err := handler.Resize(width, height)
 	if err != nil {
@@ -27,7 +27,7 @@ func prepareTest() (*StringWriter, *Tile, *WindowManager) {
 }
 
 func TestWindowManagerSetFocus(t *testing.T) {
-	_, left, handler := prepareTest()
+	_, left, handler := prepareTest(false, NewTestHandler())
 	right, err := handler.SplitHorizontal(NewTestHandler())
 
 	if err != nil {
@@ -47,20 +47,24 @@ func TestWindowManagerSetFocus(t *testing.T) {
 
 // TestHandler signals that it's handling event by incrementing it's fill rune
 func TestWindowManagerHandle(t *testing.T) {
-	writer, topleft, handler := prepareTest()
+	topLeftHandler := NewTestHandler()
+	writer, topleft, handler := prepareTest(false, topLeftHandler)
 
-	bottomleft, err := handler.SplitHorizontal(NewTestHandler())
+	bottomLeftHandler := NewTestHandler()
+	bottomleft, err := handler.SplitHorizontal(bottomLeftHandler)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	_, err2 := handler.SplitVertical(NewTestHandler())
+	topRightHandler := NewTestHandler()
+	_, err2 := handler.SplitVertical(topRightHandler)
 	if err2 != nil {
 		t.Fatal(err2)
 	}
 
 	handler.SetFocus(bottomleft)
-	_, err3 := handler.SplitVertical(NewTestHandler())
+	bottomRightHandler := NewTestHandler()
+	_, err3 := handler.SplitVertical(bottomRightHandler)
 	if err3 != nil {
 		t.Fatal(err3)
 	}
@@ -76,7 +80,7 @@ AAAAAAAA
 AAAAAAAA`,
 		},
 		{
-			moveEvent('l'), `
+			altEvent('l'), `
 BBBBAAAA
 BBBBAAAA
 AAAAAAAA
@@ -90,7 +94,7 @@ AAAAAAAA
 AAAAAAAA`,
 		},
 		{
-			moveEvent('l'), `
+			altEvent('l'), `
 BBBBBBBB
 BBBBBBBB
 AAAAAAAA
@@ -104,7 +108,7 @@ AAAAAAAA
 AAAAAAAA`,
 		},
 		{
-			moveEvent('h'), `
+			altEvent('h'), `
 BBBBCCCC
 BBBBCCCC
 AAAAAAAA
@@ -118,7 +122,7 @@ AAAAAAAA
 AAAAAAAA`,
 		},
 		{
-			moveEvent('j'), `
+			altEvent('j'), `
 CCCCCCCC
 CCCCCCCC
 AAAAAAAA
@@ -126,19 +130,19 @@ AAAAAAAA`,
 		},
 		{
 			termbox.Event{}, `
-CCCCCCCC
-CCCCCCCC
-BBBBAAAA
-BBBBAAAA`,
-		},
-		{
-			moveEvent('l'), `
 CCCCCCCC
 CCCCCCCC
 BBBBAAAA
 BBBBAAAA`,
 		},
 		{
+			altEvent('l'), `
+CCCCCCCC
+CCCCCCCC
+BBBBAAAA
+BBBBAAAA`,
+		},
+		{
 			termbox.Event{}, `
 CCCCCCCC
 CCCCCCCC
@@ -146,18 +150,147 @@ BBBBBBBB
 BBBBBBBB`,
 		},
 		{
-			moveEvent('k'), `
+			termbox.Event{}, `
 CCCCCCCC
 CCCCCCCC
-BBBBBBBB
-BBBBBBBB`,
+BBBBCCCC
+BBBBCCCC`,
+		},
+		{
+			altEvent('k'), `
+CCCCCCCC
+CCCCCCCC
+BBBBCCCC
+BBBBCCCC`,
 		},
 		{
 			termbox.Event{}, `
 CCCCDDDD
 CCCCDDDD
-BBBBBBBB
-BBBBBBBB`,
+BBBBCCCC
+BBBBCCCC`,
+		},
+	}
+
+	testHandlerWorkflow(t, handler, cases, writer)
+
+	topRightHandler.Exit = true
+
+	cases = []handlerTestCase{
+		{
+			// testhandler will return after this event active = false
+			termbox.Event{}, `
+CCCCCCCC
+CCCCCCCC
+BBBBCCCC
+BBBBCCCC`,
+		},
+		{
+			termbox.Event{}, `
+DDDDDDDD
+DDDDDDDD
+BBBBCCCC
+BBBBCCCC`,
+		},
+		{
+			altEvent('j'), `
+DDDDDDDD
+DDDDDDDD
+BBBBCCCC
+BBBBCCCC`,
+		},
+		{
+			altEvent('h'), `
+DDDDDDDD
+DDDDDDDD
+BBBBCCCC
+BBBBCCCC`,
+		},
+		{
+			termbox.Event{}, `
+DDDDDDDD
+DDDDDDDD
+CCCCCCCC
+CCCCCCCC`,
+		},
+		{
+			termbox.Event{}, `
+DDDDDDDD
+DDDDDDDD
+DDDDCCCC
+DDDDCCCC`,
+		},
+	}
+
+	testHandlerWorkflow(t, handler, cases, writer)
+
+	bottomLeftHandler.Exit = true
+
+	cases = []handlerTestCase{
+		{
+			// testhandler will return after this event active = false
+			termbox.Event{}, `
+DDDDDDDD
+DDDDDDDD
+CCCCCCCC
+CCCCCCCC`,
+		},
+		{
+			altEvent('k'), `
+DDDDDDDD
+DDDDDDDD
+CCCCCCCC
+CCCCCCCC`,
+		},
+		{
+			termbox.Event{}, `
+EEEEEEEE
+EEEEEEEE
+CCCCCCCC
+CCCCCCCC`,
+		},
+	}
+
+	testHandlerWorkflow(t, handler, cases, writer)
+
+	topLeftHandler.Exit = true
+
+	cases = []handlerTestCase{
+		{
+			// testhandler will return after this event active = false
+			termbox.Event{}, `
+CCCCCCCC
+CCCCCCCC
+CCCCCCCC
+CCCCCCCC`,
+		},
+		{
+			termbox.Event{}, `
+DDDDDDDD
+DDDDDDDD
+DDDDDDDD
+DDDDDDDD`,
+		},
+		{
+			altEvent('k'), `
+DDDDDDDD
+DDDDDDDD
+DDDDDDDD
+DDDDDDDD`,
+		},
+		{
+			altEvent('l'), `
+DDDDDDDD
+DDDDDDDD
+DDDDDDDD
+DDDDDDDD`,
+		},
+		{
+			termbox.Event{}, `
+EEEEEEEE
+EEEEEEEE
+EEEEEEEE
+EEEEEEEE`,
 		},
 	}
 
