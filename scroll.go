@@ -1,12 +1,11 @@
-package component
+package fractal
 
 import (
 	"bytes"
 	"fmt"
 	"io"
 
-	"github.com/ernestrc/fractal"
-	termbox "termbox"
+	"termbox"
 )
 
 // TODO add alignment
@@ -15,28 +14,28 @@ type Scroll struct {
 	Tabspaces int               // number of spaces to use when expanding tabs
 	ResultsFG termbox.Attribute // foreground attribute for search results
 	ResultsBG termbox.Attribute // background attribute for search results
-	buffer    *fractal.Buffer
-	cells     []fractal.Cell
-	maxoffset fractal.Coordinates
-	offset    fractal.Coordinates
-	position  fractal.Coordinates
+	buffer    *Buffer
+	cells     []Cell
+	maxoffset Coordinates
+	offset    Coordinates
+	position  Coordinates
 	width     int
 	height    int
 }
 
-func NewScroll(buffer *fractal.Buffer, width, height, x, y int) *Scroll {
+func NewScroll(buffer *Buffer, width, height, x, y int) *Scroll {
 	w := new(Scroll)
 	w.Init(buffer, width, height, x, y)
 	return w
 }
 
-func (w *Scroll) Init(buffer *fractal.Buffer, width, height, x, y int) {
+func (w *Scroll) Init(buffer *Buffer, width, height, x, y int) {
 	w.buffer = buffer
 	w.width, w.height = width, height
 	if buffer != nil {
-		w.cells = make([]fractal.Cell, buffer.Len())
+		w.cells = make([]Cell, buffer.Len())
 	} else {
-		w.cells = make([]fractal.Cell, 0)
+		w.cells = make([]Cell, 0)
 	}
 
 	w.Tabspaces = 4
@@ -196,7 +195,7 @@ func (w *Scroll) Width() int {
 	return w.width
 }
 
-func reserve(s []fractal.Cell, capacity int) []fractal.Cell {
+func reserve(s []Cell, capacity int) []Cell {
 	slen := len(s)
 
 	if capacity <= len(s) {
@@ -207,7 +206,7 @@ func reserve(s []fractal.Cell, capacity int) []fractal.Cell {
 		return s[:capacity]
 	}
 
-	n := make([]fractal.Cell, capacity)
+	n := make([]Cell, capacity)
 	copied := copy(n, s)
 	if copied != slen {
 		panic(fmt.Sprintf("copy failed to copy all cells: did=%d; should=%d", copied, slen))
@@ -235,22 +234,22 @@ func (w *Scroll) scan() (err error) {
 			break
 		}
 
-		var cell fractal.Cell
+		var cell Cell
 
 		switch r {
 		case '\n':
 			row++
 			x = 0
-			cell = fractal.Cell{}
+			cell = Cell{}
 		case '\t':
 			x += w.Tabspaces
-			cell = fractal.Cell{}
+			cell = Cell{}
 		default:
-			cell = fractal.Cell{
+			cell = Cell{
 				Fg: w.cells[i].Fg,
 				Bg: w.cells[i].Bg,
 				Ch: r,
-				Coordinates: fractal.Coordinates{
+				Coordinates: Coordinates{
 					X: x,
 					Y: row,
 				},
@@ -262,7 +261,7 @@ func (w *Scroll) scan() (err error) {
 
 		// we want one cell per byte so that search and indexing is natural
 		for ; size > 1; size-- {
-			ncells = append(ncells, fractal.Cell{})
+			ncells = append(ncells, Cell{})
 		}
 
 		if x > columns {
@@ -304,7 +303,7 @@ func (w *Scroll) scan() (err error) {
 	return err
 }
 
-func (w *Scroll) SetBuffer(buf *fractal.Buffer) (orig *fractal.Buffer) {
+func (w *Scroll) SetBuffer(buf *Buffer) (orig *Buffer) {
 	orig = w.buffer
 	w.buffer = buf
 	// TODO should reset the rest of properties
@@ -314,9 +313,9 @@ func (w *Scroll) SetBuffer(buf *fractal.Buffer) (orig *fractal.Buffer) {
 	return
 }
 
-func (w *Scroll) draw(writer fractal.Writer) (err error) {
+func (w *Scroll) draw(writer Writer) (err error) {
 	var x, y int
-	var c fractal.Cell
+	var c Cell
 	xwindow := w.offset.X + w.width
 	ywindow := w.offset.Y + w.height
 	for _, c = range w.cells {
@@ -332,9 +331,9 @@ func (w *Scroll) draw(writer fractal.Writer) (err error) {
 	return nil
 }
 
-func (w *Scroll) wrapdraw(writer fractal.Writer) (err error) {
+func (w *Scroll) wrapdraw(writer Writer) (err error) {
 	var x, y, ywindow int
-	var c fractal.Cell
+	var c Cell
 	xwindow := w.width
 	wraps := 0
 	for _, c = range w.cells {
@@ -358,7 +357,7 @@ func (w *Scroll) wrapdraw(writer fractal.Writer) (err error) {
 	return nil
 }
 
-func (w *Scroll) Draw(writer fractal.Writer) (err error) {
+func (w *Scroll) Draw(writer Writer) (err error) {
 	if w.buffer == nil {
 		return nil
 	}
@@ -376,11 +375,11 @@ func (w *Scroll) Draw(writer fractal.Writer) (err error) {
 
 func (w *Scroll) resetCells() {
 	for i, c := range w.cells {
-		w.cells[i] = fractal.Cell{
+		w.cells[i] = Cell{
 			Fg: 0,
 			Bg: 0,
 			Ch: c.Ch,
-			Coordinates: fractal.Coordinates{
+			Coordinates: Coordinates{
 				X: c.X,
 				Y: c.Y,
 			},
@@ -396,6 +395,6 @@ func (w *Scroll) Search(text string) int {
 	return w.buffer.Search([]byte(text), w.cells, w.ResultsFG, w.ResultsBG)
 }
 
-func (w *Scroll) CellAt(idx int) fractal.Cell {
+func (w *Scroll) CellAt(idx int) Cell {
 	return w.cells[idx]
 }

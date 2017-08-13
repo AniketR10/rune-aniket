@@ -1,4 +1,4 @@
-package handler
+package fractal
 
 // import (
 // 	"bytes"
@@ -10,11 +10,10 @@ package handler
 // 	"syscall"
 // 	"termbox"
 //
-// 	"github.com/ernestrc/fractal"
 // )
 //
 // type Embed struct {
-// 	pos           fractal.Coordinates
+// 	pos           Coordinates
 // 	width, height int
 // 	cmd           *exec.Cmd
 // 	Pty           *os.File
@@ -91,9 +90,9 @@ package handler
 // 	return nil
 // }
 //
-// func (e *Embed) GetCursor() fractal.Coordinates {
+// func (e *Embed) GetCursor() Coordinates {
 // 	// TODO
-// 	return fractal.Coordinates{}
+// 	return Coordinates{}
 // }
 //
 // func (e *Embed) Resize(width, height int) error {
@@ -113,7 +112,7 @@ package handler
 // 	return nil
 // }
 //
-// func (e *Embed) Draw(w fractal.Writer) (err error) {
+// func (e *Embed) Draw(w Writer) (err error) {
 // 	outbuf := termbox.Outbuf()
 // 	outbuf.Reset()
 //

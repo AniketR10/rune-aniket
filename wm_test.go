@@ -1,11 +1,8 @@
-package handler
+package fractal
 
 import (
 	"termbox"
 	"testing"
-
-	"github.com/ernestrc/fractal"
-	"github.com/ernestrc/fractal/component"
 )
 
 func moveEvent(ch rune) termbox.Event {
@@ -16,10 +13,10 @@ func moveEvent(ch rune) termbox.Event {
 	}
 }
 
-func prepareTest() (*fractal.StringWriter, *component.Tile, *WindowManager) {
+func prepareTest() (*StringWriter, *Tile, *WindowManager) {
 	width, height := 8, 4
-	writer := fractal.String(width, height)
-	handler, tile, err := NewWindowManager(NewFillHandler(), width, height, 0, 0)
+	writer := NewStringWriter(width, height)
+	handler, tile, err := NewWindowManager(NewTestHandler(), width, height, 0, 0)
 	if err != nil {
 		panic(err)
 	}
@@ -29,7 +26,7 @@ func prepareTest() (*fractal.StringWriter, *component.Tile, *WindowManager) {
 
 func TestWindowManagerSetFocus(t *testing.T) {
 	_, left, handler := prepareTest()
-	right, err := handler.SplitHorizontal(NewFillHandler())
+	right, err := handler.SplitHorizontal(NewTestHandler())
 
 	if err != nil {
 		t.Fatal(err)
@@ -46,29 +43,29 @@ func TestWindowManagerSetFocus(t *testing.T) {
 	}
 }
 
-// FillHandler signals that it's handling event by incrementing it's fill rune
+// TestHandler signals that it's handling event by incrementing it's fill rune
 func TestWindowManagerHandle(t *testing.T) {
 	writer, topleft, handler := prepareTest()
 
-	bottomleft, err := handler.SplitHorizontal(NewFillHandler())
+	bottomleft, err := handler.SplitHorizontal(NewTestHandler())
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	_, err2 := handler.SplitVertical(NewFillHandler())
+	_, err2 := handler.SplitVertical(NewTestHandler())
 	if err2 != nil {
 		t.Fatal(err2)
 	}
 
 	handler.SetFocus(bottomleft)
-	_, err3 := handler.SplitVertical(NewFillHandler())
+	_, err3 := handler.SplitVertical(NewTestHandler())
 	if err3 != nil {
 		t.Fatal(err3)
 	}
 
 	handler.SetFocus(topleft)
 
-	cases := []testCase{
+	cases := []handlerTestCase{
 		{
 			termbox.Event{}, `
 BBBBAAAA
@@ -162,5 +159,5 @@ BBBBBBBB`,
 		},
 	}
 
-	testWorkflow(t, handler, cases, writer)
+	testHandlerWorkflow(t, handler, cases, writer)
 }

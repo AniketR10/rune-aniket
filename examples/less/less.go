@@ -9,13 +9,12 @@ import (
 	"os"
 
 	"github.com/ernestrc/fractal"
-	"github.com/ernestrc/fractal/handler"
 
 	"termbox"
 )
 
 var (
-	less *handler.Less
+	less *fractal.Less
 )
 
 type ScannerHandler struct {
@@ -43,11 +42,11 @@ func (h ScannerHandler) WriteTo(w io.Writer) (written int64, err error) {
 	return
 }
 
-func (h ScannerHandler) Handle(ev handler.LessEvent) error {
+func (h ScannerHandler) Handle(ev fractal.LessEvent) error {
 	switch ev.Type {
-	case handler.EOF:
+	case fractal.EOF:
 		less.SetMessage("EOF")
-	case handler.Search:
+	case fractal.Search:
 		less.SetMessage("search pattern: %s..", ev.Data)
 	}
 
@@ -76,7 +75,7 @@ func main() {
 
 	}
 
-	config := handler.DefaultLessConfig()
+	config := fractal.DefaultLessConfig()
 	config.Wrap = *wrap
 	if *border {
 		config.ScrollBorder |= termbox.ColorWhite
@@ -88,7 +87,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	if less, err = handler.NewLess(string(initContent.Bytes()), h.Handle, config); err != nil {
+	if less, err = fractal.NewLess(string(initContent.Bytes()), h.Handle, config); err != nil {
 		log.Fatal(err)
 	}
 

@@ -1,9 +1,7 @@
-package component
+package fractal
 
 import (
 	"testing"
-
-	"github.com/ernestrc/fractal"
 )
 
 var fortune = `Love in your heart wasn't put there to stay.
@@ -12,8 +10,8 @@ Love isn't love 'til you give it away.
 
 var fortune_width = 44
 
-func newScroll(tabspaces int, wrap bool, width, height int) (buf *fractal.Buffer, window *Scroll) {
-	buf = &fractal.Buffer{}
+func newScroll(tabspaces int, wrap bool, width, height int) (buf *Buffer, window *Scroll) {
+	buf = &Buffer{}
 	window = NewScroll(buf, width, height, 0, 0)
 	window.Tabspaces = tabspaces
 	window.Wrap = wrap
@@ -43,7 +41,7 @@ func TestScrollscan(t *testing.T) {
 		t.Errorf("max offsets not correct: x: %d shouldbe %d, y: %d should be %d", window.maxoffset.X, xexpt, window.maxoffset.Y, yexpt)
 	}
 
-	var loveL fractal.Cell
+	var loveL Cell
 
 	loveL = window.CellAt(0)
 	if loveL.Y != 0 || loveL.X != 0 || loveL.Ch != 'L' {
@@ -80,7 +78,7 @@ func TestScrollDraw(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	w := fractal.String(width, height)
+	w := NewStringWriter(width, height)
 
 	tests := []struct {
 		action   func()
@@ -103,7 +101,7 @@ func TestScrollDraw(t *testing.T) {
 		{func() { window.Search("Love") }, "Love in \nLove isn"},
 		{window.SeekNextResult, "Love in \nLove isn"},
 		{window.SeekPrevResult, "Love in \nLove isn"},
-		{func() { window.Resize(20, 1); w = fractal.String(20, 1) }, "Love in your heart w"},
+		{func() { window.Resize(20, 1); w = NewStringWriter(20, 1) }, "Love in your heart w"},
 		{func() { window.Search("you") }, "Love in your heart w"},
 		{window.SeekNextResult, "Love in your heart w"},
 		{window.SeekNextResult, " isn't love 'til you"},
@@ -142,7 +140,7 @@ func TestScrollDrawWrap(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	w := fractal.String(width, height)
+	w := NewStringWriter(width, height)
 
 	tests := []testCase{
 		{nil, "Love in \nyour hea"},
@@ -187,7 +185,7 @@ func TestScrollNilBuffer(t *testing.T) {
 // 		t.Fatal(err)
 // 	}
 //
-// 	var loveL fractal.Cell
+// 	var loveL Cell
 // 	var idx int
 //
 // 	idx, loveL = window.Cell(0, 0)

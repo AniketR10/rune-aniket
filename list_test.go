@@ -1,9 +1,7 @@
-package component
+package fractal
 
 import (
 	"testing"
-
-	"github.com/ernestrc/fractal"
 )
 
 func TestNewList(t *testing.T) {
@@ -34,7 +32,7 @@ func TestListDraw(t *testing.T) {
 	l := NewList(1, 8, 4, 0, 0)
 	l2 := NewList(1, 8, 4, 0, 0)
 
-	w := fractal.String(8, 4)
+	w := NewStringWriter(8, 4)
 
 	tests := []testCase{
 		{
@@ -44,13 +42,13 @@ func TestListDraw(t *testing.T) {
         
         `,
 		}, {
-			func() { l.PushBack(&Fill{Ch: 'X'}) }, `
+			func() { l.PushBack(&TestComponent{Ch: 'X'}) }, `
 XXXXXXXX
         
         
         `,
 		}, {
-			func() { l.PushBack(&Fill{Ch: 'Y'}) }, `
+			func() { l.PushBack(&TestComponent{Ch: 'Y'}) }, `
 XXXXXXXX
 YYYYYYYY
         
@@ -68,15 +66,15 @@ YYYYYYYY
         
         `,
 		}, {
-			func() { l.PushFront(&Fill{Ch: 'Z'}) }, `
+			func() { l.PushFront(&TestComponent{Ch: 'Z'}) }, `
 ZZZZZZZZ
 XXXXXXXX
 YYYYYYYY
         `,
 		}, {
 			func() {
-				l2.PushFront(&Fill{Ch: '$'})
-				l2.PushFront(&Fill{Ch: '#'})
+				l2.PushFront(&TestComponent{Ch: '$'})
+				l2.PushFront(&TestComponent{Ch: '#'})
 				l.PushBackList(l2)
 			}, `
 ZZZZZZZZ

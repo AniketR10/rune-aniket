@@ -1,25 +1,23 @@
-package component
+package fractal
 
 import (
 	"termbox"
-
-	"github.com/ernestrc/fractal"
 )
 
 type Frame struct {
-	content         fractal.Component
+	content         Component
 	width, height   int
 	bwidth, bheight int
-	pos             fractal.Coordinates
+	pos             Coordinates
 	Fg, Bg          termbox.Attribute
 }
 
-func NewFrame(content fractal.Component, width, height, x, y int) (f *Frame, err error) {
+func NewFrame(content Component, width, height, x, y int) (f *Frame, err error) {
 	f = new(Frame)
 	return f, f.Init(content, width, height, x, y, termbox.ColorDefault, termbox.ColorDefault)
 }
 
-func (f *Frame) Init(content fractal.Component, width, height, x, y int, fg, bg termbox.Attribute) (err error) {
+func (f *Frame) Init(content Component, width, height, x, y int, fg, bg termbox.Attribute) (err error) {
 	f.Fg, f.Bg = fg, bg
 	f.pos.X, f.pos.Y = x, y
 	f.width, f.height = width, height
@@ -27,7 +25,11 @@ func (f *Frame) Init(content fractal.Component, width, height, x, y int, fg, bg 
 	return f.SetContent(content)
 }
 
-func (f *Frame) SetContent(content fractal.Component) (err error) {
+func (f *Frame) Content() Component {
+	return f.content
+}
+
+func (f *Frame) SetContent(content Component) (err error) {
 	f.content = content
 
 	if err = f.Resize(f.width, f.height); err != nil {
@@ -63,7 +65,7 @@ func (f *Frame) Move(x, y int) error {
 	return f.content.Move(f.pos.X+xoffset, f.pos.Y+yoffset)
 }
 
-func (f *Frame) Draw(w fractal.Writer) (err error) {
+func (f *Frame) Draw(w Writer) (err error) {
 	if f.bwidth == 0 || f.bheight == 0 {
 		return f.content.Draw(w)
 	}

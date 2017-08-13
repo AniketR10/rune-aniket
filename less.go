@@ -1,13 +1,10 @@
-package handler
+package fractal
 
 import (
 	"fmt"
 	"math"
 
 	"termbox"
-
-	"github.com/ernestrc/fractal"
-	"github.com/ernestrc/fractal/component"
 )
 
 type LessConfig struct {
@@ -39,15 +36,15 @@ func DefaultLessConfig() *LessConfig {
 }
 
 type Less struct {
-	cmdScroll    *component.Scroll
-	cmdBuf       fractal.Buffer
-	msgScroll    *component.Scroll
-	msgBuf       fractal.Buffer
-	contScroll   *component.Scroll
-	contBuf      fractal.Buffer
+	cmdScroll    *Scroll
+	cmdBuf       Buffer
+	msgScroll    *Scroll
+	msgBuf       Buffer
+	contScroll   *Scroll
+	contBuf      Buffer
 	mode         mode
 	delEOF       bool
-	pos          fractal.Coordinates
+	pos          Coordinates
 	cursorOffset int
 	height       int
 	width        int
@@ -217,11 +214,11 @@ func (l *Less) SetContent(text string, args ...interface{}) error {
 	return nil
 }
 
-func (l *Less) GetCursor() fractal.Coordinates {
-	return fractal.Coordinates{X: l.pos.X + l.cursorOffset, Y: l.pos.Y + l.height - 1}
+func (l *Less) GetCursor() Coordinates {
+	return Coordinates{X: l.pos.X + l.cursorOffset, Y: l.pos.Y + l.height - 1}
 }
 
-func (l *Less) Draw(w fractal.Writer) (err error) {
+func (l *Less) Draw(w Writer) (err error) {
 	if err = l.contScroll.Draw(w); err != nil {
 		return err
 	}
@@ -316,7 +313,7 @@ func (l *Less) Handle(ev termbox.Event) (exit bool, err error) {
 	return
 }
 
-func (l *Less) setupScroll(w *component.Scroll) {
+func (l *Less) setupScroll(w *Scroll) {
 	w.ResultsFG = l.config.ResFG
 	w.ResultsBG = l.config.ResBG
 	w.Tabspaces, w.Wrap = l.config.Tabspaces, l.config.Wrap
@@ -328,9 +325,9 @@ func (l *Less) Init(content string, handler LessHandler, cfg *LessConfig) (err e
 	} else {
 		l.config = cfg
 	}
-	l.cmdScroll = component.NewScroll(&l.cmdBuf, l.width, l.height, 0, 0)
-	l.msgScroll = component.NewScroll(&l.msgBuf, l.width, l.height, 0, 0)
-	l.contScroll = component.NewScroll(&l.contBuf, l.width, l.height, 0, 0)
+	l.cmdScroll = NewScroll(&l.cmdBuf, l.width, l.height, 0, 0)
+	l.msgScroll = NewScroll(&l.msgBuf, l.width, l.height, 0, 0)
+	l.contScroll = NewScroll(&l.contBuf, l.width, l.height, 0, 0)
 
 	l.setupScroll(l.cmdScroll)
 	l.setupScroll(l.msgScroll)

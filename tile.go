@@ -1,9 +1,7 @@
-package component
+package fractal
 
 import (
 	"fmt"
-
-	"github.com/ernestrc/fractal"
 )
 
 type splitdir uint8
@@ -16,11 +14,11 @@ const (
 type linkedComponent interface {
 	setParent(*TileNode)
 	getParent() *TileNode
-	fractal.Component
+	Component
 }
 
 type TileNode struct {
-	pos       fractal.Coordinates
+	pos       Coordinates
 	width     int
 	height    int
 	children  []linkedComponent
@@ -29,18 +27,18 @@ type TileNode struct {
 }
 
 type Tile struct {
-	content fractal.Component
+	content Component
 	parent  *TileNode
 }
 
-func (t *TileNode) Init(width, height, x, y int, content fractal.Component) (*Tile, error) {
+func (t *TileNode) Init(width, height, x, y int, content Component) (*Tile, error) {
 	root := newTile(content)
 	t.initNode(vertical, nil, root, x, y, width, height)
 	root.parent = t
 	return root, t.Resize(width, height)
 }
 
-func NewTileNode(width, height, x, y int, content fractal.Component) (*TileNode, *Tile, error) {
+func NewTileNode(width, height, x, y int, content Component) (*TileNode, *Tile, error) {
 	t := new(TileNode)
 	root, err := t.Init(width, height, x, y, content)
 	return t, root, err
@@ -53,7 +51,7 @@ func (t *TileNode) initNode(direction splitdir, parent *TileNode, w *Tile, x, y,
 	t.parent = parent
 }
 
-func newTile(content fractal.Component) (t *Tile) {
+func newTile(content Component) (t *Tile) {
 	t = new(Tile)
 	t.content = content
 	return
@@ -137,7 +135,7 @@ func (t *TileNode) Move(x, y int) error {
 	return t.Resize(t.width, t.height)
 }
 
-func (t *TileNode) Draw(w fractal.Writer) (err error) {
+func (t *TileNode) Draw(w Writer) (err error) {
 	for _, ti := range t.children {
 		if err = ti.Draw(w); err != nil {
 			return
@@ -167,7 +165,7 @@ func (t *Tile) Move(x, y int) error {
 	return t.content.Move(x, y)
 }
 
-func (t *Tile) Draw(w fractal.Writer) (err error) {
+func (t *Tile) Draw(w Writer) (err error) {
 	return t.content.Draw(w)
 }
 
@@ -193,7 +191,7 @@ func (t *TileNode) childIdx(comp linkedComponent) int {
 	panic("corrupt node: window already closed or tile does not belong to this node")
 }
 
-func (m *TileNode) split(tw *Tile, direction splitdir, content fractal.Component) (t *Tile, err error) {
+func (m *TileNode) split(tw *Tile, direction splitdir, content Component) (t *Tile, err error) {
 	if tw == nil {
 		panic("trying to split a nil tile")
 	}
@@ -263,15 +261,15 @@ func (tw *Tile) Close() (err error) {
 	return node.Resize(node.width, node.height)
 }
 
-func (m *TileNode) SplitVertical(tw *Tile, content fractal.Component) (*Tile, error) {
+func (m *TileNode) SplitVertical(tw *Tile, content Component) (*Tile, error) {
 	return m.split(tw, vertical, content)
 }
 
-func (m *TileNode) SplitHorizontal(tw *Tile, content fractal.Component) (*Tile, error) {
+func (m *TileNode) SplitHorizontal(tw *Tile, content Component) (*Tile, error) {
 	return m.split(tw, horizontal, content)
 }
 
-func (t *Tile) Content() fractal.Component {
+func (t *Tile) Content() Component {
 	return t.content
 }
 

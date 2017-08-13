@@ -1,11 +1,9 @@
-package component
+package fractal
 
 import (
 	"container/list"
 
 	"termbox"
-
-	"github.com/ernestrc/fractal"
 )
 
 const resfg, resbg = termbox.AttrReverse, termbox.AttrReverse
@@ -13,9 +11,9 @@ const resfg, resbg = termbox.AttrReverse, termbox.AttrReverse
 type List struct {
 	elementHeight int
 	width, height int
-	pos           fractal.Coordinates
+	pos           Coordinates
 	offset        int
-	list.List     // list of fractal.Component
+	list.List     // list of Component
 }
 
 func NewList(elementHeight, width, height, x, y int) (l *List) {
@@ -82,9 +80,9 @@ func (l *List) SeekStart() {
 
 func (l *List) Resize(width, height int) (err error) {
 	l.width, l.height = width, height
-	var comp fractal.Component
+	var comp Component
 	for i, el := 0, l.Front(); el != nil; el, i = el.Next(), i+1 {
-		comp = el.Value.(fractal.Component)
+		comp = el.Value.(Component)
 		if err = comp.Resize(l.width, l.elementHeight); err != nil {
 			return
 		}
@@ -102,7 +100,7 @@ func (l *List) Move(x, y int) (err error) {
 	return l.Resize(l.width, l.height)
 }
 
-func (l *List) Draw(w fractal.Writer) (err error) {
+func (l *List) Draw(w Writer) (err error) {
 	// API exposes internal list so we need
 	// to make sure that the elements are properly position and sized
 	// before drawing
@@ -116,7 +114,7 @@ func (l *List) Draw(w fractal.Writer) (err error) {
 		if i < l.offset {
 			continue
 		}
-		if err = el.Value.(fractal.Component).Draw(w); err != nil {
+		if err = el.Value.(Component).Draw(w); err != nil {
 			return
 		}
 	}

@@ -1,20 +1,18 @@
-package component
+package fractal
 
 import (
 	"testing"
-
-	"github.com/ernestrc/fractal"
 )
 
 func TestNewFrame(t *testing.T) {
-	u := &Fill{Ch: '*'}
+	u := &TestComponent{Ch: '*'}
 	f, err := NewFrame(u, 8, 4, 1, 1)
 
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if f.content.(*Fill) != u {
+	if f.Content().(*TestComponent) != u {
 		t.Errorf("did not set content correctly")
 	}
 
@@ -28,14 +26,14 @@ func TestNewFrame(t *testing.T) {
 }
 
 func TestDrawFrame(t *testing.T) {
-	u := &Fill{Ch: 'X'}
+	u := &TestComponent{Ch: 'X'}
 	f, err := NewFrame(u, 8, 4, 0, 0)
 
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	w := fractal.String(9, 5)
+	w := NewStringWriter(9, 5)
 
 	tests := []testCase{
 		{
@@ -46,7 +44,7 @@ func TestDrawFrame(t *testing.T) {
 └──────┘ 
          `,
 		}, {
-			func() { f.SetContent(&Fill{Ch: '*'}) }, `
+			func() { f.SetContent(&TestComponent{Ch: '*'}) }, `
 ┌──────┐ 
 │******│ 
 │******│ 
@@ -67,7 +65,7 @@ func TestDrawFrame(t *testing.T) {
     └──┘ 
          `,
 		}, {
-			func() { f.SetContent(&Fill{Ch: 'T'}) }, `
+			func() { f.SetContent(&TestComponent{Ch: 'T'}) }, `
     ┌──┐ 
     │TT│ 
     │TT│ 

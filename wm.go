@@ -1,19 +1,16 @@
-package handler
+package fractal
 
 import (
 	"termbox"
-
-	"github.com/ernestrc/fractal"
-	"github.com/ernestrc/fractal/component"
 )
 
 type WindowManager struct {
-	component.TileNode
-	focus *component.Tile
+	TileNode
+	focus *Tile
 	exit  bool
 }
 
-func NewWindowManager(handler fractal.Handler, width, height, x, y int) (wm *WindowManager, tile *component.Tile, err error) {
+func NewWindowManager(handler Handler, width, height, x, y int) (wm *WindowManager, tile *Tile, err error) {
 	wm = new(WindowManager)
 	tile, err = wm.TileNode.Init(width, height, x, y, handler)
 	wm.focus = tile
@@ -60,16 +57,16 @@ func (wm *WindowManager) Handle(ev termbox.Event) (exit bool, err error) {
 	return false, nil
 }
 
-func (wm *WindowManager) SplitVertical(n fractal.Handler) (*component.Tile, error) {
+func (wm *WindowManager) SplitVertical(n Handler) (*Tile, error) {
 	return wm.TileNode.SplitVertical(wm.focus, n)
 }
 
-func (wm *WindowManager) SplitHorizontal(n fractal.Handler) (*component.Tile, error) {
+func (wm *WindowManager) SplitHorizontal(n Handler) (*Tile, error) {
 	return wm.TileNode.SplitHorizontal(wm.focus, n)
 
 }
 
-func (wm *WindowManager) switchFocus(tile *component.Tile) bool {
+func (wm *WindowManager) switchFocus(tile *Tile) bool {
 	if tile == nil {
 		return false
 	}
@@ -94,20 +91,20 @@ func (wm *WindowManager) FocusDown() bool {
 	return wm.switchFocus(wm.focus.TileDown())
 }
 
-func (wm *WindowManager) getFocusHandler() fractal.Handler {
-	return wm.focus.Content().(fractal.Handler)
+func (wm *WindowManager) getFocusHandler() Handler {
+	return wm.focus.Content().(Handler)
 }
 
-func (wm *WindowManager) Focus() *component.Tile {
+func (wm *WindowManager) Focus() *Tile {
 	return wm.focus
 }
 
-func (wm *WindowManager) SetFocus(tile *component.Tile) {
+func (wm *WindowManager) SetFocus(tile *Tile) {
 	wm.focus = tile
 }
 
-func (wm *WindowManager) GetCursor() fractal.Coordinates {
-	return wm.Focus().Content().(fractal.Handler).GetCursor()
+func (wm *WindowManager) GetCursor() Coordinates {
+	return wm.Focus().Content().(Handler).GetCursor()
 }
 
 func (wm *WindowManager) IsActive() bool {

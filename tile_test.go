@@ -1,13 +1,11 @@
-package component
+package fractal
 
 import (
 	"testing"
-
-	"github.com/ernestrc/fractal"
 )
 
 func TestNew(t *testing.T) {
-	m, _, e := NewTileNode(10, 10, 0, 0, &Fill{})
+	m, _, e := NewTileNode(10, 10, 0, 0, &TestComponent{})
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -41,11 +39,11 @@ func TestStackWhenNoSpace(t *testing.T) {
 	width := 1
 	height := 1
 
-	if m, root, e := NewTileNode(width, height, 0, 0, &Fill{}); e != nil {
+	if m, root, e := NewTileNode(width, height, 0, 0, &TestComponent{}); e != nil {
 		t.Fatal(e)
 	} else {
-		w1, _ := m.SplitHorizontal(root, &Fill{})
-		w2, _ := m.SplitVertical(w1, &Fill{})
+		w1, _ := m.SplitHorizontal(root, &TestComponent{})
+		w2, _ := m.SplitVertical(w1, &TestComponent{})
 
 		testScrollSize(t, root, 1, 0)
 		testScrollSize(t, w1, 0, 1)
@@ -60,15 +58,15 @@ func TestStackWhenNoSpace(t *testing.T) {
 func setupTestCase(t *testing.T, gwidth, gheight int) (m *TileNode, root *Tile, w1 *Tile, w2 *Tile) {
 	var e error
 
-	if m, root, e = NewTileNode(gwidth, gheight, 0, 0, &Fill{}); e != nil {
+	if m, root, e = NewTileNode(gwidth, gheight, 0, 0, &TestComponent{}); e != nil {
 		t.Fatal(e)
 	}
 
-	if w1, e = m.SplitHorizontal(root, &Fill{}); e != nil {
+	if w1, e = m.SplitHorizontal(root, &TestComponent{}); e != nil {
 		t.Fatal(e)
 	}
 
-	if w2, e = m.SplitVertical(w1, &Fill{}); e != nil {
+	if w2, e = m.SplitVertical(w1, &TestComponent{}); e != nil {
 		t.Fatal(e)
 	}
 
@@ -118,7 +116,7 @@ func TestNeighbours(t *testing.T) {
 		t.Errorf("%+v vs %+v", w2.TileLeft(), w1)
 	}
 
-	w3, err := m.SplitVertical(w1, &Fill{})
+	w3, err := m.SplitVertical(w1, &TestComponent{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -139,12 +137,12 @@ func TestNeighbours(t *testing.T) {
 		t.Errorf("%+v vs %+v", w3.TileRight(), w2)
 	}
 
-	w4, err2 := m.SplitHorizontal(w3, &Fill{})
+	w4, err2 := m.SplitHorizontal(w3, &TestComponent{})
 	if err2 != nil {
 		t.Fatal(err2)
 	}
 
-	w5, err3 := m.SplitVertical(w4, &Fill{})
+	w5, err3 := m.SplitVertical(w4, &TestComponent{})
 	if err3 != nil {
 		t.Fatal(err3)
 	}
@@ -242,8 +240,8 @@ func TestResizeRounding(t *testing.T) {
 
 func TestTileNodeDraw(t *testing.T) {
 	width, height := 8, 4
-	w := fractal.String(width, height)
-	m, root, err := NewTileNode(width, height, 0, 0, &Fill{Ch: 'A'})
+	w := NewStringWriter(width, height)
+	m, root, err := NewTileNode(width, height, 0, 0, &TestComponent{Ch: 'A'})
 
 	var m1 *Tile
 	var m2 *Tile
@@ -264,37 +262,37 @@ AAAAAAAA
 AAAAAAAA
 AAAAAAAA`,
 		}, {
-			func() { m1, err = m.SplitVertical(root, &Fill{Ch: 'B'}) }, `
+			func() { m1, err = m.SplitVertical(root, &TestComponent{Ch: 'B'}) }, `
 AAAABBBB
 AAAABBBB
 AAAABBBB
 AAAABBBB`,
 		}, {
-			func() { m2, err = m.SplitVertical(m1, &Fill{Ch: 'C'}) }, `
+			func() { m2, err = m.SplitVertical(m1, &TestComponent{Ch: 'C'}) }, `
 AABBBCCC
 AABBBCCC
 AABBBCCC
 AABBBCCC`,
 		}, {
-			func() { m3, err = m.SplitVertical(m2, &Fill{Ch: 'D'}) }, `
+			func() { m3, err = m.SplitVertical(m2, &TestComponent{Ch: 'D'}) }, `
 AABBCCDD
 AABBCCDD
 AABBCCDD
 AABBCCDD`,
 		}, {
-			func() { m4, err = m.SplitVertical(m3, &Fill{Ch: 'E'}) }, `
+			func() { m4, err = m.SplitVertical(m3, &TestComponent{Ch: 'E'}) }, `
 ABCCDDEE
 ABCCDDEE
 ABCCDDEE
 ABCCDDEE`,
 		}, {
-			func() { m5, err = m.SplitHorizontal(m4, &Fill{Ch: 'X'}) }, `
+			func() { m5, err = m.SplitHorizontal(m4, &TestComponent{Ch: 'X'}) }, `
 ABCCDDEE
 ABCCDDEE
 ABCCDDXX
 ABCCDDXX`,
 		}, {
-			func() { m6, err = m.SplitHorizontal(m2, &Fill{Ch: 'Z'}) }, `
+			func() { m6, err = m.SplitHorizontal(m2, &TestComponent{Ch: 'Z'}) }, `
 ABCCDDEE
 ABCCDDEE
 ABZZDDXX
@@ -324,7 +322,7 @@ ZZDDDEEE
 ZZDDDEEE
 ZZDDDEEE`,
 		}, {
-			func() { m1, err = m.SplitHorizontal(m3, &Fill{Ch: 'A'}) }, `
+			func() { m1, err = m.SplitHorizontal(m3, &TestComponent{Ch: 'A'}) }, `
 ZZDDDEEE
 ZZDDDEEE
 ZZAAAEEE
@@ -348,13 +346,13 @@ ZZZZZZZZ
 ZZZZZZZZ
 ZZZZZZZZ`,
 		}, {
-			func() { m1, err = m.SplitHorizontal(m6, &Fill{Ch: 'Y'}) }, `
+			func() { m1, err = m.SplitHorizontal(m6, &TestComponent{Ch: 'Y'}) }, `
 ZZZZZZZZ
 ZZZZZZZZ
 YYYYYYYY
 YYYYYYYY`,
 		}, {
-			func() { m2, err = m.SplitVertical(m1, &Fill{Ch: 'X'}) }, `
+			func() { m2, err = m.SplitVertical(m1, &TestComponent{Ch: 'X'}) }, `
 ZZZZZZZZ
 ZZZZZZZZ
 YYYYXXXX
@@ -380,7 +378,7 @@ YYXX`,
 XXXX
 XXXX`,
 		}, {
-			func() { _, err = m.SplitVertical(m2, &Fill{Ch: 'Z'}) }, `
+			func() { _, err = m.SplitVertical(m2, &TestComponent{Ch: 'Z'}) }, `
 XXZZ
 XXZZ`,
 		}, {
@@ -390,7 +388,7 @@ XXXXZZZZ
 XXXXZZZZ
 XXXXZZZZ`,
 		}, {
-			func() { _, err = m.SplitVertical(m2, &Fill{Ch: 'I'}) }, `
+			func() { _, err = m.SplitVertical(m2, &TestComponent{Ch: 'I'}) }, `
 XXIIIZZZ
 XXIIIZZZ
 XXIIIZZZ

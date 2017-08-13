@@ -4,12 +4,11 @@ import (
 	"log"
 
 	"github.com/ernestrc/fractal"
-	"github.com/ernestrc/fractal/handler"
 )
 
 func main() {
 	var err error
-	var wm *handler.WindowManager
+	var wm *fractal.WindowManager
 
 	if err = fractal.Init(); err != nil {
 		log.Fatal(err)
@@ -19,22 +18,22 @@ func main() {
 
 	width, height := fractal.Size()
 
-	wm, _, err = handler.NewWindowManager(handler.NewFillHandler(), width, height, 0, 0)
+	wm, _, err = fractal.NewWindowManager(fractal.NewTestHandler(), width, height, 0, 0)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	if _, err = wm.SplitHorizontal(handler.NewFillHandler()); err != nil {
+	if _, err = wm.SplitHorizontal(fractal.NewTestHandler()); err != nil {
 		log.Fatal(err)
 	}
 
-	if _, err = wm.SplitVertical(handler.NewFillHandler()); err != nil {
+	if _, err = wm.SplitVertical(fractal.NewTestHandler()); err != nil {
 		log.Fatal(err)
 	}
 
 	wm.FocusDown()
 
-	if _, err = wm.SplitVertical(handler.NewFillHandler()); err != nil {
+	if _, err = wm.SplitVertical(fractal.NewTestHandler()); err != nil {
 		log.Fatal(err)
 	}
 

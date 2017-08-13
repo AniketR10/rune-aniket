@@ -1,12 +1,9 @@
-package handler
+package fractal
 
 import (
 	"fmt"
 
 	"termbox"
-
-	"github.com/ernestrc/fractal"
-	"github.com/ernestrc/fractal/component"
 )
 
 type ViMode uint8
@@ -21,7 +18,7 @@ const (
 
 // Vi basic edit window
 type Vi struct {
-	component.Scroll
+	Scroll
 	mode   ViMode
 	cursor cursorHelper
 	// TODO clipboard fractal.Clipboard
@@ -124,18 +121,18 @@ func (vi *Vi) handleVisualBlock(ev *termbox.Event) (bool, error) {
 	return false, nil
 }
 
-func NewVi(buf *fractal.Buffer, width, height, x, y int) *Vi {
+func NewVi(buf *Buffer, width, height, x, y int) *Vi {
 	vi := new(Vi)
 	vi.Init(buf, width, height, x, y)
 	return vi
 }
 
-func (vi *Vi) Init(buf *fractal.Buffer, width, height, x, y int) {
+func (vi *Vi) Init(buf *Buffer, width, height, x, y int) {
 	vi.Scroll.Init(buf, width, height, x, y)
 	vi.SetNormalMode()
 }
 
-func (vi *Vi) SetBuffer(buf *fractal.Buffer) *fractal.Buffer {
+func (vi *Vi) SetBuffer(buf *Buffer) *Buffer {
 	vi.SetNormalMode()
 	return vi.Scroll.SetBuffer(buf)
 }

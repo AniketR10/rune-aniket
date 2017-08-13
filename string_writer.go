@@ -12,7 +12,7 @@ type StringWriter struct {
 	width, height int
 }
 
-func String(width, height int) (t *StringWriter) {
+func NewStringWriter(width, height int) (t *StringWriter) {
 	t = new(StringWriter)
 	t.Resize(width, height)
 	return
