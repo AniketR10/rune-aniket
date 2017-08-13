@@ -11,9 +11,9 @@ type WindowManager struct {
 	exit  bool
 }
 
-func NewWindowManager(handler Handler, width, height, x, y int) (wm *WindowManager, tile *Tile, err error) {
+func NewWindowManager(handler Handler) (wm *WindowManager, tile *Tile) {
 	wm = new(WindowManager)
-	tile, err = wm.TileNode.Init(width, height, x, y, handler)
+	tile = wm.TileNode.Init(handler)
 	wm.focus = tile
 	return
 }

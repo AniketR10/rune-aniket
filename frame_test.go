@@ -5,10 +5,15 @@ import (
 )
 
 func TestNewFrame(t *testing.T) {
+	var err error
 	u := &TestComponent{Ch: '*'}
-	f, err := NewFrame(u, 8, 4, 1, 1)
+	f := NewFrame(u, 0, 0)
 
-	if err != nil {
+	if err = f.Move(1, 1); err != nil {
+		t.Fatal(err)
+	}
+
+	if err = f.Resize(8, 4); err != nil {
 		t.Fatal(err)
 	}
 
@@ -27,9 +32,9 @@ func TestNewFrame(t *testing.T) {
 
 func TestDrawFrame(t *testing.T) {
 	u := &TestComponent{Ch: 'X'}
-	f, err := NewFrame(u, 8, 4, 0, 0)
+	f := NewFrame(u, 0, 0)
 
-	if err != nil {
+	if err := f.Resize(8, 4); err != nil {
 		t.Fatal(err)
 	}
 

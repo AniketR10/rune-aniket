@@ -16,9 +16,9 @@ type List struct {
 	list.List     // list of Component
 }
 
-func NewList(elementHeight, width, height, x, y int) (l *List) {
+func NewList(elementHeight int) (l *List) {
 	l = new(List)
-	l.Init(elementHeight, width, height, x, y)
+	l.Init(elementHeight)
 	return l
 }
 
@@ -26,12 +26,11 @@ func (l *List) Reset() {
 	l.List.Init()
 }
 
-func (l *List) Init(elementHeight, width, height, x, y int) {
+func (l *List) Init(elementHeight int) {
 	if elementHeight <= 0 {
 		panic("element height cannot be smaller than or equal to 0")
 	}
 	l.elementHeight = elementHeight
-	l.width, l.height, l.pos.X, l.pos.Y = width, height, x, y
 	l.List.Init()
 }
 

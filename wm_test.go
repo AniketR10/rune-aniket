@@ -16,7 +16,9 @@ func moveEvent(ch rune) termbox.Event {
 func prepareTest() (*StringWriter, *Tile, *WindowManager) {
 	width, height := 8, 4
 	writer := NewStringWriter(width, height)
-	handler, tile, err := NewWindowManager(NewTestHandler(), width, height, 0, 0)
+	handler, tile := NewWindowManager(NewTestHandler())
+
+	err := handler.Resize(width, height)
 	if err != nil {
 		panic(err)
 	}

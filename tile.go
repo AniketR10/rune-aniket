@@ -31,17 +31,17 @@ type Tile struct {
 	parent  *TileNode
 }
 
-func (t *TileNode) Init(width, height, x, y int, content Component) (*Tile, error) {
+func (t *TileNode) Init(content Component) *Tile {
 	root := newTile(content)
-	t.initNode(vertical, nil, root, x, y, width, height)
+	t.initNode(vertical, nil, root, 0, 0, 0, 0)
 	root.parent = t
-	return root, t.Resize(width, height)
+	return root
 }
 
-func NewTileNode(width, height, x, y int, content Component) (*TileNode, *Tile, error) {
+func NewTileNode(content Component) (*TileNode, *Tile) {
 	t := new(TileNode)
-	root, err := t.Init(width, height, x, y, content)
-	return t, root, err
+	root := t.Init(content)
+	return t, root
 }
 
 func (t *TileNode) initNode(direction splitdir, parent *TileNode, w *Tile, x, y, width, height int) {

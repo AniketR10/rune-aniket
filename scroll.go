@@ -23,15 +23,14 @@ type Scroll struct {
 	height    int
 }
 
-func NewScroll(buffer *Buffer, width, height, x, y int) *Scroll {
+func NewScroll(buffer *Buffer) *Scroll {
 	w := new(Scroll)
-	w.Init(buffer, width, height, x, y)
+	w.Init(buffer)
 	return w
 }
 
-func (w *Scroll) Init(buffer *Buffer, width, height, x, y int) {
+func (w *Scroll) Init(buffer *Buffer) {
 	w.buffer = buffer
-	w.width, w.height = width, height
 	if buffer != nil {
 		w.cells = make([]Cell, buffer.Len())
 	} else {

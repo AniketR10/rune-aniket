@@ -5,7 +5,15 @@ import (
 )
 
 func TestNewList(t *testing.T) {
-	l := NewList(1, 8, 4, 1, 1)
+	l := NewList(1)
+
+	if err := l.Resize(8, 4); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := l.Move(1, 1); err != nil {
+		l.Move(1, 1)
+	}
 
 	if l.ElementHeight() != 1 || l.Width() != 8 || l.Height() != 4 {
 		t.Errorf("sizes not initialized correctly: %+v", l)
@@ -17,7 +25,14 @@ func TestNewList(t *testing.T) {
 
 	var l2 List
 
-	l2.Init(1, 8, 4, 1, 1)
+	l2.Init(1)
+	if err := l.Resize(8, 4); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := l.Move(1, 1); err != nil {
+		t.Fatal(err)
+	}
 
 	if l.ElementHeight() != 1 || l.Width() != 8 || l.Height() != 4 {
 		t.Errorf("sizes not initialized correctly: %+v", l)
@@ -29,8 +44,16 @@ func TestNewList(t *testing.T) {
 }
 
 func TestListDraw(t *testing.T) {
-	l := NewList(1, 8, 4, 0, 0)
-	l2 := NewList(1, 8, 4, 0, 0)
+	l := NewList(1)
+	l2 := NewList(1)
+
+	if err := l.Resize(8, 4); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := l2.Resize(8, 4); err != nil {
+		t.Fatal(err)
+	}
 
 	w := NewStringWriter(8, 4)
 

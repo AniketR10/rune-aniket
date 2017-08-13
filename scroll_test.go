@@ -12,7 +12,10 @@ var fortune_width = 44
 
 func newScroll(tabspaces int, wrap bool, width, height int) (buf *Buffer, window *Scroll) {
 	buf = &Buffer{}
-	window = NewScroll(buf, width, height, 0, 0)
+	window = NewScroll(buf)
+	if err := window.Resize(width, height); err != nil {
+		panic(err)
+	}
 	window.Tabspaces = tabspaces
 	window.Wrap = wrap
 	return
@@ -204,7 +207,10 @@ DDDDDDDD    `,
 }
 
 func TestScrollNilBuffer(t *testing.T) {
-	scroll := NewScroll(nil, 10, 10, 0, 0)
+	scroll := NewScroll(nil)
+	if err := scroll.Resize(10, 10); err != nil {
+		t.Fatal(err)
+	}
 	scroll.SeekNextResult()
 	scroll.SeekPrevResult()
 	if r := scroll.Search("jfklwjl"); r != 0 {

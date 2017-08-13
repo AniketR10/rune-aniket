@@ -20,12 +20,12 @@ package fractal
 // 	buf           bytes.Buffer
 // }
 //
-// func NewEmbed(x, y, width, height int, cmd *exec.Cmd) (b *Embed, err error) {
+// func NewEmbed(cmd *exec.Cmd) (b *Embed, err error) {
 // 	b = new(Embed)
 // 	return b, b.Init(x, y, width, height, cmd)
 // }
 //
-// func (e *Embed) Init(x, y, width, height int, cmd *exec.Cmd) (err error) {
+// func (e *Embed) Init(cmd *exec.Cmd) (err error) {
 // 	e.pos.X, e.pos.Y, e.width, e.height = x, y, width, height
 // 	e.cmd = cmd
 //

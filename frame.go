@@ -12,17 +12,19 @@ type Frame struct {
 	Fg, Bg          termbox.Attribute
 }
 
-func NewFrame(content Component, width, height, x, y int) (f *Frame, err error) {
+func NewFrame(content Component, fg, bg termbox.Attribute) (f *Frame) {
 	f = new(Frame)
-	return f, f.Init(content, width, height, x, y, termbox.ColorDefault, termbox.ColorDefault)
+	f.Init(content, fg, bg)
+	return
 }
 
-func (f *Frame) Init(content Component, width, height, x, y int, fg, bg termbox.Attribute) (err error) {
+func (f *Frame) Init(content Component, fg, bg termbox.Attribute) {
 	f.Fg, f.Bg = fg, bg
-	f.pos.X, f.pos.Y = x, y
-	f.width, f.height = width, height
+	f.content = content
+}
 
-	return f.SetContent(content)
+func (f *Frame) SetAttr(fg, bg termbox.Attribute) {
+	f.Fg, f.Bg = fg, bg
 }
 
 func (f *Frame) Content() Component {

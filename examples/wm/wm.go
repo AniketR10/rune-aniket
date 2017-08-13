@@ -43,31 +43,26 @@ func main() {
 
 	defer fractal.Close()
 
-	width, height := fractal.Size()
-
 	var wm *fractal.WindowManager
 	var l1, l2, l3, l4 *fractal.Less
 
-	if l1, err = fractal.NewLess(width, height, 0, 0, content, nil, nil); err != nil {
+	if l1, err = fractal.NewLess(content, nil, nil); err != nil {
 		log.Fatal(err)
 	}
 
-	if l2, err = fractal.NewLess(width, height, 0, 0, content, nil, nil); err != nil {
+	if l2, err = fractal.NewLess(content, nil, nil); err != nil {
 		log.Fatal(err)
 	}
 
-	if l3, err = fractal.NewLess(width, height, 0, 0, content, nil, nil); err != nil {
+	if l3, err = fractal.NewLess(content, nil, nil); err != nil {
 		log.Fatal(err)
 	}
 
-	if l4, err = fractal.NewLess(width, height, 0, 0, content, nil, nil); err != nil {
+	if l4, err = fractal.NewLess(content, nil, nil); err != nil {
 		log.Fatal(err)
 	}
 
-	wm, _, err = fractal.NewWindowManager(l1, width, height, 0, 0)
-	if err != nil {
-		log.Fatal(err)
-	}
+	wm, _ = fractal.NewWindowManager(l1)
 
 	if _, err = wm.SplitHorizontal(l2); err != nil {
 		log.Fatal(err)

@@ -329,16 +329,15 @@ func (l *Less) setupScroll(w *Scroll) {
 	w.Tabspaces, w.Wrap = l.config.Tabspaces, l.config.Wrap
 }
 
-func (l *Less) Init(width, height, x, y int, c string, h LessHandler, cfg *LessConfig) (err error) {
-	l.width, l.height, l.pos.X, l.pos.Y = width, height, x, y
+func (l *Less) Init(content string, h LessHandler, cfg *LessConfig) (err error) {
 	if cfg == nil {
 		l.config = DefaultLessConfig()
 	} else {
 		l.config = cfg
 	}
-	l.cmdScroll = NewScroll(&l.cmdBuf, l.width, l.height, l.pos.X, l.pos.Y)
-	l.msgScroll = NewScroll(&l.msgBuf, l.width, l.height, l.pos.X, l.pos.Y)
-	l.contScroll = NewScroll(&l.contBuf, l.width, l.height, l.pos.X, l.pos.Y)
+	l.cmdScroll = NewScroll(&l.cmdBuf)
+	l.msgScroll = NewScroll(&l.msgBuf)
+	l.contScroll = NewScroll(&l.contBuf)
 
 	l.setupScroll(l.cmdScroll)
 	l.setupScroll(l.msgScroll)
@@ -346,8 +345,8 @@ func (l *Less) Init(width, height, x, y int, c string, h LessHandler, cfg *LessC
 
 	l.handler = h
 
-	if c != "" {
-		if _, err = l.contBuf.Write([]byte(c)); err != nil {
+	if content != "" {
+		if _, err = l.contBuf.Write([]byte(content)); err != nil {
 			return
 		}
 	}
@@ -356,17 +355,13 @@ func (l *Less) Init(width, height, x, y int, c string, h LessHandler, cfg *LessC
 		return
 	}
 
-	if err = l.resize(); err != nil {
-		return
-	}
-
 	return
 }
 
-func NewLess(width, height, x, y int, c string, h LessHandler, cfg *LessConfig) (*Less, error) {
+func NewLess(content string, h LessHandler, cfg *LessConfig) (*Less, error) {
 	l := new(Less)
 
-	if err := l.Init(width, height, x, y, c, h, cfg); err != nil {
+	if err := l.Init(content, h, cfg); err != nil {
 		return nil, err
 	}
 

@@ -5,8 +5,8 @@ import (
 )
 
 func TestNew(t *testing.T) {
-	m, _, e := NewTileNode(10, 10, 0, 0, &TestComponent{})
-	if e != nil {
+	m, _ := NewTileNode(&TestComponent{})
+	if e := m.Resize(10, 10); e != nil {
 		t.Fatal(e)
 	}
 
@@ -39,7 +39,8 @@ func TestStackWhenNoSpace(t *testing.T) {
 	width := 1
 	height := 1
 
-	if m, root, e := NewTileNode(width, height, 0, 0, &TestComponent{}); e != nil {
+	m, root := NewTileNode(&TestComponent{})
+	if e := m.Resize(width, height); e != nil {
 		t.Fatal(e)
 	} else {
 		w1, _ := m.SplitHorizontal(root, &TestComponent{})
@@ -58,7 +59,8 @@ func TestStackWhenNoSpace(t *testing.T) {
 func setupTestCase(t *testing.T, gwidth, gheight int) (m *TileNode, root *Tile, w1 *Tile, w2 *Tile) {
 	var e error
 
-	if m, root, e = NewTileNode(gwidth, gheight, 0, 0, &TestComponent{}); e != nil {
+	m, root = NewTileNode(&TestComponent{})
+	if e = m.Resize(gwidth, gheight); e != nil {
 		t.Fatal(e)
 	}
 
@@ -239,9 +241,15 @@ func TestResizeRounding(t *testing.T) {
 }
 
 func TestTileNodeDraw(t *testing.T) {
+	var err error
+
 	width, height := 8, 4
 	w := NewStringWriter(width, height)
-	m, root, err := NewTileNode(width, height, 0, 0, &TestComponent{Ch: 'A'})
+	m, root := NewTileNode(&TestComponent{Ch: 'A'})
+
+	if err = m.Resize(width, height); err != nil {
+		t.Fatal(err)
+	}
 
 	var m1 *Tile
 	var m2 *Tile
