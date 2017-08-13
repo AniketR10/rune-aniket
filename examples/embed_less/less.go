@@ -1,6 +1,5 @@
 package main
 
-//
 // import (
 // 	"fmt"
 // 	"log"
@@ -9,13 +8,13 @@ package main
 // 	"syscall"
 // 	"termbox"
 //
+// 	"github.com/ernestrc/fractal"
 // 	"github.com/ernestrc/fractal/handler"
-// 	"github.com/ernestrc/fractal/writer"
 // )
 //
 // var (
 // 	width, height int
-// 	w             writer.TermboxWriter
+// 	w             fractal.TermboxWriter
 // 	e             handler.Embed
 // )
 //
@@ -41,6 +40,10 @@ package main
 // 	if err = e.Init(0, 0, width, height, c); err != nil {
 // 		log.Fatal(err)
 // 	}
+//
+// 	// TODO if err = fractal.Run(&e); err != nil {
+// 	// TODO 	log.Fatal(err)
+// 	// TODO }
 //
 // 	data := make([]byte, 1024*4)
 //

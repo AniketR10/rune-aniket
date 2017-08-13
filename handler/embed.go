@@ -1,6 +1,5 @@
 package handler
 
-//
 // import (
 // 	"bytes"
 // 	"fmt"
@@ -62,18 +61,16 @@ package handler
 // 		return
 // 	}
 //
+// 	// TODO synchronize
+// 	go func() {
+// 		for {
+// 			if _, err = e.buf.ReadFrom(e.Pty); err != nil {
+// 				return
+// 			}
+// 		}
+// 	}()
+//
 // 	// TODO design new event handler api's and internally register handler's (maybe also externally)
-// 	// TODO design new event handler api's
-// 	// TODO design new event handler api's
-// 	// TODO design new event handler api's
-// 	// TODO design new event handler api's
-// 	// TODO design new event handler api's
-// 	// TODO design new event handler api's
-// 	// TODO design new event handler api's
-// 	// TODO design new event handler api's
-// 	// TODO design new event handler api's
-// 	// TODO design new event handler api's
-// 	// TODO design new event handler api's
 // 	// TODO think abouyt making it non-blocking
 //
 // 	// + master if err = slave.Close(); err != nil {
@@ -88,8 +85,10 @@ package handler
 // // TODO provide absrtaction on top of event that allows RawEvents too
 // // alternatively provide a handler itnerface and a rawHandler
 // func (e *Embed) HandleRaw(ev []byte) error {
-// 	_, err := e.buf.Write(ev)
-// 	return err
+// 	if _, err := e.Pty.Write(ev); err != nil {
+// 		return err
+// 	}
+// 	return nil
 // }
 //
 // func (e *Embed) GetCursor() fractal.Coordinates {
@@ -115,25 +114,14 @@ package handler
 // }
 //
 // func (e *Embed) Draw(w fractal.Writer) (err error) {
-// 	if _, err = e.Pty.Write(e.buf.Bytes()); err != nil {
-// 		return
-// 	}
-// 	e.buf.Reset()
-//
-// 	buf := make([]byte, 1024*64)
-//
-// 	if _, err = e.Pty.Read(buf); err != nil {
-// 		return
-// 	}
-//
 // 	outbuf := termbox.Outbuf()
 // 	outbuf.Reset()
 //
-// 	if _, err = outbuf.Write(buf); err != nil {
+// 	if _, err = outbuf.Write(e.buf.Bytes()); err != nil {
 // 		return
 // 	}
 //
-// 	//	e.buf.Reset()
+// 	e.buf.Reset()
 //
 // 	return
 // }
