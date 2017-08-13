@@ -60,16 +60,14 @@ func run(root Handler, termw Writer) (err error) {
 		}
 	}()
 
-	for root.IsActive() && err == nil {
+	for !exit && err == nil {
 		if err = redraw(root, termw); err != nil {
 			return
 		}
 
 		select {
 		case ev := <-echan:
-			if err = root.Handle(ev); err != nil {
-				return
-			}
+			exit, err = root.Handle(ev)
 		case ev := <-ichan:
 			switch ev.Type {
 			case termbox.EventInterrupt:
@@ -81,9 +79,7 @@ func run(root Handler, termw Writer) (err error) {
 					return
 				}
 			default:
-				if err = root.Handle(ev); err != nil {
-					return
-				}
+				exit, err = root.Handle(ev)
 			}
 		}
 	}

@@ -38,10 +38,9 @@ type Help struct {
 type Handler interface {
 	Component
 	// TODO custom key event
-	Handle(termbox.Event) error
+	Handle(termbox.Event) (bool, error)
 	GetCursor() Coordinates
 	GetAttr() (fg termbox.Attribute, bg termbox.Attribute)
-	IsActive() bool
 	Man() string
 }
 

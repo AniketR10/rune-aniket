@@ -58,7 +58,6 @@ type Less struct {
 	config       *LessConfig
 	search       string
 	handler      LessHandler
-	exit         bool
 }
 
 type LessHandler func(LessEvent) error
@@ -297,18 +296,14 @@ func (l *Less) resize() error {
 	return nil
 }
 
-func (l *Less) IsActive() bool {
-	return !l.exit
-}
-
 func (l *Less) GetAttr() (fg termbox.Attribute, bg termbox.Attribute) {
 	return l.config.Fg, l.config.Bg
 }
 
-func (l *Less) Handle(ev termbox.Event) (err error) {
+func (l *Less) Handle(ev termbox.Event) (exit bool, err error) {
 	switch ev.Type {
 	case termbox.EventError:
-		return ev.Err
+		return false, ev.Err
 	case termbox.EventResize:
 		if err = l.Resize(ev.Width, ev.Height); err != nil {
 			return
@@ -316,9 +311,9 @@ func (l *Less) Handle(ev termbox.Event) (err error) {
 	case termbox.EventKey:
 		switch l.mode {
 		case normalMode:
-			l.exit, err = l.normalHandleEvent(ev)
+			exit, err = l.normalHandleEvent(ev)
 		case searchMode:
-			l.exit, err = l.searchHandleEvent(ev)
+			exit, err = l.searchHandleEvent(ev)
 		}
 	case termbox.EventMouse:
 	case termbox.EventInterrupt:

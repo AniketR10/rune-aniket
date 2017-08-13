@@ -20,7 +20,7 @@ func NewWindowManager(handler fractal.Handler, width, height, x, y int) (wm *Win
 	return
 }
 
-func (wm *WindowManager) handleEvent(ev termbox.Event) (exit bool, err error) {
+func (wm *WindowManager) Handle(ev termbox.Event) (exit bool, err error) {
 	if ev.Type == termbox.EventKey && ev.Mod == termbox.ModAlt {
 		switch ev.Ch {
 		case 'q':
@@ -40,18 +40,19 @@ func (wm *WindowManager) handleEvent(ev termbox.Event) (exit bool, err error) {
 		}
 	}
 
-	if err = wm.getFocusHandler().Handle(ev); err != nil {
+	if exit, err = wm.getFocusHandler().Handle(ev); err != nil {
 		return
 	}
 
-	if !wm.getFocusHandler().IsActive() {
+	if exit {
 		if wm.TileNode.Len() == 1 {
 			return true, nil
 		}
+		curr := wm.focus
 		if !wm.FocusLeft() {
 			wm.FocusUp()
 		}
-		if err = wm.focus.Close(); err != nil {
+		if err = curr.Close(); err != nil {
 			return
 		}
 	}
@@ -59,12 +60,12 @@ func (wm *WindowManager) handleEvent(ev termbox.Event) (exit bool, err error) {
 	return false, nil
 }
 
-func (wm *WindowManager) SplitVertical(newh fractal.Handler) (*component.Tile, error) {
-	return wm.TileNode.SplitVertical(wm.focus, newh)
+func (wm *WindowManager) SplitVertical(n fractal.Handler) (*component.Tile, error) {
+	return wm.TileNode.SplitVertical(wm.focus, n)
 }
 
-func (wm *WindowManager) SplitHorizontal(newh fractal.Handler) (*component.Tile, error) {
-	return wm.TileNode.SplitHorizontal(wm.focus, newh)
+func (wm *WindowManager) SplitHorizontal(n fractal.Handler) (*component.Tile, error) {
+	return wm.TileNode.SplitHorizontal(wm.focus, n)
 
 }
 
@@ -91,11 +92,6 @@ func (wm *WindowManager) FocusUp() bool {
 
 func (wm *WindowManager) FocusDown() bool {
 	return wm.switchFocus(wm.focus.TileDown())
-}
-
-func (wm *WindowManager) Handle(ev termbox.Event) (err error) {
-	wm.exit, err = wm.handleEvent(ev)
-	return
 }
 
 func (wm *WindowManager) getFocusHandler() fractal.Handler {

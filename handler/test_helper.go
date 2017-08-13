@@ -21,7 +21,7 @@ func testWorkflow(t *testing.T, handler fractal.Handler, cases []testCase, w *fr
 			t.Fatal(err)
 		}
 
-		if err = handler.Handle(tcase.event); err != nil {
+		if _, err = handler.Handle(tcase.event); err != nil {
 			t.Fatal(err)
 		}
 
