@@ -19,7 +19,7 @@ func moveEvent(ch rune) termbox.Event {
 func prepareTest() (*fractal.StringWriter, *component.Tile, *WindowManager) {
 	width, height := 8, 4
 	writer := fractal.String(width, height)
-	handler, tile, err := NewWindowManager(newTestHandler(), width, height, 0, 0)
+	handler, tile, err := NewWindowManager(NewFillHandler(), width, height, 0, 0)
 	if err != nil {
 		panic(err)
 	}
@@ -29,7 +29,7 @@ func prepareTest() (*fractal.StringWriter, *component.Tile, *WindowManager) {
 
 func TestWindowManagerSetFocus(t *testing.T) {
 	_, left, handler := prepareTest()
-	right, err := handler.SplitHorizontal(newTestHandler())
+	right, err := handler.SplitHorizontal(NewFillHandler())
 
 	if err != nil {
 		t.Fatal(err)
@@ -46,22 +46,22 @@ func TestWindowManagerSetFocus(t *testing.T) {
 	}
 }
 
-// testHandler signals that it's handling event by incrementing it's fill rune
+// FillHandler signals that it's handling event by incrementing it's fill rune
 func TestWindowManagerHandle(t *testing.T) {
 	writer, topleft, handler := prepareTest()
 
-	bottomleft, err := handler.SplitHorizontal(newTestHandler())
+	bottomleft, err := handler.SplitHorizontal(NewFillHandler())
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	_, err2 := handler.SplitVertical(newTestHandler())
+	_, err2 := handler.SplitVertical(NewFillHandler())
 	if err2 != nil {
 		t.Fatal(err2)
 	}
 
 	handler.SetFocus(bottomleft)
-	_, err3 := handler.SplitVertical(newTestHandler())
+	_, err3 := handler.SplitVertical(NewFillHandler())
 	if err3 != nil {
 		t.Fatal(err3)
 	}

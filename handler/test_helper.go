@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/ernestrc/fractal"
-	"github.com/ernestrc/fractal/component"
 )
 
 type testCase struct {
@@ -40,38 +39,4 @@ func testWorkflow(t *testing.T, handler fractal.Handler, cases []testCase, w *fr
 			t.Errorf("expected %q found %q", expected, w.String())
 		}
 	}
-}
-
-type testHandler struct {
-	component.Fill
-	Active bool
-}
-
-func newTestHandler() *testHandler {
-	t := new(testHandler)
-	t.Ch = 'A'
-	t.Active = true
-	return t
-}
-
-func (t *testHandler) Handle(termbox.Event) error {
-	// signal that we handled the event
-	t.Ch++
-	return nil
-}
-
-func (t *testHandler) GetCursor() fractal.Coordinates {
-	return fractal.Coordinates{0, 0}
-}
-
-func (t *testHandler) GetAttr() (fg termbox.Attribute, bg termbox.Attribute) {
-	return termbox.ColorDefault, termbox.ColorDefault
-}
-
-func (t *testHandler) IsActive() bool {
-	return t.Active
-}
-
-func (t *testHandler) Man() string {
-	return ""
 }
