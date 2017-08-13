@@ -13,8 +13,7 @@ func altEvent(ch rune) termbox.Event {
 	}
 }
 
-func prepareTest(border bool, root Handler) (*StringWriter, *Tile, *WindowManager) {
-	width, height := 8, 4
+func prepareTest(width, height int, border bool, root Handler) (*StringWriter, *Tile, *WindowManager) {
 	writer := NewStringWriter(width, height)
 	handler, tile := NewWindowManager(root, border)
 
@@ -27,7 +26,8 @@ func prepareTest(border bool, root Handler) (*StringWriter, *Tile, *WindowManage
 }
 
 func TestWindowManagerSetFocus(t *testing.T) {
-	_, left, handler := prepareTest(false, NewTestHandler())
+	width, height := 8, 4
+	_, left, handler := prepareTest(width, height, false, NewTestHandler())
 	right, err := handler.SplitHorizontal(NewTestHandler())
 
 	if err != nil {
@@ -48,7 +48,8 @@ func TestWindowManagerSetFocus(t *testing.T) {
 // TestHandler signals that it's handling event by incrementing it's fill rune
 func TestWindowManagerHandle(t *testing.T) {
 	topLeftHandler := NewTestHandler()
-	writer, topleft, handler := prepareTest(false, topLeftHandler)
+	width, height := 8, 4
+	writer, topleft, handler := prepareTest(width, height, false, topLeftHandler)
 
 	bottomLeftHandler := NewTestHandler()
 	bottomleft, err := handler.SplitHorizontal(bottomLeftHandler)
@@ -295,4 +296,42 @@ EEEEEEEE`,
 	}
 
 	testHandlerWorkflow(t, handler, cases, writer)
+}
+
+func TestWindowManagerHandleBorder(t *testing.T) {
+	leftHandler := NewTestHandler()
+	width, height := 12, 4
+	writer, _, handler := prepareTest(width, height, true, leftHandler)
+
+	rightHandler := NewTestHandler()
+	_, err := handler.SplitVertical(rightHandler)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cases := []handlerTestCase{
+		{
+			termbox.Event{}, `
+┌────┐┌────┐
+│BBBB││AAAA│
+│BBBB││AAAA│
+└────┘└────┘`,
+		},
+		{
+			altEvent('l'), `
+┌────┐┌────┐
+│BBBB││AAAA│
+│BBBB││AAAA│
+└────┘└────┘`,
+		},
+	}
+
+	testHandlerWorkflow(t, handler, cases, writer)
+
+	// TODO check that border for focus window is highlighted
+	// cells := writer.Cells()
+
+	// for i, cell := range writer.Cells() {
+	// 	if i ==
+	// }
 }
