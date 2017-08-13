@@ -37,7 +37,6 @@ type Help struct {
 
 type Handler interface {
 	Component
-	// TODO custom key event
 	Handle(termbox.Event) (bool, error)
 	GetCursor() Coordinates
 	Man() string

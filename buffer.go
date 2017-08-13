@@ -13,9 +13,9 @@ import (
 // The zero value for Buffer is an empty buffer ready to use.
 type Buffer struct {
 	buffer     bytes.Buffer
-	reslist    list.List     // search result list
-	result     *list.Element // current focused result
-	searchText []byte        // search term
+	reslist    list.List
+	result     *list.Element
+	searchText []byte
 	scanned    bool
 }
 
@@ -36,8 +36,8 @@ func (b *Buffer) SearchText() []byte {
 func (b *Buffer) PrevResult() (int, bool) {
 	if b.result == nil {
 		b.result = b.reslist.Back()
-	} else {
-		b.result = b.result.Prev()
+	} else if b.result = b.result.Prev(); b.result == nil {
+		b.result = b.reslist.Back()
 	}
 
 	if b.result == nil {
@@ -50,8 +50,8 @@ func (b *Buffer) PrevResult() (int, bool) {
 func (b *Buffer) NextResult() (int, bool) {
 	if b.result == nil {
 		b.result = b.reslist.Front()
-	} else {
-		b.result = b.result.Next()
+	} else if b.result = b.result.Next(); b.result == nil {
+		b.result = b.reslist.Front()
 	}
 
 	if b.result == nil {

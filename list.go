@@ -1,12 +1,6 @@
 package fractal
 
-import (
-	"container/list"
-
-	"termbox"
-)
-
-const resfg, resbg = termbox.AttrReverse, termbox.AttrReverse
+import "container/list"
 
 type List struct {
 	elementHeight int

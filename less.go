@@ -2,31 +2,27 @@ package fractal
 
 import (
 	"fmt"
-	"math"
 
 	"termbox"
 )
 
+const (
+	cmdBarHeight = 1
+)
+
 type LessConfig struct {
-	Tabspaces    int
-	Msgwidth     int8 // 0 - 100%
-	CmdBarHeight int  // in cells
-	Wrap         bool
-	Debug        bool
-	ResFG        termbox.Attribute
-	ResBG        termbox.Attribute
-	ScrollBorder termbox.Attribute
+	Tabspaces int
+	Wrap      bool
+	ResFG     termbox.Attribute
+	ResBG     termbox.Attribute
 	// TODO keyMap *KeyMap
 }
 
 var defaultConfig = LessConfig{
-	Tabspaces:    8,
-	Msgwidth:     70,
-	CmdBarHeight: 1,
-	Wrap:         false,
-	Debug:        false,
-	ResFG:        termbox.AttrReverse,
-	ResBG:        termbox.ColorDefault,
+	Tabspaces: 8,
+	Wrap:      false,
+	ResFG:     termbox.AttrReverse,
+	ResBG:     termbox.ColorDefault,
 }
 
 func DefaultLessConfig() *LessConfig {
@@ -153,36 +149,31 @@ func (l *Less) searchHandleEvent(ev termbox.Event) (exit bool, err error) {
 func (l *Less) normalHandleEvent(ev termbox.Event) (exit bool, err error) {
 	switch ev.Type {
 	case termbox.EventKey:
-		switch ev.Key {
-		case termbox.KeyEsc:
+		switch ev.Ch {
+		case 'q':
 			return true, nil
-		default:
-			switch ev.Ch {
-			case 'q':
-				return true, nil
-			case 'N':
-				l.contScroll.SeekPrevResult()
-			case 'n':
-				l.contScroll.SeekNextResult()
-			case '0':
-				l.contScroll.SeekStartLine()
-			case '$':
-				l.contScroll.SeekEndLine()
-			case 'g':
-				l.contScroll.SeekStartFile()
-			case 'G':
-				l.contScroll.SeekEndFile()
-			case 'j':
-				l.contScroll.SeekDown()
-			case 'k':
-				l.contScroll.SeekUp()
-			case 'h':
-				l.contScroll.SeekLeft()
-			case 'l':
-				l.contScroll.SeekRight()
-			case '/':
-				err = l.setSearchMode()
-			}
+		case 'N':
+			l.contScroll.SeekPrevResult()
+		case 'n':
+			l.contScroll.SeekNextResult()
+		case '0':
+			l.contScroll.SeekStartLine()
+		case '$':
+			l.contScroll.SeekEndLine()
+		case 'g':
+			l.contScroll.SeekStartFile()
+		case 'G':
+			l.contScroll.SeekEndFile()
+		case 'j':
+			l.contScroll.SeekDown()
+		case 'k':
+			l.contScroll.SeekUp()
+		case 'h':
+			l.contScroll.SeekLeft()
+		case 'l':
+			l.contScroll.SeekRight()
+		case '/':
+			err = l.setSearchMode()
 		}
 	}
 
@@ -267,9 +258,8 @@ func (l *Less) Position() (int, int) {
 func (l *Less) resize() error {
 	var err error
 
-	contentHeight := l.height - l.config.CmdBarHeight
-	msgScrollWidth := int(float32(l.width) * float32(l.config.Msgwidth) / 100)
-	msgWidth := int(math.Min(float64(msgScrollWidth), float64(l.msgBuf.Len())))
+	contentHeight := l.height - cmdBarHeight
+	msgWidth := l.msgBuf.Len()
 	cmdBarWidth := l.width - msgWidth
 
 	if err = l.contScroll.Move(l.pos.X, l.pos.Y); err != nil {
@@ -284,7 +274,7 @@ func (l *Less) resize() error {
 		return err
 	}
 
-	if err = l.cmdScroll.Resize(cmdBarWidth, l.config.CmdBarHeight); err != nil {
+	if err = l.cmdScroll.Resize(cmdBarWidth, cmdBarHeight); err != nil {
 		return err
 	}
 
@@ -292,7 +282,7 @@ func (l *Less) resize() error {
 		return err
 	}
 
-	if err = l.msgScroll.Resize(msgWidth, l.config.CmdBarHeight); err != nil {
+	if err = l.msgScroll.Resize(msgWidth, cmdBarHeight); err != nil {
 		return err
 	}
 
@@ -303,10 +293,6 @@ func (l *Less) Handle(ev termbox.Event) (exit bool, err error) {
 	switch ev.Type {
 	case termbox.EventError:
 		return false, ev.Err
-	case termbox.EventResize:
-		if err = l.Resize(ev.Width, ev.Height); err != nil {
-			return
-		}
 	case termbox.EventKey:
 		switch l.mode {
 		case normalMode:
@@ -314,10 +300,6 @@ func (l *Less) Handle(ev termbox.Event) (exit bool, err error) {
 		case searchMode:
 			exit, err = l.searchHandleEvent(ev)
 		}
-	case termbox.EventMouse:
-	case termbox.EventInterrupt:
-	case termbox.EventRaw:
-	case termbox.EventNone:
 	}
 
 	return
