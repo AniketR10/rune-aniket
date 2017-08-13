@@ -12,8 +12,17 @@ type WindowManager struct {
 
 func NewWindowManager(handler Handler, border bool) (wm *WindowManager, tile *Tile) {
 	wm = new(WindowManager)
+	tile = wm.Init(handler, border)
+	return
+}
+
+func (wm *WindowManager) Init(handler Handler, border bool) (tile *Tile) {
+	if border {
+		handler = NewContainer(handler, fg, bg)
+	}
 	tile = wm.TileNode.Init(handler)
 	wm.focus = tile
+	wm.border = border
 	return
 }
 
@@ -61,12 +70,18 @@ func (wm *WindowManager) Handle(ev termbox.Event) (exit bool, err error) {
 	return
 }
 
-func (wm *WindowManager) SplitVertical(n Handler) (*Tile, error) {
-	return wm.TileNode.SplitVertical(wm.focus, n)
+func (wm *WindowManager) SplitVertical(h Handler) (*Tile, error) {
+	if wm.border {
+		h = NewContainer(h, fg, bg)
+	}
+	return wm.TileNode.SplitVertical(wm.focus, h)
 }
 
-func (wm *WindowManager) SplitHorizontal(n Handler) (*Tile, error) {
-	return wm.TileNode.SplitHorizontal(wm.focus, n)
+func (wm *WindowManager) SplitHorizontal(h Handler) (*Tile, error) {
+	if wm.border {
+		h = NewContainer(h, fg, bg)
+	}
+	return wm.TileNode.SplitHorizontal(wm.focus, h)
 
 }
 
