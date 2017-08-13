@@ -54,13 +54,14 @@ func Init() error {
 
 	echan = make(chan termbox.Event)
 	ichan = make(chan termbox.Event)
-	fg, bg = termbox.ColorDefault, termbox.ColorDefault
+	foreground, background = termbox.ColorDefault, termbox.ColorDefault
+	highlightfg, highlightbg = termbox.ColorRed, termbox.ColorDefault
 
 	return nil
 }
 
-func SetAttr(background, foreground termbox.Attribute) {
-	fg, bg = background, foreground
+func SetAttr(fg, bg, highlightfg, highlightbg termbox.Attribute) {
+	foreground, background = fg, bg
 }
 
 func Run(root Handler) (err error) {

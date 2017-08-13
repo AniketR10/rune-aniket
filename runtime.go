@@ -7,9 +7,10 @@ import (
 )
 
 var (
-	echan  chan termbox.Event
-	ichan  chan termbox.Event
-	fg, bg termbox.Attribute
+	echan                    chan termbox.Event
+	ichan                    chan termbox.Event
+	foreground, background   termbox.Attribute
+	highlightfg, highlightbg termbox.Attribute
 )
 
 func resize(root Handler, width, height int) error {
@@ -21,7 +22,7 @@ func resize(root Handler, width, height int) error {
 }
 
 func redraw(root Handler, termw Writer) (err error) {
-	if err = termw.Clear(fg, bg); err != nil {
+	if err = termw.Clear(foreground, background); err != nil {
 		return err
 	}
 

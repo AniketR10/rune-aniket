@@ -18,7 +18,7 @@ func NewWindowManager(handler Handler, border bool) (wm *WindowManager, tile *Ti
 
 func (wm *WindowManager) Init(handler Handler, border bool) (tile *Tile) {
 	if border {
-		handler = NewContainer(handler, fg, bg)
+		handler = NewContainer(handler, foreground, background)
 	}
 	tile = wm.TileNode.Init(handler)
 	wm.focus = tile
@@ -72,14 +72,14 @@ func (wm *WindowManager) Handle(ev termbox.Event) (exit bool, err error) {
 
 func (wm *WindowManager) SplitVertical(h Handler) (*Tile, error) {
 	if wm.border {
-		h = NewContainer(h, fg, bg)
+		h = NewContainer(h, foreground, background)
 	}
 	return wm.TileNode.SplitVertical(wm.focus, h)
 }
 
 func (wm *WindowManager) SplitHorizontal(h Handler) (*Tile, error) {
 	if wm.border {
-		h = NewContainer(h, fg, bg)
+		h = NewContainer(h, foreground, background)
 	}
 	return wm.TileNode.SplitHorizontal(wm.focus, h)
 
@@ -90,7 +90,7 @@ func (wm *WindowManager) switchFocus(tile *Tile) bool {
 		return false
 	}
 
-	wm.focus = tile
+	wm.SetFocus(tile)
 	return true
 }
 
@@ -119,6 +119,10 @@ func (wm *WindowManager) Focus() *Tile {
 }
 
 func (wm *WindowManager) SetFocus(tile *Tile) {
+	if wm.border {
+		wm.focus.Content().(*Container).SetAttr(foreground, background)
+		tile.Content().(*Container).SetAttr(highlightfg, highlightbg)
+	}
 	wm.focus = tile
 }
 
