@@ -40,7 +40,6 @@ type Handler interface {
 	// TODO custom key event
 	Handle(termbox.Event) (bool, error)
 	GetCursor() Coordinates
-	GetAttr() (fg termbox.Attribute, bg termbox.Attribute)
 	Man() string
 }
 
@@ -55,8 +54,13 @@ func Init() error {
 
 	echan = make(chan termbox.Event)
 	ichan = make(chan termbox.Event)
+	fg, bg = termbox.ColorDefault, termbox.ColorDefault
 
 	return nil
+}
+
+func SetAttr(background, foreground termbox.Attribute) {
+	fg, bg = background, foreground
 }
 
 func Run(root Handler) (err error) {

@@ -7,8 +7,9 @@ import (
 )
 
 var (
-	echan chan termbox.Event
-	ichan chan termbox.Event
+	echan  chan termbox.Event
+	ichan  chan termbox.Event
+	fg, bg termbox.Attribute
 )
 
 func resize(root Handler, width, height int) error {
@@ -20,7 +21,7 @@ func resize(root Handler, width, height int) error {
 }
 
 func redraw(root Handler, termw Writer) (err error) {
-	if err = termw.Clear(root.GetAttr()); err != nil {
+	if err = termw.Clear(fg, bg); err != nil {
 		return err
 	}
 
@@ -28,8 +29,8 @@ func redraw(root Handler, termw Writer) (err error) {
 		return fmt.Errorf("failed to draw root handler: %v", err)
 	}
 
-	//  cursor := root.GetCursor()
-	//  termbox.SetCursor(cursor.X, cursor.Y)
+	cursor := root.GetCursor()
+	termbox.SetCursor(cursor.X, cursor.Y)
 
 	if err = termw.Flush(); err != nil {
 		return err
@@ -52,22 +53,22 @@ func run(root Handler, termw Writer) (err error) {
 
 	termbox.SetInputMode(termbox.InputAlt)
 
-	var exit bool
+	var hexit, texit bool
 
 	go func() {
-		for !exit {
+		for !texit {
 			ichan <- termbox.PollEvent()
 		}
 	}()
 
-	for !exit && err == nil {
+	for !hexit && err == nil {
 		if err = redraw(root, termw); err != nil {
 			return
 		}
 
 		select {
 		case ev := <-echan:
-			exit, err = root.Handle(ev)
+			hexit, err = root.Handle(ev)
 		case ev := <-ichan:
 			switch ev.Type {
 			case termbox.EventInterrupt:
@@ -79,13 +80,13 @@ func run(root Handler, termw Writer) (err error) {
 					return
 				}
 			default:
-				exit, err = root.Handle(ev)
+				hexit, err = root.Handle(ev)
 			}
 		}
 	}
 
 	// stop polling events
-	exit = true
+	texit = true
 	termbox.Interrupt()
 	<-ichan
 

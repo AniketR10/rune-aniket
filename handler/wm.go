@@ -110,10 +110,6 @@ func (wm *WindowManager) GetCursor() fractal.Coordinates {
 	return wm.Focus().Content().(fractal.Handler).GetCursor()
 }
 
-func (wm *WindowManager) GetAttr() (fg termbox.Attribute, bg termbox.Attribute) {
-	return termbox.ColorDefault, termbox.ColorDefault
-}
-
 func (wm *WindowManager) IsActive() bool {
 	return !wm.exit
 }

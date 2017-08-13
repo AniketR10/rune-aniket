@@ -12,8 +12,6 @@ import (
 
 type LessConfig struct {
 	Tabspaces    int
-	Fg           termbox.Attribute
-	Bg           termbox.Attribute
 	Msgwidth     int8 // 0 - 100%
 	CmdBarHeight int  // in cells
 	Wrap         bool
@@ -26,8 +24,6 @@ type LessConfig struct {
 
 var defaultConfig = LessConfig{
 	Tabspaces:    8,
-	Fg:           termbox.ColorDefault,
-	Bg:           termbox.ColorDefault,
 	Msgwidth:     70,
 	CmdBarHeight: 1,
 	Wrap:         false,
@@ -296,10 +292,6 @@ func (l *Less) resize() error {
 	return nil
 }
 
-func (l *Less) GetAttr() (fg termbox.Attribute, bg termbox.Attribute) {
-	return l.config.Fg, l.config.Bg
-}
-
 func (l *Less) Handle(ev termbox.Event) (exit bool, err error) {
 	switch ev.Type {
 	case termbox.EventError:
@@ -350,10 +342,6 @@ func (l *Less) Init(content string, handler LessHandler, cfg *LessConfig) (err e
 		if _, err = l.contBuf.Write([]byte(content)); err != nil {
 			return
 		}
-	}
-
-	if err = termbox.Init(); err != nil {
-		return
 	}
 
 	if err = l.setNormalMode(); err != nil {

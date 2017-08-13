@@ -31,7 +31,7 @@ $(TARGET):
 	@mkdir $(TARGET)
 
 $(EXEC): $(EXECS) $(EXECSRC) $(SRC) $(TARGET)
-	@for b in $(EXECS); do cd ./$$b && $(CC) build -o $(PWD)/$(patsubst examples/%,$(TARGET)/%,$@) && cd $(PWD); done;
+	@cd $(patsubst bin/%,examples/%,$@) && $(CC) build -o ../../$@
 
 $(PKGS): $(SRC) FORCE
 	@cd $@ && $(CC) install

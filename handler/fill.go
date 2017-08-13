@@ -32,10 +32,6 @@ func (t *FillHandler) GetCursor() fractal.Coordinates {
 	return fractal.Coordinates{X: -1, Y: -1}
 }
 
-func (t *FillHandler) GetAttr() (fg termbox.Attribute, bg termbox.Attribute) {
-	return termbox.ColorDefault, termbox.ColorDefault
-}
-
 func (t *FillHandler) Man() string {
 	return ""
 }
