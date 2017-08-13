@@ -393,6 +393,16 @@ XXIIIZZZ
 XXIIIZZZ
 XXIIIZZZ
 XXIIIZZZ`,
+		}, {
+			func() { err = m.Move(2, 2); w.Resize(8, 8) }, `
+        
+        
+  XXIIIZ
+  XXIIIZ
+  XXIIIZ
+  XXIIIZ
+        
+        `,
 		},
 	}
 

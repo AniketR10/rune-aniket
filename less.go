@@ -272,16 +272,26 @@ func (l *Less) resize() error {
 	msgWidth := int(math.Min(float64(msgScrollWidth), float64(l.msgBuf.Len())))
 	cmdBarWidth := l.width - msgWidth
 
+	if err = l.contScroll.Move(l.pos.X, l.pos.Y); err != nil {
+		return err
+	}
+
 	if err = l.contScroll.Resize(l.width, contentHeight); err != nil {
 		return err
 	}
 
-	l.cmdScroll.Move(l.pos.X, l.pos.Y+contentHeight)
+	if err = l.cmdScroll.Move(l.pos.X, l.pos.Y+contentHeight); err != nil {
+		return err
+	}
+
 	if err = l.cmdScroll.Resize(cmdBarWidth, l.config.CmdBarHeight); err != nil {
 		return err
 	}
 
-	l.msgScroll.Move(l.pos.X+cmdBarWidth, l.pos.Y+contentHeight)
+	if err = l.msgScroll.Move(l.pos.X+cmdBarWidth, l.pos.Y+contentHeight); err != nil {
+		return err
+	}
+
 	if err = l.msgScroll.Resize(msgWidth, l.config.CmdBarHeight); err != nil {
 		return err
 	}
@@ -319,24 +329,25 @@ func (l *Less) setupScroll(w *Scroll) {
 	w.Tabspaces, w.Wrap = l.config.Tabspaces, l.config.Wrap
 }
 
-func (l *Less) Init(content string, handler LessHandler, cfg *LessConfig) (err error) {
+func (l *Less) Init(width, height, x, y int, c string, h LessHandler, cfg *LessConfig) (err error) {
+	l.width, l.height, l.pos.X, l.pos.Y = width, height, x, y
 	if cfg == nil {
 		l.config = DefaultLessConfig()
 	} else {
 		l.config = cfg
 	}
-	l.cmdScroll = NewScroll(&l.cmdBuf, l.width, l.height, 0, 0)
-	l.msgScroll = NewScroll(&l.msgBuf, l.width, l.height, 0, 0)
-	l.contScroll = NewScroll(&l.contBuf, l.width, l.height, 0, 0)
+	l.cmdScroll = NewScroll(&l.cmdBuf, l.width, l.height, l.pos.X, l.pos.Y)
+	l.msgScroll = NewScroll(&l.msgBuf, l.width, l.height, l.pos.X, l.pos.Y)
+	l.contScroll = NewScroll(&l.contBuf, l.width, l.height, l.pos.X, l.pos.Y)
 
 	l.setupScroll(l.cmdScroll)
 	l.setupScroll(l.msgScroll)
 	l.setupScroll(l.contScroll)
 
-	l.handler = handler
+	l.handler = h
 
-	if content != "" {
-		if _, err = l.contBuf.Write([]byte(content)); err != nil {
+	if c != "" {
+		if _, err = l.contBuf.Write([]byte(c)); err != nil {
 			return
 		}
 	}
@@ -352,10 +363,10 @@ func (l *Less) Init(content string, handler LessHandler, cfg *LessConfig) (err e
 	return
 }
 
-func NewLess(content string, handler LessHandler, cfg *LessConfig) (*Less, error) {
+func NewLess(width, height, x, y int, c string, h LessHandler, cfg *LessConfig) (*Less, error) {
 	l := new(Less)
 
-	if err := l.Init(content, handler, cfg); err != nil {
+	if err := l.Init(width, height, x, y, c, h, cfg); err != nil {
 		return nil, err
 	}
 

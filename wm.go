@@ -4,6 +4,7 @@ import (
 	"termbox"
 )
 
+// TODO add border + padding configuration
 type WindowManager struct {
 	TileNode
 	focus *Tile

@@ -87,7 +87,9 @@ func main() {
 		log.Fatal(err)
 	}
 
-	if less, err = fractal.NewLess(string(initContent.Bytes()), h.Handle, config); err != nil {
+	width, height := fractal.Size()
+
+	if less, err = fractal.NewLess(width, height, 0, 0, string(initContent.Bytes()), h.Handle, config); err != nil {
 		log.Fatal(err)
 	}
 

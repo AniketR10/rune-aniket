@@ -80,10 +80,7 @@ func TestScrollDraw(t *testing.T) {
 
 	w := NewStringWriter(width, height)
 
-	tests := []struct {
-		action   func()
-		expected string
-	}{
+	tests := []testCase{
 		{nil, "Love in \nLove isn"},
 		{window.SeekUp, "Love in \nLove isn"},
 		{window.SeekLeft, "Love in \nLove isn"},
@@ -162,6 +159,45 @@ func TestScrollDrawWrap(t *testing.T) {
 		{func() { window.Resize(20, 1); w.Resize(20, 1) }, "Love in your heart w"},
 		{func() { window.Search("you") }, "Love in your heart w"},
 		{window.SeekNextResult, "Love in your heart w"},
+	}
+
+	testWorkflow(t, window, w, tests)
+}
+
+func TestScrollDrawPosition(t *testing.T) {
+	width, height := 8, 4
+	tabspaces := 4
+	wrap := false
+	buf, window := newScroll(tabspaces, wrap, width, height)
+	buf.Write([]byte("AAAAAAAAAAAA\nBBBBBBBBBBBB\nCCCCCCCCCCCC\nDDDDDDDDDDDD"))
+	if err := window.scan(); err != nil {
+		t.Fatal(err)
+	}
+
+	w := NewStringWriter(12, height)
+
+	tests := []testCase{
+		{
+			nil, `
+AAAAAAAA    
+BBBBBBBB    
+CCCCCCCC    
+DDDDDDDD    `,
+		},
+		{
+			func() { window.Move(1, 1) }, `
+            
+ AAAAAAAA   
+ BBBBBBBB   
+ CCCCCCCC   `,
+		},
+		{
+			func() { window.Move(3, 0) }, `
+   AAAAAAAA 
+   BBBBBBBB 
+   CCCCCCCC 
+   DDDDDDDD `,
+		},
 	}
 
 	testWorkflow(t, window, w, tests)
