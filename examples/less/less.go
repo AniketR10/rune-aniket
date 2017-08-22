@@ -9,8 +9,6 @@ import (
 	"os"
 
 	"github.com/ernestrc/fractal"
-
-	"termbox"
 )
 
 var (
@@ -77,9 +75,6 @@ func main() {
 
 	config := fractal.DefaultLessConfig()
 	config.Wrap = *wrap
-	if *border {
-		config.ScrollBorder |= termbox.ColorWhite
-	}
 
 	h := NewHandler(input)
 	initContent := new(bytes.Buffer)
