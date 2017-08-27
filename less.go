@@ -32,11 +32,11 @@ func DefaultLessConfig() *LessConfig {
 }
 
 type Less struct {
-	cmdScroll    *Scroll
+	cmdScroll    Scroll
 	cmdBuf       Buffer
-	msgScroll    *Scroll
+	msgScroll    Scroll
 	msgBuf       Buffer
-	contScroll   *Scroll
+	contScroll   Scroll
 	contBuf      Buffer
 	mode         mode
 	delEOF       bool
@@ -44,9 +44,9 @@ type Less struct {
 	cursorOffset int
 	height       int
 	width        int
-	config       *LessConfig
 	search       string
 	handler      LessHandler
+	config       *LessConfig
 }
 
 type LessHandler func(LessEvent) error
@@ -311,27 +311,34 @@ func (l *Less) setupScroll(w *Scroll) {
 	w.Tabspaces, w.Wrap = l.config.Tabspaces, l.config.Wrap
 }
 
-func (l *Less) Init(content string, h LessHandler, cfg *LessConfig) (err error) {
+func (l *Less) InitWithContent(content string, h LessHandler, cfg *LessConfig) (err error) {
+	if err = l.Init(h, cfg); err != nil {
+		return err
+	}
+
+	if err = l.SetContent(content); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (l *Less) Init(h LessHandler, cfg *LessConfig) (err error) {
 	if cfg == nil {
 		l.config = DefaultLessConfig()
 	} else {
 		l.config = cfg
 	}
-	l.cmdScroll = NewScroll(&l.cmdBuf)
-	l.msgScroll = NewScroll(&l.msgBuf)
-	l.contScroll = NewScroll(&l.contBuf)
 
-	l.setupScroll(l.cmdScroll)
-	l.setupScroll(l.msgScroll)
-	l.setupScroll(l.contScroll)
+	l.cmdScroll.Init(&l.cmdBuf)
+	l.msgScroll.Init(&l.msgBuf)
+	l.contScroll.Init(&l.contBuf)
+
+	l.setupScroll(&l.cmdScroll)
+	l.setupScroll(&l.msgScroll)
+	l.setupScroll(&l.contScroll)
 
 	l.handler = h
-
-	if content != "" {
-		if _, err = l.contBuf.Write([]byte(content)); err != nil {
-			return
-		}
-	}
 
 	if err = l.setNormalMode(); err != nil {
 		return
@@ -340,10 +347,10 @@ func (l *Less) Init(content string, h LessHandler, cfg *LessConfig) (err error) 
 	return
 }
 
-func NewLess(content string, h LessHandler, cfg *LessConfig) (*Less, error) {
+func NewLess(h LessHandler, cfg *LessConfig) (*Less, error) {
 	l := new(Less)
 
-	if err := l.Init(content, h, cfg); err != nil {
+	if err := l.Init(h, cfg); err != nil {
 		return nil, err
 	}
 

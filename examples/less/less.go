@@ -82,7 +82,11 @@ func main() {
 		log.Fatal(err)
 	}
 
-	if less, err = fractal.NewLess(string(initContent.Bytes()), h.Handle, config); err != nil {
+	if less, err = fractal.NewLess(h.Handle, config); err != nil {
+		log.Fatal(err)
+	}
+
+	if err = less.SetContent(string(initContent.Bytes())); err != nil {
 		log.Fatal(err)
 	}
 

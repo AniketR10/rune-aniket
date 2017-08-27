@@ -1,6 +1,7 @@
 CC=go
 
 TARGET=bin
+LIBSRC=$(wildcard *.go)
 EXECSRC=$(wildcard examples/**/*.go)
 EXECDIRS=$(sort $(dir $(EXECSRC)))
 EXEC=$(patsubst examples/%/,$(TARGET)/%,$(EXECDIRS))
@@ -25,7 +26,7 @@ clean:
 $(TARGET):
 	@mkdir $(TARGET)
 
-$(TARGET)/%: $(EXECSRC) $(TARGET)
+$(TARGET)/%: $(EXECSRC) $(LIBSRC) $(TARGET)
 	@cd $(patsubst bin/%,examples/%,$@) && $(CC) build -o ../../$@
 
 CHECK:

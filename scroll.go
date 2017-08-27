@@ -30,8 +30,8 @@ func NewScroll(buffer *Buffer) *Scroll {
 }
 
 func (w *Scroll) Init(buffer *Buffer) {
-	w.buffer = buffer
 	if buffer != nil {
+		w.SetBuffer(buffer)
 		w.cells = make([]Cell, buffer.Len())
 	} else {
 		w.cells = make([]Cell, 0)
@@ -305,7 +305,8 @@ func (w *Scroll) scan() (err error) {
 func (w *Scroll) SetBuffer(buf *Buffer) (orig *Buffer) {
 	orig = w.buffer
 	w.buffer = buf
-	// TODO should reset the rest of properties
+	w.maxoffset.X, w.maxoffset.Y = 0, 0
+	w.offset.X, w.offset.Y = 0, 0
 
 	buf.MarkUnscanned()
 

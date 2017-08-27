@@ -16,9 +16,20 @@ KKKKXXLLLL
 3333333333
 11111111XX`
 
-func setup(width, height int, handler LessHandler, config *LessConfig) (*Less, *StringWriter) {
-	less, err := NewLess(content, handler, config)
+func setup(less *Less, width, height int, handler LessHandler, config *LessConfig) (*Less, *StringWriter) {
+	var err error
+
+	if less == nil {
+		less, err = NewLess(handler, config)
+	} else {
+		err = less.Init(handler, config)
+	}
+
 	if err != nil {
+		panic(err)
+	}
+
+	if err = less.SetContent(content); err != nil {
 		panic(err)
 	}
 
@@ -30,8 +41,6 @@ func setup(width, height int, handler LessHandler, config *LessConfig) (*Less, *
 }
 
 func TestLessHandle(t *testing.T) {
-	less, writer := setup(8, 4, nil, nil)
-
 	cases := []handlerTestCase{
 		{
 			termbox.Event{}, `
@@ -161,21 +170,34 @@ KKXXLLLL
 		},
 	}
 
-	testHandlerWorkflow(t, less, cases, writer)
+	var less [2]Less
+	var less1 *Less
+	var writer1, writer2, writer3 *StringWriter
+	_, writer1 = setup(&less[0], 8, 4, nil, nil)
+	_, writer2 = setup(&less[1], 8, 4, nil, nil)
+	less1, writer3 = setup(nil, 8, 4, nil, nil)
 
-	if err := less.SetMessage("hi"); err != nil {
+	// test cases with allocated less
+	testHandlerWorkflow(t, &less[0], cases, writer1)
+	testHandlerWorkflow(t, &less[1], cases, writer2)
+
+	// test cases with stack less
+	testHandlerWorkflow(t, less1, cases, writer3)
+
+	// setup new test case
+	if err := less[0].SetMessage("hi"); err != nil {
 		t.Fatal(err)
 	}
 
-	if err := less.SetContent("blonde"); err != nil {
+	if err := less[0].SetContent("blonde"); err != nil {
 		t.Fatal(err)
 	}
 
-	if err := less.Resize(7, 4); err != nil {
+	if err := less[0].Resize(7, 4); err != nil {
 		t.Fatal(err)
 	}
 
-	if err := less.Move(1, 0); err != nil {
+	if err := less[0].Move(1, 0); err != nil {
 		t.Fatal(err)
 	}
 
@@ -189,6 +211,6 @@ KKXXLLLL
 		},
 	}
 
-	testHandlerWorkflow(t, less, cases, writer)
+	testHandlerWorkflow(t, &less[0], cases, writer3)
 
 }

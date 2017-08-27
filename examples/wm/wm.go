@@ -46,37 +46,27 @@ func main() {
 	defer fractal.Close()
 
 	var wm *fractal.WindowManager
-	var l1, l2, l3, l4 *fractal.Less
+	var less [4]fractal.Less
 
-	if l1, err = fractal.NewLess(content, nil, nil); err != nil {
+	for i := range less {
+		if err = less[i].InitWithContent(content, nil, nil); err != nil {
+			log.Fatal(err)
+		}
+	}
+
+	wm, _ = fractal.NewWindowManager(&less[0], border)
+
+	if _, err = wm.SplitHorizontal(&less[1]); err != nil {
 		log.Fatal(err)
 	}
 
-	if l2, err = fractal.NewLess(content, nil, nil); err != nil {
-		log.Fatal(err)
-	}
-
-	if l3, err = fractal.NewLess(content, nil, nil); err != nil {
-		log.Fatal(err)
-	}
-
-	if l4, err = fractal.NewLess(content, nil, nil); err != nil {
-		log.Fatal(err)
-	}
-
-	wm, _ = fractal.NewWindowManager(l1, border)
-
-	if _, err = wm.SplitHorizontal(l2); err != nil {
-		log.Fatal(err)
-	}
-
-	if _, err = wm.SplitVertical(l3); err != nil {
+	if _, err = wm.SplitVertical(&less[2]); err != nil {
 		log.Fatal(err)
 	}
 
 	wm.FocusDown()
 
-	if _, err = wm.SplitVertical(l4); err != nil {
+	if _, err = wm.SplitVertical(&less[3]); err != nil {
 		log.Fatal(err)
 	}
 
