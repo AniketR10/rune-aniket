@@ -93,14 +93,19 @@ func (vi *Vi) handleVisualBlock(ev termbox.Event) (bool, error) {
 	return false, nil
 }
 
-func NewVi(buf *Buffer) *Vi {
+func NewVi() *Vi {
 	vi := new(Vi)
-	vi.Init(buf)
+	vi.Init()
 	return vi
 }
 
-func (vi *Vi) Init(buf *Buffer) {
+func (vi *Vi) Init() {
 	vi.Less.Init(nil)
+	vi.setNormalMode()
+}
+
+func (vi *Vi) InitWithScroll(scroll *Scroll) {
+	vi.Less.InitWithScroll(scroll, nil)
 	vi.setNormalMode()
 }
 

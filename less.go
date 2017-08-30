@@ -177,7 +177,7 @@ func (l *Less) normalHandleEvent(ev termbox.Event) (exit bool, err error) {
 // Message will draw a message on the bottom right corner
 func (l *Less) SetMessage(text string, args ...interface{}) (err error) {
 	l.msgScroll.Reset()
-	if _, err := l.msgScroll.Write([]byte(fmt.Sprintf(text, args...))); err != nil {
+	if _, err := l.msgScroll.Write(fmt.Sprintf(text, args...)); err != nil {
 		return err
 	}
 
@@ -205,7 +205,7 @@ func (l *Less) SetScroll(scroll *Scroll) (orig *Scroll) {
 func (l *Less) SetContent(text string, args ...interface{}) error {
 	l.Reset()
 
-	if _, err := l.content.Write([]byte(fmt.Sprintf(text, args...))); err != nil {
+	if _, err := l.content.Write(fmt.Sprintf(text, args...)); err != nil {
 		return err
 	}
 

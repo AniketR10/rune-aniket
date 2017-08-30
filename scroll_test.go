@@ -34,7 +34,7 @@ func TestScrollscan(t *testing.T) {
 	width, height := 8, 2
 	tabspaces := 4
 	window := newScroll(tabspaces, false, width, height)
-	window.Write([]byte(fortune))
+	window.Write(fortune)
 	if err := window.scan(); err != nil {
 		t.Fatal(err)
 	}
@@ -76,7 +76,7 @@ func TestScrollDraw(t *testing.T) {
 	tabspaces := 4
 	wrap := false
 	window := newScroll(tabspaces, wrap, width, height)
-	window.Write([]byte(fortune))
+	window.Write(fortune)
 	if err := window.scan(); err != nil {
 		t.Fatal(err)
 	}
@@ -134,7 +134,7 @@ func TestScrollDrawWrap(t *testing.T) {
 	tabspaces := 4
 	wrap := true
 	window := newScroll(tabspaces, wrap, width, height)
-	window.Write([]byte(fortune))
+	window.Write(fortune)
 	if err := window.scan(); err != nil {
 		t.Fatal(err)
 	}
@@ -171,7 +171,7 @@ func TestScrollDrawPosition(t *testing.T) {
 	tabspaces := 4
 	wrap := false
 	window := newScroll(tabspaces, wrap, width, height)
-	window.Write([]byte("AAAAAAAAAAAA\nBBBBBBBBBBBB\nCCCCCCCCCCCC\nDDDDDDDDDDDD"))
+	window.Write("AAAAAAAAAAAA\nBBBBBBBBBBBB\nCCCCCCCCCCCC\nDDDDDDDDDDDD")
 	if err := window.scan(); err != nil {
 		t.Fatal(err)
 	}

@@ -1,7 +1,7 @@
 package fractal
 
 import (
-	"bytes"
+	"container/list"
 	"fmt"
 	"io"
 
@@ -10,24 +10,36 @@ import (
 
 // TODO add alignment
 type Scroll struct {
-	Buffer
-	Wrap      bool              // lines longer than the width of the window will wrap and displaying continues on the next line. wrap text
-	Tabspaces int               // number of spaces to use when expanding tabs
-	ResultsFG termbox.Attribute // foreground attribute for search results
-	ResultsBG termbox.Attribute // background attribute for search results
-	cells     []Cell
-	maxoffset Coordinates
-	offset    Coordinates
-	position  Coordinates
-	width     int
-	height    int
+	buffer     []rune
+	cells      []Cell
+	scanned    bool
+	maxoffset  Coordinates
+	offset     Coordinates
+	position   Coordinates
+	width      int
+	height     int
+	reslist    list.List
+	result     *list.Element
+	searchText []rune
+	Wrap       bool              // lines longer than the width of the window will wrap and displaying continues on the next line. wrap text
+	Tabspaces  int               // number of spaces to use when expanding tabs
+	ResultsFG  termbox.Attribute // foreground attribute for search results
+	ResultsBG  termbox.Attribute // background attribute for search results
+}
+
+func (w *Scroll) Reset() {
+	w.cells = w.cells[:0]
+	w.buffer = w.buffer[:0]
+	w.reslist.Init()
+	w.result = nil
+	w.searchText = nil
 }
 
 func (w *Scroll) Init() {
 	w.cells = make([]Cell, 0)
-
 	w.Tabspaces = 4
 	w.ResultsFG, w.ResultsBG = termbox.AttrReverse, termbox.AttrReverse
+	w.Reset()
 }
 
 func (w *Scroll) YOffset() int {
@@ -120,16 +132,14 @@ func (w *Scroll) moveResult(i int) {
 	w.SeekVertical(res.Y)
 
 	if res.X >= w.offset.X+w.width {
-		// move to the minimal x to render search result
-		runes := []rune(string(w.Buffer.SearchText()))
-		w.SeekHorizontal(res.X - w.width + len(runes))
+		w.SeekHorizontal(res.X - w.width + len(w.searchText))
 	} else if res.X < w.offset.X {
 		w.SeekHorizontal(res.X)
 	}
 }
 
 func (w *Scroll) SeekNextResult() {
-	i, ok := w.Buffer.NextResult()
+	i, ok := w.NextResult()
 
 	if !ok {
 		return
@@ -139,7 +149,7 @@ func (w *Scroll) SeekNextResult() {
 }
 
 func (w *Scroll) SeekPrevResult() {
-	i, ok := w.Buffer.PrevResult()
+	i, ok := w.PrevResult()
 
 	if !ok {
 		return
@@ -198,28 +208,21 @@ func reserve(s []Cell, capacity int) []Cell {
 }
 
 func (w *Scroll) scan() (err error) {
-	w.cells = reserve(w.cells, w.Buffer.Len())
+	w.cells = reserve(w.cells, len(w.buffer))
 	ncells := w.cells[:0]
 
-	var r rune
-	var size int
 	columns, row := 0, 0
+	x := 0
 
-	for view, x, i := bytes.NewBuffer(w.Buffer.Bytes()), 0, 0; ; {
-		if r, size, err = view.ReadRune(); err != nil {
-			break
-		}
-
+	for i, r := range w.buffer {
 		var cell Cell
 
 		switch r {
 		case '\n':
 			row++
 			x = 0
-			cell = Cell{}
 		case '\t':
 			x += w.Tabspaces
-			cell = Cell{}
 		default:
 			cell = Cell{
 				Fg: w.cells[i].Fg,
@@ -235,16 +238,9 @@ func (w *Scroll) scan() (err error) {
 
 		ncells = append(ncells, cell)
 
-		// we want one cell per byte so that search and indexing is natural
-		for ; size > 1; size-- {
-			ncells = append(ncells, Cell{})
-		}
-
 		if x > columns {
 			columns = x
 		}
-
-		i += size
 	}
 
 	w.cells = ncells
@@ -266,11 +262,11 @@ func (w *Scroll) scan() (err error) {
 		w.maxoffset.X = 0
 	}
 
-	// adjust offsets in case they became ilegal
+	// adjust offsets in case they became illegal
 	w.SeekHorizontal(w.offset.X)
 	w.SeekVertical(w.offset.Y)
 
-	w.Buffer.MarkScanned()
+	w.scanned = true
 
 	if err == io.EOF {
 		return nil
@@ -324,7 +320,7 @@ func (w *Scroll) wrapdraw(writer Writer) (err error) {
 }
 
 func (w *Scroll) Draw(writer Writer) (err error) {
-	if !w.Buffer.Scanned() {
+	if !w.scanned {
 		if err = w.scan(); err != nil {
 			return
 		}
@@ -350,11 +346,141 @@ func (w *Scroll) resetCells() {
 	}
 }
 
+// we cannot use the optimized byte or string search routines in std
+// since we need to know the index of the rune as it is drawn in the screen grid
+func index(s, sep []rune) int {
+	n, m := len(s), len(sep)
+	if m == 0 {
+		return 0
+	}
+	if m > n {
+		return -1
+	}
+
+	var i, o int
+	for i = 0; i < n && o < m; i++ {
+		if s[i] != sep[o] {
+			o = 0
+		} else {
+			o++
+		}
+	}
+
+	if o == m {
+		return i - o
+	}
+
+	return -1
+}
+
 func (w *Scroll) Search(text string) int {
 	w.resetCells()
-	return w.Buffer.Search([]byte(text), w.cells, w.ResultsFG, w.ResultsBG)
+	w.reslist.Init()
+	w.result = nil
+	w.searchText = []rune(text)
+
+	tlen := len(w.searchText)
+	if tlen == 0 {
+		return 0
+	}
+
+	view := w.buffer
+
+	var a, i int
+	for {
+		if i = index(view, w.searchText); i == -1 {
+			break
+		}
+
+		// use anchor to translate index to original slice
+		a += i
+
+		for j, last := a, a+tlen; j < last; j++ {
+			w.cells[j] = Cell{
+				Fg: w.ResultsFG,
+				Bg: w.ResultsBG,
+				Ch: w.cells[j].Ch,
+				Coordinates: Coordinates{
+					X: w.cells[j].X,
+					Y: w.cells[j].Y,
+				},
+			}
+		}
+
+		// mark first fractal.Cell as result index
+		w.reslist.PushBack(a)
+
+		view = view[i+tlen:]
+
+		// set next anchor
+		a += tlen
+	}
+
+	return w.reslist.Len()
+}
+
+func (w *Scroll) PrevResult() (int, bool) {
+	if w.result == nil {
+		w.result = w.reslist.Back()
+	} else if w.result = w.result.Prev(); w.result == nil {
+		w.result = w.reslist.Back()
+	}
+
+	if w.result == nil {
+		return 0, false
+	}
+
+	return w.result.Value.(int), true
+}
+
+func (w *Scroll) NextResult() (int, bool) {
+	if w.result == nil {
+		w.result = w.reslist.Front()
+	} else if w.result = w.result.Next(); w.result == nil {
+		w.result = w.reslist.Front()
+	}
+
+	if w.result == nil {
+		return 0, false
+	}
+
+	return w.result.Value.(int), true
 }
 
 func (w *Scroll) CellAt(idx int) Cell {
 	return w.cells[idx]
+}
+
+func (s *Scroll) Write(p string) (n int, err error) {
+	s.scanned = false
+	s.buffer = append(s.buffer, []rune(p)...)
+	return len(p), nil
+}
+func (s *Scroll) WriteRune(r rune) (n int, err error) {
+	s.scanned = false
+	s.buffer = append(s.buffer, r)
+	return 1, nil
+}
+
+func (s *Scroll) WriteAt(pos Coordinates, r rune) (n int, err error) {
+	s.scanned = false
+	panic("todo")
+}
+
+func (s *Scroll) Truncate(n int) {
+	s.scanned = false
+	s.buffer = s.buffer[:n]
+}
+
+func (s *Scroll) TruncateAt(pos Coordinates) error {
+	s.scanned = false
+	panic("todo")
+}
+
+func (s *Scroll) Len() int {
+	return len(s.buffer)
+}
+
+func (s *Scroll) String() string {
+	return string(s.buffer)
 }
