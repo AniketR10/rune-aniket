@@ -16,13 +16,13 @@ KKKKXXLLLL
 3333333333
 11111111XX`
 
-func setup(less *Less, width, height int, handler LessHandler, config *LessConfig) (*Less, *StringWriter) {
+func setup(less *Less, width, height int, config *LessConfig) (*Less, *StringWriter) {
 	var err error
 
 	if less == nil {
-		less, err = NewLess(handler, config)
+		less, err = NewLess(config)
 	} else {
-		err = less.Init(handler, config)
+		err = less.Init(config)
 	}
 
 	if err != nil {
@@ -173,9 +173,9 @@ KKXXLLLL
 	var less [2]Less
 	var less1 *Less
 	var writer1, writer2, writer3 *StringWriter
-	_, writer1 = setup(&less[0], 8, 4, nil, nil)
-	_, writer2 = setup(&less[1], 8, 4, nil, nil)
-	less1, writer3 = setup(nil, 8, 4, nil, nil)
+	_, writer1 = setup(&less[0], 8, 4, nil)
+	_, writer2 = setup(&less[1], 8, 4, nil)
+	less1, writer3 = setup(nil, 8, 4, nil)
 
 	// test cases with allocated less
 	testHandlerWorkflow(t, &less[0], cases, writer1)

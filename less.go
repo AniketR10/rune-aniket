@@ -15,7 +15,7 @@ type LessConfig struct {
 	Wrap      bool
 	ResFG     termbox.Attribute
 	ResBG     termbox.Attribute
-	// TODO keyMap *KeyMap
+	Handler   func(LessEvent) error
 }
 
 var defaultConfig = LessConfig{
@@ -32,12 +32,13 @@ func DefaultLessConfig() *LessConfig {
 }
 
 type Less struct {
-	cmdScroll    Scroll
+	// Scroll content
+	Scroll
+	contBuf      *Buffer
 	cmdBuf       Buffer
-	msgScroll    Scroll
+	cmdScroll    Scroll
 	msgBuf       Buffer
-	contScroll   Scroll
-	contBuf      Buffer
+	msgScroll    Scroll
 	mode         mode
 	delEOF       bool
 	pos          Coordinates
@@ -45,11 +46,8 @@ type Less struct {
 	height       int
 	width        int
 	search       string
-	handler      LessHandler
 	config       *LessConfig
 }
-
-type LessHandler func(LessEvent) error
 
 // EventType represents a less event
 type LessEventType uint8
@@ -77,8 +75,8 @@ type LessEvent struct {
 }
 
 func (l *Less) sendEvent(ev LessEvent) error {
-	if l.handler != nil {
-		if err := l.handler(ev); err != nil {
+	if l.config.Handler != nil {
+		if err := l.config.Handler(ev); err != nil {
 			return fmt.Errorf("less handler failed to process event: %+v: %v", ev, err)
 		}
 	}
@@ -122,11 +120,11 @@ func (l *Less) searchHandleEvent(ev termbox.Event) (exit bool, err error) {
 		str := l.cmdBuf.String()
 		bytes := []byte(str)[1:]
 		l.search = string(bytes)
-		l.contScroll.Search(l.search)
+		l.Scroll.Search(l.search)
 		if err = l.setNormalMode(); err != nil {
 			return
 		}
-		l.contScroll.SeekNextResult()
+		l.Scroll.SeekNextResult()
 		if err = l.sendEvent(LessEvent{Type: Search, Data: bytes}); err != nil {
 			return
 		}
@@ -153,25 +151,25 @@ func (l *Less) normalHandleEvent(ev termbox.Event) (exit bool, err error) {
 		case 'q':
 			return true, nil
 		case 'N':
-			l.contScroll.SeekPrevResult()
+			l.Scroll.SeekPrevResult()
 		case 'n':
-			l.contScroll.SeekNextResult()
+			l.Scroll.SeekNextResult()
 		case '0':
-			l.contScroll.SeekStartLine()
+			l.Scroll.SeekStartLine()
 		case '$':
-			l.contScroll.SeekEndLine()
+			l.Scroll.SeekEndLine()
 		case 'g':
-			l.contScroll.SeekStartFile()
+			l.Scroll.SeekStartFile()
 		case 'G':
-			l.contScroll.SeekEndFile()
+			l.Scroll.SeekEndFile()
 		case 'j':
-			l.contScroll.SeekDown()
+			l.Scroll.SeekDown()
 		case 'k':
-			l.contScroll.SeekUp()
+			l.Scroll.SeekUp()
 		case 'h':
-			l.contScroll.SeekLeft()
+			l.Scroll.SeekLeft()
 		case 'l':
-			l.contScroll.SeekRight()
+			l.Scroll.SeekRight()
 		case '/':
 			err = l.setSearchMode()
 		}
@@ -190,16 +188,33 @@ func (l *Less) SetMessage(text string, args ...interface{}) (err error) {
 	return l.Resize(l.width, l.height)
 }
 
-func (l *Less) SetContent(text string, args ...interface{}) error {
+func (l *Less) resetBuf() {
 	l.contBuf.Reset()
 	l.delEOF = false
+}
+
+func (l *Less) SetBuffer(buf *Buffer) (orig *Buffer) {
+	l.contBuf = buf
+	l.resetBuf()
+
+	orig = l.Scroll.SetBuffer(buf)
+
+	if len(l.search) != 0 {
+		l.Scroll.Search(l.search)
+	}
+
+	return
+}
+
+func (l *Less) SetContent(text string, args ...interface{}) error {
+	l.resetBuf()
 
 	if _, err := l.contBuf.Write([]byte(fmt.Sprintf(text, args...))); err != nil {
 		return err
 	}
 
 	if len(l.search) != 0 {
-		l.contScroll.Search(l.search)
+		l.Scroll.Search(l.search)
 	}
 
 	return nil
@@ -210,11 +225,11 @@ func (l *Less) GetCursor() Coordinates {
 }
 
 func (l *Less) Draw(w Writer) (err error) {
-	if err = l.contScroll.Draw(w); err != nil {
+	if err = l.Scroll.Draw(w); err != nil {
 		return err
 	}
 
-	if !l.contScroll.CanSeekDown() && !l.delEOF {
+	if !l.Scroll.CanSeekDown() && !l.delEOF {
 		l.delEOF = true
 		if err = l.sendEvent(LessEvent{Type: EOF}); err != nil {
 			return err
@@ -262,11 +277,11 @@ func (l *Less) resize() error {
 	msgWidth := l.msgBuf.Len()
 	cmdBarWidth := l.width - msgWidth
 
-	if err = l.contScroll.Move(l.pos.X, l.pos.Y); err != nil {
+	if err = l.Scroll.Move(l.pos.X, l.pos.Y); err != nil {
 		return err
 	}
 
-	if err = l.contScroll.Resize(l.width, contentHeight); err != nil {
+	if err = l.Scroll.Resize(l.width, contentHeight); err != nil {
 		return err
 	}
 
@@ -311,34 +326,31 @@ func (l *Less) setupScroll(w *Scroll) {
 	w.Tabspaces, w.Wrap = l.config.Tabspaces, l.config.Wrap
 }
 
-func (l *Less) InitWithContent(content string, h LessHandler, cfg *LessConfig) (err error) {
-	if err = l.Init(h, cfg); err != nil {
-		return err
-	}
-
-	if err = l.SetContent(content); err != nil {
+// Init will initialize a less handler. If config is null, the default
+// configuration will be used.
+func (l *Less) Init(cfg *LessConfig) (err error) {
+	if err = l.InitWithBuffer(&Buffer{}, cfg); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-func (l *Less) Init(h LessHandler, cfg *LessConfig) (err error) {
+func (l *Less) InitWithBuffer(buf *Buffer, cfg *LessConfig) (err error) {
 	if cfg == nil {
 		l.config = DefaultLessConfig()
 	} else {
 		l.config = cfg
 	}
 
+	l.contBuf = buf
 	l.cmdScroll.Init(&l.cmdBuf)
 	l.msgScroll.Init(&l.msgBuf)
-	l.contScroll.Init(&l.contBuf)
+	l.Scroll.Init(l.contBuf)
 
 	l.setupScroll(&l.cmdScroll)
 	l.setupScroll(&l.msgScroll)
-	l.setupScroll(&l.contScroll)
-
-	l.handler = h
+	l.setupScroll(&l.Scroll)
 
 	if err = l.setNormalMode(); err != nil {
 		return
@@ -347,10 +359,10 @@ func (l *Less) Init(h LessHandler, cfg *LessConfig) (err error) {
 	return
 }
 
-func NewLess(h LessHandler, cfg *LessConfig) (*Less, error) {
+func NewLess(cfg *LessConfig) (*Less, error) {
 	l := new(Less)
 
-	if err := l.Init(h, cfg); err != nil {
+	if err := l.Init(cfg); err != nil {
 		return nil, err
 	}
 

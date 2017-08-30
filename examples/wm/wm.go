@@ -49,7 +49,11 @@ func main() {
 	var less [4]fractal.Less
 
 	for i := range less {
-		if err = less[i].InitWithContent(content, nil, nil); err != nil {
+		if err = less[i].Init(nil); err != nil {
+			log.Fatal(err)
+		}
+
+		if err = less[i].SetContent(content); err != nil {
 			log.Fatal(err)
 		}
 	}

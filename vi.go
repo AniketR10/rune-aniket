@@ -18,106 +18,78 @@ const (
 
 // Vi basic edit window
 type Vi struct {
-	Scroll
+	Less
 	mode   ViMode
 	cursor cursorHelper
-	// TODO clipboard fractal.Clipboard
+	// TODO clipboard Clipboard
 }
 
-func (vi *Vi) SetNormalMode() {
+func (vi *Vi) setNormalMode() {
 	vi.mode = Normal
 }
 
-func (vi *Vi) SetInsertMode() {
+func (vi *Vi) setInsertMode() {
 	vi.mode = Insert
 }
 
-func (vi *Vi) SetVisualMode() {
+func (vi *Vi) setVisualMode() {
 	vi.mode = Visual
 }
-func (vi *Vi) SetVisualLineMode() {
+func (vi *Vi) setVisualLineMode() {
 	vi.mode = VisualLine
 }
-func (vi *Vi) SetVisualBlockMode() {
+func (vi *Vi) setVisualBlockMode() {
 	vi.mode = VisualBlock
 }
 
-func (vi *Vi) handleNormal(ev *termbox.Event) (bool, error) {
+func (vi *Vi) handleNormal(ev termbox.Event) (bool, error) {
 	switch ev.Type {
 	case termbox.EventKey:
-		switch ev.Key {
-		case termbox.KeyArrowDown:
-			vi.MoveDown()
-		case termbox.KeyArrowUp:
-			vi.MoveUp()
-		case termbox.KeyArrowLeft:
-			vi.MoveLeft()
-		case termbox.KeyArrowRight:
-			vi.MoveRight()
-		default:
-			switch ev.Ch {
-			case 'O':
-				vi.MoveUp()
-				vi.SetInsertMode()
-			case 'o':
-				vi.MoveDown()
-				vi.SetInsertMode()
-			case 'i':
-				vi.SetInsertMode()
-			case 'I':
-				vi.MoveStartLine()
-				vi.SetInsertMode()
-			case 'a':
-				vi.MoveRight()
-				vi.SetInsertMode()
-			case 'A':
-				vi.MoveEndLine()
-				vi.SetInsertMode()
-			case 'x':
-				// vi.RemoveChar(vi.cursor.X, vi.cursor.Y)
-			case 's':
-				// vi.RemoveChar(vi.cursor.X, vi.cursor.Y)
-				vi.SetInsertMode()
-			case 'N':
-				vi.MovePrevResult()
-			case 'n':
-				vi.MoveNextResult()
-			case '0':
-				vi.MoveStartLine()
-			case '$':
-				vi.MoveEndLine()
-			case 'g':
-				vi.MoveStartFile()
-			case 'G':
-				vi.MoveEndFile()
-			case 'j':
-				vi.MoveDown()
-			case 'k':
-				vi.MoveUp()
-			case 'h':
-				vi.MoveLeft()
-			case 'l':
-				vi.MoveRight()
-			}
+		switch ev.Ch {
+		case 'O':
+			vi.SeekUp()
+			vi.setInsertMode()
+		case 'o':
+			vi.SeekDown()
+			vi.setInsertMode()
+		case 'i':
+			vi.setInsertMode()
+		case 'I':
+			vi.SeekStartLine()
+			vi.setInsertMode()
+		case 'a':
+			vi.SeekRight()
+			vi.setInsertMode()
+		case 'A':
+			vi.SeekEndLine()
+			vi.setInsertMode()
+		case 'x':
+			// TODO vi.RemoveChar(vi.cursor.X, vi.cursor.Y)
+			vi.setInsertMode()
+		case 's':
+			// TODO vi.RemoveChar(vi.cursor.X, vi.cursor.Y)
+			vi.setInsertMode()
 		}
+	default:
+		return vi.Less.Handle(ev)
 	}
 
 	return false, nil
 }
 
-func (vi *Vi) handleInsert(ev *termbox.Event) (bool, error) {
+func (vi *Vi) handleInsert(ev termbox.Event) (bool, error) {
 	return false, nil
 }
 
-func (vi *Vi) handleVisual(ev *termbox.Event) (bool, error) {
+func (vi *Vi) handleVisual(ev termbox.Event) (bool, error) {
 	return false, nil
 }
 
-func (vi *Vi) handleVisualLine(ev *termbox.Event) (bool, error) {
+func (vi *Vi) handleVisualLine(ev termbox.Event) (bool, error) {
 	return false, nil
 }
 
-func (vi *Vi) handleVisualBlock(ev *termbox.Event) (bool, error) {
+func (vi *Vi) handleVisualBlock(ev termbox.Event) (bool, error) {
 	return false, nil
 }
 
@@ -128,16 +100,16 @@ func NewVi(buf *Buffer) *Vi {
 }
 
 func (vi *Vi) Init(buf *Buffer) {
-	vi.Scroll.Init(buf)
-	vi.SetNormalMode()
+	vi.Less.Init(nil)
+	vi.setNormalMode()
 }
 
 func (vi *Vi) SetBuffer(buf *Buffer) *Buffer {
-	vi.SetNormalMode()
-	return vi.Scroll.SetBuffer(buf)
+	vi.setNormalMode()
+	return vi.Less.SetBuffer(buf)
 }
 
-func (vi *Vi) Handle(ev *termbox.Event) (bool, error) {
+func (vi *Vi) Handle(ev termbox.Event) (bool, error) {
 	switch vi.mode {
 	case Normal:
 		return vi.handleNormal(ev)
@@ -152,58 +124,4 @@ func (vi *Vi) Handle(ev *termbox.Event) (bool, error) {
 	default:
 		panic(fmt.Sprintf("unknown mode: %d", vi.mode))
 	}
-}
-
-func (vi *Vi) MovePrevResult() {
-	vi.SeekPrevResult()
-}
-
-func (vi *Vi) MoveNextResult() {
-
-}
-
-func (vi *Vi) MoveStartLine() {
-
-}
-
-func (vi *Vi) MoveEndLine() {
-
-}
-
-func (vi *Vi) MoveStartFile() {
-
-}
-
-func (vi *Vi) MoveEndFile() {
-
-}
-
-func (vi *Vi) MoveDown() {
-	// _, y := vi.Position()
-	// if vi.cursor.Y == y+vi.Height()-1 {
-	// 	vi.SeekDown()
-	// } else {
-	// 	vi.cursor.moveDown(vi.GetView())
-	// }
-}
-
-func (vi *Vi) MoveUp() {
-	// _, y := vi.Position()
-	// if vi.cursor.Y == y {
-	// 	vi.SeekUp()
-	// } else {
-	// 	vi.cursor.moveUp(vi.GetView())
-	// }
-}
-
-func (vi *Vi) MoveLeft() {
-
-}
-
-func (vi *Vi) MoveRight() {
-
-}
-
-func (vi *Vi) RemoveChar(x, y int) {
-
 }

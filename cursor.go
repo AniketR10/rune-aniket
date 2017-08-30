@@ -2,11 +2,11 @@ package fractal
 
 type cursorHelper struct {
 	idx int
-	pos Coordinates
+	Coordinates
 }
 
 func (c *cursorHelper) Reset() {
-	c.idx, c.pos.X, c.pos.Y = 0, 0, 0
+	c.idx, c.X, c.Y = 0, 0, 0
 }
 
 func (c *cursorHelper) moveRight(cells []Cell) {

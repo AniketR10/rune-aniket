@@ -77,12 +77,15 @@ func main() {
 	config.Wrap = *wrap
 
 	h := NewHandler(input)
+
+	config.Handler = h.Handle
+
 	initContent := new(bytes.Buffer)
 	if _, err = h.WriteTo(initContent); err != nil {
 		log.Fatal(err)
 	}
 
-	if less, err = fractal.NewLess(h.Handle, config); err != nil {
+	if less, err = fractal.NewLess(config); err != nil {
 		log.Fatal(err)
 	}
 
