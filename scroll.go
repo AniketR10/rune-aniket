@@ -10,11 +10,11 @@ import (
 
 // TODO add alignment
 type Scroll struct {
+	Buffer
 	Wrap      bool              // lines longer than the width of the window will wrap and displaying continues on the next line. wrap text
 	Tabspaces int               // number of spaces to use when expanding tabs
 	ResultsFG termbox.Attribute // foreground attribute for search results
 	ResultsBG termbox.Attribute // background attribute for search results
-	buffer    *Buffer
 	cells     []Cell
 	maxoffset Coordinates
 	offset    Coordinates
@@ -23,19 +23,8 @@ type Scroll struct {
 	height    int
 }
 
-func NewScroll(buffer *Buffer) *Scroll {
-	w := new(Scroll)
-	w.Init(buffer)
-	return w
-}
-
-func (w *Scroll) Init(buffer *Buffer) {
-	if buffer != nil {
-		w.SetBuffer(buffer)
-		w.cells = make([]Cell, buffer.Len())
-	} else {
-		w.cells = make([]Cell, 0)
-	}
+func (w *Scroll) Init() {
+	w.cells = make([]Cell, 0)
 
 	w.Tabspaces = 4
 	w.ResultsFG, w.ResultsBG = termbox.AttrReverse, termbox.AttrReverse
@@ -132,7 +121,7 @@ func (w *Scroll) moveResult(i int) {
 
 	if res.X >= w.offset.X+w.width {
 		// move to the minimal x to render search result
-		runes := []rune(string(w.buffer.SearchText()))
+		runes := []rune(string(w.Buffer.SearchText()))
 		w.SeekHorizontal(res.X - w.width + len(runes))
 	} else if res.X < w.offset.X {
 		w.SeekHorizontal(res.X)
@@ -140,10 +129,7 @@ func (w *Scroll) moveResult(i int) {
 }
 
 func (w *Scroll) SeekNextResult() {
-	if w.buffer == nil {
-		return
-	}
-	i, ok := w.buffer.NextResult()
+	i, ok := w.Buffer.NextResult()
 
 	if !ok {
 		return
@@ -153,10 +139,7 @@ func (w *Scroll) SeekNextResult() {
 }
 
 func (w *Scroll) SeekPrevResult() {
-	if w.buffer == nil {
-		return
-	}
-	i, ok := w.buffer.PrevResult()
+	i, ok := w.Buffer.PrevResult()
 
 	if !ok {
 		return
@@ -215,20 +198,14 @@ func reserve(s []Cell, capacity int) []Cell {
 }
 
 func (w *Scroll) scan() (err error) {
-	if w.buffer == nil {
-		w.maxoffset.Y = 0
-		w.maxoffset.X = 0
-		return nil
-	}
-
-	w.cells = reserve(w.cells, w.buffer.Len())
+	w.cells = reserve(w.cells, w.Buffer.Len())
 	ncells := w.cells[:0]
 
 	var r rune
 	var size int
 	columns, row := 0, 0
 
-	for view, x, i := bytes.NewBuffer(w.buffer.Bytes()), 0, 0; ; {
+	for view, x, i := bytes.NewBuffer(w.Buffer.Bytes()), 0, 0; ; {
 		if r, size, err = view.ReadRune(); err != nil {
 			break
 		}
@@ -293,24 +270,13 @@ func (w *Scroll) scan() (err error) {
 	w.SeekHorizontal(w.offset.X)
 	w.SeekVertical(w.offset.Y)
 
-	w.buffer.MarkScanned()
+	w.Buffer.MarkScanned()
 
 	if err == io.EOF {
 		return nil
 	}
 
 	return err
-}
-
-func (w *Scroll) SetBuffer(buf *Buffer) (orig *Buffer) {
-	orig = w.buffer
-	w.buffer = buf
-	w.maxoffset.X, w.maxoffset.Y = 0, 0
-	w.offset.X, w.offset.Y = 0, 0
-
-	buf.MarkUnscanned()
-
-	return
 }
 
 func (w *Scroll) draw(writer Writer) (err error) {
@@ -358,10 +324,7 @@ func (w *Scroll) wrapdraw(writer Writer) (err error) {
 }
 
 func (w *Scroll) Draw(writer Writer) (err error) {
-	if w.buffer == nil {
-		return nil
-	}
-	if !w.buffer.Scanned() {
+	if !w.Buffer.Scanned() {
 		if err = w.scan(); err != nil {
 			return
 		}
@@ -388,11 +351,8 @@ func (w *Scroll) resetCells() {
 }
 
 func (w *Scroll) Search(text string) int {
-	if w.buffer == nil {
-		return 0
-	}
 	w.resetCells()
-	return w.buffer.Search([]byte(text), w.cells, w.ResultsFG, w.ResultsBG)
+	return w.Buffer.Search([]byte(text), w.cells, w.ResultsFG, w.ResultsBG)
 }
 
 func (w *Scroll) CellAt(idx int) Cell {

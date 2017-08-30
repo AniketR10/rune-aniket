@@ -10,9 +10,9 @@ Love isn't love 'til you give it away.
 
 var fortune_width = 44
 
-func newScroll(tabspaces int, wrap bool, width, height int) (buf *Buffer, window *Scroll) {
-	buf = &Buffer{}
-	window = NewScroll(buf)
+func newScroll(tabspaces int, wrap bool, width, height int) (window *Scroll) {
+	window = new(Scroll)
+	window.Init()
 	if err := window.Resize(width, height); err != nil {
 		panic(err)
 	}
@@ -22,8 +22,8 @@ func newScroll(tabspaces int, wrap bool, width, height int) (buf *Buffer, window
 }
 
 func TestScrollNew(t *testing.T) {
-	buf, window := newScroll(5, true, 100, 100)
-	if window.cells == nil || window.buffer != buf ||
+	window := newScroll(5, true, 100, 100)
+	if window.cells == nil ||
 		window.Wrap != true || window.Tabspaces != 5 ||
 		window.width != 100 || window.height != 100 {
 		t.Errorf("window not initialized properly: %+v", window)
@@ -33,8 +33,8 @@ func TestScrollNew(t *testing.T) {
 func TestScrollscan(t *testing.T) {
 	width, height := 8, 2
 	tabspaces := 4
-	buf, window := newScroll(tabspaces, false, width, height)
-	buf.Write([]byte(fortune))
+	window := newScroll(tabspaces, false, width, height)
+	window.Write([]byte(fortune))
 	if err := window.scan(); err != nil {
 		t.Fatal(err)
 	}
@@ -75,8 +75,8 @@ func TestScrollDraw(t *testing.T) {
 	width, height := 8, 2
 	tabspaces := 4
 	wrap := false
-	buf, window := newScroll(tabspaces, wrap, width, height)
-	buf.Write([]byte(fortune))
+	window := newScroll(tabspaces, wrap, width, height)
+	window.Write([]byte(fortune))
 	if err := window.scan(); err != nil {
 		t.Fatal(err)
 	}
@@ -133,8 +133,8 @@ func TestScrollDrawWrap(t *testing.T) {
 	width, height := 8, 2
 	tabspaces := 4
 	wrap := true
-	buf, window := newScroll(tabspaces, wrap, width, height)
-	buf.Write([]byte(fortune))
+	window := newScroll(tabspaces, wrap, width, height)
+	window.Write([]byte(fortune))
 	if err := window.scan(); err != nil {
 		t.Fatal(err)
 	}
@@ -170,8 +170,8 @@ func TestScrollDrawPosition(t *testing.T) {
 	width, height := 8, 4
 	tabspaces := 4
 	wrap := false
-	buf, window := newScroll(tabspaces, wrap, width, height)
-	buf.Write([]byte("AAAAAAAAAAAA\nBBBBBBBBBBBB\nCCCCCCCCCCCC\nDDDDDDDDDDDD"))
+	window := newScroll(tabspaces, wrap, width, height)
+	window.Write([]byte("AAAAAAAAAAAA\nBBBBBBBBBBBB\nCCCCCCCCCCCC\nDDDDDDDDDDDD"))
 	if err := window.scan(); err != nil {
 		t.Fatal(err)
 	}
@@ -203,18 +203,6 @@ DDDDDDDD    `,
 	}
 
 	testWorkflow(t, window, w, tests)
-}
-
-func TestScrollNilBuffer(t *testing.T) {
-	scroll := NewScroll(nil)
-	if err := scroll.Resize(10, 10); err != nil {
-		t.Fatal(err)
-	}
-	scroll.SeekNextResult()
-	scroll.SeekPrevResult()
-	if r := scroll.Search("jfklwjl"); r != 0 {
-		t.Errorf("unexpected result for search: %d", r)
-	}
 }
 
 // func TestScrollGetCell(t *testing.T) {

@@ -8,7 +8,7 @@ import (
 )
 
 // Buffer is a write-only wrapper of bytes.Buffer which
-// provides a cell-aware search API.
+// provides a cell-aware search API and a seek/write API.
 //
 // The zero value for Buffer is an empty buffer ready to use.
 type Buffer struct {

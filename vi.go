@@ -47,21 +47,21 @@ func (vi *Vi) handleNormal(ev termbox.Event) (bool, error) {
 	case termbox.EventKey:
 		switch ev.Ch {
 		case 'O':
-			vi.SeekUp()
+			// vi.SeekUp()
 			vi.setInsertMode()
 		case 'o':
-			vi.SeekDown()
+			// vi.SeekDown()
 			vi.setInsertMode()
 		case 'i':
 			vi.setInsertMode()
 		case 'I':
-			vi.SeekStartLine()
+			// vi.SeekStartLine()
 			vi.setInsertMode()
 		case 'a':
-			vi.SeekRight()
+			// vi.SeekRight()
 			vi.setInsertMode()
 		case 'A':
-			vi.SeekEndLine()
+			// vi.SeekEndLine()
 			vi.setInsertMode()
 		case 'x':
 			// TODO vi.RemoveChar(vi.cursor.X, vi.cursor.Y)
@@ -104,9 +104,9 @@ func (vi *Vi) Init(buf *Buffer) {
 	vi.setNormalMode()
 }
 
-func (vi *Vi) SetBuffer(buf *Buffer) *Buffer {
+func (vi *Vi) SetScroll(scroll *Scroll) (orig *Scroll) {
 	vi.setNormalMode()
-	return vi.Less.SetBuffer(buf)
+	return vi.Less.SetScroll(scroll)
 }
 
 func (vi *Vi) Handle(ev termbox.Event) (bool, error) {
