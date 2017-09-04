@@ -1,6 +1,7 @@
 package fractal
 
 import (
+	"reflect"
 	"testing"
 )
 
@@ -8,7 +9,7 @@ var fortune = `Love in your heart wasn't put there to stay.
 Love isn't love 'til you give it away.
 		-- Oscar Hammerstein 中国`
 
-var fortune_width = 44
+var fortunewidth = 44
 
 func newScroll(tabspaces int, wrap bool, width, height int) (window *Scroll) {
 	window = new(Scroll)
@@ -30,56 +31,13 @@ func TestScrollNew(t *testing.T) {
 	}
 }
 
-func TestScrollscan(t *testing.T) {
-	width, height := 8, 2
-	tabspaces := 4
-	window := newScroll(tabspaces, false, width, height)
-	window.Write(fortune)
-	if err := window.scan(); err != nil {
-		t.Fatal(err)
-	}
-
-	xexpt, yexpt := fortune_width-width, 1
-	if window.maxoffset.X != xexpt || window.maxoffset.Y != yexpt {
-		t.Errorf("max offsets not correct: x: %d shouldbe %d, y: %d should be %d", window.maxoffset.X, xexpt, window.maxoffset.Y, yexpt)
-	}
-
-	var loveL Cell
-
-	loveL = window.CellAt(0)
-	if loveL.Y != 0 || loveL.X != 0 || loveL.Ch != 'L' {
-		t.Errorf("failed to set content: %+v: %c", loveL, loveL.Ch)
-	}
-
-	loveL = window.CellAt(fortune_width + 1)
-	if loveL.Y != 1 || loveL.X != 0 || loveL.Ch != 'L' {
-		t.Errorf("failed to scan newline: %+v: %c", loveL, loveL.Ch)
-	}
-
-	oscarO := window.CellAt(89)
-	if rune(fortune[89]) != window.CellAt(89).Ch {
-		t.Errorf("something is wrong with the cell mapping: fortune: %d, cell: %d", fortune[89], window.CellAt(89))
-	}
-	if oscarO.Y != 2 || oscarO.X != tabspaces*2+3 || oscarO.Ch != 'O' {
-		t.Errorf("failed to scan newline: %+v: %c", oscarO, oscarO.Ch)
-	}
-
-	window.Resize(20, 1)
-	xexpt2, yexpt2 := fortune_width-20, 2
-	if window.maxoffset.X != xexpt2 || window.maxoffset.Y != yexpt2 {
-		t.Errorf("max offsets not correct: x: %d shouldbe %d, y: %d should be %d", window.maxoffset.X, xexpt2, window.maxoffset.Y, yexpt2)
-	}
-}
-
 func TestScrollDraw(t *testing.T) {
 	width, height := 8, 2
 	tabspaces := 4
 	wrap := false
 	window := newScroll(tabspaces, wrap, width, height)
 	window.Write(fortune)
-	if err := window.scan(); err != nil {
-		t.Fatal(err)
-	}
+	window.scan()
 
 	w := NewStringWriter(width, height)
 
@@ -107,6 +65,15 @@ func TestScrollDraw(t *testing.T) {
 		{window.SeekPrevResult, " in your heart wasn'"},
 		{func() { window.Search("中国"); window.SeekNextResult() }, "Oscar Hammerstein 中国"},
 		{func() { window.Search("Oscar"); window.SeekNextResult() }, "Oscar Hammerstein 中国"},
+		{func() { window.SeekStartFile(); window.SeekStartLine() }, "Love in your heart w"},
+		{func() { window.TruncateAt(Coordinates{X: 0, Y: 0}) }, "ove in your heart wa"},
+		{func() { window.TruncateAt(Coordinates{X: 14, Y: 0}) }, "ove in your hert was"},
+		{window.SeekDown, "Love isn't love 'til"},
+		{func() { window.TruncateAt(Coordinates{X: 16, Y: 1}) }, "Love isn't love til "},
+		{func() { window.InsertAt(Coordinates{X: 16, Y: 1}, '中') }, "Love isn't love 中til"},
+		{window.SeekDown, "        -- Oscar Ham"},
+		{window.SeekEndLine, "rstein 中            "},
+		{func() { window.InsertAt(Coordinates{X: 20, Y: 2}, '中') }, "rstein 中中           "},
 	}
 
 	for _, tcase := range tests {
@@ -135,9 +102,7 @@ func TestScrollDrawWrap(t *testing.T) {
 	wrap := true
 	window := newScroll(tabspaces, wrap, width, height)
 	window.Write(fortune)
-	if err := window.scan(); err != nil {
-		t.Fatal(err)
-	}
+	window.scan()
 
 	w := NewStringWriter(width, height)
 
@@ -172,9 +137,7 @@ func TestScrollDrawPosition(t *testing.T) {
 	wrap := false
 	window := newScroll(tabspaces, wrap, width, height)
 	window.Write("AAAAAAAAAAAA\nBBBBBBBBBBBB\nCCCCCCCCCCCC\nDDDDDDDDDDDD")
-	if err := window.scan(); err != nil {
-		t.Fatal(err)
-	}
+	window.scan()
 
 	w := NewStringWriter(12, height)
 
@@ -205,6 +168,52 @@ DDDDDDDD    `,
 	testWorkflow(t, window, w, tests)
 }
 
+func TestAdjustCells(t *testing.T) {
+	cases := []struct {
+		input         []Cell
+		output        []Cell
+		columns, rows int
+	}{
+		{
+			[]Cell{},
+			[]Cell{
+				Cell{}, Cell{},
+				Cell{}, Cell{},
+			},
+			2, 2,
+		},
+		{
+			[]Cell{Cell{Coordinates: Coordinates{X: 0, Y: 1}}},
+			[]Cell{
+				Cell{}, Cell{},
+				Cell{Coordinates: Coordinates{X: 0, Y: 1}}, Cell{},
+			},
+			2, 2,
+		},
+		{
+			[]Cell{Cell{Coordinates: Coordinates{X: 1, Y: 0}}},
+			[]Cell{
+				Cell{}, Cell{Coordinates: Coordinates{X: 1, Y: 0}},
+				Cell{}, Cell{},
+			},
+			2, 2,
+		},
+	}
+
+	for _, tcase := range cases {
+		res := adjustCells(tcase.input, tcase.rows, tcase.columns)
+
+		if len(res) != tcase.rows*tcase.columns {
+			t.Errorf("unexpected grid dimensions: expected %+v found %+v",
+				tcase.rows*tcase.columns, len(res))
+		}
+
+		if !reflect.DeepEqual(tcase.output, res) {
+			t.Errorf("expected %+v found %+v", tcase.output, res)
+		}
+	}
+}
+
 // func TestScrollGetCell(t *testing.T) {
 // 	width, height := 8, 2
 // 	tabspaces := 4
@@ -223,7 +232,7 @@ DDDDDDDD    `,
 // 	}
 //
 // 	idx, loveL = window.Cell(0, 1)
-// 	if idx != fortune_width+1 || loveL.Ch != 'L' {
+// 	if idx != fortunewidth+1 || loveL.Ch != 'L' {
 // 		t.Errorf("failed to scan newline: %+v: %c", loveL, loveL.Ch)
 // 	}
 //
@@ -232,5 +241,3 @@ DDDDDDDD    `,
 // 		t.Errorf("failed to scan newline: %+v: %c", oscarO, oscarO.Ch)
 // 	}
 // }
-
-// TODO add tests for changing buffer

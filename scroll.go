@@ -2,194 +2,188 @@ package fractal
 
 import (
 	"container/list"
-	"fmt"
-	"io"
 
 	"termbox"
 )
 
 // TODO add alignment
 type Scroll struct {
-	buffer     []rune
-	cells      []Cell
-	scanned    bool
-	maxoffset  Coordinates
-	offset     Coordinates
-	position   Coordinates
-	width      int
-	height     int
-	reslist    list.List
-	result     *list.Element
-	searchText []rune
-	Wrap       bool              // lines longer than the width of the window will wrap and displaying continues on the next line. wrap text
-	Tabspaces  int               // number of spaces to use when expanding tabs
-	ResultsFG  termbox.Attribute // foreground attribute for search results
-	ResultsBG  termbox.Attribute // background attribute for search results
+	buffer        []rune
+	cells         []Cell
+	rowwidth      []int
+	width, height int
+	columns, rows int
+	searchText    []rune
+	maxoffset     Coordinates
+	offset        Coordinates
+	position      Coordinates
+	reslist       list.List
+	result        *list.Element
+	ResultsFG     termbox.Attribute // foreground attribute for search results
+	ResultsBG     termbox.Attribute // background attribute for search results
+	Tabspaces     int               // number of spaces to use when expanding tabs
+	Wrap          bool              // lines longer than the width of the window will wrap and displaying continues on the next line. wrap text
+	scanned       bool
 }
 
-func (w *Scroll) Reset() {
-	w.cells = w.cells[:0]
-	w.buffer = w.buffer[:0]
-	w.reslist.Init()
-	w.result = nil
-	w.searchText = nil
+func (s *Scroll) Reset() {
+	s.cells = s.cells[:0]
+	s.buffer = s.buffer[:0]
+	s.reslist.Init()
+	s.result = nil
+	s.searchText = nil
 }
 
-func (w *Scroll) Init() {
-	w.cells = make([]Cell, 0)
-	w.Tabspaces = 4
-	w.ResultsFG, w.ResultsBG = termbox.AttrReverse, termbox.AttrReverse
-	w.Reset()
+func (s *Scroll) Init() {
+	s.cells = make([]Cell, 0)
+	s.Tabspaces = 4
+	s.ResultsFG, s.ResultsBG = termbox.AttrReverse, termbox.AttrReverse
+	s.Reset()
 }
 
-func (w *Scroll) YOffset() int {
-	return w.offset.Y
+func (s *Scroll) YOffset() int {
+	return s.offset.Y
 }
 
-func (w *Scroll) XOffset() int {
-	return w.offset.X
+func (s *Scroll) XOffset() int {
+	return s.offset.X
 }
 
-func (w *Scroll) CanSeekUp() bool {
-	return w.offset.Y > 0
+func (s *Scroll) CanSeekUp() bool {
+	return s.offset.Y > 0
 }
 
-func (w *Scroll) CanSeekDown() bool {
-	return w.offset.Y < w.maxoffset.Y
+func (s *Scroll) CanSeekDown() bool {
+	return s.offset.Y < s.maxoffset.Y
 }
 
-func (w *Scroll) CanSeekLeft() bool {
-	return w.offset.X > 0
+func (s *Scroll) CanSeekLeft() bool {
+	return s.offset.X > 0
 }
 
-func (w *Scroll) CanSeekRight() bool {
-	return w.offset.X < w.maxoffset.X
+func (s *Scroll) CanSeekRight() bool {
+	return s.offset.X < s.maxoffset.X
 }
 
-func (w *Scroll) SeekUp() {
-	if w.CanSeekUp() {
-		w.offset.Y--
+func (s *Scroll) SeekUp() {
+	if s.CanSeekUp() {
+		s.offset.Y--
 	}
 }
 
-func (w *Scroll) SeekDown() {
-	if w.CanSeekDown() {
-		w.offset.Y++
+func (s *Scroll) SeekDown() {
+	if s.CanSeekDown() {
+		s.offset.Y++
 	}
 }
 
-func (w *Scroll) SeekLeft() {
-	if w.CanSeekLeft() {
-		w.offset.X--
+func (s *Scroll) SeekLeft() {
+	if s.CanSeekLeft() {
+		s.offset.X--
 	}
 }
 
-func (w *Scroll) SeekRight() {
-	if w.CanSeekRight() {
-		w.offset.X++
+func (s *Scroll) SeekRight() {
+	if s.CanSeekRight() {
+		s.offset.X++
 	}
 }
 
-func (w *Scroll) SeekVertical(y int) {
-	if y > w.maxoffset.Y {
-		y = w.maxoffset.Y
+func (s *Scroll) SeekVertical(y int) {
+	if y > s.maxoffset.Y {
+		y = s.maxoffset.Y
 	} else if y < 0 {
 		y = 0
 	}
 
-	w.offset.Y = y
+	s.offset.Y = y
 }
 
-func (w *Scroll) SeekHorizontal(x int) {
-	if x > w.maxoffset.X {
-		x = w.maxoffset.X
+func (s *Scroll) SeekHorizontal(x int) {
+	if x > s.maxoffset.X {
+		x = s.maxoffset.X
 	} else if x < 0 {
 		x = 0
 	}
 
-	w.offset.X = x
+	s.offset.X = x
 }
 
-func (w *Scroll) SeekEndLine() {
-	w.SeekHorizontal(w.maxoffset.X)
+func (s *Scroll) SeekEndLine() {
+	s.SeekHorizontal(s.maxoffset.X)
 }
 
-func (w *Scroll) SeekStartLine() {
-	w.SeekHorizontal(0)
+func (s *Scroll) SeekStartLine() {
+	s.SeekHorizontal(0)
 }
 
-func (w *Scroll) SeekEndFile() {
-	w.SeekVertical(w.maxoffset.Y)
+func (s *Scroll) SeekEndFile() {
+	s.SeekVertical(s.maxoffset.Y)
 }
 
-func (w *Scroll) SeekStartFile() {
-	w.SeekVertical(0)
+func (s *Scroll) SeekStartFile() {
+	s.SeekVertical(0)
 }
 
-func (w *Scroll) moveResult(i int) {
-	res := w.cells[i]
+func (s *Scroll) moveResult(i int) {
+	res := s.cells[i]
 
-	w.SeekVertical(res.Y)
+	s.SeekVertical(res.Y)
 
-	if res.X >= w.offset.X+w.width {
-		w.SeekHorizontal(res.X - w.width + len(w.searchText))
-	} else if res.X < w.offset.X {
-		w.SeekHorizontal(res.X)
+	if res.X >= s.offset.X+s.width {
+		s.SeekHorizontal(res.X - s.width + len(s.searchText))
+	} else if res.X < s.offset.X {
+		s.SeekHorizontal(res.X)
 	}
 }
 
-func (w *Scroll) SeekNextResult() {
-	i, ok := w.NextResult()
+func (s *Scroll) SeekNextResult() {
+	i, ok := s.NextResult()
 
 	if !ok {
 		return
 	}
 
-	w.moveResult(i)
+	s.moveResult(i)
 }
 
-func (w *Scroll) SeekPrevResult() {
-	i, ok := w.PrevResult()
+func (s *Scroll) SeekPrevResult() {
+	i, ok := s.PrevResult()
 
 	if !ok {
 		return
 	}
 
-	w.moveResult(i)
+	s.moveResult(i)
 }
 
-func (w *Scroll) Position() (x, y int) {
-	return w.position.X, w.position.Y
+func (s *Scroll) Position() (x, y int) {
+	return s.position.X, s.position.Y
 }
 
-func (w *Scroll) Move(x, y int) error {
-	w.position.X = x
-	w.position.Y = y
+func (s *Scroll) Move(x, y int) error {
+	s.position.X = x
+	s.position.Y = y
 	return nil
 }
 
-func (w *Scroll) Resize(width, height int) error {
-	w.width = width
-	w.height = height
-
-	if err := w.scan(); err != nil {
-		return err
-	}
+func (s *Scroll) Resize(width, height int) error {
+	s.width = width
+	s.height = height
+	s.scan()
 
 	return nil
 }
 
-func (w *Scroll) Height() int {
-	return w.height
+func (s *Scroll) Height() int {
+	return s.height
 }
 
-func (w *Scroll) Width() int {
-	return w.width
+func (s *Scroll) Width() int {
+	return s.width
 }
 
 func reserve(s []Cell, capacity int) []Cell {
-	slen := len(s)
-
 	if capacity <= len(s) {
 		return s
 	}
@@ -199,34 +193,58 @@ func reserve(s []Cell, capacity int) []Cell {
 	}
 
 	n := make([]Cell, capacity)
-	copied := copy(n, s)
-	if copied != slen {
-		panic(fmt.Sprintf("copy failed to copy all cells: did=%d; should=%d", copied, slen))
-	}
+	copy(n, s)
 
 	return n
 }
 
-func (w *Scroll) scan() (err error) {
-	w.cells = reserve(w.cells, len(w.buffer))
-	ncells := w.cells[:0]
+func (s *Scroll) adjustOffsets(rows, columns int) {
+	if rows <= s.height {
+		s.maxoffset.Y = 0
+	} else {
+		s.maxoffset.Y = rows - s.height
+	}
+
+	if s.Wrap {
+		s.maxoffset.X = 0
+	} else if columns >= s.width {
+		s.maxoffset.X = columns - s.width
+	} else {
+		s.maxoffset.X = 0
+	}
+}
+
+// transform cells to be a rows * columns grid
+// fixes tabspaces + missing cells for shorter lines
+func adjustCells(cells []Cell, rows, columns int) []Cell {
+	ncells := make([]Cell, rows*columns)
+	for _, c := range cells {
+		ncells[c.X+c.Y*columns] = c
+	}
+
+	return ncells
+}
+
+func (s *Scroll) scan() {
+	s.cells = reserve(s.cells, len(s.buffer))
+	ncells := s.cells[:0]
 
 	columns, row := 0, 0
 	x := 0
 
-	for i, r := range w.buffer {
-		var cell Cell
-
+	var cell Cell
+	for i, r := range s.buffer {
 		switch r {
 		case '\n':
+			s.rowwidth = append(s.rowwidth, x)
 			row++
 			x = 0
 		case '\t':
-			x += w.Tabspaces
+			x += s.Tabspaces
 		default:
 			cell = Cell{
-				Fg: w.cells[i].Fg,
-				Bg: w.cells[i].Bg,
+				Fg: s.cells[i].Fg,
+				Bg: s.cells[i].Bg,
 				Ch: r,
 				Coordinates: Coordinates{
 					X: x,
@@ -243,47 +261,29 @@ func (w *Scroll) scan() (err error) {
 		}
 	}
 
-	w.cells = ncells
+	s.cells = ncells
 
-	rows := row + 1 // row is index starting at 0
-
-	// adjust max content offsets
-	if rows <= w.height {
-		w.maxoffset.Y = 0
-	} else {
-		w.maxoffset.Y = rows - w.height
-	}
-
-	if w.Wrap {
-		w.maxoffset.X = 0
-	} else if columns >= w.width {
-		w.maxoffset.X = columns - w.width
-	} else {
-		w.maxoffset.X = 0
-	}
+	s.columns = columns
+	s.rows = row + 1
+	s.adjustOffsets(s.rows, s.columns)
+	s.cells = adjustCells(s.cells, s.rows, s.columns)
 
 	// adjust offsets in case they became illegal
-	w.SeekHorizontal(w.offset.X)
-	w.SeekVertical(w.offset.Y)
+	s.SeekHorizontal(s.offset.X)
+	s.SeekVertical(s.offset.Y)
 
-	w.scanned = true
-
-	if err == io.EOF {
-		return nil
-	}
-
-	return err
+	s.scanned = true
 }
 
-func (w *Scroll) draw(writer Writer) (err error) {
+func (s *Scroll) draw(writer Writer) (err error) {
 	var x, y int
 	var c Cell
-	xwindow := w.offset.X + w.width
-	ywindow := w.offset.Y + w.height
-	for _, c = range w.cells {
-		if c.Ch != 0 && c.Y >= w.offset.Y && c.Y < ywindow && c.X >= w.offset.X && c.X < xwindow {
-			x = c.X - w.offset.X + w.position.X
-			y = c.Y - w.offset.Y + w.position.Y
+	xwindow := s.offset.X + s.width
+	ywindow := s.offset.Y + s.height
+	for _, c = range s.cells {
+		if c.Ch != 0 && c.Y >= s.offset.Y && c.Y < ywindow && c.X >= s.offset.X && c.X < xwindow {
+			x = c.X - s.offset.X + s.position.X
+			y = c.Y - s.offset.Y + s.position.Y
 			if err = writer.Write(x, y, c.Ch, c.Fg, c.Bg); err != nil {
 				return
 			}
@@ -293,14 +293,14 @@ func (w *Scroll) draw(writer Writer) (err error) {
 	return nil
 }
 
-func (w *Scroll) wrapdraw(writer Writer) (err error) {
+func (s *Scroll) wrapdraw(writer Writer) (err error) {
 	var x, y, ywindow int
 	var c Cell
-	xwindow := w.width
+	xwindow := s.width
 	wraps := 0
-	for _, c = range w.cells {
-		ywindow = w.offset.Y + w.height - wraps
-		if c.Ch != 0 && c.Y >= w.offset.Y && c.Y < ywindow {
+	for _, c = range s.cells {
+		ywindow = s.offset.Y + s.height - wraps
+		if c.Ch != 0 && c.Y >= s.offset.Y && c.Y < ywindow {
 			x = c.X
 			if x >= xwindow {
 				for ; x >= xwindow; x -= xwindow {
@@ -309,8 +309,8 @@ func (w *Scroll) wrapdraw(writer Writer) (err error) {
 					wraps++
 				}
 			}
-			y = c.Y - w.offset.Y + w.position.Y + wraps
-			if err = writer.Write(x+w.position.X, y, c.Ch, c.Fg, c.Bg); err != nil {
+			y = c.Y - s.offset.Y + s.position.Y + wraps
+			if err = writer.Write(x+s.position.X, y, c.Ch, c.Fg, c.Bg); err != nil {
 				return
 			}
 		}
@@ -319,22 +319,20 @@ func (w *Scroll) wrapdraw(writer Writer) (err error) {
 	return nil
 }
 
-func (w *Scroll) Draw(writer Writer) (err error) {
-	if !w.scanned {
-		if err = w.scan(); err != nil {
-			return
-		}
+func (s *Scroll) Draw(writer Writer) (err error) {
+	if !s.scanned {
+		s.scan()
 	}
-	if w.Wrap {
-		return w.wrapdraw(writer)
+	if s.Wrap {
+		return s.wrapdraw(writer)
 	}
 
-	return w.draw(writer)
+	return s.draw(writer)
 }
 
-func (w *Scroll) resetCells() {
-	for i, c := range w.cells {
-		w.cells[i] = Cell{
+func (s *Scroll) resetCells() {
+	for i, c := range s.cells {
+		s.cells[i] = Cell{
 			Fg: 0,
 			Bg: 0,
 			Ch: c.Ch,
@@ -348,18 +346,15 @@ func (w *Scroll) resetCells() {
 
 // we cannot use the optimized byte or string search routines in std
 // since we need to know the index of the rune as it is drawn in the screen grid
-func index(s, sep []rune) int {
-	n, m := len(s), len(sep)
+func index(s []Cell, sep []rune) int {
+	m := len(sep)
 	if m == 0 {
 		return 0
 	}
-	if m > n {
-		return -1
-	}
 
 	var i, o int
-	for i = 0; i < n && o < m; i++ {
-		if s[i] != sep[o] {
+	for i = 0; i < len(s) && o < m; i++ {
+		if s[i].Ch != sep[o] {
 			o = 0
 		} else {
 			o++
@@ -373,22 +368,22 @@ func index(s, sep []rune) int {
 	return -1
 }
 
-func (w *Scroll) Search(text string) int {
-	w.resetCells()
-	w.reslist.Init()
-	w.result = nil
-	w.searchText = []rune(text)
+func (s *Scroll) Search(text string) int {
+	s.resetCells()
+	s.reslist.Init()
+	s.result = nil
+	s.searchText = []rune(text)
 
-	tlen := len(w.searchText)
+	tlen := len(s.searchText)
 	if tlen == 0 {
 		return 0
 	}
 
-	view := w.buffer
+	view := s.cells
 
 	var a, i int
 	for {
-		if i = index(view, w.searchText); i == -1 {
+		if i = index(view, s.searchText); i == -1 {
 			break
 		}
 
@@ -396,19 +391,19 @@ func (w *Scroll) Search(text string) int {
 		a += i
 
 		for j, last := a, a+tlen; j < last; j++ {
-			w.cells[j] = Cell{
-				Fg: w.ResultsFG,
-				Bg: w.ResultsBG,
-				Ch: w.cells[j].Ch,
+			s.cells[j] = Cell{
+				Fg: s.ResultsFG,
+				Bg: s.ResultsBG,
+				Ch: s.cells[j].Ch,
 				Coordinates: Coordinates{
-					X: w.cells[j].X,
-					Y: w.cells[j].Y,
+					X: s.cells[j].X,
+					Y: s.cells[j].Y,
 				},
 			}
 		}
 
-		// mark first fractal.Cell as result index
-		w.reslist.PushBack(a)
+		// mark first Cell as result index
+		s.reslist.PushBack(a)
 
 		view = view[i+tlen:]
 
@@ -416,39 +411,35 @@ func (w *Scroll) Search(text string) int {
 		a += tlen
 	}
 
-	return w.reslist.Len()
+	return s.reslist.Len()
 }
 
-func (w *Scroll) PrevResult() (int, bool) {
-	if w.result == nil {
-		w.result = w.reslist.Back()
-	} else if w.result = w.result.Prev(); w.result == nil {
-		w.result = w.reslist.Back()
+func (s *Scroll) PrevResult() (int, bool) {
+	if s.result == nil {
+		s.result = s.reslist.Back()
+	} else if s.result = s.result.Prev(); s.result == nil {
+		s.result = s.reslist.Back()
 	}
 
-	if w.result == nil {
+	if s.result == nil {
 		return 0, false
 	}
 
-	return w.result.Value.(int), true
+	return s.result.Value.(int), true
 }
 
-func (w *Scroll) NextResult() (int, bool) {
-	if w.result == nil {
-		w.result = w.reslist.Front()
-	} else if w.result = w.result.Next(); w.result == nil {
-		w.result = w.reslist.Front()
+func (s *Scroll) NextResult() (int, bool) {
+	if s.result == nil {
+		s.result = s.reslist.Front()
+	} else if s.result = s.result.Next(); s.result == nil {
+		s.result = s.reslist.Front()
 	}
 
-	if w.result == nil {
+	if s.result == nil {
 		return 0, false
 	}
 
-	return w.result.Value.(int), true
-}
-
-func (w *Scroll) CellAt(idx int) Cell {
-	return w.cells[idx]
+	return s.result.Value.(int), true
 }
 
 func (s *Scroll) Write(p string) (n int, err error) {
@@ -456,15 +447,39 @@ func (s *Scroll) Write(p string) (n int, err error) {
 	s.buffer = append(s.buffer, []rune(p)...)
 	return len(p), nil
 }
+
 func (s *Scroll) WriteRune(r rune) (n int, err error) {
 	s.scanned = false
 	s.buffer = append(s.buffer, r)
 	return 1, nil
 }
 
+func (s *Scroll) getIdx(pos Coordinates) int {
+	return pos.X + pos.Y*(s.columns+1) // +1 for newline cell
+}
+
 func (s *Scroll) WriteAt(pos Coordinates, r rune) (n int, err error) {
 	s.scanned = false
-	panic("todo")
+	idx := s.getIdx(pos)
+	s.buffer[idx] = r
+	return 1, nil
+}
+
+func (s *Scroll) InsertAt(pos Coordinates, r rune) (n int, err error) {
+	s.scanned = false
+	idx := s.getIdx(pos)
+	len := len(s.buffer)
+
+	if idx >= len {
+		s.buffer = append(s.buffer, r)
+		return 1, nil
+	}
+
+	// make sure we have enough capacity
+	s.buffer = append(s.buffer, 0)[:len]
+	copy(s.buffer[idx+1:], s.buffer[idx:])
+	s.buffer[idx] = r
+	return 1, nil
 }
 
 func (s *Scroll) Truncate(n int) {
@@ -474,7 +489,16 @@ func (s *Scroll) Truncate(n int) {
 
 func (s *Scroll) TruncateAt(pos Coordinates) error {
 	s.scanned = false
-	panic("todo")
+	idx := s.getIdx(pos)
+	tmp := s.buffer[:idx]
+	tmp = append(tmp, s.buffer[idx+1:]...)
+	s.buffer = tmp
+	return nil
+}
+
+// RowWidth returns the width of row i or panics if row i does not exist
+func (s *Scroll) RowWidth(i int) int {
+	return s.rowwidth[i]
 }
 
 func (s *Scroll) Len() int {

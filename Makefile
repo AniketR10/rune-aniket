@@ -1,4 +1,5 @@
 CC=go
+CFLAGS=
 
 TARGET=bin
 LIBSRC=$(wildcard *.go)
@@ -27,7 +28,7 @@ $(TARGET):
 	@mkdir $(TARGET)
 
 $(TARGET)/%: $(EXECSRC) $(LIBSRC) $(TARGET)
-	@cd $(patsubst bin/%,examples/%,$@) && $(CC) build -o ../../$@
+	@cd $(patsubst bin/%,examples/%,$@) && $(CC) build $(CFLAGS) -o ../../$@
 
 CHECK:
 ifndef GOPATH
