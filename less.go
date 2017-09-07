@@ -32,7 +32,7 @@ func DefaultLessConfig() *LessConfig {
 }
 
 type Less struct {
-	content      *Scroll
+	*Scroll
 	cmdScroll    Scroll
 	msgScroll    Scroll
 	mode         mode
@@ -116,11 +116,11 @@ func (l *Less) searchHandleEvent(ev termbox.Event) (exit bool, err error) {
 		str := l.cmdScroll.String()
 		bytes := []byte(str)[1:]
 		l.search = string(bytes)
-		l.content.Search(l.search)
+		l.Scroll.Search(l.search)
 		if err = l.setNormalMode(); err != nil {
 			return
 		}
-		l.content.SeekNextResult()
+		l.Scroll.SeekNextResult()
 		if err = l.sendEvent(LessEvent{Type: Search, Data: bytes}); err != nil {
 			return
 		}
@@ -147,25 +147,25 @@ func (l *Less) normalHandleEvent(ev termbox.Event) (exit bool, err error) {
 		case 'q':
 			return true, nil
 		case 'N':
-			l.content.SeekPrevResult()
+			l.Scroll.SeekPrevResult()
 		case 'n':
-			l.content.SeekNextResult()
+			l.Scroll.SeekNextResult()
 		case '0':
-			l.content.SeekStartLine()
+			l.Scroll.SeekStartLine()
 		case '$':
-			l.content.SeekEndLine()
+			l.Scroll.SeekEndLine()
 		case 'g':
-			l.content.SeekStartFile()
+			l.Scroll.SeekStartFile()
 		case 'G':
-			l.content.SeekEndFile()
+			l.Scroll.SeekEndFile()
 		case 'j':
-			l.content.SeekDown()
+			l.Scroll.SeekDown()
 		case 'k':
-			l.content.SeekUp()
+			l.Scroll.SeekUp()
 		case 'h':
-			l.content.SeekLeft()
+			l.Scroll.SeekLeft()
 		case 'l':
-			l.content.SeekRight()
+			l.Scroll.SeekRight()
 		case '/':
 			err = l.setSearchMode()
 		}
@@ -185,18 +185,18 @@ func (l *Less) SetMessage(text string, args ...interface{}) (err error) {
 }
 
 func (l *Less) Reset() {
-	l.content.Reset()
+	l.Scroll.Reset()
 	l.delEOF = false
 }
 
 func (l *Less) SetScroll(scroll *Scroll) (orig *Scroll) {
-	orig = l.content
-	l.content = scroll
+	orig = l.Scroll
+	l.Scroll = scroll
 	l.Reset()
-	l.setupScroll(l.content)
+	l.setupScroll(l.Scroll)
 
 	if len(l.search) != 0 {
-		l.content.Search(l.search)
+		l.Scroll.Search(l.search)
 	}
 
 	return
@@ -205,12 +205,12 @@ func (l *Less) SetScroll(scroll *Scroll) (orig *Scroll) {
 func (l *Less) SetContent(text string, args ...interface{}) error {
 	l.Reset()
 
-	if _, err := l.content.Write(fmt.Sprintf(text, args...)); err != nil {
+	if _, err := l.Scroll.Write(fmt.Sprintf(text, args...)); err != nil {
 		return err
 	}
 
 	if len(l.search) != 0 {
-		l.content.Search(l.search)
+		l.Scroll.Search(l.search)
 	}
 
 	return nil
@@ -221,11 +221,11 @@ func (l *Less) GetCursor() Coordinates {
 }
 
 func (l *Less) Draw(w Writer) (err error) {
-	if err = l.content.Draw(w); err != nil {
+	if err = l.Scroll.Draw(w); err != nil {
 		return err
 	}
 
-	if !l.content.CanSeekDown() && !l.delEOF {
+	if !l.Scroll.CanSeekDown() && !l.delEOF {
 		l.delEOF = true
 		if err = l.sendEvent(LessEvent{Type: EOF}); err != nil {
 			return err
@@ -273,11 +273,11 @@ func (l *Less) resize() error {
 	msgWidth := l.msgScroll.Len()
 	cmdBarWidth := l.width - msgWidth
 
-	if err = l.content.Move(l.pos.X, l.pos.Y); err != nil {
+	if err = l.Scroll.Move(l.pos.X, l.pos.Y); err != nil {
 		return err
 	}
 
-	if err = l.content.Resize(l.width, contentHeight); err != nil {
+	if err = l.Scroll.Resize(l.width, contentHeight); err != nil {
 		return err
 	}
 
@@ -341,14 +341,14 @@ func (l *Less) InitWithScroll(scroll *Scroll, cfg *LessConfig) (err error) {
 		l.config = cfg
 	}
 
-	l.content = scroll
+	l.Scroll = scroll
 	l.cmdScroll.Init()
 	l.msgScroll.Init()
-	l.content.Init()
+	l.Scroll.Init()
 
 	l.setupScroll(&l.cmdScroll)
 	l.setupScroll(&l.msgScroll)
-	l.setupScroll(l.content)
+	l.setupScroll(l.Scroll)
 
 	if err = l.setNormalMode(); err != nil {
 		return

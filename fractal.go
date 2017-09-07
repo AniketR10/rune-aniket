@@ -67,6 +67,11 @@ func Run(root Handler) (err error) {
 	return run(root, &TermboxWriter{})
 }
 
+func RunMode(root Handler, mode termbox.InputMode) (err error) {
+	termbox.SetInputMode(mode)
+	return Run(root)
+}
+
 func Size() (width int, height int) {
 	return termbox.Size()
 }

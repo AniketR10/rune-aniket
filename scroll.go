@@ -27,6 +27,8 @@ type Scroll struct {
 }
 
 func (s *Scroll) Reset() {
+	s.rowwidth = s.rowwidth[:0]
+	s.columns, s.rows = 0, 0
 	s.cells = s.cells[:0]
 	s.buffer = s.buffer[:0]
 	s.reslist.Init()
@@ -34,19 +36,17 @@ func (s *Scroll) Reset() {
 	s.searchText = nil
 }
 
+func NewScroll() (s *Scroll) {
+	s = new(Scroll)
+	s.Init()
+	return
+}
+
 func (s *Scroll) Init() {
 	s.cells = make([]Cell, 0)
 	s.Tabspaces = 4
 	s.ResultsFG, s.ResultsBG = termbox.AttrReverse, termbox.AttrReverse
 	s.Reset()
-}
-
-func (s *Scroll) YOffset() int {
-	return s.offset.Y
-}
-
-func (s *Scroll) XOffset() int {
-	return s.offset.X
 }
 
 func (s *Scroll) CanSeekUp() bool {
@@ -228,45 +228,48 @@ func adjustCells(cells []Cell, rows, columns int) []Cell {
 func (s *Scroll) scan() {
 	s.cells = reserve(s.cells, len(s.buffer))
 	ncells := s.cells[:0]
+	s.rowwidth = s.rowwidth[:0]
 
 	columns, row := 0, 0
 	x := 0
 
-	var cell Cell
 	for i, r := range s.buffer {
+		ncells = append(ncells, Cell{
+			// FIXME
+			Fg: s.cells[i].Fg,
+			Bg: s.cells[i].Bg,
+			Ch: r,
+			Coordinates: Coordinates{
+				X: x,
+				Y: row,
+			},
+		})
 		switch r {
 		case '\n':
-			s.rowwidth = append(s.rowwidth, x)
+			if x == 0 {
+				s.rowwidth = append(s.rowwidth, 0)
+			} else {
+				s.rowwidth = append(s.rowwidth, x-1)
+			}
 			row++
 			x = 0
 		case '\t':
 			x += s.Tabspaces
 		default:
-			cell = Cell{
-				Fg: s.cells[i].Fg,
-				Bg: s.cells[i].Bg,
-				Ch: r,
-				Coordinates: Coordinates{
-					X: x,
-					Y: row,
-				},
-			}
 			x++
 		}
-
-		ncells = append(ncells, cell)
 
 		if x > columns {
 			columns = x
 		}
 	}
 
-	s.cells = ncells
+	s.rowwidth = append(s.rowwidth, x)
 
 	s.columns = columns
 	s.rows = row + 1
 	s.adjustOffsets(s.rows, s.columns)
-	s.cells = adjustCells(s.cells, s.rows, s.columns)
+	s.cells = adjustCells(ncells, s.rows, s.columns)
 
 	// adjust offsets in case they became illegal
 	s.SeekHorizontal(s.offset.X)
@@ -276,14 +279,12 @@ func (s *Scroll) scan() {
 }
 
 func (s *Scroll) draw(writer Writer) (err error) {
-	var x, y int
-	var c Cell
 	xwindow := s.offset.X + s.width
 	ywindow := s.offset.Y + s.height
-	for _, c = range s.cells {
+	for _, c := range s.cells {
 		if c.Ch != 0 && c.Y >= s.offset.Y && c.Y < ywindow && c.X >= s.offset.X && c.X < xwindow {
-			x = c.X - s.offset.X + s.position.X
-			y = c.Y - s.offset.Y + s.position.Y
+			x := c.X - s.offset.X + s.position.X
+			y := c.Y - s.offset.Y + s.position.Y
 			if err = writer.Write(x, y, c.Ch, c.Fg, c.Bg); err != nil {
 				return
 			}
@@ -303,7 +304,8 @@ func (s *Scroll) wrapdraw(writer Writer) (err error) {
 		if c.Ch != 0 && c.Y >= s.offset.Y && c.Y < ywindow {
 			x = c.X
 			if x >= xwindow {
-				for ; x >= xwindow; x -= xwindow {
+				for x >= xwindow {
+					x -= xwindow
 				}
 				if x == 0 {
 					wraps++
@@ -496,8 +498,8 @@ func (s *Scroll) TruncateAt(pos Coordinates) error {
 	return nil
 }
 
-// RowWidth returns the width of row i or panics if row i does not exist
-func (s *Scroll) RowWidth(i int) int {
+// RowLastIdx returns the width of row i or panics if row i does not exist
+func (s *Scroll) RowLastIdx(i int) int {
 	return s.rowwidth[i]
 }
 
@@ -507,4 +509,12 @@ func (s *Scroll) Len() int {
 
 func (s *Scroll) String() string {
 	return string(s.buffer)
+}
+
+func (s *Scroll) Rows() int {
+	return s.rows
+}
+
+func (s *Scroll) Columns() int {
+	return s.columns
 }

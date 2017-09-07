@@ -2,6 +2,7 @@ package fractal
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -47,12 +48,12 @@ func TestScrollDraw(t *testing.T) {
 		{window.SeekLeft, "Love in \nLove isn"},
 		{window.SeekRight, "ove in y\nove isn'"},
 		{window.SeekLeft, "Love in \nLove isn"},
-		{window.SeekDown, "Love isn\n        "},
-		{window.SeekDown, "Love isn\n        "},
-		{window.SeekRight, "ove isn'\n       -"},
+		{window.SeekDown, "Love isn\n\t   \t   "},
+		{window.SeekDown, "Love isn\n\t   \t   "},
+		{window.SeekRight, "ove isn'\n   \t   -"},
 		{window.SeekStartFile, "ove in y\nove isn'"},
-		{window.SeekEndFile, "ove isn'\n       -"},
-		{window.SeekStartLine, "Love isn\n        "},
+		{window.SeekEndFile, "ove isn'\n   \t   -"},
+		{window.SeekStartLine, "Love isn\n\t   \t   "},
 		{window.SeekStartFile, "Love in \nLove isn"},
 		{func() { window.Move(1, 1) }, "        \n Love in"},
 		{func() { window.Move(0, 0) }, "Love in \nLove isn"},
@@ -71,7 +72,7 @@ func TestScrollDraw(t *testing.T) {
 		{window.SeekDown, "Love isn't love 'til"},
 		{func() { window.TruncateAt(Coordinates{X: 16, Y: 1}) }, "Love isn't love til "},
 		{func() { window.InsertAt(Coordinates{X: 16, Y: 1}, '中') }, "Love isn't love 中til"},
-		{window.SeekDown, "        -- Oscar Ham"},
+		{window.SeekDown, "\t   \t   -- Oscar Ham"},
 		{window.SeekEndLine, "rstein 中            "},
 		{func() { window.InsertAt(Coordinates{X: 20, Y: 2}, '中') }, "rstein 中中           "},
 	}
@@ -214,30 +215,34 @@ func TestAdjustCells(t *testing.T) {
 	}
 }
 
-// func TestScrollGetCell(t *testing.T) {
-// 	width, height := 8, 2
-// 	tabspaces := 4
-// 	buf, window := newScroll(tabspaces, false, width, height)
-// 	buf.Write([]byte(fortune))
-// 	if err := window.scan(); err != nil {
-// 		t.Fatal(err)
-// 	}
-//
-// 	var loveL Cell
-// 	var idx int
-//
-// 	idx, loveL = window.Cell(0, 0)
-// 	if idx != 0 || loveL.Ch != 'L' {
-// 		t.Errorf("failed to set content: %+v: %c", loveL, loveL.Ch)
-// 	}
-//
-// 	idx, loveL = window.Cell(0, 1)
-// 	if idx != fortunewidth+1 || loveL.Ch != 'L' {
-// 		t.Errorf("failed to scan newline: %+v: %c", loveL, loveL.Ch)
-// 	}
-//
-// 	idx2, oscarO := window.Cell(2, tabspaces*2+3)
-// 	if idx2 != 89 || oscarO.Ch != 'O' {
-// 		t.Errorf("failed to scan newline: %+v: %c", oscarO, oscarO.Ch)
-// 	}
-// }
+func TestRowLength(t *testing.T) {
+	scroll := NewScroll()
+	cases := []struct {
+		content  string
+		line     int
+		expected int
+	}{
+		{fortune, 0, 43},
+		{fortune, 1, 37},
+		{fortune, 2, 31},
+		{"\t\n1\t\t\t222\n\n\n4\n", 0, 3},
+		{"\t\n1\t\t\t222\n\n\n4\n", 1, 15},
+		{"\t\n1\t\t\t222\n\n\n4\n", 2, 0},
+		{"\t\n1\t\t\t222\n\n\n4\n", 3, 0},
+		{"\t\n1\t\t\t222\n\n\n4\n", 4, 0},
+	}
+
+	for _, tcase := range cases {
+		scroll.Reset()
+		if _, err := scroll.Write(tcase.content); err != nil {
+			t.Fatal(err)
+		}
+		scroll.scan()
+		i := scroll.RowLastIdx(tcase.line)
+		lines := strings.Split(tcase.content, "\n")
+
+		if i != tcase.expected {
+			t.Errorf("expected last index of line \"%s\" to be %d instead of %d", lines[tcase.line], tcase.expected, i)
+		}
+	}
+}

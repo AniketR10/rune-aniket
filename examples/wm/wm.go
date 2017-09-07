@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"termbox"
 
 	"github.com/ernestrc/fractal"
 )
@@ -46,7 +47,8 @@ func main() {
 	defer fractal.Close()
 
 	var wm *fractal.WindowManager
-	var less [4]fractal.Less
+	var less [3]fractal.Less
+	var vi *fractal.Vi
 
 	for i := range less {
 		if err = less[i].Init(nil); err != nil {
@@ -70,11 +72,17 @@ func main() {
 
 	wm.FocusDown()
 
-	if _, err = wm.SplitVertical(&less[3]); err != nil {
+	vi = fractal.NewVi()
+
+	if vi.SetContent(content); err != nil {
 		log.Fatal(err)
 	}
 
-	if err := fractal.Run(wm); err != nil {
+	if _, err = wm.SplitVertical(vi); err != nil {
+		log.Fatal(err)
+	}
+
+	if err := fractal.RunMode(wm, termbox.InputAlt); err != nil {
 		log.Fatal(err)
 	}
 }
