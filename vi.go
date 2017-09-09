@@ -6,54 +6,87 @@ import (
 	"termbox"
 )
 
-type ViMode uint8
+type viMode uint8
 
 const (
-	Normal ViMode = iota
-	Insert
-	Visual
-	VisualLine
-	VisualBlock
+	normal viMode = iota
+	insert
+	visual
+	visualLine
+	visualBlock
 )
 
-// Vi basic edit window
+type ViConfig struct {
+	less LessConfig
+	// TODO dispatch edit events with diffs
+	Handler func(ViEvent) error
+}
+
+type ViEvent uint8
+
+// Vi basic edit Handler and Component without ex commands
 type Vi struct {
-	// TODO install search handler to position cursor
 	Less
-	mode   ViMode
+	mode   viMode
 	cursor Coordinates
-	// TODO ViEventHandler to dispatch edits
+	config *ViConfig
 	// TODO clipboard Clipboard
 	// TODO history History
+}
+
+func (vi *Vi) lessHandler(ev LessEvent) error {
+	switch ev.Type {
+	case EOF:
+		// ignore
+	case Search:
+		// TODO set cursor to result
+	}
+	return nil
+}
+
+func DefaultViConfig() *ViConfig {
+	lessConfig := DefaultLessConfig()
+	return &ViConfig{
+		less:    *lessConfig,
+		Handler: nil,
+	}
+}
+
+func NewViConfig(tabspaces int, wrap bool, handler func(ViEvent) error) *ViConfig {
+	c := new(ViConfig)
+	c.less.Tabspaces = tabspaces
+	c.less.Wrap = wrap
+	c.less.ResBG, c.less.ResFG = termbox.ColorDefault, termbox.AttrReverse
+	return c
 }
 
 func (vi *Vi) setNormalMode() {
 	vi.cmdScroll.Reset()
 	vi.msgScroll.Reset()
 	vi.msgScroll.Write("NORMAL")
-	vi.mode = Normal
+	vi.mode = normal
 }
 
 func (vi *Vi) setInsertMode() {
 	vi.msgScroll.Reset()
 	vi.msgScroll.Write("INSERT")
-	vi.mode = Insert
+	vi.mode = insert
 }
 
 func (vi *Vi) setVisualMode() {
 	vi.msgScroll.Reset()
 	vi.msgScroll.Write("VISUAL")
-	vi.mode = Visual
+	vi.mode = visual
 }
 func (vi *Vi) setVisualLineMode() {
 	vi.msgScroll.Reset()
 	vi.msgScroll.Write("V-LINE")
-	vi.mode = VisualLine
+	vi.mode = visualLine
 }
 func (vi *Vi) setVisualBlockMode() {
 	vi.msgScroll.Reset()
 	vi.msgScroll.Write("V-BLOCK")
-	vi.mode = VisualBlock
+	vi.mode = visualBlock
 }
 
 func (vi *Vi) handleNormal(ev termbox.Event) (bool, error) {
@@ -146,19 +179,29 @@ func (vi *Vi) handleVisualBlock(ev termbox.Event) (bool, error) {
 	return false, nil
 }
 
-func NewVi() *Vi {
+func NewVi(cfg *ViConfig) *Vi {
 	vi := new(Vi)
-	vi.Init()
+	vi.Init(cfg)
 	return vi
 }
 
-func (vi *Vi) Init() {
-	vi.Less.Init(nil)
+func (vi *Vi) Init(cfg *ViConfig) {
+	if cfg == nil {
+		cfg = DefaultViConfig()
+	}
+	vi.config = cfg
+	vi.config.less.Handler = vi.lessHandler
+	vi.Less.Init(&vi.config.less)
 	vi.setNormalMode()
 }
 
-func (vi *Vi) InitWithScroll(scroll *Scroll) {
-	vi.Less.InitWithScroll(scroll, nil)
+func (vi *Vi) InitWithScroll(scroll *Scroll, cfg *ViConfig) {
+	if cfg == nil {
+		cfg = DefaultViConfig()
+	}
+	vi.config = cfg
+	vi.config.less.Handler = vi.lessHandler
+	vi.Less.InitWithScroll(scroll, &vi.config.less)
 	vi.setNormalMode()
 }
 
@@ -169,18 +212,18 @@ func (vi *Vi) SetScroll(scroll *Scroll) (orig *Scroll) {
 
 func (vi *Vi) Handle(ev termbox.Event) (bool, error) {
 	switch vi.mode {
-	case Normal:
+	case normal:
 		if vi.Less.mode != normalMode {
 			return vi.Less.Handle(ev)
 		}
 		return vi.handleNormal(ev)
-	case Insert:
+	case insert:
 		return vi.handleInsert(ev)
-	case Visual:
+	case visual:
 		return vi.handleVisual(ev)
-	case VisualLine:
+	case visualLine:
 		return vi.handleVisualLine(ev)
-	case VisualBlock:
+	case visualBlock:
 		return vi.handleVisualBlock(ev)
 	default:
 		panic(fmt.Sprintf("unknown mode: %d", vi.mode))
@@ -220,7 +263,7 @@ func (vi *Vi) cellAtCursor() Cell {
 }
 
 func (vi *Vi) isCursorAtNull() bool {
-	return vi.cellAtCursor().Ch == 0
+	return len(vi.cells) > 0 && vi.cellAtCursor().Ch == 0
 }
 
 func (vi *Vi) MoveEndLine() {

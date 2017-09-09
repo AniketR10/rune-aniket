@@ -9,6 +9,7 @@ type Writer interface {
 	Write(x, y int, r rune, fg termbox.Attribute, bg termbox.Attribute) error
 	Flush() error
 	Clear(fg, bg termbox.Attribute) error
+	SetCursor(Coordinates)
 }
 
 type Component interface {

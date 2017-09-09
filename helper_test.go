@@ -56,10 +56,6 @@ func testWorkflow(t *testing.T, m Component, w *StringWriter, cases []testCase) 
 			tcase.action()
 		}
 
-		if err != nil {
-			t.Fatal(err)
-		}
-
 		if err := m.Draw(w); err != nil {
 			t.Fatal(err)
 		}

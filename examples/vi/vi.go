@@ -69,7 +69,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	if vi = fractal.NewVi(); err != nil {
+	if vi = fractal.NewVi(nil); err != nil {
 		log.Fatal(err)
 	}
 

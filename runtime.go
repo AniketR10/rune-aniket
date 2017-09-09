@@ -31,7 +31,7 @@ func redraw(root Handler, termw Writer) (err error) {
 	}
 
 	cursor := root.GetCursor()
-	termbox.SetCursor(cursor.X, cursor.Y)
+	termw.SetCursor(cursor)
 
 	if err = termw.Flush(); err != nil {
 		return err

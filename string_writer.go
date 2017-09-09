@@ -10,11 +10,13 @@ type StringWriter struct {
 	cellbuf       []Cell
 	buffer        bytes.Buffer
 	width, height int
+	CursorCh      rune
 }
 
 func NewStringWriter(width, height int) (t *StringWriter) {
 	t = new(StringWriter)
 	t.Resize(width, height)
+	t.CursorCh = '▐'
 	return
 }
 
@@ -40,7 +42,12 @@ func (w *StringWriter) Flush() (err error) {
 			}
 		}
 		ch := c.Ch
-		if ch == 0 {
+		switch ch {
+		case '\n':
+			fallthrough
+		case 0:
+			fallthrough
+		case '\t':
 			ch = ' '
 		}
 		if _, err = w.buffer.WriteRune(ch); err != nil {
@@ -62,4 +69,11 @@ func (w *StringWriter) Clear(_, _ termbox.Attribute) (err error) {
 
 func (w *StringWriter) String() string {
 	return w.buffer.String()
+}
+
+func (w *StringWriter) SetCursor(pos Coordinates) {
+	i := pos.X + pos.Y*w.width
+	if i < len(w.cellbuf) {
+		w.cellbuf[i].Ch = w.CursorCh
+	}
 }

@@ -9,7 +9,9 @@ func TestWriteFlush(t *testing.T) {
 	c := 'A'
 	for i := 0; i < width; i++ {
 		for j := 0; j < height; j++ {
-			writer.Write(j, i, c, 0, 0)
+			if i > j-1 {
+				writer.Write(j, i, c, 0, 0)
+			}
 		}
 		c++
 	}
@@ -23,7 +25,7 @@ func TestWriteFlush(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	expected := "AAAAA\nBBBBB\nCCCCC\nDDDDD\nEEEEE\n     "
+	expected := "A    \nBB   \nCCC  \nDDDD \nEEEEE\n     "
 	if writer.String() != expected {
 		t.Errorf("expected: %q; found: %q", expected, writer.String())
 	}

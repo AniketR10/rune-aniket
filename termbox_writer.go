@@ -24,3 +24,7 @@ func (w *TermboxWriter) Clear(fg, bg termbox.Attribute) (err error) {
 	err = termbox.Clear(termbox.Attribute(fg), termbox.Attribute(bg))
 	return
 }
+
+func (w *TermboxWriter) SetCursor(pos Coordinates) {
+	termbox.SetCursor(pos.X, pos.Y)
+}
