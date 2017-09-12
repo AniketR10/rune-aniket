@@ -233,16 +233,11 @@ func (s *Scroll) scan() {
 	columns, row := 0, 0
 	x := 0
 
-	for i, r := range s.buffer {
+	for _, r := range s.buffer {
+
 		ncells = append(ncells, Cell{
-			// FIXME
-			Fg: s.cells[i].Fg,
-			Bg: s.cells[i].Bg,
-			Ch: r,
-			Coordinates: Coordinates{
-				X: x,
-				Y: row,
-			},
+			Ch:          r,
+			Coordinates: Coordinates{X: x, Y: row},
 		})
 		switch r {
 		case '\n':
@@ -274,6 +269,8 @@ func (s *Scroll) scan() {
 	// adjust offsets in case they became illegal
 	s.SeekHorizontal(s.offset.X)
 	s.SeekVertical(s.offset.Y)
+
+	s.Search(string(s.searchText))
 
 	s.scanned = true
 }
@@ -333,16 +330,8 @@ func (s *Scroll) Draw(writer Writer) (err error) {
 }
 
 func (s *Scroll) resetCells() {
-	for i, c := range s.cells {
-		s.cells[i] = Cell{
-			Fg: 0,
-			Bg: 0,
-			Ch: c.Ch,
-			Coordinates: Coordinates{
-				X: c.X,
-				Y: c.Y,
-			},
-		}
+	for i := range s.cells {
+		s.cells[i].Fg, s.cells[i].Bg = 0, 0
 	}
 }
 
@@ -370,6 +359,14 @@ func index(s []Cell, sep []rune) int {
 	return -1
 }
 
+func (s *Scroll) SetAttr(pos Coordinates, fg, bg termbox.Attribute) {
+	s.setAttr(s.getIdx(pos), fg, bg)
+}
+
+func (s *Scroll) setAttr(idx int, fg, bg termbox.Attribute) {
+	s.cells[idx].Fg, s.cells[idx].Bg = fg, bg
+}
+
 func (s *Scroll) Search(text string) int {
 	s.resetCells()
 	s.reslist.Init()
@@ -393,15 +390,7 @@ func (s *Scroll) Search(text string) int {
 		a += i
 
 		for j, last := a, a+tlen; j < last; j++ {
-			s.cells[j] = Cell{
-				Fg: s.ResultsFG,
-				Bg: s.ResultsBG,
-				Ch: s.cells[j].Ch,
-				Coordinates: Coordinates{
-					X: s.cells[j].X,
-					Y: s.cells[j].Y,
-				},
-			}
+			s.setAttr(j, s.ResultsFG, s.ResultsBG)
 		}
 
 		// mark first Cell as result index

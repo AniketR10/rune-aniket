@@ -234,7 +234,6 @@ func (vi *Vi) MovePrevResult() {
 }
 
 func (vi *Vi) MoveNextResult() {
-
 }
 
 func (vi *Vi) MoveStartLine() {
