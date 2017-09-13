@@ -34,12 +34,20 @@ type Vi struct {
 	// TODO history History
 }
 
+func (vi *Vi) setCursorResult() {
+	if pos, ok := vi.Result(); ok {
+		vi.cursor = Coordinates{
+			X: pos.X - vi.offset.X,
+			Y: pos.Y - vi.offset.Y,
+		}
+	}
+}
+
 func (vi *Vi) lessHandler(ev LessEvent) error {
 	switch ev.Type {
 	case EOF:
-		// ignore
 	case Search:
-		// TODO set cursor to result
+		vi.setCursorResult()
 	}
 	return nil
 }
@@ -231,9 +239,13 @@ func (vi *Vi) Handle(ev termbox.Event) (bool, error) {
 }
 
 func (vi *Vi) MovePrevResult() {
+	vi.SeekPrevResult()
+	vi.setCursorResult()
 }
 
 func (vi *Vi) MoveNextResult() {
+	vi.SeekNextResult()
+	vi.setCursorResult()
 }
 
 func (vi *Vi) MoveStartLine() {

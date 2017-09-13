@@ -41,7 +41,6 @@ diff_buf_adjust(win_T *win)
 
 type batchTestCase struct {
 	batch  string
-	input  string
 	output string
 }
 
@@ -50,16 +49,21 @@ func testBatchWorkload(t *testing.T, width, height int, cases []batchTestCase) {
 	writer := NewStringWriter(width, height)
 	vi := NewVi(NewViConfig(2, false, nil))
 	vi.Resize(width, height)
+	vi.SetContent(snippet)
 
 	for _, tcase := range cases {
 		if err := writer.Clear(0, 0); err != nil {
 			t.Fatal(err)
 		}
 
-		vi.SetContent(tcase.input)
-
 		for _, r := range tcase.batch {
-			if _, err := vi.Handle(termbox.Event{Ch: r, Type: termbox.EventKey}); err != nil {
+			var err error
+			if r == '>' {
+				_, err = vi.Handle(termbox.Event{Key: termbox.KeyEnter, Type: termbox.EventKey})
+			} else {
+				_, err = vi.Handle(termbox.Event{Ch: r, Type: termbox.EventKey})
+			}
+			if err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -83,7 +87,7 @@ func testBatchWorkload(t *testing.T, width, height int, cases []batchTestCase) {
 
 func TestViCursor(t *testing.T) {
 	cases := []batchTestCase{
-		{"", snippet,
+		{"",
 			`                    
 ▐*                  
  * Check if the curr
@@ -94,7 +98,7 @@ diff_buf_adjust(win_
 {                   
   win_T  *wp;       
               NORMAL`},
-		{"jjjj", snippet,
+		{"jjjj",
 			`                    
 /*                  
  * Check if the curr
@@ -105,6 +109,19 @@ diff_buf_adjust(win_
 {                   
   win_T  *wp;       
               NORMAL`},
+		// fixme: > is ENTER key
+		{"/NULL>",
+			`  if (wp == ▐ULL)   
+  {                 
+    i = diff_buf_idx
+    if (i != DB_COUN
+    {               
+    curtab->tp_diffb
+    curtab->tp_diff_
+    diff_redraw(TRUE
+    }               
+:             NORMAL`},
 	}
+
 	testBatchWorkload(t, 20, 10, cases)
 }

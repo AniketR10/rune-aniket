@@ -433,6 +433,18 @@ func (s *Scroll) NextResult() (int, bool) {
 	return s.result.Value.(int), true
 }
 
+// Result returns the current search result's coordinates
+func (s *Scroll) Result() (pos Coordinates, ok bool) {
+	if s.result == nil {
+		ok = false
+		return
+	}
+	cell := s.cells[s.result.Value.(int)]
+	pos = Coordinates{X: cell.X, Y: cell.Y}
+	ok = true
+	return
+}
+
 func (s *Scroll) Write(p string) (n int, err error) {
 	s.scanned = false
 	s.buffer = append(s.buffer, []rune(p)...)
