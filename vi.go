@@ -147,6 +147,10 @@ func (vi *Vi) handleNormal(ev termbox.Event) (bool, error) {
 			vi.setInsertMode()
 		case 'v':
 			vi.setVisualMode()
+		case 'w':
+			vi.MoveNextWord()
+		case 'b':
+			vi.MovePrevWord()
 		case '/':
 			return vi.Less.Handle(ev)
 		}
@@ -235,6 +239,117 @@ func (vi *Vi) Handle(ev termbox.Event) (bool, error) {
 		return vi.handleVisualBlock(ev)
 	default:
 		panic(fmt.Sprintf("unknown mode: %d", vi.mode))
+	}
+}
+
+func (vi *Vi) moveBeforeRune(t []rune, move func()) {
+	const (
+		skipRune = iota
+		findRune
+		done
+	)
+
+	state := skipRune
+	c := vi.cellAtCursor()
+	prev := c
+
+	for state != done {
+		prev = c
+		move()
+		if c = vi.cellAtCursor(); c.Coordinates == prev.Coordinates {
+			break
+		}
+
+		switch state {
+		case skipRune:
+			none := true
+			for _, r := range t {
+				none = none && c.Ch != r
+			}
+			if none {
+				state = findRune
+			}
+		case findRune:
+			for _, r := range t {
+				if c.Ch == r {
+					state = done
+					break
+				}
+			}
+		}
+	}
+
+	vi.cursor.X = prev.Coordinates.X - vi.offset.X
+	vi.cursor.Y = prev.Coordinates.Y - vi.offset.Y
+}
+
+func (vi *Vi) moveAfterRune(t []rune, move func()) {
+	const (
+		init = iota
+		foundRune
+	)
+
+	c := Cell{Coordinates: Coordinates{X: -1, Y: -1}}
+	state := init
+	var temp Cell
+
+	for {
+		move()
+		if temp = vi.cellAtCursor(); c.Coordinates == temp.Coordinates {
+			return
+		}
+
+		c = temp
+
+		switch state {
+		case init:
+			for _, r := range t {
+				if r == c.Ch {
+					state = foundRune
+					break
+				}
+			}
+		case foundRune:
+			none := true
+			for _, r := range t {
+				none = none && r != c.Ch
+			}
+			if none {
+				return
+			}
+		}
+	}
+}
+
+func (vi *Vi) MoveNextWord() {
+	vi.moveAfterRune([]rune{' ', '\n', '\t'}, vi.MoveRightWrap)
+}
+
+func (vi *Vi) MovePrevWord() {
+	vi.moveBeforeRune([]rune{'\n', ' ', '\t'}, vi.MoveLeftWrap)
+}
+
+// MoveLeftWrap will move the cursor to the left or wrap to end of
+// previous line if cursor is at X=0
+func (vi *Vi) MoveLeftWrap() {
+	if vi.cursor.X == 0 {
+		vi.MoveUp()
+		vi.MoveEndLine()
+		return
+	}
+
+	vi.MoveLeft()
+}
+
+// MoveRightWrap will move the cursor to the right or wrap to beginning
+// of next line if cursor is at X=EOL
+func (vi *Vi) MoveRightWrap() {
+	curr := vi.cursor
+	vi.MoveRight()
+
+	if curr.X == vi.cursor.X {
+		vi.MoveDown()
+		vi.MoveStartLine()
 	}
 }
 
