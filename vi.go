@@ -86,11 +86,13 @@ func (vi *Vi) setVisualMode() {
 	vi.msgScroll.Write("VISUAL")
 	vi.mode = visual
 }
+
 func (vi *Vi) setVisualLineMode() {
 	vi.msgScroll.Reset()
 	vi.msgScroll.Write("V-LINE")
 	vi.mode = visualLine
 }
+
 func (vi *Vi) setVisualBlockMode() {
 	vi.msgScroll.Reset()
 	vi.msgScroll.Write("V-BLOCK")
@@ -153,6 +155,24 @@ func (vi *Vi) handleNormal(ev termbox.Event) (bool, error) {
 			vi.MovePrevWord()
 		case '/':
 			return vi.Less.Handle(ev)
+		case '%':
+			switch vi.cellAtCursor().Ch {
+			case '[':
+				vi.moveMatchRune('[', ']', vi.MoveRightWrap)
+			case '{':
+				vi.moveMatchRune('{', '}', vi.MoveRightWrap)
+			case '(':
+				vi.moveMatchRune('(', ')', vi.MoveRightWrap)
+
+			case ']':
+				vi.moveMatchRune(']', '[', vi.MoveLeftWrap)
+			case '}':
+				vi.moveMatchRune('}', '{', vi.MoveLeftWrap)
+			case ')':
+				vi.moveMatchRune(')', '(', vi.MoveLeftWrap)
+			default:
+				vi.SetMessage(fmt.Sprintf("%+v", vi.cellAtCursor()))
+			}
 		}
 	}
 
@@ -242,7 +262,29 @@ func (vi *Vi) Handle(ev termbox.Event) (bool, error) {
 	}
 }
 
-func (vi *Vi) moveBeforeRune(t []rune, move func()) {
+func (vi *Vi) moveMatchRune(target, match rune, move func() bool) {
+	curr := vi.cursor
+	pending := 1
+	var c Cell
+	for pending != 0 && move() {
+		c = vi.cellAtCursor()
+		switch c.Ch {
+		case target:
+			pending++
+		case match:
+			pending--
+		}
+	}
+
+	if pending == 0 {
+		vi.cursor.X = c.Coordinates.X - vi.offset.X
+		vi.cursor.Y = c.Coordinates.Y - vi.offset.Y
+	} else {
+		vi.cursor = curr
+	}
+}
+
+func (vi *Vi) moveBeforeRune(t []rune, move func() bool) {
 	const (
 		skipRune = iota
 		findRune
@@ -253,12 +295,9 @@ func (vi *Vi) moveBeforeRune(t []rune, move func()) {
 	c := vi.cellAtCursor()
 	prev := c
 
-	for state != done {
+	for state != done && move() {
 		prev = c
-		move()
-		if c = vi.cellAtCursor(); c.Coordinates == prev.Coordinates {
-			break
-		}
+		c = vi.cellAtCursor()
 
 		switch state {
 		case skipRune:
@@ -283,23 +322,17 @@ func (vi *Vi) moveBeforeRune(t []rune, move func()) {
 	vi.cursor.Y = prev.Coordinates.Y - vi.offset.Y
 }
 
-func (vi *Vi) moveAfterRune(t []rune, move func()) {
+func (vi *Vi) moveAfterRune(t []rune, move func() bool) {
 	const (
 		init = iota
 		foundRune
 	)
 
-	c := Cell{Coordinates: Coordinates{X: -1, Y: -1}}
+	var c Cell
 	state := init
-	var temp Cell
 
-	for {
-		move()
-		if temp = vi.cellAtCursor(); c.Coordinates == temp.Coordinates {
-			return
-		}
-
-		c = temp
+	for move() {
+		c = vi.cellAtCursor()
 
 		switch state {
 		case init:
@@ -326,31 +359,40 @@ func (vi *Vi) MoveNextWord() {
 }
 
 func (vi *Vi) MovePrevWord() {
-	vi.moveBeforeRune([]rune{'\n', ' ', '\t'}, vi.MoveLeftWrap)
+	vi.moveBeforeRune([]rune{' ', '\n', '\t'}, vi.MoveLeftWrap)
 }
 
 // MoveLeftWrap will move the cursor to the left or wrap to end of
 // previous line if cursor is at X=0
-func (vi *Vi) MoveLeftWrap() {
-	if vi.cursor.X == 0 {
-		vi.MoveUp()
-		vi.MoveEndLine()
-		return
-	}
-
+func (vi *Vi) MoveLeftWrap() bool {
+	curr := vi.cursor
 	vi.MoveLeft()
+
+	if curr.X == vi.cursor.X {
+		vi.MoveUp()
+		if curr.Y == vi.cursor.Y {
+			return false
+		}
+		vi.MoveEndLine()
+	}
+	return true
 }
 
 // MoveRightWrap will move the cursor to the right or wrap to beginning
 // of next line if cursor is at X=EOL
-func (vi *Vi) MoveRightWrap() {
+func (vi *Vi) MoveRightWrap() bool {
 	curr := vi.cursor
 	vi.MoveRight()
 
 	if curr.X == vi.cursor.X {
 		vi.MoveDown()
+		if curr.Y == vi.cursor.Y {
+			return false
+		}
 		vi.MoveStartLine()
 	}
+
+	return true
 }
 
 func (vi *Vi) MovePrevResult() {
@@ -384,12 +426,14 @@ func (vi *Vi) lastIdxCursorRow() int {
 }
 
 func (vi *Vi) cellAtCursor() Cell {
-	cursor := vi.translatedCursor()
+	cursor := Coordinates{
+		X: vi.offset.X + vi.cursor.X,
+		Y: vi.offset.Y + vi.cursor.Y,
+	}
+	if i := vi.lastIdxCursorRow(); vi.cursor.X > i {
+		cursor.X = i
+	}
 	return vi.cells[cursor.X+cursor.Y*vi.columns]
-}
-
-func (vi *Vi) isCursorAtNull() bool {
-	return len(vi.cells) > 0 && vi.cellAtCursor().Ch == 0
 }
 
 func (vi *Vi) MoveEndLine() {
@@ -415,9 +459,6 @@ func (vi *Vi) MoveEndFile() {
 func (vi *Vi) MoveUp() {
 	if vi.cursor.Y > 0 {
 		vi.cursor.Y--
-		if vi.isCursorAtNull() {
-			vi.MoveRight()
-		}
 	} else {
 		vi.SeekUp()
 	}
@@ -426,9 +467,6 @@ func (vi *Vi) MoveUp() {
 func (vi *Vi) MoveDown() {
 	if vi.cursor.Y < vi.height-2 { // account for command line
 		vi.cursor.Y++
-		if vi.isCursorAtNull() {
-			vi.MoveRight()
-		}
 	} else {
 		vi.SeekDown()
 	}
@@ -437,9 +475,6 @@ func (vi *Vi) MoveDown() {
 func (vi *Vi) MoveLeft() {
 	if vi.cursor.X > 0 {
 		vi.cursor.X--
-		if vi.isCursorAtNull() {
-			vi.MoveLeft()
-		}
 	} else {
 		vi.SeekLeft()
 	}
@@ -449,14 +484,22 @@ func (vi *Vi) MoveRight() {
 	i := vi.lastIdxCursorRow()
 	if vi.cursor.X < vi.width-1 && vi.cursor.X < i {
 		vi.cursor.X++
-		if vi.isCursorAtNull() {
-			vi.MoveRight()
-		}
 	} else if vi.cursor.X < i {
 		vi.SeekRight()
 	}
 }
 
+func (vi *Vi) isCursorAtNull() bool {
+	if len(vi.cells) == 0 {
+		return false
+	}
+	c := vi.cellAtCursor().Ch
+
+	return c == '\t' || c == 0
+}
+
+// GetCursor returns the cursor coordinates relative to the current
+// fractal global positioning
 func (vi *Vi) GetCursor() Coordinates {
 	if vi.Less.mode != normalMode {
 		return vi.Less.GetCursor()
@@ -466,6 +509,12 @@ func (vi *Vi) GetCursor() Coordinates {
 
 	if i := vi.lastIdxCursorRow(); vi.cursor.X > i {
 		cursor.X = i
+	}
+
+	for vi.isCursorAtNull() {
+		if !vi.MoveRightWrap() {
+			break
+		}
 	}
 
 	return Coordinates{
@@ -485,4 +534,10 @@ func (vi *Vi) Resize(width, height int) error {
 	vi.MoveDown()
 
 	return nil
+}
+
+func (vi *Vi) Draw(w Writer) error {
+	c := vi.cellAtCursor()
+	vi.SetMessage("%d,%d %c", c.X, c.Y, c.Ch)
+	return vi.Less.Draw(w)
 }

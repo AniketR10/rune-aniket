@@ -36,8 +36,7 @@ diff_buf_adjust(win_T *win)
 	}
 	else
 	diff_buf_add(win->w_buffer);
-}
-`
+}`
 
 type batchTestCase struct {
 	batch  string
@@ -81,6 +80,35 @@ func testBatchWorkload(t *testing.T, width, height int, cases []batchTestCase) {
 		if out != tcase.output {
 			t.Errorf(">>>>>>>>>>> expected:\n%s\n------------ found:\n%s\n",
 				tcase.output, out)
+		}
+	}
+}
+
+func TestCellAtCursor(t *testing.T) {
+	cases := []struct {
+		input string
+		cell  rune
+	}{
+		{"", '\n'},
+		{"j", '/'},
+		{"l", '*'},
+		{"$", '*'},
+	}
+
+	vi := NewVi(nil)
+	vi.SetContent(snippet)
+	vi.scan()
+
+	if c := vi.GetCursor(); c.X != 0 || c.Y != 0 {
+		t.Fatalf("cursor initialized incorrectly: %+v", c)
+	}
+
+	for _, tcase := range cases {
+		for _, r := range tcase.input {
+			vi.Handle(termbox.Event{Type: termbox.EventKey, Ch: r})
+		}
+		if c := vi.cellAtCursor().Ch; c != tcase.cell {
+			t.Errorf("expected cell \"%c\" found \"%c\"", tcase.cell, c)
 		}
 	}
 }
