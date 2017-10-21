@@ -89,15 +89,18 @@ func TestCellAtCursor(t *testing.T) {
 		input string
 		cell  rune
 	}{
-		{"", '\n'},
+		{"k", '\n'},
 		{"j", '/'},
 		{"l", '*'},
 		{"$", '*'},
 	}
 
+	width, height := 20, 10
+
+	writer := NewStringWriter(width, height)
 	vi := NewVi(nil)
+	vi.Resize(width, height)
 	vi.SetContent(snippet)
-	vi.scan()
 
 	if c := vi.GetCursor(); c.X != 0 || c.Y != 0 {
 		t.Fatalf("cursor initialized incorrectly: %+v", c)
@@ -106,6 +109,14 @@ func TestCellAtCursor(t *testing.T) {
 	for _, tcase := range cases {
 		for _, r := range tcase.input {
 			vi.Handle(termbox.Event{Type: termbox.EventKey, Ch: r})
+
+			if err := vi.Draw(writer); err != nil {
+				t.Fatal(err)
+			}
+
+			if err := writer.Flush(); err != nil {
+				t.Fatal(err)
+			}
 		}
 		if c := vi.cellAtCursor().Ch; c != tcase.cell {
 			t.Errorf("expected cell \"%c\" found \"%c\"", tcase.cell, c)
@@ -116,8 +127,8 @@ func TestCellAtCursor(t *testing.T) {
 func TestViCursor(t *testing.T) {
 	cases := []batchTestCase{
 		{"",
-			`                    
-▐*                  
+			`▐                   
+/*                  
  * Check if the curr
  * diff buffers.    
  */                 
@@ -131,13 +142,13 @@ diff_buf_adjust(win_
 /*                  
  * Check if the curr
  * diff buffers.    
- */                 
-▐ void              
+▐*/                 
+  void              
 diff_buf_adjust(win_
 {                   
   win_T  *wp;       
               NORMAL`},
-		// fixme: > is ENTER key
+		// FIXME: > is ENTER key
 		{"/NULL>",
 			`  if (wp == ▐ULL)   
   {                 

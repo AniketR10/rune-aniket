@@ -238,7 +238,7 @@ func TestRowLength(t *testing.T) {
 			t.Fatal(err)
 		}
 		scroll.scan()
-		i := scroll.RowLastIdx(tcase.line)
+		i, _ := scroll.RowLastIdx(tcase.line)
 		lines := strings.Split(tcase.content, "\n")
 
 		if i != tcase.expected {

@@ -500,8 +500,14 @@ func (s *Scroll) TruncateAt(pos Coordinates) error {
 }
 
 // RowLastIdx returns the width of row i or panics if row i does not exist
-func (s *Scroll) RowLastIdx(i int) int {
-	return s.rowwidth[i]
+func (s *Scroll) RowLastIdx(i int) (int, bool) {
+	if i < 0 {
+		panic("illegal index")
+	}
+	if i >= len(s.rowwidth) {
+		return 0, false
+	}
+	return s.rowwidth[i], true
 }
 
 func (s *Scroll) Len() int {
