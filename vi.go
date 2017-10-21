@@ -27,9 +27,8 @@ type ViEvent uint8
 // Vi basic edit Handler and Component without ex commands
 type Vi struct {
 	Less
-	mode viMode
-	// last cursor move was left-down
-	isRight bool
+	mode         viMode
+	correctRight bool
 	// cursor Coordinates relative to the position of the component in the screen
 	// GetCursor method returns the absolute coordinates
 	cursor Coordinates
@@ -58,9 +57,9 @@ func (vi *Vi) SetCursor(c Coordinates) {
 	}
 
 	if vi.cursor.X > curr.X || vi.cursor.Y > curr.Y {
-		vi.isRight = true
+		vi.correctRight = true
 	} else {
-		vi.isRight = false
+		vi.correctRight = false
 	}
 }
 
@@ -325,10 +324,10 @@ func (vi *Vi) moveBeforeRune(t []rune, move func() bool) {
 	state := skipRune
 	c := vi.cellAtCursor()
 	var prev Coordinates
-	var isRight bool
+	var correctRight bool
 	for move() {
 		c = vi.cellAtCursor()
-		isRight = vi.isRight
+		correctRight = vi.correctRight
 
 		switch state {
 		case skipRune:
@@ -355,7 +354,7 @@ func (vi *Vi) moveBeforeRune(t []rune, move func() bool) {
 
 	vi.cursor = prev
 	// revert direction detection
-	vi.isRight = isRight
+	vi.correctRight = correctRight
 }
 
 func (vi *Vi) moveAfterRune(t []rune, move func() bool) {
@@ -391,11 +390,11 @@ func (vi *Vi) moveAfterRune(t []rune, move func() bool) {
 }
 
 func (vi *Vi) MoveRightStartWord() {
-	vi.moveAfterRune([]rune{' ', '\n', '\t'}, vi.MoveRightWrap)
+	vi.moveAfterRune([]rune{' ', '\n', '\t', 0}, vi.MoveRightWrap)
 }
 
 func (vi *Vi) MoveLeftStartWord() {
-	vi.moveBeforeRune([]rune{' ', '\n', '\t'}, vi.MoveLeftWrap)
+	vi.moveBeforeRune([]rune{' ', '\n', '\t', 0}, vi.MoveLeftWrap)
 }
 
 // MoveLeftWrap will move the cursor to the left or wrap to end of
@@ -449,6 +448,7 @@ func (vi *Vi) MoveStartLine() {
 	if vi.offset.X > 0 {
 		vi.SeekStartLine()
 	}
+	vi.correctRight = true
 }
 
 func (vi *Vi) translatedCursor() Coordinates {
@@ -506,7 +506,7 @@ func (vi *Vi) MoveEndFile() {
 
 func (vi *Vi) MoveUp() {
 	if vi.cursor.Y > 0 {
-		vi.isRight = false
+		vi.correctRight = true
 		vi.cursor.Y--
 	} else {
 		vi.SeekUp()
@@ -515,7 +515,7 @@ func (vi *Vi) MoveUp() {
 
 func (vi *Vi) MoveDown() {
 	if vi.cursor.Y < vi.height-2 { // account for command line
-		vi.isRight = true
+		vi.correctRight = true
 		vi.cursor.Y++
 	} else {
 		vi.SeekDown()
@@ -524,7 +524,7 @@ func (vi *Vi) MoveDown() {
 
 func (vi *Vi) MoveLeft() {
 	if vi.cursor.X > 0 {
-		vi.isRight = false
+		vi.correctRight = false
 		vi.cursor.X--
 	} else {
 		vi.SeekLeft()
@@ -534,7 +534,7 @@ func (vi *Vi) MoveLeft() {
 func (vi *Vi) MoveRight() {
 	i := vi.lastIdxCursorRow()
 	if vi.cursor.X < vi.width-1 && vi.cursor.X < i {
-		vi.isRight = true
+		vi.correctRight = true
 		vi.cursor.X++
 	} else if vi.cursor.X < i {
 		vi.SeekRight()
@@ -557,13 +557,8 @@ func (vi *Vi) GetCursor() Coordinates {
 		return vi.Less.GetCursor()
 	}
 	x, y := vi.Position()
-	cursor := vi.cursor
 
-	if i := vi.lastIdxCursorRow(); cursor.X > i {
-		cursor.X = i
-	}
-
-	if vi.isRight {
+	if vi.correctRight {
 		for vi.isCursorAtNull() {
 			if !vi.MoveRightWrap() {
 				break
@@ -577,10 +572,13 @@ func (vi *Vi) GetCursor() Coordinates {
 		}
 
 	}
+	if i := vi.lastIdxCursorRow(); vi.cursor.X > i {
+		vi.cursor.X = i
+	}
 
 	return Coordinates{
-		X: x + cursor.X,
-		Y: y + cursor.Y,
+		X: x + vi.cursor.X,
+		Y: y + vi.cursor.Y,
 	}
 }
 
