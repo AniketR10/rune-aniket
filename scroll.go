@@ -8,9 +8,7 @@ import (
 
 // TODO add alignment
 type Scroll struct {
-	buffer        []rune
-	cells         []Cell
-	rowwidth      []int
+	buffer        CellBuf
 	width, height int
 	columns, rows int
 	searchText    []rune
@@ -23,17 +21,14 @@ type Scroll struct {
 	ResultsBG     termbox.Attribute // background attribute for search results
 	Tabspaces     int               // number of spaces to use when expanding tabs
 	Wrap          bool              // lines longer than the width of the window will wrap and displaying continues on the next line. wrap text
-	scanned       bool
 }
 
 func (s *Scroll) Reset() {
-	s.rowwidth = s.rowwidth[:0]
 	s.columns, s.rows = 0, 0
-	s.cells = s.cells[:0]
-	s.buffer = s.buffer[:0]
-	s.reslist.Init()
 	s.result = nil
 	s.searchText = nil
+	s.reslist.Init()
+	s.buffer.Init()
 }
 
 func NewScroll() (s *Scroll) {
@@ -43,7 +38,6 @@ func NewScroll() (s *Scroll) {
 }
 
 func (s *Scroll) Init() {
-	s.cells = make([]Cell, 0)
 	s.Tabspaces = 4
 	s.ResultsFG, s.ResultsBG = termbox.AttrReverse, termbox.AttrReverse
 	s.Reset()
@@ -491,6 +485,9 @@ func (s *Scroll) Truncate(n int) {
 }
 
 func (s *Scroll) TruncateAt(pos Coordinates) error {
+	if pos.X < 0 || pos.Y < 0 {
+		panic("negative coordinates")
+	}
 	s.scanned = false
 	idx := s.getIdx(pos)
 	tmp := s.buffer[:idx]

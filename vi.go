@@ -42,7 +42,7 @@ func (vi *Vi) SetCursor(c Coordinates) {
 	curr := vi.cursor
 	if c.X < 0 {
 		vi.cursor.X = 0
-	} else if max := vi.width - 1; c.X > max { // -1 because width starts at 1
+	} else if max := vi.width - 1; c.X > max { // width starts at 1
 		vi.cursor.X = max
 	} else {
 		vi.cursor.X = c.X
@@ -50,7 +50,7 @@ func (vi *Vi) SetCursor(c Coordinates) {
 
 	if c.Y < 0 {
 		vi.cursor.Y = 0
-	} else if max := vi.height - 2; c.Y > max { // -2 to account for command line
+	} else if max := vi.height - 2; c.Y > max { // to account for command line
 		vi.cursor.Y = max
 	} else {
 		vi.cursor.Y = c.Y
@@ -209,9 +209,26 @@ func (vi *Vi) handleNormal(ev termbox.Event) (bool, error) {
 }
 
 func (vi *Vi) handleInsert(ev termbox.Event) (bool, error) {
+	cursor := vi.translatedCursor()
 	switch ev.Key {
+	case termbox.KeySpace:
+		vi.InsertAt(cursor, ' ')
+		vi.MoveRight()
+	case termbox.KeyTab:
+		vi.InsertAt(cursor, '\t')
+		vi.MoveRight()
+	case termbox.KeyBackspace, termbox.KeyBackspace2:
+		if vi.cursor.X > 0 {
+			vi.TruncateAt(Coordinates{cursor.X - 1, cursor.Y})
+			vi.MoveLeft()
+		}
 	case termbox.KeyEsc:
 		vi.setNormalMode()
+	default:
+		if ev.Ch != 0 {
+			vi.InsertAt(cursor, ev.Ch)
+			vi.MoveRight()
+		}
 	}
 	return false, nil
 }
