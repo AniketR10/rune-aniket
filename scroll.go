@@ -2,6 +2,7 @@ package fractal
 
 import (
 	"container/list"
+	"log"
 
 	"termbox"
 )
@@ -490,6 +491,7 @@ func (s *Scroll) TruncateAt(pos Coordinates) error {
 	}
 	s.scanned = false
 	idx := s.getIdx(pos)
+	log.Println(pos, idx)
 	tmp := s.buffer[:idx]
 	tmp = append(tmp, s.buffer[idx+1:]...)
 	s.buffer = tmp
