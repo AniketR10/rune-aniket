@@ -4,6 +4,8 @@ import (
 	"fmt"
 )
 
+const defTabSpaces int = 4
+
 // CellBuf represents a buffer of cells. It is optimized for 2D operations with Coordinates
 type CellBuf struct {
 	cells     [][]Cell
@@ -29,13 +31,12 @@ func (b *CellBuf) appendRune(to Cell, r rune) (lo Cell) {
 		lo.X = -1
 		b.insertNewRow()
 	case '\t':
+		lo.Ch = ' '
 		for i := 0; i < b.Tabspaces; i++ {
-			lo = Cell{
-				// TODO				Ch:          ' ',
-				Coordinates: Coordinates{X: lo.X + 1, Y: y},
-			}
 			b.cells[y] = append(b.cells[y], lo)
+			lo.X++
 		}
+		lo.X--
 	default:
 		b.cells[y] = append(b.cells[y], lo)
 	}
@@ -67,7 +68,7 @@ func (b *CellBuf) fillIn(pos Coordinates) {
 	// fill in cells
 	for x := pos.X; pos.X >= len(b.cells[pos.Y]); x++ {
 		b.cells[pos.Y] = append(b.cells[pos.Y], Cell{
-			// TODO				Ch:          ' ',
+			Ch:          ' ',
 			Coordinates: Coordinates{X: x, Y: pos.Y},
 		})
 	}
@@ -93,7 +94,9 @@ func (b *CellBuf) insertAt(pos Coordinates, r rune) {
 func (b *CellBuf) Init() {
 	b.cells = make([][]Cell, 1)
 	b.cells[0] = make([]Cell, 0)
-	b.Tabspaces = 4
+	if b.Tabspaces == 0 {
+		b.Tabspaces = defTabSpaces
+	}
 }
 
 // WriteStr writes the given string at the end of the buffer

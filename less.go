@@ -83,9 +83,7 @@ func (l *Less) sendEvent(ev LessEvent) error {
 func (l *Less) setNormalMode() error {
 	l.cursorOffset = 1
 	l.cmdScroll.Reset()
-	if _, err := l.cmdScroll.WriteRune(':'); err != nil {
-		return err
-	}
+	l.cmdScroll.Write(':')
 	l.mode = normalMode
 
 	return nil
@@ -93,9 +91,7 @@ func (l *Less) setNormalMode() error {
 
 func (l *Less) setSearchMode() error {
 	l.cmdScroll.Reset()
-	if _, err := l.cmdScroll.WriteRune('/'); err != nil {
-		return err
-	}
+	l.cmdScroll.Write('/')
 	l.mode = searchMode
 
 	return nil
@@ -132,9 +128,7 @@ func (l *Less) searchHandleEvent(ev termbox.Event) (exit bool, err error) {
 
 	default:
 		l.cursorOffset++
-		if _, err = l.cmdScroll.WriteRune(ev.Ch); err != nil {
-			return
-		}
+		l.cmdScroll.Write(ev.Ch)
 	}
 
 	return
@@ -177,10 +171,7 @@ func (l *Less) normalHandleEvent(ev termbox.Event) (exit bool, err error) {
 // Message will draw a message on the bottom right corner
 func (l *Less) SetMessage(text string, args ...interface{}) (err error) {
 	l.msgScroll.Reset()
-	if _, err := l.msgScroll.Write(fmt.Sprintf(text, args...)); err != nil {
-		return err
-	}
-
+	l.msgScroll.WriteStr(fmt.Sprintf(text, args...))
 	return l.Resize(l.width, l.height)
 }
 
@@ -205,9 +196,7 @@ func (l *Less) SetScroll(scroll *Scroll) (orig *Scroll) {
 func (l *Less) SetContent(text string, args ...interface{}) error {
 	l.Reset()
 
-	if _, err := l.Scroll.Write(fmt.Sprintf(text, args...)); err != nil {
-		return err
-	}
+	l.Scroll.WriteStr(fmt.Sprintf(text, args...))
 
 	if len(l.search) != 0 {
 		l.Scroll.Search(l.search)

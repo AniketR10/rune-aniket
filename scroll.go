@@ -2,25 +2,22 @@ package fractal
 
 import (
 	"container/list"
-	"log"
 
 	"termbox"
 )
 
 // TODO add alignment
 type Scroll struct {
-	buffer        CellBuf
+	CellBuf
 	width, height int
 	columns, rows int
 	searchText    []rune
-	maxoffset     Coordinates
 	offset        Coordinates
 	position      Coordinates
 	reslist       list.List
 	result        *list.Element
 	ResultsFG     termbox.Attribute // foreground attribute for search results
 	ResultsBG     termbox.Attribute // background attribute for search results
-	Tabspaces     int               // number of spaces to use when expanding tabs
 	Wrap          bool              // lines longer than the width of the window will wrap and displaying continues on the next line. wrap text
 }
 
@@ -29,7 +26,7 @@ func (s *Scroll) Reset() {
 	s.result = nil
 	s.searchText = nil
 	s.reslist.Init()
-	s.buffer.Init()
+	s.CellBuf.Init()
 }
 
 func NewScroll() (s *Scroll) {
@@ -39,7 +36,6 @@ func NewScroll() (s *Scroll) {
 }
 
 func (s *Scroll) Init() {
-	s.Tabspaces = 4
 	s.ResultsFG, s.ResultsBG = termbox.AttrReverse, termbox.AttrReverse
 	s.Reset()
 }
@@ -49,7 +45,7 @@ func (s *Scroll) CanSeekUp() bool {
 }
 
 func (s *Scroll) CanSeekDown() bool {
-	return s.offset.Y < s.maxoffset.Y
+	return s.offset.Y < s.getMaxYOffset()
 }
 
 func (s *Scroll) CanSeekLeft() bool {
@@ -57,7 +53,7 @@ func (s *Scroll) CanSeekLeft() bool {
 }
 
 func (s *Scroll) CanSeekRight() bool {
-	return s.offset.X < s.maxoffset.X
+	return s.offset.X < s.getMaxXOffset()
 }
 
 func (s *Scroll) SeekUp() {
@@ -85,8 +81,8 @@ func (s *Scroll) SeekRight() {
 }
 
 func (s *Scroll) SeekVertical(y int) {
-	if y > s.maxoffset.Y {
-		y = s.maxoffset.Y
+	if max := s.getMaxYOffset(); y > max {
+		y = max
 	} else if y < 0 {
 		y = 0
 	}
@@ -95,8 +91,8 @@ func (s *Scroll) SeekVertical(y int) {
 }
 
 func (s *Scroll) SeekHorizontal(x int) {
-	if x > s.maxoffset.X {
-		x = s.maxoffset.X
+	if max := s.getMaxXOffset(); x > max {
+		x = max
 	} else if x < 0 {
 		x = 0
 	}
@@ -105,7 +101,7 @@ func (s *Scroll) SeekHorizontal(x int) {
 }
 
 func (s *Scroll) SeekEndLine() {
-	s.SeekHorizontal(s.maxoffset.X)
+	s.SeekHorizontal(s.getMaxXOffset())
 }
 
 func (s *Scroll) SeekStartLine() {
@@ -113,43 +109,43 @@ func (s *Scroll) SeekStartLine() {
 }
 
 func (s *Scroll) SeekEndFile() {
-	s.SeekVertical(s.maxoffset.Y)
+	s.SeekVertical(s.getMaxYOffset())
 }
 
 func (s *Scroll) SeekStartFile() {
 	s.SeekVertical(0)
 }
 
-func (s *Scroll) moveResult(i int) {
-	res := s.cells[i]
+func (s *Scroll) seekTo(pos Coordinates, padding int) {
+	s.SeekVertical(pos.Y)
 
-	s.SeekVertical(res.Y)
-
-	if res.X >= s.offset.X+s.width {
-		s.SeekHorizontal(res.X - s.width + len(s.searchText))
-	} else if res.X < s.offset.X {
-		s.SeekHorizontal(res.X)
+	if pos.X >= s.offset.X+s.width {
+		s.SeekHorizontal(pos.X - s.width + padding)
+	} else if pos.X < s.offset.X {
+		s.SeekHorizontal(pos.X)
 	}
+}
+
+func (s *Scroll) SeekTo(pos Coordinates) {
+	s.seekTo(pos, 1)
 }
 
 func (s *Scroll) SeekNextResult() {
-	i, ok := s.NextResult()
-
+	pos, ok := s.NextResult()
 	if !ok {
 		return
 	}
 
-	s.moveResult(i)
+	s.seekTo(pos, len(s.searchText))
 }
 
 func (s *Scroll) SeekPrevResult() {
-	i, ok := s.PrevResult()
-
+	pos, ok := s.PrevResult()
 	if !ok {
 		return
 	}
 
-	s.moveResult(i)
+	s.seekTo(pos, len(s.searchText))
 }
 
 func (s *Scroll) Position() (x, y int) {
@@ -165,8 +161,6 @@ func (s *Scroll) Move(x, y int) error {
 func (s *Scroll) Resize(width, height int) error {
 	s.width = width
 	s.height = height
-	s.scan()
-
 	return nil
 }
 
@@ -193,92 +187,50 @@ func reserve(s []Cell, capacity int) []Cell {
 	return n
 }
 
-func (s *Scroll) adjustOffsets(rows, columns int) {
-	if rows <= s.height {
-		s.maxoffset.Y = 0
-	} else {
-		s.maxoffset.Y = rows - s.height
-	}
+func (s *Scroll) getView() [][]Cell {
+	ywindow := s.offset.Y + s.height
+	return s.cells[s.offset.Y:ywindow]
+}
 
+func (s *Scroll) getMaxXOffset() (x int) {
+	view := s.getView()
+	columns := 0
+	for _, r := range view {
+		if l := len(r); l > columns {
+			columns = l
+		}
+	}
 	if s.Wrap {
-		s.maxoffset.X = 0
+		x = 0
 	} else if columns >= s.width {
-		s.maxoffset.X = columns - s.width
+		x = columns - s.width
 	} else {
-		s.maxoffset.X = 0
+		x = 0
 	}
+	return
 }
 
-// transform cells to be a rows * columns grid
-// fixes tabspaces + missing cells for shorter lines
-func adjustCells(cells []Cell, rows, columns int) []Cell {
-	ncells := make([]Cell, rows*columns)
-	for _, c := range cells {
-		ncells[c.X+c.Y*columns] = c
+func (s *Scroll) getMaxYOffset() (y int) {
+	rows := len(s.cells)
+	if rows <= s.height {
+		y = 0
+	} else {
+		y = rows - s.height
 	}
-
-	return ncells
-}
-
-func (s *Scroll) scan() {
-	s.cells = reserve(s.cells, len(s.buffer))
-	ncells := s.cells[:0]
-	s.rowwidth = s.rowwidth[:0]
-
-	columns, row := 0, 0
-	x := 0
-
-	for _, r := range s.buffer {
-
-		ncells = append(ncells, Cell{
-			Ch:          r,
-			Coordinates: Coordinates{X: x, Y: row},
-		})
-		switch r {
-		case '\n':
-			if x == 0 {
-				s.rowwidth = append(s.rowwidth, 0)
-			} else {
-				s.rowwidth = append(s.rowwidth, x-1)
-			}
-			row++
-			x = 0
-		case '\t':
-			x += s.Tabspaces
-		default:
-			x++
-		}
-
-		if x > columns {
-			columns = x
-		}
-	}
-
-	s.rowwidth = append(s.rowwidth, x)
-
-	s.columns = columns
-	s.rows = row + 1
-	s.adjustOffsets(s.rows, s.columns)
-	s.cells = adjustCells(ncells, s.rows, s.columns)
-
-	// adjust offsets in case they became illegal
-	s.SeekHorizontal(s.offset.X)
-	s.SeekVertical(s.offset.Y)
-
-	s.Search(string(s.searchText))
-
-	s.scanned = true
+	return
 }
 
 func (s *Scroll) draw(writer Writer) (err error) {
 	xwindow := s.offset.X + s.width
 	ywindow := s.offset.Y + s.height
-	for _, c := range s.cells {
-		if c.Ch != 0 && c.Y >= s.offset.Y && c.Y < ywindow && c.X >= s.offset.X && c.X < xwindow {
-			x := c.X - s.offset.X + s.position.X
-			y := c.Y - s.offset.Y + s.position.Y
-			if err = writer.Write(x, y, c.Ch, c.Fg, c.Bg); err != nil {
-				return
+	for _, r := range s.cells {
+		for _, c := range r {
+			if c.Ch != 0 && c.Y >= s.offset.Y && c.Y < ywindow && c.X >= s.offset.X && c.X < xwindow {
+				x := c.X - s.offset.X + s.position.X
+				y := c.Y - s.offset.Y + s.position.Y
+				if err = writer.Write(x, y, c.Ch, c.Fg, c.Bg); err != nil {
+					return
+				}
 			}
 		}
 	}
@@ -288,24 +240,25 @@ func (s *Scroll) draw(writer Writer) (err error) {
 
 func (s *Scroll) wrapdraw(writer Writer) (err error) {
 	var x, y, ywindow int
-	var c Cell
 	xwindow := s.width
 	wraps := 0
-	for _, c = range s.cells {
-		ywindow = s.offset.Y + s.height - wraps
-		if c.Ch != 0 && c.Y >= s.offset.Y && c.Y < ywindow {
-			x = c.X
-			if x >= xwindow {
-				for x >= xwindow {
-					x -= xwindow
+	for _, r := range s.cells {
+		for _, c := range r {
+			ywindow = s.offset.Y + s.height - wraps
+			if c.Ch != 0 && c.Y >= s.offset.Y && c.Y < ywindow {
+				x = c.X
+				if x >= xwindow {
+					for x >= xwindow {
+						x -= xwindow
+					}
+					if x == 0 {
+						wraps++
+					}
 				}
-				if x == 0 {
-					wraps++
+				y = c.Y - s.offset.Y + s.position.Y + wraps
+				if err = writer.Write(x+s.position.X, y, c.Ch, c.Fg, c.Bg); err != nil {
+					return
 				}
-			}
-			y = c.Y - s.offset.Y + s.position.Y + wraps
-			if err = writer.Write(x+s.position.X, y, c.Ch, c.Fg, c.Bg); err != nil {
-				return
 			}
 		}
 	}
@@ -314,9 +267,6 @@ func (s *Scroll) wrapdraw(writer Writer) (err error) {
 }
 
 func (s *Scroll) Draw(writer Writer) (err error) {
-	if !s.scanned {
-		s.scan()
-	}
 	if s.Wrap {
 		return s.wrapdraw(writer)
 	}
@@ -325,41 +275,16 @@ func (s *Scroll) Draw(writer Writer) (err error) {
 }
 
 func (s *Scroll) resetCells() {
-	for i := range s.cells {
-		s.cells[i].Fg, s.cells[i].Bg = 0, 0
-	}
-}
-
-// we cannot use the optimized byte or string search routines in std
-// since we need to know the index of the rune as it is drawn in the screen grid
-func index(s []Cell, sep []rune) int {
-	m := len(sep)
-	if m == 0 {
-		return 0
-	}
-
-	var i, o int
-	for i = 0; i < len(s) && o < m; i++ {
-		if s[i].Ch != sep[o] {
-			o = 0
-		} else {
-			o++
+	for y, r := range s.cells {
+		for x := range r {
+			s.cells[y][x].Fg, s.cells[y][x].Bg = 0, 0
 		}
 	}
-
-	if o == m {
-		return i - o
-	}
-
-	return -1
 }
 
 func (s *Scroll) SetAttr(pos Coordinates, fg, bg termbox.Attribute) {
-	s.setAttr(s.getIdx(pos), fg, bg)
-}
-
-func (s *Scroll) setAttr(idx int, fg, bg termbox.Attribute) {
-	s.cells[idx].Fg, s.cells[idx].Bg = fg, bg
+	s.cells[pos.Y][pos.X].Bg = bg
+	s.cells[pos.Y][pos.X].Fg = fg
 }
 
 func (s *Scroll) Search(text string) int {
@@ -368,39 +293,39 @@ func (s *Scroll) Search(text string) int {
 	s.result = nil
 	s.searchText = []rune(text)
 
-	tlen := len(s.searchText)
-	if tlen == 0 {
+	m := len(s.searchText)
+	if m == 0 {
 		return 0
 	}
 
-	view := s.cells
-
-	var a, i int
-	for {
-		if i = index(view, s.searchText); i == -1 {
-			break
+	var i Cell
+	var o int
+	for _, r := range s.cells {
+		for _, c := range r {
+			if c.Ch != s.searchText[o] {
+				o = 0
+			} else if o == 0 {
+				i = c
+				o++
+			} else {
+				o++
+			}
+			if o == m {
+				s.reslist.PushBack(i.Coordinates)
+				for _, cell := range s.cells[i.Y][i.X : c.X+1] {
+					s.SetAttr(cell.Coordinates, s.ResultsFG, s.ResultsBG)
+				}
+				o = 0
+			}
 		}
-
-		// use anchor to translate index to original slice
-		a += i
-
-		for j, last := a, a+tlen; j < last; j++ {
-			s.setAttr(j, s.ResultsFG, s.ResultsBG)
-		}
-
-		// mark first Cell as result index
-		s.reslist.PushBack(a)
-
-		view = view[i+tlen:]
-
-		// set next anchor
-		a += tlen
+		// search is not performed across rows
+		o = 0
 	}
 
 	return s.reslist.Len()
 }
 
-func (s *Scroll) PrevResult() (int, bool) {
+func (s *Scroll) PrevResult() (pos Coordinates, ok bool) {
 	if s.result == nil {
 		s.result = s.reslist.Back()
 	} else if s.result = s.result.Prev(); s.result == nil {
@@ -408,13 +333,15 @@ func (s *Scroll) PrevResult() (int, bool) {
 	}
 
 	if s.result == nil {
-		return 0, false
+		return
 	}
 
-	return s.result.Value.(int), true
+	pos = s.result.Value.(Coordinates)
+	ok = true
+	return
 }
 
-func (s *Scroll) NextResult() (int, bool) {
+func (s *Scroll) NextResult() (pos Coordinates, ok bool) {
 	if s.result == nil {
 		s.result = s.reslist.Front()
 	} else if s.result = s.result.Next(); s.result == nil {
@@ -422,10 +349,12 @@ func (s *Scroll) NextResult() (int, bool) {
 	}
 
 	if s.result == nil {
-		return 0, false
+		return
 	}
 
-	return s.result.Value.(int), true
+	pos = s.result.Value.(Coordinates)
+	ok = true
+	return
 }
 
 // Result returns the current search result's coordinates
@@ -434,68 +363,9 @@ func (s *Scroll) Result() (pos Coordinates, ok bool) {
 		ok = false
 		return
 	}
-	cell := s.cells[s.result.Value.(int)]
-	pos = Coordinates{X: cell.X, Y: cell.Y}
+	pos = s.result.Value.(Coordinates)
 	ok = true
 	return
-}
-
-func (s *Scroll) Write(p string) (n int, err error) {
-	s.scanned = false
-	s.buffer = append(s.buffer, []rune(p)...)
-	return len(p), nil
-}
-
-func (s *Scroll) WriteRune(r rune) (n int, err error) {
-	s.scanned = false
-	s.buffer = append(s.buffer, r)
-	return 1, nil
-}
-
-func (s *Scroll) getIdx(pos Coordinates) int {
-	return pos.X + pos.Y*(s.columns+1) // +1 for newline cell
-}
-
-func (s *Scroll) WriteAt(pos Coordinates, r rune) (n int, err error) {
-	s.scanned = false
-	idx := s.getIdx(pos)
-	s.buffer[idx] = r
-	return 1, nil
-}
-
-func (s *Scroll) InsertAt(pos Coordinates, r rune) (n int, err error) {
-	s.scanned = false
-	idx := s.getIdx(pos)
-	len := len(s.buffer)
-
-	if idx >= len {
-		s.buffer = append(s.buffer, r)
-		return 1, nil
-	}
-
-	// make sure we have enough capacity
-	s.buffer = append(s.buffer, 0)[:len]
-	copy(s.buffer[idx+1:], s.buffer[idx:])
-	s.buffer[idx] = r
-	return 1, nil
-}
-
-func (s *Scroll) Truncate(n int) {
-	s.scanned = false
-	s.buffer = s.buffer[:n]
-}
-
-func (s *Scroll) TruncateAt(pos Coordinates) error {
-	if pos.X < 0 || pos.Y < 0 {
-		panic("negative coordinates")
-	}
-	s.scanned = false
-	idx := s.getIdx(pos)
-	log.Println(pos, idx)
-	tmp := s.buffer[:idx]
-	tmp = append(tmp, s.buffer[idx+1:]...)
-	s.buffer = tmp
-	return nil
 }
 
 // RowLastIdx returns the width of row i or panics if row i does not exist
@@ -503,18 +373,11 @@ func (s *Scroll) RowLastIdx(i int) (int, bool) {
 	if i < 0 {
 		panic("illegal index")
 	}
-	if i >= len(s.rowwidth) {
-		return 0, false
+	if i < len(s.cells) {
+		return len(s.cells[i]), true
 	}
-	return s.rowwidth[i], true
-}
 
-func (s *Scroll) Len() int {
-	return len(s.buffer)
-}
-
-func (s *Scroll) String() string {
-	return string(s.buffer)
+	return 0, false
 }
 
 func (s *Scroll) Rows() int {

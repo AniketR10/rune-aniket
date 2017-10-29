@@ -100,31 +100,31 @@ func NewViConfig(tabspaces int, wrap bool, handler func(ViEvent) error) *ViConfi
 func (vi *Vi) setNormalMode() {
 	vi.cmdScroll.Reset()
 	vi.msgScroll.Reset()
-	vi.msgScroll.Write("NORMAL")
+	vi.msgScroll.WriteStr("NORMAL")
 	vi.mode = normal
 }
 
 func (vi *Vi) setInsertMode() {
 	vi.msgScroll.Reset()
-	vi.msgScroll.Write("INSERT")
+	vi.msgScroll.WriteStr("INSERT")
 	vi.mode = insert
 }
 
 func (vi *Vi) setVisualMode() {
 	vi.msgScroll.Reset()
-	vi.msgScroll.Write("VISUAL")
+	vi.msgScroll.WriteStr("VISUAL")
 	vi.mode = visual
 }
 
 func (vi *Vi) setVisualLineMode() {
 	vi.msgScroll.Reset()
-	vi.msgScroll.Write("V-LINE")
+	vi.msgScroll.WriteStr("V-LINE")
 	vi.mode = visualLine
 }
 
 func (vi *Vi) setVisualBlockMode() {
 	vi.msgScroll.Reset()
-	vi.msgScroll.Write("V-BLOCK")
+	vi.msgScroll.WriteStr("V-BLOCK")
 	vi.mode = visualBlock
 }
 
@@ -172,9 +172,9 @@ func (vi *Vi) handleNormal(ev termbox.Event) (bool, error) {
 			vi.MoveEndLine()
 			vi.setInsertMode()
 		case 'x':
-			vi.TruncateAt(vi.cursor)
+			vi.TruncateCellAt(vi.cursor)
 		case 's':
-			vi.TruncateAt(vi.cursor)
+			vi.TruncateCellAt(vi.cursor)
 			vi.setInsertMode()
 		case 'v':
 			vi.setVisualMode()
@@ -219,7 +219,7 @@ func (vi *Vi) handleInsert(ev termbox.Event) (bool, error) {
 		vi.MoveRight()
 	case termbox.KeyBackspace, termbox.KeyBackspace2:
 		if vi.cursor.X > 0 {
-			vi.TruncateAt(Coordinates{cursor.X - 1, cursor.Y})
+			vi.TruncateCellAt(Coordinates{cursor.X - 1, cursor.Y})
 			vi.MoveLeft()
 		}
 	case termbox.KeyEsc:
@@ -493,12 +493,8 @@ func (vi *Vi) cellAtCursor() Cell {
 	if i := vi.lastIdxCursorRow(); vi.cursor.X > i {
 		cursor.X = i
 	}
-	idx := cursor.X + cursor.Y*vi.columns
-	if idx < len(vi.cells) {
-		return vi.cells[idx]
-	}
 
-	return Cell{}
+	return vi.cells[cursor.Y][cursor.X]
 }
 
 func (vi *Vi) MoveEndLine() {
