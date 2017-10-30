@@ -14,21 +14,17 @@ type Writer interface {
 
 type Component interface {
 	Resize(width, height int) error
+	// TODO use coordinates
 	Move(x, y int) error
 	Draw(Writer) error
 	Height() int
 	Width() int
+	// TODO use coordinates
 	Position() (int, int)
 }
 
 type Coordinates struct {
 	X, Y int
-}
-
-type Cell struct {
-	Coordinates
-	Fg, Bg termbox.Attribute
-	Ch     rune
 }
 
 type Help struct {

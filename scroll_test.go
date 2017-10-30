@@ -165,7 +165,7 @@ DDDDDDDD    `,
 	testWorkflow(t, window, w, tests)
 }
 
-func TestRowLength(t *testing.T) {
+func TestRowLastIndex(t *testing.T) {
 	scroll := NewScroll()
 	cases := []struct {
 		content  string
@@ -174,7 +174,7 @@ func TestRowLength(t *testing.T) {
 	}{
 		{fortune, 0, 43},
 		{fortune, 1, 37},
-		{fortune, 2, 31},
+		{fortune, 2, 30},
 		{"\t\n1\t\t\t222\n\n\n4\n", 0, 3},
 		{"\t\n1\t\t\t222\n\n\n4\n", 1, 15},
 		{"\t\n1\t\t\t222\n\n\n4\n", 2, 0},

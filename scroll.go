@@ -172,22 +172,7 @@ func (s *Scroll) Width() int {
 	return s.width
 }
 
-func reserve(s []Cell, capacity int) []Cell {
-	if capacity <= len(s) {
-		return s
-	}
-
-	if capacity <= cap(s) {
-		return s[:capacity]
-	}
-
-	n := make([]Cell, capacity)
-	copy(n, s)
-
-	return n
-}
-
-func (s *Scroll) getView() [][]Cell {
+func (s *Scroll) getView() [][]termbox.Cell {
 	ywindow := s.offset.Y + s.height
 	return s.cells[s.offset.Y:ywindow]
 }
@@ -223,12 +208,12 @@ func (s *Scroll) getMaxYOffset() (y int) {
 func (s *Scroll) draw(writer Writer) (err error) {
 	xwindow := s.offset.X + s.width
 	ywindow := s.offset.Y + s.height
-	for _, r := range s.cells {
-		for _, c := range r {
-			if c.Ch != 0 && c.Y >= s.offset.Y && c.Y < ywindow && c.X >= s.offset.X && c.X < xwindow {
-				x := c.X - s.offset.X + s.position.X
-				y := c.Y - s.offset.Y + s.position.Y
-				if err = writer.Write(x, y, c.Ch, c.Fg, c.Bg); err != nil {
+	for y, r := range s.cells {
+		for x, c := range r {
+			if c.Ch != 0 && y >= s.offset.Y && y < ywindow && x >= s.offset.X && x < xwindow {
+				xi := x - s.offset.X + s.position.X
+				yi := y - s.offset.Y + s.position.Y
+				if err = writer.Write(xi, yi, c.Ch, c.Fg, c.Bg); err != nil {
 					return
 				}
 			}
@@ -239,24 +224,24 @@ func (s *Scroll) draw(writer Writer) (err error) {
 }
 
 func (s *Scroll) wrapdraw(writer Writer) (err error) {
-	var x, y, ywindow int
+	var xi, yi, ywindow int
 	xwindow := s.width
 	wraps := 0
-	for _, r := range s.cells {
-		for _, c := range r {
+	for y, r := range s.cells {
+		for x, c := range r {
 			ywindow = s.offset.Y + s.height - wraps
-			if c.Ch != 0 && c.Y >= s.offset.Y && c.Y < ywindow {
-				x = c.X
-				if x >= xwindow {
-					for x >= xwindow {
-						x -= xwindow
+			if c.Ch != 0 && y >= s.offset.Y && y < ywindow {
+				xi = x
+				if xi >= xwindow {
+					for xi >= xwindow {
+						xi -= xwindow
 					}
-					if x == 0 {
+					if xi == 0 {
 						wraps++
 					}
 				}
-				y = c.Y - s.offset.Y + s.position.Y + wraps
-				if err = writer.Write(x+s.position.X, y, c.Ch, c.Fg, c.Bg); err != nil {
+				yi = y - s.offset.Y + s.position.Y + wraps
+				if err = writer.Write(xi+s.position.X, yi, c.Ch, c.Fg, c.Bg); err != nil {
 					return
 				}
 			}
@@ -293,27 +278,28 @@ func (s *Scroll) Search(text string) int {
 	s.result = nil
 	s.searchText = []rune(text)
 
-	m := len(s.searchText)
-	if m == 0 {
+	slen := len(s.searchText)
+	if slen == 0 {
 		return 0
 	}
 
-	var i Cell
+	var pos Coordinates
 	var o int
-	for _, r := range s.cells {
-		for _, c := range r {
+	for y, r := range s.cells {
+		for x, c := range r {
 			if c.Ch != s.searchText[o] {
 				o = 0
 			} else if o == 0 {
-				i = c
+				pos = Coordinates{X: x, Y: y}
 				o++
 			} else {
 				o++
 			}
-			if o == m {
-				s.reslist.PushBack(i.Coordinates)
-				for _, cell := range s.cells[i.Y][i.X : c.X+1] {
-					s.SetAttr(cell.Coordinates, s.ResultsFG, s.ResultsBG)
+			if o == slen {
+				s.reslist.PushBack(pos)
+				lX := pos.X + slen
+				for j := pos.X; j < lX; j++ {
+					s.SetAttr(Coordinates{X: j, Y: pos.Y}, s.ResultsFG, s.ResultsBG)
 				}
 				o = 0
 			}
@@ -369,15 +355,18 @@ func (s *Scroll) Result() (pos Coordinates, ok bool) {
 }
 
 // RowLastIdx returns the width of row i or panics if row i does not exist
-func (s *Scroll) RowLastIdx(i int) (int, bool) {
-	if i < 0 {
+func (s *Scroll) RowLastIdx(y int) (x int, ok bool) {
+	if y < 0 {
 		panic("illegal index")
 	}
-	if i < len(s.cells) {
-		return len(s.cells[i]), true
+	if y < len(s.cells) {
+		ok = true
+		if len := len(s.cells[y]); len > 0 {
+			x = len - 1
+		}
 	}
 
-	return 0, false
+	return
 }
 
 func (s *Scroll) Rows() int {

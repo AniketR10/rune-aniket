@@ -7,7 +7,7 @@ import (
 )
 
 type StringWriter struct {
-	cellbuf       []Cell
+	cellbuf       []termbox.Cell
 	buffer        bytes.Buffer
 	width, height int
 	CursorCh      rune
@@ -22,7 +22,7 @@ func NewStringWriter(width, height int) (t *StringWriter) {
 
 func (w *StringWriter) Resize(width, height int) {
 	w.width, w.height = width, height
-	w.cellbuf = make([]Cell, width*height)
+	w.cellbuf = make([]termbox.Cell, width*height)
 }
 
 func (w *StringWriter) Write(x, y int, ch rune, fg, bg termbox.Attribute) error {
@@ -30,7 +30,7 @@ func (w *StringWriter) Write(x, y int, ch rune, fg, bg termbox.Attribute) error 
 		return nil
 	}
 	idx := y*w.width + x
-	w.cellbuf[idx] = Cell{Coordinates: Coordinates{X: x, Y: y}, Ch: ch, Fg: fg, Bg: bg}
+	w.cellbuf[idx] = termbox.Cell{Ch: ch, Fg: fg, Bg: bg}
 	return nil
 }
 
@@ -57,12 +57,12 @@ func (w *StringWriter) Flush() (err error) {
 	return
 }
 
-func (w *StringWriter) Cells() []Cell {
+func (w *StringWriter) Cells() []termbox.Cell {
 	return w.cellbuf
 }
 
 func (w *StringWriter) Clear(_, _ termbox.Attribute) (err error) {
-	w.cellbuf = make([]Cell, w.width*w.height)
+	w.cellbuf = make([]termbox.Cell, w.width*w.height)
 	w.buffer.Reset()
 	return
 }

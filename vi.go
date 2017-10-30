@@ -27,13 +27,30 @@ type ViEvent uint8
 // Vi basic edit Handler and Component without ex commands
 type Vi struct {
 	Less
-	mode         viMode
-	correctRight bool
+	mode viMode
 	// cursor Coordinates relative to the position of the component in the screen
 	// GetCursor method returns the absolute coordinates
 	cursor Coordinates
 	config *ViConfig
 	// TODO clipboard Clipboard
+}
+
+func (vi *Vi) skipNullsRight() {
+	for vi.isCursorAtNull() {
+		// TODO not wrap
+		if !vi.MoveRightWrap() {
+			break
+		}
+	}
+}
+
+func (vi *Vi) skipNullsLeft() {
+	for vi.isCursorAtNull() {
+		// TODO not wrap
+		if !vi.MoveLeftWrap() {
+			break
+		}
+	}
 }
 
 // SetCursor sets the cursor position.
@@ -57,9 +74,9 @@ func (vi *Vi) SetCursor(c Coordinates) {
 	}
 
 	if vi.cursor.X > curr.X || vi.cursor.Y > curr.Y {
-		vi.correctRight = true
+		vi.skipNullsRight()
 	} else {
-		vi.correctRight = false
+		vi.skipNullsLeft()
 	}
 }
 
@@ -208,21 +225,33 @@ func (vi *Vi) handleNormal(ev termbox.Event) (bool, error) {
 	return false, nil
 }
 
+func (vi *Vi) setFromScrollPos(pos Coordinates) {
+	vi.cursor = Coordinates{
+		X: pos.X - vi.offset.X,
+		Y: pos.Y - vi.offset.Y,
+	}
+}
+
 func (vi *Vi) handleInsert(ev termbox.Event) (bool, error) {
 	cursor := vi.translatedCursor()
 	switch ev.Key {
+	case termbox.KeyEnter:
+		vi.setFromScrollPos(vi.InsertAt(cursor, '\n'))
 	case termbox.KeySpace:
-		vi.InsertAt(cursor, ' ')
-		vi.MoveRight()
+		vi.setFromScrollPos(vi.InsertAt(cursor, ' '))
 	case termbox.KeyTab:
-		vi.InsertAt(cursor, '\t')
-		vi.MoveRight()
+		vi.setFromScrollPos(vi.InsertAt(cursor, '\t'))
 	case termbox.KeyBackspace, termbox.KeyBackspace2:
 		if vi.cursor.X > 0 {
 			vi.TruncateCellAt(Coordinates{cursor.X - 1, cursor.Y})
+			// TODO use coordinates from insert to set cursor
+			// for inserts and also truncates
 			vi.MoveLeft()
+		} else if vi.cursor.Y > 0 {
+			vi.TruncateCellAt(Coordinates{Y: vi.cursor.Y - 1, X: len(vi.cells[vi.cursor.Y-1]) - 1})
 		}
 	case termbox.KeyEsc:
+		vi.MoveLeft()
 		vi.setNormalMode()
 	default:
 		if ev.Ch != 0 {
@@ -341,10 +370,8 @@ func (vi *Vi) moveBeforeRune(t []rune, move func() bool) {
 	state := skipRune
 	c := vi.cellAtCursor()
 	var prev Coordinates
-	var correctRight bool
 	for move() {
 		c = vi.cellAtCursor()
-		correctRight = vi.correctRight
 
 		switch state {
 		case skipRune:
@@ -370,8 +397,6 @@ func (vi *Vi) moveBeforeRune(t []rune, move func() bool) {
 	}
 
 	vi.cursor = prev
-	// revert direction detection
-	vi.correctRight = correctRight
 }
 
 func (vi *Vi) moveAfterRune(t []rune, move func() bool) {
@@ -380,7 +405,7 @@ func (vi *Vi) moveAfterRune(t []rune, move func() bool) {
 		foundRune
 	)
 
-	var c Cell
+	var c termbox.Cell
 	state := init
 
 	for move() {
@@ -465,7 +490,7 @@ func (vi *Vi) MoveStartLine() {
 	if vi.offset.X > 0 {
 		vi.SeekStartLine()
 	}
-	vi.correctRight = true
+	vi.skipNullsRight()
 }
 
 func (vi *Vi) translatedCursor() Coordinates {
@@ -485,16 +510,18 @@ func (vi *Vi) lastIdxCursorRow() int {
 	return 0
 }
 
-func (vi *Vi) cellAtCursor() Cell {
+func (vi *Vi) cellAtCursor() (cell termbox.Cell) {
+	// cursor at global 2D space
+	gcursor := vi.GetCursor()
 	cursor := Coordinates{
-		X: vi.offset.X + vi.cursor.X,
-		Y: vi.offset.Y + vi.cursor.Y,
+		X: gcursor.X - vi.position.X,
+		Y: gcursor.Y - vi.position.Y,
 	}
-	if i := vi.lastIdxCursorRow(); vi.cursor.X > i {
-		cursor.X = i
+	if cursor.Y < len(vi.cells) && cursor.X < len(vi.cells[cursor.Y]) {
+		cell = vi.cells[cursor.Y][cursor.X]
 	}
 
-	return vi.cells[cursor.Y][cursor.X]
+	return
 }
 
 func (vi *Vi) MoveEndLine() {
@@ -519,8 +546,8 @@ func (vi *Vi) MoveEndFile() {
 
 func (vi *Vi) MoveUp() {
 	if vi.cursor.Y > 0 {
-		vi.correctRight = true
 		vi.cursor.Y--
+		vi.skipNullsRight()
 	} else {
 		vi.SeekUp()
 	}
@@ -528,8 +555,8 @@ func (vi *Vi) MoveUp() {
 
 func (vi *Vi) MoveDown() {
 	if vi.cursor.Y < vi.height-2 { // account for command line
-		vi.correctRight = true
 		vi.cursor.Y++
+		vi.skipNullsRight()
 	} else {
 		vi.SeekDown()
 	}
@@ -537,8 +564,8 @@ func (vi *Vi) MoveDown() {
 
 func (vi *Vi) MoveLeft() {
 	if vi.cursor.X > 0 {
-		vi.correctRight = false
 		vi.cursor.X--
+		vi.skipNullsLeft()
 	} else {
 		vi.SeekLeft()
 	}
@@ -547,20 +574,16 @@ func (vi *Vi) MoveLeft() {
 func (vi *Vi) MoveRight() {
 	i := vi.lastIdxCursorRow()
 	if vi.cursor.X < vi.width-1 && vi.cursor.X < i {
-		vi.correctRight = true
 		vi.cursor.X++
+		vi.skipNullsRight()
 	} else if vi.cursor.X < i {
 		vi.SeekRight()
 	}
 }
 
 func (vi *Vi) isCursorAtNull() bool {
-	if len(vi.cells) == 0 {
-		return false
-	}
 	c := vi.cellAtCursor().Ch
-
-	return c == '\t' || c == 0
+	return c == 0
 }
 
 // GetCursor returns the cursor coordinates relative to the current
@@ -571,28 +594,15 @@ func (vi *Vi) GetCursor() Coordinates {
 	}
 	x, y := vi.Position()
 
-	if vi.correctRight {
-		for vi.isCursorAtNull() {
-			if !vi.MoveRightWrap() {
-				break
-			}
-		}
-	} else {
-		for vi.isCursorAtNull() {
-			if !vi.MoveLeftWrap() {
-				break
-			}
-		}
-
-	}
-	if i := vi.lastIdxCursorRow(); vi.cursor.X > i {
-		vi.cursor.X = i
-	}
-
-	return Coordinates{
+	pos := Coordinates{
 		X: x + vi.cursor.X,
 		Y: y + vi.cursor.Y,
 	}
+	if i := vi.lastIdxCursorRow(); vi.cursor.X > i {
+		pos.X = i
+	}
+
+	return pos
 }
 
 func (vi *Vi) Resize(width, height int) error {

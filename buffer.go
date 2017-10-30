@@ -1,217 +1,168 @@
 package fractal
 
 import (
-	"fmt"
+	"termbox"
 )
 
 const defTabSpaces int = 4
 
-// CellBuf represents a buffer of cells. It is optimized for 2D operations with Coordinates
 type CellBuf struct {
-	cells     [][]Cell
+	cells     [][]termbox.Cell
 	Tabspaces int
 }
 
-func (b *CellBuf) insertNewRow() {
-	nlast := make([]Cell, 0, 1)
-	b.cells = append(b.cells, nlast)
+func makeNewRow(rowlen int) (row []termbox.Cell) {
+	row = make([]termbox.Cell, rowlen)
+	return
 }
 
-func (b *CellBuf) appendRune(to Cell, r rune) (lo Cell) {
-	y, x := to.Y, to.X+1
-	lo = Cell{
-		Ch:          r,
-		Coordinates: Coordinates{X: x, Y: y},
-	}
+func (b *CellBuf) insertNewRow(pos Coordinates) {
+	sourceRow := b.cells[pos.Y]
+	targetY := pos.Y + 1
 
-	switch r {
-	case '\n':
-		b.cells[y] = append(b.cells[y], lo)
-		lo.Y++
-		lo.X = -1
-		b.insertNewRow()
-	case '\t':
-		lo.Ch = ' '
-		for i := 0; i < b.Tabspaces; i++ {
-			b.cells[y] = append(b.cells[y], lo)
-			lo.X++
-		}
-		lo.X--
-	default:
-		b.cells[y] = append(b.cells[y], lo)
+	// make enough space for one more row
+	b.cells = append(b.cells, nil)
+	copy(b.cells[targetY:], b.cells[pos.Y:])
+
+	// if not last position, copy the rest of cells to the next row
+	if pos.X < len(sourceRow) {
+		b.cells[pos.Y] = b.cells[pos.Y][:pos.X]
+		b.cells[targetY] = makeNewRow(len(sourceRow[pos.X:]))
+		copy(b.cells[targetY], sourceRow[pos.X:])
+	} else {
+		b.cells[targetY] = makeNewRow(0)
 	}
-	return lo
 }
 
-func (b *CellBuf) lastCell() (Cell, bool) {
+func (b *CellBuf) nextWrite() Coordinates {
 	// cannot be 0, since we always have at least one row
 	y := len(b.cells) - 1
-
-	// can be 0, since we can have a row with no cells
-	x := len(b.cells[y]) - 1
-	if x < 0 {
-		return Cell{}, false
-	}
-	return b.cells[y][x], true
+	x := len(b.cells[y])
+	return Coordinates{X: x, Y: y}
 }
 
-func (b *CellBuf) fillIn(pos Coordinates) {
+func (b *CellBuf) fillInRows(y int) {
 	if b.cells == nil {
 		b.Init()
 	}
-	// fill in rows
-	for diff := pos.Y - len(b.cells); diff >= 0; diff-- {
-		row := make([]Cell, 0)
+	for y >= len(b.cells) {
+		row := makeNewRow(0)
 		b.cells = append(b.cells, row)
 	}
-
-	// fill in cells
-	for x := pos.X; pos.X >= len(b.cells[pos.Y]); x++ {
-		b.cells[pos.Y] = append(b.cells[pos.Y], Cell{
-			Ch:          ' ',
-			Coordinates: Coordinates{X: x, Y: pos.Y},
-		})
-	}
 }
 
-func (b *CellBuf) writeAt(pos Coordinates, r rune) {
-	b.cells[pos.Y][pos.X] = Cell{Ch: r, Coordinates: pos}
-	if r == '\n' {
-		b.insertNewRow()
-	}
-}
-
-func (b *CellBuf) insertAt(pos Coordinates, r rune) {
-	rowLen := len(b.cells[pos.Y])
+func (b *CellBuf) doInsertAt(pos Coordinates, r rune) {
 	// make sure we have enough capacity
-	b.cells[pos.Y] = append(b.cells[pos.Y], Cell{})[:rowLen]
+	b.cells[pos.Y] = append(b.cells[pos.Y], termbox.Cell{})
 	copy(b.cells[pos.Y][pos.X+1:], b.cells[pos.Y][pos.X:])
+	b.cells[pos.Y][pos.X] = termbox.Cell{Ch: r}
+}
 
-	b.writeAt(pos, r)
+func (b *CellBuf) insertAt(pos Coordinates, r rune) (next Coordinates) {
+	switch r {
+	case '\n':
+		b.insertNewRow(pos)
+		next = Coordinates{X: 0, Y: pos.Y + 1}
+	case '\t':
+		if b.Tabspaces > 0 {
+			n := Coordinates{X: pos.X, Y: pos.Y}
+			for i := 1; i < b.Tabspaces; i++ {
+				n = b.insertAt(n, '\x00')
+			}
+			b.doInsertAt(n, r)
+			next = Coordinates{X: pos.X + b.Tabspaces, Y: pos.Y}
+			break
+		}
+		fallthrough
+	default:
+		b.doInsertAt(pos, r)
+		next = Coordinates{X: pos.X + 1, Y: pos.Y}
+	}
+
+	return
 }
 
 // Init resets and initializes the CellBuf. Note that clients of CellBuf are not required to call this method.
 func (b *CellBuf) Init() {
-	b.cells = make([][]Cell, 1)
-	b.cells[0] = make([]Cell, 0)
+	b.cells = make([][]termbox.Cell, 1)
+	b.cells[0] = makeNewRow(0)
 	if b.Tabspaces == 0 {
 		b.Tabspaces = defTabSpaces
 	}
 }
 
 // WriteStr writes the given string at the end of the buffer
-func (b *CellBuf) WriteStr(p string) {
+func (b *CellBuf) WriteStr(p string) Coordinates {
 	if b.cells == nil {
 		b.Init()
 	}
-	c, ok := b.lastCell()
-	if !ok {
-		c = Cell{Coordinates: Coordinates{X: -1, Y: 0}}
-	}
+	c := b.nextWrite()
 	for _, r := range p {
-		c = b.appendRune(c, r)
+		c = b.insertAt(c, r)
 	}
-	return
+	return c
 }
 
 // Write writes the given rune at the end of the buffer
-func (b *CellBuf) Write(r rune) {
+func (b *CellBuf) Write(r rune) Coordinates {
 	if b.cells == nil {
 		b.Init()
 	}
-	if c, ok := b.lastCell(); ok {
-		b.appendRune(c, r)
-	} else {
-		b.appendRune(Cell{Coordinates: Coordinates{X: -1, Y: 0}}, r)
+	c := b.nextWrite()
+	return b.insertAt(c, r)
+}
+
+func (b *CellBuf) fillInColumns(pos Coordinates) {
+	for pos.X > len(b.cells[pos.Y]) {
+		b.cells[pos.Y] = append(b.cells[pos.Y], termbox.Cell{Ch: '\x00'})
 	}
 }
 
 // WriteAt overwrites the cell at the given position with rune
 func (b *CellBuf) WriteAt(pos Coordinates, r rune) {
-	b.fillIn(pos)
-	b.writeAt(pos, r)
-}
-
-// InsertAt inserts a rune in the given position and shift the cells to the right
-func (b *CellBuf) InsertAt(pos Coordinates, r rune) {
-	b.fillIn(pos)
+	b.fillInRows(pos.Y)
+	b.fillInColumns(pos)
+	b.TruncateCellAt(pos)
 	b.insertAt(pos, r)
 }
 
-// Truncate truncates the last n cells of the buffer
-func (b *CellBuf) Truncate(n int) (t int) {
-	var lrowi int
-	var lrowlen int
-	rows := len(b.cells)
-	for {
-		lrowi = rows - 1
-		if lrowi < 0 {
-			return
-		}
-		lrowlen = len(b.cells[lrowi])
-		if t+lrowlen >= n {
-			break
-		}
-		t += lrowlen
-		b.cells = b.cells[:lrowi]
-		rows--
-	}
-
-	b.cells[lrowi] = b.cells[lrowi][:lrowlen+t-n]
-
-	return
+// InsertAt inserts a rune in the given position and shift the cells to the right
+func (b *CellBuf) InsertAt(pos Coordinates, r rune) Coordinates {
+	b.fillInRows(pos.Y)
+	b.fillInColumns(pos)
+	return b.insertAt(pos, r)
 }
 
 // TruncateLastRow truncates the last row in the buffer
 func (b *CellBuf) TruncateLastRow() {
 	last := len(b.cells) - 1
 	// we need to guarantee that there's always at least one row
-	if last < 0 {
+	if last == 0 {
 		b.TruncateRowFrom(Coordinates{X: 0, Y: 0})
 		return
 	}
 
 	b.cells = b.cells[:last]
-	b.rewriteCoordinates(Coordinates{X: 0, Y: last - 1}, b.cells)
-	// remove newline char from previous row
-	if c, ok := b.lastCell(); ok && c.Ch == '\n' {
-		b.TruncateCellAt(c.Coordinates)
-	}
-}
-
-func (b *CellBuf) rewriteCoordinates(from Coordinates, cells [][]Cell) {
-	for _, row := range cells {
-		for _, c := range row {
-			b.cells[from.Y][from.X] = Cell{
-				Ch:          c.Ch,
-				Coordinates: Coordinates{X: from.X, Y: from.Y},
-			}
-			from.X++
-		}
-		from.X = 0
-		from.Y++
-	}
 }
 
 // TruncateRowAt truncates the row at Coordinates.Y
-func (b *CellBuf) TruncateRowAt(pos Coordinates) {
+func (b *CellBuf) TruncateRowAt(i int) (ok bool) {
 	last := len(b.cells) - 1
-	if pos.Y > last {
-		l, _ := b.lastCell()
-		panic(fmt.Sprintf("index out of bounds: trying to truncate beyond last cell %+v", l))
-	} else if pos.Y != last {
-		copy(b.cells[pos.Y:], b.cells[pos.Y+1:])
+	if i > last {
+		return
+	}
+
+	if i != last {
+		copy(b.cells[i:], b.cells[i+1:])
 	}
 	b.TruncateLastRow()
+	ok = true
+	return
 }
 
 // TruncateRowFrom truncates the row at Coordinates.Y starting from Coordinates.X
 func (b *CellBuf) TruncateRowFrom(pos Coordinates) {
 	b.cells[pos.Y] = b.cells[pos.Y][:pos.X]
-	// keep newline if row was in the middle of the buffer
-	if len(b.cells)-1 != pos.Y {
-		b.cells[pos.Y] = append(b.cells[pos.Y], Cell{Ch: '\n', Coordinates: pos})
-	}
 }
 
 // TruncateFrom truncates from the given position to the end of the buffer
@@ -224,41 +175,42 @@ func (b *CellBuf) TruncateFrom(pos Coordinates) {
 	b.TruncateRowFrom(pos)
 }
 
+// ConflateRow will conflate row at index i with the next row
+func (b *CellBuf) ConflateRow(i int) (ok bool) {
+	// if last row or beyond can't conflate
+	if i >= len(b.cells)-1 {
+		return
+	}
+	for _, c := range b.cells[i+1] {
+		b.cells[i] = append(b.cells[i], termbox.Cell{Ch: c.Ch})
+	}
+	b.TruncateRowAt(i + 1)
+	ok = true
+	return
+}
+
 // TruncateCellAt truncates the cell at the given position and shifts the cells on the right to the left
-func (b *CellBuf) TruncateCellAt(pos Coordinates) (orig Cell) {
+func (b *CellBuf) TruncateCellAt(pos Coordinates) (orig termbox.Cell, ok bool) {
+	if pos.Y >= len(b.cells) || pos.X >= len(b.cells[pos.Y]) {
+		return
+	}
 	orig = b.cells[pos.Y][pos.X]
 	lastIdx := len(b.cells[pos.Y]) - 1
 	if pos.X < lastIdx {
 		copy(b.cells[pos.Y][pos.X:], b.cells[pos.Y][pos.X+1:])
 	}
 	b.cells[pos.Y] = b.cells[pos.Y][:lastIdx]
-
-	// move cells from next row to this row
-	if orig.Ch == '\n' && pos.Y < len(b.cells)-1 {
-		x := pos.X
-		for _, c := range b.cells[pos.Y+1] {
-			b.cells[pos.Y] = append(b.cells[pos.Y], Cell{
-				Ch:          c.Ch,
-				Coordinates: Coordinates{X: x, Y: pos.Y},
-			})
-			x++
-		}
-		b.TruncateLastRow()
-	}
-	b.rewriteCoordinates(Coordinates{X: 0, Y: pos.Y}, b.cells[pos.Y:pos.Y+1])
-	return orig
+	ok = true
+	return
 }
 
 // RowLen returns the number of cells of row at index i
-func (b *CellBuf) RowLen(i int) int {
-	return len(b.cells[i])
-}
-
-// Len returns the total number of cells in the buffer
-func (b *CellBuf) Len() (n int) {
-	for _, row := range b.cells {
-		n += len(row)
+func (b *CellBuf) RowLen(i int) (j int, ok bool) {
+	if i >= len(b.cells) {
+		return
 	}
+	j = len(b.cells[i])
+	ok = true
 	return
 }
 
@@ -271,8 +223,16 @@ func (b *CellBuf) String() string {
 	s := make([]rune, 0)
 	for _, r := range b.cells {
 		for _, c := range r {
-			s = append(s, c.Ch)
+			if c.Ch != '\x00' {
+				s = append(s, c.Ch)
+			}
 		}
+		s = append(s, '\n')
+	}
+	// trim last newline
+	l := len(s) - 1
+	if l >= 0 {
+		s = s[:l]
 	}
 	return string(s)
 }

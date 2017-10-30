@@ -4,25 +4,22 @@ import (
 	"testing"
 )
 
-func TestBufferWrite(t *testing.T) {
+func TestBufferWriteStr(t *testing.T) {
 	var buf CellBuf
-	str := "hello\nworld"
+	str := "hello\n\tworld"
 	buf.WriteStr(str)
-
-	if buf.Len() != len(str) {
-		t.Errorf("length is not correct: is %d, should be %d", buf.Len(), len(str))
-	}
+	buf.Tabspaces = 4
 
 	if l := buf.Rows(); l != 2 {
-		t.Errorf("Lines() is not correct: is %d, should be 2", l)
+		t.Errorf("Lines() is not correct: %d", l)
 	}
 
-	if l := buf.RowLen(0); l != 6 {
-		t.Errorf("RowLen(0) is not correct: is %d, should be 6", l)
+	if l, _ := buf.RowLen(0); l != 5 {
+		t.Errorf("RowLen(0) is not correct: %d", l)
 	}
 
-	if l := buf.RowLen(1); l != 5 {
-		t.Errorf("RowLen(1) is not correct: is %d, should be 5", l)
+	if l, _ := buf.RowLen(1); l != 9 {
+		t.Errorf("RowLen(1) is not correct: %d", l)
 	}
 
 	if s := buf.String(); s != str {
@@ -30,11 +27,47 @@ func TestBufferWrite(t *testing.T) {
 	}
 }
 
-// TODO test InsertAt with \n modifying the rest of cells coordinates
+func TestBufferInsertAt(t *testing.T) {
+	var buf CellBuf
+	var next Coordinates
+
+	next = buf.InsertAt(next, 'h')
+	next = buf.InsertAt(next, 'e')
+	next = buf.InsertAt(next, 'l')
+	next = buf.InsertAt(next, 'l')
+	next = buf.InsertAt(next, 'o')
+	next = buf.InsertAt(next, '\n')
+	next = buf.InsertAt(next, 'w')
+	next = buf.InsertAt(next, 'o')
+	next = buf.InsertAt(next, 'r')
+	next = buf.InsertAt(next, 'l')
+	buf.InsertAt(next, 'd')
+	buf.InsertAt(Coordinates{X: 4, Y: 0}, '\n')
+
+	str := "hell\no\nworld"
+	if l := buf.Rows(); l != 3 {
+		t.Errorf("Rows() is not correct: %d", l)
+	}
+
+	if l, _ := buf.RowLen(0); l != 4 {
+		t.Errorf("RowLen(0) is not correct: %+v", buf.cells[0])
+	}
+
+	if l, _ := buf.RowLen(1); l != 1 {
+		t.Errorf("RowLen(1) is not correct: %+v", buf.cells[1])
+	}
+
+	if l, _ := buf.RowLen(2); l != 5 {
+		t.Errorf("RowLen(2) is not correct: %+v", buf.cells[2])
+	}
+
+	if s := buf.String(); s != str {
+		t.Errorf("expected '%q' found '%q'", str, s)
+	}
+}
 
 func TestBufferWriteAt(t *testing.T) {
 	var buf CellBuf
-	str := "hello\nworld"
 	buf.WriteStr("hello")
 
 	buf.WriteAt(Coordinates{X: 5, Y: 0}, 'w')
@@ -46,48 +79,21 @@ func TestBufferWriteAt(t *testing.T) {
 	buf.WriteAt(Coordinates{X: 3, Y: 1}, 'l')
 	buf.WriteAt(Coordinates{X: 4, Y: 1}, 'd')
 
-	if buf.Len() != len(str) {
-		t.Errorf("length is not correct: is %d, should be %d", buf.Len(), len(str))
+	if expected, l := 2, buf.Rows(); l != expected {
+		t.Errorf("Rows() is not correct: is %d, should be %d", l, expected)
 	}
 
-	if l := buf.Rows(); l != 2 {
-		t.Errorf("Rows() is not correct: is %d, should be 2", l)
+	if l, _ := buf.RowLen(0); l != 5 {
+		t.Errorf("RowLen(0) is not correct: is %d, should be 5", l)
 	}
 
-	if l := buf.RowLen(0); l != 6 {
-		t.Errorf("RowLen(0) is not correct: is %d, should be 6", l)
-	}
-
-	if l := buf.RowLen(1); l != 5 {
+	if l, _ := buf.RowLen(1); l != 5 {
 		t.Errorf("RowLen(1) is not correct: is %d, should be 5", l)
 	}
 
+	str := "hello\nworld"
 	if s := buf.String(); s != str {
 		t.Errorf("expected '%+v' found '%+v'", []byte(str), []byte(s))
-	}
-}
-
-func TestBufferTruncate1(t *testing.T) {
-	var buf CellBuf
-	str := "hello\nworld"
-	buf.WriteStr(str)
-
-	buf.Truncate(7)
-
-	if s := buf.String(); s != "hell" {
-		t.Errorf("expected '%+v' found '%+v'", []byte("hell"), []byte(s))
-	}
-}
-
-func TestBufferTruncate2(t *testing.T) {
-	var buf CellBuf
-	str := "hello\nworld"
-	buf.WriteStr(str)
-
-	buf.Truncate(6)
-
-	if s := buf.String(); s != "hello" {
-		t.Errorf("expected '%+v' found '%+v'", []byte("hello"), []byte(s))
 	}
 }
 
@@ -102,8 +108,8 @@ func TestBufferTruncateLastRow(t *testing.T) {
 		t.Errorf("Rows() is not correct: is %d, should be 1", l)
 	}
 
-	if s := buf.String(); s != "hello" {
-		t.Errorf("expected '%+v' found '%+v'", []byte("hello"), []byte(s))
+	if s, expected := buf.String(), "hello"; s != expected {
+		t.Errorf("expected '%q' found '%q'", expected, s)
 	}
 }
 
@@ -112,10 +118,10 @@ func TestBufferTruncateRowAt(t *testing.T) {
 	str := "hello\nworld"
 	buf.WriteStr(str)
 
-	buf.TruncateRowAt(Coordinates{X: 0, Y: 0})
+	buf.TruncateRowAt(0)
 
-	if s := buf.String(); s != "world" {
-		t.Errorf("expected '%+v' found '%+v'", []byte("world"), []byte(s))
+	if s, expected := buf.String(), "world"; s != expected {
+		t.Errorf("expected '%q' found '%q'", expected, s)
 	}
 }
 
@@ -126,8 +132,8 @@ func TestBufferTruncateRowFrom1(t *testing.T) {
 
 	buf.TruncateRowFrom(Coordinates{X: 2, Y: 0})
 
-	if s := buf.String(); s != "he\nworld" {
-		t.Errorf("expected '%+v' found '%+v'", []byte("he\nworld"), []byte(s))
+	if s, expected := buf.String(), "he\nworld"; s != expected {
+		t.Errorf("expected '%q' found '%q'", expected, s)
 	}
 }
 
@@ -138,8 +144,8 @@ func TestBufferTruncateRowFrom2(t *testing.T) {
 
 	buf.TruncateRowFrom(Coordinates{X: 2, Y: 1})
 
-	if s := buf.String(); s != "hello\nwo" {
-		t.Errorf("expected '%+v' found '%+v'", []byte("hello\nwo"), []byte(s))
+	if s, expected := buf.String(), "hello\nwo"; s != expected {
+		t.Errorf("expected '%q' found '%q'", expected, s)
 	}
 }
 
@@ -162,8 +168,8 @@ func TestBufferTruncateFrom2(t *testing.T) {
 
 	buf.TruncateFrom(Coordinates{X: 0, Y: 1})
 
-	if s := buf.String(); s != "hello\n" {
-		t.Errorf("expected '%+v' found '%+v'", []byte("hello\n"), []byte(s))
+	if s, expected := buf.String(), "hello\n"; s != expected {
+		t.Errorf("expected '%q' found '%q'", expected, s)
 	}
 }
 
@@ -174,11 +180,36 @@ func TestBufferTruncateCellAt(t *testing.T) {
 
 	buf.TruncateCellAt(Coordinates{X: 0, Y: 1})
 	buf.TruncateCellAt(Coordinates{X: 1, Y: 1})
-	buf.TruncateCellAt(Coordinates{X: 5, Y: 0})
+	buf.ConflateRow(0)
 	buf.TruncateCellAt(Coordinates{X: 7, Y: 0})
 
-	if s := buf.String(); s != "hellool" {
-		t.Errorf("expected '%+v' found '%+v'", []byte("hellool"), []byte(s))
-		t.Errorf("found '%s'", s)
+	if s, expected := buf.String(), "hellool"; s != expected {
+		t.Errorf("expected '%q' found '%q'", expected, s)
+		t.Errorf("found '%q'", s)
+	}
+}
+
+func TestBufferWrite(t *testing.T) {
+	var buf CellBuf
+	str := "hello\nworld"
+
+	for _, c := range str {
+		buf.Write(c)
+	}
+
+	if l := buf.Rows(); l != 2 {
+		t.Errorf("Rows() is not correct: is %d, should be 2", l)
+	}
+
+	if l, _ := buf.RowLen(0); l != 5 {
+		t.Errorf("RowLen(0) is not correct: is %d, should be 5", l)
+	}
+
+	if l, _ := buf.RowLen(1); l != 5 {
+		t.Errorf("RowLen(1) is not correct: is %d, should be 5", l)
+	}
+
+	if s := buf.String(); s != str {
+		t.Errorf("expected '%q' found '%q'", str, s)
 	}
 }

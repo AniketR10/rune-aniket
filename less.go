@@ -19,7 +19,7 @@ type LessConfig struct {
 }
 
 var defaultConfig = LessConfig{
-	Tabspaces: 8,
+	Tabspaces: 4,
 	Wrap:      false,
 	ResFG:     termbox.AttrReverse,
 	ResBG:     termbox.ColorDefault,
@@ -103,11 +103,10 @@ func (l *Less) searchHandleEvent(ev termbox.Event) (exit bool, err error) {
 	case termbox.KeyBackspace:
 		fallthrough
 	case termbox.KeyBackspace2:
-		if l.cursorOffset > 0 {
+		if l.cursorOffset > 1 {
 			l.cursorOffset--
+			l.cmdScroll.TruncateCellAt(Coordinates{X: l.cursorOffset, Y: 0})
 		}
-		l.cmdScroll.Truncate(l.cmdScroll.Len() - 1)
-
 	case termbox.KeyEnter:
 		str := l.cmdScroll.String()
 		bytes := []byte(str)[1:]
@@ -259,7 +258,7 @@ func (l *Less) resize() error {
 	var err error
 
 	contentHeight := l.height - cmdBarHeight
-	msgWidth := l.msgScroll.Len()
+	msgWidth := len(l.msgScroll.String())
 	cmdBarWidth := l.width - msgWidth
 
 	if err = l.Scroll.Move(l.pos.X, l.pos.Y); err != nil {
