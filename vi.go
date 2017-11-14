@@ -35,21 +35,10 @@ type Vi struct {
 	// TODO clipboard Clipboard
 }
 
-func (vi *Vi) skipNullsRight() {
-	for vi.isCursorAtNull() {
-		// TODO not wrap
-		if !vi.MoveRightWrap() {
-			break
-		}
-	}
-}
-
-func (vi *Vi) skipNullsLeft() {
-	for vi.isCursorAtNull() {
-		// TODO not wrap
-		if !vi.MoveLeftWrap() {
-			break
-		}
+func (vi *Vi) skipNulls(move func() bool) {
+	c := vi.cellAtCursor()
+	for c.Ch == 0 && move() {
+		c = vi.cellAtCursor()
 	}
 }
 
@@ -74,9 +63,9 @@ func (vi *Vi) SetCursor(c Coordinates) {
 	}
 
 	if vi.cursor.X > curr.X || vi.cursor.Y > curr.Y {
-		vi.skipNullsRight()
+		vi.skipNulls(vi.moveRight)
 	} else {
-		vi.skipNullsLeft()
+		vi.skipNulls(vi.moveLeft)
 	}
 }
 
@@ -216,8 +205,6 @@ func (vi *Vi) handleNormal(ev termbox.Event) (bool, error) {
 				vi.moveMatchRune('}', '{', vi.MoveLeftWrap)
 			case ')':
 				vi.moveMatchRune(')', '(', vi.MoveLeftWrap)
-			default:
-				vi.SetMessage(fmt.Sprintf("%+v", vi.cellAtCursor()))
 			}
 		}
 	}
@@ -233,7 +220,7 @@ func (vi *Vi) setFromScrollPos(pos Coordinates) {
 }
 
 func (vi *Vi) handleInsert(ev termbox.Event) (bool, error) {
-	cursor := vi.translatedCursor()
+	cursor := vi.getCursorAtBuffer()
 	switch ev.Key {
 	case termbox.KeyEnter:
 		vi.setFromScrollPos(vi.InsertAt(cursor, '\n'))
@@ -343,8 +330,7 @@ func (vi *Vi) moveMatchRune(target, match rune, move func() bool) {
 	var prev Coordinates
 	for pending != 0 && move() {
 		prev = vi.cursor
-		c := vi.cellAtCursor()
-		switch c.Ch {
+		switch vi.cellAtCursor().Ch {
 		case target:
 			pending++
 		case match:
@@ -490,33 +476,28 @@ func (vi *Vi) MoveStartLine() {
 	if vi.offset.X > 0 {
 		vi.SeekStartLine()
 	}
-	vi.skipNullsRight()
+	vi.skipNulls(vi.moveRight)
 }
 
-func (vi *Vi) translatedCursor() Coordinates {
+func (vi *Vi) getCursorAtBuffer() Coordinates {
+	cursor := vi.getCursor()
 	c := Coordinates{
-		X: vi.offset.X + vi.cursor.X,
-		Y: vi.offset.Y + vi.cursor.Y,
+		X: vi.offset.X + cursor.X,
+		Y: vi.offset.Y + cursor.Y,
 	}
 	return c
 }
 
 // lastIdxCursorRow returns the last legal cursor X position on the current row
 func (vi *Vi) lastIdxCursorRow() int {
-	cursor := vi.translatedCursor()
-	if i, ok := vi.RowLastIdx(cursor.Y); ok {
+	if i, ok := vi.RowLastIdx(vi.cursor.Y + vi.offset.Y); ok {
 		return i - vi.offset.X
 	}
 	return 0
 }
 
 func (vi *Vi) cellAtCursor() (cell termbox.Cell) {
-	// cursor at global 2D space
-	gcursor := vi.GetCursor()
-	cursor := Coordinates{
-		X: gcursor.X - vi.position.X,
-		Y: gcursor.Y - vi.position.Y,
-	}
+	cursor := vi.getCursorAtBuffer()
 	if cursor.Y < len(vi.cells) && cursor.X < len(vi.cells[cursor.Y]) {
 		cell = vi.cells[cursor.Y][cursor.X]
 	}
@@ -547,7 +528,7 @@ func (vi *Vi) MoveEndFile() {
 func (vi *Vi) MoveUp() {
 	if vi.cursor.Y > 0 {
 		vi.cursor.Y--
-		vi.skipNullsRight()
+		vi.skipNulls(vi.moveRight)
 	} else {
 		vi.SeekUp()
 	}
@@ -556,53 +537,69 @@ func (vi *Vi) MoveUp() {
 func (vi *Vi) MoveDown() {
 	if vi.cursor.Y < vi.height-2 { // account for command line
 		vi.cursor.Y++
-		vi.skipNullsRight()
+		vi.skipNulls(vi.moveRight)
 	} else {
 		vi.SeekDown()
 	}
 }
 
 func (vi *Vi) MoveLeft() {
+	if vi.moveLeft() {
+		vi.skipNulls(vi.moveRight)
+	}
+}
+
+func (vi *Vi) moveLeft() (ok bool) {
 	if vi.cursor.X > 0 {
 		vi.cursor.X--
-		vi.skipNullsLeft()
+		ok = true
 	} else {
 		vi.SeekLeft()
 	}
+	return
 }
 
 func (vi *Vi) MoveRight() {
-	i := vi.lastIdxCursorRow()
-	if vi.cursor.X < vi.width-1 && vi.cursor.X < i {
-		vi.cursor.X++
-		vi.skipNullsRight()
-	} else if vi.cursor.X < i {
-		vi.SeekRight()
+	if vi.moveRight() {
+		vi.skipNulls(vi.moveLeft)
 	}
 }
 
-func (vi *Vi) isCursorAtNull() bool {
-	c := vi.cellAtCursor().Ch
-	return c == 0
+func (vi *Vi) moveRight() (ok bool) {
+	i := vi.lastIdxCursorRow()
+	if vi.cursor.X < vi.width-1 && vi.cursor.X < i {
+		vi.cursor.X++
+		ok = true
+	} else if vi.cursor.X < i {
+		vi.SeekRight()
+	}
+	return
+}
+
+func (vi *Vi) getCursor() Coordinates {
+	// use less GetCursor if we are in search mode
+	if vi.Less.mode != normalMode {
+		return vi.Less.GetCursor()
+	}
+
+	pos := vi.cursor
+	if i := vi.lastIdxCursorRow(); pos.X > i {
+		pos.X = i
+	}
+
+	return pos
 }
 
 // GetCursor returns the cursor coordinates relative to the current
 // fractal global positioning
 func (vi *Vi) GetCursor() Coordinates {
-	if vi.Less.mode != normalMode {
-		return vi.Less.GetCursor()
-	}
 	x, y := vi.Position()
+	cursor := vi.getCursor()
 
-	pos := Coordinates{
-		X: x + vi.cursor.X,
-		Y: y + vi.cursor.Y,
+	return Coordinates{
+		X: x + cursor.X,
+		Y: y + cursor.Y,
 	}
-	if i := vi.lastIdxCursorRow(); vi.cursor.X > i {
-		pos.X = i
-	}
-
-	return pos
 }
 
 func (vi *Vi) Resize(width, height int) error {
