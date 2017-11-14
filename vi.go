@@ -178,9 +178,9 @@ func (vi *Vi) handleNormal(ev termbox.Event) (bool, error) {
 			vi.MoveEndLine()
 			vi.setInsertMode()
 		case 'x':
-			vi.TruncateCellAt(vi.cursor)
+			vi.TruncateCellAt(vi.getCursorAtBuffer())
 		case 's':
-			vi.TruncateCellAt(vi.cursor)
+			vi.TruncateCellAt(vi.getCursorAtBuffer())
 			vi.setInsertMode()
 		case 'v':
 			vi.setVisualMode()
@@ -212,6 +212,7 @@ func (vi *Vi) handleNormal(ev termbox.Event) (bool, error) {
 	return false, nil
 }
 
+// sets cursor with coordinates relative to buffer
 func (vi *Vi) setFromScrollPos(pos Coordinates) {
 	vi.cursor = Coordinates{
 		X: pos.X - vi.offset.X,
@@ -229,13 +230,23 @@ func (vi *Vi) handleInsert(ev termbox.Event) (bool, error) {
 	case termbox.KeyTab:
 		vi.setFromScrollPos(vi.InsertAt(cursor, '\t'))
 	case termbox.KeyBackspace, termbox.KeyBackspace2:
-		if vi.cursor.X > 0 {
+		if cursor.X > 0 {
 			vi.TruncateCellAt(Coordinates{cursor.X - 1, cursor.Y})
 			// TODO use coordinates from insert to set cursor
 			// for inserts and also truncates
 			vi.MoveLeft()
-		} else if vi.cursor.Y > 0 {
-			vi.TruncateCellAt(Coordinates{Y: vi.cursor.Y - 1, X: len(vi.cells[vi.cursor.Y-1]) - 1})
+		} else if cursor.Y > 0 {
+			y := cursor.Y - 1
+			i, ok := vi.RowLastIdx(y)
+			l := len(vi.cells[y])
+			vi.ConflateRow(y)
+			if ok {
+				x := i
+				if l > 0 {
+					x++
+				}
+				vi.setFromScrollPos(Coordinates{X: x, Y: y})
+			}
 		}
 	case termbox.KeyEsc:
 		vi.MoveLeft()
@@ -545,7 +556,7 @@ func (vi *Vi) MoveDown() {
 
 func (vi *Vi) MoveLeft() {
 	if vi.moveLeft() {
-		vi.skipNulls(vi.moveRight)
+		vi.skipNulls(vi.moveLeft)
 	}
 }
 
@@ -561,7 +572,7 @@ func (vi *Vi) moveLeft() (ok bool) {
 
 func (vi *Vi) MoveRight() {
 	if vi.moveRight() {
-		vi.skipNulls(vi.moveLeft)
+		vi.skipNulls(vi.moveRight)
 	}
 }
 
