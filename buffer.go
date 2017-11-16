@@ -189,18 +189,28 @@ func (b *CellBuf) ConflateRow(i int) (ok bool) {
 	return
 }
 
-// TruncateCellAt truncates the cell at the given position and shifts the cells on the right to the left
-func (b *CellBuf) TruncateCellAt(pos Coordinates) (orig termbox.Cell, ok bool) {
+// TruncateCellAt truncates the cell at the given position and shifts the cells on the right to the left.
+// It returns the position of the next available cell.
+func (b *CellBuf) TruncateCellAt(pos Coordinates) (next Coordinates, orig termbox.Cell, ok bool) {
 	if pos.Y >= len(b.cells) || pos.X >= len(b.cells[pos.Y]) {
 		return
 	}
 	orig = b.cells[pos.Y][pos.X]
 	lastIdx := len(b.cells[pos.Y]) - 1
-	if pos.X < lastIdx {
-		copy(b.cells[pos.Y][pos.X:], b.cells[pos.Y][pos.X+1:])
+	offset := 0
+
+	if orig.Ch == '\t' {
+		offset = b.Tabspaces - 1
 	}
-	b.cells[pos.Y] = b.cells[pos.Y][:lastIdx]
+
+	x := pos.X - offset
+
+	if pos.X < lastIdx {
+		copy(b.cells[pos.Y][pos.X-offset:], b.cells[pos.Y][pos.X+1:])
+	}
+	b.cells[pos.Y] = b.cells[pos.Y][:lastIdx-offset]
 	ok = true
+	next = Coordinates{X: x, Y: pos.Y}
 	return
 }
 

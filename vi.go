@@ -220,6 +220,14 @@ func (vi *Vi) setFromScrollPos(pos Coordinates) {
 	}
 }
 
+func (vi *Vi) TruncateCellAt(pos Coordinates) (orig termbox.Cell, ok bool) {
+	var next Coordinates
+	if next, _, ok = vi.CellBuf.TruncateCellAt(pos); ok {
+		vi.setFromScrollPos(next)
+	}
+	return
+}
+
 func (vi *Vi) handleInsert(ev termbox.Event) (bool, error) {
 	cursor := vi.getCursorAtBuffer()
 	switch ev.Key {
@@ -232,9 +240,6 @@ func (vi *Vi) handleInsert(ev termbox.Event) (bool, error) {
 	case termbox.KeyBackspace, termbox.KeyBackspace2:
 		if cursor.X > 0 {
 			vi.TruncateCellAt(Coordinates{cursor.X - 1, cursor.Y})
-			// TODO use coordinates from insert to set cursor
-			// for inserts and also truncates
-			vi.MoveLeft()
 		} else if cursor.Y > 0 {
 			y := cursor.Y - 1
 			i, ok := vi.RowLastIdx(y)
