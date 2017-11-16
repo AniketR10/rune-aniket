@@ -11,10 +11,6 @@ import (
 	"github.com/ernestrc/fractal"
 )
 
-var (
-	vi *fractal.Vi
-)
-
 type ScannerHandler struct {
 	scanner *bufio.Scanner
 }
@@ -69,13 +65,8 @@ func main() {
 		log.Fatal(err)
 	}
 
-	if vi = fractal.NewVi(nil); err != nil {
-		log.Fatal(err)
-	}
-
-	if err = vi.SetContent(string(initContent.Bytes())); err != nil {
-		log.Fatal(err)
-	}
+	vi := fractal.NewVi(nil)
+	vi.Write(string(initContent.Bytes()))
 
 	if err = fractal.Init(); err != nil {
 		log.Fatal(err)

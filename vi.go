@@ -27,7 +27,7 @@ type ViEvent uint8
 
 // Vi basic edit Handler and Component without ex commands
 type Vi struct {
-	Less
+	less Less
 	mode viMode
 	// cursor Coordinates relative to the position of the component in the screen
 	// GetCursor method returns the absolute coordinates
@@ -44,8 +44,8 @@ func (vi *Vi) skipNulls(move func() bool) {
 }
 
 func (vi *Vi) getMaxCursorY() int {
-	hardl := vi.height - 2
-	textl := len(vi.cells) - vi.offset.Y - 2
+	hardl := vi.less.height - 2
+	textl := len(vi.less.cells) - vi.less.offset.Y - 1
 	return int(math.Min(float64(hardl), float64(textl)))
 }
 
@@ -55,7 +55,7 @@ func (vi *Vi) SetCursor(c Coordinates) {
 	curr := vi.cursor
 	if c.X < 0 {
 		vi.cursor.X = 0
-	} else if max := vi.width - 1; c.X > max { // width starts at 1
+	} else if max := vi.less.width - 1; c.X > max { // width starts at 1
 		vi.cursor.X = max
 	} else {
 		vi.cursor.X = c.X
@@ -77,10 +77,10 @@ func (vi *Vi) SetCursor(c Coordinates) {
 }
 
 func (vi *Vi) setCursorResult() {
-	if pos, ok := vi.Result(); ok {
+	if pos, ok := vi.less.Result(); ok {
 		vi.SetCursor(Coordinates{
-			X: pos.X - vi.offset.X,
-			Y: pos.Y - vi.offset.Y,
+			X: pos.X - vi.less.offset.X,
+			Y: pos.Y - vi.less.offset.Y,
 		})
 	}
 }
@@ -111,33 +111,33 @@ func NewViConfig(tabspaces int, wrap bool, handler func(ViEvent) error) *ViConfi
 }
 
 func (vi *Vi) setNormalMode() {
-	vi.cmdScroll.Reset()
-	vi.msgScroll.Reset()
-	vi.msgScroll.WriteStr("NORMAL")
+	vi.less.cmdScroll.Reset()
+	vi.less.msgScroll.Reset()
+	vi.less.msgScroll.WriteStr("NORMAL")
 	vi.mode = normal
 }
 
 func (vi *Vi) setInsertMode() {
-	vi.msgScroll.Reset()
-	vi.msgScroll.WriteStr("INSERT")
+	vi.less.msgScroll.Reset()
+	vi.less.msgScroll.WriteStr("INSERT")
 	vi.mode = insert
 }
 
 func (vi *Vi) setVisualMode() {
-	vi.msgScroll.Reset()
-	vi.msgScroll.WriteStr("VISUAL")
+	vi.less.msgScroll.Reset()
+	vi.less.msgScroll.WriteStr("VISUAL")
 	vi.mode = visual
 }
 
 func (vi *Vi) setVisualLineMode() {
-	vi.msgScroll.Reset()
-	vi.msgScroll.WriteStr("V-LINE")
+	vi.less.msgScroll.Reset()
+	vi.less.msgScroll.WriteStr("V-LINE")
 	vi.mode = visualLine
 }
 
 func (vi *Vi) setVisualBlockMode() {
-	vi.msgScroll.Reset()
-	vi.msgScroll.WriteStr("V-BLOCK")
+	vi.less.msgScroll.Reset()
+	vi.less.msgScroll.WriteStr("V-BLOCK")
 	vi.mode = visualBlock
 }
 
@@ -185,9 +185,9 @@ func (vi *Vi) handleNormal(ev termbox.Event) (bool, error) {
 			vi.MoveEndLine()
 			vi.setInsertMode()
 		case 'x':
-			vi.TruncateCellAt(vi.getCursorAtBuffer())
+			vi.TruncateCell()
 		case 's':
-			vi.TruncateCellAt(vi.getCursorAtBuffer())
+			vi.TruncateCell()
 			vi.setInsertMode()
 		case 'v':
 			vi.setVisualMode()
@@ -196,7 +196,7 @@ func (vi *Vi) handleNormal(ev termbox.Event) (bool, error) {
 		case 'b':
 			vi.MoveLeftStartWord()
 		case '/':
-			return vi.Less.Handle(ev)
+			return vi.less.Handle(ev)
 		case '%':
 			switch vi.cellAtCursor().Ch {
 			case '[':
@@ -222,21 +222,33 @@ func (vi *Vi) handleNormal(ev termbox.Event) (bool, error) {
 // sets cursor with coordinates relative to buffer
 func (vi *Vi) setFromScrollPos(pos Coordinates) {
 	vi.cursor = Coordinates{
-		X: pos.X - vi.offset.X,
-		Y: pos.Y - vi.offset.Y,
+		X: pos.X - vi.less.offset.X,
+		Y: pos.Y - vi.less.offset.Y,
 	}
 }
 
-func (vi *Vi) TruncateCellAt(pos Coordinates) (orig termbox.Cell, ok bool) {
+func (vi *Vi) TruncateCell() (orig termbox.Cell, ok bool) {
+	pos := vi.getCursorAtBuffer()
 	var next Coordinates
-	if next, _, ok = vi.CellBuf.TruncateCellAt(pos); ok {
+	if next, _, ok = vi.less.TruncateCellAt(pos); ok {
 		vi.setFromScrollPos(next)
 	}
 	return
 }
 
+// Insert will insert rune at the current cursor's position
 func (vi *Vi) Insert(r rune) {
-	vi.setFromScrollPos(vi.CellBuf.InsertAt(vi.getCursorAtBuffer(), r))
+	vi.setFromScrollPos(vi.less.InsertAt(vi.getCursorAtBuffer(), r))
+}
+
+// Write will write the given string at the end of the buffer
+func (vi *Vi) Write(str string) {
+	vi.less.WriteStr(str)
+}
+
+// Clear clears the buffer
+func (vi *Vi) Clear() {
+	vi.less.TruncateFrom(Coordinates{X: 0, Y: 0})
 }
 
 func (vi *Vi) handleInsert(ev termbox.Event) (bool, error) {
@@ -250,12 +262,12 @@ func (vi *Vi) handleInsert(ev termbox.Event) (bool, error) {
 		vi.Insert('\t')
 	case termbox.KeyBackspace, termbox.KeyBackspace2:
 		if cursor.X > 0 {
-			vi.TruncateCellAt(Coordinates{cursor.X - 1, cursor.Y})
+			vi.less.TruncateCellAt(Coordinates{cursor.X - 1, cursor.Y})
 		} else if cursor.Y > 0 {
 			y := cursor.Y - 1
-			i, ok := vi.RowLastIdx(y)
-			l := len(vi.cells[y])
-			vi.ConflateRow(y)
+			i, ok := vi.less.RowLastIdx(y)
+			l := len(vi.less.cells[y])
+			vi.less.ConflateRow(y)
 			if ok {
 				x := i
 				if l > 0 {
@@ -311,7 +323,7 @@ func (vi *Vi) Init(cfg *ViConfig) {
 	}
 	vi.config = cfg
 	vi.config.less.Handler = vi.lessHandler
-	vi.Less.Init(&vi.config.less)
+	vi.less.Init(&vi.config.less)
 	vi.setNormalMode()
 }
 
@@ -321,37 +333,17 @@ func (vi *Vi) InitWithScroll(scroll *Scroll, cfg *ViConfig) {
 	}
 	vi.config = cfg
 	vi.config.less.Handler = vi.lessHandler
-	vi.Less.InitWithScroll(scroll, &vi.config.less)
+	vi.less.InitWithScroll(scroll, &vi.config.less)
 	vi.setNormalMode()
 }
 
 func (vi *Vi) SetScroll(scroll *Scroll) (orig *Scroll) {
 	vi.setNormalMode()
-	return vi.Less.SetScroll(scroll)
-}
-
-func (vi *Vi) Handle(ev termbox.Event) (bool, error) {
-	switch vi.mode {
-	case normal:
-		if vi.Less.mode != normalMode {
-			return vi.Less.Handle(ev)
-		}
-		return vi.handleNormal(ev)
-	case insert:
-		return vi.handleInsert(ev)
-	case visual:
-		return vi.handleVisual(ev)
-	case visualLine:
-		return vi.handleVisualLine(ev)
-	case visualBlock:
-		return vi.handleVisualBlock(ev)
-	default:
-		panic(fmt.Sprintf("unknown mode: %d", vi.mode))
-	}
+	return vi.less.SetScroll(scroll)
 }
 
 func (vi *Vi) moveMatchRune(target, match rune, move func() bool) {
-	currc, curro := vi.cursor, vi.offset
+	currc, curro := vi.cursor, vi.less.offset
 	pending := 1
 	var prev Coordinates
 	for pending != 0 && move() {
@@ -367,7 +359,7 @@ func (vi *Vi) moveMatchRune(target, match rune, move func() bool) {
 	if pending == 0 {
 		vi.cursor = prev
 	} else {
-		vi.offset = curro
+		vi.less.offset = curro
 		vi.cursor = currc
 	}
 }
@@ -458,11 +450,11 @@ func (vi *Vi) MoveLeftWrap() bool {
 	// is to return false when we cannot move which depends on the type of move.
 	// Returing false when reached 0, in the case of moving one cell at a time is correct
 	// but not when we jump from start of word to the next
-	currc, curro := vi.cursor, vi.offset
+	currc, curro := vi.cursor, vi.less.offset
 	vi.MoveLeft()
-	if vi.cursor.X == currc.X && vi.offset.X == curro.X {
+	if vi.cursor.X == currc.X && vi.less.offset.X == curro.X {
 		vi.MoveUp()
-		if vi.cursor.Y == currc.Y && vi.offset.Y == curro.Y {
+		if vi.cursor.Y == currc.Y && vi.less.offset.Y == curro.Y {
 			return false
 		}
 		vi.MoveEndLine()
@@ -473,12 +465,12 @@ func (vi *Vi) MoveLeftWrap() bool {
 // MoveRightWrap will move the cursor to the right or wrap to beginning
 // of next line if cursor is at X=EOL
 func (vi *Vi) MoveRightWrap() bool {
-	currc, curro := vi.cursor, vi.offset
+	currc, curro := vi.cursor, vi.less.offset
 	vi.MoveRight()
 
-	if currc.X == vi.cursor.X && vi.offset.X == curro.X {
+	if currc.X == vi.cursor.X && vi.less.offset.X == curro.X {
 		vi.MoveDown()
-		if currc.Y == vi.cursor.Y && vi.offset.Y == curro.Y {
+		if currc.Y == vi.cursor.Y && vi.less.offset.Y == curro.Y {
 			return false
 		}
 		vi.MoveStartLine()
@@ -488,19 +480,19 @@ func (vi *Vi) MoveRightWrap() bool {
 }
 
 func (vi *Vi) MovePrevResult() {
-	vi.SeekPrevResult()
+	vi.less.SeekPrevResult()
 	vi.setCursorResult()
 }
 
 func (vi *Vi) MoveNextResult() {
-	vi.SeekNextResult()
+	vi.less.SeekNextResult()
 	vi.setCursorResult()
 }
 
 func (vi *Vi) MoveStartLine() {
 	vi.SetCursor(Coordinates{X: 0, Y: vi.cursor.Y})
-	if vi.offset.X > 0 {
-		vi.SeekStartLine()
+	if vi.less.offset.X > 0 {
+		vi.less.SeekStartLine()
 	}
 	vi.skipNulls(vi.moveRight)
 }
@@ -508,47 +500,47 @@ func (vi *Vi) MoveStartLine() {
 func (vi *Vi) getCursorAtBuffer() Coordinates {
 	cursor := vi.getCursor()
 	c := Coordinates{
-		X: vi.offset.X + cursor.X,
-		Y: vi.offset.Y + cursor.Y,
+		X: vi.less.offset.X + cursor.X,
+		Y: vi.less.offset.Y + cursor.Y,
 	}
 	return c
 }
 
 // lastIdxCursorRow returns the last legal cursor X position on the current row
 func (vi *Vi) lastIdxCursorRow() int {
-	if i, ok := vi.RowLastIdx(vi.cursor.Y + vi.offset.Y); ok {
-		return i - vi.offset.X
+	if i, ok := vi.less.RowLastIdx(vi.cursor.Y + vi.less.offset.Y); ok {
+		return i - vi.less.offset.X
 	}
 	return 0
 }
 
 func (vi *Vi) cellAtCursor() (cell termbox.Cell) {
 	cursor := vi.getCursorAtBuffer()
-	if cursor.Y < len(vi.cells) && cursor.X < len(vi.cells[cursor.Y]) {
-		cell = vi.cells[cursor.Y][cursor.X]
+	if cursor.Y < len(vi.less.cells) && cursor.X < len(vi.less.cells[cursor.Y]) {
+		cell = vi.less.cells[cursor.Y][cursor.X]
 	}
 
 	return
 }
 
 func (vi *Vi) MoveEndLine() {
-	vi.SetCursor(Coordinates{X: vi.width - 1, Y: vi.cursor.Y})
+	vi.SetCursor(Coordinates{X: vi.less.width - 1, Y: vi.cursor.Y})
 	i := vi.lastIdxCursorRow()
 	if i < vi.cursor.X {
 		vi.SetCursor(Coordinates{X: i, Y: vi.cursor.Y})
 	} else if i > vi.cursor.X {
-		vi.SeekEndLine()
+		vi.less.SeekEndLine()
 	}
 }
 
 func (vi *Vi) MoveStartFile() {
 	vi.SetCursor(Coordinates{0, 0})
-	vi.SeekStartFile()
+	vi.less.SeekStartFile()
 }
 
 func (vi *Vi) MoveEndFile() {
 	vi.SetCursor(Coordinates{vi.cursor.X, vi.getMaxCursorY()})
-	vi.SeekEndFile()
+	vi.less.SeekEndFile()
 }
 
 func (vi *Vi) MoveUp() {
@@ -556,7 +548,7 @@ func (vi *Vi) MoveUp() {
 		vi.cursor.Y--
 		vi.skipNulls(vi.moveRight)
 	} else {
-		vi.SeekUp()
+		vi.less.SeekUp()
 	}
 }
 
@@ -565,7 +557,7 @@ func (vi *Vi) MoveDown() {
 		vi.cursor.Y++
 		vi.skipNulls(vi.moveRight)
 	} else {
-		vi.SeekDown()
+		vi.less.SeekDown()
 	}
 }
 
@@ -580,7 +572,7 @@ func (vi *Vi) moveLeft() (ok bool) {
 		vi.cursor.X--
 		ok = true
 	} else {
-		vi.SeekLeft()
+		vi.less.SeekLeft()
 	}
 	return
 }
@@ -593,19 +585,19 @@ func (vi *Vi) MoveRight() {
 
 func (vi *Vi) moveRight() (ok bool) {
 	i := vi.lastIdxCursorRow()
-	if vi.cursor.X < vi.width-1 && vi.cursor.X < i {
+	if vi.cursor.X < vi.less.width-1 && vi.cursor.X < i {
 		vi.cursor.X++
 		ok = true
 	} else if vi.cursor.X < i {
-		vi.SeekRight()
+		vi.less.SeekRight()
 	}
 	return
 }
 
 func (vi *Vi) getCursor() Coordinates {
 	// use less GetCursor if we are in search mode
-	if vi.Less.mode != normalMode {
-		return vi.Less.GetCursor()
+	if vi.less.mode != normalMode {
+		return vi.less.GetCursor()
 	}
 
 	pos := vi.cursor
@@ -616,10 +608,37 @@ func (vi *Vi) getCursor() Coordinates {
 	return pos
 }
 
-// GetCursor returns the cursor coordinates relative to the current
-// fractal global positioning
+/* satisfy Component interface */
+
+func (vi *Vi) Resize(width, height int) error {
+	return vi.less.Resize(width, height)
+}
+
+func (vi *Vi) Draw(w Writer) error {
+	return vi.less.Draw(w)
+}
+
+func (vi *Vi) Move(x, y int) error {
+	return vi.less.Move(x, y)
+}
+func (vi *Vi) Height() int {
+	return vi.less.Height()
+}
+func (vi *Vi) Width() int {
+	return vi.less.Width()
+}
+func (vi *Vi) Position() (int, int) {
+	return vi.less.Position()
+}
+
+/* satisfy Handler interface */
+
+func (vi *Vi) Man() string {
+	panic("todo")
+}
+
 func (vi *Vi) GetCursor() Coordinates {
-	x, y := vi.Position()
+	x, y := vi.less.Position()
 	cursor := vi.getCursor()
 
 	return Coordinates{
@@ -628,14 +647,22 @@ func (vi *Vi) GetCursor() Coordinates {
 	}
 }
 
-func (vi *Vi) Resize(width, height int) error {
-	if err := vi.Less.Resize(width, height); err != nil {
-		return err
+func (vi *Vi) Handle(ev termbox.Event) (bool, error) {
+	switch vi.mode {
+	case normal:
+		if vi.less.mode != normalMode {
+			return vi.less.Handle(ev)
+		}
+		return vi.handleNormal(ev)
+	case insert:
+		return vi.handleInsert(ev)
+	case visual:
+		return vi.handleVisual(ev)
+	case visualLine:
+		return vi.handleVisualLine(ev)
+	case visualBlock:
+		return vi.handleVisualBlock(ev)
+	default:
+		panic(fmt.Sprintf("unknown mode: %d", vi.mode))
 	}
-
-	return nil
-}
-
-func (vi *Vi) Draw(w Writer) error {
-	return vi.Less.Draw(w)
 }

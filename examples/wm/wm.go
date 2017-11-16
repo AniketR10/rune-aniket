@@ -73,10 +73,7 @@ func main() {
 	wm.FocusDown()
 
 	vi = fractal.NewVi(nil)
-
-	if vi.SetContent(content); err != nil {
-		log.Fatal(err)
-	}
+	vi.Write(content)
 
 	if _, err = wm.SplitVertical(vi); err != nil {
 		log.Fatal(err)
