@@ -2,6 +2,7 @@ package fractal
 
 import (
 	"fmt"
+	"math"
 
 	"termbox"
 )
@@ -42,6 +43,12 @@ func (vi *Vi) skipNulls(move func() bool) {
 	}
 }
 
+func (vi *Vi) getMaxCursorY() int {
+	hardl := vi.height - 2
+	textl := len(vi.cells) - vi.offset.Y - 2
+	return int(math.Min(float64(hardl), float64(textl)))
+}
+
 // SetCursor sets the cursor position.
 // Coordinates is parsed as the desired position relative to the component position
 func (vi *Vi) SetCursor(c Coordinates) {
@@ -56,7 +63,7 @@ func (vi *Vi) SetCursor(c Coordinates) {
 
 	if c.Y < 0 {
 		vi.cursor.Y = 0
-	} else if max := vi.height - 2; c.Y > max { // to account for command line
+	} else if max := vi.getMaxCursorY(); c.Y > max { // to account for command line
 		vi.cursor.Y = max
 	} else {
 		vi.cursor.Y = c.Y
@@ -537,7 +544,7 @@ func (vi *Vi) MoveStartFile() {
 }
 
 func (vi *Vi) MoveEndFile() {
-	vi.SetCursor(Coordinates{vi.cursor.X, vi.height - 2})
+	vi.SetCursor(Coordinates{vi.cursor.X, vi.getMaxCursorY()})
 	vi.SeekEndFile()
 }
 
@@ -551,7 +558,7 @@ func (vi *Vi) MoveUp() {
 }
 
 func (vi *Vi) MoveDown() {
-	if vi.cursor.Y < vi.height-2 { // account for command line
+	if vi.cursor.Y < vi.getMaxCursorY() { // account for command line
 		vi.cursor.Y++
 		vi.skipNulls(vi.moveRight)
 	} else {
