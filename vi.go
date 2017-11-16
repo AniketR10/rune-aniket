@@ -235,15 +235,19 @@ func (vi *Vi) TruncateCellAt(pos Coordinates) (orig termbox.Cell, ok bool) {
 	return
 }
 
+func (vi *Vi) Insert(r rune) {
+	vi.setFromScrollPos(vi.CellBuf.InsertAt(vi.getCursorAtBuffer(), r))
+}
+
 func (vi *Vi) handleInsert(ev termbox.Event) (bool, error) {
 	cursor := vi.getCursorAtBuffer()
 	switch ev.Key {
 	case termbox.KeyEnter:
-		vi.setFromScrollPos(vi.InsertAt(cursor, '\n'))
+		vi.Insert('\n')
 	case termbox.KeySpace:
-		vi.setFromScrollPos(vi.InsertAt(cursor, ' '))
+		vi.Insert(' ')
 	case termbox.KeyTab:
-		vi.setFromScrollPos(vi.InsertAt(cursor, '\t'))
+		vi.Insert('\t')
 	case termbox.KeyBackspace, termbox.KeyBackspace2:
 		if cursor.X > 0 {
 			vi.TruncateCellAt(Coordinates{cursor.X - 1, cursor.Y})
@@ -265,8 +269,7 @@ func (vi *Vi) handleInsert(ev termbox.Event) (bool, error) {
 		vi.setNormalMode()
 	default:
 		if ev.Ch != 0 {
-			vi.InsertAt(cursor, ev.Ch)
-			vi.MoveRight()
+			vi.Insert(ev.Ch)
 		}
 	}
 	return false, nil
