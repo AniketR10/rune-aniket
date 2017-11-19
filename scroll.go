@@ -56,96 +56,109 @@ func (s *Scroll) CanSeekRight() bool {
 	return s.offset.X < s.getMaxXOffset()
 }
 
-func (s *Scroll) SeekUp() {
-	if s.CanSeekUp() {
+func (s *Scroll) SeekUp() (ok bool) {
+	if ok = s.CanSeekUp(); ok {
 		s.offset.Y--
 	}
+	return ok
 }
 
-func (s *Scroll) SeekDown() {
-	if s.CanSeekDown() {
+func (s *Scroll) SeekDown() (ok bool) {
+	if ok = s.CanSeekDown(); ok {
 		s.offset.Y++
 	}
+	return
 }
 
-func (s *Scroll) SeekLeft() {
-	if s.CanSeekLeft() {
+func (s *Scroll) SeekLeft() (ok bool) {
+	if ok = s.CanSeekLeft(); ok {
 		s.offset.X--
 	}
+	return
 }
 
-func (s *Scroll) SeekRight() {
-	if s.CanSeekRight() {
+func (s *Scroll) SeekRight() (ok bool) {
+	if ok = s.CanSeekRight(); ok {
 		s.offset.X++
 	}
+	return
 }
 
-func (s *Scroll) SeekVertical(y int) {
+func (s *Scroll) SeekVertical(y int) (ok bool) {
 	if max := s.getMaxYOffset(); y > max {
 		y = max
 	} else if y < 0 {
 		y = 0
 	}
 
+	ok = s.offset.Y != y
 	s.offset.Y = y
+
+	return
 }
 
-func (s *Scroll) SeekHorizontal(x int) {
+func (s *Scroll) SeekHorizontal(x int) (ok bool) {
 	if max := s.getMaxXOffset(); x > max {
 		x = max
 	} else if x < 0 {
 		x = 0
 	}
 
+	ok = s.offset.X != x
 	s.offset.X = x
+
+	return
 }
 
-func (s *Scroll) SeekEndLine() {
-	s.SeekHorizontal(s.getMaxXOffset())
+func (s *Scroll) SeekEndLine() bool {
+	return s.SeekHorizontal(s.getMaxXOffset())
 }
 
-func (s *Scroll) SeekStartLine() {
-	s.SeekHorizontal(0)
+func (s *Scroll) SeekStartLine() bool {
+	return s.SeekHorizontal(0)
 }
 
-func (s *Scroll) SeekEndFile() {
-	s.SeekVertical(s.getMaxYOffset())
+func (s *Scroll) SeekEndFile() bool {
+	return s.SeekVertical(s.getMaxYOffset())
 }
 
-func (s *Scroll) SeekStartFile() {
-	s.SeekVertical(0)
+func (s *Scroll) SeekStartFile() bool {
+	return s.SeekVertical(0)
 }
 
-func (s *Scroll) seekTo(pos Coordinates, padding int) {
-	s.SeekVertical(pos.Y)
+func (s *Scroll) seekTo(pos Coordinates, padding int) bool {
+	yok := s.SeekVertical(pos.Y)
+	var xok bool
 
 	if pos.X >= s.offset.X+s.width {
-		s.SeekHorizontal(pos.X - s.width + padding)
+		xok = s.SeekHorizontal(pos.X - s.width + padding)
 	} else if pos.X < s.offset.X {
-		s.SeekHorizontal(pos.X)
+		xok = s.SeekHorizontal(pos.X)
 	}
+
+	return yok || xok
 }
 
-func (s *Scroll) SeekTo(pos Coordinates) {
-	s.seekTo(pos, 1)
+func (s *Scroll) SeekTo(pos Coordinates) bool {
+	return s.seekTo(pos, 1)
 }
 
-func (s *Scroll) SeekNextResult() {
+func (s *Scroll) SeekNextResult() bool {
 	pos, ok := s.NextResult()
 	if !ok {
-		return
+		return false
 	}
 
-	s.seekTo(pos, len(s.searchText))
+	return s.seekTo(pos, len(s.searchText))
 }
 
-func (s *Scroll) SeekPrevResult() {
+func (s *Scroll) SeekPrevResult() bool {
 	pos, ok := s.PrevResult()
 	if !ok {
-		return
+		return false
 	}
 
-	s.seekTo(pos, len(s.searchText))
+	return s.seekTo(pos, len(s.searchText))
 }
 
 func (s *Scroll) Position() (x, y int) {
