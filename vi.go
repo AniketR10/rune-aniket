@@ -36,9 +36,18 @@ type Vi struct {
 	// TODO clipboard Clipboard
 }
 
-func (vi *Vi) skipNulls(move func() bool) {
+func (vi *Vi) skipNulls() {
 	c := vi.cellAtCursor()
-	for c.Ch == 0 && move() {
+	for c.Ch == 0 && vi.moveRight() {
+		c = vi.cellAtCursor()
+	}
+	for c.Ch == 0 && vi.less.SeekRight() {
+		c = vi.cellAtCursor()
+	}
+	for c.Ch == 0 && vi.moveLeft() {
+		c = vi.cellAtCursor()
+	}
+	for c.Ch == 0 && vi.less.SeekLeft() {
 		c = vi.cellAtCursor()
 	}
 }
@@ -52,7 +61,6 @@ func (vi *Vi) getMaxCursorY() int {
 // SetCursor sets the cursor position.
 // Coordinates is parsed as the desired position relative to the component position
 func (vi *Vi) SetCursor(c Coordinates) {
-	curr := vi.cursor
 	if c.X < 0 {
 		vi.cursor.X = 0
 	} else if max := vi.less.width - 1; c.X > max { // width starts at 1
@@ -69,11 +77,7 @@ func (vi *Vi) SetCursor(c Coordinates) {
 		vi.cursor.Y = c.Y
 	}
 
-	if vi.cursor.X > curr.X || vi.cursor.Y > curr.Y {
-		vi.skipNulls(vi.moveRight)
-	} else {
-		vi.skipNulls(vi.moveLeft)
-	}
+	vi.skipNulls()
 }
 
 func (vi *Vi) setCursorResult() {
@@ -494,11 +498,11 @@ func (vi *Vi) MoveStartLine() {
 	if vi.less.offset.X > 0 {
 		vi.less.SeekStartLine()
 	}
-	vi.skipNulls(vi.moveRight)
+	vi.skipNulls()
 }
 
 func (vi *Vi) getCursorAtBuffer() Coordinates {
-	cursor := vi.getCursor()
+	cursor := vi.cursor
 	c := Coordinates{
 		X: vi.less.offset.X + cursor.X,
 		Y: vi.less.offset.Y + cursor.Y,
@@ -546,7 +550,7 @@ func (vi *Vi) MoveEndFile() {
 func (vi *Vi) MoveUp() {
 	if vi.cursor.Y > 0 {
 		vi.cursor.Y--
-		vi.skipNulls(vi.moveRight)
+		vi.skipNulls()
 	} else {
 		vi.less.SeekUp()
 	}
@@ -555,7 +559,7 @@ func (vi *Vi) MoveUp() {
 func (vi *Vi) MoveDown() {
 	if vi.cursor.Y < vi.getMaxCursorY() { // account for command line
 		vi.cursor.Y++
-		vi.skipNulls(vi.moveRight)
+		vi.skipNulls()
 	} else {
 		vi.less.SeekDown()
 	}
@@ -563,7 +567,7 @@ func (vi *Vi) MoveDown() {
 
 func (vi *Vi) MoveLeft() {
 	if vi.moveLeft() {
-		vi.skipNulls(vi.moveLeft)
+		vi.skipNulls()
 	}
 }
 
@@ -579,7 +583,7 @@ func (vi *Vi) moveLeft() (ok bool) {
 
 func (vi *Vi) MoveRight() {
 	if vi.moveRight() {
-		vi.skipNulls(vi.moveRight)
+		vi.skipNulls()
 	}
 }
 
@@ -592,20 +596,6 @@ func (vi *Vi) moveRight() (ok bool) {
 		vi.less.SeekRight()
 	}
 	return
-}
-
-func (vi *Vi) getCursor() Coordinates {
-	// use less GetCursor if we are in search mode
-	if vi.less.mode != normalMode {
-		return vi.less.GetCursor()
-	}
-
-	pos := vi.cursor
-	if i := vi.lastIdxCursorRow(); pos.X > i {
-		pos.X = i
-	}
-
-	return pos
 }
 
 /* satisfy Component interface */
@@ -638,8 +628,16 @@ func (vi *Vi) Man() string {
 }
 
 func (vi *Vi) GetCursor() Coordinates {
+	// use less GetCursor if we are in search mode
+	if vi.less.mode != normalMode {
+		return vi.less.GetCursor()
+	}
+
 	x, y := vi.less.Position()
-	cursor := vi.getCursor()
+	cursor := vi.cursor
+	if i := vi.lastIdxCursorRow(); cursor.X > i {
+		cursor.X = i
+	}
 
 	return Coordinates{
 		X: x + cursor.X,
