@@ -36,25 +36,43 @@ type Vi struct {
 	// TODO clipboard Clipboard
 }
 
-func (vi *Vi) skipNulls() {
+func forAny(r rune, runes []rune) (any bool) {
+	for _, ru := range runes {
+		if r == ru {
+			any = true
+			return
+		}
+	}
+	return
+}
+
+func (vi *Vi) skipRunes(runes []rune) {
 	c := vi.cellAtCursor()
-	for c.Ch == 0 && vi.moveRight() {
+	for forAny(c.Ch, runes) && vi.moveRight() {
 		c = vi.cellAtCursor()
 	}
-	for c.Ch == 0 && vi.less.SeekRight() {
+	for forAny(c.Ch, runes) && vi.less.SeekRight() {
 		c = vi.cellAtCursor()
 	}
-	for c.Ch == 0 && vi.moveLeft() {
+	for forAny(c.Ch, runes) && vi.moveLeft() {
 		c = vi.cellAtCursor()
 	}
-	for c.Ch == 0 && vi.less.SeekLeft() {
+	for forAny(c.Ch, runes) && vi.less.SeekLeft() {
 		c = vi.cellAtCursor()
 	}
 }
 
+func (vi *Vi) skipSpaces() {
+	vi.skipRunes([]rune{'\x00', ' ', '\t'})
+}
+
+func (vi *Vi) skipNulls() {
+	vi.skipRunes([]rune{'\x00'})
+}
+
 func (vi *Vi) getMaxCursorY() int {
-	hardl := vi.less.height - 2
-	textl := len(vi.less.cells) - vi.less.offset.Y - 1
+	hardl := vi.less.height - 2 // - 1 for command bar
+	textl := len(vi.less.cells) - vi.less.offset.Y - 2
 	return int(math.Min(float64(hardl), float64(textl)))
 }
 
@@ -71,7 +89,7 @@ func (vi *Vi) SetCursor(c Coordinates) {
 
 	if c.Y < 0 {
 		vi.cursor.Y = 0
-	} else if max := vi.getMaxCursorY(); c.Y > max { // to account for command line
+	} else if max := vi.getMaxCursorY(); c.Y > max {
 		vi.cursor.Y = max
 	} else {
 		vi.cursor.Y = c.Y
@@ -145,6 +163,7 @@ func (vi *Vi) setVisualBlockMode() {
 	vi.mode = visualBlock
 }
 
+// TODO provide key bindings override mechanism via sharing map
 func (vi *Vi) handleNormal(ev termbox.Event) (bool, error) {
 	switch ev.Type {
 	case termbox.EventKey:
@@ -172,31 +191,48 @@ func (vi *Vi) handleNormal(ev termbox.Event) (bool, error) {
 		case 'l':
 			vi.MoveRight()
 		case 'O':
-			vi.MoveUp()
 			vi.setInsertMode()
+			cursor := vi.getCursorAtBuffer()
+			y := cursor.Y - 1
+			if y < 0 {
+				y = 0
+			}
+			vi.less.insertNewRow(Coordinates{X: 0, Y: y})
 		case 'o':
-			vi.MoveDown()
 			vi.setInsertMode()
+			cursor := vi.getCursorAtBuffer()
+			y := cursor.Y + 1
+			if max := len(vi.less.cells); y > max {
+				y = max
+			}
+			vi.less.insertNewRow(Coordinates{X: 0, Y: y})
+			vi.MoveDown()
 		case 'i':
 			vi.setInsertMode()
 		case 'I':
 			vi.MoveStartLine()
+			vi.skipSpaces()
 			vi.setInsertMode()
 		case 'a':
+			vi.setInsertMode()
 			vi.MoveRight()
-			vi.setInsertMode()
 		case 'A':
-			vi.MoveEndLine()
 			vi.setInsertMode()
+			vi.MoveEndLine()
+			vi.MoveRight()
 		case 'x':
 			vi.TruncateCell()
 		case 's':
 			vi.TruncateCell()
+			vi.MoveRight()
 			vi.setInsertMode()
 		case 'v':
 			vi.setVisualMode()
 		case 'w':
 			vi.MoveRightStartWord()
+		// TODO
+		// case 'e':
+		// 	vi.MoveRightEndWord()
 		case 'b':
 			vi.MoveLeftStartWord()
 		case '/':
@@ -224,25 +260,28 @@ func (vi *Vi) handleNormal(ev termbox.Event) (bool, error) {
 }
 
 // sets cursor with coordinates relative to buffer
-func (vi *Vi) setFromScrollPos(pos Coordinates) {
+func (vi *Vi) setCursorFromBuffer(pos Coordinates) {
 	vi.cursor = Coordinates{
 		X: pos.X - vi.less.offset.X,
 		Y: pos.Y - vi.less.offset.Y,
 	}
 }
 
-func (vi *Vi) TruncateCell() (orig termbox.Cell, ok bool) {
-	pos := vi.getCursorAtBuffer()
+func (vi *Vi) TruncateCell() (termbox.Cell, bool) {
+	return vi.TruncateCellAt(vi.getCursorAtBuffer())
+}
+
+func (vi *Vi) TruncateCellAt(pos Coordinates) (orig termbox.Cell, ok bool) {
 	var next Coordinates
-	if next, _, ok = vi.less.TruncateCellAt(pos); ok {
-		vi.setFromScrollPos(next)
+	if next, orig, ok = vi.less.TruncateCellAt(pos); ok {
+		vi.setCursorFromBuffer(next)
 	}
 	return
 }
 
 // Insert will insert rune at the current cursor's position
 func (vi *Vi) Insert(r rune) {
-	vi.setFromScrollPos(vi.less.InsertAt(vi.getCursorAtBuffer(), r))
+	vi.setCursorFromBuffer(vi.less.InsertAt(vi.getCursorAtBuffer(), r))
 }
 
 // Write will write the given string at the end of the buffer
@@ -266,7 +305,10 @@ func (vi *Vi) handleInsert(ev termbox.Event) (bool, error) {
 		vi.Insert('\t')
 	case termbox.KeyBackspace, termbox.KeyBackspace2:
 		if cursor.X > 0 {
-			vi.less.TruncateCellAt(Coordinates{cursor.X - 1, cursor.Y})
+			vi.TruncateCellAt(Coordinates{X: cursor.X - 1, Y: cursor.Y})
+			if vi.getCursorAtBuffer().X > 0 {
+				vi.MoveRight()
+			}
 		} else if cursor.Y > 0 {
 			y := cursor.Y - 1
 			i, ok := vi.less.RowLastIdx(y)
@@ -277,7 +319,7 @@ func (vi *Vi) handleInsert(ev termbox.Event) (bool, error) {
 				if l > 0 {
 					x++
 				}
-				vi.setFromScrollPos(Coordinates{X: x, Y: y})
+				vi.setCursorFromBuffer(Coordinates{X: x, Y: y})
 			}
 		}
 	case termbox.KeyEsc:
@@ -511,11 +553,17 @@ func (vi *Vi) getCursorAtBuffer() Coordinates {
 }
 
 // lastIdxCursorRow returns the last legal cursor X position on the current row
-func (vi *Vi) lastIdxCursorRow() int {
-	if i, ok := vi.less.RowLastIdx(vi.cursor.Y + vi.less.offset.Y); ok {
-		return i - vi.less.offset.X
+func (vi *Vi) lastIdxCursorRow() (i int) {
+	var ok bool
+	if i, ok = vi.less.RowLastIdx(vi.cursor.Y + vi.less.offset.Y); ok {
+		i = i - vi.less.offset.X
+	} else {
+		i = 0
 	}
-	return 0
+	if vi.mode == insert {
+		i++
+	}
+	return
 }
 
 func (vi *Vi) cellAtCursor() (cell termbox.Cell) {
@@ -528,11 +576,9 @@ func (vi *Vi) cellAtCursor() (cell termbox.Cell) {
 }
 
 func (vi *Vi) MoveEndLine() {
-	vi.SetCursor(Coordinates{X: vi.less.width - 1, Y: vi.cursor.Y})
 	i := vi.lastIdxCursorRow()
-	if i < vi.cursor.X {
-		vi.SetCursor(Coordinates{X: i, Y: vi.cursor.Y})
-	} else if i > vi.cursor.X {
+	vi.SetCursor(Coordinates{X: i, Y: vi.cursor.Y})
+	if i > vi.cursor.X {
 		vi.less.SeekEndLine()
 	}
 }
@@ -557,7 +603,7 @@ func (vi *Vi) MoveUp() {
 }
 
 func (vi *Vi) MoveDown() {
-	if vi.cursor.Y < vi.getMaxCursorY() { // account for command line
+	if vi.cursor.Y < vi.getMaxCursorY() {
 		vi.cursor.Y++
 		vi.skipNulls()
 	} else {
@@ -566,7 +612,7 @@ func (vi *Vi) MoveDown() {
 }
 
 func (vi *Vi) MoveLeft() {
-	if vi.moveLeft() {
+	if vi.moveLeft() && vi.mode != insert {
 		vi.skipNulls()
 	}
 }
@@ -582,7 +628,7 @@ func (vi *Vi) moveLeft() (ok bool) {
 }
 
 func (vi *Vi) MoveRight() {
-	if vi.moveRight() {
+	if vi.moveRight() && vi.mode != insert {
 		vi.skipNulls()
 	}
 }

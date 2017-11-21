@@ -48,7 +48,7 @@ func testBatchWorkload(t *testing.T, width, height int, cases []batchTestCase) {
 	writer := NewStringWriter(width, height)
 	vi := NewVi(NewViConfig(2, false, nil))
 	vi.Resize(width, height)
-	vi.SetContent(snippet)
+	vi.Write(snippet)
 
 	for _, tcase := range cases {
 		if err := writer.Clear(0, 0); err != nil {
@@ -100,7 +100,7 @@ func TestCellAtCursor(t *testing.T) {
 	writer := NewStringWriter(width, height)
 	vi := NewVi(nil)
 	vi.Resize(width, height)
-	vi.SetContent(snippet)
+	vi.Write(snippet)
 
 	if c := vi.GetCursor(); c.X != 0 || c.Y != 0 {
 		t.Fatalf("cursor initialized incorrectly: %+v", c)

@@ -213,11 +213,12 @@ func (s *Scroll) getMaxYOffset() (y int) {
 	if rows <= s.height {
 		y = 0
 	} else {
-		y = rows - s.height
+		y = rows - s.height - 1
 	}
 	return
 }
 
+// TODO optimize for large files
 func (s *Scroll) draw(writer Writer) (err error) {
 	xwindow := s.offset.X + s.width
 	ywindow := s.offset.Y + s.height

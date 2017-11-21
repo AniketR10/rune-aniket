@@ -203,13 +203,15 @@ func (b *CellBuf) TruncateCellAt(pos Coordinates) (next Coordinates, orig termbo
 		offset = b.Tabspaces - 1
 	}
 
-	x := pos.X - offset
-
 	if pos.X < lastIdx {
 		copy(b.cells[pos.Y][pos.X-offset:], b.cells[pos.Y][pos.X+1:])
 	}
 	b.cells[pos.Y] = b.cells[pos.Y][:lastIdx-offset]
 	ok = true
+	x := pos.X - offset - 1
+	if x < 0 {
+		x = 0
+	}
 	next = Coordinates{X: x, Y: pos.Y}
 	return
 }
