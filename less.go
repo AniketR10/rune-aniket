@@ -201,7 +201,7 @@ func (l *Less) SetContent(text string, args ...interface{}) error {
 		l.Scroll.Search(l.search)
 	}
 
-	return nil
+	return l.Resize(l.width, l.height)
 }
 
 func (l *Less) GetCursor() Coordinates {

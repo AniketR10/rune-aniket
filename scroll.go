@@ -25,6 +25,7 @@ func (s *Scroll) Reset() {
 	s.columns, s.rows = 0, 0
 	s.result = nil
 	s.searchText = nil
+	s.offset = Coordinates{}
 	s.reslist.Init()
 	s.CellBuf.Init()
 }

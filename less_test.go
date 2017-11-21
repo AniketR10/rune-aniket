@@ -14,7 +14,8 @@ KKKKXXLLLL
 9999999999
 8888888888
 3333333333
-11111111XX`
+11111111XX
+`
 
 func setup(less *Less, width, height int, config *LessConfig) (*Less, *StringWriter) {
 	var err error

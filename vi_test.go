@@ -89,7 +89,7 @@ func TestCellAtCursor(t *testing.T) {
 		input string
 		cell  rune
 	}{
-		{"k", '\n'},
+		{"k", '\x00'},
 		{"j", '/'},
 		{"l", '*'},
 		{"$", '*'},

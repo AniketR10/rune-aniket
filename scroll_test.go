@@ -7,7 +7,8 @@ import (
 
 var fortune = `Love in your heart wasn't put there to stay.
 Love isn't love 'til you give it away.
-		-- Oscar Hammerstein 中国`
+		-- Oscar Hammerstein 中国
+`
 
 var fortunewidth = 44
 
