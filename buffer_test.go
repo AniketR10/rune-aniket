@@ -286,3 +286,42 @@ func TestBufferSelect(t *testing.T) {
 		}
 	}
 }
+
+func TestBufferSelectLine(t *testing.T) {
+	var buf CellBuf
+	str := "hello\n\tworld\nitsme"
+	buf.WriteStr(str)
+	buf.Tabspaces = 4
+
+	testCases := []selectCase{
+		{
+			from: Coordinates{},
+			to:   Coordinates{X: 1, Y: 0},
+			expected: [][]termbox.Cell{
+				[]termbox.Cell{{Ch: 'h'}, {Ch: 'e'}, {Ch: 'l'}, {Ch: 'l'}, {Ch: 'o'}},
+			},
+		},
+		{
+			from: Coordinates{X: 2, Y: 0},
+			to:   Coordinates{X: 4, Y: 0},
+			expected: [][]termbox.Cell{
+				[]termbox.Cell{{Ch: 'h'}, {Ch: 'e'}, {Ch: 'l'}, {Ch: 'l'}, {Ch: 'o'}},
+			},
+		},
+		{
+			from: Coordinates{X: 2, Y: 0},
+			to:   Coordinates{X: 7, Y: 1},
+			expected: [][]termbox.Cell{
+				[]termbox.Cell{{Ch: 'h'}, {Ch: 'e'}, {Ch: 'l'}, {Ch: 'l'}, {Ch: 'o'}},
+				[]termbox.Cell{{}, {}, {}, {Ch: '\t'}, {Ch: 'w'}, {Ch: 'o'}, {Ch: 'r'}, {Ch: 'l'}, {Ch: 'd'}},
+			},
+		},
+	}
+
+	for _, tcase := range testCases {
+		selection := buf.SelectLine(tcase.from, tcase.to)
+		if !reflect.DeepEqual(selection, tcase.expected) {
+			t.Errorf("expected %q found %q", toString(tcase.expected), toString(selection))
+		}
+	}
+}

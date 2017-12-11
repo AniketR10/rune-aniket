@@ -262,8 +262,16 @@ func (b *CellBuf) Select(from Coordinates, to Coordinates) (res [][]termbox.Cell
 	return
 }
 
-func (b *CellBuf) SelectLine(from Coordinates, to Coordinates) [][]termbox.Cell {
-	panic("todo")
+// SelectLine returns the lines inside the given coordinates or panics if coordinates are out of bounds.
+func (b *CellBuf) SelectLine(from Coordinates, to Coordinates) (res [][]termbox.Cell) {
+	res = make([][]termbox.Cell, 0)
+
+	for from.Y < to.Y {
+		res = append(res, b.cells[from.Y][:])
+		from.Y++
+	}
+	res = append(res, b.cells[to.Y][:])
+	return
 }
 
 func (b *CellBuf) SelectBlock(from Coordinates, to Coordinates) [][]termbox.Cell {
