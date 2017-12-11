@@ -275,7 +275,11 @@ func (b *CellBuf) Select(from Coordinates, to Coordinates) (res [][]termbox.Cell
 		from.X = 0
 		from.Y++
 	}
-	res = append(res, b.cells[to.Y][from.X:to.X+1])
+	if len(b.cells[from.Y]) > 0 {
+		res = append(res, b.cells[from.Y][from.X:to.X+1])
+	} else {
+		res = append(res, b.cells[from.Y][:])
+	}
 	return
 }
 
@@ -285,11 +289,11 @@ func (b *CellBuf) SelectLine(from Coordinates, to Coordinates) (res [][]termbox.
 
 	from, to = sortFromTo(from, to)
 
-	for from.Y < to.Y {
+	for from.Y <= to.Y {
 		res = append(res, b.cells[from.Y][:])
 		from.Y++
 	}
-	res = append(res, b.cells[to.Y][:])
+
 	return
 }
 
@@ -300,9 +304,29 @@ func (b *CellBuf) SelectBlock(from Coordinates, to Coordinates) (res [][]termbox
 	from, to = sortFromTo(from, to)
 
 	for from.Y <= to.Y {
-		res = append(res, b.cells[from.Y][from.X:to.X+1])
+		if len(b.cells[from.Y]) > 0 {
+			res = append(res, b.cells[from.Y][from.X:to.X+1])
+		} else {
+			res = append(res, b.cells[from.Y][:])
+		}
 		from.Y++
 	}
 
 	return
+}
+
+func InvertAttr(cells [][]termbox.Cell) {
+	for i := 0; i < len(cells); i++ {
+		for j := 0; j < len(cells[i]); j++ {
+			c := cells[i][j]
+			if c.Bg&termbox.AttrReverse == termbox.AttrReverse ||
+				c.Fg&termbox.AttrReverse == termbox.AttrReverse {
+				cells[i][j].Fg &^= termbox.AttrReverse
+				cells[i][j].Bg &^= termbox.AttrReverse
+			} else {
+				cells[i][j].Fg |= termbox.AttrReverse
+				cells[i][j].Bg |= termbox.AttrReverse
+			}
+		}
+	}
 }

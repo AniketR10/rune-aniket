@@ -234,7 +234,7 @@ func toString(cells [][]termbox.Cell) string {
 
 func TestBufferSelect(t *testing.T) {
 	var buf CellBuf
-	str := "hello\n\tworld\nitsme"
+	str := "hello\n\tworld\n\nitsme"
 	buf.WriteStr(str)
 	buf.tabspaces = 4
 
@@ -278,10 +278,19 @@ func TestBufferSelect(t *testing.T) {
 		},
 		{
 			from: Coordinates{X: 4, Y: 0},
-			to:   Coordinates{X: 4, Y: 2},
+			to:   Coordinates{X: 4, Y: 3},
 			expected: [][]termbox.Cell{
 				[]termbox.Cell{{Ch: 'o'}},
 				[]termbox.Cell{{}, {}, {}, {Ch: '\t'}, {Ch: 'w'}, {Ch: 'o'}, {Ch: 'r'}, {Ch: 'l'}, {Ch: 'd'}},
+				[]termbox.Cell{},
+				[]termbox.Cell{{Ch: 'i'}, {Ch: 't'}, {Ch: 's'}, {Ch: 'm'}, {Ch: 'e'}},
+			},
+		},
+		{
+			from: Coordinates{X: 0, Y: 2},
+			to:   Coordinates{X: 4, Y: 3},
+			expected: [][]termbox.Cell{
+				[]termbox.Cell{},
 				[]termbox.Cell{{Ch: 'i'}, {Ch: 't'}, {Ch: 's'}, {Ch: 'm'}, {Ch: 'e'}},
 			},
 		},
@@ -297,7 +306,7 @@ func TestBufferSelect(t *testing.T) {
 
 func TestBufferSelectLine(t *testing.T) {
 	var buf CellBuf
-	str := "hello\n\tworld\nitsme"
+	str := "hello\n\tworld\n\nitsme"
 	buf.WriteStr(str)
 	buf.tabspaces = 4
 
@@ -325,11 +334,12 @@ func TestBufferSelectLine(t *testing.T) {
 			},
 		},
 		{
-			from: Coordinates{X: 7, Y: 1},
+			from: Coordinates{X: 0, Y: 2},
 			to:   Coordinates{X: 2, Y: 0},
 			expected: [][]termbox.Cell{
 				[]termbox.Cell{{Ch: 'h'}, {Ch: 'e'}, {Ch: 'l'}, {Ch: 'l'}, {Ch: 'o'}},
 				[]termbox.Cell{{}, {}, {}, {Ch: '\t'}, {Ch: 'w'}, {Ch: 'o'}, {Ch: 'r'}, {Ch: 'l'}, {Ch: 'd'}},
+				[]termbox.Cell{},
 			},
 		},
 	}
@@ -344,7 +354,7 @@ func TestBufferSelectLine(t *testing.T) {
 
 func TestBufferSelectBlock(t *testing.T) {
 	var buf CellBuf
-	str := "hello\n\tworld\nitsme"
+	str := "hello\n\tworld\n\nitsme"
 	buf.WriteStr(str)
 	buf.tabspaces = 4
 
@@ -370,6 +380,16 @@ func TestBufferSelectBlock(t *testing.T) {
 			expected: [][]termbox.Cell{
 				[]termbox.Cell{{Ch: 'h'}, {Ch: 'e'}, {Ch: 'l'}, {Ch: 'l'}},
 				[]termbox.Cell{{}, {}, {}, {Ch: '\t'}},
+			},
+		},
+		{
+			from: Coordinates{X: 3, Y: 3},
+			to:   Coordinates{X: 0, Y: 0},
+			expected: [][]termbox.Cell{
+				[]termbox.Cell{{Ch: 'h'}, {Ch: 'e'}, {Ch: 'l'}, {Ch: 'l'}},
+				[]termbox.Cell{{}, {}, {}, {Ch: '\t'}},
+				[]termbox.Cell{},
+				[]termbox.Cell{{Ch: 'i'}, {Ch: 't'}, {Ch: 's'}, {Ch: 'm'}},
 			},
 		},
 	}

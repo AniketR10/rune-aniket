@@ -31,8 +31,9 @@ type Vi struct {
 	mode viMode
 	// cursor Coordinates relative to the position of the component in the screen
 	// GetCursor method returns the absolute coordinates
-	cursor Coordinates
-	config *ViConfig
+	cursor     Coordinates
+	config     *ViConfig
+	selectFrom Coordinates
 	// TODO clipboard Clipboard
 }
 
@@ -136,6 +137,7 @@ func (vi *Vi) setNormalMode() {
 	vi.less.cmdScroll.Reset()
 	vi.less.msgScroll.Reset()
 	vi.less.msgScroll.WriteStr("NORMAL")
+	vi.selectFrom = Coordinates{}
 	vi.mode = normal
 }
 
@@ -149,18 +151,24 @@ func (vi *Vi) setVisualMode() {
 	vi.less.msgScroll.Reset()
 	vi.less.msgScroll.WriteStr("VISUAL")
 	vi.mode = visual
+	vi.selectFrom = vi.getCursorAtBuffer()
+	InvertAttr(vi.less.Select(vi.selectFrom, vi.selectFrom))
 }
 
 func (vi *Vi) setVisualLineMode() {
 	vi.less.msgScroll.Reset()
 	vi.less.msgScroll.WriteStr("V-LINE")
 	vi.mode = visualLine
+	vi.selectFrom = vi.getCursorAtBuffer()
+	InvertAttr(vi.less.SelectLine(vi.selectFrom, vi.selectFrom))
 }
 
 func (vi *Vi) setVisualBlockMode() {
 	vi.less.msgScroll.Reset()
 	vi.less.msgScroll.WriteStr("V-BLOCK")
 	vi.mode = visualBlock
+	vi.selectFrom = vi.getCursorAtBuffer()
+	InvertAttr(vi.less.SelectBlock(vi.selectFrom, vi.selectFrom))
 }
 
 // TODO provide key bindings override mechanism via sharing map
@@ -228,6 +236,8 @@ func (vi *Vi) handleNormal(ev termbox.Event) (bool, error) {
 			vi.setInsertMode()
 		case 'v':
 			vi.setVisualMode()
+		case 'V':
+			vi.setVisualLineMode()
 		case 'w':
 			vi.MoveRightStartWord()
 		// TODO
@@ -252,6 +262,11 @@ func (vi *Vi) handleNormal(ev termbox.Event) (bool, error) {
 				vi.moveMatchRune('}', '{', vi.MoveLeftWrap)
 			case ')':
 				vi.moveMatchRune(')', '(', vi.MoveLeftWrap)
+			}
+		default:
+			switch ev.Key {
+			case termbox.KeyCtrlV:
+				vi.setVisualBlockMode()
 			}
 		}
 	}
@@ -333,28 +348,20 @@ func (vi *Vi) handleInsert(ev termbox.Event) (bool, error) {
 	return false, nil
 }
 
-func (vi *Vi) handleVisual(ev termbox.Event) (bool, error) {
-	switch ev.Key {
-	case termbox.KeyEsc:
-		vi.setNormalMode()
-	}
-	return false, nil
-}
+type selectFunc func(Coordinates, Coordinates) [][]termbox.Cell
 
-func (vi *Vi) handleVisualLine(ev termbox.Event) (bool, error) {
-	switch ev.Key {
-	case termbox.KeyEsc:
-		vi.setNormalMode()
-	}
-	return false, nil
-}
+func (vi *Vi) handleVisual(ev termbox.Event, s selectFunc) (ok bool, err error) {
+	InvertAttr(s(vi.selectFrom, vi.getCursorAtBuffer()))
 
-func (vi *Vi) handleVisualBlock(ev termbox.Event) (bool, error) {
-	switch ev.Key {
-	case termbox.KeyEsc:
+	if ev.Key == termbox.KeyEsc {
 		vi.setNormalMode()
+		return
 	}
-	return false, nil
+
+	ok, err = vi.handleNormal(ev)
+	InvertAttr(s(vi.selectFrom, vi.getCursorAtBuffer()))
+
+	return
 }
 
 func NewVi(cfg *ViConfig) *Vi {
@@ -701,11 +708,11 @@ func (vi *Vi) Handle(ev termbox.Event) (bool, error) {
 	case insert:
 		return vi.handleInsert(ev)
 	case visual:
-		return vi.handleVisual(ev)
+		return vi.handleVisual(ev, vi.less.CellBuf.Select)
 	case visualLine:
-		return vi.handleVisualLine(ev)
+		return vi.handleVisual(ev, vi.less.CellBuf.SelectLine)
 	case visualBlock:
-		return vi.handleVisualBlock(ev)
+		return vi.handleVisual(ev, vi.less.CellBuf.SelectBlock)
 	default:
 		panic(fmt.Sprintf("unknown mode: %d", vi.mode))
 	}
