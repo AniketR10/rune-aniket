@@ -269,6 +269,14 @@ func TestBufferSelect(t *testing.T) {
 			},
 		},
 		{
+			from: Coordinates{X: 7, Y: 1},
+			to:   Coordinates{X: 2, Y: 0},
+			expected: [][]termbox.Cell{
+				[]termbox.Cell{{Ch: 'l'}, {Ch: 'l'}, {Ch: 'o'}},
+				[]termbox.Cell{{}, {}, {}, {Ch: '\t'}, {Ch: 'w'}, {Ch: 'o'}, {Ch: 'r'}, {Ch: 'l'}},
+			},
+		},
+		{
 			from: Coordinates{X: 4, Y: 0},
 			to:   Coordinates{X: 4, Y: 2},
 			expected: [][]termbox.Cell{
@@ -316,10 +324,58 @@ func TestBufferSelectLine(t *testing.T) {
 				[]termbox.Cell{{}, {}, {}, {Ch: '\t'}, {Ch: 'w'}, {Ch: 'o'}, {Ch: 'r'}, {Ch: 'l'}, {Ch: 'd'}},
 			},
 		},
+		{
+			from: Coordinates{X: 7, Y: 1},
+			to:   Coordinates{X: 2, Y: 0},
+			expected: [][]termbox.Cell{
+				[]termbox.Cell{{Ch: 'h'}, {Ch: 'e'}, {Ch: 'l'}, {Ch: 'l'}, {Ch: 'o'}},
+				[]termbox.Cell{{}, {}, {}, {Ch: '\t'}, {Ch: 'w'}, {Ch: 'o'}, {Ch: 'r'}, {Ch: 'l'}, {Ch: 'd'}},
+			},
+		},
 	}
 
 	for _, tcase := range testCases {
 		selection := buf.SelectLine(tcase.from, tcase.to)
+		if !reflect.DeepEqual(selection, tcase.expected) {
+			t.Errorf("expected %q found %q", toString(tcase.expected), toString(selection))
+		}
+	}
+}
+
+func TestBufferSelectBlock(t *testing.T) {
+	var buf CellBuf
+	str := "hello\n\tworld\nitsme"
+	buf.WriteStr(str)
+	buf.Tabspaces = 4
+
+	testCases := []selectCase{
+		{
+			from: Coordinates{},
+			to:   Coordinates{X: 1, Y: 0},
+			expected: [][]termbox.Cell{
+				[]termbox.Cell{{Ch: 'h'}, {Ch: 'e'}},
+			},
+		},
+		{
+			from: Coordinates{X: 0, Y: 0},
+			to:   Coordinates{X: 3, Y: 1},
+			expected: [][]termbox.Cell{
+				[]termbox.Cell{{Ch: 'h'}, {Ch: 'e'}, {Ch: 'l'}, {Ch: 'l'}},
+				[]termbox.Cell{{}, {}, {}, {Ch: '\t'}},
+			},
+		},
+		{
+			from: Coordinates{X: 3, Y: 1},
+			to:   Coordinates{X: 0, Y: 0},
+			expected: [][]termbox.Cell{
+				[]termbox.Cell{{Ch: 'h'}, {Ch: 'e'}, {Ch: 'l'}, {Ch: 'l'}},
+				[]termbox.Cell{{}, {}, {}, {Ch: '\t'}},
+			},
+		},
+	}
+
+	for _, tcase := range testCases {
+		selection := buf.SelectBlock(tcase.from, tcase.to)
 		if !reflect.DeepEqual(selection, tcase.expected) {
 			t.Errorf("expected %q found %q", toString(tcase.expected), toString(selection))
 		}

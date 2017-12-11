@@ -249,9 +249,25 @@ func (b *CellBuf) String() string {
 	return string(s)
 }
 
+func sortFromTo(from Coordinates, to Coordinates) (Coordinates, Coordinates) {
+	if from.X > to.X {
+		temp := from.X
+		from.X = to.X
+		to.X = temp
+	}
+	if from.Y > to.Y {
+		temp := from.Y
+		from.Y = to.Y
+		to.Y = temp
+	}
+	return from, to
+}
+
 // Select returns the cells inside the given coordinates or panics if coordinates are out of bounds.
 func (b *CellBuf) Select(from Coordinates, to Coordinates) (res [][]termbox.Cell) {
 	res = make([][]termbox.Cell, 0)
+
+	from, to = sortFromTo(from, to)
 
 	for from.Y < to.Y {
 		res = append(res, b.cells[from.Y][from.X:])
@@ -266,6 +282,8 @@ func (b *CellBuf) Select(from Coordinates, to Coordinates) (res [][]termbox.Cell
 func (b *CellBuf) SelectLine(from Coordinates, to Coordinates) (res [][]termbox.Cell) {
 	res = make([][]termbox.Cell, 0)
 
+	from, to = sortFromTo(from, to)
+
 	for from.Y < to.Y {
 		res = append(res, b.cells[from.Y][:])
 		from.Y++
@@ -274,6 +292,16 @@ func (b *CellBuf) SelectLine(from Coordinates, to Coordinates) (res [][]termbox.
 	return
 }
 
-func (b *CellBuf) SelectBlock(from Coordinates, to Coordinates) [][]termbox.Cell {
-	panic("todo")
+// SelectBlock returns the block of cells inside the given coordinates or panics if coordinates are out of bounds.
+func (b *CellBuf) SelectBlock(from Coordinates, to Coordinates) (res [][]termbox.Cell) {
+	res = make([][]termbox.Cell, 0)
+
+	from, to = sortFromTo(from, to)
+
+	for from.Y <= to.Y {
+		res = append(res, b.cells[from.Y][from.X:to.X+1])
+		from.Y++
+	}
+
+	return
 }
