@@ -18,7 +18,7 @@ func newScroll(tabspaces int, wrap bool, width, height int) (window *Scroll) {
 	if err := window.Resize(width, height); err != nil {
 		panic(err)
 	}
-	window.Tabspaces = tabspaces
+	window.tabspaces = tabspaces
 	window.Wrap = wrap
 	return
 }
@@ -26,7 +26,7 @@ func newScroll(tabspaces int, wrap bool, width, height int) (window *Scroll) {
 func TestScrollNew(t *testing.T) {
 	window := newScroll(5, true, 100, 100)
 	if window.cells == nil ||
-		window.Wrap != true || window.Tabspaces != 5 ||
+		window.Wrap != true || window.tabspaces != 5 ||
 		window.width != 100 || window.height != 100 {
 		t.Errorf("window not initialized properly: %+v", window)
 	}

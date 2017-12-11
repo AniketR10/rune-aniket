@@ -6,9 +6,10 @@ import (
 
 const defTabSpaces int = 4
 
+// TODO enforce initialization contract
 type CellBuf struct {
 	cells     [][]termbox.Cell
-	Tabspaces int
+	tabspaces int
 }
 
 func makeNewRow(rowlen int) (row []termbox.Cell) {
@@ -64,13 +65,13 @@ func (b *CellBuf) insertAt(pos Coordinates, r rune) (next Coordinates) {
 		b.insertNewRow(pos)
 		next = Coordinates{X: 0, Y: pos.Y + 1}
 	case '\t':
-		if b.Tabspaces > 0 {
+		if b.tabspaces > 0 {
 			n := Coordinates{X: pos.X, Y: pos.Y}
-			for i := 1; i < b.Tabspaces; i++ {
+			for i := 1; i < b.tabspaces; i++ {
 				n = b.insertAt(n, '\x00')
 			}
 			b.doInsertAt(n, r)
-			next = Coordinates{X: pos.X + b.Tabspaces, Y: pos.Y}
+			next = Coordinates{X: pos.X + b.tabspaces, Y: pos.Y}
 			break
 		}
 		fallthrough
@@ -86,8 +87,8 @@ func (b *CellBuf) insertAt(pos Coordinates, r rune) (next Coordinates) {
 func (b *CellBuf) Init() {
 	b.cells = make([][]termbox.Cell, 1)
 	b.cells[0] = makeNewRow(0)
-	if b.Tabspaces == 0 {
-		b.Tabspaces = defTabSpaces
+	if b.tabspaces == 0 {
+		b.tabspaces = defTabSpaces
 	}
 }
 
@@ -200,7 +201,7 @@ func (b *CellBuf) TruncateCellAt(pos Coordinates) (next Coordinates, orig termbo
 	offset := 0
 
 	if orig.Ch == '\t' {
-		offset = b.Tabspaces - 1
+		offset = b.tabspaces - 1
 	}
 
 	if pos.X < lastIdx {

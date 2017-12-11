@@ -10,7 +10,7 @@ func TestBufferWriteStr(t *testing.T) {
 	var buf CellBuf
 	str := "hello\n\tworld"
 	buf.WriteStr(str)
-	buf.Tabspaces = 4
+	buf.tabspaces = 4
 
 	if l := buf.Rows(); l != 2 {
 		t.Errorf("Lines() is not correct: %d", l)
@@ -236,7 +236,7 @@ func TestBufferSelect(t *testing.T) {
 	var buf CellBuf
 	str := "hello\n\tworld\nitsme"
 	buf.WriteStr(str)
-	buf.Tabspaces = 4
+	buf.tabspaces = 4
 
 	testCases := []selectCase{
 		{
@@ -299,7 +299,7 @@ func TestBufferSelectLine(t *testing.T) {
 	var buf CellBuf
 	str := "hello\n\tworld\nitsme"
 	buf.WriteStr(str)
-	buf.Tabspaces = 4
+	buf.tabspaces = 4
 
 	testCases := []selectCase{
 		{
@@ -346,7 +346,7 @@ func TestBufferSelectBlock(t *testing.T) {
 	var buf CellBuf
 	str := "hello\n\tworld\nitsme"
 	buf.WriteStr(str)
-	buf.Tabspaces = 4
+	buf.tabspaces = 4
 
 	testCases := []selectCase{
 		{

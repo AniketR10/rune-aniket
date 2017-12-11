@@ -307,7 +307,7 @@ func (l *Less) Handle(ev termbox.Event) (exit bool, err error) {
 func (l *Less) setupScroll(w *Scroll) {
 	w.ResultsFG = l.config.ResFG
 	w.ResultsBG = l.config.ResBG
-	w.Tabspaces, w.Wrap = l.config.Tabspaces, l.config.Wrap
+	w.CellBuf.tabspaces, w.Wrap = l.config.Tabspaces, l.config.Wrap
 }
 
 // Init will initialize a less handler. If config is null, the default
