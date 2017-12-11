@@ -248,3 +248,24 @@ func (b *CellBuf) String() string {
 	}
 	return string(s)
 }
+
+// Select returns the cells inside the given coordinates or panics if coordinates are out of bounds.
+func (b *CellBuf) Select(from Coordinates, to Coordinates) (res [][]termbox.Cell) {
+	res = make([][]termbox.Cell, 0)
+
+	for from.Y < to.Y {
+		res = append(res, b.cells[from.Y][from.X:])
+		from.X = 0
+		from.Y++
+	}
+	res = append(res, b.cells[to.Y][from.X:to.X+1])
+	return
+}
+
+func (b *CellBuf) SelectLine(from Coordinates, to Coordinates) [][]termbox.Cell {
+	panic("todo")
+}
+
+func (b *CellBuf) SelectBlock(from Coordinates, to Coordinates) [][]termbox.Cell {
+	panic("todo")
+}

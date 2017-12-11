@@ -1,6 +1,8 @@
 package fractal
 
 import (
+	"reflect"
+	"termbox"
 	"testing"
 )
 
@@ -211,5 +213,76 @@ func TestBufferWrite(t *testing.T) {
 
 	if s := buf.String(); s != str {
 		t.Errorf("expected '%q' found '%q'", str, s)
+	}
+}
+
+type selectCase struct {
+	from     Coordinates
+	to       Coordinates
+	expected [][]termbox.Cell
+}
+
+func toString(cells [][]termbox.Cell) string {
+	runes := make([]rune, 0)
+	for _, r := range cells {
+		for _, c := range r {
+			runes = append(runes, c.Ch)
+		}
+	}
+	return string(runes)
+}
+
+func TestBufferSelect(t *testing.T) {
+	var buf CellBuf
+	str := "hello\n\tworld\nitsme"
+	buf.WriteStr(str)
+	buf.Tabspaces = 4
+
+	testCases := []selectCase{
+		{
+			from: Coordinates{},
+			to:   Coordinates{X: 1, Y: 0},
+			expected: [][]termbox.Cell{
+				[]termbox.Cell{{Ch: 'h'}, {Ch: 'e'}},
+			},
+		},
+		{
+			from: Coordinates{X: 0, Y: 1},
+			to:   Coordinates{X: 8, Y: 1},
+			expected: [][]termbox.Cell{
+				[]termbox.Cell{{}, {}, {}, {Ch: '\t'}, {Ch: 'w'}, {Ch: 'o'}, {Ch: 'r'}, {Ch: 'l'}, {Ch: 'd'}},
+			},
+		},
+		{
+			from: Coordinates{X: 2, Y: 0},
+			to:   Coordinates{X: 4, Y: 0},
+			expected: [][]termbox.Cell{
+				[]termbox.Cell{{Ch: 'l'}, {Ch: 'l'}, {Ch: 'o'}},
+			},
+		},
+		{
+			from: Coordinates{X: 2, Y: 0},
+			to:   Coordinates{X: 7, Y: 1},
+			expected: [][]termbox.Cell{
+				[]termbox.Cell{{Ch: 'l'}, {Ch: 'l'}, {Ch: 'o'}},
+				[]termbox.Cell{{}, {}, {}, {Ch: '\t'}, {Ch: 'w'}, {Ch: 'o'}, {Ch: 'r'}, {Ch: 'l'}},
+			},
+		},
+		{
+			from: Coordinates{X: 4, Y: 0},
+			to:   Coordinates{X: 4, Y: 2},
+			expected: [][]termbox.Cell{
+				[]termbox.Cell{{Ch: 'o'}},
+				[]termbox.Cell{{}, {}, {}, {Ch: '\t'}, {Ch: 'w'}, {Ch: 'o'}, {Ch: 'r'}, {Ch: 'l'}, {Ch: 'd'}},
+				[]termbox.Cell{{Ch: 'i'}, {Ch: 't'}, {Ch: 's'}, {Ch: 'm'}, {Ch: 'e'}},
+			},
+		},
+	}
+
+	for _, tcase := range testCases {
+		selection := buf.Select(tcase.from, tcase.to)
+		if !reflect.DeepEqual(selection, tcase.expected) {
+			t.Errorf("expected %q found %q", toString(tcase.expected), toString(selection))
+		}
 	}
 }
