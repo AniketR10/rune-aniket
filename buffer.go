@@ -1,6 +1,7 @@
 package fractal
 
 import (
+	"math"
 	"termbox"
 )
 
@@ -304,11 +305,10 @@ func (b *CellBuf) SelectBlock(from Coordinates, to Coordinates) (res [][]termbox
 	from, to = sortFromTo(from, to)
 
 	for from.Y <= to.Y {
-		if len(b.cells[from.Y]) > 0 {
-			res = append(res, b.cells[from.Y][from.X:to.X+1])
-		} else {
-			res = append(res, b.cells[from.Y][:])
-		}
+		maxy := float64(len(b.cells[from.Y]))
+		xfrom := int(math.Min(maxy, float64(from.X)))
+		xto := int(math.Min(maxy, float64(to.X+1)))
+		res = append(res, b.cells[from.Y][xfrom:xto])
 		from.Y++
 	}
 
