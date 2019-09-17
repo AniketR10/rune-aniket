@@ -5,33 +5,27 @@ import (
 )
 
 func TestNew(t *testing.T) {
-	m, _ := NewTileNode(&TestComponent{})
-	if e := m.Resize(10, 10); e != nil {
-		t.Fatal(e)
-	}
+	tree, m := NewTileTree(&TestComponent{})
+	tree.Resize(10, 10)
 
 	if m.height != 10 || m.width != 10 {
 		t.Errorf("not initialized correcty: %+v", m)
 	}
 }
 
-func testScrollSize(t *testing.T, w *Tile, width, height int) {
-	if w.Width() != width {
-		t.Errorf("window.Width(%d) != %d", w.Width(), width)
+func assertTileSize(t *testing.T, w *TileNode, width, height int) {
+	if w.width != width {
+		t.Errorf("window.Width(%d) != %d", w.width, width)
 	}
 
-	if w.Height() != height {
-		t.Errorf("window.Height(%d) != %d", w.Height(), height)
+	if w.height != height {
+		t.Errorf("window.Height(%d) != %d", w.height, height)
 	}
 }
 
-func testScrollPos(t *testing.T, w *Tile, x, y int) {
-	xpos, ypos := w.Position()
-	if xpos != x {
-		t.Errorf("window.x(%d) != %d", xpos, x)
-	}
-	if ypos != y {
-		t.Errorf("window.y(%d) != %d", ypos, y)
+func assertTilePos(t *testing.T, tree *TileTree, node *TileNode, x, y int) {
+	if pos := tree.TilePosition(node); pos.X != x || pos.Y != y {
+		t.Errorf("position should be (x=%d,y=%d) but found %+v", x, y, pos)
 	}
 }
 
@@ -39,73 +33,55 @@ func TestStackWhenNoSpace(t *testing.T) {
 	width := 1
 	height := 1
 
-	m, root := NewTileNode(&TestComponent{})
-	if e := m.Resize(width, height); e != nil {
-		t.Fatal(e)
-	} else {
-		w1, _ := m.SplitHorizontal(root, &TestComponent{})
-		w2, _ := m.SplitVertical(w1, &TestComponent{})
+	tree, m := NewTileTree(&TestComponent{})
+	tree.Resize(width, height)
+	w1 := tree.SplitHorizontal(m, &TestComponent{})
+	w2 := tree.SplitVertical(w1, &TestComponent{})
 
-		testScrollSize(t, root, 1, 0)
-		testScrollSize(t, w1, 0, 1)
-		testScrollSize(t, w2, 1, 1)
+	assertTileSize(t, m, 1, 0)
+	assertTileSize(t, w1, 0, 1)
+	assertTileSize(t, w2, 1, 1)
 
-		testScrollPos(t, root, 0, 0)
-		testScrollPos(t, w1, 0, 0)
-		testScrollPos(t, w2, 0, 0)
-	}
+	assertTilePos(t, tree, m, 0, 0)
+	assertTilePos(t, tree, w1, 0, 0)
+	assertTilePos(t, tree, w2, 0, 0)
 }
 
-func setupTestCase(t *testing.T, gwidth, gheight int) (m *TileNode, root *Tile, w1 *Tile, w2 *Tile) {
-	var e error
+func setupTestCase(t *testing.T, gwidth, gheight int) (tree *TileTree, m *TileNode, w1 *TileNode, w2 *TileNode) {
+	tree, m = NewTileTree(&TestComponent{})
+	tree.Resize(gwidth, gheight)
 
-	m, root = NewTileNode(&TestComponent{})
-	if e = m.Resize(gwidth, gheight); e != nil {
-		t.Fatal(e)
-	}
-
-	if w1, e = m.SplitHorizontal(root, &TestComponent{}); e != nil {
-		t.Fatal(e)
-	}
-
-	if w2, e = m.SplitVertical(w1, &TestComponent{}); e != nil {
-		t.Fatal(e)
-	}
+	w1 = tree.SplitHorizontal(m, &TestComponent{})
+	w2 = tree.SplitVertical(w1, &TestComponent{})
 
 	return
 }
-func TestLen(t *testing.T) {
-	m, _, _, _ := setupTestCase(t, 100, 100)
-	if len := m.Len(); len != 3 {
-		t.Errorf("len should be 3; found: %d", len)
-	}
-}
 
 func TestNeighbours(t *testing.T) {
-	m, root, w1, w2 := setupTestCase(t, 100, 100)
+	tree, m, w1, w2 := setupTestCase(t, 100, 100)
 
-	if root.TileUp() != nil {
-		t.Errorf("%+v vs nil", root.TileUp())
+	if m.TileUp() != nil {
+		t.Errorf("%+v vs nil", m.TileUp())
 	}
 
-	if root.TileLeft() != nil {
-		t.Errorf("%+v vs nil", root.TileLeft())
+	if m.TileLeft() != nil {
+		t.Errorf("%+v vs nil", m.TileLeft())
 	}
 
-	if root.TileRight() != nil {
-		t.Errorf("%+v vs nil", root.TileRight())
+	if m.TileRight() != nil {
+		t.Errorf("%+v vs nil", m.TileRight())
 	}
 
-	if root.TileDown() != w1 {
-		t.Errorf("%+v vs %+v", root.TileDown(), w1)
+	if m.TileDown() != w1 {
+		t.Errorf("%+v vs %+v", m.TileDown(), w1)
 	}
 
-	if w1.TileUp() != root {
-		t.Errorf("%+v vs %+v", w1.TileUp(), root)
+	if w1.TileUp() != m {
+		t.Errorf("%+v vs %+v", w1.TileUp(), m)
 	}
 
-	if w2.TileUp() != root {
-		t.Errorf("%+v vs %+v", w2.TileUp(), root)
+	if w2.TileUp() != m {
+		t.Errorf("%+v vs %+v", w2.TileUp(), m)
 	}
 
 	if w1.TileLeft() != nil {
@@ -124,10 +100,7 @@ func TestNeighbours(t *testing.T) {
 		t.Errorf("%+v vs %+v", w2.TileLeft(), w1)
 	}
 
-	w3, err := m.SplitVertical(w1, &TestComponent{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	w3 := tree.SplitVertical(w1, &TestComponent{})
 
 	if w1.TileRight() != w3 {
 		t.Errorf("%+v vs %+v", w1.TileRight(), w3)
@@ -145,15 +118,8 @@ func TestNeighbours(t *testing.T) {
 		t.Errorf("%+v vs %+v", w3.TileRight(), w2)
 	}
 
-	w4, err2 := m.SplitHorizontal(w3, &TestComponent{})
-	if err2 != nil {
-		t.Fatal(err2)
-	}
-
-	w5, err3 := m.SplitVertical(w4, &TestComponent{})
-	if err3 != nil {
-		t.Fatal(err3)
-	}
+	w4 := tree.SplitHorizontal(w3, &TestComponent{})
+	w5 := tree.SplitVertical(w4, &TestComponent{})
 
 	if w5.TileRight() != w2 {
 		t.Errorf("%+v vs %+v", w5.TileRight(), w2)
@@ -184,85 +150,104 @@ func TestNeighbours(t *testing.T) {
 	}
 }
 
-func TestResize(t *testing.T) {
-	m, root, w1, w2 := setupTestCase(t, 100, 100)
+func TestResizeSimple(t *testing.T) {
+	tree, m, w1, w2 := setupTestCase(t, 100, 100)
 
-	testScrollSize(t, root, 100, 50)
-	testScrollSize(t, w1, 50, 50)
-	testScrollSize(t, w2, 50, 50)
+	assertTileSize(t, m, 100, 50)
+	assertTileSize(t, w1, 50, 50)
+	assertTileSize(t, w2, 50, 50)
 
-	testScrollPos(t, root, 0, 0)
-	testScrollPos(t, w1, 0, 50)
-	testScrollPos(t, w2, 50, 50)
+	assertTilePos(t, tree, m, 0, 0)
+	assertTilePos(t, tree, w1, 0, 50)
+	assertTilePos(t, tree, w2, 50, 50)
 
-	if err := m.Resize(50, 50); err != nil {
-		t.Fatal(err)
-	}
+	tree.Resize(50, 50)
 
-	testScrollSize(t, root, 50, 25)
-	testScrollSize(t, w1, 25, 25)
-	testScrollSize(t, w2, 25, 25)
+	assertTileSize(t, m, 50, 25)
+	assertTileSize(t, w1, 25, 25)
+	assertTileSize(t, w2, 25, 25)
 
-	testScrollPos(t, root, 0, 0)
-	testScrollPos(t, w1, 0, 25)
-	testScrollPos(t, w2, 25, 25)
+	assertTilePos(t, tree, m, 0, 0)
+	assertTilePos(t, tree, w1, 0, 25)
+	assertTilePos(t, tree, w2, 25, 25)
 }
 
 func TestResizeRounding(t *testing.T) {
-	m, root, w1, w2 := setupTestCase(t, 3, 3)
-	testScrollSize(t, root, 3, 1)
-	testScrollSize(t, w1, 1, 2)
-	testScrollSize(t, w2, 2, 2)
+	tree, m, w1, w2 := setupTestCase(t, 3, 3)
+	assertTileSize(t, m, 3, 1)
+	assertTileSize(t, w1, 1, 2)
+	assertTileSize(t, w2, 2, 2)
 
-	testScrollPos(t, root, 0, 0)
-	testScrollPos(t, w1, 0, 1)
-	testScrollPos(t, w2, 1, 1)
+	assertTilePos(t, tree, m, 0, 0)
+	assertTilePos(t, tree, w1, 0, 1)
+	assertTilePos(t, tree, w2, 1, 1)
 
-	m.Resize(2, 2)
-	testScrollSize(t, root, 2, 1)
-	testScrollSize(t, w1, 1, 1)
-	testScrollSize(t, w2, 1, 1)
+	tree.Resize(2, 2)
+	assertTileSize(t, m, 2, 1)
+	assertTileSize(t, w1, 1, 1)
+	assertTileSize(t, w2, 1, 1)
+	assertTilePos(t, tree, m, 0, 0)
+	assertTilePos(t, tree, w1, 0, 1)
+	assertTilePos(t, tree, w2, 1, 1)
 
-	testScrollPos(t, root, 0, 0)
-	testScrollPos(t, w1, 0, 1)
-	testScrollPos(t, w2, 1, 1)
+	tree.Resize(3, 3)
+	assertTileSize(t, m, 3, 1)
+	assertTileSize(t, w1, 1, 2)
+	assertTileSize(t, w2, 2, 2)
+	assertTilePos(t, tree, m, 0, 0)
+	assertTilePos(t, tree, w1, 0, 1)
+	assertTilePos(t, tree, w2, 1, 1)
 
-	m.Resize(3, 3)
-	testScrollSize(t, root, 3, 1)
-	testScrollSize(t, w1, 1, 2)
-	testScrollSize(t, w2, 2, 2)
+	tree.Resize(100, 100)
+	assertTileSize(t, m, 100, 50)
+	assertTileSize(t, w1, 50, 50)
+	assertTileSize(t, w2, 50, 50)
+	assertTilePos(t, tree, m, 0, 0)
+	assertTilePos(t, tree, w1, 0, 50)
+	assertTilePos(t, tree, w2, 50, 50)
+}
 
-	testScrollPos(t, root, 0, 0)
-	testScrollPos(t, w1, 0, 1)
-	testScrollPos(t, w2, 1, 1)
+func TestTileNodeClose(t *testing.T) {
+	t.Run("panics if try to close last node", func(t *testing.T) {
+		defer func() {
+			if r := recover(); r == nil {
+				t.Errorf("did not panic when closing last node")
+			}
+		}()
+		_, m := NewTileTree(&TestComponent{Ch: 'A'})
+		m.Close()
+	})
+	t.Run("does not panic if try to close first node", func(t *testing.T) {
+		tree, m := NewTileTree(&TestComponent{Ch: 'A'})
+		tree.SplitVertical(m, &TestComponent{Ch: 'X'})
+		m.Close()
+	})
+	t.Run("does not panic if try to close second node after removing first", func(t *testing.T) {
+		tree, m := NewTileTree(&TestComponent{Ch: 'A'})
+		m2 := tree.SplitVertical(m, &TestComponent{Ch: 'X'})
+		m2.Close()
+		m3 := tree.SplitVertical(m, &TestComponent{Ch: 'X'})
+		m.Close()
+		m4 := tree.SplitVertical(m3, &TestComponent{Ch: 'X'})
+		m4.Close()
+	})
 
-	m.Resize(100, 100)
-	testScrollSize(t, root, 100, 50)
-	testScrollSize(t, w1, 50, 50)
-	testScrollSize(t, w2, 50, 50)
-
-	testScrollPos(t, root, 0, 0)
-	testScrollPos(t, w1, 0, 50)
-	testScrollPos(t, w2, 50, 50)
 }
 
 func TestTileNodeDraw(t *testing.T) {
 	var err error
 
 	width, height := 8, 4
-	w := NewStringWriter(width, height)
-	m, root := NewTileNode(&TestComponent{Ch: 'A'})
+	w := newStringWriter(width, height)
+	tree, m := NewTileTree(&TestComponent{Ch: 'A'})
+	tree.Resize(width, height)
 
-	if err = m.Resize(width, height); err != nil {
-		t.Fatal(err)
-	}
-
-	var m1 *Tile
-	var m2 *Tile
-	var m3 *Tile
-	var m4 *Tile
-	var m5 *Tile
-	var m6 *Tile
+	var m1 *TileNode
+	var m2 *TileNode
+	var m3 *TileNode
+	var m4 *TileNode
+	var m5 *TileNode
+	var m6 *TileNode
 
 	if err != nil {
 		t.Fatal(err)
@@ -276,149 +261,159 @@ AAAAAAAA
 AAAAAAAA
 AAAAAAAA`,
 		}, {
-			func() { m1, err = m.SplitVertical(root, &TestComponent{Ch: 'B'}) }, `
+			func() { m1 = tree.SplitVertical(m, &TestComponent{Ch: 'B'}) }, `
 AAAABBBB
 AAAABBBB
 AAAABBBB
 AAAABBBB`,
 		}, {
-			func() { m2, err = m.SplitVertical(m1, &TestComponent{Ch: 'C'}) }, `
+			func() { m2 = tree.SplitVertical(m1, &TestComponent{Ch: 'C'}) }, `
 AABBBCCC
 AABBBCCC
 AABBBCCC
 AABBBCCC`,
 		}, {
-			func() { m3, err = m.SplitVertical(m2, &TestComponent{Ch: 'D'}) }, `
+			func() { m3 = tree.SplitVertical(m2, &TestComponent{Ch: 'D'}) }, `
 AABBCCDD
 AABBCCDD
 AABBCCDD
 AABBCCDD`,
 		}, {
-			func() { m4, err = m.SplitVertical(m3, &TestComponent{Ch: 'E'}) }, `
+			func() { m4 = tree.SplitVertical(m3, &TestComponent{Ch: 'E'}) }, `
 ABCCDDEE
 ABCCDDEE
 ABCCDDEE
 ABCCDDEE`,
 		}, {
-			func() { m5, err = m.SplitHorizontal(m4, &TestComponent{Ch: 'X'}) }, `
+			func() { m5 = tree.SplitHorizontal(m4, &TestComponent{Ch: 'X'}) }, `
 ABCCDDEE
 ABCCDDEE
 ABCCDDXX
 ABCCDDXX`,
 		}, {
-			func() { m6, err = m.SplitHorizontal(m2, &TestComponent{Ch: 'Z'}) }, `
+			func() { m6 = tree.SplitHorizontal(m2, &TestComponent{Ch: 'Z'}) }, `
 ABCCDDEE
 ABCCDDEE
 ABZZDDXX
 ABZZDDXX`,
 		}, {
-			func() { err = m5.Close() }, `
+			func() { m5.Close() }, `
 ABCCDDEE
 ABCCDDEE
 ABZZDDEE
 ABZZDDEE`,
 		}, {
-			func() { err = m2.Close() }, `
+			func() { m2.Close() }, `
 ABZZDDEE
 ABZZDDEE
 ABZZDDEE
 ABZZDDEE`,
 		}, {
-			func() { err = root.Close() }, `
+			func() { m.Close() }, `
 BBZZDDEE
 BBZZDDEE
 BBZZDDEE
 BBZZDDEE`,
 		}, {
-			func() { err = m1.Close() }, `
+			func() { m1.Close() }, `
 ZZDDDEEE
 ZZDDDEEE
 ZZDDDEEE
 ZZDDDEEE`,
 		}, {
-			func() { m1, err = m.SplitHorizontal(m3, &TestComponent{Ch: 'A'}) }, `
+			func() { m1 = tree.SplitHorizontal(m3, &TestComponent{Ch: 'A'}) }, `
 ZZDDDEEE
 ZZDDDEEE
 ZZAAAEEE
 ZZAAAEEE`,
 		}, {
-			func() { err = m1.Close() }, `
+			func() { m1.Close() }, `
 ZZDDDEEE
 ZZDDDEEE
 ZZDDDEEE
 ZZDDDEEE`,
 		}, {
-			func() { err = m3.Close() }, `
+			func() { m3.Close() }, `
 ZZZZEEEE
 ZZZZEEEE
 ZZZZEEEE
 ZZZZEEEE`,
 		}, {
-			func() { err = m4.Close() }, `
+			func() { m4.Close() }, `
 ZZZZZZZZ
 ZZZZZZZZ
 ZZZZZZZZ
 ZZZZZZZZ`,
 		}, {
-			func() { m1, err = m.SplitHorizontal(m6, &TestComponent{Ch: 'Y'}) }, `
+			func() { m1 = tree.SplitHorizontal(m6, &TestComponent{Ch: 'Y'}) }, `
 ZZZZZZZZ
 ZZZZZZZZ
 YYYYYYYY
 YYYYYYYY`,
 		}, {
-			func() { m2, err = m.SplitVertical(m1, &TestComponent{Ch: 'X'}) }, `
+			func() { m2 = tree.SplitVertical(m1, &TestComponent{Ch: 'X'}) }, `
 ZZZZZZZZ
 ZZZZZZZZ
 YYYYXXXX
 YYYYXXXX`,
 		}, {
-			func() { err = m.Resize(16, 4); w.Resize(16, 4) }, `
+			func() { tree.Resize(16, 4); w.Resize(16, 4) }, `
 ZZZZZZZZZZZZZZZZ
 ZZZZZZZZZZZZZZZZ
 YYYYYYYYXXXXXXXX
 YYYYYYYYXXXXXXXX`,
 		}, {
-			func() { err = m6.Close() }, `
+			func() { m6.Close() }, `
 YYYYYYYYXXXXXXXX
 YYYYYYYYXXXXXXXX
 YYYYYYYYXXXXXXXX
 YYYYYYYYXXXXXXXX`,
 		}, {
-			func() { err = m.Resize(4, 2); w.Resize(4, 2) }, `
+			func() { tree.Resize(4, 2); w.Resize(4, 2) }, `
 YYXX
 YYXX`,
 		}, {
-			func() { err = m1.Close() }, `
+			func() { m1.Close() }, `
 XXXX
 XXXX`,
 		}, {
-			func() { _, err = m.SplitVertical(m2, &TestComponent{Ch: 'Z'}) }, `
+			func() { _ = tree.SplitVertical(m2, &TestComponent{Ch: 'Z'}) }, `
 XXZZ
 XXZZ`,
 		}, {
-			func() { err = m.Resize(8, 4); w.Resize(8, 4) }, `
+			func() { tree.Resize(8, 4); w.Resize(8, 4) }, `
 XXXXZZZZ
 XXXXZZZZ
 XXXXZZZZ
 XXXXZZZZ`,
 		}, {
-			func() { _, err = m.SplitVertical(m2, &TestComponent{Ch: 'I'}) }, `
+			func() { _ = tree.SplitVertical(m2, &TestComponent{Ch: 'I'}) }, `
 XXIIIZZZ
 XXIIIZZZ
 XXIIIZZZ
 XXIIIZZZ`,
-		}, {
-			func() { err = m.Move(2, 2); w.Resize(8, 8) }, `
-        
-        
-  XXIIIZ
-  XXIIIZ
-  XXIIIZ
-  XXIIIZ
-        
-        `,
 		},
 	}
 
-	testWorkflow(t, m, w, tests)
+	testWorkflow(t, tree, w, tests)
+}
+
+func TestTileNodeSize(t *testing.T) {
+	tree, _, _, _ := setupTestCase(t, 100, 100)
+	if size := tree.Size(); size != 3 {
+		t.Errorf("size should be 3; found: %d", size)
+	}
+}
+
+func assertNotNil(t *testing.T, c Component) {
+	if c == nil {
+		t.Errorf("unexpected nil component")
+	}
+}
+
+func TestTiledNodeContent(t *testing.T) {
+	_, m1, m2, m3 := setupTestCase(t, 100, 100)
+	assertNotNil(t, m1.Content())
+	assertNotNil(t, m2.Content())
+	assertNotNil(t, m3.Content())
 }

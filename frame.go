@@ -4,121 +4,114 @@ import (
 	"termbox"
 )
 
+// Frame is a Component that simply draws a border around a nested component.
 type Frame struct {
-	content         Component
-	width, height   int
+	content         VirtualComponent
 	bwidth, bheight int
-	pos             Coordinates
+	width, height   int
 	Fg, Bg          termbox.Attribute
 }
 
+// NewFrame allocates storage and initializes a new frame with the given
+// border attributes and underlying component.
 func NewFrame(content Component, fg, bg termbox.Attribute) (f *Frame) {
 	f = new(Frame)
 	f.Init(content, fg, bg)
 	return
 }
 
+// Init initializes this frame with the given Component and border attributes.
 func (f *Frame) Init(content Component, fg, bg termbox.Attribute) {
 	f.Fg, f.Bg = fg, bg
-	f.content = content
+	f.content.C = content
 }
 
+// SetAttr updates the border attributes of this Frame.
 func (f *Frame) SetAttr(fg, bg termbox.Attribute) {
 	f.Fg, f.Bg = fg, bg
 }
 
+// Content returns the underlying Component.
 func (f *Frame) Content() Component {
-	return f.content
+	return &f.content
 }
 
+// SetContent updates the underlying component and resizes it
+// to conform to this frame's width and height.
 func (f *Frame) SetContent(content Component) (err error) {
-	f.content = content
-
-	if err = f.Resize(f.width, f.height); err != nil {
-		return
-	}
-
-	if err = f.Move(f.pos.X, f.pos.Y); err != nil {
-		return
-	}
-
+	f.content.C = content
+	f.Resize(f.width, f.height)
 	return
 }
 
-func (f *Frame) Resize(width, height int) (err error) {
+// Resize updates this frame with a new width and height. If width or height
+// is smaller than 3 cells, the border will not be drawn.
+func (f *Frame) Resize(width, height int) {
 	// deactivate frame if there's not space for content
 	if width < 3 || height < 3 {
 		f.bwidth, f.bheight = 0, 0
 	} else {
 		f.bwidth, f.bheight = 2, 2
 	}
+
+	offset := f.getContentOffset()
+	contentWidth := width - f.bwidth
+	contentHeight := height - f.bheight
+	f.content.Resize(contentWidth, contentHeight)
+	f.content.Move(offset)
 	f.width, f.height = width, height
-
-	if err = f.content.Resize(width-f.bwidth, height-f.bheight); err != nil {
-		return
-	}
-
-	return f.Move(f.pos.X, f.pos.Y)
 }
 
-func (f *Frame) Move(x, y int) error {
-	f.pos.X, f.pos.Y = x, y
-	xoffset, yoffset := f.bwidth/2, f.bheight/2
-	return f.content.Move(f.pos.X+xoffset, f.pos.Y+yoffset)
+func (f *Frame) getContentOffset() Coordinates {
+	return Coordinates{X: f.bwidth / 2, Y: f.bheight / 2}
 }
 
+// Draw draws this frame's border and contents to the given Writer.
 func (f *Frame) Draw(w Writer) (err error) {
 	if f.bwidth == 0 || f.bheight == 0 {
 		return f.content.Draw(w)
 	}
 
-	maxX, maxY := f.pos.X+f.width-1, f.pos.Y+f.height-1
+	limitX, limitY := f.width-1, f.height-1
 
-	for i := f.pos.X; i < maxX; i++ {
-		if err = w.Write(i, f.pos.Y, '─', f.Fg, f.Bg); err != nil {
+	for i := 0; i < limitX; i++ {
+		if err = w.Write(i, 0, '─', f.Fg, f.Bg); err != nil {
 			return
 		}
-		if err = w.Write(i, maxY, '─', f.Fg, f.Bg); err != nil {
+		if err = w.Write(i, limitY, '─', f.Fg, f.Bg); err != nil {
 			return
 		}
 	}
 
-	for i := f.pos.Y; i < maxY; i++ {
-		if err = w.Write(f.pos.X, i, '│', f.Fg, f.Bg); err != nil {
+	for i := 0; i < limitY; i++ {
+		if err = w.Write(0, i, '│', f.Fg, f.Bg); err != nil {
 			return
 		}
-		if err = w.Write(maxX, i, '│', f.Fg, f.Bg); err != nil {
+		if err = w.Write(limitX, i, '│', f.Fg, f.Bg); err != nil {
 			return
 		}
 	}
 
-	if err = w.Write(f.pos.X, f.pos.Y, '┌', f.Fg, f.Bg); err != nil {
+	if err = w.Write(0, 0, '┌', f.Fg, f.Bg); err != nil {
 		return
 	}
 
-	if err = w.Write(maxX, f.pos.Y, '┐', f.Fg, f.Bg); err != nil {
+	if err = w.Write(limitX, 0, '┐', f.Fg, f.Bg); err != nil {
 		return
 	}
 
-	if err = w.Write(f.pos.X, maxY, '└', f.Fg, f.Bg); err != nil {
+	if err = w.Write(0, limitY, '└', f.Fg, f.Bg); err != nil {
 		return
 	}
 
-	if err = w.Write(maxX, maxY, '┘', f.Fg, f.Bg); err != nil {
+	if err = w.Write(limitX, limitY, '┘', f.Fg, f.Bg); err != nil {
 		return
 	}
 
 	return f.content.Draw(w)
 }
 
-func (f *Frame) Height() int {
-	return f.height
-}
-
-func (f *Frame) Width() int {
-	return f.width
-}
-
-func (f *Frame) Position() (int, int) {
-	return f.pos.X, f.pos.Y
+// ContentPosition returns the position of the content inside this frame.
+func (f *Frame) ContentPosition() Coordinates {
+	return f.getContentOffset()
 }

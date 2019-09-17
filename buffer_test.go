@@ -4,10 +4,115 @@ import (
 	"reflect"
 	"termbox"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
+func TestUninitializedNotPanic(t *testing.T) {
+
+	t.Run("ConflateRow", func(t *testing.T) {
+		var b Buffer
+		_ = b.ConflateRow(10)
+	})
+
+	t.Run("InsertAt", func(t *testing.T) {
+		var b Buffer
+		_ = b.InsertAt(Coordinates{X: 10, Y: 10}, 'f')
+	})
+
+	t.Run("RawCells", func(t *testing.T) {
+		var b Buffer
+		assert.NotNil(t, b.RawCells())
+	})
+
+	t.Run("ResetAttr", func(t *testing.T) {
+		var b Buffer
+		b.ResetAttr()
+	})
+
+	t.Run("RowLastIdx", func(t *testing.T) {
+		var b Buffer
+		_, _ = b.RowLastIdx(10)
+	})
+
+	t.Run("RowLen", func(t *testing.T) {
+		var b Buffer
+		_, _ = b.RowLen(10)
+	})
+
+	t.Run("Rows", func(t *testing.T) {
+		var b Buffer
+		_ = b.Rows()
+	})
+
+	t.Run("SetAttr", func(t *testing.T) {
+		var b Buffer
+		b.SetAttr(Coordinates{X: 1, Y: 10}, 0, 0)
+	})
+
+	t.Run("String", func(t *testing.T) {
+		var b Buffer
+		_ = b.String()
+	})
+
+	t.Run("TruncateCellAt", func(t *testing.T) {
+		var b Buffer
+		_, _, _ = b.TruncateCellAt(Coordinates{X: 10, Y: 10})
+	})
+
+	t.Run("TruncateFrom", func(t *testing.T) {
+		var b Buffer
+		b.TruncateFrom(Coordinates{X: 0, Y: 1})
+	})
+
+	t.Run("TruncateLastRow", func(t *testing.T) {
+		var b Buffer
+		b.TruncateLastRow()
+	})
+
+	t.Run("TruncateRowAt", func(t *testing.T) {
+		var b Buffer
+		_ = b.TruncateRowAt(10)
+	})
+
+	t.Run("TruncateRowFrom", func(t *testing.T) {
+		var b Buffer
+		b.TruncateRowFrom(Coordinates{X: 10, Y: 0})
+	})
+
+	t.Run("Write", func(t *testing.T) {
+		var b Buffer
+		_ = b.Write('h')
+	})
+
+	t.Run("WriteAt", func(t *testing.T) {
+		var b Buffer
+		b.WriteAt(Coordinates{X: 10, Y: 0}, 'h')
+	})
+
+	t.Run("WriteStr", func(t *testing.T) {
+		var b Buffer
+		_ = b.WriteStr("hfjlkw")
+	})
+
+	t.Run("Select", func(t *testing.T) {
+		var b Buffer
+		_ = b.Select(Coordinates{X: 0, Y: 0}, Coordinates{X: 1, Y: 1})
+	})
+
+	t.Run("SelectLine", func(t *testing.T) {
+		var b Buffer
+		_ = b.SelectLine(Coordinates{X: 0, Y: 0}, Coordinates{X: 1, Y: 1})
+	})
+
+	t.Run("SelectBlock", func(t *testing.T) {
+		var b Buffer
+		_ = b.SelectBlock(Coordinates{X: 0, Y: 0}, Coordinates{X: 1, Y: 1})
+	})
+}
+
 func TestBufferWriteStr(t *testing.T) {
-	var buf CellBuf
+	var buf Buffer
 	str := "hello\n\tworld"
 	buf.WriteStr(str)
 	buf.tabspaces = 4
@@ -30,7 +135,7 @@ func TestBufferWriteStr(t *testing.T) {
 }
 
 func TestBufferInsertAt(t *testing.T) {
-	var buf CellBuf
+	var buf Buffer
 	var next Coordinates
 
 	next = buf.InsertAt(next, 'h')
@@ -69,7 +174,7 @@ func TestBufferInsertAt(t *testing.T) {
 }
 
 func TestBufferWriteAt(t *testing.T) {
-	var buf CellBuf
+	var buf Buffer
 	buf.WriteStr("hello")
 
 	buf.WriteAt(Coordinates{X: 5, Y: 0}, 'w')
@@ -100,7 +205,7 @@ func TestBufferWriteAt(t *testing.T) {
 }
 
 func TestBufferTruncateLastRow(t *testing.T) {
-	var buf CellBuf
+	var buf Buffer
 	str := "hello\nworld"
 	buf.WriteStr(str)
 
@@ -116,7 +221,7 @@ func TestBufferTruncateLastRow(t *testing.T) {
 }
 
 func TestBufferTruncateRowAt(t *testing.T) {
-	var buf CellBuf
+	var buf Buffer
 	str := "hello\nworld"
 	buf.WriteStr(str)
 
@@ -128,7 +233,7 @@ func TestBufferTruncateRowAt(t *testing.T) {
 }
 
 func TestBufferTruncateRowFrom1(t *testing.T) {
-	var buf CellBuf
+	var buf Buffer
 	str := "hello\nworld"
 	buf.WriteStr(str)
 
@@ -140,7 +245,7 @@ func TestBufferTruncateRowFrom1(t *testing.T) {
 }
 
 func TestBufferTruncateRowFrom2(t *testing.T) {
-	var buf CellBuf
+	var buf Buffer
 	str := "hello\nworld"
 	buf.WriteStr(str)
 
@@ -152,7 +257,7 @@ func TestBufferTruncateRowFrom2(t *testing.T) {
 }
 
 func TestBufferTruncateFrom1(t *testing.T) {
-	var buf CellBuf
+	var buf Buffer
 	str := "hello\nworld"
 	buf.WriteStr(str)
 
@@ -164,7 +269,7 @@ func TestBufferTruncateFrom1(t *testing.T) {
 }
 
 func TestBufferTruncateFrom2(t *testing.T) {
-	var buf CellBuf
+	var buf Buffer
 	str := "hello\nworld"
 	buf.WriteStr(str)
 
@@ -176,7 +281,7 @@ func TestBufferTruncateFrom2(t *testing.T) {
 }
 
 func TestBufferTruncateCellAt(t *testing.T) {
-	var buf CellBuf
+	var buf Buffer
 	str := "hello\nworld"
 	buf.WriteStr(str)
 
@@ -192,7 +297,7 @@ func TestBufferTruncateCellAt(t *testing.T) {
 }
 
 func TestBufferWrite(t *testing.T) {
-	var buf CellBuf
+	var buf Buffer
 	str := "hello\nworld"
 
 	for _, c := range str {
@@ -233,7 +338,7 @@ func toString(cells [][]termbox.Cell) string {
 }
 
 func TestBufferSelect(t *testing.T) {
-	var buf CellBuf
+	var buf Buffer
 	str := "hello\n\tworld\n\nitsme"
 	buf.WriteStr(str)
 	buf.tabspaces = 4
@@ -294,6 +399,22 @@ func TestBufferSelect(t *testing.T) {
 				[]termbox.Cell{{Ch: 'i'}, {Ch: 't'}, {Ch: 's'}, {Ch: 'm'}, {Ch: 'e'}},
 			},
 		},
+		{
+			from: Coordinates{X: 0, Y: 2},
+			to:   Coordinates{X: 5, Y: 3},
+			expected: [][]termbox.Cell{
+				[]termbox.Cell{},
+				[]termbox.Cell{{Ch: 'i'}, {Ch: 't'}, {Ch: 's'}, {Ch: 'm'}, {Ch: 'e'}},
+			},
+		},
+		{
+			from: Coordinates{X: 0, Y: 2},
+			to:   Coordinates{X: 4, Y: 4},
+			expected: [][]termbox.Cell{
+				[]termbox.Cell{},
+				[]termbox.Cell{{Ch: 'i'}, {Ch: 't'}, {Ch: 's'}, {Ch: 'm'}, {Ch: 'e'}},
+			},
+		},
 	}
 
 	for _, tcase := range testCases {
@@ -305,7 +426,7 @@ func TestBufferSelect(t *testing.T) {
 }
 
 func TestBufferSelectLine(t *testing.T) {
-	var buf CellBuf
+	var buf Buffer
 	str := "hello\n\tworld\n\nitsme"
 	buf.WriteStr(str)
 	buf.tabspaces = 4
@@ -342,18 +463,36 @@ func TestBufferSelectLine(t *testing.T) {
 				[]termbox.Cell{},
 			},
 		},
+		{
+			to:   Coordinates{X: 2, Y: 0},
+			from: Coordinates{X: 10, Y: 2},
+			expected: [][]termbox.Cell{
+				[]termbox.Cell{{Ch: 'h'}, {Ch: 'e'}, {Ch: 'l'}, {Ch: 'l'}, {Ch: 'o'}},
+				[]termbox.Cell{{}, {}, {}, {Ch: '\t'}, {Ch: 'w'}, {Ch: 'o'}, {Ch: 'r'}, {Ch: 'l'}, {Ch: 'd'}},
+				[]termbox.Cell{},
+			},
+		},
+		{
+			to:   Coordinates{X: 2, Y: 0},
+			from: Coordinates{X: 0, Y: 10},
+			expected: [][]termbox.Cell{
+				[]termbox.Cell{{Ch: 'h'}, {Ch: 'e'}, {Ch: 'l'}, {Ch: 'l'}, {Ch: 'o'}},
+				[]termbox.Cell{{}, {}, {}, {Ch: '\t'}, {Ch: 'w'}, {Ch: 'o'}, {Ch: 'r'}, {Ch: 'l'}, {Ch: 'd'}},
+				[]termbox.Cell{{Ch: 'i'}, {Ch: 't'}, {Ch: 's'}, {Ch: 'm'}, {Ch: 'e'}},
+			},
+		},
 	}
 
 	for _, tcase := range testCases {
 		selection := buf.SelectLine(tcase.from, tcase.to)
-		if !reflect.DeepEqual(selection, tcase.expected) {
+		if toString(selection) != toString(tcase.expected) {
 			t.Errorf("expected %q found %q", toString(tcase.expected), toString(selection))
 		}
 	}
 }
 
 func TestBufferSelectBlock(t *testing.T) {
-	var buf CellBuf
+	var buf Buffer
 	str := "hello\n\tworld\n\nitsme"
 	buf.WriteStr(str)
 	buf.tabspaces = 4

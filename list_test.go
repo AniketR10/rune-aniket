@@ -7,39 +7,19 @@ import (
 func TestNewList(t *testing.T) {
 	l := NewList(1)
 
-	if err := l.Resize(8, 4); err != nil {
-		t.Fatal(err)
-	}
+	l.Resize(8, 4)
 
-	if err := l.Move(1, 1); err != nil {
-		l.Move(1, 1)
-	}
-
-	if l.ElementHeight() != 1 || l.Width() != 8 || l.Height() != 4 {
+	if l.ElementHeight() != 1 || l.width != 8 || l.height != 4 {
 		t.Errorf("sizes not initialized correctly: %+v", l)
-	}
-
-	if x, y := l.Position(); x != 1 || y != 1 {
-		t.Errorf("position not initialized correctly: %+v", l)
 	}
 
 	var l2 List
 
 	l2.Init(1)
-	if err := l.Resize(8, 4); err != nil {
-		t.Fatal(err)
-	}
+	l.Resize(8, 4)
 
-	if err := l.Move(1, 1); err != nil {
-		t.Fatal(err)
-	}
-
-	if l.ElementHeight() != 1 || l.Width() != 8 || l.Height() != 4 {
+	if l.ElementHeight() != 1 || l.width != 8 || l.height != 4 {
 		t.Errorf("sizes not initialized correctly: %+v", l)
-	}
-
-	if x, y := l.Position(); x != 1 || y != 1 {
-		t.Errorf("position not initialized correctly: %+v", l)
 	}
 }
 
@@ -47,15 +27,11 @@ func TestListDraw(t *testing.T) {
 	l := NewList(1)
 	l2 := NewList(1)
 
-	if err := l.Resize(8, 4); err != nil {
-		t.Fatal(err)
-	}
+	l.Resize(8, 4)
 
-	if err := l2.Resize(8, 4); err != nil {
-		t.Fatal(err)
-	}
+	l2.Resize(8, 4)
 
-	w := NewStringWriter(8, 4)
+	w := newStringWriter(8, 4)
 
 	tests := []testCase{
 		{
@@ -65,13 +41,13 @@ func TestListDraw(t *testing.T) {
         
         `,
 		}, {
-			func() { l.PushBack(&TestComponent{Ch: 'X'}) }, `
+			func() { l.PushBack(&VirtualComponent{C: &TestComponent{Ch: 'X'}}) }, `
 XXXXXXXX
         
         
         `,
 		}, {
-			func() { l.PushBack(&TestComponent{Ch: 'Y'}) }, `
+			func() { l.PushBack(&VirtualComponent{C: &TestComponent{Ch: 'Y'}}) }, `
 XXXXXXXX
 YYYYYYYY
         
@@ -89,15 +65,15 @@ YYYYYYYY
         
         `,
 		}, {
-			func() { l.PushFront(&TestComponent{Ch: 'Z'}) }, `
+			func() { l.PushFront(&VirtualComponent{C: &TestComponent{Ch: 'Z'}}) }, `
 ZZZZZZZZ
 XXXXXXXX
 YYYYYYYY
         `,
 		}, {
 			func() {
-				l2.PushFront(&TestComponent{Ch: '$'})
-				l2.PushFront(&TestComponent{Ch: '#'})
+				l2.PushFront(&VirtualComponent{C: &TestComponent{Ch: '$'}})
+				l2.PushFront(&VirtualComponent{C: &TestComponent{Ch: '#'}})
 				l.PushBackList(l2)
 			}, `
 ZZZZZZZZ
@@ -123,19 +99,7 @@ YYYYYYYY
 ########
 $$$$$$$$`,
 		}, {
-			func() { l.Move(1, 1) }, `
-        
- XXXXXXX
- YYYYYYY
- #######`,
-		}, {
 			func() { l.Resize(4, 4) }, `
-        
- XXXX   
- YYYY   
- ####   `,
-		}, {
-			func() { l.Move(0, 0) }, `
 XXXX    
 YYYY    
 ####    

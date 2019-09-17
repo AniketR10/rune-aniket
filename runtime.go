@@ -13,12 +13,8 @@ var (
 	highlightfg, highlightbg termbox.Attribute
 )
 
-func resize(root Handler, width, height int) error {
-	if err := root.Resize(width, height); err != nil {
-		return fmt.Errorf("failed to resize root handler: %v", err)
-	}
-
-	return nil
+func resize(root Handler, width, height int) {
+	root.Resize(width, height)
 }
 
 func redraw(root Handler, termw Writer) (err error) {
@@ -42,15 +38,9 @@ func redraw(root Handler, termw Writer) (err error) {
 }
 
 func run(root Handler, termw Writer) (err error) {
-	if err = root.Move(0, 0); err != nil {
-		return fmt.Errorf("failed to position root handler: %v", err)
-	}
-
 	width, height := termbox.Size()
 
-	if err = resize(root, width, height); err != nil {
-		return err
-	}
+	resize(root, width, height)
 
 	var hexit, texit bool
 
@@ -67,7 +57,7 @@ func run(root Handler, termw Writer) (err error) {
 
 		select {
 		case ev := <-echan:
-			hexit, err = root.Handle(ev)
+			hexit = root.Handle(ev)
 		case ev := <-ichan:
 			switch ev.Type {
 			case termbox.EventInterrupt:
@@ -75,11 +65,9 @@ func run(root Handler, termw Writer) (err error) {
 				err = ev.Err
 			case termbox.EventResize:
 				width, height := ev.Width, ev.Height
-				if err = resize(root, width, height); err != nil {
-					return
-				}
+				resize(root, width, height)
 			default:
-				hexit, err = root.Handle(ev)
+				hexit = root.Handle(ev)
 			}
 		}
 	}

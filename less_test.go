@@ -17,166 +17,183 @@ KKKKXXLLLL
 11111111XX
 `
 
-func setup(less *Less, width, height int, config *LessConfig) (*Less, *StringWriter) {
-	var err error
-
+func setup(less *Less, width, height int) (*Less, *stringWriter) {
 	if less == nil {
-		less, err = NewLess(config)
+		less = NewLess()
 	} else {
-		err = less.Init(config)
+		less.Init()
 	}
 
-	if err != nil {
-		panic(err)
-	}
+	less.SetContent(content)
 
-	if err = less.SetContent(content); err != nil {
-		panic(err)
-	}
+	less.Resize(width, height)
 
-	if err = less.Resize(width, height); err != nil {
-		panic(err)
-	}
-
-	return less, NewStringWriter(width, height)
+	return less, newStringWriter(width, height)
 }
 
 func TestLessHandle(t *testing.T) {
-	cases := []handlerTestCase{
+	cases := getLessHandleTestFlow([19]termbox.Event{
+		termbox.Event{},
+		termbox.Event{Ch: 'k', Type: termbox.EventKey},
+		termbox.Event{Ch: 'j', Type: termbox.EventKey},
+		termbox.Event{Ch: 'h', Type: termbox.EventKey},
+		termbox.Event{Ch: 'l', Type: termbox.EventKey},
+		termbox.Event{Ch: '$', Type: termbox.EventKey},
+		termbox.Event{Ch: '0', Type: termbox.EventKey},
+		termbox.Event{Ch: 'G', Type: termbox.EventKey},
+		termbox.Event{Ch: 'g', Type: termbox.EventKey},
+		termbox.Event{Ch: '/', Type: termbox.EventKey},
+		termbox.Event{Ch: 'X', Type: termbox.EventKey},
+		termbox.Event{Key: termbox.KeyBackspace, Type: termbox.EventKey},
+		termbox.Event{Ch: 'X', Type: termbox.EventKey},
+		termbox.Event{Ch: 'X', Type: termbox.EventKey},
+		termbox.Event{Key: termbox.KeyEnter, Type: termbox.EventKey},
+		termbox.Event{Ch: 'g', Type: termbox.EventKey},
+		termbox.Event{Ch: 'N', Type: termbox.EventKey},
+		termbox.Event{Ch: 'n', Type: termbox.EventKey},
+		termbox.Event{},
+	})
+	testLessHandle(t, cases)
+}
+
+func getLessHandleTestFlow(events [19]termbox.Event) []handlerTestCase {
+	return []handlerTestCase{
 		{
-			termbox.Event{}, `
+			events[0], `
 AAAAABBB
 CCCCCDDD
 EEEEEFFF
 :       `,
 		},
 		{
-			termbox.Event{Ch: 'k', Type: termbox.EventKey}, `
+			events[1], `
 AAAAABBB
 CCCCCDDD
 EEEEEFFF
 :       `,
 		},
 		{
-			termbox.Event{Ch: 'j', Type: termbox.EventKey}, `
+			events[2], `
 CCCCCDDD
 EEEEEFFF
 GGGGGHHH
 :       `,
 		},
 		{
-			termbox.Event{Ch: 'h', Type: termbox.EventKey}, `
+			events[3], `
 CCCCCDDD
 EEEEEFFF
 GGGGGHHH
 :       `,
 		},
 		{
-			termbox.Event{Ch: 'l', Type: termbox.EventKey}, `
+			events[4], `
 CCCCDDDD
 EEEEFFFF
 GGGGHHHH
 :       `,
 		},
 		{
-			termbox.Event{Ch: '$', Type: termbox.EventKey}, `
+			events[5], `
 CCCDDDDD
 EEEFFFFF
 GGGHHHHH
 :       `,
 		},
 		{
-			termbox.Event{Ch: '0', Type: termbox.EventKey}, `
+			events[6], `
 CCCCCDDD
 EEEEEFFF
 GGGGGHHH
 :       `,
 		},
 		{
-			termbox.Event{Ch: 'G', Type: termbox.EventKey}, `
+			events[7], `
 88888888
 33333333
 11111111
 :       `,
 		},
 		{
-			termbox.Event{Ch: 'g', Type: termbox.EventKey}, `
+			events[8], `
 AAAAABBB
 CCCCCDDD
 EEEEEFFF
 :       `,
 		},
 		{
-			termbox.Event{Ch: '/', Type: termbox.EventKey}, `
+			events[9], `
 AAAAABBB
 CCCCCDDD
 EEEEEFFF
 /       `,
 		},
 		{
-			termbox.Event{Ch: 'X', Type: termbox.EventKey}, `
+			events[10], `
 AAAAABBB
 CCCCCDDD
 EEEEEFFF
 /X      `,
 		},
 		{
-			termbox.Event{Key: termbox.KeyBackspace, Type: termbox.EventKey}, `
+			events[11], `
 AAAAABBB
 CCCCCDDD
 EEEEEFFF
 /       `,
 		},
 		{
-			termbox.Event{Ch: 'X', Type: termbox.EventKey}, `
+			events[12], `
 AAAAABBB
 CCCCCDDD
 EEEEEFFF
 /X      `,
 		},
 		{
-			termbox.Event{Ch: 'X', Type: termbox.EventKey}, `
+			events[13], `
 AAAAABBB
 CCCCCDDD
 EEEEEFFF
 /XX     `,
 		},
 		{
-			termbox.Event{Key: termbox.KeyEnter, Type: termbox.EventKey}, `
+			events[14], `
 KKKKXXLL
 99999999
 88888888
 :       `,
 		},
 		{
-			termbox.Event{Ch: 'g', Type: termbox.EventKey}, `
+			events[15], `
 AAAAABBB
 CCCCCDDD
 EEEEEFFF
 :       `,
 		},
 		{
-			termbox.Event{Ch: 'N', Type: termbox.EventKey}, `
+			events[16], `
 88888888
 33333333
 111111XX
 :       `,
 		},
 		{
-			termbox.Event{Ch: 'n', Type: termbox.EventKey}, `
+			events[17], `
 KKXXLLLL
 99999999
 88888888
 :       `,
 		},
 	}
+}
 
+func testLessHandle(t *testing.T, cases []handlerTestCase) {
 	var less [2]Less
 	var less1 *Less
-	var writer1, writer2, writer3 *StringWriter
-	_, writer1 = setup(&less[0], 8, 4, nil)
-	_, writer2 = setup(&less[1], 8, 4, nil)
-	less1, writer3 = setup(nil, 8, 4, nil)
+	var writer1, writer2, writer3 *stringWriter
+	_, writer1 = setup(&less[0], 8, 4)
+	_, writer2 = setup(&less[1], 8, 4)
+	less1, writer3 = setup(nil, 8, 4)
 
 	// test cases with allocated less
 	testHandlerWorkflow(t, &less[0], cases, writer1)
@@ -184,34 +201,4 @@ KKXXLLLL
 
 	// test cases with stack less
 	testHandlerWorkflow(t, less1, cases, writer3)
-
-	// setup new test case
-	if err := less[0].SetMessage("hi"); err != nil {
-		t.Fatal(err)
-	}
-
-	if err := less[0].SetContent("blonde"); err != nil {
-		t.Fatal(err)
-	}
-
-	if err := less[0].Resize(7, 4); err != nil {
-		t.Fatal(err)
-	}
-
-	if err := less[0].Move(1, 0); err != nil {
-		t.Fatal(err)
-	}
-
-	cases = []handlerTestCase{
-		{
-			termbox.Event{}, `
- blonde 
-        
-        
- :    hi`,
-		},
-	}
-
-	testHandlerWorkflow(t, &less[0], cases, writer3)
-
 }

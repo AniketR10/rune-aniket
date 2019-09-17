@@ -6,27 +6,27 @@ import (
 	"termbox"
 )
 
-type StringWriter struct {
+type stringWriter struct {
 	cellbuf       []termbox.Cell
 	buffer        bytes.Buffer
 	width, height int
 	CursorCh      rune
 }
 
-func NewStringWriter(width, height int) (t *StringWriter) {
-	t = new(StringWriter)
+func newStringWriter(width, height int) (t *stringWriter) {
+	t = new(stringWriter)
 	t.Resize(width, height)
 	t.CursorCh = '▐'
 	return
 }
 
-func (w *StringWriter) Resize(width, height int) {
+func (w *stringWriter) Resize(width, height int) {
 	w.width, w.height = width, height
 	w.cellbuf = make([]termbox.Cell, width*height)
 }
 
-func (w *StringWriter) Write(x, y int, ch rune, fg, bg termbox.Attribute) error {
-	if x >= w.width || y >= w.height {
+func (w *stringWriter) Write(x, y int, ch rune, fg, bg termbox.Attribute) error {
+	if x >= w.width || y >= w.height || x < 0 || y < 0 {
 		return nil
 	}
 	idx := y*w.width + x
@@ -34,7 +34,7 @@ func (w *StringWriter) Write(x, y int, ch rune, fg, bg termbox.Attribute) error 
 	return nil
 }
 
-func (w *StringWriter) Flush() (err error) {
+func (w *stringWriter) Flush() (err error) {
 	for i, c := range w.cellbuf {
 		if i != 0 && i%w.width == 0 {
 			if _, err = w.buffer.WriteRune('\n'); err != nil {
@@ -57,21 +57,21 @@ func (w *StringWriter) Flush() (err error) {
 	return
 }
 
-func (w *StringWriter) Cells() []termbox.Cell {
+func (w *stringWriter) Cells() []termbox.Cell {
 	return w.cellbuf
 }
 
-func (w *StringWriter) Clear(_, _ termbox.Attribute) (err error) {
+func (w *stringWriter) Clear(_, _ termbox.Attribute) (err error) {
 	w.cellbuf = make([]termbox.Cell, w.width*w.height)
 	w.buffer.Reset()
 	return
 }
 
-func (w *StringWriter) String() string {
+func (w *stringWriter) String() string {
 	return w.buffer.String()
 }
 
-func (w *StringWriter) SetCursor(pos Coordinates) {
+func (w *stringWriter) SetCursor(pos Coordinates) {
 	i := pos.X + pos.Y*w.width
 	if i < len(w.cellbuf) {
 		w.cellbuf[i].Ch = w.CursorCh

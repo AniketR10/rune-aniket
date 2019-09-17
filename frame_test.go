@@ -4,41 +4,13 @@ import (
 	"testing"
 )
 
-func TestNewFrame(t *testing.T) {
-	var err error
-	u := &TestComponent{Ch: '*'}
-	f := NewFrame(u, 0, 0)
-
-	if err = f.Move(1, 1); err != nil {
-		t.Fatal(err)
-	}
-
-	if err = f.Resize(8, 4); err != nil {
-		t.Fatal(err)
-	}
-
-	if f.Content().(*TestComponent) != u {
-		t.Errorf("did not set content correctly")
-	}
-
-	if f.Height() != 4 || f.Width() != 8 {
-		t.Errorf("did not set size correctly")
-	}
-
-	if x, y := f.Position(); x != 1 || y != 1 {
-		t.Errorf("did not set position correctly")
-	}
-}
-
 func TestDrawFrame(t *testing.T) {
 	u := &TestComponent{Ch: 'X'}
 	f := NewFrame(u, 0, 0)
 
-	if err := f.Resize(8, 4); err != nil {
-		t.Fatal(err)
-	}
+	f.Resize(8, 4)
 
-	w := NewStringWriter(9, 5)
+	w := newStringWriter(9, 5)
 
 	tests := []testCase{
 		{
@@ -63,28 +35,21 @@ func TestDrawFrame(t *testing.T) {
 └──┘     
          `,
 		}, {
-			func() { f.Move(4, 0) }, `
-    ┌──┐ 
-    │**│ 
-    │**│ 
-    └──┘ 
-         `,
-		}, {
 			func() { f.SetContent(&TestComponent{Ch: 'T'}) }, `
-    ┌──┐ 
-    │TT│ 
-    │TT│ 
-    └──┘ 
+┌──┐     
+│TT│     
+│TT│     
+└──┘     
          `,
 		}, {
 			func() { f.Resize(2, 2) }, `
-    TT   
-    TT   
+TT       
+TT       
          
          
          `,
 		}, {
-			func() { f.Resize(8, 4); f.Move(0, 0) }, `
+			func() { f.Resize(8, 4) }, `
 ┌──────┐ 
 │TTTTTT│ 
 │TTTTTT│ 

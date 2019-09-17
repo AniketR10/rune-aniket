@@ -11,7 +11,7 @@ type handlerTestCase struct {
 	expected string
 }
 
-func testHandlerWorkflow(t *testing.T, handler Handler, cases []handlerTestCase, w *StringWriter) {
+func testHandlerWorkflow(t *testing.T, handler Handler, cases []handlerTestCase, w *stringWriter) {
 	var err error
 
 	for _, tcase := range cases {
@@ -19,9 +19,7 @@ func testHandlerWorkflow(t *testing.T, handler Handler, cases []handlerTestCase,
 			t.Fatal(err)
 		}
 
-		if _, err = handler.Handle(tcase.event); err != nil {
-			t.Fatal(err)
-		}
+		handler.Handle(tcase.event)
 
 		if err = handler.Draw(w); err != nil {
 			t.Fatal(err)
@@ -44,7 +42,7 @@ type testCase struct {
 	expected string
 }
 
-func testWorkflow(t *testing.T, m Component, w *StringWriter, cases []testCase) {
+func testWorkflow(t *testing.T, m Component, w *stringWriter, cases []testCase) {
 	var err error
 
 	for _, tcase := range cases {

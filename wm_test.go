@@ -13,30 +13,18 @@ func altEvent(ch rune) termbox.Event {
 	}
 }
 
-func prepareTest(width, height int, border bool, root Handler) (*StringWriter, *Tile, *WindowManager) {
-	writer := NewStringWriter(width, height)
-	handler, tile := NewWindowManager(root, border)
+func prepareTest(width, height int, border bool, root Handler) (*stringWriter, *WindowManager) {
+	writer := newStringWriter(width, height)
+	handler := NewWindowManager(root, border)
+	handler.Resize(width, height)
 
-	err := handler.Resize(width, height)
-	if err != nil {
-		panic(err)
-	}
-
-	return writer, tile, handler
+	return writer, handler
 }
 
 func TestWindowManagerSetFocus(t *testing.T) {
 	width, height := 8, 4
-	_, left, handler := prepareTest(width, height, false, NewTestHandler())
-	right, err := handler.SplitHorizontal(NewTestHandler())
-
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if focus := handler.Focus(); focus != left {
-		t.Errorf("focus should be %+v, instead of %+v", left, focus)
-	}
+	_, handler := prepareTest(width, height, false, NewTestHandler())
+	right := handler.SplitHorizontal(NewTestHandler())
 
 	handler.SetFocus(right)
 
@@ -49,28 +37,19 @@ func TestWindowManagerSetFocus(t *testing.T) {
 func TestWindowManagerHandle(t *testing.T) {
 	topLeftHandler := NewTestHandler()
 	width, height := 8, 4
-	writer, topleft, handler := prepareTest(width, height, false, topLeftHandler)
+	writer, handler := prepareTest(width, height, false, topLeftHandler)
 
 	bottomLeftHandler := NewTestHandler()
-	bottomleft, err := handler.SplitHorizontal(bottomLeftHandler)
-	if err != nil {
-		t.Fatal(err)
-	}
+	bottomleft := handler.SplitHorizontal(bottomLeftHandler)
 
 	topRightHandler := NewTestHandler()
-	_, err2 := handler.SplitVertical(topRightHandler)
-	if err2 != nil {
-		t.Fatal(err2)
-	}
+	_ = handler.SplitVertical(topRightHandler)
 
-	handler.SetFocus(bottomleft)
+	topLeft := handler.SetFocus(bottomleft)
 	bottomRightHandler := NewTestHandler()
-	_, err3 := handler.SplitVertical(bottomRightHandler)
-	if err3 != nil {
-		t.Fatal(err3)
-	}
+	_ = handler.SplitVertical(bottomRightHandler)
 
-	handler.SetFocus(topleft)
+	handler.SetFocus(topLeft)
 
 	cases := []handlerTestCase{
 		{
@@ -301,13 +280,10 @@ EEEEEEEE`,
 func TestWindowManagerHandleBorder(t *testing.T) {
 	leftHandler := NewTestHandler()
 	width, height := 12, 4
-	writer, _, handler := prepareTest(width, height, true, leftHandler)
+	writer, handler := prepareTest(width, height, true, leftHandler)
 
 	rightHandler := NewTestHandler()
-	_, err := handler.SplitVertical(rightHandler)
-	if err != nil {
-		t.Fatal(err)
-	}
+	_ = handler.SplitVertical(rightHandler)
 
 	cases := []handlerTestCase{
 		{
@@ -327,11 +303,4 @@ func TestWindowManagerHandleBorder(t *testing.T) {
 	}
 
 	testHandlerWorkflow(t, handler, cases, writer)
-
-	// TODO check that border for focus window is highlighted
-	// cells := writer.Cells()
-
-	// for i, cell := range writer.Cells() {
-	// 	if i ==
-	// }
 }

@@ -11,131 +11,132 @@ const (
 	horizontal
 )
 
-type linkedComponent interface {
-	setParent(*TileNode)
-	getParent() *TileNode
-	Component
+// TileTree represents the root node of a tree of TileNodes.
+type TileTree struct {
+	root TileNode
 }
 
+// TileNode represents a node in a tree of tiled components.
 type TileNode struct {
-	pos       Coordinates
-	width     int
-	height    int
-	children  []linkedComponent
-	direction splitdir
-	parent    *TileNode
+	width, height int
+	content       Component
+	children      []*VirtualComponent
+	direction     splitdir
+	parent        *TileNode
 }
 
-type Tile struct {
-	content Component
-	parent  *TileNode
+// Init initializes a TileTree or resets it if already initialied.
+func (t *TileTree) Init(content Component) (n *TileNode) {
+	n = new(TileNode)
+	t.root.direction = vertical
+	t.root.children = []*VirtualComponent{&VirtualComponent{C: n}}
+	n.initNode(vertical, content, &t.root)
+	return
 }
 
-func (t *TileNode) Init(content Component) *Tile {
-	root := newTile(content)
-	t.initNode(vertical, nil, root, 0, 0, 0, 0)
-	root.parent = t
-	return root
+// NewTileTree allocates storage for a new TileTree and initializes it.
+// It also returns the TileNode allocated to store the given content.
+func NewTileTree(content Component) (t *TileTree, n *TileNode) {
+	t = new(TileTree)
+	n = t.Init(content)
+	return
 }
 
-func NewTileNode(content Component) (*TileNode, *Tile) {
-	t := new(TileNode)
-	root := t.Init(content)
-	return t, root
+// Resize resizes the contents of this TileTree.
+func (t *TileTree) Resize(width, height int) {
+	t.root.Resize(width, height)
 }
 
-func (t *TileNode) initNode(direction splitdir, parent *TileNode, w *Tile, x, y, width, height int) {
-	t.pos.X, t.pos.Y, t.width, t.height = x, y, width, height
-	t.children = []linkedComponent{w}
+// Draw draws the contents of this TileTree.
+func (t *TileTree) Draw(w Writer) error {
+	return t.root.Draw(w)
+}
+
+func (t *TileNode) initNode(
+	direction splitdir, content Component, parent *TileNode,
+) {
+	t.content = content
+	t.children = []*VirtualComponent{}
 	t.direction = direction
 	t.parent = parent
 }
 
-func newTile(content Component) (t *Tile) {
-	t = new(Tile)
-	t.content = content
-	return
-}
+func (t *TileNode) resizeHorizontal(width, height int) (err error) {
+	length := len(t.children)
+	cheight := height / length
+	hspare := height - cheight*length
 
-func (t *Tile) setParent(parent *TileNode) {
-	t.parent = parent
-}
-
-func (t *TileNode) setParent(parent *TileNode) {
-	t.parent = parent
-}
-
-func (t *TileNode) resizeHorizontal(len, width, height int) (err error) {
-	cheight := height / len
-	hspare := height - cheight*len
-
-	useSpareIdx := len - hspare
+	useSpareIdx := length - hspare
 	spareCell := 0
 
 	for i, ti := range t.children {
 		offset := ((i - useSpareIdx) * spareCell)
-		if err = ti.Move(t.pos.X, (t.pos.Y+i*cheight)+offset); err != nil {
-			return
-		}
+		ti.Move(Coordinates{0, i*cheight + offset})
 
 		if i == useSpareIdx {
 			spareCell = 1
 		}
 
-		if err = ti.Resize(width, cheight+spareCell); err != nil {
-			return
-		}
+		ti.Resize(width, cheight+spareCell)
 	}
 	return
 }
 
-func (t *TileNode) resizeVertical(len, width, height int) (err error) {
-	cwidth := width / len
-	wspare := width - cwidth*len
+func (t *TileNode) resizeVertical(width, height int) {
+	length := len(t.children)
+	cwidth := width / length
+	wspare := width - cwidth*length
 
-	useSpareIdx := len - wspare
+	useSpareIdx := length - wspare
 	spareCell := 0
 
 	for i, ti := range t.children {
 		offset := ((i - useSpareIdx) * spareCell)
-		if err = ti.Move((t.pos.X+i*cwidth)+offset, t.pos.Y); err != nil {
-			return
-		}
+		ti.Move(Coordinates{i*cwidth + offset, 0})
 
 		if i == useSpareIdx {
 			spareCell = 1
 		}
 
-		if err = ti.Resize(cwidth+spareCell, height); err != nil {
-			return
-		}
+		ti.Resize(cwidth+spareCell, height)
 	}
 	return
 }
 
-func (t *TileNode) Resize(width, height int) (err error) {
+// Resize : Component
+func (t *TileNode) Resize(width, height int) {
 	t.height = height
 	t.width = width
 
-	len := len(t.children)
+	if len(t.children) == 0 && t.content == nil {
+		panic("corrupted node: non-empty children and content")
+	}
 
-	if len == 0 {
-		panic(fmt.Sprintf("can't resize a TileNode with no children: %[1]p: %+[1]v", t))
+	if t.content != nil {
+		t.content.Resize(width, height)
+		return
 	}
 
 	if t.direction == vertical {
-		return t.resizeVertical(len, width, height)
+		t.resizeVertical(width, height)
+		return
+
 	}
 
-	return t.resizeHorizontal(len, width, height)
+	t.resizeHorizontal(width, height)
 }
 
-func (t *TileNode) Move(x, y int) error {
-	t.pos.X, t.pos.Y = x, y
-	return t.Resize(t.width, t.height)
-}
-
+// Draw : Component
 func (t *TileNode) Draw(w Writer) (err error) {
+	if len(t.children) == 0 && t.content == nil {
+		panic("corrupted node: non-empty children and content")
+	}
+
+	if t.content != nil {
+		t.content.Draw(w)
+		return
+	}
+
 	for _, ti := range t.children {
 		if err = ti.Draw(w); err != nil {
 			return
@@ -145,237 +146,296 @@ func (t *TileNode) Draw(w Writer) (err error) {
 	return
 }
 
-func (t *TileNode) Height() int {
-	return t.height
-}
-
-func (t *TileNode) Width() int {
-	return t.width
-}
-
-func (t *TileNode) Position() (int, int) {
-	return t.pos.X, t.pos.Y
-}
-
-func (t *Tile) Resize(width, height int) (err error) {
-	return t.content.Resize(width, height)
-}
-
-func (t *Tile) Move(x, y int) error {
-	return t.content.Move(x, y)
-}
-
-func (t *Tile) Draw(w Writer) (err error) {
-	return t.content.Draw(w)
-}
-
-func (t *Tile) Height() int {
-	return t.content.Height()
-}
-
-func (t *Tile) Width() int {
-	return t.content.Width()
-}
-
-func (t *Tile) Position() (int, int) {
-	return t.content.Position()
-}
-
-func (t *TileNode) childIdx(comp linkedComponent) int {
-	for i, t := range t.children {
-		if t == comp {
+func (t *TileNode) childIdx(child *TileNode) int {
+	for i, c := range t.children {
+		if c.C == child {
 			return i
 		}
 	}
 
-	panic("corrupt node: window already closed or tile does not belong to this node")
+	panic("tile is not a child of parent")
 }
 
-func (m *TileNode) split(tw *Tile, direction splitdir, content Component) (t *Tile, err error) {
-	if tw == nil {
-		panic("trying to split a nil tile")
+func (t *TileNode) addChildAtIdx(
+	child *TileNode, content Component, direction splitdir, idx int,
+) {
+	if idx > len(t.children) {
+		panic(fmt.Errorf("trying to append child at index out of bounds: %d; len=%d",
+			idx, len(t.children)))
 	}
 
-	node := tw.parent
-	t = newTile(content)
-	i := node.childIdx(tw)
+	v := &VirtualComponent{C: child}
 
-	if node.direction == direction {
-		t.parent = node
-		target := i + 1 // target position
+	// transfer content to child at index 0 but do it in a way such that it
+	// maintains mapping of content to TileNode.
+	// This is because instances of TileNode are leaked outside of the
+	// tree through various APIs.
+	if len(t.children) == 0 {
+		proxyNode := new(TileNode)
+		proxyNode.initNode(direction, nil, t.parent)
+		proxyNode.children = append(proxyNode.children, &VirtualComponent{C: t}, v)
 
-		if target == len(node.children) {
-			node.children = append(node.children, t)
-		} else {
-			node.children = append(node.children, nil)
-			copy(node.children[target+1:], node.children[target:])
-			node.children[target] = t
-		}
-		err = node.Resize(node.width, node.height)
+		idx := t.parent.childIdx(t)
+		t.parent.children[idx] = &VirtualComponent{C: proxyNode}
+
+		child.initNode(direction, content, proxyNode)
+		t.initNode(direction, t.content, proxyNode)
+
+		proxyNode.parent.Resize(proxyNode.parent.width, proxyNode.parent.height)
 		return
 	}
 
-	x, y := tw.Position()
-	// substitute tile we are splitting over for a node
-	// which will contain the current tile and a new one
-	nnode := new(TileNode)
-	nnode.initNode(direction, node, tw, x, y, tw.Width(), tw.Height())
-	nnode.children = append(nnode.children, t)
-	t.parent = nnode
+	child.initNode(direction, content, t)
 
-	node.children[i] = nnode
-	tw.parent = nnode
-	err = nnode.Resize(nnode.width, nnode.height)
+	t.children = append(t.children, nil)
+	copy(t.children[idx+1:], t.children[idx:])
+	t.children[idx] = v
 
+	t.Resize(t.width, t.height)
+}
+
+func split(over *TileNode, direction splitdir, content Component) (n *TileNode) {
+	if content == nil {
+		panic("empty content for tile")
+	}
+	if over == nil {
+		panic("trying to split over a nil tile")
+	}
+
+	n = new(TileNode)
+
+	parent := over.parent
+
+	if parent.direction == direction {
+		i := parent.childIdx(over)
+		parent.addChildAtIdx(n, content, direction, i+1)
+		return
+	}
+
+	over.addChildAtIdx(n, content, direction, 0)
 	return
 }
 
-func (tw *Tile) Close() (err error) {
-	node := tw.parent
+func removeChild(parent, child *TileNode) {
+	i := parent.childIdx(child)
+	copy(parent.children[i:], parent.children[i+1:])
+	parent.children = parent.children[:len(parent.children)-1]
 
-	if node.parent == nil && len(node.children) == 1 {
-		panic("unsupported: trying to close last window: remove manager instead")
+	child.parent = nil
+	child.children = nil
+
+	// transfer last child to content but do it in a way such that it
+	// maintains mapping of contents to TileNode.
+	if len(parent.children) == 1 && parent.parent != nil {
+		proxyNode := parent
+		lastNode := parent.children[0]
+
+		idx := proxyNode.parent.childIdx(proxyNode)
+		proxyNode.parent.children[idx] = lastNode
+
+		lastNode.C.(*TileNode).parent = proxyNode.parent
+
+		proxyNode.parent.Resize(proxyNode.parent.width, proxyNode.parent.height)
+
+		proxyNode.parent = nil
+		proxyNode.children = nil
+		return
 	}
 
-	// remove window
-	i := node.childIdx(tw)
-	copy(node.children[i:], node.children[i+1:])
-	node.children[len(node.children)-1] = nil
-	node.children = node.children[:len(node.children)-1]
+	parent.Resize(parent.width, parent.height)
+}
 
-	// add last component to parent node and remove itself
-	if node.parent != nil && len(node.children) == 1 {
-		parent := node.parent
-		child := node.children[0]
-
-		j := parent.childIdx(node)
-		parent.children[j] = child
-		child.setParent(parent)
-
-		// avoid memory leaks
-		node.parent = nil
-
-		return parent.Resize(parent.width, parent.height)
+// Close removes this node from the tree. It panics if node is last node on the tree.
+func (t *TileNode) Close() {
+	if t.parent.parent == nil && len(t.parent.children) == 1 {
+		panic("unsupported: trying to close last node")
 	}
 
-	return node.Resize(node.width, node.height)
+	if len(t.parent.children) != 0 {
+		removeChild(t.parent, t)
+		return
+	}
+
+	t.parent.Close()
 }
 
-func (m *TileNode) SplitVertical(tw *Tile, content Component) (*Tile, error) {
-	return m.split(tw, vertical, content)
+// SplitVertical splits the given node to incorporate new content. If direction of the
+// given node's split is vertical, a new node with content will be added as a sibling of node.
+// Otherwise, a new node with content will become a child of the given node so
+// width will be divided in half so new node can be drawn next to it.
+// It panics if node is a child of this TileTree.
+func (t *TileTree) SplitVertical(node *TileNode, content Component) *TileNode {
+	return split(node, vertical, content)
 }
 
-func (m *TileNode) SplitHorizontal(tw *Tile, content Component) (*Tile, error) {
-	return m.split(tw, horizontal, content)
+// SplitHorizontal splits the given node to incorporate new content. If direction of the
+// given node's split is horizontal, a new node with content will be added as a sibling of node.
+// Otherwise, a new node will become a child of the given node so
+// height will be divided in half so new node can be drawn next to it.
+// It panics if node is a child of this TileTree.
+func (t *TileTree) SplitHorizontal(node *TileNode, content Component) *TileNode {
+	return split(node, horizontal, content)
 }
 
-func (t *Tile) Content() Component {
-	return t.content
-}
-
-// LeftMostTile will return the left-most tile in the node
+// leftMostChild will return the left-most tile in the node
 // if node's split is horizontal, or the top-most tile if the node's split is vertical
-func (t *TileNode) LeftMostTile() *Tile {
-	if len(t.children) == 0 {
-		return nil
+func (t *TileNode) leftMostChild() *TileNode {
+	node := t.children[0].C.(*TileNode)
+	if len(node.children) == 0 {
+		return node
 	}
 
-	if tile, ok := t.children[0].(*Tile); ok {
-		return tile
-	}
-
-	return t.children[0].(*TileNode).LeftMostTile()
+	return node.leftMostChild()
 }
 
-// RightMostTile will return the right-most tile in the node
+// rightMostChild will return the right-most tile in the node
 // if node's split is horizontal, or the bottom-most tile if the node's split is vertical
-func (t *TileNode) RightMostTile() *Tile {
-	len := len(t.children)
-	if len == 0 {
+func (t *TileNode) rightMostChild() *TileNode {
+	node := t.children[len(t.children)-1].C.(*TileNode)
+	if len(node.children) == 0 {
+		return node
+	}
+
+	return node.rightMostChild()
+}
+
+func getParentIdx(node *TileNode) (parent *TileNode, i int) {
+	parent = node.parent
+	if parent == nil {
+		panic("corrupted tree: exposed root node")
+	}
+	i = parent.childIdx(node)
+	return
+}
+
+func tileLeftDir(node *TileNode, direction splitdir) *TileNode {
+	parent, i := getParentIdx(node)
+	if parent.parent == nil {
 		return nil
 	}
 
-	idx := len - 1
-	if tile, ok := t.children[idx].(*Tile); ok {
-		return tile
+	if i == 0 || parent.direction != direction {
+		return tileLeftDir(parent, direction)
 	}
 
-	return t.children[idx].(*TileNode).RightMostTile()
+	link := parent.children[i-1].C.(*TileNode)
+	if len(link.children) == 0 {
+		return link
+	}
+
+	return link.rightMostChild()
 }
 
-func (t *TileNode) getParent() *TileNode {
-	return t.parent
-}
-
-func (t *Tile) getParent() *TileNode {
-	return t.parent
-}
-
-func tileLeftDir(l linkedComponent, direction splitdir) *Tile {
-	node := l.getParent()
-
-	if node == nil {
+func tileRightDir(node *TileNode, direction splitdir) *TileNode {
+	parent, i := getParentIdx(node)
+	if parent.parent == nil {
 		return nil
 	}
 
-	i := node.childIdx(l)
-	if i == 0 || node.direction != direction {
-		return tileLeftDir(node, direction)
+	if i == len(parent.children)-1 || parent.direction != direction {
+		return tileRightDir(parent, direction)
 	}
 
-	link := node.children[i-1]
-
-	if t, ok := link.(*Tile); ok {
-		return t
+	link := parent.children[i+1].C.(*TileNode)
+	if len(link.children) == 0 {
+		return link
 	}
 
-	return link.(*TileNode).RightMostTile()
+	return link.leftMostChild()
 }
 
-func tileRightDir(l linkedComponent, direction splitdir) *Tile {
-	node := l.getParent()
-	if node == nil {
-		return nil
+// TileLeft returns the tile left-adjacent to t or nil if t is the
+// left-most tile in the tree.
+func (t *TileNode) TileLeft() *TileNode {
+	node := t
+	direction := vertical
+	parent, i := getParentIdx(node)
+
+	if i == 0 || parent.direction != direction {
+		return tileLeftDir(parent, direction)
 	}
 
-	i := node.childIdx(l)
-	if i == len(node.children)-1 || node.direction != direction {
-		return tileRightDir(node, direction)
+	link := parent.children[i-1].C.(*TileNode)
+	if len(link.children) == 0 {
+		return link
 	}
 
-	link := node.children[i+1]
-
-	if t, ok := link.(*Tile); ok {
-		return t
-	}
-
-	return link.(*TileNode).LeftMostTile()
+	return link.rightMostChild()
 }
 
-func (t *Tile) TileLeft() *Tile {
-	return tileLeftDir(t, vertical)
-}
-
-func (t *Tile) TileRight() *Tile {
+// TileRight returns the tile right-adjacent to t or nil if t is the
+// right-most tile in the tree.
+func (t *TileNode) TileRight() *TileNode {
 	return tileRightDir(t, vertical)
 }
 
-func (t *Tile) TileUp() *Tile {
+// TileUp returns the tile on top of t or nil if t is the
+// top-most tile in the tree.
+func (t *TileNode) TileUp() *TileNode {
 	return tileLeftDir(t, horizontal)
 }
 
-func (t *Tile) TileDown() *Tile {
+// TileDown returns the tile in the bottom of t or nil if t is the
+// bottom-most tile in the tree.
+func (t *TileNode) TileDown() *TileNode {
 	return tileRightDir(t, horizontal)
 }
 
-func (t *TileNode) Len() (len int) {
+// Size returns the total number of nodes under this TileNode.
+func (t *TileNode) Size() (size int) {
+	if len(t.children) == 0 {
+		return 1
+	}
+
 	for _, c := range t.children {
-		if _, ok := c.(*Tile); ok {
-			len++
-		} else {
-			len += c.(*TileNode).Len()
-		}
+		size += c.C.(*TileNode).Size()
 	}
 
 	return
+}
+
+// Size returns the total number of nodes in this tree.
+func (t *TileTree) Size() (size int) {
+	return t.root.Size()
+}
+
+// Content returns the Component held by this TileNode in the TileTree.
+func (t *TileNode) Content() Component {
+	if t.content == nil {
+		panic("corrupted node: leaked proxy node outside of tree")
+	}
+	return t.content
+}
+
+func (t *TileNode) tilePosition(child *TileNode, currOffset Coordinates) (offset Coordinates, ok bool) {
+	if t == child {
+		panic("missed child on parent loop")
+	}
+
+	for _, c := range t.children {
+		offset = c.Position()
+
+		ok = (c.C == child)
+		if ok {
+			offset.X += currOffset.X
+			offset.Y += currOffset.Y
+			return
+		}
+
+		offset, ok = c.C.(*TileNode).tilePosition(child, offset)
+		if ok {
+			return
+		}
+	}
+	return
+}
+
+// TilePosition returns the given tile's position offset inside this TileTree.
+// It panics if tile is not a member of this tree.
+func (t *TileTree) TilePosition(tile *TileNode) Coordinates {
+	offset, ok := t.root.tilePosition(tile, Coordinates{})
+	if !ok {
+		panic("tile does not belong to this tree")
+	}
+	return offset
 }

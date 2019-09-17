@@ -4,7 +4,7 @@ import "testing"
 
 func TestWriteFlush(t *testing.T) {
 	width, height := 5, 6
-	writer := NewStringWriter(width, height)
+	writer := newStringWriter(width, height)
 
 	c := 'A'
 	for i := 0; i < width; i++ {
@@ -34,7 +34,7 @@ func TestWriteFlush(t *testing.T) {
 // TODO
 // func TestRuneLength(t *testing.T) {
 // 	width, height := 5, 6
-// 	writer := NewStringWriter(width, height)
+// 	writer := newStringWriter(width, height)
 //
 // 	c := '中'
 // 	for i := 0; i < width; i++ {

@@ -10,12 +10,13 @@ const (
 	cmdBarHeight = 1
 )
 
+// LessConfig holds configuration values for a Less instance.
 type LessConfig struct {
 	Tabspaces int
 	Wrap      bool
 	ResFG     termbox.Attribute
 	ResBG     termbox.Attribute
-	Handler   func(LessEvent) error
+	Handler   func(LessEvent)
 }
 
 var defaultConfig = LessConfig{
@@ -25,19 +26,20 @@ var defaultConfig = LessConfig{
 	ResBG:     termbox.ColorDefault,
 }
 
+// DefaultLessConfig returns sane configuration defaults for a less instance.
 func DefaultLessConfig() *LessConfig {
 	cfg := new(LessConfig)
 	*cfg = defaultConfig
 	return cfg
 }
 
+// Less is a clone of Unix' less program.
 type Less struct {
 	*Scroll
-	cmdScroll    Scroll
-	msgScroll    Scroll
+	cmdScroll    VirtualComponent
+	msgScroll    VirtualComponent
 	mode         mode
 	delEOF       bool
-	pos          Coordinates
 	cursorOffset int
 	height       int
 	width        int
@@ -45,7 +47,7 @@ type Less struct {
 	config       *LessConfig
 }
 
-// EventType represents a less event
+// LessEventType represents a less event
 type LessEventType uint8
 
 const (
@@ -63,41 +65,33 @@ const (
 	searchMode
 )
 
-// Event type represents a less event.
+// LessEvent type represents a less event.
 type LessEvent struct {
 	Type LessEventType
 	Data []byte
 	Err  error
 }
 
-func (l *Less) sendEvent(ev LessEvent) error {
+func (l *Less) sendEvent(ev LessEvent) {
 	if l.config.Handler != nil {
-		if err := l.config.Handler(ev); err != nil {
-			return fmt.Errorf("less handler failed to process event: %+v: %v", ev, err)
-		}
+		l.config.Handler(ev)
 	}
-
-	return nil
 }
 
-func (l *Less) setNormalMode() error {
+func (l *Less) setNormalMode() {
 	l.cursorOffset = 1
-	l.cmdScroll.Reset()
-	l.cmdScroll.Write(':')
+	l.cmdScroll.C.(*Scroll).Reset()
+	l.cmdScroll.C.(*Scroll).Write(':')
 	l.mode = normalMode
-
-	return nil
 }
 
-func (l *Less) setSearchMode() error {
-	l.cmdScroll.Reset()
-	l.cmdScroll.Write('/')
+func (l *Less) setSearchMode() {
+	l.cmdScroll.C.(*Scroll).Reset()
+	l.cmdScroll.C.(*Scroll).Write('/')
 	l.mode = searchMode
-
-	return nil
 }
 
-func (l *Less) searchHandleEvent(ev termbox.Event) (exit bool, err error) {
+func (l *Less) searchHandleEvent(ev termbox.Event) (exit bool) {
 	switch ev.Key {
 
 	case termbox.KeyBackspace:
@@ -105,40 +99,34 @@ func (l *Less) searchHandleEvent(ev termbox.Event) (exit bool, err error) {
 	case termbox.KeyBackspace2:
 		if l.cursorOffset > 1 {
 			l.cursorOffset--
-			l.cmdScroll.TruncateCellAt(Coordinates{X: l.cursorOffset, Y: 0})
+			l.cmdScroll.C.(*Scroll).TruncateCellAt(Coordinates{X: l.cursorOffset, Y: 0})
 		}
 	case termbox.KeyEnter:
-		str := l.cmdScroll.String()
+		str := l.cmdScroll.C.(*Scroll).String()
 		bytes := []byte(str)[1:]
 		l.search = string(bytes)
 		l.Scroll.Search(l.search)
-		if err = l.setNormalMode(); err != nil {
-			return
-		}
+		l.setNormalMode()
 		l.Scroll.SeekNextResult()
-		if err = l.sendEvent(LessEvent{Type: Search, Data: bytes}); err != nil {
-			return
-		}
+		l.sendEvent(LessEvent{Type: Search, Data: bytes})
 
 	case termbox.KeyEsc:
-		if err = l.setNormalMode(); err != nil {
-			return
-		}
+		l.setNormalMode()
 
 	default:
 		l.cursorOffset++
-		l.cmdScroll.Write(ev.Ch)
+		l.cmdScroll.C.(*Scroll).Write(ev.Ch)
 	}
 
 	return
 }
 
-func (l *Less) normalHandleEvent(ev termbox.Event) (exit bool, err error) {
+func (l *Less) normalHandleEvent(ev termbox.Event) (exit bool) {
 	switch ev.Type {
 	case termbox.EventKey:
 		switch ev.Ch {
 		case 'q':
-			return true, nil
+			exit = true
 		case 'N':
 			l.Scroll.SeekPrevResult()
 		case 'n':
@@ -160,54 +148,48 @@ func (l *Less) normalHandleEvent(ev termbox.Event) (exit bool, err error) {
 		case 'l':
 			l.Scroll.SeekRight()
 		case '/':
-			err = l.setSearchMode()
+			l.setSearchMode()
 		}
 	}
 
 	return
 }
 
-// Message will draw a message on the bottom right corner
-func (l *Less) SetMessage(text string, args ...interface{}) (err error) {
-	l.msgScroll.Reset()
-	l.msgScroll.WriteStr(fmt.Sprintf(text, args...))
-	return l.Resize(l.width, l.height)
+// SetMessage sets a message to be displayed on the bottom right corner.
+func (l *Less) SetMessage(text string, args ...interface{}) {
+	l.msgScroll.C.(*Scroll).Reset()
+	l.msgScroll.C.(*Scroll).WriteStr(fmt.Sprintf(text, args...))
+	l.Resize(l.width, l.height)
 }
 
+// Reset resets the contents and state of this instance.
 func (l *Less) Reset() {
 	l.Scroll.Reset()
 	l.delEOF = false
 }
 
-func (l *Less) SetScroll(scroll *Scroll) (orig *Scroll) {
+// SetScroll swaps the main scroll for s and returns the original scroll.
+func (l *Less) SetScroll(s *Scroll) (orig *Scroll) {
 	orig = l.Scroll
-	l.Scroll = scroll
+	l.Scroll = s
 	l.Reset()
 	l.setupScroll(l.Scroll)
-
-	if len(l.search) != 0 {
-		l.Scroll.Search(l.search)
-	}
-
 	return
 }
 
-func (l *Less) SetContent(text string, args ...interface{}) error {
+// SetContent overwrites the main contents.
+func (l *Less) SetContent(text string, args ...interface{}) {
 	l.Reset()
-
 	l.Scroll.WriteStr(fmt.Sprintf(text, args...))
-
-	if len(l.search) != 0 {
-		l.Scroll.Search(l.search)
-	}
-
-	return l.Resize(l.width, l.height)
+	l.Resize(l.width, l.height)
 }
 
+// GetCursor : Handler
 func (l *Less) GetCursor() Coordinates {
-	return Coordinates{X: l.pos.X + l.cursorOffset, Y: l.pos.Y + l.height - 1}
+	return Coordinates{X: l.cursorOffset, Y: l.height - 1}
 }
 
+// Draw : Component
 func (l *Less) Draw(w Writer) (err error) {
 	if err = l.Scroll.Draw(w); err != nil {
 		return err
@@ -215,9 +197,7 @@ func (l *Less) Draw(w Writer) (err error) {
 
 	if !l.Scroll.CanSeekDown() && !l.delEOF {
 		l.delEOF = true
-		if err = l.sendEvent(LessEvent{Type: EOF}); err != nil {
-			return err
-		}
+		l.sendEvent(LessEvent{Type: EOF})
 	}
 
 	if err = l.cmdScroll.Draw(w); err != nil {
@@ -232,72 +212,35 @@ func (l *Less) Draw(w Writer) (err error) {
 	return nil
 }
 
-func (l *Less) Resize(width, height int) error {
+// Resize : Component
+func (l *Less) Resize(width, height int) {
 	l.width, l.height = width, height
-	return l.resize()
+	l.resize()
 }
 
-func (l *Less) Move(x, y int) error {
-	l.pos.X, l.pos.Y = x, y
-	return l.resize()
-}
-
-func (l *Less) Height() int {
-	return l.height
-}
-
-func (l *Less) Width() int {
-	return l.width
-}
-
-func (l *Less) Position() (int, int) {
-	return l.pos.X, l.pos.Y
-}
-
-func (l *Less) resize() error {
-	var err error
-
+func (l *Less) resize() {
 	contentHeight := l.height - cmdBarHeight
-	msgWidth := len(l.msgScroll.String())
+	msgWidth := len(l.msgScroll.C.(*Scroll).String())
 	cmdBarWidth := l.width - msgWidth
 
-	if err = l.Scroll.Move(l.pos.X, l.pos.Y); err != nil {
-		return err
-	}
-
-	if err = l.Scroll.Resize(l.width, contentHeight); err != nil {
-		return err
-	}
-
-	if err = l.cmdScroll.Move(l.pos.X, l.pos.Y+contentHeight); err != nil {
-		return err
-	}
-
-	if err = l.cmdScroll.Resize(cmdBarWidth, cmdBarHeight); err != nil {
-		return err
-	}
-
-	if err = l.msgScroll.Move(l.pos.X+cmdBarWidth, l.pos.Y+contentHeight); err != nil {
-		return err
-	}
-
-	if err = l.msgScroll.Resize(msgWidth, cmdBarHeight); err != nil {
-		return err
-	}
-
-	return nil
+	l.Scroll.Resize(l.width, contentHeight)
+	l.cmdScroll.Move(Coordinates{0, contentHeight})
+	l.cmdScroll.Resize(cmdBarWidth, cmdBarHeight)
+	l.msgScroll.Move(Coordinates{cmdBarWidth, contentHeight})
+	l.msgScroll.Resize(msgWidth, cmdBarHeight)
 }
 
-func (l *Less) Handle(ev termbox.Event) (exit bool, err error) {
+// Handle : Handler
+func (l *Less) Handle(ev termbox.Event) (exit bool) {
 	switch ev.Type {
 	case termbox.EventError:
-		return false, ev.Err
+		return false
 	case termbox.EventKey:
 		switch l.mode {
 		case normalMode:
-			exit, err = l.normalHandleEvent(ev)
+			exit = l.normalHandleEvent(ev)
 		case searchMode:
-			exit, err = l.searchHandleEvent(ev)
+			exit = l.searchHandleEvent(ev)
 		}
 	}
 
@@ -307,22 +250,89 @@ func (l *Less) Handle(ev termbox.Event) (exit bool, err error) {
 func (l *Less) setupScroll(w *Scroll) {
 	w.ResultsFG = l.config.ResFG
 	w.ResultsBG = l.config.ResBG
-	w.CellBuf.tabspaces, w.Wrap = l.config.Tabspaces, l.config.Wrap
+	w.Buffer.tabspaces, w.Wrap = l.config.Tabspaces, l.config.Wrap
 }
 
-// Init will initialize a less handler. If config is null, the default
-// configuration will be used.
-func (l *Less) Init(cfg *LessConfig) (err error) {
-	s := new(Scroll)
-	s.Init()
-	if err = l.InitWithScroll(s, cfg); err != nil {
-		return err
+// Man : Handler
+func (l *Less) Man() Manual {
+	return Manual{
+		Summary: "Less is a handler similar to Unix' less program, but simplified. It allows basic navigation with vi-style key bindings and text search.",
+		Keys: KeyMap{
+			termbox.Event{Type: termbox.EventKey, Ch: 'q'}: {
+				ID:          "Normal.Exit",
+				Description: "Exit handler.",
+			},
+			termbox.Event{Type: termbox.EventKey, Ch: 'N'}: {
+				ID:          "Normal.SeekPrevResult",
+				Description: "Seek to previous search result. See 'SetSearchMode' for more info.",
+			},
+			termbox.Event{Type: termbox.EventKey, Ch: 'n'}: {
+				ID:          "Normal.SeekNextResult",
+				Description: "Seek to next search result. See 'SetSearchMode' for more info.",
+			},
+			termbox.Event{Type: termbox.EventKey, Ch: '0'}: {
+				ID:          "Normal.SeekStartLine",
+				Description: "Seek scroll enough columns to render start of the line.",
+			},
+			termbox.Event{Type: termbox.EventKey, Ch: '$'}: {
+				ID:          "Normal.SeekEndLine",
+				Description: "Seek scroll enough columns to render the end of the line.",
+			},
+			termbox.Event{Type: termbox.EventKey, Ch: 'g'}: {
+				ID:          "Normal.SeekStartScroll",
+				Description: "Seek to start of scroll",
+			},
+			termbox.Event{Type: termbox.EventKey, Ch: 'G'}: {
+				ID:          "Normal.SeekEndScroll",
+				Description: "Seek to end of scroll.",
+			},
+			termbox.Event{Type: termbox.EventKey, Ch: 'j'}: {
+				ID:          "Normal.SeekDown",
+				Description: "Seek scroll one row down.",
+			},
+			termbox.Event{Type: termbox.EventKey, Ch: 'k'}: {
+				ID:          "Normal.SeekUp",
+				Description: "Seek scroll one row up.",
+			},
+			termbox.Event{Type: termbox.EventKey, Ch: 'h'}: {
+				ID:          "Normal.SeekLeft",
+				Description: "Seek scroll one column to the left.",
+			},
+			termbox.Event{Type: termbox.EventKey, Ch: 'l'}: {
+				ID:          "Normal.SeekRight",
+				Description: "Seek scroll one column to the right.",
+			},
+			termbox.Event{Type: termbox.EventKey, Ch: '/'}: {
+				ID:          "Normal.SetSearchMode",
+				Description: "Enter search mode. After typing search text, press ENTER to perform a text-search or ESC to go back to normal mode.",
+			},
+			termbox.Event{Type: termbox.EventKey, Key: termbox.KeyEsc}: {
+				ID: "Search.SetNormalMode", Description: "Enter normal mode",
+			},
+			termbox.Event{Type: termbox.EventKey, Key: termbox.KeyEnter}: {
+				ID: "Search.Search", Description: "Perform text search with current search buffer.",
+			},
+		},
 	}
-
-	return nil
 }
 
-func (l *Less) InitWithScroll(scroll *Scroll, cfg *LessConfig) (err error) {
+// InitWithConfig will initialize a less handler.
+// If config is nil this method will panic.
+func (l *Less) InitWithConfig(cfg *LessConfig) {
+	if cfg == nil {
+		panic("initializing less handler with nil configuration")
+	}
+	l.initWithScrollConfig(new(Scroll), cfg)
+}
+
+// Init initializes this instance or resets it if already initialized.
+func (l *Less) Init() {
+	l.initWithScrollConfig(new(Scroll), nil)
+}
+
+// initWithScrollConfig initialzes this instance with the given scroll and configuration.
+// If config is nil, the default one will be used.
+func (l *Less) initWithScrollConfig(scroll *Scroll, cfg *LessConfig) {
 	if cfg == nil {
 		l.config = DefaultLessConfig()
 	} else {
@@ -330,44 +340,23 @@ func (l *Less) InitWithScroll(scroll *Scroll, cfg *LessConfig) (err error) {
 	}
 
 	l.Scroll = scroll
-	l.cmdScroll.Init()
-	l.msgScroll.Init()
-	l.Scroll.Init()
+	l.Scroll.Init(l.config.Tabspaces)
 
-	l.setupScroll(&l.cmdScroll)
-	l.setupScroll(&l.msgScroll)
+	l.cmdScroll.C = NewScroll()
+	l.msgScroll.C = NewScroll()
+
+	l.setupScroll(l.cmdScroll.C.(*Scroll))
+	l.setupScroll(l.msgScroll.C.(*Scroll))
 	l.setupScroll(l.Scroll)
 
-	if err = l.setNormalMode(); err != nil {
-		return
-	}
+	l.setNormalMode()
 
 	return
 }
 
-func NewLess(cfg *LessConfig) (*Less, error) {
+// NewLess allocates storage and returns a new instance of Less.
+func NewLess() *Less {
 	l := new(Less)
-
-	if err := l.Init(cfg); err != nil {
-		return nil, err
-	}
-
-	return l, nil
-}
-
-func (l *Less) Man() string {
-	return `
-q: exit
-j: scroll down
-k: scroll up
-l: scroll right
-h: scroll left
-/: enter search mode
-G: scroll to end of file
-g: scroll to start of file
-$: scroll to end of line
-0: scroll to start of line
-n: scroll to next search result
-n: scroll to prev search result
-`
+	l.Init()
+	return l
 }

@@ -47,37 +47,19 @@ func main() {
 	defer fractal.Close()
 
 	var wm *fractal.WindowManager
-	var less [3]fractal.Less
-	var vi *fractal.Vi
+	var less [4]fractal.Less
 
 	for i := range less {
-		if err = less[i].Init(nil); err != nil {
-			log.Fatal(err)
-		}
-
-		if err = less[i].SetContent(content); err != nil {
-			log.Fatal(err)
-		}
+		less[i].Init()
+		less[i].SetContent(content)
 	}
 
-	wm, _ = fractal.NewWindowManager(&less[0], border)
+	wm = fractal.NewWindowManager(&less[0], border)
 
-	if _, err = wm.SplitHorizontal(&less[1]); err != nil {
-		log.Fatal(err)
-	}
-
-	if _, err = wm.SplitVertical(&less[2]); err != nil {
-		log.Fatal(err)
-	}
-
+	wm.SplitHorizontal(&less[1])
+	wm.SplitVertical(&less[2])
 	wm.FocusDown()
-
-	vi = fractal.NewVi(nil)
-	vi.Write(content)
-
-	if _, err = wm.SplitVertical(vi); err != nil {
-		log.Fatal(err)
-	}
+	wm.SplitVertical(&less[3])
 
 	if err := fractal.RunMode(wm, termbox.InputAlt); err != nil {
 		log.Fatal(err)

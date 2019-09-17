@@ -8,6 +8,7 @@ import (
 // processed by this handler increments the Ch rune to the next rune.
 type TestHandler struct {
 	TestComponent
+	Manual
 	Exit bool
 }
 
@@ -19,10 +20,10 @@ func NewTestHandler() (t *TestHandler) {
 }
 
 // Handle the next Event
-func (t *TestHandler) Handle(termbox.Event) (bool, error) {
+func (t *TestHandler) Handle(termbox.Event) bool {
 	// signal that we handled the event
 	t.Ch++
-	return t.Exit, nil
+	return t.Exit
 }
 
 // GetCursor returns always a hidden cursor
@@ -31,6 +32,6 @@ func (t *TestHandler) GetCursor() Coordinates {
 }
 
 // Man for this handler is empty
-func (t *TestHandler) Man() string {
-	return ""
+func (t *TestHandler) Man() Manual {
+	return t.Manual
 }

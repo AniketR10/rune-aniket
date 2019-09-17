@@ -2,112 +2,114 @@ package fractal
 
 import "container/list"
 
+// List represents a list of VirtualComponent which are drawn each one
+// in series as a separate row.
 type List struct {
 	elementHeight int
 	width, height int
-	pos           Coordinates
 	offset        int
-	list.List     // list of Component
+	list          list.List // list of VirtualComponent
 }
 
+// NewList allocates storage for a new List and initializes it.
 func NewList(elementHeight int) (l *List) {
 	l = new(List)
 	l.Init(elementHeight)
 	return l
 }
 
+// Reset resets the contents of this List.
 func (l *List) Reset() {
-	l.List.Init()
+	l.list.Init()
 }
 
+// Init initializes this List.
 func (l *List) Init(elementHeight int) {
 	if elementHeight <= 0 {
 		panic("element height cannot be smaller than or equal to 0")
 	}
 	l.elementHeight = elementHeight
-	l.List.Init()
+	l.list.Init()
 }
 
-func (l *List) SetElementHeight(height int) (err error) {
+// SetElementHeight sets the height for each element of this list.
+func (l *List) SetElementHeight(height int) {
 	l.elementHeight = height
-	return l.Resize(l.width, l.height)
+	l.Resize(l.width, l.height)
 }
 
+// ElementHeight returns the height for each element of this list.
 func (l *List) ElementHeight() int {
 	return l.elementHeight
 }
 
-func (l *List) Offset() int {
-	return l.offset
-}
-
+// CanSeekUp returns whether SeekUp would seek one row up.
 func (l *List) CanSeekUp() bool {
 	return l.offset > 0
 }
 
+// CanSeekDown returns whether SeekUp would seek one row down.
 func (l *List) CanSeekDown() bool {
-	return l.offset < l.Len()-l.height/l.elementHeight
+	return l.offset < l.list.Len()-l.height/l.elementHeight
 }
 
+// SeekUp shifts the contents of this list one row up.
 func (l *List) SeekUp() {
 	if l.CanSeekUp() {
 		l.offset--
 	}
 }
 
+// SeekDown shifts the contents of this list one row down.
 func (l *List) SeekDown() {
 	if l.CanSeekDown() {
 		l.offset++
 	}
 }
 
+// SeekEnd shifts the contents of this list such that the last element
+// is drawn at the top of the list.
 func (l *List) SeekEnd() {
 	for l.CanSeekDown() {
 		l.offset++
 	}
 }
 
+// SeekStart shifts the contents of this list such that the first element
+// is drawn at the top f the list.
 func (l *List) SeekStart() {
 	l.offset = 0
 }
 
-func (l *List) Resize(width, height int) (err error) {
+// Resize resizes this list to fit within width and height.
+func (l *List) Resize(width, height int) {
+	var ok bool
 	l.width, l.height = width, height
-	var comp Component
-	for i, el := 0, l.Front(); el != nil; el, i = el.Next(), i+1 {
-		comp = el.Value.(Component)
-		if err = comp.Resize(l.width, l.elementHeight); err != nil {
-			return
+	var comp *VirtualComponent
+	for i, el := 0, l.list.Front(); el != nil; el, i = el.Next(), i+1 {
+		comp, ok = el.Value.(*VirtualComponent)
+		if !ok {
+			panic("element of this list is not VirtualComponent")
 		}
-		ypos := l.pos.Y + (i-l.offset)*l.elementHeight
-		if err = comp.Move(l.pos.X, ypos); err != nil {
-			return
-		}
+		comp.Resize(l.width, l.elementHeight)
+		ypos := (i - l.offset) * l.elementHeight
+		comp.Move(Coordinates{0, ypos})
 	}
-	return
 }
 
-func (l *List) Move(x, y int) (err error) {
-	l.pos.X, l.pos.Y = x, y
-
-	return l.Resize(l.width, l.height)
-}
-
+// Draw draws this list's elements with the current seek offset.
 func (l *List) Draw(w Writer) (err error) {
 	// API exposes internal list so we need
 	// to make sure that the elements are properly position and sized
 	// before drawing
-	if err = l.Resize(l.width, l.height); err != nil {
-		return
-	}
-
+	l.Resize(l.width, l.height)
 	lastVisible := l.height/l.elementHeight + l.offset
 
-	for i, el := 0, l.Front(); i < lastVisible && el != nil; i, el = i+1, el.Next() {
+	for i, el := 0, l.list.Front(); i < lastVisible && el != nil; i, el = i+1, el.Next() {
 		if i < l.offset {
 			continue
 		}
-		if err = el.Value.(Component).Draw(w); err != nil {
+		if err = el.Value.(*VirtualComponent).Draw(w); err != nil {
 			return
 		}
 	}
@@ -115,28 +117,82 @@ func (l *List) Draw(w Writer) (err error) {
 	return
 }
 
-func (l *List) Height() int {
-	return l.height
-}
+// Back returns the last element of list l or nil if the list is empty.
+func (l *List) Back() *list.Element { return l.list.Back() }
 
-func (l *List) Width() int {
-	return l.width
-}
+// Front returns the first element of list l or nil if the list is empty.
+func (l *List) Front() *list.Element { return l.list.Front() }
 
-func (l *List) Position() (int, int) {
-	return l.pos.X, l.pos.Y
-}
+// Len returns the number of elements of list l. The complexity is O(1).
+func (l *List) Len() int { return l.list.Len() }
 
+// MoveAfter moves element e to its new position after mark. If e or mark is
+// not an element of l, or e == mark, the list is not modified. The element and
+// mark must not be nil.
+func (l *List) MoveAfter(e, mark *list.Element) { l.list.MoveAfter(e, mark) }
+
+// MoveBefore moves element e to its new position before mark. If e or mark is
+// not an element of l, or e == mark, the list is not modified. The element and
+// mark must not be nil.
+func (l *List) MoveBefore(e, mark *list.Element) { l.list.MoveBefore(e, mark) }
+
+// MoveToBack moves element e to the back of list l. If e is not an element of
+// l, the list is not modified. The element must not be nil.
+func (l *List) MoveToBack(e *list.Element) { l.list.MoveToBack(e) }
+
+// MoveToFront moves element e to the front of list l. If e is not an element
+// of l, the list is not modified. The element must not be nil.
+func (l *List) MoveToFront(e *list.Element) { l.list.MoveToFront(e) }
+
+// PushBackList inserts a copy of an other list at the back of list l. The
+// lists l and other must NOT be the same or nil.
 func (l *List) PushBackList(other *List) {
 	if l == other {
 		panic("other list cannot be self: components can't be deep cloned")
 	}
-	l.List.PushBackList(&other.List)
+	l.list.PushBackList(&other.list)
 }
 
+// PushFrontList inserts a copy of an other list at the front of list l. The
+// lists l and other must NOT be the same or nil.
 func (l *List) PushFrontList(other *List) {
 	if l == other {
 		panic("other list cannot be self: components can't be deep cloned")
 	}
-	l.List.PushFrontList(&other.List)
+	l.list.PushFrontList(&other.list)
+}
+
+/* Override methods of list.List which take/return an interface value, so we can enforce
+   usage of VirtualComponent */
+
+// InsertAfter inserts a new element e with value v immediately after mark and
+// returns e. If mark is not an element of l, the list is not modified. The
+// mark must not be nil.
+func (l *List) InsertAfter(v *VirtualComponent, mark *list.Element) *list.Element {
+	return l.list.InsertAfter(v, mark)
+}
+
+// InsertBefore inserts a new element e with value v immediately before mark
+// and returns e. If mark is not an element of l, the list is not modified. The
+// mark must not be nil.
+func (l *List) InsertBefore(v *VirtualComponent, mark *list.Element) *list.Element {
+	return l.list.InsertBefore(v, mark)
+}
+
+// PushBack inserts a new element e with value v at the back of list l and
+// returns e.
+func (l *List) PushBack(v *VirtualComponent) *list.Element {
+	return l.list.PushBack(v)
+}
+
+// PushFront inserts a new element e with value v at the front of list l and
+// returns e.
+func (l *List) PushFront(v *VirtualComponent) *list.Element {
+	return l.list.PushFront(v)
+}
+
+// Remove removes e from l if e is an element of list l. It returns the element
+// value e.Value. The element must not be nil.
+func (l *List) Remove(e *list.Element) *VirtualComponent {
+	return l.list.Remove(e).(*VirtualComponent)
 }

@@ -6,14 +6,12 @@ import (
 	"termbox"
 )
 
-// TODO add alignment
+// Scroll adds scrolling, searching and wrap-around capabilities to a Buffer.
 type Scroll struct {
-	CellBuf
+	Buffer
 	width, height int
-	columns, rows int
 	searchText    []rune
 	offset        Coordinates
-	position      Coordinates
 	reslist       list.List
 	result        *list.Element
 	ResultsFG     termbox.Attribute // foreground attribute for search results
@@ -21,42 +19,50 @@ type Scroll struct {
 	Wrap          bool              // lines longer than the width of the window will wrap and displaying continues on the next line. wrap text
 }
 
+// Reset resets this scroll's state and its contents.
 func (s *Scroll) Reset() {
-	s.columns, s.rows = 0, 0
 	s.result = nil
 	s.searchText = nil
 	s.offset = Coordinates{}
 	s.reslist.Init()
-	s.CellBuf.Init()
+	s.Buffer.Reset()
 }
 
+// NewScroll allocates storage for a Scroll and initializes it.
 func NewScroll() (s *Scroll) {
 	s = new(Scroll)
-	s.Init()
+	s.Init(defTabSpaces)
 	return
 }
 
-func (s *Scroll) Init() {
+// Init initializes this scroll's internal cell buffer.
+func (s *Scroll) Init(tabspaces int) {
 	s.ResultsFG, s.ResultsBG = termbox.AttrReverse, termbox.AttrReverse
+	s.Buffer.Init(tabspaces)
 	s.Reset()
 }
 
+// CanSeekUp returns true if SeekUp would seek one row up.
 func (s *Scroll) CanSeekUp() bool {
 	return s.offset.Y > 0
 }
 
+// CanSeekDown returns true if SeekDown would seek one row down.
 func (s *Scroll) CanSeekDown() bool {
 	return s.offset.Y < s.getMaxYOffset()
 }
 
+// CanSeekLeft returns true if SeekLeft would seek one column left.
 func (s *Scroll) CanSeekLeft() bool {
 	return s.offset.X > 0
 }
 
+// CanSeekRight returns true if SeekRight would seek one column right.
 func (s *Scroll) CanSeekRight() bool {
 	return s.offset.X < s.getMaxXOffset()
 }
 
+// SeekUp shifts the contents of this scroll one row up.
 func (s *Scroll) SeekUp() (ok bool) {
 	if ok = s.CanSeekUp(); ok {
 		s.offset.Y--
@@ -64,6 +70,7 @@ func (s *Scroll) SeekUp() (ok bool) {
 	return ok
 }
 
+// SeekDown shifts the contents of this scroll one row down.
 func (s *Scroll) SeekDown() (ok bool) {
 	if ok = s.CanSeekDown(); ok {
 		s.offset.Y++
@@ -71,6 +78,7 @@ func (s *Scroll) SeekDown() (ok bool) {
 	return
 }
 
+// SeekLeft shifts the contents of this scroll one column left.
 func (s *Scroll) SeekLeft() (ok bool) {
 	if ok = s.CanSeekLeft(); ok {
 		s.offset.X--
@@ -78,6 +86,7 @@ func (s *Scroll) SeekLeft() (ok bool) {
 	return
 }
 
+// SeekRight shifts the contents of this scroll one column right.
 func (s *Scroll) SeekRight() (ok bool) {
 	if ok = s.CanSeekRight(); ok {
 		s.offset.X++
@@ -85,6 +94,9 @@ func (s *Scroll) SeekRight() (ok bool) {
 	return
 }
 
+// SeekVertical shifts the contents of this scroll such that
+// the vertical offset is y. If y is out of bounds the contents
+// will be shifted to the maximum possible y offset.
 func (s *Scroll) SeekVertical(y int) (ok bool) {
 	if max := s.getMaxYOffset(); y > max {
 		y = max
@@ -98,6 +110,9 @@ func (s *Scroll) SeekVertical(y int) (ok bool) {
 	return
 }
 
+// SeekHorizontal shifts the contents of this scroll such that
+// the horizontal offset is x. If x is out of bounds the contents
+// will be shifted to the maximum possible x offset.
 func (s *Scroll) SeekHorizontal(x int) (ok bool) {
 	if max := s.getMaxXOffset(); x > max {
 		x = max
@@ -111,18 +126,22 @@ func (s *Scroll) SeekHorizontal(x int) (ok bool) {
 	return
 }
 
+// SeekEndLine shifts the contents of this scroll to the maximum x offset.
 func (s *Scroll) SeekEndLine() bool {
 	return s.SeekHorizontal(s.getMaxXOffset())
 }
 
+// SeekStartLine shifts the contents of this scroll to the minimum x offset.
 func (s *Scroll) SeekStartLine() bool {
 	return s.SeekHorizontal(0)
 }
 
+// SeekEndFile shifts the contents of this scroll to the maximum y offset.
 func (s *Scroll) SeekEndFile() bool {
 	return s.SeekVertical(s.getMaxYOffset())
 }
 
+// SeekStartFile shifts the contents of this scroll to the minimum y offset.
 func (s *Scroll) SeekStartFile() bool {
 	return s.SeekVertical(0)
 }
@@ -140,10 +159,14 @@ func (s *Scroll) seekTo(pos Coordinates, padding int) bool {
 	return yok || xok
 }
 
+// SeekTo shifts the contents of this scroll such that the offset
+// is exactly at given coordinates.
 func (s *Scroll) SeekTo(pos Coordinates) bool {
 	return s.seekTo(pos, 1)
 }
 
+// SeekNextResult shifts the contents of this scroll to visualize
+// the next result in the result list.
 func (s *Scroll) SeekNextResult() bool {
 	pos, ok := s.NextResult()
 	if !ok {
@@ -153,6 +176,8 @@ func (s *Scroll) SeekNextResult() bool {
 	return s.seekTo(pos, len(s.searchText))
 }
 
+// SeekPrevResult shifts the contents of this scroll to visualize
+// the previous result in the result list.
 func (s *Scroll) SeekPrevResult() bool {
 	pos, ok := s.PrevResult()
 	if !ok {
@@ -162,33 +187,15 @@ func (s *Scroll) SeekPrevResult() bool {
 	return s.seekTo(pos, len(s.searchText))
 }
 
-func (s *Scroll) Position() (x, y int) {
-	return s.position.X, s.position.Y
-}
-
-func (s *Scroll) Move(x, y int) error {
-	s.position.X = x
-	s.position.Y = y
-	return nil
-}
-
-func (s *Scroll) Resize(width, height int) error {
+// Resize resizes this scroll to fit inside given width and height.
+func (s *Scroll) Resize(width, height int) {
 	s.width = width
 	s.height = height
-	return nil
-}
-
-func (s *Scroll) Height() int {
-	return s.height
-}
-
-func (s *Scroll) Width() int {
-	return s.width
 }
 
 func (s *Scroll) getView() [][]termbox.Cell {
 	ywindow := s.offset.Y + s.height
-	return s.cells[s.offset.Y:ywindow]
+	return s.Buffer.RawCells()[s.offset.Y:ywindow]
 }
 
 func (s *Scroll) getMaxXOffset() (x int) {
@@ -210,7 +217,7 @@ func (s *Scroll) getMaxXOffset() (x int) {
 }
 
 func (s *Scroll) getMaxYOffset() (y int) {
-	rows := len(s.cells)
+	rows := s.Buffer.Rows()
 	if rows <= s.height {
 		y = 0
 	} else {
@@ -223,11 +230,11 @@ func (s *Scroll) getMaxYOffset() (y int) {
 func (s *Scroll) draw(writer Writer) (err error) {
 	xwindow := s.offset.X + s.width
 	ywindow := s.offset.Y + s.height
-	for y, r := range s.cells {
+	for y, r := range s.Buffer.RawCells() {
 		for x, c := range r {
 			if c.Ch != 0 && y >= s.offset.Y && y < ywindow && x >= s.offset.X && x < xwindow {
-				xi := x - s.offset.X + s.position.X
-				yi := y - s.offset.Y + s.position.Y
+				xi := x - s.offset.X
+				yi := y - s.offset.Y
 				if err = writer.Write(xi, yi, c.Ch, c.Fg, c.Bg); err != nil {
 					return
 				}
@@ -242,7 +249,7 @@ func (s *Scroll) wrapdraw(writer Writer) (err error) {
 	var xi, yi, ywindow int
 	xwindow := s.width
 	wraps := 0
-	for y, r := range s.cells {
+	for y, r := range s.Buffer.RawCells() {
 		for x, c := range r {
 			ywindow = s.offset.Y + s.height - wraps
 			if c.Ch != 0 && y >= s.offset.Y && y < ywindow {
@@ -255,8 +262,8 @@ func (s *Scroll) wrapdraw(writer Writer) (err error) {
 						wraps++
 					}
 				}
-				yi = y - s.offset.Y + s.position.Y + wraps
-				if err = writer.Write(xi+s.position.X, yi, c.Ch, c.Fg, c.Bg); err != nil {
+				yi = y - s.offset.Y + wraps
+				if err = writer.Write(xi, yi, c.Ch, c.Fg, c.Bg); err != nil {
 					return
 				}
 			}
@@ -266,6 +273,9 @@ func (s *Scroll) wrapdraw(writer Writer) (err error) {
 	return nil
 }
 
+// Draw draws the contents of this scroll to the given writer. If Wrap is set,
+// lines that are too long to be rendered will wrap around and thus
+// be rendered in the next line.
 func (s *Scroll) Draw(writer Writer) (err error) {
 	if s.Wrap {
 		return s.wrapdraw(writer)
@@ -274,21 +284,11 @@ func (s *Scroll) Draw(writer Writer) (err error) {
 	return s.draw(writer)
 }
 
-func (s *Scroll) resetCells() {
-	for y, r := range s.cells {
-		for x := range r {
-			s.cells[y][x].Fg, s.cells[y][x].Bg = 0, 0
-		}
-	}
-}
-
-func (s *Scroll) SetAttr(pos Coordinates, fg, bg termbox.Attribute) {
-	s.cells[pos.Y][pos.X].Bg = bg
-	s.cells[pos.Y][pos.X].Fg = fg
-}
-
+// Search performs a text search of text in the internal cell buffer. It populates
+// a search list so SeekNextResult and SeekPreviousResult can be used to visualize results.
+// It returns the number of matches found.
 func (s *Scroll) Search(text string) int {
-	s.resetCells()
+	s.Buffer.ResetAttr()
 	s.reslist.Init()
 	s.result = nil
 	s.searchText = []rune(text)
@@ -300,7 +300,7 @@ func (s *Scroll) Search(text string) int {
 
 	var pos Coordinates
 	var o int
-	for y, r := range s.cells {
+	for y, r := range s.Buffer.RawCells() {
 		for x, c := range r {
 			if c.Ch != s.searchText[o] {
 				o = 0
@@ -314,7 +314,7 @@ func (s *Scroll) Search(text string) int {
 				s.reslist.PushBack(pos)
 				lX := pos.X + slen
 				for j := pos.X; j < lX; j++ {
-					s.SetAttr(Coordinates{X: j, Y: pos.Y}, s.ResultsFG, s.ResultsBG)
+					s.Buffer.SetAttr(Coordinates{X: j, Y: pos.Y}, s.ResultsFG, s.ResultsBG)
 				}
 				o = 0
 			}
@@ -326,6 +326,7 @@ func (s *Scroll) Search(text string) int {
 	return s.reslist.Len()
 }
 
+// PrevResult returns the coordinates of the previous result in the Search list.
 func (s *Scroll) PrevResult() (pos Coordinates, ok bool) {
 	if s.result == nil {
 		s.result = s.reslist.Back()
@@ -342,6 +343,7 @@ func (s *Scroll) PrevResult() (pos Coordinates, ok bool) {
 	return
 }
 
+// NextResult returns the coordinates of the next result in the Search list.
 func (s *Scroll) NextResult() (pos Coordinates, ok bool) {
 	if s.result == nil {
 		s.result = s.reslist.Front()
@@ -358,7 +360,7 @@ func (s *Scroll) NextResult() (pos Coordinates, ok bool) {
 	return
 }
 
-// Result returns the current search result's coordinates
+// Result returns the current search result's coordinates.
 func (s *Scroll) Result() (pos Coordinates, ok bool) {
 	if s.result == nil {
 		ok = false
@@ -367,27 +369,4 @@ func (s *Scroll) Result() (pos Coordinates, ok bool) {
 	pos = s.result.Value.(Coordinates)
 	ok = true
 	return
-}
-
-// RowLastIdx returns the width of row i or panics if row i does not exist
-func (s *Scroll) RowLastIdx(y int) (x int, ok bool) {
-	if y < 0 {
-		panic("illegal index")
-	}
-	if y < len(s.cells) {
-		ok = true
-		if len := len(s.cells[y]); len > 0 {
-			x = len - 1
-		}
-	}
-
-	return
-}
-
-func (s *Scroll) Rows() int {
-	return s.rows
-}
-
-func (s *Scroll) Columns() int {
-	return s.columns
 }

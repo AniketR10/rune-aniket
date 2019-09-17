@@ -5,38 +5,30 @@ import (
 	"termbox"
 )
 
-type Writer interface {
-	Write(x, y int, r rune, fg termbox.Attribute, bg termbox.Attribute) error
-	Flush() error
-	Clear(fg, bg termbox.Attribute) error
-	SetCursor(Coordinates)
-}
-
 type Component interface {
-	Resize(width, height int) error
-	// TODO use coordinates
-	Move(x, y int) error
+	Resize(width, height int)
 	Draw(Writer) error
-	Height() int
-	Width() int
-	// TODO use coordinates
-	Position() (int, int)
 }
 
 type Coordinates struct {
 	X, Y int
 }
 
-type Help struct {
-	Summary int
-	Keys    int
-}
-
 type Handler interface {
 	Component
-	Handle(termbox.Event) (bool, error)
+	Handle(termbox.Event) bool
 	GetCursor() Coordinates
-	Man() string
+	Man() Manual
+}
+
+type Manual struct {
+	Summary string
+	Keys    KeyMap
+}
+
+type KeyMap map[termbox.Event]struct {
+	ID          string
+	Description string
 }
 
 func Channel() <-chan termbox.Event {
@@ -61,7 +53,7 @@ func SetAttr(fg, bg, highlightfg, highlightbg termbox.Attribute) {
 }
 
 func Run(root Handler) (err error) {
-	return run(root, &TermboxWriter{})
+	return run(root, &termboxWriter{})
 }
 
 func RunMode(root Handler, mode termbox.InputMode) (err error) {
