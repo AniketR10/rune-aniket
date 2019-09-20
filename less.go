@@ -38,7 +38,7 @@ type Less struct {
 	*Scroll
 	cmdScroll    VirtualComponent
 	msgScroll    VirtualComponent
-	mode         mode
+	mode         LessMode
 	delEOF       bool
 	cursorOffset int
 	height       int
@@ -58,11 +58,13 @@ const (
 	Search
 )
 
-type mode uint8
+// LessMode represents one of the two modes of a less Handler.
+// See Manual for more information on how to switch between modes.
+type LessMode uint8
 
 const (
-	normalMode mode = iota
-	searchMode
+	LessNormalMode LessMode = iota
+	LessSearchMode
 )
 
 // LessEvent type represents a less event.
@@ -82,13 +84,13 @@ func (l *Less) setNormalMode() {
 	l.cursorOffset = 1
 	l.cmdScroll.C.(*Scroll).Reset()
 	l.cmdScroll.C.(*Scroll).WriteRune(':')
-	l.mode = normalMode
+	l.mode = LessNormalMode
 }
 
 func (l *Less) setSearchMode() {
 	l.cmdScroll.C.(*Scroll).Reset()
 	l.cmdScroll.C.(*Scroll).WriteRune('/')
-	l.mode = searchMode
+	l.mode = LessSearchMode
 }
 
 func (l *Less) searchHandleEvent(ev termbox.Event) (exit bool) {
@@ -184,6 +186,11 @@ func (l *Less) SetContent(text string, args ...interface{}) {
 	l.Resize(l.width, l.height)
 }
 
+// Mode returns the current LessMode.
+func (l *Less) Mode() LessMode {
+	return l.mode
+}
+
 // GetCursor : Handler
 func (l *Less) GetCursor() Coordinates {
 	return Coordinates{X: l.cursorOffset, Y: l.height - 1}
@@ -237,9 +244,9 @@ func (l *Less) Handle(ev termbox.Event) (exit bool) {
 		return false
 	case termbox.EventKey:
 		switch l.mode {
-		case normalMode:
+		case LessNormalMode:
 			exit = l.normalHandleEvent(ev)
-		case searchMode:
+		case LessSearchMode:
 			exit = l.searchHandleEvent(ev)
 		}
 	}
