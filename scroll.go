@@ -228,13 +228,10 @@ func (s *Scroll) getMaxYOffset() (y int) {
 
 func (s *Scroll) draw(writer Writer) (err error) {
 	xwindow := s.offset.X + s.width
-	ywindow := s.offset.Y + s.height
-	for y, r := range s.Buffer.RawCells() {
+	ywindow := s.height
+	for y, r := range s.Buffer.RawCells()[s.offset.Y:] {
 		if y >= ywindow {
 			break
-		}
-		if y < s.offset.Y {
-			continue
 		}
 		for x, c := range r {
 			if x >= xwindow {
@@ -244,8 +241,7 @@ func (s *Scroll) draw(writer Writer) (err error) {
 				continue
 			}
 			xi := x - s.offset.X
-			yi := y - s.offset.Y
-			if err = writer.Write(xi, yi, c.Ch, c.Fg, c.Bg); err != nil {
+			if err = writer.Write(xi, y, c.Ch, c.Fg, c.Bg); err != nil {
 				return
 			}
 		}
@@ -257,13 +253,10 @@ func (s *Scroll) wrapdraw(writer Writer) (err error) {
 	var xi, yi, ywindow int
 	xwindow := s.width
 	wraps := 0
-	for y, r := range s.Buffer.RawCells() {
-		ywindow = s.offset.Y + s.height - wraps
+	for y, r := range s.Buffer.RawCells()[s.offset.Y:] {
+		ywindow = s.height - wraps
 		if y >= ywindow {
 			break
-		}
-		if y < s.offset.Y {
-			continue
 		}
 		for x, c := range r {
 			if c.Ch == 0 {
@@ -278,7 +271,7 @@ func (s *Scroll) wrapdraw(writer Writer) (err error) {
 					wraps++
 				}
 			}
-			yi = y - s.offset.Y + wraps
+			yi = y + wraps
 			if err = writer.Write(xi, yi, c.Ch, c.Fg, c.Bg); err != nil {
 				return
 			}
