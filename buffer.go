@@ -2,7 +2,6 @@ package fractal
 
 import (
 	"bufio"
-	"bytes"
 	"io"
 	"math"
 	"termbox"
@@ -109,12 +108,29 @@ func (b *Buffer) insertTabSpaces(pos Coordinates) {
 	}
 	b.doInsertAt(n, '\t')
 }
-
-// WriteString writes the given string at the end of the buffer
-func (b *Buffer) WriteString(p string) Coordinates {
-	if b.cells == nil {
-		b.Reset()
+func (b *Buffer) appendBytes(p []byte, rowY int) int {
+	for _, r := range p {
+		switch r {
+		case '\n':
+			b.cells = append(b.cells, makeNewRow(0, defColumnCap))
+			rowY++
+		case '\t':
+			if b.tabspaces > 0 {
+				for i := 1; i < b.tabspaces; i++ {
+					b.cells[rowY] = append(b.cells[rowY], termbox.Cell{})
+				}
+				b.cells[rowY] = append(b.cells[rowY], termbox.Cell{Ch: '\t'})
+				break
+			}
+			fallthrough
+		default:
+			b.cells[rowY] = append(b.cells[rowY], termbox.Cell{Ch: rune(r)})
+		}
 	}
+	return rowY
+}
+
+func (b *Buffer) appendString(p string) {
 	rowY := b.nextWrite().Y
 	for _, r := range p {
 		switch r {
@@ -123,7 +139,10 @@ func (b *Buffer) WriteString(p string) Coordinates {
 			rowY++
 		case '\t':
 			if b.tabspaces > 0 {
-				b.insertTabSpaces(b.nextWrite())
+				for i := 1; i < b.tabspaces; i++ {
+					b.cells[rowY] = append(b.cells[rowY], termbox.Cell{})
+				}
+				b.cells[rowY] = append(b.cells[rowY], termbox.Cell{Ch: '\t'})
 				break
 			}
 			fallthrough
@@ -131,6 +150,14 @@ func (b *Buffer) WriteString(p string) Coordinates {
 			b.cells[rowY] = append(b.cells[rowY], termbox.Cell{Ch: r})
 		}
 	}
+}
+
+// WriteString writes the given string at the end of the buffer
+func (b *Buffer) WriteString(p string) Coordinates {
+	if b.cells == nil {
+		b.Reset()
+	}
+	b.appendString(p)
 	return b.nextWrite()
 }
 
@@ -393,40 +420,35 @@ func (b *Buffer) RowLastIdx(y int) (x int, ok bool) {
 	return
 }
 
-type scannerHandler struct {
-	scanner *bufio.Scanner
-}
-
-func newHandler(r io.Reader) *scannerHandler {
-	handler := new(scannerHandler)
-	handler.scanner = bufio.NewScanner(r)
-	return handler
-}
-
-func (h scannerHandler) WriteTo(w io.Writer) (written int64, err error) {
-	var n int
-	for h.scanner.Scan() {
-		if err = h.scanner.Err(); err != nil {
-			return written, err
-		}
-		if n, err = w.Write([]byte(h.scanner.Text() + "\n")); err != nil {
-			return
-		}
-		written += int64(n)
-	}
-
-	return
-}
-
 // ReadFrom reads data from r until EOF and appends it to the buffer, growing
 // the buffer as needed. The return value n is the number of bytes read. Any
 // error except io.EOF encountered during the read is also returned.
-func (b *Buffer) ReadFrom(input io.Reader) (n int64, err error) {
-	h := newHandler(input)
-	initContent := new(bytes.Buffer)
-	if n, err = h.WriteTo(initContent); err != nil {
-		return
+func (b *Buffer) ReadFrom(r io.Reader) (n int64, err error) {
+	if b.cells == nil {
+		b.Reset()
 	}
-	b.WriteString(string(initContent.Bytes()))
-	return
+	rowY := b.nextWrite().Y
+	reader := bufio.NewReader(r)
+	var bytes []byte
+	var isPrefix bool
+	for {
+		bytes, isPrefix, err = reader.ReadLine()
+		if err != nil {
+			if err == io.EOF {
+				err = nil
+			}
+			return
+		}
+		for _, r := range bytes {
+			for i := 1; r == '\t' && i < b.tabspaces; i++ {
+				b.cells[rowY] = append(b.cells[rowY], termbox.Cell{})
+			}
+			b.cells[rowY] = append(b.cells[rowY], termbox.Cell{Ch: rune(r)})
+		}
+		n += int64(len(bytes) + 1)
+		if !isPrefix {
+			b.cells = append(b.cells, makeNewRow(0, defColumnCap))
+			rowY++
+		}
+	}
 }
