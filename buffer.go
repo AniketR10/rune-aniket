@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"io"
 	"math"
+
 	"github.com/nsf/termbox-go"
 )
 
@@ -40,6 +41,14 @@ func (b *Buffer) insertNewRow(pos Coordinates) {
 	} else {
 		b.cells[targetY] = makeNewRow(0, defColumnCap)
 	}
+}
+
+// InsertRowAt inserts a new row at given position. If pos is out of bounds,
+// this method does not panic; instead, it will fill in the necessary
+// rows such that the new row is the last row in the buffer.
+func (b *Buffer) InsertRowAt(i int) {
+	b.fillInRows(i)
+	b.insertNewRow(Coordinates{Y: i, X: 0})
 }
 
 func (b *Buffer) nextWrite() Coordinates {

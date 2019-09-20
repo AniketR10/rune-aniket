@@ -3,8 +3,9 @@ package fractal
 import (
 	"reflect"
 	"strings"
-	"github.com/nsf/termbox-go"
 	"testing"
+
+	"github.com/nsf/termbox-go"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -14,6 +15,11 @@ func TestUninitializedNotPanic(t *testing.T) {
 	t.Run("ConflateRow", func(t *testing.T) {
 		var b Buffer
 		_ = b.ConflateRow(10)
+	})
+
+	t.Run("InsertRowAt", func(t *testing.T) {
+		var b Buffer
+		b.InsertRowAt(134)
 	})
 
 	t.Run("InsertAt", func(t *testing.T) {
