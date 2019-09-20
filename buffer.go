@@ -6,6 +6,8 @@ import (
 )
 
 const defTabSpaces int = 4
+const defColumnCap int = 64
+const defRowCap int = 128
 
 // A Buffer is a variable-sized matrix of cells.
 // The zero value for Buffer is ready to use.
@@ -14,8 +16,8 @@ type Buffer struct {
 	tabspaces int
 }
 
-func makeNewRow(rowlen int) (row []termbox.Cell) {
-	row = make([]termbox.Cell, rowlen)
+func makeNewRow(length, capacity int) (row []termbox.Cell) {
+	row = make([]termbox.Cell, length, capacity)
 	return
 }
 
@@ -30,10 +32,11 @@ func (b *Buffer) insertNewRow(pos Coordinates) {
 	// if not last position, copy the rest of cells to the next row
 	if pos.X < len(sourceRow) {
 		b.cells[pos.Y] = b.cells[pos.Y][:pos.X]
-		b.cells[targetY] = makeNewRow(len(sourceRow[pos.X:]))
+		length := len(sourceRow[pos.X:])
+		b.cells[targetY] = makeNewRow(length, length)
 		copy(b.cells[targetY], sourceRow[pos.X:])
 	} else {
-		b.cells[targetY] = makeNewRow(0)
+		b.cells[targetY] = makeNewRow(0, defColumnCap)
 	}
 }
 
@@ -49,7 +52,7 @@ func (b *Buffer) fillInRows(y int) {
 		b.Reset()
 	}
 	for y >= len(b.cells) {
-		row := makeNewRow(0)
+		row := makeNewRow(0, defColumnCap)
 		b.cells = append(b.cells, row)
 	}
 }
@@ -68,11 +71,7 @@ func (b *Buffer) insertAt(pos Coordinates, r rune) (next Coordinates) {
 		next = Coordinates{X: 0, Y: pos.Y + 1}
 	case '\t':
 		if b.tabspaces > 0 {
-			n := Coordinates{X: pos.X, Y: pos.Y}
-			for i := 1; i < b.tabspaces; i++ {
-				n = b.insertAt(n, '\x00')
-			}
-			b.doInsertAt(n, r)
+			b.insertTabSpaces(pos)
 			next = Coordinates{X: pos.X + b.tabspaces, Y: pos.Y}
 			break
 		}
@@ -93,11 +92,19 @@ func (b *Buffer) Init(tabspaces int) {
 
 // Reset resets the contents of this cellbuf.
 func (b *Buffer) Reset() {
-	b.cells = make([][]termbox.Cell, 1)
-	b.cells[0] = makeNewRow(0)
+	b.cells = make([][]termbox.Cell, 1, defRowCap)
+	b.cells[0] = makeNewRow(0, defColumnCap)
 	if b.tabspaces == 0 {
 		b.tabspaces = defTabSpaces
 	}
+}
+
+func (b *Buffer) insertTabSpaces(pos Coordinates) {
+	n := Coordinates{X: pos.X, Y: pos.Y}
+	for i := 1; i < b.tabspaces; i++ {
+		n = b.insertAt(n, '\x00')
+	}
+	b.doInsertAt(n, '\t')
 }
 
 // WriteStr writes the given string at the end of the buffer
@@ -105,11 +112,23 @@ func (b *Buffer) WriteStr(p string) Coordinates {
 	if b.cells == nil {
 		b.Reset()
 	}
-	c := b.nextWrite()
+	rowY := b.nextWrite().Y
 	for _, r := range p {
-		c = b.insertAt(c, r)
+		switch r {
+		case '\n':
+			b.cells = append(b.cells, makeNewRow(0, defColumnCap))
+			rowY++
+		case '\t':
+			if b.tabspaces > 0 {
+				b.insertTabSpaces(b.nextWrite())
+				break
+			}
+			fallthrough
+		default:
+			b.cells[rowY] = append(b.cells[rowY], termbox.Cell{Ch: r})
+		}
 	}
-	return c
+	return b.nextWrite()
 }
 
 // Write writes the given rune at the end of the buffer

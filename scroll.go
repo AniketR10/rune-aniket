@@ -226,23 +226,31 @@ func (s *Scroll) getMaxYOffset() (y int) {
 	return
 }
 
-// TODO optimize for large files
 func (s *Scroll) draw(writer Writer) (err error) {
 	xwindow := s.offset.X + s.width
 	ywindow := s.offset.Y + s.height
 	for y, r := range s.Buffer.RawCells() {
+		if y >= ywindow {
+			break
+		}
+		if y < s.offset.Y {
+			continue
+		}
 		for x, c := range r {
-			if c.Ch != 0 && y >= s.offset.Y && y < ywindow && x >= s.offset.X && x < xwindow {
-				xi := x - s.offset.X
-				yi := y - s.offset.Y
-				if err = writer.Write(xi, yi, c.Ch, c.Fg, c.Bg); err != nil {
-					return
-				}
+			if x >= xwindow {
+				break
+			}
+			if c.Ch == 0 || x < s.offset.X {
+				continue
+			}
+			xi := x - s.offset.X
+			yi := y - s.offset.Y
+			if err = writer.Write(xi, yi, c.Ch, c.Fg, c.Bg); err != nil {
+				return
 			}
 		}
 	}
-
-	return nil
+	return
 }
 
 func (s *Scroll) wrapdraw(writer Writer) (err error) {
@@ -250,22 +258,29 @@ func (s *Scroll) wrapdraw(writer Writer) (err error) {
 	xwindow := s.width
 	wraps := 0
 	for y, r := range s.Buffer.RawCells() {
+		ywindow = s.offset.Y + s.height - wraps
+		if y >= ywindow {
+			break
+		}
+		if y < s.offset.Y {
+			continue
+		}
 		for x, c := range r {
-			ywindow = s.offset.Y + s.height - wraps
-			if c.Ch != 0 && y >= s.offset.Y && y < ywindow {
-				xi = x
-				if xi >= xwindow {
-					for xi >= xwindow {
-						xi -= xwindow
-					}
-					if xi == 0 {
-						wraps++
-					}
+			if c.Ch == 0 {
+				continue
+			}
+			xi = x
+			if xi >= xwindow {
+				for xi >= xwindow {
+					xi -= xwindow
 				}
-				yi = y - s.offset.Y + wraps
-				if err = writer.Write(xi, yi, c.Ch, c.Fg, c.Bg); err != nil {
-					return
+				if xi == 0 {
+					wraps++
 				}
+			}
+			yi = y - s.offset.Y + wraps
+			if err = writer.Write(xi, yi, c.Ch, c.Fg, c.Bg); err != nil {
+				return
 			}
 		}
 	}
@@ -314,7 +329,11 @@ func (s *Scroll) Search(text string) int {
 				s.reslist.PushBack(pos)
 				lX := pos.X + slen
 				for j := pos.X; j < lX; j++ {
-					s.Buffer.SetAttr(Coordinates{X: j, Y: pos.Y}, s.ResultsFG, s.ResultsBG)
+					s.Buffer.SetAttr(
+						Coordinates{X: j, Y: pos.Y},
+						s.ResultsFG,
+						s.ResultsBG,
+					)
 				}
 				o = 0
 			}

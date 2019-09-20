@@ -152,3 +152,109 @@ func TestRowLastIndex(t *testing.T) {
 		}
 	}
 }
+
+func benchmarkScrollWrite(b *testing.B, fortunes int) {
+	scroll := NewScroll()
+	payload := ""
+	for i := 0; i < fortunes; i++ {
+		payload = payload + fortune
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		scroll.Reset()
+		_ = scroll.WriteStr(payload)
+	}
+
+	// b.Logf("benchmark wrote payload of %d bytes\n", len([]byte(payload)))
+}
+
+func newBigScroll(fortunes int) (scroll *Scroll) {
+	scroll = NewScroll()
+	for i := 0; i < fortunes; i++ {
+		_ = scroll.WriteStr(fortune)
+	}
+	// assume big screen
+	scroll.Resize(3000, 2000)
+	return
+}
+
+func benchmarkScrollDraw(b *testing.B, fortunes int, offset float32) {
+	scroll := newBigScroll(fortunes)
+	seekPercRows(scroll, offset)
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = scroll.Draw(noopWriter{})
+	}
+	// b.Logf("benchmark draw using payload of %d bytes\n", fortunes*len(fortune))
+}
+
+func seekPercRows(scroll *Scroll, offset float32) {
+	offsetRows := int(float32(scroll.Rows()) * offset)
+	for i := 0; i < offsetRows; i++ {
+		scroll.SeekDown()
+	}
+}
+
+func benchmarkScrollWrapDraw(b *testing.B, fortunes int, offset float32) {
+	scroll := newBigScroll(int(float32(fortunes) * (1 + offset)))
+	scroll.Wrap = true
+	seekPercRows(scroll, offset)
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = scroll.Draw(noopWriter{})
+	}
+	// b.Logf("benchmark draw using payload of %d bytes\n", fortunes*len(fortune))
+}
+
+func BenchmarkScrollWrapDraw10(b *testing.B) {
+	benchmarkScrollWrapDraw(b, 10, 0)
+}
+func BenchmarkScrollWrapDraw100(b *testing.B) {
+	benchmarkScrollWrapDraw(b, 100, 0)
+}
+func BenchmarkScrollWrapDraw1000(b *testing.B) {
+	benchmarkScrollWrapDraw(b, 1000, 0)
+}
+func BenchmarkScrollWrapDrawBigOffset1000(b *testing.B) {
+	benchmarkScrollWrapDraw(b, 1000, 0.7)
+}
+
+func BenchmarkScrollDraw10(b *testing.B) {
+	benchmarkScrollDraw(b, 10, 0)
+}
+func BenchmarkScrollDraw100(b *testing.B) {
+	benchmarkScrollDraw(b, 100, 0)
+}
+func BenchmarkScrollDraw1000(b *testing.B) {
+	benchmarkScrollDraw(b, 1000, 0)
+}
+func BenchmarkScrollDrawBigOffset1000(b *testing.B) {
+	benchmarkScrollDraw(b, 1000, 0.7)
+}
+
+func BenchmarkScrollgWrite10(b *testing.B) {
+	benchmarkScrollWrite(b, 10)
+}
+func BenchmarkScrollgWrite100(b *testing.B) {
+	benchmarkScrollWrite(b, 100)
+}
+func BenchmarkScrollgWrite1000(b *testing.B) {
+	benchmarkScrollWrite(b, 1000)
+}
+func BenchmarkScrollgWrite10000(b *testing.B) {
+	benchmarkScrollWrite(b, 10000)
+}
+
+// func BenchmarkScrollgWrite100MB(b *testing.B) {
+// 	benchmarkScrollWrite(b, 1000000)
+// }
+
+func BenchmarkScrollDraw100MB(b *testing.B) {
+	benchmarkScrollDraw(b, 1000000, 0)
+}
+func BenchmarkScrollWrapDraw100MB(b *testing.B) {
+	benchmarkScrollDraw(b, 1000000, 0)
+}
