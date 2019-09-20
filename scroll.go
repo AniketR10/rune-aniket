@@ -382,3 +382,8 @@ func (s *Scroll) Result() (pos Coordinates, ok bool) {
 	ok = true
 	return
 }
+
+// Offset returns the scroll offset from the start of the content.
+func (s *Scroll) Offset() Coordinates {
+	return s.offset
+}
