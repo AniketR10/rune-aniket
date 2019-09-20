@@ -6,7 +6,8 @@ import (
 	"github.com/nsf/termbox-go"
 )
 
-// Scroll adds scrolling, searching and wrap-around capabilities to a Buffer.
+// Scroll adds Draw to a Buffer along with
+// scrolling, searching and wrap-around capabilities.
 type Scroll struct {
 	Buffer
 	width, height int

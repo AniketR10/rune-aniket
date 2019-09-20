@@ -64,7 +64,7 @@ func TestUninitializedNotPanic(t *testing.T) {
 
 	t.Run("TruncateCellAt", func(t *testing.T) {
 		var b Buffer
-		_, _, _ = b.TruncateCellAt(Coordinates{X: 10, Y: 10})
+		_, _ = b.TruncateCellAt(Coordinates{X: 10, Y: 10})
 	})
 
 	t.Run("TruncateFrom", func(t *testing.T) {
@@ -321,7 +321,35 @@ func TestBufferTruncateCellAt(t *testing.T) {
 
 	if s, expected := buf.String(), "hellool"; s != expected {
 		t.Errorf("expected '%q' found '%q'", expected, s)
-		t.Errorf("found '%q'", s)
+	}
+}
+
+func assertCellCh(t *testing.T, cell termbox.Cell, r rune) {
+	if cell.Ch != r {
+		t.Errorf("expected cell content to be %c but was %c", r, cell.Ch)
+	}
+}
+
+func TestBufferTruncateCellAtTab(t *testing.T) {
+	const tabspaces = 4
+	var buf Buffer
+	buf.Init(tabspaces)
+
+	str := "!\t\t!\t"
+	buf.WriteString(str)
+
+	cell, n := buf.TruncateCellAt(Coordinates{X: tabspaces - 1, Y: 0})
+	if n != tabspaces {
+		t.Errorf("TruncateCellAt returned %d instead of %d", n, tabspaces)
+	}
+	assertCellCh(t, cell, '\t')
+	cell, n = buf.TruncateCellAt(Coordinates{X: 2, Y: 0})
+	if n != tabspaces {
+		t.Errorf("TruncateCellAt returned %d instead of %d", n, tabspaces)
+	}
+	assertCellCh(t, cell, '\t')
+	if s, expected := buf.String(), "!!\t"; s != expected {
+		t.Errorf("expected '%q' found '%q'", expected, s)
 	}
 }
 
