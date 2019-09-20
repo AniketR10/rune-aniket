@@ -107,8 +107,8 @@ func (b *Buffer) insertTabSpaces(pos Coordinates) {
 	b.doInsertAt(n, '\t')
 }
 
-// WriteStr writes the given string at the end of the buffer
-func (b *Buffer) WriteStr(p string) Coordinates {
+// WriteString writes the given string at the end of the buffer
+func (b *Buffer) WriteString(p string) Coordinates {
 	if b.cells == nil {
 		b.Reset()
 	}
@@ -131,8 +131,8 @@ func (b *Buffer) WriteStr(p string) Coordinates {
 	return b.nextWrite()
 }
 
-// Write writes the given rune at the end of the buffer
-func (b *Buffer) Write(r rune) Coordinates {
+// WriteRune writes the given rune at the end of the buffer
+func (b *Buffer) WriteRune(r rune) Coordinates {
 	if b.cells == nil {
 		b.Reset()
 	}

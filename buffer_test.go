@@ -80,9 +80,9 @@ func TestUninitializedNotPanic(t *testing.T) {
 		b.TruncateRowFrom(Coordinates{X: 10, Y: 0})
 	})
 
-	t.Run("Write", func(t *testing.T) {
+	t.Run("WriteRune", func(t *testing.T) {
 		var b Buffer
-		_ = b.Write('h')
+		_ = b.WriteRune('h')
 	})
 
 	t.Run("WriteAt", func(t *testing.T) {
@@ -90,9 +90,9 @@ func TestUninitializedNotPanic(t *testing.T) {
 		b.WriteAt(Coordinates{X: 10, Y: 0}, 'h')
 	})
 
-	t.Run("WriteStr", func(t *testing.T) {
+	t.Run("WriteString", func(t *testing.T) {
 		var b Buffer
-		_ = b.WriteStr("hfjlkw")
+		_ = b.WriteString("hfjlkw")
 	})
 
 	t.Run("Select", func(t *testing.T) {
@@ -111,10 +111,10 @@ func TestUninitializedNotPanic(t *testing.T) {
 	})
 }
 
-func TestBufferWriteStr(t *testing.T) {
+func TestBufferWriteString(t *testing.T) {
 	var buf Buffer
 	str := "hello\n\tworld"
-	buf.WriteStr(str)
+	buf.WriteString(str)
 	buf.tabspaces = 4
 
 	if l := buf.Rows(); l != 2 {
@@ -175,7 +175,7 @@ func TestBufferInsertAt(t *testing.T) {
 
 func TestBufferWriteAt(t *testing.T) {
 	var buf Buffer
-	buf.WriteStr("hello")
+	buf.WriteString("hello")
 
 	buf.WriteAt(Coordinates{X: 5, Y: 0}, 'w')
 	// overwrite
@@ -207,7 +207,7 @@ func TestBufferWriteAt(t *testing.T) {
 func TestBufferTruncateLastRow(t *testing.T) {
 	var buf Buffer
 	str := "hello\nworld"
-	buf.WriteStr(str)
+	buf.WriteString(str)
 
 	buf.TruncateLastRow()
 
@@ -223,7 +223,7 @@ func TestBufferTruncateLastRow(t *testing.T) {
 func TestBufferTruncateRowAt(t *testing.T) {
 	var buf Buffer
 	str := "hello\nworld"
-	buf.WriteStr(str)
+	buf.WriteString(str)
 
 	buf.TruncateRowAt(0)
 
@@ -235,7 +235,7 @@ func TestBufferTruncateRowAt(t *testing.T) {
 func TestBufferTruncateRowFrom1(t *testing.T) {
 	var buf Buffer
 	str := "hello\nworld"
-	buf.WriteStr(str)
+	buf.WriteString(str)
 
 	buf.TruncateRowFrom(Coordinates{X: 2, Y: 0})
 
@@ -247,7 +247,7 @@ func TestBufferTruncateRowFrom1(t *testing.T) {
 func TestBufferTruncateRowFrom2(t *testing.T) {
 	var buf Buffer
 	str := "hello\nworld"
-	buf.WriteStr(str)
+	buf.WriteString(str)
 
 	buf.TruncateRowFrom(Coordinates{X: 2, Y: 1})
 
@@ -259,7 +259,7 @@ func TestBufferTruncateRowFrom2(t *testing.T) {
 func TestBufferTruncateFrom1(t *testing.T) {
 	var buf Buffer
 	str := "hello\nworld"
-	buf.WriteStr(str)
+	buf.WriteString(str)
 
 	buf.TruncateFrom(Coordinates{X: 4, Y: 0})
 
@@ -271,7 +271,7 @@ func TestBufferTruncateFrom1(t *testing.T) {
 func TestBufferTruncateFrom2(t *testing.T) {
 	var buf Buffer
 	str := "hello\nworld"
-	buf.WriteStr(str)
+	buf.WriteString(str)
 
 	buf.TruncateFrom(Coordinates{X: 0, Y: 1})
 
@@ -283,7 +283,7 @@ func TestBufferTruncateFrom2(t *testing.T) {
 func TestBufferTruncateCellAt(t *testing.T) {
 	var buf Buffer
 	str := "hello\nworld"
-	buf.WriteStr(str)
+	buf.WriteString(str)
 
 	buf.TruncateCellAt(Coordinates{X: 0, Y: 1})
 	buf.TruncateCellAt(Coordinates{X: 1, Y: 1})
@@ -301,7 +301,7 @@ func TestBufferWrite(t *testing.T) {
 	str := "hello\nworld"
 
 	for _, c := range str {
-		buf.Write(c)
+		buf.WriteRune(c)
 	}
 
 	if l := buf.Rows(); l != 2 {
@@ -340,7 +340,7 @@ func toString(cells [][]termbox.Cell) string {
 func TestBufferSelect(t *testing.T) {
 	var buf Buffer
 	str := "hello\n\tworld\n\nitsme"
-	buf.WriteStr(str)
+	buf.WriteString(str)
 	buf.tabspaces = 4
 
 	testCases := []selectCase{
@@ -428,7 +428,7 @@ func TestBufferSelect(t *testing.T) {
 func TestBufferSelectLine(t *testing.T) {
 	var buf Buffer
 	str := "hello\n\tworld\n\nitsme"
-	buf.WriteStr(str)
+	buf.WriteString(str)
 	buf.tabspaces = 4
 
 	testCases := []selectCase{
@@ -494,7 +494,7 @@ func TestBufferSelectLine(t *testing.T) {
 func TestBufferSelectBlock(t *testing.T) {
 	var buf Buffer
 	str := "hello\n\tworld\n\nitsme"
-	buf.WriteStr(str)
+	buf.WriteString(str)
 	buf.tabspaces = 4
 
 	testCases := []selectCase{
@@ -540,3 +540,34 @@ func TestBufferSelectBlock(t *testing.T) {
 		}
 	}
 }
+
+func benchmarkBufferWrite(b *testing.B, fortunes int) {
+	buffer := Buffer{}
+	payload := ""
+	for i := 0; i < fortunes; i++ {
+		payload = payload + fortune
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		buffer.Reset()
+		_ = buffer.WriteString(payload)
+	}
+}
+
+func BenchmarkBufferWrite10(b *testing.B) {
+	benchmarkBufferWrite(b, 10)
+}
+func BenchmarkBufferWrite100(b *testing.B) {
+	benchmarkBufferWrite(b, 100)
+}
+func BenchmarkBufferWrite1000(b *testing.B) {
+	benchmarkBufferWrite(b, 1000)
+}
+func BenchmarkBufferWrite10000(b *testing.B) {
+	benchmarkBufferWrite(b, 10000)
+}
+
+// func BenchmarkBufferWrite100MB(b *testing.B) {
+// 	benchmarkBufferWrite(b, 1000000)
+// }

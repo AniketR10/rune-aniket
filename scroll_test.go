@@ -35,7 +35,7 @@ func TestScrollDraw(t *testing.T) {
 	tabspaces := 4
 	wrap := false
 	scroll := newScroll(tabspaces, wrap, width, height)
-	scroll.WriteStr(fortune)
+	scroll.WriteString(fortune)
 
 	w := newStringWriter(width, height)
 
@@ -97,7 +97,7 @@ func TestScrollDrawWrap(t *testing.T) {
 	tabspaces := 4
 	wrap := true
 	scroll := newScroll(tabspaces, wrap, width, height)
-	scroll.WriteStr(fortune)
+	scroll.WriteString(fortune)
 
 	w := newStringWriter(width, height)
 
@@ -143,7 +143,7 @@ func TestRowLastIndex(t *testing.T) {
 
 	for _, tcase := range cases {
 		scroll.Reset()
-		scroll.WriteStr(tcase.content)
+		scroll.WriteString(tcase.content)
 		i, _ := scroll.RowLastIdx(tcase.line)
 		lines := strings.Split(tcase.content, "\n")
 
@@ -153,26 +153,10 @@ func TestRowLastIndex(t *testing.T) {
 	}
 }
 
-func benchmarkScrollWrite(b *testing.B, fortunes int) {
-	scroll := NewScroll()
-	payload := ""
-	for i := 0; i < fortunes; i++ {
-		payload = payload + fortune
-	}
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		scroll.Reset()
-		_ = scroll.WriteStr(payload)
-	}
-
-	// b.Logf("benchmark wrote payload of %d bytes\n", len([]byte(payload)))
-}
-
 func newBigScroll(fortunes int) (scroll *Scroll) {
 	scroll = NewScroll()
 	for i := 0; i < fortunes; i++ {
-		_ = scroll.WriteStr(fortune)
+		_ = scroll.WriteString(fortune)
 	}
 	// assume big screen
 	scroll.Resize(3000, 2000)
@@ -234,23 +218,6 @@ func BenchmarkScrollDraw1000(b *testing.B) {
 func BenchmarkScrollDrawBigOffset1000(b *testing.B) {
 	benchmarkScrollDraw(b, 1000, 0.7)
 }
-
-func BenchmarkScrollgWrite10(b *testing.B) {
-	benchmarkScrollWrite(b, 10)
-}
-func BenchmarkScrollgWrite100(b *testing.B) {
-	benchmarkScrollWrite(b, 100)
-}
-func BenchmarkScrollgWrite1000(b *testing.B) {
-	benchmarkScrollWrite(b, 1000)
-}
-func BenchmarkScrollgWrite10000(b *testing.B) {
-	benchmarkScrollWrite(b, 10000)
-}
-
-// func BenchmarkScrollgWrite100MB(b *testing.B) {
-// 	benchmarkScrollWrite(b, 1000000)
-// }
 
 func BenchmarkScrollDraw100MB(b *testing.B) {
 	benchmarkScrollDraw(b, 1000000, 0)

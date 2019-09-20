@@ -81,13 +81,13 @@ func (l *Less) sendEvent(ev LessEvent) {
 func (l *Less) setNormalMode() {
 	l.cursorOffset = 1
 	l.cmdScroll.C.(*Scroll).Reset()
-	l.cmdScroll.C.(*Scroll).Write(':')
+	l.cmdScroll.C.(*Scroll).WriteRune(':')
 	l.mode = normalMode
 }
 
 func (l *Less) setSearchMode() {
 	l.cmdScroll.C.(*Scroll).Reset()
-	l.cmdScroll.C.(*Scroll).Write('/')
+	l.cmdScroll.C.(*Scroll).WriteRune('/')
 	l.mode = searchMode
 }
 
@@ -115,7 +115,7 @@ func (l *Less) searchHandleEvent(ev termbox.Event) (exit bool) {
 
 	default:
 		l.cursorOffset++
-		l.cmdScroll.C.(*Scroll).Write(ev.Ch)
+		l.cmdScroll.C.(*Scroll).WriteRune(ev.Ch)
 	}
 
 	return
@@ -158,7 +158,7 @@ func (l *Less) normalHandleEvent(ev termbox.Event) (exit bool) {
 // SetMessage sets a message to be displayed on the bottom right corner.
 func (l *Less) SetMessage(text string, args ...interface{}) {
 	l.msgScroll.C.(*Scroll).Reset()
-	l.msgScroll.C.(*Scroll).WriteStr(fmt.Sprintf(text, args...))
+	l.msgScroll.C.(*Scroll).WriteString(fmt.Sprintf(text, args...))
 	l.Resize(l.width, l.height)
 }
 
@@ -177,10 +177,10 @@ func (l *Less) SetScroll(s *Scroll) (orig *Scroll) {
 	return
 }
 
-// SetContent overwrites the main contents.
+// SetContent replaces the content of the underlying scroll with 'text'.
 func (l *Less) SetContent(text string, args ...interface{}) {
 	l.Reset()
-	l.Scroll.WriteStr(fmt.Sprintf(text, args...))
+	l.Scroll.WriteString(fmt.Sprintf(text, args...))
 	l.Resize(l.width, l.height)
 }
 
