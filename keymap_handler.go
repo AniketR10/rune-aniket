@@ -1,6 +1,6 @@
 package fractal
 
-import "termbox"
+import "github.com/nsf/termbox-go"
 
 type keyMappingHandler struct {
 	Component

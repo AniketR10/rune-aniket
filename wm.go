@@ -1,7 +1,7 @@
 package fractal
 
 import (
-	"termbox"
+	"github.com/nsf/termbox-go"
 )
 
 // WindowManager implements Handler as a tiled window manager.

@@ -1,7 +1,7 @@
 package fractal
 
 import (
-	"termbox"
+	"github.com/nsf/termbox-go"
 )
 
 type TestComponent struct {

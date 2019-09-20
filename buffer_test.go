@@ -3,7 +3,7 @@ package fractal
 import (
 	"reflect"
 	"strings"
-	"termbox"
+	"github.com/nsf/termbox-go"
 	"testing"
 
 	"github.com/stretchr/testify/assert"

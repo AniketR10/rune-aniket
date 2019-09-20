@@ -8,7 +8,7 @@ import (
 	"net/http"
 	_ "net/http/pprof"
 	"os"
-	"termbox"
+	"github.com/nsf/termbox-go"
 
 	"github.com/ernestrc/fractal"
 )

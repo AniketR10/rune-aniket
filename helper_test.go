@@ -2,7 +2,7 @@ package fractal
 
 import (
 	"strings"
-	"termbox"
+	"github.com/nsf/termbox-go"
 	"testing"
 )
 

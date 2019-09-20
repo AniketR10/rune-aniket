@@ -3,7 +3,7 @@ package fractal
 import (
 	"bytes"
 
-	"termbox"
+	"github.com/nsf/termbox-go"
 )
 
 type stringWriter struct {

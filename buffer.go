@@ -4,7 +4,7 @@ import (
 	"bufio"
 	"io"
 	"math"
-	"termbox"
+	"github.com/nsf/termbox-go"
 )
 
 const defTabSpaces int = 4

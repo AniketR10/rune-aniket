@@ -1,6 +1,6 @@
 package fractal
 
-import "termbox"
+import "github.com/nsf/termbox-go"
 
 // FrameProxy is a proxy handler that simply draws a frame around
 // the underlying handler.

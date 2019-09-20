@@ -1,7 +1,7 @@
 package fractal
 
 import (
-	"termbox"
+	"github.com/nsf/termbox-go"
 )
 
 // Frame is a Component that simply draws a border around a nested component.

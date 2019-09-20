@@ -3,7 +3,7 @@ package fractal
 import (
 	"container/list"
 
-	"termbox"
+	"github.com/nsf/termbox-go"
 )
 
 // Scroll adds scrolling, searching and wrap-around capabilities to a Buffer.

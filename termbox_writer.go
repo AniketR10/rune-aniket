@@ -1,7 +1,7 @@
 package fractal
 
 import (
-	"termbox"
+	"github.com/nsf/termbox-go"
 )
 
 // Writer abstracts termbox write functionality to decouple components from

@@ -1,7 +1,7 @@
 package fractal
 
 import (
-	"termbox"
+	"github.com/nsf/termbox-go"
 )
 
 // TestHandler is a handler used to test composite handlers. Each event

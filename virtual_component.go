@@ -2,7 +2,7 @@ package fractal
 
 import (
 	"fmt"
-	"termbox"
+	"github.com/nsf/termbox-go"
 )
 
 // VirtualComponent wraps a component to
