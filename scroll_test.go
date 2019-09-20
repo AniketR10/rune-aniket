@@ -97,7 +97,7 @@ func TestScrollDrawWrap(t *testing.T) {
 	tabspaces := 4
 	wrap := true
 	scroll := newScroll(tabspaces, wrap, width, height)
-	scroll.WriteString(fortune)
+	scroll.ReadFrom(strings.NewReader(fortune))
 
 	w := newStringWriter(width, height)
 

@@ -1,12 +1,15 @@
 package main
 
 import (
-	"bufio"
-	"bytes"
 	"flag"
 	"io"
+	"io/ioutil"
 	"log"
+	"net/http"
+	_ "net/http/pprof"
 	"os"
+	"runtime"
+	"runtime/pprof"
 
 	"github.com/ernestrc/fractal"
 )
@@ -15,32 +18,35 @@ var (
 	less *fractal.Less
 )
 
-type scannerHandler struct {
-	scanner *bufio.Scanner
-}
+var wrap = flag.Bool("w", false, "wrap text")
 
-func newHandler(r io.Reader) *scannerHandler {
-	handler := new(scannerHandler)
-	handler.scanner = bufio.NewScanner(r)
-	return handler
-}
-
-func (h scannerHandler) WriteTo(w io.Writer) (written int64, err error) {
-	var n int
-	for h.scanner.Scan() {
-		if err = h.scanner.Err(); err != nil {
-			return written, err
-		}
-		if n, err = w.Write([]byte(h.scanner.Text() + "\n")); err != nil {
-			return
-		}
-		written += int64(n)
+func startCPUProfile() func() {
+	f, err := ioutil.TempFile("", "less_cpuprofile")
+	if err != nil {
+		log.Fatal("could not create CPU profile: ", err)
 	}
-
-	return
+	if err := pprof.StartCPUProfile(f); err != nil {
+		log.Fatal("could not start CPU profile: ", err)
+	}
+	return func() {
+		pprof.StopCPUProfile()
+		f.Close()
+	}
 }
 
-func (h scannerHandler) Handle(ev fractal.LessEvent) {
+func writeMemProfile() {
+	f, err := ioutil.TempFile("", "less_memprofile")
+	if err != nil {
+		log.Fatal("could not create memory profile: ", err)
+	}
+	defer f.Close()
+	runtime.GC() // get up-to-date statistics
+	if err := pprof.WriteHeapProfile(f); err != nil {
+		log.Fatal("could not write memory profile: ", err)
+	}
+}
+
+func handleLessEvent(ev fractal.LessEvent) {
 	switch ev.Type {
 	case fractal.EOF:
 		less.SetMessage("EOF")
@@ -49,9 +55,11 @@ func (h scannerHandler) Handle(ev fractal.LessEvent) {
 	}
 }
 
-var wrap = flag.Bool("w", false, "wrap text")
-
 func main() {
+	go func() {
+		// for net/pprof
+		log.Println(http.ListenAndServe("localhost:6060", nil))
+	}()
 
 	var input io.Reader
 	var err error
@@ -72,24 +80,26 @@ func main() {
 
 	config := fractal.DefaultLessConfig()
 	config.Wrap = *wrap
+	config.Handler = handleLessEvent
 
-	h := newHandler(input)
-
-	config.Handler = h.Handle
-
-	initContent := new(bytes.Buffer)
-	if _, err = h.WriteTo(initContent); err != nil {
-		log.Fatal(err)
-	}
+	// profile initialization
+	stopCPUProfile := startCPUProfile()
 
 	less = fractal.NewLess()
 	less.InitWithConfig(config)
 
-	less.SetContent(string(initContent.Bytes()))
+	_, err = less.ReadFrom(input)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	stopCPUProfile()
 
 	if err = fractal.Init(); err != nil {
 		log.Fatal(err)
 	}
+
+	writeMemProfile()
 
 	defer fractal.Close()
 

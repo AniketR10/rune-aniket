@@ -1,6 +1,9 @@
 package fractal
 
 import (
+	"bufio"
+	"bytes"
+	"io"
 	"math"
 	"termbox"
 )
@@ -387,5 +390,43 @@ func (b *Buffer) RowLastIdx(y int) (x int, ok bool) {
 		}
 	}
 
+	return
+}
+
+type scannerHandler struct {
+	scanner *bufio.Scanner
+}
+
+func newHandler(r io.Reader) *scannerHandler {
+	handler := new(scannerHandler)
+	handler.scanner = bufio.NewScanner(r)
+	return handler
+}
+
+func (h scannerHandler) WriteTo(w io.Writer) (written int64, err error) {
+	var n int
+	for h.scanner.Scan() {
+		if err = h.scanner.Err(); err != nil {
+			return written, err
+		}
+		if n, err = w.Write([]byte(h.scanner.Text() + "\n")); err != nil {
+			return
+		}
+		written += int64(n)
+	}
+
+	return
+}
+
+// ReadFrom reads data from r until EOF and appends it to the buffer, growing
+// the buffer as needed. The return value n is the number of bytes read. Any
+// error except io.EOF encountered during the read is also returned.
+func (b *Buffer) ReadFrom(input io.Reader) (n int64, err error) {
+	h := newHandler(input)
+	initContent := new(bytes.Buffer)
+	if n, err = h.WriteTo(initContent); err != nil {
+		return
+	}
+	b.WriteString(string(initContent.Bytes()))
 	return
 }

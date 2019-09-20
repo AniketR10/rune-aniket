@@ -2,6 +2,7 @@ package fractal
 
 import (
 	"reflect"
+	"strings"
 	"termbox"
 	"testing"
 
@@ -95,6 +96,11 @@ func TestUninitializedNotPanic(t *testing.T) {
 		_ = b.WriteString("hfjlkw")
 	})
 
+	t.Run("ReadFrom", func(t *testing.T) {
+		var b Buffer
+		_, _ = b.ReadFrom(strings.NewReader("hfjlkw"))
+	})
+
 	t.Run("Select", func(t *testing.T) {
 		var b Buffer
 		_ = b.Select(Coordinates{X: 0, Y: 0}, Coordinates{X: 1, Y: 1})
@@ -111,13 +117,8 @@ func TestUninitializedNotPanic(t *testing.T) {
 	})
 }
 
-func TestBufferWriteString(t *testing.T) {
-	var buf Buffer
-	str := "hello\n\tworld"
-	buf.WriteString(str)
-	buf.tabspaces = 4
-
-	if l := buf.Rows(); l != 2 {
+func assertBufferContent(t *testing.T, buf *Buffer, str string) {
+	if l := buf.Rows(); l != 3 {
 		t.Errorf("Lines() is not correct: %d", l)
 	}
 
@@ -132,6 +133,28 @@ func TestBufferWriteString(t *testing.T) {
 	if s := buf.String(); s != str {
 		t.Errorf("expected '%+v' found '%+v'", []byte(str), []byte(s))
 	}
+}
+
+func TestBufferWriteString(t *testing.T) {
+	var buf Buffer
+	str := "hello\n\tworld\n"
+	buf.tabspaces = 4
+	buf.WriteString(str)
+	assertBufferContent(t, &buf, str)
+}
+
+func TestBufferReadFrom(t *testing.T) {
+	var buf Buffer
+	str := "hello\n\tworld\n"
+	buf.tabspaces = 4
+	n, err := buf.ReadFrom(strings.NewReader(str))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != int64(len(str)) {
+		t.Errorf("expected n to be %d but found %d", len(str), n)
+	}
+	assertBufferContent(t, &buf, str)
 }
 
 func TestBufferInsertAt(t *testing.T) {
@@ -541,12 +564,23 @@ func TestBufferSelectBlock(t *testing.T) {
 	}
 }
 
-func benchmarkBufferWrite(b *testing.B, fortunes int) {
+var bufferFortune = `
+				Love in your heart wasn't put there to stay.
+				Love isn't love 'til you give it away.
+				-- Oscar Hammerstein 中国
+`
+
+func newBenchmarkBuffer(fortunes int) (*Buffer, string) {
 	buffer := Buffer{}
 	payload := ""
 	for i := 0; i < fortunes; i++ {
-		payload = payload + fortune
+		payload = payload + bufferFortune
 	}
+	return &buffer, payload
+}
+
+func benchmarkBufferWrite(b *testing.B, fortunes int) {
+	buffer, payload := newBenchmarkBuffer(fortunes)
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -570,4 +604,33 @@ func BenchmarkBufferWrite10000(b *testing.B) {
 
 // func BenchmarkBufferWrite100MB(b *testing.B) {
 // 	benchmarkBufferWrite(b, 1000000)
+// }
+
+func benchmarkBufferReadFrom(b *testing.B, fortunes int) {
+	buffer, payload := newBenchmarkBuffer(fortunes)
+	reader := strings.NewReader(payload)
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		buffer.Reset()
+		reader.Reset(payload)
+		_, _ = buffer.ReadFrom(reader)
+	}
+}
+
+func BenchmarkBufferReadFrom10(b *testing.B) {
+	benchmarkBufferReadFrom(b, 10)
+}
+func BenchmarkBufferReadFrom100(b *testing.B) {
+	benchmarkBufferReadFrom(b, 100)
+}
+func BenchmarkBufferReadFrom1000(b *testing.B) {
+	benchmarkBufferReadFrom(b, 1000)
+}
+func BenchmarkBufferReadFrom10000(b *testing.B) {
+	benchmarkBufferReadFrom(b, 10000)
+}
+
+// func BenchmarkBufferReadFrom100MB(b *testing.B) {
+// 	benchmarkBufferReadFrom(b, 1000000)
 // }

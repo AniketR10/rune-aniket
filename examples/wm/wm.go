@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net/http"
+	_ "net/http/pprof"
 	"os"
 	"termbox"
 
@@ -22,6 +24,10 @@ func readFile(f io.Reader) (string, error) {
 }
 
 func main() {
+	go func() {
+		log.Println(http.ListenAndServe("localhost:6060", nil))
+	}()
+
 	var err error
 	var input io.Reader
 	var content string
