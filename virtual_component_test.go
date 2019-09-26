@@ -8,7 +8,7 @@ func TestIntegrationScroll(t *testing.T) {
 	wrap := false
 	virtualScroll := VirtualComponent{C: newScroll(tabspaces, wrap, width, height)}
 	virtualScroll.Resize(width, height)
-	virtualScroll.C.(*Scroll).WriteString("AAAAAAAAAAAA\nBBBBBBBBBBBB\nCCCCCCCCCCCC\nDDDDDDDDDDDD")
+	virtualScroll.C.(*Scroll).Buffer().WriteString("AAAAAAAAAAAA\nBBBBBBBBBBBB\nCCCCCCCCCCCC\nDDDDDDDDDDDD")
 
 	w := newStringWriter(12, height)
 

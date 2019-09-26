@@ -9,38 +9,45 @@ import (
 // Scroll adds Draw to a Buffer along with
 // scrolling, searching and wrap-around capabilities.
 type Scroll struct {
-	Buffer
+	buf           *Buffer
 	width, height int
 	searchText    []rune
 	offset        Coordinates
 	reslist       list.List
 	result        *list.Element
-	ResultsFG     termbox.Attribute // foreground attribute for search results
-	ResultsBG     termbox.Attribute // background attribute for search results
-	Wrap          bool              // lines longer than the width of the window will wrap and displaying continues on the next line. wrap text
+	// foreground and background attributes
+	// for cells that match search results
+	ResultsFG, ResultsBG termbox.Attribute
+	// lines longer than the width of the scroll wrap around and
+	// are rendered in the next line if Wrap is set to true.
+	Wrap bool
 }
 
-// Reset resets this scroll's state and its contents.
-func (s *Scroll) Reset() {
+func (s *Scroll) resetProps() {
 	s.result = nil
 	s.searchText = nil
 	s.offset = Coordinates{}
 	s.reslist.Init()
-	s.Buffer.Reset()
 }
 
 // NewScroll allocates storage for a Scroll and initializes it.
 func NewScroll() (s *Scroll) {
 	s = new(Scroll)
-	s.Init(defTabSpaces)
+	s.Init()
 	return
 }
 
-// Init initializes this scroll's internal cell buffer.
-func (s *Scroll) Init(tabspaces int) {
+// Init initializes this scroll and allocates new storage
+// for the internal cell buffer.
+func (s *Scroll) Init() {
+	s.InitWithBuffer(new(Buffer))
+}
+
+// InitWithBuffer initializes this scroll with the given cell buffer.
+func (s *Scroll) InitWithBuffer(b *Buffer) {
 	s.ResultsFG, s.ResultsBG = termbox.AttrReverse, termbox.AttrReverse
-	s.Buffer.Init(tabspaces)
-	s.Reset()
+	s.buf = b
+	s.resetProps()
 }
 
 // CanSeekUp returns true if SeekUp would seek one row up.
@@ -97,7 +104,7 @@ func (s *Scroll) SeekRight() (ok bool) {
 
 // SeekVertical shifts the contents of this scroll such that
 // the vertical offset is y. If y is out of bounds the contents
-// will be shifted to the maximum possible y offset.
+// are shifted to the maximum possible y offset.
 func (s *Scroll) SeekVertical(y int) (ok bool) {
 	if max := s.getMaxYOffset(); y > max {
 		y = max
@@ -113,7 +120,7 @@ func (s *Scroll) SeekVertical(y int) (ok bool) {
 
 // SeekHorizontal shifts the contents of this scroll such that
 // the horizontal offset is x. If x is out of bounds the contents
-// will be shifted to the maximum possible x offset.
+// are shifted to the maximum possible x offset.
 func (s *Scroll) SeekHorizontal(x int) (ok bool) {
 	if max := s.getMaxXOffset(); x > max {
 		x = max
@@ -196,7 +203,7 @@ func (s *Scroll) Resize(width, height int) {
 
 func (s *Scroll) getView() [][]termbox.Cell {
 	ywindow := s.offset.Y + s.height
-	return s.Buffer.RawCells()[s.offset.Y:ywindow]
+	return s.buf.RawCells()[s.offset.Y:ywindow]
 }
 
 func (s *Scroll) getMaxXOffset() (x int) {
@@ -218,7 +225,7 @@ func (s *Scroll) getMaxXOffset() (x int) {
 }
 
 func (s *Scroll) getMaxYOffset() (y int) {
-	rows := s.Buffer.Rows()
+	rows := s.buf.Rows()
 	if rows <= s.height {
 		y = 0
 	} else {
@@ -230,7 +237,7 @@ func (s *Scroll) getMaxYOffset() (y int) {
 func (s *Scroll) draw(writer Writer) (err error) {
 	xwindow := s.offset.X + s.width
 	ywindow := s.height
-	for y, r := range s.Buffer.RawCells()[s.offset.Y:] {
+	for y, r := range s.buf.RawCells()[s.offset.Y:] {
 		if y >= ywindow {
 			break
 		}
@@ -254,7 +261,7 @@ func (s *Scroll) wrapdraw(writer Writer) (err error) {
 	var xi, yi, ywindow int
 	xwindow := s.width
 	wraps := 0
-	for y, r := range s.Buffer.RawCells()[s.offset.Y:] {
+	for y, r := range s.buf.RawCells()[s.offset.Y:] {
 		ywindow = s.height - wraps
 		if y >= ywindow {
 			break
@@ -283,8 +290,7 @@ func (s *Scroll) wrapdraw(writer Writer) (err error) {
 }
 
 // Draw draws the contents of this scroll to the given writer. If Wrap is set,
-// lines that are too long to be rendered will wrap around and thus
-// be rendered in the next line.
+// lines that are too long wrap around and thus are rendered in the next line.
 func (s *Scroll) Draw(writer Writer) (err error) {
 	if s.Wrap {
 		return s.wrapdraw(writer)
@@ -297,7 +303,7 @@ func (s *Scroll) Draw(writer Writer) (err error) {
 // a search list so SeekNextResult and SeekPreviousResult can be used to visualize results.
 // It returns the number of matches found.
 func (s *Scroll) Search(text string) int {
-	s.Buffer.ResetAttr()
+	s.buf.ResetAttr()
 	s.reslist.Init()
 	s.result = nil
 	s.searchText = []rune(text)
@@ -309,7 +315,7 @@ func (s *Scroll) Search(text string) int {
 
 	var pos Coordinates
 	var o int
-	for y, r := range s.Buffer.RawCells() {
+	for y, r := range s.buf.RawCells() {
 		for x, c := range r {
 			if c.Ch != s.searchText[o] {
 				o = 0
@@ -323,7 +329,7 @@ func (s *Scroll) Search(text string) int {
 				s.reslist.PushBack(pos)
 				lX := pos.X + slen
 				for j := pos.X; j < lX; j++ {
-					s.Buffer.SetAttr(
+					s.buf.SetAttr(
 						Coordinates{X: j, Y: pos.Y},
 						s.ResultsFG,
 						s.ResultsBG,
@@ -387,4 +393,13 @@ func (s *Scroll) Result() (pos Coordinates, ok bool) {
 // Offset returns the scroll offset from the start of the content.
 func (s *Scroll) Offset() Coordinates {
 	return s.offset
+}
+
+// Buffer provides acces to the underlying Buffer.
+func (s *Scroll) Buffer() *Buffer {
+	return s.buf
+}
+
+func (s *Scroll) String() string {
+	return s.buf.String()
 }

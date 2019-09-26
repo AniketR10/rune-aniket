@@ -14,17 +14,16 @@ var fortunewidth = 44
 
 func newScroll(tabspaces int, wrap bool, width, height int) (scroll *Scroll) {
 	scroll = new(Scroll)
-	scroll.Init(defTabSpaces)
+	scroll.Init()
 	scroll.Resize(width, height)
-	scroll.tabspaces = tabspaces
 	scroll.Wrap = wrap
+	scroll.Buffer().tabspaces = tabspaces
 	return
 }
 
 func TestScrollNew(t *testing.T) {
 	scroll := newScroll(5, true, 100, 100)
-	if scroll.cells == nil ||
-		scroll.Wrap != true || scroll.tabspaces != 5 ||
+	if scroll.Wrap != true || scroll.buf.tabspaces != 5 ||
 		scroll.width != 100 || scroll.height != 100 {
 		t.Errorf("scroll not initialized properly: %+v", scroll)
 	}
@@ -35,7 +34,7 @@ func TestScrollDraw(t *testing.T) {
 	tabspaces := 4
 	wrap := false
 	scroll := newScroll(tabspaces, wrap, width, height)
-	scroll.WriteString(fortune)
+	scroll.Buffer().WriteString(fortune)
 
 	w := newStringWriter(width, height)
 
@@ -62,11 +61,11 @@ func TestScrollDraw(t *testing.T) {
 		{func() { scroll.Search("中国"); scroll.SeekNextResult() }, "Oscar Hammerstein 中国"},
 		{func() { scroll.Search("Oscar"); scroll.SeekNextResult() }, "Oscar Hammerstein 中国"},
 		{func() { scroll.SeekStartFile(); scroll.SeekStartLine() }, "Love in your heart w"},
-		{func() { scroll.TruncateCellAt(Coordinates{X: 0, Y: 0}) }, "ove in your heart wa"},
-		{func() { scroll.TruncateCellAt(Coordinates{X: 14, Y: 0}) }, "ove in your hert was"},
+		{func() { scroll.Buffer().TruncateCellAt(Coordinates{X: 0, Y: 0}) }, "ove in your heart wa"},
+		{func() { scroll.Buffer().TruncateCellAt(Coordinates{X: 14, Y: 0}) }, "ove in your hert was"},
 		{func() { scroll.SeekDown() }, "Love isn't love 'til"},
-		{func() { scroll.TruncateCellAt(Coordinates{X: 16, Y: 1}) }, "Love isn't love til "},
-		{func() { scroll.InsertAt(Coordinates{X: 16, Y: 1}, '中') }, "Love isn't love 中til"},
+		{func() { scroll.Buffer().TruncateCellAt(Coordinates{X: 16, Y: 1}) }, "Love isn't love til "},
+		{func() { scroll.Buffer().InsertAt(Coordinates{X: 16, Y: 1}, '中') }, "Love isn't love 中til"},
 		// {scroll.SeekDown, "        -- Oscar Ham"},
 		// {scroll.SeekEndLine, "rstein 中            "},
 		// {func() { scroll.InsertAt(Coordinates{X: 20, Y: 2}, '中') }, "rstein 中中           "},
@@ -97,7 +96,7 @@ func TestScrollDrawWrap(t *testing.T) {
 	tabspaces := 4
 	wrap := true
 	scroll := newScroll(tabspaces, wrap, width, height)
-	scroll.ReadFrom(strings.NewReader(fortune))
+	scroll.Buffer().ReadFrom(strings.NewReader(fortune))
 
 	w := newStringWriter(width, height)
 
@@ -142,9 +141,9 @@ func TestRowLastIndex(t *testing.T) {
 	}
 
 	for _, tcase := range cases {
-		scroll.Reset()
-		scroll.WriteString(tcase.content)
-		i, _ := scroll.RowLastIdx(tcase.line)
+		scroll.Buffer().Reset()
+		scroll.Buffer().WriteString(tcase.content)
+		i, _ := scroll.Buffer().RowLastIdx(tcase.line)
 		lines := strings.Split(tcase.content, "\n")
 
 		if i != tcase.expected {
@@ -153,10 +152,24 @@ func TestRowLastIndex(t *testing.T) {
 	}
 }
 
+func TestScrollInit(t *testing.T) {
+	t.Run("does not mutate buffer on initialization", func(t *testing.T) {
+		var buf Buffer
+		str := "hola"
+		buf.WriteString(str)
+		buf.tabspaces = 4
+		var scroll Scroll
+		scroll.InitWithBuffer(&buf)
+		if found := scroll.String(); found != str {
+			t.Errorf("expected '%s' but found '%s'", str, found)
+		}
+	})
+}
+
 func newBigScroll(fortunes int) (scroll *Scroll) {
 	scroll = NewScroll()
 	for i := 0; i < fortunes; i++ {
-		_ = scroll.WriteString(fortune)
+		_ = scroll.Buffer().WriteString(fortune)
 	}
 	// assume big screen
 	scroll.Resize(3000, 2000)
@@ -175,7 +188,7 @@ func benchmarkScrollDraw(b *testing.B, fortunes int, offset float32) {
 }
 
 func seekPercRows(scroll *Scroll, offset float32) {
-	offsetRows := int(float32(scroll.Rows()) * offset)
+	offsetRows := int(float32(scroll.Buffer().Rows()) * offset)
 	for i := 0; i < offsetRows; i++ {
 		scroll.SeekDown()
 	}

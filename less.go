@@ -12,18 +12,16 @@ const (
 
 // LessConfig holds configuration values for a Less instance.
 type LessConfig struct {
-	Tabspaces int
-	Wrap      bool
-	ResFG     termbox.Attribute
-	ResBG     termbox.Attribute
-	Handler   func(LessEvent)
+	Wrap    bool
+	ResFG   termbox.Attribute
+	ResBG   termbox.Attribute
+	Handler func(LessEvent)
 }
 
 var defaultConfig = LessConfig{
-	Tabspaces: 4,
-	Wrap:      false,
-	ResFG:     termbox.AttrReverse,
-	ResBG:     termbox.ColorDefault,
+	Wrap:  false,
+	ResFG: termbox.AttrReverse,
+	ResBG: termbox.ColorDefault,
 }
 
 // DefaultLessConfig returns sane configuration defaults for a less instance.
@@ -35,7 +33,8 @@ func DefaultLessConfig() *LessConfig {
 
 // Less is a clone of Unix' less program.
 type Less struct {
-	*Scroll
+	Scroll
+	buf          *Buffer
 	cmdScroll    VirtualComponent
 	msgScroll    VirtualComponent
 	mode         LessMode
@@ -80,16 +79,20 @@ func (l *Less) sendEvent(ev LessEvent) {
 	}
 }
 
+func getBuffer(virtualScroll VirtualComponent) *Buffer {
+	return virtualScroll.C.(*Scroll).Buffer()
+}
+
 func (l *Less) setNormalMode() {
 	l.cursorOffset = 1
-	l.cmdScroll.C.(*Scroll).Reset()
-	l.cmdScroll.C.(*Scroll).WriteRune(':')
+	getBuffer(l.cmdScroll).Reset()
+	getBuffer(l.cmdScroll).WriteRune(':')
 	l.mode = LessNormalMode
 }
 
 func (l *Less) setSearchMode() {
-	l.cmdScroll.C.(*Scroll).Reset()
-	l.cmdScroll.C.(*Scroll).WriteRune('/')
+	getBuffer(l.cmdScroll).Reset()
+	getBuffer(l.cmdScroll).WriteRune('/')
 	l.mode = LessSearchMode
 }
 
@@ -101,10 +104,10 @@ func (l *Less) searchHandleEvent(ev termbox.Event) (exit bool) {
 	case termbox.KeyBackspace2:
 		if l.cursorOffset > 1 {
 			l.cursorOffset--
-			l.cmdScroll.C.(*Scroll).TruncateCellAt(Coordinates{X: l.cursorOffset, Y: 0})
+			l.cmdScroll.C.(*Scroll).Buffer().TruncateCellAt(Coordinates{X: l.cursorOffset, Y: 0})
 		}
 	case termbox.KeyEnter:
-		str := l.cmdScroll.C.(*Scroll).String()
+		str := getBuffer(l.cmdScroll).String()
 		bytes := []byte(str)[1:]
 		l.search = string(bytes)
 		l.Scroll.Search(l.search)
@@ -117,7 +120,7 @@ func (l *Less) searchHandleEvent(ev termbox.Event) (exit bool) {
 
 	default:
 		l.cursorOffset++
-		l.cmdScroll.C.(*Scroll).WriteRune(ev.Ch)
+		getBuffer(l.cmdScroll).WriteRune(ev.Ch)
 	}
 
 	return
@@ -159,30 +162,28 @@ func (l *Less) normalHandleEvent(ev termbox.Event) (exit bool) {
 
 // SetMessage sets a message to be displayed on the bottom right corner.
 func (l *Less) SetMessage(text string, args ...interface{}) {
-	l.msgScroll.C.(*Scroll).Reset()
-	l.msgScroll.C.(*Scroll).WriteString(fmt.Sprintf(text, args...))
+	getBuffer(l.msgScroll).Reset()
+	getBuffer(l.msgScroll).WriteString(fmt.Sprintf(text, args...))
 	l.Resize(l.width, l.height)
 }
 
 // Reset resets the contents and state of this instance.
 func (l *Less) Reset() {
-	l.Scroll.Reset()
-	l.delEOF = false
+	l.InitWithBufferConfig(l.buf, l.config)
 }
 
-// SetScroll swaps the main scroll for s and returns the original scroll.
-func (l *Less) SetScroll(s *Scroll) (orig *Scroll) {
-	orig = l.Scroll
-	l.Scroll = s
+// SetBuffer swaps the main scroll for s and returns the original scroll.
+func (l *Less) SetBuffer(b *Buffer) (orig *Buffer) {
+	orig = l.buf
+	l.buf = b
 	l.Reset()
-	l.setupScroll(l.Scroll)
 	return
 }
 
 // SetContent replaces the content of the underlying scroll with 'text'.
 func (l *Less) SetContent(text string, args ...interface{}) {
 	l.Reset()
-	l.Scroll.WriteString(fmt.Sprintf(text, args...))
+	l.Scroll.Buffer().WriteString(fmt.Sprintf(text, args...))
 	l.Resize(l.width, l.height)
 }
 
@@ -227,7 +228,7 @@ func (l *Less) Resize(width, height int) {
 
 func (l *Less) resize() {
 	contentHeight := l.height - cmdBarHeight
-	msgWidth := len(l.msgScroll.C.(*Scroll).String())
+	msgWidth := len(getBuffer(l.msgScroll).String())
 	cmdBarWidth := l.width - msgWidth
 
 	l.Scroll.Resize(l.width, contentHeight)
@@ -257,7 +258,12 @@ func (l *Less) Handle(ev termbox.Event) (exit bool) {
 func (l *Less) setupScroll(w *Scroll) {
 	w.ResultsFG = l.config.ResFG
 	w.ResultsBG = l.config.ResBG
-	w.Buffer.tabspaces, w.Wrap = l.config.Tabspaces, l.config.Wrap
+	w.Wrap = l.config.Wrap
+}
+
+// Buffer provides acces to the underlying Buffer.
+func (l *Less) Buffer() *Buffer {
+	return l.buf
 }
 
 // Man : Handler
@@ -323,38 +329,44 @@ func (l *Less) Man() Manual {
 	}
 }
 
-// InitWithConfig will initialize a less handler.
-// If config is nil this method will panic.
+// InitWithConfig initializes a Less Handler with the given Buffer.
+// If config is nil this method panics.
 func (l *Less) InitWithConfig(cfg *LessConfig) {
 	if cfg == nil {
 		panic("initializing less handler with nil configuration")
 	}
-	l.initWithScrollConfig(new(Scroll), cfg)
+	l.InitWithBufferConfig(new(Buffer), cfg)
+}
+
+// InitWithBuffer initializes a Less Handler with the given buffer.
+func (l *Less) InitWithBuffer(buf *Buffer) {
+	l.InitWithBufferConfig(buf, nil)
 }
 
 // Init initializes this instance or resets it if already initialized.
 func (l *Less) Init() {
-	l.initWithScrollConfig(new(Scroll), nil)
+	l.InitWithBufferConfig(new(Buffer), nil)
 }
 
-// initWithScrollConfig initialzes this instance with the given scroll and configuration.
-// If config is nil, the default one will be used.
-func (l *Less) initWithScrollConfig(scroll *Scroll, cfg *LessConfig) {
+// InitWithBufferConfig initialzes this instance with the given Buffer and configuration.
+// If config is nil, the default one is used.
+func (l *Less) InitWithBufferConfig(buf *Buffer, cfg *LessConfig) {
 	if cfg == nil {
 		l.config = DefaultLessConfig()
 	} else {
 		l.config = cfg
 	}
 
-	l.Scroll = scroll
-	l.Scroll.Init(l.config.Tabspaces)
+	l.delEOF = false
+	l.buf = buf
+	l.Scroll.InitWithBuffer(l.buf)
 
 	l.cmdScroll.C = NewScroll()
 	l.msgScroll.C = NewScroll()
 
 	l.setupScroll(l.cmdScroll.C.(*Scroll))
 	l.setupScroll(l.msgScroll.C.(*Scroll))
-	l.setupScroll(l.Scroll)
+	l.setupScroll(&l.Scroll)
 
 	l.setNormalMode()
 

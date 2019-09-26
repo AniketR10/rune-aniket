@@ -88,7 +88,7 @@ func main() {
 	less = fractal.NewLess()
 	less.InitWithConfig(config)
 
-	_, err = less.ReadFrom(input)
+	_, err = less.Buffer().ReadFrom(input)
 	if err != nil {
 		log.Fatal(err)
 	}

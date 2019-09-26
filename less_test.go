@@ -1,8 +1,9 @@
 package fractal
 
 import (
-	"github.com/nsf/termbox-go"
 	"testing"
+
+	"github.com/nsf/termbox-go"
 )
 
 const content = `AAAAABBBBB
@@ -24,7 +25,7 @@ func setup(less *Less, width, height int) (*Less, *stringWriter) {
 		less.Init()
 	}
 
-	less.WriteString(content)
+	less.Buffer().WriteString(content)
 
 	less.Resize(width, height)
 
