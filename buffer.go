@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"fmt"
 	"io"
-	"math"
 
 	"github.com/nsf/termbox-go"
 )
@@ -59,7 +58,8 @@ func (b *Buffer) InsertRowAt(i int) {
 	b.insertNewRow(Coordinates{Y: i, X: 0})
 }
 
-func (b *Buffer) nextWrite() Coordinates {
+// NextWrite returns the position of the write cursor.
+func (b *Buffer) NextWrite() Coordinates {
 	// cannot be 0, since we always have at least one row
 	y := len(b.cells) - 1
 	x := len(b.cells[y])
@@ -127,7 +127,7 @@ func (b *Buffer) insertTabSpaces(pos Coordinates) {
 }
 
 func (b *Buffer) appendString(p string) {
-	rowY := b.nextWrite().Y
+	rowY := b.NextWrite().Y
 	for _, r := range p {
 		switch r {
 		case '\n':
@@ -154,7 +154,7 @@ func (b *Buffer) WriteString(p string) Coordinates {
 		b.Reset()
 	}
 	b.appendString(p)
-	return b.nextWrite()
+	return b.NextWrite()
 }
 
 // WriteRune writes the given rune at the end of the buffer
@@ -162,7 +162,7 @@ func (b *Buffer) WriteRune(r rune) Coordinates {
 	if b.cells == nil {
 		b.Reset()
 	}
-	c := b.nextWrite()
+	c := b.NextWrite()
 	return b.insertAt(c, r)
 }
 
@@ -189,8 +189,8 @@ func (b *Buffer) InsertAt(pos Coordinates, r rune) Coordinates {
 	return b.insertAt(pos, r)
 }
 
-// TruncateLastRow truncates the last row in the buffer
-func (b *Buffer) TruncateLastRow() {
+// truncateLastRow truncates the last row in the buffer
+func (b *Buffer) truncateLastRow() {
 	last := len(b.cells) - 1
 	// we need to guarantee that there's always at least one row
 	if last <= 0 {
@@ -211,7 +211,7 @@ func (b *Buffer) TruncateRowAt(i int) (ok bool) {
 	if i != last {
 		copy(b.cells[i:], b.cells[i+1:])
 	}
-	b.TruncateLastRow()
+	b.truncateLastRow()
 	ok = true
 	return
 }
@@ -264,7 +264,9 @@ func (b *Buffer) truncateCellAt(pos Coordinates) {
 func (b *Buffer) truncateTabPadding(n int, pos Coordinates) int {
 	for ; n < b.tabspaces; n++ {
 		pos.X--
-		b.truncateCellAt(Coordinates{Y: pos.Y, X: pos.X})
+		if pos.X >= 0 {
+			b.truncateCellAt(Coordinates{Y: pos.Y, X: pos.X})
+		}
 	}
 	return n
 }
@@ -332,74 +334,6 @@ func (b *Buffer) String() string {
 	return string(s)
 }
 
-func sortFromTo(from Coordinates, to Coordinates) (Coordinates, Coordinates) {
-	if from.X > to.X {
-		temp := from.X
-		from.X = to.X
-		to.X = temp
-	}
-	if from.Y > to.Y {
-		temp := from.Y
-		from.Y = to.Y
-		to.Y = temp
-	}
-	return from, to
-}
-
-// Select returns the cells inside the given coordinates or nil if coordinates are out of bounds.
-func (b *Buffer) Select(from Coordinates, to Coordinates) (res [][]termbox.Cell) {
-	res = make([][]termbox.Cell, 0)
-
-	from, to = sortFromTo(from, to)
-
-	for from.Y < to.Y && from.Y < len(b.cells) {
-		x := int(math.Min(float64(from.X), float64(len(b.cells[from.Y]))))
-		res = append(res, b.cells[from.Y][x:])
-		from.X = 0
-		from.Y++
-	}
-
-	if from.Y >= len(b.cells) {
-		return
-	}
-
-	fromX := int(math.Min(float64(from.X), float64(len(b.cells[from.Y]))))
-	toX := int(math.Min(float64(to.X+1), float64(len(b.cells[from.Y]))))
-	res = append(res, b.cells[from.Y][fromX:toX])
-	return
-}
-
-// SelectLine returns the lines inside the given coordinates or nil if coordinates are out of bounds.
-func (b *Buffer) SelectLine(from Coordinates, to Coordinates) (res [][]termbox.Cell) {
-	res = make([][]termbox.Cell, 0)
-
-	from, to = sortFromTo(from, to)
-
-	for from.Y <= to.Y && from.Y < len(b.cells) {
-		res = append(res, b.cells[from.Y][:])
-		from.Y++
-	}
-
-	return
-}
-
-// SelectBlock returns the block of cells inside the given coordinates or nil if coordinates are out of bounds.
-func (b *Buffer) SelectBlock(from Coordinates, to Coordinates) (res [][]termbox.Cell) {
-	res = make([][]termbox.Cell, 0)
-
-	from, to = sortFromTo(from, to)
-
-	for from.Y <= to.Y && from.Y < len(b.cells) {
-		maxy := float64(len(b.cells[from.Y]))
-		xfrom := int(math.Min(maxy, float64(from.X)))
-		xto := int(math.Min(maxy, float64(to.X+1)))
-		res = append(res, b.cells[from.Y][xfrom:xto])
-		from.Y++
-	}
-
-	return
-}
-
 // RawCells gives clients access to the underlying cell matrix.
 func (b *Buffer) RawCells() [][]termbox.Cell {
 	if b.cells == nil {
@@ -418,15 +352,42 @@ func (b *Buffer) ResetAttr() {
 }
 
 // SetAttr overwrites the background and foreground attributes of cell at position.
-func (b *Buffer) SetAttr(pos Coordinates, fg, bg termbox.Attribute) {
+func (b *Buffer) SetAttr(pos Coordinates, fg, bg termbox.Attribute) (ok bool) {
 	assertCoordinates(pos)
-	b.fillInRows(pos.Y)
-	b.fillInColumns(pos)
+	if pos.Y >= b.Rows() || pos.X >= len(b.cells[pos.Y]) {
+		return
+	}
+	ok = true
 	if len(b.cells[pos.Y]) == pos.X {
 		b.insertAt(pos, ' ')
 	}
 	b.cells[pos.Y][pos.X].Bg = bg
 	b.cells[pos.Y][pos.X].Fg = fg
+	return
+}
+
+// GetAttr gets the background and foreground attributes of cell at position.
+func (b *Buffer) GetAttr(pos Coordinates) (fg, bg termbox.Attribute, ok bool) {
+	var cell termbox.Cell
+	_, cell, ok = b.GetCellAt(pos)
+	fg, bg = cell.Fg, cell.Bg
+	return
+}
+
+// GetCellAt returns the cell and true or a zero-valued cell and false if there is no
+// cell at position. If attempting to get a tab padding, the position of the tab is returned.
+func (b *Buffer) GetCellAt(pos Coordinates) (ppos Coordinates, cell termbox.Cell, ok bool) {
+	assertCoordinates(pos)
+	if pos.Y >= b.Rows() || pos.X >= len(b.cells[pos.Y]) {
+		return
+	}
+	ok = true
+	for cell.Ch == 0 {
+		cell = b.cells[pos.Y][pos.X]
+		pos.X++
+	}
+	ppos = pos
+	return
 }
 
 // RowLastIdx returns the width of row i.
@@ -449,7 +410,7 @@ func (b *Buffer) ReadFrom(r io.Reader) (n int64, err error) {
 	if b.cells == nil {
 		b.Reset()
 	}
-	rowY := b.nextWrite().Y
+	rowY := b.NextWrite().Y
 	reader := bufio.NewReader(r)
 	var bytes []byte
 	var isPrefix bool
@@ -473,4 +434,9 @@ func (b *Buffer) ReadFrom(r io.Reader) (n int64, err error) {
 			rowY++
 		}
 	}
+}
+
+// Tabspaces returns the number of tabspaces initialized.
+func (b *Buffer) Tabspaces() int {
+	return b.tabspaces
 }

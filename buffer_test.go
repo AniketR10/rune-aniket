@@ -1,7 +1,6 @@
 package fractal
 
 import (
-	"reflect"
 	"strings"
 	"testing"
 
@@ -11,6 +10,16 @@ import (
 )
 
 func TestUninitializedNotPanic(t *testing.T) {
+
+	t.Run("GetCellAt", func(t *testing.T) {
+		var b Buffer
+		b.GetCellAt(Coordinates{X: 10, Y: 0})
+	})
+
+	t.Run("GetAttr", func(t *testing.T) {
+		var b Buffer
+		b.GetAttr(Coordinates{X: 10, Y: 0})
+	})
 
 	t.Run("ConflateRow", func(t *testing.T) {
 		var b Buffer
@@ -72,11 +81,6 @@ func TestUninitializedNotPanic(t *testing.T) {
 		b.TruncateFrom(Coordinates{X: 0, Y: 1})
 	})
 
-	t.Run("TruncateLastRow", func(t *testing.T) {
-		var b Buffer
-		b.TruncateLastRow()
-	})
-
 	t.Run("TruncateRowAt", func(t *testing.T) {
 		var b Buffer
 		_ = b.TruncateRowAt(10)
@@ -105,21 +109,6 @@ func TestUninitializedNotPanic(t *testing.T) {
 	t.Run("ReadFrom", func(t *testing.T) {
 		var b Buffer
 		_, _ = b.ReadFrom(strings.NewReader("hfjlkw"))
-	})
-
-	t.Run("Select", func(t *testing.T) {
-		var b Buffer
-		_ = b.Select(Coordinates{X: 0, Y: 0}, Coordinates{X: 1, Y: 1})
-	})
-
-	t.Run("SelectLine", func(t *testing.T) {
-		var b Buffer
-		_ = b.SelectLine(Coordinates{X: 0, Y: 0}, Coordinates{X: 1, Y: 1})
-	})
-
-	t.Run("SelectBlock", func(t *testing.T) {
-		var b Buffer
-		_ = b.SelectBlock(Coordinates{X: 0, Y: 0}, Coordinates{X: 1, Y: 1})
 	})
 }
 
@@ -230,22 +219,6 @@ func TestBufferWriteAt(t *testing.T) {
 	str := "hello\nworld"
 	if s := buf.String(); s != str {
 		t.Errorf("expected '%+v' found '%+v'", []byte(str), []byte(s))
-	}
-}
-
-func TestBufferTruncateLastRow(t *testing.T) {
-	var buf Buffer
-	str := "hello\nworld"
-	buf.WriteString(str)
-
-	buf.TruncateLastRow()
-
-	if l := buf.Rows(); l != 1 {
-		t.Errorf("Rows() is not correct: is %d, should be 1", l)
-	}
-
-	if s, expected := buf.String(), "hello"; s != expected {
-		t.Errorf("expected '%q' found '%q'", expected, s)
 	}
 }
 
@@ -394,211 +367,69 @@ func toString(cells [][]termbox.Cell) string {
 	return string(runes)
 }
 
-func TestBufferSelect(t *testing.T) {
-	var buf Buffer
-	str := "hello\n\tworld\n\nitsme"
-	buf.WriteString(str)
-	buf.tabspaces = 4
-
-	testCases := []selectCase{
-		{
-			from: Coordinates{},
-			to:   Coordinates{X: 1, Y: 0},
-			expected: [][]termbox.Cell{
-				[]termbox.Cell{{Ch: 'h'}, {Ch: 'e'}},
-			},
-		},
-		{
-			from: Coordinates{X: 0, Y: 1},
-			to:   Coordinates{X: 8, Y: 1},
-			expected: [][]termbox.Cell{
-				[]termbox.Cell{{}, {}, {}, {Ch: '\t'}, {Ch: 'w'}, {Ch: 'o'}, {Ch: 'r'}, {Ch: 'l'}, {Ch: 'd'}},
-			},
-		},
-		{
-			from: Coordinates{X: 2, Y: 0},
-			to:   Coordinates{X: 4, Y: 0},
-			expected: [][]termbox.Cell{
-				[]termbox.Cell{{Ch: 'l'}, {Ch: 'l'}, {Ch: 'o'}},
-			},
-		},
-		{
-			from: Coordinates{X: 2, Y: 0},
-			to:   Coordinates{X: 7, Y: 1},
-			expected: [][]termbox.Cell{
-				[]termbox.Cell{{Ch: 'l'}, {Ch: 'l'}, {Ch: 'o'}},
-				[]termbox.Cell{{}, {}, {}, {Ch: '\t'}, {Ch: 'w'}, {Ch: 'o'}, {Ch: 'r'}, {Ch: 'l'}},
-			},
-		},
-		{
-			from: Coordinates{X: 7, Y: 1},
-			to:   Coordinates{X: 2, Y: 0},
-			expected: [][]termbox.Cell{
-				[]termbox.Cell{{Ch: 'l'}, {Ch: 'l'}, {Ch: 'o'}},
-				[]termbox.Cell{{}, {}, {}, {Ch: '\t'}, {Ch: 'w'}, {Ch: 'o'}, {Ch: 'r'}, {Ch: 'l'}},
-			},
-		},
-		{
-			from: Coordinates{X: 4, Y: 0},
-			to:   Coordinates{X: 4, Y: 3},
-			expected: [][]termbox.Cell{
-				[]termbox.Cell{{Ch: 'o'}},
-				[]termbox.Cell{{}, {}, {}, {Ch: '\t'}, {Ch: 'w'}, {Ch: 'o'}, {Ch: 'r'}, {Ch: 'l'}, {Ch: 'd'}},
-				[]termbox.Cell{},
-				[]termbox.Cell{{Ch: 'i'}, {Ch: 't'}, {Ch: 's'}, {Ch: 'm'}, {Ch: 'e'}},
-			},
-		},
-		{
-			from: Coordinates{X: 0, Y: 2},
-			to:   Coordinates{X: 4, Y: 3},
-			expected: [][]termbox.Cell{
-				[]termbox.Cell{},
-				[]termbox.Cell{{Ch: 'i'}, {Ch: 't'}, {Ch: 's'}, {Ch: 'm'}, {Ch: 'e'}},
-			},
-		},
-		{
-			from: Coordinates{X: 0, Y: 2},
-			to:   Coordinates{X: 5, Y: 3},
-			expected: [][]termbox.Cell{
-				[]termbox.Cell{},
-				[]termbox.Cell{{Ch: 'i'}, {Ch: 't'}, {Ch: 's'}, {Ch: 'm'}, {Ch: 'e'}},
-			},
-		},
-		{
-			from: Coordinates{X: 0, Y: 2},
-			to:   Coordinates{X: 4, Y: 4},
-			expected: [][]termbox.Cell{
-				[]termbox.Cell{},
-				[]termbox.Cell{{Ch: 'i'}, {Ch: 't'}, {Ch: 's'}, {Ch: 'm'}, {Ch: 'e'}},
-			},
-		},
+func assertCellProperties(t *testing.T, cell termbox.Cell, fg, bg termbox.Attribute) {
+	if cell.Fg != fg {
+		t.Errorf("cell FG was not %d", fg)
 	}
-
-	for _, tcase := range testCases {
-		selection := buf.Select(tcase.from, tcase.to)
-		if !reflect.DeepEqual(selection, tcase.expected) {
-			t.Errorf("expected %q found %q", toString(tcase.expected), toString(selection))
-		}
+	if cell.Bg != bg {
+		t.Errorf("cell BG was not %d", fg)
 	}
 }
 
-func TestBufferSelectLine(t *testing.T) {
-	var buf Buffer
-	str := "hello\n\tworld\n\nitsme"
-	buf.WriteString(str)
-	buf.tabspaces = 4
+func TestGetCellAt(t *testing.T) {
+	t.Run("handles tabs and tab padding", func(t *testing.T) {
+		var buf Buffer
+		buf.WriteString("\t\tlol")
 
-	testCases := []selectCase{
-		{
-			from: Coordinates{},
-			to:   Coordinates{X: 1, Y: 0},
-			expected: [][]termbox.Cell{
-				[]termbox.Cell{{Ch: 'h'}, {Ch: 'e'}, {Ch: 'l'}, {Ch: 'l'}, {Ch: 'o'}},
-			},
-		},
-		{
-			from: Coordinates{X: 2, Y: 0},
-			to:   Coordinates{X: 4, Y: 0},
-			expected: [][]termbox.Cell{
-				[]termbox.Cell{{Ch: 'h'}, {Ch: 'e'}, {Ch: 'l'}, {Ch: 'l'}, {Ch: 'o'}},
-			},
-		},
-		{
-			from: Coordinates{X: 2, Y: 0},
-			to:   Coordinates{X: 7, Y: 1},
-			expected: [][]termbox.Cell{
-				[]termbox.Cell{{Ch: 'h'}, {Ch: 'e'}, {Ch: 'l'}, {Ch: 'l'}, {Ch: 'o'}},
-				[]termbox.Cell{{}, {}, {}, {Ch: '\t'}, {Ch: 'w'}, {Ch: 'o'}, {Ch: 'r'}, {Ch: 'l'}, {Ch: 'd'}},
-			},
-		},
-		{
-			from: Coordinates{X: 0, Y: 2},
-			to:   Coordinates{X: 2, Y: 0},
-			expected: [][]termbox.Cell{
-				[]termbox.Cell{{Ch: 'h'}, {Ch: 'e'}, {Ch: 'l'}, {Ch: 'l'}, {Ch: 'o'}},
-				[]termbox.Cell{{}, {}, {}, {Ch: '\t'}, {Ch: 'w'}, {Ch: 'o'}, {Ch: 'r'}, {Ch: 'l'}, {Ch: 'd'}},
-				[]termbox.Cell{},
-			},
-		},
-		{
-			to:   Coordinates{X: 2, Y: 0},
-			from: Coordinates{X: 10, Y: 2},
-			expected: [][]termbox.Cell{
-				[]termbox.Cell{{Ch: 'h'}, {Ch: 'e'}, {Ch: 'l'}, {Ch: 'l'}, {Ch: 'o'}},
-				[]termbox.Cell{{}, {}, {}, {Ch: '\t'}, {Ch: 'w'}, {Ch: 'o'}, {Ch: 'r'}, {Ch: 'l'}, {Ch: 'd'}},
-				[]termbox.Cell{},
-			},
-		},
-		{
-			to:   Coordinates{X: 2, Y: 0},
-			from: Coordinates{X: 0, Y: 10},
-			expected: [][]termbox.Cell{
-				[]termbox.Cell{{Ch: 'h'}, {Ch: 'e'}, {Ch: 'l'}, {Ch: 'l'}, {Ch: 'o'}},
-				[]termbox.Cell{{}, {}, {}, {Ch: '\t'}, {Ch: 'w'}, {Ch: 'o'}, {Ch: 'r'}, {Ch: 'l'}, {Ch: 'd'}},
-				[]termbox.Cell{{Ch: 'i'}, {Ch: 't'}, {Ch: 's'}, {Ch: 'm'}, {Ch: 'e'}},
-			},
-		},
-	}
-
-	for _, tcase := range testCases {
-		selection := buf.SelectLine(tcase.from, tcase.to)
-		if toString(selection) != toString(tcase.expected) {
-			t.Errorf("expected %q found %q", toString(tcase.expected), toString(selection))
+		for i := buf.tabspaces; i < buf.tabspaces+buf.tabspaces; i++ {
+			pos, cell, ok := buf.GetCellAt(Coordinates{X: i, Y: 0})
+			if !ok {
+				t.Error("GetCellAt returned unexpected ok")
+			}
+			if cell.Ch != '\t' {
+				t.Errorf("expected tab but found '%c'", cell.Ch)
+			}
+			expected := Coordinates{X: buf.tabspaces * 2, Y: 0}
+			if pos != expected {
+				t.Errorf("did not return actual tab position: %+v", pos)
+			}
 		}
-	}
+	})
+	t.Run("returns false if position is outside of bounds", func(t *testing.T) {
+		var buf Buffer
+		buf.WriteString("\n\t")
+		for _, pos := range []Coordinates{Coordinates{X: 1}, Coordinates{Y: 1, X: 4}} {
+			_, _, ok := buf.GetCellAt(pos)
+			if ok {
+				t.Error("GetCellAt returned unexpected ok")
+			}
+		}
+	})
 }
 
-func TestBufferSelectBlock(t *testing.T) {
+func TestSetAttr(t *testing.T) {
 	var buf Buffer
-	str := "hello\n\tworld\n\nitsme"
+	str := "0123"
 	buf.WriteString(str)
-	buf.tabspaces = 4
 
-	testCases := []selectCase{
-		{
-			from: Coordinates{},
-			to:   Coordinates{X: 1, Y: 0},
-			expected: [][]termbox.Cell{
-				[]termbox.Cell{{Ch: 'h'}, {Ch: 'e'}},
-			},
-		},
-		{
-			from: Coordinates{X: 0, Y: 0},
-			to:   Coordinates{X: 3, Y: 1},
-			expected: [][]termbox.Cell{
-				[]termbox.Cell{{Ch: 'h'}, {Ch: 'e'}, {Ch: 'l'}, {Ch: 'l'}},
-				[]termbox.Cell{{}, {}, {}, {Ch: '\t'}},
-			},
-		},
-		{
-			from: Coordinates{X: 3, Y: 1},
-			to:   Coordinates{X: 0, Y: 0},
-			expected: [][]termbox.Cell{
-				[]termbox.Cell{{Ch: 'h'}, {Ch: 'e'}, {Ch: 'l'}, {Ch: 'l'}},
-				[]termbox.Cell{{}, {}, {}, {Ch: '\t'}},
-			},
-		},
-		{
-			from: Coordinates{X: 3, Y: 3},
-			to:   Coordinates{X: 0, Y: 0},
-			expected: [][]termbox.Cell{
-				[]termbox.Cell{{Ch: 'h'}, {Ch: 'e'}, {Ch: 'l'}, {Ch: 'l'}},
-				[]termbox.Cell{{}, {}, {}, {Ch: '\t'}},
-				[]termbox.Cell{},
-				[]termbox.Cell{{Ch: 'i'}, {Ch: 't'}, {Ch: 's'}, {Ch: 'm'}},
-			},
-		},
-	}
-
-	for _, tcase := range testCases {
-		selection := buf.SelectBlock(tcase.from, tcase.to)
-		if !reflect.DeepEqual(selection, tcase.expected) {
-			t.Errorf("expected %q found %q", toString(tcase.expected), toString(selection))
+	t.Run("sets attribute to cell at position if exists", func(t *testing.T) {
+		pos := Coordinates{X: 0, Y: 0}
+		if !buf.SetAttr(pos, termbox.AttrBold, termbox.AttrReverse) {
+			t.Error("expected SetAttr to return true")
 		}
-	}
+		_, c, _ := buf.GetCellAt(pos)
+		assertCellProperties(t, c, termbox.AttrBold, termbox.AttrReverse)
+	})
+	t.Run("returns ok=false if cell at position does not exist", func(t *testing.T) {
+		for _, pos := range []Coordinates{Coordinates{X: 10, Y: 10}, Coordinates{X: 0, Y: 10}, Coordinates{X: 4, Y: 0}} {
+			if buf.SetAttr(pos, termbox.AttrBold, termbox.AttrReverse) {
+				t.Error("expected SetAttr to return false")
+			}
+		}
+	})
 }
 
-var bufferFortune = `
+var benchmarkFortune = `
 				Love in your heart wasn't put there to stay.
 				Love isn't love 'til you give it away.
 				-- Oscar Hammerstein 中国
@@ -608,7 +439,7 @@ func newBenchmarkBuffer(fortunes int) (*Buffer, string) {
 	buffer := Buffer{}
 	payload := ""
 	for i := 0; i < fortunes; i++ {
-		payload = payload + bufferFortune
+		payload = payload + benchmarkFortune
 	}
 	return &buffer, payload
 }
