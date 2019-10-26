@@ -1,10 +1,10 @@
-package fractal
+package cell
 
 import (
 	"strings"
 	"testing"
 
-	"github.com/nsf/termbox-go"
+	"github.com/ernestrc/fractal/term"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -13,12 +13,12 @@ func TestUninitializedNotPanic(t *testing.T) {
 
 	t.Run("GetCellAt", func(t *testing.T) {
 		var b Buffer
-		b.GetCellAt(Coordinates{X: 10, Y: 0})
+		b.GetCellAt(term.Coordinates{X: 10, Y: 0})
 	})
 
 	t.Run("GetAttr", func(t *testing.T) {
 		var b Buffer
-		b.GetAttr(Coordinates{X: 10, Y: 0})
+		b.GetAttr(term.Coordinates{X: 10, Y: 0})
 	})
 
 	t.Run("ConflateRow", func(t *testing.T) {
@@ -33,7 +33,7 @@ func TestUninitializedNotPanic(t *testing.T) {
 
 	t.Run("InsertAt", func(t *testing.T) {
 		var b Buffer
-		_ = b.InsertAt(Coordinates{X: 10, Y: 10}, 'f')
+		_ = b.InsertAt(term.Coordinates{X: 10, Y: 10}, 'f')
 	})
 
 	t.Run("RawCells", func(t *testing.T) {
@@ -63,7 +63,7 @@ func TestUninitializedNotPanic(t *testing.T) {
 
 	t.Run("SetAttr", func(t *testing.T) {
 		var b Buffer
-		b.SetAttr(Coordinates{X: 1, Y: 10}, 0, 0)
+		b.SetAttr(term.Coordinates{X: 1, Y: 10}, term.Attributes{})
 	})
 
 	t.Run("String", func(t *testing.T) {
@@ -73,12 +73,12 @@ func TestUninitializedNotPanic(t *testing.T) {
 
 	t.Run("TruncateCellAt", func(t *testing.T) {
 		var b Buffer
-		_, _ = b.TruncateCellAt(Coordinates{X: 10, Y: 10})
+		_, _ = b.TruncateCellAt(term.Coordinates{X: 10, Y: 10})
 	})
 
 	t.Run("TruncateFrom", func(t *testing.T) {
 		var b Buffer
-		b.TruncateFrom(Coordinates{X: 0, Y: 1})
+		b.TruncateFrom(term.Coordinates{X: 0, Y: 1})
 	})
 
 	t.Run("TruncateRowAt", func(t *testing.T) {
@@ -88,7 +88,7 @@ func TestUninitializedNotPanic(t *testing.T) {
 
 	t.Run("TruncateRowFrom", func(t *testing.T) {
 		var b Buffer
-		b.TruncateRowFrom(Coordinates{X: 10, Y: 0})
+		b.TruncateRowFrom(term.Coordinates{X: 10, Y: 0})
 	})
 
 	t.Run("WriteRune", func(t *testing.T) {
@@ -98,7 +98,7 @@ func TestUninitializedNotPanic(t *testing.T) {
 
 	t.Run("WriteAt", func(t *testing.T) {
 		var b Buffer
-		b.WriteAt(Coordinates{X: 10, Y: 0}, 'h')
+		b.WriteAt(term.Coordinates{X: 10, Y: 0}, 'h')
 	})
 
 	t.Run("WriteString", func(t *testing.T) {
@@ -154,7 +154,7 @@ func TestBufferReadFrom(t *testing.T) {
 
 func TestBufferInsertAt(t *testing.T) {
 	var buf Buffer
-	var next Coordinates
+	var next term.Coordinates
 
 	next = buf.InsertAt(next, 'h')
 	next = buf.InsertAt(next, 'e')
@@ -167,7 +167,7 @@ func TestBufferInsertAt(t *testing.T) {
 	next = buf.InsertAt(next, 'r')
 	next = buf.InsertAt(next, 'l')
 	buf.InsertAt(next, 'd')
-	buf.InsertAt(Coordinates{X: 4, Y: 0}, '\n')
+	buf.InsertAt(term.Coordinates{X: 4, Y: 0}, '\n')
 
 	str := "hell\no\nworld"
 	if l := buf.Rows(); l != 3 {
@@ -195,14 +195,14 @@ func TestBufferWriteAt(t *testing.T) {
 	var buf Buffer
 	buf.WriteString("hello")
 
-	buf.WriteAt(Coordinates{X: 5, Y: 0}, 'w')
+	buf.WriteAt(term.Coordinates{X: 5, Y: 0}, 'w')
 	// overwrite
-	buf.WriteAt(Coordinates{X: 5, Y: 0}, '\n')
-	buf.WriteAt(Coordinates{X: 0, Y: 1}, 'w')
-	buf.WriteAt(Coordinates{X: 1, Y: 1}, 'o')
-	buf.WriteAt(Coordinates{X: 2, Y: 1}, 'r')
-	buf.WriteAt(Coordinates{X: 3, Y: 1}, 'l')
-	buf.WriteAt(Coordinates{X: 4, Y: 1}, 'd')
+	buf.WriteAt(term.Coordinates{X: 5, Y: 0}, '\n')
+	buf.WriteAt(term.Coordinates{X: 0, Y: 1}, 'w')
+	buf.WriteAt(term.Coordinates{X: 1, Y: 1}, 'o')
+	buf.WriteAt(term.Coordinates{X: 2, Y: 1}, 'r')
+	buf.WriteAt(term.Coordinates{X: 3, Y: 1}, 'l')
+	buf.WriteAt(term.Coordinates{X: 4, Y: 1}, 'd')
 
 	if expected, l := 2, buf.Rows(); l != expected {
 		t.Errorf("Rows() is not correct: is %d, should be %d", l, expected)
@@ -239,7 +239,7 @@ func TestBufferTruncateRowFrom1(t *testing.T) {
 	str := "hello\nworld"
 	buf.WriteString(str)
 
-	buf.TruncateRowFrom(Coordinates{X: 2, Y: 0})
+	buf.TruncateRowFrom(term.Coordinates{X: 2, Y: 0})
 
 	if s, expected := buf.String(), "he\nworld"; s != expected {
 		t.Errorf("expected '%q' found '%q'", expected, s)
@@ -251,7 +251,7 @@ func TestBufferTruncateRowFrom2(t *testing.T) {
 	str := "hello\nworld"
 	buf.WriteString(str)
 
-	buf.TruncateRowFrom(Coordinates{X: 2, Y: 1})
+	buf.TruncateRowFrom(term.Coordinates{X: 2, Y: 1})
 
 	if s, expected := buf.String(), "hello\nwo"; s != expected {
 		t.Errorf("expected '%q' found '%q'", expected, s)
@@ -263,7 +263,7 @@ func TestBufferTruncateFrom1(t *testing.T) {
 	str := "hello\nworld"
 	buf.WriteString(str)
 
-	buf.TruncateFrom(Coordinates{X: 4, Y: 0})
+	buf.TruncateFrom(term.Coordinates{X: 4, Y: 0})
 
 	if s := buf.String(); s != "hell" {
 		t.Errorf("expected '%+v' found '%+v'", []byte("hell"), []byte(s))
@@ -275,7 +275,7 @@ func TestBufferTruncateFrom2(t *testing.T) {
 	str := "hello\nworld"
 	buf.WriteString(str)
 
-	buf.TruncateFrom(Coordinates{X: 0, Y: 1})
+	buf.TruncateFrom(term.Coordinates{X: 0, Y: 1})
 
 	if s, expected := buf.String(), "hello\n"; s != expected {
 		t.Errorf("expected '%q' found '%q'", expected, s)
@@ -287,17 +287,17 @@ func TestBufferTruncateCellAt(t *testing.T) {
 	str := "hello\nworld"
 	buf.WriteString(str)
 
-	buf.TruncateCellAt(Coordinates{X: 0, Y: 1})
-	buf.TruncateCellAt(Coordinates{X: 1, Y: 1})
+	buf.TruncateCellAt(term.Coordinates{X: 0, Y: 1})
+	buf.TruncateCellAt(term.Coordinates{X: 1, Y: 1})
 	buf.ConflateRow(0)
-	buf.TruncateCellAt(Coordinates{X: 7, Y: 0})
+	buf.TruncateCellAt(term.Coordinates{X: 7, Y: 0})
 
 	if s, expected := buf.String(), "hellool"; s != expected {
 		t.Errorf("expected '%q' found '%q'", expected, s)
 	}
 }
 
-func assertCellCh(t *testing.T, cell termbox.Cell, r rune) {
+func assertCellCh(t *testing.T, cell term.Cell, r rune) {
 	if cell.Ch != r {
 		t.Errorf("expected cell content to be %c but was %c", r, cell.Ch)
 	}
@@ -311,16 +311,16 @@ func TestBufferTruncateCellAtTab(t *testing.T) {
 	str := "!\t\t!\t"
 	buf.WriteString(str)
 
-	cell, n := buf.TruncateCellAt(Coordinates{X: tabspaces - 1, Y: 0})
+	cl, n := buf.TruncateCellAt(term.Coordinates{X: tabspaces - 1, Y: 0})
 	if n != tabspaces {
 		t.Errorf("TruncateCellAt returned %d instead of %d", n, tabspaces)
 	}
-	assertCellCh(t, cell, '\t')
-	cell, n = buf.TruncateCellAt(Coordinates{X: 2, Y: 0})
+	assertCellCh(t, cl, '\t')
+	cl, n = buf.TruncateCellAt(term.Coordinates{X: 2, Y: 0})
 	if n != tabspaces {
 		t.Errorf("TruncateCellAt returned %d instead of %d", n, tabspaces)
 	}
-	assertCellCh(t, cell, '\t')
+	assertCellCh(t, cl, '\t')
 	if s, expected := buf.String(), "!!\t"; s != expected {
 		t.Errorf("expected '%q' found '%q'", expected, s)
 	}
@@ -352,12 +352,12 @@ func TestBufferWrite(t *testing.T) {
 }
 
 type selectCase struct {
-	from     Coordinates
-	to       Coordinates
-	expected [][]termbox.Cell
+	from     term.Coordinates
+	to       term.Coordinates
+	expected [][]term.Cell
 }
 
-func toString(cells [][]termbox.Cell) string {
+func toString(cells [][]term.Cell) string {
 	runes := make([]rune, 0)
 	for _, r := range cells {
 		for _, c := range r {
@@ -367,12 +367,12 @@ func toString(cells [][]termbox.Cell) string {
 	return string(runes)
 }
 
-func assertCellProperties(t *testing.T, cell termbox.Cell, fg, bg termbox.Attribute) {
-	if cell.Fg != fg {
-		t.Errorf("cell FG was not %d", fg)
+func assertCellProperties(t *testing.T, cell term.Cell, attr term.Attributes) {
+	if cell.Fg != attr.Fg {
+		t.Errorf("cell FG was not %d", attr.Fg)
 	}
-	if cell.Bg != bg {
-		t.Errorf("cell BG was not %d", fg)
+	if cell.Bg != attr.Bg {
+		t.Errorf("cell BG was not %d", attr.Bg)
 	}
 }
 
@@ -382,14 +382,14 @@ func TestGetCellAt(t *testing.T) {
 		buf.WriteString("\t\tlol")
 
 		for i := buf.tabspaces; i < buf.tabspaces+buf.tabspaces; i++ {
-			pos, cell, ok := buf.GetCellAt(Coordinates{X: i, Y: 0})
+			pos, cl, ok := buf.GetCellAt(term.Coordinates{X: i, Y: 0})
 			if !ok {
 				t.Error("GetCellAt returned unexpected ok")
 			}
-			if cell.Ch != '\t' {
-				t.Errorf("expected tab but found '%c'", cell.Ch)
+			if cl.Ch != '\t' {
+				t.Errorf("expected tab but found '%c'", cl.Ch)
 			}
-			expected := Coordinates{X: buf.tabspaces * 2, Y: 0}
+			expected := term.Coordinates{X: buf.tabspaces * 2, Y: 0}
 			if pos != expected {
 				t.Errorf("did not return actual tab position: %+v", pos)
 			}
@@ -398,7 +398,11 @@ func TestGetCellAt(t *testing.T) {
 	t.Run("returns false if position is outside of bounds", func(t *testing.T) {
 		var buf Buffer
 		buf.WriteString("\n\t")
-		for _, pos := range []Coordinates{Coordinates{X: 1}, Coordinates{Y: 1, X: 4}} {
+		coords := []term.Coordinates{
+			term.Coordinates{X: 1},
+			term.Coordinates{Y: 1, X: 4},
+		}
+		for _, pos := range coords {
 			_, _, ok := buf.GetCellAt(pos)
 			if ok {
 				t.Error("GetCellAt returned unexpected ok")
@@ -413,16 +417,23 @@ func TestSetAttr(t *testing.T) {
 	buf.WriteString(str)
 
 	t.Run("sets attribute to cell at position if exists", func(t *testing.T) {
-		pos := Coordinates{X: 0, Y: 0}
-		if !buf.SetAttr(pos, termbox.AttrBold, termbox.AttrReverse) {
+		pos := term.Coordinates{X: 0, Y: 0}
+		attr := term.Attributes{Fg: term.AttrBold, Bg: term.AttrReverse}
+		if !buf.SetAttr(pos, attr) {
 			t.Error("expected SetAttr to return true")
 		}
 		_, c, _ := buf.GetCellAt(pos)
-		assertCellProperties(t, c, termbox.AttrBold, termbox.AttrReverse)
+		assertCellProperties(t, c, attr)
 	})
 	t.Run("returns ok=false if cell at position does not exist", func(t *testing.T) {
-		for _, pos := range []Coordinates{Coordinates{X: 10, Y: 10}, Coordinates{X: 0, Y: 10}, Coordinates{X: 4, Y: 0}} {
-			if buf.SetAttr(pos, termbox.AttrBold, termbox.AttrReverse) {
+		coords := []term.Coordinates{
+			term.Coordinates{X: 10, Y: 10},
+			term.Coordinates{X: 0, Y: 10},
+			term.Coordinates{X: 4, Y: 0},
+		}
+		for _, pos := range coords {
+			attr := term.Attributes{Fg: term.AttrBold, Bg: term.AttrReverse}
+			if buf.SetAttr(pos, attr) {
 				t.Error("expected SetAttr to return false")
 			}
 		}

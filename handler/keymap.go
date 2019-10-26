@@ -1,22 +1,27 @@
-package fractal
+package handler
 
-import "github.com/nsf/termbox-go"
+import (
+	"github.com/ernestrc/fractal"
+	"github.com/ernestrc/fractal/term"
+)
 
 type keyMappingHandler struct {
-	Component
-	inner    Handler
-	mappings map[termbox.Event]termbox.Event
+	fractal.Component
+	inner    fractal.Handler
+	mappings map[term.Event]term.Event
 }
 
 // WithMapping takes a handler and a set of event mappings to provide
 // key and event mapping to override default handler event handler.
-func WithMapping(inner Handler, mappings map[termbox.Event]termbox.Event) Handler {
+func WithMapping(
+	inner fractal.Handler, mappings map[term.Event]term.Event,
+) fractal.Handler {
 	return keyMappingHandler{inner, inner, mappings}
 }
 
 // Handle finds a mapping and overwrites event or delegates the event to
 // underlying handler.
-func (k keyMappingHandler) Handle(ev termbox.Event) bool {
+func (k keyMappingHandler) Handle(ev term.Event) bool {
 	mapped, ok := k.mappings[ev]
 	if ok {
 		ev = mapped
@@ -25,12 +30,12 @@ func (k keyMappingHandler) Handle(ev termbox.Event) bool {
 }
 
 // GetCursor delegates call to underlying handler.
-func (k keyMappingHandler) GetCursor() Coordinates {
+func (k keyMappingHandler) GetCursor() term.Coordinates {
 	return k.inner.GetCursor()
 }
 
 // Man returns remapped Manual from underlying handler.
-func (k keyMappingHandler) Man() Manual {
+func (k keyMappingHandler) Man() fractal.Manual {
 	m := k.inner.Man()
 	for from, to := range k.mappings {
 		m.Keys[to] = m.Keys[from]

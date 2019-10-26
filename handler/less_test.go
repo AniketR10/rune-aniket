@@ -1,9 +1,9 @@
-package fractal
+package handler
 
 import (
 	"testing"
 
-	"github.com/nsf/termbox-go"
+	"github.com/ernestrc/fractal/term"
 )
 
 const content = `AAAAABBBBB
@@ -18,7 +18,7 @@ KKKKXXLLLL
 11111111XX
 `
 
-func setup(less *Less, width, height int) (*Less, *stringWriter) {
+func setup(less *Less, width, height int) (*Less, *term.StringWriter) {
 	if less == nil {
 		less = NewLess()
 	} else {
@@ -29,35 +29,35 @@ func setup(less *Less, width, height int) (*Less, *stringWriter) {
 
 	less.Resize(width, height)
 
-	return less, newStringWriter(width, height)
+	return less, term.NewStringWriter(width, height)
 }
 
 func TestLessHandle(t *testing.T) {
-	cases := getLessHandleTestFlow([19]termbox.Event{
-		termbox.Event{},
-		termbox.Event{Ch: 'k', Type: termbox.EventKey},
-		termbox.Event{Ch: 'j', Type: termbox.EventKey},
-		termbox.Event{Ch: 'h', Type: termbox.EventKey},
-		termbox.Event{Ch: 'l', Type: termbox.EventKey},
-		termbox.Event{Ch: '$', Type: termbox.EventKey},
-		termbox.Event{Ch: '0', Type: termbox.EventKey},
-		termbox.Event{Ch: 'G', Type: termbox.EventKey},
-		termbox.Event{Ch: 'g', Type: termbox.EventKey},
-		termbox.Event{Ch: '/', Type: termbox.EventKey},
-		termbox.Event{Ch: 'X', Type: termbox.EventKey},
-		termbox.Event{Key: termbox.KeyBackspace, Type: termbox.EventKey},
-		termbox.Event{Ch: 'X', Type: termbox.EventKey},
-		termbox.Event{Ch: 'X', Type: termbox.EventKey},
-		termbox.Event{Key: termbox.KeyEnter, Type: termbox.EventKey},
-		termbox.Event{Ch: 'g', Type: termbox.EventKey},
-		termbox.Event{Ch: 'N', Type: termbox.EventKey},
-		termbox.Event{Ch: 'n', Type: termbox.EventKey},
-		termbox.Event{},
+	cases := getLessHandleTestFlow([19]term.Event{
+		term.Event{},
+		term.Event{Ch: 'k', Type: term.EventKey},
+		term.Event{Ch: 'j', Type: term.EventKey},
+		term.Event{Ch: 'h', Type: term.EventKey},
+		term.Event{Ch: 'l', Type: term.EventKey},
+		term.Event{Ch: '$', Type: term.EventKey},
+		term.Event{Ch: '0', Type: term.EventKey},
+		term.Event{Ch: 'G', Type: term.EventKey},
+		term.Event{Ch: 'g', Type: term.EventKey},
+		term.Event{Ch: '/', Type: term.EventKey},
+		term.Event{Ch: 'X', Type: term.EventKey},
+		term.Event{Key: term.KeyBackspace, Type: term.EventKey},
+		term.Event{Ch: 'X', Type: term.EventKey},
+		term.Event{Ch: 'X', Type: term.EventKey},
+		term.Event{Key: term.KeyEnter, Type: term.EventKey},
+		term.Event{Ch: 'g', Type: term.EventKey},
+		term.Event{Ch: 'N', Type: term.EventKey},
+		term.Event{Ch: 'n', Type: term.EventKey},
+		term.Event{},
 	})
 	testLessHandle(t, cases)
 }
 
-func getLessHandleTestFlow(events [19]termbox.Event) []handlerTestCase {
+func getLessHandleTestFlow(events [19]term.Event) []handlerTestCase {
 	return []handlerTestCase{
 		{
 			events[0], `
@@ -191,7 +191,7 @@ KKXXLLLL
 func testLessHandle(t *testing.T, cases []handlerTestCase) {
 	var less [2]Less
 	var less1 *Less
-	var writer1, writer2, writer3 *stringWriter
+	var writer1, writer2, writer3 *term.StringWriter
 	_, writer1 = setup(&less[0], 8, 4)
 	_, writer2 = setup(&less[1], 8, 4)
 	less1, writer3 = setup(nil, 8, 4)

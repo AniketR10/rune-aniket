@@ -1,44 +1,45 @@
-package fractal
+package component
 
 import (
-	"github.com/nsf/termbox-go"
+	"github.com/ernestrc/fractal"
+	"github.com/ernestrc/fractal/term"
 )
 
 // Frame is a Component that simply draws a border around a nested component.
 type Frame struct {
+	term.Attributes
 	content         VirtualComponent
 	bwidth, bheight int
 	width, height   int
-	Fg, Bg          termbox.Attribute
 }
 
 // NewFrame allocates storage and initializes a new frame with the given
 // border attributes and underlying component.
-func NewFrame(content Component, fg, bg termbox.Attribute) (f *Frame) {
+func NewFrame(content fractal.Component, border term.Attributes) (f *Frame) {
 	f = new(Frame)
-	f.Init(content, fg, bg)
+	f.Init(content, border)
 	return
 }
 
 // Init initializes this frame with the given Component and border attributes.
-func (f *Frame) Init(content Component, fg, bg termbox.Attribute) {
-	f.Fg, f.Bg = fg, bg
+func (f *Frame) Init(content fractal.Component, border term.Attributes) {
+	f.Attributes = border
 	f.content.C = content
 }
 
 // SetAttr updates the border attributes of this Frame.
-func (f *Frame) SetAttr(fg, bg termbox.Attribute) {
-	f.Fg, f.Bg = fg, bg
+func (f *Frame) SetAttr(border term.Attributes) {
+	f.Attributes = border
 }
 
 // Content returns the underlying Component.
-func (f *Frame) Content() Component {
+func (f *Frame) Content() fractal.Component {
 	return &f.content
 }
 
 // SetContent updates the underlying component and resizes it
 // to conform to this frame's width and height.
-func (f *Frame) SetContent(content Component) (err error) {
+func (f *Frame) SetContent(content fractal.Component) (err error) {
 	f.content.C = content
 	f.Resize(f.width, f.height)
 	return
@@ -62,56 +63,46 @@ func (f *Frame) Resize(width, height int) {
 	f.width, f.height = width, height
 }
 
-func (f *Frame) getContentOffset() Coordinates {
-	return Coordinates{X: f.bwidth / 2, Y: f.bheight / 2}
+func (f *Frame) getContentOffset() term.Coordinates {
+	return term.Coordinates{X: f.bwidth / 2, Y: f.bheight / 2}
 }
 
 // Draw draws this frame's border and contents to the given Writer.
-func (f *Frame) Draw(w Writer) (err error) {
+func (f *Frame) Draw(w fractal.Writer) {
 	if f.bwidth == 0 || f.bheight == 0 {
-		return f.content.Draw(w)
+		f.content.Draw(w)
 	}
 
 	limitX, limitY := f.width-1, f.height-1
 
 	for i := 0; i < limitX; i++ {
-		if err = w.Write(i, 0, '─', f.Fg, f.Bg); err != nil {
-			return
-		}
-		if err = w.Write(i, limitY, '─', f.Fg, f.Bg); err != nil {
-			return
-		}
+		cell := term.Cell{Ch: '─', Fg: f.Fg, Bg: f.Bg}
+		w.SetCell(term.Coordinates{X: i, Y: 0}, cell)
+		w.SetCell(term.Coordinates{X: i, Y: limitY}, cell)
 	}
 
 	for i := 0; i < limitY; i++ {
-		if err = w.Write(0, i, '│', f.Fg, f.Bg); err != nil {
-			return
-		}
-		if err = w.Write(limitX, i, '│', f.Fg, f.Bg); err != nil {
-			return
-		}
+		cell := term.Cell{Ch: '│', Fg: f.Fg, Bg: f.Bg}
+		w.SetCell(term.Coordinates{X: 0, Y: i}, cell)
+		w.SetCell(term.Coordinates{X: limitX, Y: i}, cell)
 	}
 
-	if err = w.Write(0, 0, '┌', f.Fg, f.Bg); err != nil {
-		return
-	}
+	w.SetCell(term.Coordinates{X: 0, Y: 0},
+		term.Cell{Ch: '┌', Fg: f.Fg, Bg: f.Bg})
 
-	if err = w.Write(limitX, 0, '┐', f.Fg, f.Bg); err != nil {
-		return
-	}
+	w.SetCell(term.Coordinates{X: limitX, Y: 0},
+		term.Cell{Ch: '┐', Fg: f.Fg, Bg: f.Bg})
 
-	if err = w.Write(0, limitY, '└', f.Fg, f.Bg); err != nil {
-		return
-	}
+	w.SetCell(term.Coordinates{X: 0, Y: limitY},
+		term.Cell{Ch: '└', Fg: f.Fg, Bg: f.Bg})
 
-	if err = w.Write(limitX, limitY, '┘', f.Fg, f.Bg); err != nil {
-		return
-	}
+	w.SetCell(term.Coordinates{X: limitX, Y: limitY},
+		term.Cell{Ch: '┘', Fg: f.Fg, Bg: f.Bg})
 
-	return f.content.Draw(w)
+	f.content.Draw(w)
 }
 
 // ContentPosition returns the position of the content inside this frame.
-func (f *Frame) ContentPosition() Coordinates {
+func (f *Frame) ContentPosition() term.Coordinates {
 	return f.getContentOffset()
 }

@@ -1,31 +1,33 @@
-package fractal
+package handler
 
 import (
 	"reflect"
-	"github.com/nsf/termbox-go"
 	"testing"
+
+	"github.com/ernestrc/fractal"
+	"github.com/ernestrc/fractal/term"
 )
 
 func TestFrameProxyMan(t *testing.T) {
-	myManual := Manual{
+	myManual := fractal.Manual{
 		Summary: "sup",
-		Keys: KeyMap{
-			termbox.Event{Ch: 'j'}: {
+		Keys: fractal.KeyMap{
+			term.Event{Ch: 'j'}: {
 				ID:          "wow",
 				Description: "now",
 			},
 		},
 	}
 	handler := &TestHandler{Manual: myManual}
-	if !reflect.DeepEqual(handler.Man(), NewFrameProxy(handler, 0, 0).Man()) {
+	if !reflect.DeepEqual(handler.Man(), NewFrame(handler, term.Attributes{}).Man()) {
 		t.Errorf("did not proxy Man correctly")
 	}
 }
 
 func TestFrameProxyCursor(t *testing.T) {
 	handler := &TestHandler{}
-	proxy := NewFrameProxy(handler, 0, 0)
-	proxy.Frame.bwidth, proxy.Frame.bheight = 2, 2
+	proxy := NewFrame(handler, term.Attributes{})
+	proxy.Resize(4, 4)
 	offsetCursor := handler.GetCursor()
 	offsetCursor.X++
 	offsetCursor.Y++

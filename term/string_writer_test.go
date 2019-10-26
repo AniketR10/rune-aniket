@@ -1,25 +1,23 @@
-package fractal
+package term
 
 import "testing"
 
 func TestWriteFlush(t *testing.T) {
 	width, height := 5, 6
-	writer := newStringWriter(width, height)
+	writer := NewStringWriter(width, height)
 
 	c := 'A'
 	for i := 0; i < width; i++ {
 		for j := 0; j < height; j++ {
 			if i > j-1 {
-				writer.Write(j, i, c, 0, 0)
+				writer.SetCell(Coordinates{X: j, Y: i}, Cell{Ch: c})
 			}
 		}
 		c++
 	}
 
 	// should be fine to wtry to write
-	if err := writer.Write(width+1, height+1, '=', 0, 0); err != nil {
-		t.Fatal(err)
-	}
+	writer.SetCell(Coordinates{X: width + 1, Y: height + 1}, Cell{Ch: '='})
 
 	if err := writer.Flush(); err != nil {
 		t.Fatal(err)

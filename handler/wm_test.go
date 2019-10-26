@@ -1,20 +1,24 @@
-package fractal
+package handler
 
 import (
-	"github.com/nsf/termbox-go"
 	"testing"
+
+	"github.com/ernestrc/fractal"
+	"github.com/ernestrc/fractal/term"
 )
 
-func altEvent(ch rune) termbox.Event {
-	return termbox.Event{
-		Type: termbox.EventKey,
-		Mod:  termbox.ModAlt,
+func altEvent(ch rune) term.Event {
+	return term.Event{
+		Type: term.EventKey,
+		Mod:  term.ModAlt,
 		Ch:   ch,
 	}
 }
 
-func prepareTest(width, height int, border bool, root Handler) (*stringWriter, *WindowManager) {
-	writer := newStringWriter(width, height)
+func prepareTest(width, height int, border bool, root fractal.Handler) (
+	*term.StringWriter, *WindowManager,
+) {
+	writer := term.NewStringWriter(width, height)
 	handler := NewWindowManager(root, border)
 	handler.Resize(width, height)
 
@@ -53,7 +57,7 @@ func TestWindowManagerHandle(t *testing.T) {
 
 	cases := []handlerTestCase{
 		{
-			termbox.Event{}, `
+			term.Event{}, `
 BBBBAAAA
 BBBBAAAA
 AAAAAAAA
@@ -67,7 +71,7 @@ AAAAAAAA
 AAAAAAAA`,
 		},
 		{
-			termbox.Event{}, `
+			term.Event{}, `
 BBBBBBBB
 BBBBBBBB
 AAAAAAAA
@@ -81,7 +85,7 @@ AAAAAAAA
 AAAAAAAA`,
 		},
 		{
-			termbox.Event{}, `
+			term.Event{}, `
 BBBBCCCC
 BBBBCCCC
 AAAAAAAA
@@ -95,7 +99,7 @@ AAAAAAAA
 AAAAAAAA`,
 		},
 		{
-			termbox.Event{}, `
+			term.Event{}, `
 CCCCCCCC
 CCCCCCCC
 AAAAAAAA
@@ -109,7 +113,7 @@ AAAAAAAA
 AAAAAAAA`,
 		},
 		{
-			termbox.Event{}, `
+			term.Event{}, `
 CCCCCCCC
 CCCCCCCC
 BBBBAAAA
@@ -123,14 +127,14 @@ BBBBAAAA
 BBBBAAAA`,
 		},
 		{
-			termbox.Event{}, `
+			term.Event{}, `
 CCCCCCCC
 CCCCCCCC
 BBBBBBBB
 BBBBBBBB`,
 		},
 		{
-			termbox.Event{}, `
+			term.Event{}, `
 CCCCCCCC
 CCCCCCCC
 BBBBCCCC
@@ -144,7 +148,7 @@ BBBBCCCC
 BBBBCCCC`,
 		},
 		{
-			termbox.Event{}, `
+			term.Event{}, `
 CCCCDDDD
 CCCCDDDD
 BBBBCCCC
@@ -159,14 +163,14 @@ BBBBCCCC`,
 	cases = []handlerTestCase{
 		{
 			// testhandler will return after this event active = false
-			termbox.Event{}, `
+			term.Event{}, `
 CCCCCCCC
 CCCCCCCC
 BBBBCCCC
 BBBBCCCC`,
 		},
 		{
-			termbox.Event{}, `
+			term.Event{}, `
 DDDDDDDD
 DDDDDDDD
 BBBBCCCC
@@ -187,14 +191,14 @@ BBBBCCCC
 BBBBCCCC`,
 		},
 		{
-			termbox.Event{}, `
+			term.Event{}, `
 DDDDDDDD
 DDDDDDDD
 CCCCCCCC
 CCCCCCCC`,
 		},
 		{
-			termbox.Event{}, `
+			term.Event{}, `
 DDDDDDDD
 DDDDDDDD
 DDDDCCCC
@@ -209,7 +213,7 @@ DDDDCCCC`,
 	cases = []handlerTestCase{
 		{
 			// testhandler will return after this event active = false
-			termbox.Event{}, `
+			term.Event{}, `
 DDDDDDDD
 DDDDDDDD
 CCCCCCCC
@@ -223,7 +227,7 @@ CCCCCCCC
 CCCCCCCC`,
 		},
 		{
-			termbox.Event{}, `
+			term.Event{}, `
 EEEEEEEE
 EEEEEEEE
 CCCCCCCC
@@ -238,14 +242,14 @@ CCCCCCCC`,
 	cases = []handlerTestCase{
 		{
 			// testhandler will return after this event active = false
-			termbox.Event{}, `
+			term.Event{}, `
 CCCCCCCC
 CCCCCCCC
 CCCCCCCC
 CCCCCCCC`,
 		},
 		{
-			termbox.Event{}, `
+			term.Event{}, `
 DDDDDDDD
 DDDDDDDD
 DDDDDDDD
@@ -266,7 +270,7 @@ DDDDDDDD
 DDDDDDDD`,
 		},
 		{
-			termbox.Event{}, `
+			term.Event{}, `
 EEEEEEEE
 EEEEEEEE
 EEEEEEEE
@@ -287,7 +291,7 @@ func TestWindowManagerHandleBorder(t *testing.T) {
 
 	cases := []handlerTestCase{
 		{
-			termbox.Event{}, `
+			term.Event{}, `
 ┌────┐┌────┐
 │BBBB││AAAA│
 │BBBB││AAAA│

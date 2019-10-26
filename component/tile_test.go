@@ -1,7 +1,10 @@
-package fractal
+package component
 
 import (
 	"testing"
+
+	"github.com/ernestrc/fractal"
+	"github.com/ernestrc/fractal/term"
 )
 
 func TestNew(t *testing.T) {
@@ -238,7 +241,7 @@ func TestTileNodeDraw(t *testing.T) {
 	var err error
 
 	width, height := 8, 4
-	w := newStringWriter(width, height)
+	w := term.NewStringWriter(width, height)
 	tree, m := NewTileTree(&TestComponent{Ch: 'A'})
 	tree.Resize(width, height)
 
@@ -405,7 +408,7 @@ func TestTileNodeSize(t *testing.T) {
 	}
 }
 
-func assertNotNil(t *testing.T, c Component) {
+func assertNotNil(t *testing.T, c fractal.Component) {
 	if c == nil {
 		t.Errorf("unexpected nil component")
 	}

@@ -2,7 +2,11 @@ package fractal
 
 import (
 	"fmt"
-	"github.com/nsf/termbox-go"
+
+	// TODO should use
+	// https://github.com/gdamore/tcell/blob/master/termbox/compat.go
+
+	"github.com/ernestrc/fractal/term"
 )
 
 // Component represents an element that can be drawn
@@ -18,12 +22,17 @@ import (
 // called to set the appropiate dimensions.
 type Component interface {
 	Resize(width, height int)
-	Draw(Writer) error
+	Draw(Writer)
 }
 
-// Coordinates represent a point in a 2-D space.
-type Coordinates struct {
-	X, Y int
+// Writer abstracts termbox write functionality to decouple components from
+// termbox, so they're easier to test.
+type Writer interface {
+	SetCell(term.Coordinates, term.Cell)
+	SetAttr(term.Coordinates, term.Attributes)
+	Flush() error
+	Clear(term.Attributes) error
+	SetCursor(term.Coordinates)
 }
 
 // Handler builds upon Component to add event-handling behavior.
@@ -40,8 +49,8 @@ type Coordinates struct {
 // Man returns a Handler's usage manual. See Manual for more information.
 type Handler interface {
 	Component
-	Handle(termbox.Event) bool
-	GetCursor() Coordinates
+	Handle(term.Event) bool
+	GetCursor() term.Coordinates
 	Man() Manual
 }
 
@@ -53,7 +62,7 @@ type Manual struct {
 }
 
 // KeyMap represents a Handler's key mapping information in the Manual.
-type KeyMap map[termbox.Event]struct {
+type KeyMap map[term.Event]struct {
 	ID          string
 	Description string
 }
@@ -61,43 +70,42 @@ type KeyMap map[termbox.Event]struct {
 // Init initializes this library. This function should be called before any
 // other functions. 'Close' must be called at the end to ensure graceful shutdown.
 func Init() error {
-	if err := termbox.Init(); err != nil {
-		return fmt.Errorf("failed termbox init: %v", err)
+	if err := term.Init(); err != nil {
+		return fmt.Errorf("failed term init: %v", err)
 	}
 
-	echan = make(chan termbox.Event)
-	ichan = make(chan termbox.Event)
-	foreground, background = termbox.ColorDefault, termbox.ColorDefault
-	highlightfg, highlightbg = termbox.ColorRed, termbox.ColorDefault
+	echan = make(chan term.Event)
+	ichan = make(chan term.Event)
+	attr.Fg, attr.Bg = term.ColorDefault, term.ColorDefault
 
 	return nil
 }
 
 // SetAttr sets the global foreground and background attributes.
-func SetAttr(fg, bg, highlightfg, highlightbg termbox.Attribute) {
-	foreground, background = fg, bg
+func SetAttr(newattr term.Attributes) {
+	attr = newattr
 }
 
 // Run takes the given root handler, renders it full-screen,
-// and starts feeding it with termbox Events.
+// and starts feeding it with term.Events.
 // Error is non-nil if there were any errors.
 func Run(root Handler) (err error) {
-	return run(root, &termboxWriter{})
+	return run(root, &term.TermboxWriter{})
 }
 
 // RunMode runs the given root handler with the given termbox InputMode.
 // See Run for more information.
-func RunMode(root Handler, mode termbox.InputMode) (err error) {
-	termbox.SetInputMode(mode)
+func RunMode(root Handler, mode term.InputMode) (err error) {
+	term.SetInputMode(mode)
 	return Run(root)
 }
 
 // Size returns the total available width and height in the current terminal.
 func Size() (width int, height int) {
-	return termbox.Size()
+	return term.Size()
 }
 
 // Close should be called when this library is not required anynmore.
 func Close() {
-	termbox.Close()
+	term.Close()
 }

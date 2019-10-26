@@ -1,7 +1,9 @@
-package fractal
+package component
 
 import (
 	"testing"
+
+	"github.com/ernestrc/fractal/term"
 )
 
 func TestNewList(t *testing.T) {
@@ -31,7 +33,7 @@ func TestListDraw(t *testing.T) {
 
 	l2.Resize(8, 4)
 
-	w := newStringWriter(8, 4)
+	w := term.NewStringWriter(8, 4)
 
 	tests := []testCase{
 		{

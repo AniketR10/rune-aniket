@@ -1,23 +1,25 @@
-package fractal
+package component
 
 import (
 	"container/list"
 
-	"github.com/nsf/termbox-go"
+	"github.com/ernestrc/fractal"
+	"github.com/ernestrc/fractal/cell"
+	"github.com/ernestrc/fractal/term"
 )
 
 // Scroll adds Draw to a Buffer along with
 // scrolling, searching and wrap-around capabilities.
 type Scroll struct {
-	buf           *Buffer
+	buf           *cell.Buffer
 	width, height int
 	searchText    []rune
-	offset        Coordinates
+	offset        term.Coordinates
 	reslist       list.List
 	result        *list.Element
 	// foreground and background attributes
 	// for cells that match search results
-	ResultsFG, ResultsBG termbox.Attribute
+	ResultsAttr term.Attributes
 	// lines longer than the width of the scroll wrap around and
 	// are rendered in the next line if Wrap is set to true.
 	Wrap bool
@@ -26,7 +28,7 @@ type Scroll struct {
 func (s *Scroll) resetProps() {
 	s.result = nil
 	s.searchText = nil
-	s.offset = Coordinates{}
+	s.offset = term.Coordinates{}
 	s.reslist.Init()
 }
 
@@ -40,12 +42,12 @@ func NewScroll() (s *Scroll) {
 // Init initializes this scroll and allocates new storage
 // for the internal cell buffer.
 func (s *Scroll) Init() {
-	s.InitWithBuffer(new(Buffer))
+	s.InitWithBuffer(new(cell.Buffer))
 }
 
 // InitWithBuffer initializes this scroll with the given cell buffer.
-func (s *Scroll) InitWithBuffer(b *Buffer) {
-	s.ResultsFG, s.ResultsBG = termbox.AttrReverse, termbox.AttrReverse
+func (s *Scroll) InitWithBuffer(b *cell.Buffer) {
+	s.ResultsAttr.Fg, s.ResultsAttr.Bg = term.AttrReverse, term.AttrReverse
 	s.buf = b
 	s.resetProps()
 }
@@ -154,7 +156,7 @@ func (s *Scroll) SeekStartFile() bool {
 	return s.SeekVertical(0)
 }
 
-func (s *Scroll) seekTo(pos Coordinates, padding int) bool {
+func (s *Scroll) seekTo(pos term.Coordinates, padding int) bool {
 	yok := s.SeekVertical(pos.Y)
 	var xok bool
 
@@ -169,7 +171,7 @@ func (s *Scroll) seekTo(pos Coordinates, padding int) bool {
 
 // SeekTo shifts the contents of this scroll such that the offset
 // is exactly at given coordinates.
-func (s *Scroll) SeekTo(pos Coordinates) bool {
+func (s *Scroll) SeekTo(pos term.Coordinates) bool {
 	return s.seekTo(pos, 1)
 }
 
@@ -201,7 +203,7 @@ func (s *Scroll) Resize(width, height int) {
 	s.height = height
 }
 
-func (s *Scroll) getView() [][]termbox.Cell {
+func (s *Scroll) getView() [][]term.Cell {
 	ywindow := s.offset.Y + s.height
 	return s.buf.RawCells()[s.offset.Y:ywindow]
 }
@@ -234,7 +236,7 @@ func (s *Scroll) getMaxYOffset() (y int) {
 	return
 }
 
-func (s *Scroll) draw(writer Writer) (err error) {
+func (s *Scroll) draw(writer fractal.Writer) {
 	xwindow := s.offset.X + s.width
 	ywindow := s.height
 	for y, r := range s.buf.RawCells()[s.offset.Y:] {
@@ -249,15 +251,13 @@ func (s *Scroll) draw(writer Writer) (err error) {
 				continue
 			}
 			xi := x - s.offset.X
-			if err = writer.Write(xi, y, c.Ch, c.Fg, c.Bg); err != nil {
-				return
-			}
+			writer.SetCell(term.Coordinates{X: xi, Y: y}, c)
 		}
 	}
 	return
 }
 
-func (s *Scroll) wrapdraw(writer Writer) (err error) {
+func (s *Scroll) wrapdraw(writer fractal.Writer) {
 	var xi, yi, ywindow int
 	xwindow := s.width
 	wraps := 0
@@ -280,23 +280,21 @@ func (s *Scroll) wrapdraw(writer Writer) (err error) {
 				}
 			}
 			yi = y + wraps
-			if err = writer.Write(xi, yi, c.Ch, c.Fg, c.Bg); err != nil {
-				return
-			}
+			writer.SetCell(term.Coordinates{X: xi, Y: yi}, c)
 		}
 	}
 
-	return nil
 }
 
 // Draw draws the contents of this scroll to the given writer. If Wrap is set,
 // lines that are too long wrap around and thus are rendered in the next line.
-func (s *Scroll) Draw(writer Writer) (err error) {
+func (s *Scroll) Draw(writer fractal.Writer) {
 	if s.Wrap {
-		return s.wrapdraw(writer)
+		s.wrapdraw(writer)
+		return
 	}
 
-	return s.draw(writer)
+	s.draw(writer)
 }
 
 // Search performs a text search of text in the internal cell buffer. It populates
@@ -313,14 +311,14 @@ func (s *Scroll) Search(text string) int {
 		return 0
 	}
 
-	var pos Coordinates
+	var pos term.Coordinates
 	var o int
 	for y, r := range s.buf.RawCells() {
 		for x, c := range r {
 			if c.Ch != s.searchText[o] {
 				o = 0
 			} else if o == 0 {
-				pos = Coordinates{X: x, Y: y}
+				pos = term.Coordinates{X: x, Y: y}
 				o++
 			} else {
 				o++
@@ -330,9 +328,8 @@ func (s *Scroll) Search(text string) int {
 				lX := pos.X + slen
 				for j := pos.X; j < lX; j++ {
 					s.buf.SetAttr(
-						Coordinates{X: j, Y: pos.Y},
-						s.ResultsFG,
-						s.ResultsBG,
+						term.Coordinates{X: j, Y: pos.Y},
+						s.ResultsAttr,
 					)
 				}
 				o = 0
@@ -346,7 +343,7 @@ func (s *Scroll) Search(text string) int {
 }
 
 // PrevResult returns the coordinates of the previous result in the Search list.
-func (s *Scroll) PrevResult() (pos Coordinates, ok bool) {
+func (s *Scroll) PrevResult() (pos term.Coordinates, ok bool) {
 	if s.result == nil {
 		s.result = s.reslist.Back()
 	} else if s.result = s.result.Prev(); s.result == nil {
@@ -357,13 +354,13 @@ func (s *Scroll) PrevResult() (pos Coordinates, ok bool) {
 		return
 	}
 
-	pos = s.result.Value.(Coordinates)
+	pos = s.result.Value.(term.Coordinates)
 	ok = true
 	return
 }
 
 // NextResult returns the coordinates of the next result in the Search list.
-func (s *Scroll) NextResult() (pos Coordinates, ok bool) {
+func (s *Scroll) NextResult() (pos term.Coordinates, ok bool) {
 	if s.result == nil {
 		s.result = s.reslist.Front()
 	} else if s.result = s.result.Next(); s.result == nil {
@@ -374,29 +371,29 @@ func (s *Scroll) NextResult() (pos Coordinates, ok bool) {
 		return
 	}
 
-	pos = s.result.Value.(Coordinates)
+	pos = s.result.Value.(term.Coordinates)
 	ok = true
 	return
 }
 
 // Result returns the current search result's coordinates.
-func (s *Scroll) Result() (pos Coordinates, ok bool) {
+func (s *Scroll) Result() (pos term.Coordinates, ok bool) {
 	if s.result == nil {
 		ok = false
 		return
 	}
-	pos = s.result.Value.(Coordinates)
+	pos = s.result.Value.(term.Coordinates)
 	ok = true
 	return
 }
 
 // Offset returns the scroll offset from the start of the content.
-func (s *Scroll) Offset() Coordinates {
+func (s *Scroll) Offset() term.Coordinates {
 	return s.offset
 }
 
 // Buffer provides acces to the underlying Buffer.
-func (s *Scroll) Buffer() *Buffer {
+func (s *Scroll) Buffer() *cell.Buffer {
 	return s.buf
 }
 

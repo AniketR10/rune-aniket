@@ -1,6 +1,11 @@
-package fractal
+package component
 
-import "container/list"
+import (
+	"container/list"
+
+	"github.com/ernestrc/fractal"
+	"github.com/ernestrc/fractal/term"
+)
 
 // List represents a list of VirtualComponent which are drawn each one
 // in series as a separate row.
@@ -93,12 +98,12 @@ func (l *List) Resize(width, height int) {
 		}
 		comp.Resize(l.width, l.elementHeight)
 		ypos := (i - l.offset) * l.elementHeight
-		comp.Move(Coordinates{0, ypos})
+		comp.Move(term.Coordinates{0, ypos})
 	}
 }
 
 // Draw draws this list's elements with the current seek offset.
-func (l *List) Draw(w Writer) (err error) {
+func (l *List) Draw(w fractal.Writer) {
 	// API exposes internal list so we need
 	// to make sure that the elements are properly position and sized
 	// before drawing
@@ -109,9 +114,7 @@ func (l *List) Draw(w Writer) (err error) {
 		if i < l.offset {
 			continue
 		}
-		if err = el.Value.(*VirtualComponent).Draw(w); err != nil {
-			return
-		}
+		el.Value.(*VirtualComponent).Draw(w)
 	}
 
 	return

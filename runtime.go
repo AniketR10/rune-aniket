@@ -1,16 +1,14 @@
 package fractal
 
 import (
-	"fmt"
-
+	"github.com/ernestrc/fractal/term"
 	"github.com/nsf/termbox-go"
 )
 
 var (
-	echan                    chan termbox.Event
-	ichan                    chan termbox.Event
-	foreground, background   termbox.Attribute
-	highlightfg, highlightbg termbox.Attribute
+	echan chan term.Event
+	ichan chan term.Event
+	attr  term.Attributes
 )
 
 func resize(root Handler, width, height int) {
@@ -18,13 +16,11 @@ func resize(root Handler, width, height int) {
 }
 
 func redraw(root Handler, termw Writer) (err error) {
-	if err = termw.Clear(foreground, background); err != nil {
+	if err = termw.Clear(attr); err != nil {
 		return err
 	}
 
-	if err = root.Draw(termw); err != nil {
-		return fmt.Errorf("failed to draw root handler: %v", err)
-	}
+	root.Draw(termw)
 
 	cursor := root.GetCursor()
 	termw.SetCursor(cursor)
@@ -46,7 +42,7 @@ func run(root Handler, termw Writer) (err error) {
 
 	go func() {
 		for !texit {
-			ichan <- termbox.PollEvent()
+			ichan <- term.PollEvent()
 		}
 	}()
 
@@ -60,10 +56,10 @@ func run(root Handler, termw Writer) (err error) {
 			hexit = root.Handle(ev)
 		case ev := <-ichan:
 			switch ev.Type {
-			case termbox.EventInterrupt:
-			case termbox.EventError:
+			case term.EventInterrupt:
+			case term.EventError:
 				err = ev.Err
-			case termbox.EventResize:
+			case term.EventResize:
 				width, height := ev.Width, ev.Height
 				resize(root, width, height)
 			default:

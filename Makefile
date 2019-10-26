@@ -2,7 +2,7 @@ CC=go
 CFLAGS=
 
 TARGET=bin
-LIBSRC=$(wildcard *.go)
+LIBSRC=$(wildcard *.go) $(wildcard **/*.go)
 EXECSRC=$(wildcard examples/**/*.go)
 EXECDIRS=$(sort $(dir $(EXECSRC)))
 EXEC=$(patsubst examples/%/,$(TARGET)/%,$(EXECDIRS))
@@ -12,7 +12,7 @@ EXEC=$(patsubst examples/%/,$(TARGET)/%,$(EXECDIRS))
 default: CHECK $(EXEC)
 
 test: CHECK
-	@ go test
+	@ go test ./...
 
 coverage: CHECK $(TARGET)
 	@ go test -coverprofile $(TARGET)/coverage

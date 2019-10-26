@@ -1,9 +1,9 @@
-package fractal
+package cell
 
 import (
 	"math"
 
-	"github.com/nsf/termbox-go"
+	"github.com/ernestrc/fractal/term"
 )
 
 /*
@@ -20,7 +20,9 @@ import (
 *		│    t ││    t ││    t ││    t │
 *		└──────┘└──────┘└──────┘└──────┘
  */
-func sortFromTo(from Coordinates, to Coordinates) (Coordinates, Coordinates) {
+func sortFromTo(from term.Coordinates, to term.Coordinates) (
+	term.Coordinates, term.Coordinates,
+) {
 	if from.X > to.X {
 		temp := from.X
 		from.X = to.X
@@ -34,9 +36,12 @@ func sortFromTo(from Coordinates, to Coordinates) (Coordinates, Coordinates) {
 	return from, to
 }
 
-// Select returns the cells inside the given coordinates or nil if coordinates are out of bounds.
-func Select(cells [][]termbox.Cell, from Coordinates, to Coordinates) (res [][]termbox.Cell) {
-	res = make([][]termbox.Cell, 0)
+// Select returns the cells inside the given coordinates or nil if coordinates
+// are out of bounds.
+func Select(
+	cells [][]term.Cell, from term.Coordinates, to term.Coordinates,
+) (res [][]term.Cell) {
+	res = make([][]term.Cell, 0)
 
 	from, to = sortFromTo(from, to)
 
@@ -57,9 +62,12 @@ func Select(cells [][]termbox.Cell, from Coordinates, to Coordinates) (res [][]t
 	return
 }
 
-// SelectLine returns the lines inside the given coordinates or nil if coordinates are out of bounds.
-func SelectLine(cells [][]termbox.Cell, from Coordinates, to Coordinates) (res [][]termbox.Cell) {
-	res = make([][]termbox.Cell, 0)
+// SelectLine returns the lines inside the given coordinates or nil if
+// coordinates are out of bounds.
+func SelectLine(
+	cells [][]term.Cell, from term.Coordinates, to term.Coordinates,
+) (res [][]term.Cell) {
+	res = make([][]term.Cell, 0)
 
 	from, to = sortFromTo(from, to)
 
@@ -71,9 +79,12 @@ func SelectLine(cells [][]termbox.Cell, from Coordinates, to Coordinates) (res [
 	return
 }
 
-// SelectBlock returns the block of cells inside the given coordinates or nil if coordinates are out of bounds.
-func SelectBlock(cells [][]termbox.Cell, from Coordinates, to Coordinates) (res [][]termbox.Cell) {
-	res = make([][]termbox.Cell, 0)
+// SelectBlock returns the block of cells inside the given coordinates or nil if
+// coordinates are out of bounds.
+func SelectBlock(
+	cells [][]term.Cell, from term.Coordinates, to term.Coordinates,
+) (res [][]term.Cell) {
+	res = make([][]term.Cell, 0)
 
 	from, to = sortFromTo(from, to)
 

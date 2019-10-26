@@ -12,10 +12,11 @@ import (
 	"runtime/pprof"
 
 	"github.com/ernestrc/fractal"
+	"github.com/ernestrc/fractal/handler"
 )
 
 var (
-	less *fractal.Less
+	less *handler.Less
 )
 
 var wrap = flag.Bool("w", false, "wrap text")
@@ -46,11 +47,11 @@ func writeMemProfile() {
 	}
 }
 
-func handleLessEvent(ev fractal.LessEvent) {
+func handleLessEvent(ev handler.LessEvent) {
 	switch ev.Type {
-	case fractal.EOF:
+	case handler.EOF:
 		less.SetMessage("EOF")
-	case fractal.Search:
+	case handler.Search:
 		less.SetMessage("search pattern: %s..", ev.Data)
 	}
 }
@@ -78,14 +79,14 @@ func main() {
 
 	}
 
-	config := fractal.DefaultLessConfig()
+	config := handler.DefaultLessConfig()
 	config.Wrap = *wrap
 	config.Handler = handleLessEvent
 
 	// profile initialization
 	stopCPUProfile := startCPUProfile()
 
-	less = fractal.NewLess()
+	less = handler.NewLess()
 	less.InitWithConfig(config)
 
 	_, err = less.Buffer().ReadFrom(input)

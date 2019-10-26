@@ -1,9 +1,12 @@
-package fractal
+package handler
 
 import (
 	"fmt"
 
-	"github.com/nsf/termbox-go"
+	"github.com/ernestrc/fractal"
+	"github.com/ernestrc/fractal/cell"
+	"github.com/ernestrc/fractal/component"
+	"github.com/ernestrc/fractal/term"
 )
 
 const (
@@ -13,15 +16,16 @@ const (
 // LessConfig holds configuration values for a Less instance.
 type LessConfig struct {
 	Wrap    bool
-	ResFG   termbox.Attribute
-	ResBG   termbox.Attribute
+	ResAttr term.Attributes
 	Handler func(LessEvent)
 }
 
 var defaultConfig = LessConfig{
-	Wrap:  false,
-	ResFG: termbox.AttrReverse,
-	ResBG: termbox.ColorDefault,
+	Wrap: false,
+	ResAttr: term.Attributes{
+		Fg: term.AttrReverse,
+		Bg: term.ColorDefault,
+	},
 }
 
 // DefaultLessConfig returns sane configuration defaults for a less instance.
@@ -31,12 +35,13 @@ func DefaultLessConfig() *LessConfig {
 	return cfg
 }
 
-// Less is a clone of Unix' less program.
+// Less is a clone of Unix' less program which implements
+// the Handler and Component interfaces.
 type Less struct {
-	Scroll
-	buf          *Buffer
-	cmdScroll    VirtualComponent
-	msgScroll    VirtualComponent
+	component.Scroll
+	buf          *cell.Buffer
+	cmdScroll    component.VirtualComponent
+	msgScroll    component.VirtualComponent
 	mode         LessMode
 	delEOF       bool
 	cursorOffset int
@@ -79,8 +84,8 @@ func (l *Less) sendEvent(ev LessEvent) {
 	}
 }
 
-func getBuffer(virtualScroll VirtualComponent) *Buffer {
-	return virtualScroll.C.(*Scroll).Buffer()
+func getBuffer(virtualScroll component.VirtualComponent) *cell.Buffer {
+	return virtualScroll.C.(*component.Scroll).Buffer()
 }
 
 func (l *Less) setNormalMode() {
@@ -96,17 +101,18 @@ func (l *Less) setSearchMode() {
 	l.mode = LessSearchMode
 }
 
-func (l *Less) searchHandleEvent(ev termbox.Event) (exit bool) {
+func (l *Less) searchHandleEvent(ev term.Event) (exit bool) {
 	switch ev.Key {
 
-	case termbox.KeyBackspace:
+	case term.KeyBackspace:
 		fallthrough
-	case termbox.KeyBackspace2:
+	case term.KeyBackspace2:
 		if l.cursorOffset > 1 {
 			l.cursorOffset--
-			l.cmdScroll.C.(*Scroll).Buffer().TruncateCellAt(Coordinates{X: l.cursorOffset, Y: 0})
+			l.cmdScroll.C.(*component.Scroll).Buffer().
+				TruncateCellAt(term.Coordinates{X: l.cursorOffset, Y: 0})
 		}
-	case termbox.KeyEnter:
+	case term.KeyEnter:
 		str := getBuffer(l.cmdScroll).String()
 		bytes := []byte(str)[1:]
 		l.search = string(bytes)
@@ -115,7 +121,7 @@ func (l *Less) searchHandleEvent(ev termbox.Event) (exit bool) {
 		l.Scroll.SeekNextResult()
 		l.sendEvent(LessEvent{Type: Search, Data: bytes})
 
-	case termbox.KeyEsc:
+	case term.KeyEsc:
 		l.setNormalMode()
 
 	default:
@@ -126,9 +132,9 @@ func (l *Less) searchHandleEvent(ev termbox.Event) (exit bool) {
 	return
 }
 
-func (l *Less) normalHandleEvent(ev termbox.Event) (exit bool) {
+func (l *Less) normalHandleEvent(ev term.Event) (exit bool) {
 	switch ev.Type {
-	case termbox.EventKey:
+	case term.EventKey:
 		switch ev.Ch {
 		case 'q':
 			exit = true
@@ -173,7 +179,7 @@ func (l *Less) Reset() {
 }
 
 // SetBuffer swaps the main scroll for s and returns the original scroll.
-func (l *Less) SetBuffer(b *Buffer) (orig *Buffer) {
+func (l *Less) SetBuffer(b *cell.Buffer) (orig *cell.Buffer) {
 	orig = l.buf
 	l.buf = b
 	l.Reset()
@@ -193,31 +199,21 @@ func (l *Less) Mode() LessMode {
 }
 
 // GetCursor : Handler
-func (l *Less) GetCursor() Coordinates {
-	return Coordinates{X: l.cursorOffset, Y: l.height - 1}
+func (l *Less) GetCursor() term.Coordinates {
+	return term.Coordinates{X: l.cursorOffset, Y: l.height - 1}
 }
 
 // Draw : Component
-func (l *Less) Draw(w Writer) (err error) {
-	if err = l.Scroll.Draw(w); err != nil {
-		return err
-	}
+func (l *Less) Draw(w fractal.Writer) {
+	l.Scroll.Draw(w)
 
 	if !l.Scroll.CanSeekDown() && !l.delEOF {
 		l.delEOF = true
 		l.sendEvent(LessEvent{Type: EOF})
 	}
 
-	if err = l.cmdScroll.Draw(w); err != nil {
-		return err
-	}
-
-	if err = l.msgScroll.Draw(w); err != nil {
-		return err
-
-	}
-
-	return nil
+	l.cmdScroll.Draw(w)
+	l.msgScroll.Draw(w)
 }
 
 // Resize : Component
@@ -232,18 +228,18 @@ func (l *Less) resize() {
 	cmdBarWidth := l.width - msgWidth
 
 	l.Scroll.Resize(l.width, contentHeight)
-	l.cmdScroll.Move(Coordinates{0, contentHeight})
+	l.cmdScroll.Move(term.Coordinates{X: 0, Y: contentHeight})
 	l.cmdScroll.Resize(cmdBarWidth, cmdBarHeight)
-	l.msgScroll.Move(Coordinates{cmdBarWidth, contentHeight})
+	l.msgScroll.Move(term.Coordinates{X: cmdBarWidth, Y: contentHeight})
 	l.msgScroll.Resize(msgWidth, cmdBarHeight)
 }
 
 // Handle : Handler
-func (l *Less) Handle(ev termbox.Event) (exit bool) {
+func (l *Less) Handle(ev term.Event) (exit bool) {
 	switch ev.Type {
-	case termbox.EventError:
+	case term.EventError:
 		return false
-	case termbox.EventKey:
+	case term.EventKey:
 		switch l.mode {
 		case LessNormalMode:
 			exit = l.normalHandleEvent(ev)
@@ -255,74 +251,73 @@ func (l *Less) Handle(ev termbox.Event) (exit bool) {
 	return
 }
 
-func (l *Less) setupScroll(w *Scroll) {
-	w.ResultsFG = l.config.ResFG
-	w.ResultsBG = l.config.ResBG
+func (l *Less) setupScroll(w *component.Scroll) {
+	w.ResultsAttr = l.config.ResAttr
 	w.Wrap = l.config.Wrap
 }
 
 // Buffer provides acces to the underlying Buffer.
-func (l *Less) Buffer() *Buffer {
+func (l *Less) Buffer() *cell.Buffer {
 	return l.buf
 }
 
 // Man : Handler
-func (l *Less) Man() Manual {
-	return Manual{
+func (l *Less) Man() fractal.Manual {
+	return fractal.Manual{
 		Summary: "Less is a handler similar to Unix' less program, but simplified. It allows basic navigation with vi-style key bindings and text search.",
-		Keys: KeyMap{
-			termbox.Event{Type: termbox.EventKey, Ch: 'q'}: {
+		Keys: fractal.KeyMap{
+			term.Event{Type: term.EventKey, Ch: 'q'}: {
 				ID:          "Normal.Exit",
 				Description: "Exit handler.",
 			},
-			termbox.Event{Type: termbox.EventKey, Ch: 'N'}: {
+			term.Event{Type: term.EventKey, Ch: 'N'}: {
 				ID:          "Normal.SeekPrevResult",
 				Description: "Seek to previous search result. See 'SetSearchMode' for more info.",
 			},
-			termbox.Event{Type: termbox.EventKey, Ch: 'n'}: {
+			term.Event{Type: term.EventKey, Ch: 'n'}: {
 				ID:          "Normal.SeekNextResult",
 				Description: "Seek to next search result. See 'SetSearchMode' for more info.",
 			},
-			termbox.Event{Type: termbox.EventKey, Ch: '0'}: {
+			term.Event{Type: term.EventKey, Ch: '0'}: {
 				ID:          "Normal.SeekStartLine",
 				Description: "Seek scroll enough columns to render start of the line.",
 			},
-			termbox.Event{Type: termbox.EventKey, Ch: '$'}: {
+			term.Event{Type: term.EventKey, Ch: '$'}: {
 				ID:          "Normal.SeekEndLine",
 				Description: "Seek scroll enough columns to render the end of the line.",
 			},
-			termbox.Event{Type: termbox.EventKey, Ch: 'g'}: {
+			term.Event{Type: term.EventKey, Ch: 'g'}: {
 				ID:          "Normal.SeekStartScroll",
 				Description: "Seek to start of scroll",
 			},
-			termbox.Event{Type: termbox.EventKey, Ch: 'G'}: {
+			term.Event{Type: term.EventKey, Ch: 'G'}: {
 				ID:          "Normal.SeekEndScroll",
 				Description: "Seek to end of scroll.",
 			},
-			termbox.Event{Type: termbox.EventKey, Ch: 'j'}: {
+			term.Event{Type: term.EventKey, Ch: 'j'}: {
 				ID:          "Normal.SeekDown",
 				Description: "Seek scroll one row down.",
 			},
-			termbox.Event{Type: termbox.EventKey, Ch: 'k'}: {
+			term.Event{Type: term.EventKey, Ch: 'k'}: {
 				ID:          "Normal.SeekUp",
 				Description: "Seek scroll one row up.",
 			},
-			termbox.Event{Type: termbox.EventKey, Ch: 'h'}: {
+			term.Event{Type: term.EventKey, Ch: 'h'}: {
 				ID:          "Normal.SeekLeft",
 				Description: "Seek scroll one column to the left.",
 			},
-			termbox.Event{Type: termbox.EventKey, Ch: 'l'}: {
+			term.Event{Type: term.EventKey, Ch: 'l'}: {
 				ID:          "Normal.SeekRight",
 				Description: "Seek scroll one column to the right.",
 			},
-			termbox.Event{Type: termbox.EventKey, Ch: '/'}: {
+			term.Event{Type: term.EventKey, Ch: '/'}: {
 				ID:          "Normal.SetSearchMode",
 				Description: "Enter search mode. After typing search text, press ENTER to perform a text-search or ESC to go back to normal mode.",
 			},
-			termbox.Event{Type: termbox.EventKey, Key: termbox.KeyEsc}: {
+			term.Event{Type: term.EventKey, Key: term.KeyEsc}: {
 				ID: "Search.SetNormalMode", Description: "Enter normal mode",
 			},
-			termbox.Event{Type: termbox.EventKey, Key: termbox.KeyEnter}: {
+			term.Event{Type: term.EventKey, Key: term.KeyEnter}: {
 				ID: "Search.Search", Description: "Perform text search with current search buffer.",
 			},
 		},
@@ -335,22 +330,22 @@ func (l *Less) InitWithConfig(cfg *LessConfig) {
 	if cfg == nil {
 		panic("initializing less handler with nil configuration")
 	}
-	l.InitWithBufferConfig(new(Buffer), cfg)
+	l.InitWithBufferConfig(new(cell.Buffer), cfg)
 }
 
 // InitWithBuffer initializes a Less Handler with the given buffer.
-func (l *Less) InitWithBuffer(buf *Buffer) {
+func (l *Less) InitWithBuffer(buf *cell.Buffer) {
 	l.InitWithBufferConfig(buf, nil)
 }
 
 // Init initializes this instance or resets it if already initialized.
 func (l *Less) Init() {
-	l.InitWithBufferConfig(new(Buffer), nil)
+	l.InitWithBufferConfig(new(cell.Buffer), nil)
 }
 
 // InitWithBufferConfig initialzes this instance with the given Buffer and configuration.
 // If config is nil, the default one is used.
-func (l *Less) InitWithBufferConfig(buf *Buffer, cfg *LessConfig) {
+func (l *Less) InitWithBufferConfig(buf *cell.Buffer, cfg *LessConfig) {
 	if cfg == nil {
 		l.config = DefaultLessConfig()
 	} else {
@@ -361,11 +356,12 @@ func (l *Less) InitWithBufferConfig(buf *Buffer, cfg *LessConfig) {
 	l.buf = buf
 	l.Scroll.InitWithBuffer(l.buf)
 
-	l.cmdScroll.C = NewScroll()
-	l.msgScroll.C = NewScroll()
+	// TODO what should scroll be?
+	l.cmdScroll.C = component.NewScroll()
+	l.msgScroll.C = component.NewScroll()
 
-	l.setupScroll(l.cmdScroll.C.(*Scroll))
-	l.setupScroll(l.msgScroll.C.(*Scroll))
+	l.setupScroll(l.cmdScroll.C.(*component.Scroll))
+	l.setupScroll(l.msgScroll.C.(*component.Scroll))
 	l.setupScroll(&l.Scroll)
 
 	l.setNormalMode()

@@ -1,7 +1,10 @@
-package fractal
+package component
 
 import (
 	"fmt"
+
+	"github.com/ernestrc/fractal"
+	"github.com/ernestrc/fractal/term"
 )
 
 type splitdir uint8
@@ -19,14 +22,14 @@ type TileTree struct {
 // TileNode represents a node in a tree of tiled components.
 type TileNode struct {
 	width, height int
-	content       Component
+	content       fractal.Component
 	children      []*VirtualComponent
 	direction     splitdir
 	parent        *TileNode
 }
 
 // Init initializes a TileTree or resets it if already initialied.
-func (t *TileTree) Init(content Component) (n *TileNode) {
+func (t *TileTree) Init(content fractal.Component) (n *TileNode) {
 	n = new(TileNode)
 	t.root.direction = vertical
 	t.root.children = []*VirtualComponent{&VirtualComponent{C: n}}
@@ -36,7 +39,7 @@ func (t *TileTree) Init(content Component) (n *TileNode) {
 
 // NewTileTree allocates storage for a new TileTree and initializes it.
 // It also returns the TileNode allocated to store the given content.
-func NewTileTree(content Component) (t *TileTree, n *TileNode) {
+func NewTileTree(content fractal.Component) (t *TileTree, n *TileNode) {
 	t = new(TileTree)
 	n = t.Init(content)
 	return
@@ -48,12 +51,12 @@ func (t *TileTree) Resize(width, height int) {
 }
 
 // Draw draws the contents of this TileTree.
-func (t *TileTree) Draw(w Writer) error {
-	return t.root.Draw(w)
+func (t *TileTree) Draw(w fractal.Writer) {
+	t.root.Draw(w)
 }
 
 func (t *TileNode) initNode(
-	direction splitdir, content Component, parent *TileNode,
+	direction splitdir, content fractal.Component, parent *TileNode,
 ) {
 	t.content = content
 	t.children = []*VirtualComponent{}
@@ -71,7 +74,7 @@ func (t *TileNode) resizeHorizontal(width, height int) (err error) {
 
 	for i, ti := range t.children {
 		offset := ((i - useSpareIdx) * spareCell)
-		ti.Move(Coordinates{0, i*cheight + offset})
+		ti.Move(term.Coordinates{0, i*cheight + offset})
 
 		if i == useSpareIdx {
 			spareCell = 1
@@ -92,7 +95,7 @@ func (t *TileNode) resizeVertical(width, height int) {
 
 	for i, ti := range t.children {
 		offset := ((i - useSpareIdx) * spareCell)
-		ti.Move(Coordinates{i*cwidth + offset, 0})
+		ti.Move(term.Coordinates{i*cwidth + offset, 0})
 
 		if i == useSpareIdx {
 			spareCell = 1
@@ -127,7 +130,7 @@ func (t *TileNode) Resize(width, height int) {
 }
 
 // Draw : Component
-func (t *TileNode) Draw(w Writer) (err error) {
+func (t *TileNode) Draw(w fractal.Writer) {
 	if len(t.children) == 0 && t.content == nil {
 		panic("corrupted node: non-empty children and content")
 	}
@@ -138,9 +141,7 @@ func (t *TileNode) Draw(w Writer) (err error) {
 	}
 
 	for _, ti := range t.children {
-		if err = ti.Draw(w); err != nil {
-			return
-		}
+		ti.Draw(w)
 	}
 
 	return
@@ -157,7 +158,7 @@ func (t *TileNode) childIdx(child *TileNode) int {
 }
 
 func (t *TileNode) addChildAtIdx(
-	child *TileNode, content Component, direction splitdir, idx int,
+	child *TileNode, content fractal.Component, direction splitdir, idx int,
 ) {
 	if idx > len(t.children) {
 		panic(fmt.Errorf("trying to append child at index out of bounds: %d; len=%d",
@@ -194,7 +195,9 @@ func (t *TileNode) addChildAtIdx(
 	t.Resize(t.width, t.height)
 }
 
-func split(over *TileNode, direction splitdir, content Component) (n *TileNode) {
+func split(over *TileNode, direction splitdir, content fractal.Component) (
+	n *TileNode,
+) {
 	if content == nil {
 		panic("empty content for tile")
 	}
@@ -264,7 +267,9 @@ func (t *TileNode) Close() {
 // Otherwise, a new node with content will become a child of the given node so
 // width will be divided in half so new node can be drawn next to it.
 // It panics if node is a child of this TileTree.
-func (t *TileTree) SplitVertical(node *TileNode, content Component) *TileNode {
+func (t *TileTree) SplitVertical(
+	node *TileNode, content fractal.Component,
+) *TileNode {
 	return split(node, vertical, content)
 }
 
@@ -273,7 +278,9 @@ func (t *TileTree) SplitVertical(node *TileNode, content Component) *TileNode {
 // Otherwise, a new node will become a child of the given node so
 // height will be divided in half so new node can be drawn next to it.
 // It panics if node is a child of this TileTree.
-func (t *TileTree) SplitHorizontal(node *TileNode, content Component) *TileNode {
+func (t *TileTree) SplitHorizontal(
+	node *TileNode, content fractal.Component,
+) *TileNode {
 	return split(node, horizontal, content)
 }
 
@@ -400,14 +407,16 @@ func (t *TileTree) Size() (size int) {
 }
 
 // Content returns the Component held by this TileNode in the TileTree.
-func (t *TileNode) Content() Component {
+func (t *TileNode) Content() fractal.Component {
 	if t.content == nil {
 		panic("corrupted node: leaked proxy node outside of tree")
 	}
 	return t.content
 }
 
-func (t *TileNode) tilePosition(child *TileNode, currOffset Coordinates) (offset Coordinates, ok bool) {
+func (t *TileNode) tilePosition(child *TileNode, currOffset term.Coordinates) (
+	offset term.Coordinates, ok bool,
+) {
 	if t == child {
 		panic("missed child on parent loop")
 	}
@@ -432,8 +441,8 @@ func (t *TileNode) tilePosition(child *TileNode, currOffset Coordinates) (offset
 
 // TilePosition returns the given tile's position offset inside this TileTree.
 // It panics if tile is not a member of this tree.
-func (t *TileTree) TilePosition(tile *TileNode) Coordinates {
-	offset, ok := t.root.tilePosition(tile, Coordinates{})
+func (t *TileTree) TilePosition(tile *TileNode) term.Coordinates {
+	offset, ok := t.root.tilePosition(tile, term.Coordinates{})
 	if !ok {
 		panic("tile does not belong to this tree")
 	}

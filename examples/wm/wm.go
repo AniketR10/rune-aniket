@@ -8,9 +8,10 @@ import (
 	"net/http"
 	_ "net/http/pprof"
 	"os"
-	"github.com/nsf/termbox-go"
 
 	"github.com/ernestrc/fractal"
+	"github.com/ernestrc/fractal/handler"
+	"github.com/ernestrc/fractal/term"
 )
 
 const border = true
@@ -52,22 +53,22 @@ func main() {
 
 	defer fractal.Close()
 
-	var wm *fractal.WindowManager
-	var less [4]fractal.Less
+	var wm *handler.WindowManager
+	var less [4]handler.Less
 
 	for i := range less {
 		less[i].Init()
 		less[i].SetContent(content)
 	}
 
-	wm = fractal.NewWindowManager(&less[0], border)
+	wm = handler.NewWindowManager(&less[0], border)
 
 	wm.SplitHorizontal(&less[1])
 	wm.SplitVertical(&less[2])
 	wm.FocusDown()
 	wm.SplitVertical(&less[3])
 
-	if err := fractal.RunMode(wm, termbox.InputAlt); err != nil {
+	if err := fractal.RunMode(wm, term.InputAlt); err != nil {
 		log.Fatal(err)
 	}
 }

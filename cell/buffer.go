@@ -1,11 +1,11 @@
-package fractal
+package cell
 
 import (
 	"bufio"
 	"fmt"
 	"io"
 
-	"github.com/nsf/termbox-go"
+	"github.com/ernestrc/fractal/term"
 )
 
 const defTabSpaces int = 4
@@ -15,22 +15,22 @@ const defRowCap int = 128
 // A Buffer is a variable-sized matrix of cells.
 // The zero value for Buffer is ready to use.
 type Buffer struct {
-	cells     [][]termbox.Cell
+	cells     [][]term.Cell
 	tabspaces int
 }
 
-func makeNewRow(length, capacity int) (row []termbox.Cell) {
-	row = make([]termbox.Cell, length, capacity)
+func makeNewRow(length, capacity int) (row []term.Cell) {
+	row = make([]term.Cell, length, capacity)
 	return
 }
 
-func assertCoordinates(pos Coordinates) {
+func assertCoordinates(pos term.Coordinates) {
 	if pos.X < 0 || pos.Y < 0 {
 		panic(fmt.Sprintf("invalid coordinates: %+v", pos))
 	}
 }
 
-func (b *Buffer) insertNewRow(pos Coordinates) {
+func (b *Buffer) insertNewRow(pos term.Coordinates) {
 	assertCoordinates(pos)
 	sourceRow := b.cells[pos.Y]
 	targetY := pos.Y + 1
@@ -55,15 +55,15 @@ func (b *Buffer) insertNewRow(pos Coordinates) {
 // rows such that the new row is the last row in the buffer.
 func (b *Buffer) InsertRowAt(i int) {
 	b.fillInRows(i)
-	b.insertNewRow(Coordinates{Y: i, X: 0})
+	b.insertNewRow(term.Coordinates{Y: i, X: 0})
 }
 
 // NextWrite returns the position of the write cursor.
-func (b *Buffer) NextWrite() Coordinates {
+func (b *Buffer) NextWrite() term.Coordinates {
 	// cannot be 0, since we always have at least one row
 	y := len(b.cells) - 1
 	x := len(b.cells[y])
-	return Coordinates{X: x, Y: y}
+	return term.Coordinates{X: x, Y: y}
 }
 
 func (b *Buffer) fillInRows(y int) {
@@ -76,28 +76,28 @@ func (b *Buffer) fillInRows(y int) {
 	}
 }
 
-func (b *Buffer) doInsertAt(pos Coordinates, r rune) {
+func (b *Buffer) doInsertAt(pos term.Coordinates, r rune) {
 	// make sure we have enough capacity
-	b.cells[pos.Y] = append(b.cells[pos.Y], termbox.Cell{})
+	b.cells[pos.Y] = append(b.cells[pos.Y], term.Cell{})
 	copy(b.cells[pos.Y][pos.X+1:], b.cells[pos.Y][pos.X:])
-	b.cells[pos.Y][pos.X] = termbox.Cell{Ch: r}
+	b.cells[pos.Y][pos.X] = term.Cell{Ch: r}
 }
 
-func (b *Buffer) insertAt(pos Coordinates, r rune) (next Coordinates) {
+func (b *Buffer) insertAt(pos term.Coordinates, r rune) (next term.Coordinates) {
 	switch r {
 	case '\n':
 		b.insertNewRow(pos)
-		next = Coordinates{X: 0, Y: pos.Y + 1}
+		next = term.Coordinates{X: 0, Y: pos.Y + 1}
 	case '\t':
 		if b.tabspaces > 0 {
 			b.insertTabSpaces(pos)
-			next = Coordinates{X: pos.X + b.tabspaces, Y: pos.Y}
+			next = term.Coordinates{X: pos.X + b.tabspaces, Y: pos.Y}
 			break
 		}
 		fallthrough
 	default:
 		b.doInsertAt(pos, r)
-		next = Coordinates{X: pos.X + 1, Y: pos.Y}
+		next = term.Coordinates{X: pos.X + 1, Y: pos.Y}
 	}
 
 	return
@@ -111,15 +111,15 @@ func (b *Buffer) Init(tabspaces int) {
 
 // Reset resets the contents of this cellbuf.
 func (b *Buffer) Reset() {
-	b.cells = make([][]termbox.Cell, 1, defRowCap)
+	b.cells = make([][]term.Cell, 1, defRowCap)
 	b.cells[0] = makeNewRow(0, defColumnCap)
 	if b.tabspaces == 0 {
 		b.tabspaces = defTabSpaces
 	}
 }
 
-func (b *Buffer) insertTabSpaces(pos Coordinates) {
-	n := Coordinates{X: pos.X, Y: pos.Y}
+func (b *Buffer) insertTabSpaces(pos term.Coordinates) {
+	n := term.Coordinates{X: pos.X, Y: pos.Y}
 	for i := 1; i < b.tabspaces; i++ {
 		n = b.insertAt(n, '\x00')
 	}
@@ -136,20 +136,20 @@ func (b *Buffer) appendString(p string) {
 		case '\t':
 			if b.tabspaces > 0 {
 				for i := 1; i < b.tabspaces; i++ {
-					b.cells[rowY] = append(b.cells[rowY], termbox.Cell{})
+					b.cells[rowY] = append(b.cells[rowY], term.Cell{})
 				}
-				b.cells[rowY] = append(b.cells[rowY], termbox.Cell{Ch: '\t'})
+				b.cells[rowY] = append(b.cells[rowY], term.Cell{Ch: '\t'})
 				break
 			}
 			fallthrough
 		default:
-			b.cells[rowY] = append(b.cells[rowY], termbox.Cell{Ch: r})
+			b.cells[rowY] = append(b.cells[rowY], term.Cell{Ch: r})
 		}
 	}
 }
 
 // WriteString writes the given string at the end of the buffer
-func (b *Buffer) WriteString(p string) Coordinates {
+func (b *Buffer) WriteString(p string) term.Coordinates {
 	if b.cells == nil {
 		b.Reset()
 	}
@@ -158,7 +158,7 @@ func (b *Buffer) WriteString(p string) Coordinates {
 }
 
 // WriteRune writes the given rune at the end of the buffer
-func (b *Buffer) WriteRune(r rune) Coordinates {
+func (b *Buffer) WriteRune(r rune) term.Coordinates {
 	if b.cells == nil {
 		b.Reset()
 	}
@@ -166,14 +166,14 @@ func (b *Buffer) WriteRune(r rune) Coordinates {
 	return b.insertAt(c, r)
 }
 
-func (b *Buffer) fillInColumns(pos Coordinates) {
+func (b *Buffer) fillInColumns(pos term.Coordinates) {
 	for pos.X > len(b.cells[pos.Y]) {
-		b.cells[pos.Y] = append(b.cells[pos.Y], termbox.Cell{Ch: ' '})
+		b.cells[pos.Y] = append(b.cells[pos.Y], term.Cell{Ch: ' '})
 	}
 }
 
 // WriteAt overwrites the cell at the given position with rune
-func (b *Buffer) WriteAt(pos Coordinates, r rune) {
+func (b *Buffer) WriteAt(pos term.Coordinates, r rune) {
 	assertCoordinates(pos)
 	b.fillInRows(pos.Y)
 	b.fillInColumns(pos)
@@ -182,7 +182,7 @@ func (b *Buffer) WriteAt(pos Coordinates, r rune) {
 }
 
 // InsertAt inserts a rune in the given position and shift the cells to the right
-func (b *Buffer) InsertAt(pos Coordinates, r rune) Coordinates {
+func (b *Buffer) InsertAt(pos term.Coordinates, r rune) term.Coordinates {
 	assertCoordinates(pos)
 	b.fillInRows(pos.Y)
 	b.fillInColumns(pos)
@@ -194,14 +194,14 @@ func (b *Buffer) truncateLastRow() {
 	last := len(b.cells) - 1
 	// we need to guarantee that there's always at least one row
 	if last <= 0 {
-		b.TruncateRowFrom(Coordinates{X: 0, Y: 0})
+		b.TruncateRowFrom(term.Coordinates{X: 0, Y: 0})
 		return
 	}
 
 	b.cells = b.cells[:last]
 }
 
-// TruncateRowAt truncates the row at Coordinates.Y
+// TruncateRowAt truncates the row at term.Coordinates.Y
 func (b *Buffer) TruncateRowAt(i int) (ok bool) {
 	last := len(b.cells) - 1
 	if i > last {
@@ -216,8 +216,8 @@ func (b *Buffer) TruncateRowAt(i int) (ok bool) {
 	return
 }
 
-// TruncateRowFrom truncates the row at Coordinates.Y starting from Coordinates.X
-func (b *Buffer) TruncateRowFrom(pos Coordinates) (ok bool) {
+// TruncateRowFrom truncates the row at term.Coordinates.Y starting from term.Coordinates.X
+func (b *Buffer) TruncateRowFrom(pos term.Coordinates) (ok bool) {
 	assertCoordinates(pos)
 	if pos.Y >= len(b.cells) || pos.X >= len(b.cells[pos.Y]) {
 		return
@@ -228,7 +228,7 @@ func (b *Buffer) TruncateRowFrom(pos Coordinates) (ok bool) {
 }
 
 // TruncateFrom truncates from the given position to the end of the buffer.
-func (b *Buffer) TruncateFrom(pos Coordinates) (ok bool) {
+func (b *Buffer) TruncateFrom(pos term.Coordinates) (ok bool) {
 	assertCoordinates(pos)
 	// remove until we have only row Y
 	if pos.Y+1 < len(b.cells) {
@@ -245,14 +245,14 @@ func (b *Buffer) ConflateRow(i int) (ok bool) {
 		return
 	}
 	for _, c := range b.cells[i+1] {
-		b.cells[i] = append(b.cells[i], termbox.Cell{Ch: c.Ch})
+		b.cells[i] = append(b.cells[i], term.Cell{Ch: c.Ch})
 	}
 	b.TruncateRowAt(i + 1)
 	ok = true
 	return
 }
 
-func (b *Buffer) truncateCellAt(pos Coordinates) {
+func (b *Buffer) truncateCellAt(pos term.Coordinates) {
 	lastIdx := len(b.cells[pos.Y]) - 1
 	if pos.X < lastIdx {
 		copy(b.cells[pos.Y][pos.X:], b.cells[pos.Y][pos.X+1:])
@@ -261,11 +261,11 @@ func (b *Buffer) truncateCellAt(pos Coordinates) {
 	return
 }
 
-func (b *Buffer) truncateTabPadding(n int, pos Coordinates) int {
+func (b *Buffer) truncateTabPadding(n int, pos term.Coordinates) int {
 	for ; n < b.tabspaces; n++ {
 		pos.X--
 		if pos.X >= 0 {
-			b.truncateCellAt(Coordinates{Y: pos.Y, X: pos.X})
+			b.truncateCellAt(term.Coordinates{Y: pos.Y, X: pos.X})
 		}
 	}
 	return n
@@ -274,7 +274,7 @@ func (b *Buffer) truncateTabPadding(n int, pos Coordinates) int {
 // TruncateCellAt truncates the cell at the given position.
 // It returns the cell truncated along with the number of cells truncated
 // because if a tab cell was truncated the tab padding is truncated along with it.
-func (b *Buffer) TruncateCellAt(pos Coordinates) (orig termbox.Cell, n int) {
+func (b *Buffer) TruncateCellAt(pos term.Coordinates) (orig term.Cell, n int) {
 	assertCoordinates(pos)
 	if pos.Y >= len(b.cells) || pos.X >= len(b.cells[pos.Y]) {
 		return
@@ -293,7 +293,7 @@ func (b *Buffer) TruncateCellAt(pos Coordinates) (orig termbox.Cell, n int) {
 	if orig.Ch == '\x00' {
 		for orig.Ch != '\t' {
 			orig = b.cells[pos.Y][pos.X]
-			b.truncateCellAt(Coordinates{Y: pos.Y, X: pos.X})
+			b.truncateCellAt(term.Coordinates{Y: pos.Y, X: pos.X})
 			n++
 		}
 		n = b.truncateTabPadding(n, pos)
@@ -335,7 +335,7 @@ func (b *Buffer) String() string {
 }
 
 // RawCells gives clients access to the underlying cell matrix.
-func (b *Buffer) RawCells() [][]termbox.Cell {
+func (b *Buffer) RawCells() [][]term.Cell {
 	if b.cells == nil {
 		b.Reset()
 	}
@@ -352,7 +352,9 @@ func (b *Buffer) ResetAttr() {
 }
 
 // SetAttr overwrites the background and foreground attributes of cell at position.
-func (b *Buffer) SetAttr(pos Coordinates, fg, bg termbox.Attribute) (ok bool) {
+func (b *Buffer) SetAttr(pos term.Coordinates, attr term.Attributes) (
+	ok bool,
+) {
 	assertCoordinates(pos)
 	if pos.Y >= b.Rows() || pos.X >= len(b.cells[pos.Y]) {
 		return
@@ -361,22 +363,26 @@ func (b *Buffer) SetAttr(pos Coordinates, fg, bg termbox.Attribute) (ok bool) {
 	if len(b.cells[pos.Y]) == pos.X {
 		b.insertAt(pos, ' ')
 	}
-	b.cells[pos.Y][pos.X].Bg = bg
-	b.cells[pos.Y][pos.X].Fg = fg
+	b.cells[pos.Y][pos.X].Bg = attr.Bg
+	b.cells[pos.Y][pos.X].Fg = attr.Fg
 	return
 }
 
 // GetAttr gets the background and foreground attributes of cell at position.
-func (b *Buffer) GetAttr(pos Coordinates) (fg, bg termbox.Attribute, ok bool) {
-	var cell termbox.Cell
+func (b *Buffer) GetAttr(pos term.Coordinates) (
+	attr term.Attributes, ok bool,
+) {
+	var cell term.Cell
 	_, cell, ok = b.GetCellAt(pos)
-	fg, bg = cell.Fg, cell.Bg
+	attr.Fg, attr.Bg = cell.Fg, cell.Bg
 	return
 }
 
 // GetCellAt returns the cell and true or a zero-valued cell and false if there is no
 // cell at position. If attempting to get a tab padding, the position of the tab is returned.
-func (b *Buffer) GetCellAt(pos Coordinates) (ppos Coordinates, cell termbox.Cell, ok bool) {
+func (b *Buffer) GetCellAt(pos term.Coordinates) (
+	ppos term.Coordinates, cell term.Cell, ok bool,
+) {
 	assertCoordinates(pos)
 	if pos.Y >= b.Rows() || pos.X >= len(b.cells[pos.Y]) {
 		return
@@ -424,9 +430,9 @@ func (b *Buffer) ReadFrom(r io.Reader) (n int64, err error) {
 		}
 		for _, r := range bytes {
 			for i := 1; r == '\t' && i < b.tabspaces; i++ {
-				b.cells[rowY] = append(b.cells[rowY], termbox.Cell{})
+				b.cells[rowY] = append(b.cells[rowY], term.Cell{})
 			}
-			b.cells[rowY] = append(b.cells[rowY], termbox.Cell{Ch: rune(r)})
+			b.cells[rowY] = append(b.cells[rowY], term.Cell{Ch: rune(r)})
 		}
 		n += int64(len(bytes) + 1)
 		if !isPrefix {

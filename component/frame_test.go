@@ -1,16 +1,18 @@
-package fractal
+package component
 
 import (
 	"testing"
+
+	"github.com/ernestrc/fractal/term"
 )
 
 func TestDrawFrame(t *testing.T) {
 	u := &TestComponent{Ch: 'X'}
-	f := NewFrame(u, 0, 0)
+	f := NewFrame(u, term.Attributes{})
 
 	f.Resize(8, 4)
 
-	w := newStringWriter(9, 5)
+	w := term.NewStringWriter(9, 5)
 
 	tests := []testCase{
 		{
