@@ -9,7 +9,10 @@ import (
 
 func TestSelect(t *testing.T) {
 	var buf Buffer
-	str := "hello\n\tworld\n\nitsme"
+	str := `hello
+	world
+
+itsme`
 	buf.WriteString(str)
 
 	testCases := []selectCase{
@@ -24,8 +27,8 @@ func TestSelect(t *testing.T) {
 			from: term.Coordinates{X: 2, Y: 0},
 			to:   term.Coordinates{X: 1, Y: 1},
 			expected: [][]term.Cell{
-				[]term.Cell{{Ch: 'e'}, {Ch: 'l'}, {Ch: 'l'}, {Ch: 'o'}},
-				[]term.Cell{{}, {}, {}},
+				[]term.Cell{{Ch: 'l'}, {Ch: 'l'}, {Ch: 'o'}},
+				[]term.Cell{{}, {}},
 			},
 		},
 		{
@@ -101,10 +104,11 @@ func TestSelect(t *testing.T) {
 		},
 	}
 
-	for _, tcase := range testCases {
+	for i, tcase := range testCases {
 		selection := Select(buf.RawCells(), tcase.from, tcase.to)
 		if !reflect.DeepEqual(selection, tcase.expected) {
-			t.Errorf("expected %q found %q", toString(tcase.expected), toString(selection))
+			t.Errorf("tcase %d: expected %q found %q", i,
+				toString(tcase.expected), toString(selection))
 		}
 	}
 }

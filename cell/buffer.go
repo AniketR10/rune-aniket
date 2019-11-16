@@ -2,15 +2,10 @@ package cell
 
 import (
 	"bufio"
-	"fmt"
 	"io"
 
 	"github.com/ernestrc/fractal/term"
 )
-
-const defTabSpaces int = 4
-const defColumnCap int = 64
-const defRowCap int = 128
 
 // A Buffer is a variable-sized matrix of cells.
 // The zero value for Buffer is ready to use.
@@ -19,19 +14,8 @@ type Buffer struct {
 	tabspaces int
 }
 
-func makeNewRow(length, capacity int) (row []term.Cell) {
-	row = make([]term.Cell, length, capacity)
-	return
-}
-
-func assertCoordinates(pos term.Coordinates) {
-	if pos.X < 0 || pos.Y < 0 {
-		panic(fmt.Sprintf("invalid coordinates: %+v", pos))
-	}
-}
-
 func (b *Buffer) insertNewRow(pos term.Coordinates) {
-	assertCoordinates(pos)
+	assertValidCoords(pos)
 	sourceRow := b.cells[pos.Y]
 	targetY := pos.Y + 1
 
@@ -174,7 +158,7 @@ func (b *Buffer) fillInColumns(pos term.Coordinates) {
 
 // WriteAt overwrites the cell at the given position with rune
 func (b *Buffer) WriteAt(pos term.Coordinates, r rune) {
-	assertCoordinates(pos)
+	assertValidCoords(pos)
 	b.fillInRows(pos.Y)
 	b.fillInColumns(pos)
 	b.TruncateCellAt(pos)
@@ -183,7 +167,7 @@ func (b *Buffer) WriteAt(pos term.Coordinates, r rune) {
 
 // InsertAt inserts a rune in the given position and shift the cells to the right
 func (b *Buffer) InsertAt(pos term.Coordinates, r rune) term.Coordinates {
-	assertCoordinates(pos)
+	assertValidCoords(pos)
 	b.fillInRows(pos.Y)
 	b.fillInColumns(pos)
 	return b.insertAt(pos, r)
@@ -218,7 +202,7 @@ func (b *Buffer) TruncateRowAt(i int) (ok bool) {
 
 // TruncateRowFrom truncates the row at term.Coordinates.Y starting from term.Coordinates.X
 func (b *Buffer) TruncateRowFrom(pos term.Coordinates) (ok bool) {
-	assertCoordinates(pos)
+	assertValidCoords(pos)
 	if pos.Y >= len(b.cells) || pos.X >= len(b.cells[pos.Y]) {
 		return
 	}
@@ -229,7 +213,7 @@ func (b *Buffer) TruncateRowFrom(pos term.Coordinates) (ok bool) {
 
 // TruncateFrom truncates from the given position to the end of the buffer.
 func (b *Buffer) TruncateFrom(pos term.Coordinates) (ok bool) {
-	assertCoordinates(pos)
+	assertValidCoords(pos)
 	// remove until we have only row Y
 	if pos.Y+1 < len(b.cells) {
 		ok = true
@@ -275,7 +259,7 @@ func (b *Buffer) truncateTabPadding(n int, pos term.Coordinates) int {
 // It returns the cell truncated along with the number of cells truncated
 // because if a tab cell was truncated the tab padding is truncated along with it.
 func (b *Buffer) TruncateCellAt(pos term.Coordinates) (orig term.Cell, n int) {
-	assertCoordinates(pos)
+	assertValidCoords(pos)
 	if pos.Y >= len(b.cells) || pos.X >= len(b.cells[pos.Y]) {
 		return
 	}
@@ -355,7 +339,7 @@ func (b *Buffer) ResetAttr() {
 func (b *Buffer) SetAttr(pos term.Coordinates, attr term.Attributes) (
 	ok bool,
 ) {
-	assertCoordinates(pos)
+	assertValidCoords(pos)
 	if pos.Y >= b.Rows() || pos.X >= len(b.cells[pos.Y]) {
 		return
 	}
@@ -383,7 +367,7 @@ func (b *Buffer) GetAttr(pos term.Coordinates) (
 func (b *Buffer) GetCellAt(pos term.Coordinates) (
 	ppos term.Coordinates, cell term.Cell, ok bool,
 ) {
-	assertCoordinates(pos)
+	assertValidCoords(pos)
 	if pos.Y >= b.Rows() || pos.X >= len(b.cells[pos.Y]) {
 		return
 	}

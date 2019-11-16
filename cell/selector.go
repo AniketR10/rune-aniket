@@ -6,36 +6,6 @@ import (
 	"github.com/ernestrc/fractal/term"
 )
 
-/*
-*					cases
-*
-*		┌──────┐┌──────┐┌──────┐┌──────┐
-*		│ f    ││ t    ││    f ││    t │
-*		│    t ││    f ││ t    ││ f    │
-*		└──────┘└──────┘└──────┘└──────┘
-*          |       |        |       |
-*          v       v        v       v
-*		┌──────┐┌──────┐┌──────┐┌──────┐
-*		│ f    ││ f    ││ f    ││ f    │
-*		│    t ││    t ││    t ││    t │
-*		└──────┘└──────┘└──────┘└──────┘
- */
-func sortFromTo(from term.Coordinates, to term.Coordinates) (
-	term.Coordinates, term.Coordinates,
-) {
-	if from.X > to.X {
-		temp := from.X
-		from.X = to.X
-		to.X = temp
-	}
-	if from.Y > to.Y {
-		temp := from.Y
-		from.Y = to.Y
-		to.Y = temp
-	}
-	return from, to
-}
-
 // Select returns the cells inside the given coordinates or nil if coordinates
 // are out of bounds.
 func Select(
@@ -86,7 +56,7 @@ func SelectBlock(
 ) (res [][]term.Cell) {
 	res = make([][]term.Cell, 0)
 
-	from, to = sortFromTo(from, to)
+	from, to = sortFromToBlock(from, to)
 
 	for from.Y <= to.Y && from.Y < len(cells) {
 		maxy := float64(len(cells[from.Y]))
