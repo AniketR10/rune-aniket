@@ -110,7 +110,7 @@ func (l *Less) searchHandleEvent(ev term.Event) (exit bool) {
 		if l.cursorOffset > 1 {
 			l.cursorOffset--
 			l.cmdScroll.C.(*component.Scroll).Buffer().
-				TruncateCellAt(term.Coordinates{X: l.cursorOffset, Y: 0})
+				DeleteCell(term.Coordinates{X: l.cursorOffset, Y: 0})
 		}
 	case term.KeyEnter:
 		str := getBuffer(l.cmdScroll).String()

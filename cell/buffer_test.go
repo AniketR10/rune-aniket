@@ -7,14 +7,10 @@ import (
 	"github.com/ernestrc/fractal/term"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestUninitializedNotPanic(t *testing.T) {
-
-	t.Run("GetCellAt", func(t *testing.T) {
-		var b Buffer
-		b.GetCellAt(term.Coordinates{X: 10, Y: 0})
-	})
 
 	t.Run("GetAttr", func(t *testing.T) {
 		var b Buffer
@@ -46,14 +42,9 @@ func TestUninitializedNotPanic(t *testing.T) {
 		b.ResetAttr()
 	})
 
-	t.Run("RowLastIdx", func(t *testing.T) {
+	t.Run("Columns", func(t *testing.T) {
 		var b Buffer
-		_, _ = b.RowLastIdx(10)
-	})
-
-	t.Run("RowLen", func(t *testing.T) {
-		var b Buffer
-		_, _ = b.RowLen(10)
+		_, _ = b.Columns(10)
 	})
 
 	t.Run("Rows", func(t *testing.T) {
@@ -71,9 +62,9 @@ func TestUninitializedNotPanic(t *testing.T) {
 		_ = b.String()
 	})
 
-	t.Run("TruncateCellAt", func(t *testing.T) {
+	t.Run("DeleteCell", func(t *testing.T) {
 		var b Buffer
-		_, _ = b.TruncateCellAt(term.Coordinates{X: 10, Y: 10})
+		b.DeleteCell(term.Coordinates{X: 10, Y: 10})
 	})
 
 	t.Run("TruncateFrom", func(t *testing.T) {
@@ -81,9 +72,9 @@ func TestUninitializedNotPanic(t *testing.T) {
 		b.TruncateFrom(term.Coordinates{X: 0, Y: 1})
 	})
 
-	t.Run("TruncateRowAt", func(t *testing.T) {
+	t.Run("DeleteRow", func(t *testing.T) {
 		var b Buffer
-		_ = b.TruncateRowAt(10)
+		_ = b.DeleteRow(10)
 	})
 
 	t.Run("TruncateRowFrom", func(t *testing.T) {
@@ -94,11 +85,6 @@ func TestUninitializedNotPanic(t *testing.T) {
 	t.Run("WriteRune", func(t *testing.T) {
 		var b Buffer
 		_ = b.WriteRune('h')
-	})
-
-	t.Run("WriteAt", func(t *testing.T) {
-		var b Buffer
-		b.WriteAt(term.Coordinates{X: 10, Y: 0}, 'h')
 	})
 
 	t.Run("WriteString", func(t *testing.T) {
@@ -112,44 +98,44 @@ func TestUninitializedNotPanic(t *testing.T) {
 	})
 }
 
-func assertBufferContent(t *testing.T, buf *Buffer, str string) {
-	if l := buf.Rows(); l != 3 {
-		t.Errorf("Lines() is not correct: %d", l)
-	}
+const str = "hello\n\tworld\n"
 
-	if l, _ := buf.RowLen(0); l != 5 {
-		t.Errorf("RowLen(0) is not correct: %d", l)
-	}
+func assertBufferContent(t *testing.T, buf *Buffer) {
+	assert.Equal(t, 3, buf.Rows())
 
-	if l, _ := buf.RowLen(1); l != 9 {
-		t.Errorf("RowLen(1) is not correct: %d", l)
-	}
+	cols, ok := buf.Columns(0)
+	assert.Equal(t, 5, cols)
+	assert.True(t, ok)
 
-	if s := buf.String(); s != str {
-		t.Errorf("expected '%+v' found '%+v'", []byte(str), []byte(s))
-	}
+	cols, ok = buf.Columns(1)
+	assert.Equal(t, 9, cols)
+	assert.True(t, ok)
+
+	assert.Equal(t, str, buf.String())
 }
 
 func TestBufferWriteString(t *testing.T) {
 	var buf Buffer
-	str := "hello\n\tworld\n"
-	buf.tabspaces = 4
 	buf.WriteString(str)
-	assertBufferContent(t, &buf, str)
+	assertBufferContent(t, &buf)
 }
 
 func TestBufferReadFrom(t *testing.T) {
 	var buf Buffer
-	str := "hello\n\tworld\n"
-	buf.tabspaces = 4
 	n, err := buf.ReadFrom(strings.NewReader(str))
-	if err != nil {
-		t.Fatal(err)
+	require.NoError(t, err)
+	assert.Equal(t, len(str), int(n))
+	assertBufferContent(t, &buf)
+}
+
+func TestBufferWriteRune(t *testing.T) {
+	var buf Buffer
+
+	for _, c := range str {
+		buf.WriteRune(c)
 	}
-	if n != int64(len(str)) {
-		t.Errorf("expected n to be %d but found %d", len(str), n)
-	}
-	assertBufferContent(t, &buf, str)
+
+	assertBufferContent(t, &buf)
 }
 
 func TestBufferInsertAt(t *testing.T) {
@@ -170,68 +156,33 @@ func TestBufferInsertAt(t *testing.T) {
 	buf.InsertAt(term.Coordinates{X: 4, Y: 0}, '\n')
 
 	str := "hell\no\nworld"
-	if l := buf.Rows(); l != 3 {
-		t.Errorf("Rows() is not correct: %d", l)
-	}
+	assert.Equal(t, 3, buf.Rows())
 
-	if l, _ := buf.RowLen(0); l != 4 {
-		t.Errorf("RowLen(0) is not correct: %+v", buf.cells[0])
-	}
+	cols, ok := buf.Columns(0)
+	assert.True(t, ok)
+	assert.Equal(t, 4, cols)
 
-	if l, _ := buf.RowLen(1); l != 1 {
-		t.Errorf("RowLen(1) is not correct: %+v", buf.cells[1])
-	}
+	cols, ok = buf.Columns(1)
+	assert.True(t, ok)
+	assert.Equal(t, 1, cols)
 
-	if l, _ := buf.RowLen(2); l != 5 {
-		t.Errorf("RowLen(2) is not correct: %+v", buf.cells[2])
-	}
+	cols, ok = buf.Columns(2)
+	assert.True(t, ok)
+	assert.Equal(t, 5, cols)
 
-	if s := buf.String(); s != str {
-		t.Errorf("expected '%q' found '%q'", str, s)
-	}
+	assert.Equal(t, str, buf.String())
 }
 
-func TestBufferWriteAt(t *testing.T) {
-	var buf Buffer
-	buf.WriteString("hello")
-
-	buf.WriteAt(term.Coordinates{X: 5, Y: 0}, 'w')
-	// overwrite
-	buf.WriteAt(term.Coordinates{X: 5, Y: 0}, '\n')
-	buf.WriteAt(term.Coordinates{X: 0, Y: 1}, 'w')
-	buf.WriteAt(term.Coordinates{X: 1, Y: 1}, 'o')
-	buf.WriteAt(term.Coordinates{X: 2, Y: 1}, 'r')
-	buf.WriteAt(term.Coordinates{X: 3, Y: 1}, 'l')
-	buf.WriteAt(term.Coordinates{X: 4, Y: 1}, 'd')
-
-	if expected, l := 2, buf.Rows(); l != expected {
-		t.Errorf("Rows() is not correct: is %d, should be %d", l, expected)
-	}
-
-	if l, _ := buf.RowLen(0); l != 5 {
-		t.Errorf("RowLen(0) is not correct: is %d, should be 5", l)
-	}
-
-	if l, _ := buf.RowLen(1); l != 5 {
-		t.Errorf("RowLen(1) is not correct: is %d, should be 5", l)
-	}
-
-	str := "hello\nworld"
-	if s := buf.String(); s != str {
-		t.Errorf("expected '%+v' found '%+v'", []byte(str), []byte(s))
-	}
-}
-
-func TestBufferTruncateRowAt(t *testing.T) {
+func TestBufferDeleteRow(t *testing.T) {
 	var buf Buffer
 	str := "hello\nworld"
 	buf.WriteString(str)
 
-	buf.TruncateRowAt(0)
+	buf.DeleteRow(0)
+	assert.Equal(t, "world", buf.String())
 
-	if s, expected := buf.String(), "world"; s != expected {
-		t.Errorf("expected '%q' found '%q'", expected, s)
-	}
+	buf.DeleteRow(0)
+	assert.Equal(t, "", buf.String())
 }
 
 func TestBufferTruncateRowFrom1(t *testing.T) {
@@ -241,9 +192,7 @@ func TestBufferTruncateRowFrom1(t *testing.T) {
 
 	buf.TruncateRowFrom(term.Coordinates{X: 2, Y: 0})
 
-	if s, expected := buf.String(), "he\nworld"; s != expected {
-		t.Errorf("expected '%q' found '%q'", expected, s)
-	}
+	assert.Equal(t, "he\nworld", buf.String())
 }
 
 func TestBufferTruncateRowFrom2(t *testing.T) {
@@ -253,9 +202,7 @@ func TestBufferTruncateRowFrom2(t *testing.T) {
 
 	buf.TruncateRowFrom(term.Coordinates{X: 2, Y: 1})
 
-	if s, expected := buf.String(), "hello\nwo"; s != expected {
-		t.Errorf("expected '%q' found '%q'", expected, s)
-	}
+	assert.Equal(t, "hello\nwo", buf.String())
 }
 
 func TestBufferTruncateFrom1(t *testing.T) {
@@ -265,9 +212,7 @@ func TestBufferTruncateFrom1(t *testing.T) {
 
 	buf.TruncateFrom(term.Coordinates{X: 4, Y: 0})
 
-	if s := buf.String(); s != "hell" {
-		t.Errorf("expected '%+v' found '%+v'", []byte("hell"), []byte(s))
-	}
+	assert.Equal(t, "hell", buf.String())
 }
 
 func TestBufferTruncateFrom2(t *testing.T) {
@@ -277,9 +222,7 @@ func TestBufferTruncateFrom2(t *testing.T) {
 
 	buf.TruncateFrom(term.Coordinates{X: 0, Y: 1})
 
-	if s, expected := buf.String(), "hello\n"; s != expected {
-		t.Errorf("expected '%q' found '%q'", expected, s)
-	}
+	assert.Equal(t, "hello\n", buf.String())
 }
 
 func TestBufferTruncateCellAt(t *testing.T) {
@@ -287,23 +230,15 @@ func TestBufferTruncateCellAt(t *testing.T) {
 	str := "hello\nworld"
 	buf.WriteString(str)
 
-	buf.TruncateCellAt(term.Coordinates{X: 0, Y: 1})
-	buf.TruncateCellAt(term.Coordinates{X: 1, Y: 1})
+	buf.DeleteCell(term.Coordinates{X: 0, Y: 1})
+	buf.DeleteCell(term.Coordinates{X: 1, Y: 1})
 	buf.ConflateRow(0)
-	buf.TruncateCellAt(term.Coordinates{X: 7, Y: 0})
+	buf.DeleteCell(term.Coordinates{X: 7, Y: 0})
 
-	if s, expected := buf.String(), "hellool"; s != expected {
-		t.Errorf("expected '%q' found '%q'", expected, s)
-	}
+	assert.Equal(t, "hellool", buf.String())
 }
 
-func assertCellCh(t *testing.T, cell term.Cell, r rune) {
-	if cell.Ch != r {
-		t.Errorf("expected cell content to be %c but was %c", r, cell.Ch)
-	}
-}
-
-func TestBufferTruncateCellAtTab(t *testing.T) {
+func TestBufferDeleteCellAtTab(t *testing.T) {
 	const tabspaces = 4
 	var buf Buffer
 	buf.Init(tabspaces)
@@ -311,44 +246,17 @@ func TestBufferTruncateCellAtTab(t *testing.T) {
 	str := "!\t\t!\t"
 	buf.WriteString(str)
 
-	cl, n := buf.TruncateCellAt(term.Coordinates{X: tabspaces - 1, Y: 0})
-	if n != tabspaces {
-		t.Errorf("TruncateCellAt returned %d instead of %d", n, tabspaces)
-	}
-	assertCellCh(t, cl, '\t')
-	cl, n = buf.TruncateCellAt(term.Coordinates{X: 2, Y: 0})
-	if n != tabspaces {
-		t.Errorf("TruncateCellAt returned %d instead of %d", n, tabspaces)
-	}
-	assertCellCh(t, cl, '\t')
-	if s, expected := buf.String(), "!!\t"; s != expected {
-		t.Errorf("expected '%q' found '%q'", expected, s)
-	}
-}
+	start := buf.DeleteCell(term.Coordinates{X: 3, Y: 0})
+	assert.Equal(t, term.Coordinates{X: 1}, start)
+	assert.Equal(t, "!\t!\t", buf.String())
 
-func TestBufferWrite(t *testing.T) {
-	var buf Buffer
-	str := "hello\nworld"
+	start = buf.DeleteCell(term.Coordinates{X: 2, Y: 0})
+	assert.Equal(t, term.Coordinates{X: 1}, start)
+	assert.Equal(t, "!!\t", buf.String())
 
-	for _, c := range str {
-		buf.WriteRune(c)
-	}
-
-	if l := buf.Rows(); l != 2 {
-		t.Errorf("Rows() is not correct: is %d, should be 2", l)
-	}
-
-	if l, _ := buf.RowLen(0); l != 5 {
-		t.Errorf("RowLen(0) is not correct: is %d, should be 5", l)
-	}
-
-	if l, _ := buf.RowLen(1); l != 5 {
-		t.Errorf("RowLen(1) is not correct: is %d, should be 5", l)
-	}
-
-	if s := buf.String(); s != str {
-		t.Errorf("expected '%q' found '%q'", str, s)
-	}
+	start = buf.DeleteCell(term.Coordinates{X: 2, Y: 0})
+	assert.Equal(t, term.Coordinates{X: 2}, start)
+	assert.Equal(t, "!!", buf.String())
 }
 
 type selectCase struct {
@@ -368,47 +276,8 @@ func toString(cells [][]term.Cell) string {
 }
 
 func assertCellProperties(t *testing.T, cell term.Cell, attr term.Attributes) {
-	if cell.Fg != attr.Fg {
-		t.Errorf("cell FG was not %d", attr.Fg)
-	}
-	if cell.Bg != attr.Bg {
-		t.Errorf("cell BG was not %d", attr.Bg)
-	}
-}
-
-func TestGetCellAt(t *testing.T) {
-	t.Run("handles tabs and tab padding", func(t *testing.T) {
-		var buf Buffer
-		buf.WriteString("\t\tlol")
-
-		for i := buf.tabspaces; i < buf.tabspaces+buf.tabspaces; i++ {
-			pos, cl, ok := buf.GetCellAt(term.Coordinates{X: i, Y: 0})
-			if !ok {
-				t.Error("GetCellAt returned unexpected ok")
-			}
-			if cl.Ch != '\t' {
-				t.Errorf("expected tab but found '%c'", cl.Ch)
-			}
-			expected := term.Coordinates{X: buf.tabspaces * 2, Y: 0}
-			if pos != expected {
-				t.Errorf("did not return actual tab position: %+v", pos)
-			}
-		}
-	})
-	t.Run("returns false if position is outside of bounds", func(t *testing.T) {
-		var buf Buffer
-		buf.WriteString("\n\t")
-		coords := []term.Coordinates{
-			term.Coordinates{X: 1},
-			term.Coordinates{Y: 1, X: 4},
-		}
-		for _, pos := range coords {
-			_, _, ok := buf.GetCellAt(pos)
-			if ok {
-				t.Error("GetCellAt returned unexpected ok")
-			}
-		}
-	})
+	assert.Equal(t, attr.Fg, cell.Fg)
+	assert.Equal(t, attr.Bg, cell.Bg)
 }
 
 func TestSetAttr(t *testing.T) {
@@ -419,10 +288,8 @@ func TestSetAttr(t *testing.T) {
 	t.Run("sets attribute to cell at position if exists", func(t *testing.T) {
 		pos := term.Coordinates{X: 0, Y: 0}
 		attr := term.Attributes{Fg: term.AttrBold, Bg: term.AttrReverse}
-		if !buf.SetAttr(pos, attr) {
-			t.Error("expected SetAttr to return true")
-		}
-		_, c, _ := buf.GetCellAt(pos)
+		assert.True(t, buf.SetAttr(pos, attr))
+		c := buf.cells.cells[pos.Y][pos.X]
 		assertCellProperties(t, c, attr)
 	})
 	t.Run("returns ok=false if cell at position does not exist", func(t *testing.T) {
@@ -433,9 +300,7 @@ func TestSetAttr(t *testing.T) {
 		}
 		for _, pos := range coords {
 			attr := term.Attributes{Fg: term.AttrBold, Bg: term.AttrReverse}
-			if buf.SetAttr(pos, attr) {
-				t.Error("expected SetAttr to return false")
-			}
+			assert.False(t, buf.SetAttr(pos, attr))
 		}
 	})
 }

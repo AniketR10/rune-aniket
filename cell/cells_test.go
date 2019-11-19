@@ -2,6 +2,7 @@ package cell
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"strings"
 	"testing"
@@ -130,9 +131,8 @@ func TestCellsReadFrom(t *testing.T) {
 		{[]string{"a"}, []error{nil}, 1, nil},
 		{[]string{""}, []error{nil}, 0, nil},
 		{[]string{"a", "b"}, []error{nil, nil}, 2, nil},
-		{[]string{"a\nb", "c"}, []error{nil, nil}, 4, nil},
-		// FIXME {[]string{"\n"}, []error{nil}, 1, nil},
-		// FIXME {[]string{"a\r\nb", "c"}, []error{nil, nil}, 5, nil},
+		{[]string{"ab", "c"}, []error{nil, nil}, 3, nil},
+		{[]string{"a", ""}, []error{nil, io.EOF}, 1, nil},
 		{[]string{""}, []error{myError}, 0, myError},
 	}
 
@@ -145,6 +145,26 @@ func TestCellsReadFrom(t *testing.T) {
 		if tcase.expectedErr == nil {
 			assert.Equal(t, strings.Join(reads, ""), c.String())
 		}
+	}
+}
+
+func TestCellsStringReadFrom(t *testing.T) {
+	tsuite := []string{
+		"a",
+		"\nb",
+		"c\n",
+		"\n\n\n",
+		"\n\n\na",
+	}
+	for i, _tcase := range tsuite {
+		tcase := _tcase
+		t.Run(fmt.Sprintf("test case %d", i), func(t *testing.T) {
+			var c Cells
+			n, err := c.ReadFrom(strings.NewReader(tcase))
+			assert.NoError(t, err)
+			assert.Equal(t, int64(len(tcase)), n)
+			assert.Equal(t, tcase, c.String())
+		})
 	}
 }
 
@@ -238,7 +258,23 @@ package rpc;
 		expectedCells      string
 		inputFrom, inputTo term.Coordinates
 		overrideBaseCells  string //optional; otherwise baseCells is used
+		//optional; otherwise inputFrom and inputTo is assumed to be returned
+		expectedStart, expectedEnd *term.Coordinates
 	}{
+		{
+			overrideBaseCells: "a",
+			expectedStr:       "a",
+			expectedCells:     "",
+			inputFrom:         term.Coordinates{X: 0},
+			inputTo:           term.Coordinates{X: 0},
+		},
+		{
+			overrideBaseCells: "a",
+			expectedStr:       "a",
+			expectedCells:     "",
+			inputFrom:         term.Coordinates{X: 0},
+			inputTo:           term.Coordinates{X: 1},
+		},
 		{
 			overrideBaseCells: "a\nb",
 			expectedStr:       "a",
@@ -306,6 +342,9 @@ package rpc;
 			expectedCells: "",
 			inputTo:       term.Coordinates{},
 			inputFrom:     term.Coordinates{X: 14, Y: 5},
+			// returns inverted from/to
+			expectedStart: &term.Coordinates{},
+			expectedEnd:   &term.Coordinates{X: 14, Y: 5},
 		},
 		{
 			expectedStr:   baseCells,
@@ -332,19 +371,22 @@ package rpc;
 			inputFrom:         term.Coordinates{},
 			inputTo:           term.Coordinates{X: 4},
 		},
-		{
+		{ //16
 			overrideBaseCells: "a\tb",
 			expectedStr:       "a\t",
 			expectedCells:     "b",
 			inputFrom:         term.Coordinates{},
 			inputTo:           term.Coordinates{X: 2},
+			expectedEnd:       &term.Coordinates{X: 4},
 		},
 		{
-			overrideBaseCells: "a\tb",
-			expectedStr:       "a\t",
-			expectedCells:     "b",
-			inputFrom:         term.Coordinates{X: 2},
+			overrideBaseCells: "aa\tb",
+			expectedStr:       "\t",
+			expectedCells:     "aab",
+			inputFrom:         term.Coordinates{X: 3},
 			inputTo:           term.Coordinates{X: 4},
+			expectedStart:     &term.Coordinates{X: 2},
+			expectedEnd:       &term.Coordinates{X: 5},
 		},
 		{
 			overrideBaseCells: "a\n\tb",
@@ -352,6 +394,7 @@ package rpc;
 			expectedCells:     "b",
 			inputFrom:         term.Coordinates{},
 			inputTo:           term.Coordinates{Y: 1, X: 2},
+			expectedEnd:       &term.Coordinates{Y: 1, X: 3},
 		},
 		{
 			overrideBaseCells: "a\n\tb\n\tc",
@@ -359,6 +402,17 @@ package rpc;
 			expectedCells:     "a\nc",
 			inputFrom:         term.Coordinates{Y: 1, X: 2},
 			inputTo:           term.Coordinates{Y: 2, X: 2},
+			expectedStart:     &term.Coordinates{Y: 1, X: 0},
+			expectedEnd:       &term.Coordinates{Y: 2, X: 3},
+		},
+		{
+			overrideBaseCells: "\t\t\ta",
+			expectedStr:       "\t",
+			expectedCells:     "\t\ta",
+			inputFrom:         term.Coordinates{X: 5},
+			inputTo:           term.Coordinates{X: 5},
+			expectedStart:     &term.Coordinates{X: 4},
+			expectedEnd:       &term.Coordinates{X: 7},
 		},
 	}
 
@@ -371,8 +425,17 @@ package rpc;
 		_, err := c.ReadFrom(strings.NewReader(base))
 		require.NoError(t, err)
 
-		actualStr := c.Delete(tcase.inputFrom, tcase.inputTo)
+		actualStart, actualEnd, actualStr := c.Delete(tcase.inputFrom, tcase.inputTo)
 		assert.Equal(t, tcase.expectedStr, actualStr, "expected return string in test case %d", i)
 		assert.Equal(t, tcase.expectedCells, c.String(), "expected cells in test case %d", i)
+
+		if tcase.expectedStart == nil {
+			tcase.expectedStart = &tcase.inputFrom
+		}
+		if tcase.expectedEnd == nil {
+			tcase.expectedEnd = &tcase.inputTo
+		}
+		assert.Equal(t, *tcase.expectedStart, actualStart, "expected return start in test case %d", i)
+		assert.Equal(t, *tcase.expectedEnd, actualEnd, "expected return end in test case %d", i)
 	}
 }

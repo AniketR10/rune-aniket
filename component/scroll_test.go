@@ -6,6 +6,7 @@ import (
 
 	"github.com/ernestrc/fractal/cell"
 	"github.com/ernestrc/fractal/term"
+	"github.com/stretchr/testify/assert"
 )
 
 var fortune = `Love in your heart wasn't put there to stay.
@@ -64,10 +65,10 @@ func TestScrollDraw(t *testing.T) {
 		{func() { scroll.Search("中国"); scroll.SeekNextResult() }, "Oscar Hammerstein 中国"},
 		{func() { scroll.Search("Oscar"); scroll.SeekNextResult() }, "Oscar Hammerstein 中国"},
 		{func() { scroll.SeekStartFile(); scroll.SeekStartLine() }, "Love in your heart w"},
-		{func() { scroll.Buffer().TruncateCellAt(term.Coordinates{X: 0, Y: 0}) }, "ove in your heart wa"},
-		{func() { scroll.Buffer().TruncateCellAt(term.Coordinates{X: 14, Y: 0}) }, "ove in your hert was"},
+		{func() { scroll.Buffer().DeleteCell(term.Coordinates{X: 0, Y: 0}) }, "ove in your heart wa"},
+		{func() { scroll.Buffer().DeleteCell(term.Coordinates{X: 14, Y: 0}) }, "ove in your hert was"},
 		{func() { scroll.SeekDown() }, "Love isn't love 'til"},
-		{func() { scroll.Buffer().TruncateCellAt(term.Coordinates{X: 16, Y: 1}) }, "Love isn't love til "},
+		{func() { scroll.Buffer().DeleteCell(term.Coordinates{X: 16, Y: 1}) }, "Love isn't love til "},
 		{func() { scroll.Buffer().InsertAt(term.Coordinates{X: 16, Y: 1}, '中') }, "Love isn't love 中til"},
 		// {scroll.SeekDown, "        -- Oscar Ham"},
 		// {scroll.SeekEndLine, "rstein 中            "},
@@ -131,25 +132,21 @@ func TestRowLastIndex(t *testing.T) {
 		line     int
 		expected int
 	}{
-		{fortune, 0, 43},
-		{fortune, 1, 37},
-		{fortune, 2, 30},
-		{"\t\n1\t\t\t222\n\n\n4\n", 0, 3},
-		{"\t\n1\t\t\t222\n\n\n4\n", 1, 15},
+		{fortune, 0, 44},
+		{fortune, 1, 38},
+		{fortune, 2, 31},
+		{"\t\n1\t\t\t222\n\n\n4\n", 0, 4},
+		{"\t\n1\t\t\t222\n\n\n4\n", 1, 16},
 		{"\t\n1\t\t\t222\n\n\n4\n", 2, 0},
 		{"\t\n1\t\t\t222\n\n\n4\n", 3, 0},
-		{"\t\n1\t\t\t222\n\n\n4\n", 4, 0},
+		{"\t\n1\t\t\t222\n\n\n4\n", 4, 1},
 	}
 
 	for _, tcase := range cases {
 		scroll.Buffer().Reset()
 		scroll.Buffer().WriteString(tcase.content)
-		i, _ := scroll.Buffer().RowLastIdx(tcase.line)
-		lines := strings.Split(tcase.content, "\n")
-
-		if i != tcase.expected {
-			t.Errorf("expected last index of line \"%s\" to be %d instead of %d", lines[tcase.line], tcase.expected, i)
-		}
+		i, _ := scroll.Buffer().Columns(tcase.line)
+		assert.Equal(t, tcase.expected, i)
 	}
 }
 

@@ -117,7 +117,6 @@ func TestSelectLine(t *testing.T) {
 	var buf Buffer
 	str := "hello\n\tworld\n\nitsme"
 	buf.WriteString(str)
-	buf.tabspaces = 4
 
 	testCases := []selectCase{
 		{
@@ -183,7 +182,6 @@ func TestSelectBlock(t *testing.T) {
 	var buf Buffer
 	str := "hello\n\tworld\n\nitsme\n\n\nhi"
 	buf.WriteString(str)
-	buf.tabspaces = 4
 
 	testCases := []selectCase{
 		{

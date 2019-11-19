@@ -13,8 +13,12 @@ const defTabSpaces int = 4
 const defColumnCap int = 64
 const defRowCap int = 128
 
-// A Cells is a matrix of cells. The zero value for Cells is ready to use.
+// Cells is a matrix of term.Cell. The zero value for Cells is ready to use.
 type Cells struct {
+	// TODO should be a matrix of rune; to solve scroll search:
+	// - scroll search results should be recalculated on every draw?
+	// - should be a matrix of a struct { rune and a ctx } field which could be
+	//   an interface type so it could be dynamic or simply a context.Context?
 	cells     [][]term.Cell
 	tabspaces int
 }
@@ -127,40 +131,46 @@ func (b *Cells) fillInColumns(pos term.Coordinates) (n int) {
 	return
 }
 
+func (b *Cells) fillInCoords(pos term.Coordinates) (
+	from, to term.Coordinates,
+) {
+	assertValidCoords(pos)
+	from = pos
+	if filled := b.fillInRows(pos.Y); filled != 0 {
+		from.Y -= filled
+		from.X = b.Columns(from.Y)
+		b.fillInColumns(pos)
+	} else {
+		from.X -= b.fillInColumns(pos)
+	}
+	to = pos
+
+	return
+}
+
 // Insert inserts string in the given position and shifts the remaining cells.
 // Insert never fails: if at is out-of-bounds, this method fills in the rows
 // and/or columns of cells.
 func (b *Cells) Insert(at term.Coordinates, str string) (
 	from, to term.Coordinates,
 ) {
-	assertValidCoords(at)
-
-	from = at
-	if filled := b.fillInRows(at.Y); filled != 0 {
-		from.Y -= filled
-		from.X = b.Columns(from.Y)
-		b.fillInColumns(at)
-	} else {
-		from.X -= b.fillInColumns(at)
-	}
-
-	to = at
+	from, to = b.fillInCoords(at)
 	for _, r := range str {
 		to = b.insertAt(to, r)
 	}
 	return
 }
 
-func writeToBuilder(builder *strings.Builder, cells [][]term.Cell) {
+func copyToBuilder(builder *strings.Builder, cells [][]term.Cell) {
 	for i, r := range cells {
-		writeRowToBuilder(builder, r)
+		copyRowToBuilder(builder, r)
 		if i+1 != len(cells) {
 			builder.WriteByte('\n')
 		}
 	}
 }
 
-func writeRowToBuilder(builder *strings.Builder, cells []term.Cell) {
+func copyRowToBuilder(builder *strings.Builder, cells []term.Cell) {
 	for _, c := range cells {
 		if c.Ch != '\x00' {
 			builder.WriteRune(c.Ch)
@@ -186,38 +196,14 @@ func (b *Cells) conflate(row int) {
 	b.cells = b.cells[:len(b.cells)-1]
 }
 
-func (b *Cells) skipPaddingLeft(row, x int) int {
-	rowLastIdx := len(b.cells[row]) - 1
-	for x < rowLastIdx && b.cells[row][x].Ch == 0 {
-		if x == 0 {
-			break
-		}
-		x--
-	}
-	return x
-}
-
-func (b *Cells) skipPaddingRight(row, x int) int {
-	rowLastIdx := len(b.cells[row]) - 1
-	for x < rowLastIdx && b.cells[row][x].Ch == 0 {
-		if x == rowLastIdx {
-			break
-		}
-		x++
-	}
-	return x
-}
-
 func (b *Cells) doDeleteRowInRange(
 	builder *strings.Builder, row, fromX, toX int,
 ) (conflate bool) {
-	fromX = b.skipPaddingLeft(row, fromX)
-	toX = b.skipPaddingRight(row, toX)
 	conflate = toX == len(b.cells[row])
 	if !conflate {
 		toX++
 	}
-	writeRowToBuilder(builder, b.cells[row][fromX:toX])
+	copyRowToBuilder(builder, b.cells[row][fromX:toX])
 	diff := toX - fromX
 	copy(b.cells[row][fromX:], b.cells[row][toX:])
 	b.cells[row] = b.cells[row][:len(b.cells[row])-diff]
@@ -225,7 +211,7 @@ func (b *Cells) doDeleteRowInRange(
 	return conflate
 }
 
-func (b *Cells) deleteRowInRange(
+func (b *Cells) deleteRowRange(
 	builder *strings.Builder, row, fromX, toX int,
 ) {
 	shouldConflate := b.doDeleteRowInRange(builder, row, fromX, toX)
@@ -233,43 +219,80 @@ func (b *Cells) deleteRowInRange(
 		builder.WriteByte('\n')
 		b.conflate(row)
 	}
+	return
+}
+
+func (b *Cells) skipPadding(start, end term.Coordinates) (
+	term.Coordinates, term.Coordinates,
+) {
+	tokens := b.tabspaces - 1
+	rowLastIdx := len(b.cells[end.Y]) - 1
+	for tokens > 0 && end.X < rowLastIdx && b.cells[end.Y][end.X].Ch == 0 {
+		end.X++
+		tokens--
+	}
+
+	tokens = b.tabspaces - 1
+	rowLastIdx = len(b.cells[start.Y]) - 1
+	for tokens > 0 && start.X > 0 &&
+		start.X < rowLastIdx && b.cells[start.Y][start.X].Ch == 0 {
+
+		start.X--
+		tokens--
+
+	}
+
+	// we need the last pad's position, but on the left there's no \t delimiter,
+	// so we need to rollback one cell
+	if tokens != b.tabspaces-1 && b.cells[start.Y][start.X].Ch != 0 {
+		start.X++
+	}
+	return start, end
 }
 
 // Delete removes cells in left-inclusive, right-inclusive range
-// and returns the corresponding string representation of the cells removed.
-func (b *Cells) Delete(from, to term.Coordinates) string {
-	from, to = sortFromTo(from, to)
-	b.assertCordsInBounds(from)
-	b.assertCordsInBounds(to)
+// and returns the corresponding string representation of the cells removed,
+// along with the true start and end of the range, in case some cells groups
+// (cell with padding) were deleted.
+func (b *Cells) Delete(from, to term.Coordinates) (
+	start, end term.Coordinates, str string,
+) {
+	b.assertCordsInBounds(start)
+	b.assertCordsInBounds(end)
+	start, end = sortFromTo(from, to)
+	start, end = b.skipPadding(start, end)
 
 	builder := strings.Builder{}
 
-	if from.Y == to.Y {
-		b.deleteRowInRange(&builder, from.Y, from.X, to.X)
-		return builder.String()
+	if start.Y == end.Y {
+		b.deleteRowRange(&builder, start.Y, start.X, end.X)
+		str = builder.String()
+		return
 	}
 
 	// trim til end of first row
-	b.doDeleteRowInRange(&builder, from.Y, from.X, len(b.cells[from.Y]))
+	b.doDeleteRowInRange(&builder, start.Y, start.X, len(b.cells[start.Y]))
 	builder.WriteByte('\n')
 
-	// copy second row until second to last, to reuse conflate logic
-	if diff := to.Y - from.Y; diff > 1 {
-		writeToBuilder(&builder, b.cells[from.Y+1:to.Y])
+	// copy rows in between and move last row to second row, if applicable
+	lastRow := end.Y
+	if diff := lastRow - start.Y; diff > 1 {
+		copyToBuilder(&builder, b.cells[start.Y+1:lastRow])
 		builder.WriteByte('\n')
 
-		b.cells[from.Y+1] = b.cells[to.Y]
-		to.Y = from.Y + 1
+		b.cells[start.Y+1] = b.cells[lastRow]
+		lastRow = start.Y + 1
 		b.cells = b.cells[:len(b.cells)-diff+1]
 	}
 
-	// then remove cells from last row; from.Y is now last row to delete
-	b.deleteRowInRange(&builder, to.Y, 0, to.X)
+	// then remove cells from last row; start.Y is now last row to delete
+	b.deleteRowRange(&builder, lastRow, 0, end.X)
 
 	// conflate last row in range
-	b.conflate(from.Y)
+	b.conflate(start.Y)
 
-	return builder.String()
+	str = builder.String()
+	return
 }
 
 // Columns returns the number of cells of row at index y
@@ -294,7 +317,7 @@ func (b *Cells) Rows() int {
 
 func (b *Cells) String() string {
 	builder := strings.Builder{}
-	writeToBuilder(&builder, b.cells)
+	copyToBuilder(&builder, b.cells)
 	return builder.String()
 }
 
@@ -330,39 +353,36 @@ func (b *Cells) Cell(pos term.Coordinates) (
 // ReadFrom reads data from r until EOF and appends it to the buffer, growing
 // the buffer as needed. The return value n is the number of bytes read. Any
 // error except io.EOF encountered during the read is also returned.
-func (b *Cells) ReadFrom(r io.Reader) (n int64, err error) {
+func (b *Cells) ReadFrom(r io.Reader) (int64, error) {
 	if b.cells == nil {
 		b.Reset()
 	}
 	rowY := b.NextWrite().Y
 	reader := bufio.NewReader(r)
-	// TODO fix case when rune length is > 1 without sacrificing perf too much
-	var bytes []byte
-	var isPrefix bool
+	n := int64(0)
 	for {
-		bytes, isPrefix, err = reader.ReadLine()
-		if err != nil {
-			if err == io.EOF {
-				if n > 0 {
-					n--
-					b.cells = b.cells[:len(b.cells)-1]
-				}
-				err = nil
-			}
-			return
-		}
+		bytes, err := reader.ReadSlice('\n')
 		for _, r := range bytes {
-			for i := 1; r == '\t' && i < b.tabspaces; i++ {
-				b.cells[rowY] = append(b.cells[rowY], term.Cell{})
+			switch r {
+			case '\n':
+			case '\t':
+				for i := 1; r == '\t' && i < b.tabspaces; i++ {
+					b.cells[rowY] = append(b.cells[rowY], term.Cell{})
+				}
+				fallthrough
+			default:
+				b.cells[rowY] = append(b.cells[rowY], term.Cell{Ch: rune(r)})
 			}
-			b.cells[rowY] = append(b.cells[rowY], term.Cell{Ch: rune(r)})
 		}
 		n += int64(len(bytes))
-		if !isPrefix {
-			b.cells = append(b.cells, makeNewRow(0, defColumnCap))
-			rowY++
-			n++
+		if err != nil {
+			if err == io.EOF {
+				err = nil
+			}
+			return n, err
 		}
+		b.cells = append(b.cells, makeNewRow(0, defColumnCap))
+		rowY++
 	}
 }
 
