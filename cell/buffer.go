@@ -6,15 +6,21 @@ import (
 	"github.com/ernestrc/fractal/term"
 )
 
-// A Buffer offers a high level API to manipulate a matrix of term.Cell.
-// The zero value for Buffer is ready to use.
+// A Buffer offers a high level API to manipulate cell.ReadWriter.
 type Buffer struct {
-	cells Cells
+	cells ReadWriter
 }
 
-// Init initializes this Buffer with the given tabspaces config and resets its contents.
-func (b *Buffer) Init(tabspaces int) {
-	b.cells.Init(tabspaces)
+// NewBuffer allocates storage for a new Buffer and initializes it.
+func NewBuffer() (b *Buffer) {
+	b = new(Buffer)
+	b.Init(&RawCells{})
+	return b
+}
+
+// Init initializes this Buffer with the given instance of ReadWriter.
+func (b *Buffer) Init(rw ReadWriter) {
+	b.cells = rw
 }
 
 // Reset resets the contents of this cellbuf.
@@ -136,6 +142,15 @@ func (b *Buffer) String() string {
 	return b.cells.String()
 }
 
+// ReadFrom reads data from r until EOF and appends it to the buffer, growing
+// the buffer as needed. The return value n is the number of bytes read. Any
+// error except io.EOF encountered during the read is also returned.
+func (b *Buffer) ReadFrom(r io.Reader) (n int64, err error) {
+	return b.cells.ReadFrom(r)
+}
+
+/* NOTE: the following methods should be removed and employ an attributes view */
+
 // RawCells gives clients access to the underlying cell matrix.
 func (b *Buffer) RawCells() [][]term.Cell {
 	return b.cells.RawCells()
@@ -175,16 +190,4 @@ func (b *Buffer) GetAttr(pos term.Coordinates) (
 	cells := b.cells.RawCells()
 	attr = term.Attributes{Bg: cells[pos.Y][pos.X].Bg, Fg: cells[pos.Y][pos.X].Fg}
 	return
-}
-
-// ReadFrom reads data from r until EOF and appends it to the buffer, growing
-// the buffer as needed. The return value n is the number of bytes read. Any
-// error except io.EOF encountered during the read is also returned.
-func (b *Buffer) ReadFrom(r io.Reader) (n int64, err error) {
-	return b.cells.ReadFrom(r)
-}
-
-// Tabspaces returns the number of tabspaces initialized.
-func (b *Buffer) Tabspaces() int {
-	return b.cells.Tabspaces()
 }

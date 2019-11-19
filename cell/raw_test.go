@@ -1,0 +1,436 @@
+package cell
+
+import (
+	"errors"
+	"fmt"
+	"io"
+	"strings"
+	"testing"
+
+	"github.com/ernestrc/fractal/term"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+func TestRawCellsUninitialized(t *testing.T) {
+	t.Run("Columns()", func(t *testing.T) {
+		var c RawCells
+		assert.Equal(t, 0, c.Columns(0))
+	})
+
+	t.Run("Insert()", func(t *testing.T) {
+		var c RawCells
+		from, until := c.Insert(term.Coordinates{X: 0, Y: 0}, "r")
+		assert.Equal(t, term.Coordinates{}, from)
+		assert.Equal(t, term.Coordinates{X: 1}, until)
+	})
+
+	t.Run("NextWrite()", func(t *testing.T) {
+		var c RawCells
+		assert.Equal(t, term.Coordinates{}, c.NextWrite())
+	})
+
+	t.Run("RawCells()", func(t *testing.T) {
+		var c RawCells
+		cs := c.RawCells()
+		assert.Equal(t, cs, [][]term.Cell{[]term.Cell{}})
+	})
+
+	t.Run("ReadFrom()", func(t *testing.T) {
+		var c RawCells
+		n, err := c.ReadFrom(strings.NewReader("r"))
+		assert.NoError(t, err)
+		assert.Equal(t, int64(1), n)
+	})
+
+	t.Run("Reset()", func(t *testing.T) {
+		var c RawCells
+		c.Reset()
+	})
+
+	t.Run("Rows()", func(t *testing.T) {
+		var c RawCells
+		assert.Equal(t, 0, c.Rows())
+	})
+
+	t.Run("String()", func(t *testing.T) {
+		var c RawCells
+		assert.Equal(t, "", c.String())
+	})
+}
+
+func TestRawCellsPanicsNegativeCoordinates(t *testing.T) {
+
+	var c RawCells
+	negativeCoords := []term.Coordinates{
+		term.Coordinates{X: -1, Y: 0},
+		term.Coordinates{X: 0, Y: -1},
+	}
+
+	for _, pos := range negativeCoords {
+		t.Run("Cell()", func(t *testing.T) {
+			assert.Panics(t, func() {
+				c.Cell(pos)
+			})
+		})
+
+		t.Run("Insert()", func(t *testing.T) {
+			assert.Panics(t, func() {
+				c.Insert(pos, "r")
+			})
+		})
+		t.Run("Delete(from)", func(t *testing.T) {
+			assert.Panics(t, func() {
+				c.Delete(pos, term.Coordinates{X: 0, Y: 2})
+			})
+		})
+		t.Run("Delete(until)", func(t *testing.T) {
+			assert.Panics(t, func() {
+				c.Delete(term.Coordinates{X: 0, Y: 2}, pos)
+			})
+		})
+	}
+}
+
+type readFromTestCase struct {
+	reads       []string
+	errors      []error
+	expectedN   int64
+	expectedErr error
+}
+
+func (r *readFromTestCase) Read(p []byte) (n int, err error) {
+	if len(r.reads) == 0 {
+		err = io.EOF
+		return
+	}
+
+	defer func() {
+		r.reads = r.reads[1:]
+		r.errors = r.errors[1:]
+	}()
+
+	read := r.reads[0]
+	err = r.errors[0]
+	if err != nil {
+		return
+	}
+	n = copy(p, read)
+	return
+}
+
+func TestRawCellsReadFrom(t *testing.T) {
+	myError := errors.New("oopsie daisy")
+
+	tsuite := []readFromTestCase{
+		{[]string{"a"}, []error{nil}, 1, nil},
+		{[]string{""}, []error{nil}, 0, nil},
+		{[]string{"a", "b"}, []error{nil, nil}, 2, nil},
+		{[]string{"ab", "c"}, []error{nil, nil}, 3, nil},
+		{[]string{"a", ""}, []error{nil, io.EOF}, 1, nil},
+		{[]string{""}, []error{myError}, 0, myError},
+	}
+
+	for i, tcase := range tsuite {
+		var c RawCells
+		reads := tcase.reads
+		n, err := c.ReadFrom(&tcase)
+		assert.Equal(t, tcase.expectedErr, err, "tcase %d", i)
+		assert.Equal(t, tcase.expectedN, n, "tcase %d", i)
+		if tcase.expectedErr == nil {
+			assert.Equal(t, strings.Join(reads, ""), c.String())
+		}
+	}
+}
+
+func TestRawCellsStringReadFrom(t *testing.T) {
+	tsuite := []string{
+		"a",
+		"\nb",
+		"c\n",
+		"\n\n\n",
+		"\n\n\na",
+	}
+	for i, _tcase := range tsuite {
+		tcase := _tcase
+		t.Run(fmt.Sprintf("test case %d", i), func(t *testing.T) {
+			var c RawCells
+			n, err := c.ReadFrom(strings.NewReader(tcase))
+			assert.NoError(t, err)
+			assert.Equal(t, int64(len(tcase)), n)
+			assert.Equal(t, tcase, c.String())
+		})
+	}
+}
+
+func TestRawCellsInsert(t *testing.T) {
+	const baseRawCells = `
+syntax = "proto2";
+package rpc;`
+
+	tsuite := []struct {
+		inputStr                    string
+		inputAt                     term.Coordinates
+		expectedRawCells            string
+		expectedFrom, expectedUntil term.Coordinates
+	}{
+		{
+			inputStr:         ">>>\n",
+			inputAt:          term.Coordinates{},
+			expectedRawCells: ">>>\n" + baseRawCells,
+			expectedFrom:     term.Coordinates{},
+			expectedUntil:    term.Coordinates{Y: 1},
+		},
+		{
+			inputStr: "-",
+			inputAt:  term.Coordinates{X: 7, Y: 1},
+			expectedRawCells: `
+syntax -= "proto2";
+package rpc;`,
+			expectedFrom:  term.Coordinates{X: 7, Y: 1},
+			expectedUntil: term.Coordinates{X: 8, Y: 1},
+		},
+		{
+			inputStr: "// what's up",
+			inputAt:  term.Coordinates{X: 2, Y: 5},
+			expectedRawCells: `
+syntax = "proto2";
+package rpc;
+
+
+  // what's up`,
+			expectedFrom:  term.Coordinates{X: 12, Y: 2},
+			expectedUntil: term.Coordinates{X: 2 + len("// what's up"), Y: 5},
+		},
+	}
+
+	for i, tcase := range tsuite {
+		var c RawCells
+		_, err := c.ReadFrom(strings.NewReader(baseRawCells))
+		require.NoError(t, err)
+
+		actualFrom, actualUntil := c.Insert(tcase.inputAt, tcase.inputStr)
+		assert.Equal(t, tcase.expectedFrom, actualFrom, "test case %d", i)
+		assert.Equal(t, tcase.expectedUntil, actualUntil, "test case %d", i)
+		assert.Equal(t, tcase.expectedRawCells, c.String())
+	}
+}
+
+func TestRawCellsDelete(t *testing.T) {
+	const baseRawCells = `
+syntax = "proto2";
+package rpc;
+
+
+  // what's up`
+
+	const expectedRawCellsCase1 = `
+syntax = "proto2";
+package rpc;
+
+
+  `
+
+	const expectedRawCellsCase2 = `
+syntax  "proto2";
+package rpc;
+
+
+  // what's up`
+	const expectedRawCellsCase3 = `
+syntax = "proto2";
+package rpc;
+
+/ what's up`
+	const expectedRawCellsCase4 = `;
+package rpc;
+
+
+  // what's up`
+
+	tsuite := []struct {
+		expectedStr          string
+		expectedRawCells     string
+		inputFrom, inputTo   term.Coordinates
+		overrideBaseRawCells string //optional; otherwise baseRawCells is used
+		//optional; otherwise inputFrom and inputTo is assumed to be returned
+		expectedStart, expectedEnd *term.Coordinates
+	}{
+		{
+			overrideBaseRawCells: "a",
+			expectedStr:          "a",
+			expectedRawCells:     "",
+			inputFrom:            term.Coordinates{X: 0},
+			inputTo:              term.Coordinates{X: 0},
+		},
+		{
+			overrideBaseRawCells: "a",
+			expectedStr:          "a",
+			expectedRawCells:     "",
+			inputFrom:            term.Coordinates{X: 0},
+			inputTo:              term.Coordinates{X: 1},
+		},
+		{
+			overrideBaseRawCells: "a\nb",
+			expectedStr:          "a",
+			expectedRawCells:     "\nb",
+			inputFrom:            term.Coordinates{},
+			inputTo:              term.Coordinates{},
+		},
+		{
+			overrideBaseRawCells: "a\nb",
+			expectedStr:          "a\n",
+			expectedRawCells:     "b",
+			inputFrom:            term.Coordinates{},
+			inputTo:              term.Coordinates{X: 1},
+		},
+		{
+			expectedStr:      "// what's up",
+			expectedRawCells: expectedRawCellsCase1,
+			inputFrom:        term.Coordinates{X: 2, Y: 5},
+			inputTo:          term.Coordinates{X: 2 + len("// what's up"), Y: 5},
+		},
+		{
+			expectedStr:      "=",
+			expectedRawCells: expectedRawCellsCase2,
+			inputFrom:        term.Coordinates{X: 7, Y: 1},
+			inputTo:          term.Coordinates{X: 7, Y: 1},
+		},
+		{
+			overrideBaseRawCells: "a\nbc",
+			expectedStr:          "a\nb",
+			expectedRawCells:     "c",
+			inputFrom:            term.Coordinates{},
+			inputTo:              term.Coordinates{X: 0, Y: 1},
+		},
+		{
+			overrideBaseRawCells: "aa\nbb",
+			expectedStr:          "a\nb",
+			expectedRawCells:     "ab",
+			inputFrom:            term.Coordinates{X: 1},
+			inputTo:              term.Coordinates{X: 0, Y: 1},
+		},
+		{
+			overrideBaseRawCells: "a\nbc",
+			expectedStr:          "a\nbc",
+			expectedRawCells:     "",
+			inputFrom:            term.Coordinates{},
+			inputTo:              term.Coordinates{X: 1, Y: 1},
+		},
+		{
+			overrideBaseRawCells: "a\nb\nc",
+			expectedStr:          "a\nb\n",
+			expectedRawCells:     "c",
+			inputFrom:            term.Coordinates{},
+			inputTo:              term.Coordinates{X: 1, Y: 1},
+		},
+		{
+			overrideBaseRawCells: "a",
+			expectedStr:          "a",
+			expectedRawCells:     "",
+			inputFrom:            term.Coordinates{},
+			inputTo:              term.Coordinates{X: 1},
+		},
+		{
+			// inverted from/until
+			expectedStr:      baseRawCells,
+			expectedRawCells: "",
+			inputTo:          term.Coordinates{},
+			inputFrom:        term.Coordinates{X: 14, Y: 5},
+			// returns inverted from/to
+			expectedStart: &term.Coordinates{},
+			expectedEnd:   &term.Coordinates{X: 14, Y: 5},
+		},
+		{
+			expectedStr:      baseRawCells,
+			expectedRawCells: "",
+			inputFrom:        term.Coordinates{},
+			inputTo:          term.Coordinates{X: 14, Y: 5},
+		},
+		{
+			expectedStr:      "\nsyntax = \"proto2\"",
+			expectedRawCells: expectedRawCellsCase4,
+			inputFrom:        term.Coordinates{},
+			inputTo:          term.Coordinates{X: 16, Y: 1},
+		},
+		{
+			expectedStr:      "\n  /",
+			expectedRawCells: expectedRawCellsCase3,
+			inputFrom:        term.Coordinates{Y: 4},
+			inputTo:          term.Coordinates{X: 2, Y: 5},
+		},
+		{
+			overrideBaseRawCells: "a\tb",
+			expectedStr:          "a\t",
+			expectedRawCells:     "b",
+			inputFrom:            term.Coordinates{},
+			inputTo:              term.Coordinates{X: 4},
+		},
+		{ //16
+			overrideBaseRawCells: "a\tb",
+			expectedStr:          "a\t",
+			expectedRawCells:     "b",
+			inputFrom:            term.Coordinates{},
+			inputTo:              term.Coordinates{X: 2},
+			expectedEnd:          &term.Coordinates{X: 4},
+		},
+		{
+			overrideBaseRawCells: "aa\tb",
+			expectedStr:          "\t",
+			expectedRawCells:     "aab",
+			inputFrom:            term.Coordinates{X: 3},
+			inputTo:              term.Coordinates{X: 4},
+			expectedStart:        &term.Coordinates{X: 2},
+			expectedEnd:          &term.Coordinates{X: 5},
+		},
+		{
+			overrideBaseRawCells: "a\n\tb",
+			expectedStr:          "a\n\t",
+			expectedRawCells:     "b",
+			inputFrom:            term.Coordinates{},
+			inputTo:              term.Coordinates{Y: 1, X: 2},
+			expectedEnd:          &term.Coordinates{Y: 1, X: 3},
+		},
+		{
+			overrideBaseRawCells: "a\n\tb\n\tc",
+			expectedStr:          "\tb\n\t",
+			expectedRawCells:     "a\nc",
+			inputFrom:            term.Coordinates{Y: 1, X: 2},
+			inputTo:              term.Coordinates{Y: 2, X: 2},
+			expectedStart:        &term.Coordinates{Y: 1, X: 0},
+			expectedEnd:          &term.Coordinates{Y: 2, X: 3},
+		},
+		{
+			overrideBaseRawCells: "\t\t\ta",
+			expectedStr:          "\t",
+			expectedRawCells:     "\t\ta",
+			inputFrom:            term.Coordinates{X: 5},
+			inputTo:              term.Coordinates{X: 5},
+			expectedStart:        &term.Coordinates{X: 4},
+			expectedEnd:          &term.Coordinates{X: 7},
+		},
+	}
+
+	for i, tcase := range tsuite {
+		var c RawCells
+		base := baseRawCells
+		if tcase.overrideBaseRawCells != "" {
+			base = tcase.overrideBaseRawCells
+		}
+		_, err := c.ReadFrom(strings.NewReader(base))
+		require.NoError(t, err)
+
+		actualStart, actualEnd, actualStr := c.Delete(tcase.inputFrom, tcase.inputTo)
+		assert.Equal(t, tcase.expectedStr, actualStr, "expected return string in test case %d", i)
+		assert.Equal(t, tcase.expectedRawCells, c.String(), "expected cells in test case %d", i)
+
+		if tcase.expectedStart == nil {
+			tcase.expectedStart = &tcase.inputFrom
+		}
+		if tcase.expectedEnd == nil {
+			tcase.expectedEnd = &tcase.inputTo
+		}
+		assert.Equal(t, *tcase.expectedStart, actualStart, "expected return start in test case %d", i)
+		assert.Equal(t, *tcase.expectedEnd, actualEnd, "expected return end in test case %d", i)
+	}
+}

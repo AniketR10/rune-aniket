@@ -19,7 +19,9 @@ var fortunewidth = 44
 func newScroll(tabspaces int, wrap bool, width, height int) (scroll *Scroll) {
 	scroll = new(Scroll)
 	scroll.Init()
-	scroll.Buffer().Init(tabspaces)
+	cells := new(cell.RawCells)
+	cells.Init(tabspaces)
+	scroll.Buffer().Init(cells)
 	scroll.Resize(width, height)
 	scroll.Wrap = wrap
 	return
@@ -27,8 +29,7 @@ func newScroll(tabspaces int, wrap bool, width, height int) (scroll *Scroll) {
 
 func TestScrollNew(t *testing.T) {
 	scroll := newScroll(5, true, 100, 100)
-	if scroll.Wrap != true || scroll.buf.Tabspaces() != 5 ||
-		scroll.width != 100 || scroll.height != 100 {
+	if scroll.Wrap != true || scroll.width != 100 || scroll.height != 100 {
 		t.Errorf("scroll not initialized properly: %+v", scroll)
 	}
 }
@@ -152,12 +153,11 @@ func TestRowLastIndex(t *testing.T) {
 
 func TestScrollInit(t *testing.T) {
 	t.Run("does not mutate buffer on initialization", func(t *testing.T) {
-		var buf cell.Buffer
+		buf := cell.NewBuffer()
 		str := "hola"
-		buf.Init(4)
 		buf.WriteString(str)
 		var scroll Scroll
-		scroll.InitWithBuffer(&buf)
+		scroll.InitWithBuffer(buf)
 		if found := scroll.String(); found != str {
 			t.Errorf("expected '%s' but found '%s'", str, found)
 		}

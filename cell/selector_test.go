@@ -8,7 +8,7 @@ import (
 )
 
 func TestSelect(t *testing.T) {
-	var buf Buffer
+	buf := NewBuffer()
 	str := `hello
 	world
 
@@ -114,7 +114,7 @@ itsme`
 }
 
 func TestSelectLine(t *testing.T) {
-	var buf Buffer
+	buf := NewBuffer()
 	str := "hello\n\tworld\n\nitsme"
 	buf.WriteString(str)
 
@@ -179,7 +179,7 @@ func TestSelectLine(t *testing.T) {
 }
 
 func TestSelectBlock(t *testing.T) {
-	var buf Buffer
+	buf := NewBuffer()
 	str := "hello\n\tworld\n\nitsme\n\n\nhi"
 	buf.WriteString(str)
 

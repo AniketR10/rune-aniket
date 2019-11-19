@@ -330,7 +330,7 @@ func (l *Less) InitWithConfig(cfg *LessConfig) {
 	if cfg == nil {
 		panic("initializing less handler with nil configuration")
 	}
-	l.InitWithBufferConfig(new(cell.Buffer), cfg)
+	l.InitWithBufferConfig(cell.NewBuffer(), cfg)
 }
 
 // InitWithBuffer initializes a Less Handler with the given buffer.
@@ -340,7 +340,7 @@ func (l *Less) InitWithBuffer(buf *cell.Buffer) {
 
 // Init initializes this instance or resets it if already initialized.
 func (l *Less) Init() {
-	l.InitWithBufferConfig(new(cell.Buffer), nil)
+	l.InitWithBufferConfig(cell.NewBuffer(), nil)
 }
 
 // InitWithBufferConfig initialzes this instance with the given Buffer and configuration.

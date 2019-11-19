@@ -10,94 +10,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestUninitializedNotPanic(t *testing.T) {
-
-	t.Run("GetAttr", func(t *testing.T) {
-		var b Buffer
-		b.GetAttr(term.Coordinates{X: 10, Y: 0})
-	})
-
-	t.Run("ConflateRow", func(t *testing.T) {
-		var b Buffer
-		_ = b.ConflateRow(10)
-	})
-
-	t.Run("InsertRowAt", func(t *testing.T) {
-		var b Buffer
-		b.InsertRowAt(134)
-	})
-
-	t.Run("InsertAt", func(t *testing.T) {
-		var b Buffer
-		_ = b.InsertAt(term.Coordinates{X: 10, Y: 10}, 'f')
-	})
-
-	t.Run("RawCells", func(t *testing.T) {
-		var b Buffer
-		assert.NotNil(t, b.RawCells())
-	})
-
-	t.Run("ResetAttr", func(t *testing.T) {
-		var b Buffer
-		b.ResetAttr()
-	})
-
-	t.Run("Columns", func(t *testing.T) {
-		var b Buffer
-		_, _ = b.Columns(10)
-	})
-
-	t.Run("Rows", func(t *testing.T) {
-		var b Buffer
-		_ = b.Rows()
-	})
-
-	t.Run("SetAttr", func(t *testing.T) {
-		var b Buffer
-		b.SetAttr(term.Coordinates{X: 1, Y: 10}, term.Attributes{})
-	})
-
-	t.Run("String", func(t *testing.T) {
-		var b Buffer
-		_ = b.String()
-	})
-
-	t.Run("DeleteCell", func(t *testing.T) {
-		var b Buffer
-		b.DeleteCell(term.Coordinates{X: 10, Y: 10})
-	})
-
-	t.Run("TruncateFrom", func(t *testing.T) {
-		var b Buffer
-		b.TruncateFrom(term.Coordinates{X: 0, Y: 1})
-	})
-
-	t.Run("DeleteRow", func(t *testing.T) {
-		var b Buffer
-		_ = b.DeleteRow(10)
-	})
-
-	t.Run("TruncateRowFrom", func(t *testing.T) {
-		var b Buffer
-		b.TruncateRowFrom(term.Coordinates{X: 10, Y: 0})
-	})
-
-	t.Run("WriteRune", func(t *testing.T) {
-		var b Buffer
-		_ = b.WriteRune('h')
-	})
-
-	t.Run("WriteString", func(t *testing.T) {
-		var b Buffer
-		_ = b.WriteString("hfjlkw")
-	})
-
-	t.Run("ReadFrom", func(t *testing.T) {
-		var b Buffer
-		_, _ = b.ReadFrom(strings.NewReader("hfjlkw"))
-	})
-}
-
 const str = "hello\n\tworld\n"
 
 func assertBufferContent(t *testing.T, buf *Buffer) {
@@ -115,31 +27,31 @@ func assertBufferContent(t *testing.T, buf *Buffer) {
 }
 
 func TestBufferWriteString(t *testing.T) {
-	var buf Buffer
+	buf := NewBuffer()
 	buf.WriteString(str)
-	assertBufferContent(t, &buf)
+	assertBufferContent(t, buf)
 }
 
 func TestBufferReadFrom(t *testing.T) {
-	var buf Buffer
+	buf := NewBuffer()
 	n, err := buf.ReadFrom(strings.NewReader(str))
 	require.NoError(t, err)
 	assert.Equal(t, len(str), int(n))
-	assertBufferContent(t, &buf)
+	assertBufferContent(t, buf)
 }
 
 func TestBufferWriteRune(t *testing.T) {
-	var buf Buffer
+	buf := NewBuffer()
 
 	for _, c := range str {
 		buf.WriteRune(c)
 	}
 
-	assertBufferContent(t, &buf)
+	assertBufferContent(t, buf)
 }
 
 func TestBufferInsertAt(t *testing.T) {
-	var buf Buffer
+	buf := NewBuffer()
 	var next term.Coordinates
 
 	next = buf.InsertAt(next, 'h')
@@ -174,7 +86,7 @@ func TestBufferInsertAt(t *testing.T) {
 }
 
 func TestBufferDeleteRow(t *testing.T) {
-	var buf Buffer
+	buf := NewBuffer()
 	str := "hello\nworld"
 	buf.WriteString(str)
 
@@ -186,7 +98,7 @@ func TestBufferDeleteRow(t *testing.T) {
 }
 
 func TestBufferTruncateRowFrom1(t *testing.T) {
-	var buf Buffer
+	buf := NewBuffer()
 	str := "hello\nworld"
 	buf.WriteString(str)
 
@@ -196,7 +108,7 @@ func TestBufferTruncateRowFrom1(t *testing.T) {
 }
 
 func TestBufferTruncateRowFrom2(t *testing.T) {
-	var buf Buffer
+	buf := NewBuffer()
 	str := "hello\nworld"
 	buf.WriteString(str)
 
@@ -206,7 +118,7 @@ func TestBufferTruncateRowFrom2(t *testing.T) {
 }
 
 func TestBufferTruncateFrom1(t *testing.T) {
-	var buf Buffer
+	buf := NewBuffer()
 	str := "hello\nworld"
 	buf.WriteString(str)
 
@@ -216,7 +128,7 @@ func TestBufferTruncateFrom1(t *testing.T) {
 }
 
 func TestBufferTruncateFrom2(t *testing.T) {
-	var buf Buffer
+	buf := NewBuffer()
 	str := "hello\nworld"
 	buf.WriteString(str)
 
@@ -226,7 +138,7 @@ func TestBufferTruncateFrom2(t *testing.T) {
 }
 
 func TestBufferTruncateCellAt(t *testing.T) {
-	var buf Buffer
+	buf := NewBuffer()
 	str := "hello\nworld"
 	buf.WriteString(str)
 
@@ -239,9 +151,7 @@ func TestBufferTruncateCellAt(t *testing.T) {
 }
 
 func TestBufferDeleteCellAtTab(t *testing.T) {
-	const tabspaces = 4
-	var buf Buffer
-	buf.Init(tabspaces)
+	buf := NewBuffer()
 
 	str := "!\t\t!\t"
 	buf.WriteString(str)
@@ -281,7 +191,7 @@ func assertCellProperties(t *testing.T, cell term.Cell, attr term.Attributes) {
 }
 
 func TestSetAttr(t *testing.T) {
-	var buf Buffer
+	buf := NewBuffer()
 	str := "0123"
 	buf.WriteString(str)
 
@@ -289,7 +199,7 @@ func TestSetAttr(t *testing.T) {
 		pos := term.Coordinates{X: 0, Y: 0}
 		attr := term.Attributes{Fg: term.AttrBold, Bg: term.AttrReverse}
 		assert.True(t, buf.SetAttr(pos, attr))
-		c := buf.cells.cells[pos.Y][pos.X]
+		_, c := buf.cells.Cell(pos)
 		assertCellProperties(t, c, attr)
 	})
 	t.Run("returns ok=false if cell at position does not exist", func(t *testing.T) {

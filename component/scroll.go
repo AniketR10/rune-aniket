@@ -42,7 +42,7 @@ func NewScroll() (s *Scroll) {
 // Init initializes this scroll and allocates new storage
 // for the internal cell buffer.
 func (s *Scroll) Init() {
-	s.InitWithBuffer(new(cell.Buffer))
+	s.InitWithBuffer(cell.NewBuffer())
 }
 
 // InitWithBuffer initializes this scroll with the given cell buffer.
