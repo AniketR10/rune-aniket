@@ -39,7 +39,6 @@ func DefaultLessConfig() *LessConfig {
 // the Handler and Component interfaces.
 type Less struct {
 	component.Scroll
-	buf          *cell.Buffer
 	cmdScroll    component.VirtualComponent
 	msgScroll    component.VirtualComponent
 	mode         LessMode
@@ -85,7 +84,7 @@ func (l *Less) sendEvent(ev LessEvent) {
 }
 
 func getBuffer(virtualScroll component.VirtualComponent) *cell.Buffer {
-	return virtualScroll.C.(*component.Scroll).Buffer()
+	return &virtualScroll.C.(*component.Scroll).Buffer
 }
 
 func (l *Less) setNormalMode() {
@@ -109,7 +108,7 @@ func (l *Less) searchHandleEvent(ev term.Event) (exit bool) {
 	case term.KeyBackspace2:
 		if l.cursorOffset > 1 {
 			l.cursorOffset--
-			l.cmdScroll.C.(*component.Scroll).Buffer().
+			l.cmdScroll.C.(*component.Scroll).Buffer.
 				DeleteCell(term.Coordinates{X: l.cursorOffset, Y: 0})
 		}
 	case term.KeyEnter:
@@ -175,21 +174,13 @@ func (l *Less) SetMessage(text string, args ...interface{}) {
 
 // Reset resets the contents and state of this instance.
 func (l *Less) Reset() {
-	l.InitWithBufferConfig(l.buf, l.config)
-}
-
-// SetBuffer swaps the main scroll for s and returns the original scroll.
-func (l *Less) SetBuffer(b *cell.Buffer) (orig *cell.Buffer) {
-	orig = l.buf
-	l.buf = b
-	l.Reset()
-	return
+	l.InitWithBuffer(&l.Scroll.Buffer)
 }
 
 // SetContent replaces the content of the underlying scroll with 'text'.
 func (l *Less) SetContent(text string, args ...interface{}) {
 	l.Reset()
-	l.Scroll.Buffer().WriteString(fmt.Sprintf(text, args...))
+	l.Scroll.WriteString(fmt.Sprintf(text, args...))
 	l.Resize(l.width, l.height)
 }
 
@@ -256,11 +247,6 @@ func (l *Less) setupScroll(w *component.Scroll) {
 	w.Wrap = l.config.Wrap
 }
 
-// Buffer provides acces to the underlying Buffer.
-func (l *Less) Buffer() *cell.Buffer {
-	return l.buf
-}
-
 // Man : Handler
 func (l *Less) Man() fractal.Manual {
 	return fractal.Manual{
@@ -324,39 +310,29 @@ func (l *Less) Man() fractal.Manual {
 	}
 }
 
-// InitWithConfig initializes a Less Handler with the given Buffer.
-// If config is nil this method panics.
-func (l *Less) InitWithConfig(cfg *LessConfig) {
-	if cfg == nil {
-		panic("initializing less handler with nil configuration")
-	}
-	l.InitWithBufferConfig(cell.NewBuffer(), cfg)
-}
-
-// InitWithBuffer initializes a Less Handler with the given buffer.
-func (l *Less) InitWithBuffer(buf *cell.Buffer) {
-	l.InitWithBufferConfig(buf, nil)
+// WithConfig sets cfg as the new Less handler configuration.
+func (l *Less) WithConfig(cfg *LessConfig) (ret *Less) {
+	ret = new(Less)
+	*ret = *l
+	ret.config = cfg
+	return ret
 }
 
 // Init initializes this instance or resets it if already initialized.
 func (l *Less) Init() {
-	l.InitWithBufferConfig(cell.NewBuffer(), nil)
+	l.InitWithBuffer(cell.NewBuffer())
 }
 
-// InitWithBufferConfig initialzes this instance with the given Buffer and configuration.
+// InitWithBuffer initialzes this instance with the given Buffer and configuration.
 // If config is nil, the default one is used.
-func (l *Less) InitWithBufferConfig(buf *cell.Buffer, cfg *LessConfig) {
-	if cfg == nil {
+func (l *Less) InitWithBuffer(buf *cell.Buffer) {
+	if l.config == nil {
 		l.config = DefaultLessConfig()
-	} else {
-		l.config = cfg
 	}
-
 	l.delEOF = false
-	l.buf = buf
-	l.Scroll.InitWithBuffer(l.buf)
+	l.Scroll.Init()
+	l.Scroll.Buffer = *buf
 
-	// TODO what should scroll be?
 	l.cmdScroll.C = component.NewScroll()
 	l.msgScroll.C = component.NewScroll()
 

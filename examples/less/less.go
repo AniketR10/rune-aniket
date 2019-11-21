@@ -86,10 +86,9 @@ func main() {
 	// profile initialization
 	stopCPUProfile := startCPUProfile()
 
-	less = handler.NewLess()
-	less.InitWithConfig(config)
+	less = handler.NewLess().WithConfig(config)
 
-	_, err = less.Buffer().ReadFrom(input)
+	_, err = less.ReadFrom(input)
 	if err != nil {
 		log.Fatal(err)
 	}

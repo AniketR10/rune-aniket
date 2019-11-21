@@ -25,7 +25,7 @@ func setup(less *Less, width, height int) (*Less, *term.StringWriter) {
 		less.Init()
 	}
 
-	less.Buffer().WriteString(content)
+	less.WriteString(content)
 
 	less.Resize(width, height)
 

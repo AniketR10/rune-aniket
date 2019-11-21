@@ -21,7 +21,7 @@ func newScroll(tabspaces int, wrap bool, width, height int) (scroll *Scroll) {
 	scroll.Init()
 	cells := new(cell.RawCells)
 	cells.Init(tabspaces)
-	scroll.Buffer().Init(cells)
+	scroll.Buffer.SetReadWriter(cells)
 	scroll.Resize(width, height)
 	scroll.Wrap = wrap
 	return
@@ -39,7 +39,7 @@ func TestScrollDraw(t *testing.T) {
 	tabspaces := 4
 	wrap := false
 	scroll := newScroll(tabspaces, wrap, width, height)
-	scroll.Buffer().WriteString(fortune)
+	scroll.WriteString(fortune)
 
 	w := term.NewStringWriter(width, height)
 
@@ -66,11 +66,11 @@ func TestScrollDraw(t *testing.T) {
 		{func() { scroll.Search("中国"); scroll.SeekNextResult() }, "Oscar Hammerstein 中国"},
 		{func() { scroll.Search("Oscar"); scroll.SeekNextResult() }, "Oscar Hammerstein 中国"},
 		{func() { scroll.SeekStartFile(); scroll.SeekStartLine() }, "Love in your heart w"},
-		{func() { scroll.Buffer().DeleteCell(term.Coordinates{X: 0, Y: 0}) }, "ove in your heart wa"},
-		{func() { scroll.Buffer().DeleteCell(term.Coordinates{X: 14, Y: 0}) }, "ove in your hert was"},
+		{func() { scroll.DeleteCell(term.Coordinates{X: 0, Y: 0}) }, "ove in your heart wa"},
+		{func() { scroll.DeleteCell(term.Coordinates{X: 14, Y: 0}) }, "ove in your hert was"},
 		{func() { scroll.SeekDown() }, "Love isn't love 'til"},
-		{func() { scroll.Buffer().DeleteCell(term.Coordinates{X: 16, Y: 1}) }, "Love isn't love til "},
-		{func() { scroll.Buffer().InsertAt(term.Coordinates{X: 16, Y: 1}, '中') }, "Love isn't love 中til"},
+		{func() { scroll.DeleteCell(term.Coordinates{X: 16, Y: 1}) }, "Love isn't love til "},
+		{func() { scroll.InsertAt(term.Coordinates{X: 16, Y: 1}, '中') }, "Love isn't love 中til"},
 		// {scroll.SeekDown, "        -- Oscar Ham"},
 		// {scroll.SeekEndLine, "rstein 中            "},
 		// {func() { scroll.InsertAt(term.Coordinates{X: 20, Y: 2}, '中') }, "rstein 中中           "},
@@ -99,7 +99,7 @@ func TestScrollDrawWrap(t *testing.T) {
 	tabspaces := 4
 	wrap := true
 	scroll := newScroll(tabspaces, wrap, width, height)
-	scroll.Buffer().ReadFrom(strings.NewReader(fortune))
+	scroll.ReadFrom(strings.NewReader(fortune))
 
 	w := term.NewStringWriter(width, height)
 
@@ -144,30 +144,17 @@ func TestRowLastIndex(t *testing.T) {
 	}
 
 	for _, tcase := range cases {
-		scroll.Buffer().Reset()
-		scroll.Buffer().WriteString(tcase.content)
-		i, _ := scroll.Buffer().Columns(tcase.line)
+		scroll.Reset()
+		scroll.WriteString(tcase.content)
+		i := scroll.Columns(tcase.line)
 		assert.Equal(t, tcase.expected, i)
 	}
-}
-
-func TestScrollInit(t *testing.T) {
-	t.Run("does not mutate buffer on initialization", func(t *testing.T) {
-		buf := cell.NewBuffer()
-		str := "hola"
-		buf.WriteString(str)
-		var scroll Scroll
-		scroll.InitWithBuffer(buf)
-		if found := scroll.String(); found != str {
-			t.Errorf("expected '%s' but found '%s'", str, found)
-		}
-	})
 }
 
 func newBigScroll(fortunes int) (scroll *Scroll) {
 	scroll = NewScroll()
 	for i := 0; i < fortunes; i++ {
-		_ = scroll.Buffer().WriteString(fortune)
+		_ = scroll.WriteString(fortune)
 	}
 	// assume big screen
 	scroll.Resize(3000, 2000)
@@ -186,7 +173,7 @@ func benchmarkScrollDraw(b *testing.B, fortunes int, offset float32) {
 }
 
 func seekPercRows(scroll *Scroll, offset float32) {
-	offsetRows := int(float32(scroll.Buffer().Rows()) * offset)
+	offsetRows := int(float32(scroll.Rows()) * offset)
 	for i := 0; i < offsetRows; i++ {
 		scroll.SeekDown()
 	}

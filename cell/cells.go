@@ -13,6 +13,7 @@ type Reader interface {
 	Columns(row int) int
 	Cell(term.Coordinates) (actual term.Coordinates, cell term.Cell)
 	RawCells() [][]term.Cell
+	fmt.Stringer
 }
 
 // Writer is the interface that wraps methods to mutate a 2D matrix of term.Cell.
@@ -21,6 +22,7 @@ type Writer interface {
 	Insert(at term.Coordinates, str string) (from, to term.Coordinates)
 	Delete(from, to term.Coordinates) (start, end term.Coordinates, str string)
 	Reset()
+	io.ReaderFrom
 }
 
 // ReadWriter is the interface that groups methods to query and manipulate
@@ -28,6 +30,4 @@ type Writer interface {
 type ReadWriter interface {
 	Writer
 	Reader
-	fmt.Stringer
-	io.ReaderFrom
 }

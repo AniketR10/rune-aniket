@@ -14,6 +14,7 @@ const defColumnCap int = 64
 const defRowCap int = 128
 
 // RawCells is a matrix of term.Cell. The zero value for RawCells is ready to use.
+// It satisfies cell.Reader and cell.Writer.
 type RawCells struct {
 	// TODO should be a matrix of rune; to solve scroll search:
 	// - scroll search results should be recalculated on every draw?

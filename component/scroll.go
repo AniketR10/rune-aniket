@@ -11,7 +11,7 @@ import (
 // Scroll adds Draw to a Buffer along with
 // scrolling, searching and wrap-around capabilities.
 type Scroll struct {
-	buf           *cell.Buffer
+	cell.Buffer
 	width, height int
 	searchText    []rune
 	offset        term.Coordinates
@@ -42,13 +42,8 @@ func NewScroll() (s *Scroll) {
 // Init initializes this scroll and allocates new storage
 // for the internal cell buffer.
 func (s *Scroll) Init() {
-	s.InitWithBuffer(cell.NewBuffer())
-}
-
-// InitWithBuffer initializes this scroll with the given cell buffer.
-func (s *Scroll) InitWithBuffer(b *cell.Buffer) {
 	s.ResultsAttr.Fg, s.ResultsAttr.Bg = term.AttrReverse, term.AttrReverse
-	s.buf = b
+	s.Buffer.Init()
 	s.resetProps()
 }
 
@@ -205,7 +200,7 @@ func (s *Scroll) Resize(width, height int) {
 
 func (s *Scroll) getView() [][]term.Cell {
 	ywindow := s.offset.Y + s.height
-	return s.buf.RawCells()[s.offset.Y:ywindow]
+	return s.RawCells()[s.offset.Y:ywindow]
 }
 
 func (s *Scroll) getMaxXOffset() (x int) {
@@ -227,7 +222,7 @@ func (s *Scroll) getMaxXOffset() (x int) {
 }
 
 func (s *Scroll) getMaxYOffset() (y int) {
-	rows := s.buf.Rows()
+	rows := s.Buffer.Rows()
 	if rows <= s.height {
 		y = 0
 	} else {
@@ -239,7 +234,7 @@ func (s *Scroll) getMaxYOffset() (y int) {
 func (s *Scroll) draw(writer fractal.Writer) {
 	xwindow := s.offset.X + s.width
 	ywindow := s.height
-	for y, r := range s.buf.RawCells()[s.offset.Y:] {
+	for y, r := range s.Buffer.RawCells()[s.offset.Y:] {
 		if y >= ywindow {
 			break
 		}
@@ -261,7 +256,7 @@ func (s *Scroll) wrapdraw(writer fractal.Writer) {
 	var xi, yi, ywindow int
 	xwindow := s.width
 	wraps := 0
-	for y, r := range s.buf.RawCells()[s.offset.Y:] {
+	for y, r := range s.Buffer.RawCells()[s.offset.Y:] {
 		ywindow = s.height - wraps
 		if y >= ywindow {
 			break
@@ -301,7 +296,7 @@ func (s *Scroll) Draw(writer fractal.Writer) {
 // a search list so SeekNextResult and SeekPreviousResult can be used to visualize results.
 // It returns the number of matches found.
 func (s *Scroll) Search(text string) int {
-	s.buf.ResetAttr()
+	s.Buffer.ResetAttr()
 	s.reslist.Init()
 	s.result = nil
 	s.searchText = []rune(text)
@@ -313,7 +308,7 @@ func (s *Scroll) Search(text string) int {
 
 	var pos term.Coordinates
 	var o int
-	for y, r := range s.buf.RawCells() {
+	for y, r := range s.Buffer.RawCells() {
 		for x, c := range r {
 			if c.Ch != s.searchText[o] {
 				o = 0
@@ -327,7 +322,7 @@ func (s *Scroll) Search(text string) int {
 				s.reslist.PushBack(pos)
 				lX := pos.X + slen
 				for j := pos.X; j < lX; j++ {
-					s.buf.SetAttr(
+					s.Buffer.SetAttr(
 						term.Coordinates{X: j, Y: pos.Y},
 						s.ResultsAttr,
 					)
@@ -390,13 +385,4 @@ func (s *Scroll) Result() (pos term.Coordinates, ok bool) {
 // Offset returns the scroll offset from the start of the content.
 func (s *Scroll) Offset() term.Coordinates {
 	return s.offset
-}
-
-// Buffer provides acces to the underlying Buffer.
-func (s *Scroll) Buffer() *cell.Buffer {
-	return s.buf
-}
-
-func (s *Scroll) String() string {
-	return s.buf.String()
 }
