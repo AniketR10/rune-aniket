@@ -105,7 +105,8 @@ itsme`
 	}
 
 	for i, tcase := range testCases {
-		selection := Select(buf.RawCells(), tcase.from, tcase.to)
+		selector := Selector{Reader: buf}
+		selection := selector.Select(tcase.from, tcase.to)
 		if !reflect.DeepEqual(selection, tcase.expected) {
 			t.Errorf("tcase %d: expected %q found %q", i,
 				toString(tcase.expected), toString(selection))
@@ -171,7 +172,8 @@ func TestSelectLine(t *testing.T) {
 	}
 
 	for _, tcase := range testCases {
-		selection := SelectLine(buf.RawCells(), tcase.from, tcase.to)
+		selector := Selector{Reader: buf}
+		selection := selector.SelectLine(tcase.from, tcase.to)
 		if toString(selection) != toString(tcase.expected) {
 			t.Errorf("expected %q found %q", toString(tcase.expected), toString(selection))
 		}
@@ -233,7 +235,8 @@ func TestSelectBlock(t *testing.T) {
 	}
 
 	for _, tcase := range testCases {
-		selection := SelectBlock(buf.RawCells(), tcase.from, tcase.to)
+		selector := Selector{Reader: buf}
+		selection := selector.SelectBlock(tcase.from, tcase.to)
 		if !reflect.DeepEqual(selection, tcase.expected) {
 			t.Errorf("expected %q found %q", toString(tcase.expected), toString(selection))
 		}
