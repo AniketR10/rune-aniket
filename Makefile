@@ -15,11 +15,8 @@ test: CHECK
 	@ go test ./...
 
 coverage: CHECK $(TARGET)
-	@ go test -coverprofile $(TARGET)/coverage
+	@ go test ./... -coverprofile $(TARGET)/coverage
 	@ go tool cover -html=$(TARGET)/coverage
-
-install:
-	@ go install
 
 clean:
 	@-rm -rf $(TARGET)
