@@ -225,7 +225,6 @@ func (b *RawCells) deleteRowRange(
 		builder.WriteByte('\n')
 		b.conflate(row)
 	}
-	return
 }
 
 func (b *RawCells) skipPadding(start, end term.Coordinates) (
