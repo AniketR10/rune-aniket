@@ -488,3 +488,43 @@ Love isn't love 'til you give it away.
 		assert.Equal(t, *tcase.expectedEnd, actualEnd, "expected return end in test case %d", i)
 	}
 }
+
+func newBenchmarkRawCells(fortunes int) (*RawCells, string) {
+	cells := new(RawCells)
+	payload := ""
+	for i := 0; i < fortunes; i++ {
+		payload = payload + benchmarkFortune
+	}
+	return cells, payload
+}
+
+func benchmarkBufferReadFrom(b *testing.B, fortunes int) {
+	cells, payload := newBenchmarkRawCells(fortunes)
+	reader := strings.NewReader(payload)
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		cells.Reset()
+		reader.Reset(payload)
+		_, _ = cells.ReadFrom(reader)
+	}
+}
+
+// NOTE: names starting with 'Buffer' are kept so we can
+// compare to when ReadFrom was implemented in Buffer.
+func BenchmarkBufferReadFrom10(b *testing.B) {
+	benchmarkBufferReadFrom(b, 10)
+}
+func BenchmarkBufferReadFrom100(b *testing.B) {
+	benchmarkBufferReadFrom(b, 100)
+}
+func BenchmarkBufferReadFrom1000(b *testing.B) {
+	benchmarkBufferReadFrom(b, 1000)
+}
+func BenchmarkBufferReadFrom10000(b *testing.B) {
+	benchmarkBufferReadFrom(b, 10000)
+}
+
+// func BenchmarkBufferReadFrom100MB(b *testing.B) {
+// 	benchmarkBufferReadFrom(b, 1000000)
+// }

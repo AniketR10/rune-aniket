@@ -1,9 +1,6 @@
 package cell
 
 import (
-	"fmt"
-	"io"
-
 	"github.com/ernestrc/fractal/term"
 )
 
@@ -11,9 +8,9 @@ import (
 type Reader interface {
 	Rows() int
 	Columns(row int) int
-	Cell(term.Coordinates) (actual term.Coordinates, cell term.Cell)
+	Cell(term.Coordinates) (term.Coordinates, term.Cell)
 	RawCells() [][]term.Cell
-	fmt.Stringer
+	String() string
 }
 
 // Writer is the interface that wraps methods to mutate a 2D matrix of term.Cell.
@@ -22,7 +19,6 @@ type Writer interface {
 	Insert(at term.Coordinates, str string) (from, to term.Coordinates)
 	Delete(from, to term.Coordinates) (start, end term.Coordinates, str string)
 	Reset()
-	io.ReaderFrom
 }
 
 // ReadWriter is the interface that groups methods to query and manipulate

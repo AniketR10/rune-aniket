@@ -1,7 +1,6 @@
 package component
 
 import (
-	"strings"
 	"testing"
 
 	"github.com/ernestrc/fractal/cell"
@@ -99,7 +98,7 @@ func TestScrollDrawWrap(t *testing.T) {
 	tabspaces := 4
 	wrap := true
 	scroll := newScroll(tabspaces, wrap, width, height)
-	scroll.ReadFrom(strings.NewReader(fortune))
+	scroll.WriteString(fortune)
 
 	w := term.NewStringWriter(width, height)
 

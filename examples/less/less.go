@@ -12,6 +12,7 @@ import (
 	"runtime/pprof"
 
 	"github.com/ernestrc/fractal"
+	"github.com/ernestrc/fractal/cell"
 	"github.com/ernestrc/fractal/handler"
 )
 
@@ -86,12 +87,14 @@ func main() {
 	// profile initialization
 	stopCPUProfile := startCPUProfile()
 
-	less = handler.NewLess().WithConfig(config)
-
-	_, err = less.ReadFrom(input)
+	cells := cell.RawCells{}
+	_, err = cells.ReadFrom(input)
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	less = handler.NewLess().WithConfig(config)
+	less.SetReadWriter(&cells)
 
 	stopCPUProfile()
 

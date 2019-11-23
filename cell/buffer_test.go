@@ -1,13 +1,11 @@
 package cell
 
 import (
-	"strings"
 	"testing"
 
 	"github.com/ernestrc/fractal/term"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 const str = "hello\n\tworld\n"
@@ -30,14 +28,6 @@ func assertBufferContent(t *testing.T, buf *Buffer) {
 func TestBufferWriteString(t *testing.T) {
 	buf := NewBuffer()
 	buf.WriteString(str)
-	assertBufferContent(t, buf)
-}
-
-func TestBufferReadFrom(t *testing.T) {
-	buf := NewBuffer()
-	n, err := buf.ReadFrom(strings.NewReader(str))
-	require.NoError(t, err)
-	assert.Equal(t, len(str), int(n))
 	assertBufferContent(t, buf)
 }
 
@@ -259,33 +249,4 @@ func BenchmarkBufferWrite10000(b *testing.B) {
 
 // func BenchmarkBufferWrite100MB(b *testing.B) {
 // 	benchmarkBufferWrite(b, 1000000)
-// }
-
-func benchmarkBufferReadFrom(b *testing.B, fortunes int) {
-	buffer, payload := newBenchmarkBuffer(fortunes)
-	reader := strings.NewReader(payload)
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		buffer.Reset()
-		reader.Reset(payload)
-		_, _ = buffer.ReadFrom(reader)
-	}
-}
-
-func BenchmarkBufferReadFrom10(b *testing.B) {
-	benchmarkBufferReadFrom(b, 10)
-}
-func BenchmarkBufferReadFrom100(b *testing.B) {
-	benchmarkBufferReadFrom(b, 100)
-}
-func BenchmarkBufferReadFrom1000(b *testing.B) {
-	benchmarkBufferReadFrom(b, 1000)
-}
-func BenchmarkBufferReadFrom10000(b *testing.B) {
-	benchmarkBufferReadFrom(b, 10000)
-}
-
-// func BenchmarkBufferReadFrom100MB(b *testing.B) {
-// 	benchmarkBufferReadFrom(b, 1000000)
 // }
