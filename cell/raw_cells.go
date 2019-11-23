@@ -367,10 +367,8 @@ func (b *RawCells) ReadFrom(r io.Reader) (int64, error) {
 	reader := bufio.NewReader(r)
 	n := int64(0)
 	for {
-		// FIXME r, _, err := reader.ReadRune()
-		// TODO add test and also see benchmark
-		bytes, err := reader.ReadSlice('\n')
-		for _, r := range bytes {
+		str, err := reader.ReadString('\n')
+		for _, r := range str {
 			switch r {
 			case '\n':
 			case '\t':
@@ -382,7 +380,7 @@ func (b *RawCells) ReadFrom(r io.Reader) (int64, error) {
 				b.cells[rowY] = append(b.cells[rowY], term.Cell{Ch: rune(r)})
 			}
 		}
-		n += int64(len(bytes))
+		n += int64(len(str))
 		if err != nil {
 			if err == io.EOF {
 				err = nil

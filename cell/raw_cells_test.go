@@ -14,7 +14,7 @@ import (
 
 const rawCellsFortune = `Love in your heart wasn't put there to stay.
 Love isn't love 'til you give it away.
-		-- Oscar Hammerstein XX`
+		-- Oscar Hammerstein 中国`
 
 func TestRawCellsUninitialized(t *testing.T) {
 	t.Run("Columns()", func(t *testing.T) {
@@ -186,11 +186,11 @@ package rpc;`
 	const expectedRawCellsCase4 = `Love in your heart wasn't put there to stay.
 
 Love isn't love 'til you give it away.
-		-- Oscar Hammerstein XX`
+		-- Oscar Hammerstein 中国`
 
 	const expectedRawCellsCase5 = `Love in your heart wasn't put there to stay.
 Love isn't love 'til you give it away.
-			-- Oscar Hammerstein XX`
+			-- Oscar Hammerstein 中国`
 
 	tsuite := []struct {
 		overrideBaseRawCells     string
@@ -291,7 +291,7 @@ package rpc;
 	const inputRawCellsCase5 = `Love in your heart wasn't put there to stay.
 
 Love isn't love 'til you give it away.
-		-- Oscar Hammerstein XX`
+		-- Oscar Hammerstein 中国`
 
 	tsuite := []struct {
 		expectedStr          string
