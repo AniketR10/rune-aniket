@@ -156,8 +156,13 @@ func (b *RawCells) Insert(at term.Coordinates, str string) (
 	from, to term.Coordinates,
 ) {
 	from, to = b.fillInCoords(at)
+	next := to
 	for _, r := range str {
-		to = b.insertAt(to, r)
+		to = next
+		next = b.insertAt(next, r)
+		if padding := next.X - to.X - 1; padding > 0 {
+			to.X += padding
+		}
 	}
 	return
 }
@@ -362,6 +367,8 @@ func (b *RawCells) ReadFrom(r io.Reader) (int64, error) {
 	reader := bufio.NewReader(r)
 	n := int64(0)
 	for {
+		// FIXME r, _, err := reader.ReadRune()
+		// TODO add test and also see benchmark
 		bytes, err := reader.ReadSlice('\n')
 		for _, r := range bytes {
 			switch r {

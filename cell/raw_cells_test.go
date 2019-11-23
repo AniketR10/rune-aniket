@@ -12,6 +12,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const rawCellsFortune = `Love in your heart wasn't put there to stay.
+Love isn't love 'til you give it away.
+		-- Oscar Hammerstein XX`
+
 func TestRawCellsUninitialized(t *testing.T) {
 	t.Run("Columns()", func(t *testing.T) {
 		var c RawCells
@@ -20,9 +24,9 @@ func TestRawCellsUninitialized(t *testing.T) {
 
 	t.Run("Insert()", func(t *testing.T) {
 		var c RawCells
-		from, until := c.Insert(term.Coordinates{X: 0, Y: 0}, "r")
+		from, to := c.Insert(term.Coordinates{X: 0, Y: 0}, "r")
 		assert.Equal(t, term.Coordinates{}, from)
-		assert.Equal(t, term.Coordinates{X: 1}, until)
+		assert.Equal(t, term.Coordinates{}, to)
 	})
 
 	t.Run("NextWrite()", func(t *testing.T) {
@@ -168,50 +172,86 @@ func TestRawCellsInsert(t *testing.T) {
 syntax = "proto2";
 package rpc;`
 
+	const expectedRawCellsCase3 = `
+syntax = "proto2";
+package rpc;
+
+
+  // what's up`
+
+	const expectedRawCellsCase2 = `
+syntax -= "proto2";
+package rpc;`
+
+	const expectedRawCellsCase4 = `Love in your heart wasn't put there to stay.
+
+Love isn't love 'til you give it away.
+		-- Oscar Hammerstein XX`
+
+	const expectedRawCellsCase5 = `Love in your heart wasn't put there to stay.
+Love isn't love 'til you give it away.
+			-- Oscar Hammerstein XX`
+
 	tsuite := []struct {
-		inputStr                    string
-		inputAt                     term.Coordinates
-		expectedRawCells            string
-		expectedFrom, expectedUntil term.Coordinates
+		overrideBaseRawCells     string
+		inputStr                 string
+		inputAt                  term.Coordinates
+		expectedRawCells         string
+		expectedFrom, expectedTo term.Coordinates
 	}{
 		{
 			inputStr:         ">>>\n",
 			inputAt:          term.Coordinates{},
 			expectedRawCells: ">>>\n" + baseRawCells,
 			expectedFrom:     term.Coordinates{},
-			expectedUntil:    term.Coordinates{Y: 1},
+			expectedTo:       term.Coordinates{X: 3},
 		},
 		{
-			inputStr: "-",
-			inputAt:  term.Coordinates{X: 7, Y: 1},
-			expectedRawCells: `
-syntax -= "proto2";
-package rpc;`,
-			expectedFrom:  term.Coordinates{X: 7, Y: 1},
-			expectedUntil: term.Coordinates{X: 8, Y: 1},
+			inputStr:         "-",
+			inputAt:          term.Coordinates{X: 7, Y: 1},
+			expectedRawCells: expectedRawCellsCase2,
+			expectedFrom:     term.Coordinates{X: 7, Y: 1},
+			expectedTo:       term.Coordinates{X: 7, Y: 1},
 		},
 		{
-			inputStr: "// what's up",
-			inputAt:  term.Coordinates{X: 2, Y: 5},
-			expectedRawCells: `
-syntax = "proto2";
-package rpc;
-
-
-  // what's up`,
-			expectedFrom:  term.Coordinates{X: 12, Y: 2},
-			expectedUntil: term.Coordinates{X: 2 + len("// what's up"), Y: 5},
+			inputStr:         "// what's up",
+			inputAt:          term.Coordinates{X: 2, Y: 5},
+			expectedRawCells: expectedRawCellsCase3,
+			expectedFrom:     term.Coordinates{X: 12, Y: 2},
+			expectedTo:       term.Coordinates{X: 13, Y: 5},
+		},
+		{
+			overrideBaseRawCells: rawCellsFortune,
+			expectedRawCells:     expectedRawCellsCase4,
+			inputAt:              term.Coordinates{Y: 1},
+			inputStr:             "\n",
+			expectedFrom:         term.Coordinates{Y: 1},
+			expectedTo:           term.Coordinates{Y: 1},
+		},
+		{
+			overrideBaseRawCells: rawCellsFortune,
+			expectedRawCells:     expectedRawCellsCase5,
+			inputAt:              term.Coordinates{Y: 2},
+			inputStr:             "\t",
+			expectedFrom:         term.Coordinates{Y: 2},
+			expectedTo:           term.Coordinates{X: 3, Y: 2},
 		},
 	}
 
 	for i, tcase := range tsuite {
 		var c RawCells
-		_, err := c.ReadFrom(strings.NewReader(baseRawCells))
+		var input string
+		if tcase.overrideBaseRawCells != "" {
+			input = tcase.overrideBaseRawCells
+		} else {
+			input = baseRawCells
+		}
+		_, err := c.ReadFrom(strings.NewReader(input))
 		require.NoError(t, err)
 
-		actualFrom, actualUntil := c.Insert(tcase.inputAt, tcase.inputStr)
+		actualFrom, actualTo := c.Insert(tcase.inputAt, tcase.inputStr)
 		assert.Equal(t, tcase.expectedFrom, actualFrom, "test case %d", i)
-		assert.Equal(t, tcase.expectedUntil, actualUntil, "test case %d", i)
+		assert.Equal(t, tcase.expectedTo, actualTo, "test case %d", i)
 		assert.Equal(t, tcase.expectedRawCells, c.String())
 	}
 }
@@ -247,6 +287,11 @@ package rpc;
 
 
   // what's up`
+
+	const inputRawCellsCase5 = `Love in your heart wasn't put there to stay.
+
+Love isn't love 'til you give it away.
+		-- Oscar Hammerstein XX`
 
 	tsuite := []struct {
 		expectedStr          string
@@ -408,6 +453,15 @@ package rpc;
 			inputTo:              term.Coordinates{X: 5},
 			expectedStart:        &term.Coordinates{X: 4},
 			expectedEnd:          &term.Coordinates{X: 7},
+		},
+		{
+			overrideBaseRawCells: inputRawCellsCase5,
+			expectedStr:          "\n",
+			expectedRawCells:     rawCellsFortune,
+			inputFrom:            term.Coordinates{Y: 1},
+			inputTo:              term.Coordinates{Y: 1},
+			expectedStart:        &term.Coordinates{Y: 1},
+			expectedEnd:          &term.Coordinates{Y: 1},
 		},
 	}
 
