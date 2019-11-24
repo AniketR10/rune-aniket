@@ -2,6 +2,8 @@ package term
 
 import (
 	"github.com/nsf/termbox-go"
+	// TODO should use
+	// https://github.com/gdamore/tcell/blob/master/termbox/compat.go
 )
 
 type TermboxWriter struct{}

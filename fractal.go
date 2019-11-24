@@ -3,9 +3,6 @@ package fractal
 import (
 	"fmt"
 
-	// TODO should use
-	// https://github.com/gdamore/tcell/blob/master/termbox/compat.go
-
 	"github.com/ernestrc/fractal/term"
 )
 
