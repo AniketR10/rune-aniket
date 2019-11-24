@@ -35,15 +35,6 @@ func (w *StringWriter) SetCell(pos Coordinates, cell Cell) {
 	w.cellbuf[idx] = cell
 }
 
-func (w *StringWriter) SetAttr(pos Coordinates, attr Attributes) {
-	if w.outOfBounds(pos) {
-		return
-	}
-	idx := pos.Y*w.width + pos.X
-	w.cellbuf[idx].Bg = attr.Bg
-	w.cellbuf[idx].Fg = attr.Fg
-}
-
 func (w *StringWriter) Flush() (err error) {
 	for i, c := range w.cellbuf {
 		if i != 0 && i%w.width == 0 {

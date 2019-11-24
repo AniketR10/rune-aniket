@@ -29,7 +29,6 @@ type Component interface {
 // termbox, so they're easier to test.
 type Writer interface {
 	SetCell(term.Coordinates, term.Cell)
-	SetAttr(term.Coordinates, term.Attributes)
 	Flush() error
 	Clear(term.Attributes) error
 	SetCursor(term.Coordinates)

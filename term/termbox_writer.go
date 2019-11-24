@@ -12,13 +12,6 @@ func (w TermboxWriter) SetCell(pos Coordinates, c Cell) {
 	return
 }
 
-func (w TermboxWriter) SetAttr(pos Coordinates, attr Attributes) {
-	panic("TODO")
-	// FIXME
-	// termbox.SetCell(x, y, ch, 0, 0)
-	// termbox.Attribute(fg), termbox.Attribute(bg)
-}
-
 func (w TermboxWriter) Flush() error {
 	return termbox.Flush()
 }

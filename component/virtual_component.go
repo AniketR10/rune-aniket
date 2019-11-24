@@ -40,12 +40,6 @@ func (w *virtualWriter) SetCell(pos term.Coordinates, c term.Cell) {
 	w.writer.SetCell(pos, c)
 }
 
-func (w *virtualWriter) SetAttr(pos term.Coordinates, attr term.Attributes) {
-	w.assertNotOutOfBounds(pos)
-	pos = term.Coordinates{X: w.offset.X + pos.X, Y: w.offset.Y + pos.Y}
-	w.writer.SetAttr(pos, attr)
-}
-
 func (w *virtualWriter) Flush() error {
 	return w.writer.Flush()
 }
