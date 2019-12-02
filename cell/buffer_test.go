@@ -56,7 +56,7 @@ func TestBufferInsertAt(t *testing.T) {
 	next = buf.InsertAt(next, 'r')
 	next = buf.InsertAt(next, 'l')
 	buf.InsertAt(next, 'd')
-	buf.InsertAt(term.Coordinates{X: 4, Y: 0}, '\n')
+	next = buf.InsertAt(term.Coordinates{X: 4, Y: 0}, '\n')
 
 	str := "hell\no\nworld"
 	assert.Equal(t, 3, buf.Rows())
@@ -71,6 +71,11 @@ func TestBufferInsertAt(t *testing.T) {
 	assert.Equal(t, 5, cols)
 
 	assert.Equal(t, str, buf.String())
+
+	assert.Equal(t, term.Coordinates{Y: 1}, next)
+
+	next = buf.InsertAt(term.Coordinates{Y: 1}, '\t')
+	assert.Equal(t, term.Coordinates{Y: 1, X: 4}, next)
 }
 
 func TestBufferDeleteRow(t *testing.T) {

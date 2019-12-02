@@ -54,9 +54,18 @@ func (b *Buffer) WriteRune(r rune) term.Coordinates {
 }
 
 // InsertAt inserts a rune in the given position and shift the cells to the right
-func (b *Buffer) InsertAt(pos term.Coordinates, r rune) term.Coordinates {
-	b.Writer.Insert(pos, string(r))
-	return b.Writer.NextWrite()
+func (b *Buffer) InsertAt(pos term.Coordinates, r rune) (next term.Coordinates) {
+	_, next = b.Writer.Insert(pos, string(r))
+
+	if r == '\n' {
+		next.Y++
+		next.X = 0
+		return
+	}
+
+	next.X++
+
+	return
 }
 
 // DeleteRow truncates the row at term.Coordinates.Y
