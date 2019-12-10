@@ -22,8 +22,7 @@ func redraw(root Handler, termw Writer) (err error) {
 
 	root.Draw(termw)
 
-	cursor := root.GetCursor()
-	termw.SetCursor(cursor)
+	termw.SetCursor(root.Cursor())
 
 	if err = termw.Flush(); err != nil {
 		return err

@@ -28,11 +28,11 @@ func TestFrameProxyCursor(t *testing.T) {
 	handler := &TestHandler{}
 	proxy := NewFrame(handler, term.Attributes{})
 	proxy.Resize(4, 4)
-	offsetCursor := handler.GetCursor()
+	offsetCursor := handler.Cursor()
 	offsetCursor.X++
 	offsetCursor.Y++
 
-	if offsetCursor != proxy.GetCursor() {
-		t.Errorf("did not proxy GetCursor correctly")
+	if offsetCursor != proxy.Cursor() {
+		t.Errorf("did not proxy Cursor correctly")
 	}
 }

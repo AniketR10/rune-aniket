@@ -189,8 +189,8 @@ func (l *Less) Mode() LessMode {
 	return l.mode
 }
 
-// GetCursor : Handler
-func (l *Less) GetCursor() term.Coordinates {
+// Cursor : Handler
+func (l *Less) Cursor() term.Coordinates {
 	return term.Coordinates{X: l.cursorOffset, Y: l.height - 1}
 }
 

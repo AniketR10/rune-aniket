@@ -29,9 +29,9 @@ func (k keyMappingHandler) Handle(ev term.Event) bool {
 	return k.inner.Handle(ev)
 }
 
-// GetCursor delegates call to underlying handler.
-func (k keyMappingHandler) GetCursor() term.Coordinates {
-	return k.inner.GetCursor()
+// Cursor delegates call to underlying handler.
+func (k keyMappingHandler) Cursor() term.Coordinates {
+	return k.inner.Cursor()
 }
 
 // Man returns remapped Manual from underlying handler.
