@@ -414,6 +414,30 @@ func (t *TileNode) Content() fractal.Component {
 	return t.content
 }
 
+func (t *TileNode) tileAt(pos term.Coordinates) *TileNode {
+	if t.direction == vertical {
+		for _, child := range t.children {
+			childPos := child.Position()
+			if pos.X >= childPos.X && pos.X < childPos.X+child.Width() {
+				return child.C.(*TileNode).tileAt(pos)
+			}
+		}
+	} else {
+		for _, child := range t.children {
+			childPos := child.Position()
+			if pos.Y >= childPos.Y && pos.Y < childPos.Y+child.Height() {
+				return child.C.(*TileNode).tileAt(pos)
+			}
+		}
+	}
+
+	if len(t.children) != 0 {
+		panic(fmt.Sprintf("could not finde tile at %+v", pos))
+	}
+
+	return t
+}
+
 func (t *TileNode) tilePosition(child *TileNode, currOffset term.Coordinates) (
 	offset term.Coordinates, ok bool,
 ) {
@@ -447,4 +471,12 @@ func (t *TileTree) TilePosition(tile *TileNode) term.Coordinates {
 		panic("tile does not belong to this tree")
 	}
 	return offset
+}
+
+// TileAt returns the tile at pos term.Coordinates.
+func (t *TileTree) TileAt(pos term.Coordinates) *TileNode {
+	if pos.X < 0 || pos.Y < 0 || pos.X >= t.root.width || pos.Y >= t.root.height {
+		panic("Coordinates out of bounds")
+	}
+	return t.root.tileAt(pos)
 }

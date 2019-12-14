@@ -5,6 +5,7 @@ import (
 
 	"github.com/ernestrc/fractal"
 	"github.com/ernestrc/fractal/term"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestNew(t *testing.T) {
@@ -237,6 +238,57 @@ func TestTileNodeClose(t *testing.T) {
 
 }
 
+func testTileAt(t *testing.T, tree *TileTree) {
+	// ABCCDDEE
+	// ABCCDDEE
+	// ABCCDDXX
+	// ABCCDDXX
+
+	ta := tree.TileAt(term.Coordinates{})
+	assert.Equal(t, ta.Content().(*TestComponent).Ch, 'A')
+	assert.Equal(t, ta, tree.TileAt(term.Coordinates{Y: 1}))
+	assert.Equal(t, ta, tree.TileAt(term.Coordinates{Y: 2}))
+	assert.Equal(t, ta, tree.TileAt(term.Coordinates{Y: 3}))
+
+	tb := tree.TileAt(term.Coordinates{X: 1})
+	assert.Equal(t, tb.Content().(*TestComponent).Ch, 'B')
+	assert.Equal(t, tb, tree.TileAt(term.Coordinates{X: 1, Y: 1}))
+	assert.Equal(t, tb, tree.TileAt(term.Coordinates{X: 1, Y: 2}))
+	assert.Equal(t, tb, tree.TileAt(term.Coordinates{X: 1, Y: 3}))
+
+	tc := tree.TileAt(term.Coordinates{X: 3})
+	assert.Equal(t, tc.Content().(*TestComponent).Ch, 'C')
+	assert.Equal(t, tc, tree.TileAt(term.Coordinates{X: 3, Y: 1}))
+	assert.Equal(t, tc, tree.TileAt(term.Coordinates{X: 3, Y: 2}))
+	assert.Equal(t, tc, tree.TileAt(term.Coordinates{X: 3, Y: 3}))
+	assert.Equal(t, tc, tree.TileAt(term.Coordinates{X: 2, Y: 0}))
+	assert.Equal(t, tc, tree.TileAt(term.Coordinates{X: 2, Y: 1}))
+	assert.Equal(t, tc, tree.TileAt(term.Coordinates{X: 2, Y: 2}))
+	assert.Equal(t, tc, tree.TileAt(term.Coordinates{X: 2, Y: 3}))
+
+	td := tree.TileAt(term.Coordinates{X: 5})
+	assert.Equal(t, td.Content().(*TestComponent).Ch, 'D')
+	assert.Equal(t, td, tree.TileAt(term.Coordinates{X: 5, Y: 1}))
+	assert.Equal(t, td, tree.TileAt(term.Coordinates{X: 5, Y: 2}))
+	assert.Equal(t, td, tree.TileAt(term.Coordinates{X: 5, Y: 3}))
+	assert.Equal(t, td, tree.TileAt(term.Coordinates{X: 4, Y: 0}))
+	assert.Equal(t, td, tree.TileAt(term.Coordinates{X: 4, Y: 1}))
+	assert.Equal(t, td, tree.TileAt(term.Coordinates{X: 4, Y: 2}))
+	assert.Equal(t, td, tree.TileAt(term.Coordinates{X: 4, Y: 3}))
+
+	te := tree.TileAt(term.Coordinates{X: 6})
+	assert.Equal(t, te.Content().(*TestComponent).Ch, 'E')
+	assert.Equal(t, te, tree.TileAt(term.Coordinates{X: 6, Y: 1}))
+	assert.Equal(t, te, tree.TileAt(term.Coordinates{X: 7, Y: 0}))
+	assert.Equal(t, te, tree.TileAt(term.Coordinates{X: 7, Y: 1}))
+
+	tx := tree.TileAt(term.Coordinates{Y: 2, X: 6})
+	assert.Equal(t, tx.Content().(*TestComponent).Ch, 'X')
+	assert.Equal(t, tx, tree.TileAt(term.Coordinates{X: 6, Y: 2}))
+	assert.Equal(t, tx, tree.TileAt(term.Coordinates{X: 7, Y: 3}))
+	assert.Equal(t, tx, tree.TileAt(term.Coordinates{X: 7, Y: 3}))
+}
+
 func TestTileNodeDraw(t *testing.T) {
 	var err error
 
@@ -294,7 +346,13 @@ ABCCDDEE
 ABCCDDXX
 ABCCDDXX`,
 		}, {
-			func() { m6 = tree.SplitHorizontal(m2, &TestComponent{Ch: 'Z'}) }, `
+			func() {
+				// NOTE: I'm feeling lazy today; this should be moved
+				// to a separate test... :shrug
+				testTileAt(t, tree)
+
+				m6 = tree.SplitHorizontal(m2, &TestComponent{Ch: 'Z'})
+			}, `
 ABCCDDEE
 ABCCDDEE
 ABZZDDXX

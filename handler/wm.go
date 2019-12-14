@@ -51,20 +51,30 @@ func (wm *WindowManager) Handle(ev term.Event) (exit bool) {
 		switch ev.Ch {
 		case 'q':
 			exit = true
-			return
 		case 'k':
 			wm.FocusUp()
-			return
 		case 'j':
 			wm.FocusDown()
-			return
 		case 'h':
 			wm.FocusLeft()
-			return
 		case 'l':
 			wm.FocusRight()
+		}
+		return
+	}
+
+	if ev.Type == term.EventMouse {
+		mousePos := term.Coordinates{X: ev.MouseX, Y: ev.MouseY}
+		childAtMouse := wm.TileTree.TileAt(mousePos)
+		if wm.Focus() != childAtMouse {
+			if ev.Key == term.MouseLeft {
+				wm.SetFocus(childAtMouse)
+			}
 			return
 		}
+		offset := wm.TileTree.TilePosition(childAtMouse)
+		ev.MouseX -= offset.X
+		ev.MouseY -= offset.Y
 	}
 
 	hexit := wm.getFocusHandler().Handle(ev)
