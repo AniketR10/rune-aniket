@@ -39,10 +39,9 @@ func (f *Frame) Content() fractal.Component {
 
 // SetContent updates the underlying component and resizes it
 // to conform to this frame's width and height.
-func (f *Frame) SetContent(content fractal.Component) (err error) {
+func (f *Frame) SetContent(content fractal.Component) {
 	f.content.C = content
 	f.Resize(f.width, f.height)
-	return
 }
 
 // Resize updates this frame with a new width and height. If width or height
@@ -55,24 +54,12 @@ func (f *Frame) Resize(width, height int) {
 		f.bwidth, f.bheight = 2, 2
 	}
 
-	offset := f.getContentOffset()
-	contentWidth := width - f.bwidth
-	contentHeight := height - f.bheight
-	f.content.Resize(contentWidth, contentHeight)
-	f.content.Move(offset)
+	alignContent(&f.content, width, height, f.bwidth, f.bheight, DefaultSpanFlags)
 	f.width, f.height = width, height
-}
-
-func (f *Frame) getContentOffset() term.Coordinates {
-	return term.Coordinates{X: f.bwidth / 2, Y: f.bheight / 2}
 }
 
 // Draw draws this frame's border and contents to the given Writer.
 func (f *Frame) Draw(w fractal.Writer) {
-	if f.bwidth == 0 || f.bheight == 0 {
-		f.content.Draw(w)
-	}
-
 	limitX, limitY := f.width-1, f.height-1
 
 	for i := 0; i < limitX; i++ {
@@ -104,5 +91,5 @@ func (f *Frame) Draw(w fractal.Writer) {
 
 // ContentPosition returns the position of the content inside this frame.
 func (f *Frame) ContentPosition() term.Coordinates {
-	return f.getContentOffset()
+	return calculateContentOffset(f.bwidth, f.bheight, DefaultSpanFlags)
 }
