@@ -30,7 +30,7 @@ func (k keyMappingHandler) Handle(ev term.Event) bool {
 }
 
 // GetCursor delegates call to underlying handler.
-func (k keyMappingHandler) GetCursor() term.Coordinates {
+func (k keyMappingHandler) GetCursor() (term.Coordinates, bool) {
 	return k.inner.GetCursor()
 }
 

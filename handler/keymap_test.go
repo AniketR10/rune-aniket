@@ -80,7 +80,9 @@ func TestKeyMappingMan(t *testing.T) {
 
 func TestKeyMappingCursor(t *testing.T) {
 	handler := &TestHandler{}
-	if handler.GetCursor() != WithMapping(handler, nil).GetCursor() {
+	cursor, _ := handler.GetCursor()
+	kmCursor, _ := WithMapping(handler, nil).GetCursor()
+	if cursor != kmCursor {
 		t.Errorf("did not proxy GetCursor correctly")
 	}
 }

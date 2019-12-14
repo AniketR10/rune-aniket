@@ -190,8 +190,8 @@ func (l *Less) Mode() LessMode {
 }
 
 // GetCursor : Handler
-func (l *Less) GetCursor() term.Coordinates {
-	return term.Coordinates{X: l.cursorOffset, Y: l.height - 1}
+func (l *Less) GetCursor() (term.Coordinates, bool) {
+	return term.Coordinates{X: l.cursorOffset, Y: l.height - 1}, true
 }
 
 // Draw : Component

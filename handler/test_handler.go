@@ -32,8 +32,8 @@ func (t *TestHandler) Handle(term.Event) bool {
 }
 
 // GetCursor returns always a hidden cursor
-func (t *TestHandler) GetCursor() term.Coordinates {
-	return term.Coordinates{X: -1, Y: -1}
+func (t *TestHandler) GetCursor() (term.Coordinates, bool) {
+	return term.Coordinates{X: -1, Y: -1}, false
 }
 
 // Man for this handler is empty

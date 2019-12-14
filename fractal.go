@@ -46,7 +46,7 @@ type Writer interface {
 type Handler interface {
 	Component
 	Handle(term.Event) bool
-	GetCursor() term.Coordinates
+	GetCursor() (pos term.Coordinates, show bool)
 	Man() Manual
 }
 
