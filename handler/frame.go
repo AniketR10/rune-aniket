@@ -32,10 +32,10 @@ func (f *Frame) Handle(ev term.Event) bool {
 	return f.handler.Handle(ev)
 }
 
-// GetCursor returns the underlying handler's cursor position
+// Cursor returns the underlying handler's cursor position
 // with the frame offset.
-func (f *Frame) GetCursor() (pos term.Coordinates, show bool) {
-	pos, show = f.handler.GetCursor()
+func (f *Frame) Cursor() (pos term.Coordinates, show bool) {
+	pos, show = f.handler.Cursor()
 	content := f.Frame.ContentPosition()
 	pos.X += content.X
 	pos.Y += content.Y

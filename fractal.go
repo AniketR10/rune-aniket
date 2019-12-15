@@ -32,13 +32,13 @@ type Writer interface {
 }
 
 // Handler builds upon Component to add event-handling behavior.
-// It wraps the basic Handle, GetCursor and Man methods.
+// It wraps the basic Handle, Cursor and Man methods.
 //
 // Handle represents the ability to handle termbox events. These events could
 // be key presses or other types of events. See termbox' documentation for more
 // information. Handle returns true if a handler is done processing events.
 //
-// GetCursor returns a handler's cursor coordinates.
+// Cursor returns a handler's cursor coordinates.
 // Clients can have multiple handlers in the same interface so
 // this method will be called only when handler is in focus.
 //
@@ -46,7 +46,7 @@ type Writer interface {
 type Handler interface {
 	Component
 	Handle(term.Event) bool
-	GetCursor() (pos term.Coordinates, show bool)
+	Cursor() (pos term.Coordinates, show bool)
 	Man() Manual
 }
 

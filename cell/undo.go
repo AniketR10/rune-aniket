@@ -48,6 +48,8 @@ func (u *Undoer) Redo() bool {
 	return ok
 }
 
+// TODO Redo/Undo should return start of update
+
 // Undo reverses the last update to the underlying buffer.
 // Redo can be used to reverse the undo.
 func (u *Undoer) Undo() bool {

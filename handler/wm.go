@@ -168,10 +168,10 @@ func (wm *WindowManager) SetFocus(tile *component.TileNode) (
 	return
 }
 
-// GetCursor returns the cursor coordinates of the tile in focus.
-func (wm *WindowManager) GetCursor() (term.Coordinates, bool) {
+// Cursor returns the cursor coordinates of the tile in focus.
+func (wm *WindowManager) Cursor() (term.Coordinates, bool) {
 	offset := wm.TileTree.TilePosition(wm.focus)
-	cursor, show := wm.focus.Content().(fractal.Handler).GetCursor()
+	cursor, show := wm.focus.Content().(fractal.Handler).Cursor()
 	return term.Coordinates{X: offset.X + cursor.X, Y: offset.Y + cursor.Y}, show
 }
 
