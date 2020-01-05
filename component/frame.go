@@ -6,8 +6,33 @@ import (
 )
 
 // Frame is a Component that simply draws a border around a nested component.
+// By default the frame adds some padding around the component by using
+// the following cells:
+//
+// f.Horizontal = term.Cell{Ch: '─'}
+// f.Vertical = term.Cell{Ch: '│'}
+// f.TopLeft = term.Cell{Ch: '┌'}
+// f.TopRight = term.Cell{Ch: '┐'}
+// f.BottomLeft = term.Cell{Ch: '└'}
+// f.BottomRight = term.Cell{Ch: '┘'}
+//
+// Note that this component can achieve other effects (highlight, frame)
+// by setting the rigth cell characters and/or attributes.
+//
+// Example frame characters (ASCII 9472-9580):
+//
+//   '─', '━', '│', '┃', '┄', '┅', '┆', '┇', '┈', '┉', '┊', '┋', '┌', '┍',
+//   '┎', '┏', '┐', '┑', '┒', '┓', '└', '┕', '┖', '┗', '┘', '┙', '┚', '┛',
+//   '├', '┝', '┞', '┟', '┠', '┡', '┢', '┣', '┤', '┥', '┦', '┧', '┨', '┩',
+//   '┪', '┫', '┬', '┭', '┮', '┯', '┰', '┱', '┲', '┳', '┴', '┵', '┶', '┷',
+//   '┸', '┹', '┺', '┻', '┼', '┽', '┾', '┿', '╀', '╁', '╂', '╃', '╄', '╅',
+//   '╆', '╇', '╈', '╉', '╊', '╋', '╌', '╍', '╎', '╏', '═', '║', '╒', '╓',
+//   '╔', '╕', '╖', '╗', '╘', '╙', '╚', '╛', '╜', '╝', '╞', '╟', '╠', '╡',
+//   '╢', '╣', '╤', '╥', '╦', '╧', '╨', '╩'
 type Frame struct {
-	term.Attributes
+	TopLeft, TopRight, BottomLeft, BottomRight term.Cell
+	Horizontal, Vertical                       term.Cell
+
 	content         VirtualComponent
 	bwidth, bheight int
 	width, height   int
@@ -15,21 +40,37 @@ type Frame struct {
 
 // NewFrame allocates storage and initializes a new frame with the given
 // border attributes and underlying component.
-func NewFrame(content fractal.Component, border term.Attributes) (f *Frame) {
+func NewFrame(content fractal.Component) (f *Frame) {
 	f = new(Frame)
-	f.Init(content, border)
+	f.Init(content)
 	return
 }
 
 // Init initializes this frame with the given Component and border attributes.
-func (f *Frame) Init(content fractal.Component, border term.Attributes) {
-	f.Attributes = border
+func (f *Frame) Init(content fractal.Component) {
 	f.content.C = content
+	f.Horizontal.Ch = '─'
+	f.Vertical.Ch = '│'
+	f.TopLeft.Ch = '┌'
+	f.TopRight.Ch = '┐'
+	f.BottomLeft.Ch = '└'
+	f.BottomRight.Ch = '┘'
 }
 
 // SetAttr updates the border attributes of this Frame.
 func (f *Frame) SetAttr(border term.Attributes) {
-	f.Attributes = border
+	f.Horizontal.Fg = border.Fg
+	f.Horizontal.Bg = border.Bg
+	f.Vertical.Fg = border.Fg
+	f.Vertical.Bg = border.Bg
+	f.TopLeft.Fg = border.Fg
+	f.TopLeft.Bg = border.Bg
+	f.TopRight.Fg = border.Fg
+	f.TopRight.Bg = border.Bg
+	f.BottomLeft.Fg = border.Fg
+	f.BottomLeft.Bg = border.Bg
+	f.BottomRight.Fg = border.Fg
+	f.BottomRight.Bg = border.Bg
 }
 
 // Content returns the underlying Component.
@@ -63,28 +104,22 @@ func (f *Frame) Draw(w fractal.Writer) {
 	limitX, limitY := f.width-1, f.height-1
 
 	for i := 0; i < limitX; i++ {
-		cell := term.Cell{Ch: '─', Fg: f.Fg, Bg: f.Bg}
-		w.SetCell(term.Coordinates{X: i, Y: 0}, cell)
-		w.SetCell(term.Coordinates{X: i, Y: limitY}, cell)
+		w.SetCell(term.Coordinates{X: i, Y: 0}, f.Horizontal)
+		w.SetCell(term.Coordinates{X: i, Y: limitY}, f.Horizontal)
 	}
 
 	for i := 0; i < limitY; i++ {
-		cell := term.Cell{Ch: '│', Fg: f.Fg, Bg: f.Bg}
-		w.SetCell(term.Coordinates{X: 0, Y: i}, cell)
-		w.SetCell(term.Coordinates{X: limitX, Y: i}, cell)
+		w.SetCell(term.Coordinates{X: 0, Y: i}, f.Vertical)
+		w.SetCell(term.Coordinates{X: limitX, Y: i}, f.Vertical)
 	}
 
-	w.SetCell(term.Coordinates{X: 0, Y: 0},
-		term.Cell{Ch: '┌', Fg: f.Fg, Bg: f.Bg})
+	w.SetCell(term.Coordinates{X: 0, Y: 0}, f.TopLeft)
 
-	w.SetCell(term.Coordinates{X: limitX, Y: 0},
-		term.Cell{Ch: '┐', Fg: f.Fg, Bg: f.Bg})
+	w.SetCell(term.Coordinates{X: limitX, Y: 0}, f.TopRight)
 
-	w.SetCell(term.Coordinates{X: 0, Y: limitY},
-		term.Cell{Ch: '└', Fg: f.Fg, Bg: f.Bg})
+	w.SetCell(term.Coordinates{X: 0, Y: limitY}, f.BottomLeft)
 
-	w.SetCell(term.Coordinates{X: limitX, Y: limitY},
-		term.Cell{Ch: '┘', Fg: f.Fg, Bg: f.Bg})
+	w.SetCell(term.Coordinates{X: limitX, Y: limitY}, f.BottomRight)
 
 	f.content.Draw(w)
 }

@@ -8,7 +8,7 @@ import (
 
 func TestDrawFrame(t *testing.T) {
 	u := &TestComponent{Ch: 'X'}
-	f := NewFrame(u, term.Attributes{})
+	f := NewFrame(u)
 
 	f.Resize(8, 4)
 

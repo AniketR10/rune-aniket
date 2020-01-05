@@ -14,17 +14,17 @@ type Frame struct {
 }
 
 // NewFrame allocates storage for a new Frame and initializes it.
-func NewFrame(handler fractal.Handler, attr term.Attributes) (f *Frame) {
+func NewFrame(handler fractal.Handler) (f *Frame) {
 	f = new(Frame)
-	f.Init(handler, attr)
+	f.Init(handler)
 	return
 }
 
 // Init initializes this Frame with the given underlying handler
 // and frame attributes.
-func (f *Frame) Init(handler fractal.Handler, attr term.Attributes) {
+func (f *Frame) Init(handler fractal.Handler) {
 	f.handler = handler
-	f.Frame.Init(handler, attr)
+	f.Frame.Init(handler)
 }
 
 // Handle delegates the event to the underlying handler.

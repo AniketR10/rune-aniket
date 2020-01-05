@@ -23,6 +23,12 @@ func NewWindowManager(handler fractal.Handler, border bool) (wm *WindowManager) 
 	return
 }
 
+func (wm *WindowManager) withFrame(handler fractal.Handler) fractal.Handler {
+	f := NewFrame(handler)
+	f.SetAttr(wm.borderAttr)
+	return f
+}
+
 // Init initializes this WindowManager with the given handler. If border is true, it will draw
 // a border around every tile.
 func (wm *WindowManager) Init(handler fractal.Handler, border bool) {
@@ -31,7 +37,7 @@ func (wm *WindowManager) Init(handler fractal.Handler, border bool) {
 		wm.borderAttr.Bg = term.ColorDefault
 		wm.focusAttr.Fg = term.ColorRed
 		wm.focusAttr.Bg = term.ColorDefault
-		handler = NewFrame(handler, wm.borderAttr)
+		handler = wm.withFrame(handler)
 	}
 	tile := wm.TileTree.Init(handler)
 	wm.focus = tile
@@ -98,7 +104,7 @@ func (wm *WindowManager) Handle(ev term.Event) (exit bool) {
 // SplitVertical creates a new vertical split over the tile currently in focus.
 func (wm *WindowManager) SplitVertical(h fractal.Handler) *component.TileNode {
 	if wm.border {
-		h = NewFrame(h, wm.borderAttr)
+		h = wm.withFrame(h)
 	}
 	return wm.TileTree.SplitVertical(wm.focus, h)
 }
@@ -106,7 +112,7 @@ func (wm *WindowManager) SplitVertical(h fractal.Handler) *component.TileNode {
 // SplitHorizontal creates a new horizontal split over the tile currently in focus.
 func (wm *WindowManager) SplitHorizontal(h fractal.Handler) *component.TileNode {
 	if wm.border {
-		h = NewFrame(h, wm.borderAttr)
+		h = wm.withFrame(h)
 	}
 	return wm.TileTree.SplitHorizontal(wm.focus, h)
 

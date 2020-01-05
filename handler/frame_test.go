@@ -19,14 +19,14 @@ func TestFrameProxyMan(t *testing.T) {
 		},
 	}
 	handler := &TestHandler{Manual: myManual}
-	if !reflect.DeepEqual(handler.Man(), NewFrame(handler, term.Attributes{}).Man()) {
+	if !reflect.DeepEqual(handler.Man(), NewFrame(handler).Man()) {
 		t.Errorf("did not proxy Man correctly")
 	}
 }
 
 func TestFrameProxyCursor(t *testing.T) {
 	handler := &TestHandler{}
-	proxy := NewFrame(handler, term.Attributes{})
+	proxy := NewFrame(handler)
 	proxy.Resize(4, 4)
 	offsetCursor, _ := handler.Cursor()
 	offsetCursor.X++
