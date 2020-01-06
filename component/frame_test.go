@@ -59,7 +59,7 @@ TT
          `,
 		}, {
 			func() {
-				fb := DefaultFrameCharSet()
+				fb := FrameCharSetDefault()
 				fb.Horizontal.Ch = '┄'
 				fb.Vertical.Ch = '┊'
 				f.FrameCharSet = fb

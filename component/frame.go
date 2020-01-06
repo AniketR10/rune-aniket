@@ -5,19 +5,187 @@ import (
 	"github.com/ernestrc/go-tui/term"
 )
 
-// DefaultFrameCharSet returns the default cells used as FrameCharSet.
-func DefaultFrameCharSet() FrameCharSet {
-	f := FrameCharSet{}
-	f.Horizontal.Ch = '─'
-	f.Vertical.Ch = '│'
-	f.TopLeft.Ch = '┌'
-	f.TopRight.Ch = '┐'
-	f.BottomLeft.Ch = '└'
-	f.BottomRight.Ch = '┘'
-	return f
+// FrameCharSet is a struct used to store the set of characters used to
+// draw a frame.
+//
+// Example characters (ASCII 9472-9580):
+//
+//   '─', '━', '│', '┃', '┄', '┅', '┆', '┇', '┈', '┉', '┊', '┋', '┌', '┍',
+//
+//   '┎', '┏', '┐', '┑', '┒', '┓', '└', '┕', '┖', '┗', '┘', '┙', '┚', '┛',
+//
+//   '├', '┝', '┞', '┟', '┠', '┡', '┢', '┣', '┤', '┥', '┦', '┧', '┨', '┩',
+//
+//   '┪', '┫', '┬', '┭', '┮', '┯', '┰', '┱', '┲', '┳', '┴', '┵', '┶', '┷',
+//
+//   '┸', '┹', '┺', '┻', '┼', '┽', '┾', '┿', '╀', '╁', '╂', '╃', '╄', '╅',
+//
+//   '╆', '╇', '╈', '╉', '╊', '╋', '╌', '╍', '╎', '╏', '═', '║', '╒', '╓',
+//
+//   '╔', '╕', '╖', '╗', '╘', '╙', '╚', '╛', '╜', '╝', '╞', '╟', '╠', '╡',
+//
+//   '╢', '╣', '╤', '╥', '╦', '╧', '╨', '╩'
+type FrameCharSet struct {
+	TopLeft, TopRight       term.Cell
+	BottomLeft, BottomRight term.Cell
+	Horizontal, Vertical    term.Cell
 }
 
-// FrameCharSet define the cells used to draw a Frame border.
+// WithAttr sets cs term.Attributes.
+func (cs FrameCharSet) WithAttr(attr term.Attributes) FrameCharSet {
+	cs.Horizontal.Fg = attr.Fg
+	cs.Horizontal.Bg = attr.Bg
+	cs.Vertical.Fg = attr.Fg
+	cs.Vertical.Bg = attr.Bg
+	cs.TopLeft.Fg = attr.Fg
+	cs.TopLeft.Bg = attr.Bg
+	cs.TopRight.Fg = attr.Fg
+	cs.TopRight.Bg = attr.Bg
+	cs.BottomLeft.Fg = attr.Fg
+	cs.BottomLeft.Bg = attr.Bg
+	cs.BottomRight.Fg = attr.Fg
+	cs.BottomRight.Bg = attr.Bg
+	return cs
+}
+
+// FrameCharSetDefault returns the default FrameCharSet
+// used accross the library. It produces the following frame:
+//
+//   ┌─┐
+//   │ │
+//   └─┘
+//
+func FrameCharSetDefault() FrameCharSet {
+	return FrameCharSet{
+		Horizontal:  term.Cell{Ch: '─'},
+		Vertical:    term.Cell{Ch: '│'},
+		TopLeft:     term.Cell{Ch: '┌'},
+		TopRight:    term.Cell{Ch: '┐'},
+		BottomLeft:  term.Cell{Ch: '└'},
+		BottomRight: term.Cell{Ch: '┘'},
+	}
+}
+
+// FrameCharSetHighlight returns a charset that produces the following frame:
+//
+//   ┏━┓
+//   ┃ ┃
+//   ┗━┛
+//
+func FrameCharSetHighlight() FrameCharSet {
+	return FrameCharSet{
+		Horizontal:  term.Cell{Ch: '━'},
+		Vertical:    term.Cell{Ch: '┃'},
+		TopLeft:     term.Cell{Ch: '┏'},
+		TopRight:    term.Cell{Ch: '┓'},
+		BottomLeft:  term.Cell{Ch: '┗'},
+		BottomRight: term.Cell{Ch: '┛'},
+	}
+}
+
+// FrameCharSetStack returns a charset that produces the following frame:
+//
+//   ├─┤
+//   │ │
+//   ├─┤
+//
+func FrameCharSetStack() FrameCharSet {
+	return FrameCharSet{
+		Horizontal:  term.Cell{Ch: '─'},
+		Vertical:    term.Cell{Ch: '│'},
+		TopLeft:     term.Cell{Ch: '├'},
+		TopRight:    term.Cell{Ch: '┤'},
+		BottomLeft:  term.Cell{Ch: '├'},
+		BottomRight: term.Cell{Ch: '┤'},
+	}
+}
+
+// FrameCharSetStackHighlight returns a charset that produces the following frame:
+//
+//   ┢━┪
+//   ┃ ┃
+//   ┡━┩
+//
+func FrameCharSetStackHighlight() FrameCharSet {
+	return FrameCharSet{
+		Horizontal:  term.Cell{Ch: '━'},
+		Vertical:    term.Cell{Ch: '┃'},
+		TopLeft:     term.Cell{Ch: '┢'},
+		TopRight:    term.Cell{Ch: '┪'},
+		BottomLeft:  term.Cell{Ch: '┡'},
+		BottomRight: term.Cell{Ch: '┩'},
+	}
+}
+
+// FrameCharSetStackHead returns a charset that produces the following frame:
+//
+//   ┌─┐
+//   │ │
+//   ├─┤
+//
+func FrameCharSetStackHead() FrameCharSet {
+	return FrameCharSet{
+		Horizontal:  term.Cell{Ch: '─'},
+		Vertical:    term.Cell{Ch: '│'},
+		TopLeft:     term.Cell{Ch: '┌'},
+		TopRight:    term.Cell{Ch: '┐'},
+		BottomLeft:  term.Cell{Ch: '├'},
+		BottomRight: term.Cell{Ch: '┤'},
+	}
+}
+
+// FrameCharSetStackHeadHighlight returns a charset that produces the following frame:
+//
+//   ┏━┓
+//   ┃ ┃
+//   ┡━┩
+//
+func FrameCharSetStackHeadHighlight() FrameCharSet {
+	return FrameCharSet{
+		Horizontal:  term.Cell{Ch: '━'},
+		Vertical:    term.Cell{Ch: '┃'},
+		TopLeft:     term.Cell{Ch: '┏'},
+		TopRight:    term.Cell{Ch: '┓'},
+		BottomLeft:  term.Cell{Ch: '┡'},
+		BottomRight: term.Cell{Ch: '┩'},
+	}
+}
+
+// FrameCharSetStackTail returns a charset that produces the following frame:
+//
+//   ├─┤
+//   │ │
+//   └─┘
+//
+func FrameCharSetStackTail() FrameCharSet {
+	return FrameCharSet{
+		Horizontal:  term.Cell{Ch: '─'},
+		Vertical:    term.Cell{Ch: '│'},
+		TopLeft:     term.Cell{Ch: '├'},
+		TopRight:    term.Cell{Ch: '┤'},
+		BottomLeft:  term.Cell{Ch: '└'},
+		BottomRight: term.Cell{Ch: '┘'},
+	}
+}
+
+// FrameCharSetStackTailHighlight returns a charset that produces the following frame:
+//
+//   ┢━┪
+//   ┃ ┃
+//   ┗━┛
+//
+func FrameCharSetStackTailHighlight() FrameCharSet {
+	return FrameCharSet{
+		Horizontal:  term.Cell{Ch: '━'},
+		Vertical:    term.Cell{Ch: '┃'},
+		TopLeft:     term.Cell{Ch: '┢'},
+		TopRight:    term.Cell{Ch: '┪'},
+		BottomLeft:  term.Cell{Ch: '┗'},
+		BottomRight: term.Cell{Ch: '┛'},
+	}
+}
+
+// Frame is a Component that simply draws a border around a nested component.
 // By default the frame adds some padding around the component by using
 // the following cells:
 //
@@ -30,24 +198,6 @@ func DefaultFrameCharSet() FrameCharSet {
 //
 // Note that this component can achieve other effects (highlight, frame)
 // by setting the rigth cell characters and/or attributes.
-//
-// Example frame characters (ASCII 9472-9580):
-//
-//   '─', '━', '│', '┃', '┄', '┅', '┆', '┇', '┈', '┉', '┊', '┋', '┌', '┍',
-//   '┎', '┏', '┐', '┑', '┒', '┓', '└', '┕', '┖', '┗', '┘', '┙', '┚', '┛',
-//   '├', '┝', '┞', '┟', '┠', '┡', '┢', '┣', '┤', '┥', '┦', '┧', '┨', '┩',
-//   '┪', '┫', '┬', '┭', '┮', '┯', '┰', '┱', '┲', '┳', '┴', '┵', '┶', '┷',
-//   '┸', '┹', '┺', '┻', '┼', '┽', '┾', '┿', '╀', '╁', '╂', '╃', '╄', '╅',
-//   '╆', '╇', '╈', '╉', '╊', '╋', '╌', '╍', '╎', '╏', '═', '║', '╒', '╓',
-//   '╔', '╕', '╖', '╗', '╘', '╙', '╚', '╛', '╜', '╝', '╞', '╟', '╠', '╡',
-//   '╢', '╣', '╤', '╥', '╦', '╧', '╨', '╩'
-type FrameCharSet struct {
-	TopLeft, TopRight, BottomLeft, BottomRight term.Cell
-	Horizontal, Vertical                       term.Cell
-}
-
-// Frame is a Component that simply draws a border around a nested component.
-// Border cells can be configured through FrameCharSet.
 type Frame struct {
 	FrameCharSet
 
@@ -67,23 +217,12 @@ func NewFrame(content tui.Component) (f *Frame) {
 // Init initializes this frame with the given Component and border attributes.
 func (f *Frame) Init(content tui.Component) {
 	f.content.C = content
-	f.FrameCharSet = DefaultFrameCharSet()
+	f.FrameCharSet = FrameCharSetDefault()
 }
 
 // SetAttr updates the border attributes of this Frame.
 func (f *Frame) SetAttr(border term.Attributes) {
-	f.Horizontal.Fg = border.Fg
-	f.Horizontal.Bg = border.Bg
-	f.Vertical.Fg = border.Fg
-	f.Vertical.Bg = border.Bg
-	f.TopLeft.Fg = border.Fg
-	f.TopLeft.Bg = border.Bg
-	f.TopRight.Fg = border.Fg
-	f.TopRight.Bg = border.Bg
-	f.BottomLeft.Fg = border.Fg
-	f.BottomLeft.Bg = border.Bg
-	f.BottomRight.Fg = border.Fg
-	f.BottomRight.Bg = border.Bg
+	f.FrameCharSet = f.FrameCharSet.WithAttr(border)
 }
 
 // Content returns the underlying Component.

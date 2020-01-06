@@ -11,7 +11,7 @@ import (
 func TestTabsDraw(t *testing.T) {
 	l := NewTabs()
 	l.Resize(20, 4)
-	fb := DefaultFrameCharSet()
+	fb := FrameCharSetDefault()
 	fb.BottomLeft.Ch, fb.BottomRight.Ch = '├', '┤'
 	l.SetFrameCharSet(fb)
 

@@ -139,6 +139,6 @@ func (wm *WindowManager) SetDefaultAttr(attr term.Attributes) {
 func DefaultWindowManagerConfig() WindowManagerConfig {
 	return WindowManagerConfig{
 		Border:       true,
-		FrameCharSet: DefaultFrameCharSet(),
+		FrameCharSet: FrameCharSetDefault(),
 	}
 }

@@ -382,7 +382,7 @@ func TestWindowManagerSetFocusContent(t *testing.T) {
 
 	testHandlerWorkflow(t, wm, cases, writer)
 
-	fb := component.DefaultFrameCharSet()
+	fb := component.FrameCharSet{}
 	fb.TopLeft.Ch = '╔'
 	fb.BottomRight.Ch = '╝'
 	fb.BottomLeft.Ch = '╚'
@@ -391,7 +391,7 @@ func TestWindowManagerSetFocusContent(t *testing.T) {
 	fb.Vertical.Ch = '║'
 	fb.Horizontal.Ch = '═'
 
-	wm.SetFrameCharSet(component.DefaultFrameCharSet(), fb)
+	wm.SetFrameCharSet(component.FrameCharSetDefault(), fb)
 
 	cases = []handlerTestCase{
 		{

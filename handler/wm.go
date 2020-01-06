@@ -282,7 +282,7 @@ func (wm *WindowManager) SetFocus(tile Window) (
 func DefaultWindowManagerConfig() WindowManagerConfig {
 	return WindowManagerConfig{
 		WindowManagerConfig: component.DefaultWindowManagerConfig(),
-		FocusFrameCharSet:   component.DefaultFrameCharSet(),
+		FocusFrameCharSet:   component.FrameCharSetDefault(),
 		FocusBorderAttr: term.Attributes{
 			Fg: term.ColorRed,
 			Bg: term.ColorDefault,
