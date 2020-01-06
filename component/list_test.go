@@ -27,6 +27,17 @@ func TestNewList(t *testing.T) {
 	}
 }
 
+func TestEmptyListDraw(t *testing.T) {
+	l := NewList(1)
+	w := term.NewStringWriter(8, 4)
+
+	assert.NotPanics(t, func() {
+		l.Draw(w)
+		l.Resize(10, 10)
+		l.Draw(w)
+	})
+}
+
 func TestListDraw(t *testing.T) {
 	l := NewList(1)
 	l2 := NewList(1)
@@ -45,13 +56,13 @@ func TestListDraw(t *testing.T) {
         
         `,
 		}, {
-			func() { l.PushBack(&Virtual{C: &TestComponent{Ch: 'X'}}) }, `
+			func() { l.PushBack(&TestComponent{Ch: 'X'}) }, `
 XXXXXXXX
         
         
         `,
 		}, {
-			func() { l.PushBack(&Virtual{C: &TestComponent{Ch: 'Y'}}) }, `
+			func() { l.PushBack(&TestComponent{Ch: 'Y'}) }, `
 XXXXXXXX
 YYYYYYYY
         
@@ -69,15 +80,15 @@ YYYYYYYY
         
         `,
 		}, {
-			func() { l.PushFront(&Virtual{C: &TestComponent{Ch: 'Z'}}) }, `
+			func() { l.PushFront(&TestComponent{Ch: 'Z'}) }, `
 ZZZZZZZZ
 XXXXXXXX
 YYYYYYYY
         `,
 		}, {
 			func() {
-				l2.PushFront(&Virtual{C: &TestComponent{Ch: '$'}})
-				l2.PushFront(&Virtual{C: &TestComponent{Ch: '#'}})
+				l2.PushFront(&TestComponent{Ch: '$'})
+				l2.PushFront(&TestComponent{Ch: '#'})
 				l.PushBackList(l2)
 			}, `
 ZZZZZZZZ
@@ -103,7 +114,30 @@ YYYYYYYY
 ########
 $$$$$$$$`,
 		}, {
-			func() { l.Resize(4, 4) }, `
+			func() {
+				l.Resize(4, 4)
+				elNode, ok := l.ElementAt(term.Coordinates{Y: 0})
+				el := elNode.Value().(*TestComponent)
+				require.True(t, ok)
+				el1Node, ok := l.ElementAt(term.Coordinates{Y: 1})
+				el1 := el1Node.Value().(*TestComponent)
+				require.True(t, ok)
+				el2Node, ok := l.ElementAt(term.Coordinates{Y: 2})
+				el2 := el2Node.Value().(*TestComponent)
+				require.True(t, ok)
+				el3Node, ok := l.ElementAt(term.Coordinates{Y: 3})
+				el3 := el3Node.Value().(*TestComponent)
+				require.True(t, ok)
+				assert.Equal(t, el.Ch, 'X')
+				assert.Equal(t, el1.Ch, 'Y')
+				assert.Equal(t, el2.Ch, '#')
+				assert.Equal(t, el3.Ch, '$')
+				_, ok = l.ElementAt(term.Coordinates{Y: 4})
+				assert.False(t, ok)
+				assert.Panics(t, func() {
+					l.ElementAt(term.Coordinates{Y: -1})
+				})
+			}, `
 XXXX    
 YYYY    
 ####    

@@ -254,3 +254,29 @@ func (e ListNode) Next() (ListNode, bool) {
 	}
 	return e.l.newElement(e.el.Next()), true
 }
+
+// ElementAt returns the element at pos Coordinates or panics if
+// coordinates are out of the bounds of this List.
+func (l *List) ElementAt(pos term.Coordinates) (ListNode, bool) {
+	if pos.X < 0 || pos.Y < 0 {
+		panic("negative coordinates")
+	}
+
+	el := l.Front()
+	for i := 0; i < l.offset; i++ {
+		el, _ = el.Next()
+	}
+
+	i := 0
+	y := pos.Y
+	ok := true
+	for ok {
+		if i*l.elementHeight+l.elementHeight > y {
+			return el, true
+		}
+		el, ok = el.Next()
+		i++
+	}
+
+	return ListNode{}, false
+}
