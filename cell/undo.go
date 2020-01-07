@@ -17,14 +17,18 @@ type op struct {
 	undo func()
 }
 
-// NewUndoer returns an instance of Undoer which provides undo and redo operations
-// for the given Writer.
+// NewUndoer returns new instance of Undoer to undo/redo operations of w.
 func NewUndoer(w Writer) *Undoer {
-	return &Undoer{
-		w:            w,
-		undoTimeline: make([]op, 0),
-		redoTimeline: make([]op, 0),
-	}
+	u := new(Undoer)
+	u.Init(w)
+	return u
+}
+
+// Init initializes this Undoer to undo/redo operations of w.
+func (u *Undoer) Init(w Writer) {
+	u.w = w
+	u.undoTimeline = make([]op, 0)
+	u.redoTimeline = make([]op, 0)
 }
 
 func popLastOp(timeline []op) ([]op, op, bool) {
