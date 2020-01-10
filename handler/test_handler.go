@@ -7,6 +7,7 @@ import (
 	"github.com/ernestrc/fractal"
 	"github.com/ernestrc/fractal/component"
 	"github.com/ernestrc/fractal/term"
+	"github.com/stretchr/testify/assert"
 )
 
 // TestHandler is a handler used to test composite handlers. Each event
@@ -69,8 +70,6 @@ func testHandlerWorkflow(
 
 		// for readability, we expected strings are written starting with \n
 		expected := strings.TrimLeft(tcase.expected, "\n")
-		if expected != w.String() {
-			t.Errorf("expected %q found %q", expected, w.String())
-		}
+		assert.Equal(t, expected, w.String())
 	}
 }

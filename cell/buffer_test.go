@@ -171,8 +171,8 @@ func TestBufferTruncateFrom(t *testing.T) {
 		ok       bool
 		expected string
 	}{
-		{"hello\nworld", term.Coordinates{X: 4, Y: 0}, true, "hell"},
-		{"hello\nworld", term.Coordinates{X: 0, Y: 1}, true, "hello\n"},
+		{"hello\nworld\n", term.Coordinates{X: 4, Y: 0}, true, "hell"},
+		{"hello\nworld\n", term.Coordinates{X: 0, Y: 1}, true, "hello"},
 		{longStr, term.Coordinates{X: 6, Y: 0}, true, "Love i"},
 	}
 

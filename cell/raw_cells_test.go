@@ -4,8 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
-	"os"
 	"strings"
 	"testing"
 
@@ -19,42 +17,6 @@ const testFilesLines = 3
 const rawCellsFortune = `Love in your heart wasn't put there to stay.
 Love isn't love 'til you give it away.
 		-- Oscar Hammerstein 中国`
-
-var fileWithNoEOL string
-var fileWithEOL string
-
-func init() {
-	f, err := ioutil.TempFile("", "test_raw_cells_1_")
-	if err != nil {
-		return
-	}
-
-	f.WriteString("LINE")
-	for i := 1; i < testFilesLines; i++ {
-		_, err := f.WriteString("\nLINE")
-		if err != nil {
-			return
-		}
-	}
-
-	fileWithNoEOL = f.Name()
-	f.Close()
-
-	f, err = ioutil.TempFile("", "test_raw_cells_2_")
-	if err != nil {
-		return
-	}
-	defer f.Close()
-
-	for i := 0; i < testFilesLines; i++ {
-		_, err := f.WriteString("LINE\n")
-		if err != nil {
-			return
-		}
-	}
-
-	fileWithEOL = f.Name()
-}
 
 func TestRawCellsUninitialized(t *testing.T) {
 	t.Run("columns()", func(t *testing.T) {
@@ -96,51 +58,6 @@ func TestRawCellsUninitialized(t *testing.T) {
 		var c rawCells
 		assert.Equal(t, "", c.String())
 	})
-}
-
-func TestRawCellsRows(t *testing.T) {
-	require.NotZero(t, fileWithNoEOL)
-	require.NotZero(t, fileWithEOL)
-
-	f, err := os.Open(fileWithNoEOL)
-	require.NoError(t, err)
-	defer f.Close()
-
-	f2, err := os.Open(fileWithEOL)
-	require.NoError(t, err)
-	defer f2.Close()
-
-	tsuite := []struct {
-		input io.Reader
-		rows  int
-	}{
-		{strings.NewReader(""), 1},
-		{strings.NewReader("fjelkwfjlkew"), 1},
-		{strings.NewReader("fjelkwfjlkew\nfewjklfe"), 2},
-		{f, testFilesLines},
-		{f2, testFilesLines + 1},
-	}
-
-	for _, tcase := range tsuite {
-		reader := tcase.input
-		{
-			var c rawCells
-			_, err := c.ReadFrom(tcase.input)
-			require.NoError(t, err)
-			assert.Equal(t, tcase.rows, c.rows(), "ReadFrom()")
-		}
-
-		s := reader.(io.Seeker)
-		s.Seek(0, 0)
-
-		{
-			var c rawCells
-			bytes, err := ioutil.ReadAll(tcase.input)
-			require.NoError(t, err)
-			c.insert(term.Coordinates{}, string(bytes))
-			assert.Equal(t, tcase.rows, c.rows(), "insert()")
-		}
-	}
 }
 
 func TestRawCellsPanicsNegativeCoordinates(t *testing.T) {

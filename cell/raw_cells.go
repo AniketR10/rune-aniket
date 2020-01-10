@@ -14,9 +14,6 @@ const defColumnCap int = 64
 const defRowCap int = 128
 
 // rawCells is a matrix of term.Cell. The zero value for rawCells is ready to use.
-// It satisfies cell.ReadWriter interface.
-//
-// Note that rawCells always ensures that there's an EOL at the end of the structure.
 type rawCells struct {
 	cells     [][]term.Cell
 	tabspaces int
@@ -158,7 +155,6 @@ func (c *rawCells) insert(at term.Coordinates, str string) (
 			to.X += padding
 		}
 	}
-	c.ensureLastEOL()
 	return
 }
 
@@ -289,7 +285,6 @@ func (c *rawCells) delete(from, to term.Coordinates) (
 
 	str = builder.String()
 
-	c.ensureLastEOL()
 	return
 }
 
@@ -348,13 +343,6 @@ func (c *rawCells) cell(pos term.Coordinates) (
 	return
 }
 
-func (c *rawCells) ensureLastEOL() {
-	// TODO
-	// if len(c.cells) == 0 || len(c.cells[len(c.cells)-1]) != 0 {
-	// 	c.cells = append(c.cells, makeNewRow(0, defColumnCap))
-	// }
-}
-
 func (c *rawCells) ReadFrom(r io.Reader) (int64, error) {
 	if c.cells == nil {
 		c.reset()
@@ -379,7 +367,6 @@ func (c *rawCells) ReadFrom(r io.Reader) (int64, error) {
 		n += int64(len(str))
 		if err != nil {
 			if err == io.EOF {
-				c.ensureLastEOL()
 				err = nil
 			}
 			return n, err
@@ -389,18 +376,9 @@ func (c *rawCells) ReadFrom(r io.Reader) (int64, error) {
 	}
 }
 
-// FIXME with last line
 // nextWrite returns the position of the write cursor.
 func (c *rawCells) nextWrite() term.Coordinates {
-	if c.cells == nil {
-		c.reset()
-	}
-
-	rows := c.rows()
-	y := rows - 1
-	if rows > 1 {
-		y--
-	}
+	y := c.rows() - 1
 	x := len(c.cells[y])
 	return term.Coordinates{X: x, Y: y}
 }

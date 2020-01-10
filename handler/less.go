@@ -2,7 +2,6 @@ package handler
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/ernestrc/fractal"
 	"github.com/ernestrc/fractal/cell"
@@ -32,7 +31,6 @@ var DefaultLessConfig = LessConfig{
 
 // Less is a clone of Unix' less program which implements
 // the Handler and Component interfaces.
-// TODO for message bar use span.
 type Less struct {
 	component.Scroll
 	cmdScroll    component.VirtualComponent
@@ -86,13 +84,15 @@ func getBuffer(virtualScroll component.VirtualComponent) *cell.Buffer {
 // SetNormalMode sets the mode to normal.
 func (l *Less) SetNormalMode() {
 	l.cursorOffset = 1
-	getBuffer(l.cmdScroll).ReadFrom(strings.NewReader(":"))
+	getBuffer(l.cmdScroll).Reset()
+	getBuffer(l.cmdScroll).WriteString(":")
 	l.mode = LessNormalMode
 }
 
 // SetSearchMode sets the mode to search mode.
 func (l *Less) SetSearchMode() {
-	getBuffer(l.cmdScroll).ReadFrom(strings.NewReader("/"))
+	getBuffer(l.cmdScroll).Reset()
+	getBuffer(l.cmdScroll).WriteString("/")
 	l.mode = LessSearchMode
 }
 
@@ -126,8 +126,7 @@ func (l *Less) searchHandleEvent(ev term.Event) (exit bool) {
 
 	default:
 		l.cursorOffset++
-		panic("TODO: cmdScroll does not support append")
-		// FIXME getBuffer(l.cmdScroll).WriteRune(ev.Ch)
+		getBuffer(l.cmdScroll).WriteString(string(ev.Ch))
 	}
 
 	return
@@ -170,7 +169,7 @@ func (l *Less) normalHandleEvent(ev term.Event) (exit bool) {
 // SetMessage sets a message to be displayed on the bottom right corner.
 func (l *Less) SetMessage(text string, args ...interface{}) {
 	getBuffer(l.msgScroll).Reset()
-	getBuffer(l.msgScroll).ReadFrom(strings.NewReader(fmt.Sprintf(text, args...)))
+	getBuffer(l.msgScroll).WriteString(fmt.Sprintf(text, args...))
 	l.Resize(l.width, l.height)
 }
 
@@ -182,7 +181,7 @@ func (l *Less) Reset() {
 // SetContent replaces the content of the underlying scroll with 'text'.
 func (l *Less) SetContent(text string, args ...interface{}) {
 	l.Reset()
-	l.Scroll.ReadFrom(strings.NewReader(fmt.Sprintf(text, args...)))
+	l.Scroll.WriteString(fmt.Sprintf(text, args...))
 	l.Resize(l.width, l.height)
 }
 

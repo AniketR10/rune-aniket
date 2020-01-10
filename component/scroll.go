@@ -221,7 +221,7 @@ func (s *Scroll) getMaxXOffset() (x int) {
 func (s *Scroll) getMaxYOffset() (y int) {
 	rows := s.Buffer.Rows()
 	if rows >= s.height {
-		y = rows - s.height - 1
+		y = rows - s.height
 	}
 	return
 }

@@ -1,18 +1,21 @@
 package cell
 
 import (
+	"bytes"
+	"fmt"
 	"io"
+	"strings"
 
 	"github.com/ernestrc/fractal/term"
 )
 
-// A Buffer offers a high level API to manipulate cell.ReadWriter.
+// A Buffer offers a high level API to manipulate a matrix of term.Cell.
 type Buffer struct {
+	readerFrom io.ReaderFrom
 	reader     reader
 	writer     writer
-	undoer     undoer
+	undoer     *undoer
 	selector   selector
-	readerFrom io.ReaderFrom
 }
 
 // NewBuffer allocates storage for a new Buffer and initializes it.
@@ -27,12 +30,14 @@ func (b *Buffer) InitWithTabspaces(tabspaces int) {
 	cells := new(rawCells)
 	cells.init(tabspaces)
 
-	b.undoer.init(cells)
-	b.selector.reader = cells
-
 	b.readerFrom = cells
-	b.reader = cells
-	b.writer = &b.undoer
+	b.reader = newUnixFileBuffer(cells)
+
+	b.undoer = newUndoer(cells)
+	b.writer = b.undoer
+
+	b.selector.reader = b.reader
+
 }
 
 // Init initializes this Buffer with the default configuration.
@@ -136,8 +141,6 @@ func (b *Buffer) DeleteCell(pos term.Coordinates) term.Coordinates {
 	return start
 }
 
-/* NOTE: the following methods should be removed and employ an attributes view */
-
 // ResetAttr resets all the attributes of the underlying cell matrix.
 func (b *Buffer) ResetAttr() {
 	cells := b.reader.rawCells()
@@ -208,6 +211,9 @@ func (b *Buffer) Insert(at term.Coordinates, str string) (from, to term.Coordina
 // along with the true start and end of the range, in case some cells groups
 // (cell with padding) were deleted.
 func (b *Buffer) Delete(from, to term.Coordinates) (start, end term.Coordinates, str string) {
+	if !b.inBounds(from) || !b.inBounds(to) {
+		panic(fmt.Sprintf("out of bounds: from=%+v, to=%+v", from, to))
+	}
 	return b.writer.delete(from, to)
 }
 
@@ -222,6 +228,21 @@ func (b *Buffer) Reset() {
 // error except io.EOF encountered during the read is also returned.
 func (b *Buffer) ReadFrom(r io.Reader) (int64, error) {
 	return b.readerFrom.ReadFrom(r)
+}
+
+// io.Writer
+func (b *Buffer) Write(p []byte) (int, error) {
+	n, err := b.readerFrom.ReadFrom(bytes.NewReader(p))
+	return int(n), err
+}
+
+// WriteString writes the given string at the end of the buffer
+func (b *Buffer) WriteString(p string) {
+	_, err := b.readerFrom.ReadFrom(strings.NewReader(p))
+	if err != nil {
+		// strings.Reader never errors out
+		panic(err)
+	}
 }
 
 // Undo reverses the last update to the Buffer.

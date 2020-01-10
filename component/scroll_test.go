@@ -26,9 +26,9 @@ func newScroll(tabspaces int, wrap bool, width, height int) (scroll *Scroll) {
 
 func TestScrollNew(t *testing.T) {
 	scroll := newScroll(5, true, 100, 100)
-	if scroll.Wrap != true || scroll.width != 100 || scroll.height != 100 {
-		t.Errorf("scroll not initialized properly: %+v", scroll)
-	}
+	assert.True(t, scroll.Wrap)
+	assert.Equal(t, 100, scroll.width)
+	assert.Equal(t, 100, scroll.height)
 }
 
 func TestScrollDraw(t *testing.T) {
@@ -86,9 +86,7 @@ func TestScrollDraw(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		if w.String() != tcase.expected {
-			t.Errorf("expected: %q; found: %q", tcase.expected, w.String())
-		}
+		assert.Equal(t, tcase.expected, w.String())
 	}
 }
 
