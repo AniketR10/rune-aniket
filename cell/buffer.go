@@ -1,13 +1,18 @@
 package cell
 
 import (
+	"io"
+
 	"github.com/ernestrc/fractal/term"
 )
 
 // A Buffer offers a high level API to manipulate cell.ReadWriter.
 type Buffer struct {
-	Writer
-	Reader
+	reader     reader
+	writer     writer
+	undoer     undoer
+	selector   selector
+	readerFrom io.ReaderFrom
 }
 
 // NewBuffer allocates storage for a new Buffer and initializes it.
@@ -17,45 +22,41 @@ func NewBuffer() (b *Buffer) {
 	return b
 }
 
-// Init initializes this Buffer with the given instance of ReadWriter.
-func (b *Buffer) Init() {
-	cells := new(RawCells)
-	b.Writer = cells
-	b.Reader = cells
+// InitWithTabspaces initializes this Buffer with
+func (b *Buffer) InitWithTabspaces(tabspaces int) {
+	cells := new(rawCells)
+	cells.init(tabspaces)
+
+	b.undoer.init(cells)
+	b.selector.reader = cells
+
+	b.readerFrom = cells
+	b.reader = cells
+	b.writer = &b.undoer
 }
 
-// SetReadWriter sets this buffer writer and reader to rw.
-func (b *Buffer) SetReadWriter(rw ReadWriter) {
-	b.Writer = rw
-	b.Reader = rw
+// Init initializes this Buffer with the default configuration.
+func (b *Buffer) Init() {
+	b.InitWithTabspaces(defTabSpaces)
+}
+
+// WithLogger adds a cell logger this Buffer which
+// intercepts all the calls and logs them to out.
+func (b *Buffer) WithLogger(out io.Writer) *Buffer {
+	b.reader, b.writer = newLogger(b.reader, b.writer, out)
+	return b
 }
 
 // InsertRowAt inserts a new row at given position. If pos is out of bounds,
 // this method does not panic; instead, it will fill in the necessary
 // rows such that the new row is the last row in the buffer.
 func (b *Buffer) InsertRowAt(y int) {
-	b.Writer.Insert(term.Coordinates{Y: y}, "\n")
-}
-
-// NextWrite returns the position of the write cursor.
-func (b *Buffer) NextWrite() term.Coordinates {
-	return b.Writer.NextWrite()
-}
-
-// WriteString writes the given string at the end of the buffer
-func (b *Buffer) WriteString(p string) term.Coordinates {
-	b.Writer.Insert(b.Writer.NextWrite(), p)
-	return b.Writer.NextWrite()
-}
-
-// WriteRune writes the given rune at the end of the buffer
-func (b *Buffer) WriteRune(r rune) term.Coordinates {
-	return b.WriteString(string(r))
+	b.writer.insert(term.Coordinates{Y: y}, "\n")
 }
 
 // InsertAt inserts a rune in the given position and shift the cells to the right
 func (b *Buffer) InsertAt(pos term.Coordinates, r rune) (next term.Coordinates) {
-	_, next = b.Writer.Insert(pos, string(r))
+	_, next = b.writer.insert(pos, string(r))
 
 	if r == '\n' {
 		next.Y++
@@ -74,13 +75,13 @@ func (b *Buffer) DeleteRow(y int) (ok bool) {
 		return
 	}
 	from := term.Coordinates{Y: y, X: 0}
-	to := term.Coordinates{Y: y, X: b.Reader.Columns(y)}
-	b.Writer.Delete(from, to)
+	to := term.Coordinates{Y: y, X: b.reader.columns(y)}
+	b.writer.delete(from, to)
 	return
 }
 
 func (b *Buffer) inBounds(pos term.Coordinates) (ok bool) {
-	if pos.Y >= b.Reader.Rows() || pos.X >= b.Reader.Columns(pos.Y) {
+	if pos.Y >= b.reader.rows() || pos.X >= b.reader.columns(pos.Y) {
 		return
 	}
 	ok = true
@@ -92,12 +93,12 @@ func (b *Buffer) TruncateRowFrom(pos term.Coordinates) (ok bool) {
 	if ok = b.inBounds(pos); !ok {
 		return
 	}
-	cols := b.Reader.Columns(pos.Y)
+	cols := b.reader.columns(pos.Y)
 	if cols == 0 {
 		ok = false
 		return
 	}
-	b.Writer.Delete(pos, term.Coordinates{Y: pos.Y, X: cols - 1})
+	b.writer.delete(pos, term.Coordinates{Y: pos.Y, X: cols - 1})
 	return
 }
 
@@ -106,9 +107,9 @@ func (b *Buffer) TruncateFrom(pos term.Coordinates) (ok bool) {
 	if ok = b.inBounds(pos); !ok {
 		return
 	}
-	y := b.Reader.Rows() - 1
-	to := term.Coordinates{X: b.Reader.Columns(y), Y: y}
-	b.Writer.Delete(pos, to)
+	y := b.reader.rows() - 1
+	to := term.Coordinates{X: b.reader.columns(y), Y: y}
+	b.writer.delete(pos, to)
 	return
 }
 
@@ -118,8 +119,8 @@ func (b *Buffer) ConflateRow(y int) (ok bool) {
 	if ok = b.inBounds(pos); !ok {
 		return
 	}
-	pos.X = b.Reader.Columns(y)
-	b.Writer.Delete(pos, pos)
+	pos.X = b.reader.columns(y)
+	b.writer.delete(pos, pos)
 	return
 }
 
@@ -131,7 +132,7 @@ func (b *Buffer) DeleteCell(pos term.Coordinates) term.Coordinates {
 		return term.Coordinates{}
 	}
 
-	start, _, _ := b.Writer.Delete(pos, pos)
+	start, _, _ := b.writer.delete(pos, pos)
 	return start
 }
 
@@ -139,7 +140,7 @@ func (b *Buffer) DeleteCell(pos term.Coordinates) term.Coordinates {
 
 // ResetAttr resets all the attributes of the underlying cell matrix.
 func (b *Buffer) ResetAttr() {
-	cells := b.Reader.RawCells()
+	cells := b.reader.rawCells()
 	for y, r := range cells {
 		for x := range r {
 			cells[y][x].Fg, cells[y][x].Bg = 0, 0
@@ -155,7 +156,7 @@ func (b *Buffer) SetAttr(pos term.Coordinates, attr term.Attributes) (
 		return
 	}
 
-	cells := b.Reader.RawCells()
+	cells := b.reader.rawCells()
 	cells[pos.Y][pos.X].Bg = attr.Bg
 	cells[pos.Y][pos.X].Fg = attr.Fg
 	return
@@ -168,7 +169,90 @@ func (b *Buffer) GetAttr(pos term.Coordinates) (
 	if ok = b.inBounds(pos); !ok {
 		return
 	}
-	cells := b.Reader.RawCells()
+	cells := b.reader.rawCells()
 	attr = term.Attributes{Bg: cells[pos.Y][pos.X].Bg, Fg: cells[pos.Y][pos.X].Fg}
 	return
+}
+
+// Rows returns the number of rows in the Buffer.
+func (b *Buffer) Rows() int {
+	return b.reader.rows()
+}
+
+// Columns returns the number of cells of row at index y.
+func (b *Buffer) Columns(y int) int {
+	return b.reader.columns(y)
+}
+
+// Cell returns the cell and true or a zero-valued cell and false if there is no
+// cell at position. If attempting to get a tab padding, the position of the
+// tab is returned.
+func (b *Buffer) Cell(pos term.Coordinates) (term.Coordinates, term.Cell) {
+	return b.reader.cell(pos)
+}
+
+// RawCells gives clients access to the underlying cell matrix.
+func (b *Buffer) RawCells() [][]term.Cell {
+	return b.reader.rawCells()
+}
+
+// Insert inserts string in the given position and shifts the remaining cells.
+// insert never fails: if at is out-of-bounds, this method fills in the rows
+// and/or columns of cells.
+func (b *Buffer) Insert(at term.Coordinates, str string) (from, to term.Coordinates) {
+	return b.writer.insert(at, str)
+}
+
+// Delete removes cells in left-inclusive, right-inclusive range
+// and returns the corresponding string representation of the cells removed,
+// along with the true start and end of the range, in case some cells groups
+// (cell with padding) were deleted.
+func (b *Buffer) Delete(from, to term.Coordinates) (start, end term.Coordinates, str string) {
+	return b.writer.delete(from, to)
+}
+
+// Reset resets the contents of this Buffer.
+func (b *Buffer) Reset() {
+	b.writer.reset()
+	b.undoer.reset()
+}
+
+// ReadFrom reads data from r until EOF and appends it to the buffer, growing
+// the buffer as needed. The return value n is the number of bytes read. Any
+// error except io.EOF encountered during the read is also returned.
+func (b *Buffer) ReadFrom(r io.Reader) (int64, error) {
+	return b.readerFrom.ReadFrom(r)
+}
+
+// Undo reverses the last update to the Buffer.
+// Redo can be used to reverse Undo.
+func (b *Buffer) Undo() bool {
+	return b.undoer.undo()
+}
+
+// Redo reverses the previously reversed update to the Buffer.
+func (b *Buffer) Redo() bool {
+	return b.undoer.redo()
+}
+
+// Select returns the cells inside the given coordinates or nil if coordinates
+// are out of bounds.
+func (b *Buffer) Select(from term.Coordinates, to term.Coordinates) [][]term.Cell {
+	return b.selector.selectCells(from, to)
+}
+
+// SelectLine returns the lines inside the given coordinates or nil if
+// coordinates are out of bounds.
+func (b *Buffer) SelectLine(from term.Coordinates, to term.Coordinates) [][]term.Cell {
+	return b.selector.selectLine(from, to)
+}
+
+// SelectBlock returns the block of cells inside the given coordinates or nil if
+// coordinates are out of bounds.
+func (b *Buffer) SelectBlock(from term.Coordinates, to term.Coordinates) [][]term.Cell {
+	return b.selector.selectBlock(from, to)
+}
+
+func (b *Buffer) String() string {
+	return b.reader.String()
 }

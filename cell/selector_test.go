@@ -8,12 +8,11 @@ import (
 )
 
 func TestSelect(t *testing.T) {
-	buf := NewBuffer()
 	str := `hello
 	world
 
 itsme`
-	buf.WriteString(str)
+	buf := newBufferWithContent(t, str)
 
 	testCases := []selectCase{
 		{
@@ -105,8 +104,8 @@ itsme`
 	}
 
 	for i, tcase := range testCases {
-		selector := Selector{Reader: buf}
-		selection := selector.Select(tcase.from, tcase.to)
+		selector := selector{reader: buf.reader}
+		selection := selector.selectCells(tcase.from, tcase.to)
 		if !reflect.DeepEqual(selection, tcase.expected) {
 			t.Errorf("tcase %d: expected %q found %q", i,
 				toString(tcase.expected), toString(selection))
@@ -115,9 +114,8 @@ itsme`
 }
 
 func TestSelectLine(t *testing.T) {
-	buf := NewBuffer()
 	str := "hello\n\tworld\n\nitsme"
-	buf.WriteString(str)
+	buf := newBufferWithContent(t, str)
 
 	testCases := []selectCase{
 		{
@@ -172,8 +170,8 @@ func TestSelectLine(t *testing.T) {
 	}
 
 	for _, tcase := range testCases {
-		selector := Selector{Reader: buf}
-		selection := selector.SelectLine(tcase.from, tcase.to)
+		selector := selector{reader: buf.reader}
+		selection := selector.selectLine(tcase.from, tcase.to)
 		if toString(selection) != toString(tcase.expected) {
 			t.Errorf("expected %q found %q", toString(tcase.expected), toString(selection))
 		}
@@ -181,9 +179,8 @@ func TestSelectLine(t *testing.T) {
 }
 
 func TestSelectBlock(t *testing.T) {
-	buf := NewBuffer()
 	str := "hello\n\tworld\n\nitsme\n\n\nhi"
-	buf.WriteString(str)
+	buf := newBufferWithContent(t, str)
 
 	testCases := []selectCase{
 		{
@@ -235,8 +232,8 @@ func TestSelectBlock(t *testing.T) {
 	}
 
 	for _, tcase := range testCases {
-		selector := Selector{Reader: buf}
-		selection := selector.SelectBlock(tcase.from, tcase.to)
+		selector := selector{reader: buf.reader}
+		selection := selector.selectBlock(tcase.from, tcase.to)
 		if !reflect.DeepEqual(selection, tcase.expected) {
 			t.Errorf("expected %q found %q", toString(tcase.expected), toString(selection))
 		}

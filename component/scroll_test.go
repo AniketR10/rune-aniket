@@ -1,11 +1,12 @@
 package component
 
 import (
+	"strings"
 	"testing"
 
-	"github.com/ernestrc/fractal/cell"
 	"github.com/ernestrc/fractal/term"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 var fortune = `Love in your heart wasn't put there to stay.
@@ -16,11 +17,8 @@ Love isn't love 'til you give it away.
 var fortunewidth = 44
 
 func newScroll(tabspaces int, wrap bool, width, height int) (scroll *Scroll) {
-	scroll = new(Scroll)
-	scroll.Init()
-	cells := new(cell.RawCells)
-	cells.Init(tabspaces)
-	scroll.Buffer.SetReadWriter(cells)
+	scroll = NewScroll()
+	scroll.Buffer.InitWithTabspaces(tabspaces)
 	scroll.Resize(width, height)
 	scroll.Wrap = wrap
 	return
@@ -38,7 +36,8 @@ func TestScrollDraw(t *testing.T) {
 	tabspaces := 4
 	wrap := false
 	scroll := newScroll(tabspaces, wrap, width, height)
-	scroll.WriteString(fortune)
+	_, err := scroll.ReadFrom(strings.NewReader(fortune))
+	require.NoError(t, err)
 
 	w := term.NewStringWriter(width, height)
 
@@ -98,7 +97,8 @@ func TestScrollDrawWrap(t *testing.T) {
 	tabspaces := 4
 	wrap := true
 	scroll := newScroll(tabspaces, wrap, width, height)
-	scroll.WriteString(fortune)
+	_, err := scroll.ReadFrom(strings.NewReader(fortune))
+	require.NoError(t, err)
 
 	w := term.NewStringWriter(width, height)
 
@@ -144,7 +144,8 @@ func TestRowLastIndex(t *testing.T) {
 
 	for _, tcase := range cases {
 		scroll.Reset()
-		scroll.WriteString(tcase.content)
+		_, err := scroll.ReadFrom(strings.NewReader(tcase.content))
+		require.NoError(t, err)
 		i := scroll.Columns(tcase.line)
 		assert.Equal(t, tcase.expected, i)
 	}
@@ -153,7 +154,7 @@ func TestRowLastIndex(t *testing.T) {
 func newBigScroll(fortunes int) (scroll *Scroll) {
 	scroll = NewScroll()
 	for i := 0; i < fortunes; i++ {
-		_ = scroll.WriteString(fortune)
+		_, _ = scroll.ReadFrom(strings.NewReader(fortune))
 	}
 	// assume big screen
 	scroll.Resize(3000, 2000)

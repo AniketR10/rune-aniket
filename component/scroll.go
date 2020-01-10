@@ -8,6 +8,8 @@ import (
 	"github.com/ernestrc/fractal/term"
 )
 
+// TODO do not draw or display last EOL
+
 // Scroll adds Draw to a Buffer along with
 // scrolling, searching and wrap-around capabilities.
 type Scroll struct {
@@ -198,13 +200,8 @@ func (s *Scroll) Resize(width, height int) {
 	s.height = height
 }
 
-func (s *Scroll) getView() [][]term.Cell {
-	ywindow := s.offset.Y + s.height
-	return s.RawCells()[s.offset.Y:ywindow]
-}
-
 func (s *Scroll) getMaxXOffset() (x int) {
-	view := s.getView()
+	view := s.RawCells()[s.offset.Y:]
 	columns := 0
 	for _, r := range view {
 		if l := len(r); l > columns {
@@ -223,9 +220,7 @@ func (s *Scroll) getMaxXOffset() (x int) {
 
 func (s *Scroll) getMaxYOffset() (y int) {
 	rows := s.Buffer.Rows()
-	if rows <= s.height {
-		y = 0
-	} else {
+	if rows >= s.height {
 		y = rows - s.height - 1
 	}
 	return
@@ -385,4 +380,14 @@ func (s *Scroll) Result() (pos term.Coordinates, ok bool) {
 // Offset returns the scroll offset from the start of the content.
 func (s *Scroll) Offset() term.Coordinates {
 	return s.offset
+}
+
+// Width returns this scroll's width.
+func (s *Scroll) Width() int {
+	return s.width
+}
+
+// Height returns this scroll's height.
+func (s *Scroll) Height() int {
+	return s.height
 }

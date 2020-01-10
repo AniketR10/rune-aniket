@@ -1,9 +1,11 @@
 package component
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/ernestrc/fractal/term"
+	"github.com/stretchr/testify/require"
 )
 
 func TestIntegrationScroll(t *testing.T) {
@@ -12,7 +14,9 @@ func TestIntegrationScroll(t *testing.T) {
 	wrap := false
 	virtualScroll := VirtualComponent{C: newScroll(tabspaces, wrap, width, height)}
 	virtualScroll.Resize(width, height)
-	virtualScroll.C.(*Scroll).WriteString("AAAAAAAAAAAA\nBBBBBBBBBBBB\nCCCCCCCCCCCC\nDDDDDDDDDDDD")
+	str := "AAAAAAAAAAAA\nBBBBBBBBBBBB\nCCCCCCCCCCCC\nDDDDDDDDDDDD"
+	_, err := virtualScroll.C.(*Scroll).ReadFrom(strings.NewReader(str))
+	require.NoError(t, err)
 
 	w := term.NewStringWriter(12, height)
 

@@ -4,10 +4,12 @@ import (
 	"github.com/ernestrc/fractal/term"
 )
 
-// Undoer adds Undo and Redo methods to a otherwise, irreversible cell.Writer.
-// It satifies the cell.Writer interface and it should be used as a replacement.
-type Undoer struct {
-	w            Writer
+// TODO redo/undo should return start of update
+
+// undoer adds undo and redo methods to a otherwise, irreversible cell.writer.
+// It satifies the cell.writer interface and it should be used as a replacement.
+type undoer struct {
+	w            writer
 	undoTimeline []op
 	redoTimeline []op
 }
@@ -17,15 +19,15 @@ type op struct {
 	undo func()
 }
 
-// NewUndoer returns new instance of Undoer to undo/redo operations of w.
-func NewUndoer(w Writer) *Undoer {
-	u := new(Undoer)
-	u.Init(w)
+// Newundoer returns new instance of undoer to undo/redo operations of w.
+func newUndoer(w writer) *undoer {
+	u := new(undoer)
+	u.init(w)
 	return u
 }
 
-// Init initializes this Undoer to undo/redo operations of w.
-func (u *Undoer) Init(w Writer) {
+// Init initializes this undoer to undo/redo operations of w.
+func (u *undoer) init(w writer) {
 	u.w = w
 	u.undoTimeline = make([]op, 0)
 	u.redoTimeline = make([]op, 0)
@@ -40,8 +42,7 @@ func popLastOp(timeline []op) ([]op, op, bool) {
 	return timeline[:lastCmd], op, true
 }
 
-// Redo reverses the previously reversed update to the underlying buffer.
-func (u *Undoer) Redo() bool {
+func (u *undoer) redo() bool {
 	redoTimeline, op, ok := popLastOp(u.redoTimeline)
 	if !ok {
 		return ok
@@ -52,11 +53,7 @@ func (u *Undoer) Redo() bool {
 	return ok
 }
 
-// TODO Redo/Undo should return start of update
-
-// Undo reverses the last update to the underlying buffer.
-// Redo can be used to reverse the undo.
-func (u *Undoer) Undo() bool {
+func (u *undoer) undo() bool {
 	undoTimeline, op, ok := popLastOp(u.undoTimeline)
 	if !ok {
 		return ok
@@ -69,25 +66,25 @@ func (u *Undoer) Undo() bool {
 
 var i int
 
-func (u *Undoer) pushUndo(cmd op) {
+func (u *undoer) pushUndo(cmd op) {
 	u.undoTimeline = append(u.undoTimeline, cmd)
 }
-func (u *Undoer) pushRedo(cmd op) {
+func (u *undoer) pushRedo(cmd op) {
 	u.redoTimeline = append(u.redoTimeline, cmd)
 }
 
-func (u *Undoer) resetRedoTimeline() {
+func (u *undoer) resetRedoTimeline() {
 	u.redoTimeline = u.redoTimeline[:0]
 }
 
-// Insert captures underlying writer Insert so it can be undone. See cell.Writer.Insert
-func (u *Undoer) Insert(at term.Coordinates, str string) (from, to term.Coordinates) {
+// insert captures underlying writer insert so it can be undone. See cell.writer.insert
+func (u *undoer) insert(at term.Coordinates, str string) (from, to term.Coordinates) {
 	op := op{
 		do: func() {
-			from, to = u.w.Insert(at, str)
+			from, to = u.w.insert(at, str)
 		},
 		undo: func() {
-			u.w.Delete(from, to)
+			u.w.delete(from, to)
 		},
 	}
 
@@ -97,14 +94,14 @@ func (u *Undoer) Insert(at term.Coordinates, str string) (from, to term.Coordina
 	return
 }
 
-// Delete captures underlying writer Delete so it can be undone. See cell.Writer.Delete
-func (u *Undoer) Delete(from, to term.Coordinates) (start, end term.Coordinates, str string) {
+// delete captures underlying writer delete so it can be undone. See cell.writer.delete
+func (u *undoer) delete(from, to term.Coordinates) (start, end term.Coordinates, str string) {
 	op := op{
 		do: func() {
-			start, end, str = u.w.Delete(from, to)
+			start, end, str = u.w.delete(from, to)
 		},
 		undo: func() {
-			u.w.Insert(start, str)
+			u.w.insert(start, str)
 		},
 	}
 
@@ -114,14 +111,9 @@ func (u *Undoer) Delete(from, to term.Coordinates) (start, end term.Coordinates,
 	return
 }
 
-// Reset resets the undo/redo timelines and the underlying cell.Writer.
-func (u *Undoer) Reset() {
+// Reset resets the undo/redo timelines and the underlying cell.writer.
+func (u *undoer) reset() {
 	u.resetRedoTimeline()
 	u.undoTimeline = u.undoTimeline[:0]
-	u.w.Reset()
-}
-
-// NextWrite delegates call to underlying cell.Writer.
-func (u *Undoer) NextWrite() term.Coordinates {
-	return u.w.NextWrite()
+	u.w.reset()
 }

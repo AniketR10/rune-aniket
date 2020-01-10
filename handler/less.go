@@ -2,6 +2,7 @@ package handler
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/ernestrc/fractal"
 	"github.com/ernestrc/fractal/cell"
@@ -20,7 +21,8 @@ type LessConfig struct {
 	Handler func(LessEvent)
 }
 
-var defaultConfig = LessConfig{
+// DefaultLessConfig is a sane configuration defaults for Less.
+var DefaultLessConfig = LessConfig{
 	Wrap: false,
 	ResAttr: term.Attributes{
 		Fg: term.AttrReverse,
@@ -28,15 +30,9 @@ var defaultConfig = LessConfig{
 	},
 }
 
-// DefaultLessConfig returns sane configuration defaults for a less instance.
-func DefaultLessConfig() *LessConfig {
-	cfg := new(LessConfig)
-	*cfg = defaultConfig
-	return cfg
-}
-
 // Less is a clone of Unix' less program which implements
 // the Handler and Component interfaces.
+// TODO for message bar use span.
 type Less struct {
 	component.Scroll
 	cmdScroll    component.VirtualComponent
@@ -47,7 +43,7 @@ type Less struct {
 	height       int
 	width        int
 	search       string
-	config       *LessConfig
+	config       LessConfig
 }
 
 // LessEventType represents a less event
@@ -87,17 +83,24 @@ func getBuffer(virtualScroll component.VirtualComponent) *cell.Buffer {
 	return &virtualScroll.C.(*component.Scroll).Buffer
 }
 
-func (l *Less) setNormalMode() {
+// SetNormalMode sets the mode to normal.
+func (l *Less) SetNormalMode() {
 	l.cursorOffset = 1
-	getBuffer(l.cmdScroll).Reset()
-	getBuffer(l.cmdScroll).WriteRune(':')
+	getBuffer(l.cmdScroll).ReadFrom(strings.NewReader(":"))
 	l.mode = LessNormalMode
 }
 
-func (l *Less) setSearchMode() {
-	getBuffer(l.cmdScroll).Reset()
-	getBuffer(l.cmdScroll).WriteRune('/')
+// SetSearchMode sets the mode to search mode.
+func (l *Less) SetSearchMode() {
+	getBuffer(l.cmdScroll).ReadFrom(strings.NewReader("/"))
 	l.mode = LessSearchMode
+}
+
+// SearchText returns the contents of the search buffer.
+func (l *Less) SearchText() string {
+	str := getBuffer(l.cmdScroll).String()
+	bytes := []byte(str)[1:]
+	return string(bytes)
 }
 
 func (l *Less) searchHandleEvent(ev term.Event) (exit bool) {
@@ -112,20 +115,19 @@ func (l *Less) searchHandleEvent(ev term.Event) (exit bool) {
 				DeleteCell(term.Coordinates{X: l.cursorOffset, Y: 0})
 		}
 	case term.KeyEnter:
-		str := getBuffer(l.cmdScroll).String()
-		bytes := []byte(str)[1:]
-		l.search = string(bytes)
+		l.search = l.SearchText()
 		l.Scroll.Search(l.search)
-		l.setNormalMode()
+		l.SetNormalMode()
 		l.Scroll.SeekNextResult()
-		l.sendEvent(LessEvent{Type: Search, Data: bytes})
+		l.sendEvent(LessEvent{Type: Search, Data: []byte(l.search)})
 
 	case term.KeyEsc:
-		l.setNormalMode()
+		l.SetNormalMode()
 
 	default:
 		l.cursorOffset++
-		getBuffer(l.cmdScroll).WriteRune(ev.Ch)
+		panic("TODO: cmdScroll does not support append")
+		// FIXME getBuffer(l.cmdScroll).WriteRune(ev.Ch)
 	}
 
 	return
@@ -158,7 +160,7 @@ func (l *Less) normalHandleEvent(ev term.Event) (exit bool) {
 		case 'l':
 			l.Scroll.SeekRight()
 		case '/':
-			l.setSearchMode()
+			l.SetSearchMode()
 		}
 	}
 
@@ -168,7 +170,7 @@ func (l *Less) normalHandleEvent(ev term.Event) (exit bool) {
 // SetMessage sets a message to be displayed on the bottom right corner.
 func (l *Less) SetMessage(text string, args ...interface{}) {
 	getBuffer(l.msgScroll).Reset()
-	getBuffer(l.msgScroll).WriteString(fmt.Sprintf(text, args...))
+	getBuffer(l.msgScroll).ReadFrom(strings.NewReader(fmt.Sprintf(text, args...)))
 	l.Resize(l.width, l.height)
 }
 
@@ -180,7 +182,7 @@ func (l *Less) Reset() {
 // SetContent replaces the content of the underlying scroll with 'text'.
 func (l *Less) SetContent(text string, args ...interface{}) {
 	l.Reset()
-	l.Scroll.WriteString(fmt.Sprintf(text, args...))
+	l.Scroll.ReadFrom(strings.NewReader(fmt.Sprintf(text, args...)))
 	l.Resize(l.width, l.height)
 }
 
@@ -311,7 +313,7 @@ func (l *Less) Man() fractal.Manual {
 }
 
 // WithConfig sets cfg as the new Less handler configuration.
-func (l *Less) WithConfig(cfg *LessConfig) (ret *Less) {
+func (l *Less) WithConfig(cfg LessConfig) (ret *Less) {
 	ret = new(Less)
 	*ret = *l
 	ret.config = cfg
@@ -326,9 +328,7 @@ func (l *Less) Init() {
 // InitWithBuffer initialzes this instance with the given Buffer and configuration.
 // If config is nil, the default one is used.
 func (l *Less) InitWithBuffer(buf *cell.Buffer) {
-	if l.config == nil {
-		l.config = DefaultLessConfig()
-	}
+	l.config = DefaultLessConfig
 	l.delEOF = false
 	l.Scroll.Init()
 	l.Scroll.Buffer = *buf
@@ -340,7 +340,7 @@ func (l *Less) InitWithBuffer(buf *cell.Buffer) {
 	l.setupScroll(l.msgScroll.C.(*component.Scroll))
 	l.setupScroll(&l.Scroll)
 
-	l.setNormalMode()
+	l.SetNormalMode()
 
 	return
 }

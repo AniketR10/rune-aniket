@@ -1,9 +1,11 @@
 package handler
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/ernestrc/fractal/term"
+	"github.com/stretchr/testify/require"
 )
 
 const content = `AAAAABBBBB
@@ -18,14 +20,15 @@ KKKKXXLLLL
 11111111XX
 `
 
-func setup(less *Less, width, height int) (*Less, *term.StringWriter) {
+func setup(t *testing.T, less *Less, width, height int) (*Less, *term.StringWriter) {
 	if less == nil {
 		less = NewLess()
 	} else {
 		less.Init()
 	}
 
-	less.WriteString(content)
+	_, err := less.ReadFrom(strings.NewReader(content))
+	require.NoError(t, err)
 
 	less.Resize(width, height)
 
@@ -192,9 +195,9 @@ func testLessHandle(t *testing.T, cases []handlerTestCase) {
 	var less [2]Less
 	var less1 *Less
 	var writer1, writer2, writer3 *term.StringWriter
-	_, writer1 = setup(&less[0], 8, 4)
-	_, writer2 = setup(&less[1], 8, 4)
-	less1, writer3 = setup(nil, 8, 4)
+	_, writer1 = setup(t, &less[0], 8, 4)
+	_, writer2 = setup(t, &less[1], 8, 4)
+	less1, writer3 = setup(t, nil, 8, 4)
 
 	// test cases with allocated less
 	testHandlerWorkflow(t, &less[0], cases, writer1)

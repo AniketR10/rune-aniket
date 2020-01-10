@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/ioutil"
+	"os"
 	"strings"
 	"testing"
 
@@ -12,85 +14,163 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const testFilesLines = 3
+
 const rawCellsFortune = `Love in your heart wasn't put there to stay.
 Love isn't love 'til you give it away.
 		-- Oscar Hammerstein 中国`
 
+var fileWithNoEOL string
+var fileWithEOL string
+
+func init() {
+	f, err := ioutil.TempFile("", "test_raw_cells_1_")
+	if err != nil {
+		return
+	}
+
+	f.WriteString("LINE")
+	for i := 1; i < testFilesLines; i++ {
+		_, err := f.WriteString("\nLINE")
+		if err != nil {
+			return
+		}
+	}
+
+	fileWithNoEOL = f.Name()
+	f.Close()
+
+	f, err = ioutil.TempFile("", "test_raw_cells_2_")
+	if err != nil {
+		return
+	}
+	defer f.Close()
+
+	for i := 0; i < testFilesLines; i++ {
+		_, err := f.WriteString("LINE\n")
+		if err != nil {
+			return
+		}
+	}
+
+	fileWithEOL = f.Name()
+}
+
 func TestRawCellsUninitialized(t *testing.T) {
-	t.Run("Columns()", func(t *testing.T) {
-		var c RawCells
-		assert.Equal(t, 0, c.Columns(0))
+	t.Run("columns()", func(t *testing.T) {
+		var c rawCells
+		assert.Equal(t, 0, c.columns(0))
 	})
 
-	t.Run("Insert()", func(t *testing.T) {
-		var c RawCells
-		from, to := c.Insert(term.Coordinates{X: 0, Y: 0}, "r")
+	t.Run("insert()", func(t *testing.T) {
+		var c rawCells
+		from, to := c.insert(term.Coordinates{X: 0, Y: 0}, "r")
 		assert.Equal(t, term.Coordinates{}, from)
 		assert.Equal(t, term.Coordinates{}, to)
 	})
 
-	t.Run("NextWrite()", func(t *testing.T) {
-		var c RawCells
-		assert.Equal(t, term.Coordinates{}, c.NextWrite())
-	})
-
-	t.Run("RawCells()", func(t *testing.T) {
-		var c RawCells
-		cs := c.RawCells()
+	t.Run("rawCells()", func(t *testing.T) {
+		var c rawCells
+		cs := c.rawCells()
 		assert.Equal(t, cs, [][]term.Cell{[]term.Cell{}})
 	})
 
 	t.Run("ReadFrom()", func(t *testing.T) {
-		var c RawCells
+		var c rawCells
 		n, err := c.ReadFrom(strings.NewReader("r"))
 		assert.NoError(t, err)
 		assert.Equal(t, int64(1), n)
 	})
 
-	t.Run("Reset()", func(t *testing.T) {
-		var c RawCells
-		c.Reset()
+	t.Run("reset()", func(t *testing.T) {
+		var c rawCells
+		c.reset()
 	})
 
-	t.Run("Rows()", func(t *testing.T) {
-		var c RawCells
-		assert.Equal(t, 0, c.Rows())
+	t.Run("rows()", func(t *testing.T) {
+		var c rawCells
+		assert.Equal(t, 0, c.rows())
 	})
 
 	t.Run("String()", func(t *testing.T) {
-		var c RawCells
+		var c rawCells
 		assert.Equal(t, "", c.String())
 	})
 }
 
+func TestRawCellsRows(t *testing.T) {
+	require.NotZero(t, fileWithNoEOL)
+	require.NotZero(t, fileWithEOL)
+
+	f, err := os.Open(fileWithNoEOL)
+	require.NoError(t, err)
+	defer f.Close()
+
+	f2, err := os.Open(fileWithEOL)
+	require.NoError(t, err)
+	defer f2.Close()
+
+	tsuite := []struct {
+		input io.Reader
+		rows  int
+	}{
+		{strings.NewReader(""), 1},
+		{strings.NewReader("fjelkwfjlkew"), 1},
+		{strings.NewReader("fjelkwfjlkew\nfewjklfe"), 2},
+		{f, testFilesLines},
+		{f2, testFilesLines + 1},
+	}
+
+	for _, tcase := range tsuite {
+		reader := tcase.input
+		{
+			var c rawCells
+			_, err := c.ReadFrom(tcase.input)
+			require.NoError(t, err)
+			assert.Equal(t, tcase.rows, c.rows(), "ReadFrom()")
+		}
+
+		s := reader.(io.Seeker)
+		s.Seek(0, 0)
+
+		{
+			var c rawCells
+			bytes, err := ioutil.ReadAll(tcase.input)
+			require.NoError(t, err)
+			c.insert(term.Coordinates{}, string(bytes))
+			assert.Equal(t, tcase.rows, c.rows(), "insert()")
+		}
+	}
+}
+
 func TestRawCellsPanicsNegativeCoordinates(t *testing.T) {
 
-	var c RawCells
+	var c rawCells
 	negativeCoords := []term.Coordinates{
 		term.Coordinates{X: -1, Y: 0},
 		term.Coordinates{X: 0, Y: -1},
 	}
 
 	for _, pos := range negativeCoords {
-		t.Run("Cell()", func(t *testing.T) {
+		t.Run("cell()", func(t *testing.T) {
 			assert.Panics(t, func() {
-				c.Cell(pos)
+				c.cell(pos)
 			})
 		})
 
-		t.Run("Insert()", func(t *testing.T) {
+		t.Run("insert()", func(t *testing.T) {
 			assert.Panics(t, func() {
-				c.Insert(pos, "r")
+				c.insert(pos, "r")
 			})
 		})
-		t.Run("Delete(from)", func(t *testing.T) {
+		t.Run("delete(from)", func(t *testing.T) {
 			assert.Panics(t, func() {
-				c.Delete(pos, term.Coordinates{X: 0, Y: 2})
+				c.delete(pos, term.Coordinates{X: 0, Y: 2})
 			})
 		})
-		t.Run("Delete(until)", func(t *testing.T) {
+		t.Run("delete(until)", func(t *testing.T) {
 			assert.Panics(t, func() {
-				c.Delete(term.Coordinates{X: 0, Y: 2}, pos)
+				c.delete(term.Coordinates{X: 0, Y: 2}, pos)
 			})
 		})
 	}
@@ -136,7 +216,7 @@ func TestRawCellsReadFrom(t *testing.T) {
 	}
 
 	for i, tcase := range tsuite {
-		var c RawCells
+		var c rawCells
 		reads := tcase.reads
 		n, err := c.ReadFrom(&tcase)
 		assert.Equal(t, tcase.expectedErr, err, "tcase %d", i)
@@ -158,7 +238,7 @@ func TestRawCellsStringReadFrom(t *testing.T) {
 	for i, _tcase := range tsuite {
 		tcase := _tcase
 		t.Run(fmt.Sprintf("test case %d", i), func(t *testing.T) {
-			var c RawCells
+			var c rawCells
 			n, err := c.ReadFrom(strings.NewReader(tcase))
 			assert.NoError(t, err)
 			assert.Equal(t, int64(len(tcase)), n)
@@ -239,7 +319,7 @@ Love isn't love 'til you give it away.
 	}
 
 	for i, tcase := range tsuite {
-		var c RawCells
+		var c rawCells
 		var input string
 		if tcase.overrideBaseRawCells != "" {
 			input = tcase.overrideBaseRawCells
@@ -249,7 +329,7 @@ Love isn't love 'til you give it away.
 		_, err := c.ReadFrom(strings.NewReader(input))
 		require.NoError(t, err)
 
-		actualFrom, actualTo := c.Insert(tcase.inputAt, tcase.inputStr)
+		actualFrom, actualTo := c.insert(tcase.inputAt, tcase.inputStr)
 		assert.Equal(t, tcase.expectedFrom, actualFrom, "test case %d", i)
 		assert.Equal(t, tcase.expectedTo, actualTo, "test case %d", i)
 		assert.Equal(t, tcase.expectedRawCells, c.String())
@@ -466,7 +546,7 @@ Love isn't love 'til you give it away.
 	}
 
 	for i, tcase := range tsuite {
-		var c RawCells
+		var c rawCells
 		base := baseRawCells
 		if tcase.overrideBaseRawCells != "" {
 			base = tcase.overrideBaseRawCells
@@ -474,7 +554,7 @@ Love isn't love 'til you give it away.
 		_, err := c.ReadFrom(strings.NewReader(base))
 		require.NoError(t, err)
 
-		actualStart, actualEnd, actualStr := c.Delete(tcase.inputFrom, tcase.inputTo)
+		actualStart, actualEnd, actualStr := c.delete(tcase.inputFrom, tcase.inputTo)
 		assert.Equal(t, tcase.expectedStr, actualStr, "expected return string in test case %d", i)
 		assert.Equal(t, tcase.expectedRawCells, c.String(), "expected cells in test case %d", i)
 
@@ -489,8 +569,8 @@ Love isn't love 'til you give it away.
 	}
 }
 
-func newBenchmarkRawCells(fortunes int) (*RawCells, string) {
-	cells := new(RawCells)
+func newBenchmarkRawCells(fortunes int) (*rawCells, string) {
+	cells := new(rawCells)
 	payload := ""
 	for i := 0; i < fortunes; i++ {
 		payload = payload + benchmarkFortune
@@ -504,11 +584,17 @@ func benchmarkBufferReadFrom(b *testing.B, fortunes int) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		cells.Reset()
+		cells.reset()
 		reader.Reset(payload)
 		_, _ = cells.ReadFrom(reader)
 	}
 }
+
+var benchmarkFortune = `
+				Love in your heart wasn't put there to stay.
+				Love isn't love 'til you give it away.
+				-- Oscar Hammerstein 中国
+`
 
 // NOTE: names starting with 'Buffer' are kept so we can
 // compare to when ReadFrom was implemented in Buffer.

@@ -1,11 +1,13 @@
 package cell
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/ernestrc/fractal/term"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 const str = "hello\n\tworld\n"
@@ -13,32 +15,12 @@ const longStr = `Love in your heart wasn't put there to stay.
 Love isn't love 'til you give it away.
 		-- Oscar Hammerstein 中国`
 
-func assertBufferContent(t *testing.T, buf *Buffer) {
-	assert.Equal(t, 3, buf.Rows())
+func newBufferWithContent(t *testing.T, str string) *Buffer {
+	b := NewBuffer()
+	_, err := b.ReadFrom(strings.NewReader(str))
+	require.NoError(t, err)
 
-	cols := buf.Columns(0)
-	assert.Equal(t, 5, cols)
-
-	cols = buf.Columns(1)
-	assert.Equal(t, 9, cols)
-
-	assert.Equal(t, str, buf.String())
-}
-
-func TestBufferWriteString(t *testing.T) {
-	buf := NewBuffer()
-	buf.WriteString(str)
-	assertBufferContent(t, buf)
-}
-
-func TestBufferWriteRune(t *testing.T) {
-	buf := NewBuffer()
-
-	for _, c := range str {
-		buf.WriteRune(c)
-	}
-
-	assertBufferContent(t, buf)
+	return b
 }
 
 func TestBufferInsertAt(t *testing.T) {
@@ -79,9 +61,8 @@ func TestBufferInsertAt(t *testing.T) {
 }
 
 func TestBufferDeleteRow(t *testing.T) {
-	buf := NewBuffer()
 	str := "hello\nworld"
-	buf.WriteString(str)
+	buf := newBufferWithContent(t, str)
 
 	buf.DeleteRow(0)
 	assert.Equal(t, "world", buf.String())
@@ -91,9 +72,8 @@ func TestBufferDeleteRow(t *testing.T) {
 }
 
 func TestBufferTruncateRowFrom1(t *testing.T) {
-	buf := NewBuffer()
 	str := "hello\nworld"
-	buf.WriteString(str)
+	buf := newBufferWithContent(t, str)
 
 	buf.TruncateRowFrom(term.Coordinates{X: 2, Y: 0})
 
@@ -101,9 +81,8 @@ func TestBufferTruncateRowFrom1(t *testing.T) {
 }
 
 func TestBufferTruncateRowFrom2(t *testing.T) {
-	buf := NewBuffer()
 	str := "hello\nworld"
-	buf.WriteString(str)
+	buf := newBufferWithContent(t, str)
 
 	buf.TruncateRowFrom(term.Coordinates{X: 2, Y: 1})
 
@@ -111,9 +90,8 @@ func TestBufferTruncateRowFrom2(t *testing.T) {
 }
 
 func TestBufferTruncateCellAt(t *testing.T) {
-	buf := NewBuffer()
 	str := "hello\nworld"
-	buf.WriteString(str)
+	buf := newBufferWithContent(t, str)
 
 	buf.DeleteCell(term.Coordinates{X: 0, Y: 1})
 	buf.DeleteCell(term.Coordinates{X: 1, Y: 1})
@@ -124,10 +102,8 @@ func TestBufferTruncateCellAt(t *testing.T) {
 }
 
 func TestBufferDeleteCellAtTab(t *testing.T) {
-	buf := NewBuffer()
-
 	str := "!\t\t!\t"
-	buf.WriteString(str)
+	buf := newBufferWithContent(t, str)
 
 	start := buf.DeleteCell(term.Coordinates{X: 3, Y: 0})
 	assert.Equal(t, term.Coordinates{X: 1}, start)
@@ -164,9 +140,8 @@ func assertCellProperties(t *testing.T, cell term.Cell, attr term.Attributes) {
 }
 
 func TestSetAttr(t *testing.T) {
-	buf := NewBuffer()
 	str := "0123"
-	buf.WriteString(str)
+	buf := newBufferWithContent(t, str)
 
 	t.Run("sets attribute to cell at position if exists", func(t *testing.T) {
 		pos := term.Coordinates{X: 0, Y: 0}
@@ -202,8 +177,7 @@ func TestBufferTruncateFrom(t *testing.T) {
 	}
 
 	for _, tcase := range tsuite {
-		buf := NewBuffer()
-		buf.WriteString(tcase.contents)
+		buf := newBufferWithContent(t, tcase.contents)
 		ok := buf.TruncateFrom(tcase.input)
 		if tcase.ok {
 			assert.True(t, ok)
@@ -213,45 +187,3 @@ func TestBufferTruncateFrom(t *testing.T) {
 		}
 	}
 }
-
-var benchmarkFortune = `
-				Love in your heart wasn't put there to stay.
-				Love isn't love 'til you give it away.
-				-- Oscar Hammerstein 中国
-`
-
-func newBenchmarkBuffer(fortunes int) (*Buffer, string) {
-	buffer := NewBuffer()
-	payload := ""
-	for i := 0; i < fortunes; i++ {
-		payload = payload + benchmarkFortune
-	}
-	return buffer, payload
-}
-
-func benchmarkBufferWrite(b *testing.B, fortunes int) {
-	buffer, payload := newBenchmarkBuffer(fortunes)
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		buffer.Reset()
-		_ = buffer.WriteString(payload)
-	}
-}
-
-func BenchmarkBufferWrite10(b *testing.B) {
-	benchmarkBufferWrite(b, 10)
-}
-func BenchmarkBufferWrite100(b *testing.B) {
-	benchmarkBufferWrite(b, 100)
-}
-func BenchmarkBufferWrite1000(b *testing.B) {
-	benchmarkBufferWrite(b, 1000)
-}
-func BenchmarkBufferWrite10000(b *testing.B) {
-	benchmarkBufferWrite(b, 10000)
-}
-
-// func BenchmarkBufferWrite100MB(b *testing.B) {
-// 	benchmarkBufferWrite(b, 1000000)
-// }

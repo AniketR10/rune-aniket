@@ -13,21 +13,22 @@ const defTabSpaces int = 4
 const defColumnCap int = 64
 const defRowCap int = 128
 
-// RawCells is a matrix of term.Cell. The zero value for RawCells is ready to use.
-// It satisfies cell.Reader and cell.Writer.
-type RawCells struct {
+// rawCells is a matrix of term.Cell. The zero value for rawCells is ready to use.
+// It satisfies cell.ReadWriter interface.
+//
+// Note that rawCells always ensures that there's an EOL at the end of the structure.
+type rawCells struct {
 	cells     [][]term.Cell
 	tabspaces int
 }
 
-// Init initializes this RawCells with the given tabspaces config and resets its contents.
-func (c *RawCells) Init(tabspaces int) {
+// init initializes this rawCells with the given tabspaces config and resets its contents.
+func (c *rawCells) init(tabspaces int) {
 	c.tabspaces = tabspaces
-	c.Reset()
+	c.reset()
 }
 
-// Reset resets the contents of this cellbuf.
-func (c *RawCells) Reset() {
+func (c *rawCells) reset() {
 	c.cells = make([][]term.Cell, 1, defRowCap)
 	c.cells[0] = makeNewRow(0, defColumnCap)
 	if c.tabspaces == 0 {
@@ -41,9 +42,9 @@ func assertValidCoords(pos term.Coordinates) {
 	}
 }
 
-func (c *RawCells) assertCordsInBounds(pos term.Coordinates) {
+func (c *rawCells) assertCordsInBounds(pos term.Coordinates) {
 	assertValidCoords(pos)
-	if pos.Y >= c.Rows() || pos.X > len(c.cells[pos.Y]) {
+	if pos.Y >= c.rows() || pos.X > len(c.cells[pos.Y]) {
 		panic(fmt.Sprintf("Coordinates out of bounds: %+v", pos))
 	}
 }
@@ -53,7 +54,7 @@ func makeNewRow(length, capacity int) (row []term.Cell) {
 	return
 }
 
-func (c *RawCells) insertNewRow(pos term.Coordinates) {
+func (c *rawCells) insertNewRow(pos term.Coordinates) {
 	assertValidCoords(pos)
 	sourceRow := c.cells[pos.Y]
 	targetY := pos.Y + 1
@@ -73,14 +74,14 @@ func (c *RawCells) insertNewRow(pos term.Coordinates) {
 	}
 }
 
-func (c *RawCells) doInsertAt(pos term.Coordinates, r rune) {
+func (c *rawCells) doInsertAt(pos term.Coordinates, r rune) {
 	// make sure we have enough capacity
 	c.cells[pos.Y] = append(c.cells[pos.Y], term.Cell{})
 	copy(c.cells[pos.Y][pos.X+1:], c.cells[pos.Y][pos.X:])
 	c.cells[pos.Y][pos.X] = term.Cell{Ch: r}
 }
 
-func (c *RawCells) insertAt(pos term.Coordinates, r rune) (next term.Coordinates) {
+func (c *rawCells) insertAt(pos term.Coordinates, r rune) (next term.Coordinates) {
 	switch r {
 	case '\n':
 		c.insertNewRow(pos)
@@ -100,7 +101,7 @@ func (c *RawCells) insertAt(pos term.Coordinates, r rune) (next term.Coordinates
 	return
 }
 
-func (c *RawCells) insertTabSpaces(pos term.Coordinates) {
+func (c *rawCells) insertTabSpaces(pos term.Coordinates) {
 	n := term.Coordinates{X: pos.X, Y: pos.Y}
 	for i := 1; i < c.tabspaces; i++ {
 		n = c.insertAt(n, '\x00')
@@ -108,9 +109,9 @@ func (c *RawCells) insertTabSpaces(pos term.Coordinates) {
 	c.doInsertAt(n, '\t')
 }
 
-func (c *RawCells) fillInRows(y int) (n int) {
+func (c *rawCells) fillInRows(y int) (n int) {
 	if c.cells == nil {
-		c.Reset()
+		c.reset()
 	}
 	for y >= len(c.cells) {
 		n++
@@ -120,7 +121,7 @@ func (c *RawCells) fillInRows(y int) (n int) {
 	return
 }
 
-func (c *RawCells) fillInColumns(pos term.Coordinates) (n int) {
+func (c *rawCells) fillInColumns(pos term.Coordinates) (n int) {
 	for pos.X > len(c.cells[pos.Y]) {
 		c.cells[pos.Y] = append(c.cells[pos.Y], term.Cell{Ch: ' '})
 		n++
@@ -128,14 +129,14 @@ func (c *RawCells) fillInColumns(pos term.Coordinates) (n int) {
 	return
 }
 
-func (c *RawCells) fillInCoords(pos term.Coordinates) (
+func (c *rawCells) fillInCoords(pos term.Coordinates) (
 	from, to term.Coordinates,
 ) {
 	assertValidCoords(pos)
 	from = pos
 	if filled := c.fillInRows(pos.Y); filled != 0 {
 		from.Y -= filled
-		from.X = c.Columns(from.Y)
+		from.X = c.columns(from.Y)
 		c.fillInColumns(pos)
 	} else {
 		from.X -= c.fillInColumns(pos)
@@ -145,10 +146,7 @@ func (c *RawCells) fillInCoords(pos term.Coordinates) (
 	return
 }
 
-// Insert inserts string in the given position and shifts the remaining cells.
-// Insert never fails: if at is out-of-bounds, this method fills in the rows
-// and/or columns of cells.
-func (c *RawCells) Insert(at term.Coordinates, str string) (
+func (c *rawCells) insert(at term.Coordinates, str string) (
 	from, to term.Coordinates,
 ) {
 	from, to = c.fillInCoords(at)
@@ -160,6 +158,7 @@ func (c *RawCells) Insert(at term.Coordinates, str string) (
 			to.X += padding
 		}
 	}
+	c.ensureLastEOL()
 	return
 }
 
@@ -180,11 +179,11 @@ func copyRowToBuilder(builder *strings.Builder, cells []term.Cell) {
 	}
 }
 
-func (c *RawCells) canConflate(row int) (ok bool) {
+func (c *rawCells) canConflate(row int) (ok bool) {
 	return row < len(c.cells)-1
 }
 
-func (c *RawCells) conflate(row int) {
+func (c *rawCells) conflate(row int) {
 	// copy cells from next row into current row
 	rlen := len(c.cells[row+1])
 	if rlen != 0 {
@@ -198,7 +197,7 @@ func (c *RawCells) conflate(row int) {
 	c.cells = c.cells[:len(c.cells)-1]
 }
 
-func (c *RawCells) doDeleteRowInRange(
+func (c *rawCells) doDeleteRowInRange(
 	builder *strings.Builder, row, fromX, toX int,
 ) (conflate bool) {
 	conflate = toX == len(c.cells[row])
@@ -213,7 +212,7 @@ func (c *RawCells) doDeleteRowInRange(
 	return conflate
 }
 
-func (c *RawCells) deleteRowRange(
+func (c *rawCells) deleteRowRange(
 	builder *strings.Builder, row, fromX, toX int,
 ) {
 	shouldConflate := c.doDeleteRowInRange(builder, row, fromX, toX)
@@ -223,7 +222,7 @@ func (c *RawCells) deleteRowRange(
 	}
 }
 
-func (c *RawCells) skipPadding(start, end term.Coordinates) (
+func (c *rawCells) skipPadding(start, end term.Coordinates) (
 	term.Coordinates, term.Coordinates,
 ) {
 	tokens := c.tabspaces - 1
@@ -251,11 +250,7 @@ func (c *RawCells) skipPadding(start, end term.Coordinates) (
 	return start, end
 }
 
-// Delete removes cells in left-inclusive, right-inclusive range
-// and returns the corresponding string representation of the cells removed,
-// along with the true start and end of the range, in case some cells groups
-// (cell with padding) were deleted.
-func (c *RawCells) Delete(from, to term.Coordinates) (
+func (c *rawCells) delete(from, to term.Coordinates) (
 	start, end term.Coordinates, str string,
 ) {
 	c.assertCordsInBounds(start)
@@ -293,31 +288,31 @@ func (c *RawCells) Delete(from, to term.Coordinates) (
 	c.conflate(start.Y)
 
 	str = builder.String()
+
+	c.ensureLastEOL()
 	return
 }
 
-// Columns returns the number of cells of row at index y
-func (c *RawCells) Columns(y int) (j int) {
+func (c *rawCells) columns(y int) (j int) {
 	if c.cells == nil {
-		c.Reset()
+		c.reset()
 	}
 	if y < 0 {
 		panic(fmt.Sprintf("invalid row: %d", y))
 	}
-	if y >= c.Rows() {
+	if y >= c.rows() {
 		panic(fmt.Sprintf("row out of bounds: %d", y))
 	}
 	j = len(c.cells[y])
 	return
 }
 
-// Rows returns the number of rows in the buffer
-func (c *RawCells) Rows() int {
+func (c *rawCells) rows() int {
 	return len(c.cells)
 }
 
-func (c *RawCells) String() string {
-	return CellsToString(c.cells)
+func (c *rawCells) String() string {
+	return CellsToString(c.rawCells())
 }
 
 // CellsToString returns the string representation of the given cell matrix.
@@ -327,17 +322,14 @@ func CellsToString(cells [][]term.Cell) string {
 	return builder.String()
 }
 
-// RawCells gives clients access to the underlying cell matrix.
-func (c *RawCells) RawCells() [][]term.Cell {
+func (c *rawCells) rawCells() [][]term.Cell {
 	if c.cells == nil {
-		c.Reset()
+		c.reset()
 	}
 	return c.cells
 }
 
-// Cell returns the cell and true or a zero-valued cell and false if there is no
-// cell at position. If attempting to get a tab padding, the position of the tab is returned.
-func (c *RawCells) Cell(pos term.Coordinates) (
+func (c *rawCells) cell(pos term.Coordinates) (
 	ppos term.Coordinates, cell term.Cell,
 ) {
 	c.assertCordsInBounds(pos)
@@ -356,14 +348,18 @@ func (c *RawCells) Cell(pos term.Coordinates) (
 	return
 }
 
-// ReadFrom reads data from r until EOF and appends it to the buffer, growing
-// the buffer as needed. The return value n is the number of bytes read. Any
-// error except io.EOF encountered during the read is also returned.
-func (c *RawCells) ReadFrom(r io.Reader) (int64, error) {
+func (c *rawCells) ensureLastEOL() {
+	// TODO
+	// if len(c.cells) == 0 || len(c.cells[len(c.cells)-1]) != 0 {
+	// 	c.cells = append(c.cells, makeNewRow(0, defColumnCap))
+	// }
+}
+
+func (c *rawCells) ReadFrom(r io.Reader) (int64, error) {
 	if c.cells == nil {
-		c.Reset()
+		c.reset()
 	}
-	rowY := c.NextWrite().Y
+	rowY := c.nextWrite().Y
 	reader := bufio.NewReader(r)
 	n := int64(0)
 	for {
@@ -383,6 +379,7 @@ func (c *RawCells) ReadFrom(r io.Reader) (int64, error) {
 		n += int64(len(str))
 		if err != nil {
 			if err == io.EOF {
+				c.ensureLastEOL()
 				err = nil
 			}
 			return n, err
@@ -392,13 +389,18 @@ func (c *RawCells) ReadFrom(r io.Reader) (int64, error) {
 	}
 }
 
-// NextWrite returns the position of the write cursor.
-func (c *RawCells) NextWrite() term.Coordinates {
+// FIXME with last line
+// nextWrite returns the position of the write cursor.
+func (c *rawCells) nextWrite() term.Coordinates {
 	if c.cells == nil {
-		c.Reset()
+		c.reset()
 	}
-	// cannot be 0, since we always have at least one row
-	y := len(c.cells) - 1
+
+	rows := c.rows()
+	y := rows - 1
+	if rows > 1 {
+		y--
+	}
 	x := len(c.cells[y])
 	return term.Coordinates{X: x, Y: y}
 }

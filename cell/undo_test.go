@@ -12,12 +12,11 @@ var undoFortune = `Love in your heart wasn't put there to stay.
 Love isn't love 'til you give it away.
 		-- Oscar Hammerstein 中国`
 
-func initUndoTestBuffer(t *testing.T) (u *Undoer, b *Buffer) {
-	b = NewBuffer()
-	b.WriteString(undoFortune)
+func initUndoTestBuffer(t *testing.T) (u *undoer, b *Buffer) {
+	b = newBufferWithContent(t, undoFortune)
 
-	u = NewUndoer(b.Writer)
-	b.Writer = u
+	u = newUndoer(b.writer)
+	b.writer = u
 	return
 }
 
@@ -31,12 +30,6 @@ func TestUndo(t *testing.T) {
 		}},
 		{"InsertRowAt", func(b *Buffer) {
 			b.InsertRowAt(1)
-		}},
-		{"WriteRune", func(b *Buffer) {
-			b.WriteRune('\t')
-		}},
-		{"WriteString", func(b *Buffer) {
-			b.WriteString("fjlkfjlkw\njfkelwjflkew\tjfklewjflkew\t")
 		}},
 		{"DeleteCell", func(b *Buffer) {
 			b.DeleteCell(term.Coordinates{X: 4, Y: 2})
@@ -57,13 +50,13 @@ func TestUndo(t *testing.T) {
 
 	for _, _tcase := range suite {
 		tcase := _tcase
-		t.Run(fmt.Sprintf("Undo %s", tcase.name), func(t *testing.T) {
+		t.Run(fmt.Sprintf("undo %s", tcase.name), func(t *testing.T) {
 			undoer, buf := initUndoTestBuffer(t)
 			prev := buf.String()
 
 			for i := 0; i < 5; i++ {
 				tcase.cmd(buf)
-				assert.True(t, undoer.Undo())
+				assert.True(t, undoer.undo())
 			}
 
 			after := buf.String()
@@ -84,21 +77,21 @@ func TestUndo(t *testing.T) {
 		middle := buf.String()
 
 		for range suite {
-			undoer.Undo()
+			undoer.undo()
 		}
 
 		after := buf.String()
 		assert.Equal(t, prev, after)
 
 		for range suite {
-			undoer.Redo()
+			undoer.redo()
 		}
 
 		afterRedo := buf.String()
 		assert.Equal(t, middle, afterRedo)
 
 		for range suite {
-			undoer.Undo()
+			undoer.undo()
 		}
 
 		after = buf.String()

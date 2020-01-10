@@ -29,7 +29,7 @@ func TestKeyMappedLessHandle(t *testing.T) {
 		term.Event{Ch: 'n', Type: term.EventKey, Mod: term.ModAlt},
 		term.Event{},
 	})
-	less1, writer3 := setup(nil, 8, 4)
+	less1, writer3 := setup(t, nil, 8, 4)
 	testHandlerWorkflow(t, WithMapping(less1, map[term.Event]term.Event{
 		term.Event{Ch: 'k', Type: term.EventKey}:                    term.Event{Ch: 'k', Type: term.EventKey},
 		term.Event{Ch: 'U', Type: term.EventKey}:                    term.Event{Ch: 'j', Type: term.EventKey},
