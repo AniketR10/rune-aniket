@@ -104,18 +104,33 @@ func TestBufferTruncateCellAt(t *testing.T) {
 func TestBufferDeleteCellAtTab(t *testing.T) {
 	str := "!\t\t!\t"
 	buf := newBufferWithContent(t, str)
+	require.Equal(t, 14, buf.Columns(0))
 
-	start := buf.DeleteCell(term.Coordinates{X: 3, Y: 0})
+	start, ok := buf.DeleteCell(term.Coordinates{X: 3, Y: 0})
+	assert.True(t, ok)
 	assert.Equal(t, term.Coordinates{X: 1}, start)
 	assert.Equal(t, "!\t!\t", buf.String())
+	assert.Equal(t, 10, buf.Columns(0))
 
-	start = buf.DeleteCell(term.Coordinates{X: 2, Y: 0})
+	start, ok = buf.DeleteCell(term.Coordinates{X: 2, Y: 0})
+	assert.True(t, ok)
 	assert.Equal(t, term.Coordinates{X: 1}, start)
 	assert.Equal(t, "!!\t", buf.String())
+	assert.Equal(t, 6, buf.Columns(0))
 
-	start = buf.DeleteCell(term.Coordinates{X: 2, Y: 0})
+	start, ok = buf.DeleteCell(term.Coordinates{X: 2, Y: 0})
+	assert.True(t, ok)
 	assert.Equal(t, term.Coordinates{X: 2}, start)
 	assert.Equal(t, "!!", buf.String())
+	assert.Equal(t, 2, buf.Columns(0))
+
+	str = "\t\t>>>>"
+	buf = newBufferWithContent(t, str)
+	start, ok = buf.DeleteCell(term.Coordinates{X: 3, Y: 0})
+	assert.True(t, ok)
+	assert.Equal(t, term.Coordinates{X: 0}, start)
+	assert.Equal(t, "\t>>>>", buf.String())
+	assert.Equal(t, 8, buf.Columns(0))
 }
 
 type selectCase struct {

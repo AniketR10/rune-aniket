@@ -132,13 +132,13 @@ func (b *Buffer) ConflateRow(y int) (ok bool) {
 // DeleteCell truncates the cell at the given position.
 // It returns the position at which the current cell (width padding) started,
 // if the width was > 1.
-func (b *Buffer) DeleteCell(pos term.Coordinates) term.Coordinates {
+func (b *Buffer) DeleteCell(pos term.Coordinates) (term.Coordinates, bool) {
 	if ok := b.inBounds(pos); !ok {
-		return term.Coordinates{}
+		return term.Coordinates{}, false
 	}
 
 	start, _, _ := b.writer.delete(pos, pos)
-	return start
+	return start, true
 }
 
 // ResetAttr resets all the attributes of the underlying cell matrix.

@@ -228,14 +228,17 @@ func (c *rawCells) skipPadding(start, end term.Coordinates) (
 		tokens--
 	}
 
+	if start.X > 0 && start.X <= rowLastIdx &&
+		c.cells[start.Y][start.X].Ch == '\t' {
+		start.X--
+	}
+
 	tokens = c.tabspaces - 1
 	rowLastIdx = len(c.cells[start.Y]) - 1
 	for tokens > 0 && start.X > 0 &&
-		start.X < rowLastIdx && c.cells[start.Y][start.X].Ch == 0 {
-
+		start.X <= rowLastIdx && c.cells[start.Y][start.X].Ch == 0 {
 		start.X--
 		tokens--
-
 	}
 
 	// we need the last pad's position, but on the left there's no \t delimiter,
