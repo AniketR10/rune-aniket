@@ -64,11 +64,27 @@ func TestBufferDeleteRow(t *testing.T) {
 	str := "hello\nworld"
 	buf := newBufferWithContent(t, str)
 
-	buf.DeleteRow(0)
+	assert.True(t, buf.DeleteRow(0))
 	assert.Equal(t, "world", buf.String())
 
-	buf.DeleteRow(0)
+	assert.True(t, buf.DeleteRow(0))
 	assert.Equal(t, "", buf.String())
+}
+
+func TestBufferDeleteRow2(t *testing.T) {
+	str := "\nworld"
+	buf := newBufferWithContent(t, str)
+
+	assert.True(t, buf.DeleteRow(0))
+	assert.Equal(t, "world", buf.String())
+}
+
+func TestBufferDeleteRowNotPanic(t *testing.T) {
+	str := "1234"
+	buf := newBufferWithContent(t, str)
+
+	assert.False(t, buf.DeleteRow(1))
+	assert.Equal(t, "1234", buf.String())
 }
 
 func TestBufferTruncateRowFrom1(t *testing.T) {

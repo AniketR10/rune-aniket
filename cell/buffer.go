@@ -76,7 +76,7 @@ func (b *Buffer) InsertAt(pos term.Coordinates, r rune) (next term.Coordinates) 
 
 // DeleteRow truncates the row at term.Coordinates.Y
 func (b *Buffer) DeleteRow(y int) (ok bool) {
-	if ok = b.inBounds(term.Coordinates{Y: y}); !ok {
+	if ok = y < b.reader.rows(); !ok {
 		return
 	}
 	from := term.Coordinates{Y: y, X: 0}
