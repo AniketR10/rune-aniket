@@ -201,6 +201,8 @@ func (s *Scroll) Resize(width, height int) {
 }
 
 func (s *Scroll) getMaxXOffset() (x int) {
+	const padding = 1
+
 	view := s.RawCells()[s.offset.Y:]
 	columns := 0
 	for _, r := range view {
@@ -211,7 +213,7 @@ func (s *Scroll) getMaxXOffset() (x int) {
 	if s.Wrap {
 		x = 0
 	} else if columns >= s.width {
-		x = columns - s.width
+		x = columns - s.width + padding
 	} else {
 		x = 0
 	}

@@ -99,9 +99,9 @@ GGGGHHHH
 		},
 		{
 			events[5], `
-CCCDDDDD
-EEEFFFFF
-GGGHHHHH
+CCDDDDD 
+EEFFFFF 
+GGHHHHH 
 :       `,
 		},
 		{
