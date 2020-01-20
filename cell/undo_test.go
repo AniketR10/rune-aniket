@@ -56,7 +56,9 @@ func TestUndo(t *testing.T) {
 
 			for i := 0; i < 5; i++ {
 				tcase.cmd(buf)
-				assert.True(t, undoer.undo())
+				ok, _ := undoer.undo()
+				// TODO assert.Equal(t, term.Coordinates{}, at)
+				assert.True(t, ok)
 			}
 
 			after := buf.String()

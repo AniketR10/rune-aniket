@@ -247,12 +247,12 @@ func (b *Buffer) WriteString(p string) {
 
 // Undo reverses the last update to the Buffer.
 // Redo can be used to reverse Undo.
-func (b *Buffer) Undo() bool {
+func (b *Buffer) Undo() (bool, term.Coordinates) {
 	return b.undoer.undo()
 }
 
 // Redo reverses the previously reversed update to the Buffer.
-func (b *Buffer) Redo() bool {
+func (b *Buffer) Redo() (bool, term.Coordinates) {
 	return b.undoer.redo()
 }
 

@@ -15,6 +15,7 @@ type undoer struct {
 }
 
 type op struct {
+	at   term.Coordinates
 	do   func()
 	undo func()
 }
@@ -42,26 +43,26 @@ func popLastOp(timeline []op) ([]op, op, bool) {
 	return timeline[:lastCmd], op, true
 }
 
-func (u *undoer) redo() bool {
+func (u *undoer) redo() (bool, term.Coordinates) {
 	redoTimeline, op, ok := popLastOp(u.redoTimeline)
 	if !ok {
-		return ok
+		return false, term.Coordinates{}
 	}
 	u.redoTimeline = redoTimeline
 	op.do()
 	u.pushUndo(op)
-	return ok
+	return ok, op.at
 }
 
-func (u *undoer) undo() bool {
+func (u *undoer) undo() (bool, term.Coordinates) {
 	undoTimeline, op, ok := popLastOp(u.undoTimeline)
 	if !ok {
-		return ok
+		return false, term.Coordinates{}
 	}
 	u.undoTimeline = undoTimeline
 	op.undo()
 	u.pushRedo(op)
-	return ok
+	return ok, op.at
 }
 
 var i int
@@ -80,6 +81,7 @@ func (u *undoer) resetRedoTimeline() {
 // insert captures underlying writer insert so it can be undone. See cell.writer.insert
 func (u *undoer) insert(at term.Coordinates, str string) (from, to term.Coordinates) {
 	op := op{
+		at: at,
 		do: func() {
 			from, to = u.w.insert(at, str)
 		},
@@ -97,6 +99,7 @@ func (u *undoer) insert(at term.Coordinates, str string) (from, to term.Coordina
 // delete captures underlying writer delete so it can be undone. See cell.writer.delete
 func (u *undoer) delete(from, to term.Coordinates) (start, end term.Coordinates, str string) {
 	op := op{
+		at: from,
 		do: func() {
 			start, end, str = u.w.delete(from, to)
 		},

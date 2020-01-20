@@ -15,13 +15,6 @@ const (
 	visualBlockSelection
 )
 
-// TODO allow client to configure how much to seek when moving cursor
-// left/right/up/down and reached window limit
-// TODO allow client to configure how much offset to leave before
-// seeking scroll on reached window limit when moving cursor left/up/right/down
-// TODO add clipboard
-// TODO if Wrap is on, then move right should use moveRightWrap
-// Cursor adds a cursor to a scroll.
 type Cursor struct {
 	scroll    *component.Scroll
 	cursor    term.Coordinates
@@ -30,6 +23,8 @@ type Cursor struct {
 		scrollFrom term.Coordinates
 		cells      [][]term.Cell
 	}
+	// TODO add clipboard
+	// TODO rename cursor receivers to c from e
 }
 
 func NewCursor() *Cursor {
@@ -328,11 +323,11 @@ func (e *Cursor) moveAfterRune(t []rune, move func() bool) (ok bool) {
 		}
 	}
 
-	e.moveTo(lastSanePos, lastSaneOffset)
+	e.revertTo(lastSanePos, lastSaneOffset)
 	return
 }
 
-func (e *Cursor) moveTo(pos, offset term.Coordinates) {
+func (e *Cursor) revertTo(pos, offset term.Coordinates) {
 	e.setCursor(pos)
 	e.scroll.SeekTo(offset)
 }
@@ -378,9 +373,9 @@ func (e *Cursor) moveBeforeRune(t []rune, move func() bool) (ok bool) {
 
 	if state == done {
 		ok = true
-		e.moveTo(prev, prevOffset)
+		e.revertTo(prev, prevOffset)
 	} else {
-		e.moveTo(initial, initialOffset)
+		e.revertTo(initial, initialOffset)
 	}
 	return
 }
@@ -429,11 +424,11 @@ func (e *Cursor) moveMatchRune(target, match rune, move func() bool) bool {
 	}
 
 	if pending == 0 {
-		e.moveTo(prev, prevOffset)
+		e.revertTo(prev, prevOffset)
 		return true
 	}
 
-	e.moveTo(currc, curro)
+	e.revertTo(currc, curro)
 	return false
 }
 
@@ -493,15 +488,7 @@ func (e *Cursor) Delete() (ok bool) {
 	var pos term.Coordinates
 	pos, ok = e.scroll.DeleteCell(e.cursorAtScroll())
 	if ok {
-		// if DeleteCell deletes a tab, it could be that
-		// pos.X at scroll yields a negative coordinate
-		// (i.e. -3 if tabspaces is 4)
-		cursorAt := e.scrollToWindowCoordinates(pos)
-		for cursorAt.X < 0 {
-			e.scroll.SeekLeft()
-			cursorAt.X++
-		}
-		e.setCursor(cursorAt)
+		e.setCursor(e.scrollToWindowCoordinates(pos))
 	}
 	return
 }
@@ -562,10 +549,29 @@ func invertAttr(cells [][]term.Cell) {
 }
 
 func (e *Cursor) scrollToWindowCoordinates(pos term.Coordinates) term.Coordinates {
-	return term.Coordinates{
+	pos = term.Coordinates{
 		X: pos.X - e.scroll.Offset().X,
 		Y: pos.Y - e.scroll.Offset().Y,
 	}
+
+	// scroll can return some coordinates that are be outside
+	// of the bounds of the current window.
+	// For instance, if DeleteCell deletes a tab, it could be that
+	// pos.X at scroll yields a negative coordinate
+	// (i.e. -3 if tabspaces is 4)
+	for pos.X < 0 && e.scroll.SeekLeft() {
+		pos.X++
+	}
+	for pos.Y < 0 && e.scroll.SeekUp() {
+		pos.Y++
+	}
+	for pos.X >= e.scroll.Width() && e.scroll.SeekRight() {
+		pos.X--
+	}
+	for pos.Y >= e.scroll.Height() && e.scroll.SeekDown() {
+		pos.Y--
+	}
+	return pos
 }
 
 func (e *Cursor) windowToScrollCoordinates(pos term.Coordinates) term.Coordinates {
@@ -629,12 +635,22 @@ func (e *Cursor) Selection() string {
 	return cell.CellsToString(e.selection.cells)
 }
 
+// Redo reverses the previously reversed update to the underlying buffer.
 func (e *Cursor) Redo() bool {
-	// TODO set cursor
-	return e.scroll.Redo()
+	ok, at := e.scroll.Redo()
+	if !ok {
+		return false
+	}
+	e.setCursor(e.scrollToWindowCoordinates(at))
+	return true
 }
 
+// Undo reverses the last update to the underlying buffer.
 func (e *Cursor) Undo() bool {
-	// TODO set cursor
-	return e.scroll.Undo()
+	ok, at := e.scroll.Undo()
+	if !ok {
+		return false
+	}
+	e.setCursor(e.scrollToWindowCoordinates(at))
+	return true
 }

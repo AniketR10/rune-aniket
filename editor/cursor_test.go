@@ -624,3 +624,66 @@ func TestCursorSelect50(t *testing.T) {
 func TestCursorSelect100(t *testing.T) {
 	testCursorSelect(t, 100, 100)
 }
+
+func testCursorUndoRedo(t *testing.T, moveBefore, moveAfter func(c *Cursor) bool, width, height int) {
+	const input = "Aleda"
+	e := setupCursor(t, width, height)
+	str := e.scroll.String()
+
+	moveBefore(&e)
+	cBefore, ok := e.Cursor()
+	require.True(t, ok)
+
+	for _, c := range input {
+		e.Insert(c)
+	}
+	str2 := e.scroll.String()
+
+	for range input {
+		require.True(t, e.Undo())
+	}
+	require.False(t, e.Undo())
+
+	c, ok := e.Cursor()
+	require.True(t, ok)
+	assert.Equal(t, cBefore, c)
+	assert.Equal(t, str, e.scroll.String())
+
+	moveAfter(&e)
+
+	for range input {
+		require.True(t, e.Redo())
+	}
+	assert.Equal(t, str2, e.scroll.String())
+	require.False(t, e.Redo())
+
+	for range input {
+		require.True(t, e.Undo())
+	}
+	require.False(t, e.Undo())
+
+	c, ok = e.Cursor()
+	require.True(t, ok)
+	assert.Equal(t, cBefore, c)
+	assert.Equal(t, str, e.scroll.String())
+}
+
+func TestCursorUndoRedo10(t *testing.T) {
+	testCursorUndoRedo(t, (*Cursor).MoveFirstLine, (*Cursor).MoveLastLine, 10, 10)
+}
+func TestCursorUndoRedo20(t *testing.T) {
+	testCursorUndoRedo(t, (*Cursor).MoveFirstLine, (*Cursor).MoveLastLine, 20, 20)
+}
+func TestCursorUndoRedo100(t *testing.T) {
+	testCursorUndoRedo(t, (*Cursor).MoveFirstLine, (*Cursor).MoveLastLine, 100, 100)
+}
+
+func TestCursorUndoRedo10Backwards(t *testing.T) {
+	testCursorUndoRedo(t, (*Cursor).MoveLastLine, (*Cursor).MoveFirstLine, 10, 10)
+}
+func TestCursorUndoRedo20Backwards(t *testing.T) {
+	testCursorUndoRedo(t, (*Cursor).MoveLastLine, (*Cursor).MoveFirstLine, 20, 20)
+}
+func TestCursorUndoRedo100Backwards(t *testing.T) {
+	testCursorUndoRedo(t, (*Cursor).MoveLastLine, (*Cursor).MoveFirstLine, 100, 100)
+}
