@@ -9,12 +9,12 @@ EXEC=$(patsubst examples/%/,$(TARGET)/%,$(EXECDIRS))
 
 .PHONY: clean test coverage
 
-default: CHECK $(EXEC)
+default: $(EXEC)
 
-test: CHECK
+test:
 	@ go test ./...
 
-coverage: CHECK $(TARGET)
+coverage: $(TARGET)
 	@ go test ./... -coverprofile $(TARGET)/coverage
 	@ go tool cover -html=$(TARGET)/coverage
 
@@ -26,8 +26,3 @@ $(TARGET):
 
 $(TARGET)/%: $(EXECSRC) $(LIBSRC) $(TARGET)
 	@cd $(patsubst bin/%,examples/%,$@) && $(CC) build $(CFLAGS) -o ../../$@
-
-CHECK:
-ifndef GOPATH
-	$(error GOPATH is undefined)
-endif
