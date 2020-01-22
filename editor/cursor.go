@@ -659,3 +659,19 @@ func (c *Cursor) Undo() bool {
 	c.setCursor(c.scrollToWindowCoordinates(at))
 	return true
 }
+
+// Row returns the row number of the row where the cursor is positioned.
+func (c *Cursor) Row() int {
+	return c.cursorAtScroll().Y
+}
+
+// Column returns the column number of the column where the cursor is positioned.
+func (c *Cursor) Column() int {
+	return c.cursorAtScroll().X
+}
+
+// Cell returns the cell where the cursor is positioned or false if there's no cell
+// at the current cursor position.
+func (c *Cursor) Cell() (term.Cell, bool) {
+	return c.cellAtCursor()
+}
