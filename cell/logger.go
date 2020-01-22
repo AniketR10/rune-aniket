@@ -66,11 +66,11 @@ func (l *logger) columns(row int) (cols int) {
 }
 
 func (l *logger) cell(p term.Coordinates) (
-	actual term.Coordinates, c term.Cell,
+	c term.Cell, ok bool,
 ) {
-	actual, c = l.r.cell(p)
-	l.out.Printf("(%p: %s).cell(p=%+v): actual=%+v, c=%+v\n",
-		l.r, l.rType, p, actual, c)
+	c, ok = l.r.cell(p)
+	l.out.Printf("(%p: %s).cell(p=%+v): c=%+v, ok=%+v\n",
+		l.r, l.rType, p, c, ok)
 	return
 }
 

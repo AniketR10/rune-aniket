@@ -216,7 +216,7 @@ func TestCursorMove(t *testing.T) {
 
 				assert.True(t, e.MoveEndLine())
 
-				_, c := e.scroll.Cell(e.cursorAtScroll())
+				c, _ := e.scroll.Cell(e.cursorAtScroll())
 				assert.Equal(t, 76, e.scroll.Offset().X+e.cursor.X)
 				assert.Equal(t, 'f', c.Ch)
 			},
@@ -272,7 +272,7 @@ func TestCursorMove(t *testing.T) {
 			func(t *testing.T, e *Cursor) {
 				assert.True(t, e.MoveLastLine())
 
-				_, c := e.scroll.Cell(e.cursorAtScroll())
+				c, _ := e.scroll.Cell(e.cursorAtScroll())
 				assert.Equal(t, 31, e.scroll.Offset().Y+e.cursor.Y)
 				assert.Equal(t, '}', c.Ch)
 			},
@@ -419,7 +419,7 @@ func TestCursorMove(t *testing.T) {
 
 				assert.True(t, e.MoveRightStartWord())
 
-				_, c := e.scroll.Cell(e.cursorAtScroll())
+				c, _ := e.scroll.Cell(e.cursorAtScroll())
 				assert.Equal(t, 't', c.Ch)
 			},
 			term.Coordinates{X: 9, Y: 2},
@@ -434,7 +434,7 @@ func TestCursorMove(t *testing.T) {
 
 				assert.True(t, e.MoveLeftStartWord())
 
-				_, c := e.scroll.Cell(e.cursorAtScroll())
+				c, _ := e.scroll.Cell(e.cursorAtScroll())
 				assert.Equal(t, 'i', c.Ch)
 			},
 			term.Coordinates{X: 6, Y: 2},
@@ -451,7 +451,7 @@ func TestCursorMove(t *testing.T) {
 
 				assert.True(t, e.MoveRightEndWord())
 
-				_, c := e.scroll.Cell(e.cursorAtScroll())
+				c, _ := e.scroll.Cell(e.cursorAtScroll())
 				assert.Equal(t, 'f', c.Ch)
 			},
 			term.Coordinates{X: 7, Y: 2},
@@ -471,7 +471,7 @@ func TestCursorMove(t *testing.T) {
 				e.cursor.Y = 7
 				assert.True(t, e.MoveToMatchingRune())
 
-				_, c := e.scroll.Cell(e.cursorAtScroll())
+				c, _ := e.scroll.Cell(e.cursorAtScroll())
 				assert.Equal(t, '}', c.Ch)
 			},
 			term.Coordinates{X: 0, Y: 9},
@@ -485,7 +485,7 @@ func TestCursorMove(t *testing.T) {
 				e.scroll.SeekEndFile()
 				assert.False(t, e.MoveToMatchingRune())
 
-				_, c := e.scroll.Cell(e.cursorAtScroll())
+				c, _ := e.scroll.Cell(e.cursorAtScroll())
 				assert.Equal(t, '{', c.Ch)
 			},
 			term.Coordinates{X: 5, Y: 31},

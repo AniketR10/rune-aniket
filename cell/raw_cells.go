@@ -328,21 +328,14 @@ func (c *rawCells) rawCells() [][]term.Cell {
 }
 
 func (c *rawCells) cell(pos term.Coordinates) (
-	ppos term.Coordinates, cell term.Cell,
+	cell term.Cell, ok bool,
 ) {
-	c.assertCordsInBounds(pos)
-
-	if pos.X == len(c.cells[pos.Y]) {
-		cell.Ch = '\n'
-		ppos = pos
+	assertValidCoords(pos)
+	if pos.Y >= c.rows() || pos.X >= len(c.cells[pos.Y]) {
 		return
 	}
-
-	for cell.Ch == 0 {
-		cell = c.cells[pos.Y][pos.X]
-		pos.X++
-	}
-	ppos = pos
+	cell = c.cells[pos.Y][pos.X]
+	ok = true
 	return
 }
 

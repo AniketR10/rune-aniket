@@ -10,7 +10,7 @@ import (
 type reader interface {
 	rows() int
 	columns(row int) int
-	cell(term.Coordinates) (term.Coordinates, term.Cell)
+	cell(term.Coordinates) (term.Cell, bool)
 	rawCells() [][]term.Cell
 	fmt.Stringer
 }

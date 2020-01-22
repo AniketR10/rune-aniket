@@ -178,7 +178,8 @@ func TestSetAttr(t *testing.T) {
 		pos := term.Coordinates{X: 0, Y: 0}
 		attr := term.Attributes{Fg: term.AttrBold, Bg: term.AttrReverse}
 		assert.True(t, buf.SetAttr(pos, attr))
-		_, c := buf.Cell(pos)
+		c, ok := buf.Cell(pos)
+		assert.True(t, ok)
 		assertCellProperties(t, c, attr)
 	})
 	t.Run("returns ok=false if cell at position does not exist", func(t *testing.T) {

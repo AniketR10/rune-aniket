@@ -188,9 +188,8 @@ func (b *Buffer) Columns(y int) int {
 }
 
 // Cell returns the cell and true or a zero-valued cell and false if there is no
-// cell at position. If attempting to get a tab padding, the position of the
-// tab is returned.
-func (b *Buffer) Cell(pos term.Coordinates) (term.Coordinates, term.Cell) {
+// cell at position.
+func (b *Buffer) Cell(pos term.Coordinates) (term.Cell, bool) {
 	return b.reader.cell(pos)
 }
 

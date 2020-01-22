@@ -54,6 +54,12 @@ func TestRawCellsUninitialized(t *testing.T) {
 		assert.Equal(t, 0, c.rows())
 	})
 
+	t.Run("cell()", func(t *testing.T) {
+		var c rawCells
+		_, ok := c.cell(term.Coordinates{})
+		assert.False(t, ok)
+	})
+
 	t.Run("String()", func(t *testing.T) {
 		var c rawCells
 		assert.Equal(t, "", c.String())
@@ -502,6 +508,28 @@ Love isn't love 'til you give it away.
 		assert.Equal(t, *tcase.expectedStart, actualStart, "expected return start in test case %d", i)
 		assert.Equal(t, *tcase.expectedEnd, actualEnd, "expected return end in test case %d", i)
 	}
+}
+
+func TestRawCellsCell(t *testing.T) {
+	var c rawCells
+	c.ReadFrom(strings.NewReader(benchmarkFortune))
+
+	cell, ok := c.cell(term.Coordinates{})
+	assert.False(t, ok)
+
+	cell, ok = c.cell(term.Coordinates{X: 1})
+	assert.False(t, ok)
+
+	cell, ok = c.cell(term.Coordinates{Y: 1, X: 16})
+	assert.True(t, ok)
+	assert.Equal(t, term.Cell{Ch: 'L'}, cell)
+
+	cell, ok = c.cell(term.Coordinates{Y: 3, X: 37})
+	assert.True(t, ok)
+	assert.Equal(t, term.Cell{Ch: '中'}, cell)
+
+	cell, ok = c.cell(term.Coordinates{Y: 666})
+	assert.False(t, ok)
 }
 
 func newBenchmarkRawCells(fortunes int) (*rawCells, string) {

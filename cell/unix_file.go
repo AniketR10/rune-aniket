@@ -34,7 +34,7 @@ func (b *unixFileBuffer) columns(row int) int {
 	return b.reader.columns(row)
 }
 
-func (b *unixFileBuffer) cell(pos term.Coordinates) (term.Coordinates, term.Cell) {
+func (b *unixFileBuffer) cell(pos term.Coordinates) (term.Cell, bool) {
 	return b.reader.cell(pos)
 }
 
