@@ -10,3 +10,4 @@ For examples of how to use some of the provided building blocks, see the [./exam
 
 # Documentation
 See https://godoc.org/github.com/ernestrc/fractal.
+
