@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/ioutil"
+	"os"
 	"strings"
 	"testing"
 
@@ -317,6 +319,8 @@ Love isn't love 'til you give it away.
 			expectedRawCells:     "",
 			inputFrom:            term.Coordinates{X: 0},
 			inputTo:              term.Coordinates{X: 1},
+			expectedStart:        &term.Coordinates{X: 0},
+			expectedEnd:          &term.Coordinates{X: 0},
 		},
 		{
 			overrideBaseRawCells: "a\nb",
@@ -337,6 +341,7 @@ Love isn't love 'til you give it away.
 			expectedRawCells: expectedRawCellsCase1,
 			inputFrom:        term.Coordinates{X: 2, Y: 5},
 			inputTo:          term.Coordinates{X: 2 + len("// what's up"), Y: 5},
+			expectedEnd:      &term.Coordinates{X: 2 + len("// what's up") - 1, Y: 5},
 		},
 		{
 			expectedStr:      "=",
@@ -378,22 +383,23 @@ Love isn't love 'til you give it away.
 			expectedRawCells:     "",
 			inputFrom:            term.Coordinates{},
 			inputTo:              term.Coordinates{X: 1},
+			expectedEnd:          &term.Coordinates{},
 		},
 		{
 			// inverted from/until
 			expectedStr:      baseRawCells,
 			expectedRawCells: "",
-			inputTo:          term.Coordinates{},
 			inputFrom:        term.Coordinates{X: 14, Y: 5},
+			inputTo:          term.Coordinates{},
 			// returns inverted from/to
 			expectedStart: &term.Coordinates{},
-			expectedEnd:   &term.Coordinates{X: 14, Y: 5},
+			expectedEnd:   &term.Coordinates{X: 13, Y: 5},
 		},
 		{
 			expectedStr:      baseRawCells,
 			expectedRawCells: "",
 			inputFrom:        term.Coordinates{},
-			inputTo:          term.Coordinates{X: 14, Y: 5},
+			inputTo:          term.Coordinates{X: 13, Y: 5},
 		},
 		{
 			expectedStr:      "\nsyntax = \"proto2\"",
@@ -484,6 +490,15 @@ Love isn't love 'til you give it away.
 			expectedStart:        &term.Coordinates{Y: 1},
 			expectedEnd:          &term.Coordinates{Y: 1},
 		},
+		{
+			overrideBaseRawCells: "a\nb\n\nc\n\n\nd",
+			expectedStr:          "a\nb\n\nc\n",
+			expectedRawCells:     "\n\nd",
+			inputFrom:            term.Coordinates{},
+			inputTo:              term.Coordinates{Y: 3, X: 1},
+			expectedStart:        &term.Coordinates{},
+			expectedEnd:          &term.Coordinates{Y: 3, X: 1},
+		},
 	}
 
 	for i, tcase := range tsuite {
@@ -507,6 +522,12 @@ Love isn't love 'til you give it away.
 		}
 		assert.Equal(t, *tcase.expectedStart, actualStart, "expected return start in test case %d", i)
 		assert.Equal(t, *tcase.expectedEnd, actualEnd, "expected return end in test case %d", i)
+
+		// test symmetry
+		from, to := c.insert(actualStart, actualStr)
+		assert.Equal(t, from, actualStart, "test case %d", i)
+		assert.Equal(t, to, actualEnd, "test case %d", i)
+		assert.Equal(t, base, c.String(), "insert was not able to reverse delete in test case %d", i)
 	}
 }
 
@@ -530,6 +551,33 @@ func TestRawCellsCell(t *testing.T) {
 
 	cell, ok = c.cell(term.Coordinates{Y: 666})
 	assert.False(t, ok)
+}
+
+func TestRawCellsInsertDeleteSymmetry(t *testing.T) {
+	// enable if want to brute-test insert/delete symmetry
+	t.SkipNow()
+
+	file, err := os.Open("raw_cells_test.go")
+	require.NoError(t, err)
+	defer file.Close()
+
+	var r rawCells
+	r.ReadFrom(file)
+
+	cells := r.rawCells()
+	for i, row := range cells {
+		for j := range row {
+			start, end, str := r.delete(term.Coordinates{}, term.Coordinates{X: j, Y: i})
+			from, to := r.insert(start, str)
+			assert.Equal(t, end, to)
+			assert.Equal(t, start, from)
+		}
+	}
+
+	file.Seek(0, 0)
+	b, err := ioutil.ReadAll(file)
+	require.NoError(t, err)
+	assert.Equal(t, string(b), r.String())
 }
 
 func newBenchmarkRawCells(fortunes int) (*rawCells, string) {

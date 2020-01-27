@@ -208,14 +208,20 @@ func (c *rawCells) doDeleteRowInRange(
 	return conflate
 }
 
+// returns true if should have conflated but could not;
+// that's useful to correct end coordinate when trying to delete
+// last row til last newline
 func (c *rawCells) deleteRowRange(
 	builder *strings.Builder, row, fromX, toX int,
-) {
+) bool {
 	shouldConflate := c.doDeleteRowInRange(builder, row, fromX, toX)
-	if shouldConflate && c.canConflate(row) {
+	canConflate := c.canConflate(row)
+	if shouldConflate && canConflate {
 		builder.WriteByte('\n')
 		c.conflate(row)
+		return false
 	}
+	return shouldConflate && !canConflate
 }
 
 func (c *rawCells) skipPadding(start, end term.Coordinates) (
@@ -260,7 +266,9 @@ func (c *rawCells) delete(from, to term.Coordinates) (
 	builder := strings.Builder{}
 
 	if start.Y == end.Y {
-		c.deleteRowRange(&builder, start.Y, start.X, end.X)
+		if c.deleteRowRange(&builder, start.Y, start.X, end.X) {
+			end.X--
+		}
 		str = builder.String()
 		return
 	}
@@ -271,17 +279,20 @@ func (c *rawCells) delete(from, to term.Coordinates) (
 
 	// copy rows in between and move last row to second row, if applicable
 	lastRow := end.Y
-	if diff := lastRow - start.Y; diff > 1 {
-		copyToBuilder(&builder, c.cells[start.Y+1:lastRow])
+	if diff := end.Y - start.Y; diff > 1 {
+		copyToBuilder(&builder, c.cells[start.Y+1:end.Y])
 		builder.WriteByte('\n')
 
-		c.cells[start.Y+1] = c.cells[lastRow]
-		lastRow = start.Y + 1
+		copy(c.cells[start.Y+1:], c.cells[end.Y:])
 		c.cells = c.cells[:len(c.cells)-diff+1]
+
+		lastRow = start.Y + 1
 	}
 
 	// then remove cells from last row; start.Y is now last row to delete
-	c.deleteRowRange(&builder, lastRow, 0, end.X)
+	if c.deleteRowRange(&builder, lastRow, 0, end.X) {
+		end.X--
+	}
 
 	// conflate last row in range
 	c.conflate(start.Y)
