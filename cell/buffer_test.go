@@ -219,3 +219,14 @@ func TestBufferTruncateFrom(t *testing.T) {
 		}
 	}
 }
+
+func TestBufferDelete(t *testing.T) {
+	b := NewBuffer()
+	_, err := b.ReadFrom(strings.NewReader("bla\nbleh"))
+	require.NoError(t, err)
+
+	start, end, str := b.Delete(term.Coordinates{}, term.Coordinates{X: 3})
+	assert.Equal(t, term.Coordinates{}, start)
+	assert.Equal(t, term.Coordinates{X: 3}, end)
+	assert.Equal(t, "bla\n", str)
+}

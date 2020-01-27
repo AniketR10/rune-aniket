@@ -85,8 +85,20 @@ func (b *Buffer) DeleteRow(y int) (ok bool) {
 	return
 }
 
-func (b *Buffer) inBounds(pos term.Coordinates) (ok bool) {
+// used by methods that need to validate cell access.
+// inBounds just checks that it's a valid coordinate for the underlying
+// reader/writer, which for instance could be x = len(row), which
+// does not contain a cell.
+func (b *Buffer) inStrictBounds(pos term.Coordinates) (ok bool) {
 	if pos.Y >= b.reader.rows() || pos.X >= b.reader.columns(pos.Y) {
+		return
+	}
+	ok = true
+	return
+}
+
+func (b *Buffer) inBounds(pos term.Coordinates) (ok bool) {
+	if pos.Y >= b.reader.rows() || pos.X > b.reader.columns(pos.Y) {
 		return
 	}
 	ok = true
@@ -155,7 +167,7 @@ func (b *Buffer) ResetAttr() {
 func (b *Buffer) SetAttr(pos term.Coordinates, attr term.Attributes) (
 	ok bool,
 ) {
-	if ok = b.inBounds(pos); !ok {
+	if ok = b.inStrictBounds(pos); !ok {
 		return
 	}
 
@@ -169,7 +181,7 @@ func (b *Buffer) SetAttr(pos term.Coordinates, attr term.Attributes) (
 func (b *Buffer) GetAttr(pos term.Coordinates) (
 	attr term.Attributes, ok bool,
 ) {
-	if ok = b.inBounds(pos); !ok {
+	if ok = b.inStrictBounds(pos); !ok {
 		return
 	}
 	cells := b.reader.rawCells()
@@ -209,6 +221,8 @@ func (b *Buffer) Insert(at term.Coordinates, str string) (from, to term.Coordina
 // and returns the corresponding string representation of the cells removed,
 // along with the true start and end of the range, in case some cells groups
 // (cell with padding) were deleted.
+// Note that if to.X == b.Columns(to.Y), the newline at the end of the row is deleted,
+// and so row is conflated with next row.
 func (b *Buffer) Delete(from, to term.Coordinates) (start, end term.Coordinates, str string) {
 	if !b.inBounds(from) || !b.inBounds(to) {
 		panic(fmt.Sprintf("out of bounds: from=%+v, to=%+v", from, to))
