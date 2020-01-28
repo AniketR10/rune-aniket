@@ -640,14 +640,10 @@ func testCursorUndoRedo(t *testing.T, moveBefore, moveAfter func(c *Cursor) bool
 	cBefore, ok := e.Cursor()
 	require.True(t, ok)
 
-	for _, c := range input {
-		e.Insert(c)
-	}
+	e.InsertString(input)
 	str2 := e.scroll.String()
 
-	for range input {
-		require.True(t, e.Undo())
-	}
+	require.True(t, e.Undo())
 	require.False(t, e.Undo())
 
 	c, ok := e.Cursor()
@@ -657,15 +653,11 @@ func testCursorUndoRedo(t *testing.T, moveBefore, moveAfter func(c *Cursor) bool
 
 	moveAfter(&e)
 
-	for range input {
-		require.True(t, e.Redo())
-	}
+	require.True(t, e.Redo())
 	assert.Equal(t, str2, e.scroll.String())
 	require.False(t, e.Redo())
 
-	for range input {
-		require.True(t, e.Undo())
-	}
+	require.True(t, e.Undo())
 	require.False(t, e.Undo())
 
 	c, ok = e.Cursor()

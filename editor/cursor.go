@@ -482,10 +482,16 @@ func (c *Cursor) InsertRowBelow() {
 	c.MoveDown()
 }
 
-// Insert will insert rune at the current cursor's position
+// Insert inserts rune at the current cursor's position.
 func (c *Cursor) Insert(r rune) {
 	pos := c.scroll.InsertAt(c.cursorAtScroll(), r)
 	c.setCursor(c.scrollToWindowCoordinates(pos))
+}
+
+// InsertString inserts str at the current cursor's position.
+func (c *Cursor) InsertString(str string) {
+	_, until := c.scroll.Insert(c.cursorAtScroll(), str)
+	c.setCursor(c.scrollToWindowCoordinates(until))
 }
 
 // Delete deletes the cell at the current cursor position.
