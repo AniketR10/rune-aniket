@@ -43,13 +43,18 @@ diff_buf_adjust(win_T *win)
 	diff_buf_add(win->w_buffer);
 } /* { */ `
 
-func setupCursor(t *testing.T, width, height int) (e Cursor) {
+func setupCursorContent(t *testing.T, width, height int, cont string) (e Cursor) {
 	scroll := component.NewScroll()
 	e.Init(scroll)
-	_, err := scroll.ReadFrom(strings.NewReader(sampleSnippet))
+	_, err := scroll.ReadFrom(strings.NewReader(cont))
 	require.NoError(t, err)
 	scroll.Resize(width, height)
+
 	return
+}
+
+func setupCursor(t *testing.T, width, height int) Cursor {
+	return setupCursorContent(t, width, height, sampleSnippet)
 }
 
 func TestCursorSearch(t *testing.T) {
@@ -132,7 +137,7 @@ func TestCursorSearch(t *testing.T) {
 				return
 			}
 
-			e.Select()
+			require.True(t, e.Select())
 			for i := 1; i < len(tcase.searchstring); i++ {
 				e.MoveRight()
 			}
@@ -574,38 +579,39 @@ func TestCursorConflate(t *testing.T) {
 }
 
 func testCursorSelect(t *testing.T, width, height int) {
-	e := setupCursor(t, width, height)
-	str := e.scroll.String()
-
-	e.Unselect()
-
 	t.Run("Select", func(t *testing.T) {
-		e.Select()
-		for e.MoveRightWrap() {
-		}
+		e := setupCursor(t, width, height)
+		str := e.scroll.String()
+		e.Unselect()
+		require.True(t, e.Select())
+
+		e.MoveLastLine()
+		e.MoveEndLine()
 		assert.Equal(t, str, e.Selection())
+
+		require.True(t, e.DeleteSelection())
+		assert.Equal(t, "", e.Selection())
 	})
 
-	e.MoveFirstLine()
-	e.Unselect()
-
 	t.Run("SelectLine", func(t *testing.T) {
-		e.SelectLine()
+		e := setupCursor(t, width, height)
+		str := e.scroll.String()
+		require.True(t, e.SelectLine())
 		for e.MoveDown() {
 		}
 		assert.Equal(t, str, e.Selection())
+		assert.False(t, e.DeleteSelection())
 	})
 
-	e.MoveFirstLine()
-	e.MoveStartLine()
-	e.Unselect()
-
 	t.Run("SelectBlock", func(t *testing.T) {
-		e.SelectBlock()
+		e := setupCursor(t, width, height)
+		str := e.scroll.String()
+		require.True(t, e.SelectBlock())
 		e.MoveLastLine()
 		for e.MoveRight() {
 		}
 		assert.Equal(t, str, e.Selection())
+		assert.False(t, e.DeleteSelection())
 	})
 }
 
@@ -686,4 +692,111 @@ func TestCursorUndoRedo20Backwards(t *testing.T) {
 }
 func TestCursorUndoRedo100Backwards(t *testing.T) {
 	testCursorUndoRedo(t, (*Cursor).MoveLastLine, (*Cursor).MoveFirstLine, 100, 100)
+}
+
+func testCursorDeleteSelection(t *testing.T, width, height int) {
+	tsuite := []struct {
+		initialBuf string
+		initialPos func(*Cursor)
+		selected   bool
+		finalPos   func(*Cursor)
+		deleted    bool
+		finalBuf   string
+	}{
+		{
+			initialBuf: "",
+			selected:   false,
+			finalPos:   func(*Cursor) {},
+			deleted:    false,
+			finalBuf:   "",
+		},
+		{
+			initialBuf: "a",
+			selected:   true,
+			finalPos:   func(*Cursor) {},
+			deleted:    true,
+			finalBuf:   "",
+		},
+		{
+			initialBuf: "a\nb",
+			selected:   true,
+			finalPos:   func(c *Cursor) { c.MoveRight() },
+			deleted:    true,
+			finalBuf:   "b",
+		},
+		{
+			initialBuf: "a\nb",
+			selected:   true,
+			finalPos: func(c *Cursor) {
+				for i := 0; i < 3; i++ {
+					c.MoveRight()
+				}
+			},
+			deleted: false,
+		},
+		{
+			initialBuf: "a\nb",
+			initialPos: func(c *Cursor) {
+				for i := 0; i < 3; i++ {
+					c.MoveRight()
+				}
+			},
+			selected: false,
+		},
+		{
+			initialBuf: "a\nb",
+			selected:   true,
+			finalPos: func(c *Cursor) {
+				for i := 0; i < 100; i++ {
+					c.MoveDown()
+				}
+			},
+			deleted: false,
+		},
+		{
+			initialBuf: "a\nb",
+			initialPos: func(c *Cursor) {
+				for i := 0; i < 100; i++ {
+					c.MoveDown()
+				}
+			},
+			selected: false,
+		},
+		{
+			initialBuf: "a\nb",
+			selected:   true,
+			finalPos: func(c *Cursor) {
+				c.MoveLastLine()
+				c.MoveEndLine()
+			},
+			deleted:  true,
+			finalBuf: "",
+		},
+	}
+
+	for _, tcase := range tsuite {
+		c := setupCursorContent(t, width, height, tcase.initialBuf)
+		if tcase.initialPos != nil {
+			tcase.initialPos(&c)
+		}
+		require.Equal(t, tcase.selected, c.Select())
+		if !tcase.selected {
+			continue
+		}
+		tcase.finalPos(&c)
+		require.Equal(t, tcase.deleted, c.DeleteSelection())
+		if !tcase.deleted {
+			continue
+		}
+		assert.Equal(t, tcase.finalBuf, c.scroll.String())
+	}
+}
+func TestCursorDeleteSelection10(t *testing.T) {
+	testCursorDeleteSelection(t, 10, 10)
+}
+func TestCursorDeleteSelection20(t *testing.T) {
+	testCursorDeleteSelection(t, 20, 20)
+}
+func TestCursorDeleteSelection1000(t *testing.T) {
+	testCursorDeleteSelection(t, 1000, 1000)
 }

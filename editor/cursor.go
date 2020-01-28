@@ -56,7 +56,7 @@ func (c *Cursor) setCursor(pos term.Coordinates) {
 	if pos.X < 0 || pos.Y < 0 ||
 		pos.X >= c.scroll.Width() || pos.Y >= c.scroll.Height() {
 		// FIXME scroll Resize is not captured
-		panic(fmt.Sprintf("cursor out of bounds: %+v", pos))
+		// panic(fmt.Sprintf("cursor out of bounds: %+v", pos))
 	}
 
 	c.cursor = pos
@@ -604,28 +604,52 @@ func (c *Cursor) setSelection() {
 	invertAttr(c.selection.cells)
 }
 
+func (c *Cursor) inBounds() (ok bool) {
+	pos := c.cursorAtScroll()
+	if pos.Y >= c.scroll.Rows() || pos.X > c.scroll.Columns(pos.Y) {
+		return
+	}
+	ok = true
+	return
+}
+
 // Select anchors the current cursor position as the start of a text selection.
-// In order to unset anchor, use Unselect().
-func (c *Cursor) Select() {
+// In order to unset anchor, use Unselect(). It returns true if cursor is in bounds or
+// false if selection failed.
+func (c *Cursor) Select() (ok bool) {
+	if ok = c.inBounds(); !ok {
+		return
+	}
 	c.selection.scrollFrom = c.cursorAtScroll()
 	c.selection.mode = visualSelection
 	c.setSelection()
+	return
 }
 
 // SelectLine anchors the current cursor position as the start of a line selection.
-// In order to unset anchor, use Unselect().
-func (c *Cursor) SelectLine() {
+// In order to unset anchor, use Unselect(). It returns true if cursor is in bounds or
+// false if selection failed.
+func (c *Cursor) SelectLine() (ok bool) {
+	if ok = c.inBounds(); !ok {
+		return
+	}
 	c.selection.scrollFrom = c.cursorAtScroll()
 	c.selection.mode = visualLineSelection
 	c.setSelection()
+	return
 }
 
 // SelectBlock anchors the current cursor position as the start of a block selection.
-// In order to unset anchor, use Unselect().
-func (c *Cursor) SelectBlock() {
+// In order to unset anchor, use Unselect(). It returns true if cursor is in bounds or
+// false if selection failed.
+func (c *Cursor) SelectBlock() (ok bool) {
+	if ok = c.inBounds(); !ok {
+		return
+	}
 	c.selection.scrollFrom = c.cursorAtScroll()
 	c.selection.mode = visualBlockSelection
 	c.setSelection()
+	return
 }
 
 // Unselect resets the current selection anchor.
@@ -674,4 +698,18 @@ func (c *Cursor) Column() int {
 // at the current cursor position.
 func (c *Cursor) Cell() (term.Cell, bool) {
 	return c.cellAtCursor()
+}
+
+// DeleteSelection deletes the current text under selection or does nothing
+func (c *Cursor) DeleteSelection() (ok bool) {
+	if len(c.selection.cells) == 0 {
+		return
+	}
+	if ok = c.inBounds(); !ok {
+		return
+	}
+	c.Unselect()
+	start, _, _ := c.scroll.Delete(c.selection.scrollFrom, c.cursorAtScroll())
+	c.setCursor(c.scrollToWindowCoordinates(start))
+	return
 }
