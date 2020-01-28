@@ -212,9 +212,23 @@ func (b *Buffer) RawCells() [][]term.Cell {
 
 // Insert inserts string in the given position and shifts the remaining cells.
 // insert never fails: if at is out-of-bounds, this method fills in the rows
-// and/or columns of cells.
-func (b *Buffer) Insert(at term.Coordinates, str string) (from, to term.Coordinates) {
-	return b.writer.insert(at, str)
+// and/or columns of cells with blank spaces.
+// It returns the start of the insert 'from', including the filled-in blank spaces
+// and where the next logical Insert should go 'until'.
+func (b *Buffer) Insert(at term.Coordinates, str string) (from, until term.Coordinates) {
+	from, until = b.writer.insert(at, str)
+
+	if str == "" {
+		return
+	}
+	runes := []rune(str)
+	if runes[len(runes)-1] == '\n' {
+		until.Y++
+		until.X = 0
+		return
+	}
+	until.X++
+	return
 }
 
 // Delete removes cells in left-inclusive, right-inclusive range

@@ -230,3 +230,15 @@ func TestBufferDelete(t *testing.T) {
 	assert.Equal(t, term.Coordinates{X: 3}, end)
 	assert.Equal(t, "bla\n", str)
 }
+
+func TestBufferInsert(t *testing.T) {
+	b := NewBuffer()
+
+	from, until := b.Insert(term.Coordinates{X: 1}, "hello\n")
+	assert.Equal(t, term.Coordinates{}, from)
+	assert.Equal(t, term.Coordinates{Y: 1}, until)
+	b.Insert(until, "world")
+	b.Insert(until, "")
+
+	assert.Equal(t, " hello\nworld", b.String())
+}
