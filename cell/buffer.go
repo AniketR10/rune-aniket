@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/ernestrc/fractal/term"
+	log "github.com/sirupsen/logrus"
 )
 
 // A Buffer offers a high level API to manipulate a matrix of term.Cell.
@@ -45,10 +46,10 @@ func (b *Buffer) Init() {
 	b.InitWithTabspaces(defTabSpaces)
 }
 
-// WithLogger adds a cell logger this Buffer which
-// intercepts all the calls and logs them to out.
-func (b *Buffer) WithLogger(out io.Writer) *Buffer {
-	b.reader, b.writer = newLogger(b.reader, b.writer, out)
+// WithLogger adds a cell logger which intercepts and logs all
+// the calls to the underlying writer/reader.
+func (b *Buffer) WithLogger(logger *log.Logger) *Buffer {
+	b.reader, b.writer = newLogger(b.reader, b.writer, logger)
 	return b
 }
 
