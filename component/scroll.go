@@ -8,8 +8,6 @@ import (
 	"github.com/ernestrc/fractal/term"
 )
 
-// TODO do not draw or display last EOL
-
 // Scroll adds Draw to a Buffer along with
 // scrolling, searching and wrap-around capabilities.
 type Scroll struct {
