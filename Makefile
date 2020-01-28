@@ -1,15 +1,18 @@
-CC=go
-CFLAGS=
+GO=go
+GOFLAGS=
 
 TARGET=bin
 LIBSRC=$(wildcard *.go) $(wildcard **/*.go)
-EXECSRC=$(wildcard examples/**/*.go)
+EXAMPLESRC=$(wildcard examples/**/*.go)
+EXAMPLEDIRS=$(sort $(dir $(EXAMPLESRC)))
+EXAMPLES=$(patsubst examples/%/,$(TARGET)/example_%,$(EXAMPLEDIRS))
+EXECSRC=$(wildcard cmd/**/*.go)
 EXECDIRS=$(sort $(dir $(EXECSRC)))
-EXEC=$(patsubst examples/%/,$(TARGET)/%,$(EXECDIRS))
+EXECS=$(patsubst cmd/%/,$(TARGET)/%,$(EXECDIRS))
 
 .PHONY: clean test coverage
 
-default: $(EXEC)
+default: $(EXAMPLES) $(EXECS)
 
 test:
 	@ go test ./...
@@ -24,5 +27,8 @@ clean:
 $(TARGET):
 	@mkdir $(TARGET)
 
+$(TARGET)/example_%: $(EXAMPLESRC) $(LIBSRC) $(TARGET)
+	@cd $(patsubst bin/example_%,examples/%,$@) && $(GO) build $(GOFLAGS) -o ../../$@
+
 $(TARGET)/%: $(EXECSRC) $(LIBSRC) $(TARGET)
-	@cd $(patsubst bin/%,examples/%,$@) && $(CC) build $(CFLAGS) -o ../../$@
+	@cd $(patsubst bin/%,cmd/%,$@) && $(GO) build $(GOFLAGS) -o ../../$@
