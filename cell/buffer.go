@@ -12,6 +12,7 @@ import (
 
 // A Buffer offers a high level API to manipulate a matrix of term.Cell.
 type Buffer struct {
+	tabspaces  int
 	readerFrom io.ReaderFrom
 	reader     Reader
 	writer     Writer
@@ -31,6 +32,7 @@ func (b *Buffer) InitWithTabspaces(tabspaces int) {
 	cells := new(rawCells)
 	cells.init(tabspaces)
 
+	b.tabspaces = tabspaces
 	b.readerFrom = cells
 	b.reader = newUnixFileBuffer(cells)
 
@@ -268,8 +270,7 @@ func (b *Buffer) Delete(from, to term.Coordinates) (start, end term.Coordinates,
 
 // Reset resets the contents of this Buffer.
 func (b *Buffer) Reset() {
-	b.writer.Reset()
-	b.undoer.Reset()
+	b.InitWithTabspaces(b.tabspaces)
 }
 
 // ReadFrom reads data from r until EOF and appends it to the buffer, growing

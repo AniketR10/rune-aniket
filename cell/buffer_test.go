@@ -242,3 +242,15 @@ func TestBufferInsert(t *testing.T) {
 
 	assert.Equal(t, " hello\nworld", b.String())
 }
+
+func TestBufferReset(t *testing.T) {
+	var b Buffer
+	b.InitWithTabspaces(4)
+	b.ReadFrom(strings.NewReader("a\tb"))
+
+	assert.Equal(t, "a\tb", b.String())
+
+	b.Reset()
+	assert.Equal(t, "", b.String())
+	assert.Equal(t, 4, b.tabspaces)
+}

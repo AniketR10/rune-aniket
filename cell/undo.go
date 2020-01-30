@@ -118,5 +118,4 @@ func (u *undoer) Delete(from, to term.Coordinates) (start, end term.Coordinates,
 func (u *undoer) Reset() {
 	u.resetRedoTimeline()
 	u.undoTimeline = u.undoTimeline[:0]
-	u.w.Reset()
 }

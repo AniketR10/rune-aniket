@@ -80,14 +80,6 @@ func (l *logger) Delete(from, to term.Coordinates) (
 	return
 }
 
-func (l *logger) Reset() {
-	fields := l.wFields("reset")
-
-	l.w.Reset()
-
-	l.out.WithFields(fields).Trace()
-}
-
 func (l *logger) Rows() (rows int) {
 	fields := l.rFields("rows")
 

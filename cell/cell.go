@@ -19,5 +19,4 @@ type Reader interface {
 type Writer interface {
 	Insert(at term.Coordinates, str string) (from, to term.Coordinates)
 	Delete(from, to term.Coordinates) (start, end term.Coordinates, str string)
-	Reset()
 }
