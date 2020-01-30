@@ -72,7 +72,6 @@ func TestUndo(t *testing.T) {
 		prev := buf.String()
 
 		for _, tcase := range suite {
-			t.Log(buf.String())
 			tcase.cmd(buf)
 		}
 
