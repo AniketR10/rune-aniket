@@ -13,8 +13,8 @@ import (
 // A Buffer offers a high level API to manipulate a matrix of term.Cell.
 type Buffer struct {
 	readerFrom io.ReaderFrom
-	reader     reader
-	writer     writer
+	reader     Reader
+	writer     Writer
 	undoer     *undoer
 	selector   selector
 }
@@ -38,7 +38,6 @@ func (b *Buffer) InitWithTabspaces(tabspaces int) {
 	b.writer = b.undoer
 
 	b.selector.reader = b.reader
-
 }
 
 // Init initializes this Buffer with the default configuration.
@@ -46,23 +45,45 @@ func (b *Buffer) Init() {
 	b.InitWithTabspaces(defTabSpaces)
 }
 
-// WithLogger adds a cell logger which intercepts and logs all
-// the calls to the underlying writer/reader.
-func (b *Buffer) WithLogger(logger *log.Logger) *Buffer {
-	b.reader, b.writer = newLogger(b.reader, b.writer, logger)
+// WithReader sets this Buffer's Reader to r.
+func (b *Buffer) WithReader(r Reader) *Buffer {
+	b.reader = r
 	return b
+}
+
+// WithWriter sets this Buffer's Writer to w.
+func (b *Buffer) WithWriter(w Writer) *Buffer {
+	b.writer = w
+	return b
+}
+
+// Reader returns this Buffer's underlying cell.Reader.
+func (b *Buffer) Reader() Reader {
+	return b.reader
+}
+
+// Writer returns this Buffer's underlying cell.Writer.
+func (b *Buffer) Writer() Writer {
+	return b.writer
+}
+
+// WithLogger adds a cell logger which intercepts and logs all
+// the calls to the underlying Writer/Reader.
+func (b *Buffer) WithLogger(logger *log.Logger) *Buffer {
+	cellLogger := newLogger(b.Reader(), b.Writer(), logger)
+	return b.WithReader(cellLogger).WithWriter(cellLogger)
 }
 
 // InsertRowAt inserts a new row at given position. If pos is out of bounds,
 // this method does not panic; instead, it will fill in the necessary
 // rows such that the new row is the last row in the buffer.
 func (b *Buffer) InsertRowAt(y int) {
-	b.writer.insert(term.Coordinates{Y: y}, "\n")
+	b.writer.Insert(term.Coordinates{Y: y}, "\n")
 }
 
 // InsertAt inserts a rune in the given position and shift the cells to the right
 func (b *Buffer) InsertAt(pos term.Coordinates, r rune) (next term.Coordinates) {
-	_, next = b.writer.insert(pos, string(r))
+	_, next = b.writer.Insert(pos, string(r))
 
 	if r == '\n' {
 		next.Y++
@@ -77,12 +98,12 @@ func (b *Buffer) InsertAt(pos term.Coordinates, r rune) (next term.Coordinates) 
 
 // DeleteRow truncates the row at term.Coordinates.Y
 func (b *Buffer) DeleteRow(y int) (ok bool) {
-	if ok = y < b.reader.rows(); !ok {
+	if ok = y < b.reader.Rows(); !ok {
 		return
 	}
 	from := term.Coordinates{Y: y, X: 0}
-	to := term.Coordinates{Y: y, X: b.reader.columns(y)}
-	b.writer.delete(from, to)
+	to := term.Coordinates{Y: y, X: b.reader.Columns(y)}
+	b.writer.Delete(from, to)
 	return
 }
 
@@ -91,7 +112,7 @@ func (b *Buffer) DeleteRow(y int) (ok bool) {
 // reader/writer, which for instance could be x = len(row), which
 // does not contain a cell.
 func (b *Buffer) inStrictBounds(pos term.Coordinates) (ok bool) {
-	if pos.Y >= b.reader.rows() || pos.X >= b.reader.columns(pos.Y) {
+	if pos.Y >= b.reader.Rows() || pos.X >= b.reader.Columns(pos.Y) {
 		return
 	}
 	ok = true
@@ -99,7 +120,7 @@ func (b *Buffer) inStrictBounds(pos term.Coordinates) (ok bool) {
 }
 
 func (b *Buffer) inBounds(pos term.Coordinates) (ok bool) {
-	if pos.Y >= b.reader.rows() || pos.X > b.reader.columns(pos.Y) {
+	if pos.Y >= b.reader.Rows() || pos.X > b.reader.Columns(pos.Y) {
 		return
 	}
 	ok = true
@@ -111,12 +132,12 @@ func (b *Buffer) TruncateRowFrom(pos term.Coordinates) (ok bool) {
 	if ok = b.inBounds(pos); !ok {
 		return
 	}
-	cols := b.reader.columns(pos.Y)
+	cols := b.reader.Columns(pos.Y)
 	if cols == 0 {
 		ok = false
 		return
 	}
-	b.writer.delete(pos, term.Coordinates{Y: pos.Y, X: cols - 1})
+	b.writer.Delete(pos, term.Coordinates{Y: pos.Y, X: cols - 1})
 	return
 }
 
@@ -125,9 +146,9 @@ func (b *Buffer) TruncateFrom(pos term.Coordinates) (ok bool) {
 	if ok = b.inBounds(pos); !ok {
 		return
 	}
-	y := b.reader.rows() - 1
-	to := term.Coordinates{X: b.reader.columns(y), Y: y}
-	b.writer.delete(pos, to)
+	y := b.reader.Rows() - 1
+	to := term.Coordinates{X: b.reader.Columns(y), Y: y}
+	b.writer.Delete(pos, to)
 	return
 }
 
@@ -137,8 +158,8 @@ func (b *Buffer) ConflateRow(y int) (ok bool) {
 	if ok = b.inBounds(pos); !ok {
 		return
 	}
-	pos.X = b.reader.columns(y)
-	b.writer.delete(pos, pos)
+	pos.X = b.reader.Columns(y)
+	b.writer.Delete(pos, pos)
 	return
 }
 
@@ -150,13 +171,13 @@ func (b *Buffer) DeleteCell(pos term.Coordinates) (term.Coordinates, bool) {
 		return term.Coordinates{}, false
 	}
 
-	start, _, _ := b.writer.delete(pos, pos)
+	start, _, _ := b.writer.Delete(pos, pos)
 	return start, true
 }
 
 // ResetAttr resets all the attributes of the underlying cell matrix.
 func (b *Buffer) ResetAttr() {
-	cells := b.reader.rawCells()
+	cells := b.reader.RawCells()
 	for y, r := range cells {
 		for x := range r {
 			cells[y][x].Fg, cells[y][x].Bg = 0, 0
@@ -172,7 +193,7 @@ func (b *Buffer) SetAttr(pos term.Coordinates, attr term.Attributes) (
 		return
 	}
 
-	cells := b.reader.rawCells()
+	cells := b.reader.RawCells()
 	cells[pos.Y][pos.X].Bg = attr.Bg
 	cells[pos.Y][pos.X].Fg = attr.Fg
 	return
@@ -185,30 +206,30 @@ func (b *Buffer) GetAttr(pos term.Coordinates) (
 	if ok = b.inStrictBounds(pos); !ok {
 		return
 	}
-	cells := b.reader.rawCells()
+	cells := b.reader.RawCells()
 	attr = term.Attributes{Bg: cells[pos.Y][pos.X].Bg, Fg: cells[pos.Y][pos.X].Fg}
 	return
 }
 
 // Rows returns the number of rows in the Buffer.
 func (b *Buffer) Rows() int {
-	return b.reader.rows()
+	return b.reader.Rows()
 }
 
 // Columns returns the number of cells of row at index y.
 func (b *Buffer) Columns(y int) int {
-	return b.reader.columns(y)
+	return b.reader.Columns(y)
 }
 
 // Cell returns the cell and true or a zero-valued cell and false if there is no
 // cell at position.
 func (b *Buffer) Cell(pos term.Coordinates) (term.Cell, bool) {
-	return b.reader.cell(pos)
+	return b.reader.Cell(pos)
 }
 
 // RawCells gives clients access to the underlying cell matrix.
 func (b *Buffer) RawCells() [][]term.Cell {
-	return b.reader.rawCells()
+	return b.reader.RawCells()
 }
 
 // Insert inserts string in the given position and shifts the remaining cells.
@@ -217,7 +238,7 @@ func (b *Buffer) RawCells() [][]term.Cell {
 // It returns the start of the insert 'from', including the filled-in blank spaces
 // and where the next logical Insert should go 'until'.
 func (b *Buffer) Insert(at term.Coordinates, str string) (from, until term.Coordinates) {
-	from, until = b.writer.insert(at, str)
+	from, until = b.writer.Insert(at, str)
 
 	if str == "" {
 		return
@@ -242,13 +263,13 @@ func (b *Buffer) Delete(from, to term.Coordinates) (start, end term.Coordinates,
 	if !b.inBounds(from) || !b.inBounds(to) {
 		panic(fmt.Sprintf("out of bounds: from=%+v, to=%+v", from, to))
 	}
-	return b.writer.delete(from, to)
+	return b.writer.Delete(from, to)
 }
 
 // Reset resets the contents of this Buffer.
 func (b *Buffer) Reset() {
-	b.writer.reset()
-	b.undoer.reset()
+	b.writer.Reset()
+	b.undoer.Reset()
 }
 
 // ReadFrom reads data from r until EOF and appends it to the buffer, growing

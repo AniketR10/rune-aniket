@@ -82,7 +82,7 @@ func TestUnixFile(t *testing.T) {
 
 			reader := newUnixFileBuffer(&c)
 
-			assert.Equal(t, tcase.rows, reader.rows(), fmt.Sprintf("ReadFrom(%d)", i))
+			assert.Equal(t, tcase.rows, reader.Rows(), fmt.Sprintf("ReadFrom(%d)", i))
 			assert.Equal(t, tcase.expected, reader.String(), i)
 		}
 
@@ -93,11 +93,11 @@ func TestUnixFile(t *testing.T) {
 			var c rawCells
 			bytes, err := ioutil.ReadAll(tcase.input)
 			require.NoError(t, err)
-			c.insert(term.Coordinates{}, string(bytes))
+			c.Insert(term.Coordinates{}, string(bytes))
 
 			reader := newUnixFileBuffer(&c)
 
-			assert.Equal(t, tcase.rows, reader.rows(), fmt.Sprintf("insert(%d)", i))
+			assert.Equal(t, tcase.rows, reader.Rows(), fmt.Sprintf("insert(%d)", i))
 			assert.Equal(t, tcase.expected, reader.String(), i)
 		}
 	}

@@ -11,13 +11,13 @@ import (
 
 type logger struct {
 	out   *log.Logger
-	r     reader
+	r     Reader
 	rType string
-	w     writer
+	w     Writer
 	wType string
 }
 
-func newLogger(r reader, w writer, out *log.Logger) (reader, writer) {
+func newLogger(r Reader, w Writer, out *log.Logger) *logger {
 	lg := &logger{
 		out:   out,
 		r:     r,
@@ -25,7 +25,7 @@ func newLogger(r reader, w writer, out *log.Logger) (reader, writer) {
 		w:     w,
 		wType: reflect.TypeOf(w).Elem().String(),
 	}
-	return lg, lg
+	return lg
 }
 
 func (l *logger) rFields(method string) log.Fields {
@@ -44,7 +44,7 @@ func (l *logger) wFields(method string) log.Fields {
 	}
 }
 
-func (l *logger) insert(at term.Coordinates, str string) (
+func (l *logger) Insert(at term.Coordinates, str string) (
 	from, to term.Coordinates,
 ) {
 	fields := l.wFields("insert")
@@ -52,7 +52,7 @@ func (l *logger) insert(at term.Coordinates, str string) (
 	fields["string"] = fmt.Sprintf("%.10s", str)
 	fields["length"] = len(str)
 
-	from, to = l.w.insert(at, str)
+	from, to = l.w.Insert(at, str)
 
 	fields["from"] = from
 	fields["to"] = to
@@ -61,14 +61,14 @@ func (l *logger) insert(at term.Coordinates, str string) (
 	return
 }
 
-func (l *logger) delete(from, to term.Coordinates) (
+func (l *logger) Delete(from, to term.Coordinates) (
 	start, end term.Coordinates, str string,
 ) {
 	fields := l.wFields("delete")
 	fields["from"] = from
 	fields["to"] = to
 
-	start, end, str = l.w.delete(from, to)
+	start, end, str = l.w.Delete(from, to)
 
 	fields["string"] = fmt.Sprintf("%.10s", str)
 	fields["length"] = len(str)
@@ -80,18 +80,18 @@ func (l *logger) delete(from, to term.Coordinates) (
 	return
 }
 
-func (l *logger) reset() {
+func (l *logger) Reset() {
 	fields := l.wFields("reset")
 
-	l.w.reset()
+	l.w.Reset()
 
 	l.out.WithFields(fields).Trace()
 }
 
-func (l *logger) rows() (rows int) {
+func (l *logger) Rows() (rows int) {
 	fields := l.rFields("rows")
 
-	rows = l.r.rows()
+	rows = l.r.Rows()
 	fields["rows"] = rows
 
 	l.out.WithFields(fields).Trace()
@@ -99,11 +99,11 @@ func (l *logger) rows() (rows int) {
 	return
 }
 
-func (l *logger) columns(row int) (cols int) {
+func (l *logger) Columns(row int) (cols int) {
 	fields := l.rFields("columns")
 	fields["row"] = row
 
-	cols = l.r.columns(row)
+	cols = l.r.Columns(row)
 
 	fields["cols"] = cols
 
@@ -112,13 +112,13 @@ func (l *logger) columns(row int) (cols int) {
 	return
 }
 
-func (l *logger) cell(p term.Coordinates) (
+func (l *logger) Cell(p term.Coordinates) (
 	c term.Cell, ok bool,
 ) {
 	fields := l.rFields("cell")
 	fields["position"] = p
 
-	c, ok = l.r.cell(p)
+	c, ok = l.r.Cell(p)
 
 	fields["cell"] = c
 	fields["ok"] = ok
@@ -128,10 +128,10 @@ func (l *logger) cell(p term.Coordinates) (
 	return
 }
 
-func (l *logger) rawCells() (cells [][]term.Cell) {
+func (l *logger) RawCells() (cells [][]term.Cell) {
 	fields := l.rFields("rawCells")
 
-	cells = l.r.rawCells()
+	cells = l.r.RawCells()
 
 	fields["rows"] = len(cells)
 

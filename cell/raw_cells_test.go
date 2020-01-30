@@ -23,19 +23,19 @@ Love isn't love 'til you give it away.
 func TestRawCellsUninitialized(t *testing.T) {
 	t.Run("columns()", func(t *testing.T) {
 		var c rawCells
-		assert.Equal(t, 0, c.columns(0))
+		assert.Equal(t, 0, c.Columns(0))
 	})
 
 	t.Run("insert()", func(t *testing.T) {
 		var c rawCells
-		from, to := c.insert(term.Coordinates{X: 0, Y: 0}, "r")
+		from, to := c.Insert(term.Coordinates{X: 0, Y: 0}, "r")
 		assert.Equal(t, term.Coordinates{}, from)
 		assert.Equal(t, term.Coordinates{}, to)
 	})
 
 	t.Run("rawCells()", func(t *testing.T) {
 		var c rawCells
-		cs := c.rawCells()
+		cs := c.RawCells()
 		assert.Equal(t, cs, [][]term.Cell{[]term.Cell{}})
 	})
 
@@ -48,17 +48,17 @@ func TestRawCellsUninitialized(t *testing.T) {
 
 	t.Run("reset()", func(t *testing.T) {
 		var c rawCells
-		c.reset()
+		c.Reset()
 	})
 
 	t.Run("rows()", func(t *testing.T) {
 		var c rawCells
-		assert.Equal(t, 0, c.rows())
+		assert.Equal(t, 0, c.Rows())
 	})
 
 	t.Run("cell()", func(t *testing.T) {
 		var c rawCells
-		_, ok := c.cell(term.Coordinates{})
+		_, ok := c.Cell(term.Coordinates{})
 		assert.False(t, ok)
 	})
 
@@ -79,23 +79,23 @@ func TestRawCellsPanicsNegativeCoordinates(t *testing.T) {
 	for _, pos := range negativeCoords {
 		t.Run("cell()", func(t *testing.T) {
 			assert.Panics(t, func() {
-				c.cell(pos)
+				c.Cell(pos)
 			})
 		})
 
 		t.Run("insert()", func(t *testing.T) {
 			assert.Panics(t, func() {
-				c.insert(pos, "r")
+				c.Insert(pos, "r")
 			})
 		})
 		t.Run("delete(from)", func(t *testing.T) {
 			assert.Panics(t, func() {
-				c.delete(pos, term.Coordinates{X: 0, Y: 2})
+				c.Delete(pos, term.Coordinates{X: 0, Y: 2})
 			})
 		})
 		t.Run("delete(until)", func(t *testing.T) {
 			assert.Panics(t, func() {
-				c.delete(term.Coordinates{X: 0, Y: 2}, pos)
+				c.Delete(term.Coordinates{X: 0, Y: 2}, pos)
 			})
 		})
 	}
@@ -254,7 +254,7 @@ Love isn't love 'til you give it away.
 		_, err := c.ReadFrom(strings.NewReader(input))
 		require.NoError(t, err)
 
-		actualFrom, actualTo := c.insert(tcase.inputAt, tcase.inputStr)
+		actualFrom, actualTo := c.Insert(tcase.inputAt, tcase.inputStr)
 		assert.Equal(t, tcase.expectedFrom, actualFrom, "test case %d", i)
 		assert.Equal(t, tcase.expectedTo, actualTo, "test case %d", i)
 		assert.Equal(t, tcase.expectedRawCells, c.String())
@@ -510,7 +510,7 @@ Love isn't love 'til you give it away.
 		_, err := c.ReadFrom(strings.NewReader(base))
 		require.NoError(t, err)
 
-		actualStart, actualEnd, actualStr := c.delete(tcase.inputFrom, tcase.inputTo)
+		actualStart, actualEnd, actualStr := c.Delete(tcase.inputFrom, tcase.inputTo)
 		assert.Equal(t, tcase.expectedStr, actualStr, "expected return string in test case %d", i)
 		assert.Equal(t, tcase.expectedRawCells, c.String(), "expected cells in test case %d", i)
 
@@ -524,7 +524,7 @@ Love isn't love 'til you give it away.
 		assert.Equal(t, *tcase.expectedEnd, actualEnd, "expected return end in test case %d", i)
 
 		// test symmetry
-		from, to := c.insert(actualStart, actualStr)
+		from, to := c.Insert(actualStart, actualStr)
 		assert.Equal(t, from, actualStart, "test case %d", i)
 		assert.Equal(t, to, actualEnd, "test case %d", i)
 		assert.Equal(t, base, c.String(), "insert was not able to reverse delete in test case %d", i)
@@ -535,21 +535,21 @@ func TestRawCellsCell(t *testing.T) {
 	var c rawCells
 	c.ReadFrom(strings.NewReader(benchmarkFortune))
 
-	cell, ok := c.cell(term.Coordinates{})
+	cell, ok := c.Cell(term.Coordinates{})
 	assert.False(t, ok)
 
-	cell, ok = c.cell(term.Coordinates{X: 1})
+	cell, ok = c.Cell(term.Coordinates{X: 1})
 	assert.False(t, ok)
 
-	cell, ok = c.cell(term.Coordinates{Y: 1, X: 16})
+	cell, ok = c.Cell(term.Coordinates{Y: 1, X: 16})
 	assert.True(t, ok)
 	assert.Equal(t, term.Cell{Ch: 'L'}, cell)
 
-	cell, ok = c.cell(term.Coordinates{Y: 3, X: 37})
+	cell, ok = c.Cell(term.Coordinates{Y: 3, X: 37})
 	assert.True(t, ok)
 	assert.Equal(t, term.Cell{Ch: '中'}, cell)
 
-	cell, ok = c.cell(term.Coordinates{Y: 666})
+	cell, ok = c.Cell(term.Coordinates{Y: 666})
 	assert.False(t, ok)
 }
 
@@ -564,11 +564,11 @@ func TestRawCellsInsertDeleteSymmetry(t *testing.T) {
 	var r rawCells
 	r.ReadFrom(file)
 
-	cells := r.rawCells()
+	cells := r.RawCells()
 	for i, row := range cells {
 		for j := range row {
-			start, end, str := r.delete(term.Coordinates{}, term.Coordinates{X: j, Y: i})
-			from, to := r.insert(start, str)
+			start, end, str := r.Delete(term.Coordinates{}, term.Coordinates{X: j, Y: i})
+			from, to := r.Insert(start, str)
 			assert.Equal(t, end, to)
 			assert.Equal(t, start, from)
 		}
@@ -595,7 +595,7 @@ func benchmarkBufferReadFrom(b *testing.B, fortunes int) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		cells.reset()
+		cells.Reset()
 		reader.Reset(payload)
 		_, _ = cells.ReadFrom(reader)
 	}

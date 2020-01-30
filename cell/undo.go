@@ -9,7 +9,7 @@ import (
 // undoer adds undo and redo methods to a otherwise, irreversible cell.writer.
 // It satifies the cell.writer interface and it should be used as a replacement.
 type undoer struct {
-	w            writer
+	w            Writer
 	undoTimeline []op
 	redoTimeline []op
 }
@@ -21,14 +21,14 @@ type op struct {
 }
 
 // Newundoer returns new instance of undoer to undo/redo operations of w.
-func newUndoer(w writer) *undoer {
+func newUndoer(w Writer) *undoer {
 	u := new(undoer)
 	u.init(w)
 	return u
 }
 
 // Init initializes this undoer to undo/redo operations of w.
-func (u *undoer) init(w writer) {
+func (u *undoer) init(w Writer) {
 	u.w = w
 	u.undoTimeline = make([]op, 0)
 	u.redoTimeline = make([]op, 0)
@@ -79,14 +79,14 @@ func (u *undoer) resetRedoTimeline() {
 }
 
 // insert captures underlying writer insert so it can be undone. See cell.writer.insert
-func (u *undoer) insert(at term.Coordinates, str string) (from, to term.Coordinates) {
+func (u *undoer) Insert(at term.Coordinates, str string) (from, to term.Coordinates) {
 	op := op{
 		at: at,
 		do: func() {
-			from, to = u.w.insert(at, str)
+			from, to = u.w.Insert(at, str)
 		},
 		undo: func() {
-			u.w.delete(from, to)
+			u.w.Delete(from, to)
 		},
 	}
 
@@ -97,14 +97,14 @@ func (u *undoer) insert(at term.Coordinates, str string) (from, to term.Coordina
 }
 
 // delete captures underlying writer delete so it can be undone. See cell.writer.delete
-func (u *undoer) delete(from, to term.Coordinates) (start, end term.Coordinates, str string) {
+func (u *undoer) Delete(from, to term.Coordinates) (start, end term.Coordinates, str string) {
 	op := op{
 		at: from,
 		do: func() {
-			start, end, str = u.w.delete(from, to)
+			start, end, str = u.w.Delete(from, to)
 		},
 		undo: func() {
-			u.w.insert(start, str)
+			u.w.Insert(start, str)
 		},
 	}
 
@@ -115,8 +115,8 @@ func (u *undoer) delete(from, to term.Coordinates) (start, end term.Coordinates,
 }
 
 // Reset resets the undo/redo timelines and the underlying cell.writer.
-func (u *undoer) reset() {
+func (u *undoer) Reset() {
 	u.resetRedoTimeline()
 	u.undoTimeline = u.undoTimeline[:0]
-	u.w.reset()
+	u.w.Reset()
 }

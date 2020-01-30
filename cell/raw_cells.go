@@ -22,10 +22,10 @@ type rawCells struct {
 // init initializes this rawCells with the given tabspaces config and resets its contents.
 func (c *rawCells) init(tabspaces int) {
 	c.tabspaces = tabspaces
-	c.reset()
+	c.Reset()
 }
 
-func (c *rawCells) reset() {
+func (c *rawCells) Reset() {
 	c.cells = make([][]term.Cell, 1, defRowCap)
 	c.cells[0] = makeNewRow(0, defColumnCap)
 	if c.tabspaces == 0 {
@@ -41,7 +41,7 @@ func assertValidCoords(pos term.Coordinates) {
 
 func (c *rawCells) assertCordsInBounds(pos term.Coordinates) {
 	assertValidCoords(pos)
-	if pos.Y >= c.rows() || pos.X > len(c.cells[pos.Y]) {
+	if pos.Y >= c.Rows() || pos.X > len(c.cells[pos.Y]) {
 		panic(fmt.Sprintf("Coordinates out of bounds: %+v", pos))
 	}
 }
@@ -108,7 +108,7 @@ func (c *rawCells) insertTabSpaces(pos term.Coordinates) {
 
 func (c *rawCells) fillInRows(y int) (n int) {
 	if c.cells == nil {
-		c.reset()
+		c.Reset()
 	}
 	for y >= len(c.cells) {
 		n++
@@ -133,7 +133,7 @@ func (c *rawCells) fillInCoords(pos term.Coordinates) (
 	from = pos
 	if filled := c.fillInRows(pos.Y); filled != 0 {
 		from.Y -= filled
-		from.X = c.columns(from.Y)
+		from.X = c.Columns(from.Y)
 		c.fillInColumns(pos)
 	} else {
 		from.X -= c.fillInColumns(pos)
@@ -143,7 +143,7 @@ func (c *rawCells) fillInCoords(pos term.Coordinates) (
 	return
 }
 
-func (c *rawCells) insert(at term.Coordinates, str string) (
+func (c *rawCells) Insert(at term.Coordinates, str string) (
 	from, to term.Coordinates,
 ) {
 	from, to = c.fillInCoords(at)
@@ -255,7 +255,7 @@ func (c *rawCells) skipPadding(start, end term.Coordinates) (
 	return start, end
 }
 
-func (c *rawCells) delete(from, to term.Coordinates) (
+func (c *rawCells) Delete(from, to term.Coordinates) (
 	start, end term.Coordinates, str string,
 ) {
 	c.assertCordsInBounds(start)
@@ -302,26 +302,26 @@ func (c *rawCells) delete(from, to term.Coordinates) (
 	return
 }
 
-func (c *rawCells) columns(y int) (j int) {
+func (c *rawCells) Columns(y int) (j int) {
 	if c.cells == nil {
-		c.reset()
+		c.Reset()
 	}
 	if y < 0 {
 		panic(fmt.Sprintf("invalid row: %d", y))
 	}
-	if y >= c.rows() {
+	if y >= c.Rows() {
 		panic(fmt.Sprintf("row out of bounds: %d", y))
 	}
 	j = len(c.cells[y])
 	return
 }
 
-func (c *rawCells) rows() int {
+func (c *rawCells) Rows() int {
 	return len(c.cells)
 }
 
 func (c *rawCells) String() string {
-	return CellsToString(c.rawCells())
+	return CellsToString(c.RawCells())
 }
 
 // CellsToString returns the string representation of the given cell matrix.
@@ -331,18 +331,18 @@ func CellsToString(cells [][]term.Cell) string {
 	return builder.String()
 }
 
-func (c *rawCells) rawCells() [][]term.Cell {
+func (c *rawCells) RawCells() [][]term.Cell {
 	if c.cells == nil {
-		c.reset()
+		c.Reset()
 	}
 	return c.cells
 }
 
-func (c *rawCells) cell(pos term.Coordinates) (
+func (c *rawCells) Cell(pos term.Coordinates) (
 	cell term.Cell, ok bool,
 ) {
 	assertValidCoords(pos)
-	if pos.Y >= c.rows() || pos.X >= len(c.cells[pos.Y]) {
+	if pos.Y >= c.Rows() || pos.X >= len(c.cells[pos.Y]) {
 		return
 	}
 	cell = c.cells[pos.Y][pos.X]
@@ -352,7 +352,7 @@ func (c *rawCells) cell(pos term.Coordinates) (
 
 func (c *rawCells) ReadFrom(r io.Reader) (int64, error) {
 	if c.cells == nil {
-		c.reset()
+		c.Reset()
 	}
 	rowY := c.nextWrite().Y
 	reader := bufio.NewReader(r)
@@ -385,7 +385,7 @@ func (c *rawCells) ReadFrom(r io.Reader) (int64, error) {
 
 // nextWrite returns the position of the write cursor.
 func (c *rawCells) nextWrite() term.Coordinates {
-	y := c.rows() - 1
+	y := c.Rows() - 1
 	x := len(c.cells[y])
 	return term.Coordinates{X: x, Y: y}
 }
