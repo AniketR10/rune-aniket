@@ -23,22 +23,22 @@ func newBufferWithContent(t *testing.T, str string) *Buffer {
 	return b
 }
 
-func TestBufferInsertAt(t *testing.T) {
+func TestBufferInsert(t *testing.T) {
 	buf := NewBuffer()
 	var next term.Coordinates
 
-	next = buf.InsertAt(next, 'h')
-	next = buf.InsertAt(next, 'e')
-	next = buf.InsertAt(next, 'l')
-	next = buf.InsertAt(next, 'l')
-	next = buf.InsertAt(next, 'o')
-	next = buf.InsertAt(next, '\n')
-	next = buf.InsertAt(next, 'w')
-	next = buf.InsertAt(next, 'o')
-	next = buf.InsertAt(next, 'r')
-	next = buf.InsertAt(next, 'l')
-	buf.InsertAt(next, 'd')
-	next = buf.InsertAt(term.Coordinates{X: 4, Y: 0}, '\n')
+	next = buf.Insert(next, 'h')
+	next = buf.Insert(next, 'e')
+	next = buf.Insert(next, 'l')
+	next = buf.Insert(next, 'l')
+	next = buf.Insert(next, 'o')
+	next = buf.Insert(next, '\n')
+	next = buf.Insert(next, 'w')
+	next = buf.Insert(next, 'o')
+	next = buf.Insert(next, 'r')
+	next = buf.Insert(next, 'l')
+	buf.Insert(next, 'd')
+	next = buf.Insert(term.Coordinates{X: 4, Y: 0}, '\n')
 
 	str := "hell\no\nworld"
 	assert.Equal(t, 3, buf.Rows())
@@ -56,7 +56,7 @@ func TestBufferInsertAt(t *testing.T) {
 
 	assert.Equal(t, term.Coordinates{Y: 1}, next)
 
-	next = buf.InsertAt(term.Coordinates{Y: 1}, '\t')
+	next = buf.Insert(term.Coordinates{Y: 1}, '\t')
 	assert.Equal(t, term.Coordinates{Y: 1, X: 4}, next)
 }
 
@@ -231,14 +231,14 @@ func TestBufferDelete(t *testing.T) {
 	assert.Equal(t, "bla\n", str)
 }
 
-func TestBufferInsert(t *testing.T) {
+func TestBufferInsertString(t *testing.T) {
 	b := NewBuffer()
 
-	from, until := b.Insert(term.Coordinates{X: 1}, "hello\n")
+	from, until := b.InsertString(term.Coordinates{X: 1}, "hello\n")
 	assert.Equal(t, term.Coordinates{}, from)
 	assert.Equal(t, term.Coordinates{Y: 1}, until)
-	b.Insert(until, "world")
-	b.Insert(until, "")
+	b.InsertString(until, "world")
+	b.InsertString(until, "")
 
 	assert.Equal(t, " hello\nworld", b.String())
 }

@@ -83,8 +83,8 @@ func (b *Buffer) InsertRowAt(y int) {
 	b.writer.Insert(term.Coordinates{Y: y}, "\n")
 }
 
-// InsertAt inserts a rune in the given position and shift the cells to the right
-func (b *Buffer) InsertAt(pos term.Coordinates, r rune) (next term.Coordinates) {
+// Insert inserts a rune in the given position and shift the cells to the right
+func (b *Buffer) Insert(pos term.Coordinates, r rune) (next term.Coordinates) {
 	_, next = b.writer.Insert(pos, string(r))
 
 	if r == '\n' {
@@ -234,12 +234,12 @@ func (b *Buffer) RawCells() [][]term.Cell {
 	return b.reader.RawCells()
 }
 
-// Insert inserts string in the given position and shifts the remaining cells.
+// InsertString inserts string in the given position and shifts the remaining cells.
 // insert never fails: if at is out-of-bounds, this method fills in the rows
 // and/or columns of cells with blank spaces.
 // It returns the start of the insert 'from', including the filled-in blank spaces
 // and where the next logical Insert should go 'until'.
-func (b *Buffer) Insert(at term.Coordinates, str string) (from, until term.Coordinates) {
+func (b *Buffer) InsertString(at term.Coordinates, str string) (from, until term.Coordinates) {
 	from, until = b.writer.Insert(at, str)
 
 	if str == "" {

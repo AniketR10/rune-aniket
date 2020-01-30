@@ -484,13 +484,13 @@ func (c *Cursor) InsertRowBelow() {
 
 // Insert inserts rune at the current cursor's position.
 func (c *Cursor) Insert(r rune) {
-	pos := c.scroll.InsertAt(c.cursorAtScroll(), r)
+	pos := c.scroll.Insert(c.cursorAtScroll(), r)
 	c.setCursor(c.scrollToWindowCoordinates(pos))
 }
 
 // InsertString inserts str at the current cursor's position.
 func (c *Cursor) InsertString(str string) {
-	_, until := c.scroll.Insert(c.cursorAtScroll(), str)
+	_, until := c.scroll.InsertString(c.cursorAtScroll(), str)
 	c.setCursor(c.scrollToWindowCoordinates(until))
 }
 

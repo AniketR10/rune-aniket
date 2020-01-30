@@ -25,8 +25,8 @@ func TestUndo(t *testing.T) {
 		name string
 		cmd  func(b *Buffer)
 	}{
-		{"InsertAt", func(b *Buffer) {
-			b.InsertAt(term.Coordinates{X: 0, Y: 2}, '\t')
+		{"Insert", func(b *Buffer) {
+			b.Insert(term.Coordinates{X: 0, Y: 2}, '\t')
 		}},
 		{"InsertRowAt", func(b *Buffer) {
 			b.InsertRowAt(1)

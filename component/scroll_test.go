@@ -68,10 +68,10 @@ func TestScrollDraw(t *testing.T) {
 		{func() { scroll.DeleteCell(term.Coordinates{X: 14, Y: 0}) }, "ove in your hert was"},
 		{func() { scroll.SeekDown() }, "Love isn't love 'til"},
 		{func() { scroll.DeleteCell(term.Coordinates{X: 16, Y: 1}) }, "Love isn't love til "},
-		{func() { scroll.InsertAt(term.Coordinates{X: 16, Y: 1}, '中') }, "Love isn't love 中til"},
+		{func() { scroll.Insert(term.Coordinates{X: 16, Y: 1}, '中') }, "Love isn't love 中til"},
 		// {scroll.SeekDown, "        -- Oscar Ham"},
 		// {scroll.SeekEndLine, "rstein 中            "},
-		// {func() { scroll.InsertAt(term.Coordinates{X: 20, Y: 2}, '中') }, "rstein 中中           "},
+		// {func() { scroll.Insert(term.Coordinates{X: 20, Y: 2}, '中') }, "rstein 中中           "},
 	}
 
 	for _, tcase := range tests {
