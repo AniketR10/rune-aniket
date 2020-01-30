@@ -14,11 +14,11 @@ EXECS=$(patsubst cmd/%/,$(TARGET)/%,$(EXECDIRS))
 
 default: $(EXAMPLES) $(EXECS)
 
-test:
-	@ go test ./...
+test: $(EXECS)
+	@ go test ./.../... -race
 
 coverage: $(TARGET)
-	@ go test ./... -coverprofile $(TARGET)/coverage
+	@ go test ./.../... -coverprofile $(TARGET)/coverage
 	@ go tool cover -html=$(TARGET)/coverage
 
 clean:
