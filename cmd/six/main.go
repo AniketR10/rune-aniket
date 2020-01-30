@@ -9,10 +9,12 @@ import (
 
 	"github.com/ernestrc/fractal"
 	"github.com/ernestrc/fractal/handler"
+	"github.com/ernestrc/fractal/plugin"
 	log "github.com/sirupsen/logrus"
 )
 
 var debugLog = flag.String("d", "", "debug log file")
+var clipboardPlugin = flag.String("x", "", "clipboard plugin")
 var tabspaces = flag.Int("t", 4, "tabspaces")
 
 func init() {
@@ -50,8 +52,22 @@ func main() {
 		cfg.Logger = log.New()
 		cfg.Logger.SetOutput(f)
 		cfg.Logger.SetLevel(log.TraceLevel)
+
+		// set output of plugins
+		plugin.SetLoggingOutput(f)
+		plugin.SetLoggingLevel(log.TraceLevel)
 	}
+
 	cfg.Tabspaces = *tabspaces
+
+	if *clipboardPlugin != "" {
+		clip, closeClip, err := plugin.NewClipboard(*clipboardPlugin)
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer closeClip()
+		cfg.Clipboard = clip
+	}
 
 	vi := handler.NewVi().WithConfig(cfg)
 	_, err = vi.ReadFrom(input)
