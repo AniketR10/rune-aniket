@@ -4,23 +4,23 @@ import (
 	"github.com/ernestrc/fractal/term"
 )
 
-// unixFileBuffer is a reader that hides the last EOL if present.
-type unixFileBuffer struct {
+// unixFileReader is a reader that hides the last EOL if present.
+type unixFileReader struct {
 	reader Reader
 }
 
-func newUnixFileBuffer(r Reader) Reader {
-	b := new(unixFileBuffer)
+func newUnixFileReader(r Reader) *unixFileReader {
+	b := new(unixFileReader)
 	b.reader = r
 	return b
 }
 
-func (b *unixFileBuffer) endswithEOL() bool {
+func (b *unixFileReader) endswithEOL() bool {
 	rows := b.reader.Rows()
 	return rows != 0 && b.reader.Columns(rows-1) == 0
 }
 
-func (b *unixFileBuffer) Rows() (rows int) {
+func (b *unixFileReader) Rows() (rows int) {
 	rows = b.reader.Rows()
 	if !b.endswithEOL() {
 		return
@@ -30,15 +30,15 @@ func (b *unixFileBuffer) Rows() (rows int) {
 
 }
 
-func (b *unixFileBuffer) Columns(row int) int {
+func (b *unixFileReader) Columns(row int) int {
 	return b.reader.Columns(row)
 }
 
-func (b *unixFileBuffer) Cell(pos term.Coordinates) (term.Cell, bool) {
+func (b *unixFileReader) Cell(pos term.Coordinates) (term.Cell, bool) {
 	return b.reader.Cell(pos)
 }
 
-func (b *unixFileBuffer) RawCells() (cells [][]term.Cell) {
+func (b *unixFileReader) RawCells() (cells [][]term.Cell) {
 	cells = b.reader.RawCells()
 	if !b.endswithEOL() {
 		return
@@ -47,7 +47,7 @@ func (b *unixFileBuffer) RawCells() (cells [][]term.Cell) {
 	return
 }
 
-func (b *unixFileBuffer) String() string {
+func (b *unixFileReader) String() string {
 	if !b.endswithEOL() {
 		return b.reader.String()
 	}

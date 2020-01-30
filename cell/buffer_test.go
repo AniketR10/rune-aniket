@@ -254,3 +254,16 @@ func TestBufferReset(t *testing.T) {
 	assert.Equal(t, "", b.String())
 	assert.Equal(t, 4, b.tabspaces)
 }
+
+func TestBufferEndsWithEOL(t *testing.T) {
+	b := NewBuffer()
+	b.WriteString("1234")
+	assert.False(t, b.EndsWithEOL())
+
+	assert.Equal(t, "1234", b.String())
+
+	b.WriteString("\n")
+	assert.True(t, b.EndsWithEOL())
+
+	assert.Equal(t, "1234", b.String())
+}

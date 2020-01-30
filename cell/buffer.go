@@ -18,6 +18,7 @@ type Buffer struct {
 	writer     Writer
 	undoer     *undoer
 	selector   selector
+	unixReader *unixFileReader
 }
 
 // NewBuffer allocates storage for a new Buffer and initializes it.
@@ -34,7 +35,9 @@ func (b *Buffer) InitWithTabspaces(tabspaces int) {
 
 	b.tabspaces = tabspaces
 	b.readerFrom = cells
-	b.reader = newUnixFileBuffer(cells)
+
+	b.unixReader = newUnixFileReader(cells)
+	b.reader = b.unixReader
 
 	b.undoer = newUndoer(cells)
 	b.writer = b.undoer
@@ -326,4 +329,13 @@ func (b *Buffer) SelectBlock(from term.Coordinates, to term.Coordinates) [][]ter
 
 func (b *Buffer) String() string {
 	return b.reader.String()
+}
+
+// EndsWithEOL returns true if the underlying text ends with an EOL character.
+//
+// A text file, under UNIX-like systems, consists of a series of lines, each of which
+// ends with a newline character (\n). A file that is not empty and does not
+// end with a newline is therefore not a text file.
+func (b *Buffer) EndsWithEOL() bool {
+	return b.unixReader.endswithEOL()
 }

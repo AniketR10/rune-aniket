@@ -80,7 +80,7 @@ func TestUnixFile(t *testing.T) {
 			_, err := c.ReadFrom(tcase.input)
 			require.NoError(t, err)
 
-			reader := newUnixFileBuffer(&c)
+			reader := newUnixFileReader(&c)
 
 			assert.Equal(t, tcase.rows, reader.Rows(), fmt.Sprintf("ReadFrom(%d)", i))
 			assert.Equal(t, tcase.expected, reader.String(), i)
@@ -95,7 +95,7 @@ func TestUnixFile(t *testing.T) {
 			require.NoError(t, err)
 			c.Insert(term.Coordinates{}, string(bytes))
 
-			reader := newUnixFileBuffer(&c)
+			reader := newUnixFileReader(&c)
 
 			assert.Equal(t, tcase.rows, reader.Rows(), fmt.Sprintf("insert(%d)", i))
 			assert.Equal(t, tcase.expected, reader.String(), i)
