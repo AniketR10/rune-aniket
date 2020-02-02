@@ -173,16 +173,16 @@ func (l *Less) SetMessage(text string, args ...interface{}) {
 	l.Resize(l.width, l.height)
 }
 
+// SetMessageAlt sets a message to be displayed on the bottom left corner.
+func (l *Less) SetMessageAlt(text string, args ...interface{}) {
+	getBuffer(l.cmdScroll).Reset()
+	getBuffer(l.cmdScroll).WriteString(fmt.Sprintf(text, args...))
+	l.Resize(l.width, l.height)
+}
+
 // Reset resets the contents and state of this instance.
 func (l *Less) Reset() {
 	l.InitWithBuffer(&l.Scroll.Buffer)
-}
-
-// SetContent replaces the content of the underlying scroll with 'text'.
-func (l *Less) SetContent(text string, args ...interface{}) {
-	l.Reset()
-	l.Scroll.WriteString(fmt.Sprintf(text, args...))
-	l.Resize(l.width, l.height)
 }
 
 // Mode returns the current LessMode.

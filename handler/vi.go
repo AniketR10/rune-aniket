@@ -19,6 +19,7 @@ const (
 	normal viMode = iota
 	insert
 	visual
+	command
 )
 
 // ViConfig holds configuration for Vi.
@@ -30,13 +31,14 @@ type ViConfig struct {
 }
 
 // Vi implements a basic vi-like text editor which satisfies fractal.Handler
-// and fractal.Component without ex commands.
+// and fractal.Component.
 type Vi struct {
 	config      ViConfig
 	less        Less // used for message bar and text search capabilities
 	logger      *log.Logger
 	raw, cursor editor.Cursor
 	mode        viMode
+	command     []rune
 }
 
 // DefaultViConfig is a sane configuration defaults for Vi.
@@ -148,6 +150,10 @@ func skipNulls(cursor *editor.Cursor) {
 
 // Cursor : fractal.Handler
 func (vi *Vi) Cursor() (term.Coordinates, bool) {
+	if vi.mode == command {
+		pos := term.Coordinates{X: len(vi.command), Y: vi.less.Height()}
+		return pos, true
+	}
 	// use less Cursor if we are in search mode
 	if vi.less.Mode() != LessNormalMode {
 		return vi.less.Cursor()
@@ -160,8 +166,14 @@ func (vi *Vi) setMode(text string, mode viMode) {
 	vi.mode = mode
 }
 
+func (vi *Vi) setError(err error) {
+	vi.less.SetMessageAlt("Error: %s", err)
+}
+
 func (vi *Vi) setNormalMode() {
 	vi.setMode("NORMAL", normal)
+	vi.command = vi.command[:0]
+	vi.less.SetMessageAlt(":")
 }
 
 func (vi *Vi) setInsertMode() {
@@ -184,6 +196,10 @@ func (vi *Vi) setVisualBlockMode() {
 	if vi.cursor.SelectBlock() {
 		vi.setMode("V-BLOCK", visual)
 	}
+}
+
+func (vi *Vi) setCommandMode() {
+	vi.setMode("COMMAND", command)
 }
 
 // we delegate search buffer Component to Less but delegate cursor position
@@ -216,8 +232,9 @@ func (vi *Vi) handleNormal(ev term.Event) bool {
 	switch ev.Type {
 	case term.EventKey:
 		switch ev.Ch {
-		case 'q':
-			return true
+		case ':':
+			vi.setCommandMode()
+			vi.handleCommand(ev)
 		case 'N':
 			vi.cursor.MovePrevSearchResult()
 		case 'p':
@@ -322,7 +339,7 @@ func (vi *Vi) handleInsert(ev term.Event) bool {
 	return false
 }
 
-func (vi *Vi) handleVisual(ev term.Event) (ok bool) {
+func (vi *Vi) handleVisual(ev term.Event) (quit bool) {
 	if ev.Key == term.KeyEsc {
 		vi.setNormalMode()
 		vi.cursor.Unselect()
@@ -347,24 +364,67 @@ func (vi *Vi) handleVisual(ev term.Event) (ok bool) {
 	}
 
 	if !handled {
-		ok = vi.handleNormal(ev)
+		quit = vi.handleNormal(ev)
+	}
+	return
+}
+
+func (vi *Vi) runCommand() (quit bool, err error) {
+	cmd := string(vi.command[1:])
+	switch cmd {
+	case "q!", "q":
+		quit = true
+	default:
+		err = fmt.Errorf("Unknown command: %s", cmd)
+	}
+	return
+}
+
+func (vi *Vi) handleCommand(ev term.Event) (quit bool) {
+	switch ev.Key {
+	case term.KeyEnter:
+		var err error
+		quit, err = vi.runCommand()
+		vi.setNormalMode()
+		if err != nil {
+			vi.setError(err)
+		}
+	case term.KeyEsc:
+		vi.setNormalMode()
+	case term.KeyBackspace, term.KeyBackspace2:
+		if len(vi.command) == 1 {
+			vi.setNormalMode()
+			return
+		}
+		vi.command = vi.command[:len(vi.command)-1]
+		vi.less.SetMessageAlt(string(vi.command))
+	case term.KeySpace:
+		ev.Ch = ' '
+		fallthrough
+	default:
+		if ev.Type == term.EventKey && ev.Ch != 0 {
+			vi.command = append(vi.command, ev.Ch)
+			vi.less.SetMessageAlt(string(vi.command))
+		}
 	}
 	return
 }
 
 // Handle : fractal.Handler
-func (vi *Vi) Handle(ev term.Event) (ok bool) {
+func (vi *Vi) Handle(ev term.Event) (quit bool) {
 	switch vi.mode {
 	case normal:
 		if vi.less.Mode() != LessNormalMode {
-			ok = vi.handleSearch(ev)
+			quit = vi.handleSearch(ev)
 		} else {
-			ok = vi.handleNormal(ev)
+			quit = vi.handleNormal(ev)
 		}
 	case insert:
-		ok = vi.handleInsert(ev)
+		quit = vi.handleInsert(ev)
 	case visual:
-		ok = vi.handleVisual(ev)
+		quit = vi.handleVisual(ev)
+	case command:
+		quit = vi.handleCommand(ev)
 	default:
 		panic(fmt.Sprintf("unknown mode: %d", vi.mode))
 	}
@@ -373,7 +433,7 @@ func (vi *Vi) Handle(ev term.Event) (ok bool) {
 	vi.raw = vi.cursor
 
 	switch vi.mode {
-	case normal, visual:
+	case normal, visual, command:
 		moveInBoundsNormal(&vi.less.Scroll, &vi.cursor)
 	case insert:
 		moveInBoundsInsert(&vi.less.Scroll, &vi.cursor)

@@ -158,7 +158,51 @@ diff_buf_adjust(win_
     diff_redraw(TRUE
     }               
 :             NORMAL`},
+		{":w",
+			`  if (wp == NULL)   
+  {                 
+    i = diff_buf_idx
+    if (i != DB_COUN
+    {               
+    curtab->tp_diffb
+    curtab->tp_diff_
+    diff_redraw(TRUE
+    }               
+:w▐          COMMAND`},
+		{">",
+			`  if (wp == ▐ULL)   
+  {                 
+    i = diff_buf_idx
+    if (i != DB_COUN
+    {               
+    curtab->tp_diffb
+    curtab->tp_diff_
+    diff_redraw(TRUE
+    }               
+Error: UnknownNORMAL`},
 	}
 
 	testBatchWorkload(t, 20, 10, cases)
+}
+
+func TestViCommandMode(t *testing.T) {
+	const height, width = 10, 10
+	vi := NewVi()
+	_, err := vi.ReadFrom(strings.NewReader(snippet))
+	require.NoError(t, err)
+
+	vi.Resize(width, height)
+
+	pos, _ := vi.Cursor()
+	assert.Equal(t, term.Coordinates{}, pos)
+
+	assert.False(t, vi.Handle(term.Event{Ch: ':'}))
+	pos, _ = vi.Cursor()
+	assert.Equal(t, term.Coordinates{Y: height - 1, X: 1}, pos)
+
+	assert.False(t, vi.Handle(term.Event{Ch: 'q'}))
+	pos, _ = vi.Cursor()
+	assert.Equal(t, term.Coordinates{Y: height - 1, X: 2}, pos)
+
+	assert.True(t, vi.Handle(term.Event{Key: term.KeyEnter}))
 }
