@@ -12,6 +12,9 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+// TODO delete also stores in clipboard
+// TODO select line seems to not behave correctly
+
 type viMode uint8
 
 const (
@@ -199,12 +202,10 @@ func (vi *Vi) Man() fractal.Manual {
 }
 
 func moveInBounds(scroll *component.Scroll, cursor *editor.Cursor, padding int) {
-	for cursor.Row() >= scroll.Rows() &&
-		cursor.MoveUp() {
+	for cursor.Row() >= scroll.Rows() && cursor.MoveUp() {
 	}
 
-	for cursor.Column() >= scroll.Columns(cursor.Row())+padding &&
-		cursor.MoveLeft() {
+	for cursor.Column() >= scroll.Columns(cursor.Row())+padding && cursor.MoveLeft() {
 	}
 }
 
@@ -248,6 +249,7 @@ func (vi *Vi) Cursor() (term.Coordinates, bool) {
 }
 
 func (vi *Vi) setMode(text string, mode viMode) {
+	vi.less.SetMessageAlt(":")
 	vi.less.SetMessage(text)
 	vi.mode = mode
 }
@@ -314,6 +316,10 @@ func (vi *Vi) pasteClipboard() bool {
 	return true
 }
 
+func (vi *Vi) deleteCell() {
+	vi.cursor.Delete()
+}
+
 func (vi *Vi) handleNormal(ev term.Event) bool {
 	switch ev.Type {
 	case term.EventKey:
@@ -369,6 +375,12 @@ func (vi *Vi) handleNormal(ev term.Event) bool {
 			vi.setInsertMode()
 			vi.cursor.MoveEndLine()
 			vi.cursor.MoveRight()
+		case 'C':
+			vi.setInsertMode()
+			if vi.cursor.Select() {
+				vi.cursor.MoveEndLine()
+				vi.cursor.DeleteSelection()
+			}
 		case 'x':
 			vi.cursor.Delete()
 		case 's':
@@ -528,13 +540,12 @@ func (vi *Vi) Handle(ev term.Event) (quit bool) {
 	switch vi.mode {
 	case normal, visual, command:
 		moveInBoundsNormal(&vi.less.Scroll, &vi.cursor)
+		skipNulls(&vi.cursor)
 	case insert:
 		moveInBoundsInsert(&vi.less.Scroll, &vi.cursor)
 	default:
 		panic(fmt.Sprintf("unknown mode: %d", vi.mode))
 	}
-
-	skipNulls(&vi.cursor)
 
 	return
 }

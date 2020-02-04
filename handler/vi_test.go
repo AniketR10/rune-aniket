@@ -72,9 +72,12 @@ func testBatchWorkload(t *testing.T, width, height int, cases []batchTestCase) {
 		require.NoError(t, err)
 
 		for _, r := range tcase.batch {
-			if r == '>' {
+			switch r {
+			case '>':
 				vi.Handle(term.Event{Key: term.KeyEnter, Type: term.EventKey})
-			} else {
+			case '<':
+				vi.Handle(term.Event{Key: term.KeyEsc, Type: term.EventKey})
+			default:
 				vi.Handle(term.Event{Ch: r, Type: term.EventKey})
 			}
 		}
@@ -152,7 +155,6 @@ diff_buf_adjust(win_
 {                   
   win_T  *wp;       
 :             NORMAL`},
-		// FIXME: > is ENTER key
 		{"/NULL>",
 			`  if (wp == ▐ULL)   
   {                 
@@ -186,6 +188,28 @@ diff_buf_adjust(win_
     diff_redraw(TRUE
     }               
 Error: Cannot NORMAL`},
+		{"Ahello",
+			`f (wp == NULL)hello▐
+                    
+ i = diff_buf_idx(wi
+ if (i != DB_COUNT) 
+ {                  
+ curtab->tp_diffbuf[
+ curtab->tp_diff_inv
+ diff_redraw(TRUE); 
+ }                  
+:             INSERT`},
+		{"<hhhhC<",
+			`f (wp == NULL▐      
+                    
+ i = diff_buf_idx(wi
+ if (i != DB_COUNT) 
+ {                  
+ curtab->tp_diffbuf[
+ curtab->tp_diff_inv
+ diff_redraw(TRUE); 
+ }                  
+:             NORMAL`},
 	}
 
 	testBatchWorkload(t, 20, 10, cases)
