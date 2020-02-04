@@ -11,7 +11,6 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-// TODO delete also stores in clipboard
 // TODO select line seems to not behave correctly
 
 type viMode uint8
@@ -176,6 +175,7 @@ func (vi *Vi) Init(opts ...ViOption) (err error) {
 		}
 	}
 
+	editor.WithCopyDelete(vi.config.Clipboard, &vi.less.Scroll.Buffer)
 	vi.less.Scroll.ResultsAttr = vi.config.ResAttr
 	vi.logger = vi.config.Logger
 
