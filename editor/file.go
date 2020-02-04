@@ -45,6 +45,7 @@ type FileBuffer struct {
 	renameFunc   renameFunc
 	swapDir      string
 	swapFileName string
+	fileName     string
 	info         os.FileInfo
 	orig, swap   osFile
 	reader       cell.Reader
@@ -55,17 +56,11 @@ type FileBuffer struct {
 // FileBuffer cell.Writer API should not be used publicly
 type fileBuf FileBuffer
 
-func makeSwapFileName(orig osFile) string {
-	return fmt.Sprintf("%s.swp", filepath.Base(orig.Name()))
+func makeSwapFileName(filename string) string {
+	return fmt.Sprintf("%s.swp", filename)
 }
 
 func (f *FileBuffer) initSwap(swapDir string, orig osFile) (osFile, error) {
-	content, err := ioutil.ReadAll(orig)
-	if err != nil {
-		return nil, err
-	}
-	defer orig.Seek(0, 0)
-
 	swap, err := f.openFunc(f.swapFileName, os.O_RDWR|os.O_CREATE|os.O_EXCL, filePerms)
 	if err != nil {
 		if os.IsExist(err) {
@@ -73,6 +68,16 @@ func (f *FileBuffer) initSwap(swapDir string, orig osFile) (osFile, error) {
 		}
 		return nil, err
 	}
+
+	if orig == nil {
+		return swap, nil
+	}
+
+	content, err := ioutil.ReadAll(orig)
+	if err != nil {
+		return nil, err
+	}
+	defer orig.Seek(0, 0)
 
 	_, err = swap.Write(content)
 	if err != nil {
@@ -108,8 +113,9 @@ func validateFileType(file osFile) (os.FileInfo, error) {
 func (f *FileBuffer) openFile(filePath string) (
 	file osFile, fileInfo os.FileInfo, err error,
 ) {
-	file, err = f.openFunc(filePath, os.O_RDWR|os.O_CREATE, filePerms)
+	file, err = f.openFunc(filePath, os.O_RDWR, filePerms)
 	if err != nil {
+		file = nil
 		return
 	}
 
@@ -120,16 +126,20 @@ func (f *FileBuffer) openFile(filePath string) (
 
 func (f *FileBuffer) initFiles(filePath, swapDir string) error {
 	file, fileInfo, err := f.openFile(filePath)
+	if err != nil && os.IsNotExist(err) {
+		// delegate opening file to Flush
+		err = nil
+	}
 	if err != nil {
 		return err
 	}
 
 	if swapDir == "" {
-		swapDir = filepath.Dir(file.Name())
+		swapDir = filepath.Dir(filePath)
 	}
 
 	if f.swapFileName == "" {
-		f.swapFileName = path.Join(swapDir, makeSwapFileName(file))
+		f.swapFileName = path.Join(swapDir, makeSwapFileName(filepath.Base(filePath)))
 	}
 
 	swap, err := f.initSwap(swapDir, file)
@@ -140,6 +150,8 @@ func (f *FileBuffer) initFiles(filePath, swapDir string) error {
 	f.orig = file
 	f.swap = swap
 	f.info = fileInfo
+	f.fileName = filePath
+	f.swapDir = swapDir
 
 	return nil
 }
@@ -147,12 +159,15 @@ func (f *FileBuffer) initFiles(filePath, swapDir string) error {
 func (f *FileBuffer) initBuffer(buf *cell.Buffer, file osFile) (err error) {
 	buf.Reset()
 
-	_, err = buf.ReadFrom(file)
-	if err != nil {
-		return
-	}
+	// file could be not created yet
+	if file != nil {
+		_, err = buf.ReadFrom(file)
+		if err != nil {
+			return
+		}
 
-	defer file.Seek(0, 0)
+		defer file.Seek(0, 0)
+	}
 
 	reader := buf.Reader()
 	writer := buf.Writer()
@@ -166,7 +181,11 @@ func (f *FileBuffer) initBuffer(buf *cell.Buffer, file osFile) (err error) {
 }
 
 func (f *FileBuffer) recoverFile(filePath, swapFilePath string, buf *cell.Buffer) error {
-	file, _, err := f.openFile(filePath)
+	var err error
+	f.orig, _, err = f.openFile(filePath)
+	if err != nil && os.IsNotExist(err) {
+		err = nil
+	}
 	if err != nil {
 		return err
 	}
@@ -175,11 +194,11 @@ func (f *FileBuffer) recoverFile(filePath, swapFilePath string, buf *cell.Buffer
 		return err
 	}
 
-	f.orig = file
 	f.swap = swap
 	f.info = swapFileInfo
 	f.swapFileName = swapFilePath
-	f.swapDir = filepath.Dir(swap.Name())
+	f.swapDir = filepath.Dir(swapFilePath)
+	f.fileName = filePath
 
 	err = f.initBuffer(buf, f.swap)
 	if err != nil {
@@ -236,8 +255,6 @@ func (f *FileBuffer) Init(filePath string, buf *cell.Buffer, swapDir string) err
 		f.Close()
 		return err
 	}
-
-	f.swapDir = swapDir
 
 	return nil
 }
@@ -321,6 +338,19 @@ func (f *FileBuffer) moveFile(sourcePath, destPath string) error {
 	return nil
 }
 
+func (f *FileBuffer) touchFile() (err error) {
+	f.orig, err = f.openFunc(f.fileName, os.O_RDWR|os.O_CREATE|os.O_EXCL, filePerms)
+	if err != nil {
+		// file was not created when instantiating this FileBuffer, but now
+		// file seems to be there so FileBuffer must be stale.
+		if os.IsExist(err) {
+			err = ErrStaleData
+		}
+		return
+	}
+	return
+}
+
 // Flush saves the contents of the buffer to disk. If file was modified by some
 // other process, this method returns ErrStaleData.
 func (f *FileBuffer) Flush() error {
@@ -331,13 +361,21 @@ func (f *FileBuffer) Flush() error {
 			return err
 		}
 	}
-	newFileInfo, err := f.orig.Stat()
-	if err != nil {
-		return err
-	}
 
-	if newFileInfo.ModTime().After(f.info.ModTime()) {
-		return ErrStaleData
+	// create file if it didn't exist before
+	if f.orig == nil {
+		err := f.touchFile()
+		if err != nil {
+			return err
+		}
+	} else {
+		newFileInfo, err := f.orig.Stat()
+		if err != nil {
+			return err
+		}
+		if newFileInfo.ModTime().After(f.info.ModTime()) {
+			return ErrStaleData
+		}
 	}
 
 	err = f.moveFile(f.swap.Name(), f.orig.Name())
@@ -350,7 +388,7 @@ func (f *FileBuffer) Flush() error {
 	_ = f.orig.Close()
 	_ = f.swap.Close()
 
-	err = f.initFiles(f.orig.Name(), f.swapDir)
+	err = f.initFiles(f.fileName, f.swapDir)
 	if err != nil {
 		return err
 	}
@@ -360,19 +398,21 @@ func (f *FileBuffer) Flush() error {
 
 // Close should be called once when this structure is not to be used anymore.
 func (f *FileBuffer) Close() error {
-	if f.orig == nil {
+	if f.swap == nil {
 		return errors.New("trying to Close an uninitialized FileBuffer")
 	}
 	swapFileName := f.swap.Name()
-	err1 := f.orig.Close()
 	err2 := f.swap.Close()
 	err3 := f.removeFunc(swapFileName)
+	f.swap = nil
 
-	f.orig = nil
-
-	if err1 != nil {
-		return err1
+	if f.orig != nil {
+		err := f.orig.Close()
+		if err != nil {
+			return err
+		}
 	}
+
 	if err2 != nil {
 		return err2
 	}

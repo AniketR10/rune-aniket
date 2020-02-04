@@ -2,10 +2,13 @@ package editor
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"io/ioutil"
+	"math/rand"
 	"os"
 	"path"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -39,7 +42,7 @@ func newIntegrationTestCase(t *testing.T, endsInEOL bool) (*cell.Buffer, *os.Fil
 
 // tests FileBuffer with real os.File's. endsInEOL refers to the original file.
 func testFileBufferIntegration(t *testing.T, endsInEOL bool) {
-	t.Run("if file does not exist, create it, even before Flush is called", func(t *testing.T) {
+	t.Run("if file does not exist, create it upon Flush", func(t *testing.T) {
 		buf := cell.NewBuffer()
 		file, err := ioutil.TempFile("", "frctl_file_test")
 		require.NoError(t, err)
@@ -51,11 +54,27 @@ func testFileBufferIntegration(t *testing.T, endsInEOL bool) {
 		f, err := NewFileBuffer(filename, buf, "")
 		require.NoError(t, err)
 
-		f.Close()
-		defer os.Remove(filename)
+		_, err = os.Stat(filename)
+		require.Error(t, err)
+
+		require.NoError(t, f.Flush())
 
 		_, err = os.Stat(filename)
 		require.NoError(t, err)
+	})
+
+	t.Run("if file does not exist, if there are errors upon creation, it bubbles up on Flush", func(t *testing.T) {
+		buf := cell.NewBuffer()
+		rand.Seed(int64(time.Now().Nanosecond()))
+		filename := fmt.Sprintf("/tmp/mpo/tmp/tmp/tmp/tmp/%d.go", rand.Int())
+
+		f, err := NewFileBuffer(filename, buf, os.TempDir())
+		require.NoError(t, err)
+
+		_, err = os.Stat(filename)
+		require.Error(t, err)
+
+		require.Error(t, f.Flush())
 	})
 
 	t.Run("no swap file is open, creates one; removes on close", func(t *testing.T) {
@@ -65,16 +84,16 @@ func testFileBufferIntegration(t *testing.T, endsInEOL bool) {
 		swapDir, err := ioutil.TempDir("", "")
 		require.NoError(t, err)
 
-		swapFileName := path.Join(swapDir, makeSwapFileName(file))
+		swapFileName := path.Join(swapDir, makeSwapFileName(filepath.Base(file.Name())))
 
 		_, err = os.Stat(swapFileName)
-		assert.Error(t, err)
+		require.Error(t, err)
 
 		f, err := NewFileBuffer(file.Name(), b, swapDir)
 		require.NoError(t, err)
 
 		_, err = os.Stat(swapFileName)
-		assert.NoError(t, err)
+		require.NoError(t, err, swapFileName)
 
 		f.Close()
 
@@ -197,7 +216,7 @@ func TestFileBufferRecover(t *testing.T) {
 		swapFileName := path.Base(swapFilepath)
 		filepath := path.Join(path.Dir(swapFilepath), "my_actual_file"+swapFileName)
 		f, err := RecoverFile(filepath, swapFilepath, b)
-		require.NoError(t, err)
+		require.NoError(t, err, filepath)
 		defer f.Close()
 
 		assertRecoverFromSwapFile(t, filepath, swapFilepath, b)
@@ -386,9 +405,7 @@ func TestFileBufferInit(t *testing.T) {
 		fileName := "fjklewjflk"
 
 		origFileMock.EXPECT().Stat().Return(testFileInfo{}, nil)
-		origFileMock.EXPECT().Read(gomock.Any()).Return(0, io.EOF)
 		origFileMock.EXPECT().Name().Return(fileName).AnyTimes()
-		origFileMock.EXPECT().Seek(gomock.Eq(int64(0)), gomock.Eq(0)).Return(int64(0), nil)
 
 		assert.Equal(t, accessDeniedErr, f.Init(fileName, cell.NewBuffer(), ""))
 	})
@@ -404,6 +421,24 @@ func newInitializedTestFileBuffer(t *testing.T, ctrl *gomock.Controller) (
 	f, mock := newTestFileBuffer(ctrl)
 	expectInitSwap(mock, defaultFileName, testFileInfo{}, defaultFileData)
 	expectInitBuffer(mock, defaultFileData)
+	buf := cell.NewBuffer()
+	require.NoError(t, f.Init(defaultFileName, buf, ""))
+	return f, mock, buf
+}
+
+func newUninitializedTestFileBuffer(t *testing.T, ctrl *gomock.Controller) (
+	*FileBuffer, *MockOsFile, *cell.Buffer,
+) {
+	f, mock := newTestFileBuffer(ctrl)
+	f.openFunc = func(name string, flag int, perm os.FileMode) (osFile, error) {
+		if flag&os.O_CREATE != 0 {
+			return mock, nil
+		}
+		return nil, &os.PathError{Err: os.ErrNotExist}
+	}
+
+	mock.EXPECT().Name().Return(defaultFileName).AnyTimes()
+
 	buf := cell.NewBuffer()
 	require.NoError(t, f.Init(defaultFileName, buf, ""))
 	return f, mock, buf
@@ -473,6 +508,31 @@ func TestRecoverFileBufferClose(t *testing.T) {
 	testFileBufferClose(t, newRecoveredTestFileBuffer)
 }
 
+func TestFileNotCreatedBufferClose(t *testing.T) {
+	t.Run("Close should remove and close all resources such that Init can be called again", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		f, mock, _ := newUninitializedTestFileBuffer(t, ctrl)
+
+		mock.EXPECT().Close().Return(nil).Times(1)
+		assert.NoError(t, f.Close())
+
+		assert.NoError(t, f.Init(defaultFileName, cell.NewBuffer(), ""))
+	})
+
+	t.Run("two consecutive calls to Close should return an error", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		f, mock, _ := newUninitializedTestFileBuffer(t, ctrl)
+
+		mock.EXPECT().Close().Return(nil).Times(1)
+		assert.NoError(t, f.Close())
+		assert.Error(t, f.Close())
+	})
+}
+
 func testFileBufferFlush(t *testing.T, newBuffer newBufferFunc) {
 	t.Run("Flush bubbles up Stat errors", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
@@ -535,6 +595,22 @@ func TestNewFileBufferFlush(t *testing.T) {
 
 func TestRecoverFileBufferFlush(t *testing.T) {
 	testFileBufferFlush(t, newRecoveredTestFileBuffer)
+}
+
+func TestFileNotCreatedBufferFlush(t *testing.T) {
+	t.Run("if file is created after NewFileBuffer is called returns error", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		f, _, _ := newUninitializedTestFileBuffer(t, ctrl)
+		require.Nil(t, f.orig)
+
+		f.openFunc = func(name string, flag int, perm os.FileMode) (osFile, error) {
+			assert.NotZero(t, flag&os.O_CREATE)
+			return nil, &os.PathError{Err: os.ErrExist}
+		}
+		assert.Equal(t, ErrStaleData, f.Flush())
+	})
 }
 
 func expectCopyToSwapPrepare(mock *MockOsFile) {
@@ -677,6 +753,7 @@ func TestNewFileBufferDelete(t *testing.T) {
 func TestNewFileBufferInsert(t *testing.T) {
 	testFileBufferInsert(t, newInitializedTestFileBuffer)
 }
+
 func TestRecoverFileBufferDelete(t *testing.T) {
 	testFileBufferDelete(t, newRecoveredTestFileBuffer)
 }
