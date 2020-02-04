@@ -6,7 +6,6 @@ import (
 
 	"github.com/ernestrc/fractal"
 	"github.com/ernestrc/fractal/cell"
-	"github.com/ernestrc/fractal/component"
 	"github.com/ernestrc/fractal/editor"
 	"github.com/ernestrc/fractal/term"
 	log "github.com/sirupsen/logrus"
@@ -199,40 +198,6 @@ func (vi *Vi) Draw(w fractal.Writer) {
 // Man : fractal.Handler
 func (vi *Vi) Man() fractal.Manual {
 	panic("TODO")
-}
-
-func moveInBounds(scroll *component.Scroll, cursor *editor.Cursor, padding int) {
-	for cursor.Row() >= scroll.Rows() && cursor.MoveUp() {
-	}
-
-	for cursor.Column() >= scroll.Columns(cursor.Row())+padding && cursor.MoveLeft() {
-	}
-}
-
-func moveInBoundsNormal(scroll *component.Scroll, cursor *editor.Cursor) {
-	moveInBounds(scroll, cursor, 0)
-}
-
-func moveInBoundsInsert(scroll *component.Scroll, cursor *editor.Cursor) {
-	moveInBounds(scroll, cursor, 1)
-}
-
-func skipNulls(cursor *editor.Cursor) {
-	for c, ok := cursor.Cell(); ; c, ok = cursor.Cell() {
-		if !ok {
-			if !cursor.MoveLeft() {
-				break
-			}
-			continue
-		}
-		if c.Ch == '\x00' {
-			if !cursor.MoveRight() {
-				break
-			}
-			continue
-		}
-		break
-	}
 }
 
 // Cursor : fractal.Handler
@@ -470,13 +435,15 @@ func (vi *Vi) handleVisual(ev term.Event) (quit bool) {
 func (vi *Vi) runCommand() (quit bool, err error) {
 	cmd := string(vi.command[1:])
 	switch cmd {
-	case "w", "w!", "wq", "wq!":
+	case "wq", "wq!":
+		quit = true
+		fallthrough
+	case "w", "w!":
 		if vi.fileBuf != nil {
 			err = vi.fileBuf.Flush()
 		} else {
 			err = fmt.Errorf("Cannot save non-file buffer")
 		}
-		quit = err == nil && (cmd == "wq" || cmd == "wq!")
 	case "q!", "q":
 		quit = true
 	default:
@@ -539,10 +506,10 @@ func (vi *Vi) Handle(ev term.Event) (quit bool) {
 
 	switch vi.mode {
 	case normal, visual, command:
-		moveInBoundsNormal(&vi.less.Scroll, &vi.cursor)
-		skipNulls(&vi.cursor)
+		vi.cursor.MoveToBounds(0)
+		vi.cursor.MoveToNextNonNull()
 	case insert:
-		moveInBoundsInsert(&vi.less.Scroll, &vi.cursor)
+		vi.cursor.MoveToBounds(1)
 	default:
 		panic(fmt.Sprintf("unknown mode: %d", vi.mode))
 	}

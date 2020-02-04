@@ -719,3 +719,36 @@ func (c *Cursor) DeleteSelection() (ok bool) {
 	c.setCursor(c.scrollToWindowCoordinates(start))
 	return
 }
+
+// MoveToBounds moves the cursor up and to the left until it is in a row
+// with content and it is 'padding' cells away from the last column in the row.
+// If cursor is already in a row and/or in a column with content, then this method
+// does nothing.
+func (c *Cursor) MoveToBounds(padding int) {
+	for c.Row() >= c.scroll.Rows() && c.MoveUp() {
+	}
+
+	for c.Column() >= c.scroll.Columns(c.Row())+padding && c.MoveLeft() {
+	}
+}
+
+// MoveToNextNonNull will move the cursor to the right until it finds
+// a cell with a non-null character. If the current cell is already a cell with
+// a non-null character, then this method does nothing.
+func (c *Cursor) MoveToNextNonNull() {
+	for cell, ok := c.Cell(); ; cell, ok = c.Cell() {
+		if !ok {
+			if !c.MoveLeft() {
+				break
+			}
+			continue
+		}
+		if cell.Ch == '\x00' {
+			if !c.MoveRight() {
+				break
+			}
+			continue
+		}
+		break
+	}
+}

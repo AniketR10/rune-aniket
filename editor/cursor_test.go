@@ -792,3 +792,83 @@ func TestCursorDeleteSelection20(t *testing.T) {
 func TestCursorDeleteSelection1000(t *testing.T) {
 	testCursorDeleteSelection(t, 1000, 1000)
 }
+
+func TestCursorMoveToBounds(t *testing.T) {
+	e := setupCursor(t, 100, 100)
+
+	pos, ok := e.Cursor()
+	require.True(t, ok)
+	assert.Equal(t, term.Coordinates{}, pos)
+
+	assert.True(t, e.MoveRight())
+	assert.True(t, e.MoveRight())
+	assert.True(t, e.MoveRight())
+
+	e.MoveToBounds(2)
+
+	pos, ok = e.Cursor()
+	require.True(t, ok)
+	assert.Equal(t, term.Coordinates{X: 1}, pos)
+
+	pos, _ = e.Cursor()
+	assert.True(t, e.MoveDown())
+
+	e.MoveEndLine()
+	e.MoveRight()
+	e.MoveRight()
+
+	e.MoveToBounds(1)
+
+	pos, _ = e.Cursor()
+	assert.Equal(t, term.Coordinates{X: 2, Y: 1}, pos)
+
+	e.MoveToBounds(0)
+
+	pos, _ = e.Cursor()
+	assert.Equal(t, term.Coordinates{X: 1, Y: 1}, pos)
+
+	e.MoveLastLine()
+	e.MoveDown()
+
+	e.MoveToBounds(0)
+
+	pos, _ = e.Cursor()
+	assert.Equal(t, term.Coordinates{X: 0, Y: 31}, pos)
+}
+
+func TestCursorSkipNulls(t *testing.T) {
+	e := setupCursor(t, 100, 100)
+
+	assert.True(t, e.MoveRight())
+
+	e.MoveToNextNonNull()
+
+	pos, ok := e.Cursor()
+	require.True(t, ok)
+	assert.Equal(t, term.Coordinates{X: 0}, pos)
+
+	e.MoveLastLine()
+	e.MoveDown()
+
+	e.MoveToNextNonNull()
+
+	pos, _ = e.Cursor()
+	assert.Equal(t, term.Coordinates{X: 0, Y: 32}, pos)
+
+	e.MoveFirstLine()
+	for i := 0; i < 16; i++ {
+		e.MoveDown()
+	}
+	e.MoveRight()
+
+	e.MoveToNextNonNull()
+
+	pos, _ = e.Cursor()
+	assert.Equal(t, term.Coordinates{X: 3, Y: 16}, pos)
+
+	e.MoveRight()
+	e.MoveToNextNonNull()
+
+	pos, _ = e.Cursor()
+	assert.Equal(t, term.Coordinates{X: 7, Y: 16}, pos)
+}
