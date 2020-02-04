@@ -1,0 +1,384 @@
+package editor
+
+import (
+	"errors"
+	"fmt"
+	"io"
+	"io/ioutil"
+	"os"
+	"path"
+	"path/filepath"
+
+	"github.com/ernestrc/fractal/cell"
+	"github.com/ernestrc/fractal/term"
+)
+
+const filePerms = 0600
+
+// used to abstract *os.File
+type osFile interface {
+	Name() string
+	Stat() (os.FileInfo, error)
+	Sync() error
+	Truncate(size int64) error
+	WriteString(str string) (int, error)
+
+	io.Seeker
+	io.Reader
+	io.Closer
+	io.Writer
+}
+
+type openFunc func(name string, flag int, perm os.FileMode) (osFile, error)
+type removeFunc func(name string) error
+type renameFunc func(oldpath, newpath string) error
+
+// FileBuffer is a struture which persists all updates to a swap file
+// and exposes methods to effectively fsync the contents to disk.
+//
+// It installs itself as the cell.Buffer's writer, intercepting all
+// calls to Insert/Delete but it doesn't intercept (therefore copy to swap
+// upon update) other methods like WriteString/Write/ReadFrom.
+type FileBuffer struct {
+	openFunc     openFunc
+	removeFunc   removeFunc
+	renameFunc   renameFunc
+	swapDir      string
+	swapFileName string
+	info         os.FileInfo
+	orig, swap   osFile
+	reader       cell.Reader
+	writer       cell.Writer
+	delayedError error
+}
+
+// FileBuffer cell.Writer API should not be used publicly
+type fileBuf FileBuffer
+
+func makeSwapFileName(orig osFile) string {
+	return fmt.Sprintf("%s.swp", filepath.Base(orig.Name()))
+}
+
+func (f *FileBuffer) initSwap(swapDir string, orig osFile) (osFile, error) {
+	content, err := ioutil.ReadAll(orig)
+	if err != nil {
+		return nil, err
+	}
+	defer orig.Seek(0, 0)
+
+	swap, err := f.openFunc(f.swapFileName, os.O_RDWR|os.O_CREATE|os.O_EXCL, filePerms)
+	if err != nil {
+		if os.IsExist(err) {
+			return nil, ErrFileAlreadyOpen
+		}
+		return nil, err
+	}
+
+	_, err = swap.Write(content)
+	if err != nil {
+		swap.Close()
+		return nil, err
+	}
+
+	if err = swap.Sync(); err != nil {
+		return nil, err
+	}
+
+	return swap, nil
+}
+
+func validateFileType(file osFile) (os.FileInfo, error) {
+	fileInfo, err := file.Stat()
+	if err != nil {
+		return nil, err
+	}
+
+	if fileInfo.IsDir() {
+		return nil, ErrFileIsNotRegular
+	}
+
+	mode := fileInfo.Mode()
+	if mode.IsRegular() || mode&os.ModeSymlink != 0 {
+		return fileInfo, nil
+	}
+
+	return nil, ErrFileIsNotRegular
+}
+
+func (f *FileBuffer) openFile(filePath string) (
+	file osFile, fileInfo os.FileInfo, err error,
+) {
+	file, err = f.openFunc(filePath, os.O_RDWR|os.O_CREATE, filePerms)
+	if err != nil {
+		return
+	}
+
+	fileInfo, err = validateFileType(file)
+
+	return
+}
+
+func (f *FileBuffer) initFiles(filePath, swapDir string) error {
+	file, fileInfo, err := f.openFile(filePath)
+	if err != nil {
+		return err
+	}
+
+	if swapDir == "" {
+		swapDir = filepath.Dir(file.Name())
+	}
+
+	if f.swapFileName == "" {
+		f.swapFileName = path.Join(swapDir, makeSwapFileName(file))
+	}
+
+	swap, err := f.initSwap(swapDir, file)
+	if err != nil {
+		return err
+	}
+
+	f.orig = file
+	f.swap = swap
+	f.info = fileInfo
+
+	return nil
+}
+
+func (f *FileBuffer) initBuffer(buf *cell.Buffer, file osFile) (err error) {
+	buf.Reset()
+
+	_, err = buf.ReadFrom(file)
+	if err != nil {
+		return
+	}
+
+	defer file.Seek(0, 0)
+
+	reader := buf.Reader()
+	writer := buf.Writer()
+
+	f.reader = reader
+	f.writer = writer
+
+	buf.WithWriter((*fileBuf)(f))
+
+	return nil
+}
+
+func (f *FileBuffer) recoverFile(filePath, swapFilePath string, buf *cell.Buffer) error {
+	file, _, err := f.openFile(filePath)
+	if err != nil {
+		return err
+	}
+	swap, swapFileInfo, err := f.openFile(swapFilePath)
+	if err != nil {
+		return err
+	}
+
+	f.orig = file
+	f.swap = swap
+	f.info = swapFileInfo
+	f.swapFileName = swapFilePath
+	f.swapDir = filepath.Dir(swap.Name())
+
+	err = f.initBuffer(buf, f.swap)
+	if err != nil {
+		f.Close()
+		return err
+	}
+
+	err = f.Flush()
+	if err != nil {
+		buf.Reset()
+		f.Close()
+		return err
+	}
+
+	return nil
+}
+
+func osOpenFileFunc() openFunc {
+	return func(name string, flag int, perm os.FileMode) (osFile, error) {
+		return os.OpenFile(name, flag, perm)
+	}
+}
+
+func newOsFileBuffer() *FileBuffer {
+	ret := new(FileBuffer)
+	ret.openFunc = osOpenFileFunc()
+	ret.removeFunc = os.Remove
+	ret.renameFunc = os.Rename
+	return ret
+}
+
+// RecoverFile recovers the file at filePath with the swap file swapFilePath.
+func RecoverFile(filePath, swapFilePath string, buf *cell.Buffer) (*FileBuffer, error) {
+	ret := newOsFileBuffer()
+
+	err := ret.recoverFile(filePath, swapFilePath, buf)
+	if err != nil {
+		return nil, err
+	}
+	return ret, err
+}
+
+// Init instantiates opens the file at filePath and initializes
+// buf with the contents of it. If swapDir is "", then filePath directory is
+// used as a swap directory
+func (f *FileBuffer) Init(filePath string, buf *cell.Buffer, swapDir string) error {
+	err := f.initFiles(filePath, swapDir)
+	if err != nil {
+		return err
+	}
+
+	err = f.initBuffer(buf, f.orig)
+	if err != nil {
+		f.Close()
+		return err
+	}
+
+	f.swapDir = swapDir
+
+	return nil
+}
+
+// NewFileBuffer allocates store for a new FileBuffer and then calls Init.
+func NewFileBuffer(filePath string, buf *cell.Buffer, swapDir string) (
+	*FileBuffer, error,
+) {
+	ret := newOsFileBuffer()
+
+	err := ret.Init(filePath, buf, swapDir)
+	if err != nil {
+		return nil, err
+	}
+	return ret, nil
+}
+
+func (f *fileBuf) delayCopySwapError(err error) {
+	f.delayedError = fmt.Errorf("Swap file error %s: %s", f.swap.Name(), err)
+}
+
+func (f *fileBuf) copyFlushSwapFile() (ok bool) {
+	str := f.reader.String()
+	err := f.swap.Truncate(0)
+	if err != nil {
+		f.delayCopySwapError(err)
+		return
+	}
+	_, err = f.swap.Seek(0, 0)
+	if err != nil {
+		f.delayCopySwapError(err)
+		return
+	}
+	_, err = f.swap.WriteString(str)
+	if err != nil {
+		f.delayCopySwapError(err)
+		return
+	}
+
+	// files must end in EOL; cell.Buffer hides the last EOL
+	// so it is safe here to always write a last EOL.
+	_, err = f.swap.Write([]byte{'\n'})
+	if err != nil {
+		f.delayCopySwapError(err)
+		return
+	}
+
+	err = f.swap.Sync()
+	if err != nil {
+		f.delayCopySwapError(err)
+		return
+	}
+
+	ok = true
+	return
+}
+
+// Insert : cell.Writer
+func (f *fileBuf) Insert(at term.Coordinates, str string) (
+	from, to term.Coordinates,
+) {
+	from, to = f.writer.Insert(at, str)
+	f.copyFlushSwapFile()
+	return
+}
+
+// Delete : cell.Writer
+func (f *fileBuf) Delete(from, to term.Coordinates) (
+	start, end term.Coordinates, str string,
+) {
+	start, end, str = f.writer.Delete(from, to)
+	f.copyFlushSwapFile()
+	return
+}
+
+func (f *FileBuffer) moveFile(sourcePath, destPath string) error {
+	err := f.renameFunc(sourcePath, destPath)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// Flush saves the contents of the buffer to disk. If file was modified by some
+// other process, this method returns ErrStaleData.
+func (f *FileBuffer) Flush() error {
+	err := f.delayedError
+	if err != nil {
+		f.delayedError = nil
+		if !(*fileBuf)(f).copyFlushSwapFile() {
+			return err
+		}
+	}
+	newFileInfo, err := f.orig.Stat()
+	if err != nil {
+		return err
+	}
+
+	if newFileInfo.ModTime().After(f.info.ModTime()) {
+		return ErrStaleData
+	}
+
+	err = f.moveFile(f.swap.Name(), f.orig.Name())
+	if err != nil {
+		return err
+	}
+
+	// any fs errors should be picked up or fixed
+	// by opening files again
+	_ = f.orig.Close()
+	_ = f.swap.Close()
+
+	err = f.initFiles(f.orig.Name(), f.swapDir)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// Close should be called once when this structure is not to be used anymore.
+func (f *FileBuffer) Close() error {
+	if f.orig == nil {
+		return errors.New("trying to Close an uninitialized FileBuffer")
+	}
+	swapFileName := f.swap.Name()
+	err1 := f.orig.Close()
+	err2 := f.swap.Close()
+	err3 := f.removeFunc(swapFileName)
+
+	f.orig = nil
+
+	if err1 != nil {
+		return err1
+	}
+	if err2 != nil {
+		return err2
+	}
+	if err3 != nil {
+		return err3
+	}
+
+	return nil
+}
