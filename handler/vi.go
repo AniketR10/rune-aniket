@@ -2,7 +2,6 @@ package handler
 
 import (
 	"fmt"
-	"io"
 	"strings"
 
 	"github.com/ernestrc/fractal"
@@ -22,27 +21,99 @@ const (
 	command
 )
 
-// ViConfig holds configuration for Vi.
-type ViConfig struct {
-	ResAttr   term.Attributes
-	Tabspaces int
-	Clipboard editor.Clipboard
-	Logger    *log.Logger
+// viConfig holds configuration for Vi.
+type viConfig struct {
+	Filepath         string
+	Buffer           *cell.Buffer
+	ResAttr          term.Attributes
+	Tabspaces        int
+	Clipboard        editor.Clipboard
+	Logger           *log.Logger
+	SwapDir          string
+	RecoverySwapFile string
+}
+
+// ViOption represents a Vi handler configuration option.
+type ViOption func(*viConfig)
+
+// WithViSwapDir defines the swap directory to use if WithViFilepath option is set.
+// The swap directory is used to keep persist recovery files. If this option is not
+// defined, the directory of WithViFilepath is used as a swap directory.
+func WithViSwapDir(dir string) ViOption {
+	return func(cfg *viConfig) {
+		cfg.SwapDir = dir
+	}
+}
+
+// WithViRecoveryFile indicates that a Vi handler is to be initialized
+// from recovery file swapFilePath. This option overrides WithViSwapDir because
+// the swap directory of swapFilePath is used instead.
+func WithViRecoveryFile(swapFilePath string) ViOption {
+	return func(cfg *viConfig) {
+		cfg.RecoverySwapFile = swapFilePath
+	}
+}
+
+// WithViLogger sets the editor.Clipboard implementation to use.
+func WithViLogger(l *log.Logger) ViOption {
+	return func(cfg *viConfig) {
+		cfg.Logger = l
+	}
+}
+
+// WithViClipboard sets the editor.Clipboard implementation to use.
+func WithViClipboard(clip editor.Clipboard) ViOption {
+	return func(cfg *viConfig) {
+		cfg.Clipboard = clip
+	}
+}
+
+// WithViTabspaces sets the number of spaces used to render a tab.
+func WithViTabspaces(tabspaces int) ViOption {
+	return func(cfg *viConfig) {
+		cfg.Tabspaces = tabspaces
+	}
+}
+
+// WithViResAttr sets the search result cell attributes to be rendered.
+func WithViResAttr(attr term.Attributes) ViOption {
+	return func(cfg *viConfig) {
+		cfg.ResAttr = attr
+	}
+}
+
+// WithViBuffer is a ViOption that sets the buffer to use with
+// Vi handler. If this option is set, note that it overrides
+// WithViFilepath so some functions (like Saving to disk) will be disabled.
+// This option also overrides WithViRecoveryFile.
+func WithViBuffer(buf *cell.Buffer) ViOption {
+	return func(cfg *viConfig) {
+		cfg.Buffer = buf
+	}
+}
+
+// WithViFilepath is a ViOption that sets the filepath of the file to open with
+// a Vi handler.
+func WithViFilepath(filepath string) ViOption {
+	return func(cfg *viConfig) {
+		cfg.Filepath = filepath
+	}
 }
 
 // Vi implements a basic vi-like text editor which satisfies fractal.Handler
 // and fractal.Component.
 type Vi struct {
-	config      ViConfig
+	config      viConfig
 	less        Less // used for message bar and text search capabilities
 	logger      *log.Logger
 	raw, cursor editor.Cursor
+	fileBuf     *editor.FileBuffer
 	mode        viMode
 	command     []rune
 }
 
 // DefaultViConfig is a sane configuration defaults for Vi.
-var DefaultViConfig = ViConfig{
+var defaultViConfig = viConfig{
 	ResAttr: term.Attributes{
 		Fg: term.AttrReverse,
 		Bg: term.ColorDefault,
@@ -53,48 +124,63 @@ var DefaultViConfig = ViConfig{
 }
 
 // NewVi allocates storage for a new Vi handle, initializes it and returns it.
-func NewVi() *Vi {
+func NewVi(opts ...ViOption) (*Vi, error) {
 	vi := new(Vi)
-	vi.Init()
-	return vi
-}
-
-// WithConfig sets cfg as the new Less handler configuration.
-func (vi *Vi) WithConfig(cfg ViConfig) (ret *Vi) {
-	ret = new(Vi)
-	*ret = *vi
-	ret.config = cfg
-	ret.initWithBuffer(&vi.less.Buffer)
-	return ret
+	err := vi.Init(opts...)
+	if err != nil {
+		return nil, err
+	}
+	return vi, nil
 }
 
 // Init initialies this vi handle with a new Buffer.
-func (vi *Vi) Init() {
-	vi.config = DefaultViConfig
-	vi.initWithBuffer(cell.NewBuffer())
-}
-
-func (vi *Vi) initWithBuffer(buf *cell.Buffer) {
-	vi.less.Scroll.ResultsAttr = vi.config.ResAttr
-	vi.logger = vi.config.Logger
-
-	if buf.Rows() != 0 {
+func (vi *Vi) Init(opts ...ViOption) (err error) {
+	vi.config = defaultViConfig
+	for _, o := range opts {
+		o(&vi.config)
+	}
+	buf := vi.config.Buffer
+	if buf == nil {
+		if vi.config.Filepath == "" {
+			panic("either WithViFilepath or WithViBuffer must be set")
+		}
+		buf = cell.NewBuffer()
+		buf.InitWithTabspaces(vi.config.Tabspaces)
+	} else {
+		// initialize Buffer but with the configured tabspaces
 		str := buf.String()
 		buf.InitWithTabspaces(vi.config.Tabspaces)
 		_, _ = buf.ReadFrom(strings.NewReader(str))
-	} else {
-		buf.InitWithTabspaces(vi.config.Tabspaces)
 	}
 
 	if vi.logger != nil {
 		buf = buf.WithLogger(vi.logger)
 	}
 
+	// this copies buf to the Scroll's Buffer
 	vi.less.InitWithBuffer(buf)
 	vi.cursor.Init(&vi.less.Scroll)
+
+	if vi.config.Filepath != "" {
+		if vi.config.RecoverySwapFile != "" {
+			vi.fileBuf, err = editor.RecoverFile(vi.config.Filepath,
+				vi.config.RecoverySwapFile, &vi.less.Scroll.Buffer)
+		} else {
+			vi.fileBuf, err = editor.NewFileBuffer(
+				vi.config.Filepath, &vi.less.Scroll.Buffer, vi.config.SwapDir)
+		}
+		if err != nil {
+			return err
+		}
+	}
+
+	vi.less.Scroll.ResultsAttr = vi.config.ResAttr
+	vi.logger = vi.config.Logger
+
 	vi.raw = vi.cursor
 
 	vi.setNormalMode()
+	return nil
 }
 
 // Resize : fractal.Component
@@ -372,6 +458,13 @@ func (vi *Vi) handleVisual(ev term.Event) (quit bool) {
 func (vi *Vi) runCommand() (quit bool, err error) {
 	cmd := string(vi.command[1:])
 	switch cmd {
+	case "w", "w!", "wq", "wq!":
+		if vi.fileBuf != nil {
+			err = vi.fileBuf.Flush()
+		} else {
+			err = fmt.Errorf("Cannot save non-file buffer")
+		}
+		quit = err == nil && (cmd == "wq" || cmd == "wq!")
 	case "q!", "q":
 		quit = true
 	default:
@@ -446,9 +539,10 @@ func (vi *Vi) Handle(ev term.Event) (quit bool) {
 	return
 }
 
-// ReadFrom reads data from r until EOF and appends it to the buffer, growing
-// the buffer as needed. The return value n is the number of bytes read. Any
-// error except io.EOF encountered during the read is also returned.
-func (vi *Vi) ReadFrom(reader io.Reader) (int64, error) {
-	return vi.less.ReadFrom(reader)
+// Close closes the resources associated with this instance of Vi.
+func (vi *Vi) Close() error {
+	if vi.fileBuf != nil {
+		return vi.fileBuf.Close()
+	}
+	return nil
 }

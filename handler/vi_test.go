@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ernestrc/fractal/cell"
 	"github.com/ernestrc/fractal/term"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -47,19 +48,24 @@ type batchTestCase struct {
 	output string
 }
 
-func setupVi(t *testing.T, text string, width, height int, config ViConfig) *Vi {
-	vi := NewVi().WithConfig(config)
+func setupVi(t *testing.T, text string, width, height int, opts ...ViOption) *Vi {
+	buf := cell.NewBuffer()
+	_, err := buf.ReadFrom(strings.NewReader(text))
+	require.NoError(t, err)
+
+	opts = append(opts, WithViBuffer(buf))
+
+	vi, err := NewVi(opts...)
+	require.NoError(t, err)
 	vi.Resize(width, height)
 
-	_, err := vi.ReadFrom(strings.NewReader(text))
-	require.NoError(t, err)
 	return vi
 }
 
 func testBatchWorkload(t *testing.T, width, height int, cases []batchTestCase) {
 	writer := term.NewStringWriter(width, height)
 
-	vi := setupVi(t, snippet, width, height, ViConfig{Tabspaces: 2})
+	vi := setupVi(t, snippet, width, height, WithViTabspaces(2))
 
 	for _, tcase := range cases {
 		err := writer.Clear(term.Attributes{Fg: 0, Bg: 0})
@@ -101,7 +107,7 @@ func TestCellAtCursor(t *testing.T) {
 	width, height := 20, 10
 
 	writer := term.NewStringWriter(width, height)
-	vi := setupVi(t, snippet, width, height, ViConfig{Tabspaces: 2})
+	vi := setupVi(t, snippet, width, height, WithViTabspaces(2))
 
 	for _, tcase := range cases {
 		for _, r := range tcase.input {
@@ -179,7 +185,7 @@ diff_buf_adjust(win_
     curtab->tp_diff_
     diff_redraw(TRUE
     }               
-Error: UnknownNORMAL`},
+Error: Cannot NORMAL`},
 	}
 
 	testBatchWorkload(t, 20, 10, cases)
@@ -187,8 +193,12 @@ Error: UnknownNORMAL`},
 
 func TestViCommandMode(t *testing.T) {
 	const height, width = 10, 10
-	vi := NewVi()
-	_, err := vi.ReadFrom(strings.NewReader(snippet))
+
+	buf := cell.NewBuffer()
+	_, err := buf.ReadFrom(strings.NewReader(snippet))
+	require.NoError(t, err)
+
+	vi, err := NewVi(WithViBuffer(buf))
 	require.NoError(t, err)
 
 	vi.Resize(width, height)

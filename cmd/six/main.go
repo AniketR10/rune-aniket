@@ -2,18 +2,20 @@ package main
 
 import (
 	"flag"
-	"io"
 	"net/http"
 	_ "net/http/pprof"
 	"os"
 
 	"github.com/ernestrc/fractal"
+	"github.com/ernestrc/fractal/cell"
 	"github.com/ernestrc/fractal/handler"
 	"github.com/ernestrc/fractal/plugin"
 	log "github.com/sirupsen/logrus"
 )
 
 var debugLog = flag.String("d", "", "debug log file")
+var swapDir = flag.String("s", "", "swap files directory")
+var recoveryFile = flag.String("r", "", "recover from recovery file")
 var clipboardPlugin = flag.String("x", "", "clipboard plugin")
 var tabspaces = flag.Int("t", 4, "tabspaces")
 
@@ -26,39 +28,45 @@ func main() {
 		log.Println(http.ListenAndServe("localhost:6060", nil))
 	}()
 
-	var input io.Reader
-	var err error
+	opts := make([]handler.ViOption, 0)
 
 	if len(os.Args) > 1 {
 		filename := os.Args[1]
-		if input, err = os.Open(filename); err != nil {
+		if err := flag.CommandLine.Parse(os.Args[2:]); err != nil {
 			log.Fatal(err)
 		}
-		if err = flag.CommandLine.Parse(os.Args[2:]); err != nil {
-			log.Fatal(err)
-		}
+		opts = append(opts, handler.WithViFilepath(filename))
 	} else {
-		input = os.Stdin
 		flag.Parse()
-
+		buf := cell.NewBuffer()
+		_, err := buf.ReadFrom(os.Stdin)
+		if err != nil {
+			log.Fatal(err)
+		}
+		opts = append(opts, handler.WithViBuffer(buf))
 	}
 
-	cfg := handler.DefaultViConfig
+	opts = append(opts,
+		handler.WithViTabspaces(*tabspaces),
+		handler.WithViSwapDir(*swapDir),
+		handler.WithViRecoveryFile(*recoveryFile),
+	)
+
 	if *debugLog != "" {
 		f, err := os.OpenFile(*debugLog, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
 		if err != nil {
 			log.Fatal(err)
 		}
-		cfg.Logger = log.New()
-		cfg.Logger.SetOutput(f)
-		cfg.Logger.SetLevel(log.TraceLevel)
+
+		l := log.New()
+		l.SetOutput(f)
+		l.SetLevel(log.TraceLevel)
+		opts = append(opts, handler.WithViLogger(l))
 
 		// set output of plugins
 		plugin.SetLoggingOutput(f)
 		plugin.SetLoggingLevel(log.TraceLevel)
 	}
-
-	cfg.Tabspaces = *tabspaces
 
 	if *clipboardPlugin != "" {
 		clip, closeClip, err := plugin.NewClipboard(*clipboardPlugin)
@@ -66,14 +74,14 @@ func main() {
 			log.Fatal(err)
 		}
 		defer closeClip()
-		cfg.Clipboard = clip
+		opts = append(opts, handler.WithViClipboard(clip))
 	}
 
-	vi := handler.NewVi().WithConfig(cfg)
-	_, err = vi.ReadFrom(input)
+	vi, err := handler.NewVi(opts...)
 	if err != nil {
 		log.Fatal(err)
 	}
+	defer vi.Close()
 
 	if err = fractal.Init(); err != nil {
 		log.Fatal(err)
@@ -84,5 +92,4 @@ func main() {
 	if err = fractal.Run(vi); err != nil {
 		log.Fatal(err)
 	}
-
 }
