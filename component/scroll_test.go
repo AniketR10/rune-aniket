@@ -11,7 +11,7 @@ import (
 
 var fortune = `Love in your heart wasn't put there to stay.
 Love isn't love 'til you give it away.
-		-- Oscar Hammerstein 中国
+		-- Oscar Hammerstein ⌘⌘
 `
 
 var fortunewidth = 44
@@ -61,8 +61,9 @@ func TestScrollDraw(t *testing.T) {
 		{func() { scroll.SeekNextResult() }, "Love in your heart w"},
 		{func() { scroll.SeekNextResult() }, " isn't love 'til you"},
 		{func() { scroll.SeekPrevResult() }, " in your heart wasn'"},
-		{func() { scroll.Search("中国"); scroll.SeekNextResult() }, "Oscar Hammerstein 中国"},
-		{func() { scroll.Search("Oscar"); scroll.SeekNextResult() }, "Oscar Hammerstein 中国"},
+		{func() { assert.Equal(t, 1, scroll.Search("⌘⌘")); scroll.SeekNextResult() }, "Oscar Hammerstein ⌘⌘"},
+		{func() { assert.Equal(t, 2, scroll.Search("⌘")); scroll.SeekNextResult() }, "Oscar Hammerstein ⌘⌘"},
+		{func() { scroll.Search("Oscar"); scroll.SeekNextResult() }, "Oscar Hammerstein ⌘⌘"},
 		{func() { scroll.SeekStartFile(); scroll.SeekStartLine() }, "Love in your heart w"},
 		{func() { scroll.DeleteCell(term.Coordinates{X: 0, Y: 0}) }, "ove in your heart wa"},
 		{func() { scroll.DeleteCell(term.Coordinates{X: 14, Y: 0}) }, "ove in your hert was"},

@@ -1,8 +1,6 @@
 package component
 
 import (
-	"container/list"
-
 	"github.com/ernestrc/fractal"
 	"github.com/ernestrc/fractal/cell"
 	"github.com/ernestrc/fractal/term"
@@ -12,11 +10,10 @@ import (
 // scrolling, searching and wrap-around capabilities.
 type Scroll struct {
 	cell.Buffer
+	searcher      cell.Searcher
 	width, height int
 	searchText    []rune
 	offset        term.Coordinates
-	reslist       list.List
-	result        *list.Element
 	// foreground and background attributes
 	// for cells that match search results
 	ResultsAttr term.Attributes
@@ -26,10 +23,9 @@ type Scroll struct {
 }
 
 func (s *Scroll) resetProps() {
-	s.result = nil
 	s.searchText = nil
 	s.offset = term.Coordinates{}
-	s.reslist.Init()
+	s.searcher.Reset()
 }
 
 // NewScroll allocates storage for a Scroll and initializes it.
@@ -44,6 +40,7 @@ func NewScroll() (s *Scroll) {
 func (s *Scroll) Init() {
 	s.ResultsAttr.Fg, s.ResultsAttr.Bg = term.AttrReverse, term.AttrReverse
 	s.Buffer.Init()
+	s.searcher = cell.NewSimpleSearcher(&s.Buffer)
 	s.resetProps()
 }
 
@@ -289,92 +286,45 @@ func (s *Scroll) Draw(writer fractal.Writer) {
 
 // Search performs a text search of text in the internal cell buffer. It populates
 // a search list so SeekNextResult and SeekPreviousResult can be used to visualize results.
-// It returns the number of matches found.
-func (s *Scroll) Search(text string) int {
+// It returns the number of matches found. Note that it also sets the attributes of
+// the matching terms as defined by ResultsAttr.
+func (s *Scroll) Search(text string) (n int) {
 	s.Buffer.ResetAttr()
-	s.reslist.Init()
-	s.result = nil
 	s.searchText = []rune(text)
 
-	slen := len(s.searchText)
-	if slen == 0 {
-		return 0
+	n = s.searcher.Search(text)
+	if n == 0 {
+		return
 	}
 
-	var pos term.Coordinates
-	var o int
-	for y, r := range s.Buffer.RawCells() {
-		for x, c := range r {
-			if c.Ch != s.searchText[o] {
-				o = 0
-			} else if o == 0 {
-				pos = term.Coordinates{X: x, Y: y}
-				o++
-			} else {
-				o++
-			}
-			if o == slen {
-				s.reslist.PushBack(pos)
-				lX := pos.X + slen
-				for j := pos.X; j < lX; j++ {
-					s.Buffer.SetAttr(
-						term.Coordinates{X: j, Y: pos.Y},
-						s.ResultsAttr,
-					)
-				}
-				o = 0
-			}
+	slen := len(text)
+	for i := 0; i < n; i++ {
+		pos, _ := s.searcher.NextResult()
+		lX := pos.X + slen
+		for j := pos.X; j < lX; j++ {
+			s.Buffer.SetAttr(
+				term.Coordinates{X: j, Y: pos.Y},
+				s.ResultsAttr,
+			)
 		}
-		// search is not performed across rows
-		o = 0
 	}
 
-	return s.reslist.Len()
+	return
 }
 
 // PrevResult returns the coordinates of the previous result in the Search list.
 func (s *Scroll) PrevResult() (pos term.Coordinates, ok bool) {
-	if s.result == nil {
-		s.result = s.reslist.Back()
-	} else if s.result = s.result.Prev(); s.result == nil {
-		s.result = s.reslist.Back()
-	}
-
-	if s.result == nil {
-		return
-	}
-
-	pos = s.result.Value.(term.Coordinates)
-	ok = true
-	return
+	return s.searcher.PrevResult()
 }
 
 // NextResult returns the coordinates of the next result in the Search list.
 func (s *Scroll) NextResult() (pos term.Coordinates, ok bool) {
-	if s.result == nil {
-		s.result = s.reslist.Front()
-	} else if s.result = s.result.Next(); s.result == nil {
-		s.result = s.reslist.Front()
-	}
-
-	if s.result == nil {
-		return
-	}
-
-	pos = s.result.Value.(term.Coordinates)
-	ok = true
-	return
+	return s.searcher.NextResult()
 }
 
 // Result returns the current search result's coordinates.
 func (s *Scroll) Result() (pos term.Coordinates, ok bool) {
-	if s.result == nil {
-		ok = false
-		return
-	}
-	pos = s.result.Value.(term.Coordinates)
-	ok = true
-	return
+	return s.searcher.Result()
 }
 
 // Offset returns the scroll offset from the start of the content.
