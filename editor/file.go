@@ -51,6 +51,7 @@ type FileBuffer struct {
 	reader       cell.Reader
 	writer       cell.Writer
 	delayedError error
+	unflushed    bool
 }
 
 // FileBuffer cell.Writer API should not be used publicly
@@ -277,6 +278,7 @@ func (f *fileBuf) delayCopySwapError(err error) {
 }
 
 func (f *fileBuf) copyFlushSwapFile() (ok bool) {
+	f.unflushed = true
 	str := f.reader.String()
 	err := f.swap.Truncate(0)
 	if err != nil {
@@ -351,6 +353,11 @@ func (f *FileBuffer) touchFile() (err error) {
 	return
 }
 
+// Flushed returns true if the contents of the Buffer have been flushed to file system.
+func (f *FileBuffer) Flushed() bool {
+	return !f.unflushed
+}
+
 // Flush saves the contents of the buffer to disk. If file was modified by some
 // other process, this method returns ErrStaleData.
 func (f *FileBuffer) Flush() error {
@@ -392,6 +399,8 @@ func (f *FileBuffer) Flush() error {
 	if err != nil {
 		return err
 	}
+
+	f.unflushed = false
 
 	return nil
 }

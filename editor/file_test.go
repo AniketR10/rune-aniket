@@ -21,7 +21,9 @@ import (
 
 /* INTEGRATION TESTS */
 
-func newIntegrationTestCase(t *testing.T, endsInEOL bool) (*cell.Buffer, *os.File, func()) {
+func newIntegrationTestCase(t *testing.T, endsInEOL bool) (
+	*cell.Buffer, *os.File, func(),
+) {
 	buffer := cell.NewBuffer()
 	file, err := ioutil.TempFile("", "frctl_file_test")
 	require.NoError(t, err)
@@ -760,4 +762,54 @@ func TestRecoverFileBufferDelete(t *testing.T) {
 
 func TestRecoverFileBufferInsert(t *testing.T) {
 	testFileBufferInsert(t, newRecoveredTestFileBuffer)
+}
+
+func testFileBufferFlushed(t *testing.T, newBuffer newBufferFunc) {
+	t.Run("Flushed should return true upon initialization", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		f, _, _ := newBuffer(t, ctrl)
+		assert.True(t, f.Flushed())
+	})
+
+	t.Run("Flushed should return false after insert is called", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		f, mock, buf := newBuffer(t, ctrl)
+
+		myString := "fjklew"
+		expectCopyToSwap(mock, myString)
+		buf.InsertString(term.Coordinates{}, myString)
+
+		assert.False(t, f.Flushed())
+	})
+
+	t.Run("Flushed should return false after delete is called", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		f, mock, buf := newBuffer(t, ctrl)
+
+		myString := "fjklew"
+		expectCopyToSwap(mock, myString)
+		buf.DeleteRow(0)
+
+		assert.False(t, f.Flushed())
+	})
+
+	t.Run("Flushed should return false after delete is called", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		f, mock, buf := newBuffer(t, ctrl)
+
+		myString := ""
+		expectCopyToSwap(mock, myString)
+		buf.DeleteRow(0)
+
+		require.NoError(t, f.Flush())
+		assert.True(t, f.Flushed())
+	})
 }
