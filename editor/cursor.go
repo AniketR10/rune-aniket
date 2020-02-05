@@ -10,9 +10,9 @@ import (
 
 const (
 	noSelection = iota
-	visualSelection
-	visualLineSelection
-	visualBlockSelection
+	standardSelection
+	lineSelection
+	blockSelection
 )
 
 // Cursor is a helper structure which manages a cursor over a Scroll.
@@ -599,11 +599,11 @@ func (c *Cursor) setSelection() {
 	to := c.cursorAtScroll()
 
 	switch c.selection.mode {
-	case visualSelection:
+	case standardSelection:
 		c.selection.cells = c.scroll.Select(from, to)
-	case visualLineSelection:
+	case lineSelection:
 		c.selection.cells = c.scroll.SelectLine(from, to)
-	case visualBlockSelection:
+	case blockSelection:
 		c.selection.cells = c.scroll.SelectBlock(from, to)
 	}
 
@@ -627,7 +627,7 @@ func (c *Cursor) Select() (ok bool) {
 		return
 	}
 	c.selection.scrollFrom = c.cursorAtScroll()
-	c.selection.mode = visualSelection
+	c.selection.mode = standardSelection
 	c.setSelection()
 	return
 }
@@ -640,7 +640,7 @@ func (c *Cursor) SelectLine() (ok bool) {
 		return
 	}
 	c.selection.scrollFrom = c.cursorAtScroll()
-	c.selection.mode = visualLineSelection
+	c.selection.mode = lineSelection
 	c.setSelection()
 	return
 }
@@ -653,7 +653,7 @@ func (c *Cursor) SelectBlock() (ok bool) {
 		return
 	}
 	c.selection.scrollFrom = c.cursorAtScroll()
-	c.selection.mode = visualBlockSelection
+	c.selection.mode = blockSelection
 	c.setSelection()
 	return
 }
@@ -714,8 +714,22 @@ func (c *Cursor) DeleteSelection() (ok bool) {
 	if ok = c.inBounds(); !ok {
 		return
 	}
+
+	mode := c.selection.mode
+	from := c.selection.scrollFrom
+	to := c.cursorAtScroll()
+
 	c.Unselect()
-	start, _, _ := c.scroll.Delete(c.selection.scrollFrom, c.cursorAtScroll())
+
+	var start term.Coordinates
+	switch mode {
+	case standardSelection:
+		start, _, _ = c.scroll.Delete(from, to)
+	case lineSelection:
+		start, _, _ = c.scroll.DeleteLine(from, to)
+	case blockSelection:
+		start, _, _ = c.scroll.DeleteBlock(from, to)
+	}
 	c.setCursor(c.scrollToWindowCoordinates(start))
 	return
 }
