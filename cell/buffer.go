@@ -125,7 +125,8 @@ func (b *Buffer) inStrictBounds(pos term.Coordinates) (ok bool) {
 }
 
 func (b *Buffer) inBounds(pos term.Coordinates) (ok bool) {
-	if pos.Y >= b.reader.Rows() || pos.X > b.reader.Columns(pos.Y) {
+	if pos.Y < 0 || pos.Y >= b.reader.Rows() ||
+		pos.X < 0 || pos.X > b.reader.Columns(pos.Y) {
 		return
 	}
 	ok = true
@@ -269,6 +270,53 @@ func (b *Buffer) Delete(from, to term.Coordinates) (start, end term.Coordinates,
 		panic(fmt.Sprintf("out of bounds: from=%+v, to=%+v", from, to))
 	}
 	return b.writer.Delete(from, to)
+}
+
+// DeleteLine deletes the lines starting at from, between from, to and including end.
+// See Delete for more information about the return values.
+func (b *Buffer) DeleteLine(from, to term.Coordinates) (
+	start, end term.Coordinates, str string,
+) {
+	from.X, to.X = 0, b.Columns(to.Y)-1
+	if to.X < 0 {
+		to.X = 0
+	}
+	return b.Delete(from, to)
+}
+
+// DeleteBlock deletes the blocks of cells between from, to. See SelectBlock for more
+// information about how DeleteBlock selects the cells to delete.
+// See Delete for more information about the return values.
+func (b *Buffer) DeleteBlock(from, to term.Coordinates) (
+	start, end term.Coordinates, str string,
+) {
+	builder := strings.Builder{}
+
+	b.selector.iterateBlocks(from, to,
+		func(i int, from, to term.Coordinates, cells []term.Cell) {
+			if b.Columns(from.Y) == 0 {
+				if i == 0 {
+					start = term.Coordinates{Y: from.Y}
+				} else {
+					_ = builder.WriteByte('\n')
+				}
+				end = term.Coordinates{Y: from.Y}
+				return
+			}
+			blockStart, blockEnd, blockStr := b.Delete(from, to)
+
+			if i == 0 {
+				start = blockStart
+			} else {
+				_ = builder.WriteByte('\n')
+			}
+			end = blockEnd
+			_, _ = builder.WriteString(blockStr)
+		})
+
+	str = builder.String()
+
+	return
 }
 
 // Reset resets the contents of this Buffer.

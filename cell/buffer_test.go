@@ -267,3 +267,83 @@ func TestBufferEndsWithEOL(t *testing.T) {
 
 	assert.Equal(t, "1234", b.String())
 }
+
+func TestBufferDeleteLine(t *testing.T) {
+	tsuite := []struct {
+		from, to   term.Coordinates
+		input      string
+		output     string
+		start, end term.Coordinates
+	}{
+		{
+			from:   term.Coordinates{X: 1},
+			to:     term.Coordinates{Y: 1, X: 2},
+			input:  "bla\nbleh",
+			output: "bla\nbleh",
+			start:  term.Coordinates{},
+			end:    term.Coordinates{Y: 1, X: 3},
+		},
+		{
+			from:   term.Coordinates{X: 1}, // should not matter that is oob
+			to:     term.Coordinates{Y: 2},
+			input:  "\nbla\n\nbleh\n",
+			output: "\nbla\n\n",
+			start:  term.Coordinates{},
+			end:    term.Coordinates{Y: 2},
+		},
+	}
+
+	for _, tcase := range tsuite {
+		b := NewBuffer()
+		b.WriteString(tcase.input)
+
+		start, end, str := b.DeleteLine(tcase.from, tcase.to)
+		assert.Equal(t, tcase.start, start)
+		assert.Equal(t, tcase.end, end)
+		assert.Equal(t, tcase.output, str)
+	}
+}
+
+func TestBufferDeleteBlock(t *testing.T) {
+	tsuite := []struct {
+		from, to   term.Coordinates
+		input      string
+		output     string
+		start, end term.Coordinates
+	}{
+		{
+			from:   term.Coordinates{X: 1},
+			to:     term.Coordinates{Y: 1, X: 2},
+			input:  "bla\nbleh",
+			output: "la\nle",
+			start:  term.Coordinates{X: 1},
+			end:    term.Coordinates{Y: 1, X: 2},
+		},
+		{ // inverted
+			to:     term.Coordinates{X: 1},
+			from:   term.Coordinates{Y: 1, X: 2},
+			input:  "bla\nbleh",
+			output: "la\nle",
+			start:  term.Coordinates{X: 1},
+			end:    term.Coordinates{Y: 1, X: 2},
+		},
+		{
+			from:   term.Coordinates{},
+			to:     term.Coordinates{Y: 2},
+			input:  "\nbla\n\nbleh\n",
+			output: "\nb\n",
+			start:  term.Coordinates{},
+			end:    term.Coordinates{Y: 2},
+		},
+	}
+
+	for _, tcase := range tsuite {
+		b := NewBuffer()
+		b.WriteString(tcase.input)
+
+		start, end, str := b.DeleteBlock(tcase.from, tcase.to)
+		assert.Equal(t, tcase.start, start)
+		assert.Equal(t, tcase.end, end)
+		assert.Equal(t, tcase.output, str)
+	}
+}
