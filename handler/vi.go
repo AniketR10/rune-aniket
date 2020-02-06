@@ -11,16 +11,38 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-// TODO select line seems to not behave correctly
+// TODO on normal '*' searches word under cursor. Add Cursor.Word()
+// TODO '>' selection tabs to the right selection
+// TODO '%s' search and replace text
 
 type viMode uint8
+type moveMode uint8
 
 const (
 	normal viMode = iota
 	insert
 	visual
 	command
+	moveToCharacter
 )
+
+const (
+	moveToNext moveMode = iota
+	moveToPrev
+	// moveToNextPad
+	// moveToPrevPad
+)
+
+func moveOpposite(m moveMode) moveMode {
+	switch m {
+	case moveToNext:
+		return moveToPrev
+	case moveToPrev:
+		return moveToNext
+	default:
+		panic("not a known moving mode")
+	}
+}
 
 // viConfig holds configuration for Vi.
 type viConfig struct {
@@ -110,6 +132,8 @@ type Vi struct {
 	raw, cursor editor.Cursor
 	fileBuf     *editor.FileBuffer
 	mode        viMode
+	moveMode    moveMode
+	moveChar    rune
 	command     []rune
 }
 
@@ -255,6 +279,11 @@ func (vi *Vi) setCommandMode() {
 	vi.setMode("COMMAND", command)
 }
 
+func (vi *Vi) setMoveToCharacterMode(mode moveMode) {
+	vi.setMode("MOVE-TO", moveToCharacter)
+	vi.moveMode = mode
+}
+
 // we delegate search buffer Component to Less but delegate cursor position
 // and results seeking to Editor so this function makes sure that we only
 // perform the search once, at the same time we delegate the right logic to
@@ -277,23 +306,32 @@ func (vi *Vi) pasteClipboard() bool {
 		vi.logger.Error("clipboard.Get: ", err)
 		return false
 	}
+	// TODO add new field to keep clipboards selection mode
+	// TODO switch over selection mode
 	vi.cursor.InsertString(str)
 	return true
-}
-
-func (vi *Vi) deleteCell() {
-	vi.cursor.Delete()
 }
 
 func (vi *Vi) handleNormal(ev term.Event) bool {
 	switch ev.Type {
 	case term.EventKey:
 		switch ev.Ch {
+		case ',':
+			mode := moveOpposite(vi.moveMode)
+			event := term.Event{Type: term.EventKey, Ch: vi.moveChar}
+			vi.handleMoveToCharacter(mode, event)
+		case ';':
+			event := term.Event{Type: term.EventKey, Ch: vi.moveChar}
+			vi.handleMoveToCharacter(vi.moveMode, event)
+		case 'f':
+			vi.setMoveToCharacterMode(moveToNext)
+		case 'F':
+			vi.setMoveToCharacterMode(moveToPrev)
 		case ':':
 			vi.setCommandMode()
 			vi.handleCommand(ev)
 		case 'N':
-			vi.cursor.MovePrevSearchResult()
+			vi.cursor.MoveToPrevMatch()
 		case 'p':
 			vi.cursor.MoveRight()
 			vi.pasteClipboard()
@@ -301,7 +339,7 @@ func (vi *Vi) handleNormal(ev term.Event) bool {
 		case 'P':
 			vi.pasteClipboard()
 		case 'n':
-			vi.cursor.MoveNextSearchResult()
+			vi.cursor.MoveToNextMatch()
 		case '0':
 			vi.cursor.MoveStartLine()
 		case '$':
@@ -432,6 +470,23 @@ func (vi *Vi) handleVisual(ev term.Event) (quit bool) {
 	return
 }
 
+func (vi *Vi) handleMoveToCharacter(mode moveMode, ev term.Event) (quit bool) {
+	switch ev.Type {
+	case term.EventKey:
+		switch mode {
+		case moveToNext:
+			vi.cursor.MoveToNextChar(ev.Ch)
+		case moveToPrev:
+			vi.cursor.MoveToPrevChar(ev.Ch)
+		}
+		vi.moveChar = ev.Ch
+		vi.setNormalMode()
+	default:
+		vi.setNormalMode()
+	}
+	return
+}
+
 func (vi *Vi) runCommand() (quit bool, err error) {
 	cmd := string(vi.command[1:])
 	switch cmd {
@@ -495,6 +550,8 @@ func (vi *Vi) Handle(ev term.Event) (quit bool) {
 		quit = vi.handleInsert(ev)
 	case visual:
 		quit = vi.handleVisual(ev)
+	case moveToCharacter:
+		quit = vi.handleMoveToCharacter(vi.moveMode, ev)
 	case command:
 		quit = vi.handleCommand(ev)
 	default:
@@ -505,7 +562,7 @@ func (vi *Vi) Handle(ev term.Event) (quit bool) {
 	vi.raw = vi.cursor
 
 	switch vi.mode {
-	case normal, visual, command:
+	case normal, visual, command, moveToCharacter:
 		vi.cursor.MoveToBounds(0)
 		vi.cursor.MoveToNextNonNull()
 	case insert:

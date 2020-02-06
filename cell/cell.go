@@ -20,3 +20,9 @@ type Writer interface {
 	Insert(at term.Coordinates, str string) (from, to term.Coordinates)
 	Delete(from, to term.Coordinates) (start, end term.Coordinates, str string)
 }
+
+// NewReader returns a new Reader which reads from cells and uses tabspaces.
+func NewReader(cells [][]term.Cell, tabspaces int) Reader {
+	r := &rawCells{cells: cells, tabspaces: tabspaces}
+	return r
+}

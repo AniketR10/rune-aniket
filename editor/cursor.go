@@ -52,6 +52,7 @@ func (c *Cursor) Cursor() (term.Coordinates, bool) {
 	return c.cursor, true
 }
 
+// note that pos is window coordinates, not scroll coordinates
 func (c *Cursor) setCursor(pos term.Coordinates) {
 	if pos.X < 0 || pos.Y < 0 ||
 		pos.X >= c.scroll.Width() || pos.Y >= c.scroll.Height() {
@@ -70,7 +71,7 @@ func (c *Cursor) setCursor(pos term.Coordinates) {
 // the number of occurrences found.
 func (c *Cursor) Search(text string) int {
 	res := c.scroll.Search(text)
-	c.MoveNextSearchResult()
+	c.MoveToNextMatch()
 	return res
 }
 
@@ -82,15 +83,15 @@ func (c *Cursor) setCursorResult() (ok bool) {
 	return
 }
 
-// MoveNextSearchResult moves the cursor to the next search result if any.
-func (c *Cursor) MoveNextSearchResult() (ok bool) {
+// MoveToNextMatch moves the cursor to the next search result if any.
+func (c *Cursor) MoveToNextMatch() (ok bool) {
 	c.scroll.SeekNextResult()
 	ok = c.setCursorResult()
 	return
 }
 
-// MovePrevSearchResult moves the cursor to the next search result if any.
-func (c *Cursor) MovePrevSearchResult() (ok bool) {
+// MoveToPrevMatch moves the cursor to the next search result if any.
+func (c *Cursor) MoveToPrevMatch() (ok bool) {
 	c.scroll.SeekPrevResult()
 	ok = c.setCursorResult()
 	return
@@ -765,4 +766,71 @@ func (c *Cursor) MoveToNextNonNull() {
 		}
 		break
 	}
+}
+
+func (c *Cursor) moveToChar(
+	ch rune, findResult func(int, cell.Searcher) (term.Coordinates, bool),
+) bool {
+	cursor := c.cursorAtScroll()
+	lastPos := c.scroll.Columns(cursor.Y) - 1
+	if lastPos < 0 {
+		lastPos = 0
+	}
+	start := term.Coordinates{Y: cursor.Y}
+	end := term.Coordinates{Y: cursor.Y, X: lastPos}
+
+	cells := c.scroll.Select(start, end)
+	if len(cells) == 0 {
+		return false
+	}
+
+	reader := cell.NewReader(cells, c.scroll.Buffer.Tabspaces())
+
+	searcher := cell.NewSimpleSearcher(reader)
+	n := searcher.Search(string(ch))
+	if n == 0 {
+		return false
+	}
+
+	result, ok := findResult(n, searcher)
+	if !ok { // results not aligned with direction
+		return false
+	}
+
+	resultAtScroll := term.Coordinates{Y: cursor.Y, X: result.X}
+
+	resultAtWindow := c.scrollToWindowCoordinates(resultAtScroll)
+	c.setCursor(resultAtWindow)
+
+	return true
+}
+
+// MoveToNextChar moves the cursor to the next occurence of ch in the current line,
+// from the cursor's current position.
+func (c *Cursor) MoveToNextChar(ch rune) bool {
+	cursor := c.cursorAtScroll()
+	return c.moveToChar(ch, func(n int, searcher cell.Searcher) (term.Coordinates, bool) {
+		for i := 0; i < n; i++ {
+			result, _ := searcher.NextResult()
+			if result.X > cursor.X {
+				return result, true
+			}
+		}
+		return term.Coordinates{}, false
+	})
+}
+
+// MoveToPrevChar moves the cursor to the previous occurence of ch in the current line,
+// from the cursor's current position.
+func (c *Cursor) MoveToPrevChar(ch rune) bool {
+	cursor := c.cursorAtScroll()
+	return c.moveToChar(ch, func(n int, searcher cell.Searcher) (term.Coordinates, bool) {
+		for i := 0; i < n; i++ {
+			result, _ := searcher.PrevResult()
+			if result.X < cursor.X {
+				return result, true
+			}
+		}
+		return term.Coordinates{}, false
+	})
 }

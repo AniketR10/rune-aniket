@@ -72,7 +72,7 @@ func TestCursorSearch(t *testing.T) {
 			0,
 			"nothing",
 			func(t *testing.T, e *Cursor) {
-				assert.False(t, e.MoveNextSearchResult())
+				assert.False(t, e.MoveToNextMatch())
 			}, term.Coordinates{},
 		},
 		{
@@ -83,12 +83,12 @@ func TestCursorSearch(t *testing.T) {
 			nil, term.Coordinates{X: 14, Y: 18},
 		},
 		{
-			"MoveNextSearchResult does nothing if only one result is found",
+			"MoveToNextMatch does nothing if only one result is found",
 			1000, 1000,
 			1,
 			"else",
 			func(t *testing.T, e *Cursor) {
-				assert.True(t, e.MoveNextSearchResult())
+				assert.True(t, e.MoveToNextMatch())
 			}, term.Coordinates{X: 4, Y: 29},
 		},
 		{
@@ -100,21 +100,21 @@ func TestCursorSearch(t *testing.T) {
 			term.Coordinates{X: 7, Y: 0},
 		},
 		{
-			"Seeks to last result upon MovePrevSearchResult",
+			"Seeks to last result upon MoveToPrevMatch",
 			1000, 1000,
 			2,
 			"NULL",
 			func(t *testing.T, e *Cursor) {
-				assert.True(t, e.MovePrevSearchResult())
+				assert.True(t, e.MoveToPrevMatch())
 			}, term.Coordinates{X: 32, Y: 23},
 		},
 		{
-			"Seeks if MoveNextSearchResult result is not in window",
+			"Seeks if MoveToNextMatch result is not in window",
 			100, 10,
 			2,
 			"NULL",
 			func(t *testing.T, e *Cursor) {
-				assert.True(t, e.MoveNextSearchResult())
+				assert.True(t, e.MoveToNextMatch())
 			}, term.Coordinates{X: 32, Y: 1},
 		},
 	}
@@ -494,6 +494,72 @@ func TestCursorMove(t *testing.T) {
 				assert.Equal(t, '{', c.Ch)
 			},
 			term.Coordinates{X: 5, Y: 31},
+		},
+		{
+			"MoveToNextChar should do nothing if there is no matches in the line",
+			10, 10,
+			func(t *testing.T, e *Cursor) {
+				e.MoveDown()
+				e.MoveRight()
+				assert.False(t, e.MoveToNextChar('a'))
+			},
+			term.Coordinates{X: 1, Y: 1},
+		},
+		{
+			"MoveToNextChar should do nothing if are only matches before cursor",
+			10, 10,
+			func(t *testing.T, e *Cursor) {
+				e.MoveDown()
+				e.MoveRight()
+				assert.False(t, e.MoveToNextChar('/'))
+			},
+			term.Coordinates{X: 1, Y: 1},
+		},
+		{
+			"MoveToNextChar should move the cursor to a matching character",
+			10, 10,
+			func(t *testing.T, e *Cursor) {
+				e.MoveDown()
+				e.MoveDown()
+				assert.True(t, e.MoveToNextChar('o'))
+
+				c, _ := e.scroll.Cell(e.cursorAtScroll())
+				assert.Equal(t, 'o', c.Ch)
+			},
+			term.Coordinates{X: 9, Y: 2},
+		},
+		{
+			"MoveToPrevChar should do nothing if there is no matches in the line",
+			10, 10,
+			func(t *testing.T, e *Cursor) {
+				e.MoveDown()
+				e.MoveRight()
+				assert.False(t, e.MoveToPrevChar('a'))
+			},
+			term.Coordinates{X: 1, Y: 1},
+		},
+		{
+			"MoveToPrevChar should do nothing if are only matches after cursor",
+			10, 10,
+			func(t *testing.T, e *Cursor) {
+				e.MoveDown()
+				assert.False(t, e.MoveToPrevChar('/'))
+			},
+			term.Coordinates{X: 0, Y: 1},
+		},
+		{
+			"MoveToPrevChar should move the cursor to a matching character",
+			10, 10,
+			func(t *testing.T, e *Cursor) {
+				e.MoveDown()
+				e.MoveDown()
+				e.MoveEndLine()
+				assert.True(t, e.MoveToPrevChar('C'))
+
+				c, _ := e.scroll.Cell(e.cursorAtScroll())
+				assert.Equal(t, 'C', c.Ch)
+			},
+			term.Coordinates{X: 0, Y: 2},
 		},
 	}
 

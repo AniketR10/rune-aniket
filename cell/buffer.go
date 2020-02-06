@@ -387,3 +387,8 @@ func (b *Buffer) String() string {
 func (b *Buffer) EndsWithEOL() bool {
 	return b.unixReader.endswithEOL()
 }
+
+// Tabspaces returns the number of tabspaces uses to initialized this Buffer.
+func (b *Buffer) Tabspaces() int {
+	return b.tabspaces
+}

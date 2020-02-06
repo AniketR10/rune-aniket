@@ -221,6 +221,61 @@ Error: Cannot NORMAL`},
  diff_redraw(TRUE); 
  }                  
 :             NORMAL`},
+		{"F(",
+			`f ▐wp == NULL)hello 
+                    
+ i = diff_buf_idx(wi
+ if (i != DB_COUNT) 
+ {                  
+ curtab->tp_diffbuf[
+ curtab->tp_diff_inv
+ diff_redraw(TRUE); 
+ }                  
+:             NORMAL`},
+		{"f)",
+			`f (wp == NULL▐hello 
+                    
+ i = diff_buf_idx(wi
+ if (i != DB_COUNT) 
+ {                  
+ curtab->tp_diffbuf[
+ curtab->tp_diff_inv
+ diff_redraw(TRUE); 
+ }                  
+:             NORMAL`},
+		{"F=",
+			`f (wp =▐ NULL)hello 
+                    
+ i = diff_buf_idx(wi
+ if (i != DB_COUNT) 
+ {                  
+ curtab->tp_diffbuf[
+ curtab->tp_diff_inv
+ diff_redraw(TRUE); 
+ }                  
+:             NORMAL`},
+		{";",
+			`f (wp ▐= NULL)hello 
+                    
+ i = diff_buf_idx(wi
+ if (i != DB_COUNT) 
+ {                  
+ curtab->tp_diffbuf[
+ curtab->tp_diff_inv
+ diff_redraw(TRUE); 
+ }                  
+:             NORMAL`},
+		{",",
+			`f (wp =▐ NULL)hello 
+                    
+ i = diff_buf_idx(wi
+ if (i != DB_COUNT) 
+ {                  
+ curtab->tp_diffbuf[
+ curtab->tp_diff_inv
+ diff_redraw(TRUE); 
+ }                  
+:             NORMAL`},
 	}
 
 	testBatchWorkload(t, 20, 10, cases)
