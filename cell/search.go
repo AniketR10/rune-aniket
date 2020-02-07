@@ -6,11 +6,6 @@ import (
 	"github.com/ernestrc/fractal/term"
 )
 
-// TODO define new readerCache which is a cell.Writer/Reader that installs itself
-// and caches calls to RawCells/String/etc.
-// TODO define new tokenizer reader/writer that installs itself and caches tokenization.
-// TODO plugin https://github.com/monochromegane/the_platinum_searcher
-
 // Searcher is an interface that wraps methods to search text in a Reader.
 type Searcher interface {
 	// Search performs a text search on a Reader. It populates a search list
@@ -19,11 +14,15 @@ type Searcher interface {
 	Search(text string) int
 
 	// PrevResult returns the coordinates of the previous result in the Search list
-	// and moves the search result pointer.
+	// and moves the search result pointer. Returns false if there aren't any search
+	// matches. Implementors should wrap around and continue to the
+	// last match once result list is exhausted.
 	PrevResult() (pos term.Coordinates, ok bool)
 
 	// NextResult returns the coordinates of the next result in the Search list
-	// and moves the search result pointer.
+	// and moves the search result pointer. Returns false if there aren't any search
+	// matches. Implementors should wrap around and continue to the
+	// first match once result list is exhausted.
 	NextResult() (pos term.Coordinates, ok bool)
 
 	// Result returns the search pointer's coordinates or false if there is no
