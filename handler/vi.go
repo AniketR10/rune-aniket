@@ -11,10 +11,6 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-// TODO on normal '*' searches word under cursor. Add Cursor.Word()
-// TODO '>' selection tabs to the right selection
-// TODO '%s' search and replace text
-
 type viMode uint8
 type moveMode uint8
 
@@ -306,8 +302,6 @@ func (vi *Vi) pasteClipboard() bool {
 		vi.logger.Error("clipboard.Get: ", err)
 		return false
 	}
-	// TODO add new field to keep clipboards selection mode
-	// TODO switch over selection mode
 	vi.cursor.InsertString(str)
 	return true
 }
@@ -380,6 +374,8 @@ func (vi *Vi) handleNormal(ev term.Event) bool {
 			vi.cursor.MoveRight()
 		case 'C':
 			vi.setInsertMode()
+			fallthrough
+		case 'D':
 			if vi.cursor.Select() {
 				vi.cursor.MoveEndLine()
 				vi.cursor.DeleteSelection()
