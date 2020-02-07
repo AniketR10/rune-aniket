@@ -834,3 +834,27 @@ func (c *Cursor) MoveToPrevChar(ch rune) bool {
 		return term.Coordinates{}, false
 	})
 }
+
+// ShiftLineRight shifts the current cursor's line one tab to the right.
+func (c *Cursor) ShiftLineRight() {
+	cursor := c.cursorAtScroll()
+	n := c.scroll.ShiftRowRight(cursor.Y)
+	cursor.X += n
+	c.setCursor(cursor)
+}
+
+// ShiftLineLeft shifts the current cursor's line one tab to the left. It returns
+// false if line's start of content is already at the start of the line.
+func (c *Cursor) ShiftLineLeft() bool {
+	cursor := c.cursorAtScroll()
+	n := c.scroll.ShiftRowLeft(cursor.Y)
+	if n == 0 {
+		return false
+	}
+	cursor.X -= n
+	if cursor.X < 0 {
+		cursor.X = 0
+	}
+	c.setCursor(cursor)
+	return true
+}

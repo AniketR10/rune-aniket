@@ -310,6 +310,10 @@ func (vi *Vi) handleNormal(ev term.Event) bool {
 	switch ev.Type {
 	case term.EventKey:
 		switch ev.Ch {
+		case '>':
+			vi.cursor.ShiftLineRight()
+		case '<':
+			vi.cursor.ShiftLineLeft()
 		case ',':
 			mode := moveOpposite(vi.moveMode)
 			event := term.Event{Type: term.EventKey, Ch: vi.moveChar}

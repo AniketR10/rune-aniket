@@ -287,7 +287,7 @@ Error: Cannot NORMAL`},
  diff_redraw(TRUE); 
  }                  
 :             NORMAL`},
- 		{"sbrillo",
+		{"sbrillo",
 			`f (wp brillo▐       
                     
  i = diff_buf_idx(wi

@@ -411,3 +411,32 @@ func (b *Buffer) EndsWithEOL() bool {
 func (b *Buffer) Tabspaces() int {
 	return b.tabspaces
 }
+
+// ShiftRowRight shifts row one tab to the right. It returns
+// the number of cells that the line was shifted.
+func (b *Buffer) ShiftRowRight(row int) int {
+	b.Insert(term.Coordinates{Y: row}, '\t')
+	return b.Tabspaces()
+}
+
+// ShiftRowLeft shifts row one tab to the left. It returns
+// the number of cells that the line was shifted.
+func (b *Buffer) ShiftRowLeft(row int) (chars int) {
+	for ; chars < b.Tabspaces(); chars++ {
+		c, ok := b.reader.Cell(term.Coordinates{Y: row, X: 0})
+		if !ok {
+			return
+		}
+
+		switch c.Ch {
+		case '\t', '\x00':
+			chars = b.Tabspaces() - 1
+			fallthrough
+		case ' ':
+			b.DeleteCell(term.Coordinates{Y: row})
+		default:
+			return
+		}
+	}
+	return
+}

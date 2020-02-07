@@ -347,3 +347,36 @@ func TestBufferDeleteBlock(t *testing.T) {
 		assert.Equal(t, tcase.output, str)
 	}
 }
+
+func TestBufferShiftRowTabs(t *testing.T) {
+	stringNoTab := "the_3T_ring_idea_is_fucking_cool\n:D"
+	origString := "\t" + stringNoTab
+	buf := NewBuffer()
+	buf.ReadFrom(strings.NewReader(origString))
+
+	shifted := buf.ShiftRowLeft(0)
+	assert.Equal(t, 4, shifted)
+	assert.Equal(t, stringNoTab, buf.String())
+
+	shifted = buf.ShiftRowLeft(0)
+	assert.Equal(t, 0, shifted)
+	assert.Equal(t, stringNoTab, buf.String())
+
+	shifted = buf.ShiftRowRight(0)
+	assert.Equal(t, 4, shifted)
+	assert.Equal(t, origString, buf.String())
+}
+
+func TestBufferShiftRowSpaces(t *testing.T) {
+	origString := "     "
+	buf := NewBuffer()
+	buf.ReadFrom(strings.NewReader(origString))
+
+	shifted := buf.ShiftRowLeft(0)
+	assert.Equal(t, 4, shifted)
+	assert.Equal(t, " ", buf.String())
+
+	shifted = buf.ShiftRowLeft(0)
+	assert.Equal(t, 1, shifted)
+	assert.Equal(t, "", buf.String())
+}

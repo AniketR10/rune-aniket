@@ -972,3 +972,19 @@ func TestCursorSkipNulls(t *testing.T) {
 	pos, _ = e.Cursor()
 	assert.Equal(t, term.Coordinates{X: 7, Y: 16}, pos)
 }
+
+func TestCursorShiftLine(t *testing.T) {
+	c := setupCursorContent(t, 10, 10, " blabla\nbleble")
+	assert.True(t, c.ShiftLineLeft())
+	assert.False(t, c.ShiftLineLeft())
+	assert.Equal(t, term.Coordinates{}, c.cursor)
+
+	c.ShiftLineRight()
+	assert.Equal(t, term.Coordinates{X: 4}, c.cursor)
+	c.ShiftLineRight()
+	assert.Equal(t, term.Coordinates{X: 8}, c.cursor)
+	assert.True(t, c.ShiftLineLeft())
+	assert.Equal(t, term.Coordinates{X: 4}, c.cursor)
+	assert.True(t, c.ShiftLineLeft())
+	assert.Equal(t, term.Coordinates{}, c.cursor)
+}
