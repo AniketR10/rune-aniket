@@ -171,12 +171,14 @@ func (f *FileBuffer) initBuffer(buf *cell.Buffer, file osFile) (err error) {
 	}
 
 	reader := buf.Reader()
-	writer := buf.Writer()
+	writer := buf.RootWriter()
 
 	f.reader = reader
 	f.writer = writer
 
-	buf.WithWriter((*fileBuf)(f))
+	// we want fileBuf to receive all updates, so we
+	// need to install with WithRootWriter.
+	buf.WithRootWriter((*fileBuf)(f))
 
 	return nil
 }

@@ -636,10 +636,9 @@ func expectCopyToSwap(mock *MockOsFile, newData string) {
 
 type newBufferFunc func(*testing.T, *gomock.Controller) (*FileBuffer, *MockOsFile, *cell.Buffer)
 
-func testFileBufferOp(
+func testFileBufferInsert(
 	t *testing.T,
 	newBuffer newBufferFunc,
-	op func(*cell.Buffer, string),
 ) {
 
 	t.Run("if copy to swap fails, retries on next insert", func(t *testing.T) {
@@ -707,30 +706,22 @@ func testFileBufferOp(
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), defaultFileName)
 	})
-}
 
-func testFileBufferDelete(t *testing.T, newBuffer newBufferFunc) {
-
-	testFileBufferOp(t, newBuffer, func(buf *cell.Buffer, data string) {
-		buf.InsertString(term.Coordinates{}, data)
-	})
-
-	t.Run("upon Delete, it copies content to swap file", func(t *testing.T) {
+	t.Run("Undo/Redo should be captured and therefore copied to swap file", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
 		_, mock, buf := newBuffer(t, ctrl)
-		expectCopyToSwapPrepare(mock)
-		mock.EXPECT().
-			WriteString(gomock.Eq("")).
-			Return(len(""), nil)
-		buf.DeleteRow(0)
-	})
-}
+		myString := "my string\n"
 
-func testFileBufferInsert(t *testing.T, newBuffer newBufferFunc) {
-	testFileBufferOp(t, newBuffer, func(buf *cell.Buffer, data string) {
-		buf.DeleteRow(0)
+		expectCopyToSwap(mock, myString)
+		buf.InsertString(term.Coordinates{}, myString)
+
+		expectCopyToSwap(mock, "")
+		buf.Undo()
+
+		expectCopyToSwap(mock, myString)
+		buf.Redo()
 	})
 
 	t.Run("upon Insert, it copies content to swap file", func(t *testing.T) {
@@ -745,6 +736,20 @@ func testFileBufferInsert(t *testing.T, newBuffer newBufferFunc) {
 		expectCopyToSwap(mock, myString)
 
 		buf.InsertString(term.Coordinates{}, myString)
+	})
+}
+
+func testFileBufferDelete(t *testing.T, newBuffer newBufferFunc) {
+	t.Run("upon Delete, it copies content to swap file", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		_, mock, buf := newBuffer(t, ctrl)
+		expectCopyToSwapPrepare(mock)
+		mock.EXPECT().
+			WriteString(gomock.Eq("")).
+			Return(len(""), nil)
+		buf.DeleteRow(0)
 	})
 }
 
