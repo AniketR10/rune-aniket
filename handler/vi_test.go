@@ -287,6 +287,17 @@ Error: Cannot NORMAL`},
  diff_redraw(TRUE); 
  }                  
 :             NORMAL`},
+ 		{"sbrillo",
+			`f (wp brillo▐       
+                    
+ i = diff_buf_idx(wi
+ if (i != DB_COUNT) 
+ {                  
+ curtab->tp_diffbuf[
+ curtab->tp_diff_inv
+ diff_redraw(TRUE); 
+ }                  
+:             INSERT`},
 	}
 
 	testBatchWorkload(t, 20, 10, cases)

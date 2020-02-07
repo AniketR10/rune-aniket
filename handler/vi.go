@@ -384,7 +384,6 @@ func (vi *Vi) handleNormal(ev term.Event) bool {
 			vi.cursor.Delete()
 		case 's':
 			vi.cursor.Delete()
-			vi.cursor.MoveRight()
 			vi.setInsertMode()
 		case 'v':
 			vi.setVisualMode()
