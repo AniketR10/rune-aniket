@@ -285,6 +285,9 @@ func newTestFileBuffer(ctrl *gomock.Controller) (*FileBuffer, *MockOsFile) {
 	f.renameFunc = func(oldName, newName string) error {
 		return nil
 	}
+	f.statFunc = func(name string) (os.FileInfo, error) {
+		return testFileInfo{}, nil
+	}
 	return f, mock
 }
 
@@ -302,7 +305,7 @@ func expectInitSwap(
 	mock *MockOsFile, fileName string, fileInfo os.FileInfo, data []byte,
 ) {
 	// stat original file
-	mock.EXPECT().Stat().Return(fileInfo, nil)
+	mock.EXPECT().Stat().Return(fileInfo, nil).AnyTimes()
 	// read original file
 	expectRead(mock, data)
 
@@ -450,7 +453,7 @@ func newRecoveredTestFileBuffer(t *testing.T, ctrl *gomock.Controller) (
 	*FileBuffer, *MockOsFile, *cell.Buffer,
 ) {
 	f, mock := newTestFileBuffer(ctrl)
-	mock.EXPECT().Stat().Return(testFileInfo{}, nil).Times(3)
+	mock.EXPECT().Stat().Return(testFileInfo{}, nil).AnyTimes()
 	mock.EXPECT().Close().Return(nil).Times(2)
 	expectInitSwap(mock, defaultFileName, testFileInfo{}, defaultFileData)
 	expectInitBuffer(mock, defaultFileData)
@@ -540,10 +543,12 @@ func testFileBufferFlush(t *testing.T, newBuffer newBufferFunc) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
-		f, mock, _ := newBuffer(t, ctrl)
+		f, _, _ := newBuffer(t, ctrl)
 
 		myErr := errors.New("what?")
-		mock.EXPECT().Stat().Return(nil, myErr)
+		f.statFunc = func(name string) (os.FileInfo, error) {
+			return nil, myErr
+		}
 		assert.Equal(t, myErr, f.Flush())
 	})
 
@@ -558,7 +563,6 @@ func testFileBufferFlush(t *testing.T, newBuffer newBufferFunc) {
 			return nil
 		}
 
-		mock.EXPECT().Stat().Return(testFileInfo{}, nil)
 		mock.EXPECT().Close().Return(nil).Times(2)
 		expectInitSwap(mock, defaultFileName, testFileInfo{}, defaultFileData)
 
@@ -570,13 +574,11 @@ func testFileBufferFlush(t *testing.T, newBuffer newBufferFunc) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
-		f, mock, _ := newBuffer(t, ctrl)
+		f, _, _ := newBuffer(t, ctrl)
 		myErr := errors.New("wtf")
 		f.renameFunc = func(oldName, newName string) error {
 			return myErr
 		}
-
-		mock.EXPECT().Stat().Return(testFileInfo{}, nil)
 
 		assert.Equal(t, myErr, f.Flush())
 	})
@@ -585,8 +587,10 @@ func testFileBufferFlush(t *testing.T, newBuffer newBufferFunc) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
-		f, mock, _ := newBuffer(t, ctrl)
-		mock.EXPECT().Stat().Return(testFileInfo{modTime: time.Now()}, nil)
+		f, _, _ := newBuffer(t, ctrl)
+		f.statFunc = func(name string) (os.FileInfo, error) {
+			return testFileInfo{modTime: time.Now()}, nil
+		}
 		assert.Error(t, ErrStaleData, f.Flush())
 	})
 }
@@ -669,7 +673,6 @@ func testFileBufferInsert(
 		buf.InsertString(term.Coordinates{}, myString)
 
 		expectCopyToSwap(mock, myString)
-		mock.EXPECT().Stat().Return(testFileInfo{}, nil)
 		mock.EXPECT().Close().Return(nil).Times(2)
 		expectInitSwap(mock, defaultFileName, testFileInfo{}, defaultFileData)
 		assert.NoError(t, f.Flush())

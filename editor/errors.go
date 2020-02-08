@@ -10,5 +10,5 @@ var (
 	ErrFileAlreadyOpen = errors.New("file is already open by another application")
 
 	// ErrStaleData is returned when a file was modified by some other application.
-	ErrStaleData = errors.New("file was modified before reading it")
+	ErrStaleData = errors.New("file was modified by another process since reading it")
 )

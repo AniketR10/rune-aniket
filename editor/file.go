@@ -32,6 +32,7 @@ type osFile interface {
 type openFunc func(name string, flag int, perm os.FileMode) (osFile, error)
 type removeFunc func(name string) error
 type renameFunc func(oldpath, newpath string) error
+type statFunc func(name string) (os.FileInfo, error)
 
 // FileBuffer is a struture which persists all updates to a swap file
 // and exposes methods to effectively fsync the contents to disk.
@@ -43,6 +44,7 @@ type FileBuffer struct {
 	openFunc     openFunc
 	removeFunc   removeFunc
 	renameFunc   renameFunc
+	statFunc     statFunc
 	swapDir      string
 	swapFileName string
 	fileName     string
@@ -230,6 +232,7 @@ func newOsFileBuffer() *FileBuffer {
 	ret.openFunc = osOpenFileFunc()
 	ret.removeFunc = os.Remove
 	ret.renameFunc = os.Rename
+	ret.statFunc = os.Stat
 	return ret
 }
 
@@ -378,7 +381,7 @@ func (f *FileBuffer) Flush() error {
 			return err
 		}
 	} else {
-		newFileInfo, err := f.orig.Stat()
+		newFileInfo, err := f.statFunc(f.orig.Name())
 		if err != nil {
 			return err
 		}
