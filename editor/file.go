@@ -36,10 +36,6 @@ type statFunc func(name string) (os.FileInfo, error)
 
 // FileBuffer is a struture which persists all updates to a swap file
 // and exposes methods to effectively fsync the contents to disk.
-//
-// It installs itself as the cell.Buffer's writer, intercepting all
-// calls to Insert/Delete but it doesn't intercept (therefore copy to swap
-// upon update) other methods like WriteString/Write/ReadFrom.
 type FileBuffer struct {
 	openFunc     openFunc
 	removeFunc   removeFunc
@@ -51,7 +47,6 @@ type FileBuffer struct {
 	info         os.FileInfo
 	orig, swap   osFile
 	reader       cell.Reader
-	writer       cell.Writer
 	delayedError error
 	unflushed    bool
 }
@@ -172,15 +167,9 @@ func (f *FileBuffer) initBuffer(buf *cell.Buffer, file osFile) (err error) {
 		defer file.Seek(0, 0)
 	}
 
-	reader := buf.Reader()
-	writer := buf.RootWriter()
+	f.reader = buf
 
-	f.reader = reader
-	f.writer = writer
-
-	// we want fileBuf to receive all updates, so we
-	// need to install with WithRootWriter.
-	buf.WithRootWriter((*fileBuf)(f))
+	buf.Subscribe((*fileBuf)(f))
 
 	return nil
 }
@@ -320,19 +309,13 @@ func (f *fileBuf) copyFlushSwapFile() (ok bool) {
 }
 
 // Insert : cell.Writer
-func (f *fileBuf) Insert(at term.Coordinates, str string) (
-	from, to term.Coordinates,
-) {
-	from, to = f.writer.Insert(at, str)
+func (f *fileBuf) OnInsert(from, to term.Coordinates, str string) {
 	f.copyFlushSwapFile()
 	return
 }
 
 // Delete : cell.Writer
-func (f *fileBuf) Delete(from, to term.Coordinates) (
-	start, end term.Coordinates, str string,
-) {
-	start, end, str = f.writer.Delete(from, to)
+func (f *fileBuf) OnDelete(from, to term.Coordinates, str string) {
 	f.copyFlushSwapFile()
 	return
 }

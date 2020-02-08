@@ -6,7 +6,6 @@ import (
 )
 
 type delClip struct {
-	writer    cell.Writer
 	clipboard Clipboard
 }
 
@@ -15,22 +14,13 @@ type delClip struct {
 func WithCopyDelete(clipboard Clipboard, buf *cell.Buffer) {
 	c := new(delClip)
 	c.clipboard = clipboard
-
-	writer := buf.Writer()
-	c.writer = writer
-	buf.WithWriter(c)
+	buf.Subscribe(c)
 }
 
-func (c *delClip) Insert(at term.Coordinates, str string) (
-	from, to term.Coordinates,
-) {
-	return c.writer.Insert(at, str)
+func (c *delClip) OnInsert(from, to term.Coordinates, str string) {
 }
 
-func (c *delClip) Delete(from, to term.Coordinates) (
-	start, end term.Coordinates, str string,
-) {
-	start, end, str = c.writer.Delete(from, to)
+func (c *delClip) OnDelete(from, to term.Coordinates, str string) {
 	c.clipboard.Set(Paste{Data: str})
 	return
 }

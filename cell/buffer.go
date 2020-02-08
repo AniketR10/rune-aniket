@@ -20,6 +20,7 @@ type Buffer struct {
 	undoer     *undoer
 	selector   selector
 	unixReader *unixFileReader
+	pub        *syncPublisher
 }
 
 // NewBuffer allocates storage for a new Buffer and initializes it.
@@ -37,10 +38,13 @@ func (b *Buffer) InitWithTabspaces(tabspaces int) {
 	b.tabspaces = tabspaces
 	b.readerFrom = cells
 
+	b.pub = newPublisher(cells)
 	b.unixReader = newUnixFileReader(cells)
 	b.reader = b.unixReader
 
-	b.WithRootWriter(cells)
+	// setup the publisher as the deepest Writer
+	b.undoer = newUndoer(b.pub)
+	b.writer = b.undoer
 
 	b.selector.reader = b.reader
 }
@@ -50,52 +54,13 @@ func (b *Buffer) Init() {
 	b.InitWithTabspaces(defTabSpaces)
 }
 
-// WithReader sets this Buffer's Reader to r. This method along
-// with Reader can be used to install a pipeline of Reader's.
-func (b *Buffer) WithReader(r Reader) *Buffer {
-	b.reader = r
-	return b
-}
-
-// WithWriter sets this Buffer's Writer to w. This method along
-// with Writer can be used to install a pipeline of Writers's.
-func (b *Buffer) WithWriter(w Writer) *Buffer {
-	b.writer = w
-	return b
-}
-
-// Reader returns this Buffer's cell.Reader.
-func (b *Buffer) Reader() Reader {
-	return b.reader
-}
-
-// Writer returns this Buffer's cell.Writer.
-func (b *Buffer) Writer() Writer {
-	return b.writer
-}
-
-// RootWriter returns this Buffer's underlying cell.Writer.
-// All updates go through the Writer returned by this method.
-func (b *Buffer) RootWriter() Writer {
-	return b.rootWriter
-}
-
-// WithRootWriter sets the underlying Writer upon which the rest of
-// Writers are installed. Note that subsequent calls to RootWriter
-// will return this writer. Note that updates made with WithWriter
-// are overwritten by this method so this should be called first.
-func (b *Buffer) WithRootWriter(w Writer) *Buffer {
-	b.rootWriter = w
-	b.undoer = newUndoer(w)
-	b.writer = b.undoer
-	return b
-}
-
 // WithLogger adds a cell logger which intercepts and logs all
 // the calls to the underlying Writer/Reader.
 func (b *Buffer) WithLogger(logger *log.Logger) *Buffer {
-	cellLogger := newLogger(b.Reader(), b.Writer(), logger)
-	return b.WithReader(cellLogger).WithWriter(cellLogger)
+	cellLogger := newLogger(b.reader, b.writer, logger)
+	b.reader = cellLogger
+	b.writer = cellLogger
+	return b
 }
 
 // InsertRowAt inserts a new row at given position. If pos is out of bounds,
@@ -439,4 +404,9 @@ func (b *Buffer) ShiftRowLeft(row int) (chars int) {
 		}
 	}
 	return
+}
+
+// Subscribe subscribes s to all updates to the underlying buffer.
+func (b *Buffer) Subscribe(s Subscriber) {
+	b.pub.subscribe(s)
 }
