@@ -211,7 +211,7 @@ Error: Cannot NORMAL`},
  }                  
 :             NORMAL`},
 		{"p",
-			`f (wp == NULL)hell▐ 
+			`f (wp == NULL)▐ello 
                     
  i = diff_buf_idx(wi
  if (i != DB_COUNT) 
@@ -298,7 +298,7 @@ Error: Cannot NORMAL`},
  diff_redraw(TRUE); 
  }                  
 :             INSERT`},
- 		{"<hhhhhhR == NULL)",
+		{"<hhhhhhR == NULL)",
 			`f (wp == NULL)▐     
                     
  i = diff_buf_idx(wi
@@ -309,7 +309,7 @@ Error: Cannot NORMAL`},
  diff_redraw(TRUE); 
  }                  
 :            REPLACE`},
-  		{"<r]h",
+		{"<r]h",
 			`f (wp == NUL▐]      
                     
  i = diff_buf_idx(wi
@@ -319,6 +319,17 @@ Error: Cannot NORMAL`},
  curtab->tp_diff_inv
  diff_redraw(TRUE); 
  }                  
+:             NORMAL`},
+		{"Vyp",
+			`  if (wp == NULL]   
+ ▐if (wp == NULL]   
+  {                 
+    i = diff_buf_idx
+    if (i != DB_COUN
+    {               
+    curtab->tp_diffb
+    curtab->tp_diff_
+    diff_redraw(TRUE
 :             NORMAL`},
 	}
 

@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"bufio"
 	"fmt"
 	"strings"
 
@@ -18,6 +19,8 @@ const (
 	normalMode viMode = iota
 	insertMode
 	visualMode
+	visualLineMode
+	visualBlockMode
 	commandMode
 	moveToCharMode
 	replaceMode
@@ -263,13 +266,13 @@ func (vi *Vi) setVisualMode() {
 
 func (vi *Vi) setVisualLineMode() {
 	if vi.cursor.SelectLine() {
-		vi.setMode("V-LINE", visualMode)
+		vi.setMode("V-LINE", visualLineMode)
 	}
 }
 
 func (vi *Vi) setVisualBlockMode() {
 	if vi.cursor.SelectBlock() {
-		vi.setMode("V-BLOCK", visualMode)
+		vi.setMode("V-BLOCK", visualBlockMode)
 	}
 }
 
@@ -306,13 +309,75 @@ func (vi *Vi) handleSearch(ev term.Event) bool {
 	return false
 }
 
-func (vi *Vi) pasteClipboard() bool {
-	str, err := vi.config.Clipboard.Get()
+func (vi *Vi) insertBlock(str string) {
+	reader := bufio.NewReader(strings.NewReader(str))
+	for {
+		str, err := reader.ReadString('\n')
+		if err == nil && len(str) > 0 {
+			str = str[:len(str)-1]
+		}
+		cur, _ := vi.cursor.Cursor()
+		vi.cursor.InsertString(str)
+		if err != nil {
+			break
+		}
+		vi.cursor.MoveTo(cur)
+		vi.cursor.MoveDown()
+	}
+}
+
+func (vi *Vi) pasteClipboard(before bool) bool {
+	paste, err := vi.config.Clipboard.Get()
+	str := paste.Data
+	mode, ok := paste.Metadata.(viMode)
+	if !ok {
+		mode = visualMode
+	}
 	if err != nil {
 		vi.logger.Error("clipboard.Get: ", err)
 		return false
 	}
-	vi.cursor.InsertString(str)
+
+	cur, _ := vi.cursor.Cursor()
+
+	switch mode {
+	case visualMode:
+		if !before {
+			vi.cursor.MoveRight()
+			vi.cursor.InsertString(str)
+			vi.cursor.MoveTo(cur)
+			vi.cursor.MoveRight()
+		} else {
+			vi.cursor.InsertString(str)
+			vi.cursor.MoveTo(cur)
+		}
+	case visualLineMode:
+		if !before {
+			vi.cursor.InsertRowBelow()
+			vi.cursor.MoveStartLine()
+			vi.cursor.InsertString(str)
+			vi.cursor.MoveTo(cur)
+			vi.cursor.MoveDown()
+			vi.cursor.MoveStartLine()
+		} else {
+			vi.cursor.MoveUp()
+			vi.cursor.InsertRowBelow()
+			vi.cursor.MoveStartLine()
+			vi.cursor.InsertString(str)
+			vi.cursor.MoveTo(cur)
+			vi.cursor.MoveStartLine()
+		}
+	case visualBlockMode:
+		if !before {
+			vi.cursor.MoveRight()
+			vi.insertBlock(str)
+			vi.cursor.MoveTo(cur)
+			vi.cursor.MoveRight()
+		} else {
+			vi.insertBlock(str)
+			vi.cursor.MoveTo(cur)
+		}
+	}
 	return true
 }
 
@@ -345,11 +410,9 @@ func (vi *Vi) handleNormal(ev term.Event) bool {
 		case 'N':
 			vi.cursor.MoveToPrevMatch()
 		case 'p':
-			vi.cursor.MoveRight()
-			vi.pasteClipboard()
-			vi.cursor.MoveLeft()
+			vi.pasteClipboard(false)
 		case 'P':
-			vi.pasteClipboard()
+			vi.pasteClipboard(true)
 		case 'n':
 			vi.cursor.MoveToNextMatch()
 		case '0':
@@ -465,10 +528,13 @@ func (vi *Vi) handleVisual(ev term.Event) (quit bool) {
 		handled = true
 		switch ev.Ch {
 		case 'y':
-			vi.config.Clipboard.Set(vi.cursor.Selection())
+			selection := vi.cursor.Selection()
+			vi.config.Clipboard.Set(editor.Paste{Data: selection, Metadata: vi.mode})
 			vi.cursor.Unselect()
+			vi.setNormalMode()
 		case 'd', 'x':
 			vi.cursor.DeleteSelection()
+			vi.setNormalMode()
 		case 's', 'c':
 			vi.cursor.DeleteSelection()
 			vi.setInsertMode()
@@ -591,7 +657,7 @@ func (vi *Vi) Handle(ev term.Event) (quit bool) {
 		}
 	case insertMode:
 		quit = vi.handleInsert(ev)
-	case visualMode:
+	case visualMode, visualLineMode, visualBlockMode:
 		quit = vi.handleVisual(ev)
 	case moveToCharMode:
 		quit = vi.handleMoveToCharacter(vi.moveMode, ev)
@@ -610,7 +676,8 @@ func (vi *Vi) Handle(ev term.Event) (quit bool) {
 	vi.raw = vi.cursor
 
 	switch vi.mode {
-	case normalMode, visualMode, commandMode, moveToCharMode:
+	case normalMode, visualMode, visualLineMode,
+		visualBlockMode, commandMode, moveToCharMode:
 		vi.cursor.MoveToBounds(0)
 		vi.cursor.MoveToNextNonNull()
 	case insertMode, replaceMode, replaceOneMode:

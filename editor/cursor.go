@@ -52,6 +52,13 @@ func (c *Cursor) Cursor() (term.Coordinates, bool) {
 	return c.cursor, true
 }
 
+// MoveTo moves the cursor to pos.
+func (c *Cursor) MoveTo(pos term.Coordinates) term.Coordinates {
+	ret := c.cursor
+	c.cursor = pos
+	return ret
+}
+
 // note that pos is window coordinates, not scroll coordinates
 func (c *Cursor) setCursor(pos term.Coordinates) {
 	if pos.X < 0 || pos.Y < 0 ||
