@@ -9,19 +9,19 @@ type RPCClipboardClient struct{ *rpc.Client }
 
 // Get uses the underlying RPC client to call the remote's clipboard Get method and
 // return its results.
-func (c *RPCClipboardClient) Get() (string, error) {
-	var resp string
+func (c *RPCClipboardClient) Get() (Paste, error) {
+	var resp Paste
 	err := c.Client.Call("Plugin.ClipboardGet", new(interface{}), &resp)
 	if err != nil {
-		return "", err
+		return Paste{}, err
 	}
 
 	return resp, nil
 }
 
 // Set uses the underlying RPC client to call the remote's clipboard Set method.
-func (c *RPCClipboardClient) Set(str string) error {
-	err := c.Client.Call("Plugin.ClipboardSet", str, new(interface{}))
+func (c *RPCClipboardClient) Set(data Paste) error {
+	err := c.Client.Call("Plugin.ClipboardSet", data, new(interface{}))
 	if err != nil {
 		return err
 	}
@@ -35,13 +35,13 @@ type RPCClipboardServer struct {
 }
 
 // ClipboardGet can be called over RPC to call the underlying's Clipboard Get method.
-func (s *RPCClipboardServer) ClipboardGet(args interface{}, resp *string) error {
+func (s *RPCClipboardServer) ClipboardGet(args interface{}, resp *Paste) error {
 	var err error
 	*resp, err = s.Clipboard.Get()
 	return err
 }
 
 // ClipboardSet can be called over RPC to call the underlying's Clipboard Set method.
-func (s *RPCClipboardServer) ClipboardSet(str string, resp *interface{}) error {
-	return s.Clipboard.Set(str)
+func (s *RPCClipboardServer) ClipboardSet(data Paste, resp *interface{}) error {
+	return s.Clipboard.Set(data)
 }

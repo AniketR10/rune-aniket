@@ -31,12 +31,13 @@ func (c *clipboardLogger) fields(method string) log.Fields {
 	}
 }
 
-func (c *clipboardLogger) Get() (str string, err error) {
+func (c *clipboardLogger) Get() (data Paste, err error) {
 	fields := c.fields("Get")
 
-	str, err = c.other.Get()
+	data, err = c.other.Get()
 
-	fields["string"] = fmt.Sprintf("%.10s", str)
+	fields["string"] = fmt.Sprintf("%.10s", data.Data)
+	fields["metadata"] = fmt.Sprintf("%+v", data.Metadata)
 	entry := c.logger.WithFields(fields)
 
 	if err != nil {
@@ -49,11 +50,12 @@ func (c *clipboardLogger) Get() (str string, err error) {
 	return
 }
 
-func (c *clipboardLogger) Set(str string) (err error) {
+func (c *clipboardLogger) Set(data Paste) (err error) {
 	fields := c.fields("Set")
-	fields["string"] = fmt.Sprintf("%.10s", str)
+	fields["string"] = fmt.Sprintf("%.10s", data.Data)
+	fields["metadata"] = fmt.Sprintf("%+v", data.Metadata)
 
-	err = c.other.Set(str)
+	err = c.other.Set(data)
 
 	entry := c.logger.WithFields(fields)
 	if err != nil {

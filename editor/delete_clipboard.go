@@ -31,6 +31,6 @@ func (c *delClip) Delete(from, to term.Coordinates) (
 	start, end term.Coordinates, str string,
 ) {
 	start, end, str = c.writer.Delete(from, to)
-	c.clipboard.Set(str)
+	c.clipboard.Set(Paste{Data: str})
 	return
 }

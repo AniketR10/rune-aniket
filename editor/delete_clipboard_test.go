@@ -18,7 +18,7 @@ func TestDeleteClipboard(t *testing.T) {
 	buf.InsertString(term.Coordinates{}, content)
 	buf.DeleteRow(0)
 
-	str, err := clip.Get()
+	data, err := clip.Get()
 	require.NoError(t, err)
-	assert.Equal(t, str, content)
+	assert.Equal(t, Paste{Data: content}, data)
 }

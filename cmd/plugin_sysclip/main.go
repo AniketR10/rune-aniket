@@ -4,17 +4,22 @@ import (
 	"log"
 
 	"github.com/atotto/clipboard"
+	"github.com/ernestrc/fractal/editor"
 	"github.com/ernestrc/fractal/plugin"
 )
 
 type systemClipboard struct{}
 
-func (c *systemClipboard) Get() (string, error) {
-	return clipboard.ReadAll()
+func (c *systemClipboard) Get() (editor.Paste, error) {
+	text, err := clipboard.ReadAll()
+	if err != nil {
+		return editor.Paste{}, err
+	}
+	return editor.Paste{Data: text}, nil
 }
 
-func (c *systemClipboard) Set(text string) error {
-	return clipboard.WriteAll(text)
+func (c *systemClipboard) Set(data editor.Paste) error {
+	return clipboard.WriteAll(data.Data)
 }
 
 func main() {
