@@ -298,6 +298,28 @@ Error: Cannot NORMAL`},
  diff_redraw(TRUE); 
  }                  
 :             INSERT`},
+ 		{"<hhhhhhR == NULL)",
+			`f (wp == NULL)▐     
+                    
+ i = diff_buf_idx(wi
+ if (i != DB_COUNT) 
+ {                  
+ curtab->tp_diffbuf[
+ curtab->tp_diff_inv
+ diff_redraw(TRUE); 
+ }                  
+:            REPLACE`},
+  		{"<r]h",
+			`f (wp == NUL▐]      
+                    
+ i = diff_buf_idx(wi
+ if (i != DB_COUNT) 
+ {                  
+ curtab->tp_diffbuf[
+ curtab->tp_diff_inv
+ diff_redraw(TRUE); 
+ }                  
+:             NORMAL`},
 	}
 
 	testBatchWorkload(t, 20, 10, cases)

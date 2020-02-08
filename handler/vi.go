@@ -15,11 +15,13 @@ type viMode uint8
 type moveMode uint8
 
 const (
-	normal viMode = iota
-	insert
-	visual
-	command
-	moveToCharacter
+	normalMode viMode = iota
+	insertMode
+	visualMode
+	commandMode
+	moveToCharMode
+	replaceMode
+	replaceOneMode
 )
 
 const (
@@ -222,7 +224,7 @@ func (vi *Vi) Man() fractal.Manual {
 
 // Cursor : fractal.Handler
 func (vi *Vi) Cursor() (term.Coordinates, bool) {
-	if vi.mode == command {
+	if vi.mode == commandMode {
 		pos := term.Coordinates{X: len(vi.command), Y: vi.less.Height()}
 		return pos, true
 	}
@@ -244,40 +246,48 @@ func (vi *Vi) setError(err error) {
 }
 
 func (vi *Vi) setNormalMode() {
-	vi.setMode("NORMAL", normal)
+	vi.setMode("NORMAL", normalMode)
 	vi.command = vi.command[:0]
 	vi.less.SetMessageAlt(":")
 }
 
 func (vi *Vi) setInsertMode() {
-	vi.setMode("INSERT", insert)
+	vi.setMode("INSERT", insertMode)
 }
 
 func (vi *Vi) setVisualMode() {
 	if vi.cursor.Select() {
-		vi.setMode("VISUAL", visual)
+		vi.setMode("VISUAL", visualMode)
 	}
 }
 
 func (vi *Vi) setVisualLineMode() {
 	if vi.cursor.SelectLine() {
-		vi.setMode("V-LINE", visual)
+		vi.setMode("V-LINE", visualMode)
 	}
 }
 
 func (vi *Vi) setVisualBlockMode() {
 	if vi.cursor.SelectBlock() {
-		vi.setMode("V-BLOCK", visual)
+		vi.setMode("V-BLOCK", visualMode)
 	}
 }
 
 func (vi *Vi) setCommandMode() {
-	vi.setMode("COMMAND", command)
+	vi.setMode("COMMAND", commandMode)
 }
 
 func (vi *Vi) setMoveToCharacterMode(mode moveMode) {
-	vi.setMode("MOVE-TO", moveToCharacter)
+	vi.setMode("MOVE-TO", moveToCharMode)
 	vi.moveMode = mode
+}
+
+func (vi *Vi) setReplaceMode() {
+	vi.setMode("REPLACE", replaceMode)
+}
+
+func (vi *Vi) setReplaceOneMode() {
+	vi.setMode("NORMAL", replaceOneMode)
 }
 
 // we delegate search buffer Component to Less but delegate cursor position
@@ -310,6 +320,10 @@ func (vi *Vi) handleNormal(ev term.Event) bool {
 	switch ev.Type {
 	case term.EventKey:
 		switch ev.Ch {
+		case 'R':
+			vi.setReplaceMode()
+		case 'r':
+			vi.setReplaceOneMode()
 		case '>':
 			vi.cursor.ShiftLineRight()
 		case '<':
@@ -536,23 +550,58 @@ func (vi *Vi) handleCommand(ev term.Event) (quit bool) {
 	return
 }
 
+func (vi *Vi) handleReplace(ev term.Event) (quit bool) {
+	if ev.Type != term.EventKey {
+		return
+	}
+
+	switch ev.Key {
+	case term.KeyEnter:
+		ev.Ch = '\n'
+	case term.KeySpace:
+		ev.Ch = ' '
+	case term.KeyTab:
+		ev.Ch = '\t'
+	case term.KeyBackspace, term.KeyBackspace2:
+		vi.cursor.MoveLeft()
+	case term.KeyEsc:
+		vi.cursor.MoveLeft()
+		vi.setNormalMode()
+	}
+
+	if ev.Ch != 0 {
+		// do not delete column == len(row); it contains a newline
+		// and that would conflate the current row with the next
+		if vi.cursor.Column() < vi.less.Columns(vi.cursor.Row()) {
+			vi.cursor.Delete()
+		}
+		vi.cursor.Insert(ev.Ch)
+	}
+	return
+}
+
 // Handle : fractal.Handler
 func (vi *Vi) Handle(ev term.Event) (quit bool) {
 	switch vi.mode {
-	case normal:
+	case normalMode:
 		if vi.less.Mode() != LessNormalMode {
 			quit = vi.handleSearch(ev)
 		} else {
 			quit = vi.handleNormal(ev)
 		}
-	case insert:
+	case insertMode:
 		quit = vi.handleInsert(ev)
-	case visual:
+	case visualMode:
 		quit = vi.handleVisual(ev)
-	case moveToCharacter:
+	case moveToCharMode:
 		quit = vi.handleMoveToCharacter(vi.moveMode, ev)
-	case command:
+	case commandMode:
 		quit = vi.handleCommand(ev)
+	case replaceMode:
+		quit = vi.handleReplace(ev)
+	case replaceOneMode:
+		quit = vi.handleReplace(ev)
+		vi.setNormalMode()
 	default:
 		panic(fmt.Sprintf("unknown mode: %d", vi.mode))
 	}
@@ -561,10 +610,10 @@ func (vi *Vi) Handle(ev term.Event) (quit bool) {
 	vi.raw = vi.cursor
 
 	switch vi.mode {
-	case normal, visual, command, moveToCharacter:
+	case normalMode, visualMode, commandMode, moveToCharMode:
 		vi.cursor.MoveToBounds(0)
 		vi.cursor.MoveToNextNonNull()
-	case insert:
+	case insertMode, replaceMode, replaceOneMode:
 		vi.cursor.MoveToBounds(1)
 	default:
 		panic(fmt.Sprintf("unknown mode: %d", vi.mode))
