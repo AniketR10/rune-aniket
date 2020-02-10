@@ -124,6 +124,10 @@ func (l *Less) searchHandleEvent(ev term.Event) (exit bool) {
 	case term.KeyEsc:
 		l.SetNormalMode()
 
+	case term.KeySpace:
+		ev.Ch = ' '
+		fallthrough
+
 	default:
 		l.cursorOffset++
 		getBuffer(l.cmdScroll).WriteString(string(ev.Ch))

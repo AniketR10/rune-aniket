@@ -331,6 +331,17 @@ Error: Cannot NORMAL`},
     curtab->tp_diff_
     diff_redraw(TRUE
 :             NORMAL`},
+		{"/i =>",
+			`    ▐ = diff_buf_idx
+    if (i != DB_COUN
+    {               
+    curtab->tp_diffb
+    curtab->tp_diff_
+    diff_redraw(TRUE
+    }               
+  }                 
+  }                 
+:             NORMAL`},
 	}
 
 	testBatchWorkload(t, 20, 10, cases)
