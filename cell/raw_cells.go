@@ -22,15 +22,12 @@ type rawCells struct {
 // init initializes this rawCells with the given tabspaces config and resets its contents.
 func (c *rawCells) init(tabspaces int) {
 	c.tabspaces = tabspaces
-	c.Reset()
+	c.reset()
 }
 
-func (c *rawCells) Reset() {
+func (c *rawCells) reset() {
 	c.cells = make([][]term.Cell, 1, defRowCap)
 	c.cells[0] = makeNewRow(0, defColumnCap)
-	if c.tabspaces == 0 {
-		c.tabspaces = defTabSpaces
-	}
 }
 
 func assertValidCoords(pos term.Coordinates) {
@@ -108,7 +105,7 @@ func (c *rawCells) insertTabSpaces(pos term.Coordinates) {
 
 func (c *rawCells) fillInRows(y int) (n int) {
 	if c.cells == nil {
-		c.Reset()
+		c.init(defTabSpaces)
 	}
 	for y >= len(c.cells) {
 		n++
@@ -304,7 +301,7 @@ func (c *rawCells) Delete(from, to term.Coordinates) (
 
 func (c *rawCells) Columns(y int) (j int) {
 	if c.cells == nil {
-		c.Reset()
+		c.init(defTabSpaces)
 	}
 	if y < 0 {
 		panic(fmt.Sprintf("invalid row: %d", y))
@@ -333,7 +330,7 @@ func CellsToString(cells [][]term.Cell) string {
 
 func (c *rawCells) RawCells() [][]term.Cell {
 	if c.cells == nil {
-		c.Reset()
+		c.init(defTabSpaces)
 	}
 	return c.cells
 }
@@ -352,7 +349,7 @@ func (c *rawCells) Cell(pos term.Coordinates) (
 
 func (c *rawCells) ReadFrom(r io.Reader) (int64, error) {
 	if c.cells == nil {
-		c.Reset()
+		c.init(defTabSpaces)
 	}
 	rowY := c.nextWrite().Y
 	reader := bufio.NewReader(r)

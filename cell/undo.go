@@ -4,8 +4,6 @@ import (
 	"github.com/ernestrc/fractal/term"
 )
 
-// TODO redo/undo should return start of update
-
 // undoer adds undo and redo methods to a otherwise, irreversible cell.writer.
 // It satifies the cell.writer interface and it should be used as a replacement.
 type undoer struct {
@@ -114,8 +112,7 @@ func (u *undoer) Delete(from, to term.Coordinates) (start, end term.Coordinates,
 	return
 }
 
-// Reset resets the undo/redo timelines and the underlying cell.writer.
-func (u *undoer) Reset() {
+func (u *undoer) reset() {
 	u.resetRedoTimeline()
 	u.undoTimeline = u.undoTimeline[:0]
 }

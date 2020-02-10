@@ -13,14 +13,15 @@ import (
 // A Buffer offers a high level API to manipulate a matrix of term.Cell.
 type Buffer struct {
 	tabspaces  int
-	readerFrom io.ReaderFrom
-	reader     Reader
-	writer     Writer
-	rootWriter Writer
+	cells      *rawCells
 	undoer     *undoer
 	selector   selector
 	unixReader *unixFileReader
 	pub        *syncPublisher
+
+	// effective Reader and Writer
+	reader Reader
+	writer Writer
 }
 
 // NewBuffer allocates storage for a new Buffer and initializes it.
@@ -32,14 +33,13 @@ func NewBuffer() (b *Buffer) {
 
 // InitWithTabspaces initializes this Buffer with
 func (b *Buffer) InitWithTabspaces(tabspaces int) {
-	cells := new(rawCells)
-	cells.init(tabspaces)
+	b.cells = new(rawCells)
+	b.cells.init(tabspaces)
 
 	b.tabspaces = tabspaces
-	b.readerFrom = cells
 
-	b.pub = newPublisher(cells)
-	b.unixReader = newUnixFileReader(cells)
+	b.pub = newPublisher(b.cells)
+	b.unixReader = newUnixFileReader(b.cells)
 	b.reader = b.unixReader
 
 	// setup the publisher as the deepest Writer
@@ -305,25 +305,26 @@ func (b *Buffer) DeleteBlock(from, to term.Coordinates) (
 
 // Reset resets the contents of this Buffer.
 func (b *Buffer) Reset() {
-	b.InitWithTabspaces(b.tabspaces)
+	b.undoer.reset()
+	b.cells.reset()
 }
 
 // ReadFrom reads data from r until EOF and appends it to the buffer, growing
 // the buffer as needed. The return value n is the number of bytes read. Any
 // error except io.EOF encountered during the read is also returned.
 func (b *Buffer) ReadFrom(r io.Reader) (int64, error) {
-	return b.readerFrom.ReadFrom(r)
+	return b.cells.ReadFrom(r)
 }
 
 // io.Writer
 func (b *Buffer) Write(p []byte) (int, error) {
-	n, err := b.readerFrom.ReadFrom(bytes.NewReader(p))
+	n, err := b.cells.ReadFrom(bytes.NewReader(p))
 	return int(n), err
 }
 
 // WriteString writes the given string at the end of the buffer
 func (b *Buffer) WriteString(p string) {
-	_, err := b.readerFrom.ReadFrom(strings.NewReader(p))
+	_, err := b.cells.ReadFrom(strings.NewReader(p))
 	if err != nil {
 		// strings.Reader never errors out
 		panic(err)

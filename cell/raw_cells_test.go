@@ -48,7 +48,7 @@ func TestRawCellsUninitialized(t *testing.T) {
 
 	t.Run("reset()", func(t *testing.T) {
 		var c rawCells
-		c.Reset()
+		c.reset()
 	})
 
 	t.Run("rows()", func(t *testing.T) {
@@ -595,7 +595,7 @@ func benchmarkBufferReadFrom(b *testing.B, fortunes int) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		cells.Reset()
+		cells.reset()
 		reader.Reset(payload)
 		_, _ = cells.ReadFrom(reader)
 	}

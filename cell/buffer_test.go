@@ -243,16 +243,54 @@ func TestBufferInsertString(t *testing.T) {
 	assert.Equal(t, " hello\nworld", b.String())
 }
 
+type testSubscriber struct {
+	onInsert, onDelete int
+}
+
+func (t *testSubscriber) OnInsert(from, to term.Coordinates, str string) {
+	t.onInsert++
+}
+
+func (t *testSubscriber) OnDelete(start, end term.Coordinates, str string) {
+	t.onDelete++
+}
+
 func TestBufferReset(t *testing.T) {
-	var b Buffer
-	b.InitWithTabspaces(4)
-	b.ReadFrom(strings.NewReader("a\tb"))
+	t.Run("resets the contents of the buffer", func(t *testing.T) {
+		var b Buffer
+		b.InitWithTabspaces(4)
+		b.ReadFrom(strings.NewReader("a\tb"))
 
-	assert.Equal(t, "a\tb", b.String())
+		assert.Equal(t, "a\tb", b.String())
 
-	b.Reset()
-	assert.Equal(t, "", b.String())
-	assert.Equal(t, 4, b.tabspaces)
+		b.Reset()
+		assert.Equal(t, "", b.String())
+		assert.Equal(t, 4, b.tabspaces)
+	})
+
+	t.Run("does not reset subscribers", func(t *testing.T) {
+		b := NewBuffer()
+		sub := testSubscriber{}
+		b.Subscribe(&sub)
+
+		b.Reset()
+		b.InsertRowAt(0)
+		b.DeleteRow(0)
+		assert.Equal(t, 1, sub.onInsert)
+		assert.Equal(t, 1, sub.onDelete)
+	})
+
+	t.Run("does reset undo", func(t *testing.T) {
+		b := NewBuffer()
+		sub := testSubscriber{}
+		b.Subscribe(&sub)
+
+		b.InsertRowAt(0)
+		b.Reset()
+
+		ok, _ := b.Undo()
+		assert.False(t, ok)
+	})
 }
 
 func TestBufferEndsWithEOL(t *testing.T) {
