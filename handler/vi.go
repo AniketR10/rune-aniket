@@ -183,24 +183,23 @@ func (vi *Vi) Init(opts ...ViOption) (err error) {
 		buf = buf.WithLogger(vi.logger)
 	}
 
-	// this copies buf to the Scroll's Buffer
 	vi.less.InitWithBuffer(buf)
 	vi.cursor.Init(&vi.less.Scroll)
 
 	if vi.config.Filepath != "" {
 		if vi.config.RecoverySwapFile != "" {
 			vi.fileBuf, err = editor.RecoverFile(vi.config.Filepath,
-				vi.config.RecoverySwapFile, &vi.less.Scroll.Buffer)
+				vi.config.RecoverySwapFile, buf)
 		} else {
 			vi.fileBuf, err = editor.NewFileBuffer(
-				vi.config.Filepath, &vi.less.Scroll.Buffer, vi.config.SwapDir)
+				vi.config.Filepath, buf, vi.config.SwapDir)
 		}
 		if err != nil {
 			return err
 		}
 	}
 
-	editor.WithCopyDelete(vi.config.Clipboard, &vi.less.Scroll.Buffer)
+	editor.WithCopyDelete(vi.config.Clipboard, buf)
 	vi.less.Scroll.ResultsAttr = vi.config.ResAttr
 	vi.logger = vi.config.Logger
 
@@ -638,7 +637,7 @@ func (vi *Vi) handleReplace(ev term.Event) (quit bool) {
 	if ev.Ch != 0 {
 		// do not delete column == len(row); it contains a newline
 		// and that would conflate the current row with the next
-		if vi.cursor.Column() < vi.less.Columns(vi.cursor.Row()) {
+		if vi.cursor.Column() < vi.less.Scroll.Buffer().Columns(vi.cursor.Row()) {
 			vi.cursor.Delete()
 		}
 		vi.cursor.Insert(ev.Ch)

@@ -46,7 +46,7 @@ diff_buf_adjust(win_T *win)
 func setupCursorContent(t *testing.T, width, height int, cont string) (e Cursor) {
 	scroll := component.NewScroll()
 	e.Init(scroll)
-	_, err := scroll.ReadFrom(strings.NewReader(cont))
+	_, err := scroll.Buffer().ReadFrom(strings.NewReader(cont))
 	require.NoError(t, err)
 	scroll.Resize(width, height)
 
@@ -221,7 +221,7 @@ func TestCursorMove(t *testing.T) {
 
 				assert.True(t, e.MoveEndLine())
 
-				c, _ := e.scroll.Cell(e.cursorAtScroll())
+				c, _ := e.scroll.Buffer().Cell(e.cursorAtScroll())
 				assert.Equal(t, 76, e.scroll.Offset().X+e.cursor.X)
 				assert.Equal(t, 'f', c.Ch)
 			},
@@ -277,7 +277,7 @@ func TestCursorMove(t *testing.T) {
 			func(t *testing.T, e *Cursor) {
 				assert.True(t, e.MoveLastLine())
 
-				c, _ := e.scroll.Cell(e.cursorAtScroll())
+				c, _ := e.scroll.Buffer().Cell(e.cursorAtScroll())
 				assert.Equal(t, 31, e.scroll.Offset().Y+e.cursor.Y)
 				assert.Equal(t, '}', c.Ch)
 			},
@@ -424,7 +424,7 @@ func TestCursorMove(t *testing.T) {
 
 				assert.True(t, e.MoveRightStartWord())
 
-				c, _ := e.scroll.Cell(e.cursorAtScroll())
+				c, _ := e.scroll.Buffer().Cell(e.cursorAtScroll())
 				assert.Equal(t, 't', c.Ch)
 			},
 			term.Coordinates{X: 9, Y: 2},
@@ -439,7 +439,7 @@ func TestCursorMove(t *testing.T) {
 
 				assert.True(t, e.MoveLeftStartWord())
 
-				c, _ := e.scroll.Cell(e.cursorAtScroll())
+				c, _ := e.scroll.Buffer().Cell(e.cursorAtScroll())
 				assert.Equal(t, 'i', c.Ch)
 			},
 			term.Coordinates{X: 6, Y: 2},
@@ -456,7 +456,7 @@ func TestCursorMove(t *testing.T) {
 
 				assert.True(t, e.MoveRightEndWord())
 
-				c, _ := e.scroll.Cell(e.cursorAtScroll())
+				c, _ := e.scroll.Buffer().Cell(e.cursorAtScroll())
 				assert.Equal(t, 'f', c.Ch)
 			},
 			term.Coordinates{X: 7, Y: 2},
@@ -476,7 +476,7 @@ func TestCursorMove(t *testing.T) {
 				e.cursor.Y = 7
 				assert.True(t, e.MoveToMatchingRune())
 
-				c, _ := e.scroll.Cell(e.cursorAtScroll())
+				c, _ := e.scroll.Buffer().Cell(e.cursorAtScroll())
 				assert.Equal(t, '}', c.Ch)
 			},
 			term.Coordinates{X: 0, Y: 9},
@@ -490,7 +490,7 @@ func TestCursorMove(t *testing.T) {
 				e.scroll.SeekEndFile()
 				assert.False(t, e.MoveToMatchingRune())
 
-				c, _ := e.scroll.Cell(e.cursorAtScroll())
+				c, _ := e.scroll.Buffer().Cell(e.cursorAtScroll())
 				assert.Equal(t, '{', c.Ch)
 			},
 			term.Coordinates{X: 5, Y: 31},
@@ -523,7 +523,7 @@ func TestCursorMove(t *testing.T) {
 				e.MoveDown()
 				assert.True(t, e.MoveToNextChar('o'))
 
-				c, _ := e.scroll.Cell(e.cursorAtScroll())
+				c, _ := e.scroll.Buffer().Cell(e.cursorAtScroll())
 				assert.Equal(t, 'o', c.Ch)
 			},
 			term.Coordinates{X: 9, Y: 2},
@@ -556,7 +556,7 @@ func TestCursorMove(t *testing.T) {
 				e.MoveEndLine()
 				assert.True(t, e.MoveToPrevChar('C'))
 
-				c, _ := e.scroll.Cell(e.cursorAtScroll())
+				c, _ := e.scroll.Buffer().Cell(e.cursorAtScroll())
 				assert.Equal(t, 'C', c.Ch)
 			},
 			term.Coordinates{X: 0, Y: 2},
@@ -581,26 +581,26 @@ func TestCursorInsertRow(t *testing.T) {
 	e := setupCursor(t, 10, 10)
 
 	e.InsertRowAbove()
-	assert.Equal(t, 0, len(e.scroll.RawCells()[0]))
+	assert.Equal(t, 0, len(e.scroll.Buffer().RawCells()[0]))
 
 	e.scroll.SeekEndLine()
 	e.cursor.Y = 2
 	e.cursor.X = 9
 
 	e.InsertRowAbove()
-	assert.Equal(t, 0, len(e.scroll.RawCells()[2]))
+	assert.Equal(t, 0, len(e.scroll.Buffer().RawCells()[2]))
 
 	e.MoveLastLine()
 
-	r := e.scroll.Rows()
+	r := e.scroll.Buffer().Rows()
 	e.InsertRowBelow()
 
-	assert.Equal(t, r+1, e.scroll.Rows())
+	assert.Equal(t, r+1, e.scroll.Buffer().Rows())
 }
 
 func TestCursorInsertDelete(t *testing.T) {
 	e := setupCursor(t, 10, 10)
-	str := e.scroll.String()
+	str := e.scroll.Buffer().String()
 
 	e.Insert('p')
 	e.Insert('a')
@@ -612,12 +612,12 @@ func TestCursorInsertDelete(t *testing.T) {
 		e.Delete()
 	}
 
-	assert.Equal(t, str, e.scroll.String())
+	assert.Equal(t, str, e.scroll.Buffer().String())
 }
 
 func TestCursorBackspace(t *testing.T) {
 	e := setupCursor(t, 10, 10)
-	n := len(e.scroll.String())
+	n := len(e.scroll.Buffer().String())
 
 	e.MoveLastLine()
 	e.MoveEndLine()
@@ -627,27 +627,27 @@ func TestCursorBackspace(t *testing.T) {
 		e.Backspace()
 	}
 
-	assert.Equal(t, "", e.scroll.String())
+	assert.Equal(t, "", e.scroll.Buffer().String())
 }
 
 func TestCursorConflate(t *testing.T) {
 	e := setupCursor(t, 10, 10)
-	n := strings.Count(e.scroll.String(), "\n")
-	rows := e.scroll.Rows()
+	n := strings.Count(e.scroll.Buffer().String(), "\n")
+	rows := e.scroll.Buffer().Rows()
 	require.Equal(t, n+1, rows)
 
 	for i := 0; i < n; i++ {
 		e.Conflate()
 	}
 
-	assert.Equal(t, 1, e.scroll.Rows())
-	assert.Zero(t, strings.Count(e.scroll.String(), "\n"))
+	assert.Equal(t, 1, e.scroll.Buffer().Rows())
+	assert.Zero(t, strings.Count(e.scroll.Buffer().String(), "\n"))
 }
 
 func testCursorSelect(t *testing.T, width, height int) {
 	t.Run("Select", func(t *testing.T) {
 		e := setupCursor(t, width, height)
-		str := e.scroll.String()
+		str := e.scroll.Buffer().String()
 		e.Unselect()
 		require.True(t, e.Select())
 
@@ -661,7 +661,7 @@ func testCursorSelect(t *testing.T, width, height int) {
 
 	t.Run("SelectLine", func(t *testing.T) {
 		e := setupCursor(t, width, height)
-		str := e.scroll.String()
+		str := e.scroll.Buffer().String()
 		require.True(t, e.SelectLine())
 		for e.MoveDown() {
 		}
@@ -671,7 +671,7 @@ func testCursorSelect(t *testing.T, width, height int) {
 
 	t.Run("SelectBlock", func(t *testing.T) {
 		e := setupCursor(t, width, height)
-		str := e.scroll.String()
+		str := e.scroll.Buffer().String()
 		require.True(t, e.SelectBlock())
 		e.MoveLastLine()
 		for e.MoveRight() {
@@ -700,14 +700,14 @@ func TestCursorSelect100(t *testing.T) {
 func testCursorUndoRedo(t *testing.T, moveBefore, moveAfter func(c *Cursor) bool, width, height int) {
 	const input = "Aleda"
 	e := setupCursor(t, width, height)
-	str := e.scroll.String()
+	str := e.scroll.Buffer().String()
 
 	moveBefore(&e)
 	cBefore, ok := e.Cursor()
 	require.True(t, ok)
 
 	e.InsertString(input)
-	str2 := e.scroll.String()
+	str2 := e.scroll.Buffer().String()
 
 	require.True(t, e.Undo())
 	require.False(t, e.Undo())
@@ -715,12 +715,12 @@ func testCursorUndoRedo(t *testing.T, moveBefore, moveAfter func(c *Cursor) bool
 	c, ok := e.Cursor()
 	require.True(t, ok)
 	assert.Equal(t, cBefore, c)
-	assert.Equal(t, str, e.scroll.String())
+	assert.Equal(t, str, e.scroll.Buffer().String())
 
 	moveAfter(&e)
 
 	require.True(t, e.Redo())
-	assert.Equal(t, str2, e.scroll.String())
+	assert.Equal(t, str2, e.scroll.Buffer().String())
 	require.False(t, e.Redo())
 
 	require.True(t, e.Undo())
@@ -729,7 +729,7 @@ func testCursorUndoRedo(t *testing.T, moveBefore, moveAfter func(c *Cursor) bool
 	c, ok = e.Cursor()
 	require.True(t, ok)
 	assert.Equal(t, cBefore, c)
-	assert.Equal(t, str, e.scroll.String())
+	assert.Equal(t, str, e.scroll.Buffer().String())
 }
 
 func TestCursorUndoRedo10(t *testing.T) {
@@ -861,7 +861,7 @@ func testCursorDeleteSelection(t *testing.T, width, height int, typeSelect int) 
 		if !tcase.deleted {
 			continue
 		}
-		assert.Equal(t, tcase.finalBuf, c.scroll.String())
+		assert.Equal(t, tcase.finalBuf, c.scroll.Buffer().String())
 	}
 }
 

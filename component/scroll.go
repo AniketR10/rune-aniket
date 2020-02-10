@@ -1,6 +1,8 @@
 package component
 
 import (
+	"io"
+
 	"github.com/ernestrc/fractal"
 	"github.com/ernestrc/fractal/cell"
 	"github.com/ernestrc/fractal/term"
@@ -9,7 +11,7 @@ import (
 // Scroll adds Draw to a Buffer along with
 // scrolling, searching and wrap-around capabilities.
 type Scroll struct {
-	cell.Buffer
+	buf           *cell.Buffer
 	searcher      cell.Searcher
 	width, height int
 	searchText    []rune
@@ -35,12 +37,21 @@ func NewScroll() (s *Scroll) {
 	return
 }
 
-// Init initializes this scroll and allocates new storage
-// for the internal cell buffer.
+// Init initializes this scroll and allocates a new cell.Buffer.
 func (s *Scroll) Init() {
+	buf := cell.NewBuffer()
+	s.InitWithBuffer(buf)
+}
+
+// InitWithBuffer initializes this scroll with buf.
+func (s *Scroll) InitWithBuffer(buf *cell.Buffer) {
 	s.ResultsAttr.Fg, s.ResultsAttr.Bg = term.AttrReverse, term.AttrReverse
-	s.Buffer.Init()
-	s.searcher = cell.NewSimpleSearcher(&s.Buffer)
+
+	s.buf = buf
+
+	searcher := cell.NewSimpleSearcher(s.buf)
+	s.searcher = searcher
+
 	s.resetProps()
 }
 
@@ -198,7 +209,7 @@ func (s *Scroll) Resize(width, height int) {
 func (s *Scroll) getMaxXOffset() (x int) {
 	const padding = 1
 
-	view := s.RawCells()[s.offset.Y:]
+	view := s.buf.RawCells()[s.offset.Y:]
 	columns := 0
 	for _, r := range view {
 		if l := len(r); l > columns {
@@ -216,7 +227,7 @@ func (s *Scroll) getMaxXOffset() (x int) {
 }
 
 func (s *Scroll) getMaxYOffset() (y int) {
-	rows := s.Buffer.Rows()
+	rows := s.buf.Rows()
 	if rows >= s.height {
 		y = rows - s.height
 	}
@@ -226,7 +237,7 @@ func (s *Scroll) getMaxYOffset() (y int) {
 func (s *Scroll) draw(writer fractal.Writer) {
 	xwindow := s.offset.X + s.width
 	ywindow := s.height
-	for y, r := range s.Buffer.RawCells()[s.offset.Y:] {
+	for y, r := range s.buf.RawCells()[s.offset.Y:] {
 		if y >= ywindow {
 			break
 		}
@@ -248,7 +259,7 @@ func (s *Scroll) wrapdraw(writer fractal.Writer) {
 	var xi, yi, ywindow int
 	xwindow := s.width
 	wraps := 0
-	for y, r := range s.Buffer.RawCells()[s.offset.Y:] {
+	for y, r := range s.buf.RawCells()[s.offset.Y:] {
 		ywindow = s.height - wraps
 		if y >= ywindow {
 			break
@@ -284,12 +295,14 @@ func (s *Scroll) Draw(writer fractal.Writer) {
 	s.draw(writer)
 }
 
+// TODO test edit search result undo ResAttr
+
 // Search performs a text search of text in the internal cell buffer. It populates
 // a search list so SeekNextResult and SeekPreviousResult can be used to visualize results.
 // It returns the number of matches found. Note that it also sets the attributes of
 // the matching terms as defined by ResultsAttr.
 func (s *Scroll) Search(text string) (n int) {
-	s.Buffer.ResetAttr()
+	s.buf.ResetAttr()
 	s.searchText = []rune(text)
 
 	n = s.searcher.Search(text)
@@ -302,7 +315,7 @@ func (s *Scroll) Search(text string) (n int) {
 		pos, _ := s.searcher.NextResult()
 		lX := pos.X + slen
 		for j := pos.X; j < lX; j++ {
-			s.Buffer.SetAttr(
+			s.buf.SetAttr(
 				term.Coordinates{X: j, Y: pos.Y},
 				s.ResultsAttr,
 			)
@@ -340,4 +353,14 @@ func (s *Scroll) Width() int {
 // Height returns this scroll's height.
 func (s *Scroll) Height() int {
 	return s.height
+}
+
+// Buffer returns s internal Buffer.
+func (s *Scroll) Buffer() *cell.Buffer {
+	return s.buf
+}
+
+// ReadFrom see cell.Buffer.ReadFrom.
+func (s *Scroll) ReadFrom(r io.Reader) (n int64, err error) {
+	return s.buf.ReadFrom(r)
 }

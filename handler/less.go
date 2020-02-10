@@ -78,7 +78,7 @@ func (l *Less) sendEvent(ev LessEvent) {
 }
 
 func getBuffer(virtualScroll component.VirtualComponent) *cell.Buffer {
-	return &virtualScroll.C.(*component.Scroll).Buffer
+	return virtualScroll.C.(*component.Scroll).Buffer()
 }
 
 // SetNormalMode sets the mode to normal.
@@ -111,7 +111,7 @@ func (l *Less) searchHandleEvent(ev term.Event) (exit bool) {
 	case term.KeyBackspace2:
 		if l.cursorOffset > 1 {
 			l.cursorOffset--
-			l.cmdScroll.C.(*component.Scroll).Buffer.
+			l.cmdScroll.C.(*component.Scroll).Buffer().
 				DeleteCell(term.Coordinates{X: l.cursorOffset, Y: 0})
 		}
 	case term.KeyEnter:
@@ -182,11 +182,6 @@ func (l *Less) SetMessageAlt(text string, args ...interface{}) {
 	getBuffer(l.cmdScroll).Reset()
 	getBuffer(l.cmdScroll).WriteString(fmt.Sprintf(text, args...))
 	l.Resize(l.width, l.height)
-}
-
-// Reset resets the contents and state of this instance.
-func (l *Less) Reset() {
-	l.InitWithBuffer(&l.Scroll.Buffer)
 }
 
 // Mode returns the current LessMode.
@@ -333,8 +328,7 @@ func (l *Less) Init() {
 func (l *Less) InitWithBuffer(buf *cell.Buffer) {
 	l.config = DefaultLessConfig
 	l.delEOF = false
-	l.Scroll.Init()
-	l.Scroll.Buffer = *buf
+	l.Scroll.InitWithBuffer(buf)
 
 	l.cmdScroll.C = component.NewScroll()
 	l.msgScroll.C = component.NewScroll()

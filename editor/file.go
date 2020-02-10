@@ -308,13 +308,11 @@ func (f *fileBuf) copyFlushSwapFile() (ok bool) {
 	return
 }
 
-// Insert : cell.Writer
 func (f *fileBuf) OnInsert(from, to term.Coordinates, str string) {
 	f.copyFlushSwapFile()
 	return
 }
 
-// Delete : cell.Writer
 func (f *fileBuf) OnDelete(from, to term.Coordinates, str string) {
 	f.copyFlushSwapFile()
 	return
