@@ -5,6 +5,7 @@ import (
 
 	"github.com/ernestrc/fractal"
 	"github.com/ernestrc/fractal/term"
+	"github.com/stretchr/testify/assert"
 )
 
 func altEvent(ch rune) term.Event {
@@ -25,16 +26,25 @@ func prepareTest(width, height int, border bool, root fractal.Handler) (
 	return writer, handler
 }
 
-func TestWindowManagerSetFocus(t *testing.T) {
+func TestWindowManagerSetFocusBorder(t *testing.T) {
+	testWindowManagerSetFocus(t, true)
+}
+func TestWindowManagerSetFocusNoBorder(t *testing.T) {
+	testWindowManagerSetFocus(t, false)
+}
+
+func testWindowManagerSetFocus(t *testing.T, border bool) {
 	width, height := 8, 4
-	_, handler := prepareTest(width, height, false, NewTestHandler())
-	right := handler.SplitHorizontal(NewTestHandler())
+	_, wm := prepareTest(width, height, border, NewTestHandler())
+	right := wm.SplitHorizontal(NewTestHandler())
 
-	handler.SetFocus(right)
+	wm.SetFocus(right)
 
-	if focus := handler.Focus(); focus != right {
+	if focus := wm.Focus(); focus != right {
 		t.Errorf("focus should be %+v, instead of %+v", right, focus)
 	}
+	_, ok := wm.FocusContent().(*TestHandler)
+	assert.True(t, ok)
 }
 
 // TestHandler signals that it's handling event by incrementing it's fill rune

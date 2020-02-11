@@ -75,7 +75,7 @@ func (f *Frame) SetAttr(border term.Attributes) {
 
 // Content returns the underlying Component.
 func (f *Frame) Content() fractal.Component {
-	return &f.content
+	return f.content.C
 }
 
 // SetContent updates the underlying component and resizes it

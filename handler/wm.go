@@ -83,7 +83,7 @@ func (wm *WindowManager) Handle(ev term.Event) (exit bool) {
 		ev.MouseY -= offset.Y
 	}
 
-	hexit := wm.getFocusHandler().Handle(ev)
+	hexit := wm.FocusContent().Handle(ev)
 
 	// if handler in focus wants to exit, close the window,
 	// or signal exit to upstream handler if it was last window
@@ -151,7 +151,11 @@ func (wm *WindowManager) FocusDown() bool {
 	return wm.switchFocus(wm.focus.TileDown())
 }
 
-func (wm *WindowManager) getFocusHandler() fractal.Handler {
+// FocusContent returns the current focus content.
+func (wm *WindowManager) FocusContent() fractal.Handler {
+	if wm.border {
+		return wm.focus.Content().(*Frame).Content().(fractal.Handler)
+	}
 	return wm.focus.Content().(fractal.Handler)
 }
 
