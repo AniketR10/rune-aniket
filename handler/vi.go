@@ -134,6 +134,7 @@ type Vi struct {
 	fileBuf     *editor.FileBuffer
 	mode        viMode
 	moveMode    moveMode
+	searchMode  moveMode
 	moveChar    rune
 	command     []rune
 }
@@ -407,13 +408,23 @@ func (vi *Vi) handleNormal(ev term.Event) bool {
 			vi.setCommandMode()
 			vi.handleCommand(ev)
 		case 'N':
-			vi.cursor.MoveToPrevMatch()
+			switch vi.searchMode {
+			case moveToNext:
+				vi.cursor.MoveToPrevMatch()
+			case moveToPrev:
+				vi.cursor.MoveToNextMatch()
+			}
+		case 'n':
+			switch vi.searchMode {
+			case moveToNext:
+				vi.cursor.MoveToNextMatch()
+			case moveToPrev:
+				vi.cursor.MoveToPrevMatch()
+			}
 		case 'p':
 			vi.pasteClipboard(false)
 		case 'P':
 			vi.pasteClipboard(true)
-		case 'n':
-			vi.cursor.MoveToNextMatch()
 		case '0':
 			vi.cursor.MoveStartLine()
 		case '$':
@@ -477,7 +488,12 @@ func (vi *Vi) handleNormal(ev term.Event) bool {
 			vi.cursor.MoveRightEndWord()
 		case 'b':
 			vi.cursor.MoveLeftStartWord()
+		case '?':
+			vi.searchMode = moveToPrev
+			ev.Ch = '/'
+			vi.less.Handle(ev)
 		case '/':
+			vi.searchMode = moveToNext
 			vi.less.Handle(ev)
 		case '%':
 			vi.cursor.MoveToMatchingRune()
