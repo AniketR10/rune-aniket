@@ -56,7 +56,7 @@ func (p *syncPublisher) Unsubscribe(s Subscriber) {
 		}
 	}
 	if unsubs < 0 {
-		panic("Subscriber not found")
+		panic("Subscriber is not subscribed")
 	}
 	p.subscribers = append(p.subscribers[:unsubs], p.subscribers[unsubs+1:]...)
 }

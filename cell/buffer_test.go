@@ -415,3 +415,20 @@ func TestBufferShiftRowSpaces(t *testing.T) {
 	assert.Equal(t, 1, shifted)
 	assert.Equal(t, "", buf.String())
 }
+
+func TestBufferUnsubscribe(t *testing.T) {
+	buf := NewBuffer()
+	one := &testSubscriber{}
+	two := &testSubscriber{}
+	buf.Subscribe(one)
+	buf.Subscribe(two)
+
+	assert.Panics(t, func() {
+		buf.Unsubscribe(&testSubscriber{})
+	})
+
+	assert.NotPanics(t, func() {
+		buf.Unsubscribe(two)
+		buf.Unsubscribe(one)
+	})
+}
