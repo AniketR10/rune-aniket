@@ -760,7 +760,7 @@ func testCursorDeleteSelection(t *testing.T, width, height int, typeSelect int) 
 		finalPos    func(*Cursor)
 		deleted     bool
 		finalBuf    string
-		skipForMode int
+		skipForMode []int
 	}{
 		{
 			initialBuf: "",
@@ -782,7 +782,7 @@ func testCursorDeleteSelection(t *testing.T, width, height int, typeSelect int) 
 			finalPos:    func(c *Cursor) { c.MoveRight() },
 			deleted:     true,
 			finalBuf:    "b",
-			skipForMode: lineSelection,
+			skipForMode: []int{lineSelection},
 		},
 		{
 			initialBuf: "a\nb",
@@ -832,10 +832,30 @@ func testCursorDeleteSelection(t *testing.T, width, height int, typeSelect int) 
 			deleted:  true,
 			finalBuf: "",
 		},
+		{
+			initialBuf: "type Writer {\n\ta int\n\tb int\n}\n",
+			selected:   true,
+			initialPos: func(c *Cursor) {
+				c.MoveLastLine()
+			},
+			finalPos: func(c *Cursor) {
+				c.MoveFirstLine()
+			},
+			deleted:     true,
+			finalBuf:    "",
+			skipForMode: []int{standardSelection, blockSelection},
+		},
 	}
 
 	for _, tcase := range tsuite {
-		if tcase.skipForMode == typeSelect {
+		var skip bool
+		for _, mode := range tcase.skipForMode {
+			if mode == typeSelect {
+				skip = true
+				break
+			}
+		}
+		if skip {
 			continue
 		}
 
@@ -845,7 +865,7 @@ func testCursorDeleteSelection(t *testing.T, width, height int, typeSelect int) 
 		}
 		switch typeSelect {
 		case noSelection:
-			panic("yo wasup!")
+			panic("hmm...")
 		case blockSelection:
 			require.Equal(t, tcase.selected, c.SelectBlock())
 		case lineSelection:

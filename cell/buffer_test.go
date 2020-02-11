@@ -310,6 +310,15 @@ func TestBufferDeleteLine(t *testing.T) {
 			end:    term.Coordinates{Y: 1, X: 3},
 		},
 		{
+			// inverted from/to
+			to:     term.Coordinates{X: 1},
+			from:   term.Coordinates{Y: 1, X: 2},
+			input:  "bla\nbleh",
+			output: "bla\nbleh",
+			start:  term.Coordinates{},
+			end:    term.Coordinates{Y: 1, X: 3},
+		},
+		{
 			from:   term.Coordinates{X: 1}, // should not matter that is oob
 			to:     term.Coordinates{Y: 2},
 			input:  "\nbla\n\nbleh\n",
