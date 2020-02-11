@@ -96,18 +96,6 @@ func (b *Buffer) DeleteRow(y int) (ok bool) {
 	return
 }
 
-// used by methods that need to validate cell access.
-// inBounds just checks that it's a valid coordinate for the underlying
-// reader/writer, which for instance could be x = len(row), which
-// does not contain a cell.
-func (b *Buffer) inStrictBounds(pos term.Coordinates) (ok bool) {
-	if pos.Y >= b.reader.Rows() || pos.X >= b.reader.Columns(pos.Y) {
-		return
-	}
-	ok = true
-	return
-}
-
 func (b *Buffer) inBounds(pos term.Coordinates) (ok bool) {
 	if pos.Y < 0 || pos.Y >= b.reader.Rows() ||
 		pos.X < 0 || pos.X > b.reader.Columns(pos.Y) {
