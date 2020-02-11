@@ -1,4 +1,4 @@
-package handler
+package vi
 
 import (
 	"bufio"
@@ -8,6 +8,7 @@ import (
 	"github.com/ernestrc/fractal"
 	"github.com/ernestrc/fractal/cell"
 	"github.com/ernestrc/fractal/editor"
+	"github.com/ernestrc/fractal/handler"
 	"github.com/ernestrc/fractal/term"
 	log "github.com/sirupsen/logrus"
 )
@@ -45,90 +46,11 @@ func moveOpposite(m moveMode) moveMode {
 	}
 }
 
-// viConfig holds configuration for Vi.
-type viConfig struct {
-	Filepath         string
-	Buffer           *cell.Buffer
-	ResAttr          term.Attributes
-	Tabspaces        int
-	Clipboard        editor.Clipboard
-	Logger           *log.Logger
-	SwapDir          string
-	RecoverySwapFile string
-}
-
-// ViOption represents a Vi handler configuration option.
-type ViOption func(*viConfig)
-
-// WithViSwapDir defines the swap directory to use if WithViFilepath option is set.
-// The swap directory is used to keep persist recovery files. If this option is not
-// defined, the directory of WithViFilepath is used as a swap directory.
-func WithViSwapDir(dir string) ViOption {
-	return func(cfg *viConfig) {
-		cfg.SwapDir = dir
-	}
-}
-
-// WithViRecoveryFile indicates that a Vi handler is to be initialized
-// from recovery file swapFilePath. This option overrides WithViSwapDir because
-// the swap directory of swapFilePath is used instead.
-func WithViRecoveryFile(swapFilePath string) ViOption {
-	return func(cfg *viConfig) {
-		cfg.RecoverySwapFile = swapFilePath
-	}
-}
-
-// WithViLogger sets the editor.Clipboard implementation to use.
-func WithViLogger(l *log.Logger) ViOption {
-	return func(cfg *viConfig) {
-		cfg.Logger = l
-	}
-}
-
-// WithViClipboard sets the editor.Clipboard implementation to use.
-func WithViClipboard(clip editor.Clipboard) ViOption {
-	return func(cfg *viConfig) {
-		cfg.Clipboard = clip
-	}
-}
-
-// WithViTabspaces sets the number of spaces used to render a tab.
-func WithViTabspaces(tabspaces int) ViOption {
-	return func(cfg *viConfig) {
-		cfg.Tabspaces = tabspaces
-	}
-}
-
-// WithViResAttr sets the search result cell attributes to be rendered.
-func WithViResAttr(attr term.Attributes) ViOption {
-	return func(cfg *viConfig) {
-		cfg.ResAttr = attr
-	}
-}
-
-// WithViBuffer is a ViOption that sets the buffer to use with
-// Vi handler. If this option is set, note that it overrides
-// WithViFilepath so some functions (like Saving to disk) will be disabled.
-// This option also overrides WithViRecoveryFile.
-func WithViBuffer(buf *cell.Buffer) ViOption {
-	return func(cfg *viConfig) {
-		cfg.Buffer = buf
-	}
-}
-
-// WithViFilepath is a ViOption that sets the filepath of the file to open with
-// a Vi handler.
-func WithViFilepath(filepath string) ViOption {
-	return func(cfg *viConfig) {
-		cfg.Filepath = filepath
-	}
-}
-
 // Vi implements a basic vi-like text editor which satisfies fractal.Handler
 // and fractal.Component.
 type Vi struct {
 	config      viConfig
-	less        Less // used for message bar and text search capabilities
+	less        handler.Less // used for message bar and text search capabilities
 	logger      *log.Logger
 	raw, cursor editor.Cursor
 	fileBuf     *editor.FileBuffer
@@ -150,8 +72,8 @@ var defaultViConfig = viConfig{
 	Logger:    nil,
 }
 
-// NewVi allocates storage for a new Vi handle, initializes it and returns it.
-func NewVi(opts ...ViOption) (*Vi, error) {
+// New allocates storage for a new Vi handler, initializes it and returns it.
+func New(opts ...Option) (*Vi, error) {
 	vi := new(Vi)
 	err := vi.Init(opts...)
 	if err != nil {
@@ -161,7 +83,7 @@ func NewVi(opts ...ViOption) (*Vi, error) {
 }
 
 // Init initialies this vi handle with a new Buffer.
-func (vi *Vi) Init(opts ...ViOption) (err error) {
+func (vi *Vi) Init(opts ...Option) (err error) {
 	vi.config = defaultViConfig
 	for _, o := range opts {
 		o(&vi.config)
@@ -232,7 +154,7 @@ func (vi *Vi) Cursor() (term.Coordinates, bool) {
 		return pos, true
 	}
 	// use less Cursor if we are in search mode
-	if vi.less.Mode() != LessNormalMode {
+	if vi.less.Mode() != handler.LessNormalMode {
 		return vi.less.Cursor()
 	}
 	return vi.cursor.Cursor()
@@ -665,7 +587,7 @@ func (vi *Vi) handleReplace(ev term.Event) (quit bool) {
 func (vi *Vi) Handle(ev term.Event) (quit bool) {
 	switch vi.mode {
 	case normalMode:
-		if vi.less.Mode() != LessNormalMode {
+		if vi.less.Mode() != handler.LessNormalMode {
 			quit = vi.handleSearch(ev)
 		} else {
 			quit = vi.handleNormal(ev)

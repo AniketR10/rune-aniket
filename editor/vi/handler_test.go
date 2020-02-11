@@ -1,4 +1,4 @@
-package handler
+package vi
 
 import (
 	"strings"
@@ -48,14 +48,14 @@ type batchTestCase struct {
 	output string
 }
 
-func setupVi(t *testing.T, text string, width, height int, opts ...ViOption) *Vi {
+func setupVi(t *testing.T, text string, width, height int, opts ...Option) *Vi {
 	buf := cell.NewBuffer()
 	_, err := buf.ReadFrom(strings.NewReader(text))
 	require.NoError(t, err)
 
-	opts = append(opts, WithViBuffer(buf))
+	opts = append(opts, WithBuffer(buf))
 
-	vi, err := NewVi(opts...)
+	vi, err := New(opts...)
 	require.NoError(t, err)
 	vi.Resize(width, height)
 
@@ -65,7 +65,7 @@ func setupVi(t *testing.T, text string, width, height int, opts ...ViOption) *Vi
 func testBatchWorkload(t *testing.T, width, height int, cases []batchTestCase) {
 	writer := term.NewStringWriter(width, height)
 
-	vi := setupVi(t, snippet, width, height, WithViTabspaces(2))
+	vi := setupVi(t, snippet, width, height, WithTabspaces(2))
 
 	for _, tcase := range cases {
 		err := writer.Clear(term.Attributes{Fg: 0, Bg: 0})
@@ -110,7 +110,7 @@ func TestCellAtCursor(t *testing.T) {
 	width, height := 20, 10
 
 	writer := term.NewStringWriter(width, height)
-	vi := setupVi(t, snippet, width, height, WithViTabspaces(2))
+	vi := setupVi(t, snippet, width, height, WithTabspaces(2))
 
 	for _, tcase := range cases {
 		for _, r := range tcase.input {
@@ -354,7 +354,7 @@ func TestViCommandMode(t *testing.T) {
 	_, err := buf.ReadFrom(strings.NewReader(snippet))
 	require.NoError(t, err)
 
-	vi, err := NewVi(WithViBuffer(buf))
+	vi, err := New(WithBuffer(buf))
 	require.NoError(t, err)
 
 	vi.Resize(width, height)

@@ -8,7 +8,7 @@ import (
 
 	"github.com/ernestrc/fractal"
 	"github.com/ernestrc/fractal/cell"
-	"github.com/ernestrc/fractal/handler"
+	"github.com/ernestrc/fractal/editor/vi"
 	"github.com/ernestrc/fractal/plugin"
 	"github.com/ernestrc/fractal/term"
 	log "github.com/sirupsen/logrus"
@@ -29,14 +29,14 @@ func main() {
 		log.Println(http.ListenAndServe("localhost:6060", nil))
 	}()
 
-	opts := make([]handler.ViOption, 0)
+	opts := make([]vi.Option, 0)
 
 	if len(os.Args) > 1 {
 		filename := os.Args[1]
 		if err := flag.CommandLine.Parse(os.Args[2:]); err != nil {
 			log.Fatal(err)
 		}
-		opts = append(opts, handler.WithViFilepath(filename))
+		opts = append(opts, vi.WithFilepath(filename))
 	} else {
 		flag.Parse()
 		buf := cell.NewBuffer()
@@ -44,14 +44,14 @@ func main() {
 		if err != nil {
 			log.Fatal(err)
 		}
-		opts = append(opts, handler.WithViBuffer(buf))
+		opts = append(opts, vi.WithBuffer(buf))
 	}
 
 	opts = append(opts,
-		handler.WithViTabspaces(*tabspaces),
-		handler.WithViSwapDir(*swapDir),
-		handler.WithViRecoveryFile(*recoveryFile),
-		handler.WithViResAttr(term.Attributes{Bg: term.ColorYellow, Fg: term.ColorBlack}),
+		vi.WithTabspaces(*tabspaces),
+		vi.WithSwapDir(*swapDir),
+		vi.WithRecoveryFile(*recoveryFile),
+		vi.WithResAttr(term.Attributes{Bg: term.ColorYellow, Fg: term.ColorBlack}),
 	)
 
 	if *debugLog != "" {
@@ -63,7 +63,7 @@ func main() {
 		l := log.New()
 		l.SetOutput(f)
 		l.SetLevel(log.TraceLevel)
-		opts = append(opts, handler.WithViLogger(l))
+		opts = append(opts, vi.WithLogger(l))
 
 		// set output of plugins
 		plugin.SetLoggingOutput(f)
@@ -76,10 +76,10 @@ func main() {
 			log.Fatal(err)
 		}
 		defer closeClip()
-		opts = append(opts, handler.WithViClipboard(clip))
+		opts = append(opts, vi.WithClipboard(clip))
 	}
 
-	vi, err := handler.NewVi(opts...)
+	vi, err := vi.New(opts...)
 	if err != nil {
 		log.Fatal(err)
 	}
