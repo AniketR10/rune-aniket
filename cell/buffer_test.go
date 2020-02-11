@@ -170,31 +170,6 @@ func assertCellProperties(t *testing.T, cell term.Cell, attr term.Attributes) {
 	assert.Equal(t, attr.Bg, cell.Bg)
 }
 
-func TestSetAttr(t *testing.T) {
-	str := "0123"
-	buf := newBufferWithContent(t, str)
-
-	t.Run("sets attribute to cell at position if exists", func(t *testing.T) {
-		pos := term.Coordinates{X: 0, Y: 0}
-		attr := term.Attributes{Fg: term.AttrBold, Bg: term.AttrReverse}
-		assert.True(t, buf.SetAttr(pos, attr))
-		c, ok := buf.Cell(pos)
-		assert.True(t, ok)
-		assertCellProperties(t, c, attr)
-	})
-	t.Run("returns ok=false if cell at position does not exist", func(t *testing.T) {
-		coords := []term.Coordinates{
-			term.Coordinates{X: 10, Y: 10},
-			term.Coordinates{X: 0, Y: 10},
-			term.Coordinates{X: 4, Y: 0},
-		}
-		for _, pos := range coords {
-			attr := term.Attributes{Fg: term.AttrBold, Bg: term.AttrReverse}
-			assert.False(t, buf.SetAttr(pos, attr))
-		}
-	})
-}
-
 func TestBufferTruncateFrom(t *testing.T) {
 
 	tsuite := []struct {
@@ -244,15 +219,26 @@ func TestBufferInsertString(t *testing.T) {
 }
 
 type testSubscriber struct {
-	onInsert, onDelete int
+	onDidInsert, onDidDelete, onWillInsert, onWillDelete int
 }
 
-func (t *testSubscriber) OnInsert(from, to term.Coordinates, str string) {
-	t.onInsert++
+func (t *testSubscriber) OnWillInsert(at term.Coordinates, str string) {
+	t.onWillInsert++
 }
 
-func (t *testSubscriber) OnDelete(start, end term.Coordinates, str string) {
-	t.onDelete++
+func (t *testSubscriber) OnDidInsert(from, to term.Coordinates) {
+	t.onDidInsert++
+}
+
+func (t *testSubscriber) OnWillDelete(from, to term.Coordinates) {
+	t.onWillDelete++
+}
+
+func (t *testSubscriber) OnDidDelete(start, end term.Coordinates, str string) {
+	t.onDidDelete++
+}
+
+func (t *testSubscriber) Unsubscribe() {
 }
 
 func TestBufferReset(t *testing.T) {
@@ -276,8 +262,10 @@ func TestBufferReset(t *testing.T) {
 		b.Reset()
 		b.InsertRowAt(0)
 		b.DeleteRow(0)
-		assert.Equal(t, 1, sub.onInsert)
-		assert.Equal(t, 1, sub.onDelete)
+		assert.Equal(t, 1, sub.onDidInsert)
+		assert.Equal(t, 1, sub.onWillDelete)
+		assert.Equal(t, 1, sub.onWillInsert)
+		assert.Equal(t, 1, sub.onWillDelete)
 	})
 
 	t.Run("does reset undo", func(t *testing.T) {

@@ -7,30 +7,39 @@ import (
 )
 
 // Searcher is an interface that wraps methods to search text in a Reader.
+//
+// Search performs a text search on a Reader. It populates a search list
+// so subsequent calls to PrevResult and NextResult can scroll through the results.
+// The return value represents number of text occurrences found.
+//
+// PrevResult returns the coordinates of the previous result in the Search list
+// and moves the search result pointer. Returns false if there aren't any search
+// matches. Implementors should wrap around and continue to the
+// last match once result list is exhausted.
+//
+// NextResult returns the coordinates of the next result in the Search list
+// and moves the search result pointer. Returns false if there aren't any search
+// matches. Implementors should wrap around and continue to the
+// first match once result list is exhausted.
+//
+// Result returns the search pointer's coordinates or false if there is no
+// search result.
+//
+// Reset resets the internal state of a Searcher.
 type Searcher interface {
-	// Search performs a text search on a Reader. It populates a search list
-	// so subsequent calls to PrevResult and NextResult can scroll through the results.
-	// The return value represents number of text occurrences found.
 	Search(text string) int
-
-	// PrevResult returns the coordinates of the previous result in the Search list
-	// and moves the search result pointer. Returns false if there aren't any search
-	// matches. Implementors should wrap around and continue to the
-	// last match once result list is exhausted.
 	PrevResult() (pos term.Coordinates, ok bool)
-
-	// NextResult returns the coordinates of the next result in the Search list
-	// and moves the search result pointer. Returns false if there aren't any search
-	// matches. Implementors should wrap around and continue to the
-	// first match once result list is exhausted.
 	NextResult() (pos term.Coordinates, ok bool)
-
-	// Result returns the search pointer's coordinates or false if there is no
-	// search result.
 	Result() (pos term.Coordinates, ok bool)
-
-	// Reset resets the result list of this Searcher.
 	Reset()
+}
+
+// SubscriberSearcher is an interface that groups the Searcher and Subscriber interface.
+// Searchers installed on a mutable buffer MUST satisfy Subscriber,
+// otherwise search results become stale as buffer is updated.
+type SubscriberSearcher interface {
+	Subscriber
+	Searcher
 }
 
 type simpleSearcher struct {
@@ -39,8 +48,8 @@ type simpleSearcher struct {
 	result  *list.Element
 }
 
-// NewSimpleSearcher returns a Searcher which uses a simple algorithm to find ALL
-// occurrences of the given string upon calling Search.
+// NewSimpleSearcher returns a Searcher which uses a simple O(n) algorithm to
+// preemptively find all occurrences of the given string upon calling Search.
 func NewSimpleSearcher(reader Reader) Searcher {
 	s := new(simpleSearcher)
 	s.reader = reader

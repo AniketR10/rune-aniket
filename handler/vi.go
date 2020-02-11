@@ -183,6 +183,7 @@ func (vi *Vi) Init(opts ...ViOption) (err error) {
 		buf = buf.WithLogger(vi.logger)
 	}
 
+	vi.less.Scroll.ResultsAttr = vi.config.ResAttr
 	vi.less.InitWithBuffer(buf)
 	vi.cursor.Init(&vi.less.Scroll)
 
@@ -200,7 +201,6 @@ func (vi *Vi) Init(opts ...ViOption) (err error) {
 	}
 
 	editor.WithCopyDelete(vi.config.Clipboard, buf)
-	vi.less.Scroll.ResultsAttr = vi.config.ResAttr
 	vi.logger = vi.config.Logger
 
 	vi.raw = vi.cursor

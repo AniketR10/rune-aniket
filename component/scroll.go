@@ -16,9 +16,10 @@ type Scroll struct {
 	width, height int
 	searchText    []rune
 	offset        term.Coordinates
-	// foreground and background attributes
-	// for cells that match search results
+
+	// Sets the search result attributes upon matching.
 	ResultsAttr term.Attributes
+
 	// lines longer than the width of the scroll wrap around and
 	// are rendered in the next line if Wrap is set to true.
 	Wrap bool
@@ -45,12 +46,19 @@ func (s *Scroll) Init() {
 
 // InitWithBuffer initializes this scroll with buf.
 func (s *Scroll) InitWithBuffer(buf *cell.Buffer) {
-	s.ResultsAttr.Fg, s.ResultsAttr.Bg = term.AttrReverse, term.AttrReverse
+	if s.ResultsAttr == (term.Attributes{}) {
+		s.ResultsAttr.Fg, s.ResultsAttr.Bg = term.AttrReverse, term.AttrReverse
+	}
 
 	s.buf = buf
 
+	// Searcher that actually performs the text search
 	searcher := cell.NewSimpleSearcher(s.buf)
-	s.searcher = searcher
+
+	attrSearcher := cell.AttrSearcher(searcher, buf, s.ResultsAttr)
+	buf.Subscribe(attrSearcher)
+
+	s.searcher = attrSearcher
 
 	s.resetProps()
 }
@@ -295,34 +303,13 @@ func (s *Scroll) Draw(writer fractal.Writer) {
 	s.draw(writer)
 }
 
-// TODO test edit search result undo ResAttr
-
 // Search performs a text search of text in the internal cell buffer. It populates
 // a search list so SeekNextResult and SeekPreviousResult can be used to visualize results.
 // It returns the number of matches found. Note that it also sets the attributes of
 // the matching terms as defined by ResultsAttr.
 func (s *Scroll) Search(text string) (n int) {
-	s.buf.ResetAttr()
 	s.searchText = []rune(text)
-
-	n = s.searcher.Search(text)
-	if n == 0 {
-		return
-	}
-
-	slen := len(text)
-	for i := 0; i < n; i++ {
-		pos, _ := s.searcher.NextResult()
-		lX := pos.X + slen
-		for j := pos.X; j < lX; j++ {
-			s.buf.SetAttr(
-				term.Coordinates{X: j, Y: pos.Y},
-				s.ResultsAttr,
-			)
-		}
-	}
-
-	return
+	return s.searcher.Search(text)
 }
 
 // PrevResult returns the coordinates of the previous result in the Search list.

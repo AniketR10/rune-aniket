@@ -10,6 +10,7 @@ import (
 	"github.com/ernestrc/fractal/cell"
 	"github.com/ernestrc/fractal/handler"
 	"github.com/ernestrc/fractal/plugin"
+	"github.com/ernestrc/fractal/term"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -50,6 +51,7 @@ func main() {
 		handler.WithViTabspaces(*tabspaces),
 		handler.WithViSwapDir(*swapDir),
 		handler.WithViRecoveryFile(*recoveryFile),
+		handler.WithViResAttr(term.Attributes{Bg: term.ColorYellow, Fg: term.ColorBlack}),
 	)
 
 	if *debugLog != "" {

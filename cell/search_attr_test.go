@@ -1,0 +1,200 @@
+package cell
+
+import (
+	"strings"
+	"testing"
+
+	"github.com/ernestrc/fractal/term"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+func TestAttrSearcherSearch(t *testing.T) {
+	fn := func(buf *Buffer) Searcher {
+		searcher := NewSimpleSearcher(buf)
+		s := AttrSearcher(searcher, buf, term.Attributes{})
+		return s
+	}
+	testSearch(t, fn)
+}
+
+func newAttrSearcher(t *testing.T, content string) (*Buffer, SubscriberSearcher) {
+	buf := NewBuffer()
+	searcher := NewSimpleSearcher(buf)
+	s := AttrSearcher(searcher, buf, term.Attributes{Bg: term.ColorRed, Fg: term.ColorCyan})
+	_, err := buf.ReadFrom(strings.NewReader(content))
+	require.NoError(t, err)
+
+	return buf, s
+}
+
+func TestAttrSearcher(t *testing.T) {
+
+	t.Run("sets/unsets attributes upon Search", func(t *testing.T) {
+		buf, s := newAttrSearcher(t, "yo wasup")
+
+		require.Equal(t, 1, s.Search("wasup"))
+		expected := [][]term.Cell{
+			[]term.Cell{
+				term.Cell{Ch: 'y'},
+				term.Cell{Ch: 'o'},
+				term.Cell{Ch: ' '},
+				term.Cell{Ch: 'w', Bg: term.ColorRed, Fg: term.ColorCyan},
+				term.Cell{Ch: 'a', Bg: term.ColorRed, Fg: term.ColorCyan},
+				term.Cell{Ch: 's', Bg: term.ColorRed, Fg: term.ColorCyan},
+				term.Cell{Ch: 'u', Bg: term.ColorRed, Fg: term.ColorCyan},
+				term.Cell{Ch: 'p', Bg: term.ColorRed, Fg: term.ColorCyan},
+			},
+		}
+		assert.Equal(t, expected, buf.RawCells())
+
+		require.Equal(t, 0, s.Search(""))
+		expected = [][]term.Cell{
+			[]term.Cell{
+				term.Cell{Ch: 'y'}, term.Cell{Ch: 'o'}, term.Cell{Ch: ' '},
+				term.Cell{Ch: 'w'}, term.Cell{Ch: 'a'}, term.Cell{Ch: 's'},
+				term.Cell{Ch: 'u'}, term.Cell{Ch: 'p'},
+			},
+		}
+		assert.Equal(t, expected, buf.RawCells())
+	})
+
+	t.Run("unsets attributes if match result is partially deleted", func(t *testing.T) {
+		buf, s := newAttrSearcher(t, "yo wasup")
+		require.Equal(t, 1, s.Search("wasup"))
+
+		buf.DeleteCell(term.Coordinates{X: 7})
+		require.Equal(t, "yo wasu", buf.String())
+
+		expected := [][]term.Cell{
+			[]term.Cell{
+				term.Cell{Ch: 'y'}, term.Cell{Ch: 'o'}, term.Cell{Ch: ' '},
+				term.Cell{Ch: 'w'}, term.Cell{Ch: 'a'}, term.Cell{Ch: 's'},
+				term.Cell{Ch: 'u'},
+			},
+		}
+		assert.Equal(t, expected, buf.RawCells())
+	})
+
+	t.Run("unsets attributes of ONE of the match results if it is partially deleted", func(t *testing.T) {
+		buf, s := newAttrSearcher(t, "yo yo wasup")
+		require.Equal(t, 2, s.Search("yo"))
+
+		buf.DeleteCell(term.Coordinates{X: 0})
+		require.Equal(t, "o yo wasup", buf.String())
+
+		expected := [][]term.Cell{
+			[]term.Cell{
+				term.Cell{Ch: 'o'}, term.Cell{Ch: ' '},
+				term.Cell{Ch: 'y', Bg: term.ColorRed, Fg: term.ColorCyan},
+				term.Cell{Ch: 'o', Bg: term.ColorRed, Fg: term.ColorCyan},
+				term.Cell{Ch: ' '},
+				term.Cell{Ch: 'w'}, term.Cell{Ch: 'a'}, term.Cell{Ch: 's'},
+				term.Cell{Ch: 'u'}, term.Cell{Ch: 'p'},
+			},
+		}
+		assert.Equal(t, expected, buf.RawCells())
+	})
+
+	t.Run("unsets attributes of ONE of the match results if it is inserted in the middle", func(t *testing.T) {
+		buf, s := newAttrSearcher(t, "yo yo wasup")
+		require.Equal(t, 2, s.Search("yo"))
+
+		buf.Insert(term.Coordinates{X: 1}, 'j')
+		require.Equal(t, "yjo yo wasup", buf.String())
+
+		expected := [][]term.Cell{
+			[]term.Cell{
+				term.Cell{Ch: 'y'}, term.Cell{Ch: 'j'},
+				term.Cell{Ch: 'o'}, term.Cell{Ch: ' '},
+				term.Cell{Ch: 'y', Bg: term.ColorRed, Fg: term.ColorCyan},
+				term.Cell{Ch: 'o', Bg: term.ColorRed, Fg: term.ColorCyan},
+				term.Cell{Ch: ' '},
+				term.Cell{Ch: 'w'}, term.Cell{Ch: 'a'}, term.Cell{Ch: 's'},
+				term.Cell{Ch: 'u'}, term.Cell{Ch: 'p'},
+			},
+		}
+		assert.Equal(t, expected, buf.RawCells())
+	})
+
+	t.Run("sets attributes if text is added such that there's a new match result ", func(t *testing.T) {
+		buf, s := newAttrSearcher(t, "yo wasup")
+
+		require.Equal(t, 0, s.Search("wasupp"))
+
+		buf.Insert(term.Coordinates{X: 8}, 'p')
+		require.Equal(t, "yo wasupp", buf.String())
+
+		expected := [][]term.Cell{
+			[]term.Cell{
+				term.Cell{Ch: 'y'},
+				term.Cell{Ch: 'o'},
+				term.Cell{Ch: ' '},
+				term.Cell{Ch: 'w', Bg: term.ColorRed, Fg: term.ColorCyan},
+				term.Cell{Ch: 'a', Bg: term.ColorRed, Fg: term.ColorCyan},
+				term.Cell{Ch: 's', Bg: term.ColorRed, Fg: term.ColorCyan},
+				term.Cell{Ch: 'u', Bg: term.ColorRed, Fg: term.ColorCyan},
+				term.Cell{Ch: 'p', Bg: term.ColorRed, Fg: term.ColorCyan},
+				term.Cell{Ch: 'p', Bg: term.ColorRed, Fg: term.ColorCyan},
+			},
+		}
+		assert.Equal(t, expected, buf.RawCells())
+	})
+
+	t.Run("unsets attributes if match result is inserted in the middle such that there's no more match", func(t *testing.T) {
+		buf, s := newAttrSearcher(t, "yo wasup")
+
+		require.Equal(t, 1, s.Search("wasup"))
+
+		buf.Insert(term.Coordinates{X: 5}, 'p')
+		require.Equal(t, "yo wapsup", buf.String())
+
+		expected := [][]term.Cell{
+			[]term.Cell{
+				term.Cell{Ch: 'y'},
+				term.Cell{Ch: 'o'},
+				term.Cell{Ch: ' '},
+				term.Cell{Ch: 'w'},
+				term.Cell{Ch: 'a'},
+				term.Cell{Ch: 'p'},
+				term.Cell{Ch: 's'},
+				term.Cell{Ch: 'u'},
+				term.Cell{Ch: 'p'},
+			},
+		}
+		assert.Equal(t, expected, buf.RawCells())
+	})
+
+	t.Run("sets attributes if text is deleted in the middle such that text now matches", func(t *testing.T) {
+		buf, s := newAttrSearcher(t, "yo wasup")
+
+		require.Equal(t, 1, s.Search("wasup"))
+
+		buf.DeleteCell(term.Coordinates{X: 5})
+		require.Equal(t, "yo waup", buf.String())
+
+		expected := [][]term.Cell{
+			[]term.Cell{
+				term.Cell{Ch: 'y'},
+				term.Cell{Ch: 'o'},
+				term.Cell{Ch: ' '},
+				term.Cell{Ch: 'w'},
+				term.Cell{Ch: 'a'},
+				term.Cell{Ch: 'u'},
+				term.Cell{Ch: 'p'},
+			},
+		}
+		assert.Equal(t, expected, buf.RawCells())
+	})
+
+	t.Run("Unsubscribes upon calls to Unsubscribe", func(t *testing.T) {
+		buf, s := newAttrSearcher(t, "yo wasup")
+		require.Equal(t, 0, s.Search("oy"))
+		s.Unsubscribe()
+
+		buf.InsertString(term.Coordinates{}, "oy")
+
+		_, ok := s.NextResult()
+		require.False(t, ok)
+	})
+}

@@ -165,42 +165,6 @@ func (b *Buffer) DeleteCell(pos term.Coordinates) (term.Coordinates, bool) {
 	return start, true
 }
 
-// ResetAttr resets all the attributes of the underlying cell matrix.
-func (b *Buffer) ResetAttr() {
-	cells := b.reader.RawCells()
-	for y, r := range cells {
-		for x := range r {
-			cells[y][x].Fg, cells[y][x].Bg = 0, 0
-		}
-	}
-}
-
-// SetAttr overwrites the background and foreground attributes of cell at position.
-func (b *Buffer) SetAttr(pos term.Coordinates, attr term.Attributes) (
-	ok bool,
-) {
-	if ok = b.inStrictBounds(pos); !ok {
-		return
-	}
-
-	cells := b.reader.RawCells()
-	cells[pos.Y][pos.X].Bg = attr.Bg
-	cells[pos.Y][pos.X].Fg = attr.Fg
-	return
-}
-
-// GetAttr gets the background and foreground attributes of cell at position.
-func (b *Buffer) GetAttr(pos term.Coordinates) (
-	attr term.Attributes, ok bool,
-) {
-	if ok = b.inStrictBounds(pos); !ok {
-		return
-	}
-	cells := b.reader.RawCells()
-	attr = term.Attributes{Bg: cells[pos.Y][pos.X].Bg, Fg: cells[pos.Y][pos.X].Fg}
-	return
-}
-
 // Rows returns the number of rows in the Buffer.
 func (b *Buffer) Rows() int {
 	return b.reader.Rows()
@@ -409,5 +373,10 @@ func (b *Buffer) ShiftRowLeft(row int) (chars int) {
 
 // Subscribe subscribes s to all updates to the underlying buffer.
 func (b *Buffer) Subscribe(s Subscriber) {
-	b.pub.subscribe(s)
+	b.pub.Subscribe(s)
+}
+
+// Unsubscribe unsubscribes s from updates.
+func (b *Buffer) Unsubscribe(s Subscriber) {
+	b.pub.Unsubscribe(s)
 }
