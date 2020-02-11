@@ -354,20 +354,7 @@ func tileRightDir(node *TileNode, direction splitdir) *TileNode {
 // TileLeft returns the tile left-adjacent to t or nil if t is the
 // left-most tile in the tree.
 func (t *TileNode) TileLeft() *TileNode {
-	node := t
-	direction := vertical
-	parent, i := getParentIdx(node)
-
-	if i == 0 || parent.direction != direction {
-		return tileLeftDir(parent, direction)
-	}
-
-	link := parent.children[i-1].C.(*TileNode)
-	if len(link.children) == 0 {
-		return link
-	}
-
-	return link.rightMostChild()
+	return tileLeftDir(t, vertical)
 }
 
 // TileRight returns the tile right-adjacent to t or nil if t is the

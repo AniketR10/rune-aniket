@@ -40,8 +40,9 @@ func (wm *WindowManager) Init(handler fractal.Handler, border bool) {
 		handler = wm.withFrame(handler)
 	}
 	tile := wm.TileTree.Init(handler)
-	wm.focus = tile
 	wm.border = border
+	wm.focus = tile
+	wm.SetFocus(tile)
 	return
 }
 
@@ -92,9 +93,7 @@ func (wm *WindowManager) Handle(ev term.Event) (exit bool) {
 			return
 		}
 		curr := wm.focus
-		if !wm.FocusLeft() && !wm.FocusUp() && !wm.FocusRight() {
-			wm.FocusDown()
-		}
+		wm.ShiftFocus()
 		curr.Close()
 	}
 
@@ -162,6 +161,25 @@ func (wm *WindowManager) FocusContent() fractal.Handler {
 // Focus returns the tile currently in focus.
 func (wm *WindowManager) Focus() *component.TileNode {
 	return wm.focus
+}
+
+// ShiftFocus attempts to shift to focus to another tile. It returns
+// false if focus did not shift to another tile because there aren't any tiles left.
+func (wm *WindowManager) ShiftFocus() (ok bool) {
+	ok = wm.FocusLeft()
+	if ok {
+		return
+	}
+	ok = wm.FocusUp()
+	if ok {
+		return
+	}
+	ok = wm.FocusRight()
+	if ok {
+		return
+	}
+	ok = wm.FocusDown()
+	return
 }
 
 // SetFocus sets the passed tile in focus. It returns the previous tile in focus.

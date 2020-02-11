@@ -318,3 +318,11 @@ func TestWindowManagerHandleBorder(t *testing.T) {
 
 	testHandlerWorkflow(t, handler, cases, writer)
 }
+
+func TestWindowFocus(t *testing.T) {
+	leftHandler := NewTestHandler()
+	width, height := 12, 4
+	_, handler := prepareTest(width, height, true, leftHandler)
+
+	assert.Nil(t, handler.Focus().TileLeft())
+}
