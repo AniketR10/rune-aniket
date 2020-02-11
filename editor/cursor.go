@@ -396,7 +396,8 @@ func (c *Cursor) moveBeforeRune(t []rune, move func() bool) (ok bool) {
 }
 
 var skipRunes = []rune{'.', ',', ':', ';', ' ', ')', '"',
-	'\'', '(', '{', '}', '[', ']', '\t', '\x00', '\\', '/'}
+	'\'', '(', '{', '}', '[', ']', '\t', '\x00', '\\', '/',
+	'+', '`','_'}
 
 // MoveRightStartWord moves the cursor right to the start of the next word.
 func (c *Cursor) MoveRightStartWord() bool {
