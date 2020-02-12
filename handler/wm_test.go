@@ -319,10 +319,20 @@ func TestWindowManagerHandleBorder(t *testing.T) {
 	testHandlerWorkflow(t, handler, cases, writer)
 }
 
-func TestWindowFocus(t *testing.T) {
+func TestWindowFocusInitSplitVertical(t *testing.T) {
 	leftHandler := NewTestHandler()
 	width, height := 12, 4
-	_, handler := prepareTest(width, height, true, leftHandler)
+	_, m := prepareTest(width, height, true, leftHandler)
 
-	assert.Nil(t, handler.Focus().TileLeft())
+	assert.Nil(t, m.Focus().TileLeft())
+	assert.False(t, m.ShiftFocus())
+
+	rightHandler := NewTestHandler()
+	_ = m.SplitVertical(rightHandler)
+
+	assert.Equal(t, leftHandler, m.FocusContent())
+	assert.True(t, m.ShiftFocus())
+	assert.Equal(t, rightHandler, m.FocusContent())
+	assert.True(t, m.ShiftFocus())
+	assert.Equal(t, leftHandler, m.FocusContent())
 }

@@ -10,7 +10,8 @@ import (
 type splitdir uint8
 
 const (
-	vertical splitdir = iota
+	root splitdir = iota
+	vertical
 	horizontal
 )
 
@@ -31,7 +32,7 @@ type TileNode struct {
 // Init initializes a TileTree or resets it if already initialied.
 func (t *TileTree) Init(content fractal.Component) (n *TileNode) {
 	n = new(TileNode)
-	t.root.direction = vertical
+	t.root.direction = root
 	t.root.children = []*VirtualComponent{&VirtualComponent{C: n}}
 	n.initNode(vertical, content, &t.root)
 	return

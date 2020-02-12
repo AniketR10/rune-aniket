@@ -47,11 +47,12 @@ func main() {
 	wm = handler.NewWindowManager(&less[0], border)
 
 	wm.SplitHorizontal(&less[1])
+	wm.FocusUp()
+	wm.FocusLeft()
 	wm.SplitVertical(&less[2])
-	wm.FocusDown()
 	wm.SplitVertical(&less[3])
 
-	if err := fractal.RunMode(wm, term.InputAlt); err != nil {
+	if err := fractal.RunMode(wm, term.InputAlt|term.InputMouse); err != nil {
 		log.Fatal(err)
 	}
 }
