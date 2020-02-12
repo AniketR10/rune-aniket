@@ -468,3 +468,9 @@ func (t *TileTree) TileAt(pos term.Coordinates) *TileNode {
 	}
 	return t.root.tileAt(pos)
 }
+
+// SetContent sets the content of a TileNode to c.
+func (t *TileNode) SetContent(c fractal.Component) {
+	t.content = c
+	t.content.Resize(t.width, t.height)
+}

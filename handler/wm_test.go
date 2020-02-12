@@ -336,3 +336,41 @@ func TestWindowFocusInitSplitVertical(t *testing.T) {
 	assert.True(t, m.ShiftFocus())
 	assert.Equal(t, leftHandler, m.FocusContent())
 }
+
+func TestWindowManagerSetFocusContent(t *testing.T) {
+	leftHandler := NewTestHandler()
+	width, height := 8, 4
+	writer, wm := prepareTest(width, height, true, leftHandler)
+
+	rightHandler := NewTestHandler()
+	_ = wm.SplitVertical(rightHandler)
+
+	prev := wm.SetFocusContent(rightHandler)
+	assert.Equal(t, prev, leftHandler)
+
+	cases := []handlerTestCase{
+		{
+			term.Event{}, `
+┌──┐┌──┐
+│BB││BB│
+│BB││BB│
+└──┘└──┘`,
+		},
+		{
+			altEvent('l'), `
+┌──┐┌──┐
+│BB││BB│
+│BB││BB│
+└──┘└──┘`,
+		},
+		{
+			term.Event{}, `
+┌──┐┌──┐
+│CC││CC│
+│CC││CC│
+└──┘└──┘`,
+		},
+	}
+
+	testHandlerWorkflow(t, wm, cases, writer)
+}

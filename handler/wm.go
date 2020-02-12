@@ -196,6 +196,19 @@ func (wm *WindowManager) SetFocus(tile *component.TileNode) (
 	return
 }
 
+// SetFocusContent sets the content of the tile in focus to h.
+func (wm *WindowManager) SetFocusContent(h fractal.Handler) (
+	prev fractal.Handler,
+) {
+	prev = wm.FocusContent()
+	if wm.border {
+		h = wm.withFrame(h)
+		h.(*Frame).SetAttr(wm.focusAttr)
+	}
+	wm.focus.SetContent(h)
+	return
+}
+
 // Cursor returns the cursor coordinates of the tile in focus.
 func (wm *WindowManager) Cursor() (term.Coordinates, bool) {
 	offset := wm.TileTree.TilePosition(wm.focus)
