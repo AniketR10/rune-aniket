@@ -19,6 +19,7 @@ type Scroll struct {
 
 	// Sets the search result attributes upon matching.
 	ResultsAttr term.Attributes
+	Attributes  term.Attributes
 
 	// lines longer than the width of the scroll wrap around and
 	// are rendered in the next line if Wrap is set to true.
@@ -257,6 +258,12 @@ func (s *Scroll) draw(writer fractal.Writer) {
 				continue
 			}
 			xi := x - s.offset.X
+			if c.Bg == 0 {
+				c.Bg = s.Attributes.Bg
+			}
+			if c.Fg == 0 {
+				c.Fg = s.Attributes.Fg
+			}
 			writer.SetCell(term.Coordinates{X: xi, Y: y}, c)
 		}
 	}
@@ -286,6 +293,12 @@ func (s *Scroll) wrapdraw(writer fractal.Writer) {
 				}
 			}
 			yi = y + wraps
+			if c.Bg == 0 {
+				c.Bg = s.Attributes.Bg
+			}
+			if c.Fg == 0 {
+				c.Fg = s.Attributes.Fg
+			}
 			writer.SetCell(term.Coordinates{X: xi, Y: yi}, c)
 		}
 	}
