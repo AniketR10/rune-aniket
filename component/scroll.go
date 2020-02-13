@@ -243,6 +243,27 @@ func (s *Scroll) getMaxYOffset() (y int) {
 	return
 }
 
+func (s *Scroll) drawFast(writer fractal.Writer) {
+	xwindow := s.offset.X + s.width
+	ywindow := s.height
+	for y, r := range s.buf.RawCells()[s.offset.Y:] {
+		if y >= ywindow {
+			break
+		}
+		for x, c := range r {
+			if x >= xwindow {
+				break
+			}
+			if c.Ch == 0 || x < s.offset.X {
+				continue
+			}
+			xi := x - s.offset.X
+			writer.SetCell(term.Coordinates{X: xi, Y: y}, c)
+		}
+	}
+	return
+}
+
 func (s *Scroll) draw(writer fractal.Writer) {
 	xwindow := s.offset.X + s.width
 	ywindow := s.height
@@ -268,6 +289,35 @@ func (s *Scroll) draw(writer fractal.Writer) {
 		}
 	}
 	return
+}
+
+func (s *Scroll) wrapdrawFast(writer fractal.Writer) {
+	var xi, yi, ywindow int
+	xwindow := s.width
+	wraps := 0
+	for y, r := range s.buf.RawCells()[s.offset.Y:] {
+		ywindow = s.height - wraps
+		if y >= ywindow {
+			break
+		}
+		for x, c := range r {
+			if c.Ch == 0 {
+				continue
+			}
+			xi = x
+			if xi >= xwindow {
+				for xi >= xwindow {
+					xi -= xwindow
+				}
+				if xi == 0 {
+					wraps++
+				}
+			}
+			yi = y + wraps
+			writer.SetCell(term.Coordinates{X: xi, Y: yi}, c)
+		}
+	}
+
 }
 
 func (s *Scroll) wrapdraw(writer fractal.Writer) {
@@ -308,6 +358,15 @@ func (s *Scroll) wrapdraw(writer fractal.Writer) {
 // Draw draws the contents of this scroll to the given writer. If Wrap is set,
 // lines that are too long wrap around and thus are rendered in the next line.
 func (s *Scroll) Draw(writer fractal.Writer) {
+	if s.Attributes == (term.Attributes{}) {
+		if s.Wrap {
+			s.wrapdrawFast(writer)
+			return
+		}
+
+		s.drawFast(writer)
+		return
+	}
 	if s.Wrap {
 		s.wrapdraw(writer)
 		return
