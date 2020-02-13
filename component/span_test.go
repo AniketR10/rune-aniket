@@ -30,7 +30,7 @@ XXXXXXXX
 ******** 
          `,
 		}, {
-			func() { s.Padding.Horizontal, s.Padding.Vertical = 0.5, 0.5; s.Resize(8, 4) }, `
+			func() { s.Padding.HorizontalPerc, s.Padding.VerticalPerc = 0.5, 0.5; s.Resize(8, 4) }, `
 ****     
 ****     
          
@@ -124,6 +124,37 @@ XXXXXXXX
 **       
          
          
+         `,
+		}, {
+			func() {
+				s.ContentAlignment = SpanAlignmentCentered
+
+				// Vertical/Horizontal override Perc
+				s.Padding.Vertical = 2
+				s.Padding.Horizontal = 4
+
+				s.Resize(8, 4)
+			}, `
+         
+  ****   
+  ****   
+         
+         `,
+		}, {
+			func() {
+				s.ContentAlignment = SpanAlignmentCentered
+
+				// Vertical/Horizontal negatie is used
+				// as effective content width/height
+				s.Padding.Vertical = -4
+				s.Padding.Horizontal = -6
+
+				s.Resize(8, 4)
+			}, `
+ ******  
+ ******  
+ ******  
+ ******  
          `,
 		},
 	}
