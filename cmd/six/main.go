@@ -2,12 +2,13 @@ package main
 
 import (
 	"flag"
+	"io"
 	"net/http"
 	_ "net/http/pprof"
 	"os"
 
 	"github.com/ernestrc/fractal"
-	"github.com/ernestrc/fractal/cell"
+	"github.com/ernestrc/fractal/editor"
 	"github.com/ernestrc/fractal/editor/vi"
 	"github.com/ernestrc/fractal/plugin"
 	"github.com/ernestrc/fractal/term"
@@ -29,28 +30,26 @@ func main() {
 		log.Println(http.ListenAndServe("localhost:6060", nil))
 	}()
 
-	opts := make([]vi.Option, 0)
+	opts := make([]editor.Option, 0)
+	viOpts := make([]vi.Option, 0)
 
 	if len(os.Args) > 1 {
 		filename := os.Args[1]
 		if err := flag.CommandLine.Parse(os.Args[2:]); err != nil {
 			log.Fatal(err)
 		}
-		opts = append(opts, vi.WithFilepath(filename))
+		opts = append(opts, editor.WithFilepath(filename))
 	} else {
 		flag.Parse()
-		buf := cell.NewBuffer()
-		_, err := buf.ReadFrom(os.Stdin)
-		if err != nil {
-			log.Fatal(err)
-		}
-		opts = append(opts, vi.WithBuffer(buf))
 	}
 
 	opts = append(opts,
-		vi.WithTabspaces(*tabspaces),
-		vi.WithSwapDir(*swapDir),
-		vi.WithRecoveryFile(*recoveryFile),
+		editor.WithTabspaces(*tabspaces),
+		editor.WithSwapDir(*swapDir),
+		editor.WithRecoveryFile(*recoveryFile),
+	)
+
+	viOpts = append(viOpts,
 		vi.WithResAttr(term.Attributes{Bg: term.ColorYellow, Fg: term.ColorBlack}),
 	)
 
@@ -63,7 +62,7 @@ func main() {
 		l := log.New()
 		l.SetOutput(f)
 		l.SetLevel(log.TraceLevel)
-		opts = append(opts, vi.WithLogger(l))
+		opts = append(opts, editor.WithLogger(l))
 
 		// set output of plugins
 		plugin.SetLoggingOutput(f)
@@ -76,22 +75,28 @@ func main() {
 			log.Fatal(err)
 		}
 		defer closeClip()
-		opts = append(opts, vi.WithClipboard(clip))
+		viOpts = append(viOpts, vi.WithClipboard(clip))
 	}
 
-	vi, err := vi.New(opts...)
+	vi := vi.Editor(viOpts...)
+	editor, err := editor.New(vi, opts...)
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer vi.Close()
 
-	if err = fractal.Init(); err != nil {
+	// TODO export EditorHandler and return from New
+	if closer, ok := editor.(io.Closer); ok {
+		defer closer.Close()
+	}
+
+	err = fractal.Init()
+	if err != nil {
 		log.Fatal(err)
 	}
 
 	defer fractal.Close()
 
-	if err = fractal.Run(vi); err != nil {
+	if err := fractal.RunMode(editor, term.InputMouse); err != nil {
 		log.Fatal(err)
 	}
 }

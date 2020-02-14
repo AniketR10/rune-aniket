@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/ernestrc/fractal/cell"
+	"github.com/ernestrc/fractal/handler"
 	"github.com/ernestrc/fractal/term"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -43,57 +44,17 @@ diff_buf_adjust(win_T *win)
 	diff_buf_add(win->w_buffer);
 }`
 
-type batchTestCase struct {
-	batch  string
-	output string
-}
-
-func setupVi(t *testing.T, text string, width, height int, opts ...Option) *Vi {
+func setupVi(
+	t *testing.T, text string, tabspaces int, opts ...Option,
+) *Vi {
 	buf := cell.NewBuffer()
+	buf.InitWithTabspaces(tabspaces)
 	_, err := buf.ReadFrom(strings.NewReader(text))
 	require.NoError(t, err)
 
-	opts = append(opts, WithBuffer(buf))
-
-	vi, err := New(opts...)
-	require.NoError(t, err)
-	vi.Resize(width, height)
+	vi := New(buf, opts...)
 
 	return vi
-}
-
-func testBatchWorkload(t *testing.T, width, height int, cases []batchTestCase) {
-	writer := term.NewStringWriter(width, height)
-
-	vi := setupVi(t, snippet, width, height, WithTabspaces(2))
-
-	for _, tcase := range cases {
-		err := writer.Clear(term.Attributes{Fg: 0, Bg: 0})
-		require.NoError(t, err)
-
-		for _, r := range tcase.batch {
-			switch r {
-			case '>':
-				vi.Handle(term.Event{Key: term.KeyEnter, Type: term.EventKey})
-			case '<':
-				vi.Handle(term.Event{Key: term.KeyEsc, Type: term.EventKey})
-			default:
-				vi.Handle(term.Event{Ch: r, Type: term.EventKey})
-			}
-		}
-
-		vi.Draw(writer)
-
-		cursor, ok := vi.Cursor()
-		require.True(t, ok)
-		writer.SetCursor(cursor)
-
-		err = writer.Flush()
-		require.NoError(t, err)
-
-		out := writer.String()
-		assert.Equal(t, tcase.output, out)
-	}
 }
 
 func TestCellAtCursor(t *testing.T) {
@@ -110,7 +71,8 @@ func TestCellAtCursor(t *testing.T) {
 	width, height := 20, 10
 
 	writer := term.NewStringWriter(width, height)
-	vi := setupVi(t, snippet, width, height, WithTabspaces(2))
+	vi := setupVi(t, snippet, 2)
+	vi.Resize(width, height)
 
 	for _, tcase := range cases {
 		for _, r := range tcase.input {
@@ -132,7 +94,7 @@ func TestCellAtCursor(t *testing.T) {
 }
 
 func TestViCursor(t *testing.T) {
-	cases := []batchTestCase{
+	cases := []handler.TestInputSequence{
 		{"",
 			`▐                   
 /*                  
@@ -166,17 +128,6 @@ diff_buf_adjust(win_
     diff_redraw(TRUE
     }               
 :             NORMAL`},
-		{":w",
-			`  if (wp == NULL)   
-  {                 
-    i = diff_buf_idx
-    if (i != DB_COUN
-    {               
-    curtab->tp_diffb
-    curtab->tp_diff_
-    diff_redraw(TRUE
-    }               
-:w▐          COMMAND`},
 		{">",
 			`  if (wp == ▐ULL)   
   {                 
@@ -187,7 +138,7 @@ diff_buf_adjust(win_
     curtab->tp_diff_
     diff_redraw(TRUE
     }               
-Error: Cannot NORMAL`},
+:             NORMAL`},
 		{"Ahello",
 			`f (wp == NULL)hello▐
                     
@@ -344,31 +295,6 @@ Error: Cannot NORMAL`},
 :             NORMAL`},
 	}
 
-	testBatchWorkload(t, 20, 10, cases)
-}
-
-func TestViCommandMode(t *testing.T) {
-	const height, width = 10, 10
-
-	buf := cell.NewBuffer()
-	_, err := buf.ReadFrom(strings.NewReader(snippet))
-	require.NoError(t, err)
-
-	vi, err := New(WithBuffer(buf))
-	require.NoError(t, err)
-
-	vi.Resize(width, height)
-
-	pos, _ := vi.Cursor()
-	assert.Equal(t, term.Coordinates{}, pos)
-
-	assert.False(t, vi.Handle(term.Event{Ch: ':'}))
-	pos, _ = vi.Cursor()
-	assert.Equal(t, term.Coordinates{Y: height - 1, X: 1}, pos)
-
-	assert.False(t, vi.Handle(term.Event{Ch: 'q'}))
-	pos, _ = vi.Cursor()
-	assert.Equal(t, term.Coordinates{Y: height - 1, X: 2}, pos)
-
-	assert.True(t, vi.Handle(term.Event{Key: term.KeyEnter}))
+	vi := setupVi(t, snippet, 2)
+	handler.BatchTestInputSequence(t, vi, 20, 10, cases)
 }

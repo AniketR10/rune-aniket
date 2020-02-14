@@ -8,6 +8,7 @@ import (
 	"github.com/ernestrc/fractal/component"
 	"github.com/ernestrc/fractal/term"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestHandler is a handler used to test composite handlers. Each event
@@ -71,5 +72,61 @@ func testHandlerWorkflow(
 		// for readability, we expected strings are written starting with \n
 		expected := strings.TrimLeft(tcase.expected, "\n")
 		assert.Equal(t, expected, w.String())
+	}
+}
+
+// TestInputSequence represents an input sequence and
+// the result expected draw string representation.
+type TestInputSequence struct {
+	InputSequence string
+	DrawOutput    string
+}
+
+// BatchTestInputSequence is a helper function that drives
+// a set of TestInputSequence and its results.
+//
+// Certain key events are encoded in characters. For instance, a '>' character
+// signals term.KeyEnter and '<' character signals term.KeyEsc.
+func BatchTestInputSequence(
+	t *testing.T, handler fractal.Handler, width, height int, cases []TestInputSequence,
+) {
+	writer := term.NewStringWriter(width, height)
+	handler.Resize(width, height)
+
+	for _, tcase := range cases {
+		err := writer.Clear(term.Attributes{Fg: 0, Bg: 0})
+		require.NoError(t, err)
+
+		for _, r := range tcase.InputSequence {
+			switch r {
+			case ' ':
+				handler.Handle(term.Event{Key: term.KeySpace, Type: term.EventKey})
+			case '^':
+				handler.Handle(term.Event{Key: term.KeyBackspace, Type: term.EventKey})
+			case '#':
+				handler.Handle(term.Event{Key: term.KeyCtrlH, Type: term.EventKey})
+			case '$':
+				handler.Handle(term.Event{Key: term.KeyCtrlL, Type: term.EventKey})
+			case '>':
+				handler.Handle(term.Event{Key: term.KeyEnter, Type: term.EventKey})
+			case '<':
+				handler.Handle(term.Event{Key: term.KeyEsc, Type: term.EventKey})
+			default:
+				handler.Handle(term.Event{Ch: r, Type: term.EventKey})
+			}
+		}
+
+		handler.Draw(writer)
+
+		cursor, ok := handler.Cursor()
+		if ok {
+			writer.SetCursor(cursor)
+		}
+
+		err = writer.Flush()
+		require.NoError(t, err)
+
+		out := writer.String()
+		assert.Equal(t, tcase.DrawOutput, out)
 	}
 }

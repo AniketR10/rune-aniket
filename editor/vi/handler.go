@@ -10,7 +10,6 @@ import (
 	"github.com/ernestrc/fractal/editor"
 	"github.com/ernestrc/fractal/handler"
 	"github.com/ernestrc/fractal/term"
-	log "github.com/sirupsen/logrus"
 )
 
 type viMode uint8
@@ -22,7 +21,6 @@ const (
 	visualMode
 	visualLineMode
 	visualBlockMode
-	commandMode
 	moveToCharMode
 	replaceMode
 	replaceOneMode
@@ -51,14 +49,11 @@ func moveOpposite(m moveMode) moveMode {
 type Vi struct {
 	config      viConfig
 	less        handler.Less // used for message bar and text search capabilities
-	logger      *log.Logger
 	raw, cursor editor.Cursor
-	fileBuf     *editor.FileBuffer
 	mode        viMode
 	moveMode    moveMode
 	searchMode  moveMode
 	moveChar    rune
-	command     []rune
 }
 
 // DefaultViConfig is a sane configuration defaults for Vi.
@@ -67,69 +62,32 @@ var defaultViConfig = viConfig{
 		Fg: term.AttrReverse,
 		Bg: term.ColorDefault,
 	},
-	Tabspaces: 4,
 	Clipboard: editor.NewEphemeralClipboard(),
-	Logger:    nil,
 }
 
 // New allocates storage for a new Vi handler, initializes it and returns it.
-func New(opts ...Option) (*Vi, error) {
+func New(buf *cell.Buffer, opts ...Option) *Vi {
 	vi := new(Vi)
-	err := vi.Init(opts...)
-	if err != nil {
-		return nil, err
-	}
-	return vi, nil
+	vi.Init(buf, opts...)
+	return vi
 }
 
 // Init initialies this vi handle with a new Buffer.
-func (vi *Vi) Init(opts ...Option) (err error) {
+func (vi *Vi) Init(buf *cell.Buffer, opts ...Option) {
 	vi.config = defaultViConfig
 	for _, o := range opts {
 		o(&vi.config)
-	}
-	buf := vi.config.Buffer
-	if buf == nil {
-		if vi.config.Filepath == "" {
-			panic("either WithViFilepath or WithViBuffer must be set")
-		}
-		buf = cell.NewBuffer()
-		buf.InitWithTabspaces(vi.config.Tabspaces)
-	} else {
-		// initialize Buffer but with the configured tabspaces
-		str := buf.String()
-		buf.InitWithTabspaces(vi.config.Tabspaces)
-		_, _ = buf.ReadFrom(strings.NewReader(str))
-	}
-
-	if vi.logger != nil {
-		buf = buf.WithLogger(vi.logger)
 	}
 
 	vi.less.Scroll.ResultsAttr = vi.config.ResAttr
 	vi.less.InitWithBuffer(buf)
 	vi.cursor.Init(&vi.less.Scroll)
 
-	if vi.config.Filepath != "" {
-		if vi.config.RecoverySwapFile != "" {
-			vi.fileBuf, err = editor.RecoverFile(vi.config.Filepath,
-				vi.config.RecoverySwapFile, buf)
-		} else {
-			vi.fileBuf, err = editor.NewFileBuffer(
-				vi.config.Filepath, buf, vi.config.SwapDir)
-		}
-		if err != nil {
-			return err
-		}
-	}
-
 	editor.WithCopyDelete(vi.config.Clipboard, buf)
-	vi.logger = vi.config.Logger
 
 	vi.raw = vi.cursor
 
 	vi.setNormalMode()
-	return nil
 }
 
 // Resize : fractal.Component
@@ -149,10 +107,6 @@ func (vi *Vi) Man() fractal.Manual {
 
 // Cursor : fractal.Handler
 func (vi *Vi) Cursor() (term.Coordinates, bool) {
-	if vi.mode == commandMode {
-		pos := term.Coordinates{X: len(vi.command), Y: vi.less.Height()}
-		return pos, true
-	}
 	// use less Cursor if we are in search mode
 	if vi.less.Mode() != handler.LessNormalMode {
 		return vi.less.Cursor()
@@ -166,13 +120,8 @@ func (vi *Vi) setMode(text string, mode viMode) {
 	vi.mode = mode
 }
 
-func (vi *Vi) setError(err error) {
-	vi.less.SetMessageAlt("Error: %s", err)
-}
-
 func (vi *Vi) setNormalMode() {
 	vi.setMode("NORMAL", normalMode)
-	vi.command = vi.command[:0]
 	vi.less.SetMessageAlt(":")
 }
 
@@ -196,10 +145,6 @@ func (vi *Vi) setVisualBlockMode() {
 	if vi.cursor.SelectBlock() {
 		vi.setMode("V-BLOCK", visualBlockMode)
 	}
-}
-
-func (vi *Vi) setCommandMode() {
-	vi.setMode("COMMAND", commandMode)
 }
 
 func (vi *Vi) setMoveToCharacterMode(mode moveMode) {
@@ -256,7 +201,7 @@ func (vi *Vi) pasteClipboard(before bool) bool {
 		mode = visualMode
 	}
 	if err != nil {
-		vi.logger.Error("clipboard.Get: ", err)
+		vi.config.Logger.Error("clipboard.Get: ", err)
 		return false
 	}
 
@@ -326,9 +271,6 @@ func (vi *Vi) handleNormal(ev term.Event) bool {
 			vi.setMoveToCharacterMode(moveToNext)
 		case 'F':
 			vi.setMoveToCharacterMode(moveToPrev)
-		case ':':
-			vi.setCommandMode()
-			vi.handleCommand(ev)
 		case 'N':
 			switch vi.searchMode {
 			case moveToNext:
@@ -503,56 +445,6 @@ func (vi *Vi) handleMoveToCharacter(mode moveMode, ev term.Event) (quit bool) {
 	return
 }
 
-func (vi *Vi) runCommand() (quit bool, err error) {
-	cmd := string(vi.command[1:])
-	switch cmd {
-	case "wq", "wq!":
-		quit = true
-		fallthrough
-	case "w", "w!":
-		if vi.fileBuf != nil {
-			err = vi.fileBuf.Flush()
-		} else {
-			err = fmt.Errorf("Cannot save non-file buffer")
-		}
-	case "q!", "q":
-		quit = true
-	default:
-		err = fmt.Errorf("Unknown command: %s", cmd)
-	}
-	return
-}
-
-func (vi *Vi) handleCommand(ev term.Event) (quit bool) {
-	switch ev.Key {
-	case term.KeyEnter:
-		var err error
-		quit, err = vi.runCommand()
-		vi.setNormalMode()
-		if err != nil {
-			vi.setError(err)
-		}
-	case term.KeyEsc:
-		vi.setNormalMode()
-	case term.KeyBackspace, term.KeyBackspace2:
-		if len(vi.command) == 1 {
-			vi.setNormalMode()
-			return
-		}
-		vi.command = vi.command[:len(vi.command)-1]
-		vi.less.SetMessageAlt(string(vi.command))
-	case term.KeySpace:
-		ev.Ch = ' '
-		fallthrough
-	default:
-		if ev.Type == term.EventKey && ev.Ch != 0 {
-			vi.command = append(vi.command, ev.Ch)
-			vi.less.SetMessageAlt(string(vi.command))
-		}
-	}
-	return
-}
-
 func (vi *Vi) handleReplace(ev term.Event) (quit bool) {
 	if ev.Type != term.EventKey {
 		return
@@ -598,8 +490,6 @@ func (vi *Vi) Handle(ev term.Event) (quit bool) {
 		quit = vi.handleVisual(ev)
 	case moveToCharMode:
 		quit = vi.handleMoveToCharacter(vi.moveMode, ev)
-	case commandMode:
-		quit = vi.handleCommand(ev)
 	case replaceMode:
 		quit = vi.handleReplace(ev)
 	case replaceOneMode:
@@ -614,7 +504,7 @@ func (vi *Vi) Handle(ev term.Event) (quit bool) {
 
 	switch vi.mode {
 	case normalMode, visualMode, visualLineMode,
-		visualBlockMode, commandMode, moveToCharMode:
+		visualBlockMode, moveToCharMode:
 		vi.cursor.MoveToBounds(0)
 		vi.cursor.MoveToNextNonNull()
 	case insertMode, replaceMode, replaceOneMode:
@@ -624,12 +514,4 @@ func (vi *Vi) Handle(ev term.Event) (quit bool) {
 	}
 
 	return
-}
-
-// Close closes the resources associated with this instance of Vi.
-func (vi *Vi) Close() error {
-	if vi.fileBuf != nil {
-		return vi.fileBuf.Close()
-	}
-	return nil
 }

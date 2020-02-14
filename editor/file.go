@@ -225,8 +225,10 @@ func newOsFileBuffer() *FileBuffer {
 	return ret
 }
 
-// RecoverFile recovers the file at filePath with the swap file swapFilePath.
-func RecoverFile(filePath, swapFilePath string, buf *cell.Buffer) (*FileBuffer, error) {
+// RecoverFileBuffer recovers the file at filePath with the swap file swapFilePath.
+func RecoverFileBuffer(filePath, swapFilePath string, buf *cell.Buffer) (
+	*FileBuffer, error,
+) {
 	ret := newOsFileBuffer()
 
 	err := ret.recoverFile(filePath, swapFilePath, buf)

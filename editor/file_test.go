@@ -203,7 +203,7 @@ func TestFileBufferRecover(t *testing.T) {
 		defer cleanup()
 
 		filepath, swapFilepath := file.Name(), swap.Name()
-		f, err := RecoverFile(filepath, swapFilepath, b)
+		f, err := RecoverFileBuffer(filepath, swapFilepath, b)
 		require.NoError(t, err)
 		defer f.Close()
 
@@ -217,7 +217,7 @@ func TestFileBufferRecover(t *testing.T) {
 		swapFilepath := swap.Name()
 		swapFileName := path.Base(swapFilepath)
 		filepath := path.Join(path.Dir(swapFilepath), "my_actual_file"+swapFileName)
-		f, err := RecoverFile(filepath, swapFilepath, b)
+		f, err := RecoverFileBuffer(filepath, swapFilepath, b)
 		require.NoError(t, err, filepath)
 		defer f.Close()
 
@@ -233,7 +233,7 @@ func TestFileBufferRecover(t *testing.T) {
 		file.Sync()
 
 		filepath, swapFilepath := file.Name(), swap.Name()
-		_, err := RecoverFile(filepath, swapFilepath, b)
+		_, err := RecoverFileBuffer(filepath, swapFilepath, b)
 		require.Equal(t, ErrStaleData, err)
 	})
 }
