@@ -85,6 +85,33 @@ func (b *Buffer) Insert(pos term.Coordinates, r rune) (next term.Coordinates) {
 	return
 }
 
+// InsertWithAttr writes str and gives it attr term.Attributes.
+func (b *Buffer) InsertWithAttr(
+	pos term.Coordinates, r rune, attr term.Attributes,
+) (next term.Coordinates) {
+	next = b.Insert(pos, r)
+
+	cells := b.RawCells()
+	cells[pos.Y][pos.X].Bg = attr.Bg
+	cells[pos.Y][pos.X].Fg = attr.Fg
+
+	return
+}
+
+func (b *Buffer) InsertStringWithAttr(
+	at term.Coordinates, str string, attr term.Attributes,
+) (from, until term.Coordinates) {
+	from, until = b.InsertString(at, str)
+	cells := b.Select(from, until)
+	for y, row := range cells {
+		for x := range row {
+			cells[y][x].Bg = attr.Bg
+			cells[y][x].Fg = attr.Fg
+		}
+	}
+	return
+}
+
 // DeleteRow truncates the row at term.Coordinates.Y
 func (b *Buffer) DeleteRow(y int) (ok bool) {
 	if ok = y < b.reader.Rows(); !ok {

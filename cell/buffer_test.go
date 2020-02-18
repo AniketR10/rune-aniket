@@ -432,3 +432,28 @@ func TestBufferUnsubscribe(t *testing.T) {
 		buf.Unsubscribe(one)
 	})
 }
+
+func TestBufferInsertWithAttr(t *testing.T) {
+	buf := NewBuffer()
+	fg := term.ColorRed
+	bg := term.ColorYellow
+	buf.InsertWithAttr(term.Coordinates{}, 'A',
+		term.Attributes{Fg: fg, Bg: bg})
+	cell := buf.RawCells()[0][0]
+	assert.Equal(t, term.Cell{Ch: 'A', Fg: fg, Bg: bg}, cell)
+}
+
+func TestBufferInsertStringWithAttr(t *testing.T) {
+	buf := NewBuffer()
+	fg := term.ColorRed
+	bg := term.ColorYellow
+	buf.InsertStringWithAttr(term.Coordinates{}, "Atza",
+		term.Attributes{Fg: fg, Bg: bg})
+	cell := buf.RawCells()[0]
+	assert.Equal(t, []term.Cell{
+		term.Cell{Ch: 'A', Fg: fg, Bg: bg},
+		term.Cell{Ch: 't', Fg: fg, Bg: bg},
+		term.Cell{Ch: 'z', Fg: fg, Bg: bg},
+		term.Cell{Ch: 'a', Fg: fg, Bg: bg},
+	}, cell)
+}
