@@ -22,7 +22,7 @@ const (
 // Span is a component that takes another component and handles padding and
 // alignment.
 type Span struct {
-	content       VirtualComponent
+	content       Virtual
 	width, height int
 	// Padding represents horizontal and vertical padding. It can be represented
 	// as an absolute number of cells (Horizontal/Verical) or as a percentage of
@@ -48,6 +48,7 @@ type Span struct {
 func NewSpan(content fractal.Component) *Span {
 	s := new(Span)
 	s.Init(content)
+	s.ContentAlignment = DefaultSpanFlags
 	return s
 }
 
@@ -75,7 +76,7 @@ func calculateContentOffset(
 }
 
 func alignContent(
-	content *VirtualComponent,
+	content *Virtual,
 	width, height int,
 	horizontalPadding, verticalPadding int,
 	flags Alignment) {

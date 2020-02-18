@@ -33,8 +33,8 @@ var DefaultLessConfig = LessConfig{
 // the Handler and Component interfaces.
 type Less struct {
 	component.Scroll
-	cmdScroll    component.VirtualComponent
-	msgScroll    component.VirtualComponent
+	cmdScroll    component.Virtual
+	msgScroll    component.Virtual
 	mode         LessMode
 	delEOF       bool
 	cursorOffset int
@@ -77,7 +77,7 @@ func (l *Less) sendEvent(ev LessEvent) {
 	}
 }
 
-func getBuffer(virtualScroll component.VirtualComponent) *cell.Buffer {
+func getBuffer(virtualScroll component.Virtual) *cell.Buffer {
 	return virtualScroll.C.(*component.Scroll).Buffer()
 }
 

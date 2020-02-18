@@ -24,7 +24,7 @@ type TileTree struct {
 type TileNode struct {
 	width, height int
 	content       fractal.Component
-	children      []*VirtualComponent
+	children      []*Virtual
 	direction     splitdir
 	parent        *TileNode
 }
@@ -33,7 +33,7 @@ type TileNode struct {
 func (t *TileTree) Init(content fractal.Component) (n *TileNode) {
 	n = new(TileNode)
 	t.root.direction = root
-	t.root.children = []*VirtualComponent{&VirtualComponent{C: n}}
+	t.root.children = []*Virtual{&Virtual{C: n}}
 	n.initNode(vertical, content, &t.root)
 	return
 }
@@ -60,7 +60,7 @@ func (t *TileNode) initNode(
 	direction splitdir, content fractal.Component, parent *TileNode,
 ) {
 	t.content = content
-	t.children = []*VirtualComponent{}
+	t.children = []*Virtual{}
 	t.direction = direction
 	t.parent = parent
 }
@@ -166,7 +166,7 @@ func (t *TileNode) addChildAtIdx(
 			idx, len(t.children)))
 	}
 
-	v := &VirtualComponent{C: child}
+	v := &Virtual{C: child}
 
 	// transfer content to child at index 0 but do it in a way such that it
 	// maintains mapping of content to TileNode.
@@ -175,10 +175,10 @@ func (t *TileNode) addChildAtIdx(
 	if len(t.children) == 0 {
 		proxyNode := new(TileNode)
 		proxyNode.initNode(direction, nil, t.parent)
-		proxyNode.children = append(proxyNode.children, &VirtualComponent{C: t}, v)
+		proxyNode.children = append(proxyNode.children, &Virtual{C: t}, v)
 
 		idx := t.parent.childIdx(t)
-		t.parent.children[idx] = &VirtualComponent{C: proxyNode}
+		t.parent.children[idx] = &Virtual{C: proxyNode}
 
 		child.initNode(direction, content, proxyNode)
 		t.initNode(direction, t.content, proxyNode)

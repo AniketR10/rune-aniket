@@ -7,11 +7,11 @@ import (
 	"github.com/ernestrc/fractal/term"
 )
 
-// VirtualComponent wraps a component to
+// Virtual wraps a component to
 // provide virtual coordinates and write bound checking.
 // It exposes Move which can be used to move the inner component
 // in the virtual coordinate space.
-type VirtualComponent struct {
+type Virtual struct {
 	C             fractal.Component
 	pos           term.Coordinates
 	height, width int
@@ -54,7 +54,7 @@ func (w *virtualWriter) SetCursor(pos term.Coordinates) {
 
 // Resize resizes the underlying component and stores size
 // to perform bound checking on Draw.
-func (c *VirtualComponent) Resize(width, height int) {
+func (c *Virtual) Resize(width, height int) {
 	c.width = width
 	c.height = height
 	c.C.Resize(width, height)
@@ -62,7 +62,7 @@ func (c *VirtualComponent) Resize(width, height int) {
 
 // Draw uses a virtual writer to perform bound checking and
 // if successful draw the inner component in the virtual coordinate space.
-func (c *VirtualComponent) Draw(writer fractal.Writer) {
+func (c *Virtual) Draw(writer fractal.Writer) {
 	writer = &virtualWriter{
 		writer: writer,
 		offset: c.pos,
@@ -74,22 +74,22 @@ func (c *VirtualComponent) Draw(writer fractal.Writer) {
 
 // Move changes the position of this virtual component
 // in the virtual coordinate space.
-func (c *VirtualComponent) Move(pos term.Coordinates) {
+func (c *Virtual) Move(pos term.Coordinates) {
 	c.pos = pos
 }
 
 // Width returns the width set in last Resize.
-func (c *VirtualComponent) Width() int {
+func (c *Virtual) Width() int {
 	return c.width
 }
 
 // Height returns the height set in last Resize.
-func (c *VirtualComponent) Height() int {
+func (c *Virtual) Height() int {
 	return c.height
 }
 
 // Position returns this virtual component's position
 // in the virtual coordinate space.
-func (c *VirtualComponent) Position() term.Coordinates {
+func (c *Virtual) Position() term.Coordinates {
 	return c.pos
 }

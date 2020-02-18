@@ -7,13 +7,13 @@ import (
 	"github.com/ernestrc/fractal/term"
 )
 
-// List represents a list of VirtualComponent which are drawn each one
+// List represents a list of Virtual which are drawn each one
 // in series as a separate row.
 type List struct {
 	elementHeight int
 	width, height int
 	offset        int
-	list          list.List // list of VirtualComponent
+	list          list.List // list of Virtual
 }
 
 // NewList allocates storage for a new List and initializes it.
@@ -90,11 +90,11 @@ func (l *List) SeekStart() {
 func (l *List) Resize(width, height int) {
 	var ok bool
 	l.width, l.height = width, height
-	var comp *VirtualComponent
+	var comp *Virtual
 	for i, el := 0, l.list.Front(); el != nil; el, i = el.Next(), i+1 {
-		comp, ok = el.Value.(*VirtualComponent)
+		comp, ok = el.Value.(*Virtual)
 		if !ok {
-			panic("element of this list is not VirtualComponent")
+			panic("element of this list is not Virtual")
 		}
 		comp.Resize(l.width, l.elementHeight)
 		ypos := (i - l.offset) * l.elementHeight
@@ -114,7 +114,7 @@ func (l *List) Draw(w fractal.Writer) {
 		if i < l.offset {
 			continue
 		}
-		el.Value.(*VirtualComponent).Draw(w)
+		el.Value.(*Virtual).Draw(w)
 	}
 
 	return
@@ -166,36 +166,36 @@ func (l *List) PushFrontList(other *List) {
 }
 
 /* Override methods of list.List which take/return an interface value, so we can enforce
-   usage of VirtualComponent */
+   usage of Virtual */
 
 // InsertAfter inserts a new element e with value v immediately after mark and
 // returns e. If mark is not an element of l, the list is not modified. The
 // mark must not be nil.
-func (l *List) InsertAfter(v *VirtualComponent, mark *list.Element) *list.Element {
+func (l *List) InsertAfter(v *Virtual, mark *list.Element) *list.Element {
 	return l.list.InsertAfter(v, mark)
 }
 
 // InsertBefore inserts a new element e with value v immediately before mark
 // and returns e. If mark is not an element of l, the list is not modified. The
 // mark must not be nil.
-func (l *List) InsertBefore(v *VirtualComponent, mark *list.Element) *list.Element {
+func (l *List) InsertBefore(v *Virtual, mark *list.Element) *list.Element {
 	return l.list.InsertBefore(v, mark)
 }
 
 // PushBack inserts a new element e with value v at the back of list l and
 // returns e.
-func (l *List) PushBack(v *VirtualComponent) *list.Element {
+func (l *List) PushBack(v *Virtual) *list.Element {
 	return l.list.PushBack(v)
 }
 
 // PushFront inserts a new element e with value v at the front of list l and
 // returns e.
-func (l *List) PushFront(v *VirtualComponent) *list.Element {
+func (l *List) PushFront(v *Virtual) *list.Element {
 	return l.list.PushFront(v)
 }
 
 // Remove removes e from l if e is an element of list l. It returns the element
 // value e.Value. The element must not be nil.
-func (l *List) Remove(e *list.Element) *VirtualComponent {
-	return l.list.Remove(e).(*VirtualComponent)
+func (l *List) Remove(e *list.Element) *Virtual {
+	return l.list.Remove(e).(*Virtual)
 }

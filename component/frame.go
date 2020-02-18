@@ -33,7 +33,7 @@ type Frame struct {
 	TopLeft, TopRight, BottomLeft, BottomRight term.Cell
 	Horizontal, Vertical                       term.Cell
 
-	content         VirtualComponent
+	content         Virtual
 	bwidth, bheight int
 	width, height   int
 }

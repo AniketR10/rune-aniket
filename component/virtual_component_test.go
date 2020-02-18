@@ -12,7 +12,7 @@ func TestIntegrationScroll(t *testing.T) {
 	width, height := 8, 4
 	tabspaces := 4
 	wrap := false
-	virtualScroll := VirtualComponent{C: newScroll(tabspaces, wrap, width, height)}
+	virtualScroll := Virtual{C: newScroll(tabspaces, wrap, width, height)}
 	virtualScroll.Resize(width, height)
 	str := "AAAAAAAAAAAA\nBBBBBBBBBBBB\nCCCCCCCCCCCC\nDDDDDDDDDDDD"
 	_, err := virtualScroll.C.(*Scroll).ReadFrom(strings.NewReader(str))
@@ -49,7 +49,7 @@ DDDDDDDD    `,
 
 func TestVirtualDraw(t *testing.T) {
 	width, height := 4, 4
-	v := VirtualComponent{C: &TestComponent{Ch: '$'}}
+	v := Virtual{C: &TestComponent{Ch: '$'}}
 	v.Resize(width, height)
 
 	w := term.NewStringWriter(width, height)
