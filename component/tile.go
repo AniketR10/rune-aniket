@@ -474,3 +474,19 @@ func (t *TileNode) SetContent(c fractal.Component) {
 	t.content = c
 	t.content.Resize(t.width, t.height)
 }
+
+func (t *TileNode) iterate(op func(*TileNode)) {
+	if t.content != nil {
+		op(t)
+		return
+	}
+
+	for _, ti := range t.children {
+		ti.C.(*TileNode).iterate(op)
+	}
+}
+
+// Iterate applies op to the content of all nodes of this tree.
+func (t *TileTree) Iterate(op func(*TileNode)) {
+	t.root.iterate(op)
+}

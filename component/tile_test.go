@@ -453,6 +453,16 @@ XXIIIZZZ
 XXIIIZZZ
 XXIIIZZZ
 XXIIIZZZ`,
+		}, {
+			func() {
+				tree.Iterate(func(node *TileNode) {
+					node.Content().(*TestComponent).Ch = 'X'
+				})
+			}, `
+XXXXXXXX
+XXXXXXXX
+XXXXXXXX
+XXXXXXXX`,
 		},
 	}
 
@@ -477,4 +487,22 @@ func TestTiledNodeContent(t *testing.T) {
 	assertNotNil(t, m1.Content())
 	assertNotNil(t, m2.Content())
 	assertNotNil(t, m3.Content())
+}
+
+func TestTiledIterateInit(t *testing.T) {
+	tree, m := NewTileTree(&TestComponent{})
+	var i int
+	tree.Iterate(func(node *TileNode) {
+		i++
+	})
+	assert.Equal(t, 1, i)
+	i = 0
+
+	tree.SplitHorizontal(m, &TestComponent{})
+	tree.SplitVertical(m, &TestComponent{})
+
+	tree.Iterate(func(node *TileNode) {
+		i++
+	})
+	assert.Equal(t, 3, i)
 }
