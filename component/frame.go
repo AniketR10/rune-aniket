@@ -128,3 +128,8 @@ func (f *Frame) Draw(w fractal.Writer) {
 func (f *Frame) ContentPosition() term.Coordinates {
 	return calculateContentOffset(f.bwidth, f.bheight, DefaultSpanFlags)
 }
+
+// ContentSize returns the size and width of the inner content.
+func (f *Frame) ContentSize() (int, int) {
+	return f.content.Width(), f.content.Height()
+}

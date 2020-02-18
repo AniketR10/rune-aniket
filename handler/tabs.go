@@ -1,0 +1,59 @@
+package handler
+
+import (
+	"github.com/ernestrc/fractal"
+	"github.com/ernestrc/fractal/component"
+	"github.com/ernestrc/fractal/term"
+)
+
+// Tabs add mouse handling to component.Tabs.
+type Tabs struct {
+	component.Tabs
+
+	OnClick func(int)
+}
+
+// NewTabs returns a Tabs component which handles mouse events.
+func NewTabs() *Tabs {
+	t := new(Tabs)
+	t.Init()
+	return t
+}
+
+// Init initializes this Tabs with the given underlying handler
+// and frame attributes.
+func (f *Tabs) Init() {
+	f.Tabs.Init()
+}
+
+// Handle delegates the event to the underlying handler.
+func (f *Tabs) Handle(ev term.Event) (quit bool) {
+	if ev.Type != term.EventMouse || ev.Key != term.MouseLeft {
+		return
+	}
+	mousePos := term.Coordinates{X: ev.MouseX, Y: ev.MouseY}
+	idx, ok := f.Tabs.TabAt(mousePos)
+	if !ok {
+		return
+	}
+	focusIdx, ok := f.Focus()
+	if ok && focusIdx == idx {
+		return
+	}
+	f.SetFocus(idx)
+	if f.OnClick != nil {
+		f.OnClick(idx)
+	}
+	return
+}
+
+// Cursor returns the underlying handler's cursor position
+// with the frame offset.
+func (f *Tabs) Cursor() (term.Coordinates, bool) {
+	return term.Coordinates{}, false
+}
+
+// Man just delegates Man call to underlying handler.
+func (f *Tabs) Man() fractal.Manual {
+	panic("TODO")
+}

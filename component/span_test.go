@@ -31,16 +31,16 @@ XXXXXXXX
          `,
 		}, {
 			func() { s.Padding.HorizontalPerc, s.Padding.VerticalPerc = 0.5, 0.5; s.Resize(8, 4) }, `
-****     
-****     
          
+  ****   
+  ****   
          
          `,
 		}, {
 			func() { s.Resize(4, 4) }, `
-**       
-**       
          
+ **      
+ **      
          
          `,
 		}, {
