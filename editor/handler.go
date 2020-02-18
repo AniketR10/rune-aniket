@@ -3,6 +3,7 @@ package editor
 import (
 	"errors"
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	"github.com/ernestrc/fractal"
@@ -28,6 +29,17 @@ type openFileFunc func(filePath string,
 type recoverFileFunc func(filePath,
 	swapFilePath string, buf *cell.Buffer) (*FileBuffer, error)
 
+var (
+	focusFileAttr    = term.Attributes{Fg: term.ColorDefault}
+	nonFocusFileAttr = term.Attributes{Fg: 243}
+	scrollAttr       = term.Attributes{Fg: term.ColorWhite}
+	frameFileAttr    = term.Attributes{Fg: 243}
+	commandBarAttr   = term.Attributes{Bg: term.ColorWhite, Fg: term.ColorBlack}
+	logBarAttr       = term.Attributes{Bg: term.ColorRed, Fg: term.ColorWhite}
+	wmFocusAttr      = frameFileAttr
+	wmDefaultAttr    = frameFileAttr
+)
+
 // NOTE: for now this behaves like vi's ex-command. Once we
 // have a better understanding on how we can abstract the "command" we should
 // refactor it: (i.e. we should force Editor to provide a command Handler?)
@@ -38,14 +50,18 @@ type editorHandler struct {
 	ed     Editor
 	config editorConfig
 
-	commandBuf    *cell.Buffer
-	commandSpan   *component.Span
-	logBuf        *cell.Buffer
-	logSpan       *component.Span
-	wm            *handler.WindowManager
-	buffers       []*editorBuffer
-	mode          mode
-	width, height int
+	tabs *handler.Tabs
+
+	commandBuf *cell.Buffer
+	cmdVirt    handler.Virtual
+	logBuf     *cell.Buffer
+	logVirt    handler.Virtual
+	wm         *handler.WindowManager
+	wmVirt     handler.Virtual
+
+	buffers        []*editorBuffer
+	mode           mode
+	fileListHeight int
 }
 
 func (e *editorHandler) emptyBuffer() *editorBuffer {
@@ -58,29 +74,6 @@ func (e *editorHandler) emptyBuffer() *editorBuffer {
 		fileBuf:  nil,
 	}
 	return &handler
-}
-
-func newLogSpan(buf *cell.Buffer, bgAttr term.Attributes) *component.Span {
-	scroll := component.NewScroll()
-	scroll.InitWithBuffer(buf)
-	scroll.Attributes = bgAttr
-	// FIXME panics scroll.Wrap = true
-
-	background := term.Cell{Bg: bgAttr.Bg, Fg: bgAttr.Fg}
-	content := component.WithBackground(scroll, background)
-
-	span := component.NewSpan(content)
-	span.ContentAlignment = component.SpanAlignmentBottom
-	span.Padding.Vertical = -1
-
-	// add margin bottom
-	span = component.NewSpan(span)
-	span.ContentAlignment = component.SpanAlignmentTop |
-		component.SpanAlignmentHorizontallyCentered
-	span.Padding.Vertical = 1
-	span.Padding.Horizontal = 2
-
-	return span
 }
 
 func newOsEditor() *editorHandler {
@@ -101,6 +94,37 @@ func New(ed Editor, opts ...Option) (h fractal.Handler, err error) {
 	return
 }
 
+func newLogSpan(buf *cell.Buffer, bgAttr term.Attributes) handler.Virtual {
+	scroll := component.NewScroll()
+	scroll.InitWithBuffer(buf)
+	scroll.Attributes = bgAttr
+	// FIXME panics scroll.Wrap = true
+
+	background := term.Cell{Bg: bgAttr.Bg, Fg: bgAttr.Fg}
+	content := component.WithBackground(scroll, background)
+	return handler.Virtual{Virtual: component.Virtual{C: content}}
+}
+
+func (e *editorHandler) addBuffer(buf *editorBuffer) {
+	e.buffers = append(e.buffers, buf)
+
+	e.tabs.Add(buf.filename)
+}
+
+func (e *editorHandler) removeBuffer(buf *editorBuffer) {
+	if buf.node != nil {
+		panic("trying to remove buffer that is still attached to a window")
+	}
+	if buf.fileBuf != nil {
+		buf.Close()
+	}
+
+	idx := e.findBufferIdx(buf)
+	e.buffers = append(e.buffers[:idx], e.buffers[idx+1:]...)
+
+	e.tabs.Remove(idx)
+}
+
 func (e *editorHandler) Init(ed Editor, opts ...Option) (err error) {
 	e.config = defaultEditorConfig
 
@@ -112,12 +136,16 @@ func (e *editorHandler) Init(ed Editor, opts ...Option) (err error) {
 	e.mode = proxyMode
 
 	e.commandBuf = cell.NewBuffer()
-	e.commandSpan = newLogSpan(e.commandBuf,
-		term.Attributes{Bg: term.ColorWhite, Fg: term.ColorBlack})
+	e.cmdVirt = newLogSpan(e.commandBuf, commandBarAttr)
 
 	e.logBuf = cell.NewBuffer()
-	e.logSpan = newLogSpan(e.logBuf,
-		term.Attributes{Bg: term.ColorRed, Fg: term.ColorWhite})
+	e.logVirt = newLogSpan(e.logBuf, logBarAttr)
+
+	e.tabs = handler.NewTabs()
+	e.tabs.OnClick = func(idx int) {
+		e.switchFocusContent(idx, e.buffers[idx])
+	}
+	e.tabs.SetAttr(focusFileAttr, nonFocusFileAttr, frameFileAttr, scrollAttr)
 
 	var initBuffer *editorBuffer
 	if e.config.Filepath != "" {
@@ -127,10 +155,13 @@ func (e *editorHandler) Init(ed Editor, opts ...Option) (err error) {
 		}
 	} else {
 		initBuffer = e.emptyBuffer()
-		e.buffers = append(e.buffers, initBuffer)
+		e.addBuffer(initBuffer)
 	}
 	e.wm = handler.NewWindowManager(initBuffer, e.config.WindowBorder)
+	e.wm.SetAttr(wmDefaultAttr, wmFocusAttr)
 	initBuffer.setNode(e.wm.Focus())
+
+	e.wmVirt = handler.Virtual{Virtual: component.Virtual{C: e.wm}}
 
 	return
 }
@@ -167,12 +198,12 @@ func (e *editorHandler) newBufferWithFile(
 	editor := e.ed.Edit(buf)
 
 	buffer := &editorBuffer{
-		filename: filename,
+		filename: filepath.Base(filename),
 		fileBuf:  fileBuf,
 		editor:   editor,
 	}
 
-	e.buffers = append(e.buffers, buffer)
+	e.addBuffer(buffer)
 
 	return buffer, nil
 }
@@ -198,7 +229,7 @@ func (e *editorHandler) switchPrevBuffer() {
 	} else {
 		idx--
 	}
-	e.switchFocusContent(e.buffers[idx])
+	e.switchFocusContent(idx, e.buffers[idx])
 }
 
 func (e *editorHandler) switchNextBuffer() {
@@ -207,13 +238,15 @@ func (e *editorHandler) switchNextBuffer() {
 	if idx == len(e.buffers) {
 		idx = 0
 	}
-	e.switchFocusContent(e.buffers[idx])
+	e.switchFocusContent(idx, e.buffers[idx])
 }
 
-func (e *editorHandler) switchFocusContent(newBuf *editorBuffer) *editorBuffer {
+func (e *editorHandler) switchFocusContent(idx int, newBuf *editorBuffer) *editorBuffer {
 	oldBufIfc := e.wm.SetFocusContent(newBuf)
 	oldBuf := oldBufIfc.(*editorBuffer)
 	newBuf.setNode(oldBuf.setNode(nil))
+
+	e.tabs.SetFocus(idx)
 	return oldBuf
 }
 
@@ -223,7 +256,7 @@ func (e *editorHandler) focusNewBufferWithFile(filename string) error {
 		return err
 	}
 
-	oldFocus := e.switchFocusContent(buffer)
+	oldFocus := e.switchFocusContent(len(e.buffers)-1, buffer)
 	if oldFocus.filename == "" && oldFocus.fileBuf == nil {
 		e.removeBuffer(oldFocus)
 	}
@@ -256,17 +289,6 @@ func (e *editorHandler) freeBuffers() []int {
 	return freeBufs
 }
 
-func (e *editorHandler) removeBuffer(buf *editorBuffer) {
-	if buf.node != nil {
-		panic("trying to remove buffer that is still attached to a window")
-	}
-	if buf.fileBuf != nil {
-		buf.Close()
-	}
-	idx := e.findBufferIdx(buf)
-	e.buffers = append(e.buffers[:idx], e.buffers[idx+1:]...)
-}
-
 func (e *editorHandler) closeFocusBuffer() error {
 	freeBufs := e.freeBuffers()
 	if len(freeBufs) == 0 {
@@ -274,8 +296,9 @@ func (e *editorHandler) closeFocusBuffer() error {
 	}
 
 	oldBuf := e.focus()
-	newBuf := e.buffers[freeBufs[0]]
-	e.switchFocusContent(newBuf)
+
+	idx := freeBufs[0]
+	e.switchFocusContent(idx, e.buffers[idx])
 
 	oldBuf.Close()
 	e.removeBuffer(oldBuf)
@@ -385,9 +408,13 @@ func (e *editorHandler) handleProxy(ev term.Event) bool {
 	case ':':
 		e.setCommandMode()
 		return false
-	default:
-		return e.wm.Handle(ev)
 	}
+
+	if ev.Type == term.EventMouse && ev.MouseY < e.fileListHeight {
+		return e.tabs.Handle(ev)
+	}
+
+	return e.wmVirt.Handle(ev)
 }
 
 func (e *editorHandler) Handle(ev term.Event) bool {
@@ -403,11 +430,11 @@ func (e *editorHandler) Handle(ev term.Event) bool {
 
 func (e *editorHandler) Cursor() (pos term.Coordinates, show bool) {
 	if e.mode == commandMode {
-		pos := e.commandSpan.ContentOffset()
+		pos := e.cmdVirt.Position()
 		pos.X += len(e.commandBuf.String())
 		return pos, true
 	}
-	return e.wm.Cursor()
+	return e.wmVirt.Cursor()
 }
 
 func (e *editorHandler) Man() fractal.Manual {
@@ -415,23 +442,44 @@ func (e *editorHandler) Man() fractal.Manual {
 }
 
 func (e *editorHandler) Resize(width, height int) {
-	e.width, e.height = width, height
-	e.wm.Resize(width, height)
-	e.commandSpan.Resize(width, height)
-	e.logSpan.Resize(width, height)
+	if width > 1 && height > 0 {
+		e.cmdVirt.Resize(width-2, 1)
+		e.logVirt.Resize(width-2, 1)
+
+		busPos := term.Coordinates{X: 1, Y: height - 2}
+		e.cmdVirt.Move(busPos)
+		e.logVirt.Move(busPos)
+	} else {
+		e.cmdVirt.Resize(0, 0)
+		e.logVirt.Resize(0, 0)
+	}
+
+	e.fileListHeight = 3
+	wmHeight := height - e.fileListHeight + 1
+	wmY := height - wmHeight
+	if wmHeight < 0 {
+		wmHeight = height
+		e.fileListHeight = 0
+		wmY = 0
+	}
+	e.tabs.Resize(width, e.fileListHeight)
+	e.wmVirt.Resize(width, wmHeight)
+	e.wmVirt.Move(term.Coordinates{Y: wmY})
 }
 
 func (e *editorHandler) Draw(w fractal.Writer) {
-	e.wm.Draw(w)
+	e.wmVirt.Draw(w)
 
 	if e.logBuf.Columns(0) != 0 {
-		e.logSpan.Draw(w)
+		e.logVirt.Draw(w)
 
 		// only draw once
 		e.logBuf.Reset()
 	} else if e.mode == commandMode {
-		e.commandSpan.Draw(w)
+		e.cmdVirt.Draw(w)
 	}
+
+	e.tabs.Draw(w)
 }
 
 // Close closes the resources associated with this editor.

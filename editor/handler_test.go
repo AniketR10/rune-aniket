@@ -56,8 +56,8 @@ func TestEditorHandlerDraw(t *testing.T) {
 	cases := []handler.TestInputSequence{
 		{"asdf",
 			`┌──────────────────┐
-│EEEEEEEEEEEEEEEEEE│
-│EEEEEEEEEEEEEEEEEE│
+│                  │
+├──────────────────┤
 │EEEEEEEEEEEEEEEEEE│
 │EEEEEEEEEEEEEEEEEE│
 │EEEEEEEEEEEEEEEEEE│
@@ -67,8 +67,8 @@ func TestEditorHandlerDraw(t *testing.T) {
 └──────────────────┘`},
 		{":",
 			`┌──────────────────┐
-│EEEEEEEEEEEEEEEEEE│
-│EEEEEEEEEEEEEEEEEE│
+│                  │
+├──────────────────┤
 │EEEEEEEEEEEEEEEEEE│
 │EEEEEEEEEEEEEEEEEE│
 │EEEEEEEEEEEEEEEEEE│
@@ -78,8 +78,8 @@ func TestEditorHandlerDraw(t *testing.T) {
 └──────────────────┘`},
 		{"e cabin.go>",
 			`┌──────────────────┐
-│AAAAAAAAAAAAAAAAAA│
-│AAAAAAAAAAAAAAAAAA│
+│cabin.go          │
+├──────────────────┤
 │AAAAAAAAAAAAAAAAAA│
 │AAAAAAAAAAAAAAAAAA│
 │AAAAAAAAAAAAAAAAAA│
@@ -89,8 +89,8 @@ func TestEditorHandlerDraw(t *testing.T) {
 └──────────────────┘`},
 		{"a",
 			`┌──────────────────┐
-│BBBBBBBBBBBBBBBBBB│
-│BBBBBBBBBBBBBBBBBB│
+│cabin.go          │
+├──────────────────┤
 │BBBBBBBBBBBBBBBBBB│
 │BBBBBBBBBBBBBBBBBB│
 │BBBBBBBBBBBBBBBBBB│
@@ -100,8 +100,8 @@ func TestEditorHandlerDraw(t *testing.T) {
 └──────────────────┘`},
 		{":e other.go>",
 			`┌──────────────────┐
-│AAAAAAAAAAAAAAAAAA│
-│AAAAAAAAAAAAAAAAAA│
+│cabin.go  other.go│
+├──────────────────┤
 │AAAAAAAAAAAAAAAAAA│
 │AAAAAAAAAAAAAAAAAA│
 │AAAAAAAAAAAAAAAAAA│
@@ -111,8 +111,8 @@ func TestEditorHandlerDraw(t *testing.T) {
 └──────────────────┘`},
 		{"#", // simulates ctrl-h
 			`┌──────────────────┐
-│BBBBBBBBBBBBBBBBBB│
-│BBBBBBBBBBBBBBBBBB│
+│cabin.go  other.go│
+├──────────────────┤
 │BBBBBBBBBBBBBBBBBB│
 │BBBBBBBBBBBBBBBBBB│
 │BBBBBBBBBBBBBBBBBB│
@@ -122,8 +122,8 @@ func TestEditorHandlerDraw(t *testing.T) {
 └──────────────────┘`},
 		{"#", // simulates ctrl-h
 			`┌──────────────────┐
-│AAAAAAAAAAAAAAAAAA│
-│AAAAAAAAAAAAAAAAAA│
+│cabin.go  other.go│
+├──────────────────┤
 │AAAAAAAAAAAAAAAAAA│
 │AAAAAAAAAAAAAAAAAA│
 │AAAAAAAAAAAAAAAAAA│
@@ -133,8 +133,8 @@ func TestEditorHandlerDraw(t *testing.T) {
 └──────────────────┘`},
 		{"$", // simulates ctrl-h
 			`┌──────────────────┐
-│BBBBBBBBBBBBBBBBBB│
-│BBBBBBBBBBBBBBBBBB│
+│cabin.go  other.go│
+├──────────────────┤
 │BBBBBBBBBBBBBBBBBB│
 │BBBBBBBBBBBBBBBBBB│
 │BBBBBBBBBBBBBBBBBB│
@@ -144,8 +144,8 @@ func TestEditorHandlerDraw(t *testing.T) {
 └──────────────────┘`},
 		{"$", // simulates ctrl-h
 			`┌──────────────────┐
-│AAAAAAAAAAAAAAAAAA│
-│AAAAAAAAAAAAAAAAAA│
+│cabin.go  other.go│
+├──────────────────┤
 │AAAAAAAAAAAAAAAAAA│
 │AAAAAAAAAAAAAAAAAA│
 │AAAAAAAAAAAAAAAAAA│
@@ -155,8 +155,8 @@ func TestEditorHandlerDraw(t *testing.T) {
 └──────────────────┘`},
 		{":close>",
 			`┌──────────────────┐
-│BBBBBBBBBBBBBBBBBB│
-│BBBBBBBBBBBBBBBBBB│
+│cabin.go          │
+├──────────────────┤
 │BBBBBBBBBBBBBBBBBB│
 │BBBBBBBBBBBBBBBBBB│
 │BBBBBBBBBBBBBBBBBB│
@@ -166,8 +166,8 @@ func TestEditorHandlerDraw(t *testing.T) {
 └──────────────────┘`},
 		{":close>",
 			`┌──────────────────┐
-│BBBBBBBBBBBBBBBBBB│
-│BBBBBBBBBBBBBBBBBB│
+│cabin.go          │
+├──────────────────┤
 │BBBBBBBBBBBBBBBBBB│
 │BBBBBBBBBBBBBBBBBB│
 │BBBBBBBBBBBBBBBBBB│
@@ -177,8 +177,8 @@ func TestEditorHandlerDraw(t *testing.T) {
 └──────────────────┘`},
 		{":wq!^",
 			`┌──────────────────┐
-│BBBBBBBBBBBBBBBBBB│
-│BBBBBBBBBBBBBBBBBB│
+│cabin.go          │
+├──────────────────┤
 │BBBBBBBBBBBBBBBBBB│
 │BBBBBBBBBBBBBBBBBB│
 │BBBBBBBBBBBBBBBBBB│
@@ -188,8 +188,8 @@ func TestEditorHandlerDraw(t *testing.T) {
 └──────────────────┘`},
 		{"^^^^",
 			`┌──────────────────┐
-│BBBBBBBBBBBBBBBBBB│
-│BBBBBBBBBBBBBBBBBB│
+│cabin.go          │
+├──────────────────┤
 │BBBBBBBBBBBBBBBBBB│
 │BBBBBBBBBBBBBBBBBB│
 │BBBBBBBBBBBBBBBBBB│
@@ -199,8 +199,8 @@ func TestEditorHandlerDraw(t *testing.T) {
 └──────────────────┘`},
 		{":<",
 			`┌──────────────────┐
-│BBBBBBBBBBBBBBBBBB│
-│BBBBBBBBBBBBBBBBBB│
+│cabin.go          │
+├──────────────────┤
 │BBBBBBBBBBBBBBBBBB│
 │BBBBBBBBBBBBBBBBBB│
 │BBBBBBBBBBBBBBBBBB│
