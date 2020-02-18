@@ -6,6 +6,7 @@ import (
 	"github.com/ernestrc/fractal"
 	"github.com/ernestrc/fractal/term"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func altEvent(ch rune) term.Event {
@@ -373,4 +374,26 @@ func TestWindowManagerSetFocusContent(t *testing.T) {
 	}
 
 	testHandlerWorkflow(t, wm, cases, writer)
+}
+
+func TestWindowManagerInit(t *testing.T) {
+	wm := NewWindowManager(NewTestHandler(), false)
+	require.NotNil(t, wm.Focus())
+}
+
+func TestWindowManagerSetAttr(t *testing.T) {
+	wm := NewWindowManager(NewTestHandler(), true)
+	cyan := term.ColorCyan
+	red := term.ColorRed
+
+	wm.SplitHorizontal(NewTestHandler())
+	wm.SetAttr(term.Attributes{Bg: cyan, Fg: red}, term.Attributes{Bg: red, Fg: cyan})
+
+	frame := wm.Focus().Content().(*Frame)
+	assert.Equal(t, red, frame.TopLeft.Bg)
+	assert.Equal(t, cyan, frame.TopLeft.Fg)
+
+	wm.ShiftFocus()
+	assert.Equal(t, cyan, frame.TopLeft.Bg)
+	assert.Equal(t, red, frame.TopLeft.Fg)
 }

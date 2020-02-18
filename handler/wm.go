@@ -8,7 +8,7 @@ import (
 
 // WindowManager implements Handler as a tiled window manager.
 type WindowManager struct {
-	component.TileTree
+	tree       component.TileTree
 	focus      *component.TileNode
 	border     bool
 	borderAttr term.Attributes
@@ -39,17 +39,28 @@ func (wm *WindowManager) Init(handler fractal.Handler, border bool) {
 		wm.focusAttr.Bg = term.ColorDefault
 		handler = wm.withFrame(handler)
 	}
-	tile := wm.TileTree.Init(handler)
+	tile := wm.tree.Init(handler)
 	wm.border = border
 	wm.focus = tile
 	wm.SetFocus(tile)
 	return
 }
 
-// SetAttr sets the default and focus window border attributes.
+// SetAttr sets the default and focus window border attributes. Note that
+// this has no effect if WindowManager was initialized with border == false.
 func (wm *WindowManager) SetAttr(standard, focus term.Attributes) {
+	if !wm.border {
+		return
+	}
+
 	wm.borderAttr = standard
 	wm.focusAttr = focus
+
+	wm.tree.Iterate(func(node *component.TileNode) {
+		node.Content().(*Frame).SetAttr(wm.borderAttr)
+	})
+
+	wm.focus.Content().(*Frame).SetAttr(wm.focusAttr)
 }
 
 // Handle : Handler
@@ -72,14 +83,14 @@ func (wm *WindowManager) Handle(ev term.Event) (exit bool) {
 
 	if ev.Type == term.EventMouse {
 		mousePos := term.Coordinates{X: ev.MouseX, Y: ev.MouseY}
-		childAtMouse := wm.TileTree.TileAt(mousePos)
+		childAtMouse := wm.tree.TileAt(mousePos)
 		if wm.Focus() != childAtMouse {
 			if ev.Key == term.MouseLeft {
 				wm.SetFocus(childAtMouse)
 			}
 			return
 		}
-		offset := wm.TileTree.TilePosition(childAtMouse)
+		offset := wm.tree.TilePosition(childAtMouse)
 		ev.MouseX -= offset.X
 		ev.MouseY -= offset.Y
 	}
@@ -89,7 +100,7 @@ func (wm *WindowManager) Handle(ev term.Event) (exit bool) {
 	// if handler in focus wants to exit, close the window,
 	// or signal exit to upstream handler if it was last window
 	if hexit {
-		if exit = wm.Size() == 1; exit {
+		if exit = wm.tree.Size() == 1; exit {
 			return
 		}
 		curr := wm.focus
@@ -105,7 +116,7 @@ func (wm *WindowManager) SplitVertical(h fractal.Handler) *component.TileNode {
 	if wm.border {
 		h = wm.withFrame(h)
 	}
-	return wm.TileTree.SplitVertical(wm.focus, h)
+	return wm.tree.SplitVertical(wm.focus, h)
 }
 
 // SplitHorizontal creates a new horizontal split over the tile currently in focus.
@@ -113,7 +124,7 @@ func (wm *WindowManager) SplitHorizontal(h fractal.Handler) *component.TileNode 
 	if wm.border {
 		h = wm.withFrame(h)
 	}
-	return wm.TileTree.SplitHorizontal(wm.focus, h)
+	return wm.tree.SplitHorizontal(wm.focus, h)
 
 }
 
@@ -211,7 +222,7 @@ func (wm *WindowManager) SetFocusContent(h fractal.Handler) (
 
 // Cursor returns the cursor coordinates of the tile in focus.
 func (wm *WindowManager) Cursor() (term.Coordinates, bool) {
-	offset := wm.TileTree.TilePosition(wm.focus)
+	offset := wm.tree.TilePosition(wm.focus)
 	cursor, show := wm.focus.Content().(fractal.Handler).Cursor()
 	return term.Coordinates{X: offset.X + cursor.X, Y: offset.Y + cursor.Y}, show
 }
@@ -243,4 +254,14 @@ func (wm *WindowManager) Man() fractal.Manual {
 			},
 		},
 	}
+}
+
+// Draw : fractal.Component
+func (wm *WindowManager) Draw(w fractal.Writer) {
+	wm.tree.Draw(w)
+}
+
+// Resize : fractal.Component
+func (wm *WindowManager) Resize(width, height int) {
+	wm.tree.Resize(width, height)
 }
