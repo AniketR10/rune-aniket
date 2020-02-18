@@ -96,6 +96,8 @@ func main() {
 
 	defer fractal.Close()
 
+	term.SetOutputMode(term.Output256)
+
 	if err := fractal.RunMode(editor, term.InputMouse); err != nil {
 		log.Fatal(err)
 	}
