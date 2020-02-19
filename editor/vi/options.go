@@ -6,7 +6,6 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-// TODO add keyMap and others.
 // viConfig holds configuration for Vi.
 type viConfig struct {
 	ResAttr   term.Attributes

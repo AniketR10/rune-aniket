@@ -193,6 +193,13 @@ func (vi *Vi) insertBlock(str string) {
 	}
 }
 
+func (vi *Vi) logError(err error) {
+	if vi.config.Logger == nil {
+		return
+	}
+	vi.config.Logger.Error(err)
+}
+
 func (vi *Vi) pasteClipboard(before bool) bool {
 	paste, err := vi.config.Clipboard.Get()
 	str := paste.Data
@@ -201,7 +208,7 @@ func (vi *Vi) pasteClipboard(before bool) bool {
 		mode = visualMode
 	}
 	if err != nil {
-		vi.config.Logger.Error("clipboard.Get: ", err)
+		vi.logError(fmt.Errorf("clipboard.Get: %s", err))
 		return false
 	}
 
