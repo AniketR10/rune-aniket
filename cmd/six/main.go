@@ -63,6 +63,7 @@ func main() {
 		l.SetOutput(f)
 		l.SetLevel(log.TraceLevel)
 		opts = append(opts, editor.WithLogger(l))
+		viOpts = append(viOpts, vi.WithLogger(l))
 
 		// set output of plugins
 		plugin.SetLoggingOutput(f)
