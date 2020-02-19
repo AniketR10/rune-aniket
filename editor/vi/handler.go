@@ -406,6 +406,10 @@ func (vi *Vi) handleVisual(ev term.Event) (quit bool) {
 	if ev.Type == term.EventKey {
 		handled = true
 		switch ev.Ch {
+		case '>':
+			vi.cursor.ShiftSelectionRight()
+		case '<':
+			vi.cursor.ShiftSelectionLeft()
 		case 'y':
 			selection := vi.cursor.Selection()
 			vi.config.Clipboard.Set(editor.Paste{Data: selection, Metadata: vi.mode})

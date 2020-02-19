@@ -868,3 +868,41 @@ func (c *Cursor) ShiftLineLeft() bool {
 	c.setCursor(cursor)
 	return true
 }
+
+func (c *Cursor) getShiftSelection() (from, to term.Coordinates) {
+	from, to = c.selection.scrollFrom, c.cursorAtScroll()
+	switch c.selection.mode {
+	case blockSelection:
+		from, to = cell.SortFromToBlock(from, to)
+	default:
+		from, to = cell.SortFromTo(from, to)
+	}
+	return
+}
+
+// ShiftSelectionRight shifts the current selection one tab to the right.
+func (c *Cursor) ShiftSelectionRight() {
+	from, to := c.getShiftSelection()
+
+	c.Unselect()
+
+	for y := from.Y; y <= to.Y; y++ {
+		c.buf.ShiftRowRight(y)
+	}
+}
+
+// ShiftSelectionLeft shifts the current selection one tab to the left. It returns
+// false if selection could not be shifted.
+func (c *Cursor) ShiftSelectionLeft() (ok bool) {
+	from, to := c.getShiftSelection()
+
+	c.Unselect()
+
+	for y := from.Y; y <= to.Y; y++ {
+		n := c.buf.ShiftRowLeft(y)
+		if n != 0 {
+			ok = true
+		}
+	}
+	return
+}

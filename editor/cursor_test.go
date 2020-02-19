@@ -1008,3 +1008,17 @@ func TestCursorShiftLine(t *testing.T) {
 	assert.True(t, c.ShiftLineLeft())
 	assert.Equal(t, term.Coordinates{}, c.cursor)
 }
+
+func TestCursorShiftSelection(t *testing.T) {
+	c := setupCursorContent(t, 10, 10, " blabla\nbleble")
+	require.True(t, c.Select())
+	require.True(t, c.MoveDown())
+
+	c.ShiftSelectionRight()
+	assert.Equal(t, "\t blabla\n\tbleble", c.scroll.Buffer().String())
+
+	require.True(t, c.SelectBlock())
+	require.True(t, c.MoveUp())
+	assert.True(t, c.ShiftSelectionLeft())
+	assert.Equal(t, " blabla\nbleble", c.scroll.Buffer().String())
+}
