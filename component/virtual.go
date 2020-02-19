@@ -3,8 +3,8 @@ package component
 import (
 	"fmt"
 
-	"github.com/ernestrc/fractal"
-	"github.com/ernestrc/fractal/term"
+	"github.com/ernestrc/go-tui"
+	"github.com/ernestrc/go-tui/term"
 )
 
 // Virtual wraps a component to
@@ -12,13 +12,13 @@ import (
 // It exposes Move which can be used to move the inner component
 // in the virtual coordinate space.
 type Virtual struct {
-	C             fractal.Component
+	C             tui.Component
 	pos           term.Coordinates
 	height, width int
 }
 
 type virtualWriter struct {
-	writer        fractal.Writer
+	writer        tui.Writer
 	offset        term.Coordinates
 	height, width int
 }
@@ -62,7 +62,7 @@ func (c *Virtual) Resize(width, height int) {
 
 // Draw uses a virtual writer to perform bound checking and
 // if successful draw the inner component in the virtual coordinate space.
-func (c *Virtual) Draw(writer fractal.Writer) {
+func (c *Virtual) Draw(writer tui.Writer) {
 	writer = &virtualWriter{
 		writer: writer,
 		offset: c.pos,

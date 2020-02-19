@@ -6,11 +6,11 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/ernestrc/fractal"
-	"github.com/ernestrc/fractal/cell"
-	"github.com/ernestrc/fractal/component"
-	"github.com/ernestrc/fractal/handler"
-	"github.com/ernestrc/fractal/term"
+	"github.com/ernestrc/go-tui"
+	"github.com/ernestrc/go-tui/cell"
+	"github.com/ernestrc/go-tui/component"
+	"github.com/ernestrc/go-tui/handler"
+	"github.com/ernestrc/go-tui/term"
 )
 
 var ErrLastWindow = errors.New("Cannot close last window")
@@ -84,7 +84,7 @@ func newOsEditor() *editorHandler {
 }
 
 // New returns a Handler based on the given
-func New(ed Editor, opts ...Option) (h fractal.Handler, err error) {
+func New(ed Editor, opts ...Option) (h tui.Handler, err error) {
 	e := newOsEditor()
 	err = e.Init(ed, opts...)
 	if err != nil {
@@ -437,7 +437,7 @@ func (e *editorHandler) Cursor() (pos term.Coordinates, show bool) {
 	return e.wmVirt.Cursor()
 }
 
-func (e *editorHandler) Man() fractal.Manual {
+func (e *editorHandler) Man() tui.Manual {
 	panic("TODO")
 }
 
@@ -467,7 +467,7 @@ func (e *editorHandler) Resize(width, height int) {
 	e.wmVirt.Move(term.Coordinates{Y: wmY})
 }
 
-func (e *editorHandler) Draw(w fractal.Writer) {
+func (e *editorHandler) Draw(w tui.Writer) {
 	e.wmVirt.Draw(w)
 
 	if e.logBuf.Columns(0) != 0 {

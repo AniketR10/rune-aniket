@@ -9,8 +9,8 @@ import (
 	"path"
 	"path/filepath"
 
-	"github.com/ernestrc/fractal/cell"
-	"github.com/ernestrc/fractal/term"
+	"github.com/ernestrc/go-tui/cell"
+	"github.com/ernestrc/go-tui/term"
 )
 
 const filePerms = 0600

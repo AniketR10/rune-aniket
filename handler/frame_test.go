@@ -4,14 +4,14 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/ernestrc/fractal"
-	"github.com/ernestrc/fractal/term"
+	"github.com/ernestrc/go-tui"
+	"github.com/ernestrc/go-tui/term"
 )
 
 func TestFrameProxyMan(t *testing.T) {
-	myManual := fractal.Manual{
+	myManual := tui.Manual{
 		Summary: "sup",
-		Keys: fractal.KeyMap{
+		Keys: tui.KeyMap{
 			term.Event{Ch: 'j'}: {
 				ID:          "wow",
 				Description: "now",

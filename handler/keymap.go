@@ -1,21 +1,21 @@
 package handler
 
 import (
-	"github.com/ernestrc/fractal"
-	"github.com/ernestrc/fractal/term"
+	"github.com/ernestrc/go-tui"
+	"github.com/ernestrc/go-tui/term"
 )
 
 type keyMappingHandler struct {
-	fractal.Component
-	inner    fractal.Handler
+	tui.Component
+	inner    tui.Handler
 	mappings map[term.Event]term.Event
 }
 
 // WithMapping takes a handler and a set of event mappings to provide
 // key and event mapping to override default handler event handler.
 func WithMapping(
-	inner fractal.Handler, mappings map[term.Event]term.Event,
-) fractal.Handler {
+	inner tui.Handler, mappings map[term.Event]term.Event,
+) tui.Handler {
 	return keyMappingHandler{inner, inner, mappings}
 }
 
@@ -35,7 +35,7 @@ func (k keyMappingHandler) Cursor() (term.Coordinates, bool) {
 }
 
 // Man returns remapped Manual from underlying handler.
-func (k keyMappingHandler) Man() fractal.Manual {
+func (k keyMappingHandler) Man() tui.Manual {
 	m := k.inner.Man()
 	for from, to := range k.mappings {
 		m.Keys[to] = m.Keys[from]

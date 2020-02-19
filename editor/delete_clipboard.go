@@ -1,8 +1,8 @@
 package editor
 
 import (
-	"github.com/ernestrc/fractal/cell"
-	"github.com/ernestrc/fractal/term"
+	"github.com/ernestrc/go-tui/cell"
+	"github.com/ernestrc/go-tui/term"
 )
 
 type delClip struct {

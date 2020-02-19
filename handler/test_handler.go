@@ -4,9 +4,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ernestrc/fractal"
-	"github.com/ernestrc/fractal/component"
-	"github.com/ernestrc/fractal/term"
+	"github.com/ernestrc/go-tui"
+	"github.com/ernestrc/go-tui/component"
+	"github.com/ernestrc/go-tui/term"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -15,7 +15,7 @@ import (
 // processed by this handler increments the Ch rune to the next rune.
 type TestHandler struct {
 	component.TestComponent
-	fractal.Manual
+	tui.Manual
 	Exit bool
 }
 
@@ -39,7 +39,7 @@ func (t *TestHandler) Cursor() (term.Coordinates, bool) {
 }
 
 // Man for this handler is empty
-func (t *TestHandler) Man() fractal.Manual {
+func (t *TestHandler) Man() tui.Manual {
 	return t.Manual
 }
 
@@ -50,7 +50,7 @@ type handlerTestCase struct {
 
 func testHandlerWorkflow(
 	t *testing.T,
-	handler fractal.Handler,
+	handler tui.Handler,
 	cases []handlerTestCase,
 	w *term.StringWriter,
 ) {
@@ -88,7 +88,7 @@ type TestInputSequence struct {
 // Certain key events are encoded in characters. For instance, a '>' character
 // signals term.KeyEnter and '<' character signals term.KeyEsc.
 func BatchTestInputSequence(
-	t *testing.T, handler fractal.Handler, width, height int, cases []TestInputSequence,
+	t *testing.T, handler tui.Handler, width, height int, cases []TestInputSequence,
 ) {
 	writer := term.NewStringWriter(width, height)
 	handler.Resize(width, height)

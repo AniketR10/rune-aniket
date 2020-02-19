@@ -1,9 +1,9 @@
 package handler
 
 import (
-	"github.com/ernestrc/fractal"
-	"github.com/ernestrc/fractal/component"
-	"github.com/ernestrc/fractal/term"
+	"github.com/ernestrc/go-tui"
+	"github.com/ernestrc/go-tui/component"
+	"github.com/ernestrc/go-tui/term"
 )
 
 // WindowManager implements Handler as a tiled window manager.
@@ -17,13 +17,13 @@ type WindowManager struct {
 
 // NewWindowManager allocates storage for a new WindowManager and initializes it with the
 // given handler. If border is true, it will draw a border around every tile.
-func NewWindowManager(handler fractal.Handler, border bool) (wm *WindowManager) {
+func NewWindowManager(handler tui.Handler, border bool) (wm *WindowManager) {
 	wm = new(WindowManager)
 	wm.Init(handler, border)
 	return
 }
 
-func (wm *WindowManager) withFrame(handler fractal.Handler) fractal.Handler {
+func (wm *WindowManager) withFrame(handler tui.Handler) tui.Handler {
 	f := NewFrame(handler)
 	f.SetAttr(wm.borderAttr)
 	return f
@@ -31,7 +31,7 @@ func (wm *WindowManager) withFrame(handler fractal.Handler) fractal.Handler {
 
 // Init initializes this WindowManager with the given handler. If border is true, it will draw
 // a border around every tile.
-func (wm *WindowManager) Init(handler fractal.Handler, border bool) {
+func (wm *WindowManager) Init(handler tui.Handler, border bool) {
 	if border {
 		wm.borderAttr.Fg = term.ColorDefault
 		wm.borderAttr.Bg = term.ColorDefault
@@ -112,7 +112,7 @@ func (wm *WindowManager) Handle(ev term.Event) (exit bool) {
 }
 
 // SplitVertical creates a new vertical split over the tile currently in focus.
-func (wm *WindowManager) SplitVertical(h fractal.Handler) *component.TileNode {
+func (wm *WindowManager) SplitVertical(h tui.Handler) *component.TileNode {
 	if wm.border {
 		h = wm.withFrame(h)
 	}
@@ -120,7 +120,7 @@ func (wm *WindowManager) SplitVertical(h fractal.Handler) *component.TileNode {
 }
 
 // SplitHorizontal creates a new horizontal split over the tile currently in focus.
-func (wm *WindowManager) SplitHorizontal(h fractal.Handler) *component.TileNode {
+func (wm *WindowManager) SplitHorizontal(h tui.Handler) *component.TileNode {
 	if wm.border {
 		h = wm.withFrame(h)
 	}
@@ -162,11 +162,11 @@ func (wm *WindowManager) FocusDown() bool {
 }
 
 // FocusContent returns the current focus content.
-func (wm *WindowManager) FocusContent() fractal.Handler {
+func (wm *WindowManager) FocusContent() tui.Handler {
 	if wm.border {
-		return wm.focus.Content().(*Frame).Content().(fractal.Handler)
+		return wm.focus.Content().(*Frame).Content().(tui.Handler)
 	}
-	return wm.focus.Content().(fractal.Handler)
+	return wm.focus.Content().(tui.Handler)
 }
 
 // Focus returns the tile currently in focus.
@@ -208,8 +208,8 @@ func (wm *WindowManager) SetFocus(tile *component.TileNode) (
 }
 
 // SetFocusContent sets the content of the tile in focus to h.
-func (wm *WindowManager) SetFocusContent(h fractal.Handler) (
-	prev fractal.Handler,
+func (wm *WindowManager) SetFocusContent(h tui.Handler) (
+	prev tui.Handler,
 ) {
 	prev = wm.FocusContent()
 	if wm.border {
@@ -223,15 +223,15 @@ func (wm *WindowManager) SetFocusContent(h fractal.Handler) (
 // Cursor returns the cursor coordinates of the tile in focus.
 func (wm *WindowManager) Cursor() (term.Coordinates, bool) {
 	offset := wm.tree.TilePosition(wm.focus)
-	cursor, show := wm.focus.Content().(fractal.Handler).Cursor()
+	cursor, show := wm.focus.Content().(tui.Handler).Cursor()
 	return term.Coordinates{X: offset.X + cursor.X, Y: offset.Y + cursor.Y}, show
 }
 
 // Man : Handler
-func (wm *WindowManager) Man() fractal.Manual {
-	return fractal.Manual{
+func (wm *WindowManager) Man() tui.Manual {
+	return tui.Manual{
 		Summary: "WindowManager implements a tiled window manager.",
-		Keys: fractal.KeyMap{
+		Keys: tui.KeyMap{
 			term.Event{Mod: term.ModAlt, Ch: 'q'}: {
 				ID:          "Exit",
 				Description: "Exit handler.",
@@ -256,12 +256,12 @@ func (wm *WindowManager) Man() fractal.Manual {
 	}
 }
 
-// Draw : fractal.Component
-func (wm *WindowManager) Draw(w fractal.Writer) {
+// Draw : tui.Component
+func (wm *WindowManager) Draw(w tui.Writer) {
 	wm.tree.Draw(w)
 }
 
-// Resize : fractal.Component
+// Resize : tui.Component
 func (wm *WindowManager) Resize(width, height int) {
 	wm.tree.Resize(width, height)
 }

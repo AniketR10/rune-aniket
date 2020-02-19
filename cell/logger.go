@@ -6,7 +6,7 @@ import (
 
 	log "github.com/sirupsen/logrus"
 
-	"github.com/ernestrc/fractal/term"
+	"github.com/ernestrc/go-tui/term"
 )
 
 type logger struct {

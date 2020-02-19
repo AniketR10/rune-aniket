@@ -1,7 +1,7 @@
 package cell
 
 import (
-	"github.com/ernestrc/fractal/term"
+	"github.com/ernestrc/go-tui/term"
 )
 
 // undoer adds undo and redo methods to a otherwise, irreversible cell.writer.

@@ -3,8 +3,8 @@ package handler
 import (
 	"testing"
 
-	"github.com/ernestrc/fractal"
-	"github.com/ernestrc/fractal/term"
+	"github.com/ernestrc/go-tui"
+	"github.com/ernestrc/go-tui/term"
 )
 
 func TestKeyMappedLessHandle(t *testing.T) {
@@ -49,10 +49,10 @@ func TestKeyMappingMan(t *testing.T) {
 	kKey := term.Event{Ch: 'k', Type: term.EventKey}
 	jKey := term.Event{Ch: 'j', Type: term.EventKey}
 
-	var handler fractal.Handler
-	handler = &TestHandler{Manual: fractal.Manual{
+	var handler tui.Handler
+	handler = &TestHandler{Manual: tui.Manual{
 		Summary: mySummary,
-		Keys: fractal.KeyMap{
+		Keys: tui.KeyMap{
 			kKey: {
 				ID:          myID,
 				Description: myDesc,

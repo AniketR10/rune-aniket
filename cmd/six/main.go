@@ -7,11 +7,11 @@ import (
 	_ "net/http/pprof"
 	"os"
 
-	"github.com/ernestrc/fractal"
-	"github.com/ernestrc/fractal/editor"
-	"github.com/ernestrc/fractal/editor/vi"
-	"github.com/ernestrc/fractal/plugin"
-	"github.com/ernestrc/fractal/term"
+	"github.com/ernestrc/go-tui"
+	"github.com/ernestrc/go-tui/editor"
+	"github.com/ernestrc/go-tui/editor/vi"
+	"github.com/ernestrc/go-tui/plugin"
+	"github.com/ernestrc/go-tui/term"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -89,16 +89,16 @@ func main() {
 		defer closer.Close()
 	}
 
-	err = fractal.Init()
+	err = tui.Init()
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	defer fractal.Close()
+	defer tui.Close()
 
 	term.SetOutputMode(term.Output256)
 
-	if err := fractal.RunMode(editor, term.InputMouse); err != nil {
+	if err := tui.RunMode(editor, term.InputMouse); err != nil {
 		log.Fatal(err)
 	}
 }

@@ -3,8 +3,8 @@ package component
 import (
 	"testing"
 
-	"github.com/ernestrc/fractal"
-	"github.com/ernestrc/fractal/term"
+	"github.com/ernestrc/go-tui"
+	"github.com/ernestrc/go-tui/term"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -476,7 +476,7 @@ func TestTileNodeSize(t *testing.T) {
 	}
 }
 
-func assertNotNil(t *testing.T, c fractal.Component) {
+func assertNotNil(t *testing.T, c tui.Component) {
 	if c == nil {
 		t.Errorf("unexpected nil component")
 	}

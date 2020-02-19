@@ -3,8 +3,8 @@ package handler
 import (
 	"testing"
 
-	"github.com/ernestrc/fractal"
-	"github.com/ernestrc/fractal/term"
+	"github.com/ernestrc/go-tui"
+	"github.com/ernestrc/go-tui/term"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -17,7 +17,7 @@ func altEvent(ch rune) term.Event {
 	}
 }
 
-func prepareTest(width, height int, border bool, root fractal.Handler) (
+func prepareTest(width, height int, border bool, root tui.Handler) (
 	*term.StringWriter, *WindowManager,
 ) {
 	writer := term.NewStringWriter(width, height)

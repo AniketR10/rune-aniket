@@ -7,9 +7,9 @@ import (
 	_ "net/http/pprof"
 	"os"
 
-	"github.com/ernestrc/fractal"
-	"github.com/ernestrc/fractal/handler"
-	"github.com/ernestrc/fractal/term"
+	"github.com/ernestrc/go-tui"
+	"github.com/ernestrc/go-tui/handler"
+	"github.com/ernestrc/go-tui/term"
 )
 
 const border = true
@@ -30,11 +30,11 @@ func main() {
 		log.Fatal(err)
 	}
 
-	if err := fractal.Init(); err != nil {
+	if err := tui.Init(); err != nil {
 		log.Fatal(err)
 	}
 
-	defer fractal.Close()
+	defer tui.Close()
 
 	var wm *handler.WindowManager
 	var less [4]handler.Less
@@ -52,7 +52,7 @@ func main() {
 	wm.SplitVertical(&less[2])
 	wm.SplitVertical(&less[3])
 
-	if err := fractal.RunMode(wm, term.InputAlt|term.InputMouse); err != nil {
+	if err := tui.RunMode(wm, term.InputAlt|term.InputMouse); err != nil {
 		log.Fatal(err)
 	}
 }

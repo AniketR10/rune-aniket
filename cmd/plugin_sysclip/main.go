@@ -4,8 +4,8 @@ import (
 	"log"
 
 	"github.com/atotto/clipboard"
-	"github.com/ernestrc/fractal/editor"
-	"github.com/ernestrc/fractal/plugin"
+	"github.com/ernestrc/go-tui/editor"
+	"github.com/ernestrc/go-tui/plugin"
 )
 
 type systemClipboard struct{}

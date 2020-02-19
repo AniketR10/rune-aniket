@@ -1,8 +1,8 @@
 package vi
 
 import (
-	"github.com/ernestrc/fractal/editor"
-	"github.com/ernestrc/fractal/term"
+	"github.com/ernestrc/go-tui/editor"
+	"github.com/ernestrc/go-tui/term"
 	log "github.com/sirupsen/logrus"
 )
 

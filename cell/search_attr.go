@@ -1,7 +1,7 @@
 package cell
 
 import (
-	"github.com/ernestrc/fractal/term"
+	"github.com/ernestrc/go-tui/term"
 )
 
 type attrSearcher struct {

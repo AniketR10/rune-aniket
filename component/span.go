@@ -1,8 +1,8 @@
 package component
 
 import (
-	"github.com/ernestrc/fractal"
-	"github.com/ernestrc/fractal/term"
+	"github.com/ernestrc/go-tui"
+	"github.com/ernestrc/go-tui/term"
 )
 
 type Alignment int
@@ -45,7 +45,7 @@ type Span struct {
 }
 
 // NewSpan returns an initialized Span. See Span.Init for more info.
-func NewSpan(content fractal.Component) *Span {
+func NewSpan(content tui.Component) *Span {
 	s := new(Span)
 	s.Init(content)
 	s.ContentAlignment = DefaultSpanFlags
@@ -53,7 +53,7 @@ func NewSpan(content fractal.Component) *Span {
 }
 
 // Init initializes this Span with content.
-func (s *Span) Init(content fractal.Component) {
+func (s *Span) Init(content tui.Component) {
 	s.content.C = content
 }
 
@@ -125,13 +125,13 @@ func (s *Span) Resize(width, height int) {
 }
 
 // Draw : Component
-func (s *Span) Draw(w fractal.Writer) {
+func (s *Span) Draw(w tui.Writer) {
 	s.content.Draw(w)
 }
 
 // SetContent updates the underlying component and resizes it
 // to conform to this frame's width and height.
-func (s *Span) SetContent(content fractal.Component) {
+func (s *Span) SetContent(content tui.Component) {
 	s.content.C = content
 	s.Resize(s.width, s.height)
 }

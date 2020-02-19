@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ernestrc/fractal/term"
+	"github.com/ernestrc/go-tui/term"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

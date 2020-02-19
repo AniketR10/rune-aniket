@@ -1,20 +1,20 @@
 package handler
 
 import (
-	"github.com/ernestrc/fractal"
-	"github.com/ernestrc/fractal/component"
-	"github.com/ernestrc/fractal/term"
+	"github.com/ernestrc/go-tui"
+	"github.com/ernestrc/go-tui/component"
+	"github.com/ernestrc/go-tui/term"
 )
 
 // Frame is a proxy handler that simply draws a frame around
 // the underlying handler.
 type Frame struct {
 	component.Frame
-	handler fractal.Handler
+	handler tui.Handler
 }
 
 // NewFrame allocates storage for a new Frame and initializes it.
-func NewFrame(handler fractal.Handler) (f *Frame) {
+func NewFrame(handler tui.Handler) (f *Frame) {
 	f = new(Frame)
 	f.Init(handler)
 	return
@@ -22,7 +22,7 @@ func NewFrame(handler fractal.Handler) (f *Frame) {
 
 // Init initializes this Frame with the given underlying handler
 // and frame attributes.
-func (f *Frame) Init(handler fractal.Handler) {
+func (f *Frame) Init(handler tui.Handler) {
 	f.handler = handler
 	f.Frame.Init(handler)
 }
@@ -43,6 +43,6 @@ func (f *Frame) Cursor() (pos term.Coordinates, show bool) {
 }
 
 // Man just delegates Man call to underlying handler.
-func (f *Frame) Man() fractal.Manual {
+func (f *Frame) Man() tui.Manual {
 	return f.handler.Man()
 }

@@ -1,8 +1,8 @@
 package component
 
 import (
-	"github.com/ernestrc/fractal"
-	"github.com/ernestrc/fractal/term"
+	"github.com/ernestrc/go-tui"
+	"github.com/ernestrc/go-tui/term"
 )
 
 // TestComponent draws rune Ch, and attributes Bg, Fg on every cell
@@ -17,7 +17,7 @@ func (t *TestComponent) Resize(width, height int) {
 	t.width, t.height = width, height
 }
 
-func (t *TestComponent) Draw(w fractal.Writer) {
+func (t *TestComponent) Draw(w tui.Writer) {
 	for tx := t.width - 1; tx >= 0; tx-- {
 		for ty := 0 + t.height - 1; ty >= 0; ty-- {
 			w.SetCell(term.Coordinates{X: tx, Y: ty},

@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ernestrc/fractal"
-	"github.com/ernestrc/fractal/term"
+	"github.com/ernestrc/go-tui"
+	"github.com/ernestrc/go-tui/term"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -15,7 +15,7 @@ type testCase struct {
 }
 
 func testWorkflow(
-	t *testing.T, m fractal.Component,
+	t *testing.T, m tui.Component,
 	w *term.StringWriter, cases []testCase,
 ) {
 	var err error

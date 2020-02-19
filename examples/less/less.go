@@ -11,8 +11,8 @@ import (
 	"runtime"
 	"runtime/pprof"
 
-	"github.com/ernestrc/fractal"
-	"github.com/ernestrc/fractal/handler"
+	"github.com/ernestrc/go-tui"
+	"github.com/ernestrc/go-tui/handler"
 )
 
 var (
@@ -94,15 +94,15 @@ func main() {
 
 	stopCPUProfile()
 
-	if err = fractal.Init(); err != nil {
+	if err = tui.Init(); err != nil {
 		log.Fatal(err)
 	}
 
 	writeMemProfile()
 
-	defer fractal.Close()
+	defer tui.Close()
 
-	if err = fractal.Run(less); err != nil {
+	if err = tui.Run(less); err != nil {
 		log.Fatal(err)
 	}
 

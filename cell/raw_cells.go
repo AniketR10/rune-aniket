@@ -6,7 +6,7 @@ import (
 	"io"
 	"strings"
 
-	"github.com/ernestrc/fractal/term"
+	"github.com/ernestrc/go-tui/term"
 )
 
 const defTabSpaces int = 4

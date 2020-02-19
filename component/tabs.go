@@ -1,9 +1,9 @@
 package component
 
 import (
-	"github.com/ernestrc/fractal"
-	"github.com/ernestrc/fractal/cell"
-	"github.com/ernestrc/fractal/term"
+	"github.com/ernestrc/go-tui"
+	"github.com/ernestrc/go-tui/cell"
+	"github.com/ernestrc/go-tui/term"
 )
 
 var (
@@ -21,7 +21,7 @@ type tab struct {
 
 type Tabs struct {
 	fileListBuf   *cell.Buffer
-	fileListFrame fractal.Component
+	fileListFrame tui.Component
 	tabs          []*tab
 	width, height int
 	offsetIdx     int
@@ -36,7 +36,7 @@ type Tabs struct {
 
 func newListFrame(
 	scrollAttr, frameAttr term.Attributes, buf *cell.Buffer, border bool,
-) (content fractal.Component) {
+) (content tui.Component) {
 	scroll := NewScroll()
 	scroll.InitWithBuffer(buf)
 	scroll.Attributes = scrollAttr
@@ -92,14 +92,14 @@ func (t *Tabs) SetBorder(border bool) {
 	t.fileListFrame.Resize(t.width, t.height)
 }
 
-// Resize : fractal.Component
+// Resize : tui.Component
 func (t *Tabs) Resize(width, height int) {
 	t.width, t.height = width, height
 	t.fileListFrame.Resize(width, height)
 }
 
-// Draw : fractal.Component
-func (t *Tabs) Draw(w fractal.Writer) {
+// Draw : tui.Component
+func (t *Tabs) Draw(w tui.Writer) {
 	t.fileListBuf.Reset()
 
 	var focusLen int

@@ -3,8 +3,8 @@ package component
 import (
 	"container/list"
 
-	"github.com/ernestrc/fractal"
-	"github.com/ernestrc/fractal/term"
+	"github.com/ernestrc/go-tui"
+	"github.com/ernestrc/go-tui/term"
 )
 
 // List represents a list of Virtual which are drawn each one
@@ -103,7 +103,7 @@ func (l *List) Resize(width, height int) {
 }
 
 // Draw draws this list's elements with the current seek offset.
-func (l *List) Draw(w fractal.Writer) {
+func (l *List) Draw(w tui.Writer) {
 	// API exposes internal list so we need
 	// to make sure that the elements are properly position and sized
 	// before drawing

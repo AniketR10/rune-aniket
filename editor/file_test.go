@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ernestrc/fractal/cell"
-	"github.com/ernestrc/fractal/term"
+	"github.com/ernestrc/go-tui/cell"
+	"github.com/ernestrc/go-tui/term"
 	gomock "github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

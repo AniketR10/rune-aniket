@@ -1,8 +1,8 @@
 package component
 
 import (
-	"github.com/ernestrc/fractal"
-	"github.com/ernestrc/fractal/term"
+	"github.com/ernestrc/go-tui"
+	"github.com/ernestrc/go-tui/term"
 )
 
 // Frame is a Component that simply draws a border around a nested component.
@@ -40,14 +40,14 @@ type Frame struct {
 
 // NewFrame allocates storage and initializes a new frame with the given
 // border attributes and underlying component.
-func NewFrame(content fractal.Component) (f *Frame) {
+func NewFrame(content tui.Component) (f *Frame) {
 	f = new(Frame)
 	f.Init(content)
 	return
 }
 
 // Init initializes this frame with the given Component and border attributes.
-func (f *Frame) Init(content fractal.Component) {
+func (f *Frame) Init(content tui.Component) {
 	f.content.C = content
 	f.Horizontal.Ch = '─'
 	f.Vertical.Ch = '│'
@@ -74,13 +74,13 @@ func (f *Frame) SetAttr(border term.Attributes) {
 }
 
 // Content returns the underlying Component.
-func (f *Frame) Content() fractal.Component {
+func (f *Frame) Content() tui.Component {
 	return f.content.C
 }
 
 // SetContent updates the underlying component and resizes it
 // to conform to this frame's width and height.
-func (f *Frame) SetContent(content fractal.Component) {
+func (f *Frame) SetContent(content tui.Component) {
 	f.content.C = content
 	f.Resize(f.width, f.height)
 }
@@ -100,7 +100,7 @@ func (f *Frame) Resize(width, height int) {
 }
 
 // Draw draws this frame's border and contents to the given Writer.
-func (f *Frame) Draw(w fractal.Writer) {
+func (f *Frame) Draw(w tui.Writer) {
 	limitX, limitY := f.width-1, f.height-1
 
 	for i := 0; i < limitX; i++ {

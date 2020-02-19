@@ -1,7 +1,7 @@
 package cell
 
 import (
-	"github.com/ernestrc/fractal/term"
+	"github.com/ernestrc/go-tui/term"
 )
 
 // unixFileReader is a reader that hides the last EOL if present.

@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/ernestrc/fractal"
-	"github.com/ernestrc/fractal/cell"
-	"github.com/ernestrc/fractal/editor"
-	"github.com/ernestrc/fractal/handler"
-	"github.com/ernestrc/fractal/term"
+	"github.com/ernestrc/go-tui"
+	"github.com/ernestrc/go-tui/cell"
+	"github.com/ernestrc/go-tui/editor"
+	"github.com/ernestrc/go-tui/handler"
+	"github.com/ernestrc/go-tui/term"
 )
 
 type viMode uint8
@@ -44,8 +44,8 @@ func moveOpposite(m moveMode) moveMode {
 	}
 }
 
-// Vi implements a basic vi-like text editor which satisfies fractal.Handler
-// and fractal.Component.
+// Vi implements a basic vi-like text editor which satisfies tui.Handler
+// and tui.Component.
 type Vi struct {
 	config      viConfig
 	less        handler.Less // used for message bar and text search capabilities
@@ -90,22 +90,22 @@ func (vi *Vi) Init(buf *cell.Buffer, opts ...Option) {
 	vi.setNormalMode()
 }
 
-// Resize : fractal.Component
+// Resize : tui.Component
 func (vi *Vi) Resize(width, height int) {
 	vi.less.Resize(width, height)
 }
 
-// Draw : fractal.Component
-func (vi *Vi) Draw(w fractal.Writer) {
+// Draw : tui.Component
+func (vi *Vi) Draw(w tui.Writer) {
 	vi.less.Draw(w)
 }
 
-// Man : fractal.Handler
-func (vi *Vi) Man() fractal.Manual {
+// Man : tui.Handler
+func (vi *Vi) Man() tui.Manual {
 	panic("TODO")
 }
 
-// Cursor : fractal.Handler
+// Cursor : tui.Handler
 func (vi *Vi) Cursor() (term.Coordinates, bool) {
 	// use less Cursor if we are in search mode
 	if vi.less.Mode() != handler.LessNormalMode {
@@ -479,7 +479,7 @@ func (vi *Vi) handleReplace(ev term.Event) (quit bool) {
 	return
 }
 
-// Handle : fractal.Handler
+// Handle : tui.Handler
 func (vi *Vi) Handle(ev term.Event) (quit bool) {
 	switch vi.mode {
 	case normalMode:

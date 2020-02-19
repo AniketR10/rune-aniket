@@ -3,7 +3,7 @@ package cell
 import (
 	"math"
 
-	"github.com/ernestrc/fractal/term"
+	"github.com/ernestrc/go-tui/term"
 )
 
 // selector extends a reader to perform cell selection operations.

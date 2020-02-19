@@ -1,7 +1,7 @@
-package fractal
+package tui
 
 import (
-	"github.com/ernestrc/fractal/term"
+	"github.com/ernestrc/go-tui/term"
 	"github.com/nsf/termbox-go"
 )
 

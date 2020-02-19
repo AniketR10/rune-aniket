@@ -3,7 +3,7 @@ package cell
 import (
 	"fmt"
 
-	"github.com/ernestrc/fractal/term"
+	"github.com/ernestrc/go-tui/term"
 )
 
 // Reader is the interface that wraps methods to query a 2D matrix of term.Cell.

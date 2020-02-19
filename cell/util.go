@@ -1,6 +1,6 @@
 package cell
 
-import "github.com/ernestrc/fractal/term"
+import "github.com/ernestrc/go-tui/term"
 
 // SortFromToBlock sorts a pair of coordinates (from/to) such that:
 //

@@ -1,9 +1,9 @@
-package fractal
+package tui
 
 import (
 	"fmt"
 
-	"github.com/ernestrc/fractal/term"
+	"github.com/ernestrc/go-tui/term"
 )
 
 // Component represents an element that can be drawn

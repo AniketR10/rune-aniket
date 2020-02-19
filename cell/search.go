@@ -3,7 +3,7 @@ package cell
 import (
 	"container/list"
 
-	"github.com/ernestrc/fractal/term"
+	"github.com/ernestrc/go-tui/term"
 )
 
 // Searcher is an interface that wraps methods to search text in a Reader.

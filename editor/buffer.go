@@ -1,17 +1,17 @@
 package editor
 
 import (
-	"github.com/ernestrc/fractal"
-	"github.com/ernestrc/fractal/component"
-	"github.com/ernestrc/fractal/term"
+	"github.com/ernestrc/go-tui"
+	"github.com/ernestrc/go-tui/component"
+	"github.com/ernestrc/go-tui/term"
 )
 
 // This structure is just a wrap structure to be able to add certain
-// properties to a fractal.Handler editor.
+// properties to a tui.Handler editor.
 type editorBuffer struct {
 	filename string
 	fileBuf  *FileBuffer
-	editor   fractal.Handler
+	editor   tui.Handler
 	node     *component.TileNode
 }
 
@@ -27,7 +27,7 @@ func (s *editorBuffer) Resize(width, height int) {
 	s.editor.Resize(width, height)
 }
 
-func (s *editorBuffer) Draw(w fractal.Writer) {
+func (s *editorBuffer) Draw(w tui.Writer) {
 	s.editor.Draw(w)
 }
 
@@ -39,7 +39,7 @@ func (s *editorBuffer) Cursor() (pos term.Coordinates, show bool) {
 	return s.editor.Cursor()
 }
 
-func (s *editorBuffer) Man() fractal.Manual {
+func (s *editorBuffer) Man() tui.Manual {
 	return s.editor.Man()
 }
 

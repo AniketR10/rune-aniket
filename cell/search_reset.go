@@ -1,6 +1,6 @@
 package cell
 
-import "github.com/ernestrc/fractal/term"
+import "github.com/ernestrc/go-tui/term"
 
 type resetStatefulSearcher struct {
 	pub      PublisherReader

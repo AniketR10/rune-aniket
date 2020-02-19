@@ -3,9 +3,9 @@ package component
 import (
 	"io"
 
-	"github.com/ernestrc/fractal"
-	"github.com/ernestrc/fractal/cell"
-	"github.com/ernestrc/fractal/term"
+	"github.com/ernestrc/go-tui"
+	"github.com/ernestrc/go-tui/cell"
+	"github.com/ernestrc/go-tui/term"
 )
 
 // Scroll adds Draw to a Buffer along with
@@ -243,7 +243,7 @@ func (s *Scroll) getMaxYOffset() (y int) {
 	return
 }
 
-func (s *Scroll) drawFast(writer fractal.Writer) {
+func (s *Scroll) drawFast(writer tui.Writer) {
 	xwindow := s.offset.X + s.width
 	ywindow := s.height
 	for y, r := range s.buf.RawCells()[s.offset.Y:] {
@@ -264,7 +264,7 @@ func (s *Scroll) drawFast(writer fractal.Writer) {
 	return
 }
 
-func (s *Scroll) draw(writer fractal.Writer) {
+func (s *Scroll) draw(writer tui.Writer) {
 	xwindow := s.offset.X + s.width
 	ywindow := s.height
 	for y, r := range s.buf.RawCells()[s.offset.Y:] {
@@ -291,7 +291,7 @@ func (s *Scroll) draw(writer fractal.Writer) {
 	return
 }
 
-func (s *Scroll) wrapdrawFast(writer fractal.Writer) {
+func (s *Scroll) wrapdrawFast(writer tui.Writer) {
 	var xi, yi, ywindow int
 	xwindow := s.width
 	wraps := 0
@@ -320,7 +320,7 @@ func (s *Scroll) wrapdrawFast(writer fractal.Writer) {
 
 }
 
-func (s *Scroll) wrapdraw(writer fractal.Writer) {
+func (s *Scroll) wrapdraw(writer tui.Writer) {
 	var xi, yi, ywindow int
 	xwindow := s.width
 	wraps := 0
@@ -357,7 +357,7 @@ func (s *Scroll) wrapdraw(writer fractal.Writer) {
 
 // Draw draws the contents of this scroll to the given writer. If Wrap is set,
 // lines that are too long wrap around and thus are rendered in the next line.
-func (s *Scroll) Draw(writer fractal.Writer) {
+func (s *Scroll) Draw(writer tui.Writer) {
 	if s.Attributes == (term.Attributes{}) {
 		if s.Wrap {
 			s.wrapdrawFast(writer)

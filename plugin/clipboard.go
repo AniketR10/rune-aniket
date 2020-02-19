@@ -7,7 +7,7 @@ import (
 	"os"
 	"os/exec"
 
-	"github.com/ernestrc/fractal/editor"
+	"github.com/ernestrc/go-tui/editor"
 	hPlugin "github.com/hashicorp/go-plugin"
 	log "github.com/sirupsen/logrus"
 )

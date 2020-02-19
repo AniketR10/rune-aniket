@@ -4,9 +4,9 @@ import (
 	"os"
 	"testing"
 
-	"github.com/ernestrc/fractal"
-	"github.com/ernestrc/fractal/cell"
-	"github.com/ernestrc/fractal/handler"
+	"github.com/ernestrc/go-tui"
+	"github.com/ernestrc/go-tui/cell"
+	"github.com/ernestrc/go-tui/handler"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -15,7 +15,7 @@ type testEditor struct {
 	buf *cell.Buffer
 }
 
-func (e *testEditor) Edit(buf *cell.Buffer) fractal.Handler {
+func (e *testEditor) Edit(buf *cell.Buffer) tui.Handler {
 	e.buf = buf
 	return handler.NewTestHandler()
 }

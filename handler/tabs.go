@@ -1,9 +1,9 @@
 package handler
 
 import (
-	"github.com/ernestrc/fractal"
-	"github.com/ernestrc/fractal/component"
-	"github.com/ernestrc/fractal/term"
+	"github.com/ernestrc/go-tui"
+	"github.com/ernestrc/go-tui/component"
+	"github.com/ernestrc/go-tui/term"
 )
 
 // Tabs add mouse handling to component.Tabs.
@@ -54,6 +54,6 @@ func (f *Tabs) Cursor() (term.Coordinates, bool) {
 }
 
 // Man just delegates Man call to underlying handler.
-func (f *Tabs) Man() fractal.Manual {
+func (f *Tabs) Man() tui.Manual {
 	panic("TODO")
 }

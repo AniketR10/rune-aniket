@@ -3,10 +3,10 @@ package handler
 import (
 	"fmt"
 
-	"github.com/ernestrc/fractal"
-	"github.com/ernestrc/fractal/cell"
-	"github.com/ernestrc/fractal/component"
-	"github.com/ernestrc/fractal/term"
+	"github.com/ernestrc/go-tui"
+	"github.com/ernestrc/go-tui/cell"
+	"github.com/ernestrc/go-tui/component"
+	"github.com/ernestrc/go-tui/term"
 )
 
 const (
@@ -195,7 +195,7 @@ func (l *Less) Cursor() (term.Coordinates, bool) {
 }
 
 // Draw : Component
-func (l *Less) Draw(w fractal.Writer) {
+func (l *Less) Draw(w tui.Writer) {
 	l.Scroll.Draw(w)
 
 	if !l.Scroll.CanSeekDown() && !l.delEOF {
@@ -248,10 +248,10 @@ func (l *Less) setupScroll(w *component.Scroll) {
 }
 
 // Man : Handler
-func (l *Less) Man() fractal.Manual {
-	return fractal.Manual{
+func (l *Less) Man() tui.Manual {
+	return tui.Manual{
 		Summary: "Less is a handler similar to Unix' less program, but simplified. It allows basic navigation with vi-style key bindings and text search.",
-		Keys: fractal.KeyMap{
+		Keys: tui.KeyMap{
 			term.Event{Type: term.EventKey, Ch: 'q'}: {
 				ID:          "Normal.Exit",
 				Description: "Exit handler.",

@@ -1,4 +1,4 @@
-module github.com/ernestrc/fractal
+module github.com/ernestrc/go-tui
 
 go 1.12
 

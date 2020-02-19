@@ -1,9 +1,9 @@
 package vi
 
 import (
-	"github.com/ernestrc/fractal"
-	"github.com/ernestrc/fractal/cell"
-	"github.com/ernestrc/fractal/editor"
+	"github.com/ernestrc/go-tui"
+	"github.com/ernestrc/go-tui/cell"
+	"github.com/ernestrc/go-tui/editor"
 )
 
 type viEditor struct {
@@ -15,6 +15,6 @@ func Editor(opts ...Option) editor.Editor {
 	return &viEditor{opts: opts}
 }
 
-func (e *viEditor) Edit(buf *cell.Buffer) fractal.Handler {
+func (e *viEditor) Edit(buf *cell.Buffer) tui.Handler {
 	return New(buf, e.opts...)
 }

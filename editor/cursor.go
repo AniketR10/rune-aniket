@@ -3,9 +3,9 @@ package editor
 import (
 	"fmt"
 
-	"github.com/ernestrc/fractal/cell"
-	"github.com/ernestrc/fractal/component"
-	"github.com/ernestrc/fractal/term"
+	"github.com/ernestrc/go-tui/cell"
+	"github.com/ernestrc/go-tui/component"
+	"github.com/ernestrc/go-tui/term"
 )
 
 const (
@@ -49,7 +49,7 @@ func (c *Cursor) Init(scroll *component.Scroll) {
 	c.selection.mode = noSelection
 }
 
-// Cursor returns the current position of the cursor. It safisfies fractal.Handler.Cursor.
+// Cursor returns the current position of the cursor. It safisfies tui.Handler.Cursor.
 func (c *Cursor) Cursor() (term.Coordinates, bool) {
 	return c.cursor, true
 }

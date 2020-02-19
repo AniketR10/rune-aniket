@@ -5,7 +5,7 @@ import (
 )
 
 const (
-	envLogLevel = "FRACTAL_PLUGIN_LOG_LEVEL"
+	envLogLevel = "GOTUI_PLUGIN_LOG_LEVEL"
 )
 
 var pluginEnv = []string{}
