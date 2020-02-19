@@ -1022,3 +1022,177 @@ func TestCursorShiftSelection(t *testing.T) {
 	assert.True(t, c.ShiftSelectionLeft())
 	assert.Equal(t, " blabla\nbleble", c.scroll.Buffer().String())
 }
+
+var (
+	abcAttr      = term.Attributes{Fg: term.AttrUnderline, Bg: term.ColorBlack}
+	abcLocations = []Location{
+		Location{
+			From: term.Coordinates{Y: 1},
+			To:   term.Coordinates{Y: 1},
+			Attr: abcAttr,
+		},
+		Location{
+			From: term.Coordinates{Y: 2},
+			To:   term.Coordinates{Y: 2},
+			Attr: abcAttr,
+		},
+		Location{
+			From: term.Coordinates{Y: 3},
+			To:   term.Coordinates{Y: 3},
+			Attr: abcAttr,
+		},
+	}
+)
+
+func TestCursorMoveLocationList(t *testing.T) {
+	t.Run("MoveToPrevLocation should return false and do nothing if location list is nil", func(t *testing.T) {
+		c := setupCursorContent(t, 10, 10, "")
+		assert.False(t, c.MoveToPrevLocation())
+	})
+
+	t.Run("MoveToNextLocation should return false and do nothing if location list is nil", func(t *testing.T) {
+		c := setupCursorContent(t, 10, 10, "")
+		assert.False(t, c.MoveToNextLocation())
+	})
+
+	t.Run("MoveToPrevLocation should return false and do nothing if already at start of location list", func(t *testing.T) {
+		c := setupCursorContent(t, 10, 10, "")
+		locations := []Location{Location{}}
+		assert.Nil(t, c.SetLocationList(&testLocationList{locations: locations}))
+		assert.False(t, c.MoveToPrevLocation())
+	})
+
+	t.Run("MoveToNextLocation should return false and do nothing if already at end of location list", func(t *testing.T) {
+		c := setupCursorContent(t, 10, 10, "")
+		locations := []Location{Location{}}
+		assert.Nil(t, c.SetLocationList(&testLocationList{locations: locations}))
+		assert.False(t, c.MoveToNextLocation())
+	})
+
+	t.Run("MoveToPrevLocation should return true and move cursor to earlier location", func(t *testing.T) {
+		c := setupCursorContent(t, 10, 10, " X")
+		require.True(t, c.MoveRight())
+
+		locations := []Location{Location{}}
+		assert.Nil(t, c.SetLocationList(&testLocationList{locations: locations}))
+		assert.True(t, c.MoveToNextLocation())
+
+		pos, ok := c.Cursor()
+		require.True(t, ok)
+		assert.Equal(t, term.Coordinates{}, pos)
+	})
+
+	t.Run("MoveToNextLocation should wrap around to first location", func(t *testing.T) {
+		c := setupCursorContent(t, 10, 10, "\na\nb\nc \n")
+		require.True(t, c.MoveLastLine())
+		require.True(t, c.MoveEndLine())
+
+		assert.Nil(t, c.SetLocationList(&testLocationList{locations: abcLocations}))
+		assert.True(t, c.MoveToNextLocation())
+
+		pos, ok := c.Cursor()
+		require.True(t, ok)
+		assert.Equal(t, term.Coordinates{Y: 1}, pos)
+	})
+
+	t.Run("MoveToPrevLocation should wrap around to last location", func(t *testing.T) {
+		c := setupCursorContent(t, 10, 10, "\na\nb\nc\n")
+
+		assert.Nil(t, c.SetLocationList(&testLocationList{locations: abcLocations}))
+		assert.True(t, c.MoveToPrevLocation())
+
+		pos, ok := c.Cursor()
+		require.True(t, ok)
+		assert.Equal(t, term.Coordinates{Y: 3}, pos)
+	})
+
+	t.Run("MoveToNextLocation should wrap around to first location (special case)", func(t *testing.T) {
+		c := setupCursorContent(t, 10, 10, " X")
+		require.True(t, c.MoveRight())
+
+		locations := []Location{Location{}, Location{From: term.Coordinates{X: 1}}}
+		assert.Nil(t, c.SetLocationList(&testLocationList{locations: locations}))
+		assert.True(t, c.MoveToNextLocation())
+
+		pos, ok := c.Cursor()
+		require.True(t, ok)
+		assert.Equal(t, term.Coordinates{}, pos)
+	})
+
+	t.Run("MoveToPrevLocation should wrap around to last location (special case)", func(t *testing.T) {
+		c := setupCursorContent(t, 10, 10, " X")
+
+		locations := []Location{Location{}, Location{From: term.Coordinates{X: 1}}}
+		assert.Nil(t, c.SetLocationList(&testLocationList{locations: locations}))
+		assert.True(t, c.MoveToPrevLocation())
+
+		pos, ok := c.Cursor()
+		require.True(t, ok)
+		assert.Equal(t, term.Coordinates{X: 1}, pos)
+	})
+
+	t.Run("MoveToNextLocation should go to next location after cursor", func(t *testing.T) {
+		c := setupCursorContent(t, 10, 10, "\na\nb\nc \n")
+		require.True(t, c.MoveDown())
+		require.True(t, c.MoveDown())
+
+		assert.Nil(t, c.SetLocationList(&testLocationList{locations: abcLocations}))
+		assert.True(t, c.MoveToNextLocation())
+
+		pos, ok := c.Cursor()
+		require.True(t, ok)
+		assert.Equal(t, term.Coordinates{Y: 3}, pos)
+	})
+
+	t.Run("MoveToPrevLocation should go to prev location before location", func(t *testing.T) {
+		c := setupCursorContent(t, 10, 10, "\na\nb\nc\n")
+		require.True(t, c.MoveDown())
+		require.True(t, c.MoveDown())
+
+		assert.Nil(t, c.SetLocationList(&testLocationList{locations: abcLocations}))
+		assert.True(t, c.MoveToPrevLocation())
+
+		pos, ok := c.Cursor()
+		require.True(t, ok)
+		assert.Equal(t, term.Coordinates{Y: 1}, pos)
+	})
+}
+
+func TestCursorSetLocationList(t *testing.T) {
+	c := setupCursorContent(t, 10, 10, "\na\nb\nc\n")
+	buf := c.scroll.Buffer()
+
+	expected := [][]term.Cell{
+		[]term.Cell{},
+		[]term.Cell{term.Cell{Ch: 'a', Bg: abcAttr.Bg, Fg: abcAttr.Fg}},
+		[]term.Cell{term.Cell{Ch: 'b', Bg: abcAttr.Bg, Fg: abcAttr.Fg}},
+		[]term.Cell{term.Cell{Ch: 'c', Bg: abcAttr.Bg, Fg: abcAttr.Fg}},
+	}
+
+	abcList := &testLocationList{locations: abcLocations}
+
+	assert.Nil(t, c.SetLocationList(abcList))
+	assert.Equal(t, expected, buf.RawCells())
+
+	buf.RawCells()[2][0].Bg = term.AttrUnderline
+	buf.RawCells()[2][0].Fg = term.AttrBold
+
+	newLocations := []Location{
+		Location{
+			From: term.Coordinates{Y: 2},
+			To:   term.Coordinates{Y: 2},
+			Attr: term.Attributes{Bg: term.ColorRed},
+		},
+	}
+
+	expected = [][]term.Cell{
+		[]term.Cell{},
+		[]term.Cell{term.Cell{Ch: 'a'}},
+		[]term.Cell{term.Cell{Ch: 'b',
+			Fg: term.AttrBold, Bg: term.AttrUnderline | term.ColorRed}},
+		[]term.Cell{term.Cell{Ch: 'c'}},
+	}
+	oldLocList := c.SetLocationList(&testLocationList{locations: newLocations})
+	assert.Equal(t, abcList, oldLocList)
+	assert.Equal(t, expected, buf.RawCells())
+}

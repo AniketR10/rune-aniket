@@ -374,6 +374,10 @@ func (vi *Vi) handleNormal(ev term.Event) bool {
 				vi.cursor.Redo()
 			case term.KeyCtrlV:
 				vi.setVisualBlockMode()
+			case term.KeyCtrlK:
+				vi.cursor.MoveToPrevLocation()
+			case term.KeyCtrlJ:
+				vi.cursor.MoveToNextLocation()
 			}
 		}
 	}
@@ -525,4 +529,9 @@ func (vi *Vi) Handle(ev term.Event) (quit bool) {
 	}
 
 	return
+}
+
+// SetLocationList sets a location list of this handler. See Cursor.SetLocationList
+func (vi *Vi) SetLocationList(l editor.LocationList) editor.LocationList {
+	return vi.cursor.SetLocationList(l)
 }

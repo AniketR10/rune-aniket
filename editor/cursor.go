@@ -20,6 +20,7 @@ type Cursor struct {
 	buf       *cell.Buffer
 	scroll    *component.Scroll
 	cursor    term.Coordinates
+	locations LocationList
 	selection struct {
 		mode       int
 		scrollFrom term.Coordinates
@@ -905,4 +906,133 @@ func (c *Cursor) ShiftSelectionLeft() (ok bool) {
 		}
 	}
 	return
+}
+
+func (c *Cursor) setLocListAttr(l LocationList, reverse bool) {
+	for ok := true; ok; _, ok = l.Prev() {
+		/* go to start of loc list */
+	}
+
+	loc, ok := l.Current()
+	if !ok {
+		return
+	}
+
+	for {
+		selection := c.buf.Select(loc.From, loc.To)
+		if reverse {
+			for y, row := range selection {
+				for x := range row {
+					selection[y][x].Fg &^= loc.Attr.Fg
+					selection[y][x].Bg &^= loc.Attr.Bg
+				}
+			}
+		} else {
+			for y, row := range selection {
+				for x := range row {
+					selection[y][x].Fg |= loc.Attr.Fg
+					selection[y][x].Bg |= loc.Attr.Bg
+				}
+			}
+		}
+
+		loc, ok = l.Next()
+		if !ok {
+			break
+		}
+	}
+}
+
+// SetLocationList sets a location list on this cursor. It substitutes and returns
+// the previous location list if there was any.
+func (c *Cursor) SetLocationList(l LocationList) LocationList {
+	if c.locations != nil {
+		c.setLocListAttr(c.locations, true)
+	}
+
+	prev := c.locations
+	c.locations = l
+
+	c.setLocListAttr(c.locations, false)
+
+	return prev
+}
+
+func (c *Cursor) moveEndOfLocationList(
+	op func(LocationList) (Location, bool),
+) (term.Coordinates, bool) {
+	prev, ok := c.locations.Current()
+	if !ok {
+		return term.Coordinates{}, false
+	}
+	for {
+		pos, ok := op(c.locations)
+		if !ok {
+			return prev.From, true
+		}
+		prev = pos
+	}
+}
+
+func (c *Cursor) lastCursorPos() term.Coordinates {
+	buf := c.scroll.Buffer()
+	y := buf.Rows() - 1
+	if y < 0 {
+		y = 0
+	}
+	x := buf.Columns(y) - 1
+	if x < 0 {
+		x = 0
+	}
+	return term.Coordinates{Y: y, X: x}
+}
+
+func (c *Cursor) movePastCursor(
+	op, reverse func(LocationList) (Location, bool),
+	continueIf func(term.Coordinates, term.Coordinates) bool,
+) bool {
+	if c.locations == nil {
+		return false
+	}
+
+	_, gotLocations := c.moveEndOfLocationList(reverse)
+	if !gotLocations {
+		return false
+	}
+
+	cursor := c.cursorAtScroll()
+	for {
+		pos, ok := op(c.locations)
+		if !ok {
+			pos.From, _ = c.moveEndOfLocationList(reverse)
+			c.MoveTo(pos.From)
+			break
+		}
+		if continueIf(cursor, pos.From) {
+			continue
+		}
+		c.MoveTo(pos.From)
+		break
+	}
+	return cursor != c.cursorAtScroll()
+}
+
+// MoveToNextLocation moves the cursor to the next position returned by the location
+// list set by SetLocationList. If there isn't a location list set, this method returns
+// false.
+func (c *Cursor) MoveToNextLocation() bool {
+	return c.movePastCursor((LocationList).Next, (LocationList).Prev,
+		func(cursor, pos term.Coordinates) bool {
+			return pos.Y < cursor.Y || (pos.Y == cursor.Y && pos.X <= cursor.X)
+		})
+}
+
+// MoveToPrevLocation moves the cursor to the previous position returned by the
+// location list set by SetLocationList. If there isn't a location list set,
+// this method returns false.
+func (c *Cursor) MoveToPrevLocation() bool {
+	return c.movePastCursor((LocationList).Prev, (LocationList).Next,
+		func(cursor, pos term.Coordinates) bool {
+			return pos.Y > cursor.Y || (pos.Y == cursor.Y && pos.X >= cursor.X)
+		})
 }
