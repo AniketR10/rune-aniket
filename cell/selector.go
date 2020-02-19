@@ -15,7 +15,7 @@ func (s *selector) selectCells(from term.Coordinates, to term.Coordinates) (
 	res [][]term.Cell,
 ) {
 	res = make([][]term.Cell, 0)
-	from, to = sortFromTo(from, to)
+	from, to = SortFromTo(from, to)
 	cells := s.reader.RawCells()
 
 	for from.Y < to.Y && from.Y < len(cells) {
@@ -39,7 +39,7 @@ func (s *selector) selectLine(from term.Coordinates, to term.Coordinates) (
 	res [][]term.Cell,
 ) {
 	res = make([][]term.Cell, 0)
-	from, to = sortFromTo(from, to)
+	from, to = SortFromTo(from, to)
 	cells := s.reader.RawCells()
 
 	for from.Y <= to.Y && from.Y < len(cells) {
@@ -55,7 +55,7 @@ type iterateBlockFunc func(int, term.Coordinates, term.Coordinates, []term.Cell)
 func (s *selector) iterateBlocks(
 	from term.Coordinates, to term.Coordinates, op iterateBlockFunc,
 ) {
-	from, to = sortFromToBlock(from, to)
+	from, to = SortFromToBlock(from, to)
 	cells := s.reader.RawCells()
 	i := 0
 	for from.Y <= to.Y && from.Y < len(cells) {

@@ -2,21 +2,22 @@ package cell
 
 import "github.com/ernestrc/fractal/term"
 
-/*
-*					cases
-*
-*		┌──────┐┌──────┐┌──────┐┌──────┐┌──────┐┌──────┐
-*		│ f    ││ t    ││    f ││    t ││ t  f ││ f  t │
-*		│    t ││    f ││ t    ││ f    ││      ││      │
-*		└──────┘└──────┘└──────┘└──────┘└──────┘└──────┘
-*          |       |        |       |       |       |
-*          v       v        v       v       v       v
-*		┌──────┐┌──────┐┌──────┐┌──────┐┌──────┐┌──────┐
-*		│ f    ││ f    ││ f    ││ f    ││ f  t ││ f  t │
-*		│    t ││    t ││    t ││    t ││      ││      │
-*		└──────┘└──────┘└──────┘└──────┘└──────┘└──────┘
- */
-func sortFromToBlock(from term.Coordinates, to term.Coordinates) (
+// SortFromToBlock sorts a pair of coordinates (from/to) such that:
+//
+//  				cases
+//
+//  	┌──────┐┌──────┐┌──────┐┌──────┐┌──────┐┌──────┐
+//  	│ f    ││ t    ││    f ││    t ││ t  f ││ f  t │
+//  	│    t ││    f ││ t    ││ f    ││      ││      │
+//  	└──────┘└──────┘└──────┘└──────┘└──────┘└──────┘
+//         |       |        |       |       |       |
+//         v       v        v       v       v       v
+//  	┌──────┐┌──────┐┌──────┐┌──────┐┌──────┐┌──────┐
+//  	│ f    ││ f    ││ f    ││ f    ││ f  t ││ f  t │
+//  	│    t ││    t ││    t ││    t ││      ││      │
+//  	└──────┘└──────┘└──────┘└──────┘└──────┘└──────┘
+//
+func SortFromToBlock(from term.Coordinates, to term.Coordinates) (
 	term.Coordinates, term.Coordinates,
 ) {
 	if from.X > to.X {
@@ -32,21 +33,21 @@ func sortFromToBlock(from term.Coordinates, to term.Coordinates) (
 	return from, to
 }
 
-/*
-*					cases
-*
-*		┌──────┐┌──────┐┌──────┐┌──────┐┌──────┐┌──────┐
-*		│ f    ││ t    ││    f ││    t ││ t  f ││ f  t │
-*		│    t ││    f ││ t    ││ f    ││      ││      │
-*		└──────┘└──────┘└──────┘└──────┘└──────┘└──────┘
-*          |       |        |       |       |       |
-*          v       v        v       v       v       v
-*		┌──────┐┌──────┐┌──────┐┌──────┐┌──────┐┌──────┐
-*		│ f    ││ f    ││    f ││    f ││ f  t ││ f  t │
-*		│    t ││    t ││ t    ││ t    ││      ││      │
-*		└──────┘└──────┘└──────┘└──────┘└──────┘└──────┘
- */
-func sortFromTo(from term.Coordinates, to term.Coordinates) (
+// SortFromTo sorts a pair of coordinates (from/to) such that:
+//
+// 				cases
+//
+// 	┌──────┐┌──────┐┌──────┐┌──────┐┌──────┐┌──────┐
+// 	│ f    ││ t    ││    f ││    t ││ t  f ││ f  t │
+// 	│    t ││    f ││ t    ││ f    ││      ││      │
+// 	└──────┘└──────┘└──────┘└──────┘└──────┘└──────┘
+//        |       |        |       |       |       |
+//        v       v        v       v       v       v
+// 	┌──────┐┌──────┐┌──────┐┌──────┐┌──────┐┌──────┐
+// 	│ f    ││ f    ││    f ││    f ││ f  t ││ f  t │
+// 	│    t ││    t ││ t    ││ t    ││      ││      │
+// 	└──────┘└──────┘└──────┘└──────┘└──────┘└──────┘
+func SortFromTo(from term.Coordinates, to term.Coordinates) (
 	term.Coordinates, term.Coordinates,
 ) {
 	if from.Y > to.Y {

@@ -257,7 +257,7 @@ func (c *rawCells) Delete(from, to term.Coordinates) (
 ) {
 	c.assertCordsInBounds(start)
 	c.assertCordsInBounds(end)
-	start, end = sortFromTo(from, to)
+	start, end = SortFromTo(from, to)
 	start, end = c.skipPadding(start, end)
 
 	builder := strings.Builder{}
