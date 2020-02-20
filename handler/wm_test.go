@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/ernestrc/go-tui"
+	"github.com/ernestrc/go-tui/component"
 	"github.com/ernestrc/go-tui/term"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -370,6 +371,29 @@ func TestWindowManagerSetFocusContent(t *testing.T) {
 │CC││CC│
 │CC││CC│
 └──┘└──┘`,
+		},
+	}
+
+	testHandlerWorkflow(t, wm, cases, writer)
+
+	fb := component.DefaultFrameBorders()
+	fb.TopLeft.Ch = '╔'
+	fb.BottomRight.Ch = '╝'
+	fb.BottomLeft.Ch = '╚'
+	fb.TopRight.Ch = '╗'
+
+	fb.Vertical.Ch = '║'
+	fb.Horizontal.Ch = '═'
+
+	wm.SetFrameBorders(fb)
+
+	cases = []handlerTestCase{
+		{
+			term.Event{}, `
+╔══╗╔══╗
+║DD║║DD║
+║DD║║DD║
+╚══╝╚══╝`,
 		},
 	}
 

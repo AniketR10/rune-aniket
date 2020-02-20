@@ -8,11 +8,16 @@ import (
 
 // WindowManager implements Handler as a tiled window manager.
 type WindowManager struct {
-	tree       component.TileTree
-	focus      *component.TileNode
+	tree  component.TileTree
+	focus *component.TileNode
+
 	border     bool
 	borderAttr term.Attributes
 	focusAttr  term.Attributes
+
+	// If border is set to true, the Frame cells can be configured
+	// through the following properties.
+	frmBorders component.FrameBorders
 }
 
 // NewWindowManager allocates storage for a new WindowManager and initializes it with the
@@ -25,6 +30,7 @@ func NewWindowManager(handler tui.Handler, border bool) (wm *WindowManager) {
 
 func (wm *WindowManager) withFrame(handler tui.Handler) tui.Handler {
 	f := NewFrame(handler)
+	f.FrameBorders = wm.frmBorders
 	f.SetAttr(wm.borderAttr)
 	return f
 }
@@ -33,6 +39,7 @@ func (wm *WindowManager) withFrame(handler tui.Handler) tui.Handler {
 // a border around every tile.
 func (wm *WindowManager) Init(handler tui.Handler, border bool) {
 	if border {
+		wm.frmBorders = component.DefaultFrameBorders()
 		wm.borderAttr.Fg = term.ColorDefault
 		wm.borderAttr.Bg = term.ColorDefault
 		wm.focusAttr.Fg = term.ColorRed
@@ -44,6 +51,21 @@ func (wm *WindowManager) Init(handler tui.Handler, border bool) {
 	wm.focus = tile
 	wm.SetFocus(tile)
 	return
+}
+
+// SetFrameBorders sets the frame border cells used to draw borders around tiles.
+// Note that this has no effect if WindowManager was
+// initialized with border == false.
+func (wm *WindowManager) SetFrameBorders(b component.FrameBorders) {
+	if !wm.border {
+		return
+	}
+
+	wm.tree.Iterate(func(node *component.TileNode) {
+		node.Content().(*Frame).FrameBorders = b
+	})
+
+	wm.frmBorders = b
 }
 
 // SetAttr sets the default and focus window border attributes. Note that
@@ -161,12 +183,17 @@ func (wm *WindowManager) FocusDown() bool {
 	return wm.switchFocus(wm.focus.TileDown())
 }
 
+// Content returns the content of t.
+func (wm *WindowManager) Content(t *component.TileNode) tui.Handler {
+	if wm.border {
+		return t.Content().(*Frame).Content().(tui.Handler)
+	}
+	return t.Content().(tui.Handler)
+}
+
 // FocusContent returns the current focus content.
 func (wm *WindowManager) FocusContent() tui.Handler {
-	if wm.border {
-		return wm.focus.Content().(*Frame).Content().(tui.Handler)
-	}
-	return wm.focus.Content().(tui.Handler)
+	return wm.Content(wm.focus)
 }
 
 // Focus returns the tile currently in focus.
@@ -207,17 +234,24 @@ func (wm *WindowManager) SetFocus(tile *component.TileNode) (
 	return
 }
 
-// SetFocusContent sets the content of the tile in focus to h.
-func (wm *WindowManager) SetFocusContent(h tui.Handler) (
+// SetContent sets the content of the tile in focus to h.
+func (wm *WindowManager) SetContent(tile *component.TileNode, h tui.Handler) (
 	prev tui.Handler,
 ) {
-	prev = wm.FocusContent()
+	prev = wm.Content(tile)
 	if wm.border {
 		h = wm.withFrame(h)
 		h.(*Frame).SetAttr(wm.focusAttr)
 	}
-	wm.focus.SetContent(h)
+	tile.SetContent(h)
 	return
+}
+
+// SetFocusContent sets the content of the tile in focus to h.
+func (wm *WindowManager) SetFocusContent(h tui.Handler) (
+	prev tui.Handler,
+) {
+	return wm.SetContent(wm.focus, h)
 }
 
 // Cursor returns the cursor coordinates of the tile in focus.
