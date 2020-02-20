@@ -15,6 +15,7 @@ import (
 
 var ErrLastWindow = errors.New("Cannot close last window")
 var ErrLastBuffer = errors.New("No free buffers left")
+var ErrInvalidSave = errors.New("Cannot save this buffer")
 
 type mode int8
 
@@ -49,24 +50,35 @@ type editorHandler struct {
 
 	ed     Editor
 	config editorConfig
-
-	tabs *handler.Tabs
+	keymap map[term.Event]term.Event
 
 	commandBuf *cell.Buffer
 	cmdVirt    handler.Virtual
 	logBuf     *cell.Buffer
 	logVirt    handler.Virtual
-	wm         *handler.WindowManager
-	wmVirt     handler.Virtual
+
+	tabs     *handler.Tabs
+	tabsVirt handler.Virtual
+	wm       *handler.WindowManager
+	wmVirt   handler.Virtual
+	frames   *component.FrameUnion
 
 	buffers        []*editorBuffer
 	mode           mode
 	fileListHeight int
 }
 
+func (e *editorHandler) doEdit(buf *cell.Buffer) tui.Handler {
+	editor := e.ed.Edit(buf)
+	if e.keymap != nil {
+		editor = handler.WithMapping(editor, e.keymap)
+	}
+	return editor
+}
+
 func (e *editorHandler) emptyBuffer() *editorBuffer {
 	buf := cell.NewBuffer()
-	editor := e.ed.Edit(buf)
+	editor := e.doEdit(buf)
 	handler := editorBuffer{
 		filename: "",
 		editor:   editor,
@@ -107,7 +119,6 @@ func newLogSpan(buf *cell.Buffer, bgAttr term.Attributes) handler.Virtual {
 
 func (e *editorHandler) addBuffer(buf *editorBuffer) {
 	e.buffers = append(e.buffers, buf)
-
 	e.tabs.Add(buf.filename)
 }
 
@@ -143,13 +154,14 @@ func (e *editorHandler) Init(ed Editor, opts ...Option) (err error) {
 
 	e.tabs = handler.NewTabs()
 	e.tabs.OnClick = func(idx int) {
-		e.switchFocusContent(idx, e.buffers[idx])
+		e.updateNodeBuffer(e.wm.Focus(), idx, e.buffers[idx])
 	}
 	e.tabs.SetAttr(focusFileAttr, nonFocusFileAttr, frameFileAttr, scrollAttr)
 
 	var initBuffer *editorBuffer
 	if e.config.Filepath != "" {
-		initBuffer, err = e.newBufferWithFile(e.config.Filepath, e.config.RecoveryFilepath)
+		initBuffer, err = e.newBufferWithFile(e.config.Filepath,
+			e.config.RecoveryFilepath)
 		if err != nil {
 			return
 		}
@@ -159,9 +171,16 @@ func (e *editorHandler) Init(ed Editor, opts ...Option) (err error) {
 	}
 	e.wm = handler.NewWindowManager(initBuffer, e.config.WindowBorder)
 	e.wm.SetAttr(wmDefaultAttr, wmFocusAttr)
+
 	initBuffer.setNode(e.wm.Focus())
 
 	e.wmVirt = handler.Virtual{Virtual: component.Virtual{C: e.wm}}
+	e.tabsVirt = handler.Virtual{Virtual: component.Virtual{C: e.tabs}}
+	e.frames = component.NewFrameUnion(&e.tabsVirt.Virtual, &e.wmVirt.Virtual)
+	e.frames.MiddleLeft.Bg = frameFileAttr.Bg
+	e.frames.MiddleLeft.Fg = frameFileAttr.Fg
+	e.frames.MiddleRight.Bg = frameFileAttr.Bg
+	e.frames.MiddleRight.Fg = frameFileAttr.Fg
 
 	return
 }
@@ -195,7 +214,7 @@ func (e *editorHandler) newBufferWithFile(
 		return nil, err
 	}
 
-	editor := e.ed.Edit(buf)
+	editor := e.doEdit(buf)
 
 	buffer := &editorBuffer{
 		filename: filepath.Base(filename),
@@ -222,59 +241,73 @@ func (e *editorHandler) findBufferIdx(buf *editorBuffer) int {
 	return idx
 }
 
-func (e *editorHandler) switchPrevBuffer() {
-	idx := e.findBufferIdx(e.focus())
+func (e *editorHandler) switchBuffer(node *component.TileNode) (*editorBuffer, int) {
+	buf, ok := e.nodeBuffer(node)
+	if !ok {
+		freeBufs := e.freeBuffers()
+		if len(freeBufs) != 0 {
+			e.updateNodeContent(node, e.buffers[freeBufs[0]])
+		}
+		return nil, 0
+	}
+	return buf, e.findBufferIdx(buf)
+}
+
+func (e *editorHandler) switchPrevBuffer(node *component.TileNode) {
+	buf, idx := e.switchBuffer(node)
+	if buf == nil {
+		return
+	}
 	if idx == 0 {
 		idx = len(e.buffers) - 1
 	} else {
 		idx--
 	}
-	e.switchFocusContent(idx, e.buffers[idx])
+	e.updateNodeBuffer(node, idx, e.buffers[idx])
 }
 
-func (e *editorHandler) switchNextBuffer() {
-	idx := e.findBufferIdx(e.focus())
+func (e *editorHandler) switchNextBuffer(node *component.TileNode) {
+	buf, idx := e.switchBuffer(node)
+	if buf == nil {
+		return
+	}
 	idx++
 	if idx == len(e.buffers) {
 		idx = 0
 	}
-	e.switchFocusContent(idx, e.buffers[idx])
+	e.updateNodeBuffer(node, idx, e.buffers[idx])
 }
 
-func (e *editorHandler) switchFocusContent(idx int, newBuf *editorBuffer) *editorBuffer {
-	oldBufIfc := e.wm.SetFocusContent(newBuf)
-	oldBuf := oldBufIfc.(*editorBuffer)
-	newBuf.setNode(oldBuf.setNode(nil))
+func (e *editorHandler) updateNodeContent(
+	node *component.TileNode, content tui.Handler,
+) tui.Handler {
+	oldHandler := e.wm.SetContent(node, content)
+	if oldBuf, ok := oldHandler.(*editorBuffer); ok {
+		oldBuf.setNode(nil)
+	}
+	return oldHandler
+}
 
+func (e *editorHandler) updateNodeBuffer(
+	node *component.TileNode, idx int, newBuf *editorBuffer,
+) tui.Handler {
+	oldHandler := e.updateNodeContent(node, newBuf)
+	newBuf.setNode(node)
 	e.tabs.SetFocus(idx)
-	return oldBuf
+	return oldHandler
 }
 
-func (e *editorHandler) focusNewBufferWithFile(filename string) error {
-	buffer, err := e.newBufferWithFile(filename, "")
-	if err != nil {
-		return err
-	}
-
-	oldFocus := e.switchFocusContent(len(e.buffers)-1, buffer)
-	if oldFocus.filename == "" && oldFocus.fileBuf == nil {
-		e.removeBuffer(oldFocus)
-	}
-
-	return nil
+func (e *editorHandler) nodeBuffer(node *component.TileNode) (*editorBuffer, bool) {
+	buf, ok := e.wm.FocusContent().(*editorBuffer)
+	return buf, ok
 }
 
-func (e *editorHandler) focus() *editorBuffer {
-	return e.wm.FocusContent().(*editorBuffer)
-}
-
-func (e *editorHandler) closeWindow() error {
-	focus := e.focus()
+func (e *editorHandler) closeNode(node *component.TileNode) error {
 	ok := e.wm.ShiftFocus()
 	if !ok {
 		return ErrLastWindow
 	}
-	focus.node.Close()
+	node.Close()
 
 	return nil
 }
@@ -289,40 +322,47 @@ func (e *editorHandler) freeBuffers() []int {
 	return freeBufs
 }
 
-func (e *editorHandler) closeFocusBuffer() error {
+func (e *editorHandler) closeNodeBuffer(node *component.TileNode) error {
 	freeBufs := e.freeBuffers()
 	if len(freeBufs) == 0 {
 		return ErrLastBuffer
 	}
 
-	oldBuf := e.focus()
-
 	idx := freeBufs[0]
-	e.switchFocusContent(idx, e.buffers[idx])
-
-	oldBuf.Close()
-	e.removeBuffer(oldBuf)
-
+	oldHandler := e.updateNodeBuffer(node, idx, e.buffers[idx])
+	oldBuf, ok := oldHandler.(*editorBuffer)
+	if ok {
+		oldBuf.Close()
+		e.removeBuffer(oldBuf)
+	}
 	return nil
+}
+
+func (e *editorHandler) saveFocusBuffer() error {
+	buf, ok := e.nodeBuffer(e.wm.Focus())
+	if !ok {
+		return ErrInvalidSave
+	}
+	if buf.fileBuf == nil {
+		return ErrInvalidSave
+	}
+
+	return buf.fileBuf.Flush()
 }
 
 func (e *editorHandler) runSingleCommand(cmd string) (quit bool, err error) {
 	switch cmd {
+	case "bclose":
+		err = e.closeNodeBuffer(e.wm.Focus())
+	case "bcloseAll":
+		e.closeAllBuffers()
+	case "close":
+		err = e.closeNode(e.wm.Focus())
 	case "wq", "wq!":
 		quit = true
 		fallthrough
-	case "close":
-		err = e.closeWindow()
-		if err != ErrLastWindow {
-			return
-		}
-		err = e.closeFocusBuffer()
 	case "w", "w!":
-		if e.focus().fileBuf == nil {
-			err = fmt.Errorf("Cannot save this buffer")
-		} else {
-			err = e.focus().fileBuf.Flush()
-		}
+		err = e.saveFocusBuffer()
 	case "q!", "q":
 		quit = true
 	default:
@@ -340,7 +380,7 @@ func (e *editorHandler) runCommand() (quit bool, err error) {
 
 	switch cmds[0] {
 	case "e":
-		err = e.focusNewBufferWithFile(cmds[1])
+		err = e.OpenFile(cmds[1])
 	}
 	return
 }
@@ -354,16 +394,8 @@ func (e *editorHandler) setCommandMode() {
 	e.mode = commandMode
 }
 
-func (e *editorHandler) setMessage(msg string, args ...interface{}) {
-	msg = fmt.Sprintf(msg, args...)
-	if e.config.Logger != nil {
-		e.config.Logger.Infof("Message: %s", msg)
-	}
-	e.logBuf.WriteString(msg)
-}
-
 func (e *editorHandler) setError(err error) {
-	e.setMessage("Error: %s", err)
+	e.SetMessage("Error: %s", err)
 }
 
 func (e *editorHandler) handleCommand(ev term.Event) (quit bool) {
@@ -395,26 +427,46 @@ func (e *editorHandler) handleCommand(ev term.Event) (quit bool) {
 	return
 }
 
-func (e *editorHandler) handleProxy(ev term.Event) bool {
-	switch ev.Key {
-	case term.KeyCtrlL:
-		e.switchNextBuffer()
-		return false
-	case term.KeyCtrlH:
-		e.switchPrevBuffer()
-		return false
+func (e *editorHandler) closeAllBuffers() {
+	for {
+		err := e.closeNodeBuffer(e.wm.Focus())
+		if err != nil {
+			if err != ErrLastBuffer {
+				e.setError(err)
+			}
+			break
+		}
 	}
+}
+
+func (e *editorHandler) handleProxy(ev term.Event) bool {
 	switch ev.Ch {
 	case ':':
 		e.setCommandMode()
 		return false
 	}
 
-	if ev.Type == term.EventMouse && ev.MouseY < e.fileListHeight {
-		return e.tabs.Handle(ev)
+	switch ev.Key {
+	case term.KeyCtrlA:
+		e.closeAllBuffers()
+	case term.KeyCtrlW:
+		err := e.closeNodeBuffer(e.wm.Focus())
+		if err != nil {
+			e.setError(err)
+		}
+	case term.KeyCtrlL:
+		e.switchNextBuffer(e.wm.Focus())
+	case term.KeyCtrlH:
+		e.switchPrevBuffer(e.wm.Focus())
+	default:
+		if ev.Type == term.EventMouse && ev.MouseY < e.fileListHeight {
+			return e.tabs.Handle(ev)
+		}
+
+		return e.wmVirt.Handle(ev)
 	}
 
-	return e.wmVirt.Handle(ev)
+	return false
 }
 
 func (e *editorHandler) Handle(ev term.Event) bool {
@@ -455,20 +507,15 @@ func (e *editorHandler) Resize(width, height int) {
 	}
 
 	e.fileListHeight = 3
-	wmHeight := height - e.fileListHeight + 1
-	wmY := height - wmHeight
-	if wmHeight < 0 {
-		wmHeight = height
+	if height < 4 {
 		e.fileListHeight = 0
-		wmY = 0
 	}
-	e.tabs.Resize(width, e.fileListHeight)
-	e.wmVirt.Resize(width, wmHeight)
-	e.wmVirt.Move(term.Coordinates{Y: wmY})
+	e.tabsVirt.Resize(width, e.fileListHeight)
+	e.frames.Resize(width, height)
 }
 
 func (e *editorHandler) Draw(w tui.Writer) {
-	e.wmVirt.Draw(w)
+	e.frames.Draw(w)
 
 	if e.logBuf.Columns(0) != 0 {
 		e.logVirt.Draw(w)
@@ -478,8 +525,6 @@ func (e *editorHandler) Draw(w tui.Writer) {
 	} else if e.mode == commandMode {
 		e.cmdVirt.Draw(w)
 	}
-
-	e.tabs.Draw(w)
 }
 
 // Close closes the resources associated with this editor.
@@ -489,4 +534,67 @@ func (e *editorHandler) Close() error {
 	}
 	e.buffers = e.buffers[:0]
 	return nil
+}
+
+// Conform to plugin.Editor interface
+func (e *editorHandler) OpenFile(filename string) error {
+	buffer, err := e.newBufferWithFile(filename, "")
+	if err != nil {
+		return err
+	}
+
+	oldFocus := e.updateNodeBuffer(e.wm.Focus(), len(e.buffers)-1, buffer)
+
+	// remove initial empty buffer
+	if oldBuf, ok := oldFocus.(*editorBuffer); ok &&
+		oldBuf.filename == "" && oldBuf.fileBuf == nil {
+		e.removeBuffer(oldBuf)
+	}
+
+	return nil
+}
+
+func (e *editorHandler) SetMessage(msg string, args ...interface{}) {
+	msg = fmt.Sprintf(msg, args...)
+	if e.config.Logger != nil {
+		e.config.Logger.Infof("Message: %s", msg)
+	}
+	e.logBuf.WriteString(msg)
+}
+
+func (e *editorHandler) MergeKeyMap(keymap map[term.Event]term.Event) {
+	if e.keymap == nil {
+		e.keymap = make(map[term.Event]term.Event)
+	}
+	for k, v := range keymap {
+		e.keymap[k] = v
+	}
+}
+
+func (e *editorHandler) splitInverted(
+	split func(*handler.WindowManager, tui.Handler) *component.TileNode, h tui.Handler,
+) {
+	nodeInFocus := e.wm.Focus()
+	buf, ok := e.nodeBuffer(nodeInFocus)
+	newNode := split(e.wm, e.wm.FocusContent())
+	if ok {
+		buf.setNode(newNode)
+	}
+	e.updateNodeContent(nodeInFocus, h)
+}
+
+func (e *editorHandler) SplitVerticalRight(h tui.Handler) {
+	e.wm.SplitVertical(h)
+}
+
+func (e *editorHandler) SplitVerticalLeft(h tui.Handler) {
+	e.splitInverted((*handler.WindowManager).SplitVertical, h)
+}
+
+func (e *editorHandler) SplitHorizontalBelow(h tui.Handler) {
+	e.wm.SplitHorizontal(h)
+}
+
+func (e *editorHandler) SplitHorizontalAbove(h tui.Handler) {
+	e.splitInverted((*handler.WindowManager).SplitHorizontal, h)
 }

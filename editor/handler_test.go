@@ -153,7 +153,7 @@ func TestEditorHandlerDraw(t *testing.T) {
 │AAAAAAAAAAAAAAAAAA│
 │AAAAAAAAAAAAAAAAAA│
 └──────────────────┘`},
-		{":close>",
+		{":bclose>",
 			`┌──────────────────┐
 │cabin.go          │
 ├──────────────────┤
@@ -164,7 +164,7 @@ func TestEditorHandlerDraw(t *testing.T) {
 │BBBBBBBBBBBBBBBBBB│
 │BBBBBBBBBBBBBBBBBB│
 └──────────────────┘`},
-		{":close>",
+		{":bclose>",
 			`┌──────────────────┐
 │cabin.go          │
 ├──────────────────┤
@@ -208,11 +208,84 @@ func TestEditorHandlerDraw(t *testing.T) {
 │BBBBBBBBBBBBBBBBBB│
 │BBBBBBBBBBBBBBBBBB│
 └──────────────────┘`},
+		{":e other.go>1111",
+			`┌──────────────────┐
+│cabin.go  other.go│
+├──────────────────┤
+│EEEEEEEEEEEEEEEEEE│
+│EEEEEEEEEEEEEEEEEE│
+│EEEEEEEEEEEEEEEEEE│
+│EEEEEEEEEEEEEEEEEE│
+│EEEEEEEEEEEEEEEEEE│
+│EEEEEEEEEEEEEEEEEE│
+└──────────────────┘`},
+		{"$$##",
+			`┌──────────────────┐
+│cabin.go  other.go│
+├──────────────────┤
+│EEEEEEEEEEEEEEEEEE│
+│EEEEEEEEEEEEEEEEEE│
+│EEEEEEEEEEEEEEEEEE│
+│EEEEEEEEEEEEEEEEEE│
+│EEEEEEEEEEEEEEEEEE│
+│EEEEEEEEEEEEEEEEEE│
+└──────────────────┘`},
 	}
 
 	ed := newTestEditorHandler()
 	err := ed.Init(&testEditor{}, WithFilepath("")) //first handler is empty handler
 	require.NoError(t, err)
+	handler.BatchTestInputSequence(t, ed, 20, 10, cases)
+
+	ed.SplitVerticalLeft(handler.NewTestHandler())
+	ed.SplitHorizontalBelow(handler.NewTestHandler())
+
+	cases = []handler.TestInputSequence{
+		{":<11111111111111111111",
+			`┌──────────────────┐
+│cabin.go  other.go│
+├────────┐┌────────┤
+│UUUUUUUU││EEEEEEEE│
+│UUUUUUUU││EEEEEEEE│
+└────────┘│EEEEEEEE│
+┌────────┐│EEEEEEEE│
+│AAAAAAAA││EEEEEEEE│
+│AAAAAAAA││EEEEEEEE│
+└────────┘└────────┘`},
+		{"$",
+			`┌──────────────────┐
+│cabin.go  other.go│
+├────────┐┌────────┤
+│BBBBBBBB││EEEEEEEE│
+│BBBBBBBB││EEEEEEEE│
+└────────┘│EEEEEEEE│
+┌────────┐│EEEEEEEE│
+│AAAAAAAA││EEEEEEEE│
+│AAAAAAAA││EEEEEEEE│
+└────────┘└────────┘`},
+		{":close>:close>$$$",
+			`┌──────────────────┐
+│cabin.go  other.go│
+├──────────────────┤
+│BBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBB│
+└──────────────────┘`},
+		{":bcloseAll>####",
+			`┌──────────────────┐
+│other.go          │
+├──────────────────┤
+│EEEEEEEEEEEEEEEEEE│
+│EEEEEEEEEEEEEEEEEE│
+│EEEEEEEEEEEEEEEEEE│
+│EEEEEEEEEEEEEEEEEE│
+│EEEEEEEEEEEEEEEEEE│
+│EEEEEEEEEEEEEEEEEE│
+└──────────────────┘`},
+	}
 	handler.BatchTestInputSequence(t, ed, 20, 10, cases)
 
 	assert.NoError(t, ed.Close())
