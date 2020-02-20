@@ -26,16 +26,17 @@ type Tabs struct {
 	width, height int
 	offsetIdx     int
 
-	// TODO should allow to configure whether border or not.
 	border         bool
 	focusAttr      term.Attributes
 	nonFocusAttr   term.Attributes
 	backgroundAttr term.Attributes
 	frameAttr      term.Attributes
+	frameBorders   FrameBorders
 }
 
 func newListFrame(
 	scrollAttr, frameAttr term.Attributes, buf *cell.Buffer, border bool,
+	frameBorders FrameBorders,
 ) (content tui.Component) {
 	scroll := NewScroll()
 	scroll.InitWithBuffer(buf)
@@ -48,9 +49,8 @@ func newListFrame(
 	}
 
 	f := NewFrame(span)
+	f.FrameBorders = frameBorders
 	f.SetAttr(frameAttr)
-	f.BottomLeft.Ch = '├'
-	f.BottomRight.Ch = '┤'
 	return f
 }
 
@@ -66,9 +66,11 @@ func (t *Tabs) Init() {
 	t.border = true
 	t.focusAttr = defaultFocusAttr
 	t.nonFocusAttr = defaultNonFocusAttr
+	t.frameBorders = DefaultFrameBorders()
 	t.fileListBuf = cell.NewBuffer()
 	t.fileListFrame = newListFrame(
-		defaultScrollAttr, defaultFrameAttr, t.fileListBuf, t.border)
+		defaultScrollAttr, defaultFrameAttr, t.fileListBuf,
+		t.border, t.frameBorders)
 }
 
 // SetAttr sets the attributes of the text in focus, text not in focus, the tabs
@@ -79,7 +81,7 @@ func (t *Tabs) SetAttr(focusTab, tab, frame, background term.Attributes) {
 	t.backgroundAttr = background
 	t.frameAttr = frame
 	t.fileListFrame = newListFrame(t.backgroundAttr,
-		t.frameAttr, t.fileListBuf, t.border)
+		t.frameAttr, t.fileListBuf, t.border, t.frameBorders)
 	t.fileListFrame.Resize(t.width, t.height)
 }
 
@@ -88,7 +90,16 @@ func (t *Tabs) SetAttr(focusTab, tab, frame, background term.Attributes) {
 func (t *Tabs) SetBorder(border bool) {
 	t.border = border
 	t.fileListFrame = newListFrame(
-		t.backgroundAttr, t.frameAttr, t.fileListBuf, t.border)
+		t.backgroundAttr, t.frameAttr, t.fileListBuf, t.border, t.frameBorders)
+	t.fileListFrame.Resize(t.width, t.height)
+}
+
+// SetFrameBorders defines the characters used to draw a frame border.
+// Note that this has no effect if border is set to false on this Tabs.
+func (t *Tabs) SetFrameBorders(fb FrameBorders) {
+	t.frameBorders = fb
+	t.fileListFrame = newListFrame(
+		t.backgroundAttr, t.frameAttr, t.fileListBuf, t.border, t.frameBorders)
 	t.fileListFrame.Resize(t.width, t.height)
 }
 

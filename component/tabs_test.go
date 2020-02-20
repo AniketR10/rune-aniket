@@ -11,6 +11,9 @@ import (
 func TestTabsDraw(t *testing.T) {
 	l := NewTabs()
 	l.Resize(20, 4)
+	fb := DefaultFrameBorders()
+	fb.BottomLeft.Ch, fb.BottomRight.Ch = '├', '┤'
+	l.SetFrameBorders(fb)
 
 	w := term.NewStringWriter(20, 9)
 

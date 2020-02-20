@@ -57,6 +57,18 @@ TT
 │TTTTTT│ 
 └──────┘ 
          `,
+		}, {
+			func() {
+				fb := DefaultFrameBorders()
+				fb.Horizontal.Ch = '┄'
+				fb.Vertical.Ch = '┊'
+				f.FrameBorders = fb
+			}, `
+┌┄┄┄┄┄┄┐ 
+┊TTTTTT┊ 
+┊TTTTTT┊ 
+└┄┄┄┄┄┄┘ 
+         `,
 		},
 	}
 

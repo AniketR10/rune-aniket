@@ -5,7 +5,19 @@ import (
 	"github.com/ernestrc/go-tui/term"
 )
 
-// Frame is a Component that simply draws a border around a nested component.
+// DefaultFrameBorders returns the default cells used as FrameBorders.
+func DefaultFrameBorders() FrameBorders {
+	f := FrameBorders{}
+	f.Horizontal.Ch = '─'
+	f.Vertical.Ch = '│'
+	f.TopLeft.Ch = '┌'
+	f.TopRight.Ch = '┐'
+	f.BottomLeft.Ch = '└'
+	f.BottomRight.Ch = '┘'
+	return f
+}
+
+// FrameBorders define the cells used to draw a Frame border.
 // By default the frame adds some padding around the component by using
 // the following cells:
 //
@@ -29,9 +41,15 @@ import (
 //   '╆', '╇', '╈', '╉', '╊', '╋', '╌', '╍', '╎', '╏', '═', '║', '╒', '╓',
 //   '╔', '╕', '╖', '╗', '╘', '╙', '╚', '╛', '╜', '╝', '╞', '╟', '╠', '╡',
 //   '╢', '╣', '╤', '╥', '╦', '╧', '╨', '╩'
-type Frame struct {
+type FrameBorders struct {
 	TopLeft, TopRight, BottomLeft, BottomRight term.Cell
 	Horizontal, Vertical                       term.Cell
+}
+
+// Frame is a Component that simply draws a border around a nested component.
+// Border cells can be configured through FrameBorders.
+type Frame struct {
+	FrameBorders
 
 	content         Virtual
 	bwidth, bheight int
@@ -49,12 +67,7 @@ func NewFrame(content tui.Component) (f *Frame) {
 // Init initializes this frame with the given Component and border attributes.
 func (f *Frame) Init(content tui.Component) {
 	f.content.C = content
-	f.Horizontal.Ch = '─'
-	f.Vertical.Ch = '│'
-	f.TopLeft.Ch = '┌'
-	f.TopRight.Ch = '┐'
-	f.BottomLeft.Ch = '└'
-	f.BottomRight.Ch = '┘'
+	f.FrameBorders = DefaultFrameBorders()
 }
 
 // SetAttr updates the border attributes of this Frame.
