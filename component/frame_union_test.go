@@ -1,0 +1,46 @@
+package component
+
+import (
+	"testing"
+
+	"github.com/ernestrc/go-tui/term"
+)
+
+func TestDrawFrameUnion(t *testing.T) {
+	one := Virtual{C: NewFrame(&TestComponent{Ch: 'X'})}
+	two := Virtual{C: NewFrame(&TestComponent{Ch: 'A'})}
+	f := NewFrameUnion(&one, &two)
+	one.Resize(10, 3)
+	f.Resize(10, 8)
+
+	w := term.NewStringWriter(10, 8)
+
+	tests := []testCase{
+		{
+			nil, `
+┌────────┐
+│XXXXXXXX│
+├────────┤
+│AAAAAAAA│
+│AAAAAAAA│
+│AAAAAAAA│
+│AAAAAAAA│
+└────────┘`,
+		}, {
+			func() {
+				f.MiddleLeft.Ch = '┊'
+				f.MiddleRight.Ch = '┊'
+			}, `
+┌────────┐
+│XXXXXXXX│
+┊────────┊
+│AAAAAAAA│
+│AAAAAAAA│
+│AAAAAAAA│
+│AAAAAAAA│
+└────────┘`,
+		},
+	}
+
+	testWorkflow(t, f, w, tests)
+}
