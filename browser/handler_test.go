@@ -6,6 +6,7 @@ import (
 	"github.com/ernestrc/go-tui"
 	"github.com/ernestrc/go-tui/cell"
 	"github.com/ernestrc/go-tui/handler"
+	"github.com/ernestrc/go-tui/term"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -239,6 +240,12 @@ func TestEditorHandlerDraw(t *testing.T) {
 	ed.SplitVerticalLeft(handler.NewTestHandler())
 	ed.SplitHorizontalBelow(handler.NewTestHandler())
 
+	newMappings := map[term.Event]term.Event{
+		term.Event{Type: term.EventKey, Ch: ')'}: term.Event{Type: term.EventKey, Key: term.KeyCtrlL},
+		term.Event{Type: term.EventKey, Ch: '('}: term.Event{Type: term.EventKey, Key: term.KeyCtrlH},
+	}
+	ed.MergeKeyMap(newMappings)
+
 	cases = []handler.TestInputSequence{
 		{":<11111111111111111111",
 			`┌──────────────────┐
@@ -251,7 +258,7 @@ func TestEditorHandlerDraw(t *testing.T) {
 │AAAAAAAA││EEEEEEEE│
 │AAAAAAAA││EEEEEEEE│
 └────────┘└────────┘`},
-		{"$",
+		{")",
 			`┌──────────────────┐
 │cabin.go  other.go│
 ├────────┐┌────────┤
@@ -262,7 +269,7 @@ func TestEditorHandlerDraw(t *testing.T) {
 │AAAAAAAA││EEEEEEEE│
 │AAAAAAAA││EEEEEEEE│
 └────────┘└────────┘`},
-		{":close>:close>$$$",
+		{":close>:close>)))",
 			`┌──────────────────┐
 │cabin.go  other.go│
 ├──────────────────┤
@@ -273,7 +280,7 @@ func TestEditorHandlerDraw(t *testing.T) {
 │BBBBBBBBBBBBBBBBBB│
 │BBBBBBBBBBBBBBBBBB│
 └──────────────────┘`},
-		{":bcloseAll>####",
+		{":bcloseAll>((((",
 			`┌──────────────────┐
 │other.go          │
 ├──────────────────┤

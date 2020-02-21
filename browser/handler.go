@@ -81,9 +81,6 @@ type Handler struct {
 
 func (e *Handler) doEdit(buf *cell.Buffer) tui.Handler {
 	editor := e.ed.Edit(buf)
-	if e.keymap != nil {
-		editor = handler.WithMapping(editor, e.keymap)
-	}
 	return editor
 }
 
@@ -92,7 +89,7 @@ func (e *Handler) emptyBuffer() *browserBuffer {
 	editor := e.doEdit(buf)
 	handler := browserBuffer{
 		filename: "",
-		editor:   editor,
+		handler:  editor,
 		node:     nil,
 		fileBuf:  nil,
 	}
@@ -239,7 +236,7 @@ func (e *Handler) newBufferWithFile(
 	buffer := &browserBuffer{
 		filename: filepath.Base(filename),
 		fileBuf:  fileBuf,
-		editor:   editor,
+		handler:  editor,
 	}
 
 	e.addBuffer(buffer)
@@ -465,11 +462,23 @@ func (e *Handler) closeAllBuffers() {
 	}
 }
 
+func (e *Handler) mapEvent(ev term.Event) term.Event {
+	// map event if applicable
+	mev, ok := e.keymap[ev]
+	if !ok {
+		mev = ev
+	}
+	return mev
+}
+
 func (e *Handler) handleProxy(ev term.Event) (bool, bool) {
 	if ev == e.config.CommandEvent {
 		e.setCommandMode()
 		return false, true
 	}
+
+	prev := ev
+	ev = e.mapEvent(ev)
 
 	switch ev.Key {
 	case term.KeyCtrlA:
@@ -484,6 +493,8 @@ func (e *Handler) handleProxy(ev term.Event) (bool, bool) {
 	case term.KeyCtrlH:
 		e.switchPrevBuffer(e.wm.Focus())
 	default:
+		// do not map for children
+		ev = prev
 		if ev.Type == term.EventMouse && ev.MouseY < e.fileListHeight {
 			return e.tabs.Handle(ev)
 		}
