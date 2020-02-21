@@ -142,6 +142,17 @@ func TestTabsDraw(t *testing.T) {
                     
                     
                     `,
+		}, {
+			func() { l.SetBorder(false); l.Resize(4, 0) }, `
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    `,
 		},
 	}
 

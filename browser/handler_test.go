@@ -233,6 +233,8 @@ func TestEditorHandlerDraw(t *testing.T) {
 	}
 
 	ed := newTestEditorHandler()
+	defer assert.NoError(t, ed.Close())
+
 	err := ed.Init(&testEditor{}, WithFilepath("")) //first handler is empty handler
 	require.NoError(t, err)
 	handler.BatchTestInputSequence(t, ed, 20, 10, cases)
@@ -294,5 +296,11 @@ func TestEditorHandlerDraw(t *testing.T) {
 	}
 	handler.BatchTestInputSequence(t, ed, 20, 10, cases)
 
-	assert.NoError(t, ed.Close())
+	cases = []handler.TestInputSequence{
+		{"", `┌──┐
+│..│
+├EE┤
+EEEE`},
+	}
+	handler.BatchTestInputSequence(t, ed, 4, 4, cases)
 }

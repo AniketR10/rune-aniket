@@ -39,6 +39,19 @@ func TestDrawFrameUnion(t *testing.T) {
 │AAAAAAAA│
 │AAAAAAAA│
 └────────┘`,
+		}, {
+			func() {
+				one.Resize(1, 2)
+				f.Resize(2, 2)
+			}, `
+XX        
+AA        
+          
+          
+          
+          
+          
+          `,
 		},
 	}
 

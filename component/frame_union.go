@@ -54,8 +54,10 @@ func (u *FrameUnion) Resize(width, height int) {
 func (u *FrameUnion) Draw(w tui.Writer) {
 	u.top.Draw(w)
 	u.bottom.Draw(w)
-	w.SetCell(term.Coordinates{Y: u.secondY}, u.MiddleLeft)
-	if u.width > 0 {
-		w.SetCell(term.Coordinates{X: u.width - 1, Y: u.secondY}, u.MiddleRight)
+	if u.height >= 3 || u.width >= 3 {
+		w.SetCell(term.Coordinates{Y: u.secondY}, u.MiddleLeft)
+		if u.width > 0 {
+			w.SetCell(term.Coordinates{X: u.width - 1, Y: u.secondY}, u.MiddleRight)
+		}
 	}
 }

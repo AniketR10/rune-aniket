@@ -113,6 +113,10 @@ func (t *Tabs) Resize(width, height int) {
 func (t *Tabs) Draw(w tui.Writer) {
 	t.fileListBuf.Reset()
 
+	if t.width == 0 || t.height == 0 {
+		return
+	}
+
 	var focusLen int
 	var focusPos, next term.Coordinates
 	for i, tab := range t.tabs {
@@ -142,7 +146,10 @@ func (t *Tabs) Draw(w tui.Writer) {
 		effectiveWidth = t.width
 	}
 	for i := 0; i < len(t.tabs) && focusLen+focusPos.X > effectiveWidth; i++ {
-		lenTab := len(t.tabs[i].name) + lenSeparator
+		lenTab := len(t.tabs[i].name)
+		if i < len(t.tabs)-1 {
+			lenTab += lenSeparator
+		}
 		_, _, str := t.fileListBuf.Delete(term.Coordinates{}, term.Coordinates{X: lenTab - 1})
 		focusPos.X -= len(str)
 		next.X -= len(str)

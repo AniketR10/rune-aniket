@@ -547,7 +547,7 @@ func (e *Handler) Resize(width, height int) {
 	}
 
 	e.fileListHeight = 3
-	if height < 4 {
+	if height < 3 {
 		e.fileListHeight = 0
 	}
 	e.tabsVirt.Resize(width, e.fileListHeight)
