@@ -1,6 +1,10 @@
 package term
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+)
 
 func TestWriteFlush(t *testing.T) {
 	width, height := 5, 6
@@ -24,9 +28,7 @@ func TestWriteFlush(t *testing.T) {
 	}
 
 	expected := "A    \nBB   \nCCC  \nDDDD \nEEEEE\n     "
-	if writer.String() != expected {
-		t.Errorf("expected: %q; found: %q", expected, writer.String())
-	}
+	assert.Equal(t, expected, writer.String())
 }
 
 // TODO

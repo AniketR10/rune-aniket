@@ -1,0 +1,47 @@
+package cell
+
+import "github.com/ernestrc/go-tui/term"
+
+// BufferWriter satisfies tui.Writer with a Buffer.
+type BufferWriter struct {
+	width, height int
+	Cursor        term.Coordinates
+	Buffer
+}
+
+// NewBufferWriter allocates storage for a new BufferWriter and initializes it.
+func NewBufferWriter(width, height int) *BufferWriter {
+	ret := new(BufferWriter)
+	ret.Init(width, height)
+	return ret
+}
+
+// Init initializes a BufferWriter's internal structures.
+func (w *BufferWriter) Init(width, height int) {
+	w.width, w.height = width, height
+	w.Buffer.InitWithTabspaces(1) // do not expand tabs
+}
+
+// SetCell satisfies tui.Writer
+func (w *BufferWriter) SetCell(pos term.Coordinates, c term.Cell) {
+	if pos.X >= w.width || pos.Y >= w.height || pos.X < 0 || pos.Y < 0 {
+		return
+	}
+	w.Buffer.InsertWithAttr(pos, c.Ch, term.Attributes{Fg: c.Fg, Bg: c.Bg})
+}
+
+// Flush satisfies tui.Writer
+func (w *BufferWriter) Flush() error {
+	return nil
+}
+
+// Clear satisfies tui.Writer
+func (w *BufferWriter) Clear(term.Attributes) error {
+	w.Buffer.Reset()
+	return nil
+}
+
+// SetCursor satisfies tui.Writer
+func (w *BufferWriter) SetCursor(pos term.Coordinates) {
+	w.Cursor = pos
+}
