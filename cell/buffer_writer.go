@@ -1,6 +1,8 @@
 package cell
 
-import "github.com/ernestrc/go-tui/term"
+import (
+	"github.com/ernestrc/go-tui/term"
+)
 
 // BufferWriter satisfies tui.Writer with a Buffer.
 type BufferWriter struct {
@@ -26,6 +28,12 @@ func (w *BufferWriter) Init(width, height int) {
 func (w *BufferWriter) SetCell(pos term.Coordinates, c term.Cell) {
 	if pos.X >= w.width || pos.Y >= w.height || pos.X < 0 || pos.Y < 0 {
 		return
+	}
+
+	// NOTE: performance could be improved here
+	_, ok := w.Buffer.Cell(pos)
+	if ok {
+		w.Buffer.DeleteCell(pos)
 	}
 	w.Buffer.InsertWithAttr(pos, c.Ch, term.Attributes{Fg: c.Fg, Bg: c.Bg})
 }

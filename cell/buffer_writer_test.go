@@ -12,14 +12,14 @@ func TestWriteFlush(t *testing.T) {
 	width, height := 5, 6
 	writer := NewBufferWriter(width, height)
 
-	c := 'A'
-	for i := 0; i < width; i++ {
-		for j := 0; j < height; j++ {
+	c := 'E'
+	for i := width - 1; i >= 0; i-- {
+		for j := height - 1; j >= 0; j-- {
 			if i > j-1 {
 				writer.SetCell(term.Coordinates{X: j, Y: i}, term.Cell{Ch: c})
 			}
 		}
-		c++
+		c--
 	}
 
 	// should be fine to wtry to write out of bounds
