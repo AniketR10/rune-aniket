@@ -1,6 +1,9 @@
 package editor
 
-import log "github.com/sirupsen/logrus"
+import (
+	"github.com/ernestrc/go-tui/term"
+	log "github.com/sirupsen/logrus"
+)
 
 var defaultEditorConfig = editorConfig{
 	Tabspaces:        4,
@@ -9,6 +12,7 @@ var defaultEditorConfig = editorConfig{
 	SwapDir:          "",
 	Filepath:         "",
 	RecoveryFilepath: "",
+	CommandEvent:     term.Event{Ch: ':', Type: term.EventKey},
 }
 
 // Option represents a configuration option for a Editor.
@@ -22,6 +26,7 @@ type editorConfig struct {
 	WindowBorder     bool
 	Filepath         string
 	RecoveryFilepath string
+	CommandEvent     term.Event
 }
 
 // WithLogger sets a logger that the editor can use to log debugging data.
@@ -47,7 +52,7 @@ func WithSwapDir(dir string) Option {
 	}
 }
 
-// WithWindowBorder is a Option that defines whether WindowManager should draw
+// WithWindowBorder is an Option that defines whether WindowManager should draw
 // windows with a border or not.
 func WithWindowBorder(border bool) Option {
 	return func(cfg *editorConfig) {
@@ -64,10 +69,18 @@ func WithRecoveryFile(swapFilePath string) Option {
 	}
 }
 
-// WithFilepath is a Option that sets the filepath of the file to open with
+// WithFilepath is an Option that sets the filepath of the file to open with
 // a Editor handler.
 func WithFilepath(filepath string) Option {
 	return func(cfg *editorConfig) {
 		cfg.Filepath = filepath
+	}
+}
+
+// WithCommandEvent is an Option that defines what event triggers the editor's
+// command mode.
+func WithCommandEvent(event term.Event) Option {
+	return func(cfg *editorConfig) {
+		cfg.CommandEvent = event
 	}
 }

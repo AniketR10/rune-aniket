@@ -446,8 +446,7 @@ func (e *editorHandler) closeAllBuffers() {
 }
 
 func (e *editorHandler) handleProxy(ev term.Event) (bool, bool) {
-	switch ev.Ch {
-	case ':':
+	if ev == e.config.CommandEvent {
 		e.setCommandMode()
 		return false, true
 	}

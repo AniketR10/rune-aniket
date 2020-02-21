@@ -47,6 +47,7 @@ func main() {
 		editor.WithTabspaces(*tabspaces),
 		editor.WithSwapDir(*swapDir),
 		editor.WithRecoveryFile(*recoveryFile),
+		editor.WithCommandEvent(term.Event{Type: term.EventKey, Ch: ':'}),
 	)
 
 	viOpts = append(viOpts,
