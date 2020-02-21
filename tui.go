@@ -45,7 +45,7 @@ type Writer interface {
 // Man returns a Handler's usage manual. See Manual for more information.
 type Handler interface {
 	Component
-	Handle(term.Event) bool
+	Handle(term.Event) (exit, handled bool)
 	Cursor() (pos term.Coordinates, show bool)
 	Man() Manual
 }

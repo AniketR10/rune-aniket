@@ -381,6 +381,8 @@ func (e *editorHandler) runCommand() (quit bool, err error) {
 	switch cmds[0] {
 	case "e":
 		err = e.OpenFile(cmds[1])
+	default:
+		err = fmt.Errorf("Unknown command: %s", cmd)
 	}
 	return
 }
@@ -398,7 +400,9 @@ func (e *editorHandler) setError(err error) {
 	e.SetMessage("Error: %s", err)
 }
 
-func (e *editorHandler) handleCommand(ev term.Event) (quit bool) {
+func (e *editorHandler) handleCommand(ev term.Event) (quit, handled bool) {
+	handled = true
+
 	switch ev.Key {
 	case term.KeyEnter:
 		var err error
@@ -422,6 +426,8 @@ func (e *editorHandler) handleCommand(ev term.Event) (quit bool) {
 	default:
 		if ev.Type == term.EventKey && ev.Ch != 0 {
 			e.commandBuf.WriteString(string(ev.Ch))
+		} else {
+			handled = false
 		}
 	}
 	return
@@ -439,11 +445,11 @@ func (e *editorHandler) closeAllBuffers() {
 	}
 }
 
-func (e *editorHandler) handleProxy(ev term.Event) bool {
+func (e *editorHandler) handleProxy(ev term.Event) (bool, bool) {
 	switch ev.Ch {
 	case ':':
 		e.setCommandMode()
-		return false
+		return false, true
 	}
 
 	switch ev.Key {
@@ -466,10 +472,10 @@ func (e *editorHandler) handleProxy(ev term.Event) bool {
 		return e.wmVirt.Handle(ev)
 	}
 
-	return false
+	return false, true
 }
 
-func (e *editorHandler) Handle(ev term.Event) bool {
+func (e *editorHandler) Handle(ev term.Event) (bool, bool) {
 	switch e.mode {
 	case proxyMode:
 		return e.handleProxy(ev)

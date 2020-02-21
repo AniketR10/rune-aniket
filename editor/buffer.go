@@ -31,7 +31,7 @@ func (s *editorBuffer) Draw(w tui.Writer) {
 	s.editor.Draw(w)
 }
 
-func (s *editorBuffer) Handle(ev term.Event) bool {
+func (s *editorBuffer) Handle(ev term.Event) (bool, bool) {
 	return s.editor.Handle(ev)
 }
 

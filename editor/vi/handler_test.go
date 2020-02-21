@@ -76,7 +76,8 @@ func TestCellAtCursor(t *testing.T) {
 
 	for _, tcase := range cases {
 		for _, r := range tcase.input {
-			vi.Handle(term.Event{Type: term.EventKey, Ch: r})
+			_, handled := vi.Handle(term.Event{Type: term.EventKey, Ch: r})
+			require.True(t, handled)
 
 			vi.Draw(writer)
 

@@ -27,10 +27,10 @@ func NewTestHandler() (t *TestHandler) {
 }
 
 // Handle the next Event
-func (t *TestHandler) Handle(term.Event) bool {
+func (t *TestHandler) Handle(term.Event) (bool, bool) {
 	// signal that we handled the event
 	t.Ch++
-	return t.Exit
+	return t.Exit, true
 }
 
 // Cursor returns always a hidden cursor

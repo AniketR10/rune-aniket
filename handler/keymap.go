@@ -21,7 +21,7 @@ func WithMapping(
 
 // Handle finds a mapping and overwrites event or delegates the event to
 // underlying handler.
-func (k keyMappingHandler) Handle(ev term.Event) bool {
+func (k keyMappingHandler) Handle(ev term.Event) (bool, bool) {
 	mapped, ok := k.mappings[ev]
 	if ok {
 		ev = mapped

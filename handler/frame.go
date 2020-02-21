@@ -28,7 +28,7 @@ func (f *Frame) Init(handler tui.Handler) {
 }
 
 // Handle delegates the event to the underlying handler.
-func (f *Frame) Handle(ev term.Event) bool {
+func (f *Frame) Handle(ev term.Event) (bool, bool) {
 	return f.handler.Handle(ev)
 }
 

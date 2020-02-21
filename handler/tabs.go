@@ -27,7 +27,7 @@ func (f *Tabs) Init() {
 }
 
 // Handle delegates the event to the underlying handler.
-func (f *Tabs) Handle(ev term.Event) (quit bool) {
+func (f *Tabs) Handle(ev term.Event) (quit, handled bool) {
 	if ev.Type != term.EventMouse || ev.Key != term.MouseLeft {
 		return
 	}
@@ -40,6 +40,9 @@ func (f *Tabs) Handle(ev term.Event) (quit bool) {
 	if ok && focusIdx == idx {
 		return
 	}
+
+	handled = true
+
 	f.SetFocus(idx)
 	if f.OnClick != nil {
 		f.OnClick(idx)

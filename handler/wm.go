@@ -86,7 +86,7 @@ func (wm *WindowManager) SetAttr(standard, focus term.Attributes) {
 }
 
 // Handle : Handler
-func (wm *WindowManager) Handle(ev term.Event) (exit bool) {
+func (wm *WindowManager) Handle(ev term.Event) (exit bool, handled bool) {
 	if ev.Type == term.EventKey && ev.Mod == term.ModAlt {
 		switch ev.Ch {
 		case 'q':
@@ -100,6 +100,7 @@ func (wm *WindowManager) Handle(ev term.Event) (exit bool) {
 		case 'l':
 			wm.FocusRight()
 		}
+		handled = true
 		return
 	}
 
@@ -117,7 +118,8 @@ func (wm *WindowManager) Handle(ev term.Event) (exit bool) {
 		ev.MouseY -= offset.Y
 	}
 
-	hexit := wm.FocusContent().Handle(ev)
+	var hexit bool
+	hexit, handled = wm.FocusContent().Handle(ev)
 
 	// if handler in focus wants to exit, close the window,
 	// or signal exit to upstream handler if it was last window

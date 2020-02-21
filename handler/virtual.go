@@ -12,7 +12,7 @@ type Virtual struct {
 }
 
 // Handle tui.Handler
-func (v *Virtual) Handle(ev term.Event) bool {
+func (v *Virtual) Handle(ev term.Event) (bool, bool) {
 	if ev.Type == term.EventMouse {
 		offset := v.Position()
 		ev.MouseX -= offset.X

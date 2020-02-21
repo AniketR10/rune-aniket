@@ -164,16 +164,16 @@ func (vi *Vi) setReplaceOneMode() {
 // and results seeking to Editor so this function makes sure that we only
 // perform the search once, at the same time we delegate the right logic to
 // Editor and Less.
-func (vi *Vi) handleSearch(ev term.Event) bool {
+func (vi *Vi) handleSearch(ev term.Event) (bool, bool) {
 	switch ev.Key {
 	case term.KeyEnter:
 		text := vi.less.SearchText()
 		vi.less.SetNormalMode()
 		vi.cursor.Search(text)
+		return false, true
 	default:
-		vi.less.Handle(ev)
+		return vi.less.Handle(ev)
 	}
-	return false
 }
 
 func (vi *Vi) insertBlock(str string) {
@@ -255,9 +255,10 @@ func (vi *Vi) pasteClipboard(before bool) bool {
 	return true
 }
 
-func (vi *Vi) handleNormal(ev term.Event) bool {
+func (vi *Vi) handleNormal(ev term.Event) (quit bool, handled bool) {
 	switch ev.Type {
 	case term.EventKey:
+		handled = true
 		switch ev.Ch {
 		case 'R':
 			vi.setReplaceMode()
@@ -378,14 +379,17 @@ func (vi *Vi) handleNormal(ev term.Event) bool {
 				vi.cursor.MoveToPrevLocation()
 			case term.KeyCtrlJ:
 				vi.cursor.MoveToNextLocation()
+			default:
+				handled = false
 			}
 		}
 	}
 
-	return false
+	return
 }
 
-func (vi *Vi) handleInsert(ev term.Event) bool {
+func (vi *Vi) handleInsert(ev term.Event) (quit, handled bool) {
+	handled = true
 	switch ev.Key {
 	case term.KeyEnter:
 		vi.cursor.Insert('\n')
@@ -401,19 +405,21 @@ func (vi *Vi) handleInsert(ev term.Event) bool {
 	default:
 		if ev.Ch != 0 {
 			vi.cursor.Insert(ev.Ch)
+		} else {
+			handled = false
 		}
 	}
-	return false
+	return
 }
 
-func (vi *Vi) handleVisual(ev term.Event) (quit bool) {
+func (vi *Vi) handleVisual(ev term.Event) (quit, handled bool) {
 	if ev.Key == term.KeyEsc {
 		vi.setNormalMode()
 		vi.cursor.Unselect()
+		handled = true
 		return
 	}
 
-	handled := false
 	if ev.Type == term.EventKey {
 		handled = true
 		switch ev.Ch {
@@ -438,12 +444,12 @@ func (vi *Vi) handleVisual(ev term.Event) (quit bool) {
 	}
 
 	if !handled {
-		quit = vi.handleNormal(ev)
+		quit, handled = vi.handleNormal(ev)
 	}
 	return
 }
 
-func (vi *Vi) handleMoveToCharacter(mode moveMode, ev term.Event) (quit bool) {
+func (vi *Vi) handleMoveToCharacter(mode moveMode, ev term.Event) (bool, bool) {
 	switch ev.Type {
 	case term.EventKey:
 		switch mode {
@@ -457,13 +463,15 @@ func (vi *Vi) handleMoveToCharacter(mode moveMode, ev term.Event) (quit bool) {
 	default:
 		vi.setNormalMode()
 	}
-	return
+	return false, true
 }
 
-func (vi *Vi) handleReplace(ev term.Event) (quit bool) {
+func (vi *Vi) handleReplace(ev term.Event) (quit, handled bool) {
 	if ev.Type != term.EventKey {
 		return
 	}
+
+	handled = true
 
 	switch ev.Key {
 	case term.KeyEnter:
@@ -491,24 +499,25 @@ func (vi *Vi) handleReplace(ev term.Event) (quit bool) {
 }
 
 // Handle : tui.Handler
-func (vi *Vi) Handle(ev term.Event) (quit bool) {
+func (vi *Vi) Handle(ev term.Event) (quit, handled bool) {
 	switch vi.mode {
 	case normalMode:
 		if vi.less.Mode() != handler.LessNormalMode {
-			quit = vi.handleSearch(ev)
+			quit, handled = vi.handleSearch(ev)
 		} else {
-			quit = vi.handleNormal(ev)
+			quit, handled = vi.handleNormal(ev)
 		}
 	case insertMode:
-		quit = vi.handleInsert(ev)
+		quit, handled = vi.handleInsert(ev)
 	case visualMode, visualLineMode, visualBlockMode:
-		quit = vi.handleVisual(ev)
+		quit, handled = vi.handleVisual(ev)
 	case moveToCharMode:
-		quit = vi.handleMoveToCharacter(vi.moveMode, ev)
+		quit, handled = vi.handleMoveToCharacter(vi.moveMode, ev)
 	case replaceMode:
-		quit = vi.handleReplace(ev)
+		quit, handled = vi.handleReplace(ev)
 	case replaceOneMode:
-		quit = vi.handleReplace(ev)
+		quit, _ = vi.handleReplace(ev)
+		handled = true
 		vi.setNormalMode()
 	default:
 		panic(fmt.Sprintf("unknown mode: %d", vi.mode))
@@ -532,6 +541,6 @@ func (vi *Vi) Handle(ev term.Event) (quit bool) {
 }
 
 // SetLocationList sets a location list of this handler. See Cursor.SetLocationList
-func (vi *Vi) SetLocationList(l editor.LocationList) editor.LocationList {
-	return vi.cursor.SetLocationList(l)
+func (vi *Vi) SetLocationList(l editor.LocationList) {
+	_ = vi.cursor.SetLocationList(l)
 }

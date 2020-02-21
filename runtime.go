@@ -57,7 +57,7 @@ func run(root Handler, termw Writer) (err error) {
 
 		select {
 		case ev := <-echan:
-			hexit = root.Handle(ev)
+			hexit, _ = root.Handle(ev)
 		case ev := <-ichan:
 			switch ev.Type {
 			case term.EventInterrupt:
@@ -67,7 +67,7 @@ func run(root Handler, termw Writer) (err error) {
 				width, height := ev.Width, ev.Height
 				resize(root, width, height)
 			default:
-				hexit = root.Handle(ev)
+				hexit, _ = root.Handle(ev)
 			}
 		}
 	}

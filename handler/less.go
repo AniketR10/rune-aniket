@@ -103,9 +103,8 @@ func (l *Less) SearchText() string {
 	return string(bytes)
 }
 
-func (l *Less) searchHandleEvent(ev term.Event) (exit bool) {
+func (l *Less) searchHandleEvent(ev term.Event) (bool, bool) {
 	switch ev.Key {
-
 	case term.KeyBackspace:
 		fallthrough
 	case term.KeyBackspace2:
@@ -133,12 +132,13 @@ func (l *Less) searchHandleEvent(ev term.Event) (exit bool) {
 		getBuffer(l.cmdScroll).WriteString(string(ev.Ch))
 	}
 
-	return
+	return false, true
 }
 
-func (l *Less) normalHandleEvent(ev term.Event) (exit bool) {
+func (l *Less) normalHandleEvent(ev term.Event) (exit, handled bool) {
 	switch ev.Type {
 	case term.EventKey:
+		handled = true
 		switch ev.Ch {
 		case 'q':
 			exit = true
@@ -164,6 +164,8 @@ func (l *Less) normalHandleEvent(ev term.Event) (exit bool) {
 			l.Scroll.SeekRight()
 		case '/':
 			l.SetSearchMode()
+		default:
+			handled = false
 		}
 	}
 
@@ -226,16 +228,14 @@ func (l *Less) resize() {
 }
 
 // Handle : Handler
-func (l *Less) Handle(ev term.Event) (exit bool) {
+func (l *Less) Handle(ev term.Event) (exit bool, handled bool) {
 	switch ev.Type {
-	case term.EventError:
-		return false
 	case term.EventKey:
 		switch l.mode {
 		case LessNormalMode:
-			exit = l.normalHandleEvent(ev)
+			exit, handled = l.normalHandleEvent(ev)
 		case LessSearchMode:
-			exit = l.searchHandleEvent(ev)
+			exit, handled = l.searchHandleEvent(ev)
 		}
 	}
 
