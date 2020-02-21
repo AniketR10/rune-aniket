@@ -272,11 +272,11 @@ func (t testFileInfo) Sys() interface{} {
 	return nil
 }
 
-// returns an un-initialized (but dep injected) FileBuffer along with the mocked osFile
+// returns an un-initialized (but dep injected) FileBuffer along with the mocked OsFile
 func newTestFileBuffer(ctrl *gomock.Controller) (*FileBuffer, *MockOsFile) {
 	f := new(FileBuffer)
 	mock := NewMockOsFile(ctrl)
-	f.openFunc = func(name string, flag int, perm os.FileMode) (osFile, error) {
+	f.openFunc = func(name string, flag int, perm os.FileMode) (OsFile, error) {
 		return mock, nil
 	}
 	f.removeFunc = func(name string) error {
@@ -385,7 +385,7 @@ func TestFileBufferInit(t *testing.T) {
 	t.Run("bubble up original file open error", func(t *testing.T) {
 		accessDeniedErr := errors.New("access denied")
 		f := new(FileBuffer)
-		f.openFunc = func(name string, flag int, perm os.FileMode) (osFile, error) {
+		f.openFunc = func(name string, flag int, perm os.FileMode) (OsFile, error) {
 			return nil, accessDeniedErr
 		}
 		assert.Equal(t, accessDeniedErr, f.Init("fjkelw", cell.NewBuffer(), ""))
@@ -399,7 +399,7 @@ func TestFileBufferInit(t *testing.T) {
 		origFileMock := NewMockOsFile(ctrl)
 		f := new(FileBuffer)
 		i := 0
-		f.openFunc = func(name string, flag int, perm os.FileMode) (osFile, error) {
+		f.openFunc = func(name string, flag int, perm os.FileMode) (OsFile, error) {
 			i++
 			if i == 1 {
 				return origFileMock, nil
@@ -435,7 +435,7 @@ func newUninitializedTestFileBuffer(t *testing.T, ctrl *gomock.Controller) (
 	*FileBuffer, *MockOsFile, *cell.Buffer,
 ) {
 	f, mock := newTestFileBuffer(ctrl)
-	f.openFunc = func(name string, flag int, perm os.FileMode) (osFile, error) {
+	f.openFunc = func(name string, flag int, perm os.FileMode) (OsFile, error) {
 		if flag&os.O_CREATE != 0 {
 			return mock, nil
 		}
@@ -611,7 +611,7 @@ func TestFileNotCreatedBufferFlush(t *testing.T) {
 		f, _, _ := newUninitializedTestFileBuffer(t, ctrl)
 		require.Nil(t, f.orig)
 
-		f.openFunc = func(name string, flag int, perm os.FileMode) (osFile, error) {
+		f.openFunc = func(name string, flag int, perm os.FileMode) (OsFile, error) {
 			assert.NotZero(t, flag&os.O_CREATE)
 			return nil, &os.PathError{Err: os.ErrExist}
 		}

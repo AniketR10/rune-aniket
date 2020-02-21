@@ -2,13 +2,12 @@ package main
 
 import (
 	"flag"
-	"io"
 	"net/http"
 	_ "net/http/pprof"
 	"os"
 
 	"github.com/ernestrc/go-tui"
-	"github.com/ernestrc/go-tui/editor"
+	"github.com/ernestrc/go-tui/browser"
 	"github.com/ernestrc/go-tui/editor/vi"
 	"github.com/ernestrc/go-tui/plugin"
 	"github.com/ernestrc/go-tui/term"
@@ -30,7 +29,7 @@ func main() {
 		log.Println(http.ListenAndServe("localhost:6060", nil))
 	}()
 
-	opts := make([]editor.Option, 0)
+	opts := make([]browser.Option, 0)
 	viOpts := make([]vi.Option, 0)
 
 	if len(os.Args) > 1 {
@@ -38,16 +37,16 @@ func main() {
 		if err := flag.CommandLine.Parse(os.Args[2:]); err != nil {
 			log.Fatal(err)
 		}
-		opts = append(opts, editor.WithFilepath(filename))
+		opts = append(opts, browser.WithFilepath(filename))
 	} else {
 		flag.Parse()
 	}
 
 	opts = append(opts,
-		editor.WithTabspaces(*tabspaces),
-		editor.WithSwapDir(*swapDir),
-		editor.WithRecoveryFile(*recoveryFile),
-		editor.WithCommandEvent(term.Event{Type: term.EventKey, Ch: ':'}),
+		browser.WithTabspaces(*tabspaces),
+		browser.WithSwapDir(*swapDir),
+		browser.WithRecoveryFile(*recoveryFile),
+		browser.WithCommandEvent(term.Event{Type: term.EventKey, Ch: ':'}),
 	)
 
 	viOpts = append(viOpts,
@@ -63,7 +62,7 @@ func main() {
 		l := log.New()
 		l.SetOutput(f)
 		l.SetLevel(log.TraceLevel)
-		opts = append(opts, editor.WithLogger(l))
+		opts = append(opts, browser.WithLogger(l))
 		viOpts = append(viOpts, vi.WithLogger(l))
 
 		// set output of plugins
@@ -81,15 +80,11 @@ func main() {
 	}
 
 	vi := vi.Editor(viOpts...)
-	editor, err := editor.New(vi, opts...)
+	browser, err := browser.New(vi, opts...)
 	if err != nil {
 		log.Fatal(err)
 	}
-
-	// TODO export EditorHandler and return from New
-	if closer, ok := editor.(io.Closer); ok {
-		defer closer.Close()
-	}
+	defer browser.Close()
 
 	err = tui.Init()
 	if err != nil {
@@ -100,7 +95,7 @@ func main() {
 
 	term.SetOutputMode(term.Output256)
 
-	if err := tui.RunMode(editor, term.InputMouse); err != nil {
+	if err := tui.RunMode(browser, term.InputMouse); err != nil {
 		log.Fatal(err)
 	}
 }

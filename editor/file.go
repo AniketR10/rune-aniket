@@ -15,8 +15,8 @@ import (
 
 const filePerms = 0600
 
-// used to abstract *os.File
-type osFile interface {
+// OsFile is used to abstract *os.File.
+type OsFile interface {
 	Name() string
 	Stat() (os.FileInfo, error)
 	Sync() error
@@ -29,7 +29,7 @@ type osFile interface {
 	io.Writer
 }
 
-type openFunc func(name string, flag int, perm os.FileMode) (osFile, error)
+type openFunc func(name string, flag int, perm os.FileMode) (OsFile, error)
 type removeFunc func(name string) error
 type renameFunc func(oldpath, newpath string) error
 type statFunc func(name string) (os.FileInfo, error)
@@ -45,7 +45,7 @@ type FileBuffer struct {
 	swapFileName string
 	fileName     string
 	info         os.FileInfo
-	orig, swap   osFile
+	orig, swap   OsFile
 	reader       cell.PublisherReader
 	delayedError error
 	unflushed    bool
@@ -58,7 +58,7 @@ func makeSwapFileName(filename string) string {
 	return fmt.Sprintf("%s.swp", filename)
 }
 
-func (f *FileBuffer) initSwap(swapDir string, orig osFile) (osFile, error) {
+func (f *FileBuffer) initSwap(swapDir string, orig OsFile) (OsFile, error) {
 	swap, err := f.openFunc(f.swapFileName, os.O_RDWR|os.O_CREATE|os.O_EXCL, filePerms)
 	if err != nil {
 		if os.IsExist(err) {
@@ -90,7 +90,7 @@ func (f *FileBuffer) initSwap(swapDir string, orig osFile) (osFile, error) {
 	return swap, nil
 }
 
-func validateFileType(file osFile) (os.FileInfo, error) {
+func validateFileType(file OsFile) (os.FileInfo, error) {
 	fileInfo, err := file.Stat()
 	if err != nil {
 		return nil, err
@@ -109,7 +109,7 @@ func validateFileType(file osFile) (os.FileInfo, error) {
 }
 
 func (f *FileBuffer) openFile(filePath string) (
-	file osFile, fileInfo os.FileInfo, err error,
+	file OsFile, fileInfo os.FileInfo, err error,
 ) {
 	file, err = f.openFunc(filePath, os.O_RDWR, filePerms)
 	if err != nil {
@@ -154,7 +154,7 @@ func (f *FileBuffer) initFiles(filePath, swapDir string) error {
 	return nil
 }
 
-func (f *FileBuffer) initBuffer(buf *cell.Buffer, file osFile) (err error) {
+func (f *FileBuffer) initBuffer(buf *cell.Buffer, file OsFile) (err error) {
 	buf.Reset()
 
 	// file could be not created yet
@@ -211,7 +211,7 @@ func (f *FileBuffer) recoverFile(filePath, swapFilePath string, buf *cell.Buffer
 }
 
 func osOpenFileFunc() openFunc {
-	return func(name string, flag int, perm os.FileMode) (osFile, error) {
+	return func(name string, flag int, perm os.FileMode) (OsFile, error) {
 		return os.OpenFile(name, flag, perm)
 	}
 }

@@ -1,7 +1,6 @@
-package editor
+package browser
 
 import (
-	"os"
 	"testing"
 
 	"github.com/ernestrc/go-tui"
@@ -20,33 +19,33 @@ func (e *testEditor) Edit(buf *cell.Buffer) tui.Handler {
 	return handler.NewTestHandler()
 }
 
+type testFileBuffer struct {
+	flushErr error
+	closeErr error
+}
+
+func (t *testFileBuffer) Flush() error {
+	return t.flushErr
+}
+
+func (t *testFileBuffer) Close() error {
+	return t.closeErr
+}
+
 func openTestFile(filePath string, buf *cell.Buffer, swapDir string) (
-	*FileBuffer, error,
+	fileBuffer, error,
 ) {
-	f := new(FileBuffer)
-	f.openFunc = func(name string, flag int, perm os.FileMode) (osFile, error) {
-		return &noopFile{name: filePath}, nil
-	}
-	f.removeFunc = func(name string) error {
-		return nil
-	}
-	f.renameFunc = func(oldName, newName string) error {
-		return nil
-	}
-	f.statFunc = func(name string) (os.FileInfo, error) {
-		return testFileInfo{}, nil
-	}
-	return f, nil
+	return &testFileBuffer{}, nil
 }
 
 func recoverTestFile(filePath, swapFilePath string, buf *cell.Buffer) (
-	*FileBuffer, error,
+	fileBuffer, error,
 ) {
 	return openTestFile(filePath, buf, "")
 }
 
-func newTestEditorHandler() *editorHandler {
-	ret := new(editorHandler)
+func newTestEditorHandler() *Handler {
+	ret := new(Handler)
 	ret.openFileFn = openTestFile
 	ret.recoverFileFn = recoverTestFile
 	return ret

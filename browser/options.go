@@ -1,4 +1,4 @@
-package editor
+package browser
 
 import (
 	"github.com/ernestrc/go-tui/term"
