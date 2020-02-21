@@ -109,7 +109,6 @@ func PollEvent() (ev Event) {
 	ev.Err = tev.Err
 	ev.MouseX = tev.MouseX
 	ev.MouseY = tev.MouseY
-	ev.N = tev.N
 	return
 }
 
