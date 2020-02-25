@@ -1,0 +1,44 @@
+package browser
+
+import (
+	"io"
+
+	"github.com/ernestrc/go-tui"
+	"github.com/ernestrc/go-tui/term"
+)
+
+// WindowManager is the interface that groups tile
+// window management methods.
+type WindowManager interface {
+	SplitVerticalRight(tui.Handler) error
+	SplitVerticalLeft(tui.Handler) error
+	SplitHorizontalAbove(tui.Handler) error
+	SplitHorizontalBelow(tui.Handler) error
+}
+
+// KeyMapper is the interface that wraps the method MergeKeyMap
+// to merge new key mappings.
+type KeyMapper interface {
+	MergeKeyMap(map[term.Event]term.Event) error
+}
+
+// Messenger is the interface that wraps methods to display
+// messages to the user.
+type Messenger interface {
+	SetMessage(msg string, args ...interface{}) error
+}
+
+// FileOpener is the interface that wraps the method OpenFile.
+type FileOpener interface {
+	OpenFile(filename string) error
+}
+
+// Browser is an interface that groups methods to manipulate
+// the user interface of a browser.
+type Browser interface {
+	WindowManager
+	KeyMapper
+	FileOpener
+	Messenger
+	io.Closer
+}

@@ -596,23 +596,25 @@ func (e *Handler) OpenFile(filename string) error {
 }
 
 // SetMessage formats the given msg and args and displays it on next Draw.
-func (e *Handler) SetMessage(msg string, args ...interface{}) {
+func (e *Handler) SetMessage(msg string, args ...interface{}) error {
 	msg = fmt.Sprintf(msg, args...)
 	if e.config.Logger != nil {
 		e.config.Logger.Infof("Message: %s", msg)
 	}
 	e.logBuf.WriteString(msg)
+	return nil
 }
 
 // MergeKeyMap takes the given keymap and merges it with the Browser's keymap
 // to override the current event key mappings.
-func (e *Handler) MergeKeyMap(keymap map[term.Event]term.Event) {
+func (e *Handler) MergeKeyMap(keymap map[term.Event]term.Event) error {
 	if e.keymap == nil {
 		e.keymap = make(map[term.Event]term.Event)
 	}
 	for k, v := range keymap {
 		e.keymap[k] = v
 	}
+	return nil
 }
 
 func (e *Handler) splitInverted(
@@ -629,24 +631,28 @@ func (e *Handler) splitInverted(
 
 // SplitVerticalRight opens a new window tile to the right of the
 // current tile in focus and initializes it with h.
-func (e *Handler) SplitVerticalRight(h tui.Handler) {
+func (e *Handler) SplitVerticalRight(h tui.Handler) error {
 	e.wm.SplitVertical(h)
+	return nil
 }
 
 // SplitVerticalLeft opens a new window tile to the left of the
 // current tile in focus and initializes it with h.
-func (e *Handler) SplitVerticalLeft(h tui.Handler) {
+func (e *Handler) SplitVerticalLeft(h tui.Handler) error {
 	e.splitInverted((*handler.WindowManager).SplitVertical, h)
+	return nil
 }
 
 // SplitHorizontalBelow opens a new window tile below the current tile in focus
 // and initializes it with h.
-func (e *Handler) SplitHorizontalBelow(h tui.Handler) {
+func (e *Handler) SplitHorizontalBelow(h tui.Handler) error {
 	e.wm.SplitHorizontal(h)
+	return nil
 }
 
 // SplitHorizontalAbove opens a new window tile above the current tile in focus
 // and initializes it with h.
-func (e *Handler) SplitHorizontalAbove(h tui.Handler) {
+func (e *Handler) SplitHorizontalAbove(h tui.Handler) error {
 	e.splitInverted((*handler.WindowManager).SplitHorizontal, h)
+	return nil
 }

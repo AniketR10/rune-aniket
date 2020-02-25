@@ -1,0 +1,49 @@
+syntax = "proto3";
+
+import "proto/term.proto";
+
+package proto;
+
+message OpenFileRequest {
+    string file = 1;
+}
+
+message OpenFileResponse {
+// string error = 1;
+// string handler_id = 2;
+}
+
+message SetMessageRequest {
+	string msg = 1;
+}
+
+message SetMessageResponse {}
+
+message Mapping {
+	Event from = 1;
+	Event to = 2;
+}
+
+message MergeKeyMapRequest {
+	repeated Mapping mappings = 1;
+}
+
+message MergeKeyMapResponse {
+}
+
+message SplitRequest {
+	uint32 handler_id = 1;
+}
+
+message SplitResponse {
+}
+
+service Browser {
+	rpc OpenFile(OpenFileRequest) returns (OpenFileResponse);
+	rpc SetMessage(SetMessageRequest) returns (SetMessageResponse);
+	rpc MergeKeyMap(MergeKeyMapRequest) returns (MergeKeyMapResponse);
+	rpc SplitVerticalRight(SplitRequest) returns (SplitResponse);
+	rpc SplitVerticalLeft(SplitRequest) returns (SplitResponse);
+	rpc SplitHorizontalAbove(SplitRequest) returns (SplitResponse);
+	rpc SplitHorizontalBelow(SplitRequest) returns (SplitResponse);
+}

@@ -5,17 +5,25 @@ import (
 
 	"github.com/ernestrc/go-tui"
 	"github.com/ernestrc/go-tui/cell"
+	"github.com/ernestrc/go-tui/editor"
 	"github.com/ernestrc/go-tui/handler"
 	"github.com/ernestrc/go-tui/term"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-type testEditor struct {
+type browserInternal interface {
+	Browser
+	tui.Handler
+}
+
+type browserConstructor func(ed editor.Editor, opts ...Option) (browserInternal, error)
+
+type testBrowser struct {
 	buf *cell.Buffer
 }
 
-func (e *testEditor) Edit(buf *cell.Buffer) tui.Handler {
+func (e *testBrowser) Edit(buf *cell.Buffer) tui.Handler {
 	e.buf = buf
 	return handler.NewTestHandler()
 }
@@ -45,14 +53,25 @@ func recoverTestFile(filePath, swapFilePath string, buf *cell.Buffer) (
 	return openTestFile(filePath, buf, "")
 }
 
-func newTestEditorHandler() *Handler {
+func newTestBrowserHandler() *Handler {
 	ret := new(Handler)
 	ret.openFileFn = openTestFile
 	ret.recoverFileFn = recoverTestFile
 	return ret
 }
 
-func TestEditorHandlerDraw(t *testing.T) {
+func TestBrowserHandlerDraw(t *testing.T) {
+	testBrowserHandlerDraw(t, func(ed editor.Editor, opts ...Option) (browserInternal, error) {
+		b := newTestBrowserHandler()
+		err := b.Init(ed, opts...)
+		if err != nil {
+			return nil, err
+		}
+		return b, nil
+	})
+}
+
+func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 	cases := []handler.TestInputSequence{
 		{"asdf",
 			`┌──────────────────┐
@@ -232,11 +251,9 @@ func TestEditorHandlerDraw(t *testing.T) {
 └──────────────────┘`},
 	}
 
-	ed := newTestEditorHandler()
-	defer assert.NoError(t, ed.Close())
-
-	err := ed.Init(&testEditor{}, WithFilepath("")) //first handler is empty handler
+	ed, err := constructor(&testBrowser{}, WithFilepath(""))
 	require.NoError(t, err)
+
 	handler.BatchTestInputSequence(t, ed, 20, 10, cases)
 
 	ed.SplitVerticalLeft(handler.NewTestHandler())
@@ -303,4 +320,38 @@ func TestEditorHandlerDraw(t *testing.T) {
 EEEE`},
 	}
 	handler.BatchTestInputSequence(t, ed, 4, 4, cases)
+
+	ed.SetMessage("wasup: %s", "Z")
+	cases = []handler.TestInputSequence{
+		{"",
+			`┌──────────────────┐
+│other.go          │
+├──────────────────┤
+│EEEEEEEEEEEEEEEEEE│
+│EEEEEEEEEEEEEEEEEE│
+│EEEEEEEEEEEEEEEEEE│
+│EEEEEEEEEEEEEEEEEE│
+│EEEEEEEEEEEEEEEEEE│
+│wasup: Z          │
+└──────────────────┘`},
+	}
+	handler.BatchTestInputSequence(t, ed, 20, 10, cases)
+
+	ed.OpenFile("bugz")
+	cases = []handler.TestInputSequence{
+		{"",
+			`┌──────────────────┐
+│other.go  bugz    │
+├──────────────────┤
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+└──────────────────┘`},
+	}
+	handler.BatchTestInputSequence(t, ed, 20, 10, cases)
+
+	assert.NoError(t, ed.Close())
 }

@@ -15,7 +15,7 @@ import (
 type Client struct {
 	Logger *log.Logger
 
-	height, width int
+	width, height int
 	errors        chan error
 	client        proto.HandlerClient
 }
@@ -175,7 +175,7 @@ func (s *Server) Init(handler tui.Handler) {
 func (s *Server) Resize(ctx context.Context, req *proto.ResizeRequest) (
 	*proto.ResizeResponse, error,
 ) {
-	s.height, s.width = int(req.GetHeight()), int(req.GetWidth())
+	s.width, s.height = int(req.GetWidth()), int(req.GetHeight())
 	s.handler.Resize(s.width, s.height)
 	return new(proto.ResizeResponse), nil
 }
@@ -185,7 +185,7 @@ func (s *Server) Resize(ctx context.Context, req *proto.ResizeRequest) (
 func (s *Server) Draw(context.Context, *proto.DrawRequest) (
 	*proto.DrawResponse, error,
 ) {
-	w := cell.NewBufferWriter(s.height, s.width)
+	w := cell.NewBufferWriter(s.width, s.height)
 	s.handler.Draw(w)
 
 	resp := new(proto.DrawResponse)
