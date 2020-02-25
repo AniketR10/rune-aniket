@@ -1,0 +1,146 @@
+syntax = "proto3";
+package proto;
+
+message Attribute {
+  enum Colors {
+	ColorDefault = 0;
+	ColorBlack = 1;
+	ColorRed = 2;
+	ColorGreen = 3;
+	ColorYellow = 4;
+	ColorBlue = 5;
+	ColorMagenta = 6;
+	ColorCyan = 7;
+	ColorWhite = 8;
+  }
+
+  enum Attrs {
+	AttrBold = 0;
+	AttrUnderline = 1;
+	AttrReverse = 2;
+  }
+
+  // Bitwise-OR of Colors and Attrs.
+  uint32 flags = 1;
+}
+
+message Cell {
+	uint32 Character = 1;
+	Attribute Foreground = 2;
+	Attribute Background = 3;
+}
+
+message CellRow {
+    repeated Cell cells = 1 ;
+}
+
+message Coordinates {
+	int32 X = 1;
+	int32 Y = 2;
+}
+
+message Event {
+  enum Type {
+	TypeKey = 0;
+	TypeMouse = 2;
+	// EventInterrupt
+	// EventResize
+	// EventError
+	// EventRaw
+	// EventNone
+  }
+
+  enum Mod {
+	None = 0;
+	Alt = 1;
+	Motion = 2;
+  }
+
+  enum Key {
+	F1 = 0;
+	F2 = 1;
+	F3 = 2;
+	F4 = 3;
+	F5 = 4;
+	F6 = 5;
+	F7 = 6;
+	F8 = 7;
+	F9 = 8;
+	F10 = 9;
+	F11 = 10;
+	F12 = 11;
+	Insert = 12;
+	Delete = 13;
+	Home = 14;
+	End = 15;
+	Pgup = 16;
+	Pgdn = 17;
+	ArrowUp = 18;
+	ArrowDown = 19;
+	ArrowLeft = 20;
+	ArrowRight = 21;
+	MouseLeft = 22;
+	MouseMiddle = 23;
+	MouseRight = 24;
+	MouseRelease = 25;
+	MouseWheelUp = 26;
+	MouseWheelDown = 27;
+	CtrlTilde = 28;
+	Ctrl2 = 29;
+	CtrlSpace = 30;
+	CtrlA = 31;
+	CtrlB = 32;
+	CtrlC = 33;
+	CtrlD = 34;
+	CtrlE = 35;
+	CtrlF = 36;
+	CtrlG = 37;
+	Backspace = 38;
+	CtrlH = 39;
+	Tab = 40;
+	CtrlI = 41;
+	CtrlJ = 42;
+	CtrlK = 43;
+	CtrlL = 44;
+	Enter = 45;
+	CtrlM = 46;
+	CtrlN = 47;
+	CtrlO = 48;
+	CtrlP = 49;
+	CtrlQ = 50;
+	CtrlR = 51;
+	CtrlS = 52;
+	CtrlT = 53;
+	CtrlU = 54;
+	CtrlV = 55;
+	CtrlW = 56;
+	CtrlX = 57;
+	CtrlY = 58;
+	CtrlZ = 59;
+	Esc = 60;
+	CtrlLsqBracket = 61;
+	Ctrl3 = 62;
+	Ctrl4 = 63;
+	CtrlBackslash = 64;
+	Ctrl5 = 65;
+	CtrlRsqBracket = 66;
+	Ctrl6 = 67;
+	Ctrl7 = 68;
+	CtrlSlash = 69;
+	CtrlUnderscore = 70;
+	Space = 72;
+	Backspace2 = 73;
+	Ctrl8 = 74;
+  }
+
+  message Mouse {
+    int32 X = 1;
+    int32 Y = 2;
+  }
+
+  Type type = 1;
+  Mod mod = 2;
+  Key key = 3;
+  uint32 Char = 4;
+  Mouse mouse = 5;
+}

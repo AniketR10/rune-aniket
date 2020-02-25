@@ -1,0 +1,16 @@
+syntax = "proto3";
+
+import "proto/term.proto";
+
+package proto;
+
+message Key {
+	Event event = 1;
+	string id = 2;
+	string description = 3;
+}
+
+message Manual {
+	string summary = 1;
+	repeated Key keys = 2;
+}

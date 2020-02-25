@@ -57,11 +57,14 @@ type Manual struct {
 	Keys    KeyMap
 }
 
-// KeyMap represents a Handler's key mapping information in the Manual.
-type KeyMap map[term.Event]struct {
+// EventDesc represents a description of how a Handler handles a certain event.
+type EventDesc struct {
 	ID          string
 	Description string
 }
+
+// KeyMap represents a Handler's key mapping information in the Manual.
+type KeyMap map[term.Event]EventDesc
 
 // Init initializes this library. This function should be called before any
 // other functions. 'Close' must be called at the end to ensure graceful shutdown.

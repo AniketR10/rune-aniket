@@ -1,0 +1,49 @@
+syntax = "proto3";
+
+import "proto/term.proto";
+import "proto/tui.proto";
+
+package proto;
+
+message ResizeRequest {
+	int32 width = 1;
+	int32 height = 2;
+}
+
+message ResizeResponse {}
+
+message DrawRequest {}
+
+message DrawResponse {
+	repeated CellRow rows = 1;
+}
+
+message HandleRequest {
+	Event event = 1;
+}
+
+message HandleResponse {
+	bool handled = 1;
+	bool quit = 2;
+}
+
+message CursorRequest {}
+
+message CursorResponse {
+	Coordinates position = 1;
+	bool show = 2;
+}
+
+message ManRequest {}
+
+message ManResponse {
+	Manual man = 1;
+}
+
+service Handler {
+	rpc Resize(ResizeRequest) returns (ResizeResponse);
+	rpc Draw(DrawRequest) returns (DrawResponse);
+	rpc Handle(HandleRequest) returns (HandleResponse);
+	rpc Cursor(CursorRequest) returns (CursorResponse);
+	rpc Man(ManRequest) returns (ManResponse);
+}

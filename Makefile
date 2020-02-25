@@ -9,6 +9,8 @@ EXAMPLES=$(patsubst examples/%/,$(TARGET)/example_%,$(EXAMPLEDIRS))
 EXECSRC=$(wildcard cmd/**/*.go)
 EXECDIRS=$(sort $(dir $(EXECSRC)))
 EXECS=$(patsubst cmd/%/,$(TARGET)/%,$(EXECDIRS))
+PROTOGEN=$(wildcard proto/*.proto)
+PROTO=proto/*.pb.go
 
 .PHONY: clean test coverage
 
@@ -20,6 +22,10 @@ test: $(EXECS)
 coverage: $(TARGET)
 	@ go test ./.../... -coverprofile $(TARGET)/coverage
 	@ go tool cover -html=$(TARGET)/coverage
+
+rpc:
+	@ rm -rf $(PROTO)
+	@ protoc $(PROTOGEN) --go_out=plugins=grpc:.
 
 install:
 	@ go install ./...

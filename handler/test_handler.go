@@ -127,6 +127,10 @@ func BatchTestInputSequence(
 		require.NoError(t, err)
 
 		out := writer.String()
-		assert.Equal(t, tcase.DrawOutput, out)
+		if client, ok := handler.(*Client); ok {
+			assert.Equal(t, tcase.DrawOutput, out, client.errors)
+		} else {
+			assert.Equal(t, tcase.DrawOutput, out)
+		}
 	}
 }
