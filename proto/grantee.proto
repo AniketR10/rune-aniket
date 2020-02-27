@@ -1,0 +1,37 @@
+syntax = "proto3";
+
+package proto;
+
+message Permission {
+	string id = 1;
+}
+message PermissionGrant {
+	string id = 1;
+	uint32 grant_id = 2;
+}
+
+message PermRequest {}
+message PermResponse {
+	repeated Permission perms = 1;
+}
+
+message OnPermGrantRequest {
+	repeated PermissionGrant granted = 1;
+	repeated Permission denied = 2;
+}
+message OnPermGrantResponse{}
+
+message ShutdownRequest {
+	string reason = 1;
+}
+message ShutdownResponse {}
+
+message HealthRequest {}
+message HealthResponse {}
+
+service Grantee {
+	rpc Permissions(PermRequest) returns (PermResponse);
+	rpc OnGrant(OnPermGrantRequest) returns (OnPermGrantResponse);
+	rpc Shutdown(ShutdownRequest) returns (ShutdownResponse);
+	rpc Health(HealthRequest) returns (HealthResponse);
+}

@@ -13,31 +13,24 @@ import (
 	"google.golang.org/grpc"
 )
 
-// MuxBroker allows a client or server to multiplex over connections.
-type MuxBroker interface {
-	NextId() uint32
-	AcceptAndServe(ID uint32, srv func(opts []grpc.ServerOption) *grpc.Server)
-	Dial(ID uint32) (conn *grpc.ClientConn, err error)
-}
-
 // Client satisfies Browser by talking to a browser server over RPC.
 type Client struct {
 	Logger *log.Logger
 
-	broker  MuxBroker
+	broker  proto.MuxBroker
 	client  proto.BrowserClient
 	servers []*grpc.Server
 }
 
 // NewClient allocates storage for a new Client and initializes it.
-func NewClient(broker MuxBroker, client proto.BrowserClient) *Client {
+func NewClient(broker proto.MuxBroker, client proto.BrowserClient) *Client {
 	ret := new(Client)
 	ret.Init(broker, client)
 	return ret
 }
 
 // Init initializes this Client with broker and client.
-func (c *Client) Init(broker MuxBroker, client proto.BrowserClient) {
+func (c *Client) Init(broker proto.MuxBroker, client proto.BrowserClient) {
 	c.broker = broker
 	c.client = client
 	c.servers = make([]*grpc.Server, 0)
@@ -156,20 +149,20 @@ func (c *Client) Close() error {
 type Server struct {
 	Logger *log.Logger
 
-	broker  MuxBroker
+	broker  proto.MuxBroker
 	browser Browser
 	conns   []*grpc.ClientConn
 }
 
 // NewServer allocates storage for a new Server and initializes it.
-func NewServer(broker MuxBroker, browser Browser) *Server {
+func NewServer(broker proto.MuxBroker, browser Browser) *Server {
 	ret := new(Server)
 	ret.Init(broker, browser)
 	return ret
 }
 
 // Init initializes this Server with broker and browser.
-func (s *Server) Init(broker MuxBroker, browser Browser) {
+func (s *Server) Init(broker proto.MuxBroker, browser Browser) {
 	s.broker = broker
 	s.browser = browser
 	s.conns = make([]*grpc.ClientConn, 0)
