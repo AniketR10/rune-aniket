@@ -63,7 +63,7 @@ func newTestManager(grantor Grantor) (*Manager, *testGranteePbClient, *nopBroker
 		return newGranteeClient(broker, mockpb), nil
 	}
 	m.Init(grantor)
-	m.handshakeTimeout = 100 * time.Millisecond
+	m.handshakeTimeout = 300 * time.Millisecond
 	m.healthCheckTicker = 300 * time.Millisecond
 	m.healthRetries = 0
 	m.runRetries = 0
@@ -85,6 +85,10 @@ func assertShutdown(t *testing.T, pbClient *testGranteePbClient, broker *nopBrok
 	<-pbClient.onShutdownChan
 	sht, ok := pbClient.shutdown()
 	assert.True(t, ok)
+
+	// we cannot close broker before we send shutdown request, so this is
+	// the only way to leave time for the granteeClient to close broker
+	time.Sleep(10 * time.Millisecond)
 
 	assert.True(t, broker.closed())
 	return sht.Reason

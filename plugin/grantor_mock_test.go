@@ -12,7 +12,9 @@ type mockResourceServer struct {
 	muxes []proto.MuxBroker
 }
 
-func (s *mockResourceServer) Serve(uid uint32, mux proto.MuxBroker) {
+func (s *mockResourceServer) Serve(
+	pluginID string, uid uint32, mux proto.MuxBroker, rmu *sync.Mutex,
+) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 

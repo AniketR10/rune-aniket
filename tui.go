@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"sync"
 
 	"github.com/ernestrc/go-tui/term"
 )
@@ -73,7 +74,6 @@ func Init() error {
 		return fmt.Errorf("failed term init: %v", err)
 	}
 
-	echan = make(chan term.Event)
 	ichan = make(chan term.Event)
 	attr.Fg, attr.Bg = term.ColorDefault, term.ColorDefault
 
@@ -85,18 +85,24 @@ func SetAttr(newattr term.Attributes) {
 	attr = newattr
 }
 
+type nopLocker struct{}
+
+func (l nopLocker) Lock() {
+}
+func (l nopLocker) Unlock() {
+}
+
 // Run takes the given root handler, renders it full-screen,
 // and starts feeding it with term.Events.
 // Error is non-nil if there were any errors.
 func Run(root Handler) (err error) {
-	return run(root, &term.TermboxWriter{})
+	return RunWithLocker(root, nopLocker{})
 }
 
-// RunMode runs the given root handler with the given termbox InputMode.
-// See Run for more information.
-func RunMode(root Handler, mode term.InputMode) (err error) {
-	term.SetInputMode(mode)
-	return Run(root)
+// RunWithLocker runs the given root handler and uses lock to
+// synchronize access to root.
+func RunWithLocker(root Handler, lock sync.Locker) (err error) {
+	return run(root, lock, &term.TermboxWriter{})
 }
 
 // Size returns the total available width and height in the current terminal.

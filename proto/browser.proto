@@ -38,10 +38,19 @@ message SplitRequest {
 message SplitResponse {
 }
 
-service Browser {
+service FileOpener {
 	rpc OpenFile(OpenFileRequest) returns (OpenFileResponse);
+}
+
+service Messenger {
 	rpc SetMessage(SetMessageRequest) returns (SetMessageResponse);
+}
+
+service KeyMapper {
 	rpc MergeKeyMap(MergeKeyMapRequest) returns (MergeKeyMapResponse);
+}
+
+service WindowManager {
 	rpc SplitVerticalRight(SplitRequest) returns (SplitResponse);
 	rpc SplitVerticalLeft(SplitRequest) returns (SplitResponse);
 	rpc SplitHorizontalAbove(SplitRequest) returns (SplitResponse);

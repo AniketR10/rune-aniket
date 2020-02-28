@@ -1,12 +1,13 @@
 package tui
 
 import (
+	"sync"
+
 	"github.com/ernestrc/go-tui/term"
 	"github.com/nsf/termbox-go"
 )
 
 var (
-	echan chan term.Event
 	ichan chan term.Event
 	attr  term.Attributes
 )
@@ -37,7 +38,7 @@ func redraw(root Handler, termw Writer) (err error) {
 
 }
 
-func run(root Handler, termw Writer) (err error) {
+func run(root Handler, lock sync.Locker, termw Writer) (err error) {
 	width, height := termbox.Size()
 
 	resize(root, width, height)
@@ -56,8 +57,6 @@ func run(root Handler, termw Writer) (err error) {
 		}
 
 		select {
-		case ev := <-echan:
-			hexit, _ = root.Handle(ev)
 		case ev := <-ichan:
 			switch ev.Type {
 			case term.EventInterrupt:
@@ -67,7 +66,9 @@ func run(root Handler, termw Writer) (err error) {
 				width, height := ev.Width, ev.Height
 				resize(root, width, height)
 			default:
+				lock.Lock()
 				hexit, _ = root.Handle(ev)
+				lock.Unlock()
 			}
 		}
 	}

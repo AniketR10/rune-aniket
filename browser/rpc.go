@@ -18,21 +18,27 @@ type Client struct {
 	Logger *log.Logger
 
 	broker  proto.MuxBroker
-	client  proto.BrowserClient
+	wm      proto.WindowManagerClient
+	msg     proto.MessengerClient
+	mp      proto.KeyMapperClient
+	f       proto.FileOpenerClient
 	servers []*grpc.Server
 }
 
 // NewClient allocates storage for a new Client and initializes it.
-func NewClient(broker proto.MuxBroker, client proto.BrowserClient) *Client {
+func NewClient(broker proto.MuxBroker, cc grpc.ClientConnInterface) *Client {
 	ret := new(Client)
-	ret.Init(broker, client)
+	ret.wm = proto.NewWindowManagerClient(cc)
+	ret.msg = proto.NewMessengerClient(cc)
+	ret.mp = proto.NewKeyMapperClient(cc)
+	ret.f = proto.NewFileOpenerClient(cc)
+	ret.Init(broker)
 	return ret
 }
 
 // Init initializes this Client with broker and client.
-func (c *Client) Init(broker proto.MuxBroker, client proto.BrowserClient) {
+func (c *Client) Init(broker proto.MuxBroker) {
 	c.broker = broker
-	c.client = client
 	c.servers = make([]*grpc.Server, 0)
 }
 
@@ -63,7 +69,7 @@ func (c *Client) serveHandler(h tui.Handler) proto.SplitRequest {
 func (c *Client) SplitVerticalRight(h tui.Handler) error {
 	req := c.serveHandler(h)
 	ctx := context.Background()
-	_, err := c.client.SplitVerticalRight(ctx, &req)
+	_, err := c.wm.SplitVerticalRight(ctx, &req)
 	return err
 }
 
@@ -71,7 +77,7 @@ func (c *Client) SplitVerticalRight(h tui.Handler) error {
 func (c *Client) SplitVerticalLeft(h tui.Handler) error {
 	req := c.serveHandler(h)
 	ctx := context.Background()
-	_, err := c.client.SplitVerticalLeft(ctx, &req)
+	_, err := c.wm.SplitVerticalLeft(ctx, &req)
 	return err
 }
 
@@ -79,7 +85,7 @@ func (c *Client) SplitVerticalLeft(h tui.Handler) error {
 func (c *Client) SplitHorizontalAbove(h tui.Handler) error {
 	req := c.serveHandler(h)
 	ctx := context.Background()
-	_, err := c.client.SplitHorizontalAbove(ctx, &req)
+	_, err := c.wm.SplitHorizontalAbove(ctx, &req)
 	return err
 }
 
@@ -87,7 +93,7 @@ func (c *Client) SplitHorizontalAbove(h tui.Handler) error {
 func (c *Client) SplitHorizontalBelow(h tui.Handler) error {
 	req := c.serveHandler(h)
 	ctx := context.Background()
-	_, err := c.client.SplitHorizontalBelow(ctx, &req)
+	_, err := c.wm.SplitHorizontalBelow(ctx, &req)
 	return err
 }
 
@@ -112,7 +118,7 @@ func (c *Client) MergeKeyMap(m map[term.Event]term.Event) error {
 		})
 	}
 
-	_, err := c.client.MergeKeyMap(ctx, &req)
+	_, err := c.mp.MergeKeyMap(ctx, &req)
 	return err
 }
 
@@ -122,7 +128,7 @@ func (c *Client) SetMessage(msg string, args ...interface{}) error {
 	ctx := context.Background()
 	req := proto.SetMessageRequest{Msg: msg}
 
-	_, err := c.client.SetMessage(ctx, &req)
+	_, err := c.msg.SetMessage(ctx, &req)
 	return err
 }
 
@@ -131,7 +137,7 @@ func (c *Client) OpenFile(filename string) error {
 	ctx := context.Background()
 	req := proto.OpenFileRequest{File: filename}
 
-	_, err := c.client.OpenFile(ctx, &req)
+	_, err := c.f.OpenFile(ctx, &req)
 	return err
 }
 
@@ -150,21 +156,29 @@ type Server struct {
 	Logger *log.Logger
 
 	broker  proto.MuxBroker
-	browser Browser
 	conns   []*grpc.ClientConn
+	browser struct {
+		Browser
+		*sync.Mutex
+	}
 }
 
 // NewServer allocates storage for a new Server and initializes it.
-func NewServer(broker proto.MuxBroker, browser Browser) *Server {
+func NewServer(
+	broker proto.MuxBroker, browser Browser, rmu *sync.Mutex,
+) *Server {
 	ret := new(Server)
-	ret.Init(broker, browser)
+	ret.Init(broker, browser, rmu)
 	return ret
 }
 
 // Init initializes this Server with broker and browser.
-func (s *Server) Init(broker proto.MuxBroker, browser Browser) {
+func (s *Server) Init(
+	broker proto.MuxBroker, browser Browser, rmu *sync.Mutex,
+) {
 	s.broker = broker
-	s.browser = browser
+	s.browser.Browser = browser
+	s.browser.Mutex = rmu
 	s.conns = make([]*grpc.ClientConn, 0)
 }
 
@@ -186,6 +200,9 @@ func (s *Server) browserSplitPlugin(req *proto.SplitRequest) (tui.Handler, error
 func (s *Server) SplitVerticalRight(ctx context.Context, req *proto.SplitRequest) (
 	*proto.SplitResponse, error,
 ) {
+	s.browser.Lock()
+	defer s.browser.Unlock()
+
 	handler, err := s.browserSplitPlugin(req)
 	if err != nil {
 		return nil, err
@@ -203,6 +220,9 @@ func (s *Server) SplitVerticalRight(ctx context.Context, req *proto.SplitRequest
 func (s *Server) SplitVerticalLeft(ctx context.Context, req *proto.SplitRequest) (
 	*proto.SplitResponse, error,
 ) {
+	s.browser.Lock()
+	defer s.browser.Unlock()
+
 	handler, err := s.browserSplitPlugin(req)
 	if err != nil {
 		return nil, err
@@ -220,6 +240,9 @@ func (s *Server) SplitVerticalLeft(ctx context.Context, req *proto.SplitRequest)
 func (s *Server) SplitHorizontalAbove(ctx context.Context, req *proto.SplitRequest) (
 	*proto.SplitResponse, error,
 ) {
+	s.browser.Lock()
+	defer s.browser.Unlock()
+
 	handler, err := s.browserSplitPlugin(req)
 	if err != nil {
 		return nil, err
@@ -237,6 +260,9 @@ func (s *Server) SplitHorizontalAbove(ctx context.Context, req *proto.SplitReque
 func (s *Server) SplitHorizontalBelow(ctx context.Context, req *proto.SplitRequest) (
 	*proto.SplitResponse, error,
 ) {
+	s.browser.Lock()
+	defer s.browser.Unlock()
+
 	handler, err := s.browserSplitPlugin(req)
 	if err != nil {
 		return nil, err
@@ -254,6 +280,9 @@ func (s *Server) SplitHorizontalBelow(ctx context.Context, req *proto.SplitReque
 func (s *Server) MergeKeyMap(ctx context.Context, req *proto.MergeKeyMapRequest) (
 	*proto.MergeKeyMapResponse, error,
 ) {
+	s.browser.Lock()
+	defer s.browser.Unlock()
+
 	m := make(map[term.Event]term.Event)
 
 	for _, mapping := range req.Mappings {
@@ -276,6 +305,9 @@ func (s *Server) MergeKeyMap(ctx context.Context, req *proto.MergeKeyMapRequest)
 func (s *Server) SetMessage(ctx context.Context, req *proto.SetMessageRequest) (
 	*proto.SetMessageResponse, error,
 ) {
+	s.browser.Lock()
+	defer s.browser.Unlock()
+
 	s.browser.SetMessage(req.Msg)
 	return new(proto.SetMessageResponse), nil
 }
@@ -284,6 +316,9 @@ func (s *Server) SetMessage(ctx context.Context, req *proto.SetMessageRequest) (
 func (s *Server) OpenFile(ctx context.Context, req *proto.OpenFileRequest) (
 	*proto.OpenFileResponse, error,
 ) {
+	s.browser.Lock()
+	defer s.browser.Unlock()
+
 	err := s.browser.OpenFile(req.File)
 	if err != nil {
 		return nil, err

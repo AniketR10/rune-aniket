@@ -9,7 +9,17 @@ import (
 
 // ResourceServer wraps the basic Serve method, to serve resources over a mux broker.
 type ResourceServer interface {
-	Serve(uint32, proto.MuxBroker)
+	Serve(string, uint32, proto.MuxBroker, *sync.Mutex)
+}
+
+// enables functions matching signature of Serve to
+// satisfy ResourceServer
+type resourceServerFn func(string, uint32, proto.MuxBroker, *sync.Mutex)
+
+func (fn resourceServerFn) Serve(
+	pluginID string, grantID uint32, broker proto.MuxBroker, mu *sync.Mutex,
+) {
+	fn(pluginID, grantID, broker, mu)
 }
 
 // Grantor encapsulates the ability grant or deny access to resources.
@@ -23,6 +33,9 @@ type inmemoryGrantor struct {
 	res    map[Permission]ResourceServer
 }
 
+// NewInmemoryGrantor returns a Grantor that Grants according to the given
+// grants and resources maps. This function panics if there's a Permission in
+// grants that does not have a ResourceServe in res.
 func NewInmemoryGrantor(
 	grants map[string]Permissions,
 	res map[Permission]ResourceServer,
@@ -63,4 +76,18 @@ func (m *inmemoryGrantor) Grant(plugin string, perm Permission) (ResourceServer,
 	}
 
 	return m.res[perm], true
+}
+
+type grantAll struct {
+	caps map[Permission]ResourceServer
+}
+
+func (g *grantAll) Grant(plugin string, perm Permission) (ResourceServer, bool) {
+	srv, ok := g.caps[perm]
+	return srv, ok
+}
+
+// GrantAll returns Grantor that Grants permission to all the given capabilities.
+func GrantAll(capabilities map[Permission]ResourceServer) Grantor {
+	return &grantAll{caps: capabilities}
 }

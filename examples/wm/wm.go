@@ -52,7 +52,9 @@ func main() {
 	wm.SplitVertical(&less[2])
 	wm.SplitVertical(&less[3])
 
-	if err := tui.RunMode(wm, term.InputAlt|term.InputMouse); err != nil {
+	term.SetInputMode(term.InputAlt | term.InputMouse)
+
+	if err := tui.Run(wm); err != nil {
 		log.Fatal(err)
 	}
 }

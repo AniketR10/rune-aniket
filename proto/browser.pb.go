@@ -366,31 +366,33 @@ func init() {
 func init() { proto.RegisterFile("proto/browser.proto", fileDescriptor_2117966f04d6c9a0) }
 
 var fileDescriptor_2117966f04d6c9a0 = []byte{
-	// 387 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xa4, 0x51, 0x5d, 0x4b, 0x2a, 0x41,
-	0x18, 0xc6, 0x8f, 0x73, 0xd4, 0x57, 0x3d, 0xea, 0xe8, 0xa9, 0x6d, 0x29, 0x90, 0x05, 0x41, 0x82,
-	0x0c, 0xec, 0x32, 0xa8, 0x94, 0x8a, 0xa4, 0x96, 0x60, 0x85, 0x6e, 0x63, 0xcd, 0xd7, 0x75, 0x60,
-	0x77, 0x67, 0x9b, 0x99, 0x94, 0xfa, 0xa1, 0xfd, 0x9e, 0x68, 0x76, 0xd6, 0x8f, 0xf4, 0x46, 0xba,
-	0xda, 0xd9, 0xf7, 0xf9, 0x78, 0x9f, 0x79, 0x06, 0xea, 0x11, 0x67, 0x92, 0x9d, 0x8e, 0x38, 0x9b,
-	0x0b, 0xe4, 0x1d, 0xf5, 0x47, 0xfe, 0xa8, 0x8f, 0x59, 0x8d, 0x31, 0x89, 0x3c, 0x88, 0x01, 0xab,
-	0x05, 0x95, 0xc7, 0x08, 0xc3, 0x5b, 0xea, 0xa3, 0x83, 0xaf, 0x6f, 0x28, 0x24, 0x21, 0x90, 0x9d,
-	0x50, 0x1f, 0x8d, 0x54, 0x33, 0xd5, 0x2e, 0x38, 0xea, 0x6c, 0x11, 0xa8, 0x2e, 0x69, 0x22, 0x62,
-	0xa1, 0x40, 0xab, 0x05, 0xb5, 0x21, 0x4a, 0x1b, 0x85, 0x70, 0xbd, 0x85, 0xb8, 0x0a, 0x99, 0x40,
-	0x78, 0x5a, 0xfb, 0x7d, 0xb4, 0x1a, 0x40, 0x56, 0x69, 0x5a, 0x3c, 0x80, 0x9c, 0xed, 0x46, 0x11,
-	0x0d, 0x3d, 0xd2, 0x84, 0xec, 0x84, 0xb3, 0x40, 0x69, 0x8a, 0xdd, 0x52, 0x1c, 0xac, 0x73, 0x33,
-	0xc3, 0x50, 0x3a, 0x0a, 0x21, 0x87, 0x90, 0x96, 0xcc, 0x48, 0x6f, 0xc1, 0xd3, 0x92, 0x59, 0x57,
-	0x40, 0x6c, 0xe4, 0x1e, 0xde, 0xe3, 0xbb, 0xed, 0x46, 0x49, 0x90, 0x63, 0xc8, 0x07, 0xf1, 0x02,
-	0x61, 0xa4, 0x9a, 0x99, 0x76, 0xb1, 0xfb, 0x4f, 0x2b, 0xf5, 0x5e, 0x67, 0x81, 0x5b, 0xff, 0xa1,
-	0xbe, 0xe6, 0xa0, 0x33, 0x9e, 0x40, 0x69, 0x18, 0xf9, 0x54, 0x26, 0x96, 0x47, 0x00, 0x53, 0x37,
-	0x1c, 0xfb, 0xc8, 0x9f, 0xe9, 0x58, 0xc5, 0x2d, 0x3b, 0x05, 0x3d, 0x19, 0x8c, 0xad, 0x0a, 0x94,
-	0x35, 0x3d, 0xd6, 0x77, 0x3f, 0x33, 0x90, 0xeb, 0xc7, 0xcf, 0x40, 0xce, 0x21, 0x9f, 0x14, 0x48,
-	0xf6, 0x74, 0x90, 0x1f, 0xc5, 0x9b, 0xfb, 0x1b, 0xf3, 0xd8, 0x88, 0xf4, 0x00, 0x96, 0x15, 0x12,
-	0x43, 0xd3, 0x36, 0xca, 0x37, 0x0f, 0xb6, 0x20, 0xda, 0xe2, 0x1a, 0x8a, 0x2b, 0x57, 0x24, 0x09,
-	0x73, 0xb3, 0x38, 0xd3, 0xdc, 0x06, 0x69, 0x97, 0x4b, 0x20, 0xea, 0x8a, 0x4f, 0xc8, 0x25, 0x7d,
-	0x71, 0x7d, 0x87, 0x7a, 0x53, 0x49, 0xea, 0xc9, 0xda, 0x95, 0xb2, 0xcc, 0xc6, 0xfa, 0x50, 0x1b,
-	0x5c, 0x40, 0x6d, 0xcd, 0xe0, 0x01, 0x27, 0x3b, 0xe9, 0x7b, 0xd0, 0x50, 0x83, 0x3b, 0xc6, 0xe9,
-	0x07, 0x0b, 0xa5, 0xeb, 0xf7, 0x46, 0x6c, 0x86, 0xbf, 0xb3, 0xe8, 0xa3, 0xcf, 0xe6, 0x3b, 0x58,
-	0x8c, 0xfe, 0xaa, 0xe1, 0xd9, 0x57, 0x00, 0x00, 0x00, 0xff, 0xff, 0xce, 0x91, 0x0c, 0x1b, 0x6b,
+	// 419 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xa4, 0x51, 0x5d, 0x8b, 0xd3, 0x40,
+	0x14, 0xa5, 0xd9, 0x55, 0x37, 0xb7, 0x5b, 0xb7, 0x7b, 0x5b, 0x35, 0x06, 0x85, 0x12, 0x58, 0x58,
+	0x04, 0x57, 0xa8, 0x8f, 0x82, 0x5a, 0x51, 0xb1, 0x68, 0x14, 0xb3, 0xa0, 0x8f, 0x32, 0x35, 0xb7,
+	0xd9, 0x81, 0x64, 0x66, 0x9c, 0x19, 0xb7, 0xe8, 0x0f, 0xf1, 0xf7, 0x4a, 0x26, 0x93, 0x7e, 0xd8,
+	0xbe, 0x14, 0x9f, 0x32, 0x39, 0xe7, 0x9e, 0x33, 0xe7, 0x9e, 0x81, 0x81, 0xd2, 0xd2, 0xca, 0x27,
+	0x33, 0x2d, 0x17, 0x86, 0xf4, 0x85, 0xfb, 0xc3, 0x1b, 0xee, 0x13, 0xf7, 0x1b, 0xce, 0x92, 0xae,
+	0x1a, 0x22, 0x39, 0x83, 0x93, 0x4f, 0x8a, 0xc4, 0x5b, 0x5e, 0x52, 0x46, 0x3f, 0x7e, 0x92, 0xb1,
+	0x88, 0x70, 0x38, 0xe7, 0x25, 0x45, 0x9d, 0x51, 0xe7, 0x3c, 0xcc, 0xdc, 0x39, 0x41, 0xe8, 0xaf,
+	0xc6, 0x8c, 0x92, 0xc2, 0x50, 0x72, 0x06, 0xa7, 0x97, 0x64, 0x53, 0x32, 0x86, 0x15, 0x4b, 0x71,
+	0x1f, 0x0e, 0x2a, 0x53, 0x78, 0x6d, 0x7d, 0x4c, 0x86, 0x80, 0xeb, 0x63, 0x5e, 0x3c, 0x85, 0x5b,
+	0x29, 0x53, 0x8a, 0x8b, 0x02, 0x47, 0x70, 0x38, 0xd7, 0xb2, 0x72, 0x9a, 0xee, 0xf8, 0xb8, 0x09,
+	0x76, 0xf1, 0xe6, 0x9a, 0x84, 0xcd, 0x1c, 0x83, 0x0f, 0x20, 0xb0, 0x32, 0x0a, 0x76, 0xf0, 0x81,
+	0x95, 0xc9, 0x4b, 0xc0, 0x94, 0x74, 0x41, 0xef, 0xe9, 0x57, 0xca, 0x54, 0x1b, 0xe4, 0x11, 0x1c,
+	0x55, 0xcd, 0x05, 0x26, 0xea, 0x8c, 0x0e, 0xce, 0xbb, 0xe3, 0xdb, 0x5e, 0xe9, 0xef, 0xcd, 0x96,
+	0x7c, 0x72, 0x07, 0x06, 0x1b, 0x0e, 0x3e, 0xe3, 0x63, 0x38, 0xbe, 0x54, 0x25, 0xb7, 0xad, 0xe5,
+	0x43, 0x80, 0x2b, 0x26, 0xf2, 0x92, 0xf4, 0x37, 0x9e, 0xbb, 0xb8, 0xbd, 0x2c, 0xf4, 0xc8, 0x34,
+	0x4f, 0x4e, 0xa0, 0xe7, 0xc7, 0x1b, 0xfd, 0x78, 0x0a, 0x50, 0x17, 0x56, 0x17, 0x47, 0x1a, 0x9f,
+	0xc1, 0x51, 0x5b, 0x21, 0xde, 0xf5, 0x51, 0xfe, 0xa9, 0x3e, 0xbe, 0xb7, 0x85, 0x7b, 0xab, 0x8f,
+	0x10, 0xd6, 0x0d, 0x92, 0x28, 0x48, 0xe3, 0x04, 0x60, 0xd5, 0x28, 0x46, 0x5e, 0xb3, 0xf5, 0x16,
+	0xf1, 0xfd, 0x1d, 0x8c, 0xf7, 0xfb, 0x0c, 0x61, 0xb3, 0xac, 0x22, 0x8d, 0xaf, 0xa1, 0xbb, 0xb6,
+	0x3e, 0xb6, 0xb2, 0xed, 0x52, 0xe3, 0x78, 0x17, 0xe5, 0x2d, 0xff, 0x04, 0xd0, 0xfb, 0xca, 0x45,
+	0x2e, 0x17, 0x29, 0x13, 0xac, 0xce, 0xf9, 0x02, 0xd0, 0x15, 0xf2, 0x85, 0xb4, 0xe5, 0xdf, 0x59,
+	0x99, 0xf1, 0xe2, 0xca, 0xe2, 0xa0, 0x4d, 0xb5, 0x56, 0x6d, 0x3c, 0xdc, 0x04, 0x1b, 0x4b, 0x7c,
+	0x0e, 0xa7, 0x1b, 0x06, 0x1f, 0x68, 0xbe, 0x97, 0x7e, 0x02, 0x43, 0x07, 0xbc, 0x93, 0x9a, 0xff,
+	0x96, 0xc2, 0xb2, 0x72, 0x32, 0x93, 0xd7, 0xf4, 0x7f, 0x16, 0xaf, 0xa8, 0x94, 0x8b, 0x3d, 0x2c,
+	0x66, 0x37, 0x1d, 0xf8, 0xf4, 0x6f, 0x00, 0x00, 0x00, 0xff, 0xff, 0x7e, 0xe2, 0x94, 0xa6, 0x99,
 	0x03, 0x00, 0x00,
 }
 
@@ -402,288 +404,396 @@ var _ grpc.ClientConnInterface
 // is compatible with the grpc package it is being compiled against.
 const _ = grpc.SupportPackageIsVersion6
 
-// BrowserClient is the client API for Browser service.
+// FileOpenerClient is the client API for FileOpener service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://godoc.org/google.golang.org/grpc#ClientConn.NewStream.
-type BrowserClient interface {
+type FileOpenerClient interface {
 	OpenFile(ctx context.Context, in *OpenFileRequest, opts ...grpc.CallOption) (*OpenFileResponse, error)
+}
+
+type fileOpenerClient struct {
+	cc grpc.ClientConnInterface
+}
+
+func NewFileOpenerClient(cc grpc.ClientConnInterface) FileOpenerClient {
+	return &fileOpenerClient{cc}
+}
+
+func (c *fileOpenerClient) OpenFile(ctx context.Context, in *OpenFileRequest, opts ...grpc.CallOption) (*OpenFileResponse, error) {
+	out := new(OpenFileResponse)
+	err := c.cc.Invoke(ctx, "/proto.FileOpener/OpenFile", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// FileOpenerServer is the server API for FileOpener service.
+type FileOpenerServer interface {
+	OpenFile(context.Context, *OpenFileRequest) (*OpenFileResponse, error)
+}
+
+// UnimplementedFileOpenerServer can be embedded to have forward compatible implementations.
+type UnimplementedFileOpenerServer struct {
+}
+
+func (*UnimplementedFileOpenerServer) OpenFile(ctx context.Context, req *OpenFileRequest) (*OpenFileResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method OpenFile not implemented")
+}
+
+func RegisterFileOpenerServer(s *grpc.Server, srv FileOpenerServer) {
+	s.RegisterService(&_FileOpener_serviceDesc, srv)
+}
+
+func _FileOpener_OpenFile_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(OpenFileRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(FileOpenerServer).OpenFile(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/proto.FileOpener/OpenFile",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(FileOpenerServer).OpenFile(ctx, req.(*OpenFileRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+var _FileOpener_serviceDesc = grpc.ServiceDesc{
+	ServiceName: "proto.FileOpener",
+	HandlerType: (*FileOpenerServer)(nil),
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "OpenFile",
+			Handler:    _FileOpener_OpenFile_Handler,
+		},
+	},
+	Streams:  []grpc.StreamDesc{},
+	Metadata: "proto/browser.proto",
+}
+
+// MessengerClient is the client API for Messenger service.
+//
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://godoc.org/google.golang.org/grpc#ClientConn.NewStream.
+type MessengerClient interface {
 	SetMessage(ctx context.Context, in *SetMessageRequest, opts ...grpc.CallOption) (*SetMessageResponse, error)
+}
+
+type messengerClient struct {
+	cc grpc.ClientConnInterface
+}
+
+func NewMessengerClient(cc grpc.ClientConnInterface) MessengerClient {
+	return &messengerClient{cc}
+}
+
+func (c *messengerClient) SetMessage(ctx context.Context, in *SetMessageRequest, opts ...grpc.CallOption) (*SetMessageResponse, error) {
+	out := new(SetMessageResponse)
+	err := c.cc.Invoke(ctx, "/proto.Messenger/SetMessage", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// MessengerServer is the server API for Messenger service.
+type MessengerServer interface {
+	SetMessage(context.Context, *SetMessageRequest) (*SetMessageResponse, error)
+}
+
+// UnimplementedMessengerServer can be embedded to have forward compatible implementations.
+type UnimplementedMessengerServer struct {
+}
+
+func (*UnimplementedMessengerServer) SetMessage(ctx context.Context, req *SetMessageRequest) (*SetMessageResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SetMessage not implemented")
+}
+
+func RegisterMessengerServer(s *grpc.Server, srv MessengerServer) {
+	s.RegisterService(&_Messenger_serviceDesc, srv)
+}
+
+func _Messenger_SetMessage_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SetMessageRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MessengerServer).SetMessage(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/proto.Messenger/SetMessage",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MessengerServer).SetMessage(ctx, req.(*SetMessageRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+var _Messenger_serviceDesc = grpc.ServiceDesc{
+	ServiceName: "proto.Messenger",
+	HandlerType: (*MessengerServer)(nil),
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "SetMessage",
+			Handler:    _Messenger_SetMessage_Handler,
+		},
+	},
+	Streams:  []grpc.StreamDesc{},
+	Metadata: "proto/browser.proto",
+}
+
+// KeyMapperClient is the client API for KeyMapper service.
+//
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://godoc.org/google.golang.org/grpc#ClientConn.NewStream.
+type KeyMapperClient interface {
 	MergeKeyMap(ctx context.Context, in *MergeKeyMapRequest, opts ...grpc.CallOption) (*MergeKeyMapResponse, error)
+}
+
+type keyMapperClient struct {
+	cc grpc.ClientConnInterface
+}
+
+func NewKeyMapperClient(cc grpc.ClientConnInterface) KeyMapperClient {
+	return &keyMapperClient{cc}
+}
+
+func (c *keyMapperClient) MergeKeyMap(ctx context.Context, in *MergeKeyMapRequest, opts ...grpc.CallOption) (*MergeKeyMapResponse, error) {
+	out := new(MergeKeyMapResponse)
+	err := c.cc.Invoke(ctx, "/proto.KeyMapper/MergeKeyMap", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// KeyMapperServer is the server API for KeyMapper service.
+type KeyMapperServer interface {
+	MergeKeyMap(context.Context, *MergeKeyMapRequest) (*MergeKeyMapResponse, error)
+}
+
+// UnimplementedKeyMapperServer can be embedded to have forward compatible implementations.
+type UnimplementedKeyMapperServer struct {
+}
+
+func (*UnimplementedKeyMapperServer) MergeKeyMap(ctx context.Context, req *MergeKeyMapRequest) (*MergeKeyMapResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method MergeKeyMap not implemented")
+}
+
+func RegisterKeyMapperServer(s *grpc.Server, srv KeyMapperServer) {
+	s.RegisterService(&_KeyMapper_serviceDesc, srv)
+}
+
+func _KeyMapper_MergeKeyMap_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(MergeKeyMapRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(KeyMapperServer).MergeKeyMap(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/proto.KeyMapper/MergeKeyMap",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(KeyMapperServer).MergeKeyMap(ctx, req.(*MergeKeyMapRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+var _KeyMapper_serviceDesc = grpc.ServiceDesc{
+	ServiceName: "proto.KeyMapper",
+	HandlerType: (*KeyMapperServer)(nil),
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "MergeKeyMap",
+			Handler:    _KeyMapper_MergeKeyMap_Handler,
+		},
+	},
+	Streams:  []grpc.StreamDesc{},
+	Metadata: "proto/browser.proto",
+}
+
+// WindowManagerClient is the client API for WindowManager service.
+//
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://godoc.org/google.golang.org/grpc#ClientConn.NewStream.
+type WindowManagerClient interface {
 	SplitVerticalRight(ctx context.Context, in *SplitRequest, opts ...grpc.CallOption) (*SplitResponse, error)
 	SplitVerticalLeft(ctx context.Context, in *SplitRequest, opts ...grpc.CallOption) (*SplitResponse, error)
 	SplitHorizontalAbove(ctx context.Context, in *SplitRequest, opts ...grpc.CallOption) (*SplitResponse, error)
 	SplitHorizontalBelow(ctx context.Context, in *SplitRequest, opts ...grpc.CallOption) (*SplitResponse, error)
 }
 
-type browserClient struct {
+type windowManagerClient struct {
 	cc grpc.ClientConnInterface
 }
 
-func NewBrowserClient(cc grpc.ClientConnInterface) BrowserClient {
-	return &browserClient{cc}
+func NewWindowManagerClient(cc grpc.ClientConnInterface) WindowManagerClient {
+	return &windowManagerClient{cc}
 }
 
-func (c *browserClient) OpenFile(ctx context.Context, in *OpenFileRequest, opts ...grpc.CallOption) (*OpenFileResponse, error) {
-	out := new(OpenFileResponse)
-	err := c.cc.Invoke(ctx, "/proto.Browser/OpenFile", in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *browserClient) SetMessage(ctx context.Context, in *SetMessageRequest, opts ...grpc.CallOption) (*SetMessageResponse, error) {
-	out := new(SetMessageResponse)
-	err := c.cc.Invoke(ctx, "/proto.Browser/SetMessage", in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *browserClient) MergeKeyMap(ctx context.Context, in *MergeKeyMapRequest, opts ...grpc.CallOption) (*MergeKeyMapResponse, error) {
-	out := new(MergeKeyMapResponse)
-	err := c.cc.Invoke(ctx, "/proto.Browser/MergeKeyMap", in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *browserClient) SplitVerticalRight(ctx context.Context, in *SplitRequest, opts ...grpc.CallOption) (*SplitResponse, error) {
+func (c *windowManagerClient) SplitVerticalRight(ctx context.Context, in *SplitRequest, opts ...grpc.CallOption) (*SplitResponse, error) {
 	out := new(SplitResponse)
-	err := c.cc.Invoke(ctx, "/proto.Browser/SplitVerticalRight", in, out, opts...)
+	err := c.cc.Invoke(ctx, "/proto.WindowManager/SplitVerticalRight", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *browserClient) SplitVerticalLeft(ctx context.Context, in *SplitRequest, opts ...grpc.CallOption) (*SplitResponse, error) {
+func (c *windowManagerClient) SplitVerticalLeft(ctx context.Context, in *SplitRequest, opts ...grpc.CallOption) (*SplitResponse, error) {
 	out := new(SplitResponse)
-	err := c.cc.Invoke(ctx, "/proto.Browser/SplitVerticalLeft", in, out, opts...)
+	err := c.cc.Invoke(ctx, "/proto.WindowManager/SplitVerticalLeft", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *browserClient) SplitHorizontalAbove(ctx context.Context, in *SplitRequest, opts ...grpc.CallOption) (*SplitResponse, error) {
+func (c *windowManagerClient) SplitHorizontalAbove(ctx context.Context, in *SplitRequest, opts ...grpc.CallOption) (*SplitResponse, error) {
 	out := new(SplitResponse)
-	err := c.cc.Invoke(ctx, "/proto.Browser/SplitHorizontalAbove", in, out, opts...)
+	err := c.cc.Invoke(ctx, "/proto.WindowManager/SplitHorizontalAbove", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *browserClient) SplitHorizontalBelow(ctx context.Context, in *SplitRequest, opts ...grpc.CallOption) (*SplitResponse, error) {
+func (c *windowManagerClient) SplitHorizontalBelow(ctx context.Context, in *SplitRequest, opts ...grpc.CallOption) (*SplitResponse, error) {
 	out := new(SplitResponse)
-	err := c.cc.Invoke(ctx, "/proto.Browser/SplitHorizontalBelow", in, out, opts...)
+	err := c.cc.Invoke(ctx, "/proto.WindowManager/SplitHorizontalBelow", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-// BrowserServer is the server API for Browser service.
-type BrowserServer interface {
-	OpenFile(context.Context, *OpenFileRequest) (*OpenFileResponse, error)
-	SetMessage(context.Context, *SetMessageRequest) (*SetMessageResponse, error)
-	MergeKeyMap(context.Context, *MergeKeyMapRequest) (*MergeKeyMapResponse, error)
+// WindowManagerServer is the server API for WindowManager service.
+type WindowManagerServer interface {
 	SplitVerticalRight(context.Context, *SplitRequest) (*SplitResponse, error)
 	SplitVerticalLeft(context.Context, *SplitRequest) (*SplitResponse, error)
 	SplitHorizontalAbove(context.Context, *SplitRequest) (*SplitResponse, error)
 	SplitHorizontalBelow(context.Context, *SplitRequest) (*SplitResponse, error)
 }
 
-// UnimplementedBrowserServer can be embedded to have forward compatible implementations.
-type UnimplementedBrowserServer struct {
+// UnimplementedWindowManagerServer can be embedded to have forward compatible implementations.
+type UnimplementedWindowManagerServer struct {
 }
 
-func (*UnimplementedBrowserServer) OpenFile(ctx context.Context, req *OpenFileRequest) (*OpenFileResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method OpenFile not implemented")
-}
-func (*UnimplementedBrowserServer) SetMessage(ctx context.Context, req *SetMessageRequest) (*SetMessageResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method SetMessage not implemented")
-}
-func (*UnimplementedBrowserServer) MergeKeyMap(ctx context.Context, req *MergeKeyMapRequest) (*MergeKeyMapResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method MergeKeyMap not implemented")
-}
-func (*UnimplementedBrowserServer) SplitVerticalRight(ctx context.Context, req *SplitRequest) (*SplitResponse, error) {
+func (*UnimplementedWindowManagerServer) SplitVerticalRight(ctx context.Context, req *SplitRequest) (*SplitResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SplitVerticalRight not implemented")
 }
-func (*UnimplementedBrowserServer) SplitVerticalLeft(ctx context.Context, req *SplitRequest) (*SplitResponse, error) {
+func (*UnimplementedWindowManagerServer) SplitVerticalLeft(ctx context.Context, req *SplitRequest) (*SplitResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SplitVerticalLeft not implemented")
 }
-func (*UnimplementedBrowserServer) SplitHorizontalAbove(ctx context.Context, req *SplitRequest) (*SplitResponse, error) {
+func (*UnimplementedWindowManagerServer) SplitHorizontalAbove(ctx context.Context, req *SplitRequest) (*SplitResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SplitHorizontalAbove not implemented")
 }
-func (*UnimplementedBrowserServer) SplitHorizontalBelow(ctx context.Context, req *SplitRequest) (*SplitResponse, error) {
+func (*UnimplementedWindowManagerServer) SplitHorizontalBelow(ctx context.Context, req *SplitRequest) (*SplitResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SplitHorizontalBelow not implemented")
 }
 
-func RegisterBrowserServer(s *grpc.Server, srv BrowserServer) {
-	s.RegisterService(&_Browser_serviceDesc, srv)
+func RegisterWindowManagerServer(s *grpc.Server, srv WindowManagerServer) {
+	s.RegisterService(&_WindowManager_serviceDesc, srv)
 }
 
-func _Browser_OpenFile_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(OpenFileRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(BrowserServer).OpenFile(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/proto.Browser/OpenFile",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(BrowserServer).OpenFile(ctx, req.(*OpenFileRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _Browser_SetMessage_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(SetMessageRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(BrowserServer).SetMessage(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/proto.Browser/SetMessage",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(BrowserServer).SetMessage(ctx, req.(*SetMessageRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _Browser_MergeKeyMap_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(MergeKeyMapRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(BrowserServer).MergeKeyMap(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/proto.Browser/MergeKeyMap",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(BrowserServer).MergeKeyMap(ctx, req.(*MergeKeyMapRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _Browser_SplitVerticalRight_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _WindowManager_SplitVerticalRight_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(SplitRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(BrowserServer).SplitVerticalRight(ctx, in)
+		return srv.(WindowManagerServer).SplitVerticalRight(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/proto.Browser/SplitVerticalRight",
+		FullMethod: "/proto.WindowManager/SplitVerticalRight",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(BrowserServer).SplitVerticalRight(ctx, req.(*SplitRequest))
+		return srv.(WindowManagerServer).SplitVerticalRight(ctx, req.(*SplitRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Browser_SplitVerticalLeft_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _WindowManager_SplitVerticalLeft_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(SplitRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(BrowserServer).SplitVerticalLeft(ctx, in)
+		return srv.(WindowManagerServer).SplitVerticalLeft(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/proto.Browser/SplitVerticalLeft",
+		FullMethod: "/proto.WindowManager/SplitVerticalLeft",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(BrowserServer).SplitVerticalLeft(ctx, req.(*SplitRequest))
+		return srv.(WindowManagerServer).SplitVerticalLeft(ctx, req.(*SplitRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Browser_SplitHorizontalAbove_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _WindowManager_SplitHorizontalAbove_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(SplitRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(BrowserServer).SplitHorizontalAbove(ctx, in)
+		return srv.(WindowManagerServer).SplitHorizontalAbove(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/proto.Browser/SplitHorizontalAbove",
+		FullMethod: "/proto.WindowManager/SplitHorizontalAbove",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(BrowserServer).SplitHorizontalAbove(ctx, req.(*SplitRequest))
+		return srv.(WindowManagerServer).SplitHorizontalAbove(ctx, req.(*SplitRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Browser_SplitHorizontalBelow_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _WindowManager_SplitHorizontalBelow_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(SplitRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(BrowserServer).SplitHorizontalBelow(ctx, in)
+		return srv.(WindowManagerServer).SplitHorizontalBelow(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/proto.Browser/SplitHorizontalBelow",
+		FullMethod: "/proto.WindowManager/SplitHorizontalBelow",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(BrowserServer).SplitHorizontalBelow(ctx, req.(*SplitRequest))
+		return srv.(WindowManagerServer).SplitHorizontalBelow(ctx, req.(*SplitRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-var _Browser_serviceDesc = grpc.ServiceDesc{
-	ServiceName: "proto.Browser",
-	HandlerType: (*BrowserServer)(nil),
+var _WindowManager_serviceDesc = grpc.ServiceDesc{
+	ServiceName: "proto.WindowManager",
+	HandlerType: (*WindowManagerServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
-			MethodName: "OpenFile",
-			Handler:    _Browser_OpenFile_Handler,
-		},
-		{
-			MethodName: "SetMessage",
-			Handler:    _Browser_SetMessage_Handler,
-		},
-		{
-			MethodName: "MergeKeyMap",
-			Handler:    _Browser_MergeKeyMap_Handler,
-		},
-		{
 			MethodName: "SplitVerticalRight",
-			Handler:    _Browser_SplitVerticalRight_Handler,
+			Handler:    _WindowManager_SplitVerticalRight_Handler,
 		},
 		{
 			MethodName: "SplitVerticalLeft",
-			Handler:    _Browser_SplitVerticalLeft_Handler,
+			Handler:    _WindowManager_SplitVerticalLeft_Handler,
 		},
 		{
 			MethodName: "SplitHorizontalAbove",
-			Handler:    _Browser_SplitHorizontalAbove_Handler,
+			Handler:    _WindowManager_SplitHorizontalAbove_Handler,
 		},
 		{
 			MethodName: "SplitHorizontalBelow",
-			Handler:    _Browser_SplitHorizontalBelow_Handler,
+			Handler:    _WindowManager_SplitHorizontalBelow_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

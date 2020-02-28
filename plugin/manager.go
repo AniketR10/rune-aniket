@@ -42,6 +42,10 @@ type Manager struct {
 	grantor Grantor
 	clients map[string]granteeClientWrap
 
+	// resource mutex used to synchronize term event loop with
+	// access to resources by plugins.
+	rmu *sync.Mutex
+
 	// used to abstract out go-plugin specific functionality
 	builder           func(pluginID, path string, grantor Grantor) (*granteeClient, error)
 	handshakeTimeout  time.Duration
@@ -66,6 +70,7 @@ func (m *Manager) Init(grantor Grantor) {
 	m.healthCheckTicker = defaultHealthCheckTicker
 	m.healthRetries = defaultHealthRetries
 	m.runRetries = defaultRunRetries
+	m.rmu = new(sync.Mutex)
 }
 
 func (m *Manager) log(msg string, args ...interface{}) {
@@ -136,7 +141,7 @@ func (m *Manager) doGrant(
 		// such that one plugin => one grpc server for all the resources
 		// requested. Right now, each call to serve, spins a new listener
 		// and a new GRPC server.
-		go srv.Serve(grantID, broker)
+		go srv.Serve(pluginID, grantID, broker, m.rmu)
 
 		grant := &proto.PermissionGrant{
 			Id:      p.Id,
@@ -361,4 +366,17 @@ func (m *Manager) Close() error {
 
 	m.clients = make(map[string]granteeClientWrap)
 	return nil
+}
+
+// Lock locks access to resources that have been shared
+// with the manager. This MUST be called before processing any
+// events from the terminal event loop.
+func (m *Manager) Lock() {
+	m.mu.Lock()
+}
+
+// Unlock unlocks access to resources that have been
+// shared with the manager.
+func (m *Manager) Unlock() {
+	m.mu.Unlock()
 }

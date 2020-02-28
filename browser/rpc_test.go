@@ -100,8 +100,11 @@ func TestRPCBrowserDraw(t *testing.T) {
 		broker := newDialBroker()
 
 		grpcServer := grpc.NewServer()
-		server := NewServer(broker, b)
-		proto.RegisterBrowserServer(grpcServer, server)
+		server := NewServer(broker, b, new(sync.Mutex))
+		proto.RegisterWindowManagerServer(grpcServer, server)
+		proto.RegisterMessengerServer(grpcServer, server)
+		proto.RegisterKeyMapperServer(grpcServer, server)
+		proto.RegisterFileOpenerServer(grpcServer, server)
 
 		go grpcServer.Serve(lis)
 
@@ -109,7 +112,7 @@ func TestRPCBrowserDraw(t *testing.T) {
 		require.NoError(t, err)
 
 		client := testClient{
-			Client:  NewClient(broker, proto.NewBrowserClient(conn)),
+			Client:  NewClient(broker, conn),
 			Handler: b,
 		}
 		closeFn = func() {

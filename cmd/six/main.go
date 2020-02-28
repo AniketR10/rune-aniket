@@ -94,8 +94,9 @@ func main() {
 	defer tui.Close()
 
 	term.SetOutputMode(term.Output256)
+	term.SetInputMode(term.InputMouse)
 
-	if err := tui.RunMode(browser, term.InputMouse); err != nil {
+	if err := tui.Run(browser); err != nil {
 		log.Fatal(err)
 	}
 }
