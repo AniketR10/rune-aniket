@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"net"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/ernestrc/go-tui/proto"
 	"github.com/stretchr/testify/assert"
@@ -13,31 +15,71 @@ import (
 )
 
 type testGranteePbClient struct {
+	mu                 sync.Mutex
 	err                error
 	fixturePermissions []*proto.Permission
+	sleepPermissions   time.Duration
+	healthChan         chan struct{}
+	onShutdownChan     chan struct{}
 
-	permissions *proto.PermRequest
-	onGrant     *proto.OnPermGrantRequest
-	shutdown    *proto.ShutdownRequest
-	health      *proto.HealthRequest
+	_permissions *proto.PermRequest
+	_onGrant     *proto.OnPermGrantRequest
+	_shutdown    *proto.ShutdownRequest
+	_health      *proto.HealthRequest
+}
+
+func (c *testGranteePbClient) permissions() (proto.PermRequest, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c._permissions == nil {
+		return proto.PermRequest{}, false
+	}
+	return *c._permissions, true
+}
+func (c *testGranteePbClient) onGrant() (proto.OnPermGrantRequest, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c._onGrant == nil {
+		return proto.OnPermGrantRequest{}, false
+	}
+	return *c._onGrant, true
+}
+func (c *testGranteePbClient) shutdown() (proto.ShutdownRequest, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c._shutdown == nil {
+		return proto.ShutdownRequest{}, false
+
+	}
+	return *c._shutdown, true
+}
+func (c *testGranteePbClient) health() (proto.HealthRequest, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c._health == nil {
+		return proto.HealthRequest{}, false
+
+	}
+	return *c._health, true
 }
 
 func (c *testGranteePbClient) Permissions(
 	ctx context.Context, in *proto.PermRequest, opts ...grpc.CallOption,
 ) (*proto.PermResponse, error) {
-	c.permissions = in
+	c._permissions = in
 	permissions := new(proto.PermResponse)
 	if c.err != nil {
 		return nil, c.err
 	}
 	permissions.Perms = c.fixturePermissions
+	time.Sleep(c.sleepPermissions)
 	return permissions, nil
 }
 
 func (c *testGranteePbClient) OnGrant(
 	ctx context.Context, in *proto.OnPermGrantRequest, opts ...grpc.CallOption,
 ) (*proto.OnPermGrantResponse, error) {
-	c.onGrant = in
+	c._onGrant = in
 	if c.err != nil {
 		return nil, c.err
 	}
@@ -47,7 +89,11 @@ func (c *testGranteePbClient) OnGrant(
 func (c *testGranteePbClient) Shutdown(
 	ctx context.Context, in *proto.ShutdownRequest, opts ...grpc.CallOption,
 ) (*proto.ShutdownResponse, error) {
-	c.shutdown = in
+	c._shutdown = in
+	if c.onShutdownChan != nil {
+		c.onShutdownChan <- struct{}{}
+		c.onShutdownChan = nil
+	}
 	if c.err != nil {
 		return nil, c.err
 	}
@@ -57,9 +103,16 @@ func (c *testGranteePbClient) Shutdown(
 func (c *testGranteePbClient) Health(
 	ctx context.Context, in *proto.HealthRequest, opts ...grpc.CallOption,
 ) (*proto.HealthResponse, error) {
-	c.health = in
 	if c.err != nil {
 		return nil, c.err
+	}
+	if c.healthChan != nil {
+		// wait for test harness signal to respond
+		_, ok := <-c.healthChan
+		// if not closed, then hold
+		if ok {
+			c._health = in
+		}
 	}
 	return new(proto.HealthResponse), nil
 }
@@ -96,8 +149,10 @@ func TestUnitClient(t *testing.T) {
 		err := client.sendGrants(context.Background(), denied, granted)
 		require.NoError(t, err)
 
-		assert.Equal(t, mockpbClient.onGrant.GetDenied(), denied)
-		assert.Equal(t, mockpbClient.onGrant.GetGranted(), granted)
+		onGrant, ok := mockpbClient.onGrant()
+		require.True(t, ok)
+		assert.Equal(t, onGrant.GetDenied(), denied)
+		assert.Equal(t, onGrant.GetGranted(), granted)
 	})
 
 	t.Run("sendGrants bubbles up error", func(t *testing.T) {
@@ -131,7 +186,7 @@ func TestUnitClient(t *testing.T) {
 		mockpbClient := &testGranteePbClient{}
 		client := newGranteeClient(nil, mockpbClient)
 
-		err := client.Close()
+		err := client.shutdown("")
 		require.NoError(t, err)
 		require.NotNil(t, mockpbClient.shutdown)
 	})
@@ -141,7 +196,7 @@ func TestUnitClient(t *testing.T) {
 		mockpbClient := &testGranteePbClient{err: myErr}
 		client := newGranteeClient(nil, mockpbClient)
 
-		err := client.Close()
+		err := client.shutdown("")
 		require.Equal(t, myErr, err)
 	})
 }
@@ -197,7 +252,7 @@ func setupIntTest(
 
 	client = newGranteeClient(nil, proto.NewGranteeClient(conn))
 	closeFn = func() {
-		client.Close()
+		client.shutdown("test harness")
 		grpcServer.Stop()
 	}
 	return
@@ -298,7 +353,7 @@ func TestIntegrationPluginClientServer(t *testing.T) {
 		client, closeFn := setupIntTest(t, &grantee, perms)
 		defer closeFn()
 
-		err := client.Close()
+		err := client.shutdown("sut")
 		require.NoError(t, err)
 
 		assert.True(t, grantee.onShutdown)
@@ -311,7 +366,7 @@ func TestIntegrationPluginClientServer(t *testing.T) {
 		client, closeFn := setupIntTest(t, &grantee, perms)
 		defer closeFn()
 
-		err := client.Close()
+		err := client.shutdown("sut")
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "oh bollocks")
 	})

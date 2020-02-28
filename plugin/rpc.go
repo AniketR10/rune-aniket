@@ -2,13 +2,10 @@ package plugin
 
 import (
 	"context"
-	"time"
 
 	"github.com/ernestrc/go-tui/proto"
 	"github.com/hashicorp/go-plugin"
 )
-
-var healthCheckTicker = 30 * time.Second
 
 type granteeServer struct {
 	req       []Permission
@@ -148,17 +145,22 @@ func (c *granteeClient) bindPluginClient(pc *plugin.Client) {
 	c.pClient = pc
 }
 
-func (c *granteeClient) Close() error {
+func (c *granteeClient) shutdown(reason string) error {
 	if c.pClient != nil {
 		defer func() {
 			c.pClient.Kill()
 			c.pClient = nil
 		}()
 	}
-
 	ctx := context.Background()
-	req := proto.ShutdownRequest{}
-
+	req := proto.ShutdownRequest{Reason: reason}
 	_, err := c.client.Shutdown(ctx, &req)
+
+	if broker := c.broker(); broker != nil {
+		brokerErr := broker.Close()
+		if brokerErr != nil {
+			return brokerErr
+		}
+	}
 	return err
 }

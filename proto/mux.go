@@ -7,4 +7,5 @@ type MuxBroker interface {
 	NextId() uint32
 	AcceptAndServe(ID uint32, srv func(opts []grpc.ServerOption) *grpc.Server)
 	Dial(ID uint32) (conn *grpc.ClientConn, err error)
+	Close() error
 }

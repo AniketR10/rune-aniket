@@ -67,7 +67,7 @@ func (t *dialBroker) Dial(ID uint32) (conn *grpc.ClientConn, err error) {
 	return grpc.Dial(br.Listener.Addr().String(), grpc.WithInsecure())
 }
 
-func (t *dialBroker) Close() {
+func (t *dialBroker) Close() error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
@@ -75,6 +75,7 @@ func (t *dialBroker) Close() {
 		br.Server.Stop()
 	}
 	t.conns = nil
+	return nil
 }
 
 // binds together a client with the remote browser, so we can verify
