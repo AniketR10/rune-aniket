@@ -17,7 +17,7 @@ import (
 var debugLog = flag.String("d", "", "debug log file")
 var swapDir = flag.String("s", "", "swap files directory")
 var recoveryFile = flag.String("r", "", "recover from recovery file")
-var clipboardPlugin = flag.String("x", "", "clipboard plugin")
+var granteePlugin = flag.String("x", "", "plugin")
 var tabspaces = flag.Int("t", 4, "tabspaces")
 
 func init() {
@@ -70,21 +70,23 @@ func main() {
 		plugin.SetLoggingLevel(log.TraceLevel)
 	}
 
-	if *clipboardPlugin != "" {
-		clip, closeClip, err := plugin.NewClipboard(*clipboardPlugin)
-		if err != nil {
-			log.Fatal(err)
-		}
-		defer closeClip()
-		viOpts = append(viOpts, vi.WithClipboard(clip))
-	}
-
 	vi := vi.Editor(viOpts...)
 	browser, err := browser.New(vi, opts...)
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer browser.Close()
+
+	res := plugin.BrowserResources(browser)
+	manager := plugin.NewManager(plugin.GrantAll(res))
+	defer manager.Close()
+
+	if *granteePlugin != "" {
+		err := manager.Run(*granteePlugin, *granteePlugin)
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
 
 	err = tui.Init()
 	if err != nil {
@@ -96,7 +98,8 @@ func main() {
 	term.SetOutputMode(term.Output256)
 	term.SetInputMode(term.InputMouse)
 
-	if err := tui.Run(browser); err != nil {
+	err = tui.RunWithLocker(browser, manager.ResourceLocker())
+	if err != nil {
 		log.Fatal(err)
 	}
 }

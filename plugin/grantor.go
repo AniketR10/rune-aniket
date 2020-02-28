@@ -9,15 +9,15 @@ import (
 
 // ResourceServer wraps the basic Serve method, to serve resources over a mux broker.
 type ResourceServer interface {
-	Serve(string, uint32, proto.MuxBroker, *sync.Mutex)
+	Serve(string, uint32, proto.MuxBroker, sync.Locker)
 }
 
 // enables functions matching signature of Serve to
 // satisfy ResourceServer
-type resourceServerFn func(string, uint32, proto.MuxBroker, *sync.Mutex)
+type resourceServerFn func(string, uint32, proto.MuxBroker, sync.Locker)
 
 func (fn resourceServerFn) Serve(
-	pluginID string, grantID uint32, broker proto.MuxBroker, mu *sync.Mutex,
+	pluginID string, grantID uint32, broker proto.MuxBroker, mu sync.Locker,
 ) {
 	fn(pluginID, grantID, broker, mu)
 }

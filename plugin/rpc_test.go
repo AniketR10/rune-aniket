@@ -211,7 +211,7 @@ type granteeMock struct {
 func (g *granteeMock) OnConnected(b proto.MuxBroker) {
 	g.onConnected++
 }
-func (g *granteeMock) OnPermissionGranted(perm Permission) {
+func (g *granteeMock) OnPermissionGranted(grantID uint32, perm Permission) {
 	g.onGrant = append(g.onGrant, perm)
 }
 func (g *granteeMock) OnPermissionDenied(perm Permission) {

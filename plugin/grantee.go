@@ -2,9 +2,11 @@ package plugin
 
 import (
 	"context"
+	"os"
 
 	"github.com/ernestrc/go-tui/proto"
 	"github.com/hashicorp/go-plugin"
+	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 )
 
@@ -14,7 +16,7 @@ type Permissions map[Permission]struct{}
 
 type Grantee interface {
 	OnConnected(proto.MuxBroker)
-	OnPermissionGranted(perm Permission)
+	OnPermissionGranted(token uint32, perm Permission)
 	OnPermissionDenied(perm Permission)
 	OnShutdown() error
 	Health() error
@@ -52,4 +54,30 @@ func (p *granteePlugin) GRPCClient(
 ) (interface{}, error) {
 	client := newGranteeClient(broker, proto.NewGranteeClient(c))
 	return client, nil
+}
+
+// Serve attempts to request the given permissions for Grantee
+// and serves it as a plugin. This function never returns.
+func Serve(grantee Grantee, request ...Permission) {
+	SetLoggingOutput(os.Stderr)
+
+	level, err := log.ParseLevel(os.Getenv(envLogLevel))
+	if err != nil {
+		panic(err)
+	}
+	SetLoggingLevel(level)
+
+	pluginMap := map[string]plugin.Plugin{
+		typeGranteePlugin: &granteePlugin{
+			requested: request,
+			grantee:   grantee,
+		},
+	}
+
+	plugin.Serve(&plugin.ServeConfig{
+		HandshakeConfig: handshakeConfig,
+		Plugins:         pluginMap,
+		Logger:          NewHCLogLogrus(pluginLogger),
+		GRPCServer:      plugin.DefaultGRPCServer,
+	})
 }

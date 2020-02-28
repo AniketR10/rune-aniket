@@ -55,7 +55,7 @@ func (s *granteeServer) OnGrant(ctx context.Context, req *proto.OnPermGrantReque
 	for _, granted := range req.Granted {
 		for _, requested := range s.req {
 			if string(requested) == granted.Id {
-				s.grantee.OnPermissionGranted(Permission(granted.Id))
+				s.grantee.OnPermissionGranted(granted.GrantId, Permission(granted.Id))
 			}
 		}
 	}

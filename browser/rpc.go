@@ -159,26 +159,26 @@ type Server struct {
 	conns   []*grpc.ClientConn
 	browser struct {
 		Browser
-		*sync.Mutex
+		sync.Locker
 	}
 }
 
 // NewServer allocates storage for a new Server and initializes it.
 func NewServer(
-	broker proto.MuxBroker, browser Browser, rmu *sync.Mutex,
+	broker proto.MuxBroker, browser Browser, lock sync.Locker,
 ) *Server {
 	ret := new(Server)
-	ret.Init(broker, browser, rmu)
+	ret.Init(broker, browser, lock)
 	return ret
 }
 
 // Init initializes this Server with broker and browser.
 func (s *Server) Init(
-	broker proto.MuxBroker, browser Browser, rmu *sync.Mutex,
+	broker proto.MuxBroker, browser Browser, lock sync.Locker,
 ) {
 	s.broker = broker
 	s.browser.Browser = browser
-	s.browser.Mutex = rmu
+	s.browser.Locker = lock
 	s.conns = make([]*grpc.ClientConn, 0)
 }
 

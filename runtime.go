@@ -4,7 +4,6 @@ import (
 	"sync"
 
 	"github.com/ernestrc/go-tui/term"
-	"github.com/nsf/termbox-go"
 )
 
 var (
@@ -39,7 +38,7 @@ func redraw(root Handler, termw Writer) (err error) {
 }
 
 func run(root Handler, lock sync.Locker, termw Writer) (err error) {
-	width, height := termbox.Size()
+	width, height := term.Size()
 
 	resize(root, width, height)
 
@@ -75,7 +74,7 @@ func run(root Handler, lock sync.Locker, termw Writer) (err error) {
 
 	// stop polling events
 	texit = true
-	termbox.Interrupt()
+	term.Interrupt()
 	<-ichan
 
 	return nil

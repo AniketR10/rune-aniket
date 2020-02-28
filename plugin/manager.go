@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/ernestrc/go-tui/proto"
+	"github.com/ernestrc/go-tui/term"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -141,7 +142,7 @@ func (m *Manager) doGrant(
 		// such that one plugin => one grpc server for all the resources
 		// requested. Right now, each call to serve, spins a new listener
 		// and a new GRPC server.
-		go srv.Serve(pluginID, grantID, broker, m.rmu)
+		go srv.Serve(pluginID, grantID, broker, m.rpcMutex())
 
 		grant := &proto.PermissionGrant{
 			Id:      p.Id,
@@ -368,15 +369,24 @@ func (m *Manager) Close() error {
 	return nil
 }
 
-// Lock locks access to resources that have been shared
-// with the manager. This MUST be called before processing any
-// events from the terminal event loop.
-func (m *Manager) Lock() {
-	m.mu.Lock()
+// ResourceLocker returns a Locker that synchronizes access to
+// resources that have been shared with this manager.
+func (m *Manager) ResourceLocker() sync.Locker {
+	return m.rmu
 }
 
-// Unlock unlocks access to resources that have been
-// shared with the manager.
-func (m *Manager) Unlock() {
-	m.mu.Unlock()
+type rpcMutex Manager
+
+func (m *rpcMutex) Lock() {
+	m.rmu.Lock()
+}
+
+func (m *rpcMutex) Unlock() {
+	// force redraw after waking up polling gorouting
+	term.Interrupt()
+	m.rmu.Unlock()
+}
+
+func (m *Manager) rpcMutex() sync.Locker {
+	return (*rpcMutex)(m)
 }

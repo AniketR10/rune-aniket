@@ -93,6 +93,7 @@ func Init() error {
 	return termbox.Init()
 }
 
+// Size returns the size of the terminal window.
 func Size() (width int, height int) {
 	return termbox.Size()
 }
@@ -116,4 +117,11 @@ func PollEvent() (ev Event) {
 // when termbox's functionality isn't required anymore.
 func Close() {
 	termbox.Close()
+}
+
+// Interrupt an in-progress call to the event poller and forces redraw.
+// This is useful when the root handler's has been updated by another goroutine,
+// other than the main event loop goroutine.
+func Interrupt() {
+	termbox.Interrupt()
 }
