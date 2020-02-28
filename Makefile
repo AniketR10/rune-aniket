@@ -16,7 +16,7 @@ PROTO=proto/*.pb.go
 
 default: $(EXAMPLES) $(EXECS)
 
-test: $(EXECS)
+test: $(EXAMPLES) $(EXECS)
 	@ go test ./.../... -race
 
 coverage: $(TARGET)
