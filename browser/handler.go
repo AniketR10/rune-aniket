@@ -24,6 +24,8 @@ var ErrLastBuffer = errors.New("No free buffers left")
 // in the file system.
 var ErrInvalidSave = errors.New("Cannot save this buffer")
 
+const logBufDrawTimes = 2
+
 type mode int8
 
 const (
@@ -66,6 +68,7 @@ type Handler struct {
 	commandBuf *cell.Buffer
 	cmdVirt    handler.Virtual
 	logBuf     *cell.Buffer
+	logBufDraw int
 	logVirt    handler.Virtual
 
 	tabs     *handler.Tabs
@@ -558,12 +561,15 @@ func (e *Handler) Resize(width, height int) {
 func (e *Handler) Draw(w tui.Writer) {
 	e.frames.Draw(w)
 
-	if e.logBuf.Columns(0) != 0 {
+	// only draw logBufDraw times
+	if e.logBufDraw > 0 {
 		e.logVirt.Draw(w)
-
-		// only draw once
+		e.logBufDraw--
+	} else {
 		e.logBuf.Reset()
-	} else if e.mode == commandMode {
+	}
+
+	if e.mode == commandMode {
 		e.cmdVirt.Draw(w)
 	}
 }
@@ -602,6 +608,7 @@ func (e *Handler) SetMessage(msg string, args ...interface{}) error {
 		e.config.Logger.Infof("Message: %s", msg)
 	}
 	e.logBuf.WriteString(msg)
+	e.logBufDraw = logBufDrawTimes
 	return nil
 }
 

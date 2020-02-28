@@ -348,7 +348,7 @@ EEEE`},
 │AAAAAAAAAAAAAAAAAA│
 │AAAAAAAAAAAAAAAAAA│
 │AAAAAAAAAAAAAAAAAA│
-│AAAAAAAAAAAAAAAAAA│
+│wasup: Z          │
 └──────────────────┘`},
 	}
 	handler.BatchTestInputSequence(t, ed, 20, 10, cases)
