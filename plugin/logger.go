@@ -2,11 +2,35 @@ package plugin
 
 import (
 	"fmt"
+	"io"
+	"io/ioutil"
 	"log"
 
 	"github.com/hashicorp/go-hclog"
 	"github.com/sirupsen/logrus"
 )
+
+var pluginLogger *logrus.Logger
+
+func init() {
+	pluginLogger = logrus.New()
+	pluginLogger.SetOutput(ioutil.Discard)
+}
+
+// SetLoggingOutput sets the logging output of all plugins to out.
+func SetLoggingOutput(out io.Writer) {
+	pluginLogger.SetOutput(out)
+}
+
+// SetLoggingFormatter sets the logging formatter of all plugins to f.
+func SetLoggingFormatter(f logrus.Formatter) {
+	pluginLogger.SetFormatter(f)
+}
+
+// SetLoggingLevel sets the logging level of all plugins to level.
+func SetLoggingLevel(level logrus.Level) {
+	pluginLogger.SetLevel(level)
+}
 
 // satisfies hclog.Logger by using a logrus.Logger
 type hcloggerLogrus struct {
