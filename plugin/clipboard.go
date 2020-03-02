@@ -40,7 +40,7 @@ func ServeClipboard(impl editor.Clipboard) {
 	}
 	SetLoggingLevel(level)
 
-	impl = editor.NewLoggingClipboard(pluginLogger, impl)
+	impl = editor.NewLoggingClipboard(&pluginLogger, impl)
 
 	pluginMap := map[string]hPlugin.Plugin{
 		"clipboard": &ClipboardPlugin{Clipboard: impl},
@@ -49,7 +49,7 @@ func ServeClipboard(impl editor.Clipboard) {
 	hPlugin.Serve(&hPlugin.ServeConfig{
 		HandshakeConfig: handshakeConfig,
 		Plugins:         pluginMap,
-		Logger:          NewHCLogLogrus(pluginLogger),
+		Logger:          NewHCLogLogrus(&pluginLogger),
 	})
 }
 
@@ -73,7 +73,7 @@ func NewClipboard(path string) (editor.Clipboard, func(), error) {
 		HandshakeConfig: handshakeConfig,
 		Plugins:         pluginMap,
 		Cmd:             cmd,
-		Logger:          NewHCLogLogrus(pluginLogger),
+		Logger:          NewHCLogLogrus(&pluginLogger),
 		// TODO we should validate integrity of plugins
 		// SecureConfig:    &secureCfg,
 	})

@@ -14,10 +14,17 @@ import (
 
 const (
 	defaultHandshakeTimeout  = 5 * time.Second
-	defaultHealthCheckTicker = 30 * time.Second
+	defaultHealthCheckTicker = 15 * time.Second
 	defaultHealthRetries     = 2
 	defaultRunRetries        = 2
 )
+
+var defaultManagerConfig = managerConfig{
+	handshakeTimeout:  defaultHandshakeTimeout,
+	healthCheckTicker: defaultHealthCheckTicker,
+	healthRetries:     defaultHealthRetries,
+	logger:            &pluginLogger,
+}
 
 type granteeClientWrap struct {
 	id       string
@@ -35,10 +42,22 @@ type Stat struct {
 	Errors   []error
 }
 
+type managerConfig struct {
+	logger *log.Logger
+
+	handshakeTimeout  time.Duration
+	healthCheckTicker time.Duration
+	healthRetries     int
+}
+
+// Option is a configuration option for a manager.
+type Option func(cfg *managerConfig)
+
+type pluginBuilder func(pluginID, path string,
+	grantor Grantor, log *log.Logger) (*granteeClient, error)
+
 // Manager manages the lifecycle of plugins.
 type Manager struct {
-	Logger *log.Logger
-
 	mu      sync.Mutex
 	grantor Grantor
 	clients map[string]granteeClientWrap
@@ -48,44 +67,43 @@ type Manager struct {
 	rmu *sync.Mutex
 
 	// used to abstract out go-plugin specific functionality
-	builder           func(pluginID, path string, grantor Grantor) (*granteeClient, error)
-	handshakeTimeout  time.Duration
-	healthCheckTicker time.Duration
-	healthRetries     int
-	runRetries        int
+	builder pluginBuilder
+
+	config managerConfig
 }
 
 // NewManager allocates storage for a new Manager and initializes it.
-func NewManager(grantor Grantor) *Manager {
+func NewManager(grantor Grantor, opts ...Option) *Manager {
 	ret := new(Manager)
 	ret.builder = goPluginGranteeBuilder
-	ret.Init(grantor)
+	ret.Init(grantor, opts...)
 	return ret
 }
 
 // Init initializes this manager with grantor.
-func (m *Manager) Init(grantor Grantor) {
+func (m *Manager) Init(grantor Grantor, opts ...Option) {
 	m.grantor = grantor
 	m.clients = make(map[string]granteeClientWrap)
-	m.handshakeTimeout = defaultHandshakeTimeout
-	m.healthCheckTicker = defaultHealthCheckTicker
-	m.healthRetries = defaultHealthRetries
-	m.runRetries = defaultRunRetries
 	m.rmu = new(sync.Mutex)
+
+	m.config = defaultManagerConfig
+	for _, o := range opts {
+		o(&m.config)
+	}
 }
 
 func (m *Manager) log(msg string, args ...interface{}) {
-	if m.Logger == nil {
+	if m.config.logger == nil {
 		return
 	}
-	m.Logger.Debugf(msg, args...)
+	m.config.logger.Debugf(msg, args...)
 }
 
 func (m *Manager) runPlugin(pluginID, path string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	client, err := m.builder(pluginID, path, m.grantor)
+	client, err := m.builder(pluginID, path, m.grantor, m.config.logger)
 	if err != nil {
 		return err
 	}
@@ -170,7 +188,7 @@ func (m *Manager) doCloseClient(reason string, client granteeClientWrap) {
 func (m *Manager) checkHealth(client granteeClientWrap) (
 	done bool, err error,
 ) {
-	ctx, closeFn := context.WithTimeout(context.Background(), m.healthCheckTicker)
+	ctx, closeFn := context.WithTimeout(context.Background(), m.config.healthCheckTicker)
 	defer closeFn()
 
 	waitCh := make(chan error)
@@ -196,11 +214,12 @@ func (m *Manager) checkHealth(client granteeClientWrap) (
 func (m *Manager) monitor(client granteeClientWrap) {
 	const stopCalledReason = "Stop was called on plugin Manager"
 
-	m.log("checking health of plugin '%s' every %+v", client.id, m.healthCheckTicker)
+	m.log("checking health of plugin '%s' every %+v",
+		client.id, m.config.healthCheckTicker)
 
-	timer := time.NewTicker(m.healthCheckTicker)
+	timer := time.NewTicker(m.config.healthCheckTicker)
 
-	triesLeft := 1 + m.healthRetries
+	triesLeft := 1 + m.config.healthRetries
 	for {
 		select {
 		case <-timer.C:
@@ -209,7 +228,7 @@ func (m *Manager) monitor(client granteeClientWrap) {
 				triesLeft--
 				m.addClientErr(client.id, err)
 			} else {
-				triesLeft = 1 + m.healthRetries
+				triesLeft = 1 + m.config.healthRetries
 			}
 			if triesLeft == 0 {
 				m.doCloseClient("exhausted health check retries", client)
@@ -249,7 +268,7 @@ func (m *Manager) setRunning(pluginID string) {
 
 func (m *Manager) handshake(pluginID string, client granteeClientWrap) {
 	ctx := context.Background()
-	ctx, closeFn := context.WithTimeout(ctx, m.handshakeTimeout)
+	ctx, closeFn := context.WithTimeout(ctx, m.config.handshakeTimeout)
 	defer closeFn()
 
 	m.log("starting handshake for plugin '%s'", pluginID)

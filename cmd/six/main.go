@@ -31,6 +31,7 @@ func main() {
 
 	opts := make([]browser.Option, 0)
 	viOpts := make([]vi.Option, 0)
+	pluginOpts := make([]plugin.Option, 0)
 
 	if len(os.Args) > 1 {
 		filename := os.Args[1]
@@ -64,10 +65,7 @@ func main() {
 		l.SetLevel(log.TraceLevel)
 		opts = append(opts, browser.WithLogger(l))
 		viOpts = append(viOpts, vi.WithLogger(l))
-
-		// set output of plugins
-		plugin.SetLoggingOutput(f)
-		plugin.SetLoggingLevel(log.TraceLevel)
+		pluginOpts = append(pluginOpts, plugin.WithLogger(l))
 	}
 
 	vi := vi.Editor(viOpts...)
@@ -78,7 +76,7 @@ func main() {
 	defer browser.Close()
 
 	res := plugin.BrowserResources(browser)
-	manager := plugin.NewManager(plugin.GrantAll(res))
+	manager := plugin.NewManager(plugin.GrantAll(res), pluginOpts...)
 	defer manager.Close()
 
 	if *granteePlugin != "" {

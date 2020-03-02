@@ -2,31 +2,81 @@ package plugin
 
 import (
 	"context"
+	"os"
+	"sync"
+	"time"
 
 	"github.com/ernestrc/go-tui/proto"
 	"github.com/hashicorp/go-plugin"
 )
 
+const defDurationGracefulShut = 5 * time.Second
+
 type granteeServer struct {
+	mu        sync.Mutex
 	req       []Permission
 	broker    proto.MuxBroker
 	grantee   Grantee
 	connected bool
+	keepAlive chan struct{}
+	osExit    func(int)
+
+	durationGracefulShut time.Duration
+	keepAliveTimeout     time.Duration
 }
 
 func newGranteeServer(
 	broker proto.MuxBroker, grantee Grantee, req []Permission,
+	keepAlive time.Duration,
 ) proto.GranteeServer {
 	ret := new(granteeServer)
 	ret.broker = broker
 	ret.grantee = grantee
 	ret.req = req
+	ret.durationGracefulShut = defDurationGracefulShut
+	ret.osExit = os.Exit
+	if keepAlive != time.Duration(0) {
+		ret.keepAlive = make(chan struct{})
+		ret.keepAliveTimeout = keepAlive * 2
+	}
 	return ret
+}
+
+func forceStopTimer(timer *time.Timer) {
+	if timer.Stop() {
+		return
+	}
+
+	select {
+	case <-timer.C:
+	default:
+	}
+}
+
+func (s *granteeServer) monitorKeepAlive() {
+	t := time.NewTimer(s.keepAliveTimeout)
+
+	s.mu.Lock()
+	ch := s.keepAlive
+	s.mu.Unlock()
+
+	for {
+		select {
+		case <-t.C:
+			s.doShutdown("lost connectivity to host: failed to send a health check in time")
+		case <-ch:
+			forceStopTimer(t)
+			t.Reset(s.keepAliveTimeout)
+		}
+	}
 }
 
 func (s *granteeServer) Permissions(context.Context, *proto.PermRequest) (
 	*proto.PermResponse, error,
 ) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	resp := new(proto.PermResponse)
 	for _, perm := range s.req {
 		resp.Perms = append(resp.Perms, &proto.Permission{Id: string(perm)})
@@ -35,6 +85,9 @@ func (s *granteeServer) Permissions(context.Context, *proto.PermRequest) (
 	if !s.connected {
 		s.connected = true
 		s.grantee.OnConnected(s.broker)
+		if s.keepAlive != nil {
+			go s.monitorKeepAlive()
+		}
 	}
 
 	return resp, nil
@@ -43,6 +96,9 @@ func (s *granteeServer) Permissions(context.Context, *proto.PermRequest) (
 func (s *granteeServer) OnGrant(ctx context.Context, req *proto.OnPermGrantRequest) (
 	*proto.OnPermGrantResponse, error,
 ) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	/* only trigger OnPermission* for permissions that were actually requested */
 
 	for _, denied := range req.Denied {
@@ -63,10 +119,31 @@ func (s *granteeServer) OnGrant(ctx context.Context, req *proto.OnPermGrantReque
 	return new(proto.OnPermGrantResponse), nil
 }
 
-func (s *granteeServer) Shutdown(context.Context, *proto.ShutdownRequest) (
+func (s *granteeServer) doShutdown(reason string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if err := s.grantee.OnShutdown(reason); err != nil {
+		return err
+	}
+	if s.keepAlive != nil {
+		close(s.keepAlive)
+		s.keepAlive = nil
+	}
+	if s.osExit != nil {
+		go func() {
+			time.Sleep(s.durationGracefulShut)
+			s.osExit(0)
+		}()
+	}
+	return nil
+}
+
+func (s *granteeServer) Shutdown(ctx context.Context, in *proto.ShutdownRequest) (
 	*proto.ShutdownResponse, error,
 ) {
-	if err := s.grantee.OnShutdown(); err != nil {
+	err := s.doShutdown(in.GetReason())
+	if err != nil {
 		return nil, err
 	}
 	return new(proto.ShutdownResponse), nil
@@ -75,8 +152,14 @@ func (s *granteeServer) Shutdown(context.Context, *proto.ShutdownRequest) (
 func (s *granteeServer) Health(context.Context, *proto.HealthRequest) (
 	*proto.HealthResponse, error,
 ) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	if err := s.grantee.Health(); err != nil {
 		return nil, err
+	}
+	if s.keepAlive != nil {
+		s.keepAlive <- struct{}{}
 	}
 	return new(proto.HealthResponse), nil
 }

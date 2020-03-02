@@ -10,10 +10,10 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-var pluginLogger *logrus.Logger
+var pluginLogger logrus.Logger
 
 func init() {
-	pluginLogger = logrus.New()
+	pluginLogger = *logrus.New()
 	pluginLogger.SetOutput(ioutil.Discard)
 }
 

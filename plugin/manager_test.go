@@ -51,24 +51,23 @@ func (b *nopBroker) Close() error {
 	return nil
 }
 
-func newTestManager(grantor Grantor) (*Manager, *testGranteePbClient, *nopBroker) {
+func newTestManager(grantor Grantor, opts ...Option) (*Manager, *testGranteePbClient, *nopBroker) {
 	m := new(Manager)
 
+	opts = append([]Option{
+		WithHandshakeTimeout(300 * time.Millisecond),
+		WithHealthTimeout(300 * time.Millisecond),
+		WithHealthRetries(0),
+	}, opts...)
 	mockpb := &testGranteePbClient{
 		healthChan: make(chan struct{}),
 	}
 
 	broker := &nopBroker{}
-	m.builder = func(pluginID, path string, grantor Grantor) (*granteeClient, error) {
+	m.builder = func(pluginID, path string, grantor Grantor, logger *log.Logger) (*granteeClient, error) {
 		return newGranteeClient(broker, mockpb), nil
 	}
-	m.Init(grantor)
-	m.handshakeTimeout = 300 * time.Millisecond
-	m.healthCheckTicker = 300 * time.Millisecond
-	m.healthRetries = 0
-	m.runRetries = 0
-	m.Logger = log.New()
-	m.Logger.SetLevel(log.TraceLevel)
+	m.Init(grantor, opts...)
 
 	return m, mockpb, broker
 }
@@ -209,22 +208,20 @@ func TestManagerRun(t *testing.T) {
 		err := mgr.Run("green", "/here/is/my/plugin")
 		require.NoError(t, err)
 
-		time.Sleep(mgr.handshakeTimeout + 50*time.Millisecond)
+		time.Sleep(mgr.config.handshakeTimeout + 50*time.Millisecond)
 
 		reason := assertShutdown(t, pbClient, broker)
 		assert.Contains(t, reason, "health check")
 	})
 
 	t.Run("should shutdown plugin if fails to respond to subsequent health checks", func(t *testing.T) {
-		mgr, pbClient, broker := newTestManager(&mockGrantor{})
+		mgr, pbClient, broker := newTestManager(&mockGrantor{},
+			WithHealthTimeout(250*time.Millisecond), WithHealthRetries(3))
 		defer mgr.Close()
 
 		pbClient.fixturePermissions =
 			[]*proto.Permission{&proto.Permission{Id: "read"}}
 		pbClient.onShutdownChan = make(chan struct{})
-
-		mgr.healthCheckTicker = 250 * time.Millisecond
-		mgr.healthRetries = 3
 
 		err := mgr.Run("yellow", "/here/is/my/plugin")
 		require.NoError(t, err)
@@ -244,7 +241,7 @@ func TestManagerRun(t *testing.T) {
 		// check errors in status
 		stat, ok := mgr.Stat("yellow")
 		require.True(t, ok)
-		require.Len(t, stat.Errors, mgr.healthRetries+1)
+		require.Len(t, stat.Errors, mgr.config.healthRetries+1)
 		assert.Contains(t, stat.Errors[0].Error(), "plugin health timeout")
 	})
 }

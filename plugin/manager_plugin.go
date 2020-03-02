@@ -4,28 +4,30 @@ import (
 	"os/exec"
 
 	"github.com/hashicorp/go-plugin"
+	log "github.com/sirupsen/logrus"
 )
 
-func goPluginGranteeBuilder(pluginID, path string, grantor Grantor) (
-	*granteeClient, error,
-) {
+func goPluginGranteeBuilder(
+	pluginID, path string, grantor Grantor, logger *log.Logger,
+) (*granteeClient, error) {
 	pluginMap := map[string]plugin.Plugin{
-		typeGranteePlugin: &granteePlugin{grantor: grantor},
+		typeGranteePlugin: &granteePlugin{logger: logger, grantor: grantor},
 	}
 
 	cmd := exec.Command(path)
 	cmd.Env = append(cmd.Env, pluginEnv...)
-	cmd.Env = append(cmd.Env, makeEnvVar(envLogLevel, pluginLogger.Level.String()))
+	cmd.Env = append(cmd.Env, makeEnvVar(envLogLevel, logger.Level.String()))
 
-	client := plugin.NewClient(&plugin.ClientConfig{
+	config := &plugin.ClientConfig{
 		HandshakeConfig:  handshakeConfig,
 		Plugins:          pluginMap,
 		Cmd:              cmd,
-		Logger:           NewHCLogLogrus(pluginLogger),
+		Logger:           NewHCLogLogrus(logger),
 		AllowedProtocols: []plugin.Protocol{plugin.ProtocolGRPC},
 		// TODO we should validate integrity of plugins
 		// SecureConfig:    &secureCfg,
-	})
+	}
+	client := plugin.NewClient(config)
 
 	rpcClient, err := client.Client()
 	if err != nil {

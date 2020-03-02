@@ -217,7 +217,7 @@ func (g *granteeMock) OnPermissionGranted(grantID uint32, perm Permission) {
 func (g *granteeMock) OnPermissionDenied(perm Permission) {
 	g.onDenied = append(g.onDenied, perm)
 }
-func (g *granteeMock) OnShutdown() error {
+func (g *granteeMock) OnShutdown(reason string) error {
 	if g.err != nil {
 		return g.err
 	}
@@ -242,7 +242,8 @@ func setupIntTest(
 	require.NoError(t, err)
 
 	grpcServer := grpc.NewServer()
-	server := newGranteeServer(nil, granteeMock, perms)
+	server := newGranteeServer(nil, granteeMock, perms, time.Duration(0))
+	server.(*granteeServer).osExit = nil
 	proto.RegisterGranteeServer(grpcServer, server)
 
 	go grpcServer.Serve(lis)
@@ -258,9 +259,6 @@ func setupIntTest(
 	return
 }
 
-// TODO test that OnShutdown error does bubble up all the way to the client?
-// TODO test that Health error does bubble up all the way to the client?
-// TODO test after bind close closes plugin.Client
 func TestIntegrationPluginClientServer(t *testing.T) {
 	t.Run("permissions request triggers Grantee OnConnected", func(t *testing.T) {
 		grantee := granteeMock{}

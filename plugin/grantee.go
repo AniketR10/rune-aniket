@@ -3,6 +3,7 @@ package plugin
 import (
 	"context"
 	"os"
+	"time"
 
 	"github.com/ernestrc/go-tui/proto"
 	"github.com/hashicorp/go-plugin"
@@ -18,7 +19,7 @@ type Grantee interface {
 	OnConnected(proto.MuxBroker)
 	OnPermissionGranted(token uint32, perm Permission)
 	OnPermissionDenied(perm Permission)
-	OnShutdown() error
+	OnShutdown(reason string) error
 	Health() error
 }
 
@@ -36,14 +37,17 @@ const typeGranteePlugin = "tui_grantee_plugin"
 
 type granteePlugin struct {
 	plugin.Plugin
+	logger    *log.Logger
 	requested []Permission
 	grantee   Grantee
 	grantor   Grantor
+	keepAlive time.Duration
 }
 
 // GRPCServer satisfies plugin.GRPCPlugin
 func (p *granteePlugin) GRPCServer(broker *plugin.GRPCBroker, s *grpc.Server) error {
-	server := newGranteeServer(broker, p.grantee, p.requested)
+	server := newGranteeServer(broker, p.grantee, p.requested, p.keepAlive)
+	server = &loggingGranteeServer{Logger: p.logger, GranteeServer: server}
 	proto.RegisterGranteeServer(s, server)
 	return nil
 }
@@ -52,7 +56,9 @@ func (p *granteePlugin) GRPCServer(broker *plugin.GRPCBroker, s *grpc.Server) er
 func (p *granteePlugin) GRPCClient(
 	ctx context.Context, broker *plugin.GRPCBroker, c *grpc.ClientConn,
 ) (interface{}, error) {
-	client := newGranteeClient(broker, proto.NewGranteeClient(c))
+	pbClient := proto.NewGranteeClient(c)
+	pbClient = &loggingGranteeClient{Logger: p.logger, GranteeClient: pbClient}
+	client := newGranteeClient(broker, pbClient)
 	return client, nil
 }
 
@@ -69,15 +75,17 @@ func Serve(grantee Grantee, request ...Permission) {
 
 	pluginMap := map[string]plugin.Plugin{
 		typeGranteePlugin: &granteePlugin{
+			logger:    &pluginLogger,
 			requested: request,
 			grantee:   grantee,
+			keepAlive: defaultHealthCheckTicker,
 		},
 	}
 
 	plugin.Serve(&plugin.ServeConfig{
 		HandshakeConfig: handshakeConfig,
 		Plugins:         pluginMap,
-		Logger:          NewHCLogLogrus(pluginLogger),
+		Logger:          NewHCLogLogrus(&pluginLogger),
 		GRPCServer:      plugin.DefaultGRPCServer,
 	})
 }
