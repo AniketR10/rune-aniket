@@ -209,7 +209,9 @@ func (e *Handler) newBuffer() *cell.Buffer {
 	buf := cell.NewBuffer()
 	buf.InitWithTabspaces(e.config.Tabspaces)
 	if e.config.Logger != nil {
-		buf = buf.WithLogger(e.config.Logger)
+		// NOTE: only enable when trying to debug low level buffer bugs
+		// as it degrades performance quite a bit.
+		// buf = buf.WithLogger(e.config.Logger)
 	}
 	return buf
 }
