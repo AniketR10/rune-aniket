@@ -457,3 +457,10 @@ func TestBufferInsertStringWithAttr(t *testing.T) {
 		term.Cell{Ch: 'a', Fg: fg, Bg: bg},
 	}, cell)
 }
+
+func TestBufferHeightWidth(t *testing.T) {
+	buf := NewBuffer()
+	buf.WriteString("aaaaaaaaaaaaaaaaaaaa\naaa\naaaaaaa\naaa")
+	assert.Equal(t, 4, buf.Height())
+	assert.Equal(t, 20, buf.Width())
+}

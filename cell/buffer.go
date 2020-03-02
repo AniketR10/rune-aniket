@@ -396,3 +396,19 @@ func (b *Buffer) Subscribe(s Subscriber) {
 func (b *Buffer) Unsubscribe(s Subscriber) {
 	b.pub.Unsubscribe(s)
 }
+
+// Height returns the required height if this Buffer was to be drawn on a tui.Writer.
+func (b *Buffer) Height() int {
+	return b.Rows()
+}
+
+// Width returns the required width if this Buffer was to be drawn on a tui.Writer.
+func (b *Buffer) Width() int {
+	var ret int
+	for _, row := range b.RawCells() {
+		if len(row) > ret {
+			ret = len(row)
+		}
+	}
+	return ret
+}
