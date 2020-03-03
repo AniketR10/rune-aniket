@@ -5,7 +5,6 @@ import (
 	"errors"
 
 	"github.com/ernestrc/go-tui"
-	"github.com/ernestrc/go-tui/cell"
 	"github.com/ernestrc/go-tui/proto"
 	"github.com/ernestrc/go-tui/term"
 	log "github.com/sirupsen/logrus"
@@ -185,22 +184,7 @@ func (s *Server) Resize(ctx context.Context, req *proto.ResizeRequest) (
 func (s *Server) Draw(context.Context, *proto.DrawRequest) (
 	*proto.DrawResponse, error,
 ) {
-	w := cell.NewBufferWriter(s.width, s.height)
-	s.handler.Draw(w)
-
-	resp := new(proto.DrawResponse)
-	for _, row := range w.RawCells() {
-		var protoRow []*proto.Cell
-		for _, c := range row {
-			protoRow = append(protoRow, &proto.Cell{
-				Character:  uint32(c.Ch),
-				Foreground: &proto.Attribute{Flags: uint32(c.Fg)},
-				Background: &proto.Attribute{Flags: uint32(c.Bg)},
-			})
-		}
-		resp.Rows = append(resp.Rows, &proto.CellRow{Cells: protoRow})
-	}
-	return resp, nil
+	return proto.NewDrawResponse(s.handler, s.width, s.height), nil
 }
 
 // Handle is an RPC that handles request to an underlying Handler's

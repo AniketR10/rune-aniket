@@ -33,6 +33,10 @@ func TestString(t *testing.T) {
 			in:  "XXXXXXXXXX\nXXXXXXXXXXX\nXXXXXXXXXXX\nXXXXXXXXXXX\nXXXXXXXXXXX\nXXXXXXXXXXX\nXXXXXXXXXXX\nXXXXXXXXXXX\n",
 			out: "XXXXX\nXXXXX\nXXXXX\nXXXXX\nXXXXX",
 		},
+		{
+			in:  "a",
+			out: "     \n     \n  a  \n     \n     ",
+		},
 	}
 
 	for _, tcase := range tcases {
