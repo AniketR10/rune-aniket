@@ -16,13 +16,17 @@ func TestNewDrawResponse(t *testing.T) {
 			in: "a",
 			out: &DrawResponse{
 				Rows: []*CellRow{
-					&CellRow{},
-					&CellRow{},
+					&CellRow{Cells: []*Cell{nil, nil, nil, nil, nil}},
+					&CellRow{Cells: []*Cell{nil, nil, nil, nil, nil}},
 					&CellRow{Cells: []*Cell{
-						&Cell{Character: ' ', Foreground: new(Attribute), Background: new(Attribute)},
-						&Cell{Character: ' ', Foreground: new(Attribute), Background: new(Attribute)},
+						nil,
+						nil,
 						&Cell{Character: 'a', Foreground: new(Attribute), Background: new(Attribute)},
+						nil,
+						nil,
 					}},
+					&CellRow{Cells: []*Cell{nil, nil, nil, nil, nil}},
+					&CellRow{Cells: []*Cell{nil, nil, nil, nil, nil}},
 				},
 			},
 		},

@@ -9,11 +9,14 @@ import (
 
 // ToModel maps this Cell into a term.Cell.
 func (c *Cell) ToModel() term.Cell {
+	if c == nil {
+		return term.Cell{}
+	}
 	return term.Cell{
-		Bg: term.Attribute(c.GetBackground().Flags),
-		Fg: term.Attribute(c.GetForeground().Flags),
+		Bg: term.Attribute(c.Background.Flags),
+		Fg: term.Attribute(c.Foreground.Flags),
 		// TODO test full UTF-8
-		Ch: rune(c.GetCharacter()),
+		Ch: rune(c.Character),
 	}
 }
 
