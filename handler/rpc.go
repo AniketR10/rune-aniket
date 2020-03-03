@@ -3,12 +3,15 @@ package handler
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/ernestrc/go-tui"
 	"github.com/ernestrc/go-tui/proto"
 	"github.com/ernestrc/go-tui/term"
 	log "github.com/sirupsen/logrus"
 )
+
+const defaultRPCTimeout = 5 * time.Second
 
 // Client satisfies Handler by talking to a remote handler over GRPC.
 type Client struct {
@@ -28,7 +31,7 @@ func NewClient(pbClient proto.HandlerClient) *Client {
 
 // Init initialies this Client with pbClient.
 func (c *Client) Init(pbClient proto.HandlerClient) {
-	c.client = pbClient
+	c.client = withClientBreaker(pbClient, defaultRPCTimeout)
 	c.errors = make(chan error)
 }
 
