@@ -53,24 +53,15 @@ func (c *Client) collectError(err error) {
 	}
 }
 
-// Resize satisfies tui.
+// Resize satisfies tui.Handler
 func (c *Client) Resize(width, height int) {
-	ctx := context.Background()
-	req := proto.ResizeRequest{Width: int32(width), Height: int32(height)}
-
-	_, err := c.client.Resize(ctx, &req)
-	if err != nil {
-		c.collectError(err)
-		return
-	}
-
 	c.width, c.height = width, height
 }
 
 // Draw satisfies tui.Handler
 func (c *Client) Draw(w tui.Writer) {
 	ctx := context.Background()
-	req := proto.DrawRequest{}
+	req := proto.DrawRequest{Width: int32(c.width), Height: int32(c.height)}
 
 	resp, err := c.client.Draw(ctx, &req)
 	if err != nil {
@@ -156,8 +147,7 @@ func (c *Client) Man() tui.Manual {
 
 // Server serves a tui.Handler implementation over GRPC.
 type Server struct {
-	handler       tui.Handler
-	width, height int
+	handler tui.Handler
 }
 
 // NewServer allocates storage for a new Server and initializes it.
@@ -172,22 +162,13 @@ func (s *Server) Init(handler tui.Handler) {
 	s.handler = handler
 }
 
-// Resize is an RPC that handles request to an
-// underlying Handler's Resize over RPC.
-func (s *Server) Resize(ctx context.Context, req *proto.ResizeRequest) (
-	*proto.ResizeResponse, error,
-) {
-	s.width, s.height = int(req.GetWidth()), int(req.GetHeight())
-	s.handler.Resize(s.width, s.height)
-	return new(proto.ResizeResponse), nil
-}
-
 // Draw is an RPC that handles request to an underlying
 // Handler's Draw over RPC.
-func (s *Server) Draw(context.Context, *proto.DrawRequest) (
+func (s *Server) Draw(ctx context.Context, in *proto.DrawRequest) (
 	*proto.DrawResponse, error,
 ) {
-	return proto.NewDrawResponse(s.handler, s.width, s.height), nil
+	s.handler.Resize(int(in.Width), int(in.Height))
+	return proto.NewDrawResponse(s.handler, int(in.Width), int(in.Height)), nil
 }
 
 // Handle is an RPC that handles request to an underlying Handler's

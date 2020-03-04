@@ -29,9 +29,8 @@ Connection to plugin was lost:
 `
 
 type clientBreaker struct {
-	width, height int
-	other         proto.HandlerClient
-	rpcTimeout    time.Duration
+	other      proto.HandlerClient
+	rpcTimeout time.Duration
 }
 
 // clientBreaker wraps a HandlerClient to provide an RPC
@@ -69,23 +68,11 @@ func (b *clientBreaker) rpcWithTimeout(
 	}
 }
 
-func (b *clientBreaker) Resize(
-	ctx context.Context, in *proto.ResizeRequest, opts ...grpc.CallOption,
-) (*proto.ResizeResponse, error) {
-	b.width = int(in.Width)
-	b.height = int(in.Height)
-	resIfc, err := b.rpcWithTimeout(ctx, func(ctx context.Context) (interface{}, error) {
-		return b.other.Resize(ctx, in, opts...)
-	})
-	if err != nil {
-		return nil, err
-	}
-	return resIfc.(*proto.ResizeResponse), err
-}
-
-func (b *clientBreaker) makeSadFaceComponent(err error) tui.Component {
+func (b *clientBreaker) makeSadFaceComponent(
+	err error, width, height int,
+) tui.Component {
 	comp := component.String(fmt.Sprintf(connectionLostCopy, err))
-	comp.Resize(b.width, b.height)
+	comp.Resize(width, height)
 	return comp
 }
 
@@ -96,8 +83,8 @@ func (b *clientBreaker) Draw(
 		return b.other.Draw(ctx, in, opts...)
 	})
 	if err != nil {
-		sadFace := b.makeSadFaceComponent(err)
-		return proto.NewDrawResponse(sadFace, b.width, b.height), nil
+		sadFace := b.makeSadFaceComponent(err, int(in.Width), int(in.Height))
+		return proto.NewDrawResponse(sadFace, int(in.Width), int(in.Height)), nil
 	}
 	return resIfc.(*proto.DrawResponse), nil
 }

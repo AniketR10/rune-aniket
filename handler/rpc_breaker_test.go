@@ -77,7 +77,7 @@ func newSlowHandler() *slowHandler {
 func testHandlerTimeout(t *testing.T,
 	rpc func(c proto.HandlerClient) (interface{}, error)) {
 	mock := newSlowHandler()
-	stubClient := &proto.MockHandlerClient{Remote: mock}
+	stubClient := &mockHandlerClient{remote: mock}
 	c := withClientBreaker(stubClient, 50*time.Millisecond)
 
 	mock.setDelay(0)
@@ -91,12 +91,6 @@ func testHandlerTimeout(t *testing.T,
 	res, err = rpc(c)
 	assert.Error(t, err)
 	assert.Nil(t, res)
-}
-
-func TestHandlerResizeTimeout(t *testing.T) {
-	testHandlerTimeout(t, func(c proto.HandlerClient) (interface{}, error) {
-		return c.Resize(context.Background(), new(proto.ResizeRequest))
-	})
 }
 
 func TestHandlerCursorTimeout(t *testing.T) {
@@ -122,7 +116,7 @@ func TestHandlerHandleTimeout(t *testing.T) {
 func TestHandlerDrawBreaker(t *testing.T) {
 	mock := newSlowHandler()
 
-	stubClient := &proto.MockHandlerClient{Remote: mock}
+	stubClient := &mockHandlerClient{remote: mock}
 	c := withClientBreaker(stubClient, 50*time.Millisecond)
 
 	mock.setDelay(0)

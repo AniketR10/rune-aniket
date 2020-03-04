@@ -24,85 +24,9 @@ var _ = math.Inf
 // proto package needs to be updated.
 const _ = proto.ProtoPackageIsVersion3 // please upgrade the proto package
 
-type ResizeRequest struct {
+type DrawRequest struct {
 	Width                int32    `protobuf:"varint,1,opt,name=width,proto3" json:"width,omitempty"`
 	Height               int32    `protobuf:"varint,2,opt,name=height,proto3" json:"height,omitempty"`
-	XXX_NoUnkeyedLiteral struct{} `json:"-"`
-	XXX_unrecognized     []byte   `json:"-"`
-	XXX_sizecache        int32    `json:"-"`
-}
-
-func (m *ResizeRequest) Reset()         { *m = ResizeRequest{} }
-func (m *ResizeRequest) String() string { return proto.CompactTextString(m) }
-func (*ResizeRequest) ProtoMessage()    {}
-func (*ResizeRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_1f2821b95a83419f, []int{0}
-}
-
-func (m *ResizeRequest) XXX_Unmarshal(b []byte) error {
-	return xxx_messageInfo_ResizeRequest.Unmarshal(m, b)
-}
-func (m *ResizeRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	return xxx_messageInfo_ResizeRequest.Marshal(b, m, deterministic)
-}
-func (m *ResizeRequest) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_ResizeRequest.Merge(m, src)
-}
-func (m *ResizeRequest) XXX_Size() int {
-	return xxx_messageInfo_ResizeRequest.Size(m)
-}
-func (m *ResizeRequest) XXX_DiscardUnknown() {
-	xxx_messageInfo_ResizeRequest.DiscardUnknown(m)
-}
-
-var xxx_messageInfo_ResizeRequest proto.InternalMessageInfo
-
-func (m *ResizeRequest) GetWidth() int32 {
-	if m != nil {
-		return m.Width
-	}
-	return 0
-}
-
-func (m *ResizeRequest) GetHeight() int32 {
-	if m != nil {
-		return m.Height
-	}
-	return 0
-}
-
-type ResizeResponse struct {
-	XXX_NoUnkeyedLiteral struct{} `json:"-"`
-	XXX_unrecognized     []byte   `json:"-"`
-	XXX_sizecache        int32    `json:"-"`
-}
-
-func (m *ResizeResponse) Reset()         { *m = ResizeResponse{} }
-func (m *ResizeResponse) String() string { return proto.CompactTextString(m) }
-func (*ResizeResponse) ProtoMessage()    {}
-func (*ResizeResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_1f2821b95a83419f, []int{1}
-}
-
-func (m *ResizeResponse) XXX_Unmarshal(b []byte) error {
-	return xxx_messageInfo_ResizeResponse.Unmarshal(m, b)
-}
-func (m *ResizeResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	return xxx_messageInfo_ResizeResponse.Marshal(b, m, deterministic)
-}
-func (m *ResizeResponse) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_ResizeResponse.Merge(m, src)
-}
-func (m *ResizeResponse) XXX_Size() int {
-	return xxx_messageInfo_ResizeResponse.Size(m)
-}
-func (m *ResizeResponse) XXX_DiscardUnknown() {
-	xxx_messageInfo_ResizeResponse.DiscardUnknown(m)
-}
-
-var xxx_messageInfo_ResizeResponse proto.InternalMessageInfo
-
-type DrawRequest struct {
 	XXX_NoUnkeyedLiteral struct{} `json:"-"`
 	XXX_unrecognized     []byte   `json:"-"`
 	XXX_sizecache        int32    `json:"-"`
@@ -112,7 +36,7 @@ func (m *DrawRequest) Reset()         { *m = DrawRequest{} }
 func (m *DrawRequest) String() string { return proto.CompactTextString(m) }
 func (*DrawRequest) ProtoMessage()    {}
 func (*DrawRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_1f2821b95a83419f, []int{2}
+	return fileDescriptor_1f2821b95a83419f, []int{0}
 }
 
 func (m *DrawRequest) XXX_Unmarshal(b []byte) error {
@@ -133,6 +57,20 @@ func (m *DrawRequest) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_DrawRequest proto.InternalMessageInfo
 
+func (m *DrawRequest) GetWidth() int32 {
+	if m != nil {
+		return m.Width
+	}
+	return 0
+}
+
+func (m *DrawRequest) GetHeight() int32 {
+	if m != nil {
+		return m.Height
+	}
+	return 0
+}
+
 type DrawResponse struct {
 	Rows                 []*CellRow `protobuf:"bytes,1,rep,name=rows,proto3" json:"rows,omitempty"`
 	XXX_NoUnkeyedLiteral struct{}   `json:"-"`
@@ -144,7 +82,7 @@ func (m *DrawResponse) Reset()         { *m = DrawResponse{} }
 func (m *DrawResponse) String() string { return proto.CompactTextString(m) }
 func (*DrawResponse) ProtoMessage()    {}
 func (*DrawResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_1f2821b95a83419f, []int{3}
+	return fileDescriptor_1f2821b95a83419f, []int{1}
 }
 
 func (m *DrawResponse) XXX_Unmarshal(b []byte) error {
@@ -183,7 +121,7 @@ func (m *HandleRequest) Reset()         { *m = HandleRequest{} }
 func (m *HandleRequest) String() string { return proto.CompactTextString(m) }
 func (*HandleRequest) ProtoMessage()    {}
 func (*HandleRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_1f2821b95a83419f, []int{4}
+	return fileDescriptor_1f2821b95a83419f, []int{2}
 }
 
 func (m *HandleRequest) XXX_Unmarshal(b []byte) error {
@@ -223,7 +161,7 @@ func (m *HandleResponse) Reset()         { *m = HandleResponse{} }
 func (m *HandleResponse) String() string { return proto.CompactTextString(m) }
 func (*HandleResponse) ProtoMessage()    {}
 func (*HandleResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_1f2821b95a83419f, []int{5}
+	return fileDescriptor_1f2821b95a83419f, []int{3}
 }
 
 func (m *HandleResponse) XXX_Unmarshal(b []byte) error {
@@ -268,7 +206,7 @@ func (m *CursorRequest) Reset()         { *m = CursorRequest{} }
 func (m *CursorRequest) String() string { return proto.CompactTextString(m) }
 func (*CursorRequest) ProtoMessage()    {}
 func (*CursorRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_1f2821b95a83419f, []int{6}
+	return fileDescriptor_1f2821b95a83419f, []int{4}
 }
 
 func (m *CursorRequest) XXX_Unmarshal(b []byte) error {
@@ -301,7 +239,7 @@ func (m *CursorResponse) Reset()         { *m = CursorResponse{} }
 func (m *CursorResponse) String() string { return proto.CompactTextString(m) }
 func (*CursorResponse) ProtoMessage()    {}
 func (*CursorResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_1f2821b95a83419f, []int{7}
+	return fileDescriptor_1f2821b95a83419f, []int{5}
 }
 
 func (m *CursorResponse) XXX_Unmarshal(b []byte) error {
@@ -346,7 +284,7 @@ func (m *ManRequest) Reset()         { *m = ManRequest{} }
 func (m *ManRequest) String() string { return proto.CompactTextString(m) }
 func (*ManRequest) ProtoMessage()    {}
 func (*ManRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_1f2821b95a83419f, []int{8}
+	return fileDescriptor_1f2821b95a83419f, []int{6}
 }
 
 func (m *ManRequest) XXX_Unmarshal(b []byte) error {
@@ -378,7 +316,7 @@ func (m *ManResponse) Reset()         { *m = ManResponse{} }
 func (m *ManResponse) String() string { return proto.CompactTextString(m) }
 func (*ManResponse) ProtoMessage()    {}
 func (*ManResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_1f2821b95a83419f, []int{9}
+	return fileDescriptor_1f2821b95a83419f, []int{7}
 }
 
 func (m *ManResponse) XXX_Unmarshal(b []byte) error {
@@ -407,8 +345,6 @@ func (m *ManResponse) GetMan() *Manual {
 }
 
 func init() {
-	proto.RegisterType((*ResizeRequest)(nil), "proto.ResizeRequest")
-	proto.RegisterType((*ResizeResponse)(nil), "proto.ResizeResponse")
 	proto.RegisterType((*DrawRequest)(nil), "proto.DrawRequest")
 	proto.RegisterType((*DrawResponse)(nil), "proto.DrawResponse")
 	proto.RegisterType((*HandleRequest)(nil), "proto.HandleRequest")
@@ -422,31 +358,29 @@ func init() {
 func init() { proto.RegisterFile("proto/handler.proto", fileDescriptor_1f2821b95a83419f) }
 
 var fileDescriptor_1f2821b95a83419f = []byte{
-	// 386 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x5c, 0x51, 0xcd, 0xce, 0xda, 0x30,
-	0x10, 0x14, 0x1f, 0x24, 0x1f, 0xda, 0x90, 0x7c, 0xd4, 0xd0, 0x2a, 0xca, 0xa5, 0xc8, 0x27, 0x0e,
-	0x55, 0x90, 0x82, 0x38, 0xb6, 0x17, 0x5a, 0xa9, 0x17, 0x2e, 0x56, 0x5f, 0xc0, 0x55, 0xac, 0xc6,
-	0x52, 0xb0, 0xc1, 0x76, 0x1a, 0xa9, 0xef, 0xd0, 0x77, 0xae, 0xe2, 0x9f, 0x94, 0x70, 0x4a, 0x76,
-	0xd6, 0xb3, 0x33, 0x3b, 0x0b, 0x9b, 0x9b, 0x92, 0x46, 0x1e, 0x1a, 0x2a, 0xea, 0x96, 0xa9, 0xd2,
-	0x56, 0x28, 0xb2, 0x9f, 0x62, 0xed, 0x7a, 0x86, 0xa9, 0xab, 0x6b, 0x14, 0x6f, 0x1e, 0xe9, 0xb8,
-	0x03, 0xf0, 0x67, 0x48, 0x09, 0xd3, 0xfc, 0x0f, 0x23, 0xec, 0xde, 0x31, 0x6d, 0xd0, 0x16, 0xa2,
-	0x9e, 0xd7, 0xa6, 0xc9, 0x67, 0xbb, 0xd9, 0x3e, 0x22, 0xae, 0x40, 0x1f, 0x20, 0x6e, 0x18, 0xff,
-	0xd5, 0x98, 0xfc, 0xc5, 0xc2, 0xbe, 0xc2, 0x6b, 0xc8, 0x02, 0x5d, 0xdf, 0xa4, 0xd0, 0x0c, 0xa7,
-	0x90, 0x7c, 0x55, 0xb4, 0xf7, 0xe3, 0x70, 0x05, 0x2b, 0x57, 0xba, 0x36, 0xc2, 0xb0, 0x50, 0xb2,
-	0xd7, 0xf9, 0x6c, 0x37, 0xdf, 0x27, 0x55, 0xe6, 0x5c, 0x94, 0x67, 0xd6, 0xb6, 0x44, 0xf6, 0xc4,
-	0xf6, 0xf0, 0x11, 0xd2, 0xef, 0x76, 0x9d, 0xe0, 0x09, 0x43, 0xc4, 0x7e, 0x33, 0x61, 0xac, 0xa7,
-	0xa4, 0x5a, 0x79, 0xd6, 0xb7, 0x01, 0x23, 0xae, 0x85, 0xbf, 0x40, 0x16, 0x48, 0x5e, 0x2a, 0x87,
-	0x57, 0x97, 0x4a, 0x6d, 0x79, 0x4b, 0x12, 0x4a, 0x84, 0x60, 0x71, 0xef, 0xb8, 0xdb, 0x65, 0x49,
-	0xec, 0x3f, 0x7e, 0x83, 0xf4, 0xdc, 0x29, 0x2d, 0x55, 0x70, 0xfe, 0x03, 0xb2, 0x00, 0xf8, 0x81,
-	0x25, 0x2c, 0x6f, 0x52, 0x73, 0xc3, 0xa5, 0xf0, 0x4e, 0x50, 0xf0, 0x2f, 0xa5, 0xaa, 0xb9, 0xa0,
-	0x86, 0x69, 0x32, 0xbe, 0x19, 0x64, 0x74, 0x23, 0xfb, 0x20, 0x33, 0xfc, 0xe3, 0x15, 0xc0, 0x85,
-	0x8a, 0xa0, 0x51, 0x42, 0x62, 0x2b, 0x2f, 0xf0, 0x11, 0xe6, 0x57, 0x1a, 0x66, 0xa7, 0x7e, 0xf6,
-	0x85, 0x8a, 0x8e, 0xb6, 0x64, 0xe8, 0x54, 0x7f, 0x5f, 0xe0, 0xd5, 0x6d, 0xa9, 0xd0, 0x09, 0x62,
-	0x17, 0x3d, 0xda, 0xfa, 0x97, 0x93, 0x43, 0x16, 0xef, 0x9f, 0x50, 0xaf, 0x71, 0x80, 0xc5, 0x70,
-	0x10, 0x14, 0xac, 0x3f, 0x1c, 0xab, 0xd8, 0x4c, 0x30, 0x4f, 0x38, 0x41, 0xec, 0x24, 0x47, 0x9d,
-	0xc9, 0x71, 0x46, 0x9d, 0xa7, 0xf4, 0x4f, 0x10, 0xbb, 0xf8, 0x46, 0xda, 0x24, 0xde, 0x91, 0xf6,
-	0x94, 0xf1, 0x27, 0x98, 0x5f, 0xa8, 0x40, 0xef, 0xfe, 0x2f, 0x1f, 0x08, 0xe8, 0x11, 0x72, 0xaf,
-	0x7f, 0xc6, 0x16, 0x3a, 0xfe, 0x0b, 0x00, 0x00, 0xff, 0xff, 0xc6, 0xbe, 0x74, 0x6b, 0x05, 0x03,
+	// 354 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x5c, 0x51, 0xcb, 0x6a, 0xeb, 0x30,
+	0x14, 0xc4, 0x37, 0x71, 0x12, 0x8e, 0xf3, 0xb8, 0x55, 0xd2, 0x62, 0xbc, 0x69, 0xd0, 0x2a, 0x8b,
+	0xe2, 0x80, 0x43, 0x57, 0x85, 0x6e, 0xd2, 0x42, 0x37, 0xd9, 0x88, 0xfe, 0x80, 0x8a, 0x45, 0x2d,
+	0x70, 0xa4, 0x44, 0x92, 0xeb, 0x3f, 0xed, 0xf7, 0x14, 0xeb, 0x91, 0xd7, 0xca, 0x3a, 0x33, 0x9a,
+	0x33, 0xa3, 0x31, 0xcc, 0x0f, 0x4a, 0x1a, 0xb9, 0xae, 0xa8, 0x28, 0x6b, 0xa6, 0x72, 0x3b, 0xa1,
+	0xd8, 0x7e, 0xb2, 0xff, 0x8e, 0x33, 0x4c, 0xed, 0x1d, 0x91, 0xcd, 0x3c, 0xd2, 0x70, 0x07, 0xe0,
+	0x17, 0x48, 0xde, 0x14, 0x6d, 0x09, 0x3b, 0x36, 0x4c, 0x1b, 0xb4, 0x80, 0xb8, 0xe5, 0xa5, 0xa9,
+	0xd2, 0x68, 0x19, 0xad, 0x62, 0xe2, 0x06, 0xf4, 0x00, 0x83, 0x8a, 0xf1, 0xef, 0xca, 0xa4, 0xff,
+	0x2c, 0xec, 0x27, 0x5c, 0xc0, 0xd8, 0x89, 0xf5, 0x41, 0x0a, 0xcd, 0x10, 0x86, 0xbe, 0x92, 0xad,
+	0x4e, 0xa3, 0x65, 0x6f, 0x95, 0x14, 0x53, 0x67, 0x91, 0x6f, 0x59, 0x5d, 0x13, 0xd9, 0x12, 0xcb,
+	0xe1, 0x0d, 0x4c, 0x3e, 0x6c, 0xd6, 0x60, 0x89, 0x21, 0x66, 0x3f, 0x4c, 0x18, 0x6b, 0x99, 0x14,
+	0x63, 0xaf, 0x7a, 0xef, 0x30, 0xe2, 0x28, 0xfc, 0x0a, 0xd3, 0x20, 0xf2, 0x56, 0x29, 0x0c, 0xdd,
+	0x93, 0x4b, 0xab, 0x1b, 0x91, 0x30, 0x22, 0x04, 0xfd, 0x63, 0xc3, 0x5d, 0xd4, 0x11, 0xb1, 0x67,
+	0x3c, 0x83, 0xc9, 0xb6, 0x51, 0x5a, 0x2a, 0x6f, 0x8a, 0x3f, 0x61, 0x1a, 0x00, 0xbf, 0x30, 0x87,
+	0xd1, 0x41, 0x6a, 0x6e, 0xb8, 0x14, 0x3e, 0x09, 0x0a, 0xf9, 0xa5, 0x54, 0x25, 0x17, 0xd4, 0x30,
+	0x4d, 0x4e, 0x77, 0x3a, 0x1b, 0x5d, 0xc9, 0x36, 0xd8, 0x74, 0x67, 0x3c, 0x06, 0xd8, 0x51, 0x11,
+	0x3c, 0x72, 0x48, 0xec, 0xe4, 0x0d, 0x1e, 0xa1, 0xb7, 0xa7, 0x61, 0xf7, 0xc4, 0xef, 0xde, 0x51,
+	0xd1, 0xd0, 0x9a, 0x74, 0x4c, 0xf1, 0x1b, 0xc1, 0xd0, 0xbd, 0x52, 0xa1, 0x35, 0xf4, 0xbb, 0x66,
+	0x51, 0xc8, 0x70, 0xf1, 0x8f, 0xb2, 0xf9, 0x15, 0xe6, 0xb7, 0x3f, 0xc3, 0xc0, 0x69, 0xd1, 0xc2,
+	0xd3, 0x57, 0x2d, 0x67, 0xf7, 0x37, 0xe8, 0x59, 0xe6, 0x7a, 0x38, 0xc9, 0xae, 0x7a, 0x3a, 0xc9,
+	0x6e, 0xca, 0x7a, 0x82, 0xde, 0x8e, 0x0a, 0x74, 0x77, 0x7e, 0x45, 0x10, 0xa0, 0x4b, 0xc8, 0xdd,
+	0xfe, 0x1a, 0x58, 0x68, 0xf3, 0x17, 0x00, 0x00, 0xff, 0xff, 0x47, 0x33, 0x74, 0xbb, 0xab, 0x02,
 	0x00, 0x00,
 }
 
@@ -462,7 +396,6 @@ const _ = grpc.SupportPackageIsVersion6
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://godoc.org/google.golang.org/grpc#ClientConn.NewStream.
 type HandlerClient interface {
-	Resize(ctx context.Context, in *ResizeRequest, opts ...grpc.CallOption) (*ResizeResponse, error)
 	Draw(ctx context.Context, in *DrawRequest, opts ...grpc.CallOption) (*DrawResponse, error)
 	Handle(ctx context.Context, in *HandleRequest, opts ...grpc.CallOption) (*HandleResponse, error)
 	Cursor(ctx context.Context, in *CursorRequest, opts ...grpc.CallOption) (*CursorResponse, error)
@@ -475,15 +408,6 @@ type handlerClient struct {
 
 func NewHandlerClient(cc grpc.ClientConnInterface) HandlerClient {
 	return &handlerClient{cc}
-}
-
-func (c *handlerClient) Resize(ctx context.Context, in *ResizeRequest, opts ...grpc.CallOption) (*ResizeResponse, error) {
-	out := new(ResizeResponse)
-	err := c.cc.Invoke(ctx, "/proto.Handler/Resize", in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
 }
 
 func (c *handlerClient) Draw(ctx context.Context, in *DrawRequest, opts ...grpc.CallOption) (*DrawResponse, error) {
@@ -524,7 +448,6 @@ func (c *handlerClient) Man(ctx context.Context, in *ManRequest, opts ...grpc.Ca
 
 // HandlerServer is the server API for Handler service.
 type HandlerServer interface {
-	Resize(context.Context, *ResizeRequest) (*ResizeResponse, error)
 	Draw(context.Context, *DrawRequest) (*DrawResponse, error)
 	Handle(context.Context, *HandleRequest) (*HandleResponse, error)
 	Cursor(context.Context, *CursorRequest) (*CursorResponse, error)
@@ -535,9 +458,6 @@ type HandlerServer interface {
 type UnimplementedHandlerServer struct {
 }
 
-func (*UnimplementedHandlerServer) Resize(ctx context.Context, req *ResizeRequest) (*ResizeResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method Resize not implemented")
-}
 func (*UnimplementedHandlerServer) Draw(ctx context.Context, req *DrawRequest) (*DrawResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Draw not implemented")
 }
@@ -553,24 +473,6 @@ func (*UnimplementedHandlerServer) Man(ctx context.Context, req *ManRequest) (*M
 
 func RegisterHandlerServer(s *grpc.Server, srv HandlerServer) {
 	s.RegisterService(&_Handler_serviceDesc, srv)
-}
-
-func _Handler_Resize_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ResizeRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(HandlerServer).Resize(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/proto.Handler/Resize",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(HandlerServer).Resize(ctx, req.(*ResizeRequest))
-	}
-	return interceptor(ctx, in, info, handler)
 }
 
 func _Handler_Draw_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
@@ -649,10 +551,6 @@ var _Handler_serviceDesc = grpc.ServiceDesc{
 	ServiceName: "proto.Handler",
 	HandlerType: (*HandlerServer)(nil),
 	Methods: []grpc.MethodDesc{
-		{
-			MethodName: "Resize",
-			Handler:    _Handler_Resize_Handler,
-		},
 		{
 			MethodName: "Draw",
 			Handler:    _Handler_Draw_Handler,

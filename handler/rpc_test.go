@@ -36,8 +36,8 @@ func testHandler() tui.Handler {
 
 func newStubClient(t *testing.T) *Client {
 	return &Client{
-		client: &proto.MockHandlerClient{
-			Remote: testHandler(),
+		client: &mockHandlerClient{
+			remote: testHandler(),
 		},
 	}
 }
@@ -91,14 +91,14 @@ func TestUnitClientHandlerCursor(t *testing.T) {
 
 func TestClientHandleErrors(t *testing.T) {
 	myErr := errors.New("functional programming is overrated")
-	stubClient := NewClient(&proto.MockHandlerClient{
-		Remote:      testHandler(),
-		ResizeError: myErr,
+	stubClient := NewClient(&mockHandlerClient{
+		remote:      testHandler(),
+		cursorError: myErr,
 	})
 	errChan := stubClient.Errors()
 
 	go func() {
-		stubClient.Resize(10, 10)
+		_, _ = stubClient.Cursor()
 	}()
 
 	assert.Equal(t, myErr, <-errChan)
