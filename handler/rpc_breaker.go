@@ -54,14 +54,15 @@ func (b *clientBreaker) rpcWithTimeout(
 	var res interface{}
 	var err error
 	ch := make(chan struct{})
+	defer close(ch)
 
 	go func() {
 		res, err = rpc(ctx)
-		ch <- struct{}{}
+		<-ch
 	}()
 
 	select {
-	case <-ch:
+	case ch <- struct{}{}:
 		return res, err
 	case <-ctx.Done():
 		return nil, ctx.Err()
