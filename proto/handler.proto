@@ -11,7 +11,13 @@ message DrawRequest {
 }
 
 message DrawResponse {
+	message Cursor {
+		Coordinates position = 1;
+		bool show = 2;
+	}
+
 	repeated CellRow rows = 1;
+	Cursor cursor = 2;
 }
 
 message HandleRequest {
@@ -23,13 +29,6 @@ message HandleResponse {
 	bool quit = 2;
 }
 
-message CursorRequest {}
-
-message CursorResponse {
-	Coordinates position = 1;
-	bool show = 2;
-}
-
 message ManRequest {}
 
 message ManResponse {
@@ -39,6 +38,5 @@ message ManResponse {
 service Handler {
 	rpc Draw(DrawRequest) returns (DrawResponse);
 	rpc Handle(HandleRequest) returns (HandleResponse);
-	rpc Cursor(CursorRequest) returns (CursorResponse);
 	rpc Man(ManRequest) returns (ManResponse);
 }

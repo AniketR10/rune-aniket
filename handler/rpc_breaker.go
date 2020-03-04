@@ -101,18 +101,6 @@ func (b *clientBreaker) Handle(
 	return resIfc.(*proto.HandleResponse), err
 }
 
-func (b *clientBreaker) Cursor(
-	ctx context.Context, in *proto.CursorRequest, opts ...grpc.CallOption,
-) (*proto.CursorResponse, error) {
-	resIfc, err := b.rpcWithTimeout(ctx, func(ctx context.Context) (interface{}, error) {
-		return b.other.Cursor(ctx, in, opts...)
-	})
-	if err != nil {
-		return nil, err
-	}
-	return resIfc.(*proto.CursorResponse), err
-}
-
 func (b *clientBreaker) Man(
 	ctx context.Context, in *proto.ManRequest, opts ...grpc.CallOption,
 ) (*proto.ManResponse, error) {

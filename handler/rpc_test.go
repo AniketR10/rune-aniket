@@ -68,6 +68,9 @@ func testRPCHandlerManual(t *testing.T, rpcHandler *Client) {
 }
 
 func testRPCHandlerCursor(t *testing.T, rpcHandler *Client) {
+	// force call to underlying Cursor
+	rpcHandler.Draw(term.NewStringWriter(0, 0))
+
 	pos, ok := rpcHandler.Cursor()
 	require.False(t, ok)
 
@@ -92,13 +95,13 @@ func TestUnitClientHandlerCursor(t *testing.T) {
 func TestClientHandleErrors(t *testing.T) {
 	myErr := errors.New("functional programming is overrated")
 	stubClient := NewClient(&mockHandlerClient{
-		remote:      testHandler(),
-		cursorError: myErr,
+		remote:   testHandler(),
+		manError: myErr,
 	})
 	errChan := stubClient.Errors()
 
 	go func() {
-		_, _ = stubClient.Cursor()
+		_ = stubClient.Man()
 	}()
 
 	assert.Equal(t, myErr, <-errChan)

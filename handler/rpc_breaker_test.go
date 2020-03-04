@@ -93,12 +93,6 @@ func testHandlerTimeout(t *testing.T,
 	assert.Nil(t, res)
 }
 
-func TestHandlerCursorTimeout(t *testing.T) {
-	testHandlerTimeout(t, func(c proto.HandlerClient) (interface{}, error) {
-		return c.Cursor(context.Background(), new(proto.CursorRequest))
-	})
-}
-
 func TestHandlerManTimeout(t *testing.T) {
 	testHandlerTimeout(t, func(c proto.HandlerClient) (interface{}, error) {
 		return c.Man(context.Background(), new(proto.ManRequest))

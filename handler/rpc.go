@@ -14,12 +14,20 @@ import (
 const defaultRPCTimeout = 5 * time.Second
 
 // Client satisfies Handler by talking to a remote handler over GRPC.
+//
+// Note that Draw,Resize and Cursor are conflated into one RPC. This
+// Client relies on the fact that runtime first Resizes, then calls Draw,
+// and then gets the Cursor.
 type Client struct {
 	Logger *log.Logger
 
 	width, height int
-	errors        chan error
-	client        proto.HandlerClient
+	cursor        struct {
+		term.Coordinates
+		show bool
+	}
+	errors chan error
+	client proto.HandlerClient
 }
 
 // NewClient allocates storage for a new Client and initializes it.
@@ -75,6 +83,12 @@ func (c *Client) Draw(w tui.Writer) {
 			w.SetCell(term.Coordinates{X: x, Y: y}, cell)
 		}
 	}
+
+	cursor := resp.GetCursor()
+	pos := cursor.GetPosition()
+	c.cursor.X = int(pos.GetX())
+	c.cursor.Y = int(pos.GetY())
+	c.cursor.show = cursor.GetShow()
 }
 
 // Handle satisfies tui.Handler
@@ -100,23 +114,7 @@ func (c *Client) Handle(ev term.Event) (exit, handled bool) {
 
 // Cursor satisfies tui.Handler
 func (c *Client) Cursor() (pos term.Coordinates, show bool) {
-	ctx := context.Background()
-	req := proto.CursorRequest{}
-
-	resp, err := c.client.Cursor(ctx, &req)
-	if err != nil {
-		c.collectError(err)
-		return
-	}
-
-	if resp.GetPosition() == nil {
-		c.collectError(errors.New("missing Position field in Cursor response"))
-		return
-	}
-
-	pos = resp.GetPosition().ToModel()
-	show = resp.GetShow()
-	return
+	return c.cursor.Coordinates, c.cursor.show
 }
 
 // Man satisfies tui.Handler
@@ -168,7 +166,16 @@ func (s *Server) Draw(ctx context.Context, in *proto.DrawRequest) (
 	*proto.DrawResponse, error,
 ) {
 	s.handler.Resize(int(in.Width), int(in.Height))
-	return proto.NewDrawResponse(s.handler, int(in.Width), int(in.Height)), nil
+	cursor, show := s.handler.Cursor()
+	res := proto.NewDrawResponse(s.handler, int(in.Width), int(in.Height))
+	res.Cursor = &proto.DrawResponse_Cursor{
+		Position: &proto.Coordinates{
+			X: int32(cursor.X),
+			Y: int32(cursor.Y),
+		},
+		Show: show,
+	}
+	return res, nil
 }
 
 // Handle is an RPC that handles request to an underlying Handler's
@@ -186,18 +193,6 @@ func (s *Server) Handle(ctx context.Context, req *proto.HandleRequest) (
 	}
 	exit, handled := s.handler.Handle(ev)
 	return &proto.HandleResponse{Quit: exit, Handled: handled}, nil
-}
-
-// Cursor is an RPC that handles request to an underlying Handler's
-// Cursor over RPC.
-func (s *Server) Cursor(ctx context.Context, req *proto.CursorRequest) (
-	*proto.CursorResponse, error,
-) {
-	pos, show := s.handler.Cursor()
-	return &proto.CursorResponse{
-		Position: &proto.Coordinates{X: int32(pos.X), Y: int32(pos.Y)},
-		Show:     show,
-	}, nil
 }
 
 // Man is an RPC that handles request to an underlying

@@ -72,10 +72,11 @@ func (m *DrawRequest) GetHeight() int32 {
 }
 
 type DrawResponse struct {
-	Rows                 []*CellRow `protobuf:"bytes,1,rep,name=rows,proto3" json:"rows,omitempty"`
-	XXX_NoUnkeyedLiteral struct{}   `json:"-"`
-	XXX_unrecognized     []byte     `json:"-"`
-	XXX_sizecache        int32      `json:"-"`
+	Rows                 []*CellRow           `protobuf:"bytes,1,rep,name=rows,proto3" json:"rows,omitempty"`
+	Cursor               *DrawResponse_Cursor `protobuf:"bytes,2,opt,name=cursor,proto3" json:"cursor,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}             `json:"-"`
+	XXX_unrecognized     []byte               `json:"-"`
+	XXX_sizecache        int32                `json:"-"`
 }
 
 func (m *DrawResponse) Reset()         { *m = DrawResponse{} }
@@ -108,6 +109,60 @@ func (m *DrawResponse) GetRows() []*CellRow {
 		return m.Rows
 	}
 	return nil
+}
+
+func (m *DrawResponse) GetCursor() *DrawResponse_Cursor {
+	if m != nil {
+		return m.Cursor
+	}
+	return nil
+}
+
+type DrawResponse_Cursor struct {
+	Position             *Coordinates `protobuf:"bytes,1,opt,name=position,proto3" json:"position,omitempty"`
+	Show                 bool         `protobuf:"varint,2,opt,name=show,proto3" json:"show,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}     `json:"-"`
+	XXX_unrecognized     []byte       `json:"-"`
+	XXX_sizecache        int32        `json:"-"`
+}
+
+func (m *DrawResponse_Cursor) Reset()         { *m = DrawResponse_Cursor{} }
+func (m *DrawResponse_Cursor) String() string { return proto.CompactTextString(m) }
+func (*DrawResponse_Cursor) ProtoMessage()    {}
+func (*DrawResponse_Cursor) Descriptor() ([]byte, []int) {
+	return fileDescriptor_1f2821b95a83419f, []int{1, 0}
+}
+
+func (m *DrawResponse_Cursor) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_DrawResponse_Cursor.Unmarshal(m, b)
+}
+func (m *DrawResponse_Cursor) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_DrawResponse_Cursor.Marshal(b, m, deterministic)
+}
+func (m *DrawResponse_Cursor) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_DrawResponse_Cursor.Merge(m, src)
+}
+func (m *DrawResponse_Cursor) XXX_Size() int {
+	return xxx_messageInfo_DrawResponse_Cursor.Size(m)
+}
+func (m *DrawResponse_Cursor) XXX_DiscardUnknown() {
+	xxx_messageInfo_DrawResponse_Cursor.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_DrawResponse_Cursor proto.InternalMessageInfo
+
+func (m *DrawResponse_Cursor) GetPosition() *Coordinates {
+	if m != nil {
+		return m.Position
+	}
+	return nil
+}
+
+func (m *DrawResponse_Cursor) GetShow() bool {
+	if m != nil {
+		return m.Show
+	}
+	return false
 }
 
 type HandleRequest struct {
@@ -196,84 +251,6 @@ func (m *HandleResponse) GetQuit() bool {
 	return false
 }
 
-type CursorRequest struct {
-	XXX_NoUnkeyedLiteral struct{} `json:"-"`
-	XXX_unrecognized     []byte   `json:"-"`
-	XXX_sizecache        int32    `json:"-"`
-}
-
-func (m *CursorRequest) Reset()         { *m = CursorRequest{} }
-func (m *CursorRequest) String() string { return proto.CompactTextString(m) }
-func (*CursorRequest) ProtoMessage()    {}
-func (*CursorRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_1f2821b95a83419f, []int{4}
-}
-
-func (m *CursorRequest) XXX_Unmarshal(b []byte) error {
-	return xxx_messageInfo_CursorRequest.Unmarshal(m, b)
-}
-func (m *CursorRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	return xxx_messageInfo_CursorRequest.Marshal(b, m, deterministic)
-}
-func (m *CursorRequest) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_CursorRequest.Merge(m, src)
-}
-func (m *CursorRequest) XXX_Size() int {
-	return xxx_messageInfo_CursorRequest.Size(m)
-}
-func (m *CursorRequest) XXX_DiscardUnknown() {
-	xxx_messageInfo_CursorRequest.DiscardUnknown(m)
-}
-
-var xxx_messageInfo_CursorRequest proto.InternalMessageInfo
-
-type CursorResponse struct {
-	Position             *Coordinates `protobuf:"bytes,1,opt,name=position,proto3" json:"position,omitempty"`
-	Show                 bool         `protobuf:"varint,2,opt,name=show,proto3" json:"show,omitempty"`
-	XXX_NoUnkeyedLiteral struct{}     `json:"-"`
-	XXX_unrecognized     []byte       `json:"-"`
-	XXX_sizecache        int32        `json:"-"`
-}
-
-func (m *CursorResponse) Reset()         { *m = CursorResponse{} }
-func (m *CursorResponse) String() string { return proto.CompactTextString(m) }
-func (*CursorResponse) ProtoMessage()    {}
-func (*CursorResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_1f2821b95a83419f, []int{5}
-}
-
-func (m *CursorResponse) XXX_Unmarshal(b []byte) error {
-	return xxx_messageInfo_CursorResponse.Unmarshal(m, b)
-}
-func (m *CursorResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	return xxx_messageInfo_CursorResponse.Marshal(b, m, deterministic)
-}
-func (m *CursorResponse) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_CursorResponse.Merge(m, src)
-}
-func (m *CursorResponse) XXX_Size() int {
-	return xxx_messageInfo_CursorResponse.Size(m)
-}
-func (m *CursorResponse) XXX_DiscardUnknown() {
-	xxx_messageInfo_CursorResponse.DiscardUnknown(m)
-}
-
-var xxx_messageInfo_CursorResponse proto.InternalMessageInfo
-
-func (m *CursorResponse) GetPosition() *Coordinates {
-	if m != nil {
-		return m.Position
-	}
-	return nil
-}
-
-func (m *CursorResponse) GetShow() bool {
-	if m != nil {
-		return m.Show
-	}
-	return false
-}
-
 type ManRequest struct {
 	XXX_NoUnkeyedLiteral struct{} `json:"-"`
 	XXX_unrecognized     []byte   `json:"-"`
@@ -284,7 +261,7 @@ func (m *ManRequest) Reset()         { *m = ManRequest{} }
 func (m *ManRequest) String() string { return proto.CompactTextString(m) }
 func (*ManRequest) ProtoMessage()    {}
 func (*ManRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_1f2821b95a83419f, []int{6}
+	return fileDescriptor_1f2821b95a83419f, []int{4}
 }
 
 func (m *ManRequest) XXX_Unmarshal(b []byte) error {
@@ -316,7 +293,7 @@ func (m *ManResponse) Reset()         { *m = ManResponse{} }
 func (m *ManResponse) String() string { return proto.CompactTextString(m) }
 func (*ManResponse) ProtoMessage()    {}
 func (*ManResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_1f2821b95a83419f, []int{7}
+	return fileDescriptor_1f2821b95a83419f, []int{5}
 }
 
 func (m *ManResponse) XXX_Unmarshal(b []byte) error {
@@ -347,10 +324,9 @@ func (m *ManResponse) GetMan() *Manual {
 func init() {
 	proto.RegisterType((*DrawRequest)(nil), "proto.DrawRequest")
 	proto.RegisterType((*DrawResponse)(nil), "proto.DrawResponse")
+	proto.RegisterType((*DrawResponse_Cursor)(nil), "proto.DrawResponse.Cursor")
 	proto.RegisterType((*HandleRequest)(nil), "proto.HandleRequest")
 	proto.RegisterType((*HandleResponse)(nil), "proto.HandleResponse")
-	proto.RegisterType((*CursorRequest)(nil), "proto.CursorRequest")
-	proto.RegisterType((*CursorResponse)(nil), "proto.CursorResponse")
 	proto.RegisterType((*ManRequest)(nil), "proto.ManRequest")
 	proto.RegisterType((*ManResponse)(nil), "proto.ManResponse")
 }
@@ -358,30 +334,30 @@ func init() {
 func init() { proto.RegisterFile("proto/handler.proto", fileDescriptor_1f2821b95a83419f) }
 
 var fileDescriptor_1f2821b95a83419f = []byte{
-	// 354 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x5c, 0x51, 0xcb, 0x6a, 0xeb, 0x30,
-	0x14, 0xc4, 0x37, 0x71, 0x12, 0x8e, 0xf3, 0xb8, 0x55, 0xd2, 0x62, 0xbc, 0x69, 0xd0, 0x2a, 0x8b,
-	0xe2, 0x80, 0x43, 0x57, 0x85, 0x6e, 0xd2, 0x42, 0x37, 0xd9, 0x88, 0xfe, 0x80, 0x8a, 0x45, 0x2d,
-	0x70, 0xa4, 0x44, 0x92, 0xeb, 0x3f, 0xed, 0xf7, 0x14, 0xeb, 0x91, 0xd7, 0xca, 0x3a, 0x33, 0x9a,
-	0x33, 0xa3, 0x31, 0xcc, 0x0f, 0x4a, 0x1a, 0xb9, 0xae, 0xa8, 0x28, 0x6b, 0xa6, 0x72, 0x3b, 0xa1,
-	0xd8, 0x7e, 0xb2, 0xff, 0x8e, 0x33, 0x4c, 0xed, 0x1d, 0x91, 0xcd, 0x3c, 0xd2, 0x70, 0x07, 0xe0,
-	0x17, 0x48, 0xde, 0x14, 0x6d, 0x09, 0x3b, 0x36, 0x4c, 0x1b, 0xb4, 0x80, 0xb8, 0xe5, 0xa5, 0xa9,
-	0xd2, 0x68, 0x19, 0xad, 0x62, 0xe2, 0x06, 0xf4, 0x00, 0x83, 0x8a, 0xf1, 0xef, 0xca, 0xa4, 0xff,
-	0x2c, 0xec, 0x27, 0x5c, 0xc0, 0xd8, 0x89, 0xf5, 0x41, 0x0a, 0xcd, 0x10, 0x86, 0xbe, 0x92, 0xad,
-	0x4e, 0xa3, 0x65, 0x6f, 0x95, 0x14, 0x53, 0x67, 0x91, 0x6f, 0x59, 0x5d, 0x13, 0xd9, 0x12, 0xcb,
-	0xe1, 0x0d, 0x4c, 0x3e, 0x6c, 0xd6, 0x60, 0x89, 0x21, 0x66, 0x3f, 0x4c, 0x18, 0x6b, 0x99, 0x14,
-	0x63, 0xaf, 0x7a, 0xef, 0x30, 0xe2, 0x28, 0xfc, 0x0a, 0xd3, 0x20, 0xf2, 0x56, 0x29, 0x0c, 0xdd,
-	0x93, 0x4b, 0xab, 0x1b, 0x91, 0x30, 0x22, 0x04, 0xfd, 0x63, 0xc3, 0x5d, 0xd4, 0x11, 0xb1, 0x67,
-	0x3c, 0x83, 0xc9, 0xb6, 0x51, 0x5a, 0x2a, 0x6f, 0x8a, 0x3f, 0x61, 0x1a, 0x00, 0xbf, 0x30, 0x87,
-	0xd1, 0x41, 0x6a, 0x6e, 0xb8, 0x14, 0x3e, 0x09, 0x0a, 0xf9, 0xa5, 0x54, 0x25, 0x17, 0xd4, 0x30,
-	0x4d, 0x4e, 0x77, 0x3a, 0x1b, 0x5d, 0xc9, 0x36, 0xd8, 0x74, 0x67, 0x3c, 0x06, 0xd8, 0x51, 0x11,
-	0x3c, 0x72, 0x48, 0xec, 0xe4, 0x0d, 0x1e, 0xa1, 0xb7, 0xa7, 0x61, 0xf7, 0xc4, 0xef, 0xde, 0x51,
-	0xd1, 0xd0, 0x9a, 0x74, 0x4c, 0xf1, 0x1b, 0xc1, 0xd0, 0xbd, 0x52, 0xa1, 0x35, 0xf4, 0xbb, 0x66,
-	0x51, 0xc8, 0x70, 0xf1, 0x8f, 0xb2, 0xf9, 0x15, 0xe6, 0xb7, 0x3f, 0xc3, 0xc0, 0x69, 0xd1, 0xc2,
-	0xd3, 0x57, 0x2d, 0x67, 0xf7, 0x37, 0xe8, 0x59, 0xe6, 0x7a, 0x38, 0xc9, 0xae, 0x7a, 0x3a, 0xc9,
-	0x6e, 0xca, 0x7a, 0x82, 0xde, 0x8e, 0x0a, 0x74, 0x77, 0x7e, 0x45, 0x10, 0xa0, 0x4b, 0xc8, 0xdd,
-	0xfe, 0x1a, 0x58, 0x68, 0xf3, 0x17, 0x00, 0x00, 0xff, 0xff, 0x47, 0x33, 0x74, 0xbb, 0xab, 0x02,
-	0x00, 0x00,
+	// 360 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x6c, 0x50, 0xc1, 0x4e, 0xeb, 0x30,
+	0x10, 0x54, 0x5e, 0x9b, 0xb4, 0xda, 0xb4, 0x7d, 0xef, 0x6d, 0x0b, 0x8a, 0x72, 0xa1, 0xf2, 0xa9,
+	0x07, 0x94, 0x4a, 0xa9, 0x38, 0x21, 0x71, 0x29, 0x48, 0x1c, 0xe8, 0xc5, 0x7f, 0x60, 0x88, 0x45,
+	0x22, 0xa5, 0x76, 0x6b, 0x3b, 0xe4, 0x73, 0xf8, 0x09, 0x3e, 0x10, 0xc5, 0x76, 0xa0, 0x45, 0x9c,
+	0x92, 0x9d, 0xd9, 0x99, 0xf1, 0x0e, 0xcc, 0x0f, 0x4a, 0x1a, 0xb9, 0x2e, 0x99, 0x28, 0x6a, 0xae,
+	0x32, 0x3b, 0x61, 0x68, 0x3f, 0xe9, 0x3f, 0xc7, 0x19, 0xae, 0xf6, 0x8e, 0x48, 0xff, 0x7a, 0xa4,
+	0xa9, 0x1c, 0x40, 0x6e, 0x21, 0xbe, 0x57, 0xac, 0xa5, 0xfc, 0xd8, 0x70, 0x6d, 0x70, 0x01, 0x61,
+	0x5b, 0x15, 0xa6, 0x4c, 0x82, 0x65, 0xb0, 0x0a, 0xa9, 0x1b, 0xf0, 0x12, 0xa2, 0x92, 0x57, 0xaf,
+	0xa5, 0x49, 0xfe, 0x58, 0xd8, 0x4f, 0xe4, 0x23, 0x80, 0x89, 0x53, 0xeb, 0x83, 0x14, 0x9a, 0x23,
+	0x81, 0xa1, 0x92, 0xad, 0x4e, 0x82, 0xe5, 0x60, 0x15, 0xe7, 0x33, 0x97, 0x91, 0x6d, 0x79, 0x5d,
+	0x53, 0xd9, 0x52, 0xcb, 0x61, 0x0e, 0xd1, 0x4b, 0xa3, 0xb4, 0x54, 0xd6, 0x2c, 0xce, 0x53, 0xbf,
+	0x75, 0x6a, 0x94, 0x6d, 0xed, 0x06, 0xf5, 0x9b, 0xe9, 0x13, 0x44, 0x0e, 0xc1, 0x0c, 0xc6, 0x07,
+	0xa9, 0x2b, 0x53, 0x49, 0x61, 0xdf, 0x18, 0xe7, 0xd8, 0xa7, 0x48, 0xa9, 0x8a, 0x4a, 0x30, 0xc3,
+	0x35, 0xfd, 0xda, 0x41, 0x84, 0xa1, 0x2e, 0x65, 0x6b, 0xb3, 0xc6, 0xd4, 0xfe, 0x93, 0x0d, 0x4c,
+	0x1f, 0x6d, 0x5d, 0xfd, 0xd5, 0x04, 0x42, 0xfe, 0xc6, 0x85, 0xf1, 0x8e, 0x13, 0xef, 0xf8, 0xd0,
+	0x61, 0xd4, 0x51, 0xe4, 0x0e, 0x66, 0xbd, 0xc8, 0x1f, 0x9b, 0xc0, 0xc8, 0xb5, 0x5e, 0x58, 0xdd,
+	0x98, 0xf6, 0x63, 0x17, 0x7a, 0x6c, 0x2a, 0xd3, 0x87, 0x76, 0xff, 0x64, 0x02, 0xb0, 0x63, 0xc2,
+	0x27, 0x92, 0x0c, 0x62, 0x3b, 0x79, 0xab, 0x2b, 0x18, 0xec, 0x59, 0x7f, 0xd0, 0xd4, 0xc7, 0xef,
+	0x98, 0x68, 0x58, 0x4d, 0x3b, 0x26, 0x7f, 0x0f, 0x60, 0xe4, 0xe2, 0x15, 0xae, 0x61, 0xd8, 0x75,
+	0x85, 0x78, 0x56, 0x9c, 0xf5, 0x4d, 0xe7, 0xbf, 0x94, 0x89, 0x37, 0x10, 0x39, 0x2d, 0x2e, 0x3c,
+	0x7d, 0x76, 0x7e, 0x7a, 0xf1, 0x03, 0xf5, 0xb2, 0x6b, 0x18, 0xec, 0x98, 0xc0, 0xff, 0xdf, 0xcf,
+	0xe9, 0x05, 0x78, 0x0a, 0xb9, 0xed, 0xe7, 0xc8, 0x42, 0x9b, 0xcf, 0x00, 0x00, 0x00, 0xff, 0xff,
+	0xfb, 0xf0, 0x16, 0x8a, 0x90, 0x02, 0x00, 0x00,
 }
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -398,7 +374,6 @@ const _ = grpc.SupportPackageIsVersion6
 type HandlerClient interface {
 	Draw(ctx context.Context, in *DrawRequest, opts ...grpc.CallOption) (*DrawResponse, error)
 	Handle(ctx context.Context, in *HandleRequest, opts ...grpc.CallOption) (*HandleResponse, error)
-	Cursor(ctx context.Context, in *CursorRequest, opts ...grpc.CallOption) (*CursorResponse, error)
 	Man(ctx context.Context, in *ManRequest, opts ...grpc.CallOption) (*ManResponse, error)
 }
 
@@ -428,15 +403,6 @@ func (c *handlerClient) Handle(ctx context.Context, in *HandleRequest, opts ...g
 	return out, nil
 }
 
-func (c *handlerClient) Cursor(ctx context.Context, in *CursorRequest, opts ...grpc.CallOption) (*CursorResponse, error) {
-	out := new(CursorResponse)
-	err := c.cc.Invoke(ctx, "/proto.Handler/Cursor", in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
 func (c *handlerClient) Man(ctx context.Context, in *ManRequest, opts ...grpc.CallOption) (*ManResponse, error) {
 	out := new(ManResponse)
 	err := c.cc.Invoke(ctx, "/proto.Handler/Man", in, out, opts...)
@@ -450,7 +416,6 @@ func (c *handlerClient) Man(ctx context.Context, in *ManRequest, opts ...grpc.Ca
 type HandlerServer interface {
 	Draw(context.Context, *DrawRequest) (*DrawResponse, error)
 	Handle(context.Context, *HandleRequest) (*HandleResponse, error)
-	Cursor(context.Context, *CursorRequest) (*CursorResponse, error)
 	Man(context.Context, *ManRequest) (*ManResponse, error)
 }
 
@@ -463,9 +428,6 @@ func (*UnimplementedHandlerServer) Draw(ctx context.Context, req *DrawRequest) (
 }
 func (*UnimplementedHandlerServer) Handle(ctx context.Context, req *HandleRequest) (*HandleResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Handle not implemented")
-}
-func (*UnimplementedHandlerServer) Cursor(ctx context.Context, req *CursorRequest) (*CursorResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method Cursor not implemented")
 }
 func (*UnimplementedHandlerServer) Man(ctx context.Context, req *ManRequest) (*ManResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Man not implemented")
@@ -511,24 +473,6 @@ func _Handler_Handle_Handler(srv interface{}, ctx context.Context, dec func(inte
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Handler_Cursor_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(CursorRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(HandlerServer).Cursor(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/proto.Handler/Cursor",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(HandlerServer).Cursor(ctx, req.(*CursorRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
 func _Handler_Man_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ManRequest)
 	if err := dec(in); err != nil {
@@ -558,10 +502,6 @@ var _Handler_serviceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Handle",
 			Handler:    _Handler_Handle_Handler,
-		},
-		{
-			MethodName: "Cursor",
-			Handler:    _Handler_Cursor_Handler,
 		},
 		{
 			MethodName: "Man",
