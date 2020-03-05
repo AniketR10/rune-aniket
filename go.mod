@@ -12,5 +12,6 @@ require (
 	github.com/nsf/termbox-go v0.0.0-20190817171036-93860e161317
 	github.com/sirupsen/logrus v1.4.2
 	github.com/stretchr/testify v1.4.0
+	go.uber.org/goleak v1.0.0
 	google.golang.org/grpc v1.27.1
 )

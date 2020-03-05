@@ -11,6 +11,7 @@ import (
 	"github.com/ernestrc/go-tui/term"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/goleak"
 	"google.golang.org/grpc"
 )
 
@@ -113,7 +114,8 @@ func TestClientHandleErrors(t *testing.T) {
 	stubClient := NewClient(&mockHandlerClient{
 		remote:   testHandler(),
 		rpcError: myErr,
-	})
+	}, func() {})
+	defer stubClient.Close()
 	errChan := stubClient.Errors()
 
 	go func() {
@@ -135,7 +137,10 @@ func newServerClient(t *testing.T) (*Client, func()) {
 	conn, err := grpc.Dial(lis.Addr().String(), grpc.WithInsecure())
 	require.NoError(t, err)
 
-	return NewClient(proto.NewHandlerClient(conn)), grpcServer.Stop
+	return NewClient(proto.NewHandlerClient(conn), func() {}), func() {
+		conn.Close()
+		grpcServer.Stop()
+	}
 }
 
 func TestIntegrationClientHandlerDraw(t *testing.T) {
@@ -202,4 +207,8 @@ func TestIntegrationClientHandlerCursor(t *testing.T) {
 	defer closeFn()
 	defer serverClient.Close()
 	testRPCHandlerCursor(t, serverClient)
+}
+
+func TestMain(m *testing.M) {
+	goleak.VerifyTestMain(m)
 }

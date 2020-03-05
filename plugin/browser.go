@@ -30,10 +30,12 @@ func newBrowserResource(b browser.Browser) *browserResource {
 }
 
 func (s *browserResource) serve(perm Permission) resourceServerFn {
-	return func(pluginID string, grantID uint32, broker proto.MuxBroker, lock sync.Locker) {
+	return func(pluginID string, grantID uint32, broker proto.MuxBroker,
+		lock sync.Locker, interrupt func()) {
+
 		broker.AcceptAndServe(grantID, func(opts []grpc.ServerOption) *grpc.Server {
 			grpcServer := grpc.NewServer(opts...)
-			server := browser.NewServer(broker, s.b, lock)
+			server := browser.NewServer(broker, s.b, lock, interrupt)
 			switch perm {
 			case PermissionBrowserWindowManager:
 				proto.RegisterWindowManagerServer(grpcServer, server)

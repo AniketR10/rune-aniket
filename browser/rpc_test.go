@@ -10,6 +10,7 @@ import (
 	"github.com/ernestrc/go-tui/editor"
 	"github.com/ernestrc/go-tui/proto"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/goleak"
 	"google.golang.org/grpc"
 )
 
@@ -100,7 +101,7 @@ func TestRPCBrowserDraw(t *testing.T) {
 		broker := newDialBroker()
 
 		grpcServer := grpc.NewServer()
-		server := NewServer(broker, b, new(sync.Mutex))
+		server := NewServer(broker, b, new(sync.Mutex), func() {})
 		proto.RegisterWindowManagerServer(grpcServer, server)
 		proto.RegisterMessengerServer(grpcServer, server)
 		proto.RegisterKeyMapperServer(grpcServer, server)
@@ -116,13 +117,17 @@ func TestRPCBrowserDraw(t *testing.T) {
 			Handler: b,
 		}
 		closeFn = func() {
+			conn.Close()
 			client.Close()
 			server.Close()
 			grpcServer.Stop()
-			broker.Close()
 		}
 		return client, nil
 	})
 
 	closeFn()
+}
+
+func TestMain(m *testing.M) {
+	goleak.VerifyTestMain(m)
 }

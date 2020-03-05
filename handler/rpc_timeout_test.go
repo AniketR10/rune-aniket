@@ -14,9 +14,10 @@ import (
 )
 
 type slowHandler struct {
-	mu    sync.Mutex
-	h     TestHandler
-	delay time.Duration
+	mu       sync.Mutex
+	h        TestHandler
+	delay    time.Duration
+	quitChan chan struct{}
 }
 
 func (h *slowHandler) setDelay(d time.Duration) {
@@ -26,11 +27,22 @@ func (h *slowHandler) setDelay(d time.Duration) {
 	h.delay = d
 }
 
+func (h *slowHandler) sleep() {
+	timer := time.NewTimer(h.delay)
+	defer timer.Stop()
+
+	select {
+	case <-h.quitChan:
+	case <-timer.C:
+	}
+}
+
 func (h *slowHandler) Resize(width, height int) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
-	time.Sleep(h.delay)
+	h.sleep()
+
 	h.h.Resize(width, height)
 }
 
@@ -38,7 +50,7 @@ func (h *slowHandler) Draw(w tui.Writer) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
-	time.Sleep(h.delay)
+	h.sleep()
 	h.h.Draw(w)
 }
 
@@ -46,7 +58,7 @@ func (h *slowHandler) Handle(ev term.Event) (exit, handled bool) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
-	time.Sleep(h.delay)
+	h.sleep()
 	return h.h.Handle(ev)
 }
 
@@ -54,7 +66,7 @@ func (h *slowHandler) Cursor() (pos term.Coordinates, show bool) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
-	time.Sleep(h.delay)
+	h.sleep()
 	return h.h.Cursor()
 }
 
@@ -62,8 +74,13 @@ func (h *slowHandler) Man() tui.Manual {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
-	time.Sleep(h.delay)
+	h.sleep()
 	return h.h.Man()
+}
+
+func (h *slowHandler) Close() error {
+	close(h.quitChan)
+	return nil
 }
 
 func newSlowHandler() *slowHandler {
@@ -71,12 +88,15 @@ func newSlowHandler() *slowHandler {
 	ret.h = *NewTestHandler()
 	ret.h.Manual.Summary = testHandlerManualDesc
 	ret.h.Manual.Keys = testHandlerKeys
+	ret.quitChan = make(chan struct{})
 	return ret
 }
 
 func testHandlerTimeout(t *testing.T,
 	rpc func(c proto.HandlerClient) (interface{}, error)) {
 	mock := newSlowHandler()
+	defer mock.Close()
+
 	stubClient := &mockHandlerClient{remote: mock}
 	c := withClientTimeout(stubClient, 50*time.Millisecond)
 

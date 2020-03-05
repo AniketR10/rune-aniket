@@ -37,12 +37,13 @@ type Client struct {
 	breakerCh chan error
 	quitCh    chan struct{}
 	client    clientCloser
+	interrupt func()
 }
 
 // NewClient allocates storage for a new Client and initializes it.
-func NewClient(pbClient proto.HandlerClient) *Client {
+func NewClient(pbClient proto.HandlerClient, interrupt func()) *Client {
 	ret := new(Client)
-	ret.Init(pbClient)
+	ret.Init(pbClient, interrupt)
 	return ret
 }
 
@@ -56,17 +57,19 @@ func (c *Client) consumeBreakerInterrupt() {
 			if err != nil {
 				c.collectError(err)
 			}
-			term.Interrupt()
+			c.interrupt()
 		case <-c.quitCh:
 			return
 		}
 	}
 }
 
-// Init initialies this Client with pbClient.
-func (c *Client) Init(pbClient proto.HandlerClient) {
-	c.client, c.breakerCh = withClientBreaker(withClientTimeout(pbClient, defaultRPCTimeout))
+// Init initialies this Client with pbClient and the given interrupt func.
+func (c *Client) Init(pbClient proto.HandlerClient, interrupt func()) {
+	pbClient = withClientTimeout(pbClient, defaultRPCTimeout)
+	c.client, c.breakerCh = withClientBreaker(pbClient)
 
+	c.interrupt = interrupt
 	c.errors = make(chan error)
 	c.quitCh = make(chan struct{})
 

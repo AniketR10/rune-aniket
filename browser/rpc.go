@@ -166,24 +166,28 @@ type Server struct {
 		Browser
 		sync.Locker
 	}
+	interrupt func()
 }
 
 // NewServer allocates storage for a new Server and initializes it.
 func NewServer(
 	broker proto.MuxBroker, browser Browser, lock sync.Locker,
+	interrupt func(),
 ) *Server {
 	ret := new(Server)
-	ret.Init(broker, browser, lock)
+	ret.Init(broker, browser, lock, interrupt)
 	return ret
 }
 
 // Init initializes this Server with broker and browser.
 func (s *Server) Init(
 	broker proto.MuxBroker, browser Browser, lock sync.Locker,
+	interrupt func(),
 ) {
 	s.broker = broker
 	s.browser.Browser = browser
 	s.browser.Locker = lock
+	s.interrupt = interrupt
 	s.conns = make([]clientConn, 0)
 }
 
@@ -193,7 +197,7 @@ func (s *Server) browserSplitPlugin(req *proto.SplitRequest) (tui.Handler, error
 		return nil, err
 	}
 
-	cc := handler.NewClient(proto.NewHandlerClient(conn))
+	cc := handler.NewClient(proto.NewHandlerClient(conn), s.interrupt)
 	cc.Logger = s.Logger
 
 	s.conns = append(s.conns, clientConn{conn: conn, client: cc})
@@ -344,6 +348,7 @@ func (s *Server) Close() error {
 			err = ccErr
 		}
 	}
+	s.browser.Close()
 	s.conns = s.conns[:0]
 	return err
 }

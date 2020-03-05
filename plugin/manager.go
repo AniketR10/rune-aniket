@@ -67,7 +67,8 @@ type Manager struct {
 	rmu *sync.Mutex
 
 	// used to abstract out go-plugin specific functionality
-	builder pluginBuilder
+	builder   pluginBuilder
+	interrupt func()
 
 	config managerConfig
 }
@@ -76,6 +77,7 @@ type Manager struct {
 func NewManager(grantor Grantor, opts ...Option) *Manager {
 	ret := new(Manager)
 	ret.builder = goPluginGranteeBuilder
+	ret.interrupt = term.Interrupt
 	ret.Init(grantor, opts...)
 	return ret
 }
@@ -160,7 +162,7 @@ func (m *Manager) doGrant(
 		// such that one plugin => one grpc server for all the resources
 		// requested. Right now, each call to serve, spins a new listener
 		// and a new GRPC server.
-		go srv.Serve(pluginID, grantID, broker, m.rpcMutex())
+		go srv.Serve(pluginID, grantID, broker, m.rpcMutex(), m.interrupt)
 
 		grant := &proto.PermissionGrant{
 			Id:      p.Id,
