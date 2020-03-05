@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net"
 	"testing"
+	"time"
 
 	"github.com/ernestrc/go-tui"
 	"github.com/ernestrc/go-tui/proto"
@@ -14,6 +15,7 @@ import (
 )
 
 const testHandlerManualDesc = "remote SUPER plugin"
+const drawDispatchWaitTime = 20 * time.Millisecond
 
 var testHandlerKeys tui.KeyMap
 
@@ -39,6 +41,7 @@ func newStubClient(t *testing.T) *Client {
 		client: &mockHandlerClient{
 			remote: testHandler(),
 		},
+		quitCh: make(chan struct{}),
 	}
 }
 
@@ -59,16 +62,26 @@ BBBB`},
 	BatchTestInputSequence(t, rpcHandler, 4, 4, cases)
 }
 
-func testRPCHandlerManual(t *testing.T, rpcHandler *Client) {
+func assertTestManual(t *testing.T, man tui.Manual, msg ...interface{}) {
 	expected := tui.Manual{
 		Summary: testHandlerManualDesc,
 		Keys:    testHandlerKeys,
 	}
-	assert.Equal(t, expected, rpcHandler.Man(), rpcHandler.errors)
+	assert.Equal(t, expected, man)
+}
+
+func testRPCHandlerManual(t *testing.T, rpcHandler *Client) {
+	assertTestManual(t, rpcHandler.Man(), rpcHandler.errors)
 }
 
 func testRPCHandlerCursor(t *testing.T, rpcHandler *Client) {
-	// force call to underlying Cursor
+	// force call to underlying Cursor on the server side
+	rpcHandler.Draw(term.NewStringWriter(0, 0))
+
+	// give some time for the client to asynchronously receive it
+	time.Sleep(drawDispatchWaitTime)
+
+	// then force collect cursor response
 	rpcHandler.Draw(term.NewStringWriter(0, 0))
 
 	pos, ok := rpcHandler.Cursor()
@@ -79,16 +92,19 @@ func testRPCHandlerCursor(t *testing.T, rpcHandler *Client) {
 
 func TestUnitClientHandlerDraw(t *testing.T) {
 	stubClient := newStubClient(t)
+	defer stubClient.Close()
 	testRPCHandlerHandleDraw(t, stubClient)
 }
 
 func TestUnitClientHandlerManual(t *testing.T) {
 	stubClient := newStubClient(t)
+	defer stubClient.Close()
 	testRPCHandlerManual(t, stubClient)
 }
 
 func TestUnitClientHandlerCursor(t *testing.T) {
 	stubClient := newStubClient(t)
+	defer stubClient.Close()
 	testRPCHandlerCursor(t, stubClient)
 }
 
@@ -96,7 +112,7 @@ func TestClientHandleErrors(t *testing.T) {
 	myErr := errors.New("functional programming is overrated")
 	stubClient := NewClient(&mockHandlerClient{
 		remote:   testHandler(),
-		manError: myErr,
+		rpcError: myErr,
 	})
 	errChan := stubClient.Errors()
 
@@ -125,17 +141,65 @@ func newServerClient(t *testing.T) (*Client, func()) {
 func TestIntegrationClientHandlerDraw(t *testing.T) {
 	serverClient, closeFn := newServerClient(t)
 	defer closeFn()
-	testRPCHandlerHandleDraw(t, serverClient)
+	defer serverClient.Close()
+
+	cases := []TestInputSequence{
+		{"",
+			`    
+OADI
+    
+    `},
+		{"",
+			`AAAA
+AAAA
+AAAA
+AAAA`},
+		{"j",
+			`AAAA
+AAAA
+AAAA
+AAAA`},
+		{"",
+			`BBBB
+BBBB
+BBBB
+BBBB`},
+	}
+
+	width, height := 4, 4
+	writer := term.NewStringWriter(width, height)
+	serverClient.Resize(width, height)
+
+	for _, tcase := range cases {
+		err := writer.Clear(term.Attributes{Fg: 0, Bg: 0})
+		require.NoError(t, err)
+
+		for _, r := range tcase.InputSequence {
+			serverClient.Handle(term.Event{Ch: r, Type: term.EventKey})
+			time.Sleep(drawDispatchWaitTime)
+		}
+
+		serverClient.Draw(writer)
+		time.Sleep(drawDispatchWaitTime)
+
+		err = writer.Flush()
+		require.NoError(t, err)
+
+		out := writer.String()
+		assert.Equal(t, tcase.DrawOutput, out, serverClient.errors)
+	}
 }
 
 func TestIntegrationClientHandlerManual(t *testing.T) {
 	serverClient, closeFn := newServerClient(t)
 	defer closeFn()
+	defer serverClient.Close()
 	testRPCHandlerManual(t, serverClient)
 }
 
 func TestIntegrationClientHandlerCursor(t *testing.T) {
 	serverClient, closeFn := newServerClient(t)
 	defer closeFn()
+	defer serverClient.Close()
 	testRPCHandlerCursor(t, serverClient)
 }

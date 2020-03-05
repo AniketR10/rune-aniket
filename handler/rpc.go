@@ -3,6 +3,8 @@ package handler
 import (
 	"context"
 	"errors"
+	"io"
+	"sync"
 	"time"
 
 	"github.com/ernestrc/go-tui"
@@ -12,6 +14,11 @@ import (
 )
 
 const defaultRPCTimeout = 5 * time.Second
+
+type clientCloser interface {
+	proto.HandlerClient
+	io.Closer
+}
 
 // Client satisfies Handler by talking to a remote handler over GRPC.
 //
@@ -26,8 +33,10 @@ type Client struct {
 		term.Coordinates
 		show bool
 	}
-	errors chan error
-	client proto.HandlerClient
+	errors    chan error
+	breakerCh chan error
+	quitCh    chan struct{}
+	client    clientCloser
 }
 
 // NewClient allocates storage for a new Client and initializes it.
@@ -37,10 +46,31 @@ func NewClient(pbClient proto.HandlerClient) *Client {
 	return ret
 }
 
+func (c *Client) consumeBreakerInterrupt() {
+	for {
+		select {
+		case err, ok := <-c.breakerCh:
+			if !ok {
+				return
+			}
+			if err != nil {
+				c.collectError(err)
+			}
+			term.Interrupt()
+		case <-c.quitCh:
+			return
+		}
+	}
+}
+
 // Init initialies this Client with pbClient.
 func (c *Client) Init(pbClient proto.HandlerClient) {
-	c.client = withClientBreaker(pbClient, defaultRPCTimeout)
+	c.client, c.breakerCh = withClientBreaker(withClientTimeout(pbClient, defaultRPCTimeout))
+
 	c.errors = make(chan error)
+	c.quitCh = make(chan struct{})
+
+	go c.consumeBreakerInterrupt()
 }
 
 // Errors returns a channel which receives RPC errors.
@@ -84,11 +114,14 @@ func (c *Client) Draw(w tui.Writer) {
 		}
 	}
 
-	cursor := resp.GetCursor()
-	pos := cursor.GetPosition()
-	c.cursor.X = int(pos.GetX())
-	c.cursor.Y = int(pos.GetY())
-	c.cursor.show = cursor.GetShow()
+	if resp.Cursor == nil || resp.Cursor.Position == nil {
+		c.collectError(errors.New("invalid Cursor from server's Draw response"))
+		return
+	}
+
+	c.cursor.Coordinates.X = int(resp.Cursor.Position.X)
+	c.cursor.Coordinates.Y = int(resp.Cursor.Position.Y)
+	c.cursor.show = resp.Cursor.Show
 }
 
 // Handle satisfies tui.Handler
@@ -143,8 +176,15 @@ func (c *Client) Man() tui.Manual {
 	return tuiMan
 }
 
+// Close closes this client and all associated resources.
+func (c *Client) Close() error {
+	defer close(c.quitCh)
+	return c.client.Close()
+}
+
 // Server serves a tui.Handler implementation over GRPC.
 type Server struct {
+	mu      sync.Mutex
 	handler tui.Handler
 }
 
@@ -165,6 +205,9 @@ func (s *Server) Init(handler tui.Handler) {
 func (s *Server) Draw(ctx context.Context, in *proto.DrawRequest) (
 	*proto.DrawResponse, error,
 ) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	s.handler.Resize(int(in.Width), int(in.Height))
 	cursor, show := s.handler.Cursor()
 	res := proto.NewDrawResponse(s.handler, int(in.Width), int(in.Height))
@@ -191,6 +234,10 @@ func (s *Server) Handle(ctx context.Context, req *proto.HandleRequest) (
 	if err != nil {
 		return nil, err
 	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	exit, handled := s.handler.Handle(ev)
 	return &proto.HandleResponse{Quit: exit, Handled: handled}, nil
 }
@@ -200,6 +247,9 @@ func (s *Server) Handle(ctx context.Context, req *proto.HandleRequest) (
 func (s *Server) Man(context.Context, *proto.ManRequest) (
 	*proto.ManResponse, error,
 ) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	man := s.handler.Man()
 	protoMan := new(proto.Manual)
 	protoMan.FromModel(man)

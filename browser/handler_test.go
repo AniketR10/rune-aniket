@@ -266,7 +266,7 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 	ed.MergeKeyMap(newMappings)
 
 	cases = []handler.TestInputSequence{
-		{":<11111111111111111111",
+		{":<_11111111111111111111",
 			`┌──────────────────┐
 │cabin.go  other.go│
 ├────────┐┌────────┤

@@ -14,3 +14,9 @@ message Manual {
 	string summary = 1;
 	repeated Key keys = 2;
 }
+
+message Coordinates {
+	int32 X = 1;
+	int32 Y = 2;
+}
+

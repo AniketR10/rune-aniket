@@ -2,126 +2,148 @@ package handler
 
 import (
 	"context"
-	"sync"
+	"errors"
 	"testing"
-	"time"
 
-	"github.com/ernestrc/go-tui"
+	"github.com/ernestrc/go-tui/component"
 	"github.com/ernestrc/go-tui/proto"
 	"github.com/ernestrc/go-tui/term"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-type slowHandler struct {
-	mu    sync.Mutex
-	h     TestHandler
-	delay time.Duration
-}
+func TestClientBreakerMan(t *testing.T) {
+	mock := &mockHandlerClient{remote: testHandler()}
+	b, _ := withClientBreaker(mock)
+	defer b.Close()
 
-func (h *slowHandler) setDelay(d time.Duration) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
+	t.Run("dispatches Man synchronously", func(t *testing.T) {
+		manRes, err := b.Man(context.Background(), new(proto.ManRequest))
+		require.NoError(t, err)
+		require.NotNil(t, manRes)
 
-	h.delay = d
-}
+		man, err := manRes.GetMan().ToModel()
+		require.NoError(t, err)
 
-func (h *slowHandler) Resize(width, height int) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
+		assertTestManual(t, man)
+	})
 
-	time.Sleep(h.delay)
-	h.h.Resize(width, height)
-}
+	t.Run("bubbles up error", func(t *testing.T) {
+		mock.rpcError = errors.New("man error")
+		defer func() {
+			mock.rpcError = nil
+		}()
 
-func (h *slowHandler) Draw(w tui.Writer) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-
-	time.Sleep(h.delay)
-	h.h.Draw(w)
-}
-
-func (h *slowHandler) Handle(ev term.Event) (exit, handled bool) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-
-	time.Sleep(h.delay)
-	return h.h.Handle(ev)
-}
-
-func (h *slowHandler) Cursor() (pos term.Coordinates, show bool) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-
-	time.Sleep(h.delay)
-	return h.h.Cursor()
-}
-
-func (h *slowHandler) Man() tui.Manual {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-
-	time.Sleep(h.delay)
-	return h.h.Man()
-}
-
-func newSlowHandler() *slowHandler {
-	ret := new(slowHandler)
-	ret.h = *NewTestHandler()
-	ret.h.Manual.Summary = testHandlerManualDesc
-	ret.h.Manual.Keys = testHandlerKeys
-	return ret
-}
-
-func testHandlerTimeout(t *testing.T,
-	rpc func(c proto.HandlerClient) (interface{}, error)) {
-	mock := newSlowHandler()
-	stubClient := &mockHandlerClient{remote: mock}
-	c := withClientBreaker(stubClient, 50*time.Millisecond)
-
-	mock.setDelay(0)
-
-	res, err := rpc(c)
-	require.NoError(t, err)
-	assert.NotNil(t, res)
-
-	mock.setDelay(1 * time.Second)
-
-	res, err = rpc(c)
-	assert.Error(t, err)
-	assert.Nil(t, res)
-}
-
-func TestHandlerManTimeout(t *testing.T) {
-	testHandlerTimeout(t, func(c proto.HandlerClient) (interface{}, error) {
-		return c.Man(context.Background(), new(proto.ManRequest))
+		manRes, err := b.Man(context.Background(), new(proto.ManRequest))
+		assert.Error(t, err)
+		assert.Nil(t, manRes)
 	})
 }
 
-func TestHandlerHandleTimeout(t *testing.T) {
-	testHandlerTimeout(t, func(c proto.HandlerClient) (interface{}, error) {
-		req := new(proto.HandleRequest)
-		req.Event = new(proto.Event)
-		return c.Handle(context.Background(), req)
+func TestClientBreakerHandle(t *testing.T) {
+	mock := &mockHandlerClient{remote: testHandler()}
+	b, errCh := withClientBreaker(mock)
+	defer b.Close()
+
+	mock.handledCh = make(chan term.Event)
+	req := &proto.HandleRequest{Event: &proto.Event{Char: '$', Type: proto.Event_TypeKey}}
+
+	t.Run("dispatches events asynchronously", func(t *testing.T) {
+		res, err := b.Handle(context.Background(), req)
+		require.NoError(t, err)
+		assert.NotNil(t, res)
+
+		expected := term.Event{Ch: '$', Type: term.EventKey}
+		assert.Equal(t, expected, <-mock.handledCh)
+	})
+
+	t.Run("dispatches handle errors to error chan", func(t *testing.T) {
+		mock.rpcError = errors.New("sup")
+		defer func() {
+			mock.rpcError = nil
+		}()
+
+		res, err := b.Handle(context.Background(), req)
+		require.NoError(t, err)
+		assert.NotNil(t, res)
+
+		assert.Equal(t, mock.rpcError, <-errCh)
 	})
 }
 
-func TestHandlerDrawBreaker(t *testing.T) {
-	mock := newSlowHandler()
+func assertDrawResponse(t *testing.T, res *proto.DrawResponse, strCopy string) {
+	require.NotNil(t, res)
+	str, width, height := proto.DrawResponseToTermString(res)
+	expected := component.String(strCopy)
+	expected.Resize(width, height)
+	w := term.NewStringWriter(width, height)
+	expected.Draw(w)
+	w.Flush()
+	assert.Equal(t, w.String(), str)
+}
 
-	stubClient := &mockHandlerClient{remote: mock}
-	c := withClientBreaker(stubClient, 50*time.Millisecond)
+func TestClientBreakerDraw(t *testing.T) {
+	const testHandlerCopy = "AAAAA\nAAAAA\nAAAAA\nAAAAA\nAAAAA"
 
-	mock.setDelay(0)
+	req := &proto.DrawRequest{Width: 5, Height: 5}
 
-	res, err := c.Draw(context.Background(), new(proto.DrawRequest))
-	require.NoError(t, err)
-	assert.NotNil(t, res)
+	t.Run("dispatches draw requests asynchonously", func(t *testing.T) {
+		mock := &mockHandlerClient{remote: testHandler()}
+		b, errCh := withClientBreaker(mock)
+		defer b.Close()
 
-	mock.setDelay(1 * time.Second)
+		res, err := b.Draw(context.Background(), req)
+		require.NoError(t, err)
+		assertDrawResponse(t, res, loadingCopy)
 
-	res, err = c.Draw(context.Background(), new(proto.DrawRequest))
-	assert.NoError(t, err)
-	assert.NotNil(t, res)
+		assert.Nil(t, <-errCh)
+		res, err = b.Draw(context.Background(), req)
+		require.NoError(t, err)
+		assertDrawResponse(t, res, testHandlerCopy)
+
+		// no need to consume interrupt because previous
+		// draw was consumed when state = ready.
+		res, err = b.Draw(context.Background(), req)
+		require.NoError(t, err)
+		assertDrawResponse(t, res, testHandlerCopy)
+	})
+
+	t.Run("subsequent draw with different size re-issues new draw", func(t *testing.T) {
+		mock := &mockHandlerClient{remote: testHandler()}
+		b, errCh := withClientBreaker(mock)
+		defer b.Close()
+
+		res, err := b.Draw(context.Background(), req)
+		require.NoError(t, err)
+		assertDrawResponse(t, res, loadingCopy)
+
+		biggerReq := &proto.DrawRequest{Width: 6, Height: 5}
+
+		assert.Nil(t, <-errCh)
+		res, err = b.Draw(context.Background(), biggerReq)
+		require.NoError(t, err)
+		assertDrawResponse(t, res, loadingCopy)
+
+		assert.Nil(t, <-errCh)
+		res, err = b.Draw(context.Background(), biggerReq)
+		require.NoError(t, err)
+		assertDrawResponse(t, res, "AAAAAA\nAAAAAA\nAAAAAA\nAAAAAA\nAAAAAA")
+	})
+
+	t.Run("dispatches draw errors to error chan", func(t *testing.T) {
+		mock := &mockHandlerClient{remote: testHandler()}
+		b, errCh := withClientBreaker(mock)
+		defer b.Close()
+
+		mock.rpcError = errors.New("Uh, Houstoun, we've had a problem")
+
+		res, err := b.Draw(context.Background(), req)
+		require.NoError(t, err)
+		assertDrawResponse(t, res, loadingCopy)
+
+		assert.Equal(t, mock.rpcError, <-errCh)
+		res, err = b.Draw(context.Background(), req)
+		require.NoError(t, err)
+		assertDrawResponse(t, res, smtgWrongCopy)
+	})
 }

@@ -151,12 +151,17 @@ func (c *Client) Close() error {
 	return nil
 }
 
+type clientConn struct {
+	conn   *grpc.ClientConn
+	client *handler.Client
+}
+
 // Server serves a Browser over GRPC.
 type Server struct {
 	Logger *log.Logger
 
 	broker  proto.MuxBroker
-	conns   []*grpc.ClientConn
+	conns   []clientConn
 	browser struct {
 		Browser
 		sync.Locker
@@ -179,7 +184,7 @@ func (s *Server) Init(
 	s.broker = broker
 	s.browser.Browser = browser
 	s.browser.Locker = lock
-	s.conns = make([]*grpc.ClientConn, 0)
+	s.conns = make([]clientConn, 0)
 }
 
 func (s *Server) browserSplitPlugin(req *proto.SplitRequest) (tui.Handler, error) {
@@ -188,12 +193,12 @@ func (s *Server) browserSplitPlugin(req *proto.SplitRequest) (tui.Handler, error
 		return nil, err
 	}
 
-	a := handler.NewClient(proto.NewHandlerClient(conn))
-	a.Logger = s.Logger
+	cc := handler.NewClient(proto.NewHandlerClient(conn))
+	cc.Logger = s.Logger
 
-	s.conns = append(s.conns, conn)
+	s.conns = append(s.conns, clientConn{conn: conn, client: cc})
 
-	return a, nil
+	return cc, nil
 }
 
 // SplitVerticalRight satisfies proto.BrowserServer
@@ -328,11 +333,17 @@ func (s *Server) OpenFile(ctx context.Context, req *proto.OpenFileRequest) (
 
 // Close closes all resources associated with this server.
 func (s *Server) Close() error {
+	var err error
 	for _, conn := range s.conns {
-		if err := conn.Close(); err != nil {
-			return err
+		connErr := conn.conn.Close()
+		if connErr != nil {
+			err = connErr
+		}
+		ccErr := conn.client.Close()
+		if ccErr != nil {
+			err = ccErr
 		}
 	}
 	s.conns = s.conns[:0]
-	return nil
+	return err
 }

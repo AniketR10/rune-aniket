@@ -34,11 +34,6 @@ message CellRow {
     repeated Cell cells = 1 ;
 }
 
-message Coordinates {
-	int32 X = 1;
-	int32 Y = 2;
-}
-
 message Event {
   enum Type {
 	TypeKey = 0;
@@ -57,7 +52,7 @@ message Event {
   }
 
   enum Key {
-	F1 = 0;
+	CtrlTilde = 0;
 	F2 = 1;
 	F3 = 2;
 	F4 = 3;
@@ -85,7 +80,7 @@ message Event {
 	MouseRelease = 25;
 	MouseWheelUp = 26;
 	MouseWheelDown = 27;
-	CtrlTilde = 28;
+	F1 = 28;
 	Ctrl2 = 29;
 	CtrlSpace = 30;
 	CtrlA = 31;

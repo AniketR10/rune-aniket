@@ -3,6 +3,7 @@ package handler
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ernestrc/go-tui"
 	"github.com/ernestrc/go-tui/component"
@@ -97,8 +98,11 @@ func BatchTestInputSequence(
 		err := writer.Clear(term.Attributes{Fg: 0, Bg: 0})
 		require.NoError(t, err)
 
+		var shouldSleep bool
 		for _, r := range tcase.InputSequence {
 			switch r {
+			case '_':
+				shouldSleep = true
 			case ' ':
 				handler.Handle(term.Event{Key: term.KeySpace, Type: term.EventKey})
 			case '^':
@@ -116,6 +120,14 @@ func BatchTestInputSequence(
 			}
 		}
 
+		// this is a hack for async handlers
+		if shouldSleep {
+			// wait until all events have been dispatched
+			time.Sleep(100 * time.Millisecond)
+			// force a draw and wait for the draw response to arrive
+			handler.Draw(term.NewStringWriter(width, height))
+			time.Sleep(100 * time.Millisecond)
+		}
 		handler.Draw(writer)
 
 		cursor, ok := handler.Cursor()
