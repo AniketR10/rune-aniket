@@ -61,9 +61,10 @@ type Handler struct {
 	openFileFn    openFileFunc
 	recoverFileFn recoverFileFunc
 
-	ed     editor.Editor
-	config editorConfig
-	keymap map[term.Event]term.Event
+	ed          editor.Editor
+	config      editorConfig
+	keymap      map[term.Event]term.Event
+	subscribers map[term.Event]EventHandler
 
 	commandBuf *cell.Buffer
 	cmdVirt    handler.Virtual
@@ -485,6 +486,11 @@ func (e *Handler) handleProxy(ev term.Event) (bool, bool) {
 	prev := ev
 	ev = e.mapEvent(ev)
 
+	if subscriber, ok := e.subscribers[ev]; ok {
+		subscriber.Handle(ev)
+		return false, true
+	}
+
 	switch ev.Key {
 	case term.KeyCtrlA:
 		e.closeAllBuffers()
@@ -663,5 +669,14 @@ func (e *Handler) SplitHorizontalBelow(h tui.Handler) error {
 // and initializes it with h.
 func (e *Handler) SplitHorizontalAbove(h tui.Handler) error {
 	e.splitInverted((*handler.WindowManager).SplitHorizontal, h)
+	return nil
+}
+
+// Subscribe subscribers h EventHandler to term.Event ev.
+func (e *Handler) Subscribe(ev term.Event, h EventHandler) error {
+	if e.subscribers == nil {
+		e.subscribers = make(map[term.Event]EventHandler)
+	}
+	e.subscribers[ev] = h
 	return nil
 }

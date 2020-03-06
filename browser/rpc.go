@@ -3,6 +3,7 @@ package browser
 import (
 	"context"
 	"fmt"
+	"io"
 	"sync"
 
 	"github.com/ernestrc/go-tui"
@@ -17,11 +18,13 @@ import (
 type Client struct {
 	Logger *log.Logger
 
+	cc      grpc.ClientConnInterface
 	broker  proto.MuxBroker
 	wm      proto.WindowManagerClient
 	msg     proto.MessengerClient
 	mp      proto.KeyMapperClient
 	f       proto.FileOpenerClient
+	p       proto.EventPublisherClient
 	servers []*grpc.Server
 }
 
@@ -30,8 +33,10 @@ func NewClient(broker proto.MuxBroker, cc grpc.ClientConnInterface) *Client {
 	ret := new(Client)
 	ret.wm = proto.NewWindowManagerClient(cc)
 	ret.msg = proto.NewMessengerClient(cc)
+	ret.cc = cc
 	ret.mp = proto.NewKeyMapperClient(cc)
 	ret.f = proto.NewFileOpenerClient(cc)
+	ret.p = proto.NewEventPublisherClient(cc)
 	ret.Init(broker)
 	return ret
 }
@@ -42,7 +47,7 @@ func (c *Client) Init(broker proto.MuxBroker) {
 	c.servers = make([]*grpc.Server, 0)
 }
 
-func (c *Client) serveHandler(h tui.Handler) proto.SplitRequest {
+func (c *Client) serveHandler(h tui.Handler) uint32 {
 	brokerID := c.broker.NextId()
 
 	var wg sync.WaitGroup
@@ -61,13 +66,13 @@ func (c *Client) serveHandler(h tui.Handler) proto.SplitRequest {
 	wg.Wait()
 	c.servers = append(c.servers, s)
 
-	return proto.SplitRequest{HandlerId: brokerID}
+	return brokerID
 
 }
 
 // SplitVerticalRight satisfies Browser.
 func (c *Client) SplitVerticalRight(h tui.Handler) error {
-	req := c.serveHandler(h)
+	req := proto.SplitRequest{HandlerId: c.serveHandler(h)}
 	ctx := context.Background()
 	_, err := c.wm.SplitVerticalRight(ctx, &req)
 	return err
@@ -75,7 +80,7 @@ func (c *Client) SplitVerticalRight(h tui.Handler) error {
 
 // SplitVerticalLeft satisfies Browser.
 func (c *Client) SplitVerticalLeft(h tui.Handler) error {
-	req := c.serveHandler(h)
+	req := proto.SplitRequest{HandlerId: c.serveHandler(h)}
 	ctx := context.Background()
 	_, err := c.wm.SplitVerticalLeft(ctx, &req)
 	return err
@@ -83,7 +88,7 @@ func (c *Client) SplitVerticalLeft(h tui.Handler) error {
 
 // SplitHorizontalAbove satisfies Browser.
 func (c *Client) SplitHorizontalAbove(h tui.Handler) error {
-	req := c.serveHandler(h)
+	req := proto.SplitRequest{HandlerId: c.serveHandler(h)}
 	ctx := context.Background()
 	_, err := c.wm.SplitHorizontalAbove(ctx, &req)
 	return err
@@ -91,7 +96,7 @@ func (c *Client) SplitHorizontalAbove(h tui.Handler) error {
 
 // SplitHorizontalBelow satisfies Browser.
 func (c *Client) SplitHorizontalBelow(h tui.Handler) error {
-	req := c.serveHandler(h)
+	req := proto.SplitRequest{HandlerId: c.serveHandler(h)}
 	ctx := context.Background()
 	_, err := c.wm.SplitHorizontalBelow(ctx, &req)
 	return err
@@ -141,19 +146,38 @@ func (c *Client) OpenFile(filename string) error {
 	return err
 }
 
+// Subscribe satisfies Browser.
+func (c *Client) Subscribe(ev term.Event, h EventHandler) error {
+	ctx := context.Background()
+
+	protoEv := new(proto.Event)
+	err := protoEv.FromModel(ev)
+	if err != nil {
+		return err
+	}
+	handlerID := c.serveHandler(eventHandlerToHandler{h})
+	req := proto.SubscribeRequest{Ev: protoEv, HandlerId: handlerID}
+
+	_, err = c.p.Subscribe(ctx, &req)
+	return err
+}
+
 // Close closes all resources associated with this Client.
 // This client should not be used after this method is called.
 func (c *Client) Close() error {
 	for _, server := range c.servers {
 		server.Stop()
 	}
+	if closer, ok := c.cc.(io.Closer); ok {
+		closer.Close()
+	}
 	c.servers = c.servers[:0]
 	return nil
 }
 
 type clientConn struct {
-	conn   *grpc.ClientConn
-	client *handler.Client
+	conn *grpc.ClientConn
+	cc   io.Closer
 }
 
 // Server serves a Browser over GRPC.
@@ -191,8 +215,8 @@ func (s *Server) Init(
 	s.conns = make([]clientConn, 0)
 }
 
-func (s *Server) browserSplitPlugin(req *proto.SplitRequest) (tui.Handler, error) {
-	conn, err := s.broker.Dial(req.GetHandlerId())
+func (s *Server) dialHandler(handlerID uint32) (*handler.Client, error) {
+	conn, err := s.broker.Dial(handlerID)
 	if err != nil {
 		return nil, err
 	}
@@ -200,7 +224,7 @@ func (s *Server) browserSplitPlugin(req *proto.SplitRequest) (tui.Handler, error
 	cc := handler.NewClient(proto.NewHandlerClient(conn), s.interrupt)
 	cc.Logger = s.Logger
 
-	s.conns = append(s.conns, clientConn{conn: conn, client: cc})
+	s.conns = append(s.conns, clientConn{conn: conn, cc: cc})
 
 	return cc, nil
 }
@@ -212,7 +236,7 @@ func (s *Server) SplitVerticalRight(ctx context.Context, req *proto.SplitRequest
 	s.browser.Lock()
 	defer s.browser.Unlock()
 
-	handler, err := s.browserSplitPlugin(req)
+	handler, err := s.dialHandler(req.GetHandlerId())
 	if err != nil {
 		return nil, err
 	}
@@ -232,7 +256,7 @@ func (s *Server) SplitVerticalLeft(ctx context.Context, req *proto.SplitRequest)
 	s.browser.Lock()
 	defer s.browser.Unlock()
 
-	handler, err := s.browserSplitPlugin(req)
+	handler, err := s.dialHandler(req.GetHandlerId())
 	if err != nil {
 		return nil, err
 	}
@@ -252,7 +276,7 @@ func (s *Server) SplitHorizontalAbove(ctx context.Context, req *proto.SplitReque
 	s.browser.Lock()
 	defer s.browser.Unlock()
 
-	handler, err := s.browserSplitPlugin(req)
+	handler, err := s.dialHandler(req.GetHandlerId())
 	if err != nil {
 		return nil, err
 	}
@@ -272,7 +296,7 @@ func (s *Server) SplitHorizontalBelow(ctx context.Context, req *proto.SplitReque
 	s.browser.Lock()
 	defer s.browser.Unlock()
 
-	handler, err := s.browserSplitPlugin(req)
+	handler, err := s.dialHandler(req.GetHandlerId())
 	if err != nil {
 		return nil, err
 	}
@@ -335,6 +359,31 @@ func (s *Server) OpenFile(ctx context.Context, req *proto.OpenFileRequest) (
 	return new(proto.OpenFileResponse), nil
 }
 
+// Subscribe satisfies proto.BrowserServer
+func (s *Server) Subscribe(ctx context.Context, req *proto.SubscribeRequest) (
+	*proto.SubscribeResponse, error,
+) {
+	s.browser.Lock()
+	defer s.browser.Unlock()
+
+	handler, err := s.dialHandler(req.GetHandlerId())
+	if err != nil {
+		return nil, err
+	}
+
+	ev, err := req.GetEv().ToModel()
+	if err != nil {
+		return nil, err
+	}
+
+	err = s.browser.Subscribe(ev, eventHandler{cc: handler})
+	if err != nil {
+		return nil, err
+	}
+
+	return new(proto.SubscribeResponse), nil
+}
+
 // Close closes all resources associated with this server.
 func (s *Server) Close() error {
 	var err error
@@ -343,7 +392,7 @@ func (s *Server) Close() error {
 		if connErr != nil {
 			err = connErr
 		}
-		ccErr := conn.client.Close()
+		ccErr := conn.cc.Close()
 		if ccErr != nil {
 			err = ccErr
 		}

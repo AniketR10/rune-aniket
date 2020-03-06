@@ -12,6 +12,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+type funcEventHandler func(term.Event) bool
+
+func (f funcEventHandler) Handle(ev term.Event) bool {
+	return f(ev)
+}
+
 type browserInternal interface {
 	Browser
 	tui.Handler
@@ -251,19 +257,28 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 └──────────────────┘`},
 	}
 
-	ed, err := constructor(&testBrowser{}, WithFilepath(""))
+	browser, err := constructor(&testBrowser{}, WithFilepath(""))
 	require.NoError(t, err)
 
-	handler.BatchTestInputSequence(t, ed, 20, 10, cases)
+	handler.BatchTestInputSequence(t, browser, 20, 10, cases)
 
-	ed.SplitVerticalLeft(handler.NewTestHandler())
-	ed.SplitHorizontalBelow(handler.NewTestHandler())
+	require.NoError(t, browser.SplitVerticalLeft(handler.NewTestHandler()))
+
+	err = browser.Subscribe(term.Event{Type: term.EventKey, Ch: ']'},
+		funcEventHandler(func(ev term.Event) bool {
+			browser.SplitHorizontalBelow(handler.NewTestHandler())
+			return false
+		}))
+	require.NoError(t, err)
+
+	_, ok := browser.Handle(term.Event{Type: term.EventKey, Ch: ']'})
+	require.True(t, ok)
 
 	newMappings := map[term.Event]term.Event{
 		term.Event{Type: term.EventKey, Ch: ')'}: term.Event{Type: term.EventKey, Key: term.KeyCtrlL},
 		term.Event{Type: term.EventKey, Ch: '('}: term.Event{Type: term.EventKey, Key: term.KeyCtrlH},
 	}
-	ed.MergeKeyMap(newMappings)
+	require.NoError(t, browser.MergeKeyMap(newMappings))
 
 	cases = []handler.TestInputSequence{
 		{":<_11111111111111111111",
@@ -311,7 +326,7 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 │EEEEEEEEEEEEEEEEEE│
 └──────────────────┘`},
 	}
-	handler.BatchTestInputSequence(t, ed, 20, 10, cases)
+	handler.BatchTestInputSequence(t, browser, 20, 10, cases)
 
 	cases = []handler.TestInputSequence{
 		{"", `┌──┐
@@ -319,9 +334,9 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 ├EE┤
 EEEE`},
 	}
-	handler.BatchTestInputSequence(t, ed, 4, 4, cases)
+	handler.BatchTestInputSequence(t, browser, 4, 4, cases)
 
-	ed.SetMessage("wasup: %s", "Z")
+	require.NoError(t, browser.SetMessage("wasup: %s", "Z"))
 	cases = []handler.TestInputSequence{
 		{"",
 			`┌──────────────────┐
@@ -335,9 +350,9 @@ EEEE`},
 │wasup: Z          │
 └──────────────────┘`},
 	}
-	handler.BatchTestInputSequence(t, ed, 20, 10, cases)
+	handler.BatchTestInputSequence(t, browser, 20, 10, cases)
 
-	ed.OpenFile("bugz")
+	require.NoError(t, browser.OpenFile("bugz"))
 	cases = []handler.TestInputSequence{
 		{"",
 			`┌──────────────────┐
@@ -351,7 +366,7 @@ EEEE`},
 │wasup: Z          │
 └──────────────────┘`},
 	}
-	handler.BatchTestInputSequence(t, ed, 20, 10, cases)
+	handler.BatchTestInputSequence(t, browser, 20, 10, cases)
 
-	assert.NoError(t, ed.Close())
+	assert.NoError(t, browser.Close())
 }

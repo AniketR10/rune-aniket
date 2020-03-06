@@ -16,6 +16,17 @@ type WindowManager interface {
 	SplitHorizontalBelow(tui.Handler) error
 }
 
+// EventHandler wraps the basic tui.Handler method Handle.
+type EventHandler interface {
+	Handle(term.Event) (exit bool)
+}
+
+// EventPublisher handler is the interface that wraps
+// the method Subscribe to install
+type EventPublisher interface {
+	Subscribe(term.Event, EventHandler) error
+}
+
 // KeyMapper is the interface that wraps the method MergeKeyMap
 // to merge new key mappings.
 type KeyMapper interface {
@@ -37,6 +48,7 @@ type FileOpener interface {
 // the user interface of a browser.
 type Browser interface {
 	WindowManager
+	EventPublisher
 	KeyMapper
 	FileOpener
 	Messenger

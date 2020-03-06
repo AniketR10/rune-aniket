@@ -38,6 +38,14 @@ message SplitRequest {
 message SplitResponse {
 }
 
+message SubscribeRequest {
+	Event ev = 1;
+	uint32 handler_id = 2;
+}
+
+message SubscribeResponse {
+}
+
 service FileOpener {
 	rpc OpenFile(OpenFileRequest) returns (OpenFileResponse);
 }
@@ -48,6 +56,10 @@ service Messenger {
 
 service KeyMapper {
 	rpc MergeKeyMap(MergeKeyMapRequest) returns (MergeKeyMapResponse);
+}
+
+service EventPublisher {
+	rpc Subscribe(SubscribeRequest) returns (SubscribeResponse);
 }
 
 service WindowManager {

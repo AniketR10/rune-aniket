@@ -17,6 +17,8 @@ const (
 	PermissionBrowserFileOpener = "_PermBrowserFileOpener"
 	// PermissionBrowserMessenger requests access to send messages to the UI.
 	PermissionBrowserMessenger = "_PermBrowserMessenger"
+	// PermissionBrowserEventPublisher requests access to open new files.
+	PermissionBrowserEventPublisher = "_PermBrowserEventPublisher"
 )
 
 type browserResource struct {
@@ -45,6 +47,8 @@ func (s *browserResource) serve(perm Permission) resourceServerFn {
 				proto.RegisterFileOpenerServer(grpcServer, server)
 			case PermissionBrowserMessenger:
 				proto.RegisterMessengerServer(grpcServer, server)
+			case PermissionBrowserEventPublisher:
+				proto.RegisterEventPublisherServer(grpcServer, server)
 			}
 			return grpcServer
 		})
@@ -63,20 +67,26 @@ func (s *browserResource) ServeKeyMapper() ResourceServer {
 func (s *browserResource) ServeMessenger() ResourceServer {
 	return s.serve(PermissionBrowserMessenger)
 }
+func (s *browserResource) ServeEventPublisher() ResourceServer {
+	return s.serve(PermissionBrowserEventPublisher)
+}
 
 // BrowserResources returns a map of Permission to a ResourceServer
 // capable of serving each of the b Browser's resources.
 func BrowserResources(b browser.Browser) map[Permission]ResourceServer {
 	server := newBrowserResource(b)
 	return map[Permission]ResourceServer{
-		PermissionBrowserWindowManager: server.ServeWindowManager(),
-		PermissionBrowserKeyMapper:     server.ServeKeyMapper(),
-		PermissionBrowserFileOpener:    server.ServeFileOpener(),
-		PermissionBrowserMessenger:     server.ServeMessenger(),
+		PermissionBrowserWindowManager:  server.ServeWindowManager(),
+		PermissionBrowserKeyMapper:      server.ServeKeyMapper(),
+		PermissionBrowserFileOpener:     server.ServeFileOpener(),
+		PermissionBrowserMessenger:      server.ServeMessenger(),
+		PermissionBrowserEventPublisher: server.ServeEventPublisher(),
 	}
 }
 
-func dialBrowser(token uint32, broker proto.MuxBroker) (browser.Browser, error) {
+func dialBrowser(token uint32, broker proto.MuxBroker) (
+	browser.Browser, error,
+) {
 	conn, err := broker.Dial(token)
 	if err != nil {
 		return nil, err
@@ -84,8 +94,11 @@ func dialBrowser(token uint32, broker proto.MuxBroker) (browser.Browser, error) 
 	return browser.NewClient(broker, conn), nil
 }
 
-// WindowManager acquires the browser's WindowManager resources with the given token.
-func WindowManager(token uint32, broker proto.MuxBroker) (browser.WindowManager, error) {
+// WindowManager acquires the browser's WindowManager
+// resource with the given token.
+func WindowManager(token uint32, broker proto.MuxBroker) (
+	browser.WindowManager, error,
+) {
 	b, err := dialBrowser(token, broker)
 	if err != nil {
 		return nil, err
@@ -93,8 +106,11 @@ func WindowManager(token uint32, broker proto.MuxBroker) (browser.WindowManager,
 	return b.(browser.WindowManager), nil
 }
 
-// KeyMapper acquires the browser's WindowManager resources with the given token.
-func KeyMapper(token uint32, broker proto.MuxBroker) (browser.KeyMapper, error) {
+// KeyMapper acquires the browser's KeyMapper
+// resource with the given token.
+func KeyMapper(token uint32, broker proto.MuxBroker) (
+	browser.KeyMapper, error,
+) {
 	b, err := dialBrowser(token, broker)
 	if err != nil {
 		return nil, err
@@ -102,8 +118,11 @@ func KeyMapper(token uint32, broker proto.MuxBroker) (browser.KeyMapper, error) 
 	return b.(browser.KeyMapper), nil
 }
 
-// FileOpener acquires the browser's WindowManager resources with the given token.
-func FileOpener(token uint32, broker proto.MuxBroker) (browser.FileOpener, error) {
+// FileOpener acquires the browser's FileOpener
+// resource with the given token.
+func FileOpener(token uint32, broker proto.MuxBroker) (
+	browser.FileOpener, error,
+) {
 	b, err := dialBrowser(token, broker)
 	if err != nil {
 		return nil, err
@@ -112,12 +131,28 @@ func FileOpener(token uint32, broker proto.MuxBroker) (browser.FileOpener, error
 	return b.(browser.FileOpener), nil
 }
 
-// Messenger acquires the browser's WindowManager resources with the given token.
-func Messenger(token uint32, broker proto.MuxBroker) (browser.Messenger, error) {
+// Messenger acquires the browser's Messenger
+// resource with the given token.
+func Messenger(token uint32, broker proto.MuxBroker) (
+	browser.Messenger, error,
+) {
 	b, err := dialBrowser(token, broker)
 	if err != nil {
 		return nil, err
 
 	}
 	return b.(browser.Messenger), nil
+}
+
+// EventPublisher acquires the browser's EventPublisher
+// resource with the given token.
+func EventPublisher(token uint32, broker proto.MuxBroker) (
+	browser.EventPublisher, error,
+) {
+	b, err := dialBrowser(token, broker)
+	if err != nil {
+		return nil, err
+
+	}
+	return b.(browser.EventPublisher), nil
 }
