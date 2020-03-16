@@ -1,15 +1,24 @@
 package handler
 
 import (
+	"errors"
+	"fmt"
+
 	"github.com/ernestrc/go-tui"
 	"github.com/ernestrc/go-tui/component"
 	"github.com/ernestrc/go-tui/term"
 )
 
+// TileNode represents a tile in a WindowManager.
+type TileNode struct {
+	wm   *WindowManager
+	node *component.TileNode
+}
+
 // WindowManager implements Handler as a tiled window manager.
 type WindowManager struct {
 	tree  component.TileTree
-	focus *component.TileNode
+	focus TileNode
 
 	border     bool
 	borderAttr term.Attributes
@@ -35,6 +44,10 @@ func (wm *WindowManager) withFrame(handler tui.Handler) tui.Handler {
 	return f
 }
 
+func (wm *WindowManager) newNode(t *component.TileNode) TileNode {
+	return TileNode{wm: wm, node: t}
+}
+
 // Init initializes this WindowManager with the given handler. If border is true, it will draw
 // a border around every tile.
 func (wm *WindowManager) Init(handler tui.Handler, border bool) {
@@ -48,8 +61,8 @@ func (wm *WindowManager) Init(handler tui.Handler, border bool) {
 	}
 	tile := wm.tree.Init(handler)
 	wm.border = border
-	wm.focus = tile
-	wm.SetFocus(tile)
+	wm.focus = wm.newNode(tile)
+	wm.SetFocus(wm.focus)
 	return
 }
 
@@ -82,7 +95,7 @@ func (wm *WindowManager) SetAttr(standard, focus term.Attributes) {
 		node.Content().(*Frame).SetAttr(wm.borderAttr)
 	})
 
-	wm.focus.Content().(*Frame).SetAttr(wm.focusAttr)
+	wm.focus.node.Content().(*Frame).SetAttr(wm.focusAttr)
 }
 
 // Handle : Handler
@@ -107,9 +120,9 @@ func (wm *WindowManager) Handle(ev term.Event) (exit bool, handled bool) {
 	if ev.Type == term.EventMouse {
 		mousePos := term.Coordinates{X: ev.MouseX, Y: ev.MouseY}
 		childAtMouse := wm.tree.TileAt(mousePos)
-		if wm.Focus() != childAtMouse {
+		if wm.Focus().node != childAtMouse {
 			if ev.Key == term.MouseLeft {
-				wm.SetFocus(childAtMouse)
+				wm.SetFocus(wm.newNode(childAtMouse))
 			}
 			return
 		}
@@ -136,61 +149,65 @@ func (wm *WindowManager) Handle(ev term.Event) (exit bool, handled bool) {
 }
 
 // SplitVertical creates a new vertical split over the tile currently in focus.
-func (wm *WindowManager) SplitVertical(h tui.Handler) *component.TileNode {
+func (wm *WindowManager) SplitVertical(h tui.Handler) TileNode {
 	if wm.border {
 		h = wm.withFrame(h)
 	}
-	return wm.tree.SplitVertical(wm.focus, h)
+	return wm.newNode(wm.tree.SplitVertical(wm.focus.node, h))
 }
 
 // SplitHorizontal creates a new horizontal split over the tile currently in focus.
-func (wm *WindowManager) SplitHorizontal(h tui.Handler) *component.TileNode {
+func (wm *WindowManager) SplitHorizontal(h tui.Handler) TileNode {
 	if wm.border {
 		h = wm.withFrame(h)
 	}
-	return wm.tree.SplitHorizontal(wm.focus, h)
+	return wm.newNode(wm.tree.SplitHorizontal(wm.focus.node, h))
 
 }
 
-func (wm *WindowManager) switchFocus(tile *component.TileNode) bool {
-	if tile == nil {
+func (wm *WindowManager) switchFocus(tileFn func(TileNode) (TileNode, bool)) bool {
+	tile, ok := tileFn(wm.focus)
+	if !ok {
 		return false
 	}
-
-	wm.SetFocus(tile)
+	wm.SetFocus(wm.newNode(tile.node))
 	return true
 }
 
 // FocusLeft switches the focus to the tile on the left side of the tile in focus
 // If the tile in focus is the left-most tile in this window manager, then this method does nothing.
 func (wm *WindowManager) FocusLeft() bool {
-	return wm.switchFocus(wm.focus.TileLeft())
+	return wm.switchFocus((TileNode).TileLeft)
 }
 
 // FocusRight switches the focus to the tile on the right side of the tile in focus
 // If the tile in focus is the right-most tile in this window manager, then this method does nothing.
 func (wm *WindowManager) FocusRight() bool {
-	return wm.switchFocus(wm.focus.TileRight())
+	return wm.switchFocus((TileNode).TileRight)
 }
 
 // FocusUp switches the focus to the tile above the tile in focus
 // If the tile in focus is the up-most tile in this window manager, then this method does nothing.
 func (wm *WindowManager) FocusUp() bool {
-	return wm.switchFocus(wm.focus.TileUp())
+	return wm.switchFocus((TileNode).TileUp)
 }
 
 // FocusDown switches the focus to the tile beneath the tile in focus
 // If the tile in focus is the down-most tile in this window manager, then this method does nothing.
 func (wm *WindowManager) FocusDown() bool {
-	return wm.switchFocus(wm.focus.TileDown())
+	return wm.switchFocus((TileNode).TileDown)
 }
 
 // Content returns the content of t.
-func (wm *WindowManager) Content(t *component.TileNode) tui.Handler {
-	if wm.border {
-		return t.Content().(*Frame).Content().(tui.Handler)
+func (wm *WindowManager) Content(t TileNode) tui.Handler {
+	if t.wm != wm {
+		panic(fmt.Sprintf("Tile does not belong to"+
+			"this window manager: %p vs %p", wm, t.wm))
 	}
-	return t.Content().(tui.Handler)
+	if wm.border {
+		return t.node.Content().(*Frame).Content().(tui.Handler)
+	}
+	return t.node.Content().(tui.Handler)
 }
 
 // FocusContent returns the current focus content.
@@ -199,7 +216,7 @@ func (wm *WindowManager) FocusContent() tui.Handler {
 }
 
 // Focus returns the tile currently in focus.
-func (wm *WindowManager) Focus() *component.TileNode {
+func (wm *WindowManager) Focus() TileNode {
 	return wm.focus
 }
 
@@ -224,12 +241,16 @@ func (wm *WindowManager) ShiftFocus() (ok bool) {
 
 // SetFocus sets the passed tile in focus. It returns the previous tile in focus.
 // The behaviour is undefined if the given tile is not part of this WindowManager.
-func (wm *WindowManager) SetFocus(tile *component.TileNode) (
-	prev *component.TileNode,
+func (wm *WindowManager) SetFocus(tile TileNode) (
+	prev TileNode,
 ) {
+	if tile.wm != wm {
+		panic(fmt.Sprintf("Tile does not belong to"+
+			"this window manager: %p vs %p", wm, tile.wm))
+	}
 	if wm.border {
-		wm.focus.Content().(*Frame).SetAttr(wm.borderAttr)
-		tile.Content().(*Frame).SetAttr(wm.focusAttr)
+		wm.focus.node.Content().(*Frame).SetAttr(wm.borderAttr)
+		tile.node.Content().(*Frame).SetAttr(wm.focusAttr)
 	}
 	prev = wm.focus
 	wm.focus = tile
@@ -237,15 +258,19 @@ func (wm *WindowManager) SetFocus(tile *component.TileNode) (
 }
 
 // SetContent sets the content of the tile in focus to h.
-func (wm *WindowManager) SetContent(tile *component.TileNode, h tui.Handler) (
+func (wm *WindowManager) SetContent(tile TileNode, h tui.Handler) (
 	prev tui.Handler,
 ) {
+	if tile.wm != wm {
+		panic(fmt.Sprintf("Tile does not belong to"+
+			"this window manager: %p vs %p", wm, tile.wm))
+	}
 	prev = wm.Content(tile)
 	if wm.border {
 		h = wm.withFrame(h)
 		h.(*Frame).SetAttr(wm.focusAttr)
 	}
-	tile.SetContent(h)
+	tile.node.SetContent(h)
 	return
 }
 
@@ -258,8 +283,8 @@ func (wm *WindowManager) SetFocusContent(h tui.Handler) (
 
 // Cursor returns the cursor coordinates of the tile in focus.
 func (wm *WindowManager) Cursor() (term.Coordinates, bool) {
-	offset := wm.tree.TilePosition(wm.focus)
-	cursor, show := wm.focus.Content().(tui.Handler).Cursor()
+	offset := wm.tree.TilePosition(wm.focus.node)
+	cursor, show := wm.focus.node.Content().(tui.Handler).Cursor()
 	return term.Coordinates{X: offset.X + cursor.X, Y: offset.Y + cursor.Y}, show
 }
 
@@ -300,4 +325,79 @@ func (wm *WindowManager) Draw(w tui.Writer) {
 // Resize : tui.Component
 func (wm *WindowManager) Resize(width, height int) {
 	wm.tree.Resize(width, height)
+}
+
+// Content returns the Component held by this TileNode in the TileTree.
+func (t TileNode) Content() tui.Handler {
+	return t.wm.Content(t)
+}
+
+// SetContent sets the content of a TileNode to c.
+func (t TileNode) SetContent(h tui.Handler) tui.Handler {
+	return t.wm.SetContent(t, h)
+}
+
+// Size returns the total number of nodes under this TileNode.
+func (t TileNode) Size() (size int) {
+	return t.node.Size()
+}
+
+// TileDown returns the tile in the bottom of t or nil if t is the
+// bottom-most tile in the tree.
+func (t TileNode) TileDown() (TileNode, bool) {
+	node := t.node.TileDown()
+	if node == nil {
+		return TileNode{}, false
+	}
+	return t.wm.newNode(node), true
+}
+
+// TileLeft returns the tile left-adjacent to t or nil if t is the
+// left-most tile in the tree.
+func (t TileNode) TileLeft() (TileNode, bool) {
+	node := t.node.TileLeft()
+	if node == nil {
+		return TileNode{}, false
+	}
+	return t.wm.newNode(node), true
+}
+
+// TileRight returns the tile right-adjacent to t or nil if t is the
+// right-most tile in the tree.
+func (t TileNode) TileRight() (TileNode, bool) {
+	node := t.node.TileRight()
+	if node == nil {
+		return TileNode{}, false
+	}
+	return t.wm.newNode(node), true
+}
+
+// TileUp returns the tile on top of t or nil if t is the
+// top-most tile in the tree.
+func (t TileNode) TileUp() (TileNode, bool) {
+	node := t.node.TileUp()
+	if node == nil {
+		return TileNode{}, false
+	}
+	return t.wm.newNode(node), true
+}
+
+// Close removes this node from the tree.
+// It panics if node is last node on the tree.
+func (t TileNode) Close() error {
+	if t.wm == nil {
+		return nil
+	}
+
+	ok := true
+	if t.wm.focus.node == t.node {
+		ok = t.wm.ShiftFocus()
+	}
+	if !ok {
+		return errors.New("trying to close last node")
+	}
+
+	t.node.Close()
+
+	return nil
 }

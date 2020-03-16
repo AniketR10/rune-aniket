@@ -17,7 +17,8 @@ import (
 type TestHandler struct {
 	component.TestComponent
 	tui.Manual
-	Exit bool
+	CursorPos term.Coordinates
+	Exit      bool
 }
 
 // NewTestHandler will allocate storage for a new handler and initialize it
@@ -36,7 +37,10 @@ func (t *TestHandler) Handle(term.Event) (bool, bool) {
 
 // Cursor returns always a hidden cursor
 func (t *TestHandler) Cursor() (term.Coordinates, bool) {
-	return term.Coordinates{X: -1, Y: -1}, false
+	if t.CursorPos == (term.Coordinates{}) {
+		return term.Coordinates{X: -1, Y: -1}, false
+	}
+	return t.CursorPos, true
 }
 
 // Man for this handler is empty
