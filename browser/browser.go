@@ -7,13 +7,19 @@ import (
 	"github.com/ernestrc/go-tui/term"
 )
 
+// Window is the interface that represents
+// a closeable window in a WindowManager.
+type Window interface {
+	Close() error
+}
+
 // WindowManager is the interface that groups tile
 // window management methods.
 type WindowManager interface {
-	SplitVerticalRight(tui.Handler) error
-	SplitVerticalLeft(tui.Handler) error
-	SplitHorizontalAbove(tui.Handler) error
-	SplitHorizontalBelow(tui.Handler) error
+	SplitVerticalRight(tui.Handler) (Window, error)
+	SplitVerticalLeft(tui.Handler) (Window, error)
+	SplitHorizontalAbove(tui.Handler) (Window, error)
+	SplitHorizontalBelow(tui.Handler) (Window, error)
 }
 
 // EventHandler wraps the basic tui.Handler method Handle.

@@ -24,6 +24,8 @@ var ErrLastBuffer = errors.New("No free buffers left")
 // in the file system.
 var ErrInvalidSave = errors.New("Cannot save this buffer")
 
+var zeroTileNode = handler.TileNode{}
+
 const logBufDrawTimes = 2
 
 type mode int8
@@ -56,6 +58,18 @@ var (
 	wmDefaultAttr    = frameFileAttr
 )
 
+type browserWindow struct {
+	handler *Handler
+	node    handler.TileNode
+}
+
+// browserWindow is passed by value, so we store whether
+// it has been closed or not in Handler.
+func (w browserWindow) Close() error {
+	w.handler.closeWindow(w)
+	return nil
+}
+
 // Handler adds tab and window management to a editor.Editor.
 type Handler struct {
 	openFileFn    openFileFunc
@@ -79,8 +93,48 @@ type Handler struct {
 	frames   *component.FrameUnion
 
 	buffers        []*browserBuffer
+	windows        []browserWindow
 	mode           mode
 	fileListHeight int
+}
+
+func (e *Handler) newWindow(node handler.TileNode) browserWindow {
+	win := browserWindow{
+		handler: e,
+		node:    node,
+	}
+	e.windows = append(e.windows, win)
+	return win
+}
+
+func (e *Handler) findWindow(node handler.TileNode) (int, browserWindow) {
+	for i, w := range e.windows {
+		if w.node == node {
+			return i, w
+		}
+	}
+	return -1, browserWindow{}
+}
+
+func (e *Handler) closeWindow(win browserWindow) error {
+	idx, _ := e.findWindow(win.node)
+	if idx == -1 {
+		// already closed
+		return nil
+	}
+
+	buf, ok := e.browserBufferInNode(win.node)
+	if ok {
+		buf.free = true
+	}
+
+	err := win.node.Close()
+	if err != nil {
+		return err
+	}
+
+	e.windows = append(e.windows[:idx], e.windows[idx+1:]...)
+	return nil
 }
 
 func (e *Handler) doEdit(buf *cell.Buffer) tui.Handler {
@@ -94,7 +148,7 @@ func (e *Handler) emptyBuffer() *browserBuffer {
 	handler := browserBuffer{
 		filename: "",
 		handler:  editor,
-		node:     nil,
+		free:     false,
 		fileBuf:  nil,
 	}
 	return &handler
@@ -141,12 +195,11 @@ func (e *Handler) addBuffer(buf *browserBuffer) {
 }
 
 func (e *Handler) removeBuffer(buf *browserBuffer) {
-	if buf.node != nil {
+	if !buf.free {
 		panic("trying to remove buffer that is still attached to a window")
 	}
-	if buf.fileBuf != nil {
-		buf.Close()
-	}
+
+	defer buf.Close()
 
 	idx := e.findBufferIdx(buf)
 	e.buffers = append(e.buffers[:idx], e.buffers[idx+1:]...)
@@ -175,7 +228,7 @@ func (e *Handler) Init(ed editor.Editor, opts ...Option) (err error) {
 
 	e.tabs = handler.NewTabs()
 	e.tabs.OnClick = func(idx int) {
-		e.updateNodeBuffer(e.wm.Focus(), idx, e.buffers[idx])
+		e.updateNodeContent(e.wm.Focus(), e.buffers[idx])
 	}
 	e.tabs.SetAttr(focusFileAttr, nonFocusFileAttr, frameFileAttr, scrollAttr)
 
@@ -193,7 +246,8 @@ func (e *Handler) Init(ed editor.Editor, opts ...Option) (err error) {
 	e.wm = handler.NewWindowManager(initBuffer, e.config.WindowBorder)
 	e.wm.SetAttr(wmDefaultAttr, wmFocusAttr)
 
-	initBuffer.setNode(e.wm.Focus())
+	initBuffer.free = false
+	_ = e.newWindow(e.wm.Focus()) // init handler with initial window
 
 	e.wmVirt = handler.Virtual{Virtual: component.Virtual{C: e.wm}}
 	e.tabsVirt = handler.Virtual{Virtual: component.Virtual{C: e.tabs}}
@@ -264,8 +318,10 @@ func (e *Handler) findBufferIdx(buf *browserBuffer) int {
 	return idx
 }
 
-func (e *Handler) switchBuffer(node *component.TileNode) (*browserBuffer, int) {
-	buf, ok := e.nodeBuffer(node)
+func (e *Handler) switchBuffer(node handler.TileNode) (
+	*browserBuffer, int,
+) {
+	buf, ok := e.browserBufferInNode(node)
 	if !ok {
 		freeBufs := e.freeBuffers()
 		if len(freeBufs) != 0 {
@@ -276,7 +332,7 @@ func (e *Handler) switchBuffer(node *component.TileNode) (*browserBuffer, int) {
 	return buf, e.findBufferIdx(buf)
 }
 
-func (e *Handler) switchPrevBuffer(node *component.TileNode) {
+func (e *Handler) switchPrevBuffer(node handler.TileNode) {
 	buf, idx := e.switchBuffer(node)
 	if buf == nil {
 		return
@@ -286,10 +342,10 @@ func (e *Handler) switchPrevBuffer(node *component.TileNode) {
 	} else {
 		idx--
 	}
-	e.updateNodeBuffer(node, idx, e.buffers[idx])
+	e.updateNodeContent(node, e.buffers[idx])
 }
 
-func (e *Handler) switchNextBuffer(node *component.TileNode) {
+func (e *Handler) switchNextBuffer(node handler.TileNode) {
 	buf, idx := e.switchBuffer(node)
 	if buf == nil {
 		return
@@ -298,61 +354,48 @@ func (e *Handler) switchNextBuffer(node *component.TileNode) {
 	if idx == len(e.buffers) {
 		idx = 0
 	}
-	e.updateNodeBuffer(node, idx, e.buffers[idx])
+	e.updateNodeContent(node, e.buffers[idx])
 }
 
 func (e *Handler) updateNodeContent(
-	node *component.TileNode, content tui.Handler,
+	node handler.TileNode, content tui.Handler,
 ) tui.Handler {
+	newBuf, ok := content.(*browserBuffer)
+	if ok {
+		idx := e.findBufferIdx(newBuf)
+		e.tabs.SetFocus(idx)
+		newBuf.free = false
+	}
 	oldHandler := e.wm.SetContent(node, content)
 	if oldBuf, ok := oldHandler.(*browserBuffer); ok {
-		oldBuf.setNode(nil)
+		oldBuf.free = true
 	}
 	return oldHandler
 }
 
-func (e *Handler) updateNodeBuffer(
-	node *component.TileNode, idx int, newBuf *browserBuffer,
-) tui.Handler {
-	oldHandler := e.updateNodeContent(node, newBuf)
-	newBuf.setNode(node)
-	e.tabs.SetFocus(idx)
-	return oldHandler
-}
-
-func (e *Handler) nodeBuffer(node *component.TileNode) (*browserBuffer, bool) {
-	buf, ok := e.wm.FocusContent().(*browserBuffer)
+func (e *Handler) browserBufferInNode(node handler.TileNode) (*browserBuffer, bool) {
+	buf, ok := node.Content().(*browserBuffer)
 	return buf, ok
-}
-
-func (e *Handler) closeNode(node *component.TileNode) error {
-	ok := e.wm.ShiftFocus()
-	if !ok {
-		return ErrLastWindow
-	}
-	node.Close()
-
-	return nil
 }
 
 func (e *Handler) freeBuffers() []int {
 	freeBufs := make([]int, 0)
 	for i, b := range e.buffers {
-		if b.node == nil {
+		if b.free {
 			freeBufs = append(freeBufs, i)
 		}
 	}
 	return freeBufs
 }
 
-func (e *Handler) closeNodeBuffer(node *component.TileNode) error {
+func (e *Handler) removeNodeBuffer(node handler.TileNode) error {
 	freeBufs := e.freeBuffers()
 	if len(freeBufs) == 0 {
 		return ErrLastBuffer
 	}
 
 	idx := freeBufs[0]
-	oldHandler := e.updateNodeBuffer(node, idx, e.buffers[idx])
+	oldHandler := e.updateNodeContent(node, e.buffers[idx])
 	oldBuf, ok := oldHandler.(*browserBuffer)
 	if ok {
 		oldBuf.Close()
@@ -362,7 +405,7 @@ func (e *Handler) closeNodeBuffer(node *component.TileNode) error {
 }
 
 func (e *Handler) saveFocusBuffer() error {
-	buf, ok := e.nodeBuffer(e.wm.Focus())
+	buf, ok := e.browserBufferInNode(e.wm.Focus())
 	if !ok {
 		return ErrInvalidSave
 	}
@@ -376,11 +419,11 @@ func (e *Handler) saveFocusBuffer() error {
 func (e *Handler) runSingleCommand(cmd string) (quit bool, err error) {
 	switch cmd {
 	case "bclose":
-		err = e.closeNodeBuffer(e.wm.Focus())
+		err = e.removeNodeBuffer(e.wm.Focus())
 	case "bcloseAll":
-		e.closeAllBuffers()
+		e.removeAllBuffers()
 	case "close":
-		err = e.closeNode(e.wm.Focus())
+		err = browserWindow{handler: e, node: e.wm.Focus()}.Close()
 	case "wq", "wq!":
 		quit = true
 		fallthrough
@@ -456,9 +499,9 @@ func (e *Handler) handleCommand(ev term.Event) (quit, handled bool) {
 	return
 }
 
-func (e *Handler) closeAllBuffers() {
+func (e *Handler) removeAllBuffers() {
 	for {
-		err := e.closeNodeBuffer(e.wm.Focus())
+		err := e.removeNodeBuffer(e.wm.Focus())
 		if err != nil {
 			if err != ErrLastBuffer {
 				e.setError(err)
@@ -493,9 +536,9 @@ func (e *Handler) handleProxy(ev term.Event) (bool, bool) {
 
 	switch ev.Key {
 	case term.KeyCtrlA:
-		e.closeAllBuffers()
+		e.removeAllBuffers()
 	case term.KeyCtrlW:
-		err := e.closeNodeBuffer(e.wm.Focus())
+		err := e.removeNodeBuffer(e.wm.Focus())
 		if err != nil {
 			e.setError(err)
 		}
@@ -598,7 +641,7 @@ func (e *Handler) OpenFile(filename string) error {
 		return err
 	}
 
-	oldFocus := e.updateNodeBuffer(e.wm.Focus(), len(e.buffers)-1, buffer)
+	oldFocus := e.updateNodeContent(e.wm.Focus(), buffer)
 
 	// remove initial empty buffer
 	if oldBuf, ok := oldFocus.(*browserBuffer); ok &&
@@ -633,43 +676,42 @@ func (e *Handler) MergeKeyMap(keymap map[term.Event]term.Event) error {
 }
 
 func (e *Handler) splitInverted(
-	split func(*handler.WindowManager, tui.Handler) *component.TileNode, h tui.Handler,
-) {
-	nodeInFocus := e.wm.Focus()
-	buf, ok := e.nodeBuffer(nodeInFocus)
-	newNode := split(e.wm, e.wm.FocusContent())
-	if ok {
-		buf.setNode(newNode)
+	split func(*handler.WindowManager, tui.Handler) handler.TileNode,
+	h tui.Handler,
+) browserWindow {
+	nodeInFocus, focusContent := e.wm.Focus(), e.wm.FocusContent()
+	newNode := split(e.wm, focusContent)
+	e.wm.SetContent(nodeInFocus, h)
+	_ = e.newWindow(newNode)
+	idx, w := e.findWindow(nodeInFocus)
+	if idx == -1 {
+		panic("Handler: corrupted window list")
 	}
-	e.updateNodeContent(nodeInFocus, h)
+	return w
 }
 
 // SplitVerticalRight opens a new window tile to the right of the
 // current tile in focus and initializes it with h.
-func (e *Handler) SplitVerticalRight(h tui.Handler) error {
-	e.wm.SplitVertical(h)
-	return nil
+func (e *Handler) SplitVerticalRight(h tui.Handler) (Window, error) {
+	return e.newWindow(e.wm.SplitVertical(h)), nil
 }
 
 // SplitVerticalLeft opens a new window tile to the left of the
 // current tile in focus and initializes it with h.
-func (e *Handler) SplitVerticalLeft(h tui.Handler) error {
-	e.splitInverted((*handler.WindowManager).SplitVertical, h)
-	return nil
+func (e *Handler) SplitVerticalLeft(h tui.Handler) (Window, error) {
+	return e.splitInverted((*handler.WindowManager).SplitVertical, h), nil
 }
 
 // SplitHorizontalBelow opens a new window tile below the current tile in focus
 // and initializes it with h.
-func (e *Handler) SplitHorizontalBelow(h tui.Handler) error {
-	e.wm.SplitHorizontal(h)
-	return nil
+func (e *Handler) SplitHorizontalBelow(h tui.Handler) (Window, error) {
+	return e.newWindow(e.wm.SplitHorizontal(h)), nil
 }
 
 // SplitHorizontalAbove opens a new window tile above the current tile in focus
 // and initializes it with h.
-func (e *Handler) SplitHorizontalAbove(h tui.Handler) error {
-	e.splitInverted((*handler.WindowManager).SplitHorizontal, h)
-	return nil
+func (e *Handler) SplitHorizontalAbove(h tui.Handler) (Window, error) {
+	return e.splitInverted((*handler.WindowManager).SplitHorizontal, h), nil
 }
 
 // Subscribe subscribers h EventHandler to term.Event ev.

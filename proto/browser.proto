@@ -36,6 +36,7 @@ message SplitRequest {
 }
 
 message SplitResponse {
+	uint32 window_id = 2;
 }
 
 message SubscribeRequest {
@@ -67,4 +68,14 @@ service WindowManager {
 	rpc SplitVerticalLeft(SplitRequest) returns (SplitResponse);
 	rpc SplitHorizontalAbove(SplitRequest) returns (SplitResponse);
 	rpc SplitHorizontalBelow(SplitRequest) returns (SplitResponse);
+}
+
+message WindowCloseRequest {
+}
+
+message WindowCloseResponse {
+}
+
+service Window {
+	rpc Close(WindowCloseRequest) returns (WindowCloseResponse);
 }

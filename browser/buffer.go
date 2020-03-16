@@ -2,7 +2,6 @@ package browser
 
 import (
 	"github.com/ernestrc/go-tui"
-	"github.com/ernestrc/go-tui/component"
 	"github.com/ernestrc/go-tui/term"
 )
 
@@ -12,15 +11,7 @@ type browserBuffer struct {
 	filename string
 	fileBuf  fileBuffer
 	handler  tui.Handler
-	node     *component.TileNode
-}
-
-func (s *browserBuffer) setNode(node *component.TileNode) (
-	prev *component.TileNode,
-) {
-	prev = s.node
-	s.node = node
-	return
+	free     bool
 }
 
 func (s *browserBuffer) Resize(width, height int) {

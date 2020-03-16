@@ -10,6 +10,7 @@ import (
 	"github.com/ernestrc/go-tui/editor"
 	"github.com/ernestrc/go-tui/proto"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/goleak"
 	"google.golang.org/grpc"
 )
 
@@ -128,7 +129,5 @@ func TestRPCBrowserDraw(t *testing.T) {
 }
 
 func TestMain(m *testing.M) {
-	// FIXME there seems to be a race detected
-	// when this runs
-	// goleak.VerifyTestMain(m)
+	goleak.VerifyTestMain(m)
 }

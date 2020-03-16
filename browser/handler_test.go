@@ -262,17 +262,17 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 
 	handler.BatchTestInputSequence(t, browser, 20, 10, cases)
 
-	require.NoError(t, browser.SplitVerticalLeft(handler.NewTestHandler()))
+	win, err := browser.SplitVerticalLeft(handler.NewTestHandler())
+	require.NoError(t, err)
 
+	_, err = browser.SplitHorizontalBelow(handler.NewTestHandler())
+	require.NoError(t, err)
 	err = browser.Subscribe(term.Event{Type: term.EventKey, Ch: ']'},
 		funcEventHandler(func(ev term.Event) bool {
 			browser.SplitHorizontalBelow(handler.NewTestHandler())
 			return false
 		}))
 	require.NoError(t, err)
-
-	_, ok := browser.Handle(term.Event{Type: term.EventKey, Ch: ']'})
-	require.True(t, ok)
 
 	newMappings := map[term.Event]term.Event{
 		term.Event{Type: term.EventKey, Ch: ')'}: term.Event{Type: term.EventKey, Key: term.KeyCtrlL},
@@ -303,7 +303,26 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 │AAAAAAAA││EEEEEEEE│
 │AAAAAAAA││EEEEEEEE│
 └────────┘└────────┘`},
-		{":close>:close>)))",
+	}
+
+	handler.BatchTestInputSequence(t, browser, 20, 10, cases)
+
+	// test window ifc
+	require.NoError(t, win.Close())
+
+	cases = []handler.TestInputSequence{
+		{"_",
+			`┌──────────────────┐
+│cabin.go  other.go│
+├────────┐┌────────┤
+│AAAAAAAA││EEEEEEEE│
+│AAAAAAAA││EEEEEEEE│
+│AAAAAAAA││EEEEEEEE│
+│AAAAAAAA││EEEEEEEE│
+│AAAAAAAA││EEEEEEEE│
+│AAAAAAAA││EEEEEEEE│
+└────────┘└────────┘`},
+		{":close>)))",
 			`┌──────────────────┐
 │cabin.go  other.go│
 ├──────────────────┤

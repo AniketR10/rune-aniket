@@ -26,6 +26,7 @@ type Client struct {
 	f       proto.FileOpenerClient
 	p       proto.EventPublisherClient
 	servers []*grpc.Server
+	conns   []io.Closer
 }
 
 // NewClient allocates storage for a new Client and initializes it.
@@ -45,61 +46,95 @@ func NewClient(broker proto.MuxBroker, cc grpc.ClientConnInterface) *Client {
 func (c *Client) Init(broker proto.MuxBroker) {
 	c.broker = broker
 	c.servers = make([]*grpc.Server, 0)
+	c.conns = make([]io.Closer, 0)
 }
 
-func (c *Client) serveHandler(h tui.Handler) uint32 {
-	brokerID := c.broker.NextId()
+func acceptAndServe(
+	broker proto.MuxBroker, register func(*grpc.Server),
+) (uint32, *grpc.Server) {
+	brokerID := broker.NextId()
 
 	var wg sync.WaitGroup
-	var s *grpc.Server
+	var srv *grpc.Server
 	serverFunc := func(opts []grpc.ServerOption) *grpc.Server {
 		defer wg.Done()
 
-		s = grpc.NewServer(opts...)
-		proto.RegisterHandlerServer(s, handler.NewServer(h))
-		return s
+		srv = grpc.NewServer(opts...)
+		register(srv)
+		return srv
 	}
 
 	wg.Add(1)
-	go c.broker.AcceptAndServe(brokerID, serverFunc)
-
+	go broker.AcceptAndServe(brokerID, serverFunc)
 	wg.Wait()
-	c.servers = append(c.servers, s)
 
+	return brokerID, srv
+}
+
+func (c *Client) serveHandler(h tui.Handler) uint32 {
+	brokerID, srv := acceptAndServe(c.broker, func(srv *grpc.Server) {
+		proto.RegisterHandlerServer(srv, handler.NewServer(h))
+	})
+	c.servers = append(c.servers, srv)
 	return brokerID
+}
 
+func (c *Client) dialToWindow(windowID uint32) (*windowClient, error) {
+	conn, err := c.broker.Dial(windowID)
+	if err != nil {
+		return nil, err
+	}
+
+	cc := newWindowClient(proto.NewWindowClient(conn), conn)
+	cc.logger = c.Logger
+
+	c.conns = append(c.conns, cc)
+
+	return cc, nil
 }
 
 // SplitVerticalRight satisfies Browser.
-func (c *Client) SplitVerticalRight(h tui.Handler) error {
+func (c *Client) SplitVerticalRight(h tui.Handler) (Window, error) {
 	req := proto.SplitRequest{HandlerId: c.serveHandler(h)}
 	ctx := context.Background()
-	_, err := c.wm.SplitVerticalRight(ctx, &req)
-	return err
+	res, err := c.wm.SplitVerticalRight(ctx, &req)
+	if err != nil {
+		return nil, err
+	}
+	return c.dialToWindow(res.WindowId)
 }
 
 // SplitVerticalLeft satisfies Browser.
-func (c *Client) SplitVerticalLeft(h tui.Handler) error {
+func (c *Client) SplitVerticalLeft(h tui.Handler) (Window, error) {
 	req := proto.SplitRequest{HandlerId: c.serveHandler(h)}
 	ctx := context.Background()
-	_, err := c.wm.SplitVerticalLeft(ctx, &req)
-	return err
+	res, err := c.wm.SplitVerticalLeft(ctx, &req)
+	if err != nil {
+		return nil, err
+	}
+	return c.dialToWindow(res.WindowId)
 }
 
 // SplitHorizontalAbove satisfies Browser.
-func (c *Client) SplitHorizontalAbove(h tui.Handler) error {
+func (c *Client) SplitHorizontalAbove(h tui.Handler) (Window, error) {
 	req := proto.SplitRequest{HandlerId: c.serveHandler(h)}
 	ctx := context.Background()
-	_, err := c.wm.SplitHorizontalAbove(ctx, &req)
-	return err
+	res, err := c.wm.SplitHorizontalAbove(ctx, &req)
+	if err != nil {
+		return nil, err
+	}
+	return c.dialToWindow(res.WindowId)
 }
 
 // SplitHorizontalBelow satisfies Browser.
-func (c *Client) SplitHorizontalBelow(h tui.Handler) error {
+func (c *Client) SplitHorizontalBelow(h tui.Handler) (Window, error) {
 	req := proto.SplitRequest{HandlerId: c.serveHandler(h)}
 	ctx := context.Background()
-	_, err := c.wm.SplitHorizontalBelow(ctx, &req)
-	return err
+	res, err := c.wm.SplitHorizontalBelow(ctx, &req)
+	if err != nil {
+		return nil, err
+	}
+	return c.dialToWindow(res.WindowId)
 }
 
 // MergeKeyMap satisfies Browser.
@@ -164,14 +199,24 @@ func (c *Client) Subscribe(ev term.Event, h EventHandler) error {
 
 // Close closes all resources associated with this Client.
 // This client should not be used after this method is called.
-func (c *Client) Close() error {
+func (c *Client) Close() (err error) {
 	for _, server := range c.servers {
 		server.Stop()
 	}
+	for _, conn := range c.conns {
+		connErr := conn.Close()
+		if connErr != nil {
+			err = connErr
+		}
+	}
 	if closer, ok := c.cc.(io.Closer); ok {
-		closer.Close()
+		ccErr := closer.Close()
+		if ccErr != nil {
+			err = ccErr
+		}
 	}
 	c.servers = c.servers[:0]
+	c.conns = c.conns[:0]
 	return nil
 }
 
@@ -186,6 +231,7 @@ type Server struct {
 
 	broker  proto.MuxBroker
 	conns   []clientConn
+	servers []*grpc.Server
 	browser struct {
 		Browser
 		sync.Locker
@@ -213,6 +259,7 @@ func (s *Server) Init(
 	s.browser.Locker = lock
 	s.interrupt = interrupt
 	s.conns = make([]clientConn, 0)
+	s.servers = make([]*grpc.Server, 0)
 }
 
 func (s *Server) dialHandler(handlerID uint32) (*handler.Client, error) {
@@ -229,10 +276,19 @@ func (s *Server) dialHandler(handlerID uint32) (*handler.Client, error) {
 	return cc, nil
 }
 
+func (s *Server) serveWindow(win Window) uint32 {
+	brokerID, srv := acceptAndServe(s.broker, func(srv *grpc.Server) {
+		proto.RegisterWindowServer(srv, newWindowServer(win, s.browser.Locker))
+	})
+	s.servers = append(s.servers, srv)
+	return brokerID
+}
+
 // SplitVerticalRight satisfies proto.BrowserServer
-func (s *Server) SplitVerticalRight(ctx context.Context, req *proto.SplitRequest) (
-	*proto.SplitResponse, error,
-) {
+func (s *Server) split(
+	ctx context.Context, req *proto.SplitRequest,
+	split func(WindowManager, tui.Handler) (Window, error),
+) (*proto.SplitResponse, error) {
 	s.browser.Lock()
 	defer s.browser.Unlock()
 
@@ -241,72 +297,42 @@ func (s *Server) SplitVerticalRight(ctx context.Context, req *proto.SplitRequest
 		return nil, err
 	}
 
-	err = s.browser.SplitVerticalRight(handler)
+	win, err := split(s.browser, handler)
 	if err != nil {
 		return nil, err
 	}
 
-	return new(proto.SplitResponse), nil
+	windowID := s.serveWindow(win)
+	res := &proto.SplitResponse{WindowId: windowID}
+	return res, nil
+}
+
+// SplitVerticalRight satisfies proto.BrowserServer
+func (s *Server) SplitVerticalRight(ctx context.Context, req *proto.SplitRequest) (
+	*proto.SplitResponse, error,
+) {
+	return s.split(ctx, req, (WindowManager).SplitVerticalRight)
 }
 
 // SplitVerticalLeft satisfies proto.BrowserServer
 func (s *Server) SplitVerticalLeft(ctx context.Context, req *proto.SplitRequest) (
 	*proto.SplitResponse, error,
 ) {
-	s.browser.Lock()
-	defer s.browser.Unlock()
-
-	handler, err := s.dialHandler(req.GetHandlerId())
-	if err != nil {
-		return nil, err
-	}
-
-	err = s.browser.SplitVerticalLeft(handler)
-	if err != nil {
-		return nil, err
-	}
-
-	return new(proto.SplitResponse), nil
+	return s.split(ctx, req, (WindowManager).SplitVerticalLeft)
 }
 
 // SplitHorizontalAbove satisfies proto.BrowserServer
 func (s *Server) SplitHorizontalAbove(ctx context.Context, req *proto.SplitRequest) (
 	*proto.SplitResponse, error,
 ) {
-	s.browser.Lock()
-	defer s.browser.Unlock()
-
-	handler, err := s.dialHandler(req.GetHandlerId())
-	if err != nil {
-		return nil, err
-	}
-
-	err = s.browser.SplitHorizontalAbove(handler)
-	if err != nil {
-		return nil, err
-	}
-
-	return new(proto.SplitResponse), nil
+	return s.split(ctx, req, (WindowManager).SplitHorizontalAbove)
 }
 
 // SplitHorizontalBelow satisfies proto.BrowserServer
 func (s *Server) SplitHorizontalBelow(ctx context.Context, req *proto.SplitRequest) (
 	*proto.SplitResponse, error,
 ) {
-	s.browser.Lock()
-	defer s.browser.Unlock()
-
-	handler, err := s.dialHandler(req.GetHandlerId())
-	if err != nil {
-		return nil, err
-	}
-
-	err = s.browser.SplitHorizontalBelow(handler)
-	if err != nil {
-		return nil, err
-	}
-
-	return new(proto.SplitResponse), nil
+	return s.split(ctx, req, (WindowManager).SplitHorizontalBelow)
 }
 
 // MergeKeyMap satisfies proto.BrowserServer
@@ -397,7 +423,11 @@ func (s *Server) Close() error {
 			err = ccErr
 		}
 	}
+	for _, s := range s.servers {
+		s.Stop()
+	}
 	s.browser.Close()
 	s.conns = s.conns[:0]
+	s.servers = s.servers[:0]
 	return err
 }
