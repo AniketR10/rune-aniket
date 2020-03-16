@@ -235,6 +235,14 @@ func TestTileNodeClose(t *testing.T) {
 		m4 := tree.SplitVertical(m3, &TestComponent{Ch: 'X'})
 		m4.Close()
 	})
+	t.Run("panics if try to close same node twice", func(t *testing.T) {
+		tree, m := NewTileTree(&TestComponent{Ch: 'A'})
+		m2 := tree.SplitVertical(m, &TestComponent{Ch: 'X'})
+		assert.NotPanics(t, func() {
+			m2.Close()
+			m2.Close()
+		})
+	})
 
 }
 

@@ -251,6 +251,9 @@ func removeChild(parent, child *TileNode) {
 
 // Close removes this node from the tree. It panics if node is last node on the tree.
 func (t *TileNode) Close() {
+	if t.parent == nil {
+		return
+	}
 	if t.parent.parent == nil && len(t.parent.children) == 1 {
 		panic("unsupported: trying to close last node")
 	}
