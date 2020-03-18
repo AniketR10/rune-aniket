@@ -64,9 +64,26 @@ func (c *Client) consumeBreakerInterrupt() {
 	}
 }
 
+type nopCloser struct {
+	proto.HandlerClient
+}
+
+func (n *nopCloser) Close() error { return nil }
+
 // Init initialies this Client with pbClient and the given interrupt func.
 func (c *Client) Init(pbClient proto.HandlerClient, interrupt func()) {
-	pbClient = withClientTimeout(pbClient, defaultRPCTimeout)
+	// the ALWAYS 'async' feature of the rpc breaker is essential
+	// to avoid the following deadlock:
+	//
+	// browser server          browser client
+	//   Lock()          ->       Handle(), tries to open window
+	//   Split()         <-
+	//   Lock()
+	//
+	// The original call to Handle will block forever, because
+	// the handler client is invoking an RPC which requires the
+	// original lock to be unlocked.
+	c.client = &nopCloser{HandlerClient: withClientTimeout(pbClient, defaultRPCTimeout)}
 	c.client, c.breakerCh = withClientBreaker(pbClient)
 
 	c.interrupt = interrupt

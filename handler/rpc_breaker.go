@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"errors"
 	"sync"
 
 	"github.com/ernestrc/go-tui/component"
@@ -29,9 +30,6 @@ Uh, Houston, we've had a problem
 `
 
 const (
-	// if underlying proto.HandlerClient is not processing events
-	// in a timely fashion, we start applying backpressure when
-	// we have 10 events queued.
 	handleBackpressureThres = 10
 )
 
@@ -39,11 +37,12 @@ type breakerState uint8
 
 const (
 	initial = iota
-	waiting
 	ready
+	pending
 )
 
 type clientBreaker struct {
+	quitNext bool
 	clientCh chan error
 	quitCh   chan struct{}
 	mu       sync.Mutex
@@ -80,13 +79,19 @@ func (a *clientBreaker) pipelineHandleEvents() {
 		case <-a.quitCh:
 			return
 		case req := <-a.handle.ch:
-			_, err := a.cc.Handle(context.Background(), req)
-			if err != nil {
-				select {
-				case a.clientCh <- err:
-				case <-a.quitCh:
-					return
-				}
+			res, err := a.cc.Handle(context.Background(), req)
+			if err == nil && res.Quit {
+				a.mu.Lock()
+				a.quitNext = true
+				a.mu.Unlock()
+
+				return
+			}
+
+			select {
+			case a.clientCh <- err:
+			case <-a.quitCh:
+				return
 			}
 		}
 	}
@@ -105,7 +110,9 @@ func (a *clientBreaker) dispatchDraw(
 	a.mu.Lock()
 	a.draw.prevReq = in
 	a.draw.prevRes = res
-	a.draw.state = ready
+	// instead of setting to ready, we decrement such that only when
+	// there are no outstanding draw requests, we move back to ready.
+	a.draw.state--
 	a.mu.Unlock()
 
 	select {
@@ -131,12 +138,16 @@ func (a *clientBreaker) Draw(
 		fallthrough
 
 	case initial:
-		a.draw.state = waiting
-		go a.dispatchDraw(ctx, in, opts...)
+		// so fallthrough will ++ and so become pending
+		a.draw.state = ready
 
 		fallthrough
 
-	case waiting:
+	default:
+		a.draw.state++
+
+		go a.dispatchDraw(ctx, in, opts...)
+
 		if a.draw.prevRes != nil && a.draw.prevReq.Width == in.Width &&
 			a.draw.prevReq.Height == in.Height {
 			return a.draw.prevRes, nil
@@ -147,17 +158,34 @@ func (a *clientBreaker) Draw(
 		loading := component.String(loadingCopy)
 		loading.Resize(int(in.Width), int(in.Height))
 		return proto.NewDrawResponse(loading, int(in.Width), int(in.Height)), nil
-
-	default:
-		panic("circuing breaker client unkown draw.state")
 	}
 }
 
 func (a *clientBreaker) Handle(
 	ctx context.Context, in *proto.HandleRequest, opts ...grpc.CallOption,
 ) (*proto.HandleResponse, error) {
-	a.handle.ch <- in
-	return new(proto.HandleResponse), nil
+	res := new(proto.HandleResponse)
+
+	a.mu.Lock()
+	quitNext := a.quitNext
+	a.mu.Unlock()
+
+	if quitNext {
+		res.Quit = quitNext
+		return res, nil
+	}
+
+	res.Handled = true
+
+	// if underlying proto.HandlerClient is not processing events
+	// in a timely fashion, we start returning errors as a safety valve.
+	// This avoids deadlocking with browser lock. See Client documentation.
+	select {
+	case a.handle.ch <- in:
+		return res, nil
+	default:
+		return nil, errors.New("remote handler is not processing events in a timely fashion")
+	}
 }
 
 func (a *clientBreaker) Man(

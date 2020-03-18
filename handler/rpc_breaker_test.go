@@ -3,7 +3,9 @@ package handler
 import (
 	"context"
 	"errors"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/ernestrc/go-tui/component"
 	"github.com/ernestrc/go-tui/proto"
@@ -30,9 +32,6 @@ func TestClientBreakerMan(t *testing.T) {
 
 	t.Run("bubbles up error", func(t *testing.T) {
 		mock.rpcError = errors.New("man error")
-		defer func() {
-			mock.rpcError = nil
-		}()
 
 		manRes, err := b.Man(context.Background(), new(proto.ManRequest))
 		assert.Error(t, err)
@@ -40,15 +39,63 @@ func TestClientBreakerMan(t *testing.T) {
 	})
 }
 
-func TestClientBreakerHandle(t *testing.T) {
-	mock := &mockHandlerClient{remote: testHandler()}
-	b, errCh := withClientBreaker(mock)
-	defer b.Close()
+func consumeMockEvents(
+	mock *mockHandlerClient, quitChan chan struct{},
+) {
+	for {
+		select {
+		case <-mock.handledCh:
+		case <-quitChan:
+			return
+		}
+	}
+}
 
-	mock.handledCh = make(chan term.Event)
-	req := &proto.HandleRequest{Event: &proto.Event{Char: '$', Type: proto.Event_TypeKey}}
+func slowlyConsumeMockEvents(
+	wg *sync.WaitGroup,
+	mock *mockHandlerClient,
+	quitChan chan struct{},
+) {
+	for {
+		select {
+		case <-mock.handledCh:
+			time.Sleep(1 * time.Millisecond)
+			wg.Done()
+		case <-quitChan:
+			return
+		}
+	}
+}
+
+func consumeInterrupts(
+	ch chan error,
+	quitChan chan struct{},
+) {
+	for {
+		select {
+		case <-ch:
+		case <-quitChan:
+			return
+		}
+	}
+}
+
+func closeTestingResources(b *clientBreaker, quitChan chan struct{}) {
+	b.Close()
+	close(quitChan)
+}
+
+func TestClientBreakerHandle(t *testing.T) {
+	req := &proto.HandleRequest{
+		Event: &proto.Event{Char: '$', Type: proto.Event_TypeKey},
+	}
 
 	t.Run("dispatches events asynchronously", func(t *testing.T) {
+		mock := &mockHandlerClient{remote: testHandler()}
+		b, _ := withClientBreaker(mock)
+		defer b.Close()
+
+		mock.handledCh = make(chan term.Event)
 		res, err := b.Handle(context.Background(), req)
 		require.NoError(t, err)
 		assert.NotNil(t, res)
@@ -58,16 +105,67 @@ func TestClientBreakerHandle(t *testing.T) {
 	})
 
 	t.Run("dispatches handle errors to error chan", func(t *testing.T) {
+		mock := &mockHandlerClient{remote: testHandler()}
+		b, errCh := withClientBreaker(mock)
+		defer b.Close()
+
+		mock.handledCh = make(chan term.Event)
 		mock.rpcError = errors.New("sup")
-		defer func() {
-			mock.rpcError = nil
-		}()
 
 		res, err := b.Handle(context.Background(), req)
 		require.NoError(t, err)
 		assert.NotNil(t, res)
 
 		assert.Equal(t, mock.rpcError, <-errCh)
+	})
+
+	t.Run("dispatches all events, even when upon backpressure", func(t *testing.T) {
+		var wg sync.WaitGroup
+		h := NewTestHandler()
+		mock := &mockHandlerClient{remote: h}
+		b, ch := withClientBreaker(mock)
+		quitChan := make(chan struct{})
+		mock.handledCh = make(chan term.Event)
+
+		go slowlyConsumeMockEvents(&wg, mock, quitChan)
+		defer closeTestingResources(b, quitChan)
+		go consumeInterrupts(ch, quitChan)
+
+		for i := 0; i < 1000; i++ {
+			wg.Add(1)
+			_, err := b.Handle(context.Background(), req)
+			if err != nil {
+				wg.Done()
+			}
+		}
+
+		wg.Wait()
+	})
+
+	t.Run("dispatches exit on next handle event", func(t *testing.T) {
+		h := NewTestHandler()
+		h.Exit = true
+		mock := &mockHandlerClient{remote: h}
+		b, ch := withClientBreaker(mock)
+		quitChan := make(chan struct{})
+		mock.handledCh = make(chan term.Event)
+
+		go consumeMockEvents(mock, quitChan)
+		go consumeInterrupts(ch, quitChan)
+		defer closeTestingResources(b, quitChan)
+
+		// next exit is false, because events are handled
+		// asynchronously
+		res, err := b.Handle(context.Background(), req)
+		require.NoError(t, err)
+		assert.False(t, res.GetQuit())
+
+		time.Sleep(50 * time.Millisecond)
+
+		// next should be now true
+		res, err = b.Handle(context.Background(), req)
+		require.NoError(t, err)
+		assert.True(t, res.GetQuit())
 	})
 }
 

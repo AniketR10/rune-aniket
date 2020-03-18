@@ -125,6 +125,23 @@ func TestHandlerHandleTimeout(t *testing.T) {
 		req.Event = new(proto.Event)
 		return c.Handle(context.Background(), req)
 	})
+
+	t.Run("returns exit and handled", func(t *testing.T) {
+		handler := NewTestHandler()
+		stubClient := &mockHandlerClient{remote: handler}
+		c := withClientTimeout(stubClient, 50*time.Millisecond)
+
+		req := &proto.HandleRequest{Event: &proto.Event{}}
+
+		res, err := c.Handle(context.Background(), req)
+		require.NoError(t, err)
+		assert.False(t, res.GetQuit())
+
+		handler.Exit = true
+		res, err = c.Handle(context.Background(), req)
+		require.NoError(t, err)
+		assert.True(t, res.GetQuit())
+	})
 }
 
 func TestHandlerDrawTimeout(t *testing.T) {
