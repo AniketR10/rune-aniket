@@ -7,13 +7,8 @@ import (
 )
 
 var (
-	ichan chan term.Event
-	attr  term.Attributes
+	attr term.Attributes
 )
-
-func resize(root Handler, width, height int) {
-	root.Resize(width, height)
-}
 
 func redraw(root Handler, termw Writer) (err error) {
 	if err = termw.Clear(attr); err != nil {
@@ -40,42 +35,29 @@ func redraw(root Handler, termw Writer) (err error) {
 func run(root Handler, lock sync.Locker, termw Writer) (err error) {
 	width, height := term.Size()
 
-	resize(root, width, height)
+	root.Resize(width, height)
 
-	var hexit, texit bool
-
-	go func() {
-		for !texit {
-			ichan <- term.PollEvent()
-		}
-	}()
+	var hexit bool
 
 	for !hexit && err == nil {
 		if err = redraw(root, termw); err != nil {
 			return
 		}
 
-		select {
-		case ev := <-ichan:
-			switch ev.Type {
-			case term.EventInterrupt:
-			case term.EventError:
-				err = ev.Err
-			case term.EventResize:
-				width, height := ev.Width, ev.Height
-				resize(root, width, height)
-			default:
-				lock.Lock()
-				hexit, _ = root.Handle(ev)
-				lock.Unlock()
-			}
+		ev := term.PollEvent()
+		switch ev.Type {
+		case term.EventInterrupt:
+		case term.EventError:
+			err = ev.Err
+		case term.EventResize:
+			width, height := ev.Width, ev.Height
+			root.Resize(width, height)
+		default:
+			lock.Lock()
+			hexit, _ = root.Handle(ev)
+			lock.Unlock()
 		}
 	}
-
-	// stop polling events
-	texit = true
-	term.Interrupt()
-	<-ichan
 
 	return nil
 }

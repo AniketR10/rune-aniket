@@ -74,7 +74,6 @@ func Init() error {
 		return fmt.Errorf("failed term init: %v", err)
 	}
 
-	ichan = make(chan term.Event)
 	attr.Fg, attr.Bg = term.ColorDefault, term.ColorDefault
 
 	return nil
