@@ -1,5 +1,5 @@
 GO=go
-GOFLAGS=
+GOFLAGS=-race
 
 TARGET=bin
 LIBSRC=$(wildcard *.go) $(wildcard **/*.go)
