@@ -83,12 +83,20 @@ func (h *slowHandler) Close() error {
 	return nil
 }
 
+func (h *slowHandler) init() {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	h.h = *NewTestHandler()
+	h.h.Manual.Summary = testHandlerManualDesc
+	h.h.Manual.Keys = testHandlerKeys
+	h.quitChan = make(chan struct{})
+	h.delay = 0
+}
+
 func newSlowHandler() *slowHandler {
 	ret := new(slowHandler)
-	ret.h = *NewTestHandler()
-	ret.h.Manual.Summary = testHandlerManualDesc
-	ret.h.Manual.Keys = testHandlerKeys
-	ret.quitChan = make(chan struct{})
+	ret.init()
 	return ret
 }
 

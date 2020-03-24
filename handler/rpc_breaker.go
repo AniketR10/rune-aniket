@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 
 	"github.com/ernestrc/go-tui/component"
@@ -37,10 +38,23 @@ type breakerState uint8
 
 const (
 	initial = iota
-	ready
 	pending
+	ready
 )
 
+// clientBreaker Draw logic follows the following state diagram:
+//
+// Initial - DrawReqSame ->> Pending
+// Initial -- DrawRes -->> Error
+// Pending - DrawRes ->> Ready
+// Pending - DrawReqSame ->> Cancel
+// Pending - DrawReqDiff ->> Cancel
+// Ready - DrawReqSame ->> Initial
+// Ready - DrawReqDiff ->> Pending
+// Ready -- DrawRes -->> Error
+// Cancel ->> Pending
+//
+// http://chartmage.com/index.html
 type clientBreaker struct {
 	quitNext bool
 	clientCh chan error
@@ -49,9 +63,10 @@ type clientBreaker struct {
 	cc       proto.HandlerClient
 
 	draw struct {
+		cancel  func()
 		state   breakerState
-		prevReq *proto.DrawRequest
-		prevRes *proto.DrawResponse
+		prevReq proto.DrawRequest
+		prevRes proto.DrawResponse
 	}
 
 	handle struct {
@@ -97,7 +112,61 @@ func (a *clientBreaker) pipelineHandleEvents() {
 	}
 }
 
-func (a *clientBreaker) dispatchDraw(
+func (a *clientBreaker) prevResCopy() *proto.DrawResponse {
+	res := new(proto.DrawResponse)
+	*res = a.draw.prevRes
+	return res
+}
+
+func (a *clientBreaker) loadingContent(
+	in *proto.DrawRequest,
+) *proto.DrawResponse {
+	if a.draw.prevReq.Width == in.Width &&
+		a.draw.prevReq.Height == in.Height {
+		return a.prevResCopy()
+	}
+
+	loading := component.String(loadingCopy)
+	loading.Resize(int(in.Width), int(in.Height))
+	return proto.NewDrawResponse(loading, int(in.Width), int(in.Height))
+}
+
+func (a *clientBreaker) transitionToCancel() {
+	if a.draw.cancel == nil {
+		panic("corrupted state machine: tried to cancel same request twice")
+	}
+
+	a.draw.cancel()
+	a.draw.cancel = nil
+}
+
+func (a *clientBreaker) transitionToPending(
+	ctx context.Context, in *proto.DrawRequest, opts ...grpc.CallOption,
+) {
+	a.draw.state = pending
+	a.draw.prevReq = *in
+	ctx, a.draw.cancel = context.WithCancel(ctx)
+	go a.sendDrawRequest(ctx, in, opts...)
+}
+
+func (a *clientBreaker) transitionToReady(res *proto.DrawResponse, err error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	if a.draw.state != pending {
+		panic(fmt.Sprintf("corrupted state machine: "+
+			"state should be pending if there's an "+
+			"inflight request: err=%s, state=%d",
+			err, a.draw.state))
+	}
+
+	// should be never nil; if canceled err should be context.Canceled
+	a.draw.cancel()
+	a.draw.prevRes = *res
+	a.draw.state = ready
+}
+
+func (a *clientBreaker) sendDrawRequest(
 	ctx context.Context, in *proto.DrawRequest, opts ...grpc.CallOption,
 ) {
 	res, err := a.cc.Draw(ctx, in, opts...)
@@ -107,13 +176,17 @@ func (a *clientBreaker) dispatchDraw(
 		res = proto.NewDrawResponse(comp, int(in.Width), int(in.Height))
 	}
 
-	a.mu.Lock()
-	a.draw.prevReq = in
-	a.draw.prevRes = res
-	// instead of setting to ready, we decrement such that only when
-	// there are no outstanding draw requests, we move back to ready.
-	a.draw.state--
-	a.mu.Unlock()
+	select {
+	case <-ctx.Done():
+		return
+	default:
+	}
+
+	a.transitionToReady(res, err)
+
+	// TODO there should be another state here: interrupt not yet issued
+	// but received another draw request. should unlocking be defered to
+	// after clientCh channel is drained?
 
 	select {
 	case <-a.quitCh:
@@ -122,42 +195,37 @@ func (a *clientBreaker) dispatchDraw(
 }
 
 func (a *clientBreaker) Draw(
-	ctx context.Context, in *proto.DrawRequest, opts ...grpc.CallOption,
+	ctx context.Context, in *proto.DrawRequest,
+	opts ...grpc.CallOption,
 ) (*proto.DrawResponse, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
 	switch a.draw.state {
+	case initial:
+		resp := a.loadingContent(in)
+		a.transitionToPending(ctx, in)
+		return resp, nil
+
+	case pending:
+		resp := a.loadingContent(in)
+		a.transitionToCancel()
+		a.transitionToPending(ctx, in)
+		return resp, nil
+
 	case ready:
-		a.draw.state = initial
-		if a.draw.prevRes != nil && a.draw.prevReq.Width == in.Width &&
+		if a.draw.prevReq.Width == in.Width &&
 			a.draw.prevReq.Height == in.Height {
-			return a.draw.prevRes, nil
+			a.draw.state = initial
+			return a.prevResCopy(), nil
 		}
 
-		fallthrough
-
-	case initial:
-		// so fallthrough will ++ and so become pending
-		a.draw.state = ready
-
-		fallthrough
+		resp := a.loadingContent(in)
+		a.transitionToPending(ctx, in)
+		return resp, nil
 
 	default:
-		a.draw.state++
-
-		go a.dispatchDraw(ctx, in, opts...)
-
-		if a.draw.prevRes != nil && a.draw.prevReq.Width == in.Width &&
-			a.draw.prevReq.Height == in.Height {
-			return a.draw.prevRes, nil
-		}
-		// NOTE we could improve responsiveness by cancelling
-		// context of previous request and re-issuing a request
-		// if draw width, height is different that issued.
-		loading := component.String(loadingCopy)
-		loading.Resize(int(in.Width), int(in.Height))
-		return proto.NewDrawResponse(loading, int(in.Width), int(in.Height)), nil
+		panic(fmt.Sprintf("unknown state: %d", a.draw.state))
 	}
 }
 

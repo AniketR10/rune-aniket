@@ -244,4 +244,28 @@ func TestClientBreakerDraw(t *testing.T) {
 		require.NoError(t, err)
 		assertDrawResponse(t, res, smtgWrongCopy)
 	})
+
+	t.Run("cancels previous draw request if new draw is requested", func(t *testing.T) {
+		slowHandler := newSlowHandler()
+		mock := &mockHandlerClient{remote: slowHandler}
+		slowHandler.setDelay(1 * time.Second)
+
+		b, ch := withClientBreaker(mock)
+		defer b.Close()
+
+		_, err := b.Draw(context.Background(), req)
+		require.NoError(t, err)
+
+		// break handler 1 second sleep, so next draw should go through
+		slowHandler.Close()
+		slowHandler.init()
+		defer slowHandler.Close()
+
+		// issue new draw which should cancel previous draw
+		res, err := b.Draw(context.Background(), req)
+		require.NoError(t, err)
+
+		require.NoError(t, <-ch)
+		assertDrawResponse(t, res, "AAAAAA\nAAAAAA\nAAAAAA\nAAAAAA\nAAAAAA")
+	})
 }
