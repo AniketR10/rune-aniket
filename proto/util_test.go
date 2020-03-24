@@ -7,9 +7,6 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-var zeroAttr = Attribute{}
-var zeroCell = Cell{Foreground: &zeroAttr, Background: &zeroAttr}
-
 func TestNewDrawResponse(t *testing.T) {
 	tcase := []struct {
 		in  string

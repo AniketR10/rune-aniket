@@ -7,6 +7,9 @@ import (
 	"github.com/ernestrc/go-tui/term"
 )
 
+var zeroAttr = Attribute{}
+var zeroCell = Cell{Foreground: &zeroAttr, Background: &zeroAttr}
+
 // NewDrawResponse converts a tui.Component into a DrawResponse.
 func NewDrawResponse(comp tui.Component, width, height int) *DrawResponse {
 	resp := new(DrawResponse)
@@ -25,10 +28,9 @@ func newDrawResponseWriter(width, height int, r *DrawResponse) drawResponseWrite
 	for i := 0; i < height; i++ {
 		r.Rows[i] = &CellRow{Cells: make([]*Cell, width)}
 		for j := 0; j < width; j++ {
-			r.Rows[i].Cells[j] = &Cell{
-				Foreground: &Attribute{},
-				Background: &Attribute{},
-			}
+			// SetCell substitutes zeroCell for a newly allocated cell;
+			// this allows us to speed up client/server communication
+			r.Rows[i].Cells[j] = &zeroCell
 		}
 	}
 	return drawResponseWriter{
