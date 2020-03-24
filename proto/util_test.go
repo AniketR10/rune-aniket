@@ -7,6 +7,9 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+var zeroAttr = Attribute{}
+var zeroCell = Cell{Foreground: &zeroAttr, Background: &zeroAttr}
+
 func TestNewDrawResponse(t *testing.T) {
 	tcase := []struct {
 		in  string
@@ -16,17 +19,17 @@ func TestNewDrawResponse(t *testing.T) {
 			in: "a",
 			out: &DrawResponse{
 				Rows: []*CellRow{
-					&CellRow{Cells: []*Cell{nil, nil, nil, nil, nil}},
-					&CellRow{Cells: []*Cell{nil, nil, nil, nil, nil}},
+					&CellRow{Cells: []*Cell{&zeroCell, &zeroCell, &zeroCell, &zeroCell, &zeroCell}},
+					&CellRow{Cells: []*Cell{&zeroCell, &zeroCell, &zeroCell, &zeroCell, &zeroCell}},
 					&CellRow{Cells: []*Cell{
-						nil,
-						nil,
+						&zeroCell,
+						&zeroCell,
 						&Cell{Character: 'a', Foreground: new(Attribute), Background: new(Attribute)},
-						nil,
-						nil,
+						&zeroCell,
+						&zeroCell,
 					}},
-					&CellRow{Cells: []*Cell{nil, nil, nil, nil, nil}},
-					&CellRow{Cells: []*Cell{nil, nil, nil, nil, nil}},
+					&CellRow{Cells: []*Cell{&zeroCell, &zeroCell, &zeroCell, &zeroCell, &zeroCell}},
+					&CellRow{Cells: []*Cell{&zeroCell, &zeroCell, &zeroCell, &zeroCell, &zeroCell}},
 				},
 			},
 		},

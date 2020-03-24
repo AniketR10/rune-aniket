@@ -24,6 +24,12 @@ func newDrawResponseWriter(width, height int, r *DrawResponse) drawResponseWrite
 	r.Rows = make([]*CellRow, height)
 	for i := 0; i < height; i++ {
 		r.Rows[i] = &CellRow{Cells: make([]*Cell, width)}
+		for j := 0; j < width; j++ {
+			r.Rows[i].Cells[j] = &Cell{
+				Foreground: &Attribute{},
+				Background: &Attribute{},
+			}
+		}
 	}
 	return drawResponseWriter{
 		width:  width,
