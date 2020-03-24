@@ -10,14 +10,16 @@ var (
 	attr term.Attributes
 )
 
-func redraw(root Handler, termw Writer) (err error) {
+func redraw(root Handler, lock sync.Locker, termw Writer) (err error) {
 	if err = termw.Clear(attr); err != nil {
 		return err
 	}
 
+	lock.Lock()
 	root.Draw(termw)
-
 	cursor, show := root.Cursor()
+	lock.Unlock()
+
 	if show {
 		termw.SetCursor(cursor)
 	} else {
@@ -35,12 +37,14 @@ func redraw(root Handler, termw Writer) (err error) {
 func run(root Handler, lock sync.Locker, termw Writer) (err error) {
 	width, height := term.Size()
 
+	lock.Lock()
 	root.Resize(width, height)
+	lock.Unlock()
 
 	var hexit bool
 
 	for !hexit && err == nil {
-		if err = redraw(root, termw); err != nil {
+		if err = redraw(root, lock, termw); err != nil {
 			return
 		}
 
@@ -51,7 +55,9 @@ func run(root Handler, lock sync.Locker, termw Writer) (err error) {
 			err = ev.Err
 		case term.EventResize:
 			width, height := ev.Width, ev.Height
+			lock.Lock()
 			root.Resize(width, height)
+			lock.Unlock()
 		default:
 			lock.Lock()
 			hexit, _ = root.Handle(ev)
