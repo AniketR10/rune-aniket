@@ -1,33 +1,28 @@
 syntax = "proto3";
 package proto;
 
-message Attribute {
-  enum Colors {
-	ColorDefault = 0;
-	ColorBlack = 1;
-	ColorRed = 2;
-	ColorGreen = 3;
-	ColorYellow = 4;
-	ColorBlue = 5;
-	ColorMagenta = 6;
-	ColorCyan = 7;
-	ColorWhite = 8;
-  }
+enum Colors {
+  ColorDefault = 0;
+  ColorBlack = 1;
+  ColorRed = 2;
+  ColorGreen = 3;
+  ColorYellow = 4;
+  ColorBlue = 5;
+  ColorMagenta = 6;
+  ColorCyan = 7;
+  ColorWhite = 8;
+}
 
-  enum Attrs {
-	AttrBold = 0;
-	AttrUnderline = 1;
-	AttrReverse = 2;
-  }
-
-  // Bitwise-OR of Colors and Attrs.
-  uint32 flags = 1;
+enum Attrs {
+  AttrBold = 0;
+  AttrUnderline = 1;
+  AttrReverse = 2;
 }
 
 message Cell {
 	uint32 Character = 1;
-	Attribute Foreground = 2;
-	Attribute Background = 3;
+	uint32 Foreground = 2;
+	uint32 Background = 3;
 }
 
 message CellRow {

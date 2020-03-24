@@ -21,7 +21,7 @@ func TestNewDrawResponse(t *testing.T) {
 					&CellRow{Cells: []*Cell{
 						&zeroCell,
 						&zeroCell,
-						&Cell{Character: 'a', Foreground: new(Attribute), Background: new(Attribute)},
+						&Cell{Character: 'a'},
 						&zeroCell,
 						&zeroCell,
 					}},

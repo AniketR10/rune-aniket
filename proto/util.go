@@ -7,8 +7,7 @@ import (
 	"github.com/ernestrc/go-tui/term"
 )
 
-var zeroAttr = Attribute{}
-var zeroCell = Cell{Foreground: &zeroAttr, Background: &zeroAttr}
+var zeroCell = Cell{}
 
 // NewDrawResponse converts a tui.Component into a DrawResponse.
 func NewDrawResponse(comp tui.Component, width, height int) *DrawResponse {
@@ -47,8 +46,8 @@ func (r drawResponseWriter) SetCell(pos term.Coordinates, c term.Cell) {
 	}
 	r.res.Rows[pos.Y].Cells[pos.X] = &Cell{
 		Character:  uint32(c.Ch),
-		Foreground: &Attribute{Flags: uint32(c.Fg)},
-		Background: &Attribute{Flags: uint32(c.Bg)},
+		Foreground: uint32(c.Fg),
+		Background: uint32(c.Bg),
 	}
 }
 

@@ -13,8 +13,8 @@ func (c *Cell) ToModel() term.Cell {
 		return term.Cell{}
 	}
 	return term.Cell{
-		Bg: term.Attribute(c.Background.Flags),
-		Fg: term.Attribute(c.Foreground.Flags),
+		Bg: term.Attribute(c.Background),
+		Fg: term.Attribute(c.Foreground),
 		// TODO test full UTF-8
 		Ch: rune(c.Character),
 	}
@@ -22,8 +22,8 @@ func (c *Cell) ToModel() term.Cell {
 
 // FromModel takes cc and maps it into this Cell.
 func (c *Cell) FromModel(cc term.Cell) {
-	c.Background = &Attribute{Flags: uint32(cc.Bg)}
-	c.Foreground = &Attribute{Flags: uint32(cc.Fg)}
+	c.Background = uint32(cc.Bg)
+	c.Foreground = uint32(cc.Fg)
 	c.Character = uint32(cc.Ch)
 }
 
