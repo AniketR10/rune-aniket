@@ -33,35 +33,19 @@ type Client struct {
 		term.Coordinates
 		show bool
 	}
-	errors    chan error
-	breakerCh chan error
-	quitCh    chan struct{}
-	client    clientCloser
-	interrupt func()
+
+	errors chan error
+	client clientCloser
 }
 
 // NewClient allocates storage for a new Client and initializes it.
-func NewClient(pbClient proto.HandlerClient, interrupt func()) *Client {
+func NewClient(
+	pbClient proto.HandlerClient,
+	interruptDraw, interruptHandle func(),
+) *Client {
 	ret := new(Client)
-	ret.Init(pbClient, interrupt)
+	ret.Init(pbClient, interruptDraw, interruptHandle)
 	return ret
-}
-
-func (c *Client) consumeBreakerInterrupt() {
-	for {
-		select {
-		case err, ok := <-c.breakerCh:
-			if !ok {
-				return
-			}
-			if err != nil {
-				c.collectError(err)
-			}
-			c.interrupt()
-		case <-c.quitCh:
-			return
-		}
-	}
 }
 
 type nopCloser struct {
@@ -71,7 +55,9 @@ type nopCloser struct {
 func (n *nopCloser) Close() error { return nil }
 
 // Init initialies this Client with pbClient and the given interrupt func.
-func (c *Client) Init(pbClient proto.HandlerClient, interrupt func()) {
+func (c *Client) Init(
+	pbClient proto.HandlerClient, interruptDraw, interruptHandle func(),
+) {
 	// the ALWAYS 'async' feature of the rpc breaker is essential
 	// to avoid the following deadlock:
 	//
@@ -83,14 +69,10 @@ func (c *Client) Init(pbClient proto.HandlerClient, interrupt func()) {
 	// The original call to Handle will block forever, because
 	// the handler client is invoking an RPC which requires the
 	// original lock to be unlocked.
-	c.client = &nopCloser{HandlerClient: withClientTimeout(pbClient, defaultRPCTimeout)}
-	c.client, c.breakerCh = withClientBreaker(pbClient)
+	pbClient = withClientTimeout(pbClient, defaultRPCTimeout)
+	c.client = withClientBreaker(pbClient, interruptDraw, interruptHandle)
 
-	c.interrupt = interrupt
 	c.errors = make(chan error)
-	c.quitCh = make(chan struct{})
-
-	go c.consumeBreakerInterrupt()
 }
 
 // Errors returns a channel which receives RPC errors.
@@ -198,7 +180,6 @@ func (c *Client) Man() tui.Manual {
 
 // Close closes this client and all associated resources.
 func (c *Client) Close() error {
-	defer close(c.quitCh)
 	return c.client.Close()
 }
 

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"sync"
+	"time"
 
 	"github.com/ernestrc/go-tui"
 	"github.com/ernestrc/go-tui/handler"
@@ -12,21 +13,63 @@ import (
 	"github.com/ernestrc/go-tui/term"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/connectivity"
 )
+
+// TODO rpc_window server calls OnWindowClosed when
+// connection shutdown is detected, so there's no need
+// to add an extra GRPC call to call handler server.
+// type nopWindowHandler struct{ tui.Handler }
+//
+// func (c nopWindowHandler) OnWindowClosed() {}
+
+// TODO
+// consume handler.Client.Errors() and close upon errors and log somehwere?
+type browserClientHandler struct {
+	shutdownWait time.Duration
+	handlerID    uint32
+	tui.Handler
+	c *Client
+}
+
+func (c browserClientHandler) Handle(ev term.Event) (exit, handled bool) {
+	exit, handled = c.Handler.Handle(ev)
+	if exit {
+		// err is already logged by *Client
+		_ = closeResourceCloser(c.c, c.shutdownWait, c.handlerID)
+		// c.Handler.OnWindowClosed()
+	}
+	return
+}
+
+type clientResource struct {
+	srv     *grpc.Server
+	winConn *grpc.ClientConn
+}
+
+func (r *clientResource) Close() (err error) {
+	// gracefully shutting down this clientResource
+	// means that we need to close winConn only after server
+	// is done shutting down resources.
+	r.srv.Stop()
+	return
+}
 
 // Client satisfies Browser by talking to a browser server over RPC.
 type Client struct {
 	Logger *log.Logger
 
-	cc      grpc.ClientConnInterface
-	broker  proto.MuxBroker
-	wm      proto.WindowManagerClient
-	msg     proto.MessengerClient
-	mp      proto.KeyMapperClient
-	f       proto.FileOpenerClient
-	p       proto.EventPublisherClient
-	servers []*grpc.Server
-	conns   []io.Closer
+	cc grpc.ClientConnInterface
+
+	broker proto.MuxBroker
+	wm     proto.WindowManagerClient
+	msg    proto.MessengerClient
+	mp     proto.KeyMapperClient
+	f      proto.FileOpenerClient
+	p      proto.EventPublisherClient
+
+	shutdownWait time.Duration
+	resources    map[uint32]*clientResource
 }
 
 // NewClient allocates storage for a new Client and initializes it.
@@ -45,8 +88,8 @@ func NewClient(broker proto.MuxBroker, cc grpc.ClientConnInterface) *Client {
 // Init initializes this Client with broker and client.
 func (c *Client) Init(broker proto.MuxBroker) {
 	c.broker = broker
-	c.servers = make([]*grpc.Server, 0)
-	c.conns = make([]io.Closer, 0)
+	c.shutdownWait = 5 * time.Second
+	c.resources = make(map[uint32]*clientResource)
 }
 
 func acceptAndServe(
@@ -72,69 +115,108 @@ func acceptAndServe(
 }
 
 func (c *Client) serveHandler(h tui.Handler) uint32 {
+	h = browserClientHandler{Handler: h, c: c, shutdownWait: c.shutdownWait}
 	brokerID, srv := acceptAndServe(c.broker, func(srv *grpc.Server) {
 		proto.RegisterHandlerServer(srv, handler.NewServer(h))
 	})
-	c.servers = append(c.servers, srv)
+	c.resources[brokerID] = &clientResource{srv: srv}
 	return brokerID
 }
 
-func (c *Client) dialToWindow(windowID uint32) (*windowClient, error) {
-	conn, err := c.broker.Dial(windowID)
+func (c *Client) dialToWindow(
+	windowID uint32, handlerID uint32,
+) (*windowClient, error) {
+	winConn, err := c.broker.Dial(windowID)
 	if err != nil {
 		return nil, err
 	}
 
-	cc := newWindowClient(proto.NewWindowClient(conn), conn)
+	cc := newWindowClient(handlerID, c, proto.NewWindowClient(winConn))
 	cc.logger = c.Logger
 
-	c.conns = append(c.conns, cc)
+	c.resources[handlerID].winConn = winConn
 
 	return cc, nil
 }
 
+func (c *Client) waitForClientClose(ctx context.Context, handlerID uint32) bool {
+	res, ok := c.resources[handlerID]
+	if !ok {
+		return false
+	}
+	return res.winConn.WaitForStateChange(ctx, connectivity.Ready)
+}
+
+func (c *Client) getResources(handlerID uint32) (*clientResource, bool) {
+	res, ok := c.resources[handlerID]
+	return res, ok
+}
+
+func (c *Client) closeResources(handlerID uint32) error {
+	res, ok := c.resources[handlerID]
+	if !ok {
+		if c.Logger != nil {
+			c.Logger.Warnf("closeResources: handler %d already closed", handlerID)
+		}
+		return nil
+	}
+
+	err := res.Close()
+	if err != nil && c.Logger != nil {
+		c.Logger.Error(err)
+	}
+
+	delete(c.resources, handlerID)
+
+	return err
+}
+
 // SplitVerticalRight satisfies Browser.
 func (c *Client) SplitVerticalRight(h tui.Handler) (Window, error) {
-	req := proto.SplitRequest{HandlerId: c.serveHandler(h)}
+	brokerID := c.serveHandler(h)
+	req := proto.SplitRequest{HandlerId: brokerID}
 	ctx := context.Background()
 	res, err := c.wm.SplitVerticalRight(ctx, &req)
 	if err != nil {
 		return nil, err
 	}
-	return c.dialToWindow(res.WindowId)
+	return c.dialToWindow(res.WindowId, brokerID)
 }
 
 // SplitVerticalLeft satisfies Browser.
 func (c *Client) SplitVerticalLeft(h tui.Handler) (Window, error) {
-	req := proto.SplitRequest{HandlerId: c.serveHandler(h)}
+	brokerID := c.serveHandler(h)
+	req := proto.SplitRequest{HandlerId: brokerID}
 	ctx := context.Background()
 	res, err := c.wm.SplitVerticalLeft(ctx, &req)
 	if err != nil {
 		return nil, err
 	}
-	return c.dialToWindow(res.WindowId)
+	return c.dialToWindow(res.WindowId, brokerID)
 }
 
 // SplitHorizontalAbove satisfies Browser.
 func (c *Client) SplitHorizontalAbove(h tui.Handler) (Window, error) {
-	req := proto.SplitRequest{HandlerId: c.serveHandler(h)}
+	brokerID := c.serveHandler(h)
+	req := proto.SplitRequest{HandlerId: brokerID}
 	ctx := context.Background()
 	res, err := c.wm.SplitHorizontalAbove(ctx, &req)
 	if err != nil {
 		return nil, err
 	}
-	return c.dialToWindow(res.WindowId)
+	return c.dialToWindow(res.WindowId, brokerID)
 }
 
 // SplitHorizontalBelow satisfies Browser.
 func (c *Client) SplitHorizontalBelow(h tui.Handler) (Window, error) {
-	req := proto.SplitRequest{HandlerId: c.serveHandler(h)}
+	brokerID := c.serveHandler(h)
+	req := proto.SplitRequest{HandlerId: brokerID}
 	ctx := context.Background()
 	res, err := c.wm.SplitHorizontalBelow(ctx, &req)
 	if err != nil {
 		return nil, err
 	}
-	return c.dialToWindow(res.WindowId)
+	return c.dialToWindow(res.WindowId, brokerID)
 }
 
 // MergeKeyMap satisfies Browser.
@@ -190,6 +272,9 @@ func (c *Client) Subscribe(ev term.Event, h EventHandler) error {
 	if err != nil {
 		return err
 	}
+
+	// NOTE: for now we don't have an unsubscribe mechanism
+	// so this rpc handler always stays open until Client.Close is called.
 	handlerID := c.serveHandler(eventHandlerToHandler{h})
 	req := proto.SubscribeRequest{Ev: protoEv, HandlerId: handlerID}
 
@@ -200,13 +285,16 @@ func (c *Client) Subscribe(ev term.Event, h EventHandler) error {
 // Close closes all resources associated with this Client.
 // This client should not be used after this method is called.
 func (c *Client) Close() (err error) {
-	for _, server := range c.servers {
-		server.Stop()
-	}
-	for _, conn := range c.conns {
-		connErr := conn.Close()
-		if connErr != nil {
-			err = connErr
+	for _, res := range c.resources {
+		resErr := res.Close()
+		if resErr != nil {
+			err = resErr
+		}
+		if res.winConn != nil {
+			winErr := res.winConn.Close()
+			if winErr != nil {
+				err = winErr
+			}
 		}
 	}
 	if closer, ok := c.cc.(io.Closer); ok {
@@ -215,73 +303,160 @@ func (c *Client) Close() (err error) {
 			err = ccErr
 		}
 	}
-	c.servers = c.servers[:0]
-	c.conns = c.conns[:0]
-	return nil
+	c.resources = nil
+	return
 }
 
-type clientConn struct {
-	conn *grpc.ClientConn
-	cc   io.Closer
+type serverResource struct {
+	handlerID   uint32
+	handlerConn *grpc.ClientConn
+	cc          io.Closer
+	srv         *grpc.Server
+	win         Window
+}
+
+func (s *Server) waitForClientClose(ctx context.Context, handlerID uint32) bool {
+	s.browser.Lock()
+	res, ok := s.resources[handlerID]
+	s.browser.Unlock()
+	if !ok {
+		return false
+	}
+
+	return res.handlerConn.WaitForStateChange(ctx, connectivity.Ready)
+}
+
+func (s *serverResource) Close() (err error) {
+	err1 := s.cc.Close()
+	if err1 != nil {
+		err = err1
+	}
+
+	err2 := s.handlerConn.Close()
+	if err2 != nil {
+		err = err2
+	}
+
+	if s.srv != nil {
+		s.srv.Stop()
+		err3 := s.win.Close()
+		if err3 != nil {
+			err = err3
+		}
+	}
+	return
+}
+
+// browserServerHandler is a helper structures to enable closing
+// all resources associated with a tui.Handler when it returns exit = true
+// upon calls to Handle
+type browserServerHandler struct {
+	tui.Handler
+	s         *Server
+	handlerID uint32
+}
+
+func (s browserServerHandler) Handle(ev term.Event) (exit, handled bool) {
+	exit, handled = s.Handler.Handle(ev)
+	if exit {
+		// we need to run asynchronously to not double lock
+		// on the runtime lock.
+		go s.s.closeResources(s.handlerID)
+	}
+	return
 }
 
 // Server serves a Browser over GRPC.
 type Server struct {
 	Logger *log.Logger
 
-	broker  proto.MuxBroker
-	conns   []clientConn
-	servers []*grpc.Server
+	broker proto.MuxBroker
+
+	resources    map[uint32]*serverResource
+	shutdownWait time.Duration
+
 	browser struct {
 		Browser
 		sync.Locker
 	}
-	interrupt func()
+
+	interruptDraw   func()
+	interruptHandle func()
 }
 
 // NewServer allocates storage for a new Server and initializes it.
 func NewServer(
 	broker proto.MuxBroker, browser Browser, lock sync.Locker,
-	interrupt func(),
+	interruptDraw, interruptHandle func(),
 ) *Server {
 	ret := new(Server)
-	ret.Init(broker, browser, lock, interrupt)
+	ret.Init(broker, browser, lock, interruptDraw, interruptHandle)
 	return ret
 }
 
 // Init initializes this Server with broker and browser.
 func (s *Server) Init(
 	broker proto.MuxBroker, browser Browser, lock sync.Locker,
-	interrupt func(),
+	interruptDraw, interruptHandle func(),
 ) {
 	s.broker = broker
 	s.browser.Browser = browser
 	s.browser.Locker = lock
-	s.interrupt = interrupt
-	s.conns = make([]clientConn, 0)
-	s.servers = make([]*grpc.Server, 0)
+	s.interruptDraw = interruptDraw
+	s.interruptHandle = interruptHandle
+	s.shutdownWait = 5 * time.Second
+	s.resources = make(map[uint32]*serverResource)
 }
 
-func (s *Server) dialHandler(handlerID uint32) (*handler.Client, error) {
-	conn, err := s.broker.Dial(handlerID)
+func (s *Server) dialHandler(handlerID uint32) (tui.Handler, error) {
+	handlerConn, err := s.broker.Dial(handlerID)
 	if err != nil {
 		return nil, err
 	}
 
-	cc := handler.NewClient(proto.NewHandlerClient(conn), s.interrupt)
+	pbClient := proto.NewHandlerClient(handlerConn)
+	cc := handler.NewClient(pbClient, s.interruptDraw, s.interruptHandle)
 	cc.Logger = s.Logger
 
-	s.conns = append(s.conns, clientConn{conn: conn, cc: cc})
+	s.browser.Lock()
+	defer s.browser.Unlock()
+
+	s.resources[handlerID] = &serverResource{
+		handlerID:   handlerID,
+		handlerConn: handlerConn,
+		cc:          cc,
+	}
 
 	return cc, nil
 }
 
-func (s *Server) serveWindow(win Window) uint32 {
+func (s *Server) serveWindow(win Window, handlerID uint32) uint32 {
+	winSrv := newWindowServer(s, handlerID, win)
 	brokerID, srv := acceptAndServe(s.broker, func(srv *grpc.Server) {
-		proto.RegisterWindowServer(srv, newWindowServer(win, s.browser.Locker))
+		proto.RegisterWindowServer(srv, winSrv)
 	})
-	s.servers = append(s.servers, srv)
+	s.resources[handlerID].srv = srv
+	s.resources[handlerID].win = win
 	return brokerID
+}
+
+func (s *Server) closeResources(handlerID uint32) error {
+	s.browser.Lock()
+	defer s.browser.Unlock()
+
+	res, ok := s.resources[handlerID]
+	if !ok {
+		return nil
+	}
+
+	err := res.Close()
+	if err != nil && s.Logger != nil {
+		s.Logger.Error(err)
+	}
+
+	delete(s.resources, res.handlerID)
+
+	return err
 }
 
 // SplitVerticalRight satisfies proto.BrowserServer
@@ -289,20 +464,27 @@ func (s *Server) split(
 	ctx context.Context, req *proto.SplitRequest,
 	split func(WindowManager, tui.Handler) (Window, error),
 ) (*proto.SplitResponse, error) {
-	s.browser.Lock()
-	defer s.browser.Unlock()
-
-	handler, err := s.dialHandler(req.GetHandlerId())
+	handlerID := req.GetHandlerId()
+	handler, err := s.dialHandler(handlerID)
 	if err != nil {
 		return nil, err
 	}
+
+	handler = browserServerHandler{
+		handlerID: handlerID,
+		Handler:   handler,
+		s:         s,
+	}
+
+	s.browser.Lock()
+	defer s.browser.Unlock()
 
 	win, err := split(s.browser, handler)
 	if err != nil {
 		return nil, err
 	}
 
-	windowID := s.serveWindow(win)
+	windowID := s.serveWindow(win, handlerID)
 	res := &proto.SplitResponse{WindowId: windowID}
 	return res, nil
 }
@@ -339,9 +521,6 @@ func (s *Server) SplitHorizontalBelow(ctx context.Context, req *proto.SplitReque
 func (s *Server) MergeKeyMap(ctx context.Context, req *proto.MergeKeyMapRequest) (
 	*proto.MergeKeyMapResponse, error,
 ) {
-	s.browser.Lock()
-	defer s.browser.Unlock()
-
 	m := make(map[term.Event]term.Event)
 
 	for _, mapping := range req.Mappings {
@@ -355,6 +534,9 @@ func (s *Server) MergeKeyMap(ctx context.Context, req *proto.MergeKeyMapRequest)
 		}
 		m[from] = to
 	}
+
+	s.browser.Lock()
+	defer s.browser.Unlock()
 
 	s.browser.MergeKeyMap(m)
 	return new(proto.MergeKeyMapResponse), nil
@@ -389,9 +571,6 @@ func (s *Server) OpenFile(ctx context.Context, req *proto.OpenFileRequest) (
 func (s *Server) Subscribe(ctx context.Context, req *proto.SubscribeRequest) (
 	*proto.SubscribeResponse, error,
 ) {
-	s.browser.Lock()
-	defer s.browser.Unlock()
-
 	handler, err := s.dialHandler(req.GetHandlerId())
 	if err != nil {
 		return nil, err
@@ -402,7 +581,10 @@ func (s *Server) Subscribe(ctx context.Context, req *proto.SubscribeRequest) (
 		return nil, err
 	}
 
-	err = s.browser.Subscribe(ev, eventHandler{cc: handler})
+	s.browser.Lock()
+	defer s.browser.Unlock()
+
+	err = s.browser.Subscribe(ev, eventHandler{s: s, h: handler})
 	if err != nil {
 		return nil, err
 	}
@@ -411,23 +593,18 @@ func (s *Server) Subscribe(ctx context.Context, req *proto.SubscribeRequest) (
 }
 
 // Close closes all resources associated with this server.
-func (s *Server) Close() error {
-	var err error
-	for _, conn := range s.conns {
-		connErr := conn.conn.Close()
-		if connErr != nil {
-			err = connErr
-		}
-		ccErr := conn.cc.Close()
-		if ccErr != nil {
-			err = ccErr
+func (s *Server) Close() (err error) {
+	s.browser.Lock()
+	defer s.browser.Unlock()
+
+	for _, res := range s.resources {
+		resErr := res.Close()
+		if resErr != nil {
+			err = resErr
 		}
 	}
-	for _, s := range s.servers {
-		s.Stop()
-	}
+
 	s.browser.Close()
-	s.conns = s.conns[:0]
-	s.servers = s.servers[:0]
+	s.resources = nil
 	return err
 }

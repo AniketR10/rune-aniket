@@ -58,6 +58,19 @@ var (
 	wmDefaultAttr    = frameFileAttr
 )
 
+type browserContent struct {
+	win browserWindow
+	tui.Handler
+}
+
+func (e browserContent) Handle(ev term.Event) (exit, handled bool) {
+	exit, handled = e.Handler.Handle(ev)
+	if exit {
+		_ = e.win.Close()
+	}
+	return
+}
+
 type browserWindow struct {
 	handler *Handler
 	node    handler.TileNode
@@ -98,12 +111,16 @@ type Handler struct {
 	fileListHeight int
 }
 
+func (e *Handler) addWindow(win browserWindow) {
+	e.windows = append(e.windows, win)
+}
+
 func (e *Handler) newWindow(node handler.TileNode) browserWindow {
 	win := browserWindow{
 		handler: e,
 		node:    node,
 	}
-	e.windows = append(e.windows, win)
+	e.addWindow(win)
 	return win
 }
 
@@ -116,7 +133,8 @@ func (e *Handler) findWindow(node handler.TileNode) (int, browserWindow) {
 	return -1, browserWindow{}
 }
 
-func (e *Handler) closeWindow(win browserWindow) error {
+func (e *Handler) closeWindow(winIfc Window) error {
+	win := winIfc.(browserWindow)
 	idx, _ := e.findWindow(win.node)
 	if idx == -1 {
 		// already closed
@@ -520,10 +538,13 @@ func (e *Handler) mapEvent(ev term.Event) term.Event {
 	return mev
 }
 
-func (e *Handler) handleProxy(ev term.Event) (bool, bool) {
+func (e *Handler) handleProxy(ev term.Event) (
+	exit, handled bool,
+) {
 	if ev == e.config.CommandEvent {
 		e.setCommandMode()
-		return false, true
+		handled = true
+		return
 	}
 
 	prev := ev
@@ -531,10 +552,15 @@ func (e *Handler) handleProxy(ev term.Event) (bool, bool) {
 
 	if subscriber, ok := e.subscribers[ev]; ok {
 		subscriber.Handle(ev)
-		return false, true
+		handled = true
+		return
 	}
 
 	switch ev.Key {
+	case term.KeyArrowLeft:
+		e.wm.FocusLeft()
+	case term.KeyArrowRight:
+		e.wm.FocusRight()
 	case term.KeyCtrlA:
 		e.removeAllBuffers()
 	case term.KeyCtrlW:
@@ -550,10 +576,12 @@ func (e *Handler) handleProxy(ev term.Event) (bool, bool) {
 		// do not map for children
 		ev = prev
 		if ev.Type == term.EventMouse && ev.MouseY < e.fileListHeight {
-			return e.tabs.Handle(ev)
+			_, handled = e.tabs.Handle(ev)
+			return
 		}
 
-		return e.wmVirt.Handle(ev)
+		_, handled = e.wmVirt.Handle(ev)
+		return
 	}
 
 	return false, true
@@ -680,20 +708,46 @@ func (e *Handler) splitInverted(
 	h tui.Handler,
 ) browserWindow {
 	nodeInFocus, focusContent := e.wm.Focus(), e.wm.FocusContent()
-	newNode := split(e.wm, focusContent)
-	e.wm.SetContent(nodeInFocus, h)
-	_ = e.newWindow(newNode)
 	idx, w := e.findWindow(nodeInFocus)
 	if idx == -1 {
 		panic("Handler: corrupted window list")
 	}
+
+	newNode := split(e.wm, focusContent)
+	e.newWindow(newNode)
+
+	w.node = nodeInFocus
+	e.wm.SetContent(nodeInFocus, browserContent{Handler: h, win: w})
 	return w
+}
+
+func (e *Handler) split(
+	split func(*handler.WindowManager, tui.Handler) handler.TileNode,
+	h tui.Handler,
+) browserWindow {
+	// force split a new node
+	node := split(e.wm, h)
+
+	win := browserWindow{
+		handler: e,
+		node:    node,
+	}
+	// update content with browserContent
+	// so we can have a browserWindow with the correct node
+	e.wm.SetContent(node, browserContent{
+		Handler: h,
+		win:     win,
+	})
+
+	e.wm.SetFocus(node)
+	e.addWindow(win)
+	return win
 }
 
 // SplitVerticalRight opens a new window tile to the right of the
 // current tile in focus and initializes it with h.
 func (e *Handler) SplitVerticalRight(h tui.Handler) (Window, error) {
-	return e.newWindow(e.wm.SplitVertical(h)), nil
+	return e.split((*handler.WindowManager).SplitVertical, h), nil
 }
 
 // SplitVerticalLeft opens a new window tile to the left of the
@@ -705,7 +759,7 @@ func (e *Handler) SplitVerticalLeft(h tui.Handler) (Window, error) {
 // SplitHorizontalBelow opens a new window tile below the current tile in focus
 // and initializes it with h.
 func (e *Handler) SplitHorizontalBelow(h tui.Handler) (Window, error) {
-	return e.newWindow(e.wm.SplitHorizontal(h)), nil
+	return e.split((*handler.WindowManager).SplitHorizontal, h), nil
 }
 
 // SplitHorizontalAbove opens a new window tile above the current tile in focus

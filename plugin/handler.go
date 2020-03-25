@@ -14,7 +14,8 @@ import (
 type HandlerPlugin struct {
 	plugin.Plugin
 	tui.Handler
-	Interrupt func()
+	InterruptDraw   func()
+	InterruptHandle func()
 }
 
 // GRPCServer satisfies plugin.GRPCPlugin
@@ -28,6 +29,7 @@ func (p *HandlerPlugin) GRPCServer(broker *plugin.GRPCBroker, s *grpc.Server) er
 func (p *HandlerPlugin) GRPCClient(
 	ctx context.Context, broker *plugin.GRPCBroker, c *grpc.ClientConn,
 ) (interface{}, error) {
-	client := handler.NewClient(proto.NewHandlerClient(c), p.Interrupt)
+	pbClient := proto.NewHandlerClient(c)
+	client := handler.NewClient(pbClient, p.InterruptDraw, p.InterruptHandle)
 	return client, nil
 }

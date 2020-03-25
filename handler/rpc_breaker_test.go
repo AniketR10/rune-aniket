@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -14,9 +15,20 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func nop() {}
+
+func waitForInterrupt(quitCh, ch chan struct{}) func() {
+	return func() {
+		select {
+		case ch <- struct{}{}:
+		case <-quitCh:
+		}
+	}
+}
+
 func TestClientBreakerMan(t *testing.T) {
 	mock := &mockHandlerClient{remote: testHandler()}
-	b, _ := withClientBreaker(mock)
+	b := withClientBreaker(mock, nop, nop)
 	defer b.Close()
 
 	t.Run("dispatches Man synchronously", func(t *testing.T) {
@@ -67,19 +79,6 @@ func slowlyConsumeMockEvents(
 	}
 }
 
-func consumeInterrupts(
-	ch chan error,
-	quitChan chan struct{},
-) {
-	for {
-		select {
-		case <-ch:
-		case <-quitChan:
-			return
-		}
-	}
-}
-
 func closeTestingResources(b *clientBreaker, quitChan chan struct{}) {
 	b.Close()
 	close(quitChan)
@@ -92,7 +91,7 @@ func TestClientBreakerHandle(t *testing.T) {
 
 	t.Run("dispatches events asynchronously", func(t *testing.T) {
 		mock := &mockHandlerClient{remote: testHandler()}
-		b, _ := withClientBreaker(mock)
+		b := withClientBreaker(mock, nop, nop)
 		defer b.Close()
 
 		mock.handledCh = make(chan term.Event)
@@ -104,9 +103,12 @@ func TestClientBreakerHandle(t *testing.T) {
 		assert.Equal(t, expected, <-mock.handledCh)
 	})
 
-	t.Run("dispatches handle errors to error chan", func(t *testing.T) {
+	t.Run("handle error triggers interrupt and is returned on next", func(t *testing.T) {
 		mock := &mockHandlerClient{remote: testHandler()}
-		b, errCh := withClientBreaker(mock)
+		interrupt := make(chan struct{})
+		quitCh := make(chan struct{})
+		defer close(quitCh)
+		b := withClientBreaker(mock, nop, waitForInterrupt(quitCh, interrupt))
 		defer b.Close()
 
 		mock.handledCh = make(chan term.Event)
@@ -116,20 +118,21 @@ func TestClientBreakerHandle(t *testing.T) {
 		require.NoError(t, err)
 		assert.NotNil(t, res)
 
-		assert.Equal(t, mock.rpcError, <-errCh)
+		<-interrupt
+		_, err = b.Handle(context.Background(), req)
+		assert.Error(t, err)
 	})
 
 	t.Run("dispatches all events, even when upon backpressure", func(t *testing.T) {
 		var wg sync.WaitGroup
 		h := NewTestHandler()
 		mock := &mockHandlerClient{remote: h}
-		b, ch := withClientBreaker(mock)
+		b := withClientBreaker(mock, nop, nop)
 		quitChan := make(chan struct{})
 		mock.handledCh = make(chan term.Event)
 
 		go slowlyConsumeMockEvents(&wg, mock, quitChan)
 		defer closeTestingResources(b, quitChan)
-		go consumeInterrupts(ch, quitChan)
 
 		for i := 0; i < 1000; i++ {
 			wg.Add(1)
@@ -143,15 +146,15 @@ func TestClientBreakerHandle(t *testing.T) {
 	})
 
 	t.Run("dispatches exit on next handle event", func(t *testing.T) {
+		var i int32
 		h := NewTestHandler()
 		h.Exit = true
 		mock := &mockHandlerClient{remote: h}
-		b, ch := withClientBreaker(mock)
+		b := withClientBreaker(mock, nop, func() { atomic.AddInt32(&i, 1) })
 		quitChan := make(chan struct{})
 		mock.handledCh = make(chan term.Event)
 
 		go consumeMockEvents(mock, quitChan)
-		go consumeInterrupts(ch, quitChan)
 		defer closeTestingResources(b, quitChan)
 
 		// next exit is false, because events are handled
@@ -161,6 +164,9 @@ func TestClientBreakerHandle(t *testing.T) {
 		assert.False(t, res.GetQuit())
 
 		time.Sleep(50 * time.Millisecond)
+
+		// assert calls handle interrupt
+		assert.Equal(t, int32(1), atomic.LoadInt32(&i))
 
 		// next should be now true
 		res, err = b.Handle(context.Background(), req)
@@ -187,14 +193,17 @@ func TestClientBreakerDraw(t *testing.T) {
 
 	t.Run("dispatches draw requests asynchonously", func(t *testing.T) {
 		mock := &mockHandlerClient{remote: testHandler()}
-		b, errCh := withClientBreaker(mock)
+		interrupt := make(chan struct{})
+		quitCh := make(chan struct{})
+		defer close(quitCh)
+		b := withClientBreaker(mock, waitForInterrupt(quitCh, interrupt), nop)
 		defer b.Close()
 
 		res, err := b.Draw(context.Background(), req)
 		require.NoError(t, err)
 		assertDrawResponse(t, res, loadingCopy)
 
-		assert.Nil(t, <-errCh)
+		<-interrupt
 		res, err = b.Draw(context.Background(), req)
 		require.NoError(t, err)
 		assertDrawResponse(t, res, testHandlerCopy)
@@ -208,7 +217,10 @@ func TestClientBreakerDraw(t *testing.T) {
 
 	t.Run("subsequent draw with different size re-issues new draw", func(t *testing.T) {
 		mock := &mockHandlerClient{remote: testHandler()}
-		b, errCh := withClientBreaker(mock)
+		interrupt := make(chan struct{})
+		quitCh := make(chan struct{})
+		defer close(quitCh)
+		b := withClientBreaker(mock, waitForInterrupt(quitCh, interrupt), nop)
 		defer b.Close()
 
 		res, err := b.Draw(context.Background(), req)
@@ -217,20 +229,25 @@ func TestClientBreakerDraw(t *testing.T) {
 
 		biggerReq := &proto.DrawRequest{Width: 6, Height: 5}
 
-		assert.Nil(t, <-errCh)
+		<-interrupt
+
 		res, err = b.Draw(context.Background(), biggerReq)
 		require.NoError(t, err)
 		assertDrawResponse(t, res, loadingCopy)
 
-		assert.Nil(t, <-errCh)
+		<-interrupt
+
 		res, err = b.Draw(context.Background(), biggerReq)
 		require.NoError(t, err)
 		assertDrawResponse(t, res, "AAAAAA\nAAAAAA\nAAAAAA\nAAAAAA\nAAAAAA")
 	})
 
-	t.Run("dispatches draw errors to error chan", func(t *testing.T) {
+	t.Run("returns 'something went wrong' when Draw errors", func(t *testing.T) {
 		mock := &mockHandlerClient{remote: testHandler()}
-		b, errCh := withClientBreaker(mock)
+		interrupt := make(chan struct{})
+		quitCh := make(chan struct{})
+		defer close(quitCh)
+		b := withClientBreaker(mock, waitForInterrupt(quitCh, interrupt), nop)
 		defer b.Close()
 
 		mock.rpcError = errors.New("Uh, Houstoun, we've had a problem")
@@ -239,7 +256,7 @@ func TestClientBreakerDraw(t *testing.T) {
 		require.NoError(t, err)
 		assertDrawResponse(t, res, loadingCopy)
 
-		assert.Equal(t, mock.rpcError, <-errCh)
+		<-interrupt
 		res, err = b.Draw(context.Background(), req)
 		require.NoError(t, err)
 		assertDrawResponse(t, res, smtgWrongCopy)
@@ -247,10 +264,14 @@ func TestClientBreakerDraw(t *testing.T) {
 
 	t.Run("cancels previous draw request if new draw is requested", func(t *testing.T) {
 		slowHandler := newSlowHandler()
-		mock := &mockHandlerClient{remote: slowHandler}
 		slowHandler.setDelay(1 * time.Second)
+		mock := &mockHandlerClient{remote: slowHandler}
+		req := &proto.DrawRequest{Width: 5, Height: 5}
 
-		b, ch := withClientBreaker(mock)
+		interrupt := make(chan struct{})
+		quitCh := make(chan struct{})
+		defer close(quitCh)
+		b := withClientBreaker(mock, waitForInterrupt(quitCh, interrupt), nop)
 		defer b.Close()
 
 		_, err := b.Draw(context.Background(), req)
@@ -264,8 +285,11 @@ func TestClientBreakerDraw(t *testing.T) {
 		// issue new draw which should cancel previous draw
 		res, err := b.Draw(context.Background(), req)
 		require.NoError(t, err)
+		assertDrawResponse(t, res, loadingCopy)
 
-		require.NoError(t, <-ch)
+		<-interrupt
+		res, err = b.Draw(context.Background(), req)
+		require.NoError(t, err)
 		assertDrawResponse(t, res, "AAAAAA\nAAAAAA\nAAAAAA\nAAAAAA\nAAAAAA")
 	})
 }

@@ -42,7 +42,6 @@ func newStubClient(t *testing.T) *Client {
 		client: &mockHandlerClient{
 			remote: testHandler(),
 		},
-		quitCh: make(chan struct{}),
 	}
 }
 
@@ -114,7 +113,7 @@ func TestClientHandleErrors(t *testing.T) {
 	stubClient := NewClient(&mockHandlerClient{
 		remote:   testHandler(),
 		rpcError: myErr,
-	}, func() {})
+	}, nop, nop)
 	defer stubClient.Close()
 	errChan := stubClient.Errors()
 
@@ -137,7 +136,7 @@ func newServerClient(t *testing.T) (*Client, func()) {
 	conn, err := grpc.Dial(lis.Addr().String(), grpc.WithInsecure())
 	require.NoError(t, err)
 
-	return NewClient(proto.NewHandlerClient(conn), func() {}), func() {
+	return NewClient(proto.NewHandlerClient(conn), nop, nop), func() {
 		conn.Close()
 		grpcServer.Stop()
 	}

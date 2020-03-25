@@ -25,11 +25,11 @@ type browserInternal interface {
 
 type browserConstructor func(ed editor.Editor, opts ...Option) (browserInternal, error)
 
-type testBrowser struct {
+type testEditor struct {
 	buf *cell.Buffer
 }
 
-func (e *testBrowser) Edit(buf *cell.Buffer) tui.Handler {
+func (e *testEditor) Edit(buf *cell.Buffer) tui.Handler {
 	e.buf = buf
 	return handler.NewTestHandler()
 }
@@ -156,7 +156,7 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 │AAAAAAAAAAAAAAAAAA│
 │AAAAAAAAAAAAAAAAAA│
 └──────────────────┘`},
-		{"$", // simulates ctrl-h
+		{"$", // simulates ctrl-l
 			`┌──────────────────┐
 │cabin.go  other.go│
 ├──────────────────┤
@@ -167,7 +167,7 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 │BBBBBBBBBBBBBBBBBB│
 │BBBBBBBBBBBBBBBBBB│
 └──────────────────┘`},
-		{"$", // simulates ctrl-h
+		{"$", // simulates ctrl-l
 			`┌──────────────────┐
 │cabin.go  other.go│
 ├──────────────────┤
@@ -257,7 +257,7 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 └──────────────────┘`},
 	}
 
-	browser, err := constructor(&testBrowser{}, WithFilepath(""))
+	browser, err := constructor(&testEditor{}, WithFilepath(""))
 	require.NoError(t, err)
 
 	handler.BatchTestInputSequence(t, browser, 20, 10, cases)
@@ -265,11 +265,12 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 	win, err := browser.SplitVerticalLeft(handler.NewTestHandler())
 	require.NoError(t, err)
 
-	_, err = browser.SplitHorizontalBelow(handler.NewTestHandler())
-	require.NoError(t, err)
+	h := handler.NewTestHandler()
+	h.Ch = 'Z' // helps identify in tests
+
 	err = browser.Subscribe(term.Event{Type: term.EventKey, Ch: ']'},
 		funcEventHandler(func(ev term.Event) bool {
-			browser.SplitHorizontalBelow(handler.NewTestHandler())
+			browser.SplitHorizontalBelow(h)
 			return false
 		}))
 	require.NoError(t, err)
@@ -281,27 +282,27 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 	require.NoError(t, browser.MergeKeyMap(newMappings))
 
 	cases = []handler.TestInputSequence{
-		{":<_11111111111111111111",
+		{"]__",
 			`┌──────────────────┐
 │cabin.go  other.go│
 ├────────┐┌────────┤
-│UUUUUUUU││EEEEEEEE│
-│UUUUUUUU││EEEEEEEE│
+│AAAAAAAA││EEEEEEEE│
+│AAAAAAAA││EEEEEEEE│
 └────────┘│EEEEEEEE│
 ┌────────┐│EEEEEEEE│
-│AAAAAAAA││EEEEEEEE│
-│AAAAAAAA││EEEEEEEE│
+│ZZZZZZZZ││EEEEEEEE│
+│ZZZZZZZZ││EEEEEEEE│
 └────────┘└────────┘`},
-		{")",
+		{":<111111111_",
 			`┌──────────────────┐
 │cabin.go  other.go│
 ├────────┐┌────────┤
-│BBBBBBBB││EEEEEEEE│
-│BBBBBBBB││EEEEEEEE│
+│AAAAAAAA││EEEEEEEE│
+│AAAAAAAA││EEEEEEEE│
 └────────┘│EEEEEEEE│
 ┌────────┐│EEEEEEEE│
-│AAAAAAAA││EEEEEEEE│
-│AAAAAAAA││EEEEEEEE│
+│cccccccc││EEEEEEEE│
+│cccccccc││EEEEEEEE│
 └────────┘└────────┘`},
 	}
 
@@ -311,17 +312,6 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 	require.NoError(t, win.Close())
 
 	cases = []handler.TestInputSequence{
-		{"_",
-			`┌──────────────────┐
-│cabin.go  other.go│
-├────────┐┌────────┤
-│AAAAAAAA││EEEEEEEE│
-│AAAAAAAA││EEEEEEEE│
-│AAAAAAAA││EEEEEEEE│
-│AAAAAAAA││EEEEEEEE│
-│AAAAAAAA││EEEEEEEE│
-│AAAAAAAA││EEEEEEEE│
-└────────┘└────────┘`},
 		{":close>)))",
 			`┌──────────────────┐
 │cabin.go  other.go│

@@ -67,8 +67,11 @@ type Manager struct {
 	rmu *sync.Mutex
 
 	// used to abstract out go-plugin specific functionality
-	builder   pluginBuilder
-	interrupt func()
+	builder pluginBuilder
+
+	// interrupt functions
+	interruptDraw   func()
+	interruptHandle func()
 
 	config managerConfig
 }
@@ -77,7 +80,8 @@ type Manager struct {
 func NewManager(grantor Grantor, opts ...Option) *Manager {
 	ret := new(Manager)
 	ret.builder = goPluginGranteeBuilder
-	ret.interrupt = term.Interrupt
+	ret.interruptDraw = term.Interrupt
+	ret.interruptHandle = term.SendNoneEvent
 	ret.Init(grantor, opts...)
 	return ret
 }
@@ -162,7 +166,8 @@ func (m *Manager) doGrant(
 		// such that one plugin => one grpc server for all the resources
 		// requested. Right now, each call to serve, spins a new listener
 		// and a new GRPC server.
-		go srv.Serve(pluginID, grantID, broker, m.rpcMutex(), m.interrupt)
+		go srv.Serve(pluginID, grantID, broker, m.rmu,
+			m.interruptDraw, m.interruptHandle)
 
 		grant := &proto.PermissionGrant{
 			Id:      p.Id,
@@ -393,7 +398,7 @@ func (m *Manager) Close() error {
 // ResourceLocker returns a Locker that synchronizes access to
 // resources that have been shared with this manager.
 func (m *Manager) ResourceLocker() sync.Locker {
-	return m.rmu
+	return (*rpcMutex)(m)
 }
 
 type rpcMutex Manager
@@ -403,11 +408,5 @@ func (m *rpcMutex) Lock() {
 }
 
 func (m *rpcMutex) Unlock() {
-	// force redraw after waking up polling gorouting
-	term.Interrupt()
 	m.rmu.Unlock()
-}
-
-func (m *Manager) rpcMutex() sync.Locker {
-	return (*rpcMutex)(m)
 }

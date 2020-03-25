@@ -2,60 +2,106 @@ package browser
 
 import (
 	"context"
-	"io"
 	"sync"
+	"time"
 
 	"github.com/ernestrc/go-tui/proto"
 	log "github.com/sirupsen/logrus"
 )
 
+type resourceCloser interface {
+	closeResources(handlerID uint32) error
+	waitForClientClose(ctx context.Context, handlerID uint32) bool
+}
+
 // WindowClient satisfies Window by talking to a
 // remote window over GRPC.
 type windowClient struct {
-	logger     *log.Logger
-	pbClient   proto.WindowClient
-	connCloser io.Closer
+	handlerID     uint32
+	logger        *log.Logger
+	pbClient      proto.WindowClient
+	browserClient *Client
 }
 
 func newWindowClient(
-	pbClient proto.WindowClient, connCloser io.Closer,
+	handlerID uint32,
+	browserClient *Client,
+	pbClient proto.WindowClient,
 ) *windowClient {
 	ret := new(windowClient)
+	ret.browserClient = browserClient
 	ret.pbClient = pbClient
-	ret.connCloser = connCloser
+	ret.handlerID = handlerID
 	return ret
 }
 
-func (w *windowClient) Close() error {
-	req := new(proto.WindowCloseRequest)
-	_, err := w.pbClient.Close(context.Background(), req)
-	err2 := w.connCloser.Close()
-	if err2 != nil {
-		return err2
+func (w *windowClient) Close() (err error) {
+	resource, ok := w.browserClient.getResources(w.handlerID)
+
+	// shutsdown the handler server associated with this window
+	cliErr := w.browserClient.closeResources(w.handlerID)
+	if cliErr != nil {
+		err = cliErr
 	}
-	return err
+
+	// tell server to wait close resources: waits for handler server connection
+	// to change to shutdown mode, then shutsdown window grpc server
+	// error is ignored because pbClient's server is shutdown preemptively
+	// and even if error was legitimate, there's nothing else we could do from here
+	req := new(proto.WindowCloseRequest)
+	_, _ = w.pbClient.Close(context.Background(), req)
+
+	// now we're ready to finally close window client connection
+	if ok && resource.winConn != nil {
+		connErr := resource.winConn.Close()
+		if connErr != nil {
+			err = connErr
+		}
+	}
+	return
 }
 
 // satisfies proto.WindowServer
 type windowServer struct {
-	lock sync.Locker
-	win  Window
+	mu           sync.Mutex
+	handlerID    uint32
+	win          Window
+	s            *Server
+	shutdownWait time.Duration
 }
 
-func newWindowServer(win Window, lock sync.Locker) *windowServer {
+func newWindowServer(
+	s *Server, handlerID uint32, win Window,
+) *windowServer {
 	ret := new(windowServer)
-	ret.lock = lock
 	ret.win = win
+	ret.handlerID = handlerID
+	ret.s = s
+	ret.shutdownWait = s.shutdownWait
 	return ret
+}
+
+func closeResourceCloser(
+	closer resourceCloser,
+	shutdownWait time.Duration, handlerID uint32,
+) (err error) {
+	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(ctx, shutdownWait)
+	defer cancel()
+
+	closer.waitForClientClose(ctx, handlerID)
+	err = closer.closeResources(handlerID)
+
+	return
 }
 
 func (s *windowServer) Close(
 	ctx context.Context, req *proto.WindowCloseRequest,
 ) (*proto.WindowCloseResponse, error) {
-	s.lock.Lock()
-	defer s.lock.Unlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
-	err := s.win.Close()
+	err := closeResourceCloser(s.s, s.shutdownWait, s.handlerID)
 	if err != nil {
 		return nil, err
 	}

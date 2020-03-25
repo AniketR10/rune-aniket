@@ -13,6 +13,12 @@ type Window interface {
 	Close() error
 }
 
+// TODO WindowHandler wraps a tui.Handler in a Window context.
+// type WindowHandler interface {
+// 	tui.Handler
+// 	OnWindowClosed()
+// }
+
 // WindowManager is the interface that groups tile
 // window management methods.
 type WindowManager interface {

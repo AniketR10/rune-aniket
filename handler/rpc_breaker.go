@@ -55,37 +55,51 @@ const (
 // Cancel ->> Pending
 //
 // http://chartmage.com/index.html
+//
+// Note that Handle events are always "handled", meaning
+// that clients of this clientBreaker should not use that field
+// to know whether underlying client is handling a particular event or not.
 type clientBreaker struct {
-	quitNext bool
-	clientCh chan error
-	quitCh   chan struct{}
-	mu       sync.Mutex
-	cc       proto.HandlerClient
+	quitCh chan struct{}
+	mu     sync.Mutex
+	cc     proto.HandlerClient
+
+	// interrupt functions
+	interruptDraw   func()
+	interruptHandle func()
 
 	draw struct {
 		cancel  func()
 		state   breakerState
-		prevReq proto.DrawRequest
-		prevRes proto.DrawResponse
+		pending proto.DrawRequest
+		ready   struct {
+			proto.DrawRequest
+			proto.DrawResponse
+		}
 	}
 
 	handle struct {
-		ch chan *proto.HandleRequest
+		quit bool
+		err  error
+		ch   chan *proto.HandleRequest
 	}
 
 	man proto.Manual
 }
 
-func withClientBreaker(c proto.HandlerClient) (*clientBreaker, chan error) {
+func withClientBreaker(
+	c proto.HandlerClient, interruptDraw, interruptHandle func(),
+) *clientBreaker {
 	ret := new(clientBreaker)
 	ret.cc = c
-	ret.clientCh = make(chan error)
 	ret.quitCh = make(chan struct{})
 	ret.handle.ch = make(chan *proto.HandleRequest, handleBackpressureThres)
+	ret.interruptDraw = interruptDraw
+	ret.interruptHandle = interruptHandle
 
 	go ret.pipelineHandleEvents()
 
-	return ret, ret.clientCh
+	return ret
 }
 
 func (a *clientBreaker) pipelineHandleEvents() {
@@ -95,35 +109,33 @@ func (a *clientBreaker) pipelineHandleEvents() {
 			return
 		case req := <-a.handle.ch:
 			res, err := a.cc.Handle(context.Background(), req)
-			if err == nil && res.Quit {
+			if err != nil || res.Quit {
 				a.mu.Lock()
-				a.quitNext = true
+				a.handle.quit = true
+				a.handle.err = err
 				a.mu.Unlock()
 
+				a.interruptHandle()
 				return
 			}
 
-			select {
-			case a.clientCh <- err:
-			case <-a.quitCh:
-				return
-			}
+			a.interruptDraw()
 		}
 	}
 }
 
-func (a *clientBreaker) prevResCopy() *proto.DrawResponse {
+func (a *clientBreaker) readyCopy() *proto.DrawResponse {
 	res := new(proto.DrawResponse)
-	*res = a.draw.prevRes
+	*res = a.draw.ready.DrawResponse
 	return res
 }
 
 func (a *clientBreaker) loadingContent(
 	in *proto.DrawRequest,
 ) *proto.DrawResponse {
-	if a.draw.prevReq.Width == in.Width &&
-		a.draw.prevReq.Height == in.Height {
-		return a.prevResCopy()
+	if a.draw.ready.Width == in.Width &&
+		a.draw.ready.Height == in.Height {
+		return a.readyCopy()
 	}
 
 	loading := component.String(loadingCopy)
@@ -144,7 +156,7 @@ func (a *clientBreaker) transitionToPending(
 	ctx context.Context, in *proto.DrawRequest, opts ...grpc.CallOption,
 ) {
 	a.draw.state = pending
-	a.draw.prevReq = *in
+	a.draw.pending = *in
 	ctx, a.draw.cancel = context.WithCancel(ctx)
 	go a.sendDrawRequest(ctx, in, opts...)
 }
@@ -160,9 +172,11 @@ func (a *clientBreaker) transitionToReady(res *proto.DrawResponse, err error) {
 			err, a.draw.state))
 	}
 
-	// should be never nil; if canceled err should be context.Canceled
+	// should be never nil because we check if context.Done() channel
+	// before transitioning to ready.
 	a.draw.cancel()
-	a.draw.prevRes = *res
+	a.draw.ready.DrawRequest = a.draw.pending
+	a.draw.ready.DrawResponse = *res
 	a.draw.state = ready
 }
 
@@ -183,15 +197,7 @@ func (a *clientBreaker) sendDrawRequest(
 	}
 
 	a.transitionToReady(res, err)
-
-	// TODO there should be another state here: interrupt not yet issued
-	// but received another draw request. should unlocking be defered to
-	// after clientCh channel is drained?
-
-	select {
-	case <-a.quitCh:
-	case a.clientCh <- err:
-	}
+	a.interruptDraw()
 }
 
 func (a *clientBreaker) Draw(
@@ -214,10 +220,10 @@ func (a *clientBreaker) Draw(
 		return resp, nil
 
 	case ready:
-		if a.draw.prevReq.Width == in.Width &&
-			a.draw.prevReq.Height == in.Height {
+		if a.draw.ready.Width == in.Width &&
+			a.draw.ready.Height == in.Height {
 			a.draw.state = initial
-			return a.prevResCopy(), nil
+			return a.readyCopy(), nil
 		}
 
 		resp := a.loadingContent(in)
@@ -235,8 +241,13 @@ func (a *clientBreaker) Handle(
 	res := new(proto.HandleResponse)
 
 	a.mu.Lock()
-	quitNext := a.quitNext
+	quitNext := a.handle.quit
+	errNext := a.handle.err
 	a.mu.Unlock()
+
+	if errNext != nil {
+		return nil, errNext
+	}
 
 	if quitNext {
 		res.Quit = quitNext

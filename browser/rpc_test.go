@@ -3,16 +3,24 @@ package browser
 import (
 	"fmt"
 	"net"
+	"os"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/ernestrc/go-tui"
 	"github.com/ernestrc/go-tui/editor"
+	"github.com/ernestrc/go-tui/handler"
 	"github.com/ernestrc/go-tui/proto"
+	"github.com/ernestrc/go-tui/term"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/goleak"
 	"google.golang.org/grpc"
 )
+
+func nop() {}
+
+const testingShutdownWait = 500 * time.Millisecond
 
 type brokerage struct {
 	net.Listener
@@ -85,10 +93,41 @@ type testClient struct {
 	tui.Handler
 }
 
-func TestRPCBrowserDraw(t *testing.T) {
-	var closeFn func()
+type safeHandler struct {
+	mu *sync.Mutex
+	tui.Handler
+}
 
-	testBrowserHandlerDraw(t, func(ed editor.Editor, opts ...Option) (browserInternal, error) {
+func (h *safeHandler) Resize(width, height int) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.Handler.Resize(width, height)
+}
+func (h *safeHandler) Draw(w tui.Writer) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.Handler.Draw(w)
+}
+func (h *safeHandler) Handle(ev term.Event) (exit, handled bool) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.Handler.Handle(ev)
+}
+func (h *safeHandler) Cursor() (pos term.Coordinates, show bool) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.Handler.Cursor()
+}
+func (h *safeHandler) Man() tui.Manual {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.Handler.Man()
+}
+
+func newTestRPCBrowser(t *testing.T,
+	destructor *func(),
+) browserConstructor {
+	return func(ed editor.Editor, opts ...Option) (browserInternal, error) {
 		b := newTestBrowserHandler()
 		err := b.Init(ed, opts...)
 		if err != nil {
@@ -100,8 +139,10 @@ func TestRPCBrowserDraw(t *testing.T) {
 
 		broker := newDialBroker()
 
+		var mu sync.Mutex
 		grpcServer := grpc.NewServer()
-		server := NewServer(broker, b, new(sync.Mutex), func() {})
+		server := NewServer(broker, b, &mu, nop, nop)
+		server.shutdownWait = testingShutdownWait
 		proto.RegisterWindowManagerServer(grpcServer, server)
 		proto.RegisterMessengerServer(grpcServer, server)
 		proto.RegisterKeyMapperServer(grpcServer, server)
@@ -115,19 +156,52 @@ func TestRPCBrowserDraw(t *testing.T) {
 
 		client := testClient{
 			Client:  NewClient(broker, conn),
-			Handler: b,
+			Handler: &safeHandler{Handler: b, mu: &mu},
 		}
-		closeFn = func() {
+		*destructor = func() {
 			client.Close()
 			server.Close()
 			grpcServer.Stop()
 		}
 		return client, nil
-	})
+	}
+}
 
-	closeFn()
+func TestRPCBrowserDraw(t *testing.T) {
+	var destructor func()
+	constructor := newTestRPCBrowser(t, &destructor)
+	testBrowserHandlerDraw(t, constructor)
+	destructor()
+}
+
+func TestRPCBrowserCloseLeak(t *testing.T) {
+	var destructor func()
+	browser, err := newTestRPCBrowser(t, &destructor)(&testEditor{}, WithFilepath(""))
+	require.NoError(t, err)
+
+	defer destructor()
+
+	win, err := browser.SplitVerticalLeft(handler.NewTestHandler())
+	require.NoError(t, err)
+
+	require.NoError(t, win.Close())
+
+	// NOTE: to reason about window/handler resource leaks
+	// uncomment next line and analyze running goroutines
+	// goleak.VerifyNone(t)
 }
 
 func TestMain(m *testing.M) {
-	goleak.VerifyTestMain(m)
+	exitCode := m.Run()
+	if exitCode == 0 {
+		// this is to give time to server to close resources
+		time.Sleep(testingShutdownWait)
+		err := goleak.Find()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "goleak: Leaks on successful test run: %v\n", err)
+			exitCode = 1
+		}
+	}
+
+	os.Exit(exitCode)
 }

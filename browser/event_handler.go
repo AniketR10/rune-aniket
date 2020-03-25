@@ -2,7 +2,6 @@ package browser
 
 import (
 	"github.com/ernestrc/go-tui"
-	"github.com/ernestrc/go-tui/handler"
 	"github.com/ernestrc/go-tui/term"
 )
 
@@ -11,15 +10,20 @@ import (
 
 // adapts a handler.Client to be used as a EventHandler
 type eventHandler struct {
-	cc *handler.Client
+	handlerID uint32
+	h         tui.Handler
+	s         *Server
 }
 
 func (e eventHandler) Handle(ev term.Event) (exit bool) {
-	exit, _ = e.cc.Handle(ev)
+	exit, _ = e.h.Handle(ev)
+	if exit {
+		e.s.closeResources(e.handlerID)
+	}
 	return
 }
 
-// adapts an EventHandler to be used as a tui.Handler
+// adapts an EventHandler to be used as a WindowHandler
 type eventHandlerToHandler struct {
 	h EventHandler
 }
@@ -44,4 +48,7 @@ func (e eventHandlerToHandler) Cursor() (pos term.Coordinates, show bool) {
 
 func (e eventHandlerToHandler) Man() tui.Manual {
 	panic("EventHandler cannot Man")
+}
+
+func (e eventHandlerToHandler) OnWindowClosed() {
 }
