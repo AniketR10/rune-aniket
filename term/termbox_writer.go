@@ -6,6 +6,11 @@ import (
 	// https://github.com/gdamore/tcell/blob/master/termbox/compat.go
 )
 
+var (
+	quit   chan struct{}
+	events chan Event
+)
+
 type TermboxWriter struct{}
 
 func (w TermboxWriter) SetCell(pos Coordinates, c Cell) {
@@ -90,6 +95,33 @@ func SetOutputMode(mode OutputMode) OutputMode {
 // After successful initialization, the writer must be finalized using 'Close'
 // function.
 func Init() error {
+	events = make(chan Event)
+	quit = make(chan struct{})
+
+	// start polling events
+	go func() {
+		for {
+			var ev Event
+
+			tev := termbox.PollEvent()
+			ev.Type = EventType(tev.Type)
+			ev.Mod = Modifier(tev.Mod)
+			ev.Key = Key(tev.Key)
+			ev.Ch = tev.Ch
+			ev.Width = tev.Width
+			ev.Height = tev.Height
+			ev.Err = tev.Err
+			ev.MouseX = tev.MouseX
+			ev.MouseY = tev.MouseY
+
+			select {
+			case <-quit:
+				return
+			case events <- ev:
+			}
+		}
+	}()
+
 	return termbox.Init()
 }
 
@@ -98,24 +130,17 @@ func Size() (width int, height int) {
 	return termbox.Size()
 }
 
-// Wait for an event and return it. This is a blocking function call.
+// PollEvent waits for an event and returns it.
+// This is a blocking function call.
 func PollEvent() (ev Event) {
-	tev := termbox.PollEvent()
-	ev.Type = EventType(tev.Type)
-	ev.Mod = Modifier(tev.Mod)
-	ev.Key = Key(tev.Key)
-	ev.Ch = tev.Ch
-	ev.Width = tev.Width
-	ev.Height = tev.Height
-	ev.Err = tev.Err
-	ev.MouseX = tev.MouseX
-	ev.MouseY = tev.MouseY
+	ev = <-events
 	return
 }
 
 // Close writer; should be called after successful initialization
 // when termbox's functionality isn't required anymore.
 func Close() {
+	close(quit)
 	termbox.Close()
 }
 
@@ -124,4 +149,10 @@ func Close() {
 // other than the main event loop goroutine.
 func Interrupt() {
 	termbox.Interrupt()
+}
+
+// SendNoneEvent sends a term.EventNone to the event poller and
+// forces event handling which in turn forces redraw.
+func SendNoneEvent() {
+	events <- Event{Type: EventNone}
 }

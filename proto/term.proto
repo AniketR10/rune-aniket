@@ -32,12 +32,12 @@ message CellRow {
 message Event {
   enum Type {
 	TypeKey = 0;
+	TypeNone = 1;
 	TypeMouse = 2;
 	// EventInterrupt
 	// EventResize
 	// EventError
 	// EventRaw
-	// EventNone
   }
 
   enum Mod {
