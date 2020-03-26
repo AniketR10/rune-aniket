@@ -19,6 +19,8 @@ type tab struct {
 	focus bool
 }
 
+// Tabs is a simple component that draws a list of component
+// names which can in in Focus (highlighted) or not.
 type Tabs struct {
 	fileListBuf   *cell.Buffer
 	fileListFrame tui.Component
@@ -171,37 +173,17 @@ func (t *Tabs) Draw(w tui.Writer) {
 	t.fileListFrame.Draw(w)
 }
 
-func (t *Tabs) focus() (*tab, int, bool) {
-	curr := -1
-	for i, t := range t.tabs {
-		if t.focus {
-			if curr != -1 {
-				panic("corrupted tabs: two tabs are in focus")
-			}
-			curr = i
-		}
+// ResetFocus resets the focus of all the tabs to false.
+func (t *Tabs) ResetFocus() {
+	for _, tab := range t.tabs {
+		tab.focus = false
 	}
-	if curr == -1 {
-		return nil, curr, false
-	}
-	return t.tabs[curr], curr, true
 }
 
 // SetFocus sets the focus to tab with ID. If tab with ID does not exist,
 // this method will panic.
 func (t *Tabs) SetFocus(idx int) {
-	if tab, _, ok := t.focus(); ok {
-		tab.focus = false
-	}
 	t.tabs[idx].focus = true
-}
-
-// Focus returns the ID of the tab in focus.
-func (t *Tabs) Focus() (int, bool) {
-	if _, idx, ok := t.focus(); ok {
-		return idx, true
-	}
-	return 0, false
 }
 
 // Add adds a tab with ID.

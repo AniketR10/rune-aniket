@@ -246,7 +246,10 @@ func (e *Handler) Init(ed editor.Editor, opts ...Option) (err error) {
 
 	e.tabs = handler.NewTabs()
 	e.tabs.OnClick = func(idx int) {
-		e.updateNodeContent(e.wm.Focus(), e.buffers[idx])
+		buf := e.buffers[idx]
+		if buf.free {
+			e.updateNodeContent(e.wm.Focus(), buf)
+		}
 	}
 	e.tabs.SetAttr(focusFileAttr, nonFocusFileAttr, frameFileAttr, scrollAttr)
 
@@ -355,12 +358,18 @@ func (e *Handler) switchPrevBuffer(node handler.TileNode) {
 	if buf == nil {
 		return
 	}
-	if idx == 0 {
-		idx = len(e.buffers) - 1
-	} else {
-		idx--
+	for i := 0; i < len(e.buffers); i++ {
+		if idx == 0 {
+			idx = len(e.buffers) - 1
+		} else {
+			idx--
+		}
+		buf := e.buffers[idx]
+		if buf.free {
+			e.updateNodeContent(node, buf)
+			return
+		}
 	}
-	e.updateNodeContent(node, e.buffers[idx])
 }
 
 func (e *Handler) switchNextBuffer(node handler.TileNode) {
@@ -368,11 +377,17 @@ func (e *Handler) switchNextBuffer(node handler.TileNode) {
 	if buf == nil {
 		return
 	}
-	idx++
-	if idx == len(e.buffers) {
-		idx = 0
+	for i := 0; i < len(e.buffers); i++ {
+		idx++
+		if idx == len(e.buffers) {
+			idx = 0
+		}
+		buf := e.buffers[idx]
+		if buf.free {
+			e.updateNodeContent(node, buf)
+			return
+		}
 	}
-	e.updateNodeContent(node, e.buffers[idx])
 }
 
 func (e *Handler) updateNodeContent(
@@ -638,6 +653,12 @@ func (e *Handler) Resize(width, height int) {
 
 // Draw satisfies tui.Component
 func (e *Handler) Draw(w tui.Writer) {
+	e.tabs.ResetFocus()
+	for idx, buf := range e.buffers {
+		if !buf.free {
+			e.tabs.SetFocus(idx)
+		}
+	}
 	e.frames.Draw(w)
 
 	// only draw logBufDraw times

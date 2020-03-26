@@ -36,10 +36,6 @@ func (f *Tabs) Handle(ev term.Event) (quit, handled bool) {
 	if !ok {
 		return
 	}
-	focusIdx, ok := f.Focus()
-	if ok && focusIdx == idx {
-		return
-	}
 
 	handled = true
 

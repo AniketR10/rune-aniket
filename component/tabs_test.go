@@ -133,7 +133,7 @@ func TestTabsDraw(t *testing.T) {
                     `,
 		}, {
 			func() { l.SetFocus(3) }, `
-..  Other  Things ..
+..  Morsillonins    
                     
                     
                     
@@ -211,31 +211,4 @@ func TestTabsTabAt(t *testing.T) {
 		require.True(t, ok)
 		assert.Equal(t, "4", l.tabs[idx].name)
 	})
-}
-
-func TestTabsFocus(t *testing.T) {
-	l := setupOneTab(10, 10)
-	idx, ok := l.Focus()
-	require.True(t, ok)
-	assert.Equal(t, 0, idx)
-
-	assert.Panics(t, func() {
-		l.SetFocus(2)
-	})
-
-	assert.Equal(t, 1, l.Add("fjkewl"))
-	l.SetFocus(1)
-
-	idx, ok = l.Focus()
-	require.True(t, ok)
-	assert.Equal(t, 1, idx)
-
-	assert.Equal(t, 2, l.Add("jkflejwkl"))
-	assert.Equal(t, 3, l.Add("jkflejwkl"))
-	assert.Equal(t, 4, l.Add("jkflejwkl"))
-	l.SetFocus(4)
-
-	idx, ok = l.Focus()
-	require.True(t, ok)
-	assert.Equal(t, 4, idx)
 }
