@@ -93,6 +93,7 @@ type testClient struct {
 	tui.Handler
 }
 
+// used to emulate term event loop synchronization
 type safeHandler struct {
 	mu *sync.Mutex
 	tui.Handler
@@ -178,7 +179,6 @@ func TestRPCBrowserCloseLeak(t *testing.T) {
 	var destructor func()
 	browser, err := newTestRPCBrowser(t, &destructor)(&testEditor{}, WithFilepath(""))
 	require.NoError(t, err)
-
 	defer destructor()
 
 	win, err := browser.SplitVerticalLeft(handler.NewTestHandler())

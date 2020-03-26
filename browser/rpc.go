@@ -16,13 +16,6 @@ import (
 	"google.golang.org/grpc/connectivity"
 )
 
-// TODO rpc_window server calls OnWindowClosed when
-// connection shutdown is detected, so there's no need
-// to add an extra GRPC call to call handler server.
-// type nopWindowHandler struct{ tui.Handler }
-//
-// func (c nopWindowHandler) OnWindowClosed() {}
-
 // TODO
 // consume handler.Client.Errors() and close upon errors and log somehwere?
 type browserClientHandler struct {
@@ -35,9 +28,7 @@ type browserClientHandler struct {
 func (c browserClientHandler) Handle(ev term.Event) (exit, handled bool) {
 	exit, handled = c.Handler.Handle(ev)
 	if exit {
-		// err is already logged by *Client
-		_ = closeResourceCloser(c.c, c.shutdownWait, c.handlerID)
-		// c.Handler.OnWindowClosed()
+		go closeResourceCloser(c.c, c.shutdownWait, c.handlerID)
 	}
 	return
 }
@@ -59,9 +50,10 @@ func (r *clientResource) Close() (err error) {
 type Client struct {
 	Logger *log.Logger
 
-	cc grpc.ClientConnInterface
+	mu sync.Mutex
 
 	broker proto.MuxBroker
+	cc     grpc.ClientConnInterface
 	wm     proto.WindowManagerClient
 	msg    proto.MessengerClient
 	mp     proto.KeyMapperClient
@@ -93,7 +85,7 @@ func (c *Client) Init(broker proto.MuxBroker) {
 }
 
 func acceptAndServe(
-	broker proto.MuxBroker, register func(*grpc.Server),
+	broker proto.MuxBroker, register func(uint32, *grpc.Server),
 ) (uint32, *grpc.Server) {
 	brokerID := broker.NextId()
 
@@ -103,7 +95,7 @@ func acceptAndServe(
 		defer wg.Done()
 
 		srv = grpc.NewServer(opts...)
-		register(srv)
+		register(brokerID, srv)
 		return srv
 	}
 
@@ -115,10 +107,20 @@ func acceptAndServe(
 }
 
 func (c *Client) serveHandler(h tui.Handler) uint32 {
-	h = browserClientHandler{Handler: h, c: c, shutdownWait: c.shutdownWait}
-	brokerID, srv := acceptAndServe(c.broker, func(srv *grpc.Server) {
-		proto.RegisterHandlerServer(srv, handler.NewServer(h))
-	})
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	brokerID, srv := acceptAndServe(c.broker,
+		func(handlerID uint32, srv *grpc.Server) {
+			h = browserClientHandler{
+				Handler:      h,
+				c:            c,
+				shutdownWait: c.shutdownWait,
+				handlerID:    handlerID,
+			}
+			proto.RegisterHandlerServer(srv, handler.NewServer(h))
+		})
+
 	c.resources[brokerID] = &clientResource{srv: srv}
 	return brokerID
 }
@@ -126,6 +128,9 @@ func (c *Client) serveHandler(h tui.Handler) uint32 {
 func (c *Client) dialToWindow(
 	windowID uint32, handlerID uint32,
 ) (*windowClient, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	winConn, err := c.broker.Dial(windowID)
 	if err != nil {
 		return nil, err
@@ -140,19 +145,29 @@ func (c *Client) dialToWindow(
 }
 
 func (c *Client) waitForClientClose(ctx context.Context, handlerID uint32) bool {
+	c.mu.Lock()
 	res, ok := c.resources[handlerID]
+	c.mu.Unlock()
+
 	if !ok {
 		return false
 	}
+
 	return res.winConn.WaitForStateChange(ctx, connectivity.Ready)
 }
 
 func (c *Client) getResources(handlerID uint32) (*clientResource, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	res, ok := c.resources[handlerID]
 	return res, ok
 }
 
 func (c *Client) closeResources(handlerID uint32) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	res, ok := c.resources[handlerID]
 	if !ok {
 		if c.Logger != nil {
@@ -285,6 +300,9 @@ func (c *Client) Subscribe(ev term.Event, h EventHandler) error {
 // Close closes all resources associated with this Client.
 // This client should not be used after this method is called.
 func (c *Client) Close() (err error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	for _, res := range c.resources {
 		resErr := res.Close()
 		if resErr != nil {
@@ -432,9 +450,10 @@ func (s *Server) dialHandler(handlerID uint32) (tui.Handler, error) {
 
 func (s *Server) serveWindow(win Window, handlerID uint32) uint32 {
 	winSrv := newWindowServer(s, handlerID, win)
-	brokerID, srv := acceptAndServe(s.broker, func(srv *grpc.Server) {
-		proto.RegisterWindowServer(srv, winSrv)
-	})
+	brokerID, srv := acceptAndServe(s.broker,
+		func(windowBrokerID uint32, srv *grpc.Server) {
+			proto.RegisterWindowServer(srv, winSrv)
+		})
 	s.resources[handlerID].srv = srv
 	s.resources[handlerID].win = win
 	return brokerID
