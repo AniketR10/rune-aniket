@@ -76,8 +76,8 @@ message Event {
 	MouseWheelUp = 26;
 	MouseWheelDown = 27;
 	F1 = 28;
-	Ctrl2 = 29;
-	CtrlSpace = 30;
+	// Ctrl2 = 29;
+	// CtrlSpace = 30;
 	CtrlA = 31;
 	CtrlB = 32;
 	CtrlC = 33;
@@ -85,15 +85,15 @@ message Event {
 	CtrlE = 35;
 	CtrlF = 36;
 	CtrlG = 37;
-	Backspace = 38;
+	// Backspace = 38;
 	CtrlH = 39;
 	Tab = 40;
-	CtrlI = 41;
+	// CtrlI = 41;
 	CtrlJ = 42;
 	CtrlK = 43;
 	CtrlL = 44;
 	Enter = 45;
-	CtrlM = 46;
+	// CtrlM = 46;
 	CtrlN = 47;
 	CtrlO = 48;
 	CtrlP = 49;
@@ -108,18 +108,18 @@ message Event {
 	CtrlY = 58;
 	CtrlZ = 59;
 	Esc = 60;
-	CtrlLsqBracket = 61;
-	Ctrl3 = 62;
+	// CtrlLsqBracket = 61;
+	// Ctrl3 = 62;
 	Ctrl4 = 63;
-	CtrlBackslash = 64;
+	// CtrlBackslash = 64;
 	Ctrl5 = 65;
-	CtrlRsqBracket = 66;
+	// CtrlRsqBracket = 66;
 	Ctrl6 = 67;
 	Ctrl7 = 68;
-	CtrlSlash = 69;
-	CtrlUnderscore = 70;
+	// CtrlSlash = 69;
+	// CtrlUnderscore = 70;
 	Space = 72;
-	Backspace2 = 73;
+	// Backspace2 = 73;
 	Ctrl8 = 74;
   }
 
