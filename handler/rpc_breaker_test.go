@@ -285,7 +285,6 @@ func TestClientBreakerDraw(t *testing.T) {
 		// issue new draw which should cancel previous draw
 		res, err := b.Draw(context.Background(), req)
 		require.NoError(t, err)
-		assertDrawResponse(t, res, loadingCopy)
 
 		<-interrupt
 		res, err = b.Draw(context.Background(), req)
