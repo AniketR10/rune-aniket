@@ -123,14 +123,10 @@ message Event {
 	Ctrl8 = 74;
   }
 
-  message Mouse {
-    int32 X = 1;
-    int32 Y = 2;
-  }
-
   Type type = 1;
   Mod mod = 2;
   Key key = 3;
   uint32 Char = 4;
-  Mouse mouse = 5;
+  int32 mouseX = 5;
+  int32 mouseY = 6;
 }

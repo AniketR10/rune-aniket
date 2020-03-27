@@ -193,7 +193,8 @@ func (e *Event) FromModel(ev term.Event) error {
 	}
 
 	e.Char = uint32(ev.Ch)
-	e.Mouse = &Event_Mouse{X: int32(ev.MouseX), Y: int32(ev.MouseY)}
+	e.MouseX = int32(ev.MouseX)
+	e.MouseY = int32(ev.MouseY)
 
 	return nil
 }
@@ -364,10 +365,9 @@ func (e *Event) ToModel() (ev term.Event, err error) {
 			fmt.Errorf("serialization error: unknown event key: %s", e.Key)
 	}
 
-	mouse := e.GetMouse()
 	ev.Ch = rune(e.Char)
-	ev.MouseX = int(mouse.GetX())
-	ev.MouseY = int(mouse.GetY())
+	ev.MouseX = int(e.GetMouseX())
+	ev.MouseY = int(e.GetMouseY())
 
 	return ev, nil
 }
