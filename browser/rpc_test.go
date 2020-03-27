@@ -65,7 +65,7 @@ func (t *dialBroker) AcceptAndServe(
 	t.conns[ID] = brokerage{Listener: lis, Server: server}
 }
 
-func (t *dialBroker) Dial(ID uint32) (conn *grpc.ClientConn, err error) {
+func (t *dialBroker) Dial(ID uint32) (conn proto.MuxConn, err error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 

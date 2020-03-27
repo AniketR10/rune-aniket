@@ -31,7 +31,9 @@ func (b *nopBroker) AcceptAndServe(
 ) {
 }
 
-func (b *nopBroker) Dial(ID uint32) (conn *grpc.ClientConn, err error) {
+func (b *nopBroker) Dial(ID uint32) (
+	conn proto.MuxConn, err error,
+) {
 	return nil, nil
 }
 

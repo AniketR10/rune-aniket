@@ -46,7 +46,7 @@ type granteePlugin struct {
 
 // GRPCServer satisfies plugin.GRPCPlugin
 func (p *granteePlugin) GRPCServer(broker *plugin.GRPCBroker, s *grpc.Server) error {
-	server := newGranteeServer(broker, p.grantee, p.requested, p.keepAlive)
+	server := newGranteeServer(pluginBrokerAdapter{GRPCBroker: broker}, p.grantee, p.requested, p.keepAlive)
 	server = &loggingGranteeServer{Logger: p.logger, GranteeServer: server}
 	proto.RegisterGranteeServer(s, server)
 	return nil
@@ -58,7 +58,7 @@ func (p *granteePlugin) GRPCClient(
 ) (interface{}, error) {
 	pbClient := proto.NewGranteeClient(c)
 	pbClient = &loggingGranteeClient{Logger: p.logger, GranteeClient: pbClient}
-	client := newGranteeClient(broker, pbClient)
+	client := newGranteeClient(pluginBrokerAdapter{GRPCBroker: broker}, pbClient)
 	return client, nil
 }
 
