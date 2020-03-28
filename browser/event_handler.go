@@ -39,6 +39,7 @@ func (e eventHandlerToHandler) Draw(tui.Writer) {
 func (e eventHandlerToHandler) Handle(ev term.Event) (exit, handled bool) {
 	handled = true
 	exit = e.h.Handle(ev)
+	// TODO unsubscribe on exit?
 	return
 }
 

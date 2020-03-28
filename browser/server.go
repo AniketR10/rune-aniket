@@ -195,12 +195,15 @@ func (s *Server) split(
 	}
 
 	s.browser.Lock()
-	defer s.browser.Unlock()
-
 	win, err := split(s.browser, handler)
+	s.browser.Unlock()
 	if err != nil {
+		s.forceClose(handlerID)
 		return nil, err
 	}
+
+	s.browser.Lock()
+	defer s.browser.Unlock()
 
 	windowID := s.serveWindow(win, handlerID)
 	res := &proto.SplitResponse{WindowId: windowID}
@@ -208,37 +211,37 @@ func (s *Server) split(
 }
 
 // SplitVerticalRight satisfies proto.BrowserServer
-func (s *Server) SplitVerticalRight(ctx context.Context, req *proto.SplitRequest) (
-	*proto.SplitResponse, error,
-) {
+func (s *Server) SplitVerticalRight(
+	ctx context.Context, req *proto.SplitRequest,
+) (*proto.SplitResponse, error) {
 	return s.split(ctx, req, (WindowManager).SplitVerticalRight)
 }
 
 // SplitVerticalLeft satisfies proto.BrowserServer
-func (s *Server) SplitVerticalLeft(ctx context.Context, req *proto.SplitRequest) (
-	*proto.SplitResponse, error,
-) {
+func (s *Server) SplitVerticalLeft(
+	ctx context.Context, req *proto.SplitRequest,
+) (*proto.SplitResponse, error) {
 	return s.split(ctx, req, (WindowManager).SplitVerticalLeft)
 }
 
 // SplitHorizontalAbove satisfies proto.BrowserServer
-func (s *Server) SplitHorizontalAbove(ctx context.Context, req *proto.SplitRequest) (
-	*proto.SplitResponse, error,
-) {
+func (s *Server) SplitHorizontalAbove(
+	ctx context.Context, req *proto.SplitRequest,
+) (*proto.SplitResponse, error) {
 	return s.split(ctx, req, (WindowManager).SplitHorizontalAbove)
 }
 
 // SplitHorizontalBelow satisfies proto.BrowserServer
-func (s *Server) SplitHorizontalBelow(ctx context.Context, req *proto.SplitRequest) (
-	*proto.SplitResponse, error,
-) {
+func (s *Server) SplitHorizontalBelow(
+	ctx context.Context, req *proto.SplitRequest,
+) (*proto.SplitResponse, error) {
 	return s.split(ctx, req, (WindowManager).SplitHorizontalBelow)
 }
 
 // MergeKeyMap satisfies proto.BrowserServer
-func (s *Server) MergeKeyMap(ctx context.Context, req *proto.MergeKeyMapRequest) (
-	*proto.MergeKeyMapResponse, error,
-) {
+func (s *Server) MergeKeyMap(
+	ctx context.Context, req *proto.MergeKeyMapRequest,
+) (*proto.MergeKeyMapResponse, error) {
 	m := make(map[term.Event]term.Event)
 
 	for _, mapping := range req.Mappings {
@@ -256,25 +259,31 @@ func (s *Server) MergeKeyMap(ctx context.Context, req *proto.MergeKeyMapRequest)
 	s.browser.Lock()
 	defer s.browser.Unlock()
 
-	s.browser.MergeKeyMap(m)
+	err := s.browser.MergeKeyMap(m)
+	if err != nil {
+		return nil, err
+	}
 	return new(proto.MergeKeyMapResponse), nil
 }
 
 // SetMessage satisfies proto.BrowserServer
-func (s *Server) SetMessage(ctx context.Context, req *proto.SetMessageRequest) (
-	*proto.SetMessageResponse, error,
-) {
+func (s *Server) SetMessage(
+	ctx context.Context, req *proto.SetMessageRequest,
+) (*proto.SetMessageResponse, error) {
 	s.browser.Lock()
 	defer s.browser.Unlock()
 
-	s.browser.SetMessage(req.Msg)
+	err := s.browser.SetMessage(req.Msg)
+	if err != nil {
+		return nil, err
+	}
 	return new(proto.SetMessageResponse), nil
 }
 
 // OpenFile satisfies proto.BrowserServer
-func (s *Server) OpenFile(ctx context.Context, req *proto.OpenFileRequest) (
-	*proto.OpenFileResponse, error,
-) {
+func (s *Server) OpenFile(
+	ctx context.Context, req *proto.OpenFileRequest,
+) (*proto.OpenFileResponse, error) {
 	s.browser.Lock()
 	defer s.browser.Unlock()
 
@@ -286,10 +295,11 @@ func (s *Server) OpenFile(ctx context.Context, req *proto.OpenFileRequest) (
 }
 
 // Subscribe satisfies proto.BrowserServer
-func (s *Server) Subscribe(ctx context.Context, req *proto.SubscribeRequest) (
-	*proto.SubscribeResponse, error,
-) {
-	handler, err := s.dialHandler(req.GetHandlerId())
+func (s *Server) Subscribe(
+	ctx context.Context, req *proto.SubscribeRequest,
+) (*proto.SubscribeResponse, error) {
+	handlerID := req.GetHandlerId()
+	handler, err := s.dialHandler(handlerID)
 	if err != nil {
 		return nil, err
 	}
@@ -300,10 +310,11 @@ func (s *Server) Subscribe(ctx context.Context, req *proto.SubscribeRequest) (
 	}
 
 	s.browser.Lock()
-	defer s.browser.Unlock()
-
 	err = s.browser.Subscribe(ev, eventHandler{s: s, h: handler})
+	s.browser.Unlock()
+
 	if err != nil {
+		s.forceClose(handlerID)
 		return nil, err
 	}
 

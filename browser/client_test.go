@@ -18,6 +18,27 @@ import (
 	"google.golang.org/grpc"
 )
 
+var (
+	key1 = term.Event{Type: term.EventKey, Key: term.KeyCtrlBackslash}
+	key2 = term.Event{Type: term.EventKey,
+		Mod: term.ModAlt, Key: term.KeyBackspace}
+	key3      = term.Event{Type: term.EventMouse, MouseX: 10, MouseY: 11111}
+	protoKey1 = proto.Event{
+		Type: proto.Event_TypeKey,
+		Key:  proto.Event_Ctrl4,
+	}
+	protoKey2 = proto.Event{
+		Type: proto.Event_TypeKey,
+		Key:  proto.Event_CtrlH,
+		Mod:  proto.Event_Alt,
+	}
+	protoKey3 = proto.Event{
+		Type:   proto.Event_TypeMouse,
+		MouseX: 10,
+		MouseY: 11111,
+	}
+)
+
 func newMockedClient(ctrl *gomock.Controller) (
 	client *Client,
 	mockCC *MockClientConnInterface,
@@ -27,6 +48,14 @@ func newMockedClient(ctrl *gomock.Controller) (
 	mockMux = proto.NewMockMuxBroker(ctrl)
 	client = NewClient(mockMux, mockCC)
 	return
+}
+
+func expectInvokeRPC(mockCC *MockClientConnInterface) {
+	mockCC.EXPECT().
+		Invoke(gomock.Any(), gomock.Any(),
+			gomock.Any(), gomock.Any()).
+		Times(1).
+		Return(nil)
 }
 
 func expectInvokeError(mockCC *MockClientConnInterface) {
@@ -43,25 +72,6 @@ func assertInvokeError(t *testing.T, err error) {
 }
 
 func TestClientMergeKeyMap(t *testing.T) {
-	key1 := term.Event{Type: term.EventKey, Key: term.KeyCtrlBackslash}
-	key2 := term.Event{Type: term.EventKey,
-		Mod: term.ModAlt, Key: term.KeyBackspace}
-	key3 := term.Event{Type: term.EventMouse, MouseX: 10, MouseY: 11111}
-	protoKey1 := proto.Event{
-		Type: proto.Event_TypeKey,
-		Key:  proto.Event_Ctrl4,
-	}
-	protoKey2 := proto.Event{
-		Type: proto.Event_TypeKey,
-		Key:  proto.Event_CtrlH,
-		Mod:  proto.Event_Alt,
-	}
-	protoKey3 := proto.Event{
-		Type:   proto.Event_TypeMouse,
-		MouseX: 10,
-		MouseY: 11111,
-	}
-
 	fixture := make(map[term.Event]term.Event)
 	fixture[key1] = key2
 	fixture[key2] = key3
