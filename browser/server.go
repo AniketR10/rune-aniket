@@ -77,7 +77,7 @@ func (s browserServerHandler) Handle(ev term.Event) (exit, handled bool) {
 	if exit {
 		// we need to run asynchronously to not double lock
 		// on the runtime lock.
-		go s.s.closeResources(s.handlerID)
+		go s.s.forceClose(s.handlerID)
 	}
 	return
 }
@@ -155,12 +155,15 @@ func (s *Server) serveWindow(win Window, handlerID uint32) uint32 {
 	return brokerID
 }
 
-func (s *Server) closeResources(handlerID uint32) error {
+func (s *Server) forceClose(handlerID uint32) error {
 	s.browser.Lock()
 	defer s.browser.Unlock()
 
 	res, ok := s.resources[handlerID]
 	if !ok {
+		if s.Logger != nil {
+			s.Logger.Warnf("handler %d already closed", handlerID)
+		}
 		return nil
 	}
 
@@ -169,7 +172,7 @@ func (s *Server) closeResources(handlerID uint32) error {
 		s.Logger.Error(err)
 	}
 
-	delete(s.resources, res.handlerID)
+	delete(s.resources, handlerID)
 
 	return err
 }

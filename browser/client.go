@@ -19,6 +19,8 @@ import (
 type clientResource struct {
 	srv     *grpc.Server
 	winConn proto.MuxConn
+
+	_h tui.Handler // only used for testing
 }
 
 // Client satisfies Browser by talking to a browser server over RPC.
@@ -46,7 +48,7 @@ type browserClientHandler struct {
 	c *Client
 }
 
-func (r *clientResource) Close() (err error) {
+func (r *clientResource) closeHandler() (err error) {
 	// gracefully shutting down this clientResource
 	// means that we need to close winConn only after server
 	// is done shutting down resources.
@@ -54,10 +56,20 @@ func (r *clientResource) Close() (err error) {
 	return
 }
 
+func (r *clientResource) closeWindow() error {
+	if r.winConn != nil {
+		winErr := r.winConn.Close()
+		if winErr != nil {
+			return winErr
+		}
+	}
+	return nil
+}
+
 func (c browserClientHandler) Handle(ev term.Event) (exit, handled bool) {
 	exit, handled = c.Handler.Handle(ev)
 	if exit {
-		go closeResourceCloser(c.c, c.shutdownWait, c.handlerID)
+		go gracefullyShutdown(c.c, c.shutdownWait, c.handlerID)
 	}
 	return
 }
@@ -119,7 +131,7 @@ func (c *Client) serveHandler(h tui.Handler) uint32 {
 			proto.RegisterHandlerServer(srv, handler.NewServer(h))
 		})
 
-	c.resources[brokerID] = &clientResource{srv: srv}
+	c.resources[brokerID] = &clientResource{_h: h, srv: srv}
 	return brokerID
 }
 
@@ -164,22 +176,51 @@ func (c *Client) getResources(handlerID uint32) (*clientResource, bool) {
 	defer c.mu.Unlock()
 
 	res, ok := c.resources[handlerID]
+	if !ok && c.Logger != nil {
+		c.Logger.Warnf("handler %d already closed", handlerID)
+	}
 	return res, ok
 }
 
-func (c *Client) closeResources(handlerID uint32) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+func (c *Client) forceClose(handlerID uint32) (err error) {
+	err1 := c.closePhase1(handlerID)
+	if err1 != nil {
+		err = err1
+	}
+	err2 := c.closePhase2(handlerID)
+	if err2 != nil {
+		err = err2
+	}
+	return
+}
 
-	res, ok := c.resources[handlerID]
+func (c *Client) closePhase1(handlerID uint32) error {
+	res, ok := c.getResources(handlerID)
 	if !ok {
-		if c.Logger != nil {
-			c.Logger.Warnf("closeResources: handler %d already closed", handlerID)
-		}
 		return nil
 	}
 
-	err := res.Close()
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	err := res.closeHandler()
+	if err != nil && c.Logger != nil {
+		c.Logger.Error(err)
+	}
+
+	return err
+}
+
+func (c *Client) closePhase2(handlerID uint32) error {
+	res, ok := c.getResources(handlerID)
+	if !ok {
+		return nil
+	}
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	err := res.closeWindow()
 	if err != nil && c.Logger != nil {
 		c.Logger.Error(err)
 	}
@@ -199,12 +240,12 @@ func (c *Client) split(split clientSplit, h tui.Handler) (Window, error) {
 	ctx := context.Background()
 	res, err := split(c.wm, ctx, &req)
 	if err != nil {
-		c.closeResources(handlerID)
+		c.forceClose(handlerID)
 		return nil, err
 	}
 	win, err := c.dialToWindow(res.WindowId, handlerID)
 	if err != nil {
-		c.closeResources(handlerID)
+		c.forceClose(handlerID)
 		return nil, err
 	}
 	return win, nil
@@ -292,7 +333,7 @@ func (c *Client) Subscribe(ev term.Event, h EventHandler) error {
 
 	_, err = c.p.Subscribe(ctx, &req)
 	if err != nil {
-		c.closeResources(handlerID)
+		c.forceClose(handlerID)
 	}
 	return err
 }
@@ -304,15 +345,13 @@ func (c *Client) Close() (err error) {
 	defer c.mu.Unlock()
 
 	for _, res := range c.resources {
-		resErr := res.Close()
+		resErr := res.closeHandler()
 		if resErr != nil {
 			err = resErr
 		}
-		if res.winConn != nil {
-			winErr := res.winConn.Close()
-			if winErr != nil {
-				err = winErr
-			}
+		winErr := res.closeWindow()
+		if winErr != nil {
+			err = winErr
 		}
 	}
 	if closer, ok := c.cc.(io.Closer); ok {

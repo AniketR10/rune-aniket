@@ -9,8 +9,8 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-type resourceCloser interface {
-	closeResources(handlerID uint32) error
+type gracefulCloser interface {
+	forceClose(handlerID uint32) error
 	waitForClientClose(ctx context.Context, handlerID uint32) bool
 }
 
@@ -36,10 +36,8 @@ func newWindowClient(
 }
 
 func (w *windowClient) Close() (err error) {
-	resource, ok := w.browserClient.getResources(w.handlerID)
-
 	// shutsdown the handler server associated with this window
-	cliErr := w.browserClient.closeResources(w.handlerID)
+	cliErr := w.browserClient.closePhase1(w.handlerID)
 	if cliErr != nil {
 		err = cliErr
 	}
@@ -51,12 +49,10 @@ func (w *windowClient) Close() (err error) {
 	req := new(proto.WindowCloseRequest)
 	_, _ = w.pbClient.Close(context.Background(), req)
 
-	// now we're ready to finally close window client connection
-	if ok && resource.winConn != nil {
-		connErr := resource.winConn.Close()
-		if connErr != nil {
-			err = connErr
-		}
+	// now we're ready to finally close window client connection and remove
+	connErr := w.browserClient.closePhase2(w.handlerID)
+	if connErr != nil {
+		err = connErr
 	}
 	return
 }
@@ -81,8 +77,8 @@ func newWindowServer(
 	return ret
 }
 
-func closeResourceCloser(
-	closer resourceCloser,
+func gracefullyShutdown(
+	closer gracefulCloser,
 	shutdownWait time.Duration, handlerID uint32,
 ) (err error) {
 	ctx := context.Background()
@@ -90,7 +86,10 @@ func closeResourceCloser(
 	defer cancel()
 
 	closer.waitForClientClose(ctx, handlerID)
-	err = closer.closeResources(handlerID)
+	err1 := closer.forceClose(handlerID)
+	if err1 != nil {
+		err = err1
+	}
 
 	return
 }
@@ -101,7 +100,7 @@ func (s *windowServer) Close(
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	err := closeResourceCloser(s.s, s.shutdownWait, s.handlerID)
+	err := gracefullyShutdown(s.s, s.shutdownWait, s.handlerID)
 	if err != nil {
 		return nil, err
 	}

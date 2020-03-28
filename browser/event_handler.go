@@ -18,7 +18,7 @@ type eventHandler struct {
 func (e eventHandler) Handle(ev term.Event) (exit bool) {
 	exit, _ = e.h.Handle(ev)
 	if exit {
-		e.s.closeResources(e.handlerID)
+		e.s.forceClose(e.handlerID)
 	}
 	return
 }

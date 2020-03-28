@@ -5,8 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/ernestrc/go-tui"
+	"github.com/ernestrc/go-tui/handler"
 	"github.com/ernestrc/go-tui/proto"
 	"github.com/ernestrc/go-tui/term"
 	gomock "github.com/golang/mock/gomock"
@@ -381,6 +383,43 @@ func testClientSplit(
 		win, err := split(client, nil)
 		require.Error(t, err)
 		assert.Nil(t, win)
+		assert.Equal(t, 0, len(client.resources))
+	})
+
+	t.Run("gracefully closes resources if handler returns exit = true", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		client, mockCC, mockBroker := newMockedClient(ctrl)
+
+		windowID := uint32(63)
+		expectBrokerServe(t, 1, mockBroker)
+		expectSplit(t, mockCC, 1, windowID, rpc)
+		mockWinConn := expectBrokerDial(t, ctrl, mockBroker, windowID)
+
+		h := handler.NewTestHandler()
+		_, err := split(client, h)
+		require.NoError(t, err)
+		require.Equal(t, 1, len(client.resources))
+
+		h.Exit = true
+		mockWinConn.EXPECT().Close().Times(1).Return(nil)
+
+		cliRes, ok := client.getResources(1)
+		require.True(t, ok)
+
+		exit, handled := cliRes._h.Handle(term.Event{Type: term.EventNone})
+		assert.True(t, exit)
+		assert.True(t, handled)
+
+		// unfortunately gracefulshutdowns are asynchronous
+		// because they wait on grpc connection to be shutdown fist by
+		// server
+		time.Sleep(100 * time.Millisecond)
+
+		client.mu.Lock()
+		defer client.mu.Unlock()
+
 		assert.Equal(t, 0, len(client.resources))
 	})
 
