@@ -791,6 +791,7 @@ func (e *Handler) SplitHorizontalAbove(h tui.Handler) (Window, error) {
 
 // Subscribe subscribers h EventHandler to term.Event ev.
 func (e *Handler) Subscribe(ev term.Event, h EventHandler) error {
+	// TODO remove subscription upon exit = true
 	if e.subscribers == nil {
 		e.subscribers = make(map[term.Event]EventHandler)
 	}

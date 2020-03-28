@@ -8,24 +8,25 @@ import (
 // the following structures are helpers to adapt a handler.Client
 // to be used as a client and/or server of EventHandler.
 
-// adapts a handler.Client to be used as a EventHandler
-type eventHandler struct {
+// adapts an EventHandler to be used as a WindowHandler
+type eventHandlerToHandler struct {
+	h EventHandler
+}
+
+type handlerToEventHandler struct {
+	h tui.Handler
+}
+
+type serverEventHandler struct {
 	handlerID uint32
 	h         tui.Handler
 	s         *Server
 }
 
-func (e eventHandler) Handle(ev term.Event) (exit bool) {
-	exit, _ = e.h.Handle(ev)
-	if exit {
-		go e.s.forceClose(e.handlerID)
-	}
-	return
-}
-
-// adapts an EventHandler to be used as a WindowHandler
-type eventHandlerToHandler struct {
-	h EventHandler
+type clientEventHandler struct {
+	tui.Handler
+	handlerID uint32
+	c         *Client
 }
 
 func (e eventHandlerToHandler) Resize(width, height int) {
@@ -39,9 +40,6 @@ func (e eventHandlerToHandler) Draw(tui.Writer) {
 func (e eventHandlerToHandler) Handle(ev term.Event) (exit, handled bool) {
 	handled = true
 	exit = e.h.Handle(ev)
-	if exit {
-		// TODO client_test.go
-	}
 	return
 }
 
@@ -54,4 +52,36 @@ func (e eventHandlerToHandler) Man() tui.Manual {
 }
 
 func (e eventHandlerToHandler) OnWindowClosed() {
+}
+
+func (h handlerToEventHandler) Handle(ev term.Event) bool {
+	exit, _ := h.h.Handle(ev)
+	return exit
+}
+
+func newClientEventHandler(c *Client, h EventHandler) *clientEventHandler {
+	return &clientEventHandler{
+		Handler: eventHandlerToHandler{h: h},
+		c:       c,
+	}
+}
+
+func (e *clientEventHandler) setHandlerID(handlerID uint32) {
+	e.handlerID = handlerID
+}
+
+func (e *clientEventHandler) Handle(ev term.Event) (exit, handled bool) {
+	exit, handled = e.Handler.Handle(ev)
+	if exit {
+		go e.c.forceClose(e.handlerID)
+	}
+	return
+}
+
+func (h serverEventHandler) Handle(ev term.Event) (exit bool) {
+	exit, _ = h.h.Handle(ev)
+	if exit {
+		go h.s.forceClose(h.handlerID)
+	}
+	return
 }

@@ -326,9 +326,10 @@ func (c *Client) Subscribe(ev term.Event, h EventHandler) error {
 		return err
 	}
 
-	// NOTE: for now we don't have an unsubscribe mechanism
-	// so this rpc handler always stays open until Client.Close is called.
-	handlerID := c.serveHandler(eventHandlerToHandler{h})
+	evh := newClientEventHandler(c, h)
+	handlerID := c.serveHandler(evh)
+	evh.setHandlerID(handlerID)
+
 	req := proto.SubscribeRequest{Ev: protoEv, HandlerId: handlerID}
 
 	_, err = c.p.Subscribe(ctx, &req)

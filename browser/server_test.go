@@ -193,7 +193,7 @@ func TestServerSubscribe(t *testing.T) {
 		require.NoError(t, err)
 		assert.NotNil(t, res)
 
-		assertHandlerExitCloseResources(t, handlerConn, nil,
+		assertServerHandlerExitClose(t, handlerConn, nil,
 			eventHandlerToHandler{h}, s, termEv)
 	})
 
@@ -259,7 +259,7 @@ func TestServerSplitVerticalRight(t *testing.T) {
 	)
 }
 
-func assertHandlerExitCloseResources(
+func assertServerHandlerExitClose(
 	t *testing.T, handlerConn *proto.MockMuxConn,
 	mockWindow *MockWindow, h tui.Handler, s *Server,
 	termEv term.Event,
@@ -392,7 +392,7 @@ func testServerSplit(
 		_, err := split(s, ctx, &req)
 		require.NoError(t, err)
 
-		assertHandlerExitCloseResources(t, handlerConn, mockWindow, h, s, termEv)
+		assertServerHandlerExitClose(t, handlerConn, mockWindow, h, s, termEv)
 	})
 
 	goleak.VerifyNone(t)

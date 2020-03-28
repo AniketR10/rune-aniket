@@ -71,6 +71,101 @@ func assertInvokeError(t *testing.T, err error) {
 	assert.Contains(t, err.Error(), "woopsie")
 }
 
+func assertClientHandlerExitClose(
+	t *testing.T,
+	h *handler.TestHandler, mockWinConn *proto.MockMuxConn,
+	client *Client,
+) {
+	require.Equal(t, 1, len(client.resources))
+
+	h.Exit = true
+	if mockWinConn != nil {
+		mockWinConn.EXPECT().Close().Times(1).Return(nil)
+	}
+
+	cliRes, ok := client.getResources(1)
+	require.True(t, ok)
+
+	exit, handled := cliRes._h.Handle(term.Event{Type: term.EventNone})
+	assert.True(t, exit)
+	assert.True(t, handled)
+
+	// unfortunately gracefulshutdowns are asynchronous
+	// because they wait on grpc connection to be shutdown fist by
+	// server
+	time.Sleep(100 * time.Millisecond)
+
+	client.mu.Lock()
+	defer client.mu.Unlock()
+
+	assert.Equal(t, 0, len(client.resources))
+}
+
+func expectBrokerServe(t *testing.T, brokerID uint32, mockBroker *proto.MockMuxBroker) {
+	mockBroker.EXPECT().NextId().Return(uint32(brokerID))
+	mockBroker.EXPECT().AcceptAndServe(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(brokerId uint32, serverFunc func(opts []grpc.ServerOption) *grpc.Server) {
+			assert.Equal(t, uint32(brokerID), brokerId)
+			serverFunc(make([]grpc.ServerOption, 0))
+		}).
+		Times(1)
+}
+
+func expectBrokerDial(
+	t *testing.T, ctrl *gomock.Controller,
+	mockBroker *proto.MockMuxBroker, expectedBrokerID uint32,
+) *proto.MockMuxConn {
+	ret := proto.NewMockMuxConn(ctrl)
+
+	mockBroker.EXPECT().Dial(gomock.Any()).
+		DoAndReturn(func(brokerId uint32) (proto.MuxConn, error) {
+			assert.Equal(t, expectedBrokerID, brokerId)
+			return ret, nil
+		}).
+		Times(1)
+
+	return ret
+}
+
+func expectBrokerDialError(
+	t *testing.T, ctrl *gomock.Controller,
+	mockBroker *proto.MockMuxBroker, expectedBrokerID uint32,
+) {
+	mockBroker.EXPECT().Dial(gomock.Any()).
+		Return(nil, errors.New("whoopsie")).
+		Times(1)
+}
+
+func expectSplit(
+	t *testing.T, mockCC *MockClientConnInterface,
+	handlerID, windowID uint32, rpc string,
+) {
+	mockCC.EXPECT().
+		Invoke(gomock.Any(),
+			gomock.Eq(rpc),
+			gomock.Eq(&proto.SplitRequest{HandlerId: handlerID}),
+			gomock.Any()).
+		DoAndReturn(func(
+			ctx context.Context, method string, args interface{},
+			reply interface{}, opts ...grpc.CallOption) error {
+			splitRes, ok := reply.(*proto.SplitResponse)
+			require.True(t, ok)
+			splitRes.WindowId = windowID
+			return nil
+		}).
+		Times(1)
+}
+
+func expectWindowClose(t *testing.T, mockWinConn *proto.MockMuxConn) {
+	mockWinConn.EXPECT().
+		Invoke(gomock.Any(),
+			gomock.Eq("/proto.Window/Close"),
+			gomock.Eq(&proto.WindowCloseRequest{}),
+			gomock.Eq(&proto.WindowCloseResponse{})).
+		Times(1)
+	mockWinConn.EXPECT().Close().Times(1).Return(nil)
+}
+
 func TestClientMergeKeyMap(t *testing.T) {
 	fixture := make(map[term.Event]term.Event)
 	fixture[key1] = key2
@@ -213,71 +308,6 @@ func TestClientOpenFile(t *testing.T) {
 	})
 }
 
-func expectBrokerServe(t *testing.T, brokerID uint32, mockBroker *proto.MockMuxBroker) {
-	mockBroker.EXPECT().NextId().Return(uint32(brokerID))
-	mockBroker.EXPECT().AcceptAndServe(gomock.Any(), gomock.Any()).
-		DoAndReturn(func(brokerId uint32, serverFunc func(opts []grpc.ServerOption) *grpc.Server) {
-			assert.Equal(t, uint32(brokerID), brokerId)
-			serverFunc(make([]grpc.ServerOption, 0))
-		}).
-		Times(1)
-}
-
-func expectBrokerDial(
-	t *testing.T, ctrl *gomock.Controller,
-	mockBroker *proto.MockMuxBroker, expectedBrokerID uint32,
-) *proto.MockMuxConn {
-	ret := proto.NewMockMuxConn(ctrl)
-
-	mockBroker.EXPECT().Dial(gomock.Any()).
-		DoAndReturn(func(brokerId uint32) (proto.MuxConn, error) {
-			assert.Equal(t, expectedBrokerID, brokerId)
-			return ret, nil
-		}).
-		Times(1)
-
-	return ret
-}
-
-func expectBrokerDialError(
-	t *testing.T, ctrl *gomock.Controller,
-	mockBroker *proto.MockMuxBroker, expectedBrokerID uint32,
-) {
-	mockBroker.EXPECT().Dial(gomock.Any()).
-		Return(nil, errors.New("whoopsie")).
-		Times(1)
-}
-
-func expectSplit(
-	t *testing.T, mockCC *MockClientConnInterface,
-	handlerID, windowID uint32, rpc string,
-) {
-	mockCC.EXPECT().
-		Invoke(gomock.Any(),
-			gomock.Eq(rpc),
-			gomock.Eq(&proto.SplitRequest{HandlerId: handlerID}),
-			gomock.Any()).
-		DoAndReturn(func(
-			ctx context.Context, method string, args interface{},
-			reply interface{}, opts ...grpc.CallOption) error {
-			splitRes, ok := reply.(*proto.SplitResponse)
-			require.True(t, ok)
-			splitRes.WindowId = windowID
-			return nil
-		}).
-		Times(1)
-}
-
-func expectWindowClose(t *testing.T, mockWinConn *proto.MockMuxConn) {
-	mockWinConn.EXPECT().
-		Invoke(gomock.Any(),
-			gomock.Eq("/proto.Window/Close"),
-			gomock.Eq(&proto.WindowCloseRequest{}),
-			gomock.Eq(&proto.WindowCloseResponse{})).
-		Times(1)
-	mockWinConn.EXPECT().Close().Times(1).Return(nil)
-}
-
 func TestClientSubscribe(t *testing.T) {
 	t.Run("bubbles up rpc error and so stops event handler resources", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
@@ -311,10 +341,11 @@ func TestClientSubscribe(t *testing.T) {
 				gomock.Eq(in), gomock.Eq(out)).
 			Times(1)
 
-		err := client.Subscribe(term.Event{Ch: 'a'}, nil)
+		h := handler.NewTestHandler()
+		err := client.Subscribe(term.Event{Ch: 'a'}, handlerToEventHandler{h})
 		require.NoError(t, err)
 
-		assert.Equal(t, 1, len(client.resources))
+		assertClientHandlerExitClose(t, h, nil, client)
 	})
 }
 
@@ -410,27 +441,8 @@ func testClientSplit(
 		h := handler.NewTestHandler()
 		_, err := split(client, h)
 		require.NoError(t, err)
-		require.Equal(t, 1, len(client.resources))
 
-		h.Exit = true
-		mockWinConn.EXPECT().Close().Times(1).Return(nil)
-
-		cliRes, ok := client.getResources(1)
-		require.True(t, ok)
-
-		exit, handled := cliRes._h.Handle(term.Event{Type: term.EventNone})
-		assert.True(t, exit)
-		assert.True(t, handled)
-
-		// unfortunately gracefulshutdowns are asynchronous
-		// because they wait on grpc connection to be shutdown fist by
-		// server
-		time.Sleep(100 * time.Millisecond)
-
-		client.mu.Lock()
-		defer client.mu.Unlock()
-
-		assert.Equal(t, 0, len(client.resources))
+		assertClientHandlerExitClose(t, h, mockWinConn, client)
 	})
 
 	goleak.VerifyNone(t)
