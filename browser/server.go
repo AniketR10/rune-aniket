@@ -309,8 +309,9 @@ func (s *Server) Subscribe(
 		return nil, err
 	}
 
+	h := eventHandler{handlerID: handlerID, s: s, h: handler}
 	s.browser.Lock()
-	err = s.browser.Subscribe(ev, eventHandler{s: s, h: handler})
+	err = s.browser.Subscribe(ev, h)
 	s.browser.Unlock()
 
 	if err != nil {

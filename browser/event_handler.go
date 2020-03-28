@@ -18,7 +18,7 @@ type eventHandler struct {
 func (e eventHandler) Handle(ev term.Event) (exit bool) {
 	exit, _ = e.h.Handle(ev)
 	if exit {
-		e.s.forceClose(e.handlerID)
+		go e.s.forceClose(e.handlerID)
 	}
 	return
 }
@@ -39,7 +39,9 @@ func (e eventHandlerToHandler) Draw(tui.Writer) {
 func (e eventHandlerToHandler) Handle(ev term.Event) (exit, handled bool) {
 	handled = true
 	exit = e.h.Handle(ev)
-	// TODO unsubscribe on exit?
+	if exit {
+		// TODO client_test.go
+	}
 	return
 }
 

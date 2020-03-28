@@ -147,6 +147,23 @@ func expectHandlerInvoke(handlerConn *proto.MockMuxConn, protoEv *proto.Event) {
 		Times(1).
 		Return(nil)
 }
+func expectHandlerInvokeExit(t *testing.T, handlerConn *proto.MockMuxConn) {
+	handlerConn.EXPECT().
+		Invoke(gomock.Any(), gomock.Eq("/proto.Handler/Handle"),
+			gomock.Any(),
+			gomock.Any()).
+		DoAndReturn(func(ctx context.Context,
+			method string, args interface{},
+			reply interface{}, opts ...grpc.CallOption) error {
+			// validate mappings with finer grained control
+			res, ok := reply.(*proto.HandleResponse)
+			require.True(t, ok)
+
+			res.Quit = true
+			return nil
+		}).
+		Times(1)
+}
 
 func TestServerSubscribe(t *testing.T) {
 	ctx := context.Background()
@@ -157,8 +174,6 @@ func TestServerSubscribe(t *testing.T) {
 		Ev:        &protoEv,
 		HandlerId: handlerID,
 	}
-
-	// TODO when handler exit = true, close resources/unsubscribe?
 
 	t.Run("dials to remote handler and delegates Subscribe to underlying Browser", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
@@ -178,16 +193,8 @@ func TestServerSubscribe(t *testing.T) {
 		require.NoError(t, err)
 		assert.NotNil(t, res)
 
-		// verify that handler works
-		expectHandlerInvoke(handlerConn, &protoEv)
-		assert.False(t, h.Handle(termEv))
-
-		time.Sleep(100 * time.Millisecond)
-
-		// verify that handler is closeable by its handlerId
-		handlerConn.EXPECT().Close().Times(1).Return(nil)
-		require.NoError(t, s.forceClose(handlerID))
-		assert.Equal(t, 0, len(s.resources))
+		assertHandlerExitCloseResources(t, handlerConn, nil,
+			eventHandlerToHandler{h}, s, termEv)
 	})
 
 	t.Run("returns browser Subscribe dial to handler error", func(t *testing.T) {
@@ -250,6 +257,33 @@ func TestServerSplitVerticalRight(t *testing.T) {
 		(*MockBrowserMockRecorder).SplitVerticalRight,
 		(*Server).SplitVerticalRight,
 	)
+}
+
+func assertHandlerExitCloseResources(
+	t *testing.T, handlerConn *proto.MockMuxConn,
+	mockWindow *MockWindow, h tui.Handler, s *Server,
+	termEv term.Event,
+) {
+	expectHandlerInvokeExit(t, handlerConn)
+
+	handlerConn.EXPECT().Close().Times(1).Return(nil)
+	if mockWindow != nil {
+		mockWindow.EXPECT().Close().Times(1).Return(nil)
+	}
+
+	exit, _ := h.Handle(termEv)
+	// rpc handler event delivery is asynchronous
+	// so second Handle response will trigger exit
+	time.Sleep(200 * time.Millisecond)
+	exit, _ = h.Handle(termEv)
+	assert.True(t, exit)
+	// close sequence is performed asynchronously
+	time.Sleep(200 * time.Millisecond)
+
+	s.browser.Lock()
+	defer s.browser.Unlock()
+
+	assert.Equal(t, 0, len(s.resources))
 }
 
 func testServerSplit(
@@ -358,38 +392,7 @@ func testServerSplit(
 		_, err := split(s, ctx, &req)
 		require.NoError(t, err)
 
-		handlerConn.EXPECT().
-			Invoke(gomock.Any(), gomock.Eq("/proto.Handler/Handle"),
-				gomock.Any(),
-				gomock.Any()).
-			DoAndReturn(func(ctx context.Context,
-				method string, args interface{},
-				reply interface{}, opts ...grpc.CallOption) error {
-				// validate mappings with finer grained control
-				res, ok := reply.(*proto.HandleResponse)
-				require.True(t, ok)
-
-				res.Quit = true
-				return nil
-			}).
-			Times(1)
-
-		handlerConn.EXPECT().Close().Times(1).Return(nil)
-		mockWindow.EXPECT().Close().Times(1).Return(nil)
-
-		exit, _ := h.Handle(termEv)
-		// rpc handler event delivery is asynchronous
-		// so second Handle response will trigger exit
-		time.Sleep(200 * time.Millisecond)
-		exit, _ = h.Handle(termEv)
-		assert.True(t, exit)
-		// close sequence is performed asynchronously
-		time.Sleep(200 * time.Millisecond)
-
-		s.browser.Lock()
-		defer s.browser.Unlock()
-
-		assert.Equal(t, 0, len(s.resources))
+		assertHandlerExitCloseResources(t, handlerConn, mockWindow, h, s, termEv)
 	})
 
 	goleak.VerifyNone(t)
