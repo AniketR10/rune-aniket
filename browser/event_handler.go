@@ -29,6 +29,11 @@ type clientEventHandler struct {
 	c         *Client
 }
 
+type browserEventHandler struct {
+	browser *Handler
+	h       EventHandler
+}
+
 func (e eventHandlerToHandler) Resize(width, height int) {
 	panic("EventHandler cannot Resize")
 }
@@ -82,6 +87,14 @@ func (h serverEventHandler) Handle(ev term.Event) (exit bool) {
 	exit, _ = h.h.Handle(ev)
 	if exit {
 		go h.s.forceClose(h.handlerID)
+	}
+	return
+}
+
+func (h browserEventHandler) Handle(ev term.Event) (exit bool) {
+	exit = h.h.Handle(ev)
+	if exit {
+		h.browser.unsubscribe(ev)
 	}
 	return
 }

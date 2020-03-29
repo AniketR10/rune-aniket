@@ -379,3 +379,33 @@ EEEE`},
 
 	assert.NoError(t, browser.Close())
 }
+
+func TestBrowserHandlerSubscribe(t *testing.T) {
+	browser := newTestBrowserHandler()
+	require.NoError(t, browser.Init(&testEditor{}))
+	h := handler.NewTestHandler()
+	ev := term.Event{Type: term.EventNone}
+	ch := h.Ch
+	err := browser.Subscribe(ev, handlerToEventHandler{h})
+	require.NoError(t, err)
+
+	t.Run("proxies event to subscribed EventHandler", func(t *testing.T) {
+		exit, handled := browser.Handle(ev)
+		assert.False(t, exit)
+		assert.True(t, handled)
+		assert.NotEqual(t, ch, h.Ch)
+	})
+
+	t.Run("upon handler exit, it unsubscribes EventHandler", func(t *testing.T) {
+		h.Exit = true
+		exit, _ := browser.Handle(ev)
+		assert.False(t, exit)
+		assert.NotEqual(t, ch, h.Ch)
+
+		ch = h.Ch
+		exit, _ = browser.Handle(ev)
+		assert.False(t, exit)
+		assert.Equal(t, ch, h.Ch)
+	})
+
+}

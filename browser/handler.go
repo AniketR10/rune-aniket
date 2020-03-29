@@ -174,21 +174,12 @@ func (e *Handler) emptyBuffer() *browserBuffer {
 
 func newOsHandler() *Handler {
 	ret := new(Handler)
-	ret.openFileFn = func(filePath string,
-		buf *cell.Buffer, swapDir string) (fileBuffer, error) {
-		return editor.NewFileBuffer(filePath, buf, swapDir)
-	}
-
-	ret.recoverFileFn = func(filePath,
-		swapFilePath string, buf *cell.Buffer) (fileBuffer, error) {
-		return editor.RecoverFileBuffer(filePath, swapFilePath, buf)
-	}
 	return ret
 }
 
 // New allocates storage for a new Handler and initializes it.
 func New(ed editor.Editor, opts ...Option) (e *Handler, err error) {
-	e = newOsHandler()
+	e = new(Handler)
 	err = e.Init(ed, opts...)
 	if err != nil {
 		return
@@ -225,10 +216,27 @@ func (e *Handler) removeBuffer(buf *browserBuffer) {
 	e.tabs.Remove(idx)
 }
 
+func (e *Handler) initConstructors() {
+	if e.openFileFn == nil {
+		e.openFileFn = func(filePath string,
+			buf *cell.Buffer, swapDir string) (fileBuffer, error) {
+			return editor.NewFileBuffer(filePath, buf, swapDir)
+		}
+	}
+
+	if e.recoverFileFn == nil {
+		e.recoverFileFn = func(filePath,
+			swapFilePath string, buf *cell.Buffer) (fileBuffer, error) {
+			return editor.RecoverFileBuffer(filePath, swapFilePath, buf)
+		}
+	}
+}
+
 // Init initializes this Handler with the given editor and Options.
 // It returns an error if an initial filepath was given through WithFilePath option
 // and the file failed to be opened.
 func (e *Handler) Init(ed editor.Editor, opts ...Option) (err error) {
+	e.initConstructors()
 	e.config = defaultEditorConfig
 
 	for _, o := range opts {
@@ -789,12 +797,15 @@ func (e *Handler) SplitHorizontalAbove(h tui.Handler) (Window, error) {
 	return e.splitInverted((*handler.WindowManager).SplitHorizontal, h), nil
 }
 
+func (e *Handler) unsubscribe(ev term.Event) {
+	delete(e.subscribers, ev)
+}
+
 // Subscribe subscribers h EventHandler to term.Event ev.
 func (e *Handler) Subscribe(ev term.Event, h EventHandler) error {
-	// TODO remove subscription upon exit = true
 	if e.subscribers == nil {
 		e.subscribers = make(map[term.Event]EventHandler)
 	}
-	e.subscribers[ev] = h
+	e.subscribers[ev] = browserEventHandler{browser: e, h: h}
 	return nil
 }
