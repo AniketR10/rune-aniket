@@ -12,8 +12,6 @@ import (
 	"github.com/ernestrc/go-tui/term"
 )
 
-const border = true
-
 func main() {
 	go func() {
 		log.Println(http.ListenAndServe("localhost:6060", nil))
@@ -44,7 +42,7 @@ func main() {
 		less[i].ReadFrom(input)
 	}
 
-	wm = handler.NewWindowManager(&less[0], border)
+	wm = handler.NewWindowManager(&less[0], handler.DefaultWindowManagerConfig())
 
 	wm.SplitHorizontal(&less[1])
 	wm.FocusUp()

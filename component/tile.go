@@ -473,9 +473,11 @@ func (t *TileTree) TileAt(pos term.Coordinates) *TileNode {
 }
 
 // SetContent sets the content of a TileNode to c.
-func (t *TileNode) SetContent(c tui.Component) {
+func (t *TileNode) SetContent(c tui.Component) (prev tui.Component) {
+	prev = t.content
 	t.content = c
 	t.content.Resize(t.width, t.height)
+	return
 }
 
 func (t *TileNode) iterate(op func(*TileNode)) {

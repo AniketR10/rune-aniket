@@ -24,8 +24,6 @@ var ErrLastBuffer = errors.New("No free buffers left")
 // in the file system.
 var ErrInvalidSave = errors.New("Cannot save this buffer")
 
-var zeroTileNode = handler.TileNode{}
-
 const logBufDrawTimes = 2
 
 type mode int8
@@ -73,7 +71,7 @@ func (e browserContent) Handle(ev term.Event) (exit, handled bool) {
 
 type browserWindow struct {
 	handler *Handler
-	node    handler.TileNode
+	win     handler.Window
 }
 
 // browserWindow is passed by value, so we store whether
@@ -115,18 +113,18 @@ func (e *Handler) addWindow(win browserWindow) {
 	e.windows = append(e.windows, win)
 }
 
-func (e *Handler) newWindow(node handler.TileNode) browserWindow {
+func (e *Handler) newWindow(node handler.Window) browserWindow {
 	win := browserWindow{
 		handler: e,
-		node:    node,
+		win:     node,
 	}
 	e.addWindow(win)
 	return win
 }
 
-func (e *Handler) findWindow(node handler.TileNode) (int, browserWindow) {
+func (e *Handler) findWindow(node handler.Window) (int, browserWindow) {
 	for i, w := range e.windows {
-		if w.node == node {
+		if w.win == node {
 			return i, w
 		}
 	}
@@ -135,18 +133,18 @@ func (e *Handler) findWindow(node handler.TileNode) (int, browserWindow) {
 
 func (e *Handler) closeWindow(winIfc Window) error {
 	win := winIfc.(browserWindow)
-	idx, _ := e.findWindow(win.node)
+	idx, _ := e.findWindow(win.win)
 	if idx == -1 {
 		// already closed
 		return nil
 	}
 
-	buf, ok := e.browserBufferInNode(win.node)
+	buf, ok := e.browserBufferInNode(win.win)
 	if ok {
 		buf.free = true
 	}
 
-	err := win.node.Close()
+	err := win.win.Close()
 	if err != nil {
 		return err
 	}
@@ -272,7 +270,10 @@ func (e *Handler) Init(ed editor.Editor, opts ...Option) (err error) {
 		initBuffer = e.emptyBuffer()
 		e.addBuffer(initBuffer)
 	}
-	e.wm = handler.NewWindowManager(initBuffer, e.config.WindowBorder)
+	// TODO expose borders in config
+	wmConfig := handler.DefaultWindowManagerConfig()
+	wmConfig.WindowManagerConfig.Border = e.config.WindowBorder
+	e.wm = handler.NewWindowManager(initBuffer, wmConfig)
 	e.wm.SetAttr(wmDefaultAttr, wmFocusAttr)
 
 	initBuffer.free = false
@@ -347,7 +348,7 @@ func (e *Handler) findBufferIdx(buf *browserBuffer) int {
 	return idx
 }
 
-func (e *Handler) switchBuffer(node handler.TileNode) (
+func (e *Handler) switchBuffer(node handler.Window) (
 	*browserBuffer, int,
 ) {
 	buf, ok := e.browserBufferInNode(node)
@@ -361,7 +362,7 @@ func (e *Handler) switchBuffer(node handler.TileNode) (
 	return buf, e.findBufferIdx(buf)
 }
 
-func (e *Handler) switchPrevBuffer(node handler.TileNode) {
+func (e *Handler) switchPrevBuffer(node handler.Window) {
 	buf, idx := e.switchBuffer(node)
 	if buf == nil {
 		return
@@ -380,7 +381,7 @@ func (e *Handler) switchPrevBuffer(node handler.TileNode) {
 	}
 }
 
-func (e *Handler) switchNextBuffer(node handler.TileNode) {
+func (e *Handler) switchNextBuffer(node handler.Window) {
 	buf, idx := e.switchBuffer(node)
 	if buf == nil {
 		return
@@ -399,7 +400,7 @@ func (e *Handler) switchNextBuffer(node handler.TileNode) {
 }
 
 func (e *Handler) updateNodeContent(
-	node handler.TileNode, content tui.Handler,
+	node handler.Window, content tui.Handler,
 ) tui.Handler {
 	newBuf, ok := content.(*browserBuffer)
 	if ok {
@@ -407,14 +408,14 @@ func (e *Handler) updateNodeContent(
 		e.tabs.SetFocus(idx)
 		newBuf.free = false
 	}
-	oldHandler := e.wm.SetContent(node, content)
+	oldHandler := node.SetContent(content)
 	if oldBuf, ok := oldHandler.(*browserBuffer); ok {
 		oldBuf.free = true
 	}
 	return oldHandler
 }
 
-func (e *Handler) browserBufferInNode(node handler.TileNode) (*browserBuffer, bool) {
+func (e *Handler) browserBufferInNode(node handler.Window) (*browserBuffer, bool) {
 	buf, ok := node.Content().(*browserBuffer)
 	return buf, ok
 }
@@ -429,7 +430,7 @@ func (e *Handler) freeBuffers() []int {
 	return freeBufs
 }
 
-func (e *Handler) removeNodeBuffer(node handler.TileNode) error {
+func (e *Handler) removeNodeBuffer(node handler.Window) error {
 	freeBufs := e.freeBuffers()
 	if len(freeBufs) == 0 {
 		return ErrLastBuffer
@@ -464,7 +465,7 @@ func (e *Handler) runSingleCommand(cmd string) (quit bool, err error) {
 	case "bcloseAll":
 		e.removeAllBuffers()
 	case "close":
-		err = browserWindow{handler: e, node: e.wm.Focus()}.Close()
+		err = browserWindow{handler: e, win: e.wm.Focus()}.Close()
 	case "wq", "wq!":
 		quit = true
 		fallthrough
@@ -733,11 +734,11 @@ func (e *Handler) MergeKeyMap(keymap map[term.Event]term.Event) error {
 }
 
 func (e *Handler) splitInverted(
-	split func(*handler.WindowManager, tui.Handler) handler.TileNode,
+	split func(*handler.WindowManager, tui.Handler) handler.Window,
 	h tui.Handler,
 ) browserWindow {
-	nodeInFocus, focusContent := e.wm.Focus(), e.wm.FocusContent()
-	idx, w := e.findWindow(nodeInFocus)
+	winInFocus, focusContent := e.wm.Focus(), e.wm.Focus().Content()
+	idx, w := e.findWindow(winInFocus)
 	if idx == -1 {
 		panic("Handler: corrupted window list")
 	}
@@ -745,25 +746,25 @@ func (e *Handler) splitInverted(
 	newNode := split(e.wm, focusContent)
 	e.newWindow(newNode)
 
-	w.node = nodeInFocus
-	e.wm.SetContent(nodeInFocus, browserContent{Handler: h, win: w})
+	w.win = winInFocus
+	winInFocus.SetContent(browserContent{Handler: h, win: w})
 	return w
 }
 
 func (e *Handler) split(
-	split func(*handler.WindowManager, tui.Handler) handler.TileNode,
+	split func(*handler.WindowManager, tui.Handler) handler.Window,
 	h tui.Handler,
 ) browserWindow {
-	// force split a new node
+	// force split a new window tile
 	node := split(e.wm, h)
 
 	win := browserWindow{
 		handler: e,
-		node:    node,
+		win:     node,
 	}
 	// update content with browserContent
 	// so we can have a browserWindow with the correct node
-	e.wm.SetContent(node, browserContent{
+	node.SetContent(browserContent{
 		Handler: h,
 		win:     win,
 	})
@@ -774,24 +775,24 @@ func (e *Handler) split(
 }
 
 // SplitVerticalRight opens a new window tile to the right of the
-// current tile in focus and initializes it with h.
+// current window in focus and initializes it with h.
 func (e *Handler) SplitVerticalRight(h tui.Handler) (Window, error) {
 	return e.split((*handler.WindowManager).SplitVertical, h), nil
 }
 
 // SplitVerticalLeft opens a new window tile to the left of the
-// current tile in focus and initializes it with h.
+// current window in focus and initializes it with h.
 func (e *Handler) SplitVerticalLeft(h tui.Handler) (Window, error) {
 	return e.splitInverted((*handler.WindowManager).SplitVertical, h), nil
 }
 
-// SplitHorizontalBelow opens a new window tile below the current tile in focus
+// SplitHorizontalBelow opens a new window tile below the current window in focus
 // and initializes it with h.
 func (e *Handler) SplitHorizontalBelow(h tui.Handler) (Window, error) {
 	return e.split((*handler.WindowManager).SplitHorizontal, h), nil
 }
 
-// SplitHorizontalAbove opens a new window tile above the current tile in focus
+// SplitHorizontalAbove opens a new window tile above the current window in focus
 // and initializes it with h.
 func (e *Handler) SplitHorizontalAbove(h tui.Handler) (Window, error) {
 	return e.splitInverted((*handler.WindowManager).SplitHorizontal, h), nil

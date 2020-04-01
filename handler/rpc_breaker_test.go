@@ -281,7 +281,7 @@ func TestClientBreakerDraw(t *testing.T) {
 		slowHandler.Close()
 		slowHandler.init()
 		defer slowHandler.Close()
-		time.Sleep(50 * time.Millisecond)
+		time.Sleep(200 * time.Millisecond)
 
 		// issue new draw which should cancel previous draw
 		res, err := b.Draw(context.Background(), req)

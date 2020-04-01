@@ -22,7 +22,9 @@ func prepareTest(width, height int, border bool, root tui.Handler) (
 	*term.StringWriter, *WindowManager,
 ) {
 	writer := term.NewStringWriter(width, height)
-	handler := NewWindowManager(root, border)
+	cfg := DefaultWindowManagerConfig()
+	cfg.Border = border
+	handler := NewWindowManager(root, cfg)
 	handler.Resize(width, height)
 
 	return writer, handler
@@ -45,7 +47,7 @@ func testWindowManagerSetFocus(t *testing.T, border bool) {
 	if focus := wm.Focus(); focus != right {
 		t.Errorf("focus should be %+v, instead of %+v", right, focus)
 	}
-	_, ok := wm.FocusContent().(*TestHandler)
+	_, ok := wm.Focus().Content().(*TestHandler)
 	assert.True(t, ok)
 }
 
@@ -333,11 +335,14 @@ func TestWindowFocusInitSplitVertical(t *testing.T) {
 	rightHandler := NewTestHandler()
 	_ = m.SplitVertical(rightHandler)
 
-	assert.Equal(t, leftHandler, m.FocusContent())
+	assert.Equal(t, leftHandler, m.Focus().Content())
 	assert.True(t, m.ShiftFocus())
-	assert.Equal(t, rightHandler, m.FocusContent())
+	assert.Equal(t, rightHandler, m.Focus().Content())
 	assert.True(t, m.ShiftFocus())
-	assert.Equal(t, leftHandler, m.FocusContent())
+	assert.Equal(t, leftHandler, m.Focus().Content())
+
+	assert.Equal(t, 1, m.Focus().Size())
+	assert.Equal(t, 6, m.Focus().Width())
 }
 
 func TestWindowManagerSetFocusContent(t *testing.T) {
@@ -348,7 +353,7 @@ func TestWindowManagerSetFocusContent(t *testing.T) {
 	rightHandler := NewTestHandler()
 	_ = wm.SplitVertical(rightHandler)
 
-	prev := wm.SetFocusContent(rightHandler)
+	prev := wm.Focus().SetContent(rightHandler)
 	assert.Equal(t, prev, leftHandler)
 
 	cases := []handlerTestCase{
@@ -386,15 +391,15 @@ func TestWindowManagerSetFocusContent(t *testing.T) {
 	fb.Vertical.Ch = '║'
 	fb.Horizontal.Ch = '═'
 
-	wm.SetFrameBorders(fb)
+	wm.SetFrameBorders(component.DefaultFrameBorders(), fb)
 
 	cases = []handlerTestCase{
 		{
 			term.Event{}, `
-╔══╗╔══╗
-║DD║║DD║
-║DD║║DD║
-╚══╝╚══╝`,
+┌──┐╔══╗
+│DD│║DD║
+│DD│║DD║
+└──┘╚══╝`,
 		},
 	}
 
@@ -402,32 +407,39 @@ func TestWindowManagerSetFocusContent(t *testing.T) {
 }
 
 func TestWindowManagerInit(t *testing.T) {
-	wm := NewWindowManager(NewTestHandler(), false)
+	cfg := DefaultWindowManagerConfig()
+	cfg.Border = false
+	wm := NewWindowManager(NewTestHandler(), cfg)
 	require.NotNil(t, wm.Focus())
 }
 
 func TestWindowManagerSetAttr(t *testing.T) {
-	wm := NewWindowManager(NewTestHandler(), true)
+	wm := NewWindowManager(NewTestHandler(), DefaultWindowManagerConfig())
 	cyan := term.ColorCyan
 	red := term.ColorRed
 
 	wm.SplitHorizontal(NewTestHandler())
 	wm.SetAttr(term.Attributes{Bg: cyan, Fg: red}, term.Attributes{Bg: red, Fg: cyan})
 
-	frame := wm.Focus().node.Content().(*Frame)
-	assert.Equal(t, red, frame.TopLeft.Bg)
-	assert.Equal(t, cyan, frame.TopLeft.Fg)
+	focus := wm.Focus()
+	b, ok := focus.FrameBorders()
+	require.True(t, ok)
+	assert.Equal(t, red, b.TopLeft.Bg)
+	assert.Equal(t, cyan, b.TopLeft.Fg)
 
 	wm.ShiftFocus()
-	assert.Equal(t, cyan, frame.TopLeft.Bg)
-	assert.Equal(t, red, frame.TopLeft.Fg)
+	b, ok = focus.FrameBorders()
+	assert.Equal(t, cyan, b.TopLeft.Bg)
+	assert.Equal(t, red, b.TopLeft.Fg)
 }
 
 func testWindowManagerClose(t *testing.T, border bool) {
 	h1 := NewTestHandler()
 	h2 := NewTestHandler()
 	h2.Ch = 'D' // different char to enable assert.Equal
-	wm := NewWindowManager(h1, border)
+	cfg := DefaultWindowManagerConfig()
+	cfg.Border = border
+	wm := NewWindowManager(h1, cfg)
 	node2 := wm.SplitHorizontal(h2)
 
 	assert.NotEqual(t, node2, wm.Focus())
@@ -446,17 +458,21 @@ func TestWindowManagerClose(t *testing.T) {
 }
 
 func testWindowManagerContent(t *testing.T, border bool) {
-	wm := NewWindowManager(NewTestHandler(), border)
+	cfg := DefaultWindowManagerConfig()
+	cfg.Border = border
+	wm := NewWindowManager(NewTestHandler(), cfg)
 	node2 := wm.SplitHorizontal(NewTestHandler())
 
-	_, ok := node2.Content().(*TestHandler)
+	c := node2.Content()
+	_, ok := c.(*TestHandler)
 	require.True(t, ok)
 
 	prev := node2.SetContent(NewTestHandler())
 	_, ok = prev.(*TestHandler)
 	require.True(t, ok)
 
-	_, ok = node2.Content().(*TestHandler)
+	c = node2.Content()
+	_, ok = c.(*TestHandler)
 	require.True(t, ok)
 }
 
@@ -469,21 +485,63 @@ func TestWindowManagerContent(t *testing.T) {
 	})
 }
 
-func testWindowManagerCursor(t *testing.T, border bool) {
+func testWindowManagerCursor(
+	t *testing.T, border bool,
+	input, expected term.Coordinates,
+) {
 	handler := NewTestHandler()
-	handler.CursorPos = term.Coordinates{X: 1, Y: 2}
-	wm := NewWindowManager(handler, border)
+	handler.CursorPos = input
+	cfg := DefaultWindowManagerConfig()
+	cfg.Border = border
+	wm := NewWindowManager(handler, cfg)
+	wm.Resize(10, 10)
+
 	pos, ok := wm.Cursor()
 	require.True(t, ok)
-	assert.Equal(t, handler.CursorPos, pos)
+	assert.Equal(t, expected, pos)
 }
 
 func TestWindowManagerCursor(t *testing.T) {
+	input := term.Coordinates{X: 1, Y: 2}
 	t.Run("Cursor with border", func(t *testing.T) {
-		testWindowManagerCursor(t, true)
+		testWindowManagerCursor(t, true, input,
+			term.Coordinates{X: 2, Y: 3})
 	})
 
 	t.Run("Cursor without border", func(t *testing.T) {
-		testWindowManagerCursor(t, false)
+		testWindowManagerCursor(t, false, input, input)
+	})
+}
+
+func TestHandlerWindowZeroValue(t *testing.T) {
+	t.Run("Close", func(t *testing.T) {
+		var win Window
+		assert.NotPanics(t, func() {
+			win.Close()
+		})
+	})
+	t.Run("Content", func(t *testing.T) {
+		var win Window
+		assert.PanicsWithValue(t, errCalledZeroValuedWin, func() {
+			_ = win.Content()
+		})
+	})
+	t.Run("SetContent", func(t *testing.T) {
+		var win Window
+		assert.PanicsWithValue(t, errCalledZeroValuedWin, func() {
+			win.SetContent(NewTestHandler())
+		})
+	})
+	t.Run("Size", func(t *testing.T) {
+		var win Window
+		assert.PanicsWithValue(t, errCalledZeroValuedWin, func() {
+			win.Size()
+		})
+	})
+	t.Run("TileDirection", func(t *testing.T) {
+		var win Window
+		assert.PanicsWithValue(t, errCalledZeroValuedWin, func() {
+			win.TileDown()
+		})
 	})
 }
