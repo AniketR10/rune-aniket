@@ -59,10 +59,10 @@ TT
          `,
 		}, {
 			func() {
-				fb := DefaultFrameBorders()
+				fb := DefaultFrameCharSet()
 				fb.Horizontal.Ch = '┄'
 				fb.Vertical.Ch = '┊'
-				f.FrameBorders = fb
+				f.FrameCharSet = fb
 			}, `
 ┌┄┄┄┄┄┄┐ 
 ┊TTTTTT┊ 

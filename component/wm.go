@@ -10,7 +10,7 @@ import (
 type WindowManagerConfig struct {
 	Border     bool
 	BorderAttr term.Attributes
-	FrameBorders
+	FrameCharSet
 }
 
 // WindowManager wraps a TileTree to provide an easier API.
@@ -22,12 +22,12 @@ type WindowManager struct {
 
 	// If border is set to true, the Frame cells can be configured
 	// through the following properties.
-	frmBorders FrameBorders
+	frmBorders FrameCharSet
 }
 
 func (wm *WindowManager) withFrame(handler tui.Component) tui.Component {
 	f := NewFrame(handler)
-	f.FrameBorders = wm.frmBorders
+	f.FrameCharSet = wm.frmBorders
 	f.SetAttr(wm.borderAttr)
 	return f
 }
@@ -52,7 +52,7 @@ func (wm *WindowManager) Init(
 ) (n Window) {
 	wm.border = config.Border
 	wm.borderAttr = config.BorderAttr
-	wm.frmBorders = config.FrameBorders
+	wm.frmBorders = config.FrameCharSet
 
 	if wm.border {
 		content = wm.withFrame(content)
@@ -107,16 +107,16 @@ func (wm *WindowManager) WindowAt(pos term.Coordinates) Window {
 	return wm.nodeToWindow(wm.tree.TileAt(pos))
 }
 
-// SetDefaultFrameBorders sets the defaultframe border cells used
+// SetDefaultFrameCharSet sets the defaultframe border cells used
 // to draw borders around tiles.  Note that this has no effect if WindowManager was
 // initialized with border == false.
-func (wm *WindowManager) SetDefaultFrameBorders(b FrameBorders) {
+func (wm *WindowManager) SetDefaultFrameCharSet(b FrameCharSet) {
 	if !wm.border {
 		return
 	}
 
 	wm.tree.Iterate(func(node *TileNode) {
-		node.Content().(*Frame).FrameBorders = b
+		node.Content().(*Frame).FrameCharSet = b
 	})
 
 	wm.frmBorders = b
@@ -139,6 +139,6 @@ func (wm *WindowManager) SetDefaultAttr(attr term.Attributes) {
 func DefaultWindowManagerConfig() WindowManagerConfig {
 	return WindowManagerConfig{
 		Border:       true,
-		FrameBorders: DefaultFrameBorders(),
+		FrameCharSet: DefaultFrameCharSet(),
 	}
 }

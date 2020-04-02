@@ -33,12 +33,12 @@ type Tabs struct {
 	nonFocusAttr   term.Attributes
 	backgroundAttr term.Attributes
 	frameAttr      term.Attributes
-	frameBorders   FrameBorders
+	frameBorders   FrameCharSet
 }
 
 func newListFrame(
 	scrollAttr, frameAttr term.Attributes, buf *cell.Buffer, border bool,
-	frameBorders FrameBorders,
+	frameBorders FrameCharSet,
 ) (content tui.Component) {
 	scroll := NewScroll()
 	scroll.InitWithBuffer(buf)
@@ -51,7 +51,7 @@ func newListFrame(
 	}
 
 	f := NewFrame(span)
-	f.FrameBorders = frameBorders
+	f.FrameCharSet = frameBorders
 	f.SetAttr(frameAttr)
 	return f
 }
@@ -68,7 +68,7 @@ func (t *Tabs) Init() {
 	t.border = true
 	t.focusAttr = defaultFocusAttr
 	t.nonFocusAttr = defaultNonFocusAttr
-	t.frameBorders = DefaultFrameBorders()
+	t.frameBorders = DefaultFrameCharSet()
 	t.fileListBuf = cell.NewBuffer()
 	t.fileListFrame = newListFrame(
 		defaultScrollAttr, defaultFrameAttr, t.fileListBuf,
@@ -96,9 +96,9 @@ func (t *Tabs) SetBorder(border bool) {
 	t.fileListFrame.Resize(t.width, t.height)
 }
 
-// SetFrameBorders defines the characters used to draw a frame border.
+// SetFrameCharSet defines the characters used to draw a frame border.
 // Note that this has no effect if border is set to false on this Tabs.
-func (t *Tabs) SetFrameBorders(fb FrameBorders) {
+func (t *Tabs) SetFrameCharSet(fb FrameCharSet) {
 	t.frameBorders = fb
 	t.fileListFrame = newListFrame(
 		t.backgroundAttr, t.frameAttr, t.fileListBuf, t.border, t.frameBorders)

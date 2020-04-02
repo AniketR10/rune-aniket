@@ -71,7 +71,7 @@ func (w Window) SetContent(content tui.Component) (
 	return
 }
 
-// SetFrameAttr sets a Window's FrameBorders default attributes.
+// SetFrameAttr sets a Window's FrameCharSet default attributes.
 // Any Window's frame attributes can be reset by calling SetDefaultAttr
 // which sets the default attributes for all windows.
 func (w Window) SetFrameAttr(attr term.Attributes) bool {
@@ -85,20 +85,20 @@ func (w Window) SetFrameAttr(attr term.Attributes) bool {
 	return true
 }
 
-// SetFrameBorders sets a Window's Frame attributes. This can be reset by calling
-// SetDefaultFrameBorders which sets the default attributes for all windows.
-func (w Window) SetFrameBorders(b FrameBorders) bool {
+// SetFrameCharSet sets a Window's Frame attributes. This can be reset by calling
+// SetDefaultFrameCharSet which sets the default attributes for all windows.
+func (w Window) SetFrameCharSet(b FrameCharSet) bool {
 	if w.wm == nil {
 		panic(errCalledZeroValuedWin)
 	}
 	if !w.wm.border {
 		return false
 	}
-	w.node.Content().(*Frame).FrameBorders = b
+	w.node.Content().(*Frame).FrameCharSet = b
 	return true
 }
 
-// FrameAttr return this Window's default FrameBorders attributes or false
+// FrameAttr return this Window's default FrameCharSet attributes or false
 // if this Window belongs to a WindowManager configured to not use borders.
 func (w Window) FrameAttr() (attr term.Attributes, ok bool) {
 	if w.wm == nil {
@@ -107,7 +107,7 @@ func (w Window) FrameAttr() (attr term.Attributes, ok bool) {
 	if !w.wm.border {
 		return
 	}
-	oneCell := w.node.Content().(*Frame).FrameBorders.TopLeft
+	oneCell := w.node.Content().(*Frame).FrameCharSet.TopLeft
 	ok = true
 	attr = term.Attributes{
 		Bg: oneCell.Bg,
@@ -116,9 +116,9 @@ func (w Window) FrameAttr() (attr term.Attributes, ok bool) {
 	return
 }
 
-// FrameBorders return this Window's configured FrameBorders or false
+// FrameCharSet return this Window's configured FrameCharSet or false
 // if this Window belongs to a WindowManager configured to not use borders.
-func (w Window) FrameBorders() (b FrameBorders, ok bool) {
+func (w Window) FrameCharSet() (b FrameCharSet, ok bool) {
 	if w.wm == nil {
 		panic(errCalledZeroValuedWin)
 	}
@@ -126,7 +126,7 @@ func (w Window) FrameBorders() (b FrameBorders, ok bool) {
 		return
 	}
 	ok = true
-	b = w.node.Content().(*Frame).FrameBorders
+	b = w.node.Content().(*Frame).FrameCharSet
 	return
 }
 

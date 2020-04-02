@@ -14,7 +14,7 @@ type WindowManagerConfig struct {
 	component.WindowManagerConfig
 
 	FocusBorderAttr   term.Attributes
-	FocusFrameBorders component.FrameBorders
+	FocusFrameCharSet component.FrameCharSet
 }
 
 // WindowManager implements Handler as a tiled window manager.
@@ -24,7 +24,7 @@ type WindowManager struct {
 	border      bool
 	borderAttr  term.Attributes
 	focusAttr   term.Attributes
-	focusBorder component.FrameBorders
+	focusBorder component.FrameCharSet
 
 	focus Window
 }
@@ -48,25 +48,25 @@ func (wm *WindowManager) newNode(t component.Window) Window {
 func (wm *WindowManager) Init(handler tui.Handler, cfg WindowManagerConfig) {
 	win := wm.comp.Init(handler, cfg.WindowManagerConfig)
 	wm.focusAttr = cfg.FocusBorderAttr
-	wm.focusBorder = cfg.FocusFrameBorders
+	wm.focusBorder = cfg.FocusFrameCharSet
 	wm.border = cfg.Border
 	wm.focus = wm.newNode(win)
 	wm.SetFocus(wm.focus)
 	return
 }
 
-// SetFrameBorders sets the frame border cells used to draw borders around tiles.
+// SetFrameCharSet sets the frame border cells used to draw borders around tiles.
 // Note that this has no effect if WindowManager was
 // initialized with border == false.
-func (wm *WindowManager) SetFrameBorders(def, focus component.FrameBorders) {
+func (wm *WindowManager) SetFrameCharSet(def, focus component.FrameCharSet) {
 	if !wm.border {
 		return
 	}
 
 	wm.focusBorder = focus
 
-	wm.comp.SetDefaultFrameBorders(def)
-	wm.focus.SetFrameBorders(focus)
+	wm.comp.SetDefaultFrameCharSet(def)
+	wm.focus.SetFrameCharSet(focus)
 }
 
 // SetAttr sets the default and focus window border attributes. Note that
@@ -282,7 +282,7 @@ func (wm *WindowManager) SetFocus(tile Window) (
 func DefaultWindowManagerConfig() WindowManagerConfig {
 	return WindowManagerConfig{
 		WindowManagerConfig: component.DefaultWindowManagerConfig(),
-		FocusFrameBorders:   component.DefaultFrameBorders(),
+		FocusFrameCharSet:   component.DefaultFrameCharSet(),
 		FocusBorderAttr: term.Attributes{
 			Fg: term.ColorRed,
 			Bg: term.ColorDefault,
