@@ -1,18 +1,19 @@
 package browser
 
 import (
+	"github.com/ernestrc/go-tui/handler"
 	"github.com/ernestrc/go-tui/term"
 	log "github.com/sirupsen/logrus"
 )
 
 var defaultEditorConfig = editorConfig{
-	Tabspaces:        4,
-	WindowBorder:     true,
-	Logger:           nil,
-	SwapDir:          "",
-	Filepath:         "",
-	RecoveryFilepath: "",
-	CommandEvent:     term.Event{Ch: ':', Type: term.EventKey},
+	Tabspaces:           4,
+	Logger:              nil,
+	SwapDir:             "",
+	Filepath:            "",
+	RecoveryFilepath:    "",
+	CommandEvent:        term.Event{Ch: ':', Type: term.EventKey},
+	WindowManagerConfig: handler.DefaultWindowManagerConfig(),
 }
 
 // Option represents a configuration option for a Editor.
@@ -23,10 +24,10 @@ type editorConfig struct {
 	Tabspaces        int
 	Logger           *log.Logger
 	SwapDir          string
-	WindowBorder     bool
 	Filepath         string
 	RecoveryFilepath string
 	CommandEvent     term.Event
+	handler.WindowManagerConfig
 }
 
 // WithLogger sets a logger that the editor can use to log debugging data.
@@ -52,11 +53,13 @@ func WithSwapDir(dir string) Option {
 	}
 }
 
-// WithWindowBorder is an Option that defines whether WindowManager should draw
-// windows with a border or not.
-func WithWindowBorder(border bool) Option {
+// WithWindowManagerConfig is an Option that defines
+// the underlying's WindowManager initialization configuration.
+// See handler.WindowManagerConfig for more info. If this option is not passed
+// DefaultWindowManagerConfig is utilized.
+func WithWindowManagerConfig(config handler.WindowManagerConfig) Option {
 	return func(cfg *editorConfig) {
-		cfg.WindowBorder = border
+		cfg.WindowManagerConfig = config
 	}
 }
 

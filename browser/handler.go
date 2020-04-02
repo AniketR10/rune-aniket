@@ -270,10 +270,7 @@ func (e *Handler) Init(ed editor.Editor, opts ...Option) (err error) {
 		initBuffer = e.emptyBuffer()
 		e.addBuffer(initBuffer)
 	}
-	// TODO expose borders in config
-	wmConfig := handler.DefaultWindowManagerConfig()
-	wmConfig.WindowManagerConfig.Border = e.config.WindowBorder
-	e.wm = handler.NewWindowManager(initBuffer, wmConfig)
+	e.wm = handler.NewWindowManager(initBuffer, e.config.WindowManagerConfig)
 	e.wm.SetAttr(wmDefaultAttr, wmFocusAttr)
 
 	initBuffer.free = false
