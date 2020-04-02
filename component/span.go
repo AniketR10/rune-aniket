@@ -30,7 +30,7 @@ type Span struct {
 	// Either Horizontal/Vertical or HorizontalPerc/VerticalPerc can be set;
 	// If both are set, then Horizontal/Vertical take precedence.
 	//
-	// Negative padding on Horizontal/Vertical that the padding should be
+	// Negative padding on Horizontal/Vertical indicates that the padding should be
 	// automatically calculated based on the available height/width. For instance,
 	// a Horizontal padding of -1, indicates that the padding needs to be set such
 	// that the inner component is exactly 1 cell.
