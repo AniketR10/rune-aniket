@@ -314,6 +314,9 @@ func (s *Scroll) wrapdrawFast(writer tui.Writer) {
 				}
 			}
 			yi = y + wraps
+			if yi >= ywindow {
+				continue
+			}
 			writer.SetCell(term.Coordinates{X: xi, Y: yi}, c)
 		}
 	}
@@ -343,6 +346,9 @@ func (s *Scroll) wrapdraw(writer tui.Writer) {
 				}
 			}
 			yi = y + wraps
+			if yi >= ywindow {
+				continue
+			}
 			if c.Bg == 0 {
 				c.Bg = s.Attributes.Bg
 			}

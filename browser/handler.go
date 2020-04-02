@@ -189,7 +189,6 @@ func newLogSpan(buf *cell.Buffer, bgAttr term.Attributes) handler.Virtual {
 	scroll := component.NewScroll()
 	scroll.InitWithBuffer(buf)
 	scroll.Attributes = bgAttr
-	// FIXME panics scroll.Wrap = true
 
 	background := term.Cell{Bg: bgAttr.Bg, Fg: bgAttr.Fg}
 	content := component.WithBackground(scroll, background)

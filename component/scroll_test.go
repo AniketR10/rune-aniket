@@ -124,6 +124,23 @@ func TestScrollDrawWrap(t *testing.T) {
 	testWorkflow(t, scroll, w, tests)
 }
 
+func TestScrollDrawWrap2(t *testing.T) {
+	width, height := 8, 1
+	tabspaces := 4
+	wrap := true
+	scroll := newScroll(tabspaces, wrap, width, height)
+	_, err := scroll.Buffer().ReadFrom(strings.NewReader(fortune))
+	require.NoError(t, err)
+
+	w := term.NewStringWriter(width, height)
+
+	tests := []testCase{
+		{nil, "Love in "},
+	}
+
+	testWorkflow(t, scroll, w, tests)
+}
+
 func TestRowLastIndex(t *testing.T) {
 	scroll := NewScroll()
 	cases := []struct {
