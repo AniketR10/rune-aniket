@@ -4,6 +4,8 @@ import (
 	"testing"
 
 	"github.com/ernestrc/go-tui/term"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestNewList(t *testing.T) {
@@ -146,4 +148,55 @@ ZZZZZZZZ
 	}
 
 	testWorkflow(t, l, w, tests)
+}
+
+func TestListNode(t *testing.T) {
+	l := NewList(1)
+	c1, c2, c3, c4 := NewScroll(), NewScroll(), NewScroll(), NewScroll()
+	el1 := l.PushFront(c1)
+	el2 := l.PushBack(c2)
+	el4 := l.InsertAfter(c4, el2)
+	el3 := l.InsertBefore(c3, el4)
+
+	t.Run("Value returns the component instance passed in PushFront", func(t *testing.T) {
+		assert.Equal(t, c1, el1.Value())
+	})
+
+	t.Run("Value returns the component instance passed in PushBack", func(t *testing.T) {
+		assert.Equal(t, c2, el2.Value())
+	})
+
+	t.Run("Value returns the component instance passed in PushFront", func(t *testing.T) {
+		assert.Equal(t, c3, el3.Value())
+	})
+
+	t.Run("Value returns the component instance passed in PushBack", func(t *testing.T) {
+		assert.Equal(t, c4, el4.Value())
+	})
+
+	t.Run("Value on non-linked element returns false", func(t *testing.T) {
+		assert.Nil(t, ListNode{}.Value())
+	})
+
+	t.Run("Prev returns the previous node", func(t *testing.T) {
+		prev, ok := el2.Prev()
+		require.True(t, ok)
+		assert.Equal(t, el1, prev)
+	})
+
+	t.Run("Prev returns false if first node", func(t *testing.T) {
+		_, ok := el1.Prev()
+		require.False(t, ok)
+	})
+
+	t.Run("Next returns the next node", func(t *testing.T) {
+		next, ok := el3.Next()
+		require.True(t, ok)
+		assert.Equal(t, el4, next)
+	})
+
+	t.Run("Next returns false if last node", func(t *testing.T) {
+		_, ok := el4.Next()
+		require.False(t, ok)
+	})
 }
