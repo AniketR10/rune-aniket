@@ -321,13 +321,6 @@ func (c *rawCells) String() string {
 	return CellsToString(c.RawCells())
 }
 
-// CellsToString returns the string representation of the given cell matrix.
-func CellsToString(cells [][]term.Cell) string {
-	builder := strings.Builder{}
-	copyToBuilder(&builder, cells)
-	return builder.String()
-}
-
 func (c *rawCells) RawCells() [][]term.Cell {
 	if c.cells == nil {
 		c.init(defTabSpaces)

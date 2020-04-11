@@ -1,6 +1,10 @@
 package cell
 
-import "github.com/ernestrc/go-tui/term"
+import (
+	"strings"
+
+	"github.com/ernestrc/go-tui/term"
+)
 
 // SortFromToBlock sorts a pair of coordinates (from/to) such that:
 //
@@ -64,4 +68,19 @@ func SortFromTo(from term.Coordinates, to term.Coordinates) (
 		to.X = temp
 	}
 	return from, to
+}
+
+// CellsToString returns the string representation of the given cell matrix.
+func CellsToString(cells [][]term.Cell) string {
+	builder := strings.Builder{}
+	copyToBuilder(&builder, cells)
+	return builder.String()
+}
+
+// StringToCells returns the cell matrix representation of the given string.
+func StringToCells(str string) (cells [][]term.Cell) {
+	var builder rawCells
+	builder.init(defTabSpaces)
+	builder.ReadFrom(strings.NewReader(str))
+	return builder.RawCells()
 }
