@@ -65,14 +65,7 @@ func Init() error {
 		return fmt.Errorf("failed term init: %v", err)
 	}
 
-	attr.Fg, attr.Bg = term.ColorDefault, term.ColorDefault
-
 	return nil
-}
-
-// SetAttr sets the global foreground and background attributes.
-func SetAttr(newattr term.Attributes) {
-	attr = newattr
 }
 
 type nopLocker struct{}
@@ -91,8 +84,8 @@ func Run(root Handler) (err error) {
 
 // RunWithLocker runs the given root handler and uses lock to
 // synchronize access to root.
-func RunWithLocker(root Handler, lock sync.Locker) (err error) {
-	return run(root, lock, term.NewWriter())
+func RunWithLocker(root Handler, lock sync.Locker) error {
+	return run(root, lock, term.DefaultWriter)
 }
 
 // Size returns the total available width and height in the current terminal.

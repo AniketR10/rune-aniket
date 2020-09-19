@@ -6,12 +6,8 @@ import (
 	"github.com/ernestrc/go-tui/term"
 )
 
-var (
-	attr term.Attributes
-)
-
 func redraw(root Handler, lock sync.Locker, termw term.Writer) (err error) {
-	if err = termw.Clear(attr); err != nil {
+	if err = termw.Clear(term.Attr()); err != nil {
 		return err
 	}
 

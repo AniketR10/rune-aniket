@@ -11,6 +11,11 @@ import (
 var (
 	quit   chan struct{}
 	events chan Event
+
+	defaultAttr = Attributes{Fg: ColorDefault, Bg: ColorDefault}
+
+	// DefaultWriter returns the global terminal Writer.
+	DefaultWriter = new(termboxWriter)
 )
 
 type termboxWriter struct{}
@@ -92,6 +97,16 @@ func SetOutputMode(mode OutputMode) OutputMode {
 	return OutputMode(termbox.SetOutputMode(termbox.OutputMode(mode)))
 }
 
+// SetAttr sets the global foreground and background attributes.
+func SetAttr(newattr Attributes) {
+	defaultAttr = newattr
+}
+
+// Attr returns the global foreground and background attributes.
+func Attr() Attributes {
+	return defaultAttr
+}
+
 // Init Initializes writer.
 // This function should be called before any other functions.
 // After successful initialization, the writer must be finalized using 'Close'
@@ -157,9 +172,4 @@ func Interrupt() {
 // forces event handling which in turn forces redraw.
 func SendNoneEvent() {
 	events <- Event{Type: EventNone}
-}
-
-// NewWriter returns a new termbox-go based tui.Writer.
-func NewWriter() Writer {
-	return new(termboxWriter)
 }
