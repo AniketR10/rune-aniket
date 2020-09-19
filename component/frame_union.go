@@ -1,7 +1,6 @@
 package component
 
 import (
-	"github.com/ernestrc/go-tui"
 	"github.com/ernestrc/go-tui/term"
 )
 
@@ -51,7 +50,7 @@ func (u *FrameUnion) Resize(width, height int) {
 }
 
 // Draw satisfies tui.Component
-func (u *FrameUnion) Draw(w tui.Writer) {
+func (u *FrameUnion) Draw(w term.Writer) {
 	u.top.Draw(w)
 	u.bottom.Draw(w)
 	if u.height >= 3 || u.width >= 3 {

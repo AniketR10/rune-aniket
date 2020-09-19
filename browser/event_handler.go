@@ -38,7 +38,7 @@ func (e eventHandlerToHandler) Resize(width, height int) {
 	panic("EventHandler cannot Resize")
 }
 
-func (e eventHandlerToHandler) Draw(tui.Writer) {
+func (e eventHandlerToHandler) Draw(term.Writer) {
 	panic("EventHandler cannot Draw")
 }
 

@@ -112,7 +112,7 @@ func (t *Tabs) Resize(width, height int) {
 }
 
 // Draw : tui.Component
-func (t *Tabs) Draw(w tui.Writer) {
+func (t *Tabs) Draw(w term.Writer) {
 	t.fileListBuf.Reset()
 
 	if t.width == 0 || t.height == 0 {

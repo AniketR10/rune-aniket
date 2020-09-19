@@ -18,7 +18,7 @@ type Virtual struct {
 }
 
 type virtualWriter struct {
-	writer        tui.Writer
+	writer        term.Writer
 	offset        term.Coordinates
 	height, width int
 }
@@ -62,7 +62,7 @@ func (c *Virtual) Resize(width, height int) {
 
 // Draw uses a virtual writer to perform bound checking and
 // if successful draw the inner component in the virtual coordinate space.
-func (c *Virtual) Draw(writer tui.Writer) {
+func (c *Virtual) Draw(writer term.Writer) {
 	writer = &virtualWriter{
 		writer: writer,
 		offset: c.pos,

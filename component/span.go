@@ -125,7 +125,7 @@ func (s *Span) Resize(width, height int) {
 }
 
 // Draw : Component
-func (s *Span) Draw(w tui.Writer) {
+func (s *Span) Draw(w term.Writer) {
 	s.content.Draw(w)
 }
 

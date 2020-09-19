@@ -657,7 +657,7 @@ func (e *Handler) Resize(width, height int) {
 }
 
 // Draw satisfies tui.Component
-func (e *Handler) Draw(w tui.Writer) {
+func (e *Handler) Draw(w term.Writer) {
 	e.tabs.ResetFocus()
 	for idx, buf := range e.buffers {
 		if !buf.free {

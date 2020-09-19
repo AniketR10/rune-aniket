@@ -15,7 +15,7 @@ func Nop() tui.Handler {
 func (n nopHandler) Resize(width, height int) {
 }
 
-func (n nopHandler) Draw(tui.Writer) {
+func (n nopHandler) Draw(term.Writer) {
 }
 
 func (n nopHandler) Handle(term.Event) (exit, handled bool) {

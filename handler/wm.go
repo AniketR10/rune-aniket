@@ -251,7 +251,7 @@ func (wm *WindowManager) Man() tui.Manual {
 }
 
 // Draw : tui.Component
-func (wm *WindowManager) Draw(w tui.Writer) {
+func (wm *WindowManager) Draw(w term.Writer) {
 	wm.comp.Draw(w)
 }
 

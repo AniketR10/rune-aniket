@@ -29,7 +29,7 @@ func (b *Background) Resize(width, height int) {
 }
 
 // Draw : tui.Component
-func (b *Background) Draw(w tui.Writer) {
+func (b *Background) Draw(w term.Writer) {
 	for y := 0; y < b.height; y++ {
 		for x := 0; x < b.width; x++ {
 			w.SetCell(term.Coordinates{X: x, Y: y}, b.cell)

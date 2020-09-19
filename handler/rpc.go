@@ -99,7 +99,7 @@ func (c *Client) Resize(width, height int) {
 }
 
 // Draw satisfies tui.Handler
-func (c *Client) Draw(w tui.Writer) {
+func (c *Client) Draw(w term.Writer) {
 	ctx := context.Background()
 	req := proto.DrawRequest{Width: int32(c.width), Height: int32(c.height)}
 

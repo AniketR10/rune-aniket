@@ -18,7 +18,7 @@ func (s *browserBuffer) Resize(width, height int) {
 	s.handler.Resize(width, height)
 }
 
-func (s *browserBuffer) Draw(w tui.Writer) {
+func (s *browserBuffer) Draw(w term.Writer) {
 	s.handler.Draw(w)
 }
 

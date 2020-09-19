@@ -104,7 +104,7 @@ func (h *safeHandler) Resize(width, height int) {
 	defer h.mu.Unlock()
 	h.Handler.Resize(width, height)
 }
-func (h *safeHandler) Draw(w tui.Writer) {
+func (h *safeHandler) Draw(w term.Writer) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.Handler.Draw(w)

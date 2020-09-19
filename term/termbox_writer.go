@@ -1,3 +1,5 @@
+// +build !js
+
 package term
 
 import (
@@ -11,24 +13,24 @@ var (
 	events chan Event
 )
 
-type TermboxWriter struct{}
+type termboxWriter struct{}
 
-func (w TermboxWriter) SetCell(pos Coordinates, c Cell) {
+func (w termboxWriter) SetCell(pos Coordinates, c Cell) {
 	termbox.SetCell(pos.X, pos.Y,
 		c.Ch, termbox.Attribute(c.Fg), termbox.Attribute(c.Bg))
 	return
 }
 
-func (w TermboxWriter) Flush() error {
+func (w termboxWriter) Flush() error {
 	return termbox.Flush()
 }
 
-func (w TermboxWriter) Clear(attr Attributes) (err error) {
+func (w termboxWriter) Clear(attr Attributes) (err error) {
 	err = termbox.Clear(termbox.Attribute(attr.Fg), termbox.Attribute(attr.Bg))
 	return
 }
 
-func (w TermboxWriter) SetCursor(pos Coordinates) {
+func (w termboxWriter) SetCursor(pos Coordinates) {
 	termbox.SetCursor(pos.X, pos.Y)
 }
 
@@ -155,4 +157,9 @@ func Interrupt() {
 // forces event handling which in turn forces redraw.
 func SendNoneEvent() {
 	events <- Event{Type: EventNone}
+}
+
+// NewWriter returns a new termbox-go based tui.Writer.
+func NewWriter() Writer {
+	return new(termboxWriter)
 }

@@ -3,7 +3,6 @@ package component
 import (
 	"container/list"
 
-	"github.com/ernestrc/go-tui"
 	"github.com/ernestrc/go-tui/term"
 )
 
@@ -103,7 +102,7 @@ func (l *List) Resize(width, height int) {
 }
 
 // Draw draws this list's elements with the current seek offset.
-func (l *List) Draw(w tui.Writer) {
+func (l *List) Draw(w term.Writer) {
 	// API exposes internal list so we need
 	// to make sure that the elements are properly position and sized
 	// before drawing

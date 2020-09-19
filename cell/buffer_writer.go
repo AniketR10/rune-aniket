@@ -4,7 +4,7 @@ import (
 	"github.com/ernestrc/go-tui/term"
 )
 
-// BufferWriter satisfies tui.Writer with a Buffer.
+// BufferWriter satisfies term.Writer with a Buffer.
 type BufferWriter struct {
 	width, height int
 	Cursor        term.Coordinates
@@ -24,7 +24,7 @@ func (w *BufferWriter) Init(width, height int) {
 	w.Buffer.InitWithTabspaces(1) // do not expand tabs
 }
 
-// SetCell satisfies tui.Writer
+// SetCell satisfies term.Writer
 func (w *BufferWriter) SetCell(pos term.Coordinates, c term.Cell) {
 	if pos.X >= w.width || pos.Y >= w.height || pos.X < 0 || pos.Y < 0 {
 		return
@@ -38,18 +38,18 @@ func (w *BufferWriter) SetCell(pos term.Coordinates, c term.Cell) {
 	w.Buffer.InsertWithAttr(pos, c.Ch, term.Attributes{Fg: c.Fg, Bg: c.Bg})
 }
 
-// Flush satisfies tui.Writer
+// Flush satisfies term.Writer
 func (w *BufferWriter) Flush() error {
 	return nil
 }
 
-// Clear satisfies tui.Writer
+// Clear satisfies term.Writer
 func (w *BufferWriter) Clear(term.Attributes) error {
 	w.Buffer.Reset()
 	return nil
 }
 
-// SetCursor satisfies tui.Writer
+// SetCursor satisfies term.Writer
 func (w *BufferWriter) SetCursor(pos term.Coordinates) {
 	w.Cursor = pos
 }

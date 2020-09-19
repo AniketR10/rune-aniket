@@ -197,7 +197,7 @@ func (l *Less) Cursor() (term.Coordinates, bool) {
 }
 
 // Draw : Component
-func (l *Less) Draw(w tui.Writer) {
+func (l *Less) Draw(w term.Writer) {
 	l.Scroll.Draw(w)
 
 	if !l.Scroll.CanSeekDown() && !l.delEOF {

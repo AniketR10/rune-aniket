@@ -96,7 +96,7 @@ func (vi *Vi) Resize(width, height int) {
 }
 
 // Draw : tui.Component
-func (vi *Vi) Draw(w tui.Writer) {
+func (vi *Vi) Draw(w term.Writer) {
 	vi.less.Draw(w)
 }
 

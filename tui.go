@@ -20,16 +20,7 @@ import (
 // called to set the appropiate dimensions.
 type Component interface {
 	Resize(width, height int)
-	Draw(Writer)
-}
-
-// Writer abstracts termbox write functionality to decouple components from
-// termbox, so they're easier to test.
-type Writer interface {
-	SetCell(term.Coordinates, term.Cell)
-	Flush() error
-	Clear(term.Attributes) error
-	SetCursor(term.Coordinates)
+	Draw(term.Writer)
 }
 
 // Handler builds upon Component to add event-handling behavior.
@@ -101,7 +92,7 @@ func Run(root Handler) (err error) {
 // RunWithLocker runs the given root handler and uses lock to
 // synchronize access to root.
 func RunWithLocker(root Handler, lock sync.Locker) (err error) {
-	return run(root, lock, &term.TermboxWriter{})
+	return run(root, lock, term.NewWriter())
 }
 
 // Size returns the total available width and height in the current terminal.

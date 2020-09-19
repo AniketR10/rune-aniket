@@ -46,7 +46,7 @@ func (h *slowHandler) Resize(width, height int) {
 	h.h.Resize(width, height)
 }
 
-func (h *slowHandler) Draw(w tui.Writer) {
+func (h *slowHandler) Draw(w term.Writer) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 

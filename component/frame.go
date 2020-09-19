@@ -113,7 +113,7 @@ func (f *Frame) Resize(width, height int) {
 }
 
 // Draw draws this frame's border and contents to the given Writer.
-func (f *Frame) Draw(w tui.Writer) {
+func (f *Frame) Draw(w term.Writer) {
 	limitX, limitY := f.width-1, f.height-1
 
 	for i := 0; i < limitX; i++ {

@@ -33,7 +33,7 @@ func (wm *WindowManager) withFrame(handler tui.Component) tui.Component {
 }
 
 // Draw satisfies tui.Component
-func (wm *WindowManager) Draw(w tui.Writer) {
+func (wm *WindowManager) Draw(w term.Writer) {
 	wm.tree.Draw(w)
 }
 

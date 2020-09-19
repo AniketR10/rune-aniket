@@ -10,7 +10,7 @@ var (
 	attr term.Attributes
 )
 
-func redraw(root Handler, lock sync.Locker, termw Writer) (err error) {
+func redraw(root Handler, lock sync.Locker, termw term.Writer) (err error) {
 	if err = termw.Clear(attr); err != nil {
 		return err
 	}
@@ -34,7 +34,7 @@ func redraw(root Handler, lock sync.Locker, termw Writer) (err error) {
 
 }
 
-func run(root Handler, lock sync.Locker, termw Writer) (err error) {
+func run(root Handler, lock sync.Locker, termw term.Writer) (err error) {
 	width, height := term.Size()
 
 	lock.Lock()

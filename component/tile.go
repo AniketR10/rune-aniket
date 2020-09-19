@@ -52,7 +52,7 @@ func (t *TileTree) Resize(width, height int) {
 }
 
 // Draw draws the contents of this TileTree.
-func (t *TileTree) Draw(w tui.Writer) {
+func (t *TileTree) Draw(w term.Writer) {
 	t.root.Draw(w)
 }
 
@@ -131,7 +131,7 @@ func (t *TileNode) Resize(width, height int) {
 }
 
 // Draw : Component
-func (t *TileNode) Draw(w tui.Writer) {
+func (t *TileNode) Draw(w term.Writer) {
 	if len(t.children) == 0 && t.content == nil {
 		panic("corrupted node: non-empty children and content")
 	}
