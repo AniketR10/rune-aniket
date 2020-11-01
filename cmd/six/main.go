@@ -19,16 +19,13 @@ var swapDir = flag.String("s", "", "swap files directory")
 var recoveryFile = flag.String("r", "", "recover from recovery file")
 var granteePlugin = flag.String("x", "", "plugin")
 var tabspaces = flag.Int("t", 4, "tabspaces")
+var pprof = flag.Bool("p", false, "start pprof server at :6060")
 
 func init() {
 	log.SetLevel(log.TraceLevel)
 }
 
 func main() {
-	go func() {
-		log.Println(http.ListenAndServe("localhost:6060", nil))
-	}()
-
 	opts := make([]browser.Option, 0)
 	viOpts := make([]vi.Option, 0)
 	pluginOpts := make([]plugin.Option, 0)
@@ -41,6 +38,13 @@ func main() {
 		opts = append(opts, browser.WithFilepath(filename))
 	} else {
 		flag.Parse()
+	}
+
+	if *pprof {
+		go func() {
+			log.Println(http.ListenAndServe(":6060", nil))
+		}()
+
 	}
 
 	opts = append(opts,
