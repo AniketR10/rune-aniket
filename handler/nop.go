@@ -5,17 +5,21 @@ import (
 	"github.com/ernestrc/go-tui/term"
 )
 
-type nopHandler struct{}
+type nopHandler struct {
+	c tui.Component
+}
 
-// Nop returns a tui.Handler that does nothing.
-func Nop() tui.Handler {
-	return nopHandler{}
+// Nop wraps a tui.Component with a tui.Handler that does nothing.
+func Nop(c tui.Component) tui.Handler {
+	return nopHandler{c: c}
 }
 
 func (n nopHandler) Resize(width, height int) {
+	n.c.Resize(width, height)
 }
 
-func (n nopHandler) Draw(term.Writer) {
+func (n nopHandler) Draw(w term.Writer) {
+	n.c.Draw(w)
 }
 
 func (n nopHandler) Handle(term.Event) (exit, handled bool) {
