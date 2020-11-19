@@ -4,6 +4,7 @@ go 1.12
 
 require (
 	github.com/atotto/clipboard v0.1.2
+	github.com/ernestrc/dom v0.2.5-0.20201125033726-789c946aa938
 	github.com/golang/mock v1.4.0
 	github.com/golang/protobuf v1.3.2
 	github.com/hashicorp/go-hclog v0.0.0-20180709165350-ff2cf002a8dd
