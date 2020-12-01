@@ -6,7 +6,9 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestWriteFlush(t *testing.T) {
+// this test is not very thorough because StringWriter is used by
+// many tui.Component tests and so it's already indirectly tested.
+func TestStringWriter(t *testing.T) {
 	width, height := 5, 6
 	writer := NewStringWriter(width, height)
 
@@ -34,12 +36,12 @@ func TestWriteFlush(t *testing.T) {
 // TODO
 // func TestRuneLength(t *testing.T) {
 // 	width, height := 5, 6
-// 	writer := newStringWriter(width, height)
+// 	writer := NewStringWriter(width, height)
 //
 // 	c := '中'
 // 	for i := 0; i < width; i++ {
 // 		for j := 0; j < height; j++ {
-// 			writer.Write(j, i, c, 0, 0)
+// 			writer.SetCell(Coordinates{X: j, Y: i}, Cell{Ch: c})
 // 		}
 // 		c++
 // 	}
