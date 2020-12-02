@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const defaultBackgroundCursorAtRoot = `<pre style="background:#000000;color:#FFFFFF;"><span style="background: red; animation: blinker 1s linear infinite;">%s</span>%s</pre>`
+const defaultBackgroundCursorAtRoot = `<pre style="background:#000000;color:#FFFFFF;"><span style="background: red;">%s</span>%s</pre>`
 const defaultBackgroundNoCursor = `<pre style="background:#000000;color:#FFFFFF;">%s</pre>`
 
 func expectInnerHTMLWithCursor(t *testing.T, writer *HTMLWriter, expectedHTML string) {
@@ -102,7 +102,7 @@ func TestHTMLWriterSetCursor(t *testing.T) {
 	t.Run("sets cursor", func(t *testing.T) {
 		writer := NewHTMLWriter(2, 2)
 		writer.SetCursor(Coordinates{Y: 1, X: 1})
-		expectedHTML := "<pre style=\"background:#000000;color:#FFFFFF;\">  \n <span style=\"background: red; animation: blinker 1s linear infinite;\"> </span></pre>"
+		expectedHTML := "<pre style=\"background:#000000;color:#FFFFFF;\">  \n <span style=\"background: red;\"> </span></pre>"
 		expectInnerHTMLWithCursor(t, writer, expectedHTML)
 	})
 

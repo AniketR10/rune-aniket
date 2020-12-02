@@ -19,7 +19,7 @@ const (
 	defaultBg = hexBlack
 	defaultFg = hexWhite
 
-	cursorStyle = "<span style=\"background: red; animation: blinker 1s linear infinite;\">"
+	defaultCursorStyle = "background: red;"
 )
 
 // HTMLWriter implements term.Writer by rendering an HTML representation.
@@ -29,6 +29,7 @@ type HTMLWriter struct {
 	cursor        int
 	width, height int
 	defaultAttr   Attributes
+	cursorStyle   string
 }
 
 // NewHTMLWriter allocates storage for a new HTMLWriter and initializes it.
@@ -36,7 +37,13 @@ func NewHTMLWriter(width, height int) (t *HTMLWriter) {
 	t = new(HTMLWriter)
 	t.defaultAttr = Attributes{Bg: ColorBlack, Fg: ColorWhite}
 	t.Resize(width, height)
+	t.cursorStyle = defaultCursorStyle
 	return
+}
+
+// SetCursorStyle sets the CSS style of the cursor.
+func (w *HTMLWriter) SetCursorStyle(style string) {
+	w.cursorStyle = style
 }
 
 // Resize satisfies Writer.
@@ -157,7 +164,9 @@ func (w *HTMLWriter) convertToCSS(attr Attributes, ignoreDefault bool) (
 
 func (w *HTMLWriter) writeCellStyle(i int, c Cell) bool {
 	if w.cursor == i {
-		w.buffer.WriteString(cursorStyle)
+		w.buffer.WriteString("<span style=\"")
+		w.buffer.WriteString(w.cursorStyle)
+		w.buffer.WriteString("\">")
 		return true
 	}
 
