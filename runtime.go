@@ -7,6 +7,7 @@ import (
 )
 
 func redraw(root Handler, lock sync.Locker, termw term.Writer) (err error) {
+	// TODO Attr should be removed and Clear should no take any parameters
 	if err = termw.Clear(term.Attr()); err != nil {
 		return err
 	}
@@ -61,5 +62,5 @@ func run(root Handler, lock sync.Locker, termw term.Writer) (err error) {
 		}
 	}
 
-	return nil
+	return err
 }

@@ -141,4 +141,6 @@ const (
 const (
 	ModAlt    Modifier = Modifier(termbox.ModAlt)
 	ModMotion          = Modifier(termbox.ModMotion)
+	modCtrl            = Modifier(0x11)
+	modShift           = Modifier(0x10)
 )
