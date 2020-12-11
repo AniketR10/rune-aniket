@@ -150,7 +150,7 @@ func TestIntegrationClientHandlerDraw(t *testing.T) {
 	cases := []TestInputSequence{
 		{"",
 			`    
-OADI
+LOAD
     
     `},
 		{"",

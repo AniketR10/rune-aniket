@@ -144,6 +144,19 @@ XXXXXXXX
 		}, {
 			func() {
 				s.cfg.ContentAlignment = SpanAlignmentCentered
+				// Vertical/Horizontal greater than size
+				s.cfg.PadVertical = 9
+				s.cfg.PadHorizontal = 5
+				s.Resize(8, 4)
+			}, `
+         
+         
+         
+         
+         `,
+		}, {
+			func() {
+				s.cfg.ContentAlignment = SpanAlignmentCentered
 
 				// Vertical/Horizontal negatie is used
 				// as effective content width/height
@@ -156,6 +169,20 @@ XXXXXXXX
  ******  
  ******  
  ******  
+         `,
+		}, {
+			func() {
+				s.cfg.ContentAlignment = SpanAlignmentCentered
+				// bigger than available
+				s.cfg.PadVertical = -5
+				s.cfg.PadHorizontal = -9
+
+				s.Resize(8, 4)
+			}, `
+******** 
+******** 
+******** 
+******** 
          `,
 		},
 	}

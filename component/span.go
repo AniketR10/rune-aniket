@@ -1,6 +1,8 @@
 package component
 
 import (
+	"math"
+
 	"github.com/ernestrc/go-tui"
 	"github.com/ernestrc/go-tui/term"
 )
@@ -118,11 +120,6 @@ func alignContent(
 
 // Resize : Component
 func (s *Span) Resize(width, height int) {
-	if s.cfg.PadHorizontalPerc < 0 || s.cfg.PadVerticalPerc < 0 ||
-		s.cfg.PadHorizontalPerc > 1 || s.cfg.PadVerticalPerc > 1 {
-		panic("invalid padding")
-	}
-
 	var hPadding, vPadding int
 
 	if width < 3 {
@@ -130,7 +127,7 @@ func (s *Span) Resize(width, height int) {
 	} else if s.cfg.PadHorizontal == 0 {
 		hPadding = int(s.cfg.PadHorizontalPerc * float64(width))
 	} else if s.cfg.PadHorizontal < 0 {
-		hPadding = width + s.cfg.PadHorizontal
+		hPadding = int(math.Max(0, float64(width+s.cfg.PadHorizontal)))
 	} else {
 		hPadding = s.cfg.PadHorizontal
 	}
@@ -140,7 +137,7 @@ func (s *Span) Resize(width, height int) {
 	} else if s.cfg.PadVertical == 0 {
 		vPadding = int(s.cfg.PadVerticalPerc * float64(height))
 	} else if s.cfg.PadVertical < 0 {
-		vPadding = height + s.cfg.PadVertical
+		vPadding = int(math.Max(0, float64(height+s.cfg.PadVertical)))
 	} else {
 		vPadding = s.cfg.PadVertical
 	}
