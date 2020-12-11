@@ -44,8 +44,11 @@ func newListFrame(
 	scroll.InitWithBuffer(buf)
 	scroll.Attributes = scrollAttr
 	background := term.Cell{Bg: scroll.Attributes.Bg, Fg: scroll.Attributes.Fg}
-	span := NewSpan(WithBackground(scroll, background))
-	span.Padding.Vertical = -1
+	spanCfg := SpanConfig{
+		ContentAlignment: SpanAlignmentCentered,
+		PadVertical:      -1,
+	}
+	span := NewSpan(WithBackground(scroll, background), spanCfg)
 	if !border {
 		return span
 	}

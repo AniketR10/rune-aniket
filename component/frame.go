@@ -108,7 +108,7 @@ func (f *Frame) Resize(width, height int) {
 		f.bwidth, f.bheight = 2, 2
 	}
 
-	alignContent(&f.content, width, height, f.bwidth, f.bheight, DefaultSpanFlags)
+	alignContent(&f.content, width, height, f.bwidth, f.bheight, SpanAlignmentCentered)
 	f.width, f.height = width, height
 }
 
@@ -139,7 +139,7 @@ func (f *Frame) Draw(w term.Writer) {
 
 // ContentPosition returns the position of the content inside this frame.
 func (f *Frame) ContentPosition() term.Coordinates {
-	return calculateContentOffset(f.bwidth, f.bheight, DefaultSpanFlags)
+	return calculateContentOffset(f.bwidth, f.bheight, SpanAlignmentCentered)
 }
 
 // ContentSize returns the size and width of the inner content.

@@ -5,19 +5,37 @@ import (
 	"github.com/ernestrc/go-tui/term"
 )
 
+// Alignment represents the content alignment.
 type Alignment int
 
 const (
+	// SpanAlignmentLeft horizontally aligns content to the left.
 	SpanAlignmentLeft Alignment = 1 << iota
+	// SpanAlignmentRight horizontally aligns content to the right.
 	SpanAlignmentRight
+	// SpanAlignmentHorizontallyCentered horizontally aligns content to the center.
 	SpanAlignmentHorizontallyCentered
+	// SpanAlignmentTop vertically aligns content to the top.
 	SpanAlignmentTop
+	// SpanAlignmentBottom vertically aligns content to the bottom.
 	SpanAlignmentBottom
+	// SpanAlignmentVerticallyCentered vertically aligns content to center.
 	SpanAlignmentVerticallyCentered
 
+	// SpanAlignmentCentered vertically and horizontally aligns content to center.
 	SpanAlignmentCentered = SpanAlignmentHorizontallyCentered | SpanAlignmentVerticallyCentered
-	DefaultSpanFlags      = SpanAlignmentCentered
 )
+
+// SpanConfig represents the configuration of a Span.
+type SpanConfig struct {
+	PadHorizontal int
+	PadVertical   int
+
+	PadHorizontalPerc float64
+	PadVerticalPerc   float64
+
+	ContentAlignment Alignment
+}
 
 // Span is a component that takes another component and handles padding and
 // alignment.
@@ -34,26 +52,35 @@ type Span struct {
 	// automatically calculated based on the available height/width. For instance,
 	// a Horizontal padding of -1, indicates that the padding needs to be set such
 	// that the inner component is exactly 1 cell.
-	Padding struct {
-		Horizontal int
-		Vertical   int
+	cfg SpanConfig
+}
 
-		HorizontalPerc float64
-		VerticalPerc   float64
-	}
-	ContentAlignment Alignment
+// DefaultSpanConfig returns the default span configuration wich is no padding,
+// and content alignment centered.
+func DefaultSpanConfig() (ret SpanConfig) {
+	ret.ContentAlignment = SpanAlignmentCentered
+	return
 }
 
 // NewSpan returns an initialized Span. See Span.Init for more info.
-func NewSpan(content tui.Component) *Span {
+func NewSpan(content tui.Component, cfg SpanConfig) *Span {
 	s := new(Span)
-	s.Init(content)
-	s.ContentAlignment = DefaultSpanFlags
+	s.Init(content, cfg)
 	return s
 }
 
 // Init initializes this Span with content.
-func (s *Span) Init(content tui.Component) {
+func (s *Span) Init(content tui.Component, cfg SpanConfig) {
+	if cfg.PadHorizontalPerc < 0 || cfg.PadHorizontalPerc > 1 ||
+		cfg.PadVerticalPerc < 0 || cfg.PadVerticalPerc > 1 {
+		panic("padding percentage must be between range [0, 1]")
+	}
+
+	if cfg.ContentAlignment == 0 {
+		cfg.ContentAlignment = SpanAlignmentCentered
+	}
+
+	s.cfg = cfg
 	s.content.C = content
 }
 
@@ -91,8 +118,8 @@ func alignContent(
 
 // Resize : Component
 func (s *Span) Resize(width, height int) {
-	if s.Padding.HorizontalPerc < 0 || s.Padding.VerticalPerc < 0 ||
-		s.Padding.HorizontalPerc > 1 || s.Padding.VerticalPerc > 1 {
+	if s.cfg.PadHorizontalPerc < 0 || s.cfg.PadVerticalPerc < 0 ||
+		s.cfg.PadHorizontalPerc > 1 || s.cfg.PadVerticalPerc > 1 {
 		panic("invalid padding")
 	}
 
@@ -100,26 +127,26 @@ func (s *Span) Resize(width, height int) {
 
 	if width < 3 {
 		hPadding = 0
-	} else if s.Padding.Horizontal == 0 {
-		hPadding = int(s.Padding.HorizontalPerc * float64(width))
-	} else if s.Padding.Horizontal < 0 {
-		hPadding = width + s.Padding.Horizontal
+	} else if s.cfg.PadHorizontal == 0 {
+		hPadding = int(s.cfg.PadHorizontalPerc * float64(width))
+	} else if s.cfg.PadHorizontal < 0 {
+		hPadding = width + s.cfg.PadHorizontal
 	} else {
-		hPadding = s.Padding.Horizontal
+		hPadding = s.cfg.PadHorizontal
 	}
 
 	if height < 3 {
 		vPadding = 0
-	} else if s.Padding.Vertical == 0 {
-		vPadding = int(s.Padding.VerticalPerc * float64(height))
-	} else if s.Padding.Vertical < 0 {
-		vPadding = height + s.Padding.Vertical
+	} else if s.cfg.PadVertical == 0 {
+		vPadding = int(s.cfg.PadVerticalPerc * float64(height))
+	} else if s.cfg.PadVertical < 0 {
+		vPadding = height + s.cfg.PadVertical
 	} else {
-		vPadding = s.Padding.Vertical
+		vPadding = s.cfg.PadVertical
 	}
 
 	alignContent(&s.content, width, height, hPadding,
-		vPadding, s.ContentAlignment)
+		vPadding, s.cfg.ContentAlignment)
 
 	s.width, s.height = width, height
 }

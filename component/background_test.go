@@ -8,9 +8,10 @@ import (
 
 func TestDrawBackground(t *testing.T) {
 	u := &TestComponent{Ch: 'X'}
-	s := NewSpan(u)
-	s.Padding.HorizontalPerc = 0.2
-	s.Padding.VerticalPerc = 0.2
+	s := NewSpan(u, SpanConfig{
+		PadHorizontalPerc: 0.2,
+		PadVerticalPerc:   0.2,
+	})
 	b := WithBackground(s, term.Cell{Ch: 'O'})
 
 	b.Resize(9, 5)

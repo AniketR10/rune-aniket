@@ -20,10 +20,11 @@ func StringBackground(str string, c rune) tui.Component {
 		Bg: scroll.Attributes.Bg,
 		Fg: scroll.Attributes.Fg,
 	}
-	span := NewSpan(WithBackground(&scroll, background))
 
-	span.Padding.Vertical = -buf.Height()
-	span.Padding.Horizontal = -buf.Width()
+	span := NewSpan(WithBackground(&scroll, background), SpanConfig{
+		PadVertical:   -buf.Height(),
+		PadHorizontal: -buf.Width(),
+	})
 
 	return span
 }
