@@ -56,9 +56,6 @@ func (e eventHandlerToHandler) Man() tui.Manual {
 	panic("EventHandler cannot Man")
 }
 
-func (e eventHandlerToHandler) OnWindowClosed() {
-}
-
 func (h handlerToEventHandler) Handle(ev term.Event) bool {
 	exit, _ := h.h.Handle(ev)
 	return exit

@@ -257,6 +257,7 @@ func (e *Handler) Init(ed editor.Editor, opts ...Option) (err error) {
 		}
 	}
 	e.tabs.SetAttr(focusFileAttr, nonFocusFileAttr, frameFileAttr, scrollAttr)
+	e.subscribers = make(map[term.Event]EventHandler)
 
 	var initBuffer *browserBuffer
 	if e.config.Filepath != "" {
@@ -800,8 +801,8 @@ func (e *Handler) unsubscribe(ev term.Event) {
 
 // Subscribe subscribers h EventHandler to term.Event ev.
 func (e *Handler) Subscribe(ev term.Event, h EventHandler) error {
-	if e.subscribers == nil {
-		e.subscribers = make(map[term.Event]EventHandler)
+	if _, ok := e.subscribers[ev]; ok {
+		return fmt.Errorf("there's already a subscriber subscribed to: %#v", ev)
 	}
 	e.subscribers[ev] = browserEventHandler{browser: e, h: h}
 	return nil

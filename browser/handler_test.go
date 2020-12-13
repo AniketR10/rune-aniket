@@ -380,32 +380,61 @@ EEEE`},
 	assert.NoError(t, browser.Close())
 }
 
-func TestBrowserHandlerSubscribe(t *testing.T) {
+func assertHandled(
+	t *testing.T, h *handler.TestHandler, startingRune rune, exit, handled bool,
+) {
+	// test handler increments the character that it displays next
+	// upon handling a new event
+	require.False(t, exit)
+	require.True(t, handled)
+	assert.NotEqual(t, startingRune, h.Ch)
+}
+
+func newBrowserForSubscribeTest(t *testing.T, ev term.Event) (
+	*Handler, *handler.TestHandler, rune,
+) {
 	browser := newTestBrowserHandler()
 	require.NoError(t, browser.Init(&testEditor{}))
+
 	h := handler.NewTestHandler()
-	ev := term.Event{Type: term.EventNone}
-	ch := h.Ch
 	err := browser.Subscribe(ev, handlerToEventHandler{h})
 	require.NoError(t, err)
 
+	return browser, h, h.Ch
+}
+
+func TestBrowserHandlerSubscribe(t *testing.T) {
 	t.Run("proxies event to subscribed EventHandler", func(t *testing.T) {
-		exit, handled := browser.Handle(ev)
-		assert.False(t, exit)
-		assert.True(t, handled)
-		assert.NotEqual(t, ch, h.Ch)
+		ev := term.Event{Type: term.EventKey, Ch: '*'}
+		b, h, startingRune := newBrowserForSubscribeTest(t, ev)
+
+		exit, handled := b.Handle(ev)
+		assertHandled(t, h, startingRune, exit, handled)
+	})
+
+	t.Run("returns error on second event Subscribe", func(t *testing.T) {
+		ev := term.Event{Type: term.EventError}
+		b, h, startingRune := newBrowserForSubscribeTest(t, ev)
+
+		h2 := handler.NewTestHandler()
+		err := b.Subscribe(ev, handlerToEventHandler{h2})
+		assert.Error(t, err)
+
+		exit, handled := b.Handle(ev)
+		assertHandled(t, h, startingRune, exit, handled)
 	})
 
 	t.Run("upon handler exit, it unsubscribes EventHandler", func(t *testing.T) {
+		ev := term.Event{Type: term.EventKey, Ch: '*'}
+		b, h, startingRune := newBrowserForSubscribeTest(t, ev)
 		h.Exit = true
-		exit, _ := browser.Handle(ev)
-		assert.False(t, exit)
-		assert.NotEqual(t, ch, h.Ch)
 
-		ch = h.Ch
-		exit, _ = browser.Handle(ev)
+		exit, handled := b.Handle(ev)
+		assertHandled(t, h, startingRune, exit, handled)
+
+		nextRune := h.Ch
+		exit, _ = b.Handle(ev)
 		assert.False(t, exit)
-		assert.Equal(t, ch, h.Ch)
+		assert.Equal(t, nextRune, h.Ch)
 	})
-
 }

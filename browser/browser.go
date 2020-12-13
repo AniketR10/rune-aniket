@@ -28,7 +28,8 @@ type EventHandler interface {
 }
 
 // EventPublisher handler is the interface that wraps
-// the method Subscribe to install
+// the method Subscribe which allows clients to subscribe to
+// specific events.
 type EventPublisher interface {
 	Subscribe(term.Event, EventHandler) error
 }
