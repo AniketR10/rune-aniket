@@ -84,7 +84,9 @@ func main() {
 	defer manager.Close()
 
 	if *granteePlugin != "" {
-		err := manager.Run(*granteePlugin, *granteePlugin)
+		// TODO
+		cfg := plugin.NewConfig(make(map[string]interface{}))
+		err := manager.Run(*granteePlugin, *granteePlugin, cfg)
 		if err != nil {
 			log.Fatal(err)
 		}

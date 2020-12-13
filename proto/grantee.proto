@@ -10,7 +10,9 @@ message PermissionGrant {
 	uint32 grant_id = 2;
 }
 
-message PermRequest {}
+message PermRequest {
+    bytes config = 1;
+}
 message PermResponse {
 	repeated Permission perms = 1;
 }

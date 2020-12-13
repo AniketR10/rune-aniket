@@ -3,6 +3,7 @@ package plugin
 import (
 	"context"
 	"errors"
+	"math"
 	"net"
 	"sync"
 	"testing"
@@ -125,7 +126,7 @@ func TestUnitClient(t *testing.T) {
 
 		client := newGranteeClient(nil, mockpbClient)
 
-		perms, err := client.permissions(context.Background())
+		perms, err := client.permissions(context.Background(), nil)
 		require.NoError(t, err)
 		assert.Equal(t, mockpbClient.fixturePermissions, perms)
 	})
@@ -135,7 +136,7 @@ func TestUnitClient(t *testing.T) {
 		mockpbClient := &testGranteePbClient{err: myErr}
 		client := newGranteeClient(nil, mockpbClient)
 
-		_, err := client.permissions(context.Background())
+		_, err := client.permissions(context.Background(), nil)
 		require.Equal(t, myErr, err)
 	})
 
@@ -204,11 +205,13 @@ func TestUnitClient(t *testing.T) {
 type granteeMock struct {
 	err                  error
 	onConnected          int
+	cfgs                 []Config
 	onGrant, onDenied    []Permission
 	onHealth, onShutdown bool
 }
 
-func (g *granteeMock) OnConnected(b proto.MuxBroker) {
+func (g *granteeMock) OnConnected(b proto.MuxBroker, cfg Config) {
+	g.cfgs = append(g.cfgs, cfg)
 	g.onConnected++
 }
 func (g *granteeMock) OnPermissionGranted(grantID uint32, perm Permission) {
@@ -266,7 +269,7 @@ func TestIntegrationPluginClientServer(t *testing.T) {
 		client, closeFn := setupIntTest(t, &grantee, perms)
 		defer closeFn()
 
-		protoPerms, err := client.permissions(context.Background())
+		protoPerms, err := client.permissions(context.Background(), nil)
 		require.NoError(t, err)
 
 		assert.Equal(t, []*proto.Permission{
@@ -275,15 +278,55 @@ func TestIntegrationPluginClientServer(t *testing.T) {
 		assert.Equal(t, 1, grantee.onConnected)
 	})
 
+	t.Run("permissions request plugin config passes onto grantee", func(t *testing.T) {
+		grantee := granteeMock{}
+		perms := []Permission{Permission("wasup")}
+		client, closeFn := setupIntTest(t, &grantee, perms)
+		defer closeFn()
+
+		in := map[string]interface{}{
+			"viz":    true,
+			"hubble": 1,
+			"sonicd": "more",
+			"longboard": map[string]interface{}{
+				"raven": math.MaxFloat64,
+			},
+		}
+		_, err := client.permissions(context.Background(), NewConfig(in))
+		require.NoError(t, err)
+
+		require.Len(t, grantee.cfgs, 1)
+
+		out := grantee.cfgs[0]
+		viz, ok := out.GetBool("viz")
+		assert.True(t, ok)
+		assert.True(t, viz)
+
+		sonicd, ok := out.GetString("sonicd")
+		assert.True(t, ok)
+		assert.Equal(t, "more", sonicd)
+
+		longboard, ok := out.GetConfig("longboard")
+		require.True(t, ok)
+
+		raven, ok := longboard.GetFloat("raven")
+		assert.True(t, ok)
+		assert.Equal(t, math.MaxFloat64, raven)
+
+		hubble, ok := out.GetInt("hubble")
+		assert.True(t, ok)
+		assert.Equal(t, 1, hubble)
+	})
+
 	t.Run("permissions request twice does not trigger Grantee OnConnected twice", func(t *testing.T) {
 		grantee := granteeMock{}
 		perms := []Permission{Permission("append")}
 		client, closeFn := setupIntTest(t, &grantee, perms)
 		defer closeFn()
 
-		_, err := client.permissions(context.Background())
+		_, err := client.permissions(context.Background(), nil)
 		require.NoError(t, err)
-		_, err = client.permissions(context.Background())
+		_, err = client.permissions(context.Background(), nil)
 		require.NoError(t, err)
 		assert.Equal(t, 1, grantee.onConnected)
 	})

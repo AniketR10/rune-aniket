@@ -2,6 +2,7 @@ package plugin
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"sync"
 	"time"
@@ -71,7 +72,7 @@ func (s *granteeServer) monitorKeepAlive() {
 	}
 }
 
-func (s *granteeServer) Permissions(context.Context, *proto.PermRequest) (
+func (s *granteeServer) Permissions(ctx context.Context, req *proto.PermRequest) (
 	*proto.PermResponse, error,
 ) {
 	s.mu.Lock()
@@ -82,9 +83,20 @@ func (s *granteeServer) Permissions(context.Context, *proto.PermRequest) (
 		resp.Perms = append(resp.Perms, &proto.Permission{Id: string(perm)})
 	}
 
+	var cfg jsonMap
+	protoCfg := req.GetConfig()
+	if protoCfg == nil {
+		cfg.mapConfig = make(map[string]interface{})
+	} else {
+		err := cfg.UnmarshalText(protoCfg)
+		if err != nil {
+			return nil, fmt.Errorf("could not decode incoming plugin config: %v", err)
+		}
+	}
+
 	if !s.connected {
 		s.connected = true
-		s.grantee.OnConnected(s.broker)
+		s.grantee.OnConnected(s.broker, cfg)
 		if s.keepAlive != nil {
 			go s.monitorKeepAlive()
 		}
@@ -184,10 +196,21 @@ func (c *granteeClient) broker() proto.MuxBroker {
 	return c.mBroker
 }
 
-func (c *granteeClient) permissions(ctx context.Context) (
-	[]*proto.Permission, error,
+func (c *granteeClient) permissions(ctx context.Context, config Config) (
+	perms []*proto.Permission, err error,
 ) {
-	req := proto.PermRequest{}
+	var req proto.PermRequest
+	if config == nil {
+		req.Config = []byte("{}")
+	} else {
+		mConfig := toInternalConfig(config)
+		jsonConfig := jsonMap{mConfig}
+		req.Config, err = jsonConfig.MarshalText()
+		if err != nil {
+			err = fmt.Errorf("could not marshal config: %v", err)
+			return
+		}
+	}
 
 	resp, err := c.client.Permissions(ctx, &req)
 	if err != nil {

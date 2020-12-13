@@ -75,7 +75,8 @@ func newTestManager(grantor Grantor, opts ...Option) (*Manager, *testGranteePbCl
 }
 
 func testRunAndWait(t *testing.T, mgr *Manager, pbClient *testGranteePbClient) {
-	err := mgr.Run("myId", "/here/is/my/plugin")
+	cfg := mapConfig(make(map[string]interface{}))
+	err := mgr.Run("myId", "/here/is/my/plugin", cfg)
 	require.NoError(t, err)
 
 	pbClient.healthChan <- struct{}{}
@@ -160,10 +161,10 @@ func TestManagerRun(t *testing.T) {
 		mgr, _, _ := newTestManager(&mockGrantor{})
 		defer mgr.Close()
 
-		err := mgr.Run("red", "")
+		err := mgr.Run("red", "", nil)
 		require.NoError(t, err)
 
-		err = mgr.Run("red", "")
+		err = mgr.Run("red", "", nil)
 		require.Error(t, err)
 	})
 
@@ -176,7 +177,7 @@ func TestManagerRun(t *testing.T) {
 		pbClient.err = errors.New("woopsie")
 		pbClient.onShutdownChan = make(chan struct{})
 
-		err := mgr.Run("blue", "/here/is/my/plugin")
+		err := mgr.Run("blue", "/here/is/my/plugin", nil)
 		require.NoError(t, err)
 
 		reason := assertShutdown(t, pbClient, broker)
@@ -192,7 +193,7 @@ func TestManagerRun(t *testing.T) {
 		pbClient.sleepPermissions = 2 * time.Second
 		pbClient.onShutdownChan = make(chan struct{})
 
-		err := mgr.Run("blue", "/here/is/my/plugin")
+		err := mgr.Run("blue", "/here/is/my/plugin", nil)
 		require.NoError(t, err)
 
 		reason := assertShutdown(t, pbClient, broker)
@@ -207,7 +208,7 @@ func TestManagerRun(t *testing.T) {
 			[]*proto.Permission{&proto.Permission{Id: "read"}}
 		pbClient.onShutdownChan = make(chan struct{})
 
-		err := mgr.Run("green", "/here/is/my/plugin")
+		err := mgr.Run("green", "/here/is/my/plugin", nil)
 		require.NoError(t, err)
 
 		time.Sleep(mgr.config.handshakeTimeout + 50*time.Millisecond)
@@ -225,7 +226,7 @@ func TestManagerRun(t *testing.T) {
 			[]*proto.Permission{&proto.Permission{Id: "read"}}
 		pbClient.onShutdownChan = make(chan struct{})
 
-		err := mgr.Run("yellow", "/here/is/my/plugin")
+		err := mgr.Run("yellow", "/here/is/my/plugin", nil)
 		require.NoError(t, err)
 
 		// respond 2 times correctly

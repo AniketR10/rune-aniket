@@ -16,7 +16,7 @@ type Permission string
 type Permissions map[Permission]struct{}
 
 type Grantee interface {
-	OnConnected(proto.MuxBroker)
+	OnConnected(proto.MuxBroker, Config)
 	OnPermissionGranted(token uint32, perm Permission)
 	OnPermissionDenied(perm Permission)
 	OnShutdown(reason string) error

@@ -105,7 +105,7 @@ func (m *Manager) log(msg string, args ...interface{}) {
 	m.config.logger.Debugf(msg, args...)
 }
 
-func (m *Manager) runPlugin(pluginID, path string) error {
+func (m *Manager) runPlugin(pluginID, path string, config Config) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -124,7 +124,7 @@ func (m *Manager) runPlugin(pluginID, path string) error {
 
 	m.clients[pluginID] = clientWrap
 
-	go m.handshake(pluginID, clientWrap)
+	go m.handshake(pluginID, clientWrap, config)
 
 	return nil
 }
@@ -132,14 +132,15 @@ func (m *Manager) runPlugin(pluginID, path string) error {
 // Run runs the plugin at path with identifier pluginID. It returns an error
 // if something went wrong when finding and executing the plugin executable.
 // Once the plugin is up and running, errors can be retrieved with Stat.
-func (m *Manager) Run(pluginID, path string) error {
+// Note that config is an optional argument.
+func (m *Manager) Run(pluginID, path string, config Config) error {
 	m.mu.Lock()
 	if _, ok := m.clients[pluginID]; ok {
 		m.mu.Unlock()
 		return fmt.Errorf("Manager: already connected plugin with id: '%s'", pluginID)
 	}
 	m.mu.Unlock()
-	return m.runPlugin(pluginID, path)
+	return m.runPlugin(pluginID, path, config)
 }
 
 func (m *Manager) doGrant(
@@ -273,7 +274,9 @@ func (m *Manager) setRunning(pluginID string) {
 	m.clients[pluginID] = client
 }
 
-func (m *Manager) handshake(pluginID string, client granteeClientWrap) {
+func (m *Manager) handshake(
+	pluginID string, client granteeClientWrap, config Config,
+) {
 	ctx := context.Background()
 	ctx, closeFn := context.WithTimeout(ctx, m.config.handshakeTimeout)
 	defer closeFn()
@@ -283,7 +286,7 @@ func (m *Manager) handshake(pluginID string, client granteeClientWrap) {
 	doneCh := make(chan error)
 	go func() {
 
-		perms, err := client.client.permissions(ctx)
+		perms, err := client.client.permissions(ctx, config)
 		if err != nil {
 			select {
 			case doneCh <- err:
