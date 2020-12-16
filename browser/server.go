@@ -10,6 +10,7 @@ import (
 	"github.com/ernestrc/go-tui/handler"
 	"github.com/ernestrc/go-tui/proto"
 	"github.com/ernestrc/go-tui/term"
+	"github.com/ernestrc/go-tui/util"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/connectivity"
@@ -244,7 +245,7 @@ func (s *Server) MergeKeyMap(
 ) (*proto.MergeKeyMapResponse, error) {
 	m := make(map[term.Event]term.Event)
 
-	for _, mapping := range req.Mappings {
+	for _, mapping := range req.GetMappings() {
 		from, err := mapping.From.ToModel()
 		if err != nil {
 			return nil, err
@@ -273,7 +274,7 @@ func (s *Server) SetMessage(
 	s.browser.Lock()
 	defer s.browser.Unlock()
 
-	err := s.browser.SetMessage(req.Msg)
+	err := s.browser.SetMessage(util.SanitizeLine(req.GetMsg()))
 	if err != nil {
 		return nil, err
 	}
@@ -287,7 +288,8 @@ func (s *Server) OpenFile(
 	s.browser.Lock()
 	defer s.browser.Unlock()
 
-	err := s.browser.OpenFile(req.File)
+	filename := util.SanitizeFilename(req.GetFile())
+	err := s.browser.OpenFile(filename)
 	if err != nil {
 		return nil, err
 	}

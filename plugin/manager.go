@@ -9,6 +9,7 @@ import (
 
 	"github.com/ernestrc/go-tui/proto"
 	"github.com/ernestrc/go-tui/term"
+	"github.com/ernestrc/go-tui/util"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -153,7 +154,8 @@ func (m *Manager) doGrant(
 	var granted []*proto.PermissionGrant
 
 	for _, p := range perms {
-		srv, ok := m.grantor.Grant(pluginID, Permission(p.GetId()))
+		permissionID := util.SanitizeLine(p.GetId())
+		srv, ok := m.grantor.Grant(pluginID, Permission(permissionID))
 		if !ok {
 			denied = append(denied, p)
 			continue
