@@ -56,12 +56,12 @@ var (
 	wmDefaultAttr    = frameFileAttr
 )
 
-type browserContent struct {
+type browserWindowContent struct {
 	win browserWindow
 	tui.Handler
 }
 
-func (e browserContent) Handle(ev term.Event) (exit, handled bool) {
+func (e browserWindowContent) Handle(ev term.Event) (exit, handled bool) {
 	exit, handled = e.Handler.Handle(ev)
 	if exit {
 		_ = e.win.Close()
@@ -324,6 +324,7 @@ func (e *Handler) newBufferWithFile(
 		filename: filepath.Base(filename),
 		fileBuf:  fileBuf,
 		handler:  editor,
+		free:     true,
 	}
 
 	e.addBuffer(buffer)
@@ -696,7 +697,27 @@ func (e *Handler) OpenFile(filename string) error {
 		return err
 	}
 
-	oldFocus := e.updateNodeContent(e.wm.Focus(), buffer)
+	// Do not allow file editing on windows controlled externally.
+	// This also happens to be a workaround around
+	// plugins exiting upon trying to open a file,
+	// expecting that the plugin window is going to close
+	// but not closing because OpenFile swaps the plugin
+	// handler before the rpc Handler processes the exit
+	// return from a HandleResponse (see handler/rpc_breaker.go).
+	var oldFocus tui.Handler
+	focus := e.wm.Focus()
+	if _, ok := focus.Content().(*browserBuffer); ok {
+		oldFocus = e.updateNodeContent(focus, buffer)
+	} else {
+		// find another node to update the content
+		// NOTE: this is not a very robust approach.
+		// Shiftable could return a window controlled externally
+		// in certain scenarios.
+		w, ok := e.wm.Shiftable()
+		if ok {
+			e.updateNodeContent(w, buffer)
+		}
+	}
 
 	// remove initial empty buffer
 	if oldBuf, ok := oldFocus.(*browserBuffer); ok &&
@@ -744,7 +765,7 @@ func (e *Handler) splitInverted(
 	e.newWindow(newNode)
 
 	w.win = winInFocus
-	winInFocus.SetContent(browserContent{Handler: h, win: w})
+	winInFocus.SetContent(browserWindowContent{Handler: h, win: w})
 	return w
 }
 
@@ -759,9 +780,9 @@ func (e *Handler) split(
 		handler: e,
 		win:     node,
 	}
-	// update content with browserContent
+	// update content with browserWindowContent
 	// so we can have a browserWindow with the correct node
-	node.SetContent(browserContent{
+	node.SetContent(browserWindowContent{
 		Handler: h,
 		win:     win,
 	})

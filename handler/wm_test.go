@@ -330,14 +330,24 @@ func TestWindowFocusInitSplitVertical(t *testing.T) {
 
 	_, ok := m.Focus().TileLeft()
 	assert.False(t, ok)
+	_, ok = m.Shiftable()
+	assert.False(t, ok)
 	assert.False(t, m.ShiftFocus())
 
 	rightHandler := NewTestHandler()
 	_ = m.SplitVertical(rightHandler)
 
 	assert.Equal(t, leftHandler, m.Focus().Content())
+
+	nextFocus, ok := m.Shiftable()
+	assert.True(t, ok)
+	assert.Equal(t, rightHandler, nextFocus.Content())
 	assert.True(t, m.ShiftFocus())
 	assert.Equal(t, rightHandler, m.Focus().Content())
+
+	nextFocus, ok = m.Shiftable()
+	assert.True(t, ok)
+	assert.Equal(t, leftHandler, nextFocus.Content())
 	assert.True(t, m.ShiftFocus())
 	assert.Equal(t, leftHandler, m.Focus().Content())
 

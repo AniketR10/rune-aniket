@@ -205,6 +205,25 @@ func (wm *WindowManager) ShiftFocus() (ok bool) {
 	return
 }
 
+// Shiftable returns whether next call to ShiftFocus would return true.
+func (wm *WindowManager) Shiftable() (w Window, ok bool) {
+	focus := wm.Focus()
+	w, ok = focus.TileLeft()
+	if ok {
+		return
+	}
+	w, ok = focus.TileUp()
+	if ok {
+		return
+	}
+	w, ok = focus.TileRight()
+	if ok {
+		return
+	}
+	w, ok = focus.TileDown()
+	return
+}
+
 // Cursor returns the cursor coordinates of the tile in focus.
 func (wm *WindowManager) Cursor() (term.Coordinates, bool) {
 	offset, ok := wm.focus.Window.Position()
