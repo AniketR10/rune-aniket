@@ -140,7 +140,7 @@ func (e *Handler) closeWindow(winIfc Window) error {
 		return nil
 	}
 
-	buf, ok := e.browserBufferInNode(win.win)
+	buf, ok := e.browserBufferAtNode(win.win)
 	if ok {
 		buf.free = true
 	}
@@ -350,23 +350,39 @@ func (e *Handler) findBufferIdx(buf *browserBuffer) int {
 	return idx
 }
 
-func (e *Handler) switchBuffer(node handler.Window) (
+func (e *Handler) browserBufferIdxAtNode(node handler.Window) (
 	*browserBuffer, int,
 ) {
-	buf, ok := e.browserBufferInNode(node)
+	buf, ok := e.browserBufferAtNode(node)
 	if !ok {
-		freeBufs := e.freeBuffers()
-		if len(freeBufs) != 0 {
-			e.updateNodeContent(node, e.buffers[freeBufs[0]])
-		}
 		return nil, 0
 	}
 	return buf, e.findBufferIdx(buf)
 }
 
-func (e *Handler) switchPrevBuffer(node handler.Window) {
-	buf, idx := e.switchBuffer(node)
+func (e *Handler) updateNodeBufferIdx(node handler.Window, idx int) bool {
+	buf := e.buffers[idx]
+	if buf.free {
+		e.updateNodeContent(node, buf)
+		return true
+	}
+	return false
+}
+
+func (e *Handler) updateNodeBufferNextFree(node handler.Window) bool {
+	freeBufs := e.freeBuffers()
+	if len(freeBufs) != 0 {
+		e.updateNodeContent(node, e.buffers[freeBufs[0]])
+		return true
+	}
+
+	return false
+}
+
+func (e *Handler) updateNodeBufferPrev(node handler.Window) {
+	buf, idx := e.browserBufferIdxAtNode(node)
 	if buf == nil {
+		e.updateNodeBufferNextFree(node)
 		return
 	}
 	for i := 0; i < len(e.buffers); i++ {
@@ -375,17 +391,16 @@ func (e *Handler) switchPrevBuffer(node handler.Window) {
 		} else {
 			idx--
 		}
-		buf := e.buffers[idx]
-		if buf.free {
-			e.updateNodeContent(node, buf)
+		if e.updateNodeBufferIdx(node, idx) {
 			return
 		}
 	}
 }
 
-func (e *Handler) switchNextBuffer(node handler.Window) {
-	buf, idx := e.switchBuffer(node)
+func (e *Handler) updateNodeBufferNext(node handler.Window) {
+	buf, idx := e.browserBufferIdxAtNode(node)
 	if buf == nil {
+		e.updateNodeBufferNextFree(node)
 		return
 	}
 	for i := 0; i < len(e.buffers); i++ {
@@ -393,9 +408,7 @@ func (e *Handler) switchNextBuffer(node handler.Window) {
 		if idx == len(e.buffers) {
 			idx = 0
 		}
-		buf := e.buffers[idx]
-		if buf.free {
-			e.updateNodeContent(node, buf)
+		if e.updateNodeBufferIdx(node, idx) {
 			return
 		}
 	}
@@ -417,7 +430,7 @@ func (e *Handler) updateNodeContent(
 	return oldHandler
 }
 
-func (e *Handler) browserBufferInNode(node handler.Window) (*browserBuffer, bool) {
+func (e *Handler) browserBufferAtNode(node handler.Window) (*browserBuffer, bool) {
 	buf, ok := node.Content().(*browserBuffer)
 	return buf, ok
 }
@@ -449,7 +462,7 @@ func (e *Handler) removeNodeBuffer(node handler.Window) error {
 }
 
 func (e *Handler) saveFocusBuffer() error {
-	buf, ok := e.browserBufferInNode(e.wm.Focus())
+	buf, ok := e.browserBufferAtNode(e.wm.Focus())
 	if !ok {
 		return ErrInvalidSave
 	}
@@ -462,6 +475,10 @@ func (e *Handler) saveFocusBuffer() error {
 
 func (e *Handler) runSingleCommand(cmd string) (quit bool, err error) {
 	switch cmd {
+	case "bprev":
+		e.updateNodeBufferPrev(e.wm.Focus())
+	case "bnext":
+		e.updateNodeBufferNext(e.wm.Focus())
 	case "bclose":
 		err = e.removeNodeBuffer(e.wm.Focus())
 	case "bcloseAll":
@@ -595,9 +612,9 @@ func (e *Handler) handleProxy(ev term.Event) (
 			e.setError(err)
 		}
 	case term.KeyCtrlL:
-		e.switchNextBuffer(e.wm.Focus())
+		e.updateNodeBufferNext(e.wm.Focus())
 	case term.KeyCtrlH:
-		e.switchPrevBuffer(e.wm.Focus())
+		e.updateNodeBufferPrev(e.wm.Focus())
 	default:
 		// do not map for children
 		ev = prev
