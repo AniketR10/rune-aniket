@@ -2,6 +2,7 @@ package browser
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"sync"
 	"time"
@@ -16,7 +17,6 @@ import (
 	"google.golang.org/grpc/connectivity"
 )
 
-// TODO consume handler.Client.Errors() and close upon errors and log somehwere?
 type serverResource struct {
 	handlerID   uint32
 	handlerConn proto.MuxConn
@@ -322,6 +322,31 @@ func (s *Server) Subscribe(
 	}
 
 	return new(proto.SubscribeResponse), nil
+}
+
+// Publish satisfies proto.BrowserServer
+func (s *Server) Publish(
+	ctx context.Context, req *proto.PublishRequest,
+) (*proto.PublishResponse, error) {
+	ev, err := req.GetEv().ToModel()
+	if err != nil {
+		return nil, err
+	}
+
+	// NOTE: for now it's the only event allowed
+	if ev.Type != term.EventInterrupt {
+		return nil, fmt.Errorf("invalid event type: %v", ev.Type)
+	}
+
+	s.browser.Lock()
+	err = s.browser.PublishInterrupt()
+	s.browser.Unlock()
+
+	if err != nil {
+		return nil, err
+	}
+
+	return new(proto.PublishResponse), nil
 }
 
 // Close closes all resources associated with this server.

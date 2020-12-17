@@ -165,6 +165,47 @@ func expectHandlerInvokeExit(t *testing.T, handlerConn *proto.MockMuxConn) {
 		Times(1)
 }
 
+func TestServerPublish(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("handles interrupt event by calling interrupt handler", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+		s, mock, _ := newTestServer(ctrl)
+		req := proto.PublishRequest{Ev: &proto.Event{Type: proto.Event_TypeInterrupt}}
+
+		mock.EXPECT().PublishInterrupt().Times(1)
+
+		res, err := s.Publish(ctx, &req)
+		require.NoError(t, err)
+		assert.NotNil(t, res)
+	})
+
+	t.Run("rejects any event other than an interrupt event", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+		s, _, _ := newTestServer(ctrl)
+		req := proto.PublishRequest{Ev: &proto.Event{Type: proto.Event_TypeNone}}
+
+		res, err := s.Publish(ctx, &req)
+		require.Error(t, err)
+		assert.Nil(t, res)
+	})
+
+	t.Run("handles interrupt handler error", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+		s, mock, _ := newTestServer(ctrl)
+		req := proto.PublishRequest{Ev: &proto.Event{Type: proto.Event_TypeInterrupt}}
+
+		mock.EXPECT().PublishInterrupt().Return(errors.New("uRock"))
+
+		res, err := s.Publish(ctx, &req)
+		require.Error(t, err)
+		assert.Nil(t, res)
+	})
+}
+
 func TestServerSubscribe(t *testing.T) {
 	ctx := context.Background()
 	handlerID := uint32(31)

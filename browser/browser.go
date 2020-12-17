@@ -54,11 +54,19 @@ type FileOpener interface {
 	OpenFile(filename string) error
 }
 
+// EventPublisher is the interface that wraps the method PublishInterrupt.
+type EventPublisher interface {
+	// PublishInterrupt will publish an interrupt event, which will force
+	// redrawing all components in the terminal.
+	PublishInterrupt() error
+}
+
 // Browser is an interface that groups methods to manipulate
 // the user interface of a browser.
 type Browser interface {
 	WindowManager
 	EventSubscriber
+	EventPublisher
 	KeyMapper
 	FileOpener
 	Messenger

@@ -85,6 +85,7 @@ func (w browserWindow) Close() error {
 type Handler struct {
 	openFileFn    openFileFunc
 	recoverFileFn recoverFileFunc
+	interruptDraw func()
 
 	ed          editor.Editor
 	config      editorConfig
@@ -226,6 +227,9 @@ func (e *Handler) initConstructors() {
 			swapFilePath string, buf *cell.Buffer) (fileBuffer, error) {
 			return editor.RecoverFileBuffer(filePath, swapFilePath, buf)
 		}
+	}
+	if e.interruptDraw == nil {
+		e.interruptDraw = term.Interrupt
 	}
 }
 
@@ -826,5 +830,12 @@ func (e *Handler) Subscribe(ev term.Event, h EventHandler) error {
 		return fmt.Errorf("there's already a subscriber subscribed to: %#v", ev)
 	}
 	e.subscribers[ev] = browserEventHandler{browser: e, h: h}
+	return nil
+}
+
+// PublishInterrupt interrupts the main event loop to redraw the terminal.
+func (e *Handler) PublishInterrupt() error {
+	// prevent deadlock if PublishInterrupt is called during a Draw call.
+	go e.interruptDraw()
 	return nil
 }

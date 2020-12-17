@@ -47,6 +47,13 @@ message SubscribeRequest {
 message SubscribeResponse {
 }
 
+message PublishRequest {
+	Event ev = 1;
+}
+
+message PublishResponse {
+}
+
 service FileOpener {
 	rpc OpenFile(OpenFileRequest) returns (OpenFileResponse);
 }
@@ -61,6 +68,10 @@ service KeyMapper {
 
 service EventSubscriber {
 	rpc Subscribe(SubscribeRequest) returns (SubscribeResponse);
+}
+
+service EventPublisher {
+	rpc Publish(PublishRequest) returns (PublishResponse);
 }
 
 service WindowManager {

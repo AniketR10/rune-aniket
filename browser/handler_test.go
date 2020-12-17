@@ -1,6 +1,7 @@
 package browser
 
 import (
+	"sync"
 	"testing"
 
 	"github.com/ernestrc/go-tui"
@@ -436,5 +437,19 @@ func TestBrowserHandlerSubscribe(t *testing.T) {
 		exit, _ = b.Handle(ev)
 		assert.False(t, exit)
 		assert.Equal(t, nextRune, h.Ch)
+	})
+}
+
+func TestBrowserHandlerPublishInterrupt(t *testing.T) {
+	t.Run("calls interrupt handle asynchronously", func(t *testing.T) {
+		var wg sync.WaitGroup
+		browser := newTestBrowserHandler()
+		require.NoError(t, browser.Init(&testEditor{}))
+		browser.interruptDraw = wg.Done
+
+		wg.Add(1)
+		browser.PublishInterrupt()
+
+		wg.Wait()
 	})
 }

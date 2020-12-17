@@ -35,7 +35,8 @@ type Client struct {
 	msg    proto.MessengerClient
 	mp     proto.KeyMapperClient
 	f      proto.FileOpenerClient
-	p      proto.EventSubscriberClient
+	s      proto.EventSubscriberClient
+	p      proto.EventPublisherClient
 
 	shutdownWait time.Duration
 	resources    map[uint32]*clientResource
@@ -82,7 +83,8 @@ func NewClient(broker proto.MuxBroker, cc grpc.ClientConnInterface) *Client {
 	ret.cc = cc
 	ret.mp = proto.NewKeyMapperClient(cc)
 	ret.f = proto.NewFileOpenerClient(cc)
-	ret.p = proto.NewEventSubscriberClient(cc)
+	ret.s = proto.NewEventSubscriberClient(cc)
+	ret.p = proto.NewEventPublisherClient(cc)
 	ret.Init(broker)
 	return ret
 }
@@ -332,10 +334,24 @@ func (c *Client) Subscribe(ev term.Event, h EventHandler) error {
 
 	req := proto.SubscribeRequest{Ev: protoEv, HandlerId: handlerID}
 
-	_, err = c.p.Subscribe(ctx, &req)
+	_, err = c.s.Subscribe(ctx, &req)
 	if err != nil {
 		c.forceClose(handlerID)
 	}
+	return err
+}
+
+// PublishInterrupt satisfies Browser.
+func (c *Client) PublishInterrupt() error {
+	ctx := context.Background()
+	protoEv := new(proto.Event)
+	err := protoEv.FromModel(term.Event{Type: term.EventInterrupt})
+	if err != nil {
+		return err
+	}
+	req := proto.PublishRequest{Ev: protoEv}
+
+	_, err = c.p.Publish(ctx, &req)
 	return err
 }
 

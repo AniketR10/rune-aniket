@@ -349,6 +349,43 @@ func TestClientSubscribe(t *testing.T) {
 	})
 }
 
+func TestClientPublish(t *testing.T) {
+	t.Run("bubbles up rpc error and so stops event handler resources", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		client, mockCC, _ := newMockedClient(ctrl)
+		mockCC.EXPECT().
+			Invoke(gomock.Any(),
+				gomock.Eq("/proto.EventPublisher/Publish"),
+				gomock.Any(), gomock.Any()).
+			Times(1).
+			Return(errors.New("uRich"))
+
+		err := client.PublishInterrupt()
+		require.Error(t, err)
+	})
+
+	t.Run("sends interrupt event publish request to server", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		client, mockCC, _ := newMockedClient(ctrl)
+		ev := proto.Event{Type: proto.Event_TypeInterrupt}
+		in := &proto.PublishRequest{Ev: &ev}
+		out := new(proto.PublishResponse)
+
+		mockCC.EXPECT().
+			Invoke(gomock.Any(),
+				gomock.Eq("/proto.EventPublisher/Publish"),
+				gomock.Eq(in), gomock.Eq(out)).
+			Times(1)
+
+		err := client.PublishInterrupt()
+		require.NoError(t, err)
+	})
+}
+
 func TestClientSplitHorizontalBelow(t *testing.T) {
 	rpc := "/proto.WindowManager/SplitHorizontalBelow"
 	testClientSplit(t, (WindowManager).SplitHorizontalBelow, rpc)

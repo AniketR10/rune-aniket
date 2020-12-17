@@ -322,6 +322,43 @@ func (mr *MockFileOpenerMockRecorder) OpenFile(filename interface{}) *gomock.Cal
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OpenFile", reflect.TypeOf((*MockFileOpener)(nil).OpenFile), filename)
 }
 
+// MockEventPublisher is a mock of EventPublisher interface.
+type MockEventPublisher struct {
+	ctrl     *gomock.Controller
+	recorder *MockEventPublisherMockRecorder
+}
+
+// MockEventPublisherMockRecorder is the mock recorder for MockEventPublisher.
+type MockEventPublisherMockRecorder struct {
+	mock *MockEventPublisher
+}
+
+// NewMockEventPublisher creates a new mock instance.
+func NewMockEventPublisher(ctrl *gomock.Controller) *MockEventPublisher {
+	mock := &MockEventPublisher{ctrl: ctrl}
+	mock.recorder = &MockEventPublisherMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockEventPublisher) EXPECT() *MockEventPublisherMockRecorder {
+	return m.recorder
+}
+
+// PublishInterrupt mocks base method.
+func (m *MockEventPublisher) PublishInterrupt() error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "PublishInterrupt")
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// PublishInterrupt indicates an expected call of PublishInterrupt.
+func (mr *MockEventPublisherMockRecorder) PublishInterrupt() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PublishInterrupt", reflect.TypeOf((*MockEventPublisher)(nil).PublishInterrupt))
+}
+
 // MockBrowser is a mock of Browser interface.
 type MockBrowser struct {
 	ctrl     *gomock.Controller
@@ -385,6 +422,20 @@ func (m *MockBrowser) OpenFile(filename string) error {
 func (mr *MockBrowserMockRecorder) OpenFile(filename interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OpenFile", reflect.TypeOf((*MockBrowser)(nil).OpenFile), filename)
+}
+
+// PublishInterrupt mocks base method.
+func (m *MockBrowser) PublishInterrupt() error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "PublishInterrupt")
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// PublishInterrupt indicates an expected call of PublishInterrupt.
+func (mr *MockBrowserMockRecorder) PublishInterrupt() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PublishInterrupt", reflect.TypeOf((*MockBrowser)(nil).PublishInterrupt))
 }
 
 // SetMessage mocks base method.

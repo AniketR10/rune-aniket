@@ -17,21 +17,25 @@ const (
 	PermissionBrowserFileOpener = "_PermBrowserFileOpener"
 	// PermissionBrowserMessenger requests access to send messages to the UI.
 	PermissionBrowserMessenger = "_PermBrowserMessenger"
-	// PermissionBrowserEventSubscriber requests access to open new files.
+	// PermissionBrowserEventSubscriber requests access subscribe to term events.
 	PermissionBrowserEventSubscriber = "_PermBrowserEventSubscriber"
+	// PermissionBrowserEventPublisher requests access to publish term events.
+	// This is useful if your plugin handler does async updates to its state, as
+	// it enables interrupting the main event loop to redraw components.
+	PermissionBrowserEventPublisher = "_PermBrowserEventPublisher"
 )
 
-type browserResource struct {
+type browserResourceServer struct {
 	b browser.Browser
 }
 
-func newBrowserResource(b browser.Browser) *browserResource {
-	ret := new(browserResource)
+func newBrowserResourceServer(b browser.Browser) *browserResourceServer {
+	ret := new(browserResourceServer)
 	ret.b = b
 	return ret
 }
 
-func (s *browserResource) serve(perm Permission) resourceServerFn {
+func (s *browserResourceServer) serve(perm Permission) resourceServerFn {
 	return func(pluginID string, grantID uint32, broker proto.MuxBroker,
 		lock sync.Locker, interruptDraw, interruptHandle func()) {
 
@@ -50,38 +54,25 @@ func (s *browserResource) serve(perm Permission) resourceServerFn {
 				proto.RegisterMessengerServer(grpcServer, server)
 			case PermissionBrowserEventSubscriber:
 				proto.RegisterEventSubscriberServer(grpcServer, server)
+			case PermissionBrowserEventPublisher:
+				proto.RegisterEventPublisherServer(grpcServer, server)
 			}
 			return grpcServer
 		})
 	}
 }
 
-func (s *browserResource) ServeWindowManager() ResourceServer {
-	return s.serve(PermissionBrowserWindowManager)
-}
-func (s *browserResource) ServeFileOpener() ResourceServer {
-	return s.serve(PermissionBrowserFileOpener)
-}
-func (s *browserResource) ServeKeyMapper() ResourceServer {
-	return s.serve(PermissionBrowserKeyMapper)
-}
-func (s *browserResource) ServeMessenger() ResourceServer {
-	return s.serve(PermissionBrowserMessenger)
-}
-func (s *browserResource) ServeEventSubscriber() ResourceServer {
-	return s.serve(PermissionBrowserEventSubscriber)
-}
-
 // BrowserResources returns a map of Permission to a ResourceServer
 // capable of serving each of the b Browser's resources.
 func BrowserResources(b browser.Browser) map[Permission]ResourceServer {
-	server := newBrowserResource(b)
+	s := newBrowserResourceServer(b)
 	return map[Permission]ResourceServer{
-		PermissionBrowserWindowManager:   server.ServeWindowManager(),
-		PermissionBrowserKeyMapper:       server.ServeKeyMapper(),
-		PermissionBrowserFileOpener:      server.ServeFileOpener(),
-		PermissionBrowserMessenger:       server.ServeMessenger(),
-		PermissionBrowserEventSubscriber: server.ServeEventSubscriber(),
+		PermissionBrowserWindowManager:   s.serve(PermissionBrowserWindowManager),
+		PermissionBrowserKeyMapper:       s.serve(PermissionBrowserKeyMapper),
+		PermissionBrowserFileOpener:      s.serve(PermissionBrowserFileOpener),
+		PermissionBrowserMessenger:       s.serve(PermissionBrowserMessenger),
+		PermissionBrowserEventSubscriber: s.serve(PermissionBrowserEventSubscriber),
+		PermissionBrowserEventPublisher:  s.serve(PermissionBrowserEventPublisher),
 	}
 }
 
@@ -100,11 +91,7 @@ func dialBrowser(token uint32, broker proto.MuxBroker) (
 func WindowManager(token uint32, broker proto.MuxBroker) (
 	browser.WindowManager, error,
 ) {
-	b, err := dialBrowser(token, broker)
-	if err != nil {
-		return nil, err
-	}
-	return b.(browser.WindowManager), nil
+	return dialBrowser(token, broker)
 }
 
 // KeyMapper acquires the browser's KeyMapper
@@ -112,11 +99,7 @@ func WindowManager(token uint32, broker proto.MuxBroker) (
 func KeyMapper(token uint32, broker proto.MuxBroker) (
 	browser.KeyMapper, error,
 ) {
-	b, err := dialBrowser(token, broker)
-	if err != nil {
-		return nil, err
-	}
-	return b.(browser.KeyMapper), nil
+	return dialBrowser(token, broker)
 }
 
 // FileOpener acquires the browser's FileOpener
@@ -124,12 +107,7 @@ func KeyMapper(token uint32, broker proto.MuxBroker) (
 func FileOpener(token uint32, broker proto.MuxBroker) (
 	browser.FileOpener, error,
 ) {
-	b, err := dialBrowser(token, broker)
-	if err != nil {
-		return nil, err
-
-	}
-	return b.(browser.FileOpener), nil
+	return dialBrowser(token, broker)
 }
 
 // Messenger acquires the browser's Messenger
@@ -137,12 +115,7 @@ func FileOpener(token uint32, broker proto.MuxBroker) (
 func Messenger(token uint32, broker proto.MuxBroker) (
 	browser.Messenger, error,
 ) {
-	b, err := dialBrowser(token, broker)
-	if err != nil {
-		return nil, err
-
-	}
-	return b.(browser.Messenger), nil
+	return dialBrowser(token, broker)
 }
 
 // EventSubscriber acquires the browser's EventSubscriber
@@ -150,10 +123,13 @@ func Messenger(token uint32, broker proto.MuxBroker) (
 func EventSubscriber(token uint32, broker proto.MuxBroker) (
 	browser.EventSubscriber, error,
 ) {
-	b, err := dialBrowser(token, broker)
-	if err != nil {
-		return nil, err
+	return dialBrowser(token, broker)
+}
 
-	}
-	return b.(browser.EventSubscriber), nil
+// EventPublisher acquires the browser's EventPublisher
+// resource with the given token.
+func EventPublisher(token uint32, broker proto.MuxBroker) (
+	browser.EventPublisher, error,
+) {
+	return dialBrowser(token, broker)
 }
