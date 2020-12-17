@@ -1,5 +1,7 @@
 package editor
 
+//go:generate mockgen -destination=./file_gomock.go -package editor -self_package editor -source file.go
+
 import (
 	"errors"
 	"fmt"

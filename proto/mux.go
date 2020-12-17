@@ -1,5 +1,7 @@
 package proto
 
+//go:generate mockgen -destination=./mux_gomock.go -package proto -self_package proto -source mux.go
+
 import (
 	"io"
 
