@@ -59,7 +59,7 @@ service KeyMapper {
 	rpc MergeKeyMap(MergeKeyMapRequest) returns (MergeKeyMapResponse);
 }
 
-service EventPublisher {
+service EventSubscriber {
 	rpc Subscribe(SubscribeRequest) returns (SubscribeResponse);
 }
 

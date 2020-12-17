@@ -17,8 +17,8 @@ const (
 	PermissionBrowserFileOpener = "_PermBrowserFileOpener"
 	// PermissionBrowserMessenger requests access to send messages to the UI.
 	PermissionBrowserMessenger = "_PermBrowserMessenger"
-	// PermissionBrowserEventPublisher requests access to open new files.
-	PermissionBrowserEventPublisher = "_PermBrowserEventPublisher"
+	// PermissionBrowserEventSubscriber requests access to open new files.
+	PermissionBrowserEventSubscriber = "_PermBrowserEventSubscriber"
 )
 
 type browserResource struct {
@@ -48,8 +48,8 @@ func (s *browserResource) serve(perm Permission) resourceServerFn {
 				proto.RegisterFileOpenerServer(grpcServer, server)
 			case PermissionBrowserMessenger:
 				proto.RegisterMessengerServer(grpcServer, server)
-			case PermissionBrowserEventPublisher:
-				proto.RegisterEventPublisherServer(grpcServer, server)
+			case PermissionBrowserEventSubscriber:
+				proto.RegisterEventSubscriberServer(grpcServer, server)
 			}
 			return grpcServer
 		})
@@ -68,8 +68,8 @@ func (s *browserResource) ServeKeyMapper() ResourceServer {
 func (s *browserResource) ServeMessenger() ResourceServer {
 	return s.serve(PermissionBrowserMessenger)
 }
-func (s *browserResource) ServeEventPublisher() ResourceServer {
-	return s.serve(PermissionBrowserEventPublisher)
+func (s *browserResource) ServeEventSubscriber() ResourceServer {
+	return s.serve(PermissionBrowserEventSubscriber)
 }
 
 // BrowserResources returns a map of Permission to a ResourceServer
@@ -77,11 +77,11 @@ func (s *browserResource) ServeEventPublisher() ResourceServer {
 func BrowserResources(b browser.Browser) map[Permission]ResourceServer {
 	server := newBrowserResource(b)
 	return map[Permission]ResourceServer{
-		PermissionBrowserWindowManager:  server.ServeWindowManager(),
-		PermissionBrowserKeyMapper:      server.ServeKeyMapper(),
-		PermissionBrowserFileOpener:     server.ServeFileOpener(),
-		PermissionBrowserMessenger:      server.ServeMessenger(),
-		PermissionBrowserEventPublisher: server.ServeEventPublisher(),
+		PermissionBrowserWindowManager:   server.ServeWindowManager(),
+		PermissionBrowserKeyMapper:       server.ServeKeyMapper(),
+		PermissionBrowserFileOpener:      server.ServeFileOpener(),
+		PermissionBrowserMessenger:       server.ServeMessenger(),
+		PermissionBrowserEventSubscriber: server.ServeEventSubscriber(),
 	}
 }
 
@@ -145,15 +145,15 @@ func Messenger(token uint32, broker proto.MuxBroker) (
 	return b.(browser.Messenger), nil
 }
 
-// EventPublisher acquires the browser's EventPublisher
+// EventSubscriber acquires the browser's EventSubscriber
 // resource with the given token.
-func EventPublisher(token uint32, broker proto.MuxBroker) (
-	browser.EventPublisher, error,
+func EventSubscriber(token uint32, broker proto.MuxBroker) (
+	browser.EventSubscriber, error,
 ) {
 	b, err := dialBrowser(token, broker)
 	if err != nil {
 		return nil, err
 
 	}
-	return b.(browser.EventPublisher), nil
+	return b.(browser.EventSubscriber), nil
 }

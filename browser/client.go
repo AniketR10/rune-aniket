@@ -35,7 +35,7 @@ type Client struct {
 	msg    proto.MessengerClient
 	mp     proto.KeyMapperClient
 	f      proto.FileOpenerClient
-	p      proto.EventPublisherClient
+	p      proto.EventSubscriberClient
 
 	shutdownWait time.Duration
 	resources    map[uint32]*clientResource
@@ -82,7 +82,7 @@ func NewClient(broker proto.MuxBroker, cc grpc.ClientConnInterface) *Client {
 	ret.cc = cc
 	ret.mp = proto.NewKeyMapperClient(cc)
 	ret.f = proto.NewFileOpenerClient(cc)
-	ret.p = proto.NewEventPublisherClient(cc)
+	ret.p = proto.NewEventSubscriberClient(cc)
 	ret.Init(broker)
 	return ret
 }

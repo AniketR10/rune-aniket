@@ -27,10 +27,10 @@ type EventHandler interface {
 	Handle(term.Event) (exit bool)
 }
 
-// EventPublisher handler is the interface that wraps
+// EventSubscriber handler is the interface that wraps
 // the method Subscribe which allows clients to subscribe to
 // specific events.
-type EventPublisher interface {
+type EventSubscriber interface {
 	Subscribe(term.Event, EventHandler) error
 }
 
@@ -55,7 +55,7 @@ type FileOpener interface {
 // the user interface of a browser.
 type Browser interface {
 	WindowManager
-	EventPublisher
+	EventSubscriber
 	KeyMapper
 	FileOpener
 	Messenger

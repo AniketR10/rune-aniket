@@ -337,7 +337,7 @@ func TestClientSubscribe(t *testing.T) {
 
 		mockCC.EXPECT().
 			Invoke(gomock.Any(),
-				gomock.Eq("/proto.EventPublisher/Subscribe"),
+				gomock.Eq("/proto.EventSubscriber/Subscribe"),
 				gomock.Eq(in), gomock.Eq(out)).
 			Times(1)
 

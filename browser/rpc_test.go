@@ -148,7 +148,7 @@ func newTestRPCBrowser(t *testing.T,
 		proto.RegisterMessengerServer(grpcServer, server)
 		proto.RegisterKeyMapperServer(grpcServer, server)
 		proto.RegisterFileOpenerServer(grpcServer, server)
-		proto.RegisterEventPublisherServer(grpcServer, server)
+		proto.RegisterEventSubscriberServer(grpcServer, server)
 
 		go grpcServer.Serve(lis)
 
