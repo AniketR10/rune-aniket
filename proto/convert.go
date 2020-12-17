@@ -36,6 +36,8 @@ func (e *Event) FromModel(ev term.Event) error {
 		e.Type = Event_TypeMouse
 	case term.EventNone:
 		e.Type = Event_TypeNone
+	case term.EventInterrupt:
+		e.Type = Event_TypeInterrupt
 	default:
 		return fmt.Errorf("serialization error: unknown event type: %+v", ev.Type)
 	}
@@ -206,6 +208,10 @@ func (e *Event) ToModel() (ev term.Event, err error) {
 		ev.Type = term.EventKey
 	case Event_TypeMouse:
 		ev.Type = term.EventMouse
+	case Event_TypeNone:
+		ev.Type = term.EventNone
+	case Event_TypeInterrupt:
+		ev.Type = term.EventInterrupt
 	default:
 		return term.Event{},
 			fmt.Errorf("serialization error: unknown event type: %s", e.Type)

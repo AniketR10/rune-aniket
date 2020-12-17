@@ -14,11 +14,10 @@ EXAMPLES=$(EXAMPLES_NON_WASM)
 EXECSRC=$(wildcard cmd/**/*.go)
 EXECDIRS=$(sort $(dir $(EXECSRC)))
 EXECS=$(patsubst cmd/%/,$(TARGET)/%,$(EXECDIRS))
-PROTOGEN=$(wildcard proto/*.proto)
 PROTO=proto/*.pb.go
 GOMOCKS=$(wildcard **/*_gomock.go)
 
-.PHONY: clean test coverage example_wasm rpc generate
+.PHONY: clean test coverage example_wasm generate
 
 default: $(EXAMPLES) $(EXECS)
 
@@ -31,12 +30,8 @@ coverage: $(TARGET)
 	@ go test ./.../... -coverprofile $(TARGET)/coverage
 	@ go tool cover -html=$(TARGET)/coverage
 
-rpc:
-	@ rm -rf $(PROTO)
-	@ protoc $(PROTOGEN) --go_out=plugins=grpc:.
-
-generate: rpc
-	@ rm -rf $(GOMOCKS)
+generate:
+	@ rm -rf $(GOMOCKS) $(PROTO)
 	@ go generate ./...
 
 install:

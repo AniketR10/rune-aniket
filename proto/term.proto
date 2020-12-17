@@ -34,7 +34,7 @@ message Event {
 	TypeKey = 0;
 	TypeNone = 1;
 	TypeMouse = 2;
-	// EventInterrupt
+	TypeInterrupt = 3;
 	// EventResize
 	// EventError
 	// EventRaw

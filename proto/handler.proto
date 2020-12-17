@@ -1,7 +1,7 @@
 syntax = "proto3";
 
-import "proto/term.proto";
-import "proto/tui.proto";
+import "term.proto";
+import "tui.proto";
 
 package proto;
 
