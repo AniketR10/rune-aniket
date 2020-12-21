@@ -3,6 +3,7 @@ package handler
 import (
 	"errors"
 	"net"
+	"sync"
 	"testing"
 	"time"
 
@@ -129,7 +130,7 @@ func newServerClient(t *testing.T) (*Client, func()) {
 	require.NoError(t, err)
 
 	grpcServer := grpc.NewServer()
-	proto.RegisterHandlerServer(grpcServer, NewServer(testHandler()))
+	proto.RegisterHandlerServer(grpcServer, NewServer(testHandler(), new(sync.Mutex)))
 
 	go grpcServer.Serve(lis)
 

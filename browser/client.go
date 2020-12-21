@@ -27,7 +27,11 @@ type clientResource struct {
 type Client struct {
 	Logger *log.Logger
 
+	// resources invariant
 	mu sync.Mutex
+
+	// one child Handler call at a time invariant
+	handlerMu sync.Mutex
 
 	broker proto.MuxBroker
 	cc     grpc.ClientConnInterface
@@ -130,7 +134,7 @@ func (c *Client) serveHandler(h tui.Handler) uint32 {
 				shutdownWait: c.shutdownWait,
 				handlerID:    handlerID,
 			}
-			proto.RegisterHandlerServer(srv, handler.NewServer(h))
+			proto.RegisterHandlerServer(srv, handler.NewServer(h, &c.handlerMu))
 		})
 
 	c.resources[brokerID] = &clientResource{_h: h, srv: srv}

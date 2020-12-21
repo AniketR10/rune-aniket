@@ -3,6 +3,7 @@ package browser
 import (
 	"fmt"
 	"net"
+	_ "net/http/pprof"
 	"os"
 	"sync"
 	"testing"
@@ -13,14 +14,24 @@ import (
 	"github.com/ernestrc/go-tui/handler"
 	"github.com/ernestrc/go-tui/proto"
 	"github.com/ernestrc/go-tui/term"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/goleak"
 	"google.golang.org/grpc"
 )
 
-func nop() {}
-
 const testingShutdownWait = 500 * time.Millisecond
+
+type groupEventHandler struct {
+	h  *handler.TestHandler
+	wg *sync.WaitGroup
+}
+
+func (h *groupEventHandler) Handle(ev term.Event) (handled bool) {
+	defer h.wg.Done()
+	h.h.Handle(ev)
+	return
+}
 
 type brokerage struct {
 	net.Listener
@@ -125,6 +136,8 @@ func (h *safeHandler) Man() tui.Manual {
 	return h.Handler.Man()
 }
 
+func nop() {}
+
 func newTestRPCBrowser(t *testing.T,
 	destructor *func(),
 ) browserConstructor {
@@ -189,6 +202,40 @@ func TestRPCBrowserCloseLeak(t *testing.T) {
 	// NOTE: to reason about window/handler resource leaks
 	// uncomment next line and analyze running goroutines
 	// goleak.VerifyNone(t)
+}
+
+// NOTE: run go test -race in order for this test to be useful.
+func TestClientSynchronizeHandlers(t *testing.T) {
+	var destructor func()
+	browser, err := newTestRPCBrowser(t, &destructor)(&testEditor{}, WithFilepath(""))
+	require.NoError(t, err)
+	defer destructor()
+	var wg sync.WaitGroup
+
+	h := handler.TestHandler{}
+
+	subs := []term.Event{
+		term.Event{Type: term.EventNone},
+		term.Event{Type: term.EventInterrupt},
+		term.Event{Type: term.EventKey, Key: term.KeyCtrlA},
+		term.Event{Type: term.EventKey, Key: term.KeyCtrlJ},
+		term.Event{Type: term.EventKey, Key: term.KeyCtrlH},
+		term.Event{Type: term.EventKey, Key: term.KeyCtrlB},
+	}
+
+	for _, ev := range subs {
+		h := &groupEventHandler{wg: &wg, h: &h}
+		err = browser.Subscribe(ev, h)
+		require.NoError(t, err)
+	}
+
+	for _, ev := range subs {
+		wg.Add(1)
+		_, handled := browser.Handle(ev)
+		assert.True(t, handled)
+	}
+
+	wg.Wait()
 }
 
 func TestMain(m *testing.M) {

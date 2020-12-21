@@ -185,20 +185,24 @@ func (c *Client) Close() error {
 
 // Server serves a tui.Handler implementation over GRPC.
 type Server struct {
-	mu      sync.Mutex
+	mu      sync.Locker
 	handler tui.Handler
 }
 
 // NewServer allocates storage for a new Server and initializes it.
-func NewServer(handler tui.Handler) *Server {
+func NewServer(handler tui.Handler, mu sync.Locker) *Server {
 	ret := new(Server)
-	ret.Init(handler)
+	ret.Init(handler, mu)
 	return ret
 }
 
-// Init initializes this Server to serve handler.
-func (s *Server) Init(handler tui.Handler) {
+// Init initializes this Server to serve handler. It uses locker
+// to synchronize access to handler, so it's goroutine-safe
+// to share a handler between multiple servers, as long as the
+// same locker is used.
+func (s *Server) Init(handler tui.Handler, locker sync.Locker) {
 	s.handler = handler
+	s.mu = locker
 }
 
 // Draw is an RPC that handles request to an underlying
