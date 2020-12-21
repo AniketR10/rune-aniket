@@ -143,7 +143,7 @@ func (c *Component) Init(config Config) {
 	c.config = config
 
 	c.logBuf = cell.NewBuffer()
-	c.logVirt = newLogSpan(c.logBuf, logBarAttr)
+	c.logVirt = NewMessageSpan(c.logBuf, logBarAttr)
 
 	c.tabs = handler.NewTabs()
 	c.tabs.OnClick = func(id int) {
@@ -487,7 +487,7 @@ func (c *Component) SetMessage(msg string, args ...interface{}) {
 
 // Resize satisfies tui.Component
 func (c *Component) Resize(width, height int) {
-	resizeLogSpan(width, height, &c.logVirt)
+	ResizeMessageSpan(&c.logVirt, width, height)
 
 	c.fileListHeight = 3
 	if height < 3 {

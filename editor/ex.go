@@ -1,4 +1,4 @@
-package browser
+package editor
 
 import (
 	"fmt"
@@ -6,8 +6,8 @@ import (
 	"strings"
 
 	"github.com/ernestrc/go-tui"
+	"github.com/ernestrc/go-tui/browser"
 	"github.com/ernestrc/go-tui/cell"
-	"github.com/ernestrc/go-tui/editor"
 	"github.com/ernestrc/go-tui/handler"
 	"github.com/ernestrc/go-tui/term"
 )
@@ -24,23 +24,22 @@ const (
 )
 
 type openFileFunc func(filePath string,
-	buf *cell.Buffer, swapDir string) (FlusherCloser, error)
+	buf *cell.Buffer, swapDir string) (browser.FlusherCloser, error)
 
 type recoverFileFunc func(filePath,
-	swapFilePath string, buf *cell.Buffer) (FlusherCloser, error)
+	swapFilePath string, buf *cell.Buffer) (browser.FlusherCloser, error)
 
-// Handler adds tab and window management to a editor.Editor.
 type Handler struct {
 	openFileFn    openFileFunc
 	recoverFileFn recoverFileFunc
 	interruptDraw func()
-	comp          Component
+	comp          browser.Component
 	commandBuf    *cell.Buffer
 	cmdVirt       handler.Virtual
-	ed            editor.Editor
-	config        Config
+	ed            Editor
+	config        browser.Config
 	keymap        map[term.Event]term.Event
-	subscribers   map[term.Event]EventHandler
+	subscribers   map[term.Event]browser.EventHandler
 	mode          mode
 }
 
@@ -50,7 +49,7 @@ func newOsHandler() *Handler {
 }
 
 // New allocates storage for a new Handler and initializes it.
-func New(ed editor.Editor, opts ...Option) (e *Handler, err error) {
+func New(ed Editor, opts ...browser.Option) (e *Handler, err error) {
 	e = new(Handler)
 	err = e.Init(ed, opts...)
 	if err != nil {
@@ -62,15 +61,15 @@ func New(ed editor.Editor, opts ...Option) (e *Handler, err error) {
 func (e *Handler) initConstructors() {
 	if e.openFileFn == nil {
 		e.openFileFn = func(filePath string,
-			buf *cell.Buffer, swapDir string) (FlusherCloser, error) {
-			return editor.NewFileBuffer(filePath, buf, swapDir)
+			buf *cell.Buffer, swapDir string) (browser.FlusherCloser, error) {
+			return NewFileBuffer(filePath, buf, swapDir)
 		}
 	}
 
 	if e.recoverFileFn == nil {
 		e.recoverFileFn = func(filePath,
-			swapFilePath string, buf *cell.Buffer) (FlusherCloser, error) {
-			return editor.RecoverFileBuffer(filePath, swapFilePath, buf)
+			swapFilePath string, buf *cell.Buffer) (browser.FlusherCloser, error) {
+			return RecoverFileBuffer(filePath, swapFilePath, buf)
 		}
 	}
 	if e.interruptDraw == nil {
@@ -87,9 +86,9 @@ func (e *Handler) tryLog(msg string, args ...interface{}) {
 // Init initializes this Handler with the given editor and Options.
 // It returns an error if an initial filepath was given through WithFilePath option
 // and the file failed to be opened.
-func (e *Handler) Init(ed editor.Editor, opts ...Option) (err error) {
+func (e *Handler) Init(ed Editor, opts ...browser.Option) (err error) {
 	e.initConstructors()
-	e.config = defaultEditorConfig
+	e.config = browser.DefaultConfig()
 
 	for _, o := range opts {
 		o(&e.config)
@@ -99,9 +98,9 @@ func (e *Handler) Init(ed editor.Editor, opts ...Option) (err error) {
 
 	e.ed = ed
 	e.commandBuf = cell.NewBuffer()
-	e.cmdVirt = newLogSpan(e.commandBuf, commandBarAttr)
+	e.cmdVirt = browser.NewMessageSpan(e.commandBuf, commandBarAttr)
 	e.mode = modeDefault
-	e.subscribers = make(map[term.Event]EventHandler)
+	e.subscribers = make(map[term.Event]browser.EventHandler)
 
 	if e.config.Filepath != "" {
 		err = e.newBufferWithFile(e.config.Filepath,
@@ -126,7 +125,7 @@ func (e *Handler) newCellBuffer() *cell.Buffer {
 }
 
 func (e *Handler) newFileBuffer(filename, recSwapFile string, buf *cell.Buffer) (
-	fileBuf FlusherCloser, err error,
+	fileBuf browser.FlusherCloser, err error,
 ) {
 	if recSwapFile != "" {
 		fileBuf, err = e.recoverFileFn(filename, recSwapFile, buf)
@@ -136,7 +135,7 @@ func (e *Handler) newFileBuffer(filename, recSwapFile string, buf *cell.Buffer) 
 	return
 }
 
-func emptyHandler(ed editor.Editor) tui.Handler {
+func emptyHandler(ed Editor) tui.Handler {
 	buf := cell.NewBuffer()
 	return ed.Edit(buf)
 }
@@ -242,7 +241,7 @@ func (e *Handler) removeAllBuffers() {
 	for {
 		err := e.comp.RemoveWindowBuffer(e.comp.Focus())
 		if err != nil {
-			if err != ErrNoFreeBuffers {
+			if err != browser.ErrNoFreeBuffers {
 				e.tryLog("unable to remove window buffer: %v", err)
 				e.setError(err)
 			}
@@ -330,7 +329,7 @@ func (e *Handler) Man() tui.Manual {
 
 // Resize satisfies tui.Component
 func (e *Handler) Resize(width, height int) {
-	resizeLogSpan(width, height, &e.cmdVirt)
+	browser.ResizeMessageSpan(&e.cmdVirt, width, height)
 	e.comp.Resize(width, height)
 }
 
@@ -386,25 +385,25 @@ func (e *Handler) setCommandMode() {
 
 // SplitVerticalRight opens a new window tile to the right of the
 // current window in focus and initializes it with h.
-func (e *Handler) SplitVerticalRight(h tui.Handler) (Window, error) {
+func (e *Handler) SplitVerticalRight(h tui.Handler) (browser.Window, error) {
 	return e.comp.SplitVerticalRight(h), nil
 }
 
 // SplitVerticalLeft opens a new window tile to the left of the
 // current window in focus and initializes it with h.
-func (e *Handler) SplitVerticalLeft(h tui.Handler) (Window, error) {
+func (e *Handler) SplitVerticalLeft(h tui.Handler) (browser.Window, error) {
 	return e.comp.SplitVerticalLeft(h), nil
 }
 
 // SplitHorizontalBelow opens a new window tile below the current window in focus
 // and initializes it with h.
-func (e *Handler) SplitHorizontalBelow(h tui.Handler) (Window, error) {
+func (e *Handler) SplitHorizontalBelow(h tui.Handler) (browser.Window, error) {
 	return e.comp.SplitHorizontalBelow(h), nil
 }
 
 // SplitHorizontalAbove opens a new window tile above the current window in focus
 // and initializes it with h.
-func (e *Handler) SplitHorizontalAbove(h tui.Handler) (Window, error) {
+func (e *Handler) SplitHorizontalAbove(h tui.Handler) (browser.Window, error) {
 	return e.comp.SplitHorizontalAbove(h), nil
 }
 
@@ -413,7 +412,7 @@ func (e *Handler) unsubscribe(ev term.Event) {
 }
 
 // Subscribe subscribers h EventHandler to term.Event ev.
-func (e *Handler) Subscribe(ev term.Event, h EventHandler) error {
+func (e *Handler) Subscribe(ev term.Event, h browser.EventHandler) error {
 	if _, ok := e.subscribers[ev]; ok {
 		return fmt.Errorf("there's already a subscriber subscribed to: %#v", ev)
 	}

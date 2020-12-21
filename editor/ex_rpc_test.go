@@ -1,4 +1,4 @@
-package browser
+package editor
 
 import (
 	"fmt"
@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/ernestrc/go-tui"
-	"github.com/ernestrc/go-tui/editor"
+	"github.com/ernestrc/go-tui/browser"
 	"github.com/ernestrc/go-tui/handler"
 	"github.com/ernestrc/go-tui/proto"
 	"github.com/ernestrc/go-tui/term"
@@ -100,7 +100,7 @@ func (t *dialBroker) Close() error {
 
 // binds together a client with the remote browser, so we can verify
 type testClient struct {
-	*Client
+	*browser.Client
 	tui.Handler
 }
 
@@ -141,7 +141,7 @@ func nop() {}
 func newTestRPCBrowser(t *testing.T,
 	destructor *func(),
 ) browserConstructor {
-	return func(ed editor.Editor, opts ...Option) (browserInternal, error) {
+	return func(ed Editor, opts ...browser.Option) (browserInternal, error) {
 		b := newTestBrowserHandler()
 		err := b.Init(ed, opts...)
 		if err != nil {
@@ -155,8 +155,7 @@ func newTestRPCBrowser(t *testing.T,
 
 		var mu sync.Mutex
 		grpcServer := grpc.NewServer()
-		server := NewServer(broker, b, &mu, nop, nop)
-		server.shutdownWait = testingShutdownWait
+		server := browser.NewServer(broker, b, &mu, nop, nop)
 		proto.RegisterWindowManagerServer(grpcServer, server)
 		proto.RegisterMessengerServer(grpcServer, server)
 		proto.RegisterKeyMapperServer(grpcServer, server)
@@ -169,7 +168,7 @@ func newTestRPCBrowser(t *testing.T,
 		require.NoError(t, err)
 
 		client := testClient{
-			Client:  NewClient(broker, conn),
+			Client:  browser.NewClient(broker, conn),
 			Handler: &safeHandler{Handler: b, mu: &mu},
 		}
 		*destructor = func() {
@@ -181,7 +180,7 @@ func newTestRPCBrowser(t *testing.T,
 	}
 }
 
-func TestRPCBrowserDraw(t *testing.T) {
+func TestIntegrationRPCBrowserDraw(t *testing.T) {
 	var destructor func()
 	constructor := newTestRPCBrowser(t, &destructor)
 	testBrowserHandlerDraw(t, constructor)
@@ -190,7 +189,7 @@ func TestRPCBrowserDraw(t *testing.T) {
 
 func TestRPCBrowserCloseLeak(t *testing.T) {
 	var destructor func()
-	browser, err := newTestRPCBrowser(t, &destructor)(&testEditor{}, WithFilepath(""))
+	browser, err := newTestRPCBrowser(t, &destructor)(&testEditor{}, browser.WithFilepath(""))
 	require.NoError(t, err)
 	defer destructor()
 
@@ -207,7 +206,7 @@ func TestRPCBrowserCloseLeak(t *testing.T) {
 // NOTE: run go test -race in order for this test to be useful.
 func TestClientSynchronizeHandlers(t *testing.T) {
 	var destructor func()
-	browser, err := newTestRPCBrowser(t, &destructor)(&testEditor{}, WithFilepath(""))
+	browser, err := newTestRPCBrowser(t, &destructor)(&testEditor{}, browser.WithFilepath(""))
 	require.NoError(t, err)
 	defer destructor()
 	var wg sync.WaitGroup

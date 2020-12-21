@@ -7,7 +7,11 @@ import (
 	"github.com/ernestrc/go-tui/term"
 )
 
-func newLogSpan(buf *cell.Buffer, bgAttr term.Attributes) handler.Virtual {
+// NOTE: this should probably me moved under Component package.
+
+// NewMessageSpan returns a virtual message bar suitable for use with
+// ResizeMessageSpan.
+func NewMessageSpan(buf *cell.Buffer, bgAttr term.Attributes) handler.Virtual {
 	scroll := component.NewScroll()
 	scroll.InitWithBuffer(buf)
 	scroll.Attributes = bgAttr
@@ -17,7 +21,10 @@ func newLogSpan(buf *cell.Buffer, bgAttr term.Attributes) handler.Virtual {
 	return handler.Virtual{Virtual: component.Virtual{C: content}}
 }
 
-func resizeLogSpan(width, height int, logVirt *handler.Virtual) {
+// ResizeMessageSpan resizes a handler.Virtual Message span returned by
+// NewMessageSpan. It positions the handler.Virtual at the bottom
+// of the available space with a 1 cell padding left and bottom.
+func ResizeMessageSpan(logVirt *handler.Virtual, width, height int) {
 	if width > 1 && height > 0 {
 		logVirt.Resize(width-2, 1)
 		busPos := term.Coordinates{X: 1, Y: height - 2}

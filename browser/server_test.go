@@ -19,6 +19,7 @@ import (
 
 // TODO make sure that connections are monitored and if
 // something occurs, all resources are cleaned up.
+func nop() {}
 
 func newServerWithNoBroker(ctrl *gomock.Controller) (
 	*Server, *MockBrowser,

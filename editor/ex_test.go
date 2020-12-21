@@ -1,12 +1,12 @@
-package browser
+package editor
 
 import (
 	"sync"
 	"testing"
 
 	"github.com/ernestrc/go-tui"
+	"github.com/ernestrc/go-tui/browser"
 	"github.com/ernestrc/go-tui/cell"
-	"github.com/ernestrc/go-tui/editor"
 	"github.com/ernestrc/go-tui/handler"
 	"github.com/ernestrc/go-tui/term"
 	"github.com/stretchr/testify/assert"
@@ -20,11 +20,11 @@ func (f funcEventHandler) Handle(ev term.Event) bool {
 }
 
 type browserInternal interface {
-	Browser
+	browser.Browser
 	tui.Handler
 }
 
-type browserConstructor func(ed editor.Editor, opts ...Option) (browserInternal, error)
+type browserConstructor func(ed Editor, opts ...browser.Option) (browserInternal, error)
 
 type testEditor struct {
 	buf *cell.Buffer
@@ -49,13 +49,13 @@ func (t *testFileBuffer) Close() error {
 }
 
 func openTestFile(filePath string, buf *cell.Buffer, swapDir string) (
-	FlusherCloser, error,
+	browser.FlusherCloser, error,
 ) {
 	return &testFileBuffer{}, nil
 }
 
 func recoverTestFile(filePath, swapFilePath string, buf *cell.Buffer) (
-	FlusherCloser, error,
+	browser.FlusherCloser, error,
 ) {
 	return openTestFile(filePath, buf, "")
 }
@@ -68,7 +68,7 @@ func newTestBrowserHandler() *Handler {
 }
 
 func TestBrowserHandlerDraw(t *testing.T) {
-	testBrowserHandlerDraw(t, func(ed editor.Editor, opts ...Option) (browserInternal, error) {
+	testBrowserHandlerDraw(t, func(ed Editor, opts ...browser.Option) (browserInternal, error) {
 		b := newTestBrowserHandler()
 		err := b.Init(ed, opts...)
 		if err != nil {
@@ -258,7 +258,7 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 └──────────────────┘`},
 	}
 
-	browser, err := constructor(&testEditor{}, WithFilepath(""))
+	browser, err := constructor(&testEditor{}, browser.WithFilepath(""))
 	require.NoError(t, err)
 
 	handler.BatchTestInputSequence(t, browser, 20, 10, cases)
@@ -394,14 +394,14 @@ func assertHandled(
 func newBrowserForSubscribeTest(t *testing.T, ev term.Event) (
 	*Handler, *handler.TestHandler, rune,
 ) {
-	browser := newTestBrowserHandler()
-	require.NoError(t, browser.Init(&testEditor{}))
+	b := newTestBrowserHandler()
+	require.NoError(t, b.Init(&testEditor{}))
 
 	h := handler.NewTestHandler()
-	err := browser.Subscribe(ev, handlerToEventHandler{h})
+	err := b.Subscribe(ev, browser.HandlerEventHandler(h))
 	require.NoError(t, err)
 
-	return browser, h, h.Ch
+	return b, h, h.Ch
 }
 
 func TestBrowserHandlerSubscribe(t *testing.T) {
@@ -418,7 +418,7 @@ func TestBrowserHandlerSubscribe(t *testing.T) {
 		b, h, startingRune := newBrowserForSubscribeTest(t, ev)
 
 		h2 := handler.NewTestHandler()
-		err := b.Subscribe(ev, handlerToEventHandler{h2})
+		err := b.Subscribe(ev, browser.HandlerEventHandler(h2))
 		assert.Error(t, err)
 
 		exit, handled := b.Handle(ev)

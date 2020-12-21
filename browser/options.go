@@ -6,14 +6,17 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-var defaultEditorConfig = Config{
-	Tabspaces:           4,
-	Logger:              nil,
-	SwapDir:             "",
-	Filepath:            "",
-	RecoveryFilepath:    "",
-	CommandEvent:        term.Event{Ch: ':', Type: term.EventKey},
-	WindowManagerConfig: handler.DefaultWindowManagerConfig(),
+// DefaultConfig returns the default Config.
+func DefaultConfig() Config {
+	return Config{
+		Tabspaces:           4,
+		Logger:              nil,
+		SwapDir:             "",
+		Filepath:            "",
+		RecoveryFilepath:    "",
+		CommandEvent:        term.Event{Ch: ':', Type: term.EventKey},
+		WindowManagerConfig: handler.DefaultWindowManagerConfig(),
+	}
 }
 
 // Option represents a configuration option for a browser.Handler.

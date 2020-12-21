@@ -31,7 +31,11 @@ func newRPCClipboard(t *testing.T) (Clipboard, func()) {
 		}
 	}()
 
-	return &RPCClipboardClient{Client: client}, func() { l.Close() }
+	return &RPCClipboardClient{Client: client}, func() {
+		l.Close()
+		conn.Close()
+		client.Close()
+	}
 }
 
 func TestRPCClipboard(t *testing.T) {
