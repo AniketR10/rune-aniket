@@ -8,6 +8,7 @@ import (
 
 	"github.com/ernestrc/go-tui/component"
 	"github.com/ernestrc/go-tui/proto"
+	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 )
 
@@ -84,11 +85,14 @@ type clientBreaker struct {
 		ch   chan *proto.HandleRequest
 	}
 
+	logger *log.Logger
+
 	man proto.Manual
 }
 
 func withClientBreaker(
-	c proto.HandlerClient, interruptDraw, interruptHandle func(),
+	c proto.HandlerClient,
+	interruptDraw, interruptHandle func(), logger *log.Logger,
 ) *clientBreaker {
 	ret := new(clientBreaker)
 	ret.cc = c
@@ -96,6 +100,7 @@ func withClientBreaker(
 	ret.handle.ch = make(chan *proto.HandleRequest, handleBackpressureThres)
 	ret.interruptDraw = interruptDraw
 	ret.interruptHandle = interruptHandle
+	ret.logger = logger
 
 	go ret.pipelineHandleEvents()
 
@@ -188,6 +193,9 @@ func (a *clientBreaker) sendDrawRequest(
 		comp := component.String(smtgWrongCopy)
 		comp.Resize(int(in.Width), int(in.Height))
 		res = proto.NewDrawResponse(comp, int(in.Width), int(in.Height))
+		if a.logger != nil {
+			a.logger.Errorf("error returned on Draw request: %v", err)
+		}
 	}
 
 	select {

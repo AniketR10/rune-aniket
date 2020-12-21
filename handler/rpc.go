@@ -70,7 +70,7 @@ func (c *Client) Init(
 	// the handler client is invoking an RPC which requires the
 	// original lock to be unlocked.
 	pbClient = withClientTimeout(pbClient, defaultRPCTimeout)
-	c.client = withClientBreaker(pbClient, interruptDraw, interruptHandle)
+	c.client = withClientBreaker(pbClient, interruptDraw, interruptHandle, c.Logger)
 
 	c.errors = make(chan error)
 }

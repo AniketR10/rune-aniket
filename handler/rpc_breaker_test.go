@@ -28,7 +28,7 @@ func waitForInterrupt(quitCh, ch chan struct{}) func() {
 
 func TestClientBreakerMan(t *testing.T) {
 	mock := &mockHandlerClient{remote: testHandler()}
-	b := withClientBreaker(mock, nop, nop)
+	b := withClientBreaker(mock, nop, nop, nil)
 	defer b.Close()
 
 	t.Run("dispatches Man synchronously", func(t *testing.T) {
@@ -91,7 +91,7 @@ func TestClientBreakerHandle(t *testing.T) {
 
 	t.Run("dispatches events asynchronously", func(t *testing.T) {
 		mock := &mockHandlerClient{remote: testHandler()}
-		b := withClientBreaker(mock, nop, nop)
+		b := withClientBreaker(mock, nop, nop, nil)
 		defer b.Close()
 
 		mock.handledCh = make(chan term.Event)
@@ -108,7 +108,7 @@ func TestClientBreakerHandle(t *testing.T) {
 		interrupt := make(chan struct{})
 		quitCh := make(chan struct{})
 		defer close(quitCh)
-		b := withClientBreaker(mock, nop, waitForInterrupt(quitCh, interrupt))
+		b := withClientBreaker(mock, nop, waitForInterrupt(quitCh, interrupt), nil)
 		defer b.Close()
 
 		mock.handledCh = make(chan term.Event)
@@ -127,7 +127,7 @@ func TestClientBreakerHandle(t *testing.T) {
 		var wg sync.WaitGroup
 		h := NewTestHandler()
 		mock := &mockHandlerClient{remote: h}
-		b := withClientBreaker(mock, nop, nop)
+		b := withClientBreaker(mock, nop, nop, nil)
 		quitChan := make(chan struct{})
 		mock.handledCh = make(chan term.Event)
 
@@ -150,7 +150,7 @@ func TestClientBreakerHandle(t *testing.T) {
 		h := NewTestHandler()
 		h.Exit = true
 		mock := &mockHandlerClient{remote: h}
-		b := withClientBreaker(mock, nop, func() { atomic.AddInt32(&i, 1) })
+		b := withClientBreaker(mock, nop, func() { atomic.AddInt32(&i, 1) }, nil)
 		quitChan := make(chan struct{})
 		mock.handledCh = make(chan term.Event)
 
@@ -196,7 +196,7 @@ func TestClientBreakerDraw(t *testing.T) {
 		interrupt := make(chan struct{})
 		quitCh := make(chan struct{})
 		defer close(quitCh)
-		b := withClientBreaker(mock, waitForInterrupt(quitCh, interrupt), nop)
+		b := withClientBreaker(mock, waitForInterrupt(quitCh, interrupt), nop, nil)
 		defer b.Close()
 
 		res, err := b.Draw(context.Background(), req)
@@ -220,7 +220,7 @@ func TestClientBreakerDraw(t *testing.T) {
 		interrupt := make(chan struct{})
 		quitCh := make(chan struct{})
 		defer close(quitCh)
-		b := withClientBreaker(mock, waitForInterrupt(quitCh, interrupt), nop)
+		b := withClientBreaker(mock, waitForInterrupt(quitCh, interrupt), nop, nil)
 		defer b.Close()
 
 		res, err := b.Draw(context.Background(), req)
@@ -247,7 +247,7 @@ func TestClientBreakerDraw(t *testing.T) {
 		interrupt := make(chan struct{})
 		quitCh := make(chan struct{})
 		defer close(quitCh)
-		b := withClientBreaker(mock, waitForInterrupt(quitCh, interrupt), nop)
+		b := withClientBreaker(mock, waitForInterrupt(quitCh, interrupt), nop, nil)
 		defer b.Close()
 
 		mock.rpcError = errors.New("Uh, Houstoun, we've had a problem")
@@ -271,7 +271,7 @@ func TestClientBreakerDraw(t *testing.T) {
 		interrupt := make(chan struct{})
 		quitCh := make(chan struct{})
 		defer close(quitCh)
-		b := withClientBreaker(mock, waitForInterrupt(quitCh, interrupt), nop)
+		b := withClientBreaker(mock, waitForInterrupt(quitCh, interrupt), nop, nil)
 		defer b.Close()
 
 		_, err := b.Draw(context.Background(), req)
