@@ -232,3 +232,8 @@ func (t *Tabs) Tab(idx int) (string, bool) {
 	}
 	return t.tabs[idx].name, true
 }
+
+// Size returns the number of tabs.
+func (t *Tabs) Size() int {
+	return len(t.tabs)
+}
