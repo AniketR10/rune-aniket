@@ -60,8 +60,8 @@ func recoverTestFile(filePath, swapFilePath string, buf *cell.Buffer) (
 	return openTestFile(filePath, buf, "")
 }
 
-func newTestBrowserHandler() *Handler {
-	ret := new(Handler)
+func newTestBrowserHandler() *Ex {
+	ret := new(Ex)
 	ret.openFileFn = openTestFile
 	ret.recoverFileFn = recoverTestFile
 	return ret
@@ -392,7 +392,7 @@ func assertHandled(
 }
 
 func newBrowserForSubscribeTest(t *testing.T, ev term.Event) (
-	*Handler, *handler.TestHandler, rune,
+	*Ex, *handler.TestHandler, rune,
 ) {
 	b := newTestBrowserHandler()
 	require.NoError(t, b.Init(&testEditor{}))

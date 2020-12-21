@@ -29,7 +29,9 @@ type openFileFunc func(filePath string,
 type recoverFileFunc func(filePath,
 	swapFilePath string, buf *cell.Buffer) (browser.FlusherCloser, error)
 
-type Handler struct {
+// Ex satisfies browser.Browser and tui.Handler by wrapping a browser.Component
+// to provide an ex editor interface.
+type Ex struct {
 	openFileFn    openFileFunc
 	recoverFileFn recoverFileFunc
 	interruptDraw func()
@@ -43,14 +45,14 @@ type Handler struct {
 	mode          mode
 }
 
-func newOsHandler() *Handler {
-	ret := new(Handler)
+func newOsHandler() *Ex {
+	ret := new(Ex)
 	return ret
 }
 
-// New allocates storage for a new Handler and initializes it.
-func New(ed Editor, opts ...browser.Option) (e *Handler, err error) {
-	e = new(Handler)
+// NewEx allocates storage for a new Ex and initializes it.
+func NewEx(ed Editor, opts ...browser.Option) (e *Ex, err error) {
+	e = new(Ex)
 	err = e.Init(ed, opts...)
 	if err != nil {
 		return
@@ -58,7 +60,7 @@ func New(ed Editor, opts ...browser.Option) (e *Handler, err error) {
 	return
 }
 
-func (e *Handler) initConstructors() {
+func (e *Ex) initConstructors() {
 	if e.openFileFn == nil {
 		e.openFileFn = func(filePath string,
 			buf *cell.Buffer, swapDir string) (browser.FlusherCloser, error) {
@@ -77,16 +79,16 @@ func (e *Handler) initConstructors() {
 	}
 }
 
-func (e *Handler) tryLog(msg string, args ...interface{}) {
+func (e *Ex) tryLog(msg string, args ...interface{}) {
 	if e.config.Logger != nil {
 		e.config.Logger.Debugf(msg, args...)
 	}
 }
 
-// Init initializes this Handler with the given editor and Options.
+// Init initializes this Ex with the given editor and Options.
 // It returns an error if an initial filepath was given through WithFilePath option
 // and the file failed to be opened.
-func (e *Handler) Init(ed Editor, opts ...browser.Option) (err error) {
+func (e *Ex) Init(ed Editor, opts ...browser.Option) (err error) {
 	e.initConstructors()
 	e.config = browser.DefaultConfig()
 
@@ -113,7 +115,7 @@ func (e *Handler) Init(ed Editor, opts ...browser.Option) (err error) {
 	return
 }
 
-func (e *Handler) newCellBuffer() *cell.Buffer {
+func (e *Ex) newCellBuffer() *cell.Buffer {
 	buf := cell.NewBuffer()
 	buf.InitWithTabspaces(e.config.Tabspaces)
 	if e.config.Logger != nil {
@@ -124,7 +126,7 @@ func (e *Handler) newCellBuffer() *cell.Buffer {
 	return buf
 }
 
-func (e *Handler) newFileBuffer(filename, recSwapFile string, buf *cell.Buffer) (
+func (e *Ex) newFileBuffer(filename, recSwapFile string, buf *cell.Buffer) (
 	fileBuf browser.FlusherCloser, err error,
 ) {
 	if recSwapFile != "" {
@@ -140,7 +142,7 @@ func emptyHandler(ed Editor) tui.Handler {
 	return ed.Edit(buf)
 }
 
-func (e *Handler) newBufferWithFile(
+func (e *Ex) newBufferWithFile(
 	filename, recoveryFilename string,
 ) error {
 	buf := e.newCellBuffer()
@@ -156,7 +158,7 @@ func (e *Handler) newBufferWithFile(
 	return nil
 }
 
-func (e *Handler) runSingleCommand(cmd string) (quit bool, err error) {
+func (e *Ex) runSingleCommand(cmd string) (quit bool, err error) {
 	switch cmd {
 	case "bprev":
 		e.comp.UpdateWindowBufferPrev(e.comp.Focus())
@@ -184,7 +186,7 @@ func (e *Handler) runSingleCommand(cmd string) (quit bool, err error) {
 	return
 }
 
-func (e *Handler) runCommand() (quit bool, err error) {
+func (e *Ex) runCommand() (quit bool, err error) {
 	cmd := e.commandBuf.String()
 	cmds := strings.Split(cmd, " ")
 	if len(cmds) == 1 {
@@ -200,11 +202,11 @@ func (e *Handler) runCommand() (quit bool, err error) {
 	return
 }
 
-func (e *Handler) setError(err error) {
+func (e *Ex) setError(err error) {
 	e.comp.SetMessage("Error: %s", err)
 }
 
-func (e *Handler) handleCommand(ev term.Event) (quit, handled bool) {
+func (e *Ex) handleCommand(ev term.Event) (quit, handled bool) {
 	handled = true
 
 	switch ev.Key {
@@ -237,7 +239,7 @@ func (e *Handler) handleCommand(ev term.Event) (quit, handled bool) {
 	return
 }
 
-func (e *Handler) removeAllBuffers() {
+func (e *Ex) removeAllBuffers() {
 	for {
 		err := e.comp.RemoveWindowBuffer(e.comp.Focus())
 		if err != nil {
@@ -250,7 +252,7 @@ func (e *Handler) removeAllBuffers() {
 	}
 }
 
-func (e *Handler) mapEvent(ev term.Event) term.Event {
+func (e *Ex) mapEvent(ev term.Event) term.Event {
 	// map event if applicable
 	mev, ok := e.keymap[ev]
 	if !ok {
@@ -259,7 +261,7 @@ func (e *Handler) mapEvent(ev term.Event) term.Event {
 	return mev
 }
 
-func (e *Handler) handleProxy(ev term.Event) (
+func (e *Ex) handleProxy(ev term.Event) (
 	exit, handled bool,
 ) {
 	if ev == e.config.CommandEvent {
@@ -301,7 +303,7 @@ func (e *Handler) handleProxy(ev term.Event) (
 }
 
 // Handle satisfies tui.Handler.
-func (e *Handler) Handle(ev term.Event) (bool, bool) {
+func (e *Ex) Handle(ev term.Event) (bool, bool) {
 	switch e.mode {
 	case modeDefault:
 		return e.handleProxy(ev)
@@ -313,7 +315,7 @@ func (e *Handler) Handle(ev term.Event) (bool, bool) {
 }
 
 // Cursor satisfies tui.Handler.
-func (e *Handler) Cursor() (pos term.Coordinates, show bool) {
+func (e *Ex) Cursor() (pos term.Coordinates, show bool) {
 	if e.mode == modeCommand {
 		pos := e.cmdVirt.Position()
 		pos.X += len(e.commandBuf.String())
@@ -323,18 +325,18 @@ func (e *Handler) Cursor() (pos term.Coordinates, show bool) {
 }
 
 // Man satisfies tui.Handler.
-func (e *Handler) Man() tui.Manual {
+func (e *Ex) Man() tui.Manual {
 	panic("TODO")
 }
 
 // Resize satisfies tui.Component
-func (e *Handler) Resize(width, height int) {
+func (e *Ex) Resize(width, height int) {
 	browser.ResizeMessageSpan(&e.cmdVirt, width, height)
 	e.comp.Resize(width, height)
 }
 
 // Draw satisfies tui.Component
-func (e *Handler) Draw(w term.Writer) {
+func (e *Ex) Draw(w term.Writer) {
 	e.comp.Draw(w)
 
 	if e.mode == modeCommand {
@@ -343,7 +345,7 @@ func (e *Handler) Draw(w term.Writer) {
 }
 
 // Close closes the resources associated with this browser.
-func (e *Handler) Close() error {
+func (e *Ex) Close() error {
 	err := e.comp.Close()
 	if err != nil {
 		e.tryLog("browser.Component.Close error: %v", err)
@@ -352,19 +354,19 @@ func (e *Handler) Close() error {
 }
 
 // OpenFile opens the given file in a new browser tab.
-func (e *Handler) OpenFile(filename string) error {
+func (e *Ex) OpenFile(filename string) error {
 	return e.newBufferWithFile(filename, "")
 }
 
 // SetMessage formats the given msg and args and displays it on next Draw.
-func (e *Handler) SetMessage(msg string, args ...interface{}) error {
+func (e *Ex) SetMessage(msg string, args ...interface{}) error {
 	e.comp.SetMessage(msg, args...)
 	return nil
 }
 
 // MergeKeyMap takes the given keymap and merges it with the Browser's keymap
 // to override the current event key mappings.
-func (e *Handler) MergeKeyMap(keymap map[term.Event]term.Event) error {
+func (e *Ex) MergeKeyMap(keymap map[term.Event]term.Event) error {
 	if e.keymap == nil {
 		e.keymap = make(map[term.Event]term.Event)
 	}
@@ -374,54 +376,54 @@ func (e *Handler) MergeKeyMap(keymap map[term.Event]term.Event) error {
 	return nil
 }
 
-func (e *Handler) setNormalMode() {
+func (e *Ex) setNormalMode() {
 	e.commandBuf.Reset()
 	e.mode = modeDefault
 }
 
-func (e *Handler) setCommandMode() {
+func (e *Ex) setCommandMode() {
 	e.mode = modeCommand
 }
 
 // SplitVerticalRight opens a new window tile to the right of the
 // current window in focus and initializes it with h.
-func (e *Handler) SplitVerticalRight(h tui.Handler) (browser.Window, error) {
+func (e *Ex) SplitVerticalRight(h tui.Handler) (browser.Window, error) {
 	return e.comp.SplitVerticalRight(h), nil
 }
 
 // SplitVerticalLeft opens a new window tile to the left of the
 // current window in focus and initializes it with h.
-func (e *Handler) SplitVerticalLeft(h tui.Handler) (browser.Window, error) {
+func (e *Ex) SplitVerticalLeft(h tui.Handler) (browser.Window, error) {
 	return e.comp.SplitVerticalLeft(h), nil
 }
 
 // SplitHorizontalBelow opens a new window tile below the current window in focus
 // and initializes it with h.
-func (e *Handler) SplitHorizontalBelow(h tui.Handler) (browser.Window, error) {
+func (e *Ex) SplitHorizontalBelow(h tui.Handler) (browser.Window, error) {
 	return e.comp.SplitHorizontalBelow(h), nil
 }
 
 // SplitHorizontalAbove opens a new window tile above the current window in focus
 // and initializes it with h.
-func (e *Handler) SplitHorizontalAbove(h tui.Handler) (browser.Window, error) {
+func (e *Ex) SplitHorizontalAbove(h tui.Handler) (browser.Window, error) {
 	return e.comp.SplitHorizontalAbove(h), nil
 }
 
-func (e *Handler) unsubscribe(ev term.Event) {
+func (e *Ex) unsubscribe(ev term.Event) {
 	delete(e.subscribers, ev)
 }
 
 // Subscribe subscribers h EventHandler to term.Event ev.
-func (e *Handler) Subscribe(ev term.Event, h browser.EventHandler) error {
+func (e *Ex) Subscribe(ev term.Event, h browser.EventHandler) error {
 	if _, ok := e.subscribers[ev]; ok {
 		return fmt.Errorf("there's already a subscriber subscribed to: %#v", ev)
 	}
-	e.subscribers[ev] = browserEventHandler{browser: e, h: h}
+	e.subscribers[ev] = exEventHandler{browser: e, h: h}
 	return nil
 }
 
 // PublishInterrupt interrupts the main event loop to redraw the terminal.
-func (e *Handler) PublishInterrupt() error {
+func (e *Ex) PublishInterrupt() error {
 	// prevent deadlock if PublishInterrupt is called during a Draw call.
 	go e.interruptDraw()
 	return nil
