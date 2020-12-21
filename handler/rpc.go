@@ -48,12 +48,6 @@ func NewClient(
 	return ret
 }
 
-type nopCloser struct {
-	proto.HandlerClient
-}
-
-func (n *nopCloser) Close() error { return nil }
-
 // Init initialies this Client with pbClient and the given interrupt func.
 func (c *Client) Init(
 	pbClient proto.HandlerClient, interruptDraw, interruptHandle func(),
