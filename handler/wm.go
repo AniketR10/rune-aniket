@@ -308,3 +308,8 @@ func DefaultWindowManagerConfig() WindowManagerConfig {
 		},
 	}
 }
+
+// Size returns the size in windows of this WindowManager.
+func (wm *WindowManager) Size() int {
+	return wm.comp.Size()
+}
