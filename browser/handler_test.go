@@ -49,13 +49,13 @@ func (t *testFileBuffer) Close() error {
 }
 
 func openTestFile(filePath string, buf *cell.Buffer, swapDir string) (
-	fileBuffer, error,
+	FlusherCloser, error,
 ) {
 	return &testFileBuffer{}, nil
 }
 
 func recoverTestFile(filePath, swapFilePath string, buf *cell.Buffer) (
-	fileBuffer, error,
+	FlusherCloser, error,
 ) {
 	return openTestFile(filePath, buf, "")
 }
@@ -84,22 +84,22 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 			`┌──────────────────┐
 │                  │
 ├──────────────────┤
-│EEEEEEEEEEEEEEEEEE│
-│EEEEEEEEEEEEEEEEEE│
-│EEEEEEEEEEEEEEEEEE│
-│EEEEEEEEEEEEEEEEEE│
-│EEEEEEEEEEEEEEEEEE│
-│EEEEEEEEEEEEEEEEEE│
+│                  │
+│                  │
+│                  │
+│                  │
+│                  │
+│                  │
 └──────────────────┘`},
 		{":",
 			`┌──────────────────┐
 │                  │
 ├──────────────────┤
-│EEEEEEEEEEEEEEEEEE│
-│EEEEEEEEEEEEEEEEEE│
-│EEEEEEEEEEEEEEEEEE│
-│EEEEEEEEEEEEEEEEEE│
-│EEEEEEEEEEEEEEEEEE│
+│                  │
+│                  │
+│                  │
+│                  │
+│                  │
 │▐                 │
 └──────────────────┘`},
 		{"e cabin.go>",

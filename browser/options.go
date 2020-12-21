@@ -6,7 +6,7 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-var defaultEditorConfig = editorConfig{
+var defaultEditorConfig = Config{
 	Tabspaces:           4,
 	Logger:              nil,
 	SwapDir:             "",
@@ -16,30 +16,31 @@ var defaultEditorConfig = editorConfig{
 	WindowManagerConfig: handler.DefaultWindowManagerConfig(),
 }
 
-// Option represents a configuration option for a Editor.
-type Option func(*editorConfig)
+// Option represents a configuration option for a browser.Handler.
+type Option func(*Config)
 
-// editorConfig holds configuration for an Editor.
-type editorConfig struct {
+// Config holds configuration for an browser.Component.
+type Config struct {
 	Tabspaces        int
 	Logger           *log.Logger
 	SwapDir          string
 	Filepath         string
 	RecoveryFilepath string
 	CommandEvent     term.Event
+	StartText        string
 	handler.WindowManagerConfig
 }
 
 // WithLogger sets a logger that the editor can use to log debugging data.
 func WithLogger(l *log.Logger) Option {
-	return func(cfg *editorConfig) {
+	return func(cfg *Config) {
 		cfg.Logger = l
 	}
 }
 
 // WithTabspaces sets the number of spaces used to render a tab.
 func WithTabspaces(tabspaces int) Option {
-	return func(cfg *editorConfig) {
+	return func(cfg *Config) {
 		cfg.Tabspaces = tabspaces
 	}
 }
@@ -48,7 +49,7 @@ func WithTabspaces(tabspaces int) Option {
 // The swap directory is used to keep persist recovery files. If this option is not
 // defined, the directory of WithFilepath is used as a swap directory.
 func WithSwapDir(dir string) Option {
-	return func(cfg *editorConfig) {
+	return func(cfg *Config) {
 		cfg.SwapDir = dir
 	}
 }
@@ -58,7 +59,7 @@ func WithSwapDir(dir string) Option {
 // See handler.WindowManagerConfig for more info. If this option is not passed
 // DefaultWindowManagerConfig is utilized.
 func WithWindowManagerConfig(config handler.WindowManagerConfig) Option {
-	return func(cfg *editorConfig) {
+	return func(cfg *Config) {
 		cfg.WindowManagerConfig = config
 	}
 }
@@ -67,7 +68,7 @@ func WithWindowManagerConfig(config handler.WindowManagerConfig) Option {
 // from recovery file swapFilePath. This option overrides WithSwapDir because
 // the swap directory of swapFilePath is used instead.
 func WithRecoveryFile(swapFilePath string) Option {
-	return func(cfg *editorConfig) {
+	return func(cfg *Config) {
 		cfg.RecoveryFilepath = swapFilePath
 	}
 }
@@ -75,7 +76,7 @@ func WithRecoveryFile(swapFilePath string) Option {
 // WithFilepath is an Option that sets the filepath of the file to open with
 // a Editor handler.
 func WithFilepath(filepath string) Option {
-	return func(cfg *editorConfig) {
+	return func(cfg *Config) {
 		cfg.Filepath = filepath
 	}
 }
@@ -83,7 +84,7 @@ func WithFilepath(filepath string) Option {
 // WithCommandEvent is an Option that defines what event triggers the editor's
 // command mode.
 func WithCommandEvent(event term.Event) Option {
-	return func(cfg *editorConfig) {
+	return func(cfg *Config) {
 		cfg.CommandEvent = event
 	}
 }

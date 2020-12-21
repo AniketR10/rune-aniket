@@ -1,174 +1,47 @@
 package browser
 
 import (
-	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
 
 	"github.com/ernestrc/go-tui"
 	"github.com/ernestrc/go-tui/cell"
-	"github.com/ernestrc/go-tui/component"
 	"github.com/ernestrc/go-tui/editor"
 	"github.com/ernestrc/go-tui/handler"
 	"github.com/ernestrc/go-tui/term"
 )
 
-// ErrLastWindow is returned when trying to close Browser's last window.
-var ErrLastWindow = errors.New("Cannot close last window")
-
-// ErrLastBuffer is returned when trying to delete the Browser's last buffer.
-var ErrLastBuffer = errors.New("No free buffers left")
-
-// ErrInvalidSave is returned when trying to save a buffer that it's not a file
-// in the file system.
-var ErrInvalidSave = errors.New("Cannot save this buffer")
-
-const logBufDrawTimes = 2
+var (
+	commandBarAttr = term.Attributes{Bg: term.ColorWhite, Fg: term.ColorBlack}
+)
 
 type mode int8
 
 const (
-	proxyMode mode = iota
-	commandMode
+	modeDefault mode = iota
+	modeCommand
 )
-
-// used to abstract editor.FileBufer
-type fileBuffer interface {
-	Flush() error
-	Close() error
-}
 
 type openFileFunc func(filePath string,
-	buf *cell.Buffer, swapDir string) (fileBuffer, error)
+	buf *cell.Buffer, swapDir string) (FlusherCloser, error)
 
 type recoverFileFunc func(filePath,
-	swapFilePath string, buf *cell.Buffer) (fileBuffer, error)
-
-var (
-	focusFileAttr    = term.Attributes{Fg: term.ColorDefault}
-	nonFocusFileAttr = term.Attributes{Fg: 243}
-	scrollAttr       = term.Attributes{Fg: term.ColorWhite}
-	frameFileAttr    = term.Attributes{Fg: 243}
-	commandBarAttr   = term.Attributes{Bg: term.ColorWhite, Fg: term.ColorBlack}
-	logBarAttr       = term.Attributes{Bg: term.ColorRed, Fg: term.ColorWhite}
-	wmFocusAttr      = frameFileAttr
-	wmDefaultAttr    = frameFileAttr
-)
-
-type browserWindowContent struct {
-	win browserWindow
-	tui.Handler
-}
-
-func (e browserWindowContent) Handle(ev term.Event) (exit, handled bool) {
-	exit, handled = e.Handler.Handle(ev)
-	if exit {
-		_ = e.win.Close()
-	}
-	return
-}
-
-type browserWindow struct {
-	handler *Handler
-	win     handler.Window
-}
-
-// browserWindow is passed by value, so we store whether
-// it has been closed or not in Handler.
-func (w browserWindow) Close() error {
-	w.handler.closeWindow(w)
-	return nil
-}
+	swapFilePath string, buf *cell.Buffer) (FlusherCloser, error)
 
 // Handler adds tab and window management to a editor.Editor.
 type Handler struct {
 	openFileFn    openFileFunc
 	recoverFileFn recoverFileFunc
 	interruptDraw func()
-
-	ed          editor.Editor
-	config      editorConfig
-	keymap      map[term.Event]term.Event
-	subscribers map[term.Event]EventHandler
-
-	commandBuf *cell.Buffer
-	cmdVirt    handler.Virtual
-	logBuf     *cell.Buffer
-	logBufDraw int
-	logVirt    handler.Virtual
-
-	tabs     *handler.Tabs
-	tabsVirt handler.Virtual
-	wm       *handler.WindowManager
-	wmVirt   handler.Virtual
-	frames   *component.FrameUnion
-
-	buffers        []*browserBuffer
-	windows        []browserWindow
-	mode           mode
-	fileListHeight int
-}
-
-func (e *Handler) addWindow(win browserWindow) {
-	e.windows = append(e.windows, win)
-}
-
-func (e *Handler) newWindow(node handler.Window) browserWindow {
-	win := browserWindow{
-		handler: e,
-		win:     node,
-	}
-	e.addWindow(win)
-	return win
-}
-
-func (e *Handler) findWindow(node handler.Window) (int, browserWindow) {
-	for i, w := range e.windows {
-		if w.win == node {
-			return i, w
-		}
-	}
-	return -1, browserWindow{}
-}
-
-func (e *Handler) closeWindow(winIfc Window) error {
-	win := winIfc.(browserWindow)
-	idx, _ := e.findWindow(win.win)
-	if idx == -1 {
-		// already closed
-		return nil
-	}
-
-	buf, ok := e.browserBufferAtNode(win.win)
-	if ok {
-		buf.free = true
-	}
-
-	err := win.win.Close()
-	if err != nil {
-		return err
-	}
-
-	e.windows = append(e.windows[:idx], e.windows[idx+1:]...)
-	return nil
-}
-
-func (e *Handler) doEdit(buf *cell.Buffer) tui.Handler {
-	editor := e.ed.Edit(buf)
-	return editor
-}
-
-func (e *Handler) emptyBuffer() *browserBuffer {
-	buf := cell.NewBuffer()
-	editor := e.doEdit(buf)
-	handler := browserBuffer{
-		filename: "",
-		handler:  editor,
-		free:     false,
-		fileBuf:  nil,
-	}
-	return &handler
+	comp          Component
+	commandBuf    *cell.Buffer
+	cmdVirt       handler.Virtual
+	ed            editor.Editor
+	config        Config
+	keymap        map[term.Event]term.Event
+	subscribers   map[term.Event]EventHandler
+	mode          mode
 }
 
 func newOsHandler() *Handler {
@@ -186,50 +59,28 @@ func New(ed editor.Editor, opts ...Option) (e *Handler, err error) {
 	return
 }
 
-func newLogSpan(buf *cell.Buffer, bgAttr term.Attributes) handler.Virtual {
-	scroll := component.NewScroll()
-	scroll.InitWithBuffer(buf)
-	scroll.Attributes = bgAttr
-
-	background := term.Cell{Bg: bgAttr.Bg, Fg: bgAttr.Fg}
-	content := component.WithBackground(scroll, background)
-	return handler.Virtual{Virtual: component.Virtual{C: content}}
-}
-
-func (e *Handler) addBuffer(buf *browserBuffer) {
-	e.buffers = append(e.buffers, buf)
-	e.tabs.Add(buf.filename)
-}
-
-func (e *Handler) removeBuffer(buf *browserBuffer) {
-	if !buf.free {
-		panic("trying to remove buffer that is still attached to a window")
-	}
-
-	defer buf.Close()
-
-	idx := e.findBufferIdx(buf)
-	e.buffers = append(e.buffers[:idx], e.buffers[idx+1:]...)
-
-	e.tabs.Remove(idx)
-}
-
 func (e *Handler) initConstructors() {
 	if e.openFileFn == nil {
 		e.openFileFn = func(filePath string,
-			buf *cell.Buffer, swapDir string) (fileBuffer, error) {
+			buf *cell.Buffer, swapDir string) (FlusherCloser, error) {
 			return editor.NewFileBuffer(filePath, buf, swapDir)
 		}
 	}
 
 	if e.recoverFileFn == nil {
 		e.recoverFileFn = func(filePath,
-			swapFilePath string, buf *cell.Buffer) (fileBuffer, error) {
+			swapFilePath string, buf *cell.Buffer) (FlusherCloser, error) {
 			return editor.RecoverFileBuffer(filePath, swapFilePath, buf)
 		}
 	}
 	if e.interruptDraw == nil {
 		e.interruptDraw = term.Interrupt
+	}
+}
+
+func (e *Handler) tryLog(msg string, args ...interface{}) {
+	if e.config.Logger != nil {
+		e.config.Logger.Debugf(msg, args...)
 	}
 }
 
@@ -244,54 +95,26 @@ func (e *Handler) Init(ed editor.Editor, opts ...Option) (err error) {
 		o(&e.config)
 	}
 
-	e.ed = ed
-	e.mode = proxyMode
+	e.comp.Init(e.config)
 
+	e.ed = ed
 	e.commandBuf = cell.NewBuffer()
 	e.cmdVirt = newLogSpan(e.commandBuf, commandBarAttr)
-
-	e.logBuf = cell.NewBuffer()
-	e.logVirt = newLogSpan(e.logBuf, logBarAttr)
-
-	e.tabs = handler.NewTabs()
-	e.tabs.OnClick = func(idx int) {
-		buf := e.buffers[idx]
-		if buf.free {
-			e.updateNodeContent(e.wm.Focus(), buf)
-		}
-	}
-	e.tabs.SetAttr(focusFileAttr, nonFocusFileAttr, frameFileAttr, scrollAttr)
+	e.mode = modeDefault
 	e.subscribers = make(map[term.Event]EventHandler)
 
-	var initBuffer *browserBuffer
 	if e.config.Filepath != "" {
-		initBuffer, err = e.newBufferWithFile(e.config.Filepath,
+		err = e.newBufferWithFile(e.config.Filepath,
 			e.config.RecoveryFilepath)
 		if err != nil {
 			return
 		}
-	} else {
-		initBuffer = e.emptyBuffer()
-		e.addBuffer(initBuffer)
 	}
-	e.wm = handler.NewWindowManager(initBuffer, e.config.WindowManagerConfig)
-	e.wm.SetAttr(wmDefaultAttr, wmFocusAttr)
-
-	initBuffer.free = false
-	_ = e.newWindow(e.wm.Focus()) // init handler with initial window
-
-	e.wmVirt = handler.Virtual{Virtual: component.Virtual{C: e.wm}}
-	e.tabsVirt = handler.Virtual{Virtual: component.Virtual{C: e.tabs}}
-	e.frames = component.NewFrameUnion(&e.tabsVirt.Virtual, &e.wmVirt.Virtual)
-	e.frames.MiddleLeft.Bg = frameFileAttr.Bg
-	e.frames.MiddleLeft.Fg = frameFileAttr.Fg
-	e.frames.MiddleRight.Bg = frameFileAttr.Bg
-	e.frames.MiddleRight.Fg = frameFileAttr.Fg
 
 	return
 }
 
-func (e *Handler) newBuffer() *cell.Buffer {
+func (e *Handler) newCellBuffer() *cell.Buffer {
 	buf := cell.NewBuffer()
 	buf.InitWithTabspaces(e.config.Tabspaces)
 	if e.config.Logger != nil {
@@ -303,7 +126,7 @@ func (e *Handler) newBuffer() *cell.Buffer {
 }
 
 func (e *Handler) newFileBuffer(filename, recSwapFile string, buf *cell.Buffer) (
-	fileBuf fileBuffer, err error,
+	fileBuf FlusherCloser, err error,
 ) {
 	if recSwapFile != "" {
 		fileBuf, err = e.recoverFileFn(filename, recSwapFile, buf)
@@ -313,187 +136,51 @@ func (e *Handler) newFileBuffer(filename, recSwapFile string, buf *cell.Buffer) 
 	return
 }
 
+func emptyHandler(ed editor.Editor) tui.Handler {
+	buf := cell.NewBuffer()
+	return ed.Edit(buf)
+}
+
 func (e *Handler) newBufferWithFile(
 	filename, recoveryFilename string,
-) (*browserBuffer, error) {
-	buf := e.newBuffer()
+) error {
+	buf := e.newCellBuffer()
 	fileBuf, err := e.newFileBuffer(filename, recoveryFilename, buf)
 	if err != nil {
-		return nil, err
+		e.tryLog("error opening new file buffer: %v", err)
+		e.setError(err)
+		return err
 	}
 
-	editor := e.doEdit(buf)
-
-	buffer := &browserBuffer{
-		filename: filepath.Base(filename),
-		fileBuf:  fileBuf,
-		handler:  editor,
-		free:     true,
-	}
-
-	e.addBuffer(buffer)
-
-	return buffer, nil
-}
-
-func (e *Handler) findBufferIdx(buf *browserBuffer) int {
-	idx := -1
-	for i, f := range e.buffers {
-		if f == buf {
-			idx = i
-			break
-		}
-	}
-	if idx == -1 {
-		panic("corrupted list of file buffers: could not find file")
-	}
-	return idx
-}
-
-func (e *Handler) browserBufferIdxAtNode(node handler.Window) (
-	*browserBuffer, int,
-) {
-	buf, ok := e.browserBufferAtNode(node)
-	if !ok {
-		return nil, 0
-	}
-	return buf, e.findBufferIdx(buf)
-}
-
-func (e *Handler) updateNodeBufferIdx(node handler.Window, idx int) bool {
-	buf := e.buffers[idx]
-	if buf.free {
-		e.updateNodeContent(node, buf)
-		return true
-	}
-	return false
-}
-
-func (e *Handler) updateNodeBufferNextFree(node handler.Window) bool {
-	freeBufs := e.freeBuffers()
-	if len(freeBufs) != 0 {
-		e.updateNodeContent(node, e.buffers[freeBufs[0]])
-		return true
-	}
-
-	return false
-}
-
-func (e *Handler) updateNodeBufferPrev(node handler.Window) {
-	buf, idx := e.browserBufferIdxAtNode(node)
-	if buf == nil {
-		e.updateNodeBufferNextFree(node)
-		return
-	}
-	for i := 0; i < len(e.buffers); i++ {
-		if idx == 0 {
-			idx = len(e.buffers) - 1
-		} else {
-			idx--
-		}
-		if e.updateNodeBufferIdx(node, idx) {
-			return
-		}
-	}
-}
-
-func (e *Handler) updateNodeBufferNext(node handler.Window) {
-	buf, idx := e.browserBufferIdxAtNode(node)
-	if buf == nil {
-		e.updateNodeBufferNextFree(node)
-		return
-	}
-	for i := 0; i < len(e.buffers); i++ {
-		idx++
-		if idx == len(e.buffers) {
-			idx = 0
-		}
-		if e.updateNodeBufferIdx(node, idx) {
-			return
-		}
-	}
-}
-
-func (e *Handler) updateNodeContent(
-	node handler.Window, content tui.Handler,
-) tui.Handler {
-	newBuf, ok := content.(*browserBuffer)
-	if ok {
-		idx := e.findBufferIdx(newBuf)
-		e.tabs.SetFocus(idx)
-		newBuf.free = false
-	}
-	oldHandler := node.SetContent(content)
-	if oldBuf, ok := oldHandler.(*browserBuffer); ok {
-		oldBuf.free = true
-	}
-	return oldHandler
-}
-
-func (e *Handler) browserBufferAtNode(node handler.Window) (*browserBuffer, bool) {
-	buf, ok := node.Content().(*browserBuffer)
-	return buf, ok
-}
-
-func (e *Handler) freeBuffers() []int {
-	freeBufs := make([]int, 0)
-	for i, b := range e.buffers {
-		if b.free {
-			freeBufs = append(freeBufs, i)
-		}
-	}
-	return freeBufs
-}
-
-func (e *Handler) removeNodeBuffer(node handler.Window) error {
-	freeBufs := e.freeBuffers()
-	if len(freeBufs) == 0 {
-		return ErrLastBuffer
-	}
-
-	idx := freeBufs[0]
-	oldHandler := e.updateNodeContent(node, e.buffers[idx])
-	oldBuf, ok := oldHandler.(*browserBuffer)
-	if ok {
-		oldBuf.Close()
-		e.removeBuffer(oldBuf)
-	}
+	editor := e.ed.Edit(buf)
+	e.comp.NewBuffer(filepath.Base(filename), editor, fileBuf)
 	return nil
-}
-
-func (e *Handler) saveFocusBuffer() error {
-	buf, ok := e.browserBufferAtNode(e.wm.Focus())
-	if !ok {
-		return ErrInvalidSave
-	}
-	if buf.fileBuf == nil {
-		return ErrInvalidSave
-	}
-
-	return buf.fileBuf.Flush()
 }
 
 func (e *Handler) runSingleCommand(cmd string) (quit bool, err error) {
 	switch cmd {
 	case "bprev":
-		e.updateNodeBufferPrev(e.wm.Focus())
+		e.comp.UpdateWindowBufferPrev(e.comp.Focus())
 	case "bnext":
-		e.updateNodeBufferNext(e.wm.Focus())
+		e.comp.UpdateWindowBufferNext(e.comp.Focus())
 	case "bclose":
-		err = e.removeNodeBuffer(e.wm.Focus())
+		err = e.comp.RemoveWindowBuffer(e.comp.Focus())
 	case "bcloseAll":
-		e.removeAllBuffers()
+		e.comp.RemoveAllBuffers()
 	case "close":
-		err = browserWindow{handler: e, win: e.wm.Focus()}.Close()
+		err = e.comp.Focus().Close()
 	case "wq", "wq!":
 		quit = true
 		fallthrough
 	case "w", "w!":
-		err = e.saveFocusBuffer()
+		err = e.comp.FlushBuffer(e.comp.Focus())
 	case "q!", "q":
 		quit = true
 	default:
 		err = fmt.Errorf("Unknown command: %s", cmd)
+	}
+	if err != nil {
+		e.tryLog("failed to run command '%s': %v", cmd, err)
 	}
 	return
 }
@@ -514,17 +201,8 @@ func (e *Handler) runCommand() (quit bool, err error) {
 	return
 }
 
-func (e *Handler) setProxyMode() {
-	e.commandBuf.Reset()
-	e.mode = proxyMode
-}
-
-func (e *Handler) setCommandMode() {
-	e.mode = commandMode
-}
-
 func (e *Handler) setError(err error) {
-	e.SetMessage("Error: %s", err)
+	e.comp.SetMessage("Error: %s", err)
 }
 
 func (e *Handler) handleCommand(ev term.Event) (quit, handled bool) {
@@ -534,16 +212,16 @@ func (e *Handler) handleCommand(ev term.Event) (quit, handled bool) {
 	case term.KeyEnter:
 		var err error
 		quit, err = e.runCommand()
-		e.setProxyMode()
+		e.setNormalMode()
 		if err != nil {
 			e.setError(err)
 		}
 	case term.KeyEsc:
-		e.setProxyMode()
+		e.setNormalMode()
 	case term.KeyBackspace, term.KeyBackspace2:
 		cols := e.commandBuf.Columns(0)
 		if cols == 0 {
-			e.setProxyMode()
+			e.setNormalMode()
 			return
 		}
 		e.commandBuf.DeleteCell(term.Coordinates{X: cols - 1})
@@ -562,9 +240,10 @@ func (e *Handler) handleCommand(ev term.Event) (quit, handled bool) {
 
 func (e *Handler) removeAllBuffers() {
 	for {
-		err := e.removeNodeBuffer(e.wm.Focus())
+		err := e.comp.RemoveWindowBuffer(e.comp.Focus())
 		if err != nil {
-			if err != ErrLastBuffer {
+			if err != ErrNoFreeBuffers {
+				e.tryLog("unable to remove window buffer: %v", err)
 				e.setError(err)
 			}
 			break
@@ -600,30 +279,22 @@ func (e *Handler) handleProxy(ev term.Event) (
 	}
 
 	switch ev.Key {
-	case term.KeyArrowLeft:
-		e.wm.FocusLeft()
-	case term.KeyArrowRight:
-		e.wm.FocusRight()
 	case term.KeyCtrlA:
 		e.removeAllBuffers()
 	case term.KeyCtrlW:
-		err := e.removeNodeBuffer(e.wm.Focus())
+		err := e.comp.RemoveWindowBuffer(e.comp.Focus())
 		if err != nil {
+			e.tryLog("unable to remove window buffer: %v", err)
 			e.setError(err)
 		}
 	case term.KeyCtrlL:
-		e.updateNodeBufferNext(e.wm.Focus())
+		e.comp.UpdateWindowBufferNext(e.comp.Focus())
 	case term.KeyCtrlH:
-		e.updateNodeBufferPrev(e.wm.Focus())
+		e.comp.UpdateWindowBufferPrev(e.comp.Focus())
 	default:
 		// do not map for children
 		ev = prev
-		if ev.Type == term.EventMouse && ev.MouseY < e.fileListHeight {
-			_, handled = e.tabs.Handle(ev)
-			return
-		}
-
-		_, handled = e.wmVirt.Handle(ev)
+		exit, handled = e.comp.Handle(ev)
 		return
 	}
 
@@ -633,9 +304,9 @@ func (e *Handler) handleProxy(ev term.Event) (
 // Handle satisfies tui.Handler.
 func (e *Handler) Handle(ev term.Event) (bool, bool) {
 	switch e.mode {
-	case proxyMode:
+	case modeDefault:
 		return e.handleProxy(ev)
-	case commandMode:
+	case modeCommand:
 		return e.handleCommand(ev)
 	default:
 		panic(fmt.Sprintf("unknown mode: %+v", e.mode))
@@ -644,12 +315,12 @@ func (e *Handler) Handle(ev term.Event) (bool, bool) {
 
 // Cursor satisfies tui.Handler.
 func (e *Handler) Cursor() (pos term.Coordinates, show bool) {
-	if e.mode == commandMode {
+	if e.mode == modeCommand {
 		pos := e.cmdVirt.Position()
 		pos.X += len(e.commandBuf.String())
 		return pos, true
 	}
-	return e.wmVirt.Cursor()
+	return e.comp.Cursor()
 }
 
 // Man satisfies tui.Handler.
@@ -659,104 +330,36 @@ func (e *Handler) Man() tui.Manual {
 
 // Resize satisfies tui.Component
 func (e *Handler) Resize(width, height int) {
-	if width > 1 && height > 0 {
-		e.cmdVirt.Resize(width-2, 1)
-		e.logVirt.Resize(width-2, 1)
-
-		busPos := term.Coordinates{X: 1, Y: height - 2}
-		e.cmdVirt.Move(busPos)
-		e.logVirt.Move(busPos)
-	} else {
-		e.cmdVirt.Resize(0, 0)
-		e.logVirt.Resize(0, 0)
-	}
-
-	e.fileListHeight = 3
-	if height < 3 {
-		e.fileListHeight = 0
-	}
-	e.tabsVirt.Resize(width, e.fileListHeight)
-	e.frames.Resize(width, height)
+	resizeLogSpan(width, height, &e.cmdVirt)
+	e.comp.Resize(width, height)
 }
 
 // Draw satisfies tui.Component
 func (e *Handler) Draw(w term.Writer) {
-	e.tabs.ResetFocus()
-	for idx, buf := range e.buffers {
-		if !buf.free {
-			e.tabs.SetFocus(idx)
-		}
-	}
-	e.frames.Draw(w)
+	e.comp.Draw(w)
 
-	// only draw logBufDraw times
-	if e.logBufDraw > 0 {
-		e.logVirt.Draw(w)
-		e.logBufDraw--
-	} else {
-		e.logBuf.Reset()
-	}
-
-	if e.mode == commandMode {
+	if e.mode == modeCommand {
 		e.cmdVirt.Draw(w)
 	}
 }
 
 // Close closes the resources associated with this browser.
 func (e *Handler) Close() error {
-	for _, f := range e.buffers {
-		f.Close()
+	err := e.comp.Close()
+	if err != nil {
+		e.tryLog("browser.Component.Close error: %v", err)
 	}
-	e.buffers = e.buffers[:0]
-	return nil
+	return err
 }
 
 // OpenFile opens the given file in a new browser tab.
 func (e *Handler) OpenFile(filename string) error {
-	buffer, err := e.newBufferWithFile(filename, "")
-	if err != nil {
-		return err
-	}
-
-	// Do not allow file editing on windows controlled externally.
-	// This also happens to be a workaround around
-	// plugins exiting upon trying to open a file,
-	// expecting that the plugin window is going to close
-	// but not closing because OpenFile swaps the plugin
-	// handler before the rpc Handler processes the exit
-	// return from a HandleResponse (see handler/rpc_breaker.go).
-	var oldFocus tui.Handler
-	focus := e.wm.Focus()
-	if _, ok := focus.Content().(*browserBuffer); ok {
-		oldFocus = e.updateNodeContent(focus, buffer)
-	} else {
-		// find another node to update the content
-		// NOTE: this is not a very robust approach.
-		// Shiftable could return a window controlled externally
-		// in certain scenarios.
-		w, ok := e.wm.Shiftable()
-		if ok {
-			e.updateNodeContent(w, buffer)
-		}
-	}
-
-	// remove initial empty buffer
-	if oldBuf, ok := oldFocus.(*browserBuffer); ok &&
-		oldBuf.filename == "" && oldBuf.fileBuf == nil {
-		e.removeBuffer(oldBuf)
-	}
-
-	return nil
+	return e.newBufferWithFile(filename, "")
 }
 
 // SetMessage formats the given msg and args and displays it on next Draw.
 func (e *Handler) SetMessage(msg string, args ...interface{}) error {
-	msg = fmt.Sprintf(msg, args...)
-	if e.config.Logger != nil {
-		e.config.Logger.Infof("Message: %s", msg)
-	}
-	e.logBuf.WriteString(msg)
-	e.logBufDraw = logBufDrawTimes
+	e.comp.SetMessage(msg, args...)
 	return nil
 }
 
@@ -772,69 +375,37 @@ func (e *Handler) MergeKeyMap(keymap map[term.Event]term.Event) error {
 	return nil
 }
 
-func (e *Handler) splitInverted(
-	split func(*handler.WindowManager, tui.Handler) handler.Window,
-	h tui.Handler,
-) browserWindow {
-	winInFocus, focusContent := e.wm.Focus(), e.wm.Focus().Content()
-	idx, w := e.findWindow(winInFocus)
-	if idx == -1 {
-		panic("Handler: corrupted window list")
-	}
-
-	newNode := split(e.wm, focusContent)
-	e.newWindow(newNode)
-
-	w.win = winInFocus
-	winInFocus.SetContent(browserWindowContent{Handler: h, win: w})
-	return w
+func (e *Handler) setNormalMode() {
+	e.commandBuf.Reset()
+	e.mode = modeDefault
 }
 
-func (e *Handler) split(
-	split func(*handler.WindowManager, tui.Handler) handler.Window,
-	h tui.Handler,
-) browserWindow {
-	// force split a new window tile
-	node := split(e.wm, h)
-
-	win := browserWindow{
-		handler: e,
-		win:     node,
-	}
-	// update content with browserWindowContent
-	// so we can have a browserWindow with the correct node
-	node.SetContent(browserWindowContent{
-		Handler: h,
-		win:     win,
-	})
-
-	e.wm.SetFocus(node)
-	e.addWindow(win)
-	return win
+func (e *Handler) setCommandMode() {
+	e.mode = modeCommand
 }
 
 // SplitVerticalRight opens a new window tile to the right of the
 // current window in focus and initializes it with h.
 func (e *Handler) SplitVerticalRight(h tui.Handler) (Window, error) {
-	return e.split((*handler.WindowManager).SplitVertical, h), nil
+	return e.comp.SplitVerticalRight(h), nil
 }
 
 // SplitVerticalLeft opens a new window tile to the left of the
 // current window in focus and initializes it with h.
 func (e *Handler) SplitVerticalLeft(h tui.Handler) (Window, error) {
-	return e.splitInverted((*handler.WindowManager).SplitVertical, h), nil
+	return e.comp.SplitVerticalLeft(h), nil
 }
 
 // SplitHorizontalBelow opens a new window tile below the current window in focus
 // and initializes it with h.
 func (e *Handler) SplitHorizontalBelow(h tui.Handler) (Window, error) {
-	return e.split((*handler.WindowManager).SplitHorizontal, h), nil
+	return e.comp.SplitHorizontalBelow(h), nil
 }
 
 // SplitHorizontalAbove opens a new window tile above the current window in focus
 // and initializes it with h.
 func (e *Handler) SplitHorizontalAbove(h tui.Handler) (Window, error) {
-	return e.splitInverted((*handler.WindowManager).SplitHorizontal, h), nil
+	return e.comp.SplitHorizontalAbove(h), nil
 }
 
 func (e *Handler) unsubscribe(ev term.Event) {
