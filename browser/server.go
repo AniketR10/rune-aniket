@@ -113,12 +113,20 @@ func (s *Server) serveWindow(win Window) uint32 {
 	return brokerID
 }
 
+func (s *Server) getServers() map[uint32]io.Closer {
+	return s.servers
+}
+
+func (s *Server) getClients() map[uint32]io.Closer {
+	return s.clients
+}
+
 func (s *Server) forceCloseWindow(brokerID uint32) error {
-	return forceCloseResource(s.browser.Locker, brokerID, s.servers, s.Logger)
+	return forceCloseResource(s.browser.Locker, brokerID, s.getServers, s.Logger)
 }
 
 func (s *Server) forceCloseHandler(brokerID uint32) error {
-	return forceCloseResource(s.browser.Locker, brokerID, s.clients, s.Logger)
+	return forceCloseResource(s.browser.Locker, brokerID, s.getClients, s.Logger)
 }
 
 // SplitVerticalRight satisfies proto.BrowserServer

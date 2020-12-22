@@ -43,11 +43,12 @@ func ResizeMessageSpan(logVirt *handler.Virtual, width, height int) {
 
 func forceCloseResource(
 	lock sync.Locker, brokerID uint32,
-	resources map[uint32]io.Closer, logger *log.Logger,
+	resourcesFn func() map[uint32]io.Closer, logger *log.Logger,
 ) error {
 	lock.Lock()
 	defer lock.Unlock()
 
+	resources := resourcesFn()
 	res, ok := resources[brokerID]
 	if !ok {
 		if logger != nil {

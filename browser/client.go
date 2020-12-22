@@ -157,12 +157,20 @@ func (c *Client) dialWindow(windowID, handlerID uint32) (*windowClient, error) {
 	return cc, nil
 }
 
+func (c *Client) getServers() map[uint32]io.Closer {
+	return c.servers
+}
+
+func (c *Client) getClients() map[uint32]io.Closer {
+	return c.clients
+}
+
 func (c *Client) forceCloseHandler(brokerID uint32) error {
-	return forceCloseResource(&c.mu, brokerID, c.servers, c.Logger)
+	return forceCloseResource(&c.mu, brokerID, c.getServers, c.Logger)
 }
 
 func (c *Client) forceCloseWindow(brokerID uint32) error {
-	return forceCloseResource(&c.mu, brokerID, c.clients, c.Logger)
+	return forceCloseResource(&c.mu, brokerID, c.getClients, c.Logger)
 }
 
 type clientSplit func(cc proto.WindowManagerClient,
