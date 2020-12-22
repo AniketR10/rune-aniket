@@ -3,6 +3,7 @@ package browser
 import (
 	"errors"
 	"fmt"
+	"io"
 
 	"github.com/ernestrc/go-tui"
 	"github.com/ernestrc/go-tui/cell"
@@ -112,9 +113,11 @@ func (c *Component) closeWindow(win Window) error {
 		return err
 	}
 
-	buf, ok := c.browserBufferAtWindow(win.(browserWindow))
+	buf, ok := browserBufferAtWindow(bWin)
 	if ok {
 		buf.setFree()
+	} else {
+		c.tryCloseHandler(bWin.win.Content())
 	}
 
 	c.windows = append(c.windows[:id], c.windows[id+1:]...)
@@ -258,7 +261,7 @@ func (c *Component) findBufferID(buf *buffer) int {
 func (c *Component) browserBufferID(win browserWindow) (
 	*buffer, int,
 ) {
-	buf, ok := c.browserBufferAtWindow(win)
+	buf, ok := browserBufferAtWindow(win)
 	if !ok {
 		return nil, 0
 	}
@@ -289,12 +292,11 @@ func (c *Component) UpdateWindowBufferNextFree(win Window) bool {
 }
 
 // UpdateWindowBufferPrev updates win with the buffer before the current buffer.
-func (c *Component) UpdateWindowBufferPrev(win Window) {
+func (c *Component) UpdateWindowBufferPrev(win Window) bool {
 	bWin := win.(browserWindow)
 	buf, id := c.browserBufferID(bWin)
 	if buf == nil {
-		c.UpdateWindowBufferNextFree(win)
-		return
+		return c.UpdateWindowBufferNextFree(win)
 	}
 	for i := 0; i < len(c.buffers); i++ {
 		if id == 0 {
@@ -303,18 +305,18 @@ func (c *Component) UpdateWindowBufferPrev(win Window) {
 			id--
 		}
 		if c.updateWindowBuffer(bWin, id) {
-			return
+			return true
 		}
 	}
+	return false
 }
 
 // UpdateWindowBufferNext updates win with the buffer after the current buffer.
-func (c *Component) UpdateWindowBufferNext(win Window) {
+func (c *Component) UpdateWindowBufferNext(win Window) bool {
 	bWin := win.(browserWindow)
 	buf, id := c.browserBufferID(bWin)
 	if buf == nil {
-		c.UpdateWindowBufferNextFree(win)
-		return
+		return c.UpdateWindowBufferNextFree(win)
 	}
 	for i := 0; i < len(c.buffers); i++ {
 		id++
@@ -322,7 +324,27 @@ func (c *Component) UpdateWindowBufferNext(win Window) {
 			id = 0
 		}
 		if c.updateWindowBuffer(bWin, id) {
-			return
+			return true
+		}
+	}
+	return false
+}
+
+func ephemeralHandlerCloser(h tui.Handler) (io.Closer, bool) {
+	bcontent, ok := h.(browserWindowContent)
+	if !ok {
+		return nil, false
+	}
+
+	closer, ok := bcontent.Handler.(io.Closer)
+	return closer, ok
+}
+
+func (c *Component) tryCloseHandler(h tui.Handler) {
+	if closer, ok := ephemeralHandlerCloser(h); ok {
+		err := closer.Close()
+		if err != nil && c.config.Logger != nil {
+			c.config.Logger.Errorf("failed to close Handler on window content update: %v", err)
 		}
 	}
 }
@@ -339,11 +361,13 @@ func (c *Component) updateWindowContent(
 	oldComponent := win.win.SetContent(content)
 	if oldBuf, ok := oldComponent.(*buffer); ok {
 		oldBuf.setFree()
+	} else {
+		c.tryCloseHandler(oldComponent)
 	}
 	return oldComponent
 }
 
-func (c *Component) browserBufferAtWindow(win browserWindow) (*buffer, bool) {
+func browserBufferAtWindow(win browserWindow) (*buffer, bool) {
 	buf, ok := win.win.Content().(*buffer)
 	return buf, ok
 }
@@ -392,7 +416,7 @@ func (c *Component) RemoveWindowBuffer(win Window) error {
 // FlushBuffer flushes the contents of the buffer at win, if this buffer
 // was created with a FlusherCloser. See NewBuffer.
 func (c *Component) FlushBuffer(win Window) error {
-	buf, ok := c.browserBufferAtWindow(win.(browserWindow))
+	buf, ok := browserBufferAtWindow(win.(browserWindow))
 	if !ok {
 		return ErrInvalidSave
 	}

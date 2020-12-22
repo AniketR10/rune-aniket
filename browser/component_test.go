@@ -6,6 +6,7 @@ import (
 	"github.com/ernestrc/go-tui"
 	"github.com/ernestrc/go-tui/handler"
 	"github.com/ernestrc/go-tui/term"
+	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -95,6 +96,7 @@ func TestRemoveAllBuffers(t *testing.T) {
 }
 
 type testFlushCloser struct {
+	handler.TestHandler
 	flushed, closed int
 }
 
@@ -111,7 +113,7 @@ func (t *testFlushCloser) Close() error {
 func TestFlushBuffer(t *testing.T) {
 	c := NewComponent(Config{})
 	mock := testFlushCloser{}
-	c.NewBuffer("a", handler.NewTestHandler(), &mock)
+	c.NewBuffer("a", &mock, &mock)
 
 	c.FlushBuffer(c.Focus())
 	assert.Equal(t, 1, mock.flushed)
@@ -138,7 +140,7 @@ func TestUpdateWindowBuffer(t *testing.T) {
 	assertFreeBuffer(t, goog, false)
 
 	for i := 0; i < 3; i++ {
-		c.UpdateWindowBufferNext(win)
+		assert.True(t, c.UpdateWindowBufferNext(win))
 	}
 
 	assertFreeBuffer(t, amzn, false)
@@ -146,16 +148,50 @@ func TestUpdateWindowBuffer(t *testing.T) {
 	assertFreeBuffer(t, goog, true)
 
 	for i := 0; i < 3; i++ {
-		c.UpdateWindowBufferPrev(win0)
+		assert.True(t, c.UpdateWindowBufferPrev(win0))
 	}
 
 	assertFreeBuffer(t, amzn, true)
 	assertFreeBuffer(t, tsla, false)
 	assertFreeBuffer(t, goog, false)
 
-	c.UpdateWindowBufferNextFree(win0)
+	assert.True(t, c.UpdateWindowBufferNextFree(win0))
 
 	assertFreeBuffer(t, amzn, false)
 	assertFreeBuffer(t, tsla, true)
 	assertFreeBuffer(t, goog, false)
+}
+
+func TestComponentHandlerCloser(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Logger = log.StandardLogger()
+	log.SetLevel(log.TraceLevel)
+
+	t.Run("call io.Closer.Close on handler if content is ephemeral and is removed", func(t *testing.T) {
+		tsuite := []func(*testing.T, *Component, Window){
+			func(t *testing.T, c *Component, win Window) {
+				assert.True(t, c.UpdateWindowBufferNextFree(win))
+			},
+			func(t *testing.T, c *Component, win Window) {
+				assert.True(t, c.UpdateWindowBufferNext(win))
+			},
+			func(t *testing.T, c *Component, win Window) {
+				assert.True(t, c.UpdateWindowBufferPrev(win))
+			},
+			func(t *testing.T, c *Component, win Window) {
+				require.NoError(t, win.Close())
+			},
+		}
+
+		for _, tcase := range tsuite {
+			mock := &testFlushCloser{}
+			c := NewComponent(cfg)
+			c.NewBuffer("Robinhood", handler.NewTestHandler(), nil)
+			c.NewBuffer("Stash", handler.NewTestHandler(), nil)
+			win := c.SplitHorizontalBelow(mock)
+
+			tcase(t, c, win)
+			assert.Equal(t, 1, mock.closed)
+		}
+	})
 }
