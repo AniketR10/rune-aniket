@@ -12,6 +12,111 @@ import (
 	gomock "github.com/golang/mock/gomock"
 )
 
+// MockHandler is a mock of Handler interface.
+type MockHandler struct {
+	ctrl     *gomock.Controller
+	recorder *MockHandlerMockRecorder
+}
+
+// MockHandlerMockRecorder is the mock recorder for MockHandler.
+type MockHandlerMockRecorder struct {
+	mock *MockHandler
+}
+
+// NewMockHandler creates a new mock instance.
+func NewMockHandler(ctrl *gomock.Controller) *MockHandler {
+	mock := &MockHandler{ctrl: ctrl}
+	mock.recorder = &MockHandlerMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockHandler) EXPECT() *MockHandlerMockRecorder {
+	return m.recorder
+}
+
+// Close mocks base method.
+func (m *MockHandler) Close() error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Close")
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Close indicates an expected call of Close.
+func (mr *MockHandlerMockRecorder) Close() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockHandler)(nil).Close))
+}
+
+// Cursor mocks base method.
+func (m *MockHandler) Cursor() (term.Coordinates, bool) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Cursor")
+	ret0, _ := ret[0].(term.Coordinates)
+	ret1, _ := ret[1].(bool)
+	return ret0, ret1
+}
+
+// Cursor indicates an expected call of Cursor.
+func (mr *MockHandlerMockRecorder) Cursor() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Cursor", reflect.TypeOf((*MockHandler)(nil).Cursor))
+}
+
+// Draw mocks base method.
+func (m *MockHandler) Draw(arg0 term.Writer) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "Draw", arg0)
+}
+
+// Draw indicates an expected call of Draw.
+func (mr *MockHandlerMockRecorder) Draw(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Draw", reflect.TypeOf((*MockHandler)(nil).Draw), arg0)
+}
+
+// Handle mocks base method.
+func (m *MockHandler) Handle(arg0 term.Event) (bool, bool) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Handle", arg0)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(bool)
+	return ret0, ret1
+}
+
+// Handle indicates an expected call of Handle.
+func (mr *MockHandlerMockRecorder) Handle(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Handle", reflect.TypeOf((*MockHandler)(nil).Handle), arg0)
+}
+
+// Man mocks base method.
+func (m *MockHandler) Man() go_tui.Manual {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Man")
+	ret0, _ := ret[0].(go_tui.Manual)
+	return ret0
+}
+
+// Man indicates an expected call of Man.
+func (mr *MockHandlerMockRecorder) Man() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Man", reflect.TypeOf((*MockHandler)(nil).Man))
+}
+
+// Resize mocks base method.
+func (m *MockHandler) Resize(width, height int) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "Resize", width, height)
+}
+
+// Resize indicates an expected call of Resize.
+func (mr *MockHandlerMockRecorder) Resize(width, height interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Resize", reflect.TypeOf((*MockHandler)(nil).Resize), width, height)
+}
+
 // MockWindow is a mock of Window interface.
 type MockWindow struct {
 	ctrl     *gomock.Controller
@@ -73,7 +178,7 @@ func (m *MockWindowManager) EXPECT() *MockWindowManagerMockRecorder {
 }
 
 // SplitHorizontalAbove mocks base method.
-func (m *MockWindowManager) SplitHorizontalAbove(arg0 go_tui.Handler) (Window, error) {
+func (m *MockWindowManager) SplitHorizontalAbove(arg0 Handler) (Window, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SplitHorizontalAbove", arg0)
 	ret0, _ := ret[0].(Window)
@@ -88,7 +193,7 @@ func (mr *MockWindowManagerMockRecorder) SplitHorizontalAbove(arg0 interface{}) 
 }
 
 // SplitHorizontalBelow mocks base method.
-func (m *MockWindowManager) SplitHorizontalBelow(arg0 go_tui.Handler) (Window, error) {
+func (m *MockWindowManager) SplitHorizontalBelow(arg0 Handler) (Window, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SplitHorizontalBelow", arg0)
 	ret0, _ := ret[0].(Window)
@@ -103,7 +208,7 @@ func (mr *MockWindowManagerMockRecorder) SplitHorizontalBelow(arg0 interface{}) 
 }
 
 // SplitVerticalLeft mocks base method.
-func (m *MockWindowManager) SplitVerticalLeft(arg0 go_tui.Handler) (Window, error) {
+func (m *MockWindowManager) SplitVerticalLeft(arg0 Handler) (Window, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SplitVerticalLeft", arg0)
 	ret0, _ := ret[0].(Window)
@@ -118,7 +223,7 @@ func (mr *MockWindowManagerMockRecorder) SplitVerticalLeft(arg0 interface{}) *go
 }
 
 // SplitVerticalRight mocks base method.
-func (m *MockWindowManager) SplitVerticalRight(arg0 go_tui.Handler) (Window, error) {
+func (m *MockWindowManager) SplitVerticalRight(arg0 Handler) (Window, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SplitVerticalRight", arg0)
 	ret0, _ := ret[0].(Window)
@@ -458,7 +563,7 @@ func (mr *MockBrowserMockRecorder) SetMessage(msg interface{}, args ...interface
 }
 
 // SplitHorizontalAbove mocks base method.
-func (m *MockBrowser) SplitHorizontalAbove(arg0 go_tui.Handler) (Window, error) {
+func (m *MockBrowser) SplitHorizontalAbove(arg0 Handler) (Window, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SplitHorizontalAbove", arg0)
 	ret0, _ := ret[0].(Window)
@@ -473,7 +578,7 @@ func (mr *MockBrowserMockRecorder) SplitHorizontalAbove(arg0 interface{}) *gomoc
 }
 
 // SplitHorizontalBelow mocks base method.
-func (m *MockBrowser) SplitHorizontalBelow(arg0 go_tui.Handler) (Window, error) {
+func (m *MockBrowser) SplitHorizontalBelow(arg0 Handler) (Window, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SplitHorizontalBelow", arg0)
 	ret0, _ := ret[0].(Window)
@@ -488,7 +593,7 @@ func (mr *MockBrowserMockRecorder) SplitHorizontalBelow(arg0 interface{}) *gomoc
 }
 
 // SplitVerticalLeft mocks base method.
-func (m *MockBrowser) SplitVerticalLeft(arg0 go_tui.Handler) (Window, error) {
+func (m *MockBrowser) SplitVerticalLeft(arg0 Handler) (Window, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SplitVerticalLeft", arg0)
 	ret0, _ := ret[0].(Window)
@@ -503,7 +608,7 @@ func (mr *MockBrowserMockRecorder) SplitVerticalLeft(arg0 interface{}) *gomock.C
 }
 
 // SplitVerticalRight mocks base method.
-func (m *MockBrowser) SplitVerticalRight(arg0 go_tui.Handler) (Window, error) {
+func (m *MockBrowser) SplitVerticalRight(arg0 Handler) (Window, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SplitVerticalRight", arg0)
 	ret0, _ := ret[0].(Window)

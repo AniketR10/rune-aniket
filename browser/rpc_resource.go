@@ -60,15 +60,18 @@ type handlerServerResource struct {
 }
 
 type windowClientResource struct {
-	winConn proto.MuxConn
+	winConn       proto.MuxConn
+	cancelMonitor func()
 }
 
-func (r *handlerServerResource) Close() (err error) {
+func (r *handlerServerResource) Close() error {
 	r.srv.Stop()
-	return
+	return nil
 }
 
 func (r *windowClientResource) Close() error {
+	defer r.cancelMonitor()
+
 	winErr := r.winConn.Close()
 	if winErr != nil {
 		return winErr

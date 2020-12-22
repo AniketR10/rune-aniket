@@ -401,25 +401,25 @@ func (e *Ex) setCommandMode() {
 
 // SplitVerticalRight opens a new window tile to the right of the
 // current window in focus and initializes it with h.
-func (e *Ex) SplitVerticalRight(h tui.Handler) (browser.Window, error) {
+func (e *Ex) SplitVerticalRight(h browser.Handler) (browser.Window, error) {
 	return e.comp.SplitVerticalRight(h), nil
 }
 
 // SplitVerticalLeft opens a new window tile to the left of the
 // current window in focus and initializes it with h.
-func (e *Ex) SplitVerticalLeft(h tui.Handler) (browser.Window, error) {
+func (e *Ex) SplitVerticalLeft(h browser.Handler) (browser.Window, error) {
 	return e.comp.SplitVerticalLeft(h), nil
 }
 
 // SplitHorizontalBelow opens a new window tile below the current window in focus
 // and initializes it with h.
-func (e *Ex) SplitHorizontalBelow(h tui.Handler) (browser.Window, error) {
+func (e *Ex) SplitHorizontalBelow(h browser.Handler) (browser.Window, error) {
 	return e.comp.SplitHorizontalBelow(h), nil
 }
 
 // SplitHorizontalAbove opens a new window tile above the current window in focus
 // and initializes it with h.
-func (e *Ex) SplitHorizontalAbove(h tui.Handler) (browser.Window, error) {
+func (e *Ex) SplitHorizontalAbove(h browser.Handler) (browser.Window, error) {
 	return e.comp.SplitHorizontalAbove(h), nil
 }
 

@@ -1,14 +1,17 @@
 package browser
 
 import (
+	"context"
 	"io"
 	"sync"
 
 	"github.com/ernestrc/go-tui/cell"
 	"github.com/ernestrc/go-tui/component"
 	"github.com/ernestrc/go-tui/handler"
+	"github.com/ernestrc/go-tui/proto"
 	"github.com/ernestrc/go-tui/term"
 	log "github.com/sirupsen/logrus"
+	"google.golang.org/grpc/connectivity"
 )
 
 // NOTE: this should probably me moved under Component package.
@@ -61,4 +64,11 @@ func forceCloseResource(
 	delete(resources, brokerID)
 
 	return err
+}
+
+func monitorConnection(ctx context.Context, conn proto.MuxConn, callback func()) {
+	for conn.GetState() != connectivity.Shutdown {
+		conn.WaitForStateChange(ctx, connectivity.Ready)
+	}
+	callback()
 }

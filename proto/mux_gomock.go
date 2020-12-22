@@ -10,6 +10,7 @@ import (
 
 	gomock "github.com/golang/mock/gomock"
 	grpc "google.golang.org/grpc"
+	connectivity "google.golang.org/grpc/connectivity"
 )
 
 // MockMuxConn is a mock of MuxConn interface.
@@ -49,6 +50,20 @@ func (mr *MockMuxConnMockRecorder) Close() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockMuxConn)(nil).Close))
 }
 
+// GetState mocks base method.
+func (m *MockMuxConn) GetState() connectivity.State {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetState")
+	ret0, _ := ret[0].(connectivity.State)
+	return ret0
+}
+
+// GetState indicates an expected call of GetState.
+func (mr *MockMuxConnMockRecorder) GetState() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetState", reflect.TypeOf((*MockMuxConn)(nil).GetState))
+}
+
 // Invoke mocks base method.
 func (m *MockMuxConn) Invoke(ctx context.Context, method string, args, reply interface{}, opts ...grpc.CallOption) error {
 	m.ctrl.T.Helper()
@@ -86,6 +101,20 @@ func (mr *MockMuxConnMockRecorder) NewStream(ctx, desc, method interface{}, opts
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{ctx, desc, method}, opts...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewStream", reflect.TypeOf((*MockMuxConn)(nil).NewStream), varargs...)
+}
+
+// WaitForStateChange mocks base method.
+func (m *MockMuxConn) WaitForStateChange(ctx context.Context, sourceState connectivity.State) bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "WaitForStateChange", ctx, sourceState)
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// WaitForStateChange indicates an expected call of WaitForStateChange.
+func (mr *MockMuxConnMockRecorder) WaitForStateChange(ctx, sourceState interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WaitForStateChange", reflect.TypeOf((*MockMuxConn)(nil).WaitForStateChange), ctx, sourceState)
 }
 
 // MockMuxBroker is a mock of MuxBroker interface.

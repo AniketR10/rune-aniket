@@ -76,7 +76,7 @@ func (s *Server) Init(
 	s.servers = make(map[uint32]io.Closer)
 }
 
-func (s *Server) dialHandler(handlerID uint32) (tui.Handler, error) {
+func (s *Server) dialHandler(handlerID uint32) (Handler, error) {
 	// TODO cache and re-use if already dialed.
 	// TODO monitor connection and if ready state changes clean resources.
 	handlerConn, err := s.broker.Dial(handlerID)
@@ -85,6 +85,7 @@ func (s *Server) dialHandler(handlerID uint32) (tui.Handler, error) {
 	}
 
 	pbClient := proto.NewHandlerClient(handlerConn)
+	// TODO use cc.Errors() to consume and log errors
 	cc := handler.NewClient(pbClient, s.interruptDraw, s.interruptHandle)
 	cc.Logger = s.Logger
 
@@ -123,7 +124,7 @@ func (s *Server) forceCloseHandler(brokerID uint32) error {
 // SplitVerticalRight satisfies proto.BrowserServer
 func (s *Server) split(
 	ctx context.Context, req *proto.SplitRequest,
-	split func(WindowManager, tui.Handler) (Window, error),
+	split func(WindowManager, Handler) (Window, error),
 ) (*proto.SplitResponse, error) {
 	handlerID := req.GetHandlerId()
 	handler, err := s.dialHandler(handlerID)

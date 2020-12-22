@@ -3,14 +3,18 @@ package proto
 //go:generate mockgen -destination=./mux_gomock.go -package proto -self_package proto -source mux.go
 
 import (
+	context "context"
 	"io"
 
 	grpc "google.golang.org/grpc"
+	"google.golang.org/grpc/connectivity"
 )
 
 // MuxConn is a MuxBroker connection
 type MuxConn interface {
 	grpc.ClientConnInterface
+	GetState() connectivity.State
+	WaitForStateChange(ctx context.Context, sourceState connectivity.State) bool
 	io.Closer
 }
 

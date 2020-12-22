@@ -29,13 +29,6 @@ func newWindowClient(
 }
 
 func (w *windowClient) Close() (err error) {
-	// TODO in this case, we might want to remove handler resources, if
-	// ephemeral and is not a proxy handler.
-
-	// tell server to wait close resources: waits for handler server connection
-	// to change to shutdown mode, then shutsdown window grpc server
-	// error is ignored because pbClient's server is shutdown preemptively
-	// and even if error was legitimate, there's nothing else we could do from here
 	ctx := context.Background()
 	req := proto.WindowCloseRequest{}
 	_, _ = w.pbClient.Close(ctx, &req)

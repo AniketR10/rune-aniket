@@ -6,7 +6,6 @@ import (
 	"io"
 	"sync"
 
-	"github.com/ernestrc/go-tui"
 	"github.com/ernestrc/go-tui/handler"
 	"github.com/ernestrc/go-tui/proto"
 	"github.com/ernestrc/go-tui/term"
@@ -33,13 +32,23 @@ type Client struct {
 	s      proto.EventSubscriberClient
 	p      proto.EventPublisherClient
 
+	// window client resources. windowClients are created on
+	// calls to Split* or Focus. They are destroyed when client
+	// calls Close method, or server Closes window.
+	// The latter is monitored via a separate goroutine.
 	clients map[uint32]io.Closer
+
+	// handler server resources. handler servers are created on
+	// calls to Split or SetContent (if handler is not return of Open).
+	// They are destroyed when underlying handler returns exit=true on
+	// Handle, or when window is Closed, either locally or
+	// remotely (via monitor goroutine).
 	servers map[uint32]io.Closer
 }
 
 type browserClientHandler struct {
 	handlerID uint32
-	tui.Handler
+	Handler
 	c *Client
 }
 
@@ -94,7 +103,7 @@ func acceptAndServe(
 	return brokerID, srv
 }
 
-func (c *Client) serveHandler(h tui.Handler) uint32 {
+func (c *Client) serveHandler(h Handler) uint32 {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -112,7 +121,7 @@ func (c *Client) serveHandler(h tui.Handler) uint32 {
 	return brokerID
 }
 
-func (c *Client) dialToWindow(windowID uint32) (*windowClient, error) {
+func (c *Client) dialWindow(windowID, handlerID uint32) (*windowClient, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -124,8 +133,25 @@ func (c *Client) dialToWindow(windowID uint32) (*windowClient, error) {
 	cc := newWindowClient(windowID, c, proto.NewWindowClient(winConn))
 	cc.logger = c.Logger
 
+	ctx, cancelFn := context.WithCancel(context.Background())
+
+	go monitorConnection(ctx, winConn, func() {
+		// only applies when connection is closed remotely
+		c.mu.Lock()
+		delete(c.clients, windowID)
+		c.mu.Unlock()
+
+		if handlerID >= 0 {
+			// window was created and populated with a local handler
+			// which is ephemeral, from the server's point of view
+			// so we can clean resources on the client.
+			c.forceCloseHandler(handlerID)
+		}
+	})
+
 	c.clients[windowID] = &windowClientResource{
-		winConn: winConn,
+		winConn:       winConn,
+		cancelMonitor: cancelFn,
 	}
 
 	return cc, nil
@@ -143,7 +169,7 @@ type clientSplit func(cc proto.WindowManagerClient,
 	ctx context.Context, req *proto.SplitRequest,
 	opts ...grpc.CallOption) (*proto.SplitResponse, error)
 
-func (c *Client) split(split clientSplit, h tui.Handler) (Window, error) {
+func (c *Client) split(split clientSplit, h Handler) (Window, error) {
 	handlerID := c.serveHandler(h)
 	req := proto.SplitRequest{HandlerId: handlerID}
 	ctx := context.Background()
@@ -152,7 +178,7 @@ func (c *Client) split(split clientSplit, h tui.Handler) (Window, error) {
 		c.forceCloseHandler(handlerID)
 		return nil, err
 	}
-	win, err := c.dialToWindow(res.WindowId)
+	win, err := c.dialWindow(res.WindowId, handlerID)
 	if err != nil {
 		c.forceCloseHandler(handlerID)
 		return nil, err
@@ -161,22 +187,22 @@ func (c *Client) split(split clientSplit, h tui.Handler) (Window, error) {
 }
 
 // SplitVerticalRight satisfies Browser.
-func (c *Client) SplitVerticalRight(h tui.Handler) (Window, error) {
+func (c *Client) SplitVerticalRight(h Handler) (Window, error) {
 	return c.split((proto.WindowManagerClient).SplitVerticalRight, h)
 }
 
 // SplitVerticalLeft satisfies Browser.
-func (c *Client) SplitVerticalLeft(h tui.Handler) (Window, error) {
+func (c *Client) SplitVerticalLeft(h Handler) (Window, error) {
 	return c.split((proto.WindowManagerClient.SplitVerticalLeft), h)
 }
 
 // SplitHorizontalAbove satisfies Browser.
-func (c *Client) SplitHorizontalAbove(h tui.Handler) (Window, error) {
+func (c *Client) SplitHorizontalAbove(h Handler) (Window, error) {
 	return c.split((proto.WindowManagerClient.SplitHorizontalAbove), h)
 }
 
 // SplitHorizontalBelow satisfies Browser.
-func (c *Client) SplitHorizontalBelow(h tui.Handler) (Window, error) {
+func (c *Client) SplitHorizontalBelow(h Handler) (Window, error) {
 	return c.split((proto.WindowManagerClient.SplitHorizontalBelow), h)
 }
 

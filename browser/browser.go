@@ -10,6 +10,11 @@ import (
 	"github.com/ernestrc/go-tui/term"
 )
 
+// Handler adds io.Closer to a tui.Handler.
+type Handler interface {
+	tui.Handler
+}
+
 // Window is the interface that represents
 // a closeable window in a WindowManager.
 type Window interface {
@@ -19,10 +24,10 @@ type Window interface {
 // WindowManager is the interface that groups tile
 // window management methods.
 type WindowManager interface {
-	SplitVerticalRight(tui.Handler) (Window, error)
-	SplitVerticalLeft(tui.Handler) (Window, error)
-	SplitHorizontalAbove(tui.Handler) (Window, error)
-	SplitHorizontalBelow(tui.Handler) (Window, error)
+	SplitVerticalRight(Handler) (Window, error)
+	SplitVerticalLeft(Handler) (Window, error)
+	SplitHorizontalAbove(Handler) (Window, error)
+	SplitHorizontalBelow(Handler) (Window, error)
 }
 
 // EventHandler wraps the basic tui.Handler method Handle.
