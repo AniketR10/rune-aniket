@@ -103,6 +103,17 @@ func TestClientBreakerHandle(t *testing.T) {
 		assert.Equal(t, expected, <-mock.handledCh)
 	})
 
+	t.Run("returns immediately if Close called before Handle", func(t *testing.T) {
+		mock := &mockHandlerClient{remote: testHandler()}
+		b := withClientBreaker(mock, nop, nop, nil)
+
+		require.NoError(t, b.Close())
+
+		res, err := b.Handle(context.Background(), req)
+		require.Error(t, err)
+		assert.Nil(t, res)
+	})
+
 	t.Run("handle error triggers interrupt and is returned on next", func(t *testing.T) {
 		mock := &mockHandlerClient{remote: testHandler()}
 		interrupt := make(chan struct{})
@@ -291,5 +302,19 @@ func TestClientBreakerDraw(t *testing.T) {
 		res, err = b.Draw(context.Background(), req)
 		require.NoError(t, err)
 		assertDrawResponse(t, res, "AAAAAA\nAAAAAA\nAAAAAA\nAAAAAA\nAAAAAA")
+	})
+
+	t.Run("returns error immediately if Draw is called after Close", func(t *testing.T) {
+		mock := &mockHandlerClient{remote: testHandler()}
+		interrupt := make(chan struct{})
+		quitCh := make(chan struct{})
+		defer close(quitCh)
+		b := withClientBreaker(mock, waitForInterrupt(quitCh, interrupt), nop, nil)
+
+		err := b.Close()
+		require.NoError(t, err)
+		res, err := b.Draw(context.Background(), req)
+		assert.Error(t, err)
+		assert.Nil(t, res)
 	})
 }

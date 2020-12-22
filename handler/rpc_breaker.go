@@ -41,7 +41,10 @@ const (
 	initial = iota
 	pending
 	ready
+	closed
 )
+
+var errClientClosed = errors.New("client already closed")
 
 // clientBreaker Draw logic follows the following state diagram:
 //
@@ -170,7 +173,11 @@ func (a *clientBreaker) transitionToReady(res *proto.DrawResponse, err error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	if a.draw.state != pending {
+	switch a.draw.state {
+	case pending:
+	case closed:
+		return
+	default:
 		panic(fmt.Sprintf("corrupted state machine: "+
 			"state should be pending if there's an "+
 			"inflight request: err=%s, state=%d",
@@ -238,6 +245,9 @@ func (a *clientBreaker) Draw(
 		a.transitionToPending(ctx, in)
 		return resp, nil
 
+	case closed:
+		return nil, errClientClosed
+
 	default:
 		panic(fmt.Sprintf("unknown state: %d", a.draw.state))
 	}
@@ -270,6 +280,8 @@ func (a *clientBreaker) Handle(
 	select {
 	case a.handle.ch <- in:
 		return res, nil
+	case <-a.quitCh:
+		return nil, errClientClosed
 	default:
 		return nil, errors.New("remote handler is not processing events in a timely fashion")
 	}
@@ -282,6 +294,9 @@ func (a *clientBreaker) Man(
 }
 
 func (a *clientBreaker) Close() error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.draw.state = closed
 	close(a.quitCh)
 	return nil
 }
