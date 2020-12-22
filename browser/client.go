@@ -43,7 +43,8 @@ type Client struct {
 	p      proto.EventPublisherClient
 
 	shutdownWait time.Duration
-	resources    map[uint32]*clientResource
+	// TODO this needs to be broken down too
+	resources map[uint32]*clientResource
 }
 
 type browserClientHandler struct {
@@ -74,7 +75,7 @@ func (r *clientResource) closeWindow() error {
 func (c browserClientHandler) Handle(ev term.Event) (exit, handled bool) {
 	exit, handled = c.Handler.Handle(ev)
 	if exit {
-		go gracefullyShutdown(c.c, c.shutdownWait, c.handlerID)
+		go c.c.gracefullyShutdown(c.shutdownWait, c.handlerID)
 	}
 	return
 }
@@ -158,6 +159,22 @@ func (c *Client) dialToWindow(
 	c.resources[handlerID].winConn = winConn
 
 	return cc, nil
+}
+
+func (c *Client) gracefullyShutdown(
+	shutdownWait time.Duration, brokerID uint32,
+) (err error) {
+	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(ctx, shutdownWait)
+	defer cancel()
+
+	c.waitForClientClose(ctx, brokerID)
+	err1 := c.forceClose(brokerID)
+	if err1 != nil {
+		err = err1
+	}
+
+	return
 }
 
 func (c *Client) waitForClientClose(ctx context.Context, handlerID uint32) bool {

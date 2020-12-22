@@ -235,8 +235,7 @@ func TestServerSubscribe(t *testing.T) {
 		require.NoError(t, err)
 		assert.NotNil(t, res)
 
-		assertServerHandlerExitClose(t, handlerConn, nil,
-			eventHandlerToHandler{h}, s, termEv)
+		assertServerHandlerExitClose(t, handlerConn, eventHandlerToHandler{h}, s, termEv)
 	})
 
 	t.Run("returns browser Subscribe dial to handler error", func(t *testing.T) {
@@ -250,7 +249,8 @@ func TestServerSubscribe(t *testing.T) {
 		require.Error(t, err)
 		assert.Nil(t, res)
 
-		assert.Equal(t, 0, len(s.resources))
+		assert.Equal(t, 0, len(s.clients))
+		assert.Equal(t, 0, len(s.servers))
 	})
 
 	t.Run("returns browser Subscribe rpc error and so closes handler connection", func(t *testing.T) {
@@ -267,7 +267,8 @@ func TestServerSubscribe(t *testing.T) {
 		require.Error(t, err)
 		assert.Nil(t, res)
 
-		assert.Equal(t, 0, len(s.resources))
+		assert.Equal(t, 0, len(s.clients))
+		assert.Equal(t, 0, len(s.servers))
 	})
 
 	goleak.VerifyNone(t)
@@ -303,15 +304,12 @@ func TestServerSplitVerticalRight(t *testing.T) {
 
 func assertServerHandlerExitClose(
 	t *testing.T, handlerConn *proto.MockMuxConn,
-	mockWindow *MockWindow, h tui.Handler, s *Server,
+	h tui.Handler, s *Server,
 	termEv term.Event,
 ) {
 	expectHandlerInvokeExit(t, handlerConn)
 
 	handlerConn.EXPECT().Close().Times(1).Return(nil)
-	if mockWindow != nil {
-		mockWindow.EXPECT().Close().Times(1).Return(nil)
-	}
 
 	exit, _ := h.Handle(termEv)
 	// rpc handler event delivery is asynchronous
@@ -325,7 +323,7 @@ func assertServerHandlerExitClose(
 	s.browser.Lock()
 	defer s.browser.Unlock()
 
-	assert.Equal(t, 0, len(s.resources))
+	assert.Equal(t, 0, len(s.clients))
 }
 
 func testServerSplit(
@@ -382,8 +380,13 @@ func testServerSplit(
 		// verify that handler is closeable by its handlerId
 		handlerConn.EXPECT().Close().Times(1).Return(nil)
 		mockWindow.EXPECT().Close().Times(1).Return(nil)
-		require.NoError(t, s.forceClose(handlerID))
-		assert.Equal(t, 0, len(s.resources))
+		require.NoError(t, s.forceCloseHandler(handlerID))
+		assert.Equal(t, 0, len(s.clients))
+
+		// not ideal but it's hard to mock grpc.Server Register calls
+		// windowServer calls forceCloseWindow on close.
+		require.NoError(t, s.forceCloseWindow(windowID))
+		assert.Equal(t, 0, len(s.servers))
 	})
 
 	t.Run("bubbles up dial error", func(t *testing.T) {
@@ -396,7 +399,8 @@ func testServerSplit(
 		res, err := s.SplitHorizontalAbove(ctx, &req)
 		require.Error(t, err)
 		assert.Nil(t, res)
-		assert.Equal(t, 0, len(s.resources))
+		assert.Equal(t, 0, len(s.clients))
+		assert.Equal(t, 0, len(s.servers))
 	})
 
 	t.Run("bubbles up browser split error and so closes handler connection", func(t *testing.T) {
@@ -413,7 +417,8 @@ func testServerSplit(
 		require.Error(t, err)
 		assert.Nil(t, res)
 
-		assert.Equal(t, 0, len(s.resources))
+		assert.Equal(t, 0, len(s.clients))
+		assert.Equal(t, 0, len(s.servers))
 	})
 
 	t.Run("closes resources of handler if exit = true", func(t *testing.T) {
@@ -434,7 +439,7 @@ func testServerSplit(
 		_, err := split(s, ctx, &req)
 		require.NoError(t, err)
 
-		assertServerHandlerExitClose(t, handlerConn, mockWindow, h, s, termEv)
+		assertServerHandlerExitClose(t, handlerConn, h, s, termEv)
 	})
 
 	goleak.VerifyNone(t)

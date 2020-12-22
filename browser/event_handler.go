@@ -78,7 +78,7 @@ func (e *clientEventHandler) Handle(ev term.Event) (exit, handled bool) {
 func (h serverEventHandler) Handle(ev term.Event) (exit bool) {
 	exit, _ = h.h.Handle(ev)
 	if exit {
-		go h.s.forceClose(h.handlerID)
+		go h.s.forceCloseHandler(h.handlerID)
 	}
 	return
 }
