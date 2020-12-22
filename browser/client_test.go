@@ -76,17 +76,16 @@ func assertClientHandlerExitClose(
 	h *handler.TestHandler, mockWinConn *proto.MockMuxConn,
 	client *Client,
 ) {
-	require.Equal(t, 1, len(client.resources))
+	require.Equal(t, 1, len(client.servers))
 
 	h.Exit = true
-	if mockWinConn != nil {
-		mockWinConn.EXPECT().Close().Times(1).Return(nil)
-	}
 
-	cliRes, ok := client.getResources(1)
-	require.True(t, ok)
+	client.mu.Lock()
+	cliRes := client.servers[1]
+	client.mu.Unlock()
 
-	exit, handled := cliRes._h.Handle(term.Event{Type: term.EventNone})
+	exit, handled := cliRes.(*handlerServerResource)._h.
+		Handle(term.Event{Type: term.EventNone})
 	assert.True(t, exit)
 	assert.True(t, handled)
 
@@ -98,7 +97,7 @@ func assertClientHandlerExitClose(
 	client.mu.Lock()
 	defer client.mu.Unlock()
 
-	assert.Equal(t, 0, len(client.resources))
+	assert.Equal(t, 0, len(client.servers))
 }
 
 func expectBrokerServe(t *testing.T, brokerID uint32, mockBroker *proto.MockMuxBroker) {
@@ -321,7 +320,8 @@ func TestClientSubscribe(t *testing.T) {
 		err := client.Subscribe(term.Event{}, nil)
 		assertInvokeError(t, err)
 
-		assert.Equal(t, 0, len(client.resources))
+		assert.Equal(t, 0, len(client.servers))
+		assert.Equal(t, 0, len(client.clients))
 	})
 
 	t.Run("sends event subscribe request to server", func(t *testing.T) {
@@ -424,11 +424,13 @@ func testClientSplit(
 
 		win, err := split(client, nil)
 		require.NoError(t, err)
-		assert.Equal(t, 1, len(client.resources))
+		assert.Equal(t, 1, len(client.servers))
+		assert.Equal(t, 1, len(client.clients))
 
 		expectWindowClose(t, mockWinConn)
 		require.NoError(t, win.Close())
-		assert.Equal(t, 0, len(client.resources))
+		assert.Equal(t, 1, len(client.servers))
+		assert.Equal(t, 0, len(client.clients))
 	})
 
 	t.Run("bubbles up rpc error and so stops handler server", func(t *testing.T) {
@@ -444,7 +446,8 @@ func testClientSplit(
 		assertInvokeError(t, err)
 		assert.Nil(t, win)
 
-		assert.Equal(t, 0, len(client.resources))
+		assert.Equal(t, 0, len(client.servers))
+		assert.Equal(t, 0, len(client.clients))
 	})
 
 	t.Run("bubbles up dial to window error and so stops handler server", func(t *testing.T) {
@@ -461,7 +464,8 @@ func testClientSplit(
 		win, err := split(client, nil)
 		require.Error(t, err)
 		assert.Nil(t, win)
-		assert.Equal(t, 0, len(client.resources))
+		assert.Equal(t, 0, len(client.servers))
+		assert.Equal(t, 0, len(client.clients))
 	})
 
 	t.Run("gracefully closes resources if handler returns exit = true", func(t *testing.T) {
@@ -500,7 +504,8 @@ func TestClientClose(t *testing.T) {
 
 		_, err := client.SplitVerticalRight(nil)
 		require.NoError(t, err)
-		assert.Equal(t, i+1, len(client.resources))
+		assert.Equal(t, i+1, len(client.servers))
+		assert.Equal(t, i+1, len(client.clients))
 
 		if i%2 == 0 {
 			mockWinConn.EXPECT().Close().Times(1).Return(nil)

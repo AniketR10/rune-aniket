@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"sync"
-	"time"
 
 	"github.com/ernestrc/go-tui"
 	"github.com/ernestrc/go-tui/handler"
@@ -13,15 +12,7 @@ import (
 	"github.com/ernestrc/go-tui/term"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/connectivity"
 )
-
-type clientResource struct {
-	srv     *grpc.Server
-	winConn proto.MuxConn
-
-	_h tui.Handler // only used for testing
-}
 
 // Client satisfies Browser by talking to a browser server over RPC.
 type Client struct {
@@ -42,40 +33,20 @@ type Client struct {
 	s      proto.EventSubscriberClient
 	p      proto.EventPublisherClient
 
-	shutdownWait time.Duration
-	// TODO this needs to be broken down too
-	resources map[uint32]*clientResource
+	clients map[uint32]io.Closer
+	servers map[uint32]io.Closer
 }
 
 type browserClientHandler struct {
-	shutdownWait time.Duration
-	handlerID    uint32
+	handlerID uint32
 	tui.Handler
 	c *Client
-}
-
-func (r *clientResource) closeHandler() (err error) {
-	// gracefully shutting down this clientResource
-	// means that we need to close winConn only after server
-	// is done shutting down resources.
-	r.srv.Stop()
-	return
-}
-
-func (r *clientResource) closeWindow() error {
-	if r.winConn != nil {
-		winErr := r.winConn.Close()
-		if winErr != nil {
-			return winErr
-		}
-	}
-	return nil
 }
 
 func (c browserClientHandler) Handle(ev term.Event) (exit, handled bool) {
 	exit, handled = c.Handler.Handle(ev)
 	if exit {
-		go c.c.gracefullyShutdown(c.shutdownWait, c.handlerID)
+		go c.c.forceCloseHandler(c.handlerID)
 	}
 	return
 }
@@ -97,8 +68,8 @@ func NewClient(broker proto.MuxBroker, cc grpc.ClientConnInterface) *Client {
 // Init initializes this Client with broker and client.
 func (c *Client) Init(broker proto.MuxBroker) {
 	c.broker = broker
-	c.shutdownWait = 5 * time.Second
-	c.resources = make(map[uint32]*clientResource)
+	c.clients = make(map[uint32]io.Closer)
+	c.servers = make(map[uint32]io.Closer)
 }
 
 func acceptAndServe(
@@ -130,21 +101,18 @@ func (c *Client) serveHandler(h tui.Handler) uint32 {
 	brokerID, srv := acceptAndServe(c.broker,
 		func(handlerID uint32, srv *grpc.Server) {
 			h = browserClientHandler{
-				Handler:      h,
-				c:            c,
-				shutdownWait: c.shutdownWait,
-				handlerID:    handlerID,
+				Handler:   h,
+				c:         c,
+				handlerID: handlerID,
 			}
 			proto.RegisterHandlerServer(srv, handler.NewServer(h, &c.handlerMu))
 		})
 
-	c.resources[brokerID] = &clientResource{_h: h, srv: srv}
+	c.servers[brokerID] = &handlerServerResource{_h: h, srv: srv}
 	return brokerID
 }
 
-func (c *Client) dialToWindow(
-	windowID uint32, handlerID uint32,
-) (*windowClient, error) {
+func (c *Client) dialToWindow(windowID uint32) (*windowClient, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -153,104 +121,22 @@ func (c *Client) dialToWindow(
 		return nil, err
 	}
 
-	cc := newWindowClient(handlerID, c, proto.NewWindowClient(winConn))
+	cc := newWindowClient(windowID, c, proto.NewWindowClient(winConn))
 	cc.logger = c.Logger
 
-	c.resources[handlerID].winConn = winConn
+	c.clients[windowID] = &windowClientResource{
+		winConn: winConn,
+	}
 
 	return cc, nil
 }
 
-func (c *Client) gracefullyShutdown(
-	shutdownWait time.Duration, brokerID uint32,
-) (err error) {
-	ctx := context.Background()
-	ctx, cancel := context.WithTimeout(ctx, shutdownWait)
-	defer cancel()
-
-	c.waitForClientClose(ctx, brokerID)
-	err1 := c.forceClose(brokerID)
-	if err1 != nil {
-		err = err1
-	}
-
-	return
+func (c *Client) forceCloseHandler(brokerID uint32) error {
+	return forceCloseResource(&c.mu, brokerID, c.servers, c.Logger)
 }
 
-func (c *Client) waitForClientClose(ctx context.Context, handlerID uint32) bool {
-	c.mu.Lock()
-	res, ok := c.resources[handlerID]
-	c.mu.Unlock()
-
-	if !ok {
-		return false
-	}
-
-	realConn, ok := res.winConn.(*grpc.ClientConn)
-	if !ok {
-		return true
-	}
-
-	return realConn.WaitForStateChange(ctx, connectivity.Ready)
-}
-
-func (c *Client) getResources(handlerID uint32) (*clientResource, bool) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	res, ok := c.resources[handlerID]
-	if !ok && c.Logger != nil {
-		c.Logger.Warnf("handler %d already closed", handlerID)
-	}
-	return res, ok
-}
-
-func (c *Client) forceClose(handlerID uint32) (err error) {
-	err1 := c.closePhase1(handlerID)
-	if err1 != nil {
-		err = err1
-	}
-	err2 := c.closePhase2(handlerID)
-	if err2 != nil {
-		err = err2
-	}
-	return
-}
-
-func (c *Client) closePhase1(handlerID uint32) error {
-	res, ok := c.getResources(handlerID)
-	if !ok {
-		return nil
-	}
-
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	err := res.closeHandler()
-	if err != nil && c.Logger != nil {
-		c.Logger.Error(err)
-	}
-
-	return err
-}
-
-func (c *Client) closePhase2(handlerID uint32) error {
-	res, ok := c.getResources(handlerID)
-	if !ok {
-		return nil
-	}
-
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	err := res.closeWindow()
-	if err != nil && c.Logger != nil {
-		c.Logger.Error(err)
-	}
-
-	delete(c.resources, handlerID)
-
-	return err
+func (c *Client) forceCloseWindow(brokerID uint32) error {
+	return forceCloseResource(&c.mu, brokerID, c.clients, c.Logger)
 }
 
 type clientSplit func(cc proto.WindowManagerClient,
@@ -263,12 +149,12 @@ func (c *Client) split(split clientSplit, h tui.Handler) (Window, error) {
 	ctx := context.Background()
 	res, err := split(c.wm, ctx, &req)
 	if err != nil {
-		c.forceClose(handlerID)
+		c.forceCloseHandler(handlerID)
 		return nil, err
 	}
-	win, err := c.dialToWindow(res.WindowId, handlerID)
+	win, err := c.dialToWindow(res.WindowId)
 	if err != nil {
-		c.forceClose(handlerID)
+		c.forceCloseHandler(handlerID)
 		return nil, err
 	}
 	return win, nil
@@ -357,7 +243,7 @@ func (c *Client) Subscribe(ev term.Event, h EventHandler) error {
 
 	_, err = c.s.Subscribe(ctx, &req)
 	if err != nil {
-		c.forceClose(handlerID)
+		c.forceCloseHandler(handlerID)
 	}
 	return err
 }
@@ -382,14 +268,16 @@ func (c *Client) Close() (err error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	for _, res := range c.resources {
-		resErr := res.closeHandler()
+	for _, res := range c.clients {
+		resErr := res.Close()
 		if resErr != nil {
 			err = resErr
 		}
-		winErr := res.closeWindow()
-		if winErr != nil {
-			err = winErr
+	}
+	for _, res := range c.servers {
+		resErr := res.Close()
+		if resErr != nil {
+			err = resErr
 		}
 	}
 	if closer, ok := c.cc.(io.Closer); ok {
@@ -398,6 +286,7 @@ func (c *Client) Close() (err error) {
 			err = ccErr
 		}
 	}
-	c.resources = nil
+	c.clients = nil
+	c.servers = nil
 	return
 }

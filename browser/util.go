@@ -1,10 +1,14 @@
 package browser
 
 import (
+	"io"
+	"sync"
+
 	"github.com/ernestrc/go-tui/cell"
 	"github.com/ernestrc/go-tui/component"
 	"github.com/ernestrc/go-tui/handler"
 	"github.com/ernestrc/go-tui/term"
+	log "github.com/sirupsen/logrus"
 )
 
 // NOTE: this should probably me moved under Component package.
@@ -32,4 +36,29 @@ func ResizeMessageSpan(logVirt *handler.Virtual, width, height int) {
 	} else {
 		logVirt.Resize(0, 0)
 	}
+}
+
+func forceCloseResource(
+	lock sync.Locker, brokerID uint32,
+	resources map[uint32]io.Closer, logger *log.Logger,
+) error {
+	lock.Lock()
+	defer lock.Unlock()
+
+	res, ok := resources[brokerID]
+	if !ok {
+		if logger != nil {
+			logger.Warnf("resource %d already closed", brokerID)
+		}
+		return nil
+	}
+
+	err := res.Close()
+	if err != nil && logger != nil {
+		logger.Error(err)
+	}
+
+	delete(resources, brokerID)
+
+	return err
 }

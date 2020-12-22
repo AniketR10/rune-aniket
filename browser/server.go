@@ -92,7 +92,6 @@ func (s *Server) dialHandler(handlerID uint32) (tui.Handler, error) {
 	defer s.browser.Unlock()
 
 	s.clients[handlerID] = &handlerClientResource{
-		handlerID:   handlerID,
 		handlerConn: handlerConn,
 		cc:          cc,
 	}
@@ -113,34 +112,12 @@ func (s *Server) serveWindow(win Window) uint32 {
 	return brokerID
 }
 
-func (s *Server) forceCloseResource(brokerID uint32, resources map[uint32]io.Closer) error {
-	s.browser.Lock()
-	defer s.browser.Unlock()
-
-	res, ok := resources[brokerID]
-	if !ok {
-		if s.Logger != nil {
-			s.Logger.Warnf("resource %d already closed", brokerID)
-		}
-		return nil
-	}
-
-	err := res.Close()
-	if err != nil && s.Logger != nil {
-		s.Logger.Error(err)
-	}
-
-	delete(resources, brokerID)
-
-	return err
-}
-
 func (s *Server) forceCloseWindow(brokerID uint32) error {
-	return s.forceCloseResource(brokerID, s.servers)
+	return forceCloseResource(s.browser.Locker, brokerID, s.servers, s.Logger)
 }
 
 func (s *Server) forceCloseHandler(brokerID uint32) error {
-	return s.forceCloseResource(brokerID, s.clients)
+	return forceCloseResource(s.browser.Locker, brokerID, s.clients, s.Logger)
 }
 
 // SplitVerticalRight satisfies proto.BrowserServer

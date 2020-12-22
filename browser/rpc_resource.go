@@ -4,13 +4,18 @@ import (
 	"context"
 	"io"
 
+	"github.com/ernestrc/go-tui"
 	"github.com/ernestrc/go-tui/proto"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/connectivity"
 )
 
+type windowServerResource struct {
+	srv *grpc.Server
+	win Window
+}
+
 type handlerClientResource struct {
-	handlerID   uint32
 	handlerConn proto.MuxConn
 	cc          io.Closer
 }
@@ -39,16 +44,34 @@ func (r *handlerClientResource) Close() (err error) {
 	return err
 }
 
-type windowServerResource struct {
-	srv *grpc.Server
-	win Window
-}
-
 func (r *windowServerResource) Close() error {
 	r.srv.Stop()
 	err := r.win.Close()
 	if err != nil {
 		return err
+	}
+	return nil
+}
+
+type handlerServerResource struct {
+	srv *grpc.Server
+
+	_h tui.Handler // only used for testing
+}
+
+type windowClientResource struct {
+	winConn proto.MuxConn
+}
+
+func (r *handlerServerResource) Close() (err error) {
+	r.srv.Stop()
+	return
+}
+
+func (r *windowClientResource) Close() error {
+	winErr := r.winConn.Close()
+	if winErr != nil {
+		return winErr
 	}
 	return nil
 }

@@ -11,30 +11,26 @@ import (
 // WindowClient satisfies Window by talking to a
 // remote window over GRPC.
 type windowClient struct {
-	handlerID     uint32
+	brokerID      uint32
 	logger        *log.Logger
 	pbClient      proto.WindowClient
 	browserClient *Client
 }
 
 func newWindowClient(
-	handlerID uint32,
-	browserClient *Client,
+	brokerID uint32, browserClient *Client,
 	pbClient proto.WindowClient,
 ) *windowClient {
 	ret := new(windowClient)
 	ret.browserClient = browserClient
 	ret.pbClient = pbClient
-	ret.handlerID = handlerID
+	ret.brokerID = brokerID
 	return ret
 }
 
 func (w *windowClient) Close() (err error) {
-	// shutsdown the handler server associated with this window
-	cliErr := w.browserClient.closePhase1(w.handlerID)
-	if cliErr != nil {
-		err = cliErr
-	}
+	// TODO in this case, we might want to remove handler resources, if
+	// ephemeral and is not a proxy handler.
 
 	// tell server to wait close resources: waits for handler server connection
 	// to change to shutdown mode, then shutsdown window grpc server
@@ -45,7 +41,7 @@ func (w *windowClient) Close() (err error) {
 	_, _ = w.pbClient.Close(ctx, &req)
 
 	// now we're ready to finally close window client connection and remove
-	connErr := w.browserClient.closePhase2(w.handlerID)
+	connErr := w.browserClient.forceCloseWindow(w.brokerID)
 	if connErr != nil {
 		err = connErr
 	}

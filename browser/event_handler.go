@@ -70,7 +70,7 @@ func (e *clientEventHandler) setHandlerID(handlerID uint32) {
 func (e *clientEventHandler) Handle(ev term.Event) (exit, handled bool) {
 	exit, handled = e.Handler.Handle(ev)
 	if exit {
-		go e.c.forceClose(e.handlerID)
+		go e.c.forceCloseHandler(e.handlerID)
 	}
 	return
 }
