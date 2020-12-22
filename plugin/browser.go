@@ -13,8 +13,8 @@ const (
 	PermissionBrowserWindowManager Permission = "_PermBrowserWindowManager"
 	// PermissionBrowserKeyMapper requests access to a browser's key mapper.
 	PermissionBrowserKeyMapper = "_PermBrowserKeyMapper"
-	// PermissionBrowserFileOpener requests access to open new files.
-	PermissionBrowserFileOpener = "_PermBrowserFileOpener"
+	// PermissionBrowserResourceOpener requests access to open new files.
+	PermissionBrowserResourceOpener = "_PermBrowserResourceOpener"
 	// PermissionBrowserMessenger requests access to send messages to the UI.
 	PermissionBrowserMessenger = "_PermBrowserMessenger"
 	// PermissionBrowserEventSubscriber requests access subscribe to term events.
@@ -48,8 +48,8 @@ func (s *browserResourceServer) serve(perm Permission) resourceServerFn {
 				proto.RegisterWindowManagerServer(grpcServer, server)
 			case PermissionBrowserKeyMapper:
 				proto.RegisterKeyMapperServer(grpcServer, server)
-			case PermissionBrowserFileOpener:
-				proto.RegisterFileOpenerServer(grpcServer, server)
+			case PermissionBrowserResourceOpener:
+				proto.RegisterResourceOpenerServer(grpcServer, server)
 			case PermissionBrowserMessenger:
 				proto.RegisterMessengerServer(grpcServer, server)
 			case PermissionBrowserEventSubscriber:
@@ -69,7 +69,7 @@ func BrowserResources(b browser.Browser) map[Permission]ResourceServer {
 	return map[Permission]ResourceServer{
 		PermissionBrowserWindowManager:   s.serve(PermissionBrowserWindowManager),
 		PermissionBrowserKeyMapper:       s.serve(PermissionBrowserKeyMapper),
-		PermissionBrowserFileOpener:      s.serve(PermissionBrowserFileOpener),
+		PermissionBrowserResourceOpener:  s.serve(PermissionBrowserResourceOpener),
 		PermissionBrowserMessenger:       s.serve(PermissionBrowserMessenger),
 		PermissionBrowserEventSubscriber: s.serve(PermissionBrowserEventSubscriber),
 		PermissionBrowserEventPublisher:  s.serve(PermissionBrowserEventPublisher),
@@ -102,10 +102,10 @@ func KeyMapper(token uint32, broker proto.MuxBroker) (
 	return dialBrowser(token, broker)
 }
 
-// FileOpener acquires the browser's FileOpener
+// ResourceOpener acquires the browser's ResourceOpener
 // resource with the given token.
-func FileOpener(token uint32, broker proto.MuxBroker) (
-	browser.FileOpener, error,
+func ResourceOpener(token uint32, broker proto.MuxBroker) (
+	browser.ResourceOpener, error,
 ) {
 	return dialBrowser(token, broker)
 }

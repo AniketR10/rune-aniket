@@ -19,12 +19,12 @@ func SanitizeLine(in string) string {
 	return b.String()
 }
 
-// SanitizeInputFilename escapes tained user input and validates
+// SanitizeResourceName escapes tained user input and validates
 // a file name.
-func SanitizeFilename(filename string) string {
-	resolvedPath, err := filepath.EvalSymlinks(filename)
+func SanitizeResourceName(resource string) string {
+	resolvedPath, err := filepath.EvalSymlinks(resource)
 	if err != nil {
-		resolvedPath = filepath.Clean(filename)
+		resolvedPath = filepath.Clean(resource)
 	}
 	return SanitizeLine(resolvedPath)
 }

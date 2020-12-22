@@ -285,41 +285,41 @@ func (mr *MockMessengerMockRecorder) SetMessage(msg interface{}, args ...interfa
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetMessage", reflect.TypeOf((*MockMessenger)(nil).SetMessage), varargs...)
 }
 
-// MockFileOpener is a mock of FileOpener interface.
-type MockFileOpener struct {
+// MockResourceOpener is a mock of ResourceOpener interface.
+type MockResourceOpener struct {
 	ctrl     *gomock.Controller
-	recorder *MockFileOpenerMockRecorder
+	recorder *MockResourceOpenerMockRecorder
 }
 
-// MockFileOpenerMockRecorder is the mock recorder for MockFileOpener.
-type MockFileOpenerMockRecorder struct {
-	mock *MockFileOpener
+// MockResourceOpenerMockRecorder is the mock recorder for MockResourceOpener.
+type MockResourceOpenerMockRecorder struct {
+	mock *MockResourceOpener
 }
 
-// NewMockFileOpener creates a new mock instance.
-func NewMockFileOpener(ctrl *gomock.Controller) *MockFileOpener {
-	mock := &MockFileOpener{ctrl: ctrl}
-	mock.recorder = &MockFileOpenerMockRecorder{mock}
+// NewMockResourceOpener creates a new mock instance.
+func NewMockResourceOpener(ctrl *gomock.Controller) *MockResourceOpener {
+	mock := &MockResourceOpener{ctrl: ctrl}
+	mock.recorder = &MockResourceOpenerMockRecorder{mock}
 	return mock
 }
 
 // EXPECT returns an object that allows the caller to indicate expected use.
-func (m *MockFileOpener) EXPECT() *MockFileOpenerMockRecorder {
+func (m *MockResourceOpener) EXPECT() *MockResourceOpenerMockRecorder {
 	return m.recorder
 }
 
-// OpenFile mocks base method.
-func (m *MockFileOpener) OpenFile(filename string) error {
+// Open mocks base method.
+func (m *MockResourceOpener) Open(resource string) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "OpenFile", filename)
+	ret := m.ctrl.Call(m, "Open", resource)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-// OpenFile indicates an expected call of OpenFile.
-func (mr *MockFileOpenerMockRecorder) OpenFile(filename interface{}) *gomock.Call {
+// Open indicates an expected call of Open.
+func (mr *MockResourceOpenerMockRecorder) Open(resource interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OpenFile", reflect.TypeOf((*MockFileOpener)(nil).OpenFile), filename)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Open", reflect.TypeOf((*MockResourceOpener)(nil).Open), resource)
 }
 
 // MockEventPublisher is a mock of EventPublisher interface.
@@ -410,18 +410,18 @@ func (mr *MockBrowserMockRecorder) MergeKeyMap(arg0 interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MergeKeyMap", reflect.TypeOf((*MockBrowser)(nil).MergeKeyMap), arg0)
 }
 
-// OpenFile mocks base method.
-func (m *MockBrowser) OpenFile(filename string) error {
+// Open mocks base method.
+func (m *MockBrowser) Open(resource string) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "OpenFile", filename)
+	ret := m.ctrl.Call(m, "Open", resource)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-// OpenFile indicates an expected call of OpenFile.
-func (mr *MockBrowserMockRecorder) OpenFile(filename interface{}) *gomock.Call {
+// Open indicates an expected call of Open.
+func (mr *MockBrowserMockRecorder) Open(resource interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OpenFile", reflect.TypeOf((*MockBrowser)(nil).OpenFile), filename)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Open", reflect.TypeOf((*MockBrowser)(nil).Open), resource)
 }
 
 // PublishInterrupt mocks base method.

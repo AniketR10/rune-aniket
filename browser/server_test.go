@@ -111,30 +111,30 @@ func TestServerMergeKeyMap(t *testing.T) {
 	})
 }
 
-func TestServerOpenFile(t *testing.T) {
+func TestServerOpen(t *testing.T) {
 	ctx := context.Background()
 
-	t.Run("delegates OpenFile to underlying Browser", func(t *testing.T) {
+	t.Run("delegates Open to underlying Browser", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 		s, mock := newServerWithNoBroker(ctrl)
 
-		mock.EXPECT().OpenFile(gomock.Eq("/tmp/coronavirus.sql")).Return(nil)
+		mock.EXPECT().Open(gomock.Eq("/tmp/coronavirus.sql")).Return(nil)
 
-		req := proto.OpenFileRequest{File: "/tmp/coronavirus.sql"}
-		res, err := s.OpenFile(ctx, &req)
+		req := proto.OpenResourceRequest{Resource: "/tmp/coronavirus.sql"}
+		res, err := s.Open(ctx, &req)
 		require.NoError(t, err)
 		assert.NotNil(t, res)
 	})
 
-	t.Run("bubbles up OpenFile Browser error", func(t *testing.T) {
+	t.Run("bubbles up Open Browser error", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 		s, mock := newServerWithNoBroker(ctrl)
 
-		mock.EXPECT().OpenFile(gomock.Any()).Return(errors.New("oopsie daisy"))
+		mock.EXPECT().Open(gomock.Any()).Return(errors.New("oopsie daisy"))
 
-		_, err := s.OpenFile(ctx, new(proto.OpenFileRequest))
+		_, err := s.Open(ctx, new(proto.OpenResourceRequest))
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "oopsie")
 	})

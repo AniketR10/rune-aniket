@@ -49,9 +49,9 @@ type Messenger interface {
 	SetMessage(msg string, args ...interface{}) error
 }
 
-// FileOpener is the interface that wraps the method OpenFile.
-type FileOpener interface {
-	OpenFile(filename string) error
+// ResourceOpener is the interface that wraps the method Open.
+type ResourceOpener interface {
+	Open(resource string) error
 }
 
 // EventPublisher is the interface that wraps the method PublishInterrupt.
@@ -68,7 +68,7 @@ type Browser interface {
 	EventSubscriber
 	EventPublisher
 	KeyMapper
-	FileOpener
+	ResourceOpener
 	Messenger
 	io.Closer
 }

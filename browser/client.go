@@ -38,7 +38,7 @@ type Client struct {
 	wm     proto.WindowManagerClient
 	msg    proto.MessengerClient
 	mp     proto.KeyMapperClient
-	f      proto.FileOpenerClient
+	f      proto.ResourceOpenerClient
 	s      proto.EventSubscriberClient
 	p      proto.EventPublisherClient
 
@@ -86,7 +86,7 @@ func NewClient(broker proto.MuxBroker, cc grpc.ClientConnInterface) *Client {
 	ret.msg = proto.NewMessengerClient(cc)
 	ret.cc = cc
 	ret.mp = proto.NewKeyMapperClient(cc)
-	ret.f = proto.NewFileOpenerClient(cc)
+	ret.f = proto.NewResourceOpenerClient(cc)
 	ret.s = proto.NewEventSubscriberClient(cc)
 	ret.p = proto.NewEventPublisherClient(cc)
 	ret.Init(broker)
@@ -313,12 +313,12 @@ func (c *Client) SetMessage(msg string, args ...interface{}) error {
 	return err
 }
 
-// OpenFile satisfies Browser.
-func (c *Client) OpenFile(filename string) error {
+// Open satisfies Browser.
+func (c *Client) Open(resource string) error {
 	ctx := context.Background()
-	req := proto.OpenFileRequest{File: filename}
+	req := proto.OpenResourceRequest{Resource: resource}
 
-	_, err := c.f.OpenFile(ctx, &req)
+	_, err := c.f.Open(ctx, &req)
 	return err
 }
 

@@ -19,7 +19,7 @@ func TestSanitizeFilename(t *testing.T) {
 	}
 
 	for _, tcase := range tsuite {
-		out := SanitizeFilename(tcase.in)
+		out := SanitizeResourceName(tcase.in)
 		assert.Equal(t, tcase.out, out)
 	}
 }

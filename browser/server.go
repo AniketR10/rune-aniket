@@ -281,19 +281,19 @@ func (s *Server) SetMessage(
 	return new(proto.SetMessageResponse), nil
 }
 
-// OpenFile satisfies proto.BrowserServer
-func (s *Server) OpenFile(
-	ctx context.Context, req *proto.OpenFileRequest,
-) (*proto.OpenFileResponse, error) {
+// Open satisfies proto.BrowserServer
+func (s *Server) Open(
+	ctx context.Context, req *proto.OpenResourceRequest,
+) (*proto.OpenResourceResponse, error) {
 	s.browser.Lock()
 	defer s.browser.Unlock()
 
-	filename := util.SanitizeFilename(req.GetFile())
-	err := s.browser.OpenFile(filename)
+	resource := util.SanitizeResourceName(req.GetResource())
+	err := s.browser.Open(resource)
 	if err != nil {
 		return nil, err
 	}
-	return new(proto.OpenFileResponse), nil
+	return new(proto.OpenResourceResponse), nil
 }
 
 // Subscribe satisfies proto.BrowserServer

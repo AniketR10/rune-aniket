@@ -195,7 +195,7 @@ func (e *Ex) runCommand() (quit bool, err error) {
 
 	switch cmds[0] {
 	case "e":
-		err = e.OpenFile(cmds[1])
+		err = e.Open(cmds[1])
 	default:
 		err = fmt.Errorf("Unknown command: %s", cmd)
 	}
@@ -353,9 +353,9 @@ func (e *Ex) Close() error {
 	return err
 }
 
-// OpenFile opens the given file in a new browser tab.
-func (e *Ex) OpenFile(filename string) error {
-	return e.newBufferWithFile(filename, "")
+// Open opens the given file in a new browser tab.
+func (e *Ex) Open(resource string) error {
+	return e.newBufferWithFile(resource, "")
 }
 
 // SetMessage formats the given msg and args and displays it on next Draw.

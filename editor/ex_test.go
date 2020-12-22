@@ -362,7 +362,7 @@ EEEE`},
 	}
 	handler.BatchTestInputSequence(t, browser, 20, 10, cases)
 
-	require.NoError(t, browser.OpenFile("bugz"))
+	require.NoError(t, browser.Open("bugz"))
 	cases = []handler.TestInputSequence{
 		{"",
 			`┌──────────────────┐

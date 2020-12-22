@@ -273,24 +273,24 @@ func TestClientSetMessage(t *testing.T) {
 	})
 }
 
-func TestClientOpenFile(t *testing.T) {
+func TestClientOpen(t *testing.T) {
 	t.Run("invokes the pbclient rpc", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
 		client, mockCC, _ := newMockedClient(ctrl)
 
-		myFile := "fjkelwjfeklw"
-		in := &proto.OpenFileRequest{File: myFile}
-		out := new(proto.OpenFileResponse)
+		myResource := "fjkelwjfeklw"
+		in := &proto.OpenResourceRequest{Resource: myResource}
+		out := new(proto.OpenResourceResponse)
 
 		mockCC.EXPECT().
 			Invoke(gomock.Any(),
-				gomock.Eq("/proto.FileOpener/OpenFile"),
+				gomock.Eq("/proto.ResourceOpener/Open"),
 				gomock.Eq(in), gomock.Eq(out)).
 			Times(1)
 
-		err := client.OpenFile(myFile)
+		err := client.Open(myResource)
 		require.NoError(t, err)
 	})
 
@@ -302,7 +302,7 @@ func TestClientOpenFile(t *testing.T) {
 
 		expectInvokeError(mockCC)
 
-		err := client.OpenFile("")
+		err := client.Open("")
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "woopsie")
 	})
