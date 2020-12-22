@@ -182,52 +182,9 @@ func (c *Component) newBuffer(name string, h tui.Handler, f FlusherCloser) (*buf
 	return b, c.tabs.Add(b.name)
 }
 
-// NewBuffer adds a new buffer to this Component and sets it as the buffer
-// of the current Window on focus except if the handler of the window on focus
-// is an external handler (installed via Split methods). In that case, the
-// buffer is added as the buffer of the main window.
+// NewBuffer adds a new buffer to the list of buffers on this Component.
 func (c *Component) NewBuffer(name string, h tui.Handler, f FlusherCloser) tui.Handler {
 	buf, _ := c.newBuffer(name, h, f)
-
-	// TODO this is a terrible API. Callers should create new buffer to
-	// add new buffer to tabs, and then SplitHorizontal, or Focus().SetContent
-	// to use it, instead of this component running all this logic under the hood.
-	// First we need to add SetContent method to browser.Window which requires
-	// a refactor to how we handle rpc windows internally.
-
-	// Do not allow file editing on windows controlled externally.
-	// This also happens to be a workaround around
-	// plugins exiting upon trying to open a file,
-	// expecting that the plugin window is going to close
-	// but not closing because OpenFile swaps the plugin
-	// handler before the rpc Handler processes the exit
-	// return from a HandleResponse (see handler/rpc_breaker.go).
-	// focus := c.Focus()
-	// focusWin := focus.(browserWindow)
-	//if _, ok := focusWin.win.Content().(*buffer); ok {
-	// _ = c.updateWindowContent(focusWin, buf)
-	// } else {
-	// 	// find another win to update the content
-	// 	// NOTE: this is not a very robust approach.
-	// 	// Shiftable could return a window controlled externally
-	// 	// in certain scenarios.
-	// TODO this is a hack to keep tests passing until we refactor API
-	w, ok := c.Shiftable()
-	if ok {
-		c.updateWindowContent(w.(browserWindow), buf)
-	} else {
-		focus := c.Focus()
-		focusWin := focus.(browserWindow)
-		_ = c.updateWindowContent(focusWin, buf)
-	}
-	// }
-
-	// remove initial empty buffer
-	// if oldBuf, ok := oldFocus.(*buffer); ok &&
-	// 	oldBuf.handler == c.startHandler {
-	// 	c.doRemoveBuffer(0)
-	// }
-
 	return buf
 }
 
@@ -285,6 +242,17 @@ func (c *Component) UpdateWindowBufferNextFree(win Window) bool {
 	freeBufs := c.freeBuffers()
 	if len(freeBufs) != 0 {
 		c.updateWindowContent(win.(browserWindow), c.buffers[freeBufs[0]])
+		return true
+	}
+
+	return false
+}
+
+// UpdateWindowBufferLastFree updates win with the last available buffer.
+func (c *Component) UpdateWindowBufferLastFree(win Window) bool {
+	freeBufs := c.freeBuffers()
+	if len(freeBufs) != 0 {
+		c.updateWindowContent(win.(browserWindow), c.buffers[freeBufs[len(freeBufs)-1]])
 		return true
 	}
 
@@ -457,11 +425,19 @@ func (c *Component) split(
 	win := split(c.wm, h)
 
 	browserWin := c.newWindow(win)
+	if buf, ok := h.(*buffer); ok {
+		buf.setWindow(browserWin)
+	} else {
+		h = newBrowserWindowContent(h, browserWin)
+	}
 	// update content with browserWindowContent
 	// so we can have a browserWindow with the correct win
-	win.SetContent(newBrowserWindowContent(h, browserWin))
+	win.SetContent(h)
 
 	c.wm.SetFocus(win)
+
+	// if split contains content of NewBuffer
+
 	return browserWin
 }
 

@@ -155,6 +155,20 @@ func (e *Ex) newBufferWithFile(
 
 	editor := e.ed.Edit(buf)
 	e.comp.NewBuffer(filepath.Base(filename), editor, fileBuf)
+
+	// This is a workaround around plugins exiting upon trying to open a file,
+	// expecting that the plugin window is going to close
+	// but not closing because Open swaps the plugin
+	// handler before the rpc Handler processes the exit
+	// return from a HandleResponse (see handler/rpc_breaker.go).
+	w, ok := e.comp.Shiftable()
+	if ok {
+		e.comp.UpdateWindowBufferLastFree(w)
+	} else {
+		focus := e.comp.Focus()
+		e.comp.UpdateWindowBufferLastFree(focus)
+	}
+
 	return nil
 }
 

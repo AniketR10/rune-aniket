@@ -86,6 +86,9 @@ func TestRemoveAllBuffers(t *testing.T) {
 			c.NewBuffer("a", handler.NewTestHandler(), nil)
 			c.NewBuffer("b", handler.NewTestHandler(), nil)
 			c.NewBuffer("c", handler.NewTestHandler(), nil)
+			c.UpdateWindowBufferNextFree(c.Focus())
+			c.ShiftFocus()
+			c.UpdateWindowBufferNextFree(c.Focus())
 
 			assert.Equal(t, before, c.tabs.Size())
 			c.RemoveAllBuffers()
@@ -114,6 +117,7 @@ func TestFlushBuffer(t *testing.T) {
 	c := NewComponent(Config{})
 	mock := testFlushCloser{}
 	c.NewBuffer("a", &mock, &mock)
+	c.UpdateWindowBufferNextFree(c.Focus())
 
 	c.FlushBuffer(c.Focus())
 	assert.Equal(t, 1, mock.flushed)
@@ -125,12 +129,10 @@ func assertFreeBuffer(t *testing.T, h tui.Handler, free bool) {
 }
 
 func TestUpdateWindowBuffer(t *testing.T) {
-	// FIXME once API has been refactored
-	t.SkipNow()
-
 	c := NewComponent(Config{})
 	win0 := c.Focus()
 	amzn := c.NewBuffer("AMZN", handler.NewTestHandler(), nil)
+	c.UpdateWindowBufferNextFree(win0)
 	tsla := c.NewBuffer("TSLA", handler.NewTestHandler(), nil)
 	goog := c.NewBuffer("GOOG", handler.NewTestHandler(), nil)
 	win := c.SplitHorizontalBelow(goog)
@@ -158,8 +160,8 @@ func TestUpdateWindowBuffer(t *testing.T) {
 	assert.True(t, c.UpdateWindowBufferNextFree(win0))
 
 	assertFreeBuffer(t, amzn, false)
-	assertFreeBuffer(t, tsla, true)
-	assertFreeBuffer(t, goog, false)
+	assertFreeBuffer(t, tsla, false)
+	assertFreeBuffer(t, goog, true)
 }
 
 func TestComponentHandlerCloser(t *testing.T) {
