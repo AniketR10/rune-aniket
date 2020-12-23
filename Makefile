@@ -24,7 +24,7 @@ default: $(EXAMPLES) $(EXECS)
 example_wasm: $(EXAMPLE_WASM_BLOB)
 
 test: $(EXAMPLES) $(EXECS)
-	@ go test ./.../... -race
+	@ go test ./.../... -race -timeout 20s
 
 coverage: $(TARGET)
 	@ go test ./.../... -coverprofile $(TARGET)/coverage
