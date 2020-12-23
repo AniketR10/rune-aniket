@@ -35,20 +35,6 @@ func (m *MockHandler) EXPECT() *MockHandlerMockRecorder {
 	return m.recorder
 }
 
-// Close mocks base method.
-func (m *MockHandler) Close() error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Close")
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// Close indicates an expected call of Close.
-func (mr *MockHandlerMockRecorder) Close() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockHandler)(nil).Close))
-}
-
 // Cursor mocks base method.
 func (m *MockHandler) Cursor() (term.Coordinates, bool) {
 	m.ctrl.T.Helper()
@@ -103,6 +89,20 @@ func (m *MockHandler) Man() go_tui.Manual {
 func (mr *MockHandlerMockRecorder) Man() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Man", reflect.TypeOf((*MockHandler)(nil).Man))
+}
+
+// OnUnmount mocks base method.
+func (m *MockHandler) OnUnmount() error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "OnUnmount")
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// OnUnmount indicates an expected call of OnUnmount.
+func (mr *MockHandlerMockRecorder) OnUnmount() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OnUnmount", reflect.TypeOf((*MockHandler)(nil).OnUnmount))
 }
 
 // Resize mocks base method.

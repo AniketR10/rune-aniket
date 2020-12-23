@@ -7,7 +7,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ernestrc/go-tui"
 	"github.com/ernestrc/go-tui/handler"
 	"github.com/ernestrc/go-tui/proto"
 	"github.com/ernestrc/go-tui/term"
@@ -25,16 +24,14 @@ type Server struct {
 	failureTimeout time.Duration
 
 	// handler client resources are created on calls to Subscribe,
-	// Split* and SetContent. They are destroyed when content is swapped
-	// and browser.Component checks on io.Closer (TODO this should be direct call to
-	// DidUnmount) or when Handle returns exit=true. Connections are also monitored
-	// and cleaned if necessary.
+	// Split* and SetContent. They are destroyed when OnUnmount is invoked.
+	// Connections are also monitored and cleaned if irrecoverable errors are found.
 	clients map[uint32]io.Closer
 
 	// window servers are created on calls to Split* and Focus. They are destroyed
 	// when window is closed, either remotely,
-	// TODO locally, (we do not have a hook yet on WindowManager)
-	// TODO or because the handler exited.
+	// TODO locally, (we do not have a hook yet on Component.windowClose)
+	// TODO or because the handler exited (this happens naturally if we have a hook on WindowManager).
 	servers map[uint32]io.Closer
 
 	browser struct {
@@ -46,22 +43,28 @@ type Server struct {
 	interruptHandle func()
 }
 
-// browserServerHandler is a helper structures to enable closing
-// all resources associated with a tui.Handler when it returns exit = true
-// upon calls to Handle
+// browserServerHandler wraps a handler.Client to satisfy browser.Handler.
 type browserServerHandler struct {
-	tui.Handler
+	*handler.Client
 	s         *Server
 	handlerID uint32
 }
 
 func (s browserServerHandler) Handle(ev term.Event) (exit, handled bool) {
-	exit, handled = s.Handler.Handle(ev)
+	exit, handled = s.Client.Handle(ev)
 	if exit {
 		// we need to run asynchronously to not double lock
-		// on the runtime lock.
+		// on the runtime lock. This is a bit defensive since
+		// we could trust that browser.Browser implementation
+		// would call OnUnmount on browserServerHandler.
 		go s.s.forceCloseHandler(s.handlerID)
 	}
+	return
+}
+
+func (s browserServerHandler) OnUnmount() (err error) {
+	err = s.Client.OnUnmount()
+	go s.s.forceCloseHandler(s.handlerID)
 	return
 }
 
@@ -90,7 +93,7 @@ func (s *Server) Init(
 	s.failureTimeout = defaultFailureTimeout
 }
 
-func (s *Server) dialHandler(handlerID uint32) (Handler, error) {
+func (s *Server) dialHandler(handlerID uint32) (*handler.Client, error) {
 	// TODO cache and re-use if already dialed.
 	// TODO monitor connection and if ready state changes clean resources.
 	handlerConn, err := s.broker.Dial(handlerID)
@@ -156,19 +159,19 @@ func (s *Server) split(
 	split func(WindowManager, Handler) (Window, error),
 ) (*proto.SplitResponse, error) {
 	handlerID := req.GetHandlerId()
-	handler, err := s.dialHandler(handlerID)
+	cc, err := s.dialHandler(handlerID)
 	if err != nil {
 		return nil, err
 	}
 
-	handler = browserServerHandler{
+	bHandler := browserServerHandler{
 		handlerID: handlerID,
-		Handler:   handler,
+		Client:    cc,
 		s:         s,
 	}
 
 	s.browser.Lock()
-	win, err := split(s.browser, handler)
+	win, err := split(s.browser, bHandler)
 	s.browser.Unlock()
 	if err != nil {
 		s.forceCloseHandler(handlerID)

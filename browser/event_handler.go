@@ -63,6 +63,11 @@ func newClientEventHandler(c *Client, h EventHandler) *clientEventHandler {
 	}
 }
 
+func (e *clientEventHandler) OnUnmount() error {
+	go e.c.forceCloseHandler(e.handlerID)
+	return nil
+}
+
 func (e *clientEventHandler) setHandlerID(handlerID uint32) {
 	e.handlerID = handlerID
 }

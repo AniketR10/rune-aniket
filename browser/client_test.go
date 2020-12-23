@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -531,6 +532,43 @@ func testClientSplit(
 
 		expectWindowClose(t, mockWinConn, quitCh)
 		require.NoError(t, win.Close())
+	})
+
+	t.Run("gracefully closes resources if handler server is called OnUnmount", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		client, mockCC, mockBroker := newMockedClient(ctrl)
+
+		windowID := uint32(63)
+		expectBrokerServe(t, 1, mockBroker)
+		expectSplit(t, mockCC, 1, windowID, rpc)
+		mockWinConn := expectBrokerDial(t, ctrl, mockBroker, windowID)
+		quitCh := expectMonitorConn(mockWinConn)
+
+		h := handler.NewTestHandler()
+		var wg sync.WaitGroup
+		h.OnUnmountCallback = func() error {
+			wg.Done()
+			return nil
+		}
+		win, err := split(client, h)
+		require.NoError(t, err)
+
+		wg.Add(1)
+		mockWinConn.EXPECT().
+			Invoke(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Times(1)
+		mockWinConn.EXPECT().Close().Times(1).
+			DoAndReturn(func() error {
+				h := client.servers[1].(*handlerServerResource)._h.(Handler)
+				err := expectSignalExit(mockWinConn, quitCh, nil)()
+				// server would call this asynchronously
+				go h.OnUnmount()
+				return err
+			})
+		require.NoError(t, win.Close())
+
+		wg.Wait()
 	})
 
 	goleak.VerifyNone(t)

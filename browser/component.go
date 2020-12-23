@@ -58,10 +58,19 @@ type browserWindow struct {
 	win    handler.Window
 }
 
+// used to wrap ephemeral handlers set by Split* or SetContent
 type browserWindowContent struct {
 	win browserWindow
-	tui.Handler
+	Handler
 }
+
+// func (w browserWindow) SetContent(h tui.Handler) error {
+// 	if _, ok := h.(*buffer); !ok {
+// 		h = newBrowserWindowContent(h, w)
+// 	}
+// 	w.parent.updateWindowContent(w, h)
+// 	return nil
+// }
 
 // browserWindow is passed by value, so we store whether
 // it has been closed or not in Handler.
@@ -113,12 +122,7 @@ func (c *Component) closeWindow(win Window) error {
 		return err
 	}
 
-	buf, ok := browserBufferAtWindow(bWin)
-	if ok {
-		buf.setFree()
-	} else {
-		c.tryCloseHandler(bWin.win.Content())
-	}
+	bWin.win.Content().(Handler).OnUnmount()
 
 	c.windows = append(c.windows[:id], c.windows[id+1:]...)
 
@@ -156,7 +160,7 @@ func (c *Component) Init(config Config) {
 		}
 	}
 	c.tabs.SetAttr(focusFileAttr, nonFocusFileAttr, frameFileAttr, scrollAttr)
-	n := handler.Nop(component.String(c.config.StartText))
+	n := CallbackHandler(handler.Nop(component.String(c.config.StartText)), func() {})
 	c.startHandler = newBrowserWindowContent(n, browserWindow{})
 
 	c.wm = handler.NewWindowManager(c.startHandler, c.config.WindowManagerConfig)
@@ -183,7 +187,7 @@ func (c *Component) newBuffer(name string, h tui.Handler, f FlusherCloser) (*buf
 }
 
 // NewBuffer adds a new buffer to the list of buffers on this Component.
-func (c *Component) NewBuffer(name string, h tui.Handler, f FlusherCloser) tui.Handler {
+func (c *Component) NewBuffer(name string, h tui.Handler, f FlusherCloser) Handler {
 	buf, _ := c.newBuffer(name, h, f)
 	return buf
 }
@@ -327,11 +331,7 @@ func (c *Component) updateWindowContent(
 		newBuf.setWindow(win)
 	}
 	oldComponent := win.win.SetContent(content)
-	if oldBuf, ok := oldComponent.(*buffer); ok {
-		oldBuf.setFree()
-	} else {
-		c.tryCloseHandler(oldComponent)
-	}
+	oldComponent.(Handler).OnUnmount()
 	return oldComponent
 }
 
@@ -397,7 +397,7 @@ func (c *Component) FlushBuffer(win Window) error {
 
 func (c *Component) splitInverted(
 	split func(*handler.WindowManager, tui.Handler) handler.Window,
-	h tui.Handler,
+	h Handler,
 ) browserWindow {
 	bWin, focusContent := c.focus(), c.wm.Focus().Content()
 	id, w := c.findWindow(bWin)
@@ -413,13 +413,13 @@ func (c *Component) splitInverted(
 	return w
 }
 
-func newBrowserWindowContent(h tui.Handler, w browserWindow) browserWindowContent {
+func newBrowserWindowContent(h Handler, w browserWindow) browserWindowContent {
 	return browserWindowContent{Handler: h, win: w}
 }
 
 func (c *Component) split(
 	split func(*handler.WindowManager, tui.Handler) handler.Window,
-	h tui.Handler,
+	h Handler,
 ) browserWindow {
 	// force split a new window tile
 	win := split(c.wm, h)
@@ -445,7 +445,7 @@ func (c *Component) split(
 // current window in focus and initializes it with h.
 // Note that if h is not a handler created with NewBuffer
 // the handler is cleaned as soon as the window's content is swapped.
-func (c *Component) SplitVerticalRight(h tui.Handler) Window {
+func (c *Component) SplitVerticalRight(h Handler) Window {
 	return c.split((*handler.WindowManager).SplitVertical, h)
 }
 
@@ -453,21 +453,21 @@ func (c *Component) SplitVerticalRight(h tui.Handler) Window {
 // current window in focus and initializes it with h.
 // Note that if h is not a handler created with NewBuffer
 // the handler is cleaned as soon as the window's content is swapped.
-func (c *Component) SplitVerticalLeft(h tui.Handler) Window {
+func (c *Component) SplitVerticalLeft(h Handler) Window {
 	return c.splitInverted((*handler.WindowManager).SplitVertical, h)
 }
 
 // SplitHorizontalBelow opens a new window tile below the current window in focus
 // and initializes it with h. Note that if h is not a handler created with NewBuffer
 // the handler is cleaned as soon as the window's content is swapped.
-func (c *Component) SplitHorizontalBelow(h tui.Handler) Window {
+func (c *Component) SplitHorizontalBelow(h Handler) Window {
 	return c.split((*handler.WindowManager).SplitHorizontal, h)
 }
 
 // SplitHorizontalAbove opens a new window tile above the current window in focus
 // and initializes it with h. Note that if h is not a handler created with NewBuffer
 // the handler is cleaned as soon as the window's content is swapped.
-func (c *Component) SplitHorizontalAbove(h tui.Handler) Window {
+func (c *Component) SplitHorizontalAbove(h Handler) Window {
 	return c.splitInverted((*handler.WindowManager).SplitHorizontal, h)
 }
 

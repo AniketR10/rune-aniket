@@ -224,13 +224,13 @@ func TestServerSubscribe(t *testing.T) {
 	ctx := context.Background()
 	handlerID := uint32(31)
 	protoEv := proto.Event{Mod: proto.Event_Alt, Char: '5'}
-	termEv := term.Event{Mod: term.ModAlt, Ch: '5'}
 	req := proto.SubscribeRequest{
 		Ev:        &protoEv,
 		HandlerId: handlerID,
 	}
 
 	t.Run("dials to remote handler and delegates Subscribe to underlying Browser", func(t *testing.T) {
+		termEv := term.Event{Mod: term.ModAlt, Ch: '5'}
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 		s, mock, mockBroker := newTestServer(ctrl)
@@ -293,6 +293,7 @@ func TestServerSubscribe(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 		s, mock, mockBroker := newTestServer(ctrl)
+		s.failureTimeout = 50 * time.Millisecond
 
 		handlerConn := expectBrokerDial(t, ctrl, mockBroker, handlerID)
 
@@ -410,11 +411,11 @@ func testServerSplit(
 		s, mock, mockBroker := newTestServer(ctrl)
 		mockWindow := NewMockWindow(ctrl)
 
-		var h tui.Handler
+		var h Handler
 		handlerConn := expectBrokerDial(t, ctrl, mockBroker, handlerID)
 		quitCh := expectMonitorConn(handlerConn)
 		expect(mock.EXPECT(), gomock.Any()).
-			DoAndReturn(func(_h tui.Handler) (Window, error) {
+			DoAndReturn(func(_h Handler) (Window, error) {
 				h = _h
 				return mockWindow, nil
 			})
@@ -488,11 +489,11 @@ func testServerSplit(
 		s, mock, mockBroker := newTestServer(ctrl)
 		mockWindow := NewMockWindow(ctrl)
 
-		var h tui.Handler
+		var h Handler
 		handlerConn := expectBrokerDial(t, ctrl, mockBroker, handlerID)
 		quitCh := expectMonitorConn(handlerConn)
 		expect(mock.EXPECT(), gomock.Any()).
-			DoAndReturn(func(_h tui.Handler) (Window, error) {
+			DoAndReturn(func(_h Handler) (Window, error) {
 				h = _h
 				return mockWindow, nil
 			})

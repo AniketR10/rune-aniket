@@ -57,10 +57,25 @@ type browserClientHandler struct {
 	c *Client
 }
 
+func (c browserClientHandler) OnUnmount() (err error) {
+	c.c.mu.Lock()
+	err1 := c.Handler.OnUnmount()
+	if err1 != nil {
+		err = err1
+	}
+	c.c.mu.Unlock()
+
+	err2 := c.c.forceCloseHandler(c.handlerID)
+	if err2 != nil {
+		err = err2
+	}
+	return
+}
+
 func (c browserClientHandler) Handle(ev term.Event) (exit, handled bool) {
 	exit, handled = c.Handler.Handle(ev)
 	if exit {
-		go c.c.forceCloseHandler(c.handlerID)
+		go c.OnUnmount()
 	}
 	return
 }

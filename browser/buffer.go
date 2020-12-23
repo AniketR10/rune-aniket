@@ -32,7 +32,7 @@ func newBuffer(name string, h tui.Handler, f FlusherCloser) *buffer {
 func (b *buffer) init(name string, h tui.Handler, f FlusherCloser) {
 	b.name = name
 	b.flusherCloser = f
-	b.handler.Handler = h
+	b.handler.Handler = NopHandler(h)
 	b.setFree()
 }
 
@@ -78,5 +78,10 @@ func (b *buffer) Close() error {
 		b.flusherCloser = nil
 		return err
 	}
+	return nil
+}
+
+func (b *buffer) OnUnmount() error {
+	b.setFree()
 	return nil
 }

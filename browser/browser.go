@@ -13,11 +13,13 @@ import (
 // Handler adds io.Closer to a tui.Handler.
 type Handler interface {
 	tui.Handler
+	OnUnmount() error
 }
 
 // Window is the interface that represents
 // a closeable window in a WindowManager.
 type Window interface {
+	// Close closes the window.
 	Close() error
 }
 
@@ -76,4 +78,26 @@ type Browser interface {
 	ResourceOpener
 	Messenger
 	io.Closer
+}
+
+type unmountHandler struct {
+	tui.Handler
+	onUnmount func()
+}
+
+func (h unmountHandler) OnUnmount() error {
+	h.onUnmount()
+	return nil
+}
+
+// CallbackHandler returns a Handler by wrapping a tui.Handler
+// with an OnWindowClose callback.
+func CallbackHandler(h tui.Handler, onUnmount func()) Handler {
+	return unmountHandler{Handler: h, onUnmount: onUnmount}
+}
+
+// NopHandler returns a Handler by wrapping a tui.Handler
+// with an nop OnWindowClose callback.
+func NopHandler(h tui.Handler) Handler {
+	return unmountHandler{Handler: h, onUnmount: func() {}}
 }

@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestCloseWindow(t *testing.T) {
+func TestComponentCloseWindow(t *testing.T) {
 
 	t.Run("closing the last window returns error", func(t *testing.T) {
 		c := NewComponent(Config{})
@@ -21,7 +21,7 @@ func TestCloseWindow(t *testing.T) {
 	t.Run("closes window correctly", func(t *testing.T) {
 		c := NewComponent(Config{})
 
-		var h tui.Handler
+		var h Handler
 		h = handler.NewTestHandler()
 		h, _ = c.newBuffer("OAK", h, nil)
 
@@ -43,7 +43,7 @@ func TestCloseWindow(t *testing.T) {
 
 	t.Run("close window on handler exit", func(t *testing.T) {
 		c := NewComponent(Config{})
-		var h tui.Handler
+		var h Handler
 		h = handler.NewTestHandler()
 		h.(*handler.TestHandler).Exit = true
 		h, _ = c.newBuffer("bla", h, nil)
@@ -63,7 +63,7 @@ func TestCloseWindow(t *testing.T) {
 	})
 }
 
-func TestRemoveAllBuffers(t *testing.T) {
+func TestComponentRemoveAllBuffers(t *testing.T) {
 	w1 := NewComponent(Config{})
 	w2 := NewComponent(Config{})
 	w2.SplitHorizontalAbove(handler.NewTestHandler())
@@ -100,7 +100,7 @@ func TestRemoveAllBuffers(t *testing.T) {
 
 type testFlushCloser struct {
 	handler.TestHandler
-	flushed, closed int
+	flushed, closed, unmounted int
 }
 
 func (t *testFlushCloser) Flush() error {
@@ -112,8 +112,12 @@ func (t *testFlushCloser) Close() error {
 	t.closed++
 	return nil
 }
+func (t *testFlushCloser) OnUnmount() error {
+	t.unmounted++
+	return nil
+}
 
-func TestFlushBuffer(t *testing.T) {
+func TestComponentFlushBuffer(t *testing.T) {
 	c := NewComponent(Config{})
 	mock := testFlushCloser{}
 	c.NewBuffer("a", &mock, &mock)
@@ -122,13 +126,14 @@ func TestFlushBuffer(t *testing.T) {
 	c.FlushBuffer(c.Focus())
 	assert.Equal(t, 1, mock.flushed)
 	assert.Equal(t, 0, mock.closed)
+	assert.Equal(t, 0, mock.unmounted)
 }
 
 func assertFreeBuffer(t *testing.T, h tui.Handler, free bool) {
 	assert.Equal(t, free, h.(*buffer).free)
 }
 
-func TestUpdateWindowBuffer(t *testing.T) {
+func TestComponentUpdateWindowBuffer(t *testing.T) {
 	c := NewComponent(Config{})
 	win0 := c.Focus()
 	amzn := c.NewBuffer("AMZN", handler.NewTestHandler(), nil)
@@ -193,7 +198,7 @@ func TestComponentHandlerCloser(t *testing.T) {
 			win := c.SplitHorizontalBelow(mock)
 
 			tcase(t, c, win)
-			assert.Equal(t, 1, mock.closed)
+			assert.Equal(t, 1, mock.unmounted)
 		}
 	})
 }
