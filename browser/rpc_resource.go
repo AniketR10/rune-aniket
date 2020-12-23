@@ -16,8 +16,9 @@ type windowServerResource struct {
 }
 
 type handlerClientResource struct {
-	handlerConn proto.MuxConn
-	cc          io.Closer
+	handlerConn   proto.MuxConn
+	cc            io.Closer
+	cancelMonitor func()
 }
 
 func (r *handlerClientResource) WaitForStateChange(
@@ -31,6 +32,8 @@ func (r *handlerClientResource) WaitForStateChange(
 }
 
 func (r *handlerClientResource) Close() (err error) {
+	defer r.cancelMonitor()
+
 	err1 := r.cc.Close()
 	if err1 != nil {
 		err = err1

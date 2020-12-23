@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"sync"
+	"time"
 
 	"github.com/ernestrc/go-tui/handler"
 	"github.com/ernestrc/go-tui/proto"
@@ -22,6 +23,10 @@ type Client struct {
 
 	// one child Handler call at a time invariant
 	handlerMu sync.Mutex
+
+	// time this client waits for a grpc connection transient failure
+	// to recover before we shutdown connection.
+	failureTimeout time.Duration
 
 	broker proto.MuxBroker
 	cc     grpc.ClientConnInterface
@@ -79,6 +84,7 @@ func (c *Client) Init(broker proto.MuxBroker) {
 	c.broker = broker
 	c.clients = make(map[uint32]io.Closer)
 	c.servers = make(map[uint32]io.Closer)
+	c.failureTimeout = defaultFailureTimeout
 }
 
 func acceptAndServe(
@@ -135,7 +141,7 @@ func (c *Client) dialWindow(windowID, handlerID uint32) (*windowClient, error) {
 
 	ctx, cancelFn := context.WithCancel(context.Background())
 
-	go monitorConnection(ctx, winConn, func() {
+	go monitorConnection(ctx, c.failureTimeout, winConn, func() {
 		// only applies when connection is closed remotely
 		c.mu.Lock()
 		delete(c.clients, windowID)

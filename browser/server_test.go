@@ -15,10 +15,11 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/goleak"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/connectivity"
 )
 
-// TODO make sure that connections are monitored and if
-// something occurs, all resources are cleaned up.
+const asyncResultsSleepDuration = 300 * time.Millisecond
+
 func nop() {}
 
 func newServerWithNoBroker(ctrl *gomock.Controller) (
@@ -207,6 +208,18 @@ func TestServerPublish(t *testing.T) {
 	})
 }
 
+func assertClientsEqual(t *testing.T, expected int, s *Server) {
+	s.browser.Lock()
+	defer s.browser.Unlock()
+	assert.Equal(t, expected, len(s.clients))
+}
+
+func assertServersEqual(t *testing.T, expected int, s *Server) {
+	s.browser.Lock()
+	defer s.browser.Unlock()
+	assert.Equal(t, expected, len(s.servers))
+}
+
 func TestServerSubscribe(t *testing.T) {
 	ctx := context.Background()
 	handlerID := uint32(31)
@@ -224,6 +237,7 @@ func TestServerSubscribe(t *testing.T) {
 
 		var h EventHandler
 		handlerConn := expectBrokerDial(t, ctrl, mockBroker, handlerID)
+		quitCh := expectMonitorConn(handlerConn)
 		mock.EXPECT().Subscribe(gomock.Any(), gomock.Any()).
 			DoAndReturn(func(ev term.Event, _h EventHandler) error {
 				assert.Equal(t, termEv, ev)
@@ -235,7 +249,8 @@ func TestServerSubscribe(t *testing.T) {
 		require.NoError(t, err)
 		assert.NotNil(t, res)
 
-		assertServerHandlerExitClose(t, handlerConn, eventHandlerToHandler{h}, s, termEv)
+		assertServerHandlerExitClose(t, handlerConn,
+			eventHandlerToHandler{h}, s, termEv, quitCh)
 	})
 
 	t.Run("returns browser Subscribe dial to handler error", func(t *testing.T) {
@@ -249,8 +264,7 @@ func TestServerSubscribe(t *testing.T) {
 		require.Error(t, err)
 		assert.Nil(t, res)
 
-		assert.Equal(t, 0, len(s.clients))
-		assert.Equal(t, 0, len(s.servers))
+		assertServersEqual(t, 0, s)
 	})
 
 	t.Run("returns browser Subscribe rpc error and so closes handler connection", func(t *testing.T) {
@@ -262,13 +276,50 @@ func TestServerSubscribe(t *testing.T) {
 		mock.EXPECT().Subscribe(gomock.Any(), gomock.Any()).
 			Return(errors.New("woopsie"))
 
-		handlerConn.EXPECT().Close().Times(1).Return(nil)
+		quitCh := expectMonitorConn(handlerConn)
+		handlerConn.EXPECT().Close().Times(1).
+			DoAndReturn(expectSignalExit(handlerConn, quitCh, nil))
 		res, err := s.Subscribe(ctx, &req)
 		require.Error(t, err)
 		assert.Nil(t, res)
 
-		assert.Equal(t, 0, len(s.clients))
-		assert.Equal(t, 0, len(s.servers))
+		waitForMonitoringExit(quitCh)
+
+		assertClientsEqual(t, 0, s)
+		assertServersEqual(t, 0, s)
+	})
+
+	t.Run("handles transient failures by eventually shutting down connection", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+		s, mock, mockBroker := newTestServer(ctrl)
+
+		handlerConn := expectBrokerDial(t, ctrl, mockBroker, handlerID)
+
+		quitCh := make(chan struct{})
+		handlerConn.EXPECT().GetState().Return(connectivity.TransientFailure).AnyTimes()
+		handlerConn.EXPECT().WaitForStateChange(gomock.Any(), gomock.Any()).
+			DoAndReturn(func(ctx context.Context, sourceState connectivity.State) bool {
+				switch sourceState {
+				case connectivity.TransientFailure:
+					select {
+					case <-ctx.Done():
+						return false
+					case _, ok := <-quitCh:
+						return ok
+					}
+				default:
+					return false
+				}
+			}).Times(1)
+
+		handlerConn.EXPECT().Close().Times(1).
+			DoAndReturn(expectSignalExit(handlerConn, quitCh, nil))
+		mock.EXPECT().Subscribe(gomock.Any(), gomock.Any()).Return(nil)
+		_, err := s.Subscribe(ctx, &req)
+		require.NoError(t, err)
+
+		waitForMonitoringExit(quitCh)
 	})
 
 	goleak.VerifyNone(t)
@@ -302,28 +353,31 @@ func TestServerSplitVerticalRight(t *testing.T) {
 	)
 }
 
+func waitForMonitoringExit(quitCh chan struct{}) {
+	<-quitCh
+	time.Sleep(asyncResultsSleepDuration)
+}
+
 func assertServerHandlerExitClose(
 	t *testing.T, handlerConn *proto.MockMuxConn,
 	h tui.Handler, s *Server,
-	termEv term.Event,
+	termEv term.Event, quitCh chan struct{},
 ) {
 	expectHandlerInvokeExit(t, handlerConn)
 
-	handlerConn.EXPECT().Close().Times(1).Return(nil)
+	handlerConn.EXPECT().Close().Times(1).
+		DoAndReturn(expectSignalExit(handlerConn, quitCh, nil))
 
 	exit, _ := h.Handle(termEv)
 	// rpc handler event delivery is asynchronous
 	// so second Handle response will trigger exit
-	time.Sleep(200 * time.Millisecond)
+	time.Sleep(asyncResultsSleepDuration)
 	exit, _ = h.Handle(termEv)
 	assert.True(t, exit)
 	// close sequence is performed asynchronously
-	time.Sleep(200 * time.Millisecond)
+	waitForMonitoringExit(quitCh)
 
-	s.browser.Lock()
-	defer s.browser.Unlock()
-
-	assert.Equal(t, 0, len(s.clients))
+	assertClientsEqual(t, 0, s)
 }
 
 func testServerSplit(
@@ -358,6 +412,7 @@ func testServerSplit(
 
 		var h tui.Handler
 		handlerConn := expectBrokerDial(t, ctrl, mockBroker, handlerID)
+		quitCh := expectMonitorConn(handlerConn)
 		expect(mock.EXPECT(), gomock.Any()).
 			DoAndReturn(func(_h tui.Handler) (Window, error) {
 				h = _h
@@ -375,18 +430,20 @@ func testServerSplit(
 		assert.False(t, exit)
 		assert.True(t, handled)
 
-		time.Sleep(100 * time.Millisecond)
+		time.Sleep(asyncResultsSleepDuration)
 
 		// verify that handler is closeable by its handlerId
-		handlerConn.EXPECT().Close().Times(1).Return(nil)
+		handlerConn.EXPECT().Close().Times(1).
+			DoAndReturn(expectSignalExit(handlerConn, quitCh, nil))
 		mockWindow.EXPECT().Close().Times(1).Return(nil)
 		require.NoError(t, s.forceCloseHandler(handlerID))
-		assert.Equal(t, 0, len(s.clients))
+		assertClientsEqual(t, 0, s)
+		waitForMonitoringExit(quitCh)
 
 		// not ideal but it's hard to mock grpc.Server Register calls
 		// windowServer calls forceCloseWindow on close.
 		require.NoError(t, s.forceCloseWindow(windowID))
-		assert.Equal(t, 0, len(s.servers))
+		assertServersEqual(t, 0, s)
 	})
 
 	t.Run("bubbles up dial error", func(t *testing.T) {
@@ -396,11 +453,12 @@ func testServerSplit(
 
 		expectBrokerDialError(t, ctrl, mockBroker, handlerID)
 
-		res, err := s.SplitHorizontalAbove(ctx, &req)
+		res, err := split(s, ctx, &req)
 		require.Error(t, err)
 		assert.Nil(t, res)
-		assert.Equal(t, 0, len(s.clients))
-		assert.Equal(t, 0, len(s.servers))
+
+		assertClientsEqual(t, 0, s)
+		assertServersEqual(t, 0, s)
 	})
 
 	t.Run("bubbles up browser split error and so closes handler connection", func(t *testing.T) {
@@ -409,16 +467,19 @@ func testServerSplit(
 		s, mock, mockBroker := newTestServer(ctrl)
 
 		handlerConn := expectBrokerDial(t, ctrl, mockBroker, handlerID)
-		mock.EXPECT().SplitHorizontalAbove(gomock.Any()).
+		quitCh := expectMonitorConn(handlerConn)
+		expect(mock.EXPECT(), gomock.Any()).
 			Return(nil, errors.New("woopsie"))
-		handlerConn.EXPECT().Close().Times(1).Return(nil)
+		handlerConn.EXPECT().Close().Times(1).
+			DoAndReturn(expectSignalExit(handlerConn, quitCh, nil))
 
-		res, err := s.SplitHorizontalAbove(ctx, &req)
+		res, err := split(s, ctx, &req)
 		require.Error(t, err)
 		assert.Nil(t, res)
+		waitForMonitoringExit(quitCh)
 
-		assert.Equal(t, 0, len(s.clients))
-		assert.Equal(t, 0, len(s.servers))
+		assertClientsEqual(t, 0, s)
+		assertServersEqual(t, 0, s)
 	})
 
 	t.Run("closes resources of handler if exit = true", func(t *testing.T) {
@@ -429,6 +490,7 @@ func testServerSplit(
 
 		var h tui.Handler
 		handlerConn := expectBrokerDial(t, ctrl, mockBroker, handlerID)
+		quitCh := expectMonitorConn(handlerConn)
 		expect(mock.EXPECT(), gomock.Any()).
 			DoAndReturn(func(_h tui.Handler) (Window, error) {
 				h = _h
@@ -439,7 +501,7 @@ func testServerSplit(
 		_, err := split(s, ctx, &req)
 		require.NoError(t, err)
 
-		assertServerHandlerExitClose(t, handlerConn, h, s, termEv)
+		assertServerHandlerExitClose(t, handlerConn, h, s, termEv, quitCh)
 	})
 
 	goleak.VerifyNone(t)

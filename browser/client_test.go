@@ -76,7 +76,7 @@ func assertClientHandlerExitClose(
 	h *handler.TestHandler, mockWinConn *proto.MockMuxConn,
 	client *Client,
 ) {
-	require.Equal(t, 1, len(client.servers))
+	assertClientServersEqual(t, 1, client)
 
 	h.Exit = true
 
@@ -92,12 +92,9 @@ func assertClientHandlerExitClose(
 	// unfortunately gracefulshutdowns are asynchronous
 	// because they wait on grpc connection to be shutdown fist by
 	// server
-	time.Sleep(100 * time.Millisecond)
+	time.Sleep(asyncResultsSleepDuration)
 
-	client.mu.Lock()
-	defer client.mu.Unlock()
-
-	assert.Equal(t, 0, len(client.servers))
+	assertClientServersEqual(t, 0, client)
 }
 
 func expectBrokerServe(t *testing.T, brokerID uint32, mockBroker *proto.MockMuxBroker) {
@@ -172,11 +169,11 @@ func expectSplit(
 }
 
 func expectSignalExit(
-	mockWinConn *proto.MockMuxConn, quitCh chan struct{},
+	mockConn *proto.MockMuxConn, quitCh chan struct{},
 	returnErr error,
 ) func() error {
 	return func() error {
-		mockWinConn.EXPECT().GetState().Return(connectivity.Shutdown).AnyTimes()
+		mockConn.EXPECT().GetState().Return(connectivity.Shutdown).AnyTimes()
 		close(quitCh)
 		return returnErr
 	}
@@ -350,8 +347,8 @@ func TestClientSubscribe(t *testing.T) {
 		err := client.Subscribe(term.Event{}, nil)
 		assertInvokeError(t, err)
 
-		assert.Equal(t, 0, len(client.servers))
-		assert.Equal(t, 0, len(client.clients))
+		assertClientServersEqual(t, 0, client)
+		assertClientClientsEqual(t, 0, client)
 	})
 
 	t.Run("sends event subscribe request to server", func(t *testing.T) {
@@ -436,6 +433,18 @@ func TestClientSplitVerticalLeft(t *testing.T) {
 	testClientSplit(t, (WindowManager).SplitVerticalLeft, rpc)
 }
 
+func assertClientClientsEqual(t *testing.T, expected int, c *Client) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	assert.Equal(t, expected, len(c.clients))
+}
+
+func assertClientServersEqual(t *testing.T, expected int, c *Client) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	assert.Equal(t, expected, len(c.servers))
+}
+
 func testClientSplit(
 	t *testing.T,
 	split func(WindowManager, Handler) (Window, error),
@@ -455,17 +464,15 @@ func testClientSplit(
 
 		win, err := split(client, nil)
 		require.NoError(t, err)
-		assert.Equal(t, 1, len(client.servers))
-		assert.Equal(t, 1, len(client.clients))
+		assertClientServersEqual(t, 1, client)
+		assertClientClientsEqual(t, 1, client)
 
 		expectWindowClose(t, mockWinConn, quitCh)
 		require.NoError(t, win.Close())
-		time.Sleep(100 * time.Millisecond)
+		time.Sleep(asyncResultsSleepDuration)
 
-		client.mu.Lock()
-		defer client.mu.Unlock()
-		assert.Equal(t, 0, len(client.servers))
-		assert.Equal(t, 0, len(client.clients))
+		assertClientServersEqual(t, 0, client)
+		assertClientClientsEqual(t, 0, client)
 	})
 
 	t.Run("bubbles up rpc error and so stops handler server", func(t *testing.T) {
@@ -481,10 +488,8 @@ func testClientSplit(
 		assertInvokeError(t, err)
 		assert.Nil(t, win)
 
-		client.mu.Lock()
-		defer client.mu.Unlock()
-		assert.Equal(t, 0, len(client.servers))
-		assert.Equal(t, 0, len(client.clients))
+		assertClientServersEqual(t, 0, client)
+		assertClientClientsEqual(t, 0, client)
 	})
 
 	t.Run("bubbles up dial to window error and so stops handler server", func(t *testing.T) {
@@ -502,10 +507,8 @@ func testClientSplit(
 		require.Error(t, err)
 		assert.Nil(t, win)
 
-		client.mu.Lock()
-		defer client.mu.Unlock()
-		assert.Equal(t, 0, len(client.servers))
-		assert.Equal(t, 0, len(client.clients))
+		assertClientServersEqual(t, 0, client)
+		assertClientClientsEqual(t, 0, client)
 	})
 
 	t.Run("gracefully closes resources if handler returns exit = true", func(t *testing.T) {
@@ -549,8 +552,8 @@ func TestClientClose(t *testing.T) {
 
 		_, err := client.SplitVerticalRight(nil)
 		require.NoError(t, err)
-		assert.Equal(t, i+1, len(client.servers))
-		assert.Equal(t, i+1, len(client.clients))
+		assertClientServersEqual(t, i+1, client)
+		assertClientClientsEqual(t, i+1, client)
 
 		if i%2 == 0 {
 			mockWinConn.EXPECT().Close().Times(1).

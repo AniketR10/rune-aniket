@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"sync"
+	"time"
 
 	"github.com/ernestrc/go-tui"
 	"github.com/ernestrc/go-tui/handler"
@@ -21,7 +22,19 @@ type Server struct {
 
 	broker proto.MuxBroker
 
+	failureTimeout time.Duration
+
+	// handler client resources are created on calls to Subscribe,
+	// Split* and SetContent. They are destroyed when content is swapped
+	// and browser.Component checks on io.Closer (TODO this should be direct call to
+	// DidUnmount) or when Handle returns exit=true. Connections are also monitored
+	// and cleaned if necessary.
 	clients map[uint32]io.Closer
+
+	// window servers are created on calls to Split* and Focus. They are destroyed
+	// when window is closed, either remotely,
+	// TODO locally, (we do not have a hook yet on WindowManager)
+	// TODO or because the handler exited.
 	servers map[uint32]io.Closer
 
 	browser struct {
@@ -74,6 +87,7 @@ func (s *Server) Init(
 	s.interruptHandle = interruptHandle
 	s.clients = make(map[uint32]io.Closer)
 	s.servers = make(map[uint32]io.Closer)
+	s.failureTimeout = defaultFailureTimeout
 }
 
 func (s *Server) dialHandler(handlerID uint32) (Handler, error) {
@@ -89,12 +103,19 @@ func (s *Server) dialHandler(handlerID uint32) (Handler, error) {
 	cc := handler.NewClient(pbClient, s.interruptDraw, s.interruptHandle)
 	cc.Logger = s.Logger
 
+	ctx, cancelFn := context.WithCancel(context.Background())
+
 	s.browser.Lock()
 	defer s.browser.Unlock()
 
+	go monitorConnection(ctx, s.failureTimeout, handlerConn, func() {
+		s.forceCloseHandler(handlerID)
+	})
+
 	s.clients[handlerID] = &handlerClientResource{
-		handlerConn: handlerConn,
-		cc:          cc,
+		handlerConn:   handlerConn,
+		cc:            cc,
+		cancelMonitor: cancelFn,
 	}
 
 	return cc, nil

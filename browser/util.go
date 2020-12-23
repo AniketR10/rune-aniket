@@ -2,8 +2,10 @@ package browser
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"sync"
+	"time"
 
 	"github.com/ernestrc/go-tui/cell"
 	"github.com/ernestrc/go-tui/component"
@@ -67,9 +69,30 @@ func forceCloseResource(
 	return err
 }
 
-func monitorConnection(ctx context.Context, conn proto.MuxConn, callback func()) {
-	for conn.GetState() != connectivity.Shutdown {
-		conn.WaitForStateChange(ctx, connectivity.Ready)
+const defaultFailureTimeout = 5 * time.Second
+
+func monitorConnection(
+	ctx context.Context, failureTimeout time.Duration,
+	conn proto.MuxConn, onClosed func(),
+) {
+	defer onClosed()
+
+	for {
+		state := conn.GetState()
+		switch state {
+		case connectivity.Idle, connectivity.Connecting, connectivity.Ready:
+			conn.WaitForStateChange(ctx, state)
+		case connectivity.TransientFailure:
+			failureCtx, cancelFn := context.WithTimeout(ctx, failureTimeout)
+			didChange := conn.WaitForStateChange(failureCtx, connectivity.TransientFailure)
+			cancelFn()
+			if !didChange {
+				return
+			}
+		case connectivity.Shutdown:
+			return
+		default:
+			panic(fmt.Sprintf("unknown connection state: %v", state))
+		}
 	}
-	callback()
 }
