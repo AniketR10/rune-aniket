@@ -269,6 +269,11 @@ func (a *clientBreaker) Handle(
 
 	if quitNext {
 		res.Quit = quitNext
+		select {
+		case <-a.quitCh:
+			return nil, errClientClosed
+		default:
+		}
 		return res, nil
 	}
 
@@ -290,7 +295,35 @@ func (a *clientBreaker) Handle(
 func (a *clientBreaker) Man(
 	ctx context.Context, in *proto.ManRequest, opts ...grpc.CallOption,
 ) (*proto.ManResponse, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.draw.state == closed {
+		return nil, errClientClosed
+	}
 	return a.cc.Man(ctx, in, opts...)
+}
+
+func (a *clientBreaker) OnUnmount(
+	ctx context.Context, in *proto.OnUnmountRequest, opts ...grpc.CallOption,
+) (*proto.OnUnmountResponse, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.draw.state == closed {
+		return nil, errClientClosed
+	}
+
+	go func() {
+		_, err := a.cc.OnUnmount(ctx, in, opts...)
+		if err != nil {
+			a.mu.Lock()
+			defer a.mu.Unlock()
+
+			// next Handle returns error
+			a.handle.err = err
+		}
+	}()
+
+	return new(proto.OnUnmountResponse), nil
 }
 
 func (a *clientBreaker) Close() error {

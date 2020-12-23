@@ -17,8 +17,9 @@ import (
 type TestHandler struct {
 	component.TestComponent
 	tui.Manual
-	CursorPos term.Coordinates
-	Exit      bool
+	CursorPos         term.Coordinates
+	Exit              bool
+	OnUnmountCallback func() error
 }
 
 // NewTestHandler will allocate storage for a new handler and initialize it
@@ -35,7 +36,7 @@ func (t *TestHandler) Handle(term.Event) (bool, bool) {
 	return t.Exit, true
 }
 
-// Cursor returns always a hidden cursor
+// Cursor returns the set CursorPos.
 func (t *TestHandler) Cursor() (term.Coordinates, bool) {
 	if t.CursorPos == (term.Coordinates{}) {
 		return term.Coordinates{X: -1, Y: -1}, false
@@ -43,9 +44,17 @@ func (t *TestHandler) Cursor() (term.Coordinates, bool) {
 	return t.CursorPos, true
 }
 
-// Man for this handler is empty
+// Man returns set Manual.
 func (t *TestHandler) Man() tui.Manual {
 	return t.Manual
+}
+
+// OnUnmount calls t.OnUnmount.
+func (t *TestHandler) OnUnmount() error {
+	if t.OnUnmountCallback != nil {
+		return t.OnUnmountCallback()
+	}
+	return nil
 }
 
 type handlerTestCase struct {

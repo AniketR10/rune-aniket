@@ -35,8 +35,12 @@ message ManResponse {
 	Manual man = 1;
 }
 
+message OnUnmountRequest {}
+message OnUnmountResponse {}
+
 service Handler {
 	rpc Draw(DrawRequest) returns (DrawResponse);
 	rpc Handle(HandleRequest) returns (HandleResponse);
 	rpc Man(ManRequest) returns (ManResponse);
+	rpc OnUnmount(OnUnmountRequest) returns (OnUnmountResponse);
 }

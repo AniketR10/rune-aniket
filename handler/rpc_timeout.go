@@ -83,3 +83,15 @@ func (b *clientTimeout) Man(
 	}
 	return resIfc.(*proto.ManResponse), err
 }
+
+func (b *clientTimeout) OnUnmount(
+	ctx context.Context, in *proto.OnUnmountRequest, opts ...grpc.CallOption,
+) (*proto.OnUnmountResponse, error) {
+	resIfc, err := b.rpcWithTimeout(ctx, func(ctx context.Context) (interface{}, error) {
+		return b.other.OnUnmount(ctx, in, opts...)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return resIfc.(*proto.OnUnmountResponse), err
+}

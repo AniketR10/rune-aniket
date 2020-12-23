@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"sync"
 	"time"
@@ -172,6 +173,19 @@ func (c *Client) Man() tui.Manual {
 	return tuiMan
 }
 
+// OnUnmount satisfies browser.Handler
+func (c *Client) OnUnmount() error {
+	ctx := context.Background()
+	req := proto.OnUnmountRequest{}
+
+	_, err := c.client.OnUnmount(ctx, &req)
+	if err != nil {
+		c.collectError(err)
+		return err
+	}
+	return nil
+}
+
 // Close closes this client and all associated resources.
 func (c *Client) Close() error {
 	return c.client.Close()
@@ -253,4 +267,21 @@ func (s *Server) Man(context.Context, *proto.ManRequest) (
 	protoMan := new(proto.Manual)
 	protoMan.FromModel(man)
 	return &proto.ManResponse{Man: protoMan}, nil
+}
+
+// OnUnmount is an RPC that handles request to an underlying
+// Handler's OnUnmount if it implements it, otherwise it ignores request.
+func (s *Server) OnUnmount(context.Context, *proto.OnUnmountRequest) (
+	*proto.OnUnmountResponse, error,
+) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	unmounter, ok := s.handler.(interface{ OnUnmount() error })
+	if ok {
+		err := unmounter.OnUnmount()
+		if err != nil {
+			return nil, fmt.Errorf("error OnUnmount: %v", err)
+		}
+	}
+	return &proto.OnUnmountResponse{}, nil
 }
