@@ -258,7 +258,7 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 └──────────────────┘`},
 	}
 
-	browser, err := constructor(&testEditor{}, browser.WithFilepath(""))
+	browser, err := constructor(&testEditor{})
 	require.NoError(t, err)
 
 	handler.BatchTestInputSequence(t, browser, 20, 10, cases)
@@ -452,4 +452,51 @@ func TestBrowserHandlerPublishInterrupt(t *testing.T) {
 
 		wg.Wait()
 	})
+}
+
+func TestMultipleFilesStartup(t *testing.T) {
+	cases := []handler.TestInputSequence{
+		{"",
+			`┌──────────────────┐
+│cabin.go  wi.go   │
+├──────────────────┤
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+└──────────────────┘`},
+		{"a",
+			`┌──────────────────┐
+│cabin.go  wi.go   │
+├──────────────────┤
+│BBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBB│
+└──────────────────┘`},
+		{"#", // simulates ctrl-h
+			`┌──────────────────┐
+│cabin.go  wi.go   │
+├──────────────────┤
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+└──────────────────┘`},
+	}
+
+	b := newTestBrowserHandler()
+	err := b.Init(&testEditor{},
+		browser.WithFilepath("cabin.go"),
+		browser.WithFilepath("wi.go"),
+	)
+	require.NoError(t, err)
+
+	handler.BatchTestInputSequence(t, b, 20, 10, cases)
 }

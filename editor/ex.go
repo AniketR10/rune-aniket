@@ -1,6 +1,7 @@
 package editor
 
 import (
+	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -104,9 +105,16 @@ func (e *Ex) Init(ed Editor, opts ...browser.Option) (err error) {
 	e.mode = modeDefault
 	e.subscribers = make(map[term.Event]browser.EventHandler)
 
-	if e.config.Filepath != "" {
-		err = e.newBufferWithFile(e.config.Filepath,
-			e.config.RecoveryFilepath)
+	if e.config.RecoveryFilepath != "" {
+		if len(e.config.Filepaths) != 1 {
+			return errors.New("only one file expected if recovery file is passed")
+		}
+		err = e.newBufferWithFile(e.config.Filepaths[0], e.config.RecoveryFilepath)
+		return
+	}
+
+	for _, filename := range e.config.Filepaths {
+		err = e.newBufferWithFile(filename, "")
 		if err != nil {
 			return
 		}

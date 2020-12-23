@@ -12,7 +12,7 @@ func DefaultConfig() Config {
 		Tabspaces:           4,
 		Logger:              nil,
 		SwapDir:             "",
-		Filepath:            "",
+		Filepaths:           nil,
 		RecoveryFilepath:    "",
 		CommandEvent:        term.Event{Ch: ':', Type: term.EventKey},
 		WindowManagerConfig: handler.DefaultWindowManagerConfig(),
@@ -27,7 +27,7 @@ type Config struct {
 	Tabspaces        int
 	Logger           *log.Logger
 	SwapDir          string
-	Filepath         string
+	Filepaths        []string
 	RecoveryFilepath string
 	CommandEvent     term.Event
 	StartText        string
@@ -80,7 +80,7 @@ func WithRecoveryFile(swapFilePath string) Option {
 // a Editor handler.
 func WithFilepath(filepath string) Option {
 	return func(cfg *Config) {
-		cfg.Filepath = filepath
+		cfg.Filepaths = append(cfg.Filepaths, filepath)
 	}
 }
 
