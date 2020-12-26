@@ -3,7 +3,6 @@ package browser
 import (
 	"errors"
 	"fmt"
-	"io"
 
 	"github.com/ernestrc/go-tui"
 	"github.com/ernestrc/go-tui/cell"
@@ -16,8 +15,9 @@ var (
 	// ErrInvalidSave is returned when trying to save a buffer that it's not a file
 	// in the file system.
 	ErrInvalidSave = errors.New("Cannot save this buffer")
-	// ErrNoFreeBuffers is returned when trying to delete the Browser's last buffer.
-	ErrNoFreeBuffers = errors.New("No free buffers left")
+	// ErrBufferNotFree is returned when a buffer is being used in call to
+	// SetContent but it's already owned by another Window.
+	ErrBufferNotFree = errors.New("Buffer already rendered in another Window")
 
 	focusFileAttr    = term.Attributes{Fg: term.ColorDefault}
 	nonFocusFileAttr = term.Attributes{Fg: 243}
@@ -47,34 +47,31 @@ type Component struct {
 	frames     *component.FrameUnion
 
 	config         Config
-	startHandler   browserWindowContent
+	startHandler   Handler
 	buffers        []*buffer
-	windows        []browserWindow
+	windows        []*browserWindow
 	fileListHeight int
 }
 
+// needed mutable to inverse a split
 type browserWindow struct {
 	parent *Component
 	win    handler.Window
 }
 
-// used to wrap ephemeral handlers set by Split* or SetContent
-type browserWindowContent struct {
-	win browserWindow
-	Handler
+func (w *browserWindow) SetContent(h Handler) error {
+	if b, ok := h.(*buffer); ok {
+		if !b.free {
+			return ErrBufferNotFree
+		}
+	}
+	w.parent.updateWindowContent(w, h)
+	return nil
 }
-
-// func (w browserWindow) SetContent(h tui.Handler) error {
-// 	if _, ok := h.(*buffer); !ok {
-// 		h = newBrowserWindowContent(h, w)
-// 	}
-// 	w.parent.updateWindowContent(w, h)
-// 	return nil
-// }
 
 // browserWindow is passed by value, so we store whether
 // it has been closed or not in Handler.
-func (w browserWindow) Close() error {
+func (w *browserWindow) Close() error {
 	if w.parent == nil {
 		return nil
 	}
@@ -85,23 +82,12 @@ func (w browserWindow) Close() error {
 	return err
 }
 
-func (e browserWindowContent) Handle(ev term.Event) (exit, handled bool) {
-	exit, handled = e.Handler.Handle(ev)
-	if exit {
-		// for completeness, although this should never happen
-		if buf, ok := e.Handler.(*buffer); ok {
-			e.win.parent.doRemoveBuffer(e.win.parent.findBufferID(buf))
-		}
-	}
-	return
-}
-
-func (c *Component) addWindow(win browserWindow) {
+func (c *Component) addWindow(win *browserWindow) {
 	c.windows = append(c.windows, win)
 }
 
-func (c *Component) newWindow(win handler.Window) browserWindow {
-	browserWin := browserWindow{
+func (c *Component) newWindow(win handler.Window) *browserWindow {
+	browserWin := &browserWindow{
 		parent: c,
 		win:    win,
 	}
@@ -111,8 +97,8 @@ func (c *Component) newWindow(win handler.Window) browserWindow {
 
 // closeWindow closes win or returns an error if win is the last Window.
 func (c *Component) closeWindow(win Window) error {
-	bWin := win.(browserWindow)
-	id, _ := c.findWindow(bWin)
+	bWin := win.(*browserWindow)
+	id, _ := c.findWindow(bWin.win)
 	if id == -1 {
 		return nil
 	}
@@ -122,20 +108,19 @@ func (c *Component) closeWindow(win Window) error {
 		return err
 	}
 
-	bWin.win.Content().(Handler).OnUnmount()
-
 	c.windows = append(c.windows[:id], c.windows[id+1:]...)
 
+	c.onUnmount(bWin.win.Content().(Handler))
 	return nil
 }
 
-func (c *Component) findWindow(win browserWindow) (int, browserWindow) {
+func (c *Component) findWindow(win handler.Window) (int, *browserWindow) {
 	for i, w := range c.windows {
-		if w == win {
+		if w.win == win {
 			return i, w
 		}
 	}
-	return -1, browserWindow{}
+	return -1, nil
 }
 
 // NewComponent allocates storage for a new Component and initializes it.
@@ -155,19 +140,18 @@ func (c *Component) Init(config Config) {
 	c.tabs = handler.NewTabs()
 	c.tabs.OnClick = func(id int) {
 		buf := c.buffers[id]
-		if buf.free {
-			c.updateWindowContent(c.focus(), buf)
+		err := c.Focus().SetContent(buf)
+		if err != nil {
+			c.setError(err)
 		}
 	}
 	c.tabs.SetAttr(focusFileAttr, nonFocusFileAttr, frameFileAttr, scrollAttr)
-	n := CallbackHandler(handler.Nop(component.String(c.config.StartText)), func() {})
-	c.startHandler = newBrowserWindowContent(n, browserWindow{})
+	c.startHandler = CallbackHandler(handler.Nop(component.String(c.config.StartText)), func() {})
 
 	c.wm = handler.NewWindowManager(c.startHandler, c.config.WindowManagerConfig)
 	c.wm.SetAttr(wmDefaultAttr, wmFocusAttr)
 
-	win := c.newWindow(c.wm.Focus()) // init handler with initial window
-	c.startHandler.win = win
+	_ = c.newWindow(c.wm.Focus()) // init handler with initial window
 
 	c.wmVirt = handler.Virtual{Virtual: component.Virtual{C: c.wm}}
 	c.tabsVirt = handler.Virtual{Virtual: component.Virtual{C: c.tabs}}
@@ -180,28 +164,28 @@ func (c *Component) Init(config Config) {
 	return
 }
 
-func (c *Component) newBuffer(name string, h tui.Handler, f FlusherCloser) (*buffer, int) {
-	b := newBuffer(name, h, f)
-	c.buffers = append(c.buffers, b)
-	return b, c.tabs.Add(b.name)
-}
-
 // NewBuffer adds a new buffer to the list of buffers on this Component.
 func (c *Component) NewBuffer(name string, h tui.Handler, f FlusherCloser) Handler {
-	buf, _ := c.newBuffer(name, h, f)
-	return buf
+	b := newBuffer(c, name, h, f)
+	c.buffers = append(c.buffers, b)
+	c.tabs.Add(b.name)
+	return b
 }
 
-func (c *Component) doRemoveBuffer(id int) {
-	if id >= len(c.buffers) {
-		panic(fmt.Sprintf("invalid buffer at index: %d", id))
+func (c *Component) closeBuffer(buf *buffer) error {
+	err := buf.Close()
+	if err != nil && c.config.Logger != nil {
+		c.config.Logger.Warningf("buffer Close error: %v", err)
 	}
+	return err
+}
 
-	buf := c.buffers[id]
+func (c *Component) doRemoveBuffer(buf *buffer) {
+	id := c.findBufferID(buf)
 	if !buf.free {
 		panic("trying to remove buffer that is still attached to a window")
 	}
-	defer buf.Close()
+	defer c.closeBuffer(buf)
 
 	c.buffers = append(c.buffers[:id], c.buffers[id+1:]...)
 	ok := c.tabs.Remove(id)
@@ -219,7 +203,7 @@ func (c *Component) findBufferID(buf *buffer) int {
 	panic("could not find buffer")
 }
 
-func (c *Component) browserBufferID(win browserWindow) (
+func (c *Component) browserBufferID(win *browserWindow) (
 	*buffer, int,
 ) {
 	buf, ok := browserBufferAtWindow(win)
@@ -229,7 +213,7 @@ func (c *Component) browserBufferID(win browserWindow) (
 	return buf, c.findBufferID(buf)
 }
 
-func (c *Component) updateWindowBuffer(win browserWindow, bufferID int) bool {
+func (c *Component) updateWindowBuffer(win *browserWindow, bufferID int) bool {
 	if bufferID >= len(c.buffers) {
 		panic(fmt.Sprintf("invalid buffer at index: %d", bufferID))
 	}
@@ -245,7 +229,7 @@ func (c *Component) updateWindowBuffer(win browserWindow, bufferID int) bool {
 func (c *Component) UpdateWindowBufferNextFree(win Window) bool {
 	freeBufs := c.freeBuffers()
 	if len(freeBufs) != 0 {
-		c.updateWindowContent(win.(browserWindow), c.buffers[freeBufs[0]])
+		c.updateWindowContent(win.(*browserWindow), c.buffers[freeBufs[0]])
 		return true
 	}
 
@@ -256,7 +240,7 @@ func (c *Component) UpdateWindowBufferNextFree(win Window) bool {
 func (c *Component) UpdateWindowBufferLastFree(win Window) bool {
 	freeBufs := c.freeBuffers()
 	if len(freeBufs) != 0 {
-		c.updateWindowContent(win.(browserWindow), c.buffers[freeBufs[len(freeBufs)-1]])
+		c.updateWindowContent(win.(*browserWindow), c.buffers[freeBufs[len(freeBufs)-1]])
 		return true
 	}
 
@@ -265,7 +249,7 @@ func (c *Component) UpdateWindowBufferLastFree(win Window) bool {
 
 // UpdateWindowBufferPrev updates win with the buffer before the current buffer.
 func (c *Component) UpdateWindowBufferPrev(win Window) bool {
-	bWin := win.(browserWindow)
+	bWin := win.(*browserWindow)
 	buf, id := c.browserBufferID(bWin)
 	if buf == nil {
 		return c.UpdateWindowBufferNextFree(win)
@@ -285,7 +269,7 @@ func (c *Component) UpdateWindowBufferPrev(win Window) bool {
 
 // UpdateWindowBufferNext updates win with the buffer after the current buffer.
 func (c *Component) UpdateWindowBufferNext(win Window) bool {
-	bWin := win.(browserWindow)
+	bWin := win.(*browserWindow)
 	buf, id := c.browserBufferID(bWin)
 	if buf == nil {
 		return c.UpdateWindowBufferNextFree(win)
@@ -302,27 +286,15 @@ func (c *Component) UpdateWindowBufferNext(win Window) bool {
 	return false
 }
 
-func ephemeralHandlerCloser(h tui.Handler) (io.Closer, bool) {
-	bcontent, ok := h.(browserWindowContent)
-	if !ok {
-		return nil, false
-	}
-
-	closer, ok := bcontent.Handler.(io.Closer)
-	return closer, ok
-}
-
-func (c *Component) tryCloseHandler(h tui.Handler) {
-	if closer, ok := ephemeralHandlerCloser(h); ok {
-		err := closer.Close()
-		if err != nil && c.config.Logger != nil {
-			c.config.Logger.Errorf("failed to close Handler on window content update: %v", err)
-		}
+func (c *Component) onUnmount(h Handler) {
+	err := h.OnUnmount()
+	if err != nil && c.config.Logger != nil {
+		c.config.Logger.Warningf("OnUnmount error: %v", err)
 	}
 }
 
 func (c *Component) updateWindowContent(
-	win browserWindow, content tui.Handler,
+	win *browserWindow, content tui.Handler,
 ) tui.Handler {
 	newBuf, ok := content.(*buffer)
 	if ok {
@@ -331,26 +303,26 @@ func (c *Component) updateWindowContent(
 		newBuf.setWindow(win)
 	}
 	oldComponent := win.win.SetContent(content)
-	oldComponent.(Handler).OnUnmount()
+	c.onUnmount(oldComponent.(Handler))
 	return oldComponent
 }
 
-func browserBufferAtWindow(win browserWindow) (*buffer, bool) {
+func browserBufferAtWindow(win *browserWindow) (*buffer, bool) {
 	buf, ok := win.win.Content().(*buffer)
 	return buf, ok
 }
 
 // RemoveAllBuffers removes all buffers but the last one.
 func (c *Component) RemoveAllBuffers() {
-	for {
-		err := c.RemoveWindowBuffer(c.Focus())
-		if err != nil {
-			if err != ErrNoFreeBuffers {
-				c.setError(err)
-			}
-			break
+	for _, buf := range c.buffers {
+		c.closeBuffer(buf)
+		if !buf.free {
+			c.updateWindowContent(buf.win, c.startHandler)
 		}
 	}
+
+	c.tabs.RemoveAll()
+	c.buffers = c.buffers[:0]
 }
 
 func (c *Component) freeBuffers() []int {
@@ -363,28 +335,34 @@ func (c *Component) freeBuffers() []int {
 	return freeBufs
 }
 
-// RemoveWindowBuffer removes the buffer at win or returns ErrNoFreeBuffers
-// if buffer is the last one.
-func (c *Component) RemoveWindowBuffer(win Window) error {
+// returns the next free buffer or an empty Handler
+func (c *Component) getFreeBuffer() (Handler, bool) {
 	freeBufs := c.freeBuffers()
 	if len(freeBufs) == 0 {
-		return ErrNoFreeBuffers
+		return c.startHandler, false
 	}
 
 	id := freeBufs[0]
-	oldComponent := c.updateWindowContent(win.(browserWindow), c.buffers[id])
+	return c.buffers[id], true
+}
+
+// RemoveWindowBuffer removes the buffer at win. It returns false
+// if the replacement is just an empty buffer because all buffers have been
+// removed.
+func (c *Component) RemoveWindowBuffer(win Window) bool {
+	buf, isNotEmptyBuffer := c.getFreeBuffer()
+	oldComponent := c.updateWindowContent(win.(*browserWindow), buf)
 	oldBuf, ok := oldComponent.(*buffer)
 	if ok {
-		oldBuf.Close()
-		c.doRemoveBuffer(c.findBufferID(oldBuf))
+		c.doRemoveBuffer(oldBuf)
 	}
-	return nil
+	return isNotEmptyBuffer
 }
 
 // FlushBuffer flushes the contents of the buffer at win, if this buffer
 // was created with a FlusherCloser. See NewBuffer.
 func (c *Component) FlushBuffer(win Window) error {
-	buf, ok := browserBufferAtWindow(win.(browserWindow))
+	buf, ok := browserBufferAtWindow(win.(*browserWindow))
 	if !ok {
 		return ErrInvalidSave
 	}
@@ -398,45 +376,45 @@ func (c *Component) FlushBuffer(win Window) error {
 func (c *Component) splitInverted(
 	split func(*handler.WindowManager, tui.Handler) handler.Window,
 	h Handler,
-) browserWindow {
-	bWin, focusContent := c.focus(), c.wm.Focus().Content()
-	id, w := c.findWindow(bWin)
-	if id == -1 {
-		panic("Handler: corrupted window list")
+) *browserWindow {
+	focusBrowserWin := c.focus()
+	focusContent := focusBrowserWin.win.Content()
+
+	// set content
+	newWin := split(c.wm, focusContent)
+	focusBrowserWin.win.SetContent(h)
+
+	// invert handler.Window
+	newBrowserWin := c.newWindow(focusBrowserWin.win)
+	focusBrowserWin.win = newWin
+
+	if buf, ok := focusContent.(*buffer); ok {
+		buf.setWindow(focusBrowserWin)
 	}
 
-	newWindow := split(c.wm, focusContent)
-	c.newWindow(newWindow)
+	if buf, ok := h.(*buffer); ok {
+		buf.setWindow(newBrowserWin)
+	}
 
-	w.win = bWin.win
-	bWin.win.SetContent(newBrowserWindowContent(h, w))
-	return w
-}
-
-func newBrowserWindowContent(h Handler, w browserWindow) browserWindowContent {
-	return browserWindowContent{Handler: h, win: w}
+	// return new instance of browser window
+	// pointing to old instance of focus window
+	return newBrowserWin
 }
 
 func (c *Component) split(
 	split func(*handler.WindowManager, tui.Handler) handler.Window,
 	h Handler,
-) browserWindow {
+) *browserWindow {
 	// force split a new window tile
 	win := split(c.wm, h)
 
 	browserWin := c.newWindow(win)
 	if buf, ok := h.(*buffer); ok {
 		buf.setWindow(browserWin)
-	} else {
-		h = newBrowserWindowContent(h, browserWin)
 	}
-	// update content with browserWindowContent
-	// so we can have a browserWindow with the correct win
 	win.SetContent(h)
 
 	c.wm.SetFocus(win)
-
-	// if split contains content of NewBuffer
 
 	return browserWin
 }
@@ -526,8 +504,9 @@ func (c *Component) Focus() Window {
 	return c.focus()
 }
 
-func (c *Component) focus() browserWindow {
-	return browserWindow{parent: c, win: c.wm.Focus()}
+func (c *Component) focus() *browserWindow {
+	_, win := c.findWindow(c.wm.Focus())
+	return win
 }
 
 // Shiftable calls the underlying WindowManager.Shiftable.
@@ -537,7 +516,8 @@ func (c *Component) Shiftable() (Window, bool) {
 		return nil, false
 	}
 
-	return browserWindow{parent: c, win: win}, true
+	_, bWin := c.findWindow(win)
+	return bWin, true
 }
 
 // FocusDown calls the underlying WindowManager.FocusDown.
@@ -563,7 +543,7 @@ func (c *Component) FocusUp() bool {
 // Close closes the resources associated with this browser.
 func (c *Component) Close() (ret error) {
 	for _, f := range c.buffers {
-		err := f.Close()
+		err := c.closeBuffer(f)
 		if err != nil {
 			ret = err
 		}

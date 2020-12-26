@@ -507,3 +507,7 @@ func testServerSplit(
 
 	goleak.VerifyNone(t)
 }
+
+func TestServerSetContent(t *testing.T) {
+	/* tested via ex integration tests */
+}

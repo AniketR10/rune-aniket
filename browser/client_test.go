@@ -607,3 +607,7 @@ func TestClientClose(t *testing.T) {
 	assert.Contains(t, "let's see", err.Error())
 	goleak.VerifyNone(t)
 }
+
+func TestClientSetContent(t *testing.T) {
+	/* tested via ex integration tests */
+}

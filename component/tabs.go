@@ -207,6 +207,13 @@ func (t *Tabs) Remove(idx int) bool {
 	return true
 }
 
+// RemoveAll removes all tabs.
+func (t *Tabs) RemoveAll() bool {
+	ret := t.Size() != 0
+	t.tabs = t.tabs[:0]
+	return ret
+}
+
 // TabAt returns the ID of the tab at pos, or panics if pos is
 // out of bounds.
 func (t *Tabs) TabAt(pos term.Coordinates) (int, bool) {

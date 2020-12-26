@@ -87,6 +87,14 @@ message WindowCloseRequest {
 message WindowCloseResponse {
 }
 
+message WindowSetContentRequest {
+	uint32 handler_id = 1;
+}
+
+message WindowSetContentResponse {
+}
+
 service Window {
+	rpc SetContent(WindowSetContentRequest) returns (WindowSetContentResponse);
 	rpc Close(WindowCloseRequest) returns (WindowCloseResponse);
 }

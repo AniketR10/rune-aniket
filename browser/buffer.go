@@ -14,36 +14,39 @@ type FlusherCloser interface {
 // buffer is a wrap structure to be able to add certain
 // properties to a tui.Handler.
 type buffer struct {
+	parent        *Component
 	name          string
 	flusherCloser FlusherCloser
-	handler       browserWindowContent
+	handler       Handler
+	win           *browserWindow
 	free          bool
 }
 
 // newBuffer allocates storage for a new buffer and initializes it.
-func newBuffer(name string, h tui.Handler, f FlusherCloser) *buffer {
+func newBuffer(c *Component, name string, h tui.Handler, f FlusherCloser) *buffer {
 	ret := new(buffer)
-	ret.init(name, h, f)
+	ret.init(c, name, h, f)
 	return ret
 }
 
 // Init initializes this buffer with name, h as the Handler, and f as the
 // FlusherCloser handle.
-func (b *buffer) init(name string, h tui.Handler, f FlusherCloser) {
+func (b *buffer) init(c *Component, name string, h tui.Handler, f FlusherCloser) {
+	b.parent = c
 	b.name = name
 	b.flusherCloser = f
-	b.handler.Handler = NopHandler(h)
+	b.handler = NopHandler(h)
 	b.setFree()
 }
 
-func (b *buffer) setWindow(w browserWindow) {
+func (b *buffer) setWindow(win *browserWindow) {
 	b.free = false
-	b.handler.win = w
+	b.win = win
 }
 
 func (b *buffer) setFree() {
 	b.free = true
-	b.handler.win = browserWindow{}
+	b.win = nil
 }
 
 // Resize satisfies tui.Component
@@ -57,8 +60,12 @@ func (b *buffer) Draw(w term.Writer) {
 }
 
 // Handle satisfies tui.Handler
-func (b *buffer) Handle(ev term.Event) (bool, bool) {
-	return b.handler.Handle(ev)
+func (b *buffer) Handle(ev term.Event) (exit, handled bool) {
+	exit, handled = b.handler.Handle(ev)
+	if exit {
+		b.parent.RemoveWindowBuffer(b.win)
+	}
+	return
 }
 
 // Cursor satisfies tui.Handler

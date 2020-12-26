@@ -19,6 +19,8 @@ type Handler interface {
 // Window is the interface that represents
 // a closeable window in a WindowManager.
 type Window interface {
+	SetContent(Handler) error
+
 	// Close closes the window.
 	Close() error
 }

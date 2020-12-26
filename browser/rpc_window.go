@@ -2,6 +2,7 @@ package browser
 
 import (
 	"context"
+	"fmt"
 	"sync"
 
 	"github.com/ernestrc/go-tui/proto"
@@ -26,6 +27,20 @@ func newWindowClient(
 	ret.pbClient = pbClient
 	ret.brokerID = brokerID
 	return ret
+}
+
+func (w *windowClient) SetContent(h Handler) error {
+	ctx := context.Background()
+
+	brokerID := w.browserClient.serveHandler(h)
+
+	req := proto.WindowSetContentRequest{HandlerId: brokerID}
+	_, err := w.pbClient.SetContent(ctx, &req)
+	if err != nil {
+		w.browserClient.forceCloseHandler(brokerID)
+		return fmt.Errorf("error on pbClient.SetContent: %v", err)
+	}
+	return nil
 }
 
 func (w *windowClient) Close() (err error) {
@@ -57,6 +72,26 @@ func newWindowServer(
 	ret.brokerID = brokerID
 	ret.s = s
 	return ret
+}
+
+func (s *windowServer) SetContent(
+	ctx context.Context, req *proto.WindowSetContentRequest,
+) (*proto.WindowSetContentResponse, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	client, err := s.s.dialHandler(req.GetHandlerId())
+	if err != nil {
+		return nil, fmt.Errorf("failed to dial to remote handler: %v", err)
+	}
+
+	err = s.win.SetContent(client)
+	if err != nil {
+		s.s.forceCloseHandler(req.GetHandlerId())
+		return nil, fmt.Errorf("error on Window.SetContent: %v", err)
+	}
+
+	return new(proto.WindowSetContentResponse), nil
 }
 
 func (s *windowServer) Close(

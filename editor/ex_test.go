@@ -190,17 +190,6 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 │BBBBBBBBBBBBBBBBBB│
 │BBBBBBBBBBBBBBBBBB│
 └──────────────────┘`},
-		{":bclose>",
-			`┌──────────────────┐
-│cabin.go          │
-├──────────────────┤
-│BBBBBBBBBBBBBBBBBB│
-│BBBBBBBBBBBBBBBBBB│
-│BBBBBBBBBBBBBBBBBB│
-│BBBBBBBBBBBBBBBBBB│
-│BBBBBBBBBBBBBBBBBB│
-│Error: No free buf│
-└──────────────────┘`},
 		{":wq!^",
 			`┌──────────────────┐
 │cabin.go          │
@@ -309,6 +298,28 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 
 	handler.BatchTestInputSequence(t, browser, 20, 10, cases)
 
+	var unmounted int
+	hx := handler.NewTestHandler()
+	hx.Ch = '$'
+	hx.OnUnmountCallback = func() error { unmounted++; return nil }
+	require.NoError(t, win.SetContent(hx))
+
+	cases = []handler.TestInputSequence{
+		{"___",
+			`┌──────────────────┐
+│cabin.go  other.go│
+├────────┐┌────────┤
+│$$$$$$$$││EEEEEEEE│
+│$$$$$$$$││EEEEEEEE│
+└────────┘│EEEEEEEE│
+┌────────┐│EEEEEEEE│
+│cccccccc││EEEEEEEE│
+│cccccccc││EEEEEEEE│
+└────────┘└────────┘`},
+	}
+
+	handler.BatchTestInputSequence(t, browser, 20, 10, cases)
+
 	// test window ifc
 	require.NoError(t, win.Close())
 
@@ -324,7 +335,7 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 │BBBBBBBBBBBBBBBBBB│
 │BBBBBBBBBBBBBBBBBB│
 └──────────────────┘`},
-		{":bcloseAll>((((",
+		{":bcloseAll>:e other.go>bcde((((",
 			`┌──────────────────┐
 │other.go          │
 ├──────────────────┤
@@ -379,6 +390,7 @@ EEEE`},
 	handler.BatchTestInputSequence(t, browser, 20, 10, cases)
 
 	assert.NoError(t, browser.Close())
+	assert.Equal(t, 1, unmounted)
 }
 
 func assertHandled(

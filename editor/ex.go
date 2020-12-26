@@ -187,7 +187,7 @@ func (e *Ex) runSingleCommand(cmd string) (quit bool, err error) {
 	case "bnext":
 		e.comp.UpdateWindowBufferNext(e.comp.Focus())
 	case "bclose":
-		err = e.comp.RemoveWindowBuffer(e.comp.Focus())
+		e.comp.RemoveWindowBuffer(e.comp.Focus())
 	case "bcloseAll":
 		e.comp.RemoveAllBuffers()
 	case "close":
@@ -261,19 +261,6 @@ func (e *Ex) handleCommand(ev term.Event) (quit, handled bool) {
 	return
 }
 
-func (e *Ex) removeAllBuffers() {
-	for {
-		err := e.comp.RemoveWindowBuffer(e.comp.Focus())
-		if err != nil {
-			if err != browser.ErrNoFreeBuffers {
-				e.tryLog("unable to remove window buffer: %v", err)
-				e.setError(err)
-			}
-			break
-		}
-	}
-}
-
 func (e *Ex) mapEvent(ev term.Event) term.Event {
 	// map event if applicable
 	mev, ok := e.keymap[ev]
@@ -303,13 +290,9 @@ func (e *Ex) handleProxy(ev term.Event) (
 
 	switch ev.Key {
 	case term.KeyCtrlA:
-		e.removeAllBuffers()
+		e.comp.RemoveAllBuffers()
 	case term.KeyCtrlW:
-		err := e.comp.RemoveWindowBuffer(e.comp.Focus())
-		if err != nil {
-			e.tryLog("unable to remove window buffer: %v", err)
-			e.setError(err)
-		}
+		e.comp.RemoveWindowBuffer(e.comp.Focus())
 	case term.KeyCtrlL:
 		e.comp.UpdateWindowBufferNext(e.comp.Focus())
 	case term.KeyCtrlH:
