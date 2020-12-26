@@ -255,6 +255,10 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 	win, err := browser.SplitVerticalLeft(handler.NewTestHandler())
 	require.NoError(t, err)
 
+	// test window ifc
+	focus, err := browser.Focus()
+	require.NoError(t, err)
+
 	h := handler.NewTestHandler()
 	h.Ch = 'Z' // helps identify in tests
 
@@ -302,7 +306,7 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 	hx := handler.NewTestHandler()
 	hx.Ch = '$'
 	hx.OnUnmountCallback = func() error { unmounted++; return nil }
-	require.NoError(t, win.SetContent(hx))
+	require.NoError(t, focus.SetContent(hx))
 
 	cases = []handler.TestInputSequence{
 		{"___",
@@ -320,8 +324,8 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 
 	handler.BatchTestInputSequence(t, browser, 20, 10, cases)
 
-	// test window ifc
 	require.NoError(t, win.Close())
+	require.NoError(t, focus.Close())
 
 	cases = []handler.TestInputSequence{
 		{":close>)))",

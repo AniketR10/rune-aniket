@@ -191,6 +191,21 @@ func (m *MockWindowManager) EXPECT() *MockWindowManagerMockRecorder {
 	return m.recorder
 }
 
+// Focus mocks base method.
+func (m *MockWindowManager) Focus() (Window, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Focus")
+	ret0, _ := ret[0].(Window)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Focus indicates an expected call of Focus.
+func (mr *MockWindowManagerMockRecorder) Focus() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Focus", reflect.TypeOf((*MockWindowManager)(nil).Focus))
+}
+
 // SplitHorizontalAbove mocks base method.
 func (m *MockWindowManager) SplitHorizontalAbove(arg0 Handler) (Window, error) {
 	m.ctrl.T.Helper()
@@ -513,6 +528,21 @@ func (m *MockBrowser) Close() error {
 func (mr *MockBrowserMockRecorder) Close() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockBrowser)(nil).Close))
+}
+
+// Focus mocks base method.
+func (m *MockBrowser) Focus() (Window, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Focus")
+	ret0, _ := ret[0].(Window)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Focus indicates an expected call of Focus.
+func (mr *MockBrowserMockRecorder) Focus() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Focus", reflect.TypeOf((*MockBrowser)(nil).Focus))
 }
 
 // MergeKeyMap mocks base method.

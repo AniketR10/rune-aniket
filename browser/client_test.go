@@ -85,7 +85,7 @@ func assertClientHandlerExitClose(
 	cliRes := client.servers[1]
 	client.mu.Unlock()
 
-	exit, handled := cliRes.(*handlerServerResource)._h.
+	exit, handled := cliRes.(*handlerServerResource).h.
 		Handle(term.Event{Type: term.EventNone})
 	assert.True(t, exit)
 	assert.True(t, handled)
@@ -164,6 +164,26 @@ func expectSplit(
 			splitRes, ok := reply.(*proto.SplitResponse)
 			require.True(t, ok)
 			splitRes.WindowId = windowID
+			return nil
+		}).
+		Times(1)
+}
+
+func expectFocus(
+	t *testing.T, mockCC *MockClientConnInterface,
+	handlerID, windowID uint32,
+) {
+	mockCC.EXPECT().
+		Invoke(gomock.Any(),
+			gomock.Eq("/proto.WindowManager/Focus"),
+			gomock.Eq(&proto.FocusRequest{}),
+			gomock.Any()).
+		DoAndReturn(func(
+			ctx context.Context, method string, args interface{},
+			reply interface{}, opts ...grpc.CallOption) error {
+			focusRes, ok := reply.(*proto.FocusResponse)
+			require.True(t, ok)
+			focusRes.WindowId = windowID
 			return nil
 		}).
 		Times(1)
@@ -468,6 +488,13 @@ func testClientSplit(
 		assertClientServersEqual(t, 1, client)
 		assertClientClientsEqual(t, 1, client)
 
+		// caches window clients
+		expectFocus(t, mockCC, 1, windowID)
+		_, err = client.Focus()
+		require.NoError(t, err)
+		assertClientServersEqual(t, 1, client)
+		assertClientClientsEqual(t, 1, client)
+
 		expectWindowClose(t, mockWinConn, quitCh)
 		require.NoError(t, win.Close())
 		time.Sleep(asyncResultsSleepDuration)
@@ -560,7 +587,7 @@ func testClientSplit(
 			Invoke(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Times(1)
 		mockWinConn.EXPECT().Close().Times(1).
 			DoAndReturn(func() error {
-				h := client.servers[1].(*handlerServerResource)._h.(Handler)
+				h := client.servers[1].(*handlerServerResource).h.(Handler)
 				err := expectSignalExit(mockWinConn, quitCh, nil)()
 				// server would call this asynchronously
 				go h.OnUnmount()

@@ -36,8 +36,16 @@ message SplitRequest {
 }
 
 message SplitResponse {
-	uint32 window_id = 2;
+	uint32 window_id = 1;
 }
+
+message FocusRequest {
+}
+
+message FocusResponse {
+	uint32 window_id = 1;
+}
+
 
 message SubscribeRequest {
 	Event ev = 1;
@@ -75,6 +83,7 @@ service EventPublisher {
 }
 
 service WindowManager {
+	rpc Focus(FocusRequest) returns (FocusResponse);
 	rpc SplitVerticalRight(SplitRequest) returns (SplitResponse);
 	rpc SplitVerticalLeft(SplitRequest) returns (SplitResponse);
 	rpc SplitHorizontalAbove(SplitRequest) returns (SplitResponse);

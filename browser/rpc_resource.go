@@ -2,9 +2,9 @@ package browser
 
 import (
 	"context"
-	"io"
 
 	"github.com/ernestrc/go-tui"
+	"github.com/ernestrc/go-tui/handler"
 	"github.com/ernestrc/go-tui/proto"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/connectivity"
@@ -17,7 +17,7 @@ type windowServerResource struct {
 
 type handlerClientResource struct {
 	handlerConn   proto.MuxConn
-	cc            io.Closer
+	cc            *handler.Client
 	cancelMonitor func()
 }
 
@@ -59,12 +59,13 @@ func (r *windowServerResource) Close() error {
 type handlerServerResource struct {
 	srv *grpc.Server
 
-	_h tui.Handler // only used for testing
+	h tui.Handler
 }
 
 type windowClientResource struct {
 	winConn       proto.MuxConn
 	cancelMonitor func()
+	cc            *windowClient
 }
 
 func (r *handlerServerResource) Close() error {

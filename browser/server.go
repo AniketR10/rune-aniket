@@ -94,8 +94,9 @@ func (s *Server) Init(
 }
 
 func (s *Server) dialHandler(handlerID uint32) (*handler.Client, error) {
-	// TODO cache and re-use if already dialed.
-	// TODO monitor connection and if ready state changes clean resources.
+	if res, ok := s.clients[handlerID]; ok {
+		return res.(*handlerClientResource).cc, nil
+	}
 	handlerConn, err := s.broker.Dial(handlerID)
 	if err != nil {
 		return nil, err
@@ -146,11 +147,13 @@ func (s *Server) getClients() map[uint32]io.Closer {
 }
 
 func (s *Server) forceCloseWindow(brokerID uint32) error {
-	return forceCloseResource(s.browser.Locker, brokerID, s.getServers, s.Logger)
+	_, err := forceCloseResource(s.browser.Locker, brokerID, s.getServers, s.Logger)
+	return err
 }
 
 func (s *Server) forceCloseHandler(brokerID uint32) error {
-	return forceCloseResource(s.browser.Locker, brokerID, s.getClients, s.Logger)
+	_, err := forceCloseResource(s.browser.Locker, brokerID, s.getClients, s.Logger)
+	return err
 }
 
 // SplitVerticalRight satisfies proto.BrowserServer
@@ -322,6 +325,26 @@ func (s *Server) Publish(
 	}
 
 	return new(proto.PublishResponse), nil
+}
+
+// Focus satisfies proto.BrowserServer
+func (s *Server) Focus(
+	ctx context.Context, req *proto.FocusRequest,
+) (*proto.FocusResponse, error) {
+	s.browser.Lock()
+	win, err := s.browser.Focus()
+	s.browser.Unlock()
+
+	if err != nil {
+		return nil, err
+	}
+
+	windowID := s.serveWindow(win)
+	res := &proto.FocusResponse{
+		WindowId: windowID,
+	}
+
+	return res, nil
 }
 
 // Close closes all resources associated with this server.

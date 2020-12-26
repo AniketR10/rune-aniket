@@ -28,6 +28,7 @@ type Window interface {
 // WindowManager is the interface that groups tile
 // window management methods.
 type WindowManager interface {
+	Focus() (Window, error)
 	SplitVerticalRight(Handler) (Window, error)
 	SplitVerticalLeft(Handler) (Window, error)
 	SplitHorizontalAbove(Handler) (Window, error)

@@ -138,13 +138,17 @@ func (c *Client) serveHandler(h Handler) uint32 {
 			proto.RegisterHandlerServer(srv, handler.NewServer(h, &c.handlerMu))
 		})
 
-	c.servers[brokerID] = &handlerServerResource{_h: h, srv: srv}
+	c.servers[brokerID] = &handlerServerResource{h: h, srv: srv}
 	return brokerID
 }
 
-func (c *Client) dialWindow(windowID, handlerID uint32) (*windowClient, error) {
+func (c *Client) dialWindow(windowID uint32, handlerID int) (*windowClient, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+
+	if res, ok := c.clients[windowID]; ok {
+		return res.(*windowClientResource).cc, nil
+	}
 
 	winConn, err := c.broker.Dial(windowID)
 	if err != nil {
@@ -166,13 +170,14 @@ func (c *Client) dialWindow(windowID, handlerID uint32) (*windowClient, error) {
 			// window was created and populated with a local handler
 			// which is ephemeral, from the server's point of view
 			// so we can clean resources on the client.
-			c.forceCloseHandler(handlerID)
+			c.forceCloseHandler(uint32(handlerID))
 		}
 	})
 
 	c.clients[windowID] = &windowClientResource{
 		winConn:       winConn,
 		cancelMonitor: cancelFn,
+		cc:            cc,
 	}
 
 	return cc, nil
@@ -187,11 +192,13 @@ func (c *Client) getClients() map[uint32]io.Closer {
 }
 
 func (c *Client) forceCloseHandler(brokerID uint32) error {
-	return forceCloseResource(&c.mu, brokerID, c.getServers, c.Logger)
+	_, err := forceCloseResource(&c.mu, brokerID, c.getServers, c.Logger)
+	return err
 }
 
 func (c *Client) forceCloseWindow(brokerID uint32) error {
-	return forceCloseResource(&c.mu, brokerID, c.getClients, c.Logger)
+	_, err := forceCloseResource(&c.mu, brokerID, c.getClients, c.Logger)
+	return err
 }
 
 type clientSplit func(cc proto.WindowManagerClient,
@@ -207,7 +214,7 @@ func (c *Client) split(split clientSplit, h Handler) (Window, error) {
 		c.forceCloseHandler(handlerID)
 		return nil, err
 	}
-	win, err := c.dialWindow(res.WindowId, handlerID)
+	win, err := c.dialWindow(res.GetWindowId(), int(handlerID))
 	if err != nil {
 		c.forceCloseHandler(handlerID)
 		return nil, err
@@ -315,6 +322,17 @@ func (c *Client) PublishInterrupt() error {
 
 	_, err = c.p.Publish(ctx, &req)
 	return err
+}
+
+// Focus satisfies Browser.
+func (c *Client) Focus() (Window, error) {
+	ctx := context.Background()
+	req := proto.FocusRequest{}
+	res, err := c.wm.Focus(ctx, &req)
+	if err != nil {
+		return nil, err
+	}
+	return c.dialWindow(res.GetWindowId(), -1)
 }
 
 // Close closes all resources associated with this Client.

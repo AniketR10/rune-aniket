@@ -46,7 +46,7 @@ func ResizeMessageSpan(logVirt *handler.Virtual, width, height int) {
 func forceCloseResource(
 	lock sync.Locker, brokerID uint32,
 	resourcesFn func() map[uint32]io.Closer, logger *log.Logger,
-) error {
+) (io.Closer, error) {
 	lock.Lock()
 	defer lock.Unlock()
 
@@ -56,7 +56,7 @@ func forceCloseResource(
 		if logger != nil {
 			logger.Warnf("resource %d already closed", brokerID)
 		}
-		return nil
+		return nil, nil
 	}
 
 	err := res.Close()
@@ -66,7 +66,7 @@ func forceCloseResource(
 
 	delete(resources, brokerID)
 
-	return err
+	return res, err
 }
 
 const defaultFailureTimeout = 5 * time.Second

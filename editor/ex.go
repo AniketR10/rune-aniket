@@ -433,3 +433,8 @@ func (e *Ex) PublishInterrupt() error {
 	go e.interruptDraw()
 	return nil
 }
+
+// Focus returns the current window in focus.
+func (e *Ex) Focus() (browser.Window, error) {
+	return e.comp.Focus(), nil
+}
