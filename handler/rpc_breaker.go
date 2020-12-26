@@ -267,13 +267,14 @@ func (a *clientBreaker) Handle(
 		return nil, errNext
 	}
 
+	select {
+	case <-a.quitCh:
+		return nil, errClientClosed
+	default:
+	}
+
 	if quitNext {
 		res.Quit = quitNext
-		select {
-		case <-a.quitCh:
-			return nil, errClientClosed
-		default:
-		}
 		return res, nil
 	}
 
