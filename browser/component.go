@@ -293,17 +293,28 @@ func (c *Component) onUnmount(h Handler) {
 	}
 }
 
+// UpdateWindowContent updates the content of win to content.
+func (c *Component) UpdateWindowContent(win Window, content Handler) error {
+	if b, ok := content.(*buffer); ok {
+		if !b.free {
+			return ErrBufferNotFree
+		}
+	}
+	_ = c.updateWindowContent(win.(*browserWindow), content)
+	return nil
+}
+
 func (c *Component) updateWindowContent(
-	win *browserWindow, content tui.Handler,
-) tui.Handler {
+	win *browserWindow, content Handler,
+) Handler {
 	newBuf, ok := content.(*buffer)
 	if ok {
 		id := c.findBufferID(newBuf)
 		c.tabs.SetFocus(id)
 		newBuf.setWindow(win)
 	}
-	oldComponent := win.win.SetContent(content)
-	c.onUnmount(oldComponent.(Handler))
+	oldComponent := win.win.SetContent(content).(Handler)
+	c.onUnmount(oldComponent)
 	return oldComponent
 }
 

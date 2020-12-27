@@ -215,6 +215,19 @@ func TestComponentUpdateWindowBuffer(t *testing.T) {
 			assertFreeBuffer(t, amzn, false)
 			assertFreeBuffer(t, tsla, false)
 			assertFreeBuffer(t, goog, true)
+
+			assert.True(t, c.UpdateWindowBufferLastFree(win0))
+
+			assertFreeBuffer(t, amzn, true)
+			assertFreeBuffer(t, tsla, false)
+			assertFreeBuffer(t, goog, false)
+
+			assert.Error(t, c.UpdateWindowContent(win0, tsla))
+			assert.NoError(t, c.UpdateWindowContent(win0, amzn))
+
+			assertFreeBuffer(t, amzn, false)
+			assertFreeBuffer(t, tsla, false)
+			assertFreeBuffer(t, goog, true)
 		})
 	}
 }
@@ -234,6 +247,9 @@ func TestComponentHandlerUnmount(t *testing.T) {
 				},
 				func(t *testing.T, c *Component, win Window) {
 					assert.True(t, c.UpdateWindowBufferPrev(win))
+				},
+				func(t *testing.T, c *Component, win Window) {
+					assert.NoError(t, c.UpdateWindowContent(win, handler.NewTestHandler()))
 				},
 				func(t *testing.T, c *Component, win Window) {
 					assert.NoError(t, win.Close())
