@@ -7,7 +7,6 @@ import (
 
 	"github.com/ernestrc/go-tui/editor"
 	hPlugin "github.com/hashicorp/go-plugin"
-	log "github.com/sirupsen/logrus"
 )
 
 // ClipboardPlugin satisfies plugin.Plugin
@@ -33,12 +32,6 @@ func (ClipboardPlugin) Client(b *hPlugin.MuxBroker, c *rpc.Client) (interface{},
 func ServeClipboard(impl editor.Clipboard) {
 	// this ensures plugin host captures output
 	SetLoggingOutput(os.Stderr)
-
-	level, err := log.ParseLevel(os.Getenv(envLogLevel))
-	if err != nil {
-		panic(err)
-	}
-	SetLoggingLevel(level)
 
 	impl = editor.NewLoggingClipboard(&pluginLogger, impl)
 
@@ -66,9 +59,6 @@ func NewClipboard(path string) (editor.Clipboard, func(), error) {
 	}
 
 	cmd := exec.Command(path)
-	cmd.Env = append(cmd.Env, pluginEnv...)
-	cmd.Env = append(cmd.Env, makeEnvVar(envLogLevel, pluginLogger.Level.String()))
-
 	client := hPlugin.NewClient(&hPlugin.ClientConfig{
 		HandshakeConfig: handshakeConfig,
 		Plugins:         pluginMap,

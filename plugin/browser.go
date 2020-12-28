@@ -5,6 +5,7 @@ import (
 
 	"github.com/ernestrc/go-tui/browser"
 	"github.com/ernestrc/go-tui/proto"
+	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 )
 
@@ -37,12 +38,13 @@ func newBrowserResourceServer(b browser.Browser) *browserResourceServer {
 
 func (s *browserResourceServer) serve(perm Permission) resourceServerFn {
 	return func(pluginID string, grantID uint32, broker proto.MuxBroker,
-		lock sync.Locker, interruptDraw, interruptHandle func()) {
+		l *log.Logger, lock sync.Locker, interruptDraw, interruptHandle func()) {
 
 		broker.AcceptAndServe(grantID, func(opts []grpc.ServerOption) *grpc.Server {
 			grpcServer := grpc.NewServer(opts...)
 			server := browser.NewServer(broker, s.b, lock,
 				interruptDraw, interruptHandle)
+			server.Logger = l
 			switch perm {
 			case PermissionBrowserWindowManager:
 				proto.RegisterWindowManagerServer(grpcServer, server)

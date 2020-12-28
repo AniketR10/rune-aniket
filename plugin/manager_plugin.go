@@ -15,8 +15,6 @@ func goPluginGranteeBuilder(
 	}
 
 	cmd := exec.Command(path)
-	cmd.Env = append(cmd.Env, pluginEnv...)
-	cmd.Env = append(cmd.Env, makeEnvVar(envLogLevel, logger.Level.String()))
 
 	config := &plugin.ClientConfig{
 		HandshakeConfig:  handshakeConfig,

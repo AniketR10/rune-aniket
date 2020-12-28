@@ -14,7 +14,8 @@ var pluginLogger logrus.Logger
 
 func init() {
 	pluginLogger = *logrus.New()
-	pluginLogger.SetOutput(ioutil.Discard)
+	SetLoggingOutput(ioutil.Discard)
+	SetLoggingLevel(logrus.InfoLevel)
 }
 
 // SetLoggingOutput sets the logging output of all plugins to out.

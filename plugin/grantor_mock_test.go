@@ -4,6 +4,7 @@ import (
 	"sync"
 
 	"github.com/ernestrc/go-tui/proto"
+	log "github.com/sirupsen/logrus"
 )
 
 type mockResourceServer struct {
@@ -14,7 +15,7 @@ type mockResourceServer struct {
 
 func (s *mockResourceServer) Serve(
 	pluginID string, uid uint32,
-	mux proto.MuxBroker, lock sync.Locker,
+	mux proto.MuxBroker, l *log.Logger, lock sync.Locker,
 	interruptDraw, interruptHandle func(),
 ) {
 	s.mu.Lock()

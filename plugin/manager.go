@@ -169,7 +169,7 @@ func (m *Manager) doGrant(
 		// such that one plugin => one grpc server for all the resources
 		// requested. Right now, each call to serve, spins a new listener
 		// and a new GRPC server.
-		go srv.Serve(pluginID, grantID, broker, m.rmu,
+		go srv.Serve(pluginID, grantID, broker, m.config.logger, m.rmu,
 			m.interruptDraw, m.interruptHandle)
 
 		grant := &proto.PermissionGrant{

@@ -67,12 +67,6 @@ func (p *granteePlugin) GRPCClient(
 func Serve(grantee Grantee, request ...Permission) {
 	SetLoggingOutput(os.Stderr)
 
-	level, err := log.ParseLevel(os.Getenv(envLogLevel))
-	if err != nil {
-		panic(err)
-	}
-	SetLoggingLevel(level)
-
 	pluginMap := map[string]plugin.Plugin{
 		typeGranteePlugin: &granteePlugin{
 			logger:    &pluginLogger,
