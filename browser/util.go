@@ -13,6 +13,7 @@ import (
 	"github.com/ernestrc/go-tui/proto"
 	"github.com/ernestrc/go-tui/term"
 	log "github.com/sirupsen/logrus"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/connectivity"
 )
 
@@ -44,12 +45,9 @@ func ResizeMessageSpan(logVirt *handler.Virtual, width, height int) {
 }
 
 func forceCloseResource(
-	lock sync.Locker, brokerID uint32,
-	resourcesFn func() map[uint32]io.Closer, logger *log.Logger,
+	brokerID uint32, resourcesFn func() map[uint32]io.Closer,
+	logger *log.Logger,
 ) (io.Closer, error) {
-	lock.Lock()
-	defer lock.Unlock()
-
 	resources := resourcesFn()
 	res, ok := resources[brokerID]
 	if !ok {
@@ -61,7 +59,7 @@ func forceCloseResource(
 
 	err := res.Close()
 	if err != nil && logger != nil {
-		logger.Error(err)
+		logger.Errorf("resource.Close error: %v", err)
 	}
 
 	delete(resources, brokerID)
@@ -73,9 +71,8 @@ const defaultFailureTimeout = 5 * time.Second
 
 func monitorConnection(
 	ctx context.Context, failureTimeout time.Duration,
-	conn proto.MuxConn, onClosed func(),
+	conn proto.MuxConn, onClosed func(reason string),
 ) {
-	defer onClosed()
 
 	for {
 		state := conn.GetState()
@@ -87,12 +84,36 @@ func monitorConnection(
 			didChange := conn.WaitForStateChange(failureCtx, connectivity.TransientFailure)
 			cancelFn()
 			if !didChange {
+				onClosed("timeout waiting for transient failure to recover")
 				return
 			}
 		case connectivity.Shutdown:
+			onClosed("grpc connection state = shutdown")
 			return
 		default:
 			panic(fmt.Sprintf("unknown connection state: %v", state))
 		}
 	}
+}
+
+func acceptAndServe(
+	broker proto.MuxBroker, register func(uint32, *grpc.Server),
+) (uint32, *grpc.Server) {
+	brokerID := broker.NextId()
+
+	var wg sync.WaitGroup
+	var srv *grpc.Server
+	serverFunc := func(opts []grpc.ServerOption) *grpc.Server {
+		defer wg.Done()
+
+		srv = grpc.NewServer(opts...)
+		register(brokerID, srv)
+		return srv
+	}
+
+	wg.Add(1)
+	go broker.AcceptAndServe(brokerID, serverFunc)
+	wg.Wait()
+
+	return brokerID, srv
 }

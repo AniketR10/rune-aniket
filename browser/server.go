@@ -50,21 +50,9 @@ type browserServerHandler struct {
 	handlerID uint32
 }
 
-func (s browserServerHandler) Handle(ev term.Event) (exit, handled bool) {
-	exit, handled = s.Client.Handle(ev)
-	if exit {
-		// we need to run asynchronously to not double lock
-		// on the runtime lock. This is a bit defensive since
-		// we could trust that browser.Browser implementation
-		// would call OnUnmount on browserServerHandler.
-		go s.s.forceCloseHandler(s.handlerID)
-	}
-	return
-}
-
 func (s browserServerHandler) OnUnmount() (err error) {
 	err = s.Client.OnUnmount()
-	go s.s.forceCloseHandler(s.handlerID)
+	s.s.forceCloseHandler(s.handlerID, "browserServerHandler.OnUnmount()")
 	return
 }
 
@@ -115,8 +103,8 @@ func (s *Server) dialHandler(handlerID uint32) (*handler.Client, error) {
 	s.browser.Lock()
 	defer s.browser.Unlock()
 
-	go monitorConnection(ctx, s.failureTimeout, handlerConn, func() {
-		s.forceCloseHandler(handlerID)
+	go monitorConnection(ctx, s.failureTimeout, handlerConn, func(reason string) {
+		s.safeForceCloseHandler(handlerID, reason)
 	})
 
 	s.clients[handlerID] = &handlerClientResource{
@@ -149,13 +137,29 @@ func (s *Server) getClients() map[uint32]io.Closer {
 	return s.clients
 }
 
-func (s *Server) forceCloseWindow(brokerID uint32) error {
-	_, err := forceCloseResource(s.browser.Locker, brokerID, s.getServers, s.Logger)
+func (s *Server) safeForceCloseWindow(brokerID uint32, reason string) error {
+	s.tryLog("browser.Server.forceCloseWindow(%d, reason=%s)", brokerID, reason)
+	s.browser.Lock()
+	defer s.browser.Unlock()
+	_, err := forceCloseResource(brokerID, s.getServers, s.Logger)
 	return err
 }
 
-func (s *Server) forceCloseHandler(brokerID uint32) error {
-	_, err := forceCloseResource(s.browser.Locker, brokerID, s.getClients, s.Logger)
+func (s *Server) tryLog(msg string, args ...interface{}) {
+	if s.Logger == nil {
+		return
+	}
+	s.Logger.Debugf(msg, args...)
+}
+
+func (s *Server) safeForceCloseHandler(brokerID uint32, reason string) error {
+	s.browser.Lock()
+	defer s.browser.Unlock()
+	return s.forceCloseHandler(brokerID, reason)
+}
+func (s *Server) forceCloseHandler(brokerID uint32, reason string) error {
+	s.tryLog("browser.Server.forceCloseHandler(%d, reason=%s)", brokerID, reason)
+	_, err := forceCloseResource(brokerID, s.getClients, s.Logger)
 	return err
 }
 
@@ -180,7 +184,8 @@ func (s *Server) split(
 	win, err := split(s.browser, bHandler)
 	s.browser.Unlock()
 	if err != nil {
-		s.forceCloseHandler(handlerID)
+		reason := fmt.Sprintf("failed to create split: %s", err.Error())
+		s.safeForceCloseHandler(handlerID, reason)
 		return nil, err
 	}
 
@@ -298,7 +303,8 @@ func (s *Server) Subscribe(
 	s.browser.Unlock()
 
 	if err != nil {
-		s.forceCloseHandler(handlerID)
+		reason := fmt.Sprintf("failed to subscribe: %v", err)
+		s.safeForceCloseHandler(handlerID, reason)
 		return nil, err
 	}
 

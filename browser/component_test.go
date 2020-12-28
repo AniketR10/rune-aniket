@@ -222,8 +222,8 @@ func TestComponentUpdateWindowBuffer(t *testing.T) {
 			assertFreeBuffer(t, tsla, false)
 			assertFreeBuffer(t, goog, false)
 
-			assert.Error(t, c.UpdateWindowContent(win0, tsla))
-			assert.NoError(t, c.UpdateWindowContent(win0, amzn))
+			assert.Error(t, win0.SetContent(tsla))
+			assert.NoError(t, win0.SetContent(amzn))
 
 			assertFreeBuffer(t, amzn, false)
 			assertFreeBuffer(t, tsla, false)
@@ -238,24 +238,30 @@ func TestComponentHandlerUnmount(t *testing.T) {
 	for _, _tcase := range splitSuite {
 		split := _tcase.split
 		t.Run(_tcase.method, func(t *testing.T) {
-			tsuite := []func(*testing.T, *Component, Window){
-				func(t *testing.T, c *Component, win Window) {
+			tsuite := []func(*testing.T, *Component, Window, *testFlushCloser){
+				func(t *testing.T, c *Component, win Window, h *testFlushCloser) {
 					assert.True(t, c.UpdateWindowBufferNextFree(win))
 				},
-				func(t *testing.T, c *Component, win Window) {
+				func(t *testing.T, c *Component, win Window, h *testFlushCloser) {
 					assert.True(t, c.UpdateWindowBufferNext(win))
 				},
-				func(t *testing.T, c *Component, win Window) {
+				func(t *testing.T, c *Component, win Window, h *testFlushCloser) {
 					assert.True(t, c.UpdateWindowBufferPrev(win))
 				},
-				func(t *testing.T, c *Component, win Window) {
-					assert.NoError(t, c.UpdateWindowContent(win, handler.NewTestHandler()))
+				func(t *testing.T, c *Component, win Window, h *testFlushCloser) {
+					assert.NoError(t, win.SetContent(handler.NewTestHandler()))
 				},
-				func(t *testing.T, c *Component, win Window) {
+				func(t *testing.T, c *Component, win Window, h *testFlushCloser) {
 					assert.NoError(t, win.Close())
 				},
-				func(t *testing.T, c *Component, win Window) {
+				func(t *testing.T, c *Component, win Window, h *testFlushCloser) {
 					assert.True(t, c.RemoveWindowBuffer(win))
+				},
+				func(t *testing.T, c *Component, win Window, h *testFlushCloser) {
+					h.Exit = true
+					exit, handled := c.Handle(term.Event{})
+					assert.True(t, handled)
+					assert.False(t, exit)
 				},
 			}
 
@@ -266,7 +272,7 @@ func TestComponentHandlerUnmount(t *testing.T) {
 				c.NewBuffer("Stash", handler.NewTestHandler(), nil)
 				win := split(c, mock)
 
-				tcase(t, c, win)
+				tcase(t, c, win, mock)
 				assert.Equal(t, 1, mock.unmounted)
 			}
 		})

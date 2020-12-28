@@ -173,6 +173,12 @@ func (c *Client) Man() tui.Manual {
 	return tuiMan
 }
 
+func tryLog(logger *log.Logger, msg string, args ...interface{}) {
+	if logger != nil {
+		logger.Debugf(msg, args...)
+	}
+}
+
 // OnUnmount satisfies browser.Handler
 func (c *Client) OnUnmount() error {
 	ctx := context.Background()
@@ -195,6 +201,7 @@ func (c *Client) Close() error {
 type Server struct {
 	mu      sync.Locker
 	handler tui.Handler
+	Logger  *log.Logger
 }
 
 // NewServer allocates storage for a new Server and initializes it.
@@ -279,5 +286,6 @@ func (s *Server) OnUnmount(context.Context, *proto.OnUnmountRequest) (
 			return nil, fmt.Errorf("error OnUnmount: %v", err)
 		}
 	}
+	tryLog(s.Logger, "handler.Server.OnUnmount: %v", ok)
 	return &proto.OnUnmountResponse{}, nil
 }

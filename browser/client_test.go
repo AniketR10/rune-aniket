@@ -75,7 +75,7 @@ func assertInvokeError(t *testing.T, err error) {
 func assertClientHandlerExitClose(
 	t *testing.T,
 	h *handler.TestHandler, mockWinConn *proto.MockMuxConn,
-	client *Client,
+	client *Client, callOnUnmount bool,
 ) {
 	assertClientServersEqual(t, 1, client)
 
@@ -83,12 +83,16 @@ func assertClientHandlerExitClose(
 
 	client.mu.Lock()
 	cliRes := client.servers[1]
-	client.mu.Unlock()
 
 	exit, handled := cliRes.(*handlerServerResource).h.
 		Handle(term.Event{Type: term.EventNone})
+	client.mu.Unlock()
 	assert.True(t, exit)
 	assert.True(t, handled)
+
+	if callOnUnmount {
+		require.NoError(t, cliRes.(*handlerServerResource).h.(Handler).OnUnmount())
+	}
 
 	// unfortunately gracefulshutdowns are asynchronous
 	// because they wait on grpc connection to be shutdown fist by
@@ -393,7 +397,7 @@ func TestClientSubscribe(t *testing.T) {
 		err := client.Subscribe(term.Event{Ch: 'a'}, handlerToEventHandler{h})
 		require.NoError(t, err)
 
-		assertClientHandlerExitClose(t, h, nil, client)
+		assertClientHandlerExitClose(t, h, nil, client, false)
 	})
 }
 
@@ -537,28 +541,6 @@ func testClientSplit(
 
 		assertClientServersEqual(t, 0, client)
 		assertClientClientsEqual(t, 0, client)
-	})
-
-	t.Run("gracefully closes resources if handler returns exit = true", func(t *testing.T) {
-		ctrl := gomock.NewController(t)
-		defer ctrl.Finish()
-
-		client, mockCC, mockBroker := newMockedClient(ctrl)
-
-		windowID := uint32(63)
-		expectBrokerServe(t, 1, mockBroker)
-		expectSplit(t, mockCC, 1, windowID, rpc)
-		mockWinConn := expectBrokerDial(t, ctrl, mockBroker, windowID)
-		quitCh := expectMonitorConn(mockWinConn)
-
-		h := handler.NewTestHandler()
-		win, err := split(client, h)
-		require.NoError(t, err)
-
-		assertClientHandlerExitClose(t, h, mockWinConn, client)
-
-		expectWindowClose(t, mockWinConn, quitCh)
-		require.NoError(t, win.Close())
 	})
 
 	t.Run("gracefully closes resources if handler server is called OnUnmount", func(t *testing.T) {

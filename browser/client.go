@@ -59,23 +59,15 @@ type browserClientHandler struct {
 
 func (c browserClientHandler) OnUnmount() (err error) {
 	c.c.mu.Lock()
+	defer c.c.mu.Unlock()
 	err1 := c.Handler.OnUnmount()
 	if err1 != nil {
 		err = err1
 	}
-	c.c.mu.Unlock()
 
-	err2 := c.c.forceCloseHandler(c.handlerID)
+	err2 := c.c.forceCloseHandler(c.handlerID, "browserClientHandler.OnUnmount")
 	if err2 != nil {
 		err = err2
-	}
-	return
-}
-
-func (c browserClientHandler) Handle(ev term.Event) (exit, handled bool) {
-	exit, handled = c.Handler.Handle(ev)
-	if exit {
-		go c.OnUnmount()
 	}
 	return
 }
@@ -94,34 +86,19 @@ func NewClient(broker proto.MuxBroker, cc grpc.ClientConnInterface) *Client {
 	return ret
 }
 
+func (c *Client) tryLog(msg string, args ...interface{}) {
+	if c.Logger == nil {
+		return
+	}
+	c.Logger.Debugf(msg, args...)
+}
+
 // Init initializes this Client with broker and client.
 func (c *Client) Init(broker proto.MuxBroker) {
 	c.broker = broker
 	c.clients = make(map[uint32]io.Closer)
 	c.servers = make(map[uint32]io.Closer)
 	c.failureTimeout = defaultFailureTimeout
-}
-
-func acceptAndServe(
-	broker proto.MuxBroker, register func(uint32, *grpc.Server),
-) (uint32, *grpc.Server) {
-	brokerID := broker.NextId()
-
-	var wg sync.WaitGroup
-	var srv *grpc.Server
-	serverFunc := func(opts []grpc.ServerOption) *grpc.Server {
-		defer wg.Done()
-
-		srv = grpc.NewServer(opts...)
-		register(brokerID, srv)
-		return srv
-	}
-
-	wg.Add(1)
-	go broker.AcceptAndServe(brokerID, serverFunc)
-	wg.Wait()
-
-	return brokerID, srv
 }
 
 func (c *Client) serveHandler(h Handler) uint32 {
@@ -135,7 +112,9 @@ func (c *Client) serveHandler(h Handler) uint32 {
 				c:         c,
 				handlerID: handlerID,
 			}
-			proto.RegisterHandlerServer(srv, handler.NewServer(h, &c.handlerMu))
+			hsrv := handler.NewServer(h, &c.handlerMu)
+			hsrv.Logger = c.Logger
+			proto.RegisterHandlerServer(srv, hsrv)
 		})
 
 	c.servers[brokerID] = &handlerServerResource{h: h, srv: srv}
@@ -160,7 +139,7 @@ func (c *Client) dialWindow(windowID uint32, handlerID int) (*windowClient, erro
 
 	ctx, cancelFn := context.WithCancel(context.Background())
 
-	go monitorConnection(ctx, c.failureTimeout, winConn, func() {
+	go monitorConnection(ctx, c.failureTimeout, winConn, func(reason string) {
 		// only applies when connection is closed remotely
 		c.mu.Lock()
 		delete(c.clients, windowID)
@@ -170,7 +149,7 @@ func (c *Client) dialWindow(windowID uint32, handlerID int) (*windowClient, erro
 			// window was created and populated with a local handler
 			// which is ephemeral, from the server's point of view
 			// so we can clean resources on the client.
-			c.forceCloseHandler(uint32(handlerID))
+			c.safeForceCloseHandler(uint32(handlerID), reason)
 		}
 	})
 
@@ -191,13 +170,23 @@ func (c *Client) getClients() map[uint32]io.Closer {
 	return c.clients
 }
 
-func (c *Client) forceCloseHandler(brokerID uint32) error {
-	_, err := forceCloseResource(&c.mu, brokerID, c.getServers, c.Logger)
+func (c *Client) safeForceCloseHandler(brokerID uint32, reason string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.forceCloseHandler(brokerID, reason)
+}
+
+func (c *Client) forceCloseHandler(brokerID uint32, reason string) error {
+	c.tryLog("browser.Client.forceCloseHandler(%d, reason=%s)", brokerID, reason)
+	_, err := forceCloseResource(brokerID, c.getServers, c.Logger)
 	return err
 }
 
-func (c *Client) forceCloseWindow(brokerID uint32) error {
-	_, err := forceCloseResource(&c.mu, brokerID, c.getClients, c.Logger)
+func (c *Client) safeForceCloseWindow(brokerID uint32, reason string) error {
+	c.tryLog("browser.Client.forceCloseWindow(%d, reason=%s)", brokerID, reason)
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	_, err := forceCloseResource(brokerID, c.getClients, c.Logger)
 	return err
 }
 
@@ -211,12 +200,14 @@ func (c *Client) split(split clientSplit, h Handler) (Window, error) {
 	ctx := context.Background()
 	res, err := split(c.wm, ctx, &req)
 	if err != nil {
-		c.forceCloseHandler(handlerID)
+		reason := fmt.Sprintf("error on call to split: %v", err)
+		c.safeForceCloseHandler(handlerID, reason)
 		return nil, err
 	}
 	win, err := c.dialWindow(res.GetWindowId(), int(handlerID))
 	if err != nil {
-		c.forceCloseHandler(handlerID)
+		reason := fmt.Sprintf("error dialing to window: %v", err)
+		c.safeForceCloseHandler(handlerID, reason)
 		return nil, err
 	}
 	return win, nil
@@ -305,7 +296,8 @@ func (c *Client) Subscribe(ev term.Event, h EventHandler) error {
 
 	_, err = c.s.Subscribe(ctx, &req)
 	if err != nil {
-		c.forceCloseHandler(handlerID)
+		reason := fmt.Sprintf("error on call to Subscribe: %v", err)
+		c.safeForceCloseHandler(handlerID, reason)
 	}
 	return err
 }

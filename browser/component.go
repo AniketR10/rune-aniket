@@ -53,6 +53,22 @@ type Component struct {
 	fileListHeight int
 }
 
+// component.WindowManager sinchronously removes tui.Handlers
+// upon returning exit=true on calls to Handle. This
+// structure is used to call OnUnmount when this occurs.
+type browserContent struct {
+	Handler
+	c *Component
+}
+
+func (c browserContent) Handle(ev term.Event) (exit, handled bool) {
+	exit, handled = c.Handler.Handle(ev)
+	if exit {
+		c.c.onUnmount(c.Handler, "component exit via Handle()(exit=true)")
+	}
+	return
+}
+
 // needed mutable to inverse a split
 type browserWindow struct {
 	parent *Component
@@ -60,13 +76,7 @@ type browserWindow struct {
 }
 
 func (w *browserWindow) SetContent(h Handler) error {
-	if b, ok := h.(*buffer); ok {
-		if !b.free {
-			return ErrBufferNotFree
-		}
-	}
-	w.parent.updateWindowContent(w, h)
-	return nil
+	return w.parent.forceUpdateWindowContent(w, h)
 }
 
 // browserWindow is passed by value, so we store whether
@@ -110,7 +120,8 @@ func (c *Component) closeWindow(win Window) error {
 
 	c.windows = append(c.windows[:id], c.windows[id+1:]...)
 
-	c.onUnmount(bWin.win.Content().(Handler))
+	reason := fmt.Sprintf("Close called on window: %p", win)
+	c.onUnmount(bWin.win.Content().(Handler), reason)
 	return nil
 }
 
@@ -286,21 +297,30 @@ func (c *Component) UpdateWindowBufferNext(win Window) bool {
 	return false
 }
 
-func (c *Component) onUnmount(h Handler) {
+func (c *Component) tryLog(msg string, args ...interface{}) {
+	if c.config.Logger == nil {
+		return
+	}
+	c.config.Logger.Debugf(msg, args...)
+}
+
+func (c *Component) onUnmount(h Handler, reason string) {
 	err := h.OnUnmount()
 	if err != nil && c.config.Logger != nil {
 		c.config.Logger.Warningf("OnUnmount error: %v", err)
 	}
+	c.tryLog("Component.OnUnmount(%p): reason: %s", h, reason)
 }
 
-// UpdateWindowContent updates the content of win to content.
-func (c *Component) UpdateWindowContent(win Window, content Handler) error {
+func (c *Component) forceUpdateWindowContent(
+	win *browserWindow, content Handler,
+) error {
 	if b, ok := content.(*buffer); ok {
 		if !b.free {
 			return ErrBufferNotFree
 		}
 	}
-	_ = c.updateWindowContent(win.(*browserWindow), content)
+	c.updateWindowContent(win, content)
 	return nil
 }
 
@@ -312,9 +332,15 @@ func (c *Component) updateWindowContent(
 		id := c.findBufferID(newBuf)
 		c.tabs.SetFocus(id)
 		newBuf.setWindow(win)
+	} else {
+		content = browserContent{
+			Handler: content,
+			c:       c,
+		}
 	}
 	oldComponent := win.win.SetContent(content).(Handler)
-	c.onUnmount(oldComponent)
+	reason := fmt.Sprintf("window content was updated: %p", win)
+	c.onUnmount(oldComponent, reason)
 	return oldComponent
 }
 
@@ -391,6 +417,14 @@ func (c *Component) splitInverted(
 	focusBrowserWin := c.focus()
 	focusContent := focusBrowserWin.win.Content()
 
+	_, ok := h.(*buffer)
+	if !ok {
+		h = browserContent{
+			Handler: h,
+			c:       c,
+		}
+	}
+
 	// set content
 	newWin := split(c.wm, focusContent)
 	focusBrowserWin.win.SetContent(h)
@@ -422,6 +456,11 @@ func (c *Component) split(
 	browserWin := c.newWindow(win)
 	if buf, ok := h.(*buffer); ok {
 		buf.setWindow(browserWin)
+	} else {
+		h = browserContent{
+			Handler: h,
+			c:       c,
+		}
 	}
 	win.SetContent(h)
 

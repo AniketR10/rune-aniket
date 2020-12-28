@@ -171,13 +171,13 @@ func (e *Ex) newBufferWithFile(
 	// return from a HandleResponse (see handler/rpc_breaker.go).
 	w, ok := e.comp.Shiftable()
 	if ok {
-		e.comp.UpdateWindowContent(w, browserBuf)
+		err = w.SetContent(browserBuf)
 	} else {
 		focus := e.comp.Focus()
-		e.comp.UpdateWindowContent(focus, browserBuf)
+		err = focus.SetContent(browserBuf)
 	}
 
-	return nil
+	return err
 }
 
 func (e *Ex) runSingleCommand(cmd string) (quit bool, err error) {

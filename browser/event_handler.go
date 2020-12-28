@@ -64,7 +64,7 @@ func newClientEventHandler(c *Client, h EventHandler) *clientEventHandler {
 }
 
 func (e *clientEventHandler) OnUnmount() error {
-	go e.c.forceCloseHandler(e.handlerID)
+	e.c.forceCloseHandler(e.handlerID, "clientEventHandler.OnUnmount")
 	return nil
 }
 
@@ -75,7 +75,7 @@ func (e *clientEventHandler) setHandlerID(handlerID uint32) {
 func (e *clientEventHandler) Handle(ev term.Event) (exit, handled bool) {
 	exit, handled = e.Handler.Handle(ev)
 	if exit {
-		go e.c.forceCloseHandler(e.handlerID)
+		e.c.forceCloseHandler(e.handlerID, "clientEventHandler.Handle()(exit=true)")
 	}
 	return
 }
@@ -83,7 +83,7 @@ func (e *clientEventHandler) Handle(ev term.Event) (exit, handled bool) {
 func (h serverEventHandler) Handle(ev term.Event) (exit bool) {
 	exit, _ = h.h.Handle(ev)
 	if exit {
-		go h.s.forceCloseHandler(h.handlerID)
+		h.s.forceCloseHandler(h.handlerID, "serverEventHandler.Handle()(exit=true)")
 	}
 	return
 }

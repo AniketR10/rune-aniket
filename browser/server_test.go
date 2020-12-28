@@ -437,13 +437,13 @@ func testServerSplit(
 		handlerConn.EXPECT().Close().Times(1).
 			DoAndReturn(expectSignalExit(handlerConn, quitCh, nil))
 		mockWindow.EXPECT().Close().Times(1).Return(nil)
-		require.NoError(t, s.forceCloseHandler(handlerID))
+		require.NoError(t, s.safeForceCloseHandler(handlerID, ""))
 		assertClientsEqual(t, 0, s)
 		waitForMonitoringExit(quitCh)
 
 		// not ideal but it's hard to mock grpc.Server Register calls
 		// windowServer calls forceCloseWindow on close.
-		require.NoError(t, s.forceCloseWindow(windowID))
+		require.NoError(t, s.safeForceCloseWindow(windowID, ""))
 		assertServersEqual(t, 0, s)
 	})
 
@@ -481,28 +481,6 @@ func testServerSplit(
 
 		assertClientsEqual(t, 0, s)
 		assertServersEqual(t, 0, s)
-	})
-
-	t.Run("closes resources of handler if exit = true", func(t *testing.T) {
-		ctrl := gomock.NewController(t)
-		defer ctrl.Finish()
-		s, mock, mockBroker := newTestServer(ctrl)
-		mockWindow := NewMockWindow(ctrl)
-
-		var h Handler
-		handlerConn := expectBrokerDial(t, ctrl, mockBroker, handlerID)
-		quitCh := expectMonitorConn(handlerConn)
-		expect(mock.EXPECT(), gomock.Any()).
-			DoAndReturn(func(_h Handler) (Window, error) {
-				h = _h
-				return mockWindow, nil
-			})
-		expectBrokerServe(t, windowID, mockBroker)
-
-		_, err := split(s, ctx, &req)
-		require.NoError(t, err)
-
-		assertServerHandlerExitClose(t, handlerConn, h, s, termEv, quitCh)
 	})
 
 	goleak.VerifyNone(t)
