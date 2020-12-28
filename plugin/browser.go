@@ -76,14 +76,32 @@ func BrowserResources(b browser.Browser) map[Permission]ResourceServer {
 	}
 }
 
+var (
+	clients map[uint32]*browser.Client
+	mu      sync.Mutex
+)
+
+func init() {
+	clients = make(map[uint32]*browser.Client)
+}
+
 func dialBrowser(token uint32, broker proto.MuxBroker) (
 	browser.Browser, error,
 ) {
+	mu.Lock()
+	defer mu.Unlock()
+
+	if c, ok := clients[token]; ok {
+		return c, nil
+	}
 	conn, err := broker.Dial(token)
 	if err != nil {
 		return nil, err
 	}
-	return browser.NewClient(broker, conn), nil
+	c := browser.NewClient(broker, conn)
+	c.Logger = &pluginLogger
+	clients[token] = c
+	return c, nil
 }
 
 // WindowManager acquires the browser's WindowManager

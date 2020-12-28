@@ -94,9 +94,12 @@ func (s *Server) Init(
 }
 
 func (s *Server) dialHandler(handlerID uint32) (*handler.Client, error) {
+	s.browser.Lock()
 	if res, ok := s.clients[handlerID]; ok {
 		return res.(*handlerClientResource).cc, nil
 	}
+	s.browser.Unlock()
+
 	handlerConn, err := s.broker.Dial(handlerID)
 	if err != nil {
 		return nil, err
@@ -332,8 +335,8 @@ func (s *Server) Focus(
 	ctx context.Context, req *proto.FocusRequest,
 ) (*proto.FocusResponse, error) {
 	s.browser.Lock()
+	defer s.browser.Unlock()
 	win, err := s.browser.Focus()
-	s.browser.Unlock()
 
 	if err != nil {
 		return nil, err

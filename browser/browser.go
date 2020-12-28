@@ -104,3 +104,20 @@ func CallbackHandler(h tui.Handler, onUnmount func()) Handler {
 func NopHandler(h tui.Handler) Handler {
 	return unmountHandler{Handler: h, onUnmount: func() {}}
 }
+
+type fnEventHandler func(term.Event) bool
+
+// Handle satisfies EventHandler
+func (h fnEventHandler) Handle(ev term.Event) bool {
+	return h(ev)
+}
+
+// FuncEventHandler wraps fn to satisfy EventHandler.
+func FuncEventHandler(fn func(term.Event) bool) EventHandler {
+	return fnEventHandler(fn)
+}
+
+// NopEventHandler returns an EventHandler that does nothing.
+func NopEventHandler(fn func(term.Event) bool) EventHandler {
+	return FuncEventHandler(func(term.Event) bool { return false })
+}
