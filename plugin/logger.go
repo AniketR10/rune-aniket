@@ -5,6 +5,7 @@ import (
 	"io"
 	"io/ioutil"
 	"log"
+	"time"
 
 	"github.com/hashicorp/go-hclog"
 	"github.com/sirupsen/logrus"
@@ -16,6 +17,10 @@ func init() {
 	pluginLogger = *logrus.New()
 	SetLoggingOutput(ioutil.Discard)
 	SetLoggingLevel(logrus.InfoLevel)
+	SetLoggingFormatter(&logrus.TextFormatter{
+		DisableColors:   true,
+		TimestampFormat: time.StampMilli,
+	})
 }
 
 // SetLoggingOutput sets the logging output of all plugins to out.
