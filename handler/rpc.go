@@ -224,13 +224,9 @@ func (s *Server) Draw(ctx context.Context, in *proto.DrawRequest) (
 	s.handler.Resize(int(in.Width), int(in.Height))
 	cursor, show := s.handler.Cursor()
 	res := proto.NewDrawResponse(s.handler, int(in.Width), int(in.Height))
-	res.Cursor = &proto.DrawResponse_Cursor{
-		Position: &proto.Coordinates{
-			X: int32(cursor.X),
-			Y: int32(cursor.Y),
-		},
-		Show: show,
-	}
+	res.Cursor.Position.X = int32(cursor.X)
+	res.Cursor.Position.Y = int32(cursor.Y)
+	res.Cursor.Show = show
 	return res, nil
 }
 

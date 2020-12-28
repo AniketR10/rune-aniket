@@ -189,6 +189,8 @@ func TestClientBreakerHandle(t *testing.T) {
 
 func assertDrawResponse(t *testing.T, res *proto.DrawResponse, strCopy string) {
 	require.NotNil(t, res)
+	assert.NotNil(t, res.Cursor)
+	assert.NotNil(t, res.Cursor.Position)
 	str, width, height := proto.DrawResponseToTermString(res)
 	expected := component.String(strCopy)
 	expected.Resize(width, height)

@@ -11,7 +11,11 @@ var zeroCell = Cell{}
 
 // NewDrawResponse converts a tui.Component into a DrawResponse.
 func NewDrawResponse(comp tui.Component, width, height int) *DrawResponse {
-	resp := new(DrawResponse)
+	resp := &DrawResponse{
+		Cursor: &DrawResponse_Cursor{
+			Position: &Coordinates{},
+		},
+	}
 	w := newDrawResponseWriter(width, height, resp)
 	comp.Draw(w)
 	return resp

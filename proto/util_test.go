@@ -28,6 +28,7 @@ func TestNewDrawResponse(t *testing.T) {
 					&CellRow{Cells: []*Cell{&zeroCell, &zeroCell, &zeroCell, &zeroCell, &zeroCell}},
 					&CellRow{Cells: []*Cell{&zeroCell, &zeroCell, &zeroCell, &zeroCell, &zeroCell}},
 				},
+				Cursor: &DrawResponse_Cursor{Position: &Coordinates{}},
 			},
 		},
 	}
