@@ -1,8 +1,6 @@
 package plugin
 
 import (
-	"log"
-	"net/http"
 	_ "net/http/pprof"
 	"sync"
 	"testing"
@@ -16,12 +14,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 )
-
-func init() {
-	go func() {
-		log.Println(http.ListenAndServe(":6062", nil))
-	}()
-}
 
 func registerBrowserServer(
 	brokerID uint32, mux proto.MuxBroker, bsrv *browser.Server,

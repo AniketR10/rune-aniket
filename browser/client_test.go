@@ -47,7 +47,7 @@ func newMockedClient(ctrl *gomock.Controller) (
 ) {
 	mockCC = NewMockClientConnInterface(ctrl)
 	mockMux = proto.NewMockMuxBroker(ctrl)
-	client = NewClient(mockMux, mockCC)
+	client = NewClient(mockMux, mockCC, new(sync.Mutex))
 	return
 }
 
@@ -572,7 +572,7 @@ func testClientSplit(
 				h := client.servers[1].(*handlerServerResource).h.(Handler)
 				err := expectSignalExit(mockWinConn, quitCh, nil)()
 				// server would call this asynchronously
-				go h.OnUnmount()
+				h.OnUnmount()
 				return err
 			})
 		require.NoError(t, win.Close())

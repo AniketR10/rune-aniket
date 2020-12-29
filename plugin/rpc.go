@@ -14,7 +14,7 @@ import (
 const defDurationGracefulShut = 5 * time.Second
 
 type granteeServer struct {
-	mu        sync.Mutex
+	mu        sync.Locker
 	req       []Permission
 	broker    proto.MuxBroker
 	grantee   Grantee
@@ -28,12 +28,13 @@ type granteeServer struct {
 
 func newGranteeServer(
 	broker proto.MuxBroker, grantee Grantee, req []Permission,
-	keepAlive time.Duration,
+	keepAlive time.Duration, locker sync.Locker,
 ) proto.GranteeServer {
 	ret := new(granteeServer)
 	ret.broker = broker
 	ret.grantee = grantee
 	ret.req = req
+	ret.mu = locker
 	ret.durationGracefulShut = defDurationGracefulShut
 	ret.osExit = os.Exit
 	if keepAlive != time.Duration(0) {

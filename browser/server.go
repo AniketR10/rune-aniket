@@ -45,13 +45,13 @@ type Server struct {
 
 // browserServerHandler wraps a handler.Client to satisfy browser.Handler.
 type browserServerHandler struct {
-	*handler.Client
+	handlerCloser
 	s         *Server
 	handlerID uint32
 }
 
 func (s browserServerHandler) OnUnmount() (err error) {
-	err = s.Client.OnUnmount()
+	err = s.handlerCloser.OnUnmount()
 	s.s.forceCloseHandler(s.handlerID, "browserServerHandler.OnUnmount()")
 	return
 }
@@ -81,7 +81,7 @@ func (s *Server) Init(
 	s.failureTimeout = defaultFailureTimeout
 }
 
-func (s *Server) dialHandler(handlerID uint32) (*handler.Client, error) {
+func (s *Server) dialHandler(handlerID uint32) (handlerCloser, error) {
 	s.browser.Lock()
 	if res, ok := s.clients[handlerID]; ok {
 		return res.(*handlerClientResource).cc, nil
@@ -97,6 +97,7 @@ func (s *Server) dialHandler(handlerID uint32) (*handler.Client, error) {
 	// TODO use cc.Errors() to consume and log errors
 	cc := handler.NewClient(pbClient, s.interruptDraw, s.interruptHandle)
 	cc.Logger = s.Logger
+	client := newIOWaitUnlocker(cc, s.browser)
 
 	ctx, cancelFn := context.WithCancel(context.Background())
 
@@ -109,11 +110,11 @@ func (s *Server) dialHandler(handlerID uint32) (*handler.Client, error) {
 
 	s.clients[handlerID] = &handlerClientResource{
 		handlerConn:   handlerConn,
-		cc:            cc,
+		cc:            client,
 		cancelMonitor: cancelFn,
 	}
 
-	return cc, nil
+	return client, nil
 }
 
 func (s *Server) serveWindow(win Window) uint32 {
@@ -138,9 +139,13 @@ func (s *Server) getClients() map[uint32]io.Closer {
 }
 
 func (s *Server) safeForceCloseWindow(brokerID uint32, reason string) error {
-	s.tryLog("browser.Server.forceCloseWindow(%d, reason=%s)", brokerID, reason)
 	s.browser.Lock()
 	defer s.browser.Unlock()
+	return s.forceCloseWindow(brokerID, reason)
+}
+
+func (s *Server) forceCloseWindow(brokerID uint32, reason string) error {
+	s.tryLog("browser.Server.forceCloseWindow(%d, reason=%s)", brokerID, reason)
 	_, err := forceCloseResource(brokerID, s.getServers, s.Logger)
 	return err
 }
@@ -175,9 +180,9 @@ func (s *Server) split(
 	}
 
 	bHandler := browserServerHandler{
-		handlerID: handlerID,
-		Client:    cc,
-		s:         s,
+		handlerID:     handlerID,
+		handlerCloser: cc,
+		s:             s,
 	}
 
 	s.browser.Lock()

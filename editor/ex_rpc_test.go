@@ -88,9 +88,10 @@ func newTestRPCBrowser(t *testing.T,
 
 		broker := proto.NewDialBroker()
 
-		var mu sync.Mutex
+		var clientMutex sync.Mutex
+		var serverMutex sync.Mutex
 		grpcServer := grpc.NewServer()
-		server := browser.NewServer(broker, b, &mu, nop, nop)
+		server := browser.NewServer(broker, b, &serverMutex, nop, nop)
 		proto.RegisterWindowManagerServer(grpcServer, server)
 		proto.RegisterMessengerServer(grpcServer, server)
 		proto.RegisterKeyMapperServer(grpcServer, server)
@@ -103,8 +104,8 @@ func newTestRPCBrowser(t *testing.T,
 		require.NoError(t, err)
 
 		client := testClient{
-			Client:  browser.NewClient(broker, conn),
-			Handler: &safeHandler{Handler: b, mu: &mu},
+			Client:  browser.NewClient(broker, conn, &clientMutex),
+			Handler: &safeHandler{Handler: b, mu: &serverMutex},
 		}
 		*destructor = func() {
 			client.Close()

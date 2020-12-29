@@ -79,30 +79,23 @@ func BrowserResources(b browser.Browser) map[Permission]ResourceServer {
 }
 
 var (
-	clients map[uint32]*browser.Client
-	mu      sync.Mutex
+	clients    sync.Map
+	pluginLock sync.Mutex
 )
-
-func init() {
-	clients = make(map[uint32]*browser.Client)
-}
 
 func dialBrowser(token uint32, broker proto.MuxBroker) (
 	browser.Browser, error,
 ) {
-	mu.Lock()
-	defer mu.Unlock()
-
-	if c, ok := clients[token]; ok {
-		return c, nil
+	if c, ok := clients.Load(token); ok {
+		return c.(browser.Browser), nil
 	}
 	conn, err := broker.Dial(token)
 	if err != nil {
 		return nil, err
 	}
-	c := browser.NewClient(broker, conn)
+	c := browser.NewClient(broker, conn, &pluginLock)
 	c.Logger = &pluginLogger
-	clients[token] = c
+	clients.Store(token, c)
 	return c, nil
 }
 

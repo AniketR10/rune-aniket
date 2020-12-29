@@ -30,12 +30,12 @@ func newServerWithNoBroker(ctrl *gomock.Controller) (
 	return s, mock
 }
 
-func newTestServer(ctrl *gomock.Controller) (
+func newTestServer(ctrl *gomock.Controller, mu *sync.Mutex) (
 	*Server, *MockBrowser, *proto.MockMuxBroker,
 ) {
 	mockBrowser := NewMockBrowser(ctrl)
 	mockBroker := proto.NewMockMuxBroker(ctrl)
-	s := NewServer(mockBroker, mockBrowser, new(sync.Mutex), nop, nop)
+	s := NewServer(mockBroker, mockBrowser, mu, nop, nop)
 	return s, mockBrowser, mockBroker
 }
 
@@ -173,7 +173,8 @@ func TestServerPublish(t *testing.T) {
 	t.Run("handles interrupt event by calling interrupt handler", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
-		s, mock, _ := newTestServer(ctrl)
+		var mu sync.Mutex
+		s, mock, _ := newTestServer(ctrl, &mu)
 		req := proto.PublishRequest{Ev: &proto.Event{Type: proto.Event_TypeInterrupt}}
 
 		mock.EXPECT().PublishInterrupt().Times(1)
@@ -186,7 +187,8 @@ func TestServerPublish(t *testing.T) {
 	t.Run("rejects any event other than an interrupt event", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
-		s, _, _ := newTestServer(ctrl)
+		var mu sync.Mutex
+		s, _, _ := newTestServer(ctrl, &mu)
 		req := proto.PublishRequest{Ev: &proto.Event{Type: proto.Event_TypeNone}}
 
 		res, err := s.Publish(ctx, &req)
@@ -197,7 +199,8 @@ func TestServerPublish(t *testing.T) {
 	t.Run("handles interrupt handler error", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
-		s, mock, _ := newTestServer(ctrl)
+		var mu sync.Mutex
+		s, mock, _ := newTestServer(ctrl, &mu)
 		req := proto.PublishRequest{Ev: &proto.Event{Type: proto.Event_TypeInterrupt}}
 
 		mock.EXPECT().PublishInterrupt().Return(errors.New("uRock"))
@@ -233,7 +236,8 @@ func TestServerSubscribe(t *testing.T) {
 		termEv := term.Event{Mod: term.ModAlt, Ch: '5'}
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
-		s, mock, mockBroker := newTestServer(ctrl)
+		var mu sync.Mutex
+		s, mock, mockBroker := newTestServer(ctrl, &mu)
 
 		var h EventHandler
 		handlerConn := expectBrokerDial(t, ctrl, mockBroker, handlerID)
@@ -256,7 +260,8 @@ func TestServerSubscribe(t *testing.T) {
 	t.Run("returns browser Subscribe dial to handler error", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
-		s, _, mockBroker := newTestServer(ctrl)
+		var mu sync.Mutex
+		s, _, mockBroker := newTestServer(ctrl, &mu)
 
 		expectBrokerDialError(t, ctrl, mockBroker, handlerID)
 
@@ -270,7 +275,8 @@ func TestServerSubscribe(t *testing.T) {
 	t.Run("returns browser Subscribe rpc error and so closes handler connection", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
-		s, mock, mockBroker := newTestServer(ctrl)
+		var mu sync.Mutex
+		s, mock, mockBroker := newTestServer(ctrl, &mu)
 
 		handlerConn := expectBrokerDial(t, ctrl, mockBroker, handlerID)
 		mock.EXPECT().Subscribe(gomock.Any(), gomock.Any()).
@@ -292,7 +298,8 @@ func TestServerSubscribe(t *testing.T) {
 	t.Run("handles transient failures by eventually shutting down connection", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
-		s, mock, mockBroker := newTestServer(ctrl)
+		var mu sync.Mutex
+		s, mock, mockBroker := newTestServer(ctrl, &mu)
 		s.failureTimeout = 50 * time.Millisecond
 
 		handlerConn := expectBrokerDial(t, ctrl, mockBroker, handlerID)
@@ -369,11 +376,16 @@ func assertServerHandlerExitClose(
 	handlerConn.EXPECT().Close().Times(1).
 		DoAndReturn(expectSignalExit(handlerConn, quitCh, nil))
 
+	// event dispatching is synchronized via browser lock
+	s.browser.Lock()
 	exit, _ := h.Handle(termEv)
+	s.browser.Unlock()
 	// rpc handler event delivery is asynchronous
 	// so second Handle response will trigger exit
 	time.Sleep(asyncResultsSleepDuration)
+	s.browser.Lock()
 	exit, _ = h.Handle(termEv)
+	s.browser.Unlock()
 	assert.True(t, exit)
 	// close sequence is performed asynchronously
 	waitForMonitoringExit(quitCh)
@@ -408,7 +420,8 @@ func testServerSplit(
 	t.Run("dials to remote handler and exposes window server for client to dial into", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
-		s, mock, mockBroker := newTestServer(ctrl)
+		var mu sync.Mutex
+		s, mock, mockBroker := newTestServer(ctrl, &mu)
 		mockWindow := NewMockWindow(ctrl)
 
 		var h Handler
@@ -427,7 +440,9 @@ func testServerSplit(
 
 		// verify that handler works
 		expectHandlerInvoke(handlerConn, &protoEv)
+		s.browser.Lock()
 		exit, handled := h.Handle(termEv)
+		s.browser.Unlock()
 		assert.False(t, exit)
 		assert.True(t, handled)
 
@@ -450,7 +465,8 @@ func testServerSplit(
 	t.Run("bubbles up dial error", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
-		s, _, mockBroker := newTestServer(ctrl)
+		var mu sync.Mutex
+		s, _, mockBroker := newTestServer(ctrl, &mu)
 
 		expectBrokerDialError(t, ctrl, mockBroker, handlerID)
 
@@ -465,7 +481,8 @@ func testServerSplit(
 	t.Run("bubbles up browser split error and so closes handler connection", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
-		s, mock, mockBroker := newTestServer(ctrl)
+		var mu sync.Mutex
+		s, mock, mockBroker := newTestServer(ctrl, &mu)
 
 		handlerConn := expectBrokerDial(t, ctrl, mockBroker, handlerID)
 		quitCh := expectMonitorConn(handlerConn)

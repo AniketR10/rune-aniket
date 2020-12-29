@@ -297,10 +297,10 @@ func (a *clientBreaker) Man(
 	ctx context.Context, in *proto.ManRequest, opts ...grpc.CallOption,
 ) (*proto.ManResponse, error) {
 	a.mu.Lock()
-	defer a.mu.Unlock()
 	if a.draw.state == closed {
 		return nil, errClientClosed
 	}
+	a.mu.Unlock()
 	return a.cc.Man(ctx, in, opts...)
 }
 
@@ -308,21 +308,15 @@ func (a *clientBreaker) OnUnmount(
 	ctx context.Context, in *proto.OnUnmountRequest, opts ...grpc.CallOption,
 ) (*proto.OnUnmountResponse, error) {
 	a.mu.Lock()
-	defer a.mu.Unlock()
 	if a.draw.state == closed {
 		return nil, errClientClosed
 	}
+	a.mu.Unlock()
 
-	go func() {
-		_, err := a.cc.OnUnmount(ctx, in, opts...)
-		if err != nil {
-			a.mu.Lock()
-			defer a.mu.Unlock()
-
-			// next Handle returns error
-			a.handle.err = err
-		}
-	}()
+	_, err := a.cc.OnUnmount(ctx, in, opts...)
+	if err != nil {
+		return nil, err
+	}
 
 	return new(proto.OnUnmountResponse), nil
 }

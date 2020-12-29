@@ -21,8 +21,8 @@ type Client struct {
 	// resources invariant
 	mu sync.Mutex
 
-	// one child Handler call at a time invariant
-	handlerMu sync.Mutex
+	// synchronize access to plugin state
+	pluginLock sync.Locker
 
 	// time this client waits for a grpc connection transient failure
 	// to recover before we shutdown connection.
@@ -58,14 +58,12 @@ type browserClientHandler struct {
 }
 
 func (c browserClientHandler) OnUnmount() (err error) {
-	c.c.mu.Lock()
-	defer c.c.mu.Unlock()
 	err1 := c.Handler.OnUnmount()
 	if err1 != nil {
 		err = err1
 	}
 
-	err2 := c.c.forceCloseHandler(c.handlerID, "browserClientHandler.OnUnmount")
+	err2 := c.c.safeForceCloseHandler(c.handlerID, "browserClientHandler.OnUnmount")
 	if err2 != nil {
 		err = err2
 	}
@@ -73,16 +71,12 @@ func (c browserClientHandler) OnUnmount() (err error) {
 }
 
 // NewClient allocates storage for a new Client and initializes it.
-func NewClient(broker proto.MuxBroker, cc grpc.ClientConnInterface) *Client {
+func NewClient(
+	broker proto.MuxBroker, cc grpc.ClientConnInterface,
+	pluginLock sync.Locker,
+) *Client {
 	ret := new(Client)
-	ret.wm = proto.NewWindowManagerClient(cc)
-	ret.msg = proto.NewMessengerClient(cc)
-	ret.cc = cc
-	ret.mp = proto.NewKeyMapperClient(cc)
-	ret.f = proto.NewResourceOpenerClient(cc)
-	ret.s = proto.NewEventSubscriberClient(cc)
-	ret.p = proto.NewEventPublisherClient(cc)
-	ret.Init(broker)
+	ret.Init(broker, cc, pluginLock)
 	return ret
 }
 
@@ -94,11 +88,22 @@ func (c *Client) tryLog(msg string, args ...interface{}) {
 }
 
 // Init initializes this Client with broker and client.
-func (c *Client) Init(broker proto.MuxBroker) {
+func (c *Client) Init(
+	broker proto.MuxBroker, cc grpc.ClientConnInterface,
+	pluginLock sync.Locker,
+) {
+	c.wm = proto.NewWindowManagerClient(cc)
+	c.msg = proto.NewMessengerClient(cc)
+	c.cc = cc
+	c.mp = proto.NewKeyMapperClient(cc)
+	c.f = proto.NewResourceOpenerClient(cc)
+	c.s = proto.NewEventSubscriberClient(cc)
+	c.p = proto.NewEventPublisherClient(cc)
 	c.broker = broker
 	c.clients = make(map[uint32]io.Closer)
 	c.servers = make(map[uint32]io.Closer)
 	c.failureTimeout = defaultFailureTimeout
+	c.pluginLock = pluginLock
 }
 
 func (c *Client) serveHandler(h Handler) uint32 {
@@ -112,7 +117,7 @@ func (c *Client) serveHandler(h Handler) uint32 {
 				c:         c,
 				handlerID: handlerID,
 			}
-			hsrv := handler.NewServer(h, &c.handlerMu)
+			hsrv := handler.NewServer(h, c.pluginLock)
 			hsrv.Logger = c.Logger
 			proto.RegisterHandlerServer(srv, hsrv)
 		})
@@ -182,12 +187,16 @@ func (c *Client) forceCloseHandler(brokerID uint32, reason string) error {
 	return err
 }
 
-func (c *Client) safeForceCloseWindow(brokerID uint32, reason string) error {
+func (c *Client) forceCloseWindow(brokerID uint32, reason string) error {
 	c.tryLog("browser.Client.forceCloseWindow(%d, reason=%s)", brokerID, reason)
-	c.mu.Lock()
-	defer c.mu.Unlock()
 	_, err := forceCloseResource(brokerID, c.getClients, c.Logger)
 	return err
+}
+
+func (c *Client) safeForceCloseWindow(brokerID uint32, reason string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.forceCloseWindow(brokerID, reason)
 }
 
 type clientSplit func(cc proto.WindowManagerClient,

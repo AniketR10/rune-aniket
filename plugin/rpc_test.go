@@ -245,7 +245,7 @@ func setupIntTest(
 	require.NoError(t, err)
 
 	grpcServer := grpc.NewServer()
-	server := newGranteeServer(nil, granteeMock, perms, time.Duration(0))
+	server := newGranteeServer(nil, granteeMock, perms, time.Duration(0), new(sync.Mutex))
 	server.(*granteeServer).osExit = nil
 	proto.RegisterGranteeServer(grpcServer, server)
 
