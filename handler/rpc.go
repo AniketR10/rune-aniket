@@ -77,9 +77,9 @@ func (c *Client) Errors() <-chan error {
 	return c.errors
 }
 
-func (c *Client) collectError(err error) {
+func (c *Client) collectError(call string, err error) {
 	if c.Logger != nil {
-		c.Logger.Error(err)
+		c.Logger.Errorf("handler.Client error: %s: %s", call, err)
 	}
 
 	select {
@@ -100,7 +100,7 @@ func (c *Client) Draw(w term.Writer) {
 
 	resp, err := c.client.Draw(ctx, &req)
 	if err != nil {
-		c.collectError(err)
+		c.collectError("Draw", err)
 		return
 	}
 
@@ -112,7 +112,7 @@ func (c *Client) Draw(w term.Writer) {
 	}
 
 	if resp.Cursor == nil || resp.Cursor.Position == nil {
-		c.collectError(errors.New("invalid Cursor from server's Draw response"))
+		c.collectError("Draw", errors.New("invalid Cursor from server's Draw response"))
 		return
 	}
 
@@ -128,14 +128,14 @@ func (c *Client) Handle(ev term.Event) (exit, handled bool) {
 	protoEv := proto.Event{}
 	err := protoEv.FromModel(ev)
 	if err != nil {
-		c.collectError(err)
+		c.collectError("Handle", err)
 		return
 	}
 
 	req := proto.HandleRequest{Event: &protoEv}
 	resp, err := c.client.Handle(ctx, &req)
 	if err != nil {
-		c.collectError(err)
+		c.collectError("Handle", err)
 		return
 	}
 
@@ -154,19 +154,19 @@ func (c *Client) Man() tui.Manual {
 
 	resp, err := c.client.Man(ctx, &req)
 	if err != nil {
-		c.collectError(err)
+		c.collectError("Man", err)
 		return tui.Manual{}
 	}
 
 	man := resp.GetMan()
 	if man == nil {
-		c.collectError(errors.New("missing Man field in ManResponse"))
+		c.collectError("Man", errors.New("missing Man field in ManResponse"))
 		return tui.Manual{}
 	}
 
 	tuiMan, err := man.ToModel()
 	if err != nil {
-		c.collectError(err)
+		c.collectError("Man", err)
 		return tui.Manual{}
 	}
 
@@ -186,7 +186,7 @@ func (c *Client) OnUnmount() error {
 
 	_, err := c.client.OnUnmount(ctx, &req)
 	if err != nil {
-		c.collectError(err)
+		c.collectError("OnUnmount", err)
 		return err
 	}
 	return nil

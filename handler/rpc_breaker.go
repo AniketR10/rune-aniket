@@ -117,10 +117,17 @@ func (a *clientBreaker) pipelineHandleEvents() {
 			return
 		case req := <-a.handle.ch:
 			res, err := a.cc.Handle(context.Background(), req)
-			if err != nil || res.Quit {
+			if err != nil {
+				a.mu.Lock()
+				a.handle.err = err
+				a.mu.Unlock()
+
+				a.interruptHandle()
+				return
+			}
+			if res.Quit {
 				a.mu.Lock()
 				a.handle.quit = true
-				a.handle.err = err
 				a.mu.Unlock()
 
 				a.interruptHandle()
@@ -261,11 +268,8 @@ func (a *clientBreaker) Handle(
 	a.mu.Lock()
 	quitNext := a.handle.quit
 	errNext := a.handle.err
+	a.handle.err = nil
 	a.mu.Unlock()
-
-	if errNext != nil {
-		return nil, errNext
-	}
 
 	select {
 	case <-a.quitCh:
@@ -285,6 +289,9 @@ func (a *clientBreaker) Handle(
 	// This avoids deadlocking with browser lock. See Client documentation.
 	select {
 	case a.handle.ch <- in:
+		if errNext != nil {
+			return nil, errNext
+		}
 		return res, nil
 	case <-a.quitCh:
 		return nil, errClientClosed

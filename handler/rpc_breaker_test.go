@@ -88,6 +88,7 @@ func TestClientBreakerHandle(t *testing.T) {
 	req := &proto.HandleRequest{
 		Event: &proto.Event{Char: '$', Type: proto.Event_TypeKey},
 	}
+	expected := term.Event{Ch: '$', Type: term.EventKey}
 
 	t.Run("dispatches events asynchronously", func(t *testing.T) {
 		mock := &mockHandlerClient{remote: testHandler()}
@@ -99,7 +100,6 @@ func TestClientBreakerHandle(t *testing.T) {
 		require.NoError(t, err)
 		assert.NotNil(t, res)
 
-		expected := term.Event{Ch: '$', Type: term.EventKey}
 		assert.Equal(t, expected, <-mock.handledCh)
 	})
 
@@ -120,10 +120,10 @@ func TestClientBreakerHandle(t *testing.T) {
 		interrupt := make(chan struct{})
 		quitCh := make(chan struct{})
 		defer close(quitCh)
-		b := withClientBreaker(mock, nop, waitForInterrupt(quitCh, interrupt), nil)
+		b := withClientBreaker(mock,
+			waitForInterrupt(quitCh, interrupt), waitForInterrupt(quitCh, interrupt), nil)
 		defer b.Close()
 
-		mock.handledCh = make(chan term.Event)
 		mock.rpcError = errors.New("sup")
 
 		res, err := b.Handle(context.Background(), req)
@@ -131,8 +131,13 @@ func TestClientBreakerHandle(t *testing.T) {
 		assert.NotNil(t, res)
 
 		<-interrupt
+		mock.rpcError = nil
 		_, err = b.Handle(context.Background(), req)
 		assert.Error(t, err)
+
+		res, err = b.Handle(context.Background(), req)
+		assert.NoError(t, err)
+		assert.NotNil(t, res)
 	})
 
 	t.Run("dispatches all events, even when upon backpressure", func(t *testing.T) {
