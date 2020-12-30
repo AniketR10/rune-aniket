@@ -63,7 +63,7 @@ func (i *IDE) init(cfgfilename, recfilename string, filenames ...string) error {
 
 	opts = append(opts,
 		browser.WithTabspaces(cfg.Browser.Tabspaces),
-		// browser.WithStartText(cfg.Browser.StartText),
+		browser.WithStartText(cfg.Browser.StartText),
 		// browser.WithWindowManagerConfig(cfg.WindowManager),
 		// browser.WithCommandEvent(term.Event{Type: term.EventKey, Ch: ':'}),
 	)

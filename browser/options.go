@@ -41,6 +41,13 @@ func WithLogger(l *log.Logger) Option {
 	}
 }
 
+// WithStartText sets the starting buffer default text.
+func WithStartText(text string) Option {
+	return func(cfg *Config) {
+		cfg.StartText = text
+	}
+}
+
 // WithTabspaces sets the number of spaces used to render a tab.
 func WithTabspaces(tabspaces int) Option {
 	return func(cfg *Config) {
