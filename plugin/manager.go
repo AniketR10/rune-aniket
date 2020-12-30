@@ -186,9 +186,10 @@ func (m *Manager) doCloseClient(reason string, client granteeClientWrap) {
 	var err error
 	func() {
 		m.mu.Lock()
-		defer m.mu.Unlock()
+		client := client.client
+		m.mu.Unlock()
 
-		err = client.client.shutdown(reason)
+		err = client.shutdown(reason)
 	}()
 	if err != nil {
 		m.addClientErr(client.id, err)

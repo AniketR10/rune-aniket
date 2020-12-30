@@ -27,7 +27,8 @@ const (
 )
 
 type browserResourceServer struct {
-	b browser.Browser
+	b   browser.Browser
+	srv *grpc.Server
 }
 
 func newBrowserResourceServer(b browser.Browser) *browserResourceServer {
@@ -36,32 +37,25 @@ func newBrowserResourceServer(b browser.Browser) *browserResourceServer {
 	return ret
 }
 
-func (s *browserResourceServer) serve(perm Permission) resourceServerFn {
-	return func(pluginID string, grantID uint32, broker proto.MuxBroker,
-		l *log.Logger, lock sync.Locker, interruptDraw, interruptHandle func()) {
-
-		broker.AcceptAndServe(grantID, func(opts []grpc.ServerOption) *grpc.Server {
-			grpcServer := grpc.NewServer(opts...)
+func (s *browserResourceServer) Serve(
+	pluginID string, grantID uint32, broker proto.MuxBroker,
+	l *log.Logger, lock sync.Locker, interruptDraw, interruptHandle func(),
+) {
+	broker.AcceptAndServe(grantID, func(opts []grpc.ServerOption) *grpc.Server {
+		if s.srv == nil {
+			s.srv = grpc.NewServer(opts...)
 			server := browser.NewServer(broker, s.b, lock,
 				interruptDraw, interruptHandle)
 			server.Logger = l
-			switch perm {
-			case PermissionBrowserWindowManager:
-				proto.RegisterWindowManagerServer(grpcServer, server)
-			case PermissionBrowserKeyMapper:
-				proto.RegisterKeyMapperServer(grpcServer, server)
-			case PermissionBrowserResourceOpener:
-				proto.RegisterResourceOpenerServer(grpcServer, server)
-			case PermissionBrowserMessenger:
-				proto.RegisterMessengerServer(grpcServer, server)
-			case PermissionBrowserEventSubscriber:
-				proto.RegisterEventSubscriberServer(grpcServer, server)
-			case PermissionBrowserEventPublisher:
-				proto.RegisterEventPublisherServer(grpcServer, server)
-			}
-			return grpcServer
-		})
-	}
+			proto.RegisterWindowManagerServer(s.srv, server)
+			proto.RegisterKeyMapperServer(s.srv, server)
+			proto.RegisterResourceOpenerServer(s.srv, server)
+			proto.RegisterMessengerServer(s.srv, server)
+			proto.RegisterEventSubscriberServer(s.srv, server)
+			proto.RegisterEventPublisherServer(s.srv, server)
+		}
+		return s.srv
+	})
 }
 
 // BrowserResources returns a map of Permission to a ResourceServer
@@ -69,12 +63,12 @@ func (s *browserResourceServer) serve(perm Permission) resourceServerFn {
 func BrowserResources(b browser.Browser) map[Permission]ResourceServer {
 	s := newBrowserResourceServer(b)
 	return map[Permission]ResourceServer{
-		PermissionBrowserWindowManager:   s.serve(PermissionBrowserWindowManager),
-		PermissionBrowserKeyMapper:       s.serve(PermissionBrowserKeyMapper),
-		PermissionBrowserResourceOpener:  s.serve(PermissionBrowserResourceOpener),
-		PermissionBrowserMessenger:       s.serve(PermissionBrowserMessenger),
-		PermissionBrowserEventSubscriber: s.serve(PermissionBrowserEventSubscriber),
-		PermissionBrowserEventPublisher:  s.serve(PermissionBrowserEventPublisher),
+		PermissionBrowserWindowManager:   s,
+		PermissionBrowserKeyMapper:       s,
+		PermissionBrowserResourceOpener:  s,
+		PermissionBrowserMessenger:       s,
+		PermissionBrowserEventSubscriber: s,
+		PermissionBrowserEventPublisher:  s,
 	}
 }
 

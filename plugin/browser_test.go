@@ -12,31 +12,7 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/grpc"
 )
-
-func registerBrowserServer(
-	brokerID uint32, mux proto.MuxBroker, bsrv *browser.Server,
-) {
-	mux.AcceptAndServe(brokerID, func(opts []grpc.ServerOption) *grpc.Server {
-		srv := grpc.NewServer(opts...)
-		proto.RegisterWindowManagerServer(srv, bsrv)
-		proto.RegisterKeyMapperServer(srv, bsrv)
-		proto.RegisterResourceOpenerServer(srv, bsrv)
-		proto.RegisterMessengerServer(srv, bsrv)
-		proto.RegisterEventSubscriberServer(srv, bsrv)
-		proto.RegisterEventPublisherServer(srv, bsrv)
-		return srv
-	})
-}
-
-func newMockBrowserServer(
-	ctrl *gomock.Controller, mux proto.MuxBroker, lock sync.Locker,
-) (*browser.MockBrowser, *browser.Server) {
-	ret := browser.NewMockBrowser(ctrl)
-	bsrv := browser.NewServer(mux, ret, lock, func() {}, func() {})
-	return ret, bsrv
-}
 
 func assertClientMethodNoError(
 	t *testing.T, resource interface{},
@@ -44,9 +20,9 @@ func assertClientMethodNoError(
 	method func(ifc interface{}) error,
 ) {
 	defer wg.Done()
-	err := method(resource)
 	mu.Lock()
 	defer mu.Unlock()
+	err := method(resource)
 	assert.NoError(t, err)
 }
 
@@ -62,14 +38,22 @@ func TestIntegrationBrowserRace(t *testing.T) {
 	}
 	nopHandler := browser.FuncEventHandler(func(term.Event) bool { return false })
 
-	var mu sync.Mutex
 	broker := proto.NewDialBroker()
 	brokerIDs := []uint32{broker.NextId(), broker.NextId()}
 	defer broker.Close()
-	mock, browserServer := newMockBrowserServer(ctrl, broker, &mu)
+	mock := browser.NewMockBrowser(ctrl)
+	resources := BrowserResources(mock)
 
-	for _, brokerID := range brokerIDs {
-		registerBrowserServer(brokerID, broker, browserServer)
+	perms := []Permission{
+		PermissionBrowserWindowManager, PermissionBrowserKeyMapper,
+		PermissionBrowserResourceOpener, PermissionBrowserMessenger,
+		PermissionBrowserEventSubscriber, PermissionBrowserEventPublisher,
+	}
+	for _, perm := range perms {
+		for _, brokerID := range brokerIDs {
+			resources[perm].Serve("caliu-plugins-ltd", brokerID,
+				broker, nil, new(sync.Mutex), func() {}, func() {})
+		}
 	}
 
 	tsuite := []struct {
@@ -154,6 +138,7 @@ func TestIntegrationBrowserRace(t *testing.T) {
 		}},
 	}
 
+	var mu sync.Mutex
 	var wg sync.WaitGroup
 	for _, brokerID := range brokerIDs {
 		for _, tcase := range tsuite {
