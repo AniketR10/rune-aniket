@@ -45,13 +45,13 @@ type Server struct {
 
 // browserServerHandler wraps a handler.Client to satisfy browser.Handler.
 type browserServerHandler struct {
-	handlerCloser
+	Handler
 	s         *Server
 	handlerID uint32
 }
 
 func (s browserServerHandler) OnUnmount() (err error) {
-	err = s.handlerCloser.OnUnmount()
+	err = s.Handler.OnUnmount()
 	s.s.forceCloseHandler(s.handlerID, "browserServerHandler.OnUnmount()")
 	return
 }
@@ -81,13 +81,24 @@ func (s *Server) Init(
 	s.failureTimeout = defaultFailureTimeout
 }
 
-func (s *Server) dialHandler(handlerID uint32) (handlerCloser, error) {
-	s.browser.Lock()
-	if res, ok := s.clients[handlerID]; ok {
-		return res.(*handlerClientResource).cc, nil
+func unwrapHandler(res *handlerClientResource) Handler {
+	t, ok := res.client.(localTokenHandler)
+	if ok {
+		return t.Handler
 	}
-	s.browser.Unlock()
+	return res.client
+}
 
+func (s *Server) dialHandler(handlerID uint32) (Handler, error) {
+	s.browser.Lock()
+	res, ok := s.clients[handlerID]
+	s.browser.Unlock()
+	if ok {
+		s.tryLog("(%p): found cached client for handlerID: %d", s, handlerID)
+		return unwrapHandler(res.(*handlerClientResource)), nil
+	}
+
+	s.tryLog("(%p): dialing handlerID: %d", s, handlerID)
 	handlerConn, err := s.broker.Dial(handlerID)
 	if err != nil {
 		return nil, err
@@ -97,20 +108,20 @@ func (s *Server) dialHandler(handlerID uint32) (handlerCloser, error) {
 	// TODO use cc.Errors() to consume and log errors
 	cc := handler.NewClient(pbClient, s.interruptDraw, s.interruptHandle)
 	cc.Logger = s.Logger
-	client := newIOWaitUnlocker(cc, s.browser)
+	client := newIOWaitUnlockHandler(cc, s.browser)
 
 	ctx, cancelFn := context.WithCancel(context.Background())
-
-	s.browser.Lock()
-	defer s.browser.Unlock()
 
 	go monitorConnection(ctx, s.failureTimeout, handlerConn, func(reason string) {
 		s.safeForceCloseHandler(handlerID, reason)
 	})
 
+	s.browser.Lock()
+	defer s.browser.Unlock()
+
 	s.clients[handlerID] = &handlerClientResource{
 		handlerConn:   handlerConn,
-		cc:            client,
+		client:        client,
 		cancelMonitor: cancelFn,
 	}
 
@@ -130,23 +141,17 @@ func (s *Server) serveWindow(win Window) uint32 {
 	return brokerID
 }
 
-func (s *Server) getServers() map[uint32]io.Closer {
-	return s.servers
-}
-
 func (s *Server) getClients() map[uint32]io.Closer {
 	return s.clients
 }
 
-func (s *Server) safeForceCloseWindow(brokerID uint32, reason string) error {
-	s.browser.Lock()
-	defer s.browser.Unlock()
-	return s.forceCloseWindow(brokerID, reason)
+func (s *Server) getServers() map[uint32]io.Closer {
+	return s.servers
 }
 
-func (s *Server) forceCloseWindow(brokerID uint32, reason string) error {
-	s.tryLog("browser.Server.forceCloseWindow(%d, reason=%s)", brokerID, reason)
-	_, err := forceCloseResource(brokerID, s.getServers, s.Logger)
+func (s *Server) safeForceCloseWindow(brokerID uint32, reason string) error {
+	s.tryLog("browser.Server.safeForceCloseWindow(%d, reason=%s)", brokerID, reason)
+	_, err := forceCloseResource(brokerID, s.getServers, s.Logger, &s.browser)
 	return err
 }
 
@@ -158,13 +163,13 @@ func (s *Server) tryLog(msg string, args ...interface{}) {
 }
 
 func (s *Server) safeForceCloseHandler(brokerID uint32, reason string) error {
-	s.browser.Lock()
-	defer s.browser.Unlock()
-	return s.forceCloseHandler(brokerID, reason)
+	s.tryLog("browser.Server.safeForceCloseHandler(%d, reason=%s)", brokerID, reason)
+	_, err := forceCloseResource(brokerID, s.getClients, s.Logger, &s.browser)
+	return err
 }
 func (s *Server) forceCloseHandler(brokerID uint32, reason string) error {
 	s.tryLog("browser.Server.forceCloseHandler(%d, reason=%s)", brokerID, reason)
-	_, err := forceCloseResource(brokerID, s.getClients, s.Logger)
+	_, err := forceCloseResource(brokerID, s.getClients, s.Logger, nopLocker{})
 	return err
 }
 
@@ -180,22 +185,19 @@ func (s *Server) split(
 	}
 
 	bHandler := browserServerHandler{
-		handlerID:     handlerID,
-		handlerCloser: cc,
-		s:             s,
-	}
-
-	s.browser.Lock()
-	win, err := split(s.browser, bHandler)
-	s.browser.Unlock()
-	if err != nil {
-		reason := fmt.Sprintf("failed to create split: %s", err.Error())
-		s.safeForceCloseHandler(handlerID, reason)
-		return nil, err
+		handlerID: handlerID,
+		Handler:   cc,
+		s:         s,
 	}
 
 	s.browser.Lock()
 	defer s.browser.Unlock()
+	win, err := split(s.browser, bHandler)
+	if err != nil {
+		reason := fmt.Sprintf("failed to create split: %s", err.Error())
+		s.forceCloseHandler(handlerID, reason)
+		return nil, err
+	}
 
 	windowID := s.serveWindow(win)
 	res := &proto.SplitResponse{WindowId: windowID}
@@ -272,19 +274,32 @@ func (s *Server) SetMessage(
 	return new(proto.SetMessageResponse), nil
 }
 
+func nopMonitor() {}
+
 // Open satisfies proto.BrowserServer
 func (s *Server) Open(
 	ctx context.Context, req *proto.OpenResourceRequest,
 ) (*proto.OpenResourceResponse, error) {
+	resource := util.SanitizeResourceName(req.GetResource())
+
 	s.browser.Lock()
 	defer s.browser.Unlock()
 
-	resource := util.SanitizeResourceName(req.GetResource())
-	err := s.browser.Open(resource)
+	h, err := s.browser.Open(resource)
 	if err != nil {
 		return nil, err
 	}
-	return new(proto.OpenResourceResponse), nil
+
+	// store proxy handler
+	handlerID := s.broker.NextId()
+
+	s.clients[handlerID] = &handlerClientResource{
+		client:        localTokenHandler{h},
+		cancelMonitor: nopMonitor,
+	}
+	s.tryLog("(%p): stored handler with ID: %d: %#v", s, handlerID, s.clients[handlerID])
+
+	return &proto.OpenResourceResponse{HandlerId: handlerID}, nil
 }
 
 // Subscribe satisfies proto.BrowserServer
@@ -304,12 +319,11 @@ func (s *Server) Subscribe(
 
 	h := serverEventHandler{handlerID: handlerID, s: s, h: handler}
 	s.browser.Lock()
+	defer s.browser.Unlock()
 	err = s.browser.Subscribe(ev, h)
-	s.browser.Unlock()
-
 	if err != nil {
 		reason := fmt.Sprintf("failed to subscribe: %v", err)
-		s.safeForceCloseHandler(handlerID, reason)
+		s.forceCloseHandler(handlerID, reason)
 		return nil, err
 	}
 
@@ -331,9 +345,8 @@ func (s *Server) Publish(
 	}
 
 	s.browser.Lock()
+	defer s.browser.Unlock()
 	err = s.browser.PublishInterrupt()
-	s.browser.Unlock()
-
 	if err != nil {
 		return nil, err
 	}

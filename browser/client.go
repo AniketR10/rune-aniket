@@ -107,31 +107,38 @@ func (c *Client) Init(
 }
 
 func (c *Client) serveHandler(h Handler) uint32 {
+
+	var brokerID uint32
+	var srv *grpc.Server
+
+	if tokenHandler, ok := h.(remoteTokenHandler); ok {
+		brokerID = tokenHandler.handlerID
+	} else {
+		brokerID, srv = acceptAndServe(c.broker,
+			func(handlerID uint32, srv *grpc.Server) {
+				h = browserClientHandler{
+					Handler:   h,
+					c:         c,
+					handlerID: handlerID,
+				}
+				hsrv := handler.NewServer(h, c.pluginLock)
+				hsrv.Logger = c.Logger
+				proto.RegisterHandlerServer(srv, hsrv)
+			})
+	}
+
 	c.mu.Lock()
 	defer c.mu.Unlock()
-
-	brokerID, srv := acceptAndServe(c.broker,
-		func(handlerID uint32, srv *grpc.Server) {
-			h = browserClientHandler{
-				Handler:   h,
-				c:         c,
-				handlerID: handlerID,
-			}
-			hsrv := handler.NewServer(h, c.pluginLock)
-			hsrv.Logger = c.Logger
-			proto.RegisterHandlerServer(srv, hsrv)
-		})
-
 	c.servers[brokerID] = &handlerServerResource{h: h, srv: srv}
 	return brokerID
 }
 
-func (c *Client) dialWindow(windowID uint32, handlerID int) (*windowClient, error) {
+func (c *Client) dialWindow(windowID uint32, handlerID int) (Window, error) {
 	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	if res, ok := c.clients[windowID]; ok {
-		return res.(*windowClientResource).cc, nil
+	res, ok := c.clients[windowID]
+	c.mu.Unlock()
+	if ok {
+		return res.(*windowClientResource).client, nil
 	}
 
 	winConn, err := c.broker.Dial(windowID)
@@ -139,64 +146,54 @@ func (c *Client) dialWindow(windowID uint32, handlerID int) (*windowClient, erro
 		return nil, err
 	}
 
-	cc := newWindowClient(windowID, c, proto.NewWindowClient(winConn))
-	cc.logger = c.Logger
+	cc := proto.NewWindowClient(winConn)
+	client := newWindowClient(windowID, c, cc)
+	client.logger = c.Logger
 
 	ctx, cancelFn := context.WithCancel(context.Background())
 
 	go monitorConnection(ctx, c.failureTimeout, winConn, func(reason string) {
 		// only applies when connection is closed remotely
 		c.mu.Lock()
+		defer c.mu.Unlock()
 		delete(c.clients, windowID)
-		c.mu.Unlock()
-
-		if handlerID >= 0 {
-			// window was created and populated with a local handler
-			// which is ephemeral, from the server's point of view
-			// so we can clean resources on the client.
-			c.safeForceCloseHandler(uint32(handlerID), reason)
-		}
 	})
 
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	c.clients[windowID] = &windowClientResource{
 		winConn:       winConn,
 		cancelMonitor: cancelFn,
-		cc:            cc,
+		client:        client,
 	}
 
-	return cc, nil
-}
-
-func (c *Client) getServers() map[uint32]io.Closer {
-	return c.servers
+	return client, nil
 }
 
 func (c *Client) getClients() map[uint32]io.Closer {
 	return c.clients
 }
 
-func (c *Client) safeForceCloseHandler(brokerID uint32, reason string) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.forceCloseHandler(brokerID, reason)
+func (c *Client) getServers() map[uint32]io.Closer {
+	return c.servers
 }
 
 func (c *Client) forceCloseHandler(brokerID uint32, reason string) error {
 	c.tryLog("browser.Client.forceCloseHandler(%d, reason=%s)", brokerID, reason)
-	_, err := forceCloseResource(brokerID, c.getServers, c.Logger)
+	_, err := forceCloseResource(brokerID, c.getServers, c.Logger, nopLocker{})
 	return err
 }
 
-func (c *Client) forceCloseWindow(brokerID uint32, reason string) error {
-	c.tryLog("browser.Client.forceCloseWindow(%d, reason=%s)", brokerID, reason)
-	_, err := forceCloseResource(brokerID, c.getClients, c.Logger)
+func (c *Client) safeForceCloseHandler(brokerID uint32, reason string) error {
+	c.tryLog("browser.Client.safeForceCloseHandler(%d, reason=%s)", brokerID, reason)
+	_, err := forceCloseResource(brokerID, c.getServers, c.Logger, &c.mu)
 	return err
 }
 
 func (c *Client) safeForceCloseWindow(brokerID uint32, reason string) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.forceCloseWindow(brokerID, reason)
+	c.tryLog("browser.Client.safeForceCloseWindow(%d, reason=%s)", brokerID, reason)
+	_, err := forceCloseResource(brokerID, c.getClients, c.Logger, &c.mu)
+	return err
 }
 
 type clientSplit func(cc proto.WindowManagerClient,
@@ -279,12 +276,16 @@ func (c *Client) SetMessage(msg string, args ...interface{}) error {
 }
 
 // Open satisfies Browser.
-func (c *Client) Open(resource string) error {
+func (c *Client) Open(resource string) (Handler, error) {
 	ctx := context.Background()
 	req := proto.OpenResourceRequest{Resource: resource}
 
-	_, err := c.f.Open(ctx, &req)
-	return err
+	res, err := c.f.Open(ctx, &req)
+	if err != nil {
+		return nil, err
+	}
+
+	return remoteTokenHandler{res.GetHandlerId()}, err
 }
 
 // Subscribe satisfies Browser.

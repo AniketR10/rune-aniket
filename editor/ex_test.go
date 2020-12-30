@@ -377,18 +377,24 @@ EEEE`},
 	}
 	handler.BatchTestInputSequence(t, browser, 20, 10, cases)
 
-	require.NoError(t, browser.Open("bugz"))
+	nh, err := browser.Open("bugz")
+	require.NoError(t, err)
+	focus, err = browser.Focus()
+	require.NoError(t, err)
+	err = focus.SetContent(nh)
+	require.NoError(t, err)
+
 	cases = []handler.TestInputSequence{
-		{"",
+		{"b___",
 			`┌──────────────────┐
 │other.go  bugz    │
 ├──────────────────┤
-│AAAAAAAAAAAAAAAAAA│
-│AAAAAAAAAAAAAAAAAA│
-│AAAAAAAAAAAAAAAAAA│
-│AAAAAAAAAAAAAAAAAA│
-│AAAAAAAAAAAAAAAAAA│
-│wasup: Z          │
+│BBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBB│
 └──────────────────┘`},
 	}
 	handler.BatchTestInputSequence(t, browser, 20, 10, cases)

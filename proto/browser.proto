@@ -9,8 +9,7 @@ message OpenResourceRequest {
 }
 
 message OpenResourceResponse {
-// string error = 1;
-// string handler_id = 2;
+	uint32 handler_id = 1;
 }
 
 message SetMessageRequest {

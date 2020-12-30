@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/ernestrc/go-tui"
+	"github.com/ernestrc/go-tui/handler"
 	"github.com/ernestrc/go-tui/proto"
 	"github.com/ernestrc/go-tui/term"
 	gomock "github.com/golang/mock/gomock"
@@ -118,26 +119,56 @@ func TestServerOpen(t *testing.T) {
 	t.Run("delegates Open to underlying Browser", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
-		s, mock := newServerWithNoBroker(ctrl)
+		s, mock, broker := newTestServer(ctrl, new(sync.Mutex))
 
-		mock.EXPECT().Open(gomock.Eq("/tmp/coronavirus.sql")).Return(nil)
+		nextID := uint32(10)
+		h := localTokenHandler{Handler: handler.NewTestHandler()}
+		mock.EXPECT().Open(gomock.Eq("/tmp/coronavirus.sql")).Return(h, nil)
+		broker.EXPECT().NextId().Return(nextID)
 
 		req := proto.OpenResourceRequest{Resource: "/tmp/coronavirus.sql"}
 		res, err := s.Open(ctx, &req)
 		require.NoError(t, err)
 		assert.NotNil(t, res)
+		assert.Equal(t, nextID, res.GetHandlerId())
 	})
 
 	t.Run("bubbles up Open Browser error", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
-		s, mock := newServerWithNoBroker(ctrl)
+		s, mock, _ := newTestServer(ctrl, new(sync.Mutex))
 
-		mock.EXPECT().Open(gomock.Any()).Return(errors.New("oopsie daisy"))
+		mock.EXPECT().Open(gomock.Any()).Return(nil, errors.New("oopsie daisy"))
 
 		_, err := s.Open(ctx, new(proto.OpenResourceRequest))
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "oopsie")
+	})
+
+	t.Run("stores handler for use with Split/SetContent methods", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+		s, mock, broker := newTestServer(ctrl, new(sync.Mutex))
+
+		nextID := uint32(10)
+		h := handler.NewTestHandler()
+		mock.EXPECT().Open(gomock.Any()).Return(h, nil)
+		broker.EXPECT().NextId().Return(nextID).Times(1)
+
+		req := proto.OpenResourceRequest{Resource: "Caliu"}
+		res, err := s.Open(ctx, &req)
+		require.NoError(t, err)
+		require.NotNil(t, res)
+		assertServerClientsEqual(t, 1, s)
+
+		sreq := proto.SplitRequest{
+			HandlerId: nextID,
+		}
+		windowID := uint32(999)
+		expectBrokerServe(t, windowID, broker)
+		mock.EXPECT().SplitVerticalRight(gomock.Any()).Return(nil, nil)
+		_, err = s.SplitVerticalRight(ctx, &sreq)
+		require.NoError(t, err)
 	})
 }
 
@@ -211,13 +242,13 @@ func TestServerPublish(t *testing.T) {
 	})
 }
 
-func assertClientsEqual(t *testing.T, expected int, s *Server) {
+func assertServerClientsEqual(t *testing.T, expected int, s *Server) {
 	s.browser.Lock()
 	defer s.browser.Unlock()
 	assert.Equal(t, expected, len(s.clients))
 }
 
-func assertServersEqual(t *testing.T, expected int, s *Server) {
+func assertServerServersEqual(t *testing.T, expected int, s *Server) {
 	s.browser.Lock()
 	defer s.browser.Unlock()
 	assert.Equal(t, expected, len(s.servers))
@@ -269,7 +300,7 @@ func TestServerSubscribe(t *testing.T) {
 		require.Error(t, err)
 		assert.Nil(t, res)
 
-		assertServersEqual(t, 0, s)
+		assertServerServersEqual(t, 0, s)
 	})
 
 	t.Run("returns browser Subscribe rpc error and so closes handler connection", func(t *testing.T) {
@@ -291,8 +322,8 @@ func TestServerSubscribe(t *testing.T) {
 
 		waitForMonitoringExit(quitCh)
 
-		assertClientsEqual(t, 0, s)
-		assertServersEqual(t, 0, s)
+		assertServerClientsEqual(t, 0, s)
+		assertServerServersEqual(t, 0, s)
 	})
 
 	t.Run("handles transient failures by eventually shutting down connection", func(t *testing.T) {
@@ -390,7 +421,7 @@ func assertServerHandlerExitClose(
 	// close sequence is performed asynchronously
 	waitForMonitoringExit(quitCh)
 
-	assertClientsEqual(t, 0, s)
+	assertServerClientsEqual(t, 0, s)
 }
 
 func testServerSplit(
@@ -453,13 +484,13 @@ func testServerSplit(
 			DoAndReturn(expectSignalExit(handlerConn, quitCh, nil))
 		mockWindow.EXPECT().Close().Times(1).Return(nil)
 		require.NoError(t, s.safeForceCloseHandler(handlerID, ""))
-		assertClientsEqual(t, 0, s)
+		assertServerClientsEqual(t, 0, s)
 		waitForMonitoringExit(quitCh)
 
 		// not ideal but it's hard to mock grpc.Server Register calls
 		// windowServer calls forceCloseWindow on close.
 		require.NoError(t, s.safeForceCloseWindow(windowID, ""))
-		assertServersEqual(t, 0, s)
+		assertServerServersEqual(t, 0, s)
 	})
 
 	t.Run("bubbles up dial error", func(t *testing.T) {
@@ -474,8 +505,8 @@ func testServerSplit(
 		require.Error(t, err)
 		assert.Nil(t, res)
 
-		assertClientsEqual(t, 0, s)
-		assertServersEqual(t, 0, s)
+		assertServerClientsEqual(t, 0, s)
+		assertServerServersEqual(t, 0, s)
 	})
 
 	t.Run("bubbles up browser split error and so closes handler connection", func(t *testing.T) {
@@ -496,8 +527,8 @@ func testServerSplit(
 		assert.Nil(t, res)
 		waitForMonitoringExit(quitCh)
 
-		assertClientsEqual(t, 0, s)
-		assertServersEqual(t, 0, s)
+		assertServerClientsEqual(t, 0, s)
+		assertServerServersEqual(t, 0, s)
 	})
 
 	goleak.VerifyNone(t)

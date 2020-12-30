@@ -61,7 +61,7 @@ type Messenger interface {
 
 // ResourceOpener is the interface that wraps the method Open.
 type ResourceOpener interface {
-	Open(resource string) error
+	Open(resource string) (Handler, error)
 }
 
 // EventPublisher is the interface that wraps the method PublishInterrupt.

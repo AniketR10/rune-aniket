@@ -324,6 +324,16 @@ func TestClientSetMessage(t *testing.T) {
 	})
 }
 
+func expectResourceOpen(mockCC *MockClientConnInterface, myResource string) {
+	in := &proto.OpenResourceRequest{Resource: myResource}
+	out := new(proto.OpenResourceResponse)
+	mockCC.EXPECT().
+		Invoke(gomock.Any(),
+			gomock.Eq("/proto.ResourceOpener/Open"),
+			gomock.Eq(in), gomock.Eq(out)).
+		Times(1)
+}
+
 func TestClientOpen(t *testing.T) {
 	t.Run("invokes the pbclient rpc", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
@@ -332,16 +342,10 @@ func TestClientOpen(t *testing.T) {
 		client, mockCC, _ := newMockedClient(ctrl)
 
 		myResource := "fjkelwjfeklw"
-		in := &proto.OpenResourceRequest{Resource: myResource}
-		out := new(proto.OpenResourceResponse)
 
-		mockCC.EXPECT().
-			Invoke(gomock.Any(),
-				gomock.Eq("/proto.ResourceOpener/Open"),
-				gomock.Eq(in), gomock.Eq(out)).
-			Times(1)
+		expectResourceOpen(mockCC, myResource)
 
-		err := client.Open(myResource)
+		_, err := client.Open(myResource)
 		require.NoError(t, err)
 	})
 
@@ -353,7 +357,7 @@ func TestClientOpen(t *testing.T) {
 
 		expectInvokeError(mockCC)
 
-		err := client.Open("")
+		_, err := client.Open("")
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "woopsie")
 	})
@@ -503,7 +507,6 @@ func testClientSplit(
 		require.NoError(t, win.Close())
 		time.Sleep(asyncResultsSleepDuration)
 
-		assertClientServersEqual(t, 0, client)
 		assertClientClientsEqual(t, 0, client)
 	})
 
@@ -550,8 +553,9 @@ func testClientSplit(
 		client, mockCC, mockBroker := newMockedClient(ctrl)
 
 		windowID := uint32(63)
-		expectBrokerServe(t, 1, mockBroker)
-		expectSplit(t, mockCC, 1, windowID, rpc)
+		brokerID := uint32(1)
+		expectBrokerServe(t, brokerID, mockBroker)
+		expectSplit(t, mockCC, brokerID, windowID, rpc)
 		mockWinConn := expectBrokerDial(t, ctrl, mockBroker, windowID)
 		quitCh := expectMonitorConn(mockWinConn)
 
@@ -569,15 +573,18 @@ func testClientSplit(
 			Invoke(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Times(1)
 		mockWinConn.EXPECT().Close().Times(1).
 			DoAndReturn(func() error {
-				h := client.servers[1].(*handlerServerResource).h.(Handler)
+				h := client.servers[brokerID].(*handlerServerResource).h.(Handler)
 				err := expectSignalExit(mockWinConn, quitCh, nil)()
 				// server would call this asynchronously
-				h.OnUnmount()
+				go h.OnUnmount()
 				return err
 			})
 		require.NoError(t, win.Close())
 
 		wg.Wait()
+		// monitor goroutine might not have called WaitForStateChange yet
+		// because it's run asynchronously
+		time.Sleep(asyncResultsSleepDuration)
 	})
 
 	goleak.VerifyNone(t)

@@ -86,6 +86,14 @@ func (e *Ex) tryLog(msg string, args ...interface{}) {
 	}
 }
 
+func (e *Ex) openSetFocus(filename string, recoveryName string) error {
+	h, err := e.newBufferWithFile(filename, recoveryName)
+	if err != nil {
+		return err
+	}
+	return e.comp.Focus().SetContent(h)
+}
+
 // Init initializes this Ex with the given editor and Options.
 // It returns an error if an initial filepath was given through WithFilePath option
 // and the file failed to be opened.
@@ -109,12 +117,12 @@ func (e *Ex) Init(ed Editor, opts ...browser.Option) (err error) {
 		if len(e.config.Filepaths) != 1 {
 			return errors.New("only one file expected if recovery file is passed")
 		}
-		err = e.newBufferWithFile(e.config.Filepaths[0], e.config.RecoveryFilepath)
+		err = e.openSetFocus(e.config.Filepaths[0], e.config.RecoveryFilepath)
 		return
 	}
 
 	for _, filename := range e.config.Filepaths {
-		err = e.newBufferWithFile(filename, "")
+		err = e.openSetFocus(filename, "")
 		if err != nil {
 			return
 		}
@@ -152,32 +160,18 @@ func emptyHandler(ed Editor) tui.Handler {
 
 func (e *Ex) newBufferWithFile(
 	filename, recoveryFilename string,
-) error {
+) (browser.Handler, error) {
 	buf := e.newCellBuffer()
 	fileBuf, err := e.newFileBuffer(filename, recoveryFilename, buf)
 	if err != nil {
 		e.tryLog("error opening new file buffer: %v", err)
 		e.setError(err)
-		return err
+		return nil, err
 	}
 
 	editor := e.ed.Edit(buf)
 	browserBuf := e.comp.NewBuffer(filepath.Base(filename), editor, fileBuf)
-
-	// This is a workaround around plugins exiting upon trying to open a file,
-	// expecting that the plugin window is going to close
-	// but not closing because Open swaps the plugin
-	// handler before the rpc Handler processes the exit
-	// return from a HandleResponse (see handler/rpc_breaker.go).
-	w, ok := e.comp.Shiftable()
-	if ok {
-		err = w.SetContent(browserBuf)
-	} else {
-		focus := e.comp.Focus()
-		err = focus.SetContent(browserBuf)
-	}
-
-	return err
+	return browserBuf, nil
 }
 
 func (e *Ex) runSingleCommand(cmd string) (quit bool, err error) {
@@ -217,7 +211,7 @@ func (e *Ex) runCommand() (quit bool, err error) {
 
 	switch cmds[0] {
 	case "e":
-		err = e.Open(cmds[1])
+		err = e.openSetFocus(cmds[1], "")
 	default:
 		err = fmt.Errorf("Unknown command: %s", cmd)
 	}
@@ -359,7 +353,7 @@ func (e *Ex) Close() error {
 }
 
 // Open opens the given file in a new browser tab.
-func (e *Ex) Open(resource string) error {
+func (e *Ex) Open(resource string) (browser.Handler, error) {
 	return e.newBufferWithFile(resource, "")
 }
 

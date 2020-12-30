@@ -111,9 +111,10 @@ func TestIntegrationBrowserRace(t *testing.T) {
 		{func(token uint32, broker proto.MuxBroker) (interface{}, error) {
 			return ResourceOpener(token, broker)
 		}, func(mock *browser.MockBrowserMockRecorder) *gomock.Call {
-			return mock.Open(gomock.Any()).Return(nil)
+			return mock.Open(gomock.Any()).Return(nil, nil)
 		}, func(ifc interface{}) error {
-			return ifc.(browser.ResourceOpener).Open("")
+			_, err := ifc.(browser.ResourceOpener).Open("")
+			return err
 		}},
 		{func(token uint32, broker proto.MuxBroker) (interface{}, error) {
 			return Messenger(token, broker)

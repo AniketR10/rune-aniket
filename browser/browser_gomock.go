@@ -443,11 +443,12 @@ func (m *MockResourceOpener) EXPECT() *MockResourceOpenerMockRecorder {
 }
 
 // Open mocks base method.
-func (m *MockResourceOpener) Open(resource string) error {
+func (m *MockResourceOpener) Open(resource string) (Handler, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Open", resource)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].(Handler)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // Open indicates an expected call of Open.
@@ -560,11 +561,12 @@ func (mr *MockBrowserMockRecorder) MergeKeyMap(arg0 interface{}) *gomock.Call {
 }
 
 // Open mocks base method.
-func (m *MockBrowser) Open(resource string) error {
+func (m *MockBrowser) Open(resource string) (Handler, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Open", resource)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].(Handler)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // Open indicates an expected call of Open.

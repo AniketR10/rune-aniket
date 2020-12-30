@@ -17,6 +17,14 @@ import (
 	"google.golang.org/grpc/connectivity"
 )
 
+// satisfies sync.Locker
+type nopLocker struct{}
+
+func (l nopLocker) Lock() {
+}
+func (l nopLocker) Unlock() {
+}
+
 // NOTE: this should probably me moved under Component package.
 
 // NewMessageSpan returns a virtual message bar suitable for use with
@@ -45,10 +53,12 @@ func ResizeMessageSpan(logVirt *handler.Virtual, width, height int) {
 }
 
 func forceCloseResource(
-	brokerID uint32, resourcesFn func() map[uint32]io.Closer,
-	logger *log.Logger,
+	brokerID uint32, getResourcesFn func() map[uint32]io.Closer,
+	logger *log.Logger, locker sync.Locker,
 ) (io.Closer, error) {
-	resources := resourcesFn()
+	locker.Lock()
+	defer locker.Unlock()
+	resources := getResourcesFn()
 	res, ok := resources[brokerID]
 	if !ok {
 		if logger != nil {
@@ -56,13 +66,12 @@ func forceCloseResource(
 		}
 		return nil, nil
 	}
+	delete(resources, brokerID)
 
 	err := res.Close()
 	if err != nil && logger != nil {
 		logger.Errorf("resource.Close error: %v", err)
 	}
-
-	delete(resources, brokerID)
 
 	return res, err
 }
