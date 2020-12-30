@@ -38,13 +38,3 @@ func (h remoteTokenHandler) Draw(w term.Writer) {
 func (h remoteTokenHandler) OnUnmount() error {
 	return nil
 }
-
-// used as a counterpart of remoteTokenHandler in browser.Server
-// it's used to add a Close method to a local Handler.
-type localTokenHandler struct {
-	Handler
-}
-
-func (p localTokenHandler) Close() error {
-	return nil
-}

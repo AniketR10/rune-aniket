@@ -122,7 +122,7 @@ func TestServerOpen(t *testing.T) {
 		s, mock, broker := newTestServer(ctrl, new(sync.Mutex))
 
 		nextID := uint32(10)
-		h := localTokenHandler{Handler: handler.NewTestHandler()}
+		h := handler.NewTestHandler()
 		mock.EXPECT().Open(gomock.Eq("/tmp/coronavirus.sql")).Return(h, nil)
 		broker.EXPECT().NextId().Return(nextID)
 
@@ -159,7 +159,7 @@ func TestServerOpen(t *testing.T) {
 		res, err := s.Open(ctx, &req)
 		require.NoError(t, err)
 		require.NotNil(t, res)
-		assertServerClientsEqual(t, 1, s)
+		assertServerClientsEqual(t, 0, s)
 
 		sreq := proto.SplitRequest{
 			HandlerId: nextID,

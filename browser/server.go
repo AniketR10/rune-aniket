@@ -34,6 +34,9 @@ type Server struct {
 	// TODO or because the handler exited (this happens naturally if we have a hook on WindowManager).
 	servers map[uint32]io.Closer
 
+	// Handlers opened by Open
+	opened map[uint32]Handler
+
 	browser struct {
 		Browser
 		sync.Locker
@@ -78,24 +81,24 @@ func (s *Server) Init(
 	s.interruptHandle = interruptHandle
 	s.clients = make(map[uint32]io.Closer)
 	s.servers = make(map[uint32]io.Closer)
+	s.opened = make(map[uint32]Handler)
 	s.failureTimeout = defaultFailureTimeout
 }
 
-func unwrapHandler(res *handlerClientResource) Handler {
-	t, ok := res.client.(localTokenHandler)
-	if ok {
-		return t.Handler
-	}
-	return res.client
-}
-
 func (s *Server) dialHandler(handlerID uint32) (Handler, error) {
+	s.browser.Lock()
+	h, ok := s.opened[handlerID]
+	s.browser.Unlock()
+	if ok {
+		s.tryLog("(%p): using return of Open handler for handlerID: %d", s, handlerID)
+		return h, nil
+	}
 	s.browser.Lock()
 	res, ok := s.clients[handlerID]
 	s.browser.Unlock()
 	if ok {
 		s.tryLog("(%p): found cached client for handlerID: %d", s, handlerID)
-		return unwrapHandler(res.(*handlerClientResource)), nil
+		return res.(*handlerClientResource).client, nil
 	}
 
 	s.tryLog("(%p): dialing handlerID: %d", s, handlerID)
@@ -292,12 +295,8 @@ func (s *Server) Open(
 
 	// store proxy handler
 	handlerID := s.broker.NextId()
-
-	s.clients[handlerID] = &handlerClientResource{
-		client:        localTokenHandler{h},
-		cancelMonitor: nopMonitor,
-	}
-	s.tryLog("(%p): stored handler with ID: %d: %#v", s, handlerID, s.clients[handlerID])
+	s.opened[handlerID] = h
+	s.tryLog("(%p): stored handler with ID: %d", s, handlerID)
 
 	return &proto.OpenResourceResponse{HandlerId: handlerID}, nil
 }
@@ -395,5 +394,6 @@ func (s *Server) Close() (err error) {
 	s.browser.Close()
 	s.clients = nil
 	s.servers = nil
+	s.opened = nil
 	return err
 }
