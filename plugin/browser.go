@@ -27,6 +27,7 @@ const (
 )
 
 type browserResourceServer struct {
+	mu  sync.Mutex
 	b   browser.Browser
 	srv *grpc.Server
 }
@@ -42,6 +43,8 @@ func (s *browserResourceServer) Serve(
 	l *log.Logger, lock sync.Locker, interruptDraw, interruptHandle func(),
 ) {
 	broker.AcceptAndServe(grantID, func(opts []grpc.ServerOption) *grpc.Server {
+		s.mu.Lock()
+		defer s.mu.Unlock()
 		if s.srv == nil {
 			s.srv = grpc.NewServer(opts...)
 			server := browser.NewServer(broker, s.b, lock,
