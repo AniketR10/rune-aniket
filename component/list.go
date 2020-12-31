@@ -72,31 +72,41 @@ func (l *List) CanSeekDown() bool {
 }
 
 // SeekUp shifts the contents of this list one row up.
-func (l *List) SeekUp() {
-	if l.CanSeekUp() {
+func (l *List) SeekUp() bool {
+	ok := l.CanSeekUp()
+	if ok {
 		l.offset--
 	}
+	return ok
 }
 
 // SeekDown shifts the contents of this list one row down.
-func (l *List) SeekDown() {
-	if l.CanSeekDown() {
+func (l *List) SeekDown() bool {
+	ok := l.CanSeekDown()
+	if ok {
 		l.offset++
 	}
+	return ok
 }
 
 // SeekEnd shifts the contents of this list such that the last element
 // is drawn at the top of the list.
-func (l *List) SeekEnd() {
+func (l *List) SeekEnd() (ok bool) {
 	for l.CanSeekDown() {
 		l.offset++
+		ok = true
 	}
+	return
 }
 
 // SeekStart shifts the contents of this list such that the first element
 // is drawn at the top f the list.
-func (l *List) SeekStart() {
+func (l *List) SeekStart() (ok bool) {
+	if l.offset != 0 {
+		ok = true
+	}
 	l.offset = 0
+	return
 }
 
 // Resize resizes this list to fit within width and height.
@@ -133,35 +143,41 @@ func (l *List) Draw(w term.Writer) {
 	return
 }
 
-// Back returns the last element of list l or nil if the list is empty.
-func (l *List) Back() ListNode {
-	return l.newElement(l.list.Back())
+// Back returns the last node of list l or nil if the list is empty.
+func (l *List) Back() (ListNode, bool) {
+	b := l.list.Back()
+	if b == nil {
+		return ListNode{}, false
+	}
+	return l.newElement(b), true
 }
 
-// Front returns the first element of list l or nil if the list is empty.
-func (l *List) Front() ListNode {
-	return l.newElement(l.list.Front())
+// Front returns the first node of list l or nil if the list is empty.
+func (l *List) Front() (ListNode, bool) {
+	f := l.list.Front()
+	if f == nil {
+		return ListNode{}, false
+	}
+	return l.newElement(f), true
 }
 
-// Len returns the number of elements of list l. The complexity is O(1).
+// Len returns the number of nodes of list l in O(1).
 func (l *List) Len() int { return l.list.Len() }
 
-// MoveAfter moves element e to its new position after mark. If e or mark is
-// not an element of l, or e == mark, the list is not modified. The element and
-// mark must not be nil.
+// MoveAfter moves node e to its new position after mark. If e or mark is
+// not an node of l, or e == mark, the list is not modified.
 func (l *List) MoveAfter(e, mark ListNode) {
 	l.list.MoveAfter(e.el, mark.el)
 }
 
-// MoveBefore moves element e to its new position before mark. If e or mark is
-// not an element of l, or e == mark, the list is not modified. The element and
-// mark must not be nil.
+// MoveBefore moves node e to its new position before mark. If e or mark is
+// not a node of l, or e == mark, the list is not modified.
 func (l *List) MoveBefore(e, mark ListNode) {
 	l.list.MoveBefore(e.el, mark.el)
 }
 
-// MoveToBack moves element e to the back of list l. If e is not an element of
-// l, the list is not modified. The element must not be nil.
+// MoveToBack moves node e to the back of list l. If e is not an node of
+// l, the list is not modified.
 func (l *List) MoveToBack(e ListNode) { l.list.MoveToBack(e.el) }
 
 // MoveToFront moves element e to the front of list l. If e is not an element
@@ -186,37 +202,37 @@ func (l *List) PushFrontList(other *List) {
 	l.list.PushFrontList(&other.list)
 }
 
-// InsertAfter inserts a new element e with value v immediately after mark and
-// returns e. If mark is not an element of l, the list is not modified. The
-// mark must not be nil.
+// InsertAfter inserts a new element c immediately after mark and
+// returns the linked node. If mark is not an element of l, the list
+// is not modified.
 func (l *List) InsertAfter(c tui.Component, mark ListNode) ListNode {
 	v := &Virtual{C: c}
 	return l.newElement(l.list.InsertAfter(v, mark.el))
 }
 
-// InsertBefore inserts a new element e with value v immediately before mark
-// and returns e. If mark is not an element of l, the list is not modified. The
-// mark must not be nil.
+// InsertBefore inserts a new element c immediately before mark
+// and returns the linked node. If mark is not an element of l,
+// the list is not modified.
 func (l *List) InsertBefore(c tui.Component, mark ListNode) ListNode {
 	v := &Virtual{C: c}
 	return l.newElement(l.list.InsertBefore(v, mark.el))
 }
 
-// PushBack inserts a new element e with value v at the back of list l and
-// returns e.
+// PushBack inserts a new element c at the back of list l and
+// returns the linked node.
 func (l *List) PushBack(c tui.Component) ListNode {
 	v := &Virtual{C: c}
 	return l.newElement(l.list.PushBack(v))
 }
 
-// PushFront inserts a new element e with value v at the front of list l and
-// returns e.
+// PushFront inserts a new element c at the front of list l and
+// returns the linked node.
 func (l *List) PushFront(c tui.Component) ListNode {
 	v := &Virtual{C: c}
 	return l.newElement(l.list.PushFront(v))
 }
 
-// Remove removes e from l if e is an element of list l. It returns the element
+// Remove removes e from l if e is a node of list l. It returns the element
 // value e.Value. The element must not be nil.
 func (l *List) Remove(e ListNode) tui.Component {
 	return l.list.Remove(e.el).(*Virtual).C
@@ -239,7 +255,7 @@ func (e ListNode) Value() tui.Component {
 	return e.el.Value.(*Virtual).C
 }
 
-// Prev gets the previous linked element in the list before e.
+// Prev gets the previous linked node in the list before e.
 func (e ListNode) Prev() (ListNode, bool) {
 	if e.el == nil || e.el.Prev() == nil {
 		return ListNode{}, false
@@ -247,7 +263,7 @@ func (e ListNode) Prev() (ListNode, bool) {
 	return e.l.newElement(e.el.Prev()), true
 }
 
-// Next gets the next linked element in the list after e.
+// Next gets the next linked node in the list after e.
 func (e ListNode) Next() (ListNode, bool) {
 	if e.el == nil || e.el.Next() == nil {
 		return ListNode{}, false
@@ -262,14 +278,18 @@ func (l *List) ElementAt(pos term.Coordinates) (ListNode, bool) {
 		panic("negative coordinates")
 	}
 
-	el := l.Front()
+	el, ok := l.Front()
+	if !ok {
+		return ListNode{}, ok
+	}
+
 	for i := 0; i < l.offset; i++ {
 		el, _ = el.Next()
 	}
 
 	i := 0
 	y := pos.Y
-	ok := true
+	ok = true
 	for ok {
 		if i*l.elementHeight+l.elementHeight > y {
 			return el, true

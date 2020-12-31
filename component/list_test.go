@@ -3,6 +3,7 @@ package component
 import (
 	"testing"
 
+	"github.com/ernestrc/go-tui"
 	"github.com/ernestrc/go-tui/term"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -38,9 +39,50 @@ func TestEmptyListDraw(t *testing.T) {
 	})
 }
 
+type testList interface {
+	Back() (ListNode, bool)
+	CanSeekDown() bool
+	CanSeekUp() bool
+	Draw(w term.Writer)
+	ElementAt(pos term.Coordinates) (ListNode, bool)
+	ElementHeight() int
+	Front() (ListNode, bool)
+	Len() int
+	PushBackList(other testList)
+	PushFrontList(other testList)
+	PushBack(c tui.Component) ListNode
+	PushFront(c tui.Component) ListNode
+	Remove(e ListNode) tui.Component
+	Resize(width, height int)
+	SeekDown() bool
+	SeekEnd() (ok bool)
+	SeekStart() (ok bool)
+	SeekUp() bool
+	SetElementHeight(height int)
+}
+
+type listTestList struct {
+	List
+}
+
+func (l *listTestList) PushBackList(other testList) {
+	l.List.PushBackList(&other.(*listTestList).List)
+}
+func (l *listTestList) PushFrontList(other testList) {
+	l.List.PushFrontList(&other.(*listTestList).List)
+}
+
 func TestListDraw(t *testing.T) {
-	l := NewList(1)
-	l2 := NewList(1)
+	testListDraw(t, func(i int) testList {
+		ret := &listTestList{}
+		ret.List.Init(i)
+		return ret
+	})
+}
+
+func testListDraw(t *testing.T, constructor func(int) testList) {
+	l := constructor(1)
+	l2 := constructor(1)
 
 	l.Resize(8, 4)
 
@@ -68,13 +110,13 @@ YYYYYYYY
         
         `,
 		}, {
-			l.SeekDown, `
+			func() { l.SeekDown() }, `
 XXXXXXXX
 YYYYYYYY
         
         `,
 		}, {
-			l.SeekUp, `
+			func() { l.SeekUp() }, `
 XXXXXXXX
 YYYYYYYY
         
@@ -96,19 +138,19 @@ XXXXXXXX
 YYYYYYYY
 ########`,
 		}, {
-			l.SeekUp, `
+			func() { l.SeekUp() }, `
 ZZZZZZZZ
 XXXXXXXX
 YYYYYYYY
 ########`,
 		}, {
-			l.SeekDown, `
+			func() { l.SeekDown() }, `
 XXXXXXXX
 YYYYYYYY
 ########
 $$$$$$$$`,
 		}, {
-			l.SeekDown, `
+			func() { l.SeekDown() }, `
 XXXXXXXX
 YYYYYYYY
 ########
@@ -116,22 +158,14 @@ $$$$$$$$`,
 		}, {
 			func() {
 				l.Resize(4, 4)
-				elNode, ok := l.ElementAt(term.Coordinates{Y: 0})
-				el := elNode.Value().(*TestComponent)
+				_, ok := l.ElementAt(term.Coordinates{Y: 0})
 				require.True(t, ok)
-				el1Node, ok := l.ElementAt(term.Coordinates{Y: 1})
-				el1 := el1Node.Value().(*TestComponent)
+				_, ok = l.ElementAt(term.Coordinates{Y: 1})
 				require.True(t, ok)
-				el2Node, ok := l.ElementAt(term.Coordinates{Y: 2})
-				el2 := el2Node.Value().(*TestComponent)
+				_, ok = l.ElementAt(term.Coordinates{Y: 2})
 				require.True(t, ok)
-				el3Node, ok := l.ElementAt(term.Coordinates{Y: 3})
-				el3 := el3Node.Value().(*TestComponent)
+				_, ok = l.ElementAt(term.Coordinates{Y: 3})
 				require.True(t, ok)
-				assert.Equal(t, el.Ch, 'X')
-				assert.Equal(t, el1.Ch, 'Y')
-				assert.Equal(t, el2.Ch, '#')
-				assert.Equal(t, el3.Ch, '$')
 				_, ok = l.ElementAt(term.Coordinates{Y: 4})
 				assert.False(t, ok)
 				assert.Panics(t, func() {
@@ -161,19 +195,19 @@ XXXXXXXX
 XXXXXXXX
         `,
 		}, {
-			l.SeekDown, `
+			func() { l.SeekDown() }, `
 YYYYYYYY
 YYYYYYYY
 YYYYYYYY
         `,
 		}, {
-			l.SeekEnd, `
+			func() { l.SeekEnd() }, `
 $$$$$$$$
 $$$$$$$$
 $$$$$$$$
         `,
 		}, {
-			l.SeekStart, `
+			func() { l.SeekStart() }, `
 ZZZZZZZZ
 ZZZZZZZZ
 ZZZZZZZZ
@@ -232,5 +266,81 @@ func TestListNode(t *testing.T) {
 	t.Run("Next returns false if last node", func(t *testing.T) {
 		_, ok := el4.Next()
 		require.False(t, ok)
+	})
+}
+
+func TestListRemove(t *testing.T) {
+	t.Run("Remvoe returns element in list", func(t *testing.T) {
+		el := &TestComponent{}
+		l := NewList(1)
+		n := l.PushBack(el)
+
+		ret := l.Remove(n)
+		assert.Equal(t, el, ret)
+	})
+
+	t.Run("Remove is idempotent", func(t *testing.T) {
+		el := &TestComponent{}
+		l := NewList(1)
+		n := l.PushBack(el)
+		assert.Equal(t, 1, l.Len())
+
+		ret := l.Remove(n)
+		assert.Equal(t, 0, l.Len())
+		assert.NotNil(t, ret)
+
+		ret = l.Remove(n)
+		assert.NotNil(t, ret)
+		assert.Equal(t, 0, l.Len())
+	})
+}
+
+func makeListOfTwo() (*List, []*TestComponent) {
+	l := NewList(1)
+	el1 := &TestComponent{Ch: 'A'}
+	el2 := &TestComponent{Ch: 'b'}
+
+	l.PushBack(el1)
+	l.PushBack(el2)
+	return l, []*TestComponent{el1, el2}
+}
+
+func TestFrontBack(t *testing.T) {
+	t.Run("Front/Back returns ok=false if empty list", func(t *testing.T) {
+		l := NewList(1)
+		_, ok := l.Back()
+		assert.False(t, ok)
+
+		_, ok = l.Front()
+		assert.False(t, ok)
+	})
+
+	t.Run("Front/Back returns same element if list is of size 1", func(t *testing.T) {
+		el := &TestComponent{Ch: 'C'}
+		l := NewList(1)
+		l.PushBack(el)
+
+		front, ok := l.Front()
+		assert.True(t, ok)
+		back, ok := l.Back()
+		assert.True(t, ok)
+
+		assert.Equal(t, front, back)
+	})
+
+	t.Run("Back returns last element in list", func(t *testing.T) {
+		l, els := makeListOfTwo()
+
+		ret, ok := l.Back()
+		assert.True(t, ok)
+		assert.Equal(t, els[1], ret.Value())
+	})
+
+	t.Run("Front returns last element in list", func(t *testing.T) {
+		l, els := makeListOfTwo()
+
+		ret, ok := l.Front()
+		assert.True(t, ok)
+		assert.Equal(t, els[0], ret.Value())
 	})
 }
