@@ -2,6 +2,7 @@ package component
 
 import (
 	"container/list"
+	"sort"
 
 	"github.com/ernestrc/go-tui"
 	"github.com/ernestrc/go-tui/term"
@@ -29,7 +30,7 @@ func NewList(elementHeight int) (l *List) {
 	return l
 }
 
-func (l *List) newElement(el *list.Element) ListNode {
+func (l *List) listNode(el *list.Element) ListNode {
 	return ListNode{
 		l:  l,
 		el: el,
@@ -149,7 +150,7 @@ func (l *List) Back() (ListNode, bool) {
 	if b == nil {
 		return ListNode{}, false
 	}
-	return l.newElement(b), true
+	return l.listNode(b), true
 }
 
 // Front returns the first node of list l or nil if the list is empty.
@@ -158,7 +159,7 @@ func (l *List) Front() (ListNode, bool) {
 	if f == nil {
 		return ListNode{}, false
 	}
-	return l.newElement(f), true
+	return l.listNode(f), true
 }
 
 // Len returns the number of nodes of list l in O(1).
@@ -207,7 +208,7 @@ func (l *List) PushFrontList(other *List) {
 // is not modified.
 func (l *List) InsertAfter(c tui.Component, mark ListNode) ListNode {
 	v := &Virtual{C: c}
-	return l.newElement(l.list.InsertAfter(v, mark.el))
+	return l.listNode(l.list.InsertAfter(v, mark.el))
 }
 
 // InsertBefore inserts a new element c immediately before mark
@@ -215,21 +216,21 @@ func (l *List) InsertAfter(c tui.Component, mark ListNode) ListNode {
 // the list is not modified.
 func (l *List) InsertBefore(c tui.Component, mark ListNode) ListNode {
 	v := &Virtual{C: c}
-	return l.newElement(l.list.InsertBefore(v, mark.el))
+	return l.listNode(l.list.InsertBefore(v, mark.el))
 }
 
 // PushBack inserts a new element c at the back of list l and
 // returns the linked node.
 func (l *List) PushBack(c tui.Component) ListNode {
 	v := &Virtual{C: c}
-	return l.newElement(l.list.PushBack(v))
+	return l.listNode(l.list.PushBack(v))
 }
 
 // PushFront inserts a new element c at the front of list l and
 // returns the linked node.
 func (l *List) PushFront(c tui.Component) ListNode {
 	v := &Virtual{C: c}
-	return l.newElement(l.list.PushFront(v))
+	return l.listNode(l.list.PushFront(v))
 }
 
 // Remove removes e from l if e is a node of list l. It returns the element
@@ -260,7 +261,7 @@ func (e ListNode) Prev() (ListNode, bool) {
 	if e.el == nil || e.el.Prev() == nil {
 		return ListNode{}, false
 	}
-	return e.l.newElement(e.el.Prev()), true
+	return e.l.listNode(e.el.Prev()), true
 }
 
 // Next gets the next linked node in the list after e.
@@ -268,7 +269,7 @@ func (e ListNode) Next() (ListNode, bool) {
 	if e.el == nil || e.el.Next() == nil {
 		return ListNode{}, false
 	}
-	return e.l.newElement(e.el.Next()), true
+	return e.l.listNode(e.el.Next()), true
 }
 
 // ElementAt returns the element at pos Coordinates or panics if
@@ -299,4 +300,24 @@ func (l *List) ElementAt(pos term.Coordinates) (ListNode, bool) {
 	}
 
 	return ListNode{}, false
+}
+
+// Sort returns a copy of this List sorted with the provided less function.
+func (l *List) Sort(less func(a, b tui.Component) bool) {
+	els := make([]ListNode, l.Len())
+	i := 0
+	for node, ok := l.Front(); ok; node, ok = node.Next() {
+		els[i] = node
+		i++
+	}
+
+	sort.Slice(els, func(i, j int) bool {
+		a := els[i].Value()
+		b := els[j].Value()
+		return less(a, b)
+	})
+
+	for i := l.Len() - 1; i >= 0; i-- {
+		l.MoveToFront(els[i])
+	}
 }

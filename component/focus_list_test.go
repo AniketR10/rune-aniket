@@ -16,14 +16,14 @@ type compWithAttr struct {
 func (c compWithAttr) SetAttr(attr term.Attributes) {}
 
 type focusListTestList struct {
-	FocusList
+	*FocusList
 }
 
 func (l *focusListTestList) PushBackList(other testList) {
-	l.FocusList.PushBackList(&other.(*focusListTestList).FocusList)
+	l.FocusList.PushBackList(other.(*focusListTestList).FocusList)
 }
 func (l *focusListTestList) PushFrontList(other testList) {
-	l.FocusList.PushFrontList(&other.(*focusListTestList).FocusList)
+	l.FocusList.PushFrontList(other.(*focusListTestList).FocusList)
 }
 
 func (l *focusListTestList) PushBack(c tui.Component) ListNode {
@@ -35,16 +35,19 @@ func (l *focusListTestList) PushFront(c tui.Component) ListNode {
 }
 
 func (l *focusListTestList) Remove(e ListNode) tui.Component {
-	return compWithAttr{l.FocusList.Remove(e)}
+	return l.FocusList.Remove(e)
 }
 
-func TestFocusListDraw(t *testing.T) {
-	testListDraw(t, func(i int) testList {
-		ret := &focusListTestList{}
-		ret.FocusList.Init()
-		ret.FocusList.SetElementHeight(i)
-		return ret
+func (l *focusListTestList) Sort(less func(a, b tui.Component) bool) {
+	l.FocusList.Sort(func(a, b WithAttributes) bool {
+		return less(a.(compWithAttr).Component, b.(compWithAttr).Component)
 	})
+}
+
+func newFocusTestList(i int) testList {
+	ret := &focusListTestList{FocusList: NewFocusList()}
+	ret.FocusList.SetElementHeight(i)
+	return ret
 }
 
 func TestFocusListFocus(t *testing.T) {
@@ -108,4 +111,24 @@ func TestFocusListFocus(t *testing.T) {
 		require.True(t, l.CanFocusDown())
 		require.True(t, l.CanFocusUp())
 	})
+}
+
+func TestFocusListDraw(t *testing.T) {
+	testListDraw(t, newFocusTestList)
+}
+
+func TestFocusListSort(t *testing.T) {
+	testListSort(t, newFocusTestList)
+}
+
+func TestFocusListFrontBack(t *testing.T) {
+	testFrontBack(t, newFocusTestList)
+}
+
+func TestFocusListListRemove(t *testing.T) {
+	testListRemove(t, newFocusTestList)
+}
+
+func TestFocusListEmptyDraw(t *testing.T) {
+	testEmptyListDraw(t, newFocusTestList)
 }

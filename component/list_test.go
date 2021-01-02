@@ -28,8 +28,8 @@ func TestNewList(t *testing.T) {
 	}
 }
 
-func TestEmptyListDraw(t *testing.T) {
-	l := NewList(1)
+func testEmptyListDraw(t *testing.T, constructor func(int) testList) {
+	l := constructor(1)
 	w := term.NewStringWriter(8, 4)
 
 	assert.NotPanics(t, func() {
@@ -59,25 +59,37 @@ type testList interface {
 	SeekStart() (ok bool)
 	SeekUp() bool
 	SetElementHeight(height int)
+	Sort(func(a, b tui.Component) bool)
+	Reset()
 }
 
 type listTestList struct {
-	List
+	*List
 }
 
 func (l *listTestList) PushBackList(other testList) {
-	l.List.PushBackList(&other.(*listTestList).List)
+	l.List.PushBackList(other.(*listTestList).List)
 }
 func (l *listTestList) PushFrontList(other testList) {
-	l.List.PushFrontList(&other.(*listTestList).List)
+	l.List.PushFrontList(other.(*listTestList).List)
+}
+func (l *listTestList) Sort(less func(a, b tui.Component) bool) {
+	l.List.Sort(less)
 }
 
-func TestListDraw(t *testing.T) {
-	testListDraw(t, func(i int) testList {
-		ret := &listTestList{}
-		ret.List.Init(i)
-		return ret
-	})
+func newTestList(i int) testList {
+	ret := &listTestList{List: NewList(i)}
+	return ret
+}
+
+func makeListOfTwo() (*List, []*TestComponent) {
+	l := NewList(1)
+	el1 := &TestComponent{Ch: 'A'}
+	el2 := &TestComponent{Ch: 'b'}
+
+	l.PushBack(el1)
+	l.PushBack(el2)
+	return l, []*TestComponent{el1, el2}
 }
 
 func testListDraw(t *testing.T, constructor func(int) testList) {
@@ -212,6 +224,17 @@ ZZZZZZZZ
 ZZZZZZZZ
 ZZZZZZZZ
         `,
+		}, {
+			func() {
+				l.SetElementHeight(1)
+				l.Sort(func(a, b tui.Component) bool {
+					return a.(*TestComponent).Ch < b.(*TestComponent).Ch
+				})
+			}, `
+########
+$$$$$$$$
+XXXXXXXX
+YYYYYYYY`,
 		},
 	}
 
@@ -269,19 +292,19 @@ func TestListNode(t *testing.T) {
 	})
 }
 
-func TestListRemove(t *testing.T) {
+func testListRemove(t *testing.T, constructor func(int) testList) {
 	t.Run("Remvoe returns element in list", func(t *testing.T) {
 		el := &TestComponent{}
-		l := NewList(1)
+		l := constructor(1)
 		n := l.PushBack(el)
 
 		ret := l.Remove(n)
-		assert.Equal(t, el, ret)
+		assert.Equal(t, el, getTestComponent(ret))
 	})
 
 	t.Run("Remove is idempotent", func(t *testing.T) {
 		el := &TestComponent{}
-		l := NewList(1)
+		l := constructor(1)
 		n := l.PushBack(el)
 		assert.Equal(t, 1, l.Len())
 
@@ -295,19 +318,9 @@ func TestListRemove(t *testing.T) {
 	})
 }
 
-func makeListOfTwo() (*List, []*TestComponent) {
-	l := NewList(1)
-	el1 := &TestComponent{Ch: 'A'}
-	el2 := &TestComponent{Ch: 'b'}
-
-	l.PushBack(el1)
-	l.PushBack(el2)
-	return l, []*TestComponent{el1, el2}
-}
-
-func TestFrontBack(t *testing.T) {
+func testFrontBack(t *testing.T, constructor func(int) testList) {
 	t.Run("Front/Back returns ok=false if empty list", func(t *testing.T) {
-		l := NewList(1)
+		l := constructor(1)
 		_, ok := l.Back()
 		assert.False(t, ok)
 
@@ -317,7 +330,7 @@ func TestFrontBack(t *testing.T) {
 
 	t.Run("Front/Back returns same element if list is of size 1", func(t *testing.T) {
 		el := &TestComponent{Ch: 'C'}
-		l := NewList(1)
+		l := constructor(1)
 		l.PushBack(el)
 
 		front, ok := l.Front()
@@ -343,4 +356,137 @@ func TestFrontBack(t *testing.T) {
 		assert.True(t, ok)
 		assert.Equal(t, els[0], ret.Value())
 	})
+}
+
+// bridge between testList and focusTestList
+func getTestComponent(v tui.Component) *TestComponent {
+	if a, ok := v.(compWithAttr); ok {
+		return a.Component.(*TestComponent)
+	}
+	return v.(*TestComponent)
+}
+
+func sortTestComponent(a, b tui.Component) bool {
+	return getTestComponent(a).Ch < getTestComponent(b).Ch
+}
+
+func assertEqualNodes(t *testing.T, expected int, l testList) {
+	var i int
+	for node, ok := l.Front(); ok; node, ok = node.Next() {
+		i++
+	}
+	assert.Equal(t, expected, i)
+}
+
+func testListSort(t *testing.T, constructor func(int) testList) {
+	t.Run("returns a copy of the list with same element height", func(t *testing.T) {
+		l := constructor(1)
+
+		// make sure returned list is correct
+		for i := 0; i < 3; i++ {
+			l.Sort(func(a, b tui.Component) bool { return false })
+			assert.Equal(t, 1, l.ElementHeight())
+		}
+	})
+
+	t.Run("returns a copy of the list sorted", func(t *testing.T) {
+		l := constructor(1)
+		l.PushBack(&TestComponent{Ch: 'b'})
+		l.PushBack(&TestComponent{Ch: 'a'})
+		l.PushBack(&TestComponent{Ch: 'c'})
+		// make sure returned list is correct
+		for i := 0; i < 3; i++ {
+			l.Sort(func(a, b tui.Component) bool {
+				return getTestComponent(a).Ch < getTestComponent(b).Ch
+			})
+			node, ok := l.Front()
+			require.True(t, ok)
+			assert.Equal(t, 'a', getTestComponent(node.Value()).Ch)
+
+			node, ok = node.Next()
+			require.True(t, ok)
+			assert.Equal(t, 'b', getTestComponent(node.Value()).Ch)
+
+			node, ok = node.Next()
+			require.True(t, ok)
+			assert.Equal(t, 'c', getTestComponent(node.Value()).Ch)
+
+			node, ok = node.Next()
+			require.False(t, ok)
+		}
+	})
+
+	t.Run("incremental sorting of pushed elements", func(t *testing.T) {
+		l := constructor(1)
+
+		node := l.PushBack(&TestComponent{Ch: 'z'})
+		_, ok := node.Next()
+		assert.False(t, ok)
+
+		l.Sort(sortTestComponent)
+
+		node, ok = l.Front()
+		require.True(t, ok)
+		assert.Equal(t, 'z', getTestComponent(node.Value()).Ch)
+		assertEqualNodes(t, 1, l)
+
+		node = l.PushBack(&TestComponent{Ch: 'y'})
+		_, ok = node.Next()
+		assert.False(t, ok)
+
+		l.Sort(sortTestComponent)
+
+		node, ok = l.Front()
+		require.True(t, ok)
+		assert.Equal(t, 'y', getTestComponent(node.Value()).Ch)
+
+		node, ok = node.Next()
+		require.True(t, ok)
+		assert.Equal(t, 'z', getTestComponent(node.Value()).Ch)
+
+		assertEqualNodes(t, 2, l)
+	})
+
+	t.Run("does not invalidate preaviously leaked nodes", func(t *testing.T) {
+		l := constructor(1)
+
+		z := l.PushBack(&TestComponent{Ch: 'z'})
+		_, ok := z.Next()
+		assert.False(t, ok)
+
+		y := l.PushBack(&TestComponent{Ch: 'y'})
+		_, ok = y.Next()
+		assert.False(t, ok)
+
+		_, ok = z.Next()
+		assert.True(t, ok)
+
+		l.Sort(sortTestComponent)
+
+		_, ok = y.Next()
+		assert.True(t, ok)
+
+		_, ok = z.Next()
+		assert.False(t, ok)
+	})
+}
+
+func TestListDraw(t *testing.T) {
+	testListDraw(t, newTestList)
+}
+
+func TestListSort(t *testing.T) {
+	testListSort(t, newTestList)
+}
+
+func TestFrontBack(t *testing.T) {
+	testFrontBack(t, newTestList)
+}
+
+func TestListRemove(t *testing.T) {
+	testListRemove(t, newTestList)
+}
+
+func TestEmptyListDraw(t *testing.T) {
+	testEmptyListDraw(t, newTestList)
 }

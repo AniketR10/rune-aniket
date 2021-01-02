@@ -27,7 +27,7 @@ type WithAttributes interface {
 // FocusList wraps a List to provide an element Focus. It takes WithAttributes
 // components.
 type FocusList struct {
-	list          List
+	list          *List
 	focus         ListNode
 	focusOffset   int
 	height, width int
@@ -41,9 +41,8 @@ func NewFocusList() *FocusList {
 }
 
 // Init initializes this FocusList with the default element height of 1.
-// This method can be used to reset the list.
 func (l *FocusList) Init() {
-	l.list.Init(defaultElementHeight)
+	l.list = NewList(defaultElementHeight)
 	l.focus = ListNode{}
 	l.focusOffset = 0
 }
@@ -65,12 +64,14 @@ func (l *FocusList) switchFocus(newFocus ListNode) {
 }
 
 func (l *FocusList) seekFocus() {
-	for l.focusOffset >= l.height {
-		l.SeekDown()
+	ok := true
+	for ok && l.focusOffset > 0 && l.focusOffset >= l.height {
+		ok = l.SeekDown()
 	}
 
-	for l.focusOffset < 0 {
-		l.SeekUp()
+	ok = true
+	for ok && l.focusOffset < l.height && l.focusOffset < 0 {
+		ok = l.SeekUp()
 	}
 }
 
@@ -80,6 +81,13 @@ func (l *FocusList) trySetFirstFocus(node ListNode) bool {
 		return true
 	}
 	return false
+}
+
+// Reset resets the contents of this FocusList.
+func (l *FocusList) Reset() {
+	l.list.Reset()
+	l.focusOffset = 0
+	l.focus = ListNode{}
 }
 
 // Back returns the last node of list l or nil if the list is empty.
@@ -287,4 +295,13 @@ func (l *FocusList) Focus() (ListNode, bool) {
 		return ListNode{}, false
 	}
 	return l.focus, true
+}
+
+// Sort sorts the elements of this list with the provided less function.
+func (l *FocusList) Sort(less func(a, b WithAttributes) bool) {
+	l.list.Sort(func(a, b tui.Component) bool {
+		return less(a.(WithAttributes), b.(WithAttributes))
+	})
+	l.focusOffset = 0
+	l.focus, _ = l.Front()
 }
