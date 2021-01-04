@@ -112,14 +112,13 @@ func (l *List) SeekStart() (ok bool) {
 
 // Resize resizes this list to fit within width and height.
 func (l *List) Resize(width, height int) {
-	var ok bool
 	l.width, l.height = width, height
-	var comp *Virtual
-	for i, el := 0, l.list.Front(); el != nil; el, i = el.Next(), i+1 {
-		comp, ok = el.Value.(*Virtual)
-		if !ok {
-			panic("element of this list is not Virtual")
+	lastVisible := l.height/l.elementHeight + l.offset
+	for i, el := 0, l.list.Front(); i < lastVisible && el != nil; el, i = el.Next(), i+1 {
+		if i < l.offset {
+			continue
 		}
+		comp := el.Value.(*Virtual)
 		comp.Resize(l.width, l.elementHeight)
 		ypos := (i - l.offset) * l.elementHeight
 		comp.Move(term.Coordinates{X: 0, Y: ypos})

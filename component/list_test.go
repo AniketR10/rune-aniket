@@ -1,6 +1,7 @@
 package component
 
 import (
+	"strconv"
 	"testing"
 
 	"github.com/ernestrc/go-tui"
@@ -489,4 +490,37 @@ func TestListRemove(t *testing.T) {
 
 func TestEmptyListDraw(t *testing.T) {
 	testEmptyListDraw(t, newTestList)
+}
+
+func benchmarkListDraw(b *testing.B, n int) {
+	l := NewList(1)
+	for i := 0; i < n; i++ {
+		l.PushBack(String(strconv.Itoa(i)))
+	}
+
+	var w term.NoopWriter
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		l.Draw(w)
+	}
+}
+
+func BenchmarkListDraw1(b *testing.B) {
+	benchmarkListDraw(b, 1)
+}
+
+func BenchmarkListDraw10(b *testing.B) {
+	benchmarkListDraw(b, 10)
+}
+
+func BenchmarkListDraw100(b *testing.B) {
+	benchmarkListDraw(b, 100)
+}
+
+func BenchmarkListDraw1000(b *testing.B) {
+	benchmarkListDraw(b, 1000)
+}
+
+func BenchmarkListDraw100000(b *testing.B) {
+	benchmarkListDraw(b, 100000)
 }
