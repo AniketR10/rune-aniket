@@ -157,7 +157,7 @@ func (c *Component) Init(config Config) {
 		}
 	}
 	c.tabs.SetAttr(focusFileAttr, nonFocusFileAttr, frameFileAttr, scrollAttr)
-	c.startHandler = CallbackHandler(handler.Nop(component.String(c.config.StartText)), func() {})
+	c.startHandler = CallbackHandler(handler.Nop(component.StringCentered(c.config.StartText)), func() {})
 
 	c.wm = handler.NewWindowManager(c.startHandler, c.config.WindowManagerConfig)
 	c.wm.SetAttr(wmDefaultAttr, wmFocusAttr)

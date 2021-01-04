@@ -34,7 +34,7 @@ func NewButton(text string, onClick func()) *Button {
 // To change these defaults use SetFrameCharSet and SetClickCharSet.
 func (b *Button) Init(text string, onClick func()) {
 	b.textStr = text
-	b.textComp = component.StaticStringAttr(b.textStr, b.attr)
+	b.textComp = component.StringAttr(b.textStr, b.attr)
 	b.onClick = onClick
 	b.span.Init(b.textComp, b.spanConfig)
 	b.frame.Init(&b.span)

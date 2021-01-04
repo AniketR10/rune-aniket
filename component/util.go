@@ -35,7 +35,9 @@ func (s *stringComp) Draw(w term.Writer) {
 }
 
 // StringBackground converts a string into a static tui.Compontent,
-// and uses c as the background rune.
+// and uses c as the background rune. It processes newlines and so draws
+// the string multi line if applicable. It also centers the string vertically
+// and horizontally.
 func StringBackground(str string, c rune) tui.Component {
 	cells := cell.StringToCells(str)
 	comp := stringComp{cells: cells}
@@ -54,23 +56,30 @@ func StringBackground(str string, c rune) tui.Component {
 	})
 }
 
-// String converts a string into a static tui.Compontent.
-func String(str string) tui.Component {
+// StringCentered converts a string into a static tui.Compontent.
+// It processes newlines and so draws the string multi line if applicable.
+// It also centers the string vertically and horizontally.
+func StringCentered(str string) tui.Component {
 	return StringBackground(str, 0)
 }
 
-// StaticString converts a string into a static, efficient tui.Component
+// String converts a string into a very efficient top left centered one line tui.Component
 // which draws the given string. If the string needs to be centered dynamically,
-// use String instead. This method is ~20% faster than String for
-// small payloads and it does ~20% less allocations.
-func StaticString(str string) tui.Component {
-	cells := cell.StringToCells(str)
-	return &stringComp{cells: cells}
+// or drawn multi-line use StringCentered instead.
+func String(str string) tui.Component {
+	row := make([]term.Cell, len(str))
+	for i, r := range str {
+		row[i] = term.Cell{Ch: r}
+	}
+	return &stringComp{cells: [][]term.Cell{row}}
 }
 
-// StaticStringAttr converts a string into a static, efficient tui.Component
-// which draws str along with attr. See StaticString for more information.
-func StaticStringAttr(str string, attr term.Attributes) tui.Component {
-	cells := cell.StringToCells(str)
-	return &stringComp{cells: cells, attr: attr}
+// StringAttr converts a string into a very efficient top left centered multi-line tui.Component
+// which draws str along with attr. See String for more information.
+func StringAttr(str string, attr term.Attributes) tui.Component {
+	row := make([]term.Cell, len(str))
+	for i, r := range str {
+		row[i] = term.Cell{Ch: r}
+	}
+	return &stringComp{cells: [][]term.Cell{row}, attr: attr}
 }

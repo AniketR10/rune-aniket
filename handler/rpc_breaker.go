@@ -153,7 +153,7 @@ func (a *clientBreaker) loadingContent(
 		return a.readyCopy()
 	}
 
-	loading := component.String(loadingCopy)
+	loading := component.StringCentered(loadingCopy)
 	loading.Resize(int(in.Width), int(in.Height))
 	return proto.NewDrawResponse(loading, int(in.Width), int(in.Height))
 }
@@ -204,7 +204,7 @@ func (a *clientBreaker) sendDrawRequest(
 ) {
 	res, err := a.cc.Draw(ctx, in, opts...)
 	if err != nil {
-		comp := component.String(smtgWrongCopy)
+		comp := component.StringCentered(smtgWrongCopy)
 		comp.Resize(int(in.Width), int(in.Height))
 		res = proto.NewDrawResponse(comp, int(in.Width), int(in.Height))
 		if a.logger != nil {

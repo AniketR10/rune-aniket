@@ -197,7 +197,7 @@ func assertDrawResponse(t *testing.T, res *proto.DrawResponse, strCopy string) {
 	assert.NotNil(t, res.Cursor)
 	assert.NotNil(t, res.Cursor.Position)
 	str, width, height := proto.DrawResponseToTermString(res)
-	expected := component.String(strCopy)
+	expected := component.StringCentered(strCopy)
 	expected.Resize(width, height)
 	w := term.NewStringWriter(width, height)
 	expected.Draw(w)

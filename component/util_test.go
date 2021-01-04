@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestString(t *testing.T) {
+func TestStringCentered(t *testing.T) {
 	tcases := []struct {
 		in  string
 		out string
@@ -42,7 +42,7 @@ func TestString(t *testing.T) {
 
 	for _, tcase := range tcases {
 		w := term.NewStringWriter(5, 5)
-		comp := String(tcase.in)
+		comp := StringCentered(tcase.in)
 		comp.Resize(5, 5)
 		comp.Draw(w)
 		require.NoError(t, w.Flush())
@@ -50,7 +50,7 @@ func TestString(t *testing.T) {
 	}
 }
 
-func TestStaticString(t *testing.T) {
+func TestString(t *testing.T) {
 	tcases := []struct {
 		in  string
 		out string
@@ -61,15 +61,15 @@ func TestStaticString(t *testing.T) {
 		},
 		{
 			in:  "XXXXXXXXXXXXXXXX\nXXXXXXXXXX\nXXXXXXXXXX",
-			out: "XXXXX\nXXXXX\nXXXXX\n     \n     ",
+			out: "XXXXX\n     \n     \n     \n     ",
 		},
 		{
 			in:  "X\nX\nX\nX\nX\nX\nX\nX\n",
-			out: "X    \nX    \nX    \nX    \nX    ",
+			out: "X X X\n     \n     \n     \n     ",
 		},
 		{
 			in:  "XXXXXXXXXX\nXXXXXXXXXXX\nXXXXXXXXXXX\nXXXXXXXXXXX\nXXXXXXXXXXX\nXXXXXXXXXXX\nXXXXXXXXXXX\nXXXXXXXXXXX\n",
-			out: "XXXXX\nXXXXX\nXXXXX\nXXXXX\nXXXXX",
+			out: "XXXXX\n     \n     \n     \n     ",
 		},
 		{
 			in:  "a",
@@ -79,7 +79,7 @@ func TestStaticString(t *testing.T) {
 
 	for _, tcase := range tcases {
 		w := term.NewStringWriter(5, 5)
-		comp := StaticString(tcase.in)
+		comp := String(tcase.in)
 		comp.Resize(5, 5)
 		comp.Draw(w)
 		require.NoError(t, w.Flush())
@@ -95,7 +95,7 @@ func benchmarkString(b *testing.B, fortunes int) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_ = StaticString(builder.String())
+		_ = String(builder.String())
 	}
 }
 

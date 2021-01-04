@@ -34,7 +34,7 @@ func TestNewDrawResponse(t *testing.T) {
 	}
 
 	for _, tcase := range tcase {
-		comp := component.String(tcase.in)
+		comp := component.StringCentered(tcase.in)
 		comp.Resize(5, 5)
 		res := NewDrawResponse(comp, 5, 5)
 		assert.Equal(t, tcase.out, res)
@@ -46,7 +46,7 @@ func benchmarkDrawResponse(b *testing.B, width, height int) {
 	for i := 0; i < width; i++ {
 		str += "fjkelwjflk\njflw\njfklewfkjlkew\n"
 	}
-	comp := component.String(str)
+	comp := component.StringCentered(str)
 	comp.Resize(width, height)
 
 	b.ResetTimer()
