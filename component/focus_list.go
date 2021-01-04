@@ -302,6 +302,9 @@ func (l *FocusList) Sort(less func(a, b WithAttributes) bool) {
 	l.list.Sort(func(a, b tui.Component) bool {
 		return less(a.(WithAttributes), b.(WithAttributes))
 	})
+
+	setFocusFrameCharSet(l.focus, defaultTextAttr)
 	l.focusOffset = 0
 	l.focus, _ = l.Front()
+	setFocusFrameCharSet(l.focus, highlightTextAttr)
 }
