@@ -24,7 +24,8 @@ type Server struct {
 	failureTimeout time.Duration
 
 	// handler client resources are created on calls to Subscribe,
-	// Split* and SetContent. They are destroyed when OnUnmount is invoked.
+	// Split* and SetContent. They are destroyed when OnUnmount is dispatched to handler server
+	// and so if server is closed, client connection
 	// Connections are also monitored and cleaned if irrecoverable errors are found.
 	clients map[uint32]io.Closer
 
@@ -46,16 +47,24 @@ type Server struct {
 	interruptHandle func()
 }
 
-// browserServerHandler wraps a handler.Client to satisfy browser.Handler.
+// browserServerHandler wraps a handler.Client to satisfy browser.Handler
+// and provide a hook on calls to OnUnmount. We could rely solely on the remote browser
+// server to close and our monitor goroutine to clean up, but we do not trust the remote
+// browser necessarily.
 type browserServerHandler struct {
 	Handler
 	s         *Server
 	handlerID uint32
 }
 
+func (s browserServerHandler) gracefulShutdown() {
+	time.Sleep(gracefulShutdownWait)
+	s.s.safeForceCloseHandler(s.handlerID, "browserServerHandler.OnUnmount()")
+}
+
 func (s browserServerHandler) OnUnmount() (err error) {
 	err = s.Handler.OnUnmount()
-	s.s.forceCloseHandler(s.handlerID, "browserServerHandler.OnUnmount()")
+	go s.gracefulShutdown()
 	return
 }
 
@@ -85,6 +94,23 @@ func (s *Server) Init(
 	s.failureTimeout = defaultFailureTimeout
 }
 
+func (s *Server) consumeErrors(ctx context.Context, ch <-chan error) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case err := <-ch:
+			err = fmt.Errorf("handler.Client error: %v", err)
+			s.tryLog("%v", err)
+			msgErr := s.setBrowserMessage(err.Error())
+			if msgErr != nil {
+				s.tryLog("error calling browser.SetMessage upon handler.Client"+
+					" error: %v: %v", msgErr, err)
+			}
+		}
+	}
+}
+
 func (s *Server) dialHandler(handlerID uint32) (Handler, error) {
 	s.browser.Lock()
 	h, ok := s.opened[handlerID]
@@ -108,7 +134,6 @@ func (s *Server) dialHandler(handlerID uint32) (Handler, error) {
 	}
 
 	pbClient := proto.NewHandlerClient(handlerConn)
-	// TODO use cc.Errors() to consume and log errors
 	cc := handler.NewClient(pbClient, s.interruptDraw, s.interruptHandle)
 	cc.Logger = s.Logger
 	client := newIOWaitUnlockHandler(cc, s.browser)
@@ -118,6 +143,8 @@ func (s *Server) dialHandler(handlerID uint32) (Handler, error) {
 	go monitorConnection(ctx, s.failureTimeout, handlerConn, func(reason string) {
 		s.safeForceCloseHandler(handlerID, reason)
 	})
+
+	go s.consumeErrors(ctx, cc.Errors())
 
 	s.browser.Lock()
 	defer s.browser.Unlock()
@@ -263,14 +290,19 @@ func (s *Server) MergeKeyMap(
 	return new(proto.MergeKeyMapResponse), nil
 }
 
+func (s *Server) setBrowserMessage(msg string) error {
+	s.browser.Lock()
+	defer s.browser.Unlock()
+
+	return s.browser.SetMessage(msg)
+}
+
 // SetMessage satisfies proto.BrowserServer
 func (s *Server) SetMessage(
 	ctx context.Context, req *proto.SetMessageRequest,
 ) (*proto.SetMessageResponse, error) {
-	s.browser.Lock()
-	defer s.browser.Unlock()
-
-	err := s.browser.SetMessage(util.SanitizeLine(req.GetMsg()))
+	msg := util.SanitizeLine(req.GetMsg())
+	err := s.setBrowserMessage(msg)
 	if err != nil {
 		return nil, err
 	}

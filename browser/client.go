@@ -14,6 +14,8 @@ import (
 	"google.golang.org/grpc"
 )
 
+const gracefulShutdownWait = 100 * time.Millisecond
+
 // Client satisfies Browser by talking to a browser server over RPC.
 type Client struct {
 	Logger *log.Logger
@@ -45,7 +47,8 @@ type Client struct {
 
 	// handler server resources. handler servers are created on
 	// calls to Split or SetContent (if handler is not return of Open).
-	// They are destroyed when underlying handler returns exit=true on
+	// They are destroyed when browser server calls OnUnmount rpc, which
+	// occurs when underlying handler returns exit=true on
 	// Handle, or when window is Closed, either locally or
 	// remotely (via monitor goroutine).
 	servers map[uint32]io.Closer
@@ -57,16 +60,18 @@ type browserClientHandler struct {
 	c *Client
 }
 
+func (c browserClientHandler) gracefulShutdown() {
+	time.Sleep(gracefulShutdownWait)
+	c.c.safeForceCloseHandler(c.handlerID, "browserClientHandler.OnUnmount")
+}
+
 func (c browserClientHandler) OnUnmount() (err error) {
 	err1 := c.Handler.OnUnmount()
 	if err1 != nil {
 		err = err1
 	}
 
-	err2 := c.c.safeForceCloseHandler(c.handlerID, "browserClientHandler.OnUnmount")
-	if err2 != nil {
-		err = err2
-	}
+	go c.gracefulShutdown()
 	return
 }
 
