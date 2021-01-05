@@ -23,6 +23,8 @@ type Window interface {
 
 	// Close closes the window.
 	Close() error
+
+	onWindowClosed(fn func())
 }
 
 // WindowManager is the interface that groups tile

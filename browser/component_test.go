@@ -72,6 +72,18 @@ func TestComponentCloseWindow(t *testing.T) {
 			require.NoError(t, win.Close())
 			assert.Equal(t, 1, c.wm.Size())
 		})
+
+		t.Run(tcase.method+"Close calls onWindowClosed callback", func(t *testing.T) {
+			var i int
+			c := NewComponent(Config{})
+			win := tcase.split(c, handler.NewTestHandler())
+			win.onWindowClosed(func() {
+				i++
+			})
+
+			require.NoError(t, win.Close())
+			assert.Equal(t, 1, i)
+		})
 	}
 }
 

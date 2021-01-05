@@ -15,6 +15,7 @@ type windowClient struct {
 	logger        *log.Logger
 	pbClient      proto.WindowClient
 	browserClient *Client
+	onClose       func()
 }
 
 func newWindowClient(
@@ -41,6 +42,13 @@ func (w *windowClient) SetContent(h Handler) error {
 		return fmt.Errorf("error on pbClient.SetContent: %v", err)
 	}
 	return nil
+}
+
+func (w *windowClient) onWindowClosed(fn func()) {
+	// window client cannot truly hook into when window
+	// is closed remotely (we do that at the browser client level
+	// via grpc conn monitor goroutine). For that we would
+	// need a new RPC but there's no real use-case yet.
 }
 
 func (w *windowClient) Close() (err error) {

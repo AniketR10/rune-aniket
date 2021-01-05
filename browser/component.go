@@ -71,8 +71,13 @@ func (c browserContent) Handle(ev term.Event) (exit, handled bool) {
 
 // needed mutable to inverse a split
 type browserWindow struct {
-	parent *Component
-	win    handler.Window
+	parent  *Component
+	win     handler.Window
+	onClose func()
+}
+
+func (w *browserWindow) onWindowClosed(fn func()) {
+	w.onClose = fn
 }
 
 func (w *browserWindow) SetContent(h Handler) error {
@@ -87,7 +92,15 @@ func (w *browserWindow) Close() error {
 	}
 
 	err := w.parent.closeWindow(w)
+
 	w.parent = nil
+
+	if w.onClose != nil {
+		onClose := w.onClose
+		w.onClose = nil
+
+		onClose()
+	}
 
 	return err
 }

@@ -167,7 +167,10 @@ func TestServerOpen(t *testing.T) {
 		}
 		windowID := uint32(999)
 		expectBrokerServe(t, windowID, broker)
-		mock.EXPECT().SplitVerticalRight(gomock.Any()).Return(nil, nil)
+		mockWindow := NewMockWindow(ctrl)
+		mockWindow.EXPECT().onWindowClosed(gomock.Any()).AnyTimes()
+
+		mock.EXPECT().SplitVerticalRight(gomock.Any()).Return(mockWindow, nil)
 		_, err = s.SplitVerticalRight(ctx, &sreq)
 		require.NoError(t, err)
 	})
@@ -460,7 +463,13 @@ func testServerSplit(
 		defer ctrl.Finish()
 		var mu sync.Mutex
 		s, mock, mockBroker := newTestServer(ctrl, &mu)
+
+		// store onWindowClosed callback
+		var callback func()
 		mockWindow := NewMockWindow(ctrl)
+		mockWindow.EXPECT().onWindowClosed(gomock.Any()).DoAndReturn(func(fn func()) {
+			callback = fn
+		}).Times(1)
 
 		var h Handler
 		handlerConn := expectBrokerDial(t, ctrl, mockBroker, handlerID)
@@ -489,14 +498,18 @@ func testServerSplit(
 		// verify that handler is closeable by its handlerId
 		handlerConn.EXPECT().Close().Times(1).
 			DoAndReturn(expectSignalExit(handlerConn, quitCh, nil))
-		mockWindow.EXPECT().Close().Times(1).Return(nil)
 		require.NoError(t, s.safeForceCloseHandler(handlerID, ""))
 		assertServerClientsEqual(t, 0, s)
 		waitForMonitoringExit(quitCh)
 
-		// not ideal but it's hard to mock grpc.Server Register calls
-		// windowServer calls forceCloseWindow on close.
-		require.NoError(t, s.safeForceCloseWindow(windowID, ""))
+		assertServerServersEqual(t, 1, s)
+
+		// unsubscribe
+		mockWindow.EXPECT().onWindowClosed(gomock.Any()).Times(1)
+		mockWindow.EXPECT().Close().Times(1)
+		callback()
+
+		// verify that resources are cleaned upon call to onWindowClosed callback
 		assertServerServersEqual(t, 0, s)
 	})
 

@@ -30,7 +30,7 @@ func TestIntegrationBrowserRace(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mockWin := browser.NewMockWindow(ctrl)
+	mockWin := browser.NopWindow()
 	h := handler.NewTestHandler()
 	evKeyCtrlA := term.Event{Type: term.EventKey, Key: term.KeyCtrlA}
 	keymap := map[term.Event]term.Event{

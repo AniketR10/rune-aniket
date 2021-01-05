@@ -30,9 +30,7 @@ type Server struct {
 	clients map[uint32]io.Closer
 
 	// window servers are created on calls to Split* and Focus. They are destroyed
-	// when window is closed, either remotely,
-	// TODO locally, (we do not have a hook yet on Component.windowClose)
-	// TODO or because the handler exited (this happens naturally if we have a hook on WindowManager).
+	// when window is closed, either remotely, or locally (via onWindowClosed hook).
 	servers map[uint32]io.Closer
 
 	// Handlers opened by Open
@@ -164,10 +162,15 @@ func (s *Server) serveWindow(win Window) uint32 {
 			winSrv := newWindowServer(s, windowBrokerID, win)
 			proto.RegisterWindowServer(srv, winSrv)
 		})
-	s.servers[brokerID] = &windowServerResource{
+	res := &windowServerResource{
 		srv: srv,
 		win: win,
 	}
+	s.servers[brokerID] = res
+
+	win.onWindowClosed(func() {
+		s.forceCloseWindow(brokerID, "underlying window called onWindowClosed callback")
+	})
 	return brokerID
 }
 
@@ -177,6 +180,12 @@ func (s *Server) getClients() map[uint32]io.Closer {
 
 func (s *Server) getServers() map[uint32]io.Closer {
 	return s.servers
+}
+
+func (s *Server) forceCloseWindow(brokerID uint32, reason string) error {
+	s.tryLog("browser.Server.forceCloseWindow(%d, reason=%s)", brokerID, reason)
+	_, err := forceCloseResource(brokerID, s.getServers, s.Logger, nopLocker{})
+	return err
 }
 
 func (s *Server) safeForceCloseWindow(brokerID uint32, reason string) error {

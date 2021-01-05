@@ -46,6 +46,8 @@ func (r *handlerClientResource) Close() (err error) {
 
 func (r *windowServerResource) Close() error {
 	r.srv.Stop()
+	// unsubscribe, since we are already aware
+	r.win.onWindowClosed(nil)
 	err := r.win.Close()
 	if err != nil {
 		return err

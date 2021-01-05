@@ -168,6 +168,18 @@ func (mr *MockWindowMockRecorder) SetContent(arg0 interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetContent", reflect.TypeOf((*MockWindow)(nil).SetContent), arg0)
 }
 
+// onWindowClosed mocks base method.
+func (m *MockWindow) onWindowClosed(fn func()) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "onWindowClosed", fn)
+}
+
+// onWindowClosed indicates an expected call of onWindowClosed.
+func (mr *MockWindowMockRecorder) onWindowClosed(fn interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "onWindowClosed", reflect.TypeOf((*MockWindow)(nil).onWindowClosed), fn)
+}
+
 // MockWindowManager is a mock of WindowManager interface.
 type MockWindowManager struct {
 	ctrl     *gomock.Controller
