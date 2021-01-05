@@ -307,4 +307,5 @@ func (l *FocusList) Sort(less func(a, b WithAttributes) bool) {
 	l.focusOffset = 0
 	l.focus, _ = l.Front()
 	setFocusFrameCharSet(l.focus, highlightTextAttr)
+	l.list.SeekStart()
 }

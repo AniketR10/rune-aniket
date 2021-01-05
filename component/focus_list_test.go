@@ -119,6 +119,27 @@ func TestFocusListDraw(t *testing.T) {
 
 func TestFocusListSort(t *testing.T) {
 	testListSort(t, newFocusTestList)
+
+	t.Run("focus and seeks to start of list upon call Sort", func(t *testing.T) {
+		l := NewFocusList()
+		l.PushBack(compWithAttr{&TestComponent{Ch: 'z'}})
+		l.PushBack(compWithAttr{&TestComponent{Ch: 'x'}})
+		l.PushBack(compWithAttr{&TestComponent{Ch: 'a'}})
+		l.Resize(1, 1)
+		require.True(t, l.SeekEnd())
+		require.True(t, l.CanSeekUp())
+		require.False(t, l.CanSeekDown())
+
+		l.Sort(func(a, b WithAttributes) bool {
+			return a.(compWithAttr).Component.(*TestComponent).Ch <
+				b.(compWithAttr).Component.(*TestComponent).Ch
+		})
+
+		assert.False(t, l.CanSeekUp())
+		assert.False(t, l.CanFocusUp())
+		assert.True(t, l.CanSeekDown())
+		assert.True(t, l.CanFocusDown())
+	})
 }
 
 func TestFocusListFrontBack(t *testing.T) {
