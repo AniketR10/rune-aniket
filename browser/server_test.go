@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/ernestrc/go-tui"
+	"github.com/ernestrc/go-tui/component"
 	"github.com/ernestrc/go-tui/handler"
 	"github.com/ernestrc/go-tui/proto"
 	"github.com/ernestrc/go-tui/term"
@@ -175,11 +176,12 @@ func TestServerOpen(t *testing.T) {
 func expectHandlerInvoke(handlerConn *proto.MockMuxConn, protoEv *proto.Event) {
 	handlerConn.EXPECT().
 		Invoke(gomock.Any(), gomock.Eq("/proto.Handler/Handle"),
-			gomock.Eq(&proto.HandleRequest{Event: protoEv}),
+			gomock.Eq(&proto.HandleRequest{Event: protoEv, Draw: &proto.DrawRequest{}}),
 			gomock.Any()).
 		Times(1).
 		Return(nil)
 }
+
 func expectHandlerInvokeExit(t *testing.T, handlerConn *proto.MockMuxConn) {
 	handlerConn.EXPECT().
 		Invoke(gomock.Any(), gomock.Eq("/proto.Handler/Handle"),
@@ -192,6 +194,7 @@ func expectHandlerInvokeExit(t *testing.T, handlerConn *proto.MockMuxConn) {
 			res, ok := reply.(*proto.HandleResponse)
 			require.True(t, ok)
 
+			res.Draw = proto.NewDrawResponse(component.String(""), 0, 0)
 			res.Quit = true
 			return nil
 		}).
@@ -268,7 +271,10 @@ func TestServerSubscribe(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 		var mu sync.Mutex
-		s, mock, mockBroker := newTestServer(ctrl, &mu)
+		var wg sync.WaitGroup
+		mock := NewMockBrowser(ctrl)
+		mockBroker := proto.NewMockMuxBroker(ctrl)
+		s := NewServer(mockBroker, mock, &mu, nop, func() { wg.Done() })
 
 		var h EventHandler
 		handlerConn := expectBrokerDial(t, ctrl, mockBroker, handlerID)
@@ -285,7 +291,7 @@ func TestServerSubscribe(t *testing.T) {
 		assert.NotNil(t, res)
 
 		assertServerHandlerExitClose(t, handlerConn,
-			eventHandlerToHandler{h}, s, termEv, quitCh)
+			eventHandlerToHandler{h}, s, termEv, quitCh, &wg)
 	})
 
 	t.Run("returns browser Subscribe dial to handler error", func(t *testing.T) {
@@ -401,24 +407,25 @@ func assertServerHandlerExitClose(
 	t *testing.T, handlerConn *proto.MockMuxConn,
 	h tui.Handler, s *Server,
 	termEv term.Event, quitCh chan struct{},
+	wg *sync.WaitGroup,
 ) {
 	expectHandlerInvokeExit(t, handlerConn)
 
 	handlerConn.EXPECT().Close().Times(1).
 		DoAndReturn(expectSignalExit(handlerConn, quitCh, nil))
 
-	// event dispatching is synchronized via browser lock
+	wg.Add(1)
 	s.browser.Lock()
 	exit, _ := h.Handle(termEv)
 	s.browser.Unlock()
-	// rpc handler event delivery is asynchronous
-	// so second Handle response will trigger exit
-	time.Sleep(asyncResultsSleepDuration)
+
+	wg.Wait()
+
 	s.browser.Lock()
 	exit, _ = h.Handle(termEv)
 	s.browser.Unlock()
 	assert.True(t, exit)
-	// close sequence is performed asynchronously
+
 	waitForMonitoringExit(quitCh)
 
 	assertServerClientsEqual(t, 0, s)

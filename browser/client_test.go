@@ -85,7 +85,7 @@ func assertClientHandlerExitClose(
 	cliRes := client.servers[1]
 
 	exit, handled := cliRes.(*handlerServerResource).h.
-		Handle(term.Event{Type: term.EventNone})
+		Handle(term.Event{Type: term.EventKey, Key: term.KeyCtrlBackslash})
 	client.mu.Unlock()
 	assert.True(t, exit)
 	assert.True(t, handled)

@@ -32,9 +32,9 @@ func TestIntegrationBrowserRace(t *testing.T) {
 
 	mockWin := browser.NewMockWindow(ctrl)
 	h := handler.NewTestHandler()
-	evNone := term.Event{Type: term.EventNone}
+	evKeyCtrlA := term.Event{Type: term.EventKey, Key: term.KeyCtrlA}
 	keymap := map[term.Event]term.Event{
-		evNone: term.Event{Type: term.EventInterrupt},
+		evKeyCtrlA: term.Event{Type: term.EventKey, Key: term.KeyCtrlB},
 	}
 	nopHandler := browser.FuncEventHandler(func(term.Event) bool { return false })
 
@@ -128,7 +128,7 @@ func TestIntegrationBrowserRace(t *testing.T) {
 		}, func(mock *browser.MockBrowserMockRecorder) *gomock.Call {
 			return mock.Subscribe(gomock.Any(), gomock.Any()).Return(nil)
 		}, func(ifc interface{}) error {
-			return ifc.(browser.EventSubscriber).Subscribe(evNone, nopHandler)
+			return ifc.(browser.EventSubscriber).Subscribe(evKeyCtrlA, nopHandler)
 		}},
 		{func(token uint32, broker proto.MuxBroker) (interface{}, error) {
 			return EventPublisher(token, broker)

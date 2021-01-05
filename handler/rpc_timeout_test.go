@@ -151,9 +151,3 @@ func TestHandlerHandleTimeout(t *testing.T) {
 		assert.True(t, res.GetQuit())
 	})
 }
-
-func TestHandlerDrawTimeout(t *testing.T) {
-	testHandlerTimeout(t, func(c proto.HandlerClient) (interface{}, error) {
-		return c.Draw(context.Background(), new(proto.DrawRequest))
-	})
-}

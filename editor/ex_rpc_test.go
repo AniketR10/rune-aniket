@@ -150,8 +150,6 @@ func TestClientSynchronizeHandlers(t *testing.T) {
 	h := handler.TestHandler{}
 
 	subs := []term.Event{
-		term.Event{Type: term.EventNone},
-		term.Event{Type: term.EventInterrupt},
 		term.Event{Type: term.EventKey, Key: term.KeyCtrlA},
 		term.Event{Type: term.EventKey, Key: term.KeyCtrlJ},
 		term.Event{Type: term.EventKey, Key: term.KeyCtrlH},

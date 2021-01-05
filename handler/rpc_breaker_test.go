@@ -87,6 +87,7 @@ func closeTestingResources(b *clientBreaker, quitChan chan struct{}) {
 func TestClientBreakerHandle(t *testing.T) {
 	req := &proto.HandleRequest{
 		Event: &proto.Event{Char: '$', Type: proto.Event_TypeKey},
+		Draw:  &proto.DrawRequest{},
 	}
 	expected := term.Event{Ch: '$', Type: term.EventKey}
 
@@ -98,9 +99,9 @@ func TestClientBreakerHandle(t *testing.T) {
 		mock.handledCh = make(chan term.Event)
 		res, err := b.Handle(context.Background(), req)
 		require.NoError(t, err)
-		assert.NotNil(t, res)
 
 		assert.Equal(t, expected, <-mock.handledCh)
+		assertDrawResponse(t, res, loadingCopy)
 	})
 
 	t.Run("returns immediately if Close called before Handle", func(t *testing.T) {
@@ -138,6 +139,7 @@ func TestClientBreakerHandle(t *testing.T) {
 		res, err = b.Handle(context.Background(), req)
 		assert.NoError(t, err)
 		assert.NotNil(t, res)
+		assertDrawResponse(t, res, "")
 	})
 
 	t.Run("dispatches all events, even when upon backpressure", func(t *testing.T) {
@@ -162,6 +164,30 @@ func TestClientBreakerHandle(t *testing.T) {
 		wg.Wait()
 	})
 
+	t.Run("returns draw response after loading", func(t *testing.T) {
+		const testHandlerCopy = "AAAAA\nAAAAA\nAAAAA\nAAAAA\nAAAAA"
+		var wg sync.WaitGroup
+		h := NewTestHandler()
+		mock := &mockHandlerClient{remote: h}
+		b := withClientBreaker(mock, nop, func() { wg.Done() }, nil)
+		quitChan := make(chan struct{})
+		mock.handledCh = make(chan term.Event)
+
+		go consumeMockEvents(mock, quitChan)
+		defer closeTestingResources(b, quitChan)
+
+		wg.Add(1)
+		res, err := b.Handle(context.Background(), req)
+		require.NoError(t, err)
+		assert.False(t, res.GetQuit())
+
+		wg.Wait()
+
+		wg.Add(1)
+		res, err = b.Handle(context.Background(), req)
+		require.NoError(t, err)
+		assertDrawResponse(t, res, testHandlerCopy)
+	})
 	t.Run("dispatches exit on next handle event", func(t *testing.T) {
 		var i int32
 		h := NewTestHandler()
@@ -192,11 +218,16 @@ func TestClientBreakerHandle(t *testing.T) {
 	})
 }
 
-func assertDrawResponse(t *testing.T, res *proto.DrawResponse, strCopy string) {
+func assertDrawResponse(t *testing.T, res *proto.HandleResponse, strCopy string) {
 	require.NotNil(t, res)
-	assert.NotNil(t, res.Cursor)
-	assert.NotNil(t, res.Cursor.Position)
-	str, width, height := proto.DrawResponseToTermString(res)
+	require.NotNil(t, res.Draw)
+	if assert.NotNil(t, res.Draw.Cursor) {
+		assert.NotNil(t, res.Draw.Cursor.Position)
+	}
+	str, width, height := proto.DrawResponseToTermString(res.Draw)
+	if strCopy == "" {
+		return
+	}
 	expected := component.StringCentered(strCopy)
 	expected.Resize(width, height)
 	w := term.NewStringWriter(width, height)
@@ -205,6 +236,7 @@ func assertDrawResponse(t *testing.T, res *proto.DrawResponse, strCopy string) {
 	assert.Equal(t, w.String(), str)
 }
 
+/*
 func TestClientBreakerDraw(t *testing.T) {
 	const testHandlerCopy = "AAAAA\nAAAAA\nAAAAA\nAAAAA\nAAAAA"
 
@@ -330,3 +362,4 @@ func TestClientBreakerDraw(t *testing.T) {
 		assert.Nil(t, res)
 	})
 }
+*/

@@ -30,11 +30,9 @@ type clientEventHandler struct {
 }
 
 func (e eventHandlerToHandler) Resize(width, height int) {
-	panic("EventHandler cannot Resize")
 }
 
 func (e eventHandlerToHandler) Draw(term.Writer) {
-	panic("EventHandler cannot Draw")
 }
 
 func (e eventHandlerToHandler) Handle(ev term.Event) (exit, handled bool) {
@@ -44,11 +42,11 @@ func (e eventHandlerToHandler) Handle(ev term.Event) (exit, handled bool) {
 }
 
 func (e eventHandlerToHandler) Cursor() (pos term.Coordinates, show bool) {
-	panic("EventHandler cannot Cursor")
+	return
 }
 
 func (e eventHandlerToHandler) Man() tui.Manual {
-	panic("EventHandler cannot Man")
+	return tui.Manual{}
 }
 
 func (h handlerToEventHandler) Handle(ev term.Event) bool {

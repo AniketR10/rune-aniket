@@ -48,18 +48,6 @@ func (b *clientTimeout) rpcWithTimeout(
 	}
 }
 
-func (b *clientTimeout) Draw(
-	ctx context.Context, in *proto.DrawRequest, opts ...grpc.CallOption,
-) (*proto.DrawResponse, error) {
-	resIfc, err := b.rpcWithTimeout(ctx, func(ctx context.Context) (interface{}, error) {
-		return b.other.Draw(ctx, in, opts...)
-	})
-	if err != nil {
-		return nil, err
-	}
-	return resIfc.(*proto.DrawResponse), nil
-}
-
 func (b *clientTimeout) Handle(
 	ctx context.Context, in *proto.HandleRequest, opts ...grpc.CallOption,
 ) (*proto.HandleResponse, error) {

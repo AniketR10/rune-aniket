@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/ernestrc/go-tui"
+	"github.com/ernestrc/go-tui/component"
 	"github.com/ernestrc/go-tui/proto"
 	"github.com/ernestrc/go-tui/term"
 	log "github.com/sirupsen/logrus"
@@ -37,6 +38,10 @@ type Client struct {
 
 	errors chan error
 	client clientCloser
+	resp   struct {
+		*proto.HandleResponse
+		height, width int
+	}
 }
 
 // NewClient allocates storage for a new Client and initializes it.
@@ -53,17 +58,7 @@ func NewClient(
 func (c *Client) Init(
 	pbClient proto.HandlerClient, interruptDraw, interruptHandle func(),
 ) {
-	// the ALWAYS 'async' feature of the rpc breaker is essential
-	// to avoid the following deadlock:
-	//
-	// browser server          browser client
-	//   Lock()          ->       Handle(), tries to open window
-	//   Split()         <-
-	//   Lock()
-	//
-	// The original call to Handle will block forever, because
-	// the handler client is invoking an RPC which requires the
-	// original lock to be unlocked.
+	// TODO consider removing
 	pbClient = withClientTimeout(pbClient, defaultRPCTimeout)
 	c.client = withClientBreaker(pbClient, interruptDraw, interruptHandle, c.Logger)
 
@@ -93,53 +88,87 @@ func (c *Client) Resize(width, height int) {
 	c.width, c.height = width, height
 }
 
-// Draw satisfies tui.Handler
-func (c *Client) Draw(w term.Writer) {
-	ctx := context.Background()
-	req := proto.DrawRequest{Width: int32(c.width), Height: int32(c.height)}
-
-	resp, err := c.client.Draw(ctx, &req)
-	if err != nil {
-		c.collectError("Draw", err)
-		return
-	}
-
-	for y, row := range resp.Rows {
+func (c *Client) doDraw(w term.Writer, resp *proto.DrawResponse) {
+	for y, row := range resp.GetRows() {
 		for x, c := range row.Cells {
 			cell := c.ToModel()
 			w.SetCell(term.Coordinates{X: x, Y: y}, cell)
 		}
 	}
+}
 
-	if resp.Cursor == nil || resp.Cursor.Position == nil {
-		c.collectError("Draw", errors.New("invalid Cursor from server's Draw response"))
-		return
+func (c *Client) setNewHandleResponse(comp tui.Component) {
+	draw := proto.NewDrawResponse(comp, c.width, c.height)
+	c.resp.HandleResponse = &proto.HandleResponse{Draw: draw}
+	c.resp.width = c.width
+	c.resp.height = c.height
+}
+
+// Draw satisfies tui.Handler
+func (c *Client) Draw(w term.Writer) {
+	if c.resp.HandleResponse == nil {
+		_, _, err := c.handle(term.Event{Type: term.EventInterrupt})
+		if err != nil {
+			c.setNewHandleResponse(component.StringCentered(smtgWrongCopy))
+		}
 	}
 
-	c.cursor.Coordinates.X = int(resp.Cursor.Position.X)
-	c.cursor.Coordinates.Y = int(resp.Cursor.Position.Y)
-	c.cursor.show = resp.Cursor.Show
+	if c.height != c.resp.height || c.width != c.resp.width {
+		c.setNewHandleResponse(component.StringCentered(loadingCopy))
+	}
+
+	c.doDraw(w, c.resp.HandleResponse.GetDraw())
+
+	c.resp.HandleResponse = nil
 }
 
 // Handle satisfies tui.Handler
 func (c *Client) Handle(ev term.Event) (exit, handled bool) {
+	exit, handled, _ = c.handle(ev)
+	return
+}
+
+func (c *Client) handle(ev term.Event) (exit, handled bool, err error) {
 	ctx := context.Background()
 
 	protoEv := proto.Event{}
-	err := protoEv.FromModel(ev)
+	err = protoEv.FromModel(ev)
 	if err != nil {
 		c.collectError("Handle", err)
+		// remote handler is sending bad events so eagerly close
+		exit = true
 		return
 	}
 
-	req := proto.HandleRequest{Event: &protoEv}
+	drawReq := proto.DrawRequest{Width: int32(c.width), Height: int32(c.height)}
+
+	req := proto.HandleRequest{Event: &protoEv, Draw: &drawReq}
 	resp, err := c.client.Handle(ctx, &req)
+
+	exit = resp.GetQuit()
+	handled = resp.GetHandled()
+
 	if err != nil {
 		c.collectError("Handle", err)
+		return c.resp.GetQuit(), handled, err
+	}
+
+	if resp.GetDraw() == nil ||
+		resp.GetDraw().GetCursor() == nil ||
+		resp.GetDraw().GetCursor().GetPosition() == nil {
+		err = errors.New("invalid Cursor from server's Draw response")
+		c.collectError("Draw", err)
 		return
 	}
 
-	return resp.GetQuit(), resp.GetHandled()
+	c.cursor.Coordinates.X = int(resp.Draw.Cursor.Position.X)
+	c.cursor.Coordinates.Y = int(resp.Draw.Cursor.Position.Y)
+	c.cursor.show = resp.Draw.Cursor.Show
+	c.resp.HandleResponse = resp
+	c.resp.width = int(drawReq.Width)
+	c.resp.height = int(drawReq.Height)
+
+	return
 }
 
 // Cursor satisfies tui.Handler
@@ -220,9 +249,7 @@ func (s *Server) Init(handler tui.Handler, locker sync.Locker) {
 	s.mu = locker
 }
 
-// Draw is an RPC that handles request to an underlying
-// Handler's Draw over RPC.
-func (s *Server) Draw(ctx context.Context, in *proto.DrawRequest) (
+func (s *Server) draw(ctx context.Context, in *proto.DrawRequest) (
 	*proto.DrawResponse, error,
 ) {
 	s.mu.Lock()
@@ -251,11 +278,23 @@ func (s *Server) Handle(ctx context.Context, req *proto.HandleRequest) (
 		return nil, err
 	}
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	var exit, handled bool
+	if ev.Type != term.EventInterrupt {
+		s.mu.Lock()
+		exit, handled = s.handler.Handle(ev)
+		s.mu.Unlock()
+	}
 
-	exit, handled := s.handler.Handle(ev)
-	return &proto.HandleResponse{Quit: exit, Handled: handled}, nil
+	resp, err := s.draw(ctx, req.GetDraw())
+	if err != nil {
+		return nil, err
+	}
+
+	return &proto.HandleResponse{
+		Quit:    exit,
+		Handled: handled,
+		Draw:    resp,
+	}, nil
 }
 
 // Man is an RPC that handles request to an underlying

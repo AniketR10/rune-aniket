@@ -22,11 +22,15 @@ message DrawResponse {
 
 message HandleRequest {
 	Event event = 1;
+
+	DrawRequest draw = 2;
 }
 
 message HandleResponse {
 	bool handled = 1;
 	bool quit = 2;
+
+	DrawResponse draw = 3;
 }
 
 message ManRequest {}
@@ -39,7 +43,6 @@ message OnUnmountRequest {}
 message OnUnmountResponse {}
 
 service Handler {
-	rpc Draw(DrawRequest) returns (DrawResponse);
 	rpc Handle(HandleRequest) returns (HandleResponse);
 	rpc Man(ManRequest) returns (ManResponse);
 	rpc OnUnmount(OnUnmountRequest) returns (OnUnmountResponse);

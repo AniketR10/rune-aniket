@@ -32,7 +32,7 @@ Uh, Houston, we've had a problem
 `
 
 const (
-	handleBackpressureThres = 10
+	handleBackpressureThres = 128
 )
 
 type breakerState uint8
@@ -73,7 +73,6 @@ type clientBreaker struct {
 	interruptHandle func()
 
 	draw struct {
-		cancel  func()
 		state   breakerState
 		pending proto.DrawRequest
 		ready   struct {
@@ -110,31 +109,48 @@ func withClientBreaker(
 	return ret
 }
 
+func (a *clientBreaker) sendHandle(ctx context.Context, req *proto.HandleRequest) {
+	defer a.interruptHandle()
+
+	res, err := a.cc.Handle(ctx, req)
+
+	if res.GetQuit() {
+		a.mu.Lock()
+		a.handle.quit = true
+		a.mu.Unlock()
+	}
+
+	draw := res.GetDraw()
+	if err == nil && draw == nil {
+		err = errors.New("invalid HandleResponse: missing Draw property")
+	}
+
+	if err != nil {
+		comp := component.StringCentered(smtgWrongCopy)
+		width, height := int(req.GetDraw().GetWidth()), int(req.GetDraw().GetHeight())
+		comp.Resize(width, height)
+		draw := proto.NewDrawResponse(comp, width, height)
+		if a.logger != nil {
+			a.logger.Errorf("error returned on Draw request: %v", err)
+		}
+		a.mu.Lock()
+		a.handle.err = err
+		a.mu.Unlock()
+
+		a.transitionToReady(draw, err)
+		return
+	}
+
+	a.transitionToReady(draw, err)
+}
+
 func (a *clientBreaker) pipelineHandleEvents() {
 	for {
 		select {
 		case <-a.quitCh:
 			return
 		case req := <-a.handle.ch:
-			res, err := a.cc.Handle(context.Background(), req)
-			if err != nil {
-				a.mu.Lock()
-				a.handle.err = err
-				a.mu.Unlock()
-
-				a.interruptHandle()
-				return
-			}
-			if res.Quit {
-				a.mu.Lock()
-				a.handle.quit = true
-				a.mu.Unlock()
-
-				a.interruptHandle()
-				return
-			}
-
-			a.interruptDraw()
+			a.sendHandle(context.Background(), req)
 		}
 	}
 }
@@ -148,8 +164,9 @@ func (a *clientBreaker) readyCopy() *proto.DrawResponse {
 func (a *clientBreaker) loadingContent(
 	in *proto.DrawRequest,
 ) *proto.DrawResponse {
-	if a.draw.ready.Width == in.Width &&
-		a.draw.ready.Height == in.Height {
+	if a.draw.ready.GetCursor() != nil &&
+		a.draw.ready.GetWidth() == in.Width &&
+		a.draw.ready.GetHeight() == in.Height {
 		return a.readyCopy()
 	}
 
@@ -158,86 +175,31 @@ func (a *clientBreaker) loadingContent(
 	return proto.NewDrawResponse(loading, int(in.Width), int(in.Height))
 }
 
-func (a *clientBreaker) transitionToCancel() {
-	if a.draw.cancel == nil {
-		panic("corrupted state machine: tried to cancel same request twice")
-	}
-
-	a.draw.cancel()
-	a.draw.cancel = nil
-}
-
 func (a *clientBreaker) transitionToPending(
 	ctx context.Context, in *proto.DrawRequest, opts ...grpc.CallOption,
 ) {
 	a.draw.state = pending
 	a.draw.pending = *in
-	ctx, a.draw.cancel = context.WithCancel(ctx)
-	go a.sendDrawRequest(ctx, in, opts...)
 }
 
 func (a *clientBreaker) transitionToReady(res *proto.DrawResponse, err error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	switch a.draw.state {
-	case pending:
-	case closed:
-		return
-	default:
-		panic(fmt.Sprintf("corrupted state machine: "+
-			"state should be pending if there's an "+
-			"inflight request: err=%s, state=%d",
-			err, a.draw.state))
-	}
-
-	// should be never nil because we check if context.Done() channel
-	// before transitioning to ready.
-	a.draw.cancel()
 	a.draw.ready.DrawRequest = a.draw.pending
 	a.draw.ready.DrawResponse = *res
 	a.draw.state = ready
 }
 
-func (a *clientBreaker) sendDrawRequest(
-	ctx context.Context, in *proto.DrawRequest, opts ...grpc.CallOption,
-) {
-	res, err := a.cc.Draw(ctx, in, opts...)
-	if err != nil {
-		comp := component.StringCentered(smtgWrongCopy)
-		comp.Resize(int(in.Width), int(in.Height))
-		res = proto.NewDrawResponse(comp, int(in.Width), int(in.Height))
-		if a.logger != nil {
-			a.logger.Errorf("error returned on Draw request: %v", err)
-		}
-	}
-
-	select {
-	case <-ctx.Done():
-		return
-	default:
-	}
-
-	a.transitionToReady(res, err)
-	a.interruptDraw()
-}
-
-func (a *clientBreaker) Draw(
+func (a *clientBreaker) processDraw(
 	ctx context.Context, in *proto.DrawRequest,
-	opts ...grpc.CallOption,
 ) (*proto.DrawResponse, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
 	switch a.draw.state {
-	case initial:
+	case initial, pending:
 		resp := a.loadingContent(in)
-		a.transitionToPending(ctx, in)
-		return resp, nil
-
-	case pending:
-		resp := a.loadingContent(in)
-		a.transitionToCancel()
 		a.transitionToPending(ctx, in)
 		return resp, nil
 
@@ -248,8 +210,8 @@ func (a *clientBreaker) Draw(
 			return a.readyCopy(), nil
 		}
 
-		resp := a.loadingContent(in)
 		a.transitionToPending(ctx, in)
+		resp := a.loadingContent(in)
 		return resp, nil
 
 	case closed:
@@ -279,10 +241,27 @@ func (a *clientBreaker) Handle(
 
 	if quitNext {
 		res.Quit = quitNext
+		res.Draw = proto.NewDrawResponse(component.String(""), 0, 0)
 		return res, nil
 	}
 
 	res.Handled = true
+
+	drawRes, err := a.processDraw(ctx, in.GetDraw())
+	if err != nil {
+		return nil, err
+	}
+
+	a.mu.Lock()
+	state := a.draw.state
+	a.mu.Unlock()
+
+	// interrupt handle event. If state == initial, then it means that
+	// we can simply return the last draw result.
+	if in.GetEvent().GetType() == proto.Event_TypeNone && state == initial {
+		res.Draw = drawRes
+		return res, nil
+	}
 
 	// if underlying proto.HandlerClient is not processing events
 	// in a timely fashion, we start returning errors as a safety valve.
@@ -292,6 +271,7 @@ func (a *clientBreaker) Handle(
 		if errNext != nil {
 			return nil, errNext
 		}
+		res.Draw = drawRes
 		return res, nil
 	case <-a.quitCh:
 		return nil, errClientClosed

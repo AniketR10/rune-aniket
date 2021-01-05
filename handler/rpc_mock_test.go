@@ -15,26 +15,6 @@ type mockHandlerClient struct {
 	remote    tui.Handler
 }
 
-func (c *mockHandlerClient) Draw(
-	ctx context.Context, in *proto.DrawRequest, opts ...grpc.CallOption,
-) (*proto.DrawResponse, error) {
-	if c.rpcError != nil {
-		return nil, c.rpcError
-	}
-
-	c.remote.Resize(int(in.Width), int(in.Height))
-	pos, show := c.remote.Cursor()
-	res := proto.NewDrawResponse(c.remote, int(in.Width), int(in.Height))
-	res.Cursor = &proto.DrawResponse_Cursor{
-		Position: &proto.Coordinates{
-			X: int32(pos.X),
-			Y: int32(pos.Y),
-		},
-		Show: show,
-	}
-	return res, nil
-}
-
 func (c *mockHandlerClient) Handle(
 	ctx context.Context, in *proto.HandleRequest, opts ...grpc.CallOption,
 ) (*proto.HandleResponse, error) {
@@ -47,10 +27,24 @@ func (c *mockHandlerClient) Handle(
 	if err != nil {
 		return nil, err
 	}
+
+	width, height := int(in.GetDraw().GetWidth()), int(in.GetDraw().GetHeight())
+	c.remote.Resize(width, height)
+	pos, show := c.remote.Cursor()
+	resp.Draw = proto.NewDrawResponse(c.remote, width, height)
+	resp.Draw.Cursor = &proto.DrawResponse_Cursor{
+		Position: &proto.Coordinates{
+			X: int32(pos.X),
+			Y: int32(pos.Y),
+		},
+		Show: show,
+	}
+
 	resp.Quit, resp.Handled = c.remote.Handle(ev)
 	if c.handledCh != nil {
 		c.handledCh <- ev
 	}
+
 	return resp, nil
 }
 
