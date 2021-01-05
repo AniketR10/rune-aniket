@@ -27,9 +27,12 @@ type drawResponseWriter struct {
 }
 
 func newDrawResponseWriter(width, height int, r *DrawResponse) drawResponseWriter {
+	cellRowSlab := make([]CellRow, height)
+	cellRowWidthSlab := make([]*Cell, height*width)
 	r.Rows = make([]*CellRow, height)
 	for i := 0; i < height; i++ {
-		r.Rows[i] = &CellRow{Cells: make([]*Cell, width)}
+		r.Rows[i] = &cellRowSlab[i]
+		r.Rows[i].Cells = cellRowWidthSlab[i*width : (i+1)*width]
 		for j := 0; j < width; j++ {
 			// SetCell substitutes zeroCell for a newly allocated cell;
 			// this allows us to speed up client/server communication
@@ -43,29 +46,36 @@ func newDrawResponseWriter(width, height int, r *DrawResponse) drawResponseWrite
 	}
 }
 
-// SetCell satisfies tui.Cursor
+// SetCell satisfies term.Writer
 func (r drawResponseWriter) SetCell(pos term.Coordinates, c term.Cell) {
 	if pos.Y >= r.height || pos.X >= r.width || pos.X < 0 || pos.Y < 0 {
 		return
 	}
-	r.res.Rows[pos.Y].Cells[pos.X] = &Cell{
-		Character:  uint32(c.Ch),
-		Foreground: uint32(c.Fg),
-		Background: uint32(c.Bg),
+
+	var cell *Cell
+	if r.res.Rows[pos.Y].Cells[pos.X] == &zeroCell {
+		cell = new(Cell)
+	} else {
+		cell = r.res.Rows[pos.Y].Cells[pos.X]
 	}
+	cell.Character = uint32(c.Ch)
+	cell.Foreground = uint32(c.Fg)
+	cell.Background = uint32(c.Bg)
+
+	r.res.Rows[pos.Y].Cells[pos.X] = cell
 }
 
-// Flush satisfies tui.Cursor
+// Flush satisfies term.Writer
 func (r drawResponseWriter) Flush() error {
 	return nil
 }
 
-// Clear satisfies tui.Cursor
+// Clear satisfies term.Writer
 func (r drawResponseWriter) Clear(term.Attributes) error {
 	return nil
 }
 
-// SetCursor satisfies tui.Cursor
+// SetCursor satisfies term.Writer
 func (r drawResponseWriter) SetCursor(term.Coordinates) {
 }
 

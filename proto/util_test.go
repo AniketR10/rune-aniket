@@ -31,6 +31,28 @@ func TestNewDrawResponse(t *testing.T) {
 				Cursor: &DrawResponse_Cursor{Position: &Coordinates{}},
 			},
 		},
+		{
+			in: "aaaaaa\naaaaaa\naaaaaa",
+			out: &DrawResponse{
+				Rows: []*CellRow{
+					&CellRow{Cells: []*Cell{&zeroCell, &zeroCell, &zeroCell, &zeroCell, &zeroCell}},
+					&CellRow{Cells: []*Cell{
+						&Cell{Character: 'a'}, &Cell{Character: 'a'}, &Cell{Character: 'a'},
+						&Cell{Character: 'a'}, &Cell{Character: 'a'},
+					}},
+					&CellRow{Cells: []*Cell{
+						&Cell{Character: 'a'}, &Cell{Character: 'a'}, &Cell{Character: 'a'},
+						&Cell{Character: 'a'}, &Cell{Character: 'a'},
+					}},
+					&CellRow{Cells: []*Cell{
+						&Cell{Character: 'a'}, &Cell{Character: 'a'}, &Cell{Character: 'a'},
+						&Cell{Character: 'a'}, &Cell{Character: 'a'},
+					}},
+					&CellRow{Cells: []*Cell{&zeroCell, &zeroCell, &zeroCell, &zeroCell, &zeroCell}},
+				},
+				Cursor: &DrawResponse_Cursor{Position: &Coordinates{}},
+			},
+		},
 	}
 
 	for _, tcase := range tcase {
