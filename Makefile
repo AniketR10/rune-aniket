@@ -1,5 +1,6 @@
 GO=go
-GOFLAGS=-race
+GOTESTFLAGS=$(GOFLAGS) -race
+GOFLAGS=
 
 TARGET=bin
 WASM_EXAMPLE_TARGET=bin/example_wasm
