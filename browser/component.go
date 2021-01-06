@@ -76,6 +76,10 @@ type browserWindow struct {
 	onClose func()
 }
 
+func (w *browserWindow) id() uint64 {
+	return w.win.ID()
+}
+
 func (w *browserWindow) onWindowClosed(fn func()) {
 	w.onClose = fn
 }

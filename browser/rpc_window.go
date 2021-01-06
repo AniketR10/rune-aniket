@@ -49,6 +49,11 @@ func (w *windowClient) onWindowClosed(fn func()) {
 	// is closed remotely (we do that at the browser client level
 	// via grpc conn monitor goroutine). For that we would
 	// need a new RPC but there's no real use-case yet.
+	panic("onWindowClosed not implemented on window client")
+}
+
+func (w *windowClient) id() uint64 {
+	panic("id not implemented on window client")
 }
 
 func (w *windowClient) Close() (err error) {
@@ -67,17 +72,15 @@ func (w *windowClient) Close() (err error) {
 
 // satisfies proto.WindowServer
 type windowServer struct {
-	brokerID uint32
-	win      Window
-	s        *Server
+	win Window
+	s   *Server
 }
 
 func newWindowServer(
-	s *Server, brokerID uint32, win Window,
+	s *Server, win Window,
 ) *windowServer {
 	ret := new(windowServer)
 	ret.win = win
-	ret.brokerID = brokerID
 	ret.s = s
 	return ret
 }
@@ -106,7 +109,7 @@ func (s *windowServer) SetContent(
 func (s *windowServer) Close(
 	ctx context.Context, req *proto.WindowCloseRequest,
 ) (*proto.WindowCloseResponse, error) {
-	err := s.s.safeForceCloseWindow(s.brokerID, "received WindowCloseRequest")
+	err := s.s.safeForceCloseWindow(s.win.id(), "received WindowCloseRequest")
 	if err != nil {
 		return nil, err
 	}

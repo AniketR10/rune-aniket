@@ -26,11 +26,11 @@ type Server struct {
 	// Split* and SetContent. They are destroyed when OnUnmount is dispatched to handler server
 	// and so if server is closed, client connection
 	// Connections are also monitored and cleaned if irrecoverable errors are found.
-	clients map[uint32]io.Closer
+	clients map[uint64]io.Closer
 
 	// window servers are created on calls to Split* and Focus. They are destroyed
 	// when window is closed, either remotely, or locally (via onWindowClosed hook).
-	servers map[uint32]io.Closer
+	servers map[uint64]io.Closer
 
 	// Handlers opened by Open
 	opened map[uint32]Handler
@@ -85,8 +85,8 @@ func (s *Server) Init(
 	s.browser.Locker = lock
 	s.interruptDraw = interruptDraw
 	s.interruptHandle = interruptHandle
-	s.clients = make(map[uint32]io.Closer)
-	s.servers = make(map[uint32]io.Closer)
+	s.clients = make(map[uint64]io.Closer)
+	s.servers = make(map[uint64]io.Closer)
 	s.opened = make(map[uint32]Handler)
 	s.failureTimeout = defaultFailureTimeout
 }
@@ -117,7 +117,7 @@ func (s *Server) dialHandler(handlerID uint32) (Handler, error) {
 		return h, nil
 	}
 	s.browser.Lock()
-	res, ok := s.clients[handlerID]
+	res, ok := s.clients[uint64(handlerID)]
 	s.browser.Unlock()
 	if ok {
 		s.tryLog("(%p): found cached client for handlerID: %d", s, handlerID)
@@ -146,7 +146,7 @@ func (s *Server) dialHandler(handlerID uint32) (Handler, error) {
 	s.browser.Lock()
 	defer s.browser.Unlock()
 
-	s.clients[handlerID] = &handlerClientResource{
+	s.clients[uint64(handlerID)] = &handlerClientResource{
 		handlerConn:   handlerConn,
 		client:        client,
 		cancelMonitor: cancelFn,
@@ -156,40 +156,45 @@ func (s *Server) dialHandler(handlerID uint32) (Handler, error) {
 }
 
 func (s *Server) serveWindow(win Window) uint32 {
+	if res, ok := s.servers[win.id()]; ok {
+		return res.(*windowServerResource).brokerID
+	}
+
 	brokerID, srv := acceptAndServe(s.broker, s.Logger,
 		func(windowBrokerID uint32, srv proto.MuxServer) {
-			winSrv := newWindowServer(s, windowBrokerID, win)
+			winSrv := newWindowServer(s, win)
 			proto.RegisterWindowServer(srv.GRPC(), winSrv)
 		})
-	res := &windowServerResource{
-		srv: srv,
-		win: win,
+
+	s.servers[win.id()] = &windowServerResource{
+		srv:      srv,
+		win:      win,
+		brokerID: brokerID,
 	}
-	s.servers[brokerID] = res
 
 	win.onWindowClosed(func() {
-		s.forceCloseWindow(brokerID, "underlying window called onWindowClosed callback")
+		s.forceCloseWindow(win.id(), "underlying window called onWindowClosed callback")
 	})
 	return brokerID
 }
 
-func (s *Server) getClients() map[uint32]io.Closer {
+func (s *Server) getClients() map[uint64]io.Closer {
 	return s.clients
 }
 
-func (s *Server) getServers() map[uint32]io.Closer {
+func (s *Server) getServers() map[uint64]io.Closer {
 	return s.servers
 }
 
-func (s *Server) forceCloseWindow(brokerID uint32, reason string) error {
-	s.tryLog("browser.Server.forceCloseWindow(%d, reason=%s)", brokerID, reason)
-	_, err := forceCloseResource(brokerID, s.getServers, s.Logger, nopLocker{})
+func (s *Server) forceCloseWindow(winID uint64, reason string) error {
+	s.tryLog("browser.Server.forceCloseWindow(%d, reason=%s)", winID, reason)
+	_, err := forceCloseResource(winID, s.getServers, s.Logger, nopLocker{})
 	return err
 }
 
-func (s *Server) safeForceCloseWindow(brokerID uint32, reason string) error {
-	s.tryLog("browser.Server.safeForceCloseWindow(%d, reason=%s)", brokerID, reason)
-	_, err := forceCloseResource(brokerID, s.getServers, s.Logger, &s.browser)
+func (s *Server) safeForceCloseWindow(winID uint64, reason string) error {
+	s.tryLog("browser.Server.safeForceCloseWindow(%d, reason=%s)", winID, reason)
+	_, err := forceCloseResource(winID, s.getServers, s.Logger, &s.browser)
 	return err
 }
 
@@ -202,12 +207,12 @@ func (s *Server) tryLog(msg string, args ...interface{}) {
 
 func (s *Server) safeForceCloseHandler(brokerID uint32, reason string) error {
 	s.tryLog("browser.Server.safeForceCloseHandler(%d, reason=%s)", brokerID, reason)
-	_, err := forceCloseResource(brokerID, s.getClients, s.Logger, &s.browser)
+	_, err := forceCloseResource(uint64(brokerID), s.getClients, s.Logger, &s.browser)
 	return err
 }
 func (s *Server) forceCloseHandler(brokerID uint32, reason string) error {
 	s.tryLog("browser.Server.forceCloseHandler(%d, reason=%s)", brokerID, reason)
-	_, err := forceCloseResource(brokerID, s.getClients, s.Logger, nopLocker{})
+	_, err := forceCloseResource(uint64(brokerID), s.getClients, s.Logger, nopLocker{})
 	return err
 }
 

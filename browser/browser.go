@@ -24,6 +24,10 @@ type Window interface {
 	// Close closes the window.
 	Close() error
 
+	// used to cache windows and so avoid leaks
+	// when same client is requesting via Focus()
+	// the same window over and over.
+	id() uint64
 	onWindowClosed(fn func())
 }
 

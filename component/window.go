@@ -2,6 +2,7 @@ package component
 
 import (
 	"errors"
+	"unsafe"
 
 	"github.com/ernestrc/go-tui"
 	"github.com/ernestrc/go-tui/term"
@@ -191,6 +192,11 @@ func (w Window) TileUp() (Window, bool) {
 
 	}
 	return w.wm.nodeToWindow(node), true
+}
+
+// ID returns a unique identifier for this window.
+func (w Window) ID() uint64 {
+	return uint64(uintptr(unsafe.Pointer(w.node)))
 }
 
 // Close removes this Window from the WindowManager

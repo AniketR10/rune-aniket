@@ -43,7 +43,7 @@ type Client struct {
 	// calls to Split* or Focus. They are destroyed when client
 	// calls Close method, or server Closes window.
 	// The latter is monitored via a separate goroutine.
-	clients map[uint32]io.Closer
+	clients map[uint64]io.Closer
 
 	// handler server resources. handler servers are created on
 	// calls to Split or SetContent (if handler is not return of Open).
@@ -51,7 +51,7 @@ type Client struct {
 	// occurs when underlying handler returns exit=true on
 	// Handle, or when window is Closed, either locally or
 	// remotely (via monitor goroutine).
-	servers map[uint32]io.Closer
+	servers map[uint64]io.Closer
 }
 
 type browserClientHandler struct {
@@ -105,8 +105,8 @@ func (c *Client) Init(
 	c.s = proto.NewEventSubscriberClient(cc)
 	c.p = proto.NewEventPublisherClient(cc)
 	c.broker = broker
-	c.clients = make(map[uint32]io.Closer)
-	c.servers = make(map[uint32]io.Closer)
+	c.clients = make(map[uint64]io.Closer)
+	c.servers = make(map[uint64]io.Closer)
 	c.failureTimeout = defaultFailureTimeout
 	c.pluginLock = pluginLock
 }
@@ -134,13 +134,13 @@ func (c *Client) serveHandler(h Handler) uint32 {
 
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.servers[brokerID] = &handlerServerResource{h: h, srv: srv}
+	c.servers[uint64(brokerID)] = &handlerServerResource{h: h, srv: srv}
 	return brokerID
 }
 
 func (c *Client) dialWindow(windowID uint32, handlerID int) (Window, error) {
 	c.mu.Lock()
-	res, ok := c.clients[windowID]
+	res, ok := c.clients[uint64(windowID)]
 	c.mu.Unlock()
 	if ok {
 		return res.(*windowClientResource).client, nil
@@ -161,12 +161,12 @@ func (c *Client) dialWindow(windowID uint32, handlerID int) (Window, error) {
 		// only applies when connection is closed remotely
 		c.mu.Lock()
 		defer c.mu.Unlock()
-		delete(c.clients, windowID)
+		delete(c.clients, uint64(windowID))
 	})
 
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.clients[windowID] = &windowClientResource{
+	c.clients[uint64(windowID)] = &windowClientResource{
 		winConn:       winConn,
 		cancelMonitor: cancelFn,
 		client:        client,
@@ -175,29 +175,29 @@ func (c *Client) dialWindow(windowID uint32, handlerID int) (Window, error) {
 	return client, nil
 }
 
-func (c *Client) getClients() map[uint32]io.Closer {
+func (c *Client) getClients() map[uint64]io.Closer {
 	return c.clients
 }
 
-func (c *Client) getServers() map[uint32]io.Closer {
+func (c *Client) getServers() map[uint64]io.Closer {
 	return c.servers
 }
 
 func (c *Client) forceCloseHandler(brokerID uint32, reason string) error {
 	c.tryLog("browser.Client.forceCloseHandler(%d, reason=%s)", brokerID, reason)
-	_, err := forceCloseResource(brokerID, c.getServers, c.Logger, nopLocker{})
+	_, err := forceCloseResource(uint64(brokerID), c.getServers, c.Logger, nopLocker{})
 	return err
 }
 
 func (c *Client) safeForceCloseHandler(brokerID uint32, reason string) error {
 	c.tryLog("browser.Client.safeForceCloseHandler(%d, reason=%s)", brokerID, reason)
-	_, err := forceCloseResource(brokerID, c.getServers, c.Logger, &c.mu)
+	_, err := forceCloseResource(uint64(brokerID), c.getServers, c.Logger, &c.mu)
 	return err
 }
 
 func (c *Client) safeForceCloseWindow(brokerID uint32, reason string) error {
 	c.tryLog("browser.Client.safeForceCloseWindow(%d, reason=%s)", brokerID, reason)
-	_, err := forceCloseResource(brokerID, c.getClients, c.Logger, &c.mu)
+	_, err := forceCloseResource(uint64(brokerID), c.getClients, c.Logger, &c.mu)
 	return err
 }
 

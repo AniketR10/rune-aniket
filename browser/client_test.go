@@ -573,7 +573,7 @@ func testClientSplit(
 			Invoke(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Times(1)
 		mockWinConn.EXPECT().Close().Times(1).
 			DoAndReturn(func() error {
-				h := client.servers[brokerID].(*handlerServerResource).h.(Handler)
+				h := client.servers[uint64(brokerID)].(*handlerServerResource).h.(Handler)
 				err := expectSignalExit(mockWinConn, quitCh, nil)()
 				// server would call this asynchronously
 				go h.OnUnmount()

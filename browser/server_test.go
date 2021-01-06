@@ -169,6 +169,7 @@ func TestServerOpen(t *testing.T) {
 		expectBrokerServe(t, windowID, broker)
 		mockWindow := NewMockWindow(ctrl)
 		mockWindow.EXPECT().onWindowClosed(gomock.Any()).AnyTimes()
+		mockWindow.EXPECT().id().AnyTimes().Return(uint64(0))
 
 		mock.EXPECT().SplitVerticalRight(gomock.Any()).Return(mockWindow, nil)
 		_, err = s.SplitVerticalRight(ctx, &sreq)
@@ -467,6 +468,7 @@ func testServerSplit(
 		// store onWindowClosed callback
 		var callback func()
 		mockWindow := NewMockWindow(ctrl)
+		mockWindow.EXPECT().id().AnyTimes().Return(uint64(0))
 		mockWindow.EXPECT().onWindowClosed(gomock.Any()).DoAndReturn(func(fn func()) {
 			callback = fn
 		}).Times(1)

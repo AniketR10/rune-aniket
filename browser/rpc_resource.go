@@ -8,8 +8,9 @@ import (
 )
 
 type windowServerResource struct {
-	srv proto.MuxServer
-	win Window
+	srv      proto.MuxServer
+	win      Window
+	brokerID uint32
 }
 
 type handlerCloser interface {

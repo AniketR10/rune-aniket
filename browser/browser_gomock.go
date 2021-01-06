@@ -168,6 +168,20 @@ func (mr *MockWindowMockRecorder) SetContent(arg0 interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetContent", reflect.TypeOf((*MockWindow)(nil).SetContent), arg0)
 }
 
+// id mocks base method.
+func (m *MockWindow) id() uint64 {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "id")
+	ret0, _ := ret[0].(uint64)
+	return ret0
+}
+
+// id indicates an expected call of id.
+func (mr *MockWindowMockRecorder) id() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "id", reflect.TypeOf((*MockWindow)(nil).id))
+}
+
 // onWindowClosed mocks base method.
 func (m *MockWindow) onWindowClosed(fn func()) {
 	m.ctrl.T.Helper()
