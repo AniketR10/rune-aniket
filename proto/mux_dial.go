@@ -10,7 +10,7 @@ import (
 
 type brokerage struct {
 	net.Listener
-	*grpc.Server
+	MuxServer
 }
 
 // satisfies to MuxBroker
@@ -36,21 +36,24 @@ func (t *dialBroker) NextId() uint32 {
 	return t.id
 }
 
+func (t *dialBroker) Accept(id uint32) (net.Listener, error) {
+	return net.Listen("tcp", ":0")
+}
+
 func (t *dialBroker) AcceptAndServe(
-	ID uint32, srv func(opts []grpc.ServerOption) *grpc.Server,
+	ID uint32, srv func(opts []grpc.ServerOption) MuxServer,
 ) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	lis, err := net.Listen("tcp", ":0")
+	lis, err := t.Accept(ID)
 	if err != nil {
 		panic(err)
 	}
-
 	server := srv([]grpc.ServerOption{})
 	go server.Serve(lis)
 
-	t.conns[ID] = brokerage{Listener: lis, Server: server}
+	t.conns[ID] = brokerage{Listener: lis, MuxServer: server}
 }
 
 func (t *dialBroker) Dial(ID uint32) (conn MuxConn, err error) {
@@ -69,7 +72,7 @@ func (t *dialBroker) Close() error {
 	defer t.mu.Unlock()
 
 	for _, br := range t.conns {
-		br.Server.Stop()
+		br.MuxServer.Stop()
 	}
 	t.conns = nil
 	return nil

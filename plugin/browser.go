@@ -29,7 +29,7 @@ const (
 type browserResourceServer struct {
 	mu  sync.Mutex
 	b   browser.Browser
-	srv *grpc.Server
+	srv proto.MuxServer
 }
 
 func newBrowserResourceServer(b browser.Browser) *browserResourceServer {
@@ -42,20 +42,27 @@ func (s *browserResourceServer) Serve(
 	pluginID string, grantID uint32, broker proto.MuxBroker,
 	l *log.Logger, lock sync.Locker, interruptDraw, interruptHandle func(),
 ) {
-	broker.AcceptAndServe(grantID, func(opts []grpc.ServerOption) *grpc.Server {
+	broker.AcceptAndServe(grantID, func(opts []grpc.ServerOption) proto.MuxServer {
 		s.mu.Lock()
 		defer s.mu.Unlock()
 		if s.srv == nil {
-			s.srv = grpc.NewServer(opts...)
+			var srv proto.MuxServer
+			if l != nil && l.IsLevelEnabled(log.TraceLevel) {
+				srv = proto.LoggingGRPCServer(l, opts...)
+			} else {
+				srv = proto.GRPCServer(opts...)
+			}
+			grpc := srv.GRPC()
+			s.srv = srv
 			server := browser.NewServer(broker, s.b, lock,
 				interruptDraw, interruptHandle)
 			server.Logger = l
-			proto.RegisterWindowManagerServer(s.srv, server)
-			proto.RegisterKeyMapperServer(s.srv, server)
-			proto.RegisterResourceOpenerServer(s.srv, server)
-			proto.RegisterMessengerServer(s.srv, server)
-			proto.RegisterEventSubscriberServer(s.srv, server)
-			proto.RegisterEventPublisherServer(s.srv, server)
+			proto.RegisterWindowManagerServer(grpc, server)
+			proto.RegisterKeyMapperServer(grpc, server)
+			proto.RegisterResourceOpenerServer(grpc, server)
+			proto.RegisterMessengerServer(grpc, server)
+			proto.RegisterEventSubscriberServer(grpc, server)
+			proto.RegisterEventPublisherServer(grpc, server)
 		}
 		return s.srv
 	})

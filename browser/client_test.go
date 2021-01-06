@@ -105,7 +105,7 @@ func assertClientHandlerExitClose(
 func expectBrokerServe(t *testing.T, brokerID uint32, mockBroker *proto.MockMuxBroker) {
 	mockBroker.EXPECT().NextId().Return(uint32(brokerID))
 	mockBroker.EXPECT().AcceptAndServe(gomock.Any(), gomock.Any()).
-		DoAndReturn(func(brokerId uint32, serverFunc func(opts []grpc.ServerOption) *grpc.Server) {
+		DoAndReturn(func(brokerId uint32, serverFunc func(opts []grpc.ServerOption) proto.MuxServer) {
 			assert.Equal(t, uint32(brokerID), brokerId)
 			serverFunc(make([]grpc.ServerOption, 0))
 		}).

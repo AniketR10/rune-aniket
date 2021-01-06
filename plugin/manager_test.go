@@ -2,6 +2,7 @@ package plugin
 
 import (
 	"errors"
+	"net"
 	"sync"
 	"testing"
 	"time"
@@ -26,8 +27,12 @@ func (b *nopBroker) NextId() uint32 {
 	return b.nextID
 }
 
+func (b *nopBroker) Accept(ID uint32) (net.Listener, error) {
+	return nil, nil
+}
+
 func (b *nopBroker) AcceptAndServe(
-	ID uint32, srv func(opts []grpc.ServerOption) *grpc.Server,
+	ID uint32, srv func(opts []grpc.ServerOption) proto.MuxServer,
 ) {
 }
 

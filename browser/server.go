@@ -12,7 +12,6 @@ import (
 	"github.com/ernestrc/go-tui/term"
 	"github.com/ernestrc/go-tui/util"
 	log "github.com/sirupsen/logrus"
-	"google.golang.org/grpc"
 )
 
 // Server serves a Browser over GRPC.
@@ -157,10 +156,10 @@ func (s *Server) dialHandler(handlerID uint32) (Handler, error) {
 }
 
 func (s *Server) serveWindow(win Window) uint32 {
-	brokerID, srv := acceptAndServe(s.broker,
-		func(windowBrokerID uint32, srv *grpc.Server) {
+	brokerID, srv := acceptAndServe(s.broker, s.Logger,
+		func(windowBrokerID uint32, srv proto.MuxServer) {
 			winSrv := newWindowServer(s, windowBrokerID, win)
-			proto.RegisterWindowServer(srv, winSrv)
+			proto.RegisterWindowServer(srv.GRPC(), winSrv)
 		})
 	res := &windowServerResource{
 		srv: srv,

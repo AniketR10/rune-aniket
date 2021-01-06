@@ -106,16 +106,20 @@ func monitorConnection(
 }
 
 func acceptAndServe(
-	broker proto.MuxBroker, register func(uint32, *grpc.Server),
-) (uint32, *grpc.Server) {
+	broker proto.MuxBroker, logger *log.Logger,
+	register func(uint32, proto.MuxServer),
+) (uint32, proto.MuxServer) {
 	brokerID := broker.NextId()
 
 	var wg sync.WaitGroup
-	var srv *grpc.Server
-	serverFunc := func(opts []grpc.ServerOption) *grpc.Server {
+	var srv proto.MuxServer
+	serverFunc := func(opts []grpc.ServerOption) proto.MuxServer {
 		defer wg.Done()
-
-		srv = grpc.NewServer(opts...)
+		if logger != nil && logger.IsLevelEnabled(log.TraceLevel) {
+			srv = proto.LoggingGRPCServer(logger, opts...)
+		} else {
+			srv = proto.GRPCServer(opts...)
+		}
 		register(brokerID, srv)
 		return srv
 	}

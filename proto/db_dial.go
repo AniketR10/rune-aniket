@@ -1,0 +1,140 @@
+package proto
+
+import (
+	context "context"
+	"errors"
+	fmt "fmt"
+	"net"
+	"sync"
+
+	log "github.com/sirupsen/logrus"
+	grpc "google.golang.org/grpc"
+)
+
+// Datastore is a subset of blue/datastore/document.Service
+// used to avoid importing it as an external dependency.
+type Datastore interface {
+	Create(ctx context.Context, ID string, doc interface{}) error
+	Get(ctx context.Context, ID string, doc interface{}) error
+	Delete(ctx context.Context, ID string) error
+}
+
+// NOTE: this should be blue/datastore/document.ErrAlreadyExists
+// if that implementation is used as a Datastore.
+var errAlreadyExists = errors.New("already exists")
+
+// satisfies to MuxBroker
+type dbBroker struct {
+	mu        sync.Mutex
+	id        uint32
+	svc       Datastore
+	listeners []net.Listener
+	logger    *log.Logger
+}
+
+type nextIDDoc struct {
+	ID uint32
+}
+
+type listenerDoc struct {
+	Address string
+}
+
+// NewDatastoreBroker provides brokerage by employing a datastore to share
+// connection information.
+func NewDatastoreBroker(svc Datastore, logger *log.Logger) MuxBroker {
+	ret := new(dbBroker)
+	ret.svc = svc
+	ret.logger = logger
+	return ret
+}
+
+func makeListenerDocumentKey(i uint32) string {
+	return fmt.Sprintf("LISTENER: %d", i)
+}
+
+func makeNextIDDocument(i uint32) (string, nextIDDoc) {
+	return fmt.Sprintf("ID: %d", i), nextIDDoc{i}
+}
+
+func makeListenerDocument(i uint32, listener net.Listener) (string, listenerDoc) {
+	return makeListenerDocumentKey(i), listenerDoc{Address: listener.Addr().String()}
+}
+
+func (t *dbBroker) NextId() uint32 {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	for {
+		t.id++
+		key, doc := makeNextIDDocument(t.id)
+		err := t.svc.Create(context.Background(), key, doc)
+		if err != nil && err != errAlreadyExists {
+			panic(err)
+		} else if err == nil {
+			break
+		}
+	}
+	return t.id
+}
+
+func (t *dbBroker) Accept(id uint32) (net.Listener, error) {
+	listener, err := net.Listen("tcp", ":0")
+	if err != nil {
+		return nil, err
+	}
+	key, doc := makeListenerDocument(id, listener)
+	err = t.svc.Create(context.Background(), key, doc)
+	if err != nil {
+		return nil, err
+	}
+	t.listeners = append(t.listeners, listener)
+	return listener, nil
+}
+
+func (t *dbBroker) AcceptAndServe(
+	ID uint32, srv func(opts []grpc.ServerOption) MuxServer,
+) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	lis, err := t.Accept(ID)
+	if err != nil {
+		panic(err)
+	}
+	server := srv([]grpc.ServerOption{})
+	go server.Serve(lis)
+}
+
+func (t *dbBroker) Dial(ID uint32) (conn MuxConn, err error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	var lis listenerDoc
+	err = t.svc.Get(context.Background(), makeListenerDocumentKey(ID), &lis)
+	if err != nil {
+		return
+	}
+
+	conn, err = grpc.Dial(lis.Address, grpc.WithInsecure())
+	if err != nil {
+		return
+	}
+
+	if t.logger != nil && t.logger.IsLevelEnabled(log.TraceLevel) {
+		conn = loggingConn{t.logger, conn}
+	}
+	return
+}
+
+// TODO this should also clean the datastore.
+func (t *dbBroker) Close() error {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	for _, lis := range t.listeners {
+		_ = lis.Close()
+	}
+	t.listeners = nil
+	return nil
+}

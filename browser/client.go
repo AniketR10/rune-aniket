@@ -114,13 +114,13 @@ func (c *Client) Init(
 func (c *Client) serveHandler(h Handler) uint32 {
 
 	var brokerID uint32
-	var srv *grpc.Server
+	var srv proto.MuxServer
 
 	if tokenHandler, ok := h.(remoteTokenHandler); ok {
 		brokerID = tokenHandler.handlerID
 	} else {
-		brokerID, srv = acceptAndServe(c.broker,
-			func(handlerID uint32, srv *grpc.Server) {
+		brokerID, srv = acceptAndServe(c.broker, c.Logger,
+			func(handlerID uint32, srv proto.MuxServer) {
 				h = browserClientHandler{
 					Handler:   h,
 					c:         c,
@@ -128,7 +128,7 @@ func (c *Client) serveHandler(h Handler) uint32 {
 				}
 				hsrv := handler.NewServer(h, c.pluginLock)
 				hsrv.Logger = c.Logger
-				proto.RegisterHandlerServer(srv, hsrv)
+				proto.RegisterHandlerServer(srv.GRPC(), hsrv)
 			})
 	}
 

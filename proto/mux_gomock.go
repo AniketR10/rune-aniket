@@ -6,6 +6,7 @@ package proto
 
 import (
 	context "context"
+	net "net"
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
@@ -117,6 +118,81 @@ func (mr *MockMuxConnMockRecorder) WaitForStateChange(ctx, sourceState interface
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WaitForStateChange", reflect.TypeOf((*MockMuxConn)(nil).WaitForStateChange), ctx, sourceState)
 }
 
+// MockMuxServer is a mock of MuxServer interface.
+type MockMuxServer struct {
+	ctrl     *gomock.Controller
+	recorder *MockMuxServerMockRecorder
+}
+
+// MockMuxServerMockRecorder is the mock recorder for MockMuxServer.
+type MockMuxServerMockRecorder struct {
+	mock *MockMuxServer
+}
+
+// NewMockMuxServer creates a new mock instance.
+func NewMockMuxServer(ctrl *gomock.Controller) *MockMuxServer {
+	mock := &MockMuxServer{ctrl: ctrl}
+	mock.recorder = &MockMuxServerMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockMuxServer) EXPECT() *MockMuxServerMockRecorder {
+	return m.recorder
+}
+
+// GRPC mocks base method.
+func (m *MockMuxServer) GRPC() *grpc.Server {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GRPC")
+	ret0, _ := ret[0].(*grpc.Server)
+	return ret0
+}
+
+// GRPC indicates an expected call of GRPC.
+func (mr *MockMuxServerMockRecorder) GRPC() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GRPC", reflect.TypeOf((*MockMuxServer)(nil).GRPC))
+}
+
+// GracefulStop mocks base method.
+func (m *MockMuxServer) GracefulStop() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "GracefulStop")
+}
+
+// GracefulStop indicates an expected call of GracefulStop.
+func (mr *MockMuxServerMockRecorder) GracefulStop() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GracefulStop", reflect.TypeOf((*MockMuxServer)(nil).GracefulStop))
+}
+
+// Serve mocks base method.
+func (m *MockMuxServer) Serve(lis net.Listener) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Serve", lis)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Serve indicates an expected call of Serve.
+func (mr *MockMuxServerMockRecorder) Serve(lis interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Serve", reflect.TypeOf((*MockMuxServer)(nil).Serve), lis)
+}
+
+// Stop mocks base method.
+func (m *MockMuxServer) Stop() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "Stop")
+}
+
+// Stop indicates an expected call of Stop.
+func (mr *MockMuxServerMockRecorder) Stop() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Stop", reflect.TypeOf((*MockMuxServer)(nil).Stop))
+}
+
 // MockMuxBroker is a mock of MuxBroker interface.
 type MockMuxBroker struct {
 	ctrl     *gomock.Controller
@@ -140,8 +216,23 @@ func (m *MockMuxBroker) EXPECT() *MockMuxBrokerMockRecorder {
 	return m.recorder
 }
 
+// Accept mocks base method.
+func (m *MockMuxBroker) Accept(id uint32) (net.Listener, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Accept", id)
+	ret0, _ := ret[0].(net.Listener)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Accept indicates an expected call of Accept.
+func (mr *MockMuxBrokerMockRecorder) Accept(id interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Accept", reflect.TypeOf((*MockMuxBroker)(nil).Accept), id)
+}
+
 // AcceptAndServe mocks base method.
-func (m *MockMuxBroker) AcceptAndServe(ID uint32, srv func([]grpc.ServerOption) *grpc.Server) {
+func (m *MockMuxBroker) AcceptAndServe(ID uint32, srv func([]grpc.ServerOption) MuxServer) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "AcceptAndServe", ID, srv)
 }

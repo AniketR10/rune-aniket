@@ -5,11 +5,10 @@ import (
 
 	"github.com/ernestrc/go-tui"
 	"github.com/ernestrc/go-tui/proto"
-	"google.golang.org/grpc"
 )
 
 type windowServerResource struct {
-	srv *grpc.Server
+	srv proto.MuxServer
 	win Window
 }
 
@@ -32,10 +31,6 @@ func (r *handlerClientResource) Close() (err error) {
 		err = err1
 	}
 
-	if r.handlerConn == nil {
-		return err
-	}
-
 	err2 := r.handlerConn.Close()
 	if err2 != nil {
 		err = err2
@@ -56,7 +51,7 @@ func (r *windowServerResource) Close() error {
 }
 
 type handlerServerResource struct {
-	srv *grpc.Server
+	srv proto.MuxServer
 
 	h tui.Handler
 }
@@ -68,6 +63,8 @@ type windowClientResource struct {
 }
 
 func (r *handlerServerResource) Close() error {
+	// could be token handler, in which case
+	// it is not served from the browser client.
 	if r.srv != nil {
 		r.srv.Stop()
 	}
