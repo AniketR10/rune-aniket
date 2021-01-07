@@ -18,12 +18,6 @@ var (
 	}
 )
 
-// WithAttributes represents a tui.Component that can be set attributes.
-type WithAttributes interface {
-	tui.Component
-	SetAttr(attr term.Attributes)
-}
-
 // FocusList wraps a List to provide an element Focus. It takes WithAttributes
 // components.
 type FocusList struct {

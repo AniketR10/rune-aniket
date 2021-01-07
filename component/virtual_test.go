@@ -29,14 +29,20 @@ CCCCCCCC
 DDDDDDDD    `,
 		},
 		{
-			func() { virtualScroll.Move(term.Coordinates{1, 1}) }, `
+			func() {
+				virtualScroll.Resize(8, 3)
+				virtualScroll.Move(term.Coordinates{1, 1})
+			}, `
             
  AAAAAAAA   
  BBBBBBBB   
  CCCCCCCC   `,
 		},
 		{
-			func() { virtualScroll.Move(term.Coordinates{3, 0}) }, `
+			func() {
+				virtualScroll.Resize(8, 4)
+				virtualScroll.Move(term.Coordinates{3, 0})
+			}, `
    AAAAAAAA 
    BBBBBBBB 
    CCCCCCCC 
@@ -63,7 +69,10 @@ $$$$
 $$$$`,
 		},
 		{
-			func() { v.Move(term.Coordinates{1, 1}) }, `
+			func() {
+				v.Resize(3, 3)
+				v.Move(term.Coordinates{1, 1})
+			}, `
     
  $$$
  $$$

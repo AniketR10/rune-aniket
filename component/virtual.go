@@ -1,8 +1,6 @@
 package component
 
 import (
-	"fmt"
-
 	"github.com/ernestrc/go-tui"
 	"github.com/ernestrc/go-tui/term"
 )
@@ -23,19 +21,10 @@ type virtualWriter struct {
 	height, width int
 }
 
-func (w *virtualWriter) isOutOfBounds(pos term.Coordinates) bool {
-	return pos.X >= w.width || pos.Y >= w.height || pos.Y < 0 || pos.X < 0
-}
-
-func (w *virtualWriter) assertNotOutOfBounds(pos term.Coordinates) {
-	if w.isOutOfBounds(pos) {
-		panic(fmt.Sprintf("bounds check: component out of bounds: tried to write at %d,%d but width is %d and height is %d",
-			pos.X, pos.Y, w.width, w.height))
-	}
-}
-
 func (w *virtualWriter) SetCell(pos term.Coordinates, c term.Cell) {
-	w.assertNotOutOfBounds(pos)
+	if pos.X >= w.width || pos.Y >= w.height || pos.Y < 0 || pos.X < 0 {
+		return
+	}
 	pos = term.Coordinates{X: w.offset.X + pos.X, Y: w.offset.Y + pos.Y}
 	w.writer.SetCell(pos, c)
 }

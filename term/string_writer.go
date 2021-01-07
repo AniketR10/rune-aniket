@@ -2,6 +2,7 @@ package term
 
 import (
 	"bytes"
+	"fmt"
 )
 
 // StringWriter satisfies Writer by rendering the cells into a plain string.
@@ -21,7 +22,7 @@ func NewStringWriter(width, height int) (t *StringWriter) {
 	return
 }
 
-// Resie satisfies Writer.
+// Resize satisfies Writer.
 func (w *StringWriter) Resize(width, height int) {
 	w.width, w.height = width, height
 	w.cellbuf = make([]Cell, width*height)
@@ -34,7 +35,8 @@ func outOfBounds(height, width int, pos Coordinates) bool {
 // SetCell satisfies Writer.
 func (w *StringWriter) SetCell(pos Coordinates, cell Cell) {
 	if outOfBounds(w.height, w.width, pos) {
-		return
+		panic(fmt.Sprintf("SetCell(x=%d;y=%d): out of bounds: width=%d;height=%d",
+			pos.X, pos.Y, w.width, w.height))
 	}
 	idx := pos.Y*w.width + pos.X
 	w.cellbuf[idx] = cell

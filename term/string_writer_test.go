@@ -22,8 +22,10 @@ func TestStringWriter(t *testing.T) {
 		c++
 	}
 
-	// should be fine to wtry to write
-	writer.SetCell(Coordinates{X: width + 1, Y: height + 1}, Cell{Ch: '='})
+	// we use StringWriter mostly for tests so it's important that it panics on oob
+	assert.Panics(t, func() {
+		writer.SetCell(Coordinates{X: width + 1, Y: height + 1}, Cell{Ch: '='})
+	})
 
 	if err := writer.Flush(); err != nil {
 		t.Fatal(err)
