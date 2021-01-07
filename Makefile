@@ -1,5 +1,5 @@
 GO=go
-GOTESTFLAGS=$(GOFLAGS) -race
+GOTESTFLAGS=-race -timeout 20s
 GOFLAGS=
 
 TARGET=bin
@@ -22,10 +22,13 @@ GOMOCKS=$(wildcard **/*_gomock.go)
 
 default: $(EXAMPLES) $(EXECS)
 
+debug: GOFLAGS=-race
+debug: $(EXAMPLES) $(EXECS)
+
 example_wasm: $(EXAMPLE_WASM_BLOB)
 
 test: $(EXAMPLES) $(EXECS)
-	@ go test ./.../... -race -timeout 20s
+	@ go test ./.../... $(GOTESTFLAGS)
 
 coverage: $(TARGET)
 	@ go test ./.../... -coverprofile $(TARGET)/coverage
