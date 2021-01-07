@@ -25,6 +25,8 @@ type FocusList struct {
 	focus         ListNode
 	focusOffset   int
 	height, width int
+	textAttr      term.Attributes
+	focusAttr     term.Attributes
 }
 
 // NewFocusList allocates storage for a new FocusList and initializes it.
@@ -36,9 +38,17 @@ func NewFocusList() *FocusList {
 
 // Init initializes this FocusList with the default element height of 1.
 func (l *FocusList) Init() {
+	l.InitWithAttr(defaultTextAttr, highlightTextAttr)
+}
+
+// InitWithAttr initializes this FocusList with the default element height of 1,
+// and text as the text attributes and focus as the focus attributes.
+func (l *FocusList) InitWithAttr(text, focus term.Attributes) {
 	l.list = NewList(defaultElementHeight)
 	l.focus = ListNode{}
 	l.focusOffset = 0
+	l.textAttr = text
+	l.focusAttr = focus
 }
 
 func setFocusFrameCharSet(focus ListNode, attr term.Attributes) {
@@ -50,9 +60,9 @@ func setFocusFrameCharSet(focus ListNode, attr term.Attributes) {
 }
 
 func (l *FocusList) switchFocus(newFocus ListNode) {
-	setFocusFrameCharSet(l.focus, defaultTextAttr)
+	setFocusFrameCharSet(l.focus, l.textAttr)
 	l.focus = newFocus
-	setFocusFrameCharSet(l.focus, highlightTextAttr)
+	setFocusFrameCharSet(l.focus, l.focusAttr)
 
 	l.seekFocus()
 }
@@ -131,7 +141,7 @@ func (l *FocusList) PushBack(c WithAttributes) ListNode {
 func (l *FocusList) PushBackList(other *FocusList) {
 	focus, ok := other.Focus()
 	if ok {
-		setFocusFrameCharSet(focus, defaultTextAttr)
+		setFocusFrameCharSet(focus, l.textAttr)
 	}
 	for node, ok := other.Front(); ok; node, ok = node.Next() {
 		l.PushBack(node.Value().(WithAttributes))
@@ -154,7 +164,7 @@ func (l *FocusList) PushFront(c WithAttributes) ListNode {
 func (l *FocusList) PushFrontList(other *FocusList) {
 	focus, ok := other.Focus()
 	if ok {
-		setFocusFrameCharSet(focus, defaultTextAttr)
+		setFocusFrameCharSet(focus, l.textAttr)
 	}
 	for node, ok := other.Back(); ok; node, ok = node.Prev() {
 		l.PushFront(node.Value().(WithAttributes))
@@ -297,9 +307,9 @@ func (l *FocusList) Sort(less func(a, b WithAttributes) bool) {
 		return less(a.(WithAttributes), b.(WithAttributes))
 	})
 
-	setFocusFrameCharSet(l.focus, defaultTextAttr)
+	setFocusFrameCharSet(l.focus, l.textAttr)
 	l.focusOffset = 0
 	l.focus, _ = l.Front()
-	setFocusFrameCharSet(l.focus, highlightTextAttr)
+	setFocusFrameCharSet(l.focus, l.focusAttr)
 	l.list.SeekStart()
 }
