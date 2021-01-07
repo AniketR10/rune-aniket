@@ -437,25 +437,59 @@ func TestBufferInsertWithAttr(t *testing.T) {
 	buf := NewBuffer()
 	fg := term.ColorRed
 	bg := term.ColorYellow
+
 	buf.InsertWithAttr(term.Coordinates{}, 'A',
 		term.Attributes{Fg: fg, Bg: bg})
 	cell := buf.RawCells()[0][0]
 	assert.Equal(t, term.Cell{Ch: 'A', Fg: fg, Bg: bg}, cell)
+
+	buf.InsertWithAttr(term.Coordinates{X: 1}, '\n',
+		term.Attributes{Fg: fg, Bg: bg})
+
+	buf.InsertWithAttr(term.Coordinates{Y: 1}, 'E',
+		term.Attributes{Fg: fg, Bg: bg})
+	cell = buf.RawCells()[1][0]
+	assert.Equal(t, term.Cell{Ch: 'E', Fg: fg, Bg: bg}, cell)
 }
 
 func TestBufferInsertStringWithAttr(t *testing.T) {
-	buf := NewBuffer()
 	fg := term.ColorRed
 	bg := term.ColorYellow
-	buf.InsertStringWithAttr(term.Coordinates{}, "Atza",
-		term.Attributes{Fg: fg, Bg: bg})
-	cell := buf.RawCells()[0]
-	assert.Equal(t, []term.Cell{
-		term.Cell{Ch: 'A', Fg: fg, Bg: bg},
-		term.Cell{Ch: 't', Fg: fg, Bg: bg},
-		term.Cell{Ch: 'z', Fg: fg, Bg: bg},
-		term.Cell{Ch: 'a', Fg: fg, Bg: bg},
-	}, cell)
+	t.Run("insert single line string", func(t *testing.T) {
+		buf := NewBuffer()
+		buf.InsertStringWithAttr(term.Coordinates{}, "Atza",
+			term.Attributes{Fg: fg, Bg: bg})
+		row := buf.RawCells()[0]
+		assert.Equal(t, []term.Cell{
+			term.Cell{Ch: 'A', Fg: fg, Bg: bg},
+			term.Cell{Ch: 't', Fg: fg, Bg: bg},
+			term.Cell{Ch: 'z', Fg: fg, Bg: bg},
+			term.Cell{Ch: 'a', Fg: fg, Bg: bg},
+		}, row)
+	})
+	t.Run("insert multi line string", func(t *testing.T) {
+		buf := NewBuffer()
+		buf.InsertStringWithAttr(term.Coordinates{}, "Lola\nGranola",
+			term.Attributes{Fg: fg, Bg: bg})
+		cells := buf.RawCells()
+		assert.Equal(t, [][]term.Cell{
+			[]term.Cell{
+				term.Cell{Ch: 'L', Fg: fg, Bg: bg},
+				term.Cell{Ch: 'o', Fg: fg, Bg: bg},
+				term.Cell{Ch: 'l', Fg: fg, Bg: bg},
+				term.Cell{Ch: 'a', Fg: fg, Bg: bg},
+			},
+			[]term.Cell{
+				term.Cell{Ch: 'G', Fg: fg, Bg: bg},
+				term.Cell{Ch: 'r', Fg: fg, Bg: bg},
+				term.Cell{Ch: 'a', Fg: fg, Bg: bg},
+				term.Cell{Ch: 'n', Fg: fg, Bg: bg},
+				term.Cell{Ch: 'o', Fg: fg, Bg: bg},
+				term.Cell{Ch: 'l', Fg: fg, Bg: bg},
+				term.Cell{Ch: 'a', Fg: fg, Bg: bg},
+			},
+		}, cells)
+	})
 }
 
 func TestBufferHeightWidth(t *testing.T) {

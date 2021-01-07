@@ -91,6 +91,10 @@ func (b *Buffer) InsertWithAttr(
 ) (next term.Coordinates) {
 	next = b.Insert(pos, r)
 
+	switch r {
+	case '\n', '\t':
+		return
+	}
 	cells := b.RawCells()
 	cells[pos.Y][pos.X].Bg = attr.Bg
 	cells[pos.Y][pos.X].Fg = attr.Fg
@@ -98,6 +102,8 @@ func (b *Buffer) InsertWithAttr(
 	return
 }
 
+// InsertStringWithAttr inserts str with the given attr as the background
+// and foreground cell term.Attributes.
 func (b *Buffer) InsertStringWithAttr(
 	at term.Coordinates, str string, attr term.Attributes,
 ) (from, until term.Coordinates) {
