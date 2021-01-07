@@ -81,6 +81,10 @@ func (s *AttrSetter) Draw(w term.Writer) {
 	}
 
 	for _, attrAt := range s.attr {
+		if attrAt.Y >= s.height || attrAt.Y < 0 ||
+			attrAt.X >= s.width || attrAt.X < 0 {
+			continue
+		}
 		cells[attrAt.Y][attrAt.X].Bg |= attrAt.Attributes.Bg
 		cells[attrAt.Y][attrAt.X].Fg |= attrAt.Attributes.Fg
 	}
