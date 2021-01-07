@@ -23,6 +23,11 @@ func init() {
 	})
 }
 
+// Logger returns the global plugins logger.
+func Logger() *logrus.Logger {
+	return &pluginLogger
+}
+
 // SetLoggingOutput sets the logging output of all plugins to out.
 func SetLoggingOutput(out io.Writer) {
 	pluginLogger.SetOutput(out)

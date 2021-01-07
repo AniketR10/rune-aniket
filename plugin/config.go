@@ -3,6 +3,8 @@ package plugin
 import (
 	"encoding"
 	"encoding/json"
+
+	"github.com/ernestrc/go-tui/term"
 )
 
 // Config is the interface implemented by a plugin configuration provider.
@@ -12,6 +14,8 @@ type Config interface {
 	GetString(string) (string, bool)
 	GetBool(string) (bool, bool)
 	GetConfig(string) (Config, bool)
+	GetAttribute(string) (term.Attribute, bool)
+	GetAttributes(string) (term.Attributes, bool)
 }
 
 type internalConfig interface {
@@ -123,6 +127,75 @@ func (c mapConfig) GetConfig(key string) (Config, bool) {
 	}
 
 	return mapConfig(vt), ok
+}
+
+func strToAttr(str string) (attr term.Attribute, ok bool) {
+	ok = true
+	switch str {
+	case "bold":
+		attr = term.AttrBold
+	case "underline":
+		attr = term.AttrUnderline
+	case "reverse":
+		attr = term.AttrReverse
+	case "default":
+		attr = term.ColorDefault
+	case "black":
+		attr = term.ColorBlack
+	case "red":
+		attr = term.ColorRed
+	case "green":
+		attr = term.ColorGreen
+	case "yellow":
+		attr = term.ColorYellow
+	case "blue":
+		attr = term.ColorBlue
+	case "magenta":
+		attr = term.ColorMagenta
+	case "cyan":
+		attr = term.ColorCyan
+	case "white":
+		attr = term.ColorWhite
+	default:
+		ok = false
+	}
+	return
+}
+
+func (c mapConfig) GetAttribute(key string) (attr term.Attribute, ok bool) {
+	v, ok := c[key]
+	if !ok {
+		return
+	}
+	vt, ok := v.(string)
+	if ok {
+		attr, ok = strToAttr(vt)
+		return
+	}
+
+	avt, ok := v.([]interface{})
+	if !ok {
+		return
+	}
+
+	for _, vtv := range avt {
+		if vtvs, ok := vtv.(string); ok {
+			vtvattr, _ := strToAttr(vtvs)
+			attr |= vtvattr
+		}
+	}
+
+	return
+}
+
+func (c mapConfig) GetAttributes(key string) (attr term.Attributes, ok bool) {
+	cfg, ok := c.GetConfig(key)
+	if !ok {
+		return
+	}
+	attr.Fg, _ = cfg.GetAttribute("fg")
+	attr.Bg, _ = cfg.GetAttribute("bg")
+	return
 }
 
 // NewConfig converts a map into a plugin.Config.

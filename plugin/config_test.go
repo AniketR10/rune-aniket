@@ -3,6 +3,7 @@ package plugin
 import (
 	"testing"
 
+	"github.com/ernestrc/go-tui/term"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -28,25 +29,33 @@ func TestConfigOk(t *testing.T) {
 
 	_, ok = c.GetInt("mk")
 	assert.False(t, ok)
+
+	_, ok = c.GetAttribute("mk")
+	assert.False(t, ok)
+
+	_, ok = c.GetAttributes("mk")
+	assert.False(t, ok)
 }
 func TestConfigTypes(t *testing.T) {
 	m := map[string]interface{}{
-		"a1":    rune('a'),
-		"a2":    byte('a'),
-		"a3":    string('a'),
-		"a4":    []byte{'a'},
-		"a5":    []rune{'a'},
-		"11":    1,
-		"12":    int(1),
-		"13":    int32(1),
-		"14":    int64(1),
-		"15":    float64(1),
-		"16":    float32(1),
-		"21":    2.1,
-		"22":    float64(2.1),
-		"23":    float32(2.1),
-		"true":  true,
-		"false": false,
+		"a1":     rune('a'),
+		"a2":     byte('a'),
+		"a3":     string('a'),
+		"a4":     []byte{'a'},
+		"a5":     []rune{'a'},
+		"11":     1,
+		"12":     int(1),
+		"13":     int32(1),
+		"14":     int64(1),
+		"15":     float64(1),
+		"16":     float32(1),
+		"21":     2.1,
+		"22":     float64(2.1),
+		"23":     float32(2.1),
+		"true":   true,
+		"false":  false,
+		"attr_1": map[string]interface{}{"fg": "blue", "bg": "cyan"},
+		"attr_2": map[string]interface{}{"fg": []interface{}{"red", "bold"}},
 	}
 
 	c1 := NewConfig(m)
@@ -111,6 +120,17 @@ func TestConfigTypes(t *testing.T) {
 			out, ok = c.GetBool("false")
 			assert.True(t, ok)
 			assert.Equal(t, false, out)
+
+			attrs, ok := c.GetAttributes("attr_1")
+			assert.True(t, ok)
+			assert.True(t, attrs.Fg&term.ColorBlue != 0)
+			assert.True(t, attrs.Bg&term.ColorCyan != 0)
+
+			attrs, ok = c.GetAttributes("attr_2")
+			assert.True(t, ok)
+			assert.True(t, attrs.Fg&term.ColorRed != 0)
+			assert.True(t, attrs.Fg&term.AttrBold != 0)
+			assert.Equal(t, term.ColorDefault, attrs.Bg)
 		})
 	}
 }
