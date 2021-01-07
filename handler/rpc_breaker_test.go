@@ -117,9 +117,9 @@ func TestClientBreakerHandle(t *testing.T) {
 	})
 
 	t.Run("handle error triggers interrupt and is returned on next", func(t *testing.T) {
-		mock := &mockHandlerClient{remote: testHandler()}
-		interrupt := make(chan struct{})
 		quitCh := make(chan struct{})
+		mock := &mockHandlerClient{remote: testHandler(), quitCh: quitCh}
+		interrupt := make(chan struct{})
 		defer close(quitCh)
 		b := withClientBreaker(mock,
 			waitForInterrupt(quitCh, interrupt), waitForInterrupt(quitCh, interrupt), nil)
@@ -145,9 +145,9 @@ func TestClientBreakerHandle(t *testing.T) {
 	t.Run("dispatches all events, even when upon backpressure", func(t *testing.T) {
 		var wg sync.WaitGroup
 		h := NewTestHandler()
-		mock := &mockHandlerClient{remote: h}
-		b := withClientBreaker(mock, nop, nop, nil)
 		quitChan := make(chan struct{})
+		mock := &mockHandlerClient{remote: h, quitCh: quitChan}
+		b := withClientBreaker(mock, nop, nop, nil)
 		mock.handledCh = make(chan term.Event)
 
 		go slowlyConsumeMockEvents(&wg, mock, quitChan)
@@ -168,9 +168,9 @@ func TestClientBreakerHandle(t *testing.T) {
 		const testHandlerCopy = "AAAAA\nAAAAA\nAAAAA\nAAAAA\nAAAAA"
 		var wg sync.WaitGroup
 		h := NewTestHandler()
-		mock := &mockHandlerClient{remote: h}
-		b := withClientBreaker(mock, nop, func() { wg.Done() }, nil)
 		quitChan := make(chan struct{})
+		mock := &mockHandlerClient{remote: h, quitCh: quitChan}
+		b := withClientBreaker(mock, nop, func() { wg.Done() }, nil)
 		mock.handledCh = make(chan term.Event)
 
 		go consumeMockEvents(mock, quitChan)
@@ -192,9 +192,9 @@ func TestClientBreakerHandle(t *testing.T) {
 		var i int32
 		h := NewTestHandler()
 		h.Exit = true
-		mock := &mockHandlerClient{remote: h}
-		b := withClientBreaker(mock, nop, func() { atomic.AddInt32(&i, 1) }, nil)
 		quitChan := make(chan struct{})
+		mock := &mockHandlerClient{remote: h, quitCh: quitChan}
+		b := withClientBreaker(mock, nop, func() { atomic.AddInt32(&i, 1) }, nil)
 		mock.handledCh = make(chan term.Event)
 
 		go consumeMockEvents(mock, quitChan)

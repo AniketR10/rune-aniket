@@ -11,6 +11,7 @@ import (
 
 type mockHandlerClient struct {
 	handledCh chan term.Event
+	quitCh    chan struct{}
 	rpcError  error
 	remote    tui.Handler
 }
@@ -42,7 +43,10 @@ func (c *mockHandlerClient) Handle(
 
 	resp.Quit, resp.Handled = c.remote.Handle(ev)
 	if c.handledCh != nil {
-		c.handledCh <- ev
+		select {
+		case c.handledCh <- ev:
+		case <-c.quitCh:
+		}
 	}
 
 	return resp, nil
