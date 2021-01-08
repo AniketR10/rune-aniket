@@ -5,104 +5,58 @@ import (
 	"net/http"
 	_ "net/http/pprof"
 	"os"
+	"path"
+	"runtime"
 
-	"github.com/ernestrc/go-tui"
-	"github.com/ernestrc/go-tui/browser"
-	"github.com/ernestrc/go-tui/editor/vi"
-	"github.com/ernestrc/go-tui/plugin"
-	"github.com/ernestrc/go-tui/term"
 	log "github.com/sirupsen/logrus"
 )
 
-var debugLog = flag.String("d", "", "debug log file")
-var swapDir = flag.String("s", "", "swap files directory")
-var recoveryFile = flag.String("r", "", "recover from recovery file")
-var granteePlugin = flag.String("x", "", "plugin")
-var tabspaces = flag.Int("t", 4, "tabspaces")
+var configpath *string
+var recfilename = flag.String("r", "", "recover from recovery file")
 var pprof = flag.Bool("p", false, "start pprof server at :6060")
 
 func init() {
-	log.SetLevel(log.TraceLevel)
+	home, err := os.UserHomeDir()
+	if err != nil {
+		log.Fatal(err)
+	}
+	defaultConfigPath := path.Join(home, ".six.yml")
+	configpath = flag.String("c", defaultConfigPath, "config file path")
 }
 
 func main() {
-	opts := make([]browser.Option, 0)
-	viOpts := make([]vi.Option, 0)
-	pluginOpts := make([]plugin.Option, 0)
+	var err error
+	var filenames []string
 
-	if len(os.Args) > 1 {
-		filename := os.Args[1]
-		if err := flag.CommandLine.Parse(os.Args[2:]); err != nil {
-			log.Fatal(err)
-		}
-		opts = append(opts, browser.WithFilepath(filename))
-	} else {
-		flag.Parse()
+	flag.Parse()
+
+	for _, file := range flag.Args() {
+		filenames = append(filenames, file)
 	}
 
 	if *pprof {
+		runtime.SetBlockProfileRate(1)
+		runtime.SetMutexProfileFraction(1)
 		go func() {
 			log.Println(http.ListenAndServe(":6060", nil))
 		}()
-
 	}
 
-	opts = append(opts,
-		browser.WithTabspaces(*tabspaces),
-		browser.WithSwapDir(*swapDir),
-		browser.WithRecoveryFile(*recoveryFile),
-		browser.WithCommandEvent(term.Event{Type: term.EventKey, Ch: ':'}),
-	)
-
-	viOpts = append(viOpts,
-		vi.WithResAttr(term.Attributes{Bg: term.ColorYellow, Fg: term.ColorBlack}),
-	)
-
-	if *debugLog != "" {
-		f, err := os.OpenFile(*debugLog, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		l := log.New()
-		l.SetOutput(f)
-		l.SetLevel(log.TraceLevel)
-		opts = append(opts, browser.WithLogger(l))
-		viOpts = append(viOpts, vi.WithLogger(l))
-		pluginOpts = append(pluginOpts, plugin.WithLogger(l))
+	var i *IDE
+	if *recfilename != "" && len(filenames) != 0 {
+		i, err = NewRecovery(*configpath, filenames[0], *recfilename)
+	} else if *recfilename != "" {
+		log.Fatal("flag -r requires to pass the original filename filename")
+	} else {
+		i, err = New(*configpath, filenames...)
 	}
 
-	vi := vi.Editor(viOpts...)
-	browser, err := browser.New(vi, opts...)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer browser.Close()
-
-	res := plugin.BrowserResources(browser)
-	manager := plugin.NewManager(plugin.GrantAll(res), pluginOpts...)
-	defer manager.Close()
-
-	if *granteePlugin != "" {
-		// TODO
-		cfg := plugin.NewConfig(make(map[string]interface{}))
-		err := manager.Run(*granteePlugin, *granteePlugin, cfg)
-		if err != nil {
-			log.Fatal(err)
-		}
-	}
-
-	err = tui.Init()
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	defer tui.Close()
-
-	term.SetOutputMode(term.Output256)
-	term.SetInputMode(term.InputMouse)
-
-	err = tui.RunWithLocker(browser, manager.ResourceLocker())
+	defer i.Close()
+	err = i.Run()
 	if err != nil {
 		log.Fatal(err)
 	}

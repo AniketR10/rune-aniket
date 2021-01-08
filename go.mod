@@ -15,4 +15,5 @@ require (
 	github.com/stretchr/testify v1.4.0
 	go.uber.org/goleak v1.0.0
 	google.golang.org/grpc v1.27.1
+	gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b
 )
