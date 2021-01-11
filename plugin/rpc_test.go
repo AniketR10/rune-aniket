@@ -292,29 +292,29 @@ func TestIntegrationPluginClientServer(t *testing.T) {
 				"raven": math.MaxFloat64,
 			},
 		}
-		_, err := client.permissions(context.Background(), NewConfig(in))
+		_, err := client.permissions(context.Background(), MapConfig(in))
 		require.NoError(t, err)
 
 		require.Len(t, grantee.cfgs, 1)
 
 		out := grantee.cfgs[0]
-		viz, ok := out.GetBool("viz")
-		assert.True(t, ok)
+		viz, err := out.GetBool("viz")
+		assert.NoError(t, err)
 		assert.True(t, viz)
 
-		sonicd, ok := out.GetString("sonicd")
-		assert.True(t, ok)
+		sonicd, err := out.GetString("sonicd")
+		assert.NoError(t, err)
 		assert.Equal(t, "more", sonicd)
 
-		longboard, ok := out.GetConfig("longboard")
-		require.True(t, ok)
+		longboard, err := out.GetConfig("longboard")
+		require.NoError(t, err)
 
-		raven, ok := longboard.GetFloat("raven")
-		assert.True(t, ok)
+		raven, err := longboard.GetFloat("raven")
+		assert.NoError(t, err)
 		assert.Equal(t, math.MaxFloat64, raven)
 
-		hubble, ok := out.GetInt("hubble")
-		assert.True(t, ok)
+		hubble, err := out.GetInt("hubble")
+		assert.NoError(t, err)
 		assert.Equal(t, 1, hubble)
 	})
 

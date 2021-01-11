@@ -16,8 +16,8 @@ import (
 
 // IDE binds together a text editor/browser with a plugin manager.
 type IDE struct {
-	Config
-	browser *editor.Ex
+	ideConfig
+	editor  *editor.Ex
 	manager *plugin.Manager
 }
 
@@ -43,11 +43,27 @@ func NewRecovery(cfgfilename, filename string, recfilename string) (i *IDE, err 
 	return
 }
 
-func (i *IDE) init(cfgfilename, recfilename string, filenames ...string) error {
-	cfg, err := loadYamlConfig(cfgfilename)
-	if err != nil {
-		return err
+func (i *IDE) initPlugins() (ret []error) {
+	for id, p := range i.ideConfig.plugins() {
+		path, ok := p.path()
+		if !ok {
+			continue
+		}
+		config, ok := p.config()
+		if !ok {
+			config = plugin.MapConfig(make(map[string]interface{}))
+		}
+		err := i.manager.Run(id, path, config)
+		if err != nil {
+			ret = append(ret, fmt.Errorf("could not run plugin with id '%s': %v", id, err))
+		}
 	}
+
+	return ret
+}
+
+func (i *IDE) init(cfgfilename, recfilename string, filenames ...string) error {
+	configErr := loadConfig(&i.ideConfig, cfgfilename)
 
 	opts := make([]browser.Option, 0)
 	viOpts := make([]vi.Option, 0)
@@ -62,14 +78,14 @@ func (i *IDE) init(cfgfilename, recfilename string, filenames ...string) error {
 	}
 
 	opts = append(opts,
-		browser.WithTabspaces(cfg.Browser.Tabspaces),
-		browser.WithStartText(cfg.Browser.StartText),
-		// browser.WithWindowManagerConfig(cfg.WindowManager),
-		// browser.WithCommandEvent(term.Event{Type: term.EventKey, Ch: ':'}),
+		browser.WithTabspaces(i.ideConfig.browserTabspaces()),
+		browser.WithStartText(i.ideConfig.browserStartText()),
+		browser.WithWindowManagerConfig(i.ideConfig.windowManagerConfig()),
+		browser.WithCommandEvent(term.Event{Type: term.EventKey, Ch: ':'}),
 	)
 
-	if cfg.Browser.SwapDir != "" {
-		opts = append(opts, browser.WithSwapDir(cfg.Browser.SwapDir))
+	if i.ideConfig.browserSwapDir() != "" {
+		opts = append(opts, browser.WithSwapDir(i.ideConfig.browserSwapDir()))
 	}
 
 	viOpts = append(viOpts,
@@ -77,16 +93,13 @@ func (i *IDE) init(cfgfilename, recfilename string, filenames ...string) error {
 	)
 
 	var l *log.Logger
-	if cfg.LogOutputPath != "" {
-		f, err := os.OpenFile(cfg.LogOutputPath, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
-		if err != nil {
-			return err
-		}
-		level, err := log.ParseLevel(cfg.LogLevel)
+	if i.ideConfig.logOutputPath() != "" {
+		f, err := os.OpenFile(i.ideConfig.logOutputPath(), os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
 		if err != nil {
 			return err
 		}
 
+		level := i.ideConfig.logLevel()
 		plugin.SetLoggingOutput(f)
 		plugin.SetLoggingLevel(level)
 
@@ -103,35 +116,58 @@ func (i *IDE) init(cfgfilename, recfilename string, filenames ...string) error {
 	}
 
 	vi := vi.Editor(viOpts...)
-	i.browser, err = editor.NewEx(vi, opts...)
+	editor, err := editor.NewEx(vi, opts...)
+	if err != nil {
+		return err
+	}
+	i.editor = editor
+
+	res := plugin.BrowserResources(i.editor)
+	// res = plugin.MergeResources(plugin.EditorResources(i.editor))
+	i.manager = plugin.NewManager(plugin.GrantAll(res), pluginOpts...)
+	plugErrs := i.initPlugins()
+
+	err = tui.Init()
 	if err != nil {
 		return err
 	}
 
-	res := plugin.BrowserResources(i.browser)
-	i.manager = plugin.NewManager(plugin.GrantAll(res), pluginOpts...)
+	term.SetOutputMode(i.ideConfig.outputMode())
+	term.SetInputMode(i.ideConfig.inputMode())
 
-	for id, p := range cfg.Plugins {
-		err := i.manager.Run(id, p.Path, plugin.NewConfig(p.Config))
-		if err != nil {
-			return fmt.Errorf("could not run plugin with id '%s': %v", id, err)
+	reportNonFatalErrs(i.editor, l, configErr, i.ideConfig.errors, plugErrs)
+	return nil
+}
+
+func reportNonFatalErrs(
+	b browser.Browser, l *log.Logger, configErr error,
+	configErrs map[string]error, plugErrs []error,
+) {
+	if l != nil {
+		for key, err := range configErrs {
+			l.Warnf("error with config %s: %v", key, err)
+		}
+		for _, err := range plugErrs {
+			l.Errorf("failed to run plugin: %#v", err)
+		}
+		if configErr != nil {
+			l.Errorf("failed to load configuration: %v", configErr)
 		}
 	}
-	return nil
+
+	// it's good UX to report this immediately to the user
+	for _, err := range plugErrs {
+		b.SetMessage("Error running plugin: %v", err)
+	}
+	if configErr != nil {
+		b.SetMessage("Error loading config: %v", configErr)
+	}
 }
 
 // Run initialzes the underlying terminal environment and runs
 // it with this tui.Handler.
 func (i *IDE) Run() error {
-	err := tui.Init()
-	if err != nil {
-		return err
-	}
-
-	term.SetOutputMode(strToOutput(i.Config.OutputMode))
-	term.SetInputMode(strArrayToInput(i.Config.InputMode))
-
-	err = tui.RunWithLocker(i.browser, i.manager.ResourceLocker())
+	err := tui.RunWithLocker(i.editor, i.manager.ResourceLocker())
 	if err != nil {
 		return err
 	}
@@ -141,7 +177,7 @@ func (i *IDE) Run() error {
 
 func (i *IDE) closeResources() error {
 	err1 := i.manager.Close()
-	err2 := i.browser.Close()
+	err2 := i.editor.Close()
 
 	if err1 != nil {
 		return err1

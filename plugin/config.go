@@ -3,19 +3,27 @@ package plugin
 import (
 	"encoding"
 	"encoding/json"
+	"errors"
 
 	"github.com/ernestrc/go-tui/term"
 )
 
+// ErrNotFound is returned when config property is not in config.
+var (
+	ErrNotFound              = errors.New("key not found")
+	ErrInvalidType           = errors.New("type is invalid")
+	ErrInvalidAttributeValue = errors.New("attribute value is invalid")
+)
+
 // Config is the interface implemented by a plugin configuration provider.
 type Config interface {
-	GetInt(string) (int, bool)
-	GetFloat(string) (float64, bool)
-	GetString(string) (string, bool)
-	GetBool(string) (bool, bool)
-	GetConfig(string) (Config, bool)
-	GetAttribute(string) (term.Attribute, bool)
-	GetAttributes(string) (term.Attributes, bool)
+	GetInt(string) (int, error)
+	GetFloat(string) (float64, error)
+	GetString(string) (string, error)
+	GetBool(string) (bool, error)
+	GetConfig(string) (Config, error)
+	GetAttribute(string) (term.Attribute, error)
+	GetAttributes(string) (term.Attributes, error)
 }
 
 type internalConfig interface {
@@ -42,95 +50,97 @@ func (c *jsonMap) UnmarshalText(text []byte) error {
 	return err
 }
 
-func (c mapConfig) GetInt(key string) (int, bool) {
+func (c mapConfig) GetInt(key string) (int, error) {
 	v, ok := c[key]
 	if !ok {
-		return 0, ok
+		return 0, ErrNotFound
 	}
 
 	switch vt := v.(type) {
 	case int:
-		return vt, true
+		return vt, nil
 	case float64:
-		return int(vt), true
+		return int(vt), nil
 	case float32:
-		return int(vt), true
+		return int(vt), nil
 	case int64:
-		return int(vt), true
+		return int(vt), nil
 	case int32:
-		return int(vt), true
+		return int(vt), nil
 	default:
-		return 0, false
+		return 0, ErrInvalidType
 	}
 }
 
-func (c mapConfig) GetFloat(key string) (float64, bool) {
+func (c mapConfig) GetFloat(key string) (float64, error) {
 	v, ok := c[key]
 	if !ok {
-		return 0, ok
+		return 0, ErrNotFound
 	}
 
 	switch vt := v.(type) {
 	case float64:
-		return vt, true
+		return vt, nil
 	case int:
-		return float64(vt), true
+		return float64(vt), nil
 	case float32:
-		return float64(vt), true
+		return float64(vt), nil
 	case int64:
-		return float64(vt), true
+		return float64(vt), nil
 	case int32:
-		return float64(vt), true
+		return float64(vt), nil
 	default:
-		return 0, false
+		return 0, ErrInvalidType
 	}
 }
 
-func (c mapConfig) GetString(key string) (string, bool) {
+func (c mapConfig) GetString(key string) (string, error) {
 	v, ok := c[key]
 	if !ok {
-		return "", ok
+		return "", ErrNotFound
 	}
 	switch vt := v.(type) {
 	case string:
-		return vt, true
+		return vt, nil
 	case []byte:
-		return string(vt), true
+		return string(vt), nil
 	case []rune:
-		return string(vt), true
+		return string(vt), nil
 	case rune:
-		return string(vt), true
+		return string(vt), nil
 	case byte:
-		return string(vt), true
+		return string(vt), nil
 	default:
-		return "", false
+		return "", ErrInvalidType
 	}
 }
 
-func (c mapConfig) GetBool(key string) (bool, bool) {
+func (c mapConfig) GetBool(key string) (bool, error) {
 	v, ok := c[key]
 	if !ok {
-		return false, ok
+		return false, ErrNotFound
 	}
 	vt, ok := v.(bool)
-	return vt, ok
+	if !ok {
+		return false, ErrInvalidType
+	}
+	return vt, nil
 }
 
-func (c mapConfig) GetConfig(key string) (Config, bool) {
+func (c mapConfig) GetConfig(key string) (Config, error) {
 	v, ok := c[key]
 	if !ok {
-		return nil, ok
+		return nil, ErrNotFound
 	}
 	vt, ok := v.(map[string]interface{})
 	if !ok {
-		return nil, false
+		return nil, ErrInvalidType
 	}
 
-	return mapConfig(vt), ok
+	return mapConfig(vt), nil
 }
 
-func strToAttr(str string) (attr term.Attribute, ok bool) {
-	ok = true
+func strToAttr(str string) (attr term.Attribute, err error) {
 	switch str {
 	case "bold":
 		attr = term.AttrBold
@@ -157,49 +167,54 @@ func strToAttr(str string) (attr term.Attribute, ok bool) {
 	case "white":
 		attr = term.ColorWhite
 	default:
-		ok = false
+		err = ErrInvalidAttributeValue
 	}
 	return
 }
 
-func (c mapConfig) GetAttribute(key string) (attr term.Attribute, ok bool) {
+func (c mapConfig) GetAttribute(key string) (term.Attribute, error) {
 	v, ok := c[key]
 	if !ok {
-		return
+		return 0, ErrNotFound
 	}
 	vt, ok := v.(string)
 	if ok {
-		attr, ok = strToAttr(vt)
-		return
+		return strToAttr(vt)
 	}
 
 	avt, ok := v.([]interface{})
 	if !ok {
-		return
+		return 0, ErrInvalidType
 	}
 
+	var attr term.Attribute
 	for _, vtv := range avt {
 		if vtvs, ok := vtv.(string); ok {
-			vtvattr, _ := strToAttr(vtvs)
+			vtvattr, err := strToAttr(vtvs)
+			if err != nil {
+				return 0, err
+			}
 			attr |= vtvattr
 		}
 	}
 
-	return
+	return attr, nil
 }
 
-func (c mapConfig) GetAttributes(key string) (attr term.Attributes, ok bool) {
-	cfg, ok := c.GetConfig(key)
-	if !ok {
-		return
+func (c mapConfig) GetAttributes(key string) (term.Attributes, error) {
+	cfg, err := c.GetConfig(key)
+	if err != nil {
+		return term.Attributes{}, err
 	}
+
+	var attr term.Attributes
 	attr.Fg, _ = cfg.GetAttribute("fg")
 	attr.Bg, _ = cfg.GetAttribute("bg")
-	return
+	return attr, nil
 }
 
-// NewConfig converts a map into a plugin.Config.
-func NewConfig(m map[string]interface{}) Config {
+// MapConfig wraps m to satisfy plugin.Config.
+func MapConfig(m map[string]interface{}) Config {
 	if m == nil {
 		panic("invalid argument: map cannot be nil")
 	}

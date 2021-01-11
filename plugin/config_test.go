@@ -10,31 +10,31 @@ import (
 
 func TestConfigOk(t *testing.T) {
 	assert.Panics(t, func() {
-		NewConfig(nil)
+		MapConfig(nil)
 	})
 
-	c := NewConfig(make(map[string]interface{}))
+	c := MapConfig(make(map[string]interface{}))
 
-	_, ok := c.GetString("mk")
-	assert.False(t, ok)
+	_, err := c.GetString("mk")
+	assert.Equal(t, ErrNotFound, err)
 
-	_, ok = c.GetBool("mk")
-	assert.False(t, ok)
+	_, err = c.GetBool("mk")
+	assert.Equal(t, ErrNotFound, err)
 
-	_, ok = c.GetConfig("mk")
-	assert.False(t, ok)
+	_, err = c.GetConfig("mk")
+	assert.Equal(t, ErrNotFound, err)
 
-	_, ok = c.GetFloat("mk")
-	assert.False(t, ok)
+	_, err = c.GetFloat("mk")
+	assert.Equal(t, ErrNotFound, err)
 
-	_, ok = c.GetInt("mk")
-	assert.False(t, ok)
+	_, err = c.GetInt("mk")
+	assert.Equal(t, ErrNotFound, err)
 
-	_, ok = c.GetAttribute("mk")
-	assert.False(t, ok)
+	_, err = c.GetAttribute("mk")
+	assert.Equal(t, ErrNotFound, err)
 
-	_, ok = c.GetAttributes("mk")
-	assert.False(t, ok)
+	_, err = c.GetAttributes("mk")
+	assert.Equal(t, ErrNotFound, err)
 }
 func TestConfigTypes(t *testing.T) {
 	m := map[string]interface{}{
@@ -58,13 +58,13 @@ func TestConfigTypes(t *testing.T) {
 		"attr_2": map[string]interface{}{"fg": []interface{}{"red", "bold"}},
 	}
 
-	c1 := NewConfig(m)
-	c2 := NewConfig(map[string]interface{}{
+	c1 := MapConfig(m)
+	c2 := MapConfig(map[string]interface{}{
 		"nested": m,
 	})
 
-	cnested, ok := c2.GetConfig("nested")
-	require.True(t, ok)
+	cnested, err := c2.GetConfig("nested")
+	require.Nil(t, err)
 
 	// exceptions for unmarshaled
 	m["a1"] = "a"
@@ -94,40 +94,40 @@ func TestConfigTypes(t *testing.T) {
 		t.Run(tcase.description, func(t *testing.T) {
 			strings := []string{"a1", "a2", "a3", "a4", "a5"}
 			for _, key := range strings {
-				out, ok := c.GetString(key)
-				assert.True(t, ok)
+				out, err := c.GetString(key)
+				assert.Nil(t, err)
 				assert.Equal(t, "a", out, key)
 			}
 
 			ints := []string{"11", "12", "13", "14", "15", "16"}
 			for _, key := range ints {
-				out, ok := c.GetInt(key)
-				assert.True(t, ok)
+				out, err := c.GetInt(key)
+				require.NoError(t, err)
 				assert.Equal(t, 1, out)
 			}
 
 			floats := []string{"21", "22", "23"}
 			for _, key := range floats {
-				out, ok := c.GetFloat(key)
-				assert.True(t, ok)
+				out, err := c.GetFloat(key)
+				require.NoError(t, err)
 				assert.True(t, 2.0 < out)
 			}
 
-			out, ok := c.GetBool("true")
-			assert.True(t, ok)
+			out, err := c.GetBool("true")
+			require.NoError(t, err)
 			assert.Equal(t, true, out)
 
-			out, ok = c.GetBool("false")
-			assert.True(t, ok)
+			out, err = c.GetBool("false")
+			require.NoError(t, err)
 			assert.Equal(t, false, out)
 
-			attrs, ok := c.GetAttributes("attr_1")
-			assert.True(t, ok)
+			attrs, err := c.GetAttributes("attr_1")
+			require.NoError(t, err)
 			assert.True(t, attrs.Fg&term.ColorBlue != 0)
 			assert.True(t, attrs.Bg&term.ColorCyan != 0)
 
-			attrs, ok = c.GetAttributes("attr_2")
-			assert.True(t, ok)
+			attrs, err = c.GetAttributes("attr_2")
+			require.NoError(t, err)
 			assert.True(t, attrs.Fg&term.ColorRed != 0)
 			assert.True(t, attrs.Fg&term.AttrBold != 0)
 			assert.Equal(t, term.ColorDefault, attrs.Bg)

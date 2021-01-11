@@ -134,8 +134,11 @@ func newFuzzyFinderHandler(
 	h.p = p
 	h.invokeWindow = invokeWindow
 
-	cmdStr, ok := config.GetString("command")
-	if !ok {
+	cmdStr, err := config.GetString("command")
+	if err != nil {
+		if err != plugin.ErrNotFound {
+			log.Printf("failed to load 'command' config: %v", err)
+		}
 		h.cmdStr = defaultCommand
 	} else {
 		h.cmdStr = cmdStr
@@ -153,9 +156,21 @@ func newFuzzyFinderHandler(
 }
 
 func (h *fuzzyFinderHandler) getListConfig(config plugin.Config, cwd string) search.ListConfig {
-	caseSensitive, ok := config.GetBool("case_sensitive")
-	searchBase, _ := config.GetBool("search_base")
-	algoStr, _ := config.GetString("algo")
+	caseSensitive, err := config.GetBool("case_sensitive")
+	if err != nil {
+		if err != plugin.ErrNotFound {
+			log.Errorf("failed to load 'case_sensitive' from config: %v", err)
+		}
+		caseSensitive = true
+	}
+	searchBase, err := config.GetBool("search_base")
+	if err != nil && err != plugin.ErrNotFound {
+		log.Errorf("failed to load 'search_base' from config: %v", err)
+	}
+	algoStr, err := config.GetString("algo")
+	if err != nil && err != plugin.ErrNotFound {
+		log.Errorf("failed to load 'algo' from config: %v", err)
+	}
 	algo := search.FuzzyMatch
 	if algoStr == "equal" {
 		algo = search.EqualMatch
@@ -168,32 +183,42 @@ func (h *fuzzyFinderHandler) getListConfig(config plugin.Config, cwd string) sea
 	cfg := search.ListConfig{
 		Algo:          algo,
 		Interrupt:     h.publishInterrupt,
-		CaseSensitive: ok && caseSensitive,
+		CaseSensitive: caseSensitive,
 		SearchBase:    searchBaseStr,
 	}
 
-	searchBaseAttr, ok := config.GetAttributes("search_base_attr")
-	if ok {
+	searchBaseAttr, err := config.GetAttributes("search_base_attr")
+	if err != nil && err != plugin.ErrNotFound {
+		log.Errorf("failed to load 'search_base_attr' from config: %v", err)
+	} else {
 		cfg.SearchBaseAttr = &searchBaseAttr
 	}
 
-	matchedTextAttr, ok := config.GetAttributes("match_text_attr")
-	if ok {
+	matchedTextAttr, err := config.GetAttributes("match_text_attr")
+	if err != nil && err != plugin.ErrNotFound {
+		log.Errorf("failed to load 'match_base_attr' from config: %v", err)
+	} else {
 		cfg.MatchedTextAttr = &matchedTextAttr
 	}
 
-	countAttr, ok := config.GetAttributes("count_attr")
-	if ok {
+	countAttr, err := config.GetAttributes("count_attr")
+	if err != nil && err != plugin.ErrNotFound {
+		log.Errorf("failed to load 'count_attr' from config: %v", err)
+	} else {
 		cfg.CountAttr = &countAttr
 	}
 
-	textAttr, ok := config.GetAttributes("element_attr")
-	if ok {
+	textAttr, err := config.GetAttributes("element_attr")
+	if err != nil && err != plugin.ErrNotFound {
+		log.Errorf("failed to load 'element_attr' from config: %v", err)
+	} else {
 		cfg.ElementAttr = &textAttr
 	}
 
-	focusAttr, ok := config.GetAttributes("focus_element_attr")
-	if ok {
+	focusAttr, err := config.GetAttributes("focus_element_attr")
+	if err != nil && err != plugin.ErrNotFound {
+		log.Errorf("failed to load 'focus_element_attr' from config: %v", err)
+	} else {
 		cfg.FocusElementAttr = &focusAttr
 	}
 
