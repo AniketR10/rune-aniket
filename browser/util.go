@@ -62,7 +62,7 @@ func forceCloseResource(
 	res, ok := resources[brokerID]
 	if !ok {
 		if logger != nil {
-			logger.Warnf("resource %d already closed", brokerID)
+			logger.Debugf("resource %d already closed", brokerID)
 		}
 		return nil, nil
 	}
