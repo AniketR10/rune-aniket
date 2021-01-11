@@ -34,14 +34,16 @@ func (s *stringComp) Draw(w term.Writer) {
 	}
 }
 
-// StringBackground converts a string into a static tui.Compontent,
-// and uses c as the background rune. It processes newlines and so draws
+// StringBackgroundAttr converts str into a static tui.Compontent with attr as attributes,
+// and uses c as the background rune, battr as its attributes. It processes newlines and so draws
 // the string multi line if applicable. It also centers the string vertically
 // and horizontally.
-func StringBackground(str string, c rune) tui.Component {
+func StringBackgroundAttr(
+	str string, attr term.Attributes, c rune, battr term.Attributes,
+) tui.Component {
 	cells := cell.StringToCells(str)
-	comp := stringComp{cells: cells}
-	background := term.Cell{Ch: c}
+	comp := stringComp{cells: cells, attr: attr}
+	background := term.Cell{Ch: c, Fg: battr.Fg, Bg: battr.Bg}
 
 	var width int
 	for _, row := range cells {
@@ -56,11 +58,19 @@ func StringBackground(str string, c rune) tui.Component {
 	})
 }
 
+// StringBackground converts a string into a static tui.Compontent,
+// and uses c as the background rune. It processes newlines and so draws
+// the string multi line if applicable. It also centers the string vertically
+// and horizontally.
+func StringBackground(str string, c rune) tui.Component {
+	return StringBackgroundAttr(str, term.Attributes{}, c, term.Attributes{})
+}
+
 // StringCentered converts a string into a static tui.Compontent.
 // It processes newlines and so draws the string multi line if applicable.
 // It also centers the string vertically and horizontally.
 func StringCentered(str string) tui.Component {
-	return StringBackground(str, 0)
+	return StringBackgroundAttr(str, term.Attributes{}, 0, term.Attributes{})
 }
 
 // String converts a string into a very efficient top left centered one line tui.Component
