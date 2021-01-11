@@ -2,19 +2,20 @@ GO=go
 GOTESTFLAGS=-race -timeout 20s
 GOFLAGS=
 
-TARGET=bin
+BIN=bin
+TARGET=target
 WASM_EXAMPLE_TARGET=bin/example_wasm
 WASM_EXAMPLE=examples/wasm/main.go
 WASM_EXAMPLE_STATIC=examples/wasm/static
 LIBSRC=$(wildcard *.go) $(wildcard **/*.go) $(wildcard **/**/*.go)
 EXAMPLESRC=$(filter-out $(WASM_EXAMPLE), $(wildcard examples/**/*.go))
 EXAMPLEDIRS=$(sort $(dir $(EXAMPLESRC)))
-EXAMPLES_NON_WASM=$(patsubst examples/%/,$(TARGET)/example_%,$(EXAMPLEDIRS))
+EXAMPLES_NON_WASM=$(patsubst examples/%/,$(BIN)/example_%,$(EXAMPLEDIRS))
 EXAMPLE_WASM_BLOB=$(WASM_EXAMPLE_TARGET)/main.wasm
 EXAMPLES=$(EXAMPLES_NON_WASM)
 EXECSRC=$(wildcard cmd/**/*.go)
 EXECDIRS=$(sort $(dir $(EXECSRC)))
-EXECS=$(patsubst cmd/%/,$(TARGET)/%,$(EXECDIRS))
+EXECS=$(patsubst cmd/%/,$(BIN)/%,$(EXECDIRS))
 PROTO=proto/*.pb.go
 GOMOCKS=$(wildcard **/*_gomock.go)
 
@@ -30,9 +31,9 @@ example_wasm: $(EXAMPLE_WASM_BLOB)
 test: $(EXAMPLES) $(EXECS)
 	@ go test ./.../... $(GOTESTFLAGS)
 
-coverage: $(TARGET)
-	@ go test ./.../... -coverprofile $(TARGET)/coverage
-	@ go tool cover -html=$(TARGET)/coverage
+coverage: $(BIN)
+	@ go test ./.../... -coverprofile $(BIN)/coverage
+	@ go tool cover -html=$(BIN)/coverage
 
 generate:
 	@ rm -rf $(GOMOCKS) $(PROTO)
@@ -42,12 +43,12 @@ install:
 	@ go install ./...
 
 clean:
-	@-rm -rf $(TARGET)
+	@rm -rf $(BIN) $(TARGET)
 
-$(TARGET):
-	@mkdir $(TARGET)
+$(BIN):
+	@mkdir $(BIN)
 
-$(WASM_EXAMPLE_TARGET): $(TARGET) $(WASM_EXAMPLE_STATIC)
+$(WASM_EXAMPLE_TARGET): $(BIN) $(WASM_EXAMPLE_STATIC)
 	@rm -rf $(WASM_EXAMPLE_TARGET)
 	@mkdir $(WASM_EXAMPLE_TARGET)
 	@cp -R $(WASM_EXAMPLE_STATIC)/* $(WASM_EXAMPLE_TARGET)
@@ -56,8 +57,19 @@ $(WASM_EXAMPLE_TARGET): $(TARGET) $(WASM_EXAMPLE_STATIC)
 $(EXAMPLE_WASM_BLOB): $(WASM_EXAMPLE) $(LIBSRC) $(WASM_EXAMPLE_TARGET)
 	@GOOS=js GOARCH=wasm $(GO) build -o $(EXAMPLE_WASM_BLOB) $(WASM_EXAMPLE)
 
-$(EXAMPLES_NON_WASM): $(EXAMPLESRC) $(LIBSRC) $(TARGET)
+$(EXAMPLES_NON_WASM): $(EXAMPLESRC) $(LIBSRC) $(BIN)
 	@cd $(patsubst bin/example_%,examples/%,$@) && $(GO) build $(GOFLAGS) -o ../../$@
 
-$(EXECS): $(EXECSRC) $(LIBSRC) $(TARGET)
+$(EXECS): $(EXECSRC) $(LIBSRC) $(BIN)
 	@cd $(patsubst bin/%,cmd/%,$@) && $(GO) build $(GOFLAGS) -o ../../$@
+
+make_release:
+	@ mkdir -p $(TARGET)/$(TARGET_OS)_$(TARGET_ARCH)
+	@ GOARCH=$(TARGET_ARCH) $(TARGET_ARCH_FLAGS) GOOS=$(TARGET_OS) go build -o `pwd`/$(TARGET)/$(TARGET_OS)_$(TARGET_ARCH) ./... 
+
+release: default
+	@ rm -rf $(TARGET)
+	@ TARGET_OS=linux TARGET_ARCH=arm TARGET_ARCH_FLAGS=GOARM=7 $(MAKE) make_release
+	@ TARGET_OS=linux TARGET_ARCH=amd64 $(MAKE) make_release
+	@ TARGET_OS=darwin TARGET_ARCH=amd64 $(MAKE) make_release
+	@ cd $(TARGET) && tar -czvf six-release-`git describe --tags`.tar.gz *
