@@ -21,7 +21,7 @@ func assertDefaultConfig(t *testing.T, cfg *ideConfig) {
 	assert.Equal(t, "", cfg.browserSwapDir())
 	assert.Equal(t, "", cfg.logOutputPath())
 	assert.Equal(t, logrus.ErrorLevel, cfg.logLevel())
-	assert.Equal(t, term.OutputCurrent, cfg.outputMode())
+	assert.Equal(t, term.Output256, cfg.outputMode())
 	assert.Equal(t, term.InputCurrent, cfg.inputMode())
 }
 

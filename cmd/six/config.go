@@ -242,29 +242,32 @@ func (c ideConfig) logLevel() log.Level {
 	return level
 }
 
-func (c ideConfig) outputMode() term.OutputMode {
+func (c ideConfig) outputMode() (out term.OutputMode) {
+	out = term.Output256
+
 	outputModeIfc, ok := c.cfg["output_mode"]
 	if !ok {
-		return term.OutputCurrent
+		return
 	}
 
 	outputModeStr, ok := outputModeIfc.(string)
 	if !ok {
 		c.errors["output_mode"] = errors.New("invalid type")
-		return term.OutputCurrent
+		return
 	}
 
 	switch outputModeStr {
 	case outputNormal:
-		return term.OutputNormal
+		out = term.OutputNormal
 	case output256:
-		return term.Output256
+		out = term.Output256
 	case outputGrayscale:
-		return term.OutputGrayscale
+		out = term.OutputGrayscale
 	default:
 		c.errors["output_mode"] = fmt.Errorf("unknown output mode: %s", outputModeStr)
-		return term.OutputCurrent
 	}
+
+	return
 }
 
 func (c ideConfig) inputMode() term.InputMode {
