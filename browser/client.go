@@ -116,8 +116,8 @@ func (c *Client) serveHandler(h Handler) uint32 {
 	var brokerID uint32
 	var srv proto.MuxServer
 
-	if tokenHandler, ok := h.(remoteTokenHandler); ok {
-		brokerID = tokenHandler.handlerID
+	if tokenHandler, ok := h.(handler.Token); ok {
+		brokerID = tokenHandler.ID
 	} else {
 		brokerID, srv = acceptAndServe(c.broker, c.Logger,
 			func(handlerID uint32, srv proto.MuxServer) {
@@ -290,7 +290,7 @@ func (c *Client) Open(resource string) (Handler, error) {
 		return nil, err
 	}
 
-	return remoteTokenHandler{res.GetHandlerId()}, err
+	return handler.Token{ID: res.GetHandlerId()}, err
 }
 
 // Subscribe satisfies Browser.
