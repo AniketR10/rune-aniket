@@ -418,3 +418,13 @@ func (b *Buffer) Width() int {
 	}
 	return ret
 }
+
+// Reader returns this Buffer as a cell.Reader.
+func (b *Buffer) Reader() Reader {
+	return b.reader
+}
+
+// Writer returns this Buffer as a cell.Writer.
+func (b *Buffer) Writer() Writer {
+	return b.writer
+}
