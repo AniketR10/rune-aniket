@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+import "term.proto";
+
+package proto;
+
+message EditRequest {
+	string resource_name = 1;
+	repeated CellRow buffer = 2;
+}
+
+message EditResponse {
+	uint32 handler_id = 1;
+}
+
+service Editor {
+	rpc Edit(EditRequest) returns (EditResponse);
+}

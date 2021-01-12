@@ -19,6 +19,8 @@ var (
 	// SetContent but it's already owned by another Window.
 	ErrBufferNotFree = errors.New("Buffer already rendered in another Window")
 
+	// TODO expose more via configuration
+	// TODO use window manager config to setup frame union
 	focusFileAttr    = term.Attributes{Fg: term.ColorDefault}
 	nonFocusFileAttr = term.Attributes{Fg: 243}
 	scrollAttr       = term.Attributes{Fg: term.ColorWhite}
@@ -175,7 +177,10 @@ func (c *Component) Init(config Config) {
 		}
 	}
 	c.tabs.SetAttr(focusFileAttr, nonFocusFileAttr, frameFileAttr, scrollAttr)
-	c.startHandler = CallbackHandler(handler.Nop(component.StringCentered(c.config.StartText)), func() {})
+
+	startText := component.StringBackgroundAttr(c.config.StartText,
+		term.Attributes{Fg: term.ColorRed | term.AttrBold}, 0, term.Attributes{})
+	c.startHandler = CallbackHandler(handler.Nop(startText), func() {})
 
 	c.wm = handler.NewWindowManager(c.startHandler, c.config.WindowManagerConfig)
 	c.wm.SetAttr(wmDefaultAttr, wmFocusAttr)

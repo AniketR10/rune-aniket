@@ -153,11 +153,6 @@ func (e *Ex) newFileBuffer(filename, recSwapFile string, buf *cell.Buffer) (
 	return
 }
 
-func emptyHandler(ed Editor) tui.Handler {
-	buf := cell.NewBuffer()
-	return ed.Edit(buf)
-}
-
 func (e *Ex) newBufferWithFile(
 	filename, recoveryFilename string,
 ) (browser.Handler, error) {
@@ -169,7 +164,7 @@ func (e *Ex) newBufferWithFile(
 		return nil, err
 	}
 
-	editor := e.ed.Edit(buf)
+	editor, _ := e.ed.Edit(filename, buf)
 	browserBuf := e.comp.NewBuffer(filepath.Base(filename), editor, fileBuf)
 	return browserBuf, nil
 }

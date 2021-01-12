@@ -47,16 +47,16 @@ func assertNoLeaks(t *testing.T) {
 
 func newMockedClient(ctrl *gomock.Controller) (
 	client *Client,
-	mockCC *MockClientConnInterface,
+	mockCC *proto.MockClientConnInterface,
 	mockMux *proto.MockMuxBroker,
 ) {
-	mockCC = NewMockClientConnInterface(ctrl)
+	mockCC = proto.NewMockClientConnInterface(ctrl)
 	mockMux = proto.NewMockMuxBroker(ctrl)
 	client = NewClient(mockMux, mockCC, new(sync.Mutex))
 	return
 }
 
-func expectInvokeRPC(mockCC *MockClientConnInterface) {
+func expectInvokeRPC(mockCC *proto.MockClientConnInterface) {
 	mockCC.EXPECT().
 		Invoke(gomock.Any(), gomock.Any(),
 			gomock.Any(), gomock.Any()).
@@ -64,7 +64,7 @@ func expectInvokeRPC(mockCC *MockClientConnInterface) {
 		Return(nil)
 }
 
-func expectInvokeError(mockCC *MockClientConnInterface) {
+func expectInvokeError(mockCC *proto.MockClientConnInterface) {
 	mockCC.EXPECT().
 		Invoke(gomock.Any(), gomock.Any(),
 			gomock.Any(), gomock.Any()).
@@ -159,7 +159,7 @@ func expectBrokerDialError(
 }
 
 func expectSplit(
-	t *testing.T, mockCC *MockClientConnInterface,
+	t *testing.T, mockCC *proto.MockClientConnInterface,
 	handlerID, windowID uint32, rpc string,
 ) {
 	mockCC.EXPECT().
@@ -179,7 +179,7 @@ func expectSplit(
 }
 
 func expectFocus(
-	t *testing.T, mockCC *MockClientConnInterface,
+	t *testing.T, mockCC *proto.MockClientConnInterface,
 	handlerID, windowID uint32,
 ) {
 	mockCC.EXPECT().
@@ -329,7 +329,7 @@ func TestClientSetMessage(t *testing.T) {
 	})
 }
 
-func expectResourceOpen(mockCC *MockClientConnInterface, myResource string) {
+func expectResourceOpen(mockCC *proto.MockClientConnInterface, myResource string) {
 	in := &proto.OpenResourceRequest{Resource: myResource}
 	out := new(proto.OpenResourceResponse)
 	mockCC.EXPECT().

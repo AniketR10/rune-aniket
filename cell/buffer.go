@@ -428,3 +428,11 @@ func (b *Buffer) Reader() Reader {
 func (b *Buffer) Writer() Writer {
 	return b.writer
 }
+
+// Size returns the total size in cells of this buffer.
+func (b *Buffer) Size() (ret int) {
+	for _, row := range b.RawCells() {
+		ret += len(row)
+	}
+	return
+}

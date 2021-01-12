@@ -1,7 +1,6 @@
 package browser
 
 //go:generate mockgen -destination=./browser_gomock.go -package browser -self_package browser -source browser.go
-//go:generate mockgen -destination=./grpc_gomock.go -package browser google.golang.org/grpc ClientConnInterface
 
 import (
 	"io"

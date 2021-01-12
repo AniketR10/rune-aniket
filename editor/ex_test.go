@@ -28,12 +28,14 @@ type browserInternal interface {
 type browserConstructor func(ed Editor, opts ...browser.Option) (browserInternal, error)
 
 type testEditor struct {
-	buf *cell.Buffer
+	name string
+	buf  *cell.Buffer
 }
 
-func (e *testEditor) Edit(buf *cell.Buffer) tui.Handler {
+func (e *testEditor) Edit(name string, buf *cell.Buffer) (tui.Handler, error) {
+	e.name = name
 	e.buf = buf
-	return handler.NewTestHandler()
+	return handler.NewTestHandler(), nil
 }
 
 type testFileBuffer struct {
