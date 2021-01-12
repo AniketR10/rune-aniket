@@ -74,6 +74,6 @@ func (t *dialBroker) Close() error {
 	for _, br := range t.conns {
 		br.MuxServer.Stop()
 	}
-	t.conns = nil
+	t.conns = make(map[uint32]brokerage)
 	return nil
 }

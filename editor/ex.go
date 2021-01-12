@@ -448,3 +448,11 @@ func (e *Ex) PublishInterrupt() error {
 func (e *Ex) Focus() (browser.Window, error) {
 	return e.comp.Focus(), nil
 }
+
+// Edit edits the resource with name and buffer with the underlying Editor
+// in a new browser buffer.
+func (e *Ex) Edit(name string, buf *cell.Buffer) (Handler, error) {
+	editor, _ := e.ed.Edit(name, buf)
+	_ = e.comp.NewBuffer(name, editor, nil)
+	return editor, nil
+}

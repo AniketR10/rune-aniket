@@ -24,7 +24,7 @@ func newTestServer(ctrl *gomock.Controller) (*proto.MockMuxBroker, *MockEditor, 
 	ed := NewMockEditor(ctrl)
 	// broker proto.MuxBroker, editor Editor, lock sync.Locker,
 	// interruptDraw, interruptHandle func(),
-	s := NewServer(broker, ed, nopLocker{}, func() {}, func() {})
+	s := NewServer(broker, ed, nopLocker{})
 	return broker, ed, s
 }
 

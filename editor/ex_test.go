@@ -32,7 +32,7 @@ type testEditor struct {
 	buf  *cell.Buffer
 }
 
-func (e *testEditor) Edit(name string, buf *cell.Buffer) (tui.Handler, error) {
+func (e *testEditor) Edit(name string, buf *cell.Buffer) (Handler, error) {
 	e.name = name
 	e.buf = buf
 	return handler.NewTestHandler(), nil

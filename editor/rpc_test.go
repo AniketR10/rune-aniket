@@ -42,7 +42,7 @@ func TestClientServerIntegration(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		b := proto.NewDialBroker()
 		ed := NewMockEditor(ctrl)
-		s := NewServer(b, ed, nopLocker{}, func() {}, func() {})
+		s := NewServer(b, ed, nopLocker{})
 
 		client, closeFn := setupIntTest(t, b, s)
 		defer closeFn()
@@ -59,7 +59,7 @@ func TestClientServerIntegration(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		b := proto.NewDialBroker()
 		ed := NewMockEditor(ctrl)
-		s := NewServer(b, ed, nopLocker{}, func() {}, func() {})
+		s := NewServer(b, ed, nopLocker{})
 
 		client, closeFn := setupIntTest(t, b, s)
 		defer closeFn()

@@ -7,10 +7,102 @@ package editor
 import (
 	reflect "reflect"
 
-	tui "github.com/ernestrc/go-tui"
+	go_tui "github.com/ernestrc/go-tui"
 	cell "github.com/ernestrc/go-tui/cell"
+	term "github.com/ernestrc/go-tui/term"
 	gomock "github.com/golang/mock/gomock"
 )
+
+// MockHandler is a mock of Handler interface.
+type MockHandler struct {
+	ctrl     *gomock.Controller
+	recorder *MockHandlerMockRecorder
+}
+
+// MockHandlerMockRecorder is the mock recorder for MockHandler.
+type MockHandlerMockRecorder struct {
+	mock *MockHandler
+}
+
+// NewMockHandler creates a new mock instance.
+func NewMockHandler(ctrl *gomock.Controller) *MockHandler {
+	mock := &MockHandler{ctrl: ctrl}
+	mock.recorder = &MockHandlerMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockHandler) EXPECT() *MockHandlerMockRecorder {
+	return m.recorder
+}
+
+// Cursor mocks base method.
+func (m *MockHandler) Cursor() (term.Coordinates, bool) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Cursor")
+	ret0, _ := ret[0].(term.Coordinates)
+	ret1, _ := ret[1].(bool)
+	return ret0, ret1
+}
+
+// Cursor indicates an expected call of Cursor.
+func (mr *MockHandlerMockRecorder) Cursor() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Cursor", reflect.TypeOf((*MockHandler)(nil).Cursor))
+}
+
+// Draw mocks base method.
+func (m *MockHandler) Draw(arg0 term.Writer) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "Draw", arg0)
+}
+
+// Draw indicates an expected call of Draw.
+func (mr *MockHandlerMockRecorder) Draw(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Draw", reflect.TypeOf((*MockHandler)(nil).Draw), arg0)
+}
+
+// Handle mocks base method.
+func (m *MockHandler) Handle(arg0 term.Event) (bool, bool) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Handle", arg0)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(bool)
+	return ret0, ret1
+}
+
+// Handle indicates an expected call of Handle.
+func (mr *MockHandlerMockRecorder) Handle(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Handle", reflect.TypeOf((*MockHandler)(nil).Handle), arg0)
+}
+
+// Man mocks base method.
+func (m *MockHandler) Man() go_tui.Manual {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Man")
+	ret0, _ := ret[0].(go_tui.Manual)
+	return ret0
+}
+
+// Man indicates an expected call of Man.
+func (mr *MockHandlerMockRecorder) Man() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Man", reflect.TypeOf((*MockHandler)(nil).Man))
+}
+
+// Resize mocks base method.
+func (m *MockHandler) Resize(width, height int) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "Resize", width, height)
+}
+
+// Resize indicates an expected call of Resize.
+func (mr *MockHandlerMockRecorder) Resize(width, height interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Resize", reflect.TypeOf((*MockHandler)(nil).Resize), width, height)
+}
 
 // MockEditor is a mock of Editor interface.
 type MockEditor struct {
@@ -36,10 +128,10 @@ func (m *MockEditor) EXPECT() *MockEditorMockRecorder {
 }
 
 // Edit mocks base method.
-func (m *MockEditor) Edit(name string, buf *cell.Buffer) (tui.Handler, error) {
+func (m *MockEditor) Edit(name string, buf *cell.Buffer) (Handler, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Edit", name, buf)
-	ret0, _ := ret[0].(tui.Handler)
+	ret0, _ := ret[0].(Handler)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

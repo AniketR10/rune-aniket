@@ -22,31 +22,24 @@ type Server struct {
 		Editor
 		sync.Locker
 	}
-
-	interruptDraw   func()
-	interruptHandle func()
 }
 
 // NewServer allocates storage for a new Server and initializes it.
 func NewServer(
 	broker proto.MuxBroker, editor Editor, lock sync.Locker,
-	interruptDraw, interruptHandle func(),
 ) *Server {
 	ret := new(Server)
-	ret.Init(broker, editor, lock, interruptDraw, interruptHandle)
+	ret.Init(broker, editor, lock)
 	return ret
 }
 
 // Init initializes this Server with broker and browser.
 func (s *Server) Init(
 	broker proto.MuxBroker, editor Editor, lock sync.Locker,
-	interruptDraw, interruptHandle func(),
 ) {
 	s.broker = broker
 	s.editor.Editor = editor
 	s.editor.Locker = lock
-	s.interruptDraw = interruptDraw
-	s.interruptHandle = interruptHandle
 	s.opened = make(map[uint32]tui.Handler)
 }
 

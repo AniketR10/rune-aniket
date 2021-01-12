@@ -81,11 +81,6 @@ func BrowserResources(b browser.Browser) map[Permission]ResourceServer {
 	}
 }
 
-var (
-	clients    sync.Map
-	pluginLock sync.Mutex
-)
-
 func dialBrowser(token uint32, broker proto.MuxBroker) (
 	browser.Browser, error,
 ) {

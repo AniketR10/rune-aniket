@@ -83,7 +83,7 @@ func (c *Client) Init(
 }
 
 // Edit requests editor server to edit buf.
-func (c *Client) Edit(name string, buf *cell.Buffer) (tui.Handler, error) {
+func (c *Client) Edit(name string, buf *cell.Buffer) (Handler, error) {
 	ctx := context.Background()
 	req := proto.BufferToEditRequest(buf)
 	req.ResourceName = name

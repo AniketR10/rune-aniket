@@ -123,7 +123,7 @@ func (i *IDE) init(cfgfilename, recfilename string, filenames ...string) error {
 	i.editor = editor
 
 	res := plugin.BrowserResources(i.editor)
-	// res = plugin.MergeResources(plugin.EditorResources(i.editor))
+	res = plugin.MergeResourceMap(res, plugin.EditorResources(i.editor))
 	i.manager, err = plugin.NewManager(plugin.GrantAll(res), pluginOpts...)
 	if err != nil {
 		return fmt.Errorf("error initializing plugin manager: %v", err)
