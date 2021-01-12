@@ -3,12 +3,20 @@ package proto
 //go:generate mockgen -destination=./grpc_gomock.go -package proto google.golang.org/grpc ClientConnInterface
 
 import (
+	context "context"
+	fmt "fmt"
+	"io"
 	math "math"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/ernestrc/go-tui"
 	"github.com/ernestrc/go-tui/cell"
 	"github.com/ernestrc/go-tui/term"
+	log "github.com/sirupsen/logrus"
+	grpc "google.golang.org/grpc"
+	"google.golang.org/grpc/connectivity"
 )
 
 var zeroCell = Cell{}
@@ -150,4 +158,89 @@ func DrawResponseToTermString(r *DrawResponse) (str string, width, height int) {
 	}
 	str = builder.String()
 	return
+}
+
+// ForceCloseResource is a helper function to remove a resource
+// from a resource server or client and close it, safely.
+func ForceCloseResource(
+	brokerID uint64, getResourcesFn func() map[uint64]io.Closer,
+	logger *log.Logger, locker sync.Locker,
+) (io.Closer, error) {
+	locker.Lock()
+	defer locker.Unlock()
+	resources := getResourcesFn()
+	res, ok := resources[brokerID]
+	if !ok {
+		if logger != nil {
+			logger.Debugf("resource %d already closed", brokerID)
+		}
+		return nil, nil
+	}
+	delete(resources, brokerID)
+
+	err := res.Close()
+	if err != nil && logger != nil {
+		logger.Errorf("resource.Close error: %v", err)
+	}
+
+	return res, err
+}
+
+// MonitorConnection blocks the calling goroutine and calls onClosed callback
+// and returns only when connection state is shutdown, or it has been in a transient
+// failure for too long.
+func MonitorConnection(
+	ctx context.Context, failureTimeout time.Duration,
+	conn MuxConn, onClosed func(reason string),
+) {
+
+	for {
+		state := conn.GetState()
+		switch state {
+		case connectivity.Idle, connectivity.Connecting, connectivity.Ready:
+			conn.WaitForStateChange(ctx, state)
+		case connectivity.TransientFailure:
+			failureCtx, cancelFn := context.WithTimeout(ctx, failureTimeout)
+			didChange := conn.WaitForStateChange(failureCtx, connectivity.TransientFailure)
+			cancelFn()
+			if !didChange {
+				onClosed("timeout waiting for transient failure to recover")
+				return
+			}
+		case connectivity.Shutdown:
+			onClosed("grpc connection state = shutdown")
+			return
+		default:
+			panic(fmt.Sprintf("unknown connection state: %v", state))
+		}
+	}
+}
+
+// AcceptAndServe calls the underlying broker's AcceptAndServe
+// with a new brokerID, and potentially an instrumented grpc.Server,
+// if and only if the level enabled at logger is Trace.
+func AcceptAndServe(
+	broker MuxBroker, logger *log.Logger,
+	register func(uint32, MuxServer),
+) (uint32, MuxServer) {
+	brokerID := broker.NextId()
+
+	var wg sync.WaitGroup
+	var srv MuxServer
+	serverFunc := func(opts []grpc.ServerOption) MuxServer {
+		defer wg.Done()
+		if logger != nil && logger.IsLevelEnabled(log.TraceLevel) {
+			srv = LoggingGRPCServer(logger, opts...)
+		} else {
+			srv = GRPCServer(opts...)
+		}
+		register(brokerID, srv)
+		return srv
+	}
+
+	wg.Add(1)
+	go broker.AcceptAndServe(brokerID, serverFunc)
+	wg.Wait()
+
+	return brokerID, srv
 }

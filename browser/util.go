@@ -1,21 +1,15 @@
 package browser
 
 import (
-	"context"
-	"fmt"
-	"io"
-	"sync"
 	"time"
 
 	"github.com/ernestrc/go-tui/cell"
 	"github.com/ernestrc/go-tui/component"
 	"github.com/ernestrc/go-tui/handler"
-	"github.com/ernestrc/go-tui/proto"
 	"github.com/ernestrc/go-tui/term"
-	log "github.com/sirupsen/logrus"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/connectivity"
 )
+
+const defaultFailureTimeout = 5 * time.Second
 
 // satisfies sync.Locker
 type nopLocker struct{}
@@ -50,83 +44,4 @@ func ResizeMessageSpan(logVirt *handler.Virtual, width, height int) {
 	} else {
 		logVirt.Resize(0, 0)
 	}
-}
-
-func forceCloseResource(
-	brokerID uint64, getResourcesFn func() map[uint64]io.Closer,
-	logger *log.Logger, locker sync.Locker,
-) (io.Closer, error) {
-	locker.Lock()
-	defer locker.Unlock()
-	resources := getResourcesFn()
-	res, ok := resources[brokerID]
-	if !ok {
-		if logger != nil {
-			logger.Debugf("resource %d already closed", brokerID)
-		}
-		return nil, nil
-	}
-	delete(resources, brokerID)
-
-	err := res.Close()
-	if err != nil && logger != nil {
-		logger.Errorf("resource.Close error: %v", err)
-	}
-
-	return res, err
-}
-
-const defaultFailureTimeout = 5 * time.Second
-
-func monitorConnection(
-	ctx context.Context, failureTimeout time.Duration,
-	conn proto.MuxConn, onClosed func(reason string),
-) {
-
-	for {
-		state := conn.GetState()
-		switch state {
-		case connectivity.Idle, connectivity.Connecting, connectivity.Ready:
-			conn.WaitForStateChange(ctx, state)
-		case connectivity.TransientFailure:
-			failureCtx, cancelFn := context.WithTimeout(ctx, failureTimeout)
-			didChange := conn.WaitForStateChange(failureCtx, connectivity.TransientFailure)
-			cancelFn()
-			if !didChange {
-				onClosed("timeout waiting for transient failure to recover")
-				return
-			}
-		case connectivity.Shutdown:
-			onClosed("grpc connection state = shutdown")
-			return
-		default:
-			panic(fmt.Sprintf("unknown connection state: %v", state))
-		}
-	}
-}
-
-func acceptAndServe(
-	broker proto.MuxBroker, logger *log.Logger,
-	register func(uint32, proto.MuxServer),
-) (uint32, proto.MuxServer) {
-	brokerID := broker.NextId()
-
-	var wg sync.WaitGroup
-	var srv proto.MuxServer
-	serverFunc := func(opts []grpc.ServerOption) proto.MuxServer {
-		defer wg.Done()
-		if logger != nil && logger.IsLevelEnabled(log.TraceLevel) {
-			srv = proto.LoggingGRPCServer(logger, opts...)
-		} else {
-			srv = proto.GRPCServer(opts...)
-		}
-		register(brokerID, srv)
-		return srv
-	}
-
-	wg.Add(1)
-	go broker.AcceptAndServe(brokerID, serverFunc)
-	wg.Wait()
-
-	return brokerID, srv
 }

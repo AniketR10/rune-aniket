@@ -119,7 +119,7 @@ func (c *Client) serveHandler(h Handler) uint32 {
 	if tokenHandler, ok := h.(handler.Token); ok {
 		brokerID = tokenHandler.ID
 	} else {
-		brokerID, srv = acceptAndServe(c.broker, c.Logger,
+		brokerID, srv = proto.AcceptAndServe(c.broker, c.Logger,
 			func(handlerID uint32, srv proto.MuxServer) {
 				h = browserClientHandler{
 					Handler:   h,
@@ -157,7 +157,7 @@ func (c *Client) dialWindow(windowID uint32, handlerID int) (Window, error) {
 
 	ctx, cancelFn := context.WithCancel(context.Background())
 
-	go monitorConnection(ctx, c.failureTimeout, winConn, func(reason string) {
+	go proto.MonitorConnection(ctx, c.failureTimeout, winConn, func(reason string) {
 		// only applies when connection is closed remotely
 		c.mu.Lock()
 		defer c.mu.Unlock()
@@ -185,19 +185,19 @@ func (c *Client) getServers() map[uint64]io.Closer {
 
 func (c *Client) forceCloseHandler(brokerID uint32, reason string) error {
 	c.tryLog("browser.Client.forceCloseHandler(%d, reason=%s)", brokerID, reason)
-	_, err := forceCloseResource(uint64(brokerID), c.getServers, c.Logger, nopLocker{})
+	_, err := proto.ForceCloseResource(uint64(brokerID), c.getServers, c.Logger, nopLocker{})
 	return err
 }
 
 func (c *Client) safeForceCloseHandler(brokerID uint32, reason string) error {
 	c.tryLog("browser.Client.safeForceCloseHandler(%d, reason=%s)", brokerID, reason)
-	_, err := forceCloseResource(uint64(brokerID), c.getServers, c.Logger, &c.mu)
+	_, err := proto.ForceCloseResource(uint64(brokerID), c.getServers, c.Logger, &c.mu)
 	return err
 }
 
 func (c *Client) safeForceCloseWindow(brokerID uint32, reason string) error {
 	c.tryLog("browser.Client.safeForceCloseWindow(%d, reason=%s)", brokerID, reason)
-	_, err := forceCloseResource(uint64(brokerID), c.getClients, c.Logger, &c.mu)
+	_, err := proto.ForceCloseResource(uint64(brokerID), c.getClients, c.Logger, &c.mu)
 	return err
 }
 

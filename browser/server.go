@@ -130,7 +130,7 @@ func (s *Server) dialHandler(handlerID uint32) (Handler, error) {
 
 	ctx, cancelFn := context.WithCancel(context.Background())
 
-	go monitorConnection(ctx, s.failureTimeout, handlerConn, func(reason string) {
+	go proto.MonitorConnection(ctx, s.failureTimeout, handlerConn, func(reason string) {
 		s.safeForceCloseHandler(handlerID, reason)
 	})
 
@@ -153,7 +153,7 @@ func (s *Server) serveWindow(win Window) uint32 {
 		return res.(*windowServerResource).brokerID
 	}
 
-	brokerID, srv := acceptAndServe(s.broker, s.Logger,
+	brokerID, srv := proto.AcceptAndServe(s.broker, s.Logger,
 		func(windowBrokerID uint32, srv proto.MuxServer) {
 			winSrv := newWindowServer(s, win)
 			proto.RegisterWindowServer(srv.GRPC(), winSrv)
@@ -181,13 +181,13 @@ func (s *Server) getServers() map[uint64]io.Closer {
 
 func (s *Server) forceCloseWindow(winID uint64, reason string) error {
 	s.tryLog("browser.Server.forceCloseWindow(%d, reason=%s)", winID, reason)
-	_, err := forceCloseResource(winID, s.getServers, s.Logger, nopLocker{})
+	_, err := proto.ForceCloseResource(winID, s.getServers, s.Logger, nopLocker{})
 	return err
 }
 
 func (s *Server) safeForceCloseWindow(winID uint64, reason string) error {
 	s.tryLog("browser.Server.safeForceCloseWindow(%d, reason=%s)", winID, reason)
-	_, err := forceCloseResource(winID, s.getServers, s.Logger, &s.browser)
+	_, err := proto.ForceCloseResource(winID, s.getServers, s.Logger, &s.browser)
 	return err
 }
 
@@ -200,12 +200,12 @@ func (s *Server) tryLog(msg string, args ...interface{}) {
 
 func (s *Server) safeForceCloseHandler(brokerID uint32, reason string) error {
 	s.tryLog("browser.Server.safeForceCloseHandler(%d, reason=%s)", brokerID, reason)
-	_, err := forceCloseResource(uint64(brokerID), s.getClients, s.Logger, &s.browser)
+	_, err := proto.ForceCloseResource(uint64(brokerID), s.getClients, s.Logger, &s.browser)
 	return err
 }
 func (s *Server) forceCloseHandler(brokerID uint32, reason string) error {
 	s.tryLog("browser.Server.forceCloseHandler(%d, reason=%s)", brokerID, reason)
-	_, err := forceCloseResource(uint64(brokerID), s.getClients, s.Logger, nopLocker{})
+	_, err := proto.ForceCloseResource(uint64(brokerID), s.getClients, s.Logger, nopLocker{})
 	return err
 }
 
