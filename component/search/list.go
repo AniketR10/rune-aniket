@@ -235,7 +235,7 @@ func (l *List) consumeAsyncElements() {
 	}
 }
 
-func (l *List) handleSearch(ctx context.Context) {
+func (l *List) handleSearch(ctx context.Context, cancelFn func()) {
 	l.mu.Lock()
 	l.list.Reset()
 	input := l.input
@@ -264,7 +264,7 @@ func (l *List) handleSearch(ctx context.Context) {
 
 	l.mu.Lock()
 	l.sortMatchesList()
-	l.cancelSearch()
+	cancelFn()
 	l.mu.Unlock()
 	l.cfg.interrupt()
 }
@@ -320,7 +320,7 @@ func (l *List) asyncSearch() {
 	ctx := context.Background()
 	l.searchCtx, l.cancelSearch = context.WithCancel(ctx)
 
-	go l.handleSearch(l.searchCtx)
+	go l.handleSearch(l.searchCtx, l.cancelSearch)
 }
 
 // SearchQueryLen returns the length of the current search query.

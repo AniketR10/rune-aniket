@@ -13,8 +13,6 @@ import (
 	"go.uber.org/goleak"
 )
 
-// TODO test component draw, focus push and async functionality etc.
-
 func assertNoLeaks(t *testing.T, l *List) {
 	assert.NoError(t, l.Close())
 	goleak.VerifyNone(t)
