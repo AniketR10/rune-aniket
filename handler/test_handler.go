@@ -19,6 +19,7 @@ type TestHandler struct {
 	tui.Manual
 	CursorPos         term.Coordinates
 	Exit              bool
+	Handled           bool
 	OnUnmountCallback func() error
 }
 
@@ -33,7 +34,7 @@ func NewTestHandler() (t *TestHandler) {
 func (t *TestHandler) Handle(term.Event) (bool, bool) {
 	// signal that we handled the event
 	t.Ch++
-	return t.Exit, true
+	return t.Exit, t.Handled
 }
 
 // Cursor returns the set CursorPos.
@@ -114,6 +115,8 @@ func BatchTestInputSequence(
 		var shouldSleep bool
 		for _, r := range tcase.InputSequence {
 			switch r {
+			case ':':
+				handler.Handle(term.Event{Key: term.KeyCtrlBackslash, Type: term.EventKey})
 			case '_':
 				shouldSleep = true
 			case ' ':

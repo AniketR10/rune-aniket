@@ -264,13 +264,25 @@ func (e *Ex) mapEvent(ev term.Event) term.Event {
 	return mev
 }
 
+func (e *Ex) handleCommandEvent(ev term.Event) bool {
+	if ev == e.config.CommandEvent {
+		e.setCommandMode()
+		return true
+	}
+	return false
+}
+
 func (e *Ex) handleProxy(ev term.Event) (
 	exit, handled bool,
 ) {
-	if ev == e.config.CommandEvent {
-		e.setCommandMode()
-		handled = true
-		return
+	// If Ex is configured with non character
+	// command mode trigger event, then this takes
+	// precedence over any other event
+	if e.config.CommandEvent.Ch == 0 {
+		handled = e.handleCommandEvent(ev)
+		if handled {
+			return
+		}
 	}
 
 	prev := ev
@@ -295,6 +307,15 @@ func (e *Ex) handleProxy(ev term.Event) (
 		// do not map for children
 		ev = prev
 		exit, handled = e.comp.Handle(ev)
+		if handled {
+			return
+		}
+		// If ex is configured with character
+		// command mode trigger event (i.e. ':')
+		// then we rely on underlying editor being
+		// a modal editor, which does not handle
+		// the command trigger event.
+		handled = e.handleCommandEvent(ev)
 		return
 	}
 

@@ -57,6 +57,7 @@ func TestComponentCloseWindow(t *testing.T) {
 			var h Handler
 			h = handler.NewTestHandler()
 			h.(*handler.TestHandler).Exit = true
+			h.(*handler.TestHandler).Handled = true
 			h = c.NewBuffer("bla", h, nil)
 			win := tcase.split(c, h)
 
@@ -271,8 +272,7 @@ func TestComponentHandlerUnmount(t *testing.T) {
 				},
 				func(t *testing.T, c *Component, win Window, h *testFlushCloser) {
 					h.Exit = true
-					exit, handled := c.Handle(term.Event{})
-					assert.True(t, handled)
+					exit, _ := c.Handle(term.Event{})
 					assert.False(t, exit)
 				},
 			}

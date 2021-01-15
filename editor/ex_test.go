@@ -247,7 +247,10 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 └──────────────────┘`},
 	}
 
-	browser, err := constructor(&testEditor{})
+	// handler.BatchTestInputSequence maps ':' characters to the following event
+	// this is to work around ex's assumptions on underlying handler.
+	commandEvent := term.Event{Type: term.EventKey, Key: term.KeyCtrlBackslash}
+	browser, err := constructor(&testEditor{}, browser.WithCommandEvent(commandEvent))
 	require.NoError(t, err)
 
 	handler.BatchTestInputSequence(t, browser, 20, 10, cases)

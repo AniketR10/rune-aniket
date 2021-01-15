@@ -188,6 +188,7 @@ func (c *Component) Init(config Config) {
 	c.frames.MiddleLeft.Fg = frameFileAttr.Fg
 	c.frames.MiddleRight.Bg = frameFileAttr.Bg
 	c.frames.MiddleRight.Fg = frameFileAttr.Fg
+	c.buffers = make([]*buffer, 0)
 
 	return
 }
