@@ -190,35 +190,40 @@ func (h *fuzzyFinderHandler) getListConfig(config plugin.Config, cwd string) sea
 	searchBaseAttr, err := config.GetAttributes("search_base_attr")
 	if err != nil && err != plugin.ErrNotFound {
 		log.Errorf("failed to load 'search_base_attr' from config: %v", err)
-	} else {
+	} else if err == nil {
+		log.Tracef("loaded 'search_base_attr' from config: %v", searchBaseAttr)
 		cfg.SearchBaseAttr = &searchBaseAttr
 	}
 
 	matchedTextAttr, err := config.GetAttributes("match_text_attr")
 	if err != nil && err != plugin.ErrNotFound {
 		log.Errorf("failed to load 'match_base_attr' from config: %v", err)
-	} else {
+	} else if err == nil {
+		log.Tracef("loaded 'match_base_attr' from config: %v", matchedTextAttr)
 		cfg.MatchedTextAttr = &matchedTextAttr
 	}
 
 	countAttr, err := config.GetAttributes("count_attr")
 	if err != nil && err != plugin.ErrNotFound {
 		log.Errorf("failed to load 'count_attr' from config: %v", err)
-	} else {
+	} else if err == nil {
+		log.Tracef("loaded 'count_attr' from config: %v", countAttr)
 		cfg.CountAttr = &countAttr
 	}
 
 	textAttr, err := config.GetAttributes("element_attr")
 	if err != nil && err != plugin.ErrNotFound {
 		log.Errorf("failed to load 'element_attr' from config: %v", err)
-	} else {
+	} else if err == nil {
+		log.Tracef("loaded 'element_attr' from config: %v", textAttr)
 		cfg.ElementAttr = &textAttr
 	}
 
 	focusAttr, err := config.GetAttributes("focus_element_attr")
 	if err != nil && err != plugin.ErrNotFound {
 		log.Errorf("failed to load 'focus_element_attr' from config: %v", err)
-	} else {
+	} else if err == nil {
+		log.Tracef("loaded 'focus_element_attr' from config: %v", focusAttr)
 		cfg.FocusElementAttr = &focusAttr
 	}
 

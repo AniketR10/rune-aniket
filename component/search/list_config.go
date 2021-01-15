@@ -47,7 +47,7 @@ type ListConfig struct {
 
 func (c ListConfig) toInternal() listConfig {
 	matchCountAttr := term.Attributes{
-		Fg: term.AttrBold,
+		Fg: term.ColorRed | term.AttrBold,
 	}
 	matchedTextAttr := term.Attributes{
 		Fg: term.ColorRed,
