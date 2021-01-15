@@ -218,7 +218,7 @@ func (l *List) consumeAsyncElements() {
 			l.mu.Lock()
 			height := l.height
 			l.mu.Unlock()
-			redraw := i == height || i%redrawAt == 0
+			redraw := i == height-1 || (i != 0 && i%redrawAt == 0)
 			l.pushData(data, slab, redraw)
 			if redraw {
 				l.cfg.interrupt()

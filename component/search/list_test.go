@@ -5,7 +5,6 @@ import (
 	"strings"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/ernestrc/go-tui/term"
 	"github.com/stretchr/testify/assert"
@@ -95,9 +94,6 @@ func pushTestData(l *List, n int) {
 	for i := 0; i < n; i++ {
 		l.Push() <- []byte(strconv.Itoa(i))
 	}
-
-	close(l.Push())
-	time.Sleep(500 * time.Millisecond)
 }
 
 func TestListAsyncPush(t *testing.T) {
@@ -111,6 +107,7 @@ func TestListAsyncPush(t *testing.T) {
 		wg.Add(3)
 		go func() {
 			pushTestData(l, height)
+			close(l.Push())
 			wg.Done()
 		}()
 
@@ -123,13 +120,18 @@ func TestListAsyncPush(t *testing.T) {
 	})
 
 	t.Run("search query after items pushed", func(t *testing.T) {
-		l := NewList(ListConfig{})
+		var wg sync.WaitGroup
+		l := NewList(ListConfig{Interrupt: wg.Done})
 		height := 100
 		l.Resize(100, height)
 
+		wg.Add(1)
 		pushTestData(l, height)
+		wg.Wait()
+		wg.Add(2)
 
 		l.SearchQueryWrite('9')
+		l.Wait()
 		l.SearchQueryWrite('9')
 		l.Wait()
 
@@ -140,14 +142,18 @@ func TestListAsyncPush(t *testing.T) {
 	})
 
 	t.Run("search query before items pushed", func(t *testing.T) {
-		l := NewList(ListConfig{})
-		l.Resize(10, 10)
+		var wg sync.WaitGroup
+		l := NewList(ListConfig{Interrupt: wg.Done})
 		n := 100
+		l.Resize(n, n)
 
+		wg.Add(3)
 		l.SearchQueryWrite('9')
+		l.Wait() // make next search query doesn't cancel prev
 		l.SearchQueryWrite('9')
-
+		l.Wait()
 		pushTestData(l, n)
+		wg.Wait()
 
 		// make sure it doesn't block
 		l.Wait()
@@ -159,20 +165,23 @@ func TestListAsyncPush(t *testing.T) {
 	})
 
 	t.Run("concurrent search query", func(t *testing.T) {
-		l := NewList(ListConfig{})
-		height := 100
-		l.Resize(100, height)
+		var wg sync.WaitGroup
+		l := NewList(ListConfig{Interrupt: wg.Done})
+		n := 100
+		l.Resize(n, n)
 
-		pushTestData(l, height)
+		wg.Add(3)
+		go pushTestData(l, n)
 
 		l.SearchQueryWrite('9')
+		l.Wait()
 		l.SearchQueryWrite('9')
-		l.SearchQueryDelete()
-		l.SearchQueryWrite('9')
-
 		l.Wait()
 
-		assert.Equal(t, height, l.TotalCount())
+		wg.Wait()
+		l.Wait()
+
+		assert.Equal(t, n, l.TotalCount())
 		assert.Equal(t, 1, l.MatchCount())
 
 		assertNoLeaks(t, l)
