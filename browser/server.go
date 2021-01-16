@@ -106,18 +106,18 @@ func (s *Server) dialHandler(handlerID uint32) (Handler, error) {
 	h, ok := s.opened[handlerID]
 	s.browser.Unlock()
 	if ok {
-		s.tryLog("(%p): using return of Open handler for handlerID: %d", s, handlerID)
+		s.tryLog("(%p browser.Server): using return of Open handler for handlerID: %d", s, handlerID)
 		return h, nil
 	}
 	s.browser.Lock()
 	res, ok := s.clients[uint64(handlerID)]
 	s.browser.Unlock()
 	if ok {
-		s.tryLog("(%p): found cached client for handlerID: %d", s, handlerID)
+		s.tryLog("(%p browser.Server): found cached client for handlerID: %d", s, handlerID)
 		return res.(*handlerClientResource).client, nil
 	}
 
-	s.tryLog("(%p): dialing handlerID: %d", s, handlerID)
+	s.tryLog("(%p browser.Server): dialing handlerID: %d", s, handlerID)
 	handlerConn, err := s.broker.Dial(handlerID)
 	if err != nil {
 		return nil, err
@@ -334,7 +334,7 @@ func (s *Server) Open(
 	// store proxy handler
 	handlerID := s.broker.NextId()
 	s.opened[handlerID] = h
-	s.tryLog("(%p): stored handler with ID: %d", s, handlerID)
+	s.tryLog("(%p browser.Server): stored handler with ID: %d", s, handlerID)
 
 	return &proto.OpenResourceResponse{HandlerId: handlerID}, nil
 }

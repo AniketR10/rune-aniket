@@ -11,6 +11,7 @@ import (
 	"github.com/ernestrc/go-tui/component"
 	"github.com/ernestrc/go-tui/handler"
 	"github.com/ernestrc/go-tui/proto"
+	prototest "github.com/ernestrc/go-tui/proto/test"
 	"github.com/ernestrc/go-tui/term"
 	gomock "github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
@@ -163,7 +164,7 @@ func TestServerOpen(t *testing.T) {
 			HandlerId: nextID,
 		}
 		windowID := uint32(999)
-		expectBrokerServe(t, windowID, broker)
+		prototest.ExpectBrokerServe(t, windowID, broker)
 		mockWindow := NewMockWindow(ctrl)
 		mockWindow.EXPECT().onWindowClosed(gomock.Any()).AnyTimes()
 		mockWindow.EXPECT().id().AnyTimes().Return(uint64(0))
@@ -282,8 +283,8 @@ func TestServerSubscribe(t *testing.T) {
 		s := NewServer(mockBroker, mock, &mu)
 
 		var h EventHandler
-		handlerConn := expectBrokerDial(t, ctrl, mockBroker, handlerID)
-		quitCh := expectMonitorConn(handlerConn)
+		handlerConn := prototest.ExpectBrokerDial(t, ctrl, mockBroker, handlerID)
+		quitCh := prototest.ExpectMonitorConn(handlerConn)
 		mock.EXPECT().Subscribe(gomock.Any(), gomock.Any()).
 			DoAndReturn(func(ev term.Event, _h EventHandler) error {
 				assert.Equal(t, termEv, ev)
@@ -305,7 +306,7 @@ func TestServerSubscribe(t *testing.T) {
 		var mu sync.Mutex
 		s, _, mockBroker := newTestServer(ctrl, &mu)
 
-		expectBrokerDialError(t, ctrl, mockBroker, handlerID)
+		prototest.ExpectBrokerDialError(t, ctrl, mockBroker, handlerID)
 
 		res, err := s.Subscribe(ctx, &req)
 		require.Error(t, err)
@@ -320,13 +321,13 @@ func TestServerSubscribe(t *testing.T) {
 		var mu sync.Mutex
 		s, mock, mockBroker := newTestServer(ctrl, &mu)
 
-		handlerConn := expectBrokerDial(t, ctrl, mockBroker, handlerID)
+		handlerConn := prototest.ExpectBrokerDial(t, ctrl, mockBroker, handlerID)
 		mock.EXPECT().Subscribe(gomock.Any(), gomock.Any()).
 			Return(errors.New("woopsie"))
 
-		quitCh := expectMonitorConn(handlerConn)
+		quitCh := prototest.ExpectMonitorConn(handlerConn)
 		handlerConn.EXPECT().Close().Times(1).
-			DoAndReturn(expectSignalExit(handlerConn, quitCh, nil))
+			DoAndReturn(prototest.ExpectSignalExit(handlerConn, quitCh, nil))
 		res, err := s.Subscribe(ctx, &req)
 		require.Error(t, err)
 		assert.Nil(t, res)
@@ -344,7 +345,7 @@ func TestServerSubscribe(t *testing.T) {
 		s, mock, mockBroker := newTestServer(ctrl, &mu)
 		s.failureTimeout = 50 * time.Millisecond
 
-		handlerConn := expectBrokerDial(t, ctrl, mockBroker, handlerID)
+		handlerConn := prototest.ExpectBrokerDial(t, ctrl, mockBroker, handlerID)
 
 		quitCh := make(chan struct{})
 		handlerConn.EXPECT().GetState().Return(connectivity.TransientFailure).AnyTimes()
@@ -364,7 +365,7 @@ func TestServerSubscribe(t *testing.T) {
 			}).Times(1)
 
 		handlerConn.EXPECT().Close().Times(1).
-			DoAndReturn(expectSignalExit(handlerConn, quitCh, nil))
+			DoAndReturn(prototest.ExpectSignalExit(handlerConn, quitCh, nil))
 		mock.EXPECT().Subscribe(gomock.Any(), gomock.Any()).Return(nil)
 		_, err := s.Subscribe(ctx, &req)
 		require.NoError(t, err)
@@ -416,7 +417,7 @@ func assertServerHandlerExitClose(
 	expectHandlerInvokeExit(t, handlerConn)
 
 	handlerConn.EXPECT().Close().Times(1).
-		DoAndReturn(expectSignalExit(handlerConn, quitCh, nil))
+		DoAndReturn(prototest.ExpectSignalExit(handlerConn, quitCh, nil))
 
 	s.browser.Lock()
 	exit, _ := h.Handle(termEv)
@@ -467,14 +468,14 @@ func testServerSplit(
 		}).Times(1)
 
 		var h Handler
-		handlerConn := expectBrokerDial(t, ctrl, mockBroker, handlerID)
-		quitCh := expectMonitorConn(handlerConn)
+		handlerConn := prototest.ExpectBrokerDial(t, ctrl, mockBroker, handlerID)
+		quitCh := prototest.ExpectMonitorConn(handlerConn)
 		expect(mock.EXPECT(), gomock.Any()).
 			DoAndReturn(func(_h Handler) (Window, error) {
 				h = _h
 				return mockWindow, nil
 			})
-		expectBrokerServe(t, windowID, mockBroker)
+		prototest.ExpectBrokerServe(t, windowID, mockBroker)
 
 		res, err := split(s, ctx, &req)
 		require.NoError(t, err)
@@ -492,7 +493,7 @@ func testServerSplit(
 
 		// verify that handler is closeable by its handlerId
 		handlerConn.EXPECT().Close().Times(1).
-			DoAndReturn(expectSignalExit(handlerConn, quitCh, nil))
+			DoAndReturn(prototest.ExpectSignalExit(handlerConn, quitCh, nil))
 		require.NoError(t, s.safeForceCloseHandler(handlerID, ""))
 		assertServerClientsEqual(t, 0, s)
 		waitForMonitoringExit(quitCh)
@@ -514,7 +515,7 @@ func testServerSplit(
 		var mu sync.Mutex
 		s, _, mockBroker := newTestServer(ctrl, &mu)
 
-		expectBrokerDialError(t, ctrl, mockBroker, handlerID)
+		prototest.ExpectBrokerDialError(t, ctrl, mockBroker, handlerID)
 
 		res, err := split(s, ctx, &req)
 		require.Error(t, err)
@@ -530,12 +531,12 @@ func testServerSplit(
 		var mu sync.Mutex
 		s, mock, mockBroker := newTestServer(ctrl, &mu)
 
-		handlerConn := expectBrokerDial(t, ctrl, mockBroker, handlerID)
-		quitCh := expectMonitorConn(handlerConn)
+		handlerConn := prototest.ExpectBrokerDial(t, ctrl, mockBroker, handlerID)
+		quitCh := prototest.ExpectMonitorConn(handlerConn)
 		expect(mock.EXPECT(), gomock.Any()).
 			Return(nil, errors.New("woopsie"))
 		handlerConn.EXPECT().Close().Times(1).
-			DoAndReturn(expectSignalExit(handlerConn, quitCh, nil))
+			DoAndReturn(prototest.ExpectSignalExit(handlerConn, quitCh, nil))
 
 		res, err := split(s, ctx, &req)
 		require.Error(t, err)

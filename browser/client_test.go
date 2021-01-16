@@ -10,13 +10,13 @@ import (
 
 	"github.com/ernestrc/go-tui/handler"
 	"github.com/ernestrc/go-tui/proto"
+	prototest "github.com/ernestrc/go-tui/proto/test"
 	"github.com/ernestrc/go-tui/term"
 	gomock "github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/goleak"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/connectivity"
 )
 
 var (
@@ -107,57 +107,6 @@ func assertClientHandlerExitClose(
 	assertClientServersEqual(t, 0, client)
 }
 
-func expectBrokerServe(t *testing.T, brokerID uint32, mockBroker *proto.MockMuxBroker) {
-	mockBroker.EXPECT().NextId().Return(uint32(brokerID))
-	mockBroker.EXPECT().AcceptAndServe(gomock.Any(), gomock.Any()).
-		DoAndReturn(func(brokerId uint32, serverFunc func(opts []grpc.ServerOption) proto.MuxServer) {
-			assert.Equal(t, uint32(brokerID), brokerId)
-			serverFunc(make([]grpc.ServerOption, 0))
-		}).
-		Times(1)
-}
-
-func expectMonitorConn(ret *proto.MockMuxConn) chan struct{} {
-	quitCh := make(chan struct{})
-	ret.EXPECT().GetState().Return(connectivity.Ready).Times(1)
-	ret.EXPECT().WaitForStateChange(gomock.Any(), gomock.Any()).
-		DoAndReturn(func(ctx context.Context, sourceState connectivity.State) bool {
-			select {
-			case <-ctx.Done():
-				return false
-			case _, ok := <-quitCh:
-				return ok
-			}
-		}).Times(1)
-
-	return quitCh
-}
-
-func expectBrokerDial(
-	t *testing.T, ctrl *gomock.Controller,
-	mockBroker *proto.MockMuxBroker, expectedBrokerID uint32,
-) *proto.MockMuxConn {
-	ret := proto.NewMockMuxConn(ctrl)
-
-	mockBroker.EXPECT().Dial(gomock.Any()).
-		DoAndReturn(func(brokerId uint32) (proto.MuxConn, error) {
-			assert.Equal(t, expectedBrokerID, brokerId)
-			return ret, nil
-		}).
-		Times(1)
-
-	return ret
-}
-
-func expectBrokerDialError(
-	t *testing.T, ctrl *gomock.Controller,
-	mockBroker *proto.MockMuxBroker, expectedBrokerID uint32,
-) {
-	mockBroker.EXPECT().Dial(gomock.Any()).
-		Return(nil, errors.New("whoopsie")).
-		Times(1)
-}
-
 func expectSplit(
 	t *testing.T, mockCC *proto.MockClientConnInterface,
 	handlerID, windowID uint32, rpc string,
@@ -198,17 +147,6 @@ func expectFocus(
 		Times(1)
 }
 
-func expectSignalExit(
-	mockConn *proto.MockMuxConn, quitCh chan struct{},
-	returnErr error,
-) func() error {
-	return func() error {
-		mockConn.EXPECT().GetState().Return(connectivity.Shutdown).AnyTimes()
-		close(quitCh)
-		return returnErr
-	}
-}
-
 func expectWindowClose(
 	t *testing.T, mockWinConn *proto.MockMuxConn, quitCh chan struct{},
 ) {
@@ -219,7 +157,7 @@ func expectWindowClose(
 			gomock.Eq(&proto.WindowCloseResponse{})).
 		Times(1)
 	mockWinConn.EXPECT().Close().Times(1).
-		DoAndReturn(expectSignalExit(mockWinConn, quitCh, nil))
+		DoAndReturn(prototest.ExpectSignalExit(mockWinConn, quitCh, nil))
 }
 
 func TestClientMergeKeyMap(t *testing.T) {
@@ -375,7 +313,7 @@ func TestClientSubscribe(t *testing.T) {
 
 		client, mockCC, mockBroker := newMockedClient(ctrl)
 
-		expectBrokerServe(t, 1, mockBroker)
+		prototest.ExpectBrokerServe(t, 1, mockBroker)
 		expectInvokeError(mockCC)
 
 		err := client.Subscribe(term.Event{}, nil)
@@ -391,7 +329,7 @@ func TestClientSubscribe(t *testing.T) {
 
 		client, mockCC, mockBroker := newMockedClient(ctrl)
 
-		expectBrokerServe(t, 1, mockBroker)
+		prototest.ExpectBrokerServe(t, 1, mockBroker)
 
 		in := &proto.SubscribeRequest{Ev: &proto.Event{Char: 'a'}, HandlerId: 1}
 		out := new(proto.SubscribeResponse)
@@ -491,10 +429,10 @@ func testClientSplit(
 		client, mockCC, mockBroker := newMockedClient(ctrl)
 
 		windowID := uint32(99)
-		expectBrokerServe(t, 1, mockBroker)
+		prototest.ExpectBrokerServe(t, 1, mockBroker)
 		expectSplit(t, mockCC, 1, windowID, rpc)
-		mockWinConn := expectBrokerDial(t, ctrl, mockBroker, windowID)
-		quitCh := expectMonitorConn(mockWinConn)
+		mockWinConn := prototest.ExpectBrokerDial(t, ctrl, mockBroker, windowID)
+		quitCh := prototest.ExpectMonitorConn(mockWinConn)
 
 		win, err := split(client, nil)
 		require.NoError(t, err)
@@ -521,7 +459,7 @@ func testClientSplit(
 
 		client, mockCC, mockBroker := newMockedClient(ctrl)
 
-		expectBrokerServe(t, 1, mockBroker)
+		prototest.ExpectBrokerServe(t, 1, mockBroker)
 		expectInvokeError(mockCC)
 
 		win, err := split(client, nil)
@@ -539,9 +477,9 @@ func testClientSplit(
 		client, mockCC, mockBroker := newMockedClient(ctrl)
 
 		windowID := uint32(99)
-		expectBrokerServe(t, 1, mockBroker)
+		prototest.ExpectBrokerServe(t, 1, mockBroker)
 		expectSplit(t, mockCC, 1, windowID, rpc)
-		expectBrokerDialError(t, ctrl, mockBroker, windowID)
+		prototest.ExpectBrokerDialError(t, ctrl, mockBroker, windowID)
 
 		win, err := split(client, nil)
 		require.Error(t, err)
@@ -559,10 +497,10 @@ func testClientSplit(
 
 		windowID := uint32(63)
 		brokerID := uint32(1)
-		expectBrokerServe(t, brokerID, mockBroker)
+		prototest.ExpectBrokerServe(t, brokerID, mockBroker)
 		expectSplit(t, mockCC, brokerID, windowID, rpc)
-		mockWinConn := expectBrokerDial(t, ctrl, mockBroker, windowID)
-		quitCh := expectMonitorConn(mockWinConn)
+		mockWinConn := prototest.ExpectBrokerDial(t, ctrl, mockBroker, windowID)
+		quitCh := prototest.ExpectMonitorConn(mockWinConn)
 
 		h := handler.NewTestHandler()
 		var wg sync.WaitGroup
@@ -579,7 +517,7 @@ func testClientSplit(
 		mockWinConn.EXPECT().Close().Times(1).
 			DoAndReturn(func() error {
 				h := client.servers[uint64(brokerID)].(*handlerServerResource).h.(Handler)
-				err := expectSignalExit(mockWinConn, quitCh, nil)()
+				err := prototest.ExpectSignalExit(mockWinConn, quitCh, nil)()
 				// server would call this asynchronously
 				go h.OnUnmount()
 				return err
@@ -603,11 +541,11 @@ func TestClientClose(t *testing.T) {
 
 	for i := 0; i < 10; i++ {
 		windowID := uint32(i)
-		expectBrokerServe(t, uint32(i), mockBroker)
+		prototest.ExpectBrokerServe(t, uint32(i), mockBroker)
 		expectSplit(t, mockCC, uint32(i), windowID,
 			"/proto.WindowManager/SplitVerticalRight")
-		mockWinConn := expectBrokerDial(t, ctrl, mockBroker, windowID)
-		quitCh := expectMonitorConn(mockWinConn)
+		mockWinConn := prototest.ExpectBrokerDial(t, ctrl, mockBroker, windowID)
+		quitCh := prototest.ExpectMonitorConn(mockWinConn)
 
 		_, err := client.SplitVerticalRight(nil)
 		require.NoError(t, err)
@@ -616,10 +554,10 @@ func TestClientClose(t *testing.T) {
 
 		if i%2 == 0 {
 			mockWinConn.EXPECT().Close().Times(1).
-				DoAndReturn(expectSignalExit(mockWinConn, quitCh, nil))
+				DoAndReturn(prototest.ExpectSignalExit(mockWinConn, quitCh, nil))
 		} else {
 			mockWinConn.EXPECT().Close().Times(1).
-				DoAndReturn(expectSignalExit(mockWinConn, quitCh, errors.New("let's see")))
+				DoAndReturn(prototest.ExpectSignalExit(mockWinConn, quitCh, errors.New("let's see")))
 		}
 	}
 
