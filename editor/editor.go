@@ -18,4 +18,10 @@ type Editor interface {
 	// Edit opens a file and returns a tui.Handler to edit it or an error
 	// if there was an error opening it.
 	Edit(name string, buf *cell.Buffer) (Handler, error)
+
+	// SubscribeEditor subscribes EventHandler to events of type EventType.
+	// Note that it's suffixed with Editor so implementors
+	// can also implement browser.Subscriber.
+	// TODO should rename browser.Subscribe to browser.SubscribeTerm
+	SubscribeEditor(EventType, EventHandler) error
 }

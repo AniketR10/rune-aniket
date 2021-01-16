@@ -141,3 +141,17 @@ func (mr *MockEditorMockRecorder) Edit(name, buf interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Edit", reflect.TypeOf((*MockEditor)(nil).Edit), name, buf)
 }
+
+// SubscribeEditor mocks base method.
+func (m *MockEditor) SubscribeEditor(arg0 EventType, arg1 EventHandler) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SubscribeEditor", arg0, arg1)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// SubscribeEditor indicates an expected call of SubscribeEditor.
+func (mr *MockEditorMockRecorder) SubscribeEditor(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubscribeEditor", reflect.TypeOf((*MockEditor)(nil).SubscribeEditor), arg0, arg1)
+}

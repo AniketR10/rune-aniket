@@ -6,14 +6,27 @@ import (
 )
 
 type exEventHandler struct {
-	browser *Ex
-	h       browser.EventHandler
+	e *Ex
+	h browser.EventHandler
 }
 
 func (h exEventHandler) Handle(ev term.Event) (exit bool) {
 	exit = h.h.Handle(ev)
 	if exit {
-		h.browser.unsubscribe(ev)
+		h.e.unsubscribe(ev)
+	}
+	return
+}
+
+type exEditorEventHandler struct {
+	e *Ex
+	h EventHandler
+}
+
+func (h exEditorEventHandler) Handle(ev Event) (exit bool) {
+	exit = h.h.Handle(ev)
+	if exit {
+		h.e.unsubscribeEditor(h)
 	}
 	return
 }

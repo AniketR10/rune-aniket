@@ -24,6 +24,34 @@ var _ = math.Inf
 // proto package needs to be updated.
 const _ = proto.ProtoPackageIsVersion3 // please upgrade the proto package
 
+type EditorEvent_Type int32
+
+const (
+	EditorEvent_TypeOpen  EditorEvent_Type = 0
+	EditorEvent_TypeClose EditorEvent_Type = 1
+	EditorEvent_TypeFlush EditorEvent_Type = 2
+)
+
+var EditorEvent_Type_name = map[int32]string{
+	0: "TypeOpen",
+	1: "TypeClose",
+	2: "TypeFlush",
+}
+
+var EditorEvent_Type_value = map[string]int32{
+	"TypeOpen":  0,
+	"TypeClose": 1,
+	"TypeFlush": 2,
+}
+
+func (x EditorEvent_Type) String() string {
+	return proto.EnumName(EditorEvent_Type_name, int32(x))
+}
+
+func (EditorEvent_Type) EnumDescriptor() ([]byte, []int) {
+	return fileDescriptor_7d780504008e31fd, []int{2, 0}
+}
+
 type EditRequest struct {
 	ResourceName         string     `protobuf:"bytes,1,opt,name=resource_name,json=resourceName,proto3" json:"resource_name,omitempty"`
 	Buffer               []*CellRow `protobuf:"bytes,2,rep,name=buffer,proto3" json:"buffer,omitempty"`
@@ -110,27 +138,173 @@ func (m *EditResponse) GetHandlerId() uint32 {
 	return 0
 }
 
+type EditorEvent struct {
+	Type                 EditorEvent_Type `protobuf:"varint,1,opt,name=type,proto3,enum=proto.EditorEvent_Type" json:"type,omitempty"`
+	ResourceName         string           `protobuf:"bytes,2,opt,name=resource_name,json=resourceName,proto3" json:"resource_name,omitempty"`
+	ResourceId           uint32           `protobuf:"varint,3,opt,name=resource_id,json=resourceId,proto3" json:"resource_id,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}         `json:"-"`
+	XXX_unrecognized     []byte           `json:"-"`
+	XXX_sizecache        int32            `json:"-"`
+}
+
+func (m *EditorEvent) Reset()         { *m = EditorEvent{} }
+func (m *EditorEvent) String() string { return proto.CompactTextString(m) }
+func (*EditorEvent) ProtoMessage()    {}
+func (*EditorEvent) Descriptor() ([]byte, []int) {
+	return fileDescriptor_7d780504008e31fd, []int{2}
+}
+
+func (m *EditorEvent) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_EditorEvent.Unmarshal(m, b)
+}
+func (m *EditorEvent) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_EditorEvent.Marshal(b, m, deterministic)
+}
+func (m *EditorEvent) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_EditorEvent.Merge(m, src)
+}
+func (m *EditorEvent) XXX_Size() int {
+	return xxx_messageInfo_EditorEvent.Size(m)
+}
+func (m *EditorEvent) XXX_DiscardUnknown() {
+	xxx_messageInfo_EditorEvent.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_EditorEvent proto.InternalMessageInfo
+
+func (m *EditorEvent) GetType() EditorEvent_Type {
+	if m != nil {
+		return m.Type
+	}
+	return EditorEvent_TypeOpen
+}
+
+func (m *EditorEvent) GetResourceName() string {
+	if m != nil {
+		return m.ResourceName
+	}
+	return ""
+}
+
+func (m *EditorEvent) GetResourceId() uint32 {
+	if m != nil {
+		return m.ResourceId
+	}
+	return 0
+}
+
+type EditorSubscribeRequest struct {
+	Type                 EditorEvent_Type `protobuf:"varint,1,opt,name=type,proto3,enum=proto.EditorEvent_Type" json:"type,omitempty"`
+	HandlerId            uint32           `protobuf:"varint,2,opt,name=handler_id,json=handlerId,proto3" json:"handler_id,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}         `json:"-"`
+	XXX_unrecognized     []byte           `json:"-"`
+	XXX_sizecache        int32            `json:"-"`
+}
+
+func (m *EditorSubscribeRequest) Reset()         { *m = EditorSubscribeRequest{} }
+func (m *EditorSubscribeRequest) String() string { return proto.CompactTextString(m) }
+func (*EditorSubscribeRequest) ProtoMessage()    {}
+func (*EditorSubscribeRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_7d780504008e31fd, []int{3}
+}
+
+func (m *EditorSubscribeRequest) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_EditorSubscribeRequest.Unmarshal(m, b)
+}
+func (m *EditorSubscribeRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_EditorSubscribeRequest.Marshal(b, m, deterministic)
+}
+func (m *EditorSubscribeRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_EditorSubscribeRequest.Merge(m, src)
+}
+func (m *EditorSubscribeRequest) XXX_Size() int {
+	return xxx_messageInfo_EditorSubscribeRequest.Size(m)
+}
+func (m *EditorSubscribeRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_EditorSubscribeRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_EditorSubscribeRequest proto.InternalMessageInfo
+
+func (m *EditorSubscribeRequest) GetType() EditorEvent_Type {
+	if m != nil {
+		return m.Type
+	}
+	return EditorEvent_TypeOpen
+}
+
+func (m *EditorSubscribeRequest) GetHandlerId() uint32 {
+	if m != nil {
+		return m.HandlerId
+	}
+	return 0
+}
+
+type EditorSubscribeResponse struct {
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
+}
+
+func (m *EditorSubscribeResponse) Reset()         { *m = EditorSubscribeResponse{} }
+func (m *EditorSubscribeResponse) String() string { return proto.CompactTextString(m) }
+func (*EditorSubscribeResponse) ProtoMessage()    {}
+func (*EditorSubscribeResponse) Descriptor() ([]byte, []int) {
+	return fileDescriptor_7d780504008e31fd, []int{4}
+}
+
+func (m *EditorSubscribeResponse) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_EditorSubscribeResponse.Unmarshal(m, b)
+}
+func (m *EditorSubscribeResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_EditorSubscribeResponse.Marshal(b, m, deterministic)
+}
+func (m *EditorSubscribeResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_EditorSubscribeResponse.Merge(m, src)
+}
+func (m *EditorSubscribeResponse) XXX_Size() int {
+	return xxx_messageInfo_EditorSubscribeResponse.Size(m)
+}
+func (m *EditorSubscribeResponse) XXX_DiscardUnknown() {
+	xxx_messageInfo_EditorSubscribeResponse.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_EditorSubscribeResponse proto.InternalMessageInfo
+
 func init() {
+	proto.RegisterEnum("proto.EditorEvent_Type", EditorEvent_Type_name, EditorEvent_Type_value)
 	proto.RegisterType((*EditRequest)(nil), "proto.EditRequest")
 	proto.RegisterType((*EditResponse)(nil), "proto.EditResponse")
+	proto.RegisterType((*EditorEvent)(nil), "proto.EditorEvent")
+	proto.RegisterType((*EditorSubscribeRequest)(nil), "proto.EditorSubscribeRequest")
+	proto.RegisterType((*EditorSubscribeResponse)(nil), "proto.EditorSubscribeResponse")
 }
 
 func init() { proto.RegisterFile("editor.proto", fileDescriptor_7d780504008e31fd) }
 
 var fileDescriptor_7d780504008e31fd = []byte{
-	// 191 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x54, 0xce, 0x3f, 0x0b, 0x82, 0x40,
-	0x18, 0xc7, 0x71, 0xec, 0x8f, 0xe0, 0xa3, 0x36, 0x5c, 0x8b, 0x08, 0x81, 0x18, 0x84, 0x4b, 0x06,
-	0x36, 0x35, 0x87, 0x43, 0x4b, 0xc3, 0x8d, 0x2d, 0xa2, 0xdd, 0x23, 0x09, 0xea, 0xd9, 0xdd, 0x49,
-	0x6f, 0x3f, 0xba, 0x33, 0xa8, 0xe9, 0x8e, 0xef, 0x03, 0x1f, 0x7e, 0xe0, 0x21, 0x6b, 0x14, 0x17,
-	0xe9, 0x20, 0xb8, 0xe2, 0x64, 0xa9, 0x9f, 0x10, 0x14, 0x8a, 0xce, 0xa4, 0xf8, 0x06, 0x6e, 0xce,
-	0x1a, 0x45, 0xf1, 0x39, 0xa2, 0x54, 0x64, 0x0b, 0xbe, 0x40, 0xc9, 0x47, 0x71, 0xc7, 0xa2, 0x2f,
-	0x3b, 0x0c, 0xac, 0xc8, 0x4a, 0x1c, 0xea, 0x7d, 0xe3, 0xb5, 0xec, 0x90, 0xec, 0xc0, 0xae, 0xc6,
-	0xba, 0x46, 0x11, 0xcc, 0xa2, 0x79, 0xe2, 0x66, 0x2b, 0x63, 0xa5, 0x67, 0x6c, 0x5b, 0xca, 0x5f,
-	0x74, 0xba, 0xc6, 0x7b, 0xf0, 0x8c, 0x2d, 0x07, 0xde, 0x4b, 0x24, 0x1b, 0x80, 0x47, 0xd9, 0xb3,
-	0x16, 0x45, 0xd1, 0x30, 0x2d, 0xfb, 0xd4, 0x99, 0xca, 0x85, 0x65, 0x27, 0xb0, 0x73, 0xbd, 0x96,
-	0x1c, 0x60, 0xf1, 0xf9, 0x11, 0x32, 0xc1, 0x3f, 0x0b, 0xc3, 0xf5, 0x5f, 0x33, 0x72, 0x65, 0xeb,
-	0x76, 0x7c, 0x07, 0x00, 0x00, 0xff, 0xff, 0x77, 0x2a, 0x7e, 0x98, 0xef, 0x00, 0x00, 0x00,
+	// 330 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x94, 0x91, 0xd1, 0x4a, 0xc3, 0x30,
+	0x14, 0x86, 0x6d, 0x37, 0x87, 0x3d, 0xeb, 0xc6, 0x88, 0xe0, 0xe6, 0x60, 0x3a, 0x2a, 0xc8, 0x40,
+	0xac, 0x50, 0x1f, 0x61, 0x4c, 0x98, 0x17, 0x0a, 0xd1, 0x2b, 0x6f, 0x46, 0xbb, 0x9c, 0xb1, 0x42,
+	0xdb, 0xd4, 0x24, 0x55, 0xf6, 0x00, 0xbe, 0x91, 0x0f, 0x28, 0x6d, 0xda, 0xb1, 0x6e, 0x7a, 0xe1,
+	0x55, 0x9a, 0xff, 0x3f, 0xfc, 0xe7, 0xcb, 0x5f, 0xb0, 0x91, 0x85, 0x8a, 0x0b, 0x37, 0x15, 0x5c,
+	0x71, 0x72, 0x5c, 0x1c, 0x43, 0x50, 0x28, 0x62, 0x2d, 0x39, 0x6f, 0xd0, 0x9e, 0xb1, 0x50, 0x51,
+	0x7c, 0xcf, 0x50, 0x2a, 0x72, 0x05, 0x1d, 0x81, 0x92, 0x67, 0x62, 0x89, 0x8b, 0xc4, 0x8f, 0x71,
+	0x60, 0x8c, 0x8d, 0x89, 0x45, 0xed, 0x4a, 0x7c, 0xf2, 0x63, 0x24, 0xd7, 0xd0, 0x0a, 0xb2, 0xd5,
+	0x0a, 0xc5, 0xc0, 0x1c, 0x37, 0x26, 0x6d, 0xaf, 0xab, 0xb3, 0xdc, 0x29, 0x46, 0x11, 0xe5, 0x9f,
+	0xb4, 0x74, 0x9d, 0x5b, 0xb0, 0x75, 0xb6, 0x4c, 0x79, 0x22, 0x91, 0x8c, 0x00, 0xd6, 0x7e, 0xc2,
+	0x22, 0x14, 0x8b, 0x90, 0x15, 0xc9, 0x1d, 0x6a, 0x95, 0xca, 0x9c, 0x39, 0xdf, 0x86, 0x66, 0xe1,
+	0x62, 0xf6, 0x81, 0x89, 0x22, 0x37, 0xd0, 0x54, 0x9b, 0x54, 0x23, 0x74, 0xbd, 0x7e, 0xb9, 0x64,
+	0x67, 0xc2, 0x7d, 0xdd, 0xa4, 0x48, 0x8b, 0xa1, 0x43, 0x70, 0xf3, 0x17, 0xf0, 0x4b, 0x68, 0x6f,
+	0x87, 0x42, 0x36, 0x68, 0x14, 0x04, 0x50, 0x49, 0x73, 0xe6, 0x78, 0xd0, 0xcc, 0x33, 0x89, 0x0d,
+	0x27, 0xf9, 0xf9, 0x9c, 0x62, 0xd2, 0x3b, 0x22, 0x1d, 0xb0, 0xf2, 0xdb, 0x34, 0xe2, 0x12, 0x7b,
+	0x46, 0x75, 0x7d, 0x88, 0x32, 0xb9, 0xee, 0x99, 0x0e, 0x83, 0x33, 0xcd, 0xf4, 0x92, 0x05, 0x72,
+	0x29, 0xc2, 0x00, 0xab, 0x32, 0xff, 0xf5, 0x80, 0x7a, 0x39, 0xe6, 0x7e, 0x39, 0xe7, 0xd0, 0x3f,
+	0xd8, 0xa2, 0x6b, 0xf5, 0xbe, 0x0c, 0x68, 0x69, 0x8f, 0xdc, 0x41, 0x33, 0xff, 0x22, 0x64, 0x67,
+	0x57, 0x49, 0x33, 0x3c, 0xad, 0x69, 0xe5, 0x2f, 0x79, 0x04, 0x6b, 0x1b, 0x48, 0x46, 0x35, 0xc2,
+	0xfd, 0xe7, 0x0c, 0x2f, 0xfe, 0xb2, 0x75, 0x56, 0xd0, 0x2a, 0xec, 0xfb, 0x9f, 0x00, 0x00, 0x00,
+	0xff, 0xff, 0xc7, 0xe1, 0x14, 0x8f, 0x74, 0x02, 0x00, 0x00,
 }
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -146,6 +320,7 @@ const _ = grpc.SupportPackageIsVersion6
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://godoc.org/google.golang.org/grpc#ClientConn.NewStream.
 type EditorClient interface {
 	Edit(ctx context.Context, in *EditRequest, opts ...grpc.CallOption) (*EditResponse, error)
+	Subscribe(ctx context.Context, in *EditorSubscribeRequest, opts ...grpc.CallOption) (*EditorSubscribeResponse, error)
 }
 
 type editorClient struct {
@@ -165,9 +340,19 @@ func (c *editorClient) Edit(ctx context.Context, in *EditRequest, opts ...grpc.C
 	return out, nil
 }
 
+func (c *editorClient) Subscribe(ctx context.Context, in *EditorSubscribeRequest, opts ...grpc.CallOption) (*EditorSubscribeResponse, error) {
+	out := new(EditorSubscribeResponse)
+	err := c.cc.Invoke(ctx, "/proto.Editor/Subscribe", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // EditorServer is the server API for Editor service.
 type EditorServer interface {
 	Edit(context.Context, *EditRequest) (*EditResponse, error)
+	Subscribe(context.Context, *EditorSubscribeRequest) (*EditorSubscribeResponse, error)
 }
 
 // UnimplementedEditorServer can be embedded to have forward compatible implementations.
@@ -176,6 +361,9 @@ type UnimplementedEditorServer struct {
 
 func (*UnimplementedEditorServer) Edit(ctx context.Context, req *EditRequest) (*EditResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Edit not implemented")
+}
+func (*UnimplementedEditorServer) Subscribe(ctx context.Context, req *EditorSubscribeRequest) (*EditorSubscribeResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Subscribe not implemented")
 }
 
 func RegisterEditorServer(s *grpc.Server, srv EditorServer) {
@@ -200,6 +388,24 @@ func _Editor_Edit_Handler(srv interface{}, ctx context.Context, dec func(interfa
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Editor_Subscribe_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(EditorSubscribeRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(EditorServer).Subscribe(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/proto.Editor/Subscribe",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(EditorServer).Subscribe(ctx, req.(*EditorSubscribeRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 var _Editor_serviceDesc = grpc.ServiceDesc{
 	ServiceName: "proto.Editor",
 	HandlerType: (*EditorServer)(nil),
@@ -207,6 +413,10 @@ var _Editor_serviceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Edit",
 			Handler:    _Editor_Edit_Handler,
+		},
+		{
+			MethodName: "Subscribe",
+			Handler:    _Editor_Subscribe_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

@@ -7,42 +7,50 @@ import (
 
 type viEditor struct {
 	opts []Option
+	subs map[editor.EventType][]editor.EventHandler
 }
 
 // Editor returns a Vi editor.Editor.
 func Editor(opts ...Option) editor.Editor {
-	return &viEditor{opts: opts}
+	subs := make(map[editor.EventType][]editor.EventHandler)
+	return &viEditor{opts: opts, subs: subs}
 }
 
 func (e *viEditor) Edit(name string, buf *cell.Buffer) (editor.Handler, error) {
-	return New(buf, e.opts...), nil
-}
-
-/*
-func (e *viEditor) Edit(name string, buf *cell.Buffer) (tui.Handler, error) {
 	h := New(buf, e.opts...)
-	if subs, ok := e.subs[editor.EventTypeOpen]; ok {
-		ev := editor.Event{
-			Type:            editor.EventTypeOpen,
-			ResourceName:    name,
-			ResourceHandler: h,
-		}
-		for _, sub := range subs {
-			sub.Handle(ev)
+	subs, ok := e.subs[editor.EventTypeOpen]
+	if !ok {
+		return h, nil
+	}
+
+	ev := editor.Event{
+		Type:         editor.EventTypeOpen,
+		ResourceName: name,
+		Resource:     h,
+	}
+	remain := make([]editor.EventHandler, 0, len(subs))
+	for _, sub := range subs {
+		exit := sub.Handle(ev)
+		if !exit {
+			remain = append(remain, sub)
 		}
 	}
+	e.subs[editor.EventTypeOpen] = remain
 	return h, nil
 }
 
-func (e *viEditor) Subscribe(ev editor.EventType, sub editor.Subscriber) error {
+// SubscribeEditor subsribes sub to ev. Note that this Editor is only capable
+// of dispatching EventTypeOpen EventType events.
+func (e *viEditor) SubscribeEditor(ev editor.EventType, sub editor.EventHandler) error {
 	if _, ok := e.subs[ev]; !ok {
-		e.subs[ev] = []editor.Subscriber{sub}
+		e.subs[ev] = []editor.EventHandler{sub}
 		return nil
 	}
 	e.subs[ev] = append(e.subs[ev], sub)
 	return nil
 }
 
+/*
 func (e viEditor) SetLocationList(h tui.Handler, loc editor.LocationList) error {
 	h.(*Vi).SetLocationList(loc)
 	return nil

@@ -13,6 +13,27 @@ message EditResponse {
 	uint32 handler_id = 1;
 }
 
+message EditorEvent {
+  enum Type {
+	TypeOpen = 0;
+	TypeClose = 1;
+	TypeFlush = 2;
+  }
+
+  Type type = 1;
+  string resource_name = 2;
+  uint32 resource_id = 3;
+}
+
+message EditorSubscribeRequest {
+	EditorEvent.Type type = 1;
+	uint32 handler_id = 2;
+}
+
+message EditorSubscribeResponse {
+}
+
 service Editor {
 	rpc Edit(EditRequest) returns (EditResponse);
+	rpc Subscribe(EditorSubscribeRequest) returns (EditorSubscribeResponse);
 }

@@ -38,6 +38,10 @@ func (e *testEditor) Edit(name string, buf *cell.Buffer) (Handler, error) {
 	return handler.NewTestHandler(), nil
 }
 
+func (e *testEditor) SubscribeEditor(EventType, EventHandler) error {
+	return nil
+}
+
 type testFileBuffer struct {
 	flushErr error
 	closeErr error

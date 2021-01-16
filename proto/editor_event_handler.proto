@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+package proto;
+
+import "editor.proto";
+
+message EditorEventHandleRequest {
+	EditorEvent event = 1;
+}
+
+message EditorEventHandleResponse {
+	bool quit = 1;
+}
+
+service EditorEventHandler {
+	rpc Handle(EditorEventHandleRequest) returns (EditorEventHandleResponse);
+}

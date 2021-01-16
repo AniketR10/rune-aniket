@@ -45,6 +45,7 @@ func TestIntegrationRace(t *testing.T) {
 	defer broker.Close()
 	mock := browser.NewMockBrowser(ctrl)
 	edMock := editor.NewMockEditor(ctrl)
+	edMock.EXPECT().SubscribeEditor(gomock.Any(), gomock.Any()).Times(2)
 	resources := MergeResourceMap(BrowserResources(mock), EditorResources(edMock))
 
 	// plugin manager serves each permission on a different grantID
@@ -151,6 +152,14 @@ func TestIntegrationRace(t *testing.T) {
 		}, func(ifc interface{}) error {
 			_, err := ifc.(editor.Editor).Edit("", cell.NewBuffer())
 			return err
+		}},
+		{PermissionEditor, func(token uint32, broker proto.MuxBroker) (interface{}, error) {
+			return Editor(token, broker)
+		}, func(ed *editor.MockEditorMockRecorder, mock *browser.MockBrowserMockRecorder) *gomock.Call {
+			return ed.SubscribeEditor(gomock.Any(), gomock.Any()).Return(nil)
+		}, func(ifc interface{}) error {
+			h := editor.CallbackEventHandler(func(editor.Event) bool { return false })
+			return ifc.(editor.Editor).SubscribeEditor(editor.EventTypeFlush, h)
 		}},
 	}
 

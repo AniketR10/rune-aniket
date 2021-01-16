@@ -30,20 +30,26 @@ type openFileFunc func(filePath string,
 type recoverFileFunc func(filePath,
 	swapFilePath string, buf *cell.Buffer) (browser.FlusherCloser, error)
 
+// TODO move all editor/browser ifc satisfaction code to a "Component" structure
+// that can be tested easily.
+
+// TODO if file is already open, do not return error, switch to it!
+
 // Ex satisfies browser.Browser and tui.Handler by wrapping a browser.Component
 // to provide an ex editor interface.
 type Ex struct {
-	openFileFn    openFileFunc
-	recoverFileFn recoverFileFunc
-	interruptDraw func()
-	comp          browser.Component
-	commandBuf    *cell.Buffer
-	cmdVirt       handler.Virtual
-	ed            Editor
-	config        browser.Config
-	keymap        map[term.Event]term.Event
-	subscribers   map[term.Event]browser.EventHandler
-	mode          mode
+	openFileFn      openFileFunc
+	recoverFileFn   recoverFileFunc
+	interruptDraw   func()
+	comp            browser.Component
+	commandBuf      *cell.Buffer
+	cmdVirt         handler.Virtual
+	ed              Editor
+	config          browser.Config
+	keymap          map[term.Event]term.Event
+	termSubscribers map[term.Event]browser.EventHandler
+	edSubscribers   map[EventType][]EventHandler
+	mode            mode
 }
 
 func newOsHandler() *Ex {
@@ -111,7 +117,8 @@ func (e *Ex) Init(ed Editor, opts ...browser.Option) (err error) {
 	e.commandBuf = cell.NewBuffer()
 	e.cmdVirt = browser.NewMessageSpan(e.commandBuf, commandBarAttr)
 	e.mode = modeDefault
-	e.subscribers = make(map[term.Event]browser.EventHandler)
+	e.termSubscribers = make(map[term.Event]browser.EventHandler)
+	e.edSubscribers = make(map[EventType][]EventHandler)
 
 	if e.config.RecoveryFilepath != "" {
 		if len(e.config.Filepaths) != 1 {
@@ -142,22 +149,45 @@ func (e *Ex) newCellBuffer() *cell.Buffer {
 	return buf
 }
 
-func (e *Ex) newFileBuffer(filename, recSwapFile string, buf *cell.Buffer) (
-	fileBuf browser.FlusherCloser, err error,
-) {
-	if recSwapFile != "" {
-		fileBuf, err = e.recoverFileFn(filename, recSwapFile, buf)
-	} else {
-		fileBuf, err = e.openFileFn(filename, buf, e.config.SwapDir)
+// dispatches either flush or close events
+func (e *Ex) dispatchEvent(ev Event) {
+	subs, ok := e.edSubscribers[ev.Type]
+	if !ok {
+		return
 	}
-	return
+
+	remain := make([]EventHandler, 0, len(subs))
+	for _, h := range subs {
+		exit := h.Handle(ev)
+		if !exit {
+			remain = append(remain, h)
+		}
+	}
+	e.edSubscribers[ev.Type] = remain
+}
+
+func (e *Ex) newFileBuffer(filename, recSwapFile string, buf *cell.Buffer) (
+	ret *editorFlusherCloser, err error,
+) {
+	var fc browser.FlusherCloser
+	if recSwapFile != "" {
+		fc, err = e.recoverFileFn(filename, recSwapFile, buf)
+	} else {
+		fc, err = e.openFileFn(filename, buf, e.config.SwapDir)
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &editorFlusherCloser{parent: e, fc: fc, name: filename}, nil
 }
 
 func (e *Ex) newBufferWithFile(
 	filename, recoveryFilename string,
 ) (browser.Handler, error) {
 	buf := e.newCellBuffer()
-	fileBuf, err := e.newFileBuffer(filename, recoveryFilename, buf)
+	fc, err := e.newFileBuffer(filename, recoveryFilename, buf)
 	if err != nil {
 		e.tryLog("error opening new file buffer: %v", err)
 		e.setError(err)
@@ -165,7 +195,9 @@ func (e *Ex) newBufferWithFile(
 	}
 
 	editor, _ := e.ed.Edit(filename, buf)
-	browserBuf := e.comp.NewBuffer(filepath.Base(filename), editor, fileBuf)
+	fc.h = editor
+
+	browserBuf := e.comp.NewBuffer(filepath.Base(filename), editor, fc)
 	return browserBuf, nil
 }
 
@@ -283,7 +315,7 @@ func (e *Ex) handleProxy(ev term.Event) (
 	prev := ev
 	ev = e.mapEvent(ev)
 
-	if subscriber, ok := e.subscribers[ev]; ok {
+	if subscriber, ok := e.termSubscribers[ev]; ok {
 		subscriber.Handle(ev)
 		handled = true
 		return
@@ -425,15 +457,15 @@ func (e *Ex) SplitHorizontalAbove(h browser.Handler) (browser.Window, error) {
 }
 
 func (e *Ex) unsubscribe(ev term.Event) {
-	delete(e.subscribers, ev)
+	delete(e.termSubscribers, ev)
 }
 
 // Subscribe subscribers h EventHandler to term.Event ev.
 func (e *Ex) Subscribe(ev term.Event, h browser.EventHandler) error {
-	if _, ok := e.subscribers[ev]; ok {
+	if _, ok := e.termSubscribers[ev]; ok {
 		return fmt.Errorf("there's already a subscriber subscribed to: %#v", ev)
 	}
-	e.subscribers[ev] = exEventHandler{browser: e, h: h}
+	e.termSubscribers[ev] = exEventHandler{e: e, h: h}
 	return nil
 }
 
@@ -455,4 +487,35 @@ func (e *Ex) Edit(name string, buf *cell.Buffer) (Handler, error) {
 	editor, _ := e.ed.Edit(name, buf)
 	_ = e.comp.NewBuffer(name, editor, nil)
 	return editor, nil
+}
+
+func (e *Ex) unsubscribeEditor(h EventHandler) {
+	for ev, subs := range e.edSubscribers {
+		remain := make([]EventHandler, 0, len(e.edSubscribers))
+		for _, sub := range subs {
+			if sub != h {
+				remain = append(remain, sub)
+			}
+		}
+		e.edSubscribers[ev] = remain
+	}
+}
+
+// SubscribeEditor subscribes h to editor events of type ev.
+func (e *Ex) SubscribeEditor(ev EventType, h EventHandler) error {
+	// delegate Edit dispatching to underlying editor
+	switch ev {
+	case EventTypeOpen:
+		return e.ed.SubscribeEditor(ev, h)
+	case EventTypeClose:
+	case EventTypeFlush:
+	}
+
+	h = exEditorEventHandler{e: e, h: h}
+	if _, ok := e.edSubscribers[ev]; !ok {
+		e.edSubscribers[ev] = make([]EventHandler, 0, 1)
+	}
+
+	e.edSubscribers[ev] = append(e.edSubscribers[ev], h)
+	return nil
 }

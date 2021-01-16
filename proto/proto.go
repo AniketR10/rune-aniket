@@ -6,3 +6,4 @@ package proto
 //go:generate protoc browser.proto --go_out=plugins=grpc:.
 //go:generate protoc grantee.proto --go_out=plugins=grpc:.
 //go:generate protoc editor.proto --go_out=plugins=grpc:.
+//go:generate protoc editor_event_handler.proto --go_out=plugins=grpc:.
