@@ -184,10 +184,8 @@ func (c *Component) Init(config Config) {
 	c.wmVirt = handler.Virtual{Virtual: component.Virtual{C: c.wm}}
 	c.tabsVirt = handler.Virtual{Virtual: component.Virtual{C: c.tabs}}
 	c.frames = component.NewFrameUnion(&c.tabsVirt.Virtual, &c.wmVirt.Virtual)
-	c.frames.MiddleLeft.Bg = frameFileAttr.Bg
-	c.frames.MiddleLeft.Fg = frameFileAttr.Fg
-	c.frames.MiddleRight.Bg = frameFileAttr.Bg
-	c.frames.MiddleRight.Fg = frameFileAttr.Fg
+	c.frames.Attributes = config.WindowManagerConfig.FrameAttr
+
 	c.buffers = make([]*buffer, 0)
 
 	return

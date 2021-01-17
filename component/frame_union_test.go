@@ -28,8 +28,8 @@ func TestDrawFrameUnion(t *testing.T) {
 └────────┘`,
 		}, {
 			func() {
-				f.MiddleLeft.Ch = '┊'
-				f.MiddleRight.Ch = '┊'
+				f.Left = '┊'
+				f.Right = '┊'
 			}, `
 ┌────────┐
 │XXXXXXXX│
