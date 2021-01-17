@@ -393,13 +393,13 @@ func TestWindowManagerSetFocusContent(t *testing.T) {
 	testHandlerWorkflow(t, wm, cases, writer)
 
 	fb := component.FrameCharSet{}
-	fb.TopLeft.Ch = '╔'
-	fb.BottomRight.Ch = '╝'
-	fb.BottomLeft.Ch = '╚'
-	fb.TopRight.Ch = '╗'
+	fb.TopLeft = '╔'
+	fb.BottomRight = '╝'
+	fb.BottomLeft = '╚'
+	fb.TopRight = '╗'
 
-	fb.Vertical.Ch = '║'
-	fb.Horizontal.Ch = '═'
+	fb.Vertical = '║'
+	fb.Horizontal = '═'
 
 	wm.SetFrameCharSet(component.FrameCharSetDefault(), fb)
 
@@ -432,15 +432,15 @@ func TestWindowManagerSetAttr(t *testing.T) {
 	wm.SetAttr(term.Attributes{Bg: cyan, Fg: red}, term.Attributes{Bg: red, Fg: cyan})
 
 	focus := wm.Focus()
-	b, ok := focus.FrameCharSet()
+	b, ok := focus.FrameAttr()
 	require.True(t, ok)
-	assert.Equal(t, red, b.TopLeft.Bg)
-	assert.Equal(t, cyan, b.TopLeft.Fg)
+	assert.Equal(t, red, b.Bg)
+	assert.Equal(t, cyan, b.Fg)
 
 	wm.ShiftFocus()
-	b, ok = focus.FrameCharSet()
-	assert.Equal(t, cyan, b.TopLeft.Bg)
-	assert.Equal(t, red, b.TopLeft.Fg)
+	b, ok = focus.FrameAttr()
+	assert.Equal(t, cyan, b.Bg)
+	assert.Equal(t, red, b.Fg)
 }
 
 func testWindowManagerClose(t *testing.T, border bool) {

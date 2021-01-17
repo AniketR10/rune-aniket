@@ -12,7 +12,7 @@ func TestTabsDraw(t *testing.T) {
 	l := NewTabs()
 	l.Resize(20, 4)
 	fb := FrameCharSetDefault()
-	fb.BottomLeft.Ch, fb.BottomRight.Ch = '├', '┤'
+	fb.BottomLeft, fb.BottomRight = '├', '┤'
 	l.SetFrameCharSet(fb)
 
 	w := term.NewStringWriter(20, 9)

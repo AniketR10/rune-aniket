@@ -28,7 +28,7 @@ type WindowManager struct {
 func (wm *WindowManager) withFrame(handler tui.Component) tui.Component {
 	f := NewFrame(handler)
 	f.FrameCharSet = wm.frmBorders
-	f.SetAttr(wm.borderAttr)
+	f.Attributes = wm.borderAttr
 	return f
 }
 
@@ -131,7 +131,7 @@ func (wm *WindowManager) SetDefaultAttr(attr term.Attributes) {
 
 	wm.borderAttr = attr
 	wm.tree.Iterate(func(node *TileNode) {
-		node.Content().(*Frame).SetAttr(wm.borderAttr)
+		node.Content().(*Frame).Attributes = wm.borderAttr
 	})
 }
 

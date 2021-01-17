@@ -26,26 +26,9 @@ import (
 //
 //   '╢', '╣', '╤', '╥', '╦', '╧', '╨', '╩'
 type FrameCharSet struct {
-	TopLeft, TopRight       term.Cell
-	BottomLeft, BottomRight term.Cell
-	Horizontal, Vertical    term.Cell
-}
-
-// WithAttr sets cs term.Attributes.
-func (cs FrameCharSet) WithAttr(attr term.Attributes) FrameCharSet {
-	cs.Horizontal.Fg = attr.Fg
-	cs.Horizontal.Bg = attr.Bg
-	cs.Vertical.Fg = attr.Fg
-	cs.Vertical.Bg = attr.Bg
-	cs.TopLeft.Fg = attr.Fg
-	cs.TopLeft.Bg = attr.Bg
-	cs.TopRight.Fg = attr.Fg
-	cs.TopRight.Bg = attr.Bg
-	cs.BottomLeft.Fg = attr.Fg
-	cs.BottomLeft.Bg = attr.Bg
-	cs.BottomRight.Fg = attr.Fg
-	cs.BottomRight.Bg = attr.Bg
-	return cs
+	TopLeft, TopRight       rune
+	BottomLeft, BottomRight rune
+	Horizontal, Vertical    rune
 }
 
 // FrameCharSetDefault returns the default FrameCharSet
@@ -57,12 +40,12 @@ func (cs FrameCharSet) WithAttr(attr term.Attributes) FrameCharSet {
 //
 func FrameCharSetDefault() FrameCharSet {
 	return FrameCharSet{
-		Horizontal:  term.Cell{Ch: '─'},
-		Vertical:    term.Cell{Ch: '│'},
-		TopLeft:     term.Cell{Ch: '┌'},
-		TopRight:    term.Cell{Ch: '┐'},
-		BottomLeft:  term.Cell{Ch: '└'},
-		BottomRight: term.Cell{Ch: '┘'},
+		Horizontal:  '─',
+		Vertical:    '│',
+		TopLeft:     '┌',
+		TopRight:    '┐',
+		BottomLeft:  '└',
+		BottomRight: '┘',
 	}
 }
 
@@ -74,12 +57,12 @@ func FrameCharSetDefault() FrameCharSet {
 //
 func FrameCharSetHighlight() FrameCharSet {
 	return FrameCharSet{
-		Horizontal:  term.Cell{Ch: '━'},
-		Vertical:    term.Cell{Ch: '┃'},
-		TopLeft:     term.Cell{Ch: '┏'},
-		TopRight:    term.Cell{Ch: '┓'},
-		BottomLeft:  term.Cell{Ch: '┗'},
-		BottomRight: term.Cell{Ch: '┛'},
+		Horizontal:  '━',
+		Vertical:    '┃',
+		TopLeft:     '┏',
+		TopRight:    '┓',
+		BottomLeft:  '┗',
+		BottomRight: '┛',
 	}
 }
 
@@ -91,12 +74,12 @@ func FrameCharSetHighlight() FrameCharSet {
 //
 func FrameCharSetStack() FrameCharSet {
 	return FrameCharSet{
-		Horizontal:  term.Cell{Ch: '─'},
-		Vertical:    term.Cell{Ch: '│'},
-		TopLeft:     term.Cell{Ch: '├'},
-		TopRight:    term.Cell{Ch: '┤'},
-		BottomLeft:  term.Cell{Ch: '├'},
-		BottomRight: term.Cell{Ch: '┤'},
+		Horizontal:  '─',
+		Vertical:    '│',
+		TopLeft:     '├',
+		TopRight:    '┤',
+		BottomLeft:  '├',
+		BottomRight: '┤',
 	}
 }
 
@@ -108,12 +91,12 @@ func FrameCharSetStack() FrameCharSet {
 //
 func FrameCharSetStackHighlight() FrameCharSet {
 	return FrameCharSet{
-		Horizontal:  term.Cell{Ch: '━'},
-		Vertical:    term.Cell{Ch: '┃'},
-		TopLeft:     term.Cell{Ch: '┢'},
-		TopRight:    term.Cell{Ch: '┪'},
-		BottomLeft:  term.Cell{Ch: '┡'},
-		BottomRight: term.Cell{Ch: '┩'},
+		Horizontal:  '━',
+		Vertical:    '┃',
+		TopLeft:     '┢',
+		TopRight:    '┪',
+		BottomLeft:  '┡',
+		BottomRight: '┩',
 	}
 }
 
@@ -125,12 +108,12 @@ func FrameCharSetStackHighlight() FrameCharSet {
 //
 func FrameCharSetStackHead() FrameCharSet {
 	return FrameCharSet{
-		Horizontal:  term.Cell{Ch: '─'},
-		Vertical:    term.Cell{Ch: '│'},
-		TopLeft:     term.Cell{Ch: '┌'},
-		TopRight:    term.Cell{Ch: '┐'},
-		BottomLeft:  term.Cell{Ch: '├'},
-		BottomRight: term.Cell{Ch: '┤'},
+		Horizontal:  '─',
+		Vertical:    '│',
+		TopLeft:     '┌',
+		TopRight:    '┐',
+		BottomLeft:  '├',
+		BottomRight: '┤',
 	}
 }
 
@@ -142,12 +125,12 @@ func FrameCharSetStackHead() FrameCharSet {
 //
 func FrameCharSetStackHeadHighlight() FrameCharSet {
 	return FrameCharSet{
-		Horizontal:  term.Cell{Ch: '━'},
-		Vertical:    term.Cell{Ch: '┃'},
-		TopLeft:     term.Cell{Ch: '┏'},
-		TopRight:    term.Cell{Ch: '┓'},
-		BottomLeft:  term.Cell{Ch: '┡'},
-		BottomRight: term.Cell{Ch: '┩'},
+		Horizontal:  '━',
+		Vertical:    '┃',
+		TopLeft:     '┏',
+		TopRight:    '┓',
+		BottomLeft:  '┡',
+		BottomRight: '┩',
 	}
 }
 
@@ -159,12 +142,12 @@ func FrameCharSetStackHeadHighlight() FrameCharSet {
 //
 func FrameCharSetStackTail() FrameCharSet {
 	return FrameCharSet{
-		Horizontal:  term.Cell{Ch: '─'},
-		Vertical:    term.Cell{Ch: '│'},
-		TopLeft:     term.Cell{Ch: '├'},
-		TopRight:    term.Cell{Ch: '┤'},
-		BottomLeft:  term.Cell{Ch: '└'},
-		BottomRight: term.Cell{Ch: '┘'},
+		Horizontal:  '─',
+		Vertical:    '│',
+		TopLeft:     '├',
+		TopRight:    '┤',
+		BottomLeft:  '└',
+		BottomRight: '┘',
 	}
 }
 
@@ -176,12 +159,12 @@ func FrameCharSetStackTail() FrameCharSet {
 //
 func FrameCharSetStackTailHighlight() FrameCharSet {
 	return FrameCharSet{
-		Horizontal:  term.Cell{Ch: '━'},
-		Vertical:    term.Cell{Ch: '┃'},
-		TopLeft:     term.Cell{Ch: '┢'},
-		TopRight:    term.Cell{Ch: '┪'},
-		BottomLeft:  term.Cell{Ch: '┗'},
-		BottomRight: term.Cell{Ch: '┛'},
+		Horizontal:  '━',
+		Vertical:    '┃',
+		TopLeft:     '┢',
+		TopRight:    '┪',
+		BottomLeft:  '┗',
+		BottomRight: '┛',
 	}
 }
 
@@ -189,17 +172,18 @@ func FrameCharSetStackTailHighlight() FrameCharSet {
 // By default the frame adds some padding around the component by using
 // the following cells:
 //
-// f.Horizontal = term.Cell{Ch: '─'}
-// f.Vertical = term.Cell{Ch: '│'}
-// f.TopLeft = term.Cell{Ch: '┌'}
-// f.TopRight = term.Cell{Ch: '┐'}
-// f.BottomLeft = term.Cell{Ch: '└'}
-// f.BottomRight = term.Cell{Ch: '┘'}
+// f.Horizontal =  '─'
+// f.Vertical =  '│'
+// f.TopLeft =  '┌'
+// f.TopRight =  '┐'
+// f.BottomLeft =  '└'
+// f.BottomRight =  '┘'
 //
 // Note that this component can achieve other effects (highlight, frame)
 // by setting the rigth cell characters and/or attributes.
 type Frame struct {
 	FrameCharSet
+	term.Attributes
 
 	content         Virtual
 	bwidth, bheight int
@@ -218,11 +202,6 @@ func NewFrame(content tui.Component) (f *Frame) {
 func (f *Frame) Init(content tui.Component) {
 	f.content.C = content
 	f.FrameCharSet = FrameCharSetDefault()
-}
-
-// SetAttr updates the border attributes of this Frame.
-func (f *Frame) SetAttr(border term.Attributes) {
-	f.FrameCharSet = f.FrameCharSet.WithAttr(border)
 }
 
 // Content returns the underlying Component.
@@ -256,22 +235,30 @@ func (f *Frame) Draw(w term.Writer) {
 	limitX, limitY := f.width-1, f.height-1
 
 	for i := 0; i < limitX; i++ {
-		w.SetCell(term.Coordinates{X: i, Y: 0}, f.Horizontal)
-		w.SetCell(term.Coordinates{X: i, Y: limitY}, f.Horizontal)
+		w.SetCell(term.Coordinates{X: i, Y: 0},
+			term.Cell{Ch: f.Horizontal, Bg: f.Bg, Fg: f.Fg})
+		w.SetCell(term.Coordinates{X: i, Y: limitY},
+			term.Cell{Ch: f.Horizontal, Bg: f.Bg, Fg: f.Fg})
 	}
 
 	for i := 0; i < limitY; i++ {
-		w.SetCell(term.Coordinates{X: 0, Y: i}, f.Vertical)
-		w.SetCell(term.Coordinates{X: limitX, Y: i}, f.Vertical)
+		w.SetCell(term.Coordinates{X: 0, Y: i},
+			term.Cell{Ch: f.Vertical, Bg: f.Bg, Fg: f.Fg})
+		w.SetCell(term.Coordinates{X: limitX, Y: i},
+			term.Cell{Ch: f.Vertical, Bg: f.Bg, Fg: f.Fg})
 	}
 
-	w.SetCell(term.Coordinates{X: 0, Y: 0}, f.TopLeft)
+	w.SetCell(term.Coordinates{X: 0, Y: 0},
+		term.Cell{Ch: f.TopLeft, Bg: f.Bg, Fg: f.Fg})
 
-	w.SetCell(term.Coordinates{X: limitX, Y: 0}, f.TopRight)
+	w.SetCell(term.Coordinates{X: limitX, Y: 0},
+		term.Cell{Ch: f.TopRight, Bg: f.Bg, Fg: f.Fg})
 
-	w.SetCell(term.Coordinates{X: 0, Y: limitY}, f.BottomLeft)
+	w.SetCell(term.Coordinates{X: 0, Y: limitY},
+		term.Cell{Ch: f.BottomLeft, Bg: f.Bg, Fg: f.Fg})
 
-	w.SetCell(term.Coordinates{X: limitX, Y: limitY}, f.BottomRight)
+	w.SetCell(term.Coordinates{X: limitX, Y: limitY},
+		term.Cell{Ch: f.BottomRight, Bg: f.Bg, Fg: f.Fg})
 
 	f.content.Draw(w)
 }

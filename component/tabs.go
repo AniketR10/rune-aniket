@@ -55,7 +55,7 @@ func newListFrame(
 
 	f := NewFrame(span)
 	f.FrameCharSet = frameBorders
-	f.SetAttr(frameAttr)
+	f.Attributes = frameAttr
 	return f
 }
 

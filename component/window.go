@@ -82,7 +82,7 @@ func (w Window) SetFrameAttr(attr term.Attributes) bool {
 	if !w.wm.border {
 		return false
 	}
-	w.node.Content().(*Frame).SetAttr(attr)
+	w.node.Content().(*Frame).Attributes = attr
 	return true
 }
 
@@ -108,12 +108,8 @@ func (w Window) FrameAttr() (attr term.Attributes, ok bool) {
 	if !w.wm.border {
 		return
 	}
-	oneCell := w.node.Content().(*Frame).FrameCharSet.TopLeft
 	ok = true
-	attr = term.Attributes{
-		Bg: oneCell.Bg,
-		Fg: oneCell.Fg,
-	}
+	attr = w.node.Content().(*Frame).Attributes
 	return
 }
 
