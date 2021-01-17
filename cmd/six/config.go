@@ -77,16 +77,16 @@ func (c ideConfig) windowManager() (plugin.Config, bool) {
 	return cfg, true
 }
 
-func (c ideConfig) windowBorderAttr() (attr term.Attributes) {
-	attr = defaultWindowManagerConfig.BorderAttr
+func (c ideConfig) windowFrameAttr() (attr term.Attributes) {
+	attr = defaultWindowManagerConfig.FrameAttr
 	cfg, ok := c.windowManager()
 	if !ok {
 		return
 	}
-	cfgAttr, err := cfg.GetAttributes("border_attr")
+	cfgAttr, err := cfg.GetAttributes("frame_attr")
 	if err != nil {
 		if err != plugin.ErrNotFound {
-			c.errors["window_manager.border_attr"] = err
+			c.errors["window_manager.frame_attr"] = err
 		}
 		return
 	}
@@ -94,16 +94,16 @@ func (c ideConfig) windowBorderAttr() (attr term.Attributes) {
 	return
 }
 
-func (c ideConfig) focusWindowBorderAttr() (attr term.Attributes) {
-	attr = defaultWindowManagerConfig.FocusBorderAttr
+func (c ideConfig) focusWindowFrameAttr() (attr term.Attributes) {
+	attr = defaultWindowManagerConfig.FocusFrameAttr
 	cfg, ok := c.windowManager()
 	if !ok {
 		return
 	}
-	cfgAttr, err := cfg.GetAttributes("focus_border_attr")
+	cfgAttr, err := cfg.GetAttributes("focus_frame_attr")
 	if err != nil {
 		if err != plugin.ErrNotFound {
-			c.errors["window_manager.focus_border_attr"] = err
+			c.errors["window_manager.focus_frame_attr"] = err
 		}
 		return
 	}
@@ -111,20 +111,20 @@ func (c ideConfig) focusWindowBorderAttr() (attr term.Attributes) {
 	return
 }
 
-func (c ideConfig) border() (border bool) {
-	border = defaultWindowManagerConfig.Border
+func (c ideConfig) frame() (frame bool) {
+	frame = defaultWindowManagerConfig.Frame
 	cfg, ok := c.windowManager()
 	if !ok {
 		return
 	}
-	cfgBorder, err := cfg.GetBool("border")
+	cfgFrame, err := cfg.GetBool("frame")
 	if err != nil {
 		if err != plugin.ErrNotFound {
-			c.errors["window_manager.border"] = err
+			c.errors["window_manager.frame"] = err
 		}
 		return
 	}
-	border = cfgBorder
+	frame = cfgFrame
 	return
 }
 
@@ -132,11 +132,11 @@ func (c ideConfig) windowManagerConfig() handler.WindowManagerConfig {
 	defaults := handler.DefaultWindowManagerConfig()
 	return handler.WindowManagerConfig{
 		WindowManagerConfig: component.WindowManagerConfig{
-			Border:       c.border(),
-			BorderAttr:   c.windowBorderAttr(),
+			Frame:        c.frame(),
+			FrameAttr:    c.windowFrameAttr(),
 			FrameCharSet: defaults.FrameCharSet,
 		},
-		FocusBorderAttr:   c.focusWindowBorderAttr(),
+		FocusFrameAttr:    c.focusWindowFrameAttr(),
 		FocusFrameCharSet: defaults.FocusFrameCharSet,
 	}
 }

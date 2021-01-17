@@ -8,27 +8,21 @@ import (
 // WindowManagerConfig represents the configuration for a WindowManager
 // to be initialized.
 type WindowManagerConfig struct {
-	Border     bool
-	BorderAttr term.Attributes
+	Frame     bool
+	FrameAttr term.Attributes
 	FrameCharSet
 }
 
 // WindowManager wraps a TileTree to provide an easier API.
 type WindowManager struct {
-	tree TileTree
-
-	border     bool
-	borderAttr term.Attributes
-
-	// If border is set to true, the Frame cells can be configured
-	// through the following properties.
-	frmBorders FrameCharSet
+	tree   TileTree
+	config WindowManagerConfig
 }
 
 func (wm *WindowManager) withFrame(handler tui.Component) tui.Component {
 	f := NewFrame(handler)
-	f.FrameCharSet = wm.frmBorders
-	f.Attributes = wm.borderAttr
+	f.FrameCharSet = wm.config.FrameCharSet
+	f.Attributes = wm.config.FrameAttr
 	return f
 }
 
@@ -50,11 +44,9 @@ func NewWindowManager(
 func (wm *WindowManager) Init(
 	content tui.Component, config WindowManagerConfig,
 ) (n Window) {
-	wm.border = config.Border
-	wm.borderAttr = config.BorderAttr
-	wm.frmBorders = config.FrameCharSet
+	wm.config = config
 
-	if wm.border {
+	if wm.config.Frame {
 		content = wm.withFrame(content)
 	}
 	node := wm.tree.Init(content)
@@ -85,7 +77,7 @@ func (wm *WindowManager) nodeToWindow(node *TileNode) Window {
 // SplitHorizontal creates a new Window by splitting the height of win in two and
 // initializes it with content.
 func (wm *WindowManager) SplitHorizontal(win Window, content tui.Component) Window {
-	if wm.border {
+	if wm.config.Frame {
 		content = wm.withFrame(content)
 	}
 	node := wm.tree.SplitHorizontal(win.node, content)
@@ -95,7 +87,7 @@ func (wm *WindowManager) SplitHorizontal(win Window, content tui.Component) Wind
 // SplitVertical creates a new Window by splitting the width of win in two and
 // initializes it with content.
 func (wm *WindowManager) SplitVertical(win Window, content tui.Component) Window {
-	if wm.border {
+	if wm.config.Frame {
 		content = wm.withFrame(content)
 	}
 	node := wm.tree.SplitVertical(win.node, content)
@@ -107,39 +99,38 @@ func (wm *WindowManager) WindowAt(pos term.Coordinates) Window {
 	return wm.nodeToWindow(wm.tree.TileAt(pos))
 }
 
-// SetDefaultFrameCharSet sets the defaultframe border cells used
+// SetFrameCharSet sets the defaultframe border cells used
 // to draw borders around tiles.  Note that this has no effect if WindowManager was
 // initialized with border == false.
-func (wm *WindowManager) SetDefaultFrameCharSet(b FrameCharSet) {
-	if !wm.border {
+func (wm *WindowManager) SetFrameCharSet(b FrameCharSet) {
+	if !wm.config.Frame {
 		return
 	}
 
+	wm.config.FrameCharSet = b
 	wm.tree.Iterate(func(node *TileNode) {
 		node.Content().(*Frame).FrameCharSet = b
 	})
-
-	wm.frmBorders = b
 }
 
-// SetDefaultAttr sets the default and focus window border attributes. Note that
+// SetFrameAttr sets the default and focus window border attributes. Note that
 // this has no effect if WindowManager was initialized with border == false.
-func (wm *WindowManager) SetDefaultAttr(attr term.Attributes) {
-	if !wm.border {
+func (wm *WindowManager) SetFrameAttr(attr term.Attributes) {
+	if !wm.config.Frame {
 		return
 	}
 
-	wm.borderAttr = attr
+	wm.config.FrameAttr = attr
 	wm.tree.Iterate(func(node *TileNode) {
-		node.Content().(*Frame).Attributes = wm.borderAttr
+		node.Content().(*Frame).Attributes = attr
 	})
 }
 
 // DefaultWindowManagerConfig returns a sane WindowManagerConfig.
 func DefaultWindowManagerConfig() WindowManagerConfig {
 	return WindowManagerConfig{
-		Border: true,
-		BorderAttr: term.Attributes{
+		Frame: true,
+		FrameAttr: term.Attributes{
 			Fg: term.ColorDefault,
 			Bg: term.ColorDefault,
 		},

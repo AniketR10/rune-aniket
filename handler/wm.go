@@ -13,20 +13,15 @@ import (
 type WindowManagerConfig struct {
 	component.WindowManagerConfig
 
-	FocusBorderAttr   term.Attributes
+	FocusFrameAttr    term.Attributes
 	FocusFrameCharSet component.FrameCharSet
 }
 
 // WindowManager implements Handler as a tiled window manager.
 type WindowManager struct {
-	comp component.WindowManager
-
-	border      bool
-	borderAttr  term.Attributes
-	focusAttr   term.Attributes
-	focusBorder component.FrameCharSet
-
-	focus Window
+	comp   component.WindowManager
+	config WindowManagerConfig
+	focus  Window
 }
 
 // NewWindowManager allocates storage for a new WindowManager and initializes it with the
@@ -47,9 +42,7 @@ func (wm *WindowManager) newNode(t component.Window) Window {
 // a border around every tile.
 func (wm *WindowManager) Init(handler tui.Handler, cfg WindowManagerConfig) {
 	win := wm.comp.Init(handler, cfg.WindowManagerConfig)
-	wm.focusAttr = cfg.FocusBorderAttr
-	wm.focusBorder = cfg.FocusFrameCharSet
-	wm.border = cfg.Border
+	wm.config = cfg
 	wm.focus = wm.newNode(win)
 	wm.SetFocus(wm.focus)
 	return
@@ -59,28 +52,23 @@ func (wm *WindowManager) Init(handler tui.Handler, cfg WindowManagerConfig) {
 // Note that this has no effect if WindowManager was
 // initialized with border == false.
 func (wm *WindowManager) SetFrameCharSet(def, focus component.FrameCharSet) {
-	if !wm.border {
+	if !wm.config.Frame {
 		return
 	}
-
-	wm.focusBorder = focus
-
-	wm.comp.SetDefaultFrameCharSet(def)
+	wm.comp.SetFrameCharSet(def)
 	wm.focus.SetFrameCharSet(focus)
 }
 
 // SetAttr sets the default and focus window border attributes. Note that
 // this has no effect if WindowManager was initialized with border == false.
 func (wm *WindowManager) SetAttr(def, focus term.Attributes) {
-	if !wm.border {
+	if !wm.config.Frame {
 		return
 	}
-
-	wm.borderAttr = def
-	wm.focusAttr = focus
-
-	wm.comp.SetDefaultAttr(def)
-	wm.focus.SetFrameAttr(wm.focusAttr)
+	wm.config.FocusFrameAttr = focus
+	wm.config.FrameAttr = def
+	wm.comp.SetFrameAttr(def)
+	wm.focus.SetFrameAttr(focus)
 }
 
 // Handle : Handler
@@ -231,7 +219,7 @@ func (wm *WindowManager) Cursor() (term.Coordinates, bool) {
 		panic("corrupted WindowManager: focus is a zero-valued Window")
 	}
 	content := wm.focus.Content()
-	if wm.border {
+	if wm.config.Frame {
 		// force frame cursor offset
 		content = NewFrame(content)
 		content.Resize(wm.focus.Width(), wm.focus.Height())
@@ -288,9 +276,9 @@ func (wm *WindowManager) SetFocus(tile Window) (
 		panic(fmt.Sprintf("Tile does not belong to"+
 			"this window manager: %p vs %p", wm, tile.wm))
 	}
-	if wm.border {
-		wm.focus.Window.SetFrameAttr(wm.borderAttr)
-		tile.Window.SetFrameAttr(wm.focusAttr)
+	if wm.config.Frame {
+		wm.focus.Window.SetFrameAttr(wm.config.FrameAttr)
+		tile.Window.SetFrameAttr(wm.config.FocusFrameAttr)
 	}
 	prev = wm.focus
 	wm.focus = tile
@@ -302,7 +290,7 @@ func DefaultWindowManagerConfig() WindowManagerConfig {
 	return WindowManagerConfig{
 		WindowManagerConfig: component.DefaultWindowManagerConfig(),
 		FocusFrameCharSet:   component.FrameCharSetDefault(),
-		FocusBorderAttr: term.Attributes{
+		FocusFrameAttr: term.Attributes{
 			Fg: term.ColorRed,
 			Bg: term.ColorDefault,
 		},

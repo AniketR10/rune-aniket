@@ -64,10 +64,10 @@ browser:
     tabspaces: 4
     swap_dir: /tmp/util
     window_manager:
-        border: true
-        border_attr:
+        frame: true
+        frame_attr:
             fg: red
-        focus_border_attr:
+        focus_frame_attr:
             fg: magenta
             bg:
               - cyan
@@ -92,11 +92,11 @@ browser:
 
 	expectedConfig := handler.WindowManagerConfig{
 		WindowManagerConfig: component.WindowManagerConfig{
-			Border:       true,
-			BorderAttr:   term.Attributes{Fg: term.ColorRed},
+			Frame:        true,
+			FrameAttr:    term.Attributes{Fg: term.ColorRed},
 			FrameCharSet: handler.DefaultWindowManagerConfig().FrameCharSet,
 		},
-		FocusBorderAttr:   term.Attributes{Fg: term.ColorMagenta, Bg: term.AttrBold | term.ColorCyan},
+		FocusFrameAttr:    term.Attributes{Fg: term.ColorMagenta, Bg: term.AttrBold | term.ColorCyan},
 		FocusFrameCharSet: handler.DefaultWindowManagerConfig().FocusFrameCharSet,
 	}
 	assert.Equal(t, expectedConfig, cfg.windowManagerConfig())

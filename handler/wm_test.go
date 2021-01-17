@@ -18,28 +18,28 @@ func altEvent(ch rune) term.Event {
 	}
 }
 
-func prepareTest(width, height int, border bool, root tui.Handler) (
+func prepareTest(width, height int, frame bool, root tui.Handler) (
 	*term.StringWriter, *WindowManager,
 ) {
 	writer := term.NewStringWriter(width, height)
 	cfg := DefaultWindowManagerConfig()
-	cfg.Border = border
+	cfg.Frame = frame
 	handler := NewWindowManager(root, cfg)
 	handler.Resize(width, height)
 
 	return writer, handler
 }
 
-func TestWindowManagerSetFocusBorder(t *testing.T) {
+func TestWindowManagerSetFocusFrame(t *testing.T) {
 	testWindowManagerSetFocus(t, true)
 }
-func TestWindowManagerSetFocusNoBorder(t *testing.T) {
+func TestWindowManagerSetFocusNoFrame(t *testing.T) {
 	testWindowManagerSetFocus(t, false)
 }
 
-func testWindowManagerSetFocus(t *testing.T, border bool) {
+func testWindowManagerSetFocus(t *testing.T, frame bool) {
 	width, height := 8, 4
-	_, wm := prepareTest(width, height, border, NewTestHandler())
+	_, wm := prepareTest(width, height, frame, NewTestHandler())
 	right := wm.SplitHorizontal(NewTestHandler())
 
 	wm.SetFocus(right)
@@ -295,7 +295,7 @@ EEEEEEEE`,
 	testHandlerWorkflow(t, handler, cases, writer)
 }
 
-func TestWindowManagerHandleBorder(t *testing.T) {
+func TestWindowManagerHandleFrame(t *testing.T) {
 	leftHandler := NewTestHandler()
 	width, height := 12, 4
 	writer, handler := prepareTest(width, height, true, leftHandler)
@@ -418,7 +418,7 @@ func TestWindowManagerSetFocusContent(t *testing.T) {
 
 func TestWindowManagerInit(t *testing.T) {
 	cfg := DefaultWindowManagerConfig()
-	cfg.Border = false
+	cfg.Frame = false
 	wm := NewWindowManager(NewTestHandler(), cfg)
 	require.NotNil(t, wm.Focus())
 }
@@ -439,16 +439,17 @@ func TestWindowManagerSetAttr(t *testing.T) {
 
 	wm.ShiftFocus()
 	b, ok = focus.FrameAttr()
+	require.True(t, ok)
 	assert.Equal(t, cyan, b.Bg)
 	assert.Equal(t, red, b.Fg)
 }
 
-func testWindowManagerClose(t *testing.T, border bool) {
+func testWindowManagerClose(t *testing.T, frame bool) {
 	h1 := NewTestHandler()
 	h2 := NewTestHandler()
 	h2.Ch = 'D' // different char to enable assert.Equal
 	cfg := DefaultWindowManagerConfig()
-	cfg.Border = border
+	cfg.Frame = frame
 	wm := NewWindowManager(h1, cfg)
 	node2 := wm.SplitHorizontal(h2)
 
@@ -458,18 +459,18 @@ func testWindowManagerClose(t *testing.T, border bool) {
 }
 
 func TestWindowManagerClose(t *testing.T) {
-	t.Run("Close with border", func(t *testing.T) {
+	t.Run("Close with frame", func(t *testing.T) {
 		testWindowManagerClose(t, true)
 	})
 
-	t.Run("Close without border", func(t *testing.T) {
+	t.Run("Close without frame", func(t *testing.T) {
 		testWindowManagerClose(t, false)
 	})
 }
 
-func testWindowManagerContent(t *testing.T, border bool) {
+func testWindowManagerContent(t *testing.T, frame bool) {
 	cfg := DefaultWindowManagerConfig()
-	cfg.Border = border
+	cfg.Frame = frame
 	wm := NewWindowManager(NewTestHandler(), cfg)
 	node2 := wm.SplitHorizontal(NewTestHandler())
 
@@ -487,22 +488,22 @@ func testWindowManagerContent(t *testing.T, border bool) {
 }
 
 func TestWindowManagerContent(t *testing.T) {
-	t.Run("Content with border", func(t *testing.T) {
+	t.Run("Content with frame", func(t *testing.T) {
 		testWindowManagerContent(t, true)
 	})
-	t.Run("Content without border", func(t *testing.T) {
+	t.Run("Content without frame", func(t *testing.T) {
 		testWindowManagerContent(t, false)
 	})
 }
 
 func testWindowManagerCursor(
-	t *testing.T, border bool,
+	t *testing.T, frame bool,
 	input, expected term.Coordinates,
 ) {
 	handler := NewTestHandler()
 	handler.CursorPos = input
 	cfg := DefaultWindowManagerConfig()
-	cfg.Border = border
+	cfg.Frame = frame
 	wm := NewWindowManager(handler, cfg)
 	wm.Resize(10, 10)
 
@@ -513,12 +514,12 @@ func testWindowManagerCursor(
 
 func TestWindowManagerCursor(t *testing.T) {
 	input := term.Coordinates{X: 1, Y: 2}
-	t.Run("Cursor with border", func(t *testing.T) {
+	t.Run("Cursor with frame", func(t *testing.T) {
 		testWindowManagerCursor(t, true, input,
 			term.Coordinates{X: 2, Y: 3})
 	})
 
-	t.Run("Cursor without border", func(t *testing.T) {
+	t.Run("Cursor without frame", func(t *testing.T) {
 		testWindowManagerCursor(t, false, input, input)
 	})
 }

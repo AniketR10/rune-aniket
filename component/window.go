@@ -50,7 +50,7 @@ func (w Window) Content() (c tui.Component) {
 		panic(errCalledZeroValuedWin)
 	}
 
-	if w.wm.border {
+	if w.wm.config.Frame {
 		c = w.node.Content().(*Frame).Content().(tui.Component)
 	} else {
 		c = w.node.Content().(tui.Component)
@@ -65,7 +65,7 @@ func (w Window) SetContent(content tui.Component) (
 	prev tui.Component,
 ) {
 	prev = w.Content()
-	if w.wm.border {
+	if w.wm.config.Frame {
 		content = w.wm.withFrame(content)
 	}
 	w.node.SetContent(content)
@@ -79,7 +79,7 @@ func (w Window) SetFrameAttr(attr term.Attributes) bool {
 	if w.wm == nil {
 		panic(errCalledZeroValuedWin)
 	}
-	if !w.wm.border {
+	if !w.wm.config.Frame {
 		return false
 	}
 	w.node.Content().(*Frame).Attributes = attr
@@ -92,7 +92,7 @@ func (w Window) SetFrameCharSet(b FrameCharSet) bool {
 	if w.wm == nil {
 		panic(errCalledZeroValuedWin)
 	}
-	if !w.wm.border {
+	if !w.wm.config.Frame {
 		return false
 	}
 	w.node.Content().(*Frame).FrameCharSet = b
@@ -105,7 +105,7 @@ func (w Window) FrameAttr() (attr term.Attributes, ok bool) {
 	if w.wm == nil {
 		panic(errCalledZeroValuedWin)
 	}
-	if !w.wm.border {
+	if !w.wm.config.Frame {
 		return
 	}
 	ok = true
@@ -119,7 +119,7 @@ func (w Window) FrameCharSet() (b FrameCharSet, ok bool) {
 	if w.wm == nil {
 		panic(errCalledZeroValuedWin)
 	}
-	if !w.wm.border {
+	if !w.wm.config.Frame {
 		return
 	}
 	ok = true
