@@ -184,6 +184,10 @@ func (c mapConfig) GetAttribute(key string) (term.Attribute, error) {
 	if ok {
 		return strToAttr(vt)
 	}
+	i, err := c.GetInt(key)
+	if err == nil {
+		return term.Attribute(i), nil
+	}
 
 	avt, ok := v.([]interface{})
 	if !ok {

@@ -60,7 +60,7 @@ func TestConfigTypes(t *testing.T) {
 		"23":     float32(2.1),
 		"true":   true,
 		"false":  false,
-		"attr_1": map[string]interface{}{"fg": "blue", "bg": "cyan"},
+		"attr_1": map[string]interface{}{"fg": "blue", "bg": 7},
 		"attr_2": map[string]interface{}{"fg": []interface{}{"red", "bold"}},
 		"charset_1": map[string]interface{}{"topleft": "a",
 			"topright": "b", "bottomleft": "c",
