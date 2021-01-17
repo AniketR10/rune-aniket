@@ -35,6 +35,12 @@ func TestConfigOk(t *testing.T) {
 
 	_, err = c.GetAttributes("mk")
 	assert.Equal(t, ErrNotFound, err)
+
+	_, err = c.GetRune("mk")
+	assert.Equal(t, ErrNotFound, err)
+
+	_, err = c.GetFrameCharset("mk")
+	assert.Equal(t, ErrNotFound, err)
 }
 func TestConfigTypes(t *testing.T) {
 	m := map[string]interface{}{
@@ -56,6 +62,10 @@ func TestConfigTypes(t *testing.T) {
 		"false":  false,
 		"attr_1": map[string]interface{}{"fg": "blue", "bg": "cyan"},
 		"attr_2": map[string]interface{}{"fg": []interface{}{"red", "bold"}},
+		"charset_1": map[string]interface{}{"topleft": "a",
+			"topright": "b", "bottomleft": "c",
+			"bottomright": "d", "horizontal": "e", "vertical": "f"},
+		"charset_2": map[string]interface{}{"topleft": 'a', "topright": 2},
 	}
 
 	c1 := MapConfig(m)
@@ -131,6 +141,24 @@ func TestConfigTypes(t *testing.T) {
 			assert.True(t, attrs.Fg&term.ColorRed != 0)
 			assert.True(t, attrs.Fg&term.AttrBold != 0)
 			assert.Equal(t, term.ColorDefault, attrs.Bg)
+
+			charset, err := c.GetFrameCharset("charset_1")
+			require.NoError(t, err)
+			assert.Equal(t, 'a', charset.TopLeft)
+			assert.Equal(t, 'b', charset.TopRight)
+			assert.Equal(t, 'c', charset.BottomLeft)
+			assert.Equal(t, 'd', charset.BottomRight)
+			assert.Equal(t, 'e', charset.Horizontal)
+			assert.Equal(t, 'f', charset.Vertical)
+
+			charset, err = c.GetFrameCharset("charset_2")
+			require.NoError(t, err)
+			assert.Equal(t, 'a', charset.TopLeft)
+			assert.Equal(t, rune(2), charset.TopRight)
+			assert.Equal(t, rune(0), charset.BottomLeft)
+			assert.Equal(t, rune(0), charset.BottomRight)
+			assert.Equal(t, rune(0), charset.Horizontal)
+			assert.Equal(t, rune(0), charset.Vertical)
 		})
 	}
 }

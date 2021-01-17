@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 
+	"github.com/ernestrc/go-tui/component"
 	"github.com/ernestrc/go-tui/term"
 )
 
@@ -24,6 +25,8 @@ type Config interface {
 	GetConfig(string) (Config, error)
 	GetAttribute(string) (term.Attribute, error)
 	GetAttributes(string) (term.Attributes, error)
+	GetRune(string) (rune, error)
+	GetFrameCharset(string) (component.FrameCharSet, error)
 }
 
 type internalConfig interface {
@@ -199,6 +202,52 @@ func (c mapConfig) GetAttribute(key string) (term.Attribute, error) {
 	}
 
 	return attr, nil
+}
+
+func (c mapConfig) GetRune(key string) (rune, error) {
+	v, ok := c[key]
+	if !ok {
+		return 0, ErrNotFound
+	}
+	vt, ok := v.(string)
+	if ok {
+		return []rune(vt)[0], nil
+	}
+
+	vtr, ok := v.(rune)
+	if ok {
+		return vtr, nil
+	}
+
+	vtb, ok := v.(byte)
+	if ok {
+		return rune(vtb), nil
+	}
+
+	i, err := c.GetInt(key)
+	if err != nil {
+		return 0, err
+	}
+
+	return rune(i), nil
+}
+
+func (c mapConfig) GetFrameCharset(key string) (
+	component.FrameCharSet, error,
+) {
+	cfg, err := c.GetConfig(key)
+	if err != nil {
+		return component.FrameCharSet{}, err
+	}
+
+	var cs component.FrameCharSet
+	cs.TopLeft, _ = cfg.GetRune("topleft")
+	cs.TopRight, _ = cfg.GetRune("topright")
+	cs.BottomLeft, _ = cfg.GetRune("bottomleft")
+	cs.BottomRight, _ = cfg.GetRune("bottomright")
+	cs.Horizontal, _ = cfg.GetRune("horizontal")
+	cs.Vertical, _ = cfg.GetRune("vertical")
+	return cs, nil
 }
 
 func (c mapConfig) GetAttributes(key string) (term.Attributes, error) {
