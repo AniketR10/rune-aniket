@@ -81,7 +81,13 @@ func (i *IDE) init(cfgfilename, recfilename string, filenames ...string) error {
 		browser.WithTabspaces(i.ideConfig.browserTabspaces()),
 		browser.WithStartText(i.ideConfig.browserStartText()),
 		browser.WithWindowManagerConfig(i.ideConfig.windowManagerConfig()),
+		browser.WithFrameUnionCharSet(i.ideConfig.frameUnionCharset()),
 		browser.WithCommandEvent(term.Event{Type: term.EventKey, Ch: ':'}),
+		browser.WithMessageBarAttr(i.ideConfig.messageBarAttr()),
+		browser.WithFocusTabAttr(i.ideConfig.focusTabAttr()),
+		browser.WithNonFocusTabAttr(i.ideConfig.nonFocusTabAttr()),
+		browser.WithStartTextAttr(i.ideConfig.startTextAttr()),
+		browser.WithStartTextBackgroundAttr(i.ideConfig.startTextBackgroundAttr()),
 	)
 
 	if i.ideConfig.browserSwapDir() != "" {

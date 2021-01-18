@@ -19,16 +19,7 @@ var (
 	// SetContent but it's already owned by another Window.
 	ErrBufferNotFree = errors.New("Buffer already rendered in another Window")
 
-	// TODO expose more via configuration
-	// TODO use window manager config to setup frame union
-	focusFileAttr    = term.Attributes{Fg: term.ColorDefault}
-	nonFocusFileAttr = term.Attributes{Fg: 243}
-	scrollAttr       = term.Attributes{Fg: term.ColorWhite}
-	frameFileAttr    = term.Attributes{Fg: 243}
-	logBarAttr       = term.Attributes{Bg: term.ColorRed, Fg: term.ColorWhite}
-	wmFocusAttr      = frameFileAttr
-	wmDefaultAttr    = frameFileAttr
-	logBufDrawTimes  = 2
+	logBufDrawTimes = 2
 )
 
 // Component renders a browser-like tui.Compontent and exposes an API
@@ -39,20 +30,20 @@ var (
 // to a call to Handle. Conversely, tui.Handlers installed via NewBuffer
 // will remain as a tab and can be managed independently from windows.
 type Component struct {
-	logBuf     *cell.Buffer
+	logBuf     cell.Buffer
 	logBufDraw int
 	logVirt    handler.Virtual
-	tabs       *handler.Tabs
+	tabs       handler.Tabs
 	tabsVirt   handler.Virtual
-	wm         *handler.WindowManager
+	wm         handler.WindowManager
 	wmVirt     handler.Virtual
-	frames     *component.FrameUnion
+	frames     component.FrameUnion
 
-	config         Config
-	startHandler   Handler
-	buffers        []*buffer
-	windows        map[uint64]*browserWindow
-	fileListHeight int
+	config       Config
+	startHandler Handler
+	buffers      []*buffer
+	windows      map[uint64]*browserWindow
+	tabsHeight   int
 }
 
 // component.WindowManager sinchronously removes tui.Handlers
@@ -165,10 +156,10 @@ func (c *Component) Init(config Config) {
 	c.config = config
 	c.windows = make(map[uint64]*browserWindow)
 
-	c.logBuf = cell.NewBuffer()
-	c.logVirt = NewMessageSpan(c.logBuf, logBarAttr)
+	c.logBuf.Init()
+	c.logVirt = NewMessageSpan(&c.logBuf, config.MessageBarAttr)
 
-	c.tabs = handler.NewTabs()
+	c.tabs.Init()
 	c.tabs.OnClick = func(id int) {
 		buf := c.buffers[id]
 		err := c.Focus().SetContent(buf)
@@ -176,23 +167,31 @@ func (c *Component) Init(config Config) {
 			c.setError(err)
 		}
 	}
-	c.tabs.SetAttr(focusFileAttr, nonFocusFileAttr, frameFileAttr, scrollAttr)
 
+	handlerWmConfig := handler.WindowManagerConfig{
+		FocusFrameAttr:      config.WindowManagerConfig.FrameAttr,
+		FocusFrameCharSet:   config.WindowManagerConfig.FrameCharSet,
+		WindowManagerConfig: config.WindowManagerConfig,
+	}
 	startText := component.StringBackgroundAttr(c.config.StartText,
-		term.Attributes{Fg: term.ColorRed | term.AttrBold}, 0, term.Attributes{})
+		c.config.StartTextAttr, 0, c.config.StartTextBackgroundAttr)
 	c.startHandler = CallbackHandler(handler.Nop(startText), func() {})
-
-	c.wm = handler.NewWindowManager(c.startHandler, c.config.WindowManagerConfig)
-	c.wm.SetAttr(wmDefaultAttr, wmFocusAttr)
-
+	c.wm.Init(c.startHandler, handlerWmConfig)
 	_ = c.newWindow(c.wm.Focus()) // init handler with initial window
-
-	c.wmVirt = handler.Virtual{Virtual: component.Virtual{C: c.wm}}
-	c.tabsVirt = handler.Virtual{Virtual: component.Virtual{C: c.tabs}}
-	c.frames = component.NewFrameUnion(&c.tabsVirt.Virtual, &c.wmVirt.Virtual)
-	c.frames.Attributes = config.WindowManagerConfig.FrameAttr
-
+	c.wmVirt = handler.Virtual{Virtual: component.Virtual{C: &c.wm}}
+	c.tabsVirt = handler.Virtual{Virtual: component.Virtual{C: &c.tabs}}
+	c.frames.Init(&c.tabsVirt.Virtual, &c.wmVirt.Virtual)
 	c.buffers = make([]*buffer, 0)
+
+	// make sure that frame union attrs are same as window manager attrs
+	c.frames.Attributes = config.WindowManagerConfig.FrameAttr
+	c.frames.Right = config.FrameUnionCharSet.Right
+	c.frames.Left = config.FrameUnionCharSet.Left
+
+	c.tabs.SetAttr(config.FocusTabAttr, config.NonFocusTabAttr,
+		config.WindowManagerConfig.FrameAttr, config.WindowManagerConfig.FrameAttr)
+	c.tabs.SetFrameCharSet(config.WindowManagerConfig.FrameCharSet)
+	c.tabs.SetBorder(config.WindowManagerConfig.Frame)
 
 	return
 }
@@ -490,7 +489,7 @@ func (c *Component) split(
 			c:       c,
 		}
 	}
-	win := split(c.wm, h)
+	win := split(&c.wm, h)
 	return c.newWindow(win)
 }
 
@@ -542,11 +541,11 @@ func (c *Component) SetMessage(msg string, args ...interface{}) {
 func (c *Component) Resize(width, height int) {
 	ResizeMessageSpan(&c.logVirt, width, height)
 
-	c.fileListHeight = 3
+	c.tabsHeight = 3
 	if height < 3 {
-		c.fileListHeight = 0
+		c.tabsHeight = 0
 	}
-	c.tabsVirt.Resize(width, c.fileListHeight)
+	c.tabsVirt.Resize(width, c.tabsHeight)
 	c.frames.Resize(width, height)
 }
 
@@ -558,7 +557,9 @@ func (c *Component) Draw(w term.Writer) {
 			c.tabs.SetFocus(id)
 		}
 	}
-	c.frames.Draw(w)
+	if c.config.Frame {
+		c.frames.Draw(w)
+	}
 
 	// only draw logBufDraw times
 	if c.logBufDraw > 0 {
@@ -635,7 +636,7 @@ func (c *Component) Close() (ret error) {
 
 // Handle proxies events to either the underlying Tabs or WindowManager.
 func (c *Component) Handle(ev term.Event) (exit, handled bool) {
-	if ev.Type == term.EventMouse && ev.MouseY < c.fileListHeight {
+	if ev.Type == term.EventMouse && ev.MouseY < c.tabsHeight {
 		_, handled = c.tabs.Handle(ev)
 		return
 	}

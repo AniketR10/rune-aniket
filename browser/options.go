@@ -1,7 +1,7 @@
 package browser
 
 import (
-	"github.com/ernestrc/go-tui/handler"
+	"github.com/ernestrc/go-tui/component"
 	"github.com/ernestrc/go-tui/term"
 	log "github.com/sirupsen/logrus"
 )
@@ -15,13 +15,19 @@ func DefaultConfig() Config {
 		Filepaths:           nil,
 		RecoveryFilepath:    "",
 		CommandEvent:        term.Event{Ch: ':', Type: term.EventKey},
-		WindowManagerConfig: handler.DefaultWindowManagerConfig(),
+		MessageBarAttr:      term.Attributes{Bg: term.ColorRed, Fg: term.ColorWhite},
+		FocusTabAttr:        term.Attributes{Fg: term.ColorWhite},
+		NonFocusTabAttr:     term.Attributes{Fg: term.ColorRed},
+		StartTextAttr:       term.Attributes{Fg: term.ColorRed | term.AttrBold},
+		FrameUnionCharSet:   component.DefaultFrameUnionCharSet(),
+		WindowManagerConfig: component.DefaultWindowManagerConfig(),
 	}
 }
 
 // Option represents a configuration option for a browser.Handler.
 type Option func(*Config)
 
+// TODO all this options should be moved to editor package for use with ex.
 // Config holds configuration for an browser.Component.
 type Config struct {
 	Tabspaces        int
@@ -31,7 +37,15 @@ type Config struct {
 	RecoveryFilepath string
 	CommandEvent     term.Event
 	StartText        string
-	handler.WindowManagerConfig
+
+	StartTextAttr           term.Attributes
+	StartTextBackgroundAttr term.Attributes
+	MessageBarAttr          term.Attributes
+	FocusTabAttr            term.Attributes
+	NonFocusTabAttr         term.Attributes
+
+	component.FrameUnionCharSet
+	component.WindowManagerConfig
 }
 
 // WithLogger sets a logger that the editor can use to log debugging data.
@@ -64,11 +78,19 @@ func WithSwapDir(dir string) Option {
 	}
 }
 
-// WithWindowManagerConfig is an Option that defines
+// WithFrameUnionCharSet configures the characters used to draw the frame union
+// between the browser tabs and the window manager.
+func WithFrameUnionCharSet(cs component.FrameUnionCharSet) Option {
+	return func(cfg *Config) {
+		cfg.FrameUnionCharSet = cs
+	}
+}
+
+// WithWindowManagerConfig returns an Option that defines
 // the underlying's WindowManager initialization configuration.
 // See handler.WindowManagerConfig for more info. If this option is not passed
 // DefaultWindowManagerConfig is utilized.
-func WithWindowManagerConfig(config handler.WindowManagerConfig) Option {
+func WithWindowManagerConfig(config component.WindowManagerConfig) Option {
 	return func(cfg *Config) {
 		cfg.WindowManagerConfig = config
 	}
@@ -83,7 +105,7 @@ func WithRecoveryFile(swapFilePath string) Option {
 	}
 }
 
-// WithFilepath is an Option that sets the filepath of the file to open with
+// WithFilepath returns an Option that sets the filepath of the file to open with
 // a Editor handler.
 func WithFilepath(filepath string) Option {
 	return func(cfg *Config) {
@@ -91,10 +113,50 @@ func WithFilepath(filepath string) Option {
 	}
 }
 
-// WithCommandEvent is an Option that defines what event triggers the editor's
+// WithCommandEvent returns an Option that defines what event triggers the editor's
 // command mode.
 func WithCommandEvent(event term.Event) Option {
 	return func(cfg *Config) {
 		cfg.CommandEvent = event
+	}
+}
+
+// WithMessageBarAttr returns an Option that configures
+// the browser's message bar attr.
+func WithMessageBarAttr(attr term.Attributes) Option {
+	return func(cfg *Config) {
+		cfg.MessageBarAttr = attr
+	}
+}
+
+// WithFocusTabAttr returns an Option that configures the attributes of the
+// browser's tab in focus.
+func WithFocusTabAttr(attr term.Attributes) Option {
+	return func(cfg *Config) {
+		cfg.FocusTabAttr = attr
+	}
+}
+
+// WithNonFocusTabAttr returns an Option that configures the attributes of the
+// browser's tabs that are not in focus.
+func WithNonFocusTabAttr(attr term.Attributes) Option {
+	return func(cfg *Config) {
+		cfg.NonFocusTabAttr = attr
+	}
+}
+
+// WithStartTextAttr returns an Option that configures the attributes of the
+// text passed to WithStartText.
+func WithStartTextAttr(attr term.Attributes) Option {
+	return func(cfg *Config) {
+		cfg.StartTextAttr = attr
+	}
+}
+
+// WithStartTextBackgroundAttr returns an Option that configures the attributes of the
+// padded background around text passed to WithStartText.
+func WithStartTextBackgroundAttr(attr term.Attributes) Option {
+	return func(cfg *Config) {
+		cfg.StartTextBackgroundAttr = attr
 	}
 }

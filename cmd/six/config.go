@@ -94,20 +94,64 @@ func (c ideConfig) windowFrameAttr() (attr term.Attributes) {
 	return
 }
 
-func (c ideConfig) focusWindowFrameAttr() (attr term.Attributes) {
-	attr = defaultWindowManagerConfig.FocusFrameAttr
-	cfg, ok := c.windowManager()
+func (c ideConfig) getBrowserAttr(
+	key string, def term.Attributes,
+) (attr term.Attributes) {
+	attr = def
+	cfg, ok := c.browser()
 	if !ok {
 		return
 	}
-	cfgAttr, err := cfg.GetAttributes("focus_frame_attr")
+	cfgAttr, err := cfg.GetAttributes(key)
 	if err != nil {
 		if err != plugin.ErrNotFound {
-			c.errors["window_manager.focus_frame_attr"] = err
+			c.errors["window_manager."+key] = err
 		}
 		return
 	}
 	attr = cfgAttr
+	return
+}
+
+func (c ideConfig) messageBarAttr() term.Attributes {
+	return c.getBrowserAttr("message_bar_attr",
+		browser.DefaultConfig().MessageBarAttr)
+}
+
+func (c ideConfig) focusTabAttr() term.Attributes {
+	return c.getBrowserAttr("focus_tab_attr",
+		browser.DefaultConfig().FocusTabAttr)
+}
+
+func (c ideConfig) nonFocusTabAttr() term.Attributes {
+	return c.getBrowserAttr("non_focus_tab_attr",
+		browser.DefaultConfig().NonFocusTabAttr)
+}
+
+func (c ideConfig) startTextAttr() term.Attributes {
+	return c.getBrowserAttr("start_text_attr",
+		browser.DefaultConfig().StartTextAttr)
+}
+
+func (c ideConfig) startTextBackgroundAttr() term.Attributes {
+	return c.getBrowserAttr("start_text_background_attr",
+		browser.DefaultConfig().StartTextBackgroundAttr)
+}
+
+func (c ideConfig) windowFrameCharset() (cs component.FrameCharSet) {
+	cs = defaultWindowManagerConfig.FrameCharSet
+	cfg, ok := c.windowManager()
+	if !ok {
+		return
+	}
+	cfgCs, err := cfg.GetFrameCharset("frame_charset")
+	if err != nil {
+		if err != plugin.ErrNotFound {
+			c.errors["window_manager.frame_charset"] = err
+		}
+		return
+	}
+	cs = cfgCs
 	return
 }
 
@@ -128,16 +172,46 @@ func (c ideConfig) frame() (frame bool) {
 	return
 }
 
-func (c ideConfig) windowManagerConfig() handler.WindowManagerConfig {
-	defaults := handler.DefaultWindowManagerConfig()
-	return handler.WindowManagerConfig{
-		WindowManagerConfig: component.WindowManagerConfig{
-			Frame:        c.frame(),
-			FrameAttr:    c.windowFrameAttr(),
-			FrameCharSet: defaults.FrameCharSet,
-		},
-		FocusFrameAttr:    c.focusWindowFrameAttr(),
-		FocusFrameCharSet: defaults.FocusFrameCharSet,
+func (c ideConfig) frameUnionCharset() (cs component.FrameUnionCharSet) {
+	cs = component.DefaultFrameUnionCharSet()
+	cfg, ok := c.browser()
+	if !ok {
+		return
+	}
+
+	cfg, err := cfg.GetConfig("frameunion_charset")
+	if err != nil {
+		if err != plugin.ErrNotFound {
+			c.errors["browser.frameunion_charset"] = err
+		}
+		return
+	}
+
+	left, err := cfg.GetRune("left")
+	if err != nil {
+		if err != plugin.ErrNotFound {
+			c.errors["browser.frameunion_charset.left"] = err
+		}
+		return
+	}
+	right, err := cfg.GetRune("right")
+	if err != nil {
+		if err != plugin.ErrNotFound {
+			c.errors["browser.frameunion_charset.right"] = err
+		}
+		return
+	}
+	cs.Left = left
+	cs.Right = right
+
+	return
+}
+
+func (c ideConfig) windowManagerConfig() component.WindowManagerConfig {
+	return component.WindowManagerConfig{
+		Frame:        c.frame(),
+		FrameAttr:    c.windowFrameAttr(),
+		FrameCharSet: c.windowFrameCharset(),
 	}
 }
 
