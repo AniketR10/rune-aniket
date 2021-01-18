@@ -127,8 +127,8 @@ func (h *fuzzyFinderHandler) scanForFiles() {
 func newFuzzyFinderHandler(
 	f browser.ResourceOpener, p browser.EventPublisher,
 	invokeWindow browser.Window,
-	config plugin.Config, cwd string,
-) *fuzzyFinderHandler {
+	config plugin.Config,
+) tui.Handler {
 	h := new(fuzzyFinderHandler)
 	h.f = f
 	h.p = p
@@ -147,7 +147,7 @@ func newFuzzyFinderHandler(
 
 	h.quitChan = make(chan struct{})
 
-	listConfig := h.getListConfig(config, cwd)
+	listConfig := h.getListConfig(config)
 	h.list.Init(listConfig)
 
 	go h.scanForFiles()
@@ -155,17 +155,13 @@ func newFuzzyFinderHandler(
 	return h
 }
 
-func (h *fuzzyFinderHandler) getListConfig(config plugin.Config, cwd string) search.ListConfig {
+func (h *fuzzyFinderHandler) getListConfig(config plugin.Config) search.ListConfig {
 	caseSensitive, err := config.GetBool("case_sensitive")
 	if err != nil {
 		if err != plugin.ErrNotFound {
 			log.Errorf("failed to load 'case_sensitive' from config: %v", err)
 		}
 		caseSensitive = true
-	}
-	searchBase, err := config.GetBool("search_base")
-	if err != nil && err != plugin.ErrNotFound {
-		log.Errorf("failed to load 'search_base' from config: %v", err)
 	}
 	algoStr, err := config.GetString("algo")
 	if err != nil && err != plugin.ErrNotFound {
@@ -176,15 +172,10 @@ func (h *fuzzyFinderHandler) getListConfig(config plugin.Config, cwd string) sea
 		algo = search.EqualMatch
 	}
 
-	var searchBaseStr string
-	if searchBase {
-		searchBaseStr = cwd
-	}
 	cfg := search.ListConfig{
 		Algo:          algo,
 		Interrupt:     h.publishInterrupt,
 		CaseSensitive: caseSensitive,
-		SearchBase:    searchBaseStr,
 	}
 
 	searchBaseAttr, err := config.GetAttributes("search_base_attr")
