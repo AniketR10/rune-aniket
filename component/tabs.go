@@ -48,7 +48,7 @@ func newListFrame(
 		ContentAlignment: SpanAlignmentCentered,
 		PadVertical:      -1,
 	}
-	span := NewSpan(WithBackground(scroll, background), spanCfg)
+	span := WithBackground(NewSpan(scroll, spanCfg), background)
 	if !border {
 		return span
 	}

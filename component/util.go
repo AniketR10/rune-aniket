@@ -52,10 +52,10 @@ func StringBackgroundAttr(
 		}
 	}
 
-	return NewSpan(WithBackground(&comp, background), SpanConfig{
+	return WithBackground(NewSpan(&comp, SpanConfig{
 		PadVertical:   -len(cells),
 		PadHorizontal: -width,
-	})
+	}), background)
 }
 
 // StringBackground converts a string into a static tui.Compontent,
