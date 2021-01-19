@@ -2,32 +2,21 @@ package proto
 
 import (
 	context "context"
-	"errors"
 	fmt "fmt"
 	"net"
 	"sync"
 
+	"github.com/ernestrc/blue/datastore/document"
+	"github.com/ernestrc/go-tui/util"
 	log "github.com/sirupsen/logrus"
-	grpc "google.golang.org/grpc"
+	"google.golang.org/grpc"
 )
-
-// Datastore is a subset of blue/datastore/document.Service
-// used to avoid importing it as an external dependency.
-type Datastore interface {
-	Create(ctx context.Context, ID string, doc interface{}) error
-	Get(ctx context.Context, ID string, doc interface{}) error
-	Delete(ctx context.Context, ID string) error
-}
-
-// NOTE: this should be blue/datastore/document.ErrAlreadyExists
-// if that implementation is used as a Datastore.
-var errAlreadyExists = errors.New("already exists")
 
 // satisfies to MuxBroker
 type dbBroker struct {
 	mu        sync.Mutex
 	id        uint32
-	svc       Datastore
+	svc       document.Service
 	listeners []net.Listener
 	logger    *log.Logger
 }
@@ -42,7 +31,7 @@ type listenerDoc struct {
 
 // NewDatastoreBroker provides brokerage by employing a datastore to share
 // connection information.
-func NewDatastoreBroker(svc Datastore, logger *log.Logger) MuxBroker {
+func NewDatastoreBroker(svc document.Service, logger *log.Logger) MuxBroker {
 	ret := new(dbBroker)
 	ret.svc = svc
 	ret.logger = logger
@@ -69,7 +58,7 @@ func (t *dbBroker) NextId() uint32 {
 		t.id++
 		key, doc := makeNextIDDocument(t.id)
 		err := t.svc.Create(context.Background(), key, doc)
-		if err != nil && err != errAlreadyExists {
+		if err != nil && err != document.ErrAlreadyExists {
 			panic(err)
 		} else if err == nil {
 			break
@@ -79,7 +68,7 @@ func (t *dbBroker) NextId() uint32 {
 }
 
 func (t *dbBroker) Accept(id uint32) (net.Listener, error) {
-	listener, err := net.Listen("tcp", ":0")
+	listener, err := util.TempUnixListener()
 	if err != nil {
 		return nil, err
 	}
@@ -127,7 +116,6 @@ func (t *dbBroker) Dial(ID uint32) (conn MuxConn, err error) {
 	return
 }
 
-// TODO this should also clean the datastore.
 func (t *dbBroker) Close() error {
 	t.mu.Lock()
 	defer t.mu.Unlock()

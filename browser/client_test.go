@@ -40,6 +40,11 @@ var (
 	}
 )
 
+func assertNoLeaks(t *testing.T) {
+	ignoreOpenCensus := goleak.IgnoreTopFunction("go.opencensus.io/stats/view.(*worker).start")
+	goleak.VerifyNone(t, ignoreOpenCensus)
+}
+
 func newMockedClient(ctrl *gomock.Controller) (
 	client *Client,
 	mockCC *MockClientConnInterface,
@@ -587,7 +592,7 @@ func testClientSplit(
 		time.Sleep(asyncResultsSleepDuration)
 	})
 
-	goleak.VerifyNone(t)
+	assertNoLeaks(t)
 }
 
 func TestClientClose(t *testing.T) {
@@ -621,7 +626,7 @@ func TestClientClose(t *testing.T) {
 	err := client.Close()
 	require.Error(t, err)
 	assert.Contains(t, "let's see", err.Error())
-	goleak.VerifyNone(t)
+	assertNoLeaks(t)
 }
 
 func TestClientSetContent(t *testing.T) {

@@ -210,5 +210,6 @@ func TestIntegrationClientHandlerCursor(t *testing.T) {
 }
 
 func TestMain(m *testing.M) {
-	goleak.VerifyTestMain(m)
+	ignoreOpenCensus := goleak.IgnoreTopFunction("go.opencensus.io/stats/view.(*worker).start")
+	goleak.VerifyTestMain(m, ignoreOpenCensus)
 }

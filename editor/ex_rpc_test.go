@@ -174,9 +174,10 @@ func TestClientSynchronizeHandlers(t *testing.T) {
 func TestMain(m *testing.M) {
 	exitCode := m.Run()
 	if exitCode == 0 {
+		ignoreOpenCensus := goleak.IgnoreTopFunction("go.opencensus.io/stats/view.(*worker).start")
 		// this is to give time to server to close resources
 		time.Sleep(testingShutdownWait)
-		err := goleak.Find()
+		err := goleak.Find(ignoreOpenCensus)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "goleak: Leaks on successful test run: %v\n", err)
 			exitCode = 1

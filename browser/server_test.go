@@ -15,7 +15,6 @@ import (
 	gomock "github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/goleak"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/connectivity"
 )
@@ -371,7 +370,7 @@ func TestServerSubscribe(t *testing.T) {
 		waitForMonitoringExit(quitCh)
 	})
 
-	goleak.VerifyNone(t)
+	assertNoLeaks(t)
 }
 
 func TestServerSplitHorizontalAbove(t *testing.T) {
@@ -553,7 +552,7 @@ func testServerSplit(
 		assertServerServersEqual(t, 0, s)
 	})
 
-	goleak.VerifyNone(t)
+	assertNoLeaks(t)
 }
 
 func TestServerSetContent(t *testing.T) {
