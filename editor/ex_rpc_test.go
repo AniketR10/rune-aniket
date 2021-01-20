@@ -71,8 +71,6 @@ func (h *safeHandler) Man() tui.Manual {
 	return h.Handler.Man()
 }
 
-func nop() {}
-
 func newTestRPCBrowser(t *testing.T,
 	destructor *func(),
 ) browserConstructor {
@@ -91,7 +89,7 @@ func newTestRPCBrowser(t *testing.T,
 		var clientMutex sync.Mutex
 		var serverMutex sync.Mutex
 		grpcServer := grpc.NewServer()
-		server := browser.NewServer(broker, b, &serverMutex, nop, nop)
+		server := browser.NewServer(broker, b, &serverMutex)
 		proto.RegisterWindowManagerServer(grpcServer, server)
 		proto.RegisterMessengerServer(grpcServer, server)
 		proto.RegisterKeyMapperServer(grpcServer, server)

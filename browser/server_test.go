@@ -21,13 +21,11 @@ import (
 
 const asyncResultsSleepDuration = 300 * time.Millisecond
 
-func nop() {}
-
 func newServerWithNoBroker(ctrl *gomock.Controller) (
 	*Server, *MockBrowser,
 ) {
 	mock := NewMockBrowser(ctrl)
-	s := NewServer(nil, mock, new(sync.Mutex), nop, nop)
+	s := NewServer(nil, mock, new(sync.Mutex))
 	return s, mock
 }
 
@@ -36,7 +34,7 @@ func newTestServer(ctrl *gomock.Controller, mu *sync.Mutex) (
 ) {
 	mockBrowser := NewMockBrowser(ctrl)
 	mockBroker := proto.NewMockMuxBroker(ctrl)
-	s := NewServer(mockBroker, mockBrowser, mu, nop, nop)
+	s := NewServer(mockBroker, mockBrowser, mu)
 	return s, mockBrowser, mockBroker
 }
 
@@ -176,13 +174,28 @@ func TestServerOpen(t *testing.T) {
 	})
 }
 
-func expectHandlerInvoke(handlerConn *proto.MockMuxConn, protoEv *proto.Event) {
+func insertDrawResponse(t *testing.T, quit bool) func(ctx context.Context, method string, args interface{}, reply interface{}, opts ...grpc.CallOption) error {
+	return func(ctx context.Context,
+		method string, args interface{},
+		reply interface{}, opts ...grpc.CallOption) error {
+		// validate mappings with finer grained control
+		res, ok := reply.(*proto.HandleResponse)
+		require.True(t, ok)
+
+		res.Draw = proto.NewDrawResponse(component.String(""), 0, 0)
+		res.Quit = quit
+		res.Handled = true
+		return nil
+	}
+}
+
+func expectHandlerInvoke(t *testing.T, handlerConn *proto.MockMuxConn, protoEv *proto.Event) {
 	handlerConn.EXPECT().
 		Invoke(gomock.Any(), gomock.Eq("/proto.Handler/Handle"),
 			gomock.Eq(&proto.HandleRequest{Event: protoEv, Draw: &proto.DrawRequest{}}),
 			gomock.Any()).
 		Times(1).
-		Return(nil)
+		DoAndReturn(insertDrawResponse(t, false))
 }
 
 func expectHandlerInvokeExit(t *testing.T, handlerConn *proto.MockMuxConn) {
@@ -190,17 +203,7 @@ func expectHandlerInvokeExit(t *testing.T, handlerConn *proto.MockMuxConn) {
 		Invoke(gomock.Any(), gomock.Eq("/proto.Handler/Handle"),
 			gomock.Any(),
 			gomock.Any()).
-		DoAndReturn(func(ctx context.Context,
-			method string, args interface{},
-			reply interface{}, opts ...grpc.CallOption) error {
-			// validate mappings with finer grained control
-			res, ok := reply.(*proto.HandleResponse)
-			require.True(t, ok)
-
-			res.Draw = proto.NewDrawResponse(component.String(""), 0, 0)
-			res.Quit = true
-			return nil
-		}).
+		DoAndReturn(insertDrawResponse(t, true)).
 		Times(1)
 }
 
@@ -274,10 +277,9 @@ func TestServerSubscribe(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 		var mu sync.Mutex
-		var wg sync.WaitGroup
 		mock := NewMockBrowser(ctrl)
 		mockBroker := proto.NewMockMuxBroker(ctrl)
-		s := NewServer(mockBroker, mock, &mu, nop, func() { wg.Done() })
+		s := NewServer(mockBroker, mock, &mu)
 
 		var h EventHandler
 		handlerConn := expectBrokerDial(t, ctrl, mockBroker, handlerID)
@@ -294,7 +296,7 @@ func TestServerSubscribe(t *testing.T) {
 		assert.NotNil(t, res)
 
 		assertServerHandlerExitClose(t, handlerConn,
-			eventHandlerToHandler{h}, s, termEv, quitCh, &wg)
+			eventHandlerToHandler{h}, s, termEv, quitCh)
 	})
 
 	t.Run("returns browser Subscribe dial to handler error", func(t *testing.T) {
@@ -410,22 +412,14 @@ func assertServerHandlerExitClose(
 	t *testing.T, handlerConn *proto.MockMuxConn,
 	h tui.Handler, s *Server,
 	termEv term.Event, quitCh chan struct{},
-	wg *sync.WaitGroup,
 ) {
 	expectHandlerInvokeExit(t, handlerConn)
 
 	handlerConn.EXPECT().Close().Times(1).
 		DoAndReturn(expectSignalExit(handlerConn, quitCh, nil))
 
-	wg.Add(1)
 	s.browser.Lock()
 	exit, _ := h.Handle(termEv)
-	s.browser.Unlock()
-
-	wg.Wait()
-
-	s.browser.Lock()
-	exit, _ = h.Handle(termEv)
 	s.browser.Unlock()
 	assert.True(t, exit)
 
@@ -487,7 +481,7 @@ func testServerSplit(
 		assert.NotNil(t, res)
 
 		// verify that handler works
-		expectHandlerInvoke(handlerConn, &protoEv)
+		expectHandlerInvoke(t, handlerConn, &protoEv)
 		s.browser.Lock()
 		exit, handled := h.Handle(termEv)
 		s.browser.Unlock()

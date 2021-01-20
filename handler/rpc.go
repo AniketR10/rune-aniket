@@ -15,7 +15,7 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-const defaultRPCTimeout = 5 * time.Second
+const defaultRPCTimeout = 300 * time.Millisecond
 
 type clientCloser interface {
 	proto.HandlerClient
@@ -37,7 +37,7 @@ type Client struct {
 	}
 
 	errors chan error
-	client clientCloser
+	client proto.HandlerClient
 	resp   struct {
 		*proto.HandleResponse
 		height, width int
@@ -45,22 +45,19 @@ type Client struct {
 }
 
 // NewClient allocates storage for a new Client and initializes it.
-func NewClient(
-	pbClient proto.HandlerClient,
-	interruptDraw, interruptHandle func(),
-) *Client {
+func NewClient(pbClient proto.HandlerClient) *Client {
 	ret := new(Client)
-	ret.Init(pbClient, interruptDraw, interruptHandle)
+	ret.Init(pbClient)
 	return ret
 }
 
 // Init initialies this Client with pbClient and the given interrupt func.
-func (c *Client) Init(
-	pbClient proto.HandlerClient, interruptDraw, interruptHandle func(),
-) {
-	// TODO consider removing
-	pbClient = withClientTimeout(pbClient, defaultRPCTimeout)
-	c.client = withClientBreaker(pbClient, interruptDraw, interruptHandle, c.Logger)
+func (c *Client) Init(pbClient proto.HandlerClient) {
+	c.client = pbClient
+	// NOTE client breaker is a great concept but interruptDraw is global
+	// so if there are multiple client breakers, it's hard to figure out when
+	// to re-issue redraw request to avoid endless loop. works
+	// c.client = withClientBreaker(c.client, interruptDraw, interruptHandle, c.Logger)
 
 	c.errors = make(chan error)
 }
@@ -98,19 +95,18 @@ func (c *Client) doDraw(w term.Writer, resp *proto.DrawResponse) {
 }
 
 func (c *Client) setNewHandleResponse(comp tui.Component) {
+	comp.Resize(c.width, c.height)
 	draw := proto.NewDrawResponse(comp, c.width, c.height)
 	c.resp.HandleResponse = &proto.HandleResponse{Draw: draw}
 	c.resp.width = c.width
 	c.resp.height = c.height
+	c.cursor.show = false
 }
 
 // Draw satisfies tui.Handler
 func (c *Client) Draw(w term.Writer) {
 	if c.resp.HandleResponse == nil {
-		_, _, err := c.handle(term.Event{Type: term.EventInterrupt})
-		if err != nil {
-			c.setNewHandleResponse(component.StringCentered(smtgWrongCopy))
-		}
+		c.Handle(term.Event{Type: term.EventInterrupt})
 	}
 
 	if c.height != c.resp.height || c.width != c.resp.width {
@@ -124,12 +120,16 @@ func (c *Client) Draw(w term.Writer) {
 
 // Handle satisfies tui.Handler
 func (c *Client) Handle(ev term.Event) (exit, handled bool) {
-	exit, handled, _ = c.handle(ev)
+	exit, handled, err := c.handle(ev)
+	if err != nil {
+		c.setNewHandleResponse(component.StringCentered(smtgWrongCopy))
+	}
 	return
 }
 
 func (c *Client) handle(ev term.Event) (exit, handled bool, err error) {
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), defaultRPCTimeout)
+	defer cancel()
 
 	protoEv := proto.Event{}
 	err = protoEv.FromModel(ev)
@@ -144,14 +144,13 @@ func (c *Client) handle(ev term.Event) (exit, handled bool, err error) {
 
 	req := proto.HandleRequest{Event: &protoEv, Draw: &drawReq}
 	resp, err := c.client.Handle(ctx, &req)
+	if err != nil {
+		c.collectError("Handle", err)
+		return c.resp.GetQuit(), false, err
+	}
 
 	exit = resp.GetQuit()
 	handled = resp.GetHandled()
-
-	if err != nil {
-		c.collectError("Handle", err)
-		return c.resp.GetQuit(), handled, err
-	}
 
 	if resp.GetDraw() == nil ||
 		resp.GetDraw().GetCursor() == nil ||
@@ -178,7 +177,9 @@ func (c *Client) Cursor() (pos term.Coordinates, show bool) {
 
 // Man satisfies tui.Handler
 func (c *Client) Man() tui.Manual {
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), defaultRPCTimeout)
+	defer cancel()
+
 	req := proto.ManRequest{}
 
 	resp, err := c.client.Man(ctx, &req)
@@ -210,7 +211,9 @@ func tryLog(logger *log.Logger, msg string, args ...interface{}) {
 
 // OnUnmount satisfies browser.Handler
 func (c *Client) OnUnmount() error {
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), defaultRPCTimeout)
+	defer cancel()
+
 	req := proto.OnUnmountRequest{}
 
 	_, err := c.client.OnUnmount(ctx, &req)
@@ -223,7 +226,7 @@ func (c *Client) OnUnmount() error {
 
 // Close closes this client and all associated resources.
 func (c *Client) Close() error {
-	return c.client.Close()
+	return nil
 }
 
 // Server serves a tui.Handler implementation over GRPC.

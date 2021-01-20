@@ -16,7 +16,6 @@ type mockResourceServer struct {
 func (s *mockResourceServer) Serve(
 	pluginID string, uid uint32,
 	mux proto.MuxBroker, l *log.Logger, lock sync.Locker,
-	interruptDraw, interruptHandle func(),
 ) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

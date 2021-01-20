@@ -40,7 +40,7 @@ func newBrowserResourceServer(b browser.Browser) *browserResourceServer {
 
 func (s *browserResourceServer) Serve(
 	pluginID string, grantID uint32, broker proto.MuxBroker,
-	l *log.Logger, lock sync.Locker, interruptDraw, interruptHandle func(),
+	l *log.Logger, lock sync.Locker,
 ) {
 	broker.AcceptAndServe(grantID, func(opts []grpc.ServerOption) proto.MuxServer {
 		s.mu.Lock()
@@ -54,8 +54,7 @@ func (s *browserResourceServer) Serve(
 			}
 			grpc := srv.GRPC()
 			s.srv = srv
-			server := browser.NewServer(broker, s.b, lock,
-				interruptDraw, interruptHandle)
+			server := browser.NewServer(broker, s.b, lock)
 			server.Logger = l
 			proto.RegisterWindowManagerServer(grpc, server)
 			proto.RegisterKeyMapperServer(grpc, server)

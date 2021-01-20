@@ -10,20 +10,19 @@ import (
 
 // ResourceServer wraps the basic Serve method, to serve resources over a mux broker.
 type ResourceServer interface {
-	Serve(string, uint32, proto.MuxBroker, *log.Logger, sync.Locker, func(), func())
+	Serve(string, uint32, proto.MuxBroker, *log.Logger, sync.Locker)
 }
 
 // enables functions matching signature of Serve to
 // satisfy ResourceServer
 type resourceServerFn func(string, uint32,
-	proto.MuxBroker, *log.Logger, sync.Locker, func(), func())
+	proto.MuxBroker, *log.Logger, sync.Locker)
 
 func (fn resourceServerFn) Serve(
 	pluginID string, grantID uint32,
 	broker proto.MuxBroker, l *log.Logger, mu sync.Locker,
-	interruptDraw, interruptHandle func(),
 ) {
-	fn(pluginID, grantID, broker, l, mu, interruptDraw, interruptHandle)
+	fn(pluginID, grantID, broker, l, mu)
 }
 
 // Grantor encapsulates the ability grant or deny access to resources.

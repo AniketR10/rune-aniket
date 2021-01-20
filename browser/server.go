@@ -39,9 +39,6 @@ type Server struct {
 		Browser
 		sync.Locker
 	}
-
-	interruptDraw   func()
-	interruptHandle func()
 }
 
 // browserServerHandler wraps a handler.Client to satisfy browser.Handler
@@ -68,23 +65,19 @@ func (s browserServerHandler) OnUnmount() (err error) {
 // NewServer allocates storage for a new Server and initializes it.
 func NewServer(
 	broker proto.MuxBroker, browser Browser, lock sync.Locker,
-	interruptDraw, interruptHandle func(),
 ) *Server {
 	ret := new(Server)
-	ret.Init(broker, browser, lock, interruptDraw, interruptHandle)
+	ret.Init(broker, browser, lock)
 	return ret
 }
 
 // Init initializes this Server with broker and browser.
 func (s *Server) Init(
 	broker proto.MuxBroker, browser Browser, lock sync.Locker,
-	interruptDraw, interruptHandle func(),
 ) {
 	s.broker = broker
 	s.browser.Browser = browser
 	s.browser.Locker = lock
-	s.interruptDraw = interruptDraw
-	s.interruptHandle = interruptHandle
 	s.clients = make(map[uint64]io.Closer)
 	s.servers = make(map[uint64]io.Closer)
 	s.opened = make(map[uint32]Handler)
@@ -131,7 +124,7 @@ func (s *Server) dialHandler(handlerID uint32) (Handler, error) {
 	}
 
 	pbClient := proto.NewHandlerClient(handlerConn)
-	cc := handler.NewClient(pbClient, s.interruptDraw, s.interruptHandle)
+	cc := handler.NewClient(pbClient)
 	cc.Logger = s.Logger
 	client := newIOWaitUnlockHandler(cc, s.browser)
 

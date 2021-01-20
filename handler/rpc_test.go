@@ -114,7 +114,7 @@ func TestClientHandleErrors(t *testing.T) {
 	stubClient := NewClient(&mockHandlerClient{
 		remote:   testHandler(),
 		rpcError: myErr,
-	}, nop, nop)
+	})
 	defer stubClient.Close()
 	errChan := stubClient.Errors()
 
@@ -137,7 +137,7 @@ func newServerClient(t *testing.T) (*Client, func()) {
 	conn, err := grpc.Dial(lis.Addr().String(), grpc.WithInsecure())
 	require.NoError(t, err)
 
-	return NewClient(proto.NewHandlerClient(conn), nop, nop), func() {
+	return NewClient(proto.NewHandlerClient(conn)), func() {
 		conn.Close()
 		grpcServer.Stop()
 	}
@@ -150,20 +150,15 @@ func TestIntegrationClientHandlerDraw(t *testing.T) {
 
 	cases := []TestInputSequence{
 		{"",
-			`    
-LOAD
-    
-    `},
-		{"",
 			`AAAA
 AAAA
 AAAA
 AAAA`},
 		{"j",
-			`AAAA
-AAAA
-AAAA
-AAAA`},
+			`BBBB
+BBBB
+BBBB
+BBBB`},
 		{"",
 			`BBBB
 BBBB

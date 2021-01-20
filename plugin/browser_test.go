@@ -52,7 +52,7 @@ func TestIntegrationBrowserRace(t *testing.T) {
 	for _, perm := range perms {
 		for _, brokerID := range brokerIDs {
 			resources[perm].Serve("caliu-plugins-ltd", brokerID,
-				broker, nil, new(sync.Mutex), func() {}, func() {})
+				broker, nil, new(sync.Mutex))
 		}
 	}
 
