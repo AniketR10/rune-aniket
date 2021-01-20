@@ -190,7 +190,6 @@ func TestListAsyncPush(t *testing.T) {
 
 func TestListDraw(t *testing.T) {
 	l := NewList(ListConfig{SearchBase: ":"})
-	l.Resize(8, 4)
 
 	w := term.NewStringWriter(8, 4)
 
@@ -236,6 +235,7 @@ For the
 			tcase.action()
 		}
 
+		l.Resize(8, 4)
 		l.Draw(w)
 
 		if err := w.Flush(); err != nil {

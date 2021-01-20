@@ -55,7 +55,7 @@ type List struct {
 	}
 	list struct {
 		component.Virtual
-		component.FocusList
+		*component.FocusList
 	}
 }
 
@@ -83,14 +83,16 @@ func (l *List) Init(cfg ListConfig) {
 	l.matchCountBar.Buffer.Init()
 	l.matchCountBar.Scroll.InitWithBuffer(&l.matchCountBar.Buffer)
 	l.matchCountBar.C = &l.matchCountBar.Scroll
-	l.list.C = &l.list.FocusList
+
+	f := component.NewFocusList()
+	f.InitWithAttr(l.cfg.textAttr, l.cfg.focusAttr)
+	l.setInternalList(f)
 
 	if l.cfg.searchBase != "" {
 		l.searchBar.InsertStringWithAttr(term.Coordinates{},
 			l.cfg.searchBase, l.cfg.searchBaseAttr)
 	}
 
-	l.list.InitWithAttr(l.cfg.textAttr, l.cfg.focusAttr)
 	l.quitChan = make(chan struct{})
 	l.dataChan = make(chan []byte)
 	l.setFilesCount()
@@ -98,7 +100,14 @@ func (l *List) Init(cfg ListConfig) {
 	go l.consumeAsyncElements()
 }
 
-func (l *List) addMatch(match Match, tokens *[]int) {
+func (l *List) setInternalList(f *component.FocusList) {
+	l.list.C = f
+	l.list.FocusList = f
+}
+
+func (l *List) addMatch(
+	list *component.FocusList, match Match, tokens *[]int,
+) {
 	matchText := match.data
 	b := component.NewSpan(component.String(string(matchText)), component.SpanConfig{
 		ContentAlignment: component.SpanAlignmentLeft,
@@ -116,7 +125,7 @@ func (l *List) addMatch(match Match, tokens *[]int) {
 		Match:      match,
 	}
 
-	l.list.PushBack(resComp)
+	list.PushBack(resComp)
 }
 
 func sortByResultScore(a, b component.WithAttributes) bool {
@@ -172,7 +181,7 @@ func (l *List) pushData(data []byte, slab *util.Slab, sortList bool) (matched bo
 
 	searchInput := l.getSearchQuery()
 	if len(searchInput) == 0 {
-		l.addMatch(Match{data: data}, nil)
+		l.addMatch(l.list.FocusList, Match{data: data}, nil)
 		matched = true
 		if sortList {
 			l.setFilesCount()
@@ -182,7 +191,7 @@ func (l *List) pushData(data []byte, slab *util.Slab, sortList bool) (matched bo
 
 	search(l.cfg.algo, linebuf[:], searchInput, slab, l.cfg.caseSensitive,
 		func(match Match, tokens *[]int) bool {
-			l.addMatch(match, tokens)
+			l.addMatch(l.list.FocusList, match, tokens)
 			matched = true
 			return false
 		})
@@ -237,11 +246,14 @@ func (l *List) consumeAsyncElements() {
 
 func (l *List) handleSearch(ctx context.Context, cancelFn func()) {
 	l.mu.Lock()
-	l.list.Reset()
 	input := l.input
 	searchInput := l.getSearchQuery()
 	l.mu.Unlock()
 
+	// avoid drawing in the middle of search which causes
+	// fliquering of component if search is fast enough
+	newList := component.NewFocusList()
+	newList.InitWithAttr(l.cfg.textAttr, l.cfg.focusAttr)
 	slab := makeSlab()
 	search(l.cfg.algo, input, searchInput, slab, l.cfg.caseSensitive,
 		func(match Match, tokens *[]int) bool {
@@ -251,7 +263,7 @@ func (l *List) handleSearch(ctx context.Context, cancelFn func()) {
 			default:
 				l.mu.Lock()
 				defer l.mu.Unlock()
-				l.addMatch(match, tokens)
+				l.addMatch(newList, match, tokens)
 				return true
 			}
 		})
@@ -263,6 +275,7 @@ func (l *List) handleSearch(ctx context.Context, cancelFn func()) {
 	}
 
 	l.mu.Lock()
+	l.setInternalList(newList)
 	l.sortMatchesList()
 	cancelFn()
 	l.mu.Unlock()
