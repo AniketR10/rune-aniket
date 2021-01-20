@@ -10,6 +10,7 @@ import (
 	"github.com/ernestrc/go-tui"
 	"github.com/ernestrc/go-tui/proto"
 	"github.com/ernestrc/go-tui/term"
+	testutil "github.com/ernestrc/go-tui/util/test"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/goleak"
@@ -48,7 +49,7 @@ func newStubClient(t *testing.T) *Client {
 
 func testRPCHandlerHandleDraw(t *testing.T, rpcHandler *Client) {
 
-	cases := []TestInputSequence{
+	cases := []testutil.HandlerSequenceTestCase{
 		{"",
 			`AAAA
 AAAA
@@ -60,7 +61,7 @@ BBBB
 BBBB`},
 	}
 
-	BatchTestInputSequence(t, rpcHandler, 4, 4, cases)
+	testutil.TestHandlerSequence(t, rpcHandler, 4, 4, cases)
 }
 
 func assertTestManual(t *testing.T, man tui.Manual, msg ...interface{}) {
@@ -148,7 +149,7 @@ func TestIntegrationClientHandlerDraw(t *testing.T) {
 	defer closeFn()
 	defer serverClient.Close()
 
-	cases := []TestInputSequence{
+	cases := []testutil.HandlerSequenceTestCase{
 		{"",
 			`AAAA
 AAAA
@@ -186,7 +187,7 @@ BBBB`},
 		require.NoError(t, err)
 
 		out := writer.String()
-		assert.Equal(t, tcase.DrawOutput, out, serverClient.errors)
+		assert.Equal(t, tcase.Expected, out, serverClient.errors)
 	}
 }
 

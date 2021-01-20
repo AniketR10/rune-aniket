@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/ernestrc/go-tui/term"
+	testutil "github.com/ernestrc/go-tui/util/test"
 )
 
 func TestDrawDefaultSpan(t *testing.T) {
@@ -15,7 +16,7 @@ func TestDrawDefaultSpan(t *testing.T) {
 
 	w := term.NewStringWriter(9, 5)
 
-	tests := []testCase{
+	tests := []testutil.ComponentTestCase{
 		{
 			nil, `
 XXXXXXXX 
@@ -187,5 +188,5 @@ XXXXXXXX
 		},
 	}
 
-	testWorkflow(t, s, w, tests)
+	testutil.TestComponent(t, s, w, tests)
 }

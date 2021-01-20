@@ -5,6 +5,7 @@ import (
 
 	"github.com/ernestrc/go-tui"
 	"github.com/ernestrc/go-tui/term"
+	testutil "github.com/ernestrc/go-tui/util/test"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -316,7 +317,7 @@ func TestTileNodeDraw(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	tests := []testCase{
+	tests := []testutil.ComponentTestCase{
 		{
 			nil, `
 AAAAAAAA
@@ -474,7 +475,7 @@ XXXXXXXX`,
 		},
 	}
 
-	testWorkflow(t, tree, w, tests)
+	testutil.TestComponent(t, tree, w, tests)
 }
 
 func TestTileNodeSize(t *testing.T) {

@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/ernestrc/go-tui/term"
+	testutil "github.com/ernestrc/go-tui/util/test"
 	"github.com/stretchr/testify/require"
 )
 
@@ -20,7 +21,7 @@ func TestIntegrationScroll(t *testing.T) {
 
 	w := term.NewStringWriter(12, height)
 
-	tests := []testCase{
+	tests := []testutil.ComponentTestCase{
 		{
 			nil, `
 AAAAAAAA    
@@ -50,7 +51,7 @@ DDDDDDDD    `,
 		},
 	}
 
-	testWorkflow(t, &virtualScroll, w, tests)
+	testutil.TestComponent(t, &virtualScroll, w, tests)
 }
 
 func TestVirtualDraw(t *testing.T) {
@@ -60,7 +61,7 @@ func TestVirtualDraw(t *testing.T) {
 
 	w := term.NewStringWriter(width, height)
 
-	tests := []testCase{
+	tests := []testutil.ComponentTestCase{
 		{
 			nil, `
 $$$$
@@ -79,5 +80,5 @@ $$$$`,
  $$$`,
 		},
 	}
-	testWorkflow(t, &v, w, tests)
+	testutil.TestComponent(t, &v, w, tests)
 }

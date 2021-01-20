@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/ernestrc/go-tui/term"
+	testutil "github.com/ernestrc/go-tui/util/test"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -41,7 +42,7 @@ func TestScrollDraw(t *testing.T) {
 
 	w := term.NewStringWriter(width, height)
 
-	tests := []testCase{
+	tests := []testutil.ComponentTestCase{
 		{nil, "Love in \nLove isn"},
 		{func() { scroll.SeekUp() }, "Love in \nLove isn"},
 		{func() { scroll.SeekLeft() }, "Love in \nLove isn"},
@@ -77,8 +78,8 @@ func TestScrollDraw(t *testing.T) {
 
 	for _, tcase := range tests {
 		w.Clear(term.Attributes{})
-		if tcase.action != nil {
-			tcase.action()
+		if tcase.Action != nil {
+			tcase.Action()
 		}
 
 		scroll.Draw(w)
@@ -87,7 +88,7 @@ func TestScrollDraw(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		assert.Equal(t, tcase.expected, w.String())
+		assert.Equal(t, tcase.Expected, w.String())
 	}
 }
 
@@ -101,7 +102,7 @@ func TestScrollDrawWrap(t *testing.T) {
 
 	w := term.NewStringWriter(width, height)
 
-	tests := []testCase{
+	tests := []testutil.ComponentTestCase{
 		{nil, "Love in \nyour hea"},
 		{func() { scroll.SeekUp() }, "Love in \nyour hea"},
 		{func() { scroll.SeekLeft() }, "Love in \nyour hea"},
@@ -121,7 +122,7 @@ func TestScrollDrawWrap(t *testing.T) {
 		{func() { scroll.SeekNextResult() }, "Love in your heart w"},
 	}
 
-	testWorkflow(t, scroll, w, tests)
+	testutil.TestComponent(t, scroll, w, tests)
 }
 
 func TestScrollDrawWrap2(t *testing.T) {
@@ -134,11 +135,11 @@ func TestScrollDrawWrap2(t *testing.T) {
 
 	w := term.NewStringWriter(width, height)
 
-	tests := []testCase{
+	tests := []testutil.ComponentTestCase{
 		{nil, "Love in "},
 	}
 
-	testWorkflow(t, scroll, w, tests)
+	testutil.TestComponent(t, scroll, w, tests)
 }
 
 func TestRowLastIndex(t *testing.T) {

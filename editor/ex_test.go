@@ -9,6 +9,7 @@ import (
 	"github.com/ernestrc/go-tui/cell"
 	"github.com/ernestrc/go-tui/handler"
 	"github.com/ernestrc/go-tui/term"
+	testutil "github.com/ernestrc/go-tui/util/test"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -79,7 +80,7 @@ func TestBrowserHandlerDraw(t *testing.T) {
 }
 
 func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
-	cases := []handler.TestInputSequence{
+	cases := []testutil.HandlerSequenceTestCase{
 		{"asdf",
 			`┌──────────────────┐
 │                  │
@@ -247,13 +248,13 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 └──────────────────┘`},
 	}
 
-	// handler.BatchTestInputSequence maps ':' characters to the following event
+	// testutil.TestHandlerSequence maps ':' characters to the following event
 	// this is to work around ex's assumptions on underlying handler.
 	commandEvent := term.Event{Type: term.EventKey, Key: term.KeyCtrlBackslash}
 	browser, err := constructor(&testEditor{}, browser.WithCommandEvent(commandEvent))
 	require.NoError(t, err)
 
-	handler.BatchTestInputSequence(t, browser, 20, 10, cases)
+	testutil.TestHandlerSequence(t, browser, 20, 10, cases)
 
 	win, err := browser.SplitVerticalLeft(handler.NewTestHandler())
 	require.NoError(t, err)
@@ -278,7 +279,7 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 	}
 	require.NoError(t, browser.MergeKeyMap(newMappings))
 
-	cases = []handler.TestInputSequence{
+	cases = []testutil.HandlerSequenceTestCase{
 		{"]__",
 			`┌──────────────────┐
 │cabin.go  other.go│
@@ -303,7 +304,7 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 └────────┘└────────┘`},
 	}
 
-	handler.BatchTestInputSequence(t, browser, 20, 10, cases)
+	testutil.TestHandlerSequence(t, browser, 20, 10, cases)
 
 	var unmounted int
 	hx := handler.NewTestHandler()
@@ -311,7 +312,7 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 	hx.OnUnmountCallback = func() error { unmounted++; return nil }
 	require.NoError(t, focus.SetContent(hx))
 
-	cases = []handler.TestInputSequence{
+	cases = []testutil.HandlerSequenceTestCase{
 		{"___",
 			`┌──────────────────┐
 │cabin.go  other.go│
@@ -325,12 +326,12 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 └────────┘└────────┘`},
 	}
 
-	handler.BatchTestInputSequence(t, browser, 20, 10, cases)
+	testutil.TestHandlerSequence(t, browser, 20, 10, cases)
 
 	require.NoError(t, win.Close())
 	require.NoError(t, focus.Close())
 
-	cases = []handler.TestInputSequence{
+	cases = []testutil.HandlerSequenceTestCase{
 		{":close>)))",
 			`┌──────────────────┐
 │cabin.go  other.go│
@@ -354,18 +355,18 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 │EEEEEEEEEEEEEEEEEE│
 └──────────────────┘`},
 	}
-	handler.BatchTestInputSequence(t, browser, 20, 10, cases)
+	testutil.TestHandlerSequence(t, browser, 20, 10, cases)
 
-	cases = []handler.TestInputSequence{
+	cases = []testutil.HandlerSequenceTestCase{
 		{"", `┌──┐
 │..│
 ├EE┤
 EEEE`},
 	}
-	handler.BatchTestInputSequence(t, browser, 4, 4, cases)
+	testutil.TestHandlerSequence(t, browser, 4, 4, cases)
 
 	require.NoError(t, browser.SetMessage("wasup: %s", "Z"))
-	cases = []handler.TestInputSequence{
+	cases = []testutil.HandlerSequenceTestCase{
 		{"",
 			`┌──────────────────┐
 │other.go          │
@@ -378,7 +379,7 @@ EEEE`},
 │wasup: Z          │
 └──────────────────┘`},
 	}
-	handler.BatchTestInputSequence(t, browser, 20, 10, cases)
+	testutil.TestHandlerSequence(t, browser, 20, 10, cases)
 
 	nh, err := browser.Open("bugz")
 	require.NoError(t, err)
@@ -387,7 +388,7 @@ EEEE`},
 	err = focus.SetContent(nh)
 	require.NoError(t, err)
 
-	cases = []handler.TestInputSequence{
+	cases = []testutil.HandlerSequenceTestCase{
 		{"b___",
 			`┌──────────────────┐
 │other.go  bugz    │
@@ -400,7 +401,7 @@ EEEE`},
 │BBBBBBBBBBBBBBBBBB│
 └──────────────────┘`},
 	}
-	handler.BatchTestInputSequence(t, browser, 20, 10, cases)
+	testutil.TestHandlerSequence(t, browser, 20, 10, cases)
 
 	assert.NoError(t, browser.Close())
 	assert.Equal(t, 1, unmounted)
@@ -480,7 +481,7 @@ func TestBrowserHandlerPublishInterrupt(t *testing.T) {
 }
 
 func TestMultipleFilesStartup(t *testing.T) {
-	cases := []handler.TestInputSequence{
+	cases := []testutil.HandlerSequenceTestCase{
 		{"",
 			`┌──────────────────┐
 │cabin.go  wi.go   │
@@ -523,5 +524,5 @@ func TestMultipleFilesStartup(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	handler.BatchTestInputSequence(t, b, 20, 10, cases)
+	testutil.TestHandlerSequence(t, b, 20, 10, cases)
 }

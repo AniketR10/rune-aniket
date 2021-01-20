@@ -5,6 +5,7 @@ import (
 
 	"github.com/ernestrc/go-tui"
 	"github.com/ernestrc/go-tui/term"
+	testutil "github.com/ernestrc/go-tui/util/test"
 )
 
 func TestKeyMappedLessHandle(t *testing.T) {
@@ -30,7 +31,7 @@ func TestKeyMappedLessHandle(t *testing.T) {
 		term.Event{},
 	})
 	less1, writer3 := setup(t, nil, 8, 4)
-	testHandlerWorkflow(t, WithMapping(less1, map[term.Event]term.Event{
+	testutil.TestHandler(t, WithMapping(less1, map[term.Event]term.Event{
 		term.Event{Ch: 'k', Type: term.EventKey}:                    term.Event{Ch: 'k', Type: term.EventKey},
 		term.Event{Ch: 'U', Type: term.EventKey}:                    term.Event{Ch: 'j', Type: term.EventKey},
 		term.Event{Ch: '%', Type: term.EventKey}:                    term.Event{Ch: 'h', Type: term.EventKey},

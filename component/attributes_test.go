@@ -5,6 +5,7 @@ import (
 
 	"github.com/ernestrc/go-tui/cell"
 	"github.com/ernestrc/go-tui/term"
+	testutil "github.com/ernestrc/go-tui/util/test"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -16,7 +17,7 @@ func TestDrawAttributes(t *testing.T) {
 
 		s.Resize(8, 4)
 
-		tests := []testCase{
+		tests := []testutil.ComponentTestCase{
 			{
 				nil, `
 XXXXXXXX 
@@ -27,7 +28,7 @@ XXXXXXXX
 			},
 		}
 
-		testWorkflow(t, s, w, tests)
+		testutil.TestComponent(t, s, w, tests)
 	})
 }
 

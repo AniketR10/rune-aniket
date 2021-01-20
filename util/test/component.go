@@ -1,4 +1,4 @@
-package component
+package test
 
 import (
 	"strings"
@@ -9,14 +9,17 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-type testCase struct {
-	action   func()
-	expected string
+// ComponentTestCase represents an action and how a component
+// is expected to be drawn after this action.
+type ComponentTestCase struct {
+	Action   func()
+	Expected string
 }
 
-func testWorkflow(
+// TestComponent tests a given component against a set of ComponentTestCase.
+func TestComponent(
 	t *testing.T, m tui.Component,
-	w *term.StringWriter, cases []testCase,
+	w *term.StringWriter, cases []ComponentTestCase,
 ) {
 	var err error
 
@@ -25,8 +28,8 @@ func testWorkflow(
 			t.Fatal(err)
 		}
 
-		if tcase.action != nil {
-			tcase.action()
+		if tcase.Action != nil {
+			tcase.Action()
 		}
 
 		m.Draw(w)
@@ -36,7 +39,7 @@ func testWorkflow(
 		}
 
 		// for readability, we expected strings are written starting with \n
-		expected := strings.TrimLeft(tcase.expected, "\n")
+		expected := strings.TrimLeft(tcase.Expected, "\n")
 		assert.Equal(t, expected, w.String())
 	}
 }

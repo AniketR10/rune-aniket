@@ -5,8 +5,8 @@ import (
 	"testing"
 
 	"github.com/ernestrc/go-tui/cell"
-	"github.com/ernestrc/go-tui/handler"
 	"github.com/ernestrc/go-tui/term"
+	testutil "github.com/ernestrc/go-tui/util/test"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -95,7 +95,7 @@ func TestCellAtCursor(t *testing.T) {
 }
 
 func TestViCursor(t *testing.T) {
-	cases := []handler.TestInputSequence{
+	cases := []testutil.HandlerSequenceTestCase{
 		{"",
 			`▐                   
 /*                  
@@ -297,5 +297,5 @@ diff_buf_adjust(win_
 	}
 
 	vi := setupVi(t, snippet, 2)
-	handler.BatchTestInputSequence(t, vi, 20, 10, cases)
+	testutil.TestHandlerSequence(t, vi, 20, 10, cases)
 }

@@ -6,6 +6,7 @@ import (
 
 	"github.com/ernestrc/go-tui"
 	"github.com/ernestrc/go-tui/term"
+	testutil "github.com/ernestrc/go-tui/util/test"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -103,7 +104,7 @@ func testListDraw(t *testing.T, constructor func(int) testList) {
 
 	w := term.NewStringWriter(8, 4)
 
-	tests := []testCase{
+	tests := []testutil.ComponentTestCase{
 		{
 			nil, `
         
@@ -239,7 +240,7 @@ YYYYYYYY`,
 		},
 	}
 
-	testWorkflow(t, l, w, tests)
+	testutil.TestComponent(t, l, w, tests)
 }
 
 func TestListNode(t *testing.T) {

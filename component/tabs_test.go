@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/ernestrc/go-tui/term"
+	testutil "github.com/ernestrc/go-tui/util/test"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -17,7 +18,7 @@ func TestTabsDraw(t *testing.T) {
 
 	w := term.NewStringWriter(20, 9)
 
-	tests := []testCase{
+	tests := []testutil.ComponentTestCase{
 		{
 			nil, `
 ┌──────────────────┐
@@ -156,7 +157,7 @@ func TestTabsDraw(t *testing.T) {
 		},
 	}
 
-	testWorkflow(t, l, w, tests)
+	testutil.TestComponent(t, l, w, tests)
 }
 
 func setupOneTab(width, height int) *Tabs {

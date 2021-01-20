@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/ernestrc/go-tui/term"
+	testutil "github.com/ernestrc/go-tui/util/test"
 	"github.com/stretchr/testify/require"
 )
 
@@ -60,8 +61,8 @@ func TestLessHandle(t *testing.T) {
 	testLessHandle(t, cases)
 }
 
-func getLessHandleTestFlow(events [19]term.Event) []handlerTestCase {
-	return []handlerTestCase{
+func getLessHandleTestFlow(events [19]term.Event) []testutil.HandlerTestCase {
+	return []testutil.HandlerTestCase{
 		{
 			events[0], `
 AAAAABBB
@@ -191,7 +192,7 @@ KKXXLLLL
 	}
 }
 
-func testLessHandle(t *testing.T, cases []handlerTestCase) {
+func testLessHandle(t *testing.T, cases []testutil.HandlerTestCase) {
 	var less [2]Less
 	var less1 *Less
 	var writer1, writer2, writer3 *term.StringWriter
@@ -200,9 +201,9 @@ func testLessHandle(t *testing.T, cases []handlerTestCase) {
 	less1, writer3 = setup(t, nil, 8, 4)
 
 	// test cases with allocated less
-	testHandlerWorkflow(t, &less[0], cases, writer1)
-	testHandlerWorkflow(t, &less[1], cases, writer2)
+	testutil.TestHandler(t, &less[0], cases, writer1)
+	testutil.TestHandler(t, &less[1], cases, writer2)
 
 	// test cases with stack less
-	testHandlerWorkflow(t, less1, cases, writer3)
+	testutil.TestHandler(t, less1, cases, writer3)
 }

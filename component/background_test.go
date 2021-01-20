@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/ernestrc/go-tui/term"
+	testutil "github.com/ernestrc/go-tui/util/test"
 )
 
 func TestDrawBackground(t *testing.T) {
@@ -18,7 +19,7 @@ func TestDrawBackground(t *testing.T) {
 
 	w := term.NewStringWriter(9, 5)
 
-	tests := []testCase{
+	tests := []testutil.ComponentTestCase{
 		{
 			nil, `
 XXXXXXXXO
@@ -29,5 +30,5 @@ OOOOOOOOO`,
 		},
 	}
 
-	testWorkflow(t, b, w, tests)
+	testutil.TestComponent(t, b, w, tests)
 }

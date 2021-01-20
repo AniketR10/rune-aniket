@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/ernestrc/go-tui/term"
+	testutil "github.com/ernestrc/go-tui/util/test"
 )
 
 func TestDrawOverlay(t *testing.T) {
@@ -19,7 +20,7 @@ func TestDrawOverlay(t *testing.T) {
 
 	w := term.NewStringWriter(16, 9)
 
-	tests := []testCase{
+	tests := []testutil.ComponentTestCase{
 		{
 			func() { o.Resize(16, 9) }, `
 ****************
@@ -56,5 +57,5 @@ a
 		},
 	}
 
-	testWorkflow(t, o, w, tests)
+	testutil.TestComponent(t, o, w, tests)
 }

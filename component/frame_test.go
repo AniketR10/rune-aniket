@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/ernestrc/go-tui/term"
+	testutil "github.com/ernestrc/go-tui/util/test"
 )
 
 func TestDrawFrame(t *testing.T) {
@@ -14,7 +15,7 @@ func TestDrawFrame(t *testing.T) {
 
 	w := term.NewStringWriter(9, 5)
 
-	tests := []testCase{
+	tests := []testutil.ComponentTestCase{
 		{
 			nil, `
 ┌──────┐ 
@@ -72,5 +73,5 @@ TT
 		},
 	}
 
-	testWorkflow(t, f, w, tests)
+	testutil.TestComponent(t, f, w, tests)
 }

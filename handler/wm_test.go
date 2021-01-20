@@ -6,6 +6,7 @@ import (
 	"github.com/ernestrc/go-tui"
 	"github.com/ernestrc/go-tui/component"
 	"github.com/ernestrc/go-tui/term"
+	testutil "github.com/ernestrc/go-tui/util/test"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -69,7 +70,7 @@ func TestWindowManagerHandle(t *testing.T) {
 
 	handler.SetFocus(topLeft)
 
-	cases := []handlerTestCase{
+	cases := []testutil.HandlerTestCase{
 		{
 			term.Event{}, `
 BBBBAAAA
@@ -170,11 +171,11 @@ BBBBCCCC`,
 		},
 	}
 
-	testHandlerWorkflow(t, handler, cases, writer)
+	testutil.TestHandler(t, handler, cases, writer)
 
 	topRightHandler.Exit = true
 
-	cases = []handlerTestCase{
+	cases = []testutil.HandlerTestCase{
 		{
 			// testhandler will return after this event active = false
 			term.Event{}, `
@@ -220,11 +221,11 @@ DDDDCCCC`,
 		},
 	}
 
-	testHandlerWorkflow(t, handler, cases, writer)
+	testutil.TestHandler(t, handler, cases, writer)
 
 	bottomLeftHandler.Exit = true
 
-	cases = []handlerTestCase{
+	cases = []testutil.HandlerTestCase{
 		{
 			// testhandler will return after this event active = false
 			term.Event{}, `
@@ -249,11 +250,11 @@ CCCCCCCC`,
 		},
 	}
 
-	testHandlerWorkflow(t, handler, cases, writer)
+	testutil.TestHandler(t, handler, cases, writer)
 
 	topLeftHandler.Exit = true
 
-	cases = []handlerTestCase{
+	cases = []testutil.HandlerTestCase{
 		{
 			// testhandler will return after this event active = false
 			term.Event{}, `
@@ -292,7 +293,7 @@ EEEEEEEE`,
 		},
 	}
 
-	testHandlerWorkflow(t, handler, cases, writer)
+	testutil.TestHandler(t, handler, cases, writer)
 }
 
 func TestWindowManagerHandleFrame(t *testing.T) {
@@ -303,7 +304,7 @@ func TestWindowManagerHandleFrame(t *testing.T) {
 	rightHandler := NewTestHandler()
 	_ = handler.SplitVertical(rightHandler)
 
-	cases := []handlerTestCase{
+	cases := []testutil.HandlerTestCase{
 		{
 			term.Event{}, `
 ┌────┐┌────┐
@@ -320,7 +321,7 @@ func TestWindowManagerHandleFrame(t *testing.T) {
 		},
 	}
 
-	testHandlerWorkflow(t, handler, cases, writer)
+	testutil.TestHandler(t, handler, cases, writer)
 }
 
 func TestWindowFocusInitSplitVertical(t *testing.T) {
@@ -366,7 +367,7 @@ func TestWindowManagerSetFocusContent(t *testing.T) {
 	prev := wm.Focus().SetContent(rightHandler)
 	assert.Equal(t, prev, leftHandler)
 
-	cases := []handlerTestCase{
+	cases := []testutil.HandlerTestCase{
 		{
 			term.Event{}, `
 ┌──┐┌──┐
@@ -390,7 +391,7 @@ func TestWindowManagerSetFocusContent(t *testing.T) {
 		},
 	}
 
-	testHandlerWorkflow(t, wm, cases, writer)
+	testutil.TestHandler(t, wm, cases, writer)
 
 	fb := component.FrameCharSet{}
 	fb.TopLeft = '╔'
@@ -403,7 +404,7 @@ func TestWindowManagerSetFocusContent(t *testing.T) {
 
 	wm.SetFrameCharSet(component.FrameCharSetDefault(), fb)
 
-	cases = []handlerTestCase{
+	cases = []testutil.HandlerTestCase{
 		{
 			term.Event{}, `
 ┌──┐╔══╗
@@ -413,7 +414,7 @@ func TestWindowManagerSetFocusContent(t *testing.T) {
 		},
 	}
 
-	testHandlerWorkflow(t, wm, cases, writer)
+	testutil.TestHandler(t, wm, cases, writer)
 }
 
 func TestWindowManagerInit(t *testing.T) {
