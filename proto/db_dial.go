@@ -5,6 +5,7 @@ import (
 	fmt "fmt"
 	"net"
 	"sync"
+	"time"
 
 	"github.com/ernestrc/blue/datastore/document"
 	"github.com/ernestrc/go-tui/util"
@@ -105,7 +106,16 @@ func (t *dbBroker) Dial(ID uint32) (conn MuxConn, err error) {
 		return
 	}
 
-	conn, err = grpc.Dial(lis.Address, grpc.WithInsecure())
+	opts := []grpc.DialOption{grpc.WithInsecure(), grpc.WithDialer(
+		func(_ string, _ time.Duration) (net.Conn, error) {
+			addr, err := net.ResolveUnixAddr("unix", lis.Address)
+			if err != nil {
+				return nil, err
+			}
+			return net.Dial(addr.Network(), addr.String())
+		},
+	)}
+	conn, err = grpc.Dial("", opts...)
 	if err != nil {
 		return
 	}

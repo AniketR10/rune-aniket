@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"sync"
 	"time"
 
+	"github.com/ernestrc/blue/datastore/document"
 	"github.com/ernestrc/go-tui/proto"
 	"github.com/ernestrc/go-tui/term"
 	"github.com/ernestrc/go-tui/util"
@@ -74,21 +76,27 @@ type Manager struct {
 	interruptDraw   func()
 	interruptHandle func()
 
-	config managerConfig
+	brokerServer *document.Server
+	broker       proto.MuxBroker
+	brokerAddr   net.Addr
+	config       managerConfig
 }
 
 // NewManager allocates storage for a new Manager and initializes it.
-func NewManager(grantor Grantor, opts ...Option) *Manager {
+func NewManager(grantor Grantor, opts ...Option) (*Manager, error) {
 	ret := new(Manager)
-	ret.builder = goPluginGranteeBuilder
+	ret.builder = goPluginGranteeBuilder(ret)
 	ret.interruptDraw = term.Interrupt
 	ret.interruptHandle = term.SendNoneEvent
-	ret.Init(grantor, opts...)
-	return ret
+	err := ret.Init(grantor, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return ret, nil
 }
 
 // Init initializes this manager with grantor.
-func (m *Manager) Init(grantor Grantor, opts ...Option) {
+func (m *Manager) Init(grantor Grantor, opts ...Option) (err error) {
 	m.grantor = grantor
 	m.clients = make(map[string]granteeClientWrap)
 	m.rmu = new(sync.Mutex)
@@ -97,6 +105,15 @@ func (m *Manager) Init(grantor Grantor, opts ...Option) {
 	for _, o := range opts {
 		o(&m.config)
 	}
+
+	cache := document.NewInMemoryCache()
+	m.brokerServer = document.NewServer(cache)
+	m.broker, m.brokerAddr, err = initHostBroker(m.config, cache, m.brokerServer)
+	if err != nil {
+		return
+	}
+
+	return
 }
 
 func (m *Manager) log(msg string, args ...interface{}) {
@@ -161,15 +178,14 @@ func (m *Manager) doGrant(
 			continue
 		}
 
-		broker := client.client.broker()
-		grantID := broker.NextId()
+		grantID := m.broker.NextId()
 
 		// for now this is fine, but once we have many more resources, this will
 		// become very inefficient. We should refactor this interface
 		// such that one plugin => one grpc server for all the resources
 		// requested. Right now, each call to serve, spins a new listener
 		// and a new GRPC server.
-		go srv.Serve(pluginID, grantID, broker, m.config.logger, m.rmu,
+		go srv.Serve(pluginID, grantID, m.broker, m.config.logger, m.rmu,
 			m.interruptDraw, m.interruptHandle)
 
 		grant := &proto.PermissionGrant{
@@ -398,7 +414,8 @@ func (m *Manager) Close() error {
 	}
 
 	m.clients = make(map[string]granteeClientWrap)
-	return nil
+
+	return m.brokerServer.Close()
 }
 
 // ResourceLocker returns a Locker that synchronizes access to

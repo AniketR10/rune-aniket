@@ -42,31 +42,28 @@ type granteePlugin struct {
 	grantee   Grantee
 	grantor   Grantor
 	keepAlive time.Duration
+	broker    proto.MuxBroker
 }
 
 // GRPCServer satisfies plugin.GRPCPlugin
-func (p *granteePlugin) GRPCServer(broker *plugin.GRPCBroker, s *grpc.Server) error {
-	pbroker := proto.GRPCBroker(broker, p.logger)
+func (p *granteePlugin) GRPCServer(_ *plugin.GRPCBroker, s *grpc.Server) error {
+	server := newGranteeServer(p.broker, p.grantee, p.requested, p.keepAlive, &pluginLock)
 	if p.logger.IsLevelEnabled(log.TraceLevel) {
-		pbroker = proto.LoggingBroker(pbroker, p.logger)
+		server = &loggingGranteeServer{Logger: p.logger, GranteeServer: server}
 	}
-	server := newGranteeServer(pbroker, p.grantee, p.requested, p.keepAlive, &pluginLock)
-	server = &loggingGranteeServer{Logger: p.logger, GranteeServer: server}
 	proto.RegisterGranteeServer(s, server)
 	return nil
 }
 
 // GRPCClient satisfies plugin.GRPCPlugin
 func (p *granteePlugin) GRPCClient(
-	ctx context.Context, broker *plugin.GRPCBroker, c *grpc.ClientConn,
+	ctx context.Context, _ *plugin.GRPCBroker, c *grpc.ClientConn,
 ) (interface{}, error) {
-	pbroker := proto.GRPCBroker(broker, p.logger)
-	if p.logger.IsLevelEnabled(log.TraceLevel) {
-		pbroker = proto.LoggingBroker(pbroker, p.logger)
-	}
 	pbClient := proto.NewGranteeClient(c)
-	pbClient = &loggingGranteeClient{Logger: p.logger, GranteeClient: pbClient}
-	client := newGranteeClient(pbroker, pbClient)
+	if p.logger.IsLevelEnabled(log.TraceLevel) {
+		pbClient = &loggingGranteeClient{Logger: p.logger, GranteeClient: pbClient}
+	}
+	client := newGranteeClient(p.broker, pbClient)
 	return client, nil
 }
 
@@ -81,6 +78,7 @@ func Serve(grantee Grantee, request ...Permission) {
 			requested: request,
 			grantee:   grantee,
 			keepAlive: defaultHealthCheckTicker,
+			broker:    initClientBroker(&pluginLogger),
 		},
 	}
 
