@@ -557,3 +557,108 @@ func TestHandlerWindowZeroValue(t *testing.T) {
 		})
 	})
 }
+
+func TestComponentWindowSplit(t *testing.T) {
+	w := term.NewStringWriter(20, 8)
+
+	h1 := TestHandler{TestComponent: component.TestComponent{Ch: 'A'}}
+	wm := NewWindowManager(&h1, DefaultWindowManagerConfig())
+	w1 := wm.Focus()
+	wm.Resize(20, 8)
+
+	var w2 Window
+	var w3 Window
+	h2 := TestHandler{TestComponent: component.TestComponent{Ch: 'B'}}
+	h3 := TestHandler{TestComponent: component.TestComponent{Ch: 'C'}}
+
+	tests := []testutil.ComponentTestCase{
+		{
+			nil, `
+┌──────────────────┐
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+└──────────────────┘`,
+		}, {func() {
+			w2 = wm.SplitHorizontal(&h2)
+		}, `
+┌──────────────────┐
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+└──────────────────┘
+┌──────────────────┐
+│BBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBB│
+└──────────────────┘`,
+		}, {func() {
+			assert.True(t, wm.FocusDown())
+			w3 = wm.SplitVertical(&h3)
+		}, `
+┌──────────────────┐
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+└──────────────────┘
+┌────────┐┌────────┐
+│BBBBBBBB││CCCCCCCC│
+│BBBBBBBB││CCCCCCCC│
+└────────┘└────────┘`,
+		}, {func() {
+			h2.HandleOverride = func(ev term.Event) (bool, bool) {
+				assert.NoError(t, w2.Close())
+				return true, true
+			}
+			exit, handled := wm.Handle(term.Event{})
+			assert.False(t, exit)
+			assert.True(t, handled)
+		}, `
+┌──────────────────┐
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+└──────────────────┘
+┌──────────────────┐
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+└──────────────────┘`,
+		}, {func() {
+			wm.FocusUp()
+			h1.HandleOverride = func(ev term.Event) (bool, bool) {
+				assert.NoError(t, w1.Close())
+				return true, true
+			}
+			exit, handled := wm.Handle(term.Event{})
+			assert.False(t, exit)
+			assert.True(t, handled)
+		}, `
+┌──────────────────┐
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+└──────────────────┘`,
+		}, {func() {
+			h3.HandleOverride = func(ev term.Event) (bool, bool) {
+				assert.Error(t, w3.Close())
+				return true, true
+			}
+			exit, handled := wm.Handle(term.Event{})
+			assert.True(t, exit)
+			assert.True(t, handled)
+		}, `
+┌──────────────────┐
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+└──────────────────┘`,
+		},
+	}
+
+	testutil.TestComponent(t, wm, w, tests)
+}

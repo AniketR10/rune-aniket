@@ -109,17 +109,21 @@ func (wm *WindowManager) Handle(ev term.Event) (exit bool, handled bool) {
 	}
 
 	var hexit bool
-	hexit, handled = wm.Focus().Content().Handle(ev)
+	focus := wm.focus
+	size := wm.comp.Size()
+	hexit, handled = focus.Content().Handle(ev)
 
 	// if handler in focus wants to exit, close the window,
 	// or signal exit to upstream handler if it was last window
 	if hexit {
-		if exit = wm.comp.Size() == 1; exit {
+		if exit = size == 1; exit {
 			return
 		}
 		curr := wm.focus
-		wm.ShiftFocus()
-		curr.Close()
+		if curr == focus {
+			wm.ShiftFocus()
+			curr.Close()
+		}
 	}
 
 	return
@@ -300,4 +304,11 @@ func DefaultWindowManagerConfig() WindowManagerConfig {
 // Size returns the size in windows of this WindowManager.
 func (wm *WindowManager) Size() int {
 	return wm.comp.Size()
+}
+
+// Iterate applies op to the content of all widnows of this WindowManager.
+func (wm *WindowManager) Iterate(fn func(Window)) {
+	wm.comp.Iterate(func(c component.Window) {
+		fn(wm.newNode(c))
+	})
 }

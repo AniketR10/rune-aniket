@@ -34,10 +34,10 @@ func (wm *WindowManager) Draw(w term.Writer) {
 // NewWindowManager allocates storage for a new WindowManager and initializes it.
 func NewWindowManager(
 	content tui.Component, config WindowManagerConfig,
-) *WindowManager {
+) (*WindowManager, Window) {
 	ret := new(WindowManager)
-	ret.Init(content, config)
-	return ret
+	win := ret.Init(content, config)
+	return ret, win
 }
 
 // Init initializes this WindowManager with content and config.

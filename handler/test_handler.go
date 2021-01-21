@@ -14,6 +14,7 @@ type TestHandler struct {
 	CursorPos         term.Coordinates
 	Exit              bool
 	Handled           bool
+	HandleOverride    func(term.Event) (bool, bool)
 	OnUnmountCallback func() error
 }
 
@@ -25,7 +26,10 @@ func NewTestHandler() (t *TestHandler) {
 }
 
 // Handle the next Event
-func (t *TestHandler) Handle(term.Event) (bool, bool) {
+func (t *TestHandler) Handle(ev term.Event) (bool, bool) {
+	if t.HandleOverride != nil {
+		return t.HandleOverride(ev)
+	}
 	// signal that we handled the event
 	t.Ch++
 	return t.Exit, t.Handled

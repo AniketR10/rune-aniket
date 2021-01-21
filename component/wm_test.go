@@ -3,6 +3,8 @@ package component
 import (
 	"testing"
 
+	"github.com/ernestrc/go-tui/term"
+	testutil "github.com/ernestrc/go-tui/util/test"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -37,4 +39,76 @@ func TestComponentWindowZeroValue(t *testing.T) {
 			win.TileDown()
 		})
 	})
+}
+
+func TestComponentWindowSplit(t *testing.T) {
+	w := term.NewStringWriter(20, 8)
+
+	h1 := TestComponent{Ch: 'A'}
+	wm, w1 := NewWindowManager(&h1, DefaultWindowManagerConfig())
+	wm.Resize(20, 8)
+
+	var w2 Window
+	h2 := TestComponent{Ch: 'B'}
+	h3 := TestComponent{Ch: 'C'}
+
+	tests := []testutil.ComponentTestCase{
+		{
+			nil, `
+┌──────────────────┐
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+└──────────────────┘`,
+		}, {func() {
+			w2 = wm.SplitHorizontal(w1, &h2)
+		}, `
+┌──────────────────┐
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+└──────────────────┘
+┌──────────────────┐
+│BBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBB│
+└──────────────────┘`,
+		}, {func() {
+			/*w3 =*/ wm.SplitVertical(w2, &h3)
+		}, `
+┌──────────────────┐
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+└──────────────────┘
+┌────────┐┌────────┐
+│BBBBBBBB││CCCCCCCC│
+│BBBBBBBB││CCCCCCCC│
+└────────┘└────────┘`,
+		}, {func() {
+			assert.NoError(t, w2.Close())
+		}, `
+┌──────────────────┐
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+└──────────────────┘
+┌──────────────────┐
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+└──────────────────┘`,
+		}, {func() {
+			assert.NoError(t, w1.Close())
+		}, `
+┌──────────────────┐
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+└──────────────────┘`,
+		},
+	}
+
+	testutil.TestComponent(t, wm, w, tests)
 }
