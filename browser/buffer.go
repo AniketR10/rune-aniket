@@ -18,7 +18,6 @@ type buffer struct {
 	name          string
 	flusherCloser FlusherCloser
 	handler       Handler
-	win           *browserWindow
 	free          bool
 }
 
@@ -36,17 +35,15 @@ func (b *buffer) init(c *Component, name string, h tui.Handler, f FlusherCloser)
 	b.name = name
 	b.flusherCloser = f
 	b.handler = NopHandler(h)
-	b.setFree()
+	b.free = true
 }
 
-func (b *buffer) setWindow(win *browserWindow) {
+func (b *buffer) setWindow() {
 	b.free = false
-	b.win = win
 }
 
 func (b *buffer) setFree() {
 	b.free = true
-	b.win = nil
 }
 
 // Resize satisfies tui.Component
@@ -61,11 +58,7 @@ func (b *buffer) Draw(w term.Writer) {
 
 // Handle satisfies tui.Handler
 func (b *buffer) Handle(ev term.Event) (exit, handled bool) {
-	exit, handled = b.handler.Handle(ev)
-	if exit {
-		b.parent.RemoveWindowBuffer(b.win)
-	}
-	return
+	return b.handler.Handle(ev)
 }
 
 // Cursor satisfies tui.Handler

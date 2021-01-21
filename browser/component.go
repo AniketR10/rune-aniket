@@ -49,7 +49,7 @@ type Component struct {
 	config         Config
 	startHandler   Handler
 	buffers        []*buffer
-	windows        []*browserWindow
+	windows        map[uint64]*browserWindow
 	fileListHeight int
 }
 
@@ -58,15 +58,24 @@ type Component struct {
 // structure is used to call OnUnmount when this occurs.
 type browserContent struct {
 	Handler
-	c *Component
+	unmounted bool
+	c         *Component
 }
 
-func (c browserContent) Handle(ev term.Event) (exit, handled bool) {
+func (c *browserContent) Handle(ev term.Event) (exit, handled bool) {
 	exit, handled = c.Handler.Handle(ev)
 	if exit {
-		c.c.onUnmount(c.Handler, "component exit via Handle()(exit=true)")
+		c.c.onUnmount(c, "component exit via Handle()(exit=true)")
 	}
 	return
+}
+
+func (c *browserContent) OnUnmount() error {
+	if c.unmounted {
+		return nil
+	}
+	c.unmounted = true
+	return c.Handler.OnUnmount()
 }
 
 // needed mutable to inverse a split
@@ -95,22 +104,17 @@ func (w *browserWindow) Close() error {
 		return nil
 	}
 
-	err := w.parent.closeWindow(w)
-
+	parent := w.parent
+	onClose := w.onClose
+	w.onClose = nil
 	w.parent = nil
 
-	if w.onClose != nil {
-		onClose := w.onClose
-		w.onClose = nil
-
+	err := parent.closeWindow(w)
+	if onClose != nil {
 		onClose()
 	}
 
 	return err
-}
-
-func (c *Component) addWindow(win *browserWindow) {
-	c.windows = append(c.windows, win)
 }
 
 func (c *Component) newWindow(win handler.Window) *browserWindow {
@@ -118,37 +122,33 @@ func (c *Component) newWindow(win handler.Window) *browserWindow {
 		parent: c,
 		win:    win,
 	}
-	c.addWindow(browserWin)
+	c.windows[browserWin.id()] = browserWin
 	return browserWin
 }
 
 // closeWindow closes win or returns an error if win is the last Window.
-func (c *Component) closeWindow(win Window) error {
-	bWin := win.(*browserWindow)
-	id, _ := c.findWindow(bWin.win)
-	if id == -1 {
+func (c *Component) closeWindow(win *browserWindow) error {
+	_, ok := c.findWindow(win.id())
+	if !ok {
 		return nil
 	}
 
-	err := bWin.win.Close()
+	delete(c.windows, win.id())
+
+	content := win.win.Content().(Handler)
+	err := win.win.Close()
 	if err != nil {
 		return err
 	}
 
-	c.windows = append(c.windows[:id], c.windows[id+1:]...)
-
 	reason := fmt.Sprintf("Close called on window: %p", win)
-	c.onUnmount(bWin.win.Content().(Handler), reason)
+	c.onUnmount(content, reason)
 	return nil
 }
 
-func (c *Component) findWindow(win handler.Window) (int, *browserWindow) {
-	for i, w := range c.windows {
-		if w.win == win {
-			return i, w
-		}
-	}
-	return -1, nil
+func (c *Component) findWindow(winID uint64) (*browserWindow, bool) {
+	w, ok := c.windows[winID]
+	return w, ok
 }
 
 // NewComponent allocates storage for a new Component and initializes it.
@@ -161,6 +161,7 @@ func NewComponent(config Config) *Component {
 // Init initializes this Component with config.
 func (c *Component) Init(config Config) {
 	c.config = config
+	c.windows = make(map[uint64]*browserWindow)
 
 	c.logBuf = cell.NewBuffer()
 	c.logVirt = NewMessageSpan(c.logBuf, logBarAttr)
@@ -347,9 +348,9 @@ func (c *Component) updateWindowContent(
 	if ok {
 		id := c.findBufferID(newBuf)
 		c.tabs.SetFocus(id)
-		newBuf.setWindow(win)
+		newBuf.setWindow()
 	} else {
-		content = browserContent{
+		content = &browserContent{
 			Handler: content,
 			c:       c,
 		}
@@ -369,10 +370,15 @@ func browserBufferAtWindow(win *browserWindow) (*buffer, bool) {
 func (c *Component) RemoveAllBuffers() {
 	for _, buf := range c.buffers {
 		c.closeBuffer(buf)
-		if !buf.free {
-			c.updateWindowContent(buf.win, c.startHandler)
-		}
 	}
+
+	c.wm.Iterate(func(w handler.Window) {
+		win, ok := c.findWindow(w.ID())
+		if !ok {
+			panic("corrupted browser: could not find WindowManager window")
+		}
+		c.updateWindowContent(win, c.startHandler)
+	})
 
 	c.tabs.RemoveAll()
 	c.buffers = c.buffers[:0]
@@ -426,36 +432,41 @@ func (c *Component) FlushBuffer(win Window) error {
 	return buf.flusherCloser.Flush()
 }
 
+func (c *Component) splitRegular(
+	split func(*handler.WindowManager, tui.Handler) handler.Window,
+	newHandler Handler,
+) *browserWindow {
+	win := c.split(split, newHandler)
+	c.wm.SetFocus(win.win)
+	return win
+}
+
 func (c *Component) splitInverted(
 	split func(*handler.WindowManager, tui.Handler) handler.Window,
-	h Handler,
+	newHandler Handler,
 ) *browserWindow {
 	focusBrowserWin := c.focus()
-	focusContent := focusBrowserWin.win.Content()
+	focusHandlerWin := focusBrowserWin.win
+	focusHandler := focusBrowserWin.win.Content()
 
-	_, ok := h.(*buffer)
-	if !ok {
-		h = browserContent{
-			Handler: h,
-			c:       c,
-		}
-	}
+	// perform a regular split
+	newBrowserWin := c.split(split, newHandler)
+	newHandlerWin := newBrowserWin.win
+	newBrowserHandler := newHandlerWin.Content()
 
-	// set content
-	newWin := split(c.wm, focusContent)
-	focusBrowserWin.win.SetContent(h)
+	// switch underlying handler.Window
+	// so the new *browserWindow refers to the
+	// original focus handler.Window
+	focusBrowserWin.win = newHandlerWin
+	newBrowserWin.win = focusHandlerWin
 
-	// invert handler.Window
-	newBrowserWin := c.newWindow(focusBrowserWin.win)
-	focusBrowserWin.win = newWin
+	// switch content
+	newBrowserWin.win.SetContent(newBrowserHandler)
+	focusBrowserWin.win.SetContent(focusHandler)
 
-	if buf, ok := focusContent.(*buffer); ok {
-		buf.setWindow(focusBrowserWin)
-	}
-
-	if buf, ok := h.(*buffer); ok {
-		buf.setWindow(newBrowserWin)
-	}
+	// ammend id mapping
+	c.windows[newBrowserWin.id()] = newBrowserWin
+	c.windows[focusBrowserWin.id()] = focusBrowserWin
 
 	// return new instance of browser window
 	// pointing to old instance of focus window
@@ -466,23 +477,16 @@ func (c *Component) split(
 	split func(*handler.WindowManager, tui.Handler) handler.Window,
 	h Handler,
 ) *browserWindow {
-	// force split a new window tile
-	win := split(c.wm, h)
-
-	browserWin := c.newWindow(win)
 	if buf, ok := h.(*buffer); ok {
-		buf.setWindow(browserWin)
+		buf.setWindow()
 	} else {
-		h = browserContent{
+		h = &browserContent{
 			Handler: h,
 			c:       c,
 		}
 	}
-	win.SetContent(h)
-
-	c.wm.SetFocus(win)
-
-	return browserWin
+	win := split(c.wm, h)
+	return c.newWindow(win)
 }
 
 // SplitVerticalRight opens a new window tile to the right of the
@@ -490,7 +494,7 @@ func (c *Component) split(
 // Note that if h is not a handler created with NewBuffer
 // the handler is cleaned as soon as the window's content is swapped.
 func (c *Component) SplitVerticalRight(h Handler) Window {
-	return c.split((*handler.WindowManager).SplitVertical, h)
+	return c.splitRegular((*handler.WindowManager).SplitVertical, h)
 }
 
 // SplitVerticalLeft opens a new window tile to the left of the
@@ -505,7 +509,7 @@ func (c *Component) SplitVerticalLeft(h Handler) Window {
 // and initializes it with h. Note that if h is not a handler created with NewBuffer
 // the handler is cleaned as soon as the window's content is swapped.
 func (c *Component) SplitHorizontalBelow(h Handler) Window {
-	return c.split((*handler.WindowManager).SplitHorizontal, h)
+	return c.splitRegular((*handler.WindowManager).SplitHorizontal, h)
 }
 
 // SplitHorizontalAbove opens a new window tile above the current window in focus
@@ -571,7 +575,10 @@ func (c *Component) Focus() Window {
 }
 
 func (c *Component) focus() *browserWindow {
-	_, win := c.findWindow(c.wm.Focus())
+	win, ok := c.findWindow(c.wm.Focus().ID())
+	if !ok {
+		panic("corrupted browser: cannot find focus window")
+	}
 	return win
 }
 
@@ -582,8 +589,11 @@ func (c *Component) Shiftable() (Window, bool) {
 		return nil, false
 	}
 
-	_, bWin := c.findWindow(win)
-	return bWin, true
+	w, ok := c.findWindow(win.ID())
+	if !ok {
+		panic("corrupted browser: cannot find focus window")
+	}
+	return w, true
 }
 
 // FocusDown calls the underlying WindowManager.FocusDown.

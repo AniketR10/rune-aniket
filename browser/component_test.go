@@ -6,6 +6,8 @@ import (
 	"github.com/ernestrc/go-tui"
 	"github.com/ernestrc/go-tui/handler"
 	"github.com/ernestrc/go-tui/term"
+	testutil "github.com/ernestrc/go-tui/util/test"
+	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -58,10 +60,9 @@ func TestComponentCloseWindow(t *testing.T) {
 			h = handler.NewTestHandler()
 			h.(*handler.TestHandler).Exit = true
 			h.(*handler.TestHandler).Handled = true
-			h = c.NewBuffer("bla", h, nil)
 			win := tcase.split(c, h)
 
-			assert.Equal(t, 1, c.tabs.Size())
+			assert.Equal(t, 0, c.tabs.Size())
 			assert.Equal(t, 2, c.wm.Size())
 
 			exit, handled := c.Handle(term.Event{})
@@ -251,42 +252,147 @@ func TestComponentHandlerUnmount(t *testing.T) {
 	for _, _tcase := range splitSuite {
 		split := _tcase.split
 		t.Run(_tcase.method, func(t *testing.T) {
-			tsuite := []func(*testing.T, *Component, Window, *testFlushCloser){
-				func(t *testing.T, c *Component, win Window, h *testFlushCloser) {
-					assert.True(t, c.UpdateWindowBufferNextFree(win))
-				},
-				func(t *testing.T, c *Component, win Window, h *testFlushCloser) {
-					assert.True(t, c.UpdateWindowBufferNext(win))
-				},
-				func(t *testing.T, c *Component, win Window, h *testFlushCloser) {
-					assert.True(t, c.UpdateWindowBufferPrev(win))
-				},
-				func(t *testing.T, c *Component, win Window, h *testFlushCloser) {
-					assert.NoError(t, win.SetContent(handler.NewTestHandler()))
-				},
-				func(t *testing.T, c *Component, win Window, h *testFlushCloser) {
-					assert.NoError(t, win.Close())
-				},
-				func(t *testing.T, c *Component, win Window, h *testFlushCloser) {
-					assert.True(t, c.RemoveWindowBuffer(win))
-				},
-				func(t *testing.T, c *Component, win Window, h *testFlushCloser) {
-					h.Exit = true
-					exit, _ := c.Handle(term.Event{})
-					assert.False(t, exit)
+			tsuite := []struct {
+				name string
+				fn   func(*testing.T, *Component, Window, *testFlushCloser)
+			}{
+				{
+					"UpdateWindowBufferNextFree",
+					func(t *testing.T, c *Component, win Window, h *testFlushCloser) {
+						assert.True(t, c.UpdateWindowBufferNextFree(win))
+					},
+				}, {
+					"UpdateWindowBufferNext",
+					func(t *testing.T, c *Component, win Window, h *testFlushCloser) {
+						assert.True(t, c.UpdateWindowBufferNext(win))
+					},
+				}, {
+					"UpdateWindowBufferPrev",
+					func(t *testing.T, c *Component, win Window, h *testFlushCloser) {
+						assert.True(t, c.UpdateWindowBufferPrev(win))
+					},
+				}, {
+					"Window.SetContent",
+					func(t *testing.T, c *Component, win Window, h *testFlushCloser) {
+						assert.NoError(t, win.SetContent(handler.NewTestHandler()))
+					},
+				}, {
+					"Window.Close",
+					func(t *testing.T, c *Component, win Window, h *testFlushCloser) {
+						assert.NoError(t, win.Close())
+					},
+				}, {
+					"RemoveWindowBuffer",
+					func(t *testing.T, c *Component, win Window, h *testFlushCloser) {
+						assert.True(t, c.RemoveWindowBuffer(win))
+					},
+				}, {
+					"Handle(exit=true)",
+					func(t *testing.T, c *Component, win Window, h *testFlushCloser) {
+						h.Exit = true
+						h.Handled = true
+						exit, handled := c.Handle(term.Event{})
+						assert.False(t, exit)
+						assert.True(t, handled)
+					},
 				},
 			}
 
 			for _, tcase := range tsuite {
-				mock := &testFlushCloser{}
-				c := NewComponent(cfg)
-				c.NewBuffer("Robinhood", handler.NewTestHandler(), nil)
-				c.NewBuffer("Stash", handler.NewTestHandler(), nil)
-				win := split(c, mock)
+				t.Run(tcase.name, func(t *testing.T) {
+					mock := &testFlushCloser{}
+					c := NewComponent(cfg)
+					c.NewBuffer("Robinhood", handler.NewTestHandler(), nil)
+					c.NewBuffer("Stash", handler.NewTestHandler(), nil)
+					win := split(c, mock)
 
-				tcase(t, c, win, mock)
-				assert.Equal(t, 1, mock.unmounted)
+					tcase.fn(t, c, win, mock)
+					assert.Equal(t, 1, mock.unmounted)
+				})
 			}
 		})
 	}
+}
+
+func TestComponentMultipleWindow(t *testing.T) {
+	w := term.NewStringWriter(20, 8)
+
+	cfg := DefaultConfig()
+	cfg.Logger = log.New()
+	cfg.Logger.SetLevel(log.TraceLevel)
+	c := NewComponent(cfg)
+	c.Resize(20, 8)
+
+	// w1 := c.Focus()
+	var w2 Window
+	// var w3 Window
+	h2 := handler.NewTestHandler()
+	h3 := handler.NewTestHandler()
+	h3.Ch = 'C'
+
+	tests := []testutil.ComponentTestCase{
+		{
+			nil, `
+┌──────────────────┐
+│                  │
+├──────────────────┤
+│                  │
+│                  │
+│                  │
+│                  │
+└──────────────────┘`,
+		}, {func() {
+			w2 = c.SplitHorizontalBelow(h2)
+		}, `
+┌──────────────────┐
+│                  │
+├──────────────────┤
+│                  │
+└──────────────────┘
+┌──────────────────┐
+│AAAAAAAAAAAAAAAAAA│
+└──────────────────┘`,
+		}, {func() {
+			/*w3 =*/ c.SplitVerticalRight(h3)
+		}, `
+┌──────────────────┐
+│                  │
+├──────────────────┤
+│                  │
+└──────────────────┘
+┌────────┐┌────────┐
+│AAAAAAAA││CCCCCCCC│
+└────────┘└────────┘`,
+		}, {func() {
+			assert.True(t, c.FocusLeft())
+
+			var unmounted int
+			var closed int
+			h2.Exit = true
+			w2.onWindowClosed(func() {
+				closed++
+			})
+			h2.OnUnmountCallback = func() error {
+				assert.NoError(t, w2.Close())
+				unmounted++
+				return nil
+			}
+			h2.Handled = true
+			_, handled := c.Handle(term.Event{})
+			assert.True(t, handled)
+			assert.Equal(t, 1, unmounted)
+			assert.Equal(t, 1, closed)
+		}, `
+┌──────────────────┐
+│                  │
+├──────────────────┤
+│                  │
+└──────────────────┘
+┌──────────────────┐
+│CCCCCCCCCCCCCCCCCC│
+└──────────────────┘`,
+		},
+	}
+
+	testutil.TestComponent(t, c, w, tests)
 }
