@@ -298,26 +298,36 @@ func (l *List) PushSync(b []byte) (match bool) {
 
 // FocusUp moves the focus of the match list up.
 func (l *List) FocusUp() bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
 	return l.list.FocusUp()
 }
 
 // FocusDown moves the focus of the match list down.
 func (l *List) FocusDown() bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
 	return l.list.FocusDown()
 }
 
 // FocusStart moves the focus of the match list to the start.
 func (l *List) FocusStart() bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
 	return l.list.FocusStart()
 }
 
 // FocusEnd moves the focus of the match list to the end.
 func (l *List) FocusEnd() bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
 	return l.list.FocusEnd()
 }
 
 // Focus returns the match in the list currently in focus.
 func (l *List) Focus() ([]byte, bool) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
 	node, ok := l.list.Focus()
 	if !ok {
 		return nil, false
