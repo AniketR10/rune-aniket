@@ -18,14 +18,14 @@ type handlerToEventHandler struct {
 }
 
 type serverEventHandler struct {
-	handlerID uint32
+	handlerID uint64
 	h         tui.Handler
 	s         *Server
 }
 
 type clientEventHandler struct {
 	tui.Handler
-	handlerID uint32
+	handlerID uint64
 	c         *Client
 }
 
@@ -66,7 +66,7 @@ func (e *clientEventHandler) OnUnmount() error {
 	return nil
 }
 
-func (e *clientEventHandler) setHandlerID(handlerID uint32) {
+func (e *clientEventHandler) setHandlerID(handlerID uint64) {
 	e.handlerID = handlerID
 }
 

@@ -7,7 +7,6 @@ import (
 	"github.com/ernestrc/go-tui"
 	"github.com/ernestrc/go-tui/browser"
 	"github.com/ernestrc/go-tui/cell"
-	"github.com/ernestrc/go-tui/handler"
 	"github.com/ernestrc/go-tui/term"
 	testutil "github.com/ernestrc/go-tui/util/test"
 	"github.com/stretchr/testify/assert"
@@ -35,7 +34,7 @@ type testEditor struct {
 func (e *testEditor) Edit(name string, buf *cell.Buffer) (Handler, error) {
 	e.name = name
 	e.buf = buf
-	return handler.NewTestHandler(), nil
+	return browser.NewTestHandler(), nil
 }
 
 func (e *testEditor) SubscribeEditor(EventType, EventHandler) error {
@@ -257,24 +256,24 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 	// testutil.TestHandlerSequence maps ':' characters to the following event
 	// this is to work around ex's assumptions on underlying handler.
 	commandEvent := term.Event{Type: term.EventKey, Key: term.KeyCtrlBackslash}
-	browser, err := constructor(&testEditor{}, browser.WithCommandEvent(commandEvent))
+	b, err := constructor(&testEditor{}, browser.WithCommandEvent(commandEvent))
 	require.NoError(t, err)
 
-	testutil.TestHandlerSequence(t, browser, 20, 10, cases)
+	testutil.TestHandlerSequence(t, b, 20, 10, cases)
 
-	win, err := browser.SplitVerticalLeft(handler.NewTestHandler())
+	win, err := b.SplitVerticalLeft(browser.NewTestHandler())
 	require.NoError(t, err)
 
 	// test window ifc
-	focus, err := browser.Focus()
+	focus, err := b.Focus()
 	require.NoError(t, err)
 
-	h := handler.NewTestHandler()
+	h := browser.NewTestHandler()
 	h.Ch = 'Z' // helps identify in tests
 
-	err = browser.Subscribe(term.Event{Type: term.EventKey, Ch: ']'},
+	err = b.Subscribe(term.Event{Type: term.EventKey, Ch: ']'},
 		funcEventHandler(func(ev term.Event) bool {
-			browser.SplitHorizontalBelow(h)
+			b.SplitHorizontalBelow(h)
 			return false
 		}))
 	require.NoError(t, err)
@@ -283,10 +282,10 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 		term.Event{Type: term.EventKey, Ch: ')'}: term.Event{Type: term.EventKey, Key: term.KeyCtrlL},
 		term.Event{Type: term.EventKey, Ch: '('}: term.Event{Type: term.EventKey, Key: term.KeyCtrlH},
 	}
-	require.NoError(t, browser.MergeKeyMap(newMappings))
+	require.NoError(t, b.MergeKeyMap(newMappings))
 
 	cases = []testutil.HandlerSequenceTestCase{
-		{"]__",
+		{"]_",
 			`┌──────────────────┐
 │cabin.go  other.go│
 ├────────┐┌────────┤
@@ -310,16 +309,22 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 └────────┘└────────┘`},
 	}
 
-	testutil.TestHandlerSequence(t, browser, 20, 10, cases)
+	testutil.TestHandlerSequence(t, b, 20, 10, cases)
 
 	var unmounted int
-	hx := handler.NewTestHandler()
+	hx := browser.NewTestHandler()
 	hx.Ch = '$'
 	hx.OnUnmountCallback = func() error { unmounted++; return nil }
 	require.NoError(t, focus.SetContent(hx))
 
+	for i := 0; i < 10; i++ {
+		content, err := focus.Content()
+		require.NoError(t, err)
+		require.NoError(t, focus.SetContent(content))
+	}
+
 	cases = []testutil.HandlerSequenceTestCase{
-		{"___",
+		{"_",
 			`┌──────────────────┐
 │cabin.go  other.go│
 ├────────┐┌────────┤
@@ -332,7 +337,7 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 └────────┘└────────┘`},
 	}
 
-	testutil.TestHandlerSequence(t, browser, 20, 10, cases)
+	testutil.TestHandlerSequence(t, b, 20, 10, cases)
 
 	require.NoError(t, win.Close())
 	require.NoError(t, focus.Close())
@@ -361,7 +366,7 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 │EEEEEEEEEEEEEEEEEE│
 └──────────────────┘`},
 	}
-	testutil.TestHandlerSequence(t, browser, 20, 10, cases)
+	testutil.TestHandlerSequence(t, b, 20, 10, cases)
 
 	cases = []testutil.HandlerSequenceTestCase{
 		{"", `┌──┐
@@ -369,9 +374,9 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 ├EE┤
 EEEE`},
 	}
-	testutil.TestHandlerSequence(t, browser, 4, 4, cases)
+	testutil.TestHandlerSequence(t, b, 4, 4, cases)
 
-	require.NoError(t, browser.SetMessage("wasup: %s", "Z"))
+	require.NoError(t, b.SetMessage("wasup: %s", "Z"))
 	cases = []testutil.HandlerSequenceTestCase{
 		{"",
 			`┌──────────────────┐
@@ -385,11 +390,11 @@ EEEE`},
 │wasup: Z          │
 └──────────────────┘`},
 	}
-	testutil.TestHandlerSequence(t, browser, 20, 10, cases)
+	testutil.TestHandlerSequence(t, b, 20, 10, cases)
 
-	nh, err := browser.Open("bugz")
+	nh, err := b.Open("bugz")
 	require.NoError(t, err)
-	focus, err = browser.Focus()
+	focus, err = b.Focus()
 	require.NoError(t, err)
 	err = focus.SetContent(nh)
 	require.NoError(t, err)
@@ -407,14 +412,14 @@ EEEE`},
 │BBBBBBBBBBBBBBBBBB│
 └──────────────────┘`},
 	}
-	testutil.TestHandlerSequence(t, browser, 20, 10, cases)
+	testutil.TestHandlerSequence(t, b, 20, 10, cases)
 
-	assert.NoError(t, browser.Close())
-	assert.Equal(t, 1, unmounted)
+	assert.NoError(t, b.Close())
+	assert.Equal(t, 11, unmounted)
 }
 
 func assertHandled(
-	t *testing.T, h *handler.TestHandler, startingRune rune, exit, handled bool,
+	t *testing.T, h *browser.TestHandler, startingRune rune, exit, handled bool,
 ) {
 	// test handler increments the character that it displays next
 	// upon handling a new event
@@ -424,12 +429,12 @@ func assertHandled(
 }
 
 func newBrowserForSubscribeTest(t *testing.T, ev term.Event) (
-	*Ex, *handler.TestHandler, rune,
+	*Ex, *browser.TestHandler, rune,
 ) {
 	b := newTestBrowserHandler()
 	require.NoError(t, b.Init(&testEditor{}))
 
-	h := handler.NewTestHandler()
+	h := browser.NewTestHandler()
 	err := b.Subscribe(ev, browser.HandlerEventHandler(h))
 	require.NoError(t, err)
 
@@ -449,7 +454,7 @@ func TestBrowserHandlerSubscribe(t *testing.T) {
 		ev := term.Event{Type: term.EventError}
 		b, h, startingRune := newBrowserForSubscribeTest(t, ev)
 
-		h2 := handler.NewTestHandler()
+		h2 := browser.NewTestHandler()
 		err := b.Subscribe(ev, browser.HandlerEventHandler(h2))
 		assert.Error(t, err)
 

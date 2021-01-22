@@ -46,6 +46,10 @@ func (t *dialBroker) AcceptAndServe(
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
+	if _, ok := t.conns[ID]; ok {
+		panic(fmt.Sprintf("trying to serve a connection that has been served already: %v", ID))
+	}
+
 	lis, err := t.Accept(ID)
 	if err != nil {
 		panic(err)
@@ -72,6 +76,7 @@ func (t *dialBroker) Close() error {
 	defer t.mu.Unlock()
 
 	for _, br := range t.conns {
+		br.Listener.Close()
 		br.MuxServer.Stop()
 	}
 	t.conns = make(map[uint32]brokerage)

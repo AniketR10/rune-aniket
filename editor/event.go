@@ -5,7 +5,7 @@ package editor
 import (
 	"fmt"
 
-	"github.com/ernestrc/go-tui/handler"
+	"github.com/ernestrc/go-tui/browser"
 	"github.com/ernestrc/go-tui/proto"
 )
 
@@ -52,7 +52,7 @@ func (e *Event) fromProto(pe *proto.EditorEvent) (err error) {
 		return
 	}
 	e.ResourceName = pe.GetResourceName()
-	e.Resource = handler.Token{ID: pe.GetResourceId()}
+	e.Resource = browser.Token{ID: uint64(pe.GetResourceId())}
 	return nil
 }
 
@@ -69,13 +69,13 @@ func (e Event) protoType() proto.EditorEvent_Type {
 	}
 }
 
-// expects ev Resource to be a handler.Token
+// expects ev Resource to be a browser.Token
 func (e *Event) toProto() proto.EditorEvent {
 	ret := proto.EditorEvent{}
 	ret.Type = e.protoType()
 
 	ret.ResourceName = e.ResourceName
-	ret.ResourceId = e.Resource.(handler.Token).ID
+	ret.ResourceId = uint32(e.Resource.(browser.Token).ID)
 
 	return ret
 }

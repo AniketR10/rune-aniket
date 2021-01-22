@@ -9,7 +9,7 @@ message OpenResourceRequest {
 }
 
 message OpenResourceResponse {
-	uint32 handler_id = 1;
+	uint64 handler_id = 1;
 }
 
 message SetMessageRequest {
@@ -31,24 +31,24 @@ message MergeKeyMapResponse {
 }
 
 message SplitRequest {
-	uint32 handler_id = 1;
+	uint64 handler_id = 1;
 }
 
 message SplitResponse {
-	uint32 window_id = 1;
+	uint64 window_id = 1;
 }
 
 message FocusRequest {
 }
 
 message FocusResponse {
-	uint32 window_id = 1;
+	uint64 window_id = 1;
 }
 
 
 message SubscribeRequest {
 	Event ev = 1;
-	uint32 handler_id = 2;
+	uint64 handler_id = 2;
 }
 
 message SubscribeResponse {
@@ -96,13 +96,21 @@ message WindowCloseResponse {
 }
 
 message WindowSetContentRequest {
-	uint32 handler_id = 1;
+	uint64 handler_id = 1;
 }
 
 message WindowSetContentResponse {
 }
 
+message WindowContentRequest {
+}
+
+message WindowContentResponse {
+	uint64 handler_id = 1;
+}
+
 service Window {
 	rpc SetContent(WindowSetContentRequest) returns (WindowSetContentResponse);
+	rpc Content(WindowContentRequest) returns (WindowContentResponse);
 	rpc Close(WindowCloseRequest) returns (WindowCloseResponse);
 }

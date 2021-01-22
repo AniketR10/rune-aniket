@@ -70,13 +70,12 @@ func (c *Client) Errors() <-chan error {
 }
 
 func (c *Client) collectError(call string, err error) {
-	if c.Logger != nil {
-		c.Logger.Errorf("handler.Client error: %s: %s", call, err)
-	}
-
 	select {
 	case c.errors <- err:
 	default:
+		if c.Logger != nil {
+			c.Logger.Errorf("handler.Client error: %s: %s", call, err)
+		}
 	}
 }
 

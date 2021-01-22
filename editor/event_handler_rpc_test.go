@@ -6,7 +6,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/ernestrc/go-tui/handler"
+	"github.com/ernestrc/go-tui/browser"
 	"github.com/ernestrc/go-tui/proto"
 	gomock "github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
@@ -54,7 +54,7 @@ func TestEventHandlerRPC(t *testing.T) {
 	ev := Event{
 		Type:         EventTypeFlush,
 		ResourceName: "myResourceName",
-		Resource:     handler.Token{ID: 1},
+		Resource:     browser.Token{ID: 1},
 	}
 
 	t.Run("asynchronously dispatches events to remote event handler", func(t *testing.T) {

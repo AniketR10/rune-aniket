@@ -17,7 +17,7 @@ type buffer struct {
 	parent        *Component
 	name          string
 	flusherCloser FlusherCloser
-	handler       Handler
+	handler       tui.Handler
 	free          bool
 }
 
@@ -34,7 +34,7 @@ func (b *buffer) init(c *Component, name string, h tui.Handler, f FlusherCloser)
 	b.parent = c
 	b.name = name
 	b.flusherCloser = f
-	b.handler = NopHandler(h)
+	b.handler = h
 	b.free = true
 }
 

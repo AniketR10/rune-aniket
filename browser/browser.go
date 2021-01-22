@@ -19,6 +19,7 @@ type Handler interface {
 // a closeable window in a WindowManager.
 type Window interface {
 	SetContent(Handler) error
+	Content() (Handler, error)
 
 	// Close closes the window.
 	Close() error
@@ -93,7 +94,7 @@ type unmountHandler struct {
 	onUnmount func()
 }
 
-func (h unmountHandler) OnUnmount() error {
+func (h *unmountHandler) OnUnmount() error {
 	h.onUnmount()
 	return nil
 }
@@ -101,13 +102,13 @@ func (h unmountHandler) OnUnmount() error {
 // CallbackHandler returns a Handler by wrapping a tui.Handler
 // with an OnWindowClose callback.
 func CallbackHandler(h tui.Handler, onUnmount func()) Handler {
-	return unmountHandler{Handler: h, onUnmount: onUnmount}
+	return &unmountHandler{Handler: h, onUnmount: onUnmount}
 }
 
 // NopHandler returns a Handler by wrapping a tui.Handler
 // with an nop OnWindowClose callback.
 func NopHandler(h tui.Handler) Handler {
-	return unmountHandler{Handler: h, onUnmount: func() {}}
+	return &unmountHandler{Handler: h, onUnmount: func() {}}
 }
 
 type fnEventHandler func(term.Event) bool

@@ -4,6 +4,7 @@ import (
 	"sync"
 
 	"github.com/ernestrc/go-tui"
+	"github.com/ernestrc/go-tui/handler"
 	"github.com/ernestrc/go-tui/term"
 )
 
@@ -11,16 +12,16 @@ import (
 // for a I/O based Handler to respond.
 type ioUnlockHandler struct {
 	lock sync.Locker
-	h    handlerCloser
+	h    *handler.Client
 }
 
-func newIOWaitUnlockHandler(h handlerCloser, lock sync.Locker) handlerCloser {
+func newIOWaitUnlockHandler(h *handler.Client, lock sync.Locker) handlerCloser {
 	ret := new(ioUnlockHandler)
 	ret.init(h, lock)
 	return ret
 }
 
-func (h *ioUnlockHandler) init(hc handlerCloser, lock sync.Locker) {
+func (h *ioUnlockHandler) init(hc *handler.Client, lock sync.Locker) {
 	h.h = hc
 	h.lock = lock
 }

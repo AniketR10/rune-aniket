@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/ernestrc/go-tui"
+	"github.com/ernestrc/go-tui/browser"
 	"github.com/ernestrc/go-tui/cell"
 	"github.com/ernestrc/go-tui/handler"
 	"github.com/ernestrc/go-tui/proto"
@@ -120,7 +121,7 @@ func assertServerHandlerExitClose(
 	h EventHandler, s *Server, quitCh chan struct{},
 	broker *proto.MockMuxBroker,
 ) {
-	resource := &handler.TestHandler{}
+	resource := &browser.TestHandler{}
 	name := "sup"
 	ev := Event{Type: EventTypeClose, ResourceName: name, Resource: resource}
 	expectHandlerInvokeExit(t, handlerConn)

@@ -86,8 +86,17 @@ func (w *browserWindow) onWindowClosed(fn func()) {
 	w.onClose = fn
 }
 
+func (w *browserWindow) Content() (Handler, error) {
+	h := w.win.Content().(Handler)
+	buf, ok := h.(*buffer)
+	if !ok {
+		return h.(*browserContent).Handler, nil
+	}
+	return buf, nil
+}
+
 func (w *browserWindow) SetContent(h Handler) error {
-	return w.parent.forceUpdateWindowContent(w, h)
+	return w.parent.tryUpdateWindowContent(w, h)
 }
 
 // browserWindow is passed by value, so we store whether
@@ -333,7 +342,7 @@ func (c *Component) onUnmount(h Handler, reason string) {
 	c.tryLog("Component.OnUnmount(%p): reason: %s", h, reason)
 }
 
-func (c *Component) forceUpdateWindowContent(
+func (c *Component) tryUpdateWindowContent(
 	win *browserWindow, content Handler,
 ) error {
 	if b, ok := content.(*buffer); ok {

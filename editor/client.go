@@ -7,8 +7,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ernestrc/go-tui/browser"
 	"github.com/ernestrc/go-tui/cell"
-	"github.com/ernestrc/go-tui/handler"
 	"github.com/ernestrc/go-tui/proto"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
@@ -104,7 +104,7 @@ func (c *Client) Edit(name string, buf *cell.Buffer) (Handler, error) {
 		return nil, err
 	}
 
-	return handler.Token{ID: res.GetHandlerId()}, nil
+	return browser.Token{ID: uint64(res.GetHandlerId())}, nil
 }
 
 // SubscribeEditor requests the editor server to subscribe sub to ev.

@@ -11,11 +11,10 @@ import (
 type TestHandler struct {
 	component.TestComponent
 	tui.Manual
-	CursorPos         term.Coordinates
-	Exit              bool
-	Handled           bool
-	HandleOverride    func(term.Event) (bool, bool)
-	OnUnmountCallback func() error
+	CursorPos      term.Coordinates
+	Exit           bool
+	Handled        bool
+	HandleOverride func(term.Event) (bool, bool)
 }
 
 // NewTestHandler will allocate storage for a new handler and initialize it
@@ -46,12 +45,4 @@ func (t *TestHandler) Cursor() (term.Coordinates, bool) {
 // Man returns set Manual.
 func (t *TestHandler) Man() tui.Manual {
 	return t.Manual
-}
-
-// OnUnmount calls t.OnUnmount.
-func (t *TestHandler) OnUnmount() error {
-	if t.OnUnmountCallback != nil {
-		return t.OnUnmountCallback()
-	}
-	return nil
 }

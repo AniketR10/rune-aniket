@@ -11,7 +11,7 @@ import (
 // WindowClient satisfies Window by talking to a
 // remote window over GRPC.
 type windowClient struct {
-	brokerID      uint32
+	brokerID      uint64
 	logger        *log.Logger
 	pbClient      proto.WindowClient
 	browserClient *Client
@@ -19,7 +19,7 @@ type windowClient struct {
 }
 
 func newWindowClient(
-	brokerID uint32, browserClient *Client,
+	brokerID uint64, browserClient *Client,
 	pbClient proto.WindowClient,
 ) *windowClient {
 	ret := new(windowClient)
@@ -27,6 +27,17 @@ func newWindowClient(
 	ret.pbClient = pbClient
 	ret.brokerID = brokerID
 	return ret
+}
+
+func (w *windowClient) Content() (Handler, error) {
+	ctx := context.Background()
+
+	req := proto.WindowContentRequest{}
+	res, err := w.pbClient.Content(ctx, &req)
+	if err != nil {
+		return nil, fmt.Errorf("pbClient.Content: %v", err)
+	}
+	return Token{ID: res.GetHandlerId()}, err
 }
 
 func (w *windowClient) SetContent(h Handler) error {
@@ -39,7 +50,7 @@ func (w *windowClient) SetContent(h Handler) error {
 	if err != nil {
 		reason := fmt.Sprintf("error on call to SetContent: %v", err)
 		w.browserClient.safeForceCloseHandler(brokerID, reason)
-		return fmt.Errorf("error on pbClient.SetContent: %v", err)
+		return fmt.Errorf("pbClient.SetContent: %v", err)
 	}
 	return nil
 }
@@ -85,11 +96,24 @@ func newWindowServer(
 	return ret
 }
 
+func (s *windowServer) Content(
+	ctx context.Context, req *proto.WindowContentRequest,
+) (*proto.WindowContentResponse, error) {
+	s.s.browser.Lock()
+	defer s.s.browser.Unlock()
+
+	content, err := s.win.Content()
+	if err != nil {
+		return nil, fmt.Errorf("windowServer.Content: %v", err)
+	}
+	handlerID := s.s.ensureAvailable(content)
+	return &proto.WindowContentResponse{HandlerId: handlerID}, nil
+}
+
 func (s *windowServer) SetContent(
 	ctx context.Context, req *proto.WindowSetContentRequest,
 ) (*proto.WindowSetContentResponse, error) {
-
-	client, err := s.s.dialHandler(req.GetHandlerId())
+	client, err := s.s.getContentHandler(req.GetHandlerId())
 	if err != nil {
 		return nil, fmt.Errorf("failed to dial to remote handler: %v", err)
 	}

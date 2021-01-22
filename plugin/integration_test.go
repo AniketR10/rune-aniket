@@ -9,7 +9,6 @@ import (
 	"github.com/ernestrc/go-tui/browser"
 	"github.com/ernestrc/go-tui/cell"
 	"github.com/ernestrc/go-tui/editor"
-	"github.com/ernestrc/go-tui/handler"
 	"github.com/ernestrc/go-tui/proto"
 	"github.com/ernestrc/go-tui/term"
 	"github.com/golang/mock/gomock"
@@ -33,7 +32,7 @@ func TestIntegrationRace(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockWin := browser.NopWindow()
-	h := handler.NewTestHandler()
+	h := browser.NewTestHandler()
 	evKeyCtrlA := term.Event{Type: term.EventKey, Key: term.KeyCtrlA}
 	keymap := map[term.Event]term.Event{
 		evKeyCtrlA: term.Event{Type: term.EventKey, Key: term.KeyCtrlB},
@@ -119,7 +118,7 @@ func TestIntegrationRace(t *testing.T) {
 		{PermissionBrowserResourceOpener, func(token uint32, broker proto.MuxBroker) (interface{}, error) {
 			return ResourceOpener(token, broker)
 		}, func(ed *editor.MockEditorMockRecorder, mock *browser.MockBrowserMockRecorder) *gomock.Call {
-			return mock.Open(gomock.Any()).Return(nil, nil)
+			return mock.Open(gomock.Any()).Return(h, nil)
 		}, func(ifc interface{}) error {
 			_, err := ifc.(browser.ResourceOpener).Open("")
 			return err

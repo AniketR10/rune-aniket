@@ -35,7 +35,7 @@ func TestComponentCloseWindow(t *testing.T) {
 			c := NewComponent(Config{})
 
 			var h Handler
-			h = handler.NewTestHandler()
+			h = NewTestHandler()
 			h = c.NewBuffer("OAK", h, nil)
 
 			win := tcase.split(c, h)
@@ -49,7 +49,7 @@ func TestComponentCloseWindow(t *testing.T) {
 
 		t.Run(tcase.method+"Close is idempotent", func(t *testing.T) {
 			c := NewComponent(Config{})
-			win := tcase.split(c, handler.NewTestHandler())
+			win := tcase.split(c, NewTestHandler())
 			require.NoError(t, win.Close())
 			assert.NoError(t, win.Close())
 		})
@@ -57,9 +57,9 @@ func TestComponentCloseWindow(t *testing.T) {
 		t.Run(tcase.method+"close window on handler exit", func(t *testing.T) {
 			c := NewComponent(Config{})
 			var h Handler
-			h = handler.NewTestHandler()
-			h.(*handler.TestHandler).Exit = true
-			h.(*handler.TestHandler).Handled = true
+			h = NewTestHandler()
+			h.(*TestHandler).Exit = true
+			h.(*TestHandler).Handled = true
 			win := tcase.split(c, h)
 
 			assert.Equal(t, 0, c.tabs.Size())
@@ -78,7 +78,7 @@ func TestComponentCloseWindow(t *testing.T) {
 		t.Run(tcase.method+"Close calls onWindowClosed callback", func(t *testing.T) {
 			var i int
 			c := NewComponent(Config{})
-			win := tcase.split(c, handler.NewTestHandler())
+			win := tcase.split(c, NewTestHandler())
 			win.onWindowClosed(func() {
 				i++
 			})
@@ -92,7 +92,7 @@ func TestComponentCloseWindow(t *testing.T) {
 func TestComponentRemoveAllBuffers(t *testing.T) {
 	w1 := NewComponent(Config{})
 	w2 := NewComponent(Config{})
-	w2.SplitHorizontalAbove(handler.NewTestHandler())
+	w2.SplitHorizontalAbove(NewTestHandler())
 
 	tsuite := []struct {
 		description string
@@ -166,27 +166,41 @@ func assertFreeBuffer(t *testing.T, h tui.Handler, free bool) {
 	assert.Equal(t, free, h.(*buffer).free)
 }
 
+func assertWindowContent(t *testing.T, win Window, expected Handler) {
+	content, err := win.Content()
+	require.NoError(t, err)
+	assert.Equal(t, expected, content)
+}
+
 func TestComponentSetContent(t *testing.T) {
 	for _, _tcase := range splitSuite {
 		tcase := _tcase
 		t.Run(tcase.method, func(t *testing.T) {
 			c := NewComponent(Config{})
 			win0 := c.Focus()
-			christmasBuffer := c.NewBuffer("Merry Christmas", handler.NewTestHandler(), nil)
+			christmasBuffer := c.NewBuffer("Merry Christmas", NewTestHandler(), nil)
 
 			assertFreeBuffer(t, christmasBuffer, true)
 			require.NoError(t, win0.SetContent(christmasBuffer))
 			assertFreeBuffer(t, christmasBuffer, false)
+			assertWindowContent(t, win0, christmasBuffer)
 			assert.False(t, c.UpdateWindowBufferNext(win0))
 
-			win1 := tcase.split(c, NopHandler(&handler.TestHandler{}))
+			h2 := NopHandler(&handler.TestHandler{})
+			win1 := tcase.split(c, h2)
+			assertWindowContent(t, win1, h2)
 			require.Error(t, win1.SetContent(christmasBuffer))
+			assertWindowContent(t, win1, h2)
 			assertFreeBuffer(t, christmasBuffer, false)
 
-			require.NoError(t, win1.SetContent(NopHandler(&handler.TestHandler{})))
+			h3 := NopHandler(&handler.TestHandler{})
+			require.NoError(t, win1.SetContent(h3))
+			assertWindowContent(t, win1, h3)
 			assertFreeBuffer(t, christmasBuffer, false)
 
-			require.NoError(t, win0.SetContent(NopHandler(&handler.TestHandler{})))
+			h4 := NopHandler(&handler.TestHandler{})
+			require.NoError(t, win0.SetContent(h4))
+			assertWindowContent(t, win0, h4)
 			assertFreeBuffer(t, christmasBuffer, true)
 		})
 	}
@@ -198,10 +212,10 @@ func TestComponentUpdateWindowBuffer(t *testing.T) {
 		t.Run(tcase.method, func(t *testing.T) {
 			c := NewComponent(Config{})
 			win0 := c.Focus()
-			amzn := c.NewBuffer("AMZN", handler.NewTestHandler(), nil)
+			amzn := c.NewBuffer("AMZN", NewTestHandler(), nil)
 			c.UpdateWindowBufferNextFree(win0)
-			tsla := c.NewBuffer("TSLA", handler.NewTestHandler(), nil)
-			goog := c.NewBuffer("GOOG", handler.NewTestHandler(), nil)
+			tsla := c.NewBuffer("TSLA", NewTestHandler(), nil)
+			goog := c.NewBuffer("GOOG", NewTestHandler(), nil)
 			win := tcase.split(c, goog)
 
 			assertFreeBuffer(t, amzn, false)
@@ -242,8 +256,47 @@ func TestComponentUpdateWindowBuffer(t *testing.T) {
 			assertFreeBuffer(t, amzn, false)
 			assertFreeBuffer(t, tsla, false)
 			assertFreeBuffer(t, goog, true)
+
+			assertWindowContent(t, win0, amzn)
+			assertWindowContent(t, win, tsla)
 		})
 	}
+}
+
+func TestComponentSetContentUnmount(t *testing.T) {
+	c := NewComponent(Config{})
+	win0 := c.Focus()
+	h1 := NewTestHandler()
+	h2 := NewTestHandler()
+	var unmounted int
+	h1.OnUnmountCallback = func() error {
+		unmounted++
+		return nil
+	}
+	assert.NoError(t, win0.SetContent(h1))
+	assertWindowContent(t, win0, h1)
+	assert.NoError(t, win0.SetContent(h2))
+	assertWindowContent(t, win0, h2)
+	assert.Equal(t, 1, unmounted)
+
+	assert.NoError(t, win0.SetContent(h1))
+	assertWindowContent(t, win0, h1)
+	assert.Equal(t, 1, unmounted)
+	content1, err := win0.Content()
+	require.NoError(t, err)
+
+	assert.NoError(t, win0.SetContent(content1))
+	assertWindowContent(t, win0, h1)
+	// unmounted and mounted again
+	assert.Equal(t, 2, unmounted)
+
+	win1 := c.SplitHorizontalBelow(h2)
+	assert.Equal(t, 2, unmounted)
+
+	assert.NoError(t, win0.Close())
+	assert.Equal(t, 3, unmounted)
+
+	assert.Equal(t, c.Focus(), win1)
 }
 
 func TestComponentHandlerUnmount(t *testing.T) {
@@ -274,7 +327,7 @@ func TestComponentHandlerUnmount(t *testing.T) {
 				}, {
 					"Window.SetContent",
 					func(t *testing.T, c *Component, win Window, h *testFlushCloser) {
-						assert.NoError(t, win.SetContent(handler.NewTestHandler()))
+						assert.NoError(t, win.SetContent(NewTestHandler()))
 					},
 				}, {
 					"Window.Close",
@@ -302,8 +355,8 @@ func TestComponentHandlerUnmount(t *testing.T) {
 				t.Run(tcase.name, func(t *testing.T) {
 					mock := &testFlushCloser{}
 					c := NewComponent(cfg)
-					c.NewBuffer("Robinhood", handler.NewTestHandler(), nil)
-					c.NewBuffer("Stash", handler.NewTestHandler(), nil)
+					c.NewBuffer("Robinhood", NewTestHandler(), nil)
+					c.NewBuffer("Stash", NewTestHandler(), nil)
 					win := split(c, mock)
 
 					tcase.fn(t, c, win, mock)
@@ -326,8 +379,8 @@ func TestComponentMultipleWindow(t *testing.T) {
 	// w1 := c.Focus()
 	var w2 Window
 	// var w3 Window
-	h2 := handler.NewTestHandler()
-	h3 := handler.NewTestHandler()
+	h2 := NewTestHandler()
+	h3 := NewTestHandler()
 	h3.Ch = 'C'
 
 	tests := []testutil.ComponentTestCase{

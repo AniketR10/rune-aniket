@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"math"
 	"sync"
 	"time"
 
@@ -33,6 +34,9 @@ type Server struct {
 	servers map[uint64]io.Closer
 
 	// Handlers opened by Open
+	// NOTE this map is never cleaned up: this implementation is decoupled from the
+	// editor Close hooks so we don't know when a browser client is no longer
+	// referencing a valid Handler.
 	opened map[uint32]Handler
 
 	browser struct {
@@ -48,18 +52,20 @@ type Server struct {
 type browserServerHandler struct {
 	Handler
 	s         *Server
-	handlerID uint32
+	handlerID uint64
 }
 
 func (s browserServerHandler) gracefulShutdown() {
 	time.Sleep(gracefulShutdownWait)
-	s.s.safeForceCloseHandler(s.handlerID, "browserServerHandler.OnUnmount()")
+	s.s.safeForceCloseHandler(s.handlerID, "Handle()(exit=true)")
 }
 
-func (s browserServerHandler) OnUnmount() (err error) {
-	err = s.Handler.OnUnmount()
-	go s.gracefulShutdown()
-	return
+func (s browserServerHandler) Handle(ev term.Event) (bool, bool) {
+	exit, handled := s.Handler.Handle(ev)
+	if exit {
+		go s.gracefulShutdown()
+	}
+	return exit, handled
 }
 
 // NewServer allocates storage for a new Server and initializes it.
@@ -84,13 +90,13 @@ func (s *Server) Init(
 	s.failureTimeout = defaultFailureTimeout
 }
 
-func (s *Server) consumeErrors(ctx context.Context, ch <-chan error) {
+func (s *Server) consumeErrors(ctx context.Context, handlerID uint64, ch <-chan error) {
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case err := <-ch:
-			err = fmt.Errorf("handler.Client error: %v", err)
+			err = fmt.Errorf("handler.Client %d error: %v", handlerID, err)
 			s.tryLog("%v", err)
 			msgErr := s.setBrowserMessage(err.Error())
 			if msgErr != nil {
@@ -101,24 +107,9 @@ func (s *Server) consumeErrors(ctx context.Context, ch <-chan error) {
 	}
 }
 
-func (s *Server) dialHandler(handlerID uint32) (Handler, error) {
-	s.browser.Lock()
-	h, ok := s.opened[handlerID]
-	s.browser.Unlock()
-	if ok {
-		s.tryLog("(%p browser.Server): using return of Open handler for handlerID: %d", s, handlerID)
-		return h, nil
-	}
-	s.browser.Lock()
-	res, ok := s.clients[uint64(handlerID)]
-	s.browser.Unlock()
-	if ok {
-		s.tryLog("(%p browser.Server): found cached client for handlerID: %d", s, handlerID)
-		return res.(*handlerClientResource).client, nil
-	}
-
+func (s *Server) dialHandler(handlerID uint64) (handlerCloser, error) {
 	s.tryLog("(%p browser.Server): dialing handlerID: %d", s, handlerID)
-	handlerConn, err := s.broker.Dial(handlerID)
+	handlerConn, err := s.broker.Dial(uint32(handlerID))
 	if err != nil {
 		return nil, err
 	}
@@ -134,7 +125,7 @@ func (s *Server) dialHandler(handlerID uint32) (Handler, error) {
 		s.safeForceCloseHandler(handlerID, reason)
 	})
 
-	go s.consumeErrors(ctx, cc.Errors())
+	go s.consumeErrors(ctx, handlerID, cc.Errors())
 
 	s.browser.Lock()
 	defer s.browser.Unlock()
@@ -148,7 +139,7 @@ func (s *Server) dialHandler(handlerID uint32) (Handler, error) {
 	return client, nil
 }
 
-func (s *Server) serveWindow(win Window) uint32 {
+func (s *Server) serveWindow(win Window) uint64 {
 	if res, ok := s.servers[win.id()]; ok {
 		return res.(*windowServerResource).brokerID
 	}
@@ -162,13 +153,13 @@ func (s *Server) serveWindow(win Window) uint32 {
 	s.servers[win.id()] = &windowServerResource{
 		srv:      srv,
 		win:      win,
-		brokerID: brokerID,
+		brokerID: uint64(brokerID),
 	}
 
 	win.onWindowClosed(func() {
 		s.forceCloseWindow(win.id(), "underlying window called onWindowClosed callback")
 	})
-	return brokerID
+	return uint64(brokerID)
 }
 
 func (s *Server) getClients() map[uint64]io.Closer {
@@ -198,15 +189,50 @@ func (s *Server) tryLog(msg string, args ...interface{}) {
 	s.Logger.Debugf(msg, args...)
 }
 
-func (s *Server) safeForceCloseHandler(brokerID uint32, reason string) error {
+func (s *Server) safeForceCloseHandler(brokerID uint64, reason string) error {
 	s.tryLog("browser.Server.safeForceCloseHandler(%d, reason=%s)", brokerID, reason)
-	_, err := proto.ForceCloseResource(uint64(brokerID), s.getClients, s.Logger, &s.browser)
+	_, err := proto.ForceCloseResource(brokerID, s.getClients, s.Logger, &s.browser)
 	return err
 }
-func (s *Server) forceCloseHandler(brokerID uint32, reason string) error {
+func (s *Server) forceCloseHandler(brokerID uint64, reason string) error {
 	s.tryLog("browser.Server.forceCloseHandler(%d, reason=%s)", brokerID, reason)
-	_, err := proto.ForceCloseResource(uint64(brokerID), s.getClients, s.Logger, nopLocker{})
+	_, err := proto.ForceCloseResource(brokerID, s.getClients, s.Logger, nopLocker{})
 	return err
+}
+
+func (s *Server) getContentHandler(handlerID uint64) (Handler, error) {
+	s.browser.Lock()
+	if handlerID < math.MaxUint32 {
+		h, ok := s.opened[uint32(handlerID)]
+		s.browser.Unlock()
+		if ok {
+			s.tryLog("(%p browser.Server): using return of Open/Content handler for handlerID: %d",
+				s, handlerID)
+			return h, nil
+		}
+	}
+
+	var cc handlerCloser
+	s.browser.Lock()
+	res, ok := s.clients[handlerID]
+	s.browser.Unlock()
+	if ok {
+		s.tryLog("(%p browser.Server): found cached client for handlerID: %d", s, handlerID)
+		cc = res.(*handlerClientResource).client
+	} else {
+		var err error
+		cc, err = s.dialHandler(handlerID)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	bHandler := browserServerHandler{
+		handlerID: handlerID,
+		Handler:   cc,
+		s:         s,
+	}
+	return bHandler, nil
 }
 
 // SplitVerticalRight satisfies proto.BrowserServer
@@ -215,20 +241,14 @@ func (s *Server) split(
 	split func(WindowManager, Handler) (Window, error),
 ) (*proto.SplitResponse, error) {
 	handlerID := req.GetHandlerId()
-	cc, err := s.dialHandler(handlerID)
+	handler, err := s.getContentHandler(handlerID)
 	if err != nil {
 		return nil, err
 	}
 
-	bHandler := browserServerHandler{
-		handlerID: handlerID,
-		Handler:   cc,
-		s:         s,
-	}
-
 	s.browser.Lock()
 	defer s.browser.Unlock()
-	win, err := split(s.browser, bHandler)
+	win, err := split(s.browser, handler)
 	if err != nil {
 		reason := fmt.Sprintf("failed to create split: %s", err.Error())
 		s.forceCloseHandler(handlerID, reason)
@@ -315,7 +335,25 @@ func (s *Server) SetMessage(
 	return new(proto.SetMessageResponse), nil
 }
 
-func nopMonitor() {}
+// ensureAvailable stores h for future calls to SetContent or Split methods
+// so that these calls do not dial to remote handler, but rather use local
+// handler referenced by the return id of this method.
+func (s *Server) ensureAvailable(h Handler) uint64 {
+	// if the content happens to be an active client
+	// then there's no need to store in opened, as
+	// future calls to SetContent/Split methods will used the cached
+	// client in clients
+	if bsh, ok := h.(browserServerHandler); ok {
+		if _, ok = s.clients[bsh.handlerID]; ok {
+			return bsh.handlerID
+		}
+	}
+
+	handlerID := s.broker.NextId()
+	s.opened[handlerID] = h
+	s.tryLog("(%p browser.Server): stored handler with ID %d", s, handlerID)
+	return uint64(handlerID)
+}
 
 // Open satisfies proto.BrowserServer
 func (s *Server) Open(
@@ -331,11 +369,7 @@ func (s *Server) Open(
 		return nil, err
 	}
 
-	// store proxy handler
-	handlerID := s.broker.NextId()
-	s.opened[handlerID] = h
-	s.tryLog("(%p browser.Server): stored handler with ID: %d", s, handlerID)
-
+	handlerID := s.ensureAvailable(h)
 	return &proto.OpenResourceResponse{HandlerId: handlerID}, nil
 }
 
@@ -348,13 +382,13 @@ func (s *Server) Subscribe(
 	if err != nil {
 		return nil, err
 	}
+	h := serverEventHandler{handlerID: handlerID, s: s, h: handler}
 
 	ev, err := req.GetEv().ToModel()
 	if err != nil {
 		return nil, err
 	}
 
-	h := serverEventHandler{handlerID: handlerID, s: s, h: handler}
 	s.browser.Lock()
 	defer s.browser.Unlock()
 	err = s.browser.Subscribe(ev, h)

@@ -8,7 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ernestrc/go-tui/handler"
 	"github.com/ernestrc/go-tui/proto"
 	prototest "github.com/ernestrc/go-tui/proto/test"
 	"github.com/ernestrc/go-tui/term"
@@ -79,7 +78,7 @@ func assertInvokeError(t *testing.T, err error) {
 
 func assertClientHandlerExitClose(
 	t *testing.T,
-	h *handler.TestHandler, mockWinConn *proto.MockMuxConn,
+	h *TestHandler, mockWinConn *proto.MockMuxConn,
 	client *Client, callOnUnmount bool,
 ) {
 	assertClientServersEqual(t, 1, client)
@@ -109,7 +108,7 @@ func assertClientHandlerExitClose(
 
 func expectSplit(
 	t *testing.T, mockCC *proto.MockClientConnInterface,
-	handlerID, windowID uint32, rpc string,
+	handlerID, windowID uint64, rpc string,
 ) {
 	mockCC.EXPECT().
 		Invoke(gomock.Any(),
@@ -129,7 +128,7 @@ func expectSplit(
 
 func expectFocus(
 	t *testing.T, mockCC *proto.MockClientConnInterface,
-	handlerID, windowID uint32,
+	handlerID, windowID uint64,
 ) {
 	mockCC.EXPECT().
 		Invoke(gomock.Any(),
@@ -340,7 +339,7 @@ func TestClientSubscribe(t *testing.T) {
 				gomock.Eq(in), gomock.Eq(out)).
 			Times(1)
 
-		h := handler.NewTestHandler()
+		h := NewTestHandler()
 		err := client.Subscribe(term.Event{Ch: 'a'}, handlerToEventHandler{h})
 		require.NoError(t, err)
 
@@ -428,13 +427,13 @@ func testClientSplit(
 
 		client, mockCC, mockBroker := newMockedClient(ctrl)
 
-		windowID := uint32(99)
+		windowID := uint64(99)
 		prototest.ExpectBrokerServe(t, 1, mockBroker)
 		expectSplit(t, mockCC, 1, windowID, rpc)
-		mockWinConn := prototest.ExpectBrokerDial(t, ctrl, mockBroker, windowID)
+		mockWinConn := prototest.ExpectBrokerDial(t, ctrl, mockBroker, uint32(windowID))
 		quitCh := prototest.ExpectMonitorConn(mockWinConn)
 
-		win, err := split(client, nil)
+		win, err := split(client, NewTestHandler())
 		require.NoError(t, err)
 		assertClientServersEqual(t, 1, client)
 		assertClientClientsEqual(t, 1, client)
@@ -462,7 +461,7 @@ func testClientSplit(
 		prototest.ExpectBrokerServe(t, 1, mockBroker)
 		expectInvokeError(mockCC)
 
-		win, err := split(client, nil)
+		win, err := split(client, NewTestHandler())
 		assertInvokeError(t, err)
 		assert.Nil(t, win)
 
@@ -476,12 +475,12 @@ func testClientSplit(
 
 		client, mockCC, mockBroker := newMockedClient(ctrl)
 
-		windowID := uint32(99)
+		windowID := uint64(99)
 		prototest.ExpectBrokerServe(t, 1, mockBroker)
 		expectSplit(t, mockCC, 1, windowID, rpc)
-		prototest.ExpectBrokerDialError(t, ctrl, mockBroker, windowID)
+		prototest.ExpectBrokerDialError(t, ctrl, mockBroker, uint32(windowID))
 
-		win, err := split(client, nil)
+		win, err := split(client, NewTestHandler())
 		require.Error(t, err)
 		assert.Nil(t, win)
 
@@ -495,14 +494,14 @@ func testClientSplit(
 
 		client, mockCC, mockBroker := newMockedClient(ctrl)
 
-		windowID := uint32(63)
-		brokerID := uint32(1)
-		prototest.ExpectBrokerServe(t, brokerID, mockBroker)
+		windowID := uint64(63)
+		brokerID := uint64(1)
+		prototest.ExpectBrokerServe(t, uint32(brokerID), mockBroker)
 		expectSplit(t, mockCC, brokerID, windowID, rpc)
-		mockWinConn := prototest.ExpectBrokerDial(t, ctrl, mockBroker, windowID)
+		mockWinConn := prototest.ExpectBrokerDial(t, ctrl, mockBroker, uint32(windowID))
 		quitCh := prototest.ExpectMonitorConn(mockWinConn)
 
-		h := handler.NewTestHandler()
+		h := NewTestHandler()
 		var wg sync.WaitGroup
 		h.OnUnmountCallback = func() error {
 			wg.Done()
@@ -540,14 +539,15 @@ func TestClientClose(t *testing.T) {
 	client, mockCC, mockBroker := newMockedClient(ctrl)
 
 	for i := 0; i < 10; i++ {
-		windowID := uint32(i)
-		prototest.ExpectBrokerServe(t, uint32(i), mockBroker)
-		expectSplit(t, mockCC, uint32(i), windowID,
+		windowID := uint64(i)
+		handlerID := uint64(i)
+		prototest.ExpectBrokerServe(t, uint32(handlerID), mockBroker)
+		expectSplit(t, mockCC, handlerID, windowID,
 			"/proto.WindowManager/SplitVerticalRight")
-		mockWinConn := prototest.ExpectBrokerDial(t, ctrl, mockBroker, windowID)
+		mockWinConn := prototest.ExpectBrokerDial(t, ctrl, mockBroker, uint32(windowID))
 		quitCh := prototest.ExpectMonitorConn(mockWinConn)
 
-		_, err := client.SplitVerticalRight(nil)
+		_, err := client.SplitVerticalRight(NewTestHandler())
 		require.NoError(t, err)
 		assertClientServersEqual(t, i+1, client)
 		assertClientClientsEqual(t, i+1, client)

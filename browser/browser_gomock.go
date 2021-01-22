@@ -154,6 +154,21 @@ func (mr *MockWindowMockRecorder) Close() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockWindow)(nil).Close))
 }
 
+// Content mocks base method.
+func (m *MockWindow) Content() (Handler, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Content")
+	ret0, _ := ret[0].(Handler)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Content indicates an expected call of Content.
+func (mr *MockWindowMockRecorder) Content() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Content", reflect.TypeOf((*MockWindow)(nil).Content))
+}
+
 // SetContent mocks base method.
 func (m *MockWindow) SetContent(arg0 Handler) error {
 	m.ctrl.T.Helper()

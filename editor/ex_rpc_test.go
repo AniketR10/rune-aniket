@@ -11,9 +11,9 @@ import (
 
 	"github.com/ernestrc/go-tui"
 	"github.com/ernestrc/go-tui/browser"
-	"github.com/ernestrc/go-tui/handler"
 	"github.com/ernestrc/go-tui/proto"
 	"github.com/ernestrc/go-tui/term"
+	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/goleak"
@@ -23,7 +23,7 @@ import (
 const testingShutdownWait = 500 * time.Millisecond
 
 type groupEventHandler struct {
-	h  *handler.TestHandler
+	h  *browser.TestHandler
 	wg *sync.WaitGroup
 }
 
@@ -75,6 +75,11 @@ func newTestRPCBrowser(t *testing.T,
 	destructor *func(),
 ) browserConstructor {
 	return func(ed Editor, opts ...browser.Option) (browserInternal, error) {
+		var logger *log.Logger
+		// // uncomment to debug
+		// logger = log.New()
+		// logger.SetLevel(log.TraceLevel)
+
 		b := newTestBrowserHandler()
 		err := b.Init(ed, opts...)
 		if err != nil {
@@ -90,6 +95,7 @@ func newTestRPCBrowser(t *testing.T,
 		var serverMutex sync.Mutex
 		grpcServer := grpc.NewServer()
 		server := browser.NewServer(broker, b, &serverMutex)
+		server.Logger = logger
 		proto.RegisterWindowManagerServer(grpcServer, server)
 		proto.RegisterMessengerServer(grpcServer, server)
 		proto.RegisterKeyMapperServer(grpcServer, server)
@@ -101,14 +107,17 @@ func newTestRPCBrowser(t *testing.T,
 		conn, err := grpc.Dial(lis.Addr().String(), grpc.WithInsecure())
 		require.NoError(t, err)
 
+		bc := browser.NewClient(broker, conn, &clientMutex)
+		bc.Logger = logger
 		client := testClient{
-			Client:  browser.NewClient(broker, conn, &clientMutex),
+			Client:  bc,
 			Handler: &safeHandler{Handler: b, mu: &serverMutex},
 		}
 		*destructor = func() {
 			client.Close()
 			server.Close()
 			grpcServer.Stop()
+			broker.Close()
 		}
 		return client, nil
 	}
@@ -123,11 +132,11 @@ func TestIntegrationRPCBrowserDraw(t *testing.T) {
 
 func TestRPCBrowserCloseLeak(t *testing.T) {
 	var destructor func()
-	browser, err := newTestRPCBrowser(t, &destructor)(&testEditor{}, browser.WithFilepath(""))
+	b, err := newTestRPCBrowser(t, &destructor)(&testEditor{}, browser.WithFilepath(""))
 	require.NoError(t, err)
 	defer destructor()
 
-	win, err := browser.SplitVerticalLeft(handler.NewTestHandler())
+	win, err := b.SplitVerticalLeft(browser.NewTestHandler())
 	require.NoError(t, err)
 
 	require.NoError(t, win.Close())
@@ -140,12 +149,12 @@ func TestRPCBrowserCloseLeak(t *testing.T) {
 // NOTE: run go test -race in order for this test to be useful.
 func TestClientSynchronizeHandlers(t *testing.T) {
 	var destructor func()
-	browser, err := newTestRPCBrowser(t, &destructor)(&testEditor{}, browser.WithFilepath(""))
+	b, err := newTestRPCBrowser(t, &destructor)(&testEditor{}, browser.WithFilepath(""))
 	require.NoError(t, err)
 	defer destructor()
 	var wg sync.WaitGroup
 
-	h := handler.TestHandler{}
+	h := browser.TestHandler{}
 
 	subs := []term.Event{
 		term.Event{Type: term.EventKey, Key: term.KeyCtrlA},
@@ -156,13 +165,13 @@ func TestClientSynchronizeHandlers(t *testing.T) {
 
 	for _, ev := range subs {
 		h := &groupEventHandler{wg: &wg, h: &h}
-		err = browser.Subscribe(ev, h)
+		err = b.Subscribe(ev, h)
 		require.NoError(t, err)
 	}
 
 	for _, ev := range subs {
 		wg.Add(1)
-		_, handled := browser.Handle(ev)
+		_, handled := b.Handle(ev)
 		assert.True(t, handled)
 	}
 

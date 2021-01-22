@@ -47,32 +47,27 @@ type Client struct {
 
 	// handler server resources. handler servers are created on
 	// calls to Split or SetContent (if handler is not return of Open).
-	// They are destroyed when browser server calls OnUnmount rpc, which
-	// occurs when underlying handler returns exit=true on
-	// Handle, or when window is Closed, either locally or
-	// remotely (via monitor goroutine).
+	// this map is cleaned up only when handler returns true to a call to Handle.
 	servers map[uint64]io.Closer
 }
 
 type browserClientHandler struct {
-	handlerID uint32
+	handlerID uint64
 	Handler
 	c *Client
 }
 
 func (c browserClientHandler) gracefulShutdown() {
 	time.Sleep(gracefulShutdownWait)
-	c.c.safeForceCloseHandler(c.handlerID, "browserClientHandler.OnUnmount")
+	c.c.safeForceCloseHandler(c.handlerID, "Handle()(exit=true)")
 }
 
-func (c browserClientHandler) OnUnmount() (err error) {
-	err1 := c.Handler.OnUnmount()
-	if err1 != nil {
-		err = err1
+func (c browserClientHandler) Handle(ev term.Event) (bool, bool) {
+	exit, handled := c.Handler.Handle(ev)
+	if exit {
+		go c.gracefulShutdown()
 	}
-
-	go c.gracefulShutdown()
-	return
+	return exit, handled
 }
 
 // NewClient allocates storage for a new Client and initializes it.
@@ -111,42 +106,43 @@ func (c *Client) Init(
 	c.pluginLock = pluginLock
 }
 
-func (c *Client) serveHandler(h Handler) uint32 {
-
-	var brokerID uint32
+func (c *Client) serveHandler(h Handler) uint64 {
+	var brokerID uint64
 	var srv proto.MuxServer
 
-	if tokenHandler, ok := h.(handler.Token); ok {
+	if tokenHandler, ok := h.(Token); ok {
 		brokerID = tokenHandler.ID
 	} else {
-		brokerID, srv = proto.AcceptAndServe(c.broker, c.Logger,
+		var brokerID32 uint32
+		brokerID32, srv = proto.AcceptAndServe(c.broker, c.Logger,
 			func(handlerID uint32, srv proto.MuxServer) {
 				h = browserClientHandler{
 					Handler:   h,
 					c:         c,
-					handlerID: handlerID,
+					handlerID: uint64(handlerID),
 				}
 				hsrv := handler.NewServer(h, c.pluginLock)
 				hsrv.Logger = c.Logger
 				proto.RegisterHandlerServer(srv.GRPC(), hsrv)
 			})
+		brokerID = uint64(brokerID32)
 	}
 
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.servers[uint64(brokerID)] = &handlerServerResource{h: h, srv: srv}
+	c.servers[brokerID] = &handlerServerResource{h: h, srv: srv, brokerID: brokerID}
 	return brokerID
 }
 
-func (c *Client) dialWindow(windowID uint32, handlerID int) (Window, error) {
+func (c *Client) dialWindow(windowID uint64, handlerID int) (Window, error) {
 	c.mu.Lock()
-	res, ok := c.clients[uint64(windowID)]
+	res, ok := c.clients[windowID]
 	c.mu.Unlock()
 	if ok {
 		return res.(*windowClientResource).client, nil
 	}
 
-	winConn, err := c.broker.Dial(windowID)
+	winConn, err := c.broker.Dial(uint32(windowID))
 	if err != nil {
 		return nil, err
 	}
@@ -183,21 +179,21 @@ func (c *Client) getServers() map[uint64]io.Closer {
 	return c.servers
 }
 
-func (c *Client) forceCloseHandler(brokerID uint32, reason string) error {
+func (c *Client) forceCloseHandler(brokerID uint64, reason string) error {
 	c.tryLog("browser.Client.forceCloseHandler(%d, reason=%s)", brokerID, reason)
-	_, err := proto.ForceCloseResource(uint64(brokerID), c.getServers, c.Logger, nopLocker{})
+	_, err := proto.ForceCloseResource(brokerID, c.getServers, c.Logger, nopLocker{})
 	return err
 }
 
-func (c *Client) safeForceCloseHandler(brokerID uint32, reason string) error {
+func (c *Client) safeForceCloseHandler(brokerID uint64, reason string) error {
 	c.tryLog("browser.Client.safeForceCloseHandler(%d, reason=%s)", brokerID, reason)
-	_, err := proto.ForceCloseResource(uint64(brokerID), c.getServers, c.Logger, &c.mu)
+	_, err := proto.ForceCloseResource(brokerID, c.getServers, c.Logger, &c.mu)
 	return err
 }
 
-func (c *Client) safeForceCloseWindow(brokerID uint32, reason string) error {
+func (c *Client) safeForceCloseWindow(brokerID uint64, reason string) error {
 	c.tryLog("browser.Client.safeForceCloseWindow(%d, reason=%s)", brokerID, reason)
-	_, err := proto.ForceCloseResource(uint64(brokerID), c.getClients, c.Logger, &c.mu)
+	_, err := proto.ForceCloseResource(brokerID, c.getClients, c.Logger, &c.mu)
 	return err
 }
 
@@ -290,7 +286,7 @@ func (c *Client) Open(resource string) (Handler, error) {
 		return nil, err
 	}
 
-	return handler.Token{ID: res.GetHandlerId()}, err
+	return Token{ID: uint64(res.GetHandlerId())}, err
 }
 
 // Subscribe satisfies Browser.

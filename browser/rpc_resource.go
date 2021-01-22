@@ -10,7 +10,7 @@ import (
 type windowServerResource struct {
 	srv      proto.MuxServer
 	win      Window
-	brokerID uint32
+	brokerID uint64
 }
 
 type handlerCloser interface {
@@ -52,7 +52,8 @@ func (r *windowServerResource) Close() error {
 }
 
 type handlerServerResource struct {
-	srv proto.MuxServer
+	srv      proto.MuxServer
+	brokerID uint64
 
 	h tui.Handler
 }

@@ -89,7 +89,6 @@ func (t *keySplitHandler) handleKeyEvent() {
 		return
 	}
 	t.win = win
-	log.Debugf("received key event and created a win: %#v", t.win)
 }
 
 func (t *keySplitHandler) Handle(ev term.Event) (exit bool) {

@@ -54,7 +54,7 @@ func expectSubscribe(
 	conn.EXPECT().
 		Invoke(gomock.Any(),
 			gomock.Eq("/proto.EventSubscriber/Subscribe"),
-			gomock.Eq(&proto.SubscribeRequest{HandlerId: subscribedHandlerToken, Ev: protoEv}),
+			gomock.Eq(&proto.SubscribeRequest{HandlerId: uint64(subscribedHandlerToken), Ev: protoEv}),
 			gomock.Any()).
 		Times(1)
 
@@ -80,8 +80,8 @@ func expectSplitAndFocus(
 		}).
 		AnyTimes()
 
-	windowID := uint32(1888)
-	splitWindowID := uint32(99)
+	windowID := uint64(1888)
+	splitWindowID := uint64(99)
 	mockCC.EXPECT().
 		Invoke(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		DoAndReturn(func(

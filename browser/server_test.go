@@ -9,7 +9,6 @@ import (
 
 	"github.com/ernestrc/go-tui"
 	"github.com/ernestrc/go-tui/component"
-	"github.com/ernestrc/go-tui/handler"
 	"github.com/ernestrc/go-tui/proto"
 	prototest "github.com/ernestrc/go-tui/proto/test"
 	"github.com/ernestrc/go-tui/term"
@@ -112,6 +111,12 @@ func TestServerMergeKeyMap(t *testing.T) {
 	})
 }
 
+func assertHandlerStored(t *testing.T, nextID uint32, s *Server, expected Handler) {
+	h, ok := s.opened[nextID]
+	require.True(t, ok)
+	assert.Equal(t, expected, h)
+}
+
 func TestServerOpen(t *testing.T) {
 	ctx := context.Background()
 
@@ -120,16 +125,14 @@ func TestServerOpen(t *testing.T) {
 		defer ctrl.Finish()
 		s, mock, broker := newTestServer(ctrl, new(sync.Mutex))
 
-		nextID := uint32(10)
-		h := handler.NewTestHandler()
+		h := NewTestHandler()
 		mock.EXPECT().Open(gomock.Eq("/tmp/coronavirus.sql")).Return(h, nil)
-		broker.EXPECT().NextId().Return(nextID)
+		broker.EXPECT().NextId().Return(uint32(1))
 
 		req := proto.OpenResourceRequest{Resource: "/tmp/coronavirus.sql"}
 		res, err := s.Open(ctx, &req)
 		require.NoError(t, err)
 		assert.NotNil(t, res)
-		assert.Equal(t, nextID, res.GetHandlerId())
 	})
 
 	t.Run("bubbles up Open Browser error", func(t *testing.T) {
@@ -150,18 +153,18 @@ func TestServerOpen(t *testing.T) {
 		s, mock, broker := newTestServer(ctrl, new(sync.Mutex))
 
 		nextID := uint32(10)
-		h := handler.NewTestHandler()
+		h := NewTestHandler()
 		mock.EXPECT().Open(gomock.Any()).Return(h, nil)
-		broker.EXPECT().NextId().Return(nextID).Times(1)
+		broker.EXPECT().NextId().Return(nextID)
 
 		req := proto.OpenResourceRequest{Resource: "Caliu"}
 		res, err := s.Open(ctx, &req)
 		require.NoError(t, err)
 		require.NotNil(t, res)
-		assertServerClientsEqual(t, 0, s)
+		assertHandlerStored(t, nextID, s, h)
 
 		sreq := proto.SplitRequest{
-			HandlerId: nextID,
+			HandlerId: uint64(nextID),
 		}
 		windowID := uint32(999)
 		prototest.ExpectBrokerServe(t, windowID, broker)
@@ -266,7 +269,7 @@ func assertServerServersEqual(t *testing.T, expected int, s *Server) {
 
 func TestServerSubscribe(t *testing.T) {
 	ctx := context.Background()
-	handlerID := uint32(31)
+	handlerID := uint64(31)
 	protoEv := proto.Event{Mod: proto.Event_Alt, Char: '5'}
 	req := proto.SubscribeRequest{
 		Ev:        &protoEv,
@@ -283,7 +286,7 @@ func TestServerSubscribe(t *testing.T) {
 		s := NewServer(mockBroker, mock, &mu)
 
 		var h EventHandler
-		handlerConn := prototest.ExpectBrokerDial(t, ctrl, mockBroker, handlerID)
+		handlerConn := prototest.ExpectBrokerDial(t, ctrl, mockBroker, uint32(handlerID))
 		quitCh := prototest.ExpectMonitorConn(handlerConn)
 		mock.EXPECT().Subscribe(gomock.Any(), gomock.Any()).
 			DoAndReturn(func(ev term.Event, _h EventHandler) error {
@@ -306,7 +309,7 @@ func TestServerSubscribe(t *testing.T) {
 		var mu sync.Mutex
 		s, _, mockBroker := newTestServer(ctrl, &mu)
 
-		prototest.ExpectBrokerDialError(t, ctrl, mockBroker, handlerID)
+		prototest.ExpectBrokerDialError(t, ctrl, mockBroker, uint32(handlerID))
 
 		res, err := s.Subscribe(ctx, &req)
 		require.Error(t, err)
@@ -321,7 +324,7 @@ func TestServerSubscribe(t *testing.T) {
 		var mu sync.Mutex
 		s, mock, mockBroker := newTestServer(ctrl, &mu)
 
-		handlerConn := prototest.ExpectBrokerDial(t, ctrl, mockBroker, handlerID)
+		handlerConn := prototest.ExpectBrokerDial(t, ctrl, mockBroker, uint32(handlerID))
 		mock.EXPECT().Subscribe(gomock.Any(), gomock.Any()).
 			Return(errors.New("woopsie"))
 
@@ -345,7 +348,7 @@ func TestServerSubscribe(t *testing.T) {
 		s, mock, mockBroker := newTestServer(ctrl, &mu)
 		s.failureTimeout = 50 * time.Millisecond
 
-		handlerConn := prototest.ExpectBrokerDial(t, ctrl, mockBroker, handlerID)
+		handlerConn := prototest.ExpectBrokerDial(t, ctrl, mockBroker, uint32(handlerID))
 
 		quitCh := make(chan struct{})
 		handlerConn.EXPECT().GetState().Return(connectivity.TransientFailure).AnyTimes()
@@ -438,7 +441,7 @@ func testServerSplit(
 	handlerID := uint32(21)
 	windowID := uint32(111111)
 	req := proto.SplitRequest{
-		HandlerId: handlerID,
+		HandlerId: uint64(handlerID),
 	}
 	protoEv := proto.Event{
 		Key:    proto.Event_MouseMiddle,
@@ -494,7 +497,7 @@ func testServerSplit(
 		// verify that handler is closeable by its handlerId
 		handlerConn.EXPECT().Close().Times(1).
 			DoAndReturn(prototest.ExpectSignalExit(handlerConn, quitCh, nil))
-		require.NoError(t, s.safeForceCloseHandler(handlerID, ""))
+		require.NoError(t, s.safeForceCloseHandler(uint64(handlerID), ""))
 		assertServerClientsEqual(t, 0, s)
 		waitForMonitoringExit(quitCh)
 

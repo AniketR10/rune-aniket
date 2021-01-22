@@ -1,6 +1,8 @@
 package editor
 
-import "github.com/ernestrc/go-tui/handler"
+import "github.com/ernestrc/go-tui/browser"
+
+//go:generate mockgen -destination=./event_handler_gomock.go -package editor -self_package editor -source event_handler.go
 
 // EventHandler wraps the basic method Handle.
 type EventHandler interface {
@@ -36,7 +38,7 @@ func (s serverEventHandler) Handle(ev Event) bool {
 			s.s, ev.ResourceName)
 		return false
 	}
-	ev.Resource = handler.Token{ID: brokerID}
+	ev.Resource = browser.Token{ID: uint64(brokerID)}
 
 	// cleaning up upon exit=true is performed via quitCallback
 	// of eventHandlerClient so there's no need to check for exit here.
