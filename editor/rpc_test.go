@@ -103,7 +103,7 @@ func TestClientServerIntegration(t *testing.T) {
 			})
 
 		myEv := Event{Type: evType, Resource: &handler.TestHandler{}}
-		err := client.SubscribeEditor(evType, CallbackEventHandler(func(ev Event) bool {
+		err := client.SubscribeEditor(evType, FuncEventHandler(func(ev Event) bool {
 			defer wg.Done()
 			return false
 		}))

@@ -3,6 +3,7 @@ package browser
 import (
 	"errors"
 	"fmt"
+	"io"
 
 	"github.com/ernestrc/go-tui"
 	"github.com/ernestrc/go-tui/cell"
@@ -12,22 +13,19 @@ import (
 )
 
 var (
-	// ErrInvalidSave is returned when trying to save a buffer that it's not a file
-	// in the file system.
-	ErrInvalidSave = errors.New("Cannot save this buffer")
-	// ErrBufferNotFree is returned when a buffer is being used in call to
+	// ErrTabNotFree is returned when a tab is being used in call to
 	// SetContent but it's already owned by another Window.
-	ErrBufferNotFree = errors.New("Buffer already rendered in another Window")
+	ErrTabNotFree = errors.New("Tab already rendered in Window")
 
 	logBufDrawTimes = 2
 )
 
 // Component renders a browser-like tui.Compontent and exposes an API
-// to open new windows, add new buffers, and switch between buffers.
+// to open new windows, add new tabs, and switch between tabs.
 //
-// All tui.Handlers installed other than via NewBuffer are considered ephemeral,
+// All tui.Handlers installed other than via NewTab are considered ephemeral,
 // and will be destroyed either when windows close or when they return exit=true
-// to a call to Handle. Conversely, tui.Handlers installed via NewBuffer
+// to a call to Handle. Conversely, tui.Handlers installed via NewTab
 // will remain as a tab and can be managed independently from windows.
 type Component struct {
 	logBuf     cell.Buffer
@@ -41,7 +39,7 @@ type Component struct {
 
 	config       Config
 	startHandler Handler
-	buffers      []*buffer
+	buffers      []*Tab
 	windows      map[uint64]*browserWindow
 	tabsHeight   int
 }
@@ -88,11 +86,11 @@ func (w *browserWindow) onWindowClosed(fn func()) {
 
 func (w *browserWindow) Content() (Handler, error) {
 	h := w.win.Content().(Handler)
-	buf, ok := h.(*buffer)
+	t, ok := h.(*Tab)
 	if !ok {
 		return h.(*browserContent).Handler, nil
 	}
-	return buf, nil
+	return t, nil
 }
 
 func (w *browserWindow) SetContent(h Handler) error {
@@ -170,8 +168,8 @@ func (c *Component) Init(config Config) {
 
 	c.tabs.Init()
 	c.tabs.OnClick = func(id int) {
-		buf := c.buffers[id]
-		err := c.Focus().SetContent(buf)
+		t := c.buffers[id]
+		err := c.tryUpdateWindowContent(c.Focus().(*browserWindow), t)
 		if err != nil {
 			c.setError(err)
 		}
@@ -184,13 +182,13 @@ func (c *Component) Init(config Config) {
 	}
 	startText := component.StringBackgroundAttr(c.config.StartText,
 		c.config.StartTextAttr, 0, c.config.StartTextBackgroundAttr)
-	c.startHandler = CallbackHandler(handler.Nop(startText), func() {})
+	c.startHandler = &browserContent{Handler: CallbackHandler(handler.Nop(startText), func() {}), c: c}
 	c.wm.Init(c.startHandler, handlerWmConfig)
 	_ = c.newWindow(c.wm.Focus()) // init handler with initial window
 	c.wmVirt = handler.Virtual{Virtual: component.Virtual{C: &c.wm}}
 	c.tabsVirt = handler.Virtual{Virtual: component.Virtual{C: &c.tabs}}
 	c.frames.Init(&c.tabsVirt.Virtual, &c.wmVirt.Virtual)
-	c.buffers = make([]*buffer, 0)
+	c.buffers = make([]*Tab, 0)
 
 	// make sure that frame union attrs are same as window manager attrs
 	c.frames.Attributes = config.WindowManagerConfig.FrameAttr
@@ -205,28 +203,38 @@ func (c *Component) Init(config Config) {
 	return
 }
 
-// NewBuffer adds a new buffer to the list of buffers on this Component.
-func (c *Component) NewBuffer(name string, h tui.Handler, f FlusherCloser) Handler {
-	b := newBuffer(c, name, h, f)
-	c.buffers = append(c.buffers, b)
-	c.tabs.Add(b.name)
-	return b
+// NewTab adds a new tab to the list of tabs on this Component.
+func (c *Component) NewTab(name string, h tui.Handler, f io.Closer) *Tab {
+	t := newTab(c, name, h, f)
+	c.buffers = append(c.buffers, t)
+	c.tabs.Add(t.name)
+	c.setFocusIfStartHandler(t)
+	return t
 }
 
-func (c *Component) closeBuffer(buf *buffer) error {
-	err := buf.Close()
+func (c *Component) setFocusIfStartHandler(t *Tab) {
+	win := c.focus()
+
+	h := win.win.Content()
+	if h == c.startHandler {
+		win.SetContent(t)
+	}
+}
+
+func (c *Component) closeTab(t *Tab) error {
+	err := t.doClose()
 	if err != nil && c.config.Logger != nil {
-		c.config.Logger.Warningf("buffer Close error: %v", err)
+		c.config.Logger.Warningf("tab Close error: %v", err)
 	}
 	return err
 }
 
-func (c *Component) doRemoveBuffer(buf *buffer) {
-	id := c.findBufferID(buf)
-	if !buf.free {
-		panic("trying to remove buffer that is still attached to a window")
+func (c *Component) doRemoveTab(t *Tab) {
+	id := c.findTabID(t)
+	if !t.free {
+		panic("trying to remove tab that is still attached to a window")
 	}
-	defer c.closeBuffer(buf)
+	defer c.closeTab(t)
 
 	c.buffers = append(c.buffers[:id], c.buffers[id+1:]...)
 	ok := c.tabs.Remove(id)
@@ -235,40 +243,40 @@ func (c *Component) doRemoveBuffer(buf *buffer) {
 	}
 }
 
-func (c *Component) findBufferID(buf *buffer) int {
+func (c *Component) findTabID(t *Tab) int {
 	for i, f := range c.buffers {
-		if f == buf {
+		if f == t {
 			return i
 		}
 	}
-	panic("could not find buffer")
+	panic("could not find tab")
 }
 
-func (c *Component) browserBufferID(win *browserWindow) (
-	*buffer, int,
+func (c *Component) browserTabID(win *browserWindow) (
+	*Tab, int,
 ) {
-	buf, ok := browserBufferAtWindow(win)
+	t, ok := browserTabAtWindow(win)
 	if !ok {
 		return nil, 0
 	}
-	return buf, c.findBufferID(buf)
+	return t, c.findTabID(t)
 }
 
-func (c *Component) updateWindowBuffer(win *browserWindow, bufferID int) bool {
-	if bufferID >= len(c.buffers) {
-		panic(fmt.Sprintf("invalid buffer at index: %d", bufferID))
+func (c *Component) updateWindowTab(win *browserWindow, tabID int) bool {
+	if tabID >= len(c.buffers) {
+		panic(fmt.Sprintf("invalid tab at index: %d", tabID))
 	}
-	buf := c.buffers[bufferID]
-	if buf.free {
-		c.updateWindowContent(win, buf)
+	t := c.buffers[tabID]
+	if t.free {
+		c.updateWindowContent(win, t)
 		return true
 	}
 	return false
 }
 
-// UpdateWindowBufferNextFree updates win with the next available buffer.
-func (c *Component) UpdateWindowBufferNextFree(win Window) bool {
-	freeBufs := c.freeBuffers()
+// UpdateWindowTabNextFree updates win with the next available tab.
+func (c *Component) UpdateWindowTabNextFree(win Window) bool {
+	freeBufs := c.freeTabs()
 	if len(freeBufs) != 0 {
 		c.updateWindowContent(win.(*browserWindow), c.buffers[freeBufs[0]])
 		return true
@@ -277,9 +285,9 @@ func (c *Component) UpdateWindowBufferNextFree(win Window) bool {
 	return false
 }
 
-// UpdateWindowBufferLastFree updates win with the last available buffer.
-func (c *Component) UpdateWindowBufferLastFree(win Window) bool {
-	freeBufs := c.freeBuffers()
+// UpdateWindowTabLastFree updates win with the last available tab.
+func (c *Component) UpdateWindowTabLastFree(win Window) bool {
+	freeBufs := c.freeTabs()
 	if len(freeBufs) != 0 {
 		c.updateWindowContent(win.(*browserWindow), c.buffers[freeBufs[len(freeBufs)-1]])
 		return true
@@ -288,12 +296,12 @@ func (c *Component) UpdateWindowBufferLastFree(win Window) bool {
 	return false
 }
 
-// UpdateWindowBufferPrev updates win with the buffer before the current buffer.
-func (c *Component) UpdateWindowBufferPrev(win Window) bool {
+// UpdateWindowTabPrev updates win with the tab before the current tab.
+func (c *Component) UpdateWindowTabPrev(win Window) bool {
 	bWin := win.(*browserWindow)
-	buf, id := c.browserBufferID(bWin)
-	if buf == nil {
-		return c.UpdateWindowBufferNextFree(win)
+	t, id := c.browserTabID(bWin)
+	if t == nil {
+		return c.UpdateWindowTabNextFree(win)
 	}
 	for i := 0; i < len(c.buffers); i++ {
 		if id == 0 {
@@ -301,26 +309,26 @@ func (c *Component) UpdateWindowBufferPrev(win Window) bool {
 		} else {
 			id--
 		}
-		if c.updateWindowBuffer(bWin, id) {
+		if c.updateWindowTab(bWin, id) {
 			return true
 		}
 	}
 	return false
 }
 
-// UpdateWindowBufferNext updates win with the buffer after the current buffer.
-func (c *Component) UpdateWindowBufferNext(win Window) bool {
+// UpdateWindowTabNext updates win with the tab after the current tab.
+func (c *Component) UpdateWindowTabNext(win Window) bool {
 	bWin := win.(*browserWindow)
-	buf, id := c.browserBufferID(bWin)
-	if buf == nil {
-		return c.UpdateWindowBufferNextFree(win)
+	t, id := c.browserTabID(bWin)
+	if t == nil {
+		return c.UpdateWindowTabNextFree(win)
 	}
 	for i := 0; i < len(c.buffers); i++ {
 		id++
 		if id == len(c.buffers) {
 			id = 0
 		}
-		if c.updateWindowBuffer(bWin, id) {
+		if c.updateWindowTab(bWin, id) {
 			return true
 		}
 	}
@@ -345,9 +353,9 @@ func (c *Component) onUnmount(h Handler, reason string) {
 func (c *Component) tryUpdateWindowContent(
 	win *browserWindow, content Handler,
 ) error {
-	if b, ok := content.(*buffer); ok {
+	if b, ok := content.(*Tab); ok {
 		if !b.free {
-			return ErrBufferNotFree
+			return ErrTabNotFree
 		}
 	}
 	c.updateWindowContent(win, content)
@@ -357,9 +365,9 @@ func (c *Component) tryUpdateWindowContent(
 func (c *Component) updateWindowContent(
 	win *browserWindow, content Handler,
 ) Handler {
-	newBuf, ok := content.(*buffer)
+	newBuf, ok := content.(*Tab)
 	if ok {
-		id := c.findBufferID(newBuf)
+		id := c.findTabID(newBuf)
 		c.tabs.SetFocus(id)
 		newBuf.setWindow()
 	} else {
@@ -374,15 +382,15 @@ func (c *Component) updateWindowContent(
 	return oldComponent
 }
 
-func browserBufferAtWindow(win *browserWindow) (*buffer, bool) {
-	buf, ok := win.win.Content().(*buffer)
-	return buf, ok
+func browserTabAtWindow(win *browserWindow) (*Tab, bool) {
+	t, ok := win.win.Content().(*Tab)
+	return t, ok
 }
 
-// RemoveAllBuffers removes all buffers but the last one.
-func (c *Component) RemoveAllBuffers() {
-	for _, buf := range c.buffers {
-		c.closeBuffer(buf)
+// RemoveAllTabs removes all tabs but the last one.
+func (c *Component) RemoveAllTabs() {
+	for _, t := range c.buffers {
+		c.closeTab(t)
 	}
 
 	c.wm.Iterate(func(w handler.Window) {
@@ -397,7 +405,7 @@ func (c *Component) RemoveAllBuffers() {
 	c.buffers = c.buffers[:0]
 }
 
-func (c *Component) freeBuffers() []int {
+func (c *Component) freeTabs() []int {
 	freeBufs := make([]int, 0)
 	for i, b := range c.buffers {
 		if b.free {
@@ -407,9 +415,9 @@ func (c *Component) freeBuffers() []int {
 	return freeBufs
 }
 
-// returns the next free buffer or an empty Handler
-func (c *Component) getFreeBuffer() (Handler, bool) {
-	freeBufs := c.freeBuffers()
+// returns the next free tab or an empty Handler
+func (c *Component) getFreeTab() (Handler, bool) {
+	freeBufs := c.freeTabs()
 	if len(freeBufs) == 0 {
 		return c.startHandler, false
 	}
@@ -418,32 +426,24 @@ func (c *Component) getFreeBuffer() (Handler, bool) {
 	return c.buffers[id], true
 }
 
-// RemoveWindowBuffer removes the buffer at win. It returns false
-// if the replacement is just an empty buffer because all buffers have been
-// removed.
-func (c *Component) RemoveWindowBuffer(win Window) bool {
-	buf, isNotEmptyBuffer := c.getFreeBuffer()
-	oldComponent := c.updateWindowContent(win.(*browserWindow), buf)
-	oldBuf, ok := oldComponent.(*buffer)
+// RemoveWindowContent removes the content at win. It returns false
+// if content was replaced with start handler because the content at win
+// was the last content in this Component.
+func (c *Component) RemoveWindowContent(win Window) bool {
+	t, isNotStartHandler := c.getFreeTab()
+	oldComponent := c.updateWindowContent(win.(*browserWindow), t)
+	oldTab, ok := oldComponent.(*Tab)
 	if ok {
-		c.doRemoveBuffer(oldBuf)
+		c.doRemoveTab(oldTab)
 	}
-	return isNotEmptyBuffer
+	return isNotStartHandler
 }
 
-// FlushBuffer flushes the contents of the buffer at win, if this buffer
-// was created with a FlusherCloser. See NewBuffer.
-func (c *Component) FlushBuffer(win Window) error {
-	buf, ok := browserBufferAtWindow(win.(*browserWindow))
-	if !ok {
-		return ErrInvalidSave
-	}
-	if buf.flusherCloser == nil {
-		return ErrInvalidSave
-	}
-
-	return buf.flusherCloser.Flush()
-}
+// TODO RemoveTab removes t from this Component. It returns false
+// if this tab was active in one of the windows and the replacement
+// is the start handler, because all tabs have been removed.
+// func (c *Component) RemoveTab(t *Tab) bool {
+// }
 
 func (c *Component) splitRegular(
 	split func(*handler.WindowManager, tui.Handler) handler.Window,
@@ -490,8 +490,8 @@ func (c *Component) split(
 	split func(*handler.WindowManager, tui.Handler) handler.Window,
 	h Handler,
 ) *browserWindow {
-	if buf, ok := h.(*buffer); ok {
-		buf.setWindow()
+	if t, ok := h.(*Tab); ok {
+		t.setWindow()
 	} else {
 		h = &browserContent{
 			Handler: h,
@@ -504,7 +504,7 @@ func (c *Component) split(
 
 // SplitVerticalRight opens a new window tile to the right of the
 // current window in focus and initializes it with h.
-// Note that if h is not a handler created with NewBuffer
+// Note that if h is not a handler created with NewTab
 // the handler is cleaned as soon as the window's content is swapped.
 func (c *Component) SplitVerticalRight(h Handler) Window {
 	return c.splitRegular((*handler.WindowManager).SplitVertical, h)
@@ -512,21 +512,21 @@ func (c *Component) SplitVerticalRight(h Handler) Window {
 
 // SplitVerticalLeft opens a new window tile to the left of the
 // current window in focus and initializes it with h.
-// Note that if h is not a handler created with NewBuffer
+// Note that if h is not a handler created with NewTab
 // the handler is cleaned as soon as the window's content is swapped.
 func (c *Component) SplitVerticalLeft(h Handler) Window {
 	return c.splitInverted((*handler.WindowManager).SplitVertical, h)
 }
 
 // SplitHorizontalBelow opens a new window tile below the current window in focus
-// and initializes it with h. Note that if h is not a handler created with NewBuffer
+// and initializes it with h. Note that if h is not a handler created with NewTab
 // the handler is cleaned as soon as the window's content is swapped.
 func (c *Component) SplitHorizontalBelow(h Handler) Window {
 	return c.splitRegular((*handler.WindowManager).SplitHorizontal, h)
 }
 
 // SplitHorizontalAbove opens a new window tile above the current window in focus
-// and initializes it with h. Note that if h is not a handler created with NewBuffer
+// and initializes it with h. Note that if h is not a handler created with NewTab
 // the handler is cleaned as soon as the window's content is swapped.
 func (c *Component) SplitHorizontalAbove(h Handler) Window {
 	return c.splitInverted((*handler.WindowManager).SplitHorizontal, h)
@@ -561,8 +561,8 @@ func (c *Component) Resize(width, height int) {
 // Draw satisfies tui.Component
 func (c *Component) Draw(w term.Writer) {
 	c.tabs.ResetFocus()
-	for id, buf := range c.buffers {
-		if !buf.free {
+	for id, t := range c.buffers {
+		if !t.free {
 			c.tabs.SetFocus(id)
 		}
 	}
@@ -634,7 +634,7 @@ func (c *Component) FocusUp() bool {
 // Close closes the resources associated with this browser.
 func (c *Component) Close() (ret error) {
 	for _, f := range c.buffers {
-		err := c.closeBuffer(f)
+		err := c.closeTab(f)
 		if err != nil {
 			ret = err
 		}

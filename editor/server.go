@@ -7,9 +7,12 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ernestrc/go-tui/browser"
 	"github.com/ernestrc/go-tui/proto"
 	log "github.com/sirupsen/logrus"
 )
+
+//go:generate mockgen -destination=./event_handler_gomock.go -package editor -self_package editor -source server.go
 
 // Server serves an Editor over GRPC.
 type Server struct {
@@ -30,6 +33,26 @@ type Server struct {
 
 	failureTimeout time.Duration
 	errChan        chan error
+}
+
+// helps map real Handlers with token.Handler
+type serverEventHandler struct {
+	s      *Server
+	client *eventHandlerClient
+}
+
+func (s serverEventHandler) Handle(ev Event) bool {
+	brokerID, ok := s.s.nameToID[ev.ResourceName]
+	if !ok {
+		s.s.tryLog("(%p editor.Server): could NOT dispatch event: handler with resource name %s not found",
+			s.s, ev.ResourceName)
+		return false
+	}
+	ev.Resource = browser.Token{ID: uint64(brokerID)}
+
+	// cleaning up upon exit=true is performed via quitCallback
+	// of eventHandlerClient so there's no need to check for exit here.
+	return s.client.Handle(ev)
 }
 
 // NewServer allocates storage for a new Server and initializes it.

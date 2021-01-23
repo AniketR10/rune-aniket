@@ -1,9 +1,7 @@
 package editor
 
 import (
-	"errors"
 	"fmt"
-	"path/filepath"
 	"strings"
 
 	"github.com/ernestrc/go-tui"
@@ -24,37 +22,13 @@ const (
 	modeCommand
 )
 
-type openFileFunc func(filePath string,
-	buf *cell.Buffer, swapDir string) (browser.FlusherCloser, error)
-
-type recoverFileFunc func(filePath,
-	swapFilePath string, buf *cell.Buffer) (browser.FlusherCloser, error)
-
-// TODO move all editor/browser ifc satisfaction code to a "Component" structure
-// that can be tested easily.
-
-// TODO if file is already open, do not return error, switch to it!
-
 // Ex satisfies browser.Browser and tui.Handler by wrapping a browser.Component
 // to provide an ex editor interface.
 type Ex struct {
-	openFileFn      openFileFunc
-	recoverFileFn   recoverFileFunc
-	interruptDraw   func()
-	comp            browser.Component
-	commandBuf      *cell.Buffer
-	cmdVirt         handler.Virtual
-	ed              Editor
-	config          browser.Config
-	keymap          map[term.Event]term.Event
-	termSubscribers map[term.Event]browser.EventHandler
-	edSubscribers   map[EventType][]EventHandler
-	mode            mode
-}
-
-func newOsHandler() *Ex {
-	ret := new(Ex)
-	return ret
+	Component
+	commandBuf *cell.Buffer
+	cmdVirt    handler.Virtual
+	mode       mode
 }
 
 // NewEx allocates storage for a new Ex and initializes it.
@@ -67,164 +41,41 @@ func NewEx(ed Editor, opts ...browser.Option) (e *Ex, err error) {
 	return
 }
 
-func (e *Ex) initConstructors() {
-	if e.openFileFn == nil {
-		e.openFileFn = func(filePath string,
-			buf *cell.Buffer, swapDir string) (browser.FlusherCloser, error) {
-			return NewFileBuffer(filePath, buf, swapDir)
-		}
-	}
-
-	if e.recoverFileFn == nil {
-		e.recoverFileFn = func(filePath,
-			swapFilePath string, buf *cell.Buffer) (browser.FlusherCloser, error) {
-			return RecoverFileBuffer(filePath, swapFilePath, buf)
-		}
-	}
-	if e.interruptDraw == nil {
-		e.interruptDraw = term.Interrupt
-	}
-}
-
-func (e *Ex) tryLog(msg string, args ...interface{}) {
-	if e.config.Logger != nil {
-		e.config.Logger.Debugf(msg, args...)
-	}
-}
-
-func (e *Ex) openSetFocus(filename string, recoveryName string) error {
-	h, err := e.newBufferWithFile(filename, recoveryName)
-	if err != nil {
-		return err
-	}
-	return e.comp.Focus().SetContent(h)
-}
-
 // Init initializes this Ex with the given editor and Options.
 // It returns an error if an initial filepath was given through WithFilePath option
 // and the file failed to be opened.
 func (e *Ex) Init(ed Editor, opts ...browser.Option) (err error) {
-	e.initConstructors()
-	e.config = browser.DefaultConfig()
+	e.Component.Init(ed, opts...)
 
-	for _, o := range opts {
-		o(&e.config)
-	}
-
-	e.comp.Init(e.config)
-
-	e.ed = ed
 	e.commandBuf = cell.NewBuffer()
 	e.cmdVirt = browser.NewMessageSpan(e.commandBuf, commandBarAttr)
 	e.mode = modeDefault
-	e.termSubscribers = make(map[term.Event]browser.EventHandler)
-	e.edSubscribers = make(map[EventType][]EventHandler)
-
-	if e.config.RecoveryFilepath != "" {
-		if len(e.config.Filepaths) != 1 {
-			return errors.New("only one file expected if recovery file is passed")
-		}
-		err = e.openSetFocus(e.config.Filepaths[0], e.config.RecoveryFilepath)
-		return
-	}
-
-	for _, filename := range e.config.Filepaths {
-		err = e.openSetFocus(filename, "")
-		if err != nil {
-			return
-		}
-	}
 
 	return
 }
 
-func (e *Ex) newCellBuffer() *cell.Buffer {
-	buf := cell.NewBuffer()
-	buf.InitWithTabspaces(e.config.Tabspaces)
-	if e.config.Logger != nil {
-		// NOTE: only enable when trying to debug low level buffer bugs
-		// as it degrades performance quite a bit.
-		// buf = buf.WithLogger(e.config.Logger)
-	}
-	return buf
-}
-
-// dispatches either flush or close events
-func (e *Ex) dispatchEvent(ev Event) {
-	subs, ok := e.edSubscribers[ev.Type]
-	if !ok {
-		return
-	}
-
-	remain := make([]EventHandler, 0, len(subs))
-	for _, h := range subs {
-		exit := h.Handle(ev)
-		if !exit {
-			remain = append(remain, h)
-		}
-	}
-	e.edSubscribers[ev.Type] = remain
-}
-
-func (e *Ex) newFileBuffer(filename, recSwapFile string, buf *cell.Buffer) (
-	ret *editorFlusherCloser, err error,
-) {
-	var fc browser.FlusherCloser
-	if recSwapFile != "" {
-		fc, err = e.recoverFileFn(filename, recSwapFile, buf)
-	} else {
-		fc, err = e.openFileFn(filename, buf, e.config.SwapDir)
-	}
-
-	if err != nil {
-		return nil, err
-	}
-
-	return &editorFlusherCloser{parent: e, fc: fc, name: filename}, nil
-}
-
-func (e *Ex) newBufferWithFile(
-	filename, recoveryFilename string,
-) (browser.Handler, error) {
-	buf := e.newCellBuffer()
-	fc, err := e.newFileBuffer(filename, recoveryFilename, buf)
-	if err != nil {
-		e.tryLog("error opening new file buffer: %v", err)
-		e.setError(err)
-		return nil, err
-	}
-
-	editor, _ := e.ed.Edit(filename, buf)
-	fc.h = editor
-
-	browserBuf := e.comp.NewBuffer(filepath.Base(filename), editor, fc)
-	return browserBuf, nil
-}
-
 func (e *Ex) runSingleCommand(cmd string) (quit bool, err error) {
+	browser := e.Component.Browser()
 	switch cmd {
 	case "bprev":
-		e.comp.UpdateWindowBufferPrev(e.comp.Focus())
+		browser.UpdateWindowTabPrev(browser.Focus())
 	case "bnext":
-		e.comp.UpdateWindowBufferNext(e.comp.Focus())
+		browser.UpdateWindowTabNext(browser.Focus())
 	case "bclose":
-		e.comp.RemoveWindowBuffer(e.comp.Focus())
+		browser.RemoveWindowContent(browser.Focus())
 	case "bcloseAll":
-		e.comp.RemoveAllBuffers()
+		browser.RemoveAllTabs()
 	case "close":
-		err = e.comp.Focus().Close()
+		err = browser.Focus().Close()
 	case "wq", "wq!":
 		quit = true
 		fallthrough
 	case "w", "w!":
-		err = e.comp.FlushBuffer(e.comp.Focus())
+		err = e.Component.Flush(browser.Focus())
 	case "q!", "q":
 		quit = true
 	default:
 		err = fmt.Errorf("Unknown command: %s", cmd)
-	}
-	if err != nil {
-		e.tryLog("failed to run command '%s': %v", cmd, err)
 	}
 	return
 }
@@ -238,7 +89,12 @@ func (e *Ex) runCommand() (quit bool, err error) {
 
 	switch cmds[0] {
 	case "e":
-		err = e.openSetFocus(cmds[1], "")
+		var h browser.Handler
+		h, err = e.Component.OpenFileTab(cmds[1], "")
+		if err != nil {
+			return
+		}
+		e.Component.Browser().Focus().SetContent(h)
 	default:
 		err = fmt.Errorf("Unknown command: %s", cmd)
 	}
@@ -246,7 +102,7 @@ func (e *Ex) runCommand() (quit bool, err error) {
 }
 
 func (e *Ex) setError(err error) {
-	e.comp.SetMessage("Error: %s", err)
+	e.Component.Browser().SetMessage("Error: %s", err)
 }
 
 func (e *Ex) handleCommand(ev term.Event) (quit, handled bool) {
@@ -282,15 +138,6 @@ func (e *Ex) handleCommand(ev term.Event) (quit, handled bool) {
 	return
 }
 
-func (e *Ex) mapEvent(ev term.Event) term.Event {
-	// map event if applicable
-	mev, ok := e.keymap[ev]
-	if !ok {
-		mev = ev
-	}
-	return mev
-}
-
 func (e *Ex) handleCommandEvent(ev term.Event) bool {
 	if ev == e.config.CommandEvent {
 		e.setCommandMode()
@@ -313,40 +160,51 @@ func (e *Ex) handleProxy(ev term.Event) (
 	}
 
 	prev := ev
-	ev = e.mapEvent(ev)
+	ev, _ = e.Component.KeyMapping(ev)
 
-	if subscriber, ok := e.termSubscribers[ev]; ok {
-		subscriber.Handle(ev)
-		handled = true
+	// client subscriptions take precedence over ex key mappings
+	handled = e.Component.Publish(ev)
+	if handled {
 		return
 	}
 
+	browser := e.Component.Browser()
 	switch ev.Key {
 	case term.KeyCtrlA:
-		e.comp.RemoveAllBuffers()
+		browser.RemoveAllTabs()
 	case term.KeyCtrlW:
-		e.comp.RemoveWindowBuffer(e.comp.Focus())
+		browser.RemoveWindowContent(browser.Focus())
 	case term.KeyCtrlL:
-		e.comp.UpdateWindowBufferNext(e.comp.Focus())
+		browser.UpdateWindowTabNext(browser.Focus())
 	case term.KeyCtrlH:
-		e.comp.UpdateWindowBufferPrev(e.comp.Focus())
+		browser.UpdateWindowTabPrev(browser.Focus())
 	default:
 		// do not map for children
 		ev = prev
-		exit, handled = e.comp.Handle(ev)
+		exit, handled = browser.Handle(ev)
 		if handled {
 			return
 		}
 		// If ex is configured with character
 		// command mode trigger event (i.e. ':')
-		// then we rely on underlying editor being
-		// a modal editor, which does not handle
-		// the command trigger event.
+		// then we assume that the underlying editor is
+		// a modal editor, and so does not handle
+		// the command trigger event in its "initial" mode
+		// (in vi terms, this would be normal mode).
 		handled = e.handleCommandEvent(ev)
 		return
 	}
 
 	return false, true
+}
+
+func (e *Ex) setNormalMode() {
+	e.commandBuf.Reset()
+	e.mode = modeDefault
+}
+
+func (e *Ex) setCommandMode() {
+	e.mode = modeCommand
 }
 
 // Handle satisfies tui.Handler.
@@ -368,7 +226,7 @@ func (e *Ex) Cursor() (pos term.Coordinates, show bool) {
 		pos.X += len(e.commandBuf.String())
 		return pos, true
 	}
-	return e.comp.Cursor()
+	return e.Component.Browser().Cursor()
 }
 
 // Man satisfies tui.Handler.
@@ -379,12 +237,12 @@ func (e *Ex) Man() tui.Manual {
 // Resize satisfies tui.Component
 func (e *Ex) Resize(width, height int) {
 	browser.ResizeMessageSpan(&e.cmdVirt, width, height)
-	e.comp.Resize(width, height)
+	e.Component.Resize(width, height)
 }
 
 // Draw satisfies tui.Component
 func (e *Ex) Draw(w term.Writer) {
-	e.comp.Draw(w)
+	e.Component.Draw(w)
 
 	if e.mode == modeCommand {
 		e.cmdVirt.Draw(w)
@@ -393,129 +251,5 @@ func (e *Ex) Draw(w term.Writer) {
 
 // Close closes the resources associated with this browser.
 func (e *Ex) Close() error {
-	err := e.comp.Close()
-	if err != nil {
-		e.tryLog("browser.Component.Close error: %v", err)
-	}
-	return err
-}
-
-// Open opens the given file in a new browser tab.
-func (e *Ex) Open(resource string) (browser.Handler, error) {
-	return e.newBufferWithFile(resource, "")
-}
-
-// SetMessage formats the given msg and args and displays it on next Draw.
-func (e *Ex) SetMessage(msg string, args ...interface{}) error {
-	e.comp.SetMessage(msg, args...)
-	return nil
-}
-
-// MergeKeyMap takes the given keymap and merges it with the Browser's keymap
-// to override the current event key mappings.
-func (e *Ex) MergeKeyMap(keymap map[term.Event]term.Event) error {
-	if e.keymap == nil {
-		e.keymap = make(map[term.Event]term.Event)
-	}
-	for k, v := range keymap {
-		e.keymap[k] = v
-	}
-	return nil
-}
-
-func (e *Ex) setNormalMode() {
-	e.commandBuf.Reset()
-	e.mode = modeDefault
-}
-
-func (e *Ex) setCommandMode() {
-	e.mode = modeCommand
-}
-
-// SplitVerticalRight opens a new window tile to the right of the
-// current window in focus and initializes it with h.
-func (e *Ex) SplitVerticalRight(h browser.Handler) (browser.Window, error) {
-	return e.comp.SplitVerticalRight(h), nil
-}
-
-// SplitVerticalLeft opens a new window tile to the left of the
-// current window in focus and initializes it with h.
-func (e *Ex) SplitVerticalLeft(h browser.Handler) (browser.Window, error) {
-	return e.comp.SplitVerticalLeft(h), nil
-}
-
-// SplitHorizontalBelow opens a new window tile below the current window in focus
-// and initializes it with h.
-func (e *Ex) SplitHorizontalBelow(h browser.Handler) (browser.Window, error) {
-	return e.comp.SplitHorizontalBelow(h), nil
-}
-
-// SplitHorizontalAbove opens a new window tile above the current window in focus
-// and initializes it with h.
-func (e *Ex) SplitHorizontalAbove(h browser.Handler) (browser.Window, error) {
-	return e.comp.SplitHorizontalAbove(h), nil
-}
-
-func (e *Ex) unsubscribe(ev term.Event) {
-	delete(e.termSubscribers, ev)
-}
-
-// Subscribe subscribers h EventHandler to term.Event ev.
-func (e *Ex) Subscribe(ev term.Event, h browser.EventHandler) error {
-	if _, ok := e.termSubscribers[ev]; ok {
-		return fmt.Errorf("there's already a subscriber subscribed to: %#v", ev)
-	}
-	e.termSubscribers[ev] = exEventHandler{e: e, h: h}
-	return nil
-}
-
-// PublishInterrupt interrupts the main event loop to redraw the terminal.
-func (e *Ex) PublishInterrupt() error {
-	// prevent deadlock if PublishInterrupt is called during a Draw call.
-	go e.interruptDraw()
-	return nil
-}
-
-// Focus returns the current window in focus.
-func (e *Ex) Focus() (browser.Window, error) {
-	return e.comp.Focus(), nil
-}
-
-// Edit edits the resource with name and buffer with the underlying Editor
-// in a new browser buffer.
-func (e *Ex) Edit(name string, buf *cell.Buffer) (Handler, error) {
-	editor, _ := e.ed.Edit(name, buf)
-	_ = e.comp.NewBuffer(name, editor, nil)
-	return editor, nil
-}
-
-func (e *Ex) unsubscribeEditor(h EventHandler) {
-	for ev, subs := range e.edSubscribers {
-		remain := make([]EventHandler, 0, len(e.edSubscribers))
-		for _, sub := range subs {
-			if sub != h {
-				remain = append(remain, sub)
-			}
-		}
-		e.edSubscribers[ev] = remain
-	}
-}
-
-// SubscribeEditor subscribes h to editor events of type ev.
-func (e *Ex) SubscribeEditor(ev EventType, h EventHandler) error {
-	// delegate Edit dispatching to underlying editor
-	switch ev {
-	case EventTypeOpen:
-		return e.ed.SubscribeEditor(ev, h)
-	case EventTypeClose:
-	case EventTypeFlush:
-	}
-
-	h = exEditorEventHandler{e: e, h: h}
-	if _, ok := e.edSubscribers[ev]; !ok {
-		e.edSubscribers[ev] = make([]EventHandler, 0, 1)
-	}
-
-	e.edSubscribers[ev] = append(e.edSubscribers[ev], h)
-	return nil
+	return e.Component.Close()
 }

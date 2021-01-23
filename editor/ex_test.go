@@ -13,12 +13,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type funcEventHandler func(term.Event) bool
-
-func (f funcEventHandler) Handle(ev term.Event) bool {
-	return f(ev)
-}
-
 type browserInternal interface {
 	browser.Browser
 	tui.Handler
@@ -55,13 +49,13 @@ func (t *testFileBuffer) Close() error {
 }
 
 func openTestFile(filePath string, buf *cell.Buffer, swapDir string) (
-	browser.FlusherCloser, error,
+	flusherCloser, error,
 ) {
 	return &testFileBuffer{}, nil
 }
 
 func recoverTestFile(filePath, swapFilePath string, buf *cell.Buffer) (
-	browser.FlusherCloser, error,
+	flusherCloser, error,
 ) {
 	return openTestFile(filePath, buf, "")
 }
@@ -272,7 +266,7 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 	h.Ch = 'Z' // helps identify in tests
 
 	err = b.Subscribe(term.Event{Type: term.EventKey, Ch: ']'},
-		funcEventHandler(func(ev term.Event) bool {
+		browser.FuncEventHandler(func(ev term.Event) bool {
 			b.SplitHorizontalBelow(h)
 			return false
 		}))
@@ -442,8 +436,8 @@ func newBrowserForSubscribeTest(t *testing.T, ev term.Event) (
 }
 
 func TestBrowserHandlerSubscribe(t *testing.T) {
+	ev := term.Event{Type: term.EventKey, Ch: '*'}
 	t.Run("proxies event to subscribed EventHandler", func(t *testing.T) {
-		ev := term.Event{Type: term.EventKey, Ch: '*'}
 		b, h, startingRune := newBrowserForSubscribeTest(t, ev)
 
 		exit, handled := b.Handle(ev)
@@ -451,7 +445,6 @@ func TestBrowserHandlerSubscribe(t *testing.T) {
 	})
 
 	t.Run("returns error on second event Subscribe", func(t *testing.T) {
-		ev := term.Event{Type: term.EventError}
 		b, h, startingRune := newBrowserForSubscribeTest(t, ev)
 
 		h2 := browser.NewTestHandler()
@@ -463,7 +456,6 @@ func TestBrowserHandlerSubscribe(t *testing.T) {
 	})
 
 	t.Run("upon handler exit, it unsubscribes EventHandler", func(t *testing.T) {
-		ev := term.Event{Type: term.EventKey, Ch: '*'}
 		b, h, startingRune := newBrowserForSubscribeTest(t, ev)
 		h.Exit = true
 

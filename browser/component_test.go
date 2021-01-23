@@ -36,7 +36,7 @@ func TestComponentCloseWindow(t *testing.T) {
 
 			var h Handler
 			h = NewTestHandler()
-			h = c.NewBuffer("OAK", h, nil)
+			h = c.NewTab("OAK", h, nil)
 
 			win := tcase.split(c, h)
 			require.Equal(t, 2, c.wm.Size())
@@ -44,7 +44,7 @@ func TestComponentCloseWindow(t *testing.T) {
 			assert.NoError(t, win.Close())
 			require.Equal(t, 1, c.wm.Size())
 
-			assert.Len(t, c.freeBuffers(), 1)
+			assert.Len(t, c.freeTabs(), 1)
 		})
 
 		t.Run(tcase.method+"Close is idempotent", func(t *testing.T) {
@@ -89,7 +89,7 @@ func TestComponentCloseWindow(t *testing.T) {
 	}
 }
 
-func TestComponentRemoveAllBuffers(t *testing.T) {
+func TestComponentRemoveAllTabs(t *testing.T) {
 	w1 := NewComponent(Config{})
 	w2 := NewComponent(Config{})
 	w2.SplitHorizontalAbove(NewTestHandler())
@@ -100,8 +100,8 @@ func TestComponentRemoveAllBuffers(t *testing.T) {
 		before      int
 		after       int
 	}{
-		{"removes all buffers with one window", w1, 3, 0},
-		{"removes all buffers with multiple windows", w2, 3, 0},
+		{"removes all tabs with one window", w1, 3, 0},
+		{"removes all tabs with multiple windows", w2, 3, 0},
 	}
 
 	for _, tcase := range tsuite {
@@ -109,21 +109,21 @@ func TestComponentRemoveAllBuffers(t *testing.T) {
 		before := tcase.before
 		after := tcase.after
 		t.Run(tcase.description, func(t *testing.T) {
-			handlers := [3]testFlushCloser{}
-			c.NewBuffer("a", &handlers[0], &handlers[0])
-			c.NewBuffer("b", &handlers[1], &handlers[1])
-			c.NewBuffer("c", &handlers[2], &handlers[2])
-			c.UpdateWindowBufferNextFree(c.Focus())
+			handlers := [3]testCloser{}
+			c.NewTab("a", &handlers[0], &handlers[0])
+			c.NewTab("b", &handlers[1], &handlers[1])
+			c.NewTab("c", &handlers[2], &handlers[2])
+			c.UpdateWindowTabNextFree(c.Focus())
 			c.ShiftFocus()
-			c.UpdateWindowBufferNextFree(c.Focus())
+			c.UpdateWindowTabNextFree(c.Focus())
 
 			assert.Equal(t, before, c.tabs.Size())
-			c.RemoveAllBuffers()
+			c.RemoveAllTabs()
 
 			assert.Equal(t, after, c.tabs.Size())
 			for _, h := range handlers {
 				assert.Equal(t, 1, h.closed)
-				// buffer does not get called unmount
+				// tab does not get called unmount
 				// because that's just for internal use
 				assert.Equal(t, 0, h.unmounted)
 			}
@@ -131,39 +131,22 @@ func TestComponentRemoveAllBuffers(t *testing.T) {
 	}
 }
 
-type testFlushCloser struct {
+type testCloser struct {
 	handler.TestHandler
-	flushed, closed, unmounted int
+	closed, unmounted int
 }
 
-func (t *testFlushCloser) Flush() error {
-	t.flushed++
-	return nil
-}
-
-func (t *testFlushCloser) Close() error {
+func (t *testCloser) Close() error {
 	t.closed++
 	return nil
 }
-func (t *testFlushCloser) OnUnmount() error {
+func (t *testCloser) OnUnmount() error {
 	t.unmounted++
 	return nil
 }
 
-func TestComponentFlushBuffer(t *testing.T) {
-	c := NewComponent(Config{})
-	mock := testFlushCloser{}
-	c.NewBuffer("a", &mock, &mock)
-	c.UpdateWindowBufferNextFree(c.Focus())
-
-	c.FlushBuffer(c.Focus())
-	assert.Equal(t, 1, mock.flushed)
-	assert.Equal(t, 0, mock.closed)
-	assert.Equal(t, 0, mock.unmounted)
-}
-
-func assertFreeBuffer(t *testing.T, h tui.Handler, free bool) {
-	assert.Equal(t, free, h.(*buffer).free)
+func assertFreeTab(t *testing.T, h tui.Handler, free bool) {
+	assert.Equal(t, free, h.(*Tab).free)
 }
 
 func assertWindowContent(t *testing.T, win Window, expected Handler) {
@@ -178,84 +161,86 @@ func TestComponentSetContent(t *testing.T) {
 		t.Run(tcase.method, func(t *testing.T) {
 			c := NewComponent(Config{})
 			win0 := c.Focus()
-			christmasBuffer := c.NewBuffer("Merry Christmas", NewTestHandler(), nil)
+			christmasTab := c.NewTab("Merry Christmas", NewTestHandler(), nil)
 
-			assertFreeBuffer(t, christmasBuffer, true)
-			require.NoError(t, win0.SetContent(christmasBuffer))
-			assertFreeBuffer(t, christmasBuffer, false)
-			assertWindowContent(t, win0, christmasBuffer)
-			assert.False(t, c.UpdateWindowBufferNext(win0))
+			// if component is rendering start text, then first call
+			// to NewTab should set the content to the new tab
+			assertFreeTab(t, christmasTab, false)
+			require.Error(t, win0.SetContent(christmasTab))
+			assertFreeTab(t, christmasTab, false)
+			assertWindowContent(t, win0, christmasTab)
+			assert.False(t, c.UpdateWindowTabNext(win0))
 
 			h2 := NopHandler(&handler.TestHandler{})
 			win1 := tcase.split(c, h2)
 			assertWindowContent(t, win1, h2)
-			require.Error(t, win1.SetContent(christmasBuffer))
+			require.Error(t, win1.SetContent(christmasTab))
 			assertWindowContent(t, win1, h2)
-			assertFreeBuffer(t, christmasBuffer, false)
+			assertFreeTab(t, christmasTab, false)
 
 			h3 := NopHandler(&handler.TestHandler{})
 			require.NoError(t, win1.SetContent(h3))
 			assertWindowContent(t, win1, h3)
-			assertFreeBuffer(t, christmasBuffer, false)
+			assertFreeTab(t, christmasTab, false)
 
 			h4 := NopHandler(&handler.TestHandler{})
 			require.NoError(t, win0.SetContent(h4))
 			assertWindowContent(t, win0, h4)
-			assertFreeBuffer(t, christmasBuffer, true)
+			assertFreeTab(t, christmasTab, true)
 		})
 	}
 }
 
-func TestComponentUpdateWindowBuffer(t *testing.T) {
+func TestComponentUpdateWindowTab(t *testing.T) {
 	for _, _tcase := range splitSuite {
 		tcase := _tcase
 		t.Run(tcase.method, func(t *testing.T) {
 			c := NewComponent(Config{})
 			win0 := c.Focus()
-			amzn := c.NewBuffer("AMZN", NewTestHandler(), nil)
-			c.UpdateWindowBufferNextFree(win0)
-			tsla := c.NewBuffer("TSLA", NewTestHandler(), nil)
-			goog := c.NewBuffer("GOOG", NewTestHandler(), nil)
+			amzn := c.NewTab("AMZN", NewTestHandler(), nil)
+			c.UpdateWindowTabNextFree(win0)
+			tsla := c.NewTab("TSLA", NewTestHandler(), nil)
+			goog := c.NewTab("GOOG", NewTestHandler(), nil)
 			win := tcase.split(c, goog)
 
-			assertFreeBuffer(t, amzn, false)
-			assertFreeBuffer(t, tsla, true)
-			assertFreeBuffer(t, goog, false)
+			assertFreeTab(t, amzn, false)
+			assertFreeTab(t, tsla, true)
+			assertFreeTab(t, goog, false)
 
 			for i := 0; i < 3; i++ {
-				assert.True(t, c.UpdateWindowBufferNext(win))
+				assert.True(t, c.UpdateWindowTabNext(win))
 			}
 
-			assertFreeBuffer(t, amzn, false)
-			assertFreeBuffer(t, tsla, false)
-			assertFreeBuffer(t, goog, true)
+			assertFreeTab(t, amzn, false)
+			assertFreeTab(t, tsla, false)
+			assertFreeTab(t, goog, true)
 
 			for i := 0; i < 3; i++ {
-				assert.True(t, c.UpdateWindowBufferPrev(win0))
+				assert.True(t, c.UpdateWindowTabPrev(win0))
 			}
 
-			assertFreeBuffer(t, amzn, true)
-			assertFreeBuffer(t, tsla, false)
-			assertFreeBuffer(t, goog, false)
+			assertFreeTab(t, amzn, true)
+			assertFreeTab(t, tsla, false)
+			assertFreeTab(t, goog, false)
 
-			assert.True(t, c.UpdateWindowBufferNextFree(win0))
+			assert.True(t, c.UpdateWindowTabNextFree(win0))
 
-			assertFreeBuffer(t, amzn, false)
-			assertFreeBuffer(t, tsla, false)
-			assertFreeBuffer(t, goog, true)
+			assertFreeTab(t, amzn, false)
+			assertFreeTab(t, tsla, false)
+			assertFreeTab(t, goog, true)
 
-			assert.True(t, c.UpdateWindowBufferLastFree(win0))
+			assert.True(t, c.UpdateWindowTabLastFree(win0))
 
-			assertFreeBuffer(t, amzn, true)
-			assertFreeBuffer(t, tsla, false)
-			assertFreeBuffer(t, goog, false)
+			assertFreeTab(t, amzn, true)
+			assertFreeTab(t, tsla, false)
+			assertFreeTab(t, goog, false)
 
 			assert.Error(t, win0.SetContent(tsla))
 			assert.NoError(t, win0.SetContent(amzn))
 
-			assertFreeBuffer(t, amzn, false)
-			assertFreeBuffer(t, tsla, false)
-			assertFreeBuffer(t, goog, true)
+			assertFreeTab(t, amzn, false)
+			assertFreeTab(t, tsla, false)
+			assertFreeTab(t, goog, true)
 
 			assertWindowContent(t, win0, amzn)
 			assertWindowContent(t, win, tsla)
@@ -307,41 +292,41 @@ func TestComponentHandlerUnmount(t *testing.T) {
 		t.Run(_tcase.method, func(t *testing.T) {
 			tsuite := []struct {
 				name string
-				fn   func(*testing.T, *Component, Window, *testFlushCloser)
+				fn   func(*testing.T, *Component, Window, *testCloser)
 			}{
 				{
-					"UpdateWindowBufferNextFree",
-					func(t *testing.T, c *Component, win Window, h *testFlushCloser) {
-						assert.True(t, c.UpdateWindowBufferNextFree(win))
+					"UpdateWindowTabNextFree",
+					func(t *testing.T, c *Component, win Window, h *testCloser) {
+						assert.True(t, c.UpdateWindowTabNextFree(win))
 					},
 				}, {
-					"UpdateWindowBufferNext",
-					func(t *testing.T, c *Component, win Window, h *testFlushCloser) {
-						assert.True(t, c.UpdateWindowBufferNext(win))
+					"UpdateWindowTabNext",
+					func(t *testing.T, c *Component, win Window, h *testCloser) {
+						assert.True(t, c.UpdateWindowTabNext(win))
 					},
 				}, {
-					"UpdateWindowBufferPrev",
-					func(t *testing.T, c *Component, win Window, h *testFlushCloser) {
-						assert.True(t, c.UpdateWindowBufferPrev(win))
+					"UpdateWindowTabPrev",
+					func(t *testing.T, c *Component, win Window, h *testCloser) {
+						assert.True(t, c.UpdateWindowTabPrev(win))
 					},
 				}, {
 					"Window.SetContent",
-					func(t *testing.T, c *Component, win Window, h *testFlushCloser) {
+					func(t *testing.T, c *Component, win Window, h *testCloser) {
 						assert.NoError(t, win.SetContent(NewTestHandler()))
 					},
 				}, {
 					"Window.Close",
-					func(t *testing.T, c *Component, win Window, h *testFlushCloser) {
+					func(t *testing.T, c *Component, win Window, h *testCloser) {
 						assert.NoError(t, win.Close())
 					},
 				}, {
-					"RemoveWindowBuffer",
-					func(t *testing.T, c *Component, win Window, h *testFlushCloser) {
-						assert.True(t, c.RemoveWindowBuffer(win))
+					"RemoveWindowContent",
+					func(t *testing.T, c *Component, win Window, h *testCloser) {
+						assert.True(t, c.RemoveWindowContent(win))
 					},
 				}, {
 					"Handle(exit=true)",
-					func(t *testing.T, c *Component, win Window, h *testFlushCloser) {
+					func(t *testing.T, c *Component, win Window, h *testCloser) {
 						h.Exit = true
 						h.Handled = true
 						exit, handled := c.Handle(term.Event{})
@@ -353,10 +338,10 @@ func TestComponentHandlerUnmount(t *testing.T) {
 
 			for _, tcase := range tsuite {
 				t.Run(tcase.name, func(t *testing.T) {
-					mock := &testFlushCloser{}
+					mock := &testCloser{}
 					c := NewComponent(cfg)
-					c.NewBuffer("Robinhood", NewTestHandler(), nil)
-					c.NewBuffer("Stash", NewTestHandler(), nil)
+					c.NewTab("Robinhood", NewTestHandler(), nil)
+					c.NewTab("Stash", NewTestHandler(), nil)
 					win := split(c, mock)
 
 					tcase.fn(t, c, win, mock)
