@@ -1,6 +1,7 @@
 package editor
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/ernestrc/go-tui"
@@ -147,6 +148,58 @@ func TestComponentTermSubscriber(t *testing.T) {
 		assert.Equal(t, 1, called)
 	})
 }
+
+func newTestComponentWithFile(
+	t *testing.T, filename string,
+) (*Component, browser.Handler) {
+	c, err := newTestComponent(&testEditor{})
+	require.NoError(t, err)
+	h, err := c.Open(filename)
+	require.NoError(t, err)
+	return c, h
+}
+
+func TestComponentOpen(t *testing.T) {
+	t.Run("opens a new tab", func(t *testing.T) {
+		myName := "It's_1am_and_I'm_very_tired.go"
+		c, h := newTestComponentWithFile(t, myName)
+
+		h2, ok := c.Browser().Tab(myName)
+		assert.True(t, ok)
+		assert.Equal(t, h, h2)
+	})
+
+	t.Run("it's idempotent", func(t *testing.T) {
+		myName := "La_Rosalia.mp3"
+
+		c, h := newTestComponentWithFile(t, myName)
+		_, ok := c.Browser().Tab(myName)
+		assert.True(t, ok)
+
+		c.openFileFn = func(filePath string,
+			buf *cell.Buffer, swapDir string) (flusherCloser, error) {
+			return nil, ErrFileAlreadyOpen
+		}
+
+		h2, err := c.Open(myName)
+		require.NoError(t, err)
+		assert.Equal(t, h, h2)
+	})
+
+	t.Run("bubbles up open file error", func(t *testing.T) {
+		myName := "lmao"
+		c, _ := newTestComponentWithFile(t, myName)
+		myErr := errors.New("oopsie daisy")
+		c.openFileFn = func(filePath string,
+			buf *cell.Buffer, swapDir string) (flusherCloser, error) {
+			return nil, myErr
+		}
+
+		_, err := c.Open(myName)
+		require.Error(t, err)
+	})
+}
+
 func TestComponentEditorSubscriber(t *testing.T) {
 	tsuite := []struct {
 		name    string

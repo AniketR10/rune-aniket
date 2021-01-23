@@ -212,6 +212,17 @@ func (c *Component) NewTab(name string, h tui.Handler, f io.Closer) *Tab {
 	return t
 }
 
+// Tab returns the tab with name and true if there's a tab with such name
+// or nil and false otherwise.
+func (c *Component) Tab(name string) (*Tab, bool) {
+	for _, t := range c.buffers {
+		if t.name == name {
+			return t, true
+		}
+	}
+	return nil, false
+}
+
 func (c *Component) setFocusIfStartHandler(t *Tab) {
 	win := c.focus()
 

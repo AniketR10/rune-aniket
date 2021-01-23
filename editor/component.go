@@ -191,6 +191,24 @@ func (c *Component) Init(ed Editor, opts ...browser.Option) (err error) {
 	return
 }
 
+func (c *Component) setFocusToTab(tabName string) (browser.Handler, error) {
+	t, ok := c.comp.Tab(tabName)
+	if !ok {
+		// NOTE: swap file was not cleaned up
+		// probably because prev process terminated
+		// abruptly.  Here we could interactively ask user
+		// what to do.
+		return nil, ErrFileAlreadyOpen
+	}
+	err := c.comp.Focus().SetContent(t)
+	if err != nil {
+		if err != browser.ErrTabNotFree {
+			return nil, err
+		}
+	}
+	return t, nil
+}
+
 // OpenFileTab opens the file at filename path, with an optional recovery file,
 // as a new browser tab. It's up to the caller to use the returned
 // browser.Handler and switch any of the active windows to use it.
@@ -200,9 +218,13 @@ func (c *Component) Init(ed Editor, opts ...browser.Option) (err error) {
 func (c *Component) OpenFileTab(
 	filename, recoveryFilename string,
 ) (browser.Handler, error) {
+	tabName := filepath.Base(filename)
 	buf := c.newCellBuffer()
 	fc, err := c.newFileBuffer(filename, recoveryFilename, buf)
 	if err != nil {
+		if err == ErrFileAlreadyOpen {
+			return c.setFocusToTab(tabName)
+		}
 		c.tryLog("error opening new file buffer: %v", err)
 		c.setError(err)
 		return nil, err
@@ -211,9 +233,7 @@ func (c *Component) OpenFileTab(
 	editor, _ := c.ed.Edit(filename, buf)
 	fc.h = editor
 
-	tab := c.comp.NewTab(filepath.Base(filename), editor, fc)
-
-	return tab, nil
+	return c.comp.NewTab(tabName, editor, fc), nil
 }
 
 // Open opens the given file in a new browser tab.
