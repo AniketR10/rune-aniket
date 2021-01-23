@@ -23,8 +23,8 @@ type testFlusherCloser struct{}
 func (t testFlusherCloser) Close() error { return nil }
 func (t testFlusherCloser) Flush() error { return nil }
 
-func newTestComponent(ed Editor, opts ...browser.Option) (*Component, error) {
-	c, err := NewComponent(ed, opts...)
+func newTestComponent(ed Editor) (*Component, error) {
+	c, err := NewComponent(ed, DefaultConfig())
 	if err != nil {
 		return nil, err
 	}
@@ -42,7 +42,7 @@ func newTestComponent(ed Editor, opts ...browser.Option) (*Component, error) {
 
 func TestComponentInterfaces(t *testing.T) {
 	// this test is just a compile-time test
-	c, err := NewComponent(&testEditor{})
+	c, err := NewComponent(&testEditor{}, DefaultConfig())
 	require.NoError(t, err)
 
 	var ed Editor

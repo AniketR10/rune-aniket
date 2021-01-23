@@ -74,7 +74,7 @@ func (h *safeHandler) Man() tui.Manual {
 func newTestRPCBrowser(t *testing.T,
 	destructor *func(),
 ) browserConstructor {
-	return func(ed Editor, opts ...browser.Option) (browserInternal, error) {
+	return func(ed Editor, opts ...Option) (browserInternal, error) {
 		var logger *log.Logger
 		// // uncomment to debug
 		// logger = log.New()
@@ -132,7 +132,7 @@ func TestIntegrationRPCBrowserDraw(t *testing.T) {
 
 func TestRPCBrowserCloseLeak(t *testing.T) {
 	var destructor func()
-	b, err := newTestRPCBrowser(t, &destructor)(&testEditor{}, browser.WithFilepath(""))
+	b, err := newTestRPCBrowser(t, &destructor)(&testEditor{}, WithFilepath(""))
 	require.NoError(t, err)
 	defer destructor()
 
@@ -149,7 +149,7 @@ func TestRPCBrowserCloseLeak(t *testing.T) {
 // NOTE: run go test -race in order for this test to be useful.
 func TestClientSynchronizeHandlers(t *testing.T) {
 	var destructor func()
-	b, err := newTestRPCBrowser(t, &destructor)(&testEditor{}, browser.WithFilepath(""))
+	b, err := newTestRPCBrowser(t, &destructor)(&testEditor{}, WithFilepath(""))
 	require.NoError(t, err)
 	defer destructor()
 	var wg sync.WaitGroup

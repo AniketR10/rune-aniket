@@ -8,6 +8,7 @@ import (
 
 	"github.com/ernestrc/go-tui/browser"
 	"github.com/ernestrc/go-tui/component"
+	"github.com/ernestrc/go-tui/editor"
 	"github.com/ernestrc/go-tui/handler"
 	"github.com/ernestrc/go-tui/plugin"
 	"github.com/ernestrc/go-tui/term"
@@ -230,7 +231,7 @@ func (c ideConfig) browser() (plugin.Config, bool) {
 }
 
 func (c ideConfig) browserTabspaces() (tabs int) {
-	tabs = browser.DefaultConfig().Tabspaces
+	tabs = editor.DefaultConfig().Tabspaces
 	cfg, ok := c.browser()
 	if !ok {
 		return
@@ -264,7 +265,7 @@ func (c ideConfig) browserStartText() (text string) {
 }
 
 func (c ideConfig) browserSwapDir() (dir string) {
-	dir = browser.DefaultConfig().SwapDir
+	dir = editor.DefaultConfig().SwapDir
 	cfg, ok := c.browser()
 	if !ok {
 		return

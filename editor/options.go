@@ -1,66 +1,37 @@
-package browser
+package editor
 
 import (
+	"github.com/ernestrc/go-tui/browser"
 	"github.com/ernestrc/go-tui/component"
 	"github.com/ernestrc/go-tui/term"
 	log "github.com/sirupsen/logrus"
 )
 
+// Config holds configuration for an browser.Component.
+type Config struct {
+	Tabspaces        int
+	SwapDir          string
+	Filepaths        []string
+	RecoveryFilepath string
+	CommandEvent     term.Event
+
+	browser.Config
+}
+
 // DefaultConfig returns the default Config.
 func DefaultConfig() Config {
 	return Config{
-		Tabspaces:           4,
-		Logger:              nil,
-		SwapDir:             "",
-		Filepaths:           nil,
-		RecoveryFilepath:    "",
-		CommandEvent:        term.Event{Ch: ':', Type: term.EventKey},
-		MessageBarAttr:      term.Attributes{Bg: term.ColorRed, Fg: term.ColorWhite},
-		FocusTabAttr:        term.Attributes{Fg: term.ColorWhite},
-		NonFocusTabAttr:     term.Attributes{Fg: term.ColorRed},
-		StartTextAttr:       term.Attributes{Fg: term.ColorRed | term.AttrBold},
-		FrameUnionCharSet:   component.DefaultFrameUnionCharSet(),
-		WindowManagerConfig: component.DefaultWindowManagerConfig(),
+		Tabspaces:        4,
+		SwapDir:          "",
+		Filepaths:        nil,
+		RecoveryFilepath: "",
+		CommandEvent:     term.Event{Ch: ':', Type: term.EventKey},
+		Config:           browser.DefaultConfig(),
 	}
 }
 
 // Option represents a configuration option for a browser.Handler.
 type Option func(*Config)
-
-// TODO all this options should be moved to editor package for use with ex.
-// Config holds configuration for an browser.Component.
-type Config struct {
-	Tabspaces        int
-	Logger           *log.Logger
-	SwapDir          string
-	Filepaths        []string
-	RecoveryFilepath string
-	CommandEvent     term.Event
-	StartText        string
-
-	StartTextAttr           term.Attributes
-	StartTextBackgroundAttr term.Attributes
-	MessageBarAttr          term.Attributes
-	FocusTabAttr            term.Attributes
-	NonFocusTabAttr         term.Attributes
-
-	component.FrameUnionCharSet
-	component.WindowManagerConfig
-}
-
-// WithLogger sets a logger that the editor can use to log debugging data.
-func WithLogger(l *log.Logger) Option {
-	return func(cfg *Config) {
-		cfg.Logger = l
-	}
-}
-
-// WithStartText sets the starting buffer default text.
-func WithStartText(text string) Option {
-	return func(cfg *Config) {
-		cfg.StartText = text
-	}
-}
 
 // WithTabspaces sets the number of spaces used to render a tab.
 func WithTabspaces(tabspaces int) Option {
@@ -75,24 +46,6 @@ func WithTabspaces(tabspaces int) Option {
 func WithSwapDir(dir string) Option {
 	return func(cfg *Config) {
 		cfg.SwapDir = dir
-	}
-}
-
-// WithFrameUnionCharSet configures the characters used to draw the frame union
-// between the browser tabs and the window manager.
-func WithFrameUnionCharSet(cs component.FrameUnionCharSet) Option {
-	return func(cfg *Config) {
-		cfg.FrameUnionCharSet = cs
-	}
-}
-
-// WithWindowManagerConfig returns an Option that defines
-// the underlying's WindowManager initialization configuration.
-// See handler.WindowManagerConfig for more info. If this option is not passed
-// DefaultWindowManagerConfig is utilized.
-func WithWindowManagerConfig(config component.WindowManagerConfig) Option {
-	return func(cfg *Config) {
-		cfg.WindowManagerConfig = config
 	}
 }
 
@@ -118,6 +71,38 @@ func WithFilepath(filepath string) Option {
 func WithCommandEvent(event term.Event) Option {
 	return func(cfg *Config) {
 		cfg.CommandEvent = event
+	}
+}
+
+// WithLogger sets a logger that the editor can use to log debugging data.
+func WithLogger(l *log.Logger) Option {
+	return func(cfg *Config) {
+		cfg.Logger = l
+	}
+}
+
+// WithStartText sets the starting buffer default text.
+func WithStartText(text string) Option {
+	return func(cfg *Config) {
+		cfg.StartText = text
+	}
+}
+
+// WithFrameUnionCharSet configures the characters used to draw the frame union
+// between the browser tabs and the window manager.
+func WithFrameUnionCharSet(cs component.FrameUnionCharSet) Option {
+	return func(cfg *Config) {
+		cfg.FrameUnionCharSet = cs
+	}
+}
+
+// WithWindowManagerConfig returns an Option that defines
+// the underlying's WindowManager initialization configuration.
+// See handler.WindowManagerConfig for more info. If this option is not passed
+// DefaultWindowManagerConfig is utilized.
+func WithWindowManagerConfig(config component.WindowManagerConfig) Option {
+	return func(cfg *Config) {
+		cfg.WindowManagerConfig = config
 	}
 }
 

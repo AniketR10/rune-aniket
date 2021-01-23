@@ -18,7 +18,7 @@ type browserInternal interface {
 	tui.Handler
 }
 
-type browserConstructor func(ed Editor, opts ...browser.Option) (browserInternal, error)
+type browserConstructor func(ed Editor, opts ...Option) (browserInternal, error)
 
 type testEditor struct {
 	name string
@@ -68,7 +68,7 @@ func newTestBrowserHandler() *Ex {
 }
 
 func TestBrowserHandlerDraw(t *testing.T) {
-	testBrowserHandlerDraw(t, func(ed Editor, opts ...browser.Option) (browserInternal, error) {
+	testBrowserHandlerDraw(t, func(ed Editor, opts ...Option) (browserInternal, error) {
 		b := newTestBrowserHandler()
 		err := b.Init(ed, opts...)
 		if err != nil {
@@ -250,7 +250,7 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 	// testutil.TestHandlerSequence maps ':' characters to the following event
 	// this is to work around ex's assumptions on underlying handler.
 	commandEvent := term.Event{Type: term.EventKey, Key: term.KeyCtrlBackslash}
-	b, err := constructor(&testEditor{}, browser.WithCommandEvent(commandEvent))
+	b, err := constructor(&testEditor{}, WithCommandEvent(commandEvent))
 	require.NoError(t, err)
 
 	testutil.TestHandlerSequence(t, b, 20, 10, cases)
@@ -522,8 +522,8 @@ func TestMultipleFilesStartup(t *testing.T) {
 
 	b := newTestBrowserHandler()
 	err := b.Init(&testEditor{},
-		browser.WithFilepath("cabin.go"),
-		browser.WithFilepath("wi.go"),
+		WithFilepath("cabin.go"),
+		WithFilepath("wi.go"),
 	)
 	require.NoError(t, err)
 

@@ -65,33 +65,33 @@ func (i *IDE) initPlugins() (ret []error) {
 func (i *IDE) init(cfgfilename, recfilename string, filenames ...string) error {
 	configErr := loadConfig(&i.ideConfig, cfgfilename)
 
-	opts := make([]browser.Option, 0)
+	opts := make([]editor.Option, 0)
 	viOpts := make([]vi.Option, 0)
 	pluginOpts := make([]plugin.Option, 0)
 
 	if recfilename != "" {
-		opts = append(opts, browser.WithRecoveryFile(recfilename))
+		opts = append(opts, editor.WithRecoveryFile(recfilename))
 	}
 
 	for _, filename := range filenames {
-		opts = append(opts, browser.WithFilepath(filename))
+		opts = append(opts, editor.WithFilepath(filename))
 	}
 
 	opts = append(opts,
-		browser.WithTabspaces(i.ideConfig.browserTabspaces()),
-		browser.WithStartText(i.ideConfig.browserStartText()),
-		browser.WithWindowManagerConfig(i.ideConfig.windowManagerConfig()),
-		browser.WithFrameUnionCharSet(i.ideConfig.frameUnionCharset()),
-		browser.WithCommandEvent(term.Event{Type: term.EventKey, Ch: ':'}),
-		browser.WithMessageBarAttr(i.ideConfig.messageBarAttr()),
-		browser.WithFocusTabAttr(i.ideConfig.focusTabAttr()),
-		browser.WithNonFocusTabAttr(i.ideConfig.nonFocusTabAttr()),
-		browser.WithStartTextAttr(i.ideConfig.startTextAttr()),
-		browser.WithStartTextBackgroundAttr(i.ideConfig.startTextBackgroundAttr()),
+		editor.WithTabspaces(i.ideConfig.browserTabspaces()),
+		editor.WithStartText(i.ideConfig.browserStartText()),
+		editor.WithWindowManagerConfig(i.ideConfig.windowManagerConfig()),
+		editor.WithFrameUnionCharSet(i.ideConfig.frameUnionCharset()),
+		editor.WithCommandEvent(term.Event{Type: term.EventKey, Ch: ':'}),
+		editor.WithMessageBarAttr(i.ideConfig.messageBarAttr()),
+		editor.WithFocusTabAttr(i.ideConfig.focusTabAttr()),
+		editor.WithNonFocusTabAttr(i.ideConfig.nonFocusTabAttr()),
+		editor.WithStartTextAttr(i.ideConfig.startTextAttr()),
+		editor.WithStartTextBackgroundAttr(i.ideConfig.startTextBackgroundAttr()),
 	)
 
 	if i.ideConfig.browserSwapDir() != "" {
-		opts = append(opts, browser.WithSwapDir(i.ideConfig.browserSwapDir()))
+		opts = append(opts, editor.WithSwapDir(i.ideConfig.browserSwapDir()))
 	}
 
 	viOpts = append(viOpts,
@@ -116,7 +116,7 @@ func (i *IDE) init(cfgfilename, recfilename string, filenames ...string) error {
 			DisableColors:   true,
 			TimestampFormat: time.StampMilli,
 		})
-		opts = append(opts, browser.WithLogger(l))
+		opts = append(opts, editor.WithLogger(l))
 		viOpts = append(viOpts, vi.WithLogger(l))
 		pluginOpts = append(pluginOpts, plugin.WithLogger(l))
 	}

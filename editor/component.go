@@ -16,7 +16,6 @@ type flusherCloser interface {
 	io.Closer
 }
 
-// TODO add its own configuration
 var (
 	// ErrInvalidSave is returned when trying to save a buffer that it's not a file
 	// in the file system.
@@ -37,7 +36,7 @@ type Component struct {
 	interruptDraw   func()
 	comp            browser.Component
 	ed              Editor
-	config          browser.Config
+	config          Config
 	keymap          map[term.Event]term.Event
 	termSubscribers map[term.Event]browser.EventHandler
 	edSubscribers   map[EventType][]EventHandler
@@ -85,9 +84,9 @@ func (h compEventHandler) Handle(ev term.Event) (exit bool) {
 }
 
 // NewComponent allocates storage for a new Component and initializes it.
-func NewComponent(ed Editor, opts ...browser.Option) (c *Component, err error) {
+func NewComponent(ed Editor, config Config) (c *Component, err error) {
 	c = new(Component)
-	err = c.Init(ed, opts...)
+	err = c.Init(ed, config)
 	if err != nil {
 		return
 	}
@@ -158,15 +157,11 @@ func (c *Component) newFileBuffer(
 // Init initializes this Component with the given editor and Options.
 // It returns an error if an initial filepath was given through WithFilePath option
 // and the file failed to be opened.
-func (c *Component) Init(ed Editor, opts ...browser.Option) (err error) {
+func (c *Component) Init(ed Editor, config Config) (err error) {
 	c.initConstructors()
-	c.config = browser.DefaultConfig()
+	c.config = config
 
-	for _, o := range opts {
-		o(&c.config)
-	}
-
-	c.comp.Init(c.config)
+	c.comp.Init(c.config.Config)
 
 	c.ed = ed
 	c.termSubscribers = make(map[term.Event]browser.EventHandler)

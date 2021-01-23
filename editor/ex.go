@@ -32,7 +32,7 @@ type Ex struct {
 }
 
 // NewEx allocates storage for a new Ex and initializes it.
-func NewEx(ed Editor, opts ...browser.Option) (e *Ex, err error) {
+func NewEx(ed Editor, opts ...Option) (e *Ex, err error) {
 	e = new(Ex)
 	err = e.Init(ed, opts...)
 	if err != nil {
@@ -44,12 +44,16 @@ func NewEx(ed Editor, opts ...browser.Option) (e *Ex, err error) {
 // Init initializes this Ex with the given editor and Options.
 // It returns an error if an initial filepath was given through WithFilePath option
 // and the file failed to be opened.
-func (e *Ex) Init(ed Editor, opts ...browser.Option) (err error) {
-	e.Component.Init(ed, opts...)
-
+func (e *Ex) Init(ed Editor, opts ...Option) (err error) {
 	e.commandBuf = cell.NewBuffer()
 	e.cmdVirt = browser.NewMessageSpan(e.commandBuf, commandBarAttr)
 	e.mode = modeDefault
+
+	config := DefaultConfig()
+	for _, o := range opts {
+		o(&config)
+	}
+	e.Component.Init(ed, config)
 
 	return
 }
