@@ -124,7 +124,7 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 │BBBBBBBBBBBBBBBBBB│
 │BBBBBBBBBBBBBBBBBB│
 └──────────────────┘`},
-		{":e other.go>",
+		{":e /tmp/other.go>",
 			`┌──────────────────┐
 │cabin.go  other.go│
 ├──────────────────┤

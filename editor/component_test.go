@@ -161,7 +161,7 @@ func newTestComponentWithFile(
 
 func TestComponentOpen(t *testing.T) {
 	t.Run("opens a new tab", func(t *testing.T) {
-		myName := "It's_1am_and_I'm_very_tired.go"
+		myName := "/tmp/It's_1am_and_I'm_very_tired.go"
 		c, h := newTestComponentWithFile(t, myName)
 
 		h2, ok := c.Browser().Tab(myName)
@@ -170,7 +170,7 @@ func TestComponentOpen(t *testing.T) {
 	})
 
 	t.Run("it's idempotent", func(t *testing.T) {
-		myName := "La_Rosalia.mp3"
+		myName := "/var/music/La_Rosalia.mp3"
 
 		c, h := newTestComponentWithFile(t, myName)
 		_, ok := c.Browser().Tab(myName)

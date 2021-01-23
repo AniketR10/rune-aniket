@@ -36,7 +36,7 @@ func TestComponentCloseWindow(t *testing.T) {
 
 			var h Handler
 			h = NewTestHandler()
-			h = c.NewTab("OAK", h, nil)
+			h = c.NewTab("OAK", "OAK", h, nil)
 
 			win := tcase.split(c, h)
 			require.Equal(t, 2, c.wm.Size())
@@ -110,9 +110,9 @@ func TestComponentRemoveAllTabs(t *testing.T) {
 		after := tcase.after
 		t.Run(tcase.description, func(t *testing.T) {
 			handlers := [3]testCloser{}
-			c.NewTab("a", &handlers[0], &handlers[0])
-			c.NewTab("b", &handlers[1], &handlers[1])
-			c.NewTab("c", &handlers[2], &handlers[2])
+			c.NewTab("a", "a", &handlers[0], &handlers[0])
+			c.NewTab("b", "b", &handlers[1], &handlers[1])
+			c.NewTab("c", "c", &handlers[2], &handlers[2])
 			c.UpdateWindowTabNextFree(c.Focus())
 			c.ShiftFocus()
 			c.UpdateWindowTabNextFree(c.Focus())
@@ -161,7 +161,7 @@ func TestComponentSetContent(t *testing.T) {
 		t.Run(tcase.method, func(t *testing.T) {
 			c := NewComponent(Config{})
 			win0 := c.Focus()
-			christmasTab := c.NewTab("Merry Christmas", NewTestHandler(), nil)
+			christmasTab := c.NewTab("Merry Christmas", "Merry Christmas", NewTestHandler(), nil)
 
 			// if component is rendering start text, then first call
 			// to NewTab should set the content to the new tab
@@ -197,10 +197,10 @@ func TestComponentUpdateWindowTab(t *testing.T) {
 		t.Run(tcase.method, func(t *testing.T) {
 			c := NewComponent(Config{})
 			win0 := c.Focus()
-			amzn := c.NewTab("AMZN", NewTestHandler(), nil)
+			amzn := c.NewTab("AMZN", "AMZN", NewTestHandler(), nil)
 			c.UpdateWindowTabNextFree(win0)
-			tsla := c.NewTab("TSLA", NewTestHandler(), nil)
-			goog := c.NewTab("GOOG", NewTestHandler(), nil)
+			tsla := c.NewTab("TSLA", "TSLA", NewTestHandler(), nil)
+			goog := c.NewTab("GOOG", "GOOG", NewTestHandler(), nil)
 			win := tcase.split(c, goog)
 
 			assertFreeTab(t, amzn, false)
@@ -340,8 +340,8 @@ func TestComponentHandlerUnmount(t *testing.T) {
 				t.Run(tcase.name, func(t *testing.T) {
 					mock := &testCloser{}
 					c := NewComponent(cfg)
-					c.NewTab("Robinhood", NewTestHandler(), nil)
-					c.NewTab("Stash", NewTestHandler(), nil)
+					c.NewTab("Robinhood", "Robinhood", NewTestHandler(), nil)
+					c.NewTab("Stash", "Stash", NewTestHandler(), nil)
 					win := split(c, mock)
 
 					tcase.fn(t, c, win, mock)

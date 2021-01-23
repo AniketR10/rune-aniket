@@ -16,7 +16,6 @@ type flusherCloser interface {
 	io.Closer
 }
 
-// TODO if file is already open, do not return error, switch to it!
 // TODO add its own configuration
 var (
 	// ErrInvalidSave is returned when trying to save a buffer that it's not a file
@@ -218,12 +217,11 @@ func (c *Component) setFocusToTab(tabName string) (browser.Handler, error) {
 func (c *Component) OpenFileTab(
 	filename, recoveryFilename string,
 ) (browser.Handler, error) {
-	tabName := filepath.Base(filename)
 	buf := c.newCellBuffer()
 	fc, err := c.newFileBuffer(filename, recoveryFilename, buf)
 	if err != nil {
 		if err == ErrFileAlreadyOpen {
-			return c.setFocusToTab(tabName)
+			return c.setFocusToTab(filename)
 		}
 		c.tryLog("error opening new file buffer: %v", err)
 		c.setError(err)
@@ -233,7 +231,8 @@ func (c *Component) OpenFileTab(
 	editor, _ := c.ed.Edit(filename, buf)
 	fc.h = editor
 
-	return c.comp.NewTab(tabName, editor, fc), nil
+	tabName := filepath.Base(filename)
+	return c.comp.NewTab(filename, tabName, editor, fc), nil
 }
 
 // Open opens the given file in a new browser tab.
@@ -355,7 +354,7 @@ func (c *Component) Focus() (browser.Window, error) {
 // in a new browser buffer.
 func (c *Component) Edit(name string, buf *cell.Buffer) (Handler, error) {
 	editor, _ := c.ed.Edit(name, buf)
-	_ = c.comp.NewTab(name, editor, nil)
+	_ = c.comp.NewTab(name, name, editor, nil)
 
 	c.dispatchEvent(Event{
 		Type:         EventTypeOpen,

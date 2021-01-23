@@ -204,19 +204,19 @@ func (c *Component) Init(config Config) {
 }
 
 // NewTab adds a new tab to the list of tabs on this Component.
-func (c *Component) NewTab(name string, h tui.Handler, f io.Closer) *Tab {
-	t := newTab(c, name, h, f)
+func (c *Component) NewTab(id, name string, h tui.Handler, f io.Closer) *Tab {
+	t := newTab(c, id, h, f)
 	c.buffers = append(c.buffers, t)
-	c.tabs.Add(t.name)
+	c.tabs.Add(name)
 	c.setFocusIfStartHandler(t)
 	return t
 }
 
 // Tab returns the tab with name and true if there's a tab with such name
 // or nil and false otherwise.
-func (c *Component) Tab(name string) (*Tab, bool) {
+func (c *Component) Tab(id string) (*Tab, bool) {
 	for _, t := range c.buffers {
-		if t.name == name {
+		if t.id == id {
 			return t, true
 		}
 	}

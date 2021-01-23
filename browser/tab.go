@@ -12,24 +12,24 @@ import (
 // with browser.Browser API. See browser.Component.NewTab for more details.
 type Tab struct {
 	parent  *Component
-	name    string
+	id      string
 	closer  io.Closer
 	handler tui.Handler
 	free    bool
 }
 
 // newTab allocates storage for a new tab and initializes it.
-func newTab(c *Component, name string, h tui.Handler, f io.Closer) *Tab {
+func newTab(c *Component, id string, h tui.Handler, f io.Closer) *Tab {
 	ret := new(Tab)
-	ret.init(c, name, h, f)
+	ret.init(c, id, h, f)
 	return ret
 }
 
-// Init initializes this tab with name, h as the Handler, and f as the
+// Init initializes this tab with id, h as the Handler, and f as the
 // io.Closer handle.
-func (b *Tab) init(c *Component, name string, h tui.Handler, f io.Closer) {
+func (b *Tab) init(c *Component, id string, h tui.Handler, f io.Closer) {
 	b.parent = c
-	b.name = name
+	b.id = id
 	b.closer = f
 	b.handler = h
 	b.free = true

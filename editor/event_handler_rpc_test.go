@@ -5,6 +5,7 @@ import (
 	"net"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/ernestrc/go-tui/browser"
 	"github.com/ernestrc/go-tui/proto"
@@ -119,6 +120,7 @@ func TestEventHandlerRPC(t *testing.T) {
 
 		// should cause failure
 		client.conn.(io.Closer).Close()
+		time.Sleep(gracefulShutdownWait)
 
 		wg.Add(1)
 		exit := client.Handle(ev)
