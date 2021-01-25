@@ -215,6 +215,22 @@ func TestComponentEditorSubscriber(t *testing.T) {
 			},
 		},
 		{
+			"OpenFileTab->EventTypeOpen",
+			EventTypeOpen,
+			func(t *testing.T, c *Component, resourceName string) {
+				_, err := c.OpenFileTab(resourceName, "")
+				assert.NoError(t, err)
+			},
+		},
+		{
+			"Open->EventTypeOpen",
+			EventTypeOpen,
+			func(t *testing.T, c *Component, resourceName string) {
+				_, err := c.Open(resourceName)
+				assert.NoError(t, err)
+			},
+		},
+		{
 			"Flush->EventTypeFlush",
 			EventTypeFlush,
 			func(t *testing.T, c *Component, resourceName string) {

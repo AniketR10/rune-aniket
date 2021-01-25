@@ -226,6 +226,12 @@ func (c *Component) OpenFileTab(
 	editor, _ := c.ed.Edit(filename, buf)
 	fc.h = editor
 
+	c.dispatchEvent(Event{
+		Type:         EventTypeOpen,
+		ResourceName: filename,
+		Resource:     editor,
+	})
+
 	tabName := filepath.Base(filename)
 	return c.comp.NewTab(filename, tabName, editor, fc), nil
 }
