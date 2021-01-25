@@ -365,9 +365,9 @@ func (c *Component) SetLocationList(h Handler, loc LocationList) error {
 }
 
 // Reader satisfies editor.Editor.
-// func (c *Component) Reader(h Handler) (cell.Reader, error) {
-// 	return c.ed.Reader(h)
-// }
+func (c *Component) Reader(h Handler) Reader {
+	return c.ed.Reader(h)
+}
 
 // Writer satisfies editor.Editor.
 func (c *Component) Writer(h Handler) Writer {

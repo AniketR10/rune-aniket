@@ -69,13 +69,24 @@ message DeleteResponse {
 	string str = 3;
 }
 
+message RawCellsRequest {
+	uint32 handler_id = 1;
+}
+
+message RawCellsResponse {
+	repeated CellRow rows = 1;
+}
+
 service Editor {
 	rpc Edit(EditRequest) returns (EditResponse);
 	rpc Subscribe(EditorSubscribeRequest) returns (EditorSubscribeResponse);
 	rpc SetLocationList(SetLocationListRequest) returns (SetLocationListResponse);
 
 
-	// cell.Writer
+	// Writer
 	rpc Insert(InsertRequest) returns (InsertResponse);
 	rpc Delete(DeleteRequest) returns (DeleteResponse);
+
+	// Reader
+	rpc RawCells(RawCellsRequest) returns (RawCellsResponse);
 }

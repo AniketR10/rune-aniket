@@ -355,6 +355,28 @@ func (s *Server) Delete(ctx context.Context, in *proto.DeleteRequest) (
 	return res, nil
 }
 
+// RawCells satisfies proto.EditorServer
+func (s *Server) RawCells(ctx context.Context, in *proto.RawCellsRequest) (
+	*proto.RawCellsResponse, error,
+) {
+	handlerID := in.GetHandlerId()
+
+	s.editor.Lock()
+	defer s.editor.Unlock()
+
+	h, ok := s.idToHandler[handlerID]
+	if !ok {
+		return nil, errHandlerNotFound
+	}
+
+	cells, err := s.editor.Reader(h).RawCells()
+	if err != nil {
+		return nil, err
+	}
+
+	return proto.NewRawCellsResponse(cells), nil
+}
+
 // Close closes all resources associated with this server.
 func (s *Server) Close() (err error) {
 	s.editor.Lock()

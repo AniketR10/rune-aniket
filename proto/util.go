@@ -33,20 +33,32 @@ func NewDrawResponse(comp tui.Component, width, height int) *DrawResponse {
 	return resp
 }
 
+// NewRawCellsResponse converts a buf into an RawCellsResponse.
+func NewRawCellsResponse(cells [][]term.Cell) *RawCellsResponse {
+	return &RawCellsResponse{Rows: rawCellsToProtoCells(cells)}
+}
+
 // BufferToEditRequest converts a buf into an EditRequest.
 func BufferToEditRequest(buf *cell.Buffer) EditRequest {
-	size := buf.Size()
+	return EditRequest{Buffer: rawCellsToProtoCells(buf.RawCells())}
+}
+
+func rawCellsToProtoCells(cells [][]term.Cell) []*CellRow {
+	var size int
+	for _, row := range cells {
+		size += len(row)
+	}
 
 	// these slabs reduce allocations from ~N (=num cells)
 	// to 4 which reduces this function's ns/op from 60 to 80%
-	rows := make([]*CellRow, buf.Rows())
-	protoCellRowSlabPtr := make([]CellRow, buf.Rows())
+	rows := make([]*CellRow, len(cells))
+	protoCellRowSlabPtr := make([]CellRow, len(cells))
 	cellRowSlab := make([]*Cell, size)
 	cellRowSlabIdx := 0
 	cellSlabPtr := make([]Cell, size)
 	cellSlabPtrIdx := 0
 
-	for y, row := range buf.RawCells() {
+	for y, row := range cells {
 		cells := cellRowSlab[cellRowSlabIdx : cellRowSlabIdx+len(row)]
 		cellRowSlabIdx += len(row)
 		for x, cell := range row {
@@ -59,16 +71,23 @@ func BufferToEditRequest(buf *cell.Buffer) EditRequest {
 		rows[y] = &protoCellRowSlabPtr[y]
 	}
 
-	return EditRequest{
-		Buffer: rows,
-	}
+	return rows
 }
 
 // EditRequestToBuffer converts an EditRequest into a cell.Buffer
 func EditRequestToBuffer(in *EditRequest) *cell.Buffer {
+	return rowsToBuffer(in.GetBuffer())
+}
+
+// RawCellsResponseToBuffer converts an EditRequest into a cell.Buffer
+func RawCellsResponseToBuffer(in *RawCellsResponse) *cell.Buffer {
+	return rowsToBuffer(in.GetRows())
+}
+
+func rowsToBuffer(in []*CellRow) *cell.Buffer {
 	w := cell.NewBufferWriter(math.MaxInt32, math.MaxInt32)
 
-	for y, rows := range in.GetBuffer() {
+	for y, rows := range in {
 		for x, cell := range rows.Cells {
 			w.SetCell(term.Coordinates{X: x, Y: y}, cell.ToModel())
 		}

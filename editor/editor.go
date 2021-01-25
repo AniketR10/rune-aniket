@@ -20,6 +20,11 @@ type Writer interface {
 	Delete(from, to term.Coordinates) (start, end term.Coordinates, str string, err error)
 }
 
+// Reader wraps a subset of cell.Reader behaviour with an API that can fail.
+type Reader interface {
+	RawCells() ([][]term.Cell, error)
+}
+
 // Editor is the interface that wraps an API to manage a text editor.
 type Editor interface {
 	// Edit opens a file and returns a tui.Handler to edit it or an error
@@ -36,8 +41,8 @@ type Editor interface {
 	// for more details.
 	SetLocationList(Handler, LocationList) error
 
-	// Reader returns a cell.Reader which allows to read the editor's internal buffer.
-	// Reader(Handler) (cell.Reader, error)
+	// Reader returns a Reader which allows to read the editor's internal buffer.
+	Reader(Handler) Reader
 
 	// Writer returns a cell.Writer which allows for direct write access
 	// to the editor's internal buffer.
@@ -46,6 +51,10 @@ type Editor interface {
 
 type cellWriter struct {
 	c cell.Writer
+}
+
+type cellReader struct {
+	c cell.Reader
 }
 
 func (w cellWriter) Insert(
@@ -62,7 +71,16 @@ func (w cellWriter) Delete(
 	return
 }
 
+func (r cellReader) RawCells() ([][]term.Cell, error) {
+	return r.c.RawCells(), nil
+}
+
 // CellWriter wraps a cell.Writer with a Writer that returns no errors.
 func CellWriter(c cell.Writer) Writer {
 	return cellWriter{c}
+}
+
+// CellReader wraps a cell.Reder with a Reader that returns no errors.
+func CellReader(c cell.Reader) Reader {
+	return cellReader{c}
 }

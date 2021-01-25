@@ -34,6 +34,10 @@ func (e *testEditor) Writer(h Handler) Writer {
 	return CellWriter(e.buf.Writer())
 }
 
+func (e *testEditor) Reader(h Handler) Reader {
+	return CellReader(e.buf.Reader())
+}
+
 func (e *testEditor) SubscribeEditor(EventType, EventHandler) error {
 	return nil
 }

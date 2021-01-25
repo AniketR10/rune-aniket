@@ -192,4 +192,35 @@ func TestClientServerIntegration(t *testing.T) {
 
 		assert.Equal(t, "Aridio", buf.String())
 	})
+
+	t.Run("Reader returns a Reader that is able to read underlying buffer", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+		b := proto.NewDialBroker()
+		ed := NewMockEditor(ctrl)
+		expectInitialServerSubscribe(t, ed)
+		s := NewServer(b, ed, nopLocker{})
+
+		client, closeFn := setupIntTest(t, b, s)
+		defer closeFn()
+
+		buf := cell.NewBuffer()
+		buf.WriteString("guacamole")
+		expectEdit(t, ed, "sup'App", "guacamole")
+		h, err := client.Edit("sup'App", buf)
+		require.NoError(t, err)
+
+		ed.EXPECT().Reader(gomock.Any()).Return(CellReader(buf.Reader())).Times(2)
+
+		r := client.Reader(h)
+		cells, err := r.RawCells()
+		require.NoError(t, err)
+		assert.Equal(t, "guacamole", cell.CellsToString(cells))
+
+		buf.WriteString("\npollos hermanos")
+
+		cells, err = r.RawCells()
+		require.NoError(t, err)
+		assert.Equal(t, "guacamole\npollos hermanos", cell.CellsToString(cells))
+	})
 }

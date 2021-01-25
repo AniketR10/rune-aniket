@@ -160,6 +160,44 @@ func (mr *MockWriterMockRecorder) Insert(at, str interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Insert", reflect.TypeOf((*MockWriter)(nil).Insert), at, str)
 }
 
+// MockReader is a mock of Reader interface.
+type MockReader struct {
+	ctrl     *gomock.Controller
+	recorder *MockReaderMockRecorder
+}
+
+// MockReaderMockRecorder is the mock recorder for MockReader.
+type MockReaderMockRecorder struct {
+	mock *MockReader
+}
+
+// NewMockReader creates a new mock instance.
+func NewMockReader(ctrl *gomock.Controller) *MockReader {
+	mock := &MockReader{ctrl: ctrl}
+	mock.recorder = &MockReaderMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockReader) EXPECT() *MockReaderMockRecorder {
+	return m.recorder
+}
+
+// RawCells mocks base method.
+func (m *MockReader) RawCells() ([][]term.Cell, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RawCells")
+	ret0, _ := ret[0].([][]term.Cell)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// RawCells indicates an expected call of RawCells.
+func (mr *MockReaderMockRecorder) RawCells() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RawCells", reflect.TypeOf((*MockReader)(nil).RawCells))
+}
+
 // MockEditor is a mock of Editor interface.
 type MockEditor struct {
 	ctrl     *gomock.Controller
@@ -196,6 +234,20 @@ func (m *MockEditor) Edit(name string, buf *cell.Buffer) (Handler, error) {
 func (mr *MockEditorMockRecorder) Edit(name, buf interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Edit", reflect.TypeOf((*MockEditor)(nil).Edit), name, buf)
+}
+
+// Reader mocks base method.
+func (m *MockEditor) Reader(arg0 Handler) Reader {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Reader", arg0)
+	ret0, _ := ret[0].(Reader)
+	return ret0
+}
+
+// Reader indicates an expected call of Reader.
+func (mr *MockEditorMockRecorder) Reader(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Reader", reflect.TypeOf((*MockEditor)(nil).Reader), arg0)
 }
 
 // SetLocationList mocks base method.

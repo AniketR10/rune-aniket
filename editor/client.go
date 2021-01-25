@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	gracefulShutdownWait  = 100 * time.Millisecond
+	gracefulShutdownWait  = 400 * time.Millisecond
 	defaultFailureTimeout = 5 * time.Second
 )
 
@@ -166,6 +166,15 @@ func (c *Client) Writer(h Handler) Writer {
 		panic("SetLocationList: invalid Handler argument")
 	}
 	return clientWriter{client: c, handlerID: uint32(token.ID)}
+}
+
+// Reader satisfies editor.Editor.
+func (c *Client) Reader(h Handler) Reader {
+	token, ok := h.(browser.Token)
+	if !ok {
+		panic("SetLocationList: invalid Handler argument")
+	}
+	return clientReader{client: c, handlerID: uint32(token.ID)}
 }
 
 // Close closes all resources associated with this client.
