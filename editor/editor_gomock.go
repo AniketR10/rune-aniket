@@ -104,6 +104,62 @@ func (mr *MockHandlerMockRecorder) Resize(width, height interface{}) *gomock.Cal
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Resize", reflect.TypeOf((*MockHandler)(nil).Resize), width, height)
 }
 
+// MockWriter is a mock of Writer interface.
+type MockWriter struct {
+	ctrl     *gomock.Controller
+	recorder *MockWriterMockRecorder
+}
+
+// MockWriterMockRecorder is the mock recorder for MockWriter.
+type MockWriterMockRecorder struct {
+	mock *MockWriter
+}
+
+// NewMockWriter creates a new mock instance.
+func NewMockWriter(ctrl *gomock.Controller) *MockWriter {
+	mock := &MockWriter{ctrl: ctrl}
+	mock.recorder = &MockWriterMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockWriter) EXPECT() *MockWriterMockRecorder {
+	return m.recorder
+}
+
+// Delete mocks base method.
+func (m *MockWriter) Delete(from, to term.Coordinates) (term.Coordinates, term.Coordinates, string, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Delete", from, to)
+	ret0, _ := ret[0].(term.Coordinates)
+	ret1, _ := ret[1].(term.Coordinates)
+	ret2, _ := ret[2].(string)
+	ret3, _ := ret[3].(error)
+	return ret0, ret1, ret2, ret3
+}
+
+// Delete indicates an expected call of Delete.
+func (mr *MockWriterMockRecorder) Delete(from, to interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Delete", reflect.TypeOf((*MockWriter)(nil).Delete), from, to)
+}
+
+// Insert mocks base method.
+func (m *MockWriter) Insert(at term.Coordinates, str string) (term.Coordinates, term.Coordinates, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Insert", at, str)
+	ret0, _ := ret[0].(term.Coordinates)
+	ret1, _ := ret[1].(term.Coordinates)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
+}
+
+// Insert indicates an expected call of Insert.
+func (mr *MockWriterMockRecorder) Insert(at, str interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Insert", reflect.TypeOf((*MockWriter)(nil).Insert), at, str)
+}
+
 // MockEditor is a mock of Editor interface.
 type MockEditor struct {
 	ctrl     *gomock.Controller
@@ -168,4 +224,18 @@ func (m *MockEditor) SubscribeEditor(arg0 EventType, arg1 EventHandler) error {
 func (mr *MockEditorMockRecorder) SubscribeEditor(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubscribeEditor", reflect.TypeOf((*MockEditor)(nil).SubscribeEditor), arg0, arg1)
+}
+
+// Writer mocks base method.
+func (m *MockEditor) Writer(arg0 Handler) Writer {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Writer", arg0)
+	ret0, _ := ret[0].(Writer)
+	return ret0
+}
+
+// Writer indicates an expected call of Writer.
+func (mr *MockEditorMockRecorder) Writer(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Writer", reflect.TypeOf((*MockEditor)(nil).Writer), arg0)
 }

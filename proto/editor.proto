@@ -46,8 +46,36 @@ message SetLocationListRequest {
 
 message SetLocationListResponse {}
 
+message InsertRequest {
+	uint32 handler_id = 1;
+	Coordinates at = 2;
+	string str = 3;
+}
+
+message InsertResponse {
+	Coordinates from = 1;
+	Coordinates to = 2;
+}
+
+message DeleteRequest {
+	uint32 handler_id = 1;
+	Coordinates from = 2;
+	Coordinates to = 3;
+}
+
+message DeleteResponse {
+	Coordinates start = 1;
+	Coordinates end = 2;
+	string str = 3;
+}
+
 service Editor {
 	rpc Edit(EditRequest) returns (EditResponse);
 	rpc Subscribe(EditorSubscribeRequest) returns (EditorSubscribeResponse);
 	rpc SetLocationList(SetLocationListRequest) returns (SetLocationListResponse);
+
+
+	// cell.Writer
+	rpc Insert(InsertRequest) returns (InsertResponse);
+	rpc Delete(DeleteRequest) returns (DeleteResponse);
 }

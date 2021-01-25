@@ -56,11 +56,10 @@ func (e viEditor) SetLocationList(h editor.Handler, loc editor.LocationList) err
 }
 
 /*
-func (e *viEditor) Reader(h tui.Handler) (cell.Reader, error) {
+func (e *viEditor) Reader(h editor.Handler) (cell.Reader, error) {
 	return h.(*Vi).less.Buffer().Reader(), nil
-}
+}*/
 
-func (e *viEditor) Writer(h tui.Handler) (cell.Writer, error) {
-	return h.(*Vi).less.Buffer().Writer(), nil
+func (e *viEditor) Writer(h editor.Handler) editor.Writer {
+	return editor.CellWriter(h.(*Vi).less.Buffer().Writer())
 }
-*/

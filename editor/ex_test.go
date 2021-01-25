@@ -30,6 +30,10 @@ func (e *testEditor) SetLocationList(h Handler, loc LocationList) error {
 	return nil
 }
 
+func (e *testEditor) Writer(h Handler) Writer {
+	return CellWriter(e.buf.Writer())
+}
+
 func (e *testEditor) SubscribeEditor(EventType, EventHandler) error {
 	return nil
 }

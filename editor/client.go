@@ -159,6 +159,15 @@ func (c *Client) SetLocationList(h Handler, l LocationList) error {
 	return err
 }
 
+// Writer satisfies editor.Editor.
+func (c *Client) Writer(h Handler) Writer {
+	token, ok := h.(browser.Token)
+	if !ok {
+		panic("SetLocationList: invalid Handler argument")
+	}
+	return clientWriter{client: c, handlerID: uint32(token.ID)}
+}
+
 // Close closes all resources associated with this client.
 func (c *Client) Close() (err error) {
 	c.mu.Lock()

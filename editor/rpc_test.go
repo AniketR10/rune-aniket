@@ -11,6 +11,7 @@ import (
 	"github.com/ernestrc/go-tui/cell"
 	"github.com/ernestrc/go-tui/handler"
 	"github.com/ernestrc/go-tui/proto"
+	"github.com/ernestrc/go-tui/term"
 	gomock "github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -35,6 +36,7 @@ func setupIntTest(
 	closeFn = func() {
 		client.Close()
 		grpcServer.Stop()
+		lis.Close()
 	}
 	return
 }
@@ -154,5 +156,40 @@ func TestClientServerIntegration(t *testing.T) {
 		require.NoError(t, err)
 
 		wg.Wait()
+	})
+
+	t.Run("Writer returns a Writer that is able to modify underlying buffer", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+		b := proto.NewDialBroker()
+		ed := NewMockEditor(ctrl)
+		expectInitialServerSubscribe(t, ed)
+		s := NewServer(b, ed, nopLocker{})
+
+		client, closeFn := setupIntTest(t, b, s)
+		defer closeFn()
+
+		buf := cell.NewBuffer()
+		expectEdit(t, ed, "locotron", "")
+		h, err := client.Edit("locotron", buf)
+		require.NoError(t, err)
+
+		ed.EXPECT().Writer(gomock.Any()).Return(CellWriter(buf.Writer())).Times(2)
+
+		w := client.Writer(h)
+		from, to, err := w.Insert(term.Coordinates{X: 1}, "el\nAridio")
+		require.NoError(t, err)
+		assert.Equal(t, term.Coordinates{}, from)
+		assert.Equal(t, term.Coordinates{X: 5, Y: 1}, to)
+
+		assert.Equal(t, " el\nAridio", buf.String())
+
+		start, end, str, err := w.Delete(term.Coordinates{}, term.Coordinates{X: 3})
+		require.NoError(t, err)
+		assert.Equal(t, term.Coordinates{}, start)
+		assert.Equal(t, term.Coordinates{X: 3}, end)
+		assert.Equal(t, " el\n", str)
+
+		assert.Equal(t, "Aridio", buf.String())
 	})
 }

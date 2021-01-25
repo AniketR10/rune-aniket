@@ -5,12 +5,19 @@ package editor
 import (
 	"github.com/ernestrc/go-tui"
 	"github.com/ernestrc/go-tui/cell"
+	"github.com/ernestrc/go-tui/term"
 )
 
 // Handler just wraps a tui.Handler to indicate that this API's handlers might
 // not be compatible with other APIs.
 type Handler interface {
 	tui.Handler
+}
+
+// Writer is a cell.Writer that can fail.
+type Writer interface {
+	Insert(at term.Coordinates, str string) (from, to term.Coordinates, err error)
+	Delete(from, to term.Coordinates) (start, end term.Coordinates, str string, err error)
 }
 
 // Editor is the interface that wraps an API to manage a text editor.
@@ -25,5 +32,37 @@ type Editor interface {
 	// TODO should rename browser.Subscribe to browser.SubscribeTerm
 	SubscribeEditor(EventType, EventHandler) error
 
+	// SetLocationList sets the Handler's location list. See LocationList
+	// for more details.
 	SetLocationList(Handler, LocationList) error
+
+	// Reader returns a cell.Reader which allows to read the editor's internal buffer.
+	// Reader(Handler) (cell.Reader, error)
+
+	// Writer returns a cell.Writer which allows for direct write access
+	// to the editor's internal buffer.
+	Writer(Handler) Writer
+}
+
+type cellWriter struct {
+	c cell.Writer
+}
+
+func (w cellWriter) Insert(
+	at term.Coordinates, str string,
+) (from, to term.Coordinates, err error) {
+	from, to = w.c.Insert(at, str)
+	return
+}
+
+func (w cellWriter) Delete(
+	from, to term.Coordinates,
+) (start, end term.Coordinates, str string, err error) {
+	start, end, str = w.c.Delete(from, to)
+	return
+}
+
+// CellWriter wraps a cell.Writer with a Writer that returns no errors.
+func CellWriter(c cell.Writer) Writer {
+	return cellWriter{c}
 }

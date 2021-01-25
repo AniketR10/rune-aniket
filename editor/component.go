@@ -359,9 +359,19 @@ func (c *Component) Edit(name string, buf *cell.Buffer) (Handler, error) {
 	return editor, nil
 }
 
-// SetLocationList sets the location list of h to loc.
+// SetLocationList satisfies editor.Editor.
 func (c *Component) SetLocationList(h Handler, loc LocationList) error {
 	return c.ed.SetLocationList(h, loc)
+}
+
+// Reader satisfies editor.Editor.
+// func (c *Component) Reader(h Handler) (cell.Reader, error) {
+// 	return c.ed.Reader(h)
+// }
+
+// Writer satisfies editor.Editor.
+func (c *Component) Writer(h Handler) Writer {
+	return c.ed.Writer(h)
 }
 
 // Flush flushes the contents of the buffer at win, if this buffer

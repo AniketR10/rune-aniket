@@ -290,6 +290,71 @@ func (s *Server) SetLocationList(ctx context.Context, in *proto.SetLocationListR
 	return new(proto.SetLocationListResponse), nil
 }
 
+// Insert satisfies proto.EditorServer
+func (s *Server) Insert(ctx context.Context, in *proto.InsertRequest) (
+	*proto.InsertResponse, error,
+) {
+	handlerID := in.GetHandlerId()
+	at := in.GetAt().ToModel()
+	str := in.GetStr()
+
+	s.editor.Lock()
+	defer s.editor.Unlock()
+
+	h, ok := s.idToHandler[handlerID]
+	if !ok {
+		return nil, errHandlerNotFound
+	}
+
+	from, to, err := s.editor.Writer(h).Insert(at, str)
+	if err != nil {
+		return nil, err
+	}
+
+	var protoFrom, protoTo proto.Coordinates
+	protoFrom.FromModel(from)
+	protoTo.FromModel(to)
+
+	res := &proto.InsertResponse{
+		From: &protoFrom,
+		To:   &protoTo,
+	}
+	return res, nil
+}
+
+// Delete satisfies proto.EditorServer
+func (s *Server) Delete(ctx context.Context, in *proto.DeleteRequest) (
+	*proto.DeleteResponse, error,
+) {
+	handlerID := in.GetHandlerId()
+	from := in.GetFrom().ToModel()
+	to := in.GetTo().ToModel()
+
+	s.editor.Lock()
+	defer s.editor.Unlock()
+
+	h, ok := s.idToHandler[handlerID]
+	if !ok {
+		return nil, errHandlerNotFound
+	}
+
+	start, end, str, err := s.editor.Writer(h).Delete(from, to)
+	if err != nil {
+		return nil, err
+	}
+
+	var protoStart, protoEnd proto.Coordinates
+	protoStart.FromModel(start)
+	protoEnd.FromModel(end)
+
+	res := &proto.DeleteResponse{
+		Start: &protoStart,
+		End:   &protoEnd,
+		Str:   str,
+	}
+	return res, nil
+}
+
 // Close closes all resources associated with this server.
 func (s *Server) Close() (err error) {
 	s.editor.Lock()
