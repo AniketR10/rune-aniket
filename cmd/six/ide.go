@@ -17,7 +17,7 @@ import (
 // IDE binds together a text editor/browser with a plugin manager.
 type IDE struct {
 	ideConfig
-	editor  *editor.Ex
+	ex      *editor.Ex
 	manager *plugin.Manager
 }
 
@@ -122,14 +122,14 @@ func (i *IDE) init(cfgfilename, recfilename string, filenames ...string) error {
 	}
 
 	vi := vi.Editor(viOpts...)
-	editor, err := editor.NewEx(vi, opts...)
+	ex, err := editor.NewEx(vi, opts...)
 	if err != nil {
 		return err
 	}
-	i.editor = editor
+	i.ex = ex
 
-	res := plugin.BrowserResources(i.editor)
-	res = plugin.MergeResourceMap(res, plugin.EditorResources(i.editor))
+	res := plugin.BrowserResources(i.ex.Browser())
+	res = plugin.MergeResourceMap(res, plugin.EditorResources(i.ex.Editor()))
 	i.manager, err = plugin.NewManager(plugin.GrantAll(res), pluginOpts...)
 	if err != nil {
 		return fmt.Errorf("error initializing plugin manager: %v", err)
@@ -144,7 +144,7 @@ func (i *IDE) init(cfgfilename, recfilename string, filenames ...string) error {
 	term.SetOutputMode(i.ideConfig.outputMode())
 	term.SetInputMode(i.ideConfig.inputMode())
 
-	reportNonFatalErrs(i.editor, l, configErr, i.ideConfig.errors, plugErrs)
+	reportNonFatalErrs(i.ex.Browser(), l, configErr, i.ideConfig.errors, plugErrs)
 	return nil
 }
 
@@ -176,7 +176,7 @@ func reportNonFatalErrs(
 // Run initialzes the underlying terminal environment and runs
 // it with this tui.Handler.
 func (i *IDE) Run() error {
-	err := tui.RunWithLocker(i.editor, i.manager.ResourceLocker())
+	err := tui.RunWithLocker(i.ex, i.manager.ResourceLocker())
 	if err != nil {
 		return err
 	}
@@ -186,7 +186,7 @@ func (i *IDE) Run() error {
 
 func (i *IDE) closeResources() error {
 	err1 := i.manager.Close()
-	err2 := i.editor.Close()
+	err2 := i.ex.Close()
 
 	if err1 != nil {
 		return err1

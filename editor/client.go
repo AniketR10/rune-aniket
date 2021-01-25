@@ -125,6 +125,40 @@ func (c *Client) SubscribeEditor(evType EventType, h EventHandler) error {
 	return nil
 }
 
+func setLocationListRequest(handlerID uint32, l LocationList) proto.SetLocationListRequest {
+	req := proto.SetLocationListRequest{
+		HandlerId: handlerID,
+	}
+
+	for loc, ok := l.Current(); ok; loc, ok = l.Next() {
+		var from, to proto.Coordinates
+		var attr proto.Attributes
+		from.FromModel(loc.From)
+		to.FromModel(loc.To)
+		attr.FromModel(loc.Attr)
+		req.Locations = append(req.Locations, &proto.SetLocationListRequest_Location{
+			From: &from,
+			To:   &to,
+			Attr: &attr,
+		})
+	}
+	return req
+}
+
+// SetLocationList requests the editor server to set l as the new location list for h.
+// Note that h is expected to be the return valu of Edit or a dispatched event, delivered
+// via an EventHandler.
+func (c *Client) SetLocationList(h Handler, l LocationList) error {
+	ctx := context.Background()
+	token, ok := h.(browser.Token)
+	if !ok {
+		panic("SetLocationList: invalid Handler argument")
+	}
+	req := setLocationListRequest(uint32(token.ID), l)
+	_, err := c.ed.SetLocationList(ctx, &req)
+	return err
+}
+
 // Close closes all resources associated with this client.
 func (c *Client) Close() (err error) {
 	c.mu.Lock()

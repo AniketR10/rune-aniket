@@ -20,3 +20,37 @@ type Location struct {
 	From, To term.Coordinates
 	Attr     term.Attributes
 }
+
+type sliceLocations struct {
+	curr int
+	in   []Location
+}
+
+func (s *sliceLocations) Current() (Location, bool) {
+	if s.curr >= len(s.in) || s.curr < 0 {
+		return Location{}, false
+	}
+
+	return s.in[s.curr], true
+}
+
+func (s *sliceLocations) Prev() (Location, bool) {
+	if s.curr-1 < 0 {
+		return Location{}, false
+	}
+	s.curr--
+	return s.in[s.curr], true
+}
+
+func (s *sliceLocations) Next() (Location, bool) {
+	if s.curr+1 >= len(s.in) {
+		return Location{}, false
+	}
+	s.curr++
+	return s.in[s.curr], true
+}
+
+// LocationSlice returns a LocationList based on in
+func LocationSlice(in []Location) LocationList {
+	return &sliceLocations{in: in}
+}

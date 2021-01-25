@@ -13,12 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type browserInternal interface {
-	browser.Browser
-	tui.Handler
-}
-
-type browserConstructor func(ed Editor, opts ...Option) (browserInternal, error)
+type browserConstructor func(ed Editor, opts ...Option) (tui.Handler, browser.Browser, error)
 
 type testEditor struct {
 	name string
@@ -29,6 +24,10 @@ func (e *testEditor) Edit(name string, buf *cell.Buffer) (Handler, error) {
 	e.name = name
 	e.buf = buf
 	return browser.NewTestHandler(), nil
+}
+
+func (e *testEditor) SetLocationList(h Handler, loc LocationList) error {
+	return nil
 }
 
 func (e *testEditor) SubscribeEditor(EventType, EventHandler) error {
@@ -62,19 +61,19 @@ func recoverTestFile(filePath, swapFilePath string, buf *cell.Buffer) (
 
 func newTestBrowserHandler() *Ex {
 	ret := new(Ex)
-	ret.openFileFn = openTestFile
-	ret.recoverFileFn = recoverTestFile
+	ret.comp.openFileFn = openTestFile
+	ret.comp.recoverFileFn = recoverTestFile
 	return ret
 }
 
 func TestBrowserHandlerDraw(t *testing.T) {
-	testBrowserHandlerDraw(t, func(ed Editor, opts ...Option) (browserInternal, error) {
+	testBrowserHandlerDraw(t, func(ed Editor, opts ...Option) (tui.Handler, browser.Browser, error) {
 		b := newTestBrowserHandler()
 		err := b.Init(ed, opts...)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
-		return b, nil
+		return b, b.Browser(), nil
 	})
 }
 
@@ -250,10 +249,10 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 	// testutil.TestHandlerSequence maps ':' characters to the following event
 	// this is to work around ex's assumptions on underlying handler.
 	commandEvent := term.Event{Type: term.EventKey, Key: term.KeyCtrlBackslash}
-	b, err := constructor(&testEditor{}, WithCommandEvent(commandEvent))
+	bh, b, err := constructor(&testEditor{}, WithCommandEvent(commandEvent))
 	require.NoError(t, err)
 
-	testutil.TestHandlerSequence(t, b, 20, 10, cases)
+	testutil.TestHandlerSequence(t, bh, 20, 10, cases)
 
 	win, err := b.SplitVerticalLeft(browser.NewTestHandler())
 	require.NoError(t, err)
@@ -303,7 +302,7 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 └────────┘└────────┘`},
 	}
 
-	testutil.TestHandlerSequence(t, b, 20, 10, cases)
+	testutil.TestHandlerSequence(t, bh, 20, 10, cases)
 
 	var unmounted int
 	hx := browser.NewTestHandler()
@@ -331,7 +330,7 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 └────────┘└────────┘`},
 	}
 
-	testutil.TestHandlerSequence(t, b, 20, 10, cases)
+	testutil.TestHandlerSequence(t, bh, 20, 10, cases)
 
 	require.NoError(t, win.Close())
 	require.NoError(t, focus.Close())
@@ -360,7 +359,7 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 │EEEEEEEEEEEEEEEEEE│
 └──────────────────┘`},
 	}
-	testutil.TestHandlerSequence(t, b, 20, 10, cases)
+	testutil.TestHandlerSequence(t, bh, 20, 10, cases)
 
 	cases = []testutil.HandlerSequenceTestCase{
 		{"", `┌──┐
@@ -368,7 +367,7 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 ├EE┤
 EEEE`},
 	}
-	testutil.TestHandlerSequence(t, b, 4, 4, cases)
+	testutil.TestHandlerSequence(t, bh, 4, 4, cases)
 
 	require.NoError(t, b.SetMessage("wasup: %s", "Z"))
 	cases = []testutil.HandlerSequenceTestCase{
@@ -384,7 +383,7 @@ EEEE`},
 │wasup: Z          │
 └──────────────────┘`},
 	}
-	testutil.TestHandlerSequence(t, b, 20, 10, cases)
+	testutil.TestHandlerSequence(t, bh, 20, 10, cases)
 
 	nh, err := b.Open("bugz")
 	require.NoError(t, err)
@@ -406,7 +405,7 @@ EEEE`},
 │BBBBBBBBBBBBBBBBBB│
 └──────────────────┘`},
 	}
-	testutil.TestHandlerSequence(t, b, 20, 10, cases)
+	testutil.TestHandlerSequence(t, bh, 20, 10, cases)
 
 	assert.NoError(t, b.Close())
 	assert.Equal(t, 11, unmounted)
@@ -429,7 +428,7 @@ func newBrowserForSubscribeTest(t *testing.T, ev term.Event) (
 	require.NoError(t, b.Init(&testEditor{}))
 
 	h := browser.NewTestHandler()
-	err := b.Subscribe(ev, browser.HandlerEventHandler(h))
+	err := b.Browser().Subscribe(ev, browser.HandlerEventHandler(h))
 	require.NoError(t, err)
 
 	return b, h, h.Ch
@@ -448,7 +447,7 @@ func TestBrowserHandlerSubscribe(t *testing.T) {
 		b, h, startingRune := newBrowserForSubscribeTest(t, ev)
 
 		h2 := browser.NewTestHandler()
-		err := b.Subscribe(ev, browser.HandlerEventHandler(h2))
+		err := b.Browser().Subscribe(ev, browser.HandlerEventHandler(h2))
 		assert.Error(t, err)
 
 		exit, handled := b.Handle(ev)
@@ -474,10 +473,10 @@ func TestBrowserHandlerPublishInterrupt(t *testing.T) {
 		var wg sync.WaitGroup
 		browser := newTestBrowserHandler()
 		require.NoError(t, browser.Init(&testEditor{}))
-		browser.interruptDraw = wg.Done
+		browser.comp.interruptDraw = wg.Done
 
 		wg.Add(1)
-		browser.PublishInterrupt()
+		browser.Browser().PublishInterrupt()
 
 		wg.Wait()
 	})

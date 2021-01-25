@@ -20,6 +20,20 @@ func (c *Cell) ToModel() term.Cell {
 	}
 }
 
+// ToModel maps this Attributes into the corresponding term.Attributes.
+func (a *Attributes) ToModel() term.Attributes {
+	return term.Attributes{
+		Bg: term.Attribute(a.Background),
+		Fg: term.Attribute(a.Foreground),
+	}
+}
+
+// FromModel sets this Attributes from attr term.Attributes.
+func (a *Attributes) FromModel(attr term.Attributes) {
+	a.Background = uint32(attr.Bg)
+	a.Foreground = uint32(attr.Fg)
+}
+
 // FromModel takes cc and maps it into this Cell.
 func (c *Cell) FromModel(cc term.Cell) {
 	c.Background = uint32(cc.Bg)

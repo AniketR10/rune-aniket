@@ -142,6 +142,20 @@ func (mr *MockEditorMockRecorder) Edit(name, buf interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Edit", reflect.TypeOf((*MockEditor)(nil).Edit), name, buf)
 }
 
+// SetLocationList mocks base method.
+func (m *MockEditor) SetLocationList(arg0 Handler, arg1 LocationList) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SetLocationList", arg0, arg1)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// SetLocationList indicates an expected call of SetLocationList.
+func (mr *MockEditorMockRecorder) SetLocationList(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetLocationList", reflect.TypeOf((*MockEditor)(nil).SetLocationList), arg0, arg1)
+}
+
 // SubscribeEditor mocks base method.
 func (m *MockEditor) SubscribeEditor(arg0 EventType, arg1 EventHandler) error {
 	m.ctrl.T.Helper()

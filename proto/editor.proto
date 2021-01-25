@@ -1,6 +1,7 @@
 syntax = "proto3";
 
 import "term.proto";
+import "tui.proto";
 
 package proto;
 
@@ -33,7 +34,20 @@ message EditorSubscribeRequest {
 message EditorSubscribeResponse {
 }
 
+message SetLocationListRequest {
+	message Location {
+		Coordinates from = 1;
+		Coordinates to = 2;
+		Attributes attr = 3;
+	}
+	uint32 handler_id = 1;
+	repeated Location locations = 2;
+}
+
+message SetLocationListResponse {}
+
 service Editor {
 	rpc Edit(EditRequest) returns (EditResponse);
 	rpc Subscribe(EditorSubscribeRequest) returns (EditorSubscribeResponse);
+	rpc SetLocationList(SetLocationListRequest) returns (SetLocationListResponse);
 }

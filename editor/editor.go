@@ -24,4 +24,6 @@ type Editor interface {
 	// can also implement browser.Subscriber.
 	// TODO should rename browser.Subscribe to browser.SubscribeTerm
 	SubscribeEditor(EventType, EventHandler) error
+
+	SetLocationList(Handler, LocationList) error
 }

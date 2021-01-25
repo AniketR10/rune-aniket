@@ -22,10 +22,10 @@ const (
 	modeCommand
 )
 
-// Ex satisfies browser.Browser and tui.Handler by wrapping a browser.Component
-// to provide an ex editor interface.
+// Ex implements a tui.Handler by wrapping an editor.Component and
+// providing an ex editor type of interface.
 type Ex struct {
-	Component
+	comp       Component
 	commandBuf *cell.Buffer
 	cmdVirt    handler.Virtual
 	mode       mode
@@ -53,13 +53,13 @@ func (e *Ex) Init(ed Editor, opts ...Option) (err error) {
 	for _, o := range opts {
 		o(&config)
 	}
-	e.Component.Init(ed, config)
+	e.comp.Init(ed, config)
 
 	return
 }
 
 func (e *Ex) runSingleCommand(cmd string) (quit bool, err error) {
-	browser := e.Component.Browser()
+	browser := e.comp.Browser()
 	switch cmd {
 	case "bprev":
 		browser.UpdateWindowTabPrev(browser.Focus())
@@ -75,7 +75,7 @@ func (e *Ex) runSingleCommand(cmd string) (quit bool, err error) {
 		quit = true
 		fallthrough
 	case "w", "w!":
-		err = e.Component.Flush(browser.Focus())
+		err = e.comp.Flush(browser.Focus())
 	case "q!", "q":
 		quit = true
 	default:
@@ -94,11 +94,11 @@ func (e *Ex) runCommand() (quit bool, err error) {
 	switch cmds[0] {
 	case "e":
 		var h browser.Handler
-		h, err = e.Component.OpenFileTab(cmds[1], "")
+		h, err = e.comp.OpenFileTab(cmds[1], "")
 		if err != nil {
 			return
 		}
-		e.Component.Browser().Focus().SetContent(h)
+		e.comp.Browser().Focus().SetContent(h)
 	default:
 		err = fmt.Errorf("Unknown command: %s", cmd)
 	}
@@ -106,7 +106,7 @@ func (e *Ex) runCommand() (quit bool, err error) {
 }
 
 func (e *Ex) setError(err error) {
-	e.Component.Browser().SetMessage("Error: %s", err)
+	e.comp.Browser().SetMessage("Error: %s", err)
 }
 
 func (e *Ex) handleCommand(ev term.Event) (quit, handled bool) {
@@ -143,7 +143,7 @@ func (e *Ex) handleCommand(ev term.Event) (quit, handled bool) {
 }
 
 func (e *Ex) handleCommandEvent(ev term.Event) bool {
-	if ev == e.config.CommandEvent {
+	if ev == e.comp.config.CommandEvent {
 		e.setCommandMode()
 		return true
 	}
@@ -156,7 +156,7 @@ func (e *Ex) handleProxy(ev term.Event) (
 	// If Ex is configured with non character
 	// command mode trigger event, then this takes
 	// precedence over any other event
-	if e.config.CommandEvent.Ch == 0 {
+	if e.comp.config.CommandEvent.Ch == 0 {
 		handled = e.handleCommandEvent(ev)
 		if handled {
 			return
@@ -164,15 +164,15 @@ func (e *Ex) handleProxy(ev term.Event) (
 	}
 
 	prev := ev
-	ev, _ = e.Component.KeyMapping(ev)
+	ev, _ = e.comp.KeyMapping(ev)
 
 	// client subscriptions take precedence over ex key mappings
-	handled = e.Component.Publish(ev)
+	handled = e.comp.Publish(ev)
 	if handled {
 		return
 	}
 
-	browser := e.Component.Browser()
+	browser := e.comp.Browser()
 	switch ev.Key {
 	case term.KeyCtrlA:
 		browser.RemoveAllTabs()
@@ -230,7 +230,7 @@ func (e *Ex) Cursor() (pos term.Coordinates, show bool) {
 		pos.X += len(e.commandBuf.String())
 		return pos, true
 	}
-	return e.Component.Browser().Cursor()
+	return e.comp.Browser().Cursor()
 }
 
 // Man satisfies tui.Handler.
@@ -241,19 +241,29 @@ func (e *Ex) Man() tui.Manual {
 // Resize satisfies tui.Component
 func (e *Ex) Resize(width, height int) {
 	browser.ResizeMessageSpan(&e.cmdVirt, width, height)
-	e.Component.Resize(width, height)
+	e.comp.Resize(width, height)
 }
 
 // Draw satisfies tui.Component
 func (e *Ex) Draw(w term.Writer) {
-	e.Component.Draw(w)
+	e.comp.Draw(w)
 
 	if e.mode == modeCommand {
 		e.cmdVirt.Draw(w)
 	}
 }
 
+// Editor returns the underlying Editor implementation.
+func (e *Ex) Editor() Editor {
+	return &e.comp
+}
+
+// Browser returns the underlying browser.Browser implementaiton.
+func (e *Ex) Browser() browser.Browser {
+	return &e.comp
+}
+
 // Close closes the resources associated with this browser.
 func (e *Ex) Close() error {
-	return e.Component.Close()
+	return e.comp.Close()
 }

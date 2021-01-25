@@ -47,6 +47,7 @@ func expectInitialServerSubscribe(t *testing.T, mock *MockEditor) {
 func TestClientServerIntegration(t *testing.T) {
 	t.Run("client through server calls underlying editor Edit", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
 		b := proto.NewDialBroker()
 		ed := NewMockEditor(ctrl)
 		expectInitialServerSubscribe(t, ed)
@@ -65,6 +66,7 @@ func TestClientServerIntegration(t *testing.T) {
 
 	t.Run("underlying editor Edito errors bubble up to client", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
 		b := proto.NewDialBroker()
 		ed := NewMockEditor(ctrl)
 		expectInitialServerSubscribe(t, ed)
@@ -85,6 +87,7 @@ func TestClientServerIntegration(t *testing.T) {
 	t.Run("client through server calls underlying editor Subscribe", func(t *testing.T) {
 		var wg sync.WaitGroup
 		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
 		b := proto.NewDialBroker()
 		ed := NewMockEditor(ctrl)
 		expectInitialServerSubscribe(t, ed)
@@ -118,5 +121,38 @@ func TestClientServerIntegration(t *testing.T) {
 
 		assert.NoError(t, s.Close())
 		time.Sleep(asyncResultsSleepDuration)
+	})
+
+	t.Run("SetLocationList sets the location list of the remote editor", func(t *testing.T) {
+		var wg sync.WaitGroup
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+		b := proto.NewDialBroker()
+		ed := NewMockEditor(ctrl)
+		expectInitialServerSubscribe(t, ed)
+		s := NewServer(b, ed, new(sync.Mutex))
+
+		client, closeFn := setupIntTest(t, b, s)
+		defer closeFn()
+
+		expectEdit(t, ed, "Tais", "")
+		h, err := client.Edit("Tais", cell.NewBuffer())
+		require.NoError(t, err)
+
+		l := LocationSlice([]Location{loc2})
+
+		ed.EXPECT().SetLocationList(gomock.Any(), gomock.Any()).
+			DoAndReturn(func(h Handler, ll LocationList) error {
+				defer wg.Done()
+				assertLocation(t, ll, 0, loc2)
+				assertLocationListLen(t, ll, 1)
+				return nil
+			}).Times(1)
+
+		wg.Add(1)
+		err = client.SetLocationList(h, l)
+		require.NoError(t, err)
+
+		wg.Wait()
 	})
 }

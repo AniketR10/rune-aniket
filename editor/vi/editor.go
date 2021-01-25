@@ -50,12 +50,12 @@ func (e *viEditor) SubscribeEditor(ev editor.EventType, sub editor.EventHandler)
 	return nil
 }
 
-/*
-func (e viEditor) SetLocationList(h tui.Handler, loc editor.LocationList) error {
+func (e viEditor) SetLocationList(h editor.Handler, loc editor.LocationList) error {
 	h.(*Vi).SetLocationList(loc)
 	return nil
 }
 
+/*
 func (e *viEditor) Reader(h tui.Handler) (cell.Reader, error) {
 	return h.(*Vi).less.Buffer().Reader(), nil
 }

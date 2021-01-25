@@ -359,6 +359,11 @@ func (c *Component) Edit(name string, buf *cell.Buffer) (Handler, error) {
 	return editor, nil
 }
 
+// SetLocationList sets the location list of h to loc.
+func (c *Component) SetLocationList(h Handler, loc LocationList) error {
+	return c.ed.SetLocationList(h, loc)
+}
+
 // Flush flushes the contents of the buffer at win, if this buffer
 // was created with a FlusherCloser. See browser.NewBuffer.
 func (c *Component) Flush(win browser.Window) error {

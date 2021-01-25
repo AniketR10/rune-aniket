@@ -2,6 +2,7 @@ package editor
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"sync"
@@ -12,7 +13,9 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-//go:generate mockgen -destination=./event_handler_gomock.go -package editor -self_package editor -source server.go
+var (
+	errHandlerNotFound = errors.New("handler not found")
+)
 
 // Server serves an Editor over GRPC.
 type Server struct {
@@ -251,6 +254,40 @@ func (s *Server) Subscribe(ctx context.Context, in *proto.EditorSubscribeRequest
 	}
 
 	return new(proto.EditorSubscribeResponse), nil
+}
+
+func getLocations(locs []*proto.SetLocationListRequest_Location) (ret []Location) {
+	for _, loc := range locs {
+		ret = append(ret, Location{
+			Attr: loc.GetAttr().ToModel(),
+			From: loc.GetFrom().ToModel(),
+			To:   loc.GetTo().ToModel(),
+		})
+	}
+	return
+}
+
+// SetLocationList satisfies proto.EditorServer
+func (s *Server) SetLocationList(ctx context.Context, in *proto.SetLocationListRequest) (
+	*proto.SetLocationListResponse, error,
+) {
+	handlerID := in.GetHandlerId()
+	locs := in.GetLocations()
+
+	s.editor.Lock()
+	defer s.editor.Unlock()
+
+	h, ok := s.idToHandler[handlerID]
+	if !ok {
+		return nil, errHandlerNotFound
+	}
+
+	err := s.editor.SetLocationList(h, LocationSlice(getLocations(locs)))
+	if err != nil {
+		return nil, err
+	}
+
+	return new(proto.SetLocationListResponse), nil
 }
 
 // Close closes all resources associated with this server.
