@@ -433,6 +433,20 @@ func TestBufferUnsubscribe(t *testing.T) {
 	})
 }
 
+func TestBufferSubscribe(t *testing.T) {
+	buf := NewBuffer()
+	one := &testSubscriber{}
+	two := &testSubscriber{}
+	buf.Subscribe(one)
+	buf.Subscribe(two)
+
+	buf.WriteString("\n")
+	assert.Equal(t, 1, one.onWillInsert)
+	assert.Equal(t, 1, one.onDidInsert)
+	assert.Equal(t, 1, two.onWillInsert)
+	assert.Equal(t, 1, two.onDidInsert)
+}
+
 func TestBufferInsertWithAttr(t *testing.T) {
 	buf := NewBuffer()
 	fg := term.ColorRed

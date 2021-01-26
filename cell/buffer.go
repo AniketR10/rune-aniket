@@ -1,7 +1,6 @@
 package cell
 
 import (
-	"bytes"
 	"fmt"
 	"io"
 	"strings"
@@ -304,17 +303,15 @@ func (b *Buffer) ReadFrom(r io.Reader) (int64, error) {
 
 // io.Writer
 func (b *Buffer) Write(p []byte) (int, error) {
-	n, err := b.cells.ReadFrom(bytes.NewReader(p))
-	return int(n), err
+	nextWrite := b.cells.nextWrite()
+	b.writer.Insert(nextWrite, string(p))
+	return len(p), nil
 }
 
 // WriteString writes the given string at the end of the buffer
 func (b *Buffer) WriteString(p string) {
-	_, err := b.cells.ReadFrom(strings.NewReader(p))
-	if err != nil {
-		// strings.Reader never errors out
-		panic(err)
-	}
+	nextWrite := b.cells.nextWrite()
+	b.writer.Insert(nextWrite, p)
 }
 
 // Undo reverses the last update to the Buffer.
