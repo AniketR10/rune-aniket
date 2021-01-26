@@ -85,11 +85,12 @@ func StringToCells(str string) (cells [][]term.Cell) {
 	return builder.RawCells()
 }
 
-// ConvertCoordinates converts x and y, which use the buffer in bytes as offsets
-// into term.Coordinates, which account for tab expansion.
-func ConvertCoordinates(cells [][]term.Cell, y, x int) term.Coordinates {
+// ConvertRuneCoordinates converts x and y, which use the buffer runes as offsets
+// into term.Coordinates, which account for tab expansion. It returns false if y is out
+// of bounds.
+func ConvertRuneCoordinates(cells [][]term.Cell, y, x int) (term.Coordinates, bool) {
 	if y >= len(cells) {
-		return term.Coordinates{}
+		return term.Coordinates{}, false
 	}
 	line := cells[y]
 
@@ -101,5 +102,30 @@ func ConvertCoordinates(cells [][]term.Cell, y, x int) term.Coordinates {
 			x++
 		}
 	}
-	return term.Coordinates{Y: y, X: x}
+	return term.Coordinates{Y: y, X: x}, true
+}
+
+// ConvertTermCoordinates converts c, which use the terminal system of coordinates, which
+// account for tab expansion, into rune offsets. It returns false if y is out
+// of bounds.
+func ConvertTermCoordinates(cells [][]term.Cell, c term.Coordinates) (y, x int, ok bool) {
+	if c.Y >= len(cells) {
+		return
+	}
+
+	line := cells[c.Y]
+	y = c.Y
+	x = c.X
+
+	for xi, cell := range line {
+		if xi == c.X {
+			break
+		}
+		if cell.Ch == 0 {
+			x--
+		}
+	}
+
+	ok = true
+	return
 }
