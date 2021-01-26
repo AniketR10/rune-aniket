@@ -43,17 +43,19 @@ diff_buf_adjust(win_T *win)
 	diff_buf_add(win->w_buffer);
 } /* { */ `
 
-func setupCursorContent(t *testing.T, width, height int, cont string) (e Cursor) {
+func setupCursorContent(t *testing.T, width, height int, cont string) (e *Cursor) {
 	scroll := component.NewScroll()
-	e.Init(scroll)
+	e = NewCursor(scroll)
 	_, err := scroll.Buffer().ReadFrom(strings.NewReader(cont))
 	require.NoError(t, err)
 	scroll.Resize(width, height)
+	require.Equal(t, e.scroll.Buffer(), scroll.Buffer())
+	require.Equal(t, e.subscriber.c, e)
 
 	return
 }
 
-func setupCursor(t *testing.T, width, height int) Cursor {
+func setupCursor(t *testing.T, width, height int) *Cursor {
 	return setupCursorContent(t, width, height, sampleSnippet)
 }
 
@@ -127,7 +129,7 @@ func TestCursorSearch(t *testing.T) {
 
 			require.Equal(t, tcase.results, e.Search(tcase.searchstring))
 			if tcase.assertions != nil {
-				tcase.assertions(t, &e)
+				tcase.assertions(t, e)
 			}
 
 			cursor, _ := e.Cursor()
@@ -569,7 +571,7 @@ func TestCursorMove(t *testing.T) {
 		t.Run(tcase.desc, func(t *testing.T) {
 			e := setupCursor(t, tcase.width, tcase.height)
 
-			tcase.sut(t, &e)
+			tcase.sut(t, e)
 
 			cursor, _ := e.Cursor()
 			assert.Equal(t, tcase.cursor, cursor)
@@ -702,7 +704,7 @@ func testCursorUndoRedo(t *testing.T, moveBefore, moveAfter func(c *Cursor) bool
 	e := setupCursor(t, width, height)
 	str := e.scroll.Buffer().String()
 
-	moveBefore(&e)
+	moveBefore(e)
 	cBefore, ok := e.Cursor()
 	require.True(t, ok)
 
@@ -717,7 +719,7 @@ func testCursorUndoRedo(t *testing.T, moveBefore, moveAfter func(c *Cursor) bool
 	assert.Equal(t, cBefore, c)
 	assert.Equal(t, str, e.scroll.Buffer().String())
 
-	moveAfter(&e)
+	moveAfter(e)
 
 	require.True(t, e.Redo())
 	assert.Equal(t, str2, e.scroll.Buffer().String())
@@ -861,7 +863,7 @@ func testCursorDeleteSelection(t *testing.T, width, height int, typeSelect int) 
 
 		c := setupCursorContent(t, width, height, tcase.initialBuf)
 		if tcase.initialPos != nil {
-			tcase.initialPos(&c)
+			tcase.initialPos(c)
 		}
 		switch typeSelect {
 		case noSelection:
@@ -876,7 +878,7 @@ func testCursorDeleteSelection(t *testing.T, width, height int, typeSelect int) 
 		if !tcase.selected {
 			continue
 		}
-		tcase.finalPos(&c)
+		tcase.finalPos(c)
 		require.Equal(t, tcase.deleted, c.DeleteSelection())
 		if !tcase.deleted {
 			continue
@@ -1163,10 +1165,10 @@ func TestCursorSetLocationList(t *testing.T) {
 	buf := c.scroll.Buffer()
 
 	expected := [][]term.Cell{
-		[]term.Cell{},
-		[]term.Cell{term.Cell{Ch: 'a', Bg: abcAttr.Bg, Fg: abcAttr.Fg}},
-		[]term.Cell{term.Cell{Ch: 'b', Bg: abcAttr.Bg, Fg: abcAttr.Fg}},
-		[]term.Cell{term.Cell{Ch: 'c', Bg: abcAttr.Bg, Fg: abcAttr.Fg}},
+		{},
+		{{Ch: 'a', Bg: abcAttr.Bg, Fg: abcAttr.Fg}},
+		{{Ch: 'b', Bg: abcAttr.Bg, Fg: abcAttr.Fg}},
+		{{Ch: 'c', Bg: abcAttr.Bg, Fg: abcAttr.Fg}},
 	}
 
 	abcList := &testLocationList{locations: abcLocations}
@@ -1178,7 +1180,7 @@ func TestCursorSetLocationList(t *testing.T) {
 	buf.RawCells()[2][0].Fg = term.AttrBold
 
 	newLocations := []Location{
-		Location{
+		{
 			From: term.Coordinates{Y: 2},
 			To:   term.Coordinates{Y: 2},
 			Attr: term.Attributes{Bg: term.ColorRed},
@@ -1186,13 +1188,33 @@ func TestCursorSetLocationList(t *testing.T) {
 	}
 
 	expected = [][]term.Cell{
-		[]term.Cell{},
-		[]term.Cell{term.Cell{Ch: 'a'}},
-		[]term.Cell{term.Cell{Ch: 'b',
+		{},
+		{{Ch: 'a'}},
+		{{Ch: 'b',
 			Fg: term.AttrBold, Bg: term.AttrUnderline | term.ColorRed}},
-		[]term.Cell{term.Cell{Ch: 'c'}},
+		{{Ch: 'c'}},
 	}
 	oldLocList := c.SetLocationList(&testLocationList{locations: newLocations})
 	assert.Equal(t, abcList, oldLocList)
 	assert.Equal(t, expected, buf.RawCells())
+
+	require.True(t, buf.DeleteRow(0))
+
+	// make sure it doesn't remove the wrong one
+	buf.RawCells()[0][0].Bg = term.ColorRed
+	newLocations = []Location{
+		{
+			From: term.Coordinates{Y: 2},
+			To:   term.Coordinates{Y: 2},
+			Attr: term.Attributes{Bg: term.ColorRed},
+		},
+	}
+	expected = [][]term.Cell{
+		{{Ch: 'a', Bg: term.ColorRed}},
+		{{Ch: 'b', Fg: term.AttrBold, Bg: term.AttrUnderline}},
+		{{Ch: 'c', Bg: term.ColorRed}},
+	}
+	newL := c.SetLocationList(&testLocationList{locations: newLocations})
+	assert.Equal(t, expected, buf.RawCells())
+	assert.Nil(t, newL)
 }

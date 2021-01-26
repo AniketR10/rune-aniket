@@ -15,6 +15,11 @@ const (
 	blockSelection
 )
 
+// used to subscribe to buffer updates
+type curSubscriber struct {
+	c *Cursor
+}
+
 // Cursor is a helper structure which manages a cursor over a Scroll.
 type Cursor struct {
 	buf       *cell.Buffer
@@ -26,20 +31,21 @@ type Cursor struct {
 		scrollFrom term.Coordinates
 		cells      [][]term.Cell
 	}
+	subscriber curSubscriber
 }
 
 // NewCursor allocates storage for a new cursor,
 // initializes it with an empty Scroll, and returns it.
-func NewCursor() *Cursor {
+func NewCursor(scroll *component.Scroll) *Cursor {
 	c := new(Cursor)
-	scroll := component.NewScroll()
 	c.Init(scroll)
 	return c
 }
 
 // Init initializes this cursor with the given scroll.
 // Note that this Cursor implementation does not support text wrap mode,
-// so scroll.Wrap should be falsc.
+// so scroll.Wrap should be false. Also, once initialized
+// this cursor MUST NOT be copied.
 func (c *Cursor) Init(scroll *component.Scroll) {
 	if scroll.Wrap == true {
 		panic("Cursor does not support wrap mode yet")
@@ -48,7 +54,30 @@ func (c *Cursor) Init(scroll *component.Scroll) {
 	c.scroll = scroll
 	c.buf = c.scroll.Buffer()
 	c.selection.mode = noSelection
+	c.subscriber.c = c
+
+	c.buf.Subscribe(&c.subscriber)
 }
+
+func (c *curSubscriber) OnWillInsert(at term.Coordinates, str string) {
+	if c.c.locations != nil {
+		c.c.setLocListAttr(c.c.locations, true)
+		c.c.locations = nil
+	}
+}
+
+func (c *curSubscriber) OnDidInsert(from, to term.Coordinates) { /* nop */ }
+
+func (c *curSubscriber) OnWillDelete(from, to term.Coordinates) {
+	if c.c.locations != nil {
+		c.c.setLocListAttr(c.c.locations, true)
+		c.c.locations = nil
+	}
+}
+
+func (c *curSubscriber) OnDidDelete(start, end term.Coordinates, str string) { /* nop */ }
+
+func (c *curSubscriber) Unsubscribe() {}
 
 // Cursor returns the current position of the cursor. It safisfies tui.Handler.Cursor.
 func (c *Cursor) Cursor() (term.Coordinates, bool) {
@@ -944,7 +973,8 @@ func (c *Cursor) setLocListAttr(l LocationList, reverse bool) {
 }
 
 // SetLocationList sets a location list on this cursor. It substitutes and returns
-// the previous location list if there was any.
+// the previous location list if there was any. Any calls to Insert on the underlying
+// Writer will reset the location list.
 func (c *Cursor) SetLocationList(l LocationList) LocationList {
 	if c.locations != nil {
 		c.setLocListAttr(c.locations, true)
