@@ -84,3 +84,22 @@ func StringToCells(str string) (cells [][]term.Cell) {
 	builder.ReadFrom(strings.NewReader(str))
 	return builder.RawCells()
 }
+
+// ConvertCoordinates converts x and y, which use the buffer in bytes as offsets
+// into term.Coordinates, which account for tab expansion.
+func ConvertCoordinates(cells [][]term.Cell, y, x int) term.Coordinates {
+	if y >= len(cells) {
+		return term.Coordinates{}
+	}
+	line := cells[y]
+
+	for xi, c := range line {
+		if xi == x {
+			break
+		}
+		if c.Ch == 0 {
+			x++
+		}
+	}
+	return term.Coordinates{Y: y, X: x}
+}
