@@ -19,11 +19,17 @@ message EditorEvent {
 	TypeOpen = 0;
 	TypeClose = 1;
 	TypeFlush = 2;
+	TypeInsert = 3;
+	TypeDelete = 4;
   }
 
   Type type = 1;
   string resource_name = 2;
   uint32 resource_id = 3;
+
+  Coordinates start = 4;
+  Coordinates end = 5;
+  string content = 6;
 }
 
 message EditorSubscribeRequest {

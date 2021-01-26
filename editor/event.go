@@ -6,7 +6,9 @@ import (
 	"fmt"
 
 	"github.com/ernestrc/go-tui/browser"
+	"github.com/ernestrc/go-tui/cell"
 	"github.com/ernestrc/go-tui/proto"
+	"github.com/ernestrc/go-tui/term"
 )
 
 // EventType is a type of editor event.
@@ -21,6 +23,12 @@ const (
 
 	// EventTypeFlush is dispatched when an editor buffer is Flushed.
 	EventTypeFlush
+
+	// EventTypeInsert is dispatched when new content is inserted into an editor buffer.
+	EventTypeInsert
+
+	// EventTypeDelete is dispatched when content is deleted from an editor buffer.
+	EventTypeDelete
 )
 
 // Event encapsulates eventual information about a particular editor resource.
@@ -28,6 +36,10 @@ type Event struct {
 	Type         EventType
 	ResourceName string
 	Resource     Handler
+
+	// for EventTypeInsert/EventTypeDelete events
+	Start, End term.Coordinates
+	Content    string
 }
 
 func protoTypeToModel(protoType proto.EditorEvent_Type) (ev EventType, err error) {
@@ -38,6 +50,10 @@ func protoTypeToModel(protoType proto.EditorEvent_Type) (ev EventType, err error
 		ev = EventTypeFlush
 	case proto.EditorEvent_TypeOpen:
 		ev = EventTypeOpen
+	case proto.EditorEvent_TypeDelete:
+		ev = EventTypeDelete
+	case proto.EditorEvent_TypeInsert:
+		ev = EventTypeInsert
 	default:
 		err = fmt.Errorf("failed to convert proto editor event: invalid type: %v",
 			protoType)
@@ -53,6 +69,9 @@ func (e *Event) fromProto(pe *proto.EditorEvent) (err error) {
 	}
 	e.ResourceName = pe.GetResourceName()
 	e.Resource = browser.Token{ID: uint64(pe.GetResourceId())}
+	e.Start = pe.GetStart().ToModel()
+	e.End = pe.GetEnd().ToModel()
+	e.Content = pe.GetContent()
 	return nil
 }
 
@@ -64,6 +83,10 @@ func (e Event) protoType() proto.EditorEvent_Type {
 		return proto.EditorEvent_TypeFlush
 	case EventTypeOpen:
 		return proto.EditorEvent_TypeOpen
+	case EventTypeDelete:
+		return proto.EditorEvent_TypeDelete
+	case EventTypeInsert:
+		return proto.EditorEvent_TypeInsert
 	default:
 		panic(fmt.Sprintf("failed to convert editor event to proto: invalid type: %v", e.Type))
 	}
@@ -77,5 +100,57 @@ func (e *Event) toProto() proto.EditorEvent {
 	ret.ResourceName = e.ResourceName
 	ret.ResourceId = uint32(e.Resource.(browser.Token).ID)
 
+	var start, end proto.Coordinates
+	start.FromModel(e.Start)
+	end.FromModel(e.End)
+	ret.Start = &start
+	ret.End = &end
+	ret.Content = e.Content
+
 	return ret
+}
+
+type cellSubscriber struct {
+	name string
+	h    Handler
+	eh   EventHandler
+
+	onWillInsert string
+}
+
+func (s *cellSubscriber) OnWillInsert(at term.Coordinates, str string) {
+	s.onWillInsert = str
+}
+
+func (s *cellSubscriber) OnDidInsert(from, to term.Coordinates) {
+	s.eh.Handle(Event{
+		Type:         EventTypeInsert,
+		Resource:     s.h,
+		ResourceName: s.name,
+		Start:        from,
+		End:          to,
+		Content:      s.onWillInsert,
+	})
+}
+
+func (s *cellSubscriber) OnWillDelete(from, to term.Coordinates) {
+}
+
+func (s *cellSubscriber) OnDidDelete(start, end term.Coordinates, str string) {
+	s.eh.Handle(Event{
+		Type:         EventTypeDelete,
+		Resource:     s.h,
+		ResourceName: s.name,
+		Start:        start,
+		End:          end,
+		Content:      str,
+	})
+}
+
+func (s *cellSubscriber) Unsubscribe() {
+}
+
+// CellSubscriber returns a cell.Subscriber which forwards editor Insert/Delete to evHandler.
+func CellSubscriber(name string, h Handler, evHandler EventHandler) cell.Subscriber {
+	return &cellSubscriber{name: name, h: h, eh: evHandler}
 }

@@ -226,12 +226,6 @@ func (c *Component) OpenFileTab(
 	editor, _ := c.ed.Edit(filename, buf)
 	fc.h = editor
 
-	c.dispatchEvent(Event{
-		Type:         EventTypeOpen,
-		ResourceName: filename,
-		Resource:     editor,
-	})
-
 	tabName := filepath.Base(filename)
 	return c.comp.NewTab(filename, tabName, editor, fc), nil
 }
@@ -357,11 +351,6 @@ func (c *Component) Edit(name string, buf *cell.Buffer) (Handler, error) {
 	editor, _ := c.ed.Edit(name, buf)
 	_ = c.comp.NewTab(name, name, editor, nil)
 
-	c.dispatchEvent(Event{
-		Type:         EventTypeOpen,
-		ResourceName: name,
-		Resource:     editor,
-	})
 	return editor, nil
 }
 
@@ -402,6 +391,12 @@ func (c *Component) Flush(win browser.Window) error {
 
 // SubscribeEditor subscribes h to editor events of type ev.
 func (c *Component) SubscribeEditor(ev EventType, h EventHandler) error {
+	// delegate open/insert/delete event dispatching to underlying editor.
+	switch ev {
+	case EventTypeDelete, EventTypeInsert, EventTypeOpen:
+		return c.ed.SubscribeEditor(ev, h)
+	}
+
 	if _, ok := c.edSubscribers[ev]; !ok {
 		c.edSubscribers[ev] = make([]EventHandler, 0, 1)
 	}

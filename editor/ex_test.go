@@ -18,12 +18,47 @@ type browserConstructor func(ed Editor, opts ...Option) (tui.Handler, browser.Br
 type testEditor struct {
 	name string
 	buf  *cell.Buffer
+	subs map[EventType][]EventHandler
+}
+
+func (e *testEditor) Handle(ev Event) bool {
+	e.dispatchEvent(ev)
+	return false
+}
+
+func (e *testEditor) dispatchEvent(ev Event) {
+	if len(e.subs) == 0 {
+		return
+	}
+	subs, ok := e.subs[ev.Type]
+	if !ok {
+		return
+	}
+
+	remain := make([]EventHandler, 0, len(subs))
+	for _, sub := range subs {
+		exit := sub.Handle(ev)
+		if !exit {
+			remain = append(remain, sub)
+		}
+	}
+	e.subs[ev.Type] = remain
 }
 
 func (e *testEditor) Edit(name string, buf *cell.Buffer) (Handler, error) {
 	e.name = name
 	e.buf = buf
-	return browser.NewTestHandler(), nil
+
+	h := browser.NewTestHandler()
+	e.dispatchEvent(Event{
+		Type:         EventTypeOpen,
+		ResourceName: name,
+		Resource:     h,
+	})
+
+	subs := CellSubscriber(name, h, e)
+	buf.Subscribe(subs)
+	return h, nil
 }
 
 func (e *testEditor) SetLocationList(h Handler, loc LocationList) error {
@@ -38,7 +73,15 @@ func (e *testEditor) Reader(h Handler) Reader {
 	return CellReader(e.buf.Reader())
 }
 
-func (e *testEditor) SubscribeEditor(EventType, EventHandler) error {
+func (e *testEditor) SubscribeEditor(ev EventType, sub EventHandler) error {
+	if e.subs == nil {
+		e.subs = make(map[EventType][]EventHandler)
+	}
+	if _, ok := e.subs[ev]; !ok {
+		e.subs[ev] = []EventHandler{sub}
+		return nil
+	}
+	e.subs[ev] = append(e.subs[ev], sub)
 	return nil
 }
 

@@ -3,13 +3,13 @@ package editor
 import (
 	"errors"
 	"net"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/ernestrc/go-tui/cell"
-	"github.com/ernestrc/go-tui/handler"
 	"github.com/ernestrc/go-tui/proto"
 	"github.com/ernestrc/go-tui/term"
 	gomock "github.com/golang/mock/gomock"
@@ -87,42 +87,75 @@ func TestClientServerIntegration(t *testing.T) {
 	})
 
 	t.Run("client through server calls underlying editor Subscribe", func(t *testing.T) {
-		var wg sync.WaitGroup
-		ctrl := gomock.NewController(t)
-		defer ctrl.Finish()
-		b := proto.NewDialBroker()
-		ed := NewMockEditor(ctrl)
-		expectInitialServerSubscribe(t, ed)
-		s := NewServer(b, ed, new(sync.Mutex))
+		str1 := "Granola Lola"
+		tsuite := []struct {
+			name       string
+			evType     EventType
+			trigger    func(t *testing.T, resourceName string, ed Editor, buf *cell.Buffer)
+			start, end *term.Coordinates
+			content    *string
+		}{
+			{
+				"Edit->EventTypeOpen",
+				EventTypeOpen,
+				func(t *testing.T, resourceName string, ed Editor, buf *cell.Buffer) {
+					ed.Edit(resourceName, buf)
+				}, nil, nil, nil,
+			},
+			{
+				"Edit->EventTypeInsert",
+				EventTypeInsert,
+				func(t *testing.T, resourceName string, ed Editor, buf *cell.Buffer) {
+					ed.Edit(resourceName, buf)
+					buf.WriteString(str1)
+				}, &term.Coordinates{}, &term.Coordinates{X: 11}, &str1,
+			},
+			{
+				"Edit->EventTypeDelete",
+				EventTypeDelete,
+				func(t *testing.T, resourceName string, ed Editor, buf *cell.Buffer) {
+					buf.WriteString(str1)
+					ed.Edit(resourceName, buf)
+					buf.DeleteRow(0)
+				}, &term.Coordinates{}, &term.Coordinates{X: 11}, &str1,
+			},
+		}
 
-		client, closeFn := setupIntTest(t, b, s)
-		defer closeFn()
+		for i, _tcase := range tsuite {
+			tcase := _tcase
+			var wg sync.WaitGroup
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+			b := proto.NewDialBroker()
+			ed := &testEditor{}
+			s := NewServer(b, ed, new(sync.Mutex))
 
-		evType := EventTypeOpen
-		var h EventHandler
-		ed.EXPECT().SubscribeEditor(gomock.Any(), gomock.Any()).
-			DoAndReturn(func(ev EventType, _h EventHandler) error {
-				assert.Equal(t, evType, ev)
-				h = _h
-				return nil
-			})
+			client, closeFn := setupIntTest(t, b, s)
+			defer closeFn()
 
-		myEv := Event{Type: evType, Resource: &handler.TestHandler{}}
-		err := client.SubscribeEditor(evType, FuncEventHandler(func(ev Event) bool {
-			defer wg.Done()
-			return false
-		}))
-		require.NoError(t, err)
+			err := client.SubscribeEditor(tcase.evType, FuncEventHandler(func(ev Event) bool {
+				defer wg.Done()
+				if tcase.start != nil {
+					assert.Equal(t, *tcase.start, ev.Start)
+				}
+				if tcase.end != nil {
+					assert.Equal(t, *tcase.end, ev.End)
+				}
+				if tcase.content != nil {
+					assert.Equal(t, *tcase.content, ev.Content)
+				}
+				return false
+			}))
+			require.NoError(t, err)
 
-		wg.Add(1)
-		s.Handle(myEv) // simulate underlying editor calling handle EventTypeOpen
-		exit := h.Handle(myEv)
-		assert.False(t, exit)
+			wg.Add(1)
+			buf := cell.NewBuffer()
+			tcase.trigger(t, strconv.Itoa(i), ed, buf)
+			wg.Wait()
 
-		wg.Wait()
-
-		assert.NoError(t, s.Close())
-		time.Sleep(asyncResultsSleepDuration)
+			assert.NoError(t, s.Close())
+			time.Sleep(asyncResultsSleepDuration)
+		}
 	})
 
 	t.Run("SetLocationList sets the location list of the remote editor", func(t *testing.T) {

@@ -86,6 +86,7 @@ func (s *Server) Init(
 
 func (s *Server) cleanResource(name string) {
 	// allow other subscribers to take action first
+	// TODO this breaks if client opens and closes quickly
 	time.Sleep(gracefulShutdownWait)
 
 	s.editor.Lock()
@@ -199,7 +200,7 @@ func (s *Server) addNextHandlerResource(name string, h Handler) uint32 {
 	handlerID := s.broker.NextId()
 	s.nameToID[name] = handlerID
 	s.idToHandler[handlerID] = h
-	s.tryLog("(%p editor.Server): stored handler with ID: %d", s, handlerID)
+	s.tryLog("(%p editor.Server): stored handler with name, ID: %s,%d", s, name, handlerID)
 	return handlerID
 }
 

@@ -16,18 +16,17 @@ func Editor(opts ...Option) editor.Editor {
 	return &viEditor{opts: opts, subs: subs}
 }
 
-func (e *viEditor) Edit(name string, buf *cell.Buffer) (editor.Handler, error) {
-	h := New(buf, e.opts...)
-	subs, ok := e.subs[editor.EventTypeOpen]
+func (e *viEditor) Handle(ev editor.Event) bool {
+	e.dispatchEvent(ev)
+	return false
+}
+
+func (e *viEditor) dispatchEvent(ev editor.Event) {
+	subs, ok := e.subs[ev.Type]
 	if !ok {
-		return h, nil
+		return
 	}
 
-	ev := editor.Event{
-		Type:         editor.EventTypeOpen,
-		ResourceName: name,
-		Resource:     h,
-	}
 	remain := make([]editor.EventHandler, 0, len(subs))
 	for _, sub := range subs {
 		exit := sub.Handle(ev)
@@ -35,12 +34,26 @@ func (e *viEditor) Edit(name string, buf *cell.Buffer) (editor.Handler, error) {
 			remain = append(remain, sub)
 		}
 	}
-	e.subs[editor.EventTypeOpen] = remain
+	e.subs[ev.Type] = remain
+}
+
+func (e *viEditor) Edit(name string, buf *cell.Buffer) (editor.Handler, error) {
+	h := New(buf, e.opts...)
+
+	e.dispatchEvent(editor.Event{
+		Type:         editor.EventTypeOpen,
+		ResourceName: name,
+		Resource:     h,
+	})
+
+	sub := editor.CellSubscriber(name, h, e)
+	buf.Subscribe(sub)
+
 	return h, nil
 }
 
 // SubscribeEditor subsribes sub to ev. Note that this Editor is only capable
-// of dispatching EventTypeOpen EventType events.
+// of dispatching EventTypeOpen, EventTypeInsert and EventTypeDelete EventType events.
 func (e *viEditor) SubscribeEditor(ev editor.EventType, sub editor.EventHandler) error {
 	if _, ok := e.subs[ev]; !ok {
 		e.subs[ev] = []editor.EventHandler{sub}

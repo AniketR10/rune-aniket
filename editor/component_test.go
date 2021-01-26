@@ -256,6 +256,29 @@ func TestComponentEditorSubscriber(t *testing.T) {
 				c.Browser().RemoveWindowContent(win)
 			},
 		},
+		{
+			"buf.WriteString->EventTypeInsert",
+			EventTypeInsert,
+			func(t *testing.T, c *Component, resourceName string) {
+				buf := cell.NewBuffer()
+				_, err := c.Edit(resourceName, buf)
+				assert.NoError(t, err)
+
+				buf.WriteString("wasup")
+			},
+		},
+		{
+			"buf.DeleteRow->EventTypeDelete",
+			EventTypeDelete,
+			func(t *testing.T, c *Component, resourceName string) {
+				buf := cell.NewBuffer()
+				buf.WriteString("wasup")
+				_, err := c.Edit(resourceName, buf)
+				assert.NoError(t, err)
+
+				buf.DeleteRow(0)
+			},
+		},
 	}
 
 	for _, _tcase := range tsuite {
