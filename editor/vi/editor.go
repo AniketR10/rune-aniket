@@ -44,6 +44,7 @@ func (e *viEditor) Edit(name string, buf *cell.Buffer) (editor.Handler, error) {
 		Type:         editor.EventTypeOpen,
 		ResourceName: name,
 		Resource:     h,
+		Content:      buf.String(),
 	})
 
 	sub := editor.CellSubscriber(name, h, e)

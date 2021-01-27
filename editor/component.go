@@ -223,7 +223,10 @@ func (c *Component) OpenFileTab(
 		return nil, err
 	}
 
-	editor, _ := c.ed.Edit(filename, buf)
+	editor, err := c.ed.Edit(filename, buf)
+	if err != nil {
+		return nil, err
+	}
 	fc.h = editor
 
 	tabName := filepath.Base(filename)
@@ -348,7 +351,10 @@ func (c *Component) Focus() (browser.Window, error) {
 // Edit edits the resource with name and buffer with the underlying Editor
 // in a new browser buffer.
 func (c *Component) Edit(name string, buf *cell.Buffer) (Handler, error) {
-	editor, _ := c.ed.Edit(name, buf)
+	editor, err := c.ed.Edit(name, buf)
+	if err != nil {
+		return nil, err
+	}
 	_ = c.comp.NewTab(name, name, editor, nil)
 
 	return editor, nil
@@ -397,10 +403,17 @@ func (c *Component) SubscribeEditor(ev EventType, h EventHandler) error {
 	switch ev {
 	case EventTypeOpen:
 		for _, tab := range c.comp.Tabs() {
+			resHandler := tab.Handler()
+			cells, err := c.ed.Reader(resHandler).RawCells()
+			if err != nil {
+				return fmt.Errorf("Error dispatching open event content: RawCells: %v", err)
+			}
+			str := cell.CellsToString(cells)
 			exit := h.Handle(Event{
 				Type:         EventTypeOpen,
 				ResourceName: tab.ID(),
-				Resource:     tab.Handler(),
+				Resource:     resHandler,
+				Content:      str,
 			})
 			if exit {
 				return nil

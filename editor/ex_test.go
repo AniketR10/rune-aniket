@@ -54,6 +54,7 @@ func (e *testEditor) Edit(name string, buf *cell.Buffer) (Handler, error) {
 		Type:         EventTypeOpen,
 		ResourceName: name,
 		Resource:     h,
+		Content:      buf.String(),
 	})
 
 	subs := CellSubscriber(name, h, e)
