@@ -246,7 +246,7 @@ func (b *Buffer) DeleteLine(from, to term.Coordinates) (
 	start, end term.Coordinates, str string,
 ) {
 	from, to = SortFromTo(from, to)
-	from.X, to.X = 0, b.Columns(to.Y)-1
+	from.X, to.X = 0, b.Columns(to.Y)
 	if to.X < 0 {
 		to.X = 0
 	}

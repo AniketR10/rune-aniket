@@ -326,6 +326,14 @@ func TestBufferDeleteLine(t *testing.T) {
 			start:  term.Coordinates{},
 			end:    term.Coordinates{Y: 2},
 		},
+		{
+			from:   term.Coordinates{Y: 1},
+			to:     term.Coordinates{Y: 2},
+			input:  "{\n\tb\n\tc\n}",
+			output: "\tb\n\tc\n",
+			start:  term.Coordinates{Y: 1},
+			end:    term.Coordinates{X: 5, Y: 2},
+		},
 	}
 
 	for _, tcase := range tsuite {
