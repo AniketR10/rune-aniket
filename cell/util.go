@@ -85,6 +85,14 @@ func StringToCells(str string) (cells [][]term.Cell) {
 	return builder.RawCells()
 }
 
+// CellsToBuffer writes in to a new buffer and returns it.
+func CellsToBuffer(in [][]term.Cell) *Buffer {
+	str := CellsToString(in)
+	buf := NewBuffer()
+	buf.WriteString(str)
+	return buf
+}
+
 // ConvertRuneCoordinates converts x and y, which use the buffer runes as offsets
 // into term.Coordinates, which account for tab expansion. It returns false if y is out
 // of bounds.
