@@ -223,6 +223,15 @@ func (c *Component) Tab(id string) (*Tab, bool) {
 	return nil, false
 }
 
+// Tabs returns the tabs open in this browser.Component.
+func (c *Component) Tabs() (ret []*Tab) {
+	ret = make([]*Tab, len(c.buffers))
+	for i, b := range c.buffers {
+		ret[i] = b
+	}
+	return
+}
+
 func (c *Component) setFocusIfStartHandler(t *Tab) {
 	win := c.focus()
 

@@ -83,6 +83,17 @@ func (b *Tab) OnUnmount() error {
 	return nil
 }
 
+// ID returns the identifier of this tab.
+func (b *Tab) ID() string {
+	return b.id
+}
+
+// Handler returns the tui.Handler responsible for drawing
+// the contents of this tab.
+func (b *Tab) Handler() tui.Handler {
+	return b.handler
+}
+
 // Closer returns the closer passed to browser.Component.NewTab,
 // which is used when tab is closed via
 func (b *Tab) Closer() io.Closer {

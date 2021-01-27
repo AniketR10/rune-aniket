@@ -390,10 +390,24 @@ func (c *Component) Flush(win browser.Window) error {
 }
 
 // SubscribeEditor subscribes h to editor events of type ev.
+// If ev is of type EventTypeOpen, an event will be dispatched for
+// every Tab currently open.
 func (c *Component) SubscribeEditor(ev EventType, h EventHandler) error {
 	// delegate open/insert/delete event dispatching to underlying editor.
 	switch ev {
-	case EventTypeDelete, EventTypeInsert, EventTypeOpen:
+	case EventTypeOpen:
+		for _, tab := range c.comp.Tabs() {
+			exit := h.Handle(Event{
+				Type:         EventTypeOpen,
+				ResourceName: tab.ID(),
+				Resource:     tab.Handler(),
+			})
+			if exit {
+				return nil
+			}
+		}
+		fallthrough
+	case EventTypeDelete, EventTypeInsert:
 		return c.ed.SubscribeEditor(ev, h)
 	}
 

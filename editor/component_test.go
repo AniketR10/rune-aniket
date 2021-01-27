@@ -350,7 +350,7 @@ func TestComponentEditorSubscriber(t *testing.T) {
 		var fired int
 		c.SubscribeEditor(EventTypeClose, FuncEventHandler(func(ev Event) bool {
 			fired++
-			return true
+			return false
 		}))
 
 		_, err = c.Open(filename)
@@ -358,5 +358,25 @@ func TestComponentEditorSubscriber(t *testing.T) {
 
 		assert.NoError(t, c.Close())
 		assert.Equal(t, 0, fired)
+	})
+
+	t.Run("one open event is dispatched per open tab upon subscribe to open", func(t *testing.T) {
+		c, err := newTestComponent(&testEditor{})
+		require.NoError(t, err)
+
+		filename1 := "JJ.txt"
+		filename2 := "J2.txt"
+		_, err = c.Open(filename1)
+		require.NoError(t, err)
+		_, err = c.Open(filename2)
+		require.NoError(t, err)
+
+		var fired int
+		c.SubscribeEditor(EventTypeOpen, FuncEventHandler(func(ev Event) bool {
+			fired++
+			return false
+		}))
+
+		assert.Equal(t, 2, fired)
 	})
 }
