@@ -214,6 +214,7 @@ func TestComponentOpen(t *testing.T) {
 }
 
 func TestComponentEditorSubscriber(t *testing.T) {
+	content := "Mr. Patoto"
 	tsuite := []struct {
 		name    string
 		evType  EventType
@@ -223,7 +224,9 @@ func TestComponentEditorSubscriber(t *testing.T) {
 			"Edit->EventTypeOpen",
 			EventTypeOpen,
 			func(t *testing.T, c *Component, resourceName string) {
-				_, err := c.Edit(resourceName, cell.NewBuffer())
+				buf := cell.NewBuffer()
+				buf.WriteString(content)
+				_, err := c.Edit(resourceName, buf)
 				assert.NoError(t, err)
 			},
 		},
@@ -360,31 +363,36 @@ func TestComponentEditorSubscriber(t *testing.T) {
 		assert.Equal(t, 0, fired)
 	})
 
-	t.Run("Open events are dispatched with content", func(t *testing.T) {
-		c, err := newTestComponent(&testEditor{})
-		require.NoError(t, err)
-
-		content := "Mr. Patoto"
-		filename := "Toy Rory"
-
-		c.openFileFn = func(filePath string,
-			buf *cell.Buffer, swapDir string) (flusherCloser, error) {
-			buf.WriteString(content)
-			return &testFlusherCloser{}, nil
+	for _, _tcase := range tsuite {
+		switch _tcase.evType {
+		case EventTypeFlush, EventTypeOpen:
+		default:
+			return
 		}
 
-		var fired int
-		c.SubscribeEditor(EventTypeOpen, FuncEventHandler(func(ev Event) bool {
-			fired++
-			assert.Equal(t, content, ev.Content)
-			return false
-		}))
+		tcase := _tcase
+		t.Run(tcase.name+" events are dispatched with content", func(t *testing.T) {
+			c, err := newTestComponent(&testEditor{})
+			require.NoError(t, err)
 
-		_, err = c.Open(filename)
-		require.NoError(t, err)
+			filename := "Toy Rory"
 
-		assert.Equal(t, 1, fired)
-	})
+			c.openFileFn = func(filePath string,
+				buf *cell.Buffer, swapDir string) (flusherCloser, error) {
+				buf.WriteString(content)
+				return &testFlusherCloser{}, nil
+			}
+
+			var dispatched string
+			c.SubscribeEditor(tcase.evType, FuncEventHandler(func(ev Event) bool {
+				dispatched = ev.Content
+				return false
+			}))
+
+			tcase.trigger(t, c, filename)
+			assert.Equal(t, content, dispatched)
+		})
+	}
 
 	t.Run("one open event is dispatched per open tab upon subscribe to open", func(t *testing.T) {
 		c, err := newTestComponent(&testEditor{})

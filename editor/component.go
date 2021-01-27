@@ -52,10 +52,16 @@ type editorFlusherCloser struct {
 }
 
 func (e *editorFlusherCloser) Flush() error {
+	content, err := e.parent.getContent(e.h)
+	if err != nil {
+		return err
+	}
+
 	ev := Event{
 		Type:         EventTypeFlush,
 		ResourceName: e.name,
 		Resource:     e.h,
+		Content:      content,
 	}
 	e.parent.dispatchEvent(ev)
 	return e.fc.Flush()
@@ -395,6 +401,14 @@ func (c *Component) Flush(win browser.Window) error {
 	return nil
 }
 
+func (c *Component) getContent(h Handler) (string, error) {
+	cells, err := c.ed.Reader(h).RawCells()
+	if err != nil {
+		return "", fmt.Errorf("Error dispatching event content: RawCells: %v", err)
+	}
+	return cell.CellsToString(cells), nil
+}
+
 // SubscribeEditor subscribes h to editor events of type ev.
 // If ev is of type EventTypeOpen, an event will be dispatched for
 // every Tab currently open.
@@ -404,11 +418,10 @@ func (c *Component) SubscribeEditor(ev EventType, h EventHandler) error {
 	case EventTypeOpen:
 		for _, tab := range c.comp.Tabs() {
 			resHandler := tab.Handler()
-			cells, err := c.ed.Reader(resHandler).RawCells()
+			str, err := c.getContent(resHandler)
 			if err != nil {
-				return fmt.Errorf("Error dispatching open event content: RawCells: %v", err)
+				return err
 			}
-			str := cell.CellsToString(cells)
 			exit := h.Handle(Event{
 				Type:         EventTypeOpen,
 				ResourceName: tab.ID(),
