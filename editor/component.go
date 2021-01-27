@@ -422,6 +422,10 @@ func (c *Component) Draw(w term.Writer) {
 
 // Close closes all resources associated with this Component.
 func (c *Component) Close() error {
+	// avoid dispatching close events on flusherCloser callbacks
+	c.termSubscribers = make(map[term.Event]browser.EventHandler)
+	c.edSubscribers = make(map[EventType][]EventHandler)
+
 	err := c.comp.Close()
 	if err != nil {
 		c.tryLog("browser.Component.Close error: %v", err)

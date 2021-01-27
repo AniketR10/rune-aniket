@@ -18,10 +18,23 @@ var (
 	evInterrupt = term.Event{Type: term.EventInterrupt}
 )
 
-type testFlusherCloser struct{}
+type testFlusherCloser struct {
+	closeFn func() error
+	flushFn func() error
+}
 
-func (t testFlusherCloser) Close() error { return nil }
-func (t testFlusherCloser) Flush() error { return nil }
+func (t *testFlusherCloser) Close() error {
+	if t.closeFn != nil {
+		return t.closeFn()
+	}
+	return nil
+}
+func (t *testFlusherCloser) Flush() error {
+	if t.flushFn != nil {
+		return t.flushFn()
+	}
+	return nil
+}
 
 func newTestComponent(ed Editor) (*Component, error) {
 	c, err := NewComponent(ed, DefaultConfig())
@@ -31,11 +44,11 @@ func newTestComponent(ed Editor) (*Component, error) {
 
 	c.openFileFn = func(filePath string,
 		buf *cell.Buffer, swapDir string) (flusherCloser, error) {
-		return testFlusherCloser{}, nil
+		return &testFlusherCloser{}, nil
 	}
 	c.recoverFileFn = func(filePath, swapFilePath string,
 		buf *cell.Buffer) (flusherCloser, error) {
-		return testFlusherCloser{}, nil
+		return &testFlusherCloser{}, nil
 	}
 	return c, nil
 }
@@ -315,4 +328,35 @@ func TestComponentEditorSubscriber(t *testing.T) {
 			assert.Equal(t, 1, fired)
 		})
 	}
+
+	t.Run("no events are dispatched after Close is called", func(t *testing.T) {
+		c, err := newTestComponent(&testEditor{})
+		require.NoError(t, err)
+
+		filename := "Jill_Biden.txt"
+		ev := Event{
+			Type:         EventTypeClose,
+			ResourceName: filename,
+		}
+		fc := testFlusherCloser{closeFn: func() error {
+			c.dispatchEvent(ev)
+			return nil
+		}}
+		c.openFileFn = func(filePath string,
+			buf *cell.Buffer, swapDir string) (flusherCloser, error) {
+			return &fc, nil
+		}
+
+		var fired int
+		c.SubscribeEditor(EventTypeClose, FuncEventHandler(func(ev Event) bool {
+			fired++
+			return true
+		}))
+
+		_, err = c.Open(filename)
+		require.NoError(t, err)
+
+		assert.NoError(t, c.Close())
+		assert.Equal(t, 0, fired)
+	})
 }
