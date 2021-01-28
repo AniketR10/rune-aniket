@@ -29,7 +29,9 @@ message EditorEvent {
 
   Coordinates start = 4;
   Coordinates end = 5;
-  string content = 6;
+  Coordinates from = 6;
+  Coordinates to = 7;
+  string content = 8;
 }
 
 message EditorSubscribeRequest {

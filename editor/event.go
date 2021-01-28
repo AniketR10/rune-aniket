@@ -37,9 +37,13 @@ type Event struct {
 	ResourceName string
 	Resource     Handler
 
-	// for EventTypeInsert/EventTypeDelete events
+	// Start, End represent the []byte coordinates.
 	Start, End term.Coordinates
-	Content    string
+
+	// From, To represent the raw [][]term.Cell coordinates, which account
+	// for tab expansion.
+	From, To term.Coordinates
+	Content  string
 }
 
 func protoTypeToModel(protoType proto.EditorEvent_Type) (ev EventType, err error) {
@@ -71,6 +75,8 @@ func (e *Event) fromProto(pe *proto.EditorEvent) (err error) {
 	e.Resource = browser.Token{ID: uint64(pe.GetResourceId())}
 	e.Start = pe.GetStart().ToModel()
 	e.End = pe.GetEnd().ToModel()
+	e.From = pe.GetFrom().ToModel()
+	e.To = pe.GetTo().ToModel()
 	e.Content = pe.GetContent()
 	return nil
 }
@@ -100,12 +106,17 @@ func (e *Event) toProto() proto.EditorEvent {
 	ret.ResourceName = e.ResourceName
 	ret.ResourceId = uint32(e.Resource.(browser.Token).ID)
 
-	var start, end proto.Coordinates
+	var start, end, from, to proto.Coordinates
 	start.FromModel(e.Start)
 	end.FromModel(e.End)
+	from.FromModel(e.From)
+	to.FromModel(e.To)
+
 	ret.Start = &start
 	ret.End = &end
 	ret.Content = e.Content
+	ret.From = &from
+	ret.To = &to
 
 	return ret
 }
@@ -115,11 +126,30 @@ type cellSubscriber struct {
 	h    Handler
 	eh   EventHandler
 
-	onWillInsert string
+	onWillInsert     string
+	onWillInsertAt   term.Coordinates
+	onWillDeleteFrom term.Coordinates
+	onWillDeleteTo   term.Coordinates
 }
 
 func (s *cellSubscriber) OnWillInsert(at term.Coordinates, str string) {
 	s.onWillInsert = str
+	s.onWillInsertAt = at
+}
+
+// cell.Writer API does not provide access to the "end" before tab expansion.
+func calculateInsertEnd(at term.Coordinates, str string) term.Coordinates {
+	var lines int
+	var lastLineLen int
+	for _, r := range str {
+		if r == '\n' {
+			lines++
+			lastLineLen = 0
+			continue
+		}
+		lastLineLen++
+	}
+	return term.Coordinates{Y: at.Y + lines, X: lastLineLen - 1}
 }
 
 func (s *cellSubscriber) OnDidInsert(from, to term.Coordinates) {
@@ -127,13 +157,17 @@ func (s *cellSubscriber) OnDidInsert(from, to term.Coordinates) {
 		Type:         EventTypeInsert,
 		Resource:     s.h,
 		ResourceName: s.name,
-		Start:        from,
-		End:          to,
+		Start:        s.onWillInsertAt,
+		End:          calculateInsertEnd(s.onWillInsertAt, s.onWillInsert),
+		From:         from,
+		To:           to,
 		Content:      s.onWillInsert,
 	})
 }
 
 func (s *cellSubscriber) OnWillDelete(from, to term.Coordinates) {
+	s.onWillDeleteFrom = from
+	s.onWillDeleteTo = to
 }
 
 func (s *cellSubscriber) OnDidDelete(start, end term.Coordinates, str string) {
@@ -143,6 +177,8 @@ func (s *cellSubscriber) OnDidDelete(start, end term.Coordinates, str string) {
 		ResourceName: s.name,
 		Start:        start,
 		End:          end,
+		From:         s.onWillDeleteFrom,
+		To:           s.onWillDeleteTo,
 		Content:      str,
 	})
 }
