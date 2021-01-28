@@ -1,0 +1,245 @@
+package main
+
+import (
+	"context"
+	"testing"
+
+	"github.com/ernestrc/go-tui/browser"
+	"github.com/ernestrc/go-tui/cell"
+	"github.com/ernestrc/go-tui/editor"
+	"github.com/ernestrc/go-tui/handler"
+	"github.com/ernestrc/go-tui/plugin"
+	"github.com/ernestrc/go-tui/term"
+	"github.com/ernestrc/golang-internal-tools/lsp/protocol"
+	"github.com/ernestrc/golang-internal-tools/span"
+	"github.com/golang/mock/gomock"
+	"github.com/stretchr/testify/assert"
+)
+
+var (
+	filename1    = "wa_tup.java"
+	filecontent1 = `package me.drton.jmavsim;
+public class Rotor {
+     sta  mtyp;
+
+
+  myClass;
+`
+	tokenData1         = []float64{2, 5, 3, 0, 3, 0, 5, 4, 1, 0, 3, 2, 7, 2, 0}
+	expectedLocations1 = []editor.Location{
+		{
+			From: term.Coordinates{Y: 2, X: 5},
+			To:   term.Coordinates{Y: 2, X: 7},
+		},
+		{
+			From: term.Coordinates{Y: 2, X: 10},
+			To:   term.Coordinates{Y: 2, X: 13},
+		},
+		{
+			From: term.Coordinates{Y: 5, X: 2},
+			To:   term.Coordinates{Y: 5, X: 8},
+		},
+	}
+)
+
+func makePluginConfig() plugin.Config {
+	m := make(map[string]interface{})
+	return plugin.MapConfig(m)
+}
+
+func newTestLspHandler(
+	ctrl *gomock.Controller,
+	ed editor.Editor, p browser.EventPublisher, cfg plugin.Config,
+	server protocol.Server,
+) *lspEditorHandler {
+	ret := new(lspEditorHandler)
+	ret.ed = ed
+	ret.p = p
+	ret.files = make(map[string]*file)
+	ret.server = server
+	return ret
+}
+
+func expectDidOpen(t *testing.T, mock *MockServer, file, content string) {
+	expected := &protocol.DidOpenTextDocumentParams{
+		TextDocument: protocol.TextDocumentItem{
+			URI:        protocol.URIFromSpanURI(span.URIFromPath(file)),
+			LanguageID: "go",
+			Version:    1,
+			Text:       content,
+		},
+	}
+	mock.EXPECT().DidOpen(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(ctx context.Context, p *protocol.DidOpenTextDocumentParams) error {
+			assert.Equal(t, expected, p)
+			return nil
+		}).Times(1)
+}
+
+func expectDidChange(
+	t *testing.T, mock *MockServer, file string, version float64,
+	expectedEvents []protocol.TextDocumentContentChangeEvent,
+) {
+	expected := &protocol.DidChangeTextDocumentParams{
+		TextDocument: protocol.VersionedTextDocumentIdentifier{
+			Version: version,
+			TextDocumentIdentifier: protocol.TextDocumentIdentifier{
+				URI: protocol.URIFromSpanURI(span.URIFromPath(file)),
+			},
+		},
+		ContentChanges: expectedEvents,
+	}
+	mock.EXPECT().DidChange(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(ctx context.Context, p *protocol.DidChangeTextDocumentParams) error {
+			assert.Equal(t, expected, p)
+			return nil
+		}).Times(1)
+}
+
+func expectSemanticTokens(t *testing.T, server *MockServer, returnData []float64) {
+	server.EXPECT().SemanticTokensFull(gomock.Any(), gomock.Any()).
+		Return(&protocol.SemanticTokens{Data: returnData}, nil).
+		Times(1)
+}
+
+func assertEqualLocations(t *testing.T, loc, expected editor.LocationList) {
+	var locations, expectedLocations []editor.Location
+	for n, ok := loc.Current(); ok; n, ok = loc.Next() {
+		locations = append(locations, n)
+	}
+	for n, ok := expected.Current(); ok; n, ok = expected.Next() {
+		expectedLocations = append(expectedLocations, n)
+	}
+	assert.EqualValues(t, expectedLocations, locations)
+}
+
+func expectLocationList(
+	t *testing.T, ed *editor.MockEditor, expectedLocations []editor.Location,
+) {
+	ed.EXPECT().SetLocationList(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(h editor.Handler, loc editor.LocationList) error {
+			assertEqualLocations(t, loc, editor.LocationSlice(expectedLocations))
+			return nil
+		}).Times(1)
+}
+
+func dispatchOpen(
+	t *testing.T, h *lspEditorHandler, server *MockServer, ed *editor.MockEditor,
+	name, content string,
+	tokenData []float64, expectedLocations []editor.Location,
+) {
+	evOpen := editor.Event{
+		Type:         editor.EventTypeOpen,
+		ResourceName: name,
+		Content:      content,
+		Resource:     handler.NewTestHandler(),
+	}
+
+	expectDidOpen(t, server, name, content)
+	expectSemanticTokens(t, server, tokenData)
+	expectLocationList(t, ed, expectedLocations)
+	assert.False(t, h.Handle(evOpen))
+}
+
+func dispatchFlush(
+	t *testing.T, h *lspEditorHandler, server *MockServer, ed *editor.MockEditor,
+	name, content string, version float64,
+	tokenData []float64, expectedLocations []editor.Location,
+) {
+	ev := editor.Event{
+		Type:         editor.EventTypeFlush,
+		ResourceName: name,
+		Content:      content,
+		Resource:     handler.NewTestHandler(),
+	}
+	changes := []protocol.TextDocumentContentChangeEvent{{Text: content}}
+
+	expectDidChange(t, server, name, version, changes)
+	expectSemanticTokens(t, server, tokenData)
+	expectLocationList(t, ed, expectedLocations)
+	assert.False(t, h.Handle(ev))
+}
+
+func TestLspHandlerHandleOpen(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	ed := editor.NewMockEditor(ctrl)
+	cfg := makePluginConfig()
+	server := NewMockServer(ctrl)
+
+	h := newTestLspHandler(ctrl, ed, nil, cfg, server)
+	dispatchOpen(t, h, server, ed, filename1, filecontent1, tokenData1, expectedLocations1)
+}
+
+func TestLspHandlerHandleFlush(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	ed := editor.NewMockEditor(ctrl)
+	cfg := makePluginConfig()
+	server := NewMockServer(ctrl)
+
+	h := newTestLspHandler(ctrl, ed, nil, cfg, server)
+
+	dispatchOpen(t, h, server, ed, filename1, filecontent1, tokenData1, expectedLocations1)
+	dispatchFlush(t, h, server, ed, filename1, filecontent1, 2, tokenData1, expectedLocations1)
+}
+
+func TestLspHandlerHandleInsertDelete(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	ed := editor.NewMockEditor(ctrl)
+	cfg := makePluginConfig()
+	server := NewMockServer(ctrl)
+
+	h := newTestLspHandler(ctrl, ed, nil, cfg, server)
+
+	dispatchOpen(t, h, server, ed, filename1, filecontent1, tokenData1, expectedLocations1)
+
+	buf := cell.NewBuffer()
+	buf.WriteString(filecontent1)
+	buf.Subscribe(editor.CellSubscriber(filename1, handler.NewTestHandler(),
+		editor.FuncEventHandler(func(ev editor.Event) bool {
+			assert.False(t, h.Handle(ev))
+			return false
+		})))
+
+	// Insert
+	insertStr := "\tmyClassVar\n"
+	expectedEvents := []protocol.TextDocumentContentChangeEvent{{
+		Range: &protocol.Range{
+			Start: protocol.Position{Line: 5, Character: 9},
+			End:   protocol.Position{Line: 5, Character: 9},
+		},
+		Text: insertStr,
+	}}
+	expectDidChange(t, server, filename1, 2, expectedEvents)
+	returnData := []float64{2, 5, 3, 0, 3, 0, 5, 4, 1, 0, 3, 2, 7, 2, 0, 0, 8, 10, 2, 0}
+	expectSemanticTokens(t, server, returnData)
+
+	newLocations := append(expectedLocations1, editor.Location{
+		From: term.Coordinates{Y: 5, X: 13},
+		To:   term.Coordinates{Y: 5, X: 22},
+	})
+	expectLocationList(t, ed, newLocations)
+
+	from, until := buf.InsertString(term.Coordinates{X: 9, Y: 5}, insertStr)
+
+	// Delete
+	expectedEvents = []protocol.TextDocumentContentChangeEvent{{
+		Range: &protocol.Range{
+			Start: protocol.Position{Line: 5, Character: 9},
+			// NOTE: should be 0, but 1 is also correct
+			// according to spec as if character pos is always trimmed to last
+			// available char.
+			End: protocol.Position{Line: 6, Character: 1},
+		},
+		Text: "",
+	}}
+	expectDidChange(t, server, filename1, 3, expectedEvents)
+	expectSemanticTokens(t, server, tokenData1)
+	expectLocationList(t, ed, expectedLocations1)
+	buf.Delete(from, until)
+}
