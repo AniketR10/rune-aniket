@@ -29,8 +29,7 @@ const (
 )
 
 var (
-	// TODO allow client to configure palette but otherwise provide good defaults
-	semanticTypes = map[string]term.Attributes{
+	defaultSemanticTypeAttr = map[string]term.Attributes{
 		"namespace":     {},
 		"type":          {},
 		"class":         {},
@@ -72,11 +71,12 @@ type file struct {
 }
 
 type lspEditorHandler struct {
-	ed       editor.Editor
-	p        browser.EventPublisher
-	server   protocol.Server
-	protocol *protocol.InitializeResult
-	files    map[string]*file
+	ed                editor.Editor
+	p                 browser.EventPublisher
+	server            protocol.Server
+	protocol          *protocol.InitializeResult
+	files             map[string]*file
+	semanticTypesAttr map[string]term.Attributes
 }
 
 // TODO review lsp client spec to make sure we're complying
@@ -187,6 +187,37 @@ func getRemoteAddr(pconfig plugin.Config) (string, error) {
 	return addr, nil
 }
 
+func getSemanticTypesAttr(pconfig plugin.Config) (map[string]term.Attributes, error) {
+	ret := make(map[string]term.Attributes, len(defaultSemanticTypeAttr))
+	for k, v := range defaultSemanticTypeAttr {
+		ret[k] = v
+	}
+
+	colors, err := pconfig.GetConfig("syntax_highlighting")
+	if err != nil {
+		if err != plugin.ErrNotFound {
+			err = fmt.Errorf("Error getting 'syntax_highlighting' from plugin config: %v", err)
+			return nil, err
+		}
+		return ret, nil
+	}
+
+	for semanticType := range defaultSemanticTypeAttr {
+		attr, err := colors.GetAttributes(semanticType)
+		if err != nil {
+			if err != plugin.ErrNotFound {
+				err = fmt.Errorf("Error getting 'syntax_highlighting.%s' "+
+					"from plugin config: %v", semanticType, err)
+				return nil, err
+			}
+			continue
+		}
+		ret[semanticType] = attr
+	}
+
+	return ret, nil
+}
+
 func newLspHandler(
 	ed editor.Editor, p browser.EventPublisher, pconfig plugin.Config,
 ) (*lspEditorHandler, error) {
@@ -205,8 +236,15 @@ func newLspHandler(
 	if err != nil {
 		return nil, err
 	}
+
+	ret.semanticTypesAttr, err = getSemanticTypesAttr(pconfig)
+	if err != nil {
+		return nil, err
+	}
+
 	log.Infof("connected to remote server named %s with version %s at %s: ",
 		ret.protocol.ServerInfo.Name, ret.protocol.ServerInfo.Version, remoteAddr)
+
 	return ret, nil
 }
 
@@ -235,6 +273,7 @@ func (h *lspEditorHandler) getFile(name string) (*file, bool) {
 
 func parseLocationData(
 	uri span.URI, cells [][]term.Cell, content []byte, d []float64,
+	semanticTypes map[string]term.Attributes,
 ) (ret []editor.Location) {
 	tc := span.NewContentConverter(uri.Filename(), content)
 	colmap := protocol.ColumnMapper{
@@ -318,7 +357,7 @@ func (h *lspEditorHandler) semanticTokens(
 		return
 	}
 
-	locations := parseLocationData(f.uri, cells, []byte(content), resp.Data)
+	locations := parseLocationData(f.uri, cells, []byte(content), resp.Data, h.semanticTypesAttr)
 	err = h.ed.SetLocationList(f.handler, editor.LocationSlice(locations))
 	if err != nil {
 		log.Errorf("lspEditorHandler.SetLocationList(%s): %v", f.name, err)
