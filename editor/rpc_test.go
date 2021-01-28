@@ -123,38 +123,40 @@ func TestClientServerIntegration(t *testing.T) {
 
 		for i, _tcase := range tsuite {
 			tcase := _tcase
-			var wg sync.WaitGroup
-			ctrl := gomock.NewController(t)
-			defer ctrl.Finish()
-			b := proto.NewDialBroker()
-			ed := &testEditor{}
-			s := NewServer(b, ed, new(sync.Mutex))
+			t.Run(tcase.name, func(t *testing.T) {
+				var wg sync.WaitGroup
+				ctrl := gomock.NewController(t)
+				defer ctrl.Finish()
+				b := proto.NewDialBroker()
+				ed := &testEditor{}
+				s := NewServer(b, ed, new(sync.Mutex))
 
-			client, closeFn := setupIntTest(t, b, s)
-			defer closeFn()
+				client, closeFn := setupIntTest(t, b, s)
+				defer closeFn()
 
-			err := client.SubscribeEditor(tcase.evType, FuncEventHandler(func(ev Event) bool {
-				defer wg.Done()
-				if tcase.start != nil {
-					assert.Equal(t, *tcase.start, ev.Start)
-				}
-				if tcase.end != nil {
-					assert.Equal(t, *tcase.end, ev.End)
-				}
-				if tcase.content != nil {
-					assert.Equal(t, *tcase.content, ev.Content)
-				}
-				return false
-			}))
-			require.NoError(t, err)
+				err := client.SubscribeEditor(tcase.evType, FuncEventHandler(func(ev Event) bool {
+					defer wg.Done()
+					if tcase.start != nil {
+						assert.Equal(t, *tcase.start, ev.Start)
+					}
+					if tcase.end != nil {
+						assert.Equal(t, *tcase.end, ev.End)
+					}
+					if tcase.content != nil {
+						assert.Equal(t, *tcase.content, ev.Content)
+					}
+					return false
+				}))
+				require.NoError(t, err)
 
-			wg.Add(1)
-			buf := cell.NewBuffer()
-			tcase.trigger(t, strconv.Itoa(i), ed, buf)
-			wg.Wait()
+				wg.Add(1)
+				buf := cell.NewBuffer()
+				tcase.trigger(t, strconv.Itoa(i), ed, buf)
+				wg.Wait()
 
-			assert.NoError(t, s.Close())
-			time.Sleep(asyncResultsSleepDuration)
+				assert.NoError(t, s.Close())
+				time.Sleep(asyncResultsSleepDuration)
+			})
 		}
 	})
 

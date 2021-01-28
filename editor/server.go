@@ -40,22 +40,30 @@ type Server struct {
 
 // helps map real Handlers with token.Handler
 type serverEventHandler struct {
-	s      *Server
-	client *eventHandlerClient
+	*eventHandlerClient
+	s *Server
+
+	// used to unsubscribe when client could have closed due to a
+	// network issue or because remote server closed.
+	exitNext bool
 }
 
-func (s serverEventHandler) Handle(ev Event) bool {
+func (s *serverEventHandler) Handle(ev Event) bool {
+	if s.exitNext {
+		return true
+	}
+
 	brokerID, ok := s.s.nameToID[ev.ResourceName]
 	if !ok {
 		s.s.tryLog("(%p editor.Server): could NOT dispatch event: handler with resource name %s not found",
 			s.s, ev.ResourceName)
-		return false
+		return true
 	}
 	ev.Resource = browser.Token{ID: uint64(brokerID)}
 
 	// cleaning up upon exit=true is performed via quitCallback
 	// of eventHandlerClient so there's no need to check for exit here.
-	return s.client.Handle(ev)
+	return s.eventHandlerClient.Handle(ev)
 }
 
 // NewServer allocates storage for a new Server and initializes it.
@@ -80,8 +88,12 @@ func (s *Server) Init(
 	s.failureTimeout = defaultFailureTimeout
 	s.errChan = make(chan error)
 
-	s.editor.SubscribeEditor(EventTypeClose, s)
-	s.editor.SubscribeEditor(EventTypeOpen, s)
+	go func() {
+		s.editor.Locker.Lock()
+		defer s.editor.Locker.Unlock()
+		s.editor.SubscribeEditor(EventTypeClose, s)
+		s.editor.SubscribeEditor(EventTypeOpen, s)
+	}()
 }
 
 func (s *Server) cleanResource(name string) {
@@ -153,6 +165,14 @@ func (s *Server) getClients() map[uint64]io.Closer {
 }
 
 func (s *Server) safeForceCloseHandler(brokerID uint32, reason string) error {
+	s.editor.Lock()
+	res, ok := s.clients[uint64(brokerID)]
+	if ok {
+		// make sure that next Handle unsubscribes
+		res.(*handlerClientResource).client.exitNext = true
+	}
+	s.editor.Unlock()
+
 	s.tryLog("editor.Server.safeForceCloseHandler(%d, reason=%s)", brokerID, reason)
 	_, err := proto.ForceCloseResource(uint64(brokerID), s.getClients, s.Logger, s.editor.Locker)
 	return err
@@ -187,13 +207,15 @@ func (s *Server) dialHandler(handlerID uint32) (EventHandler, error) {
 	s.editor.Lock()
 	defer s.editor.Unlock()
 
+	h := &serverEventHandler{s: s, eventHandlerClient: client}
+
 	s.clients[uint64(handlerID)] = &handlerClientResource{
 		handlerConn:   handlerConn,
-		client:        client,
+		client:        h,
 		cancelMonitor: cancelFn,
 	}
 
-	return serverEventHandler{s: s, client: client}, nil
+	return h, nil
 }
 
 func (s *Server) addNextHandlerResource(name string, h Handler) uint32 {

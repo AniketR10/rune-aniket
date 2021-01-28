@@ -14,7 +14,7 @@ func (r *handlerServerResource) Close() error {
 
 type handlerClientResource struct {
 	handlerConn   proto.MuxConn
-	client        *eventHandlerClient
+	client        *serverEventHandler
 	cancelMonitor func()
 }
 

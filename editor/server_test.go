@@ -3,6 +3,7 @@ package editor
 import (
 	"context"
 	"errors"
+	"sync"
 	"testing"
 	"time"
 
@@ -12,6 +13,7 @@ import (
 	"github.com/ernestrc/go-tui/handler"
 	"github.com/ernestrc/go-tui/proto"
 	prototest "github.com/ernestrc/go-tui/proto/test"
+	"github.com/ernestrc/go-tui/term"
 	gomock "github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -42,6 +44,24 @@ func expectEdit(t *testing.T, mock *MockEditor, resource, content string) {
 		})
 }
 
+func callServerEdit(
+	t *testing.T, ctx context.Context, broker *proto.MockMuxBroker,
+	s *Server, nextID uint32, name, content string,
+) {
+	broker.EXPECT().NextId().Return(nextID).Times(1)
+
+	buf := cell.NewBuffer()
+	buf.WriteString(content)
+	req := proto.BufferToEditRequest(buf)
+	req.ResourceName = name
+
+	res, err := s.Edit(ctx, &req)
+	require.NoError(t, err)
+	require.NotNil(t, res)
+
+	assert.Equal(t, nextID, res.GetHandlerId())
+}
+
 func TestServerEdit(t *testing.T) {
 	nextID := uint32(99)
 	ctx := context.Background()
@@ -51,20 +71,8 @@ func TestServerEdit(t *testing.T) {
 	t.Run("happy path", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		broker, mock, s := newTestServer(t, ctrl)
-
 		expectEdit(t, mock, resourceName1, bufContent1)
-		broker.EXPECT().NextId().Return(nextID).Times(1)
-
-		buf := cell.NewBuffer()
-		buf.WriteString(bufContent1)
-		req := proto.BufferToEditRequest(buf)
-		req.ResourceName = resourceName1
-
-		res, err := s.Edit(ctx, &req)
-		require.NoError(t, err)
-		require.NotNil(t, res)
-
-		assert.Equal(t, nextID, res.GetHandlerId())
+		callServerEdit(t, ctx, broker, s, nextID, resourceName1, bufContent1)
 	})
 
 	t.Run("bubbles up underlying's Editor Edit errors", func(t *testing.T) {
@@ -175,5 +183,101 @@ func TestServerSubscribe(t *testing.T) {
 		require.NotNil(t, res)
 
 		assertServerHandlerExitClose(t, conn, h, s, quitCh, broker)
+	})
+}
+
+func assertEqualLocations(t *testing.T, loc, expected LocationList) {
+	var locations, expectedLocations []Location
+	for ok := true; ok; _, ok = loc.Prev() {
+
+	}
+	for ok := true; ok; _, ok = expected.Prev() {
+
+	}
+	for n, ok := loc.Current(); ok; n, ok = loc.Next() {
+		locations = append(locations, n)
+	}
+	for n, ok := expected.Current(); ok; n, ok = expected.Next() {
+		expectedLocations = append(expectedLocations, n)
+	}
+	assert.EqualValues(t, expectedLocations, locations)
+}
+
+func TestServerSetLocationList(t *testing.T) {
+	t.Run("calls underlying editor SetLocationList", func(t *testing.T) {
+		ctx := context.Background()
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		broker, mock, s := newTestServer(t, ctrl)
+
+		name := "go-tui"
+		content := "main"
+		nextID := uint32(232)
+		expectEdit(t, mock, name, content)
+		callServerEdit(t, ctx, broker, s, nextID, name, content)
+
+		locs := LocationSlice([]Location{Location{To: term.Coordinates{X: 3}}})
+		mock.EXPECT().SetLocationList(gomock.Any(), gomock.Any()).Return(nil).Times(1)
+
+		req := makeLocationListRequest(nextID, locs)
+		res, err := s.SetLocationList(ctx, &req)
+		require.NoError(t, err)
+		require.NotNil(t, res)
+	})
+
+	t.Run("is threadsafe", func(t *testing.T) {
+		ctx := context.Background()
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		broker := proto.NewMockMuxBroker(ctrl)
+		ed := &testEditor{}
+		c, err := NewComponent(ed, Config{})
+		require.NoError(t, err)
+		s := NewServer(broker, c, new(sync.Mutex))
+
+		name := "go-tui"
+		content := "main"
+		nextID := uint32(232)
+		callServerEdit(t, ctx, broker, s, nextID, name, content)
+
+		locs := []Location{
+			Location{From: term.Coordinates{X: 0, Y: 0}, To: term.Coordinates{X: 3, Y: 0}},
+			Location{From: term.Coordinates{X: 1, Y: 4}, To: term.Coordinates{X: 2, Y: 4}},
+			Location{From: term.Coordinates{X: 0, Y: 5}, To: term.Coordinates{X: 0, Y: 6}},
+		}
+
+		var wg sync.WaitGroup
+		n := 100
+		wg.Add(n)
+		for i := 0; i < n; i++ {
+			go func() {
+				defer wg.Done()
+				l := LocationSlice(locs)
+
+				req := makeLocationListRequest(nextID, l)
+				res, err := s.SetLocationList(ctx, &req)
+				if !assert.NoError(t, err) {
+					return
+				}
+				if !assert.NotNil(t, res) {
+					return
+				}
+			}()
+		}
+
+		wg.Wait()
+
+		h, ok := s.idToHandler[nextID]
+		if !assert.True(t, ok) {
+			return
+		}
+
+		l, ok := h.(*testEditorHandler)
+		if !assert.True(t, ok) {
+			return
+		}
+		assertEqualLocations(t, LocationSlice(locs), l.locationList)
 	})
 }

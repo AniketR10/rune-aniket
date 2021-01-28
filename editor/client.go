@@ -125,7 +125,7 @@ func (c *Client) SubscribeEditor(evType EventType, h EventHandler) error {
 	return nil
 }
 
-func setLocationListRequest(handlerID uint32, l LocationList) proto.SetLocationListRequest {
+func makeLocationListRequest(handlerID uint32, l LocationList) proto.SetLocationListRequest {
 	req := proto.SetLocationListRequest{
 		HandlerId: handlerID,
 	}
@@ -154,7 +154,7 @@ func (c *Client) SetLocationList(h Handler, l LocationList) error {
 	if !ok {
 		panic("SetLocationList: invalid Handler argument")
 	}
-	req := setLocationListRequest(uint32(token.ID), l)
+	req := makeLocationListRequest(uint32(token.ID), l)
 	_, err := c.ed.SetLocationList(ctx, &req)
 	return err
 }

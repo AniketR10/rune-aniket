@@ -747,7 +747,8 @@ func (c *Cursor) Cell() (term.Cell, bool) {
 	return c.cellAtCursor()
 }
 
-// DeleteSelection deletes the current text under selection or does nothing
+// DeleteSelection deletes the current text under selection and returns true
+// or does nothing and returns false.
 func (c *Cursor) DeleteSelection() (ok bool) {
 	if len(c.selection.cells) == 0 {
 		return

@@ -45,11 +45,16 @@ func (e *testEditor) dispatchEvent(ev Event) {
 	e.subs[ev.Type] = remain
 }
 
+type testEditorHandler struct {
+	browser.TestHandler
+	locationList LocationList
+}
+
 func (e *testEditor) Edit(name string, buf *cell.Buffer) (Handler, error) {
 	e.name = name
 	e.buf = buf
 
-	h := browser.NewTestHandler()
+	h := &testEditorHandler{TestHandler: *browser.NewTestHandler()}
 	e.dispatchEvent(Event{
 		Type:         EventTypeOpen,
 		ResourceName: name,
@@ -63,6 +68,7 @@ func (e *testEditor) Edit(name string, buf *cell.Buffer) (Handler, error) {
 }
 
 func (e *testEditor) SetLocationList(h Handler, loc LocationList) error {
+	h.(*testEditorHandler).locationList = loc
 	return nil
 }
 

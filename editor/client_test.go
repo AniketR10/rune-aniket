@@ -140,7 +140,7 @@ func TestSetLocationListRequest(t *testing.T) {
 			HandlerId: handlerID,
 			Locations: nil,
 		}
-		assert.Equal(t, expected, setLocationListRequest(handlerID, l))
+		assert.Equal(t, expected, makeLocationListRequest(handlerID, l))
 	})
 
 	t.Run("nil zero slice", func(t *testing.T) {
@@ -150,7 +150,7 @@ func TestSetLocationListRequest(t *testing.T) {
 			HandlerId: handlerID,
 			Locations: nil,
 		}
-		assert.Equal(t, expected, setLocationListRequest(handlerID, l))
+		assert.Equal(t, expected, makeLocationListRequest(handlerID, l))
 	})
 	t.Run("non-zero slice", func(t *testing.T) {
 		l := LocationSlice([]Location{
@@ -183,7 +183,7 @@ func TestSetLocationListRequest(t *testing.T) {
 			},
 		}
 
-		assert.Equal(t, expected, setLocationListRequest(handlerID, l))
+		assert.Equal(t, expected, makeLocationListRequest(handlerID, l))
 	})
 }
 
@@ -200,7 +200,7 @@ func benchmarkSetLocationListRequest(b *testing.B, n int) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		ll := LocationSlice(l)
-		_ = setLocationListRequest(45, ll)
+		_ = makeLocationListRequest(45, ll)
 	}
 }
 
