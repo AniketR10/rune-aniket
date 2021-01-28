@@ -11,7 +11,7 @@ import (
 
 const defTabSpaces int = 4
 const defColumnCap int = 64
-const defRowCap int = 128
+const defRowCap int = 64
 
 // rawCells is a matrix of term.Cell. The zero value for rawCells is ready to use.
 type rawCells struct {
