@@ -29,7 +29,8 @@ const (
 )
 
 var (
-	defaultSemanticTypeAttr = map[string]term.Attributes{
+	defaultSemanticTokensListID = "lsp_syntax_highlighting"
+	defaultSemanticTypeAttr     = map[string]term.Attributes{
 		"namespace":     {},
 		"type":          {},
 		"class":         {},
@@ -71,17 +72,17 @@ type file struct {
 }
 
 type lspEditorHandler struct {
-	ed                editor.Editor
-	p                 browser.EventPublisher
-	server            protocol.Server
-	protocol          *protocol.InitializeResult
-	files             map[string]*file
-	semanticTypesAttr map[string]term.Attributes
+	ed                   editor.Editor
+	p                    browser.EventPublisher
+	server               protocol.Server
+	protocol             *protocol.InitializeResult
+	files                map[string]*file
+	semanticTypesAttr    map[string]term.Attributes
+	semanticTokensListID string
 }
 
-// TODO review lsp client spec to make sure we're complying
 func initializeParams(
-	ctx context.Context, cwd string, server protocol.Server, options func(*source.Options),
+	ctx context.Context, cwd string, server protocol.Server,
 ) (*protocol.InitializeResult, error) {
 	params := &protocol.ParamInitialize{}
 	params.RootURI = protocol.URIFromPath(cwd)
@@ -89,21 +90,18 @@ func initializeParams(
 
 	// Make sure to respect configured options when sending initialize request.
 	opts := source.DefaultOptions().Clone()
-	if options != nil {
-		options(opts)
-	}
 
-	opts.SemanticTokens = true
 	params.Capabilities.TextDocument.Hover = protocol.HoverClientCapabilities{
 		ContentFormat: []protocol.MarkupKind{opts.PreferredContentFormat},
 	}
 	params.Capabilities.TextDocument.DocumentSymbol.HierarchicalDocumentSymbolSupport = opts.HierarchicalDocumentSymbolSupport
-	params.Capabilities.TextDocument.SemanticTokens = protocol.SemanticTokensClientCapabilities{}
 	params.Capabilities.TextDocument.SemanticTokens.Formats = []string{"relative"}
 	params.Capabilities.TextDocument.SemanticTokens.Requests.Range = true
 	params.Capabilities.TextDocument.SemanticTokens.Requests.Full = true
 	params.Capabilities.TextDocument.SemanticTokens.TokenTypes = lsp.SemanticTypes()
 	params.Capabilities.TextDocument.SemanticTokens.TokenModifiers = lsp.SemanticModifiers()
+	params.Capabilities.TextDocument.PublishDiagnostics.TagSupport.ValueSet = []protocol.DiagnosticTag{protocol.Unnecessary}
+	params.Capabilities.TextDocument.PublishDiagnostics.VersionSupport = true
 	params.InitializationOptions = map[string]interface{}{
 		"symbolMatcher":  matcherString[opts.SymbolMatcher],
 		"semanticTokens": true,
@@ -123,7 +121,7 @@ func initializeParams(
 	return res, nil
 }
 
-// parseAddr parses the -listen flag in to a network, and address.
+// parseAddr parses listen into a network, and address.
 func parseAddr(listen string) (network string, address string) {
 	if listen == lsprpc.AutoNetwork {
 		return lsprpc.AutoNetwork, ""
@@ -168,7 +166,7 @@ func connectRemote(ctx context.Context, ret *lspEditorHandler, remote string) (
 	cc := jsonrpc2.NewConn(stream)
 	server := protocol.ServerDispatcher(cc)
 	go streamRPC(cc, ret)
-	res, err := initializeParams(ctx, cwd, server, nil)
+	res, err := initializeParams(ctx, cwd, server)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -240,6 +238,15 @@ func newLspHandler(
 	ret.semanticTypesAttr, err = getSemanticTypesAttr(pconfig)
 	if err != nil {
 		return nil, err
+	}
+
+	ret.semanticTokensListID, err = pconfig.GetString("semantic_tokens_list_id")
+	if err != nil {
+		if err != plugin.ErrNotFound {
+			err = fmt.Errorf("failed to get 'semantic_tokens_list_id' from config: %v", err)
+			return nil, err
+		}
+		ret.semanticTokensListID = defaultSemanticTokensListID
 	}
 
 	log.Infof("connected to remote server named %s with version %s at %s: ",
@@ -358,7 +365,7 @@ func (h *lspEditorHandler) semanticTokens(
 	}
 
 	locations := parseLocationData(f.uri, cells, []byte(content), resp.Data, h.semanticTypesAttr)
-	err = h.ed.SetLocationList(f.handler, editor.LocationSlice(locations))
+	err = h.ed.SetLocationList(f.handler, h.semanticTokensListID, editor.LocationSlice(locations))
 	if err != nil {
 		log.Errorf("lspEditorHandler.SetLocationList(%s): %v", f.name, err)
 		return

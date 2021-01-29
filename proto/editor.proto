@@ -49,7 +49,8 @@ message SetLocationListRequest {
 		Attributes attr = 3;
 	}
 	uint32 handler_id = 1;
-	repeated Location locations = 2;
+	string list_id = 2;
+	repeated Location locations = 3;
 }
 
 message SetLocationListResponse {}

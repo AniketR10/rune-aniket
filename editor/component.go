@@ -367,8 +367,8 @@ func (c *Component) Edit(name string, buf *cell.Buffer) (Handler, error) {
 }
 
 // SetLocationList satisfies editor.Editor.
-func (c *Component) SetLocationList(h Handler, loc LocationList) error {
-	return c.ed.SetLocationList(h, loc)
+func (c *Component) SetLocationList(h Handler, ID string, loc LocationList) error {
+	return c.ed.SetLocationList(h, ID, loc)
 }
 
 // Reader satisfies editor.Editor.

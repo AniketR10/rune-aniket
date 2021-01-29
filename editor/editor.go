@@ -37,9 +37,11 @@ type Editor interface {
 	// TODO should rename browser.Subscribe to browser.SubscribeTerm
 	SubscribeEditor(EventType, EventHandler) error
 
-	// SetLocationList sets the Handler's location list. See LocationList
-	// for more details.
-	SetLocationList(Handler, LocationList) error
+	// SetLocationList sets the Handler's location list for users to
+	// navigate the code. See LocationList for more details.
+	// In order to remove a location list, SetLocationList must be called
+	// with an empty (or nil) LocationList.
+	SetLocationList(Handler, string, LocationList) error
 
 	// Reader returns a Reader which allows to read the editor's internal buffer.
 	Reader(Handler) Reader

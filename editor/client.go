@@ -125,9 +125,12 @@ func (c *Client) SubscribeEditor(evType EventType, h EventHandler) error {
 	return nil
 }
 
-func makeLocationListRequest(handlerID uint32, l LocationList) proto.SetLocationListRequest {
+func makeLocationListRequest(
+	handlerID uint32, listID string, l LocationList,
+) proto.SetLocationListRequest {
 	req := proto.SetLocationListRequest{
 		HandlerId: handlerID,
+		ListId:    listID,
 	}
 
 	for loc, ok := l.Current(); ok; loc, ok = l.Next() {
@@ -148,13 +151,13 @@ func makeLocationListRequest(handlerID uint32, l LocationList) proto.SetLocation
 // SetLocationList requests the editor server to set l as the new location list for h.
 // Note that h is expected to be the return valu of Edit or a dispatched event, delivered
 // via an EventHandler.
-func (c *Client) SetLocationList(h Handler, l LocationList) error {
+func (c *Client) SetLocationList(h Handler, ID string, l LocationList) error {
 	ctx := context.Background()
 	token, ok := h.(browser.Token)
 	if !ok {
 		panic("SetLocationList: invalid Handler argument")
 	}
-	req := makeLocationListRequest(uint32(token.ID), l)
+	req := makeLocationListRequest(uint32(token.ID), ID, l)
 	_, err := c.ed.SetLocationList(ctx, &req)
 	return err
 }

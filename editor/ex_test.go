@@ -67,7 +67,7 @@ func (e *testEditor) Edit(name string, buf *cell.Buffer) (Handler, error) {
 	return h, nil
 }
 
-func (e *testEditor) SetLocationList(h Handler, loc LocationList) error {
+func (e *testEditor) SetLocationList(h Handler, id string, loc LocationList) error {
 	h.(*testEditorHandler).locationList = loc
 	return nil
 }

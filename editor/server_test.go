@@ -218,9 +218,9 @@ func TestServerSetLocationList(t *testing.T) {
 		callServerEdit(t, ctx, broker, s, nextID, name, content)
 
 		locs := LocationSlice([]Location{Location{To: term.Coordinates{X: 3}}})
-		mock.EXPECT().SetLocationList(gomock.Any(), gomock.Any()).Return(nil).Times(1)
+		mock.EXPECT().SetLocationList(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).Times(1)
 
-		req := makeLocationListRequest(nextID, locs)
+		req := makeLocationListRequest(nextID, locID, locs)
 		res, err := s.SetLocationList(ctx, &req)
 		require.NoError(t, err)
 		require.NotNil(t, res)
@@ -256,7 +256,7 @@ func TestServerSetLocationList(t *testing.T) {
 				defer wg.Done()
 				l := LocationSlice(locs)
 
-				req := makeLocationListRequest(nextID, l)
+				req := makeLocationListRequest(nextID, locID, l)
 				res, err := s.SetLocationList(ctx, &req)
 				if !assert.NoError(t, err) {
 					return

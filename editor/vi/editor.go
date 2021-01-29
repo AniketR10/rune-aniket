@@ -64,8 +64,8 @@ func (e *viEditor) SubscribeEditor(ev editor.EventType, sub editor.EventHandler)
 	return nil
 }
 
-func (e viEditor) SetLocationList(h editor.Handler, loc editor.LocationList) error {
-	h.(*Vi).SetLocationList(loc)
+func (e viEditor) SetLocationList(h editor.Handler, ID string, loc editor.LocationList) error {
+	h.(*Vi).SetLocationList(ID, loc)
 	return nil
 }
 

@@ -138,9 +138,10 @@ func TestSetLocationListRequest(t *testing.T) {
 		handlerID := uint32(23)
 		expected := proto.SetLocationListRequest{
 			HandlerId: handlerID,
+			ListId:    locID,
 			Locations: nil,
 		}
-		assert.Equal(t, expected, makeLocationListRequest(handlerID, l))
+		assert.Equal(t, expected, makeLocationListRequest(handlerID, locID, l))
 	})
 
 	t.Run("nil zero slice", func(t *testing.T) {
@@ -148,9 +149,10 @@ func TestSetLocationListRequest(t *testing.T) {
 		handlerID := uint32(23)
 		expected := proto.SetLocationListRequest{
 			HandlerId: handlerID,
+			ListId:    locID,
 			Locations: nil,
 		}
-		assert.Equal(t, expected, makeLocationListRequest(handlerID, l))
+		assert.Equal(t, expected, makeLocationListRequest(handlerID, locID, l))
 	})
 	t.Run("non-zero slice", func(t *testing.T) {
 		l := LocationSlice([]Location{
@@ -161,13 +163,14 @@ func TestSetLocationListRequest(t *testing.T) {
 		handlerID := uint32(23)
 		expected := proto.SetLocationListRequest{
 			HandlerId: handlerID,
+			ListId:    locID,
 			Locations: []*proto.SetLocationListRequest_Location{
-				&proto.SetLocationListRequest_Location{
+				{
 					From: &proto.Coordinates{},
 					To:   &proto.Coordinates{X: 1, Y: 3},
 					Attr: &proto.Attributes{Foreground: uint32(term.AttrBold)},
 				},
-				&proto.SetLocationListRequest_Location{
+				{
 					To:   &proto.Coordinates{},
 					From: &proto.Coordinates{X: 1, Y: 3},
 					Attr: &proto.Attributes{
@@ -175,7 +178,7 @@ func TestSetLocationListRequest(t *testing.T) {
 						Background: uint32(term.ColorGreen),
 					},
 				},
-				&proto.SetLocationListRequest_Location{
+				{
 					From: &proto.Coordinates{},
 					To:   &proto.Coordinates{},
 					Attr: &proto.Attributes{},
@@ -183,7 +186,7 @@ func TestSetLocationListRequest(t *testing.T) {
 			},
 		}
 
-		assert.Equal(t, expected, makeLocationListRequest(handlerID, l))
+		assert.Equal(t, expected, makeLocationListRequest(handlerID, locID, l))
 	})
 }
 
@@ -200,7 +203,7 @@ func benchmarkSetLocationListRequest(b *testing.B, n int) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		ll := LocationSlice(l)
-		_ = makeLocationListRequest(45, ll)
+		_ = makeLocationListRequest(45, locID, ll)
 	}
 }
 

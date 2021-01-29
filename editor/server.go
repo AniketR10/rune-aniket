@@ -296,6 +296,7 @@ func (s *Server) SetLocationList(ctx context.Context, in *proto.SetLocationListR
 ) {
 	handlerID := in.GetHandlerId()
 	locs := in.GetLocations()
+	id := in.GetListId()
 
 	s.editor.Lock()
 	defer s.editor.Unlock()
@@ -305,7 +306,7 @@ func (s *Server) SetLocationList(ctx context.Context, in *proto.SetLocationListR
 		return nil, errHandlerNotFound
 	}
 
-	err := s.editor.SetLocationList(h, LocationSlice(getLocations(locs)))
+	err := s.editor.SetLocationList(h, id, LocationSlice(getLocations(locs)))
 	if err != nil {
 		return nil, err
 	}

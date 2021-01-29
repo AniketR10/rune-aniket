@@ -57,6 +57,7 @@ func newTestLspHandler(
 	ret.p = p
 	ret.files = make(map[string]*file)
 	ret.server = server
+	ret.semanticTokensListID = defaultSemanticTokensListID
 	return ret
 }
 
@@ -114,19 +115,20 @@ func assertEqualLocations(t *testing.T, loc, expected editor.LocationList) {
 }
 
 func expectLocationList(
-	t *testing.T, ed *editor.MockEditor, expectedLocations []editor.Location,
+	t *testing.T, ed *editor.MockEditor, expectedID string, expectedLocations []editor.Location,
 ) {
-	ed.EXPECT().SetLocationList(gomock.Any(), gomock.Any()).
-		DoAndReturn(func(h editor.Handler, loc editor.LocationList) error {
+	ed.EXPECT().SetLocationList(gomock.Any(), gomock.Any(), gomock.Any()).
+		DoAndReturn(func(h editor.Handler, id string, loc editor.LocationList) error {
 			assertEqualLocations(t, loc, editor.LocationSlice(expectedLocations))
+			assert.Equal(t, expectedID, id)
 			return nil
 		}).Times(1)
 }
 
 func dispatchOpen(
 	t *testing.T, h *lspEditorHandler, server *MockServer, ed *editor.MockEditor,
-	name, content string,
-	tokenData []float64, expectedLocations []editor.Location,
+	name, content string, tokenData []float64, expectedListID string,
+	expectedLocations []editor.Location,
 ) {
 	evOpen := editor.Event{
 		Type:         editor.EventTypeOpen,
@@ -137,14 +139,14 @@ func dispatchOpen(
 
 	expectDidOpen(t, server, name, content)
 	expectSemanticTokens(t, server, tokenData)
-	expectLocationList(t, ed, expectedLocations)
+	expectLocationList(t, ed, expectedListID, expectedLocations)
 	assert.False(t, h.Handle(evOpen))
 }
 
 func dispatchFlush(
 	t *testing.T, h *lspEditorHandler, server *MockServer, ed *editor.MockEditor,
-	name, content string, version float64,
-	tokenData []float64, expectedLocations []editor.Location,
+	name, content string, version float64, tokenData []float64,
+	expectedListID string, expectedLocations []editor.Location,
 ) {
 	ev := editor.Event{
 		Type:         editor.EventTypeFlush,
@@ -156,7 +158,7 @@ func dispatchFlush(
 
 	expectDidChange(t, server, name, version, changes)
 	expectSemanticTokens(t, server, tokenData)
-	expectLocationList(t, ed, expectedLocations)
+	expectLocationList(t, ed, expectedListID, expectedLocations)
 	assert.False(t, h.Handle(ev))
 }
 
@@ -169,7 +171,8 @@ func TestLspHandlerHandleOpen(t *testing.T) {
 	server := NewMockServer(ctrl)
 
 	h := newTestLspHandler(ctrl, ed, nil, cfg, server)
-	dispatchOpen(t, h, server, ed, filename1, filecontent1, tokenData1, expectedLocations1)
+	dispatchOpen(t, h, server, ed, filename1, filecontent1,
+		tokenData1, h.semanticTokensListID, expectedLocations1)
 }
 
 func TestLspHandlerHandleFlush(t *testing.T) {
@@ -182,8 +185,10 @@ func TestLspHandlerHandleFlush(t *testing.T) {
 
 	h := newTestLspHandler(ctrl, ed, nil, cfg, server)
 
-	dispatchOpen(t, h, server, ed, filename1, filecontent1, tokenData1, expectedLocations1)
-	dispatchFlush(t, h, server, ed, filename1, filecontent1, 2, tokenData1, expectedLocations1)
+	dispatchOpen(t, h, server, ed, filename1, filecontent1,
+		tokenData1, h.semanticTokensListID, expectedLocations1)
+	dispatchFlush(t, h, server, ed, filename1, filecontent1, 2,
+		tokenData1, h.semanticTokensListID, expectedLocations1)
 }
 
 func TestLspHandlerHandleInsertDelete(t *testing.T) {
@@ -196,7 +201,8 @@ func TestLspHandlerHandleInsertDelete(t *testing.T) {
 
 	h := newTestLspHandler(ctrl, ed, nil, cfg, server)
 
-	dispatchOpen(t, h, server, ed, filename1, filecontent1, tokenData1, expectedLocations1)
+	dispatchOpen(t, h, server, ed, filename1, filecontent1,
+		tokenData1, h.semanticTokensListID, expectedLocations1)
 
 	buf := cell.NewBuffer()
 	buf.WriteString(filecontent1)
@@ -223,7 +229,7 @@ func TestLspHandlerHandleInsertDelete(t *testing.T) {
 		From: term.Coordinates{Y: 5, X: 13},
 		To:   term.Coordinates{Y: 5, X: 22},
 	})
-	expectLocationList(t, ed, newLocations)
+	expectLocationList(t, ed, defaultSemanticTokensListID, newLocations)
 
 	from, until := buf.InsertString(term.Coordinates{X: 9, Y: 5}, insertStr)
 
@@ -240,6 +246,6 @@ func TestLspHandlerHandleInsertDelete(t *testing.T) {
 	}}
 	expectDidChange(t, server, filename1, 3, expectedEvents)
 	expectSemanticTokens(t, server, tokenData1)
-	expectLocationList(t, ed, expectedLocations1)
+	expectLocationList(t, ed, defaultSemanticTokensListID, expectedLocations1)
 	buf.Delete(from, until)
 }

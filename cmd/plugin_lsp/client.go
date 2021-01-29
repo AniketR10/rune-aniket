@@ -48,6 +48,7 @@ func (h *lspClientHandler) Event(
 func (h *lspClientHandler) PublishDiagnostics(
 	ctx context.Context, p *protocol.PublishDiagnosticsParams,
 ) error {
+	// TODO if version is outdated, discard.
 	// TODO use to highlight errors, warnings, etc.
 	// TODO empty diagnostic should clear errors and warnings.
 	log.Tracef("lspClientHandler.PublishDiagnostics: %#v", p)
