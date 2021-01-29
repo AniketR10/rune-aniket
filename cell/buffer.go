@@ -10,8 +10,15 @@ import (
 )
 
 // A Buffer offers a high level API to manipulate a matrix of term.Cell.
+// Note that this Buffer assumes to be a UNIX file buffer, so content written to it
+// is assumed to end in EOL.
+//
+// A text file, under UNIX-like systems, consists of a series of lines, each of which
+// ends with a newline character (\n). A file that is not empty and does not
+// end with a newline is therefore not a text file.
+//
+// The write-end of this UNIX behaviour is implemented by editor.FileBuffer.
 type Buffer struct {
-	tabspaces  int
 	cells      *rawCells
 	undoer     *undoer
 	selector   selector
@@ -30,22 +37,29 @@ func NewBuffer() (b *Buffer) {
 	return b
 }
 
-// InitWithTabspaces initializes this Buffer with
-func (b *Buffer) InitWithTabspaces(tabspaces int) {
-	b.cells = new(rawCells)
-	b.cells.init(tabspaces)
-
-	b.tabspaces = tabspaces
+func (b *Buffer) initWithCells(c *rawCells, unixFile bool) {
+	b.cells = c
 
 	b.pub = newPublisher(b.cells)
-	b.unixReader = newUnixFileReader(b.cells)
-	b.reader = b.unixReader
+	if unixFile {
+		b.unixReader = newUnixFileReader(b.cells)
+		b.reader = b.unixReader
+	} else {
+		b.reader = b.cells
+	}
 
 	// setup the publisher as the deepest Writer
 	b.undoer = newUndoer(b.pub)
 	b.writer = b.undoer
 
 	b.selector.reader = b.reader
+}
+
+// InitWithTabspaces initializes this Buffer with
+func (b *Buffer) InitWithTabspaces(tabspaces int) {
+	cells := new(rawCells)
+	cells.init(tabspaces)
+	b.initWithCells(cells, true)
 }
 
 // Init initializes this Buffer with the default configuration.
@@ -348,17 +362,13 @@ func (b *Buffer) String() string {
 }
 
 // EndsWithEOL returns true if the underlying text ends with an EOL character.
-//
-// A text file, under UNIX-like systems, consists of a series of lines, each of which
-// ends with a newline character (\n). A file that is not empty and does not
-// end with a newline is therefore not a text file.
 func (b *Buffer) EndsWithEOL() bool {
 	return b.unixReader.endswithEOL()
 }
 
 // Tabspaces returns the number of tabspaces uses to initialized this Buffer.
 func (b *Buffer) Tabspaces() int {
-	return b.tabspaces
+	return b.cells.tabspaces
 }
 
 // ShiftRowRight shifts row one tab to the right. It returns

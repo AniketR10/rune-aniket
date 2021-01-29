@@ -85,12 +85,56 @@ func StringToCells(str string) (cells [][]term.Cell) {
 	return builder.RawCells()
 }
 
-// CellsToBuffer writes in to a new buffer and returns it.
-func CellsToBuffer(in [][]term.Cell) *Buffer {
-	str := CellsToString(in)
-	buf := NewBuffer()
-	buf.WriteString(str)
-	return buf
+func findTabspaces(in [][]term.Cell) int {
+	var zeroRunes int
+	for _, r := range in {
+		for _, c := range r {
+			if c.Ch == 0 {
+				zeroRunes++
+				continue
+			}
+
+			if zeroRunes == 0 {
+				continue
+			}
+
+			if c.Ch == '\t' {
+				return zeroRunes + 1
+			}
+
+			zeroRunes = 0
+		}
+	}
+
+	return 1
+}
+
+// CloneCells returns a deep clone of in.
+func CloneCells(in [][]term.Cell) [][]term.Cell {
+	ret := make([][]term.Cell, len(in))
+	for i, r := range in {
+		ret[i] = make([]term.Cell, len(r))
+		copy(ret[i], r)
+	}
+	return ret
+}
+
+// CellsToBuffer efficienty returns a Buffer that uses c as the
+// underlying matrix of cells.
+//
+// Note that this buffer will honor the tabspaces observed in c.
+// If c does not have any tabspaces, then 1 tabspace is assumed.
+func CellsToBuffer(c [][]term.Cell) *Buffer {
+	cells := new(rawCells)
+
+	tabspaces := findTabspaces(c)
+	cells.init(tabspaces)
+
+	cells.cells = CloneCells(c)
+
+	ret := new(Buffer)
+	ret.initWithCells(cells, false)
+	return ret
 }
 
 // ConvertRuneCoordinates converts x and y, which use the buffer runes as offsets

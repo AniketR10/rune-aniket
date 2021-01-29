@@ -2,6 +2,7 @@ package cell
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/ernestrc/go-tui/term"
@@ -98,4 +99,57 @@ func TestUndo(t *testing.T) {
 		after = buf.String()
 		assert.Equal(t, prev, after)
 	})
+}
+
+func TestUndoEOL(t *testing.T) {
+	const (
+		filecontent1 = `package me.drton.jmavsim;
+public class Rotor {
+     sta  mtyp;
+
+
+  myClass;
+`
+		insertStr = "\tmyClassVar\n"
+	)
+
+	insertAt := term.Coordinates{Y: 5, X: 9}
+	abuf := NewBuffer()
+	abuf.ReadFrom(strings.NewReader(filecontent1))
+	abuf.WriteString("\n") //unix EOL
+	astr0 := abuf.String()
+	arcells0 := abuf.RawCells()
+
+	afrom, ato := abuf.writer.Insert(insertAt, insertStr)
+	astr1 := abuf.String()
+	arcells1 := abuf.RawCells()
+
+	abuf.writer.Delete(afrom, ato)
+	astr2 := abuf.String()
+	arcells2 := abuf.RawCells()
+	assert.Equal(t, astr0, astr2)
+	assert.Equal(t, arcells0, arcells2)
+
+	ok, _ := abuf.Undo()
+	assert.True(t, ok)
+	bstr1 := abuf.String()
+	brcells1 := abuf.RawCells()
+	assert.Equal(t, astr1, bstr1)
+	assert.Equal(t, arcells1, brcells1)
+
+	ok, _ = abuf.Undo()
+	assert.True(t, ok)
+	bstr0 := abuf.String()
+	brcells0 := abuf.RawCells()
+	assert.Equal(t, astr0, bstr0)
+	assert.Equal(t, arcells0, brcells0)
+
+	ok, _ = abuf.Redo()
+	assert.True(t, ok)
+	ok, _ = abuf.Redo()
+	assert.True(t, ok)
+	bstr2 := abuf.String()
+	brcells2 := abuf.RawCells()
+	assert.Equal(t, astr2, bstr2)
+	assert.Equal(t, arcells2, brcells2)
 }

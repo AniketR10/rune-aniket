@@ -1,6 +1,7 @@
 package cell
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/ernestrc/go-tui/term"
@@ -32,4 +33,82 @@ func TestConvertCoordinates(t *testing.T) {
 		assert.Equal(t, tcase.x, x)
 		assert.Equal(t, tcase.y, y)
 	}
+}
+
+func TestCellToBuffer(t *testing.T) {
+	const (
+		filecontent1 = `package me.drton.jmavsim;
+public class Rotor {
+     sta	tmtyp;
+
+
+  myClass;
+`
+		insertStr = "\tmyClassVar\n"
+	)
+	insertAt := term.Coordinates{Y: 5, X: 9}
+
+	abuf := NewBuffer()
+	abuf.ReadFrom(strings.NewReader(filecontent1))
+	abuf.WriteString("\n") //unix EOL
+	astr0 := abuf.String()
+	arcells0 := abuf.RawCells()
+
+	bbuf := CellsToBuffer(arcells0)
+	bstr0 := bbuf.String()
+	brcells0 := bbuf.RawCells()
+	require.Equal(t, arcells0, brcells0)
+
+	afrom, ato := abuf.writer.Insert(insertAt, insertStr)
+	astr1 := abuf.String()
+	arcells1 := abuf.RawCells()
+
+	abuf.Delete(afrom, ato)
+	astr2 := abuf.String()
+	arcells2 := abuf.RawCells()
+
+	bfrom, bto := bbuf.writer.Insert(insertAt, insertStr)
+	bstr1 := bbuf.String()
+	brcells1 := bbuf.RawCells()
+
+	bbuf.Delete(bfrom, bto)
+	bstr2 := bbuf.String()
+	brcells2 := bbuf.RawCells()
+
+	require.Equal(t, filecontent1, astr0)
+	require.Equal(t, filecontent1, bstr0)
+
+	assert.Equal(t, astr1, bstr1)
+	assert.Equal(t, arcells1, brcells1)
+
+	assert.Equal(t, astr2, bstr2)
+	assert.Equal(t, arcells2, brcells2)
+}
+
+func benchmarkCellToBuffer(b *testing.B, n int) {
+	c := make([][]term.Cell, n)
+	for i := 0; i < n; i++ {
+		c[i] = make([]term.Cell, n)
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = CellsToBuffer(c)
+	}
+}
+
+func BenchmarkCellToBuffer10(b *testing.B) {
+	benchmarkCellToBuffer(b, 10)
+}
+
+func BenchmarkCellToBuffer100(b *testing.B) {
+	benchmarkCellToBuffer(b, 100)
+}
+
+func BenchmarkCellToBuffer1000(b *testing.B) {
+	benchmarkCellToBuffer(b, 1000)
+}
+
+func BenchmarkCellToBuffer10000(b *testing.B) {
+	benchmarkCellToBuffer(b, 10000)
 }

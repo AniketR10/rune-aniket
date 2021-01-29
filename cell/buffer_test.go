@@ -251,7 +251,7 @@ func TestBufferReset(t *testing.T) {
 
 		b.Reset()
 		assert.Equal(t, "", b.String())
-		assert.Equal(t, 4, b.tabspaces)
+		assert.Equal(t, 4, b.Tabspaces())
 	})
 
 	t.Run("does not reset subscribers", func(t *testing.T) {
