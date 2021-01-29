@@ -13,8 +13,9 @@ var (
 		Attr: term.Attributes{Fg: term.AttrBold},
 	}
 	loc2 = Location{
-		From: term.Coordinates{X: 1, Y: 3},
-		Attr: term.Attributes{Fg: term.ColorBlack, Bg: term.ColorGreen},
+		From:    term.Coordinates{X: 1, Y: 3},
+		Attr:    term.Attributes{Fg: term.ColorBlack, Bg: term.ColorGreen},
+		Message: "wsb: hold BBBY",
 	}
 	loc3 = Location{}
 )

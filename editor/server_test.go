@@ -217,7 +217,7 @@ func TestServerSetLocationList(t *testing.T) {
 		expectEdit(t, mock, name, content)
 		callServerEdit(t, ctx, broker, s, nextID, name, content)
 
-		locs := LocationSlice([]Location{Location{To: term.Coordinates{X: 3}}})
+		locs := LocationSlice([]Location{{Message: "wsb: hold AMC", To: term.Coordinates{X: 3}}})
 		mock.EXPECT().SetLocationList(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).Times(1)
 
 		req := makeLocationListRequest(nextID, locID, locs)

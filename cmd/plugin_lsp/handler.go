@@ -234,7 +234,7 @@ func severityToString(s protocol.DiagnosticSeverity) string {
 	case protocol.SeverityWarning:
 		return "warning"
 	case protocol.SeverityInformation:
-		return "information"
+		return "info"
 	case protocol.SeverityHint:
 		return "hint"
 	default:
@@ -716,15 +716,14 @@ func parseDiagnostics(
 			continue
 		}
 
-		// TODO add Message to editor.Location
-		// msg := d.Source + d.Message
+		msg := fmt.Sprintf("%s: %s", d.Source, d.Message)
 		attr, ok := diagnosticAttr[d.Severity]
 		if !ok {
 			log.Warnf("could not diagnostic severity %v; skipping diagnostic", d.Severity)
 			continue
 		}
 
-		loc := editor.Location{From: from, To: to, Attr: attr}
+		loc := editor.Location{Message: msg, From: from, To: to, Attr: attr}
 		locs = append(locs, loc)
 	}
 

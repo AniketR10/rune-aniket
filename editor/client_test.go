@@ -177,11 +177,37 @@ func TestSetLocationListRequest(t *testing.T) {
 						Foreground: uint32(term.ColorBlack),
 						Background: uint32(term.ColorGreen),
 					},
+					Msg: "wsb: hold BBBY",
 				},
 				{
 					From: &proto.Coordinates{},
 					To:   &proto.Coordinates{},
 					Attr: &proto.Attributes{},
+				},
+			},
+		}
+
+		assert.Equal(t, expected, makeLocationListRequest(handlerID, locID, l))
+	})
+	t.Run("with message", func(t *testing.T) {
+		myMsg := "wsb: HOLD GME"
+		l := LocationSlice([]Location{
+			{
+				To:      term.Coordinates{X: 1, Y: 3},
+				Attr:    term.Attributes{Fg: term.AttrBold},
+				Message: myMsg,
+			},
+		})
+		handlerID := uint32(23)
+		expected := proto.SetLocationListRequest{
+			HandlerId: handlerID,
+			ListId:    locID,
+			Locations: []*proto.SetLocationListRequest_Location{
+				{
+					From: &proto.Coordinates{},
+					To:   &proto.Coordinates{X: 1, Y: 3},
+					Attr: &proto.Attributes{Foreground: uint32(term.AttrBold)},
+					Msg:  myMsg,
 				},
 			},
 		}

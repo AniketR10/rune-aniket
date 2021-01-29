@@ -8,9 +8,10 @@ import (
 
 // viConfig holds configuration for Vi.
 type viConfig struct {
-	ResAttr   term.Attributes
-	Clipboard editor.Clipboard
-	Logger    *log.Logger
+	resAttr   term.Attributes
+	clipboard editor.Clipboard
+	logger    *log.Logger
+	messenger editor.Messenger
 }
 
 // Option represents a Vi handler configuration option.
@@ -19,20 +20,27 @@ type Option func(*viConfig)
 // WithResAttr sets the search result cell attributes to be rendered.
 func WithResAttr(attr term.Attributes) Option {
 	return func(cfg *viConfig) {
-		cfg.ResAttr = attr
+		cfg.resAttr = attr
 	}
 }
 
 // WithClipboard sets the editor.Clipboard implementation to use.
 func WithClipboard(clip editor.Clipboard) Option {
 	return func(cfg *viConfig) {
-		cfg.Clipboard = clip
+		cfg.clipboard = clip
 	}
 }
 
-// WithLogger sets the editor.Clipboard implementation to use.
+// WithLogger sets the editor.Clipboard to use.
 func WithLogger(l *log.Logger) Option {
 	return func(cfg *viConfig) {
-		cfg.Logger = l
+		cfg.logger = l
+	}
+}
+
+// WithMessenger sets the editor.Messenger to use.
+func WithMessenger(m editor.Messenger) Option {
+	return func(cfg *viConfig) {
+		cfg.messenger = m
 	}
 }

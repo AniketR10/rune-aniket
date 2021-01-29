@@ -143,6 +143,7 @@ func makeLocationListRequest(
 			From: &from,
 			To:   &to,
 			Attr: &attr,
+			Msg:  loc.Message,
 		})
 	}
 	return req

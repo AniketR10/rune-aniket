@@ -20,12 +20,18 @@ type curSubscriber struct {
 	c *Cursor
 }
 
+type message struct {
+	listID   string
+	location Location
+}
+
 // Cursor is a helper structure which manages a cursor over a Scroll.
 type Cursor struct {
 	buf       *cell.Buffer
 	scroll    *component.Scroll
 	cursor    term.Coordinates
 	locs      map[string]LocationList
+	messages  map[term.Coordinates][]message
 	selection struct {
 		mode       int
 		scrollFrom term.Coordinates
@@ -56,6 +62,7 @@ func (c *Cursor) Init(scroll *component.Scroll) {
 	c.selection.mode = noSelection
 	c.subscriber.c = c
 	c.locs = make(map[string]LocationList)
+	c.messages = make(map[term.Coordinates][]message)
 
 	c.buf.Subscribe(&c.subscriber)
 }
@@ -67,6 +74,9 @@ func (c *curSubscriber) clearAllLocations() {
 	// this is optimized by the compiler starting at go 1.11
 	for k := range c.c.locs {
 		delete(c.c.locs, k)
+	}
+	for k := range c.c.messages {
+		delete(c.c.messages, k)
 	}
 }
 
@@ -159,7 +169,6 @@ func (c *Cursor) MoveEndLine() (ok bool) {
 	y := c.cursorAtScroll().Y
 	if y >= c.buf.Rows() {
 		c.setCursor(term.Coordinates{X: 0, Y: c.cursor.Y})
-		ok = true
 		return
 	}
 
@@ -943,10 +952,13 @@ func (c *Cursor) ShiftSelectionLeft() (ok bool) {
 	return
 }
 
-func (c *Cursor) setLocListAttr(l LocationList, reverse bool) {
+func scrollStartList(l LocationList) {
 	for ok := true; ok; _, ok = l.Prev() {
-		/* go to start of loc list */
 	}
+}
+
+func (c *Cursor) setLocListAttr(l LocationList, reverse bool) {
+	scrollStartList(l)
 
 	loc, ok := l.Current()
 	if !ok {
@@ -978,6 +990,67 @@ func (c *Cursor) setLocListAttr(l LocationList, reverse bool) {
 	}
 }
 
+func (c *Cursor) setMessages(ID string, l LocationList) {
+	scrollStartList(l)
+	for n, ok := l.Current(); ok; n, ok = l.Next() {
+		if n.Message == "" {
+			continue
+		}
+		from, to := cell.SortFromTo(n.From, n.To)
+		for {
+			msgs, ok := c.messages[from]
+			if !ok {
+				msgs = make([]message, 0, 1)
+				c.messages[from] = msgs
+			}
+			c.messages[from] = append(msgs, message{
+				listID:   ID,
+				location: n,
+			})
+			if from.Y == to.Y && from.X == to.X {
+				break
+			}
+			if from.Y == to.Y {
+				from.X++
+				continue
+			}
+
+			from.Y++
+			from.X = 0
+		}
+	}
+}
+
+func (c *Cursor) clearMessages(ID string) {
+	for from, msgs := range c.messages {
+		var stay []message
+		for _, msg := range msgs {
+			if msg.listID == ID {
+				continue
+			}
+			stay = append(stay, msg)
+		}
+		c.messages[from] = stay
+	}
+}
+
+// Locations returns the set of locations by location list ID set by SetLocationList,
+// at the current cursor position, if there's any.
+func (c *Cursor) Locations() (map[string]Location, bool) {
+	msgs, ok := c.messages[c.cursor]
+	if !ok {
+		return nil, false
+	}
+	if len(msgs) == 0 {
+		return nil, false
+	}
+	ret := make(map[string]Location, len(msgs))
+	for _, msg := range msgs {
+		ret[msg.listID] = msg.location
+	}
+	return ret, true
+}
+
 // SetLocationList sets a location list on this cursor. It substitutes and returns
 // the previous location list with the same ID, if there was any.
 // Any calls to Insert on the underlying Writer will reset all location lists.
@@ -985,6 +1058,7 @@ func (c *Cursor) SetLocationList(ID string, l LocationList) LocationList {
 	prev, ok := c.locs[ID]
 	if ok {
 		c.setLocListAttr(prev, true)
+		c.clearMessages(ID)
 	}
 
 	if l == nil {
@@ -992,6 +1066,7 @@ func (c *Cursor) SetLocationList(ID string, l LocationList) LocationList {
 	} else {
 		c.locs[ID] = l
 		c.setLocListAttr(l, false)
+		c.setMessages(ID, l)
 	}
 
 	return prev

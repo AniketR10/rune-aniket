@@ -282,9 +282,10 @@ func (s *Server) Subscribe(ctx context.Context, in *proto.EditorSubscribeRequest
 func getLocations(locs []*proto.SetLocationListRequest_Location) (ret []Location) {
 	for _, loc := range locs {
 		ret = append(ret, Location{
-			Attr: loc.GetAttr().ToModel(),
-			From: loc.GetFrom().ToModel(),
-			To:   loc.GetTo().ToModel(),
+			Attr:    loc.GetAttr().ToModel(),
+			From:    loc.GetFrom().ToModel(),
+			To:      loc.GetTo().ToModel(),
+			Message: loc.GetMsg(),
 		})
 	}
 	return

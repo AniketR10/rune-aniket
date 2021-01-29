@@ -1,6 +1,7 @@
 package editor
 
 import (
+	"strconv"
 	"strings"
 	"testing"
 
@@ -1029,17 +1030,18 @@ func TestCursorShiftSelection(t *testing.T) {
 var (
 	abcAttr      = term.Attributes{Fg: term.AttrUnderline, Bg: term.ColorBlack}
 	abcLocations = []Location{
-		Location{
-			From: term.Coordinates{Y: 1},
-			To:   term.Coordinates{Y: 1},
-			Attr: abcAttr,
+		{
+			From:    term.Coordinates{Y: 1},
+			To:      term.Coordinates{Y: 1},
+			Attr:    abcAttr,
+			Message: "blabla",
 		},
-		Location{
+		{
 			From: term.Coordinates{Y: 2},
 			To:   term.Coordinates{Y: 2},
 			Attr: abcAttr,
 		},
-		Location{
+		{
 			From: term.Coordinates{Y: 3},
 			To:   term.Coordinates{Y: 3},
 			Attr: abcAttr,
@@ -1161,7 +1163,7 @@ func TestCursorMoveLocationList(t *testing.T) {
 	})
 }
 
-func TestCursorSetLocationList(t *testing.T) {
+func TestCursorSetLocationListAttr(t *testing.T) {
 	c := setupCursorContent(t, 10, 10, "\na\nb\nc\n")
 	buf := c.scroll.Buffer()
 
@@ -1227,4 +1229,81 @@ func TestCursorSetLocationList(t *testing.T) {
 		{{Ch: 'c'}},
 	}
 	assert.Equal(t, expected, buf.RawCells())
+}
+
+func TestCursorSetLocationListMessages(t *testing.T) {
+	content := "\naaa\nbbb\nccc\n"
+	messageLocations := []Location{
+		{
+			From:    term.Coordinates{Y: 1},
+			To:      term.Coordinates{Y: 1, X: 2},
+			Attr:    abcAttr,
+			Message: "1",
+		},
+		{
+			From:    term.Coordinates{Y: 2},
+			To:      term.Coordinates{Y: 2, X: 2},
+			Attr:    abcAttr,
+			Message: "2",
+		},
+		{
+			From:    term.Coordinates{Y: 3},
+			To:      term.Coordinates{Y: 3, X: 2},
+			Attr:    abcAttr,
+			Message: "3",
+		},
+	}
+
+	assertMessages := func(t *testing.T, c *Cursor) {
+		for i := 0; i < 3; i++ {
+			locsByID, ok := c.Locations()
+			require.True(t, ok, c.messages)
+			require.Len(t, locsByID, 1)
+			assert.Equal(t, locsByID[locID].Message, strconv.Itoa(i+1))
+			require.True(t, c.MoveDown())
+		}
+	}
+
+	t.Run("returns nil/false if cursor is not in from, to or in between", func(t *testing.T) {
+		c := setupCursorContent(t, 10, 10, content)
+		abcList := &testLocationList{locations: messageLocations}
+		assert.Nil(t, c.SetLocationList(locID, abcList))
+
+		_, ok := c.Locations()
+		assert.False(t, ok)
+	})
+
+	t.Run("return messages if cursor is at From", func(t *testing.T) {
+		c := setupCursorContent(t, 10, 10, content)
+		abcList := &testLocationList{locations: messageLocations}
+		assert.Nil(t, c.SetLocationList(locID, abcList))
+		require.True(t, c.MoveDown())
+
+		assertMessages(t, c)
+	})
+
+	t.Run("return messages if cursor between From/To", func(t *testing.T) {
+		c := setupCursorContent(t, 10, 10, content)
+
+		abcList := &testLocationList{locations: messageLocations}
+
+		assert.Nil(t, c.SetLocationList(locID, abcList))
+		require.True(t, c.MoveDown())
+		require.True(t, c.MoveRight())
+
+		assertMessages(t, c)
+	})
+
+	t.Run("return messages if cursor is at To", func(t *testing.T) {
+		c := setupCursorContent(t, 10, 10, content)
+
+		abcList := &testLocationList{locations: messageLocations}
+
+		assert.Nil(t, c.SetLocationList(locID, abcList))
+		require.True(t, c.MoveDown())
+		c.MoveRight()
+		c.MoveRight()
+
+		assertMessages(t, c)
+	})
 }

@@ -47,6 +47,7 @@ message SetLocationListRequest {
 		Coordinates from = 1;
 		Coordinates to = 2;
 		Attributes attr = 3;
+		string msg = 4;
 	}
 	uint32 handler_id = 1;
 	string list_id = 2;

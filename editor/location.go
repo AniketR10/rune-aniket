@@ -19,6 +19,7 @@ type LocationList interface {
 type Location struct {
 	From, To term.Coordinates
 	Attr     term.Attributes
+	Message  string
 }
 
 type sliceLocations struct {

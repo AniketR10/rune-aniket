@@ -58,11 +58,11 @@ type Vi struct {
 
 // DefaultViConfig is a sane configuration defaults for Vi.
 var defaultViConfig = viConfig{
-	ResAttr: term.Attributes{
+	resAttr: term.Attributes{
 		Fg: term.AttrReverse,
 		Bg: term.ColorDefault,
 	},
-	Clipboard: editor.NewEphemeralClipboard(),
+	clipboard: editor.NewEphemeralClipboard(),
 }
 
 // New allocates storage for a new Vi handler, initializes it and returns it.
@@ -79,11 +79,11 @@ func (vi *Vi) Init(buf *cell.Buffer, opts ...Option) {
 		o(&vi.config)
 	}
 
-	vi.less.Scroll.ResultsAttr = vi.config.ResAttr
+	vi.less.Scroll.ResultsAttr = vi.config.resAttr
 	vi.less.InitWithBuffer(buf)
 	vi.cursor.Init(&vi.less.Scroll)
 
-	editor.WithCopyDelete(vi.config.Clipboard, buf)
+	editor.WithCopyDelete(vi.config.clipboard, buf)
 
 	vi.raw = vi.cursor
 
@@ -95,8 +95,22 @@ func (vi *Vi) Resize(width, height int) {
 	vi.less.Resize(width, height)
 }
 
+func (vi *Vi) setActiveLocationListMessage(locs map[string]editor.Location) {
+	// TODO implement active location list
+	for _, loc := range locs {
+		vi.SetMessage(loc.Message)
+		return
+	}
+}
+
 // Draw : tui.Component
 func (vi *Vi) Draw(w term.Writer) {
+	locs, ok := vi.cursor.Locations()
+	if ok {
+		vi.setActiveLocationListMessage(locs)
+	} else {
+		vi.setMode(vi.mode)
+	}
 	vi.less.Draw(w)
 }
 
@@ -114,50 +128,80 @@ func (vi *Vi) Cursor() (term.Coordinates, bool) {
 	return vi.cursor.Cursor()
 }
 
-func (vi *Vi) setMode(text string, mode viMode) {
+// SetMessage uses vi's configured Messenger to set msg with args.
+func (vi *Vi) SetMessage(msg string, args ...interface{}) {
+	if vi.config.messenger != nil {
+		vi.config.messenger.SetMessage(msg, args...)
+		return
+	}
+	vi.less.SetMessage(msg, args...)
+}
+
+func (vi *Vi) setMode(mode viMode) {
+	var text string
+	switch mode {
+	case normalMode:
+		text = "NORMAL"
+	case insertMode:
+		text = "INSERT"
+	case visualMode:
+		text = "VISUAL"
+	case visualLineMode:
+		text = "V-LINE"
+	case visualBlockMode:
+		text = "V-BLOCK"
+	case moveToCharMode:
+		text = "MOVE-TO"
+	case replaceMode:
+		text = "REPLACE"
+	case replaceOneMode:
+		text = "NORMAL"
+	default:
+		panic(fmt.Sprintf("unknown mode: %v", mode))
+	}
 	vi.less.SetMessageAlt(":")
 	vi.less.SetMessage(text)
 	vi.mode = mode
 }
 
 func (vi *Vi) setNormalMode() {
-	vi.setMode("NORMAL", normalMode)
+	vi.setMode(normalMode)
 	vi.less.SetMessageAlt(":")
 }
 
 func (vi *Vi) setInsertMode() {
-	vi.setMode("INSERT", insertMode)
+	vi.setMode(insertMode)
 }
 
 func (vi *Vi) setVisualMode() {
 	if vi.cursor.Select() {
-		vi.setMode("VISUAL", visualMode)
+		vi.setMode(visualMode)
 	}
 }
 
 func (vi *Vi) setVisualLineMode() {
 	if vi.cursor.SelectLine() {
-		vi.setMode("V-LINE", visualLineMode)
+		vi.setMode(visualLineMode)
 	}
 }
 
 func (vi *Vi) setVisualBlockMode() {
 	if vi.cursor.SelectBlock() {
-		vi.setMode("V-BLOCK", visualBlockMode)
+		vi.setMode(visualBlockMode)
 	}
 }
 
 func (vi *Vi) setMoveToCharacterMode(mode moveMode) {
-	vi.setMode("MOVE-TO", moveToCharMode)
+	vi.setMode(moveToCharMode)
 	vi.moveMode = mode
 }
 
 func (vi *Vi) setReplaceMode() {
-	vi.setMode("REPLACE", replaceMode)
+	vi.setMode(replaceMode)
 }
 
 func (vi *Vi) setReplaceOneMode() {
-	vi.setMode("NORMAL", replaceOneMode)
+	vi.setMode(replaceOneMode)
 }
 
 // we delegate search buffer Component to Less but delegate cursor position
@@ -194,14 +238,14 @@ func (vi *Vi) insertBlock(str string) {
 }
 
 func (vi *Vi) logError(err error) {
-	if vi.config.Logger == nil {
+	if vi.config.logger == nil {
 		return
 	}
-	vi.config.Logger.Error(err)
+	vi.config.logger.Error(err)
 }
 
 func (vi *Vi) pasteClipboard(before bool) bool {
-	paste, err := vi.config.Clipboard.Get()
+	paste, err := vi.config.clipboard.Get()
 	str := paste.Data
 	mode, ok := paste.Metadata.(viMode)
 	if !ok {
@@ -429,7 +473,7 @@ func (vi *Vi) handleVisual(ev term.Event) (quit, handled bool) {
 			vi.cursor.ShiftSelectionLeft()
 		case 'y':
 			selection := vi.cursor.Selection()
-			vi.config.Clipboard.Set(editor.Paste{Data: selection, Metadata: vi.mode})
+			vi.config.clipboard.Set(editor.Paste{Data: selection, Metadata: vi.mode})
 			vi.cursor.Unselect()
 			vi.setNormalMode()
 		case 'd', 'x':
