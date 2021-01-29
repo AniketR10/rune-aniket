@@ -190,24 +190,4 @@ func TestKeySplitHandlerEmpty(t *testing.T) {
 
 		assert.False(t, h.Handle(keyEvent))
 	})
-
-	t.Run("closes handler and window on shutdown", func(t *testing.T) {
-		ctrl := gomock.NewController(t)
-		defer ctrl.Finish()
-
-		config := KeySplitHandlerConfig{}
-		h := &keySplitHandler{config: config}
-
-		closer := handlerCloser{Handler: handler.NewTestHandler()}
-		win := browser.NewMockWindow(ctrl)
-
-		expectInitialization(t, ctrl, h)
-		h.h = &closer
-		h.win = win
-
-		win.EXPECT().Close().Times(1)
-
-		h.OnShutdown("I'm not ok with this")
-		assert.Equal(t, 1, closer.calledClosed)
-	})
 }
