@@ -8,6 +8,7 @@ import (
 	"math"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/ernestrc/go-tui/browser"
@@ -30,7 +31,14 @@ const (
 
 var (
 	defaultSemanticTokensListID = "lsp_syntax_highlighting"
-	defaultSemanticTypeAttr     = map[string]term.Attributes{
+	defaultDiagnosticListID     = "lsp_diagnostic"
+	defaultDiagnosticAttr       = map[protocol.DiagnosticSeverity]term.Attributes{
+		protocol.SeverityError:       {Bg: term.ColorRed, Fg: term.ColorWhite},
+		protocol.SeverityWarning:     {Bg: term.ColorYellow, Fg: term.ColorBlack},
+		protocol.SeverityInformation: {Bg: term.ColorBlue, Fg: term.ColorWhite},
+		protocol.SeverityHint:        {Bg: term.ColorGreen, Fg: term.ColorWhite},
+	}
+	defaultSemanticTypeAttr = map[string]term.Attributes{
 		"namespace":     {},
 		"type":          {},
 		"class":         {},
@@ -72,13 +80,16 @@ type file struct {
 }
 
 type lspEditorHandler struct {
+	mu                   sync.Mutex
 	ed                   editor.Editor
 	p                    browser.EventPublisher
 	server               protocol.Server
 	protocol             *protocol.InitializeResult
-	files                map[string]*file
+	files                map[span.URI]*file
 	semanticTypesAttr    map[string]term.Attributes
+	diagnosticAttr       map[protocol.DiagnosticSeverity]term.Attributes
 	semanticTokensListID string
+	diagnosticListID     string
 }
 
 func initializeParams(
@@ -133,7 +144,7 @@ func parseAddr(listen string) (network string, address string) {
 }
 
 func streamRPC(cc jsonrpc2.Conn, h *lspEditorHandler) {
-	ch := lspClientHandler{}
+	ch := lspClientHandler{h: h}
 	ctx := context.Background()
 	cc.Go(ctx,
 		protocol.Handlers(protocol.ClientHandler(&ch, jsonrpc2.MethodNotFound)))
@@ -216,6 +227,87 @@ func getSemanticTypesAttr(pconfig plugin.Config) (map[string]term.Attributes, er
 	return ret, nil
 }
 
+func severityToString(s protocol.DiagnosticSeverity) string {
+	switch s {
+	case protocol.SeverityError:
+		return "error"
+	case protocol.SeverityWarning:
+		return "warning"
+	case protocol.SeverityInformation:
+		return "information"
+	case protocol.SeverityHint:
+		return "hint"
+	default:
+		return ""
+	}
+}
+
+func getDiagnosticAttr(pconfig plugin.Config) (
+	map[protocol.DiagnosticSeverity]term.Attributes, error,
+) {
+	ret := make(map[protocol.DiagnosticSeverity]term.Attributes, len(defaultDiagnosticAttr))
+	for k, v := range defaultDiagnosticAttr {
+		ret[k] = v
+	}
+
+	colors, err := pconfig.GetConfig("diagnostics")
+	if err != nil {
+		if err != plugin.ErrNotFound {
+			err = fmt.Errorf("Error getting 'diagnostics' from plugin config: %v", err)
+			return nil, err
+		}
+		return ret, nil
+	}
+
+	for s := range defaultDiagnosticAttr {
+		name := severityToString(s)
+		attr, err := colors.GetAttributes(name)
+		if err != nil {
+			if err != plugin.ErrNotFound {
+				err = fmt.Errorf("Error getting 'diagnostics.%s' "+
+					"from plugin config: %v", name, err)
+				return nil, err
+			}
+			continue
+		}
+		ret[s] = attr
+	}
+
+	return ret, nil
+}
+
+func convertRange(
+	rng protocol.Range, cells [][]term.Cell, colmap protocol.ColumnMapper,
+) (from, to term.Coordinates, ok bool) {
+	spn, err := colmap.RangeSpan(rng)
+	if err != nil {
+		log.Errorf("lspEditorHandler: failed to create rangespan for range: %#v->%#v: %v",
+			rng.Start, rng.End, err)
+		return
+	}
+
+	startLine := spn.Start().Line() - 1
+	startChar := spn.Start().Column() - 1
+	from, ok = cell.ConvertRuneCoordinates(cells, startLine, startChar)
+	if !ok {
+		log.Errorf("lspEditorHandler: failed to convert lsp Start coordinates"+
+			" to term From coordinates: %#v->%#v", startLine, startChar)
+		return
+	}
+
+	// to is right exclusive, if result is negative then it's probably
+	// not a token we're interested in
+	endChar := int(math.Max(float64(spn.End().Column()-2), 0))
+	endLine := spn.End().Line() - 1
+
+	to, ok = cell.ConvertRuneCoordinates(cells, endLine, endChar)
+	if !ok {
+		log.Errorf("lspEditorHandler: failed to convert lsp End coordinates to "+
+			"term To coordinates: %#v->%#v", endLine, endChar)
+	}
+	return
+}
+
 func newLspHandler(
 	ed editor.Editor, p browser.EventPublisher, pconfig plugin.Config,
 ) (*lspEditorHandler, error) {
@@ -229,13 +321,20 @@ func newLspHandler(
 	ret := new(lspEditorHandler)
 	ret.ed = ed
 	ret.p = p
-	ret.files = make(map[string]*file)
+	ret.files = make(map[span.URI]*file)
 	ret.server, ret.protocol, err = connectRemote(ctx, ret, remoteAddr)
 	if err != nil {
 		return nil, err
 	}
 
+	ret.server = ioUnlockServer{mu: &ret.mu, server: ret.server}
+
 	ret.semanticTypesAttr, err = getSemanticTypesAttr(pconfig)
+	if err != nil {
+		return nil, err
+	}
+
+	ret.diagnosticAttr, err = getDiagnosticAttr(pconfig)
 	if err != nil {
 		return nil, err
 	}
@@ -247,6 +346,15 @@ func newLspHandler(
 			return nil, err
 		}
 		ret.semanticTokensListID = defaultSemanticTokensListID
+	}
+
+	ret.diagnosticListID, err = pconfig.GetString("diagnostic_list_id")
+	if err != nil {
+		if err != plugin.ErrNotFound {
+			err = fmt.Errorf("failed to get 'diagnostic_list_id' from config: %v", err)
+			return nil, err
+		}
+		ret.diagnosticListID = defaultDiagnosticListID
 	}
 
 	log.Infof("connected to remote server named %s with version %s at %s: ",
@@ -269,12 +377,17 @@ func (h *lspEditorHandler) newFile(handler editor.Handler, name, content string)
 		cells: cell.StringToCells(content),
 	}
 
-	h.files[name] = f
+	h.files[uri] = f
 	return f
 }
 
-func (h *lspEditorHandler) getFile(name string) (*file, bool) {
-	f, ok := h.files[name]
+func (h *lspEditorHandler) getFileWithName(name string) (*file, bool) {
+	uri := span.URIFromPath(name)
+	return h.getFile(uri)
+}
+
+func (h *lspEditorHandler) getFile(uri span.URI) (*file, bool) {
+	f, ok := h.files[uri]
 	return f, ok
 }
 
@@ -314,36 +427,18 @@ func parseLocationData(
 				Character: lspChar[i] + d[5*i+2],
 			},
 		}
-		spn, err := colmap.RangeSpan(pr)
-		if err != nil {
-			log.Errorf("lspEditorHandler: failed to create rangespan for range: %#v->%#v: %v", pr.Start, pr.End, err)
-			continue
-		}
-
-		startLine := spn.Start().Line() - 1
-		startChar := spn.Start().Column() - 1
-		from, ok := cell.ConvertRuneCoordinates(cells, startLine, startChar)
+		from, to, ok := convertRange(pr, cells, colmap)
 		if !ok {
-			log.Errorf("lspEditorHandler: failed to convert lsp Start coordinates"+
-				" to term From coordinates: %#v->%#v", startLine, startChar)
-			continue
-		}
-
-		// to is right exclusive, if result is negative then it's probably
-		// not a token we're interested in
-		endChar := int(math.Max(float64(spn.End().Column()-2), 0))
-		endLine := spn.End().Line() - 1
-
-		to, ok := cell.ConvertRuneCoordinates(cells, endLine, endChar)
-		if !ok {
-			log.Errorf("lspEditorHandler: failed to convert lsp End coordinates to "+
-				"term To coordinates: %#v->%#v", endLine, endChar)
 			continue
 		}
 
 		// mods:   lsp.SemMods(int(d[5*i+4])),
 		semType := lsp.SemType(int(d[5*i+3]))
-		attr := semanticTypes[semType]
+		attr, ok := semanticTypes[semType]
+		if !ok {
+			log.Warnf("could not map semantic type %s; skipping token", semType)
+			continue
+		}
 
 		loc := editor.Location{From: from, To: to, Attr: attr}
 		ret = append(ret, loc)
@@ -414,7 +509,7 @@ func makeDeleteProtocolRange(
 
 	// range end signals delete newline by setting it to x:0 y:next line
 	// whereas in term.Coordinates, To signals the same by setting x==len
-	if endx == len(oldCells[endy]) {
+	if to.X == len(oldCells[to.Y]) {
 		endy++
 		endx = 0
 	} else {
@@ -502,7 +597,7 @@ func (h *lspEditorHandler) sendIncrementalUpdate(
 func (h *lspEditorHandler) handleFileFlush(ev editor.Event) {
 	ctx := context.Background()
 
-	f, ok := h.getFile(ev.ResourceName)
+	f, ok := h.getFileWithName(ev.ResourceName)
 	if !ok {
 		f = h.newFile(ev.Resource, ev.ResourceName, ev.Content)
 	}
@@ -515,7 +610,7 @@ func (h *lspEditorHandler) handleFileFlush(ev editor.Event) {
 
 func (h *lspEditorHandler) handleFileInsert(ev editor.Event) {
 	ctx := context.Background()
-	f, ok := h.getFile(ev.ResourceName)
+	f, ok := h.getFileWithName(ev.ResourceName)
 	if !ok {
 		log.Warnf("lspEditorHandler: Received insert event for an unknown file: %#v", ev)
 		return
@@ -528,14 +623,13 @@ func (h *lspEditorHandler) handleFileInsert(ev editor.Event) {
 	h.sendIncrementalUpdate(ctx, f, newCells, oldCells, ev.Content, ev.From, ev.To)
 	f.cells = newCells
 
-	content := buf.String()
-	h.semanticTokens(ctx, f, f.cells, content)
+	h.semanticTokens(ctx, f, newCells, buf.String())
 	h.publishInterrupt(f.name)
 }
 
 func (h *lspEditorHandler) handleFileDelete(ev editor.Event) {
 	ctx := context.Background()
-	f, ok := h.getFile(ev.ResourceName)
+	f, ok := h.getFileWithName(ev.ResourceName)
 	if !ok {
 		log.Warnf("lspEditorHandler: Received delete event for an unknown file: %#v", ev)
 		return
@@ -548,8 +642,7 @@ func (h *lspEditorHandler) handleFileDelete(ev editor.Event) {
 	h.sendIncrementalUpdate(ctx, f, newCells, oldCells, "", ev.From, ev.To)
 	f.cells = newCells
 
-	content := buf.String()
-	h.semanticTokens(ctx, f, f.cells, content)
+	h.semanticTokens(ctx, f, newCells, buf.String())
 	h.publishInterrupt(f.name)
 }
 
@@ -575,12 +668,12 @@ func (h *lspEditorHandler) handleFileOpen(ev editor.Event) {
 }
 
 func (h *lspEditorHandler) removeFile(name string) (*file, bool) {
-	f, ok := h.getFile(name)
+	f, ok := h.getFileWithName(name)
 	if !ok {
 		return nil, false
 	}
 
-	delete(h.files, name)
+	delete(h.files, f.uri)
 	return f, true
 }
 
@@ -603,7 +696,71 @@ func (h *lspEditorHandler) handleFileClose(ev editor.Event) {
 	}
 }
 
+func parseDiagnostics(
+	f *file, d []protocol.Diagnostic,
+	diagnosticAttr map[protocol.DiagnosticSeverity]term.Attributes,
+) []editor.Location {
+	buf := cell.CellsToBuffer(f.cells)
+	content := []byte(buf.String())
+	tc := span.NewContentConverter(f.uri.Filename(), content)
+	colmap := protocol.ColumnMapper{
+		URI:       f.uri,
+		Content:   content,
+		Converter: tc,
+	}
+
+	locs := make([]editor.Location, 0, len(d))
+	for _, d := range d {
+		from, to, ok := convertRange(d.Range, f.cells, colmap)
+		if !ok {
+			continue
+		}
+
+		// TODO add Message to editor.Location
+		// msg := d.Source + d.Message
+		attr, ok := diagnosticAttr[d.Severity]
+		if !ok {
+			log.Warnf("could not diagnostic severity %v; skipping diagnostic", d.Severity)
+			continue
+		}
+
+		loc := editor.Location{From: from, To: to, Attr: attr}
+		locs = append(locs, loc)
+	}
+
+	return locs
+}
+
+func (h *lspEditorHandler) HandleDiagnostics(
+	p *protocol.PublishDiagnosticsParams,
+) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	f, ok := h.getFile(p.URI.SpanURI())
+	if !ok {
+		log.Warnf("lspEditorHandler: Received diagnostic for an unknown file: %#v", p.URI.SpanURI())
+		return
+	}
+
+	if p.Version != f.version {
+		log.Debugf("lspEditorHandler: Received diagnostic for"+
+			"outdated version of file '%s': %#v", f.name, p.Version)
+		return
+	}
+
+	locs := parseDiagnostics(f, p.Diagnostics, h.diagnosticAttr)
+	err := h.ed.SetLocationList(f.handler, h.diagnosticListID, editor.LocationSlice(locs))
+	if err != nil {
+		log.Errorf("lspEditorHandler.SetLocationList(%s): %v", f.name, err)
+		return
+	}
+}
+
 func (h *lspEditorHandler) Handle(ev editor.Event) (exit bool) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
 	log.Tracef("lspEditorHandler.Handle(%#v)", ev)
 
 	switch ev.Type {

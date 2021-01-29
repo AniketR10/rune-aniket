@@ -7,9 +7,8 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-// TODO look at fake client in lsp package to understand
-// more about how to configure with other servers.
 type lspClientHandler struct {
+	h *lspEditorHandler
 }
 
 // lsp protocol.Client
@@ -48,10 +47,8 @@ func (h *lspClientHandler) Event(
 func (h *lspClientHandler) PublishDiagnostics(
 	ctx context.Context, p *protocol.PublishDiagnosticsParams,
 ) error {
-	// TODO if version is outdated, discard.
-	// TODO use to highlight errors, warnings, etc.
-	// TODO empty diagnostic should clear errors and warnings.
 	log.Tracef("lspClientHandler.PublishDiagnostics: %#v", p)
+	h.h.HandleDiagnostics(p)
 	return nil
 }
 

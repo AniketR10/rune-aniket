@@ -19,11 +19,12 @@ import (
 var (
 	filename1    = "wa_tup.java"
 	filecontent1 = `package me.drton.jmavsim;
-public class Rotor {
+public class	Rotor {
      sta  mtyp;
 
 
   myClass;
+
 `
 	tokenData1         = []float64{2, 5, 3, 0, 3, 0, 5, 4, 1, 0, 3, 2, 7, 2, 0}
 	expectedLocations1 = []editor.Location{
@@ -55,9 +56,12 @@ func newTestLspHandler(
 	ret := new(lspEditorHandler)
 	ret.ed = ed
 	ret.p = p
-	ret.files = make(map[string]*file)
+	ret.files = make(map[span.URI]*file)
 	ret.server = server
 	ret.semanticTokensListID = defaultSemanticTokensListID
+	ret.diagnosticListID = defaultDiagnosticListID
+	ret.semanticTypesAttr = defaultSemanticTypeAttr
+	ret.diagnosticAttr = defaultDiagnosticAttr
 	return ret
 }
 
@@ -120,6 +124,16 @@ func expectLocationList(
 	ed.EXPECT().SetLocationList(gomock.Any(), gomock.Any(), gomock.Any()).
 		DoAndReturn(func(h editor.Handler, id string, loc editor.LocationList) error {
 			assertEqualLocations(t, loc, editor.LocationSlice(expectedLocations))
+			assert.Equal(t, expectedID, id)
+			return nil
+		}).Times(1)
+}
+
+func expectAnyLocationList(
+	t *testing.T, ed *editor.MockEditor, expectedID string,
+) {
+	ed.EXPECT().SetLocationList(gomock.Any(), gomock.Any(), gomock.Any()).
+		DoAndReturn(func(h editor.Handler, id string, loc editor.LocationList) error {
 			assert.Equal(t, expectedID, id)
 			return nil
 		}).Times(1)
@@ -248,4 +262,30 @@ func TestLspHandlerHandleInsertDelete(t *testing.T) {
 	expectSemanticTokens(t, server, tokenData1)
 	expectLocationList(t, ed, defaultSemanticTokensListID, expectedLocations1)
 	buf.Delete(from, until)
+
+	// Delete 2
+	expectedEvents = []protocol.TextDocumentContentChangeEvent{{
+		Range: &protocol.Range{
+			Start: protocol.Position{Line: 6, Character: 0},
+			End:   protocol.Position{Line: 7, Character: 0},
+		},
+		Text: "",
+	}}
+	expectDidChange(t, server, filename1, 4, expectedEvents)
+	expectSemanticTokens(t, server, tokenData1)
+	expectLocationList(t, ed, defaultSemanticTokensListID, expectedLocations1)
+	buf.Delete(term.Coordinates{Y: 6}, term.Coordinates{Y: 6})
+
+	// Delete 3
+	expectedEvents = []protocol.TextDocumentContentChangeEvent{{
+		Range: &protocol.Range{
+			Start: protocol.Position{Line: 1, Character: 0},
+			End:   protocol.Position{Line: 2, Character: 0},
+		},
+		Text: "",
+	}}
+	expectDidChange(t, server, filename1, 5, expectedEvents)
+	expectSemanticTokens(t, server, tokenData1)
+	expectAnyLocationList(t, ed, defaultSemanticTokensListID)
+	buf.DeleteRow(1)
 }
