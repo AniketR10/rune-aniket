@@ -28,7 +28,7 @@ debug: $(EXAMPLES) $(EXECS)
 
 example_wasm: $(EXAMPLE_WASM_BLOB)
 
-test: $(EXAMPLES) $(EXECS)
+test:
 	@ go test ./.../... $(GOTESTFLAGS)
 
 coverage: $(BIN)
