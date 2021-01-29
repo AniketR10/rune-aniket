@@ -236,6 +236,34 @@ func (mr *MockEditorMockRecorder) Edit(name, buf interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Edit", reflect.TypeOf((*MockEditor)(nil).Edit), name, buf)
 }
 
+// MoveToNextLocation mocks base method.
+func (m *MockEditor) MoveToNextLocation(h Handler, ID string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "MoveToNextLocation", h, ID)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// MoveToNextLocation indicates an expected call of MoveToNextLocation.
+func (mr *MockEditorMockRecorder) MoveToNextLocation(h, ID interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MoveToNextLocation", reflect.TypeOf((*MockEditor)(nil).MoveToNextLocation), h, ID)
+}
+
+// MoveToPrevLocation mocks base method.
+func (m *MockEditor) MoveToPrevLocation(h Handler, ID string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "MoveToPrevLocation", h, ID)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// MoveToPrevLocation indicates an expected call of MoveToPrevLocation.
+func (mr *MockEditorMockRecorder) MoveToPrevLocation(h, ID interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MoveToPrevLocation", reflect.TypeOf((*MockEditor)(nil).MoveToPrevLocation), h, ID)
+}
+
 // Reader mocks base method.
 func (m *MockEditor) Reader(arg0 Handler) Reader {
 	m.ctrl.T.Helper()

@@ -163,6 +163,33 @@ func (c *Client) SetLocationList(h Handler, ID string, l LocationList) error {
 	return err
 }
 
+func (c *Client) moveToLocation(h Handler, ID string, next bool) (err error) {
+	ctx := context.Background()
+	token, ok := h.(browser.Token)
+	if !ok {
+		panic("MoveToNextLocation: invalid Handler argument")
+	}
+	req := proto.MoveToLocationRequest{HandlerId: uint32(token.ID), ListId: ID}
+	if next {
+		_, err = c.ed.MoveToNextLocation(ctx, &req)
+	} else {
+		_, err = c.ed.MoveToPrevLocation(ctx, &req)
+	}
+	return err
+}
+
+// MoveToPrevLocation requests the editor server to move cursor to the previous location
+// in location list identified by ID.
+func (c *Client) MoveToPrevLocation(h Handler, ID string) error {
+	return c.moveToLocation(h, ID, false)
+}
+
+// MoveToNextLocation requests the editor server to move cursor to the next location
+// in location list identified by ID.
+func (c *Client) MoveToNextLocation(h Handler, ID string) error {
+	return c.moveToLocation(h, ID, true)
+}
+
 // Writer satisfies editor.Editor.
 func (c *Client) Writer(h Handler) Writer {
 	token, ok := h.(browser.Token)

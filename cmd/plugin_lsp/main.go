@@ -9,6 +9,7 @@ import (
 	"github.com/ernestrc/go-tui/editor"
 	"github.com/ernestrc/go-tui/plugin"
 	"github.com/ernestrc/go-tui/proto"
+	"github.com/ernestrc/go-tui/term"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -17,6 +18,7 @@ type lspGrantee struct {
 	ed      editor.Editor
 	m       browser.Messenger
 	p       browser.EventPublisher
+	s       browser.EventSubscriber
 	handler *lspEditorHandler
 	pconfig plugin.Config
 	err     error
@@ -51,6 +53,29 @@ func (t *lspGrantee) subscribeToEvents() error {
 	return nil
 }
 
+func (t *lspGrantee) Handle(ev term.Event) bool {
+	if t.handler == nil {
+		return false
+	}
+	return t.handler.HandleKeyEvent(ev)
+}
+
+func (t *lspGrantee) subscribeToTermEvents() error {
+	// TODO make configurable
+	// evs := []term.Event{t.config.NextDiagnosticKey, t.config.PrevDiagnosticKey}
+	evs := []term.Event{
+		term.Event{Type: term.EventKey, Key: term.KeyCtrlJ},
+		term.Event{Type: term.EventKey, Key: term.KeyCtrlK},
+	}
+	for _, keyEv := range evs {
+		err := t.s.Subscribe(keyEv, t)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (t *lspGrantee) OnPermissionGranted(
 	token uint32, perm plugin.Permission,
 ) {
@@ -72,6 +97,11 @@ func (t *lspGrantee) OnPermissionGranted(
 		t.p, err = plugin.EventPublisher(token, t.broker)
 		if err == nil && t.err != nil {
 			err = t.m.SetMessage("Error: %v", t.err)
+		}
+	case plugin.PermissionBrowserEventSubscriber:
+		t.s, err = plugin.EventSubscriber(token, t.broker)
+		if err == nil {
+			err = t.subscribeToTermEvents()
 		}
 	}
 	if err != nil {
@@ -113,6 +143,7 @@ func main() {
 
 	plugin.Serve(&lspGrantee{},
 		plugin.PermissionBrowserEventPublisher,
+		plugin.PermissionBrowserEventSubscriber,
 		plugin.PermissionEditor,
 		plugin.PermissionBrowserMessenger,
 	)

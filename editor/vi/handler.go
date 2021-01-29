@@ -419,10 +419,6 @@ func (vi *Vi) handleNormal(ev term.Event) (quit bool, handled bool) {
 				vi.cursor.Redo()
 			case term.KeyCtrlV:
 				vi.setVisualBlockMode()
-			// case term.KeyCtrlK:
-			// 	vi.cursor.MoveToPrevLocation(vi.locationListID)
-			// case term.KeyCtrlJ:
-			// 	vi.cursor.MoveToNextLocation(vi.locationListID)
 			default:
 				handled = false
 			}
@@ -582,6 +578,20 @@ func (vi *Vi) Handle(ev term.Event) (quit, handled bool) {
 	}
 
 	return
+}
+
+// MoveToNextLocation moves the cursor to the next location
+// in the location list identified by ID.
+func (vi *Vi) MoveToNextLocation(ID string) {
+	vi.cursor.MoveToNextLocation(ID)
+	vi.raw = vi.cursor
+}
+
+// MoveToPrevLocation moves the cursor to the previous location
+// in the location list identified by ID.
+func (vi *Vi) MoveToPrevLocation(ID string) {
+	vi.cursor.MoveToPrevLocation(ID)
+	vi.raw = vi.cursor
 }
 
 // SetLocationList sets a location list of this handler. See Cursor.SetLocationList

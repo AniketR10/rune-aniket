@@ -72,6 +72,14 @@ func (e *testEditor) SetLocationList(h Handler, id string, loc LocationList) err
 	return nil
 }
 
+func (e *testEditor) MoveToNextLocation(h Handler, ID string) error {
+	return nil
+}
+
+func (e *testEditor) MoveToPrevLocation(h Handler, ID string) error {
+	return nil
+}
+
 func (e *testEditor) Writer(h Handler) Writer {
 	return CellWriter(e.buf.Writer())
 }

@@ -315,6 +315,48 @@ func (s *Server) SetLocationList(ctx context.Context, in *proto.SetLocationListR
 	return new(proto.SetLocationListResponse), nil
 }
 
+// MoveToNextLocation satisfies proto.EditorServer
+func (s *Server) MoveToNextLocation(ctx context.Context, in *proto.MoveToLocationRequest) (
+	res *proto.MoveToLocationResponse, err error,
+) {
+	return s.moveToLocation(ctx, in, true)
+}
+
+// MoveToPrevLocation satisfies proto.EditorServer
+func (s *Server) MoveToPrevLocation(ctx context.Context, in *proto.MoveToLocationRequest) (
+	res *proto.MoveToLocationResponse, err error,
+) {
+	return s.moveToLocation(ctx, in, false)
+}
+
+func (s *Server) moveToLocation(
+	ctx context.Context, in *proto.MoveToLocationRequest, next bool,
+) (res *proto.MoveToLocationResponse, err error) {
+	handlerID := in.GetHandlerId()
+	id := in.GetListId()
+
+	s.editor.Lock()
+	defer s.editor.Unlock()
+
+	h, ok := s.idToHandler[handlerID]
+	if !ok {
+		return nil, errHandlerNotFound
+	}
+
+	if next {
+		err = s.editor.MoveToNextLocation(h, id)
+	} else {
+		err = s.editor.MoveToPrevLocation(h, id)
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	res = new(proto.MoveToLocationResponse)
+	return res, nil
+}
+
 // Insert satisfies proto.EditorServer
 func (s *Server) Insert(ctx context.Context, in *proto.InsertRequest) (
 	*proto.InsertResponse, error,

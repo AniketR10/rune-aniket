@@ -87,10 +87,22 @@ message RawCellsResponse {
 	repeated CellRow rows = 1;
 }
 
+message MoveToLocationRequest {
+	uint32 handler_id = 1;
+	string list_id = 2;
+}
+
+message MoveToLocationResponse {
+}
+
 service Editor {
 	rpc Edit(EditRequest) returns (EditResponse);
 	rpc Subscribe(EditorSubscribeRequest) returns (EditorSubscribeResponse);
+
+	// locations
 	rpc SetLocationList(SetLocationListRequest) returns (SetLocationListResponse);
+	rpc MoveToNextLocation(MoveToLocationRequest) returns (MoveToLocationResponse);
+	rpc MoveToPrevLocation(MoveToLocationRequest) returns (MoveToLocationResponse);
 
 
 	// Writer

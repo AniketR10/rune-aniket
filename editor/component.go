@@ -371,6 +371,16 @@ func (c *Component) SetLocationList(h Handler, ID string, loc LocationList) erro
 	return c.ed.SetLocationList(h, ID, loc)
 }
 
+// MoveToNextLocation satisfies editor.Editor.
+func (c *Component) MoveToNextLocation(h Handler, ID string) error {
+	return c.ed.MoveToNextLocation(h, ID)
+}
+
+// MoveToPrevLocation satisfies editor.Editor.
+func (c *Component) MoveToPrevLocation(h Handler, ID string) error {
+	return c.ed.MoveToPrevLocation(h, ID)
+}
+
 // Reader satisfies editor.Editor.
 func (c *Component) Reader(h Handler) Reader {
 	return c.ed.Reader(h)

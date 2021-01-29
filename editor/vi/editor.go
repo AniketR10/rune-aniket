@@ -69,6 +69,16 @@ func (e viEditor) SetLocationList(h editor.Handler, ID string, loc editor.Locati
 	return nil
 }
 
+func (e *viEditor) MoveToNextLocation(h editor.Handler, ID string) error {
+	h.(*Vi).MoveToNextLocation(ID)
+	return nil
+}
+
+func (e *viEditor) MoveToPrevLocation(h editor.Handler, ID string) error {
+	h.(*Vi).MoveToPrevLocation(ID)
+	return nil
+}
+
 func (e *viEditor) Reader(h editor.Handler) editor.Reader {
 	return editor.CellReader(h.(*Vi).less.Buffer().Reader())
 }

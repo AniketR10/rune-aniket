@@ -777,6 +777,31 @@ func (h *lspEditorHandler) Handle(ev editor.Event) (exit bool) {
 	return
 }
 
+func (h *lspEditorHandler) HandleKeyEvent(ev term.Event) bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	switch ev.Key {
+	case term.KeyCtrlJ:
+		// FIXME: the editor API doesn't know about focus
+		// so for now, move to next location all open files.
+		for _, f := range h.files {
+			err := h.ed.MoveToNextLocation(f.handler, h.diagnosticListID)
+			if err != nil {
+				log.Errorf("lspEditorHandler.MoveToNextLocation(%s): %v", f.name, err)
+			}
+		}
+	case term.KeyCtrlK:
+		for _, f := range h.files {
+			err := h.ed.MoveToPrevLocation(f.handler, h.diagnosticListID)
+			if err != nil {
+				log.Errorf("lspEditorHandler.MoveToNextLocation(%s): %v", f.name, err)
+			}
+		}
+	}
+	return false
+}
+
 func (h *lspEditorHandler) Close() error {
 	ctx, cancel := context.WithTimeout(context.Background(), connectTimeout)
 	defer cancel()
