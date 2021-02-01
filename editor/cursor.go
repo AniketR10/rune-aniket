@@ -38,6 +38,7 @@ type Cursor struct {
 		cells      [][]term.Cell
 	}
 	subscriber curSubscriber
+	searchLoc  LocationList
 }
 
 // NewCursor allocates storage for a new cursor,
@@ -106,6 +107,17 @@ func (c *Cursor) MoveTo(pos term.Coordinates) term.Coordinates {
 	return ret
 }
 
+// the bounds of the current view, then underlying scroll is used
+// to seek to pos.
+func (c *Cursor) moveToScroll(pos term.Coordinates) {
+	offset := c.scroll.Offset()
+	height := c.scroll.Height()
+	if pos.Y >= height+offset.Y {
+		c.scroll.SeekTo(term.Coordinates{X: pos.X, Y: pos.Y})
+	}
+	c.cursor = c.scrollToWindowCoordinates(pos)
+}
+
 // note that pos is window coordinates, not scroll coordinates
 func (c *Cursor) setCursor(pos term.Coordinates) {
 	if pos.X < 0 || pos.Y < 0 ||
@@ -124,31 +136,49 @@ func (c *Cursor) setCursor(pos term.Coordinates) {
 // Search searches text string in the underlying cell buffer. It returns
 // the number of occurrences found.
 func (c *Cursor) Search(text string) int {
-	res := c.scroll.Search(text)
+	n := c.scroll.Search(text)
+
+	searchLoc := make([]Location, n)
+	for i := 0; i < n; i++ {
+		res, ok := c.scroll.NextResult()
+		if !ok {
+			panic("invalid scroll search results")
+		}
+		searchLoc[i] = Location{
+			From: res,
+			// To: is not necessary for MoveToNextLocation
+		}
+	}
+
+	c.searchLoc = LocationSlice(searchLoc)
 	c.MoveToNextMatch()
-	return res
+	return n
 }
 
-func (c *Cursor) setCursorResult() (ok bool) {
-	var pos term.Coordinates
-	if pos, ok = c.scroll.Result(); ok {
-		c.setCursor(c.scrollToWindowCoordinates(pos))
-	}
-	return
+func isBeforeCursor(cursor, pos term.Coordinates) bool {
+	return pos.Y < cursor.Y || (pos.Y == cursor.Y && pos.X <= cursor.X)
+}
+
+func isPastCursor(cursor, pos term.Coordinates) bool {
+	return pos.Y > cursor.Y || (pos.Y == cursor.Y && pos.X >= cursor.X)
 }
 
 // MoveToNextMatch moves the cursor to the next search result if any.
 func (c *Cursor) MoveToNextMatch() (ok bool) {
-	c.scroll.SeekNextResult()
-	ok = c.setCursorResult()
-	return
+	if c.searchLoc == nil {
+		return
+	}
+	return c.movePastCursor(c.searchLoc,
+		(LocationList).Next, (LocationList).Prev, isBeforeCursor)
 }
 
 // MoveToPrevMatch moves the cursor to the next search result if any.
 func (c *Cursor) MoveToPrevMatch() (ok bool) {
-	c.scroll.SeekPrevResult()
-	ok = c.setCursorResult()
-	return
+	if c.searchLoc == nil {
+		return
+	}
+	return c.movePastCursor(c.searchLoc,
+		(LocationList).Prev, (LocationList).Next, isPastCursor)
 }
 
 // MoveStartLine moves the cursor at the start of the current line, scrolling
@@ -1088,28 +1118,10 @@ func (c *Cursor) moveEndOfLocationList(
 	}
 }
 
-func (c *Cursor) lastCursorPos() term.Coordinates {
-	buf := c.scroll.Buffer()
-	y := buf.Rows() - 1
-	if y < 0 {
-		y = 0
-	}
-	x := buf.Columns(y) - 1
-	if x < 0 {
-		x = 0
-	}
-	return term.Coordinates{Y: y, X: x}
-}
-
 func (c *Cursor) movePastCursor(
-	ID string, op, reverse func(LocationList) (Location, bool),
+	l LocationList, op, reverse func(LocationList) (Location, bool),
 	continueIf func(term.Coordinates, term.Coordinates) bool,
 ) bool {
-	l, ok := c.locs[ID]
-	if !ok {
-		return false
-	}
-
 	_, gotLocations := c.moveEndOfLocationList(l, reverse)
 	if !gotLocations {
 		return false
@@ -1117,18 +1129,22 @@ func (c *Cursor) movePastCursor(
 
 	cursor := c.cursorAtScroll()
 	for {
-		pos, ok := op(l)
-		if !ok {
-			pos.From, _ = c.moveEndOfLocationList(l, reverse)
-			c.MoveTo(pos.From)
+		pos, _ := l.Current()
+		if !continueIf(cursor, pos.From) {
+			c.moveToScroll(pos.From)
 			break
 		}
-		if continueIf(cursor, pos.From) {
+
+		_, ok := op(l)
+		if ok {
 			continue
 		}
-		c.MoveTo(pos.From)
+
+		pos.From, _ = c.moveEndOfLocationList(l, reverse)
+		c.moveToScroll(pos.From)
 		break
 	}
+
 	return cursor != c.cursorAtScroll()
 }
 
@@ -1136,18 +1152,24 @@ func (c *Cursor) movePastCursor(
 // list set by SetLocationList. If there isn't a location list set, this method returns
 // false.
 func (c *Cursor) MoveToNextLocation(ID string) bool {
-	return c.movePastCursor(ID, (LocationList).Next, (LocationList).Prev,
-		func(cursor, pos term.Coordinates) bool {
-			return pos.Y < cursor.Y || (pos.Y == cursor.Y && pos.X <= cursor.X)
-		})
+	l, ok := c.locs[ID]
+	if !ok {
+		return false
+	}
+
+	return c.movePastCursor(l, (LocationList).Next,
+		(LocationList).Prev, isBeforeCursor)
 }
 
 // MoveToPrevLocation moves the cursor to the previous position returned by the
 // location list set by SetLocationList. If there isn't a location list set,
 // this method returns false.
 func (c *Cursor) MoveToPrevLocation(ID string) bool {
-	return c.movePastCursor(ID, (LocationList).Prev, (LocationList).Next,
-		func(cursor, pos term.Coordinates) bool {
-			return pos.Y > cursor.Y || (pos.Y == cursor.Y && pos.X >= cursor.X)
-		})
+	l, ok := c.locs[ID]
+	if !ok {
+		return false
+	}
+
+	return c.movePastCursor(l, (LocationList).Prev,
+		(LocationList).Next, isPastCursor)
 }

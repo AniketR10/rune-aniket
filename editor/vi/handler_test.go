@@ -118,18 +118,7 @@ diff_buf_adjust(win_
 {                   
   win_T  *wp;       
 :             NORMAL`},
-		{"/NULL>",
-			`  if (wp == ▐ULL)   
-  {                 
-    i = diff_buf_idx
-    if (i != DB_COUN
-    {               
-    curtab->tp_diffb
-    curtab->tp_diff_
-    diff_redraw(TRUE
-    }               
-:             NORMAL`},
-		{">",
+		{"/NULL>jjjjjjjjkkkkkkkk",
 			`  if (wp == ▐ULL)   
   {                 
     i = diff_buf_idx
@@ -284,15 +273,15 @@ diff_buf_adjust(win_
     diff_redraw(TRUE
 :             NORMAL`},
 		{"/i =>",
-			`    ▐ = diff_buf_idx
+			`  if (wp == NULL]   
+  if (wp == NULL]   
+  {                 
+    ▐ = diff_buf_idx
     if (i != DB_COUN
     {               
     curtab->tp_diffb
     curtab->tp_diff_
     diff_redraw(TRUE
-    }               
-  }                 
-  }                 
 :             NORMAL`},
 	}
 

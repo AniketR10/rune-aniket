@@ -92,7 +92,7 @@ func TestCursorSearch(t *testing.T) {
 			1,
 			"else",
 			func(t *testing.T, e *Cursor) {
-				assert.True(t, e.MoveToNextMatch())
+				assert.False(t, e.MoveToNextMatch())
 			}, term.Coordinates{X: 4, Y: 29},
 		},
 		{
@@ -101,7 +101,7 @@ func TestCursorSearch(t *testing.T) {
 			1,
 			"When",
 			nil,
-			term.Coordinates{X: 7, Y: 0},
+			term.Coordinates{X: 7, Y: 8},
 		},
 		{
 			"Seeks to last result upon MoveToPrevMatch",
@@ -119,7 +119,7 @@ func TestCursorSearch(t *testing.T) {
 			"NULL",
 			func(t *testing.T, e *Cursor) {
 				assert.True(t, e.MoveToNextMatch())
-			}, term.Coordinates{X: 32, Y: 1},
+			}, term.Coordinates{X: 32, Y: 8},
 		},
 	}
 

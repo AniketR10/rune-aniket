@@ -119,9 +119,7 @@ func (s *Scroll) SeekRight() (ok bool) {
 // the vertical offset is y. If y is out of bounds the contents
 // are shifted to the maximum possible y offset.
 func (s *Scroll) SeekVertical(y int) (ok bool) {
-	if max := s.getMaxYOffset(); y > max {
-		y = max
-	} else if y < 0 {
+	if y < 0 {
 		y = 0
 	}
 
@@ -167,14 +165,21 @@ func (s *Scroll) SeekStartFile() bool {
 	return s.SeekVertical(0)
 }
 
-func (s *Scroll) seekTo(pos term.Coordinates, padding int) bool {
-	yok := s.SeekVertical(pos.Y)
-	var xok bool
+func (s *Scroll) seekTo(pos term.Coordinates, xpadding, ypadding int) bool {
+	var yok, xok bool
 
-	if pos.X >= s.offset.X+s.width {
-		xok = s.SeekHorizontal(pos.X - s.width + padding)
-	} else if pos.X < s.offset.X {
-		xok = s.SeekHorizontal(pos.X)
+	if ypadding == 0 {
+		yok = s.SeekVertical(pos.Y)
+	} else if pos.Y >= s.offset.Y+s.height-ypadding {
+		yok = s.SeekVertical(pos.Y - s.height + ypadding)
+	} else if pos.Y < s.offset.Y-ypadding {
+		yok = s.SeekVertical(pos.Y - ypadding)
+	}
+
+	if pos.X >= s.offset.X+s.width-xpadding {
+		xok = s.SeekHorizontal(pos.X - s.width + xpadding)
+	} else if pos.X < s.offset.X-xpadding {
+		xok = s.SeekHorizontal(pos.X - xpadding)
 	}
 
 	return yok || xok
@@ -183,7 +188,7 @@ func (s *Scroll) seekTo(pos term.Coordinates, padding int) bool {
 // SeekTo shifts the contents of this scroll such that the offset
 // is exactly at given coordinates.
 func (s *Scroll) SeekTo(pos term.Coordinates) bool {
-	return s.seekTo(pos, 1)
+	return s.seekTo(pos, 2, 2)
 }
 
 // SeekNextResult shifts the contents of this scroll to visualize
@@ -194,7 +199,7 @@ func (s *Scroll) SeekNextResult() bool {
 		return false
 	}
 
-	return s.seekTo(pos, len(s.searchText))
+	return s.seekTo(pos, len(s.searchText), 0)
 }
 
 // SeekPrevResult shifts the contents of this scroll to visualize
@@ -205,7 +210,7 @@ func (s *Scroll) SeekPrevResult() bool {
 		return false
 	}
 
-	return s.seekTo(pos, len(s.searchText))
+	return s.seekTo(pos, len(s.searchText), 0)
 }
 
 // Resize resizes this scroll to fit inside given width and height.
