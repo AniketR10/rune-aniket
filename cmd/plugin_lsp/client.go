@@ -48,7 +48,7 @@ func (h *lspClientHandler) PublishDiagnostics(
 	ctx context.Context, p *protocol.PublishDiagnosticsParams,
 ) error {
 	log.Tracef("lspClientHandler.PublishDiagnostics: %#v", p)
-	h.h.HandleDiagnostics(p)
+	h.h.HandleDiagnostics(ctx, p)
 	return nil
 }
 

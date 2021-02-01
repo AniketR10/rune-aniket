@@ -26,7 +26,8 @@ import (
 )
 
 const (
-	connectTimeout = 5 * time.Second
+	connectTimeout   = 5 * time.Second
+	firstFileVersion = 1
 )
 
 var (
@@ -90,6 +91,7 @@ type lspEditorHandler struct {
 	diagnosticAttr       map[protocol.DiagnosticSeverity]term.Attributes
 	semanticTokensListID string
 	diagnosticListID     string
+	pending              map[span.URI][]protocol.Diagnostic
 }
 
 func initializeParams(
@@ -322,6 +324,7 @@ func newLspHandler(
 	ret.ed = ed
 	ret.p = p
 	ret.files = make(map[span.URI]*file)
+	ret.pending = make(map[span.URI][]protocol.Diagnostic)
 	ret.server, ret.protocol, err = connectRemote(ctx, ret, remoteAddr)
 	if err != nil {
 		return nil, err
@@ -367,7 +370,7 @@ func (h *lspEditorHandler) newFile(handler editor.Handler, name, content string)
 	uri := span.URIFromPath(name)
 
 	f := &file{
-		version: 1,
+		version: firstFileVersion,
 		handler: handler,
 		name:    name,
 		docID: protocol.TextDocumentIdentifier{
@@ -379,6 +382,22 @@ func (h *lspEditorHandler) newFile(handler editor.Handler, name, content string)
 
 	h.files[uri] = f
 	return f
+}
+
+func (h *lspEditorHandler) addPendingDiagnostics(
+	uri span.URI, ds []protocol.Diagnostic,
+) {
+	h.pending[uri] = ds
+}
+
+func (h *lspEditorHandler) dispatchPendingDiagnostics(uri span.URI) {
+	ds, ok := h.pending[uri]
+	if !ok {
+		return
+	}
+	delete(h.pending, uri)
+
+	h.handleDiagnostics(context.Background(), uri, ds, firstFileVersion)
 }
 
 func (h *lspEditorHandler) getFileWithName(name string) (*file, bool) {
@@ -662,7 +681,9 @@ func (h *lspEditorHandler) handleFileOpen(ev editor.Event) {
 		log.Errorf("lspEditorHandler.Server.DidOpen(%s): %v", f.name, err)
 		return
 	}
+	log.Tracef("lspEditorHandler.Server.DidOpen(%s)", f.uri)
 
+	h.dispatchPendingDiagnostics(f.uri)
 	h.semanticTokens(ctx, f, f.cells, ev.Content)
 	h.publishInterrupt(f.name)
 }
@@ -677,6 +698,20 @@ func (h *lspEditorHandler) removeFile(name string) (*file, bool) {
 	return f, true
 }
 
+func (h *lspEditorHandler) sendDidClose(ctx context.Context, uri span.URI) {
+	p := protocol.DidCloseTextDocumentParams{
+		TextDocument: protocol.TextDocumentIdentifier{
+			URI: protocol.URIFromSpanURI(uri),
+		},
+	}
+
+	if err := h.server.DidClose(ctx, &p); err != nil {
+		log.Errorf("lspEditorHandler.Server.DidClose(%s): %v", uri, err)
+		return
+	}
+	log.Tracef("lspEditorHandler.Server.DidClose(%s)", uri)
+}
+
 func (h *lspEditorHandler) handleFileClose(ev editor.Event) {
 	ctx := context.Background()
 	f, ok := h.removeFile(ev.ResourceName)
@@ -684,16 +719,7 @@ func (h *lspEditorHandler) handleFileClose(ev editor.Event) {
 		log.Warnf("lspEditorHandler: Received close event for an unknown file: %#v", ev)
 		return
 	}
-	p := protocol.DidCloseTextDocumentParams{
-		TextDocument: protocol.TextDocumentIdentifier{
-			URI: protocol.URIFromSpanURI(f.uri),
-		},
-	}
-
-	if err := h.server.DidClose(ctx, &p); err != nil {
-		log.Errorf("lspEditorHandler.Server.DidClose(%s): %v", f.name, err)
-		return
-	}
+	h.sendDidClose(ctx, f.uri)
 }
 
 func parseDiagnostics(
@@ -730,30 +756,39 @@ func parseDiagnostics(
 	return locs
 }
 
-func (h *lspEditorHandler) HandleDiagnostics(
-	p *protocol.PublishDiagnosticsParams,
+func (h *lspEditorHandler) handleDiagnostics(
+	ctx context.Context, uri span.URI, ds []protocol.Diagnostic,
+	version float64,
 ) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-
-	f, ok := h.getFile(p.URI.SpanURI())
+	f, ok := h.getFile(uri)
 	if !ok {
-		log.Warnf("lspEditorHandler: Received diagnostic for an unknown file: %#v", p.URI.SpanURI())
+		h.sendDidClose(ctx, uri)
+		h.addPendingDiagnostics(uri, ds)
+		log.Warnf("lspEditorHandler: Received diagnostic for an unknown file: %#v", uri)
 		return
 	}
 
-	if p.Version != f.version {
+	if version != f.version {
 		log.Debugf("lspEditorHandler: Received diagnostic for"+
-			"outdated version of file '%s': %#v", f.name, p.Version)
+			"outdated version of file '%s': %#v", f.name, version)
 		return
 	}
 
-	locs := parseDiagnostics(f, p.Diagnostics, h.diagnosticAttr)
+	locs := parseDiagnostics(f, ds, h.diagnosticAttr)
 	err := h.ed.SetLocationList(f.handler, h.diagnosticListID, editor.LocationSlice(locs))
 	if err != nil {
 		log.Errorf("lspEditorHandler.SetLocationList(%s): %v", f.name, err)
 		return
 	}
+}
+
+func (h *lspEditorHandler) HandleDiagnostics(
+	ctx context.Context, p *protocol.PublishDiagnosticsParams,
+) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	h.handleDiagnostics(ctx, p.URI.SpanURI(), p.Diagnostics, p.Version)
 }
 
 func (h *lspEditorHandler) Handle(ev editor.Event) (exit bool) {
@@ -803,6 +838,9 @@ func (h *lspEditorHandler) HandleKeyEvent(ev term.Event) bool {
 }
 
 func (h *lspEditorHandler) Close() error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
 	ctx, cancel := context.WithTimeout(context.Background(), connectTimeout)
 	defer cancel()
 

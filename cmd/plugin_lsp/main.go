@@ -124,6 +124,9 @@ func (t *lspGrantee) OnPermissionDenied(perm plugin.Permission) {
 
 func (t *lspGrantee) OnShutdown(reason string) error {
 	log.Warningf("plugin being shutdown: %s", reason)
+	if t.handler != nil {
+		return t.handler.Close()
+	}
 	return nil
 }
 
