@@ -33,7 +33,8 @@ var DefaultLessConfig = LessConfig{
 // the Handler and Component interfaces.
 type Less struct {
 	component.Scroll
-	cmdScroll    component.Virtual
+	msgAltScroll component.Virtual
+	searchScroll component.Virtual
 	msgScroll    component.Virtual
 	mode         LessMode
 	delEOF       bool
@@ -84,21 +85,21 @@ func getBuffer(virtualScroll component.Virtual) *cell.Buffer {
 // SetNormalMode sets the mode to normal.
 func (l *Less) SetNormalMode() {
 	l.cursorOffset = 1
-	getBuffer(l.cmdScroll).Reset()
-	getBuffer(l.cmdScroll).WriteString(":")
+	getBuffer(l.searchScroll).Reset()
+	getBuffer(l.searchScroll).WriteString(":")
 	l.mode = LessNormalMode
 }
 
 // SetSearchMode sets the mode to search mode.
 func (l *Less) SetSearchMode() {
-	getBuffer(l.cmdScroll).Reset()
-	getBuffer(l.cmdScroll).WriteString("/")
+	getBuffer(l.searchScroll).Reset()
+	getBuffer(l.searchScroll).WriteString("/")
 	l.mode = LessSearchMode
 }
 
 // SearchText returns the contents of the search buffer.
 func (l *Less) SearchText() string {
-	str := getBuffer(l.cmdScroll).String()
+	str := getBuffer(l.searchScroll).String()
 	bytes := []byte(str)[1:]
 	return string(bytes)
 }
@@ -110,7 +111,7 @@ func (l *Less) searchHandleEvent(ev term.Event) (bool, bool) {
 	case term.KeyBackspace2:
 		if l.cursorOffset > 1 {
 			l.cursorOffset--
-			l.cmdScroll.C.(*component.Scroll).Buffer().
+			l.searchScroll.C.(*component.Scroll).Buffer().
 				DeleteCell(term.Coordinates{X: l.cursorOffset, Y: 0})
 		}
 	case term.KeyEnter:
@@ -129,7 +130,7 @@ func (l *Less) searchHandleEvent(ev term.Event) (bool, bool) {
 
 	default:
 		l.cursorOffset++
-		getBuffer(l.cmdScroll).WriteString(string(ev.Ch))
+		getBuffer(l.searchScroll).WriteString(string(ev.Ch))
 	}
 
 	return false, true
@@ -181,8 +182,8 @@ func (l *Less) SetMessage(text string, args ...interface{}) {
 
 // SetMessageAlt sets a message to be displayed on the bottom left corner.
 func (l *Less) SetMessageAlt(text string, args ...interface{}) {
-	getBuffer(l.cmdScroll).Reset()
-	getBuffer(l.cmdScroll).WriteString(fmt.Sprintf(text, args...))
+	getBuffer(l.msgAltScroll).Reset()
+	getBuffer(l.msgAltScroll).WriteString(fmt.Sprintf(text, args...))
 	l.Resize(l.width, l.height)
 }
 
@@ -205,7 +206,8 @@ func (l *Less) Draw(w term.Writer) {
 		l.sendEvent(LessEvent{Type: EOF})
 	}
 
-	l.cmdScroll.Draw(w)
+	l.msgAltScroll.Draw(w)
+	l.searchScroll.Draw(w)
 	l.msgScroll.Draw(w)
 }
 
@@ -221,8 +223,10 @@ func (l *Less) resize() {
 	cmdBarWidth := l.width - msgWidth
 
 	l.Scroll.Resize(l.width, contentHeight)
-	l.cmdScroll.Move(term.Coordinates{X: 0, Y: contentHeight})
-	l.cmdScroll.Resize(cmdBarWidth, cmdBarHeight)
+	l.msgAltScroll.Move(term.Coordinates{X: 0, Y: contentHeight})
+	l.msgAltScroll.Resize(cmdBarWidth, cmdBarHeight)
+	l.searchScroll.Move(term.Coordinates{X: 0, Y: contentHeight})
+	l.searchScroll.Resize(cmdBarWidth, cmdBarHeight)
 	l.msgScroll.Move(term.Coordinates{X: cmdBarWidth, Y: contentHeight})
 	l.msgScroll.Resize(msgWidth, cmdBarHeight)
 }
@@ -330,10 +334,12 @@ func (l *Less) InitWithBuffer(buf *cell.Buffer) {
 	l.delEOF = false
 	l.Scroll.InitWithBuffer(buf)
 
-	l.cmdScroll.C = component.NewScroll()
+	l.msgAltScroll.C = component.NewScroll()
+	l.searchScroll.C = component.NewScroll()
 	l.msgScroll.C = component.NewScroll()
 
-	l.setupScroll(l.cmdScroll.C.(*component.Scroll))
+	l.setupScroll(l.searchScroll.C.(*component.Scroll))
+	l.setupScroll(l.msgAltScroll.C.(*component.Scroll))
 	l.setupScroll(l.msgScroll.C.(*component.Scroll))
 	l.setupScroll(&l.Scroll)
 
