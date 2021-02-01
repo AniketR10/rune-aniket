@@ -67,7 +67,9 @@ func (c *testGranteePbClient) health() (proto.HealthRequest, bool) {
 func (c *testGranteePbClient) Permissions(
 	ctx context.Context, in *proto.PermRequest, opts ...grpc.CallOption,
 ) (*proto.PermResponse, error) {
+	c.mu.Lock()
 	c._permissions = in
+	c.mu.Unlock()
 	permissions := new(proto.PermResponse)
 	if c.err != nil {
 		return nil, c.err
@@ -80,7 +82,9 @@ func (c *testGranteePbClient) Permissions(
 func (c *testGranteePbClient) OnGrant(
 	ctx context.Context, in *proto.OnPermGrantRequest, opts ...grpc.CallOption,
 ) (*proto.OnPermGrantResponse, error) {
+	c.mu.Lock()
 	c._onGrant = in
+	c.mu.Unlock()
 	if c.err != nil {
 		return nil, c.err
 	}
@@ -90,10 +94,13 @@ func (c *testGranteePbClient) OnGrant(
 func (c *testGranteePbClient) Shutdown(
 	ctx context.Context, in *proto.ShutdownRequest, opts ...grpc.CallOption,
 ) (*proto.ShutdownResponse, error) {
+	c.mu.Lock()
 	c._shutdown = in
+	c.mu.Unlock()
 	if c.onShutdownChan != nil {
-		c.onShutdownChan <- struct{}{}
-		c.onShutdownChan = nil
+		go func(ch chan struct{}) {
+			ch <- struct{}{}
+		}(c.onShutdownChan)
 	}
 	if c.err != nil {
 		return nil, c.err

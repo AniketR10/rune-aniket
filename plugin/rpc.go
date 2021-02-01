@@ -11,7 +11,10 @@ import (
 	"github.com/hashicorp/go-plugin"
 )
 
-const defDurationGracefulShut = 5 * time.Second
+const (
+	defDurationGracefulShutServer = 5 * time.Second
+	defDurationGracefulShutClient = 300 * time.Millisecond
+)
 
 type granteeServer struct {
 	mu        sync.Locker
@@ -35,7 +38,7 @@ func newGranteeServer(
 	ret.grantee = grantee
 	ret.req = req
 	ret.mu = locker
-	ret.durationGracefulShut = defDurationGracefulShut
+	ret.durationGracefulShut = defDurationGracefulShutServer
 	ret.osExit = os.Exit
 	if keepAlive != time.Duration(0) {
 		ret.keepAlive = make(chan struct{})
@@ -259,15 +262,10 @@ func (c *granteeClient) shutdown(reason string) error {
 			c.pClient = nil
 		}()
 	}
-	ctx := context.Background()
+	ctx, cancelFn := context.WithTimeout(context.Background(), defDurationGracefulShutClient)
+	defer cancelFn()
+
 	req := proto.ShutdownRequest{Reason: reason}
 	_, err := c.client.Shutdown(ctx, &req)
-
-	if broker := c.broker(); broker != nil {
-		brokerErr := broker.Close()
-		if brokerErr != nil {
-			return brokerErr
-		}
-	}
 	return err
 }

@@ -70,13 +70,13 @@ func newTestManager(grantor Grantor, opts ...Option) (*Manager, *testGranteePbCl
 		healthChan: make(chan struct{}),
 	}
 
-	broker := &nopBroker{}
 	m.builder = func(pluginID, path string, grantor Grantor, logger *log.Logger) (*granteeClient, error) {
-		return newGranteeClient(broker, mockpb), nil
+		return newGranteeClient(m.broker, mockpb), nil
 	}
 	m.Init(grantor, opts...)
+	m.broker = &nopBroker{}
 
-	return m, mockpb, broker
+	return m, mockpb, m.broker.(*nopBroker)
 }
 
 func testRunAndWait(t *testing.T, mgr *Manager, pbClient *testGranteePbClient) {
@@ -92,12 +92,6 @@ func assertShutdown(t *testing.T, pbClient *testGranteePbClient, broker *nopBrok
 	<-pbClient.onShutdownChan
 	sht, ok := pbClient.shutdown()
 	assert.True(t, ok)
-
-	// we cannot close broker before we send shutdown request, so this is
-	// the only way to leave time for the granteeClient to close broker
-	time.Sleep(10 * time.Millisecond)
-
-	assert.True(t, broker.closed())
 	return sht.Reason
 }
 
@@ -108,7 +102,7 @@ func TestManagerRun(t *testing.T) {
 		defer mgr.Close()
 
 		pbClient.fixturePermissions =
-			[]*proto.Permission{&proto.Permission{Id: "read"}}
+			[]*proto.Permission{{Id: "read"}}
 
 		testRunAndWait(t, mgr, pbClient)
 
@@ -122,7 +116,7 @@ func TestManagerRun(t *testing.T) {
 		require.Len(t, grant.Granted, 1)
 
 		expected := []*proto.PermissionGrant{
-			&proto.PermissionGrant{Id: "read", GrantId: 1},
+			{Id: "read", GrantId: 1},
 		}
 		assert.Equal(t, expected, grant.Granted)
 
@@ -178,7 +172,7 @@ func TestManagerRun(t *testing.T) {
 		defer mgr.Close()
 
 		pbClient.fixturePermissions =
-			[]*proto.Permission{&proto.Permission{Id: "read"}}
+			[]*proto.Permission{{Id: "read"}}
 		pbClient.err = errors.New("woopsie")
 		pbClient.onShutdownChan = make(chan struct{})
 
@@ -194,7 +188,7 @@ func TestManagerRun(t *testing.T) {
 		defer mgr.Close()
 
 		pbClient.fixturePermissions =
-			[]*proto.Permission{&proto.Permission{Id: "read"}}
+			[]*proto.Permission{{Id: "read"}}
 		pbClient.sleepPermissions = 2 * time.Second
 		pbClient.onShutdownChan = make(chan struct{})
 
@@ -210,7 +204,7 @@ func TestManagerRun(t *testing.T) {
 		defer mgr.Close()
 
 		pbClient.fixturePermissions =
-			[]*proto.Permission{&proto.Permission{Id: "read"}}
+			[]*proto.Permission{{Id: "read"}}
 		pbClient.onShutdownChan = make(chan struct{})
 
 		err := mgr.Run("green", "/here/is/my/plugin", nil)
@@ -228,7 +222,7 @@ func TestManagerRun(t *testing.T) {
 		defer mgr.Close()
 
 		pbClient.fixturePermissions =
-			[]*proto.Permission{&proto.Permission{Id: "read"}}
+			[]*proto.Permission{{Id: "read"}}
 		pbClient.onShutdownChan = make(chan struct{})
 
 		err := mgr.Run("yellow", "/here/is/my/plugin", nil)
@@ -248,8 +242,38 @@ func TestManagerRun(t *testing.T) {
 
 		// check errors in status
 		stat, ok := mgr.Stat("yellow")
-		require.True(t, ok)
-		require.Len(t, stat.Errors, mgr.config.healthRetries+1)
-		assert.Contains(t, stat.Errors[0].Error(), "plugin health timeout")
+		assert.True(t, ok)
+		require.Len(t, stat.Errors, mgr.config.healthRetries+1, mgr.clients)
+		assert.Contains(t, stat.Errors[0].Error(), "deadline")
+	})
+
+	t.Run("should wait for plugin Shutdown before returning from a call to Close", func(t *testing.T) {
+		mgr, pbClient, broker := newTestManager(&mockGrantor{})
+
+		pbClient.fixturePermissions = []*proto.Permission{{Id: "read"}}
+		pbClient.onShutdownChan = make(chan struct{})
+
+		pluginIDs := []string{"green", "blue"}
+		for _, id := range pluginIDs {
+			err := mgr.Run(id, "/here/is/my/plugin", nil)
+			require.NoError(t, err)
+		}
+
+		time.Sleep(mgr.config.handshakeTimeout + 50*time.Millisecond)
+
+		var wg sync.WaitGroup
+		wg.Add(len(pluginIDs))
+		go func() {
+			for range pluginIDs {
+				<-pbClient.onShutdownChan
+				_, ok := pbClient.shutdown()
+				assert.True(t, ok)
+				wg.Done()
+			}
+		}()
+		wg.Wait()
+
+		require.NoError(t, mgr.Close())
+		assert.True(t, broker.closed())
 	})
 }

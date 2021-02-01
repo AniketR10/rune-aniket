@@ -34,7 +34,7 @@ type granteeClientWrap struct {
 	running  bool
 	activeAt time.Time
 	errors   []error
-	doneCh   chan struct{}
+	doneCh   chan *sync.WaitGroup
 	client   *granteeClient
 }
 
@@ -62,7 +62,7 @@ type pluginBuilder func(pluginID, path string,
 type Manager struct {
 	mu      sync.Mutex
 	grantor Grantor
-	clients map[string]granteeClientWrap
+	clients map[string]*granteeClientWrap
 
 	// resource mutex used to synchronize term event loop with
 	// access to resources by plugins.
@@ -91,7 +91,7 @@ func NewManager(grantor Grantor, opts ...Option) (*Manager, error) {
 // Init initializes this manager with grantor.
 func (m *Manager) Init(grantor Grantor, opts ...Option) (err error) {
 	m.grantor = grantor
-	m.clients = make(map[string]granteeClientWrap)
+	m.clients = make(map[string]*granteeClientWrap)
 	m.rmu = new(sync.Mutex)
 
 	m.config = defaultManagerConfig
@@ -117,21 +117,21 @@ func (m *Manager) log(msg string, args ...interface{}) {
 }
 
 func (m *Manager) runPlugin(pluginID, path string, config Config) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
 	client, err := m.builder(pluginID, path, m.grantor, m.config.logger)
 	if err != nil {
 		return err
 	}
 
-	clientWrap := granteeClientWrap{
+	clientWrap := &granteeClientWrap{
 		id:      pluginID,
 		path:    path,
 		running: false,
-		doneCh:  make(chan struct{}),
+		doneCh:  make(chan *sync.WaitGroup),
 		client:  client,
 	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
 
 	m.clients[pluginID] = clientWrap
 
@@ -146,18 +146,18 @@ func (m *Manager) runPlugin(pluginID, path string, config Config) error {
 // Note that config is an optional argument.
 func (m *Manager) Run(pluginID, path string, config Config) error {
 	m.mu.Lock()
-	if _, ok := m.clients[pluginID]; ok {
-		m.mu.Unlock()
+	_, ok := m.clients[pluginID]
+	m.mu.Unlock()
+	if ok {
 		return fmt.Errorf("Manager: already connected plugin with id: '%s'", pluginID)
 	}
-	m.mu.Unlock()
 	return m.runPlugin(pluginID, path, config)
 }
 
 func (m *Manager) doGrant(
 	ctx context.Context,
 	pluginID string,
-	client granteeClientWrap,
+	client *granteeClientWrap,
 	perms []*proto.Permission,
 ) error {
 	var denied []*proto.Permission
@@ -190,24 +190,25 @@ func (m *Manager) doGrant(
 	return client.client.sendGrants(ctx, denied, granted)
 }
 
-func (m *Manager) doCloseClient(reason string, client granteeClientWrap) {
-	var err error
-	func() {
-		m.mu.Lock()
-		client := client.client
-		m.mu.Unlock()
+func (m *Manager) doCloseClient(reason string, client *granteeClientWrap) {
+	m.mu.Lock()
+	if client.doneCh == nil {
+		return
+	}
+	client.doneCh = nil
+	m.mu.Unlock()
 
-		err = client.shutdown(reason)
-	}()
+	err := client.client.shutdown(reason)
 	if err != nil {
 		m.addClientErr(client.id, err)
 	}
+	m.log("stopped plugin with id '%s': err=%v", client.id, err)
 }
 
-func (m *Manager) checkHealth(client granteeClientWrap) (
-	done bool, err error,
+func (m *Manager) checkHealth(ctx context.Context, client *granteeClientWrap) (
+	err error,
 ) {
-	ctx, closeFn := context.WithTimeout(context.Background(), m.config.healthCheckTicker)
+	ctx, closeFn := context.WithTimeout(ctx, m.config.healthCheckTicker)
 	defer closeFn()
 
 	waitCh := make(chan error)
@@ -215,34 +216,33 @@ func (m *Manager) checkHealth(client granteeClientWrap) (
 		select {
 		case waitCh <- client.client.health(ctx):
 		case <-ctx.Done():
-		case <-client.doneCh:
 		}
 	}()
 
 	select {
 	case <-ctx.Done():
-		err = errors.New("Manager: plugin health timeout")
+		err = ctx.Err()
 	case err = <-waitCh:
-	case <-client.doneCh:
-		done = true
 	}
-	m.log("health check on plugin '%s': err=%v; done=%v", client.id, err, done)
-	return
+	m.log("health check on plugin '%s': err=%v", client.id, err)
+	return err
 }
 
-func (m *Manager) monitor(client granteeClientWrap) {
-	const stopCalledReason = "Stop was called on plugin Manager"
+func (m *Manager) monitor(client *granteeClientWrap) {
 
 	m.log("checking health of plugin '%s' every %+v",
 		client.id, m.config.healthCheckTicker)
 
 	timer := time.NewTicker(m.config.healthCheckTicker)
 
+	ctx, cancelFn := context.WithCancel(context.Background())
+	defer cancelFn()
+
 	triesLeft := 1 + m.config.healthRetries
 	for {
 		select {
 		case <-timer.C:
-			done, err := m.checkHealth(client)
+			err := m.checkHealth(ctx, client)
 			if err != nil {
 				triesLeft--
 				m.addClientErr(client.id, err)
@@ -253,12 +253,9 @@ func (m *Manager) monitor(client granteeClientWrap) {
 				m.doCloseClient("exhausted health check retries", client)
 				return
 			}
-			if done {
-				m.doCloseClient(stopCalledReason, client)
-				return
-			}
-		case <-client.doneCh:
-			m.doCloseClient(stopCalledReason, client)
+		case wg := <-client.doneCh:
+			defer wg.Done()
+			m.doCloseClient("Stop was called on plugin Manager", client)
 			return
 		}
 	}
@@ -270,7 +267,6 @@ func (m *Manager) addClientErr(pluginID string, err error) {
 
 	clientWrap := m.clients[pluginID]
 	clientWrap.errors = append(clientWrap.errors, err)
-	m.clients[pluginID] = clientWrap
 
 	m.log("plugin '%s' error: %s", pluginID, err)
 }
@@ -282,11 +278,10 @@ func (m *Manager) setRunning(pluginID string) {
 	client := m.clients[pluginID]
 	client.running = true
 	client.activeAt = time.Now()
-	m.clients[pluginID] = client
 }
 
 func (m *Manager) handshake(
-	pluginID string, client granteeClientWrap, config Config,
+	pluginID string, client *granteeClientWrap, config Config,
 ) {
 	ctx := context.Background()
 	ctx, closeFn := context.WithTimeout(ctx, m.config.handshakeTimeout)
@@ -341,21 +336,27 @@ func (m *Manager) handshake(
 // will return false. See Stat.
 func (m *Manager) Stop(pluginID string) error {
 	m.mu.Lock()
-	defer m.mu.Unlock()
-
 	client, ok := m.clients[pluginID]
+	m.mu.Unlock()
 	if !ok {
 		return fmt.Errorf("Manager: not connected to plugin with id '%s'", pluginID)
 	}
 
+	if client.doneCh == nil {
+		return errors.New("already stopped")
+	}
+
 	m.log("stopping plugin '%s'", pluginID)
 
-	close(client.doneCh)
-	delete(m.clients, pluginID)
+	var wg sync.WaitGroup
+	wg.Add(1)
+	client.doneCh <- &wg
+	wg.Wait()
+
 	return nil
 }
 
-func buildStat(client granteeClientWrap) Stat {
+func buildStat(client *granteeClientWrap) Stat {
 	status := Stat{
 		Errors: client.errors,
 	}
@@ -396,18 +397,29 @@ func (m *Manager) Stats() map[string]Stat {
 
 // Close closes all plugins and resources associated with this Manager.
 func (m *Manager) Close() error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
 	m.log("Close: stopping all plugins")
 
-	for _, client := range m.clients {
-		close(client.doneCh)
+	m.mu.Lock()
+	clients := m.clients
+	m.mu.Unlock()
+
+	var wg sync.WaitGroup
+	for _, client := range clients {
+		if client.doneCh != nil {
+			wg.Add(1)
+			client.doneCh <- &wg
+		}
 	}
 
-	m.clients = make(map[string]granteeClientWrap)
+	wg.Wait()
 
-	return m.brokerServer.Close()
+	err1 := m.brokerServer.Close()
+	err2 := m.broker.Close()
+
+	if err1 != nil {
+		return err1
+	}
+	return err2
 }
 
 // ResourceLocker returns a Locker that synchronizes access to
