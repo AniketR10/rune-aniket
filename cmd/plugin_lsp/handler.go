@@ -72,12 +72,13 @@ var (
 )
 
 type file struct {
-	name    string
-	version float64
-	handler editor.Handler
-	docID   protocol.TextDocumentIdentifier
-	uri     span.URI
-	cells   [][]term.Cell
+	name        string
+	version     float64
+	handler     editor.Handler
+	docID       protocol.TextDocumentIdentifier
+	uri         span.URI
+	cells       [][]term.Cell
+	diagnostics []protocol.Diagnostic
 }
 
 type lspEditorHandler struct {
@@ -720,6 +721,7 @@ func (h *lspEditorHandler) handleFileClose(ev editor.Event) {
 		return
 	}
 	h.sendDidClose(ctx, f.uri)
+	h.addPendingDiagnostics(f.uri, f.diagnostics)
 }
 
 func parseDiagnostics(
@@ -767,6 +769,8 @@ func (h *lspEditorHandler) handleDiagnostics(
 		log.Warnf("lspEditorHandler: Received diagnostic for an unknown file: %#v", uri)
 		return
 	}
+
+	f.diagnostics = ds
 
 	if version != f.version {
 		log.Debugf("lspEditorHandler: Received diagnostic for"+
