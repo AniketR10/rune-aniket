@@ -142,7 +142,6 @@ func (t *keySplitHandler) OnShutdown(reason string) error {
 }
 
 func (t *keySplitHandler) Health() error {
-	log.Debug("health check OK")
 	return nil
 }
 

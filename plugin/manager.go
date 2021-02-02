@@ -109,11 +109,11 @@ func (m *Manager) Init(grantor Grantor, opts ...Option) (err error) {
 	return
 }
 
-func (m *Manager) log(msg string, args ...interface{}) {
+func (m *Manager) log(level log.Level, msg string, args ...interface{}) {
 	if m.config.logger == nil {
 		return
 	}
-	m.config.logger.Debugf(msg, args...)
+	m.config.logger.Logf(level, msg, args...)
 }
 
 func (m *Manager) runPlugin(pluginID, path string, config Config) error {
@@ -202,7 +202,7 @@ func (m *Manager) doCloseClient(reason string, client *granteeClientWrap) {
 	if err != nil {
 		m.addClientErr(client.id, err)
 	}
-	m.log("stopped plugin with id '%s': err=%v", client.id, err)
+	m.log(log.InfoLevel, "stopped plugin with id '%s': err=%v", client.id, err)
 }
 
 func (m *Manager) checkHealth(ctx context.Context, client *granteeClientWrap) (
@@ -224,13 +224,13 @@ func (m *Manager) checkHealth(ctx context.Context, client *granteeClientWrap) (
 		err = ctx.Err()
 	case err = <-waitCh:
 	}
-	m.log("health check on plugin '%s': err=%v", client.id, err)
+	m.log(log.TraceLevel, "health check on plugin '%s': err=%v", client.id, err)
 	return err
 }
 
 func (m *Manager) monitor(client *granteeClientWrap) {
 
-	m.log("checking health of plugin '%s' every %+v",
+	m.log(log.DebugLevel, "checking health of plugin '%s' every %+v",
 		client.id, m.config.healthCheckTicker)
 
 	timer := time.NewTicker(m.config.healthCheckTicker)
@@ -268,7 +268,7 @@ func (m *Manager) addClientErr(pluginID string, err error) {
 	clientWrap := m.clients[pluginID]
 	clientWrap.errors = append(clientWrap.errors, err)
 
-	m.log("plugin '%s' error: %s", pluginID, err)
+	m.log(log.ErrorLevel, "plugin '%s' error: %s", pluginID, err)
 }
 
 func (m *Manager) setRunning(pluginID string) {
@@ -287,7 +287,7 @@ func (m *Manager) handshake(
 	ctx, closeFn := context.WithTimeout(ctx, m.config.handshakeTimeout)
 	defer closeFn()
 
-	m.log("starting handshake for plugin '%s'", pluginID)
+	m.log(log.TraceLevel, "starting handshake for plugin '%s'", pluginID)
 
 	doneCh := make(chan error)
 	go func() {
@@ -346,7 +346,7 @@ func (m *Manager) Stop(pluginID string) error {
 		return errors.New("already stopped")
 	}
 
-	m.log("stopping plugin '%s'", pluginID)
+	m.log(log.DebugLevel, "stopping plugin '%s'", pluginID)
 
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -397,7 +397,7 @@ func (m *Manager) Stats() map[string]Stat {
 
 // Close closes all plugins and resources associated with this Manager.
 func (m *Manager) Close() error {
-	m.log("Close: stopping all plugins")
+	m.log(log.InfoLevel, "Close: stopping all plugins")
 
 	m.mu.Lock()
 	clients := m.clients
