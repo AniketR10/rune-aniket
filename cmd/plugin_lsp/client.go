@@ -8,7 +8,8 @@ import (
 )
 
 type lspClientHandler struct {
-	h *lspEditorHandler
+	h   *lspEditorHandler
+	srv protocol.Server
 }
 
 // lsp protocol.Client
@@ -48,7 +49,7 @@ func (h *lspClientHandler) PublishDiagnostics(
 	ctx context.Context, p *protocol.PublishDiagnosticsParams,
 ) error {
 	log.Tracef("lspClientHandler.PublishDiagnostics: %#v", p)
-	h.h.HandleDiagnostics(ctx, p)
+	h.h.HandleDiagnostics(ctx, h.srv, p)
 	return nil
 }
 

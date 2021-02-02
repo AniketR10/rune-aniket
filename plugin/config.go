@@ -23,6 +23,7 @@ type Config interface {
 	GetString(string) (string, error)
 	GetBool(string) (bool, error)
 	GetConfig(string) (Config, error)
+	GetMap(string) (map[string]interface{}, error)
 	GetAttribute(string) (term.Attribute, error)
 	GetAttributes(string) (term.Attributes, error)
 	GetRune(string) (rune, error)
@@ -131,6 +132,14 @@ func (c mapConfig) GetBool(key string) (bool, error) {
 }
 
 func (c mapConfig) GetConfig(key string) (Config, error) {
+	m, err := c.GetMap(key)
+	if err != nil {
+		return nil, err
+	}
+	return mapConfig(m), nil
+}
+
+func (c mapConfig) GetMap(key string) (map[string]interface{}, error) {
 	v, ok := c[key]
 	if !ok {
 		return nil, ErrNotFound
@@ -140,7 +149,7 @@ func (c mapConfig) GetConfig(key string) (Config, error) {
 		return nil, ErrInvalidType
 	}
 
-	return mapConfig(vt), nil
+	return vt, nil
 }
 
 func strToAttr(str string) (attr term.Attribute, err error) {

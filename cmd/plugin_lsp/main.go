@@ -61,11 +61,9 @@ func (t *lspGrantee) Handle(ev term.Event) bool {
 }
 
 func (t *lspGrantee) subscribeToTermEvents() error {
-	// TODO make configurable
-	// evs := []term.Event{t.config.NextDiagnosticKey, t.config.PrevDiagnosticKey}
 	evs := []term.Event{
-		term.Event{Type: term.EventKey, Key: term.KeyCtrlJ},
-		term.Event{Type: term.EventKey, Key: term.KeyCtrlK},
+		{Type: term.EventKey, Key: term.KeyCtrlJ},
+		{Type: term.EventKey, Key: term.KeyCtrlK},
 	}
 	for _, keyEv := range evs {
 		err := t.s.Subscribe(keyEv, t)
@@ -131,14 +129,13 @@ func (t *lspGrantee) OnShutdown(reason string) error {
 }
 
 func (t *lspGrantee) Health() error {
-	log.Debug("health check OK")
 	return nil
 }
 
 func main() {
 	log.SetOutput(os.Stderr)
 	log.SetLevel(log.TraceLevel)
-	plugin.SetLoggingLevel(log.DebugLevel)
+	plugin.SetLoggingLevel(log.TraceLevel)
 
 	go func() {
 		log.Println(http.ListenAndServe("localhost:6063", nil))

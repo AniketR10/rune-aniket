@@ -17,7 +17,7 @@ import (
 )
 
 var (
-	filename1    = "wa_tup.java"
+	filename1    = "wa_tup.go"
 	filecontent1 = `package me.drton.jmavsim;
 public class	Rotor {
      sta  mtyp;
@@ -57,7 +57,7 @@ func newTestLspHandler(
 	ret.ed = ed
 	ret.p = p
 	ret.files = make(map[span.URI]*file)
-	ret.server = server
+	ret.servers = map[string]execServer{".go": {srv: server}}
 	ret.semanticTokensListID = defaultSemanticTokensListID
 	ret.diagnosticListID = defaultDiagnosticListID
 	ret.semanticTypesAttr = defaultSemanticTypeAttr
@@ -69,7 +69,7 @@ func expectDidOpen(t *testing.T, mock *MockServer, file, content string) {
 	expected := &protocol.DidOpenTextDocumentParams{
 		TextDocument: protocol.TextDocumentItem{
 			URI:        protocol.URIFromSpanURI(span.URIFromPath(file)),
-			LanguageID: "go",
+			LanguageID: ".go",
 			Version:    1,
 			Text:       content,
 		},
