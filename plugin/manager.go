@@ -405,9 +405,12 @@ func (m *Manager) Close() error {
 
 	var wg sync.WaitGroup
 	for _, client := range clients {
-		if client.doneCh != nil {
+		m.mu.Lock()
+		doneCh := client.doneCh
+		m.mu.Unlock()
+		if doneCh != nil {
 			wg.Add(1)
-			client.doneCh <- &wg
+			doneCh <- &wg
 		}
 	}
 
