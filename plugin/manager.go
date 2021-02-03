@@ -190,11 +190,14 @@ func (m *Manager) doGrant(
 	return client.client.sendGrants(ctx, denied, granted)
 }
 
-func (m *Manager) doCloseClient(reason string, client *granteeClientWrap) {
+func (m *Manager) doCloseClient(reason string, client *granteeClientWrap) (
+	ret chan *sync.WaitGroup,
+) {
 	m.mu.Lock()
 	if client.doneCh == nil {
-		return
+		return nil
 	}
+	ret = client.doneCh
 	client.doneCh = nil
 	m.mu.Unlock()
 
@@ -203,6 +206,7 @@ func (m *Manager) doCloseClient(reason string, client *granteeClientWrap) {
 		m.addClientErr(client.id, err)
 	}
 	m.log(log.InfoLevel, "stopped plugin with id '%s': err=%v", client.id, err)
+	return
 }
 
 func (m *Manager) checkHealth(ctx context.Context, client *granteeClientWrap) (
@@ -250,8 +254,14 @@ func (m *Manager) monitor(client *granteeClientWrap) {
 				triesLeft = 1 + m.config.healthRetries
 			}
 			if triesLeft == 0 {
-				m.doCloseClient("exhausted health check retries", client)
-				return
+				doneCh := m.doCloseClient("exhausted health check retries", client)
+				// if someone grabs doneCh while we're doing a health check
+				// make sure we notify receiver
+				select {
+				case wg := <-doneCh:
+					wg.Done()
+				default:
+				}
 			}
 		case wg := <-client.doneCh:
 			defer wg.Done()
@@ -410,7 +420,7 @@ func (m *Manager) Close() error {
 		m.mu.Unlock()
 		if doneCh != nil {
 			wg.Add(1)
-			doneCh <- &wg
+			go func() { doneCh <- &wg }()
 		}
 	}
 
