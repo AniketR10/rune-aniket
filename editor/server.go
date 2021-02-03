@@ -279,6 +279,39 @@ func (s *Server) Subscribe(ctx context.Context, in *proto.EditorSubscribeRequest
 	return new(proto.EditorSubscribeResponse), nil
 }
 
+// Register satisfies proto.EditorServer
+func (s *Server) Register(ctx context.Context, in *proto.RegisterCommandRequest) (
+	*proto.RegisterCommandResponse, error,
+) {
+	handlerID := in.GetHandlerId()
+	handler, err := s.dialHandler(handlerID)
+	if err != nil {
+		return nil, err
+	}
+
+	commander := FuncCommandHandler(func(cmd string, h Handler, name string) bool {
+		return handler.Handle(Event{
+			Type:         eventTypeCommand,
+			Content:      cmd,
+			Resource:     h,
+			ResourceName: name,
+		})
+	})
+
+	cmd := in.GetCommand()
+
+	s.editor.Lock()
+	err = s.editor.Register(cmd, commander)
+	s.editor.Unlock()
+	if err != nil {
+		reason := fmt.Sprintf("failed to register command '%s': %v", cmd, err)
+		s.safeForceCloseHandler(handlerID, reason)
+		return nil, err
+	}
+
+	return new(proto.RegisterCommandResponse), nil
+}
+
 func getLocations(locs []*proto.SetLocationListRequest_Location) (ret []Location) {
 	for _, loc := range locs {
 		ret = append(ret, Location{

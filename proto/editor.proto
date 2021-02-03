@@ -21,6 +21,7 @@ message EditorEvent {
 	TypeFlush = 2;
 	TypeInsert = 3;
 	TypeDelete = 4;
+	TypeCommand = 5;
   }
 
   Type type = 1;
@@ -95,9 +96,17 @@ message MoveToLocationRequest {
 message MoveToLocationResponse {
 }
 
+message RegisterCommandRequest {
+	string command = 1;
+	uint32 handler_id = 2;
+}
+
+message RegisterCommandResponse {}
+
 service Editor {
 	rpc Edit(EditRequest) returns (EditResponse);
 	rpc Subscribe(EditorSubscribeRequest) returns (EditorSubscribeResponse);
+	rpc Register(RegisterCommandRequest) returns (RegisterCommandResponse);
 
 	// locations
 	rpc SetLocationList(SetLocationListRequest) returns (SetLocationListResponse);

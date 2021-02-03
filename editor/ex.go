@@ -58,6 +58,17 @@ func (e *Ex) Init(ed Editor, opts ...Option) (err error) {
 	return
 }
 
+func (e *Ex) handlerInFocus() (string, Handler, bool) {
+	focus, _ := e.comp.Focus()
+	content, _ := focus.Content()
+	t, ok := content.(*browser.Tab)
+	if !ok {
+		return "", nil, false
+	}
+
+	return t.ID(), t.Handler().(Handler), true
+}
+
 func (e *Ex) runSingleCommand(cmd string) (quit bool, err error) {
 	browser := e.comp.Browser()
 	switch cmd {
@@ -79,7 +90,14 @@ func (e *Ex) runSingleCommand(cmd string) (quit bool, err error) {
 	case "q!", "q":
 		quit = true
 	default:
-		err = fmt.Errorf("Unknown command: %s", cmd)
+		name, h, ok := e.handlerInFocus()
+		var handled bool
+		if ok {
+			handled = e.comp.DispatchCommand(cmd, h, name)
+		}
+		if !handled {
+			err = fmt.Errorf("Unknown command: %s", cmd)
+		}
 	}
 	return
 }

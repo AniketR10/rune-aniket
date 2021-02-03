@@ -125,6 +125,26 @@ func (c *Client) SubscribeEditor(evType EventType, h EventHandler) error {
 	return nil
 }
 
+// Register requests the editor server to register cmd with h.
+func (c *Client) Register(cmd string, h CommandHandler) error {
+	ctx := context.Background()
+
+	// re-use EventHandler logic
+	handlerID := c.serveHandler(FuncEventHandler(func(ev Event) bool {
+		return h.HandleCommand(ev.Content, ev.Resource, ev.ResourceName)
+	}))
+
+	req := proto.RegisterCommandRequest{Command: cmd, HandlerId: handlerID}
+	_, err := c.ed.Register(ctx, &req)
+	if err != nil {
+		reason := fmt.Sprintf("editor.Client.Register: %v", err)
+		c.safeForceCloseHandler(handlerID, reason)
+		return err
+	}
+
+	return nil
+}
+
 func makeLocationListRequest(
 	handlerID uint32, listID string, l LocationList,
 ) proto.SetLocationListRequest {

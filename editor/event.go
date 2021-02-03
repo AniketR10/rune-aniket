@@ -29,6 +29,9 @@ const (
 
 	// EventTypeDelete is dispatched when content is deleted from an editor buffer.
 	EventTypeDelete
+
+	// used internally by server/client to re-use EventHandler logic for CommandHandler
+	eventTypeCommand
 )
 
 // Event encapsulates eventual information about a particular editor resource.
@@ -58,6 +61,8 @@ func protoTypeToModel(protoType proto.EditorEvent_Type) (ev EventType, err error
 		ev = EventTypeDelete
 	case proto.EditorEvent_TypeInsert:
 		ev = EventTypeInsert
+	case proto.EditorEvent_TypeCommand:
+		ev = eventTypeCommand
 	default:
 		err = fmt.Errorf("failed to convert proto editor event: invalid type: %v",
 			protoType)
@@ -93,6 +98,8 @@ func (e Event) protoType() proto.EditorEvent_Type {
 		return proto.EditorEvent_TypeDelete
 	case EventTypeInsert:
 		return proto.EditorEvent_TypeInsert
+	case eventTypeCommand:
+		return proto.EditorEvent_TypeCommand
 	default:
 		panic(fmt.Sprintf("failed to convert editor event to proto: invalid type: %v", e.Type))
 	}

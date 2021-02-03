@@ -40,6 +40,7 @@ type Component struct {
 	keymap          map[term.Event]term.Event
 	termSubscribers map[term.Event]browser.EventHandler
 	edSubscribers   map[EventType][]EventHandler
+	cmdSubscribers  map[string]CommandHandler
 }
 
 // used to intercept calls to Close and Flush to dispatch
@@ -66,6 +67,7 @@ func (e *editorFlusherCloser) Flush() error {
 	e.parent.dispatchEvent(ev)
 	return e.fc.Flush()
 }
+
 func (e *editorFlusherCloser) Close() error {
 	ev := Event{
 		Type:         EventTypeClose,
@@ -172,6 +174,7 @@ func (c *Component) Init(ed Editor, config Config) (err error) {
 	c.ed = ed
 	c.termSubscribers = make(map[term.Event]browser.EventHandler)
 	c.edSubscribers = make(map[EventType][]EventHandler)
+	c.cmdSubscribers = make(map[string]CommandHandler)
 
 	if c.config.RecoveryFilepath != "" {
 		if len(c.config.Filepaths) != 1 {
@@ -291,8 +294,25 @@ func (c *Component) Publish(ev term.Event) (handled bool) {
 	return
 }
 
-// dispatches either flush or close events
-func (c *Component) dispatchEvent(ev Event) {
+// DispatchCommand dispatches a EventTypeCommand with cmd to subscribers
+// subscribed via SubscribeEditor.
+func (c *Component) DispatchCommand(
+	cmd string, h Handler, name string,
+) (handled bool) {
+	commander, handled := c.cmdSubscribers[cmd]
+	if !handled {
+		return false
+	}
+
+	exit := commander.HandleCommand(cmd, h, name)
+	if exit {
+		delete(c.cmdSubscribers, cmd)
+	}
+	return true
+}
+
+// dispatchEvent either flush or close events
+func (c *Component) dispatchEvent(ev Event) (handled bool) {
 	subs, ok := c.edSubscribers[ev.Type]
 	if !ok {
 		return
@@ -304,8 +324,10 @@ func (c *Component) dispatchEvent(ev Event) {
 		if !exit {
 			remain = append(remain, h)
 		}
+		handled = true
 	}
 	c.edSubscribers[ev.Type] = remain
+	return
 }
 
 // SetMessage formats the given msg and args and displays it on next Draw.
@@ -452,6 +474,17 @@ func (c *Component) SubscribeEditor(ev EventType, h EventHandler) error {
 	}
 
 	c.edSubscribers[ev] = append(c.edSubscribers[ev], h)
+	return nil
+}
+
+// Register installs cm as a command handler of cmd or returns
+// an error if there's already a CommandHandler installed for this cmd.
+func (c *Component) Register(cmd string, cm CommandHandler) error {
+	if _, ok := c.cmdSubscribers[cmd]; ok {
+		return errors.New("command already registered")
+	}
+
+	c.cmdSubscribers[cmd] = cm
 	return nil
 }
 

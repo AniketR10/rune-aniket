@@ -2,11 +2,13 @@ package editor
 
 import (
 	"errors"
+	"sync"
 	"testing"
 
 	"github.com/ernestrc/go-tui"
 	"github.com/ernestrc/go-tui/browser"
 	"github.com/ernestrc/go-tui/cell"
+	"github.com/ernestrc/go-tui/handler"
 	"github.com/ernestrc/go-tui/term"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -421,5 +423,60 @@ func TestComponentEditorSubscriber(t *testing.T) {
 		}))
 
 		assert.Equal(t, 2, fired)
+	})
+}
+
+func TestDispatchCommand(t *testing.T) {
+	t.Run("DispatchCommand returns false if there's no registered handler", func(t *testing.T) {
+		c, err := newTestComponent(&testEditor{})
+		require.NoError(t, err)
+
+		assert.False(t, c.DispatchCommand("SELL", handler.NewTestHandler(), "jklfwe"))
+	})
+}
+
+func testRegister(t *testing.T,
+	constructor func(ed Editor, mu *sync.Mutex, resourceName string) (*Component, Editor, error)) {
+	t.Run("Registered handler is unsubscribed upon returning exit=true", func(t *testing.T) {
+		var mu sync.Mutex
+		name1 := "HERS"
+		myCmd := "BUY"
+		c, sut, err := constructor(&testEditor{}, &mu, name1)
+		require.NoError(t, err)
+
+		mu.Lock()
+		h1, err := c.Edit(name1, cell.NewBuffer())
+		mu.Unlock()
+		require.NoError(t, err)
+
+		var called int
+		var wg sync.WaitGroup
+		sut.Register(myCmd, FuncCommandHandler(func(cmd string, h Handler, name string) bool {
+			defer wg.Done()
+			called++
+			return true
+		}))
+
+		wg.Add(1)
+		mu.Lock()
+		assert.True(t, c.DispatchCommand(myCmd, h1, name1))
+		mu.Unlock()
+
+		wg.Wait()
+
+		for i := 0; i < 20; i++ {
+			mu.Lock()
+			c.DispatchCommand(myCmd, h1, name1)
+			mu.Unlock()
+		}
+
+		assert.Equal(t, 1, called)
+	})
+}
+
+func TestComponentRegister(t *testing.T) {
+	testRegister(t, func(ed Editor, mu *sync.Mutex, resName string) (*Component, Editor, error) {
+		c, err := newTestComponent(ed)
+		return c, c, err
 	})
 }

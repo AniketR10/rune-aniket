@@ -260,3 +260,33 @@ func TestClientServerIntegration(t *testing.T) {
 		assert.Equal(t, "guacamole\npollos hermanos", cell.CellsToString(cells))
 	})
 }
+
+func TestRPCRegister(t *testing.T) {
+	var closeFns []func()
+
+	testRegister(t, func(ed Editor, mu *sync.Mutex, resName string) (*Component, Editor, error) {
+		c, err := newTestComponent(ed)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		if m, ok := ed.(*MockEditor); ok {
+			expectInitialServerSubscribe(t, m)
+		}
+
+		b := proto.NewDialBroker()
+		s := NewServer(b, c, mu)
+
+		client, closeFn := setupIntTest(t, b, s)
+		closeFns = append(closeFns, func() {
+			s.Close()
+			closeFn()
+		})
+
+		return c, client, err
+	})
+
+	for _, closeFn := range closeFns {
+		closeFn()
+	}
+}

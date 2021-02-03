@@ -1,6 +1,8 @@
 package vi
 
 import (
+	"errors"
+
 	"github.com/ernestrc/go-tui/cell"
 	"github.com/ernestrc/go-tui/editor"
 )
@@ -51,6 +53,10 @@ func (e *viEditor) Edit(name string, buf *cell.Buffer) (editor.Handler, error) {
 	buf.Subscribe(sub)
 
 	return h, nil
+}
+
+func (e *viEditor) Register(cmd string, h editor.CommandHandler) error {
+	return errors.New("not supported")
 }
 
 // SubscribeEditor subsribes sub to ev. Note that this Editor is only capable

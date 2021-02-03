@@ -88,6 +88,10 @@ func (e *testEditor) Reader(h Handler) Reader {
 	return CellReader(e.buf.Reader())
 }
 
+func (e *testEditor) Register(cmd string, h CommandHandler) error {
+	return nil
+}
+
 func (e *testEditor) SubscribeEditor(ev EventType, sub EventHandler) error {
 	if e.subs == nil {
 		e.subs = make(map[EventType][]EventHandler)

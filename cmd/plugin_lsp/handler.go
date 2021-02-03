@@ -32,11 +32,15 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+// TODO something is not working correctly with this anymore.
+
 const (
-	rpcTimeout        = 10 * time.Second
-	connectTimeout    = 10 * time.Second
-	disconnectTimeout = 1 * time.Second
-	firstFileVersion  = 1
+	rpcTimeout            = 30 * time.Second
+	connectTimeout        = 10 * time.Second
+	disconnectTimeout     = 1 * time.Second
+	firstFileVersion      = 1
+	commandNextDiagnostic = "lspNextDiagnostic"
+	commandPrevDiagnostic = "lspPrevDiagnostic"
 )
 
 var (
@@ -955,6 +959,26 @@ func (h *lspEditorHandler) HandleDiagnostics(
 	h.handleDiagnostics(ctx, srv, p.URI.SpanURI(), p.Diagnostics, p.Version)
 }
 
+func (h *lspEditorHandler) HandleCommand(cmd string, eh editor.Handler, name string) (exit bool) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	switch cmd {
+	case commandNextDiagnostic:
+		err := h.ed.MoveToNextLocation(eh, h.diagnosticListID)
+		if err != nil {
+			log.Errorf("lspEditorHandler.MoveToNextLocation(%s): %v", name, err)
+		}
+	case commandPrevDiagnostic:
+		err := h.ed.MoveToPrevLocation(eh, h.diagnosticListID)
+		if err != nil {
+			log.Errorf("lspEditorHandler.MoveToNextLocation(%s): %v", name, err)
+		}
+	}
+
+	return false
+}
+
 func (h *lspEditorHandler) Handle(ev editor.Event) (exit bool) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -974,31 +998,6 @@ func (h *lspEditorHandler) Handle(ev editor.Event) (exit bool) {
 		h.handleFileDelete(ev)
 	}
 	return
-}
-
-func (h *lspEditorHandler) HandleKeyEvent(ev term.Event) bool {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-
-	switch ev.Key {
-	case term.KeyCtrlJ:
-		// FIXME: the editor API doesn't know about focus
-		// so for now, move to next location all open files.
-		for _, f := range h.files {
-			err := h.ed.MoveToNextLocation(f.handler, h.diagnosticListID)
-			if err != nil {
-				log.Errorf("lspEditorHandler.MoveToNextLocation(%s): %v", f.name, err)
-			}
-		}
-	case term.KeyCtrlK:
-		for _, f := range h.files {
-			err := h.ed.MoveToPrevLocation(f.handler, h.diagnosticListID)
-			if err != nil {
-				log.Errorf("lspEditorHandler.MoveToNextLocation(%s): %v", f.name, err)
-			}
-		}
-	}
-	return false
 }
 
 func (h *lspEditorHandler) Close() error {

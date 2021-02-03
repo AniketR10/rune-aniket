@@ -10,6 +10,7 @@ message EditorEventHandleRequest {
 
 message EditorEventHandleResponse {
 	bool quit = 1;
+	bool handled = 2;
 }
 
 service EditorEventHandler {

@@ -198,6 +198,43 @@ func (mr *MockReaderMockRecorder) RawCells() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RawCells", reflect.TypeOf((*MockReader)(nil).RawCells))
 }
 
+// MockCommandHandler is a mock of CommandHandler interface.
+type MockCommandHandler struct {
+	ctrl     *gomock.Controller
+	recorder *MockCommandHandlerMockRecorder
+}
+
+// MockCommandHandlerMockRecorder is the mock recorder for MockCommandHandler.
+type MockCommandHandlerMockRecorder struct {
+	mock *MockCommandHandler
+}
+
+// NewMockCommandHandler creates a new mock instance.
+func NewMockCommandHandler(ctrl *gomock.Controller) *MockCommandHandler {
+	mock := &MockCommandHandler{ctrl: ctrl}
+	mock.recorder = &MockCommandHandlerMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockCommandHandler) EXPECT() *MockCommandHandlerMockRecorder {
+	return m.recorder
+}
+
+// HandleCommand mocks base method.
+func (m *MockCommandHandler) HandleCommand(cmd string, h Handler, name string) bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "HandleCommand", cmd, h, name)
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// HandleCommand indicates an expected call of HandleCommand.
+func (mr *MockCommandHandlerMockRecorder) HandleCommand(cmd, h, name interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleCommand", reflect.TypeOf((*MockCommandHandler)(nil).HandleCommand), cmd, h, name)
+}
+
 // MockEditor is a mock of Editor interface.
 type MockEditor struct {
 	ctrl     *gomock.Controller
@@ -276,6 +313,20 @@ func (m *MockEditor) Reader(arg0 Handler) Reader {
 func (mr *MockEditorMockRecorder) Reader(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Reader", reflect.TypeOf((*MockEditor)(nil).Reader), arg0)
+}
+
+// Register mocks base method.
+func (m *MockEditor) Register(arg0 string, arg1 CommandHandler) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Register", arg0, arg1)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Register indicates an expected call of Register.
+func (mr *MockEditorMockRecorder) Register(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Register", reflect.TypeOf((*MockEditor)(nil).Register), arg0, arg1)
 }
 
 // SetLocationList mocks base method.
