@@ -53,8 +53,7 @@ func (e *Ex) Init(ed Editor, opts ...Option) (err error) {
 	for _, o := range opts {
 		o(&config)
 	}
-	e.comp.Init(ed, config)
-
+	err = e.comp.Init(ed, config)
 	return
 }
 

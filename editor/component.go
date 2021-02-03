@@ -126,10 +126,6 @@ func (c *Component) tryLog(msg string, args ...interface{}) {
 	}
 }
 
-func (c *Component) setError(err error) {
-	c.comp.SetMessage("Error: %s", err)
-}
-
 func (c *Component) newCellBuffer() *cell.Buffer {
 	buf := cell.NewBuffer()
 	buf.InitWithTabspaces(c.config.Tabspaces)
@@ -228,7 +224,6 @@ func (c *Component) OpenFileTab(
 			return c.setFocusToTab(filename)
 		}
 		c.tryLog("error opening new file buffer: %v", err)
-		c.setError(err)
 		return nil, err
 	}
 
