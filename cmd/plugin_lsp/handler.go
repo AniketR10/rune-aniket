@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"math"
 	"net"
 	"os"
@@ -31,10 +32,8 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-// TODO something is not working correctly with this anymore.
-
 const (
-	rpcTimeout            = 30 * time.Second
+	rpcTimeout            = 10 * time.Second
 	connectTimeout        = 10 * time.Second
 	disconnectTimeout     = 1 * time.Second
 	firstFileVersion      = 1
@@ -84,14 +83,16 @@ var (
 )
 
 type file struct {
-	name        string
-	version     float64
-	languageID  string
-	handler     editor.Handler
-	docID       protocol.TextDocumentIdentifier
-	uri         span.URI
-	cells       [][]term.Cell
-	diagnostics []protocol.Diagnostic
+	name       string
+	languageID string
+	handler    editor.Handler
+	docID      protocol.TextDocumentIdentifier
+	uri        span.URI
+
+	// handler use getters
+	_version     float64
+	_cells       [][]term.Cell
+	_diagnostics []protocol.Diagnostic
 }
 
 type execServer struct {
@@ -190,9 +191,6 @@ func initializeConnection(ret *lspEditorHandler, conn net.Conn) (
 	}
 
 	stream := jsonrpc2.NewHeaderStream(conn)
-	if log.IsLevelEnabled(log.TraceLevel) {
-		stream = protocol.LoggingStream(stream, os.Stderr)
-	}
 	cc := jsonrpc2.NewConn(stream)
 	server := protocol.ServerDispatcher(cc)
 	go streamRPC(cc, server, ret)
@@ -249,6 +247,14 @@ func logStderr(langID string, stderr io.ReadCloser) {
 	}
 }
 
+type nopWriter struct {
+	io.Writer
+}
+
+func (w nopWriter) Close() error {
+	return nil
+}
+
 func startLanguageServers(
 	h *lspEditorHandler, ret map[string]execServer, cfg map[string]interface{},
 ) {
@@ -277,14 +283,14 @@ func startLanguageServers(
 			go logStderr(langID, stderr)
 		}
 
-		conn := fakenet.NewConn("stdio", stdout, stdin)
+		reader := ioutil.NopCloser(stdout)
+		writer := nopWriter{Writer: stdin}
+		conn := fakenet.NewConn("stdio", reader, writer)
 		server, initRes, err := initializeConnection(h, conn)
 		if err != nil {
 			log.Errorf("failed to initialize LSP server for '%s': %v", langID, err)
 			continue
 		}
-
-		server = ioUnlockServer{mu: &h.mu, server: server}
 
 		h.mu.Lock()
 		ret[langID] = execServer{caps: initRes.Capabilities, cmd: c, srv: server}
@@ -467,6 +473,9 @@ func newLspHandler(ed editor.Editor, pconfig plugin.Config) (*lspEditorHandler, 
 }
 
 func (h *lspEditorHandler) getServer(languageID string) (protocol.Server, bool) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
 	proc, ok := h.servers[languageID]
 	if !ok {
 		return nil, false
@@ -476,18 +485,21 @@ func (h *lspEditorHandler) getServer(languageID string) (protocol.Server, bool) 
 }
 
 func (h *lspEditorHandler) newFile(handler editor.Handler, name, content string) *file {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
 	uri := span.URIFromPath(name)
 	languageID := filepath.Ext(uri.Filename())
 
 	f := &file{
-		version: firstFileVersion,
-		handler: handler,
-		name:    name,
+		_version: firstFileVersion,
+		handler:  handler,
+		name:     name,
 		docID: protocol.TextDocumentIdentifier{
 			URI: protocol.URIFromSpanURI(uri),
 		},
 		uri:        uri,
-		cells:      cell.StringToCells(content),
+		_cells:     cell.StringToCells(content),
 		languageID: languageID,
 	}
 
@@ -498,17 +510,22 @@ func (h *lspEditorHandler) newFile(handler editor.Handler, name, content string)
 func (h *lspEditorHandler) addPendingDiagnostics(
 	uri span.URI, ds []protocol.Diagnostic,
 ) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
 	h.pending[uri] = ds
 }
 
 func (h *lspEditorHandler) dispatchPendingDiagnostics(
 	ctx context.Context, srv protocol.Server, uri span.URI,
 ) {
+	h.mu.Lock()
 	ds, ok := h.pending[uri]
+	delete(h.pending, uri)
+	h.mu.Unlock()
 	if !ok {
 		return
 	}
-	delete(h.pending, uri)
 
 	h.handleDiagnostics(ctx, srv, uri, ds, firstFileVersion)
 }
@@ -519,6 +536,9 @@ func (h *lspEditorHandler) getFileWithName(name string) (*file, bool) {
 }
 
 func (h *lspEditorHandler) getFile(uri span.URI) (*file, bool) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
 	f, ok := h.files[uri]
 	return f, ok
 }
@@ -591,6 +611,7 @@ func (h *lspEditorHandler) semanticTokens(
 		log.Errorf("lspEditorHandler.Server.SemanticTokensFull(%s): %v", f.name, err)
 		return
 	}
+	log.Tracef("lspEditorHandler.Server.SemanticTokensFull(%s): OK", f.name)
 
 	locations := parseLocationData(f.uri, cells, []byte(content), resp.Data, h.semanticTypesAttr)
 	err = h.ed.SetLocationList(f.handler, h.semanticTokensListID, editor.LocationSlice(locations))
@@ -673,7 +694,7 @@ func (h *lspEditorHandler) callServerDidChange(
 ) error {
 	params := protocol.DidChangeTextDocumentParams{
 		TextDocument: protocol.VersionedTextDocumentIdentifier{
-			Version:                f.version,
+			Version:                h.getVersion(f),
 			TextDocumentIdentifier: f.docID,
 		},
 		ContentChanges: evts,
@@ -685,18 +706,31 @@ func (h *lspEditorHandler) callServerDidChange(
 	return err
 }
 
+func (h *lspEditorHandler) getVersion(f *file) float64 {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return f._version
+}
+
+func (h *lspEditorHandler) incrementVersion(f *file) float64 {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	f._version++
+	return f._version
+}
+
 // TODO client is expected to support both incremental and full synchronization
 // based on h.protocol server capabilities. Right now we are assuming incremental.
 func (h *lspEditorHandler) pushFullUpdate(
 	ctx context.Context, srv protocol.Server, f *file, content string,
 ) {
-	f.version++
+	version := h.incrementVersion(f)
 
 	evts := []protocol.TextDocumentContentChangeEvent{{Text: content}}
 	err := h.callServerDidChange(ctx, srv, f, evts)
 	if err == nil {
 		log.Tracef("sent full file update: file=%v, length=%v, version=%v",
-			f.name, len(content), f.version)
+			f.name, len(content), version)
 	}
 }
 
@@ -704,7 +738,7 @@ func (h *lspEditorHandler) sendIncrementalUpdate(
 	ctx context.Context, srv protocol.Server, f *file, newCells,
 	oldCells [][]term.Cell, content string, from, to term.Coordinates,
 ) {
-	f.version++
+	version := h.incrementVersion(f)
 
 	// https://microsoft.github.io/language-server-protocol/specification#textDocument_didChange
 	rng := makeProtocolRange(content, newCells, oldCells, from, to)
@@ -717,8 +751,22 @@ func (h *lspEditorHandler) sendIncrementalUpdate(
 	if err == nil {
 		log.Tracef("sent incremental file update: file=%v, length=%v, version=%v,"+
 			" rangeStart: %#v, rangeEnd: %#v, from=%#v, to=%#v: content='%s'",
-			f.name, len(content), f.version, rng.Start, rng.End, from, to, content)
+			f.name, len(content), version, rng.Start, rng.End, from, to, content)
 	}
+}
+
+func (h *lspEditorHandler) setCells(f *file, cells [][]term.Cell) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	f._cells = cells
+}
+
+func (h *lspEditorHandler) getCells(f *file) (cells [][]term.Cell) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	return f._cells
 }
 
 func (h *lspEditorHandler) handleFileFlush(ev editor.Event) {
@@ -737,8 +785,8 @@ func (h *lspEditorHandler) handleFileFlush(ev editor.Event) {
 	}
 
 	h.pushFullUpdate(ctx, srv, f, ev.Content)
-	f.cells = cell.StringToCells(ev.Content)
-	h.semanticTokens(ctx, srv, f, f.cells, ev.Content)
+	h.setCells(f, cell.StringToCells(ev.Content))
+	h.semanticTokens(ctx, srv, f, h.getCells(f), ev.Content)
 }
 
 func (h *lspEditorHandler) handleFileInsert(ev editor.Event) {
@@ -756,12 +804,12 @@ func (h *lspEditorHandler) handleFileInsert(ev editor.Event) {
 		return
 	}
 
-	buf := cell.CellsToBuffer(f.cells)
+	oldCells := h.getCells(f)
+	buf := cell.CellsToBuffer(oldCells)
 	buf.InsertString(ev.Start, ev.Content)
-	oldCells := f.cells
 	newCells := buf.RawCells()
 	h.sendIncrementalUpdate(ctx, srv, f, newCells, oldCells, ev.Content, ev.From, ev.To)
-	f.cells = newCells
+	h.setCells(f, newCells)
 
 	h.semanticTokens(ctx, srv, f, newCells, buf.String())
 }
@@ -781,12 +829,12 @@ func (h *lspEditorHandler) handleFileDelete(ev editor.Event) {
 		return
 	}
 
-	buf := cell.CellsToBuffer(f.cells)
+	oldCells := h.getCells(f)
+	buf := cell.CellsToBuffer(oldCells)
 	buf.Delete(ev.From, ev.To)
-	oldCells := f.cells
 	newCells := buf.RawCells()
 	h.sendIncrementalUpdate(ctx, srv, f, newCells, oldCells, "", ev.From, ev.To)
-	f.cells = newCells
+	h.setCells(f, newCells)
 
 	h.semanticTokens(ctx, srv, f, newCells, buf.String())
 }
@@ -808,7 +856,7 @@ func (h *lspEditorHandler) handleFileOpen(ev editor.Event) {
 		TextDocument: protocol.TextDocumentItem{
 			URI:        protocol.URIFromSpanURI(f.uri),
 			LanguageID: f.languageID,
-			Version:    f.version,
+			Version:    h.getVersion(f),
 			Text:       ev.Content,
 		},
 	}
@@ -820,7 +868,7 @@ func (h *lspEditorHandler) handleFileOpen(ev editor.Event) {
 	log.Tracef("lspEditorHandler.Server.DidOpen(%s, %s)", f.name, f.languageID)
 
 	h.dispatchPendingDiagnostics(ctx, srv, f.uri)
-	h.semanticTokens(ctx, srv, f, f.cells, ev.Content)
+	h.semanticTokens(ctx, srv, f, h.getCells(f), ev.Content)
 }
 
 func (h *lspEditorHandler) removeFile(name string) (*file, bool) {
@@ -829,7 +877,11 @@ func (h *lspEditorHandler) removeFile(name string) (*file, bool) {
 		return nil, false
 	}
 
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
 	delete(h.files, f.uri)
+
 	return f, true
 }
 
@@ -864,14 +916,14 @@ func (h *lspEditorHandler) handleFileClose(ev editor.Event) {
 	}
 
 	h.sendDidClose(ctx, srv, f.uri)
-	h.addPendingDiagnostics(f.uri, f.diagnostics)
+	h.addPendingDiagnostics(f.uri, h.getDiagnostics(f))
 }
 
-func parseDiagnostics(
+func (h *lspEditorHandler) parseDiagnostics(
 	f *file, d []protocol.Diagnostic,
-	diagnosticAttr map[protocol.DiagnosticSeverity]term.Attributes,
 ) []editor.Location {
-	buf := cell.CellsToBuffer(f.cells)
+	cells := h.getCells(f)
+	buf := cell.CellsToBuffer(cells)
 	content := []byte(buf.String())
 	tc := span.NewContentConverter(f.uri.Filename(), content)
 	colmap := protocol.ColumnMapper{
@@ -882,15 +934,15 @@ func parseDiagnostics(
 
 	locs := make([]editor.Location, 0, len(d))
 	for _, d := range d {
-		from, to, ok := convertRange(d.Range, f.cells, colmap)
+		from, to, ok := convertRange(d.Range, cells, colmap)
 		if !ok {
 			continue
 		}
 
 		msg := fmt.Sprintf("%s: %s", d.Source, d.Message)
-		attr, ok := diagnosticAttr[d.Severity]
+		attr, ok := h.diagnosticAttr[d.Severity]
 		if !ok {
-			log.Warnf("could not diagnostic severity %v; skipping diagnostic", d.Severity)
+			log.Warnf("unknown diagnostic severity %v; skipping diagnostic", d.Severity)
 			continue
 		}
 
@@ -901,6 +953,20 @@ func parseDiagnostics(
 	return locs
 }
 
+func (h *lspEditorHandler) setDiagnostics(f *file, ds []protocol.Diagnostic) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	f._diagnostics = ds
+}
+
+func (h *lspEditorHandler) getDiagnostics(f *file) (ds []protocol.Diagnostic) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	return f._diagnostics
+}
+
 func (h *lspEditorHandler) handleDiagnostics(
 	ctx context.Context, srv protocol.Server,
 	uri span.URI, ds []protocol.Diagnostic,
@@ -908,21 +974,20 @@ func (h *lspEditorHandler) handleDiagnostics(
 ) {
 	f, ok := h.getFile(uri)
 	if !ok {
-		h.sendDidClose(ctx, srv, uri)
 		h.addPendingDiagnostics(uri, ds)
 		log.Warnf("lspEditorHandler: Received diagnostic for an unknown file: %#v", uri)
 		return
 	}
 
-	f.diagnostics = ds
+	h.setDiagnostics(f, ds)
 
-	if version != f.version {
+	if version != h.getVersion(f) {
 		log.Debugf("lspEditorHandler: Received diagnostic for"+
 			"outdated version of file '%s': %#v", f.name, version)
 		return
 	}
 
-	locs := parseDiagnostics(f, ds, h.diagnosticAttr)
+	locs := h.parseDiagnostics(f, ds)
 	err := h.ed.SetLocationList(f.handler, h.diagnosticListID, editor.LocationSlice(locs))
 	if err != nil {
 		log.Errorf("lspEditorHandler.SetLocationList(%s): %v", f.name, err)
@@ -935,16 +1000,20 @@ func (h *lspEditorHandler) HandleDiagnostics(
 	p *protocol.PublishDiagnosticsParams,
 
 ) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
+	var start time.Time
+	if log.IsLevelEnabled(log.TraceLevel) {
+		start = time.Now()
+		log.Tracef("lspEditorHandler.HandleDiagnostics(%#v)", p.URI)
+	}
 
 	h.handleDiagnostics(ctx, srv, p.URI.SpanURI(), p.Diagnostics, p.Version)
+
+	if log.IsLevelEnabled(log.TraceLevel) {
+		log.Tracef("lspEditorHandler.HandleDiagnostics(%#v) in %s", p.URI, time.Since(start))
+	}
 }
 
 func (h *lspEditorHandler) HandleCommand(cmd string, eh editor.Handler, name string) (exit bool) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-
 	switch cmd {
 	case commandNextDiagnostic:
 		err := h.ed.MoveToNextLocation(eh, h.diagnosticListID)
@@ -962,10 +1031,11 @@ func (h *lspEditorHandler) HandleCommand(cmd string, eh editor.Handler, name str
 }
 
 func (h *lspEditorHandler) Handle(ev editor.Event) (exit bool) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-
-	log.Tracef("lspEditorHandler.Handle(%#v)", ev)
+	var start time.Time
+	if log.IsLevelEnabled(log.TraceLevel) {
+		start = time.Now()
+		log.Tracef("lspEditorHandler.Handle(%#v)", ev)
+	}
 
 	switch ev.Type {
 	case editor.EventTypeOpen:
@@ -979,6 +1049,11 @@ func (h *lspEditorHandler) Handle(ev editor.Event) (exit bool) {
 	case editor.EventTypeDelete:
 		h.handleFileDelete(ev)
 	}
+
+	if log.IsLevelEnabled(log.TraceLevel) {
+		log.Tracef("lspEditorHandler.Handle(%#v) in %s", ev, time.Since(start))
+	}
+
 	return
 }
 
@@ -992,7 +1067,11 @@ func (h *lspEditorHandler) Close() error {
 			continue
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), disconnectTimeout)
+
+		h.mu.Unlock()
 		err := server.srv.Shutdown(ctx)
+		h.mu.Lock()
+
 		cancel()
 		if err != nil {
 			errs = append(errs, err.Error())
