@@ -4,7 +4,6 @@ import (
 	"context"
 	"testing"
 
-	"github.com/ernestrc/go-tui/browser"
 	"github.com/ernestrc/go-tui/cell"
 	"github.com/ernestrc/go-tui/editor"
 	"github.com/ernestrc/go-tui/handler"
@@ -49,13 +48,11 @@ func makePluginConfig() plugin.Config {
 }
 
 func newTestLspHandler(
-	ctrl *gomock.Controller,
-	ed editor.Editor, p browser.EventPublisher, cfg plugin.Config,
-	server protocol.Server,
+	ctrl *gomock.Controller, ed editor.Editor,
+	cfg plugin.Config, server protocol.Server,
 ) *lspEditorHandler {
 	ret := new(lspEditorHandler)
 	ret.ed = ed
-	ret.p = p
 	ret.files = make(map[span.URI]*file)
 	ret.servers = map[string]execServer{".go": {srv: server}}
 	ret.semanticTokensListID = defaultSemanticTokensListID
@@ -184,7 +181,7 @@ func TestLspHandlerHandleOpen(t *testing.T) {
 	cfg := makePluginConfig()
 	server := NewMockServer(ctrl)
 
-	h := newTestLspHandler(ctrl, ed, nil, cfg, server)
+	h := newTestLspHandler(ctrl, ed, cfg, server)
 	dispatchOpen(t, h, server, ed, filename1, filecontent1,
 		tokenData1, h.semanticTokensListID, expectedLocations1)
 }
@@ -197,7 +194,7 @@ func TestLspHandlerHandleFlush(t *testing.T) {
 	cfg := makePluginConfig()
 	server := NewMockServer(ctrl)
 
-	h := newTestLspHandler(ctrl, ed, nil, cfg, server)
+	h := newTestLspHandler(ctrl, ed, cfg, server)
 
 	dispatchOpen(t, h, server, ed, filename1, filecontent1,
 		tokenData1, h.semanticTokensListID, expectedLocations1)
@@ -213,7 +210,7 @@ func TestLspHandlerHandleInsertDelete(t *testing.T) {
 	cfg := makePluginConfig()
 	server := NewMockServer(ctrl)
 
-	h := newTestLspHandler(ctrl, ed, nil, cfg, server)
+	h := newTestLspHandler(ctrl, ed, cfg, server)
 
 	dispatchOpen(t, h, server, ed, filename1, filecontent1,
 		tokenData1, h.semanticTokensListID, expectedLocations1)

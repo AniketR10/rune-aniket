@@ -2,11 +2,16 @@
 
 package term
 
-import "github.com/nsf/termbox-go"
+import (
+	"sync/atomic"
+
+	"github.com/nsf/termbox-go"
+)
 
 var (
-	quit   chan struct{}
-	events chan Event
+	quit          chan struct{}
+	events        chan Event
+	interruptNext int32
 
 	defaultAttr = Attributes{Fg: ColorDefault, Bg: ColorDefault}
 
@@ -125,6 +130,11 @@ func Size() (width int, height int) {
 // PollEvent waits for an event and returns it.
 // This is a blocking function call.
 func PollEvent() (ev Event) {
+	i := atomic.SwapInt32(&interruptNext, 0)
+	if i != 0 {
+		ev = Event{Type: EventInterrupt}
+		return
+	}
 	ev = <-events
 	return
 }
@@ -140,7 +150,7 @@ func Close() {
 // This is useful when the root handler's has been updated by another goroutine,
 // other than the main event loop goroutine.
 func Interrupt() {
-	termbox.Interrupt()
+	atomic.AddInt32(&interruptNext, 1)
 }
 
 // SendNoneEvent sends a term.EventNone to the event poller and

@@ -366,8 +366,7 @@ func (c *Component) unsubscribe(ev term.Event) {
 
 // PublishInterrupt interrupts the main event loop to redraw the terminal.
 func (c *Component) PublishInterrupt() error {
-	// prevent deadlock if PublishInterrupt is called during a Draw call.
-	go c.interruptDraw()
+	c.interruptDraw()
 	return nil
 }
 

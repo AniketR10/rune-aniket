@@ -5,6 +5,7 @@ import (
 
 	"github.com/ernestrc/go-tui/browser"
 	"github.com/ernestrc/go-tui/proto"
+	"github.com/ernestrc/go-tui/term"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 )
@@ -56,12 +57,13 @@ func (s *browserResourceServer) Serve(
 			s.srv = srv
 			server := browser.NewServer(broker, s.b, lock)
 			server.Logger = l
-			proto.RegisterWindowManagerServer(grpc, server)
-			proto.RegisterKeyMapperServer(grpc, server)
-			proto.RegisterResourceOpenerServer(grpc, server)
-			proto.RegisterMessengerServer(grpc, server)
-			proto.RegisterEventSubscriberServer(grpc, server)
-			proto.RegisterEventPublisherServer(grpc, server)
+			rpcServer := interruptBrowserServer(server, term.Interrupt)
+			proto.RegisterWindowManagerServer(grpc, rpcServer)
+			proto.RegisterKeyMapperServer(grpc, rpcServer)
+			proto.RegisterResourceOpenerServer(grpc, rpcServer)
+			proto.RegisterMessengerServer(grpc, rpcServer)
+			proto.RegisterEventSubscriberServer(grpc, rpcServer)
+			proto.RegisterEventPublisherServer(grpc, rpcServer)
 		}
 		return s.srv
 	})

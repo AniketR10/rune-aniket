@@ -17,7 +17,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ernestrc/go-tui/browser"
 	"github.com/ernestrc/go-tui/cell"
 	"github.com/ernestrc/go-tui/editor"
 	"github.com/ernestrc/go-tui/plugin"
@@ -104,7 +103,6 @@ type execServer struct {
 type lspEditorHandler struct {
 	mu                   sync.Mutex
 	ed                   editor.Editor
-	p                    browser.EventPublisher
 	protocol             *protocol.InitializeResult
 	files                map[span.URI]*file
 	semanticTypesAttr    map[string]term.Attributes
@@ -425,12 +423,9 @@ func convertRange(
 	return
 }
 
-func newLspHandler(
-	ed editor.Editor, p browser.EventPublisher, pconfig plugin.Config,
-) (*lspEditorHandler, error) {
+func newLspHandler(ed editor.Editor, pconfig plugin.Config) (*lspEditorHandler, error) {
 	ret := new(lspEditorHandler)
 	ret.ed = ed
-	ret.p = p
 	ret.files = make(map[span.URI]*file)
 	ret.pending = make(map[span.URI][]protocol.Diagnostic)
 
@@ -605,15 +600,6 @@ func (h *lspEditorHandler) semanticTokens(
 	}
 }
 
-func (h *lspEditorHandler) publishInterrupt(filename string) {
-	if h.p != nil {
-		err := h.p.PublishInterrupt()
-		if err != nil {
-			log.Errorf("lspEditorHandler.PublishInterrupt(%s): %v", filename, err)
-		}
-	}
-}
-
 func makeInsertProtocolRange(
 	newCells [][]term.Cell, from, to term.Coordinates,
 ) protocol.Range {
@@ -753,7 +739,6 @@ func (h *lspEditorHandler) handleFileFlush(ev editor.Event) {
 	h.pushFullUpdate(ctx, srv, f, ev.Content)
 	f.cells = cell.StringToCells(ev.Content)
 	h.semanticTokens(ctx, srv, f, f.cells, ev.Content)
-	h.publishInterrupt(f.name)
 }
 
 func (h *lspEditorHandler) handleFileInsert(ev editor.Event) {
@@ -779,7 +764,6 @@ func (h *lspEditorHandler) handleFileInsert(ev editor.Event) {
 	f.cells = newCells
 
 	h.semanticTokens(ctx, srv, f, newCells, buf.String())
-	h.publishInterrupt(f.name)
 }
 
 func (h *lspEditorHandler) handleFileDelete(ev editor.Event) {
@@ -805,7 +789,6 @@ func (h *lspEditorHandler) handleFileDelete(ev editor.Event) {
 	f.cells = newCells
 
 	h.semanticTokens(ctx, srv, f, newCells, buf.String())
-	h.publishInterrupt(f.name)
 }
 
 func (h *lspEditorHandler) handleFileOpen(ev editor.Event) {
@@ -838,7 +821,6 @@ func (h *lspEditorHandler) handleFileOpen(ev editor.Event) {
 
 	h.dispatchPendingDiagnostics(ctx, srv, f.uri)
 	h.semanticTokens(ctx, srv, f, f.cells, ev.Content)
-	h.publishInterrupt(f.name)
 }
 
 func (h *lspEditorHandler) removeFile(name string) (*file, bool) {

@@ -16,7 +16,6 @@ type lspGrantee struct {
 	broker  proto.MuxBroker
 	ed      editor.Editor
 	m       browser.Messenger
-	p       browser.EventPublisher
 	s       browser.EventSubscriber
 	handler *lspEditorHandler
 	pconfig plugin.Config
@@ -37,7 +36,7 @@ func (t *lspGrantee) subscribeToEvents() error {
 		editor.EventTypeInsert,
 		editor.EventTypeDelete,
 	}
-	h, err := newLspHandler(t.ed, t.p, t.pconfig)
+	h, err := newLspHandler(t.ed, t.pconfig)
 	if err != nil {
 		return err
 	}
@@ -75,11 +74,6 @@ func (t *lspGrantee) OnPermissionGranted(
 		t.ed, err = plugin.Editor(token, t.broker)
 		if err == nil {
 			err = t.subscribeToEvents()
-		}
-	case plugin.PermissionBrowserEventPublisher:
-		t.p, err = plugin.EventPublisher(token, t.broker)
-		if err == nil && t.err != nil {
-			err = t.m.SetMessage("Error: %v", t.err)
 		}
 	}
 	if err != nil {
@@ -122,7 +116,6 @@ func main() {
 	}()
 
 	plugin.Serve(&lspGrantee{},
-		plugin.PermissionBrowserEventPublisher,
 		plugin.PermissionEditor,
 		plugin.PermissionBrowserMessenger,
 	)
