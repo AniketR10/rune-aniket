@@ -100,7 +100,7 @@ func (s *granteeServer) Permissions(ctx context.Context, req *proto.PermRequest)
 
 	if !s.connected {
 		s.connected = true
-		s.grantee.OnConnected(s.broker, cfg)
+		s.grantee.Connected(s.broker, cfg)
 		if s.keepAlive != nil {
 			go s.monitorKeepAlive()
 		}
@@ -117,19 +117,30 @@ func (s *granteeServer) OnGrant(ctx context.Context, req *proto.OnPermGrantReque
 
 	/* only trigger OnPermission* for permissions that were actually requested */
 
-	for _, denied := range req.Denied {
+	var denied []Permission
+	var granted []Grant
+	for _, den := range req.Denied {
 		for _, requested := range s.req {
-			if string(requested) == denied.Id {
-				s.grantee.OnPermissionDenied(Permission(denied.Id))
+			if string(requested) == den.Id {
+				denied = append(denied, Permission(den.Id))
 			}
 		}
 	}
-	for _, granted := range req.Granted {
+	for _, gr := range req.Granted {
 		for _, requested := range s.req {
-			if string(requested) == granted.Id {
-				s.grantee.OnPermissionGranted(granted.GrantId, Permission(granted.Id))
+			if string(requested) == gr.Id {
+				granted = append(granted, Grant{
+					Token: gr.GrantId, Permission: Permission(gr.Id),
+				})
 			}
 		}
+	}
+
+	if len(granted) != 0 {
+		s.grantee.PermissionGranted(granted)
+	}
+	if len(denied) != 0 {
+		s.grantee.PermissionDenied(denied)
 	}
 
 	return new(proto.OnPermGrantResponse), nil
@@ -139,7 +150,7 @@ func (s *granteeServer) doShutdown(reason string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if err := s.grantee.OnShutdown(reason); err != nil {
+	if err := s.grantee.Shutdown(reason); err != nil {
 		return err
 	}
 	if s.keepAlive != nil {

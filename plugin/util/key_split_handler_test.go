@@ -34,7 +34,7 @@ func expectInitialization(
 	t *testing.T, ctrl *gomock.Controller, h *keySplitHandler,
 ) *proto.MockMuxBroker {
 	broker := proto.NewMockMuxBroker(ctrl)
-	h.OnConnected(broker, emptyConfig)
+	h.Connected(broker, emptyConfig)
 	h.Health()
 	return broker
 }
@@ -153,7 +153,13 @@ func TestKeySplitHandlerEmpty(t *testing.T) {
 		browserConnToken := uint32(123)
 		expectSubscribe(t, ctrl, broker, config.Key, browserConnToken)
 
-		h.OnPermissionGranted(browserConnToken, plugin.PermissionBrowserEventSubscriber)
+		grants := []plugin.Grant{
+			{
+				Token:      browserConnToken,
+				Permission: plugin.PermissionBrowserEventSubscriber,
+			},
+		}
+		h.PermissionGranted(grants)
 	})
 
 	t.Run("does nothing if shutdown is called when window not active", func(t *testing.T) {
@@ -162,7 +168,7 @@ func TestKeySplitHandlerEmpty(t *testing.T) {
 		config := KeySplitHandlerConfig{Key: term.Event{Type: term.EventKey, Ch: 'a'}}
 		h := &keySplitHandler{config: config}
 		expectInitialization(t, ctrl, h)
-		h.OnShutdown("you are being naughty")
+		h.Shutdown("you are being naughty")
 	})
 
 	t.Run("open a split window if key event is received", func(t *testing.T) {
@@ -184,7 +190,13 @@ func TestKeySplitHandlerEmpty(t *testing.T) {
 
 		browserConnToken := uint32(155)
 		conn := prototest.ExpectBrokerDial(t, ctrl, broker, browserConnToken)
-		h.OnPermissionGranted(browserConnToken, plugin.PermissionBrowserWindowManager)
+		grants := []plugin.Grant{
+			{
+				Token:      browserConnToken,
+				Permission: plugin.PermissionBrowserWindowManager,
+			},
+		}
+		h.PermissionGranted(grants)
 
 		expectSplitAndFocus(t, ctrl, conn, broker)
 

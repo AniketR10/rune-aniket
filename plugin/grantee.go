@@ -11,15 +11,26 @@ import (
 	"google.golang.org/grpc"
 )
 
+// Permission represents a type of resource access.
 type Permission string
 
+// Permissions is a set of Permission.
 type Permissions map[Permission]struct{}
 
+// Grant binds a granted Permission with a Token that
+// can be used with the plugin API.
+type Grant struct {
+	Token uint32
+	Permission
+}
+
+// Grantee needs to be implemented by plugins that want
+// to access plugin host resources.
 type Grantee interface {
-	OnConnected(proto.MuxBroker, Config)
-	OnPermissionGranted(token uint32, perm Permission)
-	OnPermissionDenied(perm Permission)
-	OnShutdown(reason string) error
+	Connected(proto.MuxBroker, Config)
+	PermissionGranted([]Grant)
+	PermissionDenied([]Permission)
+	Shutdown(reason string) error
 	Health() error
 }
 

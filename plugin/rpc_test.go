@@ -217,17 +217,19 @@ type granteeMock struct {
 	onHealth, onShutdown bool
 }
 
-func (g *granteeMock) OnConnected(b proto.MuxBroker, cfg Config) {
+func (g *granteeMock) Connected(b proto.MuxBroker, cfg Config) {
 	g.cfgs = append(g.cfgs, cfg)
 	g.onConnected++
 }
-func (g *granteeMock) OnPermissionGranted(grantID uint32, perm Permission) {
-	g.onGrant = append(g.onGrant, perm)
+func (g *granteeMock) PermissionGranted(grants []Grant) {
+	for _, grant := range grants {
+		g.onGrant = append(g.onGrant, grant.Permission)
+	}
 }
-func (g *granteeMock) OnPermissionDenied(perm Permission) {
-	g.onDenied = append(g.onDenied, perm)
+func (g *granteeMock) PermissionDenied(perms []Permission) {
+	g.onDenied = append(g.onDenied, perms...)
 }
-func (g *granteeMock) OnShutdown(reason string) error {
+func (g *granteeMock) Shutdown(reason string) error {
 	if g.err != nil {
 		return g.err
 	}

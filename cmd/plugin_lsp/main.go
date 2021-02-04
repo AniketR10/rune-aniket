@@ -12,17 +12,20 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+var requiredPermissions = []plugin.Permission{
+	plugin.PermissionEditor,
+}
+
 type lspGrantee struct {
 	broker  proto.MuxBroker
 	ed      editor.Editor
-	m       browser.Messenger
 	s       browser.EventSubscriber
 	handler *lspEditorHandler
 	pconfig plugin.Config
 	err     error
 }
 
-func (t *lspGrantee) OnConnected(broker proto.MuxBroker, config plugin.Config) {
+func (t *lspGrantee) Connected(broker proto.MuxBroker, config plugin.Config) {
 	log.Infof("plugin connected; config: %#v", config)
 	t.broker = broker
 	t.pconfig = config
@@ -58,43 +61,30 @@ func (t *lspGrantee) subscribeToEvents() error {
 	return nil
 }
 
-func (t *lspGrantee) OnPermissionGranted(
-	token uint32, perm plugin.Permission,
-) {
-	log.Infof("plugin permission granted: %+v", perm)
+func (t *lspGrantee) PermissionGranted(grants []plugin.Grant) {
+	log.Infof("permissions granted: %v", grants)
 
-	var err error
-	switch perm {
-	case plugin.PermissionBrowserMessenger:
-		t.m, err = plugin.Messenger(token, t.broker)
-		if err == nil && t.err != nil {
-			err = t.m.SetMessage("Error: %v", t.err)
+	for _, grant := range grants {
+		var err error
+		switch grant.Permission {
+		case plugin.PermissionEditor:
+			t.ed, err = plugin.Editor(grant.Token, t.broker)
+			if err == nil {
+				err = t.subscribeToEvents()
+			}
 		}
-	case plugin.PermissionEditor:
-		t.ed, err = plugin.Editor(token, t.broker)
-		if err == nil {
-			err = t.subscribeToEvents()
-		}
-	}
-	if err != nil {
-		log.Errorf("OnPermissionGranted: %+v: %s", perm, err)
-		if t.m == nil {
-			t.err = err
-			return
-		}
-
-		err = t.m.SetMessage("Error: %v", t.err)
 		if err != nil {
-			log.Errorf("SetMessage: failed to set error %v: %v", t.err, err)
+			log.Errorf("PermissionGranted: %+v: %s", grants, err)
 		}
 	}
 }
 
-func (t *lspGrantee) OnPermissionDenied(perm plugin.Permission) {
-	log.Fatalf("plugin permission denied: %+v", perm)
+func (t *lspGrantee) PermissionDenied(perms []plugin.Permission) {
+	log.Fatalf("Could not start plugin due to missing permissions: "+
+		"denied: %v; required: %v", perms, requiredPermissions)
 }
 
-func (t *lspGrantee) OnShutdown(reason string) error {
+func (t *lspGrantee) Shutdown(reason string) error {
 	log.Warningf("plugin being shutdown: %s", reason)
 	if t.handler != nil {
 		return t.handler.Close()
@@ -115,8 +105,5 @@ func main() {
 		log.Println(http.ListenAndServe("localhost:6063", nil))
 	}()
 
-	plugin.Serve(&lspGrantee{},
-		plugin.PermissionEditor,
-		plugin.PermissionBrowserMessenger,
-	)
+	plugin.Serve(&lspGrantee{}, requiredPermissions...)
 }

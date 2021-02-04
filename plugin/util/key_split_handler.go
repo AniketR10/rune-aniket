@@ -11,6 +11,13 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+var requiredPermissions = []plugin.Permission{
+	plugin.PermissionBrowserWindowManager,
+	plugin.PermissionBrowserResourceOpener,
+	plugin.PermissionBrowserEventSubscriber,
+	plugin.PermissionBrowserEventPublisher,
+}
+
 type keySplitHandler struct {
 	config KeySplitHandlerConfig
 
@@ -24,8 +31,8 @@ type keySplitHandler struct {
 	win     browser.Window
 }
 
-func (t *keySplitHandler) OnConnected(broker proto.MuxBroker, config plugin.Config) {
-	log.Infof("plugin connected; config: %#v", config)
+func (t *keySplitHandler) Connected(broker proto.MuxBroker, config plugin.Config) {
+	log.Infof("plugin connected; config: %v", config)
 	t.broker = broker
 	t.pconfig = config
 }
@@ -106,35 +113,36 @@ func (t *keySplitHandler) subscribeToEvents() error {
 	return nil
 }
 
-func (t *keySplitHandler) OnPermissionGranted(
-	token uint32, perm plugin.Permission,
-) {
+func (t *keySplitHandler) PermissionGranted(grant []plugin.Grant) {
 	var err error
-	log.Infof("plugin permission granted: %+v", perm)
+	log.Infof("permissions granted: %+v", grant)
 
-	switch perm {
-	case plugin.PermissionBrowserWindowManager:
-		t.wm, err = plugin.WindowManager(token, t.broker)
-	case plugin.PermissionBrowserResourceOpener:
-		t.f, err = plugin.ResourceOpener(token, t.broker)
-	case plugin.PermissionBrowserEventPublisher:
-		t.p, err = plugin.EventPublisher(token, t.broker)
-	case plugin.PermissionBrowserEventSubscriber:
-		t.s, err = plugin.EventSubscriber(token, t.broker)
-		if err == nil {
-			err = t.subscribeToEvents()
+	for _, g := range grant {
+		switch g.Permission {
+		case plugin.PermissionBrowserWindowManager:
+			t.wm, err = plugin.WindowManager(g.Token, t.broker)
+		case plugin.PermissionBrowserResourceOpener:
+			t.f, err = plugin.ResourceOpener(g.Token, t.broker)
+		case plugin.PermissionBrowserEventPublisher:
+			t.p, err = plugin.EventPublisher(g.Token, t.broker)
+		case plugin.PermissionBrowserEventSubscriber:
+			t.s, err = plugin.EventSubscriber(g.Token, t.broker)
+			if err == nil {
+				err = t.subscribeToEvents()
+			}
+		}
+		if err != nil {
+			log.Errorf("PermissionGranted: %+v: %s", g.Permission, err)
 		}
 	}
-	if err != nil {
-		log.Errorf("OnPermissionGranted: %+v: %s", perm, err)
-	}
 }
 
-func (t *keySplitHandler) OnPermissionDenied(perm plugin.Permission) {
-	log.Fatalf("plugin permission denied: %+v", perm)
+func (t *keySplitHandler) PermissionDenied(perms []plugin.Permission) {
+	log.Fatalf("Could not start plugin due to missing permissions: "+
+		"denied: %v; required: %v", perms, requiredPermissions)
 }
 
-func (t *keySplitHandler) OnShutdown(reason string) error {
+func (t *keySplitHandler) Shutdown(reason string) error {
 	log.Warningf("plugin being shutdown: %s", reason)
 	t.closeHandler()
 	t.cleanWindow()
@@ -176,10 +184,5 @@ func ServeKeySplitHandler(config KeySplitHandlerConfig) {
 	if config.Handler == nil || (config.Key == term.Event{}) || config.Split == nil {
 		panic("invalid key split handler configuration")
 	}
-	plugin.Serve(&keySplitHandler{config: config},
-		plugin.PermissionBrowserWindowManager,
-		plugin.PermissionBrowserResourceOpener,
-		plugin.PermissionBrowserEventSubscriber,
-		plugin.PermissionBrowserEventPublisher,
-	)
+	plugin.Serve(&keySplitHandler{config: config}, requiredPermissions...)
 }
