@@ -2,6 +2,7 @@ package component
 
 import (
 	"io"
+	"strings"
 
 	"github.com/ernestrc/go-tui/cell"
 	"github.com/ernestrc/go-tui/term"
@@ -383,6 +384,49 @@ func (s *Scroll) Draw(writer term.Writer) {
 	}
 
 	s.draw(writer)
+}
+
+// WordAt returns the word at pos or an empty string if there's
+// no word at pos.
+func (s *Scroll) WordAt(pos term.Coordinates) string {
+	return s.tokenAt(pos, func(c rune) bool {
+		return (c >= 'A' && c <= 'Z') ||
+			(c >= 'a' && c <= 'z')
+	})
+}
+
+func (s *Scroll) tokenAt(pos term.Coordinates, is func(rune) bool) string {
+	var b strings.Builder
+	cells := s.buf.RawCells()
+	rows := s.buf.Rows()
+
+	start := pos
+	for start.Y < rows && start.X < s.buf.Columns(start.Y) && start.X >= 0 {
+		c := cells[start.Y][start.X]
+		if is(c.Ch) {
+			start.X--
+			continue
+		}
+		break
+	}
+
+	if start == pos {
+		return b.String()
+	}
+
+	start.X++
+	end := start
+	for end.Y < rows && end.X < s.buf.Columns(end.Y) && end.X >= 0 {
+		c := cells[end.Y][end.X]
+		if is(c.Ch) {
+			end.X++
+			b.WriteRune(c.Ch)
+			continue
+		}
+		break
+	}
+
+	return b.String()
 }
 
 // Search performs a text search of text in the internal cell buffer. It populates

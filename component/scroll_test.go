@@ -32,6 +32,35 @@ func TestScrollNew(t *testing.T) {
 	assert.Equal(t, 100, scroll.height)
 }
 
+func TestScrollWordAt(t *testing.T) {
+	scroll := newScroll(4, false, 100, 100)
+	_, err := scroll.Buffer().ReadFrom(strings.NewReader(fortune))
+	require.NoError(t, err)
+
+	tsuite := []struct {
+		in  term.Coordinates
+		out string
+	}{
+		{term.Coordinates{}, "Love"},
+		{term.Coordinates{X: 4}, ""},
+		{term.Coordinates{X: 6}, "in"},
+		{term.Coordinates{X: 7}, ""},
+		{term.Coordinates{X: 8}, "your"},
+		{term.Coordinates{X: 23}, ""},
+		{term.Coordinates{X: 39}, "stay"},
+		{term.Coordinates{X: 43}, ""},
+		{term.Coordinates{Y: 1}, "Love"},
+		{term.Coordinates{Y: 2, X: 11}, "Oscar"},
+		{term.Coordinates{X: 999}, ""},
+		{term.Coordinates{X: -1}, ""},
+		{term.Coordinates{Y: 5}, ""},
+	}
+
+	for _, tcase := range tsuite {
+		assert.Equal(t, tcase.out, scroll.WordAt(tcase.in))
+	}
+}
+
 func TestScrollDraw(t *testing.T) {
 	width, height := 8, 2
 	tabspaces := 4

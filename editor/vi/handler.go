@@ -96,7 +96,9 @@ func (vi *Vi) Resize(width, height int) {
 }
 
 func (vi *Vi) setActiveLocationListMessage(locs map[string]editor.Location) {
-	// TODO implement active location list
+	// NOTE: if therea re multiple location lists with a message
+	// in current cursor position, then there's no guarantee of which one
+	// is going to be rendered.
 	for _, loc := range locs {
 		vi.SetMessage(loc.Message)
 		return
@@ -413,6 +415,8 @@ func (vi *Vi) handleNormal(ev term.Event) (quit bool, handled bool) {
 			vi.less.Handle(ev)
 		case '%':
 			vi.cursor.MoveToMatchingRune()
+		case '*':
+			vi.cursor.Search(vi.cursor.Word())
 		default:
 			switch ev.Key {
 			case term.KeyCtrlR:

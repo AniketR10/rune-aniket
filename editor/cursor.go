@@ -1173,3 +1173,8 @@ func (c *Cursor) MoveToPrevLocation(ID string) bool {
 	return c.movePastCursor(l, (LocationList).Prev,
 		(LocationList).Next, isPastCursor)
 }
+
+// Word returns the word under the cursor or empty if it's not a word.
+func (c *Cursor) Word() string {
+	return c.scroll.WordAt(c.cursorAtScroll())
+}
