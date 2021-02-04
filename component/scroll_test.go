@@ -33,6 +33,10 @@ func TestScrollNew(t *testing.T) {
 }
 
 func TestScrollWordAt(t *testing.T) {
+	var fortune = `Love in your heart wasn't put there to stay.
+Love isn't love 'til you give it_away.
+		-- Oscar Hammerstein ⌘⌘
+`
 	scroll := newScroll(4, false, 100, 100)
 	_, err := scroll.Buffer().ReadFrom(strings.NewReader(fortune))
 	require.NoError(t, err)
@@ -54,6 +58,7 @@ func TestScrollWordAt(t *testing.T) {
 		{term.Coordinates{X: 999}, ""},
 		{term.Coordinates{X: -1}, ""},
 		{term.Coordinates{Y: 5}, ""},
+		{term.Coordinates{Y: 1, X: 32}, "it_away"},
 	}
 
 	for _, tcase := range tsuite {

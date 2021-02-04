@@ -391,7 +391,7 @@ func (s *Scroll) Draw(writer term.Writer) {
 func (s *Scroll) WordAt(pos term.Coordinates) string {
 	return s.tokenAt(pos, func(c rune) bool {
 		return (c >= 'A' && c <= 'Z') ||
-			(c >= 'a' && c <= 'z')
+			(c >= 'a' && c <= 'z') || c == '_'
 	})
 }
 
