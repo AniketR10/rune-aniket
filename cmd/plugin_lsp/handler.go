@@ -33,12 +33,12 @@ import (
 )
 
 const (
-	rpcTimeout            = 10 * time.Second
-	connectTimeout        = 10 * time.Second
-	disconnectTimeout     = 1 * time.Second
-	firstFileVersion      = 1
-	commandNextDiagnostic = "lspNextDiagnostic"
-	commandPrevDiagnostic = "lspPrevDiagnostic"
+	defaultRpcTimeout        = 10 * time.Second
+	defaultConnectTimeout    = 10 * time.Second
+	defaultDisconnectTimeout = 1 * time.Second
+	firstFileVersion         = 1
+	commandNextDiagnostic    = "lspNextDiagnostic"
+	commandPrevDiagnostic    = "lspPrevDiagnostic"
 )
 
 var (
@@ -102,16 +102,20 @@ type execServer struct {
 }
 
 type lspEditorHandler struct {
-	mu                   sync.Mutex
-	ed                   editor.Editor
-	protocol             *protocol.InitializeResult
-	files                map[span.URI]*file
+	mu sync.Mutex
+
+	ed editor.Editor
+
 	semanticTypesAttr    map[string]term.Attributes
 	diagnosticAttr       map[protocol.DiagnosticSeverity]term.Attributes
 	semanticTokensListID string
 	diagnosticListID     string
-	pending              map[span.URI][]protocol.Diagnostic
+	rpcTimeout           time.Duration
+	connectTimeout       time.Duration
+	disconnectTimeout    time.Duration
 
+	files   map[span.URI]*file
+	pending map[span.URI][]protocol.Diagnostic
 	servers map[string]execServer
 }
 
@@ -182,7 +186,7 @@ func initializeConnection(ret *lspEditorHandler, conn net.Conn) (
 	protocol.Server, *protocol.InitializeResult, error,
 ) {
 	ctx := context.Background()
-	ctx, cancelFn := context.WithTimeout(ctx, connectTimeout)
+	ctx, cancelFn := context.WithTimeout(ctx, ret.connectTimeout)
 	defer cancelFn()
 
 	cwd, err := os.Getwd()
@@ -429,6 +433,27 @@ func convertRange(
 	return
 }
 
+func getDuration(
+	pconfig plugin.Config, key string, def time.Duration,
+) (time.Duration, error) {
+	durStr, err := pconfig.GetString(key)
+	if err != nil {
+		if err != plugin.ErrNotFound {
+			err = fmt.Errorf("Error getting '%s' from plugin config: %v", key, err)
+			return 0, err
+		}
+		return def, nil
+	}
+
+	duration, err := time.ParseDuration(durStr)
+	if err != nil {
+		err = fmt.Errorf("Error parsing duration '%s' from plugin config: %v", key, err)
+		return 0, err
+	}
+
+	return duration, nil
+}
+
 func newLspHandler(ed editor.Editor, pconfig plugin.Config) (*lspEditorHandler, error) {
 	ret := new(lspEditorHandler)
 	ret.ed = ed
@@ -467,6 +492,24 @@ func newLspHandler(ed editor.Editor, pconfig plugin.Config) (*lspEditorHandler, 
 			return nil, err
 		}
 		ret.diagnosticListID = defaultDiagnosticListID
+	}
+
+	ret.connectTimeout, err = getDuration(pconfig,
+		"connect_timeout", defaultConnectTimeout)
+	if err != nil {
+		return nil, err
+	}
+
+	ret.disconnectTimeout, err = getDuration(pconfig,
+		"disconnect_timeout", defaultDisconnectTimeout)
+	if err != nil {
+		return nil, err
+	}
+
+	ret.rpcTimeout, err = getDuration(pconfig,
+		"rpc_timeout", defaultRpcTimeout)
+	if err != nil {
+		return nil, err
 	}
 
 	return ret, nil
@@ -771,7 +814,7 @@ func (h *lspEditorHandler) getCells(f *file) (cells [][]term.Cell) {
 
 func (h *lspEditorHandler) handleFileFlush(ev editor.Event) {
 	ctx := context.Background()
-	ctx, cancelFn := context.WithTimeout(ctx, rpcTimeout)
+	ctx, cancelFn := context.WithTimeout(ctx, h.rpcTimeout)
 	defer cancelFn()
 
 	f, ok := h.getFileWithName(ev.ResourceName)
@@ -791,7 +834,7 @@ func (h *lspEditorHandler) handleFileFlush(ev editor.Event) {
 
 func (h *lspEditorHandler) handleFileInsert(ev editor.Event) {
 	ctx := context.Background()
-	ctx, cancelFn := context.WithTimeout(ctx, rpcTimeout)
+	ctx, cancelFn := context.WithTimeout(ctx, h.rpcTimeout)
 	defer cancelFn()
 	f, ok := h.getFileWithName(ev.ResourceName)
 	if !ok {
@@ -816,7 +859,7 @@ func (h *lspEditorHandler) handleFileInsert(ev editor.Event) {
 
 func (h *lspEditorHandler) handleFileDelete(ev editor.Event) {
 	ctx := context.Background()
-	ctx, cancelFn := context.WithTimeout(ctx, rpcTimeout)
+	ctx, cancelFn := context.WithTimeout(ctx, h.rpcTimeout)
 	defer cancelFn()
 	f, ok := h.getFileWithName(ev.ResourceName)
 	if !ok {
@@ -841,7 +884,7 @@ func (h *lspEditorHandler) handleFileDelete(ev editor.Event) {
 
 func (h *lspEditorHandler) handleFileOpen(ev editor.Event) {
 	ctx := context.Background()
-	ctx, cancelFn := context.WithTimeout(ctx, rpcTimeout)
+	ctx, cancelFn := context.WithTimeout(ctx, h.rpcTimeout)
 	defer cancelFn()
 
 	f := h.newFile(ev.Resource, ev.ResourceName, ev.Content)
@@ -903,7 +946,7 @@ func (h *lspEditorHandler) sendDidClose(
 
 func (h *lspEditorHandler) handleFileClose(ev editor.Event) {
 	ctx := context.Background()
-	ctx, cancelFn := context.WithTimeout(ctx, rpcTimeout)
+	ctx, cancelFn := context.WithTimeout(ctx, h.rpcTimeout)
 	defer cancelFn()
 	f, ok := h.removeFile(ev.ResourceName)
 	if !ok {
@@ -1066,7 +1109,7 @@ func (h *lspEditorHandler) Close() error {
 		if server.cmd.Process == nil {
 			continue
 		}
-		ctx, cancel := context.WithTimeout(context.Background(), disconnectTimeout)
+		ctx, cancel := context.WithTimeout(context.Background(), h.disconnectTimeout)
 
 		h.mu.Unlock()
 		err := server.srv.Shutdown(ctx)
