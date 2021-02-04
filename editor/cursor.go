@@ -925,7 +925,7 @@ func (c *Cursor) ShiftLineRight() {
 	cursor := c.cursorAtScroll()
 	n := c.buf.ShiftRowRight(cursor.Y)
 	cursor.X += n
-	c.setCursor(cursor)
+	c.setCursor(c.scrollToWindowCoordinates(cursor))
 }
 
 // ShiftLineLeft shifts the current cursor's line one tab to the left. It returns
@@ -940,7 +940,7 @@ func (c *Cursor) ShiftLineLeft() bool {
 	if cursor.X < 0 {
 		cursor.X = 0
 	}
-	c.setCursor(cursor)
+	c.setCursor(c.scrollToWindowCoordinates(cursor))
 	return true
 }
 

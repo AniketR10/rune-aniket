@@ -998,7 +998,7 @@ func TestCursorSkipNulls(t *testing.T) {
 }
 
 func TestCursorShiftLine(t *testing.T) {
-	c := setupCursorContent(t, 10, 10, " blabla\nbleble")
+	c := setupCursorContent(t, 10, 1, " blabla\nbleble")
 	assert.True(t, c.ShiftLineLeft())
 	assert.False(t, c.ShiftLineLeft())
 	assert.Equal(t, term.Coordinates{}, c.cursor)
@@ -1011,6 +1011,11 @@ func TestCursorShiftLine(t *testing.T) {
 	assert.Equal(t, term.Coordinates{X: 4}, c.cursor)
 	assert.True(t, c.ShiftLineLeft())
 	assert.Equal(t, term.Coordinates{}, c.cursor)
+	assert.True(t, c.MoveDown())
+	c.ShiftLineRight()
+	assert.Equal(t, term.Coordinates{Y: 0, X: 4}, c.cursor)
+	assert.True(t, c.ShiftLineLeft())
+	assert.Equal(t, term.Coordinates{Y: 0, X: 0}, c.cursor)
 }
 
 func TestCursorShiftSelection(t *testing.T) {
