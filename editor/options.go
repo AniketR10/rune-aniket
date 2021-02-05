@@ -154,7 +154,7 @@ func WithCommandKeyBinding(ev term.Event, cmd string) Option {
 		if ev.Type != term.EventKey {
 			panic("invalid command key binding")
 		}
-		sum := term.Event{Type: term.EventKey, Ch: ev.Ch, Key: ev.Key}
+		sum := term.Event{Type: term.EventKey, Mod: ev.Mod, Ch: ev.Ch, Key: ev.Key}
 		cfg.CommandKeyBindings[sum] = cmd
 	}
 }
