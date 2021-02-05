@@ -9,6 +9,7 @@ import (
 	"github.com/ernestrc/go-tui/browser"
 	"github.com/ernestrc/go-tui/cell"
 	"github.com/ernestrc/go-tui/term"
+	log "github.com/sirupsen/logrus"
 )
 
 type flusherCloser interface {
@@ -120,9 +121,9 @@ func (c *Component) initConstructors() {
 	}
 }
 
-func (c *Component) tryLog(msg string, args ...interface{}) {
+func (c *Component) tryLog(level log.Level, msg string, args ...interface{}) {
 	if c.config.Logger != nil {
-		c.config.Logger.Debugf(msg, args...)
+		c.config.Logger.Logf(level, msg, args...)
 	}
 }
 
@@ -223,7 +224,6 @@ func (c *Component) OpenFileTab(
 		if err == ErrFileAlreadyOpen {
 			return c.setFocusToTab(filename)
 		}
-		c.tryLog("error opening new file buffer: %v", err)
 		return nil, err
 	}
 
@@ -253,6 +253,7 @@ func (c *Component) KeyMapping(ev term.Event) (term.Event, string, bool) {
 		mev = ev
 	}
 	cmd, _ := c.config.CommandKeyBindings[mev]
+	c.tryLog(log.TraceLevel, "KeyMapping(%#v): %#v, %s", ev, mev, cmd)
 	return mev, cmd, ok
 }
 
@@ -508,7 +509,7 @@ func (c *Component) Close() error {
 
 	err := c.comp.Close()
 	if err != nil {
-		c.tryLog("browser.Component.Close error: %v", err)
+		c.tryLog(log.ErrorLevel, "browser.Component.Close error: %v", err)
 	}
 	return err
 }
