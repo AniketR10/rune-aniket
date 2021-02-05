@@ -1,6 +1,7 @@
 package util
 
 import (
+	"fmt"
 	"io"
 
 	"github.com/ernestrc/go-tui"
@@ -13,9 +14,7 @@ import (
 
 var requiredPermissions = []plugin.Permission{
 	plugin.PermissionBrowserWindowManager,
-	plugin.PermissionBrowserResourceOpener,
 	plugin.PermissionBrowserEventSubscriber,
-	plugin.PermissionBrowserEventPublisher,
 }
 
 type keySplitHandler struct {
@@ -23,10 +22,9 @@ type keySplitHandler struct {
 
 	broker  proto.MuxBroker
 	wm      browser.WindowManager
-	f       browser.ResourceOpener
 	s       browser.EventSubscriber
-	p       browser.EventPublisher
 	pconfig plugin.Config
+	grants  []plugin.Grant
 	h       tui.Handler
 	win     browser.Window
 }
@@ -88,7 +86,11 @@ func (t *keySplitHandler) handleKeyEvent() {
 		return
 	}
 
-	t.h = t.config.Handler(t.f, t.p, focus, t.pconfig)
+	t.h, err = t.config.Handler(t.grants, t.broker, focus, t.pconfig)
+	if err != nil {
+		log.Errorf("error building window handler: %v", err)
+		return
+	}
 	h := browser.CallbackHandler(t.h, t.exitClean)
 	win, err := t.config.Split(t.wm, h)
 	if err != nil {
@@ -113,18 +115,14 @@ func (t *keySplitHandler) subscribeToEvents() error {
 	return nil
 }
 
-func (t *keySplitHandler) PermissionGranted(grant []plugin.Grant) {
+func (t *keySplitHandler) PermissionGranted(grants []plugin.Grant) {
 	var err error
-	log.Infof("permissions granted: %+v", grant)
+	log.Infof("permissions granted: %+v", grants)
 
-	for _, g := range grant {
+	for _, g := range grants {
 		switch g.Permission {
 		case plugin.PermissionBrowserWindowManager:
 			t.wm, err = plugin.WindowManager(g.Token, t.broker)
-		case plugin.PermissionBrowserResourceOpener:
-			t.f, err = plugin.ResourceOpener(g.Token, t.broker)
-		case plugin.PermissionBrowserEventPublisher:
-			t.p, err = plugin.EventPublisher(g.Token, t.broker)
 		case plugin.PermissionBrowserEventSubscriber:
 			t.s, err = plugin.EventSubscriber(g.Token, t.broker)
 			if err == nil {
@@ -135,6 +133,8 @@ func (t *keySplitHandler) PermissionGranted(grant []plugin.Grant) {
 			log.Errorf("PermissionGranted: %+v: %s", g.Permission, err)
 		}
 	}
+
+	t.grants = grants
 }
 
 func (t *keySplitHandler) PermissionDenied(perms []plugin.Permission) {
@@ -171,8 +171,11 @@ type KeySplitHandlerConfig struct {
 	// the window in focus when key event was fired.
 	// If returned Handler satisfies io.Closer, then Close will be called
 	// when split window is closed.
-	Handler func(r browser.ResourceOpener, e browser.EventPublisher,
-		focus browser.Window, config plugin.Config) tui.Handler
+	Handler func([]plugin.Grant, proto.MuxBroker, browser.Window,
+		plugin.Config) (tui.Handler, error)
+
+	// Permissions to be requested for Handler.
+	Permissions []plugin.Permission
 }
 
 // ServeKeySplitHandler serves a plugin.Grantee that opens a split window
@@ -182,7 +185,8 @@ type KeySplitHandlerConfig struct {
 // Note that this function never returns.
 func ServeKeySplitHandler(config KeySplitHandlerConfig) {
 	if config.Handler == nil || (config.Key == term.Event{}) || config.Split == nil {
-		panic("invalid key split handler configuration")
+		panic(fmt.Sprintf("invalid key split handler configuration: %#v", config))
 	}
-	plugin.Serve(&keySplitHandler{config: config}, requiredPermissions...)
+	perms := append(config.Permissions, requiredPermissions...)
+	plugin.Serve(&keySplitHandler{config: config}, perms...)
 }

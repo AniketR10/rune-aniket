@@ -12,6 +12,7 @@ import (
 	"github.com/ernestrc/go-tui/browser"
 	"github.com/ernestrc/go-tui/component/search"
 	"github.com/ernestrc/go-tui/plugin"
+	"github.com/ernestrc/go-tui/proto"
 	"github.com/ernestrc/go-tui/term"
 	log "github.com/sirupsen/logrus"
 )
@@ -24,6 +25,7 @@ const (
 type fuzzyFinderHandler struct {
 	f            browser.ResourceOpener
 	p            browser.EventPublisher
+	m            browser.Messenger
 	invokeWindow browser.Window
 	mu           sync.Mutex
 	cmdStr       string
@@ -81,6 +83,10 @@ func (h *fuzzyFinderHandler) readCommand(src io.Reader) {
 func (h *fuzzyFinderHandler) openFile(file string) {
 	buf, err := h.f.Open(file)
 	if err != nil {
+		merr := h.m.SetMessage("Open: %v", err)
+		if merr != nil {
+			log.Errorf("error setting message: %v", merr)
+		}
 		log.Errorf("error opening new file buffer: %v", err)
 		return
 	}
@@ -124,14 +130,35 @@ func (h *fuzzyFinderHandler) scanForFiles() {
 	h.exec = nil
 }
 
+func (h *fuzzyFinderHandler) initGrants(
+	broker proto.MuxBroker, grants []plugin.Grant,
+) (err error) {
+	for _, grant := range grants {
+		switch grant.Permission {
+		case plugin.PermissionBrowserMessenger:
+			h.m, err = plugin.Messenger(grant.Token, broker)
+		case plugin.PermissionBrowserEventPublisher:
+			h.p, err = plugin.EventPublisher(grant.Token, broker)
+		case plugin.PermissionBrowserResourceOpener:
+			h.f, err = plugin.ResourceOpener(grant.Token, broker)
+		}
+		if err != nil {
+			return
+		}
+	}
+	return
+}
+
 func newFuzzyFinderHandler(
-	f browser.ResourceOpener, p browser.EventPublisher,
-	invokeWindow browser.Window,
-	config plugin.Config,
-) tui.Handler {
+	grants []plugin.Grant, broker proto.MuxBroker,
+	invokeWindow browser.Window, config plugin.Config,
+) (tui.Handler, error) {
 	h := new(fuzzyFinderHandler)
-	h.f = f
-	h.p = p
+	err := h.initGrants(broker, grants)
+	if err != nil {
+		return nil, err
+	}
+
 	h.invokeWindow = invokeWindow
 
 	cmdStr, err := config.GetString("command")
@@ -152,7 +179,7 @@ func newFuzzyFinderHandler(
 
 	go h.scanForFiles()
 
-	return h
+	return h, nil
 }
 
 func (h *fuzzyFinderHandler) getListConfig(config plugin.Config) search.ListConfig {

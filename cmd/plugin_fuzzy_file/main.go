@@ -25,5 +25,10 @@ func main() {
 		Split:   browser.WindowManager.SplitHorizontalBelow,
 		Handler: newFuzzyFinderHandler,
 		Key:     term.Event{Type: term.EventKey, Key: term.KeyCtrlP},
+		Permissions: []plugin.Permission{
+			plugin.PermissionBrowserResourceOpener,
+			plugin.PermissionBrowserEventPublisher,
+			plugin.PermissionBrowserMessenger,
+		},
 	})
 }

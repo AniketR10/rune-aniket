@@ -9,6 +9,7 @@ import (
 	"github.com/ernestrc/go-tui/browser"
 	"github.com/ernestrc/go-tui/plugin"
 	plugutil "github.com/ernestrc/go-tui/plugin/util"
+	"github.com/ernestrc/go-tui/proto"
 	"github.com/ernestrc/go-tui/term"
 	log "github.com/sirupsen/logrus"
 )
@@ -24,10 +25,9 @@ func main() {
 
 	plugutil.ServeKeySplitHandler(plugutil.KeySplitHandlerConfig{
 		Split: browser.WindowManager.SplitVerticalRight,
-		Handler: func(f browser.ResourceOpener, p browser.EventPublisher,
-			invokeWindow browser.Window, config plugin.Config,
-		) tui.Handler {
-			return new(colorPaletteHandler)
+		Handler: func(grants []plugin.Grant, broker proto.MuxBroker,
+			invokeWindow browser.Window, config plugin.Config) (tui.Handler, error) {
+			return new(colorPaletteHandler), nil
 		},
 		Key: term.Event{Type: term.EventKey, Key: term.KeyCtrlY},
 	})

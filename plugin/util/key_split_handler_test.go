@@ -176,9 +176,9 @@ func TestKeySplitHandlerEmpty(t *testing.T) {
 		defer ctrl.Finish()
 
 		keyEvent := term.Event{Type: term.EventKey, Ch: 'a'}
-		handlerFn := func(r browser.ResourceOpener, e browser.EventPublisher,
-			focus browser.Window, config plugin.Config) tui.Handler {
-			return handler.NewTestHandler()
+		handlerFn := func(grants []plugin.Grant, broker proto.MuxBroker,
+			focus browser.Window, config plugin.Config) (tui.Handler, error) {
+			return handler.NewTestHandler(), nil
 		}
 		config := KeySplitHandlerConfig{
 			Key:     keyEvent,
