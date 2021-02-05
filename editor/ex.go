@@ -101,17 +101,16 @@ func (e *Ex) runSingleCommand(cmd string) (quit bool, err error) {
 	return
 }
 
-func (e *Ex) runCommand() (quit bool, err error) {
-	cmd := e.commandBuf.String()
-	cmds := strings.Split(cmd, " ")
-	if len(cmds) == 1 {
-		return e.runSingleCommand(cmds[0])
+func (e *Ex) runCommand(cmd string) (quit bool, err error) {
+	parts := strings.Split(cmd, " ")
+	if len(parts) == 1 {
+		return e.runSingleCommand(parts[0])
 	}
 
-	switch cmds[0] {
+	switch parts[0] {
 	case "e":
 		var h browser.Handler
-		h, err = e.comp.OpenFileTab(cmds[1], "")
+		h, err = e.comp.OpenFileTab(parts[1], "")
 		if err != nil {
 			return
 		}
@@ -132,7 +131,7 @@ func (e *Ex) handleCommand(ev term.Event) (quit, handled bool) {
 	switch ev.Key {
 	case term.KeyEnter:
 		var err error
-		quit, err = e.runCommand()
+		quit, err = e.runCommand(e.commandBuf.String())
 		e.setNormalMode()
 		if err != nil {
 			e.setError(err)
@@ -181,7 +180,16 @@ func (e *Ex) handleProxy(ev term.Event) (
 	}
 
 	prev := ev
-	ev, _ = e.comp.KeyMapping(ev)
+	ev, cmd, _ := e.comp.KeyMapping(ev)
+	if cmd != "" {
+		// command mappings take precedence over ev subscriptions
+		// or other ex key mappings
+		quit, err := e.runCommand(cmd)
+		if err != nil {
+			e.setError(err)
+		}
+		return quit, true
+	}
 
 	// client subscriptions take precedence over ex key mappings
 	handled = e.comp.Publish(ev)

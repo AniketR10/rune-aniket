@@ -244,13 +244,16 @@ func (c *Component) Open(file string) (browser.Handler, error) {
 
 // KeyMapping returns a key mapping for ev and true
 // or the original ev and false if there's
-// no mapping. Mappings are created via MergeKeyMap.
-func (c *Component) KeyMapping(ev term.Event) (term.Event, bool) {
+// no mapping. It also returns any command that was mapped
+// to the return mapping (or the original event, if there's no event mapping).
+// Mappings are created via MergeKeyMap.
+func (c *Component) KeyMapping(ev term.Event) (term.Event, string, bool) {
 	mev, ok := c.keymap[ev]
 	if !ok {
 		mev = ev
 	}
-	return mev, ok
+	cmd, _ := c.config.CommandKeyBindings[mev]
+	return mev, cmd, ok
 }
 
 // MergeKeyMap takes the given keymap and merges it with the Browser's keymap

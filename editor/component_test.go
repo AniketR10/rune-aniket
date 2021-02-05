@@ -80,7 +80,7 @@ func TestComponentKeyMapper(t *testing.T) {
 		c, err := newTestComponent(&testEditor{})
 		require.NoError(t, err)
 
-		ev, ok := c.KeyMapping(keya)
+		ev, _, ok := c.KeyMapping(keya)
 		assert.False(t, ok)
 		assert.Equal(t, keya, ev)
 	})
@@ -111,9 +111,26 @@ func TestComponentKeyMapper(t *testing.T) {
 		err = c.MergeKeyMap(m)
 		require.NoError(t, err)
 
-		ev, ok := c.KeyMapping(keya)
+		ev, _, ok := c.KeyMapping(keya)
 		assert.True(t, ok)
 		assert.Equal(t, keyb, ev)
+	})
+
+	t.Run("KeyMapping returns mapped command", func(t *testing.T) {
+		c, err := newTestComponent(&testEditor{})
+		require.NoError(t, err)
+		c.config.CommandKeyBindings[keyb] = "myCmd"
+
+		m := map[term.Event]term.Event{
+			keya: keyb,
+		}
+		err = c.MergeKeyMap(m)
+		require.NoError(t, err)
+
+		ev, cmd, ok := c.KeyMapping(keya)
+		assert.True(t, ok)
+		assert.Equal(t, keyb, ev)
+		assert.Equal(t, "myCmd", cmd)
 	})
 }
 

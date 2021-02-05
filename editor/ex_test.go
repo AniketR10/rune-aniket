@@ -319,7 +319,10 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 	// testutil.TestHandlerSequence maps ':' characters to the following event
 	// this is to work around ex's assumptions on underlying handler.
 	commandEvent := term.Event{Type: term.EventKey, Key: term.KeyCtrlBackslash}
-	bh, b, err := constructor(&testEditor{}, WithCommandEvent(commandEvent))
+	bh, b, err := constructor(&testEditor{},
+		WithCommandEvent(commandEvent),
+		WithCommandKeyBinding(term.Event{Type: term.EventKey, Ch: '4'}, "close"),
+	)
 	require.NoError(t, err)
 
 	testutil.TestHandlerSequence(t, bh, 20, 10, cases)
@@ -406,7 +409,8 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 	require.NoError(t, focus.Close())
 
 	cases = []testutil.HandlerSequenceTestCase{
-		{":close>)))",
+		// test CommandKeyBindings
+		{"4)))",
 			`┌──────────────────┐
 │cabin.go  other.go│
 ├──────────────────┤

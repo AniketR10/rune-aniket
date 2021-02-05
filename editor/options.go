@@ -9,11 +9,12 @@ import (
 
 // Config holds configuration for an browser.Component.
 type Config struct {
-	Tabspaces        int
-	SwapDir          string
-	Filepaths        []string
-	RecoveryFilepath string
-	CommandEvent     term.Event
+	Tabspaces          int
+	SwapDir            string
+	Filepaths          []string
+	RecoveryFilepath   string
+	CommandEvent       term.Event
+	CommandKeyBindings map[term.Event]string
 
 	browser.Config
 }
@@ -21,12 +22,13 @@ type Config struct {
 // DefaultConfig returns the default Config.
 func DefaultConfig() Config {
 	return Config{
-		Tabspaces:        4,
-		SwapDir:          "",
-		Filepaths:        nil,
-		RecoveryFilepath: "",
-		CommandEvent:     term.Event{Ch: ':', Type: term.EventKey},
-		Config:           browser.DefaultConfig(),
+		Tabspaces:          4,
+		SwapDir:            "",
+		Filepaths:          nil,
+		RecoveryFilepath:   "",
+		CommandEvent:       term.Event{Ch: ':', Type: term.EventKey},
+		Config:             browser.DefaultConfig(),
+		CommandKeyBindings: make(map[term.Event]string),
 	}
 }
 
@@ -143,5 +145,16 @@ func WithStartTextAttr(attr term.Attributes) Option {
 func WithStartTextBackgroundAttr(attr term.Attributes) Option {
 	return func(cfg *Config) {
 		cfg.StartTextBackgroundAttr = attr
+	}
+}
+
+// WithCommandKeyBinding maps key to issue cmd.
+func WithCommandKeyBinding(ev term.Event, cmd string) Option {
+	return func(cfg *Config) {
+		if ev.Type != term.EventKey {
+			panic("invalid command key binding")
+		}
+		sum := term.Event{Type: term.EventKey, Ch: ev.Ch, Key: ev.Key}
+		cfg.CommandKeyBindings[sum] = cmd
 	}
 }
