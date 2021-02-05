@@ -27,6 +27,9 @@ func TestComponentCloseWindow(t *testing.T) {
 	t.Run("closing the last window returns error", func(t *testing.T) {
 		c := NewComponent(Config{})
 		assert.Error(t, c.Focus().Close())
+
+		// makes sure that window list is not corrupted
+		c.RemoveAllTabs()
 	})
 
 	for _, _tcase := range splitSuite {

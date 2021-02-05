@@ -110,7 +110,10 @@ func (w *browserWindow) Close() error {
 	w.parent = nil
 
 	err := parent.closeWindow(w)
-	if onClose != nil {
+	if err != nil {
+		w.onClose = onClose
+		w.parent = parent
+	} else if onClose != nil {
 		onClose()
 	}
 
@@ -133,13 +136,13 @@ func (c *Component) closeWindow(win *browserWindow) error {
 		return nil
 	}
 
-	delete(c.windows, win.id())
-
 	content := win.win.Content().(Handler)
 	err := win.win.Close()
 	if err != nil {
 		return err
 	}
+
+	delete(c.windows, win.id())
 
 	reason := fmt.Sprintf("Close called on window: %p", win)
 	c.onUnmount(content, reason)
