@@ -3,15 +3,16 @@
 package term
 
 import (
-	"sync/atomic"
+	"sync"
 
 	"github.com/nsf/termbox-go"
 )
 
 var (
-	quit          chan struct{}
-	events        chan Event
-	interruptNext int32
+	quit      chan struct{}
+	events    chan Event
+	interrupt int32
+	mu        sync.Mutex
 
 	defaultAttr = Attributes{Fg: ColorDefault, Bg: ColorDefault}
 
@@ -130,11 +131,14 @@ func Size() (width int, height int) {
 // PollEvent waits for an event and returns it.
 // This is a blocking function call.
 func PollEvent() (ev Event) {
-	i := atomic.SwapInt32(&interruptNext, 0)
-	if i != 0 {
+	mu.Lock()
+	if interrupt != 0 {
+		interrupt = 0
 		ev = Event{Type: EventInterrupt}
+		mu.Unlock()
 		return
 	}
+	mu.Unlock()
 	ev = <-events
 	return
 }
@@ -150,7 +154,13 @@ func Close() {
 // This is useful when the root handler's has been updated by another goroutine,
 // other than the main event loop goroutine.
 func Interrupt() {
-	atomic.AddInt32(&interruptNext, 1)
+	mu.Lock()
+	select {
+	case events <- Event{Type: EventInterrupt}:
+	default:
+		interrupt++
+	}
+	mu.Unlock()
 }
 
 // SendNoneEvent sends a term.EventNone to the event poller and
