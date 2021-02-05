@@ -90,6 +90,10 @@ func (i *IDE) init(cfgfilename, recfilename string, filenames ...string) error {
 		editor.WithStartTextBackgroundAttr(i.ideConfig.startTextBackgroundAttr()),
 	)
 
+	for ev, cmd := range i.ideConfig.commandKeyMappings() {
+		opts = append(opts, editor.WithCommandKeyBinding(ev, cmd))
+	}
+
 	if i.ideConfig.browserSwapDir() != "" {
 		opts = append(opts, editor.WithSwapDir(i.ideConfig.browserSwapDir()))
 	}

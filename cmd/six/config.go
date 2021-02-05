@@ -63,6 +63,36 @@ func initDefaultConfig(c *ideConfig) {
 	initConfig(c, cfg)
 }
 
+func (c ideConfig) commandKeyMappings() map[term.Event]string {
+	ret := make(map[term.Event]string)
+	if c.cfg == nil {
+		return ret
+	}
+	m, err := plugin.MapConfig(c.cfg).GetMap("command_key_bindings")
+	if err != nil {
+		if err != plugin.ErrNotFound {
+			c.errors["command_key_bindings"] = err
+		}
+		return ret
+	}
+
+	for k, v := range m {
+		ev, err := term.ParseKey(k)
+		if err != nil {
+			c.errors["command_key_bindings."+k] = err
+			continue
+		}
+		strValue, ok := v.(string)
+		if !ok {
+			c.errors["command_key_bindings."+k] = errors.New("expected string found unknown type")
+			continue
+		}
+		ret[ev] = strValue
+	}
+
+	return ret
+}
+
 func (c ideConfig) windowManager() (plugin.Config, bool) {
 	b, ok := c.browser()
 	if !ok {
