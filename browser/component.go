@@ -565,6 +565,7 @@ func (c *Component) SetMessage(msg string, args ...interface{}) {
 	if c.config.Logger != nil {
 		c.config.Logger.Infof("Message: %s", msg)
 	}
+	c.logBuf.Reset()
 	c.logBuf.WriteString(msg)
 	c.logBufDraw = logBufDrawTimes
 }

@@ -437,3 +437,15 @@ func TestComponentMultipleWindow(t *testing.T) {
 
 	testutil.TestComponent(t, c, w, tests)
 }
+
+func TestComponentSetMessage(t *testing.T) {
+	cfg := DefaultConfig()
+	c := NewComponent(cfg)
+	c.Resize(20, 8)
+
+	c.SetMessage("wasup: %s", "hola")
+	c.SetMessage("wasup: %s", "hola")
+
+	expected := "wasup: hola"
+	assert.Equal(t, expected, c.logBuf.String())
+}
