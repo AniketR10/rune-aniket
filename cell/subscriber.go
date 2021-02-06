@@ -17,7 +17,6 @@ type Subscriber interface {
 	OnDidInsert(from, to term.Coordinates)
 	OnWillDelete(from, to term.Coordinates)
 	OnDidDelete(start, end term.Coordinates, str string)
-	Unsubscribe()
 }
 
 // Publisher is the interface that wraps the Subscribe method.

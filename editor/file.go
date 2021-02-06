@@ -336,14 +336,6 @@ func (f *fileBuf) OnDidDelete(start, end term.Coordinates, str string) {
 	return
 }
 
-func (f *fileBuf) Unsubscribe() {
-	if f.reader == nil {
-		return
-	}
-	f.reader.Unsubscribe(f)
-	f.reader = nil
-}
-
 func (f *FileBuffer) moveFile(sourcePath, destPath string) error {
 	err := f.renameFunc(sourcePath, destPath)
 	if err != nil {

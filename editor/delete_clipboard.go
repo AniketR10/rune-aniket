@@ -32,11 +32,3 @@ func (c *delClip) OnDidDelete(start, end term.Coordinates, str string) {
 	c.clipboard.Set(Paste{Data: str})
 	return
 }
-
-func (c *delClip) Unsubscribe() {
-	if c.pub == nil {
-		return
-	}
-	c.pub.Unsubscribe(c)
-	c.pub = nil
-}

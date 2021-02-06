@@ -190,9 +190,6 @@ func (s *cellSubscriber) OnDidDelete(start, end term.Coordinates, str string) {
 	})
 }
 
-func (s *cellSubscriber) Unsubscribe() {
-}
-
 // CellSubscriber returns a cell.Subscriber which forwards editor Insert/Delete to evHandler.
 func CellSubscriber(name string, h Handler, evHandler EventHandler) cell.Subscriber {
 	return &cellSubscriber{name: name, h: h, eh: evHandler}

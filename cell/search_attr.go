@@ -7,7 +7,6 @@ import (
 type attrSearcher struct {
 	sel  selector
 	root Searcher
-	pub  PublisherReader
 	attr term.Attributes
 
 	text    string
@@ -17,7 +16,7 @@ type attrSearcher struct {
 // AttrSearcher returns a Searcher that sets/unsets the search results
 // cell attributes upon matching.
 func AttrSearcher(
-	s Searcher, r PublisherReader, attr term.Attributes,
+	s Searcher, r Reader, attr term.Attributes,
 ) SubscriberSearcher {
 
 	as := new(attrSearcher)
@@ -25,9 +24,6 @@ func AttrSearcher(
 	as.root = s
 	as.attr = attr
 	as.sel = selector{reader: r}
-	as.pub = r
-
-	r.Subscribe(as)
 
 	return as
 }
@@ -100,12 +96,4 @@ func (s *attrSearcher) Reset() {
 	s.matches = nil
 	s.text = ""
 	s.root.Reset()
-}
-
-func (s *attrSearcher) Unsubscribe() {
-	if s.pub == nil {
-		return
-	}
-	s.pub.Unsubscribe(s)
-	s.pub = nil
 }

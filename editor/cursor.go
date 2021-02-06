@@ -93,8 +93,6 @@ func (c *curSubscriber) OnWillDelete(from, to term.Coordinates) {
 
 func (c *curSubscriber) OnDidDelete(start, end term.Coordinates, str string) { /* nop */ }
 
-func (c *curSubscriber) Unsubscribe() {}
-
 // Cursor returns the current position of the cursor. It safisfies tui.Handler.Cursor.
 func (c *Cursor) Cursor() (term.Coordinates, bool) {
 	return c.cursor, true

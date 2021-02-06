@@ -24,6 +24,7 @@ func newAttrSearcher(t *testing.T, content string) (*Buffer, SubscriberSearcher)
 	s := AttrSearcher(searcher, buf, term.Attributes{Bg: term.ColorRed, Fg: term.ColorCyan})
 	_, err := buf.ReadFrom(strings.NewReader(content))
 	require.NoError(t, err)
+	buf.Subscribe(s)
 
 	return buf, s
 }
@@ -185,16 +186,5 @@ func TestAttrSearcher(t *testing.T) {
 			},
 		}
 		assert.Equal(t, expected, buf.RawCells())
-	})
-
-	t.Run("Unsubscribes upon calls to Unsubscribe", func(t *testing.T) {
-		buf, s := newAttrSearcher(t, "yo wasup")
-		require.Equal(t, 0, s.Search("oy"))
-		s.Unsubscribe()
-
-		buf.InsertString(term.Coordinates{}, "oy")
-
-		_, ok := s.NextResult()
-		require.False(t, ok)
 	})
 }
