@@ -27,7 +27,6 @@ type message struct {
 
 // Cursor is a helper structure which manages a cursor over a Scroll.
 type Cursor struct {
-	buf       *cell.Buffer
 	scroll    *component.Scroll
 	cursor    term.Coordinates
 	locs      map[string]LocationList
@@ -49,7 +48,10 @@ func NewCursor(scroll *component.Scroll) *Cursor {
 	return c
 }
 
-// Init initializes this cursor with the given scroll.
+// Init initializes this cursor with the given scroll and subscribes
+// to changes to the scroll's buffer. If buffer is swapped
+// via Scroll.SetBuffer, consider re-initializing this cursor with the
+// updated scroll, unless it's a temporary swap.
 // Note that this Cursor implementation does not support text wrap mode,
 // so scroll.Wrap should be false. Also, once initialized
 // this cursor MUST NOT be copied.
@@ -59,13 +61,12 @@ func (c *Cursor) Init(scroll *component.Scroll) {
 	}
 	c.cursor = term.Coordinates{}
 	c.scroll = scroll
-	c.buf = c.scroll.Buffer()
 	c.selection.mode = noSelection
 	c.subscriber.c = c
 	c.locs = make(map[string]LocationList)
 	c.messages = make(map[term.Coordinates][]message)
 
-	c.buf.Subscribe(&c.subscriber)
+	c.scroll.Buffer().Subscribe(&c.subscriber)
 }
 
 func (c *curSubscriber) clearAllLocations() {
@@ -98,6 +99,10 @@ func (c *Cursor) Cursor() (term.Coordinates, bool) {
 	return c.cursor, true
 }
 
+func (c *Cursor) buffer() *cell.Buffer {
+	return c.scroll.Buffer()
+}
+
 // MoveTo moves the cursor to pos.
 func (c *Cursor) MoveTo(pos term.Coordinates) term.Coordinates {
 	ret := c.cursor
@@ -118,12 +123,6 @@ func (c *Cursor) moveToScroll(pos term.Coordinates) {
 
 // note that pos is window coordinates, not scroll coordinates
 func (c *Cursor) setCursor(pos term.Coordinates) {
-	if pos.X < 0 || pos.Y < 0 ||
-		pos.X >= c.scroll.Width() || pos.Y >= c.scroll.Height() {
-		// FIXME scroll Resize is not captured
-		// panic(fmt.Sprintf("cursor out of bounds: %+v", pos))
-	}
-
 	c.cursor = pos
 
 	if c.selection.mode != noSelection {
@@ -195,12 +194,12 @@ func (c *Cursor) MoveStartLine() (ok bool) {
 // to the end of the line if required.
 func (c *Cursor) MoveEndLine() (ok bool) {
 	y := c.cursorAtScroll().Y
-	if y >= c.buf.Rows() {
+	if y >= c.buffer().Rows() {
 		c.setCursor(term.Coordinates{X: 0, Y: c.cursor.Y})
 		return
 	}
 
-	cols := c.buf.Columns(y)
+	cols := c.buffer().Columns(y)
 	width := c.scroll.Width()
 	if cols == 0 || width == 0 {
 		return
@@ -253,7 +252,7 @@ func (c *Cursor) MoveFirstLine() (ok bool) {
 // if required.
 func (c *Cursor) MoveLastLine() (ok bool) {
 	height := c.scroll.Height()
-	rows := c.buf.Rows()
+	rows := c.buffer().Rows()
 	if height == 0 || rows == 0 {
 		return
 	}
@@ -362,7 +361,7 @@ func (c *Cursor) cursorAtScroll() term.Coordinates {
 
 func (c *Cursor) cellAtCursor() (cell term.Cell, ok bool) {
 	cursorAtScroll := c.cursorAtScroll()
-	cells := c.buf.RawCells()
+	cells := c.buffer().RawCells()
 	if cursorAtScroll.Y >= len(cells) ||
 		cursorAtScroll.X >= len(cells[cursorAtScroll.Y]) {
 		return
@@ -551,36 +550,36 @@ func (c *Cursor) MoveToMatchingRune() bool {
 func (c *Cursor) InsertRowAbove() {
 	cursorAtScroll := c.cursorAtScroll()
 	if cursorAtScroll.Y == 0 {
-		c.buf.InsertRowAt(0)
+		c.buffer().InsertRowAt(0)
 		return
 	}
-	c.buf.InsertRowAt(cursorAtScroll.Y - 1)
+	c.buffer().InsertRowAt(cursorAtScroll.Y - 1)
 	c.MoveUp()
 }
 
 // InsertRowBelow inserts a row below the current row and moves the cursor down.
 func (c *Cursor) InsertRowBelow() {
 	cursorAtScroll := c.cursorAtScroll()
-	c.buf.InsertRowAt(cursorAtScroll.Y + 1)
+	c.buffer().InsertRowAt(cursorAtScroll.Y + 1)
 	c.MoveDown()
 }
 
 // Insert inserts rune at the current cursor's position.
 func (c *Cursor) Insert(r rune) {
-	pos := c.buf.Insert(c.cursorAtScroll(), r)
+	pos := c.buffer().Insert(c.cursorAtScroll(), r)
 	c.setCursor(c.scrollToWindowCoordinates(pos))
 }
 
 // InsertString inserts str at the current cursor's position.
 func (c *Cursor) InsertString(str string) {
-	_, until := c.buf.InsertString(c.cursorAtScroll(), str)
+	_, until := c.buffer().InsertString(c.cursorAtScroll(), str)
 	c.setCursor(c.scrollToWindowCoordinates(until))
 }
 
 // Delete deletes the cell at the current cursor position.
 func (c *Cursor) Delete() (ok bool) {
 	var pos term.Coordinates
-	pos, ok = c.buf.DeleteCell(c.cursorAtScroll())
+	pos, ok = c.buffer().DeleteCell(c.cursorAtScroll())
 	if ok {
 		c.setCursor(c.scrollToWindowCoordinates(pos))
 	}
@@ -604,7 +603,7 @@ func (c *Cursor) Backspace() (ok bool) {
 // Conflate removes the new line character at the end of the current line.
 func (c *Cursor) Conflate() (ok bool) {
 	pos := c.cursorAtScroll()
-	if pos.Y >= c.buf.Rows() {
+	if pos.Y >= c.buffer().Rows() {
 		ok = false
 		return
 	}
@@ -612,9 +611,9 @@ func (c *Cursor) Conflate() (ok bool) {
 	ok = true
 
 	c.MoveEndLine()
-	length := c.buf.Columns(pos.Y)
+	length := c.buffer().Columns(pos.Y)
 	if length == 0 {
-		ok = c.buf.DeleteRow(pos.Y)
+		ok = c.buffer().DeleteRow(pos.Y)
 		if !ok {
 			panic(fmt.Sprintf("could not delete row at index: %d", pos.Y))
 		}
@@ -622,7 +621,7 @@ func (c *Cursor) Conflate() (ok bool) {
 	}
 
 	c.MoveRight()
-	c.buf.ConflateRow(pos.Y)
+	c.buffer().ConflateRow(pos.Y)
 	return
 }
 
@@ -683,11 +682,11 @@ func (c *Cursor) setSelection() {
 
 	switch c.selection.mode {
 	case standardSelection:
-		c.selection.cells = c.buf.Select(from, to)
+		c.selection.cells = c.buffer().Select(from, to)
 	case lineSelection:
-		c.selection.cells = c.buf.SelectLine(from, to)
+		c.selection.cells = c.buffer().SelectLine(from, to)
 	case blockSelection:
-		c.selection.cells = c.buf.SelectBlock(from, to)
+		c.selection.cells = c.buffer().SelectBlock(from, to)
 	}
 
 	invertAttr(c.selection.cells)
@@ -695,7 +694,8 @@ func (c *Cursor) setSelection() {
 
 func (c *Cursor) inBounds() (ok bool) {
 	pos := c.cursorAtScroll()
-	if pos.Y >= c.buf.Rows() || pos.X > c.buf.Columns(pos.Y) {
+	if pos.Y >= c.buffer().Rows() ||
+		pos.X > c.buffer().Columns(pos.Y) {
 		return
 	}
 	ok = true
@@ -755,7 +755,7 @@ func (c *Cursor) Selection() string {
 
 // Redo reverses the previously reversed update to the underlying buffer.
 func (c *Cursor) Redo() bool {
-	ok, at := c.buf.Redo()
+	ok, at := c.buffer().Redo()
 	if !ok {
 		return false
 	}
@@ -765,7 +765,7 @@ func (c *Cursor) Redo() bool {
 
 // Undo reverses the last update to the underlying buffer.
 func (c *Cursor) Undo() bool {
-	ok, at := c.buf.Undo()
+	ok, at := c.buffer().Undo()
 	if !ok {
 		return false
 	}
@@ -808,11 +808,11 @@ func (c *Cursor) DeleteSelection() (ok bool) {
 	var start term.Coordinates
 	switch mode {
 	case standardSelection:
-		start, _, _ = c.buf.Delete(from, to)
+		start, _, _ = c.buffer().Delete(from, to)
 	case lineSelection:
-		start, _, _ = c.buf.DeleteLine(from, to)
+		start, _, _ = c.buffer().DeleteLine(from, to)
 	case blockSelection:
-		start, _, _ = c.buf.DeleteBlock(from, to)
+		start, _, _ = c.buffer().DeleteBlock(from, to)
 	}
 	c.setCursor(c.scrollToWindowCoordinates(start))
 	return
@@ -823,10 +823,10 @@ func (c *Cursor) DeleteSelection() (ok bool) {
 // If cursor is already in a row and/or in a column with content, then this method
 // does nothing.
 func (c *Cursor) MoveToBounds(padding int) {
-	for c.Row() >= c.buf.Rows() && c.MoveUp() {
+	for c.Row() >= c.buffer().Rows() && c.MoveUp() {
 	}
 
-	for c.Column() >= c.buf.Columns(c.Row())+padding && c.MoveLeft() {
+	for c.Column() >= c.buffer().Columns(c.Row())+padding && c.MoveLeft() {
 	}
 }
 
@@ -855,19 +855,19 @@ func (c *Cursor) moveToChar(
 	ch rune, findResult func(int, cell.Searcher) (term.Coordinates, bool),
 ) bool {
 	cursor := c.cursorAtScroll()
-	lastPos := c.buf.Columns(cursor.Y) - 1
+	lastPos := c.buffer().Columns(cursor.Y) - 1
 	if lastPos < 0 {
 		lastPos = 0
 	}
 	start := term.Coordinates{Y: cursor.Y}
 	end := term.Coordinates{Y: cursor.Y, X: lastPos}
 
-	cells := c.buf.Select(start, end)
+	cells := c.buffer().Select(start, end)
 	if len(cells) == 0 {
 		return false
 	}
 
-	reader := cell.NewReader(cells, c.buf.Tabspaces())
+	reader := cell.NewReader(cells, c.buffer().Tabspaces())
 
 	searcher := cell.NewSimpleSearcher(reader)
 	n := searcher.Search(string(ch))
@@ -921,7 +921,7 @@ func (c *Cursor) MoveToPrevChar(ch rune) bool {
 // ShiftLineRight shifts the current cursor's line one tab to the right.
 func (c *Cursor) ShiftLineRight() {
 	cursor := c.cursorAtScroll()
-	n := c.buf.ShiftRowRight(cursor.Y)
+	n := c.buffer().ShiftRowRight(cursor.Y)
 	cursor.X += n
 	c.setCursor(c.scrollToWindowCoordinates(cursor))
 }
@@ -930,7 +930,7 @@ func (c *Cursor) ShiftLineRight() {
 // false if line's start of content is already at the start of the line.
 func (c *Cursor) ShiftLineLeft() bool {
 	cursor := c.cursorAtScroll()
-	n := c.buf.ShiftRowLeft(cursor.Y)
+	n := c.buffer().ShiftRowLeft(cursor.Y)
 	if n == 0 {
 		return false
 	}
@@ -960,7 +960,7 @@ func (c *Cursor) ShiftSelectionRight() {
 	c.Unselect()
 
 	for y := from.Y; y <= to.Y; y++ {
-		c.buf.ShiftRowRight(y)
+		c.buffer().ShiftRowRight(y)
 	}
 }
 
@@ -972,7 +972,7 @@ func (c *Cursor) ShiftSelectionLeft() (ok bool) {
 	c.Unselect()
 
 	for y := from.Y; y <= to.Y; y++ {
-		n := c.buf.ShiftRowLeft(y)
+		n := c.buffer().ShiftRowLeft(y)
 		if n != 0 {
 			ok = true
 		}
@@ -994,7 +994,7 @@ func (c *Cursor) setLocListAttr(l LocationList, reverse bool) {
 	}
 
 	for {
-		selection := c.buf.Select(loc.From, loc.To)
+		selection := c.buffer().Select(loc.From, loc.To)
 		if reverse {
 			for y, row := range selection {
 				for x := range row {

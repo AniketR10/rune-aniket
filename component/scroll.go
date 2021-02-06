@@ -12,7 +12,7 @@ import (
 // scrolling, searching and wrap-around capabilities.
 type Scroll struct {
 	buf           *cell.Buffer
-	searcher      cell.Searcher
+	searcher      cell.SubscriberSearcher
 	width, height int
 	searchText    []rune
 	offset        term.Coordinates
@@ -45,21 +45,24 @@ func (s *Scroll) Init() {
 	s.InitWithBuffer(buf)
 }
 
+func (s *Scroll) initBuffer(buf *cell.Buffer) {
+	s.buf = buf
+
+	searcher := cell.NewSimpleSearcher(s.buf)
+	attrSearcher := cell.AttrSearcher(searcher, s.buf, s.ResultsAttr)
+
+	s.searcher = attrSearcher
+	s.buf.Subscribe(s.searcher)
+}
+
 // InitWithBuffer initializes this scroll with buf.
 func (s *Scroll) InitWithBuffer(buf *cell.Buffer) {
 	if s.ResultsAttr == (term.Attributes{}) {
 		s.ResultsAttr.Fg, s.ResultsAttr.Bg = term.AttrReverse, term.AttrReverse
 	}
 
-	s.buf = buf
-
 	// Searcher that actually performs the text search
-	searcher := cell.NewSimpleSearcher(s.buf)
-
-	attrSearcher := cell.AttrSearcher(searcher, buf, s.ResultsAttr)
-	buf.Subscribe(attrSearcher)
-
-	s.searcher = attrSearcher
+	s.initBuffer(buf)
 
 	s.resetProps()
 }
@@ -427,6 +430,14 @@ func (s *Scroll) tokenAt(pos term.Coordinates, is func(rune) bool) string {
 	}
 
 	return b.String()
+}
+
+// SetBuffer sets the buffer of this Scroll and returns the previous buffer.
+func (s *Scroll) SetBuffer(b *cell.Buffer) *cell.Buffer {
+	ret := s.buf
+	ret.Unsubscribe(s.searcher)
+	s.initBuffer(b)
+	return ret
 }
 
 // Search performs a text search of text in the internal cell buffer. It populates

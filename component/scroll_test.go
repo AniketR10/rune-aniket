@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ernestrc/go-tui/cell"
 	"github.com/ernestrc/go-tui/term"
 	testutil "github.com/ernestrc/go-tui/util/test"
 	"github.com/stretchr/testify/assert"
@@ -18,8 +19,10 @@ Love isn't love 'til you give it away.
 var fortunewidth = 44
 
 func newScroll(tabspaces int, wrap bool, width, height int) (scroll *Scroll) {
+	buf := cell.NewBuffer()
+	buf.InitWithTabspaces(tabspaces)
 	scroll = NewScroll()
-	scroll.Buffer().InitWithTabspaces(tabspaces)
+	scroll.InitWithBuffer(buf)
 	scroll.Resize(width, height)
 	scroll.Wrap = wrap
 	return
@@ -105,6 +108,15 @@ func TestScrollDraw(t *testing.T) {
 		{func() { scroll.SeekDown() }, "Love isn't love 'til"},
 		{func() { scroll.Buffer().DeleteCell(term.Coordinates{X: 16, Y: 1}) }, "Love isn't love til "},
 		{func() { scroll.Buffer().Insert(term.Coordinates{X: 16, Y: 1}, '中') }, "Love isn't love 中til"},
+		{func() {
+			buf := cell.NewBuffer()
+			buf.WriteString("aa\nbb\ncc")
+			scroll.SetBuffer(buf)
+		}, "bb                  "},
+		{func() {
+			assert.Equal(t, 1, scroll.Search("aa"))
+			assert.True(t, scroll.SeekNextResult())
+		}, "aa                  "},
 		// {scroll.SeekDown, "        -- Oscar Ham"},
 		// {scroll.SeekEndLine, "rstein 中            "},
 		// {func() { scroll.Insert(term.Coordinates{X: 20, Y: 2}, '中') }, "rstein 中中           "},
