@@ -786,7 +786,7 @@ func testCursorDeleteSelection(t *testing.T, width, height int, typeSelect int) 
 			finalPos:    func(c *Cursor) { c.MoveRight() },
 			deleted:     true,
 			finalBuf:    "b",
-			skipForMode: []int{lineSelection},
+			skipForMode: []int{lineSelection, blockSelection},
 		},
 		{
 			initialBuf: "a\nb",

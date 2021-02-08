@@ -351,32 +351,28 @@ func TestBufferDeleteBlock(t *testing.T) {
 	tsuite := []struct {
 		from, to   term.Coordinates
 		input      string
-		output     string
 		start, end term.Coordinates
 	}{
 		{
-			from:   term.Coordinates{X: 1},
-			to:     term.Coordinates{Y: 1, X: 2},
-			input:  "bla\nbleh",
-			output: "la\nle",
-			start:  term.Coordinates{X: 1},
-			end:    term.Coordinates{Y: 1, X: 2},
+			from:  term.Coordinates{X: 1},
+			to:    term.Coordinates{Y: 1, X: 2},
+			input: "bla\nbleh",
+			start: term.Coordinates{X: 1},
+			end:   term.Coordinates{Y: 1, X: 2},
 		},
 		{ // inverted
-			to:     term.Coordinates{X: 1},
-			from:   term.Coordinates{Y: 1, X: 2},
-			input:  "bla\nbleh",
-			output: "la\nle",
-			start:  term.Coordinates{X: 1},
-			end:    term.Coordinates{Y: 1, X: 2},
+			to:    term.Coordinates{X: 1},
+			from:  term.Coordinates{Y: 1, X: 2},
+			input: "bla\nbleh",
+			start: term.Coordinates{X: 1},
+			end:   term.Coordinates{Y: 1, X: 2},
 		},
 		{
-			from:   term.Coordinates{},
-			to:     term.Coordinates{Y: 2},
-			input:  "\nbla\n\nbleh\n",
-			output: "\nb\n",
-			start:  term.Coordinates{},
-			end:    term.Coordinates{Y: 2},
+			from:  term.Coordinates{},
+			to:    term.Coordinates{Y: 2},
+			input: "\nbla\n\nbleh\n",
+			start: term.Coordinates{},
+			end:   term.Coordinates{Y: 2},
 		},
 	}
 
@@ -384,14 +380,12 @@ func TestBufferDeleteBlock(t *testing.T) {
 		b := NewBuffer()
 		b.WriteString(tcase.input)
 
-		start, end, str := b.DeleteBlock(tcase.from, tcase.to)
+		start, end := b.DeleteBlock(tcase.from, tcase.to)
 		assert.Equal(t, tcase.start, start)
 		assert.Equal(t, tcase.end, end)
-		assert.Equal(t, tcase.output, str)
 	}
 
-	t.Run("does not OOB for lines that are shorter than to", func(t *testing.T) {
-		const str = `/*
+	const str = `/*
  * Check if the current buffer should be added to or removed from the list of
  * diff buffers.
  */
@@ -422,15 +416,62 @@ diff_buf_adjust(win_T *win)
 	else
 	diff_buf_add(win->w_buffer);
 } /* {                                                                                 */`
+
+	t.Run("does not OOB for lines that are shorter than to", func(t *testing.T) {
 		b := NewBuffer()
 		b.WriteString(str)
 
 		assert.Equal(t, str, b.String())
 		to := term.Coordinates{X: 88, Y: 30}
-		start, end, ret := b.DeleteBlock(term.Coordinates{}, to)
-		assert.Equal(t, str, ret)
+		start, end := b.DeleteBlock(term.Coordinates{}, to)
 		assert.Equal(t, term.Coordinates{}, start)
 		assert.Equal(t, to, end)
+	})
+
+	t.Run("does not OOB for lines that are shorter than from", func(t *testing.T) {
+		expected := `/
+ 
+ 
+ 
+
+d
+{
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+}`
+
+		b := NewBuffer()
+		b.WriteString(str)
+
+		assert.Equal(t, str, b.String())
+		to := term.Coordinates{X: 1, Y: 0}
+		from := term.Coordinates{X: 88, Y: 30}
+		start, end := b.DeleteBlock(from, to)
+		assert.Equal(t, to, start)
+		assert.Equal(t, from, end)
+
+		assert.Equal(t, expected, b.String())
 	})
 }
 

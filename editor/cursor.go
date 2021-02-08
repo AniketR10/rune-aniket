@@ -812,7 +812,7 @@ func (c *Cursor) DeleteSelection() (ok bool) {
 	case lineSelection:
 		start, _, _ = c.buffer().DeleteLine(from, to)
 	case blockSelection:
-		start, _, _ = c.buffer().DeleteBlock(from, to)
+		start, _ = c.buffer().DeleteBlock(from, to)
 	}
 	c.setCursor(c.scrollToWindowCoordinates(start))
 	return

@@ -3,7 +3,6 @@ package cell
 import (
 	"fmt"
 	"io"
-	"strings"
 
 	"github.com/ernestrc/go-tui/term"
 	log "github.com/sirupsen/logrus"
@@ -271,39 +270,32 @@ func (b *Buffer) DeleteLine(from, to term.Coordinates) (
 // information about how DeleteBlock selects the cells to delete.
 // See Delete for more information about the return values.
 func (b *Buffer) DeleteBlock(from, to term.Coordinates) (
-	start, end term.Coordinates, str string,
+	start, end term.Coordinates,
 ) {
-	builder := strings.Builder{}
-
 	b.selector.iterateBlocks(from, to,
 		func(i int, from, to term.Coordinates, cells []term.Cell) {
 			columns := b.Columns(from.Y)
 			if columns == 0 {
 				if i == 0 {
 					start = term.Coordinates{Y: from.Y}
-				} else {
-					_ = builder.WriteByte('\n')
 				}
 				end = term.Coordinates{Y: from.Y}
 				return
 			}
 
-			// do not delete eol, as it signals writer do delete newline.
 			if to.X > columns-1 {
 				to.X = columns - 1
 			}
-			blockStart, blockEnd, blockStr := b.Delete(from, to)
+			if from.X > columns-1 {
+				return
+			}
+			blockStart, blockEnd, _ := b.Delete(from, to)
 
 			if i == 0 {
 				start = blockStart
-			} else {
-				_ = builder.WriteByte('\n')
 			}
 			end = blockEnd
-			_, _ = builder.WriteString(blockStr)
 		})
-
-	str = builder.String()
 
 	return
 }
