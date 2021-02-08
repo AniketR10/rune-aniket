@@ -93,6 +93,9 @@ func Attr() Attributes {
 // After successful initialization, the writer must be finalized using 'Close'
 // function.
 func Init() error {
+	mu.Lock()
+	defer mu.Unlock()
+
 	events = make(chan Event)
 	quit = make(chan struct{})
 
