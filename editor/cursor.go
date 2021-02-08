@@ -268,7 +268,8 @@ func (c *Cursor) MoveLastLine() (ok bool) {
 }
 
 // MoveDown moves the cursor to the line under the current line, scrolling
-// the content if required.
+// the content if required. It returns false and does nothing when the end
+// of the content is reached.
 func (c *Cursor) MoveDown() (ok bool) {
 	if c.cursor.Y+1 >= c.scroll.Height() {
 		ok = c.scroll.SeekDown()
@@ -692,13 +693,28 @@ func (c *Cursor) setSelection() {
 	invertAttr(c.selection.cells)
 }
 
-func (c *Cursor) inBounds() (ok bool) {
-	pos := c.cursorAtScroll()
-	if pos.Y >= c.buffer().Rows() ||
-		pos.X > c.buffer().Columns(pos.Y) {
+// returns ok=false if there's no content to select in buffer
+func (c *Cursor) cursorAtScrollBounds() (pos term.Coordinates, ok bool) {
+	rows := c.buffer().Rows()
+	if rows == 0 {
+		pos = term.Coordinates{}
 		return
 	}
+
+	pos = c.cursorAtScroll()
 	ok = true
+
+	if pos.Y >= rows {
+		pos.Y = rows - 1
+		pos.X = c.buffer().Columns(pos.Y)
+		return
+	}
+
+	cols := c.buffer().Columns(pos.Y)
+	if pos.X > cols {
+		pos.X = cols
+	}
+
 	return
 }
 
@@ -706,10 +722,10 @@ func (c *Cursor) inBounds() (ok bool) {
 // In order to unset anchor, use Unselect(). It returns true if cursor is in bounds or
 // false if selection failed.
 func (c *Cursor) Select() (ok bool) {
-	if ok = c.inBounds(); !ok {
+	c.selection.scrollFrom, ok = c.cursorAtScrollBounds()
+	if !ok {
 		return
 	}
-	c.selection.scrollFrom = c.cursorAtScroll()
 	c.selection.mode = standardSelection
 	c.setSelection()
 	return
@@ -719,10 +735,10 @@ func (c *Cursor) Select() (ok bool) {
 // In order to unset anchor, use Unselect(). It returns true if cursor is in bounds or
 // false if selection failed.
 func (c *Cursor) SelectLine() (ok bool) {
-	if ok = c.inBounds(); !ok {
+	c.selection.scrollFrom, ok = c.cursorAtScrollBounds()
+	if !ok {
 		return
 	}
-	c.selection.scrollFrom = c.cursorAtScroll()
 	c.selection.mode = lineSelection
 	c.setSelection()
 	return
@@ -732,20 +748,24 @@ func (c *Cursor) SelectLine() (ok bool) {
 // In order to unset anchor, use Unselect(). It returns true if cursor is in bounds or
 // false if selection failed.
 func (c *Cursor) SelectBlock() (ok bool) {
-	if ok = c.inBounds(); !ok {
+	c.selection.scrollFrom, ok = c.cursorAtScrollBounds()
+	if !ok {
 		return
 	}
-	c.selection.scrollFrom = c.cursorAtScroll()
 	c.selection.mode = blockSelection
 	c.setSelection()
 	return
 }
 
 // Unselect resets the current selection anchor.
-func (c *Cursor) Unselect() {
+func (c *Cursor) Unselect() bool {
+	if c.selection.mode == noSelection {
+		return false
+	}
 	c.selection.mode = noSelection
 	invertAttr(c.selection.cells)
 	c.selection.cells = nil
+	return true
 }
 
 // Selection returns the current text under either text, line or block selection.
@@ -792,18 +812,22 @@ func (c *Cursor) Cell() (term.Cell, bool) {
 // DeleteSelection deletes the current text under selection and returns true
 // or does nothing and returns false.
 func (c *Cursor) DeleteSelection() (ok bool) {
-	if len(c.selection.cells) == 0 {
-		return
-	}
-	if ok = c.inBounds(); !ok {
+	if c.selection.mode == noSelection {
 		return
 	}
 
 	mode := c.selection.mode
 	from := c.selection.scrollFrom
-	to := c.cursorAtScroll()
-
+	to, ok := c.cursorAtScrollBounds()
 	c.Unselect()
+
+	// this means that content was modified after Select started
+	// and now there's no content to select, so we are done.
+	if !ok {
+		return
+	}
+
+	ok = true
 
 	var start term.Coordinates
 	switch mode {

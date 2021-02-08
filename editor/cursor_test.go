@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ernestrc/go-tui/cell"
 	"github.com/ernestrc/go-tui/component"
 	"github.com/ernestrc/go-tui/term"
 	"github.com/stretchr/testify/assert"
@@ -649,40 +650,85 @@ func TestCursorConflate(t *testing.T) {
 }
 
 func testCursorSelect(t *testing.T, width, height int) {
-	t.Run("Select", func(t *testing.T) {
+	makeSelect := func(t *testing.T) *Cursor {
 		e := setupCursor(t, width, height)
 		str := e.scroll.Buffer().String()
-		e.Unselect()
+		assertBufferAttributes(t, e.buffer(), term.Attributes{})
+		assert.False(t, e.Unselect())
 		require.True(t, e.Select())
 
-		e.MoveLastLine()
-		e.MoveEndLine()
-		assert.Equal(t, str, e.Selection())
-
-		require.True(t, e.DeleteSelection())
-		assert.Equal(t, "", e.Selection())
-	})
-
-	t.Run("SelectLine", func(t *testing.T) {
-		e := setupCursor(t, width, height)
-		str := e.scroll.Buffer().String()
-		require.True(t, e.SelectLine())
 		for e.MoveDown() {
 		}
-		assert.Equal(t, str, e.Selection())
-		assert.False(t, e.DeleteSelection())
-	})
-
-	t.Run("SelectBlock", func(t *testing.T) {
-		e := setupCursor(t, width, height)
-		str := e.scroll.Buffer().String()
-		require.True(t, e.SelectBlock())
-		e.MoveLastLine()
 		for e.MoveRight() {
 		}
 		assert.Equal(t, str, e.Selection())
-		assert.False(t, e.DeleteSelection())
+		return e
+	}
+
+	makeSelectLine := func(t *testing.T) *Cursor {
+		e := setupCursor(t, width, height)
+		str := e.scroll.Buffer().String()
+		assertBufferAttributes(t, e.buffer(), term.Attributes{})
+		require.True(t, e.SelectLine())
+		require.True(t, e.MoveLastLine())
+		assert.Equal(t, str, e.Selection())
+		return e
+	}
+
+	makeSelectBlock := func(t *testing.T) *Cursor {
+		e := setupCursor(t, width, height)
+		assertBufferAttributes(t, e.buffer(), term.Attributes{})
+		require.True(t, e.SelectBlock())
+		require.True(t, e.MoveLastLine())
+		require.True(t, e.MoveEndLine())
+		return e
+	}
+
+	t.Run("Select then Unselect should reverse all attributes", func(t *testing.T) {
+		e := makeSelect(t)
+		assert.True(t, e.Unselect())
+		assertBufferAttributes(t, e.buffer(), term.Attributes{})
 	})
+
+	t.Run("SelectLine then Unselect should reverse all attributes", func(t *testing.T) {
+		e := makeSelectLine(t)
+		assert.True(t, e.Unselect())
+		assertBufferAttributes(t, e.buffer(), term.Attributes{})
+	})
+
+	t.Run("SelectBlock then Unselect should reverse all attributes", func(t *testing.T) {
+		e := makeSelectBlock(t)
+		assert.True(t, e.Unselect())
+		assertBufferAttributes(t, e.buffer(), term.Attributes{})
+	})
+
+	t.Run("Select selects from start to end", func(t *testing.T) {
+		e := makeSelect(t)
+		require.True(t, e.DeleteSelection())
+		assert.Equal(t, "", e.Selection())
+		assertBufferAttributes(t, e.buffer(), term.Attributes{})
+	})
+
+	t.Run("SelectLine selects from start line to end line", func(t *testing.T) {
+		e := makeSelectLine(t)
+		require.True(t, e.DeleteSelection())
+		assertBufferAttributes(t, e.buffer(), term.Attributes{})
+	})
+
+	t.Run("SelectBlock selects from start to end in block", func(t *testing.T) {
+		e := makeSelectBlock(t)
+		require.True(t, e.DeleteSelection())
+		assertBufferAttributes(t, e.buffer(), term.Attributes{})
+	})
+}
+
+func assertBufferAttributes(t *testing.T, b *cell.Buffer, attr term.Attributes) {
+	for y, row := range b.RawCells() {
+		for x, c := range row {
+			assert.Equal(t, attr.Bg, c.Bg, "at y=%d;x=%d", y, x)
+			assert.Equal(t, attr.Fg, c.Fg, "at y=%d;x=%d", y, x)
+		}
+	}
 }
 
 func TestCursorSelect10(t *testing.T) {
@@ -796,7 +842,9 @@ func testCursorDeleteSelection(t *testing.T, width, height int, typeSelect int) 
 					c.MoveRight()
 				}
 			},
-			deleted: false,
+			finalBuf:    "b",
+			deleted:     true,
+			skipForMode: []int{lineSelection, blockSelection},
 		},
 		{
 			initialBuf: "a\nb",
@@ -805,7 +853,11 @@ func testCursorDeleteSelection(t *testing.T, width, height int, typeSelect int) 
 					c.MoveRight()
 				}
 			},
-			selected: false,
+			finalPos:    func(*Cursor) {},
+			selected:    true,
+			deleted:     true,
+			finalBuf:    "ab",
+			skipForMode: []int{lineSelection, blockSelection},
 		},
 		{
 			initialBuf: "a\nb",
@@ -815,7 +867,7 @@ func testCursorDeleteSelection(t *testing.T, width, height int, typeSelect int) 
 					c.MoveDown()
 				}
 			},
-			deleted: false,
+			deleted: true,
 		},
 		{
 			initialBuf: "a\nb",
@@ -824,7 +876,11 @@ func testCursorDeleteSelection(t *testing.T, width, height int, typeSelect int) 
 					c.MoveDown()
 				}
 			},
-			selected: false,
+			finalPos:    func(*Cursor) {},
+			selected:    true,
+			deleted:     true,
+			finalBuf:    "a\nb",
+			skipForMode: []int{lineSelection},
 		},
 		{
 			initialBuf: "a\nb",
