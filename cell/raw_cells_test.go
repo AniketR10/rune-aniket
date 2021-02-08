@@ -499,6 +499,15 @@ Love isn't love 'til you give it away.
 			expectedStart:        &term.Coordinates{},
 			expectedEnd:          &term.Coordinates{Y: 3, X: 1},
 		},
+		{
+			overrideBaseRawCells: "a\nbb\nccc",
+			expectedStr:          "\nbb",
+			expectedRawCells:     "a\nccc",
+			inputFrom:            term.Coordinates{X: 1, Y: 1},
+			inputTo:              term.Coordinates{X: 1},
+			expectedStart:        &term.Coordinates{X: 1},
+			expectedEnd:          &term.Coordinates{Y: 1, X: 1},
+		},
 	}
 
 	for i, tcase := range tsuite {

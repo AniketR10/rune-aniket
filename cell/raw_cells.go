@@ -225,21 +225,21 @@ func (c *rawCells) skipPadding(start, end term.Coordinates) (
 	term.Coordinates, term.Coordinates,
 ) {
 	tokens := c.tabspaces - 1
-	rowLastIdx := len(c.cells[end.Y]) - 1
-	for tokens > 0 && end.X < rowLastIdx && c.cells[end.Y][end.X].Ch == 0 {
+	endLastIdx := len(c.cells[end.Y]) - 1
+	startLastIdx := len(c.cells[start.Y]) - 1
+	for tokens > 0 && end.X < endLastIdx && c.cells[end.Y][end.X].Ch == 0 {
 		end.X++
 		tokens--
 	}
 
-	if start.X > 0 && start.X <= rowLastIdx &&
+	if start.X > 0 && start.X <= startLastIdx &&
 		c.cells[start.Y][start.X].Ch == '\t' {
 		start.X--
 	}
 
 	tokens = c.tabspaces - 1
-	rowLastIdx = len(c.cells[start.Y]) - 1
 	for tokens > 0 && start.X > 0 &&
-		start.X <= rowLastIdx && c.cells[start.Y][start.X].Ch == 0 {
+		start.X <= startLastIdx && c.cells[start.Y][start.X].Ch == 0 {
 		start.X--
 		tokens--
 	}
@@ -255,8 +255,8 @@ func (c *rawCells) skipPadding(start, end term.Coordinates) (
 func (c *rawCells) Delete(from, to term.Coordinates) (
 	start, end term.Coordinates, str string,
 ) {
-	c.assertCordsInBounds(start)
-	c.assertCordsInBounds(end)
+	c.assertCordsInBounds(from)
+	c.assertCordsInBounds(to)
 	start, end = SortFromTo(from, to)
 	start, end = c.skipPadding(start, end)
 
