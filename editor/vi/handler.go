@@ -47,13 +47,14 @@ func moveOpposite(m moveMode) moveMode {
 // Vi implements a basic vi-like text editor which satisfies tui.Handler
 // and tui.Component.
 type Vi struct {
-	config      viConfig
-	less        handler.Less // used for message bar and text search capabilities
-	raw, cursor editor.Cursor
-	mode        viMode
-	moveMode    moveMode
-	searchMode  moveMode
-	moveChar    rune
+	config     viConfig
+	less       handler.Less // used for message bar and text search capabilities
+	free       term.Coordinates
+	cursor     editor.Cursor
+	mode       viMode
+	moveMode   moveMode
+	searchMode moveMode
+	moveChar   rune
 }
 
 // DefaultViConfig is a sane configuration defaults for Vi.
@@ -85,7 +86,7 @@ func (vi *Vi) Init(buf *cell.Buffer, opts ...Option) {
 
 	editor.WithCopyDelete(vi.config.clipboard, buf)
 
-	vi.raw = vi.cursor
+	vi.free, _ = vi.cursor.Cursor()
 
 	vi.setNormalMode()
 }
@@ -352,11 +353,11 @@ func (vi *Vi) handleNormal(ev term.Event) (quit bool, handled bool) {
 		case 'G':
 			vi.cursor.MoveLastLine()
 		case 'j':
-			vi.raw.MoveDown()
-			vi.cursor = vi.raw
+			vi.cursor.MoveTo(vi.free)
+			vi.cursor.MoveDown()
 		case 'k':
-			vi.raw.MoveUp()
-			vi.cursor = vi.raw
+			vi.cursor.MoveTo(vi.free)
+			vi.cursor.MoveUp()
 		case 'h':
 			vi.cursor.MoveLeft()
 		case 'l':
@@ -567,8 +568,12 @@ func (vi *Vi) Handle(ev term.Event) (quit, handled bool) {
 		panic(fmt.Sprintf("unknown mode: %d", vi.mode))
 	}
 
-	// copy the cursor to maintain original cursor for next vertcial move.
-	vi.raw = vi.cursor
+	// copy the cursor to maintain original cursor for next vertcial move
+	// except when moving the cursor beyond last line
+	free, _ := vi.cursor.Cursor()
+	if free.Y < vi.less.Scroll.Buffer().Rows() {
+		vi.free = free
+	}
 
 	switch vi.mode {
 	case normalMode, visualMode, visualLineMode,
@@ -588,14 +593,14 @@ func (vi *Vi) Handle(ev term.Event) (quit, handled bool) {
 // in the location list identified by ID.
 func (vi *Vi) MoveToNextLocation(ID string) {
 	vi.cursor.MoveToNextLocation(ID)
-	vi.raw = vi.cursor
+	vi.free, _ = vi.cursor.Cursor()
 }
 
 // MoveToPrevLocation moves the cursor to the previous location
 // in the location list identified by ID.
 func (vi *Vi) MoveToPrevLocation(ID string) {
 	vi.cursor.MoveToPrevLocation(ID)
-	vi.raw = vi.cursor
+	vi.free, _ = vi.cursor.Cursor()
 }
 
 // SetLocationList sets a location list of this handler. See Cursor.SetLocationList
