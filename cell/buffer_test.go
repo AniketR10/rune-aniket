@@ -389,6 +389,49 @@ func TestBufferDeleteBlock(t *testing.T) {
 		assert.Equal(t, tcase.end, end)
 		assert.Equal(t, tcase.output, str)
 	}
+
+	t.Run("does not OOB for lines that are shorter than to", func(t *testing.T) {
+		const str = `/*
+ * Check if the current buffer should be added to or removed from the list of
+ * diff buffers.
+ */
+	void
+diff_buf_adjust(win_T *win)
+{
+	win_T	*wp;
+	int		i;
+
+	if (!win->w_p_diff)
+	{
+	/* When there is no window showing a diff for this buffer, remove
+	 * it from the diffs. */
+	FOR_ALL_WINDOWS(wp)
+		if (wp->w_buffer == win->w_buffer && wp->w_p_diff)
+		break;
+	if (wp == NULL)
+	{
+		i = diff_buf_idx(win->w_buffer);
+		if (i != DB_COUNT)
+		{
+		curtab->tp_diffbuf[i] = NULL;
+		curtab->tp_diff_invalid = TRUE;
+		diff_redraw(TRUE);
+		}
+	}
+	}
+	else
+	diff_buf_add(win->w_buffer);
+} /* {                                                                                 */`
+		b := NewBuffer()
+		b.WriteString(str)
+
+		assert.Equal(t, str, b.String())
+		to := term.Coordinates{X: 88, Y: 30}
+		start, end, ret := b.DeleteBlock(term.Coordinates{}, to)
+		assert.Equal(t, str, ret)
+		assert.Equal(t, term.Coordinates{}, start)
+		assert.Equal(t, to, end)
+	})
 }
 
 func TestBufferShiftRowTabs(t *testing.T) {

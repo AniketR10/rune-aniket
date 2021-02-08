@@ -277,7 +277,8 @@ func (b *Buffer) DeleteBlock(from, to term.Coordinates) (
 
 	b.selector.iterateBlocks(from, to,
 		func(i int, from, to term.Coordinates, cells []term.Cell) {
-			if b.Columns(from.Y) == 0 {
+			columns := b.Columns(from.Y)
+			if columns == 0 {
 				if i == 0 {
 					start = term.Coordinates{Y: from.Y}
 				} else {
@@ -285,6 +286,11 @@ func (b *Buffer) DeleteBlock(from, to term.Coordinates) (
 				}
 				end = term.Coordinates{Y: from.Y}
 				return
+			}
+
+			// do not delete eol, as it signals writer do delete newline.
+			if to.X > columns-1 {
+				to.X = columns - 1
 			}
 			blockStart, blockEnd, blockStr := b.Delete(from, to)
 

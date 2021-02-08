@@ -307,7 +307,7 @@ func (c *rawCells) Columns(y int) (j int) {
 		panic(fmt.Sprintf("invalid row: %d", y))
 	}
 	if y >= c.Rows() {
-		panic(fmt.Sprintf("row out of bounds: %d", y))
+		panic(fmt.Sprintf("row out of bounds: %d, length=%d", y, c.Rows()))
 	}
 	j = len(c.cells[y])
 	return
