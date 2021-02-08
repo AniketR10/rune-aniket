@@ -53,7 +53,7 @@ func TestRawCellsUninitialized(t *testing.T) {
 
 	t.Run("rows()", func(t *testing.T) {
 		var c rawCells
-		assert.Equal(t, 0, c.Rows())
+		assert.Equal(t, 1, c.Rows())
 	})
 
 	t.Run("cell()", func(t *testing.T) {

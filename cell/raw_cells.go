@@ -314,6 +314,9 @@ func (c *rawCells) Columns(y int) (j int) {
 }
 
 func (c *rawCells) Rows() int {
+	if c.cells == nil {
+		c.init(defTabSpaces)
+	}
 	return len(c.cells)
 }
 
