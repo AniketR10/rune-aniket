@@ -80,6 +80,10 @@ func (t *keySplitHandler) handleKeyEvent() {
 		log.Debug("received key event but win is already open")
 		return
 	}
+	if t.wm == nil {
+		log.Warn("could not handle key event: could not resolve wm permission")
+		return
+	}
 	focus, err := t.wm.Focus()
 	if err != nil {
 		log.Errorf("failed to get focus: %s", err)
