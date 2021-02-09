@@ -3,11 +3,13 @@ package proto
 import (
 	context "context"
 	fmt "fmt"
+	math "math"
 	"net"
 	"sync"
 	"time"
 
 	"github.com/ernestrc/blue/datastore/document"
+	"github.com/ernestrc/blue/retry"
 	"github.com/ernestrc/go-tui/util"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
@@ -55,16 +57,25 @@ func (t *dbBroker) NextId() uint32 {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	for {
+	ctx := context.Background()
+	retries := 3 // retries for unknown errors
+	retry.Retry(ctx, retry.LimitStrategy(math.MaxInt32), func(ctx context.Context) bool {
 		t.id++
 		key, doc := makeNextIDDocument(t.id)
-		err := t.svc.Create(context.Background(), key, doc)
-		if err != nil && err != document.ErrAlreadyExists {
-			panic(err)
-		} else if err == nil {
-			break
+		err := t.svc.Create(ctx, key, doc)
+		if err == document.ErrAlreadyExists {
+			return true
 		}
-	}
+		if err != nil {
+			if retries == 0 {
+				panic(err)
+			}
+			retries--
+			return true
+		}
+		return false
+	})
+
 	return t.id
 }
 
