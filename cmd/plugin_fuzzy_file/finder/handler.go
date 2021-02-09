@@ -1,4 +1,4 @@
-package main
+package finder
 
 import (
 	"bufio"
@@ -18,7 +18,6 @@ import (
 )
 
 const (
-	defaultCommand   = `set -o pipefail; command find -L . -mindepth 1 \( -path '*/\.*' -o -fstype 'sysfs' -o -fstype 'devfs' -o -fstype 'devtmpfs' -o -fstype 'proc' \) -prune -o -type f -print -o -type l -print 2> /dev/null | cut -b3-`
 	readerBufferSize = 64 * 1024
 )
 
@@ -29,6 +28,7 @@ type fuzzyFinderHandler struct {
 	invokeWindow browser.Window
 	mu           sync.Mutex
 	cmdStr       string
+	getResource  func(string) string
 	exec         *exec.Cmd
 	quitChan     chan struct{}
 	height       int
@@ -80,14 +80,15 @@ func (h *fuzzyFinderHandler) readCommand(src io.Reader) {
 	}
 }
 
-func (h *fuzzyFinderHandler) openFile(file string) {
-	buf, err := h.f.Open(file)
+func (h *fuzzyFinderHandler) openResource(data string) {
+	resource := h.getResource(data)
+	buf, err := h.f.Open(resource)
 	if err != nil {
 		merr := h.m.SetMessage("Open: %v", err)
 		if merr != nil {
 			log.Errorf("error setting message: %v", merr)
 		}
-		log.Errorf("error opening new file buffer: %v", err)
+		log.Errorf("error opening new resource: %v", err)
 		return
 	}
 
@@ -105,10 +106,11 @@ func (h *fuzzyFinderHandler) publishInterrupt() {
 	}
 }
 
-func (h *fuzzyFinderHandler) scanForFiles() {
+func (h *fuzzyFinderHandler) scanData() {
 	h.mu.Lock()
 	h.exec = execCommand(h.cmdStr, true)
 	exec := h.exec
+	h.mu.Unlock()
 
 	out, err := exec.StdoutPipe()
 	if err != nil {
@@ -120,9 +122,16 @@ func (h *fuzzyFinderHandler) scanForFiles() {
 		log.Errorf("command start failed; %v", err)
 		return
 	}
-	h.mu.Unlock()
 
-	h.readCommand(out)
+	go h.readCommand(out)
+
+	err = exec.Wait()
+	if err != nil {
+		merr := h.m.SetMessage("failed to execute '%s': %v", h.cmdStr, err)
+		if merr != nil {
+			log.Errorf("error setting message: %v", merr)
+		}
+	}
 
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -149,9 +158,12 @@ func (h *fuzzyFinderHandler) initGrants(
 	return
 }
 
-func newFuzzyFinderHandler(
+// New returns a tui.Handler that employs a search.List
+// to interactively search the command's stdout lines.
+func New(
 	grants []plugin.Grant, broker proto.MuxBroker,
 	invokeWindow browser.Window, config plugin.Config,
+	command string, getResource func(line string) string,
 ) (tui.Handler, error) {
 	h := new(fuzzyFinderHandler)
 	err := h.initGrants(broker, grants)
@@ -160,24 +172,16 @@ func newFuzzyFinderHandler(
 	}
 
 	h.invokeWindow = invokeWindow
-
-	cmdStr, err := config.GetString("command")
-	if err != nil {
-		if err != plugin.ErrNotFound {
-			log.Printf("failed to load 'command' config: %v", err)
-		}
-		h.cmdStr = defaultCommand
-	} else {
-		h.cmdStr = cmdStr
-	}
-	log.Printf("using file list command: %s", h.cmdStr)
+	h.getResource = getResource
+	h.cmdStr = command
+	log.Printf("using resource list command: %s", h.cmdStr)
 
 	h.quitChan = make(chan struct{})
 
 	listConfig := h.getListConfig(config)
 	h.list.Init(listConfig)
 
-	go h.scanForFiles()
+	go h.scanData()
 
 	return h, nil
 }
@@ -273,11 +277,11 @@ func (h *fuzzyFinderHandler) Handle(ev term.Event) (exit, handled bool) {
 
 	switch ev.Key {
 	case term.KeyEnter:
-		filename, ok := h.list.Focus()
+		item, ok := h.list.Focus()
 		if ok {
 			handled = true
 			exit = true
-			h.openFile(string(filename))
+			h.openResource(string(item))
 		}
 	case term.KeyEsc:
 		exit = true
