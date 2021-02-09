@@ -69,6 +69,9 @@ func (t *dbBroker) NextId() uint32 {
 }
 
 func (t *dbBroker) Accept(id uint32) (net.Listener, error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
 	listener, err := util.TempUnixListener()
 	if err != nil {
 		return nil, err
@@ -85,9 +88,6 @@ func (t *dbBroker) Accept(id uint32) (net.Listener, error) {
 func (t *dbBroker) AcceptAndServe(
 	ID uint32, srv func(opts []grpc.ServerOption) MuxServer,
 ) {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-
 	lis, err := t.Accept(ID)
 	if err != nil {
 		panic(err)

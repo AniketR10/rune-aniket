@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/ernestrc/blue/datastore/document"
+	"github.com/ernestrc/blue/retry"
 	"github.com/ernestrc/go-tui/proto"
 	"github.com/ernestrc/go-tui/util"
 	log "github.com/sirupsen/logrus"
@@ -40,6 +41,7 @@ func initHostBroker(
 	go srv.Serve(lis)
 
 	broker := proto.NewDatastoreBroker(svc, config.logger)
+	broker = proto.WithRetryBroker(broker, retry.DefaultStrategy)
 	return broker, lis.Addr(), nil
 }
 
@@ -50,6 +52,7 @@ func initClientBroker(logger *log.Logger) proto.MuxBroker {
 		panic(err)
 	}
 	broker := proto.NewDatastoreBroker(store, logger)
+	broker = proto.WithRetryBroker(broker, retry.DefaultStrategy)
 	if logger.IsLevelEnabled(log.TraceLevel) {
 		broker = proto.LoggingBroker(broker, logger)
 	}
