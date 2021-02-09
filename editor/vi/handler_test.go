@@ -327,6 +327,28 @@ diff_buf_adjust(win_
   }                 
   }                 
 :             NORMAL`},
+		{"gg",
+			`▐                   
+/*                  
+ * Check if the curr
+ * diff buffers.    
+ */                 
+  void              
+diff_buf_adjust(win_
+{                   
+  win_T  *wp;       
+:             NORMAL`},
+		{"j",
+			`                    
+▐*                  
+ * Check if the curr
+ * diff buffers.    
+ */                 
+  void              
+diff_buf_adjust(win_
+{                   
+  win_T  *wp;       
+:             NORMAL`},
 	}
 
 	vi := setupVi(t, snippet, 2)

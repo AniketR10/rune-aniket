@@ -19,6 +19,7 @@ const (
 	normalMode viMode = iota
 	insertMode
 	deleteMode
+	gMode
 	visualMode
 	visualLineMode
 	visualBlockMode
@@ -140,6 +141,8 @@ func (vi *Vi) setMode(mode viMode) {
 		text = "INSERT"
 	case deleteMode:
 		text = "DELETE"
+	case gMode:
+		text = "NORMAL"
 	case visualMode:
 		text = "VISUAL"
 	case visualLineMode:
@@ -171,6 +174,10 @@ func (vi *Vi) setInsertMode() {
 func (vi *Vi) setDeleteMode(thenInsert bool) {
 	vi.setMode(deleteMode)
 	vi.deleteInsert = thenInsert
+}
+
+func (vi *Vi) setGMode() {
+	vi.setMode(gMode)
 }
 
 func (vi *Vi) setVisualMode() {
@@ -326,6 +333,8 @@ func (vi *Vi) handleNormal(ev term.Event) (quit bool, handled bool) {
 			vi.setMoveToCharacterMode(moveToNext)
 		case 'F':
 			vi.setMoveToCharacterMode(moveToPrev)
+		case 'g':
+			vi.setGMode()
 		case 'd':
 			vi.setDeleteMode(false)
 		case 'c':
@@ -584,6 +593,19 @@ func (vi *Vi) handleDelete(ev term.Event) (quit, handled bool) {
 	return
 }
 
+func (vi *Vi) handleGo(ev term.Event) (quit, handled bool) {
+	defer vi.setNormalMode()
+
+	switch ev.Ch {
+	case 'g':
+		vi.cursor.MoveFirstLine()
+		vi.free, _ = vi.cursor.Cursor()
+		handled = true
+	default:
+	}
+	return
+}
+
 // Handle : tui.Handler
 func (vi *Vi) Handle(ev term.Event) (quit, handled bool) {
 	switch vi.mode {
@@ -595,6 +617,8 @@ func (vi *Vi) Handle(ev term.Event) (quit, handled bool) {
 		}
 	case insertMode:
 		quit, handled = vi.handleInsert(ev)
+	case gMode:
+		quit, handled = vi.handleGo(ev)
 	case deleteMode:
 		quit, handled = vi.handleDelete(ev)
 	case visualMode, visualLineMode, visualBlockMode:
@@ -617,7 +641,7 @@ func (vi *Vi) Handle(ev term.Event) (quit, handled bool) {
 	}
 
 	switch vi.mode {
-	case normalMode, deleteMode, visualMode, visualLineMode, visualBlockMode:
+	case normalMode, gMode, deleteMode, visualMode, visualLineMode, visualBlockMode:
 		vi.cursor.MoveToBounds(0)
 		vi.cursor.MoveToNextNonNull()
 	case insertMode, replaceMode, replaceOneMode:
