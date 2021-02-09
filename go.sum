@@ -59,6 +59,10 @@ github.com/envoyproxy/go-control-plane v0.9.7/go.mod h1:cwu0lG7PUMfa9snN8LXBig5y
 github.com/envoyproxy/protoc-gen-validate v0.1.0/go.mod h1:iSmxcyjqTsJpI2R4NaDN7+kN2VEUnK/pcBlmesArF7c=
 github.com/ernestrc/blue v0.0.0-20210120000636-7ee39781b05c h1:ec7nDeRT8KgLTb55tRv9fvcT5x7vG65CeEANt9gByJw=
 github.com/ernestrc/blue v0.0.0-20210120000636-7ee39781b05c/go.mod h1:7DR1dghzu3gWV6GYEOAvPHkXXdndOnW+XWcdGXMHuu0=
+github.com/ernestrc/blue v0.0.0-20210209151414-aa1253693591 h1:PCOF93UImw21zA8VxEceJrm0vv31hSN3UAzpHqTjH0w=
+github.com/ernestrc/blue v0.0.0-20210209151414-aa1253693591/go.mod h1:7DR1dghzu3gWV6GYEOAvPHkXXdndOnW+XWcdGXMHuu0=
+github.com/ernestrc/blue v0.0.0-20210209154843-6cb358d2b555 h1:WTasSxNUn82ONwyhVx1vqhweP+crNxVcGJL1tcTY/dw=
+github.com/ernestrc/blue v0.0.0-20210209154843-6cb358d2b555/go.mod h1:7DR1dghzu3gWV6GYEOAvPHkXXdndOnW+XWcdGXMHuu0=
 github.com/ernestrc/dom v0.2.5-0.20201125033726-789c946aa938 h1:f/aC0hFDoMkao3chzwSlyBnwxcQj77I3i/D6HEbcuTE=
 github.com/ernestrc/dom v0.2.5-0.20201125033726-789c946aa938/go.mod h1:zkvVMhrl7iSWniJU2txvm5E6pF5bkHVK5ALYLlNBcO0=
 github.com/ernestrc/golang-internal-tools v0.0.0-20210125203355-a1ef7e2356b9 h1:aJNMv6nVes7S18nwmYH/rq5l5XFGi27dQApspGJYbvo=

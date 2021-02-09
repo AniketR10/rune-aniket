@@ -4,7 +4,7 @@ go 1.12
 
 require (
 	github.com/atotto/clipboard v0.1.2
-	github.com/ernestrc/blue v0.0.0-20210120000636-7ee39781b05c
+	github.com/ernestrc/blue v0.0.0-20210209154843-6cb358d2b555
 	github.com/ernestrc/dom v0.2.5-0.20201125033726-789c946aa938
 	github.com/ernestrc/golang-internal-tools v0.0.0-20210125203355-a1ef7e2356b9
 	github.com/golang/mock v1.4.4
