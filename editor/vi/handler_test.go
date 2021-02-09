@@ -195,7 +195,7 @@ diff_buf_adjust(win_
  diff_redraw(TRUE); 
  }                  
 :             NORMAL`},
-		{";",
+		{",",
 			`f (wp ▐= NULL)hello 
                     
  i = diff_buf_idx(wi
@@ -206,7 +206,7 @@ diff_buf_adjust(win_
  diff_redraw(TRUE); 
  }                  
 :             NORMAL`},
-		{",",
+		{";",
 			`f (wp =▐ NULL)hello 
                     
  i = diff_buf_idx(wi
@@ -282,6 +282,50 @@ diff_buf_adjust(win_
     curtab->tp_diffb
     curtab->tp_diff_
     diff_redraw(TRUE
+:             NORMAL`},
+		{"dd",
+			`  if (wp == NULL]   
+  if (wp == NULL]   
+  {                 
+ ▐  if (i != DB_COUN
+    {               
+    curtab->tp_diffb
+    curtab->tp_diff_
+    diff_redraw(TRUE
+    }               
+:             NORMAL`},
+		{"df=",
+			`  if (wp == NULL]   
+  if (wp == NULL]   
+  {                 
+▐DB_COUNT)          
+    {               
+    curtab->tp_diffb
+    curtab->tp_diff_
+    diff_redraw(TRUE
+    }               
+:             NORMAL`},
+		{"/i>kkFDcndi",
+			`  if (wp == NULL]   
+  if (wp == NULL]   
+  {                 
+ di▐fbuf[i] = NULL; 
+    curtab->tp_diff_
+    diff_redraw(TRUE
+    }               
+  }                 
+  }                 
+:             INSERT`},
+		{"<",
+			`  if (wp == NULL]   
+  if (wp == NULL]   
+  {                 
+ d▐ffbuf[i] = NULL; 
+    curtab->tp_diff_
+    diff_redraw(TRUE
+    }               
+  }                 
+  }                 
 :             NORMAL`},
 	}
 

@@ -18,43 +18,34 @@ type moveMode uint8
 const (
 	normalMode viMode = iota
 	insertMode
+	deleteMode
 	visualMode
 	visualLineMode
 	visualBlockMode
-	moveToCharMode
 	replaceMode
 	replaceOneMode
 )
 
 const (
-	moveToNext moveMode = iota
+	moveNone moveMode = iota
+	moveToNext
 	moveToPrev
 	// moveToNextPad
 	// moveToPrevPad
 )
 
-func moveOpposite(m moveMode) moveMode {
-	switch m {
-	case moveToNext:
-		return moveToPrev
-	case moveToPrev:
-		return moveToNext
-	default:
-		panic("not a known moving mode")
-	}
-}
-
 // Vi implements a basic vi-like text editor which satisfies tui.Handler
 // and tui.Component.
 type Vi struct {
-	config     viConfig
-	less       handler.Less // used for message bar and text search capabilities
-	free       term.Coordinates
-	cursor     editor.Cursor
-	mode       viMode
-	moveMode   moveMode
-	searchMode moveMode
-	moveChar   rune
+	config       viConfig
+	less         handler.Less // used for message bar and text search capabilities
+	free         term.Coordinates
+	cursor       editor.Cursor
+	mode         viMode
+	moveMode     moveMode
+	searchMode   moveMode
+	moveChar     rune
+	deleteInsert bool
 }
 
 // DefaultViConfig is a sane configuration defaults for Vi.
@@ -147,14 +138,14 @@ func (vi *Vi) setMode(mode viMode) {
 		text = "NORMAL"
 	case insertMode:
 		text = "INSERT"
+	case deleteMode:
+		text = "DELETE"
 	case visualMode:
 		text = "VISUAL"
 	case visualLineMode:
 		text = "V-LINE"
 	case visualBlockMode:
 		text = "V-BLOCK"
-	case moveToCharMode:
-		text = "MOVE-TO"
 	case replaceMode:
 		text = "REPLACE"
 	case replaceOneMode:
@@ -170,10 +161,16 @@ func (vi *Vi) setMode(mode viMode) {
 func (vi *Vi) setNormalMode() {
 	vi.setMode(normalMode)
 	vi.less.SetMessageAlt(":")
+	vi.moveMode = moveNone
 }
 
 func (vi *Vi) setInsertMode() {
 	vi.setMode(insertMode)
+}
+
+func (vi *Vi) setDeleteMode(thenInsert bool) {
+	vi.setMode(deleteMode)
+	vi.deleteInsert = thenInsert
 }
 
 func (vi *Vi) setVisualMode() {
@@ -195,7 +192,6 @@ func (vi *Vi) setVisualBlockMode() {
 }
 
 func (vi *Vi) setMoveToCharacterMode(mode moveMode) {
-	vi.setMode(moveToCharMode)
 	vi.moveMode = mode
 }
 
@@ -303,6 +299,11 @@ func (vi *Vi) pasteClipboard(before bool) bool {
 }
 
 func (vi *Vi) handleNormal(ev term.Event) (quit bool, handled bool) {
+	quit, handled = vi.handleMoveToCharacter(vi.moveMode, ev)
+	if handled {
+		return
+	}
+
 	switch ev.Type {
 	case term.EventKey:
 		handled = true
@@ -316,16 +317,19 @@ func (vi *Vi) handleNormal(ev term.Event) (quit bool, handled bool) {
 		case '<':
 			vi.cursor.ShiftLineLeft()
 		case ',':
-			mode := moveOpposite(vi.moveMode)
 			event := term.Event{Type: term.EventKey, Ch: vi.moveChar}
-			vi.handleMoveToCharacter(mode, event)
+			vi.handleMoveToCharacter(moveToPrev, event)
 		case ';':
 			event := term.Event{Type: term.EventKey, Ch: vi.moveChar}
-			vi.handleMoveToCharacter(vi.moveMode, event)
+			vi.handleMoveToCharacter(moveToNext, event)
 		case 'f':
 			vi.setMoveToCharacterMode(moveToNext)
 		case 'F':
 			vi.setMoveToCharacterMode(moveToPrev)
+		case 'd':
+			vi.setDeleteMode(false)
+		case 'c':
+			vi.setDeleteMode(true)
 		case 'N':
 			switch vi.searchMode {
 			case moveToNext:
@@ -348,8 +352,6 @@ func (vi *Vi) handleNormal(ev term.Event) (quit bool, handled bool) {
 			vi.cursor.MoveStartLine()
 		case '$':
 			vi.cursor.MoveEndLine()
-		case 'g':
-			vi.cursor.MoveFirstLine()
 		case 'G':
 			vi.cursor.MoveLastLine()
 		case 'j':
@@ -424,6 +426,8 @@ func (vi *Vi) handleNormal(ev term.Event) (quit bool, handled bool) {
 				vi.cursor.Redo()
 			case term.KeyCtrlV:
 				vi.setVisualBlockMode()
+			case term.KeyEsc:
+				vi.setNormalMode()
 			default:
 				handled = false
 			}
@@ -502,6 +506,8 @@ func (vi *Vi) handleMoveToCharacter(mode moveMode, ev term.Event) (bool, bool) {
 			vi.cursor.MoveToNextChar(ev.Ch)
 		case moveToPrev:
 			vi.cursor.MoveToPrevChar(ev.Ch)
+		case moveNone:
+			return false, false
 		}
 		vi.moveChar = ev.Ch
 		vi.setNormalMode()
@@ -543,6 +549,41 @@ func (vi *Vi) handleReplace(ev term.Event) (quit, handled bool) {
 	return
 }
 
+func (vi *Vi) handleDelete(ev term.Event) (quit, handled bool) {
+	if (!vi.deleteInsert && ev.Ch == 'd') || (vi.deleteInsert && ev.Ch == 'c') {
+		if vi.cursor.SelectLine() {
+			vi.cursor.DeleteSelection()
+		}
+		if vi.deleteInsert {
+			vi.setInsertMode()
+		} else {
+			vi.setNormalMode()
+		}
+		return
+	}
+
+	before, _ := vi.cursor.Cursor()
+	vi.cursor.Select()
+
+	quit, handled = vi.handleNormal(ev)
+	after, _ := vi.cursor.Cursor()
+
+	if before == after {
+		vi.cursor.Unselect()
+		// do not set to normal, in case we user is
+		// issuing a move to combination
+		return
+	}
+
+	vi.cursor.DeleteSelection()
+	if vi.deleteInsert {
+		vi.setInsertMode()
+	} else {
+		vi.setNormalMode()
+	}
+	return
+}
+
 // Handle : tui.Handler
 func (vi *Vi) Handle(ev term.Event) (quit, handled bool) {
 	switch vi.mode {
@@ -554,10 +595,10 @@ func (vi *Vi) Handle(ev term.Event) (quit, handled bool) {
 		}
 	case insertMode:
 		quit, handled = vi.handleInsert(ev)
+	case deleteMode:
+		quit, handled = vi.handleDelete(ev)
 	case visualMode, visualLineMode, visualBlockMode:
 		quit, handled = vi.handleVisual(ev)
-	case moveToCharMode:
-		quit, handled = vi.handleMoveToCharacter(vi.moveMode, ev)
 	case replaceMode:
 		quit, handled = vi.handleReplace(ev)
 	case replaceOneMode:
@@ -576,8 +617,7 @@ func (vi *Vi) Handle(ev term.Event) (quit, handled bool) {
 	}
 
 	switch vi.mode {
-	case normalMode, visualMode, visualLineMode,
-		visualBlockMode, moveToCharMode:
+	case normalMode, deleteMode, visualMode, visualLineMode, visualBlockMode:
 		vi.cursor.MoveToBounds(0)
 		vi.cursor.MoveToNextNonNull()
 	case insertMode, replaceMode, replaceOneMode:
