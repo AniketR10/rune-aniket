@@ -372,15 +372,43 @@ func (c *Cursor) cellAtCursor() (cell term.Cell, ok bool) {
 	return
 }
 
-func (c *Cursor) moveAfterRune(t []rune, move func() bool) (ok bool) {
+func isOneOf(cell term.Cell, special []rune) bool {
+	for _, r := range special {
+		if r == cell.Ch {
+			return true
+		}
+	}
+	return false
+}
+
+func isNoneOf(cell term.Cell, skip []rune) (none bool) {
+	none = true
+	for _, r := range skip {
+		none = none && cell.Ch != r
+	}
+	return
+}
+
+func (c *Cursor) moveAfterRune(skip, special []rune, move func() bool) (ok bool) {
 	const (
 		init = iota
 		foundRune
 	)
 
-	lastSanePos := c.cursor
-	lastSaneOffset := c.scroll.Offset()
+	initialPos := c.cursor
+	initialOffset := c.scroll.Offset()
+	lastSanePos := initialPos
+	lastSaneOffset := initialOffset
 	state := init
+
+	cell, cOk := c.cellAtCursor()
+	if !cOk {
+		return
+	}
+
+	if isOneOf(cell, special) {
+		state = foundRune
+	}
 
 	for move() {
 		cell, cOk := c.cellAtCursor()
@@ -391,20 +419,23 @@ func (c *Cursor) moveAfterRune(t []rune, move func() bool) (ok bool) {
 		lastSanePos = c.cursor
 		lastSaneOffset = c.scroll.Offset()
 
+		// newline should stop the procedure
+		if initialPos.Y != lastSanePos.Y ||
+			initialOffset.Y != lastSaneOffset.Y {
+			state = foundRune
+		}
+		// also finding a special character
+		if isOneOf(cell, special) {
+			state = foundRune
+		}
+
 		switch state {
 		case init:
-			for _, r := range t {
-				if r == cell.Ch {
-					state = foundRune
-					break
-				}
+			if isOneOf(cell, skip) {
+				state = foundRune
 			}
 		case foundRune:
-			none := true
-			for _, r := range t {
-				none = none && r != cell.Ch
-			}
-			if none {
+			if isNoneOf(cell, skip) {
 				return
 			}
 		}
@@ -419,7 +450,7 @@ func (c *Cursor) revertTo(pos, offset term.Coordinates) {
 	c.scroll.SeekTo(offset)
 }
 
-func (c *Cursor) moveBeforeRune(t []rune, move func() bool) (ok bool) {
+func (c *Cursor) moveBeforeRune(skip, all []rune, move func() bool) (ok bool) {
 	const (
 		skipRune = iota
 		findRune
@@ -433,22 +464,30 @@ func (c *Cursor) moveBeforeRune(t []rune, move func() bool) (ok bool) {
 	prevOffset := initialOffset
 
 	for move() {
-		cell, _ := c.cellAtCursor()
+		cell, cOk := c.cellAtCursor()
+		if !cOk {
+			continue
+		}
+
 		switch state {
 		case skipRune:
-			none := true
-			for _, r := range t {
-				none = none && cell.Ch != r
+			if isOneOf(cell, skip) {
+				continue
 			}
-			if none {
+			if isOneOf(cell, all) {
+				state = done
+				prev = c.cursor
+				prevOffset = c.scroll.Offset()
+			} else {
 				state = findRune
 			}
 		case findRune:
-			for _, r := range t {
-				if cell.Ch == r {
-					state = done
-					break
-				}
+			if isOneOf(cell, all) {
+				state = done
+			}
+			if initial.Y != c.cursor.Y ||
+				initialOffset.Y != c.scroll.Offset().Y {
+				state = done
 			}
 		}
 		if state == done {
@@ -461,34 +500,54 @@ func (c *Cursor) moveBeforeRune(t []rune, move func() bool) (ok bool) {
 	if state == done {
 		ok = true
 		c.revertTo(prev, prevOffset)
-	} else {
-		c.revertTo(initial, initialOffset)
 	}
 	return
 }
 
-var skipRunes = []rune{'.', ',', ':', ';', ' ', ')', '"',
+var allSpecialCharacters = []rune{'.', ',', ':', ';', ' ', ')', '"',
 	'\'', '(', '{', '}', '[', ']', '\t', '\x00', '\\', '/',
 	'+', '`', '_'}
 
+var skipCharacters = []rune{' ', '\t', '\x00', '_'}
+
+// MoveRightStartWordGroup moves the cursor right to the start of the next word.
+func (c *Cursor) MoveRightStartWordGroup() bool {
+	return c.moveAfterRune(skipCharacters, skipCharacters, c.MoveRightWrap)
+}
+
+// MoveLeftStartWordGroup moves the cursor left to the start of the previous word.
+func (c *Cursor) MoveLeftStartWordGroup() bool {
+	return c.moveBeforeRune(skipCharacters, skipCharacters, c.MoveLeftWrap)
+}
+
+// MoveRightEndWordGroup moves the cursor right to the end of the next or current word.
+func (c *Cursor) MoveRightEndWordGroup() bool {
+	return c.moveBeforeRune(skipCharacters, skipCharacters, c.MoveRightWrap)
+}
+
+// MoveLeftEndWordGroup moves the cursor left to the end of the previous word.
+func (c *Cursor) MoveLeftEndWordGroup() bool {
+	return c.moveAfterRune(skipCharacters, skipCharacters, c.MoveLeftWrap)
+}
+
 // MoveRightStartWord moves the cursor right to the start of the next word.
 func (c *Cursor) MoveRightStartWord() bool {
-	return c.moveAfterRune(skipRunes, c.MoveRightWrap)
+	return c.moveAfterRune(skipCharacters, allSpecialCharacters, c.MoveRightWrap)
 }
 
 // MoveLeftStartWord moves the cursor left to the start of the previous word.
 func (c *Cursor) MoveLeftStartWord() bool {
-	return c.moveBeforeRune(skipRunes, c.MoveLeftWrap)
+	return c.moveBeforeRune(skipCharacters, allSpecialCharacters, c.MoveLeftWrap)
 }
 
 // MoveRightEndWord moves the cursor right to the end of the next or current word.
 func (c *Cursor) MoveRightEndWord() bool {
-	return c.moveBeforeRune(skipRunes, c.MoveRightWrap)
+	return c.moveBeforeRune(skipCharacters, allSpecialCharacters, c.MoveRightWrap)
 }
 
 // MoveLeftEndWord moves the cursor left to the end of the previous word.
 func (c *Cursor) MoveLeftEndWord() bool {
-	return c.moveAfterRune(skipRunes, c.MoveLeftWrap)
+	return c.moveAfterRune(skipCharacters, allSpecialCharacters, c.MoveLeftWrap)
 }
 
 func (c *Cursor) moveMatchRune(target, match rune, move func() bool) bool {

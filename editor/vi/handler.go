@@ -412,12 +412,18 @@ func (vi *Vi) handleNormal(ev term.Event) (quit bool, handled bool) {
 			vi.setVisualLineMode()
 		case 'w':
 			vi.cursor.MoveRightStartWord()
+		case 'W':
+			vi.cursor.MoveRightStartWordGroup()
 		case 'u':
 			vi.cursor.Undo()
 		case 'e':
 			vi.cursor.MoveRightEndWord()
+		case 'E':
+			vi.cursor.MoveRightEndWordGroup()
 		case 'b':
 			vi.cursor.MoveLeftStartWord()
+		case 'B':
+			vi.cursor.MoveLeftStartWordGroup()
 		case '?':
 			vi.searchMode = moveToPrev
 			ev.Ch = '/'
