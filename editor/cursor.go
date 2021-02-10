@@ -922,6 +922,23 @@ func (c *Cursor) DeleteSelection() (ok bool) {
 	return
 }
 
+// CopySelection copies the current text under selection and returns true
+// or does nothing and returns false.
+func (c *Cursor) CopySelection(clip Clipboard, metadata interface{}) (ok bool) {
+	if c.selection.mode == noSelection {
+		return
+	}
+
+	selection := c.Selection()
+	c.Unselect()
+	c.setCursor(c.scrollToWindowCoordinates(c.selection.scrollFrom))
+
+	clip.Set(Paste{Data: selection, Metadata: metadata})
+
+	ok = true
+	return
+}
+
 // MoveToBounds moves the cursor up and to the left until it is in a row
 // with content and it is 'padding' cells away from the last column in the row.
 // If cursor is already in a row and/or in a column with content, then this method

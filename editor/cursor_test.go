@@ -707,23 +707,57 @@ func testCursorSelect(t *testing.T, width, height int) {
 		assertBufferAttributes(t, e.buffer(), term.Attributes{})
 	})
 
-	t.Run("Select selects from start to end", func(t *testing.T) {
+	t.Run("Select/DeleteSelection selects from start to end", func(t *testing.T) {
 		e := makeSelect(t)
 		require.True(t, e.DeleteSelection())
 		assert.Equal(t, "", e.Selection())
 		assertBufferAttributes(t, e.buffer(), term.Attributes{})
 	})
 
-	t.Run("SelectLine selects from start line to end line", func(t *testing.T) {
+	t.Run("SelectLine/DeleteSelection selects from start line to end line", func(t *testing.T) {
 		e := makeSelectLine(t)
 		require.True(t, e.DeleteSelection())
 		assertBufferAttributes(t, e.buffer(), term.Attributes{})
 	})
 
-	t.Run("SelectBlock selects from start to end in block", func(t *testing.T) {
+	t.Run("SelectBlock/DeleteSelection selects from start to end in block", func(t *testing.T) {
 		e := makeSelectBlock(t)
 		require.True(t, e.DeleteSelection())
 		assertBufferAttributes(t, e.buffer(), term.Attributes{})
+	})
+
+	t.Run("Select/CopySelection copies from start to end", func(t *testing.T) {
+		e := makeSelect(t)
+		clipboard := NewEphemeralClipboard()
+		require.True(t, e.CopySelection(clipboard, nil))
+		assert.Equal(t, "", e.Selection())
+		assertBufferAttributes(t, e.buffer(), term.Attributes{})
+
+		data, err := clipboard.Get()
+		require.NoError(t, err)
+		assert.Equal(t, e.scroll.Buffer().String(), data.Data)
+	})
+
+	t.Run("SelectLine/CopySelection copies from start line to end line", func(t *testing.T) {
+		e := makeSelectLine(t)
+		clipboard := NewEphemeralClipboard()
+		require.True(t, e.CopySelection(clipboard, nil))
+		assertBufferAttributes(t, e.buffer(), term.Attributes{})
+
+		data, err := clipboard.Get()
+		require.NoError(t, err)
+		assert.Equal(t, e.scroll.Buffer().String(), data.Data)
+	})
+
+	t.Run("SelectBlock/CopySelection copies from start to end in block", func(t *testing.T) {
+		e := makeSelectBlock(t)
+		clipboard := NewEphemeralClipboard()
+		require.True(t, e.CopySelection(clipboard, nil))
+		assertBufferAttributes(t, e.buffer(), term.Attributes{})
+
+		data, err := clipboard.Get()
+		require.NoError(t, err)
+		assert.NotZero(t, data.Data)
 	})
 }
 
