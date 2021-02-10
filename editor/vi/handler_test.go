@@ -305,27 +305,16 @@ diff_buf_adjust(win_
     diff_redraw(TRUE
     }               
 :             NORMAL`},
-		{"/i>kkFDcndi",
+		{"/i>kkFDcndi<ldw",
 			`  if (wp == NULL]   
   if (wp == NULL]   
   {                 
- di▐fbuf[i] = NULL; 
-    curtab->tp_diff_
+di▐urtab->tp_diff_in
     diff_redraw(TRUE
     }               
   }                 
   }                 
-:             INSERT`},
-		{"<",
-			`  if (wp == NULL]   
-  if (wp == NULL]   
-  {                 
- d▐ffbuf[i] = NULL; 
-    curtab->tp_diff_
-    diff_redraw(TRUE
-    }               
-  }                 
-  }                 
+  else              
 :             NORMAL`},
 		{"gg",
 			`▐                   
@@ -338,16 +327,16 @@ diff_buf_adjust(win_
 {                   
   win_T  *wp;       
 :             NORMAL`},
-		{"j",
+		{"jjyyp",
 			`                    
-▐*                  
+/*                  
  * Check if the curr
+▐* Check if the curr
  * diff buffers.    
  */                 
   void              
 diff_buf_adjust(win_
 {                   
-  win_T  *wp;       
 :             NORMAL`},
 	}
 

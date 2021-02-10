@@ -20,6 +20,7 @@ const (
 	insertMode
 	deleteMode
 	gMode
+	yankMode
 	visualMode
 	visualLineMode
 	visualBlockMode
@@ -143,6 +144,8 @@ func (vi *Vi) setMode(mode viMode) {
 		text = "DELETE"
 	case gMode:
 		text = "NORMAL"
+	case yankMode:
+		text = "YANK"
 	case visualMode:
 		text = "VISUAL"
 	case visualLineMode:
@@ -178,6 +181,10 @@ func (vi *Vi) setDeleteMode(thenInsert bool) {
 
 func (vi *Vi) setGMode() {
 	vi.setMode(gMode)
+}
+
+func (vi *Vi) setYankMode() {
+	vi.setMode(yankMode)
 }
 
 func (vi *Vi) setVisualMode() {
@@ -253,9 +260,9 @@ func (vi *Vi) logError(err error) {
 func (vi *Vi) pasteClipboard(before bool) bool {
 	paste, err := vi.config.clipboard.Get()
 	str := paste.Data
-	mode, ok := paste.Metadata.(viMode)
+	mode, ok := paste.Metadata.(editor.SelectMode)
 	if !ok {
-		mode = visualMode
+		mode = editor.StandardSelection
 	}
 	if err != nil {
 		vi.logError(fmt.Errorf("clipboard.Get: %s", err))
@@ -265,7 +272,7 @@ func (vi *Vi) pasteClipboard(before bool) bool {
 	cur, _ := vi.cursor.Cursor()
 
 	switch mode {
-	case visualMode:
+	case editor.StandardSelection:
 		if !before {
 			vi.cursor.MoveRight()
 			vi.cursor.InsertString(str)
@@ -275,7 +282,7 @@ func (vi *Vi) pasteClipboard(before bool) bool {
 			vi.cursor.InsertString(str)
 			vi.cursor.MoveTo(cur)
 		}
-	case visualLineMode:
+	case editor.LineSelection:
 		if !before {
 			vi.cursor.InsertRowBelow()
 			vi.cursor.MoveStartLine()
@@ -291,7 +298,7 @@ func (vi *Vi) pasteClipboard(before bool) bool {
 			vi.cursor.MoveTo(cur)
 			vi.cursor.MoveStartLine()
 		}
-	case visualBlockMode:
+	case editor.BlockSelection:
 		if !before {
 			vi.cursor.MoveRight()
 			vi.insertBlock(str)
@@ -305,7 +312,7 @@ func (vi *Vi) pasteClipboard(before bool) bool {
 	return true
 }
 
-func (vi *Vi) handleNormal(ev term.Event) (quit bool, handled bool) {
+func (vi *Vi) handleNormal(ev term.Event) (quit, handled bool) {
 	quit, handled = vi.handleMoveToCharacter(vi.moveMode, ev)
 	if handled {
 		return
@@ -339,6 +346,8 @@ func (vi *Vi) handleNormal(ev term.Event) (quit bool, handled bool) {
 			vi.setDeleteMode(false)
 		case 'c':
 			vi.setDeleteMode(true)
+		case 'y':
+			vi.setYankMode()
 		case 'N':
 			switch vi.searchMode {
 			case moveToNext:
@@ -476,6 +485,10 @@ func (vi *Vi) handleInsert(ev term.Event) (quit, handled bool) {
 	return
 }
 
+func (vi *Vi) copySelection() {
+	vi.cursor.CopySelection(vi.config.clipboard)
+}
+
 func (vi *Vi) handleVisual(ev term.Event) (quit, handled bool) {
 	if ev.Key == term.KeyEsc {
 		vi.setNormalMode()
@@ -492,9 +505,7 @@ func (vi *Vi) handleVisual(ev term.Event) (quit, handled bool) {
 		case '<':
 			vi.cursor.ShiftSelectionLeft()
 		case 'y':
-			selection := vi.cursor.Selection()
-			vi.config.clipboard.Set(editor.Paste{Data: selection, Metadata: vi.mode})
-			vi.cursor.Unselect()
+			vi.copySelection()
 			vi.setNormalMode()
 		case 'd', 'x':
 			vi.cursor.DeleteSelection()
@@ -564,6 +575,62 @@ func (vi *Vi) handleReplace(ev term.Event) (quit, handled bool) {
 	return
 }
 
+func (vi *Vi) handleMetaNormal(ev term.Event) (quit, handled, done bool) {
+	before, _ := vi.cursor.Cursor()
+	vi.cursor.Select()
+
+	prevMode := vi.moveMode
+	quit, handled = vi.handleNormal(ev)
+	isMoveSwitch := prevMode == moveNone && vi.moveMode != moveNone
+	after, _ := vi.cursor.Cursor()
+
+	if before == after {
+		vi.cursor.Unselect()
+		if !isMoveSwitch {
+			handled = false
+			vi.setNormalMode()
+		}
+		return
+	}
+
+	done = true
+
+	// in moveMode vi seems to not use right exclusive delete semantics
+	if prevMode == moveNone && before.Y == after.Y && before.X < after.X {
+		vi.cursor.MoveLeftWrap()
+	} else if before.Y == after.Y {
+		// FIXME since writer.Delete does not have right exclusive semantics
+		// we cannot fix right end in this case.
+	}
+	after, _ = vi.cursor.Cursor()
+
+	if before.Y != after.Y {
+		vi.cursor.SelectLine()
+	}
+	return
+}
+
+func (vi *Vi) handleYank(ev term.Event) (quit, handled bool) {
+	if ev.Ch == 'y' {
+		if vi.cursor.SelectLine() {
+			vi.copySelection()
+			handled = true
+		}
+		vi.setNormalMode()
+		return
+	}
+
+	var done bool
+	quit, handled, done = vi.handleMetaNormal(ev)
+	if !done {
+		return
+	}
+
+	vi.copySelection()
+	vi.setNormalMode()
+	return
+}
+
 func (vi *Vi) handleDelete(ev term.Event) (quit, handled bool) {
 	if (!vi.deleteInsert && ev.Ch == 'd') || (vi.deleteInsert && ev.Ch == 'c') {
 		if vi.cursor.SelectLine() {
@@ -574,19 +641,13 @@ func (vi *Vi) handleDelete(ev term.Event) (quit, handled bool) {
 		} else {
 			vi.setNormalMode()
 		}
+		handled = true
 		return
 	}
 
-	before, _ := vi.cursor.Cursor()
-	vi.cursor.Select()
-
-	quit, handled = vi.handleNormal(ev)
-	after, _ := vi.cursor.Cursor()
-
-	if before == after {
-		vi.cursor.Unselect()
-		// do not set to normal, in case we user is
-		// issuing a move to combination
+	var done bool
+	quit, handled, done = vi.handleMetaNormal(ev)
+	if !done {
 		return
 	}
 
@@ -625,6 +686,8 @@ func (vi *Vi) Handle(ev term.Event) (quit, handled bool) {
 		quit, handled = vi.handleInsert(ev)
 	case gMode:
 		quit, handled = vi.handleGo(ev)
+	case yankMode:
+		quit, handled = vi.handleYank(ev)
 	case deleteMode:
 		quit, handled = vi.handleDelete(ev)
 	case visualMode, visualLineMode, visualBlockMode:
@@ -647,7 +710,7 @@ func (vi *Vi) Handle(ev term.Event) (quit, handled bool) {
 	}
 
 	switch vi.mode {
-	case normalMode, gMode, deleteMode, visualMode, visualLineMode, visualBlockMode:
+	case normalMode, yankMode, gMode, deleteMode, visualMode, visualLineMode, visualBlockMode:
 		vi.cursor.MoveToBounds(0)
 		vi.cursor.MoveToNextNonNull()
 	case insertMode, replaceMode, replaceOneMode:
