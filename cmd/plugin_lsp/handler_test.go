@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"sync"
 	"testing"
 
 	"github.com/ernestrc/go-tui/cell"
@@ -59,6 +60,8 @@ func newTestLspHandler(
 	ret.diagnosticListID = defaultDiagnosticListID
 	ret.semanticTypesAttr = defaultSemanticTypeAttr
 	ret.diagnosticAttr = defaultDiagnosticAttr
+	ret.evChan = make(chan editor.Event)
+	go ret.handleEvents(ret.evChan)
 	return ret
 }
 
@@ -117,9 +120,11 @@ func assertEqualLocations(t *testing.T, loc, expected editor.LocationList) {
 
 func expectLocationList(
 	t *testing.T, ed *editor.MockEditor, expectedID string, expectedLocations []editor.Location,
+	wg *sync.WaitGroup,
 ) {
 	ed.EXPECT().SetLocationList(gomock.Any(), gomock.Any(), gomock.Any()).
 		DoAndReturn(func(h editor.Handler, id string, loc editor.LocationList) error {
+			defer wg.Done()
 			assertEqualLocations(t, loc, editor.LocationSlice(expectedLocations))
 			assert.Equal(t, expectedID, id)
 			return nil
@@ -127,10 +132,11 @@ func expectLocationList(
 }
 
 func expectAnyLocationList(
-	t *testing.T, ed *editor.MockEditor, expectedID string,
+	t *testing.T, ed *editor.MockEditor, expectedID string, wg *sync.WaitGroup,
 ) {
 	ed.EXPECT().SetLocationList(gomock.Any(), gomock.Any(), gomock.Any()).
 		DoAndReturn(func(h editor.Handler, id string, loc editor.LocationList) error {
+			defer wg.Done()
 			assert.Equal(t, expectedID, id)
 			return nil
 		}).Times(1)
@@ -141,6 +147,7 @@ func dispatchOpen(
 	name, content string, tokenData []float64, expectedListID string,
 	expectedLocations []editor.Location,
 ) {
+	var wg sync.WaitGroup
 	evOpen := editor.Event{
 		Type:         editor.EventTypeOpen,
 		ResourceName: name,
@@ -150,8 +157,10 @@ func dispatchOpen(
 
 	expectDidOpen(t, server, name, content)
 	expectSemanticTokens(t, server, tokenData)
-	expectLocationList(t, ed, expectedListID, expectedLocations)
+	expectLocationList(t, ed, expectedListID, expectedLocations, &wg)
+	wg.Add(1)
 	assert.False(t, h.Handle(evOpen))
+	wg.Wait()
 }
 
 func dispatchFlush(
@@ -159,6 +168,7 @@ func dispatchFlush(
 	name, content string, version float64, tokenData []float64,
 	expectedListID string, expectedLocations []editor.Location,
 ) {
+	var wg sync.WaitGroup
 	ev := editor.Event{
 		Type:         editor.EventTypeFlush,
 		ResourceName: name,
@@ -169,8 +179,10 @@ func dispatchFlush(
 
 	expectDidChange(t, server, name, version, changes)
 	expectSemanticTokens(t, server, tokenData)
-	expectLocationList(t, ed, expectedListID, expectedLocations)
+	expectLocationList(t, ed, expectedListID, expectedLocations, &wg)
+	wg.Add(1)
 	assert.False(t, h.Handle(ev))
+	wg.Wait()
 }
 
 func TestLspHandlerHandleOpen(t *testing.T) {
@@ -206,6 +218,7 @@ func TestLspHandlerHandleInsertDelete(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
+	var wg sync.WaitGroup
 	ed := editor.NewMockEditor(ctrl)
 	cfg := makePluginConfig()
 	server := NewMockServer(ctrl)
@@ -240,9 +253,11 @@ func TestLspHandlerHandleInsertDelete(t *testing.T) {
 		From: term.Coordinates{Y: 5, X: 13},
 		To:   term.Coordinates{Y: 5, X: 22},
 	})
-	expectLocationList(t, ed, defaultSemanticTokensListID, newLocations)
+	expectLocationList(t, ed, defaultSemanticTokensListID, newLocations, &wg)
 
+	wg.Add(1)
 	from, until := buf.InsertString(term.Coordinates{X: 9, Y: 5}, insertStr)
+	wg.Wait()
 
 	// Delete
 	expectedEvents = []protocol.TextDocumentContentChangeEvent{{
@@ -257,8 +272,10 @@ func TestLspHandlerHandleInsertDelete(t *testing.T) {
 	}}
 	expectDidChange(t, server, filename1, 3, expectedEvents)
 	expectSemanticTokens(t, server, tokenData1)
-	expectLocationList(t, ed, defaultSemanticTokensListID, expectedLocations1)
+	expectLocationList(t, ed, defaultSemanticTokensListID, expectedLocations1, &wg)
+	wg.Add(1)
 	buf.Delete(from, until)
+	wg.Wait()
 
 	// Delete 2
 	expectedEvents = []protocol.TextDocumentContentChangeEvent{{
@@ -270,8 +287,10 @@ func TestLspHandlerHandleInsertDelete(t *testing.T) {
 	}}
 	expectDidChange(t, server, filename1, 4, expectedEvents)
 	expectSemanticTokens(t, server, tokenData1)
-	expectLocationList(t, ed, defaultSemanticTokensListID, expectedLocations1)
+	expectLocationList(t, ed, defaultSemanticTokensListID, expectedLocations1, &wg)
+	wg.Add(1)
 	buf.Delete(term.Coordinates{Y: 6}, term.Coordinates{Y: 6})
+	wg.Wait()
 
 	// Delete 3
 	expectedEvents = []protocol.TextDocumentContentChangeEvent{{
@@ -283,6 +302,8 @@ func TestLspHandlerHandleInsertDelete(t *testing.T) {
 	}}
 	expectDidChange(t, server, filename1, 5, expectedEvents)
 	expectSemanticTokens(t, server, tokenData1)
-	expectAnyLocationList(t, ed, defaultSemanticTokensListID)
+	expectAnyLocationList(t, ed, defaultSemanticTokensListID, &wg)
+	wg.Add(1)
 	buf.DeleteRow(1)
+	wg.Wait()
 }

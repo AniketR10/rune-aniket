@@ -1,8 +1,6 @@
 package main
 
 import (
-	"net/http"
-	_ "net/http/pprof"
 	"os"
 
 	"github.com/ernestrc/go-tui/browser"
@@ -101,9 +99,9 @@ func main() {
 	log.SetLevel(log.TraceLevel)
 	plugin.SetLoggingLevel(log.TraceLevel)
 
-	go func() {
+	/* go func() {
 		log.Println(http.ListenAndServe("localhost:6063", nil))
-	}()
+	}()*/
 
 	plugin.Serve(&lspGrantee{}, requiredPermissions...)
 }
