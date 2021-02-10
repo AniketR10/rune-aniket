@@ -42,8 +42,8 @@ func setupIntTest(
 }
 
 func expectInitialServerSubscribe(t *testing.T, mock *MockEditor) {
-	mock.EXPECT().SubscribeEditor(gomock.Eq(EventTypeClose), gomock.Any()).Return(nil).Times(1)
-	mock.EXPECT().SubscribeEditor(gomock.Eq(EventTypeOpen), gomock.Any()).Return(nil).Times(1)
+	mock.EXPECT().SubscribeEditor(gomock.Eq(EventTypeClose), gomock.Any()).Return(nil).AnyTimes()
+	mock.EXPECT().SubscribeEditor(gomock.Eq(EventTypeOpen), gomock.Any()).Return(nil).AnyTimes()
 }
 
 func TestClientServerIntegration(t *testing.T) {
