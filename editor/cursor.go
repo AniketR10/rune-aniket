@@ -779,39 +779,60 @@ func (c *Cursor) cursorAtScrollBounds() (pos term.Coordinates, ok bool) {
 
 // Select anchors the current cursor position as the start of a text selection.
 // In order to unset anchor, use Unselect(). It returns true if cursor is in bounds or
-// false if selection failed.
+// false if selection failed. If cursor has already been called one of the Select methods,
+// then this method switches to the new mode and maintains original cursor position.
 func (c *Cursor) Select() (ok bool) {
+	mode := c.selection.mode
+	c.selection.mode = standardSelection
+	if mode != noSelection {
+		ok = true
+		c.setSelection()
+		return
+	}
 	c.selection.scrollFrom, ok = c.cursorAtScrollBounds()
 	if !ok {
 		return
 	}
-	c.selection.mode = standardSelection
 	c.setSelection()
 	return
 }
 
 // SelectLine anchors the current cursor position as the start of a line selection.
 // In order to unset anchor, use Unselect(). It returns true if cursor is in bounds or
-// false if selection failed.
+// false if selection failed. If cursor has already been called one of the Select methods,
+// then this method switches to the new mode and maintains original cursor position.
 func (c *Cursor) SelectLine() (ok bool) {
+	mode := c.selection.mode
+	c.selection.mode = lineSelection
+	if mode != noSelection {
+		ok = true
+		c.setSelection()
+		return
+	}
 	c.selection.scrollFrom, ok = c.cursorAtScrollBounds()
 	if !ok {
 		return
 	}
-	c.selection.mode = lineSelection
 	c.setSelection()
 	return
 }
 
 // SelectBlock anchors the current cursor position as the start of a block selection.
 // In order to unset anchor, use Unselect(). It returns true if cursor is in bounds or
-// false if selection failed.
+// false if selection failed. If cursor has already been called one of the Select methods,
+// then this method switches to the new mode and maintains original cursor position.
 func (c *Cursor) SelectBlock() (ok bool) {
+	mode := c.selection.mode
+	c.selection.mode = blockSelection
+	if mode != noSelection {
+		ok = true
+		c.setSelection()
+		return
+	}
 	c.selection.scrollFrom, ok = c.cursorAtScrollBounds()
 	if !ok {
 		return
 	}
-	c.selection.mode = blockSelection
 	c.setSelection()
 	return
 }

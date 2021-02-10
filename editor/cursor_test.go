@@ -655,12 +655,14 @@ func testCursorSelect(t *testing.T, width, height int) {
 		str := e.scroll.Buffer().String()
 		assertBufferAttributes(t, e.buffer(), term.Attributes{})
 		assert.False(t, e.Unselect())
-		require.True(t, e.Select())
+		require.True(t, e.SelectLine())
 
 		for e.MoveDown() {
 		}
 		for e.MoveRight() {
 		}
+		// test that we can switch between after move
+		require.True(t, e.Select())
 		assert.Equal(t, str, e.Selection())
 		return e
 	}
@@ -669,8 +671,10 @@ func testCursorSelect(t *testing.T, width, height int) {
 		e := setupCursor(t, width, height)
 		str := e.scroll.Buffer().String()
 		assertBufferAttributes(t, e.buffer(), term.Attributes{})
-		require.True(t, e.SelectLine())
+		require.True(t, e.Select())
 		require.True(t, e.MoveLastLine())
+		// test that we can switch between after move
+		require.True(t, e.SelectLine())
 		assert.Equal(t, str, e.Selection())
 		return e
 	}
@@ -678,9 +682,10 @@ func testCursorSelect(t *testing.T, width, height int) {
 	makeSelectBlock := func(t *testing.T) *Cursor {
 		e := setupCursor(t, width, height)
 		assertBufferAttributes(t, e.buffer(), term.Attributes{})
-		require.True(t, e.SelectBlock())
+		require.True(t, e.SelectLine())
 		require.True(t, e.MoveLastLine())
 		require.True(t, e.MoveEndLine())
+		require.True(t, e.SelectBlock())
 		return e
 	}
 
