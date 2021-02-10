@@ -729,7 +729,7 @@ func testCursorSelect(t *testing.T, width, height int) {
 	t.Run("Select/CopySelection copies from start to end", func(t *testing.T) {
 		e := makeSelect(t)
 		clipboard := NewEphemeralClipboard()
-		require.True(t, e.CopySelection(clipboard, nil))
+		require.True(t, e.CopySelection(clipboard))
 		assert.Equal(t, "", e.Selection())
 		assertBufferAttributes(t, e.buffer(), term.Attributes{})
 
@@ -741,7 +741,7 @@ func testCursorSelect(t *testing.T, width, height int) {
 	t.Run("SelectLine/CopySelection copies from start line to end line", func(t *testing.T) {
 		e := makeSelectLine(t)
 		clipboard := NewEphemeralClipboard()
-		require.True(t, e.CopySelection(clipboard, nil))
+		require.True(t, e.CopySelection(clipboard))
 		assertBufferAttributes(t, e.buffer(), term.Attributes{})
 
 		data, err := clipboard.Get()
@@ -752,7 +752,7 @@ func testCursorSelect(t *testing.T, width, height int) {
 	t.Run("SelectBlock/CopySelection copies from start to end in block", func(t *testing.T) {
 		e := makeSelectBlock(t)
 		clipboard := NewEphemeralClipboard()
-		require.True(t, e.CopySelection(clipboard, nil))
+		require.True(t, e.CopySelection(clipboard))
 		assertBufferAttributes(t, e.buffer(), term.Attributes{})
 
 		data, err := clipboard.Get()
@@ -841,7 +841,7 @@ func TestCursorUndoRedo100Backwards(t *testing.T) {
 	testCursorUndoRedo(t, (*Cursor).MoveLastLine, (*Cursor).MoveFirstLine, 100, 100)
 }
 
-func testCursorDeleteSelection(t *testing.T, width, height int, typeSelect int) {
+func testCursorDeleteSelection(t *testing.T, width, height int, typeSelect SelectMode) {
 	tsuite := []struct {
 		initialBuf  string
 		initialPos  func(*Cursor)
@@ -849,7 +849,7 @@ func testCursorDeleteSelection(t *testing.T, width, height int, typeSelect int) 
 		finalPos    func(*Cursor)
 		deleted     bool
 		finalBuf    string
-		skipForMode []int
+		skipForMode []SelectMode
 	}{
 		{
 			initialBuf: "",
@@ -871,7 +871,7 @@ func testCursorDeleteSelection(t *testing.T, width, height int, typeSelect int) 
 			finalPos:    func(c *Cursor) { c.MoveRight() },
 			deleted:     true,
 			finalBuf:    "b",
-			skipForMode: []int{lineSelection, blockSelection},
+			skipForMode: []SelectMode{LineSelection, BlockSelection},
 		},
 		{
 			initialBuf: "a\nb",
@@ -883,7 +883,7 @@ func testCursorDeleteSelection(t *testing.T, width, height int, typeSelect int) 
 			},
 			finalBuf:    "b",
 			deleted:     true,
-			skipForMode: []int{lineSelection, blockSelection},
+			skipForMode: []SelectMode{LineSelection, BlockSelection},
 		},
 		{
 			initialBuf: "a\nb",
@@ -896,7 +896,7 @@ func testCursorDeleteSelection(t *testing.T, width, height int, typeSelect int) 
 			selected:    true,
 			deleted:     true,
 			finalBuf:    "ab",
-			skipForMode: []int{lineSelection, blockSelection},
+			skipForMode: []SelectMode{LineSelection, BlockSelection},
 		},
 		{
 			initialBuf: "a\nb",
@@ -919,7 +919,7 @@ func testCursorDeleteSelection(t *testing.T, width, height int, typeSelect int) 
 			selected:    true,
 			deleted:     true,
 			finalBuf:    "a\nb",
-			skipForMode: []int{lineSelection},
+			skipForMode: []SelectMode{LineSelection},
 		},
 		{
 			initialBuf: "a\nb",
@@ -942,7 +942,7 @@ func testCursorDeleteSelection(t *testing.T, width, height int, typeSelect int) 
 			},
 			deleted:     true,
 			finalBuf:    "",
-			skipForMode: []int{standardSelection, blockSelection},
+			skipForMode: []SelectMode{StandardSelection, BlockSelection},
 		},
 	}
 
@@ -965,11 +965,11 @@ func testCursorDeleteSelection(t *testing.T, width, height int, typeSelect int) 
 		switch typeSelect {
 		case noSelection:
 			panic("hmm...")
-		case blockSelection:
+		case BlockSelection:
 			require.Equal(t, tcase.selected, c.SelectBlock())
-		case lineSelection:
+		case LineSelection:
 			require.Equal(t, tcase.selected, c.SelectLine())
-		case standardSelection:
+		case StandardSelection:
 			require.Equal(t, tcase.selected, c.Select())
 		}
 		if !tcase.selected {
@@ -985,31 +985,31 @@ func testCursorDeleteSelection(t *testing.T, width, height int, typeSelect int) 
 }
 
 func TestCursorDeleteSelection10(t *testing.T) {
-	testCursorDeleteSelection(t, 10, 10, standardSelection)
+	testCursorDeleteSelection(t, 10, 10, StandardSelection)
 }
 func TestCursorDeleteSelection20(t *testing.T) {
-	testCursorDeleteSelection(t, 20, 20, standardSelection)
+	testCursorDeleteSelection(t, 20, 20, StandardSelection)
 }
 func TestCursorDeleteSelection1000(t *testing.T) {
-	testCursorDeleteSelection(t, 1000, 1000, standardSelection)
+	testCursorDeleteSelection(t, 1000, 1000, StandardSelection)
 }
 func TestCursorDeleteSelectionLine10(t *testing.T) {
-	testCursorDeleteSelection(t, 10, 10, lineSelection)
+	testCursorDeleteSelection(t, 10, 10, LineSelection)
 }
 func TestCursorDeleteSelectionLine20(t *testing.T) {
-	testCursorDeleteSelection(t, 20, 20, lineSelection)
+	testCursorDeleteSelection(t, 20, 20, LineSelection)
 }
 func TestCursorDeleteSelectionLine1000(t *testing.T) {
-	testCursorDeleteSelection(t, 1000, 1000, lineSelection)
+	testCursorDeleteSelection(t, 1000, 1000, LineSelection)
 }
 func TestCursorDeleteSelectionBlock10(t *testing.T) {
-	testCursorDeleteSelection(t, 10, 10, blockSelection)
+	testCursorDeleteSelection(t, 10, 10, BlockSelection)
 }
 func TestCursorDeleteSelectionBlock20(t *testing.T) {
-	testCursorDeleteSelection(t, 20, 20, blockSelection)
+	testCursorDeleteSelection(t, 20, 20, BlockSelection)
 }
 func TestCursorDeleteSelectionBlock1000(t *testing.T) {
-	testCursorDeleteSelection(t, 1000, 1000, blockSelection)
+	testCursorDeleteSelection(t, 1000, 1000, BlockSelection)
 }
 
 func TestCursorMoveToBounds(t *testing.T) {

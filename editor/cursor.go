@@ -8,11 +8,17 @@ import (
 	"github.com/ernestrc/go-tui/term"
 )
 
+// SelectMode represents a select mode.
+type SelectMode uint8
+
 const (
-	noSelection = iota
-	standardSelection
-	lineSelection
-	blockSelection
+	noSelection SelectMode = iota
+	// StandardSelection represents a select mode. See Select for more details.
+	StandardSelection
+	// LineSelection represents a select mode. See SelectLine for more details.
+	LineSelection
+	// BlockSelection represents a select mode. See SelectBlock for more details.
+	BlockSelection
 )
 
 // used to subscribe to buffer updates
@@ -32,7 +38,7 @@ type Cursor struct {
 	locs      map[string]LocationList
 	messages  map[term.Coordinates][]message
 	selection struct {
-		mode       int
+		mode       SelectMode
 		scrollFrom term.Coordinates
 		cells      [][]term.Cell
 	}
@@ -741,11 +747,11 @@ func (c *Cursor) setSelection() {
 	to := c.cursorAtScroll()
 
 	switch c.selection.mode {
-	case standardSelection:
+	case StandardSelection:
 		c.selection.cells = c.buffer().Select(from, to)
-	case lineSelection:
+	case LineSelection:
 		c.selection.cells = c.buffer().SelectLine(from, to)
-	case blockSelection:
+	case BlockSelection:
 		c.selection.cells = c.buffer().SelectBlock(from, to)
 	}
 
@@ -783,7 +789,7 @@ func (c *Cursor) cursorAtScrollBounds() (pos term.Coordinates, ok bool) {
 // then this method switches to the new mode and maintains original cursor position.
 func (c *Cursor) Select() (ok bool) {
 	mode := c.selection.mode
-	c.selection.mode = standardSelection
+	c.selection.mode = StandardSelection
 	if mode != noSelection {
 		ok = true
 		c.setSelection()
@@ -803,7 +809,7 @@ func (c *Cursor) Select() (ok bool) {
 // then this method switches to the new mode and maintains original cursor position.
 func (c *Cursor) SelectLine() (ok bool) {
 	mode := c.selection.mode
-	c.selection.mode = lineSelection
+	c.selection.mode = LineSelection
 	if mode != noSelection {
 		ok = true
 		c.setSelection()
@@ -823,7 +829,7 @@ func (c *Cursor) SelectLine() (ok bool) {
 // then this method switches to the new mode and maintains original cursor position.
 func (c *Cursor) SelectBlock() (ok bool) {
 	mode := c.selection.mode
-	c.selection.mode = blockSelection
+	c.selection.mode = BlockSelection
 	if mode != noSelection {
 		ok = true
 		c.setSelection()
@@ -911,11 +917,11 @@ func (c *Cursor) DeleteSelection() (ok bool) {
 
 	var start term.Coordinates
 	switch mode {
-	case standardSelection:
+	case StandardSelection:
 		start, _, _ = c.buffer().Delete(from, to)
-	case lineSelection:
+	case LineSelection:
 		start, _, _ = c.buffer().DeleteLine(from, to)
-	case blockSelection:
+	case BlockSelection:
 		start, _ = c.buffer().DeleteBlock(from, to)
 	}
 	c.setCursor(c.scrollToWindowCoordinates(start))
@@ -924,16 +930,17 @@ func (c *Cursor) DeleteSelection() (ok bool) {
 
 // CopySelection copies the current text under selection and returns true
 // or does nothing and returns false.
-func (c *Cursor) CopySelection(clip Clipboard, metadata interface{}) (ok bool) {
+func (c *Cursor) CopySelection(clip Clipboard) (ok bool) {
 	if c.selection.mode == noSelection {
 		return
 	}
 
 	selection := c.Selection()
+	mode := c.selection.mode
 	c.Unselect()
 	c.setCursor(c.scrollToWindowCoordinates(c.selection.scrollFrom))
 
-	clip.Set(Paste{Data: selection, Metadata: metadata})
+	clip.Set(Paste{Data: selection, Metadata: mode})
 
 	ok = true
 	return
@@ -1066,7 +1073,7 @@ func (c *Cursor) ShiftLineLeft() bool {
 func (c *Cursor) getShiftSelection() (from, to term.Coordinates) {
 	from, to = c.selection.scrollFrom, c.cursorAtScroll()
 	switch c.selection.mode {
-	case blockSelection:
+	case BlockSelection:
 		from, to = cell.SortFromToBlock(from, to)
 	default:
 		from, to = cell.SortFromTo(from, to)
