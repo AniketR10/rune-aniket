@@ -179,8 +179,7 @@ func (e *Ex) handleProxy(ev term.Event) (
 		}
 	}
 
-	prev := ev
-	ev, cmd, _ := e.comp.KeyMapping(ev)
+	mev, cmd, _ := e.comp.KeyMapping(ev)
 	if cmd != "" {
 		// command mappings take precedence over ev subscriptions
 		// or other ex key mappings
@@ -191,14 +190,8 @@ func (e *Ex) handleProxy(ev term.Event) (
 		return quit, true
 	}
 
-	// client subscriptions take precedence over ex key mappings
-	handled = e.comp.Publish(ev)
-	if handled {
-		return
-	}
-
 	browser := e.comp.Browser()
-	switch ev.Key {
+	switch mev.Key {
 	case term.KeyCtrlA:
 		browser.RemoveAllTabs()
 	case term.KeyCtrlW:
@@ -208,9 +201,12 @@ func (e *Ex) handleProxy(ev term.Event) (
 	case term.KeyCtrlH:
 		browser.UpdateWindowTabPrev(browser.Focus())
 	default:
-		// do not map for children
-		ev = prev
-		exit, handled = browser.Handle(ev)
+		exit, handled = browser.Handle(mev)
+		if handled {
+			return
+		}
+
+		handled = e.comp.Publish(mev)
 		if handled {
 			return
 		}
@@ -220,7 +216,7 @@ func (e *Ex) handleProxy(ev term.Event) (
 		// a modal editor, and so does not handle
 		// the command trigger event in its "initial" mode
 		// (in vi terms, this would be normal mode).
-		handled = e.handleCommandEvent(ev)
+		handled = e.handleCommandEvent(mev)
 		return
 	}
 

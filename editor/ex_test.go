@@ -337,7 +337,7 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 	h := browser.NewTestHandler()
 	h.Ch = 'Z' // helps identify in tests
 
-	err = b.Subscribe(term.Event{Type: term.EventKey, Ch: ']'},
+	err = b.Subscribe(term.Event{Type: term.EventKey, Ch: '&'},
 		browser.FuncEventHandler(func(ev term.Event) bool {
 			b.SplitHorizontalBelow(h)
 			return false
@@ -351,12 +351,12 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 	require.NoError(t, b.MergeKeyMap(newMappings))
 
 	cases = []testutil.HandlerSequenceTestCase{
-		{"]_",
+		{"&_",
 			`┌──────────────────┐
 │cabin.go  other.go│
 ├────────┐┌────────┤
-│AAAAAAAA││EEEEEEEE│
-│AAAAAAAA││EEEEEEEE│
+│BBBBBBBB││EEEEEEEE│
+│BBBBBBBB││EEEEEEEE│
 └────────┘│EEEEEEEE│
 ┌────────┐│EEEEEEEE│
 │ZZZZZZZZ││EEEEEEEE│
@@ -366,8 +366,8 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 			`┌──────────────────┐
 │cabin.go  other.go│
 ├────────┐┌────────┤
-│AAAAAAAA││EEEEEEEE│
-│AAAAAAAA││EEEEEEEE│
+│BBBBBBBB││EEEEEEEE│
+│BBBBBBBB││EEEEEEEE│
 └────────┘│EEEEEEEE│
 ┌────────┐│EEEEEEEE│
 │cccccccc││EEEEEEEE│

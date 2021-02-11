@@ -148,10 +148,10 @@ func TestClientSynchronizeHandlers(t *testing.T) {
 	h1 := browser.TestHandler{}
 
 	subs := []term.Event{
-		term.Event{Type: term.EventKey, Key: term.KeyCtrlA},
-		term.Event{Type: term.EventKey, Key: term.KeyCtrlJ},
-		term.Event{Type: term.EventKey, Key: term.KeyCtrlH},
-		term.Event{Type: term.EventKey, Key: term.KeyCtrlB},
+		{Type: term.EventKey, Ch: 'A'},
+		{Type: term.EventKey, Ch: 'J'},
+		{Type: term.EventKey, Ch: 'H'},
+		{Type: term.EventKey, Ch: 'B'},
 	}
 
 	for _, ev := range subs {
