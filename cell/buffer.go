@@ -22,7 +22,8 @@ type Buffer struct {
 	undoer     *undoer
 	selector   selector
 	unixReader *unixFileReader
-	pub        *syncPublisher
+	rootPub    *syncPublisher
+	usagePub   *syncPublisher
 
 	// effective Reader and Writer
 	reader Reader
@@ -39,7 +40,6 @@ func NewBuffer() (b *Buffer) {
 func (b *Buffer) initWithCells(c *rawCells, unixFile bool) {
 	b.cells = c
 
-	b.pub = newPublisher(b.cells)
 	if unixFile {
 		b.unixReader = newUnixFileReader(b.cells)
 		b.reader = b.unixReader
@@ -47,9 +47,13 @@ func (b *Buffer) initWithCells(c *rawCells, unixFile bool) {
 		b.reader = b.cells
 	}
 
-	// setup the publisher as the deepest Writer
-	b.undoer = newUndoer(b.pub)
+	// setup the root publisher as the deepest Writer
+	b.rootPub = newPublisher(b.cells)
+	b.undoer = newUndoer(b.rootPub)
 	b.writer = b.undoer
+	// setup the usage publisher at the shalowest Writer
+	b.usagePub = newPublisher(b.writer)
+	b.writer = b.usagePub
 
 	b.selector.reader = b.reader
 }
@@ -400,12 +404,23 @@ func (b *Buffer) ShiftRowLeft(row int) (chars int) {
 
 // Subscribe subscribes s to all updates to the underlying buffer.
 func (b *Buffer) Subscribe(s Subscriber) {
-	b.pub.Subscribe(s)
+	b.rootPub.Subscribe(s)
 }
 
 // Unsubscribe unsubscribes s from updates.
 func (b *Buffer) Unsubscribe(s Subscriber) {
-	b.pub.Unsubscribe(s)
+	b.rootPub.Unsubscribe(s)
+}
+
+// SubscribeUsage subscribes s to direct update calls to this buffer. Unlike Subscribe,
+// this method does not capture indirect updates to Buffer, for instance via Undo.
+func (b *Buffer) SubscribeUsage(s Subscriber) {
+	b.usagePub.Subscribe(s)
+}
+
+// UnsubscribeUsage reverses SubscribeUsage.
+func (b *Buffer) UnsubscribeUsage(s Subscriber) {
+	b.usagePub.Unsubscribe(s)
 }
 
 // Height returns the required height if this Buffer was to be drawn on a term.Writer.

@@ -21,4 +21,12 @@ func TestDeleteClipboard(t *testing.T) {
 	data, err := clip.Get()
 	require.NoError(t, err)
 	assert.Equal(t, Paste{Data: content}, data)
+
+	// test that undo inserts do not get copied to clipboard
+	buf.Undo()
+	buf.Undo()
+
+	data, err = clip.Get()
+	require.NoError(t, err)
+	assert.Equal(t, Paste{Data: content}, data)
 }

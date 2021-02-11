@@ -16,7 +16,7 @@ func WithCopyDelete(clipboard Clipboard, buf *cell.Buffer) {
 	c := new(delClip)
 	c.clipboard = clipboard
 	c.pub = buf
-	buf.Subscribe(c)
+	buf.SubscribeUsage(c)
 }
 
 func (c *delClip) OnWillInsert(at term.Coordinates, str string) {
