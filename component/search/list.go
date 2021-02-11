@@ -105,8 +105,9 @@ func (l *List) setInternalList(f *component.FocusList) {
 	l.list.FocusList = f
 }
 
-func (l *List) addMatch(
+func addMatch(
 	list *component.FocusList, match Match, tokens *[]int,
+	matchTextAttr term.Attributes,
 ) {
 	matchText := match.data
 	b := component.NewSpan(component.String(string(matchText)), component.SpanConfig{
@@ -116,7 +117,7 @@ func (l *List) addMatch(
 	comp := component.WithAttrSetter(b)
 	if tokens != nil {
 		for _, t := range *tokens {
-			comp.SetAttrAt(term.Coordinates{X: t}, l.cfg.matchedTextAttr)
+			comp.SetAttrAt(term.Coordinates{X: t}, matchTextAttr)
 		}
 	}
 
@@ -188,7 +189,7 @@ func (l *List) pushData(data []byte, slab *util.Slab, sortList bool) (matched bo
 
 	searchInput := l.getSearchQuery()
 	if len(searchInput) == 0 {
-		l.addMatch(l.list.FocusList, Match{data: data}, nil)
+		addMatch(l.list.FocusList, Match{data: data}, nil, l.cfg.matchedTextAttr)
 		matched = true
 		if sortList {
 			l.setFilesCount()
@@ -198,7 +199,7 @@ func (l *List) pushData(data []byte, slab *util.Slab, sortList bool) (matched bo
 
 	search(l.cfg.algo, linebuf[:], searchInput, slab, l.cfg.caseSensitive,
 		func(match Match, tokens *[]int) bool {
-			l.addMatch(l.list.FocusList, match, tokens)
+			addMatch(l.list.FocusList, match, tokens, l.cfg.matchedTextAttr)
 			matched = true
 			return false
 		})
@@ -268,9 +269,7 @@ func (l *List) handleSearch(ctx context.Context, cancelFn func()) {
 			case <-ctx.Done():
 				return false
 			default:
-				l.mu.Lock()
-				defer l.mu.Unlock()
-				l.addMatch(newList, match, tokens)
+				addMatch(newList, match, tokens, l.cfg.matchedTextAttr)
 				return true
 			}
 		})
@@ -282,6 +281,8 @@ func (l *List) handleSearch(ctx context.Context, cancelFn func()) {
 	}
 
 	l.mu.Lock()
+	// NOTE the data that has been pushed asynchrously for the duration since
+	// the previous Unlock, will not make it to this iteration of the final result.
 	l.setInternalList(newList)
 	l.sortMatchesList()
 	cancelFn()

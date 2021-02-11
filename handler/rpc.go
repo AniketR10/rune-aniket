@@ -15,7 +15,7 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-const defaultRPCTimeout = 300 * time.Millisecond
+const defaultRPCTimeout = 1000 * time.Millisecond
 
 type clientCloser interface {
 	proto.HandlerClient
