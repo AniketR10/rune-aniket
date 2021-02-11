@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ernestrc/blue/datastore/document"
 	"github.com/ernestrc/go-tui/handler"
 	"github.com/ernestrc/go-tui/proto"
 	"github.com/ernestrc/go-tui/term"
@@ -30,14 +31,15 @@ type Client struct {
 	// to recover before we shutdown connection.
 	failureTimeout time.Duration
 
-	broker proto.MuxBroker
-	cc     grpc.ClientConnInterface
-	wm     proto.WindowManagerClient
-	msg    proto.MessengerClient
-	mp     proto.KeyMapperClient
-	f      proto.ResourceOpenerClient
-	s      proto.EventSubscriberClient
-	p      proto.EventPublisherClient
+	broker  proto.MuxBroker
+	cc      grpc.ClientConnInterface
+	storage document.Client
+	wm      proto.WindowManagerClient
+	msg     proto.MessengerClient
+	mp      proto.KeyMapperClient
+	f       proto.ResourceOpenerClient
+	s       proto.EventSubscriberClient
+	p       proto.EventPublisherClient
 
 	// window client resources. windowClients are created on
 	// calls to Split* or Focus. They are destroyed when client
@@ -92,6 +94,7 @@ func (c *Client) Init(
 	broker proto.MuxBroker, cc grpc.ClientConnInterface,
 	pluginLock sync.Locker,
 ) {
+	c.storage.Init(cc)
 	c.wm = proto.NewWindowManagerClient(cc)
 	c.msg = proto.NewMessengerClient(cc)
 	c.cc = cc
@@ -336,6 +339,48 @@ func (c *Client) Focus() (Window, error) {
 		return nil, err
 	}
 	return c.dialWindow(res.GetWindowId(), -1)
+}
+
+// Create satisfies browser.Storage
+func (c *Client) Create(
+	ctx context.Context, ID string, doc interface{},
+) error {
+	return c.storage.Create(ctx, ID, doc)
+}
+
+// Set satisfies browser.Storage
+func (c *Client) Set(
+	ctx context.Context, ID string, doc interface{},
+) error {
+	return c.storage.Set(ctx, ID, doc)
+}
+
+// Update satisfies browser.Storage
+func (c *Client) Update(
+	ctx context.Context, ID string, updates []document.Update,
+) error {
+	return c.storage.Update(ctx, ID, updates)
+}
+
+// Get satisfies browser.Storage
+func (c *Client) Get(
+	ctx context.Context, ID string, doc interface{},
+) error {
+	return c.storage.Get(ctx, ID, doc)
+}
+
+// Delete satisfies browser.Storage
+func (c *Client) Delete(
+	ctx context.Context, ID string,
+) error {
+	return c.storage.Delete(ctx, ID)
+}
+
+// List satisfies browser.Storage
+func (c *Client) List(
+	ctx context.Context, filters []document.Filter,
+) (document.Iterator, error) {
+	return c.storage.List(ctx, filters)
 }
 
 // Close closes all resources associated with this Client.

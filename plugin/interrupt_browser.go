@@ -3,6 +3,7 @@ package plugin
 import (
 	"context"
 
+	bproto "github.com/ernestrc/blue/rpc"
 	"github.com/ernestrc/go-tui/proto"
 )
 
@@ -13,6 +14,7 @@ type browserServer interface {
 	proto.KeyMapperServer
 	proto.MessengerServer
 	proto.ResourceOpenerServer
+	bproto.DocumentStoreServer
 }
 
 // this structure wraps a browser.Browser to
@@ -96,4 +98,45 @@ func (s *interruptBrowser) Subscribe(
 	res, err := s.browserServer.Subscribe(ctx, req)
 	s.interruptDraw()
 	return res, err
+}
+
+func (s *interruptBrowser) Create(
+	ctx context.Context, req *bproto.CreateDocumentRequest,
+) (*bproto.CreateDocumentResponse, error) {
+	res, err := s.browserServer.Create(ctx, req)
+	return res, err
+}
+
+func (s *interruptBrowser) Set(
+	ctx context.Context, req *bproto.SetDocumentRequest,
+) (*bproto.DocumentResponse, error) {
+	res, err := s.browserServer.Set(ctx, req)
+	return res, err
+}
+
+func (s *interruptBrowser) Update(
+	ctx context.Context, req *bproto.UpdateDocumentRequest,
+) (*bproto.UpdateDocumentResponse, error) {
+	res, err := s.browserServer.Update(ctx, req)
+	return res, err
+}
+
+func (s *interruptBrowser) Get(
+	ctx context.Context, req *bproto.GetDocumentRequest,
+) (*bproto.GetDocumentResponse, error) {
+	res, err := s.browserServer.Get(ctx, req)
+	return res, err
+}
+
+func (s *interruptBrowser) Delete(
+	ctx context.Context, req *bproto.DeleteDocumentRequest,
+) (*bproto.DocumentResponse, error) {
+	res, err := s.browserServer.Delete(ctx, req)
+	return res, err
+}
+
+func (s *interruptBrowser) List(
+	req *bproto.ListDocumentRequest, srv bproto.DocumentStore_ListServer,
+) error {
+	return s.browserServer.List(req, srv)
 }

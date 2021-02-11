@@ -63,6 +63,12 @@ github.com/ernestrc/blue v0.0.0-20210209151414-aa1253693591 h1:PCOF93UImw21zA8Vx
 github.com/ernestrc/blue v0.0.0-20210209151414-aa1253693591/go.mod h1:7DR1dghzu3gWV6GYEOAvPHkXXdndOnW+XWcdGXMHuu0=
 github.com/ernestrc/blue v0.0.0-20210209154843-6cb358d2b555 h1:WTasSxNUn82ONwyhVx1vqhweP+crNxVcGJL1tcTY/dw=
 github.com/ernestrc/blue v0.0.0-20210209154843-6cb358d2b555/go.mod h1:7DR1dghzu3gWV6GYEOAvPHkXXdndOnW+XWcdGXMHuu0=
+github.com/ernestrc/blue v0.0.0-20210211002833-564d08ca94cd h1:1JAEn54O1ShWRUjV+jGqn+TdS+FToY4wIVCAb0C52rY=
+github.com/ernestrc/blue v0.0.0-20210211002833-564d08ca94cd/go.mod h1:7DR1dghzu3gWV6GYEOAvPHkXXdndOnW+XWcdGXMHuu0=
+github.com/ernestrc/blue v0.0.0-20210211003819-065065d11d7e h1:D/yZPnbU1/LecYCMddyaWYrJ72b7Z9rpjZvoBFyJfXk=
+github.com/ernestrc/blue v0.0.0-20210211003819-065065d11d7e/go.mod h1:7DR1dghzu3gWV6GYEOAvPHkXXdndOnW+XWcdGXMHuu0=
+github.com/ernestrc/blue v0.0.0-20210211011506-d4a38bdf2ac3 h1:A+l6Sk18p2iNPKciMraO+TabkuVL09c0r1X05HIatug=
+github.com/ernestrc/blue v0.0.0-20210211011506-d4a38bdf2ac3/go.mod h1:7DR1dghzu3gWV6GYEOAvPHkXXdndOnW+XWcdGXMHuu0=
 github.com/ernestrc/dom v0.2.5-0.20201125033726-789c946aa938 h1:f/aC0hFDoMkao3chzwSlyBnwxcQj77I3i/D6HEbcuTE=
 github.com/ernestrc/dom v0.2.5-0.20201125033726-789c946aa938/go.mod h1:zkvVMhrl7iSWniJU2txvm5E6pF5bkHVK5ALYLlNBcO0=
 github.com/ernestrc/golang-internal-tools v0.0.0-20210125203355-a1ef7e2356b9 h1:aJNMv6nVes7S18nwmYH/rq5l5XFGi27dQApspGJYbvo=

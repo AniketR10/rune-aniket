@@ -3,6 +3,7 @@ package plugin
 import (
 	"sync"
 
+	bproto "github.com/ernestrc/blue/rpc"
 	"github.com/ernestrc/go-tui/browser"
 	"github.com/ernestrc/go-tui/proto"
 	"github.com/ernestrc/go-tui/term"
@@ -25,6 +26,8 @@ const (
 	// This is useful if your plugin handler does async updates to its state, as
 	// it enables interrupting the main event loop to redraw components.
 	PermissionBrowserEventPublisher = "_PermBrowserEventPublisher"
+	// PermissionBrowserStorage requests access to storage.
+	PermissionBrowserStorage = "_PermBrowserStorage"
 )
 
 type browserResourceServer struct {
@@ -64,6 +67,7 @@ func (s *browserResourceServer) Serve(
 			proto.RegisterMessengerServer(grpc, rpcServer)
 			proto.RegisterEventSubscriberServer(grpc, rpcServer)
 			proto.RegisterEventPublisherServer(grpc, rpcServer)
+			bproto.RegisterDocumentStoreServer(grpc, rpcServer)
 		}
 		return s.srv
 	})
@@ -80,6 +84,7 @@ func BrowserResources(b browser.Browser) map[Permission]ResourceServer {
 		PermissionBrowserMessenger:       s,
 		PermissionBrowserEventSubscriber: s,
 		PermissionBrowserEventPublisher:  s,
+		PermissionBrowserStorage:         s,
 	}
 }
 
@@ -143,6 +148,14 @@ func EventSubscriber(token uint32, broker proto.MuxBroker) (
 // resource with the given token.
 func EventPublisher(token uint32, broker proto.MuxBroker) (
 	browser.EventPublisher, error,
+) {
+	return dialBrowser(token, broker)
+}
+
+// Storage acquires the browser's Storage
+// resource with the given token.
+func Storage(token uint32, broker proto.MuxBroker) (
+	browser.Storage, error,
 ) {
 	return dialBrowser(token, broker)
 }

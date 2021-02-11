@@ -1,6 +1,7 @@
 package editor
 
 import (
+	"github.com/ernestrc/blue/datastore/document"
 	"github.com/ernestrc/go-tui/browser"
 	"github.com/ernestrc/go-tui/component"
 	"github.com/ernestrc/go-tui/term"
@@ -15,6 +16,7 @@ type Config struct {
 	RecoveryFilepath   string
 	CommandEvent       term.Event
 	CommandKeyBindings map[term.Event]string
+	Storage            document.Service
 
 	browser.Config
 }
@@ -29,6 +31,7 @@ func DefaultConfig() Config {
 		CommandEvent:       term.Event{Ch: ':', Type: term.EventKey},
 		Config:             browser.DefaultConfig(),
 		CommandKeyBindings: make(map[term.Event]string),
+		Storage:            document.NewInMemoryCache(),
 	}
 }
 
@@ -48,6 +51,13 @@ func WithTabspaces(tabspaces int) Option {
 func WithSwapDir(dir string) Option {
 	return func(cfg *Config) {
 		cfg.SwapDir = dir
+	}
+}
+
+// WithStorage updates the storage of an Editor to use svc.
+func WithStorage(svc document.Service) Option {
+	return func(cfg *Config) {
+		cfg.Storage = svc
 	}
 }
 

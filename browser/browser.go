@@ -3,8 +3,7 @@ package browser
 //go:generate mockgen -destination=./browser_gomock.go -package browser -self_package browser -source browser.go
 
 import (
-	"io"
-
+	"github.com/ernestrc/blue/datastore/document"
 	"github.com/ernestrc/go-tui"
 	"github.com/ernestrc/go-tui/term"
 )
@@ -77,6 +76,12 @@ type EventPublisher interface {
 	PublishInterrupt() error
 }
 
+// Storage is the interface that wraps persistence CRUD methods.
+// See document.Service for more details.
+type Storage interface {
+	document.Service
+}
+
 // Browser is an interface that groups methods to manipulate
 // the user interface of a browser.
 type Browser interface {
@@ -86,7 +91,8 @@ type Browser interface {
 	KeyMapper
 	ResourceOpener
 	Messenger
-	io.Closer
+	Storage
+	// io.Closer by means of Storage
 }
 
 type unmountHandler struct {

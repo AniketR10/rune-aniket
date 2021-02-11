@@ -5,8 +5,10 @@
 package browser
 
 import (
+	context "context"
 	reflect "reflect"
 
+	document "github.com/ernestrc/blue/datastore/document"
 	go_tui "github.com/ernestrc/go-tui"
 	term "github.com/ernestrc/go-tui/term"
 	gomock "github.com/golang/mock/gomock"
@@ -535,6 +537,128 @@ func (mr *MockEventPublisherMockRecorder) PublishInterrupt() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PublishInterrupt", reflect.TypeOf((*MockEventPublisher)(nil).PublishInterrupt))
 }
 
+// MockStorage is a mock of Storage interface.
+type MockStorage struct {
+	ctrl     *gomock.Controller
+	recorder *MockStorageMockRecorder
+}
+
+// MockStorageMockRecorder is the mock recorder for MockStorage.
+type MockStorageMockRecorder struct {
+	mock *MockStorage
+}
+
+// NewMockStorage creates a new mock instance.
+func NewMockStorage(ctrl *gomock.Controller) *MockStorage {
+	mock := &MockStorage{ctrl: ctrl}
+	mock.recorder = &MockStorageMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockStorage) EXPECT() *MockStorageMockRecorder {
+	return m.recorder
+}
+
+// Close mocks base method.
+func (m *MockStorage) Close() error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Close")
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Close indicates an expected call of Close.
+func (mr *MockStorageMockRecorder) Close() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockStorage)(nil).Close))
+}
+
+// Create mocks base method.
+func (m *MockStorage) Create(ctx context.Context, ID string, doc interface{}) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Create", ctx, ID, doc)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Create indicates an expected call of Create.
+func (mr *MockStorageMockRecorder) Create(ctx, ID, doc interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Create", reflect.TypeOf((*MockStorage)(nil).Create), ctx, ID, doc)
+}
+
+// Delete mocks base method.
+func (m *MockStorage) Delete(ctx context.Context, ID string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Delete", ctx, ID)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Delete indicates an expected call of Delete.
+func (mr *MockStorageMockRecorder) Delete(ctx, ID interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Delete", reflect.TypeOf((*MockStorage)(nil).Delete), ctx, ID)
+}
+
+// Get mocks base method.
+func (m *MockStorage) Get(ctx context.Context, ID string, doc interface{}) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Get", ctx, ID, doc)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Get indicates an expected call of Get.
+func (mr *MockStorageMockRecorder) Get(ctx, ID, doc interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Get", reflect.TypeOf((*MockStorage)(nil).Get), ctx, ID, doc)
+}
+
+// List mocks base method.
+func (m *MockStorage) List(ctx context.Context, filters []document.Filter) (document.Iterator, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "List", ctx, filters)
+	ret0, _ := ret[0].(document.Iterator)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// List indicates an expected call of List.
+func (mr *MockStorageMockRecorder) List(ctx, filters interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "List", reflect.TypeOf((*MockStorage)(nil).List), ctx, filters)
+}
+
+// Set mocks base method.
+func (m *MockStorage) Set(ctx context.Context, ID string, doc interface{}) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Set", ctx, ID, doc)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Set indicates an expected call of Set.
+func (mr *MockStorageMockRecorder) Set(ctx, ID, doc interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Set", reflect.TypeOf((*MockStorage)(nil).Set), ctx, ID, doc)
+}
+
+// Update mocks base method.
+func (m *MockStorage) Update(ctx context.Context, ID string, updates []document.Update) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Update", ctx, ID, updates)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Update indicates an expected call of Update.
+func (mr *MockStorageMockRecorder) Update(ctx, ID, updates interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Update", reflect.TypeOf((*MockStorage)(nil).Update), ctx, ID, updates)
+}
+
 // MockBrowser is a mock of Browser interface.
 type MockBrowser struct {
 	ctrl     *gomock.Controller
@@ -572,6 +696,34 @@ func (mr *MockBrowserMockRecorder) Close() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockBrowser)(nil).Close))
 }
 
+// Create mocks base method.
+func (m *MockBrowser) Create(ctx context.Context, ID string, doc interface{}) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Create", ctx, ID, doc)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Create indicates an expected call of Create.
+func (mr *MockBrowserMockRecorder) Create(ctx, ID, doc interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Create", reflect.TypeOf((*MockBrowser)(nil).Create), ctx, ID, doc)
+}
+
+// Delete mocks base method.
+func (m *MockBrowser) Delete(ctx context.Context, ID string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Delete", ctx, ID)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Delete indicates an expected call of Delete.
+func (mr *MockBrowserMockRecorder) Delete(ctx, ID interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Delete", reflect.TypeOf((*MockBrowser)(nil).Delete), ctx, ID)
+}
+
 // Focus mocks base method.
 func (m *MockBrowser) Focus() (Window, error) {
 	m.ctrl.T.Helper()
@@ -585,6 +737,35 @@ func (m *MockBrowser) Focus() (Window, error) {
 func (mr *MockBrowserMockRecorder) Focus() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Focus", reflect.TypeOf((*MockBrowser)(nil).Focus))
+}
+
+// Get mocks base method.
+func (m *MockBrowser) Get(ctx context.Context, ID string, doc interface{}) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Get", ctx, ID, doc)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Get indicates an expected call of Get.
+func (mr *MockBrowserMockRecorder) Get(ctx, ID, doc interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Get", reflect.TypeOf((*MockBrowser)(nil).Get), ctx, ID, doc)
+}
+
+// List mocks base method.
+func (m *MockBrowser) List(ctx context.Context, filters []document.Filter) (document.Iterator, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "List", ctx, filters)
+	ret0, _ := ret[0].(document.Iterator)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// List indicates an expected call of List.
+func (mr *MockBrowserMockRecorder) List(ctx, filters interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "List", reflect.TypeOf((*MockBrowser)(nil).List), ctx, filters)
 }
 
 // MergeKeyMap mocks base method.
@@ -628,6 +809,20 @@ func (m *MockBrowser) PublishInterrupt() error {
 func (mr *MockBrowserMockRecorder) PublishInterrupt() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PublishInterrupt", reflect.TypeOf((*MockBrowser)(nil).PublishInterrupt))
+}
+
+// Set mocks base method.
+func (m *MockBrowser) Set(ctx context.Context, ID string, doc interface{}) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Set", ctx, ID, doc)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Set indicates an expected call of Set.
+func (mr *MockBrowserMockRecorder) Set(ctx, ID, doc interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Set", reflect.TypeOf((*MockBrowser)(nil).Set), ctx, ID, doc)
 }
 
 // SetMessage mocks base method.
@@ -721,4 +916,18 @@ func (m *MockBrowser) Subscribe(arg0 term.Event, arg1 EventHandler) error {
 func (mr *MockBrowserMockRecorder) Subscribe(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Subscribe", reflect.TypeOf((*MockBrowser)(nil).Subscribe), arg0, arg1)
+}
+
+// Update mocks base method.
+func (m *MockBrowser) Update(ctx context.Context, ID string, updates []document.Update) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Update", ctx, ID, updates)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Update indicates an expected call of Update.
+func (mr *MockBrowserMockRecorder) Update(ctx, ID, updates interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Update", reflect.TypeOf((*MockBrowser)(nil).Update), ctx, ID, updates)
 }

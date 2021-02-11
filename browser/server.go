@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ernestrc/blue/datastore/document"
 	"github.com/ernestrc/go-tui/handler"
 	"github.com/ernestrc/go-tui/proto"
 	"github.com/ernestrc/go-tui/term"
@@ -17,6 +18,8 @@ import (
 
 // Server serves a Browser over GRPC.
 type Server struct {
+	document.Server
+
 	Logger *log.Logger
 
 	broker proto.MuxBroker
@@ -88,6 +91,7 @@ func (s *Server) Init(
 	s.servers = make(map[uint64]io.Closer)
 	s.opened = make(map[uint32]Handler)
 	s.failureTimeout = defaultFailureTimeout
+	s.Server.Init(browser, nil)
 }
 
 func (s *Server) consumeErrors(ctx context.Context, handlerID uint64, ch <-chan error) {

@@ -1,6 +1,7 @@
 package plugin
 
 import (
+	"context"
 	_ "net/http/pprof"
 	"sync"
 	"testing"
@@ -56,6 +57,7 @@ func TestIntegrationRace(t *testing.T) {
 		PermissionBrowserEventSubscriber: broker.NextId(),
 		PermissionBrowserEventPublisher:  broker.NextId(),
 		PermissionEditor:                 broker.NextId(),
+		PermissionBrowserStorage:         broker.NextId(),
 	}
 	for perm, brokerID := range perms {
 		resources[perm].Serve("caliu-plugins-ltd", brokerID,
@@ -160,8 +162,46 @@ func TestIntegrationRace(t *testing.T) {
 			h := editor.FuncEventHandler(func(editor.Event) bool { return false })
 			return ifc.(editor.Editor).SubscribeEditor(editor.EventTypeFlush, h)
 		}},
+		{PermissionBrowserStorage, func(token uint32, broker proto.MuxBroker) (interface{}, error) {
+			return Storage(token, broker)
+		}, func(ed *editor.MockEditorMockRecorder, mock *browser.MockBrowserMockRecorder) *gomock.Call {
+			return mock.Create(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
+		}, func(ifc interface{}) error {
+			return ifc.(browser.Storage).Create(context.Background(), "", map[string]interface{}{"a": "b"})
+		}},
+		{PermissionBrowserStorage, func(token uint32, broker proto.MuxBroker) (interface{}, error) {
+			return Storage(token, broker)
+		}, func(ed *editor.MockEditorMockRecorder, mock *browser.MockBrowserMockRecorder) *gomock.Call {
+			return mock.Get(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
+		}, func(ifc interface{}) error {
+			var recv map[string]interface{}
+			return ifc.(browser.Storage).Get(context.Background(), "", &recv)
+		}},
+		{PermissionBrowserStorage, func(token uint32, broker proto.MuxBroker) (interface{}, error) {
+			return Storage(token, broker)
+		}, func(ed *editor.MockEditorMockRecorder, mock *browser.MockBrowserMockRecorder) *gomock.Call {
+			return mock.Update(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
+		}, func(ifc interface{}) error {
+			return ifc.(browser.Storage).Update(context.Background(), "", []document.Update{{FieldPath: []string{"a"}, Value: "b"}})
+		}},
+		{PermissionBrowserStorage, func(token uint32, broker proto.MuxBroker) (interface{}, error) {
+			return Storage(token, broker)
+		}, func(ed *editor.MockEditorMockRecorder, mock *browser.MockBrowserMockRecorder) *gomock.Call {
+			return mock.Delete(gomock.Any(), gomock.Any()).Return(nil)
+		}, func(ifc interface{}) error {
+			return ifc.(browser.Storage).Delete(context.Background(), "")
+		}},
+		{PermissionBrowserStorage, func(token uint32, broker proto.MuxBroker) (interface{}, error) {
+			return Storage(token, broker)
+		}, func(ed *editor.MockEditorMockRecorder, mock *browser.MockBrowserMockRecorder) *gomock.Call {
+			m1, m2 := make(map[string]interface{}), make(map[string]interface{})
+			it := document.ListIterator(m1, m2)
+			return mock.List(gomock.Any(), gomock.Any()).Return(it, nil)
+		}, func(ifc interface{}) error {
+			_, err := ifc.(browser.Storage).List(context.Background(), nil)
+			return err
+		}},
 	}
-
 	var mu sync.Mutex
 	var wg sync.WaitGroup
 	for _, tcase := range tsuite {
