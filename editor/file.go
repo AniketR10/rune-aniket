@@ -59,7 +59,7 @@ type FileBuffer struct {
 type fileBuf FileBuffer
 
 func makeSwapFileName(filename string) string {
-	return fmt.Sprintf("%s.swp", filename)
+	return fmt.Sprintf(".%s.swp", filename)
 }
 
 func (f *FileBuffer) initSwap(swapDir string, orig OsFile) (OsFile, error) {

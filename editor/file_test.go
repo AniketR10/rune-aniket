@@ -458,7 +458,7 @@ func newRecoveredTestFileBuffer(t *testing.T, ctrl *gomock.Controller) (
 	expectInitSwap(mock, defaultFileName, testFileInfo{}, defaultFileData)
 	expectInitBuffer(mock, defaultFileData)
 	buf := cell.NewBuffer()
-	require.NoError(t, f.recoverFile(defaultFileName, defaultFileName+".swp", buf))
+	require.NoError(t, f.recoverFile(defaultFileName, "."+defaultFileName+".swp", buf))
 	return f, mock, buf
 }
 
