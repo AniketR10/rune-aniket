@@ -632,15 +632,22 @@ func (vi *Vi) handleYank(ev term.Event) (quit, handled bool) {
 }
 
 func (vi *Vi) handleDelete(ev term.Event) (quit, handled bool) {
-	if (!vi.deleteInsert && ev.Ch == 'd') || (vi.deleteInsert && ev.Ch == 'c') {
+	if !vi.deleteInsert && ev.Ch == 'd' {
 		if vi.cursor.SelectLine() {
 			vi.cursor.DeleteSelection()
 		}
-		if vi.deleteInsert {
-			vi.setInsertMode()
-		} else {
-			vi.setNormalMode()
+		vi.setNormalMode()
+		handled = true
+		return
+	}
+
+	if vi.deleteInsert && ev.Ch == 'c' {
+		vi.cursor.MoveStartLine()
+		if vi.cursor.Select() {
+			vi.cursor.MoveEndLine()
+			vi.cursor.DeleteSelection()
 		}
+		vi.setInsertMode()
 		handled = true
 		return
 	}

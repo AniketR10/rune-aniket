@@ -338,6 +338,17 @@ diff_buf_adjust(win_
 diff_buf_adjust(win_
 {                   
 :             NORMAL`},
+		{"lllcc *",
+			`                    
+/*                  
+ * Check if the curr
+ *▐                 
+ * diff buffers.    
+ */                 
+  void              
+diff_buf_adjust(win_
+{                   
+:             INSERT`},
 	}
 
 	vi := setupVi(t, snippet, 2)
