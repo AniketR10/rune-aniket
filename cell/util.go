@@ -181,3 +181,19 @@ func ConvertTermCoordinates(cells [][]term.Cell, c term.Coordinates) (y, x int, 
 	ok = true
 	return
 }
+
+// CoordinatesDiff subtracts a from b.
+func CoordinatesDiff(a, b term.Coordinates) term.Coordinates {
+	return term.Coordinates{
+		Y: a.Y - b.Y,
+		X: a.X - b.X,
+	}
+}
+
+// CoordinatesSum adds a to b.
+func CoordinatesSum(a, b term.Coordinates) term.Coordinates {
+	return term.Coordinates{
+		Y: a.Y + b.Y,
+		X: a.X + b.X,
+	}
+}
