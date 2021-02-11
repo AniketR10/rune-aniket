@@ -43,6 +43,7 @@ type Vi struct {
 	less         handler.Less // used for message bar and text search capabilities
 	free         term.Coordinates
 	cursor       editor.Cursor
+	repeater     editor.Repeater
 	mode         viMode
 	moveMode     moveMode
 	searchMode   moveMode
@@ -78,6 +79,7 @@ func (vi *Vi) Init(buf *cell.Buffer, opts ...Option) {
 	vi.cursor.Init(&vi.less.Scroll)
 
 	editor.WithCopyDelete(vi.config.clipboard, buf)
+	vi.repeater.Init(&vi.cursor, buf)
 
 	vi.free, _ = vi.cursor.Cursor()
 
@@ -442,6 +444,8 @@ func (vi *Vi) handleNormal(ev term.Event) (quit, handled bool) {
 			vi.cursor.MoveToMatchingRune()
 		case '*':
 			vi.cursor.Search(vi.cursor.Word())
+		case '.':
+			vi.repeater.Repeat()
 		default:
 			switch ev.Key {
 			case term.KeyCtrlR:

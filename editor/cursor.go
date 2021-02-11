@@ -109,11 +109,33 @@ func (c *Cursor) buffer() *cell.Buffer {
 	return c.scroll.Buffer()
 }
 
-// MoveTo moves the cursor to pos.
+// MoveTo moves the cursor to thw window relative position pos.
 func (c *Cursor) MoveTo(pos term.Coordinates) term.Coordinates {
 	ret := c.cursor
 	c.cursor = pos
 	return ret
+}
+
+// CursorAtScroll returns the current position of the cursor relative
+// to the scroll coorindates.
+func (c *Cursor) CursorAtScroll() term.Coordinates {
+	return c.cursorAtScroll()
+}
+
+// MoveToScroll moves the cursor to pos in scroll.
+func (c *Cursor) MoveToScroll(pos term.Coordinates) (
+	ret term.Coordinates, ok bool,
+) {
+	if pos.Y >= c.scroll.Buffer().Rows() {
+		return
+	}
+	if pos.X > c.scroll.Buffer().Columns(pos.Y) {
+		return
+	}
+	ok = true
+	ret = c.cursorAtScroll()
+	c.moveToScroll(pos)
+	return
 }
 
 // the bounds of the current view, then underlying scroll is used
