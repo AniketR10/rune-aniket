@@ -26,6 +26,8 @@ func main() {
 		log.Println(http.ListenAndServe("localhost:6061", nil))
 	}()
 
+	key := term.Event{Type: term.EventKey, Key: term.KeyCtrlP}
+
 	plugutil.ServeKeySplitHandler(plugutil.KeySplitHandlerConfig{
 		Split: browser.WindowManager.SplitHorizontalBelow,
 		Handler: func(grants []plugin.Grant, broker proto.MuxBroker,
@@ -37,16 +39,17 @@ func main() {
 				}
 				cmdStr = defaultCommand
 			}
-			return finder.New(grants, broker, invokeWindow,
-				config, cmdStr, func(file string) string {
+			return finder.New(grants, broker, invokeWindow, config,
+				key, cmdStr, func(file string) string {
 					return file
 				})
 		},
-		Key: term.Event{Type: term.EventKey, Key: term.KeyCtrlP},
+		Key: key,
 		Permissions: []plugin.Permission{
 			plugin.PermissionBrowserResourceOpener,
 			plugin.PermissionBrowserEventPublisher,
 			plugin.PermissionBrowserMessenger,
+			plugin.PermissionBrowserStorage,
 		},
 	})
 }

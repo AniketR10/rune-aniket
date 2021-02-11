@@ -137,6 +137,13 @@ func sortByResultScore(a, b component.WithAttributes) bool {
 	return ab.Match.res.Score > bb.Match.res.Score
 }
 
+// SearchQueryString returns the current search query.
+func (l *List) SearchQueryString() string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.getSearchQuery()
+}
+
 func (l *List) getSearchQuery() string {
 	str := l.searchBar.Buffer.String()
 	return str[len(l.cfg.searchBase):]
@@ -361,6 +368,18 @@ func (l *List) SearchQueryWrite(r rune) {
 	defer l.mu.Unlock()
 
 	l.searchBar.WriteString(string(r))
+	l.asyncSearch()
+}
+
+// Search clears current search query and uses str as the new search
+// query, canceling the previous search if any.
+// It asynchronously starts a new search.
+func (l *List) Search(str string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	l.searchBar.Reset()
+	l.searchBar.WriteString(str)
 	l.asyncSearch()
 }
 

@@ -26,12 +26,13 @@ func main() {
 		log.Println(http.ListenAndServe("localhost:6064", nil))
 	}()
 
+	key := term.Event{Type: term.EventKey, Key: term.KeyCtrlBackslash}
 	plugutil.ServeKeySplitHandler(plugutil.KeySplitHandlerConfig{
 		Split: browser.WindowManager.SplitHorizontalBelow,
 		Handler: func(grants []plugin.Grant, broker proto.MuxBroker,
 			invokeWindow browser.Window, config plugin.Config) (tui.Handler, error) {
 			return finder.New(grants, broker, invokeWindow,
-				config, ag, func(data string) string {
+				config, key, ag, func(data string) string {
 					for i, c := range data {
 						if c == ':' {
 							return data[:i]
@@ -40,11 +41,12 @@ func main() {
 					return ""
 				})
 		},
-		Key: term.Event{Type: term.EventKey, Key: term.KeyCtrlBackslash},
+		Key: key,
 		Permissions: []plugin.Permission{
 			plugin.PermissionBrowserResourceOpener,
 			plugin.PermissionBrowserEventPublisher,
 			plugin.PermissionBrowserMessenger,
+			plugin.PermissionBrowserStorage,
 		},
 	})
 }

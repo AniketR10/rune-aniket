@@ -2,12 +2,15 @@ package finder
 
 import (
 	"bufio"
+	"context"
 	"io"
 	"os"
 	"os/exec"
 	"sync"
 	"syscall"
+	"time"
 
+	"github.com/ernestrc/blue/datastore/document"
 	"github.com/ernestrc/go-tui"
 	"github.com/ernestrc/go-tui/browser"
 	"github.com/ernestrc/go-tui/component/search"
@@ -18,14 +21,19 @@ import (
 )
 
 const (
-	readerBufferSize = 64 * 1024
+	readerBufferSize        = 64 * 1024
+	defaultStoreTimeout     = 5 * time.Second
+	searchHistoryDocumentID = "search-history"
+	defaultMaxHistory       = 20
 )
 
 type fuzzyFinderHandler struct {
+	s            browser.Storage
 	f            browser.ResourceOpener
 	p            browser.EventPublisher
 	m            browser.Messenger
 	invokeWindow browser.Window
+	invokeKey    term.Event
 	mu           sync.Mutex
 	cmdStr       string
 	getResource  func(string) string
@@ -33,6 +41,12 @@ type fuzzyFinderHandler struct {
 	quitChan     chan struct{}
 	height       int
 	list         search.List
+	killed       bool
+
+	history struct {
+		max     int
+		Queries []string
+	}
 }
 
 func execCommand(command string, setpgid bool) *exec.Cmd {
@@ -80,7 +94,33 @@ func (h *fuzzyFinderHandler) readCommand(src io.Reader) {
 	}
 }
 
-func (h *fuzzyFinderHandler) openResource(data string) {
+func (h *fuzzyFinderHandler) getSearchHistory() error {
+	ctx, cancel := context.WithTimeout(context.Background(), defaultStoreTimeout)
+	defer cancel()
+
+	err := h.s.Get(ctx, searchHistoryDocumentID, &h.history)
+	if err == document.ErrNotFound {
+		err = nil
+	}
+	if err == nil {
+		log.Debugf("retrieved query history; %#v", h.history.Queries)
+	}
+	return err
+}
+
+func (h *fuzzyFinderHandler) addSearchHistory(searchQuery string) error {
+	h.history.Queries = append(h.history.Queries, searchQuery)
+	if len(h.history.Queries) > h.history.max {
+		h.history.Queries = h.history.Queries[1:]
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), defaultStoreTimeout)
+	defer cancel()
+
+	return h.s.Set(ctx, searchHistoryDocumentID, &h.history)
+}
+
+func (h *fuzzyFinderHandler) openResource(searchQuery, data string) {
 	resource := h.getResource(data)
 	buf, err := h.f.Open(resource)
 	if err != nil {
@@ -96,6 +136,16 @@ func (h *fuzzyFinderHandler) openResource(data string) {
 	if err != nil {
 		log.Errorf("error SetContent: %v", err)
 		return
+	}
+
+	// optinally store query for history browsing
+	if h.s != nil {
+		err := h.addSearchHistory(searchQuery)
+		if err != nil {
+			log.Errorf("error adding search history: %v", err)
+		} else {
+			log.Debugf("added %s to query history", searchQuery)
+		}
 	}
 }
 
@@ -126,17 +176,18 @@ func (h *fuzzyFinderHandler) scanData() {
 	go h.readCommand(out)
 
 	err = exec.Wait()
-	if err != nil {
+	h.mu.Lock()
+	killed := h.killed
+	h.exec = nil
+	h.mu.Unlock()
+
+	if !killed && err != nil {
 		merr := h.m.SetMessage("failed to execute '%s': %v", h.cmdStr, err)
 		if merr != nil {
 			log.Errorf("error setting message: %v", merr)
 		}
 	}
 
-	h.mu.Lock()
-	defer h.mu.Unlock()
-
-	h.exec = nil
 }
 
 func (h *fuzzyFinderHandler) initGrants(
@@ -150,6 +201,11 @@ func (h *fuzzyFinderHandler) initGrants(
 			h.p, err = plugin.EventPublisher(grant.Token, broker)
 		case plugin.PermissionBrowserResourceOpener:
 			h.f, err = plugin.ResourceOpener(grant.Token, broker)
+		case plugin.PermissionBrowserStorage:
+			h.s, err = plugin.Storage(grant.Token, broker)
+			if err == nil {
+				err = h.getSearchHistory()
+			}
 		}
 		if err != nil {
 			return
@@ -163,7 +219,8 @@ func (h *fuzzyFinderHandler) initGrants(
 func New(
 	grants []plugin.Grant, broker proto.MuxBroker,
 	invokeWindow browser.Window, config plugin.Config,
-	command string, getResource func(line string) string,
+	invokeKey term.Event, command string,
+	getResource func(line string) string,
 ) (tui.Handler, error) {
 	h := new(fuzzyFinderHandler)
 	err := h.initGrants(broker, grants)
@@ -172,6 +229,7 @@ func New(
 	}
 
 	h.invokeWindow = invokeWindow
+	h.invokeKey = invokeKey
 	h.getResource = getResource
 	h.cmdStr = command
 	log.Printf("using resource list command: %s", h.cmdStr)
@@ -180,6 +238,16 @@ func New(
 
 	listConfig := h.getListConfig(config)
 	h.list.Init(listConfig)
+
+	h.history.max, err = config.GetInt("history")
+	if err != nil {
+		if err != plugin.ErrNotFound {
+			log.Errorf("failed to load 'history' from config: %v", err)
+		}
+		h.history.max = defaultMaxHistory
+	} else {
+		log.Tracef("loaded 'history' from config: %v", h.history.max)
+	}
 
 	go h.scanData()
 
@@ -267,11 +335,27 @@ func (h *fuzzyFinderHandler) Draw(w term.Writer) {
 	h.list.Draw(w)
 }
 
+func (h *fuzzyFinderHandler) writeLastSearchQuery() {
+	if len(h.history.Queries) == 0 {
+		log.Debugf("no search queries stored")
+		return
+	}
+	search := h.history.Queries[0]
+	h.history.Queries = h.history.Queries[1:]
+	h.list.Search(search)
+}
+
 func (h *fuzzyFinderHandler) Handle(ev term.Event) (exit, handled bool) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
 	if ev.Type != term.EventKey {
+		return
+	}
+
+	if ev == h.invokeKey {
+		h.writeLastSearchQuery()
+		handled = true
 		return
 	}
 
@@ -281,7 +365,7 @@ func (h *fuzzyFinderHandler) Handle(ev term.Event) (exit, handled bool) {
 		if ok {
 			handled = true
 			exit = true
-			h.openResource(string(item))
+			h.openResource(h.list.SearchQueryString(), string(item))
 		}
 	case term.KeyEsc:
 		exit = true
@@ -316,6 +400,7 @@ func (h *fuzzyFinderHandler) Close() error {
 	defer h.mu.Unlock()
 
 	if h.exec != nil {
+		h.killed = true
 		_ = h.killCommand()
 	}
 	close(h.quitChan)
