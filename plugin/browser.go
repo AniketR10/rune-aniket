@@ -49,6 +49,8 @@ func (s *browserResourceServer) Serve(
 	broker.AcceptAndServe(grantID, func(opts []grpc.ServerOption) proto.MuxServer {
 		s.mu.Lock()
 		defer s.mu.Unlock()
+		// NOTE: unfortunately all plugins must share the same browser.Server,
+		// because it's internal state is not shared.
 		if s.srv == nil {
 			var srv proto.MuxServer
 			if l != nil && l.IsLevelEnabled(log.TraceLevel) {
