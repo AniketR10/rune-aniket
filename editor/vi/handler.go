@@ -443,6 +443,7 @@ func (vi *Vi) handleNormal(ev term.Event) (quit, handled bool) {
 		case '%':
 			vi.cursor.MoveToMatchingRune()
 		case '*':
+			vi.searchMode = moveToNext
 			vi.cursor.Search(vi.cursor.Word())
 		case '.':
 			vi.repeater.Repeat()
