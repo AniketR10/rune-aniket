@@ -21,6 +21,7 @@ import (
 	"github.com/ernestrc/go-tui/cell"
 	"github.com/ernestrc/go-tui/editor"
 	"github.com/ernestrc/go-tui/plugin"
+	plugutil "github.com/ernestrc/go-tui/plugin/util"
 	"github.com/ernestrc/go-tui/term"
 	"github.com/ernestrc/golang-internal-tools/fakenet"
 	"github.com/ernestrc/golang-internal-tools/jsonrpc2"
@@ -458,7 +459,9 @@ func getDuration(
 	return duration, nil
 }
 
-func newLspHandler(ed editor.Editor, pconfig plugin.Config) (*lspEditorHandler, error) {
+func newLspHandler(
+	ed editor.Editor, pconfig plugin.Config,
+) (plugutil.CommandEventHandler, error) {
 	ret := new(lspEditorHandler)
 	ret.ed = ed
 	ret.files = make(map[span.URI]*file)
