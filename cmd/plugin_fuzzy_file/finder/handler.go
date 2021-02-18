@@ -373,6 +373,8 @@ func (h *fuzzyFinderHandler) Handle(ev term.Event) (exit, handled bool) {
 		handled = h.list.FocusDown()
 	case term.KeyArrowUp:
 		handled = h.list.FocusUp()
+	case term.KeySpace:
+		ev.Ch = ' '
 	case term.KeyBackspace:
 		fallthrough
 	case term.KeyBackspace2:
