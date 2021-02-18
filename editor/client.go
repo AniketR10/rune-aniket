@@ -10,6 +10,7 @@ import (
 	"github.com/ernestrc/go-tui/browser"
 	"github.com/ernestrc/go-tui/cell"
 	"github.com/ernestrc/go-tui/proto"
+	"github.com/ernestrc/go-tui/term"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 )
@@ -208,6 +209,20 @@ func (c *Client) MoveToPrevLocation(h Handler, ID string) error {
 // in location list identified by ID.
 func (c *Client) MoveToNextLocation(h Handler, ID string) error {
 	return c.moveToLocation(h, ID, true)
+}
+
+// SetCursor requests the editor server to move cursor to pos
+func (c *Client) SetCursor(h Handler, pos term.Coordinates) error {
+	ctx := context.Background()
+	token, ok := h.(browser.Token)
+	if !ok {
+		panic("SetCursor: invalid Handler argument")
+	}
+	var protoPos proto.Coordinates
+	protoPos.FromModel(pos)
+	req := proto.SetCursorRequest{Pos: &protoPos, HandlerId: uint32(token.ID)}
+	_, err := c.ed.SetCursor(ctx, &req)
+	return err
 }
 
 // Writer satisfies editor.Editor.

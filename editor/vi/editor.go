@@ -5,6 +5,7 @@ import (
 
 	"github.com/ernestrc/go-tui/cell"
 	"github.com/ernestrc/go-tui/editor"
+	"github.com/ernestrc/go-tui/term"
 )
 
 type viEditor struct {
@@ -91,4 +92,12 @@ func (e *viEditor) Reader(h editor.Handler) editor.Reader {
 
 func (e *viEditor) Writer(h editor.Handler) editor.Writer {
 	return editor.CellWriter(h.(*Vi).less.Buffer().Writer())
+}
+
+func (e *viEditor) SetCursor(h editor.Handler, pos term.Coordinates) error {
+	ok := h.(*Vi).SetCursor(pos)
+	if !ok {
+		return errors.New("SetCursor: invalid cursor position")
+	}
+	return nil
 }

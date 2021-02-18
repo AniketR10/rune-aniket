@@ -103,10 +103,19 @@ message RegisterCommandRequest {
 
 message RegisterCommandResponse {}
 
+message SetCursorRequest {
+	Coordinates pos = 1;
+	uint32 handler_id = 2;
+}
+
+message SetCursorResponse {
+}
+
 service Editor {
 	rpc Edit(EditRequest) returns (EditResponse);
 	rpc Subscribe(EditorSubscribeRequest) returns (EditorSubscribeResponse);
 	rpc Register(RegisterCommandRequest) returns (RegisterCommandResponse);
+	rpc SetCursor(SetCursorRequest) returns (SetCursorResponse);
 
 	// locations
 	rpc SetLocationList(SetLocationListRequest) returns (SetLocationListResponse);

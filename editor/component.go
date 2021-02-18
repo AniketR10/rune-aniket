@@ -545,6 +545,11 @@ func (c *Component) List(
 	return c.config.Storage.List(ctx, filters)
 }
 
+// SetCursor satisfies editor.Editor
+func (c *Component) SetCursor(h Handler, pos term.Coordinates) error {
+	return c.ed.SetCursor(h, pos)
+}
+
 // Close closes all resources associated with this Component.
 func (c *Component) Close() error {
 	// avoid dispatching close events on flusherCloser callbacks

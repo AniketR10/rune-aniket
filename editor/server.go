@@ -362,6 +362,29 @@ func (s *Server) MoveToPrevLocation(ctx context.Context, in *proto.MoveToLocatio
 	return s.moveToLocation(ctx, in, false)
 }
 
+// SetCursor satisfies proto.EditorServer
+func (s *Server) SetCursor(ctx context.Context, in *proto.SetCursorRequest) (
+	*proto.SetCursorResponse, error,
+) {
+	handlerID := in.GetHandlerId()
+	pos := in.GetPos()
+
+	s.editor.Lock()
+	defer s.editor.Unlock()
+
+	h, ok := s.idToHandler[handlerID]
+	if !ok {
+		return nil, errHandlerNotFound
+	}
+
+	err := s.editor.SetCursor(h, pos.ToModel())
+	if err != nil {
+		return nil, err
+	}
+
+	return new(proto.SetCursorResponse), nil
+}
+
 func (s *Server) moveToLocation(
 	ctx context.Context, in *proto.MoveToLocationRequest, next bool,
 ) (res *proto.MoveToLocationResponse, err error) {

@@ -80,6 +80,11 @@ func (e *testEditor) MoveToPrevLocation(h Handler, ID string) error {
 	return nil
 }
 
+func (e *testEditor) SetCursor(h Handler, pos term.Coordinates) error {
+	h.(*testEditorHandler).CursorPos = pos
+	return nil
+}
+
 func (e *testEditor) Writer(h Handler) Writer {
 	return CellWriter(e.buf.Writer())
 }
@@ -468,6 +473,28 @@ EEEE`},
 
 	cases = []testutil.HandlerSequenceTestCase{
 		{"b___",
+			`┌──────────────────┐
+│other.go  bugz    │
+├──────────────────┤
+│BBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBB│
+└──────────────────┘`},
+		{":3>",
+			`┌──────────────────┐
+│other.go  bugz    │
+├──────────────────┤
+│BBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBB│
+│▐BBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBB│
+└──────────────────┘`},
+		{":0>",
 			`┌──────────────────┐
 │other.go  bugz    │
 ├──────────────────┤

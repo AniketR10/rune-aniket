@@ -243,9 +243,9 @@ func TestServerSetLocationList(t *testing.T) {
 		callServerEdit(t, ctx, broker, s, nextID, name, content)
 
 		locs := []Location{
-			Location{From: term.Coordinates{X: 0, Y: 0}, To: term.Coordinates{X: 3, Y: 0}},
-			Location{From: term.Coordinates{X: 1, Y: 4}, To: term.Coordinates{X: 2, Y: 4}},
-			Location{From: term.Coordinates{X: 0, Y: 5}, To: term.Coordinates{X: 0, Y: 6}},
+			{From: term.Coordinates{X: 0, Y: 0}, To: term.Coordinates{X: 3, Y: 0}},
+			{From: term.Coordinates{X: 1, Y: 4}, To: term.Coordinates{X: 2, Y: 4}},
+			{From: term.Coordinates{X: 0, Y: 5}, To: term.Coordinates{X: 0, Y: 6}},
 		}
 
 		var wg sync.WaitGroup
@@ -279,5 +279,32 @@ func TestServerSetLocationList(t *testing.T) {
 			return
 		}
 		assertEqualLocations(t, LocationSlice(locs), l.locationList)
+	})
+}
+
+func TestServerSetCursor(t *testing.T) {
+	t.Run("calls underlying editor SetCursor", func(t *testing.T) {
+		ctx := context.Background()
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		broker, mock, s := newTestServer(t, ctrl)
+
+		name := "SetCursorer"
+		content := "Oh my"
+		nextID := uint32(12888)
+		expectEdit(t, mock, name, content)
+		callServerEdit(t, ctx, broker, s, nextID, name, content)
+
+		pos := term.Coordinates{X: 4, Y: 5}
+		mock.EXPECT().SetCursor(gomock.Any(), gomock.Eq(pos)).Return(nil).Times(1)
+
+		var protoPos proto.Coordinates
+		protoPos.FromModel(pos)
+
+		req := proto.SetCursorRequest{HandlerId: nextID, Pos: &protoPos}
+		res, err := s.SetCursor(ctx, &req)
+		require.NoError(t, err)
+		require.NotNil(t, res)
 	})
 }

@@ -329,6 +329,20 @@ func (mr *MockEditorMockRecorder) Register(arg0, arg1 interface{}) *gomock.Call 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Register", reflect.TypeOf((*MockEditor)(nil).Register), arg0, arg1)
 }
 
+// SetCursor mocks base method.
+func (m *MockEditor) SetCursor(arg0 Handler, arg1 term.Coordinates) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SetCursor", arg0, arg1)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// SetCursor indicates an expected call of SetCursor.
+func (mr *MockEditorMockRecorder) SetCursor(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetCursor", reflect.TypeOf((*MockEditor)(nil).SetCursor), arg0, arg1)
+}
+
 // SetLocationList mocks base method.
 func (m *MockEditor) SetLocationList(arg0 Handler, arg1 string, arg2 LocationList) error {
 	m.ctrl.T.Helper()

@@ -750,3 +750,10 @@ func (vi *Vi) MoveToPrevLocation(ID string) {
 func (vi *Vi) SetLocationList(ID string, l editor.LocationList) {
 	_ = vi.cursor.SetLocationList(ID, l)
 }
+
+// SetCursor sets the cursor of this Vi handler.
+func (vi *Vi) SetCursor(pos term.Coordinates) bool {
+	_, ok := vi.cursor.MoveToScroll(pos)
+	vi.free, _ = vi.cursor.Cursor()
+	return ok
+}

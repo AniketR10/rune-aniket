@@ -1,7 +1,9 @@
 package editor
 
 import (
+	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/ernestrc/go-tui"
@@ -12,7 +14,8 @@ import (
 )
 
 var (
-	commandBarAttr = term.Attributes{Bg: term.ColorWhite, Fg: term.ColorBlack}
+	commandBarAttr      = term.Attributes{Bg: term.ColorWhite, Fg: term.ColorBlack}
+	errInvalidSetCursor = errors.New("Cannot set cursor on this buffer")
 )
 
 type mode int8
@@ -68,27 +71,46 @@ func (e *Ex) handlerInFocus() (string, Handler, bool) {
 	return t.ID(), t.Handler().(Handler), true
 }
 
+func (e *Ex) moveFocusCursor(line int) error {
+	_, h, ok := e.handlerInFocus()
+	if !ok {
+		return errInvalidSetCursor
+	}
+	// silently correct invalid line numbers
+	// NOTE: this won't work if we implement +/- relative
+	// line go to i.e. :+1, :-20
+	if line < 0 {
+		line = 0
+	}
+	return e.SetCursor(h, term.Coordinates{Y: line})
+}
+
 func (e *Ex) runSingleCommand(cmd string) (quit bool, err error) {
-	browser := e.comp.Browser()
+	b := e.comp.Browser()
 	switch cmd {
 	case "bprev":
-		browser.UpdateWindowTabPrev(browser.Focus())
+		b.UpdateWindowTabPrev(b.Focus())
 	case "bnext":
-		browser.UpdateWindowTabNext(browser.Focus())
+		b.UpdateWindowTabNext(b.Focus())
 	case "bclose":
-		browser.RemoveWindowContent(browser.Focus())
+		b.RemoveWindowContent(b.Focus())
 	case "bcloseAll":
-		browser.RemoveAllTabs()
+		b.RemoveAllTabs()
 	case "close":
-		err = browser.Focus().Close()
+		err = b.Focus().Close()
 	case "wq", "wq!":
 		quit = true
 		fallthrough
 	case "w", "w!":
-		err = e.comp.Flush(browser.Focus())
+		err = e.comp.Flush(b.Focus())
 	case "q!", "q":
 		quit = true
 	default:
+		line, cerr := strconv.Atoi(cmd)
+		if cerr == nil {
+			err = e.moveFocusCursor(line - 1)
+			return
+		}
 		name, h, ok := e.handlerInFocus()
 		var handled bool
 		if ok {
@@ -252,6 +274,11 @@ func (e *Ex) Cursor() (pos term.Coordinates, show bool) {
 		return pos, true
 	}
 	return e.comp.Browser().Cursor()
+}
+
+// SetCursor satisfies editor.Editor.
+func (e *Ex) SetCursor(h Handler, pos term.Coordinates) error {
+	return e.comp.SetCursor(h, pos)
 }
 
 // Man satisfies tui.Handler.
