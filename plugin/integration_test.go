@@ -195,8 +195,13 @@ func TestIntegrationRace(t *testing.T) {
 			return Storage(token, broker)
 		}, func(ed *editor.MockEditorMockRecorder, mock *browser.MockBrowserMockRecorder) *gomock.Call {
 			m1, m2 := make(map[string]interface{}), make(map[string]interface{})
-			it := document.ListIterator(m1, m2)
-			return mock.List(gomock.Any(), gomock.Any()).Return(it, nil)
+			return mock.List(gomock.Any(), gomock.Any()).
+				DoAndReturn(func(ctx context.Context, filters []document.Filter) (document.Iterator, error) {
+					// instantiate for every invokation
+					// or else we run into data race. as mock expect data
+					// is shared across different invokations
+					return document.ListIterator(m1, m2), nil
+				})
 		}, func(ifc interface{}) error {
 			_, err := ifc.(browser.Storage).List(context.Background(), nil)
 			return err
