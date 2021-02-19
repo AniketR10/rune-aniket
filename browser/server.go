@@ -241,7 +241,7 @@ func (s *Server) getContentHandler(handlerID uint64) (Handler, error) {
 
 // SplitVerticalRight satisfies proto.BrowserServer
 func (s *Server) split(
-	ctx context.Context, req *proto.SplitRequest,
+	ctx context.Context, req interface{ GetHandlerId() uint64 },
 	split func(WindowManager, Handler) (Window, error),
 ) (*proto.SplitResponse, error) {
 	handlerID := req.GetHandlerId()
@@ -254,7 +254,7 @@ func (s *Server) split(
 	defer s.browser.Unlock()
 	win, err := split(s.browser, handler)
 	if err != nil {
-		reason := fmt.Sprintf("failed to create split: %s", err.Error())
+		reason := fmt.Sprintf("failed to create window: %s", err.Error())
 		s.forceCloseHandler(handlerID, reason)
 		return nil, err
 	}
@@ -447,6 +447,22 @@ func (s *Server) Focus(
 	}
 
 	return res, nil
+}
+
+// FloatingWindow satisfies proto.BrowserServer
+func (s *Server) FloatingWindow(
+	ctx context.Context, req *proto.FloatingWindowRequest,
+) (*proto.FloatingWindowResponse, error) {
+	at := req.GetAt().ToModel()
+	height := int(req.GetHeight())
+	width := int(req.GetWidth())
+	resp, err := s.split(ctx, req, func(wm WindowManager, h Handler) (Window, error) {
+		return wm.FloatingWindow(h, at, height, width)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &proto.FloatingWindowResponse{WindowId: resp.GetWindowId()}, nil
 }
 
 // Close closes all resources associated with this server.

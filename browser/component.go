@@ -113,6 +113,7 @@ func (w *browserWindow) Close() error {
 	if err != nil {
 		w.onClose = onClose
 		w.parent = parent
+		w.parent.setError(err)
 	} else if onClose != nil {
 		onClose()
 	}
@@ -469,24 +470,30 @@ func (c *Component) RemoveWindowContent(win Window) bool {
 // }
 
 func (c *Component) splitRegular(
-	split func(*handler.WindowManager, tui.Handler) handler.Window,
+	split func(*handler.WindowManager, tui.Handler) (handler.Window, bool),
 	newHandler Handler,
-) *browserWindow {
+) (*browserWindow, bool) {
 	win := c.split(split, newHandler)
+	if win == nil {
+		return nil, false
+	}
 	c.wm.SetFocus(win.win)
-	return win
+	return win, true
 }
 
 func (c *Component) splitInverted(
-	split func(*handler.WindowManager, tui.Handler) handler.Window,
+	split func(*handler.WindowManager, tui.Handler) (handler.Window, bool),
 	newHandler Handler,
-) *browserWindow {
+) (*browserWindow, bool) {
 	focusBrowserWin := c.focus()
 	focusHandlerWin := focusBrowserWin.win
 	focusHandler := focusBrowserWin.win.Content()
 
 	// perform a regular split
 	newBrowserWin := c.split(split, newHandler)
+	if newBrowserWin == nil {
+		return nil, false
+	}
 	newHandlerWin := newBrowserWin.win
 	newBrowserHandler := newHandlerWin.Content()
 
@@ -506,13 +513,10 @@ func (c *Component) splitInverted(
 
 	// return new instance of browser window
 	// pointing to old instance of focus window
-	return newBrowserWin
+	return newBrowserWin, true
 }
 
-func (c *Component) split(
-	split func(*handler.WindowManager, tui.Handler) handler.Window,
-	h Handler,
-) *browserWindow {
+func (c *Component) newWindowContent(h Handler) Handler {
 	if t, ok := h.(*Tab); ok {
 		t.setWindow()
 	} else {
@@ -521,7 +525,18 @@ func (c *Component) split(
 			c:       c,
 		}
 	}
-	win := split(&c.wm, h)
+	return h
+}
+
+func (c *Component) split(
+	split func(*handler.WindowManager, tui.Handler) (handler.Window, bool),
+	h Handler,
+) *browserWindow {
+	h = c.newWindowContent(h)
+	win, ok := split(&c.wm, h)
+	if !ok {
+		return nil
+	}
 	return c.newWindow(win)
 }
 
@@ -529,7 +544,7 @@ func (c *Component) split(
 // current window in focus and initializes it with h.
 // Note that if h is not a handler created with NewTab
 // the handler is cleaned as soon as the window's content is swapped.
-func (c *Component) SplitVerticalRight(h Handler) Window {
+func (c *Component) SplitVerticalRight(h Handler) (Window, bool) {
 	return c.splitRegular((*handler.WindowManager).SplitVertical, h)
 }
 
@@ -537,22 +552,33 @@ func (c *Component) SplitVerticalRight(h Handler) Window {
 // current window in focus and initializes it with h.
 // Note that if h is not a handler created with NewTab
 // the handler is cleaned as soon as the window's content is swapped.
-func (c *Component) SplitVerticalLeft(h Handler) Window {
+func (c *Component) SplitVerticalLeft(h Handler) (Window, bool) {
 	return c.splitInverted((*handler.WindowManager).SplitVertical, h)
 }
 
 // SplitHorizontalBelow opens a new window tile below the current window in focus
 // and initializes it with h. Note that if h is not a handler created with NewTab
 // the handler is cleaned as soon as the window's content is swapped.
-func (c *Component) SplitHorizontalBelow(h Handler) Window {
+func (c *Component) SplitHorizontalBelow(h Handler) (Window, bool) {
 	return c.splitRegular((*handler.WindowManager).SplitHorizontal, h)
 }
 
 // SplitHorizontalAbove opens a new window tile above the current window in focus
 // and initializes it with h. Note that if h is not a handler created with NewTab
 // the handler is cleaned as soon as the window's content is swapped.
-func (c *Component) SplitHorizontalAbove(h Handler) Window {
+func (c *Component) SplitHorizontalAbove(h Handler) (Window, bool) {
 	return c.splitInverted((*handler.WindowManager).SplitHorizontal, h)
+}
+
+// FloatingWindow opens a new floating window at the given coordinates,
+// with the given height and width.
+func (c *Component) FloatingWindow(
+	h Handler, at term.Coordinates, width, height int,
+) Window {
+	h = c.newWindowContent(h)
+	win := c.newWindow(c.wm.FloatingWindow(h, at, width, height))
+	c.wm.SetFocus(win.win)
+	return win
 }
 
 func (c *Component) setError(err error) {

@@ -92,7 +92,10 @@ func (wm *WindowManager) Handle(ev term.Event) (exit bool, handled bool) {
 
 	if ev.Type == term.EventMouse {
 		mousePos := term.Coordinates{X: ev.MouseX, Y: ev.MouseY}
-		childAtMouse := wm.comp.WindowAt(mousePos)
+		childAtMouse, ok := wm.comp.WindowAt(mousePos)
+		if !ok {
+			return
+		}
 		if wm.Focus().Window != childAtMouse {
 			if ev.Key == term.MouseLeft {
 				wm.SetFocus(wm.newNode(childAtMouse))
@@ -130,14 +133,28 @@ func (wm *WindowManager) Handle(ev term.Event) (exit bool, handled bool) {
 }
 
 // SplitVertical creates a new vertical split over the tile currently in focus.
-func (wm *WindowManager) SplitVertical(h tui.Handler) Window {
-	return wm.newNode(wm.comp.SplitVertical(wm.focus.Window, h))
+func (wm *WindowManager) SplitVertical(h tui.Handler) (Window, bool) {
+	w, ok := wm.comp.SplitVertical(wm.focus.Window, h)
+	if !ok {
+		return Window{}, false
+	}
+	return wm.newNode(w), true
 }
 
 // SplitHorizontal creates a new horizontal split over the tile currently in focus.
-func (wm *WindowManager) SplitHorizontal(h tui.Handler) Window {
-	return wm.newNode(wm.comp.SplitHorizontal(wm.focus.Window, h))
+func (wm *WindowManager) SplitHorizontal(h tui.Handler) (Window, bool) {
+	w, ok := wm.comp.SplitHorizontal(wm.focus.Window, h)
+	if !ok {
+		return Window{}, false
+	}
+	return wm.newNode(w), true
+}
 
+// FloatingWindow creates a floating window.
+func (wm *WindowManager) FloatingWindow(
+	content tui.Handler, at term.Coordinates, width, height int,
+) Window {
+	return wm.newNode(wm.comp.FloatingWindow(content, at, width, height))
 }
 
 func (wm *WindowManager) switchFocus(tileFn func(Window) (Window, bool)) bool {

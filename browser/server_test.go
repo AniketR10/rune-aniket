@@ -379,6 +379,28 @@ func TestServerSubscribe(t *testing.T) {
 	assertNoLeaks(t)
 }
 
+func TestServerFloatingWindow(t *testing.T) {
+	// for some reason FloatingWindow recorder is panicking with
+	// Call with too many input arguments
+	t.SkipNow()
+
+	testServerSplit(t,
+		func(mock *MockBrowserMockRecorder, h interface{}) *gomock.Call {
+			return mock.FloatingWindow(h, gomock.Any(), gomock.Any(), gomock.Any())
+		},
+		func(s *Server, ctx context.Context, req *proto.SplitRequest) (*proto.SplitResponse, error) {
+			freq := proto.FloatingWindowRequest{
+				HandlerId: req.GetHandlerId(),
+				At:        &proto.Coordinates{},
+			}
+			res, err := s.FloatingWindow(ctx, &freq)
+			if err != nil {
+				return nil, err
+			}
+			return &proto.SplitResponse{WindowId: res.GetWindowId()}, nil
+		})
+}
+
 func TestServerSplitHorizontalAbove(t *testing.T) {
 	testServerSplit(t,
 		(*MockBrowserMockRecorder).SplitHorizontalAbove,

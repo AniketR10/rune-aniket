@@ -48,7 +48,8 @@ func TestComponentWindowSplit(t *testing.T) {
 	wm, w1 := NewWindowManager(&h1, DefaultWindowManagerConfig())
 	wm.Resize(20, 8)
 
-	var w2 Window
+	var w2, w3 Window
+	var ok bool
 	h2 := TestComponent{Ch: 'B'}
 	h3 := TestComponent{Ch: 'C'}
 
@@ -64,7 +65,8 @@ func TestComponentWindowSplit(t *testing.T) {
 │AAAAAAAAAAAAAAAAAA│
 └──────────────────┘`,
 		}, {func() {
-			w2 = wm.SplitHorizontal(w1, &h2)
+			w2, ok = wm.SplitHorizontal(w1, &h2)
+			assert.True(t, ok)
 		}, `
 ┌──────────────────┐
 │AAAAAAAAAAAAAAAAAA│
@@ -75,7 +77,8 @@ func TestComponentWindowSplit(t *testing.T) {
 │BBBBBBBBBBBBBBBBBB│
 └──────────────────┘`,
 		}, {func() {
-			/*w3 =*/ wm.SplitVertical(w2, &h3)
+			w3, ok = wm.SplitVertical(w2, &h3)
+			assert.True(t, ok)
 		}, `
 ┌──────────────────┐
 │AAAAAAAAAAAAAAAAAA│
@@ -98,6 +101,44 @@ func TestComponentWindowSplit(t *testing.T) {
 └──────────────────┘`,
 		}, {func() {
 			assert.NoError(t, w1.Close())
+		}, `
+┌──────────────────┐
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+└──────────────────┘`,
+		}, {func() {
+			assert.Error(t, w1.Close())
+			w2 = wm.FloatingWindow(&h2, term.Coordinates{}, 4, 4)
+		}, `
+┌──┐───────────────┐
+│BB│CCCCCCCCCCCCCCC│
+│BB│CCCCCCCCCCCCCCC│
+└──┘CCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+└──────────────────┘`,
+		}, {func() {
+			wx, ok := wm.WindowAt(term.Coordinates{})
+			assert.True(t, ok)
+			assert.Equal(t, w2, wx)
+
+			wx, ok = wm.WindowAt(term.Coordinates{X: 5})
+			assert.True(t, ok)
+			assert.Equal(t, w3, wx)
+
+			wx, ok = wm.WindowAt(term.Coordinates{Y: 5})
+			assert.True(t, ok)
+			assert.Equal(t, w3, wx)
+
+			assert.NoError(t, w2.Close())
+			wx, ok = wm.WindowAt(term.Coordinates{})
+			assert.True(t, ok)
+			assert.Equal(t, w3, wx)
 		}, `
 ┌──────────────────┐
 │CCCCCCCCCCCCCCCCCC│

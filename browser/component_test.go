@@ -14,7 +14,7 @@ import (
 
 var splitSuite = []struct {
 	method string
-	split  func(c *Component, h Handler) Window
+	split  func(c *Component, h Handler) (Window, bool)
 }{
 	{"SplitVerticalLeft:", (*Component).SplitVerticalLeft},
 	{"SplitVerticalRight:", (*Component).SplitVerticalRight},
@@ -41,7 +41,8 @@ func TestComponentCloseWindow(t *testing.T) {
 			h = NewTestHandler()
 			h = c.NewTab("OAK", "OAK", h, nil)
 
-			win := tcase.split(c, h)
+			win, ok := tcase.split(c, h)
+			require.True(t, ok)
 			require.Equal(t, 2, c.wm.Size())
 
 			assert.NoError(t, win.Close())
@@ -52,7 +53,8 @@ func TestComponentCloseWindow(t *testing.T) {
 
 		t.Run(tcase.method+"Close is idempotent", func(t *testing.T) {
 			c := NewComponent(Config{})
-			win := tcase.split(c, NewTestHandler())
+			win, ok := tcase.split(c, NewTestHandler())
+			require.True(t, ok)
 			require.NoError(t, win.Close())
 			assert.NoError(t, win.Close())
 		})
@@ -63,7 +65,8 @@ func TestComponentCloseWindow(t *testing.T) {
 			h = NewTestHandler()
 			h.(*TestHandler).Exit = true
 			h.(*TestHandler).Handled = true
-			win := tcase.split(c, h)
+			win, ok := tcase.split(c, h)
+			require.True(t, ok)
 
 			assert.Equal(t, 0, c.tabs.Size())
 			assert.Equal(t, 2, c.wm.Size())
@@ -81,7 +84,8 @@ func TestComponentCloseWindow(t *testing.T) {
 		t.Run(tcase.method+"Close calls onWindowClosed callback", func(t *testing.T) {
 			var i int
 			c := NewComponent(Config{})
-			win := tcase.split(c, NewTestHandler())
+			win, ok := tcase.split(c, NewTestHandler())
+			require.True(t, ok)
 			win.onWindowClosed(func() {
 				i++
 			})
@@ -175,7 +179,8 @@ func TestComponentSetContent(t *testing.T) {
 			assert.False(t, c.UpdateWindowTabNext(win0))
 
 			h2 := NopHandler(&handler.TestHandler{})
-			win1 := tcase.split(c, h2)
+			win1, ok := tcase.split(c, h2)
+			require.True(t, ok)
 			assertWindowContent(t, win1, h2)
 			require.Error(t, win1.SetContent(christmasTab))
 			assertWindowContent(t, win1, h2)
@@ -204,7 +209,8 @@ func TestComponentUpdateWindowTab(t *testing.T) {
 			c.UpdateWindowTabNextFree(win0)
 			tsla := c.NewTab("TSLA", "TSLA", NewTestHandler(), nil)
 			goog := c.NewTab("GOOG", "GOOG", NewTestHandler(), nil)
-			win := tcase.split(c, goog)
+			win, ok := tcase.split(c, goog)
+			require.True(t, ok)
 
 			assertFreeTab(t, amzn, false)
 			assertFreeTab(t, tsla, true)
@@ -278,7 +284,8 @@ func TestComponentSetContentUnmount(t *testing.T) {
 	// unmounted and mounted again
 	assert.Equal(t, 2, unmounted)
 
-	win1 := c.SplitHorizontalBelow(h2)
+	win1, ok := c.SplitHorizontalBelow(h2)
+	require.True(t, ok)
 	assert.Equal(t, 2, unmounted)
 
 	assert.NoError(t, win0.Close())
@@ -345,7 +352,8 @@ func TestComponentHandlerUnmount(t *testing.T) {
 					c := NewComponent(cfg)
 					c.NewTab("Robinhood", "Robinhood", NewTestHandler(), nil)
 					c.NewTab("Stash", "Stash", NewTestHandler(), nil)
-					win := split(c, mock)
+					win, ok := split(c, mock)
+					require.True(t, ok)
 
 					tcase.fn(t, c, win, mock)
 					assert.Equal(t, 1, mock.unmounted)
@@ -366,6 +374,7 @@ func TestComponentMultipleWindow(t *testing.T) {
 
 	// w1 := c.Focus()
 	var w2 Window
+	var ok bool
 	// var w3 Window
 	h2 := NewTestHandler()
 	h3 := NewTestHandler()
@@ -383,7 +392,8 @@ func TestComponentMultipleWindow(t *testing.T) {
 │                  │
 └──────────────────┘`,
 		}, {func() {
-			w2 = c.SplitHorizontalBelow(h2)
+			w2, ok = c.SplitHorizontalBelow(h2)
+			require.True(t, ok)
 		}, `
 ┌──────────────────┐
 │                  │

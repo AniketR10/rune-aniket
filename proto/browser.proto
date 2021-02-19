@@ -1,6 +1,7 @@
 syntax = "proto3";
 
 import "term.proto";
+import "tui.proto";
 
 package proto;
 
@@ -37,6 +38,18 @@ message SplitRequest {
 message SplitResponse {
 	uint64 window_id = 1;
 }
+
+message FloatingWindowRequest {
+	uint64 handler_id = 1;
+	Coordinates at = 2;
+	int32 height = 3;
+	int32 width = 4;
+}
+
+message FloatingWindowResponse {
+	uint64 window_id = 1;
+}
+
 
 message FocusRequest {
 }
@@ -87,6 +100,7 @@ service WindowManager {
 	rpc SplitVerticalLeft(SplitRequest) returns (SplitResponse);
 	rpc SplitHorizontalAbove(SplitRequest) returns (SplitResponse);
 	rpc SplitHorizontalBelow(SplitRequest) returns (SplitResponse);
+	rpc FloatingWindow(FloatingWindowRequest) returns (FloatingWindowResponse);
 }
 
 message WindowCloseRequest {

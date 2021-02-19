@@ -350,8 +350,8 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 	require.NoError(t, err)
 
 	newMappings := map[term.Event]term.Event{
-		term.Event{Type: term.EventKey, Ch: ')'}: term.Event{Type: term.EventKey, Key: term.KeyCtrlL},
-		term.Event{Type: term.EventKey, Ch: '('}: term.Event{Type: term.EventKey, Key: term.KeyCtrlH},
+		{Type: term.EventKey, Ch: ')'}: {Type: term.EventKey, Key: term.KeyCtrlL},
+		{Type: term.EventKey, Ch: '('}: {Type: term.EventKey, Key: term.KeyCtrlH},
 	}
 	require.NoError(t, b.MergeKeyMap(newMappings))
 
@@ -495,6 +495,45 @@ EEEE`},
 │BBBBBBBBBBBBBBBBBB│
 └──────────────────┘`},
 		{":0>",
+			`┌──────────────────┐
+│other.go  bugz    │
+├──────────────────┤
+│BBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBB│
+└──────────────────┘`},
+	}
+	testutil.TestHandlerSequence(t, bh, 20, 10, cases)
+
+	floating1, err := b.FloatingWindow(browser.NewTestHandler(), term.Coordinates{X: 1, Y: 1}, 6, 4)
+	require.NoError(t, err)
+
+	// should not be able to split over a floating window, which is currently in focus
+	_, err = b.SplitHorizontalAbove(browser.NewTestHandler())
+	require.Error(t, err)
+	cases = []testutil.HandlerSequenceTestCase{
+		{"__",
+			`┌──────────────────┐
+│other.go  bugz    │
+├──────────────────┤
+│┌────┐BBBBBBBBBBBB│
+││AAAA│BBBBBBBBBBBB│
+││AAAA│BBBBBBBBBBBB│
+│└────┘BBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBB│
+└──────────────────┘`},
+	}
+
+	testutil.TestHandlerSequence(t, bh, 20, 10, cases)
+
+	require.NoError(t, floating1.Close())
+
+	cases = []testutil.HandlerSequenceTestCase{
+		{"__",
 			`┌──────────────────┐
 │other.go  bugz    │
 ├──────────────────┤

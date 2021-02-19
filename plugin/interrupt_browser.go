@@ -20,12 +20,37 @@ type browserServer interface {
 // this structure wraps a browser.Browser to
 // provide interrupt on write requests coming from the wire
 type interruptBrowser struct {
-	browserServer
+	browserServer browserServer
 	interruptDraw func()
 }
 
 func interruptBrowserServer(srv browserServer, interruptDraw func()) browserServer {
 	return &interruptBrowser{browserServer: srv, interruptDraw: interruptDraw}
+}
+
+// Focus satisfies proto.BrowserServer
+func (s *interruptBrowser) Publish(
+	ctx context.Context, req *proto.PublishRequest,
+) (*proto.PublishResponse, error) {
+	res, err := s.browserServer.Publish(ctx, req)
+	return res, err
+}
+
+// Focus satisfies proto.BrowserServer
+func (s *interruptBrowser) Focus(
+	ctx context.Context, req *proto.FocusRequest,
+) (*proto.FocusResponse, error) {
+	res, err := s.browserServer.Focus(ctx, req)
+	return res, err
+}
+
+// FloatingWindow satisfies proto.BrowserServer
+func (s *interruptBrowser) FloatingWindow(
+	ctx context.Context, req *proto.FloatingWindowRequest,
+) (*proto.FloatingWindowResponse, error) {
+	res, err := s.browserServer.FloatingWindow(ctx, req)
+	s.interruptDraw()
+	return res, err
 }
 
 // SplitVerticalRight satisfies proto.BrowserServer

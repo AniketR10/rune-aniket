@@ -38,6 +38,7 @@ type WindowManager interface {
 	SplitVerticalLeft(Handler) (Window, error)
 	SplitHorizontalAbove(Handler) (Window, error)
 	SplitHorizontalBelow(Handler) (Window, error)
+	FloatingWindow(h Handler, at term.Coordinates, height, width int) (Window, error)
 }
 
 // EventHandler wraps the basic tui.Handler method Handle.
@@ -106,13 +107,13 @@ func (h *unmountHandler) OnUnmount() error {
 }
 
 // CallbackHandler returns a Handler by wrapping a tui.Handler
-// with an OnWindowClose callback.
+// with an OnUnmount callback.
 func CallbackHandler(h tui.Handler, onUnmount func()) Handler {
 	return &unmountHandler{Handler: h, onUnmount: onUnmount}
 }
 
 // NopHandler returns a Handler by wrapping a tui.Handler
-// with an nop OnWindowClose callback.
+// with an nop OnUnmount callback.
 func NopHandler(h tui.Handler) Handler {
 	return &unmountHandler{Handler: h, onUnmount: func() {}}
 }

@@ -2,6 +2,7 @@ package component
 
 import (
 	"fmt"
+	"unsafe"
 
 	"github.com/ernestrc/go-tui"
 	"github.com/ernestrc/go-tui/term"
@@ -22,6 +23,7 @@ type TileTree struct {
 
 // TileNode represents a node in a tree of tiled components.
 type TileNode struct {
+	tree          *TileTree
 	width, height int
 	content       tui.Component
 	children      []*Virtual
@@ -33,7 +35,8 @@ type TileNode struct {
 func (t *TileTree) Init(content tui.Component) (n *TileNode) {
 	n = new(TileNode)
 	t.root.direction = root
-	t.root.children = []*Virtual{&Virtual{C: n}}
+	t.root.children = []*Virtual{{C: n}}
+	t.root.tree = t
 	n.initNode(vertical, content, &t.root)
 	return
 }
@@ -63,6 +66,7 @@ func (t *TileNode) initNode(
 	t.children = []*Virtual{}
 	t.direction = direction
 	t.parent = parent
+	t.tree = parent.tree
 }
 
 func (t *TileNode) resizeHorizontal(width, height int) (err error) {
@@ -75,7 +79,7 @@ func (t *TileNode) resizeHorizontal(width, height int) (err error) {
 
 	for i, ti := range t.children {
 		offset := ((i - useSpareIdx) * spareCell)
-		ti.Move(term.Coordinates{0, i*cheight + offset})
+		ti.Move(term.Coordinates{Y: i*cheight + offset})
 
 		if i == useSpareIdx {
 			spareCell = 1
@@ -96,7 +100,7 @@ func (t *TileNode) resizeVertical(width, height int) {
 
 	for i, ti := range t.children {
 		offset := ((i - useSpareIdx) * spareCell)
-		ti.Move(term.Coordinates{i*cwidth + offset, 0})
+		ti.Move(term.Coordinates{X: i*cwidth + offset})
 
 		if i == useSpareIdx {
 			spareCell = 1
@@ -226,6 +230,7 @@ func removeChild(parent, child *TileNode) {
 	parent.children = parent.children[:len(parent.children)-1]
 
 	child.parent = nil
+	child.tree = nil
 	child.children = nil
 
 	// transfer last child to content but do it in a way such that it
@@ -241,6 +246,7 @@ func removeChild(parent, child *TileNode) {
 
 		proxyNode.parent.Resize(proxyNode.parent.width, proxyNode.parent.height)
 
+		proxyNode.tree = nil
 		proxyNode.parent = nil
 		proxyNode.children = nil
 		return
@@ -478,6 +484,26 @@ func (t *TileNode) SetContent(c tui.Component) (prev tui.Component) {
 	t.content = c
 	t.content.Resize(t.width, t.height)
 	return
+}
+
+// ID returns a unique identifier for this tile.
+func (t *TileNode) ID() uint64 {
+	return uint64(uintptr(unsafe.Pointer(t)))
+}
+
+// Height returns the height of this node.
+func (t *TileNode) Height() int {
+	return t.height
+}
+
+// Width returns the height of this node.
+func (t *TileNode) Width() int {
+	return t.width
+}
+
+// Position returns the position of this tile node inside its TileTree.
+func (t *TileNode) Position() term.Coordinates {
+	return t.tree.TilePosition(t)
 }
 
 func (t *TileNode) iterate(op func(*TileNode)) {

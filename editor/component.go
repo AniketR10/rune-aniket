@@ -23,6 +23,9 @@ var (
 	// ErrInvalidSave is returned when trying to save a buffer that it's not a file
 	// in the file system.
 	ErrInvalidSave = errors.New("Cannot save this buffer")
+
+	// ErrInvalidSplit is returned when attempting to split over a floating window.
+	ErrInvalidSplit = errors.New("Cannot split this window")
 )
 
 type openFileFunc func(filePath string,
@@ -340,25 +343,41 @@ func (c *Component) SetMessage(msg string, args ...interface{}) error {
 // SplitVerticalRight opens a new window tile to the right of the
 // current window in focus and initializes it with h.
 func (c *Component) SplitVerticalRight(h browser.Handler) (browser.Window, error) {
-	return c.comp.SplitVerticalRight(h), nil
+	w, ok := c.comp.SplitVerticalRight(h)
+	if !ok {
+		return nil, ErrInvalidSplit
+	}
+	return w, nil
 }
 
 // SplitVerticalLeft opens a new window tile to the left of the
 // current window in focus and initializes it with h.
 func (c *Component) SplitVerticalLeft(h browser.Handler) (browser.Window, error) {
-	return c.comp.SplitVerticalLeft(h), nil
+	w, ok := c.comp.SplitVerticalLeft(h)
+	if !ok {
+		return nil, ErrInvalidSplit
+	}
+	return w, nil
 }
 
 // SplitHorizontalBelow opens a new window tile below the current window in focus
 // and initializes it with h.
 func (c *Component) SplitHorizontalBelow(h browser.Handler) (browser.Window, error) {
-	return c.comp.SplitHorizontalBelow(h), nil
+	w, ok := c.comp.SplitHorizontalBelow(h)
+	if !ok {
+		return nil, ErrInvalidSplit
+	}
+	return w, nil
 }
 
 // SplitHorizontalAbove opens a new window tile above the current window in focus
 // and initializes it with h.
 func (c *Component) SplitHorizontalAbove(h browser.Handler) (browser.Window, error) {
-	return c.comp.SplitHorizontalAbove(h), nil
+	w, ok := c.comp.SplitHorizontalAbove(h)
+	if !ok {
+		return nil, ErrInvalidSplit
+	}
+	return w, nil
 }
 
 func (c *Component) unsubscribe(ev term.Event) {
@@ -548,6 +567,14 @@ func (c *Component) List(
 // SetCursor satisfies editor.Editor
 func (c *Component) SetCursor(h Handler, pos term.Coordinates) error {
 	return c.ed.SetCursor(h, pos)
+}
+
+// FloatingWindow opens a new floating window at the given coordinates,
+// with the given height and width.
+func (c *Component) FloatingWindow(
+	h browser.Handler, at term.Coordinates, width, height int,
+) (browser.Window, error) {
+	return c.comp.FloatingWindow(h, at, width, height), nil
 }
 
 // Close closes all resources associated with this Component.

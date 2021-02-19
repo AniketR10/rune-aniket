@@ -41,14 +41,15 @@ func TestWindowManagerSetFocusNoFrame(t *testing.T) {
 func testWindowManagerSetFocus(t *testing.T, frame bool) {
 	width, height := 8, 4
 	_, wm := prepareTest(width, height, frame, NewTestHandler())
-	right := wm.SplitHorizontal(NewTestHandler())
+	right, ok := wm.SplitHorizontal(NewTestHandler())
+	require.True(t, ok)
 
 	wm.SetFocus(right)
 
 	if focus := wm.Focus(); focus != right {
 		t.Errorf("focus should be %+v, instead of %+v", right, focus)
 	}
-	_, ok := wm.Focus().Content().(*TestHandler)
+	_, ok = wm.Focus().Content().(*TestHandler)
 	assert.True(t, ok)
 }
 
@@ -59,14 +60,17 @@ func TestWindowManagerHandle(t *testing.T) {
 	writer, handler := prepareTest(width, height, false, topLeftHandler)
 
 	bottomLeftHandler := NewTestHandler()
-	bottomleft := handler.SplitHorizontal(bottomLeftHandler)
+	bottomleft, ok := handler.SplitHorizontal(bottomLeftHandler)
+	require.True(t, ok)
 
 	topRightHandler := NewTestHandler()
-	_ = handler.SplitVertical(topRightHandler)
+	_, ok = handler.SplitVertical(topRightHandler)
+	require.True(t, ok)
 
 	topLeft := handler.SetFocus(bottomleft)
 	bottomRightHandler := NewTestHandler()
-	_ = handler.SplitVertical(bottomRightHandler)
+	_, ok = handler.SplitVertical(bottomRightHandler)
+	require.True(t, ok)
 
 	handler.SetFocus(topLeft)
 
@@ -302,7 +306,8 @@ func TestWindowManagerHandleFrame(t *testing.T) {
 	writer, handler := prepareTest(width, height, true, leftHandler)
 
 	rightHandler := NewTestHandler()
-	_ = handler.SplitVertical(rightHandler)
+	_, ok := handler.SplitVertical(rightHandler)
+	require.True(t, ok)
 
 	cases := []testutil.HandlerTestCase{
 		{
@@ -336,7 +341,8 @@ func TestWindowFocusInitSplitVertical(t *testing.T) {
 	assert.False(t, m.ShiftFocus())
 
 	rightHandler := NewTestHandler()
-	_ = m.SplitVertical(rightHandler)
+	_, ok = m.SplitVertical(rightHandler)
+	require.True(t, ok)
 
 	assert.Equal(t, leftHandler, m.Focus().Content())
 
@@ -362,7 +368,8 @@ func TestWindowManagerSetFocusContent(t *testing.T) {
 	writer, wm := prepareTest(width, height, true, leftHandler)
 
 	rightHandler := NewTestHandler()
-	_ = wm.SplitVertical(rightHandler)
+	_, ok := wm.SplitVertical(rightHandler)
+	require.True(t, ok)
 
 	prev := wm.Focus().SetContent(rightHandler)
 	assert.Equal(t, prev, leftHandler)
@@ -452,7 +459,8 @@ func testWindowManagerClose(t *testing.T, frame bool) {
 	cfg := DefaultWindowManagerConfig()
 	cfg.Frame = frame
 	wm := NewWindowManager(h1, cfg)
-	node2 := wm.SplitHorizontal(h2)
+	node2, ok := wm.SplitHorizontal(h2)
+	require.True(t, ok)
 
 	assert.NotEqual(t, node2, wm.Focus())
 	require.NoError(t, wm.Focus().Close())
@@ -473,10 +481,11 @@ func testWindowManagerContent(t *testing.T, frame bool) {
 	cfg := DefaultWindowManagerConfig()
 	cfg.Frame = frame
 	wm := NewWindowManager(NewTestHandler(), cfg)
-	node2 := wm.SplitHorizontal(NewTestHandler())
+	node2, ok := wm.SplitHorizontal(NewTestHandler())
+	require.True(t, ok)
 
 	c := node2.Content()
-	_, ok := c.(*TestHandler)
+	_, ok = c.(*TestHandler)
 	require.True(t, ok)
 
 	prev := node2.SetContent(NewTestHandler())
@@ -568,6 +577,7 @@ func TestComponentWindowSplit(t *testing.T) {
 
 	var w2 Window
 	var w3 Window
+	var ok bool
 	h2 := TestHandler{TestComponent: component.TestComponent{Ch: 'B'}}
 	h3 := TestHandler{TestComponent: component.TestComponent{Ch: 'C'}}
 
@@ -583,7 +593,8 @@ func TestComponentWindowSplit(t *testing.T) {
 │AAAAAAAAAAAAAAAAAA│
 └──────────────────┘`,
 		}, {func() {
-			w2 = wm.SplitHorizontal(&h2)
+			w2, ok = wm.SplitHorizontal(&h2)
+			require.True(t, ok)
 		}, `
 ┌──────────────────┐
 │AAAAAAAAAAAAAAAAAA│
@@ -595,7 +606,8 @@ func TestComponentWindowSplit(t *testing.T) {
 └──────────────────┘`,
 		}, {func() {
 			assert.True(t, wm.FocusDown())
-			w3 = wm.SplitVertical(&h3)
+			w3, ok = wm.SplitVertical(&h3)
+			require.True(t, ok)
 		}, `
 ┌──────────────────┐
 │AAAAAAAAAAAAAAAAAA│

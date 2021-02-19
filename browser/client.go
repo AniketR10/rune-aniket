@@ -383,6 +383,33 @@ func (c *Client) List(
 	return c.storage.List(ctx, filters)
 }
 
+// FloatingWindow satisfies browser.WindowManager
+func (c *Client) FloatingWindow(
+	h Handler, at term.Coordinates, height, width int,
+) (Window, error) {
+	var atProto proto.Coordinates
+	atProto.FromModel(at)
+
+	freq := proto.FloatingWindowRequest{
+		At:     &atProto,
+		Height: int32(height),
+		Width:  int32(width),
+	}
+
+	return c.split(func(cc proto.WindowManagerClient,
+		ctx context.Context, req *proto.SplitRequest,
+		opts ...grpc.CallOption) (*proto.SplitResponse, error) {
+
+		freq.HandlerId = req.GetHandlerId()
+
+		fres, err := cc.FloatingWindow(ctx, &freq)
+		if err != nil {
+			return nil, err
+		}
+		return &proto.SplitResponse{WindowId: fres.GetWindowId()}, nil
+	}, h)
+}
+
 // Close closes all resources associated with this Client.
 // This client should not be used after this method is called.
 func (c *Client) Close() (err error) {

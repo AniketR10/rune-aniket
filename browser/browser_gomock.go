@@ -234,6 +234,21 @@ func (m *MockWindowManager) EXPECT() *MockWindowManagerMockRecorder {
 	return m.recorder
 }
 
+// FloatingWindow mocks base method.
+func (m *MockWindowManager) FloatingWindow(h Handler, at term.Coordinates, height, width int) (Window, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "FloatingWindow", h, at, height, width)
+	ret0, _ := ret[0].(Window)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// FloatingWindow indicates an expected call of FloatingWindow.
+func (mr *MockWindowManagerMockRecorder) FloatingWindow(h, at, height, width interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FloatingWindow", reflect.TypeOf((*MockWindowManager)(nil).FloatingWindow), h, at, height, width)
+}
+
 // Focus mocks base method.
 func (m *MockWindowManager) Focus() (Window, error) {
 	m.ctrl.T.Helper()
@@ -722,6 +737,21 @@ func (m *MockBrowser) Delete(ctx context.Context, ID string) error {
 func (mr *MockBrowserMockRecorder) Delete(ctx, ID interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Delete", reflect.TypeOf((*MockBrowser)(nil).Delete), ctx, ID)
+}
+
+// FloatingWindow mocks base method.
+func (m *MockBrowser) FloatingWindow(h Handler, at term.Coordinates, height, width int) (Window, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "FloatingWindow", h, at, height, width)
+	ret0, _ := ret[0].(Window)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// FloatingWindow indicates an expected call of FloatingWindow.
+func (mr *MockBrowserMockRecorder) FloatingWindow(h, at, height, width interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FloatingWindow", reflect.TypeOf((*MockBrowser)(nil).FloatingWindow), h, at, height, width)
 }
 
 // Focus mocks base method.

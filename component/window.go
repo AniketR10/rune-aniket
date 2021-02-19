@@ -2,7 +2,6 @@ package component
 
 import (
 	"errors"
-	"unsafe"
 
 	"github.com/ernestrc/go-tui"
 	"github.com/ernestrc/go-tui/term"
@@ -10,10 +9,21 @@ import (
 
 var errCalledZeroValuedWin = "called method on zero-valued Window"
 
+type windowNode interface {
+	ID() uint64
+	Width() int
+	Height() int
+	Content() tui.Component
+	SetContent(tui.Component) tui.Component
+	Size() int
+	Close()
+	Position() term.Coordinates
+}
+
 // Window represents a tiled window in a WindowManager.
 type Window struct {
 	wm   *WindowManager
-	node *TileNode
+	node windowNode
 }
 
 // Position returns the position of this Window, or false
@@ -23,7 +33,7 @@ func (w Window) Position() (pos term.Coordinates, ok bool) {
 		panic(errCalledZeroValuedWin)
 	}
 	ok = true
-	pos = w.wm.tree.TilePosition(w.node)
+	pos = w.node.Position()
 	return
 }
 
@@ -32,7 +42,7 @@ func (w Window) Width() int {
 	if w.wm == nil {
 		panic(errCalledZeroValuedWin)
 	}
-	return w.node.width
+	return w.node.Width()
 }
 
 // Height returns the width of this Window.
@@ -40,7 +50,7 @@ func (w Window) Height() int {
 	if w.wm == nil {
 		panic(errCalledZeroValuedWin)
 	}
-	return w.node.height
+	return w.node.Height()
 }
 
 // Content returns the content of this Window, or false
@@ -137,26 +147,41 @@ func (w Window) Size() int {
 
 // TileDown returns the window in the bottom of t or false if t is the
 // bottom-most window in the WindowManager.
-func (w Window) TileDown() (Window, bool) {
+func (w Window) TileDown() (ret Window, ok bool) {
 	if w.wm == nil {
 		panic(errCalledZeroValuedWin)
 	}
-	node := w.node.TileDown()
+	t, ok := w.node.(*TileNode)
+	if !ok {
+		pos := w.node.Position()
+		pos.Y += w.node.Height()
+		pos.Y++
+		return w.wm.WindowAt(pos)
+	}
+	node := t.TileDown()
 	if node == nil {
-		return Window{}, false
+		ok = false
+		return
 	}
 	return w.wm.nodeToWindow(node), true
 }
 
 // TileLeft returns the window left-adjacent to t or false if t is the
 // left-most window in the WindowManager.
-func (w Window) TileLeft() (Window, bool) {
+func (w Window) TileLeft() (ret Window, op bool) {
 	if w.wm == nil {
 		panic(errCalledZeroValuedWin)
 	}
-	node := w.node.TileLeft()
+	t, ok := w.node.(*TileNode)
+	if !ok {
+		pos := w.node.Position()
+		pos.X--
+		return w.wm.WindowAt(pos)
+	}
+	node := t.TileLeft()
 	if node == nil {
-		return Window{}, false
+		ok = false
+		return
 
 	}
 	return w.wm.nodeToWindow(node), true
@@ -164,13 +189,21 @@ func (w Window) TileLeft() (Window, bool) {
 
 // TileRight returns the window right-adjacent to t or false if t is the
 // right-most window in the tree.
-func (w Window) TileRight() (Window, bool) {
+func (w Window) TileRight() (ret Window, ok bool) {
 	if w.wm == nil {
 		panic(errCalledZeroValuedWin)
 	}
-	node := w.node.TileRight()
+	t, ok := w.node.(*TileNode)
+	if !ok {
+		pos := w.node.Position()
+		pos.X += w.node.Width()
+		pos.X++
+		return w.wm.WindowAt(pos)
+	}
+	node := t.TileRight()
 	if node == nil {
-		return Window{}, false
+		ok = false
+		return
 
 	}
 	return w.wm.nodeToWindow(node), true
@@ -178,13 +211,20 @@ func (w Window) TileRight() (Window, bool) {
 
 // TileUp returns the window on top of t or false if t is the
 // top-most window in the tree.
-func (w Window) TileUp() (Window, bool) {
+func (w Window) TileUp() (ret Window, ok bool) {
 	if w.wm == nil {
 		panic(errCalledZeroValuedWin)
 	}
-	node := w.node.TileUp()
+	t, ok := w.node.(*TileNode)
+	if !ok {
+		pos := w.node.Position()
+		pos.Y--
+		return w.wm.WindowAt(pos)
+	}
+	node := t.TileUp()
 	if node == nil {
-		return Window{}, false
+		ok = false
+		return
 
 	}
 	return w.wm.nodeToWindow(node), true
@@ -192,7 +232,7 @@ func (w Window) TileUp() (Window, bool) {
 
 // ID returns a unique identifier for this window.
 func (w Window) ID() uint64 {
-	return uint64(uintptr(unsafe.Pointer(w.node)))
+	return w.node.ID()
 }
 
 // Close removes this Window from the WindowManager
