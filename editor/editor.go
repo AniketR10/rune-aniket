@@ -25,10 +25,18 @@ type Reader interface {
 	RawCells() ([][]term.Cell, error)
 }
 
+// Command represents a command issued by the user.
+type Command struct {
+	Name         string
+	ResourceName string
+	Resource     Handler
+	Cursor       term.Coordinates
+}
+
 // CommandHandler is a callback interface that wraps the basic method Command.
 type CommandHandler interface {
 	// Handle is called when user issued a command previously registered via Register.
-	HandleCommand(cmd string, h Handler, name string) (exit bool)
+	HandleCommand(Command) (exit bool)
 }
 
 // Editor is the interface that wraps an API to manage a text editor.
@@ -105,16 +113,16 @@ func CellReader(c cell.Reader) Reader {
 }
 
 type fnCommandHandler struct {
-	cb func(cmd string, h Handler, name string) bool
+	cb func(Command) bool
 }
 
-func (f fnCommandHandler) HandleCommand(cmd string, h Handler, name string) bool {
-	return f.cb(cmd, h, name)
+func (f fnCommandHandler) HandleCommand(c Command) bool {
+	return f.cb(c)
 }
 
 // FuncCommandHandler returns an CommandHandler that calls fn
 // every time Handle is invoked.
-func FuncCommandHandler(fn func(cmd string, h Handler, name string) bool) CommandHandler {
+func FuncCommandHandler(fn func(Command) bool) CommandHandler {
 	return fnCommandHandler{
 		cb: fn,
 	}

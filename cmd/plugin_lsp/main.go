@@ -17,6 +17,5 @@ func main() {
 		log.Println(http.ListenAndServe("localhost:6063", nil))
 	}()*/
 
-	cmds := []string{commandNextDiagnostic, commandPrevDiagnostic}
-	plugutil.ServeEditorEventHandler(cmds, newLspHandler)
+	plugutil.ServeEditorEventHandler(lspHandlerCommands, newLspHandler)
 }

@@ -289,12 +289,13 @@ func (s *Server) Register(ctx context.Context, in *proto.RegisterCommandRequest)
 		return nil, err
 	}
 
-	commander := FuncCommandHandler(func(cmd string, h Handler, name string) bool {
+	commander := FuncCommandHandler(func(cmd Command) bool {
 		return handler.Handle(Event{
 			Type:         eventTypeCommand,
-			Content:      cmd,
-			Resource:     h,
-			ResourceName: name,
+			Content:      cmd.Name,
+			Resource:     cmd.Resource,
+			ResourceName: cmd.ResourceName,
+			Start:        cmd.Cursor,
 		})
 	})
 

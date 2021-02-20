@@ -301,14 +301,21 @@ func (c *Component) Publish(ev term.Event) (handled bool) {
 // DispatchCommand dispatches a EventTypeCommand with cmd to subscribers
 // subscribed via SubscribeEditor.
 func (c *Component) DispatchCommand(
-	cmd string, h Handler, name string,
+	cmd string, resource Handler, resourceName string,
 ) (handled bool) {
 	commander, handled := c.cmdSubscribers[cmd]
 	if !handled {
 		return false
 	}
 
-	exit := commander.HandleCommand(cmd, h, name)
+	cursor, _ := resource.Cursor()
+	strc := Command{
+		Name:         cmd,
+		Resource:     resource,
+		ResourceName: resourceName,
+		Cursor:       cursor,
+	}
+	exit := commander.HandleCommand(strc)
 	if exit {
 		delete(c.cmdSubscribers, cmd)
 	}

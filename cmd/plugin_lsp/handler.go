@@ -44,6 +44,7 @@ const (
 )
 
 var (
+	lspHandlerCommands          = []string{commandNextDiagnostic, commandPrevDiagnostic}
 	defaultSemanticTokensListID = "lsp_syntax_highlighting"
 	defaultDiagnosticListID     = "lsp_diagnostic"
 	defaultDiagnosticAttr       = map[protocol.DiagnosticSeverity]term.Attributes{
@@ -1085,17 +1086,17 @@ func (h *lspEditorHandler) HandleDiagnostics(
 	}
 }
 
-func (h *lspEditorHandler) HandleCommand(cmd string, eh editor.Handler, name string) (exit bool) {
-	switch cmd {
+func (h *lspEditorHandler) HandleCommand(cmd editor.Command) (exit bool) {
+	switch cmd.Name {
 	case commandNextDiagnostic:
-		err := h.ed.MoveToNextLocation(eh, h.diagnosticListID)
+		err := h.ed.MoveToNextLocation(cmd.Resource, h.diagnosticListID)
 		if err != nil {
-			log.Errorf("lspEditorHandler.MoveToNextLocation(%s): %v", name, err)
+			log.Errorf("lspEditorHandler.MoveToNextLocation(%s): %v", cmd.Name, err)
 		}
 	case commandPrevDiagnostic:
-		err := h.ed.MoveToPrevLocation(eh, h.diagnosticListID)
+		err := h.ed.MoveToPrevLocation(cmd.Resource, h.diagnosticListID)
 		if err != nil {
-			log.Errorf("lspEditorHandler.MoveToNextLocation(%s): %v", name, err)
+			log.Errorf("lspEditorHandler.MoveToNextLocation(%s): %v", cmd.Name, err)
 		}
 	}
 

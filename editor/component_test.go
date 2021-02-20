@@ -468,7 +468,7 @@ func testRegister(t *testing.T,
 
 		var called int
 		var wg sync.WaitGroup
-		sut.Register(myCmd, FuncCommandHandler(func(cmd string, h Handler, name string) bool {
+		sut.Register(myCmd, FuncCommandHandler(func(cmd Command) bool {
 			defer wg.Done()
 			called++
 			return true

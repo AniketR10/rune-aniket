@@ -132,7 +132,13 @@ func (c *Client) Register(cmd string, h CommandHandler) error {
 
 	// re-use EventHandler logic
 	handlerID := c.serveHandler(FuncEventHandler(func(ev Event) bool {
-		return h.HandleCommand(ev.Content, ev.Resource, ev.ResourceName)
+		cmd := Command{
+			Name:         ev.Content,
+			ResourceName: ev.ResourceName,
+			Resource:     ev.Resource,
+			Cursor:       ev.Start,
+		}
+		return h.HandleCommand(cmd)
 	}))
 
 	req := proto.RegisterCommandRequest{Command: cmd, HandlerId: handlerID}
