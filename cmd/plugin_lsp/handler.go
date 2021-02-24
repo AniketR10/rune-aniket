@@ -470,11 +470,6 @@ func newLspHandler(
 	ret.evChan = make(chan editor.Event, handleBackpressureEvs)
 
 	var err error
-	ret.servers, err = initLanguageServers(ret, pconfig)
-	if err != nil {
-		return nil, err
-	}
-
 	ret.semanticTypesAttr, err = getSemanticTypesAttr(pconfig)
 	if err != nil {
 		return nil, err
@@ -517,6 +512,11 @@ func newLspHandler(
 
 	ret.rpcTimeout, err = getDuration(pconfig,
 		"rpc_timeout", defaultRpcTimeout)
+	if err != nil {
+		return nil, err
+	}
+
+	ret.servers, err = initLanguageServers(ret, pconfig)
 	if err != nil {
 		return nil, err
 	}
