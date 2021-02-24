@@ -2,6 +2,7 @@ package editor
 
 import (
 	"errors"
+	"path/filepath"
 	"sync"
 	"testing"
 
@@ -326,7 +327,7 @@ func TestComponentEditorSubscriber(t *testing.T) {
 			var fired int
 			c.SubscribeEditor(tcase.evType, FuncEventHandler(func(ev Event) bool {
 				fired++
-				assert.Equal(t, ev.ResourceName, filename)
+				assert.Equal(t, filepath.Base(ev.ResourceName), filename)
 				return false
 			}))
 
