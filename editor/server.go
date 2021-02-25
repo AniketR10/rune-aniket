@@ -299,7 +299,8 @@ func (s *Server) Register(ctx context.Context, in *proto.RegisterCommandRequest)
 			Content:      cmd.Name,
 			Resource:     cmd.Resource,
 			ResourceName: cmd.ResourceName,
-			Start:        cmd.Cursor,
+			Start:        cmd.Cursor.Content,
+			From:         cmd.Cursor.Window,
 		})
 	})
 

@@ -130,8 +130,10 @@ func (c *Client) Register(cmd string, h CommandHandler) error {
 			Name:         ev.Content,
 			ResourceName: ev.ResourceName,
 			Resource:     ev.Resource,
-			Cursor:       ev.Start,
 		}
+		// as agreed with Server
+		cmd.Cursor.Content = ev.Start
+		cmd.Cursor.Window = ev.From
 		return h.HandleCommand(cmd)
 	}))
 

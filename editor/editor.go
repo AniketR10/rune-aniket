@@ -30,7 +30,10 @@ type Command struct {
 	Name         string
 	ResourceName string
 	Resource     Handler
-	Cursor       term.Coordinates
+	Cursor       struct {
+		Content term.Coordinates
+		Window  term.Coordinates
+	}
 }
 
 // CommandHandler is a callback interface that wraps the basic method Command.

@@ -314,13 +314,13 @@ func (c *Component) DispatchCommand(
 		return false
 	}
 
-	cursor, _ := c.ed.Cursor(resource)
 	strc := Command{
 		Name:         cmd,
 		Resource:     resource,
 		ResourceName: resourceName,
-		Cursor:       cursor,
 	}
+	strc.Cursor.Content, _ = c.ed.Cursor(resource)
+	strc.Cursor.Window, _ = resource.Cursor()
 	exit := commander.HandleCommand(strc)
 	if exit {
 		delete(c.cmdSubscribers, cmd)
@@ -592,6 +592,9 @@ func (c *Component) Cursor(h Handler) (term.Coordinates, error) {
 func (c *Component) FloatingWindow(
 	h browser.Handler, at term.Coordinates, width, height int,
 ) (browser.Window, error) {
+	if at.Y < 0 || at.X < 0 {
+		return nil, fmt.Errorf("invalid floating window coordinates: %v", at)
+	}
 	return c.comp.FloatingWindow(h, at, width, height), nil
 }
 

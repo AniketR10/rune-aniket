@@ -21,6 +21,9 @@ func newFloatingNode(
 	at term.Coordinates, width, height int,
 	maxWidth, maxHeight int,
 ) *floatingNode {
+	if at.Y < 0 || at.X < 0 {
+		panic("invalid floating window coordinates")
+	}
 	ret := new(floatingNode)
 	ret.at = at
 	ret.width = width
