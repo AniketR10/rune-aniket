@@ -340,6 +340,13 @@ func (b *Buffer) WriteString(p string) {
 	b.writer.Insert(nextWrite, p)
 }
 
+// WriteStringWithAttr inserts str with the given attr as the background
+// and foreground cell term.Attributes.
+func (b *Buffer) WriteStringWithAttr(str string, attr term.Attributes) {
+	at := b.cells.nextWrite()
+	b.InsertStringWithAttr(at, str, attr)
+}
+
 // Undo reverses the last update to the Buffer.
 // Redo can be used to reverse Undo.
 func (b *Buffer) Undo() (bool, term.Coordinates) {
