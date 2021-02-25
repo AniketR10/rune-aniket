@@ -2,7 +2,9 @@ package editor
 
 import (
 	"errors"
+	"os/user"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 
@@ -323,11 +325,17 @@ func TestComponentEditorSubscriber(t *testing.T) {
 			c, err := newTestComponent(&testEditor{})
 			require.NoError(t, err)
 
-			filename := "Joe_Biden.txt"
+			filename := "~/Joe_Biden.txt"
 			var fired int
+			usr, _ := user.Current()
+			dir := usr.HomeDir
 			c.SubscribeEditor(tcase.evType, FuncEventHandler(func(ev Event) bool {
 				fired++
-				assert.Equal(t, filepath.Base(ev.ResourceName), filename)
+				assert.Equal(t, filepath.Base(ev.ResourceName), "Joe_Biden.txt")
+				// Edit skip Edit as it takes the resource name as is.
+				if tcase.evType == EventTypeOpen && tcase.name != "Edit->EventTypeOpen" {
+					assert.True(t, strings.Contains(ev.ResourceName, dir))
+				}
 				return false
 			}))
 

@@ -5,7 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os/user"
 	"path/filepath"
+	"strings"
 
 	"github.com/ernestrc/blue/datastore/document"
 	"github.com/ernestrc/go-tui/browser"
@@ -223,6 +225,13 @@ func (c *Component) setFocusToTab(id string) (browser.Handler, error) {
 func (c *Component) OpenFileTab(
 	filename, recoveryFilename string,
 ) (browser.Handler, error) {
+	usr, _ := user.Current()
+	dir := usr.HomeDir
+	if filename == "~" {
+		filename = dir
+	} else if strings.HasPrefix(filename, "~/") {
+		filename = filepath.Join(dir, filename[2:])
+	}
 	// needed as tab ID
 	filename, err := filepath.Abs(filename)
 	if err != nil {

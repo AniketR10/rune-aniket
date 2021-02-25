@@ -8,10 +8,8 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
-	"os/user"
 	"path"
 	"path/filepath"
-	"strings"
 
 	"github.com/ernestrc/go-tui/cell"
 	"github.com/ernestrc/go-tui/term"
@@ -215,14 +213,7 @@ func (f *FileBuffer) recoverFile(filePath, swapFilePath string, buf *cell.Buffer
 }
 
 func osOpenFileFunc() openFunc {
-	usr, _ := user.Current()
-	dir := usr.HomeDir
 	return func(path string, flag int, perm os.FileMode) (OsFile, error) {
-		if path == "~" {
-			path = dir
-		} else if strings.HasPrefix(path, "~/") {
-			path = filepath.Join(dir, path[2:])
-		}
 		return os.OpenFile(path, flag, perm)
 	}
 }
