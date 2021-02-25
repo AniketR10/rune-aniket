@@ -309,7 +309,6 @@ func TestServerSetCursor(t *testing.T) {
 	})
 }
 
-/* TODO
 func TestServerCursor(t *testing.T) {
 	t.Run("calls underlying editor Cursor", func(t *testing.T) {
 		ctx := context.Background()
@@ -334,4 +333,3 @@ func TestServerCursor(t *testing.T) {
 		assert.Equal(t, pos, res.GetPos().ToModel())
 	})
 }
-*/

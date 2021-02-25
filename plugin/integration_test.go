@@ -162,6 +162,33 @@ func TestIntegrationRace(t *testing.T) {
 			h := editor.FuncEventHandler(func(editor.Event) bool { return false })
 			return ifc.(editor.Editor).SubscribeEditor(editor.EventTypeFlush, h)
 		}},
+		{PermissionEditor, func(token uint32, broker proto.MuxBroker) (interface{}, error) {
+			return Editor(token, broker)
+		}, func(ed *editor.MockEditorMockRecorder, mock *browser.MockBrowserMockRecorder) *gomock.Call {
+			ed.Edit(gomock.Any(), gomock.Any()).Return(nil, nil).AnyTimes()
+			return ed.SetCursor(gomock.Any(), gomock.Any()).Return(nil)
+		}, func(ifc interface{}) error {
+			// force cache token
+			h, err := ifc.(editor.Editor).Edit("", cell.NewBuffer())
+			if err != nil {
+				return err
+			}
+			return ifc.(editor.Editor).SetCursor(h, term.Coordinates{})
+		}},
+		{PermissionEditor, func(token uint32, broker proto.MuxBroker) (interface{}, error) {
+			return Editor(token, broker)
+		}, func(ed *editor.MockEditorMockRecorder, mock *browser.MockBrowserMockRecorder) *gomock.Call {
+			ed.Edit(gomock.Any(), gomock.Any()).Return(nil, nil).AnyTimes()
+			return ed.Cursor(gomock.Any()).Return(term.Coordinates{}, nil)
+		}, func(ifc interface{}) error {
+			// force cache token
+			h, err := ifc.(editor.Editor).Edit("", cell.NewBuffer())
+			if err != nil {
+				return err
+			}
+			_, err = ifc.(editor.Editor).Cursor(h)
+			return err
+		}},
 		{PermissionBrowserStorage, func(token uint32, broker proto.MuxBroker) (interface{}, error) {
 			return Storage(token, broker)
 		}, func(ed *editor.MockEditorMockRecorder, mock *browser.MockBrowserMockRecorder) *gomock.Call {

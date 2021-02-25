@@ -314,7 +314,7 @@ func (c *Component) DispatchCommand(
 		return false
 	}
 
-	cursor, _ := resource.Cursor()
+	cursor, _ := c.ed.Cursor(resource)
 	strc := Command{
 		Name:         cmd,
 		Resource:     resource,
@@ -580,6 +580,11 @@ func (c *Component) List(
 // SetCursor satisfies editor.Editor
 func (c *Component) SetCursor(h Handler, pos term.Coordinates) error {
 	return c.ed.SetCursor(h, pos)
+}
+
+// Cursor satisfies editor.Editor
+func (c *Component) Cursor(h Handler) (term.Coordinates, error) {
+	return c.ed.Cursor(h)
 }
 
 // FloatingWindow opens a new floating window at the given coordinates,
