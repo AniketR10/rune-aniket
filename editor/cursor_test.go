@@ -131,6 +131,7 @@ func TestCursorSearch(t *testing.T) {
 			e := setupCursor(t, tcase.width, tcase.height)
 
 			require.Equal(t, tcase.results, e.Search(tcase.searchstring))
+			e.MoveToNextMatch() // backwards compat
 			if tcase.assertions != nil {
 				tcase.assertions(t, e)
 			}

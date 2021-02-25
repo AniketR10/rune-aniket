@@ -187,7 +187,6 @@ func (c *Cursor) setSearchLocationList(text string) int {
 // the number of occurrences found.
 func (c *Cursor) Search(text string) int {
 	n := c.setSearchLocationList(text)
-	c.MoveToNextMatch()
 	return n
 }
 

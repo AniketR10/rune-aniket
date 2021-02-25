@@ -228,7 +228,8 @@ func (vi *Vi) handleSearch(ev term.Event) (bool, bool) {
 	case term.KeyEnter:
 		text := vi.less.SearchText()
 		vi.less.SetNormalMode()
-		vi.cursor.Search(text)
+		vi.searchMode = moveToNext
+		vi.search(text)
 		return false, true
 	default:
 		return vi.less.Handle(ev)
@@ -442,9 +443,12 @@ func (vi *Vi) handleNormal(ev term.Event) (quit, handled bool) {
 			vi.less.Handle(ev)
 		case '%':
 			vi.cursor.MoveToMatchingRune()
+		case '#':
+			vi.searchMode = moveToPrev
+			vi.search(vi.cursor.Word())
 		case '*':
 			vi.searchMode = moveToNext
-			vi.cursor.Search(vi.cursor.Word())
+			vi.search(vi.cursor.Word())
 		case '.':
 			vi.repeater.Repeat()
 		default:
@@ -462,6 +466,17 @@ func (vi *Vi) handleNormal(ev term.Event) (quit, handled bool) {
 	}
 
 	return
+}
+
+func (vi *Vi) search(text string) {
+	vi.cursor.Search(text)
+	switch vi.searchMode {
+	case moveToNext:
+		vi.cursor.MoveToNextMatch()
+	case moveToPrev:
+		vi.cursor.MoveToPrevMatch()
+	default:
+	}
 }
 
 func (vi *Vi) handleInsert(ev term.Event) (quit, handled bool) {
