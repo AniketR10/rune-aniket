@@ -1360,12 +1360,12 @@ func TestCursorSetLocationListMessages(t *testing.T) {
 			require.True(t, ok, c.messages)
 			require.Len(t, locsByID, 1)
 			assert.Equal(t, locsByID[locID].Message, strconv.Itoa(i+1))
-			require.True(t, c.MoveDown())
+			c.MoveDown()
 		}
 	}
 
 	t.Run("returns nil/false if cursor is not in from, to or in between", func(t *testing.T) {
-		c := setupCursorContent(t, 10, 10, content)
+		c := setupCursorContent(t, 10, 2, content)
 		abcList := &testLocationList{locations: messageLocations}
 		assert.Nil(t, c.SetLocationList(locID, abcList))
 
@@ -1374,7 +1374,7 @@ func TestCursorSetLocationListMessages(t *testing.T) {
 	})
 
 	t.Run("return messages if cursor is at From", func(t *testing.T) {
-		c := setupCursorContent(t, 10, 10, content)
+		c := setupCursorContent(t, 10, 2, content)
 		abcList := &testLocationList{locations: messageLocations}
 		assert.Nil(t, c.SetLocationList(locID, abcList))
 		require.True(t, c.MoveDown())
@@ -1383,7 +1383,7 @@ func TestCursorSetLocationListMessages(t *testing.T) {
 	})
 
 	t.Run("return messages if cursor between From/To", func(t *testing.T) {
-		c := setupCursorContent(t, 10, 10, content)
+		c := setupCursorContent(t, 10, 2, content)
 
 		abcList := &testLocationList{locations: messageLocations}
 
@@ -1395,7 +1395,7 @@ func TestCursorSetLocationListMessages(t *testing.T) {
 	})
 
 	t.Run("return messages if cursor is at To", func(t *testing.T) {
-		c := setupCursorContent(t, 10, 10, content)
+		c := setupCursorContent(t, 10, 2, content)
 
 		abcList := &testLocationList{locations: messageLocations}
 

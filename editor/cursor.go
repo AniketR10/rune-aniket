@@ -1218,7 +1218,7 @@ func (c *Cursor) clearMessages(ID string) {
 // Locations returns the set of locations by location list ID set by SetLocationList,
 // at the current cursor position, if there's any.
 func (c *Cursor) Locations() (map[string]Location, bool) {
-	msgs, ok := c.messages[c.cursor]
+	msgs, ok := c.messages[c.cursorAtScroll()]
 	if !ok {
 		return nil, false
 	}
