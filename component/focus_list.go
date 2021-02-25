@@ -143,9 +143,9 @@ func (l *FocusList) PushBackList(other *FocusList) {
 	if ok {
 		setFocusFrameCharSet(focus, l.textAttr)
 	}
-	for node, ok := other.Front(); ok; node, ok = node.Next() {
-		l.PushBack(node.Value().(WithAttributes))
-	}
+	other.Iterate(func(c WithAttributes) {
+		l.PushBack(c)
+	})
 }
 
 // PushFront inserts a new element c with value v at the front of list l and
@@ -181,6 +181,13 @@ func (l *FocusList) Remove(e ListNode) WithAttributes {
 		}
 	}
 	return l.list.Remove(e).(WithAttributes)
+}
+
+// Iterate iterates over all elements in l.
+func (l *FocusList) Iterate(fn func(WithAttributes)) {
+	for node, ok := l.list.Front(); ok; node, ok = node.Next() {
+		fn(node.Value().(WithAttributes))
+	}
 }
 
 // Resize satisfies tui.Compontent
