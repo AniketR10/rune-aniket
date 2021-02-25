@@ -1,6 +1,7 @@
 package component
 
 import (
+	"math"
 	"testing"
 
 	"github.com/ernestrc/go-tui"
@@ -108,6 +109,9 @@ func TestFocusListFocus(t *testing.T) {
 		require.False(t, l.CanFocusUp())
 
 		l.FocusDown()
+		// resize should not affect
+		l.Resize(math.MaxInt32, math.MaxInt32)
+
 		require.True(t, l.CanFocusDown())
 		require.True(t, l.CanFocusUp())
 	})

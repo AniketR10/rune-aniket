@@ -179,10 +179,6 @@ func (l *FocusList) Iterate(fn func(WithAttributes)) {
 func (l *FocusList) Resize(width, height int) {
 	l.height, l.width = height, width
 	l.list.Resize(width, height)
-	front, ok := l.Front()
-	if ok {
-		l.switchFocus(front)
-	}
 }
 
 // SeekDown shifts the contents of this list one row down.
