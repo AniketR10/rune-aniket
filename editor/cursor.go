@@ -365,7 +365,6 @@ func (c *Cursor) MoveLeftWrap() bool {
 		if c.cursor.Y == currc.Y && c.scroll.Offset().Y == curro.Y {
 			return false
 		}
-		c.scroll.SeekEndLine()
 		c.MoveEndLine()
 	}
 	return true

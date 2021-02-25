@@ -475,6 +475,16 @@ func TestCursorMove(t *testing.T) {
 			term.Coordinates{X: 0, Y: 0},
 		},
 		{
+			"MoveToMatchingRune should not seek unless necessary",
+			77, 77,
+			func(t *testing.T, e *Cursor) {
+				e.cursor.Y = 27
+				e.cursor.X = 4
+				assert.True(t, e.MoveToMatchingRune())
+			},
+			term.Coordinates{X: 4, Y: 19},
+		},
+		{
 			"MoveToMatchingRune should move to the 'matching rune'",
 			10, 10,
 			func(t *testing.T, e *Cursor) {
