@@ -166,7 +166,12 @@ func (l *Less) normalHandleEvent(ev term.Event) (exit, handled bool) {
 		case '/':
 			l.SetSearchMode()
 		default:
-			handled = false
+			switch ev.Key {
+			case term.KeyEsc:
+				exit = true
+			default:
+				handled = false
+			}
 		}
 	}
 
