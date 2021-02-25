@@ -19,6 +19,8 @@ const (
 	LineSelection
 	// BlockSelection represents a select mode. See SelectBlock for more details.
 	BlockSelection
+
+	searchLocationListID = "search"
 )
 
 // used to subscribe to buffer updates
@@ -34,6 +36,7 @@ type message struct {
 // Cursor is a helper structure which manages a cursor over a Scroll.
 type Cursor struct {
 	scroll    *component.Scroll
+	search    string
 	cursor    term.Coordinates
 	locs      map[string]LocationList
 	messages  map[term.Coordinates][]message
@@ -43,7 +46,6 @@ type Cursor struct {
 		cells      [][]term.Cell
 	}
 	subscriber curSubscriber
-	searchLoc  LocationList
 }
 
 // NewCursor allocates storage for a new cursor,
@@ -85,6 +87,9 @@ func (c *curSubscriber) clearAllLocations() {
 	}
 	for k := range c.c.messages {
 		delete(c.c.messages, k)
+	}
+	if c.c.search != "" {
+		c.c.setSearchLocationList(c.c.search)
 	}
 }
 
@@ -158,9 +163,8 @@ func (c *Cursor) setCursor(pos term.Coordinates) {
 	}
 }
 
-// Search searches text string in the underlying cell buffer. It returns
-// the number of occurrences found.
-func (c *Cursor) Search(text string) int {
+func (c *Cursor) setSearchLocationList(text string) int {
+	c.search = text
 	n := c.scroll.Search(text)
 
 	searchLoc := make([]Location, n)
@@ -175,7 +179,14 @@ func (c *Cursor) Search(text string) int {
 		}
 	}
 
-	c.searchLoc = LocationSlice(searchLoc)
+	c.SetLocationList(searchLocationListID, LocationSlice(searchLoc))
+	return n
+}
+
+// Search searches text string in the underlying cell buffer. It returns
+// the number of occurrences found.
+func (c *Cursor) Search(text string) int {
+	n := c.setSearchLocationList(text)
 	c.MoveToNextMatch()
 	return n
 }
@@ -190,20 +201,12 @@ func isPastCursor(cursor, pos term.Coordinates) bool {
 
 // MoveToNextMatch moves the cursor to the next search result if any.
 func (c *Cursor) MoveToNextMatch() (ok bool) {
-	if c.searchLoc == nil {
-		return
-	}
-	return c.movePastCursor(c.searchLoc,
-		(LocationList).Next, (LocationList).Prev, isBeforeCursor)
+	return c.MoveToNextLocation(searchLocationListID)
 }
 
 // MoveToPrevMatch moves the cursor to the next search result if any.
 func (c *Cursor) MoveToPrevMatch() (ok bool) {
-	if c.searchLoc == nil {
-		return
-	}
-	return c.movePastCursor(c.searchLoc,
-		(LocationList).Prev, (LocationList).Next, isPastCursor)
+	return c.MoveToPrevLocation(searchLocationListID)
 }
 
 // MoveStartLine moves the cursor at the start of the current line, scrolling
