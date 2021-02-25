@@ -805,6 +805,7 @@ func makeInsertProtocolRange(
 func makeDeleteProtocolRange(
 	oldCells [][]term.Cell, from, to term.Coordinates,
 ) protocol.Range {
+	from, to = cell.SortFromTo(from, to)
 	starty, startx, ok := cell.ConvertTermCoordinates(oldCells, from)
 	if !ok {
 		panic("coordinates out of sync")
