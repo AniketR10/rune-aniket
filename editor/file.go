@@ -110,10 +110,10 @@ func validateFileType(file OsFile) (os.FileInfo, error) {
 	return nil, ErrFileIsNotRegular
 }
 
-func (f *FileBuffer) openFile(filePath string) (
+func (f *FileBuffer) openFile(filePath string, flag int) (
 	file OsFile, fileInfo os.FileInfo, err error,
 ) {
-	file, err = f.openFunc(filePath, os.O_RDWR, filePerms)
+	file, err = f.openFunc(filePath, flag, filePerms)
 	if err != nil {
 		file = nil
 		return
@@ -125,9 +125,16 @@ func (f *FileBuffer) openFile(filePath string) (
 }
 
 func (f *FileBuffer) initFiles(filePath, swapDir string) error {
-	file, fileInfo, err := f.openFile(filePath)
+	readOnly := false
+	file, fileInfo, err := f.openFile(filePath, os.O_RDWR)
 	if err != nil && os.IsNotExist(err) {
 		// delegate opening file to Flush
+		err = nil
+	}
+	if err != nil && os.IsPermission(err) {
+		// delegate write error to Flush
+		file, fileInfo, err = f.openFile(filePath, os.O_RDONLY)
+		readOnly = true
 		err = nil
 	}
 	if err != nil {
@@ -142,13 +149,14 @@ func (f *FileBuffer) initFiles(filePath, swapDir string) error {
 		f.swapFileName = path.Join(swapDir, makeSwapFileName(filepath.Base(filePath)))
 	}
 
-	swap, err := f.initSwap(swapDir, file)
-	if err != nil {
-		return err
+	if !readOnly {
+		f.swap, err = f.initSwap(swapDir, file)
+		if err != nil {
+			return err
+		}
 	}
 
 	f.orig = file
-	f.swap = swap
 	f.info = fileInfo
 	f.fileName = filePath
 	f.swapDir = swapDir
@@ -178,14 +186,14 @@ func (f *FileBuffer) initBuffer(buf *cell.Buffer, file OsFile) (err error) {
 
 func (f *FileBuffer) recoverFile(filePath, swapFilePath string, buf *cell.Buffer) error {
 	var err error
-	f.orig, _, err = f.openFile(filePath)
+	f.orig, _, err = f.openFile(filePath, os.O_RDWR)
 	if err != nil && os.IsNotExist(err) {
 		err = nil
 	}
 	if err != nil {
 		return err
 	}
-	swap, swapFileInfo, err := f.openFile(swapFilePath)
+	swap, swapFileInfo, err := f.openFile(swapFilePath, os.O_RDWR)
 	if err != nil {
 		return err
 	}
@@ -356,6 +364,10 @@ func (f *FileBuffer) Flushed() bool {
 // Flush saves the contents of the buffer to disk. If file was modified by some
 // other process, this method returns ErrStaleData.
 func (f *FileBuffer) Flush() error {
+	if f.swap == nil {
+		return ErrFileIsNotWritable
+	}
+
 	err := f.delayedError
 	if err != nil {
 		f.delayedError = nil
@@ -402,13 +414,19 @@ func (f *FileBuffer) Flush() error {
 
 // Close should be called once when this structure is not to be used anymore.
 func (f *FileBuffer) Close() error {
-	if f.swap == nil {
+	if f.fileName == "" {
 		return errors.New("trying to Close an uninitialized FileBuffer")
 	}
-	swapFileName := f.swap.Name()
-	err2 := f.swap.Close()
-	err3 := f.removeFunc(swapFileName)
-	f.swap = nil
+
+	f.fileName = ""
+
+	var err2, err3 error
+	if f.swap != nil {
+		swapFileName := f.swap.Name()
+		err2 = f.swap.Close()
+		err3 = f.removeFunc(swapFileName)
+		f.swap = nil
+	}
 
 	if f.orig != nil {
 		err := f.orig.Close()

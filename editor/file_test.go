@@ -449,6 +449,27 @@ func newUninitializedTestFileBuffer(t *testing.T, ctrl *gomock.Controller) (
 	return f, mock, buf
 }
 
+func newReadOnlyTestFileBuffer(t *testing.T, ctrl *gomock.Controller) (
+	*FileBuffer, *MockOsFile, *cell.Buffer,
+) {
+	f, mock := newTestFileBuffer(ctrl)
+	f.openFunc = func(name string, flag int, perm os.FileMode) (OsFile, error) {
+		if flag&os.O_RDWR != 0 || flag&os.O_CREATE != 0 {
+			return nil, &os.PathError{Err: os.ErrPermission}
+		}
+		return mock, nil
+	}
+
+	mock.EXPECT().Name().Return(defaultFileName).AnyTimes()
+	mock.EXPECT().Stat().Return(testFileInfo{}, nil).AnyTimes()
+	expectRead(mock, defaultFileData)
+	mock.EXPECT().Seek(gomock.Eq(int64(0)), gomock.Eq(0)).Return(int64(0), nil)
+
+	buf := cell.NewBuffer()
+	require.NoError(t, f.Init(defaultFileName, buf, ""))
+	return f, mock, buf
+}
+
 func newRecoveredTestFileBuffer(t *testing.T, ctrl *gomock.Controller) (
 	*FileBuffer, *MockOsFile, *cell.Buffer,
 ) {
@@ -502,6 +523,15 @@ func testFileBufferClose(t *testing.T, newBuffer newBufferFunc) {
 		mock.EXPECT().Close().Return(nil).Times(2)
 		assert.NoError(t, f.Close())
 		assert.True(t, called)
+	})
+
+	t.Run("Close returns no errors if file was opened in read-only", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		f, mock, _ := newReadOnlyTestFileBuffer(t, ctrl)
+		mock.EXPECT().Close().Return(nil).Times(1)
+		assert.NoError(t, f.Close())
 	})
 }
 
@@ -597,13 +627,15 @@ func testFileBufferFlush(t *testing.T, newBuffer newBufferFunc) {
 
 func TestNewFileBufferFlush(t *testing.T) {
 	testFileBufferFlush(t, newInitializedTestFileBuffer)
-}
 
-func TestRecoverFileBufferFlush(t *testing.T) {
-	testFileBufferFlush(t, newRecoveredTestFileBuffer)
-}
+	t.Run("Flush returns ErrFileIsNotWritable if file was opened in read-only", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
 
-func TestFileNotCreatedBufferFlush(t *testing.T) {
+		f, _, _ := newReadOnlyTestFileBuffer(t, ctrl)
+		assert.Equal(t, ErrFileIsNotWritable, f.Flush())
+	})
+
 	t.Run("if file is created after NewFileBuffer is called returns error", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
@@ -617,6 +649,10 @@ func TestFileNotCreatedBufferFlush(t *testing.T) {
 		}
 		assert.Equal(t, ErrStaleData, f.Flush())
 	})
+}
+
+func TestRecoverFileBufferFlush(t *testing.T) {
+	testFileBufferFlush(t, newRecoveredTestFileBuffer)
 }
 
 func expectCopyToSwapPrepare(mock *MockOsFile) {
