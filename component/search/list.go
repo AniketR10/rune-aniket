@@ -32,7 +32,7 @@ type listConfig struct {
 
 // List is a collection of elements that can be interactively searched.
 type List struct {
-	mu           sync.Mutex
+	mu           sync.RWMutex
 	quitChan     chan struct{}
 	dataChan     chan []byte
 	input        [][]byte
@@ -57,6 +57,7 @@ type List struct {
 		component.Virtual
 		*component.FocusList
 	}
+	draftList *component.FocusList
 }
 
 type searchResultComponent struct {
@@ -72,6 +73,12 @@ func NewList(cfg ListConfig) *List {
 	return l
 }
 
+func newFocusList(cfg listConfig) *component.FocusList {
+	f := component.NewFocusList()
+	f.InitWithAttr(cfg.textAttr, cfg.focusAttr)
+	return f
+}
+
 // Init initializes this config with cfg. Close must be called
 // when this List is no longer to be used, or before Init
 // is to be called again to reset the list.
@@ -84,9 +91,9 @@ func (l *List) Init(cfg ListConfig) {
 	l.matchCountBar.Scroll.InitWithBuffer(&l.matchCountBar.Buffer)
 	l.matchCountBar.C = &l.matchCountBar.Scroll
 
-	f := component.NewFocusList()
-	f.InitWithAttr(l.cfg.textAttr, l.cfg.focusAttr)
-	l.setInternalList(f)
+	a, b := newFocusList(l.cfg), newFocusList(l.cfg)
+	l.setInternalList(a)
+	l.draftList = b
 
 	if l.cfg.searchBase != "" {
 		l.searchBar.InsertStringWithAttr(term.Coordinates{},
@@ -101,6 +108,7 @@ func (l *List) Init(cfg ListConfig) {
 }
 
 func (l *List) setInternalList(f *component.FocusList) {
+	l.draftList = l.list.FocusList
 	l.list.C = f
 	l.list.FocusList = f
 }
@@ -140,8 +148,8 @@ func sortByResultScore(a, b component.WithAttributes) bool {
 
 // SearchQueryString returns the current search query.
 func (l *List) SearchQueryString() string {
-	l.mu.Lock()
-	defer l.mu.Unlock()
+	l.mu.RLock()
+	defer l.mu.RUnlock()
 	return l.getSearchQuery()
 }
 
@@ -152,8 +160,8 @@ func (l *List) getSearchQuery() string {
 
 // MatchCount returns how many elements match the search query so far.
 func (l *List) MatchCount() int {
-	l.mu.Lock()
-	defer l.mu.Unlock()
+	l.mu.RLock()
+	defer l.mu.RUnlock()
 
 	return l.list.Len()
 }
@@ -161,8 +169,8 @@ func (l *List) MatchCount() int {
 // TotalCount returns the total number of elements in the list, whether
 // they are matches or not.
 func (l *List) TotalCount() int {
-	l.mu.Lock()
-	defer l.mu.Unlock()
+	l.mu.RLock()
+	defer l.mu.RUnlock()
 
 	return len(l.input)
 }
@@ -232,9 +240,9 @@ func (l *List) consumeAsyncElements() {
 				l.cfg.interrupt()
 				return
 			}
-			l.mu.Lock()
+			l.mu.RLock()
 			height := l.height
-			l.mu.Unlock()
+			l.mu.RUnlock()
 			redraw := i == height-1 || (i != 0 && i%redrawAt == 0)
 			l.pushData(data, slab, redraw)
 			if redraw {
@@ -246,7 +254,7 @@ func (l *List) consumeAsyncElements() {
 		case <-l.quitChan:
 			l.mu.Lock()
 			defer l.mu.Unlock()
-			l.input = nil
+			l.input = l.input[:0]
 			return
 		}
 	}
@@ -256,12 +264,11 @@ func (l *List) handleSearch(ctx context.Context, cancelFn func()) {
 	l.mu.Lock()
 	input := l.input
 	searchInput := l.getSearchQuery()
+	// helps with contention by avoiding locking for every match added.
+	l.draftList.Reset()
+	l.list.Reset()
 	l.mu.Unlock()
 
-	// avoid drawing in the middle of search which causes
-	// fliquering of component if search is fast enough
-	newList := component.NewFocusList()
-	newList.InitWithAttr(l.cfg.textAttr, l.cfg.focusAttr)
 	slab := makeSlab()
 	search(l.cfg.algo, input, searchInput, slab, l.cfg.caseSensitive,
 		func(match Match, tokens *[]int) bool {
@@ -269,7 +276,7 @@ func (l *List) handleSearch(ctx context.Context, cancelFn func()) {
 			case <-ctx.Done():
 				return false
 			default:
-				addMatch(newList, match, tokens, l.cfg.matchedTextAttr)
+				addMatch(l.draftList, match, tokens, l.cfg.matchedTextAttr)
 				return true
 			}
 		})
@@ -283,7 +290,9 @@ func (l *List) handleSearch(ctx context.Context, cancelFn func()) {
 	l.mu.Lock()
 	// NOTE the data that has been pushed asynchrously for the duration since
 	// the previous Unlock, will not make it to this iteration of the final result.
-	l.setInternalList(newList)
+	l.draftList.Iterate(func(c component.WithAttributes) {
+		l.list.PushBack(c)
+	})
 	l.sortMatchesList()
 	cancelFn()
 	l.mu.Unlock()
@@ -334,8 +343,8 @@ func (l *List) FocusEnd() bool {
 
 // Focus returns the match in the list currently in focus.
 func (l *List) Focus() ([]byte, bool) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
+	l.mu.RLock()
+	defer l.mu.RUnlock()
 	node, ok := l.list.Focus()
 	if !ok {
 		return nil, false
@@ -356,8 +365,8 @@ func (l *List) asyncSearch() {
 
 // SearchQueryLen returns the length of the current search query.
 func (l *List) SearchQueryLen() int {
-	l.mu.Lock()
-	defer l.mu.Unlock()
+	l.mu.RLock()
+	defer l.mu.RUnlock()
 
 	return l.searchBar.Columns(0)
 }
@@ -402,17 +411,17 @@ func (l *List) SearchQueryDelete() bool {
 
 // Wait waits for the current search to finish if any and returns.
 func (l *List) Wait() {
-	l.mu.Lock()
+	l.mu.RLock()
 	ctx := l.searchCtx
-	l.mu.Unlock()
+	l.mu.RUnlock()
 
 	<-ctx.Done()
 }
 
 // Draw satisfies tui.Component
 func (l *List) Draw(w term.Writer) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
+	l.mu.RLock()
+	defer l.mu.RUnlock()
 
 	l.list.Virtual.Draw(w)
 	l.searchBar.Virtual.Draw(w)
