@@ -63,20 +63,6 @@ func (l *FocusList) switchFocus(newFocus ListNode) {
 	setFocusFrameCharSet(l.focus, l.textAttr)
 	l.focus = newFocus
 	setFocusFrameCharSet(l.focus, l.focusAttr)
-
-	l.seekFocus()
-}
-
-func (l *FocusList) seekFocus() {
-	ok := true
-	for ok && l.focusOffset > 0 && l.focusOffset >= l.height {
-		ok = l.SeekDown()
-	}
-
-	ok = true
-	for ok && l.focusOffset < l.height && l.focusOffset < 0 {
-		ok = l.SeekUp()
-	}
 }
 
 func (l *FocusList) trySetFirstFocus(node ListNode) bool {
@@ -154,7 +140,6 @@ func (l *FocusList) PushFront(c WithAttributes) ListNode {
 	n := l.list.PushFront(c)
 	if !l.trySetFirstFocus(n) {
 		l.focusOffset++
-		l.seekFocus()
 	}
 	return n
 }
@@ -194,7 +179,10 @@ func (l *FocusList) Iterate(fn func(WithAttributes)) {
 func (l *FocusList) Resize(width, height int) {
 	l.height, l.width = height, width
 	l.list.Resize(width, height)
-	l.seekFocus()
+	front, ok := l.Front()
+	if ok {
+		l.switchFocus(front)
+	}
 }
 
 // SeekDown shifts the contents of this list one row down.
@@ -256,6 +244,9 @@ func (l *FocusList) FocusDown() bool {
 	if ok {
 		l.focusOffset++
 		l.switchFocus(next)
+		if l.focusOffset == l.height-1 {
+			l.SeekDown()
+		}
 	}
 	return ok
 }
@@ -280,6 +271,9 @@ func (l *FocusList) FocusUp() bool {
 	if ok {
 		l.focusOffset--
 		l.switchFocus(prev)
+		if l.focusOffset == 0 {
+			l.SeekUp()
+		}
 	}
 	return ok
 }
