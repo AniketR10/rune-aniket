@@ -99,7 +99,8 @@ func (i *IDE) init(cfgfilename, recfilename string, filenames ...string) error {
 	}
 
 	viOpts = append(viOpts,
-		vi.WithResAttr(term.Attributes{Bg: term.ColorYellow, Fg: term.ColorBlack}),
+		vi.WithResAttr(i.ideConfig.viResultAttr()),
+		vi.WithDebug(i.ideConfig.viDebug()),
 	)
 
 	var l *log.Logger

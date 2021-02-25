@@ -736,10 +736,14 @@ func (vi *Vi) Handle(ev term.Event) (quit, handled bool) {
 
 	switch vi.mode {
 	case normalMode, yankMode, gMode, deleteMode, visualMode, visualLineMode, visualBlockMode:
-		vi.cursor.MoveToBounds(0)
-		vi.cursor.MoveToNextNonNull()
+		if !vi.config.debug {
+			vi.cursor.MoveToBounds(0)
+			vi.cursor.MoveToNextNonNull()
+		}
 	case insertMode, replaceMode, replaceOneMode:
-		vi.cursor.MoveToBounds(1)
+		if !vi.config.debug {
+			vi.cursor.MoveToBounds(1)
+		}
 	default:
 		panic(fmt.Sprintf("unknown mode: %d", vi.mode))
 	}

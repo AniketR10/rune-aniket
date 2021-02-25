@@ -12,6 +12,7 @@ type viConfig struct {
 	clipboard editor.Clipboard
 	logger    *log.Logger
 	messenger editor.Messenger
+	debug     bool
 }
 
 // Option represents a Vi handler configuration option.
@@ -42,5 +43,12 @@ func WithLogger(l *log.Logger) Option {
 func WithMessenger(m editor.Messenger) Option {
 	return func(cfg *viConfig) {
 		cfg.messenger = m
+	}
+}
+
+// WithDebug disables cursor position correction to aid with cursor debugging.
+func WithDebug(debug bool) Option {
+	return func(cfg *viConfig) {
+		cfg.debug = debug
 	}
 }

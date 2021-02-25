@@ -93,19 +93,23 @@ func (c ideConfig) commandKeyMappings() map[term.Event]string {
 	return ret
 }
 
+func (c ideConfig) getConfig(cfg plugin.Config, key string) (plugin.Config, bool) {
+	cfg, err := cfg.GetConfig(key)
+	if err != nil {
+		if err != plugin.ErrNotFound {
+			c.errors[key] = err
+		}
+		return nil, false
+	}
+	return cfg, true
+}
+
 func (c ideConfig) windowManager() (plugin.Config, bool) {
 	b, ok := c.browser()
 	if !ok {
 		return nil, false
 	}
-	cfg, err := b.GetConfig("window_manager")
-	if err != nil {
-		if err != plugin.ErrNotFound {
-			c.errors["window_manager"] = err
-		}
-		return nil, false
-	}
-	return cfg, true
+	return c.getConfig(b, "window_manager")
 }
 
 func (c ideConfig) windowFrameAttr() (attr term.Attributes) {
@@ -250,14 +254,43 @@ func (c ideConfig) browser() (plugin.Config, bool) {
 	if c.cfg == nil {
 		return nil, false
 	}
-	b, err := plugin.MapConfig(c.cfg).GetConfig("browser")
-	if err != nil {
-		if err != plugin.ErrNotFound {
-			c.errors["browser"] = err
-		}
+	return c.getConfig(plugin.MapConfig(c.cfg), "browser")
+}
+
+func (c ideConfig) vi() (plugin.Config, bool) {
+	if c.cfg == nil {
 		return nil, false
 	}
-	return b, true
+	return c.getConfig(plugin.MapConfig(c.cfg), "vi")
+}
+
+func (c ideConfig) viResultAttr() (attr term.Attributes) {
+	attr = term.Attributes{Bg: term.ColorYellow, Fg: term.ColorBlack}
+	cfg, ok := c.vi()
+	if !ok {
+		return
+	}
+	attr, err := cfg.GetAttributes("search_attr")
+	if err != nil {
+		if err != plugin.ErrNotFound {
+			c.errors["vi.search_attr"] = err
+		}
+	}
+	return attr
+}
+
+func (c ideConfig) viDebug() (ret bool) {
+	cfg, ok := c.vi()
+	if !ok {
+		return
+	}
+	ret, err := cfg.GetBool("debug")
+	if err != nil {
+		if err != plugin.ErrNotFound {
+			c.errors["vi.debug"] = err
+		}
+	}
+	return ret
 }
 
 func (c ideConfig) browserTabspaces() (tabs int) {
