@@ -758,7 +758,7 @@ func (h *lspEditorHandler) newSemanticTokensCtx() (ctx context.Context) {
 }
 
 // https://microsoft.github.io/language-server-protocol/specifications/specification-current/#textDocument_semanticTokens
-func (h *lspEditorHandler) semanticTokens(
+func (h *lspEditorHandler) semanticTokensFull(
 	ctx context.Context, srv protocol.Server,
 	f *file, cells [][]term.Cell, content string,
 ) {
@@ -899,22 +899,24 @@ func (h *lspEditorHandler) pushFullUpdate(
 func (h *lspEditorHandler) sendIncrementalUpdate(
 	ctx context.Context, srv protocol.Server, f *file, newCells,
 	oldCells [][]term.Cell, content string, from, to term.Coordinates,
-) {
+) (protocol.Range, error) {
 	version := h.incrementVersion(f)
 
 	// https://microsoft.github.io/language-server-protocol/specification#textDocument_didChange
 	rng := makeProtocolRange(content, newCells, oldCells, from, to)
 	evts := []protocol.TextDocumentContentChangeEvent{{Text: content, Range: &rng}}
 
-	log.Tracef("handling file update with range: from=%#v, to=%#v: content='%s'",
-		rng.Start, rng.End, content)
+	log.Tracef("sending incremental file update: file=%v, length=%v, version=%v,"+
+		" rangeStart: %#v, rangeEnd: %#v, from=%#v, to=%#v: content='%s'",
+		f.name, len(content), version, rng.Start, rng.End, from, to, content)
 
 	err := h.callServerDidChange(ctx, srv, f, evts)
-	if err == nil {
-		log.Tracef("sent incremental file update: file=%v, length=%v, version=%v,"+
-			" rangeStart: %#v, rangeEnd: %#v, from=%#v, to=%#v: content='%s'",
-			f.name, len(content), version, rng.Start, rng.End, from, to, content)
+	if err != nil {
+		log.Errorf("lspEditorHandler.Server.DidChange: %v", err)
+		return rng, err
 	}
+
+	return rng, nil
 }
 
 func (h *lspEditorHandler) setCells(f *file, cells [][]term.Cell) {
@@ -949,7 +951,7 @@ func (h *lspEditorHandler) handleFileFlush(ev editor.Event) {
 	h.pushFullUpdate(ctx, srv, f, ev.Content)
 	h.setCells(f, cell.StringToCells(ev.Content))
 	ctx = h.newSemanticTokensCtx()
-	go h.semanticTokens(ctx, srv, f, h.getCells(f), ev.Content)
+	go h.semanticTokensFull(ctx, srv, f, h.getCells(f), ev.Content)
 }
 
 func (h *lspEditorHandler) handleFileInsert(ev editor.Event) {
@@ -971,11 +973,14 @@ func (h *lspEditorHandler) handleFileInsert(ev editor.Event) {
 	buf := cell.CellsToBuffer(oldCells)
 	buf.InsertString(ev.Start, ev.Content)
 	newCells := buf.RawCells()
-	h.sendIncrementalUpdate(ctx, srv, f, newCells, oldCells, ev.Content, ev.From, ev.To)
+	_, err := h.sendIncrementalUpdate(ctx, srv, f, newCells, oldCells, ev.Content, ev.From, ev.To)
 	h.setCells(f, newCells)
+	if err != nil {
+		return
+	}
 
 	ctx = h.newSemanticTokensCtx()
-	go h.semanticTokens(ctx, srv, f, newCells, buf.String())
+	go h.semanticTokensFull(ctx, srv, f, newCells, buf.String())
 }
 
 func (h *lspEditorHandler) handleFileDelete(ev editor.Event) {
@@ -997,11 +1002,14 @@ func (h *lspEditorHandler) handleFileDelete(ev editor.Event) {
 	buf := cell.CellsToBuffer(oldCells)
 	buf.Delete(ev.From, ev.To)
 	newCells := buf.RawCells()
-	h.sendIncrementalUpdate(ctx, srv, f, newCells, oldCells, "", ev.From, ev.To)
+	_, err := h.sendIncrementalUpdate(ctx, srv, f, newCells, oldCells, "", ev.From, ev.To)
 	h.setCells(f, newCells)
+	if err != nil {
+		return
+	}
 
 	ctx = h.newSemanticTokensCtx()
-	go h.semanticTokens(ctx, srv, f, newCells, buf.String())
+	go h.semanticTokensFull(ctx, srv, f, newCells, buf.String())
 }
 
 func (h *lspEditorHandler) handleFileOpen(ev editor.Event) {
@@ -1035,7 +1043,7 @@ func (h *lspEditorHandler) handleFileOpen(ev editor.Event) {
 	h.dispatchPendingDiagnostics(ctx, srv, f.uri)
 	h.dispatchPendingGoTo(ctx, srv, f)
 	ctx = h.newSemanticTokensCtx()
-	go h.semanticTokens(ctx, srv, f, h.getCells(f), ev.Content)
+	go h.semanticTokensFull(ctx, srv, f, h.getCells(f), ev.Content)
 }
 
 func (h *lspEditorHandler) removeFile(name string) (*file, bool) {
