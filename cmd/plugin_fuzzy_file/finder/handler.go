@@ -195,7 +195,7 @@ func (h *fuzzyFinderHandler) scanData() {
 		return
 	}
 
-	go h.readCommand(out)
+	h.readCommand(out)
 
 	err = exec.Wait()
 	h.mu.Lock()
@@ -408,6 +408,8 @@ func (h *fuzzyFinderHandler) Handle(ev term.Event) (exit, handled bool) {
 		handled = true
 	}
 
+	log.Tracef("fuzzyFinderHandler.Handle(%#v): %v", ev, handled)
+
 	return
 }
 
@@ -422,6 +424,8 @@ func (h *fuzzyFinderHandler) Man() tui.Manual {
 func (h *fuzzyFinderHandler) Close() error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
+
+	log.Tracef("fuzzyFinderHandler.Close(): %#v", h.exec)
 
 	if h.exec != nil {
 		h.killed = true
