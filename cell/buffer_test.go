@@ -604,3 +604,11 @@ func TestBufferHeightWidth(t *testing.T) {
 	assert.Equal(t, 4, buf.Height())
 	assert.Equal(t, 20, buf.Width())
 }
+
+func TestBufferMaxColumns(t *testing.T) {
+	buf := newBufferWithContent(t, longStr)
+	assert.Equal(t, buf.MaxColumns(), 44)
+
+	buf = newBufferWithContent(t, str)
+	assert.Equal(t, buf.MaxColumns(), 9)
+}

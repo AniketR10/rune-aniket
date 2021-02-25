@@ -212,6 +212,16 @@ func (b *Buffer) Columns(y int) int {
 	return b.reader.Columns(y)
 }
 
+// MaxColumns returns the max number of columns.
+func (b *Buffer) MaxColumns() (max int) {
+	for i := 0; i < b.Rows(); i++ {
+		if col := b.Columns(i); col > max {
+			max = col
+		}
+	}
+	return
+}
+
 // Cell returns the cell and true or a zero-valued cell and false if there is no
 // cell at position.
 func (b *Buffer) Cell(pos term.Coordinates) (term.Cell, bool) {
