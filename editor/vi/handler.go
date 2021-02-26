@@ -281,8 +281,6 @@ func (vi *Vi) pasteClipboard(after bool) bool {
 		if after {
 			vi.cursor.MoveRight()
 			vi.cursor.InsertString(str)
-			vi.cursor.MoveTo(cur)
-			vi.cursor.MoveRight()
 		} else {
 			vi.cursor.InsertString(str)
 			vi.cursor.MoveTo(cur)
