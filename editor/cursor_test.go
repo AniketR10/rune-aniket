@@ -88,6 +88,17 @@ func TestCursorSearch(t *testing.T) {
 			nil, term.Coordinates{X: 14, Y: 18},
 		},
 		{
+			"tolerates inserts to buffer by updating locations",
+			1000, 1000,
+			2,
+			"NULL",
+			func(t *testing.T, e *Cursor) {
+				e.buffer().InsertRowAt(0)
+				assert.True(t, e.MoveToNextMatch())
+			},
+			term.Coordinates{X: 14, Y: 19},
+		},
+		{
 			"MoveToNextMatch does nothing if only one result is found",
 			1000, 1000,
 			1,

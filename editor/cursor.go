@@ -88,22 +88,23 @@ func (c *curSubscriber) clearAllLocations() {
 	for k := range c.c.messages {
 		delete(c.c.messages, k)
 	}
-	if c.c.search != "" {
-		c.c.setSearchLocationList(c.c.search)
-	}
 }
 
 func (c *curSubscriber) OnWillInsert(at term.Coordinates, str string) {
 	c.clearAllLocations()
 }
 
-func (c *curSubscriber) OnDidInsert(from, to term.Coordinates) { /* nop */ }
+func (c *curSubscriber) OnDidInsert(from, to term.Coordinates) {
+	c.c.setSearchLocationList(c.c.search)
+}
 
 func (c *curSubscriber) OnWillDelete(from, to term.Coordinates) {
 	c.clearAllLocations()
 }
 
-func (c *curSubscriber) OnDidDelete(start, end term.Coordinates, str string) { /* nop */ }
+func (c *curSubscriber) OnDidDelete(start, end term.Coordinates, str string) {
+	c.c.setSearchLocationList(c.c.search)
+}
 
 // Cursor returns the current position of the cursor. It safisfies tui.Handler.Cursor.
 func (c *Cursor) Cursor() (term.Coordinates, bool) {
@@ -165,6 +166,10 @@ func (c *Cursor) setCursor(pos term.Coordinates) {
 
 func (c *Cursor) setSearchLocationList(text string) int {
 	c.search = text
+	if c.search == "" {
+		return 0
+	}
+
 	n := c.scroll.Search(text)
 
 	searchLoc := make([]Location, n)
