@@ -140,7 +140,7 @@ func (c *Component) newCellBuffer() *cell.Buffer {
 	if c.config.Logger != nil {
 		// NOTE: only enable when trying to debug low level buffer bugs
 		// as it degrades performance quite a bit.
-		// buf = buf.WithLogger(e.config.Logger)
+		// buf.WithLogger(c.config.Logger)
 	}
 	return buf
 }

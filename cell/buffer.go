@@ -37,18 +37,24 @@ func NewBuffer() (b *Buffer) {
 	return b
 }
 
-func (b *Buffer) initWithCells(c *rawCells, unixFile bool) {
+func (b *Buffer) initWithCells(c *rawCells, logger *log.Logger, unixFile bool) {
 	b.cells = c
+	b.writer = b.cells
+	b.reader = b.cells
 
 	if unixFile {
-		b.unixReader = newUnixFileReader(b.cells)
+		b.unixReader = newUnixFileReader(b.reader)
 		b.reader = b.unixReader
-	} else {
-		b.reader = b.cells
+	}
+
+	if logger != nil {
+		cellLogger := newLogger(b.reader, b.cells, logger)
+		b.reader = cellLogger
+		b.writer = cellLogger
 	}
 
 	// setup the root publisher as the deepest Writer
-	b.rootPub = newPublisher(b.cells)
+	b.rootPub = newPublisher(b.writer)
 	b.undoer = newUndoer(b.rootPub)
 	b.writer = b.undoer
 	// setup the usage publisher at the shalowest Writer
@@ -62,7 +68,7 @@ func (b *Buffer) initWithCells(c *rawCells, unixFile bool) {
 func (b *Buffer) InitWithTabspaces(tabspaces int) {
 	cells := new(rawCells)
 	cells.init(tabspaces)
-	b.initWithCells(cells, true)
+	b.initWithCells(cells, nil, true)
 }
 
 // Init initializes this Buffer with the default configuration.
@@ -72,11 +78,8 @@ func (b *Buffer) Init() {
 
 // WithLogger adds a cell logger which intercepts and logs all
 // the calls to the underlying Writer/Reader.
-func (b *Buffer) WithLogger(logger *log.Logger) *Buffer {
-	cellLogger := newLogger(b.reader, b.writer, logger)
-	b.reader = cellLogger
-	b.writer = cellLogger
-	return b
+func (b *Buffer) WithLogger(logger *log.Logger) {
+	b.initWithCells(b.cells, logger, b.unixReader != nil)
 }
 
 // InsertRowAt inserts a new row at given position. If pos is out of bounds,

@@ -21,8 +21,12 @@ type Scroll struct {
 	ResultsAttr term.Attributes
 	Attributes  term.Attributes
 
+	// Debug enables seeing visualizing term cells.
+	Debug bool
+
 	// lines longer than the width of the scroll wrap around and
 	// are rendered in the next line if Wrap is set to true.
+	// Wrap invalidates Debug.
 	Wrap bool
 }
 
@@ -272,6 +276,36 @@ func (s *Scroll) drawFast(writer term.Writer) {
 	return
 }
 
+func (s *Scroll) drawDebug(writer term.Writer) {
+	xwindow := s.offset.X + s.width
+	ywindow := s.height
+	for y, r := range s.buf.RawCells()[s.offset.Y:] {
+		if y >= ywindow {
+			break
+		}
+		for x, c := range r {
+			if x >= xwindow {
+				break
+			}
+			if c.Ch == 0 {
+				c.Ch = '░'
+			}
+			if x < s.offset.X {
+				continue
+			}
+			xi := x - s.offset.X
+			if c.Bg == 0 {
+				c.Bg = s.Attributes.Bg
+			}
+			if c.Fg == 0 {
+				c.Fg = s.Attributes.Fg
+			}
+			writer.SetCell(term.Coordinates{X: xi, Y: y}, c)
+		}
+	}
+	return
+}
+
 func (s *Scroll) draw(writer term.Writer) {
 	xwindow := s.offset.X + s.width
 	ywindow := s.height
@@ -378,11 +412,21 @@ func (s *Scroll) Draw(writer term.Writer) {
 			return
 		}
 
+		if s.Debug {
+			s.drawDebug(writer)
+			return
+		}
+
 		s.drawFast(writer)
 		return
 	}
 	if s.Wrap {
 		s.wrapdraw(writer)
+		return
+	}
+
+	if s.Debug {
+		s.drawDebug(writer)
 		return
 	}
 

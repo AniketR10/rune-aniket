@@ -49,7 +49,7 @@ func (l *logger) Insert(at term.Coordinates, str string) (
 ) {
 	fields := l.wFields("insert")
 	fields["at"] = at
-	fields["string"] = fmt.Sprintf("%.10s", str)
+	fields["string"] = fmt.Sprintf("%s", str)
 	fields["length"] = len(str)
 
 	from, to = l.w.Insert(at, str)
@@ -70,7 +70,7 @@ func (l *logger) Delete(from, to term.Coordinates) (
 
 	start, end, str = l.w.Delete(from, to)
 
-	fields["string"] = fmt.Sprintf("%.10s", str)
+	fields["string"] = fmt.Sprintf("%s", str)
 	fields["length"] = len(str)
 	fields["start"] = start
 	fields["end"] = end

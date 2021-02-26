@@ -133,7 +133,7 @@ func CellsToBuffer(c [][]term.Cell) *Buffer {
 	cells.cells = CloneCells(c)
 
 	ret := new(Buffer)
-	ret.initWithCells(cells, false)
+	ret.initWithCells(cells, nil, false)
 	return ret
 }
 
