@@ -75,10 +75,11 @@ func (vi *Vi) Init(buf *cell.Buffer, opts ...Option) {
 	}
 
 	vi.less.Scroll.ResultsAttr = vi.config.resAttr
+	vi.less.Scroll.Debug = vi.config.debug
 	vi.less.InitWithBuffer(buf)
 	vi.cursor.Init(&vi.less.Scroll)
 
-	editor.WithCopyDelete(vi.config.clipboard, buf)
+	editor.WithCopyDelete(vi.config.clipboard, &vi.cursor, buf)
 	vi.repeater.Init(&vi.cursor, buf)
 
 	vi.free, _ = vi.cursor.Cursor()
@@ -260,23 +261,24 @@ func (vi *Vi) logError(err error) {
 	vi.config.logger.Error(err)
 }
 
-func (vi *Vi) pasteClipboard(before bool) bool {
+func (vi *Vi) pasteClipboard(after bool) bool {
 	paste, err := vi.config.clipboard.Get()
+	if err != nil {
+		vi.logError(fmt.Errorf("clipboard.Get: %s", err))
+		return false
+	}
+
 	str := paste.Data
 	mode, ok := paste.Metadata.(editor.SelectMode)
 	if !ok {
 		mode = editor.StandardSelection
-	}
-	if err != nil {
-		vi.logError(fmt.Errorf("clipboard.Get: %s", err))
-		return false
 	}
 
 	cur, _ := vi.cursor.Cursor()
 
 	switch mode {
 	case editor.StandardSelection:
-		if !before {
+		if after {
 			vi.cursor.MoveRight()
 			vi.cursor.InsertString(str)
 			vi.cursor.MoveTo(cur)
@@ -286,7 +288,7 @@ func (vi *Vi) pasteClipboard(before bool) bool {
 			vi.cursor.MoveTo(cur)
 		}
 	case editor.LineSelection:
-		if !before {
+		if after {
 			vi.cursor.MoveDown()
 			vi.cursor.MoveStartLine()
 			vi.cursor.InsertString(fmt.Sprintf("%s\n", str))
@@ -300,7 +302,7 @@ func (vi *Vi) pasteClipboard(before bool) bool {
 			vi.cursor.MoveStartLine()
 		}
 	case editor.BlockSelection:
-		if !before {
+		if after {
 			vi.cursor.MoveRight()
 			vi.insertBlock(str)
 			vi.cursor.MoveTo(cur)
@@ -364,9 +366,9 @@ func (vi *Vi) handleNormal(ev term.Event) (quit, handled bool) {
 				vi.cursor.MoveToPrevMatch()
 			}
 		case 'p':
-			vi.pasteClipboard(false)
-		case 'P':
 			vi.pasteClipboard(true)
+		case 'P':
+			vi.pasteClipboard(false)
 		case '0':
 			vi.cursor.MoveStartLine()
 		case '$':
@@ -691,7 +693,6 @@ func (vi *Vi) handleGo(ev term.Event) (quit, handled bool) {
 	switch ev.Ch {
 	case 'g':
 		vi.cursor.MoveFirstLine()
-		vi.free, _ = vi.cursor.Cursor()
 		handled = true
 	default:
 	}

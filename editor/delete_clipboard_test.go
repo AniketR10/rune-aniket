@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/ernestrc/go-tui/cell"
+	"github.com/ernestrc/go-tui/component"
 	"github.com/ernestrc/go-tui/term"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -12,15 +13,19 @@ import (
 func TestDeleteClipboard(t *testing.T) {
 	buf := cell.NewBuffer()
 	clip := NewEphemeralClipboard()
-	WithCopyDelete(clip, buf)
+	var scroll component.Scroll
+	scroll.InitWithBuffer(buf)
+	c := NewCursor(&scroll)
+	WithCopyDelete(clip, c, buf)
 
 	content := "my whatever"
 	buf.InsertString(term.Coordinates{}, content)
-	buf.DeleteRow(0)
+	c.SelectLine()
+	c.DeleteSelection()
 
 	data, err := clip.Get()
 	require.NoError(t, err)
-	assert.Equal(t, Paste{Data: content}, data)
+	assert.Equal(t, Paste{Data: content, Metadata: LineSelection}, data)
 
 	// test that undo inserts do not get copied to clipboard
 	buf.Undo()
@@ -28,5 +33,5 @@ func TestDeleteClipboard(t *testing.T) {
 
 	data, err = clip.Get()
 	require.NoError(t, err)
-	assert.Equal(t, Paste{Data: content}, data)
+	assert.Equal(t, Paste{Data: content, Metadata: LineSelection}, data)
 }
