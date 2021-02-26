@@ -806,6 +806,13 @@ func (c *Cursor) cursorAtScrollBounds() (pos term.Coordinates, ok bool) {
 	return
 }
 
+// SelectionMode returns the current SelectMode if any.
+func (c *Cursor) SelectionMode() (mode SelectMode, ok bool) {
+	mode = c.selection.mode
+	ok = mode != noSelection
+	return
+}
+
 // Select anchors the current cursor position as the start of a text selection.
 // In order to unset anchor, use Unselect(). It returns true if cursor is in bounds or
 // false if selection failed. If cursor has already been called one of the Select methods,
@@ -930,6 +937,10 @@ func (c *Cursor) DeleteSelection() (ok bool) {
 	to, ok := c.cursorAtScrollBounds()
 	c.Unselect()
 
+	// allow for subscribers of buffer to intercept via OnWillDelete
+	// the current selection mode via SelectionMode.
+	c.selection.mode = mode
+
 	// this means that content was modified after Select started
 	// and now there's no content to select, so we are done.
 	if !ok {
@@ -947,6 +958,7 @@ func (c *Cursor) DeleteSelection() (ok bool) {
 	case BlockSelection:
 		start, _ = c.buffer().DeleteBlock(from, to)
 	}
+	c.selection.mode = noSelection
 	c.setCursor(c.scrollToWindowCoordinates(start))
 	return
 }
