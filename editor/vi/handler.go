@@ -291,13 +291,13 @@ func (vi *Vi) pasteClipboard(after bool) bool {
 		if after {
 			vi.cursor.MoveDown()
 			vi.cursor.MoveStartLine()
-			vi.cursor.InsertString(fmt.Sprintf("%s\n", str))
+			vi.cursor.InsertString(str)
 			vi.cursor.MoveTo(cur)
 			vi.cursor.MoveDown()
 			vi.cursor.MoveStartLine()
 		} else {
 			vi.cursor.MoveStartLine()
-			vi.cursor.InsertString(fmt.Sprintf("%s\n", str))
+			vi.cursor.InsertString(str)
 			vi.cursor.MoveTo(cur)
 			vi.cursor.MoveStartLine()
 		}

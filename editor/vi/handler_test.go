@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ernestrc/go-tui"
 	"github.com/ernestrc/go-tui/cell"
 	"github.com/ernestrc/go-tui/term"
 	testutil "github.com/ernestrc/go-tui/util/test"
@@ -94,7 +95,7 @@ func TestCellAtCursor(t *testing.T) {
 	}
 }
 
-func TestViCursor(t *testing.T) {
+func TestViCursorSequence(t *testing.T) {
 	cases := []testutil.HandlerSequenceTestCase{
 		{"",
 			`▐                   
@@ -353,4 +354,25 @@ diff_buf_adjust(win_
 
 	vi := setupVi(t, snippet, 2)
 	testutil.TestHandlerSequence(t, vi, 20, 10, cases)
+}
+
+func TestViCursorIsolated(t *testing.T) {
+	cases := []testutil.HandlerSequenceTestCase{
+		{"jjddp",
+			`                    
+/*                  
+ * diff buffers.    
+▐* Check if the curr
+ */                 
+  void              
+diff_buf_adjust(win_
+{                   
+  win_T  *wp;       
+:             NORMAL`},
+	}
+
+	newVi := func() tui.Handler {
+		return setupVi(t, snippet, 2)
+	}
+	testutil.TestHandlerIsolated(t, newVi, 20, 10, cases)
 }

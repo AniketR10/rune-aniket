@@ -155,16 +155,6 @@ type selectCase struct {
 	expected [][]term.Cell
 }
 
-func toString(cells [][]term.Cell) string {
-	runes := make([]rune, 0)
-	for _, r := range cells {
-		for _, c := range r {
-			runes = append(runes, c.Ch)
-		}
-	}
-	return string(runes)
-}
-
 func assertCellProperties(t *testing.T, cell term.Cell, attr term.Attributes) {
 	assert.Equal(t, attr.Fg, cell.Fg)
 	assert.Equal(t, attr.Bg, cell.Bg)

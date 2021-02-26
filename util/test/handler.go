@@ -25,6 +25,77 @@ type HandlerTestCase struct {
 	Expected string
 }
 
+func handleTestCase(
+	t *testing.T, w *term.StringWriter, h tui.Handler, tcase HandlerSequenceTestCase,
+	width, height int,
+) {
+	err := w.Clear(term.Attributes{Fg: 0, Bg: 0})
+	require.NoError(t, err)
+
+	var shouldSleep bool
+	for _, r := range tcase.InputSequence {
+		switch r {
+		case ':':
+			h.Handle(term.Event{Key: term.KeyCtrlBackslash, Type: term.EventKey})
+		case '_':
+			shouldSleep = true
+		case ' ':
+			h.Handle(term.Event{Key: term.KeySpace, Type: term.EventKey})
+		case '^':
+			h.Handle(term.Event{Key: term.KeyBackspace, Type: term.EventKey})
+		case '#':
+			h.Handle(term.Event{Key: term.KeyCtrlH, Type: term.EventKey})
+		case '$':
+			h.Handle(term.Event{Key: term.KeyCtrlL, Type: term.EventKey})
+		case '>':
+			h.Handle(term.Event{Key: term.KeyEnter, Type: term.EventKey})
+		case '<':
+			h.Handle(term.Event{Key: term.KeyEsc, Type: term.EventKey})
+		default:
+			h.Handle(term.Event{Ch: r, Type: term.EventKey})
+		}
+	}
+
+	// this is a hack for async handlers
+	if shouldSleep {
+		// wait until all events have been dispatched
+		time.Sleep(100 * time.Millisecond)
+		// force a draw and wait for the draw response to arrive
+		h.Draw(term.NewStringWriter(width, height))
+		time.Sleep(100 * time.Millisecond)
+	}
+	h.Draw(w)
+
+	cursor, ok := h.Cursor()
+	if ok {
+		w.SetCursor(cursor)
+	}
+
+	err = w.Flush()
+	require.NoError(t, err)
+
+	out := w.String()
+	assert.Equal(t, tcase.Expected, out)
+}
+
+// TestHandlerIsolated is a helper function that drives
+// a set of HandlerSequenceTestCase and its results in an isolated fashion:
+// fn will be called on every test case.
+//
+// See TestHandlerSequence for more details.
+func TestHandlerIsolated(
+	t *testing.T, fn func() tui.Handler, width, height int,
+	cases []HandlerSequenceTestCase,
+) {
+	writer := term.NewStringWriter(width, height)
+
+	for _, tcase := range cases {
+		handler := fn()
+		handler.Resize(width, height)
+		handleTestCase(t, writer, handler, tcase, width, height)
+	}
+}
+
 // TestHandlerSequence is a helper function that drives
 // a set of HandlerSequenceTestCase and its results.
 //
@@ -38,53 +109,7 @@ func TestHandlerSequence(
 	handler.Resize(width, height)
 
 	for _, tcase := range cases {
-		err := writer.Clear(term.Attributes{Fg: 0, Bg: 0})
-		require.NoError(t, err)
-
-		var shouldSleep bool
-		for _, r := range tcase.InputSequence {
-			switch r {
-			case ':':
-				handler.Handle(term.Event{Key: term.KeyCtrlBackslash, Type: term.EventKey})
-			case '_':
-				shouldSleep = true
-			case ' ':
-				handler.Handle(term.Event{Key: term.KeySpace, Type: term.EventKey})
-			case '^':
-				handler.Handle(term.Event{Key: term.KeyBackspace, Type: term.EventKey})
-			case '#':
-				handler.Handle(term.Event{Key: term.KeyCtrlH, Type: term.EventKey})
-			case '$':
-				handler.Handle(term.Event{Key: term.KeyCtrlL, Type: term.EventKey})
-			case '>':
-				handler.Handle(term.Event{Key: term.KeyEnter, Type: term.EventKey})
-			case '<':
-				handler.Handle(term.Event{Key: term.KeyEsc, Type: term.EventKey})
-			default:
-				handler.Handle(term.Event{Ch: r, Type: term.EventKey})
-			}
-		}
-
-		// this is a hack for async handlers
-		if shouldSleep {
-			// wait until all events have been dispatched
-			time.Sleep(100 * time.Millisecond)
-			// force a draw and wait for the draw response to arrive
-			handler.Draw(term.NewStringWriter(width, height))
-			time.Sleep(100 * time.Millisecond)
-		}
-		handler.Draw(writer)
-
-		cursor, ok := handler.Cursor()
-		if ok {
-			writer.SetCursor(cursor)
-		}
-
-		err = writer.Flush()
-		require.NoError(t, err)
-
-		out := writer.String()
-		assert.Equal(t, tcase.Expected, out)
+		handleTestCase(t, writer, handler, tcase, width, height)
 	}
 }
 
