@@ -144,6 +144,11 @@ func (c *rawCells) Insert(at term.Coordinates, str string) (
 	from, to term.Coordinates,
 ) {
 	from, to = c.fillInCoords(at)
+	// avoid breaking padding blocks in half
+	if from == at {
+		from, _ = c.skipPadding(at, at)
+		to = from
+	}
 	next := to
 	for _, r := range str {
 		to = next
@@ -227,6 +232,7 @@ func (c *rawCells) skipPadding(start, end term.Coordinates) (
 	tokens := c.tabspaces - 1
 	endLastIdx := len(c.cells[end.Y]) - 1
 	startLastIdx := len(c.cells[start.Y]) - 1
+
 	for tokens > 0 && end.X < endLastIdx && c.cells[end.Y][end.X].Ch == 0 {
 		end.X++
 		tokens--

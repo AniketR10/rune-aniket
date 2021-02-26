@@ -20,6 +20,45 @@ const rawCellsFortune = `Love in your heart wasn't put there to stay.
 Love isn't love 'til you give it away.
 		-- Oscar Hammerstein 中国`
 
+func TestRawCellsInsertMiddlePadding(t *testing.T) {
+	fixture := `{
+	b
+	c
+}
+`
+	fixtureCells := [][]term.Cell{
+		{{Ch: '{'}},
+		{{}, {}, {}, {Ch: '\t'}, {Ch: 'b'}},
+		{{}, {}, {}, {Ch: '\t'}, {Ch: 'c'}},
+		{{Ch: '}'}},
+		{},
+	}
+	var c rawCells
+	c.init(4)
+	c.ReadFrom(strings.NewReader(fixture))
+
+	from := term.Coordinates{X: 0, Y: 1}
+	to := term.Coordinates{X: 5, Y: 1}
+	start, end, str := c.Delete(from, to)
+	assert.Equal(t, from, start)
+	assert.Equal(t, to, end)
+	assert.Equal(t, "\tb\n", str)
+
+	from, to = c.Insert(term.Coordinates{X: 1, Y: 1}, "\tb\n")
+	assert.Equal(t, term.Coordinates{X: 0, Y: 1}, from)
+	assert.Equal(t, term.Coordinates{X: 5, Y: 1}, to)
+
+	start, end, str = c.Delete(from, to)
+	assert.Equal(t, term.Coordinates{X: 0, Y: 1}, start)
+	assert.Equal(t, term.Coordinates{X: 5, Y: 1}, end)
+	assert.Equal(t, "\tb\n", str)
+
+	from, to = c.Insert(term.Coordinates{X: 0, Y: 1}, "\tb\n")
+	assert.Equal(t, term.Coordinates{X: 0, Y: 1}, from)
+	assert.Equal(t, term.Coordinates{X: 5, Y: 1}, to)
+	assert.Equal(t, fixtureCells, c.RawCells())
+}
+
 func TestRawCellsUninitialized(t *testing.T) {
 	t.Run("columns()", func(t *testing.T) {
 		var c rawCells
