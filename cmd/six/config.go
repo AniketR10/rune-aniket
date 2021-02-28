@@ -173,6 +173,11 @@ func (c ideConfig) startTextBackgroundAttr() term.Attributes {
 		browser.DefaultConfig().StartTextBackgroundAttr)
 }
 
+func (c ideConfig) dirtyTabAttr() term.Attributes {
+	return c.getBrowserAttr("dirty_tab_attr",
+		editor.DefaultConfig().DirtyTabAttr)
+}
+
 func (c ideConfig) windowFrameCharset() (cs component.FrameCharSet) {
 	cs = defaultWindowManagerConfig.FrameCharSet
 	cfg, ok := c.windowManager()

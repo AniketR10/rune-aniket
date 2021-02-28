@@ -54,25 +54,34 @@ type Component struct {
 // used to intercept calls to Close and Flush to dispatch
 // corresponding events to subscribers.
 type editorFlusherCloser struct {
-	parent *Component
-	fc     flusherCloser
-	name   string
-	h      Handler
+	parent    *Component
+	fc        flusherCloser
+	h         Handler
+	name      string
+	buf       *cell.Buffer
+	lastFlush string
+}
+
+func (c editorFlusherCloser) OnWillInsert(at term.Coordinates, str string) {
+}
+
+func (c editorFlusherCloser) OnDidInsert(from, to term.Coordinates) {
+	c.parent.setTabAttr(c.name, c.buf, c.lastFlush)
+}
+
+func (c editorFlusherCloser) OnWillDelete(from, to term.Coordinates) {
+}
+
+func (c editorFlusherCloser) OnDidDelete(start, end term.Coordinates, str string) {
+	c.parent.setTabAttr(c.name, c.buf, c.lastFlush)
 }
 
 func (e *editorFlusherCloser) Flush() error {
-	content, err := e.parent.getContent(e.h)
+	content, err := e.parent.dispatchFlush(e.name, e.h)
 	if err != nil {
 		return err
 	}
-
-	ev := Event{
-		Type:         EventTypeFlush,
-		ResourceName: e.name,
-		Resource:     e.h,
-		Content:      content,
-	}
-	e.parent.dispatchEvent(ev)
+	e.lastFlush = content
 	return e.fc.Flush()
 }
 
@@ -145,6 +154,22 @@ func (c *Component) newCellBuffer() *cell.Buffer {
 	return buf
 }
 
+func (c *Component) resetTabProperties(id string) {
+	c.comp.SetTabAttr(id, term.Attributes{})
+	c.comp.SetTabName(id, c.getTabName(id))
+}
+
+func (c *Component) setTabAttr(id string, buf *cell.Buffer, lastFlush string) {
+	content := buf.String()
+	if content == lastFlush {
+		c.resetTabProperties(id)
+		return
+	}
+	c.comp.SetTabAttr(id, c.config.DirtyTabAttr)
+	tabname := fmt.Sprintf("%s*", c.getTabName(id))
+	c.comp.SetTabName(id, tabname)
+}
+
 func (c *Component) newFileBuffer(
 	filename, recSwapFile string, buf *cell.Buffer,
 ) (ret *editorFlusherCloser, err error) {
@@ -159,11 +184,17 @@ func (c *Component) newFileBuffer(
 		return nil, err
 	}
 
-	return &editorFlusherCloser{
-		parent: c,
-		fc:     fc,
-		name:   filename,
-	}, nil
+	efc := &editorFlusherCloser{
+		parent:    c,
+		fc:        fc,
+		name:      filename,
+		buf:       buf,
+		lastFlush: buf.String(),
+	}
+
+	buf.Subscribe(efc)
+
+	return efc, nil
 }
 
 // Init initializes this Component with the given editor and Options.
@@ -216,6 +247,10 @@ func (c *Component) setFocusToTab(id string) (browser.Handler, error) {
 	return t, nil
 }
 
+func (c *Component) getTabName(filename string) string {
+	return filepath.Base(filename)
+}
+
 // OpenFileTab opens the file at filename path, with an optional recovery file,
 // as a new browser tab. It's up to the caller to use the returned
 // browser.Handler and switch any of the active windows to use it.
@@ -253,7 +288,7 @@ func (c *Component) OpenFileTab(
 	}
 	fc.h = editor
 
-	tabName := filepath.Base(filename)
+	tabName := c.getTabName(filename)
 	return c.comp.NewTab(filename, tabName, editor, fc), nil
 }
 
@@ -335,6 +370,24 @@ func (c *Component) DispatchCommand(
 		delete(c.cmdSubscribers, cmd)
 	}
 	return true
+}
+
+func (c *Component) dispatchFlush(id string, h Handler) (string, error) {
+	content, err := c.getContent(h)
+	if err != nil {
+		return "", err
+	}
+
+	ev := Event{
+		Type:         EventTypeFlush,
+		ResourceName: id,
+		Resource:     h,
+		Content:      content,
+	}
+	// clear dirty/flushed attributes
+	c.resetTabProperties(id)
+	c.dispatchEvent(ev)
+	return content, nil
 }
 
 // dispatchEvent either flush or close events

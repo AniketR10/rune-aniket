@@ -227,6 +227,30 @@ func (c *Component) Tab(id string) (*Tab, bool) {
 	return nil, false
 }
 
+// SetTabAttr sets the attributes of the tab with ID id. It returns false
+// if there's no tab with id.
+func (c *Component) SetTabAttr(id string, attr term.Attributes) bool {
+	for i, t := range c.buffers {
+		if t.id == id {
+			c.tabs.SetTabAttr(i, attr)
+			return true
+		}
+	}
+	return false
+}
+
+// SetTabName sets the tab name of the tab with ID id. It returns false
+// if there's no tab with id.
+func (c *Component) SetTabName(id string, name string) bool {
+	for i, t := range c.buffers {
+		if t.id == id {
+			c.tabs.SetTabName(i, name)
+			return true
+		}
+	}
+	return false
+}
+
 // Tabs returns the tabs open in this browser.Component.
 func (c *Component) Tabs() (ret []*Tab) {
 	ret = make([]*Tab, len(c.buffers))

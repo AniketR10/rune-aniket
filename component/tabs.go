@@ -17,6 +17,7 @@ var (
 type tab struct {
 	name  string
 	focus bool
+	attr  term.Attributes
 }
 
 // Tabs is a simple component that draws a list of component
@@ -125,13 +126,15 @@ func (t *Tabs) Draw(w term.Writer) {
 	var focusLen int
 	var focusPos, next term.Coordinates
 	for i, tab := range t.tabs {
-		var attr term.Attributes
+		attr := tab.attr
 		if tab.focus {
 			focusPos = next
 			focusLen = len(tab.name)
-			attr = t.focusAttr
+			attr.Fg |= t.focusAttr.Fg
+			attr.Bg |= t.focusAttr.Bg
 		} else {
-			attr = t.nonFocusAttr
+			attr.Fg |= t.nonFocusAttr.Fg
+			attr.Bg |= t.nonFocusAttr.Bg
 		}
 
 		_, next = t.fileListBuf.InsertStringWithAttr(
@@ -187,6 +190,18 @@ func (t *Tabs) ResetFocus() {
 // this method will panic.
 func (t *Tabs) SetFocus(idx int) {
 	t.tabs[idx].focus = true
+}
+
+// SetTabAttr sets the attributes of tab with ID. If tab with ID does not exist,
+// this method will panic.
+func (t *Tabs) SetTabAttr(idx int, attr term.Attributes) {
+	t.tabs[idx].attr = attr
+}
+
+// SetTabName sets the name of tab with ID. If tab with ID does not exist,
+// this method will panic.
+func (t *Tabs) SetTabName(idx int, name string) {
+	t.tabs[idx].name = name
 }
 
 // Add adds a tab with ID.

@@ -17,6 +17,7 @@ type Config struct {
 	CommandEvent       term.Event
 	CommandKeyBindings map[term.Event]string
 	Storage            document.Service
+	DirtyTabAttr       term.Attributes
 
 	browser.Config
 }
@@ -32,6 +33,7 @@ func DefaultConfig() Config {
 		Config:             browser.DefaultConfig(),
 		CommandKeyBindings: make(map[term.Event]string),
 		Storage:            document.NewInMemoryCache(),
+		DirtyTabAttr:       term.Attributes{Fg: term.AttrBold},
 	}
 }
 
@@ -166,5 +168,13 @@ func WithCommandKeyBinding(ev term.Event, cmd string) Option {
 		}
 		sum := term.Event{Type: term.EventKey, Mod: ev.Mod, Ch: ev.Ch, Key: ev.Key}
 		cfg.CommandKeyBindings[sum] = cmd
+	}
+}
+
+// WithDirtyTabAttr defines the attributes to use to indicate that
+// the buffer in a tab has been modified but not flushed the changes to disk yet.
+func WithDirtyTabAttr(attr term.Attributes) Option {
+	return func(cfg *Config) {
+		cfg.DirtyTabAttr = attr
 	}
 }
