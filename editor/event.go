@@ -156,7 +156,10 @@ func calculateInsertEnd(at term.Coordinates, str string) term.Coordinates {
 		}
 		lastLineLen++
 	}
-	return term.Coordinates{Y: at.Y + lines, X: lastLineLen - 1}
+	if lastLineLen > 0 {
+		lastLineLen--
+	}
+	return term.Coordinates{Y: at.Y + lines, X: lastLineLen}
 }
 
 func (s *cellSubscriber) OnDidInsert(from, to term.Coordinates) {
