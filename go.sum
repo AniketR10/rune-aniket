@@ -73,6 +73,8 @@ github.com/ernestrc/dom v0.2.5-0.20201125033726-789c946aa938 h1:f/aC0hFDoMkao3ch
 github.com/ernestrc/dom v0.2.5-0.20201125033726-789c946aa938/go.mod h1:zkvVMhrl7iSWniJU2txvm5E6pF5bkHVK5ALYLlNBcO0=
 github.com/ernestrc/golang-internal-tools v0.0.0-20210125203355-a1ef7e2356b9 h1:aJNMv6nVes7S18nwmYH/rq5l5XFGi27dQApspGJYbvo=
 github.com/ernestrc/golang-internal-tools v0.0.0-20210125203355-a1ef7e2356b9/go.mod h1:ggE4BgeVDAhZfc3A+4Kp+78MnQMJc7oyaL95dQQlPZY=
+github.com/ernestrc/golang-internal-tools v0.0.0-20210301211705-baf612b355fb h1:eXv3snyBk3ypmYf93zNECGlDaZ7o1dy8zN1ES/7uia0=
+github.com/ernestrc/golang-internal-tools v0.0.0-20210301211705-baf612b355fb/go.mod h1:ggE4BgeVDAhZfc3A+4Kp+78MnQMJc7oyaL95dQQlPZY=
 github.com/ernestrc/logd-go v0.0.0-20180509171507-65871c1d5504 h1:+v3dfsJghDlJelEJwUE3LeUKkw/EosxDwZ7AT0yNDLI=
 github.com/ernestrc/logd-go v0.0.0-20180509171507-65871c1d5504/go.mod h1:T9+4zGzWs0JFtwPMJWg9ww68XpBzRi4R8X/3Iz3ZXDw=
 github.com/ernestrc/sensible v0.0.0-20170704153812-102a955adfdf h1:GkfzboQaNzGIyvuwwGZL8AiFdpKk1huWg5r3tvo2pH8=

@@ -26,7 +26,7 @@ public class	Rotor {
   myClass;
 
 `
-	tokenData1         = []float64{2, 5, 3, 0, 3, 0, 5, 4, 1, 0, 3, 2, 7, 2, 0}
+	tokenData1         = []uint32{2, 5, 3, 0, 3, 0, 5, 4, 1, 0, 3, 2, 7, 2, 0}
 	expectedLocations1 = []editor.Location{
 		{
 			From: term.Coordinates{Y: 2, X: 5},
@@ -82,7 +82,7 @@ func expectDidOpen(t *testing.T, mock *MockServer, file, content string) {
 }
 
 func expectDidChange(
-	t *testing.T, mock *MockServer, file string, version float64,
+	t *testing.T, mock *MockServer, file string, version int32,
 	expectedEvents []protocol.TextDocumentContentChangeEvent,
 ) {
 	expected := &protocol.DidChangeTextDocumentParams{
@@ -101,7 +101,7 @@ func expectDidChange(
 		}).Times(1)
 }
 
-func expectSemanticTokens(t *testing.T, server *MockServer, returnData []float64) {
+func expectSemanticTokens(t *testing.T, server *MockServer, returnData []uint32) {
 	server.EXPECT().SemanticTokensFull(gomock.Any(), gomock.Any()).
 		Return(&protocol.SemanticTokens{Data: returnData}, nil).
 		Times(1)
@@ -144,7 +144,7 @@ func expectAnyLocationList(
 
 func dispatchOpen(
 	t *testing.T, h *lspEditorHandler, server *MockServer, ed *editor.MockEditor,
-	name, content string, tokenData []float64, expectedListID string,
+	name, content string, tokenData []uint32, expectedListID string,
 	expectedLocations []editor.Location,
 ) {
 	var wg sync.WaitGroup
@@ -165,7 +165,7 @@ func dispatchOpen(
 
 func dispatchFlush(
 	t *testing.T, h *lspEditorHandler, server *MockServer, ed *editor.MockEditor,
-	name, content string, version float64, tokenData []float64,
+	name, content string, version int32, tokenData []uint32,
 	expectedListID string, expectedLocations []editor.Location,
 ) {
 	var wg sync.WaitGroup
@@ -246,7 +246,7 @@ func TestLspHandlerHandleInsertDelete(t *testing.T) {
 		Text: insertStr,
 	}}
 	expectDidChange(t, server, filename1, 2, expectedEvents)
-	returnData := []float64{2, 5, 3, 0, 3, 0, 5, 4, 1, 0, 3, 2, 7, 2, 0, 0, 8, 10, 2, 0}
+	returnData := []uint32{2, 5, 3, 0, 3, 0, 5, 4, 1, 0, 3, 2, 7, 2, 0, 0, 8, 10, 2, 0}
 	expectSemanticTokens(t, server, returnData)
 
 	newLocations := append(expectedLocations1, editor.Location{

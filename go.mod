@@ -6,7 +6,7 @@ require (
 	github.com/atotto/clipboard v0.1.2
 	github.com/ernestrc/blue v0.0.0-20210211011506-d4a38bdf2ac3
 	github.com/ernestrc/dom v0.2.5-0.20201125033726-789c946aa938
-	github.com/ernestrc/golang-internal-tools v0.0.0-20210125203355-a1ef7e2356b9
+	github.com/ernestrc/golang-internal-tools v0.0.0-20210301211705-baf612b355fb
 	github.com/golang/mock v1.4.4
 	github.com/golang/protobuf v1.4.3
 	github.com/google/go-cmp v0.5.4 // indirect

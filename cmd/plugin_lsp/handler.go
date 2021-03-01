@@ -104,7 +104,7 @@ type file struct {
 	uri        span.URI
 
 	// handler use getters
-	_version     float64
+	_version     int32
 	_cells       [][]term.Cell
 	_diagnostics []protocol.Diagnostic
 }
@@ -636,7 +636,6 @@ func (h *lspEditorHandler) dispatchPendingDiagnostics(
 
 	h.handleDiagnostics(ctx, srv, uri, ds, firstFileVersion)
 }
-
 func (h *lspEditorHandler) getColumnMapper(f *file) protocol.ColumnMapper {
 	buf := cell.CellsToBuffer(h.getCells(f))
 	content := []byte(buf.String())
@@ -691,7 +690,7 @@ func (h *lspEditorHandler) getFile(uri span.URI) (*file, bool) {
 }
 
 func parseLocationData(
-	uri span.URI, cells [][]term.Cell, content []byte, d []float64,
+	uri span.URI, cells [][]term.Cell, content []byte, d []uint32,
 	semanticTypes map[string]term.Attributes,
 ) (ret []editor.Location) {
 	tc := span.NewContentConverter(uri.Filename(), content)
@@ -701,9 +700,9 @@ func parseLocationData(
 		Converter: tc,
 	}
 
-	lspLine := make([]float64, len(d)/5)
-	lspChar := make([]float64, len(d)/5)
-	line, char := 0.0, 0.0
+	lspLine := make([]uint32, len(d)/5)
+	lspChar := make([]uint32, len(d)/5)
+	var line, char uint32
 	for i := 0; 5*i < len(d); i++ {
 		lspLine[i] = line + d[5*i+0]
 		if d[5*i+0] > 0 {
@@ -718,12 +717,12 @@ func parseLocationData(
 	for i := 0; 5*i < len(d); i++ {
 		pr := protocol.Range{
 			Start: protocol.Position{
-				Line:      lspLine[i],
-				Character: lspChar[i],
+				Line:      uint32(lspLine[i]),
+				Character: uint32(lspChar[i]),
 			},
 			End: protocol.Position{
-				Line:      lspLine[i],
-				Character: lspChar[i] + d[5*i+2],
+				Line:      uint32(lspLine[i]),
+				Character: uint32(lspChar[i] + d[5*i+2]),
 			},
 		}
 		from, to, ok := convertRange(pr, cells, colmap)
@@ -792,12 +791,12 @@ func makeInsertProtocolRange(
 	}
 	return protocol.Range{
 		Start: protocol.Position{
-			Line:      float64(starty),
-			Character: float64(startx),
+			Line:      uint32(starty),
+			Character: uint32(startx),
 		},
 		End: protocol.Position{
-			Line:      float64(starty),
-			Character: float64(startx),
+			Line:      uint32(starty),
+			Character: uint32(startx),
 		},
 	}
 }
@@ -827,12 +826,12 @@ func makeDeleteProtocolRange(
 
 	return protocol.Range{
 		Start: protocol.Position{
-			Line:      float64(starty),
-			Character: float64(startx),
+			Line:      uint32(starty),
+			Character: uint32(startx),
 		},
 		End: protocol.Position{
-			Line:      float64(endy),
-			Character: float64(endx),
+			Line:      uint32(endy),
+			Character: uint32(endx),
 		},
 	}
 }
@@ -869,13 +868,13 @@ func (h *lspEditorHandler) callServerDidChange(
 	return err
 }
 
-func (h *lspEditorHandler) getVersion(f *file) float64 {
+func (h *lspEditorHandler) getVersion(f *file) int32 {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	return f._version
 }
 
-func (h *lspEditorHandler) incrementVersion(f *file) float64 {
+func (h *lspEditorHandler) incrementVersion(f *file) int32 {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	f._version++
@@ -1139,7 +1138,7 @@ func (h *lspEditorHandler) getDiagnostics(f *file) (ds []protocol.Diagnostic) {
 func (h *lspEditorHandler) handleDiagnostics(
 	ctx context.Context, srv protocol.Server,
 	uri span.URI, ds []protocol.Diagnostic,
-	version float64,
+	version int32,
 ) {
 	f, ok := h.getFile(uri)
 	if !ok {
@@ -1229,8 +1228,8 @@ func (h *lspEditorHandler) getFilePosition(cursor term.Coordinates, filename str
 
 	ok = true
 	pos = protocol.Position{
-		Line:      float64(line),
-		Character: float64(column),
+		Line:      uint32(line),
+		Character: uint32(column),
 	}
 
 	return

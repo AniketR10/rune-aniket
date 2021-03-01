@@ -65,6 +65,20 @@ func (mr *MockServerMockRecorder) CodeLens(arg0, arg1 interface{}) *gomock.Call 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CodeLens", reflect.TypeOf((*MockServer)(nil).CodeLens), arg0, arg1)
 }
 
+// CodeLensRefresh mocks base method.
+func (m *MockServer) CodeLensRefresh(arg0 context.Context) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CodeLensRefresh", arg0)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// CodeLensRefresh indicates an expected call of CodeLensRefresh.
+func (mr *MockServerMockRecorder) CodeLensRefresh(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CodeLensRefresh", reflect.TypeOf((*MockServer)(nil).CodeLensRefresh), arg0)
+}
+
 // ColorPresentation mocks base method.
 func (m *MockServer) ColorPresentation(arg0 context.Context, arg1 *protocol.ColorPresentationParams) ([]protocol.ColorPresentation, error) {
 	m.ctrl.T.Helper()
@@ -195,6 +209,34 @@ func (mr *MockServerMockRecorder) DidClose(arg0, arg1 interface{}) *gomock.Call 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DidClose", reflect.TypeOf((*MockServer)(nil).DidClose), arg0, arg1)
 }
 
+// DidCreateFiles mocks base method.
+func (m *MockServer) DidCreateFiles(arg0 context.Context, arg1 *protocol.CreateFilesParams) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DidCreateFiles", arg0, arg1)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DidCreateFiles indicates an expected call of DidCreateFiles.
+func (mr *MockServerMockRecorder) DidCreateFiles(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DidCreateFiles", reflect.TypeOf((*MockServer)(nil).DidCreateFiles), arg0, arg1)
+}
+
+// DidDeleteFiles mocks base method.
+func (m *MockServer) DidDeleteFiles(arg0 context.Context, arg1 *protocol.DeleteFilesParams) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DidDeleteFiles", arg0, arg1)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DidDeleteFiles indicates an expected call of DidDeleteFiles.
+func (mr *MockServerMockRecorder) DidDeleteFiles(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DidDeleteFiles", reflect.TypeOf((*MockServer)(nil).DidDeleteFiles), arg0, arg1)
+}
+
 // DidOpen mocks base method.
 func (m *MockServer) DidOpen(arg0 context.Context, arg1 *protocol.DidOpenTextDocumentParams) error {
 	m.ctrl.T.Helper()
@@ -207,6 +249,20 @@ func (m *MockServer) DidOpen(arg0 context.Context, arg1 *protocol.DidOpenTextDoc
 func (mr *MockServerMockRecorder) DidOpen(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DidOpen", reflect.TypeOf((*MockServer)(nil).DidOpen), arg0, arg1)
+}
+
+// DidRenameFiles mocks base method.
+func (m *MockServer) DidRenameFiles(arg0 context.Context, arg1 *protocol.RenameFilesParams) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DidRenameFiles", arg0, arg1)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DidRenameFiles indicates an expected call of DidRenameFiles.
+func (mr *MockServerMockRecorder) DidRenameFiles(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DidRenameFiles", reflect.TypeOf((*MockServer)(nil).DidRenameFiles), arg0, arg1)
 }
 
 // DidSave mocks base method.
@@ -414,6 +470,21 @@ func (m *MockServer) Initialized(arg0 context.Context, arg1 *protocol.Initialize
 func (mr *MockServerMockRecorder) Initialized(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Initialized", reflect.TypeOf((*MockServer)(nil).Initialized), arg0, arg1)
+}
+
+// LinkedEditingRange mocks base method.
+func (m *MockServer) LinkedEditingRange(arg0 context.Context, arg1 *protocol.LinkedEditingRangeParams) (*protocol.LinkedEditingRanges, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "LinkedEditingRange", arg0, arg1)
+	ret0, _ := ret[0].(*protocol.LinkedEditingRanges)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// LinkedEditingRange indicates an expected call of LinkedEditingRange.
+func (mr *MockServerMockRecorder) LinkedEditingRange(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LinkedEditingRange", reflect.TypeOf((*MockServer)(nil).LinkedEditingRange), arg0, arg1)
 }
 
 // LogTrace mocks base method.
@@ -713,6 +784,21 @@ func (mr *MockServerMockRecorder) SetTrace(arg0, arg1 interface{}) *gomock.Call 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetTrace", reflect.TypeOf((*MockServer)(nil).SetTrace), arg0, arg1)
 }
 
+// ShowDocument mocks base method.
+func (m *MockServer) ShowDocument(arg0 context.Context, arg1 *protocol.ShowDocumentParams) (*protocol.ShowDocumentResult, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ShowDocument", arg0, arg1)
+	ret0, _ := ret[0].(*protocol.ShowDocumentResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ShowDocument indicates an expected call of ShowDocument.
+func (mr *MockServerMockRecorder) ShowDocument(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ShowDocument", reflect.TypeOf((*MockServer)(nil).ShowDocument), arg0, arg1)
+}
+
 // Shutdown mocks base method.
 func (m *MockServer) Shutdown(arg0 context.Context) error {
 	m.ctrl.T.Helper()
@@ -770,6 +856,51 @@ func (m *MockServer) TypeDefinition(arg0 context.Context, arg1 *protocol.TypeDef
 func (mr *MockServerMockRecorder) TypeDefinition(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TypeDefinition", reflect.TypeOf((*MockServer)(nil).TypeDefinition), arg0, arg1)
+}
+
+// WillCreateFiles mocks base method.
+func (m *MockServer) WillCreateFiles(arg0 context.Context, arg1 *protocol.CreateFilesParams) (*protocol.WorkspaceEdit, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "WillCreateFiles", arg0, arg1)
+	ret0, _ := ret[0].(*protocol.WorkspaceEdit)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// WillCreateFiles indicates an expected call of WillCreateFiles.
+func (mr *MockServerMockRecorder) WillCreateFiles(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WillCreateFiles", reflect.TypeOf((*MockServer)(nil).WillCreateFiles), arg0, arg1)
+}
+
+// WillDeleteFiles mocks base method.
+func (m *MockServer) WillDeleteFiles(arg0 context.Context, arg1 *protocol.DeleteFilesParams) (*protocol.WorkspaceEdit, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "WillDeleteFiles", arg0, arg1)
+	ret0, _ := ret[0].(*protocol.WorkspaceEdit)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// WillDeleteFiles indicates an expected call of WillDeleteFiles.
+func (mr *MockServerMockRecorder) WillDeleteFiles(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WillDeleteFiles", reflect.TypeOf((*MockServer)(nil).WillDeleteFiles), arg0, arg1)
+}
+
+// WillRenameFiles mocks base method.
+func (m *MockServer) WillRenameFiles(arg0 context.Context, arg1 *protocol.RenameFilesParams) (*protocol.WorkspaceEdit, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "WillRenameFiles", arg0, arg1)
+	ret0, _ := ret[0].(*protocol.WorkspaceEdit)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// WillRenameFiles indicates an expected call of WillRenameFiles.
+func (mr *MockServerMockRecorder) WillRenameFiles(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WillRenameFiles", reflect.TypeOf((*MockServer)(nil).WillRenameFiles), arg0, arg1)
 }
 
 // WillSave mocks base method.
