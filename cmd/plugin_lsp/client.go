@@ -28,12 +28,12 @@ func (h *lspClientHandler) LogMessage(
 		log.Error("protocol.Client:", p.Message)
 	case protocol.Warning:
 		log.Warn("protocol.Client: ", p.Message)
-		// case protocol.Info:
-		// 	log.Info("protocol.Client: ", p.Message)
-		// case protocol.Log:
-		// 	log.Trace("protocol.Client: ", p.Message)
-		// default:
-		// 	log.Trace("protocol.Client: ", p.Message)
+	case protocol.Info:
+		log.Info("protocol.Client: ", p.Message)
+	case protocol.Log:
+		log.Trace("protocol.Client: ", p.Message)
+	default:
+		log.Trace("protocol.Client: ", p.Message)
 	}
 	return nil
 }

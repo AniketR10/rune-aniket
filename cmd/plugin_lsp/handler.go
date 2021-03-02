@@ -46,11 +46,17 @@ const (
 	commandPrevDiagnostic    = "lspPrevDiagnostic"
 	commandHover             = "lspHover"
 	commandGoToDef           = "lspGoToDefinition"
+	commandAddWorkspace      = "lspAddWorkspaceFolder"
+	commandRemoveWorkspace   = "lspRemoveWorkspaceFolder"
 	handleBackpressureEvs    = 64
 )
 
 var (
-	lspHandlerCommands    = []string{commandNextDiagnostic, commandPrevDiagnostic, commandHover, commandGoToDef}
+	lspHandlerCommands = []string{
+		commandNextDiagnostic, commandPrevDiagnostic,
+		commandHover, commandGoToDef, commandAddWorkspace,
+		commandRemoveWorkspace,
+	}
 	lspHandlerPermissions = []plugin.Permission{
 		plugin.PermissionBrowserWindowManager,
 		plugin.PermissionBrowserResourceOpener,
@@ -144,8 +150,8 @@ func sendInitializeRequest(
 	ctx context.Context, cwd string, server protocol.Server,
 ) (*protocol.InitializeResult, error) {
 	params := &protocol.ParamInitialize{}
-	params.RootURI = protocol.URIFromPath(cwd)
-	params.Capabilities.Workspace.Configuration = true
+	params.WorkspaceFolders = []protocol.WorkspaceFolder{makeWorkspaceFolder(cwd)}
+	params.Capabilities.Workspace.WorkspaceFolders = true
 
 	// Make sure to respect configured options when sending initialize request.
 	opts := source.DefaultOptions().Clone()
@@ -564,16 +570,18 @@ func newLspHandler(
 	return ret, nil
 }
 
-func (h *lspEditorHandler) getServer(languageID string) (protocol.Server, bool) {
+func (h *lspEditorHandler) getServer(languageID string) (
+	protocol.Server, protocol.ServerCapabilities, bool,
+) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
 	proc, ok := h.servers[languageID]
 	if !ok {
-		return nil, false
+		return nil, protocol.ServerCapabilities{}, false
 	}
 
-	return proc.srv, true
+	return proc.srv, proc.caps, true
 }
 
 func (h *lspEditorHandler) newFile(handler editor.Handler, name, content string) *file {
@@ -943,7 +951,7 @@ func (h *lspEditorHandler) handleFileFlush(ev editor.Event) {
 		f = h.newFile(ev.Resource, ev.ResourceName, ev.Content)
 	}
 
-	srv, ok := h.getServer(f.languageID)
+	srv, _, ok := h.getServer(f.languageID)
 	if !ok {
 		return
 	}
@@ -964,7 +972,7 @@ func (h *lspEditorHandler) handleFileInsert(ev editor.Event) {
 		return
 	}
 
-	srv, ok := h.getServer(f.languageID)
+	srv, _, ok := h.getServer(f.languageID)
 	if !ok {
 		return
 	}
@@ -993,7 +1001,7 @@ func (h *lspEditorHandler) handleFileDelete(ev editor.Event) {
 		return
 	}
 
-	srv, ok := h.getServer(f.languageID)
+	srv, _, ok := h.getServer(f.languageID)
 	if !ok {
 		return
 	}
@@ -1018,7 +1026,7 @@ func (h *lspEditorHandler) handleFileOpen(ev editor.Event) {
 	defer cancelFn()
 
 	f := h.newFile(ev.Resource, ev.ResourceName, ev.Content)
-	srv, ok := h.getServer(f.languageID)
+	srv, _, ok := h.getServer(f.languageID)
 	if !ok {
 		log.Warnf("could not connect to lsp server for %s: "+
 			"configuration not found or process not running", f.languageID)
@@ -1085,7 +1093,7 @@ func (h *lspEditorHandler) handleFileClose(ev editor.Event) {
 		log.Warnf("lspEditorHandler: Received close event for an unknown file: %#v", ev)
 		return
 	}
-	srv, ok := h.getServer(f.languageID)
+	srv, _, ok := h.getServer(f.languageID)
 	if !ok {
 		return
 	}
@@ -1250,7 +1258,7 @@ func (h *lspEditorHandler) handleGoToDefinition(cursor term.Coordinates, ed edit
 		},
 	}
 
-	srv, ok := h.getServer(f.languageID)
+	srv, _, ok := h.getServer(f.languageID)
 	if !ok {
 		return
 	}
@@ -1317,7 +1325,7 @@ func (h *lspEditorHandler) handleHover(
 		},
 	}
 
-	srv, ok := h.getServer(f.languageID)
+	srv, _, ok := h.getServer(f.languageID)
 	if !ok {
 		return
 	}
@@ -1345,6 +1353,68 @@ func (h *lspEditorHandler) handleHover(
 	}
 }
 
+func makeWorkspaceFolder(in string) protocol.WorkspaceFolder {
+	return protocol.WorkspaceFolder{
+		URI:  string(protocol.URIFromPath(in)),
+		Name: in,
+	}
+}
+
+func (h *lspEditorHandler) handleChangedWorkspace(
+	name string, added []string, removed []string,
+) {
+	uri := span.URIFromPath(name)
+	languageID := filepath.Ext(uri.Filename())
+
+	srv, _, ok := h.getServer(languageID)
+	if !ok {
+		return
+	}
+
+	/*cfg := caps.InnerServerCapabilities.Workspace.WorkspaceFolders
+	if !cfg.Supported {
+		h.m.SetMessage("LSP server does not support changing workspaces")
+		log.Tracef("lspEditorHandler.Server.DidChangeWorkspaceFolders(%#v): not supported", caps)
+		return
+	}*/
+
+	ctx := context.Background()
+	ctx, cancelFn := context.WithTimeout(ctx, h.rpcTimeout)
+	defer cancelFn()
+
+	var remove []protocol.WorkspaceFolder
+	for _, folder := range removed {
+		remove = append(remove, makeWorkspaceFolder(folder))
+	}
+
+	var add []protocol.WorkspaceFolder
+	for _, folder := range added {
+		add = append(add, makeWorkspaceFolder(folder))
+	}
+
+	req := protocol.DidChangeWorkspaceFoldersParams{
+		Event: protocol.WorkspaceFoldersChangeEvent{Added: add, Removed: remove},
+	}
+
+	log.Tracef("lspEditorHandler.Server.DidChangeWorkspaceFolders(%#v)", req)
+
+	err := srv.DidChangeWorkspaceFolders(ctx, &req)
+	if err != nil {
+		h.m.SetMessage("DidChangeWorkspaceFolders: %v", err)
+		log.Errorf("lspEditorHandler.Server.DidChangeWorkspaceFolders(%s): %v", name, err)
+	}
+}
+
+func (h *lspEditorHandler) handleAddWorkspace(name string, args []string) {
+	log.Debugf("lspEditorHandler.handleAddWorkspace(%v)", args)
+	h.handleChangedWorkspace(name, args, nil)
+}
+
+func (h *lspEditorHandler) handleRemoveWorkspace(name string, args []string) {
+	log.Debugf("lspEditorHandler.handleRemoveWorkspace(%v)", args)
+	h.handleChangedWorkspace(name, nil, args)
+}
+
 func (h *lspEditorHandler) HandleCommand(cmd editor.Command) (exit bool) {
 	switch cmd.Name {
 	case commandNextDiagnostic:
@@ -1361,6 +1431,10 @@ func (h *lspEditorHandler) HandleCommand(cmd editor.Command) (exit bool) {
 		h.handleHover(cmd.Cursor.Content, cmd.Cursor.Window, cmd.Resource, cmd.ResourceName)
 	case commandGoToDef:
 		h.handleGoToDefinition(cmd.Cursor.Content, cmd.Resource, cmd.ResourceName)
+	case commandAddWorkspace:
+		h.handleAddWorkspace(cmd.ResourceName, cmd.Args)
+	case commandRemoveWorkspace:
+		h.handleRemoveWorkspace(cmd.ResourceName, cmd.Args)
 	}
 
 	return false
