@@ -52,10 +52,14 @@ func consumeError(t *testing.T, wg *sync.WaitGroup, client *eventHandlerClient) 
 }
 
 func TestEventHandlerRPC(t *testing.T) {
+	content := "myContent"
+	cmdArgs := []string{"a", "b"}
 	ev := Event{
 		Type:         EventTypeFlush,
 		ResourceName: "myResourceName",
 		Resource:     browser.Token{ID: 1},
+		Content:      content,
+		cmdArgs:      cmdArgs,
 	}
 
 	t.Run("asynchronously dispatches events to remote event handler", func(t *testing.T) {
@@ -69,7 +73,8 @@ func TestEventHandlerRPC(t *testing.T) {
 
 		go consumeError(t, &wg, client)
 
-		h.EXPECT().Handle(gomock.Eq(ev)).DoAndReturn(func(ev Event) bool {
+		h.EXPECT().Handle(gomock.Any()).DoAndReturn(func(_ev Event) bool {
+			assert.Equal(t, ev, _ev)
 			wg.Done()
 			return false
 		}).Times(1)

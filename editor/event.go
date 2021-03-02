@@ -47,6 +47,9 @@ type Event struct {
 	// for tab expansion.
 	From, To term.Coordinates
 	Content  string
+
+	// used internally by server/client
+	cmdArgs []string
 }
 
 func protoTypeToModel(protoType proto.EditorEvent_Type) (ev EventType, err error) {
@@ -83,6 +86,7 @@ func (e *Event) fromProto(pe *proto.EditorEvent) (err error) {
 	e.From = pe.GetFrom().ToModel()
 	e.To = pe.GetTo().ToModel()
 	e.Content = pe.GetContent()
+	e.cmdArgs = pe.GetCmdArgs()
 	return nil
 }
 
@@ -124,6 +128,7 @@ func (e *Event) toProto() proto.EditorEvent {
 	ret.Content = e.Content
 	ret.From = &from
 	ret.To = &to
+	ret.CmdArgs = e.cmdArgs
 
 	return ret
 }

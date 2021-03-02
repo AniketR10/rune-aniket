@@ -457,7 +457,7 @@ func TestDispatchCommand(t *testing.T) {
 		c, err := newTestComponent(&testEditor{})
 		require.NoError(t, err)
 
-		assert.False(t, c.DispatchCommand("SELL", handler.NewTestHandler(), "jklfwe"))
+		assert.False(t, c.DispatchCommand(handler.NewTestHandler(), "jklfwe", "SELL"))
 	})
 }
 
@@ -466,6 +466,7 @@ func testRegister(t *testing.T,
 	t.Run("Registered handler is unsubscribed upon returning exit=true", func(t *testing.T) {
 		var mu sync.Mutex
 		name1 := "HERS"
+		myArgs := []string{"a", "bbbbbbbbbbbbbbbbbbbbb"}
 		myCmd := "BUY"
 		c, sut, err := constructor(&testEditor{}, &mu, name1)
 		require.NoError(t, err)
@@ -479,20 +480,22 @@ func testRegister(t *testing.T,
 		var wg sync.WaitGroup
 		sut.Register(myCmd, FuncCommandHandler(func(cmd Command) bool {
 			defer wg.Done()
+			assert.Equal(t, myCmd, cmd.Name)
+			assert.Equal(t, myArgs, cmd.Args)
 			called++
 			return true
 		}))
 
 		wg.Add(1)
 		mu.Lock()
-		assert.True(t, c.DispatchCommand(myCmd, h1, name1))
+		assert.True(t, c.DispatchCommand(h1, name1, myCmd, myArgs...))
 		mu.Unlock()
 
 		wg.Wait()
 
 		for i := 0; i < 20; i++ {
 			mu.Lock()
-			c.DispatchCommand(myCmd, h1, name1)
+			c.DispatchCommand(h1, name1, myCmd, myArgs...)
 			mu.Unlock()
 		}
 

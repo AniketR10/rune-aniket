@@ -33,6 +33,7 @@ message EditorEvent {
   Coordinates from = 6;
   Coordinates to = 7;
   string content = 8;
+  repeated string cmdArgs = 9;
 }
 
 message EditorSubscribeRequest {

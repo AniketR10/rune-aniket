@@ -351,7 +351,7 @@ func (c *Component) Publish(ev term.Event) (handled bool) {
 // DispatchCommand dispatches a EventTypeCommand with cmd to subscribers
 // subscribed via SubscribeEditor.
 func (c *Component) DispatchCommand(
-	cmd string, resource Handler, resourceName string,
+	resource Handler, resourceName string, cmd string, args ...string,
 ) (handled bool) {
 	commander, handled := c.cmdSubscribers[cmd]
 	if !handled {
@@ -360,6 +360,7 @@ func (c *Component) DispatchCommand(
 
 	strc := Command{
 		Name:         cmd,
+		Args:         args,
 		Resource:     resource,
 		ResourceName: resourceName,
 	}

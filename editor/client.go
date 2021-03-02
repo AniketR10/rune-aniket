@@ -128,6 +128,7 @@ func (c *Client) Register(cmd string, h CommandHandler) error {
 	handlerID := c.serveHandler(FuncEventHandler(func(ev Event) bool {
 		cmd := Command{
 			Name:         ev.Content,
+			Args:         ev.cmdArgs,
 			ResourceName: ev.ResourceName,
 			Resource:     ev.Resource,
 		}

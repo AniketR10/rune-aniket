@@ -114,7 +114,7 @@ func (e *Ex) runSingleCommand(cmd string) (quit bool, err error) {
 		name, h, ok := e.handlerInFocus()
 		var handled bool
 		if ok {
-			handled = e.comp.DispatchCommand(cmd, h, name)
+			handled = e.comp.DispatchCommand(h, name, cmd)
 		}
 		if !handled {
 			err = fmt.Errorf("Unknown command: %s", cmd)
@@ -138,7 +138,14 @@ func (e *Ex) runCommand(cmd string) (quit bool, err error) {
 		}
 		e.comp.Browser().Focus().SetContent(h)
 	default:
-		err = fmt.Errorf("Unknown command: %s", cmd)
+		name, h, ok := e.handlerInFocus()
+		var handled bool
+		if ok {
+			handled = e.comp.DispatchCommand(h, name, parts[0], parts[1:]...)
+		}
+		if !handled {
+			err = fmt.Errorf("Unknown command: %s", cmd)
+		}
 	}
 	return
 }

@@ -28,6 +28,7 @@ type Reader interface {
 // Command represents a command issued by the user.
 type Command struct {
 	Name         string
+	Args         []string
 	ResourceName string
 	Resource     Handler
 	Cursor       struct {
