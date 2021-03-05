@@ -61,6 +61,10 @@ type Editor interface {
 	// navigate the code. See LocationList for more details.
 	// In order to remove a location list, SetLocationList must be called
 	// with an empty (or nil) LocationList.
+	// Locations are removed if underlying buffer is updated. It is the
+	// reponsibility of the caller to recompute the list of locations
+	// and call SetLocationList with the new list of locations after
+	// every update. Check cell.Buffer.Subscribe for more details.
 	SetLocationList(Handler, string, LocationList) error
 
 	// Moves cursor to the next location on list with ID.
