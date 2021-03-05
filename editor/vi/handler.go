@@ -515,6 +515,8 @@ func (vi *Vi) handleVisual(ev term.Event) (quit, handled bool) {
 		return
 	}
 
+	mode := vi.mode
+
 	if ev.Type == term.EventKey {
 		handled = true
 		switch ev.Ch {
@@ -538,6 +540,13 @@ func (vi *Vi) handleVisual(ev term.Event) (quit, handled bool) {
 
 	if !handled {
 		quit, handled = vi.handleNormal(ev)
+	}
+	switch vi.mode {
+	case visualMode, visualLineMode, visualBlockMode, normalMode:
+	default:
+		// do not allow to switch modes without proper
+		// handling of the visual selection
+		vi.mode = mode
 	}
 	return
 }

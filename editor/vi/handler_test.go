@@ -369,6 +369,18 @@ diff_buf_adjust(win_
 {                   
   win_T  *wp;       
 :             NORMAL`},
+		// do not allow to switch modes in visual other than standard switches
+		{"vjji",
+			`                    
+/*                  
+▐* Check if the curr
+ * diff buffers.    
+ */                 
+  void              
+diff_buf_adjust(win_
+{                   
+  win_T  *wp;       
+:             VISUAL`},
 	}
 
 	newVi := func() tui.Handler {
