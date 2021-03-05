@@ -381,6 +381,18 @@ diff_buf_adjust(win_
 {                   
   win_T  *wp;       
 :             VISUAL`},
+		// check yank paste after last line
+		{"Gyyp",
+			`    curtab->tp_diff_
+    diff_redraw(TRUE
+    }               
+  }                 
+  }                 
+  else              
+  diff_buf_add(win->
+}                   
+▐                   
+:             NORMAL`},
 	}
 
 	newVi := func() tui.Handler {

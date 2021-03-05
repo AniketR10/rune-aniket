@@ -287,9 +287,12 @@ func (vi *Vi) pasteClipboard(after bool) bool {
 		}
 	case editor.LineSelection:
 		if after {
-			vi.cursor.MoveDown()
 			vi.cursor.MoveStartLine()
-			vi.cursor.InsertString(str)
+			if !vi.cursor.MoveDown() {
+				vi.cursor.InsertString(fmt.Sprintf("%s\n", str))
+			} else {
+				vi.cursor.InsertString(str)
+			}
 			vi.cursor.MoveTo(cur)
 			vi.cursor.MoveDown()
 			vi.cursor.MoveStartLine()
