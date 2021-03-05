@@ -8,8 +8,7 @@ import (
 )
 
 type lspClientHandler struct {
-	h   *lspEditorHandler
-	srv protocol.Server
+	h *lspEditorHandler
 }
 
 // lsp protocol.Client
@@ -49,7 +48,7 @@ func (h *lspClientHandler) PublishDiagnostics(
 	ctx context.Context, p *protocol.PublishDiagnosticsParams,
 ) error {
 	log.Tracef("lspClientHandler.PublishDiagnostics: %#v", p)
-	h.h.HandleDiagnostics(ctx, h.srv, p)
+	h.h.HandleDiagnostics(ctx, p)
 	return nil
 }
 
@@ -72,7 +71,6 @@ func (h *lspClientHandler) Configuration(
 ) ([]interface{}, error) {
 	log.Tracef("lspClientHandler.Configuration: %#v", p)
 
-	// TODO generalize
 	results := make([]interface{}, len(p.Items))
 	for i, item := range p.Items {
 		if item.Section != "gopls" {

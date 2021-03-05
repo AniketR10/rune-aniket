@@ -116,9 +116,10 @@ type file struct {
 }
 
 type execServer struct {
-	cmd  *exec.Cmd
-	srv  protocol.Server
-	caps protocol.ServerCapabilities
+	langID string
+	cmd    *exec.Cmd
+	srv    protocol.Server
+	caps   protocol.ServerCapabilities
 }
 
 type lspEditorHandler struct {
@@ -147,11 +148,21 @@ type lspEditorHandler struct {
 }
 
 func sendInitializeRequest(
-	ctx context.Context, cwd string, server protocol.Server,
+	ctx context.Context, cwd string, server execServer,
 ) (*protocol.InitializeResult, error) {
 	params := &protocol.ParamInitialize{}
-	params.WorkspaceFolders = []protocol.WorkspaceFolder{makeWorkspaceFolder(cwd)}
-	params.Capabilities.Workspace.WorkspaceFolders = true
+	// NOTE: gopls doesn't respect workspaces if rootURI is set
+	if server.langID == ".go" {
+		params.Capabilities.Workspace.WorkspaceFolders = true
+		params.WorkspaceFolders = []protocol.WorkspaceFolder{makeWorkspaceFolder(cwd)}
+	} else {
+		params.RootURI = protocol.URIFromPath(cwd)
+		params.RootPath = cwd
+		params.Path = params.RootPath // backwards compat with tsserver
+	}
+
+	params.Capabilities.Workspace.Configuration = false
+	params.Capabilities.Workspace.Symbol.SymbolKind.ValueSet = []protocol.SymbolKind{}
 
 	// Make sure to respect configured options when sending initialize request.
 	opts := source.DefaultOptions().Clone()
@@ -159,8 +170,15 @@ func sendInitializeRequest(
 	params.Capabilities.TextDocument.Hover = protocol.HoverClientCapabilities{
 		ContentFormat: []protocol.MarkupKind{opts.PreferredContentFormat},
 	}
+	params.Capabilities.TextDocument.CodeAction.CodeActionLiteralSupport.CodeActionKind.ValueSet = []protocol.CodeActionKind{}
+	params.Capabilities.TextDocument.CodeAction.ResolveSupport.Properties = []string{}
+	params.Capabilities.TextDocument.Completion.CompletionItem.TagSupport.ValueSet = []protocol.CompletionItemTag{}
+	params.Capabilities.TextDocument.Completion.CompletionItem.ResolveSupport.Properties = []string{}
+	params.Capabilities.TextDocument.Completion.CompletionItem.InsertTextModeSupport.ValueSet = []protocol.InsertTextMode{}
 	params.Capabilities.TextDocument.TypeDefinition.LinkSupport = false
 	params.Capabilities.TextDocument.DocumentSymbol.HierarchicalDocumentSymbolSupport = opts.HierarchicalDocumentSymbolSupport
+	params.Capabilities.TextDocument.DocumentSymbol.SymbolKind.ValueSet = []protocol.SymbolKind{}
+	params.Capabilities.TextDocument.DocumentSymbol.TagSupport.ValueSet = []protocol.SymbolTag{}
 	params.Capabilities.TextDocument.SemanticTokens.Formats = []string{"relative"}
 	params.Capabilities.TextDocument.SemanticTokens.Requests.Range = true
 	params.Capabilities.TextDocument.SemanticTokens.Requests.Full = true
@@ -173,11 +191,11 @@ func sendInitializeRequest(
 		"semanticTokens": true,
 	}
 
-	res, err := server.Initialize(ctx, params)
+	res, err := server.srv.Initialize(ctx, params)
 	if err != nil {
 		return nil, fmt.Errorf("lsp.Server.Initialize: %v", err)
 	}
-	err = server.Initialized(ctx, &protocol.InitializedParams{})
+	err = server.srv.Initialized(ctx, &protocol.InitializedParams{})
 	if err != nil {
 		return nil, fmt.Errorf("lsp.Server.Initialized: %v", err)
 	}
@@ -196,8 +214,8 @@ func parseAddr(listen string) (network string, address string) {
 	return "tcp", listen
 }
 
-func streamRPC(cc jsonrpc2.Conn, srv protocol.Server, h *lspEditorHandler) {
-	ch := lspClientHandler{h: h, srv: srv}
+func streamRPC(cc jsonrpc2.Conn, h *lspEditorHandler) {
+	ch := lspClientHandler{h: h}
 	ctx := context.Background()
 
 	cc.Go(ctx,
@@ -209,29 +227,15 @@ func streamRPC(cc jsonrpc2.Conn, srv protocol.Server, h *lspEditorHandler) {
 	}
 }
 
-func initializeConnection(ret *lspEditorHandler, conn net.Conn) (
-	protocol.Server, *protocol.InitializeResult, error,
+func initializeConnection(ctx context.Context, ret *lspEditorHandler, conn net.Conn) (
+	protocol.Server, error,
 ) {
-	ctx := context.Background()
-	ctx, cancelFn := context.WithTimeout(ctx, ret.connectTimeout)
-	defer cancelFn()
-
-	cwd, err := os.Getwd()
-	if err != nil {
-		return nil, nil, fmt.Errorf("Getwd: %v", err)
-	}
-
 	stream := jsonrpc2.NewHeaderStream(conn)
 	cc := jsonrpc2.NewConn(stream)
 	server := protocol.ServerDispatcher(cc)
-	go streamRPC(cc, server, ret)
+	go streamRPC(cc, ret)
 
-	res, err := sendInitializeRequest(ctx, cwd, server)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	return server, res, nil
+	return server, nil
 }
 
 func getPipes(cmd *exec.Cmd) (
@@ -286,49 +290,72 @@ func (w nopWriter) Close() error {
 	return nil
 }
 
+func startLanguageServer(
+	h *lspEditorHandler, ret map[string]execServer, langID string, arg interface{},
+) {
+	ctx := context.Background()
+	ctx, cancelFn := context.WithTimeout(ctx, h.connectTimeout)
+	defer cancelFn()
+
+	c, err := parseCmd(arg)
+	if err != nil {
+		log.Errorf("failed to parse language %s command: %v", langID, err)
+		return
+	}
+
+	stdin, stdout, stderr, err := getPipes(c)
+	if err != nil {
+		log.Errorf("failed to create net.Conn for '%s': %v", langID, err)
+		return
+	}
+
+	log.Debugf("Starting lsp server '%s' with cmd: %#v", langID, c)
+	err = c.Start()
+	if err != nil {
+		log.Errorf("failed to start exec for '%s': %v", langID, err)
+		return
+	}
+
+	// helps debug
+	if log.IsLevelEnabled(log.DebugLevel) {
+		go logStderr(langID, stderr)
+	}
+
+	reader := ioutil.NopCloser(stdout)
+	writer := nopWriter{Writer: stdin}
+	conn := fakenet.NewConn("stdio", reader, writer)
+	server, err := initializeConnection(ctx, h, conn)
+	if err != nil {
+		log.Errorf("failed to initialize LSP server for '%s': %v", langID, err)
+		return
+	}
+
+	cwd, err := os.Getwd()
+	if err != nil {
+		log.Errorf("Getwd: %v", err)
+		return
+	}
+	srv := execServer{langID: langID, cmd: c, srv: server}
+	initRes, err := sendInitializeRequest(ctx, cwd, srv)
+	if err != nil {
+		return
+	}
+
+	srv.caps = initRes.Capabilities
+
+	h.mu.Lock()
+	ret[langID] = srv
+	h.mu.Unlock()
+
+	log.Infof("connected to '%s' LSP server '%s' with version %s: ",
+		langID, initRes.ServerInfo.Name, initRes.ServerInfo.Version)
+}
+
 func startLanguageServers(
 	h *lspEditorHandler, ret map[string]execServer, cfg map[string]interface{},
 ) {
 	for langID, v := range cfg {
-		c, err := parseCmd(v)
-		if err != nil {
-			log.Errorf("failed to parse language %s command: %v", langID, err)
-			continue
-		}
-
-		stdin, stdout, stderr, err := getPipes(c)
-		if err != nil {
-			log.Errorf("failed to create net.Conn for '%s': %v", langID, err)
-			continue
-		}
-
-		log.Debugf("Starting lsp server '%s' with cmd: %#v", langID, c)
-		err = c.Start()
-		if err != nil {
-			log.Errorf("failed to start exec for '%s': %v", langID, err)
-			continue
-		}
-
-		// helps debug
-		if log.IsLevelEnabled(log.DebugLevel) {
-			go logStderr(langID, stderr)
-		}
-
-		reader := ioutil.NopCloser(stdout)
-		writer := nopWriter{Writer: stdin}
-		conn := fakenet.NewConn("stdio", reader, writer)
-		server, initRes, err := initializeConnection(h, conn)
-		if err != nil {
-			log.Errorf("failed to initialize LSP server for '%s': %v", langID, err)
-			continue
-		}
-
-		h.mu.Lock()
-		ret[langID] = execServer{caps: initRes.Capabilities, cmd: c, srv: server}
-		h.mu.Unlock()
-
-		log.Infof("connected to '%s' LSP server '%s' with version %s: ",
-			langID, initRes.ServerInfo.Name, initRes.ServerInfo.Version)
+		go startLanguageServer(h, ret, langID, v)
 	}
 }
 
@@ -343,7 +370,7 @@ func initLanguageServers(h *lspEditorHandler, pconfig plugin.Config) (
 
 	ret := make(map[string]execServer)
 
-	go startLanguageServers(h, ret, cfg)
+	startLanguageServers(h, ret, cfg)
 
 	return ret, nil
 }
@@ -571,17 +598,17 @@ func newLspHandler(
 }
 
 func (h *lspEditorHandler) getServer(languageID string) (
-	protocol.Server, protocol.ServerCapabilities, bool,
+	execServer, bool,
 ) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
 	proc, ok := h.servers[languageID]
 	if !ok {
-		return nil, protocol.ServerCapabilities{}, false
+		return execServer{}, false
 	}
 
-	return proc.srv, proc.caps, true
+	return proc, true
 }
 
 func (h *lspEditorHandler) newFile(handler editor.Handler, name, content string) *file {
@@ -632,7 +659,7 @@ func (h *lspEditorHandler) addPendingDiagnostics(
 }
 
 func (h *lspEditorHandler) dispatchPendingDiagnostics(
-	ctx context.Context, srv protocol.Server, uri span.URI,
+	ctx context.Context, uri span.URI,
 ) {
 	h.mu.Lock()
 	ds, ok := h.pendingDiagnostic[uri]
@@ -642,7 +669,7 @@ func (h *lspEditorHandler) dispatchPendingDiagnostics(
 		return
 	}
 
-	h.handleDiagnostics(ctx, srv, uri, ds, firstFileVersion)
+	h.handleDiagnostics(ctx, uri, ds, firstFileVersion)
 }
 func (h *lspEditorHandler) getColumnMapper(f *file) protocol.ColumnMapper {
 	buf := cell.CellsToBuffer(h.getCells(f))
@@ -669,7 +696,7 @@ func (h *lspEditorHandler) handleGoTo(f *file, rs protocol.Range) {
 }
 
 func (h *lspEditorHandler) dispatchPendingGoTo(
-	ctx context.Context, srv protocol.Server, f *file,
+	ctx context.Context, srv execServer, f *file,
 ) {
 	uri := f.uri
 
@@ -766,12 +793,17 @@ func (h *lspEditorHandler) newSemanticTokensCtx() (ctx context.Context) {
 
 // https://microsoft.github.io/language-server-protocol/specifications/specification-current/#textDocument_semanticTokens
 func (h *lspEditorHandler) semanticTokensFull(
-	ctx context.Context, srv protocol.Server,
+	ctx context.Context, srv execServer,
 	f *file, cells [][]term.Cell, content string,
 ) {
+	// NOTE: gopls does not pass semanticTokensProvider
+	if srv.caps.SemanticTokensProvider == nil && srv.langID != ".go" {
+		log.Debugf("lspEditorHandler.Server.SemanticTokensFull(%s): server does not support semantic tokens", f.name)
+		return
+	}
 	version := h.getVersion(f)
 	p2 := protocol.SemanticTokensParams{TextDocument: f.docID}
-	resp, err := srv.SemanticTokensFull(ctx, &p2)
+	resp, err := srv.srv.SemanticTokensFull(ctx, &p2)
 	if err != nil {
 		log.Errorf("lspEditorHandler.Server.SemanticTokensFull(%s): %v", f.name, err)
 		return
@@ -859,7 +891,7 @@ func makeProtocolRange(
 }
 
 func (h *lspEditorHandler) callServerDidChange(
-	ctx context.Context, srv protocol.Server,
+	ctx context.Context, srv execServer,
 	f *file, evts []protocol.TextDocumentContentChangeEvent,
 ) error {
 	params := protocol.DidChangeTextDocumentParams{
@@ -869,7 +901,7 @@ func (h *lspEditorHandler) callServerDidChange(
 		},
 		ContentChanges: evts,
 	}
-	err := srv.DidChange(ctx, &params)
+	err := srv.srv.DidChange(ctx, &params)
 	if err != nil {
 		log.Errorf("lspEditorHandler.Server.DidChange(%s): %v", f.name, err)
 	}
@@ -892,7 +924,7 @@ func (h *lspEditorHandler) incrementVersion(f *file) int32 {
 // TODO client is expected to support both incremental and full synchronization
 // based on h.protocol server capabilities. Right now we are assuming incremental.
 func (h *lspEditorHandler) pushFullUpdate(
-	ctx context.Context, srv protocol.Server, f *file, content string,
+	ctx context.Context, srv execServer, f *file, content string,
 ) {
 	version := h.incrementVersion(f)
 
@@ -905,7 +937,7 @@ func (h *lspEditorHandler) pushFullUpdate(
 }
 
 func (h *lspEditorHandler) sendIncrementalUpdate(
-	ctx context.Context, srv protocol.Server, f *file, newCells,
+	ctx context.Context, srv execServer, f *file, newCells,
 	oldCells [][]term.Cell, content string, from, to term.Coordinates,
 ) (protocol.Range, error) {
 	version := h.incrementVersion(f)
@@ -951,7 +983,7 @@ func (h *lspEditorHandler) handleFileFlush(ev editor.Event) {
 		f = h.newFile(ev.Resource, ev.ResourceName, ev.Content)
 	}
 
-	srv, _, ok := h.getServer(f.languageID)
+	srv, ok := h.getServer(f.languageID)
 	if !ok {
 		return
 	}
@@ -972,7 +1004,7 @@ func (h *lspEditorHandler) handleFileInsert(ev editor.Event) {
 		return
 	}
 
-	srv, _, ok := h.getServer(f.languageID)
+	srv, ok := h.getServer(f.languageID)
 	if !ok {
 		return
 	}
@@ -1001,7 +1033,7 @@ func (h *lspEditorHandler) handleFileDelete(ev editor.Event) {
 		return
 	}
 
-	srv, _, ok := h.getServer(f.languageID)
+	srv, ok := h.getServer(f.languageID)
 	if !ok {
 		return
 	}
@@ -1026,7 +1058,7 @@ func (h *lspEditorHandler) handleFileOpen(ev editor.Event) {
 	defer cancelFn()
 
 	f := h.newFile(ev.Resource, ev.ResourceName, ev.Content)
-	srv, _, ok := h.getServer(f.languageID)
+	srv, ok := h.getServer(f.languageID)
 	if !ok {
 		log.Warnf("could not connect to lsp server for %s: "+
 			"configuration not found or process not running", f.languageID)
@@ -1042,13 +1074,13 @@ func (h *lspEditorHandler) handleFileOpen(ev editor.Event) {
 		},
 	}
 
-	if err := srv.DidOpen(ctx, &p); err != nil {
+	if err := srv.srv.DidOpen(ctx, &p); err != nil {
 		log.Errorf("lspEditorHandler.Server.DidOpen(%s, %s): %v", f.name, f.languageID, err)
 		return
 	}
 	log.Tracef("lspEditorHandler.Server.DidOpen(%s, %s)", f.name, f.languageID)
 
-	h.dispatchPendingDiagnostics(ctx, srv, f.uri)
+	h.dispatchPendingDiagnostics(ctx, f.uri)
 	h.dispatchPendingGoTo(ctx, srv, f)
 	ctx = h.newSemanticTokensCtx()
 	go h.semanticTokensFull(ctx, srv, f, h.getCells(f), ev.Content)
@@ -1069,7 +1101,7 @@ func (h *lspEditorHandler) removeFile(name string) (*file, bool) {
 }
 
 func (h *lspEditorHandler) sendDidClose(
-	ctx context.Context, srv protocol.Server, uri span.URI,
+	ctx context.Context, srv execServer, uri span.URI,
 ) {
 	p := protocol.DidCloseTextDocumentParams{
 		TextDocument: protocol.TextDocumentIdentifier{
@@ -1077,7 +1109,7 @@ func (h *lspEditorHandler) sendDidClose(
 		},
 	}
 
-	if err := srv.DidClose(ctx, &p); err != nil {
+	if err := srv.srv.DidClose(ctx, &p); err != nil {
 		log.Errorf("lspEditorHandler.Server.DidClose(%s): %v", uri, err)
 		return
 	}
@@ -1093,7 +1125,7 @@ func (h *lspEditorHandler) handleFileClose(ev editor.Event) {
 		log.Warnf("lspEditorHandler: Received close event for an unknown file: %#v", ev)
 		return
 	}
-	srv, _, ok := h.getServer(f.languageID)
+	srv, ok := h.getServer(f.languageID)
 	if !ok {
 		return
 	}
@@ -1144,9 +1176,8 @@ func (h *lspEditorHandler) getDiagnostics(f *file) (ds []protocol.Diagnostic) {
 }
 
 func (h *lspEditorHandler) handleDiagnostics(
-	ctx context.Context, srv protocol.Server,
-	uri span.URI, ds []protocol.Diagnostic,
-	version int32,
+	ctx context.Context, uri span.URI,
+	ds []protocol.Diagnostic, version int32,
 ) {
 	f, ok := h.getFile(uri)
 	if !ok {
@@ -1158,9 +1189,10 @@ func (h *lspEditorHandler) handleDiagnostics(
 	h.setDiagnostics(f, ds)
 
 	if version != h.getVersion(f) {
-		log.Debugf("lspEditorHandler: Received diagnostic for"+
+		log.Debugf("lspEditorHandler: Received diagnostic for "+
 			"outdated version of file '%s': %#v", f.name, version)
-		return
+		// it seems that tsserver does not send any version info
+		// return
 	}
 
 	locs := h.parseDiagnostics(f, ds)
@@ -1172,8 +1204,7 @@ func (h *lspEditorHandler) handleDiagnostics(
 }
 
 func (h *lspEditorHandler) HandleDiagnostics(
-	ctx context.Context, srv protocol.Server,
-	p *protocol.PublishDiagnosticsParams,
+	ctx context.Context, p *protocol.PublishDiagnosticsParams,
 
 ) {
 	var start time.Time
@@ -1182,7 +1213,7 @@ func (h *lspEditorHandler) HandleDiagnostics(
 		log.Tracef("lspEditorHandler.HandleDiagnostics(%#v)", p.URI)
 	}
 
-	h.handleDiagnostics(ctx, srv, p.URI.SpanURI(), p.Diagnostics, p.Version)
+	h.handleDiagnostics(ctx, p.URI.SpanURI(), p.Diagnostics, p.Version)
 
 	if log.IsLevelEnabled(log.TraceLevel) {
 		log.Tracef("lspEditorHandler.HandleDiagnostics(%#v) in %s", p.URI, time.Since(start))
@@ -1258,7 +1289,7 @@ func (h *lspEditorHandler) handleGoToDefinition(cursor term.Coordinates, ed edit
 		},
 	}
 
-	srv, _, ok := h.getServer(f.languageID)
+	srv, ok := h.getServer(f.languageID)
 	if !ok {
 		return
 	}
@@ -1267,7 +1298,7 @@ func (h *lspEditorHandler) handleGoToDefinition(cursor term.Coordinates, ed edit
 	ctx, cancelFn := context.WithTimeout(ctx, h.rpcTimeout)
 	defer cancelFn()
 
-	locs, err := srv.Definition(ctx, &p)
+	locs, err := srv.srv.Definition(ctx, &p)
 	if err != nil {
 		log.Errorf("lspEditorHandler.Server.Definition(%s, %s): %v", f.name, f.languageID, err)
 		return
@@ -1325,7 +1356,7 @@ func (h *lspEditorHandler) handleHover(
 		},
 	}
 
-	srv, _, ok := h.getServer(f.languageID)
+	srv, ok := h.getServer(f.languageID)
 	if !ok {
 		return
 	}
@@ -1334,7 +1365,7 @@ func (h *lspEditorHandler) handleHover(
 	ctx, cancelFn := context.WithTimeout(ctx, h.rpcTimeout)
 	defer cancelFn()
 
-	hover, err := srv.Hover(ctx, &p)
+	hover, err := srv.srv.Hover(ctx, &p)
 	if err != nil || hover == nil {
 		log.Errorf("lspEditorHandler.Server.Hover(%s, %s): %v", f.name, f.languageID, err)
 		return
@@ -1366,7 +1397,7 @@ func (h *lspEditorHandler) handleChangedWorkspace(
 	uri := span.URIFromPath(name)
 	languageID := filepath.Ext(uri.Filename())
 
-	srv, _, ok := h.getServer(languageID)
+	srv, ok := h.getServer(languageID)
 	if !ok {
 		return
 	}
@@ -1398,7 +1429,7 @@ func (h *lspEditorHandler) handleChangedWorkspace(
 
 	log.Tracef("lspEditorHandler.Server.DidChangeWorkspaceFolders(%#v)", req)
 
-	err := srv.DidChangeWorkspaceFolders(ctx, &req)
+	err := srv.srv.DidChangeWorkspaceFolders(ctx, &req)
 	if err != nil {
 		h.m.SetMessage("DidChangeWorkspaceFolders: %v", err)
 		log.Errorf("lspEditorHandler.Server.DidChangeWorkspaceFolders(%s): %v", name, err)

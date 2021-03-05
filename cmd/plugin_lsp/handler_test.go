@@ -14,6 +14,7 @@ import (
 	"github.com/ernestrc/golang-internal-tools/span"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
+	log "github.com/sirupsen/logrus"
 )
 
 var (
@@ -55,7 +56,7 @@ func newTestLspHandler(
 	ret := new(lspEditorHandler)
 	ret.ed = ed
 	ret.files = make(map[span.URI]*file)
-	ret.servers = map[string]execServer{".go": {srv: server}}
+	ret.servers = map[string]execServer{".go": {langID: ".go", srv: server}}
 	ret.semanticTokensListID = defaultSemanticTokensListID
 	ret.diagnosticListID = defaultDiagnosticListID
 	ret.semanticTypesAttr = defaultSemanticTypeAttr
@@ -188,6 +189,8 @@ func dispatchFlush(
 func TestLspHandlerHandleOpen(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
+
+	log.SetLevel(log.TraceLevel)
 
 	ed := editor.NewMockEditor(ctrl)
 	cfg := makePluginConfig()
