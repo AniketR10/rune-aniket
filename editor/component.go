@@ -229,15 +229,7 @@ func (c *Component) Init(ed Editor, config Config) (err error) {
 	return
 }
 
-func (c *Component) setFocusToTab(id string) (browser.Handler, error) {
-	t, ok := c.comp.Tab(id)
-	if !ok {
-		// NOTE: swap file was not cleaned up
-		// probably because prev process terminated
-		// abruptly.  Here we could interactively ask user
-		// what to do.
-		return nil, ErrFileAlreadyOpen
-	}
+func (c *Component) setFocusToTab(t *browser.Tab) (browser.Handler, error) {
 	err := c.comp.Focus().SetContent(t)
 	if err != nil {
 		if err != browser.ErrTabNotFree {
@@ -251,6 +243,18 @@ func (c *Component) getTabName(filename string) string {
 	return filepath.Base(filename)
 }
 
+func getFileID(filename string) (string, error) {
+	usr, _ := user.Current()
+	dir := usr.HomeDir
+	if filename == "~" {
+		filename = dir
+	} else if strings.HasPrefix(filename, "~/") {
+		filename = filepath.Join(dir, filename[2:])
+	}
+	// needed as tab ID
+	return filepath.Abs(filename)
+}
+
 // OpenFileTab opens the file at filename path, with an optional recovery file,
 // as a new browser tab. It's up to the caller to use the returned
 // browser.Handler and switch any of the active windows to use it.
@@ -260,25 +264,19 @@ func (c *Component) getTabName(filename string) string {
 func (c *Component) OpenFileTab(
 	filename, recoveryFilename string,
 ) (browser.Handler, error) {
-	usr, _ := user.Current()
-	dir := usr.HomeDir
-	if filename == "~" {
-		filename = dir
-	} else if strings.HasPrefix(filename, "~/") {
-		filename = filepath.Join(dir, filename[2:])
-	}
-	// needed as tab ID
-	filename, err := filepath.Abs(filename)
+	filename, err := getFileID(filename)
 	if err != nil {
 		return nil, fmt.Errorf("could not evaluate file path '%s': %v", filename, err)
+	}
+
+	t, ok := c.comp.Tab(filename)
+	if ok {
+		return c.setFocusToTab(t)
 	}
 
 	buf := c.newCellBuffer()
 	fc, err := c.newFileBuffer(filename, recoveryFilename, buf)
 	if err != nil {
-		if err == ErrFileAlreadyOpen {
-			return c.setFocusToTab(filename)
-		}
 		return nil, err
 	}
 
@@ -288,8 +286,10 @@ func (c *Component) OpenFileTab(
 	}
 	fc.h = editor
 
-	tabName := c.getTabName(filename)
-	return c.comp.NewTab(filename, tabName, editor, fc), nil
+	tabname := c.getTabName(filename)
+	c.tryLog(log.DebugLevel, "Open(%s): opening tab with tabname='%s'", filename, tabname)
+
+	return c.comp.NewTab(filename, tabname, editor, fc), nil
 }
 
 // Open opens the given file in a new browser tab.

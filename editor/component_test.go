@@ -222,16 +222,30 @@ func TestComponentOpen(t *testing.T) {
 	})
 
 	t.Run("bubbles up open file error", func(t *testing.T) {
-		myName := "lmao"
-		c, _ := newTestComponentWithFile(t, myName)
+		c, _ := newTestComponentWithFile(t, "lmao")
 		myErr := errors.New("oopsie daisy")
 		c.openFileFn = func(filePath string,
 			buf *cell.Buffer, swapDir string) (flusherCloser, error) {
 			return nil, myErr
 		}
 
-		_, err := c.Open(myName)
+		_, err := c.Open("smtg_else")
 		require.Error(t, err)
+	})
+
+	t.Run("if file is already open it returns its handler", func(t *testing.T) {
+		filename := "wasup"
+		c, h1 := newTestComponentWithFile(t, filename)
+		c.openFileFn = func(filePath string,
+			buf *cell.Buffer, swapDir string) (flusherCloser, error) {
+			t.Log("should not call openFileFn")
+			t.Fail()
+			return nil, nil
+		}
+
+		h2, err := c.Open(filename)
+		require.NoError(t, err)
+		assert.Equal(t, h1, h2)
 	})
 }
 
