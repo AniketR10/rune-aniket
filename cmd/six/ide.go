@@ -120,7 +120,7 @@ func (i *IDE) init(cfgfilename, recfilename string, filenames ...string) error {
 		l.SetLevel(level)
 		l.SetFormatter(&log.TextFormatter{
 			DisableColors:   true,
-			TimestampFormat: time.StampMilli,
+			TimestampFormat: time.RFC3339,
 		})
 		opts = append(opts, editor.WithLogger(l))
 		viOpts = append(viOpts, vi.WithLogger(l))
