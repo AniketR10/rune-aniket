@@ -1,11 +1,20 @@
 package plugin
 
 import (
+	"fmt"
 	"os/exec"
 
 	"github.com/hashicorp/go-plugin"
 	log "github.com/sirupsen/logrus"
 )
+
+const (
+	envLogLevel = "go_tui_log_level"
+)
+
+func makeLogLevelEnv(l log.Level) string {
+	return fmt.Sprintf("%s=%s", envLogLevel, l)
+}
 
 func goPluginGranteeBuilder(m *Manager) pluginBuilder {
 	return func(pluginID, path string, grantor Grantor, logger *log.Logger) (*granteeClient, error) {
@@ -15,6 +24,7 @@ func goPluginGranteeBuilder(m *Manager) pluginBuilder {
 
 		cmd := exec.Command(path)
 		cmd.Env = append(cmd.Env, makeBrokerRemoteAddrEnv(m.brokerAddr.String()))
+		cmd.Env = append(cmd.Env, makeLogLevelEnv(logger.GetLevel()))
 
 		config := &plugin.ClientConfig{
 			HandshakeConfig:  handshakeConfig,

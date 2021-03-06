@@ -13,8 +13,8 @@ import (
 	"github.com/ernestrc/golang-internal-tools/lsp/protocol"
 	"github.com/ernestrc/golang-internal-tools/span"
 	"github.com/golang/mock/gomock"
-	"github.com/stretchr/testify/assert"
 	log "github.com/sirupsen/logrus"
+	"github.com/stretchr/testify/assert"
 )
 
 var (

@@ -29,16 +29,19 @@ func Logger() *logrus.Logger {
 }
 
 // SetLoggingOutput sets the logging output of all plugins to out.
+// This should only be called from plugin host, if called outside of this package.
 func SetLoggingOutput(out io.Writer) {
 	pluginLogger.SetOutput(out)
 }
 
 // SetLoggingFormatter sets the logging formatter of all plugins to f.
+// This should only be called from plugin host, if called outside of this package.
 func SetLoggingFormatter(f logrus.Formatter) {
 	pluginLogger.SetFormatter(f)
 }
 
 // SetLoggingLevel sets the logging level of all plugins to level.
+// This should only be called from plugin host, if called outside of this package.
 func SetLoggingLevel(level logrus.Level) {
 	pluginLogger.SetLevel(level)
 }

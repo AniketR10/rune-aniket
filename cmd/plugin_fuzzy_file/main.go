@@ -3,7 +3,6 @@ package main
 import (
 	"net/http"
 	_ "net/http/pprof"
-	"os"
 
 	"github.com/ernestrc/go-tui"
 	"github.com/ernestrc/go-tui/browser"
@@ -18,10 +17,6 @@ import (
 var defaultCommand = `set -o pipefail; command find -L . -mindepth 1 \( -path '*/\.*' -o -fstype 'sysfs' -o -fstype 'devfs' -o -fstype 'devtmpfs' -o -fstype 'proc' \) -prune -o -type f -print -o -type l -print 2> /dev/null | cut -b3-`
 
 func main() {
-	log.SetOutput(os.Stderr)
-	log.SetLevel(log.DebugLevel)
-	plugin.SetLoggingLevel(log.DebugLevel)
-
 	go func() {
 		log.Println(http.ListenAndServe("localhost:6061", nil))
 	}()

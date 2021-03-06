@@ -3,7 +3,6 @@ package main
 import (
 	"net/http"
 	_ "net/http/pprof"
-	"os"
 
 	"github.com/ernestrc/go-tui"
 	"github.com/ernestrc/go-tui/browser"
@@ -15,10 +14,6 @@ import (
 )
 
 func main() {
-	log.SetOutput(os.Stderr)
-	log.SetLevel(log.DebugLevel)
-	plugin.SetLoggingLevel(log.DebugLevel)
-
 	go func() {
 		log.Println(http.ListenAndServe("localhost:6062", nil))
 	}()
