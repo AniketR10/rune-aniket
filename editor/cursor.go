@@ -642,31 +642,55 @@ func (c *Cursor) MoveToMatchingRune() bool {
 
 // InsertRowAbove inserts a row above the current row and moves the cursor up.
 func (c *Cursor) InsertRowAbove() {
+	mode := c.selection.mode
+	c.selection.mode = noSelection
+	c.setSelection()
+
 	cursorAtScroll := c.cursorAtScroll()
 	if cursorAtScroll.Y == 0 {
 		c.buffer().InsertRowAt(0)
 		return
 	}
 	c.buffer().InsertRowAt(cursorAtScroll.Y - 1)
+	c.selection.mode = mode
+	c.setSelection()
 	c.MoveUp()
 }
 
 // InsertRowBelow inserts a row below the current row and moves the cursor down.
 func (c *Cursor) InsertRowBelow() {
+	mode := c.selection.mode
+	c.selection.mode = noSelection
+	c.setSelection()
+
 	cursorAtScroll := c.cursorAtScroll()
 	c.buffer().InsertRowAt(cursorAtScroll.Y + 1)
+	c.selection.mode = mode
+	c.setSelection()
 	c.MoveDown()
 }
 
 // Insert inserts rune at the current cursor's position.
 func (c *Cursor) Insert(r rune) {
+	mode := c.selection.mode
+	c.selection.mode = noSelection
+	c.setSelection()
+
 	pos := c.buffer().Insert(c.cursorAtScroll(), r)
+	c.selection.mode = mode
+	c.setSelection()
 	c.setCursor(c.scrollToWindowCoordinates(pos))
 }
 
 // InsertString inserts str at the current cursor's position.
 func (c *Cursor) InsertString(str string) {
+	mode := c.selection.mode
+	c.selection.mode = noSelection
+	c.setSelection()
+
 	_, until := c.buffer().InsertString(c.cursorAtScroll(), str)
+	c.selection.mode = mode
+	c.setSelection()
 	c.setCursor(c.scrollToWindowCoordinates(until))
 }
 
@@ -781,6 +805,8 @@ func (c *Cursor) setSelection() {
 		c.selection.cells = c.buffer().SelectLine(from, to)
 	case BlockSelection:
 		c.selection.cells = c.buffer().SelectBlock(from, to)
+	case noSelection:
+		c.selection.cells = nil
 	}
 
 	invertAttr(c.selection.cells)

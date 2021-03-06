@@ -717,6 +717,32 @@ func testCursorSelect(t *testing.T, width, height int) {
 		assertBufferAttributes(t, e.buffer(), term.Attributes{})
 	})
 
+	t.Run("Select then insert should add attributes to inserted runes", func(t *testing.T) {
+		inserts := []func(*Cursor){
+			func(e *Cursor) {
+				e.Insert('a')
+				e.Insert('b')
+				e.Insert('c')
+			},
+			func(e *Cursor) {
+				e.InsertString("abc")
+			},
+		}
+		for _, insert := range inserts {
+			e := makeSelect(t)
+			e.Unselect()
+			e.MoveFirstLine()
+			e.MoveStartLine()
+			e.Select()
+			e.MoveLastLine()
+			e.MoveEndLine()
+			insert(e)
+			assertBufferAttributes(t, e.buffer(), term.Attributes{Fg: term.AttrReverse, Bg: term.AttrReverse})
+			assert.True(t, e.Unselect())
+			assertBufferAttributes(t, e.buffer(), term.Attributes{})
+		}
+	})
+
 	t.Run("SelectLine then Unselect should reverse all attributes", func(t *testing.T) {
 		e := makeSelectLine(t)
 		assert.True(t, e.Unselect())
