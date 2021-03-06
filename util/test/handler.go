@@ -37,6 +37,8 @@ func handleTestCase(
 		switch r {
 		case ':':
 			h.Handle(term.Event{Key: term.KeyCtrlBackslash, Type: term.EventKey})
+		case '`':
+			h.Handle(term.Event{Key: term.KeyCtrlV, Type: term.EventKey})
 		case '_':
 			shouldSleep = true
 		case ' ':

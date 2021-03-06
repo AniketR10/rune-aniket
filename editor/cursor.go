@@ -128,6 +128,17 @@ func (c *Cursor) CursorAtScroll() term.Coordinates {
 	return c.cursorAtScroll()
 }
 
+// SelectionFrom returns the position of the current selection,
+// if cursor is in select mode.
+func (c *Cursor) SelectionFrom() (pos term.Coordinates, ok bool) {
+	if c.selection.mode == noSelection {
+		return
+	}
+	ok = true
+	pos = c.selection.scrollFrom
+	return
+}
+
 // MoveToScroll moves the cursor to pos in scroll.
 func (c *Cursor) MoveToScroll(pos term.Coordinates) (
 	ret term.Coordinates, ok bool,

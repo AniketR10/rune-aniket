@@ -369,18 +369,18 @@ diff_buf_adjust(win_
 {                   
   win_T  *wp;       
 :             NORMAL`},
-		// do not allow to switch modes in visual other than standard switches
-		{"vjji",
-			`                    
-/*                  
-▐* Check if the curr
- * diff buffers.    
+		// insert block one rune (for now until repeater captures all insert)
+		{"`jjjIh<",
+			`h                   
+h/*                 
+h * Check if the cur
+h▐* diff buffers.   
  */                 
   void              
 diff_buf_adjust(win_
 {                   
   win_T  *wp;       
-:             VISUAL`},
+:             NORMAL`},
 		// check yank paste after last line
 		{"Gyyp",
 			`    curtab->tp_diff_

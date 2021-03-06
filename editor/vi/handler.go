@@ -49,6 +49,10 @@ type Vi struct {
 	searchMode   moveMode
 	moveChar     rune
 	deleteInsert bool
+	blockRepeat  struct {
+		From term.Coordinates
+		To   term.Coordinates
+	}
 }
 
 // DefaultViConfig is a sane configuration defaults for Vi.
@@ -174,6 +178,8 @@ func (vi *Vi) setNormalMode() {
 }
 
 func (vi *Vi) setInsertMode() {
+	vi.blockRepeat.From = term.Coordinates{}
+	vi.blockRepeat.To = term.Coordinates{}
 	vi.setMode(insertMode)
 }
 
@@ -495,6 +501,7 @@ func (vi *Vi) handleInsert(ev term.Event) (quit, handled bool) {
 		vi.cursor.Backspace()
 	case term.KeyEsc:
 		vi.cursor.MoveLeft()
+		vi.repeatInsertStart()
 		vi.setNormalMode()
 	default:
 		if ev.Ch != 0 {
@@ -510,6 +517,23 @@ func (vi *Vi) copySelection() {
 	vi.cursor.CopySelection(vi.config.clipboard)
 }
 
+func (vi *Vi) repeatInsertStart() {
+	from, to := cell.SortFromTo(vi.blockRepeat.From, vi.blockRepeat.To)
+	n := to.Y - from.Y
+	for i := 0; i < n; i++ {
+		vi.blockRepeat.From.Y++
+		vi.cursor.MoveToScroll(vi.blockRepeat.From)
+		vi.repeater.Repeat()
+	}
+}
+
+func (vi *Vi) handleVisualBlockInsertStart() {
+	vi.setInsertMode()
+	vi.blockRepeat.From, _ = vi.cursor.SelectionFrom()
+	vi.blockRepeat.To = vi.cursor.CursorAtScroll()
+	vi.SetCursorAtScroll(vi.blockRepeat.From)
+}
+
 func (vi *Vi) handleVisual(ev term.Event) (quit, handled bool) {
 	if ev.Key == term.KeyEsc {
 		vi.setNormalMode()
@@ -517,8 +541,6 @@ func (vi *Vi) handleVisual(ev term.Event) (quit, handled bool) {
 		handled = true
 		return
 	}
-
-	mode := vi.mode
 
 	if ev.Type == term.EventKey {
 		handled = true
@@ -536,6 +558,13 @@ func (vi *Vi) handleVisual(ev term.Event) (quit, handled bool) {
 		case 's', 'c':
 			vi.cursor.DeleteSelection()
 			vi.setInsertMode()
+		case 'I':
+			switch vi.mode {
+			case visualBlockMode:
+				vi.handleVisualBlockInsertStart()
+			default:
+				handled = false
+			}
 		default:
 			handled = false
 		}
@@ -544,13 +573,13 @@ func (vi *Vi) handleVisual(ev term.Event) (quit, handled bool) {
 	if !handled {
 		quit, handled = vi.handleNormal(ev)
 	}
+
 	switch vi.mode {
-	case visualMode, visualLineMode, visualBlockMode, normalMode:
+	case visualMode, visualLineMode, visualBlockMode:
 	default:
-		// do not allow to switch modes without proper
-		// handling of the visual selection
-		vi.mode = mode
+		vi.cursor.Unselect()
 	}
+
 	return
 }
 
