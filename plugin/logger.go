@@ -9,6 +9,7 @@ import (
 
 	"github.com/hashicorp/go-hclog"
 	"github.com/sirupsen/logrus"
+	"github.com/ernestrc/blue/logging"
 )
 
 var pluginLogger logrus.Logger
@@ -66,27 +67,32 @@ func NewHCLogLogrus(logger *logrus.Logger) hclog.Logger {
 // vals can be any type, but display is implementation specific
 // Emit a message and key/value pairs at the TRACE level
 func (l *hcloggerLogrus) Trace(msg string, args ...interface{}) {
-	l.logger.WithFields(l.fields).Tracef(msg, args...)
+	lf := l.With(args).(*hcloggerLogrus)
+	l.logger.WithFields(lf.fields).Trace(msg)
 }
 
 // Emit a message and key/value pairs at the DEBUG level
 func (l *hcloggerLogrus) Debug(msg string, args ...interface{}) {
-	l.logger.WithFields(l.fields).Debugf(msg, args...)
+	lf := l.With(args).(*hcloggerLogrus)
+	l.logger.WithFields(lf.fields).Debug(msg)
 }
 
 // Emit a message and key/value pairs at the INFO level
 func (l *hcloggerLogrus) Info(msg string, args ...interface{}) {
-	l.logger.WithFields(l.fields).Infof(msg, args...)
+	lf := l.With(args).(*hcloggerLogrus)
+	l.logger.WithFields(lf.fields).Info(msg)
 }
 
 // Emit a message and key/value pairs at the WARN level
 func (l *hcloggerLogrus) Warn(msg string, args ...interface{}) {
-	l.logger.WithFields(l.fields).Warnf(msg, args...)
+	lf := l.With(args).(*hcloggerLogrus)
+	l.logger.WithFields(lf.fields).Warn(msg)
 }
 
 // Emit a message and key/value pairs at the ERROR level
 func (l *hcloggerLogrus) Error(msg string, args ...interface{}) {
-	l.logger.WithFields(l.fields).Errorf(msg, args...)
+	lf := l.With(args).(*hcloggerLogrus)
+	l.logger.WithFields(lf.fields).Error(msg)
 }
 
 // Indicate if TRACE logs would be emitted. This and the other Is* guards
@@ -117,15 +123,15 @@ func (l *hcloggerLogrus) IsError() bool {
 
 // Creates a sublogger that will always have the given key/value pairs
 func (l *hcloggerLogrus) With(args ...interface{}) hclog.Logger {
-	fieldsClone := logrus.Fields{}
+	retFields := logrus.Fields{}
 
 	for k, v := range l.fields {
-		fieldsClone[k] = v
+		retFields[k] = v
 	}
 
 	ret := &hcloggerLogrus{
 		logger: l.logger,
-		fields: fieldsClone,
+		fields: retFields,
 	}
 
 	var key string
@@ -147,12 +153,12 @@ func (l *hcloggerLogrus) With(args ...interface{}) hclog.Logger {
 // name, instead it will substitue it. This does not conform to the original hclog.Logger
 // interface requirements.
 func (l *hcloggerLogrus) Named(name string) hclog.Logger {
-	return l.With("logger.name", name)
+	return l.With(logging.KeyClass, name)
 }
 
 // Create a logger that will prepend the name string on the front of all messages.
 func (l *hcloggerLogrus) ResetNamed(name string) hclog.Logger {
-	return l.With("logger.name", name)
+	return l.With(logging.KeyClass, name)
 }
 
 // Updates the level. This should affect all sub-loggers as well. If an

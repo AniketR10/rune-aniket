@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"os"
-	"time"
 
 	"github.com/ernestrc/go-tui"
 	"github.com/ernestrc/go-tui/browser"
@@ -11,6 +10,7 @@ import (
 	"github.com/ernestrc/go-tui/editor/vi"
 	"github.com/ernestrc/go-tui/plugin"
 	"github.com/ernestrc/go-tui/term"
+	"github.com/ernestrc/blue/logging"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -118,10 +118,7 @@ func (i *IDE) init(cfgfilename, recfilename string, filenames ...string) error {
 		l = log.New()
 		l.SetOutput(f)
 		l.SetLevel(level)
-		l.SetFormatter(&log.TextFormatter{
-			DisableColors:   true,
-			TimestampFormat: time.RFC3339,
-		})
+		l.SetFormatter(&logging.LogrusFormatter{})
 		opts = append(opts, editor.WithLogger(l))
 		viOpts = append(viOpts, vi.WithLogger(l))
 		pluginOpts = append(pluginOpts, plugin.WithLogger(l))
