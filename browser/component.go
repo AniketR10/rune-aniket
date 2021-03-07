@@ -35,7 +35,7 @@ type Component struct {
 	tabsVirt   handler.Virtual
 	wm         handler.WindowManager
 	wmVirt     handler.Virtual
-	frames     component.FrameUnion
+	union      component.FrameUnion
 
 	config       Config
 	startHandler Handler
@@ -191,13 +191,14 @@ func (c *Component) Init(config Config) {
 	_ = c.newWindow(c.wm.Focus()) // init handler with initial window
 	c.wmVirt = handler.Virtual{Virtual: component.Virtual{C: &c.wm}}
 	c.tabsVirt = handler.Virtual{Virtual: component.Virtual{C: &c.tabs}}
-	c.frames.Init(&c.tabsVirt.Virtual, &c.wmVirt.Virtual)
+	c.union.Init(&c.wmVirt.Virtual, c.config.Frame)
+	c.union.UnionTop(&c.tabsVirt.Virtual)
 	c.buffers = make([]*Tab, 0)
 
 	// make sure that frame union attrs are same as window manager attrs
-	c.frames.Attributes = config.WindowManagerConfig.FrameAttr
-	c.frames.Right = config.FrameUnionCharSet.Right
-	c.frames.Left = config.FrameUnionCharSet.Left
+	c.union.Attributes = config.WindowManagerConfig.FrameAttr
+	c.union.Right = config.FrameUnionCharSet.Right
+	c.union.Left = config.FrameUnionCharSet.Left
 
 	c.tabs.SetAttr(config.FocusTabAttr, config.NonFocusTabAttr,
 		config.WindowManagerConfig.FrameAttr, config.WindowManagerConfig.FrameAttr)
@@ -627,9 +628,11 @@ func (c *Component) Resize(width, height int) {
 	c.tabsHeight = 3
 	if height < 3 {
 		c.tabsHeight = 0
+	} else if !c.config.Frame {
+		c.tabsHeight = 1
 	}
 	c.tabsVirt.Resize(width, c.tabsHeight)
-	c.frames.Resize(width, height)
+	c.union.Resize(width, height)
 }
 
 // Draw satisfies tui.Component
@@ -640,9 +643,8 @@ func (c *Component) Draw(w term.Writer) {
 			c.tabs.SetFocus(id)
 		}
 	}
-	if c.config.Frame {
-		c.frames.Draw(w)
-	}
+
+	c.union.Draw(w)
 
 	// only draw logBufDraw times
 	if c.logBufDraw > 0 {

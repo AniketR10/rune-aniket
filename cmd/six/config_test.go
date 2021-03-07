@@ -83,6 +83,8 @@ browser:
     frameunion_charset:
         left: '┣'
         right: '┫'
+        top: '┫'
+        bottom: '┫'
     message_bar_attr:
         fg: white
         bg: cyan
@@ -132,7 +134,7 @@ browser:
 	require.NoError(t, err)
 	assert.Equal(t, "ag -g \"\"", cmd)
 
-	expectedCs := component.FrameUnionCharSet{Left: '┣', Right: '┫'}
+	expectedCs := component.FrameUnionCharSet{Left: '┣', Right: '┫', Top: '┫', Bottom: '┫'}
 	assert.Equal(t, expectedCs, cfg.frameUnionCharset())
 
 	assert.Equal(t, term.Attributes{Fg: term.ColorWhite, Bg: term.ColorCyan}, cfg.messageBarAttr())
