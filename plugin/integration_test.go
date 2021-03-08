@@ -86,6 +86,13 @@ func TestIntegrationRace(t *testing.T) {
 			_, err := ifc.(browser.WindowManager).Split(browser.OrientationBottom, h)
 			return err
 		}},
+		{PermissionBrowserWindowManager, func(token uint32, broker proto.MuxBroker) (interface{}, error) {
+			return WindowManager(token, broker)
+		}, func(ed *editor.MockEditorMockRecorder, mock *browser.MockBrowserMockRecorder) *gomock.Call {
+			return mock.Bar(gomock.Any(), gomock.Any()).Return(nil)
+		}, func(ifc interface{}) error {
+			return ifc.(browser.WindowManager).Bar(browser.OrientationBottom, h)
+		}},
 		{PermissionBrowserKeyMapper, func(token uint32, broker proto.MuxBroker) (interface{}, error) {
 			return KeyMapper(token, broker)
 		}, func(ed *editor.MockEditorMockRecorder, mock *browser.MockBrowserMockRecorder) *gomock.Call {

@@ -1,6 +1,7 @@
 package editor
 
 import (
+	"strconv"
 	"sync"
 	"testing"
 
@@ -547,6 +548,30 @@ EEEE`},
 │BBBBBBBBBBBBBBBBBB│
 │BBBBBBBBBBBBBBBBBB│
 │BBBBBBBBBBBBBBBBBB│
+└──────────────────┘`},
+	}
+	testutil.TestHandlerSequence(t, bh, 20, 10, cases)
+
+	var o browser.Orientation
+	for i := 0; i < 4; i++ {
+		b1 := browser.NewTestHandler()
+		b1.Ch = rune(strconv.Itoa(i)[0])
+		err = b.Bar(o, b1)
+		require.NoError(t, err)
+		o++
+	}
+
+	cases = []testutil.HandlerSequenceTestCase{
+		{"__",
+			`┌──────────────────┐
+│other.go  bugz    │
+├──────────────────┤
+│000000000000000000│
+├─┬──────────────┬─┤
+│2│BBBBBBBBBBBBBB│3│
+│2│BBBBBBBBBBBBBB│3│
+├─┴──────────────┴─┤
+│111111111111111111│
 └──────────────────┘`},
 	}
 	testutil.TestHandlerSequence(t, bh, 20, 10, cases)

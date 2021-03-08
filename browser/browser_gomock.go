@@ -234,6 +234,20 @@ func (m *MockWindowManager) EXPECT() *MockWindowManagerMockRecorder {
 	return m.recorder
 }
 
+// Bar mocks base method.
+func (m *MockWindowManager) Bar(arg0 Orientation, arg1 go_tui.Handler) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Bar", arg0, arg1)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Bar indicates an expected call of Bar.
+func (mr *MockWindowManagerMockRecorder) Bar(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Bar", reflect.TypeOf((*MockWindowManager)(nil).Bar), arg0, arg1)
+}
+
 // Floating mocks base method.
 func (m *MockWindowManager) Floating(h Handler, at term.Coordinates, width, height int) (Window, error) {
 	m.ctrl.T.Helper()
@@ -650,6 +664,20 @@ func NewMockBrowser(ctrl *gomock.Controller) *MockBrowser {
 // EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockBrowser) EXPECT() *MockBrowserMockRecorder {
 	return m.recorder
+}
+
+// Bar mocks base method.
+func (m *MockBrowser) Bar(arg0 Orientation, arg1 go_tui.Handler) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Bar", arg0, arg1)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Bar indicates an expected call of Bar.
+func (mr *MockBrowserMockRecorder) Bar(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Bar", reflect.TypeOf((*MockBrowser)(nil).Bar), arg0, arg1)
 }
 
 // Close mocks base method.

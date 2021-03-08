@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/ernestrc/blue/datastore/document"
+	"github.com/ernestrc/go-tui"
 	"github.com/ernestrc/go-tui/browser"
 	"github.com/ernestrc/go-tui/cell"
 	"github.com/ernestrc/go-tui/term"
@@ -423,6 +424,12 @@ func (c *Component) Split(o browser.Orientation, h browser.Handler) (browser.Win
 		return nil, ErrInvalidSplit
 	}
 	return w, nil
+}
+
+// Bar creates a new status bar with h's component and delegates handling of mouse events to h.
+func (c *Component) Bar(o browser.Orientation, h tui.Handler) error {
+	c.comp.Bar(o, h)
+	return nil
 }
 
 func (c *Component) unsubscribe(ev term.Event) {

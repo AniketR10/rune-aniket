@@ -187,7 +187,6 @@ func (c *Component) Init(config Config) {
 	c.wm.Init(c.startHandler, handlerWmConfig)
 	_ = c.newWindow(c.wm.Focus()) // init handler with initial window
 	c.union.Init(&c.wm)
-	c.union.UnionTop(&c.tabs, 3)
 	c.buffers = make([]*Tab, 0)
 
 	// make sure that frame union attrs are same as window manager attrs
@@ -200,6 +199,8 @@ func (c *Component) Init(config Config) {
 		config.WindowManagerConfig.FrameAttr, config.WindowManagerConfig.FrameAttr)
 	c.tabs.SetFrameCharSet(config.WindowManagerConfig.FrameCharSet)
 	c.tabs.SetBorder(config.WindowManagerConfig.Frame)
+
+	c.Bar(OrientationTop, &c.tabs)
 
 	return
 }
@@ -590,6 +591,31 @@ func (c *Component) Floating(
 	win := c.newWindow(c.wm.FloatingWindow(h, at, width, height))
 	c.wm.SetFocus(win.win)
 	return win
+}
+
+func (c *Component) barSize() int {
+	if c.config.Frame {
+		return 3
+	}
+	return 1
+}
+
+// Bar adds a bar to the orientation of the main window.
+func (c *Component) Bar(o Orientation, h tui.Handler) {
+	if c.config.Frame {
+		h = handler.NewFrame(h)
+	}
+	size := c.barSize()
+	switch o {
+	case OrientationTop:
+		c.union.UnionTop(h, size)
+	case OrientationBottom:
+		c.union.UnionBottom(h, size)
+	case OrientationLeft:
+		c.union.UnionLeft(h, size)
+	case OrientationRight:
+		c.union.UnionRight(h, size)
+	}
 }
 
 func (c *Component) setError(err error) {

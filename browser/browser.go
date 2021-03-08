@@ -43,11 +43,18 @@ const (
 // WindowManager is the interface that groups tile
 // window management methods.
 type WindowManager interface {
+	// Focus returns the current Window in focus.
 	Focus() (Window, error)
 
+	// Split splits the current window in focus in two, and installs Handler in the new window.
 	Split(Orientation, Handler) (Window, error)
 
+	// Floating creates a new floating window at coordinates, with static width and height.
 	Floating(h Handler, at term.Coordinates, width, height int) (Window, error)
+
+	// Bar creates a status bar with Orientation and Handler. Bars differ from Split and Floating
+	// windows in that they can't be in focus and can only receive mouse events.
+	Bar(Orientation, tui.Handler) error
 }
 
 // EventHandler wraps the basic tui.Handler method Handle.

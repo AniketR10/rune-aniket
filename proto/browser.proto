@@ -47,6 +47,14 @@ message SplitResponse {
 	uint64 window_id = 1;
 }
 
+message BarRequest {
+	uint64 handler_id = 1;
+	Orientation orientation = 2;
+}
+
+message BarResponse {
+}
+
 message FloatingWindowRequest {
 	uint64 handler_id = 1;
 	Coordinates at = 2;
@@ -105,6 +113,7 @@ service EventPublisher {
 service WindowManager {
 	rpc Focus(FocusRequest) returns (FocusResponse);
 	rpc Split(SplitRequest) returns (SplitResponse);
+	rpc Bar(BarRequest) returns (BarResponse);
 	rpc Floating(FloatingWindowRequest) returns (FloatingWindowResponse);
 }
 

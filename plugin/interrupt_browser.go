@@ -62,6 +62,15 @@ func (s *interruptBrowser) Split(
 	return res, err
 }
 
+// Bar satisfies proto.BrowserServer
+func (s *interruptBrowser) Bar(
+	ctx context.Context, req *proto.BarRequest,
+) (*proto.BarResponse, error) {
+	res, err := s.browserServer.Bar(ctx, req)
+	s.interruptDraw()
+	return res, err
+}
+
 // MergeKeyMap satisfies proto.BrowserServer
 func (s *interruptBrowser) MergeKeyMap(
 	ctx context.Context, req *proto.MergeKeyMapRequest,

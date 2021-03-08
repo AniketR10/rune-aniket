@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/ernestrc/blue/datastore/document"
+	"github.com/ernestrc/go-tui"
 	"github.com/ernestrc/go-tui/handler"
 	"github.com/ernestrc/go-tui/proto"
 	"github.com/ernestrc/go-tui/term"
@@ -219,7 +220,7 @@ func (c *Client) split(split clientSplit, o Orientation, h Handler) (Window, err
 	ctx := context.Background()
 	res, err := split(c.wm, ctx, &req)
 	if err != nil {
-		reason := fmt.Sprintf("error on call to split: %v", err)
+		reason := fmt.Sprintf("browser.Split: %v", err)
 		c.safeForceCloseHandler(handlerID, reason)
 		return nil, err
 	}
@@ -235,6 +236,20 @@ func (c *Client) split(split clientSplit, o Orientation, h Handler) (Window, err
 // Split satisfies Browser.
 func (c *Client) Split(o Orientation, h Handler) (Window, error) {
 	return c.split((proto.WindowManagerClient).Split, o, h)
+}
+
+// Bar satisfies Browser.
+func (c *Client) Bar(o Orientation, h tui.Handler) error {
+	handlerID := c.serveHandler(NopHandler(h))
+	req := proto.BarRequest{HandlerId: handlerID, Orientation: toProtoOrientation(o)}
+	ctx := context.Background()
+	_, err := c.wm.Bar(ctx, &req)
+	if err != nil {
+		reason := fmt.Sprintf("browser.Bar: %v", err)
+		c.safeForceCloseHandler(handlerID, reason)
+		return err
+	}
+	return nil
 }
 
 // MergeKeyMap satisfies Browser.

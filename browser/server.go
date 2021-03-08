@@ -268,24 +268,48 @@ func (s *Server) split(
 	return res, nil
 }
 
+func protoToModelOrientation(p proto.Orientation) (o Orientation) {
+	switch p {
+	case proto.Orientation_Top:
+		o = OrientationTop
+	case proto.Orientation_Bottom:
+		o = OrientationBottom
+	case proto.Orientation_Left:
+		o = OrientationLeft
+	case proto.Orientation_Right:
+		o = OrientationRight
+	}
+	return
+}
+
 // Split satisfies proto.BrowserServer
 func (s *Server) Split(
 	ctx context.Context, req *proto.SplitRequest,
 ) (*proto.SplitResponse, error) {
 	return s.split(ctx, req, func(wm WindowManager, h Handler) (Window, error) {
-		var o Orientation
-		switch req.GetOrientation() {
-		case proto.Orientation_Top:
-			o = OrientationTop
-		case proto.Orientation_Bottom:
-			o = OrientationBottom
-		case proto.Orientation_Left:
-			o = OrientationLeft
-		case proto.Orientation_Right:
-			o = OrientationRight
-		}
-		return wm.Split(o, h)
+		return wm.Split(protoToModelOrientation(req.GetOrientation()), h)
 	})
+}
+
+// Bar satisfies proto.BrowserServer
+func (s *Server) Bar(
+	ctx context.Context, req *proto.BarRequest,
+) (*proto.BarResponse, error) {
+	handlerID := req.GetHandlerId()
+	handler, err := s.getContentHandler(handlerID)
+	if err != nil {
+		return nil, err
+	}
+
+	s.browser.Lock()
+	defer s.browser.Unlock()
+	err = s.browser.Bar(protoToModelOrientation(req.GetOrientation()), handler)
+	if err != nil {
+		reason := fmt.Sprintf("failed to create window: %s", err.Error())
+		s.forceCloseHandler(handlerID, reason)
+		return nil, err
+	}
+	return new(proto.BarResponse), nil
 }
 
 // MergeKeyMap satisfies proto.BrowserServer
