@@ -12,14 +12,27 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func splitVerticalLeft(c *Component, h Handler) (Window, bool) {
+	return c.Split(OrientationLeft, h)
+}
+func splitVerticalRight(c *Component, h Handler) (Window, bool) {
+	return c.Split(OrientationRight, h)
+}
+func splitHorizontalAbove(c *Component, h Handler) (Window, bool) {
+	return c.Split(OrientationTop, h)
+}
+func splitHorizontalBelow(c *Component, h Handler) (Window, bool) {
+	return c.Split(OrientationBottom, h)
+}
+
 var splitSuite = []struct {
 	method string
 	split  func(c *Component, h Handler) (Window, bool)
 }{
-	{"SplitVerticalLeft:", (*Component).SplitVerticalLeft},
-	{"SplitVerticalRight:", (*Component).SplitVerticalRight},
-	{"SplitHorizontalAbove:", (*Component).SplitHorizontalAbove},
-	{"SplitHorizontalBelow:", (*Component).SplitHorizontalBelow},
+	{"SplitVerticalLeft:", splitVerticalLeft},
+	{"SplitVerticalRight:", splitVerticalRight},
+	{"SplitHorizontalAbove:", splitHorizontalAbove},
+	{"SplitHorizontalBelow:", splitHorizontalBelow},
 }
 
 func TestComponentCloseWindow(t *testing.T) {
@@ -99,7 +112,7 @@ func TestComponentCloseWindow(t *testing.T) {
 func TestComponentRemoveAllTabs(t *testing.T) {
 	w1 := NewComponent(Config{})
 	w2 := NewComponent(Config{})
-	w2.SplitHorizontalAbove(NewTestHandler())
+	w2.Split(OrientationTop, NewTestHandler())
 
 	tsuite := []struct {
 		description string
@@ -284,7 +297,7 @@ func TestComponentSetContentUnmount(t *testing.T) {
 	// unmounted and mounted again
 	assert.Equal(t, 2, unmounted)
 
-	win1, ok := c.SplitHorizontalBelow(h2)
+	win1, ok := c.Split(OrientationBottom, h2)
 	require.True(t, ok)
 	assert.Equal(t, 2, unmounted)
 
@@ -392,7 +405,7 @@ func TestComponentMultipleWindow(t *testing.T) {
 │                  │
 └──────────────────┘`,
 		}, {func() {
-			w2, ok = c.SplitHorizontalBelow(h2)
+			w2, ok = c.Split(OrientationBottom, h2)
 			require.True(t, ok)
 		}, `
 ┌──────────────────┐
@@ -404,7 +417,7 @@ func TestComponentMultipleWindow(t *testing.T) {
 │AAAAAAAAAAAAAAAAAA│
 └──────────────────┘`,
 		}, {func() {
-			/*w3 =*/ c.SplitVerticalRight(h3)
+			/*w3 =*/ c.Split(OrientationRight, h3)
 		}, `
 ┌──────────────────┐
 │                  │

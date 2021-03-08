@@ -164,7 +164,8 @@ func TestServerOpen(t *testing.T) {
 		assertHandlerStored(t, nextID, s, h)
 
 		sreq := proto.SplitRequest{
-			HandlerId: uint64(nextID),
+			HandlerId:   uint64(nextID),
+			Orientation: proto.Orientation_Right,
 		}
 		windowID := uint32(999)
 		prototest.ExpectBrokerServe(t, windowID, broker)
@@ -172,8 +173,8 @@ func TestServerOpen(t *testing.T) {
 		mockWindow.EXPECT().onWindowClosed(gomock.Any()).AnyTimes()
 		mockWindow.EXPECT().id().AnyTimes().Return(uint64(0))
 
-		mock.EXPECT().SplitVerticalRight(gomock.Any()).Return(mockWindow, nil)
-		_, err = s.SplitVerticalRight(ctx, &sreq)
+		mock.EXPECT().Split(gomock.Eq(OrientationRight), gomock.Any()).Return(mockWindow, nil)
+		_, err = s.Split(ctx, &sreq)
 		require.NoError(t, err)
 	})
 }
@@ -380,53 +381,23 @@ func TestServerSubscribe(t *testing.T) {
 }
 
 func TestServerFloatingWindow(t *testing.T) {
-	// for some reason FloatingWindow recorder is panicking with
-	// Call with too many input arguments
-	t.SkipNow()
-
-	testServerSplit(t,
-		func(mock *MockBrowserMockRecorder, h interface{}) *gomock.Call {
-			return mock.FloatingWindow(h, gomock.Any(), gomock.Any(), gomock.Any())
-		},
-		func(s *Server, ctx context.Context, req *proto.SplitRequest) (*proto.SplitResponse, error) {
-			freq := proto.FloatingWindowRequest{
-				HandlerId: req.GetHandlerId(),
-				At:        &proto.Coordinates{},
-			}
-			res, err := s.FloatingWindow(ctx, &freq)
-			if err != nil {
-				return nil, err
-			}
-			return &proto.SplitResponse{WindowId: res.GetWindowId()}, nil
-		})
+	// TODO
 }
 
 func TestServerSplitHorizontalAbove(t *testing.T) {
-	testServerSplit(t,
-		(*MockBrowserMockRecorder).SplitHorizontalAbove,
-		(*Server).SplitHorizontalAbove,
-	)
+	testServerSplit(t, OrientationTop, proto.Orientation_Top)
 }
 
 func TestServerSplitHorizontalBelow(t *testing.T) {
-	testServerSplit(t,
-		(*MockBrowserMockRecorder).SplitHorizontalBelow,
-		(*Server).SplitHorizontalBelow,
-	)
+	testServerSplit(t, OrientationBottom, proto.Orientation_Bottom)
 }
 
 func TestServerSplitVerticalLeft(t *testing.T) {
-	testServerSplit(t,
-		(*MockBrowserMockRecorder).SplitVerticalLeft,
-		(*Server).SplitVerticalLeft,
-	)
+	testServerSplit(t, OrientationLeft, proto.Orientation_Left)
 }
 
 func TestServerSplitVerticalRight(t *testing.T) {
-	testServerSplit(t,
-		(*MockBrowserMockRecorder).SplitVerticalRight,
-		(*Server).SplitVerticalRight,
-	)
+	testServerSplit(t, OrientationRight, proto.Orientation_Right)
 }
 
 func waitForMonitoringExit(quitCh chan struct{}) {
@@ -454,16 +425,13 @@ func assertServerHandlerExitClose(
 	assertServerClientsEqual(t, 0, s)
 }
 
-func testServerSplit(
-	t *testing.T,
-	expect func(*MockBrowserMockRecorder, interface{}) *gomock.Call,
-	split func(*Server, context.Context, *proto.SplitRequest) (*proto.SplitResponse, error),
-) {
+func testServerSplit(t *testing.T, expectedSplit Orientation, split proto.Orientation) {
 	ctx := context.Background()
 	handlerID := uint32(21)
 	windowID := uint32(111111)
 	req := proto.SplitRequest{
-		HandlerId: uint64(handlerID),
+		HandlerId:   uint64(handlerID),
+		Orientation: split,
 	}
 	protoEv := proto.Event{
 		Key:    proto.Event_MouseMiddle,
@@ -495,14 +463,14 @@ func testServerSplit(
 		var h Handler
 		handlerConn := prototest.ExpectBrokerDial(t, ctrl, mockBroker, handlerID)
 		quitCh := prototest.ExpectMonitorConn(handlerConn)
-		expect(mock.EXPECT(), gomock.Any()).
-			DoAndReturn(func(_h Handler) (Window, error) {
+		mock.EXPECT().Split(gomock.Eq(expectedSplit), gomock.Any()).
+			DoAndReturn(func(_ Orientation, _h Handler) (Window, error) {
 				h = _h
 				return mockWindow, nil
 			})
 		prototest.ExpectBrokerServe(t, windowID, mockBroker)
 
-		res, err := split(s, ctx, &req)
+		res, err := s.Split(ctx, &req)
 		require.NoError(t, err)
 		assert.NotNil(t, res)
 
@@ -542,7 +510,7 @@ func testServerSplit(
 
 		prototest.ExpectBrokerDialError(t, ctrl, mockBroker, handlerID)
 
-		res, err := split(s, ctx, &req)
+		res, err := s.Split(ctx, &req)
 		require.Error(t, err)
 		assert.Nil(t, res)
 
@@ -558,12 +526,12 @@ func testServerSplit(
 
 		handlerConn := prototest.ExpectBrokerDial(t, ctrl, mockBroker, handlerID)
 		quitCh := prototest.ExpectMonitorConn(handlerConn)
-		expect(mock.EXPECT(), gomock.Any()).
+		mock.EXPECT().Split(gomock.Eq(expectedSplit), gomock.Any()).
 			Return(nil, errors.New("woopsie"))
 		handlerConn.EXPECT().Close().Times(1).
 			DoAndReturn(prototest.ExpectSignalExit(handlerConn, quitCh, nil))
 
-		res, err := split(s, ctx, &req)
+		res, err := s.Split(ctx, &req)
 		require.Error(t, err)
 		assert.Nil(t, res)
 		waitForMonitoringExit(quitCh)

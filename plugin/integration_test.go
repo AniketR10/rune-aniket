@@ -81,33 +81,9 @@ func TestIntegrationRace(t *testing.T) {
 		{PermissionBrowserWindowManager, func(token uint32, broker proto.MuxBroker) (interface{}, error) {
 			return WindowManager(token, broker)
 		}, func(ed *editor.MockEditorMockRecorder, mock *browser.MockBrowserMockRecorder) *gomock.Call {
-			return mock.SplitHorizontalAbove(gomock.Any()).Return(mockWin, nil)
+			return mock.Split(gomock.Any(), gomock.Any()).Return(mockWin, nil)
 		}, func(ifc interface{}) error {
-			_, err := ifc.(browser.WindowManager).SplitHorizontalAbove(h)
-			return err
-		}},
-		{PermissionBrowserWindowManager, func(token uint32, broker proto.MuxBroker) (interface{}, error) {
-			return WindowManager(token, broker)
-		}, func(ed *editor.MockEditorMockRecorder, mock *browser.MockBrowserMockRecorder) *gomock.Call {
-			return mock.SplitHorizontalBelow(gomock.Any()).Return(mockWin, nil)
-		}, func(ifc interface{}) error {
-			_, err := ifc.(browser.WindowManager).SplitHorizontalBelow(h)
-			return err
-		}},
-		{PermissionBrowserWindowManager, func(token uint32, broker proto.MuxBroker) (interface{}, error) {
-			return WindowManager(token, broker)
-		}, func(ed *editor.MockEditorMockRecorder, mock *browser.MockBrowserMockRecorder) *gomock.Call {
-			return mock.SplitVerticalLeft(gomock.Any()).Return(mockWin, nil)
-		}, func(ifc interface{}) error {
-			_, err := ifc.(browser.WindowManager).SplitVerticalLeft(h)
-			return err
-		}},
-		{PermissionBrowserWindowManager, func(token uint32, broker proto.MuxBroker) (interface{}, error) {
-			return WindowManager(token, broker)
-		}, func(ed *editor.MockEditorMockRecorder, mock *browser.MockBrowserMockRecorder) *gomock.Call {
-			return mock.SplitVerticalRight(gomock.Any()).Return(mockWin, nil)
-		}, func(ifc interface{}) error {
-			_, err := ifc.(browser.WindowManager).SplitVerticalRight(h)
+			_, err := ifc.(browser.WindowManager).Split(browser.OrientationBottom, h)
 			return err
 		}},
 		{PermissionBrowserKeyMapper, func(token uint32, broker proto.MuxBroker) (interface{}, error) {

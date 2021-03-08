@@ -268,32 +268,24 @@ func (s *Server) split(
 	return res, nil
 }
 
-// SplitVerticalRight satisfies proto.BrowserServer
-func (s *Server) SplitVerticalRight(
+// Split satisfies proto.BrowserServer
+func (s *Server) Split(
 	ctx context.Context, req *proto.SplitRequest,
 ) (*proto.SplitResponse, error) {
-	return s.split(ctx, req, (WindowManager).SplitVerticalRight)
-}
-
-// SplitVerticalLeft satisfies proto.BrowserServer
-func (s *Server) SplitVerticalLeft(
-	ctx context.Context, req *proto.SplitRequest,
-) (*proto.SplitResponse, error) {
-	return s.split(ctx, req, (WindowManager).SplitVerticalLeft)
-}
-
-// SplitHorizontalAbove satisfies proto.BrowserServer
-func (s *Server) SplitHorizontalAbove(
-	ctx context.Context, req *proto.SplitRequest,
-) (*proto.SplitResponse, error) {
-	return s.split(ctx, req, (WindowManager).SplitHorizontalAbove)
-}
-
-// SplitHorizontalBelow satisfies proto.BrowserServer
-func (s *Server) SplitHorizontalBelow(
-	ctx context.Context, req *proto.SplitRequest,
-) (*proto.SplitResponse, error) {
-	return s.split(ctx, req, (WindowManager).SplitHorizontalBelow)
+	return s.split(ctx, req, func(wm WindowManager, h Handler) (Window, error) {
+		var o Orientation
+		switch req.GetOrientation() {
+		case proto.Orientation_Top:
+			o = OrientationTop
+		case proto.Orientation_Bottom:
+			o = OrientationBottom
+		case proto.Orientation_Left:
+			o = OrientationLeft
+		case proto.Orientation_Right:
+			o = OrientationRight
+		}
+		return wm.Split(o, h)
+	})
 }
 
 // MergeKeyMap satisfies proto.BrowserServer
@@ -453,15 +445,15 @@ func (s *Server) Focus(
 	return res, nil
 }
 
-// FloatingWindow satisfies proto.BrowserServer
-func (s *Server) FloatingWindow(
+// Floating satisfies proto.BrowserServer
+func (s *Server) Floating(
 	ctx context.Context, req *proto.FloatingWindowRequest,
 ) (*proto.FloatingWindowResponse, error) {
 	at := req.GetAt().ToModel()
 	height := int(req.GetHeight())
 	width := int(req.GetWidth())
 	resp, err := s.split(ctx, req, func(wm WindowManager, h Handler) (Window, error) {
-		return wm.FloatingWindow(h, at, height, width)
+		return wm.Floating(h, at, height, width)
 	})
 	if err != nil {
 		return nil, err

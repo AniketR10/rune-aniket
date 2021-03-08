@@ -31,8 +31,16 @@ message MergeKeyMapRequest {
 message MergeKeyMapResponse {
 }
 
+enum Orientation {
+	Top = 0;
+	Bottom = 1;
+	Left = 2;
+	Right = 3;
+}
+
 message SplitRequest {
 	uint64 handler_id = 1;
+	Orientation orientation = 2;
 }
 
 message SplitResponse {
@@ -96,11 +104,8 @@ service EventPublisher {
 
 service WindowManager {
 	rpc Focus(FocusRequest) returns (FocusResponse);
-	rpc SplitVerticalRight(SplitRequest) returns (SplitResponse);
-	rpc SplitVerticalLeft(SplitRequest) returns (SplitResponse);
-	rpc SplitHorizontalAbove(SplitRequest) returns (SplitResponse);
-	rpc SplitHorizontalBelow(SplitRequest) returns (SplitResponse);
-	rpc FloatingWindow(FloatingWindowRequest) returns (FloatingWindowResponse);
+	rpc Split(SplitRequest) returns (SplitResponse);
+	rpc Floating(FloatingWindowRequest) returns (FloatingWindowResponse);
 }
 
 message WindowCloseRequest {

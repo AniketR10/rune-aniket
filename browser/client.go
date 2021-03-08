@@ -198,9 +198,24 @@ type clientSplit func(cc proto.WindowManagerClient,
 	ctx context.Context, req *proto.SplitRequest,
 	opts ...grpc.CallOption) (*proto.SplitResponse, error)
 
-func (c *Client) split(split clientSplit, h Handler) (Window, error) {
+func toProtoOrientation(o Orientation) proto.Orientation {
+	switch o {
+	case OrientationTop:
+		return proto.Orientation_Top
+	case OrientationBottom:
+		return proto.Orientation_Bottom
+	case OrientationLeft:
+		return proto.Orientation_Left
+	case OrientationRight:
+		return proto.Orientation_Right
+	default:
+		panic("invalid orientation")
+	}
+}
+
+func (c *Client) split(split clientSplit, o Orientation, h Handler) (Window, error) {
 	handlerID := c.serveHandler(h)
-	req := proto.SplitRequest{HandlerId: handlerID}
+	req := proto.SplitRequest{HandlerId: handlerID, Orientation: toProtoOrientation(o)}
 	ctx := context.Background()
 	res, err := split(c.wm, ctx, &req)
 	if err != nil {
@@ -217,24 +232,9 @@ func (c *Client) split(split clientSplit, h Handler) (Window, error) {
 	return win, nil
 }
 
-// SplitVerticalRight satisfies Browser.
-func (c *Client) SplitVerticalRight(h Handler) (Window, error) {
-	return c.split((proto.WindowManagerClient).SplitVerticalRight, h)
-}
-
-// SplitVerticalLeft satisfies Browser.
-func (c *Client) SplitVerticalLeft(h Handler) (Window, error) {
-	return c.split((proto.WindowManagerClient.SplitVerticalLeft), h)
-}
-
-// SplitHorizontalAbove satisfies Browser.
-func (c *Client) SplitHorizontalAbove(h Handler) (Window, error) {
-	return c.split((proto.WindowManagerClient.SplitHorizontalAbove), h)
-}
-
-// SplitHorizontalBelow satisfies Browser.
-func (c *Client) SplitHorizontalBelow(h Handler) (Window, error) {
-	return c.split((proto.WindowManagerClient.SplitHorizontalBelow), h)
+// Split satisfies Browser.
+func (c *Client) Split(o Orientation, h Handler) (Window, error) {
+	return c.split((proto.WindowManagerClient).Split, o, h)
 }
 
 // MergeKeyMap satisfies Browser.
@@ -377,8 +377,8 @@ func (c *Client) List(
 	return c.storage.List(ctx, filters)
 }
 
-// FloatingWindow satisfies browser.WindowManager
-func (c *Client) FloatingWindow(
+// Floating satisfies browser.WindowManager
+func (c *Client) Floating(
 	h Handler, at term.Coordinates, height, width int,
 ) (Window, error) {
 	var atProto proto.Coordinates
@@ -396,12 +396,12 @@ func (c *Client) FloatingWindow(
 
 		freq.HandlerId = req.GetHandlerId()
 
-		fres, err := cc.FloatingWindow(ctx, &freq)
+		fres, err := cc.Floating(ctx, &freq)
 		if err != nil {
 			return nil, err
 		}
 		return &proto.SplitResponse{WindowId: fres.GetWindowId()}, nil
-	}, h)
+	}, OrientationTop, h)
 }
 
 // Close closes all resources associated with this Client.

@@ -44,47 +44,20 @@ func (s *interruptBrowser) Focus(
 	return res, err
 }
 
-// FloatingWindow satisfies proto.BrowserServer
-func (s *interruptBrowser) FloatingWindow(
+// Floating satisfies proto.BrowserServer
+func (s *interruptBrowser) Floating(
 	ctx context.Context, req *proto.FloatingWindowRequest,
 ) (*proto.FloatingWindowResponse, error) {
-	res, err := s.browserServer.FloatingWindow(ctx, req)
+	res, err := s.browserServer.Floating(ctx, req)
 	s.interruptDraw()
 	return res, err
 }
 
-// SplitVerticalRight satisfies proto.BrowserServer
-func (s *interruptBrowser) SplitVerticalRight(
+// Split satisfies proto.BrowserServer
+func (s *interruptBrowser) Split(
 	ctx context.Context, req *proto.SplitRequest,
 ) (*proto.SplitResponse, error) {
-	res, err := s.browserServer.SplitVerticalRight(ctx, req)
-	s.interruptDraw()
-	return res, err
-}
-
-// SplitVerticalLeft satisfies proto.BrowserServer
-func (s *interruptBrowser) SplitVerticalLeft(
-	ctx context.Context, req *proto.SplitRequest,
-) (*proto.SplitResponse, error) {
-	res, err := s.browserServer.SplitVerticalLeft(ctx, req)
-	s.interruptDraw()
-	return res, err
-}
-
-// SplitHorizontalAbove satisfies proto.BrowserServer
-func (s *interruptBrowser) SplitHorizontalAbove(
-	ctx context.Context, req *proto.SplitRequest,
-) (*proto.SplitResponse, error) {
-	res, err := s.browserServer.SplitHorizontalAbove(ctx, req)
-	s.interruptDraw()
-	return res, err
-}
-
-// SplitHorizontalBelow satisfies proto.BrowserServer
-func (s *interruptBrowser) SplitHorizontalBelow(
-	ctx context.Context, req *proto.SplitRequest,
-) (*proto.SplitResponse, error) {
-	res, err := s.browserServer.SplitHorizontalBelow(ctx, req)
+	res, err := s.browserServer.Split(ctx, req)
 	s.interruptDraw()
 	return res, err
 }

@@ -1378,7 +1378,7 @@ func (h *lspEditorHandler) handleHover(
 	bh := browser.NopHandler(less)
 
 	at, width, height := findBestFloatingWindowPosition(cursorAtWindow, less.Scroll.Buffer())
-	_, err = h.wm.FloatingWindow(bh, at, width, height)
+	_, err = h.wm.Floating(bh, at, width, height)
 	if err != nil {
 		log.Errorf("lspEditorHandler.SplitHorizontalAbove(%s): %v", f.name, err)
 	}

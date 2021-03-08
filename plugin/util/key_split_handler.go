@@ -124,7 +124,7 @@ func (t *keySplitHandler) handleKeyEvent() {
 		return
 	}
 
-	win, err = t.config.Split(t.wm, browser.CallbackHandler(h, t.exitClean))
+	win, err = t.wm.Split(t.config.SplitOrientation, browser.CallbackHandler(h, t.exitClean))
 	if err != nil {
 		log.Errorf("error opening new window: %s", err)
 		return
@@ -199,12 +199,7 @@ func (t *keySplitHandler) Health() error {
 type KeySplitHandlerConfig struct {
 	Key term.Event
 
-	// Split is one of the following WindowManager split methods:
-	//   - SplitVerticalRight(Handler) (Window, error)
-	//   - SplitVerticalLeft(Handler) (Window, error)
-	//   - SplitHorizontalAbove(Handler) (Window, error)
-	//   - SplitHorizontalBelow(Handler) (Window, error)
-	Split func(browser.WindowManager, browser.Handler) (browser.Window, error)
+	SplitOrientation browser.Orientation
 
 	// Handler is the constructor used to install a handler
 	// on the split window. The focus argument represents
@@ -224,7 +219,7 @@ type KeySplitHandlerConfig struct {
 // If either is not set, this function panics.
 // Note that this function never returns.
 func ServeKeySplitHandler(config KeySplitHandlerConfig) {
-	if config.Handler == nil || (config.Key == term.Event{}) || config.Split == nil {
+	if config.Handler == nil || (config.Key == term.Event{}) {
 		panic(fmt.Sprintf("invalid key split handler configuration: %#v", config))
 	}
 	perms := append(config.Permissions, requiredPermissions...)

@@ -30,15 +30,24 @@ type Window interface {
 	onWindowClosed(fn func())
 }
 
+// Orientation represents a window orientation.
+type Orientation uint8
+
+const (
+	OrientationTop Orientation = iota
+	OrientationBottom
+	OrientationLeft
+	OrientationRight
+)
+
 // WindowManager is the interface that groups tile
 // window management methods.
 type WindowManager interface {
 	Focus() (Window, error)
-	SplitVerticalRight(Handler) (Window, error)
-	SplitVerticalLeft(Handler) (Window, error)
-	SplitHorizontalAbove(Handler) (Window, error)
-	SplitHorizontalBelow(Handler) (Window, error)
-	FloatingWindow(h Handler, at term.Coordinates, width, height int) (Window, error)
+
+	Split(Orientation, Handler) (Window, error)
+
+	Floating(h Handler, at term.Coordinates, width, height int) (Window, error)
 }
 
 // EventHandler wraps the basic tui.Handler method Handle.

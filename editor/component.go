@@ -416,40 +416,9 @@ func (c *Component) SetMessage(msg string, args ...interface{}) error {
 	return nil
 }
 
-// SplitVerticalRight opens a new window tile to the right of the
-// current window in focus and initializes it with h.
-func (c *Component) SplitVerticalRight(h browser.Handler) (browser.Window, error) {
-	w, ok := c.comp.SplitVerticalRight(h)
-	if !ok {
-		return nil, ErrInvalidSplit
-	}
-	return w, nil
-}
-
-// SplitVerticalLeft opens a new window tile to the left of the
-// current window in focus and initializes it with h.
-func (c *Component) SplitVerticalLeft(h browser.Handler) (browser.Window, error) {
-	w, ok := c.comp.SplitVerticalLeft(h)
-	if !ok {
-		return nil, ErrInvalidSplit
-	}
-	return w, nil
-}
-
-// SplitHorizontalBelow opens a new window tile below the current window in focus
-// and initializes it with h.
-func (c *Component) SplitHorizontalBelow(h browser.Handler) (browser.Window, error) {
-	w, ok := c.comp.SplitHorizontalBelow(h)
-	if !ok {
-		return nil, ErrInvalidSplit
-	}
-	return w, nil
-}
-
-// SplitHorizontalAbove opens a new window tile above the current window in focus
-// and initializes it with h.
-func (c *Component) SplitHorizontalAbove(h browser.Handler) (browser.Window, error) {
-	w, ok := c.comp.SplitHorizontalAbove(h)
+// Split satisfies browser.WindowManager.
+func (c *Component) Split(o browser.Orientation, h browser.Handler) (browser.Window, error) {
+	w, ok := c.comp.Split(o, h)
 	if !ok {
 		return nil, ErrInvalidSplit
 	}
@@ -650,15 +619,14 @@ func (c *Component) Cursor(h Handler) (term.Coordinates, error) {
 	return c.ed.Cursor(h)
 }
 
-// FloatingWindow opens a new floating window at the given coordinates,
-// with the given height and width.
-func (c *Component) FloatingWindow(
+// Floating satisfies browser.WindowManager.
+func (c *Component) Floating(
 	h browser.Handler, at term.Coordinates, width, height int,
 ) (browser.Window, error) {
 	if at.Y < 0 || at.X < 0 {
 		return nil, fmt.Errorf("invalid floating window coordinates: %v", at)
 	}
-	return c.comp.FloatingWindow(h, at, width, height), nil
+	return c.comp.Floating(h, at, width, height), nil
 }
 
 // Close closes all resources associated with this Component.

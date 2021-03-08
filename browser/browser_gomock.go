@@ -234,19 +234,19 @@ func (m *MockWindowManager) EXPECT() *MockWindowManagerMockRecorder {
 	return m.recorder
 }
 
-// FloatingWindow mocks base method.
-func (m *MockWindowManager) FloatingWindow(h Handler, at term.Coordinates, width, height int) (Window, error) {
+// Floating mocks base method.
+func (m *MockWindowManager) Floating(h Handler, at term.Coordinates, width, height int) (Window, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "FloatingWindow", h, at, width, height)
+	ret := m.ctrl.Call(m, "Floating", h, at, width, height)
 	ret0, _ := ret[0].(Window)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// FloatingWindow indicates an expected call of FloatingWindow.
-func (mr *MockWindowManagerMockRecorder) FloatingWindow(h, at, width, height interface{}) *gomock.Call {
+// Floating indicates an expected call of Floating.
+func (mr *MockWindowManagerMockRecorder) Floating(h, at, width, height interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FloatingWindow", reflect.TypeOf((*MockWindowManager)(nil).FloatingWindow), h, at, width, height)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Floating", reflect.TypeOf((*MockWindowManager)(nil).Floating), h, at, width, height)
 }
 
 // Focus mocks base method.
@@ -264,64 +264,19 @@ func (mr *MockWindowManagerMockRecorder) Focus() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Focus", reflect.TypeOf((*MockWindowManager)(nil).Focus))
 }
 
-// SplitHorizontalAbove mocks base method.
-func (m *MockWindowManager) SplitHorizontalAbove(arg0 Handler) (Window, error) {
+// Split mocks base method.
+func (m *MockWindowManager) Split(arg0 Orientation, arg1 Handler) (Window, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SplitHorizontalAbove", arg0)
+	ret := m.ctrl.Call(m, "Split", arg0, arg1)
 	ret0, _ := ret[0].(Window)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// SplitHorizontalAbove indicates an expected call of SplitHorizontalAbove.
-func (mr *MockWindowManagerMockRecorder) SplitHorizontalAbove(arg0 interface{}) *gomock.Call {
+// Split indicates an expected call of Split.
+func (mr *MockWindowManagerMockRecorder) Split(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SplitHorizontalAbove", reflect.TypeOf((*MockWindowManager)(nil).SplitHorizontalAbove), arg0)
-}
-
-// SplitHorizontalBelow mocks base method.
-func (m *MockWindowManager) SplitHorizontalBelow(arg0 Handler) (Window, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SplitHorizontalBelow", arg0)
-	ret0, _ := ret[0].(Window)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// SplitHorizontalBelow indicates an expected call of SplitHorizontalBelow.
-func (mr *MockWindowManagerMockRecorder) SplitHorizontalBelow(arg0 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SplitHorizontalBelow", reflect.TypeOf((*MockWindowManager)(nil).SplitHorizontalBelow), arg0)
-}
-
-// SplitVerticalLeft mocks base method.
-func (m *MockWindowManager) SplitVerticalLeft(arg0 Handler) (Window, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SplitVerticalLeft", arg0)
-	ret0, _ := ret[0].(Window)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// SplitVerticalLeft indicates an expected call of SplitVerticalLeft.
-func (mr *MockWindowManagerMockRecorder) SplitVerticalLeft(arg0 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SplitVerticalLeft", reflect.TypeOf((*MockWindowManager)(nil).SplitVerticalLeft), arg0)
-}
-
-// SplitVerticalRight mocks base method.
-func (m *MockWindowManager) SplitVerticalRight(arg0 Handler) (Window, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SplitVerticalRight", arg0)
-	ret0, _ := ret[0].(Window)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// SplitVerticalRight indicates an expected call of SplitVerticalRight.
-func (mr *MockWindowManagerMockRecorder) SplitVerticalRight(arg0 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SplitVerticalRight", reflect.TypeOf((*MockWindowManager)(nil).SplitVerticalRight), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Split", reflect.TypeOf((*MockWindowManager)(nil).Split), arg0, arg1)
 }
 
 // MockEventHandler is a mock of EventHandler interface.
@@ -739,19 +694,19 @@ func (mr *MockBrowserMockRecorder) Delete(ctx, ID interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Delete", reflect.TypeOf((*MockBrowser)(nil).Delete), ctx, ID)
 }
 
-// FloatingWindow mocks base method.
-func (m *MockBrowser) FloatingWindow(h Handler, at term.Coordinates, width, height int) (Window, error) {
+// Floating mocks base method.
+func (m *MockBrowser) Floating(h Handler, at term.Coordinates, width, height int) (Window, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "FloatingWindow", h, at, width, height)
+	ret := m.ctrl.Call(m, "Floating", h, at, width, height)
 	ret0, _ := ret[0].(Window)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// FloatingWindow indicates an expected call of FloatingWindow.
-func (mr *MockBrowserMockRecorder) FloatingWindow(h, at, width, height interface{}) *gomock.Call {
+// Floating indicates an expected call of Floating.
+func (mr *MockBrowserMockRecorder) Floating(h, at, width, height interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FloatingWindow", reflect.TypeOf((*MockBrowser)(nil).FloatingWindow), h, at, width, height)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Floating", reflect.TypeOf((*MockBrowser)(nil).Floating), h, at, width, height)
 }
 
 // Focus mocks base method.
@@ -874,64 +829,19 @@ func (mr *MockBrowserMockRecorder) SetMessage(msg interface{}, args ...interface
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetMessage", reflect.TypeOf((*MockBrowser)(nil).SetMessage), varargs...)
 }
 
-// SplitHorizontalAbove mocks base method.
-func (m *MockBrowser) SplitHorizontalAbove(arg0 Handler) (Window, error) {
+// Split mocks base method.
+func (m *MockBrowser) Split(arg0 Orientation, arg1 Handler) (Window, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SplitHorizontalAbove", arg0)
+	ret := m.ctrl.Call(m, "Split", arg0, arg1)
 	ret0, _ := ret[0].(Window)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// SplitHorizontalAbove indicates an expected call of SplitHorizontalAbove.
-func (mr *MockBrowserMockRecorder) SplitHorizontalAbove(arg0 interface{}) *gomock.Call {
+// Split indicates an expected call of Split.
+func (mr *MockBrowserMockRecorder) Split(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SplitHorizontalAbove", reflect.TypeOf((*MockBrowser)(nil).SplitHorizontalAbove), arg0)
-}
-
-// SplitHorizontalBelow mocks base method.
-func (m *MockBrowser) SplitHorizontalBelow(arg0 Handler) (Window, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SplitHorizontalBelow", arg0)
-	ret0, _ := ret[0].(Window)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// SplitHorizontalBelow indicates an expected call of SplitHorizontalBelow.
-func (mr *MockBrowserMockRecorder) SplitHorizontalBelow(arg0 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SplitHorizontalBelow", reflect.TypeOf((*MockBrowser)(nil).SplitHorizontalBelow), arg0)
-}
-
-// SplitVerticalLeft mocks base method.
-func (m *MockBrowser) SplitVerticalLeft(arg0 Handler) (Window, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SplitVerticalLeft", arg0)
-	ret0, _ := ret[0].(Window)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// SplitVerticalLeft indicates an expected call of SplitVerticalLeft.
-func (mr *MockBrowserMockRecorder) SplitVerticalLeft(arg0 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SplitVerticalLeft", reflect.TypeOf((*MockBrowser)(nil).SplitVerticalLeft), arg0)
-}
-
-// SplitVerticalRight mocks base method.
-func (m *MockBrowser) SplitVerticalRight(arg0 Handler) (Window, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SplitVerticalRight", arg0)
-	ret0, _ := ret[0].(Window)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// SplitVerticalRight indicates an expected call of SplitVerticalRight.
-func (mr *MockBrowserMockRecorder) SplitVerticalRight(arg0 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SplitVerticalRight", reflect.TypeOf((*MockBrowser)(nil).SplitVerticalRight), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Split", reflect.TypeOf((*MockBrowser)(nil).Split), arg0, arg1)
 }
 
 // Subscribe mocks base method.

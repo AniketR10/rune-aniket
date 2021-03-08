@@ -19,7 +19,7 @@ func main() {
 	}()
 
 	plugutil.ServeKeySplitHandler(plugutil.KeySplitHandlerConfig{
-		Split: browser.WindowManager.SplitVerticalRight,
+		SplitOrientation: browser.OrientationRight,
 		Handler: func(grants []plugin.Grant, broker proto.MuxBroker,
 			invokeWindow browser.Window, config plugin.Config) (tui.Handler, error) {
 			return new(colorPaletteHandler), nil

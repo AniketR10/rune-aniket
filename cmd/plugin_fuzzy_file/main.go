@@ -24,7 +24,7 @@ func main() {
 	key := term.Event{Type: term.EventKey, Key: term.KeyCtrlP}
 
 	plugutil.ServeKeySplitHandler(plugutil.KeySplitHandlerConfig{
-		Split: browser.WindowManager.SplitHorizontalBelow,
+		SplitOrientation: browser.OrientationBottom,
 		Handler: func(grants []plugin.Grant, broker proto.MuxBroker,
 			invokeWindow browser.Window, config plugin.Config) (tui.Handler, error) {
 			cmdStr, err := config.GetString("command")

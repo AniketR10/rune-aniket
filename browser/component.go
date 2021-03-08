@@ -565,39 +565,29 @@ func (c *Component) split(
 	return c.newWindow(win)
 }
 
-// SplitVerticalRight opens a new window tile to the right of the
-// current window in focus and initializes it with h.
+// Split splits the current window in two and installs h to the orientation
+// of the original content.
+//
 // Note that if h is not a handler created with NewTab
 // the handler is cleaned as soon as the window's content is swapped.
-func (c *Component) SplitVerticalRight(h Handler) (Window, bool) {
-	return c.splitRegular((*handler.WindowManager).SplitVertical, h)
+func (c *Component) Split(o Orientation, h Handler) (Window, bool) {
+	switch o {
+	case OrientationRight:
+		return c.splitRegular((*handler.WindowManager).SplitVertical, h)
+	case OrientationLeft:
+		return c.splitInverted((*handler.WindowManager).SplitVertical, h)
+	case OrientationTop:
+		return c.splitInverted((*handler.WindowManager).SplitHorizontal, h)
+	case OrientationBottom:
+		return c.splitRegular((*handler.WindowManager).SplitHorizontal, h)
+	default:
+		panic("not a valid orientation")
+	}
 }
 
-// SplitVerticalLeft opens a new window tile to the left of the
-// current window in focus and initializes it with h.
-// Note that if h is not a handler created with NewTab
-// the handler is cleaned as soon as the window's content is swapped.
-func (c *Component) SplitVerticalLeft(h Handler) (Window, bool) {
-	return c.splitInverted((*handler.WindowManager).SplitVertical, h)
-}
-
-// SplitHorizontalBelow opens a new window tile below the current window in focus
-// and initializes it with h. Note that if h is not a handler created with NewTab
-// the handler is cleaned as soon as the window's content is swapped.
-func (c *Component) SplitHorizontalBelow(h Handler) (Window, bool) {
-	return c.splitRegular((*handler.WindowManager).SplitHorizontal, h)
-}
-
-// SplitHorizontalAbove opens a new window tile above the current window in focus
-// and initializes it with h. Note that if h is not a handler created with NewTab
-// the handler is cleaned as soon as the window's content is swapped.
-func (c *Component) SplitHorizontalAbove(h Handler) (Window, bool) {
-	return c.splitInverted((*handler.WindowManager).SplitHorizontal, h)
-}
-
-// FloatingWindow opens a new floating window at the given coordinates,
+// Floating opens a new floating window at the given coordinates,
 // with the given height and width.
-func (c *Component) FloatingWindow(
+func (c *Component) Floating(
 	h Handler, at term.Coordinates, width, height int,
 ) Window {
 	h = c.newWindowContent(h)

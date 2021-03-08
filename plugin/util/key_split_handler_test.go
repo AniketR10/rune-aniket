@@ -87,7 +87,7 @@ func expectSplitAndFocus(
 		DoAndReturn(func(
 			ctx context.Context, method string, args interface{},
 			reply interface{}, opts ...grpc.CallOption) error {
-			if method == "/proto.WindowManager/SplitVerticalLeft" {
+			if method == "/proto.WindowManager/Split" {
 				splitRes, ok := reply.(*proto.SplitResponse)
 				require.True(t, ok)
 				splitRes.WindowId = splitWindowID
@@ -183,9 +183,9 @@ func TestKeySplitHandlerEmpty(t *testing.T) {
 			return handler.NewTestHandler(), nil
 		}
 		config := KeySplitHandlerConfig{
-			Key:     keyEvent,
-			Split:   browser.WindowManager.SplitVerticalLeft,
-			Handler: handlerFn,
+			Key:              keyEvent,
+			SplitOrientation: browser.OrientationLeft,
+			Handler:          handlerFn,
 		}
 		h := &keySplitHandler{config: config}
 		broker := expectInitialization(t, ctrl, h)

@@ -336,7 +336,7 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 
 	testutil.TestHandlerSequence(t, bh, 20, 10, cases)
 
-	win, err := b.SplitVerticalLeft(browser.NewTestHandler())
+	win, err := b.Split(browser.OrientationLeft, browser.NewTestHandler())
 	require.NoError(t, err)
 
 	// test window ifc
@@ -348,7 +348,7 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 
 	err = b.Subscribe(term.Event{Type: term.EventKey, Ch: '&'},
 		browser.FuncEventHandler(func(ev term.Event) bool {
-			b.SplitHorizontalBelow(h)
+			b.Split(browser.OrientationBottom, h)
 			return false
 		}))
 	require.NoError(t, err)
@@ -512,11 +512,11 @@ EEEE`},
 	}
 	testutil.TestHandlerSequence(t, bh, 20, 10, cases)
 
-	floating1, err := b.FloatingWindow(browser.NewTestHandler(), term.Coordinates{X: 1, Y: 1}, 6, 4)
+	floating1, err := b.Floating(browser.NewTestHandler(), term.Coordinates{X: 1, Y: 1}, 6, 4)
 	require.NoError(t, err)
 
 	// should not be able to split over a floating window, which is currently in focus
-	_, err = b.SplitHorizontalAbove(browser.NewTestHandler())
+	_, err = b.Split(browser.OrientationTop, browser.NewTestHandler())
 	require.Error(t, err)
 	cases = []testutil.HandlerSequenceTestCase{
 		{"__",

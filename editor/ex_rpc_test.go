@@ -126,7 +126,7 @@ func TestRPCBrowserCloseLeak(t *testing.T) {
 	require.NoError(t, err)
 	defer destructor()
 
-	win, err := b.SplitVerticalLeft(browser.NewTestHandler())
+	win, err := b.Split(browser.OrientationLeft, browser.NewTestHandler())
 	require.NoError(t, err)
 
 	require.NoError(t, win.Close())
