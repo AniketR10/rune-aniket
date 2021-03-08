@@ -267,7 +267,10 @@ func (u *FrameUnion) Resize(width, height int) {
 	u.main.Move(term.Coordinates{Y: topOffset, X: leftOffset})
 }
 
-func (u *FrameUnion) setVerticalUnionFrameCells(w term.Writer, y int) {
+func (u *FrameUnion) setVerticalUnionFrameCells(w term.Writer, v *frameVirtual, y int) {
+	if v.Height() == 0 || v.Width() == 0 {
+		return
+	}
 	w.SetCell(term.Coordinates{Y: y},
 		term.Cell{Ch: u.Left, Bg: u.Attributes.Bg, Fg: u.Attributes.Fg})
 	if u.width > 0 {
@@ -276,7 +279,10 @@ func (u *FrameUnion) setVerticalUnionFrameCells(w term.Writer, y int) {
 	}
 }
 
-func (u *FrameUnion) setHorizontalUnionFrameCells(w term.Writer, height, x, y int) {
+func (u *FrameUnion) setHorizontalUnionFrameCells(w term.Writer, v *frameVirtual, height, x, y int) {
+	if v.Height() == 0 || v.Width() == 0 {
+		return
+	}
 	w.SetCell(term.Coordinates{X: x, Y: y},
 		term.Cell{Ch: u.Top, Bg: u.Attributes.Bg, Fg: u.Attributes.Fg})
 	if height > 0 {
@@ -301,25 +307,24 @@ func (u *FrameUnion) Draw(w term.Writer) {
 	}
 
 	u.main.Draw(w)
-	pos := u.main.Position()
-	if u.main.Height() < 2 || u.main.Width() < 2 || pos.X == 0 && pos.Y == 0 || !u.Frame {
+	if u.main.Height() < 2 || u.main.Width() < 2 || !u.Frame {
 		return
 	}
 
 	for _, left := range u.left {
 		pos := left.Position()
-		u.setHorizontalUnionFrameCells(w, u.main.Height(), pos.X+left.Width()-1, pos.Y)
+		u.setHorizontalUnionFrameCells(w, left, u.main.Height(), pos.X+left.Width()-1, pos.Y)
 	}
 
 	for _, right := range u.right {
 		pos := right.Position()
-		u.setHorizontalUnionFrameCells(w, u.main.Height(), pos.X, pos.Y)
+		u.setHorizontalUnionFrameCells(w, right, u.main.Height(), pos.X, pos.Y)
 	}
 	for _, top := range u.top {
-		u.setVerticalUnionFrameCells(w, top.Position().Y+top.Height()-1)
+		u.setVerticalUnionFrameCells(w, top, top.Position().Y+top.Height()-1)
 	}
 
 	for _, bottom := range u.bottom {
-		u.setVerticalUnionFrameCells(w, bottom.Position().Y)
+		u.setVerticalUnionFrameCells(w, bottom, bottom.Position().Y)
 	}
 }

@@ -465,6 +465,44 @@ AA
 	})
 }
 
+func TestDrawFrameUnionWithFrameBottomOnly(t *testing.T) {
+	one := NewFrame(&TestComponent{Ch: 'X'})
+	main := NewFrame(&TestComponent{Ch: 'A'})
+	f := NewFrameUnion(main)
+	f.UnionBottom(one, 3)
+	f.Resize(20, 16)
+
+	w := term.NewStringWriter(20, 20)
+
+	tests := []testutil.ComponentTestCase{
+		{
+			nil, `
+┌──────────────────┐
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+├──────────────────┤
+│XXXXXXXXXXXXXXXXXX│
+└──────────────────┘
+                    
+                    
+                    
+                    `,
+		},
+	}
+
+	testutil.TestComponent(t, f, w, tests)
+}
+
 func TestComponentAtOutOfBounds(t *testing.T) {
 	f := NewFrameUnion(&TestComponent{})
 	f.Resize(10, 10)
