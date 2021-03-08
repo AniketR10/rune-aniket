@@ -7,6 +7,7 @@ import (
 
 	"github.com/ernestrc/go-tui/browser"
 	"github.com/ernestrc/go-tui/cell"
+	"github.com/ernestrc/go-tui/component"
 	"github.com/ernestrc/go-tui/proto"
 	"github.com/ernestrc/go-tui/term"
 )
@@ -16,19 +17,29 @@ type EventType uint8
 
 const (
 	// EventTypeOpen is dispatched when an editor is called the Edit method.
+	// Content represents the initial content of the underlying file.
 	EventTypeOpen EventType = iota
 
 	// EventTypeClose is dispatched when an editor buffer is closed.
 	EventTypeClose
 
 	// EventTypeFlush is dispatched when an editor buffer is Flushed.
+	// Content represents the file content that was flushed.
 	EventTypeFlush
 
 	// EventTypeInsert is dispatched when new content is inserted into an editor buffer.
+	// Start, End represent the []byte coordinates.
+	// From, To represent the raw [][]term.Cell coordinates, which account
+	// for tab expansion. Content represents the content that was inserted.
 	EventTypeInsert
 
 	// EventTypeDelete is dispatched when content is deleted from an editor buffer.
+	// See EventTypeInsert. Content represents the content that was deleted.
 	EventTypeDelete
+
+	// EventTypeScroll is dispatched when content is scroll to a new offset.
+	// Start represents the scroll offset.
+	EventTypeScroll
 
 	// used internally by server/client to re-use EventHandler logic for CommandHandler
 	eventTypeCommand
@@ -40,13 +51,9 @@ type Event struct {
 	ResourceName string
 	Resource     Handler
 
-	// Start, End represent the []byte coordinates.
 	Start, End term.Coordinates
-
-	// From, To represent the raw [][]term.Cell coordinates, which account
-	// for tab expansion.
-	From, To term.Coordinates
-	Content  string
+	From, To   term.Coordinates
+	Content    string
 
 	// used internally by server/client
 	cmdArgs []string
@@ -64,6 +71,8 @@ func protoTypeToModel(protoType proto.EditorEvent_Type) (ev EventType, err error
 		ev = EventTypeDelete
 	case proto.EditorEvent_TypeInsert:
 		ev = EventTypeInsert
+	case proto.EditorEvent_TypeScroll:
+		ev = EventTypeScroll
 	case proto.EditorEvent_TypeCommand:
 		ev = eventTypeCommand
 	default:
@@ -102,6 +111,8 @@ func (e Event) protoType() proto.EditorEvent_Type {
 		return proto.EditorEvent_TypeDelete
 	case EventTypeInsert:
 		return proto.EditorEvent_TypeInsert
+	case EventTypeScroll:
+		return proto.EditorEvent_TypeScroll
 	case eventTypeCommand:
 		return proto.EditorEvent_TypeCommand
 	default:
@@ -198,7 +209,27 @@ func (s *cellSubscriber) OnDidDelete(start, end term.Coordinates, str string) {
 	})
 }
 
-// CellSubscriber returns a cell.Subscriber which forwards editor Insert/Delete to evHandler.
+// CellSubscriber returns a cell.Subscriber which forwards Insert/Delete events to evHandler
 func CellSubscriber(name string, h Handler, evHandler EventHandler) cell.Subscriber {
 	return &cellSubscriber{name: name, h: h, eh: evHandler}
+}
+
+type scrollSubscriber struct {
+	name string
+	h    Handler
+	eh   EventHandler
+}
+
+func (s scrollSubscriber) OnSeek(at term.Coordinates) {
+	s.eh.Handle(Event{
+		Type:         EventTypeScroll,
+		Resource:     s.h,
+		ResourceName: s.name,
+		Start:        at,
+	})
+}
+
+// ScrollSubscriber returns a component.ScrollSubscriber which forwarsd Scroll events to evHandler
+func ScrollSubscriber(name string, h Handler, evHandler EventHandler) component.ScrollSubscriber {
+	return scrollSubscriber{name: name, h: h, eh: evHandler}
 }

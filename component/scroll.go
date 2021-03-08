@@ -132,6 +132,10 @@ func (s *Scroll) SeekVertical(y int) (ok bool) {
 }
 
 func (s *Scroll) seekVertical(y int, dispatch bool) (ok bool) {
+	if max := s.buf.Rows() - 1; y > max {
+		y = max
+	}
+
 	if y < 0 {
 		y = 0
 	}
@@ -156,7 +160,8 @@ func (s *Scroll) SeekHorizontal(x int) (ok bool) {
 func (s *Scroll) seekHorizontal(x int, dispatch bool) (ok bool) {
 	if max := s.getMaxXOffset(); x > max {
 		x = max
-	} else if x < 0 {
+	}
+	if x < 0 {
 		x = 0
 	}
 
@@ -192,6 +197,12 @@ func (s *Scroll) SeekStartFile() bool {
 
 func (s *Scroll) seekTo(pos term.Coordinates, xpadding, ypadding int) bool {
 	var yok, xok bool
+	if max := s.getMaxXOffset(); xpadding > max {
+		xpadding = max
+	}
+	if max := s.getMaxYOffset(); ypadding > max {
+		ypadding = max
+	}
 
 	if ypadding == 0 {
 		yok = s.seekVertical(pos.Y, false)
@@ -569,7 +580,7 @@ func (s *Scroll) Subscribe(sub ScrollSubscriber) {
 	s.subs = append(s.subs, sub)
 }
 
-// CallbackScrollSubscriber wraps fn to satisfy ScrollSubscriber.
-func CallbackScrollSubscriber(fn func(term.Coordinates)) ScrollSubscriber {
+// FuncScrollSubscriber wraps fn to satisfy ScrollSubscriber.
+func FuncScrollSubscriber(fn func(term.Coordinates)) ScrollSubscriber {
 	return fnSubscriber(fn)
 }

@@ -50,8 +50,11 @@ func (e *viEditor) Edit(name string, buf *cell.Buffer) (editor.Handler, error) {
 		Content:      buf.String(),
 	})
 
-	sub := editor.CellSubscriber(name, h, e)
-	buf.Subscribe(sub)
+	bsub := editor.CellSubscriber(name, h, e)
+	buf.Subscribe(bsub)
+
+	csub := editor.ScrollSubscriber(name, h, e)
+	h.less.Scroll.Subscribe(csub)
 
 	return h, nil
 }

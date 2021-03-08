@@ -122,9 +122,9 @@ func (h *unmountHandler) OnUnmount() error {
 	return nil
 }
 
-// CallbackHandler returns a Handler by wrapping a tui.Handler
+// FuncHandler returns a Handler by wrapping a tui.Handler
 // with an OnUnmount callback.
-func CallbackHandler(h tui.Handler, onUnmount func()) Handler {
+func FuncHandler(h tui.Handler, onUnmount func()) Handler {
 	return &unmountHandler{Handler: h, onUnmount: onUnmount}
 }
 

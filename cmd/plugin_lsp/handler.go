@@ -57,6 +57,13 @@ var (
 		commandHover, commandGoToDef, commandAddWorkspace,
 		commandRemoveWorkspace,
 	}
+	lspHandlerEvents = []editor.EventType{
+		editor.EventTypeClose,
+		editor.EventTypeFlush,
+		editor.EventTypeOpen,
+		editor.EventTypeInsert,
+		editor.EventTypeDelete,
+	}
 	lspHandlerPermissions = []plugin.Permission{
 		plugin.PermissionBrowserWindowManager,
 		plugin.PermissionBrowserResourceOpener,

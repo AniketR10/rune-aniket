@@ -1,0 +1,39 @@
+package vi
+
+import (
+	"testing"
+
+	"github.com/ernestrc/go-tui/cell"
+	"github.com/ernestrc/go-tui/editor"
+	"github.com/ernestrc/go-tui/term"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+func TestEditorDispatchScroll(t *testing.T) {
+	ed := Editor()
+	buf := cell.NewBuffer()
+	buf.WriteString("Daworg\nSurinach\n")
+	h, err := ed.Edit("oh my...", buf)
+	require.NoError(t, err)
+
+	h.Resize(2, 2)
+	require.True(t, h.(*Vi).less.Scroll.SeekDown())
+
+	at := term.Coordinates{X: -1}
+	ed.SubscribeEditor(editor.EventTypeScroll, editor.FuncEventHandler(func(ev editor.Event) bool {
+		at = ev.Start
+		return false
+	}))
+
+	require.True(t, h.(*Vi).less.Scroll.SeekUp())
+	assert.Equal(t, term.Coordinates{}, at)
+
+	at = term.Coordinates{X: -1}
+	require.True(t, h.(*Vi).less.Scroll.SeekDown())
+	assert.Equal(t, term.Coordinates{Y: 1}, at)
+
+	at = term.Coordinates{X: -1}
+	require.False(t, h.(*Vi).less.Scroll.SeekDown())
+	assert.Equal(t, term.Coordinates{X: -1}, at)
+}

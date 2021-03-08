@@ -124,7 +124,7 @@ func (t *keySplitHandler) handleKeyEvent() {
 		return
 	}
 
-	win, err = t.wm.Split(t.config.SplitOrientation, browser.CallbackHandler(h, t.exitClean))
+	win, err = t.wm.Split(t.config.SplitOrientation, browser.FuncHandler(h, t.exitClean))
 	if err != nil {
 		log.Errorf("error opening new window: %s", err)
 		return

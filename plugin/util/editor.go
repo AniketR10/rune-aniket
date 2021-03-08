@@ -26,6 +26,7 @@ type editorGrantee struct {
 	cmds       []string
 	pconfig    plugin.Config
 	err        error
+	evs        []editor.EventType
 }
 
 func (t *editorGrantee) Connected(broker proto.MuxBroker, config plugin.Config) {
@@ -49,18 +50,11 @@ func (t *editorGrantee) setNewHandler(grants []plugin.Grant) (CommandEventHandle
 }
 
 func (t *editorGrantee) subscribeToEvents(grants []plugin.Grant) error {
-	evs := []editor.EventType{
-		editor.EventTypeClose,
-		editor.EventTypeFlush,
-		editor.EventTypeOpen,
-		editor.EventTypeInsert,
-		editor.EventTypeDelete,
-	}
 	h, err := t.setNewHandler(grants)
 	if err != nil {
 		return err
 	}
-	for _, ev := range evs {
+	for _, ev := range t.evs {
 		err := t.ed.SubscribeEditor(ev, h)
 		if err != nil {
 			return err
@@ -72,7 +66,7 @@ func (t *editorGrantee) subscribeToEvents(grants []plugin.Grant) error {
 			return err
 		}
 	}
-	log.Debugf("subscribed to events %+v", evs)
+	log.Debugf("subscribed to events %+v", t.evs)
 	return nil
 }
 
@@ -117,19 +111,20 @@ func (t *editorGrantee) Health() error {
 }
 
 // ServeEditorEventHandler calls fn to build a CommandEventHandler,
-// subsribes it to all editor events and registers it as the CommandHandler
+// subsribes it to events editor.Event and registers it as the CommandHandler
 // of cmds. It also requests extraPerms, in addition to plugin.PermissionEditor.
 // All granted permissions are returned in the fn callback. If one of the
 // permissions is denied, the plugin will exit with an error.
 func ServeEditorEventHandler(
 	cmds []string,
 	fn func(editor.Editor, []plugin.Grant, proto.MuxBroker, plugin.Config) (CommandEventHandler, error),
+	events []editor.EventType,
 	extraPerms ...plugin.Permission,
 ) {
 	perms := []plugin.Permission{
 		plugin.PermissionEditor,
 	}
 	perms = append(perms, extraPerms...)
-	s := &editorGrantee{cmds: cmds, newHandler: fn}
+	s := &editorGrantee{evs: events, cmds: cmds, newHandler: fn}
 	plugin.Serve(s, perms...)
 }

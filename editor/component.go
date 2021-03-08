@@ -536,7 +536,7 @@ func (c *Component) SubscribeEditor(ev EventType, h EventHandler) error {
 			}
 		}
 		fallthrough
-	case EventTypeDelete, EventTypeInsert:
+	case EventTypeDelete, EventTypeInsert, EventTypeScroll:
 		return c.ed.SubscribeEditor(ev, h)
 	}
 

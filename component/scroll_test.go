@@ -79,7 +79,7 @@ func TestScrollDraw(t *testing.T) {
 
 	var dispatchedSubscribe int
 	var prevAt term.Coordinates
-	scroll.Subscribe(CallbackScrollSubscriber(func(at term.Coordinates) {
+	scroll.Subscribe(FuncScrollSubscriber(func(at term.Coordinates) {
 		dispatchedSubscribe++
 		require.NotEqual(t, prevAt, at, scroll.Buffer().String())
 		prevAt = at

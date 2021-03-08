@@ -10,5 +10,5 @@ func main() {
 	}()*/
 
 	plugutil.ServeEditorEventHandler(lspHandlerCommands, newLspHandler,
-		lspHandlerPermissions...)
+		lspHandlerEvents, lspHandlerPermissions...)
 }
