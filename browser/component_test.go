@@ -382,6 +382,7 @@ func TestComponentMultipleWindow(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.Logger = log.New()
 	cfg.Logger.SetLevel(log.TraceLevel)
+	cfg.WindowManagerConfig.TopLeft = 'X'
 	c := NewComponent(cfg)
 	c.Resize(20, 8)
 
@@ -396,7 +397,7 @@ func TestComponentMultipleWindow(t *testing.T) {
 	tests := []testutil.ComponentTestCase{
 		{
 			nil, `
-┌──────────────────┐
+X──────────────────┐
 │                  │
 ├──────────────────┤
 │                  │
@@ -408,23 +409,23 @@ func TestComponentMultipleWindow(t *testing.T) {
 			w2, ok = c.Split(OrientationBottom, h2)
 			require.True(t, ok)
 		}, `
-┌──────────────────┐
+X──────────────────┐
 │                  │
 ├──────────────────┤
 │                  │
 └──────────────────┘
-┌──────────────────┐
+X──────────────────┐
 │AAAAAAAAAAAAAAAAAA│
 └──────────────────┘`,
 		}, {func() {
 			/*w3 =*/ c.Split(OrientationRight, h3)
 		}, `
-┌──────────────────┐
+X──────────────────┐
 │                  │
 ├──────────────────┤
 │                  │
 └──────────────────┘
-┌────────┐┌────────┐
+X────────┐X────────┐
 │AAAAAAAA││CCCCCCCC│
 └────────┘└────────┘`,
 		}, {func() {
@@ -447,12 +448,12 @@ func TestComponentMultipleWindow(t *testing.T) {
 			assert.Equal(t, 1, unmounted)
 			assert.Equal(t, 1, closed)
 		}, `
-┌──────────────────┐
+X──────────────────┐
 │                  │
 ├──────────────────┤
 │                  │
 └──────────────────┘
-┌──────────────────┐
+X──────────────────┐
 │CCCCCCCCCCCCCCCCCC│
 └──────────────────┘`,
 		},

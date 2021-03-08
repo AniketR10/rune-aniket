@@ -200,7 +200,8 @@ func (c *Component) Init(config Config) {
 	c.tabs.SetFrameCharSet(config.WindowManagerConfig.FrameCharSet)
 	c.tabs.SetBorder(config.WindowManagerConfig.Frame)
 
-	c.Bar(OrientationTop, &c.tabs)
+	// use UnionTop instead of Bar because tabs already have their own frame
+	c.union.UnionTop(&c.tabs, c.barSize())
 
 	return
 }
@@ -603,7 +604,10 @@ func (c *Component) barSize() int {
 // Bar adds a bar to the orientation of the main window.
 func (c *Component) Bar(o Orientation, h tui.Handler) {
 	if c.config.Frame {
-		h = handler.NewFrame(h)
+		f := handler.NewFrame(h)
+		f.FrameCharSet = c.config.FrameCharSet
+		f.Attributes = c.config.FrameAttr
+		h = f
 	}
 	size := c.barSize()
 	switch o {
