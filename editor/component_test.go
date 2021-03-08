@@ -252,9 +252,10 @@ func TestComponentOpen(t *testing.T) {
 func TestComponentEditorSubscriber(t *testing.T) {
 	content := "Mr. Patoto"
 	tsuite := []struct {
-		name    string
-		evType  EventType
-		trigger func(*testing.T, *Component, string)
+		name       string
+		evType     EventType
+		trigger    func(*testing.T, *Component, string)
+		preTrigger func(*testing.T, *Component, string)
 	}{
 		{
 			"Edit->EventTypeOpen",
@@ -265,6 +266,7 @@ func TestComponentEditorSubscriber(t *testing.T) {
 				_, err := c.Edit(resourceName, buf)
 				assert.NoError(t, err)
 			},
+			nil,
 		},
 		{
 			"OpenFileTab->EventTypeOpen",
@@ -273,6 +275,7 @@ func TestComponentEditorSubscriber(t *testing.T) {
 				_, err := c.OpenFileTab(resourceName, "")
 				assert.NoError(t, err)
 			},
+			nil,
 		},
 		{
 			"Open->EventTypeOpen",
@@ -281,6 +284,7 @@ func TestComponentEditorSubscriber(t *testing.T) {
 				_, err := c.Open(resourceName)
 				assert.NoError(t, err)
 			},
+			nil,
 		},
 		{
 			"Flush->EventTypeFlush",
@@ -294,6 +298,7 @@ func TestComponentEditorSubscriber(t *testing.T) {
 
 				assert.NoError(t, c.Flush(win))
 			},
+			nil,
 		},
 		{
 			"Browser.RemoveWindowContent->EventTypeClose",
@@ -307,6 +312,7 @@ func TestComponentEditorSubscriber(t *testing.T) {
 
 				c.Browser().RemoveWindowContent(win)
 			},
+			nil,
 		},
 		{
 			"buf.WriteString->EventTypeInsert",
@@ -318,6 +324,7 @@ func TestComponentEditorSubscriber(t *testing.T) {
 
 				buf.WriteString("wasup")
 			},
+			nil,
 		},
 		{
 			"buf.DeleteRow->EventTypeDelete",
@@ -330,6 +337,53 @@ func TestComponentEditorSubscriber(t *testing.T) {
 
 				buf.DeleteRow(0)
 			},
+			nil,
+		},
+		{
+			"Open->EventTypeFocus",
+			EventTypeFocus,
+			func(t *testing.T, c *Component, resourceName string) {
+				_, err := c.Open(resourceName)
+				assert.NoError(t, err)
+			},
+			nil,
+		},
+		{
+			"Split->EventTypeFocus",
+			EventTypeFocus,
+			func(t *testing.T, c *Component, resourceName string) {
+				h, err := c.OpenFileTab(resourceName, "")
+				require.NoError(t, err)
+
+				_, err = c.Split(browser.OrientationBottom, h)
+				require.NoError(t, err)
+			},
+			func(t *testing.T, c *Component, resourceName string) {
+				_, err := c.Open("blah")
+				require.NoError(t, err)
+			},
+		},
+		{
+			"SubscribeOpen->EventTypeFocus",
+			EventTypeFocus,
+			func(t *testing.T, c *Component, resourceName string) {
+				// SubscribeEditor should trigger it
+			},
+			func(t *testing.T, c *Component, resourceName string) {
+				_, err := c.Open(resourceName)
+				require.NoError(t, err)
+			},
+		},
+		{
+			"SubscribeOpen->EventTypeOpen",
+			EventTypeOpen,
+			func(t *testing.T, c *Component, resourceName string) {
+				// SubscribeEditor should trigger it
+			},
+			func(t *testing.T, c *Component, resourceName string) {
+				_, err := c.Open(resourceName)
+				require.NoError(t, err)
+			},
 		},
 	}
 
@@ -340,12 +394,21 @@ func TestComponentEditorSubscriber(t *testing.T) {
 			require.NoError(t, err)
 
 			filename := "~/Joe_Biden.txt"
+			if tcase.preTrigger != nil {
+				tcase.preTrigger(t, c, filename)
+			}
+
 			var fired int
 			usr, _ := user.Current()
 			dir := usr.HomeDir
 			c.SubscribeEditor(tcase.evType, FuncEventHandler(func(ev Event) bool {
-				fired++
-				assert.Equal(t, filepath.Base(ev.ResourceName), "Joe_Biden.txt")
+				// if preTrigger, then only assert relevant file event
+				if tcase.preTrigger == nil {
+					assert.Equal(t, filepath.Base(ev.ResourceName), "Joe_Biden.txt")
+					fired++
+				} else if filepath.Base(ev.ResourceName) == "Joe_Biden.txt" {
+					fired++
+				}
 				// Edit skip Edit as it takes the resource name as is.
 				if tcase.evType == EventTypeOpen && tcase.name != "Edit->EventTypeOpen" {
 					assert.True(t, strings.Contains(ev.ResourceName, dir))
@@ -362,9 +425,17 @@ func TestComponentEditorSubscriber(t *testing.T) {
 			require.NoError(t, err)
 
 			filename := "Jill_Biden.txt"
+			if tcase.preTrigger != nil {
+				tcase.preTrigger(t, c, filename)
+			}
+
 			var fired int
 			c.SubscribeEditor(tcase.evType, FuncEventHandler(func(ev Event) bool {
-				fired++
+				if tcase.preTrigger == nil {
+					fired++
+				} else if filepath.Base(ev.ResourceName) == "Jill_Biden.txt" {
+					fired++
+				}
 				return true
 			}))
 

@@ -41,6 +41,9 @@ const (
 	// Start represents the scroll offset.
 	EventTypeScroll
 
+	// EventTypeFocus is dispatched when an editor handler is on browser.Focus.
+	EventTypeFocus
+
 	// used internally by server/client to re-use EventHandler logic for CommandHandler
 	eventTypeCommand
 )
@@ -73,6 +76,8 @@ func protoTypeToModel(protoType proto.EditorEvent_Type) (ev EventType, err error
 		ev = EventTypeInsert
 	case proto.EditorEvent_TypeScroll:
 		ev = EventTypeScroll
+	case proto.EditorEvent_TypeFocus:
+		ev = EventTypeFocus
 	case proto.EditorEvent_TypeCommand:
 		ev = eventTypeCommand
 	default:
@@ -113,6 +118,8 @@ func (e Event) protoType() proto.EditorEvent_Type {
 		return proto.EditorEvent_TypeInsert
 	case EventTypeScroll:
 		return proto.EditorEvent_TypeScroll
+	case EventTypeFocus:
+		return proto.EditorEvent_TypeFocus
 	case eventTypeCommand:
 		return proto.EditorEvent_TypeCommand
 	default:

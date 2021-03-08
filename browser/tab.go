@@ -11,11 +11,12 @@ import (
 // It satisfies browser.Handler interface so it can be used
 // with browser.Browser API. See browser.Component.NewTab for more details.
 type Tab struct {
-	parent  *Component
-	id      string
-	closer  io.Closer
-	handler tui.Handler
-	free    bool
+	parent      *Component
+	id          string
+	closer      io.Closer
+	handler     tui.Handler
+	free        bool
+	subscribers []TabSubscriber
 }
 
 // newTab allocates storage for a new tab and initializes it.
@@ -37,10 +38,16 @@ func (b *Tab) init(c *Component, id string, h tui.Handler, f io.Closer) {
 
 func (b *Tab) setWindow() {
 	b.free = false
+	for _, sub := range b.subscribers {
+		sub.OnFocus(b)
+	}
 }
 
 func (b *Tab) setFree() {
 	b.free = true
+	for _, sub := range b.subscribers {
+		sub.OnFree(b)
+	}
 }
 
 // Resize satisfies tui.Component
@@ -98,4 +105,20 @@ func (b *Tab) Handler() tui.Handler {
 // which is used when tab is closed via
 func (b *Tab) Closer() io.Closer {
 	return b.closer
+}
+
+// TabSubscriber is a subscriber of tab focus or free operations.
+type TabSubscriber interface {
+	OnFocus(*Tab)
+	OnFree(*Tab)
+}
+
+// Subscribe subscribes sub to OnFocus and OnFree operations.
+func (b *Tab) Subscribe(sub TabSubscriber) {
+	b.subscribers = append(b.subscribers, sub)
+	if b.free {
+		sub.OnFree(b)
+	} else {
+		sub.OnFocus(b)
+	}
 }

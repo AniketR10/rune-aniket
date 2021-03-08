@@ -212,6 +212,18 @@ func TestComponentSetContent(t *testing.T) {
 	}
 }
 
+type testTabSubscriber struct {
+	t Tab
+}
+
+func (s *testTabSubscriber) OnFocus(t *Tab) {
+	s.t = *t
+}
+
+func (s *testTabSubscriber) OnFree(t *Tab) {
+	s.t = *t
+}
+
 func TestComponentUpdateWindowTab(t *testing.T) {
 	for _, _tcase := range splitSuite {
 		tcase := _tcase
@@ -225,9 +237,13 @@ func TestComponentUpdateWindowTab(t *testing.T) {
 			win, ok := tcase.split(c, goog)
 			require.True(t, ok)
 
+			googSubs := testTabSubscriber{}
+			goog.Subscribe(&googSubs)
+
 			assertFreeTab(t, amzn, false)
 			assertFreeTab(t, tsla, true)
 			assertFreeTab(t, goog, false)
+			assertFreeTab(t, &googSubs.t, false)
 
 			for i := 0; i < 3; i++ {
 				assert.True(t, c.UpdateWindowTabNext(win))
@@ -236,6 +252,7 @@ func TestComponentUpdateWindowTab(t *testing.T) {
 			assertFreeTab(t, amzn, false)
 			assertFreeTab(t, tsla, false)
 			assertFreeTab(t, goog, true)
+			assertFreeTab(t, &googSubs.t, true)
 
 			for i := 0; i < 3; i++ {
 				assert.True(t, c.UpdateWindowTabPrev(win0))
@@ -244,18 +261,21 @@ func TestComponentUpdateWindowTab(t *testing.T) {
 			assertFreeTab(t, amzn, true)
 			assertFreeTab(t, tsla, false)
 			assertFreeTab(t, goog, false)
+			assertFreeTab(t, &googSubs.t, false)
 
 			assert.True(t, c.UpdateWindowTabNextFree(win0))
 
 			assertFreeTab(t, amzn, false)
 			assertFreeTab(t, tsla, false)
 			assertFreeTab(t, goog, true)
+			assertFreeTab(t, &googSubs.t, true)
 
 			assert.True(t, c.UpdateWindowTabLastFree(win0))
 
 			assertFreeTab(t, amzn, true)
 			assertFreeTab(t, tsla, false)
 			assertFreeTab(t, goog, false)
+			assertFreeTab(t, &googSubs.t, false)
 
 			assert.Error(t, win0.SetContent(tsla))
 			assert.NoError(t, win0.SetContent(amzn))
@@ -263,6 +283,7 @@ func TestComponentUpdateWindowTab(t *testing.T) {
 			assertFreeTab(t, amzn, false)
 			assertFreeTab(t, tsla, false)
 			assertFreeTab(t, goog, true)
+			assertFreeTab(t, &googSubs.t, true)
 
 			assertWindowContent(t, win0, amzn)
 			assertWindowContent(t, win, tsla)

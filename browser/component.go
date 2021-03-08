@@ -673,6 +673,15 @@ func (c *Component) Focus() Window {
 	return c.focus()
 }
 
+// FocusTab returns the Tab corresponding to the current window in focus,
+// or false if the current window in focus is not drawing a Tab.
+func (c *Component) FocusTab() (*Tab, bool) {
+	w := c.focus()
+	h, _ := w.Content()
+	t, ok := h.(*Tab)
+	return t, ok
+}
+
 func (c *Component) focus() *browserWindow {
 	win, ok := c.findWindow(c.wm.Focus().ID())
 	if !ok {

@@ -23,6 +23,7 @@ message EditorEvent {
 	TypeDelete = 4;
 	TypeCommand = 5;
 	TypeScroll = 6;
+	TypeFocus = 7;
   }
 
   Type type = 1;

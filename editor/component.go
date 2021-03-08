@@ -256,6 +256,20 @@ func getFileID(filename string) (string, error) {
 	return filepath.Abs(filename)
 }
 
+type compTabSubscriber Component
+
+func (s *compTabSubscriber) OnFocus(t *browser.Tab) {
+	(*Component)(s).dispatchEvent(Event{
+		Type:         EventTypeFocus,
+		ResourceName: t.ID(),
+		Resource:     t.Handler(),
+	})
+}
+
+func (s compTabSubscriber) OnFree(t *browser.Tab) {
+	// not used for now
+}
+
 // OpenFileTab opens the file at filename path, with an optional recovery file,
 // as a new browser tab. It's up to the caller to use the returned
 // browser.Handler and switch any of the active windows to use it.
@@ -290,7 +304,9 @@ func (c *Component) OpenFileTab(
 	tabname := c.getTabName(filename)
 	c.tryLog(log.DebugLevel, "Open(%s): opening tab with tabname='%s'", filename, tabname)
 
-	return c.comp.NewTab(filename, tabname, editor, fc), nil
+	t = c.comp.NewTab(filename, tabname, editor, fc)
+	t.Subscribe((*compTabSubscriber)(c))
+	return t, nil
 }
 
 // Open opens the given file in a new browser tab.
@@ -454,7 +470,9 @@ func (c *Component) Edit(name string, buf *cell.Buffer) (Handler, error) {
 	if err != nil {
 		return nil, err
 	}
-	_ = c.comp.NewTab(name, name, editor, nil)
+
+	t := c.comp.NewTab(name, name, editor, nil)
+	t.Subscribe((*compTabSubscriber)(c))
 
 	return editor, nil
 }
@@ -516,7 +534,6 @@ func (c *Component) getContent(h Handler) (string, error) {
 // If ev is of type EventTypeOpen, an event will be dispatched for
 // every Tab currently open.
 func (c *Component) SubscribeEditor(ev EventType, h EventHandler) error {
-	// delegate open/insert/delete event dispatching to underlying editor.
 	switch ev {
 	case EventTypeOpen:
 		for _, tab := range c.comp.Tabs() {
@@ -536,8 +553,19 @@ func (c *Component) SubscribeEditor(ev EventType, h EventHandler) error {
 			}
 		}
 		fallthrough
+	// delegate open/insert/delete event dispatching to underlying editor.
 	case EventTypeDelete, EventTypeInsert, EventTypeScroll:
 		return c.ed.SubscribeEditor(ev, h)
+	case EventTypeFocus:
+		t, ok := c.comp.FocusTab()
+		if ok {
+			ev := Event{
+				Type:         EventTypeClose,
+				ResourceName: t.ID(),
+				Resource:     t.Handler(),
+			}
+			h.Handle(ev)
+		}
 	}
 
 	if _, ok := c.edSubscribers[ev]; !ok {

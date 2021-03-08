@@ -50,6 +50,16 @@ func (e *viEditor) Edit(name string, buf *cell.Buffer) (editor.Handler, error) {
 		Content:      buf.String(),
 	})
 
+	// if vi is the final tui.Handler, then the underlying handler
+	// is always in focus. Consumers of this editor.Editor should not
+	// delegate SubscribeEditor to this handler if there's some other
+	// focus mechanism in place.
+	e.dispatchEvent(editor.Event{
+		Type:         editor.EventTypeFocus,
+		ResourceName: name,
+		Resource:     h,
+	})
+
 	bsub := editor.CellSubscriber(name, h, e)
 	buf.Subscribe(bsub)
 
