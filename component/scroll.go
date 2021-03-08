@@ -16,6 +16,7 @@ type Scroll struct {
 	width, height int
 	searchText    []rune
 	offset        term.Coordinates
+	subs          []ScrollSubscriber
 
 	// Sets the search result attributes upon matching.
 	ResultsAttr term.Attributes
@@ -28,12 +29,6 @@ type Scroll struct {
 	// are rendered in the next line if Wrap is set to true.
 	// Wrap invalidates Debug.
 	Wrap bool
-}
-
-func (s *Scroll) resetProps() {
-	s.searchText = nil
-	s.offset = term.Coordinates{}
-	s.searcher.Reset()
 }
 
 // NewScroll allocates storage for a Scroll and initializes it.
@@ -68,7 +63,9 @@ func (s *Scroll) InitWithBuffer(buf *cell.Buffer) {
 	// Searcher that actually performs the text search
 	s.initBuffer(buf)
 
-	s.resetProps()
+	s.searchText = nil
+	s.offset = term.Coordinates{}
+	s.searcher.Reset()
 }
 
 // CanSeekUp returns true if SeekUp would seek one row up.
@@ -95,6 +92,7 @@ func (s *Scroll) CanSeekRight() bool {
 func (s *Scroll) SeekUp() (ok bool) {
 	if ok = s.CanSeekUp(); ok {
 		s.offset.Y--
+		s.dispatchSubscribers()
 	}
 	return ok
 }
@@ -103,6 +101,7 @@ func (s *Scroll) SeekUp() (ok bool) {
 func (s *Scroll) SeekDown() (ok bool) {
 	if ok = s.CanSeekDown(); ok {
 		s.offset.Y++
+		s.dispatchSubscribers()
 	}
 	return
 }
@@ -111,6 +110,7 @@ func (s *Scroll) SeekDown() (ok bool) {
 func (s *Scroll) SeekLeft() (ok bool) {
 	if ok = s.CanSeekLeft(); ok {
 		s.offset.X--
+		s.dispatchSubscribers()
 	}
 	return
 }
@@ -119,6 +119,7 @@ func (s *Scroll) SeekLeft() (ok bool) {
 func (s *Scroll) SeekRight() (ok bool) {
 	if ok = s.CanSeekRight(); ok {
 		s.offset.X++
+		s.dispatchSubscribers()
 	}
 	return
 }
@@ -127,12 +128,20 @@ func (s *Scroll) SeekRight() (ok bool) {
 // the vertical offset is y. If y is out of bounds the contents
 // are shifted to the maximum possible y offset.
 func (s *Scroll) SeekVertical(y int) (ok bool) {
+	return s.seekVertical(y, true)
+}
+
+func (s *Scroll) seekVertical(y int, dispatch bool) (ok bool) {
 	if y < 0 {
 		y = 0
 	}
 
 	ok = s.offset.Y != y
 	s.offset.Y = y
+
+	if dispatch && ok {
+		s.dispatchSubscribers()
+	}
 
 	return
 }
@@ -141,6 +150,10 @@ func (s *Scroll) SeekVertical(y int) (ok bool) {
 // the horizontal offset is x. If x is out of bounds the contents
 // are shifted to the maximum possible x offset.
 func (s *Scroll) SeekHorizontal(x int) (ok bool) {
+	return s.seekHorizontal(x, true)
+}
+
+func (s *Scroll) seekHorizontal(x int, dispatch bool) (ok bool) {
 	if max := s.getMaxXOffset(); x > max {
 		x = max
 	} else if x < 0 {
@@ -149,6 +162,10 @@ func (s *Scroll) SeekHorizontal(x int) (ok bool) {
 
 	ok = s.offset.X != x
 	s.offset.X = x
+
+	if dispatch && ok {
+		s.dispatchSubscribers()
+	}
 
 	return
 }
@@ -177,20 +194,24 @@ func (s *Scroll) seekTo(pos term.Coordinates, xpadding, ypadding int) bool {
 	var yok, xok bool
 
 	if ypadding == 0 {
-		yok = s.SeekVertical(pos.Y)
+		yok = s.seekVertical(pos.Y, false)
 	} else if pos.Y >= s.offset.Y+s.height-ypadding {
-		yok = s.SeekVertical(pos.Y - s.height + ypadding)
+		yok = s.seekVertical(pos.Y-s.height+ypadding, false)
 	} else if pos.Y < s.offset.Y-ypadding {
-		yok = s.SeekVertical(pos.Y - ypadding)
+		yok = s.seekVertical(pos.Y-ypadding, false)
 	}
 
 	if pos.X >= s.offset.X+s.width-xpadding {
-		xok = s.SeekHorizontal(pos.X - s.width + xpadding)
+		xok = s.seekHorizontal(pos.X-s.width+xpadding, false)
 	} else if pos.X < s.offset.X-xpadding {
-		xok = s.SeekHorizontal(pos.X - xpadding)
+		xok = s.seekHorizontal(pos.X-xpadding, false)
 	}
 
-	return yok || xok
+	ok := yok || xok
+	if ok {
+		s.dispatchSubscribers()
+	}
+	return ok
 }
 
 // SeekTo shifts the contents of this scroll such that the offset
@@ -477,14 +498,6 @@ func (s *Scroll) tokenAt(pos term.Coordinates, is func(rune) bool) string {
 	return b.String()
 }
 
-// SetBuffer sets the buffer of this Scroll and returns the previous buffer.
-func (s *Scroll) SetBuffer(b *cell.Buffer) *cell.Buffer {
-	ret := s.buf
-	ret.Unsubscribe(s.searcher)
-	s.initBuffer(b)
-	return ret
-}
-
 // Search performs a text search of text in the internal cell buffer. It populates
 // a search list so SeekNextResult and SeekPreviousResult can be used to visualize results.
 // It returns the number of matches found. Note that it also sets the attributes of
@@ -532,4 +545,31 @@ func (s *Scroll) Buffer() *cell.Buffer {
 // ReadFrom see cell.Buffer.ReadFrom.
 func (s *Scroll) ReadFrom(r io.Reader) (n int64, err error) {
 	return s.buf.ReadFrom(r)
+}
+
+// ScrollSubscriber is a subscriber of seek operations in a scroll.
+type ScrollSubscriber interface {
+	OnSeek(offset term.Coordinates)
+}
+
+type fnSubscriber func(term.Coordinates)
+
+func (s fnSubscriber) OnSeek(offset term.Coordinates) {
+	s(offset)
+}
+
+func (s *Scroll) dispatchSubscribers() {
+	for _, sub := range s.subs {
+		sub.OnSeek(s.offset)
+	}
+}
+
+// Subscribe subscribes sub to seek operations.
+func (s *Scroll) Subscribe(sub ScrollSubscriber) {
+	s.subs = append(s.subs, sub)
+}
+
+// CallbackScrollSubscriber wraps fn to satisfy ScrollSubscriber.
+func CallbackScrollSubscriber(fn func(term.Coordinates)) ScrollSubscriber {
+	return fnSubscriber(fn)
 }

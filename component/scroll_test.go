@@ -77,41 +77,52 @@ func TestScrollDraw(t *testing.T) {
 	_, err := scroll.Buffer().ReadFrom(strings.NewReader(fortune))
 	require.NoError(t, err)
 
+	var dispatchedSubscribe int
+	var prevAt term.Coordinates
+	scroll.Subscribe(CallbackScrollSubscriber(func(at term.Coordinates) {
+		dispatchedSubscribe++
+		require.NotEqual(t, prevAt, at, scroll.Buffer().String())
+		prevAt = at
+	}))
+
 	w := term.NewStringWriter(width, height)
 
 	tests := []testutil.ComponentTestCase{
 		{nil, "Love in \nLove isn"},
-		{func() { scroll.SeekUp() }, "Love in \nLove isn"},
-		{func() { scroll.SeekLeft() }, "Love in \nLove isn"},
-		{func() { scroll.SeekRight() }, "ove in y\nove isn'"},
-		{func() { scroll.SeekLeft() }, "Love in \nLove isn"},
-		{func() { scroll.SeekDown() }, "Love isn\n        "},
-		{func() { scroll.SeekDown() }, "Love isn\n        "},
-		{func() { scroll.SeekRight() }, "ove isn'\n       -"},
-		{func() { scroll.SeekStartFile() }, "ove in y\nove isn'"},
-		{func() { scroll.SeekEndFile() }, "ove isn'\n       -"},
-		{func() { scroll.SeekStartLine() }, "Love isn\n        "},
-		{func() { scroll.SeekStartFile() }, "Love in \nLove isn"},
+		{func() { assert.False(t, scroll.SeekUp()) }, "Love in \nLove isn"},
+		{func() { assert.False(t, scroll.SeekLeft()) }, "Love in \nLove isn"},
+		{func() { assert.True(t, scroll.SeekRight()) }, "ove in y\nove isn'"},
+		{func() { assert.True(t, scroll.SeekLeft()) }, "Love in \nLove isn"},
+		{func() { assert.True(t, scroll.SeekDown()) }, "Love isn\n        "},
+		{func() { assert.False(t, scroll.SeekDown()) }, "Love isn\n        "},
+		{func() { assert.True(t, scroll.SeekRight()) }, "ove isn'\n       -"},
+		{func() { assert.True(t, scroll.SeekStartFile()) }, "ove in y\nove isn'"},
+		{func() { assert.True(t, scroll.SeekEndFile()) }, "ove isn'\n       -"},
+		{func() { assert.True(t, scroll.SeekStartLine()) }, "Love isn\n        "},
+		{func() { assert.True(t, scroll.SeekStartFile()) }, "Love in \nLove isn"},
 		{func() { scroll.Search("Love") }, "Love in \nLove isn"},
-		{func() { scroll.SeekNextResult() }, "Love in \nLove isn"},
+		{func() { assert.False(t, scroll.SeekNextResult()) }, "Love in \nLove isn"},
 		{func() { scroll.Resize(20, 1); w = term.NewStringWriter(20, 1) }, "Love in your heart w"},
 		{func() { scroll.Search("you") }, "Love in your heart w"},
-		{func() { scroll.SeekNextResult() }, "Love in your heart w"},
-		{func() { scroll.SeekNextResult() }, " isn't love 'til you"},
-		{func() { scroll.SeekPrevResult() }, " in your heart wasn'"},
-		{func() { assert.Equal(t, 1, scroll.Search("⌘⌘")); scroll.SeekNextResult() }, "Oscar Hammerstein ⌘⌘"},
-		{func() { assert.Equal(t, 2, scroll.Search("⌘")); scroll.SeekNextResult() }, "Oscar Hammerstein ⌘⌘"},
-		{func() { scroll.Search("Oscar"); scroll.SeekNextResult() }, "Oscar Hammerstein ⌘⌘"},
-		{func() { scroll.SeekStartFile(); scroll.SeekStartLine() }, "Love in your heart w"},
+		{func() { assert.False(t, scroll.SeekNextResult()) }, "Love in your heart w"},
+		{func() { assert.True(t, scroll.SeekNextResult()) }, " isn't love 'til you"},
+		{func() { assert.True(t, scroll.SeekPrevResult()) }, " in your heart wasn'"},
+		{func() { assert.Equal(t, 1, scroll.Search("⌘⌘")); assert.True(t, scroll.SeekNextResult()) }, "Oscar Hammerstein ⌘⌘"},
+		{func() { assert.Equal(t, 2, scroll.Search("⌘")); assert.False(t, scroll.SeekNextResult()) }, "Oscar Hammerstein ⌘⌘"},
+		{func() { scroll.Search("Oscar"); assert.False(t, scroll.SeekNextResult()) }, "Oscar Hammerstein ⌘⌘"},
+		{func() { assert.True(t, scroll.SeekStartFile()); assert.True(t, scroll.SeekStartLine()) }, "Love in your heart w"},
 		{func() { scroll.Buffer().DeleteCell(term.Coordinates{X: 0, Y: 0}) }, "ove in your heart wa"},
 		{func() { scroll.Buffer().DeleteCell(term.Coordinates{X: 14, Y: 0}) }, "ove in your hert was"},
-		{func() { scroll.SeekDown() }, "Love isn't love 'til"},
+		{func() { assert.True(t, scroll.SeekDown()) }, "Love isn't love 'til"},
 		{func() { scroll.Buffer().DeleteCell(term.Coordinates{X: 16, Y: 1}) }, "Love isn't love til "},
 		{func() { scroll.Buffer().Insert(term.Coordinates{X: 16, Y: 1}, '中') }, "Love isn't love 中til"},
 		{func() {
 			buf := cell.NewBuffer()
 			buf.WriteString("aa\nbb\ncc")
-			scroll.SetBuffer(buf)
+			scroll.searcher.Reset()
+			scroll.offset = term.Coordinates{Y: 1}
+			scroll.searchText = nil
+			scroll.initBuffer(buf)
 		}, "bb                  "},
 		{func() {
 			assert.Equal(t, 1, scroll.Search("aa"))
@@ -136,6 +147,8 @@ func TestScrollDraw(t *testing.T) {
 
 		assert.Equal(t, tcase.Expected, w.String())
 	}
+
+	assert.Equal(t, 15, dispatchedSubscribe)
 }
 
 func TestScrollDrawWrap(t *testing.T) {
