@@ -4,13 +4,13 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/ernestrc/blue/logging"
 	"github.com/ernestrc/go-tui"
 	"github.com/ernestrc/go-tui/browser"
 	"github.com/ernestrc/go-tui/editor"
 	"github.com/ernestrc/go-tui/editor/vi"
 	"github.com/ernestrc/go-tui/plugin"
 	"github.com/ernestrc/go-tui/term"
-	"github.com/ernestrc/blue/logging"
 	log "github.com/sirupsen/logrus"
 )
 

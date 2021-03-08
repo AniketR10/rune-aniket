@@ -1,6 +1,7 @@
 package component
 
 import (
+	"github.com/ernestrc/go-tui"
 	"github.com/ernestrc/go-tui/term"
 )
 
@@ -32,69 +33,124 @@ func DefaultFrameUnionCharSet() (ret FrameUnionCharSet) {
 // The API uses Virtual instead of tui.Component to determine what's the desired
 // height or width.
 type FrameUnion struct {
-	main          *Virtual
-	top, bottom   []*Virtual
-	left, right   []*Virtual
+	main          Virtual
+	top, bottom   []*frameVirtual
+	left, right   []*frameVirtual
 	height, width int
-	frame         bool
 
+	// Frame determines whether underlying components are an instance of Frame
+	// and so FrameUnion should stitch them together with FrameUnionCharSet.
+	// Default is true.
+	Frame bool
+
+	// Attributes to be set to FrameUnionCharSet.
 	term.Attributes
+
 	FrameUnionCharSet
 }
 
+type frameVirtual struct {
+	size int
+	Virtual
+}
+
 // NewFrameUnion allocates storage for a new FrameUnion and initializes it.
-func NewFrameUnion(main *Virtual, frame bool) *FrameUnion {
+func NewFrameUnion(main tui.Component) *FrameUnion {
 	ret := new(FrameUnion)
-	ret.Init(main, frame)
+	ret.Init(main)
 	return ret
 }
 
-// Init initializes this frame union with top and bottom Virtual components.
-func (u *FrameUnion) Init(main *Virtual, frame bool) {
+// Init initializes this frame union with main as the main compontent.
+func (u *FrameUnion) Init(main tui.Component) {
 	u.FrameUnionCharSet = DefaultFrameUnionCharSet()
-	u.main = main
-	u.frame = frame
+	u.main.C = main
+	u.Frame = true
 }
 
 // UnionTop stacks top on top of the main component. This
 // method panics if top is nil.
-func (u *FrameUnion) UnionTop(top *Virtual) {
+func (u *FrameUnion) UnionTop(top tui.Component, height int) {
 	if top == nil {
 		panic("invalid componen.Virtual")
 	}
-	u.top = append(u.top, top)
+	u.top = append(u.top, &frameVirtual{Virtual: Virtual{C: top}, size: height})
 }
 
 // UnionBottom stacks bottom under of the main component. This
 // method panics if bottom is nil.
-func (u *FrameUnion) UnionBottom(bottom *Virtual) {
+func (u *FrameUnion) UnionBottom(bottom tui.Component, height int) {
 	if bottom == nil {
 		panic("invalid componen.Virtual")
 	}
-	u.bottom = append([]*Virtual{bottom}, u.bottom...)
+	head := []*frameVirtual{{Virtual: Virtual{C: bottom}, size: height}}
+	u.bottom = append(head, u.bottom...)
 }
 
 // UnionLeft stacks left to the left of the main component. This
 // method panics if left is nil.
-func (u *FrameUnion) UnionLeft(left *Virtual) {
+func (u *FrameUnion) UnionLeft(left tui.Component, width int) {
 	if left == nil {
 		panic("invalid componen.Virtual")
 	}
-	u.left = append(u.left, left)
+	u.left = append(u.left, &frameVirtual{Virtual: Virtual{C: left}, size: width})
 }
 
 // UnionRight stacks right to the right of the main component. This
 // method panics if right is nil.
-func (u *FrameUnion) UnionRight(right *Virtual) {
+func (u *FrameUnion) UnionRight(right tui.Component, width int) {
 	if right == nil {
 		panic("invalid componen.Virtual")
 	}
-	u.right = append([]*Virtual{right}, u.right...)
+	head := []*frameVirtual{{Virtual: Virtual{C: right}, size: width}}
+	u.right = append(head, u.right...)
+}
+
+func (u *FrameUnion) componentAt(
+	components []*frameVirtual, pos term.Coordinates,
+) (tui.Component, bool) {
+	for _, t := range components {
+		tpos := t.Position()
+		twidth := t.Width()
+		theight := t.Height()
+		if pos.X >= tpos.X && pos.Y >= tpos.Y && pos.X < tpos.X+twidth && pos.Y < tpos.Y+theight {
+			return t.C, true
+		}
+	}
+	return nil, false
+}
+
+// ComponentAt returns the component at pos or false if there's no component at pos.
+func (u *FrameUnion) ComponentAt(pos term.Coordinates) (tui.Component, bool) {
+	frameVirtualMain := frameVirtual{Virtual: u.main}
+	main := [1]*frameVirtual{&frameVirtualMain}
+	c, ok := u.componentAt(main[:], pos)
+	if ok {
+		return c, true
+	}
+	c, ok = u.componentAt(u.top, pos)
+	if ok {
+		return c, true
+	}
+	c, ok = u.componentAt(u.bottom, pos)
+	if ok {
+		return c, true
+	}
+	c, ok = u.componentAt(u.left, pos)
+	if ok {
+		return c, true
+	}
+	return u.componentAt(u.right, pos)
+}
+
+// MainPosition returns the main component's offset from the top-left corner.
+func (u *FrameUnion) MainPosition() (offset term.Coordinates) {
+	return u.main.Position()
 }
 
 func (u *FrameUnion) resizeTopBottom(width, height int) (int, int) {
 	var frameOverlap int
-	if u.frame {
+	if u.Frame {
 		frameOverlap = 1
 	}
 
@@ -102,18 +158,18 @@ func (u *FrameUnion) resizeTopBottom(width, height int) (int, int) {
 	for _, top := range u.top {
 		top.Move(term.Coordinates{Y: topHeight})
 
-		height := top.Height()
+		height := top.size
 		if height > 0 {
 			topHeight += height - frameOverlap
-			top.C.Resize(width, height)
+			top.Resize(width, height)
 		} else {
-			top.C.Resize(0, 0)
+			top.Resize(0, 0)
 		}
 	}
 
 	var bottomHeight int
 	for _, bottom := range u.bottom {
-		height := bottom.Height()
+		height := bottom.size
 		if height > 0 {
 			bottomHeight += height - frameOverlap
 		}
@@ -122,12 +178,12 @@ func (u *FrameUnion) resizeTopBottom(width, height int) (int, int) {
 	// if there's too many union components for available height
 	// do not draw them.
 	mainHeight := u.height - topHeight - bottomHeight
-	if mainHeight < 1 {
+	if mainHeight < 1+frameOverlap {
 		for _, top := range u.top {
-			top.C.Resize(0, 0)
+			top.Resize(0, 0)
 		}
 		for _, bottom := range u.bottom {
-			bottom.C.Resize(0, 0)
+			bottom.Resize(0, 0)
 		}
 		return u.height, 0
 	}
@@ -135,12 +191,12 @@ func (u *FrameUnion) resizeTopBottom(width, height int) (int, int) {
 	bottomOffset := topHeight + mainHeight - frameOverlap
 	for _, bottom := range u.bottom {
 		bottom.Move(term.Coordinates{Y: bottomOffset})
-		height := bottom.Height()
+		height := bottom.size
 		if height > 0 {
-			bottom.C.Resize(width, height)
+			bottom.Resize(width, height)
 			bottomOffset += height - frameOverlap
 		} else {
-			bottom.C.Resize(0, 0)
+			bottom.Resize(0, 0)
 		}
 	}
 
@@ -149,7 +205,7 @@ func (u *FrameUnion) resizeTopBottom(width, height int) (int, int) {
 
 func (u *FrameUnion) resizeLeftRight(width, height, topOffset int) (int, int) {
 	var frameOverlap int
-	if u.frame {
+	if u.Frame {
 		frameOverlap = 1
 	}
 
@@ -157,30 +213,30 @@ func (u *FrameUnion) resizeLeftRight(width, height, topOffset int) (int, int) {
 	for _, left := range u.left {
 		left.Move(term.Coordinates{X: leftWidth, Y: topOffset})
 
-		width := left.Width()
+		width := left.size
 		if width > 0 {
 			leftWidth += width - frameOverlap
-			left.C.Resize(width, height)
+			left.Resize(width, height)
 		} else {
-			left.C.Resize(0, 0)
+			left.Resize(0, 0)
 		}
 	}
 
 	var rightWidth int
 	for _, right := range u.right {
-		width := right.Width()
+		width := right.size
 		if width > 0 {
 			rightWidth += width - frameOverlap
 		}
 	}
 
 	mainWidth := u.width - leftWidth - rightWidth
-	if mainWidth < 1 {
+	if mainWidth < 1+frameOverlap {
 		for _, left := range u.left {
-			left.C.Resize(0, 0)
+			left.Resize(0, 0)
 		}
 		for _, right := range u.right {
-			right.C.Resize(0, 0)
+			right.Resize(0, 0)
 		}
 		return u.width, 0
 	}
@@ -188,12 +244,12 @@ func (u *FrameUnion) resizeLeftRight(width, height, topOffset int) (int, int) {
 	rightOffset := leftWidth + mainWidth - frameOverlap
 	for _, right := range u.right {
 		right.Move(term.Coordinates{Y: topOffset, X: rightOffset})
-		width := right.Width()
+		width := right.size
 		if width > 0 {
-			right.C.Resize(width, height)
+			right.Resize(width, height)
 			rightOffset += width - frameOverlap
 		} else {
-			right.C.Resize(0, 0)
+			right.Resize(0, 0)
 		}
 	}
 
@@ -246,7 +302,7 @@ func (u *FrameUnion) Draw(w term.Writer) {
 
 	u.main.Draw(w)
 	pos := u.main.Position()
-	if u.main.Height() < 2 || u.main.Width() < 2 || pos.X == 0 && pos.Y == 0 || !u.frame {
+	if u.main.Height() < 2 || u.main.Width() < 2 || pos.X == 0 && pos.Y == 0 || !u.Frame {
 		return
 	}
 

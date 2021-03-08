@@ -232,33 +232,36 @@ func (c ideConfig) frameUnionCharset() (cs component.FrameUnionCharSet) {
 		if err != plugin.ErrNotFound {
 			c.errors["browser.frameunion_charset.left"] = err
 		}
-		return
+	} else {
+		cs.Left = left
 	}
+
 	right, err := cfg.GetRune("right")
 	if err != nil {
 		if err != plugin.ErrNotFound {
 			c.errors["browser.frameunion_charset.right"] = err
 		}
-		return
+	} else {
+		cs.Right = right
 	}
+
 	top, err := cfg.GetRune("top")
 	if err != nil {
 		if err != plugin.ErrNotFound {
 			c.errors["browser.frameunion_charset.top"] = err
 		}
-		return
+	} else {
+		cs.Top = top
 	}
+
 	bottom, err := cfg.GetRune("bottom")
 	if err != nil {
 		if err != plugin.ErrNotFound {
 			c.errors["browser.frameunion_charset.bottom"] = err
 		}
-		return
+	} else {
+		cs.Bottom = bottom
 	}
-	cs.Left = left
-	cs.Right = right
-	cs.Top = top
-	cs.Bottom = bottom
 
 	return
 }

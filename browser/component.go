@@ -32,16 +32,13 @@ type Component struct {
 	logBufDraw int
 	logVirt    handler.Virtual
 	tabs       handler.Tabs
-	tabsVirt   handler.Virtual
 	wm         handler.WindowManager
-	wmVirt     handler.Virtual
-	union      component.FrameUnion
+	union      handler.FrameUnion
 
 	config       Config
 	startHandler Handler
 	buffers      []*Tab
 	windows      map[uint64]*browserWindow
-	tabsHeight   int
 }
 
 // component.WindowManager sinchronously removes tui.Handlers
@@ -189,16 +186,15 @@ func (c *Component) Init(config Config) {
 	c.startHandler = &browserContent{Handler: CallbackHandler(handler.Nop(startText), func() {}), c: c}
 	c.wm.Init(c.startHandler, handlerWmConfig)
 	_ = c.newWindow(c.wm.Focus()) // init handler with initial window
-	c.wmVirt = handler.Virtual{Virtual: component.Virtual{C: &c.wm}}
-	c.tabsVirt = handler.Virtual{Virtual: component.Virtual{C: &c.tabs}}
-	c.union.Init(&c.wmVirt.Virtual, c.config.Frame)
-	c.union.UnionTop(&c.tabsVirt.Virtual)
+	c.union.Init(&c.wm)
+	c.union.UnionTop(&c.tabs, 3)
 	c.buffers = make([]*Tab, 0)
 
 	// make sure that frame union attrs are same as window manager attrs
 	c.union.Attributes = config.WindowManagerConfig.FrameAttr
 	c.union.Right = config.FrameUnionCharSet.Right
 	c.union.Left = config.FrameUnionCharSet.Left
+	c.union.Frame = c.config.Frame
 
 	c.tabs.SetAttr(config.FocusTabAttr, config.NonFocusTabAttr,
 		config.WindowManagerConfig.FrameAttr, config.WindowManagerConfig.FrameAttr)
@@ -614,14 +610,6 @@ func (c *Component) SetMessage(msg string, args ...interface{}) {
 // Resize satisfies tui.Component
 func (c *Component) Resize(width, height int) {
 	ResizeMessageSpan(&c.logVirt, width, height)
-
-	c.tabsHeight = 3
-	if height < 3 {
-		c.tabsHeight = 0
-	} else if !c.config.Frame {
-		c.tabsHeight = 1
-	}
-	c.tabsVirt.Resize(width, c.tabsHeight)
 	c.union.Resize(width, height)
 }
 
@@ -711,16 +699,10 @@ func (c *Component) Close() (ret error) {
 
 // Handle proxies events to either the underlying Tabs or WindowManager.
 func (c *Component) Handle(ev term.Event) (exit, handled bool) {
-	if ev.Type == term.EventMouse && ev.MouseY < c.tabsHeight {
-		_, handled = c.tabs.Handle(ev)
-		return
-	}
-
-	_, handled = c.wmVirt.Handle(ev)
-	return
+	return c.union.Handle(ev)
 }
 
-// Cursor calls the underlying WindowManager.Cursor.
+// Cursor calls the underlying FrameUnion's Cursor.
 func (c *Component) Cursor() (pos term.Coordinates, show bool) {
-	return c.wmVirt.Cursor()
+	return c.union.Cursor()
 }
