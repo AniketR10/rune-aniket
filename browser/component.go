@@ -193,6 +193,8 @@ func (c *Component) Init(config Config) {
 	c.union.Attributes = config.WindowManagerConfig.FrameAttr
 	c.union.Right = config.FrameUnionCharSet.Right
 	c.union.Left = config.FrameUnionCharSet.Left
+	c.union.Top = config.FrameUnionCharSet.Top
+	c.union.Bottom = config.FrameUnionCharSet.Bottom
 	c.union.Frame = c.config.Frame
 
 	c.tabs.SetAttr(config.FocusTabAttr, config.NonFocusTabAttr,
