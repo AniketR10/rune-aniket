@@ -128,6 +128,9 @@ func TestScrollDraw(t *testing.T) {
 			assert.Equal(t, 1, scroll.Search("aa"))
 			assert.True(t, scroll.SeekNextResult())
 		}, "aa                  "},
+		{func() {
+			assert.True(t, scroll.SetOffset(term.Coordinates{Y: 1}))
+		}, "bb                  "},
 		// {scroll.SeekDown, "        -- Oscar Ham"},
 		// {scroll.SeekEndLine, "rstein 中            "},
 		// {func() { scroll.Insert(term.Coordinates{X: 20, Y: 2}, '中') }, "rstein 中中           "},
@@ -148,7 +151,7 @@ func TestScrollDraw(t *testing.T) {
 		assert.Equal(t, tcase.Expected, w.String())
 	}
 
-	assert.Equal(t, 15, dispatchedSubscribe)
+	assert.Equal(t, 16, dispatchedSubscribe)
 }
 
 func TestScrollDrawWrap(t *testing.T) {
@@ -225,6 +228,26 @@ func TestRowLastIndex(t *testing.T) {
 		i := scroll.Buffer().Columns(tcase.line)
 		assert.Equal(t, tcase.expected, i)
 	}
+}
+
+func TestScrollSeekTo(t *testing.T) {
+	scroll := newScroll(4, false, 20, 1)
+	_, err := scroll.Buffer().ReadFrom(strings.NewReader(fortune))
+	require.NoError(t, err)
+	assert.True(t, scroll.SeekTo(term.Coordinates{Y: 100}))
+	assert.Equal(t, term.Coordinates{Y: scroll.Buffer().Rows() - 1}, scroll.Offset())
+	assert.False(t, scroll.SeekTo(term.Coordinates{Y: 100}))
+}
+
+func TestScrollSetOffset(t *testing.T) {
+	scroll := newScroll(4, false, 20, 1)
+	_, err := scroll.Buffer().ReadFrom(strings.NewReader(fortune))
+	require.NoError(t, err)
+	assert.False(t, scroll.SetOffset(term.Coordinates{Y: 100}))
+	assert.Equal(t, term.Coordinates{}, scroll.Offset())
+
+	assert.True(t, scroll.SetOffset(term.Coordinates{Y: 2}))
+	assert.Equal(t, term.Coordinates{Y: scroll.Buffer().Rows() - 1}, scroll.Offset())
 }
 
 func newBigScroll(fortunes int) (scroll *Scroll) {

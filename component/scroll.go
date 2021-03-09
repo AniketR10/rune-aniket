@@ -225,10 +225,35 @@ func (s *Scroll) seekTo(pos term.Coordinates, xpadding, ypadding int) bool {
 	return ok
 }
 
-// SeekTo shifts the contents of this scroll such that the offset
-// is exactly at given coordinates.
+// SeekTo shifts the contents of this scroll to make sure that pos is in
+// range for the next call to Draw. It uses padding and if position is beyond
+// the last seekable content, the max is used as the new seek position.
 func (s *Scroll) SeekTo(pos term.Coordinates) bool {
+	if pos.X < 0 || pos.Y < 0 {
+		panic("invalid coordinates: negative")
+	}
 	return s.seekTo(pos, 2, 2)
+}
+
+// SetOffset sets the underlying offset of this scroll. It returns
+// false if position is beyond the last seekable content.
+func (s *Scroll) SetOffset(pos term.Coordinates) bool {
+	if pos.X < 0 || pos.Y < 0 {
+		panic("invalid coordinates: negative")
+	}
+	if max := s.getMaxXOffset(); pos.X > max {
+		return false
+	}
+	if max := s.getMaxYOffset(); pos.Y > max {
+		return false
+	}
+
+	ok := pos != s.offset
+	if ok {
+		s.offset = pos
+		s.dispatchSubscribers()
+	}
+	return ok
 }
 
 // SeekNextResult shifts the contents of this scroll to visualize
