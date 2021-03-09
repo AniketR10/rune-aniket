@@ -184,7 +184,7 @@ func (c ideConfig) windowFrameCharset() (cs component.FrameCharSet) {
 	if !ok {
 		return
 	}
-	cfgCs, err := cfg.GetFrameCharset("frame_charset")
+	cfgCs, err := cfg.GetFrameCharset("frame_charset", cs)
 	if err != nil {
 		if err != plugin.ErrNotFound {
 			c.errors["window_manager.frame_charset"] = err

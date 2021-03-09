@@ -61,14 +61,14 @@ TT
 		}, {
 			func() {
 				fb := FrameCharSetDefault()
-				fb.Horizontal = '┄'
-				fb.Vertical = '┊'
+				fb.HorizontalTop = '┄'
+				fb.VerticalRight = '┊'
 				f.FrameCharSet = fb
 			}, `
 ┌┄┄┄┄┄┄┐ 
-┊TTTTTT┊ 
-┊TTTTTT┊ 
-└┄┄┄┄┄┄┘ 
+│TTTTTT┊ 
+│TTTTTT┊ 
+└──────┘ 
          `,
 		},
 	}

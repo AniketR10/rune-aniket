@@ -26,9 +26,10 @@ import (
 //
 //   '╢', '╣', '╤', '╥', '╦', '╧', '╨', '╩'
 type FrameCharSet struct {
-	TopLeft, TopRight       rune
-	BottomLeft, BottomRight rune
-	Horizontal, Vertical    rune
+	TopLeft, TopRight               rune
+	BottomLeft, BottomRight         rune
+	HorizontalTop, VerticalLeft     rune
+	HorizontalBottom, VerticalRight rune
 }
 
 // FrameCharSetDefault returns the default FrameCharSet
@@ -40,12 +41,14 @@ type FrameCharSet struct {
 //
 func FrameCharSetDefault() FrameCharSet {
 	return FrameCharSet{
-		Horizontal:  '─',
-		Vertical:    '│',
-		TopLeft:     '┌',
-		TopRight:    '┐',
-		BottomLeft:  '└',
-		BottomRight: '┘',
+		HorizontalTop:    '─',
+		HorizontalBottom: '─',
+		VerticalRight:    '│',
+		VerticalLeft:     '│',
+		TopLeft:          '┌',
+		TopRight:         '┐',
+		BottomLeft:       '└',
+		BottomRight:      '┘',
 	}
 }
 
@@ -57,12 +60,14 @@ func FrameCharSetDefault() FrameCharSet {
 //
 func FrameCharSetHighlight() FrameCharSet {
 	return FrameCharSet{
-		Horizontal:  '━',
-		Vertical:    '┃',
-		TopLeft:     '┏',
-		TopRight:    '┓',
-		BottomLeft:  '┗',
-		BottomRight: '┛',
+		HorizontalTop:    '━',
+		HorizontalBottom: '━',
+		VerticalLeft:     '┃',
+		VerticalRight:    '┃',
+		TopLeft:          '┏',
+		TopRight:         '┓',
+		BottomLeft:       '┗',
+		BottomRight:      '┛',
 	}
 }
 
@@ -74,12 +79,14 @@ func FrameCharSetHighlight() FrameCharSet {
 //
 func FrameCharSetStack() FrameCharSet {
 	return FrameCharSet{
-		Horizontal:  '─',
-		Vertical:    '│',
-		TopLeft:     '├',
-		TopRight:    '┤',
-		BottomLeft:  '├',
-		BottomRight: '┤',
+		HorizontalTop:    '─',
+		HorizontalBottom: '─',
+		VerticalLeft:     '│',
+		VerticalRight:    '│',
+		TopLeft:          '├',
+		TopRight:         '┤',
+		BottomLeft:       '├',
+		BottomRight:      '┤',
 	}
 }
 
@@ -91,12 +98,14 @@ func FrameCharSetStack() FrameCharSet {
 //
 func FrameCharSetStackHighlight() FrameCharSet {
 	return FrameCharSet{
-		Horizontal:  '━',
-		Vertical:    '┃',
-		TopLeft:     '┢',
-		TopRight:    '┪',
-		BottomLeft:  '┡',
-		BottomRight: '┩',
+		HorizontalTop:    '━',
+		HorizontalBottom: '━',
+		VerticalLeft:     '┃',
+		VerticalRight:    '┃',
+		TopLeft:          '┢',
+		TopRight:         '┪',
+		BottomLeft:       '┡',
+		BottomRight:      '┩',
 	}
 }
 
@@ -108,12 +117,14 @@ func FrameCharSetStackHighlight() FrameCharSet {
 //
 func FrameCharSetStackHead() FrameCharSet {
 	return FrameCharSet{
-		Horizontal:  '─',
-		Vertical:    '│',
-		TopLeft:     '┌',
-		TopRight:    '┐',
-		BottomLeft:  '├',
-		BottomRight: '┤',
+		HorizontalTop:    '─',
+		HorizontalBottom: '─',
+		VerticalLeft:     '│',
+		VerticalRight:    '│',
+		TopLeft:          '┌',
+		TopRight:         '┐',
+		BottomLeft:       '├',
+		BottomRight:      '┤',
 	}
 }
 
@@ -125,12 +136,14 @@ func FrameCharSetStackHead() FrameCharSet {
 //
 func FrameCharSetStackHeadHighlight() FrameCharSet {
 	return FrameCharSet{
-		Horizontal:  '━',
-		Vertical:    '┃',
-		TopLeft:     '┏',
-		TopRight:    '┓',
-		BottomLeft:  '┡',
-		BottomRight: '┩',
+		HorizontalTop:    '━',
+		HorizontalBottom: '━',
+		VerticalLeft:     '┃',
+		VerticalRight:    '┃',
+		TopLeft:          '┏',
+		TopRight:         '┓',
+		BottomLeft:       '┡',
+		BottomRight:      '┩',
 	}
 }
 
@@ -142,12 +155,14 @@ func FrameCharSetStackHeadHighlight() FrameCharSet {
 //
 func FrameCharSetStackTail() FrameCharSet {
 	return FrameCharSet{
-		Horizontal:  '─',
-		Vertical:    '│',
-		TopLeft:     '├',
-		TopRight:    '┤',
-		BottomLeft:  '└',
-		BottomRight: '┘',
+		HorizontalTop:    '─',
+		HorizontalBottom: '─',
+		VerticalLeft:     '│',
+		VerticalRight:    '│',
+		TopLeft:          '├',
+		TopRight:         '┤',
+		BottomLeft:       '└',
+		BottomRight:      '┘',
 	}
 }
 
@@ -159,12 +174,14 @@ func FrameCharSetStackTail() FrameCharSet {
 //
 func FrameCharSetStackTailHighlight() FrameCharSet {
 	return FrameCharSet{
-		Horizontal:  '━',
-		Vertical:    '┃',
-		TopLeft:     '┢',
-		TopRight:    '┪',
-		BottomLeft:  '┗',
-		BottomRight: '┛',
+		HorizontalTop:    '━',
+		HorizontalBottom: '━',
+		VerticalLeft:     '┃',
+		VerticalRight:    '┃',
+		TopLeft:          '┢',
+		TopRight:         '┪',
+		BottomLeft:       '┗',
+		BottomRight:      '┛',
 	}
 }
 
@@ -172,8 +189,10 @@ func FrameCharSetStackTailHighlight() FrameCharSet {
 // By default the frame adds some padding around the component by using
 // the following cells:
 //
-// f.Horizontal =  '─'
-// f.Vertical =  '│'
+// f.HorizontalTop =  '─'
+// f.HorizontalBottom =  '─'
+// f.VerticalLeft =  '│'
+// f.VerticalRight =  '│'
 // f.TopLeft =  '┌'
 // f.TopRight =  '┐'
 // f.BottomLeft =  '└'
@@ -236,16 +255,16 @@ func (f *Frame) Draw(w term.Writer) {
 
 	for i := 0; i < limitX; i++ {
 		w.SetCell(term.Coordinates{X: i, Y: 0},
-			term.Cell{Ch: f.Horizontal, Bg: f.Bg, Fg: f.Fg})
+			term.Cell{Ch: f.HorizontalTop, Bg: f.Bg, Fg: f.Fg})
 		w.SetCell(term.Coordinates{X: i, Y: limitY},
-			term.Cell{Ch: f.Horizontal, Bg: f.Bg, Fg: f.Fg})
+			term.Cell{Ch: f.HorizontalBottom, Bg: f.Bg, Fg: f.Fg})
 	}
 
 	for i := 0; i < limitY; i++ {
 		w.SetCell(term.Coordinates{X: 0, Y: i},
-			term.Cell{Ch: f.Vertical, Bg: f.Bg, Fg: f.Fg})
+			term.Cell{Ch: f.VerticalLeft, Bg: f.Bg, Fg: f.Fg})
 		w.SetCell(term.Coordinates{X: limitX, Y: i},
-			term.Cell{Ch: f.Vertical, Bg: f.Bg, Fg: f.Fg})
+			term.Cell{Ch: f.VerticalRight, Bg: f.Bg, Fg: f.Fg})
 	}
 
 	w.SetCell(term.Coordinates{X: 0, Y: 0},

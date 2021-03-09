@@ -74,8 +74,10 @@ browser:
         frame_attr:
             fg: red
         frame_charset:
-            horizontal: '━'
-            vertical: '┃'
+            horizontalbottom: '━'
+            horizontaltop: '━'
+            verticalleft: '┃'
+            verticalright: '┃'
             topleft: '┏'
             topright: '┓'
             bottomleft: '┗'

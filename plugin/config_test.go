@@ -3,6 +3,7 @@ package plugin
 import (
 	"testing"
 
+	"github.com/ernestrc/go-tui/component"
 	"github.com/ernestrc/go-tui/term"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -39,7 +40,7 @@ func TestConfigOk(t *testing.T) {
 	_, err = c.GetRune("mk")
 	assert.Equal(t, ErrNotFound, err)
 
-	_, err = c.GetFrameCharset("mk")
+	_, err = c.GetFrameCharset("mk", component.FrameCharSetDefault())
 	assert.Equal(t, ErrNotFound, err)
 }
 func TestConfigTypes(t *testing.T) {
@@ -64,8 +65,8 @@ func TestConfigTypes(t *testing.T) {
 		"attr_2": map[string]interface{}{"fg": []interface{}{"red", "bold"}},
 		"charset_1": map[string]interface{}{"topleft": "a",
 			"topright": "b", "bottomleft": "c",
-			"bottomright": "d", "horizontal": "e", "vertical": "f"},
-		"charset_2": map[string]interface{}{"topleft": 'a', "topright": 2},
+			"bottomright": "d", "horizontalbottom": "e", "verticalleft": "f"},
+		"charset_2": map[string]interface{}{"topleft": 'a'},
 	}
 
 	c1 := MapConfig(m)
@@ -142,23 +143,22 @@ func TestConfigTypes(t *testing.T) {
 			assert.True(t, attrs.Fg&term.AttrBold != 0)
 			assert.Equal(t, term.ColorDefault, attrs.Bg)
 
-			charset, err := c.GetFrameCharset("charset_1")
+			charset, err := c.GetFrameCharset("charset_1", component.FrameCharSetDefault())
 			require.NoError(t, err)
 			assert.Equal(t, 'a', charset.TopLeft)
 			assert.Equal(t, 'b', charset.TopRight)
 			assert.Equal(t, 'c', charset.BottomLeft)
 			assert.Equal(t, 'd', charset.BottomRight)
-			assert.Equal(t, 'e', charset.Horizontal)
-			assert.Equal(t, 'f', charset.Vertical)
+			assert.Equal(t, 'e', charset.HorizontalBottom)
+			assert.Equal(t, 'f', charset.VerticalLeft)
+			assert.Equal(t, '─', charset.HorizontalTop)
+			assert.Equal(t, '│', charset.VerticalRight)
 
-			charset, err = c.GetFrameCharset("charset_2")
+			charset, err = c.GetFrameCharset("charset_2", component.FrameCharSetDefault())
 			require.NoError(t, err)
 			assert.Equal(t, 'a', charset.TopLeft)
-			assert.Equal(t, rune(2), charset.TopRight)
-			assert.Equal(t, rune(0), charset.BottomLeft)
-			assert.Equal(t, rune(0), charset.BottomRight)
-			assert.Equal(t, rune(0), charset.Horizontal)
-			assert.Equal(t, rune(0), charset.Vertical)
+			charset.TopLeft = '┌'
+			assert.Equal(t, charset, component.FrameCharSetDefault())
 		})
 	}
 }

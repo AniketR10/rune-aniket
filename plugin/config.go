@@ -27,7 +27,7 @@ type Config interface {
 	GetAttribute(string) (term.Attribute, error)
 	GetAttributes(string) (term.Attributes, error)
 	GetRune(string) (rune, error)
-	GetFrameCharset(string) (component.FrameCharSet, error)
+	GetFrameCharset(string, component.FrameCharSet) (component.FrameCharSet, error)
 }
 
 type internalConfig interface {
@@ -245,21 +245,47 @@ func (c mapConfig) GetRune(key string) (rune, error) {
 	return rune(i), nil
 }
 
-func (c mapConfig) GetFrameCharset(key string) (
+func (c mapConfig) GetFrameCharset(key string, def component.FrameCharSet) (
 	component.FrameCharSet, error,
 ) {
 	cfg, err := c.GetConfig(key)
 	if err != nil {
-		return component.FrameCharSet{}, err
+		return def, err
 	}
 
-	var cs component.FrameCharSet
-	cs.TopLeft, _ = cfg.GetRune("topleft")
-	cs.TopRight, _ = cfg.GetRune("topright")
-	cs.BottomLeft, _ = cfg.GetRune("bottomleft")
-	cs.BottomRight, _ = cfg.GetRune("bottomright")
-	cs.Horizontal, _ = cfg.GetRune("horizontal")
-	cs.Vertical, _ = cfg.GetRune("vertical")
+	cs := def
+	r, err := cfg.GetRune("topleft")
+	if err == nil {
+		cs.TopLeft = r
+	}
+	r, err = cfg.GetRune("topright")
+	if err == nil {
+		cs.TopRight = r
+	}
+	r, err = cfg.GetRune("bottomleft")
+	if err == nil {
+		cs.BottomLeft = r
+	}
+	r, err = cfg.GetRune("bottomright")
+	if err == nil {
+		cs.BottomRight = r
+	}
+	r, err = cfg.GetRune("horizontaltop")
+	if err == nil {
+		cs.HorizontalTop = r
+	}
+	r, err = cfg.GetRune("horizontalbottom")
+	if err == nil {
+		cs.HorizontalBottom = r
+	}
+	r, err = cfg.GetRune("verticalleft")
+	if err == nil {
+		cs.VerticalLeft = r
+	}
+	r, err = cfg.GetRune("verticalright")
+	if err == nil {
+		cs.VerticalRight = r
+	}
 	return cs, nil
 }
 

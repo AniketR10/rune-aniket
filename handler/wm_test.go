@@ -406,8 +406,10 @@ func TestWindowManagerSetFocusContent(t *testing.T) {
 	fb.BottomLeft = '╚'
 	fb.TopRight = '╗'
 
-	fb.Vertical = '║'
-	fb.Horizontal = '═'
+	fb.VerticalLeft = '║'
+	fb.VerticalRight = '║'
+	fb.HorizontalTop = '═'
+	fb.HorizontalBottom = '═'
 
 	wm.SetFrameCharSet(component.FrameCharSetDefault(), fb)
 
