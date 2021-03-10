@@ -1189,7 +1189,7 @@ func (h *lspEditorHandler) handleDiagnostics(
 	f, ok := h.getFile(uri)
 	if !ok {
 		h.addPendingDiagnostics(uri, ds)
-		log.Warnf("lspEditorHandler: Received diagnostic for an unknown file: %#v", uri)
+		log.Tracef("lspEditorHandler: Received diagnostic for a unopened file: %#v", uri)
 		return
 	}
 
