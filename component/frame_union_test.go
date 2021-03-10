@@ -18,8 +18,8 @@ func TestDrawFrameUnionNoFrame(t *testing.T) {
 	main := &TestComponent{Ch: 'A'}
 	f := NewFrameUnion(main)
 	f.Frame = false
-	f.UnionTop(one, 1)
 	f.Resize(20, 16)
+	f.UnionTop(one, 1)
 
 	w := term.NewStringWriter(20, 20)
 
@@ -212,8 +212,8 @@ func TestDrawFrameUnionWithFrame(t *testing.T) {
 	nine := NewFrame(&TestComponent{Ch: '9'})
 	main := NewFrame(&TestComponent{Ch: 'A'})
 	f := NewFrameUnion(main)
-	f.UnionTop(one, 3)
 	f.Resize(20, 16)
+	f.UnionTop(one, 3)
 
 	w := term.NewStringWriter(20, 20)
 

@@ -75,6 +75,7 @@ func (u *FrameUnion) UnionTop(top tui.Component, height int) {
 		panic("invalid componen.Virtual")
 	}
 	u.top = append(u.top, &frameVirtual{Virtual: Virtual{C: top}, size: height})
+	u.Resize(u.width, u.height)
 }
 
 // UnionBottom stacks bottom under of the main component. This
@@ -85,6 +86,7 @@ func (u *FrameUnion) UnionBottom(bottom tui.Component, height int) {
 	}
 	head := []*frameVirtual{{Virtual: Virtual{C: bottom}, size: height}}
 	u.bottom = append(head, u.bottom...)
+	u.Resize(u.width, u.height)
 }
 
 // UnionLeft stacks left to the left of the main component. This
@@ -94,6 +96,7 @@ func (u *FrameUnion) UnionLeft(left tui.Component, width int) {
 		panic("invalid componen.Virtual")
 	}
 	u.left = append(u.left, &frameVirtual{Virtual: Virtual{C: left}, size: width})
+	u.Resize(u.width, u.height)
 }
 
 // UnionRight stacks right to the right of the main component. This
@@ -104,6 +107,7 @@ func (u *FrameUnion) UnionRight(right tui.Component, width int) {
 	}
 	head := []*frameVirtual{{Virtual: Virtual{C: right}, size: width}}
 	u.right = append(head, u.right...)
+	u.Resize(u.width, u.height)
 }
 
 func (u *FrameUnion) componentAt(
@@ -307,6 +311,7 @@ func (u *FrameUnion) Draw(w term.Writer) {
 	}
 
 	u.main.Draw(w)
+
 	if u.main.Height() < 2 || u.main.Width() < 2 || !u.Frame {
 		return
 	}
