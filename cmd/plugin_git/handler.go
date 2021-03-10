@@ -42,6 +42,10 @@ var (
 		plugin.PermissionBrowserWindowManager,
 		plugin.PermissionBrowserEventPublisher,
 	}
+
+	defaultScrollAttr = term.Attributes{Fg: term.ColorBlack}
+	defaultAddAttr    = term.Attributes{Bg: term.ColorGreen}
+	defaultDelAttr    = term.Attributes{Bg: term.ColorRed}
 )
 
 type gitEditorHandler struct {
@@ -55,6 +59,8 @@ type gitEditorHandler struct {
 		scroll component.Scroll
 	}
 	gitDiffListID string
+	delAttr       term.Attributes
+	addAttr       term.Attributes
 	rows          map[string]int
 	offsets       map[string]term.Coordinates
 	lastLocs      map[string][]editor.Location
@@ -72,9 +78,16 @@ func newGitHandler(
 	ret.ch = make(chan editor.Event)
 	ret.lastLocs = make(map[string][]editor.Location)
 	ret.scroll.scroll.Init()
-	ret.scroll.scroll.Attributes = term.Attributes{Bg: 235}
 
 	var err error
+	ret.scroll.scroll.Attributes, err = pconfig.GetAttributes("bar_attr")
+	if err != nil {
+		if err != plugin.ErrNotFound {
+			log.Warningf("failed to get 'bar_attr' from config: %v", err)
+		}
+		ret.scroll.scroll.Attributes = defaultScrollAttr
+	}
+
 	for _, grant := range grants {
 		switch grant.Permission {
 		case plugin.PermissionBrowserEventPublisher:
@@ -98,10 +111,25 @@ func newGitHandler(
 	ret.gitDiffListID, err = pconfig.GetString("git_diff_list_id")
 	if err != nil {
 		if err != plugin.ErrNotFound {
-			err = fmt.Errorf("failed to get 'git_diff_list_id' from config: %v", err)
-			return nil, err
+			log.Warningf("failed to get 'git_diff_list_id' from config: %v", err)
 		}
 		ret.gitDiffListID = defaultGitDiffListID
+	}
+
+	ret.addAttr, err = pconfig.GetAttributes("add_attr")
+	if err != nil {
+		if err != plugin.ErrNotFound {
+			log.Warningf("failed to get 'add_attr' from config: %v", err)
+		}
+		ret.addAttr = defaultAddAttr
+	}
+
+	ret.delAttr, err = pconfig.GetAttributes("del_attr")
+	if err != nil {
+		if err != plugin.ErrNotFound {
+			log.Warningf("failed to get 'del_attr' from config: %v", err)
+		}
+		ret.delAttr = defaultDelAttr
 	}
 
 	go ret.handleEvents()
@@ -127,11 +155,6 @@ func (h *gitEditorHandler) HandleCommand(cmd editor.Command) (exit bool) {
 }
 
 func (h *gitEditorHandler) parseDiff(diff *diff.FileDiff) []editor.Location {
-	var (
-		deleteAttr = term.Attributes{Bg: term.ColorRed}
-		addAttr    = term.Attributes{Bg: term.ColorGreen}
-	)
-
 	h.scroll.Lock()
 	defer h.scroll.Unlock()
 
@@ -146,7 +169,7 @@ func (h *gitEditorHandler) parseDiff(diff *diff.FileDiff) []editor.Location {
 				// Attr: deleteAttr,
 			})
 			h.scroll.scroll.Buffer().DeleteCell(at)
-			h.scroll.scroll.Buffer().InsertStringWithAttr(at, "-", deleteAttr)
+			h.scroll.scroll.Buffer().InsertStringWithAttr(at, "-", h.delAttr)
 			continue
 		}
 
@@ -157,7 +180,7 @@ func (h *gitEditorHandler) parseDiff(diff *diff.FileDiff) []editor.Location {
 		for y := from.Y; y < to.Y; y++ {
 			at := term.Coordinates{Y: y}
 			h.scroll.scroll.Buffer().DeleteCell(at)
-			h.scroll.scroll.Buffer().InsertStringWithAttr(at, "+", addAttr)
+			h.scroll.scroll.Buffer().InsertStringWithAttr(at, "+", h.addAttr)
 		}
 	}
 
@@ -210,7 +233,6 @@ func (h *gitEditorHandler) initScroll(name string) {
 		return
 	}
 
-	// bar could have different height (+-3) depending on frames
 	for y := 0; y < rows+1; y++ {
 		h.scroll.scroll.Buffer().Insert(term.Coordinates{Y: y}, ' ')
 	}
