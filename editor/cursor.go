@@ -492,7 +492,7 @@ func (c *Cursor) moveAfterRune(skip, special []rune, move func() bool) (ok bool)
 
 func (c *Cursor) revertTo(pos, offset term.Coordinates) {
 	c.setCursor(pos)
-	c.scroll.SeekTo(offset)
+	c.scroll.SetOffset(offset)
 }
 
 func (c *Cursor) moveBeforeRune(skip, all []rune, move func() bool) (ok bool) {
