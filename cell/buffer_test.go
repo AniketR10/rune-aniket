@@ -109,10 +109,16 @@ func TestBufferTruncateCellAt(t *testing.T) {
 	str := "hello\nworld"
 	buf := newBufferWithContent(t, str)
 
-	buf.DeleteCell(term.Coordinates{X: 0, Y: 1})
-	buf.DeleteCell(term.Coordinates{X: 1, Y: 1})
+	_, r, ok := buf.DeleteCell(term.Coordinates{X: 0, Y: 1})
+	require.True(t, ok)
+	assert.Equal(t, 'w', r)
+	_, r, ok = buf.DeleteCell(term.Coordinates{X: 1, Y: 1})
+	require.True(t, ok)
+	assert.Equal(t, 'r', r)
 	buf.ConflateRow(0)
-	buf.DeleteCell(term.Coordinates{X: 7, Y: 0})
+	_, r, ok = buf.DeleteCell(term.Coordinates{X: 7, Y: 0})
+	require.True(t, ok)
+	assert.Equal(t, 'd', r)
 
 	assert.Equal(t, "hellool", buf.String())
 }
@@ -122,31 +128,35 @@ func TestBufferDeleteCellAtTab(t *testing.T) {
 	buf := newBufferWithContent(t, str)
 	require.Equal(t, 14, buf.Columns(0))
 
-	start, ok := buf.DeleteCell(term.Coordinates{X: 3, Y: 0})
+	start, r, ok := buf.DeleteCell(term.Coordinates{X: 3, Y: 0})
 	assert.True(t, ok)
 	assert.Equal(t, term.Coordinates{X: 1}, start)
 	assert.Equal(t, "!\t!\t", buf.String())
 	assert.Equal(t, 10, buf.Columns(0))
+	assert.Equal(t, '\t', r)
 
-	start, ok = buf.DeleteCell(term.Coordinates{X: 2, Y: 0})
+	start, r, ok = buf.DeleteCell(term.Coordinates{X: 2, Y: 0})
 	assert.True(t, ok)
 	assert.Equal(t, term.Coordinates{X: 1}, start)
 	assert.Equal(t, "!!\t", buf.String())
 	assert.Equal(t, 6, buf.Columns(0))
+	assert.Equal(t, '\t', r)
 
-	start, ok = buf.DeleteCell(term.Coordinates{X: 2, Y: 0})
+	start, r, ok = buf.DeleteCell(term.Coordinates{X: 2, Y: 0})
 	assert.True(t, ok)
 	assert.Equal(t, term.Coordinates{X: 2}, start)
 	assert.Equal(t, "!!", buf.String())
 	assert.Equal(t, 2, buf.Columns(0))
+	assert.Equal(t, '\t', r)
 
 	str = "\t\t>>>>"
 	buf = newBufferWithContent(t, str)
-	start, ok = buf.DeleteCell(term.Coordinates{X: 3, Y: 0})
+	start, r, ok = buf.DeleteCell(term.Coordinates{X: 3, Y: 0})
 	assert.True(t, ok)
 	assert.Equal(t, term.Coordinates{X: 0}, start)
 	assert.Equal(t, "\t>>>>", buf.String())
 	assert.Equal(t, 8, buf.Columns(0))
+	assert.Equal(t, '\t', r)
 }
 
 type selectCase struct {
