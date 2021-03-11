@@ -24,7 +24,7 @@ const (
 	inputAlt         = "alt"
 	inputMouse       = "mouse"
 	inputCurrent     = "current"
-	defaultStartText = `
+	legacyDefaultStartText = `
          __       
         /\ \      
        /  \ \     
@@ -36,6 +36,13 @@ const (
  / / /__\ \ \     
 / / /____\ \ \    
 \/__________\/    `
+	defaultStartText = `
+███████╗██╗██╗ ██╗
+██╔════╝██║██████║
+███████╗██║╚═██╔═╝
+╚════██║██║██████╗
+███████║██║██╔═██║
+╚══════╝╚═╝╚═╝ ╚═╝`
 )
 
 var (
