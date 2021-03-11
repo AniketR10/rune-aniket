@@ -362,7 +362,7 @@ func testFrontBack(t *testing.T, constructor func(int) testList) {
 
 // bridge between testList and focusTestList
 func getTestComponent(v tui.Component) *TestComponent {
-	if a, ok := v.(compWithAttr); ok {
+	if a, ok := v.(*compWithAttr); ok {
 		return a.Component.(*TestComponent)
 	}
 	return v.(*TestComponent)

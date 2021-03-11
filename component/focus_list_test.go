@@ -10,11 +10,22 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+var (
+	defaultAttr = term.Attributes{}
+)
+
 type compWithAttr struct {
 	tui.Component
+	attr term.Attributes
 }
 
-func (c compWithAttr) SetAttr(attr term.Attributes) {}
+func (c *compWithAttr) SetAttr(attr term.Attributes) {
+	c.attr = attr
+}
+
+func newCompWithAttr(c tui.Component) *compWithAttr {
+	return &compWithAttr{Component: c, attr: defaultAttr}
+}
 
 type focusListTestList struct {
 	*FocusList
@@ -28,11 +39,11 @@ func (l *focusListTestList) PushFrontList(other testList) {
 }
 
 func (l *focusListTestList) PushBack(c tui.Component) ListNode {
-	return l.FocusList.PushBack(compWithAttr{c})
+	return l.FocusList.PushBack(newCompWithAttr(c))
 }
 
 func (l *focusListTestList) PushFront(c tui.Component) ListNode {
-	return l.FocusList.PushFront(compWithAttr{c})
+	return l.FocusList.PushFront(newCompWithAttr(c))
 }
 
 func (l *focusListTestList) Remove(e ListNode) tui.Component {
@@ -41,7 +52,7 @@ func (l *focusListTestList) Remove(e ListNode) tui.Component {
 
 func (l *focusListTestList) Sort(less func(a, b tui.Component) bool) {
 	l.FocusList.Sort(func(a, b WithAttributes) bool {
-		return less(a.(compWithAttr).Component, b.(compWithAttr).Component)
+		return less(a.(*compWithAttr).Component, b.(*compWithAttr).Component)
 	})
 }
 
@@ -59,8 +70,8 @@ func TestFocusListFocus(t *testing.T) {
 	})
 
 	t.Run("Focus returns true and the focus of the list", func(t *testing.T) {
-		el1 := compWithAttr{&TestComponent{Ch: 'c'}}
-		el2 := compWithAttr{&TestComponent{Ch: 'a'}}
+		el1 := &compWithAttr{&TestComponent{Ch: 'c'}, defaultAttr}
+		el2 := &compWithAttr{&TestComponent{Ch: 'a'}, defaultAttr}
 		l := NewFocusList()
 
 		l.PushFront(el1)
@@ -84,15 +95,15 @@ func TestFocusListFocus(t *testing.T) {
 		require.False(t, l.CanFocusDown())
 		require.False(t, l.CanFocusUp())
 
-		l.PushBack(compWithAttr{&TestComponent{}})
+		l.PushBack(newCompWithAttr(&TestComponent{}))
 		require.False(t, l.CanFocusDown())
 		require.False(t, l.CanFocusUp())
 
-		l.PushBack(compWithAttr{&TestComponent{}})
+		l.PushBack(newCompWithAttr(&TestComponent{}))
 		require.True(t, l.CanFocusDown())
 		require.False(t, l.CanFocusUp())
 
-		l.PushFront(compWithAttr{&TestComponent{}})
+		l.PushFront(newCompWithAttr(&TestComponent{}))
 		require.True(t, l.CanFocusDown())
 		require.True(t, l.CanFocusUp())
 
@@ -117,6 +128,45 @@ func TestFocusListFocus(t *testing.T) {
 	})
 }
 
+func TestFocusAddAttr(t *testing.T) {
+	var (
+		redAttr = term.Attributes{Fg: term.ColorRed}
+		greenAttr = term.Attributes{Fg: term.ColorGreen}
+	)
+
+	t.Run("first PushBack adds focus attr", func(t *testing.T) {
+		l := NewFocusList()
+		l.InitWithAttr(redAttr, greenAttr)
+		n := l.PushBack(newCompWithAttr(&TestComponent{}))
+		assert.Equal(t, greenAttr, n.Value().(*compWithAttr).attr)
+	})
+
+	t.Run("first PushFront adds focus attr", func(t *testing.T) {
+		l := NewFocusList()
+		l.InitWithAttr(redAttr, greenAttr)
+		n := l.PushFront(newCompWithAttr(&TestComponent{}))
+		assert.Equal(t, greenAttr, n.Value().(*compWithAttr).attr)
+	})
+
+	t.Run("PushBack adds default attr", func(t *testing.T) {
+		l := NewFocusList()
+		l.InitWithAttr(redAttr, greenAttr)
+		l.PushBack(newCompWithAttr(&TestComponent{}))
+
+		n := l.PushBack(newCompWithAttr(&TestComponent{}))
+		assert.Equal(t, redAttr, n.Value().(*compWithAttr).attr)
+	})
+
+	t.Run("PushFront adds default attr", func(t *testing.T) {
+		l := NewFocusList()
+		l.InitWithAttr(redAttr, greenAttr)
+		l.PushBack(newCompWithAttr(&TestComponent{}))
+
+		n := l.PushFront(newCompWithAttr(&TestComponent{}))
+		assert.Equal(t, redAttr, n.Value().(*compWithAttr).attr)
+	})
+}
+
 func TestFocusListDraw(t *testing.T) {
 	testListDraw(t, newFocusTestList)
 }
@@ -126,17 +176,17 @@ func TestFocusListSort(t *testing.T) {
 
 	t.Run("focus and seeks to start of list upon call Sort", func(t *testing.T) {
 		l := NewFocusList()
-		l.PushBack(compWithAttr{&TestComponent{Ch: 'z'}})
-		l.PushBack(compWithAttr{&TestComponent{Ch: 'x'}})
-		l.PushBack(compWithAttr{&TestComponent{Ch: 'a'}})
+		l.PushBack(newCompWithAttr(&TestComponent{Ch: 'z'}))
+		l.PushBack(newCompWithAttr(&TestComponent{Ch: 'x'}))
+		l.PushBack(newCompWithAttr(&TestComponent{Ch: 'a'}))
 		l.Resize(1, 1)
 		require.True(t, l.SeekEnd())
 		require.True(t, l.CanSeekUp())
 		require.False(t, l.CanSeekDown())
 
 		l.Sort(func(a, b WithAttributes) bool {
-			return a.(compWithAttr).Component.(*TestComponent).Ch <
-				b.(compWithAttr).Component.(*TestComponent).Ch
+			return a.(*compWithAttr).Component.(*TestComponent).Ch <
+				b.(*compWithAttr).Component.(*TestComponent).Ch
 		})
 
 		assert.False(t, l.CanSeekUp())
