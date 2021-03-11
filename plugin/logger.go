@@ -7,9 +7,9 @@ import (
 	"log"
 	"time"
 
+	"github.com/ernestrc/blue/logging"
 	"github.com/hashicorp/go-hclog"
 	"github.com/sirupsen/logrus"
-	"github.com/ernestrc/blue/logging"
 )
 
 var pluginLogger logrus.Logger

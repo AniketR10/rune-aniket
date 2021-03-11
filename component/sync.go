@@ -2,13 +2,14 @@ package component
 
 import (
 	"sync"
+
 	"github.com/ernestrc/go-tui"
 	"github.com/ernestrc/go-tui/term"
 )
 
 type csync struct {
 	mu sync.Locker
-	c tui.Component
+	c  tui.Component
 }
 
 // Sync wraps a tui.Component to provide access synchronization with mu.

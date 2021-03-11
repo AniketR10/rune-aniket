@@ -130,7 +130,7 @@ func TestFocusListFocus(t *testing.T) {
 
 func TestFocusAddAttr(t *testing.T) {
 	var (
-		redAttr = term.Attributes{Fg: term.ColorRed}
+		redAttr   = term.Attributes{Fg: term.ColorRed}
 		greenAttr = term.Attributes{Fg: term.ColorGreen}
 	)
 
