@@ -41,7 +41,7 @@ func (t *testFlusherCloser) Flush() error {
 	return nil
 }
 
-func newTestComponent(ed Editor) (*Component, error) {
+func newTestComponentErr(ed Editor) (*Component, error) {
 	c, err := NewComponent(ed, DefaultConfig())
 	if err != nil {
 		return nil, err
@@ -56,6 +56,12 @@ func newTestComponent(ed Editor) (*Component, error) {
 		return &testFlusherCloser{}, nil
 	}
 	return c, nil
+}
+
+func newTestComponent(t *testing.T, ed Editor) *Component {
+	c, err := newTestComponentErr(ed)
+	require.NoError(t, err)
+	return c
 }
 
 func TestComponentInterfaces(t *testing.T) {
@@ -80,8 +86,7 @@ func TestComponentInterfaces(t *testing.T) {
 
 func TestComponentKeyMapper(t *testing.T) {
 	t.Run("KeyMapping on a non-mapped event returns false", func(t *testing.T) {
-		c, err := newTestComponent(&testEditor{})
-		require.NoError(t, err)
+		c := newTestComponent(t, &testEditor{})
 
 		ev, _, ok := c.KeyMapping(keya)
 		assert.False(t, ok)
@@ -89,8 +94,7 @@ func TestComponentKeyMapper(t *testing.T) {
 	})
 
 	t.Run("only allows Key event mappings", func(t *testing.T) {
-		c, err := newTestComponent(&testEditor{})
-		require.NoError(t, err)
+		c := newTestComponent(t, &testEditor{})
 
 		m1 := map[term.Event]term.Event{
 			evInterrupt: keya,
@@ -105,13 +109,12 @@ func TestComponentKeyMapper(t *testing.T) {
 	})
 
 	t.Run("KeyMapping returns mapped event", func(t *testing.T) {
-		c, err := newTestComponent(&testEditor{})
-		require.NoError(t, err)
+		c := newTestComponent(t, &testEditor{})
 
 		m := map[term.Event]term.Event{
 			keya: keyb,
 		}
-		err = c.MergeKeyMap(m)
+		err := c.MergeKeyMap(m)
 		require.NoError(t, err)
 
 		ev, _, ok := c.KeyMapping(keya)
@@ -120,14 +123,13 @@ func TestComponentKeyMapper(t *testing.T) {
 	})
 
 	t.Run("KeyMapping returns mapped command", func(t *testing.T) {
-		c, err := newTestComponent(&testEditor{})
-		require.NoError(t, err)
+		c := newTestComponent(t, &testEditor{})
 		c.config.CommandKeyBindings[keyb] = "myCmd"
 
 		m := map[term.Event]term.Event{
 			keya: keyb,
 		}
-		err = c.MergeKeyMap(m)
+		err := c.MergeKeyMap(m)
 		require.NoError(t, err)
 
 		ev, cmd, ok := c.KeyMapping(keya)
@@ -139,44 +141,42 @@ func TestComponentKeyMapper(t *testing.T) {
 
 func TestComponentTermSubscriber(t *testing.T) {
 	t.Run("Publish on a non-mapped event returns false", func(t *testing.T) {
-		c, err := newTestComponent(&testEditor{})
-		require.NoError(t, err)
+		c := newTestComponent(t, &testEditor{})
 
 		ok := c.Publish(keya)
 		assert.False(t, ok)
 	})
 
 	t.Run("only allows Key event subscriptions", func(t *testing.T) {
-		c, err := newTestComponent(&testEditor{})
-		require.NoError(t, err)
+		c := newTestComponent(t, &testEditor{})
 
-		err = c.Subscribe(evInterrupt, browser.FuncEventHandler(func(term.Event) bool { return false }))
+		err := c.Subscribe(evInterrupt, browser.FuncEventHandler(func(term.Event) bool { return false }))
 		require.Error(t, err)
 	})
 
 	t.Run("only allows ONE subscription. Second attempt returns error", func(t *testing.T) {
-		c, err := newTestComponent(&testEditor{})
-		require.NoError(t, err)
+		c := newTestComponent(t, &testEditor{})
 
-		err = c.Subscribe(keya, browser.FuncEventHandler(func(term.Event) bool { return false }))
+		err := c.Subscribe(keya, browser.FuncEventHandler(func(term.Event) bool { return false }))
 		require.NoError(t, err)
 		err = c.Subscribe(keya, browser.FuncEventHandler(func(term.Event) bool { return false }))
 		require.Error(t, err)
 	})
 
 	t.Run("Publish publishes event to ONE subscribed handler", func(t *testing.T) {
-		c, err := newTestComponent(&testEditor{})
-		require.NoError(t, err)
+		c := newTestComponent(t, &testEditor{})
 
 		var called int
+		err := c.Subscribe(keya, browser.FuncEventHandler(func(term.Event) bool {
+			called++
+			return false
+		}))
+		require.NoError(t, err)
 		err = c.Subscribe(keya, browser.FuncEventHandler(func(term.Event) bool {
 			called++
 			return false
 		}))
-		err = c.Subscribe(keya, browser.FuncEventHandler(func(term.Event) bool {
-			called++
-			return false
-		}))
+		require.Error(t, err)
 
 		handled := c.Publish(keya)
 		assert.True(t, handled)
@@ -187,8 +187,7 @@ func TestComponentTermSubscriber(t *testing.T) {
 func newTestComponentWithFile(
 	t *testing.T, filename string,
 ) (*Component, browser.Handler) {
-	c, err := newTestComponent(&testEditor{})
-	require.NoError(t, err)
+	c := newTestComponent(t, &testEditor{})
 	h, err := c.Open(filename)
 	require.NoError(t, err)
 	return c, h
@@ -390,8 +389,7 @@ func TestComponentEditorSubscriber(t *testing.T) {
 	for _, _tcase := range tsuite {
 		tcase := _tcase
 		t.Run(tcase.name+" SubscribeEditor subscribes an event handler", func(t *testing.T) {
-			c, err := newTestComponent(&testEditor{})
-			require.NoError(t, err)
+			c := newTestComponent(t, &testEditor{})
 
 			filename := "~/Joe_Biden.txt"
 			if tcase.preTrigger != nil {
@@ -421,8 +419,7 @@ func TestComponentEditorSubscriber(t *testing.T) {
 		})
 
 		t.Run(tcase.name+" unsubscribes if handler returns exit=true", func(t *testing.T) {
-			c, err := newTestComponent(&testEditor{})
-			require.NoError(t, err)
+			c := newTestComponent(t, &testEditor{})
 
 			filename := "Jill_Biden.txt"
 			if tcase.preTrigger != nil {
@@ -446,8 +443,7 @@ func TestComponentEditorSubscriber(t *testing.T) {
 	}
 
 	t.Run("no events are dispatched after Close is called", func(t *testing.T) {
-		c, err := newTestComponent(&testEditor{})
-		require.NoError(t, err)
+		c := newTestComponent(t, &testEditor{})
 
 		filename := "Jill_Biden.txt"
 		ev := Event{
@@ -469,7 +465,7 @@ func TestComponentEditorSubscriber(t *testing.T) {
 			return false
 		}))
 
-		_, err = c.Open(filename)
+		_, err := c.Open(filename)
 		require.NoError(t, err)
 
 		assert.NoError(t, c.Close())
@@ -485,8 +481,7 @@ func TestComponentEditorSubscriber(t *testing.T) {
 
 		tcase := _tcase
 		t.Run(tcase.name+" events are dispatched with content", func(t *testing.T) {
-			c, err := newTestComponent(&testEditor{})
-			require.NoError(t, err)
+			c := newTestComponent(t, &testEditor{})
 
 			filename := "Toy Rory"
 
@@ -508,8 +503,7 @@ func TestComponentEditorSubscriber(t *testing.T) {
 	}
 
 	t.Run("one open event is dispatched per open tab upon subscribe to open", func(t *testing.T) {
-		c, err := newTestComponent(&testEditor{})
-		require.NoError(t, err)
+		c := newTestComponent(t, &testEditor{})
 
 		content := "how bout that"
 		filename1 := "JJ.txt"
@@ -521,7 +515,7 @@ func TestComponentEditorSubscriber(t *testing.T) {
 			return &testFlusherCloser{}, nil
 		}
 
-		_, err = c.Open(filename1)
+		_, err := c.Open(filename1)
 		require.NoError(t, err)
 		_, err = c.Open(filename2)
 		require.NoError(t, err)
@@ -539,10 +533,26 @@ func TestComponentEditorSubscriber(t *testing.T) {
 
 func TestDispatchCommand(t *testing.T) {
 	t.Run("DispatchCommand returns false if there's no registered handler", func(t *testing.T) {
-		c, err := newTestComponent(&testEditor{})
-		require.NoError(t, err)
+		c := newTestComponent(t, &testEditor{})
 
 		assert.False(t, c.DispatchCommand(handler.NewTestHandler(), "jklfwe", "SELL"))
+	})
+}
+
+func TestComponentCommands(t *testing.T) {
+	t.Run("returns empty slice if no commands have been registered", func(t *testing.T) {
+		c := newTestComponent(t, &testEditor{})
+		assert.Len(t, c.Commands(), 0)
+	})
+
+	t.Run("returns registered commands", func(t *testing.T) {
+		c := newTestComponent(t, &testEditor{})
+		c.Register("myCmd", FuncCommandHandler(func(Command) bool {
+			return true
+		}))
+		cmds := c.Commands()
+		require.Len(t, cmds, 1)
+		assert.Equal(t, "myCmd", cmds[0])
 	})
 }
 
@@ -590,7 +600,7 @@ func testRegister(t *testing.T,
 
 func TestComponentRegister(t *testing.T) {
 	testRegister(t, func(ed Editor, mu *sync.Mutex, resName string) (*Component, Editor, error) {
-		c, err := newTestComponent(ed)
+		c, err := newTestComponentErr(ed)
 		return c, c, err
 	})
 }

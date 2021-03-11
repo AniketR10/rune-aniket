@@ -269,7 +269,7 @@ func TestRPCRegister(t *testing.T) {
 	var closeFns []func()
 
 	testRegister(t, func(ed Editor, mu *sync.Mutex, resName string) (*Component, Editor, error) {
-		c, err := newTestComponent(ed)
+		c, err := newTestComponentErr(ed)
 		if err != nil {
 			return nil, nil, err
 		}
