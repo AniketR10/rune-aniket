@@ -248,14 +248,11 @@ func (l *List) consumeAsyncElements() {
 
 func (l *List) handleSearch(ctx context.Context, cancelFn func()) {
 	l.mu.Lock()
-	input := l.input
+	input := make([][]byte, len(l.input))
+	copy(input, l.input)
 	searchInput := l.getSearchQuery()
 	l.list.Reset()
 	l.mu.Unlock()
-
-	// helps with contention by avoiding locking for every match added.
-	var draftList component.FocusList
-	draftList.InitWithAttr(l.cfg.textAttr, l.cfg.focusAttr)
 
 	slab := makeSlab()
 	search(l.cfg.algo, input, searchInput, slab, l.cfg.caseSensitive,
@@ -264,7 +261,14 @@ func (l *List) handleSearch(ctx context.Context, cancelFn func()) {
 			case <-ctx.Done():
 				return false
 			default:
-				addMatch(&draftList, match, tokens, l.cfg.matchedTextAttr)
+				// NOTE: this creates a lot of contention when performing queries
+				// on very large inputs that are still being collected via Push.
+				// search list should be refactor to use on goroutine which takes
+				// requests of either: new search (with query + all input), new data, or draw
+				// that should be the only goroutine with access to l.list
+				l.mu.Lock()
+				defer l.mu.Unlock()
+				addMatch(&l.list.FocusList, match, tokens, l.cfg.matchedTextAttr)
 				return true
 			}
 		})
@@ -276,11 +280,6 @@ func (l *List) handleSearch(ctx context.Context, cancelFn func()) {
 	}
 
 	l.mu.Lock()
-	// NOTE the data that has been pushed asynchrously for the duration since
-	// the previous Unlock, will not make it to this iteration of the final result.
-	draftList.Iterate(func(c component.WithAttributes) {
-		l.list.PushBack(c)
-	})
 	l.sortMatchesList()
 	cancelFn()
 	l.mu.Unlock()
