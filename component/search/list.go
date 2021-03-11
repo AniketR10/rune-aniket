@@ -96,7 +96,7 @@ func (l *List) Init(cfg ListConfig) {
 	l.dataChan = make(chan []byte)
 	l.setFilesCount()
 
-	go l.consumeAsyncElements()
+	go l.consumeAsyncElements(l.quitChan)
 }
 
 func addMatch(
@@ -205,7 +205,7 @@ func (l *List) pushData(data []byte, slab *util.Slab, sortList bool) (matched bo
 	return
 }
 
-func (l *List) consumeAsyncElements() {
+func (l *List) consumeAsyncElements(quitChan chan struct{}) {
 	// to handle very large searches, we redraw only every
 	// numElementsToReDrawAt to start with, and we double this
 	// number every time until we earch maxNumElementsToReDrawAt,
@@ -237,7 +237,7 @@ func (l *List) consumeAsyncElements() {
 					redrawAt *= 2
 				}
 			}
-		case <-l.quitChan:
+		case <-quitChan:
 			l.mu.Lock()
 			defer l.mu.Unlock()
 			l.input = l.input[:0]
@@ -466,10 +466,14 @@ func (l *List) Close() error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
+	if l.quitChan == nil {
+		return nil
+	}
 	if l.cancelSearch != nil {
 		l.cancelSearch()
 	}
 	close(l.quitChan)
+	l.quitChan = nil
 	l.list.Reset()
 	return nil
 }
