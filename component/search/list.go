@@ -55,9 +55,8 @@ type List struct {
 	}
 	list struct {
 		component.Virtual
-		*component.FocusList
+		component.FocusList
 	}
-	draftList *component.FocusList
 }
 
 type searchResultComponent struct {
@@ -73,12 +72,6 @@ func NewList(cfg ListConfig) *List {
 	return l
 }
 
-func newFocusList(cfg listConfig) *component.FocusList {
-	f := component.NewFocusList()
-	f.InitWithAttr(cfg.textAttr, cfg.focusAttr)
-	return f
-}
-
 // Init initializes this config with cfg. Close must be called
 // when this List is no longer to be used, or before Init
 // is to be called again to reset the list.
@@ -91,9 +84,8 @@ func (l *List) Init(cfg ListConfig) {
 	l.matchCountBar.Scroll.InitWithBuffer(&l.matchCountBar.Buffer)
 	l.matchCountBar.C = &l.matchCountBar.Scroll
 
-	a, b := newFocusList(l.cfg), newFocusList(l.cfg)
-	l.setInternalList(a)
-	l.draftList = b
+	l.list.FocusList.InitWithAttr(l.cfg.textAttr, l.cfg.focusAttr)
+	l.list.C = &l.list.FocusList
 
 	if l.cfg.searchBase != "" {
 		l.searchBar.InsertStringWithAttr(term.Coordinates{},
@@ -105,12 +97,6 @@ func (l *List) Init(cfg ListConfig) {
 	l.setFilesCount()
 
 	go l.consumeAsyncElements()
-}
-
-func (l *List) setInternalList(f *component.FocusList) {
-	l.draftList = l.list.FocusList
-	l.list.C = f
-	l.list.FocusList = f
 }
 
 func addMatch(
@@ -197,7 +183,7 @@ func (l *List) pushData(data []byte, slab *util.Slab, sortList bool) (matched bo
 
 	searchInput := l.getSearchQuery()
 	if len(searchInput) == 0 {
-		addMatch(l.list.FocusList, Match{data: data}, nil, l.cfg.matchedTextAttr)
+		addMatch(&l.list.FocusList, Match{data: data}, nil, l.cfg.matchedTextAttr)
 		matched = true
 		if sortList {
 			l.setFilesCount()
@@ -207,7 +193,7 @@ func (l *List) pushData(data []byte, slab *util.Slab, sortList bool) (matched bo
 
 	search(l.cfg.algo, linebuf[:], searchInput, slab, l.cfg.caseSensitive,
 		func(match Match, tokens *[]int) bool {
-			addMatch(l.list.FocusList, match, tokens, l.cfg.matchedTextAttr)
+			addMatch(&l.list.FocusList, match, tokens, l.cfg.matchedTextAttr)
 			matched = true
 			return false
 		})
@@ -264,10 +250,12 @@ func (l *List) handleSearch(ctx context.Context, cancelFn func()) {
 	l.mu.Lock()
 	input := l.input
 	searchInput := l.getSearchQuery()
-	// helps with contention by avoiding locking for every match added.
-	l.draftList.Reset()
 	l.list.Reset()
 	l.mu.Unlock()
+
+	// helps with contention by avoiding locking for every match added.
+	var draftList component.FocusList
+	draftList.InitWithAttr(l.cfg.textAttr, l.cfg.focusAttr)
 
 	slab := makeSlab()
 	search(l.cfg.algo, input, searchInput, slab, l.cfg.caseSensitive,
@@ -276,7 +264,7 @@ func (l *List) handleSearch(ctx context.Context, cancelFn func()) {
 			case <-ctx.Done():
 				return false
 			default:
-				addMatch(l.draftList, match, tokens, l.cfg.matchedTextAttr)
+				addMatch(&draftList, match, tokens, l.cfg.matchedTextAttr)
 				return true
 			}
 		})
@@ -290,7 +278,7 @@ func (l *List) handleSearch(ctx context.Context, cancelFn func()) {
 	l.mu.Lock()
 	// NOTE the data that has been pushed asynchrously for the duration since
 	// the previous Unlock, will not make it to this iteration of the final result.
-	l.draftList.Iterate(func(c component.WithAttributes) {
+	draftList.Iterate(func(c component.WithAttributes) {
 		l.list.PushBack(c)
 	})
 	l.sortMatchesList()
@@ -395,7 +383,7 @@ func (l *List) Search(str string) {
 
 // SearchQueryDelete removes the last rune added to the search query,
 // canceling the previous search if any. It asynchronously performs
-// starts a new search.
+// a new search.
 func (l *List) SearchQueryDelete() bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -407,6 +395,21 @@ func (l *List) SearchQueryDelete() bool {
 		return true
 	}
 	return false
+}
+
+// DataReset resets the current data list.
+func (l *List) DataReset() {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.input = l.input[:0]
+}
+
+// SearchReset removes the current search query and cancels any ongoing search.
+func (l *List) SearchReset() {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.searchBar.Reset()
+	l.asyncSearch()
 }
 
 // Wait waits for the current search to finish if any and returns.
