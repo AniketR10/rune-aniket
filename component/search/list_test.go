@@ -190,6 +190,7 @@ func TestListAsyncPush(t *testing.T) {
 
 func TestListDraw(t *testing.T) {
 	l := NewList(ListConfig{SearchBase: ":"})
+	l.Resize(8, 4)
 
 	w := term.NewStringWriter(8, 4)
 
@@ -209,20 +210,24 @@ Safe Cha
         
         `,
 	}, {
-		func() { l.PushSync([]byte("For the Time Being - Phonique")) }, `
-:    2/2
+		func() {
+			for i := 0; i < 19; i++ {
+				l.PushSync([]byte("For the Time Being - Phonique"))
+			}
+		}, `
+:  20/20
 Safe Cha
 For the 
-        `,
+For the `,
 	}, {
 		func() {
 			l.SearchQueryWrite('P')
 			l.Wait()
 		}, `
-:P   1/2
+:P 19/20
 For the 
-        
-        `,
+For the 
+For the `,
 	},
 	}
 
@@ -235,7 +240,6 @@ For the
 			tcase.action()
 		}
 
-		l.Resize(8, 4)
 		l.Draw(w)
 
 		if err := w.Flush(); err != nil {

@@ -39,6 +39,7 @@ type List struct {
 	searchCtx    context.Context
 	cancelSearch func()
 	height       int
+	width        int
 
 	cfg listConfig
 
@@ -49,6 +50,7 @@ type List struct {
 	}
 
 	matchCountBar struct {
+		width int
 		cell.Buffer
 		component.Scroll
 		component.Virtual
@@ -401,6 +403,8 @@ func (l *List) DataReset() {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	l.input = l.input[:0]
+	l.list.Reset()
+	l.setFilesCount()
 }
 
 // SearchReset removes the current search query and cancels any ongoing search.
@@ -427,6 +431,9 @@ func (l *List) Draw(w term.Writer) {
 
 	l.list.Virtual.Draw(w)
 	l.searchBar.Virtual.Draw(w)
+	if l.matchCountBar.width != l.getMatchCountBarWidth() {
+		l.resizeMatchCountBar(l.width)
+	}
 	l.matchCountBar.Virtual.Draw(w)
 }
 
@@ -436,6 +443,7 @@ func (l *List) Resize(width, height int) {
 	defer l.mu.Unlock()
 
 	l.height = height
+	l.width = width
 
 	if height <= 1 {
 		l.list.Move(term.Coordinates{Y: 0})
@@ -450,13 +458,21 @@ func (l *List) Resize(width, height int) {
 
 	l.searchBar.Move(term.Coordinates{})
 	l.searchBar.Virtual.Resize(width, 1)
+	l.resizeMatchCountBar(width)
+}
 
-	lenFilesCounter := l.matchCountBar.Buffer.Columns(0)
+func (l *List) getMatchCountBarWidth() int {
+	return l.matchCountBar.Buffer.Columns(0)
+}
+
+func (l *List) resizeMatchCountBar(width int) {
+	lenFilesCounter := l.getMatchCountBarWidth()
 	if width-lenFilesCounter <= 0 {
 		l.matchCountBar.Virtual.Resize(0, 0)
 		return
 	}
 
+	l.matchCountBar.width = lenFilesCounter
 	l.matchCountBar.Move(term.Coordinates{X: width - lenFilesCounter})
 	l.matchCountBar.Virtual.Resize(lenFilesCounter, 1)
 }
