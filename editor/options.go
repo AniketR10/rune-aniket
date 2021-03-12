@@ -8,6 +8,17 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+// CommandOverlayConfig holds configuration for the
+// command's interface.
+type CommandOverlayConfig struct {
+	Frame            bool
+	Width, Height    int
+	MatchedTextAttr  term.Attributes
+	CountAttr        term.Attributes
+	FocusElementAttr term.Attributes
+	ElementAttr      term.Attributes
+}
+
 // Config holds configuration for an browser.Component.
 type Config struct {
 	Tabspaces          int
@@ -19,22 +30,37 @@ type Config struct {
 	Storage            document.Service
 	DirtyTabAttr       term.Attributes
 
+	CommandOverlay CommandOverlayConfig
 	browser.Config
+}
+
+// DefaultCommandOverlayConfig returns the default Config's CommandOverlayConfig.
+func DefaultCommandOverlayConfig() (cfg CommandOverlayConfig) {
+	cfg.Frame = true
+	cfg.Width = 50
+	cfg.Height = 14
+	cfg.MatchedTextAttr = term.Attributes{Fg: term.ColorRed}
+	cfg.CountAttr = term.Attributes{Fg: term.ColorRed | term.AttrBold}
+	cfg.FocusElementAttr = term.Attributes{Fg: term.AttrBold | term.ColorRed}
+	cfg.ElementAttr = term.Attributes{}
+	return
 }
 
 // DefaultConfig returns the default Config.
 func DefaultConfig() Config {
-	return Config{
+	cfg := Config{
 		Tabspaces:          4,
 		SwapDir:            "",
 		Filepaths:          nil,
 		RecoveryFilepath:   "",
 		CommandEvent:       term.Event{Ch: ':', Type: term.EventKey},
 		Config:             browser.DefaultConfig(),
-		CommandKeyBindings: make(map[term.Event]string),
 		Storage:            document.NewInMemoryCache(),
 		DirtyTabAttr:       term.Attributes{Fg: term.AttrBold},
+		CommandKeyBindings: make(map[term.Event]string),
+		CommandOverlay:     DefaultCommandOverlayConfig(),
 	}
+	return cfg
 }
 
 // Option represents a configuration option for a browser.Handler.
@@ -176,5 +202,12 @@ func WithCommandKeyBinding(ev term.Event, cmd string) Option {
 func WithDirtyTabAttr(attr term.Attributes) Option {
 	return func(cfg *Config) {
 		cfg.DirtyTabAttr = attr
+	}
+}
+
+// WithCommandOverlayConfig defines the command overlay interface properties.
+func WithCommandOverlayConfig(c CommandOverlayConfig) Option {
+	return func(cfg *Config) {
+		cfg.CommandOverlay = c
 	}
 }

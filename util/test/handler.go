@@ -32,7 +32,7 @@ func handleTestCase(
 	err := w.Clear(term.Attributes{Fg: 0, Bg: 0})
 	require.NoError(t, err)
 
-	var shouldSleep bool
+	var shouldSleep time.Duration
 	for _, r := range tcase.InputSequence {
 		switch r {
 		case ':':
@@ -40,7 +40,7 @@ func handleTestCase(
 		case '`':
 			h.Handle(term.Event{Key: term.KeyCtrlV, Type: term.EventKey})
 		case '_':
-			shouldSleep = true
+			shouldSleep += 100
 		case ' ':
 			h.Handle(term.Event{Key: term.KeySpace, Type: term.EventKey})
 		case '^':
@@ -59,12 +59,12 @@ func handleTestCase(
 	}
 
 	// this is a hack for async handlers
-	if shouldSleep {
+	if shouldSleep != 0 {
 		// wait until all events have been dispatched
-		time.Sleep(100 * time.Millisecond)
+		time.Sleep(shouldSleep * time.Millisecond)
 		// force a draw and wait for the draw response to arrive
 		h.Draw(term.NewStringWriter(width, height))
-		time.Sleep(100 * time.Millisecond)
+		time.Sleep(shouldSleep * time.Millisecond)
 	}
 	h.Draw(w)
 

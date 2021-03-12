@@ -17,13 +17,13 @@ import (
 )
 
 const (
-	outputNormal     = "normal"
-	output256        = "color_256"
-	outputGrayscale  = "grayscale"
-	inputEsc         = "esc"
-	inputAlt         = "alt"
-	inputMouse       = "mouse"
-	inputCurrent     = "current"
+	outputNormal           = "normal"
+	output256              = "color_256"
+	outputGrayscale        = "grayscale"
+	inputEsc               = "esc"
+	inputAlt               = "alt"
+	inputMouse             = "mouse"
+	inputCurrent           = "current"
 	legacyDefaultStartText = `
          __       
         /\ \      
@@ -70,15 +70,23 @@ func initDefaultConfig(c *ideConfig) {
 	initConfig(c, cfg)
 }
 
+func (c ideConfig) command() (plugin.Config, bool) {
+	if c.cfg == nil {
+		return nil, false
+	}
+	return c.getConfig(plugin.MapConfig(c.cfg), "command")
+}
+
 func (c ideConfig) commandKeyMappings() map[term.Event]string {
 	ret := make(map[term.Event]string)
-	if c.cfg == nil {
+	cfg, ok := c.command()
+	if !ok {
 		return ret
 	}
-	m, err := plugin.MapConfig(c.cfg).GetMap("command_key_bindings")
+	m, err := cfg.GetMap("key_bindings")
 	if err != nil {
 		if err != plugin.ErrNotFound {
-			c.errors["command_key_bindings"] = err
+			c.errors["key_bindings"] = err
 		}
 		return ret
 	}
@@ -86,18 +94,116 @@ func (c ideConfig) commandKeyMappings() map[term.Event]string {
 	for k, v := range m {
 		ev, err := term.ParseKey(k)
 		if err != nil {
-			c.errors["command_key_bindings."+k] = err
+			c.errors["key_bindings."+k] = err
 			continue
 		}
 		strValue, ok := v.(string)
 		if !ok {
-			c.errors["command_key_bindings."+k] = errors.New("expected string found unknown type")
+			c.errors["key_bindings."+k] = errors.New("expected string found unknown type")
 			continue
 		}
 		ret[ev] = strValue
 	}
 
 	return ret
+}
+func (c ideConfig) commandOverlayFrame() (ret bool) {
+	ret = editor.DefaultCommandOverlayConfig().Frame
+	cfg, ok := c.command()
+	if !ok {
+		return
+	}
+	cfgFrame, err := cfg.GetBool("frame")
+	if err != nil {
+		if err != plugin.ErrNotFound {
+			c.errors["command.frame"] = err
+		}
+		return
+	}
+	ret = cfgFrame
+	return
+}
+
+func (c ideConfig) commandOverlayWidth() (ret int) {
+	ret = editor.DefaultCommandOverlayConfig().Width
+	cfg, ok := c.command()
+	if !ok {
+		return
+	}
+	width, err := cfg.GetInt("width")
+	if err != nil {
+		if err != plugin.ErrNotFound {
+			c.errors["command.width"] = err
+		}
+		return
+	}
+	ret = width
+	return
+}
+
+func (c ideConfig) commandOverlayHeight() (ret int) {
+	ret = editor.DefaultCommandOverlayConfig().Height
+	cfg, ok := c.command()
+	if !ok {
+		return
+	}
+	height, err := cfg.GetInt("height")
+	if err != nil {
+		if err != plugin.ErrNotFound {
+			c.errors["command.height"] = err
+		}
+		return
+	}
+	ret = height
+	return
+}
+
+func (c ideConfig) getCommandAttr(
+	key string, def term.Attributes,
+) (attr term.Attributes) {
+	attr = def
+	cfg, ok := c.command()
+	if !ok {
+		return
+	}
+	cfgAttr, err := cfg.GetAttributes(key)
+	if err != nil {
+		if err != plugin.ErrNotFound {
+			c.errors["command."+key] = err
+		}
+		return
+	}
+	attr = cfgAttr
+	return
+}
+
+func (c ideConfig) commandOverlayMatchedTextAttr() (ret term.Attributes) {
+	return c.getCommandAttr("matched_text_attr",
+		editor.DefaultCommandOverlayConfig().MatchedTextAttr)
+}
+
+func (c ideConfig) commandOverlayCountAttr() (ret term.Attributes) {
+	return c.getCommandAttr("count_attr", editor.DefaultCommandOverlayConfig().CountAttr)
+}
+
+func (c ideConfig) commandOverlayFocusElementAttr() (ret term.Attributes) {
+	return c.getCommandAttr("focus_element_attr", editor.DefaultCommandOverlayConfig().FocusElementAttr)
+}
+
+func (c ideConfig) commandOverlayElementAttr() (ret term.Attributes) {
+	return c.getCommandAttr("element_attr", editor.DefaultCommandOverlayConfig().ElementAttr)
+}
+
+func (c ideConfig) commandOverlayConfig() editor.CommandOverlayConfig {
+	return editor.CommandOverlayConfig{
+		Frame:            c.commandOverlayFrame(),
+		Width:            c.commandOverlayWidth(),
+		Height:           c.commandOverlayHeight(),
+		MatchedTextAttr:  c.commandOverlayMatchedTextAttr(),
+		CountAttr:        c.commandOverlayCountAttr(),
+		FocusElementAttr: c.commandOverlayFocusElementAttr(),
+		ElementAttr:      c.commandOverlayElementAttr(),
+	}
 }
 
 func (c ideConfig) getConfig(cfg plugin.Config, key string) (plugin.Config, bool) {

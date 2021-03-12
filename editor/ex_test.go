@@ -1,6 +1,7 @@
 package editor
 
 import (
+	"io"
 	"strconv"
 	"sync"
 	"testing"
@@ -159,7 +160,7 @@ func TestBrowserHandlerDraw(t *testing.T) {
 
 func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 	cases := []testutil.HandlerSequenceTestCase{
-		{"asdf",
+		{"a",
 			`┌──────────────────┐
 │                  │
 ├──────────────────┤
@@ -170,18 +171,7 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 │                  │
 │                  │
 └──────────────────┘`},
-		{":",
-			`┌──────────────────┐
-│                  │
-├──────────────────┤
-│                  │
-│                  │
-│                  │
-│                  │
-│                  │
-│▐                 │
-└──────────────────┘`},
-		{"e cabin.go>",
+		{":e cabin.go>",
 			`┌──────────────────┐
 │cabin.go          │
 ├──────────────────┤
@@ -269,18 +259,7 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 │BBBBBBBBBBBBBBBBBB│
 │BBBBBBBBBBBBBBBBBB│
 └──────────────────┘`},
-		{":wq!^",
-			`┌──────────────────┐
-│cabin.go          │
-├──────────────────┤
-│BBBBBBBBBBBBBBBBBB│
-│BBBBBBBBBBBBBBBBBB│
-│BBBBBBBBBBBBBBBBBB│
-│BBBBBBBBBBBBBBBBBB│
-│BBBBBBBBBBBBBBBBBB│
-│wq▐               │
-└──────────────────┘`},
-		{"^^^^",
+		{":wq!^^^^^",
 			`┌──────────────────┐
 │cabin.go          │
 ├──────────────────┤
@@ -431,7 +410,7 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 │BBBBBBBBBBBBBBBBBB│
 │BBBBBBBBBBBBBBBBBB│
 └──────────────────┘`},
-		{":bcloseAll>:e other.go>bcde((((",
+		{":bcloseAll>:e other.go>bcde((((__",
 			`┌──────────────────┐
 │other.go          │
 ├──────────────────┤
@@ -477,7 +456,7 @@ EEEE`},
 	require.NoError(t, err)
 
 	cases = []testutil.HandlerSequenceTestCase{
-		{"b___",
+		{"b__",
 			`┌──────────────────┐
 │other.go  bugz    │
 ├──────────────────┤
@@ -576,6 +555,7 @@ EEEE`},
 	}
 	testutil.TestHandlerSequence(t, bh, 20, 10, cases)
 
+	assert.NoError(t, bh.(io.Closer).Close())
 	assert.NoError(t, b.Close())
 	assert.Equal(t, 11, unmounted)
 }
@@ -607,6 +587,7 @@ func TestBrowserHandlerSubscribe(t *testing.T) {
 	ev := term.Event{Type: term.EventKey, Ch: '*'}
 	t.Run("proxies event to subscribed EventHandler", func(t *testing.T) {
 		b, h, startingRune := newBrowserForSubscribeTest(t, ev)
+		defer b.Close()
 
 		exit, handled := b.Handle(ev)
 		assertHandled(t, h, startingRune, exit, handled)
@@ -614,6 +595,7 @@ func TestBrowserHandlerSubscribe(t *testing.T) {
 
 	t.Run("returns error on second event Subscribe", func(t *testing.T) {
 		b, h, startingRune := newBrowserForSubscribeTest(t, ev)
+		defer b.Close()
 
 		h2 := browser.NewTestHandler()
 		err := b.Browser().Subscribe(ev, browser.HandlerEventHandler(h2))
@@ -625,6 +607,7 @@ func TestBrowserHandlerSubscribe(t *testing.T) {
 
 	t.Run("upon handler exit, it unsubscribes EventHandler", func(t *testing.T) {
 		b, h, startingRune := newBrowserForSubscribeTest(t, ev)
+		defer b.Close()
 		h.Exit = true
 
 		exit, handled := b.Handle(ev)
@@ -642,6 +625,7 @@ func TestBrowserHandlerPublishInterrupt(t *testing.T) {
 		var wg sync.WaitGroup
 		browser := newTestBrowserHandler()
 		require.NoError(t, browser.Init(&testEditor{}))
+		defer browser.Close()
 		browser.comp.interruptDraw = wg.Done
 
 		wg.Add(1)
@@ -694,6 +678,7 @@ func TestMultipleFilesStartup(t *testing.T) {
 		WithFilepath("wi.go"),
 	)
 	require.NoError(t, err)
+	defer b.Close()
 
 	testutil.TestHandlerSequence(t, b, 20, 10, cases)
 }

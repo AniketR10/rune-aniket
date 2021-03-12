@@ -89,6 +89,7 @@ func (i *IDE) init(cfgfilename, recfilename string, filenames ...string) error {
 		editor.WithStartTextAttr(i.ideConfig.startTextAttr()),
 		editor.WithStartTextBackgroundAttr(i.ideConfig.startTextBackgroundAttr()),
 		editor.WithDirtyTabAttr(i.ideConfig.dirtyTabAttr()),
+		editor.WithCommandOverlayConfig(i.commandOverlayConfig()),
 	)
 
 	for ev, cmd := range i.ideConfig.commandKeyMappings() {

@@ -2,6 +2,7 @@ package editor
 
 import (
 	"fmt"
+	"io"
 	"net"
 	_ "net/http/pprof"
 	"os"
@@ -65,6 +66,10 @@ func (h *safeHandler) Man() tui.Manual {
 	return h.Handler.Man()
 }
 
+func (h *safeHandler) Close() error {
+	return h.Handler.(io.Closer).Close()
+}
+
 func newTestRPCBrowser(t *testing.T,
 	destructor *func(),
 ) browserConstructor {
@@ -108,6 +113,7 @@ func newTestRPCBrowser(t *testing.T,
 			server.Close()
 			grpcServer.Stop()
 			broker.Close()
+			b.Close()
 		}
 		return h, bc, nil
 	}
