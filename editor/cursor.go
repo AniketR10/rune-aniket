@@ -239,6 +239,12 @@ func (c *Cursor) MoveStartLine() (ok bool) {
 // MoveEndLine moves the cursor at the end of the current line, scrolling
 // to the end of the line if required.
 func (c *Cursor) MoveEndLine() (ok bool) {
+	c.scroll.DisablePublishing()
+	defer c.scroll.EnablePublishing()
+	return c.moveEndLine()
+}
+
+func (c *Cursor) moveEndLine() (ok bool) {
 	y := c.cursorAtScroll().Y
 	if y >= c.buffer().Rows() {
 		c.setCursor(term.Coordinates{X: 0, Y: c.cursor.Y})
@@ -252,9 +258,8 @@ func (c *Cursor) MoveEndLine() (ok bool) {
 	}
 
 	var didSeek bool
-	for cols > c.scroll.Offset().X+width {
+	for cols > c.scroll.Offset().X+width && c.scroll.SeekRight() {
 		didSeek = true
-		c.scroll.SeekRight()
 	}
 
 	// note that padding is subject to limits imposed by Scroll's max offset.
@@ -262,19 +267,19 @@ func (c *Cursor) MoveEndLine() (ok bool) {
 	// we should add some padding to the max X offset of the scroll.
 	const padding = 10
 	if didSeek {
-		for i := 0; i < padding; i++ {
-			c.scroll.SeekRight()
+		for i := 0; i < padding && c.scroll.SeekRight(); i++ {
 		}
 	}
 
 	// handle cursor *past* end of line
 	var pos term.Coordinates
-	for {
+	ok = true
+	for ok {
 		pos = term.Coordinates{X: cols - c.scroll.Offset().X - 1, Y: c.cursor.Y}
 		if pos.X >= 0 {
 			break
 		}
-		c.scroll.SeekLeft()
+		ok = c.scroll.SeekLeft()
 	}
 	ok = c.cursor != pos
 	c.setCursor(pos)
@@ -435,6 +440,9 @@ func isNoneOf(cell term.Cell, skip []rune) (none bool) {
 }
 
 func (c *Cursor) moveAfterRune(skip, special []rune, move func() bool) (ok bool) {
+	c.scroll.DisablePublishing()
+	defer c.scroll.EnablePublishing()
+
 	const (
 		init = iota
 		foundRune
@@ -496,6 +504,9 @@ func (c *Cursor) revertTo(pos, offset term.Coordinates) {
 }
 
 func (c *Cursor) moveBeforeRune(skip, all []rune, move func() bool) (ok bool) {
+	c.scroll.DisablePublishing()
+	defer c.scroll.EnablePublishing()
+
 	const (
 		skipRune = iota
 		findRune
@@ -596,6 +607,9 @@ func (c *Cursor) MoveLeftEndWord() bool {
 }
 
 func (c *Cursor) moveMatchRune(target, match rune, move func() bool) bool {
+	c.scroll.DisablePublishing()
+	defer c.scroll.EnablePublishing()
+
 	currc, curro := c.cursor, c.scroll.Offset()
 	pending := 1
 	var prev, prevOffset term.Coordinates
@@ -731,6 +745,9 @@ func (c *Cursor) Backspace() (ok bool) {
 
 // Conflate removes the new line character at the end of the current line.
 func (c *Cursor) Conflate() (ok bool) {
+	c.scroll.DisablePublishing()
+	defer c.scroll.EnablePublishing()
+
 	pos := c.cursorAtScroll()
 	if pos.Y >= c.buffer().Rows() {
 		ok = false
@@ -739,7 +756,7 @@ func (c *Cursor) Conflate() (ok bool) {
 
 	ok = true
 
-	c.MoveEndLine()
+	c.moveEndLine()
 	length := c.buffer().Columns(pos.Y)
 	if length == 0 {
 		ok = c.buffer().DeleteRow(pos.Y)
@@ -787,10 +804,10 @@ func (c *Cursor) scrollToWindowCoordinates(pos term.Coordinates) term.Coordinate
 	for pos.Y < 0 && c.scroll.SeekUp() {
 		pos.Y++
 	}
-	for pos.X >= c.scroll.Width() && c.scroll.SeekRight() {
+	for pos.X > 0 && pos.X >= c.scroll.Width() && c.scroll.SeekRight() {
 		pos.X--
 	}
-	for pos.Y >= c.scroll.Height() && c.scroll.SeekDown() {
+	for pos.Y > 0 && pos.Y >= c.scroll.Height() && c.scroll.SeekDown() {
 		pos.Y--
 	}
 	return pos
@@ -933,6 +950,9 @@ func (c *Cursor) Selection() string {
 
 // Redo reverses the previously reversed update to the underlying buffer.
 func (c *Cursor) Redo() bool {
+	c.scroll.DisablePublishing()
+	defer c.scroll.EnablePublishing()
+
 	ok, at := c.buffer().Redo()
 	if !ok {
 		return false
@@ -943,6 +963,9 @@ func (c *Cursor) Redo() bool {
 
 // Undo reverses the last update to the underlying buffer.
 func (c *Cursor) Undo() bool {
+	c.scroll.DisablePublishing()
+	defer c.scroll.EnablePublishing()
+
 	ok, at := c.buffer().Undo()
 	if !ok {
 		return false
@@ -1028,6 +1051,9 @@ func (c *Cursor) CopySelection(clip Clipboard) (ok bool) {
 // If cursor is already in a row and/or in a column with content, then this method
 // does nothing.
 func (c *Cursor) MoveToBounds(padding int) {
+	c.scroll.DisablePublishing()
+	defer c.scroll.EnablePublishing()
+
 	for c.Row() >= c.buffer().Rows() && c.MoveUp() {
 	}
 
@@ -1039,6 +1065,9 @@ func (c *Cursor) MoveToBounds(padding int) {
 // a cell with a non-null character. If the current cell is already a cell with
 // a non-null character, then this method does nothing.
 func (c *Cursor) MoveToNextNonNull() {
+	c.scroll.DisablePublishing()
+	defer c.scroll.EnablePublishing()
+
 	for cell, ok := c.Cell(); ; cell, ok = c.Cell() {
 		if !ok {
 			if !c.MoveLeft() {
@@ -1305,7 +1334,7 @@ func (c *Cursor) SetLocationList(ID string, l LocationList) LocationList {
 	return prev
 }
 
-func (c *Cursor) moveEndOfLocationList(
+func (c *Cursor) endOfLocationList(
 	l LocationList, op func(LocationList) (Location, bool),
 ) (term.Coordinates, bool) {
 	prev, ok := l.Current()
@@ -1325,7 +1354,10 @@ func (c *Cursor) movePastCursor(
 	l LocationList, op, reverse func(LocationList) (Location, bool),
 	continueIf func(term.Coordinates, term.Coordinates) bool,
 ) bool {
-	_, gotLocations := c.moveEndOfLocationList(l, reverse)
+	c.scroll.DisablePublishing()
+	defer c.scroll.EnablePublishing()
+
+	_, gotLocations := c.endOfLocationList(l, reverse)
 	if !gotLocations {
 		return false
 	}
@@ -1343,7 +1375,7 @@ func (c *Cursor) movePastCursor(
 			continue
 		}
 
-		pos.From, _ = c.moveEndOfLocationList(l, reverse)
+		pos.From, _ = c.endOfLocationList(l, reverse)
 		c.moveToScroll(pos.From)
 		break
 	}
@@ -1380,4 +1412,12 @@ func (c *Cursor) MoveToPrevLocation(ID string) bool {
 // Word returns the word under the cursor or empty if it's not a word.
 func (c *Cursor) Word() string {
 	return c.scroll.WordAt(c.cursorAtScroll())
+}
+
+// SubscribeScroll subscribes subs to scroll events. This should be
+// prefered over subscribing directly to scroll because some
+// cursor movements are composite movements that would trigger
+// multiple OnSeek dispatches rather than a single one.
+func (c *Cursor) SubscribeScroll(subs component.ScrollSubscriber) {
+	c.scroll.Subscribe(subs)
 }

@@ -6,6 +6,7 @@ import (
 
 	"github.com/ernestrc/go-tui"
 	"github.com/ernestrc/go-tui/cell"
+	"github.com/ernestrc/go-tui/component"
 	"github.com/ernestrc/go-tui/term"
 	testutil "github.com/ernestrc/go-tui/util/test"
 	"github.com/stretchr/testify/assert"
@@ -21,7 +22,7 @@ const snippet = `
 diff_buf_adjust(win_T *win)
 {
 	win_T	*wp;
-	int		i;
+	int				i;
 
 	if (!win->w_p_diff)
 	{
@@ -399,4 +400,37 @@ diff_buf_adjust(win_
 		return setupVi(t, snippet, 2)
 	}
 	testutil.TestHandlerIsolated(t, newVi, 20, 10, cases)
+}
+
+func TestIntegrationScrollEvent(t *testing.T) {
+	tsuite := []struct {
+		desc      string
+		cursorPos term.Coordinates
+		ev        term.Event
+	}{
+		{"MoveToMatchingRune", term.Coordinates{Y: 7}, term.Event{Type: term.EventKey, Ch: '%'}},
+		{"MoveEndLine", term.Coordinates{Y: 2}, term.Event{Type: term.EventKey, Ch: '$'}},
+		{"MoveRightStartWord", term.Coordinates{X: 4, Y: 9}, term.Event{Type: term.EventKey, Ch: 'w'}},
+		{"MoveLeftStartWord", term.Coordinates{X: 21, Y: 9}, term.Event{Type: term.EventKey, Ch: 'B'}},
+		{"Undo", term.Coordinates{X: 5, Y: 10}, term.Event{Type: term.EventKey, Ch: 'u'}},
+	}
+
+	for _, tcase := range tsuite {
+		tcase := tcase
+		t.Run(tcase.desc, func(t *testing.T) {
+			vi := setupVi(t, snippet, 2)
+			vi.cursor.Insert('a')
+			vi.SetCursorAtScroll(tcase.cursorPos)
+			vi.Resize(4, 4)
+
+			var called int
+			vi.less.Scroll.Subscribe(component.FuncScrollSubscriber(func(pos term.Coordinates) {
+				called++
+			}))
+
+			_, ok := vi.Handle(tcase.ev)
+			assert.True(t, ok)
+			assert.Equal(t, 1, called)
+		})
+	}
 }

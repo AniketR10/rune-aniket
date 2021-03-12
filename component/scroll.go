@@ -18,6 +18,9 @@ type Scroll struct {
 	offset        term.Coordinates
 	subs          []ScrollSubscriber
 
+	disablePublishing   bool
+	lastPublishedOffset term.Coordinates
+
 	// Sets the search result attributes upon matching.
 	ResultsAttr term.Attributes
 	Attributes  term.Attributes
@@ -595,6 +598,10 @@ func (s fnSubscriber) OnSeek(offset term.Coordinates) {
 }
 
 func (s *Scroll) dispatchSubscribers() {
+	if s.disablePublishing {
+		return
+	}
+	s.lastPublishedOffset = s.offset
 	for _, sub := range s.subs {
 		sub.OnSeek(s.offset)
 	}
@@ -603,6 +610,23 @@ func (s *Scroll) dispatchSubscribers() {
 // Subscribe subscribes sub to seek operations.
 func (s *Scroll) Subscribe(sub ScrollSubscriber) {
 	s.subs = append(s.subs, sub)
+}
+
+// DisablePublishing disables dispatching OnSeek calls to subscribers.
+// This is useful when clients of Scroll perform composite moves that
+// would otherwise dispatch multiple calls rather than one.
+func (s *Scroll) DisablePublishing() {
+	s.disablePublishing = true
+}
+
+// EnablePublishing enables dispatching OnSeek calls after a call to DisablePublishing.
+// It dispatches an OnSeek call to each subscriber if the offset has changed since
+// last time publishing was disabled.
+func (s *Scroll) EnablePublishing() {
+	s.disablePublishing = false
+	if s.lastPublishedOffset != s.Offset() {
+		s.dispatchSubscribers()
+	}
 }
 
 // FuncScrollSubscriber wraps fn to satisfy ScrollSubscriber.

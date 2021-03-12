@@ -64,7 +64,7 @@ func (e *viEditor) Edit(name string, buf *cell.Buffer) (editor.Handler, error) {
 	buf.Subscribe(bsub)
 
 	csub := editor.ScrollSubscriber(name, h, e)
-	h.less.Scroll.Subscribe(csub)
+	h.cursor.SubscribeScroll(csub)
 
 	return h, nil
 }
