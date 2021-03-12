@@ -1001,13 +1001,13 @@ func (h *lspEditorHandler) handleFileFlush(ev editor.Event) {
 	go h.semanticTokensFull(ctx, srv, f, h.getCells(f), ev.Content)
 }
 
-func (h *lspEditorHandler) handleFileInsert(ev editor.Event) {
+func (h *lspEditorHandler) handleFileUpdate(ev editor.Event, fn func(*cell.Buffer) string) {
 	ctx := context.Background()
 	ctx, cancelFn := context.WithTimeout(ctx, h.rpcTimeout)
 	defer cancelFn()
 	f, ok := h.getFileWithName(ev.ResourceName)
 	if !ok {
-		log.Warnf("lspEditorHandler: Received insert event for an unknown file: %#v", ev)
+		log.Warnf("lspEditorHandler: Received insert/delete event for an unknown file: %#v", ev)
 		return
 	}
 
@@ -1016,11 +1016,25 @@ func (h *lspEditorHandler) handleFileInsert(ev editor.Event) {
 		return
 	}
 
+	// editor.Editor requires clients to re-send locations on every update.
+	// unfortunately it seems that the LSP spec is a bit confusing regarding
+	// what to do when there are updates to the buffer but changes do not affect diagnostics.
+	// Certain LSP servers (rls, clangd, tsserver) re-send the diagnostics
+	// after every update. Some other LSP servers do not follow this behavior so
+	// we need to send the last known diagnostics and hope that if the locations are incorrect,
+	// the LSP server will overwrite them:
+	// See discussion https://github.com/microsoft/language-server-protocol/issues/1217
+	// Fix I submitted to gopls and was rejected https://go-review.googlesource.com/c/tools/+/298853
+	ds := h.getDiagnostics(f)
+	if len(ds) != 0 {
+		h.setDiagnosticsLocationList(ctx, f, ds)
+	}
+
 	oldCells := h.getCells(f)
 	buf := cell.CellsToBuffer(oldCells)
-	buf.InsertString(ev.Start, ev.Content)
+	content := fn(buf)
 	newCells := buf.RawCells()
-	_, err := h.sendIncrementalUpdate(ctx, srv, f, newCells, oldCells, ev.Content, ev.From, ev.To)
+	_, err := h.sendIncrementalUpdate(ctx, srv, f, newCells, oldCells, content, ev.From, ev.To)
 	h.setCells(f, newCells)
 	if err != nil {
 		return
@@ -1030,33 +1044,18 @@ func (h *lspEditorHandler) handleFileInsert(ev editor.Event) {
 	go h.semanticTokensFull(ctx, srv, f, newCells, buf.String())
 }
 
+func (h *lspEditorHandler) handleFileInsert(ev editor.Event) {
+	h.handleFileUpdate(ev, func(buf *cell.Buffer) string {
+		buf.InsertString(ev.Start, ev.Content)
+		return ev.Content
+	})
+}
+
 func (h *lspEditorHandler) handleFileDelete(ev editor.Event) {
-	ctx := context.Background()
-	ctx, cancelFn := context.WithTimeout(ctx, h.rpcTimeout)
-	defer cancelFn()
-	f, ok := h.getFileWithName(ev.ResourceName)
-	if !ok {
-		log.Warnf("lspEditorHandler: Received delete event for an unknown file: %#v", ev)
-		return
-	}
-
-	srv, ok := h.getServer(f.languageID)
-	if !ok {
-		return
-	}
-
-	oldCells := h.getCells(f)
-	buf := cell.CellsToBuffer(oldCells)
-	buf.Delete(ev.From, ev.To)
-	newCells := buf.RawCells()
-	_, err := h.sendIncrementalUpdate(ctx, srv, f, newCells, oldCells, "", ev.From, ev.To)
-	h.setCells(f, newCells)
-	if err != nil {
-		return
-	}
-
-	ctx = h.newSemanticTokensCtx()
-	go h.semanticTokensFull(ctx, srv, f, newCells, buf.String())
+	h.handleFileUpdate(ev, func(buf *cell.Buffer) string {
+		buf.Delete(ev.From, ev.To)
+		return ""
+	})
 }
 
 func (h *lspEditorHandler) handleFileOpen(ev editor.Event) {
@@ -1202,6 +1201,12 @@ func (h *lspEditorHandler) handleDiagnostics(
 		// return
 	}
 
+	h.setDiagnosticsLocationList(ctx, f, ds)
+}
+
+func (h *lspEditorHandler) setDiagnosticsLocationList(
+	ctx context.Context, f *file, ds []protocol.Diagnostic,
+) {
 	locs := h.parseDiagnostics(f, ds)
 	err := h.ed.SetLocationList(f.handler, h.diagnosticListID, editor.LocationSlice(locs))
 	if err != nil {
