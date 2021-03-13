@@ -184,6 +184,20 @@ func (e *Ex) forceQuit(args ...string) (bool, error) {
 	return true, nil
 }
 
+func (e *Ex) dispatchCommand(cmd string, args ...string) (err error) {
+	name, h, ok := e.handlerInFocus()
+	if !ok {
+		err = errors.New("Cannot run registered command on non Tab")
+		return
+	}
+
+	handled := e.comp.DispatchCommand(h, name, cmd, args...)
+	if !handled {
+		err = fmt.Errorf("Unknown command: %s", cmd)
+	}
+	return
+}
+
 func (e *Ex) runSingleCommand(cmd string) (quit bool, err error) {
 	fnCmd, ok := exCommands[cmd]
 	if ok {
@@ -195,15 +209,7 @@ func (e *Ex) runSingleCommand(cmd string) (quit bool, err error) {
 		err = e.moveFocusCursor(line - 1)
 		return
 	}
-	name, h, ok := e.handlerInFocus()
-	var handled bool
-	if ok {
-		handled = e.comp.DispatchCommand(h, name, cmd)
-	}
-	if !handled {
-		err = fmt.Errorf("Unknown command: %s", cmd)
-	}
-	return
+	return false, e.dispatchCommand(cmd)
 }
 
 func (e *Ex) openFileTab(args ...string) (bool, error) {
@@ -236,15 +242,7 @@ func (e *Ex) runCommand(cmd string, cmdAndArgs string) (quit bool, err error) {
 		return fnCmd(e, parts[1:]...)
 	}
 
-	name, h, ok := e.handlerInFocus()
-	var handled bool
-	if ok {
-		handled = e.comp.DispatchCommand(h, name, cmd, parts[1:]...)
-	}
-	if !handled {
-		err = fmt.Errorf("Unknown command: %s %#v", cmd, parts)
-	}
-	return
+	return false, e.dispatchCommand(cmd, parts[1:]...)
 }
 
 func (e *Ex) setError(err error) {
