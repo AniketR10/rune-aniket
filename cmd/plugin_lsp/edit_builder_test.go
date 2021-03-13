@@ -1,0 +1,106 @@
+package main
+
+import (
+	"testing"
+	"github.com/ernestrc/golang-internal-tools/lsp/protocol"
+	"github.com/ernestrc/go-tui/editor"
+	"github.com/ernestrc/go-tui/cell"
+	"github.com/ernestrc/golang-internal-tools/span"
+	"github.com/stretchr/testify/assert"
+	log "github.com/sirupsen/logrus"
+)
+
+const (
+	fixture1 = `package config
+
+import (
+	"io"
+	"os"
+	"go.uber.org/config"
+	"strings"
+)
+`
+	expected1 = `package config
+
+import (
+	"go.uber.org/config"
+	"strings"
+)
+`
+	expected2 = `package config
+
+import (
+	"go.uber.org/config"
+	"io"
+	"os"
+	"strings"
+)
+`
+)
+var (
+	edits1 = []protocol.TextEdit{
+		{Range: protocol.Range{
+			Start: protocol.Position{Line:3, Character: 2},
+			End: protocol.Position{Line: 5, Character: 2}},
+		}}
+	edits2 = append(edits1, protocol.TextEdit{
+		Range: protocol.Range{
+			Start: protocol.Position{Line:5, Character: 20},
+			End: protocol.Position{Line: 5, Character: 20}},
+		NewText: "\"\n\t\"io\"\n\t\"os",
+		},
+	)
+	edits3 = []protocol.TextEdit{
+		{Range: protocol.Range{
+			Start: protocol.Position{Line:2, Character: 0},
+			End: protocol.Position{Line: 2, Character: 6}},
+		},
+		{Range: protocol.Range{
+			Start: protocol.Position{Line:2, Character: 6},
+			End: protocol.Position{Line: 2, Character: 6}},
+		 NewText: "imp",
+		},
+		{Range: protocol.Range{
+			Start: protocol.Position{Line:2, Character: 6},
+			End: protocol.Position{Line: 2, Character: 6}},
+		 NewText: "ort",
+		},
+	}
+)
+
+func makeFile() *file {
+	name := "gopls_espavila.go"
+	uri := span.URIFromPath(name)
+	docID := protocol.TextDocumentIdentifier{
+		URI: protocol.URIFromSpanURI(uri),
+	}
+	return &file{uri: uri, docID: docID, name: name}
+}
+
+func TestApplyEdits(t *testing.T) {
+	log.SetLevel(log.TraceLevel)
+
+	tsuite := []struct {
+		input  string
+		ed     []protocol.TextEdit
+		output string
+	} {
+		{"a", nil, "a"},
+		{fixture1, edits1, expected1},
+		{fixture1, edits2, expected2},
+		{fixture1, edits3, fixture1},
+	}
+
+	for _, tcase := range tsuite {
+		var out cell.Buffer
+		out.Init()
+		out.WriteString(tcase.input)
+		out.WriteString("\n")
+
+		var b editBuilder
+		b.init(makeFile(), editor.CellWriter(out.Writer()), cell.StringToCells(tcase.input))
+		b.applyEdits(tcase.ed)
+		assert.Equal(t, tcase.output, b.buf.String())
+		assert.Equal(t, tcase.output, out.String())
+	}
+}

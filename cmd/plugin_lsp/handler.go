@@ -47,6 +47,8 @@ const (
 	commandPrevDiagnostic    = "lspPrevDiagnostic"
 	commandHover             = "lspHover"
 	commandGoToDef           = "lspGoToDefinition"
+	commandFormat            = "lspFormat"
+	commandOrganizeImports   = "lspOrganizeImports"
 	commandReferences        = "lspReferences"
 	commandAddWorkspace      = "lspAddWorkspaceFolder"
 	commandRemoveWorkspace   = "lspRemoveWorkspaceFolder"
@@ -58,8 +60,8 @@ const (
 var (
 	lspHandlerCommands = []string{
 		commandNextDiagnostic, commandPrevDiagnostic,
-		commandHover, commandGoToDef, commandReferences,
-		commandAddWorkspace, commandRemoveWorkspace,
+		commandHover, commandGoToDef, commandFormat, commandReferences,
+		commandAddWorkspace, commandRemoveWorkspace, commandOrganizeImports,
 	}
 	lspHandlerEvents = []editor.EventType{
 		editor.EventTypeClose,
@@ -182,6 +184,8 @@ func sendInitializeRequest(
 	params.Capabilities.TextDocument.Hover = protocol.HoverClientCapabilities{
 		ContentFormat: []protocol.MarkupKind{opts.PreferredContentFormat},
 	}
+	params.Capabilities.Workspace.WorkspaceClientCapabilities.ApplyEdit = true
+	params.Capabilities.Workspace.WorkspaceClientCapabilities.WorkspaceEdit.DocumentChanges = true
 	params.Capabilities.TextDocument.CodeAction.CodeActionLiteralSupport.CodeActionKind.ValueSet = []protocol.CodeActionKind{}
 	params.Capabilities.TextDocument.CodeAction.ResolveSupport.Properties = []string{}
 	params.Capabilities.TextDocument.Completion.CompletionItem.TagSupport.ValueSet = []protocol.CompletionItemTag{}
@@ -467,7 +471,7 @@ func convertRange(
 ) (from, to term.Coordinates, ok bool) {
 	spn, err := colmap.RangeSpan(rng)
 	if err != nil {
-		log.Errorf("lspEditorHandler: failed to create rangespan for range: %#v->%#v: %v",
+		log.Errorf("lspEditorHandler.convertRange: failed to create rangespan for range: %#v->%#v: %v",
 			rng.Start, rng.End, err)
 		return
 	}
@@ -476,21 +480,42 @@ func convertRange(
 	startChar := spn.Start().Column() - 1
 	from, ok = cell.ConvertRuneCoordinates(cells, startLine, startChar)
 	if !ok {
-		log.Errorf("lspEditorHandler: failed to convert lsp Start coordinates"+
+		log.Errorf("lspEditorHandler.convertRange: failed to convert lsp Start coordinates"+
 			" to term From coordinates: %#v->%#v", startLine, startChar)
 		return
 	}
 
-	// to is right exclusive, if result is negative then it's probably
-	// not a token we're interested in
-	endChar := int(math.Max(float64(spn.End().Column()-2), 0))
-	endLine := spn.End().Line() - 1
+	log.Tracef("lspEditorHandler.convertRange: convert lsp Start coordinates"+
+		" to term From coordinates: %#v -> from:%#v", spn.Start(), from)
 
-	to, ok = cell.ConvertRuneCoordinates(cells, endLine, endChar)
-	if !ok {
-		log.Errorf("lspEditorHandler: failed to convert lsp End coordinates to "+
-			"term To coordinates: %#v->%#v", endLine, endChar)
+	if rng.Start == rng.End {
+		to = from
+		return
 	}
+
+	// to is right exclusive
+	if spn.End().Column() == 1 {
+		to.Y = spn.End().Line() - 2
+		if to.Y < 0 {
+			return
+		}
+		to.X = len(cells[to.Y])
+		ok = true
+	} else {
+		endLine := spn.End().Line() - 1
+		endChar := spn.End().Column() - 2
+
+		to, ok = cell.ConvertRuneCoordinates(cells, endLine, endChar)
+		if !ok {
+			log.Errorf("lspEditorHandler.convertRange: failed to convert lsp End coordinates to "+
+				"term To coordinates: %#v->%#v", endLine, endChar)
+			return
+		}
+	}
+
+	log.Tracef("lspEditorHandler.convertRange: convert lsp End coordinates to "+
+		"term To coordinates: %#v -> to:%#v", spn.End(), to)
+
 	return
 }
 
@@ -518,7 +543,6 @@ func getDuration(
 func newLspHandler(
 	ed editor.Editor, grants []plugin.Grant,
 	broker proto.MuxBroker, pconfig plugin.Config,
-
 ) (plugutil.CommandEventHandler, error) {
 	ret := new(lspEditorHandler)
 	ret.ed = ed
@@ -683,20 +707,22 @@ func (h *lspEditorHandler) dispatchPendingDiagnostics(
 
 	h.handleDiagnostics(ctx, uri, ds, firstFileVersion)
 }
-func (h *lspEditorHandler) getColumnMapper(f *file) protocol.ColumnMapper {
-	buf := cell.CellsToBuffer(h.getCells(f))
+
+func getColumnMapper(uri span.URI, buf *cell.Buffer) protocol.ColumnMapper {
 	content := []byte(buf.String())
-	tc := span.NewContentConverter(f.uri.Filename(), content)
+	tc := span.NewContentConverter(uri.Filename(), content)
 	return protocol.ColumnMapper{
-		URI:       f.uri,
+		URI:       uri,
 		Content:   content,
 		Converter: tc,
 	}
 }
 
 func (h *lspEditorHandler) handleGoTo(f *file, rs protocol.Range) {
-	colmap := h.getColumnMapper(f)
-	pos, _, ok := convertRange(rs, h.getCells(f), colmap)
+	cells := h.getCells(f)
+	buf := cell.CellsToBuffer(cells)
+	colmap := getColumnMapper(f.uri, buf)
+	pos, _, ok := convertRange(rs, cells, colmap)
 	if !ok {
 		return
 	}
@@ -990,6 +1016,9 @@ func (h *lspEditorHandler) handleFileFlush(ev editor.Event) {
 	ctx, cancelFn := context.WithTimeout(ctx, h.rpcTimeout)
 	defer cancelFn()
 
+	// see handleFileOpen
+	ev.Content += "\n"
+
 	f, ok := h.getFileWithName(ev.ResourceName)
 	if !ok {
 		f = h.newFile(ev.Resource, ev.ResourceName, ev.Content)
@@ -1067,6 +1096,10 @@ func (h *lspEditorHandler) handleFileOpen(ev editor.Event) {
 	ctx := context.Background()
 	ctx, cancelFn := context.WithTimeout(ctx, h.rpcTimeout)
 	defer cancelFn()
+
+	// content last EOL is trimmed by the buffer's unix file reader.
+	// lsp expects the last EOL
+	ev.Content += "\n"
 
 	f := h.newFile(ev.Resource, ev.ResourceName, ev.Content)
 	srv, ok := h.getServer(f.languageID)
@@ -1149,7 +1182,8 @@ func (h *lspEditorHandler) parseDiagnostics(
 	f *file, d []protocol.Diagnostic,
 ) []editor.Location {
 	cells := h.getCells(f)
-	colmap := h.getColumnMapper(f)
+	buf := cell.CellsToBuffer(cells)
+	colmap := getColumnMapper(f.uri, buf)
 
 	locs := make([]editor.Location, 0, len(d))
 	for _, d := range d {
@@ -1301,10 +1335,8 @@ func (h *lspEditorHandler) handleGoToDefinition(
 
 	p := protocol.DefinitionParams{
 		TextDocumentPositionParams: protocol.TextDocumentPositionParams{
-			TextDocument: protocol.TextDocumentIdentifier{
-				URI: protocol.URIFromSpanURI(f.uri),
-			},
-			Position: pos,
+			TextDocument: f.docID,
+			Position:     pos,
 		},
 	}
 
@@ -1368,10 +1400,8 @@ func (h *lspEditorHandler) handleHover(
 
 	p := protocol.HoverParams{
 		TextDocumentPositionParams: protocol.TextDocumentPositionParams{
-			TextDocument: protocol.TextDocumentIdentifier{
-				URI: protocol.URIFromSpanURI(f.uri),
-			},
-			Position: pos,
+			TextDocument: f.docID,
+			Position:     pos,
 		},
 	}
 
@@ -1457,12 +1487,12 @@ func (h *lspEditorHandler) handleChangedWorkspace(
 }
 
 func (h *lspEditorHandler) handleAddWorkspace(name string, args []string) {
-	log.Debugf("lspEditorHandler.handleAddWorkspace(%v)", args)
+	log.Tracef("lspEditorHandler.handleAddWorkspace(%v)", args)
 	h.handleChangedWorkspace(name, args, nil)
 }
 
 func (h *lspEditorHandler) handleRemoveWorkspace(name string, args []string) {
-	log.Debugf("lspEditorHandler.handleRemoveWorkspace(%v)", args)
+	log.Tracef("lspEditorHandler.handleRemoveWorkspace(%v)", args)
 	h.handleChangedWorkspace(name, nil, args)
 }
 
@@ -1483,10 +1513,8 @@ func (h *lspEditorHandler) handleReferences(
 
 	p := protocol.ReferenceParams{
 		TextDocumentPositionParams: protocol.TextDocumentPositionParams{
-			TextDocument: protocol.TextDocumentIdentifier{
-				URI: protocol.URIFromSpanURI(f.uri),
-			},
-			Position: pos,
+			TextDocument: f.docID,
+			Position:     pos,
 		},
 	}
 
@@ -1549,6 +1577,90 @@ func (h *lspEditorHandler) handleReferences(
 	}
 }
 
+func (h *lspEditorHandler) format(
+	ctx context.Context, f *file, srv execServer, builder *editBuilder,
+) {
+	p := protocol.DocumentFormattingParams{
+		TextDocument: f.docID,
+		Options: protocol.FormattingOptions{
+			TabSize:                4,
+			InsertSpaces:           false,
+			TrimTrailingWhitespace: true,
+			InsertFinalNewline:     false,
+			TrimFinalNewlines:      false,
+		},
+	}
+
+	edits, err := srv.srv.Formatting(ctx, &p)
+	if err != nil {
+		log.Errorf("lspEditorHandler.Server.Formatting(%s): %v", f.name, err)
+		return
+	}
+
+	log.Tracef("lspEditorHandler.Server.Formatting(%s): %v", f.name, edits)
+
+	builder.applyEdits(edits)
+}
+
+func (h *lspEditorHandler) organizeImports(
+	ctx context.Context, f *file, srv execServer, builder *editBuilder,
+) {
+	p := protocol.CodeActionParams{
+		TextDocument: f.docID,
+		Context: protocol.CodeActionContext{
+			Only: []protocol.CodeActionKind{protocol.Source, protocol.SourceOrganizeImports},
+		},
+	}
+	codeActions, err := srv.srv.CodeAction(ctx, &p)
+	if err != nil {
+		log.Errorf("lspEditorHandler.Server.CodeAction(%s): %v", f.name, err)
+		return
+	}
+
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	for _, ca := range codeActions {
+		switch ca.Kind {
+		case protocol.Source, protocol.SourceOrganizeImports:
+			log.Tracef("lspEditorHandler.Server.CodeAction(%s): %v", f.name, ca.Edit)
+			builder.applyWorkspaceEdit(ca.Edit)
+		}
+	}
+}
+
+func (h *lspEditorHandler) handleFormat(ed editor.Handler, filename string, imports bool) {
+	ctx := context.Background()
+	ctx, cancelFn := context.WithTimeout(ctx, h.rpcTimeout)
+	defer cancelFn()
+
+	f, ok := h.getFileWithName(filename)
+	if !ok {
+		log.Errorf("lspEditorHandler: Received format event for an unknown file: %#v", filename)
+		return
+	}
+
+	srv, ok := h.getServer(f.languageID)
+	if !ok {
+		return
+	}
+	w := h.ed.Writer(ed)
+
+	// this cells are used to map edit ranges to term.Coordinates
+	// but discarded because only Insert/Delete events should
+	// apply changes to the local file copy.
+	cells := h.getCells(f)
+
+	var b editBuilder
+	b.init(f, w, cells)
+
+	if imports {
+		h.organizeImports(ctx, f, srv, &b)
+	} else {
+		h.format(ctx, f, srv, &b)
+	}
+}
+
 func (h *lspEditorHandler) HandleCommand(cmd editor.Command) (exit bool) {
 	switch cmd.Name {
 	case commandNextDiagnostic:
@@ -1571,6 +1683,10 @@ func (h *lspEditorHandler) HandleCommand(cmd editor.Command) (exit bool) {
 		h.handleAddWorkspace(cmd.ResourceName, cmd.Args)
 	case commandRemoveWorkspace:
 		h.handleRemoveWorkspace(cmd.ResourceName, cmd.Args)
+	case commandFormat:
+		h.handleFormat(cmd.Resource, cmd.ResourceName, false)
+	case commandOrganizeImports:
+		h.handleFormat(cmd.Resource, cmd.ResourceName, true)
 	}
 
 	return false
