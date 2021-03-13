@@ -41,6 +41,7 @@ type fuzzyFinderHandler struct {
 	quitChan     chan struct{}
 	height       int
 	list         search.List
+	listHandler  tui.Handler
 	killed       bool
 
 	history struct {
@@ -260,6 +261,9 @@ func New(
 
 	listConfig := h.getListConfig(config)
 	h.list.Init(listConfig)
+	h.listHandler = search.Handler(&h.list, func(item string) {
+		h.openResource(h.list.SearchQueryString(), item)
+	})
 
 	h.history.max, err = config.GetInt("history")
 	if err != nil {
@@ -381,32 +385,7 @@ func (h *fuzzyFinderHandler) Handle(ev term.Event) (exit, handled bool) {
 		return
 	}
 
-	switch ev.Key {
-	case term.KeyEnter:
-		item, ok := h.list.Focus()
-		if ok {
-			handled = true
-			exit = true
-			h.openResource(h.list.SearchQueryString(), string(item))
-		}
-	case term.KeyEsc:
-		exit = true
-	case term.KeyArrowDown:
-		handled = h.list.FocusDown()
-	case term.KeyArrowUp:
-		handled = h.list.FocusUp()
-	case term.KeySpace:
-		ev.Ch = ' '
-	case term.KeyBackspace:
-		fallthrough
-	case term.KeyBackspace2:
-		handled = h.list.SearchQueryDelete()
-	}
-
-	if ev.Ch != 0 {
-		h.list.SearchQueryWrite(ev.Ch)
-		handled = true
-	}
+	exit, handled = h.listHandler.Handle(ev)
 
 	log.Tracef("fuzzyFinderHandler.Handle(%#v): %v", ev, handled)
 
@@ -414,11 +393,11 @@ func (h *fuzzyFinderHandler) Handle(ev term.Event) (exit, handled bool) {
 }
 
 func (h *fuzzyFinderHandler) Cursor() (pos term.Coordinates, show bool) {
-	return term.Coordinates{X: h.list.SearchQueryLen()}, true
+	return h.listHandler.Cursor()
 }
 
 func (h *fuzzyFinderHandler) Man() tui.Manual {
-	return tui.Manual{}
+	return h.listHandler.Man()
 }
 
 func (h *fuzzyFinderHandler) Close() error {

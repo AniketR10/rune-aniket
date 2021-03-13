@@ -20,6 +20,7 @@ import (
 
 	"github.com/ernestrc/go-tui/browser"
 	"github.com/ernestrc/go-tui/cell"
+	"github.com/ernestrc/go-tui/component/search"
 	"github.com/ernestrc/go-tui/editor"
 	"github.com/ernestrc/go-tui/handler"
 	"github.com/ernestrc/go-tui/plugin"
@@ -46,16 +47,19 @@ const (
 	commandPrevDiagnostic    = "lspPrevDiagnostic"
 	commandHover             = "lspHover"
 	commandGoToDef           = "lspGoToDefinition"
+	commandReferences        = "lspReferences"
 	commandAddWorkspace      = "lspAddWorkspaceFolder"
 	commandRemoveWorkspace   = "lspRemoveWorkspaceFolder"
 	handleBackpressureEvs    = 64
+	referencesWindowWidth    = 50
+	referencesWindowHeight   = 15
 )
 
 var (
 	lspHandlerCommands = []string{
 		commandNextDiagnostic, commandPrevDiagnostic,
-		commandHover, commandGoToDef, commandAddWorkspace,
-		commandRemoveWorkspace,
+		commandHover, commandGoToDef, commandReferences,
+		commandAddWorkspace, commandRemoveWorkspace,
 	}
 	lspHandlerEvents = []editor.EventType{
 		editor.EventTypeClose,
@@ -1286,7 +1290,9 @@ func (h *lspEditorHandler) getFilePosition(cursor term.Coordinates, filename str
 	return
 }
 
-func (h *lspEditorHandler) handleGoToDefinition(cursor term.Coordinates, ed editor.Handler, filename string) {
+func (h *lspEditorHandler) handleGoToDefinition(
+	cursor term.Coordinates, ed editor.Handler, filename string,
+) {
 	f, pos, ok := h.getFilePosition(cursor, filename)
 	if !ok {
 		return
@@ -1333,12 +1339,12 @@ func (h *lspEditorHandler) handleGoToDefinition(cursor term.Coordinates, ed edit
 	}
 }
 
-func findBestFloatingWindowPosition(cursorAtWindow term.Coordinates, buf *cell.Buffer) (
+func findBestFloatingWindowPosition(cursorAtWindow term.Coordinates, width, height int) (
 	term.Coordinates, int, int,
 ) {
-	maxColumns := buf.MaxColumns()
-	width := int(math.Min(float64(maxColumns)+3, maxHoverColumns))
-	height := buf.Rows() + 3 // frame + less bar
+	maxColumns := width
+	width = int(math.Min(float64(maxColumns)+3, maxHoverColumns))
+	height = height + 3 // frame + less bar
 
 	at := cursorAtWindow
 	at.Y -= height - 1
@@ -1389,7 +1395,8 @@ func (h *lspEditorHandler) handleHover(
 	less.Scroll.Buffer().WriteString(hover.Contents.Value)
 	bh := browser.NopHandler(less)
 
-	at, width, height := findBestFloatingWindowPosition(cursorAtWindow, less.Scroll.Buffer())
+	width, height := less.Scroll.Buffer().MaxColumns(), less.Scroll.Buffer().Rows()
+	at, width, height := findBestFloatingWindowPosition(cursorAtWindow, width, height)
 	_, err = h.wm.Floating(bh, at, width, height)
 	if err != nil {
 		log.Errorf("lspEditorHandler.SplitHorizontalAbove(%s): %v", f.name, err)
@@ -1458,6 +1465,89 @@ func (h *lspEditorHandler) handleRemoveWorkspace(name string, args []string) {
 	h.handleChangedWorkspace(name, nil, args)
 }
 
+func (h *lspEditorHandler) handleReferences(
+	cursorAtScroll, cursorAtWindow term.Coordinates,
+	ed editor.Handler, filename string,
+) {
+	win, err := h.wm.Focus()
+	if err != nil {
+		log.Errorf("lspEditorHandler.Focus(): %v", err)
+		return
+	}
+
+	f, pos, ok := h.getFilePosition(cursorAtScroll, filename)
+	if !ok {
+		return
+	}
+
+	p := protocol.ReferenceParams{
+		TextDocumentPositionParams: protocol.TextDocumentPositionParams{
+			TextDocument: protocol.TextDocumentIdentifier{
+				URI: protocol.URIFromSpanURI(f.uri),
+			},
+			Position: pos,
+		},
+	}
+
+	srv, ok := h.getServer(f.languageID)
+	if !ok {
+		return
+	}
+
+	ctx := context.Background()
+	ctx, cancelFn := context.WithTimeout(ctx, h.rpcTimeout)
+	defer cancelFn()
+
+	locs, err := srv.srv.References(ctx, &p)
+	if err != nil {
+		log.Errorf("lspEditorHandler.Server.References(%s, %s): %v", f.name, f.languageID, err)
+		return
+	}
+
+	log.Tracef("lspEditorHandler.Server.References(%s, %s): %#v", f.name, f.languageID, locs)
+
+	if len(locs) == 0 {
+		return
+	}
+
+	cfg := search.ListConfig{
+		Algo:          search.FuzzyMatch,
+		Interrupt:     term.Interrupt,
+		CaseSensitive: false,
+		//MatchedTextAttr:  &e.config.CommandOverlay.MatchedTextAttr,
+		//CountAttr:        &e.config.CommandOverlay.CountAttr,
+		//FocusElementAttr: &e.config.CommandOverlay.FocusElementAttr,
+		//ElementAttr:      &e.config.CommandOverlay.ElementAttr,
+	}
+	list := search.NewList(cfg)
+
+	textToLocation := make(map[string]protocol.Location)
+	var longestLocation int
+	for _, l := range locs {
+		uri := l.URI.SpanURI()
+		filename := uri.Filename()
+
+		text := fmt.Sprintf("%s:%#v", filename, l.Range)
+		list.PushSync([]byte(text))
+		textToLocation[text] = l
+		if len(text) > longestLocation {
+			longestLocation = len(text)
+		}
+	}
+
+	bh := browser.NopHandler(search.Handler(list, func(text string) {
+		h.goToLocation(win, textToLocation[text])
+	}))
+
+	width := int(math.Max(float64(referencesWindowWidth), float64(longestLocation)))
+	at, width, height := findBestFloatingWindowPosition(
+		cursorAtWindow, width, referencesWindowHeight)
+	_, err = h.wm.Floating(bh, at, width, height)
+	if err != nil {
+		log.Errorf("lspEditorHandler.SplitHorizontalAbove(%s): %v", f.name, err)
+	}
+}
+
 func (h *lspEditorHandler) HandleCommand(cmd editor.Command) (exit bool) {
 	switch cmd.Name {
 	case commandNextDiagnostic:
@@ -1474,6 +1564,8 @@ func (h *lspEditorHandler) HandleCommand(cmd editor.Command) (exit bool) {
 		h.handleHover(cmd.Cursor.Content, cmd.Cursor.Window, cmd.Resource, cmd.ResourceName)
 	case commandGoToDef:
 		h.handleGoToDefinition(cmd.Cursor.Content, cmd.Resource, cmd.ResourceName)
+	case commandReferences:
+		h.handleReferences(cmd.Cursor.Content, cmd.Cursor.Window, cmd.Resource, cmd.ResourceName)
 	case commandAddWorkspace:
 		h.handleAddWorkspace(cmd.ResourceName, cmd.Args)
 	case commandRemoveWorkspace:
