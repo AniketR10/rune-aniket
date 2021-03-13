@@ -150,6 +150,7 @@ type lspEditorHandler struct {
 	connectTimeout       time.Duration
 	disconnectTimeout    time.Duration
 
+	cwd               string
 	exit              bool
 	files             map[span.URI]*file
 	pendingDiagnostic map[span.URI][]protocol.Diagnostic
@@ -341,13 +342,8 @@ func startLanguageServer(
 		return
 	}
 
-	cwd, err := os.Getwd()
-	if err != nil {
-		log.Errorf("Getwd: %v", err)
-		return
-	}
 	srv := execServer{langID: langID, cmd: c, srv: server}
-	initRes, err := sendInitializeRequest(ctx, cwd, srv)
+	initRes, err := sendInitializeRequest(ctx, h.cwd, srv)
 	if err != nil {
 		return
 	}
@@ -574,6 +570,11 @@ func newLspHandler(
 
 	ret.rpcTimeout, err = getDuration(pconfig,
 		"rpc_timeout", defaultRpcTimeout)
+	if err != nil {
+		return nil, err
+	}
+
+	ret.cwd, err = os.Getwd()
 	if err != nil {
 		return nil, err
 	}
@@ -1514,10 +1515,6 @@ func (h *lspEditorHandler) handleReferences(
 		Algo:          search.FuzzyMatch,
 		Interrupt:     term.Interrupt,
 		CaseSensitive: false,
-		//MatchedTextAttr:  &e.config.CommandOverlay.MatchedTextAttr,
-		//CountAttr:        &e.config.CommandOverlay.CountAttr,
-		//FocusElementAttr: &e.config.CommandOverlay.FocusElementAttr,
-		//ElementAttr:      &e.config.CommandOverlay.ElementAttr,
 	}
 	list := search.NewList(cfg)
 
@@ -1527,6 +1524,10 @@ func (h *lspEditorHandler) handleReferences(
 		uri := l.URI.SpanURI()
 		filename := uri.Filename()
 
+		relative, err := filepath.Rel(h.cwd, filename)
+		if err == nil && len(relative) < len(filename) {
+			filename = relative
+		}
 		text := fmt.Sprintf("%s:%#v", filename, l.Range)
 		list.PushSync([]byte(text))
 		textToLocation[text] = l
