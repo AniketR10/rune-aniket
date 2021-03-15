@@ -1,7 +1,6 @@
 package cell
 
 import (
-	"fmt"
 	"io"
 
 	"github.com/ernestrc/go-tui/term"
@@ -24,10 +23,46 @@ type Buffer struct {
 	unixReader *unixFileReader
 	rootPub    *syncPublisher
 	usagePub   *syncPublisher
+	safew      Writer
 
 	// effective Reader and Writer
 	reader Reader
 	writer Writer
+}
+
+type safeWriter struct {
+	writer Writer
+	cells  *rawCells
+}
+
+func (s safeWriter) Insert(at term.Coordinates, str string) (
+	from, to term.Coordinates,
+) {
+	// Insert is already safe
+	return s.writer.Insert(at, str)
+}
+
+func (s safeWriter) Delete(from, to term.Coordinates) (
+	start, end term.Coordinates, str string,
+) {
+	rows := s.cells.Rows()
+	if rows == 0 || from.X < 0 || to.X < 0 || to.Y < 0 || from.Y < 0 ||
+		from.Y >= rows || (from.Y == rows-1 && from.X > s.cells.Columns(from.Y)) {
+		return
+	}
+
+	if cols := s.cells.Columns(from.Y); from.X > cols {
+		from.X = cols
+	}
+
+	if to.Y >= rows {
+		to.Y = rows - 1
+		to.X = s.cells.Columns(to.Y)
+	} else if cols := s.cells.Columns(to.Y); to.X > cols {
+		to.X = cols
+	}
+
+	return s.writer.Delete(from, to)
 }
 
 // NewBuffer allocates storage for a new Buffer and initializes it.
@@ -60,6 +95,7 @@ func (b *Buffer) initWithCells(c *rawCells, logger *log.Logger, unixFile bool) {
 	// setup the usage publisher at the shalowest Writer
 	b.usagePub = newPublisher(b.writer)
 	b.writer = b.usagePub
+	b.safew = safeWriter{writer: b.writer, cells: b.cells}
 
 	b.selector.reader = b.reader
 }
@@ -263,11 +299,11 @@ func (b *Buffer) InsertString(at term.Coordinates, str string) (from, until term
 // (cell with padding) were deleted.
 // Note that if to.X == b.Columns(to.Y), the newline at the end of the row is deleted,
 // and so row is conflated with next row.
+// As opposed to cell.Writer.Delete, this method does not panic if from or to are out of bounds.
+// Instead, it trims the coordinates to be in-bounds or simply does nothing and returned str
+// is empty.
 func (b *Buffer) Delete(from, to term.Coordinates) (start, end term.Coordinates, str string) {
-	if !b.inBounds(from) || !b.inBounds(to) {
-		panic(fmt.Sprintf("out of bounds: from=%+v, to=%+v", from, to))
-	}
-	return b.writer.Delete(from, to)
+	return b.safew.Delete(from, to)
 }
 
 // DeleteLine deletes the lines starting at from, between from, to and including end.
@@ -464,9 +500,9 @@ func (b *Buffer) Reader() Reader {
 	return b.reader
 }
 
-// Writer returns this Buffer as a cell.Writer.
+// Writer returns a cell.Writer that doesn't panic on out-of-bounds calls.
 func (b *Buffer) Writer() Writer {
-	return b.writer
+	return b.safew
 }
 
 // Size returns the total size in cells of this buffer.

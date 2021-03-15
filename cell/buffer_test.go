@@ -196,14 +196,49 @@ func TestBufferTruncateFrom(t *testing.T) {
 }
 
 func TestBufferDelete(t *testing.T) {
-	b := NewBuffer()
-	_, err := b.ReadFrom(strings.NewReader("bla\nbleh"))
-	require.NoError(t, err)
+	t.Run("calls underlying writer Delete", func(t *testing.T) {
+		b := NewBuffer()
+		_, err := b.ReadFrom(strings.NewReader("bla\nbleh"))
+		require.NoError(t, err)
 
-	start, end, str := b.Delete(term.Coordinates{}, term.Coordinates{X: 3})
-	assert.Equal(t, term.Coordinates{}, start)
-	assert.Equal(t, term.Coordinates{X: 3}, end)
-	assert.Equal(t, "bla\n", str)
+		start, end, str := b.Delete(term.Coordinates{}, term.Coordinates{X: 3})
+		assert.Equal(t, term.Coordinates{}, start)
+		assert.Equal(t, term.Coordinates{X: 3}, end)
+		assert.Equal(t, "bla\n", str)
+	})
+
+	t.Run("does not panic if coordinates are partially out of bounds (x)", func(t *testing.T) {
+		b := NewBuffer()
+		_, err := b.ReadFrom(strings.NewReader("bla\nbleh"))
+		require.NoError(t, err)
+
+		start, end, str := b.Delete(term.Coordinates{X: 10}, term.Coordinates{X: 11})
+		assert.Equal(t, term.Coordinates{X: 3}, start)
+		assert.Equal(t, term.Coordinates{X: 3}, end)
+		assert.Equal(t, "\n", str)
+	})
+
+	t.Run("does not panic if coordinates are partially out of bounds (y)", func(t *testing.T) {
+		b := NewBuffer()
+		_, err := b.ReadFrom(strings.NewReader("bla\nbleh"))
+		require.NoError(t, err)
+
+		start, end, str := b.Delete(term.Coordinates{Y: 1}, term.Coordinates{Y: 1, X: 11})
+		assert.Equal(t, term.Coordinates{Y: 1}, start)
+		assert.Equal(t, term.Coordinates{Y: 1, X: 3}, end)
+		assert.Equal(t, "bleh", str)
+	})
+
+	t.Run("does not panic if coordinates are completely out of bounds", func(t *testing.T) {
+		b := NewBuffer()
+		_, err := b.ReadFrom(strings.NewReader("bla\nbleh"))
+		require.NoError(t, err)
+
+		start, end, str := b.Delete(term.Coordinates{Y: 1, X: 11}, term.Coordinates{Y: 2, X: 10})
+		assert.Equal(t, term.Coordinates{}, start)
+		assert.Equal(t, term.Coordinates{}, end)
+		assert.Equal(t, "", str)
+	})
 }
 
 func TestBufferInsertString(t *testing.T) {
