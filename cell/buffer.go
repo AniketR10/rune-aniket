@@ -46,8 +46,7 @@ func (s safeWriter) Delete(from, to term.Coordinates) (
 	start, end term.Coordinates, str string,
 ) {
 	rows := s.cells.Rows()
-	if rows == 0 || from.X < 0 || to.X < 0 || to.Y < 0 || from.Y < 0 ||
-		from.Y >= rows || (from.Y == rows-1 && from.X > s.cells.Columns(from.Y)) {
+	if rows == 0 || from.Y >= rows || (from.Y == rows-1 && from.X > s.cells.Columns(from.Y)) {
 		return
 	}
 

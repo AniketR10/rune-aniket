@@ -207,6 +207,16 @@ func TestBufferDelete(t *testing.T) {
 		assert.Equal(t, "bla\n", str)
 	})
 
+	t.Run("panics if coordinates are negative", func(t *testing.T) {
+		b := NewBuffer()
+		_, err := b.ReadFrom(strings.NewReader("bla\nbleh"))
+		require.NoError(t, err)
+
+		assert.Panics(t, func() {
+			b.Delete(term.Coordinates{X: 10}, term.Coordinates{X: -1})
+		})
+	})
+
 	t.Run("does not panic if coordinates are partially out of bounds (x)", func(t *testing.T) {
 		b := NewBuffer()
 		_, err := b.ReadFrom(strings.NewReader("bla\nbleh"))
