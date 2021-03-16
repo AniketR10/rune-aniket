@@ -421,6 +421,10 @@ func (l *List) Wait() {
 	ctx := l.searchCtx
 	l.mu.RUnlock()
 
+	if ctx == nil {
+		return
+	}
+
 	<-ctx.Done()
 }
 

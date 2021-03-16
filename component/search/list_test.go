@@ -251,3 +251,10 @@ For the `,
 		assert.Equal(t, expected, w.String())
 	}
 }
+
+func TestListWait(t *testing.T) {
+	t.Run("does not panic a new list", func(t *testing.T) {
+		l := NewList(ListConfig{SearchBase: ":"})
+		assert.NotPanics(t, l.Wait)
+	})
+}
