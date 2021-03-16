@@ -3,6 +3,8 @@ package editor
 //go:generate mockgen -destination=./editor_gomock.go -package editor -self_package editor -source editor.go
 
 import (
+	"fmt"
+
 	"github.com/ernestrc/go-tui"
 	"github.com/ernestrc/go-tui/cell"
 	"github.com/ernestrc/go-tui/term"
@@ -99,6 +101,10 @@ type cellReader struct {
 func (w cellWriter) Insert(
 	at term.Coordinates, str string,
 ) (from, to term.Coordinates, err error) {
+	if at.Y < 0 || at.X < 0 {
+		err = fmt.Errorf("invalid coordinates: at=%v", at)
+		return
+	}
 	from, to = w.c.Insert(at, str)
 	return
 }
@@ -106,6 +112,10 @@ func (w cellWriter) Insert(
 func (w cellWriter) Delete(
 	from, to term.Coordinates,
 ) (start, end term.Coordinates, str string, err error) {
+	if from.Y < 0 || to.Y < 0 || from.X < 0 || to.X < 0 {
+		err = fmt.Errorf("invalid coordinates: from=%v; to=%v", from, to)
+		return
+	}
 	start, end, str = w.c.Delete(from, to)
 	return
 }
@@ -114,7 +124,8 @@ func (r cellReader) RawCells() ([][]term.Cell, error) {
 	return r.c.RawCells(), nil
 }
 
-// CellWriter wraps a cell.Writer with a Writer that returns no errors.
+// CellWriter wraps a cell.Writer with a Writer that detects invalid input calls
+// and returns the corresponding errors.
 func CellWriter(c cell.Writer) Writer {
 	return cellWriter{c}
 }
