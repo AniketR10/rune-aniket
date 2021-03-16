@@ -42,25 +42,35 @@ func (s safeWriter) Insert(at term.Coordinates, str string) (
 	return s.writer.Insert(at, str)
 }
 
-func (s safeWriter) Delete(from, to term.Coordinates) (
-	start, end term.Coordinates, str string,
+func fromToInBounds(cells *rawCells, from, to term.Coordinates) (
+	newFrom, newTo term.Coordinates, ok bool,
 ) {
-	rows := s.cells.Rows()
-	if rows == 0 || from.Y >= rows || (from.Y == rows-1 && from.X > s.cells.Columns(from.Y)) {
+	rows := cells.Rows()
+	if rows == 0 || from.Y >= rows || (from.Y == rows-1 && from.X > cells.Columns(from.Y)) {
 		return
 	}
 
-	if cols := s.cells.Columns(from.Y); from.X > cols {
+	if cols := cells.Columns(from.Y); from.X > cols {
 		from.X = cols
 	}
 
 	if to.Y >= rows {
 		to.Y = rows - 1
-		to.X = s.cells.Columns(to.Y)
-	} else if cols := s.cells.Columns(to.Y); to.X > cols {
+		to.X = cells.Columns(to.Y)
+	} else if cols := cells.Columns(to.Y); to.X > cols {
 		to.X = cols
 	}
 
+	return from, to, true
+}
+
+func (s safeWriter) Delete(from, to term.Coordinates) (
+	start, end term.Coordinates, str string,
+) {
+	from, to, ok := fromToInBounds(s.cells, from, to)
+	if !ok {
+		return
+	}
 	return s.writer.Delete(from, to)
 }
 
@@ -162,7 +172,7 @@ func (b *Buffer) InsertStringWithAttr(
 	at term.Coordinates, str string, attr term.Attributes,
 ) (from, until term.Coordinates) {
 	from, until = b.InsertString(at, str)
-	cells := b.Select(from, until)
+	cells, _ := b.Select(from, until)
 	for y, row := range cells {
 		for x := range row {
 			cells[y][x].Bg = attr.Bg
@@ -398,20 +408,38 @@ func (b *Buffer) Redo() (bool, term.Coordinates) {
 
 // Select returns the cells inside the given coordinates or nil if coordinates
 // are out of bounds.
-func (b *Buffer) Select(from term.Coordinates, to term.Coordinates) [][]term.Cell {
-	return b.selector.selectCells(from, to)
+func (b *Buffer) Select(from term.Coordinates, to term.Coordinates) (
+	[][]term.Cell, bool,
+) {
+	from, to, ok := fromToInBounds(b.cells, from, to)
+	if !ok {
+		return nil, false
+	}
+	return b.selector.selectCells(from, to), true
 }
 
 // SelectLine returns the lines inside the given coordinates or nil if
 // coordinates are out of bounds.
-func (b *Buffer) SelectLine(from term.Coordinates, to term.Coordinates) [][]term.Cell {
-	return b.selector.selectLine(from, to)
+func (b *Buffer) SelectLine(from term.Coordinates, to term.Coordinates) (
+	[][]term.Cell, bool,
+) {
+	from, to, ok := fromToInBounds(b.cells, from, to)
+	if !ok {
+		return nil, false
+	}
+	return b.selector.selectLine(from, to), true
 }
 
 // SelectBlock returns the block of cells inside the given coordinates or nil if
 // coordinates are out of bounds.
-func (b *Buffer) SelectBlock(from term.Coordinates, to term.Coordinates) [][]term.Cell {
-	return b.selector.selectBlock(from, to)
+func (b *Buffer) SelectBlock(from term.Coordinates, to term.Coordinates) (
+	[][]term.Cell, bool,
+) {
+	from, to, ok := fromToInBounds(b.cells, from, to)
+	if !ok {
+		return nil, false
+	}
+	return b.selector.selectBlock(from, to), true
 }
 
 func (b *Buffer) String() string {

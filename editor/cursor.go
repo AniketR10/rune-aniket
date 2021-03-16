@@ -820,7 +820,7 @@ func (c *Cursor) windowToScrollCoordinates(pos term.Coordinates) term.Coordinate
 	}
 }
 
-func (c *Cursor) setSelection() {
+func (c *Cursor) setSelection() (ok bool) {
 	invertAttr(c.selection.cells)
 
 	from := c.selection.scrollFrom
@@ -828,16 +828,18 @@ func (c *Cursor) setSelection() {
 
 	switch c.selection.mode {
 	case StandardSelection:
-		c.selection.cells = c.buffer().Select(from, to)
+		c.selection.cells, ok = c.buffer().Select(from, to)
 	case LineSelection:
-		c.selection.cells = c.buffer().SelectLine(from, to)
+		c.selection.cells, ok = c.buffer().SelectLine(from, to)
 	case BlockSelection:
-		c.selection.cells = c.buffer().SelectBlock(from, to)
+		c.selection.cells, ok = c.buffer().SelectBlock(from, to)
 	case noSelection:
 		c.selection.cells = nil
+		ok = true
 	}
 
 	invertAttr(c.selection.cells)
+	return
 }
 
 // returns ok=false if there's no content to select in buffer
@@ -880,15 +882,14 @@ func (c *Cursor) Select() (ok bool) {
 	mode := c.selection.mode
 	c.selection.mode = StandardSelection
 	if mode != noSelection {
-		ok = true
-		c.setSelection()
+		ok = c.setSelection()
 		return
 	}
 	c.selection.scrollFrom, ok = c.cursorAtScrollBounds()
 	if !ok {
 		return
 	}
-	c.setSelection()
+	ok = c.setSelection()
 	return
 }
 
@@ -900,15 +901,14 @@ func (c *Cursor) SelectLine() (ok bool) {
 	mode := c.selection.mode
 	c.selection.mode = LineSelection
 	if mode != noSelection {
-		ok = true
-		c.setSelection()
+		ok = c.setSelection()
 		return
 	}
 	c.selection.scrollFrom, ok = c.cursorAtScrollBounds()
 	if !ok {
 		return
 	}
-	c.setSelection()
+	ok = c.setSelection()
 	return
 }
 
@@ -920,15 +920,14 @@ func (c *Cursor) SelectBlock() (ok bool) {
 	mode := c.selection.mode
 	c.selection.mode = BlockSelection
 	if mode != noSelection {
-		ok = true
-		c.setSelection()
+		ok = c.setSelection()
 		return
 	}
 	c.selection.scrollFrom, ok = c.cursorAtScrollBounds()
 	if !ok {
 		return
 	}
-	c.setSelection()
+	ok = c.setSelection()
 	return
 }
 
@@ -1096,8 +1095,8 @@ func (c *Cursor) moveToChar(
 	start := term.Coordinates{Y: cursor.Y}
 	end := term.Coordinates{Y: cursor.Y, X: lastPos}
 
-	cells := c.buffer().Select(start, end)
-	if len(cells) == 0 {
+	cells, ok := c.buffer().Select(start, end)
+	if !ok || len(cells) == 0 {
 		return false
 	}
 
@@ -1228,15 +1227,15 @@ func (c *Cursor) setLocListAttr(l LocationList, reverse bool) {
 	}
 
 	for {
-		selection := c.buffer().Select(loc.From, loc.To)
-		if reverse {
+		selection, ok := c.buffer().Select(loc.From, loc.To)
+		if ok && reverse {
 			for y, row := range selection {
 				for x := range row {
 					selection[y][x].Fg &^= loc.Attr.Fg
 					selection[y][x].Bg &^= loc.Attr.Bg
 				}
 			}
-		} else {
+		} else if ok {
 			for y, row := range selection {
 				for x := range row {
 					selection[y][x].Fg |= loc.Attr.Fg
