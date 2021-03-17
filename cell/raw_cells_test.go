@@ -59,57 +59,10 @@ func TestRawCellsInsertMiddlePadding(t *testing.T) {
 	assert.Equal(t, fixtureCells, c.RawCells())
 }
 
-func TestRawCellsUninitialized(t *testing.T) {
-	t.Run("columns()", func(t *testing.T) {
-		var c rawCells
-		assert.Equal(t, 0, c.Columns(0))
-	})
-
-	t.Run("insert()", func(t *testing.T) {
-		var c rawCells
-		from, to := c.Insert(term.Coordinates{X: 0, Y: 0}, "r")
-		assert.Equal(t, term.Coordinates{}, from)
-		assert.Equal(t, term.Coordinates{}, to)
-	})
-
-	t.Run("rawCells()", func(t *testing.T) {
-		var c rawCells
-		cs := c.RawCells()
-		assert.Equal(t, cs, [][]term.Cell{[]term.Cell{}})
-	})
-
-	t.Run("ReadFrom()", func(t *testing.T) {
-		var c rawCells
-		n, err := c.ReadFrom(strings.NewReader("r"))
-		assert.NoError(t, err)
-		assert.Equal(t, int64(1), n)
-	})
-
-	t.Run("reset()", func(t *testing.T) {
-		var c rawCells
-		c.reset()
-	})
-
-	t.Run("rows()", func(t *testing.T) {
-		var c rawCells
-		assert.Equal(t, 1, c.Rows())
-	})
-
-	t.Run("cell()", func(t *testing.T) {
-		var c rawCells
-		_, ok := c.Cell(term.Coordinates{})
-		assert.False(t, ok)
-	})
-
-	t.Run("String()", func(t *testing.T) {
-		var c rawCells
-		assert.Equal(t, "", c.String())
-	})
-}
-
 func TestRawCellsPanicsNegativeCoordinates(t *testing.T) {
 
 	var c rawCells
+	c.init(4)
 	negativeCoords := []term.Coordinates{
 		term.Coordinates{X: -1, Y: 0},
 		term.Coordinates{X: 0, Y: -1},
@@ -181,6 +134,7 @@ func TestRawCellsReadFrom(t *testing.T) {
 
 	for i, tcase := range tsuite {
 		var c rawCells
+		c.init(defTabSpaces)
 		reads := tcase.reads
 		n, err := c.ReadFrom(&tcase)
 		assert.Equal(t, tcase.expectedErr, err, "tcase %d", i)
@@ -203,6 +157,7 @@ func TestRawCellsStringReadFrom(t *testing.T) {
 		tcase := _tcase
 		t.Run(fmt.Sprintf("test case %d", i), func(t *testing.T) {
 			var c rawCells
+			c.init(defTabSpaces)
 			n, err := c.ReadFrom(strings.NewReader(tcase))
 			assert.NoError(t, err)
 			assert.Equal(t, int64(len(tcase)), n)
@@ -284,6 +239,7 @@ Love isn't love 'til you give it away.
 
 	for i, tcase := range tsuite {
 		var c rawCells
+		c.init(defTabSpaces)
 		var input string
 		if tcase.overrideBaseRawCells != "" {
 			input = tcase.overrideBaseRawCells
@@ -551,6 +507,7 @@ Love isn't love 'til you give it away.
 
 	for i, tcase := range tsuite {
 		var c rawCells
+		c.init(defTabSpaces)
 		base := baseRawCells
 		if tcase.overrideBaseRawCells != "" {
 			base = tcase.overrideBaseRawCells
@@ -581,6 +538,7 @@ Love isn't love 'til you give it away.
 
 func TestRawCellsCell(t *testing.T) {
 	var c rawCells
+	c.init(defTabSpaces)
 	c.ReadFrom(strings.NewReader(benchmarkFortune))
 
 	cell, ok := c.Cell(term.Coordinates{})
@@ -610,6 +568,7 @@ func TestRawCellsInsertDeleteSymmetry(t *testing.T) {
 	defer file.Close()
 
 	var r rawCells
+	r.init(defTabSpaces)
 	r.ReadFrom(file)
 
 	cells := r.RawCells()
@@ -630,6 +589,7 @@ func TestRawCellsInsertDeleteSymmetry(t *testing.T) {
 
 func newBenchmarkRawCells(fortunes int) (*rawCells, string) {
 	cells := new(rawCells)
+	cells.init(defTabSpaces)
 	payload := ""
 	for i := 0; i < fortunes; i++ {
 		payload = payload + benchmarkFortune

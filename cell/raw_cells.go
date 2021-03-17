@@ -104,9 +104,6 @@ func (c *rawCells) insertTabSpaces(pos term.Coordinates) {
 }
 
 func (c *rawCells) fillInRows(y int) (n int) {
-	if c.cells == nil {
-		c.init(defTabSpaces)
-	}
 	for y >= len(c.cells) {
 		n++
 		row := makeNewRow(0, defColumnCap)
@@ -306,23 +303,11 @@ func (c *rawCells) Delete(from, to term.Coordinates) (
 }
 
 func (c *rawCells) Columns(y int) (j int) {
-	if c.cells == nil {
-		c.init(defTabSpaces)
-	}
-	if y < 0 {
-		panic(fmt.Sprintf("invalid row: %d", y))
-	}
-	if y >= c.Rows() {
-		panic(fmt.Sprintf("row out of bounds: %d, length=%d", y, c.Rows()))
-	}
 	j = len(c.cells[y])
 	return
 }
 
 func (c *rawCells) Rows() int {
-	if c.cells == nil {
-		c.init(defTabSpaces)
-	}
 	return len(c.cells)
 }
 
@@ -331,9 +316,6 @@ func (c *rawCells) String() string {
 }
 
 func (c *rawCells) RawCells() [][]term.Cell {
-	if c.cells == nil {
-		c.init(defTabSpaces)
-	}
 	return c.cells
 }
 
@@ -350,9 +332,6 @@ func (c *rawCells) Cell(pos term.Coordinates) (
 }
 
 func (c *rawCells) ReadFrom(r io.Reader) (int64, error) {
-	if c.cells == nil {
-		c.init(defTabSpaces)
-	}
 	rowY := c.nextWrite().Y
 	reader := bufio.NewReader(r)
 	n := int64(0)

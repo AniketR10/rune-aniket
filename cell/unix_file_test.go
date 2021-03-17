@@ -77,6 +77,7 @@ func TestUnixFile(t *testing.T) {
 		reader := tcase.input
 		{
 			var c rawCells
+			c.init(4)
 			_, err := c.ReadFrom(tcase.input)
 			require.NoError(t, err)
 
@@ -91,6 +92,7 @@ func TestUnixFile(t *testing.T) {
 
 		{
 			var c rawCells
+			c.init(4)
 			bytes, err := ioutil.ReadAll(tcase.input)
 			require.NoError(t, err)
 			c.Insert(term.Coordinates{}, string(bytes))
