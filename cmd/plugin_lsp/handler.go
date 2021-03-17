@@ -22,6 +22,7 @@ import (
 	"github.com/ernestrc/go-tui/cell"
 	"github.com/ernestrc/go-tui/component/search"
 	"github.com/ernestrc/go-tui/editor"
+	"github.com/ernestrc/go-tui/editor/vi"
 	"github.com/ernestrc/go-tui/handler"
 	"github.com/ernestrc/go-tui/plugin"
 	plugutil "github.com/ernestrc/go-tui/plugin/util"
@@ -1496,6 +1497,134 @@ func (h *lspEditorHandler) handleRemoveWorkspace(name string, args []string) {
 	h.handleChangedWorkspace(name, nil, args)
 }
 
+func (h *lspEditorHandler) browseLocations(
+	win browser.Window, locs []protocol.Location,
+) {
+	const locID = "highlight_loc"
+	var (
+		longestLocation int
+		bottom, top     browser.Window
+		done            bool
+	)
+	cfg := search.ListConfig{
+		Algo:          search.FuzzyMatch,
+		Interrupt:     term.Interrupt,
+		CaseSensitive: false,
+	}
+	list := search.NewList(cfg)
+	textToLocation := make(map[string]protocol.Location)
+	buf := cell.NewBuffer()
+	ed := vi.Editor()
+	instance, _ := ed.Edit("", buf)
+
+	for _, l := range locs {
+		uri := l.URI.SpanURI()
+		filename := uri.Filename()
+
+		relative, err := filepath.Rel(h.cwd, filename)
+		if err == nil && len(relative) < len(filename) {
+			filename = relative
+		}
+		text := fmt.Sprintf("%s:%#v", filename, l.Range)
+		list.PushSync([]byte(text))
+		textToLocation[text] = l
+		if len(text) > longestLocation {
+			longestLocation = len(text)
+		}
+	}
+
+	closeWin := func(win browser.Window) func() {
+		return func() {
+			h.mu.Lock()
+			shouldClose := done && win != nil
+			closeWin := win
+			h.mu.Unlock()
+			if shouldClose {
+				closeWin.Close()
+			}
+		}
+	}
+
+	renderFile := func(l protocol.Location) {
+		uri := l.URI.SpanURI()
+		data, err := ioutil.ReadFile(uri.Filename())
+		if err != nil {
+			log.Errorf("lspEditorHandler.ReadFile(): %v", err)
+			return
+		}
+		content := string(data)
+
+		buf.Reset()
+		buf.WriteString(content)
+
+		cells := buf.RawCells()
+		colmap := getColumnMapper(uri, buf)
+		from, to, ok := convertRange(l.Range, cells, colmap)
+		if !ok {
+			log.Debugf("lspEditorHandler.convertRange(): %v", ok)
+			return
+		}
+
+		attrs := term.Attributes{Bg: term.AttrReverse, Fg: term.AttrReverse}
+		loc := editor.Location{From: from, To: to, Attr: attrs}
+		ed.SetLocationList(instance, locID, editor.LocationSlice([]editor.Location{loc}))
+		ed.MoveToPrevLocation(instance, locID)
+	}
+
+	sh := search.Handler(list, func(text string) {
+		h.mu.Lock()
+		done = true
+		h.mu.Unlock()
+
+		// liberate all tabs
+		closeWin(top)()
+		closeWin(bottom)()
+
+		h.goToLocation(win, textToLocation[text])
+	})
+
+	// wrap to detect when focus has changed
+	// and re-render window.
+	bh := handler.Wrap(sh, func(ev term.Event) (bool, bool) {
+		h.mu.Lock()
+		defer h.mu.Unlock()
+
+		if ev.Type == term.EventResize {
+			list.Wait()
+			focus, _ := list.Focus()
+			renderFile(textToLocation[string(focus)])
+			return false, true
+		}
+
+		before, _ := list.Focus()
+		exit, handle := sh.Handle(ev)
+		list.Wait()
+		after, _ := list.Focus()
+		afterStr := string(after)
+		if exit {
+			done = true
+		}
+		if string(before) != afterStr {
+			renderFile(textToLocation[afterStr])
+		}
+		return exit, handle
+	})
+
+	bhtop := browser.FuncHandler(handler.Sync(&h.mu, instance), closeWin(bottom))
+	top, err := h.wm.Split(browser.OrientationBottom, bhtop)
+	if err != nil {
+		log.Errorf("lspEditorHandler.SplitHorizontalBelow(): %v", err)
+		return
+	}
+
+	bhbottom := browser.FuncHandler(bh, closeWin(top))
+	bottom, err = h.wm.Split(browser.OrientationBottom, bhbottom)
+	if err != nil {
+		log.Errorf("lspEditorHandler.SplitHorizontalBelow(): %v", err)
+		return
+	}
+}
+
 func (h *lspEditorHandler) handleReferences(
 	cursorAtScroll, cursorAtWindow term.Coordinates,
 	ed editor.Handler, filename string,
@@ -1536,45 +1665,11 @@ func (h *lspEditorHandler) handleReferences(
 	log.Tracef("lspEditorHandler.Server.References(%s, %s): %#v", f.name, f.languageID, locs)
 
 	if len(locs) == 0 {
+		h.m.SetMessage("No references found")
 		return
 	}
 
-	cfg := search.ListConfig{
-		Algo:          search.FuzzyMatch,
-		Interrupt:     term.Interrupt,
-		CaseSensitive: false,
-	}
-	list := search.NewList(cfg)
-
-	textToLocation := make(map[string]protocol.Location)
-	var longestLocation int
-	for _, l := range locs {
-		uri := l.URI.SpanURI()
-		filename := uri.Filename()
-
-		relative, err := filepath.Rel(h.cwd, filename)
-		if err == nil && len(relative) < len(filename) {
-			filename = relative
-		}
-		text := fmt.Sprintf("%s:%#v", filename, l.Range)
-		list.PushSync([]byte(text))
-		textToLocation[text] = l
-		if len(text) > longestLocation {
-			longestLocation = len(text)
-		}
-	}
-
-	bh := browser.NopHandler(search.Handler(list, func(text string) {
-		h.goToLocation(win, textToLocation[text])
-	}))
-
-	width := int(math.Max(float64(referencesWindowWidth), float64(longestLocation)))
-	at, width, height := findBestFloatingWindowPosition(
-		cursorAtWindow, width, referencesWindowHeight)
-	_, err = h.wm.Floating(bh, at, width, height)
-	if err != nil {
-		log.Errorf("lspEditorHandler.SplitHorizontalAbove(%s): %v", f.name, err)
-	}
+	h.browseLocations(win, locs)
 }
 
 func (h *lspEditorHandler) format(
