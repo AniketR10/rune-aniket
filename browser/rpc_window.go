@@ -3,6 +3,7 @@ package browser
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/ernestrc/go-tui/proto"
 	log "github.com/sirupsen/logrus"
@@ -50,6 +51,10 @@ func (w *windowClient) SetContent(h Handler) error {
 	if err != nil {
 		reason := fmt.Sprintf("error on call to SetContent: %v", err)
 		w.browserClient.safeForceCloseHandler(brokerID, reason)
+		// handle typed errors
+		if strings.Contains(err.Error(), ErrTabNotFree.Error()) {
+			return ErrTabNotFree
+		}
 		return fmt.Errorf("pbClient.SetContent: %v", err)
 	}
 	return nil
