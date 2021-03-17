@@ -158,11 +158,7 @@ func (c *Cursor) MoveToScroll(pos term.Coordinates) (
 // the bounds of the current view, then underlying scroll is used
 // to seek to pos.
 func (c *Cursor) moveToScroll(pos term.Coordinates) {
-	offset := c.scroll.Offset()
-	height := c.scroll.Height()
-	if pos.Y >= height+offset.Y {
-		c.scroll.SeekTo(term.Coordinates{X: pos.X, Y: pos.Y})
-	}
+	c.scroll.SeekTo(term.Coordinates{X: pos.X, Y: pos.Y})
 	c.cursor = c.scrollToWindowCoordinates(pos)
 }
 

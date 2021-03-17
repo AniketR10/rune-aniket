@@ -207,7 +207,8 @@ func (s *Scroll) seekTo(pos term.Coordinates, xpadding, ypadding int) bool {
 		ypadding = max
 	}
 
-	if ypadding == 0 {
+	// ypadding < 0 is used to signal force seek on the y axis
+	if ypadding == -1 {
 		yok = s.seekVertical(pos.Y, false)
 	} else if pos.Y >= s.offset.Y+s.height-ypadding {
 		yok = s.seekVertical(pos.Y-s.height+ypadding, false)
@@ -267,7 +268,7 @@ func (s *Scroll) SeekNextResult() bool {
 		return false
 	}
 
-	return s.seekTo(pos, len(s.searchText), 0)
+	return s.seekTo(pos, len(s.searchText), -1)
 }
 
 // SeekPrevResult shifts the contents of this scroll to visualize
@@ -278,7 +279,7 @@ func (s *Scroll) SeekPrevResult() bool {
 		return false
 	}
 
-	return s.seekTo(pos, len(s.searchText), 0)
+	return s.seekTo(pos, len(s.searchText), -1)
 }
 
 // Resize resizes this scroll to fit inside given width and height.
@@ -288,21 +289,13 @@ func (s *Scroll) Resize(width, height int) {
 }
 
 func (s *Scroll) getMaxXOffset() (x int) {
-	const padding = 1
-
-	view := s.buf.RawCells()[s.offset.Y:]
-	columns := 0
-	for _, r := range view {
-		if l := len(r); l > columns {
-			columns = l
-		}
-	}
 	if s.Wrap {
-		x = 0
-	} else if columns >= s.width {
-		x = columns - s.width + padding
-	} else {
-		x = 0
+		return
+	}
+
+	columns := s.buf.MaxColumns()
+	if columns >= s.width {
+		x = columns - s.width + 1
 	}
 	return
 }

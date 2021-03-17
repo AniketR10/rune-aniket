@@ -220,6 +220,18 @@ func TestComponentOpen(t *testing.T) {
 		assert.Equal(t, h, h2)
 	})
 
+	t.Run("it's idempotent 2", func(t *testing.T) {
+		myName := "/tmp/It's_1am_and_I'm_very_tired.go"
+		c, _ := newTestComponentWithFile(t, myName)
+
+		t2, ok := c.Browser().Tab(myName)
+		require.True(t, ok)
+
+		b3, err := c.Open(myName)
+		require.NoError(t, err)
+		assert.Equal(t, t2, b3)
+	})
+
 	t.Run("bubbles up open file error", func(t *testing.T) {
 		c, _ := newTestComponentWithFile(t, "lmao")
 		myErr := errors.New("oopsie daisy")
