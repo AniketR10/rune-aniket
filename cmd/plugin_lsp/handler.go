@@ -1515,7 +1515,7 @@ func (h *lspEditorHandler) browseLocations(
 	textToLocation := make(map[string]protocol.Location)
 	buf := cell.NewBuffer()
 	ed := vi.Editor()
-	instance, _ := ed.Edit("", buf)
+	edh, _ := ed.Edit("", buf)
 
 	for _, l := range locs {
 		uri := l.URI.SpanURI()
@@ -1568,8 +1568,8 @@ func (h *lspEditorHandler) browseLocations(
 
 		attrs := term.Attributes{Bg: term.AttrReverse, Fg: term.AttrReverse}
 		loc := editor.Location{From: from, To: to, Attr: attrs}
-		ed.SetLocationList(instance, locID, editor.LocationSlice([]editor.Location{loc}))
-		ed.MoveToPrevLocation(instance, locID)
+		ed.SetLocationList(edh, locID, editor.LocationSlice([]editor.Location{loc}))
+		ed.MoveToPrevLocation(edh, locID)
 	}
 
 	sh := search.Handler(list, func(text string) {
@@ -1587,16 +1587,6 @@ func (h *lspEditorHandler) browseLocations(
 	// wrap to detect when focus has changed
 	// and re-render window.
 	bh := handler.Wrap(sh, func(ev term.Event) (bool, bool) {
-		h.mu.Lock()
-		defer h.mu.Unlock()
-
-		if ev.Type == term.EventResize {
-			list.Wait()
-			focus, _ := list.Focus()
-			renderFile(textToLocation[string(focus)])
-			return false, true
-		}
-
 		before, _ := list.Focus()
 		exit, handle := sh.Handle(ev)
 		list.Wait()
@@ -1611,7 +1601,21 @@ func (h *lspEditorHandler) browseLocations(
 		return exit, handle
 	})
 
-	bhtop := browser.FuncHandler(handler.Sync(&h.mu, instance), closeWin(bottom))
+	eh := handler.Wrap(handler.Sync(&h.mu, edh), func(ev term.Event) (bool, bool) {
+		h.mu.Lock()
+		defer h.mu.Unlock()
+
+		if ev.Type == term.EventResize {
+			list.Wait()
+			focus, _ := list.Focus()
+			renderFile(textToLocation[string(focus)])
+			return false, true
+		}
+
+		return edh.Handle(ev)
+	})
+
+	bhtop := browser.FuncHandler(eh, closeWin(bottom))
 	top, err := h.wm.Split(browser.OrientationBottom, bhtop)
 	if err != nil {
 		log.Errorf("lspEditorHandler.SplitHorizontalBelow(): %v", err)
