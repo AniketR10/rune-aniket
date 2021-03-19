@@ -1554,6 +1554,7 @@ func (h *lspEditorHandler) browseLocations(
 		}
 		content := string(data)
 
+		_ = ed.SetCursor(edh, term.Coordinates{})
 		buf.Reset()
 		buf.WriteString(content)
 
@@ -1641,6 +1642,7 @@ func (h *lspEditorHandler) handleReferences(
 	}
 
 	p := protocol.ReferenceParams{
+		Context: protocol.ReferenceContext{IncludeDeclaration: true},
 		TextDocumentPositionParams: protocol.TextDocumentPositionParams{
 			TextDocument: f.docID,
 			Position:     pos,
