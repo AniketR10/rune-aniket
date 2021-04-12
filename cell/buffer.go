@@ -101,7 +101,7 @@ func (b *Buffer) initWithCells(c *rawCells, logger *log.Logger, unixFile bool) {
 	b.rootPub = newPublisher(b.writer)
 	b.undoer = newUndoer(b.rootPub)
 	b.writer = b.undoer
-	// setup the usage publisher at the shalowest Writer
+	// setup the usage publisher at the shallowest Writer
 	b.usagePub = newPublisher(b.writer)
 	b.writer = b.usagePub
 	b.safew = safeWriter{writer: b.writer, cells: b.cells}
@@ -366,6 +366,10 @@ func (b *Buffer) DeleteBlock(from, to term.Coordinates) (
 func (b *Buffer) Reset() {
 	b.undoer.reset()
 	b.cells.reset()
+}
+
+func (b *Buffer) Version() int {
+	return b.undoer.version
 }
 
 // ReadFrom reads data from r until EOF and appends it to the buffer, growing

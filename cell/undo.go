@@ -7,6 +7,7 @@ import (
 // undoer adds undo and redo methods to a otherwise, irreversible cell.writer.
 // It satifies the cell.writer interface and it should be used as a replacement.
 type undoer struct {
+	version      int
 	w            Writer
 	undoTimeline []op
 	redoTimeline []op
@@ -46,6 +47,7 @@ func (u *undoer) redo() (bool, term.Coordinates) {
 	if !ok {
 		return false, term.Coordinates{}
 	}
+	u.version++
 	u.redoTimeline = redoTimeline
 	op.do()
 	u.pushUndo(op)
@@ -57,13 +59,12 @@ func (u *undoer) undo() (bool, term.Coordinates) {
 	if !ok {
 		return false, term.Coordinates{}
 	}
+	u.version--
 	u.undoTimeline = undoTimeline
 	op.undo()
 	u.pushRedo(op)
 	return ok, op.at
 }
-
-var i int
 
 func (u *undoer) pushUndo(cmd op) {
 	u.undoTimeline = append(u.undoTimeline, cmd)
@@ -89,6 +90,7 @@ func (u *undoer) Insert(at term.Coordinates, str string) (from, to term.Coordina
 	}
 
 	op.do()
+	u.version++
 	u.pushUndo(op)
 	u.resetRedoTimeline()
 	return
@@ -107,6 +109,7 @@ func (u *undoer) Delete(from, to term.Coordinates) (start, end term.Coordinates,
 	}
 
 	op.do()
+	u.version++
 	u.pushUndo(op)
 	u.resetRedoTimeline()
 	return
@@ -115,4 +118,5 @@ func (u *undoer) Delete(from, to term.Coordinates) (start, end term.Coordinates,
 func (u *undoer) reset() {
 	u.resetRedoTimeline()
 	u.undoTimeline = u.undoTimeline[:0]
+	u.version = 0
 }

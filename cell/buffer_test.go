@@ -678,3 +678,31 @@ func TestBufferSelectLine(t *testing.T) {
 func TestBufferSelectBlock(t *testing.T) {
 	testBufferSelect(t, (*Buffer).SelectBlock)
 }
+
+func TestBufferVersion(t *testing.T) {
+	b := NewBuffer()
+	assert.Equal(t, 0, b.Version())
+
+	b.WriteString("bla")
+	assert.Equal(t, 1, b.Version())
+
+	b.DeleteRow(0)
+	assert.Equal(t, 2, b.Version())
+
+	b.Undo()
+	assert.Equal(t, 1, b.Version())
+
+	b.Undo()
+	assert.Equal(t, 0, b.Version())
+
+	b.Undo()
+	assert.Equal(t, 0, b.Version())
+
+	for i := 0; i < 5; i++ {
+		b.Redo()
+	}
+	assert.Equal(t, 2, b.Version())
+
+	b.Reset()
+	assert.Equal(t, 0, b.Version())
+}
