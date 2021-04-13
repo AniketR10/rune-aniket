@@ -166,6 +166,7 @@ func (h *gitEditorHandler) parseDiff(diff *diff.FileDiff) []editor.Location {
 	for _, hunk := range diff.Hunks {
 		log.Tracef("Read file diff hunk: %#v", hunk)
 		if hunk.NewLines == 0 {
+			// FIXME https://github.com/ernestrc/go-tui/issues/59
 			at := term.Coordinates{Y: int(hunk.NewStartLine - 1)}
 			locs = append(locs, editor.Location{
 				From: at,

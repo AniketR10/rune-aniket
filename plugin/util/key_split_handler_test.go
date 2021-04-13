@@ -6,6 +6,7 @@ import (
 
 	"github.com/ernestrc/go-tui"
 	"github.com/ernestrc/go-tui/browser"
+	"github.com/ernestrc/go-tui/editor"
 	"github.com/ernestrc/go-tui/handler"
 	"github.com/ernestrc/go-tui/plugin"
 	"github.com/ernestrc/go-tui/proto"
@@ -59,47 +60,6 @@ func expectSubscribe(
 		Times(1)
 
 	return conn
-}
-
-func expectBrokerDialAnyTimes(t *testing.T, broker *proto.MockMuxBroker) {
-	broker.EXPECT().Dial(gomock.Any()).
-		DoAndReturn(func(brokerId uint32) (proto.MuxConn, error) {
-			return nopConn{}, nil
-		}).AnyTimes()
-}
-
-func expectSplitAndFocus(
-	t *testing.T, ctrl *gomock.Controller,
-	mockCC *proto.MockMuxConn, broker *proto.MockMuxBroker,
-) {
-	anyBrokerID := uint32(152)
-	broker.EXPECT().NextId().Return(anyBrokerID).AnyTimes()
-	broker.EXPECT().AcceptAndServe(gomock.Any(), gomock.Any()).
-		DoAndReturn(func(brokerId uint32, serverFunc func(opts []grpc.ServerOption) proto.MuxServer) {
-			serverFunc(make([]grpc.ServerOption, 0))
-		}).
-		AnyTimes()
-
-	windowID := uint64(1888)
-	splitWindowID := uint64(99)
-	mockCC.EXPECT().
-		Invoke(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
-		DoAndReturn(func(
-			ctx context.Context, method string, args interface{},
-			reply interface{}, opts ...grpc.CallOption) error {
-			if method == "/proto.WindowManager/Split" {
-				splitRes, ok := reply.(*proto.SplitResponse)
-				require.True(t, ok)
-				splitRes.WindowId = splitWindowID
-			} else if method == "/proto.WindowManager/Focus" {
-				splitRes, ok := reply.(*proto.FocusResponse)
-				require.True(t, ok)
-				splitRes.WindowId = windowID
-			}
-			return nil
-		}).AnyTimes()
-
-	expectBrokerDialAnyTimes(t, broker)
 }
 
 type nopConn struct {
@@ -170,38 +130,56 @@ func TestKeySplitHandlerEmpty(t *testing.T) {
 		expectInitialization(t, ctrl, h)
 		h.Shutdown("you are being naughty")
 	})
+}
 
+func TestKeySplitHandlerOpenWindow(t *testing.T) {
 	t.Run("open a split window if key event is received", func(t *testing.T) {
-		// FIXME ci tests failing due to this test being killed after 1'20 min
-		t.SkipNow()
-		ctrl := gomock.NewController(t)
-		defer ctrl.Finish()
-
 		keyEvent := term.Event{Type: term.EventKey, Ch: 'a'}
-		handlerFn := func(grants []plugin.Grant, broker proto.MuxBroker,
-			focus browser.Window, config plugin.Config) (tui.Handler, error) {
-			return handler.NewTestHandler(), nil
-		}
 		config := KeySplitHandlerConfig{
 			Key:              keyEvent,
 			SplitOrientation: browser.OrientationLeft,
-			Handler:          handlerFn,
 		}
-		h := &keySplitHandler{config: config}
-		broker := expectInitialization(t, ctrl, h)
-
-		browserConnToken := uint32(155)
-		conn := prototest.ExpectBrokerDial(t, ctrl, broker, browserConnToken)
-		grants := []plugin.Grant{
-			{
-				Token:      browserConnToken,
-				Permission: plugin.PermissionBrowserWindowManager,
-			},
+		grants := plugin.Grant{
+			Token:      1556,
+			Permission: plugin.PermissionBrowserWindowManager,
 		}
-		h.PermissionGranted(grants)
-
-		expectSplitAndFocus(t, ctrl, conn, broker)
-
-		assert.False(t, h.Handle(keyEvent))
+		testSplitWindow(t, config, grants, func(h *keySplitHandler) {
+			assert.False(t, h.Handle(keyEvent))
+		})
 	})
+
+	t.Run("open a split window if command received", func(t *testing.T) {
+		cmdName := "blah"
+		config := KeySplitHandlerConfig{
+			Command:          cmdName,
+			SplitOrientation: browser.OrientationLeft,
+		}
+		grants := plugin.Grant{
+			Token:      1555,
+			Permission: plugin.PermissionEditor,
+		}
+		testSplitWindow(t, config, grants, func(h *keySplitHandler) {
+			assert.False(t, h.HandleCommand(editor.Command{Name: cmdName}))
+		})
+	})
+}
+
+func testSplitWindow(
+	t *testing.T, config KeySplitHandlerConfig,
+	grant plugin.Grant, action func(*keySplitHandler),
+) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	config.Handler = func(grants []plugin.Grant, broker proto.MuxBroker,
+		focus browser.Window, config plugin.Config) (tui.Handler, error) {
+		return handler.NewTestHandler(), nil
+	}
+	mockWm := browser.NewMockWindowManager(ctrl)
+	h := &keySplitHandler{config: config, wm: mockWm}
+	mockWm.EXPECT().Focus().Return(nil, nil)
+	mockWm.EXPECT().
+		Split(gomock.Eq(config.SplitOrientation), gomock.Any()).
+		Return(nil, nil)
+	action(h)
 }

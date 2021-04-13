@@ -18,33 +18,39 @@ import (
 
 const defaultCommand = `grep -n -r "" .`
 
+var defaultKey = term.Event{Type: term.EventKey, Key: term.KeyCtrlBackslash}
+
+func parseLine(data string) (string, term.Coordinates) {
+	// NOTE: if ag breaks this or there's an edge case that it's not covered
+	// let it panic so we catch it early and fix it
+	chunks := strings.Split(data, ":")
+	y, _ := strconv.Atoi(chunks[1])
+	return chunks[0], term.Coordinates{Y: y - 1}
+}
+
+func newHandler(grants []plugin.Grant, broker proto.MuxBroker,
+	invokeWindow browser.Window, config plugin.Config) (tui.Handler, error) {
+	cmdStr, err := config.GetString("command")
+	if err != nil {
+		if err != plugin.ErrNotFound {
+			log.Printf("failed to load 'command' config: %v", err)
+		}
+		cmdStr = defaultCommand
+	}
+	return finder.New(grants, broker, invokeWindow,
+		config, defaultKey, cmdStr, parseLine)
+}
+
 func main() {
 	go func() {
 		log.Println(http.ListenAndServe("localhost:6064", nil))
 	}()
 
-	key := term.Event{Type: term.EventKey, Key: term.KeyCtrlBackslash}
 	plugutil.ServeKeySplitHandler(plugutil.KeySplitHandlerConfig{
 		SplitOrientation: browser.OrientationBottom,
-		Handler: func(grants []plugin.Grant, broker proto.MuxBroker,
-			invokeWindow browser.Window, config plugin.Config) (tui.Handler, error) {
-			cmdStr, err := config.GetString("command")
-			if err != nil {
-				if err != plugin.ErrNotFound {
-					log.Printf("failed to load 'command' config: %v", err)
-				}
-				cmdStr = defaultCommand
-			}
-			return finder.New(grants, broker, invokeWindow,
-				config, key, cmdStr, func(data string) (string, term.Coordinates) {
-					// NOTE: if ag breaks this or there's an edge case that it's not covered
-					// let it panic so we catch it early and fix it
-					chunks := strings.Split(data, ":")
-					y, _ := strconv.Atoi(chunks[1])
-					return chunks[0], term.Coordinates{Y: y - 1}
-				})
-		},
-		Key:         key,
-		Permissions: finder.Permissions(),
+		Handler:          newHandler,
+		Key:              defaultKey,
+		Permissions:      finder.Permissions(),
+		Command:          "searchLine",
 	})
 }

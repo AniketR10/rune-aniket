@@ -9,7 +9,6 @@ import (
 	"github.com/ernestrc/go-tui/plugin"
 	plugutil "github.com/ernestrc/go-tui/plugin/util"
 	"github.com/ernestrc/go-tui/proto"
-	"github.com/ernestrc/go-tui/term"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -24,6 +23,6 @@ func main() {
 			invokeWindow browser.Window, config plugin.Config) (tui.Handler, error) {
 			return new(colorPaletteHandler), nil
 		},
-		Key: term.Event{Type: term.EventKey, Key: term.KeyCtrlY},
+		Command: "colorPalette",
 	})
 }

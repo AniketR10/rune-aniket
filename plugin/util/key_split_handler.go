@@ -7,16 +7,12 @@ import (
 
 	"github.com/ernestrc/go-tui"
 	"github.com/ernestrc/go-tui/browser"
+	"github.com/ernestrc/go-tui/editor"
 	"github.com/ernestrc/go-tui/plugin"
 	"github.com/ernestrc/go-tui/proto"
 	"github.com/ernestrc/go-tui/term"
 	log "github.com/sirupsen/logrus"
 )
-
-var requiredPermissions = []plugin.Permission{
-	plugin.PermissionBrowserWindowManager,
-	plugin.PermissionBrowserEventSubscriber,
-}
 
 type keySplitHandler struct {
 	mu     sync.Mutex
@@ -25,6 +21,7 @@ type keySplitHandler struct {
 	broker  proto.MuxBroker
 	wm      browser.WindowManager
 	s       browser.EventSubscriber
+	ed      editor.Editor
 	pconfig plugin.Config
 	grants  []plugin.Grant
 	h       tui.Handler
@@ -97,7 +94,7 @@ func (t *keySplitHandler) exitClean() {
 	}
 }
 
-func (t *keySplitHandler) handleKeyEvent() {
+func (t *keySplitHandler) openSplitWindow() {
 	t.mu.Lock()
 	win := t.win
 	wm := t.wm
@@ -139,17 +136,16 @@ func (t *keySplitHandler) handleKeyEvent() {
 
 func (t *keySplitHandler) Handle(ev term.Event) (exit bool) {
 	if ev == t.config.Key {
-		t.handleKeyEvent()
+		t.openSplitWindow()
 	}
-	return
+	return false
 }
 
-func (t *keySplitHandler) subscribeToEvents() error {
-	err := t.s.SubscribeTermEvents(t.config.Key, t)
-	if err != nil {
-		return err
+func (t *keySplitHandler) HandleCommand(cmd editor.Command) (exit bool) {
+	if cmd.Name == t.config.Command {
+		t.openSplitWindow()
 	}
-	return nil
+	return false
 }
 
 func (t *keySplitHandler) PermissionGranted(grants []plugin.Grant) {
@@ -163,10 +159,15 @@ func (t *keySplitHandler) PermissionGranted(grants []plugin.Grant) {
 		switch g.Permission {
 		case plugin.PermissionBrowserWindowManager:
 			t.wm, err = plugin.WindowManager(g.Token, t.broker)
+		case plugin.PermissionEditor:
+			t.ed, err = plugin.Editor(g.Token, t.broker)
+			if err == nil && t.config.Command != "" {
+				err = t.ed.SubscribeCommand(t.config.Command, t)
+			}
 		case plugin.PermissionBrowserEventSubscriber:
 			t.s, err = plugin.EventSubscriber(g.Token, t.broker)
-			if err == nil {
-				err = t.subscribeToEvents()
+			if err == nil && t.config.Key != (term.Event{}) {
+				err = t.s.SubscribeTermEvents(t.config.Key, t)
 			}
 		}
 		if err != nil {
@@ -196,7 +197,9 @@ func (t *keySplitHandler) Health() error {
 // use KeySplitHandler plugin.Grantee helper. See KeySplitHandler
 // for more details.
 type KeySplitHandlerConfig struct {
-	Key term.Event
+	// Either Key or Command must be set.
+	Key     term.Event
+	Command string
 
 	SplitOrientation browser.Orientation
 
@@ -213,14 +216,25 @@ type KeySplitHandlerConfig struct {
 }
 
 // ServeKeySplitHandler serves a plugin.Grantee that opens a split window
-// with a new handler when key event is fired. The key subscribed to
-// the type of window split and the handler used is configured with config.
-// If either is not set, this function panics.
-// Note that this function never returns.
+// with a new handler when key event is fired or command called.
+// This function never returns.
 func ServeKeySplitHandler(config KeySplitHandlerConfig) {
-	if config.Handler == nil || (config.Key == term.Event{}) {
-		panic(fmt.Sprintf("invalid key split handler configuration: %#v", config))
+	if config.Handler == nil ||
+		(config.Key == term.Event{} && config.Command == "") {
+		panic(fmt.Sprintf("invalid key split handler configuration: "+
+			"either Key or Command must be set: %#v", config))
 	}
-	perms := append(config.Permissions, requiredPermissions...)
+
+	perms := []plugin.Permission{
+		plugin.PermissionBrowserWindowManager,
+	}
+
+	if config.Key != (term.Event{}) {
+		perms = append(perms, plugin.PermissionBrowserEventSubscriber)
+	}
+	if config.Command != "" {
+		perms = append(perms, plugin.PermissionEditor)
+	}
+	perms = append(perms, config.Permissions...)
 	plugin.Serve(&keySplitHandler{config: config}, perms...)
 }
