@@ -1,0 +1,35 @@
+syntax = "proto3";
+
+package proto;
+
+message SetRegisterRequest {
+	string register_id = 1;
+	uint64 handler_id = 2;
+}
+
+message SetRegisterResponse {
+}
+
+
+service Clipboard {
+	rpc SetRegister(SetRegisterRequest) returns (SetRegisterResponse);
+}
+
+message ClipboardCopyRequest {
+	string data = 1;
+}
+
+message ClipboardCopyResponse {
+}
+
+message ClipboardPasteRequest {
+}
+
+message ClipboardPasteResponse {
+	string data = 1;
+}
+
+service ClipboardRegister {
+	rpc Copy(ClipboardCopyRequest) returns (ClipboardCopyResponse);
+	rpc Paste(ClipboardPasteRequest) returns (ClipboardPasteResponse);
+}

@@ -61,7 +61,8 @@ var defaultViConfig = viConfig{
 		Fg: term.AttrReverse,
 		Bg: term.ColorDefault,
 	},
-	clipboard: editor.NewEphemeralClipboard(),
+	clipboard:       editor.NewInMemoryClipboard(),
+	defaultRegister: editor.DefaultRegisterID,
 }
 
 // New allocates storage for a new Vi handler, initializes it and returns it.
@@ -83,7 +84,7 @@ func (vi *Vi) Init(buf *cell.Buffer, opts ...Option) {
 	vi.less.InitWithBuffer(buf)
 	vi.cursor.Init(&vi.less.Scroll)
 
-	editor.WithCopyDelete(vi.config.clipboard, &vi.cursor, buf)
+	editor.WithCopyDelete(vi.config.defaultRegister, vi.config.clipboard, &vi.cursor, buf)
 	vi.repeater.Init(&vi.cursor, buf)
 
 	vi.free, _ = vi.cursor.Cursor()
@@ -267,14 +268,14 @@ func (vi *Vi) logError(err error) {
 	vi.config.logger.Error(err)
 }
 
-func (vi *Vi) pasteClipboard(after bool) bool {
-	paste, err := vi.config.clipboard.Get()
+func (vi *Vi) pasteClipboard(registerID string, after bool) bool {
+	paste, err := vi.config.clipboard.Paste(registerID)
 	if err != nil {
 		vi.logError(fmt.Errorf("clipboard.Get: %s", err))
 		return false
 	}
 
-	str := paste.Data
+	str := paste.Text
 	mode, ok := paste.Metadata.(editor.SelectMode)
 	if !ok {
 		mode = editor.StandardSelection
@@ -373,9 +374,9 @@ func (vi *Vi) handleNormal(ev term.Event) (quit, handled bool) {
 				vi.cursor.MoveToPrevMatch()
 			}
 		case 'p':
-			vi.pasteClipboard(true)
+			vi.pasteClipboard(vi.config.defaultRegister, true)
 		case 'P':
-			vi.pasteClipboard(false)
+			vi.pasteClipboard(vi.config.defaultRegister, false)
 		case '0':
 			vi.cursor.MoveStartLine()
 		case '$':
@@ -514,7 +515,7 @@ func (vi *Vi) handleInsert(ev term.Event) (quit, handled bool) {
 }
 
 func (vi *Vi) copySelection() {
-	vi.cursor.CopySelection(vi.config.clipboard)
+	vi.cursor.CopySelection(vi.config.defaultRegister, vi.config.clipboard)
 }
 
 func (vi *Vi) repeatInsertStart() {

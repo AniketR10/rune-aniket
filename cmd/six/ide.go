@@ -105,6 +105,9 @@ func (i *IDE) init(cfgfilename, recfilename string, filenames ...string) error {
 		vi.WithDebug(i.ideConfig.viDebug()),
 	)
 
+	clipboardManager := plugin.NewClipboardManager()
+	viOpts = append(viOpts, vi.WithClipboard(clipboardManager))
+
 	var l *log.Logger
 	if i.ideConfig.logOutputPath() != "" {
 		f, err := os.OpenFile(i.ideConfig.logOutputPath(), os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
@@ -134,6 +137,8 @@ func (i *IDE) init(cfgfilename, recfilename string, filenames ...string) error {
 
 	res := plugin.BrowserResources(i.ex.Browser())
 	res = plugin.MergeResourceMap(res, plugin.EditorResources(i.ex.Editor()))
+	res[plugin.PermissionClipboard] = clipboardManager.ResourceServer()
+
 	i.manager, err = plugin.NewManager(plugin.GrantAll(res), pluginOpts...)
 	if err != nil {
 		return fmt.Errorf("error initializing plugin manager: %v", err)

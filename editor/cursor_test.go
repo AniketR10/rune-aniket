@@ -776,36 +776,42 @@ func testCursorSelect(t *testing.T, width, height int) {
 
 	t.Run("Select/CopySelection copies from start to end", func(t *testing.T) {
 		e := makeSelect(t)
-		clipboard := NewEphemeralClipboard()
-		require.True(t, e.CopySelection(clipboard))
+		clipboard := NewInMemoryClipboard()
+		ok, err := e.CopySelection(DefaultRegisterID, clipboard)
+		require.True(t, ok)
+		require.NoError(t, err)
 		assert.Equal(t, "", e.Selection())
 		assertBufferAttributes(t, e.buffer(), term.Attributes{})
 
-		data, err := clipboard.Get()
+		data, err := clipboard.Paste(DefaultRegisterID)
 		require.NoError(t, err)
-		assert.Equal(t, e.scroll.Buffer().String(), data.Data)
+		assert.Equal(t, e.scroll.Buffer().String(), data.Text)
 	})
 
 	t.Run("SelectLine/CopySelection copies from start line to end line", func(t *testing.T) {
 		e := makeSelectLine(t)
-		clipboard := NewEphemeralClipboard()
-		require.True(t, e.CopySelection(clipboard))
+		clipboard := NewInMemoryClipboard()
+		ok, err := e.CopySelection(DefaultRegisterID, clipboard)
+		require.True(t, ok)
+		require.NoError(t, err)
 		assertBufferAttributes(t, e.buffer(), term.Attributes{})
 
-		data, err := clipboard.Get()
+		data, err := clipboard.Paste(DefaultRegisterID)
 		require.NoError(t, err)
-		assert.Equal(t, e.scroll.Buffer().String(), data.Data)
+		assert.Equal(t, e.scroll.Buffer().String(), data.Text)
 	})
 
 	t.Run("SelectBlock/CopySelection copies from start to end in block", func(t *testing.T) {
 		e := makeSelectBlock(t)
-		clipboard := NewEphemeralClipboard()
-		require.True(t, e.CopySelection(clipboard))
+		clipboard := NewInMemoryClipboard()
+		ok, err := e.CopySelection(DefaultRegisterID, clipboard)
+		require.True(t, ok)
+		require.NoError(t, err)
 		assertBufferAttributes(t, e.buffer(), term.Attributes{})
 
-		data, err := clipboard.Get()
+		data, err := clipboard.Paste(DefaultRegisterID)
 		require.NoError(t, err)
-		assert.NotZero(t, data.Data)
+		assert.NotZero(t, data.Text)
 	})
 }
 

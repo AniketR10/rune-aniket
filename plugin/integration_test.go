@@ -47,6 +47,7 @@ func TestIntegrationRace(t *testing.T) {
 	edMock := editor.NewMockEditor(ctrl)
 	edMock.EXPECT().SubscribeEditor(gomock.Any(), gomock.Any()).Times(2)
 	resources := MergeResourceMap(BrowserResources(mock), EditorResources(edMock))
+	resources[PermissionClipboard] = NewClipboardManager()
 
 	// plugin manager serves each permission on a different grantID
 	perms := map[Permission]uint32{
@@ -58,6 +59,7 @@ func TestIntegrationRace(t *testing.T) {
 		PermissionBrowserEventPublisher:  broker.NextId(),
 		PermissionEditor:                 broker.NextId(),
 		PermissionBrowserStorage:         broker.NextId(),
+		PermissionClipboard:              broker.NextId(),
 	}
 	for perm, brokerID := range perms {
 		resources[perm].Serve("caliu-plugins-ltd", brokerID,
@@ -201,6 +203,12 @@ func TestIntegrationRace(t *testing.T) {
 		}, func(ifc interface{}) error {
 			return ifc.(browser.Storage).Delete(context.Background(), "")
 		}},
+		{PermissionClipboard, func(token uint32, broker proto.MuxBroker) (interface{}, error) {
+			return Clipboard(token, broker)
+		// we test ClipboardManager directly
+		}, nil, func(ifc interface{}) error {
+			return ifc.(ClipboardSetter).SetRegister(editor.DefaultRegisterID, nil)
+		}},
 		/* FIXME: CI tests are failing due to mock.List not being called
 		{PermissionBrowserStorage, func(token uint32, broker proto.MuxBroker) (interface{}, error) {
 			return Storage(token, broker)
@@ -229,7 +237,9 @@ func TestIntegrationRace(t *testing.T) {
 		require.NoError(t, err)
 
 		n := 5
-		tcase.expect(edMock.EXPECT(), mock.EXPECT()).Times(n * 2)
+		if tcase.expect != nil {
+			tcase.expect(edMock.EXPECT(), mock.EXPECT()).Times(n * 2)
+		}
 		for i := 0; i < n; i++ {
 			wg.Add(2)
 			go assertClientMethodNoError(t, res1, &wg, &mu, tcase.method)

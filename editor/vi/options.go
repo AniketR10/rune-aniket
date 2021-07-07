@@ -8,11 +8,12 @@ import (
 
 // viConfig holds configuration for Vi.
 type viConfig struct {
-	resAttr   term.Attributes
-	clipboard editor.Clipboard
-	logger    *log.Logger
-	messenger editor.Messenger
-	debug     bool
+	resAttr         term.Attributes
+	clipboard       editor.Clipboard
+	defaultRegister string
+	logger          *log.Logger
+	messenger       editor.Messenger
+	debug           bool
 }
 
 // Option represents a Vi handler configuration option.

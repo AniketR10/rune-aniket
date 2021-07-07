@@ -1,33 +1,42 @@
 package editor
 
-// Paste represents the contents stored in a Clipboard (or a.k.a paste buffer)
-type Paste struct {
-	Data     string
+// Clipboard is the interface that wraps the basic Copy, Paste short-term data storage
+// methods for editors to use multiple storage registers.
+type Clipboard interface {
+	Paste(registerID string) (ClipboardData, error)
+	Copy(registerID string, data ClipboardData) error
+}
+
+// ClipboardData is the structure used for short-term data storage and/or data transfer
+// via Clipboard's Copy/Paste operations.
+type ClipboardData struct {
+	Text     string
 	Metadata interface{}
 }
 
-// Clipboard is the basic interface that wraps the methods Get and Set, which emulate
-// the behaviour of a system clibpboard.
-type Clipboard interface {
-	Get() (Paste, error)
-	Set(Paste) error
+var (
+	// DefaultRegisterID represents the program's default clipboard register to be used with
+	// Clipboard's Copy/Paste operations.
+	DefaultRegisterID string = " "
+
+	// UnnamedRegisterID is an alias of DefaultRegisterID.
+	UnnamedRegisterID = DefaultRegisterID
+)
+
+type inmemoryClipboard struct {
+	data ClipboardData
 }
 
-type ephemeralClipboard struct {
-	content Paste
+// NewInMemoryClipboard returns a simple in-memory implementation of Clipboard.
+func NewInMemoryClipboard() Clipboard {
+	return &inmemoryClipboard{}
 }
 
-// NewEphemeralClipboard returns a clipboard which uses program memory to store and retrieve data.
-func NewEphemeralClipboard() Clipboard {
-	c := new(ephemeralClipboard)
-	return c
+func (d *inmemoryClipboard) Paste(id string) (ret ClipboardData, err error) {
+	return d.data, nil
 }
 
-func (c *ephemeralClipboard) Get() (Paste, error) {
-	return c.content, nil
-}
-
-func (c *ephemeralClipboard) Set(data Paste) error {
-	c.content = data
+func (d *inmemoryClipboard) Copy(id string, data ClipboardData) error {
+	d.data = data
 	return nil
 }

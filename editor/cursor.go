@@ -1025,7 +1025,7 @@ func (c *Cursor) DeleteSelection() (ok bool) {
 
 // CopySelection copies the current text under selection and returns true
 // or does nothing and returns false.
-func (c *Cursor) CopySelection(clip Clipboard) (ok bool) {
+func (c *Cursor) CopySelection(registerID string, clip Clipboard) (ok bool, err error) {
 	if c.selection.mode == noSelection {
 		return
 	}
@@ -1035,9 +1035,8 @@ func (c *Cursor) CopySelection(clip Clipboard) (ok bool) {
 	c.Unselect()
 	c.setCursor(c.scrollToWindowCoordinates(c.selection.scrollFrom))
 
-	clip.Set(Paste{Data: selection, Metadata: mode})
-
 	ok = true
+	clip.Copy(registerID, ClipboardData{Text: selection, Metadata: mode})
 	return
 }
 

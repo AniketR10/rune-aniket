@@ -12,26 +12,26 @@ import (
 
 func TestDeleteClipboard(t *testing.T) {
 	buf := cell.NewBuffer()
-	clip := NewEphemeralClipboard()
+	clip := NewInMemoryClipboard()
 	var scroll component.Scroll
 	scroll.InitWithBuffer(buf)
 	c := NewCursor(&scroll)
-	WithCopyDelete(clip, c, buf)
+	WithCopyDelete("", clip, c, buf)
 
 	content := "my whatever"
 	buf.InsertString(term.Coordinates{}, content)
 	c.SelectLine()
 	c.DeleteSelection()
 
-	data, err := clip.Get()
+	data, err := clip.Paste("")
 	require.NoError(t, err)
-	assert.Equal(t, Paste{Data: content, Metadata: LineSelection}, data)
+	assert.Equal(t, ClipboardData{Text: content, Metadata: LineSelection}, data)
 
 	// test that undo inserts do not get copied to clipboard
 	buf.Undo()
 	buf.Undo()
 
-	data, err = clip.Get()
+	data, err = clip.Paste("")
 	require.NoError(t, err)
-	assert.Equal(t, Paste{Data: content, Metadata: LineSelection}, data)
+	assert.Equal(t, ClipboardData{Text: content, Metadata: LineSelection}, data)
 }
