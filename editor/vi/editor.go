@@ -69,13 +69,14 @@ func (e *viEditor) Edit(name string, buf *cell.Buffer) (editor.Handler, error) {
 	return h, nil
 }
 
-func (e *viEditor) Register(cmd string, h editor.CommandHandler) error {
+// SubscribeCommand is not supported.
+func (e *viEditor) SubscribeCommand(cmd string, h editor.CommandHandler) error {
 	return errors.New("not supported")
 }
 
-// SubscribeEditor subsribes sub to ev. Note that this Editor is only capable
+// SubscribeEditorEvents subsribes sub to ev. Note that this Editor is only capable
 // of dispatching EventTypeOpen, EventTypeInsert and EventTypeDelete EventType events.
-func (e *viEditor) SubscribeEditor(ev editor.EventType, sub editor.EventHandler) error {
+func (e *viEditor) SubscribeEditorEvents(ev editor.EventType, sub editor.EventHandler) error {
 	if _, ok := e.subs[ev]; !ok {
 		e.subs[ev] = []editor.EventHandler{sub}
 		return nil

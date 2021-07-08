@@ -315,7 +315,7 @@ func TestClientSubscribe(t *testing.T) {
 		prototest.ExpectBrokerServe(t, 1, mockBroker)
 		expectInvokeError(mockCC)
 
-		err := client.Subscribe(term.Event{}, nil)
+		err := client.SubscribeTermEvents(term.Event{}, nil)
 		assertInvokeError(t, err)
 
 		assertClientServersEqual(t, 0, client)
@@ -340,7 +340,7 @@ func TestClientSubscribe(t *testing.T) {
 			Times(1)
 
 		h := NewTestHandler()
-		err := client.Subscribe(term.Event{Ch: 'a'}, handlerToEventHandler{h})
+		err := client.SubscribeTermEvents(term.Event{Ch: 'a'}, handlerToEventHandler{h})
 		require.NoError(t, err)
 
 		assertClientHandlerExitClose(t, h, nil, client, false)

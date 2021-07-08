@@ -99,11 +99,11 @@ func (e *testEditor) Reader(h Handler) Reader {
 	return CellReader(e.buf.Reader())
 }
 
-func (e *testEditor) Register(cmd string, h CommandHandler) error {
+func (e *testEditor) SubscribeCommand(cmd string, h CommandHandler) error {
 	return nil
 }
 
-func (e *testEditor) SubscribeEditor(ev EventType, sub EventHandler) error {
+func (e *testEditor) SubscribeEditorEvents(ev EventType, sub EventHandler) error {
 	if e.subs == nil {
 		e.subs = make(map[EventType][]EventHandler)
 	}
@@ -326,7 +326,7 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 	h := browser.NewTestHandler()
 	h.Ch = 'Z' // helps identify in tests
 
-	err = b.Subscribe(term.Event{Type: term.EventKey, Ch: '&'},
+	err = b.SubscribeTermEvents(term.Event{Type: term.EventKey, Ch: '&'},
 		browser.FuncEventHandler(func(ev term.Event) bool {
 			b.Split(browser.OrientationBottom, h)
 			return false
@@ -577,7 +577,7 @@ func newBrowserForSubscribeTest(t *testing.T, ev term.Event) (
 	require.NoError(t, b.Init(&testEditor{}))
 
 	h := browser.NewTestHandler()
-	err := b.Browser().Subscribe(ev, browser.HandlerEventHandler(h))
+	err := b.Browser().SubscribeTermEvents(ev, browser.HandlerEventHandler(h))
 	require.NoError(t, err)
 
 	return b, h, h.Ch
@@ -598,7 +598,7 @@ func TestBrowserHandlerSubscribe(t *testing.T) {
 		defer b.Close()
 
 		h2 := browser.NewTestHandler()
-		err := b.Browser().Subscribe(ev, browser.HandlerEventHandler(h2))
+		err := b.Browser().SubscribeTermEvents(ev, browser.HandlerEventHandler(h2))
 		assert.Error(t, err)
 
 		exit, handled := b.Handle(ev)

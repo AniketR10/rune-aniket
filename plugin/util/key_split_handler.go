@@ -145,7 +145,7 @@ func (t *keySplitHandler) Handle(ev term.Event) (exit bool) {
 }
 
 func (t *keySplitHandler) subscribeToEvents() error {
-	err := t.s.Subscribe(t.config.Key, t)
+	err := t.s.SubscribeTermEvents(t.config.Key, t)
 	if err != nil {
 		return err
 	}

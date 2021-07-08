@@ -344,8 +344,8 @@ func (c *Component) MergeKeyMap(keymap map[term.Event]term.Event) error {
 	return nil
 }
 
-// Subscribe subscribers h EventHandler to term.Event ev.
-func (c *Component) Subscribe(ev term.Event, h browser.EventHandler) error {
+// SubscribeTermEvents subscribers h EventHandler to term.Event ev.
+func (c *Component) SubscribeTermEvents(ev term.Event, h browser.EventHandler) error {
 	if ev.Type != term.EventKey {
 		return errors.New("invalid subscription of non-key event")
 	}
@@ -530,10 +530,10 @@ func (c *Component) getContent(h Handler) (string, error) {
 	return cell.CellsToString(cells), nil
 }
 
-// SubscribeEditor subscribes h to editor events of type ev.
+// SubscribeEditorEvents subscribes h to editor events of type ev.
 // If ev is of type EventTypeOpen, an event will be dispatched for
 // every Tab currently open.
-func (c *Component) SubscribeEditor(ev EventType, h EventHandler) error {
+func (c *Component) SubscribeEditorEvents(ev EventType, h EventHandler) error {
 	switch ev {
 	case EventTypeOpen:
 		for _, tab := range c.comp.Tabs() {
@@ -555,7 +555,7 @@ func (c *Component) SubscribeEditor(ev EventType, h EventHandler) error {
 		fallthrough
 	// delegate open/insert/delete event dispatching to underlying editor.
 	case EventTypeDelete, EventTypeInsert, EventTypeScroll:
-		return c.ed.SubscribeEditor(ev, h)
+		return c.ed.SubscribeEditorEvents(ev, h)
 	case EventTypeFocus:
 		t, ok := c.comp.FocusTab()
 		if ok {
@@ -576,7 +576,7 @@ func (c *Component) SubscribeEditor(ev EventType, h EventHandler) error {
 	return nil
 }
 
-// Commands returns a list of commands registered via Register.
+// Commands returns a list of commands registered via SubscribeCommand.
 func (c *Component) Commands() (ret []string) {
 	ret = make([]string, len(c.cmdSubscribers))
 	var i int
@@ -587,9 +587,9 @@ func (c *Component) Commands() (ret []string) {
 	return ret
 }
 
-// Register installs cm as a command handler of cmd or returns
+// SubscribeCommand installs cm as a command handler of cmd or returns
 // an error if there's already a CommandHandler installed for this cmd.
-func (c *Component) Register(cmd string, cm CommandHandler) error {
+func (c *Component) SubscribeCommand(cmd string, cm CommandHandler) error {
 	if _, ok := c.cmdSubscribers[cmd]; ok {
 		return errors.New("command already registered")
 	}

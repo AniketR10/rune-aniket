@@ -125,7 +125,7 @@ func TestClientSubscribe(t *testing.T) {
 
 		prototest.ExpectBrokerServe(t, brokerID, broker)
 
-		err := c.SubscribeEditor(evType, handler)
+		err := c.SubscribeEditorEvents(evType, handler)
 		require.NoError(t, err)
 
 		assert.NoError(t, c.Close())

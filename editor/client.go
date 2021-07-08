@@ -102,8 +102,8 @@ func (c *Client) Edit(name string, buf *cell.Buffer) (Handler, error) {
 	return browser.Token{ID: uint64(res.GetHandlerId())}, nil
 }
 
-// SubscribeEditor requests the editor server to subscribe sub to ev.
-func (c *Client) SubscribeEditor(evType EventType, h EventHandler) error {
+// SubscribeEditorEvents requests the editor server to subscribe sub to ev.
+func (c *Client) SubscribeEditorEvents(evType EventType, h EventHandler) error {
 	ctx := context.Background()
 
 	handlerID := c.serveHandler(h)
@@ -120,8 +120,8 @@ func (c *Client) SubscribeEditor(evType EventType, h EventHandler) error {
 	return nil
 }
 
-// Register requests the editor server to register cmd with h.
-func (c *Client) Register(cmd string, h CommandHandler) error {
+// SubscribeCommandrequests the editor server to register cmd with h.
+func (c *Client) SubscribeCommand(cmd string, h CommandHandler) error {
 	ctx := context.Background()
 
 	// re-use EventHandler logic

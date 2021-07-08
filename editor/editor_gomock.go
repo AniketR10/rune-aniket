@@ -330,20 +330,6 @@ func (mr *MockEditorMockRecorder) Reader(arg0 interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Reader", reflect.TypeOf((*MockEditor)(nil).Reader), arg0)
 }
 
-// Register mocks base method.
-func (m *MockEditor) Register(arg0 string, arg1 CommandHandler) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Register", arg0, arg1)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// Register indicates an expected call of Register.
-func (mr *MockEditorMockRecorder) Register(arg0, arg1 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Register", reflect.TypeOf((*MockEditor)(nil).Register), arg0, arg1)
-}
-
 // SetCursor mocks base method.
 func (m *MockEditor) SetCursor(arg0 Handler, arg1 term.Coordinates) error {
 	m.ctrl.T.Helper()
@@ -372,18 +358,32 @@ func (mr *MockEditorMockRecorder) SetLocationList(arg0, arg1, arg2 interface{}) 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetLocationList", reflect.TypeOf((*MockEditor)(nil).SetLocationList), arg0, arg1, arg2)
 }
 
-// SubscribeEditor mocks base method.
-func (m *MockEditor) SubscribeEditor(arg0 EventType, arg1 EventHandler) error {
+// SubscribeCommand mocks base method.
+func (m *MockEditor) SubscribeCommand(arg0 string, arg1 CommandHandler) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SubscribeEditor", arg0, arg1)
+	ret := m.ctrl.Call(m, "SubscribeCommand", arg0, arg1)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-// SubscribeEditor indicates an expected call of SubscribeEditor.
-func (mr *MockEditorMockRecorder) SubscribeEditor(arg0, arg1 interface{}) *gomock.Call {
+// SubscribeCommand indicates an expected call of SubscribeCommand.
+func (mr *MockEditorMockRecorder) SubscribeCommand(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubscribeEditor", reflect.TypeOf((*MockEditor)(nil).SubscribeEditor), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubscribeCommand", reflect.TypeOf((*MockEditor)(nil).SubscribeCommand), arg0, arg1)
+}
+
+// SubscribeEditorEvents mocks base method.
+func (m *MockEditor) SubscribeEditorEvents(arg0 EventType, arg1 EventHandler) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SubscribeEditorEvents", arg0, arg1)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// SubscribeEditorEvents indicates an expected call of SubscribeEditorEvents.
+func (mr *MockEditorMockRecorder) SubscribeEditorEvents(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubscribeEditorEvents", reflect.TypeOf((*MockEditor)(nil).SubscribeEditorEvents), arg0, arg1)
 }
 
 // Writer mocks base method.

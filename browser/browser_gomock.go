@@ -353,18 +353,18 @@ func (m *MockEventSubscriber) EXPECT() *MockEventSubscriberMockRecorder {
 	return m.recorder
 }
 
-// Subscribe mocks base method.
-func (m *MockEventSubscriber) Subscribe(arg0 term.Event, arg1 EventHandler) error {
+// SubscribeTermEvents mocks base method.
+func (m *MockEventSubscriber) SubscribeTermEvents(arg0 term.Event, arg1 EventHandler) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Subscribe", arg0, arg1)
+	ret := m.ctrl.Call(m, "SubscribeTermEvents", arg0, arg1)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-// Subscribe indicates an expected call of Subscribe.
-func (mr *MockEventSubscriberMockRecorder) Subscribe(arg0, arg1 interface{}) *gomock.Call {
+// SubscribeTermEvents indicates an expected call of SubscribeTermEvents.
+func (mr *MockEventSubscriberMockRecorder) SubscribeTermEvents(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Subscribe", reflect.TypeOf((*MockEventSubscriber)(nil).Subscribe), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubscribeTermEvents", reflect.TypeOf((*MockEventSubscriber)(nil).SubscribeTermEvents), arg0, arg1)
 }
 
 // MockKeyMapper is a mock of KeyMapper interface.
@@ -872,18 +872,18 @@ func (mr *MockBrowserMockRecorder) Split(arg0, arg1 interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Split", reflect.TypeOf((*MockBrowser)(nil).Split), arg0, arg1)
 }
 
-// Subscribe mocks base method.
-func (m *MockBrowser) Subscribe(arg0 term.Event, arg1 EventHandler) error {
+// SubscribeTermEvents mocks base method.
+func (m *MockBrowser) SubscribeTermEvents(arg0 term.Event, arg1 EventHandler) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Subscribe", arg0, arg1)
+	ret := m.ctrl.Call(m, "SubscribeTermEvents", arg0, arg1)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-// Subscribe indicates an expected call of Subscribe.
-func (mr *MockBrowserMockRecorder) Subscribe(arg0, arg1 interface{}) *gomock.Call {
+// SubscribeTermEvents indicates an expected call of SubscribeTermEvents.
+func (mr *MockBrowserMockRecorder) SubscribeTermEvents(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Subscribe", reflect.TypeOf((*MockBrowser)(nil).Subscribe), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubscribeTermEvents", reflect.TypeOf((*MockBrowser)(nil).SubscribeTermEvents), arg0, arg1)
 }
 
 // Update mocks base method.

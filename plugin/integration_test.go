@@ -45,7 +45,7 @@ func TestIntegrationRace(t *testing.T) {
 	defer broker.Close()
 	mock := browser.NewMockBrowser(ctrl)
 	edMock := editor.NewMockEditor(ctrl)
-	edMock.EXPECT().SubscribeEditor(gomock.Any(), gomock.Any()).Times(2)
+	edMock.EXPECT().SubscribeEditorEvents(gomock.Any(), gomock.Any()).Times(2)
 	resources := MergeResourceMap(BrowserResources(mock), EditorResources(edMock))
 	resources[PermissionClipboard] = NewClipboardManager()
 
@@ -120,9 +120,9 @@ func TestIntegrationRace(t *testing.T) {
 		{PermissionBrowserEventSubscriber, func(token uint32, broker proto.MuxBroker) (interface{}, error) {
 			return EventSubscriber(token, broker)
 		}, func(ed *editor.MockEditorMockRecorder, mock *browser.MockBrowserMockRecorder) *gomock.Call {
-			return mock.Subscribe(gomock.Any(), gomock.Any()).Return(nil)
+			return mock.SubscribeTermEvents(gomock.Any(), gomock.Any()).Return(nil)
 		}, func(ifc interface{}) error {
-			return ifc.(browser.EventSubscriber).Subscribe(evKeyCtrlA, nopHandler)
+			return ifc.(browser.EventSubscriber).SubscribeTermEvents(evKeyCtrlA, nopHandler)
 		}},
 		{PermissionBrowserEventPublisher, func(token uint32, broker proto.MuxBroker) (interface{}, error) {
 			return EventPublisher(token, broker)
@@ -142,10 +142,10 @@ func TestIntegrationRace(t *testing.T) {
 		{PermissionEditor, func(token uint32, broker proto.MuxBroker) (interface{}, error) {
 			return Editor(token, broker)
 		}, func(ed *editor.MockEditorMockRecorder, mock *browser.MockBrowserMockRecorder) *gomock.Call {
-			return ed.SubscribeEditor(gomock.Any(), gomock.Any()).Return(nil)
+			return ed.SubscribeEditorEvents(gomock.Any(), gomock.Any()).Return(nil)
 		}, func(ifc interface{}) error {
 			h := editor.FuncEventHandler(func(editor.Event) bool { return false })
-			return ifc.(editor.Editor).SubscribeEditor(editor.EventTypeFlush, h)
+			return ifc.(editor.Editor).SubscribeEditorEvents(editor.EventTypeFlush, h)
 		}},
 		{PermissionEditor, func(token uint32, broker proto.MuxBroker) (interface{}, error) {
 			return Editor(token, broker)

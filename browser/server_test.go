@@ -289,7 +289,7 @@ func TestServerSubscribe(t *testing.T) {
 		var h EventHandler
 		handlerConn := prototest.ExpectBrokerDial(t, ctrl, mockBroker, uint32(handlerID))
 		quitCh := prototest.ExpectMonitorConn(handlerConn)
-		mock.EXPECT().Subscribe(gomock.Any(), gomock.Any()).
+		mock.EXPECT().SubscribeTermEvents(gomock.Any(), gomock.Any()).
 			DoAndReturn(func(ev term.Event, _h EventHandler) error {
 				assert.Equal(t, termEv, ev)
 				h = _h
@@ -326,7 +326,7 @@ func TestServerSubscribe(t *testing.T) {
 		s, mock, mockBroker := newTestServer(ctrl, &mu)
 
 		handlerConn := prototest.ExpectBrokerDial(t, ctrl, mockBroker, uint32(handlerID))
-		mock.EXPECT().Subscribe(gomock.Any(), gomock.Any()).
+		mock.EXPECT().SubscribeTermEvents(gomock.Any(), gomock.Any()).
 			Return(errors.New("woopsie"))
 
 		quitCh := prototest.ExpectMonitorConn(handlerConn)
@@ -370,7 +370,7 @@ func TestServerSubscribe(t *testing.T) {
 
 		handlerConn.EXPECT().Close().Times(1).
 			DoAndReturn(prototest.ExpectSignalExit(handlerConn, quitCh, nil))
-		mock.EXPECT().Subscribe(gomock.Any(), gomock.Any()).Return(nil)
+		mock.EXPECT().SubscribeTermEvents(gomock.Any(), gomock.Any()).Return(nil)
 		_, err := s.Subscribe(ctx, &req)
 		require.NoError(t, err)
 

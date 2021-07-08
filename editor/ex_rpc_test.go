@@ -161,7 +161,7 @@ func TestClientSynchronizeHandlers(t *testing.T) {
 
 	for _, ev := range subs {
 		h := &groupEventHandler{wg: &wg, h: &h1}
-		err = b.Subscribe(ev, h)
+		err = b.SubscribeTermEvents(ev, h)
 		require.NoError(t, err)
 	}
 

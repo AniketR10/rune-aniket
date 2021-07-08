@@ -150,16 +150,16 @@ func TestComponentTermSubscriber(t *testing.T) {
 	t.Run("only allows Key event subscriptions", func(t *testing.T) {
 		c := newTestComponent(t, &testEditor{})
 
-		err := c.Subscribe(evInterrupt, browser.FuncEventHandler(func(term.Event) bool { return false }))
+		err := c.SubscribeTermEvents(evInterrupt, browser.FuncEventHandler(func(term.Event) bool { return false }))
 		require.Error(t, err)
 	})
 
 	t.Run("only allows ONE subscription. Second attempt returns error", func(t *testing.T) {
 		c := newTestComponent(t, &testEditor{})
 
-		err := c.Subscribe(keya, browser.FuncEventHandler(func(term.Event) bool { return false }))
+		err := c.SubscribeTermEvents(keya, browser.FuncEventHandler(func(term.Event) bool { return false }))
 		require.NoError(t, err)
-		err = c.Subscribe(keya, browser.FuncEventHandler(func(term.Event) bool { return false }))
+		err = c.SubscribeTermEvents(keya, browser.FuncEventHandler(func(term.Event) bool { return false }))
 		require.Error(t, err)
 	})
 
@@ -167,12 +167,12 @@ func TestComponentTermSubscriber(t *testing.T) {
 		c := newTestComponent(t, &testEditor{})
 
 		var called int
-		err := c.Subscribe(keya, browser.FuncEventHandler(func(term.Event) bool {
+		err := c.SubscribeTermEvents(keya, browser.FuncEventHandler(func(term.Event) bool {
 			called++
 			return false
 		}))
 		require.NoError(t, err)
-		err = c.Subscribe(keya, browser.FuncEventHandler(func(term.Event) bool {
+		err = c.SubscribeTermEvents(keya, browser.FuncEventHandler(func(term.Event) bool {
 			called++
 			return false
 		}))
@@ -411,7 +411,7 @@ func TestComponentEditorSubscriber(t *testing.T) {
 			var fired int
 			usr, _ := user.Current()
 			dir := usr.HomeDir
-			c.SubscribeEditor(tcase.evType, FuncEventHandler(func(ev Event) bool {
+			c.SubscribeEditorEvents(tcase.evType, FuncEventHandler(func(ev Event) bool {
 				// if preTrigger, then only assert relevant file event
 				if tcase.preTrigger == nil {
 					assert.Equal(t, filepath.Base(ev.ResourceName), "Joe_Biden.txt")
@@ -439,7 +439,7 @@ func TestComponentEditorSubscriber(t *testing.T) {
 			}
 
 			var fired int
-			c.SubscribeEditor(tcase.evType, FuncEventHandler(func(ev Event) bool {
+			c.SubscribeEditorEvents(tcase.evType, FuncEventHandler(func(ev Event) bool {
 				if tcase.preTrigger == nil {
 					fired++
 				} else if filepath.Base(ev.ResourceName) == "Jill_Biden.txt" {
@@ -472,7 +472,7 @@ func TestComponentEditorSubscriber(t *testing.T) {
 		}
 
 		var fired int
-		c.SubscribeEditor(EventTypeClose, FuncEventHandler(func(ev Event) bool {
+		c.SubscribeEditorEvents(EventTypeClose, FuncEventHandler(func(ev Event) bool {
 			fired++
 			return false
 		}))
@@ -504,7 +504,7 @@ func TestComponentEditorSubscriber(t *testing.T) {
 			}
 
 			var dispatched string
-			c.SubscribeEditor(tcase.evType, FuncEventHandler(func(ev Event) bool {
+			c.SubscribeEditorEvents(tcase.evType, FuncEventHandler(func(ev Event) bool {
 				dispatched = ev.Content
 				return false
 			}))
@@ -533,7 +533,7 @@ func TestComponentEditorSubscriber(t *testing.T) {
 		require.NoError(t, err)
 
 		var fired int
-		c.SubscribeEditor(EventTypeOpen, FuncEventHandler(func(ev Event) bool {
+		c.SubscribeEditorEvents(EventTypeOpen, FuncEventHandler(func(ev Event) bool {
 			fired++
 			assert.Equal(t, content, ev.Content)
 			return false
@@ -559,7 +559,7 @@ func TestComponentCommands(t *testing.T) {
 
 	t.Run("returns registered commands", func(t *testing.T) {
 		c := newTestComponent(t, &testEditor{})
-		c.Register("myCmd", FuncCommandHandler(func(Command) bool {
+		c.SubscribeCommand("myCmd", FuncCommandHandler(func(Command) bool {
 			return true
 		}))
 		cmds := c.Commands()
@@ -585,7 +585,7 @@ func testRegister(t *testing.T,
 
 		var called int
 		var wg sync.WaitGroup
-		sut.Register(myCmd, FuncCommandHandler(func(cmd Command) bool {
+		sut.SubscribeCommand(myCmd, FuncCommandHandler(func(cmd Command) bool {
 			defer wg.Done()
 			assert.Equal(t, myCmd, cmd.Name)
 			assert.Equal(t, myArgs, cmd.Args)

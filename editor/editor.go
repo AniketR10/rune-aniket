@@ -51,13 +51,13 @@ type Editor interface {
 	// if there was an error opening it.
 	Edit(name string, buf *cell.Buffer) (Handler, error)
 
-	// SubscribeEditor subscribes EventHandler to events of type EventType.
+	// SubscribeEditorEvents subscribes EventHandler to events of type EventType.
 	// Note that it's suffixed with Editor so implementors
 	// can also implement browser.Subscriber.
-	SubscribeEditor(EventType, EventHandler) error
+	SubscribeEditorEvents(EventType, EventHandler) error
 
-	// Register registers command to be dispatched to CommandHandler.
-	Register(string, CommandHandler) error
+	// SubscribeCommand registers command to be dispatched to CommandHandler.
+	SubscribeCommand(string, CommandHandler) error
 
 	// SetLocationList sets the Handler's location list for users to
 	// navigate the code. See LocationList for more details.

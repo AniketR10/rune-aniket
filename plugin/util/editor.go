@@ -55,14 +55,14 @@ func (t *editorGrantee) subscribeToEvents(grants []plugin.Grant) error {
 		return err
 	}
 	for _, ev := range t.evs {
-		err := t.ed.SubscribeEditor(ev, h)
+		err := t.ed.SubscribeEditorEvents(ev, h)
 		if err != nil {
 			return err
 		}
 	}
 
 	for _, cmd := range t.cmds {
-		if err = t.ed.Register(cmd, h); err != nil {
+		if err = t.ed.SubscribeCommand(cmd, h); err != nil {
 			return err
 		}
 	}

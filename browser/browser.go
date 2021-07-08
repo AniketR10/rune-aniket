@@ -63,10 +63,10 @@ type EventHandler interface {
 }
 
 // EventSubscriber handler is the interface that wraps
-// the method Subscribe which allows clients to subscribe to
+// the method SubscribeTermEvents which allows clients to subscribe to
 // specific events.
 type EventSubscriber interface {
-	Subscribe(term.Event, EventHandler) error
+	SubscribeTermEvents(term.Event, EventHandler) error
 }
 
 // KeyMapper is the interface that wraps the method MergeKeyMap

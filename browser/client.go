@@ -301,8 +301,8 @@ func (c *Client) Open(resource string) (Handler, error) {
 	return Token{ID: uint64(res.GetHandlerId())}, err
 }
 
-// Subscribe satisfies Browser.
-func (c *Client) Subscribe(ev term.Event, h EventHandler) error {
+// SubscribeTermEvents satisfies Browser.
+func (c *Client) SubscribeTermEvents(ev term.Event, h EventHandler) error {
 	ctx := context.Background()
 
 	protoEv := new(proto.Event)

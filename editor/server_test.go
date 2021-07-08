@@ -95,7 +95,7 @@ func TestServerEdit(t *testing.T) {
 func expectSubscribe(
 	t *testing.T, mock *MockEditor, expectedType EventType, expectedHandler EventHandler,
 ) {
-	mock.EXPECT().SubscribeEditor(gomock.Any(), gomock.Any()).Times(1).
+	mock.EXPECT().SubscribeEditorEvents(gomock.Any(), gomock.Any()).Times(1).
 		DoAndReturn(func(evType EventType, h EventHandler) error {
 			assert.Equal(t, expectedType, evType)
 			return nil
@@ -164,7 +164,7 @@ func TestServerSubscribe(t *testing.T) {
 		evType := EventTypeFlush
 
 		var h EventHandler
-		mock.EXPECT().SubscribeEditor(gomock.Any(), gomock.Any()).
+		mock.EXPECT().SubscribeEditorEvents(gomock.Any(), gomock.Any()).
 			DoAndReturn(func(ev EventType, _h EventHandler) error {
 				assert.Equal(t, evType, ev)
 				h = _h

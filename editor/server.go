@@ -95,8 +95,8 @@ func (s *Server) Init(
 	go func() {
 		s.editor.Locker.Lock()
 		defer s.editor.Locker.Unlock()
-		s.editor.SubscribeEditor(EventTypeClose, s)
-		s.editor.SubscribeEditor(EventTypeOpen, s)
+		s.editor.SubscribeEditorEvents(EventTypeClose, s)
+		s.editor.SubscribeEditorEvents(EventTypeOpen, s)
 	}()
 }
 
@@ -272,7 +272,7 @@ func (s *Server) Subscribe(ctx context.Context, in *proto.EditorSubscribeRequest
 	}
 
 	s.editor.Lock()
-	err = s.editor.SubscribeEditor(evType, handler)
+	err = s.editor.SubscribeEditorEvents(evType, handler)
 	s.editor.Unlock()
 	if err != nil {
 		reason := fmt.Sprintf("failed to subscribe: %v", err)
@@ -308,7 +308,7 @@ func (s *Server) Register(ctx context.Context, in *proto.RegisterCommandRequest)
 	cmd := in.GetCommand()
 
 	s.editor.Lock()
-	err = s.editor.Register(cmd, commander)
+	err = s.editor.SubscribeCommand(cmd, commander)
 	s.editor.Unlock()
 	if err != nil {
 		reason := fmt.Sprintf("failed to register command '%s': %v", cmd, err)

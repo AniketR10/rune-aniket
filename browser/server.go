@@ -415,7 +415,7 @@ func (s *Server) Subscribe(
 
 	s.browser.Lock()
 	defer s.browser.Unlock()
-	err = s.browser.Subscribe(ev, h)
+	err = s.browser.SubscribeTermEvents(ev, h)
 	if err != nil {
 		reason := fmt.Sprintf("failed to subscribe: %v", err)
 		s.forceCloseHandler(handlerID, reason)

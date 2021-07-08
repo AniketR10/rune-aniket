@@ -16,7 +16,7 @@ func TestEditorDispatchFocus(t *testing.T) {
 	name := "Jolie"
 
 	var h editor.Handler
-	ed.SubscribeEditor(editor.EventTypeOpen, editor.FuncEventHandler(func(ev editor.Event) bool {
+	ed.SubscribeEditorEvents(editor.EventTypeOpen, editor.FuncEventHandler(func(ev editor.Event) bool {
 		assert.Equal(t, editor.EventTypeOpen, ev.Type)
 		assert.Equal(t, content, ev.Content)
 		assert.Equal(t, name, ev.ResourceName)
@@ -25,7 +25,7 @@ func TestEditorDispatchFocus(t *testing.T) {
 	}))
 
 	var focusCalled int
-	ed.SubscribeEditor(editor.EventTypeFocus, editor.FuncEventHandler(func(ev editor.Event) bool {
+	ed.SubscribeEditorEvents(editor.EventTypeFocus, editor.FuncEventHandler(func(ev editor.Event) bool {
 		focusCalled++
 		assert.Equal(t, editor.EventTypeFocus, ev.Type)
 		assert.Equal(t, name, ev.ResourceName)
@@ -52,7 +52,7 @@ func TestEditorDispatchScroll(t *testing.T) {
 	require.True(t, h.(*Vi).less.Scroll.SeekDown())
 
 	at := term.Coordinates{X: -1}
-	ed.SubscribeEditor(editor.EventTypeScroll, editor.FuncEventHandler(func(ev editor.Event) bool {
+	ed.SubscribeEditorEvents(editor.EventTypeScroll, editor.FuncEventHandler(func(ev editor.Event) bool {
 		at = ev.Start
 		return false
 	}))
