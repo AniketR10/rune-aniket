@@ -2,9 +2,9 @@ package plugin
 
 import (
 	"context"
-	"time"
 	"io"
 	"sync"
+	"time"
 
 	"github.com/ernestrc/go-tui/proto"
 	log "github.com/sirupsen/logrus"
@@ -17,16 +17,17 @@ const (
 )
 
 type clipboardSetterServer struct {
-	broker proto.MuxBroker
-	mu sync.Mutex
-	clients map[uint64]io.Closer
-	c ClipboardSetter
+	broker         proto.MuxBroker
+	mu             sync.Mutex
+	clients        map[uint64]io.Closer
+	c              ClipboardSetter
 	failureTimeout time.Duration
-	logger *log.Logger
+	logger         *log.Logger
 }
 
 type clipboardRegisterClient struct {
-	cc proto.ClipboardRegisterClient
+	cc            proto.MuxConn
+	c             proto.ClipboardRegisterClient
 	cancelMonitor func()
 }
 
@@ -34,7 +35,7 @@ func (c *clipboardRegisterClient) Paste() (string, error) {
 	ctx := context.Background()
 	req := proto.ClipboardPasteRequest{}
 
-	res, err := c.cc.Paste(ctx, &req)
+	res, err := c.c.Paste(ctx, &req)
 	if err != nil {
 		return "", err
 	}
@@ -45,7 +46,7 @@ func (c *clipboardRegisterClient) Copy(data string) error {
 	ctx := context.Background()
 	req := proto.ClipboardCopyRequest{Data: data}
 
-	_, err := c.cc.Copy(ctx, &req)
+	_, err := c.c.Copy(ctx, &req)
 	if err != nil {
 		return err
 	}
@@ -57,7 +58,7 @@ func (c *clipboardRegisterClient) Close() error {
 		return nil
 	}
 	c.cancelMonitor()
-	return nil
+	return c.cc.Close()
 }
 
 func newClipboardSetterServer(
@@ -82,15 +83,15 @@ func (s *clipboardSetterServer) dialRegister(handlerID uint32) (ClipboardRegiste
 		return nil, err
 	}
 
-	cc := proto.NewClipboardRegisterClient(handlerConn)
-	client := &clipboardRegisterClient{cc: cc}
+	c := proto.NewClipboardRegisterClient(handlerConn)
+	client := &clipboardRegisterClient{c: c, cc: handlerConn}
 
 	ctx, cancelFn := context.WithCancel(context.Background())
 	go proto.MonitorConnection(ctx, s.failureTimeout, handlerConn, func(reason string) {
 		_, _ = proto.ForceCloseResource(uint64(handlerID), s.getClients, s.logger, &s.mu)
 	})
 
-	client.cancelMonitor =  cancelFn
+	client.cancelMonitor = cancelFn
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -108,7 +109,14 @@ func (s *clipboardSetterServer) SetRegister(ctx context.Context, req *proto.SetR
 		return nil, err
 	}
 
-	err = s.c.SetRegister(req.GetRegisterId(), register)
+	registerID := req.GetRegisterId()
+
+	r, _ := s.c.register(registerID)
+	if closer, ok := r.(io.Closer); ok {
+		closer.Close()
+	}
+
+	err = s.c.SetRegister(registerID, register)
 	if err != nil {
 		return nil, err
 	}
@@ -116,20 +124,33 @@ func (s *clipboardSetterServer) SetRegister(ctx context.Context, req *proto.SetR
 	return new(proto.SetRegisterResponse), nil
 }
 
+func (s *clipboardSetterServer) Close() (ret error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	for _, c := range s.clients {
+		err := c.Close()
+		if err != nil {
+			ret = err
+		}
+	}
+
+	return
+}
+
 type clipboardSetterClient struct {
-	mu sync.Mutex
+	mu        sync.Mutex
 	registers map[string]*clipboardRegisterServer
 
 	broker proto.MuxBroker
 	cc     grpc.ClientConnInterface
 	c      proto.ClipboardClient
 	logger *log.Logger
-
 }
 
 type clipboardRegisterServer struct {
 	srv proto.MuxServer
-	r ClipboardRegister
+	r   ClipboardRegister
 }
 
 func (c *clipboardRegisterServer) Copy(
@@ -147,7 +168,7 @@ func (c *clipboardRegisterServer) Copy(
 func (c *clipboardRegisterServer) Paste(
 	ctx context.Context, req *proto.ClipboardPasteRequest,
 ) (res *proto.ClipboardPasteResponse, err error) {
-	res = new(proto.ClipboardPasteResponse)	
+	res = new(proto.ClipboardPasteResponse)
 	res.Data, err = c.r.Paste()
 	if err != nil {
 		res = nil
@@ -176,13 +197,17 @@ func newClipboardSetterClient(
 func (c *clipboardSetterClient) serveClipboardRegister(
 	r ClipboardRegister,
 ) (*clipboardRegisterServer, uint32) {
-	rs := &clipboardRegisterServer{r :r}
+	rs := &clipboardRegisterServer{r: r}
 	brokerID, srv := proto.AcceptAndServe(c.broker, c.logger,
 		func(handlerID uint32, srv proto.MuxServer) {
 			proto.RegisterClipboardRegisterServer(srv.GRPC(), rs)
 		})
 	rs.srv = srv
 	return rs, brokerID
+}
+
+func (c *clipboardSetterClient) register(registerID string) (ClipboardRegister, error) {
+	panic("this should not be called")
 }
 
 func (c *clipboardSetterClient) SetRegister(registerID string, r ClipboardRegister) error {
@@ -211,7 +236,7 @@ func (c *clipboardSetterClient) SetRegister(registerID string, r ClipboardRegist
 func (c *clipboardSetterClient) Close() error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	
+
 	for _, cc := range c.registers {
 		_ = cc.Close()
 	}

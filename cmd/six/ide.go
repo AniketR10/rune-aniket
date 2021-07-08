@@ -17,8 +17,9 @@ import (
 // IDE binds together a text editor/browser with a plugin manager.
 type IDE struct {
 	ideConfig
-	ex      *editor.Ex
-	manager *plugin.Manager
+	ex        *editor.Ex
+	manager   *plugin.Manager
+	clipboard *plugin.ClipboardManager
 }
 
 // New allocates storage for a new IDE and initializes it with config
@@ -103,8 +104,8 @@ func (i *IDE) init(cfgfilename, recfilename string, filenames ...string) error {
 		vi.WithDebug(i.ideConfig.viDebug()),
 	)
 
-	clipboardManager := plugin.NewClipboardManager()
-	viOpts = append(viOpts, vi.WithClipboard(clipboardManager))
+	i.clipboard = plugin.NewClipboardManager()
+	viOpts = append(viOpts, vi.WithClipboard(i.clipboard))
 
 	var l *log.Logger
 	if i.ideConfig.logOutputPath() != "" {
@@ -135,7 +136,7 @@ func (i *IDE) init(cfgfilename, recfilename string, filenames ...string) error {
 
 	res := plugin.BrowserResources(i.ex.Browser())
 	res = plugin.MergeResourceMap(res, plugin.EditorResources(i.ex.Editor()))
-	res[plugin.PermissionClipboard] = clipboardManager.ResourceServer()
+	res[plugin.PermissionClipboard] = i.clipboard
 
 	i.manager, err = plugin.NewManager(plugin.GrantAll(res), pluginOpts...)
 	if err != nil {
@@ -187,12 +188,16 @@ func (i *IDE) Run() error {
 func (i *IDE) closeResources() error {
 	err1 := i.manager.Close()
 	err2 := i.ex.Close()
+	err3 := i.clipboard.Close()
 
 	if err1 != nil {
 		return err1
 	}
 	if err2 != nil {
 		return err2
+	}
+	if err3 != nil {
+		return err3
 	}
 
 	return nil

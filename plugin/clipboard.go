@@ -1,9 +1,10 @@
 package plugin
 
-//go:generate mockgen -destination=./clipboard_gomock.go -package plugin -self_package plugin -source clipboard.go
+//go:generate mockgen -destination=./clipboard_gomock_test.go -package plugin -self_package plugin -source clipboard.go
 
 import (
 	"errors"
+	"io"
 	"sync"
 
 	"github.com/ernestrc/go-tui/editor"
@@ -24,9 +25,12 @@ type ClipboardRegister interface {
 	Copy(string) error
 }
 
-// ClipboardSetter is the interface that wraps the basic method to install new clipboard
-// registers, SetRegister. Plugin implementors can use the method
+// ClipboardSetter is the interface that wraps the basic methods Register and SetRegister.
 type ClipboardSetter interface {
+	// register returns the register registered with registerID or nil if there's
+	// no register with that id.
+	register(registerID string) (ClipboardRegister, error)
+
 	// SetRegister sets the register to be used for registerID. If there's already
 	// a register installed for registerID, then it should be overwritten.
 	SetRegister(registerID string, r ClipboardRegister) error
@@ -37,6 +41,7 @@ type ClipboardSetter interface {
 type ClipboardManager struct {
 	mu  sync.Mutex
 	srv proto.MuxServer
+	s   *clipboardSetterServer
 	// editor.Clipboard is re-used but each implementation is only
 	// used for its registered registerID.
 	registers map[string]editor.Clipboard
@@ -78,16 +83,11 @@ func (s *ClipboardManager) Serve(
 
 		// uses this ClipboardManager as the clipboard implementation
 		// for all resource requests.
-		proto.RegisterClipboardServer(grpc, newClipboardSetterServer(l, broker, s))
+		s.s = newClipboardSetterServer(l, broker, s)
+		proto.RegisterClipboardServer(grpc, s.s)
 
 		return s.srv
 	})
-}
-
-// ResourceServer returns this ClipboardManager's ResourceServer,
-// capable of serving PermissionClipboard.
-func (s *ClipboardManager) ResourceServer() ResourceServer {
-	return s
 }
 
 // Paste satisfies ClipboardRegister.
@@ -115,6 +115,20 @@ func (s *ClipboardManager) Copy(registerID string, data editor.ClipboardData) er
 	return reg.Copy("", data)
 }
 
+// register satisfies ClipboardSetter.
+func (s *ClipboardManager) register(registerID string) (ClipboardRegister, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	r, ok := s.registers[registerID]
+	if !ok {
+		return nil, nil
+	}
+	if plugReg, ok := r.(*pluginRegister); ok {
+		return plugReg.r, nil
+	}
+	return nil, nil
+}
+
 // SetRegister satisfies ClipboardSetter.
 func (s *ClipboardManager) SetRegister(registerID string, r ClipboardRegister) error {
 	if registerID == "" {
@@ -124,6 +138,28 @@ func (s *ClipboardManager) SetRegister(registerID string, r ClipboardRegister) e
 	defer s.mu.Unlock()
 	s.registers[registerID] = &pluginRegister{r: r}
 	return nil
+}
+
+func (s *ClipboardManager) Close() (ret error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	for _, r := range s.registers {
+		if closer, ok := r.(io.Closer); ok {
+			err := closer.Close()
+			if err != nil {
+				ret = err
+			}
+		}
+	}
+
+	err := s.s.Close()
+	if err != nil {
+		ret = err
+	}
+
+	s.srv.Stop()
+	return
 }
 
 type pluginRegister struct {
@@ -147,6 +183,13 @@ func (r *pluginRegister) Copy(registerID string, data editor.ClipboardData) erro
 		return err
 	}
 	r.metadata = data.Metadata
+	return nil
+}
+
+func (r *pluginRegister) Close() error {
+	if closer, ok := r.r.(io.Closer); ok {
+		return closer.Close()
+	}
 	return nil
 }
 

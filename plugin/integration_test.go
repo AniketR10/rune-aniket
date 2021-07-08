@@ -205,7 +205,7 @@ func TestIntegrationRace(t *testing.T) {
 		}},
 		{PermissionClipboard, func(token uint32, broker proto.MuxBroker) (interface{}, error) {
 			return Clipboard(token, broker)
-		// we test ClipboardManager directly
+			// we test ClipboardManager directly
 		}, nil, func(ifc interface{}) error {
 			return ifc.(ClipboardSetter).SetRegister(editor.DefaultRegisterID, nil)
 		}},
