@@ -43,7 +43,7 @@ func NewRecovery(cfgfilename, filename string, recfilename string) (i *IDE, err 
 	return
 }
 
-func (i *IDE) initPlugins() (ret []error) {
+func (i *IDE) initPlugins(l *log.Logger) {
 	for id, p := range i.ideConfig.plugins() {
 		path, ok := p.path()
 		if !ok {
@@ -55,11 +55,9 @@ func (i *IDE) initPlugins() (ret []error) {
 		}
 		err := i.manager.Run(id, path, config)
 		if err != nil {
-			ret = append(ret, fmt.Errorf("could not run plugin with id '%s': %v", id, err))
+			l.Errorf("failed to run plugin: could not run plugin with id '%s': %v", id, err)
 		}
 	}
-
-	return ret
 }
 
 func (i *IDE) init(cfgfilename, recfilename string, filenames ...string) error {
@@ -143,7 +141,8 @@ func (i *IDE) init(cfgfilename, recfilename string, filenames ...string) error {
 	if err != nil {
 		return fmt.Errorf("error initializing plugin manager: %v", err)
 	}
-	plugErrs := i.initPlugins()
+
+	go i.initPlugins(l)
 
 	err = tui.Init()
 	if err != nil {
@@ -153,29 +152,21 @@ func (i *IDE) init(cfgfilename, recfilename string, filenames ...string) error {
 	term.SetOutputMode(i.ideConfig.outputMode())
 	term.SetInputMode(i.ideConfig.inputMode())
 
-	reportNonFatalErrs(i.ex.Browser(), l, configErr, i.ideConfig.errors, plugErrs)
+	reportNonFatalErrs(i.ex.Browser(), l, configErr, i.ideConfig.errors)
 	return nil
 }
 
 func reportNonFatalErrs(
 	b browser.Browser, l *log.Logger, configErr error,
-	configErrs map[string]error, plugErrs []error,
+	configErrs map[string]error,
 ) {
 	if l != nil {
 		for key, err := range configErrs {
 			l.Warnf("error with config %s: %v", key, err)
 		}
-		for _, err := range plugErrs {
-			l.Errorf("failed to run plugin: %#v", err)
-		}
 		if configErr != nil {
 			l.Errorf("failed to load configuration: %v", configErr)
 		}
-	}
-
-	// it's good UX to report this immediately to the user
-	for _, err := range plugErrs {
-		b.SetMessage("Error running plugin: %v", err)
 	}
 	if configErr != nil {
 		b.SetMessage("Error loading config: %v", configErr)
