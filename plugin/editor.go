@@ -44,7 +44,9 @@ func (s *editorResourceServer) Serve(
 			grpc := srv.GRPC()
 			s.srv = srv
 			server := editor.NewServer(broker, s.b, lock)
+			lock.Lock()
 			server.Logger = l
+			lock.Unlock()
 			proto.RegisterEditorServer(grpc, interruptEditorServer(server, term.Interrupt))
 		}
 		return s.srv
