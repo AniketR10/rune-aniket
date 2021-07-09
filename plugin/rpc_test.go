@@ -151,8 +151,9 @@ func TestUnitClient(t *testing.T) {
 		mockpbClient := &testGranteePbClient{}
 		client := newGranteeClient(nil, mockpbClient)
 
-		granted := []*proto.PermissionGrant{&proto.PermissionGrant{Id: "shits", GrantId: uint32(1234)}}
-		denied := []*proto.Permission{&proto.Permission{Id: "poops"}}
+		grant := &proto.PermissionGrant{Id: "shits", GrantId: uint32(1234)}
+		granted := map[string]*proto.PermissionGrant{"poopers": grant}
+		denied := []*proto.Permission{{Id: "poops"}}
 
 		err := client.sendGrants(context.Background(), denied, granted)
 		require.NoError(t, err)
@@ -160,7 +161,7 @@ func TestUnitClient(t *testing.T) {
 		onGrant, ok := mockpbClient.onGrant()
 		require.True(t, ok)
 		assert.Equal(t, onGrant.GetDenied(), denied)
-		assert.Equal(t, onGrant.GetGranted(), granted)
+		assert.Equal(t, []*proto.PermissionGrant{grant}, onGrant.GetGranted())
 	})
 
 	t.Run("sendGrants bubbles up error", func(t *testing.T) {
@@ -347,7 +348,7 @@ func TestIntegrationPluginClientServer(t *testing.T) {
 		defer closeFn()
 
 		denied := []*proto.Permission{&proto.Permission{Id: "append"}}
-		granted := []*proto.PermissionGrant{&proto.PermissionGrant{Id: "read", GrantId: 1}}
+		granted := map[string]*proto.PermissionGrant{"read": &proto.PermissionGrant{Id: "read", GrantId: 1}}
 		err := client.sendGrants(context.Background(), denied, granted)
 		require.NoError(t, err)
 
@@ -362,9 +363,26 @@ func TestIntegrationPluginClientServer(t *testing.T) {
 		defer closeFn()
 
 		denied := []*proto.Permission{&proto.Permission{Id: "garbage"}}
-		granted := []*proto.PermissionGrant{
-			&proto.PermissionGrant{Id: "write", GrantId: 1},
-			&proto.PermissionGrant{Id: "trash", GrantId: 2},
+		granted := map[string]*proto.PermissionGrant{
+			"write": &proto.PermissionGrant{Id: "write", GrantId: 1},
+			"trash": &proto.PermissionGrant{Id: "trash", GrantId: 2},
+		}
+		err := client.sendGrants(context.Background(), denied, granted)
+		require.NoError(t, err)
+
+		assert.Equal(t, []Permission{Permission("write")}, grantee.onGrant)
+		assert.Equal(t, []Permission(nil), grantee.onDenied)
+	})
+
+	t.Run("sendGrants request DOES NOT pass multiple grants of the same permission", func(t *testing.T) {
+		grantee := granteeMock{}
+		perms := []Permission{Permission("write"), Permission("write")}
+		client, closeFn := setupIntTest(t, &grantee, perms)
+		defer closeFn()
+
+		denied := []*proto.Permission{&proto.Permission{Id: "garbage"}}
+		granted := map[string]*proto.PermissionGrant{
+			"write": &proto.PermissionGrant{Id: "write", GrantId: 1},
 		}
 		err := client.sendGrants(context.Background(), denied, granted)
 		require.NoError(t, err)

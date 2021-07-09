@@ -101,9 +101,7 @@ func TestManagerRun(t *testing.T) {
 		mgr, pbClient, _ := newTestManager(&grantor)
 		defer mgr.Close()
 
-		pbClient.fixturePermissions =
-			[]*proto.Permission{{Id: "read"}}
-
+		pbClient.fixturePermissions = []*proto.Permission{{Id: "read"}, {Id: "read"}}
 		testRunAndWait(t, mgr, pbClient)
 
 		assert.NotNil(t, pbClient.permissions)

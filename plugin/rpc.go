@@ -122,6 +122,7 @@ func (s *granteeServer) OnGrant(ctx context.Context, req *proto.OnPermGrantReque
 		for _, requested := range s.req {
 			if string(requested) == den.Id {
 				denied = append(denied, Permission(den.Id))
+				break
 			}
 		}
 	}
@@ -131,6 +132,7 @@ func (s *granteeServer) OnGrant(ctx context.Context, req *proto.OnPermGrantReque
 				granted = append(granted, Grant{
 					Token: gr.GrantId, Permission: Permission(gr.Id),
 				})
+				break
 			}
 		}
 	}
@@ -240,7 +242,7 @@ func (c *granteeClient) permissions(ctx context.Context, config Config) (
 func (c *granteeClient) sendGrants(
 	ctx context.Context,
 	denied []*proto.Permission,
-	granted []*proto.PermissionGrant,
+	granted map[string]*proto.PermissionGrant,
 ) error {
 	req := new(proto.OnPermGrantRequest)
 

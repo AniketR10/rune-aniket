@@ -161,10 +161,14 @@ func (m *Manager) doGrant(
 	perms []*proto.Permission,
 ) error {
 	var denied []*proto.Permission
-	var granted []*proto.PermissionGrant
+	granted := make(map[string]*proto.PermissionGrant)
 
 	for _, p := range perms {
 		permissionID := util.SanitizeLine(p.GetId())
+		if _, granted := granted[permissionID]; granted {
+			continue
+		}
+
 		srv, ok := m.grantor.Grant(pluginID, Permission(permissionID))
 		if !ok {
 			denied = append(denied, p)
@@ -173,18 +177,17 @@ func (m *Manager) doGrant(
 
 		grantID := m.broker.NextId()
 
+		granted[permissionID] = &proto.PermissionGrant{
+			Id:      permissionID,
+			GrantId: grantID,
+		}
+
 		// for now this is fine, but once we have many more resources, this will
 		// become very inefficient. We should refactor this interface
 		// such that one plugin => one grpc server for all the resources
 		// requested. Right now, each call to serve, spins a new listener
 		// and a new GRPC server.
 		go srv.Serve(pluginID, grantID, m.broker, m.config.logger, m.rmu)
-
-		grant := &proto.PermissionGrant{
-			Id:      p.Id,
-			GrantId: grantID,
-		}
-		granted = append(granted, grant)
 	}
 
 	return client.client.sendGrants(ctx, denied, granted)
