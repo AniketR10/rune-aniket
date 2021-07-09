@@ -1,67 +1,53 @@
 package browser
 
 import (
+	context "context"
 	"sync"
 
-	"github.com/ernestrc/go-tui"
-	"github.com/ernestrc/go-tui/handler"
-	"github.com/ernestrc/go-tui/term"
+	"github.com/ernestrc/go-tui/proto"
+	"google.golang.org/grpc"
 )
 
-// wraps a handlerCloser to provide unlocking a resource mutex while waiting
+// wraps a proto.HandlerClient to provide unlocking a resource mutex while waiting
 // for a I/O based Handler to respond.
 type ioUnlockHandler struct {
 	lock sync.Locker
-	h    *handler.Client
+	h    proto.HandlerClient
 }
 
-func newIOWaitUnlockHandler(h *handler.Client, lock sync.Locker) handlerCloser {
+func newIOWaitUnlockHandlerClient(
+	h proto.HandlerClient, lock sync.Locker,
+) proto.HandlerClient {
 	ret := new(ioUnlockHandler)
 	ret.init(h, lock)
 	return ret
 }
 
-func (h *ioUnlockHandler) init(hc *handler.Client, lock sync.Locker) {
+func (h *ioUnlockHandler) init(hc proto.HandlerClient, lock sync.Locker) {
 	h.h = hc
 	h.lock = lock
 }
 
-func (h *ioUnlockHandler) Close() error {
-	return h.h.Close()
-}
-
-func (h *ioUnlockHandler) OnUnmount() error {
+func (h *ioUnlockHandler) Handle(
+	ctx context.Context, in *proto.HandleRequest, opts ...grpc.CallOption,
+) (*proto.HandleResponse, error) {
 	h.lock.Unlock()
 	defer h.lock.Lock()
-	return h.h.OnUnmount()
+	return h.h.Handle(ctx, in, opts...)
 }
 
-func (h *ioUnlockHandler) Resize(width, height int) {
+func (h *ioUnlockHandler) Man(
+	ctx context.Context, in *proto.ManRequest, opts ...grpc.CallOption,
+) (*proto.ManResponse, error) {
 	h.lock.Unlock()
 	defer h.lock.Lock()
-	h.h.Resize(width, height)
+	return h.h.Man(ctx, in, opts...)
 }
 
-func (h *ioUnlockHandler) Draw(w term.Writer) {
+func (h *ioUnlockHandler) OnUnmount(
+	ctx context.Context, in *proto.OnUnmountRequest, opts ...grpc.CallOption,
+) (*proto.OnUnmountResponse, error) {
 	h.lock.Unlock()
 	defer h.lock.Lock()
-	h.h.Draw(w)
-}
-
-func (h *ioUnlockHandler) Handle(ev term.Event) (exit, handled bool) {
-	h.lock.Unlock()
-	defer h.lock.Lock()
-	return h.h.Handle(ev)
-}
-
-func (h *ioUnlockHandler) Cursor() (pos term.Coordinates, show bool) {
-	h.lock.Unlock()
-	defer h.lock.Lock()
-	return h.h.Cursor()
-}
-
-func (h *ioUnlockHandler) Man() tui.Manual {
-	h.lock.Unlock()
-	defer h.lock.Lock()
-	return h.h.Man()
+	return h.h.OnUnmount(ctx, in, opts...)
 }

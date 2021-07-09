@@ -123,9 +123,9 @@ func (s *Server) dialHandler(handlerID uint64) (handlerCloser, error) {
 	}
 
 	pbClient := proto.NewHandlerClient(handlerConn)
+	pbClient = newIOWaitUnlockHandlerClient(pbClient, s.browser.Locker)
 	cc := handler.NewClient(pbClient)
 	cc.Logger = s.Logger
-	client := newIOWaitUnlockHandler(cc, s.browser.Locker)
 
 	ctx, cancelFn := context.WithCancel(context.Background())
 
@@ -140,11 +140,11 @@ func (s *Server) dialHandler(handlerID uint64) (handlerCloser, error) {
 
 	s.clients[uint64(handlerID)] = &handlerClientResource{
 		handlerConn:   handlerConn,
-		client:        client,
+		client:        cc,
 		cancelMonitor: cancelFn,
 	}
 
-	return client, nil
+	return cc, nil
 }
 
 func (s *Server) serveWindow(win Window) uint64 {
