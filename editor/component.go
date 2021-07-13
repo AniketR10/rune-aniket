@@ -366,7 +366,7 @@ func (c *Component) Publish(ev term.Event) (handled bool) {
 }
 
 // DispatchCommand dispatches a EventTypeCommand with cmd to subscribers
-// subscribed via SubscribeEditor.
+// subscribed via SubscribeEditorEvents.
 func (c *Component) DispatchCommand(
 	resource Handler, resourceName string, cmd string, args ...string,
 ) (handled bool) {
@@ -554,7 +554,7 @@ func (c *Component) SubscribeEditorEvents(ev EventType, h EventHandler) error {
 		}
 		fallthrough
 	// delegate open/insert/delete event dispatching to underlying editor.
-	case EventTypeDelete, EventTypeInsert, EventTypeScroll:
+	case EventTypeDelete, EventTypeInsert, EventTypeScroll, EventTypeCursor:
 		return c.ed.SubscribeEditorEvents(ev, h)
 	case EventTypeFocus:
 		t, ok := c.comp.FocusTab()

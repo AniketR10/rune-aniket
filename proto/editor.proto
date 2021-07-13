@@ -24,6 +24,7 @@ message EditorEvent {
 	TypeCommand = 5;
 	TypeScroll = 6;
 	TypeFocus = 7;
+	TypeCursor = 8;
   }
 
   Type type = 1;

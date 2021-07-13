@@ -50,13 +50,15 @@ func (e *testEditor) dispatchEvent(ev Event) {
 type testEditorHandler struct {
 	browser.TestHandler
 	locationList LocationList
+	parent       *testEditor
+	name         string
 }
 
 func (e *testEditor) Edit(name string, buf *cell.Buffer) (Handler, error) {
 	e.name = name
 	e.buf = buf
 
-	h := &testEditorHandler{TestHandler: *browser.NewTestHandler()}
+	h := &testEditorHandler{name: name, parent: e, TestHandler: *browser.NewTestHandler()}
 	e.dispatchEvent(Event{
 		Type:         EventTypeOpen,
 		ResourceName: name,
@@ -72,6 +74,15 @@ func (e *testEditor) Edit(name string, buf *cell.Buffer) (Handler, error) {
 func (e *testEditor) SetLocationList(h Handler, id string, loc LocationList) error {
 	h.(*testEditorHandler).locationList = loc
 	return nil
+}
+
+func (e *testEditorHandler) Handle(ev term.Event) (bool, bool) {
+	e.parent.dispatchEvent(Event{
+		Type:         EventTypeCursor,
+		ResourceName: e.name,
+		Resource:     e,
+	})
+	return e.TestHandler.Handle(ev)
 }
 
 func (e *testEditor) MoveToNextLocation(h Handler, ID string) error {

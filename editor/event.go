@@ -44,6 +44,12 @@ const (
 	// EventTypeFocus is dispatched when an editor handler is on browser.Focus.
 	EventTypeFocus
 
+	// EventTypeCursor is dispatched when the position of the cursor of an
+	// editor Handler changes, either in the window coordinate system or the underlying
+	// content position. Event.Start will be set to the cursor's window position,
+	// and Event.From will be set to the cursor's scroll position.
+	EventTypeCursor
+
 	// used internally by server/client to re-use EventHandler logic for CommandHandler
 	eventTypeCommand
 )
@@ -76,6 +82,8 @@ func protoTypeToModel(protoType proto.EditorEvent_Type) (ev EventType, err error
 		ev = EventTypeInsert
 	case proto.EditorEvent_TypeScroll:
 		ev = EventTypeScroll
+	case proto.EditorEvent_TypeCursor:
+		ev = EventTypeCursor
 	case proto.EditorEvent_TypeFocus:
 		ev = EventTypeFocus
 	case proto.EditorEvent_TypeCommand:
@@ -118,6 +126,8 @@ func (e Event) protoType() proto.EditorEvent_Type {
 		return proto.EditorEvent_TypeInsert
 	case EventTypeScroll:
 		return proto.EditorEvent_TypeScroll
+	case EventTypeCursor:
+		return proto.EditorEvent_TypeCursor
 	case EventTypeFocus:
 		return proto.EditorEvent_TypeFocus
 	case eventTypeCommand:

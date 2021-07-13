@@ -3,6 +3,7 @@ package vi
 import (
 	"errors"
 
+	"github.com/ernestrc/go-tui"
 	"github.com/ernestrc/go-tui/cell"
 	"github.com/ernestrc/go-tui/editor"
 	"github.com/ernestrc/go-tui/term"
@@ -11,6 +12,12 @@ import (
 type viEditor struct {
 	opts []Option
 	subs map[editor.EventType][]editor.EventHandler
+}
+
+type viEditorCursorPublisher struct {
+	parent *viEditor
+	name   string
+	tui.Handler
 }
 
 // Editor returns a Vi editor.Editor.
@@ -41,7 +48,8 @@ func (e *viEditor) dispatchEvent(ev editor.Event) {
 }
 
 func (e *viEditor) Edit(name string, buf *cell.Buffer) (editor.Handler, error) {
-	h := New(buf, e.opts...)
+	root := New(buf, e.opts...)
+	h := &viEditorCursorPublisher{parent: e, name: name, Handler: root}
 
 	e.dispatchEvent(editor.Event{
 		Type:         editor.EventTypeOpen,
@@ -64,7 +72,7 @@ func (e *viEditor) Edit(name string, buf *cell.Buffer) (editor.Handler, error) {
 	buf.Subscribe(bsub)
 
 	csub := editor.ScrollSubscriber(name, h, e)
-	h.cursor.SubscribeScroll(csub)
+	root.cursor.SubscribeScroll(csub)
 
 	return h, nil
 }
@@ -85,31 +93,35 @@ func (e *viEditor) SubscribeEditorEvents(ev editor.EventType, sub editor.EventHa
 	return nil
 }
 
+func getViFromHandler(h tui.Handler) *Vi {
+	return h.(*viEditorCursorPublisher).Handler.(*Vi)
+}
+
 func (e viEditor) SetLocationList(h editor.Handler, ID string, loc editor.LocationList) error {
-	h.(*Vi).SetLocationList(ID, loc)
+	getViFromHandler(h).SetLocationList(ID, loc)
 	return nil
 }
 
 func (e *viEditor) MoveToNextLocation(h editor.Handler, ID string) error {
-	h.(*Vi).MoveToNextLocation(ID)
+	getViFromHandler(h).MoveToNextLocation(ID)
 	return nil
 }
 
 func (e *viEditor) MoveToPrevLocation(h editor.Handler, ID string) error {
-	h.(*Vi).MoveToPrevLocation(ID)
+	getViFromHandler(h).MoveToPrevLocation(ID)
 	return nil
 }
 
 func (e *viEditor) Reader(h editor.Handler) editor.Reader {
-	return editor.CellReader(h.(*Vi).less.Buffer().Reader())
+	return editor.CellReader(getViFromHandler(h).less.Buffer().Reader())
 }
 
 func (e *viEditor) Writer(h editor.Handler) editor.Writer {
-	return editor.CellWriter(h.(*Vi).less.Buffer().Writer())
+	return editor.CellWriter(getViFromHandler(h).less.Buffer().Writer())
 }
 
 func (e *viEditor) SetCursor(h editor.Handler, pos term.Coordinates) error {
-	ok := h.(*Vi).SetCursorAtScroll(pos)
+	ok := getViFromHandler(h).SetCursorAtScroll(pos)
 	if !ok {
 		return errors.New("SetCursor: invalid cursor position")
 	}
@@ -117,6 +129,26 @@ func (e *viEditor) SetCursor(h editor.Handler, pos term.Coordinates) error {
 }
 
 func (e *viEditor) Cursor(h editor.Handler) (term.Coordinates, error) {
-	pos := h.(*Vi).CursorAtScroll()
+	pos := getViFromHandler(h).CursorAtScroll()
 	return pos, nil
+}
+
+func (p *viEditorCursorPublisher) Handle(ev term.Event) (bool, bool) {
+	cursor0, _ := p.Handler.Cursor()
+	cursorAtScroll0 := p.Handler.(*Vi).cursor.CursorAtScroll()
+
+	exit, handled := p.Handler.Handle(ev)
+	cursor1, _ := p.Handler.Cursor()
+	cursorAtScroll1 := p.Handler.(*Vi).cursor.CursorAtScroll()
+
+	if cursor0 != cursor1 || cursorAtScroll0 != cursorAtScroll1 {
+		p.parent.dispatchEvent(editor.Event{
+			Type:         editor.EventTypeCursor,
+			ResourceName: p.name,
+			Resource:     p,
+			Start:        cursor1,
+			From:         cursorAtScroll1,
+		})
+	}
+	return exit, handled
 }

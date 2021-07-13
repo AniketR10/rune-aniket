@@ -396,6 +396,18 @@ func TestComponentEditorSubscriber(t *testing.T) {
 				require.NoError(t, err)
 			},
 		},
+		{
+			"Handle>EventTypeCursor",
+			EventTypeCursor,
+			func(t *testing.T, c *Component, resourceName string) {
+				buf := cell.NewBuffer()
+				buf.WriteString(content)
+				h, err := c.Edit(resourceName, buf)
+				assert.NoError(t, err)
+				h.Handle(term.Event{Ch: 'l'})
+			},
+			nil,
+		},
 	}
 
 	for _, _tcase := range tsuite {

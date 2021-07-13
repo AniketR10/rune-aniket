@@ -119,6 +119,16 @@ func TestClientServerIntegration(t *testing.T) {
 					buf.DeleteRow(0)
 				}, &term.Coordinates{}, &term.Coordinates{X: 11}, &str1,
 			},
+			{
+				"Handle->EventTypeCursor",
+				EventTypeCursor,
+				func(t *testing.T, resourceName string, ed Editor, buf *cell.Buffer) {
+					buf.WriteString(str1)
+					h, err := ed.Edit(resourceName, buf)
+					assert.NoError(t, err)
+					h.Handle(term.Event{Ch: 'l'})
+				}, &term.Coordinates{}, &term.Coordinates{}, nil,
+			},
 		}
 
 		for i, _tcase := range tsuite {
