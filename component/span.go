@@ -29,6 +29,16 @@ const (
 )
 
 // SpanConfig represents the configuration of a Span.
+//
+// Padding can be configured as an absolute number of cells (PadHorizontal/PadVerical)
+// or as a percentage of the available space (PadHorizontalPerc/PadVerticalPerc).
+// Either PadHorizontal/PadVertical or PadHorizontalPerc/PadVerticalPerc should be set;
+// If both are set, then Horizontal/Vertical take precedence.
+//
+// Negative padding on PadHorizontal/PadVertical indicates that the padding should be
+// automatically calculated based on the available height/width. For instance,
+// a Horizontal padding of -1, indicates that the padding needs to be set such
+// that the inner component is exactly 1 cell.
 type SpanConfig struct {
 	PadHorizontal int
 	PadVertical   int
@@ -44,16 +54,6 @@ type SpanConfig struct {
 type Span struct {
 	content       Virtual
 	width, height int
-	// Padding represents horizontal and vertical padding. It can be represented
-	// as an absolute number of cells (Horizontal/Verical) or as a percentage of
-	// the available space (HorizontalPerc/VerticalPerc).
-	// Either Horizontal/Vertical or HorizontalPerc/VerticalPerc can be set;
-	// If both are set, then Horizontal/Vertical take precedence.
-	//
-	// Negative padding on Horizontal/Vertical indicates that the padding should be
-	// automatically calculated based on the available height/width. For instance,
-	// a Horizontal padding of -1, indicates that the padding needs to be set such
-	// that the inner component is exactly 1 cell.
 	cfg SpanConfig
 }
 
