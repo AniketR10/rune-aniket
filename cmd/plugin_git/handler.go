@@ -100,8 +100,11 @@ func newGitHandler(
 			if err != nil {
 				return nil, err
 			}
-			comp := component.Sync(&ret.scroll, &ret.scroll.scroll)
-			err = ret.wm.Bar(browser.OrientationLeft, handler.Nop(comp))
+			comp := component.WithBackground(&ret.scroll.scroll,
+				term.Cell{Bg: ret.scroll.scroll.Attributes.Bg,
+					Fg: ret.scroll.scroll.Attributes.Fg})
+			syncComp := component.Sync(&ret.scroll, comp)
+			err = ret.wm.Bar(browser.OrientationLeft, handler.Nop(syncComp))
 			if err != nil {
 				return nil, err
 			}
