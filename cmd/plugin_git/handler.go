@@ -219,6 +219,12 @@ func (h *gitEditorHandler) pushNewDiffLocations(
 		return fmt.Errorf("failed to read from stdout: %v", err)
 	}
 
+	// releases associated resources; error is ignored because
+	err = c.Wait()
+	if err != nil {
+		return fmt.Errorf("git process error: %v", err)
+	}
+
 	locs := h.parseDiff(diff)
 	h.lastLocs[filename] = locs
 
