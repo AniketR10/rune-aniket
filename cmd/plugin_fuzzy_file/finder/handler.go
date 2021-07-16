@@ -14,6 +14,7 @@ import (
 	"github.com/ernestrc/go-tui"
 	"github.com/ernestrc/go-tui/browser"
 	"github.com/ernestrc/go-tui/component/search"
+	"github.com/ernestrc/go-tui/editor"
 	"github.com/ernestrc/go-tui/plugin"
 	"github.com/ernestrc/go-tui/proto"
 	"github.com/ernestrc/go-tui/term"
@@ -27,16 +28,27 @@ const (
 	defaultMaxHistory       = 20
 )
 
+func Permissions() []plugin.Permission {
+	return []plugin.Permission{
+		plugin.PermissionBrowserResourceOpener,
+		plugin.PermissionBrowserEventPublisher,
+		plugin.PermissionBrowserMessenger,
+		plugin.PermissionBrowserStorage,
+		plugin.PermissionEditor,
+	}
+}
+
 type fuzzyFinderHandler struct {
 	s            browser.Storage
 	f            browser.ResourceOpener
 	p            browser.EventPublisher
 	m            browser.Messenger
+	ed           editor.Editor
 	invokeWindow browser.Window
 	invokeKey    term.Event
 	mu           sync.Mutex
 	cmdStr       string
-	getResource  func(string) string
+	getResource  func(string) (string, term.Coordinates)
 	exec         *exec.Cmd
 	quitChan     chan struct{}
 	height       int
@@ -131,21 +143,40 @@ func (h *fuzzyFinderHandler) open(resource string) (browser.Handler, error) {
 	return h.f.Open(resource)
 }
 
-func (h *fuzzyFinderHandler) setContent(b browser.Handler) error {
+func (h *fuzzyFinderHandler) setContent(name string, b browser.Handler, pos term.Coordinates) error {
 	h.mu.Unlock()
 	defer h.mu.Lock()
-	return h.invokeWindow.SetContent(b)
+	err := h.invokeWindow.SetContent(b)
+	if err != nil {
+		return err
+	}
+	if h.ed == nil {
+		log.Info("could not set cursor position because host did not grant plugin.PermissionEditor")
+		return nil
+	}
+
+	hed, err := h.ed.Editor(name)
+	if err != nil {
+		return err
+	}
+
+	return h.ed.SetCursor(hed, pos)
 }
 
 func (h *fuzzyFinderHandler) setMessage(msg string, args ...interface{}) error {
 	h.mu.Unlock()
 	defer h.mu.Lock()
+
+	// allow browser messenger permission to be denied
+	if h.m == nil {
+		return nil
+	}
 	return h.m.SetMessage(msg, args...)
 }
 
 func (h *fuzzyFinderHandler) openResource(searchQuery, data string) {
-	resource := h.getResource(data)
-	buf, err := h.open(resource)
+	resource, pos := h.getResource(data)
+	handler, err := h.open(resource)
 	if err != nil {
 		merr := h.setMessage("Open: %v", err)
 		if merr != nil {
@@ -155,7 +186,7 @@ func (h *fuzzyFinderHandler) openResource(searchQuery, data string) {
 		return
 	}
 
-	err = h.setContent(buf)
+	err = h.setContent(resource, handler, pos)
 	if err != nil {
 		log.Errorf("error SetContent: %v", err)
 		return
@@ -205,7 +236,7 @@ func (h *fuzzyFinderHandler) scanData() {
 	h.mu.Unlock()
 
 	if !killed && err != nil {
-		merr := h.m.SetMessage("failed to execute '%s': %v", h.cmdStr, err)
+		merr := h.setMessage("failed to execute '%s': %v", h.cmdStr, err)
 		if merr != nil {
 			log.Errorf("error setting message: %v", merr)
 		}
@@ -218,6 +249,8 @@ func (h *fuzzyFinderHandler) initGrants(
 ) (err error) {
 	for _, grant := range grants {
 		switch grant.Permission {
+		case plugin.PermissionEditor:
+			h.ed, err = plugin.Editor(grant.Token, broker)
 		case plugin.PermissionBrowserMessenger:
 			h.m, err = plugin.Messenger(grant.Token, broker)
 		case plugin.PermissionBrowserEventPublisher:
@@ -234,6 +267,9 @@ func (h *fuzzyFinderHandler) initGrants(
 			return
 		}
 	}
+	if h.f == nil || h.p == nil {
+		log.Fatalf("This plugin cannot function with granted permissions. Exiting now.")
+	}
 	return
 }
 
@@ -243,7 +279,7 @@ func New(
 	grants []plugin.Grant, broker proto.MuxBroker,
 	invokeWindow browser.Window, config plugin.Config,
 	invokeKey term.Event, command string,
-	getResource func(line string) string,
+	getResource func(line string) (string, term.Coordinates),
 ) (tui.Handler, error) {
 	h := new(fuzzyFinderHandler)
 	err := h.initGrants(broker, grants)

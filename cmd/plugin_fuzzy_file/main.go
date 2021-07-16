@@ -35,16 +35,11 @@ func main() {
 				cmdStr = defaultCommand
 			}
 			return finder.New(grants, broker, invokeWindow, config,
-				key, cmdStr, func(file string) string {
-					return file
+				key, cmdStr, func(file string) (string, term.Coordinates) {
+					return file, term.Coordinates{}
 				})
 		},
 		Key: key,
-		Permissions: []plugin.Permission{
-			plugin.PermissionBrowserResourceOpener,
-			plugin.PermissionBrowserEventPublisher,
-			plugin.PermissionBrowserMessenger,
-			plugin.PermissionBrowserStorage,
-		},
+		Permissions: finder.Permissions(),
 	})
 }

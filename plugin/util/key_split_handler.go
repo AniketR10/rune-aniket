@@ -178,8 +178,7 @@ func (t *keySplitHandler) PermissionGranted(grants []plugin.Grant) {
 }
 
 func (t *keySplitHandler) PermissionDenied(perms []plugin.Permission) {
-	log.Fatalf("Could not start plugin due to missing permissions: "+
-		"denied: %v; required: %v", perms, requiredPermissions)
+	log.Warnf("permission denied: %v", perms)
 }
 
 func (t *keySplitHandler) Shutdown(reason string) error {

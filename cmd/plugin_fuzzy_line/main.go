@@ -3,6 +3,8 @@ package main
 import (
 	"net/http"
 	_ "net/http/pprof"
+	"strconv"
+	"strings"
 
 	"github.com/ernestrc/go-tui"
 	"github.com/ernestrc/go-tui/browser"
@@ -27,21 +29,15 @@ func main() {
 		Handler: func(grants []plugin.Grant, broker proto.MuxBroker,
 			invokeWindow browser.Window, config plugin.Config) (tui.Handler, error) {
 			return finder.New(grants, broker, invokeWindow,
-				config, key, ag, func(data string) string {
-					for i, c := range data {
-						if c == ':' {
-							return data[:i]
-						}
-					}
-					return ""
+				config, key, ag, func(data string) (string, term.Coordinates) {
+					// NOTE: if ag breaks this or there's an edge case that it's not covered
+					// let it panic so we catch it early and fix it
+					chunks := strings.Split(data, ":")
+					y, _ := strconv.Atoi(chunks[1])
+					return chunks[0], term.Coordinates{Y: y - 1}
 				})
 		},
-		Key: key,
-		Permissions: []plugin.Permission{
-			plugin.PermissionBrowserResourceOpener,
-			plugin.PermissionBrowserEventPublisher,
-			plugin.PermissionBrowserMessenger,
-			plugin.PermissionBrowserStorage,
-		},
+		Key:         key,
+		Permissions: finder.Permissions(),
 	})
 }
