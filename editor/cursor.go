@@ -173,10 +173,6 @@ func (c *Cursor) setCursor(pos term.Coordinates) {
 
 func (c *Cursor) setSearchLocationList(text string) int {
 	c.search = text
-	if c.search == "" {
-		return 0
-	}
-
 	n := c.scroll.Search(text)
 
 	searchLoc := make([]Location, n)

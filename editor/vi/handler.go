@@ -134,6 +134,10 @@ func (vi *Vi) Cursor() (term.Coordinates, bool) {
 
 // SetMessage uses vi's configured Messenger to set msg with args.
 func (vi *Vi) SetMessage(msg string, args ...interface{}) {
+	if vi.config.logger != nil {
+		vi.config.logger.Debugf(msg, args...)
+	}
+
 	if vi.config.messenger != nil {
 		vi.config.messenger.SetMessage(msg, args...)
 		return
@@ -237,6 +241,7 @@ func (vi *Vi) handleSearch(ev term.Event) (bool, bool) {
 		text := vi.less.SearchText()
 		vi.less.SetNormalMode()
 		vi.searchMode = moveToNext
+		vi.SetMessage("searching '%s'", text)
 		vi.search(text)
 		return false, true
 	default:

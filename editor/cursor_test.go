@@ -161,6 +161,22 @@ func TestCursorSearch(t *testing.T) {
 			assert.Equal(t, tcase.searchstring, e.Selection())
 		})
 	}
+
+	t.Run("clears results if search text is empty", func(t *testing.T) {
+		e := setupCursor(t, 100, 100)
+
+		require.Equal(t, 2, e.Search("NULL"))
+		e.MoveToNextMatch()
+
+		cursor, _ := e.Cursor()
+		assert.Equal(t, term.Coordinates{X: 14, Y: 18}, cursor)
+
+		require.Equal(t, 0, e.Search(""))
+		e.MoveToNextMatch()
+
+		cursor, _ = e.Cursor()
+		assert.Equal(t, term.Coordinates{X: 14, Y: 18}, cursor)
+	})
 }
 
 func TestCursorMove(t *testing.T) {
