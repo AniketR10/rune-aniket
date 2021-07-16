@@ -82,6 +82,12 @@ func (e *viEditor) SubscribeCommand(cmd string, h editor.CommandHandler) error {
 	return errors.New("not supported")
 }
 
+// Editor is not supported
+func (e *viEditor) Editor(name string) (editor.Handler, error) {
+	// NOTE: it would be dead code
+	return nil, errors.New("not supported")
+}
+
 // SubscribeEditorEvents subsribes sub to ev. Note that this Editor is only capable
 // of dispatching EventTypeOpen, EventTypeInsert and EventTypeDelete EventType events.
 func (e *viEditor) SubscribeEditorEvents(ev editor.EventType, sub editor.EventHandler) error {

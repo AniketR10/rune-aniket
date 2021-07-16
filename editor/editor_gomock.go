@@ -288,6 +288,21 @@ func (mr *MockEditorMockRecorder) Edit(name, buf interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Edit", reflect.TypeOf((*MockEditor)(nil).Edit), name, buf)
 }
 
+// Editor mocks base method.
+func (m *MockEditor) Editor(name string) (Handler, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Editor", name)
+	ret0, _ := ret[0].(Handler)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Editor indicates an expected call of Editor.
+func (mr *MockEditorMockRecorder) Editor(name interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Editor", reflect.TypeOf((*MockEditor)(nil).Editor), name)
+}
+
 // MoveToNextLocation mocks base method.
 func (m *MockEditor) MoveToNextLocation(h Handler, ID string) error {
 	m.ctrl.T.Helper()

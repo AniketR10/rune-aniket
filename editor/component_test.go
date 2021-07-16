@@ -563,6 +563,25 @@ func TestDispatchCommand(t *testing.T) {
 	})
 }
 
+func TestComponentEditor(t *testing.T) {
+		t.Run("returns tab with name as Handler", func(t *testing.T) {
+			myName := "/tmp/Ennio_Morricone.go"
+			c, h1 := newTestComponentWithFile(t, myName)
+
+			h2, err := c.Editor(myName)
+			assert.NoError(t, err)
+			assert.Equal(t, h1.(*browser.Tab).Handler(), h2)
+		})
+
+		t.Run("returns error if no handler is found with name", func(t *testing.T) {
+			c := newTestComponent(t, &testEditor{})
+
+			h, err := c.Editor("The sundown")
+			assert.Error(t, err)
+			assert.Nil(t, h)
+		})
+}
+
 func TestComponentCommands(t *testing.T) {
 	t.Run("returns empty slice if no commands have been registered", func(t *testing.T) {
 		c := newTestComponent(t, &testEditor{})

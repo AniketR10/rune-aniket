@@ -102,6 +102,19 @@ func (c *Client) Edit(name string, buf *cell.Buffer) (Handler, error) {
 	return browser.Token{ID: uint64(res.GetHandlerId())}, nil
 }
 
+// Editor satisfies editor.Editor
+func (c *Client) Editor(name string) (Handler, error) {
+	ctx := context.Background()
+	req := proto.EditorRequest{ResourceName: name}
+
+	res, err := c.ed.Editor(ctx, &req)
+	if err != nil {
+		return nil, err
+	}
+
+	return browser.Token{ID: uint64(res.GetHandlerId())}, nil
+}
+
 // SubscribeEditorEvents requests the editor server to subscribe sub to ev.
 func (c *Client) SubscribeEditorEvents(evType EventType, h EventHandler) error {
 	ctx := context.Background()

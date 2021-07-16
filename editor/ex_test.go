@@ -1,6 +1,7 @@
 package editor
 
 import (
+	"errors"
 	"io"
 	"strconv"
 	"sync"
@@ -124,6 +125,10 @@ func (e *testEditor) SubscribeEditorEvents(ev EventType, sub EventHandler) error
 	}
 	e.subs[ev] = append(e.subs[ev], sub)
 	return nil
+}
+
+func (e *testEditor) Editor(name string) (Handler, error) {
+	return nil, errors.New("nope")
 }
 
 type testFileBuffer struct {

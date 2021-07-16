@@ -230,6 +230,14 @@ func (s *Server) addNextHandlerResource(name string, h Handler) uint32 {
 	return handlerID
 }
 
+func (s *Server) ensureAvailable(resourceName string, h Handler) uint32 {
+	handlerID, ok := s.nameToID[resourceName]
+	if !ok {
+		handlerID = s.addNextHandlerResource(resourceName, h)
+	}
+	return handlerID
+}
+
 // Edit satisfies proto.EditorServer
 func (s *Server) Edit(ctx context.Context, in *proto.EditRequest) (
 	*proto.EditResponse, error,
@@ -244,16 +252,27 @@ func (s *Server) Edit(ctx context.Context, in *proto.EditRequest) (
 		return nil, err
 	}
 
-	handlerID, ok := s.nameToID[resourceName]
-	if !ok {
-		handlerID = s.addNextHandlerResource(resourceName, h)
+	handlerID := s.ensureAvailable(resourceName, h)
+
+	return &proto.EditResponse{HandlerId: handlerID}, nil
+}
+
+// Editor satisfies proto.EditorServer
+func (s *Server) Editor(ctx context.Context, in *proto.EditorRequest) (
+	*proto.EditorResponse, error,
+) {
+	s.editor.Lock()
+	defer s.editor.Unlock()
+
+	resourceName := in.GetResourceName()
+	h, err := s.editor.Editor.Editor(resourceName)
+	if err != nil {
+		return nil, err
 	}
 
-	res := &proto.EditResponse{
-		HandlerId: handlerID,
-	}
+	handlerID := s.ensureAvailable(resourceName, h)
 
-	return res, nil
+	return &proto.EditorResponse{HandlerId: handlerID}, nil
 }
 
 // Subscribe satisfies proto.EditorServer

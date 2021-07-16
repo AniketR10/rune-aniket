@@ -123,12 +123,21 @@ message CursorResponse {
 	Coordinates pos = 1;
 }
 
+message EditorRequest {
+	string resource_name = 1;
+}
+
+message EditorResponse {
+	uint32 handler_id = 1;
+}
+
 service Editor {
 	rpc Edit(EditRequest) returns (EditResponse);
 	rpc Subscribe(EditorSubscribeRequest) returns (EditorSubscribeResponse);
 	rpc Register(RegisterCommandRequest) returns (RegisterCommandResponse);
 	rpc SetCursor(SetCursorRequest) returns (SetCursorResponse);
 	rpc Cursor(CursorRequest) returns (CursorResponse);
+	rpc Editor(EditorRequest) returns (EditorResponse);
 
 	// locations
 	rpc SetLocationList(SetLocationListRequest) returns (SetLocationListResponse);

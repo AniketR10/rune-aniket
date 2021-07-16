@@ -314,6 +314,21 @@ func (c *Component) Open(file string) (browser.Handler, error) {
 	return c.OpenFileTab(file, "")
 }
 
+// Editor satisfies Editor interface.
+func (c *Component) Editor(name string) (Handler, error) {
+	filename, err := getFileID(name)
+	if err != nil {
+		return nil, fmt.Errorf("could not evaluate file path '%s': %v", filename, err)
+	}
+
+	for _, tab := range c.comp.Tabs() {
+		if tab.ID() == filename {
+			return tab.Handler(), nil
+		}
+	}
+	return nil, errors.New("handler not found")
+}
+
 // KeyMapping returns a key mapping for ev and true
 // or the original ev and false if there's
 // no mapping. It also returns any command that was mapped

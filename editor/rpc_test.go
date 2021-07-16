@@ -9,7 +9,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ernestrc/go-tui"
 	"github.com/ernestrc/go-tui/cell"
+	"github.com/ernestrc/go-tui/handler"
 	"github.com/ernestrc/go-tui/proto"
 	"github.com/ernestrc/go-tui/term"
 	gomock "github.com/golang/mock/gomock"
@@ -63,6 +65,26 @@ func TestClientServerIntegration(t *testing.T) {
 		buf.WriteString("hero")
 
 		_, err := client.Edit("zion", buf)
+		require.NoError(t, err)
+	})
+
+	t.Run("client through server calls underlying editor Editor", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+		b := proto.NewDialBroker()
+		ed := NewMockEditor(ctrl)
+		expectInitialServerSubscribe(t, ed)
+		s := NewServer(b, ed, nopLocker{})
+
+		client, closeFn := setupIntTest(t, b, s)
+		defer closeFn()
+
+		ed.EXPECT().Editor(gomock.Any()).Times(1).
+			DoAndReturn(func(_name string) (tui.Handler, error) {
+				assert.Equal(t, "zion", _name)
+				return handler.NewTestHandler(), nil
+			})
+		_, err := client.Editor("zion")
 		require.NoError(t, err)
 	})
 

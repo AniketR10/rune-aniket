@@ -47,7 +47,7 @@ type CommandHandler interface {
 
 // Editor is the interface that wraps an API to manage a text editor.
 type Editor interface {
-	// Edit opens a file and returns a tui.Handler to edit it or an error
+	// Edit opens a file and returns an editor.Handler to edit it or an error
 	// if there was an error opening it.
 	Edit(name string, buf *cell.Buffer) (Handler, error)
 
@@ -55,6 +55,10 @@ type Editor interface {
 	// Note that it's suffixed with Editor so implementors
 	// can also implement browser.Subscriber.
 	SubscribeEditorEvents(EventType, EventHandler) error
+
+	// Editor returns the editor.Handler with name or returns
+	// an error if no editor with name is open via Edit.
+	Editor(name string) (Handler, error)
 
 	// SubscribeCommand registers command to be dispatched to CommandHandler.
 	SubscribeCommand(string, CommandHandler) error
