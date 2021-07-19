@@ -41,6 +41,7 @@ var (
 	gitHandlerPermissions = []plugin.Permission{
 		plugin.PermissionBrowserWindowManager,
 		plugin.PermissionBrowserEventPublisher,
+		plugin.PermissionEditor,
 	}
 
 	defaultScrollAttr = term.Attributes{Fg: term.ColorBlack}
