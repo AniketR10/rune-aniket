@@ -250,6 +250,20 @@ func TestScrollSetOffset(t *testing.T) {
 	assert.Equal(t, term.Coordinates{Y: scroll.Buffer().Rows() - 1}, scroll.Offset())
 }
 
+func TestScrollDrawOffsetOOB(t *testing.T) {
+	scroll := newScroll(4, false, 20, 1)
+	_, err := scroll.Buffer().ReadFrom(strings.NewReader(fortune))
+	require.NoError(t, err)
+	assert.True(t, scroll.SeekEndFile())
+
+	// modify buffer such that cells now are empty
+	assert.True(t, scroll.Buffer().TruncateFrom(term.Coordinates{}))
+
+	w := term.NewStringWriter(10, 10)
+	// this should not panic
+	scroll.Draw(w)
+}
+
 func newBigScroll(fortunes int) (scroll *Scroll) {
 	scroll = NewScroll()
 	for i := 0; i < fortunes; i++ {

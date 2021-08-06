@@ -308,10 +308,21 @@ func (s *Scroll) getMaxYOffset() (y int) {
 	return
 }
 
+func (s *Scroll) rawCellsOffset() [][]term.Cell {
+	cells := s.buf.RawCells()
+	if s.offset.Y < len(cells) {
+		return cells[s.offset.Y:]
+	}
+	if len(cells) > 0 {
+		return cells[len(cells)-1:]
+	}
+	return cells[:]
+}
+
 func (s *Scroll) drawFast(writer term.Writer) {
 	xwindow := s.offset.X + s.width
 	ywindow := s.height
-	for y, r := range s.buf.RawCells()[s.offset.Y:] {
+	for y, r := range s.rawCellsOffset() {
 		if y >= ywindow {
 			break
 		}
@@ -332,7 +343,7 @@ func (s *Scroll) drawFast(writer term.Writer) {
 func (s *Scroll) drawDebug(writer term.Writer) {
 	xwindow := s.offset.X + s.width
 	ywindow := s.height
-	for y, r := range s.buf.RawCells()[s.offset.Y:] {
+	for y, r := range s.rawCellsOffset() {
 		if y >= ywindow {
 			break
 		}
@@ -362,7 +373,7 @@ func (s *Scroll) drawDebug(writer term.Writer) {
 func (s *Scroll) draw(writer term.Writer) {
 	xwindow := s.offset.X + s.width
 	ywindow := s.height
-	for y, r := range s.buf.RawCells()[s.offset.Y:] {
+	for y, r := range s.rawCellsOffset() {
 		if y >= ywindow {
 			break
 		}
@@ -390,7 +401,7 @@ func (s *Scroll) wrapdrawFast(writer term.Writer) {
 	var xi, yi, ywindow int
 	xwindow := s.width
 	wraps := 0
-	for y, r := range s.buf.RawCells()[s.offset.Y:] {
+	for y, r := range s.rawCellsOffset() {
 		ywindow = s.height - wraps
 		if y >= ywindow {
 			break
@@ -422,7 +433,7 @@ func (s *Scroll) wrapdraw(writer term.Writer) {
 	var xi, yi, ywindow int
 	xwindow := s.width
 	wraps := 0
-	for y, r := range s.buf.RawCells()[s.offset.Y:] {
+	for y, r := range s.rawCellsOffset() {
 		ywindow = s.height - wraps
 		if y >= ywindow {
 			break
