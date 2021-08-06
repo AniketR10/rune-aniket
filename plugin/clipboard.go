@@ -153,12 +153,15 @@ func (s *ClipboardManager) Close() (ret error) {
 		}
 	}
 
-	err := s.s.Close()
-	if err != nil {
-		ret = err
+	if s.s != nil {
+		err := s.s.Close()
+		if err != nil {
+			ret = err
+		}
 	}
-
-	s.srv.Stop()
+	if s.srv != nil {
+		s.srv.Stop()
+	}
 	return
 }
 
