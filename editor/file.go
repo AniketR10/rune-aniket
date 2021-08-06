@@ -324,6 +324,9 @@ func (f *fileBuf) OnWillInsert(at term.Coordinates, str string) {
 }
 
 func (f *fileBuf) OnDidInsert(from, to term.Coordinates) {
+	if f.swap == nil {
+		return
+	}
 	f.copyFlushSwapFile()
 }
 
@@ -331,6 +334,9 @@ func (f *fileBuf) OnWillDelete(from, to term.Coordinates) {
 }
 
 func (f *fileBuf) OnDidDelete(start, end term.Coordinates, str string) {
+	if f.swap == nil {
+		return
+	}
 	f.copyFlushSwapFile()
 	return
 }

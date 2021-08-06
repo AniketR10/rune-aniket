@@ -776,6 +776,15 @@ func testFileBufferInsert(
 
 		buf.InsertString(term.Coordinates{}, myString)
 	})
+
+	t.Run("upon Insert, if file is not writeable, it does nothing", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		fbuf, _, buf := newBuffer(t, ctrl)
+		fbuf.swap = nil
+		buf.InsertString(term.Coordinates{}, "blah")
+	})
 }
 
 func testFileBufferDelete(t *testing.T, newBuffer newBufferFunc) {
@@ -788,6 +797,15 @@ func testFileBufferDelete(t *testing.T, newBuffer newBufferFunc) {
 		mock.EXPECT().
 			WriteString(gomock.Eq("")).
 			Return(len(""), nil)
+		buf.DeleteRow(0)
+	})
+
+	t.Run("upon Delete, if file is not writeable, it does nothing", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		fbuf, _, buf := newBuffer(t, ctrl)
+		fbuf.swap = nil
 		buf.DeleteRow(0)
 	})
 }
