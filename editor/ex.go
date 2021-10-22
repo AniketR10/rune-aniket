@@ -46,7 +46,9 @@ type Ex struct {
 	config  Config
 	comp    Component
 	command struct {
-		argsMode bool
+		// argsStartIdx is the position of the first space
+		// that separates the 'command' from its args
+		argsStartIdx int
 
 		component.Virtual
 		cell.Buffer
@@ -276,11 +278,12 @@ func (e *Ex) handleCommand(ev term.Event) (quit, handled bool) {
 			e.setNormalMode()
 			return
 		}
-		e.command.List.SearchQueryDelete()
-		e.command.List.Wait()
-		_, r, _ := e.command.Buffer.DeleteCell(term.Coordinates{X: cols - 1})
-		if r == ' ' {
-			e.command.argsMode = false
+		e.command.Buffer.DeleteCell(term.Coordinates{X: cols - 1})
+		if e.command.argsStartIdx == e.command.Buffer.Size() ||
+			e.command.argsStartIdx == 0 {
+			e.command.List.SearchReset()
+			e.command.List.Search(e.command.Buffer.String())
+			e.command.argsStartIdx = 0
 		}
 	default:
 		handled = false
@@ -294,13 +297,12 @@ func (e *Ex) handleCommand(ev term.Event) (quit, handled bool) {
 		return
 	}
 
-	if ev.Ch == ' ' {
-		e.command.argsMode = true
+	if ev.Ch == ' ' && e.command.argsStartIdx == 0 {
+		e.command.argsStartIdx = e.command.Buffer.Size()
 	}
-
 	e.command.Buffer.WriteString(string([]rune{ev.Ch}))
 
-	if !e.command.argsMode {
+	if e.command.argsStartIdx == 0 {
 		e.command.List.SearchQueryWrite(ev.Ch)
 		e.command.List.Wait()
 	}
@@ -376,7 +378,7 @@ func (e *Ex) setNormalMode() {
 	e.command.Buffer.Reset()
 	e.command.List.SearchReset()
 	e.command.List.Wait()
-	e.command.argsMode = false
+	e.command.argsStartIdx = 0
 	e.mode = modeDefault
 }
 

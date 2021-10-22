@@ -556,15 +556,31 @@ EEEE`},
 		o++
 	}
 
+	// test case for issue #27
 	cases = []testutil.HandlerSequenceTestCase{
-		{"__",
+		{":e ait^^^aix^^^^d airsoft.map>",
 			`┌──────────────────┐
-│other.go  bugz    │
+│..  bugz  airsof..│
 ├──────────────────┤
 │000000000000000000│
 ├─┬──────────────┬─┤
-│2│BBBBBBBBBBBBBB│3│
-│2│BBBBBBBBBBBBBB│3│
+│2│AAAAAAAAAAAAAA│3│
+│2│AAAAAAAAAAAAAA│3│
+├─┴──────────────┴─┤
+│111111111111111111│
+└──────────────────┘`},
+	}
+	testutil.TestHandlerSequence(t, bh, 20, 10, cases)
+
+	cases = []testutil.HandlerSequenceTestCase{
+		{"__",
+			`┌──────────────────┐
+│..  bugz  airsof..│
+├──────────────────┤
+│000000000000000000│
+├─┬──────────────┬─┤
+│2│AAAAAAAAAAAAAA│3│
+│2│AAAAAAAAAAAAAA│3│
 ├─┴──────────────┴─┤
 │111111111111111111│
 └──────────────────┘`},
