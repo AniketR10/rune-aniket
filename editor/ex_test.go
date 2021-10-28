@@ -481,7 +481,7 @@ EEEE`},
 │BBBBBBBBBBBBBBBBBB│
 │BBBBBBBBBBBBBBBBBB│
 │BBBBBBBBBBBBBBBBBB│
-│BBBBBBBBBBBBBBBBBB│
+│wasup: Z          │
 └──────────────────┘`},
 		{":3>",
 			`┌──────────────────┐
@@ -492,7 +492,7 @@ EEEE`},
 │▐BBBBBBBBBBBBBBBBB│
 │BBBBBBBBBBBBBBBBBB│
 │BBBBBBBBBBBBBBBBBB│
-│BBBBBBBBBBBBBBBBBB│
+│wasup: Z          │
 └──────────────────┘`},
 		{":0>",
 			`┌──────────────────┐

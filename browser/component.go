@@ -17,7 +17,7 @@ var (
 	// SetContent but it's already owned by another Window.
 	ErrTabNotFree = errors.New("Tab already rendered in Window")
 
-	logBufDrawTimes = 2
+	logBufDrawTimes = 4
 )
 
 // Component renders a browser-like tui.Compontent and exposes an API
