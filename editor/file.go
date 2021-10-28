@@ -15,7 +15,7 @@ import (
 	"github.com/ernestrc/go-tui/term"
 )
 
-const filePerms = 0600
+const defaultFileMode os.FileMode = 0644
 
 // OsFile is used to abstract *os.File.
 type OsFile interface {
@@ -60,8 +60,8 @@ func makeSwapFileName(filename string) string {
 	return fmt.Sprintf(".%s.swp", filename)
 }
 
-func (f *FileBuffer) initSwap(swapDir string, orig OsFile) (OsFile, error) {
-	swap, err := f.openFunc(f.swapFileName, os.O_RDWR|os.O_CREATE|os.O_EXCL, filePerms)
+func (f *FileBuffer) initSwap(swapDir string, orig OsFile, origPerms os.FileMode) (OsFile, error) {
+	swap, err := f.openFunc(f.swapFileName, os.O_RDWR|os.O_CREATE|os.O_EXCL, origPerms)
 	if err != nil {
 		if os.IsExist(err) {
 			return nil, ErrFileAlreadyOpen
@@ -113,7 +113,7 @@ func validateFileType(file OsFile) (os.FileInfo, error) {
 func (f *FileBuffer) openFile(filePath string, flag int) (
 	file OsFile, fileInfo os.FileInfo, err error,
 ) {
-	file, err = f.openFunc(filePath, flag, filePerms)
+	file, err = f.openFunc(filePath, flag, 0000)
 	if err != nil {
 		file = nil
 		return
@@ -134,8 +134,10 @@ func (f *FileBuffer) initFiles(filePath, swapDir string) error {
 	if err != nil && os.IsPermission(err) {
 		// delegate write error to Flush
 		file, fileInfo, err = f.openFile(filePath, os.O_RDONLY)
+		if err != nil {
+			return err
+		}
 		readOnly = true
-		err = nil
 	}
 	if err != nil {
 		return err
@@ -150,7 +152,11 @@ func (f *FileBuffer) initFiles(filePath, swapDir string) error {
 	}
 
 	if !readOnly {
-		f.swap, err = f.initSwap(swapDir, file)
+		mode := os.FileMode(defaultFileMode)
+		if fileInfo != nil {
+			mode = fileInfo.Mode()
+		}
+		f.swap, err = f.initSwap(swapDir, file, mode)
 		if err != nil {
 			return err
 		}
@@ -350,7 +356,7 @@ func (f *FileBuffer) moveFile(sourcePath, destPath string) error {
 }
 
 func (f *FileBuffer) touchFile() (err error) {
-	f.orig, err = f.openFunc(f.fileName, os.O_RDWR|os.O_CREATE|os.O_EXCL, filePerms)
+	f.orig, err = f.openFunc(f.fileName, os.O_RDWR|os.O_CREATE|os.O_EXCL, defaultFileMode)
 	if err != nil {
 		// file was not created when instantiating this FileBuffer, but now
 		// file seems to be there so FileBuffer must be stale.

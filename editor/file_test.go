@@ -65,6 +65,31 @@ func testFileBufferIntegration(t *testing.T, endsInEOL bool) {
 		require.NoError(t, err)
 	})
 
+	t.Run("respects original file mode", func(t *testing.T) {
+		buf := cell.NewBuffer()
+		file, err := ioutil.TempFile("", "frctl_file_test")
+		require.NoError(t, err)
+
+		filename := file.Name()
+
+		err = file.Chmod(0700)
+		require.NoError(t, err)
+		require.NoError(t, file.Close())
+
+		f, err := NewFileBuffer(filename, buf, "")
+		require.NoError(t, err)
+
+		fileInfo, err := os.Stat(filename)
+		require.NoError(t, err)
+		assert.Equal(t, os.FileMode(0700), fileInfo.Mode())
+
+		require.NoError(t, f.Flush())
+
+		fileInfo, err = os.Stat(filename)
+		require.NoError(t, err)
+		assert.Equal(t, os.FileMode(0700), fileInfo.Mode())
+	})
+
 	t.Run("if file does not exist, if there are errors upon creation, it bubbles up on Flush", func(t *testing.T) {
 		buf := cell.NewBuffer()
 		rand.Seed(int64(time.Now().Nanosecond()))
