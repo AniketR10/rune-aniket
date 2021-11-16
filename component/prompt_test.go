@@ -5,6 +5,7 @@ import (
 
 	"github.com/ernestrc/go-tui/term"
 	testutil "github.com/ernestrc/go-tui/util/test"
+	"github.com/stretchr/testify/assert"
 )
 
 func testDrawPrompt(t *testing.T, cfg PromptConfig, expectedOut string) {
@@ -116,5 +117,22 @@ func TestPromptSetOptionAttr(t *testing.T) {
 		})
 		p.SetOptionAttr(0, term.Attributes{})
 		p.SetOptionAttr(1, term.Attributes{})
+	})
+}
+
+func TestPromptDefaults(t *testing.T) {
+	t.Run("panics on emptym message", func(t *testing.T) {
+		assert.Panics(t, func() {
+			_ = NewPrompt(PromptConfig{
+				Message: "", Options: []string{"a"},
+			})
+		})
+	})
+	t.Run("panics on empty options", func(t *testing.T) {
+		assert.Panics(t, func() {
+			_ = NewPrompt(PromptConfig{
+				Message: "blah", Options: []string{},
+			})
+		})
 	})
 }
