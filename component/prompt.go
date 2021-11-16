@@ -7,8 +7,9 @@ import (
 
 // Prompt implements a prompt / question with options component.
 type Prompt struct {
-	optComp   []WithAttributes
-	effective tui.Component
+	optComp      []WithAttributes
+	effective    tui.Component
+	makeOptionFn func(msg string, cfg PromptConfig) WithAttributes
 }
 
 // PromptConfig holds configuration for initializing a Prompt.
@@ -18,36 +19,34 @@ type PromptConfig struct {
 	Frame   FrameCharSet
 }
 
-func makeOption(msg string, cfg PromptConfig) (ret WithAttributes) {
-	return stringBackgroundAttrFrame(msg, term.Attributes{},
-		0, term.Attributes{}, cfg.Frame, 2, 0)
-}
-
 func (p *Prompt) initOptions(cfg PromptConfig, wm *WindowManager, win Window) {
 	if len(cfg.Options) == 0 {
 		panic("Options should be greater than zero")
 	}
-	comp0 := makeOption(cfg.Options[0], cfg)
+	// allow for Init to be used as reset
+	p.optComp = make([]WithAttributes, 0)
+	comp0 := p.makeOptionFn(cfg.Options[0], cfg)
 	win, _ = wm.SplitHorizontal(win, comp0)
 	p.optComp = append(p.optComp, comp0)
 
 	for _, opt := range cfg.Options[1:] {
-		compi := makeOption(opt, cfg)
+		compi := p.makeOptionFn(opt, cfg)
 		p.optComp = append(p.optComp, compi)
 		win, _ = wm.SplitVertical(win, compi)
 	}
 }
 
-// Init initializes this prompt with cfg. Note that PromptConfig.Options must
-// always contain at least one option and PromptConfig.Message must not be empty.
-// If one of these two rules is violated this method panics.
-func (p *Prompt) Init(cfg PromptConfig) {
+func (p *Prompt) init(
+	makeOptionFn func(string, PromptConfig) WithAttributes,
+	cfg PromptConfig,
+) {
 	if cfg.Message == "" {
 		panic("Message cannot be empty")
 	}
 	message := StringCentered(cfg.Message)
 
 	wm, win := NewWindowManager(message, WindowManagerConfig{})
+	p.makeOptionFn = makeOptionFn
 	p.initOptions(cfg, wm, win)
 
 	if cfg.Frame != (FrameCharSet{}) {
@@ -57,6 +56,16 @@ func (p *Prompt) Init(cfg PromptConfig) {
 	} else {
 		p.effective = wm
 	}
+}
+
+// Init initializes this prompt with cfg. Note that PromptConfig.Options must
+// always contain at least one option and PromptConfig.Message must not be empty.
+// If one of these two rules is violated this method panics.
+func (p *Prompt) Init(cfg PromptConfig) {
+	p.init(func(msg string, cfg PromptConfig) WithAttributes {
+		return stringBackgroundAttrFrame(msg, term.Attributes{},
+			0, term.Attributes{}, cfg.Frame, 2, 0)
+	}, cfg)
 }
 
 // NewPrompt allocates storage for a new prompt and initializes it.

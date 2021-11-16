@@ -136,3 +136,49 @@ func TestPromptDefaults(t *testing.T) {
 		})
 	})
 }
+
+func TestPromptInitReset(t *testing.T) {
+	var p Prompt
+	opts := make(map[string]*TestComponent)
+	makeTestOption := func(opt string, cfg PromptConfig) WithAttributes {
+		t := &TestComponent{Ch: ([]rune)(opt)[0]}
+		opts[opt] = t
+		return t
+	}
+	p.init(makeTestOption, PromptConfig{
+		Message: "?",
+		Options: []string{"Y", "N"},
+	})
+	p.init(makeTestOption, PromptConfig{
+		Message: "?!",
+		Options: []string{"y", "n"},
+	})
+
+	t.Run("Draw", func(t *testing.T) {
+		p.Resize(20, 10)
+		w := term.NewStringWriter(21, 11)
+
+		tests := []testutil.ComponentTestCase{
+			{Expected: `
+                     
+                     
+         ?!          
+                     
+                     
+yyyyyyyyyynnnnnnnnnn 
+yyyyyyyyyynnnnnnnnnn 
+yyyyyyyyyynnnnnnnnnn 
+yyyyyyyyyynnnnnnnnnn 
+yyyyyyyyyynnnnnnnnnn 
+                     `,
+			},
+		}
+		testutil.TestComponent(t, &p, w, tests)
+	})
+
+	t.Run("SetAttr", func(t *testing.T) {
+		attr := term.Attributes{Fg: term.AttrBold}
+		p.SetOptionAttr(0, attr)
+		assert.Equal(t, attr, opts["y"].Attributes)
+	})
+}
