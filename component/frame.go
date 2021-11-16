@@ -235,6 +235,11 @@ func (f *Frame) SetContent(content tui.Component) {
 	f.Resize(f.width, f.height)
 }
 
+// SetAttr satisfies WithAttributes.
+func (f *Frame) SetAttr(attr term.Attributes) {
+	f.Attributes = attr
+}
+
 // Resize updates this frame with a new width and height. If width or height
 // is smaller than 3 cells, the border will not be drawn.
 func (f *Frame) Resize(width, height int) {
