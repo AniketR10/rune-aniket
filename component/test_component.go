@@ -7,8 +7,8 @@ import (
 // TestComponent draws rune Ch, and attributes Bg, Fg on every cell
 // available. This component is used for testing or debugging.
 type TestComponent struct {
-	Ch            rune
-	Bg, Fg        term.Attribute
+	Ch rune
+	term.Attributes
 	width, height int
 }
 
@@ -23,4 +23,9 @@ func (t *TestComponent) Draw(w term.Writer) {
 				term.Cell{Ch: t.Ch, Fg: t.Fg, Bg: t.Bg})
 		}
 	}
+}
+
+// SetAttr satisfies WithAttributes
+func (t *TestComponent) SetAttr(attr term.Attributes) {
+	t.Attributes = attr
 }

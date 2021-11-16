@@ -54,7 +54,7 @@ type SpanConfig struct {
 type Span struct {
 	content       Virtual
 	width, height int
-	cfg SpanConfig
+	cfg           SpanConfig
 }
 
 // DefaultSpanConfig returns the default span configuration wich is no padding,
@@ -158,6 +158,11 @@ func (s *Span) Draw(w term.Writer) {
 func (s *Span) SetContent(content tui.Component) {
 	s.content.C = content
 	s.Resize(s.width, s.height)
+}
+
+// Content returns this Span's underlying content.
+func (s *Span) Content() tui.Component {
+	return s.content.C
 }
 
 // ContentOffset returns the offset in term.Coordinates of the content inside the span.
