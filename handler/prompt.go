@@ -60,14 +60,14 @@ func (f *Prompt) Init(cfg PromptConfig) {
 	}
 
 	// Prompt guarantees that there's at least one option
-	f.highlightOption(0)
+	f.highlightOption()
 }
 
-func (f *Prompt) highlightOption(i int) {
+func (f *Prompt) highlightOption() {
 	for j := range f.cfg.Options {
 		f.Prompt.SetOptionAttr(j, f.cfg.OptionAttr)
 	}
-	f.Prompt.SetOptionAttr(i, f.cfg.HighlightAttr)
+	f.Prompt.SetOptionAttr(f.hi, f.cfg.HighlightAttr)
 }
 
 // Handle satisfies tui.Handler.
@@ -84,16 +84,19 @@ func (f *Prompt) Handle(ev term.Event) (exit, handled bool) {
 		if f.hi > 0 {
 			f.hi--
 			handled = true
-			f.highlightOption(f.hi)
+			f.highlightOption()
 		}
 	case term.KeyArrowRight:
 		if f.hi < len(f.cfg.Options)-1 {
 			f.hi++
 			handled = true
-			f.highlightOption(f.hi)
+			f.highlightOption()
 		}
 	case term.KeyEnter:
 		f.cfg.OptionCallback(f.hi, f.cfg.Options[f.hi])
+		exit = true
+		handled = true
+	case term.KeyEsc:
 		exit = true
 		handled = true
 	}
