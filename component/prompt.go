@@ -25,7 +25,7 @@ func makeOption(msg string, cfg PromptConfig) (ret WithAttributes) {
 
 func (p *Prompt) initOptions(cfg PromptConfig, wm *WindowManager, win Window) {
 	if len(cfg.Options) == 0 {
-		panic("Options should be greater tha one")
+		panic("Options should be greater than zero")
 	}
 	comp0 := makeOption(cfg.Options[0], cfg)
 	win, _ = wm.SplitHorizontal(win, comp0)
@@ -38,8 +38,13 @@ func (p *Prompt) initOptions(cfg PromptConfig, wm *WindowManager, win Window) {
 	}
 }
 
-// Init initializes this prompt cfg.
+// Init initializes this prompt with cfg. Note that PromptConfig.Options must
+// always contain at least one option and PromptConfig.Message must not be empty.
+// If one of these two rules is violated this method panics.
 func (p *Prompt) Init(cfg PromptConfig) {
+	if cfg.Message == "" {
+		panic("Message cannot be empty")
+	}
 	message := StringCentered(cfg.Message)
 
 	wm, win := NewWindowManager(message, WindowManagerConfig{})
@@ -55,6 +60,7 @@ func (p *Prompt) Init(cfg PromptConfig) {
 }
 
 // NewPrompt allocates storage for a new prompt and initializes it.
+// See Init for more details.
 func NewPrompt(cfg PromptConfig) *Prompt {
 	p := new(Prompt)
 	p.Init(cfg)
@@ -63,9 +69,6 @@ func NewPrompt(cfg PromptConfig) *Prompt {
 
 // SetOptionAttr sets the attributes of option at index i.
 func (p *Prompt) SetOptionAttr(i int, attr term.Attributes) {
-	if i < 0 || i >= len(p.optComp) {
-		panic("option out of bounds")
-	}
 	p.optComp[i].SetAttr(attr)
 }
 
