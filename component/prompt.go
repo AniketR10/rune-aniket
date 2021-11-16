@@ -13,11 +13,9 @@ type Prompt struct {
 
 // PromptConfig holds configuration for initializing a Prompt.
 type PromptConfig struct {
-	Message  string
-	Options  []string
-	TextAttr term.Attributes
-	Frame    FrameCharSet
-	SpanConfig
+	Message string
+	Options []string
+	Frame   FrameCharSet
 }
 
 func makeOption(msg string, cfg PromptConfig) (ret WithAttributes) {

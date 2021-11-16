@@ -59,6 +59,43 @@ func TestDrawPrompt(t *testing.T) {
                      `,
 		)
 	})
+
+	t.Run("with frame overflow options", func(t *testing.T) {
+		testDrawPrompt(t, PromptConfig{
+			Message: "Why soooooo serious?",
+			Options: []string{"Yay", "Nay", "Say", "Wey"},
+			Frame:   FrameCharSetDefault(),
+		}, `┌──────────────────┐ 
+│                  │ 
+│Why soooooo seriou│ 
+│                  │ 
+│                  │ 
+│┌──┐┌──┐┌───┐┌───┐│ 
+││Ya││Na││Say││Wey││ 
+│└──┘└──┘└───┘└───┘│ 
+│                  │ 
+└──────────────────┘ 
+                     `,
+		)
+	})
+
+	t.Run("with frame overflow options", func(t *testing.T) {
+		testDrawPrompt(t, PromptConfig{
+			Message: "Why soooooo serious?",
+			Options: []string{"Yay", "Nay", "Say", "Wey", "They", "May"},
+		}, `                     
+                     
+Why soooooo serious? 
+                     
+                     
+                     
+                     
+YayNaySayWeyTheyMay  
+                     
+                     
+                     `,
+		)
+	})
 }
 
 func TestPromptSetOptionAttr(t *testing.T) {
