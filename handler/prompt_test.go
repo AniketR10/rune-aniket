@@ -8,6 +8,26 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func TestPromptDefaults(t *testing.T) {
+	t.Run("sets default callback", func(t *testing.T) {
+		p := NewPrompt(PromptConfig{
+			PromptConfig: component.PromptConfig{
+				Message: "blah", Options: []string{"a"},
+			}})
+		exit, handled := p.Handle(term.Event{Key: term.KeyEnter})
+		assert.True(t, exit)
+		assert.True(t, handled)
+	})
+	t.Run("sets default highlight attrs", func(t *testing.T) {
+		p := NewPrompt(PromptConfig{
+			PromptConfig: component.PromptConfig{
+				Message: "blah", Options: []string{"a"},
+			}})
+		attr := term.Attributes{Fg: term.AttrReverse, Bg: term.AttrReverse}
+		assert.Equal(t, attr, p.cfg.HighlightAttr)
+	})
+}
+
 func TestPromptHandle(t *testing.T) {
 	opt0 := "Say what?"
 	opt1 := "Yes"

@@ -36,7 +36,6 @@ func NewPrompt(cfg PromptConfig) (f *Prompt) {
 // length as Options.
 func (f *Prompt) Init(cfg PromptConfig) {
 	f.Prompt.Init(cfg.PromptConfig)
-	f.cfg = cfg
 	f.hi = 0 // allow for Init to be used as reset
 
 	if len(cfg.OptionBindings) != 0 &&
@@ -54,6 +53,7 @@ func (f *Prompt) Init(cfg PromptConfig) {
 		}
 	}
 
+	f.cfg = cfg
 	f.bindings = make(map[term.Event]int)
 	for i, ev := range f.cfg.OptionBindings {
 		f.bindings[ev] = i
