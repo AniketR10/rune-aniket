@@ -494,3 +494,118 @@ func TestComponentSetMessage(t *testing.T) {
 	expected := "wasup: hola"
 	assert.Equal(t, expected, c.logBuf.String())
 }
+
+func TestComponentPrompt(t *testing.T) {
+	w := term.NewStringWriter(24, 8)
+
+	cfg := DefaultConfig()
+	cfg.PromptConfig.Width = 18
+	cfg.PromptConfig.Height = 7
+	c := NewComponent(cfg)
+	c.Resize(20, 8)
+
+	tests := []testutil.ComponentTestCase{
+		{
+			nil, `
+┌──────────────────┐    
+│                  │    
+├──────────────────┤    
+│                  │    
+│                  │    
+│                  │    
+│                  │    
+└──────────────────┘    `,
+		}, {func() {
+			c.Prompt("Virgen Maria?", []string{"Boh", "Meh"}, nil, func(int, string) {})
+		}, `
+┌┌────────────────┐┐    
+││ Virgen Maria?  ││    
+├│                │┤    
+││┌─────┐ ┌─────┐ ││    
+│││ Boh │ │ Meh │ ││    
+││└─────┘ └─────┘ ││    
+│└────────────────┘│    
+└──────────────────┘    `,
+		}, {func() {
+			c.Handle(term.Event{Key: term.KeyEnter})
+		}, `
+┌──────────────────┐    
+│                  │    
+├──────────────────┤    
+│                  │    
+│                  │    
+│                  │    
+│                  │    
+└──────────────────┘    `,
+		}, {func() {
+			c.Prompt("Tokischa?", []string{"Yay", "Nay"}, nil, func(int, string) {})
+			c.Prompt("Rosalia?", []string{"Yay", "Nay"}, nil, func(int, string) {})
+		}, `
+┌┌────────────────┐┐    
+││    Rosalia?    ││    
+├│                │┤    
+││┌─────┐ ┌─────┐ ││    
+│││ Yay │ │ Nay │ ││    
+││└─────┘ └─────┘ ││    
+│└────────────────┘│    
+└──────────────────┘    `,
+		}, {func() {
+			c.Resize(10, 6)
+		}, `
+┌────────┐              
+│Rosalia?│              
+│        │              
+│Yay Nay │              
+│        │              
+└────────┘              
+                        
+                        `,
+		}, {func() {
+			c.Resize(24, 8)
+		}, `
+┌──┌────────────────┐──┐
+│  │    Rosalia?    │  │
+├──│                │──┤
+│  │┌─────┐ ┌─────┐ │  │
+│  ││ Yay │ │ Nay │ │  │
+│  │└─────┘ └─────┘ │  │
+│  └────────────────┘  │
+└──────────────────────┘`,
+		}, {func() {
+			c.Resize(20, 8)
+		}, `
+┌┌────────────────┐┐    
+││    Rosalia?    ││    
+├│                │┤    
+││┌─────┐ ┌─────┐ ││    
+│││ Yay │ │ Nay │ ││    
+││└─────┘ └─────┘ ││    
+│└────────────────┘│    
+└──────────────────┘    `,
+		}, {func() {
+			c.Handle(term.Event{Key: term.KeyEsc})
+		}, `
+┌┌────────────────┐┐    
+││   Tokischa?    ││    
+├│                │┤    
+││┌─────┐ ┌─────┐ ││    
+│││ Yay │ │ Nay │ ││    
+││└─────┘ └─────┘ ││    
+│└────────────────┘│    
+└──────────────────┘    `,
+		}, {func() {
+			c.Handle(term.Event{Key: term.KeyEnter})
+		}, `
+┌──────────────────┐    
+│                  │    
+├──────────────────┤    
+│                  │    
+│                  │    
+│                  │    
+│                  │    
+└──────────────────┘    `,
+		},
+	}
+
+	testutil.TestComponent(t, c, w, tests)
+}

@@ -16,7 +16,20 @@ func DefaultConfig() Config {
 		StartTextAttr:       term.Attributes{Fg: term.ColorRed | term.AttrBold},
 		FrameUnionCharSet:   component.DefaultFrameUnionCharSet(),
 		WindowManagerConfig: component.DefaultWindowManagerConfig(),
+		PromptConfig: PromptConfig{
+			Width:         50,
+			Height:        14,
+			TextAttr:      term.Attributes{},
+			HighlightAttr: term.Attributes{Bg: term.ColorRed, Fg: term.ColorWhite},
+		},
 	}
+}
+
+// PromptConfig holds configuration for the browser's Prompt component.
+type PromptConfig struct {
+	Width, Height int
+	TextAttr      term.Attributes
+	HighlightAttr term.Attributes
 }
 
 // Config holds configuration for an browser.Component.
@@ -29,6 +42,8 @@ type Config struct {
 	MessageBarAttr          term.Attributes
 	FocusTabAttr            term.Attributes
 	NonFocusTabAttr         term.Attributes
+
+	PromptConfig
 
 	component.FrameUnionCharSet
 	component.WindowManagerConfig
