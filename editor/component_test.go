@@ -48,7 +48,7 @@ func newTestComponentErr(ed Editor) (*Component, error) {
 	}
 
 	c.openFileFn = func(filePath string,
-		buf *cell.Buffer, swapDir string) (flusherCloser, error) {
+		buf *cell.Buffer, swapDir string, readOnly bool) (flusherCloser, error) {
 		return &testFlusherCloser{}, nil
 	}
 	c.recoverFileFn = func(filePath, swapFilePath string,
@@ -211,7 +211,7 @@ func TestComponentOpen(t *testing.T) {
 		assert.True(t, ok)
 
 		c.openFileFn = func(filePath string,
-			buf *cell.Buffer, swapDir string) (flusherCloser, error) {
+			buf *cell.Buffer, swapDir string, readOnly bool) (flusherCloser, error) {
 			return nil, ErrFileAlreadyOpen
 		}
 
@@ -236,7 +236,7 @@ func TestComponentOpen(t *testing.T) {
 		c, _ := newTestComponentWithFile(t, "lmao")
 		myErr := errors.New("oopsie daisy")
 		c.openFileFn = func(filePath string,
-			buf *cell.Buffer, swapDir string) (flusherCloser, error) {
+			buf *cell.Buffer, swapDir string, readOnly bool) (flusherCloser, error) {
 			return nil, myErr
 		}
 
@@ -248,7 +248,7 @@ func TestComponentOpen(t *testing.T) {
 		filename := "wasup"
 		c, h1 := newTestComponentWithFile(t, filename)
 		c.openFileFn = func(filePath string,
-			buf *cell.Buffer, swapDir string) (flusherCloser, error) {
+			buf *cell.Buffer, swapDir string, readOnly bool) (flusherCloser, error) {
 			t.Log("should not call openFileFn")
 			t.Fail()
 			return nil, nil
@@ -283,7 +283,7 @@ func TestComponentEditorSubscriber(t *testing.T) {
 			"OpenFileTab->EventTypeOpen",
 			EventTypeOpen,
 			func(t *testing.T, c *Component, resourceName string) {
-				_, err := c.OpenFileTab(resourceName, "")
+				_, err := c.OpenFileTab(resourceName, "", false)
 				assert.NoError(t, err)
 			},
 			nil,
@@ -301,7 +301,7 @@ func TestComponentEditorSubscriber(t *testing.T) {
 			"Flush->EventTypeFlush",
 			EventTypeFlush,
 			func(t *testing.T, c *Component, resourceName string) {
-				_, err := c.OpenFileTab(resourceName, "")
+				_, err := c.OpenFileTab(resourceName, "", false)
 				require.NoError(t, err)
 
 				win, err := c.Focus()
@@ -315,7 +315,7 @@ func TestComponentEditorSubscriber(t *testing.T) {
 			"Browser.RemoveWindowContent->EventTypeClose",
 			EventTypeClose,
 			func(t *testing.T, c *Component, resourceName string) {
-				_, err := c.OpenFileTab(resourceName, "")
+				_, err := c.OpenFileTab(resourceName, "", false)
 				require.NoError(t, err)
 
 				win, err := c.Focus()
@@ -363,7 +363,7 @@ func TestComponentEditorSubscriber(t *testing.T) {
 			"Split->EventTypeFocus",
 			EventTypeFocus,
 			func(t *testing.T, c *Component, resourceName string) {
-				h, err := c.OpenFileTab(resourceName, "")
+				h, err := c.OpenFileTab(resourceName, "", false)
 				require.NoError(t, err)
 
 				_, err = c.Split(browser.OrientationBottom, h)
@@ -479,7 +479,7 @@ func TestComponentEditorSubscriber(t *testing.T) {
 			return nil
 		}}
 		c.openFileFn = func(filePath string,
-			buf *cell.Buffer, swapDir string) (flusherCloser, error) {
+			buf *cell.Buffer, swapDir string, readOnly bool) (flusherCloser, error) {
 			return &fc, nil
 		}
 
@@ -510,7 +510,7 @@ func TestComponentEditorSubscriber(t *testing.T) {
 			filename := "Toy Rory"
 
 			c.openFileFn = func(filePath string,
-				buf *cell.Buffer, swapDir string) (flusherCloser, error) {
+				buf *cell.Buffer, swapDir string, readOnly bool) (flusherCloser, error) {
 				buf.WriteString(content)
 				return &testFlusherCloser{}, nil
 			}
@@ -534,7 +534,7 @@ func TestComponentEditorSubscriber(t *testing.T) {
 		filename2 := "J2.txt"
 
 		c.openFileFn = func(filePath string,
-			buf *cell.Buffer, swapDir string) (flusherCloser, error) {
+			buf *cell.Buffer, swapDir string, readOnly bool) (flusherCloser, error) {
 			buf.WriteString(content)
 			return &testFlusherCloser{}, nil
 		}
@@ -564,22 +564,22 @@ func TestDispatchCommand(t *testing.T) {
 }
 
 func TestComponentEditor(t *testing.T) {
-		t.Run("returns tab with name as Handler", func(t *testing.T) {
-			myName := "/tmp/Ennio_Morricone.go"
-			c, h1 := newTestComponentWithFile(t, myName)
+	t.Run("returns tab with name as Handler", func(t *testing.T) {
+		myName := "/tmp/Ennio_Morricone.go"
+		c, h1 := newTestComponentWithFile(t, myName)
 
-			h2, err := c.Editor(myName)
-			assert.NoError(t, err)
-			assert.Equal(t, h1.(*browser.Tab).Handler(), h2)
-		})
+		h2, err := c.Editor(myName)
+		assert.NoError(t, err)
+		assert.Equal(t, h1.(*browser.Tab).Handler(), h2)
+	})
 
-		t.Run("returns error if no handler is found with name", func(t *testing.T) {
-			c := newTestComponent(t, &testEditor{})
+	t.Run("returns error if no handler is found with name", func(t *testing.T) {
+		c := newTestComponent(t, &testEditor{})
 
-			h, err := c.Editor("The sundown")
-			assert.Error(t, err)
-			assert.Nil(t, h)
-		})
+		h, err := c.Editor("The sundown")
+		assert.Error(t, err)
+		assert.Nil(t, h)
+	})
 }
 
 func TestComponentCommands(t *testing.T) {

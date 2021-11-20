@@ -29,7 +29,7 @@ var (
 		"forceWrite!":     (*Ex).forceFlush,
 		"forceQuit!":      (*Ex).forceQuit,
 		"quit":            (*Ex).forceQuit,
-		"edit":            (*Ex).openFileTab,
+		"edit":            (*Ex).editFile,
 	}
 )
 
@@ -214,12 +214,12 @@ func (e *Ex) runSingleCommand(cmd string) (quit bool, err error) {
 	return false, e.dispatchCommand(cmd)
 }
 
-func (e *Ex) openFileTab(args ...string) (bool, error) {
+func (e *Ex) editFile(args ...string) (bool, error) {
 	if len(args) == 0 {
 		return false, errors.New("Expected file name")
 	}
 	var h browser.Handler
-	h, err := e.comp.OpenFileTab(args[0], "")
+	h, err := e.comp.Open(args[0])
 	if err != nil {
 		return false, err
 	}

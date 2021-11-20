@@ -211,3 +211,10 @@ func WithCommandOverlayConfig(c CommandOverlayConfig) Option {
 		cfg.CommandOverlay = c
 	}
 }
+
+// WithPromptConfig sets the browser's prompt properties.
+func WithPromptConfig(c browser.PromptConfig) Option {
+	return func(cfg *Config) {
+		cfg.Config.PromptConfig = c
+	}
+}

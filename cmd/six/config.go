@@ -158,23 +158,86 @@ func (c ideConfig) commandOverlayHeight() (ret int) {
 	return
 }
 
-func (c ideConfig) getCommandAttr(
+func (c ideConfig) prompt() (plugin.Config, bool) {
+	b, ok := c.browser()
+	if !ok {
+		return nil, false
+	}
+	return c.getConfig(b, "prompt")
+}
+
+func (c ideConfig) promptWidth() (ret int) {
+	ret = browser.DefaultConfig().PromptConfig.Width
+	cfg, ok := c.prompt()
+	if !ok {
+		return
+	}
+	width, err := cfg.GetInt("width")
+	if err != nil {
+		if err != plugin.ErrNotFound {
+			c.errors["prompt.width"] = err
+		}
+		return
+	}
+	ret = width
+	return
+}
+
+func (c ideConfig) promptHeight() (ret int) {
+	ret = browser.DefaultConfig().PromptConfig.Height
+	cfg, ok := c.prompt()
+	if !ok {
+		return
+	}
+	height, err := cfg.GetInt("height")
+	if err != nil {
+		if err != plugin.ErrNotFound {
+			c.errors["prompt.height"] = err
+		}
+		return
+	}
+	ret = height
+	return
+}
+
+func (c ideConfig) getCfgAttr(
 	key string, def term.Attributes,
+	cfgKey string,
+	cfgFn func() (plugin.Config, bool),
 ) (attr term.Attributes) {
 	attr = def
-	cfg, ok := c.command()
+	cfg, ok := cfgFn()
 	if !ok {
 		return
 	}
 	cfgAttr, err := cfg.GetAttributes(key)
 	if err != nil {
 		if err != plugin.ErrNotFound {
-			c.errors["command."+key] = err
+			c.errors[cfgKey+"."+key] = err
 		}
 		return
 	}
 	attr = cfgAttr
 	return
+}
+
+func (c ideConfig) getCommandAttr(
+	key string, def term.Attributes) term.Attributes {
+	return c.getCfgAttr(key, def, "command", c.command)
+}
+
+func (c ideConfig) promptTextAttr() term.Attributes {
+	return c.getCfgAttr(
+		"text_attr", browser.DefaultConfig().TextAttr,
+		"prompt", c.prompt,
+	)
+}
+
+func (c ideConfig) promptHighlightAttr() term.Attributes {
+	return c.getCfgAttr(
+		"highlight_attr", browser.DefaultConfig().HighlightAttr,
+		"prompt", c.prompt,
+	)
 }
 
 func (c ideConfig) commandOverlayMatchedTextAttr() (ret term.Attributes) {
@@ -203,6 +266,15 @@ func (c ideConfig) commandOverlayConfig() editor.CommandOverlayConfig {
 		CountAttr:        c.commandOverlayCountAttr(),
 		FocusElementAttr: c.commandOverlayFocusElementAttr(),
 		ElementAttr:      c.commandOverlayElementAttr(),
+	}
+}
+
+func (c ideConfig) promptConfig() browser.PromptConfig {
+	return browser.PromptConfig{
+		Width:         c.promptWidth(),
+		Height:        c.promptHeight(),
+		TextAttr:      c.promptTextAttr(),
+		HighlightAttr: c.promptHighlightAttr(),
 	}
 }
 

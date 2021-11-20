@@ -53,7 +53,7 @@ func testFileBufferIntegration(t *testing.T, endsInEOL bool) {
 		filename := file.Name()
 		require.NoError(t, os.Remove(filename))
 
-		f, err := NewFileBuffer(filename, buf, "")
+		f, err := NewFileBuffer(filename, buf, "", false)
 		require.NoError(t, err)
 
 		_, err = os.Stat(filename)
@@ -63,6 +63,102 @@ func testFileBufferIntegration(t *testing.T, endsInEOL bool) {
 
 		_, err = os.Stat(filename)
 		require.NoError(t, err)
+	})
+
+	t.Run("if file does not exist and readOnly, error out", func(t *testing.T) {
+		buf := cell.NewBuffer()
+		file, err := ioutil.TempFile("", "frctl_file_test")
+		require.NoError(t, err)
+
+		// secure a random filename in a tmp directory
+		filename := file.Name()
+		require.NoError(t, os.Remove(filename))
+
+		_, err = NewFileBuffer(filename, buf, "", true)
+		require.Error(t, err)
+
+		_, err = os.Stat(filename)
+		require.Error(t, err)
+	})
+
+	t.Run("if readOnly, error out on flush", func(t *testing.T) {
+		buf := cell.NewBuffer()
+		file, err := ioutil.TempFile("", "frctl_file_test")
+		require.NoError(t, err)
+
+		filename := file.Name()
+		ioutil.WriteFile(filename, []byte("blah"), 0000)
+		require.NoError(t, file.Close())
+
+		f, err := NewFileBuffer(filename, buf, "", true)
+		require.NoError(t, err)
+		defer f.Close()
+
+		buf.WriteString("meh")
+		assert.Error(t, f.Flush())
+
+		data, err := ioutil.ReadFile(filename)
+		require.NoError(t, err)
+		assert.Equal(t, "blah", string(data))
+	})
+
+	t.Run("if readOnly no swap files are initialized", func(t *testing.T) {
+		buf := cell.NewBuffer()
+		file, err := ioutil.TempFile("", "frctl_file_test")
+		require.NoError(t, err)
+
+		filename := file.Name()
+		require.NoError(t, file.Close())
+
+		swapDir, err := ioutil.TempDir("", "")
+		require.NoError(t, err)
+
+		f, err := NewFileBuffer(filename, buf, swapDir, true)
+		require.NoError(t, err)
+		defer f.Close()
+
+		_, swapFileName := swapFileName(swapDir, file.Name())
+
+		_, err = os.Stat(swapFileName)
+		require.Error(t, err)
+	})
+
+	t.Run("if readOnly it doesn't error out if file is already open", func(t *testing.T) {
+		buf := cell.NewBuffer()
+		file, err := ioutil.TempFile("", "frctl_file_test")
+		require.NoError(t, err)
+
+		filename := file.Name()
+		require.NoError(t, file.Close())
+
+		f1, err := NewFileBuffer(filename, buf, "", false)
+		require.NoError(t, err)
+		defer f1.Close()
+
+		f2, err := NewFileBuffer(filename, buf, "", true)
+		require.NoError(t, err)
+		defer f2.Close()
+	})
+
+	t.Run("if swap holding buffer is closed, then NewFileBuffer should NOT error out", func(t *testing.T) {
+		buf := cell.NewBuffer()
+		file, err := ioutil.TempFile("", "frctl_file_test")
+		require.NoError(t, err)
+
+		filename := file.Name()
+		require.NoError(t, file.Close())
+
+		f1, err := NewFileBuffer(filename, buf, "", false)
+		require.NoError(t, err)
+
+		_, err = NewFileBuffer(filename, buf, "", false)
+		require.Error(t, err)
+
+		assert.NoError(t, f1.Close())
+
+		f2, err := NewFileBuffer(filename, buf, "", false)
+		require.NoError(t, err)
+		assert.NoError(t, f2.Close())
 	})
 
 	t.Run("respects original file mode", func(t *testing.T) {
@@ -76,7 +172,7 @@ func testFileBufferIntegration(t *testing.T, endsInEOL bool) {
 		require.NoError(t, err)
 		require.NoError(t, file.Close())
 
-		f, err := NewFileBuffer(filename, buf, "")
+		f, err := NewFileBuffer(filename, buf, "", false)
 		require.NoError(t, err)
 
 		fileInfo, err := os.Stat(filename)
@@ -95,7 +191,7 @@ func testFileBufferIntegration(t *testing.T, endsInEOL bool) {
 		rand.Seed(int64(time.Now().Nanosecond()))
 		filename := fmt.Sprintf("/tmp/mpo/tmp/tmp/tmp/tmp/%d.go", rand.Int())
 
-		f, err := NewFileBuffer(filename, buf, os.TempDir())
+		f, err := NewFileBuffer(filename, buf, os.TempDir(), false)
 		require.NoError(t, err)
 
 		_, err = os.Stat(filename)
@@ -111,12 +207,12 @@ func testFileBufferIntegration(t *testing.T, endsInEOL bool) {
 		swapDir, err := ioutil.TempDir("", "")
 		require.NoError(t, err)
 
-		swapFileName := path.Join(swapDir, makeSwapFileName(filepath.Base(file.Name())))
+		_, swapFileName := swapFileName(swapDir, file.Name())
 
 		_, err = os.Stat(swapFileName)
 		require.Error(t, err)
 
-		f, err := NewFileBuffer(file.Name(), b, swapDir)
+		f, err := NewFileBuffer(file.Name(), b, swapDir, false)
 		require.NoError(t, err)
 
 		_, err = os.Stat(swapFileName)
@@ -132,7 +228,7 @@ func testFileBufferIntegration(t *testing.T, endsInEOL bool) {
 		b, file, cleanup := newIntegrationTestCase(t, endsInEOL)
 		defer cleanup()
 
-		f, err := NewFileBuffer(file.Name(), b, "")
+		f, err := NewFileBuffer(file.Name(), b, "", false)
 		require.NoError(t, err)
 
 		defer f.Close()
@@ -158,7 +254,7 @@ func testFileBufferIntegration(t *testing.T, endsInEOL bool) {
 		b, file, cleanup := newIntegrationTestCase(t, endsInEOL)
 		defer cleanup()
 
-		f, err := NewFileBuffer(file.Name(), b, "")
+		f, err := NewFileBuffer(file.Name(), b, "", false)
 		require.NoError(t, err)
 		defer f.Close()
 
@@ -179,11 +275,11 @@ func testFileBufferIntegration(t *testing.T, endsInEOL bool) {
 		swapDir, err := ioutil.TempDir("", "")
 		require.NoError(t, err)
 
-		f, err := NewFileBuffer(file.Name(), b, swapDir)
+		f, err := NewFileBuffer(file.Name(), b, swapDir, false)
 		require.NoError(t, err)
 		defer f.Close()
 
-		_, err = NewFileBuffer(file.Name(), b, swapDir)
+		_, err = NewFileBuffer(file.Name(), b, swapDir, false)
 		assert.Equal(t, ErrFileAlreadyOpen, err)
 	})
 }
@@ -260,6 +356,32 @@ func TestFileBufferRecover(t *testing.T) {
 		filepath, swapFilepath := file.Name(), swap.Name()
 		_, err := RecoverFileBuffer(filepath, swapFilepath, b)
 		require.Equal(t, ErrStaleData, err)
+	})
+
+	t.Run("if a recover buffer takes over swap, it should now allow for other NewFileBuffer to open it", func(t *testing.T) {
+		b, file, _, cleanup := newRecoveryIntegrationCase(t)
+		defer cleanup()
+
+		swapDir := filepath.Dir(file.Name())
+
+		f1, err := NewFileBuffer(file.Name(), b, swapDir, false)
+		require.NoError(t, err)
+		defer f1.Close()
+
+		// checking update time is time based
+		time.Sleep(10 * time.Millisecond)
+
+		b2 := cell.NewBuffer()
+		f2, err := RecoverFileBuffer(file.Name(), f1.swapFileName, b2)
+		require.NoError(t, err)
+		defer f2.Close()
+
+		time.Sleep(10 * time.Millisecond)
+
+		require.Equal(t, ErrStaleData, f1.Flush())
+
+		_, err = NewFileBuffer(file.Name(), b, swapDir, false)
+		require.Error(t, err)
 	})
 }
 
@@ -369,7 +491,7 @@ func TestFileBufferInit(t *testing.T) {
 		expectInitSwap(mock, fileName, fileInfo, data)
 		expectInitBuffer(mock, data)
 
-		assert.NoError(t, f.Init(fileName, cell.NewBuffer(), ""))
+		assert.NoError(t, f.Init(fileName, cell.NewBuffer(), "", false))
 	})
 
 	t.Run("is able to use a regular file", func(t *testing.T) {
@@ -384,7 +506,7 @@ func TestFileBufferInit(t *testing.T) {
 		expectInitSwap(mock, fileName, fileInfo, data)
 		expectInitBuffer(mock, data)
 
-		assert.NoError(t, f.Init(fileName, cell.NewBuffer(), ""))
+		assert.NoError(t, f.Init(fileName, cell.NewBuffer(), "", false))
 	})
 
 	t.Run("returns error if original file is not regular or symlink file", func(t *testing.T) {
@@ -394,7 +516,7 @@ func TestFileBufferInit(t *testing.T) {
 		f, mock := newTestFileBuffer(ctrl)
 		mock.EXPECT().Stat().Return(testFileInfo{mode: os.ModeSocket}, nil)
 
-		assert.Equal(t, ErrFileIsNotRegular, f.Init("fjkelw", cell.NewBuffer(), ""))
+		assert.Equal(t, ErrFileIsNotRegular, f.Init("fjkelw", cell.NewBuffer(), "", false))
 	})
 
 	t.Run("returns error if original file is directory", func(t *testing.T) {
@@ -404,7 +526,7 @@ func TestFileBufferInit(t *testing.T) {
 		f, mock := newTestFileBuffer(ctrl)
 		mock.EXPECT().Stat().Return(testFileInfo{isDir: true}, nil)
 
-		assert.Equal(t, ErrFileIsNotRegular, f.Init("fjkelw", cell.NewBuffer(), ""))
+		assert.Equal(t, ErrFileIsNotRegular, f.Init("fjkelw", cell.NewBuffer(), "", false))
 	})
 
 	t.Run("bubble up original file open error", func(t *testing.T) {
@@ -413,7 +535,7 @@ func TestFileBufferInit(t *testing.T) {
 		f.openFunc = func(name string, flag int, perm os.FileMode) (OsFile, error) {
 			return nil, accessDeniedErr
 		}
-		assert.Equal(t, accessDeniedErr, f.Init("fjkelw", cell.NewBuffer(), ""))
+		assert.Equal(t, accessDeniedErr, f.Init("fjkelw", cell.NewBuffer(), "", false))
 	})
 
 	t.Run("bubble up swap file open error", func(t *testing.T) {
@@ -437,7 +559,7 @@ func TestFileBufferInit(t *testing.T) {
 		origFileMock.EXPECT().Stat().Return(testFileInfo{}, nil)
 		origFileMock.EXPECT().Name().Return(fileName).AnyTimes()
 
-		assert.Equal(t, accessDeniedErr, f.Init(fileName, cell.NewBuffer(), ""))
+		assert.Equal(t, accessDeniedErr, f.Init(fileName, cell.NewBuffer(), "", false))
 	})
 }
 
@@ -452,7 +574,7 @@ func newInitializedTestFileBuffer(t *testing.T, ctrl *gomock.Controller) (
 	expectInitSwap(mock, defaultFileName, testFileInfo{}, defaultFileData)
 	expectInitBuffer(mock, defaultFileData)
 	buf := cell.NewBuffer()
-	require.NoError(t, f.Init(defaultFileName, buf, ""))
+	require.NoError(t, f.Init(defaultFileName, buf, "", false))
 	return f, mock, buf
 }
 
@@ -470,7 +592,7 @@ func newUninitializedTestFileBuffer(t *testing.T, ctrl *gomock.Controller) (
 	mock.EXPECT().Name().Return(defaultFileName).AnyTimes()
 
 	buf := cell.NewBuffer()
-	require.NoError(t, f.Init(defaultFileName, buf, ""))
+	require.NoError(t, f.Init(defaultFileName, buf, "", false))
 	return f, mock, buf
 }
 
@@ -491,7 +613,7 @@ func newReadOnlyTestFileBuffer(t *testing.T, ctrl *gomock.Controller) (
 	mock.EXPECT().Seek(gomock.Eq(int64(0)), gomock.Eq(0)).Return(int64(0), nil)
 
 	buf := cell.NewBuffer()
-	require.NoError(t, f.Init(defaultFileName, buf, ""))
+	require.NoError(t, f.Init(defaultFileName, buf, "", false))
 	return f, mock, buf
 }
 
@@ -520,7 +642,7 @@ func testFileBufferClose(t *testing.T, newBuffer newBufferFunc) {
 
 		expectInitSwap(mock, defaultFileName, testFileInfo{}, defaultFileData)
 		expectInitBuffer(mock, defaultFileData)
-		assert.NoError(t, f.Init(defaultFileName, cell.NewBuffer(), ""))
+		assert.NoError(t, f.Init(defaultFileName, cell.NewBuffer(), "", false))
 	})
 
 	t.Run("two consecutive calls to Close should return an error", func(t *testing.T) {
@@ -577,8 +699,7 @@ func TestFileNotCreatedBufferClose(t *testing.T) {
 
 		mock.EXPECT().Close().Return(nil).Times(1)
 		assert.NoError(t, f.Close())
-
-		assert.NoError(t, f.Init(defaultFileName, cell.NewBuffer(), ""))
+		assert.NoError(t, f.Init(defaultFileName, cell.NewBuffer(), "", false))
 	})
 
 	t.Run("two consecutive calls to Close should return an error", func(t *testing.T) {
