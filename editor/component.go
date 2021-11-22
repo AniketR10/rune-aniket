@@ -201,7 +201,7 @@ func (c *Component) newFileBuffer(
 // Init initializes this Component with the given editor and Options.
 // It returns an error if an initial filepath was given through WithFilePath option
 // and the file failed to be opened.
-func (c *Component) Init(ed Editor, config Config) (err error) {
+func (c *Component) Init(ed Editor, config Config) error {
 	c.initConstructors()
 	c.config = config
 
@@ -212,26 +212,38 @@ func (c *Component) Init(ed Editor, config Config) (err error) {
 	c.edSubscribers = make(map[EventType][]EventHandler)
 	c.cmdSubscribers = make(map[string]CommandHandler)
 
+	var first browser.Handler
+
 	if c.config.RecoveryFilepath != "" {
 		if len(c.config.Filepaths) != 1 {
 			return errors.New("only one file expected if recovery file is passed")
 		}
-		_, err = c.OpenFileTab(c.config.Filepaths[0], c.config.RecoveryFilepath, false)
-		return
+		h, err := c.OpenFileTab(c.config.Filepaths[0], c.config.RecoveryFilepath, false)
+		if err != nil {
+			return err
+		}
+		first = h
 	}
 
 	for _, filename := range c.config.Filepaths {
-		_, err = c.Open(filename)
+		h, err := c.Open(filename)
 		if err == ErrFileAlreadyOpen {
 			// handled via user Prompt
 			err = nil
 		}
 		if err != nil {
-			return
+			return err
+		}
+		if first == nil {
+			first = h
 		}
 	}
 
-	return
+	if first != nil {
+		return c.comp.Focus().SetContent(first)
+	}
+
+	return nil
 }
 
 func (c *Component) setFocusToTab(t *browser.Tab) (browser.Handler, error) {
@@ -327,21 +339,26 @@ an edit session for this file crashed.`, file)
 	c.comp.Prompt(msg, []string{recoverOpt, readOnlyOpt, skipOpt},
 		[]term.Event{{Ch: 'R'}, {Ch: 'O'}, {Ch: 'S'}},
 		func(i int, opt string) {
+
+			var h browser.Handler
 			var err error
+
 			switch opt {
 			case recoverOpt:
 				file, _ = getFileID(file) // to get right swap file name
 				_, swapFileName := swapFileName(c.config.SwapDir, file)
-				_, err = c.OpenFileTab(file, swapFileName, false)
+				h, err = c.OpenFileTab(file, swapFileName, false)
 			case readOnlyOpt:
-				_, err = c.OpenFileTab(file, "", true)
+				h, err = c.OpenFileTab(file, "", true)
 			case skipOpt:
 			}
+			if h != nil {
+				err = c.comp.Focus().SetContent(h)
+			}
 			if err != nil {
-				if c.config.Logger != nil {
-					c.config.Logger.Errorf("recovery prompt: %v", err)
-				}
+				c.tryLog(log.ErrorLevel, "recovery prompt: %v", err)
 				c.SetMessage("%v", err)
+				return
 			}
 		})
 }

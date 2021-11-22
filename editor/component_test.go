@@ -301,11 +301,13 @@ func TestComponentEditorSubscriber(t *testing.T) {
 			"Flush->EventTypeFlush",
 			EventTypeFlush,
 			func(t *testing.T, c *Component, resourceName string) {
-				_, err := c.OpenFileTab(resourceName, "", false)
+				h, err := c.OpenFileTab(resourceName, "", false)
 				require.NoError(t, err)
 
 				win, err := c.Focus()
 				require.NoError(t, err)
+
+				require.NoError(t, win.SetContent(h))
 
 				assert.NoError(t, c.Flush(win))
 			},
@@ -315,11 +317,13 @@ func TestComponentEditorSubscriber(t *testing.T) {
 			"Browser.RemoveWindowContent->EventTypeClose",
 			EventTypeClose,
 			func(t *testing.T, c *Component, resourceName string) {
-				_, err := c.OpenFileTab(resourceName, "", false)
+				h, err := c.OpenFileTab(resourceName, "", false)
 				require.NoError(t, err)
 
 				win, err := c.Focus()
 				require.NoError(t, err)
+
+				require.NoError(t, win.SetContent(h))
 
 				c.Browser().RemoveWindowContent(win)
 			},
@@ -351,11 +355,15 @@ func TestComponentEditorSubscriber(t *testing.T) {
 			nil,
 		},
 		{
-			"Open->EventTypeFocus",
+			"Window.SetContent->EventTypeFocus",
 			EventTypeFocus,
 			func(t *testing.T, c *Component, resourceName string) {
-				_, err := c.Open(resourceName)
+				h, err := c.Open(resourceName)
 				assert.NoError(t, err)
+
+				win, err := c.Focus()
+				require.NoError(t, err)
+				require.NoError(t, win.SetContent(h))
 			},
 			nil,
 		},
@@ -375,14 +383,19 @@ func TestComponentEditorSubscriber(t *testing.T) {
 			},
 		},
 		{
-			"SubscribeOpen->EventTypeFocus",
+			"SetContent->EventTypeFocus",
 			EventTypeFocus,
 			func(t *testing.T, c *Component, resourceName string) {
 				// SubscribeEditor should trigger it
 			},
 			func(t *testing.T, c *Component, resourceName string) {
-				_, err := c.Open(resourceName)
+				h, err := c.Open(resourceName)
 				require.NoError(t, err)
+
+				win, err := c.Focus()
+				require.NoError(t, err)
+
+				require.NoError(t, win.SetContent(h))
 			},
 		},
 		{
@@ -460,7 +473,6 @@ func TestComponentEditorSubscriber(t *testing.T) {
 				return true
 			}))
 
-			tcase.trigger(t, c, filename)
 			tcase.trigger(t, c, filename)
 			assert.Equal(t, 1, fired)
 		})

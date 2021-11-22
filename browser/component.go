@@ -216,7 +216,6 @@ func (c *Component) NewTab(id, name string, h tui.Handler, f io.Closer) *Tab {
 	t := newTab(c, id, h, f)
 	c.buffers = append(c.buffers, t)
 	c.tabs.Add(name)
-	c.setFocusIfStartHandler(t)
 	return t
 }
 
@@ -262,15 +261,6 @@ func (c *Component) Tabs() (ret []*Tab) {
 		ret[i] = b
 	}
 	return
-}
-
-func (c *Component) setFocusIfStartHandler(t *Tab) {
-	win := c.focus()
-
-	h := win.win.Content()
-	if h == c.startHandler {
-		win.SetContent(t)
-	}
 }
 
 func (c *Component) closeTab(t *Tab) error {

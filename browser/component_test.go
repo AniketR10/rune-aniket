@@ -183,10 +183,8 @@ func TestComponentSetContent(t *testing.T) {
 			win0 := c.Focus()
 			christmasTab := c.NewTab("Merry Christmas", "Merry Christmas", NewTestHandler(), nil)
 
-			// if component is rendering start text, then first call
-			// to NewTab should set the content to the new tab
-			assertFreeTab(t, christmasTab, false)
-			require.Error(t, win0.SetContent(christmasTab))
+			assertFreeTab(t, christmasTab, true)
+			require.NoError(t, win0.SetContent(christmasTab))
 			assertFreeTab(t, christmasTab, false)
 			assertWindowContent(t, win0, christmasTab)
 			assert.False(t, c.UpdateWindowTabNext(win0))

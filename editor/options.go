@@ -19,7 +19,7 @@ type CommandOverlayConfig struct {
 	ElementAttr      term.Attributes
 }
 
-// Config holds configuration for an browser.Component.
+// Config holds configuration for an editor.Component.
 type Config struct {
 	Tabspaces          int
 	SwapDir            string
