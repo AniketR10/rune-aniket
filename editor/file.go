@@ -10,6 +10,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"time"
 
 	"github.com/ernestrc/go-tui/cell"
 	"github.com/ernestrc/go-tui/term"
@@ -39,25 +40,30 @@ type statFunc func(name string) (os.FileInfo, error)
 // FileBuffer is a struture which persists all updates to a swap file
 // and exposes methods to effectively fsync the contents to disk.
 type FileBuffer struct {
-	openFunc     openFunc
-	removeFunc   removeFunc
-	renameFunc   renameFunc
-	statFunc     statFunc
-	swapDir      string
-	swapFileName string
-	fileName     string
-	info         os.FileInfo
-	orig, swap   OsFile
-	reader       cell.PublisherReader
-	delayedError error
-	unflushed    bool
+	openFunc        openFunc
+	removeFunc      removeFunc
+	renameFunc      renameFunc
+	statFunc        statFunc
+	swapDir         string
+	swapFileName    string
+	fileName        string
+	readOnly        bool
+	infoModTime     time.Time
+	swapInfoModTime time.Time
+	orig, swap      OsFile
+	reader          cell.PublisherReader
+	delayedError    error
+	unflushed       bool
 }
 
 // FileBuffer cell.Writer API should not be used publicly
 type fileBuf FileBuffer
 
-func makeSwapFileName(filename string) string {
-	return fmt.Sprintf(".%s.swp", filename)
+func swapFileName(swapDir, filePath string) (string, string) {
+	if swapDir == "" {
+		swapDir = filepath.Dir(filePath)
+	}
+	return swapDir, path.Join(swapDir, fmt.Sprintf(".%s.swp", filepath.Base(filePath)))
 }
 
 func (f *FileBuffer) initSwap(swapDir string, orig OsFile, origPerms os.FileMode) (OsFile, error) {
@@ -124,10 +130,13 @@ func (f *FileBuffer) openFile(filePath string, flag int) (
 	return
 }
 
-func (f *FileBuffer) initFiles(filePath, swapDir string) error {
-	readOnly := false
-	file, fileInfo, err := f.openFile(filePath, os.O_RDWR)
-	if err != nil && os.IsNotExist(err) {
+func (f *FileBuffer) initFiles(filePath, swapDir string, readOnly bool) error {
+	flag := os.O_RDWR
+	if readOnly {
+		flag = os.O_RDONLY
+	}
+	file, fileInfo, err := f.openFile(filePath, flag)
+	if err != nil && os.IsNotExist(err) && !readOnly {
 		// delegate opening file to Flush
 		err = nil
 	}
@@ -143,29 +152,36 @@ func (f *FileBuffer) initFiles(filePath, swapDir string) error {
 		return err
 	}
 
-	if swapDir == "" {
-		swapDir = filepath.Dir(filePath)
-	}
-
-	if f.swapFileName == "" {
-		f.swapFileName = path.Join(swapDir, makeSwapFileName(filepath.Base(filePath)))
-	}
-
 	if !readOnly {
+		swapDir, swapFileName := swapFileName(swapDir, filePath)
+		if f.swapFileName == "" {
+			f.swapFileName = swapFileName
+		}
+
 		mode := os.FileMode(defaultFileMode)
 		if fileInfo != nil {
 			mode = fileInfo.Mode()
 		}
-		f.swap, err = f.initSwap(swapDir, file, mode)
+		swap, err := f.initSwap(swapDir, file, mode)
 		if err != nil {
 			return err
 		}
+		// store swapInfo so we can check update times at Flush
+		swapInfo, err := f.statFunc(swap.Name())
+		if err != nil {
+			return err
+		}
+		f.swap = swap
+		f.swapInfoModTime = swapInfo.ModTime()
+		f.swapDir = swapDir
 	}
 
 	f.orig = file
-	f.info = fileInfo
+	if fileInfo != nil {
+		f.infoModTime = fileInfo.ModTime()
+	}
 	f.fileName = filePath
-	f.swapDir = swapDir
+	f.readOnly = readOnly
 
 	return nil
 }
@@ -205,7 +221,8 @@ func (f *FileBuffer) recoverFile(filePath, swapFilePath string, buf *cell.Buffer
 	}
 
 	f.swap = swap
-	f.info = swapFileInfo
+	f.infoModTime = swapFileInfo.ModTime()
+	f.swapInfoModTime = swapFileInfo.ModTime()
 	f.swapFileName = swapFilePath
 	f.swapDir = filepath.Dir(swapFilePath)
 	f.fileName = filePath
@@ -257,8 +274,10 @@ func RecoverFileBuffer(filePath, swapFilePath string, buf *cell.Buffer) (
 // Init instantiates opens the file at filePath and initializes
 // buf with the contents of it. If swapDir is "", then filePath directory is
 // used as a swap directory
-func (f *FileBuffer) Init(filePath string, buf *cell.Buffer, swapDir string) error {
-	err := f.initFiles(filePath, swapDir)
+func (f *FileBuffer) Init(
+	filePath string, buf *cell.Buffer, swapDir string, readOnly bool,
+) error {
+	err := f.initFiles(filePath, swapDir, readOnly)
 	if err != nil {
 		return err
 	}
@@ -273,12 +292,14 @@ func (f *FileBuffer) Init(filePath string, buf *cell.Buffer, swapDir string) err
 }
 
 // NewFileBuffer allocates store for a new FileBuffer and then calls Init.
-func NewFileBuffer(filePath string, buf *cell.Buffer, swapDir string) (
+func NewFileBuffer(
+	filePath string, buf *cell.Buffer, swapDir string, readOnly bool,
+) (
 	*FileBuffer, error,
 ) {
 	ret := newOsFileBuffer()
 
-	err := ret.Init(filePath, buf, swapDir)
+	err := ret.Init(filePath, buf, swapDir, readOnly)
 	if err != nil {
 		return nil, err
 	}
@@ -322,6 +343,7 @@ func (f *fileBuf) copyFlushSwapFile() (ok bool) {
 		return
 	}
 
+	f.swapInfoModTime = time.Now()
 	ok = true
 	return
 }
@@ -399,9 +421,17 @@ func (f *FileBuffer) Flush() error {
 		if err != nil {
 			return err
 		}
-		if newFileInfo.ModTime().After(f.info.ModTime()) {
+		if newFileInfo.ModTime().After(f.infoModTime) {
 			return ErrStaleData
 		}
+	}
+
+	newSwapInfo, err := f.statFunc(f.swap.Name())
+	if err != nil {
+		return err
+	}
+	if newSwapInfo.ModTime().After(f.swapInfoModTime) {
+		return ErrStaleData
 	}
 
 	err = f.moveFile(f.swap.Name(), f.orig.Name())
@@ -414,7 +444,7 @@ func (f *FileBuffer) Flush() error {
 	_ = f.orig.Close()
 	_ = f.swap.Close()
 
-	err = f.initFiles(f.fileName, f.swapDir)
+	err = f.initFiles(f.fileName, f.swapDir, f.readOnly)
 	if err != nil {
 		return err
 	}
@@ -436,7 +466,14 @@ func (f *FileBuffer) Close() error {
 	if f.swap != nil {
 		swapFileName := f.swap.Name()
 		err2 = f.swap.Close()
-		err3 = f.removeFunc(swapFileName)
+
+		newSwapInfo, err := f.statFunc(f.swap.Name())
+		if err != nil {
+			return err
+		}
+		if !newSwapInfo.ModTime().After(f.swapInfoModTime) {
+			err3 = f.removeFunc(swapFileName)
+		}
 		f.swap = nil
 	}
 

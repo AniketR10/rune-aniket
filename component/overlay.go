@@ -14,18 +14,18 @@ type Overlay struct {
 
 // NewOverlay allocates storage for a new overlay and initializes it.
 func NewOverlay(
-	background, cover tui.Component, attr term.Attributes, config SpanConfig,
+	background, cover tui.Component, backAttr term.Attributes, config SpanConfig,
 ) *Overlay {
 	ret := new(Overlay)
-	ret.Init(background, cover, attr, config)
+	ret.Init(background, cover, backAttr, config)
 	return ret
 }
 
 func (o *Overlay) Init(
-	background, cover tui.Component, attr term.Attributes, config SpanConfig,
+	background, cover tui.Component, backAttr term.Attributes, config SpanConfig,
 ) {
 	// clean cells before drawing on top
-	cover = WithBackground(cover, term.Cell{Fg: attr.Fg, Bg: attr.Bg})
+	cover = WithBackground(cover, term.Cell{Fg: backAttr.Fg, Bg: backAttr.Bg})
 
 	o.Span.Init(cover, config)
 	o.background = background

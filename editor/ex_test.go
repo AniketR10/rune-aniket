@@ -144,7 +144,7 @@ func (t *testFileBuffer) Close() error {
 	return t.closeErr
 }
 
-func openTestFile(filePath string, buf *cell.Buffer, swapDir string) (
+func openTestFile(filePath string, buf *cell.Buffer, swapDir string, readOnly bool) (
 	flusherCloser, error,
 ) {
 	return &testFileBuffer{}, nil
@@ -153,7 +153,7 @@ func openTestFile(filePath string, buf *cell.Buffer, swapDir string) (
 func recoverTestFile(filePath, swapFilePath string, buf *cell.Buffer) (
 	flusherCloser, error,
 ) {
-	return openTestFile(filePath, buf, "")
+	return openTestFile(filePath, buf, "", false)
 }
 
 func newTestBrowserHandler() *Ex {

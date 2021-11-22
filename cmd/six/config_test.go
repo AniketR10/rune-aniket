@@ -69,6 +69,14 @@ output_mode: color_256
 browser:
     tabspaces: 4
     swap_dir: /tmp/util
+    prompt:
+        width: 20
+        height: 10
+        text_attr:
+            fg: cyan
+        highlight_attr:
+            bg: red
+            fg: 219
     window_manager:
         frame: true
         frame_attr:
@@ -144,4 +152,12 @@ browser:
 	assert.Equal(t, term.Attributes{Fg: term.ColorWhite}, cfg.nonFocusTabAttr())
 	assert.Equal(t, term.Attributes{Fg: term.ColorYellow, Bg: term.ColorWhite}, cfg.startTextAttr())
 	assert.Equal(t, term.Attributes{Bg: term.ColorWhite}, cfg.startTextBackgroundAttr())
+
+	expectedPrompt := browser.PromptConfig{
+		Width: 20,
+		Height: 10,
+		TextAttr: term.Attributes{Fg: term.ColorCyan},
+		HighlightAttr: term.Attributes{Fg: 219, Bg: term.ColorRed},
+	}
+	assert.Equal(t, expectedPrompt, cfg.promptConfig())
 }

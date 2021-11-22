@@ -164,13 +164,14 @@ func (h *fuzzyFinderHandler) setContent(name string, b browser.Handler, pos term
 }
 
 func (h *fuzzyFinderHandler) setMessage(msg string, args ...interface{}) error {
-	h.mu.Unlock()
-	defer h.mu.Lock()
-
 	// allow browser messenger permission to be denied
 	if h.m == nil {
 		return nil
 	}
+
+	h.mu.Unlock()
+	defer h.mu.Lock()
+
 	return h.m.SetMessage(msg, args...)
 }
 
@@ -230,10 +231,12 @@ func (h *fuzzyFinderHandler) scanData() {
 	h.readCommand(out)
 
 	err = exec.Wait()
+
 	h.mu.Lock()
+	defer h.mu.Unlock()
+
 	killed := h.killed
 	h.exec = nil
-	h.mu.Unlock()
 
 	if !killed && err != nil {
 		merr := h.setMessage("failed to execute '%s': %v", h.cmdStr, err)

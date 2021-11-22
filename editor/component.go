@@ -32,7 +32,7 @@ var (
 )
 
 type openFileFunc func(filePath string,
-	buf *cell.Buffer, swapDir string) (flusherCloser, error)
+	buf *cell.Buffer, swapDir string, readOnly bool) (flusherCloser, error)
 
 type recoverFileFunc func(filePath,
 	swapFilePath string, buf *cell.Buffer) (flusherCloser, error)
@@ -122,8 +122,8 @@ func NewComponent(ed Editor, config Config) (c *Component, err error) {
 func (c *Component) initConstructors() {
 	if c.openFileFn == nil {
 		c.openFileFn = func(filePath string,
-			buf *cell.Buffer, swapDir string) (flusherCloser, error) {
-			return NewFileBuffer(filePath, buf, swapDir)
+			buf *cell.Buffer, swapDir string, readOnly bool) (flusherCloser, error) {
+			return NewFileBuffer(filePath, buf, swapDir, readOnly)
 		}
 	}
 
@@ -172,13 +172,13 @@ func (c *Component) setTabAttr(id string, buf *cell.Buffer, lastFlush string) {
 }
 
 func (c *Component) newFileBuffer(
-	filename, recSwapFile string, buf *cell.Buffer,
+	filename, recSwapFile string, buf *cell.Buffer, readOnly bool,
 ) (ret *editorFlusherCloser, err error) {
 	var fc flusherCloser
 	if recSwapFile != "" {
 		fc, err = c.recoverFileFn(filename, recSwapFile, buf)
 	} else {
-		fc, err = c.openFileFn(filename, buf, c.config.SwapDir)
+		fc, err = c.openFileFn(filename, buf, c.config.SwapDir, readOnly)
 	}
 
 	if err != nil {
@@ -201,7 +201,7 @@ func (c *Component) newFileBuffer(
 // Init initializes this Component with the given editor and Options.
 // It returns an error if an initial filepath was given through WithFilePath option
 // and the file failed to be opened.
-func (c *Component) Init(ed Editor, config Config) (err error) {
+func (c *Component) Init(ed Editor, config Config) error {
 	c.initConstructors()
 	c.config = config
 
@@ -212,22 +212,38 @@ func (c *Component) Init(ed Editor, config Config) (err error) {
 	c.edSubscribers = make(map[EventType][]EventHandler)
 	c.cmdSubscribers = make(map[string]CommandHandler)
 
+	var first browser.Handler
+
 	if c.config.RecoveryFilepath != "" {
 		if len(c.config.Filepaths) != 1 {
 			return errors.New("only one file expected if recovery file is passed")
 		}
-		_, err = c.OpenFileTab(c.config.Filepaths[0], c.config.RecoveryFilepath)
-		return
+		h, err := c.OpenFileTab(c.config.Filepaths[0], c.config.RecoveryFilepath, false)
+		if err != nil {
+			return err
+		}
+		first = h
 	}
 
 	for _, filename := range c.config.Filepaths {
-		_, err = c.OpenFileTab(filename, "")
+		h, err := c.Open(filename)
+		if err == ErrFileAlreadyOpen {
+			// handled via user Prompt
+			err = nil
+		}
 		if err != nil {
-			return
+			return err
+		}
+		if first == nil {
+			first = h
 		}
 	}
 
-	return
+	if first != nil {
+		return c.comp.Focus().SetContent(first)
+	}
+
+	return nil
 }
 
 func (c *Component) setFocusToTab(t *browser.Tab) (browser.Handler, error) {
@@ -277,7 +293,7 @@ func (s compTabSubscriber) OnFree(t *browser.Tab) {
 // If recoveryFilename is not empty, then the file will be recovered from the
 // contents of recoveryFilename.
 func (c *Component) OpenFileTab(
-	filename, recoveryFilename string,
+	filename, recoveryFilename string, readOnly bool,
 ) (browser.Handler, error) {
 	filename, err := getFileID(filename)
 	if err != nil {
@@ -290,7 +306,7 @@ func (c *Component) OpenFileTab(
 	}
 
 	buf := c.newCellBuffer()
-	fc, err := c.newFileBuffer(filename, recoveryFilename, buf)
+	fc, err := c.newFileBuffer(filename, recoveryFilename, buf, readOnly)
 	if err != nil {
 		return nil, err
 	}
@@ -309,9 +325,53 @@ func (c *Component) OpenFileTab(
 	return t, nil
 }
 
-// Open opens the given file in a new browser tab.
+func (c *Component) openRecoveryPrompt(file string) {
+	const (
+		recoverOpt  = "Recover"
+		readOnlyOpt = "Open Read-Only"
+		skipOpt     = "Skip"
+	)
+
+	msg := fmt.Sprintf(`File %s is already
+open by another process or
+an edit session for this file crashed.`, file)
+
+	c.comp.Prompt(msg, []string{recoverOpt, readOnlyOpt, skipOpt},
+		[]term.Event{{Ch: 'R'}, {Ch: 'O'}, {Ch: 'S'}},
+		func(i int, opt string) {
+
+			var h browser.Handler
+			var err error
+
+			switch opt {
+			case recoverOpt:
+				file, _ = getFileID(file) // to get right swap file name
+				_, swapFileName := swapFileName(c.config.SwapDir, file)
+				h, err = c.OpenFileTab(file, swapFileName, false)
+			case readOnlyOpt:
+				h, err = c.OpenFileTab(file, "", true)
+			case skipOpt:
+			}
+			if h != nil {
+				err = c.comp.Focus().SetContent(h)
+			}
+			if err != nil {
+				c.tryLog(log.ErrorLevel, "recovery prompt: %v", err)
+				c.SetMessage("%v", err)
+				return
+			}
+		})
+}
+
+// Open opens the given file in a new browser tab. If file is already
+// open by another session or the last edit session crashed, it
+// will create a prompt for the user to decide what to do.
 func (c *Component) Open(file string) (browser.Handler, error) {
-	return c.OpenFileTab(file, "")
+	h, err := c.OpenFileTab(file, "", false)
+	if err != nil && err == ErrFileAlreadyOpen {
+		c.openRecoveryPrompt(file)
+	}
+	return h, err
 }
 
 // Editor satisfies Editor interface.

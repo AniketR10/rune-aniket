@@ -34,6 +34,9 @@ type Component struct {
 	tabs       handler.Tabs
 	wm         handler.WindowManager
 	union      handler.FrameUnion
+	prompts    []tui.Handler
+	width      int
+	height     int
 
 	config       Config
 	startHandler Handler
@@ -213,7 +216,6 @@ func (c *Component) NewTab(id, name string, h tui.Handler, f io.Closer) *Tab {
 	t := newTab(c, id, h, f)
 	c.buffers = append(c.buffers, t)
 	c.tabs.Add(name)
-	c.setFocusIfStartHandler(t)
 	return t
 }
 
@@ -259,15 +261,6 @@ func (c *Component) Tabs() (ret []*Tab) {
 		ret[i] = b
 	}
 	return
-}
-
-func (c *Component) setFocusIfStartHandler(t *Tab) {
-	win := c.focus()
-
-	h := win.win.Content()
-	if h == c.startHandler {
-		win.SetContent(t)
-	}
 }
 
 func (c *Component) closeTab(t *Tab) error {
@@ -641,8 +634,12 @@ func (c *Component) SetMessage(msg string, args ...interface{}) {
 
 // Resize satisfies tui.Component
 func (c *Component) Resize(width, height int) {
+	c.width, c.height = width, height
 	ResizeMessageSpan(&c.logVirt, width, height)
 	c.union.Resize(width, height)
+	for _, prompt := range c.prompts {
+		prompt.Resize(width, height)
+	}
 }
 
 // Draw satisfies tui.Component
@@ -655,6 +652,9 @@ func (c *Component) Draw(w term.Writer) {
 	}
 
 	c.union.Draw(w)
+	if len(c.prompts) != 0 {
+		c.prompts[0].Draw(w)
+	}
 
 	// only draw logBufDraw times
 	if c.logBufDraw > 0 {
@@ -740,10 +740,49 @@ func (c *Component) Close() (ret error) {
 
 // Handle proxies events to either the underlying Tabs or WindowManager.
 func (c *Component) Handle(ev term.Event) (exit, handled bool) {
+	if len(c.prompts) != 0 {
+		exit, handled = c.prompts[0].Handle(ev)
+		if exit {
+			exit = false
+			c.prompts = c.prompts[1:]
+		}
+	}
 	return c.union.Handle(ev)
 }
 
 // Cursor calls the underlying FrameUnion's Cursor.
 func (c *Component) Cursor() (pos term.Coordinates, show bool) {
 	return c.union.Cursor()
+}
+
+// Prompt creates a new prompt to be drawn as an overlay on the next call to Draw
+// and it also takes over event control until user either exits prompt or selects
+// an option.
+func (c *Component) Prompt(
+	message string, options []string,
+	bindings []term.Event,
+	cb func(int, string),
+) {
+	promptConfig := handler.PromptConfig{
+		PromptConfig: component.PromptConfig{
+			Message: message,
+			Options: options,
+			Frame:   c.config.FrameCharSet,
+		},
+		OptionBindings: bindings,
+		OptionCallback: cb,
+		OptionAttr:     c.config.PromptConfig.TextAttr,
+		HighlightAttr:  c.config.PromptConfig.HighlightAttr,
+	}
+	if c.config.Frame {
+		promptConfig.Frame = component.FrameCharSetDefault()
+	}
+
+	prompt := handler.FloatingPrompt(promptConfig,
+		component.SpanConfig{
+			PadVertical:   -c.config.PromptConfig.Height,
+			PadHorizontal: -c.config.PromptConfig.Width,
+		})
+	prompt.Resize(c.width, c.height)
+	c.prompts = append([]tui.Handler{prompt}, c.prompts...)
 }

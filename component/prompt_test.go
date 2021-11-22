@@ -5,6 +5,7 @@ import (
 
 	"github.com/ernestrc/go-tui/term"
 	testutil "github.com/ernestrc/go-tui/util/test"
+	"github.com/stretchr/testify/assert"
 )
 
 func testDrawPrompt(t *testing.T, cfg PromptConfig, expectedOut string) {
@@ -59,6 +60,43 @@ func TestDrawPrompt(t *testing.T) {
                      `,
 		)
 	})
+
+	t.Run("with frame overflow options", func(t *testing.T) {
+		testDrawPrompt(t, PromptConfig{
+			Message: "Why soooooo serious?",
+			Options: []string{"Yay", "Nay", "Say", "Wey"},
+			Frame:   FrameCharSetDefault(),
+		}, `┌──────────────────┐ 
+│                  │ 
+│Why soooooo seriou│ 
+│                  │ 
+│                  │ 
+│┌──┐┌──┐┌───┐┌───┐│ 
+││Ya││Na││Say││Wey││ 
+│└──┘└──┘└───┘└───┘│ 
+│                  │ 
+└──────────────────┘ 
+                     `,
+		)
+	})
+
+	t.Run("with frame overflow options", func(t *testing.T) {
+		testDrawPrompt(t, PromptConfig{
+			Message: "Why soooooo serious?",
+			Options: []string{"Yay", "Nay", "Say", "Wey", "They", "May"},
+		}, `                     
+                     
+Why soooooo serious? 
+                     
+                     
+                     
+                     
+YayNaySayWeyTheyMay  
+                     
+                     
+                     `,
+		)
+	})
 }
 
 func TestPromptSetOptionAttr(t *testing.T) {
@@ -79,5 +117,68 @@ func TestPromptSetOptionAttr(t *testing.T) {
 		})
 		p.SetOptionAttr(0, term.Attributes{})
 		p.SetOptionAttr(1, term.Attributes{})
+	})
+}
+
+func TestPromptDefaults(t *testing.T) {
+	t.Run("panics on emptym message", func(t *testing.T) {
+		assert.Panics(t, func() {
+			_ = NewPrompt(PromptConfig{
+				Message: "", Options: []string{"a"},
+			})
+		})
+	})
+	t.Run("panics on empty options", func(t *testing.T) {
+		assert.Panics(t, func() {
+			_ = NewPrompt(PromptConfig{
+				Message: "blah", Options: []string{},
+			})
+		})
+	})
+}
+
+func TestPromptInitReset(t *testing.T) {
+	var p Prompt
+	opts := make(map[string]*TestComponent)
+	makeTestOption := func(opt string, cfg PromptConfig) WithAttributes {
+		t := &TestComponent{Ch: ([]rune)(opt)[0]}
+		opts[opt] = t
+		return t
+	}
+	p.init(makeTestOption, PromptConfig{
+		Message: "?",
+		Options: []string{"Y", "N"},
+	})
+	p.init(makeTestOption, PromptConfig{
+		Message: "?!",
+		Options: []string{"y", "n"},
+	})
+
+	t.Run("Draw", func(t *testing.T) {
+		p.Resize(20, 10)
+		w := term.NewStringWriter(21, 11)
+
+		tests := []testutil.ComponentTestCase{
+			{Expected: `
+                     
+                     
+         ?!          
+                     
+                     
+yyyyyyyyyynnnnnnnnnn 
+yyyyyyyyyynnnnnnnnnn 
+yyyyyyyyyynnnnnnnnnn 
+yyyyyyyyyynnnnnnnnnn 
+yyyyyyyyyynnnnnnnnnn 
+                     `,
+			},
+		}
+		testutil.TestComponent(t, &p, w, tests)
+	})
+
+	t.Run("SetAttr", func(t *testing.T) {
+		attr := term.Attributes{Fg: term.AttrBold}
+		p.SetOptionAttr(0, attr)
+		assert.Equal(t, attr, opts["y"].Attributes)
 	})
 }

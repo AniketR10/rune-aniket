@@ -19,7 +19,7 @@ type CommandOverlayConfig struct {
 	ElementAttr      term.Attributes
 }
 
-// Config holds configuration for an browser.Component.
+// Config holds configuration for an editor.Component.
 type Config struct {
 	Tabspaces          int
 	SwapDir            string
@@ -209,5 +209,12 @@ func WithDirtyTabAttr(attr term.Attributes) Option {
 func WithCommandOverlayConfig(c CommandOverlayConfig) Option {
 	return func(cfg *Config) {
 		cfg.CommandOverlay = c
+	}
+}
+
+// WithPromptConfig sets the browser's prompt properties.
+func WithPromptConfig(c browser.PromptConfig) Option {
+	return func(cfg *Config) {
+		cfg.Config.PromptConfig = c
 	}
 }

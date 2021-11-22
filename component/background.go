@@ -15,10 +15,15 @@ type Background struct {
 // WithBackground wraps comp into a Background Component
 // which makes sure that all cells are reset to cell, before comp is drawn.
 func WithBackground(comp tui.Component, cell term.Cell) *Background {
-	return &Background{
-		root: comp,
-		cell: cell,
-	}
+	ret := new(Background)
+	ret.Init(comp, cell)
+	return ret
+}
+
+// Init initializes this Background with comp and cell.
+func (b *Background) Init(comp tui.Component, cell term.Cell) {
+	b.root = comp
+	b.cell = cell
 }
 
 // Resize : tui.Component

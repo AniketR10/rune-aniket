@@ -183,10 +183,8 @@ func TestComponentSetContent(t *testing.T) {
 			win0 := c.Focus()
 			christmasTab := c.NewTab("Merry Christmas", "Merry Christmas", NewTestHandler(), nil)
 
-			// if component is rendering start text, then first call
-			// to NewTab should set the content to the new tab
-			assertFreeTab(t, christmasTab, false)
-			require.Error(t, win0.SetContent(christmasTab))
+			assertFreeTab(t, christmasTab, true)
+			require.NoError(t, win0.SetContent(christmasTab))
 			assertFreeTab(t, christmasTab, false)
 			assertWindowContent(t, win0, christmasTab)
 			assert.False(t, c.UpdateWindowTabNext(win0))
@@ -493,4 +491,119 @@ func TestComponentSetMessage(t *testing.T) {
 
 	expected := "wasup: hola"
 	assert.Equal(t, expected, c.logBuf.String())
+}
+
+func TestComponentPrompt(t *testing.T) {
+	w := term.NewStringWriter(24, 8)
+
+	cfg := DefaultConfig()
+	cfg.PromptConfig.Width = 18
+	cfg.PromptConfig.Height = 7
+	c := NewComponent(cfg)
+	c.Resize(20, 8)
+
+	tests := []testutil.ComponentTestCase{
+		{
+			nil, `
+┌──────────────────┐    
+│                  │    
+├──────────────────┤    
+│                  │    
+│                  │    
+│                  │    
+│                  │    
+└──────────────────┘    `,
+		}, {func() {
+			c.Prompt("Virgen Maria?", []string{"Boh", "Meh"}, nil, func(int, string) {})
+		}, `
+┌┌────────────────┐┐    
+││ Virgen Maria?  ││    
+├│                │┤    
+││┌─────┐ ┌─────┐ ││    
+│││ Boh │ │ Meh │ ││    
+││└─────┘ └─────┘ ││    
+│└────────────────┘│    
+└──────────────────┘    `,
+		}, {func() {
+			c.Handle(term.Event{Key: term.KeyEnter})
+		}, `
+┌──────────────────┐    
+│                  │    
+├──────────────────┤    
+│                  │    
+│                  │    
+│                  │    
+│                  │    
+└──────────────────┘    `,
+		}, {func() {
+			c.Prompt("Tokischa?", []string{"Yay", "Nay"}, nil, func(int, string) {})
+			c.Prompt("Rosalia?", []string{"Yay", "Nay"}, nil, func(int, string) {})
+		}, `
+┌┌────────────────┐┐    
+││    Rosalia?    ││    
+├│                │┤    
+││┌─────┐ ┌─────┐ ││    
+│││ Yay │ │ Nay │ ││    
+││└─────┘ └─────┘ ││    
+│└────────────────┘│    
+└──────────────────┘    `,
+		}, {func() {
+			c.Resize(10, 6)
+		}, `
+┌────────┐              
+│Rosalia?│              
+│        │              
+│Yay Nay │              
+│        │              
+└────────┘              
+                        
+                        `,
+		}, {func() {
+			c.Resize(24, 8)
+		}, `
+┌──┌────────────────┐──┐
+│  │    Rosalia?    │  │
+├──│                │──┤
+│  │┌─────┐ ┌─────┐ │  │
+│  ││ Yay │ │ Nay │ │  │
+│  │└─────┘ └─────┘ │  │
+│  └────────────────┘  │
+└──────────────────────┘`,
+		}, {func() {
+			c.Resize(20, 8)
+		}, `
+┌┌────────────────┐┐    
+││    Rosalia?    ││    
+├│                │┤    
+││┌─────┐ ┌─────┐ ││    
+│││ Yay │ │ Nay │ ││    
+││└─────┘ └─────┘ ││    
+│└────────────────┘│    
+└──────────────────┘    `,
+		}, {func() {
+			c.Handle(term.Event{Key: term.KeyEsc})
+		}, `
+┌┌────────────────┐┐    
+││   Tokischa?    ││    
+├│                │┤    
+││┌─────┐ ┌─────┐ ││    
+│││ Yay │ │ Nay │ ││    
+││└─────┘ └─────┘ ││    
+│└────────────────┘│    
+└──────────────────┘    `,
+		}, {func() {
+			c.Handle(term.Event{Key: term.KeyEnter})
+		}, `
+┌──────────────────┐    
+│                  │    
+├──────────────────┤    
+│                  │    
+│                  │    
+│                  │    
+│                  │    
+└──────────────────┘    `,
+		},
+	}
+
+	testutil.TestComponent(t, c, w, tests)
 }
