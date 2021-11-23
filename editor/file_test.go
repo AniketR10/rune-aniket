@@ -186,6 +186,41 @@ func testFileBufferIntegration(t *testing.T, endsInEOL bool) {
 		assert.Equal(t, os.FileMode(0700), fileInfo.Mode())
 	})
 
+	t.Run("respects symlinks", func(t *testing.T) {
+		buf := cell.NewBuffer()
+		orig, err := ioutil.TempFile("", "frctl_file_test")
+		require.NoError(t, err)
+
+		require.NoError(t, orig.Chmod(0700))
+		filename := orig.Name() + ".symlink"
+
+		require.NoError(t, os.Symlink(orig.Name(), filename))
+		fileInfo, err := os.Lstat(filename)
+		require.NoError(t, err)
+		assert.True(t, fileInfo.Mode()&os.ModeSymlink == os.ModeSymlink)
+
+		require.NoError(t, orig.Close())
+
+		f, err := NewFileBuffer(filename, buf, "", false)
+		require.NoError(t, err)
+
+		buf.WriteString("blah\n")
+
+		require.NoError(t, f.Flush())
+
+		fileInfo, err = os.Lstat(filename)
+		require.NoError(t, err)
+		assert.True(t, fileInfo.Mode()&os.ModeSymlink == os.ModeSymlink)
+
+		b, err := ioutil.ReadFile(filename)
+		require.NoError(t, err)
+		assert.Equal(t, "blah\n", string(b))
+
+		fileInfo, err = os.Stat(orig.Name())
+		require.NoError(t, err)
+		assert.Equal(t, os.FileMode(0700), fileInfo.Mode())
+	})
+
 	t.Run("if file does not exist, if there are errors upon creation, it bubbles up on Flush", func(t *testing.T) {
 		buf := cell.NewBuffer()
 		rand.Seed(int64(time.Now().Nanosecond()))
@@ -433,6 +468,9 @@ func newTestFileBuffer(ctrl *gomock.Controller) (*FileBuffer, *MockOsFile) {
 		return nil
 	}
 	f.statFunc = func(name string) (os.FileInfo, error) {
+		return testFileInfo{}, nil
+	}
+	f.lstatFunc = func(name string) (os.FileInfo, error) {
 		return testFileInfo{}, nil
 	}
 	return f, mock

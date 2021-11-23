@@ -558,7 +558,7 @@ EEEE`},
 
 	// test case for issue #27
 	cases = []testutil.HandlerSequenceTestCase{
-		{":e ait^^^aix^^^^d airsoft.map__>",
+		{":e ait^^^aix^^^^d airsoft.map____>",
 			`┌──────────────────┐
 │..  bugz  airsof..│
 ├──────────────────┤
@@ -573,7 +573,7 @@ EEEE`},
 	testutil.TestHandlerSequence(t, bh, 20, 10, cases)
 
 	cases = []testutil.HandlerSequenceTestCase{
-		{"__",
+		{"____",
 			`┌──────────────────┐
 │..  bugz  airsof..│
 ├──────────────────┤

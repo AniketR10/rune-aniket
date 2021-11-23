@@ -44,6 +44,7 @@ type FileBuffer struct {
 	removeFunc      removeFunc
 	renameFunc      renameFunc
 	statFunc        statFunc
+	lstatFunc       statFunc
 	swapDir         string
 	swapFileName    string
 	fileName        string
@@ -255,6 +256,7 @@ func newOsFileBuffer() *FileBuffer {
 	ret.removeFunc = os.Remove
 	ret.renameFunc = os.Rename
 	ret.statFunc = os.Stat
+	ret.lstatFunc = os.Lstat
 	return ret
 }
 
@@ -410,6 +412,9 @@ func (f *FileBuffer) Flush() error {
 		}
 	}
 
+	// used to override with symlink target if applicable
+	origTarget := f.fileName
+
 	// create file if it didn't exist before
 	if f.orig == nil {
 		err := f.touchFile()
@@ -424,6 +429,17 @@ func (f *FileBuffer) Flush() error {
 		if newFileInfo.ModTime().After(f.infoModTime) {
 			return ErrStaleData
 		}
+
+		newFileInfo, err = f.lstatFunc(f.orig.Name())
+		if err != nil {
+			return err
+		}
+		if newFileInfo.Mode()&os.ModeSymlink != 0 {
+			origTarget, err = os.Readlink(origTarget)
+			if err != nil {
+				return err
+			}
+		}
 	}
 
 	newSwapInfo, err := f.statFunc(f.swap.Name())
@@ -434,7 +450,7 @@ func (f *FileBuffer) Flush() error {
 		return ErrStaleData
 	}
 
-	err = f.moveFile(f.swap.Name(), f.orig.Name())
+	err = f.moveFile(f.swap.Name(), origTarget)
 	if err != nil {
 		return err
 	}
