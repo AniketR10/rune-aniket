@@ -256,6 +256,9 @@ func (e *Ex) handleCommand(ev term.Event) (quit, handled bool) {
 
 	switch ev.Key {
 	case term.KeyEnter:
+		// before selecting command wait for previous search to finish
+		e.command.List.Wait()
+
 		command, _ := e.command.List.Focus()
 		var err error
 		quit, err = e.runCommand(string(command), e.command.Buffer.String())
