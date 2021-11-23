@@ -660,17 +660,23 @@ func (vi *Vi) handleMetaNormal(ev term.Event) (quit, handled, done bool) {
 
 	done = true
 
-	// in moveMode vi seems to not use right exclusive delete semantics
-	if prevMode == moveNone && before.Y == after.Y && before.X < after.X {
-		vi.cursor.MoveLeftWrap()
-	} else if before.Y == after.Y {
-		// FIXME since writer.Delete does not have right exclusive semantics
-		// we cannot fix right end in this case.
-	}
+	// handle <op>wWeEbB idiosyncrasies
 	after, _ = vi.cursor.Cursor()
-
-	if before.Y != after.Y {
-		vi.cursor.SelectLine()
+	switch ev.Ch {
+	case 'e', 'E':
+	case 'w', 'W':
+		vi.cursor.MoveLeft()
+		if before.Y < after.Y {
+			vi.cursor.MoveLeftEndWord()
+		}
+	case 'b', 'B':
+		if before.Y > after.Y {
+			vi.cursor.MoveLeftStartWord()
+		}
+	default:
+		if before.Y != after.Y {
+			vi.cursor.SelectLine()
+		}
 	}
 	return
 }

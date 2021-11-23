@@ -357,6 +357,82 @@ diff_buf_adjust(win_
 	testutil.TestHandlerSequence(t, vi, 20, 10, cases)
 }
 
+func TestViDeleteAWord(t *testing.T) {
+	cases := []testutil.HandlerSequenceTestCase{
+		{"jjjjjwdw",
+			`                    
+/*                  
+ * Check if the curr
+ * diff buffers.    
+ */                 
+ ▐                  
+diff_buf_adjust(win_
+{                   
+  win_T  *wp;       
+:             NORMAL`},
+		{"jjjjjwcw",
+			`                    
+/*                  
+ * Check if the curr
+ * diff buffers.    
+ */                 
+  ▐                 
+diff_buf_adjust(win_
+{                   
+  win_T  *wp;       
+:             INSERT`},
+		{"jjjjjwce",
+			`                    
+/*                  
+ * Check if the curr
+ * diff buffers.    
+ */                 
+  ▐                 
+diff_buf_adjust(win_
+{                   
+  win_T  *wp;       
+:             INSERT`},
+		{"jjjjjwecb",
+			`                    
+/*                  
+ * Check if the curr
+ * diff buffers.    
+ */                 
+  ▐                 
+diff_buf_adjust(win_
+{                   
+  win_T  *wp;       
+:             INSERT`},
+		{"jjjwwcw",
+			`                    
+/*                  
+ * Check if the curr
+ * ▐uffers.         
+ */                 
+  void              
+diff_buf_adjust(win_
+{                   
+  win_T  *wp;       
+:             INSERT`},
+		{"jjjwwce",
+			`                    
+/*                  
+ * Check if the curr
+ * ▐buffers.        
+ */                 
+  void              
+diff_buf_adjust(win_
+{                   
+  win_T  *wp;       
+:             INSERT`},
+	}
+
+	newVi := func() tui.Handler {
+		return setupVi(t, snippet, 2)
+	}
+	testutil.TestHandlerIsolated(t, newVi, 20, 10, cases)
+}
+
 func TestViCursorIsolated(t *testing.T) {
 	cases := []testutil.HandlerSequenceTestCase{
 		{"jjddp",
