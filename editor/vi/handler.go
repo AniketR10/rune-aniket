@@ -703,7 +703,7 @@ func (vi *Vi) handleYank(ev term.Event) (quit, handled bool) {
 }
 
 func (vi *Vi) handleDelete(ev term.Event) (quit, handled bool) {
-	if !vi.deleteInsert && ev.Ch == 'd' {
+	if !vi.deleteInsert && vi.moveMode == moveNone && ev.Ch == 'd' {
 		if vi.cursor.SelectLine() {
 			vi.cursor.DeleteSelection()
 		}
@@ -712,7 +712,7 @@ func (vi *Vi) handleDelete(ev term.Event) (quit, handled bool) {
 		return
 	}
 
-	if vi.deleteInsert && ev.Ch == 'c' {
+	if vi.deleteInsert && vi.moveMode == moveNone && ev.Ch == 'c' {
 		vi.cursor.MoveStartLine()
 		if vi.cursor.Select() {
 			vi.cursor.MoveEndLine()

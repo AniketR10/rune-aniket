@@ -357,6 +357,38 @@ diff_buf_adjust(win_
 	testutil.TestHandlerSequence(t, vi, 20, 10, cases)
 }
 
+func TestVidfd(t *testing.T) {
+	cases := []testutil.HandlerSequenceTestCase{
+		{"jjdfd",
+			`                    
+/*                  
+▐be added to or remo
+ * diff buffers.    
+ */                 
+  void              
+diff_buf_adjust(win_
+{                   
+  win_T  *wp;       
+:             NORMAL`},
+		{"jjcfc",
+			`                    
+/*                  
+▐ if the current buf
+ * diff buffers.    
+ */                 
+  void              
+diff_buf_adjust(win_
+{                   
+  win_T  *wp;       
+:             INSERT`},
+	}
+
+	newVi := func() tui.Handler {
+		return setupVi(t, snippet, 2)
+	}
+	testutil.TestHandlerIsolated(t, newVi, 20, 10, cases)
+}
+
 func TestViDeleteAWord(t *testing.T) {
 	cases := []testutil.HandlerSequenceTestCase{
 		{"jjjjjwdw",
