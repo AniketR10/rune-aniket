@@ -6,6 +6,16 @@ import (
 	"github.com/ernestrc/go-tui/term"
 )
 
+// StringConfig defines options for StringConfig and StringResponsive
+// constructors.
+type StringConfig struct {
+	Alignment
+	term.Attributes
+	FrameCharSet
+	BackgroundAttributes term.Attributes
+	BackgroundRune       rune
+}
+
 type stringComp struct {
 	width, height int
 	cells         [][]term.Cell
@@ -56,18 +66,6 @@ func (s backgroundStrWrapper) SetAttr(attr term.Attributes) {
 		return
 	}
 	spanContent.(*stringComp).SetAttr(attr)
-}
-
-// StringBackgroundAttr converts str into a static tui.Compontent with attr as attributes,
-// and uses c as the background rune, battr as its attributes. It processes newlines and so draws
-// the string multi line if applicable. It also centers the string vertically
-// and horizontally.
-func StringBackgroundAttr(
-	str string, attr term.Attributes, c rune, battr term.Attributes,
-) WithAttributes {
-	cells := cell.StringToCells(str)
-	return newStringComp(cells, attr, c, battr, FrameCharSet{},
-		0, 0, SpanAlignmentCentered)
 }
 
 func withBackgroundWrapper(
@@ -121,38 +119,23 @@ func newStringComp(
 	return withBackgroundWrapper(comp, height, width, background, shouldFrame, shouldPad, alg)
 }
 
-// StringBackground converts a string into a static tui.Compontent,
-// and uses c as the background rune. It processes newlines and so draws
-// the string multi line if applicable. It also centers the string vertically
-// and horizontally.
-func StringBackground(str string, c rune) tui.Component {
-	return StringBackgroundAttr(str, term.Attributes{}, c, term.Attributes{})
-}
-
-// StringCentered converts a string into a static tui.Compontent.
-// It processes newlines and so draws the string multi line if applicable.
-// It also centers the string vertically and horizontally.
-func StringCentered(str string) tui.Component {
-	return StringBackgroundAttr(str, term.Attributes{}, 0, term.Attributes{})
+// StringWithConfig converts a string into a static tui.Compontent with
+// background/foreground attributes, content alignment and a frame,
+// all configurable through cfg. The returned component is significantly
+// slower to Draw and Resize than the component returned by String.
+func StringWithConfig(str string, cfg StringConfig) WithAttributes {
+	cells := cell.StringToCells(str)
+	return newStringComp(cells, cfg.Attributes, cfg.BackgroundRune,
+		cfg.BackgroundAttributes, cfg.FrameCharSet, 0, 0, cfg.Alignment)
 }
 
 // String converts a string into a very efficient top left centered one line tui.Component
 // which draws the given string. If the string needs to be centered dynamically,
-// or drawn multi-line use StringCentered instead.
-func String(str string) tui.Component {
+// or drawn multi-line use StringWithConfig instead.
+func String(str string) WithAttributes {
 	row := make([]term.Cell, len(str))
 	for i, r := range str {
 		row[i] = term.Cell{Ch: r}
 	}
 	return &stringComp{cells: [][]term.Cell{row}}
-}
-
-// StringAttr converts a string into a very efficient top left centered multi-line tui.Component
-// which draws str along with attr. See String for more information.
-func StringAttr(str string, attr term.Attributes) WithAttributes {
-	row := make([]term.Cell, len(str))
-	for i, r := range str {
-		row[i] = term.Cell{Ch: r}
-	}
-	return &stringComp{cells: [][]term.Cell{row}, attr: attr}
 }

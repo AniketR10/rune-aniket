@@ -54,7 +54,9 @@ func TestStringCentered(t *testing.T) {
 	}
 
 	for _, tcase := range tcases {
-		testString(t, StringCentered, 5, 5, tcase.in, tcase.out)
+		testString(t, func(str string) tui.Component {
+			return StringWithConfig(str, StringConfig{Alignment: SpanAlignmentCentered})
+		}, 5, 5, tcase.in, tcase.out)
 	}
 }
 
@@ -86,7 +88,9 @@ func TestString(t *testing.T) {
 	}
 
 	for _, tcase := range tcases {
-		testString(t, String, 5, 5, tcase.in, tcase.out)
+		testString(t, func(str string) tui.Component {
+			return String(str)
+		}, 5, 5, tcase.in, tcase.out)
 	}
 }
 

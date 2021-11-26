@@ -44,7 +44,9 @@ func (p *Prompt) init(
 	if cfg.Message == "" {
 		panic("Message cannot be empty")
 	}
-	message := StringCentered(cfg.Message)
+	message := StringWithConfig(cfg.Message, StringConfig{
+		Alignment: SpanAlignmentCentered,
+	})
 
 	wm, win := NewWindowManager(message, WindowManagerConfig{})
 	p.makeOptionFn = makeOptionFn

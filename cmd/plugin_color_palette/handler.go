@@ -52,8 +52,12 @@ func makeColorGrid() tui.Component {
 			default:
 				name = strconv.Itoa(nameNum)
 			}
-			ret[y][x] = component.StringBackgroundAttr(name,
-				term.Attributes{Bg: attr}, 0, term.Attributes{Bg: attr})
+			ret[y][x] = component.StringWithConfig(name,
+				component.StringConfig{
+					Attributes:           term.Attributes{Bg: attr},
+					BackgroundAttributes: term.Attributes{Bg: attr},
+				},
+			)
 		}
 	}
 	return component.Grid(ret)

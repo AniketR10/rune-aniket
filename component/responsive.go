@@ -21,14 +21,6 @@ type Responsive interface {
 	Height(width int) int
 }
 
-// StringConfig defines options for StringConfig and StringResponsive
-// constructors.
-type StringConfig struct {
-	Alignment
-	term.Attributes
-	FrameCharSet
-}
-
 // StringResponsive returns a Responsive implementation of
 // a string tui.Component.
 func StringResponsive(str string, cfg StringConfig) Responsive {

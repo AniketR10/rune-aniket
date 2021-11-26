@@ -126,7 +126,8 @@ func (a *clientBreaker) sendHandle(ctx context.Context, req *proto.HandleRequest
 	}
 
 	if err != nil {
-		comp := component.StringCentered(smtgWrongCopy)
+		comp := component.StringWithConfig(smtgWrongCopy,
+			component.StringConfig{Alignment: component.SpanAlignmentCentered})
 		width, height := int(req.GetDraw().GetWidth()), int(req.GetDraw().GetHeight())
 		comp.Resize(width, height)
 		draw := proto.NewDrawResponse(comp, width, height)
@@ -170,7 +171,8 @@ func (a *clientBreaker) loadingContent(
 		return a.readyCopy()
 	}
 
-	loading := component.StringCentered(loadingCopy)
+	loading := component.StringWithConfig(loadingCopy,
+		component.StringConfig{Alignment: component.SpanAlignmentCentered})
 	loading.Resize(int(in.Width), int(in.Height))
 	return proto.NewDrawResponse(loading, int(in.Width), int(in.Height))
 }

@@ -228,7 +228,8 @@ func assertDrawResponse(t *testing.T, res *proto.HandleResponse, strCopy string)
 	if strCopy == "" {
 		return
 	}
-	expected := component.StringCentered(strCopy)
+	expected := component.StringWithConfig(strCopy,
+		component.StringConfig{Alignment: component.SpanAlignmentCentered})
 	expected.Resize(width, height)
 	w := term.NewStringWriter(width, height)
 	expected.Draw(w)

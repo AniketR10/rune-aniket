@@ -184,8 +184,11 @@ func (c *Component) Init(config Config) {
 		FocusFrameCharSet:   config.WindowManagerConfig.FrameCharSet,
 		WindowManagerConfig: config.WindowManagerConfig,
 	}
-	startText := component.StringBackgroundAttr(c.config.StartText,
-		c.config.StartTextAttr, 0, c.config.StartTextBackgroundAttr)
+	strcfg := component.StringConfig{
+		Attributes:           c.config.StartTextAttr,
+		BackgroundAttributes: c.config.StartTextBackgroundAttr,
+	}
+	startText := component.StringWithConfig(c.config.StartText, strcfg)
 	c.startHandler = &browserContent{Handler: FuncHandler(handler.Nop(startText), func() {}), c: c}
 	c.wm.Init(c.startHandler, handlerWmConfig)
 	_ = c.newWindow(c.wm.Focus()) // init handler with initial window

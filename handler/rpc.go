@@ -108,7 +108,8 @@ func (c *Client) Draw(w term.Writer) {
 	}
 
 	if c.height != c.resp.height || c.width != c.resp.width {
-		c.setNewHandleResponse(component.StringCentered(loadingCopy))
+		c.setNewHandleResponse(component.StringWithConfig(loadingCopy,
+			component.StringConfig{Alignment: component.SpanAlignmentCentered}))
 	}
 
 	c.doDraw(w, c.resp.HandleResponse.GetDraw())
@@ -120,7 +121,8 @@ func (c *Client) Draw(w term.Writer) {
 func (c *Client) Handle(ev term.Event) (exit, handled bool) {
 	exit, handled, err := c.handle(ev)
 	if err != nil {
-		c.setNewHandleResponse(component.StringCentered(smtgWrongCopy))
+		c.setNewHandleResponse(component.StringWithConfig(smtgWrongCopy,
+			component.StringConfig{Alignment: component.SpanAlignmentCentered}))
 	}
 	return
 }
