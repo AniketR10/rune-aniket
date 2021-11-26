@@ -2,6 +2,7 @@ package component
 
 import (
 	"github.com/ernestrc/go-tui"
+	"github.com/ernestrc/go-tui/cell"
 	"github.com/ernestrc/go-tui/term"
 )
 
@@ -63,8 +64,9 @@ func (p *Prompt) init(
 // If one of these two rules is violated this method panics.
 func (p *Prompt) Init(cfg PromptConfig) {
 	p.init(func(msg string, cfg PromptConfig) WithAttributes {
-		return stringBackgroundAttrFrame(msg, term.Attributes{},
-			0, term.Attributes{}, cfg.Frame, 2, 0)
+		cells := cell.StringToCells(msg)
+		return newStringComp(cells, term.Attributes{},
+			0, term.Attributes{}, cfg.Frame, 2, 0, SpanAlignmentCentered)
 	}, cfg)
 }
 

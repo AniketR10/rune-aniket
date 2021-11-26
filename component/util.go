@@ -65,30 +65,32 @@ func (s backgroundStrWrapper) SetAttr(attr term.Attributes) {
 func StringBackgroundAttr(
 	str string, attr term.Attributes, c rune, battr term.Attributes,
 ) WithAttributes {
-	return stringBackgroundAttrFrame(str, attr, c, battr, FrameCharSet{}, 0, 0)
+	cells := cell.StringToCells(str)
+	return newStringComp(cells, attr, c, battr, FrameCharSet{},
+		0, 0, SpanAlignmentCentered)
 }
 
-func centerStrComp(
+func withBackgroundWrapper(
 	comp tui.Component, height, width int, background term.Cell,
-	frame, pad bool,
+	frame, pad bool, alignment Alignment,
 ) WithAttributes {
 	return backgroundStrWrapper{
 		frame: frame,
 		pad:   pad,
 		Background: WithBackground(NewSpan(comp, SpanConfig{
-			PadVertical:   -height,
-			PadHorizontal: -width,
+			PadVertical:      -height,
+			PadHorizontal:    -width,
+			ContentAlignment: alignment,
 		}), background),
 	}
 }
 
-func stringBackgroundAttrFrame(
-	str string, attr term.Attributes, c rune, battr term.Attributes,
-	frameCharSet FrameCharSet, padWidth, padHeight int,
+func newStringComp(
+	cells [][]term.Cell, attr term.Attributes, c rune, battr term.Attributes,
+	frameCharSet FrameCharSet, padWidth, padHeight int, alg Alignment,
 ) WithAttributes {
 	var comp WithAttributes
 
-	cells := cell.StringToCells(str)
 	comp = &stringComp{cells: cells, attr: attr}
 
 	var width, height int
@@ -106,7 +108,7 @@ func stringBackgroundAttrFrame(
 	if shouldFrame {
 		// if inner pad is provided, center text
 		if shouldPad {
-			comp = centerStrComp(comp, height, width, background, false, false)
+			comp = withBackgroundWrapper(comp, height, width, background, false, false, alg)
 		}
 		width += 2 + padWidth
 		height += 2 + padHeight
@@ -116,7 +118,7 @@ func stringBackgroundAttrFrame(
 		comp = frame
 	}
 
-	return centerStrComp(comp, height, width, background, shouldFrame, shouldPad)
+	return withBackgroundWrapper(comp, height, width, background, shouldFrame, shouldPad, alg)
 }
 
 // StringBackground converts a string into a static tui.Compontent,

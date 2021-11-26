@@ -4,10 +4,23 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ernestrc/go-tui"
 	"github.com/ernestrc/go-tui/term"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func testString(t *testing.T,
+	fn func(string) tui.Component,
+	width, height int, in, out string,
+) {
+	w := term.NewStringWriter(width, height)
+	comp := fn(in)
+	comp.Resize(width, height)
+	comp.Draw(w)
+	require.NoError(t, w.Flush())
+	assert.Equal(t, out, w.String())
+}
 
 func TestStringCentered(t *testing.T) {
 	tcases := []struct {
@@ -41,12 +54,7 @@ func TestStringCentered(t *testing.T) {
 	}
 
 	for _, tcase := range tcases {
-		w := term.NewStringWriter(5, 5)
-		comp := StringCentered(tcase.in)
-		comp.Resize(5, 5)
-		comp.Draw(w)
-		require.NoError(t, w.Flush())
-		assert.Equal(t, tcase.out, w.String())
+		testString(t, StringCentered, 5, 5, tcase.in, tcase.out)
 	}
 }
 
@@ -78,12 +86,7 @@ func TestString(t *testing.T) {
 	}
 
 	for _, tcase := range tcases {
-		w := term.NewStringWriter(5, 5)
-		comp := String(tcase.in)
-		comp.Resize(5, 5)
-		comp.Draw(w)
-		require.NoError(t, w.Flush())
-		assert.Equal(t, tcase.out, w.String())
+		testString(t, String, 5, 5, tcase.in, tcase.out)
 	}
 }
 
