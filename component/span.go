@@ -78,10 +78,6 @@ func (s *Span) Init(content tui.Component, cfg SpanConfig) {
 		panic("padding percentage must be between range [0, 1]")
 	}
 
-	if cfg.ContentAlignment == 0 {
-		cfg.ContentAlignment = SpanAlignmentCentered
-	}
-
 	s.cfg = cfg
 	s.content.C = content
 }

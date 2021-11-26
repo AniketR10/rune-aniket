@@ -780,8 +780,9 @@ func (c *Component) Prompt(
 
 	prompt := handler.FloatingPrompt(promptConfig,
 		component.SpanConfig{
-			PadVertical:   -c.config.PromptConfig.Height,
-			PadHorizontal: -c.config.PromptConfig.Width,
+			PadVertical:      -c.config.PromptConfig.Height,
+			PadHorizontal:    -c.config.PromptConfig.Width,
+			ContentAlignment: component.SpanAlignmentCentered,
 		})
 	prompt.Resize(c.width, c.height)
 	c.prompts = append([]tui.Handler{prompt}, c.prompts...)
