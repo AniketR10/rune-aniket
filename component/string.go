@@ -112,6 +112,7 @@ func newStringComp(
 		height += 2 + padHeight
 
 		frame := NewFrame(comp)
+		frame.Attributes = attr
 		frame.FrameCharSet = frameCharSet
 		comp = frame
 	}

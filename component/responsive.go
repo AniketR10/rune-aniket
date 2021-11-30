@@ -42,6 +42,9 @@ func (s *respStr) Height(width int) int {
 	for _, col := range s.in {
 		height += (len(col) - 1) / width
 	}
+	if s.cfg.FrameCharSet != (FrameCharSet{}) {
+		height += 2
+	}
 	return height
 }
 
@@ -59,7 +62,7 @@ func (s *respStr) Resize(width, height int) {
 		}
 	}
 	s.out = newStringComp(outRaw, s.cfg.Attributes, 0,
-		s.cfg.Attributes, s.cfg.FrameCharSet,
+		s.cfg.BackgroundAttributes, s.cfg.FrameCharSet,
 		0, 0, s.cfg.Alignment)
 	s.out.Resize(width, height)
 }
