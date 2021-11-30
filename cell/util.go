@@ -124,6 +124,9 @@ func CloneCells(in [][]term.Cell) [][]term.Cell {
 //
 // Note that this buffer will honor the tabspaces observed in c.
 // If c does not have any tabspaces, then 1 tabspace is assumed.
+//
+// Furthermore, it won't treat the last EOL as mandatory so it can be used
+// as an in-memory buffer.
 func CellsToBuffer(c [][]term.Cell) *Buffer {
 	cells := new(rawCells)
 
@@ -131,6 +134,11 @@ func CellsToBuffer(c [][]term.Cell) *Buffer {
 	cells.init(tabspaces)
 
 	cells.cells = CloneCells(c)
+
+	// rawCells hasthe property that there's always at least one row
+	if cells.Rows() == 0 {
+		cells.fillInRows(0)
+	}
 
 	ret := new(Buffer)
 	ret.initWithCells(cells, nil, false)

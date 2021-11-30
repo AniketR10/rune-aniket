@@ -34,8 +34,15 @@ func TestConvertCoordinates(t *testing.T) {
 		assert.Equal(t, tcase.y, y)
 	}
 }
+func TestCellsToBufferZero(t *testing.T) {
+	t.Run("returned buffer should always have at least one row", func(t *testing.T) {
+		buf := CellsToBuffer(nil)
+		require.Equal(t, 1, buf.Rows())
+		assert.Equal(t, 0, buf.Columns(0))
+	})
+}
 
-func TestCellToBuffer(t *testing.T) {
+func TestCellsToBuffer(t *testing.T) {
 	const (
 		filecontent1 = `package me.drton.jmavsim;
 public class Rotor {
