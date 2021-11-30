@@ -94,7 +94,7 @@ func makeListOfTwo() (*List, []*TestComponent) {
 	return l, []*TestComponent{el1, el2}
 }
 
-func testListDraw(t *testing.T, constructor func(int) testList) {
+func testListDraw(t *testing.T, skipCases []int, constructor func(int) testList) {
 	l := constructor(1)
 	l2 := constructor(1)
 
@@ -172,16 +172,20 @@ $$$$$$$$`,
 		}, {
 			func() {
 				l.Resize(4, 4)
-				_, ok := l.ElementAt(term.Coordinates{Y: 0})
+				el, ok := l.ElementAt(term.Coordinates{Y: 0})
 				require.True(t, ok)
-				_, ok = l.ElementAt(term.Coordinates{Y: 1})
+				assert.Equal(t, 'X', getTestComponent(el.Value()).Ch)
+				el, ok = l.ElementAt(term.Coordinates{Y: 1})
 				require.True(t, ok)
-				_, ok = l.ElementAt(term.Coordinates{Y: 2})
+				assert.Equal(t, 'Y', getTestComponent(el.Value()).Ch)
+				el, ok = l.ElementAt(term.Coordinates{Y: 2})
 				require.True(t, ok)
-				_, ok = l.ElementAt(term.Coordinates{Y: 3})
+				assert.Equal(t, '#', getTestComponent(el.Value()).Ch)
+				el, ok = l.ElementAt(term.Coordinates{Y: 3})
 				require.True(t, ok)
+				assert.Equal(t, '$', getTestComponent(el.Value()).Ch)
 				_, ok = l.ElementAt(term.Coordinates{Y: 4})
-				assert.False(t, ok)
+				require.False(t, ok)
 				assert.Panics(t, func() {
 					l.ElementAt(term.Coordinates{Y: -1})
 				})
@@ -240,7 +244,21 @@ YYYYYYYY`,
 		},
 	}
 
-	testutil.TestComponent(t, l, w, tests)
+	var filteredTests []testutil.ComponentTestCase
+	for i, test := range tests {
+		include := true
+		for _, skipCase := range skipCases {
+			if i == skipCase {
+				include = false
+				break
+			}
+		}
+		if include {
+			filteredTests = append(filteredTests, test)
+		}
+	}
+
+	testutil.TestComponent(t, l, w, filteredTests)
 }
 
 func TestListNode(t *testing.T) {
@@ -360,9 +378,12 @@ func testFrontBack(t *testing.T, constructor func(int) testList) {
 	})
 }
 
-// bridge between testList and focusTestList
+// bridge between testList, responsiveTestList and focusTestList
 func getTestComponent(v tui.Component) *TestComponent {
 	if a, ok := v.(*compWithAttr); ok {
+		return a.Component.(*TestComponent)
+	}
+	if a, ok := v.(*testResponsive); ok {
 		return a.Component.(*TestComponent)
 	}
 	return v.(*TestComponent)
@@ -474,7 +495,7 @@ func testListSort(t *testing.T, constructor func(int) testList) {
 }
 
 func TestListDraw(t *testing.T) {
-	testListDraw(t, newTestList)
+	testListDraw(t, nil, newTestList)
 }
 
 func TestListSort(t *testing.T) {

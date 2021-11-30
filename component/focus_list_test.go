@@ -47,7 +47,7 @@ func (l *focusListTestList) PushFront(c tui.Component) ListNode {
 }
 
 func (l *focusListTestList) Remove(e ListNode) tui.Component {
-	return l.FocusList.Remove(e)
+	return l.FocusList.Remove(e).(*compWithAttr).Component
 }
 
 func (l *focusListTestList) Sort(less func(a, b tui.Component) bool) {
@@ -168,7 +168,7 @@ func TestFocusAddAttr(t *testing.T) {
 }
 
 func TestFocusListDraw(t *testing.T) {
-	testListDraw(t, newFocusTestList)
+	testListDraw(t, nil, newFocusTestList)
 }
 
 func TestFocusListSort(t *testing.T) {

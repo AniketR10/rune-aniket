@@ -14,8 +14,12 @@ type ListNode struct {
 	el *list.Element
 }
 
-// List represents a list of components which are drawn each one
-// in series as a separate row.
+// List satisfies tui.Component by drawing a set of
+// children components with a fixed height and a width
+// that's equal to the maximum width available for this component.
+//
+// The height of the components can be set via the constructors and
+// it can be modified later with SetElementHeight.
 type List struct {
 	elementHeight int
 	width, height int
@@ -40,6 +44,7 @@ func (l *List) listNode(el *list.Element) ListNode {
 // Reset resets the contents of this List.
 func (l *List) Reset() {
 	l.list.Init()
+	l.offset = 0
 }
 
 // Init initializes this List.
@@ -93,8 +98,8 @@ func (l *List) SeekDown() bool {
 // SeekEnd shifts the contents of this list such that the last element
 // is drawn at the top of the list.
 func (l *List) SeekEnd() (ok bool) {
-	for l.CanSeekDown() {
-		l.offset++
+	if l.CanSeekDown() {
+		l.offset = l.list.Len() - l.height/l.elementHeight
 		ok = true
 	}
 	return
@@ -232,8 +237,8 @@ func (l *List) PushFront(c tui.Component) ListNode {
 	return l.listNode(l.list.PushFront(v))
 }
 
-// Remove removes e from l if e is a node of list l. It returns the element
-// value e.Value. The element must not be nil.
+// Remove removes e from l if e is a node of list l.
+// It returns the element value e.Value.
 func (l *List) Remove(e ListNode) tui.Component {
 	return l.list.Remove(e.el).(*Virtual).C
 }
