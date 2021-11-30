@@ -29,3 +29,14 @@ func (t *TestComponent) Draw(w term.Writer) {
 func (t *TestComponent) SetAttr(attr term.Attributes) {
 	t.Attributes = attr
 }
+
+type TestResponsive struct {
+	TestComponent
+	PassedWidth int
+	WantHeight  int
+}
+
+func (t *TestResponsive) Height(width int) int {
+	t.PassedWidth = width
+	return t.WantHeight
+}

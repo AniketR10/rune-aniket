@@ -114,13 +114,10 @@ func alignContent(
 	content.Move(offset)
 }
 
-// Resize : Component
-func (s *Span) Resize(width, height int) {
+func (s *Span) getPadding(width, height int) (int, int) {
 	var hPadding, vPadding int
 
-	if width < 3 {
-		hPadding = 0
-	} else if s.cfg.PadHorizontal == 0 {
+	if s.cfg.PadHorizontal == 0 {
 		hPadding = int(s.cfg.PadHorizontalPerc * float64(width))
 	} else if s.cfg.PadHorizontal < 0 {
 		hPadding = int(math.Max(0, float64(width+s.cfg.PadHorizontal)))
@@ -128,9 +125,7 @@ func (s *Span) Resize(width, height int) {
 		hPadding = s.cfg.PadHorizontal
 	}
 
-	if height < 3 {
-		vPadding = 0
-	} else if s.cfg.PadVertical == 0 {
+	if s.cfg.PadVertical == 0 {
 		vPadding = int(s.cfg.PadVerticalPerc * float64(height))
 	} else if s.cfg.PadVertical < 0 {
 		vPadding = int(math.Max(0, float64(height+s.cfg.PadVertical)))
@@ -138,6 +133,18 @@ func (s *Span) Resize(width, height int) {
 		vPadding = s.cfg.PadVertical
 	}
 
+	return hPadding, vPadding
+}
+
+// Resize : Component
+func (s *Span) Resize(width, height int) {
+	hPadding, vPadding := s.getPadding(width, height)
+	if width < 3 {
+		hPadding = 0
+	}
+	if height < 3 {
+		vPadding = 0
+	}
 	alignContent(&s.content, width, height, hPadding,
 		vPadding, s.cfg.ContentAlignment)
 
@@ -172,4 +179,22 @@ func (s *Span) ContentOffset() term.Coordinates {
 		}
 	}
 	return offset
+}
+
+// Height satisfies Responsive by returning the underlying component's Height
+// with added padding, or panics if the underlying component does
+// not satisfy Responsive.
+func (s *Span) Height(width int) int {
+	r, ok := s.content.C.(Responsive)
+	if !ok {
+		panic("underlying component does not satisfy Responsive")
+	}
+	hPadding, vPadding := s.getPadding(width, s.height)
+
+	// it doesn't make sense to specify auto vertical padding
+	// if underlying component is Responsive
+	if s.cfg.PadVertical < 0 {
+		vPadding = 0
+	}
+	return r.Height(width-hPadding) + vPadding
 }

@@ -5,7 +5,61 @@ import (
 
 	"github.com/ernestrc/go-tui/term"
 	testutil "github.com/ernestrc/go-tui/util/test"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
+
+func TestSpanHeight(t *testing.T) {
+	t.Run("panics if underlying component is not Responsive", func(t *testing.T) {
+		assert.Panics(t, func() {
+			comp := &TestComponent{}
+			s := NewSpan(comp, SpanConfig{})
+			s.Height(1)
+		})
+	})
+	t.Run("uses underlying Responsive Height if padding is 0", func(t *testing.T) {
+		comp := &TestResponsive{WantHeight: 10}
+		s := NewSpan(comp, SpanConfig{})
+		assert.Equal(t, 10, s.Height(0))
+	})
+	t.Run("adds absolute vertical padding from underlying component's returned Height", func(t *testing.T) {
+		comp := &TestResponsive{WantHeight: 10}
+		s := NewSpan(comp, SpanConfig{PadVertical: 2})
+		assert.Equal(t, 12, s.Height(0))
+	})
+	t.Run("subtracts absolute horizontal padding from underlying component's call to Height", func(t *testing.T) {
+		comp := &TestResponsive{WantHeight: 10}
+		s := NewSpan(comp, SpanConfig{PadHorizontal: 2})
+		require.Equal(t, 10, s.Height(20))
+		assert.Equal(t, 18, comp.PassedWidth)
+	})
+	t.Run("adds perc vertical padding from underlying component's returned Height", func(t *testing.T) {
+		comp := &TestResponsive{WantHeight: 10}
+		s := NewSpan(comp, SpanConfig{PadVerticalPerc: 0.2})
+		// needs Resize or else it does vertical perc over 0
+		s.Resize(10, 10)
+		assert.Equal(t, 12, s.Height(0))
+	})
+	t.Run("subtracts perc horizontal padding from underlying component's call to Height", func(t *testing.T) {
+		comp := &TestResponsive{WantHeight: 10}
+		s := NewSpan(comp, SpanConfig{PadHorizontalPerc: 0.1})
+		require.Equal(t, 10, s.Height(20))
+		assert.Equal(t, 18, comp.PassedWidth)
+	})
+	t.Run("ignores relative PadVertical when underlying component is Responsive", func(t *testing.T) {
+		comp := &TestResponsive{WantHeight: 10}
+		s := NewSpan(comp, SpanConfig{PadVertical: -2})
+		s.Resize(10, 10)
+		assert.Equal(t, 10, s.Height(0))
+	})
+	t.Run("adds relative horizontal padding and passes remaining with to underlying component's Height", func(t *testing.T) {
+		comp := &TestResponsive{WantHeight: 10}
+		s := NewSpan(comp, SpanConfig{PadHorizontal: -2})
+		s.Resize(20, 20)
+		require.Equal(t, 10, s.Height(20))
+		assert.Equal(t, 2, comp.PassedWidth)
+	})
+}
 
 func TestDrawDefaultSpan(t *testing.T) {
 	u := &TestComponent{Ch: 'X'}
