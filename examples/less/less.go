@@ -79,15 +79,15 @@ func main() {
 
 	}
 
-	config := handler.DefaultLessConfig
+	config := handler.DefaultLessConfig()
 	config.Wrap = *wrap
 	config.Handler = handleLessEvent
 
 	// profile initialization
 	stopCPUProfile := startCPUProfile()
 
-	less = handler.NewLess().WithConfig(config)
-	_, err = less.ReadFrom(input)
+	less = handler.NewLess(config)
+	_, err = less.Buffer().ReadFrom(input)
 	if err != nil {
 		log.Fatal(err)
 	}

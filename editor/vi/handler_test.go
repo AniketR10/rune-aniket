@@ -532,7 +532,7 @@ func TestIntegrationScrollEvent(t *testing.T) {
 			vi.Resize(4, 4)
 
 			var called int
-			vi.less.Scroll.Subscribe(component.FuncScrollSubscriber(func(pos term.Coordinates) {
+			vi.less.Scroll().Subscribe(component.FuncScrollSubscriber(func(pos term.Coordinates) {
 				called++
 			}))
 

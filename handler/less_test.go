@@ -23,12 +23,12 @@ KKKKXXLLLL
 
 func setup(t *testing.T, less *Less, width, height int) (*Less, *term.StringWriter) {
 	if less == nil {
-		less = NewLess()
+		less = NewLess(DefaultLessConfig())
 	} else {
-		less.Init()
+		less.Init(DefaultLessConfig())
 	}
 
-	_, err := less.ReadFrom(strings.NewReader(content))
+	_, err := less.Buffer().ReadFrom(strings.NewReader(content))
 	require.NoError(t, err)
 
 	less.Resize(width, height)

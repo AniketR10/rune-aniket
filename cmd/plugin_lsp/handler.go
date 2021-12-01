@@ -1423,11 +1423,11 @@ func (h *lspEditorHandler) handleHover(
 
 	log.Tracef("lspEditorHandler.Server.Hover(%s, %s): %#v", f.name, f.languageID, hover)
 
-	less := handler.NewLess()
-	less.Scroll.Buffer().WriteString(hover.Contents.Value)
+	less := handler.NewLess(handler.DefaultLessConfig())
+	less.Buffer().WriteString(hover.Contents.Value)
 	bh := browser.NopHandler(less)
 
-	width, height := less.Scroll.Buffer().MaxColumns(), less.Scroll.Buffer().Rows()
+	width, height := less.Buffer().MaxColumns(), less.Buffer().Rows()
 	at, width, height := findBestFloatingWindowPosition(cursorAtWindow, width, height)
 	_, err = h.wm.Floating(bh, at, width, height)
 	if err != nil {

@@ -38,8 +38,8 @@ func main() {
 	var less [4]handler.Less
 
 	for i := range less {
-		less[i].Init()
-		less[i].ReadFrom(input)
+		less[i].Init(handler.DefaultLessConfig())
+		less[i].Buffer().ReadFrom(input)
 	}
 
 	wm = handler.NewWindowManager(&less[0], handler.DefaultWindowManagerConfig())

@@ -15,24 +15,27 @@ const (
 
 // LessConfig holds configuration values for a Less instance.
 type LessConfig struct {
+	Debug   bool
 	Wrap    bool
 	ResAttr term.Attributes
 	Handler func(LessEvent)
 }
 
 // DefaultLessConfig is a sane configuration defaults for Less.
-var DefaultLessConfig = LessConfig{
-	Wrap: false,
-	ResAttr: term.Attributes{
-		Fg: term.AttrReverse,
-		Bg: term.ColorDefault,
-	},
+func DefaultLessConfig() LessConfig {
+	return LessConfig{
+		Wrap: false,
+		ResAttr: term.Attributes{
+			Fg: term.AttrReverse,
+			Bg: term.ColorDefault,
+		},
+	}
 }
 
 // Less is a clone of Unix' less program which implements
 // the Handler and Component interfaces.
 type Less struct {
-	component.Scroll
+	scroll       component.Scroll
 	msgAltScroll component.Virtual
 	searchScroll component.Virtual
 	msgScroll    component.Virtual
@@ -116,9 +119,9 @@ func (l *Less) searchHandleEvent(ev term.Event) (bool, bool) {
 		}
 	case term.KeyEnter:
 		l.search = l.SearchText()
-		l.Scroll.Search(l.search)
+		l.scroll.Search(l.search)
 		l.SetNormalMode()
-		l.Scroll.SeekNextResult()
+		l.scroll.SeekNextResult()
 		l.sendEvent(LessEvent{Type: Search, Data: []byte(l.search)})
 
 	case term.KeyEsc:
@@ -144,25 +147,25 @@ func (l *Less) normalHandleEvent(ev term.Event) (exit, handled bool) {
 		case 'q':
 			exit = true
 		case 'N':
-			l.Scroll.SeekPrevResult()
+			l.scroll.SeekPrevResult()
 		case 'n':
-			l.Scroll.SeekNextResult()
+			l.scroll.SeekNextResult()
 		case '0':
-			l.Scroll.SeekStartLine()
+			l.scroll.SeekStartLine()
 		case '$':
-			l.Scroll.SeekEndLine()
+			l.scroll.SeekEndLine()
 		case 'g':
-			l.Scroll.SeekStartFile()
+			l.scroll.SeekStartFile()
 		case 'G':
-			l.Scroll.SeekEndFile()
+			l.scroll.SeekEndFile()
 		case 'j':
-			l.Scroll.SeekDown()
+			l.scroll.SeekDown()
 		case 'k':
-			l.Scroll.SeekUp()
+			l.scroll.SeekUp()
 		case 'h':
-			l.Scroll.SeekLeft()
+			l.scroll.SeekLeft()
 		case 'l':
-			l.Scroll.SeekRight()
+			l.scroll.SeekRight()
 		case '/':
 			l.SetSearchMode()
 		default:
@@ -204,9 +207,9 @@ func (l *Less) Cursor() (term.Coordinates, bool) {
 
 // Draw : Component
 func (l *Less) Draw(w term.Writer) {
-	l.Scroll.Draw(w)
+	l.scroll.Draw(w)
 
-	if !l.Scroll.CanSeekDown() && !l.delEOF {
+	if !l.scroll.CanSeekDown() && !l.delEOF {
 		l.delEOF = true
 		l.sendEvent(LessEvent{Type: EOF})
 	}
@@ -227,7 +230,7 @@ func (l *Less) resize() {
 	msgWidth := len(getBuffer(l.msgScroll).String())
 	cmdBarWidth := l.width - msgWidth
 
-	l.Scroll.Resize(l.width, contentHeight)
+	l.scroll.Resize(l.width, contentHeight)
 	l.msgAltScroll.Move(term.Coordinates{X: 0, Y: contentHeight})
 	l.msgAltScroll.Resize(cmdBarWidth, cmdBarHeight)
 	l.searchScroll.Move(term.Coordinates{X: 0, Y: contentHeight})
@@ -254,6 +257,18 @@ func (l *Less) Handle(ev term.Event) (exit bool, handled bool) {
 func (l *Less) setupScroll(w *component.Scroll) {
 	w.ResultsAttr = l.config.ResAttr
 	w.Wrap = l.config.Wrap
+	w.Debug = l.config.Debug
+}
+
+// Buffer returns the internal scroll's Buffer.
+func (l *Less) Buffer() *cell.Buffer {
+	return l.scroll.Buffer()
+}
+
+// Scroll returns the internal scroll. Scroll's public properties
+// should not be updated. Use LessConfig instead.
+func (l *Less) Scroll() *component.Scroll {
+	return &l.scroll
 }
 
 // Man : Handler
@@ -319,26 +334,21 @@ func (l *Less) Man() tui.Manual {
 	}
 }
 
-// WithConfig sets cfg as the new Less handler configuration.
-func (l *Less) WithConfig(cfg LessConfig) (ret *Less) {
-	ret = new(Less)
-	*ret = *l
-	ret.config = cfg
-	return ret
-}
-
 // Init initializes this instance or resets it if already initialized.
-func (l *Less) Init() {
-	l.InitWithBuffer(cell.NewBuffer())
+func (l *Less) Init(cfg LessConfig) {
+	l.InitWithBuffer(cell.NewBuffer(), cfg)
 }
 
 // InitWithBuffer initialzes this instance with the given Buffer and configuration.
 // If config is nil, the default one is used.
-func (l *Less) InitWithBuffer(buf *cell.Buffer) {
-	l.config = DefaultLessConfig
+func (l *Less) InitWithBuffer(buf *cell.Buffer, cfg LessConfig) {
 	l.delEOF = false
-	l.Scroll.InitWithBuffer(buf)
+	l.scroll.InitWithBuffer(buf)
+	if cfg.ResAttr == (term.Attributes{}) {
+		cfg.ResAttr = DefaultLessConfig().ResAttr
+	}
 
+	l.config = cfg
 	l.msgAltScroll.C = component.NewScroll()
 	l.searchScroll.C = component.NewScroll()
 	l.msgScroll.C = component.NewScroll()
@@ -346,7 +356,7 @@ func (l *Less) InitWithBuffer(buf *cell.Buffer) {
 	l.setupScroll(l.searchScroll.C.(*component.Scroll))
 	l.setupScroll(l.msgAltScroll.C.(*component.Scroll))
 	l.setupScroll(l.msgScroll.C.(*component.Scroll))
-	l.setupScroll(&l.Scroll)
+	l.setupScroll(&l.scroll)
 
 	l.SetNormalMode()
 
@@ -354,8 +364,8 @@ func (l *Less) InitWithBuffer(buf *cell.Buffer) {
 }
 
 // NewLess allocates storage and returns a new instance of Less.
-func NewLess() *Less {
+func NewLess(cfg LessConfig) *Less {
 	l := new(Less)
-	l.Init()
+	l.Init(cfg)
 	return l
 }

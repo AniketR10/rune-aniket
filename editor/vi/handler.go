@@ -79,10 +79,12 @@ func (vi *Vi) Init(buf *cell.Buffer, opts ...Option) {
 		o(&vi.config)
 	}
 
-	vi.less.Scroll.ResultsAttr = vi.config.resAttr
-	vi.less.Scroll.Debug = vi.config.debug
-	vi.less.InitWithBuffer(buf)
-	vi.cursor.Init(&vi.less.Scroll)
+	vi.less.InitWithBuffer(buf, handler.LessConfig{
+		Wrap:    true,
+		Debug:   vi.config.debug,
+		ResAttr: vi.config.resAttr,
+	})
+	vi.cursor.Init(vi.less.Scroll())
 
 	editor.WithCopyDelete(vi.config.defaultRegister, vi.config.clipboard, &vi.cursor, buf)
 	vi.repeater.Init(&vi.cursor, buf)
@@ -176,10 +178,13 @@ func (vi *Vi) setMode(mode viMode) {
 	vi.mode = mode
 }
 
-func (vi *Vi) setNormalMode() {
+func (vi *Vi) setNormalMode() bool {
+	if vi.mode == normalMode && vi.moveMode == moveNone {
+		return false
+	}
 	vi.setMode(normalMode)
-	vi.less.SetMessageAlt(":")
 	vi.moveMode = moveNone
+	return true
 }
 
 func (vi *Vi) setInsertMode() {
@@ -473,7 +478,7 @@ func (vi *Vi) handleNormal(ev term.Event) (quit, handled bool) {
 			case term.KeyCtrlV:
 				vi.setVisualBlockMode()
 			case term.KeyEsc:
-				vi.setNormalMode()
+				handled = vi.setNormalMode()
 			default:
 				handled = false
 			}
@@ -632,7 +637,7 @@ func (vi *Vi) handleReplace(ev term.Event) (quit, handled bool) {
 	if ev.Ch != 0 {
 		// do not delete column == len(row); it contains a newline
 		// and that would conflate the current row with the next
-		if vi.cursor.Column() < vi.less.Scroll.Buffer().Columns(vi.cursor.Row()) {
+		if vi.cursor.Column() < vi.less.Buffer().Columns(vi.cursor.Row()) {
 			vi.cursor.Delete()
 		}
 		vi.cursor.Insert(ev.Ch)
@@ -782,7 +787,7 @@ func (vi *Vi) Handle(ev term.Event) (quit, handled bool) {
 	// copy the cursor to maintain original cursor for next vertcial move
 	// except when moving the cursor beyond last line
 	free, _ := vi.cursor.Cursor()
-	if free.Y < vi.less.Scroll.Buffer().Rows() {
+	if free.Y < vi.less.Buffer().Rows() {
 		vi.free = free
 	}
 

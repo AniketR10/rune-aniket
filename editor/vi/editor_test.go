@@ -49,7 +49,7 @@ func TestEditorDispatchScroll(t *testing.T) {
 	require.NoError(t, err)
 
 	h.Resize(2, 2)
-	require.True(t, getViFromHandler(h).less.Scroll.SeekDown())
+	require.True(t, getViFromHandler(h).less.Scroll().SeekDown())
 
 	at := term.Coordinates{X: -1}
 	ed.SubscribeEditorEvents(editor.EventTypeScroll, editor.FuncEventHandler(func(ev editor.Event) bool {
@@ -57,15 +57,15 @@ func TestEditorDispatchScroll(t *testing.T) {
 		return false
 	}))
 
-	require.True(t, getViFromHandler(h).less.Scroll.SeekUp())
+	require.True(t, getViFromHandler(h).less.Scroll().SeekUp())
 	assert.Equal(t, term.Coordinates{}, at)
 
 	at = term.Coordinates{X: -1}
-	require.True(t, getViFromHandler(h).less.Scroll.SeekDown())
+	require.True(t, getViFromHandler(h).less.Scroll().SeekDown())
 	assert.Equal(t, term.Coordinates{Y: 1}, at)
 
 	at = term.Coordinates{X: -1}
-	require.False(t, getViFromHandler(h).less.Scroll.SeekDown())
+	require.False(t, getViFromHandler(h).less.Scroll().SeekDown())
 	assert.Equal(t, term.Coordinates{X: -1}, at)
 }
 
