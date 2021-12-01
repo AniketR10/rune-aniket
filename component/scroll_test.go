@@ -171,11 +171,12 @@ func TestScrollDrawWrap(t *testing.T) {
 		{func() { scroll.SeekRight() }, "Love in \nyour hea"},
 		{func() { scroll.SeekLeft() }, "Love in \nyour hea"},
 		{func() { scroll.SeekDown() }, "Love isn\n't love "},
-		{func() { scroll.SeekDown() }, "Love isn\n't love "},
+		{func() { scroll.SeekDown() }, "        \n-- Oscar"},
+		{func() { scroll.SeekUp() }, "Love isn\n't love "},
 		{func() { scroll.SeekRight() }, "Love isn\n't love "},
 		{func() { scroll.SeekStartFile() }, "Love in \nyour hea"},
-		{func() { scroll.SeekEndFile() }, "Love isn\n't love "},
-		{func() { scroll.SeekStartLine() }, "Love isn\n't love "},
+		{func() { scroll.SeekEndFile() }, "        \n-- Oscar"},
+		{func() { scroll.SeekStartLine() }, "        \n-- Oscar"},
 		{func() { scroll.SeekStartFile() }, "Love in \nyour hea"},
 		{func() { scroll.Search("Love") }, "Love in \nyour hea"},
 		{func() { scroll.SeekNextResult() }, "Love in \nyour hea"},
@@ -199,6 +200,73 @@ func TestScrollDrawWrap2(t *testing.T) {
 
 	tests := []testutil.ComponentTestCase{
 		{nil, "Love in "},
+	}
+
+	testutil.TestComponent(t, scroll, w, tests)
+}
+
+func TestScrollDraw3(t *testing.T) {
+	const copy = `module github.com/ernestrc/blue
+
+go 1.14
+
+require (
+	cloud.google.com/go v0.63.0 // indirect
+	cloud.google.com/go/firestore v1.2.0
+	github.com/adrianmo/go-nmea v1.2.0
+	github.com/ernestrc/go-multierror v1.1.2 // indirect
+	github.com/ernestrc/logd-go v0.0.0-20180509171507-65871c1d5504
+	github.com/ernestrc/sensible v0.0.0-20170704153812-102a955adfdf
+	github.com/golang/mock v1.4.4
+	github.com/golang/protobuf v1.4.2
+	github.com/google/uuid v1.1.1
+	github.com/jacobsa/go-serial v0.0.0-20180131005756-15cf729a72d4
+)
+`
+	width, height := 51, 17
+	tabspaces := 4
+	wrap := true
+	scroll := newScroll(tabspaces, wrap, width, height)
+	_, err := scroll.Buffer().ReadFrom(strings.NewReader(copy))
+	require.NoError(t, err)
+
+	w := term.NewStringWriter(width, height)
+
+	tests := []testutil.ComponentTestCase{
+		{nil, `module github.com/ernestrc/blue                    
+                                                   
+go 1.14                                            
+                                                   
+require (                                          
+    cloud.google.com/go v0.63.0 // indirect        
+    cloud.google.com/go/firestore v1.2.0           
+    github.com/adrianmo/go-nmea v1.2.0             
+    github.com/ernestrc/go-multierror v1.1.2 // ind
+irect                                              
+    github.com/ernestrc/logd-go v0.0.0-201805091715
+07-65871c1d5504                                    
+    github.com/ernestrc/sensible v0.0.0-20170704153
+812-102a955adfdf                                   
+    github.com/golang/mock v1.4.4                  
+    github.com/golang/protobuf v1.4.2              
+    github.com/google/uuid v1.1.1                  `},
+		{func() { assert.True(t, scroll.SeekDown()) }, `                                                   
+go 1.14                                            
+                                                   
+require (                                          
+    cloud.google.com/go v0.63.0 // indirect        
+    cloud.google.com/go/firestore v1.2.0           
+    github.com/adrianmo/go-nmea v1.2.0             
+    github.com/ernestrc/go-multierror v1.1.2 // ind
+irect                                              
+    github.com/ernestrc/logd-go v0.0.0-201805091715
+07-65871c1d5504                                    
+    github.com/ernestrc/sensible v0.0.0-20170704153
+812-102a955adfdf                                   
+    github.com/golang/mock v1.4.4                  
+    github.com/golang/protobuf v1.4.2              
+    github.com/google/uuid v1.1.1                  
+    github.com/jacobsa/go-serial v0.0.0-20180131005`},
 	}
 
 	testutil.TestComponent(t, scroll, w, tests)

@@ -13,6 +13,7 @@ import (
 type Scroll struct {
 	buf           *cell.Buffer
 	searcher      cell.SubscriberSearcher
+	wraps         int
 	width, height int
 	searchText    []rune
 	offset        term.Coordinates
@@ -83,12 +84,12 @@ func (s *Scroll) CanSeekDown() bool {
 
 // CanSeekLeft returns true if SeekLeft would seek one column left.
 func (s *Scroll) CanSeekLeft() bool {
-	return s.offset.X > 0
+	return !s.Wrap && s.offset.X > 0
 }
 
 // CanSeekRight returns true if SeekRight would seek one column right.
 func (s *Scroll) CanSeekRight() bool {
-	return s.offset.X < s.getMaxXOffset()
+	return !s.Wrap && s.offset.X < s.getMaxXOffset()
 }
 
 // SeekUp shifts the contents of this scroll one row up.
@@ -301,7 +302,7 @@ func (s *Scroll) getMaxXOffset() (x int) {
 }
 
 func (s *Scroll) getMaxYOffset() (y int) {
-	rows := s.buf.Rows()
+	rows := s.buf.Rows() + s.wraps
 	if rows >= s.height {
 		y = rows - s.height
 	}
@@ -398,11 +399,11 @@ func (s *Scroll) draw(writer term.Writer) {
 }
 
 func (s *Scroll) wrapdrawFast(writer term.Writer) {
-	var xi, yi, ywindow int
+	var xi, yi int
 	xwindow := s.width
-	wraps := 0
+	ywindow := s.height
+	s.wraps = 0
 	for y, r := range s.rawCellsOffset() {
-		ywindow = s.height - wraps
 		if y >= ywindow {
 			break
 		}
@@ -416,10 +417,10 @@ func (s *Scroll) wrapdrawFast(writer term.Writer) {
 					xi -= xwindow
 				}
 				if xi == 0 {
-					wraps++
+					s.wraps++
 				}
 			}
-			yi = y + wraps
+			yi = y + s.wraps
 			if yi >= ywindow {
 				continue
 			}
@@ -430,11 +431,11 @@ func (s *Scroll) wrapdrawFast(writer term.Writer) {
 }
 
 func (s *Scroll) wrapdraw(writer term.Writer) {
-	var xi, yi, ywindow int
+	var xi, yi int
 	xwindow := s.width
-	wraps := 0
+	ywindow := s.height
+	s.wraps = 0
 	for y, r := range s.rawCellsOffset() {
-		ywindow = s.height - wraps
 		if y >= ywindow {
 			break
 		}
@@ -448,10 +449,10 @@ func (s *Scroll) wrapdraw(writer term.Writer) {
 					xi -= xwindow
 				}
 				if xi == 0 {
-					wraps++
+					s.wraps++
 				}
 			}
-			yi = y + wraps
+			yi = y + s.wraps
 			if yi >= ywindow {
 				continue
 			}
