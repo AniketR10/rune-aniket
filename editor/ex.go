@@ -111,8 +111,9 @@ func (e *Ex) Init(ed Editor, opts ...Option) (err error) {
 	e.command.List.Init(cfg)
 	e.command.Overlay.Init(&e.comp, commandOverlay, e.config.CommandOverlay.ElementAttr,
 		component.SpanConfig{
-			PadVertical:   -e.config.CommandOverlay.Height,
-			PadHorizontal: -e.config.CommandOverlay.Width,
+			PadVertical:      -e.config.CommandOverlay.Height,
+			PadHorizontal:    -e.config.CommandOverlay.Width,
+			ContentAlignment: component.SpanAlignmentCentered,
 		})
 	err = e.comp.Init(ed, e.config)
 	return

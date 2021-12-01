@@ -187,6 +187,7 @@ func (c *Component) Init(config Config) {
 	strcfg := component.StringConfig{
 		Attributes:           c.config.StartTextAttr,
 		BackgroundAttributes: c.config.StartTextBackgroundAttr,
+		Alignment:            component.SpanAlignmentCentered,
 	}
 	startText := component.StringWithConfig(c.config.StartText, strcfg)
 	c.startHandler = &browserContent{Handler: FuncHandler(handler.Nop(startText), func() {}), c: c}
