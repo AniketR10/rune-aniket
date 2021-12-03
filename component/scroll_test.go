@@ -11,10 +11,29 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-var fortune = `Love in your heart wasn't put there to stay.
+const (
+	fortune = `Love in your heart wasn't put there to stay.
 Love isn't love 'til you give it away.
 		-- Oscar Hammerstein ⌘⌘
 `
+	wrapCopy = `module github.com/ernestrc/blue
+
+go 1.14
+
+require (
+	cloud.google.com/go v0.63.0 // indirect
+	cloud.google.com/go/firestore v1.2.0
+	github.com/adrianmo/go-nmea v1.2.0
+	github.com/ernestrc/go-multierror v1.1.2 // indirect
+	github.com/ernestrc/logd-go v0.0.0-20180509171507-65871c1d5504
+	github.com/ernestrc/sensible v0.0.0-20170704153812-102a955adfdf
+	github.com/golang/mock v1.4.4
+	github.com/golang/protobuf v1.4.2
+	github.com/google/uuid v1.1.1
+	github.com/jacobsa/go-serial v0.0.0-20180131005756-15cf729a72d4
+)
+`
+)
 
 var fortunewidth = 44
 
@@ -26,6 +45,17 @@ func newScroll(tabspaces int, wrap bool, width, height int) (scroll *Scroll) {
 	scroll.Resize(width, height)
 	scroll.Wrap = wrap
 	return
+}
+
+func newScrollWrapTestCase(t *testing.T, width, height int) (*Scroll, *term.StringWriter) {
+	tabspaces := 4
+	wrap := true
+	scroll := newScroll(tabspaces, wrap, width, height)
+	_, err := scroll.Buffer().ReadFrom(strings.NewReader(wrapCopy))
+	require.NoError(t, err)
+
+	w := term.NewStringWriter(width, height)
+	return scroll, w
 }
 
 func TestScrollNew(t *testing.T) {
@@ -206,31 +236,8 @@ func TestScrollDrawWrap2(t *testing.T) {
 }
 
 func TestScrollDraw3(t *testing.T) {
-	const copy = `module github.com/ernestrc/blue
-
-go 1.14
-
-require (
-	cloud.google.com/go v0.63.0 // indirect
-	cloud.google.com/go/firestore v1.2.0
-	github.com/adrianmo/go-nmea v1.2.0
-	github.com/ernestrc/go-multierror v1.1.2 // indirect
-	github.com/ernestrc/logd-go v0.0.0-20180509171507-65871c1d5504
-	github.com/ernestrc/sensible v0.0.0-20170704153812-102a955adfdf
-	github.com/golang/mock v1.4.4
-	github.com/golang/protobuf v1.4.2
-	github.com/google/uuid v1.1.1
-	github.com/jacobsa/go-serial v0.0.0-20180131005756-15cf729a72d4
-)
-`
 	width, height := 51, 17
-	tabspaces := 4
-	wrap := true
-	scroll := newScroll(tabspaces, wrap, width, height)
-	_, err := scroll.Buffer().ReadFrom(strings.NewReader(copy))
-	require.NoError(t, err)
-
-	w := term.NewStringWriter(width, height)
+	scroll, w := newScrollWrapTestCase(t, width, height)
 
 	tests := []testutil.ComponentTestCase{
 		{nil, `module github.com/ernestrc/blue                    
@@ -270,6 +277,59 @@ irect
 	}
 
 	testutil.TestComponent(t, scroll, w, tests)
+}
+
+func TestScrollWraps(t *testing.T) {
+
+	t.Run("returns empty map if Draw has not been called yet", func(t *testing.T) {
+		scroll, _ := newScrollWrapTestCase(t, 10, 10)
+		assert.Zero(t, nil, scroll.Wraps())
+	})
+	t.Run("returns only the visibly wrapped lines", func(t *testing.T) {
+		width, height := 51, 17
+		scroll, w := newScrollWrapTestCase(t, width, height)
+		expected := map[int]int{
+			8:  1,
+			9:  1,
+			10: 1,
+		}
+		scroll.Draw(w)
+		assert.Equal(t, expected, scroll.Wraps())
+	})
+/*  +module github.com/er
+    +nestrc/blue         
+    +                    
+    +go 1.14             
+    +                    
+    +require (           
+    +    cloud.google.com
+    +/go v0.63.0 // indir
+    +ect                 
+    +    cloud.google.com
+    +/go/firestore v1.2.0
+    +    github.com/adria
+    +nmo/go-nmea v1.2.0  
+    +    github.com/ernes
+    +trc/go-multierror v1
+    +.1.2 // indirect    
+    +    github.com/ernes
+    +trc/logd-go v0.0.0-2
+    +0180509171507-65871c
+    +1d5504              
+*/
+	t.Run("returns number of wraps with each line", func(t *testing.T) {
+		scroll, w := newScrollWrapTestCase(t, 20, 20)
+		expected := map[int]int{
+			0:  1,
+			5:  2,
+			6: 1,
+			7: 1,
+			8: 2,
+			9: 3,
+		}
+		scroll.Draw(w)
+		assert.Equal(t, expected, scroll.Wraps())
+	})
 }
 
 func TestRowLastIndex(t *testing.T) {

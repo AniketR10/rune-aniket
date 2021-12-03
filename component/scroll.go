@@ -13,7 +13,8 @@ import (
 type Scroll struct {
 	buf           *cell.Buffer
 	searcher      cell.SubscriberSearcher
-	wraps         int
+	wrapsLen      int
+	wraps         map[int]int // int representing absolute y position
 	width, height int
 	searchText    []rune
 	offset        term.Coordinates
@@ -67,6 +68,7 @@ func (s *Scroll) InitWithBuffer(buf *cell.Buffer) {
 	// Searcher that actually performs the text search
 	s.initBuffer(buf)
 
+	s.wraps = make(map[int]int, 0)
 	s.searchText = nil
 	s.offset = term.Coordinates{}
 	s.searcher.Reset()
@@ -302,7 +304,7 @@ func (s *Scroll) getMaxXOffset() (x int) {
 }
 
 func (s *Scroll) getMaxYOffset() (y int) {
-	rows := s.buf.Rows() + s.wraps
+	rows := s.buf.Rows() + s.wrapsLen
 	if rows >= s.height {
 		y = rows - s.height
 	}
@@ -402,7 +404,8 @@ func (s *Scroll) wrapdrawFast(writer term.Writer) {
 	var xi, yi int
 	xwindow := s.width
 	ywindow := s.height
-	s.wraps = 0
+	s.wraps = make(map[int]int)
+	s.wrapsLen = 0
 	for y, r := range s.rawCellsOffset() {
 		if y >= ywindow {
 			break
@@ -417,12 +420,13 @@ func (s *Scroll) wrapdrawFast(writer term.Writer) {
 					xi -= xwindow
 				}
 				if xi == 0 {
-					s.wraps++
+					s.wraps[y] = s.wraps[y] + 1
+					s.wrapsLen++
 				}
 			}
-			yi = y + s.wraps
+			yi = y + s.wrapsLen
 			if yi >= ywindow {
-				continue
+				break
 			}
 			writer.SetCell(term.Coordinates{X: xi, Y: yi}, c)
 		}
@@ -434,7 +438,8 @@ func (s *Scroll) wrapdraw(writer term.Writer) {
 	var xi, yi int
 	xwindow := s.width
 	ywindow := s.height
-	s.wraps = 0
+	s.wraps = make(map[int]int)
+	s.wrapsLen = 0
 	for y, r := range s.rawCellsOffset() {
 		if y >= ywindow {
 			break
@@ -449,12 +454,13 @@ func (s *Scroll) wrapdraw(writer term.Writer) {
 					xi -= xwindow
 				}
 				if xi == 0 {
-					s.wraps++
+					s.wraps[y] = s.wraps[y] + 1
+					s.wrapsLen++
 				}
 			}
-			yi = y + s.wraps
+			yi = y + s.wrapsLen
 			if yi >= ywindow {
-				continue
+				break
 			}
 			if c.Bg == 0 {
 				c.Bg = s.Attributes.Bg
@@ -579,6 +585,18 @@ func (s *Scroll) Width() int {
 // Height returns this scroll's height.
 func (s *Scroll) Height() int {
 	return s.height
+}
+
+// Wraps returns a the wraps visible in last call to Draw,
+// indexed by their Y coordinate.
+// If Draw has not been called yet, then this method returns an
+// empty map.
+func (s *Scroll) Wraps() map[int]int {
+	ret := make(map[int]int, len(s.wraps))
+	for y, wraps := range s.wraps {
+		ret[y] = wraps
+	}
+	return ret
 }
 
 // Buffer returns s internal Buffer.
