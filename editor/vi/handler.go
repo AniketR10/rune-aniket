@@ -41,7 +41,7 @@ const (
 type Vi struct {
 	config       viConfig
 	less         handler.Less // used for message bar and text search capabilities
-	free         term.Coordinates
+	free         editor.CursorMark
 	cursor       editor.Cursor
 	repeater     editor.Repeater
 	mode         viMode
@@ -80,7 +80,7 @@ func (vi *Vi) Init(buf *cell.Buffer, opts ...Option) {
 	}
 
 	vi.less.InitWithBuffer(buf, handler.LessConfig{
-		Wrap:    true,
+		Wrap:    vi.config.wrap,
 		Debug:   vi.config.debug,
 		ResAttr: vi.config.resAttr,
 	})
@@ -89,7 +89,7 @@ func (vi *Vi) Init(buf *cell.Buffer, opts ...Option) {
 	editor.WithCopyDelete(vi.config.defaultRegister, vi.config.clipboard, &vi.cursor, buf)
 	vi.repeater.Init(&vi.cursor, buf)
 
-	vi.free, _ = vi.cursor.Cursor()
+	vi.free = vi.cursor.Mark()
 
 	vi.setNormalMode()
 }
@@ -261,12 +261,12 @@ func (vi *Vi) insertBlock(str string) {
 		if err == nil && len(str) > 0 {
 			str = str[:len(str)-1]
 		}
-		cur, _ := vi.cursor.Cursor()
+		cur := vi.cursor.Mark()
 		vi.cursor.InsertString(str)
 		if err != nil {
 			break
 		}
-		vi.cursor.MoveTo(cur)
+		vi.cursor.MoveToMark(cur)
 		vi.cursor.MoveDown()
 	}
 }
@@ -291,7 +291,7 @@ func (vi *Vi) pasteClipboard(registerID string, after bool) bool {
 		mode = editor.StandardSelection
 	}
 
-	cur, _ := vi.cursor.Cursor()
+	cur := vi.cursor.Mark()
 
 	switch mode {
 	case editor.StandardSelection:
@@ -300,7 +300,7 @@ func (vi *Vi) pasteClipboard(registerID string, after bool) bool {
 			vi.cursor.InsertString(str)
 		} else {
 			vi.cursor.InsertString(str)
-			vi.cursor.MoveTo(cur)
+			vi.cursor.MoveToMark(cur)
 		}
 	case editor.LineSelection:
 		if after {
@@ -310,24 +310,24 @@ func (vi *Vi) pasteClipboard(registerID string, after bool) bool {
 			} else {
 				vi.cursor.InsertString(str)
 			}
-			vi.cursor.MoveTo(cur)
+			vi.cursor.MoveToMark(cur)
 			vi.cursor.MoveDown()
 			vi.cursor.MoveStartLine()
 		} else {
 			vi.cursor.MoveStartLine()
 			vi.cursor.InsertString(str)
-			vi.cursor.MoveTo(cur)
+			vi.cursor.MoveToMark(cur)
 			vi.cursor.MoveStartLine()
 		}
 	case editor.BlockSelection:
 		if after {
 			vi.cursor.MoveRight()
 			vi.insertBlock(str)
-			vi.cursor.MoveTo(cur)
+			vi.cursor.MoveToMark(cur)
 			vi.cursor.MoveRight()
 		} else {
 			vi.insertBlock(str)
-			vi.cursor.MoveTo(cur)
+			vi.cursor.MoveToMark(cur)
 		}
 	}
 	return true
@@ -394,10 +394,10 @@ func (vi *Vi) handleNormal(ev term.Event) (quit, handled bool) {
 		case 'G':
 			vi.cursor.MoveLastLine()
 		case 'j':
-			vi.cursor.MoveTo(vi.free)
+			vi.cursor.MoveToMark(vi.free)
 			vi.cursor.MoveDown()
 		case 'k':
-			vi.cursor.MoveTo(vi.free)
+			vi.cursor.MoveToMark(vi.free)
 			vi.cursor.MoveUp()
 		case 'h':
 			vi.cursor.MoveLeft()
@@ -462,7 +462,7 @@ func (vi *Vi) handleNormal(ev term.Event) (quit, handled bool) {
 			vi.searchMode = moveToNext
 			vi.less.Handle(ev)
 		case '%':
-			vi.cursor.MoveToMatchingRune()
+			handled = vi.cursor.MoveToMatchingRune()
 		case '#':
 			vi.searchMode = moveToPrev
 			vi.search(vi.cursor.Word())
@@ -786,9 +786,8 @@ func (vi *Vi) Handle(ev term.Event) (quit, handled bool) {
 
 	// copy the cursor to maintain original cursor for next vertcial move
 	// except when moving the cursor beyond last line
-	free, _ := vi.cursor.Cursor()
-	if free.Y < vi.less.Buffer().Rows() {
-		vi.free = free
+	if vi.cursor.CursorAtScroll().Y < vi.less.Buffer().Rows() {
+		vi.free = vi.cursor.Mark()
 	}
 
 	switch vi.mode {
@@ -812,14 +811,14 @@ func (vi *Vi) Handle(ev term.Event) (quit, handled bool) {
 // in the location list identified by ID.
 func (vi *Vi) MoveToNextLocation(ID string) {
 	vi.cursor.MoveToNextLocation(ID)
-	vi.free, _ = vi.cursor.Cursor()
+	vi.free = vi.cursor.Mark()
 }
 
 // MoveToPrevLocation moves the cursor to the previous location
 // in the location list identified by ID.
 func (vi *Vi) MoveToPrevLocation(ID string) {
 	vi.cursor.MoveToPrevLocation(ID)
-	vi.free, _ = vi.cursor.Cursor()
+	vi.free = vi.cursor.Mark()
 }
 
 // SetLocationList sets a location list of this handler. See Cursor.SetLocationList
@@ -830,7 +829,7 @@ func (vi *Vi) SetLocationList(ID string, l editor.LocationList) {
 // SetCursorAtScroll sets the cursor of this Vi handler at content pos.
 func (vi *Vi) SetCursorAtScroll(pos term.Coordinates) bool {
 	_, ok := vi.cursor.MoveToScroll(pos)
-	vi.free, _ = vi.cursor.Cursor()
+	vi.free = vi.cursor.Mark()
 	return ok
 }
 

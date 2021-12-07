@@ -181,10 +181,10 @@ func TestCursorSearch(t *testing.T) {
 
 func TestCursorMove(t *testing.T) {
 	tsuite := []struct {
-		desc          string
-		width, height int
-		sut           func(*testing.T, *Cursor)
-		cursor        term.Coordinates
+		desc           string
+		width, height  int
+		sut            func(*testing.T, *Cursor)
+		cursorAtScroll term.Coordinates
 	}{
 		{
 			"MoveStartLine should do nothing if already at start of line",
@@ -235,7 +235,7 @@ func TestCursorMove(t *testing.T) {
 				e.scroll.SeekEndLine()
 				assert.True(t, e.MoveEndLine())
 			},
-			term.Coordinates{X: 0, Y: 0},
+			term.Coordinates{X: 8, Y: 22},
 		},
 		{
 			"MoveEndLine should move cursor to end of line",
@@ -258,7 +258,7 @@ func TestCursorMove(t *testing.T) {
 				assert.Equal(t, 76, e.scroll.Offset().X+e.cursor.X)
 				assert.Equal(t, 'f', c.Ch)
 			},
-			term.Coordinates{X: 8, Y: 2},
+			term.Coordinates{X: 76, Y: 2},
 		},
 		{
 			"MoveFirstLine should do nothing if already on first line",
@@ -314,7 +314,7 @@ func TestCursorMove(t *testing.T) {
 				assert.Equal(t, 31, e.scroll.Offset().Y+e.cursor.Y)
 				assert.Equal(t, '}', c.Ch)
 			},
-			term.Coordinates{X: 0, Y: 9},
+			term.Coordinates{X: 0, Y: 31},
 		},
 		{
 			"MoveDown should move the cursor position past the last line until end of window",
@@ -335,7 +335,7 @@ func TestCursorMove(t *testing.T) {
 				assert.True(t, e.MoveDown())
 				assert.Equal(t, 1, e.scroll.Offset().Y)
 			},
-			term.Coordinates{X: 0, Y: 9},
+			term.Coordinates{X: 0, Y: 10},
 		},
 		{
 			"MoveDown should NOT seek up if reached last line",
@@ -347,7 +347,7 @@ func TestCursorMove(t *testing.T) {
 				assert.False(t, e.MoveDown())
 				assert.Equal(t, offsetY, e.scroll.Offset().Y)
 			},
-			term.Coordinates{X: 0, Y: 9},
+			term.Coordinates{X: 0, Y: 31},
 		},
 		{
 			"MoveUp should do nothing if already on first line",
@@ -375,7 +375,7 @@ func TestCursorMove(t *testing.T) {
 				assert.True(t, e.MoveUp())
 				assert.Equal(t, offsetY-1, e.scroll.Offset().Y)
 			},
-			term.Coordinates{X: 0, Y: 0},
+			term.Coordinates{X: 0, Y: 21},
 		},
 		{
 			"MoveUp should NOT seek up if already at first line",
@@ -408,6 +408,10 @@ func TestCursorMove(t *testing.T) {
 			"MoveLeft should seek left if at start of window but not at start of line",
 			10, 10,
 			func(t *testing.T, e *Cursor) {
+				if e.scroll.Wrap {
+					t.Skip()
+					return
+				}
 				e.scroll.SeekEndLine()
 				assert.NotZero(t, e.scroll.Offset().X)
 
@@ -419,8 +423,22 @@ func TestCursorMove(t *testing.T) {
 		},
 		{
 			"MoveRight should move cursor right",
+			2, 2,
+			func(t *testing.T, e *Cursor) {
+				e.cursor.Y = 2
+				e.cursor.X = 5
+				assert.True(t, e.MoveRight())
+			},
+			term.Coordinates{X: 6, Y: 2},
+		},
+		{
+			"MoveRight should move cursor right even if past current line's end of line",
 			1000, 1000,
 			func(t *testing.T, e *Cursor) {
+				if e.scroll.Wrap {
+					t.Skip()
+					return
+				}
 				assert.True(t, e.MoveRight())
 			},
 			term.Coordinates{X: 1, Y: 0},
@@ -429,6 +447,10 @@ func TestCursorMove(t *testing.T) {
 			"MoveRight should move cursor right even if at the end of the line",
 			1000, 1000,
 			func(t *testing.T, e *Cursor) {
+				if e.scroll.Wrap {
+					t.Skip()
+					return
+				}
 				e.cursor.X = 1
 				assert.True(t, e.MoveRight())
 			},
@@ -438,6 +460,10 @@ func TestCursorMove(t *testing.T) {
 			"MoveRight should seek right if at end of window but not at end of line",
 			10, 10,
 			func(t *testing.T, e *Cursor) {
+				if e.scroll.Wrap {
+					t.Skip()
+					return
+				}
 				e.cursor.Y = 2
 				e.cursor.X = 5
 				e.scroll.SeekStartLine()
@@ -446,7 +472,7 @@ func TestCursorMove(t *testing.T) {
 					e.MoveRight()
 				}
 			},
-			term.Coordinates{X: 9, Y: 2},
+			term.Coordinates{X: 77, Y: 2},
 		},
 		{
 			"MoveRightStartWord should move to the start of the next word",
@@ -460,7 +486,7 @@ func TestCursorMove(t *testing.T) {
 				c, _ := e.scroll.Buffer().Cell(e.cursorAtScroll())
 				assert.Equal(t, 't', c.Ch)
 			},
-			term.Coordinates{X: 9, Y: 2},
+			term.Coordinates{X: 12, Y: 2},
 		},
 		{
 			"MoveLeftStartWord should move to the start of the next word",
@@ -475,7 +501,7 @@ func TestCursorMove(t *testing.T) {
 				c, _ := e.scroll.Buffer().Cell(e.cursorAtScroll())
 				assert.Equal(t, 'i', c.Ch)
 			},
-			term.Coordinates{X: 6, Y: 2},
+			term.Coordinates{X: 9, Y: 2},
 		},
 		{
 			"MoveRightEndWord should move to the end of the current word",
@@ -492,7 +518,7 @@ func TestCursorMove(t *testing.T) {
 				c, _ := e.scroll.Buffer().Cell(e.cursorAtScroll())
 				assert.Equal(t, 'f', c.Ch)
 			},
-			term.Coordinates{X: 7, Y: 2},
+			term.Coordinates{X: 10, Y: 2},
 		},
 		{
 			"MoveToMatchingRune should do nothing if rune is not {,[,(,},],)",
@@ -513,16 +539,43 @@ func TestCursorMove(t *testing.T) {
 			term.Coordinates{X: 4, Y: 19},
 		},
 		{
-			"MoveToMatchingRune should move to the 'matching rune'",
+			"MoveToMatchingRune should move to the 'matching rune' forward",
 			10, 10,
 			func(t *testing.T, e *Cursor) {
-				e.cursor.Y = 7
+				e.MoveToMark(CursorMark{term.Coordinates{Y: 7}})
+
+				c, _ := e.scroll.Buffer().Cell(e.cursorAtScroll())
+				assert.Equal(t, '{', c.Ch)
+
+				// scroll does not provide correct max y offsets
+				// if Draw hasn't been called yet so seek might fail
+				// if there are lots of wraps on an un-drawn scroll.
+				// At some point we might want to fix this by checking
+				// if wrapsLen == -1 or wraps == nil
+				e.scroll.Draw(term.NoopWriter{})
+
 				assert.True(t, e.MoveToMatchingRune())
+
+				c, _ = e.scroll.Buffer().Cell(e.cursorAtScroll())
+				assert.Equal(t, '}', c.Ch)
+			},
+			term.Coordinates{X: 0, Y: 31},
+		},
+		{
+			"MoveToMatchingRune should move to the 'matching rune' backwards",
+			10, 10,
+			func(t *testing.T, e *Cursor) {
+				e.MoveToMark(CursorMark{term.Coordinates{Y: 31}})
 
 				c, _ := e.scroll.Buffer().Cell(e.cursorAtScroll())
 				assert.Equal(t, '}', c.Ch)
+
+				assert.True(t, e.MoveToMatchingRune())
+
+				c, _ = e.scroll.Buffer().Cell(e.cursorAtScroll())
+				assert.Equal(t, '{', c.Ch)
 			},
-			term.Coordinates{X: 0, Y: 9},
+			term.Coordinates{X: 0, Y: 7},
 		},
 		{
 			"MoveToMatchingRune should return false if current matching rune is not found",
@@ -569,7 +622,7 @@ func TestCursorMove(t *testing.T) {
 				c, _ := e.scroll.Buffer().Cell(e.cursorAtScroll())
 				assert.Equal(t, 'o', c.Ch)
 			},
-			term.Coordinates{X: 9, Y: 2},
+			term.Coordinates{X: 33, Y: 2},
 		},
 		{
 			"MoveToPrevChar should do nothing if there is no matches in the line",
@@ -602,7 +655,7 @@ func TestCursorMove(t *testing.T) {
 				c, _ := e.scroll.Buffer().Cell(e.cursorAtScroll())
 				assert.Equal(t, 'C', c.Ch)
 			},
-			term.Coordinates{X: 0, Y: 2},
+			term.Coordinates{X: 3, Y: 2},
 		},
 	}
 
@@ -614,8 +667,18 @@ func TestCursorMove(t *testing.T) {
 
 			tcase.sut(t, e)
 
-			cursor, _ := e.Cursor()
-			assert.Equal(t, tcase.cursor, cursor)
+			cursor := e.CursorAtScroll()
+			assert.Equal(t, tcase.cursorAtScroll, cursor)
+		})
+
+		t.Run(tcase.desc+" (wrap mode on)", func(t *testing.T) {
+			e := setupCursor(t, tcase.width, tcase.height)
+			e.scroll.Wrap = true
+
+			tcase.sut(t, e)
+
+			cursor := e.CursorAtScroll()
+			assert.Equal(t, tcase.cursorAtScroll, cursor)
 		})
 	}
 }
@@ -1475,5 +1538,29 @@ func TestCursorSetLocationListMessages(t *testing.T) {
 		c.MoveRight()
 
 		assertMessages(t, c)
+	})
+}
+
+func TestCursorWrap(t *testing.T) {
+	t.Run("takes wraps into consideration", func(t *testing.T) {
+		e := setupCursor(t, 10, 10)
+		e.scroll.Wrap = true
+		e.MoveToScroll(term.Coordinates{X: 76, Y: 2})
+		pos, _ := e.Cursor()
+		assert.Equal(t, term.Coordinates{Y: 9, X: 6}, pos)
+	})
+	t.Run("handles cursor.X past last row's column", func(t *testing.T) {
+		e := setupCursor(t, 10, 10)
+		e.scroll.Wrap = true
+		e.MoveToScroll(term.Coordinates{X: 77, Y: 2})
+		pos, _ := e.Cursor()
+		assert.Equal(t, term.Coordinates{Y: 9, X: 7}, pos)
+	})
+	t.Run("handles cursor.X == width", func(t *testing.T) {
+		e := setupCursor(t, 10, 10)
+		e.scroll.Wrap = true
+		e.cursor.X = e.scroll.Width()
+		pos, _ := e.Cursor()
+		assert.Equal(t, term.Coordinates{Y: 1}, pos)
 	})
 }
