@@ -652,6 +652,13 @@ func (s *Scroll) EnablePublishing() {
 	}
 }
 
+// PublishingEnabled returns whether publishing has been
+// enabled with EnablePublishing, or disabled with DisablePublishing. By default
+// it is enabled when Scroll is initialized.
+func (s *Scroll) PublishingEnabled() bool {
+	return !s.disablePublishing
+}
+
 // FuncScrollSubscriber wraps fn to satisfy ScrollSubscriber.
 func FuncScrollSubscriber(fn func(term.Coordinates)) ScrollSubscriber {
 	return fnSubscriber(fn)

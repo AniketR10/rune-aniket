@@ -197,8 +197,8 @@ func (c *Cursor) moveToScroll(pos term.Coordinates) {
 	c.cursor = c.scrollToWindowCoordinates(pos)
 }
 
-// note that pos is window coordinates, not scroll coordinates
-func (c *Cursor) setCursor(pos term.Coordinates) {
+func (c *Cursor) seekToScrollCoordinates() {
+	pos := c.cursor
 	// scroll can return some coordinates that are be outside
 	// of the bounds of the current window.
 	// For instance, if DeleteCell deletes a tab, it could be that
@@ -226,8 +226,18 @@ func (c *Cursor) setCursor(pos term.Coordinates) {
 			pos.Y--
 		}
 	}
-
 	c.cursor = pos
+}
+
+// note that pos is window coordinates, not scroll coordinates
+func (c *Cursor) setCursor(pos term.Coordinates) {
+	c.cursor = pos
+
+	// this is an optimization to disable expensive calculations
+	// during composite moves that call setCursor multiple times
+	if c.scroll.PublishingEnabled() {
+		c.seekToScrollCoordinates()
+	}
 
 	if c.selection.mode != noSelection {
 		c.setSelection()
@@ -291,11 +301,16 @@ func (c *Cursor) MoveStartLine() (ok bool) {
 	return
 }
 
+func (c *Cursor) enablePublishing() {
+	c.seekToScrollCoordinates()
+	c.scroll.EnablePublishing()
+}
+
 // MoveEndLine moves the cursor at the end of the current line, scrolling
 // to the end of the line if required.
 func (c *Cursor) MoveEndLine() (ok bool) {
 	c.scroll.DisablePublishing()
-	defer c.scroll.EnablePublishing()
+	defer c.enablePublishing()
 	return c.moveEndLine()
 }
 
@@ -510,7 +525,7 @@ func isNoneOf(cell term.Cell, skip []rune) (none bool) {
 
 func (c *Cursor) moveAfterRune(skip, special []rune, move func() bool) (ok bool) {
 	c.scroll.DisablePublishing()
-	defer c.scroll.EnablePublishing()
+	defer c.enablePublishing()
 
 	const (
 		init = iota
@@ -574,7 +589,7 @@ func (c *Cursor) revertTo(pos, offset term.Coordinates) {
 
 func (c *Cursor) moveBeforeRune(skip, all []rune, move func() bool) (ok bool) {
 	c.scroll.DisablePublishing()
-	defer c.scroll.EnablePublishing()
+	defer c.enablePublishing()
 
 	const (
 		skipRune = iota
@@ -677,7 +692,7 @@ func (c *Cursor) MoveLeftEndWord() bool {
 
 func (c *Cursor) moveMatchRune(target, match rune, move func() bool) bool {
 	c.scroll.DisablePublishing()
-	defer c.scroll.EnablePublishing()
+	defer c.enablePublishing()
 
 	currc, curro := c.cursor, c.scroll.Offset()
 	pending := 1
@@ -816,7 +831,7 @@ func (c *Cursor) Backspace() (ok bool) {
 // Conflate removes the new line character at the end of the current line.
 func (c *Cursor) Conflate() (ok bool) {
 	c.scroll.DisablePublishing()
-	defer c.scroll.EnablePublishing()
+	defer c.enablePublishing()
 
 	pos := c.cursorAtScroll()
 	if pos.Y >= c.rows() {
@@ -1001,7 +1016,7 @@ func (c *Cursor) Selection() string {
 // Redo reverses the previously reversed update to the underlying buffer.
 func (c *Cursor) Redo() bool {
 	c.scroll.DisablePublishing()
-	defer c.scroll.EnablePublishing()
+	defer c.enablePublishing()
 
 	ok, at := c.buffer().Redo()
 	if !ok {
@@ -1014,7 +1029,7 @@ func (c *Cursor) Redo() bool {
 // Undo reverses the last update to the underlying buffer.
 func (c *Cursor) Undo() bool {
 	c.scroll.DisablePublishing()
-	defer c.scroll.EnablePublishing()
+	defer c.enablePublishing()
 
 	ok, at := c.buffer().Undo()
 	if !ok {
@@ -1101,7 +1116,7 @@ func (c *Cursor) CopySelection(registerID string, clip Clipboard) (ok bool, err 
 // does nothing.
 func (c *Cursor) MoveToBounds(padding int) {
 	c.scroll.DisablePublishing()
-	defer c.scroll.EnablePublishing()
+	defer c.enablePublishing()
 
 	for c.Row() >= c.rows() && c.MoveUp() {
 	}
@@ -1115,7 +1130,7 @@ func (c *Cursor) MoveToBounds(padding int) {
 // a non-null character, then this method does nothing.
 func (c *Cursor) MoveToNextNonNull() {
 	c.scroll.DisablePublishing()
-	defer c.scroll.EnablePublishing()
+	defer c.enablePublishing()
 
 	for cell, ok := c.Cell(); ; cell, ok = c.Cell() {
 		if !ok {
@@ -1404,7 +1419,7 @@ func (c *Cursor) movePastCursor(
 	continueIf func(term.Coordinates, term.Coordinates) bool,
 ) bool {
 	c.scroll.DisablePublishing()
-	defer c.scroll.EnablePublishing()
+	defer c.enablePublishing()
 
 	_, gotLocations := c.endOfLocationList(l, reverse)
 	if !gotLocations {

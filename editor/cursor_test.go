@@ -49,8 +49,7 @@ diff_buf_adjust(win_T *win)
 func setupCursorContent(t *testing.T, width, height int, cont string) (e *Cursor) {
 	scroll := component.NewScroll()
 	e = NewCursor(scroll)
-	_, err := scroll.Buffer().ReadFrom(strings.NewReader(cont))
-	require.NoError(t, err)
+	scroll.Buffer().ReadFrom(strings.NewReader(cont))
 	scroll.Resize(width, height)
 	require.Equal(t, e.scroll.Buffer(), scroll.Buffer())
 	require.Equal(t, e.subscriber.c, e)
@@ -1550,4 +1549,64 @@ func TestCursorWrap(t *testing.T) {
 		pos := e.Coordinates()
 		assert.Equal(t, term.Coordinates{Y: 1}, pos)
 	})
+}
+
+func newBenchmarkScroll(width, height int, fortunes int) (scroll *component.Scroll) {
+	scroll = component.NewScroll()
+	for i := 0; i < fortunes; i++ {
+		_, _ = scroll.Buffer().ReadFrom(strings.NewReader(sampleSnippet))
+	}
+	scroll.Resize(width, height)
+	return
+}
+
+func benchmarkCursorMoveLeft(b *testing.B, width, height int, wrap bool) {
+	s := newBenchmarkScroll(width, height, 10000)
+	s.Wrap = wrap
+	cursor := NewCursor(s)
+	cursor.MoveLastLine()
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		ok := cursor.MoveLeftWrap()
+		if !ok {
+			cursor.MoveLastLine()
+		}
+	}
+}
+
+func benchmarkCursorMoveMatchingRune(b *testing.B, width, height int, wrap bool) {
+	s := newBenchmarkScroll(width, height, 1)
+	s.Wrap = wrap
+	cursor := NewCursor(s)
+	cursor.MoveToMark(CursorMark{term.Coordinates{Y: 7}})
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		cursor.MoveToMatchingRune()
+	}
+}
+
+func BenchmarkCursorMoveMatchingRuneLargeWindowNoWrap(b *testing.B) {
+	benchmarkCursorMoveMatchingRune(b, 1000, 1000, false)
+}
+
+func BenchmarkCursorMoveMatchingRuneLargeWindowWrap(b *testing.B) {
+	benchmarkCursorMoveMatchingRune(b, 1000, 1000, true)
+}
+
+func BenchmarkCursorMoveMatchingRuneSmallWindowWrap(b *testing.B) {
+	benchmarkCursorMoveMatchingRune(b, 10, 10, true)
+}
+
+func BenchmarkCursorMoveMatchingRuneSmallWindowNoWrap(b *testing.B) {
+	benchmarkCursorMoveMatchingRune(b, 10, 10, false)
+}
+
+func BenchmarkCursorMoveLeftNoWrap(b *testing.B) {
+	benchmarkCursorMoveLeft(b, 1000, 1000, false)
+}
+
+func BenchmarkCursorMoveLeftWrap(b *testing.B) {
+	benchmarkCursorMoveLeft(b, 10, 10, true)
 }
