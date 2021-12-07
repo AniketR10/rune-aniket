@@ -131,7 +131,7 @@ func (vi *Vi) Cursor() (term.Coordinates, bool) {
 	if vi.less.Mode() != handler.LessNormalMode {
 		return vi.less.Cursor()
 	}
-	return vi.cursor.Cursor()
+	return vi.cursor.Coordinates(), true
 }
 
 // SetMessage uses vi's configured Messenger to set msg with args.
@@ -646,13 +646,13 @@ func (vi *Vi) handleReplace(ev term.Event) (quit, handled bool) {
 }
 
 func (vi *Vi) handleMetaNormal(ev term.Event) (quit, handled, done bool) {
-	before, _ := vi.cursor.Cursor()
+	before := vi.cursor.Coordinates()
 	vi.cursor.Select()
 
 	prevMode := vi.moveMode
 	quit, handled = vi.handleNormal(ev)
 	isMoveSwitch := prevMode == moveNone && vi.moveMode != moveNone
-	after, _ := vi.cursor.Cursor()
+	after := vi.cursor.Coordinates()
 
 	if before == after {
 		vi.cursor.Unselect()
@@ -666,7 +666,7 @@ func (vi *Vi) handleMetaNormal(ev term.Event) (quit, handled, done bool) {
 	done = true
 
 	// handle <op>wWeEbB idiosyncrasies
-	after, _ = vi.cursor.Cursor()
+	after = vi.cursor.Coordinates()
 	switch ev.Ch {
 	case 'e', 'E':
 	case 'w', 'W':

@@ -147,7 +147,7 @@ func TestCursorSearch(t *testing.T) {
 				tcase.assertions(t, e)
 			}
 
-			cursor, _ := e.Cursor()
+			cursor := e.Coordinates()
 			assert.Equal(t, tcase.cursor, cursor)
 
 			if tcase.results == 0 {
@@ -168,13 +168,13 @@ func TestCursorSearch(t *testing.T) {
 		require.Equal(t, 2, e.Search("NULL"))
 		e.MoveToNextMatch()
 
-		cursor, _ := e.Cursor()
+		cursor := e.Coordinates()
 		assert.Equal(t, term.Coordinates{X: 14, Y: 18}, cursor)
 
 		require.Equal(t, 0, e.Search(""))
 		e.MoveToNextMatch()
 
-		cursor, _ = e.Cursor()
+		cursor = e.Coordinates()
 		assert.Equal(t, term.Coordinates{X: 14, Y: 18}, cursor)
 	})
 }
@@ -925,8 +925,7 @@ func testCursorUndoRedo(t *testing.T, moveBefore, moveAfter func(c *Cursor) bool
 	str := e.scroll.Buffer().String()
 
 	moveBefore(e)
-	cBefore, ok := e.Cursor()
-	require.True(t, ok)
+	cBefore := e.Coordinates()
 
 	e.InsertString(input)
 	str2 := e.scroll.Buffer().String()
@@ -934,8 +933,7 @@ func testCursorUndoRedo(t *testing.T, moveBefore, moveAfter func(c *Cursor) bool
 	require.True(t, e.Undo())
 	require.False(t, e.Undo())
 
-	c, ok := e.Cursor()
-	require.True(t, ok)
+	c := e.Coordinates()
 	assert.Equal(t, cBefore, c)
 	assert.Equal(t, str, e.scroll.Buffer().String())
 
@@ -948,8 +946,7 @@ func testCursorUndoRedo(t *testing.T, moveBefore, moveAfter func(c *Cursor) bool
 	require.True(t, e.Undo())
 	require.False(t, e.Undo())
 
-	c, ok = e.Cursor()
-	require.True(t, ok)
+	c = e.Coordinates()
 	assert.Equal(t, cBefore, c)
 	assert.Equal(t, str, e.scroll.Buffer().String())
 }
@@ -1148,8 +1145,7 @@ func TestCursorDeleteSelectionBlock1000(t *testing.T) {
 func TestCursorMoveToBounds(t *testing.T) {
 	e := setupCursor(t, 100, 100)
 
-	pos, ok := e.Cursor()
-	require.True(t, ok)
+	pos := e.Coordinates()
 	assert.Equal(t, term.Coordinates{}, pos)
 
 	assert.True(t, e.MoveRight())
@@ -1158,11 +1154,10 @@ func TestCursorMoveToBounds(t *testing.T) {
 
 	e.MoveToBounds(2)
 
-	pos, ok = e.Cursor()
-	require.True(t, ok)
+	pos = e.Coordinates()
 	assert.Equal(t, term.Coordinates{X: 1}, pos)
 
-	pos, _ = e.Cursor()
+	pos = e.Coordinates()
 	assert.True(t, e.MoveDown())
 
 	e.MoveEndLine()
@@ -1171,12 +1166,12 @@ func TestCursorMoveToBounds(t *testing.T) {
 
 	e.MoveToBounds(1)
 
-	pos, _ = e.Cursor()
+	pos = e.Coordinates()
 	assert.Equal(t, term.Coordinates{X: 2, Y: 1}, pos)
 
 	e.MoveToBounds(0)
 
-	pos, _ = e.Cursor()
+	pos = e.Coordinates()
 	assert.Equal(t, term.Coordinates{X: 1, Y: 1}, pos)
 
 	e.MoveLastLine()
@@ -1184,7 +1179,7 @@ func TestCursorMoveToBounds(t *testing.T) {
 
 	e.MoveToBounds(0)
 
-	pos, _ = e.Cursor()
+	pos = e.Coordinates()
 	assert.Equal(t, term.Coordinates{X: 0, Y: 31}, pos)
 }
 
@@ -1195,8 +1190,7 @@ func TestCursorSkipNulls(t *testing.T) {
 
 	e.MoveToNextNonNull()
 
-	pos, ok := e.Cursor()
-	require.True(t, ok)
+	pos := e.Coordinates()
 	assert.Equal(t, term.Coordinates{X: 0}, pos)
 
 	e.MoveLastLine()
@@ -1204,7 +1198,7 @@ func TestCursorSkipNulls(t *testing.T) {
 
 	e.MoveToNextNonNull()
 
-	pos, _ = e.Cursor()
+	pos = e.Coordinates()
 	assert.Equal(t, term.Coordinates{X: 0, Y: 32}, pos)
 
 	e.MoveFirstLine()
@@ -1215,13 +1209,13 @@ func TestCursorSkipNulls(t *testing.T) {
 
 	e.MoveToNextNonNull()
 
-	pos, _ = e.Cursor()
+	pos = e.Coordinates()
 	assert.Equal(t, term.Coordinates{X: 3, Y: 16}, pos)
 
 	e.MoveRight()
 	e.MoveToNextNonNull()
 
-	pos, _ = e.Cursor()
+	pos = e.Coordinates()
 	assert.Equal(t, term.Coordinates{X: 7, Y: 16}, pos)
 }
 
@@ -1315,8 +1309,7 @@ func TestCursorMoveLocationList(t *testing.T) {
 		assert.Nil(t, c.SetLocationList(locID, &testLocationList{locations: locations}))
 		assert.True(t, c.MoveToNextLocation(locID))
 
-		pos, ok := c.Cursor()
-		require.True(t, ok)
+		pos := c.Coordinates()
 		assert.Equal(t, term.Coordinates{}, pos)
 	})
 
@@ -1328,8 +1321,7 @@ func TestCursorMoveLocationList(t *testing.T) {
 		assert.Nil(t, c.SetLocationList(locID, &testLocationList{locations: abcLocations}))
 		assert.True(t, c.MoveToNextLocation(locID))
 
-		pos, ok := c.Cursor()
-		require.True(t, ok)
+		pos := c.Coordinates()
 		assert.Equal(t, term.Coordinates{Y: 1}, pos)
 	})
 
@@ -1339,8 +1331,7 @@ func TestCursorMoveLocationList(t *testing.T) {
 		assert.Nil(t, c.SetLocationList(locID, &testLocationList{locations: abcLocations}))
 		assert.True(t, c.MoveToPrevLocation(locID))
 
-		pos, ok := c.Cursor()
-		require.True(t, ok)
+		pos := c.Coordinates()
 		assert.Equal(t, term.Coordinates{Y: 3}, pos)
 	})
 
@@ -1352,8 +1343,7 @@ func TestCursorMoveLocationList(t *testing.T) {
 		assert.Nil(t, c.SetLocationList(locID, &testLocationList{locations: locations}))
 		assert.True(t, c.MoveToNextLocation(locID))
 
-		pos, ok := c.Cursor()
-		require.True(t, ok)
+		pos := c.Coordinates()
 		assert.Equal(t, term.Coordinates{}, pos)
 	})
 
@@ -1364,8 +1354,7 @@ func TestCursorMoveLocationList(t *testing.T) {
 		assert.Nil(t, c.SetLocationList(locID, &testLocationList{locations: locations}))
 		assert.True(t, c.MoveToPrevLocation(locID))
 
-		pos, ok := c.Cursor()
-		require.True(t, ok)
+		pos := c.Coordinates()
 		assert.Equal(t, term.Coordinates{X: 1}, pos)
 	})
 
@@ -1377,8 +1366,7 @@ func TestCursorMoveLocationList(t *testing.T) {
 		assert.Nil(t, c.SetLocationList(locID, &testLocationList{locations: abcLocations}))
 		assert.True(t, c.MoveToNextLocation(locID))
 
-		pos, ok := c.Cursor()
-		require.True(t, ok)
+		pos := c.Coordinates()
 		assert.Equal(t, term.Coordinates{Y: 3}, pos)
 	})
 
@@ -1390,8 +1378,7 @@ func TestCursorMoveLocationList(t *testing.T) {
 		assert.Nil(t, c.SetLocationList(locID, &testLocationList{locations: abcLocations}))
 		assert.True(t, c.MoveToPrevLocation(locID))
 
-		pos, ok := c.Cursor()
-		require.True(t, ok)
+		pos := c.Coordinates()
 		assert.Equal(t, term.Coordinates{Y: 1}, pos)
 	})
 }
@@ -1546,21 +1533,21 @@ func TestCursorWrap(t *testing.T) {
 		e := setupCursor(t, 10, 10)
 		e.scroll.Wrap = true
 		e.MoveToScroll(term.Coordinates{X: 76, Y: 2})
-		pos, _ := e.Cursor()
+		pos := e.Coordinates()
 		assert.Equal(t, term.Coordinates{Y: 9, X: 6}, pos)
 	})
 	t.Run("handles cursor.X past last row's column", func(t *testing.T) {
 		e := setupCursor(t, 10, 10)
 		e.scroll.Wrap = true
 		e.MoveToScroll(term.Coordinates{X: 77, Y: 2})
-		pos, _ := e.Cursor()
+		pos := e.Coordinates()
 		assert.Equal(t, term.Coordinates{Y: 9, X: 7}, pos)
 	})
 	t.Run("handles cursor.X == width", func(t *testing.T) {
 		e := setupCursor(t, 10, 10)
 		e.scroll.Wrap = true
 		e.cursor.X = e.scroll.Width()
-		pos, _ := e.Cursor()
+		pos := e.Coordinates()
 		assert.Equal(t, term.Coordinates{Y: 1}, pos)
 	})
 }

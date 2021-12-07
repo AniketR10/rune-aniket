@@ -120,13 +120,13 @@ func (c *Cursor) wrapPos(ret term.Coordinates) term.Coordinates {
 	return ret
 }
 
-// Cursor returns the current position of the cursor. It safisfies tui.Handler.Cursor.
-func (c *Cursor) Cursor() (term.Coordinates, bool) {
+// Coordinates returns the current position of the cursor.
+func (c *Cursor) Coordinates() term.Coordinates {
 	ret := c.cursor
 	if c.scroll.Wrap && c.scroll.Width() != 0 {
 		ret = c.wrapPos(ret)
 	}
-	return ret, true
+	return ret
 }
 
 func (c *Cursor) buffer() *cell.Buffer {
@@ -377,7 +377,7 @@ func (c *Cursor) MoveLastLine() (ok bool) {
 // the content if required. It returns false and does nothing when the end
 // of the content is reached.
 func (c *Cursor) MoveDown() (ok bool) {
-	pos, _ := c.Cursor() // use actual render coordinates, wraps included
+	pos := c.Coordinates() // use actual render coordinates, wraps included
 	if pos.Y+1 >= c.scroll.Height() {
 		ok = c.scroll.SeekDown()
 		if ok {
