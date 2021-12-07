@@ -60,6 +60,13 @@ plugins:
 log_path: "/tmp/debug.log"
 log_level: "trace"
 
+vi:
+    search_attr:
+        bg: red
+        fg: 219
+    debug: true
+    wrap: true
+
 input_mode:
   - mouse
   - esc
@@ -154,10 +161,15 @@ browser:
 	assert.Equal(t, term.Attributes{Bg: term.ColorWhite}, cfg.startTextBackgroundAttr())
 
 	expectedPrompt := browser.PromptConfig{
-		Width: 20,
-		Height: 10,
-		TextAttr: term.Attributes{Fg: term.ColorCyan},
+		Width:         20,
+		Height:        10,
+		TextAttr:      term.Attributes{Fg: term.ColorCyan},
 		HighlightAttr: term.Attributes{Fg: 219, Bg: term.ColorRed},
 	}
 	assert.Equal(t, expectedPrompt, cfg.promptConfig())
+
+	assert.Equal(t, term.Attributes{Bg: term.ColorRed,
+		Fg: term.Attribute(219)}, cfg.viResultAttr())
+	assert.True(t, cfg.viDebug())
+	assert.True(t, cfg.viWrap())
 }

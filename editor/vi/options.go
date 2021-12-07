@@ -14,6 +14,7 @@ type viConfig struct {
 	logger          *log.Logger
 	messenger       editor.Messenger
 	debug           bool
+	wrap            bool
 }
 
 // Option represents a Vi handler configuration option.
@@ -51,5 +52,12 @@ func WithMessenger(m editor.Messenger) Option {
 func WithDebug(debug bool) Option {
 	return func(cfg *viConfig) {
 		cfg.debug = debug
+	}
+}
+
+// WithWrap enables or disables word wrapping mode.
+func WithWrap(wrap bool) Option {
+	return func(cfg *viConfig) {
+		cfg.wrap = wrap
 	}
 }

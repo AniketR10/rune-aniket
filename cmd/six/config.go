@@ -489,14 +489,22 @@ func (c ideConfig) viResultAttr() (attr term.Attributes) {
 }
 
 func (c ideConfig) viDebug() (ret bool) {
+	return c.viBool("debug")
+}
+
+func (c ideConfig) viWrap() (ret bool) {
+	return c.viBool("wrap")
+}
+
+func (c ideConfig) viBool(name string) (ret bool) {
 	cfg, ok := c.vi()
 	if !ok {
 		return
 	}
-	ret, err := cfg.GetBool("debug")
+	ret, err := cfg.GetBool(name)
 	if err != nil {
 		if err != plugin.ErrNotFound {
-			c.errors["vi.debug"] = err
+			c.errors["vi."+name] = err
 		}
 	}
 	return ret

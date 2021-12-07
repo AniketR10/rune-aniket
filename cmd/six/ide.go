@@ -103,6 +103,7 @@ func (i *IDE) init(cfgfilename, recfilename string, filenames ...string) error {
 	viOpts = append(viOpts,
 		vi.WithResAttr(i.ideConfig.viResultAttr()),
 		vi.WithDebug(i.ideConfig.viDebug()),
+		vi.WithWrap(i.ideConfig.viWrap()),
 	)
 
 	i.clipboard = plugin.NewClipboardManager()
