@@ -1610,3 +1610,35 @@ func BenchmarkCursorMoveLeftNoWrap(b *testing.B) {
 func BenchmarkCursorMoveLeftWrap(b *testing.B) {
 	benchmarkCursorMoveLeft(b, 10, 10, true)
 }
+
+func benchmarkCursorMoveToRune(b *testing.B, width, height int, wrap bool) {
+	s := newBenchmarkScroll(width, height, 100)
+	s.Wrap = wrap
+	cursor := NewCursor(s)
+	cursor.MoveToMark(CursorMark{term.Coordinates{Y: 7}})
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		cursor.MoveRightStartWordGroup()
+		cursor.MoveLeftStartWordGroup()
+		cursor.MoveRightEndWordGroup()
+		cursor.MoveLeftEndWordGroup()
+		cursor.MoveRightStartWord()
+		cursor.MoveLeftStartWord()
+		cursor.MoveRightEndWord()
+		cursor.MoveLeftEndWord()
+	}
+}
+
+func BenchmarkCursorMoveToRuneLargeWrap(b *testing.B) {
+	benchmarkCursorMoveToRune(b, 10000, 10000, true)
+}
+func BenchmarkCursorMoveToRuneLargeNoWrap(b *testing.B) {
+	benchmarkCursorMoveToRune(b, 10000, 10000, false)
+}
+func BenchmarkCursorMoveToRuneSmallWrap(b *testing.B) {
+	benchmarkCursorMoveToRune(b, 10, 10, true)
+}
+func BenchmarkCursorMoveToRuneSmallNoWrap(b *testing.B) {
+	benchmarkCursorMoveToRune(b, 10, 10, false)
+}

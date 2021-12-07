@@ -506,24 +506,17 @@ func (c *Cursor) cellAtCursor() (cell term.Cell, ok bool) {
 	return
 }
 
-func isOneOf(cell term.Cell, special []rune) bool {
-	for _, r := range special {
-		if r == cell.Ch {
-			return true
-		}
-	}
-	return false
+func isOneOf(cell term.Cell, special map[rune]struct{}) bool {
+	_, ok := special[cell.Ch]
+	return ok
 }
 
-func isNoneOf(cell term.Cell, skip []rune) (none bool) {
-	none = true
-	for _, r := range skip {
-		none = none && cell.Ch != r
-	}
-	return
+func isNoneOf(cell term.Cell, skip map[rune]struct{}) (none bool) {
+	_, ok := skip[cell.Ch]
+	return !ok
 }
 
-func (c *Cursor) moveAfterRune(skip, special []rune, move func() bool) (ok bool) {
+func (c *Cursor) moveAfterRune(skip, special map[rune]struct{}, move func() bool) (ok bool) {
 	c.scroll.DisablePublishing()
 	defer c.enablePublishing()
 
@@ -587,7 +580,7 @@ func (c *Cursor) revertTo(pos, offset term.Coordinates) {
 	c.scroll.SetOffset(offset)
 }
 
-func (c *Cursor) moveBeforeRune(skip, all []rune, move func() bool) (ok bool) {
+func (c *Cursor) moveBeforeRune(skip, all map[rune]struct{}, move func() bool) (ok bool) {
 	c.scroll.DisablePublishing()
 	defer c.enablePublishing()
 
@@ -644,11 +637,12 @@ func (c *Cursor) moveBeforeRune(skip, all []rune, move func() bool) (ok bool) {
 	return
 }
 
-var allSpecialCharacters = []rune{'.', ',', ':', ';', ' ', ')', '"',
-	'\'', '(', '{', '}', '[', ']', '\t', '\x00', '\\', '/',
-	'+', '`', '_'}
+var allSpecialCharacters = map[rune]struct{}{
+	'.': {}, ',': {}, ':': {}, ';': {}, ' ': {}, ')': {}, '"': {},
+	'\'': {}, '(': {}, '{': {}, '}': {}, '[': {}, ']': {}, '\t': {},
+	'\x00': {}, '\\': {}, '/': {}, '+': {}, '`': {}, '_': {}}
 
-var skipCharacters = []rune{' ', '\t', '\x00', '_'}
+var skipCharacters = map[rune]struct{}{' ': {}, '\t': {}, '\x00': {}, '_': {}}
 
 // MoveRightStartWordGroup moves the cursor right to the start of the next word.
 func (c *Cursor) MoveRightStartWordGroup() bool {
