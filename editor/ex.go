@@ -196,7 +196,7 @@ func (e *Ex) dispatchCommand(cmd string, args ...string) (err error) {
 
 	handled := e.comp.DispatchCommand(h, name, cmd, args...)
 	if !handled {
-		err = fmt.Errorf("Unknown command: %s", cmd)
+		err = fmt.Errorf("Unknown command: '%s'", cmd)
 	}
 	return
 }

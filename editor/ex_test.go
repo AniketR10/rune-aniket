@@ -559,33 +559,33 @@ EEEE`},
 	// test case for issue #27
 	cases = []testutil.HandlerSequenceTestCase{
 		{":e ait^^^aix^^^^d airsoft.map____>",
-			`┌──────────────────┐
-│..  bugz  airsof..│
-├──────────────────┤
-│000000000000000000│
-├─┬──────────────┬─┤
-│2│AAAAAAAAAAAAAA│3│
-│2│AAAAAAAAAAAAAA│3│
-├─┴──────────────┴─┤
-│111111111111111111│
-└──────────────────┘`},
+			`┌────────────────────────────────────────────────┐
+│other.go  bugz  airsoft.map                     │
+├────────────────────────────────────────────────┤
+│000000000000000000000000000000000000000000000000│
+├─┬────────────────────────────────────────────┬─┤
+│2│AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA│3│
+│2│AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA│3│
+├─┴────────────────────────────────────────────┴─┤
+│111111111111111111111111111111111111111111111111│
+└────────────────────────────────────────────────┘`},
 	}
-	testutil.TestHandlerSequence(t, bh, 20, 10, cases)
+	testutil.TestHandlerSequence(t, bh, 50, 10, cases)
 
 	cases = []testutil.HandlerSequenceTestCase{
 		{"____",
-			`┌──────────────────┐
-│..  bugz  airsof..│
-├──────────────────┤
-│000000000000000000│
-├─┬──────────────┬─┤
-│2│AAAAAAAAAAAAAA│3│
-│2│AAAAAAAAAAAAAA│3│
-├─┴──────────────┴─┤
-│111111111111111111│
-└──────────────────┘`},
+			`┌────────────────────────────────────────────────┐
+│other.go  bugz  airsoft.map                     │
+├────────────────────────────────────────────────┤
+│000000000000000000000000000000000000000000000000│
+├─┬────────────────────────────────────────────┬─┤
+│2│AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA│3│
+│2│AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA│3│
+├─┴────────────────────────────────────────────┴─┤
+│111111111111111111111111111111111111111111111111│
+└────────────────────────────────────────────────┘`},
 	}
-	testutil.TestHandlerSequence(t, bh, 20, 10, cases)
+	testutil.TestHandlerSequence(t, bh, 50, 10, cases)
 
 	assert.NoError(t, bh.(io.Closer).Close())
 	assert.NoError(t, b.Close())
