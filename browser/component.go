@@ -168,7 +168,7 @@ func (c *Component) Init(config Config) {
 	c.windows = make(map[uint64]*browserWindow)
 
 	c.logBuf.Init()
-	c.logVirt = NewMessageSpan(&c.logBuf, config.MessageBarAttr)
+	c.logVirt = newMessageSpan(&c.logBuf, config.MessageBarAttr)
 
 	c.tabs.Init()
 	c.tabs.OnClick = func(id int) {
@@ -639,7 +639,6 @@ func (c *Component) SetMessage(msg string, args ...interface{}) {
 // Resize satisfies tui.Component
 func (c *Component) Resize(width, height int) {
 	c.width, c.height = width, height
-	ResizeMessageSpan(&c.logVirt, width, height)
 	c.union.Resize(width, height)
 	for _, prompt := range c.prompts {
 		prompt.Resize(width, height)
@@ -662,6 +661,7 @@ func (c *Component) Draw(w term.Writer) {
 
 	// only draw logBufDraw times
 	if c.logBufDraw > 0 {
+		resizeMessageSpan(&c.logVirt, c.width, c.height, c.config.Frame)
 		c.logVirt.Draw(w)
 		c.logBufDraw--
 	} else {

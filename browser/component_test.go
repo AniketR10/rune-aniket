@@ -482,15 +482,32 @@ X──────────────────┐
 }
 
 func TestComponentSetMessage(t *testing.T) {
+	w := term.NewStringWriter(24, 8)
 	cfg := DefaultConfig()
 	c := NewComponent(cfg)
 	c.Resize(20, 8)
 
 	c.SetMessage("wasup: %s", "hola")
-	c.SetMessage("wasup: %s", "hola")
+	c.SetMessage("wasup: %s", "holaaaaaaaaaaaaaaaaaaaaaaaaa")
 
-	expected := "wasup: hola"
+	expected := "wasup: holaaaaaaaaaaaaaaaaaaaaaaaaa"
 	assert.Equal(t, expected, c.logBuf.String())
+
+	tests := []testutil.ComponentTestCase{
+		{
+			nil, `
+┌──────────────────┐    
+│                  │    
+├──────────────────┤    
+│                  │    
+│                  │    
+│wasup: holaaaaaaaa│    
+│aaaaaaaaaaaaaaaaa │    
+└──────────────────┘    `,
+		},
+	}
+
+	testutil.TestComponent(t, c, w, tests)
 }
 
 func TestComponentPrompt(t *testing.T) {

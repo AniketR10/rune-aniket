@@ -19,29 +19,40 @@ func (l nopLocker) Lock() {
 func (l nopLocker) Unlock() {
 }
 
-// NOTE: this should probably me moved under Component package.
-
-// NewMessageSpan returns a virtual message bar suitable for use with
+// newMessageSpan returns a virtual message bar suitable for use with
 // ResizeMessageSpan.
-func NewMessageSpan(buf *cell.Buffer, bgAttr term.Attributes) handler.Virtual {
-	scroll := component.NewScroll()
-	scroll.InitWithBuffer(buf)
-	scroll.Attributes = bgAttr
-
-	background := term.Cell{Bg: bgAttr.Bg, Fg: bgAttr.Fg}
-	content := component.WithBackground(scroll, background)
-	return handler.Virtual{Virtual: component.Virtual{C: content}}
+func newMessageSpan(buf *cell.Buffer, bgAttr term.Attributes) handler.Virtual {
+	responsive := component.BufferResponsive(buf, component.StringConfig{
+		BackgroundAttributes: bgAttr,
+		Attributes:           bgAttr,
+	})
+	return handler.Virtual{Virtual: component.Virtual{C: responsive}}
 }
 
-// ResizeMessageSpan resizes a handler.Virtual Message span returned by
+// resizeMessageSpan resizes a handler.Virtual Message span returned by
 // NewMessageSpan. It positions the handler.Virtual at the bottom
 // of the available space with a 1 cell padding left and bottom.
-func ResizeMessageSpan(logVirt *handler.Virtual, width, height int) {
-	if width > 1 && height > 0 {
-		logVirt.Resize(width-2, 1)
-		busPos := term.Coordinates{X: 1, Y: height - 2}
-		logVirt.Move(busPos)
-	} else {
+func resizeMessageSpan(logVirt *handler.Virtual, width, height int, frame bool) {
+	if width <= 1 || height <= 0 {
 		logVirt.Resize(0, 0)
+		return
 	}
+
+	move := term.Coordinates{}
+	maxWidth := width
+	if frame {
+		maxWidth -= 2
+		move.X = 1
+	}
+	minHeight := logVirt.C.(component.Responsive).Height(maxWidth)
+	if minHeight > height {
+		// if ideal height cannot be used because msg would be truncated
+		// then revert to old behaviour of truncating beyond first line
+		minHeight = 1
+	}
+
+	move.Y = height - minHeight - 1
+
+	logVirt.Resize(maxWidth, minHeight)
+	logVirt.Move(move)
 }
