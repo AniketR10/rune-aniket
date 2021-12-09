@@ -24,16 +24,49 @@ type Responsive interface {
 // StringResponsive returns a Responsive implementation of
 // a string tui.Component.
 func StringResponsive(str string, cfg StringConfig) Responsive {
+	return CellsResponsive(cell.StringToCells(str), cfg)
+}
+
+// CellsResponsive returns a Responsive implementation for a matrix of cells.
+func CellsResponsive(cells [][]term.Cell, cfg StringConfig) Responsive {
 	return &respStr{
 		cfg: cfg,
-		in:  cell.StringToCells(str),
+		in:  cells,
 	}
+}
+
+// BufferResponsive wraps a cell.Buffer and returns a tui.Component which satisfies
+// Responsive. Note that this is not the most efficient implementation of tui.Component
+// for a cell.Buffer. See component.Scroll for more details.
+func BufferResponsive(buf *cell.Buffer, cfg StringConfig) Responsive {
+	return &respBuf{buf: buf, respStr: respStr{cfg: cfg}}
 }
 
 type respStr struct {
 	cfg StringConfig
 	in  [][]term.Cell
 	out tui.Component
+}
+
+type respBuf struct {
+	buf           *cell.Buffer
+	width, height int
+	respStr
+}
+
+func (b *respBuf) Height(width int) int {
+	b.respStr.in = b.buf.RawCells()
+	return b.respStr.Height(width)
+}
+
+func (b *respBuf) Resize(width, height int) {
+	b.width, b.height = width, height
+}
+
+func (b *respBuf) Draw(w term.Writer) {
+	b.respStr.in = b.buf.RawCells()
+	b.respStr.Resize(b.width, b.height)
+	b.respStr.Draw(w)
 }
 
 // Height satisfies Responsive.

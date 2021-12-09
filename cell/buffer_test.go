@@ -706,3 +706,12 @@ func TestBufferVersion(t *testing.T) {
 	b.Reset()
 	assert.Equal(t, 0, b.Version())
 }
+
+func TestBufferWriteStringRawCells(t *testing.T) {
+	b := NewBuffer()
+	b.WriteString("a\nb\nc")
+	assert.Equal(t, [][]term.Cell{{{Ch: 'a'}}, {{Ch: 'b'}}, {{Ch: 'c'}}}, b.RawCells())
+
+	b.WriteString("xyz")
+	assert.Equal(t, [][]term.Cell{{{Ch: 'a'}}, {{Ch: 'b'}}, {{Ch: 'c'}, {Ch: 'x'}, {Ch: 'y'}, {Ch: 'z'}}}, b.RawCells())
+}
