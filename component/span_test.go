@@ -204,10 +204,10 @@ XXXXXXXX
 				s.cfg.PadHorizontal = 5
 				s.Resize(8, 4)
 			}, `
-         
-         
-         
-         
+  ***    
+  ***    
+  ***    
+  ***    
          `,
 		}, {
 			func() {

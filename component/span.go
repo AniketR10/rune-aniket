@@ -109,6 +109,14 @@ func alignContent(
 	offset := calculateContentOffset(horizontalPadding, verticalPadding, flags)
 	contentWidth := width - horizontalPadding
 	contentHeight := height - verticalPadding
+	if contentWidth < 0 {
+		contentWidth = width
+		offset.X = 0
+	}
+	if contentHeight < 0 {
+		contentHeight = height
+		offset.Y = 0
+	}
 
 	content.Resize(contentWidth, contentHeight)
 	content.Move(offset)
