@@ -1,6 +1,7 @@
 package component
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -279,6 +280,40 @@ irect
 	testutil.TestComponent(t, scroll, w, tests)
 }
 
+func TestScrollDrawInvalidSize(t *testing.T) {
+	constructors := []func(*testing.T, int, int) (*Scroll, *term.StringWriter){
+		newScrollWrapTestCase, func(t *testing.T, width, height int) (*Scroll, *term.StringWriter) {
+			w := term.NewStringWriter(width, height)
+			return newScroll(4, false, width, height), w
+		},
+	}
+	for i, constructor := range constructors {
+		t.Run(fmt.Sprintf("%d: negative width is considered as 0", i),
+			func(t *testing.T) {
+				width, height := 10, 1
+				scroll, w := constructor(t, width, height)
+				scroll.Resize(-22, 1)
+
+				tests := []testutil.ComponentTestCase{
+					{nil, `          `},
+				}
+				testutil.TestComponent(t, scroll, w, tests)
+			})
+		t.Run(fmt.Sprintf("%d: negative height is considered as 0", i),
+			func(t *testing.T) {
+				width, height := 10, 1
+				scroll, w := constructor(t, width, height)
+				scroll.Resize(10, -1)
+
+				tests := []testutil.ComponentTestCase{
+					{nil, `          `},
+				}
+				testutil.TestComponent(t, scroll, w, tests)
+			})
+	}
+
+}
+
 func TestScrollWraps(t *testing.T) {
 
 	t.Run("returns empty map if Draw has not been called yet", func(t *testing.T) {
@@ -296,32 +331,31 @@ func TestScrollWraps(t *testing.T) {
 		scroll.Draw(w)
 		assert.Equal(t, expected, scroll.Wraps())
 	})
-/*  +module github.com/er
-    +nestrc/blue         
-    +                    
-    +go 1.14             
-    +                    
-    +require (           
-    +    cloud.google.com
-    +/go v0.63.0 // indir
-    +ect                 
-    +    cloud.google.com
-    +/go/firestore v1.2.0
-    +    github.com/adria
-    +nmo/go-nmea v1.2.0  
-    +    github.com/ernes
-    +trc/go-multierror v1
-    +.1.2 // indirect    
-    +    github.com/ernes
-    +trc/logd-go v0.0.0-2
-    +0180509171507-65871c
-    +1d5504              
-*/
+	/*  +module github.com/er
+	    +nestrc/blue
+	    +
+	    +go 1.14
+	    +
+	    +require (
+	    +    cloud.google.com
+	    +/go v0.63.0 // indir
+	    +ect
+	    +    cloud.google.com
+	    +/go/firestore v1.2.0
+	    +    github.com/adria
+	    +nmo/go-nmea v1.2.0
+	    +    github.com/ernes
+	    +trc/go-multierror v1
+	    +.1.2 // indirect	    +    github.com/ernes
+	    +trc/logd-go v0.0.0-2
+	    +0180509171507-65871c
+	    +1d5504
+	*/
 	t.Run("returns number of wraps with each line", func(t *testing.T) {
 		scroll, w := newScrollWrapTestCase(t, 20, 20)
 		expected := map[int]int{
-			0:  1,
-			5:  2,
+			0: 1,
+			5: 2,
 			6: 1,
 			7: 1,
 			8: 2,

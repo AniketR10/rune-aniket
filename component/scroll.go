@@ -407,7 +407,7 @@ func (s *Scroll) wrapdrawFast(writer term.Writer) {
 	s.wraps = make(map[int]int)
 	s.wrapsLen = 0
 	for y, r := range s.rawCellsOffset() {
-		if y >= ywindow {
+		if y >= ywindow || xwindow <= 0 {
 			break
 		}
 		for x, c := range r {
@@ -441,7 +441,7 @@ func (s *Scroll) wrapdraw(writer term.Writer) {
 	s.wraps = make(map[int]int)
 	s.wrapsLen = 0
 	for y, r := range s.rawCellsOffset() {
-		if y >= ywindow {
+		if y >= ywindow || xwindow <= 0 {
 			break
 		}
 		for x, c := range r {
