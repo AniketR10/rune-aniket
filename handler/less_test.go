@@ -68,63 +68,63 @@ func getLessHandleTestFlow(events [19]term.Event) []testutil.HandlerTestCase {
 AAAAABBB
 CCCCCDDD
 EEEEEFFF
-:       `,
+        `,
 		},
 		{
 			events[1], `
 AAAAABBB
 CCCCCDDD
 EEEEEFFF
-:       `,
+        `,
 		},
 		{
 			events[2], `
 CCCCCDDD
 EEEEEFFF
 GGGGGHHH
-:       `,
+        `,
 		},
 		{
 			events[3], `
 CCCCCDDD
 EEEEEFFF
 GGGGGHHH
-:       `,
+        `,
 		},
 		{
 			events[4], `
 CCCCDDDD
 EEEEFFFF
 GGGGHHHH
-:       `,
+        `,
 		},
 		{
 			events[5], `
 CCDDDDD 
 EEFFFFF 
 GGHHHHH 
-:       `,
+        `,
 		},
 		{
 			events[6], `
 CCCCCDDD
 EEEEEFFF
 GGGGGHHH
-:       `,
+        `,
 		},
 		{
 			events[7], `
 88888888
 33333333
 11111111
-:       `,
+        `,
 		},
 		{
 			events[8], `
 AAAAABBB
 CCCCCDDD
 EEEEEFFF
-:       `,
+        `,
 		},
 		{
 			events[9], `
@@ -166,28 +166,28 @@ EEEEEFFF
 KKKKXXLL
 99999999
 88888888
-:       `,
+        `,
 		},
 		{
 			events[15], `
 AAAAABBB
 CCCCCDDD
 EEEEEFFF
-:       `,
+        `,
 		},
 		{
 			events[16], `
 111111XX
         
         
-:       `,
+        `,
 		},
 		{
 			events[17], `
 KKXXLLLL
 99999999
 88888888
-:       `,
+        `,
 		},
 	}
 }

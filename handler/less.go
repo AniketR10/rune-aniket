@@ -2,15 +2,12 @@ package handler
 
 import (
 	"fmt"
+	"math"
 
 	"github.com/ernestrc/go-tui"
 	"github.com/ernestrc/go-tui/cell"
 	"github.com/ernestrc/go-tui/component"
 	"github.com/ernestrc/go-tui/term"
-)
-
-const (
-	cmdBarHeight = 1
 )
 
 // LessConfig holds configuration values for a Less instance.
@@ -36,9 +33,12 @@ func DefaultLessConfig() LessConfig {
 // the Handler and Component interfaces.
 type Less struct {
 	scroll       component.Scroll
-	msgAltScroll component.Virtual
 	searchScroll component.Virtual
-	msgScroll    component.Virtual
+	msgAlt       component.Responsive
+	msgAltVirt   component.Virtual
+	msgAltWidth  int
+	msg          component.Responsive
+	msgVirt      component.Virtual
 	mode         LessMode
 	delEOF       bool
 	cursorOffset int
@@ -89,7 +89,6 @@ func getBuffer(virtualScroll component.Virtual) *cell.Buffer {
 func (l *Less) SetNormalMode() {
 	l.cursorOffset = 1
 	getBuffer(l.searchScroll).Reset()
-	getBuffer(l.searchScroll).WriteString(":")
 	l.mode = LessNormalMode
 }
 
@@ -181,18 +180,33 @@ func (l *Less) normalHandleEvent(ev term.Event) (exit, handled bool) {
 	return
 }
 
+func (l *Less) setMessage(msg string) {
+	l.msg = component.StringResponsive(msg, component.StringConfig{
+		Alignment: component.SpanAlignmentRight,
+	})
+	l.msgVirt.C = l.msg
+}
+
+func (l *Less) setMessageAlt(msg string) {
+	b := cell.CellsToBuffer(nil)
+	b.WriteString(msg)
+	l.msgAlt = component.BufferResponsive(b, component.StringConfig{
+		Alignment: component.SpanAlignmentLeft,
+	})
+	l.msgAltVirt.C = l.msgAlt
+	l.msgAltWidth = b.MaxColumns()
+}
+
 // SetMessage sets a message to be displayed on the bottom right corner.
 func (l *Less) SetMessage(text string, args ...interface{}) {
-	getBuffer(l.msgScroll).Reset()
-	getBuffer(l.msgScroll).WriteString(fmt.Sprintf(text, args...))
-	l.Resize(l.width, l.height)
+	l.setMessage(fmt.Sprintf(text, args...))
+	l.resize()
 }
 
 // SetMessageAlt sets a message to be displayed on the bottom left corner.
 func (l *Less) SetMessageAlt(text string, args ...interface{}) {
-	getBuffer(l.msgAltScroll).Reset()
-	getBuffer(l.msgAltScroll).WriteString(fmt.Sprintf(text, args...))
-	l.Resize(l.width, l.height)
+	l.setMessageAlt(fmt.Sprintf(text, args...))
+	l.resize()
 }
 
 // Mode returns the current LessMode.
@@ -214,9 +228,9 @@ func (l *Less) Draw(w term.Writer) {
 		l.sendEvent(LessEvent{Type: EOF})
 	}
 
-	l.msgAltScroll.Draw(w)
+	l.msgAltVirt.Draw(w)
+	l.msgVirt.Draw(w)
 	l.searchScroll.Draw(w)
-	l.msgScroll.Draw(w)
 }
 
 // Resize : Component
@@ -226,17 +240,26 @@ func (l *Less) Resize(width, height int) {
 }
 
 func (l *Less) resize() {
+	cmdBarHeight := int(math.Max(float64(l.msg.Height(l.width)),
+		float64(l.msgAlt.Height(l.width))))
+	if l.height <= cmdBarHeight {
+		cmdBarHeight = 1
+	}
 	contentHeight := l.height - cmdBarHeight
-	msgWidth := len(getBuffer(l.msgScroll).String())
-	cmdBarWidth := l.width - msgWidth
-
 	l.scroll.Resize(l.width, contentHeight)
-	l.msgAltScroll.Move(term.Coordinates{X: 0, Y: contentHeight})
-	l.msgAltScroll.Resize(cmdBarWidth, cmdBarHeight)
+
 	l.searchScroll.Move(term.Coordinates{X: 0, Y: contentHeight})
-	l.searchScroll.Resize(cmdBarWidth, cmdBarHeight)
-	l.msgScroll.Move(term.Coordinates{X: cmdBarWidth, Y: contentHeight})
-	l.msgScroll.Resize(msgWidth, cmdBarHeight)
+	l.searchScroll.Resize(l.width, cmdBarHeight)
+
+	msgAltWidth := int(math.Min(
+		math.Min(float64(l.width), float64(l.msgAltWidth)),
+		float64(l.width/2),
+	))
+	l.msgAltVirt.Move(term.Coordinates{X: 0, Y: contentHeight})
+	l.msgAltVirt.Resize(msgAltWidth, cmdBarHeight)
+
+	l.msgVirt.Move(term.Coordinates{X: msgAltWidth, Y: contentHeight})
+	l.msgVirt.Resize(l.width-msgAltWidth, cmdBarHeight)
 }
 
 // Handle : Handler
@@ -349,13 +372,13 @@ func (l *Less) InitWithBuffer(buf *cell.Buffer, cfg LessConfig) {
 	}
 
 	l.config = cfg
-	l.msgAltScroll.C = component.NewScroll()
 	l.searchScroll.C = component.NewScroll()
-	l.msgScroll.C = component.NewScroll()
+
+	// initialize message comps
+	l.setMessage("")
+	l.setMessageAlt("")
 
 	l.setupScroll(l.searchScroll.C.(*component.Scroll))
-	l.setupScroll(l.msgAltScroll.C.(*component.Scroll))
-	l.setupScroll(l.msgScroll.C.(*component.Scroll))
 	l.setupScroll(&l.scroll)
 
 	l.SetNormalMode()
