@@ -71,6 +71,9 @@ func (b *respBuf) Draw(w term.Writer) {
 
 // Height satisfies Responsive.
 func (s *respStr) Height(width int) int {
+	if width <= 0 {
+		return 0
+	}
 	height := len(s.in)
 	for _, col := range s.in {
 		height += (len(col) - 1) / width

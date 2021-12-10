@@ -112,6 +112,16 @@ func TestResponsiveHeight(t *testing.T) {
 			width: 10,
 			out:   1,
 		},
+		{
+			in:    "XXXXXXXXXX",
+			width: -1,
+			out:   0,
+		},
+		{
+			in:    "XXXXXXXXXX",
+			width: 0, // could trigger division by zero
+			out:   0,
+		},
 	}
 
 	for _, tcase := range tcases {
