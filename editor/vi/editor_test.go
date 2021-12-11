@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/ernestrc/go-tui/cell"
+	"github.com/ernestrc/go-tui/component"
 	"github.com/ernestrc/go-tui/editor"
 	"github.com/ernestrc/go-tui/term"
 	"github.com/stretchr/testify/assert"
@@ -41,6 +42,10 @@ func TestEditorDispatchFocus(t *testing.T) {
 	assert.Equal(t, 1, focusCalled)
 }
 
+func getScrollFromHandler(e editor.Editor, h editor.Handler) *component.Scroll {
+	return e.(*viEditor).Publisher.Handler(h).(*Vi).less.Scroll()
+}
+
 func TestEditorDispatchScroll(t *testing.T) {
 	ed := Editor()
 	buf := cell.NewBuffer()
@@ -49,7 +54,7 @@ func TestEditorDispatchScroll(t *testing.T) {
 	require.NoError(t, err)
 
 	h.Resize(2, 2)
-	require.True(t, getViFromHandler(h).less.Scroll().SeekDown())
+	require.True(t, getScrollFromHandler(ed, h).SeekDown())
 
 	at := term.Coordinates{X: -1}
 	ed.SubscribeEditorEvents(editor.EventTypeScroll, editor.FuncEventHandler(func(ev editor.Event) bool {
@@ -57,15 +62,15 @@ func TestEditorDispatchScroll(t *testing.T) {
 		return false
 	}))
 
-	require.True(t, getViFromHandler(h).less.Scroll().SeekUp())
+	require.True(t, getScrollFromHandler(ed, h).SeekUp())
 	assert.Equal(t, term.Coordinates{}, at)
 
 	at = term.Coordinates{X: -1}
-	require.True(t, getViFromHandler(h).less.Scroll().SeekDown())
+	require.True(t, getScrollFromHandler(ed, h).SeekDown())
 	assert.Equal(t, term.Coordinates{Y: 1}, at)
 
 	at = term.Coordinates{X: -1}
-	require.False(t, getViFromHandler(h).less.Scroll().SeekDown())
+	require.False(t, getScrollFromHandler(ed, h).SeekDown())
 	assert.Equal(t, term.Coordinates{X: -1}, at)
 }
 
