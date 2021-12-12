@@ -55,8 +55,8 @@ func fromToInBounds(cells *rawCells, from, to term.Coordinates) (
 	}
 
 	if to.Y >= rows {
-		to.Y = rows - 1
-		to.X = cells.Columns(to.Y)
+		to.Y = rows
+		to.X = 0
 	} else if cols := cells.Columns(to.Y); to.X > cols {
 		to.X = cols
 	}
@@ -137,15 +137,6 @@ func (b *Buffer) InsertRowAt(y int) {
 // Insert inserts a rune in the given position and shift the cells to the right
 func (b *Buffer) Insert(pos term.Coordinates, r rune) (next term.Coordinates) {
 	_, next = b.writer.Insert(pos, string(r))
-
-	if r == '\n' {
-		next.Y++
-		next.X = 0
-		return
-	}
-
-	next.X++
-
 	return
 }
 
@@ -187,66 +178,70 @@ func (b *Buffer) DeleteRow(y int) (ok bool) {
 	if ok = y < b.reader.Rows(); !ok {
 		return
 	}
-	from := term.Coordinates{Y: y, X: 0}
-	to := term.Coordinates{Y: y, X: b.reader.Columns(y)}
+	from := term.Coordinates{Y: y}
+	to := term.Coordinates{Y: y + 1}
 	b.writer.Delete(from, to)
 	return
 }
 
-func (b *Buffer) inBounds(pos term.Coordinates) (ok bool) {
-	if pos.Y < 0 || pos.Y >= b.reader.Rows() ||
-		pos.X < 0 || pos.X > b.reader.Columns(pos.Y) {
+// TruncateRowFrom truncates the row at term.Coordinates.Y starting
+// from term.Coordinates.X
+func (b *Buffer) TruncateRowFrom(from term.Coordinates) (ok bool) {
+	to := term.Coordinates{Y: from.Y}
+	from, to, ok = fromToInBounds(b.cells, from, to)
+	if !ok {
 		return
 	}
-	ok = true
-	return
-}
-
-// TruncateRowFrom truncates the row at term.Coordinates.Y starting from term.Coordinates.X
-func (b *Buffer) TruncateRowFrom(pos term.Coordinates) (ok bool) {
-	if ok = b.inBounds(pos); !ok {
-		return
-	}
-	cols := b.reader.Columns(pos.Y)
+	cols := b.reader.Columns(to.Y)
 	if cols == 0 {
 		ok = false
 		return
 	}
-	b.writer.Delete(pos, term.Coordinates{Y: pos.Y, X: cols - 1})
+	to.X = cols
+	b.writer.Delete(from, to)
 	return
 }
 
 // TruncateFrom truncates from the given position to the end of the buffer.
-func (b *Buffer) TruncateFrom(pos term.Coordinates) (ok bool) {
-	if ok = b.inBounds(pos); !ok {
+func (b *Buffer) TruncateFrom(from term.Coordinates) (ok bool) {
+	to := term.Coordinates{Y: b.reader.Rows()}
+	from, to, ok = fromToInBounds(b.cells, from, to)
+	if !ok {
 		return
 	}
-	y := b.reader.Rows() - 1
-	to := term.Coordinates{X: b.reader.Columns(y), Y: y}
-	b.writer.Delete(pos, to)
+	b.writer.Delete(from, to)
 	return
 }
 
 // ConflateRow will conflate row at index i with the next row
 func (b *Buffer) ConflateRow(y int) (ok bool) {
-	pos := term.Coordinates{Y: y}
-	if ok = b.inBounds(pos); !ok {
+	from := term.Coordinates{Y: y}
+	to := term.Coordinates{Y: y + 1}
+	from, to, ok = fromToInBounds(b.cells, from, to)
+	if !ok {
 		return
 	}
-	pos.X = b.reader.Columns(y)
-	b.writer.Delete(pos, pos)
+	from.X = b.reader.Columns(from.Y)
+	b.writer.Delete(from, to)
 	return
 }
 
-// DeleteCell truncates the cell at the given position.
+// DeleteCell removes the cell at the given position.
 // It returns the position at which the current cell (width padding) started,
 // if the width was > 1.
 func (b *Buffer) DeleteCell(pos term.Coordinates) (term.Coordinates, rune, bool) {
-	if ok := b.inBounds(pos); !ok {
+	from := pos
+	to := term.Coordinates{X: from.X + 1, Y: from.Y}
+	from, to, ok := fromToInBounds(b.cells, from, to)
+	if !ok {
 		return term.Coordinates{}, 0, false
 	}
 
-	start, _, str := b.writer.Delete(pos, pos)
+	start, _, str := b.writer.Delete(pos, to)
+	if str == "" {
+		return term.Coordinates{}, 0, false
+	}
+
 	return start, []rune(str)[0], true
 }
 
@@ -286,31 +281,19 @@ func (b *Buffer) RawCells() [][]term.Cell {
 // and/or columns of cells with blank spaces.
 // It returns the start of the insert 'from', including the filled-in blank spaces
 // and where the next logical Insert should go 'until'.
-func (b *Buffer) InsertString(at term.Coordinates, str string) (from, until term.Coordinates) {
-	from, until = b.writer.Insert(at, str)
-
-	if str == "" {
-		return
-	}
-	runes := []rune(str)
-	if runes[len(runes)-1] == '\n' {
-		until.Y++
-		until.X = 0
-		return
-	}
-	until.X++
-	return
+func (b *Buffer) InsertString(at term.Coordinates, str string) (
+	from, until term.Coordinates,
+) {
+	return b.writer.Insert(at, str)
 }
 
-// Delete removes cells in left-inclusive, right-inclusive range
+// Delete removes cells in left-inclusive right-exclusive range
 // and returns the corresponding string representation of the cells removed,
-// along with the true start and end of the range, in case some cells groups
-// (cell with padding) were deleted.
-// Note that if to.X == b.Columns(to.Y), the newline at the end of the row is deleted,
-// and so row is conflated with next row.
-// As opposed to cell.Writer.Delete, this method does not panic if from or to are out of bounds.
-// Instead, it trims the coordinates to be in-bounds or simply does nothing and returned str
-// is empty.
+// along with the true start and end of the range, which accounts for padding.
+//
+// As opposed to cell.Writer.Delete, this method does not panic if from or
+// to are out of bounds. Instead, it trims the coordinates to be in-bounds or
+// simply does nothing and returned str is empty.
 func (b *Buffer) Delete(from, to term.Coordinates) (start, end term.Coordinates, str string) {
 	return b.safew.Delete(from, to)
 }
@@ -321,11 +304,13 @@ func (b *Buffer) DeleteLine(from, to term.Coordinates) (
 	start, end term.Coordinates, str string,
 ) {
 	from, to = SortFromTo(from, to)
-	from.X, to.X = 0, b.Columns(to.Y)
-	if to.X < 0 {
-		to.X = 0
+	from.X, to.X = 0, 0
+	to.Y++
+	from, to, ok := fromToInBounds(b.cells, from, to)
+	if !ok {
+		return
 	}
-	return b.Delete(from, to)
+	return b.writer.Delete(from, to)
 }
 
 // DeleteBlock deletes the blocks of cells between from, to. See SelectBlock for more
@@ -337,7 +322,7 @@ func (b *Buffer) DeleteBlock(from, to term.Coordinates) (
 	b.selector.iterateBlocks(from, to,
 		func(i int, from, to term.Coordinates, cells []term.Cell) {
 			columns := b.Columns(from.Y)
-			if columns == 0 {
+			if columns == 0 || from.X > columns {
 				if i == 0 {
 					start = term.Coordinates{Y: from.Y}
 				}
@@ -345,13 +330,10 @@ func (b *Buffer) DeleteBlock(from, to term.Coordinates) (
 				return
 			}
 
-			if to.X > columns-1 {
-				to.X = columns - 1
+			if to.X > columns {
+				to.X = columns
 			}
-			if from.X > columns-1 {
-				return
-			}
-			blockStart, blockEnd, _ := b.Delete(from, to)
+			blockStart, blockEnd, _ := b.safew.Delete(from, to)
 
 			if i == 0 {
 				start = blockStart
@@ -470,18 +452,20 @@ func (b *Buffer) ShiftRowRight(row int) int {
 // ShiftRowLeft shifts row one tab to the left. It returns
 // the number of cells that the line was shifted.
 func (b *Buffer) ShiftRowLeft(row int) (chars int) {
-	for ; chars < b.Tabspaces(); chars++ {
-		c, ok := b.reader.Cell(term.Coordinates{Y: row, X: 0})
+	from, to := term.Coordinates{Y: row}, term.Coordinates{Y: row, X: 1}
+	from, to, ok := fromToInBounds(b.cells, from, to)
+	if !ok {
+		return
+	}
+	for chars < b.Tabspaces() {
+		c, ok := b.reader.Cell(from)
 		if !ok {
 			return
 		}
-
 		switch c.Ch {
-		case '\t', '\x00':
-			chars = b.Tabspaces() - 1
-			fallthrough
-		case ' ':
-			b.DeleteCell(term.Coordinates{Y: row})
+		case '\t', '\x00', ' ':
+			start, end, _ := b.Delete(from, to)
+			chars += end.X - start.X
 		default:
 			return
 		}

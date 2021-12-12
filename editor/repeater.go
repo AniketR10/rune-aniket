@@ -15,6 +15,7 @@ type Repeater struct {
 	insertStr string
 
 	d          bool
+	repeating  bool
 	deleteFrom term.Coordinates
 	deleteTo   term.Coordinates
 }
@@ -41,20 +42,19 @@ func (r *Repeater) Repeat() (ok bool) {
 		return
 	}
 	if r.d {
-		if !r.cursor.Select() {
-			return
-		}
-
-		orig := r.cursor.CursorAtScroll()
+		cursor := r.cursor.CursorAtScroll()
 		from, to := cell.SortFromTo(r.deleteFrom, r.deleteTo)
 		diff := cell.CoordinatesDiff(to, from)
-		to = cell.CoordinatesSum(orig, diff)
-		if _, ok = r.cursor.MoveToScroll(to); ok {
-			ok = r.cursor.DeleteSelection()
-			return
-		}
-		r.cursor.Unselect()
-		r.cursor.MoveToScroll(orig)
+
+		from = cursor
+		to = cell.CoordinatesSum(from, diff)
+
+		// avoid consuming OnWillDelete
+		r.repeating = true
+		_, _, str := r.buf.Delete(from, to)
+		r.repeating = false
+
+		ok = str != ""
 		return
 	}
 	return
@@ -73,6 +73,9 @@ func (r *Repeater) OnDidInsert(from, to term.Coordinates) {
 
 // OnWillDelete satisfies cell.Subscriber.
 func (r *Repeater) OnWillDelete(from, to term.Coordinates) {
+	if r.repeating {
+		return
+	}
 	r.i = false
 	r.d = true
 	r.deleteFrom = from

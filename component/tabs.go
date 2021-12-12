@@ -158,7 +158,7 @@ func (t *Tabs) Draw(w term.Writer) {
 		if i < len(t.tabs)-1 {
 			lenTab += lenSeparator
 		}
-		_, _, str := t.fileListBuf.Delete(term.Coordinates{}, term.Coordinates{X: lenTab - 1})
+		_, _, str := t.fileListBuf.Delete(term.Coordinates{}, term.Coordinates{X: lenTab})
 		focusPos.X -= len(str)
 		next.X -= len(str)
 		t.offsetIdx++

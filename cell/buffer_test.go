@@ -201,10 +201,21 @@ func TestBufferDelete(t *testing.T) {
 		_, err := b.ReadFrom(strings.NewReader("bla\nbleh"))
 		require.NoError(t, err)
 
-		start, end, str := b.Delete(term.Coordinates{}, term.Coordinates{X: 3})
+		start, end, str := b.Delete(term.Coordinates{}, term.Coordinates{Y:1})
 		assert.Equal(t, term.Coordinates{}, start)
-		assert.Equal(t, term.Coordinates{X: 3}, end)
+		assert.Equal(t, term.Coordinates{Y: 1}, end)
 		assert.Equal(t, "bla\n", str)
+	})
+
+	t.Run("does not return last rawcells newline on delete last line", func(t *testing.T) {
+		b := NewBuffer()
+		_, err := b.ReadFrom(strings.NewReader("bla\nbleh"))
+		require.NoError(t, err)
+
+		start, end, str := b.Delete(term.Coordinates{Y: 1}, term.Coordinates{Y:2})
+		assert.Equal(t, term.Coordinates{Y: 1}, start)
+		assert.Equal(t, term.Coordinates{Y: 2}, end)
+		assert.Equal(t, "bleh", str)
 	})
 
 	t.Run("panics if coordinates are negative", func(t *testing.T) {
@@ -225,7 +236,7 @@ func TestBufferDelete(t *testing.T) {
 		start, end, str := b.Delete(term.Coordinates{X: 10}, term.Coordinates{X: 11})
 		assert.Equal(t, term.Coordinates{X: 3}, start)
 		assert.Equal(t, term.Coordinates{X: 3}, end)
-		assert.Equal(t, "\n", str)
+		assert.Equal(t, "", str)
 	})
 
 	t.Run("does not panic if coordinates are partially out of bounds (y)", func(t *testing.T) {
@@ -235,7 +246,7 @@ func TestBufferDelete(t *testing.T) {
 
 		start, end, str := b.Delete(term.Coordinates{Y: 1}, term.Coordinates{Y: 1, X: 11})
 		assert.Equal(t, term.Coordinates{Y: 1}, start)
-		assert.Equal(t, term.Coordinates{Y: 1, X: 3}, end)
+		assert.Equal(t, term.Coordinates{Y: 1, X: 4}, end)
 		assert.Equal(t, "bleh", str)
 	})
 
@@ -352,7 +363,7 @@ func TestBufferDeleteLine(t *testing.T) {
 			input:  "bla\nbleh",
 			output: "bla\nbleh",
 			start:  term.Coordinates{},
-			end:    term.Coordinates{Y: 1, X: 3},
+			end:    term.Coordinates{Y: 2},
 		},
 		{
 			// inverted from/to
@@ -361,7 +372,7 @@ func TestBufferDeleteLine(t *testing.T) {
 			input:  "bla\nbleh",
 			output: "bla\nbleh",
 			start:  term.Coordinates{},
-			end:    term.Coordinates{Y: 1, X: 3},
+			end:    term.Coordinates{Y: 2},
 		},
 		{
 			from:   term.Coordinates{X: 1}, // should not matter that is oob
@@ -369,7 +380,7 @@ func TestBufferDeleteLine(t *testing.T) {
 			input:  "\nbla\n\nbleh\n",
 			output: "\nbla\n\n",
 			start:  term.Coordinates{},
-			end:    term.Coordinates{Y: 2},
+			end:    term.Coordinates{Y: 3},
 		},
 		{
 			from:   term.Coordinates{Y: 1},
@@ -377,7 +388,7 @@ func TestBufferDeleteLine(t *testing.T) {
 			input:  "{\n\tb\n\tc\n}",
 			output: "\tb\n\tc\n",
 			start:  term.Coordinates{Y: 1},
-			end:    term.Coordinates{X: 5, Y: 2},
+			end:    term.Coordinates{Y: 3},
 		},
 	}
 
@@ -467,7 +478,7 @@ diff_buf_adjust(win_T *win)
 		b.WriteString(str)
 
 		assert.Equal(t, str, b.String())
-		to := term.Coordinates{X: 88, Y: 30}
+		to := term.Coordinates{X: 89, Y: 30}
 		start, end := b.DeleteBlock(term.Coordinates{}, to)
 		assert.Equal(t, term.Coordinates{}, start)
 		assert.Equal(t, to, end)
@@ -511,7 +522,7 @@ d
 
 		assert.Equal(t, str, b.String())
 		to := term.Coordinates{X: 1, Y: 0}
-		from := term.Coordinates{X: 88, Y: 30}
+		from := term.Coordinates{X: 89, Y: 30}
 		start, end := b.DeleteBlock(from, to)
 		assert.Equal(t, to, start)
 		assert.Equal(t, from, end)

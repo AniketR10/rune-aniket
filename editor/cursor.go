@@ -886,6 +886,8 @@ func (c *Cursor) setSelection() (ok bool) {
 	from := c.selection.scrollFrom
 	to := c.cursorAtScroll()
 
+	from, to = cell.SortFromTo(from, to)
+	to.X++
 	switch c.selection.mode {
 	case StandardSelection:
 		c.selection.cells, ok = c.buffer().Select(from, to)
@@ -914,8 +916,8 @@ func (c *Cursor) cursorAtScrollBounds() (pos term.Coordinates, ok bool) {
 	ok = true
 
 	if pos.Y >= rows {
-		pos.Y = rows - 1
-		pos.X = c.buffer().Columns(pos.Y)
+		pos.Y = rows
+		pos.X = 0
 		return
 	}
 
@@ -1072,6 +1074,10 @@ func (c *Cursor) DeleteSelection() (ok bool) {
 	}
 
 	ok = true
+
+	// buffer delete uses right exclusive semantics
+	from, to = cell.SortFromTo(from, to)
+	to.X++
 
 	var start term.Coordinates
 	switch mode {

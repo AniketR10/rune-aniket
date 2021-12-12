@@ -139,7 +139,7 @@ func TestClientServerIntegration(t *testing.T) {
 					buf.WriteString(str1)
 					ed.Edit(resourceName, buf)
 					buf.DeleteRow(0)
-				}, &term.Coordinates{}, &term.Coordinates{X: 11}, &str1,
+				}, &term.Coordinates{}, &term.Coordinates{Y: 1}, &str1,
 			},
 			{
 				"Handle->EventTypeCursor",
@@ -252,14 +252,14 @@ func TestClientServerIntegration(t *testing.T) {
 		from, to, err := w.Insert(term.Coordinates{X: 1}, "el\nAridio")
 		require.NoError(t, err)
 		assert.Equal(t, term.Coordinates{}, from)
-		assert.Equal(t, term.Coordinates{X: 5, Y: 1}, to)
+		assert.Equal(t, term.Coordinates{X: 6, Y: 1}, to)
 
 		assert.Equal(t, " el\nAridio", buf.String())
 
-		start, end, str, err := w.Delete(term.Coordinates{}, term.Coordinates{X: 3})
+		start, end, str, err := w.Delete(term.Coordinates{}, term.Coordinates{Y: 1})
 		require.NoError(t, err)
 		assert.Equal(t, term.Coordinates{}, start)
-		assert.Equal(t, term.Coordinates{X: 3}, end)
+		assert.Equal(t, term.Coordinates{Y: 1}, end)
 		assert.Equal(t, " el\n", str)
 
 		assert.Equal(t, "Aridio", buf.String())

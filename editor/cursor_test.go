@@ -840,6 +840,23 @@ func testCursorSelect(t *testing.T, width, height int) {
 		assertBufferAttributes(t, e.buffer(), term.Attributes{})
 	})
 
+	t.Run("reverse coords Select/DeleteSelection selects from start to end", func(t *testing.T) {
+		e := setupCursor(t, width, height)
+		str := e.scroll.Buffer().String()
+		assertBufferAttributes(t, e.buffer(), term.Attributes{})
+
+		require.True(t, e.MoveLastLine())
+		require.True(t, e.MoveEndLine())
+
+		require.True(t, e.Select())
+
+		require.True(t, e.MoveFirstLine())
+
+		assert.Equal(t, str, e.Selection())
+		require.True(t, e.DeleteSelection())
+		assert.Equal(t, "", e.scroll.Buffer().String())
+	})
+
 	t.Run("SelectLine/DeleteSelection selects from start line to end line", func(t *testing.T) {
 		e := makeSelectLine(t)
 		require.True(t, e.DeleteSelection())
@@ -999,18 +1016,14 @@ func testCursorDeleteSelection(t *testing.T, width, height int, typeSelect Selec
 			selected:    true,
 			finalPos:    func(c *Cursor) { c.MoveRight() },
 			deleted:     true,
-			finalBuf:    "b",
+			finalBuf:    "\nb",
 			skipForMode: []SelectMode{LineSelection, BlockSelection},
 		},
 		{
-			initialBuf: "a\nb",
-			selected:   true,
-			finalPos: func(c *Cursor) {
-				for i := 0; i < 3; i++ {
-					c.MoveRight()
-				}
-			},
-			finalBuf:    "b",
+			initialBuf:  "a\nb",
+			selected:    true,
+			finalPos:    func(c *Cursor) { c.MoveDown() },
+			finalBuf:    "",
 			deleted:     true,
 			skipForMode: []SelectMode{LineSelection, BlockSelection},
 		},
@@ -1021,10 +1034,10 @@ func testCursorDeleteSelection(t *testing.T, width, height int, typeSelect Selec
 					c.MoveRight()
 				}
 			},
-			finalPos:    func(*Cursor) {},
+			finalPos:    func(c *Cursor) { c.MoveDown() },
 			selected:    true,
 			deleted:     true,
-			finalBuf:    "ab",
+			finalBuf:    "a",
 			skipForMode: []SelectMode{LineSelection, BlockSelection},
 		},
 		{
@@ -1045,8 +1058,8 @@ func testCursorDeleteSelection(t *testing.T, width, height int, typeSelect Selec
 				}
 			},
 			finalPos:    func(*Cursor) {},
-			selected:    true,
-			deleted:     true,
+			selected:    false,
+			deleted:     false,
 			finalBuf:    "a\nb",
 			skipForMode: []SelectMode{LineSelection},
 		},
@@ -1075,7 +1088,7 @@ func testCursorDeleteSelection(t *testing.T, width, height int, typeSelect Selec
 		},
 	}
 
-	for _, tcase := range tsuite {
+	for i, tcase := range tsuite {
 		var skip bool
 		for _, mode := range tcase.skipForMode {
 			if mode == typeSelect {
@@ -1099,7 +1112,7 @@ func testCursorDeleteSelection(t *testing.T, width, height int, typeSelect Selec
 		case LineSelection:
 			require.Equal(t, tcase.selected, c.SelectLine())
 		case StandardSelection:
-			require.Equal(t, tcase.selected, c.Select())
+			require.Equal(t, tcase.selected, c.Select(), "test case %d", i)
 		}
 		if !tcase.selected {
 			continue
@@ -1109,7 +1122,8 @@ func testCursorDeleteSelection(t *testing.T, width, height int, typeSelect Selec
 		if !tcase.deleted {
 			continue
 		}
-		assert.Equal(t, tcase.finalBuf, c.scroll.Buffer().String())
+		assert.Equal(t, tcase.finalBuf, c.scroll.Buffer().String(),
+			"test case %d", i)
 	}
 }
 
@@ -1258,18 +1272,18 @@ var (
 	abcLocations = []Location{
 		{
 			From:    term.Coordinates{Y: 1},
-			To:      term.Coordinates{Y: 1},
+			To:      term.Coordinates{Y: 1, X: 1},
 			Attr:    abcAttr,
 			Message: "blabla",
 		},
 		{
 			From: term.Coordinates{Y: 2},
-			To:   term.Coordinates{Y: 2},
+			To:   term.Coordinates{Y: 2, X: 1},
 			Attr: abcAttr,
 		},
 		{
 			From: term.Coordinates{Y: 3},
-			To:   term.Coordinates{Y: 3},
+			To:   term.Coordinates{Y: 3, X: 1},
 			Attr: abcAttr,
 		},
 	}
@@ -1404,7 +1418,7 @@ func TestCursorSetLocationListAttr(t *testing.T) {
 	newLocations := []Location{
 		{
 			From: term.Coordinates{Y: 2},
-			To:   term.Coordinates{Y: 2},
+			To:   term.Coordinates{Y: 2, X: 1},
 			Attr: term.Attributes{Bg: term.ColorRed},
 		},
 	}
@@ -1427,7 +1441,7 @@ func TestCursorSetLocationListAttr(t *testing.T) {
 	newLocations = []Location{
 		{
 			From: term.Coordinates{Y: 2},
-			To:   term.Coordinates{Y: 2},
+			To:   term.Coordinates{Y: 2, X: 1},
 			Attr: term.Attributes{Bg: term.ColorRed},
 		},
 	}

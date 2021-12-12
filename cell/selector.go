@@ -30,12 +30,9 @@ func (s *selector) selectCells(from term.Coordinates, to term.Coordinates) (
 	}
 
 	fromX := int(math.Min(float64(from.X), float64(len(cells[from.Y]))))
-	toX := int(math.Min(float64(to.X+1), float64(len(cells[from.Y]))))
+	toX := int(math.Min(float64(to.X), float64(len(cells[from.Y]))))
 	res = append(res, cells[from.Y][fromX:toX])
 
-	if to.X == len(cells[from.Y]) && to.Y < len(cells)-1 {
-		res = append(res, make([]term.Cell, 0))
-	}
 	return
 }
 
@@ -66,16 +63,16 @@ func (s *selector) iterateBlocks(
 	from, to = SortFromToBlock(from, to)
 	cells := s.reader.RawCells()
 	i := 0
-	for from.Y <= to.Y && from.Y < len(cells) {
-		maxy := float64(len(cells[from.Y]))
-		xfrom := int(math.Min(maxy, float64(from.X)))
-		xtolen := int(math.Min(maxy, float64(to.X+1)))
-		xto := int(math.Min(maxy, float64(to.X)))
+	lencells := len(cells)
+	for from.Y <= to.Y && from.Y < lencells {
+		maxx := float64(len(cells[from.Y]))
+		xfrom := int(math.Min(maxx, float64(from.X)))
+		xto := int(math.Min(maxx, float64(to.X)))
 
 		op(i,
 			term.Coordinates{Y: from.Y, X: xfrom},
 			term.Coordinates{Y: from.Y, X: xto},
-			cells[from.Y][xfrom:xtolen])
+			cells[from.Y][xfrom:xto])
 
 		from.Y++
 		i++

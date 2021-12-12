@@ -17,7 +17,12 @@ type Reader interface {
 
 // Writer is the interface that wraps methods to mutate a 2D matrix of term.Cell.
 type Writer interface {
+	// Insert inserts str at coordinates and returns the right-exclusive
+	// coordinates of the actual insert range.
 	Insert(at term.Coordinates, str string) (from, to term.Coordinates)
+	// Delete deletes the cells between right-exclusive range defined by from, to.
+	// It returns the true start and end coordinates of the delete operation,
+	// which account for various artifacts like tab spaces.
 	Delete(from, to term.Coordinates) (start, end term.Coordinates, str string)
 }
 

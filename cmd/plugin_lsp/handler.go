@@ -489,29 +489,13 @@ func convertRange(
 	log.Tracef("lspEditorHandler.convertRange: convert lsp Start coordinates"+
 		" to term From coordinates: %#v -> from:%#v", spn.Start(), from)
 
-	if rng.Start == rng.End {
-		to = from
+	endLine := spn.End().Line() - 1
+	endChar := spn.End().Column() - 1
+	to, ok = cell.ConvertRuneCoordinates(cells, endLine, endChar)
+	if !ok {
+		log.Errorf("lspEditorHandler.convertRange: failed to convert lsp End coordinates to "+
+			"term To coordinates: %#v->%#v", endLine, endChar)
 		return
-	}
-
-	// to is right exclusive
-	if spn.End().Column() == 1 {
-		to.Y = spn.End().Line() - 2
-		if to.Y < 0 {
-			return
-		}
-		to.X = len(cells[to.Y])
-		ok = true
-	} else {
-		endLine := spn.End().Line() - 1
-		endChar := spn.End().Column() - 2
-
-		to, ok = cell.ConvertRuneCoordinates(cells, endLine, endChar)
-		if !ok {
-			log.Errorf("lspEditorHandler.convertRange: failed to convert lsp End coordinates to "+
-				"term To coordinates: %#v->%#v", endLine, endChar)
-			return
-		}
 	}
 
 	log.Tracef("lspEditorHandler.convertRange: convert lsp End coordinates to "+
@@ -891,16 +875,6 @@ func makeDeleteProtocolRange(
 	endy, endx, ok := cell.ConvertTermCoordinates(oldCells, to)
 	if !ok {
 		panic("coordinates out of sync")
-	}
-
-	// range end signals delete newline by setting it to x:0 y:next line
-	// whereas in term.Coordinates, To signals the same by setting x==len
-	if to.X == len(oldCells[to.Y]) {
-		endy++
-		endx = 0
-	} else {
-		// end is right exclusive
-		endx++
 	}
 
 	return protocol.Range{

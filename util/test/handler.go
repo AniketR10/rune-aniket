@@ -26,7 +26,8 @@ type HandlerTestCase struct {
 }
 
 func handleTestCase(
-	t *testing.T, w *term.StringWriter, h tui.Handler, tcase HandlerSequenceTestCase,
+	t *testing.T, i int, w *term.StringWriter,
+	h tui.Handler, tcase HandlerSequenceTestCase,
 	width, height int,
 ) {
 	err := w.Clear(term.Attributes{Fg: 0, Bg: 0})
@@ -77,7 +78,7 @@ func handleTestCase(
 	require.NoError(t, err)
 
 	out := w.String()
-	assert.Equal(t, tcase.Expected, out)
+	assert.Equal(t, tcase.Expected, out, "test case %d", i)
 }
 
 // TestHandlerIsolated is a helper function that drives
@@ -91,10 +92,10 @@ func TestHandlerIsolated(
 ) {
 	writer := term.NewStringWriter(width, height)
 
-	for _, tcase := range cases {
+	for i, tcase := range cases {
 		handler := fn()
 		handler.Resize(width, height)
-		handleTestCase(t, writer, handler, tcase, width, height)
+		handleTestCase(t, i, writer, handler, tcase, width, height)
 	}
 }
 
@@ -110,8 +111,8 @@ func TestHandlerSequence(
 	writer := term.NewStringWriter(width, height)
 	handler.Resize(width, height)
 
-	for _, tcase := range cases {
-		handleTestCase(t, writer, handler, tcase, width, height)
+	for i, tcase := range cases {
+		handleTestCase(t, i, writer, handler, tcase, width, height)
 	}
 }
 

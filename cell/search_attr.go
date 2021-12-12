@@ -65,7 +65,7 @@ func (s *attrSearcher) searchMatches(text string) int {
 	slen := len(text)
 	for i := 0; i < n; i++ {
 		pos, _ := s.root.NextResult()
-		toX := pos.X + slen - 1
+		toX := pos.X + slen
 		cells := s.sel.selectCells(pos, term.Coordinates{Y: pos.Y, X: toX})
 		s.matches = append(s.matches, cells[0])
 	}

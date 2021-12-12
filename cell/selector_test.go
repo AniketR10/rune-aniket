@@ -17,21 +17,21 @@ itsme`
 	testCases := []selectCase{
 		{
 			from: term.Coordinates{},
-			to:   term.Coordinates{X: 1, Y: 0},
+			to:   term.Coordinates{X: 2, Y: 0},
 			expected: [][]term.Cell{
 				{{Ch: 'h'}, {Ch: 'e'}},
 			},
 		},
 		{
 			from: term.Coordinates{X: 2, Y: 0},
-			to:   term.Coordinates{X: 1, Y: 1},
+			to:   term.Coordinates{X: 2, Y: 1},
 			expected: [][]term.Cell{
 				{{Ch: 'l'}, {Ch: 'l'}, {Ch: 'o'}},
 				{{}, {}},
 			},
 		},
 		{
-			from: term.Coordinates{X: 2, Y: 0},
+			from: term.Coordinates{X: 3, Y: 0},
 			to:   term.Coordinates{X: 1, Y: 0},
 			expected: [][]term.Cell{
 				{{Ch: 'e'}, {Ch: 'l'}},
@@ -39,28 +39,28 @@ itsme`
 		},
 		{
 			from: term.Coordinates{X: 0, Y: 1},
-			to:   term.Coordinates{X: 8, Y: 1},
+			to:   term.Coordinates{X: 9, Y: 1},
 			expected: [][]term.Cell{
 				{{}, {}, {}, {Ch: '\t'}, {Ch: 'w'}, {Ch: 'o'}, {Ch: 'r'}, {Ch: 'l'}, {Ch: 'd'}},
 			},
 		},
 		{
 			from: term.Coordinates{X: 2, Y: 0},
-			to:   term.Coordinates{X: 4, Y: 0},
+			to:   term.Coordinates{X: 5, Y: 0},
 			expected: [][]term.Cell{
 				{{Ch: 'l'}, {Ch: 'l'}, {Ch: 'o'}},
 			},
 		},
 		{
 			from: term.Coordinates{X: 2, Y: 0},
-			to:   term.Coordinates{X: 7, Y: 1},
+			to:   term.Coordinates{X: 8, Y: 1},
 			expected: [][]term.Cell{
 				{{Ch: 'l'}, {Ch: 'l'}, {Ch: 'o'}},
 				{{}, {}, {}, {Ch: '\t'}, {Ch: 'w'}, {Ch: 'o'}, {Ch: 'r'}, {Ch: 'l'}},
 			},
 		},
 		{
-			from: term.Coordinates{X: 7, Y: 1},
+			from: term.Coordinates{X: 8, Y: 1},
 			to:   term.Coordinates{X: 2, Y: 0},
 			expected: [][]term.Cell{
 				{{Ch: 'l'}, {Ch: 'l'}, {Ch: 'o'}},
@@ -69,7 +69,7 @@ itsme`
 		},
 		{
 			from: term.Coordinates{X: 4, Y: 0},
-			to:   term.Coordinates{X: 4, Y: 3},
+			to:   term.Coordinates{X: 5, Y: 3},
 			expected: [][]term.Cell{
 				{{Ch: 'o'}},
 				{{}, {}, {}, {Ch: '\t'}, {Ch: 'w'}, {Ch: 'o'}, {Ch: 'r'}, {Ch: 'l'}, {Ch: 'd'}},
@@ -79,14 +79,6 @@ itsme`
 		},
 		{
 			from: term.Coordinates{X: 0, Y: 2},
-			to:   term.Coordinates{X: 4, Y: 3},
-			expected: [][]term.Cell{
-				{},
-				{{Ch: 'i'}, {Ch: 't'}, {Ch: 's'}, {Ch: 'm'}, {Ch: 'e'}},
-			},
-		},
-		{
-			from: term.Coordinates{X: 0, Y: 2},
 			to:   term.Coordinates{X: 5, Y: 3},
 			expected: [][]term.Cell{
 				{},
@@ -95,15 +87,23 @@ itsme`
 		},
 		{
 			from: term.Coordinates{X: 0, Y: 2},
-			to:   term.Coordinates{X: 4, Y: 4},
+			to:   term.Coordinates{X: 6, Y: 3},
 			expected: [][]term.Cell{
 				{},
 				{{Ch: 'i'}, {Ch: 't'}, {Ch: 's'}, {Ch: 'm'}, {Ch: 'e'}},
 			},
 		},
 		{
-			from: term.Coordinates{X: 0, Y: 0},
-			to:   term.Coordinates{X: 5, Y: 0},
+			from: term.Coordinates{X: 0, Y: 2},
+			to:   term.Coordinates{X: 5, Y: 4},
+			expected: [][]term.Cell{
+				{},
+				{{Ch: 'i'}, {Ch: 't'}, {Ch: 's'}, {Ch: 'm'}, {Ch: 'e'}},
+			},
+		},
+		{
+			from: term.Coordinates{},
+			to:   term.Coordinates{Y: 1},
 			expected: [][]term.Cell{
 				{{Ch: 'h'}, {Ch: 'e'}, {Ch: 'l'}, {Ch: 'l'}, {Ch: 'o'}},
 				{},
@@ -111,7 +111,7 @@ itsme`
 		},
 		{
 			from: term.Coordinates{X: 0, Y: 3},
-			to:   term.Coordinates{X: 5, Y: 3},
+			to:   term.Coordinates{X: 6, Y: 3},
 			expected: [][]term.Cell{
 				{{Ch: 'i'}, {Ch: 't'}, {Ch: 's'}, {Ch: 'm'}, {Ch: 'e'}},
 			},
@@ -219,21 +219,21 @@ func TestSelectBlock(t *testing.T) {
 	testCases := []selectCase{
 		{
 			from: term.Coordinates{},
-			to:   term.Coordinates{X: 1, Y: 0},
+			to:   term.Coordinates{X: 2, Y: 0},
 			expected: [][]term.Cell{
 				{{Ch: 'h'}, {Ch: 'e'}},
 			},
 		},
 		{
 			from: term.Coordinates{X: 0, Y: 0},
-			to:   term.Coordinates{X: 3, Y: 1},
+			to:   term.Coordinates{X: 4, Y: 1},
 			expected: [][]term.Cell{
 				{{Ch: 'h'}, {Ch: 'e'}, {Ch: 'l'}, {Ch: 'l'}},
 				{{}, {}, {}, {Ch: '\t'}},
 			},
 		},
 		{
-			from: term.Coordinates{X: 3, Y: 1},
+			from: term.Coordinates{X: 4, Y: 1},
 			to:   term.Coordinates{X: 0, Y: 0},
 			expected: [][]term.Cell{
 				{{Ch: 'h'}, {Ch: 'e'}, {Ch: 'l'}, {Ch: 'l'}},
@@ -241,7 +241,7 @@ func TestSelectBlock(t *testing.T) {
 			},
 		},
 		{
-			from: term.Coordinates{X: 3, Y: 3},
+			from: term.Coordinates{X: 4, Y: 3},
 			to:   term.Coordinates{X: 0, Y: 0},
 			expected: [][]term.Cell{
 				{{Ch: 'h'}, {Ch: 'e'}, {Ch: 'l'}, {Ch: 'l'}},
@@ -251,7 +251,7 @@ func TestSelectBlock(t *testing.T) {
 			},
 		},
 		{
-			from: term.Coordinates{X: 4, Y: 0},
+			from: term.Coordinates{X: 5, Y: 0},
 			to:   term.Coordinates{X: 2, Y: 6},
 			expected: [][]term.Cell{
 				{{Ch: 'l'}, {Ch: 'l'}, {Ch: 'o'}},

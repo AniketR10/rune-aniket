@@ -36,13 +36,6 @@ func assertValidCoords(pos term.Coordinates) {
 	}
 }
 
-func (c *rawCells) assertCordsInBounds(pos term.Coordinates) {
-	assertValidCoords(pos)
-	if pos.Y >= c.Rows() || pos.X > len(c.cells[pos.Y]) {
-		panic(fmt.Sprintf("Coordinates out of bounds: %+v", pos))
-	}
-}
-
 func makeNewRow(length, capacity int) (row []term.Cell) {
 	row = make([]term.Cell, length, capacity)
 	return
@@ -154,15 +147,16 @@ func (c *rawCells) Insert(at term.Coordinates, str string) (
 			to.X += padding
 		}
 	}
+	to = next
 	return
 }
 
 func copyToBuilder(builder *strings.Builder, cells [][]term.Cell) {
 	for i, r := range cells {
-		copyRowToBuilder(builder, r)
-		if i+1 != len(cells) {
+		if i != 0 {
 			builder.WriteByte('\n')
 		}
+		copyRowToBuilder(builder, r)
 	}
 }
 
@@ -172,10 +166,6 @@ func copyRowToBuilder(builder *strings.Builder, cells []term.Cell) {
 			builder.WriteRune(c.Ch)
 		}
 	}
-}
-
-func (c *rawCells) canConflate(row int) (ok bool) {
-	return row < len(c.cells)-1
 }
 
 func (c *rawCells) conflate(row int) {
@@ -192,49 +182,36 @@ func (c *rawCells) conflate(row int) {
 	c.cells = c.cells[:len(c.cells)-1]
 }
 
-func (c *rawCells) doDeleteRowInRange(
+func (c *rawCells) deleteRowRange(
 	builder *strings.Builder, row, fromX, toX int,
-) (conflate bool) {
-	conflate = toX == len(c.cells[row])
-	if !conflate {
-		toX++
-	}
+) {
 	copyRowToBuilder(builder, c.cells[row][fromX:toX])
 	diff := toX - fromX
 	copy(c.cells[row][fromX:], c.cells[row][toX:])
 	c.cells[row] = c.cells[row][:len(c.cells[row])-diff]
-
-	return conflate
-}
-
-// returns true if should have conflated but could not;
-// that's useful to correct end coordinate when trying to delete
-// last row til last newline
-func (c *rawCells) deleteRowRange(
-	builder *strings.Builder, row, fromX, toX int,
-) bool {
-	shouldConflate := c.doDeleteRowInRange(builder, row, fromX, toX)
-	canConflate := c.canConflate(row)
-	if shouldConflate && canConflate {
-		builder.WriteByte('\n')
-		c.conflate(row)
-		return false
-	}
-	return shouldConflate && !canConflate
 }
 
 func (c *rawCells) skipPadding(start, end term.Coordinates) (
 	term.Coordinates, term.Coordinates,
 ) {
-	tokens := c.tabspaces - 1
-	endLastIdx := len(c.cells[end.Y]) - 1
-	startLastIdx := len(c.cells[start.Y]) - 1
 
-	for tokens > 0 && end.X < endLastIdx && c.cells[end.Y][end.X].Ch == 0 {
+	tokens := c.tabspaces - 1
+	// end is right exclusive
+	if end.X > 0 {
+		// end.Y == len(c.cells) should never occur here since the only
+		// correct way for clients to pass that is if end.X == 0,
+		// which we are checking above
+		endLastIdx := len(c.cells[end.Y])
+		end.X--
+		for tokens > 0 && end.X > 0 && end.X < endLastIdx &&
+			c.cells[end.Y][end.X].Ch == 0 {
+			end.X++
+			tokens--
+		}
 		end.X++
-		tokens--
 	}
 
+	startLastIdx := len(c.cells[start.Y]) - 1
 	if start.X > 0 && start.X <= startLastIdx &&
 		c.cells[start.Y][start.X].Ch == '\t' {
 		start.X--
@@ -258,44 +235,49 @@ func (c *rawCells) skipPadding(start, end term.Coordinates) (
 func (c *rawCells) Delete(from, to term.Coordinates) (
 	start, end term.Coordinates, str string,
 ) {
-	c.assertCordsInBounds(from)
-	c.assertCordsInBounds(to)
+	assertValidCoords(from)
+	assertValidCoords(to)
 	start, end = SortFromTo(from, to)
 	start, end = c.skipPadding(start, end)
 
 	builder := strings.Builder{}
 
 	if start.Y == end.Y {
-		if c.deleteRowRange(&builder, start.Y, start.X, end.X) {
-			end.X--
-		}
+		c.deleteRowRange(&builder, start.Y, start.X, end.X)
 		str = builder.String()
 		return
 	}
 
 	// trim til end of first row
-	c.doDeleteRowInRange(&builder, start.Y, start.X, len(c.cells[start.Y]))
-	builder.WriteByte('\n')
+	if start.X < len(c.cells[start.Y]) {
+		c.deleteRowRange(&builder, start.Y, start.X, len(c.cells[start.Y]))
+	}
+	if start.Y+1 < len(c.cells) {
+		builder.WriteByte('\n')
+	}
 
 	// copy rows in between and move last row to second row, if applicable
 	lastRow := end.Y
 	if diff := end.Y - start.Y; diff > 1 {
 		copyToBuilder(&builder, c.cells[start.Y+1:end.Y])
-		builder.WriteByte('\n')
-
 		copy(c.cells[start.Y+1:], c.cells[end.Y:])
 		c.cells = c.cells[:len(c.cells)-diff+1]
 
 		lastRow = start.Y + 1
+		if lastRow < len(c.cells) {
+			builder.WriteByte('\n')
+		}
 	}
 
 	// then remove cells from last row; start.Y is now last row to delete
-	if c.deleteRowRange(&builder, lastRow, 0, end.X) {
-		end.X--
+	if end.X > 0 {
+		c.deleteRowRange(&builder, lastRow, 0, end.X)
 	}
 
 	// conflate last row in range
-	c.conflate(start.Y)
+	if lastRow < len(c.cells) {
+		c.conflate(start.Y)
+	}
 
 	str = builder.String()
 

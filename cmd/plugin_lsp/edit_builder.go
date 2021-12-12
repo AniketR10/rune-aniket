@@ -70,7 +70,7 @@ func (b *editBuilder) setDeleteStateOffset(
 ) {
 	xoffset := b.offsets.x
 	yoffset := b.offsets.y
-	linexoffset := start.X-end.X-1
+	linexoffset := start.X - end.X
 	if b.offsets.to.Y == end.Y {
 		xoffset += linexoffset
 	} else {

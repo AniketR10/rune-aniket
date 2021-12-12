@@ -31,15 +31,15 @@ public class	Rotor {
 	expectedLocations1 = []editor.Location{
 		{
 			From: term.Coordinates{Y: 2, X: 5},
-			To:   term.Coordinates{Y: 2, X: 7},
+			To:   term.Coordinates{Y: 2, X: 8},
 		},
 		{
 			From: term.Coordinates{Y: 2, X: 10},
-			To:   term.Coordinates{Y: 2, X: 13},
+			To:   term.Coordinates{Y: 2, X: 14},
 		},
 		{
 			From: term.Coordinates{Y: 5, X: 2},
-			To:   term.Coordinates{Y: 5, X: 8},
+			To:   term.Coordinates{Y: 5, X: 9},
 		},
 	}
 )
@@ -254,7 +254,7 @@ func TestLspHandlerHandleInsertDelete(t *testing.T) {
 
 	newLocations := append(expectedLocations1, editor.Location{
 		From: term.Coordinates{Y: 5, X: 13},
-		To:   term.Coordinates{Y: 5, X: 22},
+		To:   term.Coordinates{Y: 5, X: 23},
 	})
 	expectLocationList(t, ed, defaultSemanticTokensListID, newLocations, &wg)
 
@@ -266,10 +266,7 @@ func TestLspHandlerHandleInsertDelete(t *testing.T) {
 	expectedEvents = []protocol.TextDocumentContentChangeEvent{{
 		Range: &protocol.Range{
 			Start: protocol.Position{Line: 5, Character: 9},
-			// NOTE: should be 0, but 1 is also correct
-			// according to spec as if character pos is always trimmed to last
-			// available char.
-			End: protocol.Position{Line: 6, Character: 1},
+			End: protocol.Position{Line: 6, Character: 0},
 		},
 		Text: "",
 	}}
@@ -292,7 +289,7 @@ func TestLspHandlerHandleInsertDelete(t *testing.T) {
 	expectSemanticTokens(t, server, tokenData1)
 	expectLocationList(t, ed, defaultSemanticTokensListID, expectedLocations1, &wg)
 	wg.Add(1)
-	buf.Delete(term.Coordinates{Y: 6}, term.Coordinates{Y: 6})
+	buf.Delete(term.Coordinates{Y: 6}, term.Coordinates{Y: 7})
 	wg.Wait()
 
 	// Delete 3

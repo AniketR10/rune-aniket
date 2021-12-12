@@ -16,9 +16,12 @@ import (
 
 const testFilesLines = 3
 
-const rawCellsFortune = `Love in your heart wasn't put there to stay.
+var (
+	rawCellsFortune = `Love in your heart wasn't put there to stay.
 Love isn't love 'til you give it away.
 		-- Oscar Hammerstein 中国`
+	emptyString = ""
+)
 
 func TestRawCellsInsertMiddlePadding(t *testing.T) {
 	fixture := `{
@@ -38,24 +41,25 @@ func TestRawCellsInsertMiddlePadding(t *testing.T) {
 	c.ReadFrom(strings.NewReader(fixture))
 
 	from := term.Coordinates{X: 0, Y: 1}
-	to := term.Coordinates{X: 5, Y: 1}
+	to := term.Coordinates{Y: 2}
 	start, end, str := c.Delete(from, to)
 	assert.Equal(t, from, start)
 	assert.Equal(t, to, end)
 	assert.Equal(t, "\tb\n", str)
+	require.Equal(t, "{\n\tc\n}\n", c.String())
 
 	from, to = c.Insert(term.Coordinates{X: 1, Y: 1}, "\tb\n")
 	assert.Equal(t, term.Coordinates{X: 0, Y: 1}, from)
-	assert.Equal(t, term.Coordinates{X: 5, Y: 1}, to)
+	assert.Equal(t, term.Coordinates{X: 0, Y: 2}, to)
 
 	start, end, str = c.Delete(from, to)
 	assert.Equal(t, term.Coordinates{X: 0, Y: 1}, start)
-	assert.Equal(t, term.Coordinates{X: 5, Y: 1}, end)
+	assert.Equal(t, term.Coordinates{Y: 2}, end)
 	assert.Equal(t, "\tb\n", str)
 
 	from, to = c.Insert(term.Coordinates{X: 0, Y: 1}, "\tb\n")
 	assert.Equal(t, term.Coordinates{X: 0, Y: 1}, from)
-	assert.Equal(t, term.Coordinates{X: 5, Y: 1}, to)
+	assert.Equal(t, term.Coordinates{Y: 2}, to)
 	assert.Equal(t, fixtureCells, c.RawCells())
 }
 
@@ -192,7 +196,7 @@ Love isn't love 'til you give it away.
 			-- Oscar Hammerstein 中国`
 
 	tsuite := []struct {
-		overrideBaseRawCells     string
+		overrideBaseRawCells     *string
 		inputStr                 string
 		inputAt                  term.Coordinates
 		expectedRawCells         string
@@ -203,37 +207,53 @@ Love isn't love 'til you give it away.
 			inputAt:          term.Coordinates{},
 			expectedRawCells: ">>>\n" + baseRawCells,
 			expectedFrom:     term.Coordinates{},
-			expectedTo:       term.Coordinates{X: 3},
+			expectedTo:       term.Coordinates{Y: 1},
 		},
 		{
 			inputStr:         "-",
 			inputAt:          term.Coordinates{X: 7, Y: 1},
 			expectedRawCells: expectedRawCellsCase2,
 			expectedFrom:     term.Coordinates{X: 7, Y: 1},
-			expectedTo:       term.Coordinates{X: 7, Y: 1},
+			expectedTo:       term.Coordinates{X: 8, Y: 1},
 		},
 		{
 			inputStr:         "// what's up",
 			inputAt:          term.Coordinates{X: 2, Y: 5},
 			expectedRawCells: expectedRawCellsCase3,
 			expectedFrom:     term.Coordinates{X: 12, Y: 2},
-			expectedTo:       term.Coordinates{X: 13, Y: 5},
+			expectedTo:       term.Coordinates{X: 14, Y: 5},
 		},
 		{
-			overrideBaseRawCells: rawCellsFortune,
+			overrideBaseRawCells: &rawCellsFortune,
 			expectedRawCells:     expectedRawCellsCase4,
 			inputAt:              term.Coordinates{Y: 1},
 			inputStr:             "\n",
 			expectedFrom:         term.Coordinates{Y: 1},
-			expectedTo:           term.Coordinates{Y: 1},
+			expectedTo:           term.Coordinates{Y: 2},
 		},
 		{
-			overrideBaseRawCells: rawCellsFortune,
+			overrideBaseRawCells: &rawCellsFortune,
 			expectedRawCells:     expectedRawCellsCase5,
 			inputAt:              term.Coordinates{Y: 2},
 			inputStr:             "\t",
 			expectedFrom:         term.Coordinates{Y: 2},
-			expectedTo:           term.Coordinates{X: 3, Y: 2},
+			expectedTo:           term.Coordinates{X: 4, Y: 2},
+		},
+		{
+			overrideBaseRawCells: &emptyString,
+			expectedRawCells:     "\t\n",
+			inputAt:              term.Coordinates{},
+			inputStr:             "\t\n",
+			expectedFrom:         term.Coordinates{},
+			expectedTo:           term.Coordinates{Y: 1},
+		},
+		{
+			overrideBaseRawCells: &emptyString,
+			expectedRawCells:     "\n",
+			inputAt:              term.Coordinates{},
+			inputStr:             "\n",
+			expectedFrom:         term.Coordinates{},
+			expectedTo:           term.Coordinates{Y: 1},
 		},
 	}
 
@@ -241,8 +261,8 @@ Love isn't love 'til you give it away.
 		var c rawCells
 		c.init(defTabSpaces)
 		var input string
-		if tcase.overrideBaseRawCells != "" {
-			input = tcase.overrideBaseRawCells
+		if tcase.overrideBaseRawCells != nil {
+			input = *tcase.overrideBaseRawCells
 		} else {
 			input = baseRawCells
 		}
@@ -306,7 +326,7 @@ Love isn't love 'til you give it away.
 			expectedStr:          "a",
 			expectedRawCells:     "",
 			inputFrom:            term.Coordinates{X: 0},
-			inputTo:              term.Coordinates{X: 0},
+			inputTo:              term.Coordinates{X: 1},
 		},
 		{
 			overrideBaseRawCells: "a",
@@ -314,63 +334,60 @@ Love isn't love 'til you give it away.
 			expectedRawCells:     "",
 			inputFrom:            term.Coordinates{X: 0},
 			inputTo:              term.Coordinates{X: 1},
-			expectedStart:        &term.Coordinates{X: 0},
-			expectedEnd:          &term.Coordinates{X: 0},
 		},
 		{
 			overrideBaseRawCells: "a\nb",
 			expectedStr:          "a",
 			expectedRawCells:     "\nb",
 			inputFrom:            term.Coordinates{},
-			inputTo:              term.Coordinates{},
+			inputTo:              term.Coordinates{X: 1},
 		},
 		{
 			overrideBaseRawCells: "a\nb",
 			expectedStr:          "a\n",
 			expectedRawCells:     "b",
 			inputFrom:            term.Coordinates{},
-			inputTo:              term.Coordinates{X: 1},
+			inputTo:              term.Coordinates{Y: 1},
 		},
 		{
 			expectedStr:      "// what's up",
 			expectedRawCells: expectedRawCellsCase1,
 			inputFrom:        term.Coordinates{X: 2, Y: 5},
 			inputTo:          term.Coordinates{X: 2 + len("// what's up"), Y: 5},
-			expectedEnd:      &term.Coordinates{X: 2 + len("// what's up") - 1, Y: 5},
 		},
 		{
 			expectedStr:      "=",
 			expectedRawCells: expectedRawCellsCase2,
 			inputFrom:        term.Coordinates{X: 7, Y: 1},
-			inputTo:          term.Coordinates{X: 7, Y: 1},
+			inputTo:          term.Coordinates{X: 8, Y: 1},
 		},
 		{
 			overrideBaseRawCells: "a\nbc",
 			expectedStr:          "a\nb",
 			expectedRawCells:     "c",
 			inputFrom:            term.Coordinates{},
-			inputTo:              term.Coordinates{X: 0, Y: 1},
+			inputTo:              term.Coordinates{X: 1, Y: 1},
 		},
 		{
 			overrideBaseRawCells: "aa\nbb",
 			expectedStr:          "a\nb",
 			expectedRawCells:     "ab",
 			inputFrom:            term.Coordinates{X: 1},
-			inputTo:              term.Coordinates{X: 0, Y: 1},
+			inputTo:              term.Coordinates{X: 1, Y: 1},
 		},
-		{
+		{ // 8
 			overrideBaseRawCells: "a\nbc",
 			expectedStr:          "a\nbc",
 			expectedRawCells:     "",
 			inputFrom:            term.Coordinates{},
-			inputTo:              term.Coordinates{X: 1, Y: 1},
+			inputTo:              term.Coordinates{Y: 2},
 		},
 		{
 			overrideBaseRawCells: "a\nb\nc",
 			expectedStr:          "a\nb\n",
 			expectedRawCells:     "c",
 			inputFrom:            term.Coordinates{},
-			inputTo:              term.Coordinates{X: 1, Y: 1},
+			inputTo:              term.Coordinates{Y: 2},
 		},
 		{
 			overrideBaseRawCells: "a",
@@ -378,50 +395,56 @@ Love isn't love 'til you give it away.
 			expectedRawCells:     "",
 			inputFrom:            term.Coordinates{},
 			inputTo:              term.Coordinates{X: 1},
-			expectedEnd:          &term.Coordinates{},
 		},
 		{
 			// inverted from/until
 			expectedStr:      baseRawCells,
 			expectedRawCells: "",
-			inputFrom:        term.Coordinates{X: 14, Y: 5},
+			inputFrom:        term.Coordinates{Y: 6},
 			inputTo:          term.Coordinates{},
 			// returns inverted from/to
 			expectedStart: &term.Coordinates{},
-			expectedEnd:   &term.Coordinates{X: 13, Y: 5},
+			expectedEnd:   &term.Coordinates{Y: 6},
 		},
 		{
 			expectedStr:      baseRawCells,
 			expectedRawCells: "",
 			inputFrom:        term.Coordinates{},
-			inputTo:          term.Coordinates{X: 13, Y: 5},
+			inputTo:          term.Coordinates{X: 14, Y: 5},
 		},
 		{
 			expectedStr:      "\nsyntax = \"proto2\"",
 			expectedRawCells: expectedRawCellsCase4,
 			inputFrom:        term.Coordinates{},
-			inputTo:          term.Coordinates{X: 16, Y: 1},
+			inputTo:          term.Coordinates{X: 17, Y: 1},
 		},
 		{
 			expectedStr:      "\n  /",
 			expectedRawCells: expectedRawCellsCase3,
 			inputFrom:        term.Coordinates{Y: 4},
-			inputTo:          term.Coordinates{X: 2, Y: 5},
+			inputTo:          term.Coordinates{X: 3, Y: 5},
+		},
+		{
+			overrideBaseRawCells: "a\tb",
+			expectedStr:          "a",
+			expectedRawCells:     "\tb",
+			inputFrom:            term.Coordinates{},
+			inputTo:              term.Coordinates{X: 1},
 		},
 		{
 			overrideBaseRawCells: "a\tb",
 			expectedStr:          "a\t",
 			expectedRawCells:     "b",
 			inputFrom:            term.Coordinates{},
-			inputTo:              term.Coordinates{X: 4},
+			inputTo:              term.Coordinates{X: 5},
 		},
-		{ //16
+		{
 			overrideBaseRawCells: "a\tb",
 			expectedStr:          "a\t",
 			expectedRawCells:     "b",
 			inputFrom:            term.Coordinates{},
 			inputTo:              term.Coordinates{X: 2},
-			expectedEnd:          &term.Coordinates{X: 4},
+			expectedEnd:          &term.Coordinates{X: 5},
 		},
 		{
 			overrideBaseRawCells: "aa\tb",
@@ -430,7 +453,7 @@ Love isn't love 'til you give it away.
 			inputFrom:            term.Coordinates{X: 3},
 			inputTo:              term.Coordinates{X: 4},
 			expectedStart:        &term.Coordinates{X: 2},
-			expectedEnd:          &term.Coordinates{X: 5},
+			expectedEnd:          &term.Coordinates{X: 6},
 		},
 		{
 			overrideBaseRawCells: "a\n\tb",
@@ -438,102 +461,116 @@ Love isn't love 'til you give it away.
 			expectedRawCells:     "b",
 			inputFrom:            term.Coordinates{},
 			inputTo:              term.Coordinates{Y: 1, X: 2},
-			expectedEnd:          &term.Coordinates{Y: 1, X: 3},
+			expectedEnd:          &term.Coordinates{Y: 1, X: 4},
 		},
 		{
 			overrideBaseRawCells: "a\n\tb\n\tc",
 			expectedStr:          "\tb\n\t",
 			expectedRawCells:     "a\nc",
 			inputFrom:            term.Coordinates{Y: 1, X: 2},
-			inputTo:              term.Coordinates{Y: 2, X: 2},
+			inputTo:              term.Coordinates{Y: 2, X: 3},
 			expectedStart:        &term.Coordinates{Y: 1, X: 0},
-			expectedEnd:          &term.Coordinates{Y: 2, X: 3},
+			expectedEnd:          &term.Coordinates{Y: 2, X: 4},
 		},
 		{
 			overrideBaseRawCells: "\t\t\ta",
 			expectedStr:          "\t",
 			expectedRawCells:     "\t\ta",
 			inputFrom:            term.Coordinates{X: 5},
-			inputTo:              term.Coordinates{X: 5},
+			inputTo:              term.Coordinates{X: 6},
 			expectedStart:        &term.Coordinates{X: 4},
-			expectedEnd:          &term.Coordinates{X: 7},
+			expectedEnd:          &term.Coordinates{X: 8},
 		},
 		{
 			overrideBaseRawCells: "\t\t\ta",
 			expectedStr:          "\t",
 			expectedRawCells:     "\t\ta",
 			inputFrom:            term.Coordinates{X: 3},
-			inputTo:              term.Coordinates{X: 3},
+			inputTo:              term.Coordinates{X: 4},
 			expectedStart:        &term.Coordinates{X: 0},
-			expectedEnd:          &term.Coordinates{X: 3},
+			expectedEnd:          &term.Coordinates{X: 4},
 		},
 		{
 			overrideBaseRawCells: "\t\t\ta",
 			expectedStr:          "\t\t",
 			expectedRawCells:     "\ta",
 			inputFrom:            term.Coordinates{X: 0},
-			inputTo:              term.Coordinates{X: 7},
-			expectedStart:        &term.Coordinates{X: 0},
-			expectedEnd:          &term.Coordinates{X: 7},
+			inputTo:              term.Coordinates{X: 8},
 		},
-		{
-			overrideBaseRawCells: inputRawCellsCase5,
-			expectedStr:          "\n",
-			expectedRawCells:     rawCellsFortune,
-			inputFrom:            term.Coordinates{Y: 1},
-			inputTo:              term.Coordinates{Y: 1},
-			expectedStart:        &term.Coordinates{Y: 1},
-			expectedEnd:          &term.Coordinates{Y: 1},
-		},
-		{
+		{ // 24
 			overrideBaseRawCells: "a\nb\n\nc\n\n\nd",
 			expectedStr:          "a\nb\n\nc\n",
 			expectedRawCells:     "\n\nd",
 			inputFrom:            term.Coordinates{},
-			inputTo:              term.Coordinates{Y: 3, X: 1},
-			expectedStart:        &term.Coordinates{},
-			expectedEnd:          &term.Coordinates{Y: 3, X: 1},
+			inputTo:              term.Coordinates{Y: 4},
 		},
 		{
 			overrideBaseRawCells: "a\nbb\nccc",
 			expectedStr:          "\nbb",
 			expectedRawCells:     "a\nccc",
-			inputFrom:            term.Coordinates{X: 1, Y: 1},
+			inputFrom:            term.Coordinates{X: 2, Y: 1},
 			inputTo:              term.Coordinates{X: 1},
 			expectedStart:        &term.Coordinates{X: 1},
-			expectedEnd:          &term.Coordinates{Y: 1, X: 1},
+			expectedEnd:          &term.Coordinates{X: 2, Y: 1},
+		},
+		{
+			overrideBaseRawCells: "\t\n",
+			expectedStr:          "\t\n",
+			expectedRawCells:     "",
+			inputFrom:            term.Coordinates{},
+			inputTo:              term.Coordinates{Y: 1},
 		},
 	}
 
 	for i, tcase := range tsuite {
-		var c rawCells
-		c.init(defTabSpaces)
-		base := baseRawCells
-		if tcase.overrideBaseRawCells != "" {
-			base = tcase.overrideBaseRawCells
-		}
-		_, err := c.ReadFrom(strings.NewReader(base))
-		require.NoError(t, err)
+		t.Run(fmt.Sprintf("test case %d", i), func(t *testing.T) {
+			var c rawCells
+			c.init(defTabSpaces)
+			base := baseRawCells
+			if tcase.overrideBaseRawCells != "" {
+				base = tcase.overrideBaseRawCells
+			}
 
-		actualStart, actualEnd, actualStr := c.Delete(tcase.inputFrom, tcase.inputTo)
-		assert.Equal(t, tcase.expectedStr, actualStr, "expected return string in test case %d", i)
-		assert.Equal(t, tcase.expectedRawCells, c.String(), "expected cells in test case %d", i)
+			_, err := c.ReadFrom(strings.NewReader(base))
+			require.NoError(t, err)
 
-		if tcase.expectedStart == nil {
-			tcase.expectedStart = &tcase.inputFrom
-		}
-		if tcase.expectedEnd == nil {
-			tcase.expectedEnd = &tcase.inputTo
-		}
-		assert.Equal(t, *tcase.expectedStart, actualStart, "expected return start in test case %d", i)
-		assert.Equal(t, *tcase.expectedEnd, actualEnd, "expected return end in test case %d", i)
+			actualStart, actualEnd, actualStr := c.Delete(tcase.inputFrom, tcase.inputTo)
+			assert.Equal(t, tcase.expectedStr, actualStr,
+				"expected return string")
+			assert.Equal(t, tcase.expectedRawCells, c.String(),
+				"expected resulting cells")
 
-		// test symmetry
-		from, to := c.Insert(actualStart, actualStr)
-		assert.Equal(t, from, actualStart, "test case %d", i)
-		assert.Equal(t, to, actualEnd, "test case %d", i)
-		assert.Equal(t, base, c.String(), "insert was not able to reverse delete in test case %d", i)
+			if tcase.expectedStart == nil {
+				tcase.expectedStart = &tcase.inputFrom
+			}
+			if tcase.expectedEnd == nil {
+				tcase.expectedEnd = &tcase.inputTo
+			}
+			assert.Equal(t, *tcase.expectedStart, actualStart)
+			assert.Equal(t, *tcase.expectedEnd, actualEnd)
+
+			// test symmetry
+			from, to := c.Insert(actualStart, actualStr)
+			assert.Equal(t, actualStart, from)
+			assertEquivalentEnd(t, &c, actualEnd, to)
+			assert.Equal(t, base, c.String(),
+				"insert was not able to reverse delete")
+		})
 	}
+}
+
+// in last line, delete can use Y:y+1, X:0 but insert might return
+// the equivalent of that which is Y:y, X: len(insert)
+// that's because delete til last character can be expressed both by
+// deleting til past last line or til past las character of last line
+func assertEquivalentEnd(
+	t *testing.T, c *rawCells, expectedEnd, end term.Coordinates,
+) {
+	if end.Y == c.Rows()-1 && end.X == c.Columns(end.Y) && expectedEnd != end {
+		end.Y++
+		end.X = 0
+	}
+	assert.Equal(t, expectedEnd, end)
 }
 
 func TestRawCellsCell(t *testing.T) {
