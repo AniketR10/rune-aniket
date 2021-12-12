@@ -308,7 +308,6 @@ func (e *Ex) handleCommand(ev term.Event) (quit, handled bool) {
 
 	if e.command.argsStartIdx == 0 {
 		e.command.List.SearchQueryWrite(ev.Ch)
-		e.command.List.Wait()
 	}
 	return
 }

@@ -248,14 +248,10 @@ func (l *List) consumeAsyncElements(quitChan chan struct{}) {
 	}
 }
 
-func (l *List) handleSearch(ctx context.Context, cancelFn func()) {
-	l.mu.Lock()
-	input := make([][]byte, len(l.input))
-	copy(input, l.input)
-	searchInput := l.getSearchQuery()
-	l.list.Reset()
-	l.mu.Unlock()
-
+func (l *List) handleSearch(
+	ctx context.Context, cancelFn func(), input [][]byte,
+	searchInput string,
+) {
 	slab := makeSlab()
 	search(l.cfg.algo, input, searchInput, slab, l.cfg.caseSensitive,
 		func(match Match, tokens *[]int) bool {
@@ -349,7 +345,11 @@ func (l *List) asyncSearch() {
 	ctx := context.Background()
 	l.searchCtx, l.cancelSearch = context.WithCancel(ctx)
 
-	go l.handleSearch(l.searchCtx, l.cancelSearch)
+	input := make([][]byte, len(l.input))
+	copy(input, l.input)
+	searchInput := l.getSearchQuery()
+	l.list.Reset()
+	go l.handleSearch(l.searchCtx, l.cancelSearch, input, searchInput)
 }
 
 // SearchQueryLen returns the length of the current search query.
