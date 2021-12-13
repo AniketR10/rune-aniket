@@ -1,6 +1,6 @@
 GO=go
 GOTESTFLAGS=-race -timeout 20s
-GOFLAGS=
+GOFLAGS=-ldflags="-X main.Version=$$(git describe --abbrev=0 --tags)"
 
 BIN=bin
 TARGET=target
@@ -65,7 +65,7 @@ $(EXECS): $(EXECSRC) $(LIBSRC) $(BIN)
 
 make_release:
 	@ mkdir -p $(TARGET)/$(TARGET_OS)_$(TARGET_ARCH)
-	@ GOARCH=$(TARGET_ARCH) $(TARGET_ARCH_FLAGS) GOOS=$(TARGET_OS) go build -o `pwd`/$(TARGET)/$(TARGET_OS)_$(TARGET_ARCH) ./... 
+	@ GOARCH=$(TARGET_ARCH) $(TARGET_ARCH_FLAGS) GOOS=$(TARGET_OS) go build $(GOFLAGS) -o `pwd`/$(TARGET)/$(TARGET_OS)_$(TARGET_ARCH) ./...
 
 release: default
 	@ rm -rf $(TARGET)

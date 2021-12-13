@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"net/http"
 	_ "net/http/pprof"
 	"os"
@@ -11,9 +12,14 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-var configpath *string
-var recfilename = flag.String("r", "", "recover from recovery file")
-var pprof = flag.Bool("p", false, "start pprof server at :6060")
+var (
+	Version = "development"
+	configpath *string
+
+	flagRecover = flag.String("r", "", "recover from recovery file")
+	flagPprof = flag.Bool("p", false, "start pprof server at :6060")
+	flagVersion = flag.Bool("v", false, "print version information")
+)
 
 func init() {
 	home, err := os.UserHomeDir()
@@ -30,11 +36,16 @@ func main() {
 
 	flag.Parse()
 
+	if *flagVersion {
+		fmt.Printf("Six %s\n", Version)
+		return
+	}
+
 	for _, file := range flag.Args() {
 		filenames = append(filenames, file)
 	}
 
-	if *pprof {
+	if *flagPprof {
 		runtime.SetBlockProfileRate(1)
 		runtime.SetMutexProfileFraction(1)
 		go func() {
@@ -43,9 +54,9 @@ func main() {
 	}
 
 	var i *IDE
-	if *recfilename != "" && len(filenames) != 0 {
-		i, err = NewRecovery(*configpath, filenames[0], *recfilename)
-	} else if *recfilename != "" {
+	if *flagRecover!= "" && len(filenames) != 0 {
+		i, err = NewRecovery(*configpath, filenames[0], *flagRecover)
+	} else if *flagRecover != "" {
 		log.Fatal("flag -r requires to pass the original filename filename")
 	} else {
 		i, err = New(*configpath, filenames...)
