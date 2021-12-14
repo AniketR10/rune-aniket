@@ -1,6 +1,6 @@
 GO=go
 GOTESTFLAGS=-race -timeout 20s
-GOFLAGS=-ldflags="-X main.Version=$$(git describe --abbrev=0 --tags)"
+GOFLAGS=-ldflags="-X main.Version=$$(git describe --tags)"
 
 BIN=bin
 TARGET=target
