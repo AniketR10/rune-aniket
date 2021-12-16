@@ -16,7 +16,7 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-var ag = `ag --nogroup --nocolor '^(?=.)'`
+const defaultCommand = `ag --nogroup --nocolor '^(?=.)'`
 
 func main() {
 	go func() {
@@ -28,8 +28,15 @@ func main() {
 		SplitOrientation: browser.OrientationBottom,
 		Handler: func(grants []plugin.Grant, broker proto.MuxBroker,
 			invokeWindow browser.Window, config plugin.Config) (tui.Handler, error) {
+			cmdStr, err := config.GetString("command")
+			if err != nil {
+				if err != plugin.ErrNotFound {
+					log.Printf("failed to load 'command' config: %v", err)
+				}
+				cmdStr = defaultCommand
+			}
 			return finder.New(grants, broker, invokeWindow,
-				config, key, ag, func(data string) (string, term.Coordinates) {
+				config, key, cmdStr, func(data string) (string, term.Coordinates) {
 					// NOTE: if ag breaks this or there's an edge case that it's not covered
 					// let it panic so we catch it early and fix it
 					chunks := strings.Split(data, ":")
