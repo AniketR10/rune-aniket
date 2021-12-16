@@ -16,7 +16,7 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-const defaultCommand = `ag --nogroup --nocolor '^(?=.)'`
+const defaultCommand = `grep -n -r "" .`
 
 func main() {
 	go func() {
