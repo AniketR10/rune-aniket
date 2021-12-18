@@ -346,8 +346,9 @@ func (b *Buffer) DeleteBlock(from, to term.Coordinates) (
 
 // Reset resets the contents of this Buffer.
 func (b *Buffer) Reset() {
+	// make sure that reset is propagated to subscribers.
+	b.TruncateFrom(term.Coordinates{})
 	b.undoer.reset()
-	b.cells.reset()
 }
 
 func (b *Buffer) Version() int {

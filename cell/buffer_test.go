@@ -319,9 +319,10 @@ func TestBufferReset(t *testing.T) {
 		b.InsertRowAt(0)
 		b.DeleteRow(0)
 		assert.Equal(t, 1, sub.onDidInsert)
-		assert.Equal(t, 1, sub.onWillDelete)
 		assert.Equal(t, 1, sub.onWillInsert)
-		assert.Equal(t, 1, sub.onWillDelete)
+		// 1 reset + 1 delete
+		assert.Equal(t, 2, sub.onWillDelete)
+		assert.Equal(t, 2, sub.onWillDelete)
 	})
 
 	t.Run("does reset undo", func(t *testing.T) {
