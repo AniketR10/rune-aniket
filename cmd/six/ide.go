@@ -17,7 +17,7 @@ import (
 // IDE binds together a text editor/browser with a plugin manager.
 type IDE struct {
 	ideConfig
-	ex        *editor.Ex
+	ex        *Ex
 	manager   *plugin.Manager
 	clipboard *plugin.ClipboardManager
 }
@@ -130,7 +130,7 @@ func (i *IDE) init(cfgfilename, recfilename string, filenames ...string) error {
 	}
 
 	vi := vi.Editor(viOpts...)
-	ex, err := editor.NewEx(vi, opts...)
+	ex, err := NewEx(vi, opts...)
 	if err != nil {
 		return err
 	}

@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"os/user"
 	"path/filepath"
 	"strings"
@@ -17,11 +16,6 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-type flusherCloser interface {
-	Flush() error
-	io.Closer
-}
-
 var (
 	// ErrInvalidSave is returned when trying to save a buffer that it's not a file
 	// in the file system.
@@ -31,18 +25,9 @@ var (
 	ErrInvalidSplit = errors.New("Cannot split this window")
 )
 
-type openFileFunc func(filePath string,
-	buf *cell.Buffer, swapDir string, readOnly bool) (flusherCloser, error)
-
-type recoverFileFunc func(filePath,
-	swapFilePath string, buf *cell.Buffer) (flusherCloser, error)
-
 // Component is an implementation of browser.Browser for file editing.
 // It also satisfies tui.Component, and editor.Editor.
 type Component struct {
-	openFileFn      openFileFunc
-	recoverFileFn   recoverFileFunc
-	interruptDraw   func()
 	comp            browser.Component
 	ed              Editor
 	config          Config
@@ -56,7 +41,7 @@ type Component struct {
 // corresponding events to subscribers.
 type editorFlusherCloser struct {
 	parent    *Component
-	fc        flusherCloser
+	fc        FlusherCloser
 	h         Handler
 	name      string
 	buf       *cell.Buffer
@@ -119,25 +104,6 @@ func NewComponent(ed Editor, config Config) (c *Component, err error) {
 	return
 }
 
-func (c *Component) initConstructors() {
-	if c.openFileFn == nil {
-		c.openFileFn = func(filePath string,
-			buf *cell.Buffer, swapDir string, readOnly bool) (flusherCloser, error) {
-			return NewFileBuffer(filePath, buf, swapDir, readOnly)
-		}
-	}
-
-	if c.recoverFileFn == nil {
-		c.recoverFileFn = func(filePath,
-			swapFilePath string, buf *cell.Buffer) (flusherCloser, error) {
-			return RecoverFileBuffer(filePath, swapFilePath, buf)
-		}
-	}
-	if c.interruptDraw == nil {
-		c.interruptDraw = term.Interrupt
-	}
-}
-
 func (c *Component) tryLog(level log.Level, msg string, args ...interface{}) {
 	if c.config.Logger != nil {
 		c.config.Logger.Logf(level, msg, args...)
@@ -174,11 +140,11 @@ func (c *Component) setTabAttr(id string, buf *cell.Buffer, lastFlush string) {
 func (c *Component) newFileBuffer(
 	filename, recSwapFile string, buf *cell.Buffer, readOnly bool,
 ) (ret *editorFlusherCloser, err error) {
-	var fc flusherCloser
+	var fc FlusherCloser
 	if recSwapFile != "" {
-		fc, err = c.recoverFileFn(filename, recSwapFile, buf)
+		fc, err = c.config.RecoverFileFn(filename, recSwapFile, buf)
 	} else {
-		fc, err = c.openFileFn(filename, buf, c.config.SwapDir, readOnly)
+		fc, err = c.config.OpenFileFn(filename, buf, c.config.SwapDir, readOnly)
 	}
 
 	if err != nil {
@@ -202,7 +168,6 @@ func (c *Component) newFileBuffer(
 // It returns an error if an initial filepath was given through WithFilePath option
 // and the file failed to be opened.
 func (c *Component) Init(ed Editor, config Config) error {
-	c.initConstructors()
 	c.config = config
 
 	c.comp.Init(c.config.Config)
@@ -529,7 +494,7 @@ func (c *Component) unsubscribe(ev term.Event) {
 
 // PublishInterrupt interrupts the main event loop to redraw the terminal.
 func (c *Component) PublishInterrupt() error {
-	c.interruptDraw()
+	c.config.InterruptDraw()
 	return nil
 }
 
@@ -589,7 +554,7 @@ func (c *Component) Flush(win browser.Window) error {
 		return ErrInvalidSave
 	}
 
-	fc := t.Closer().(flusherCloser)
+	fc := t.Closer().(FlusherCloser)
 	err = fc.Flush()
 	if err != nil {
 		return fmt.Errorf("editor.Component.Flush: %v", err)

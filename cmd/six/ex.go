@@ -1,4 +1,4 @@
-package editor
+package main
 
 import (
 	"errors"
@@ -11,6 +11,7 @@ import (
 	"github.com/ernestrc/go-tui/cell"
 	"github.com/ernestrc/go-tui/component"
 	"github.com/ernestrc/go-tui/component/search"
+	"github.com/ernestrc/go-tui/editor"
 	"github.com/ernestrc/go-tui/term"
 )
 
@@ -43,8 +44,8 @@ const (
 // Ex implements a tui.Handler by wrapping an editor.Component and
 // providing an ex editor type of interface.
 type Ex struct {
-	config  Config
-	comp    Component
+	config  editor.Config
+	comp    editor.Component
 	command struct {
 		// argsStartIdx is the position of the first space
 		// that separates the 'command' from its args
@@ -61,7 +62,7 @@ type Ex struct {
 }
 
 // NewEx allocates storage for a new Ex and initializes it.
-func NewEx(ed Editor, opts ...Option) (e *Ex, err error) {
+func NewEx(ed editor.Editor, opts ...editor.Option) (e *Ex, err error) {
 	e = new(Ex)
 	err = e.Init(ed, opts...)
 	if err != nil {
@@ -73,11 +74,11 @@ func NewEx(ed Editor, opts ...Option) (e *Ex, err error) {
 // Init initializes this Ex with the given editor and Options.
 // It returns an error if an initial filepath was given through WithFilePath option
 // and the file failed to be opened.
-func (e *Ex) Init(ed Editor, opts ...Option) (err error) {
+func (e *Ex) Init(ed editor.Editor, opts ...editor.Option) (err error) {
 	e.command.Buffer.Init()
 	e.mode = modeDefault
 
-	e.config = DefaultConfig()
+	e.config = editor.DefaultConfig()
 	for _, o := range opts {
 		o(&e.config)
 	}
@@ -119,7 +120,7 @@ func (e *Ex) Init(ed Editor, opts ...Option) (err error) {
 	return
 }
 
-func (e *Ex) handlerInFocus() (string, Handler, bool) {
+func (e *Ex) handlerInFocus() (string, editor.Handler, bool) {
 	focus, _ := e.comp.Focus()
 	content, _ := focus.Content()
 	t, ok := content.(*browser.Tab)
@@ -127,7 +128,7 @@ func (e *Ex) handlerInFocus() (string, Handler, bool) {
 		return "", nil, false
 	}
 
-	return t.ID(), t.Handler().(Handler), true
+	return t.ID(), t.Handler().(editor.Handler), true
 }
 
 func (e *Ex) moveFocusCursor(line int) error {
@@ -313,7 +314,7 @@ func (e *Ex) handleCommand(ev term.Event) (quit, handled bool) {
 }
 
 func (e *Ex) handleCommandEvent(ev term.Event) bool {
-	if ev == e.comp.config.CommandEvent {
+	if ev == e.config.CommandEvent {
 		e.setCommandMode()
 		return true
 	}
@@ -326,7 +327,7 @@ func (e *Ex) handleProxy(ev term.Event) (
 	// If Ex is configured with non character
 	// command mode trigger event, then this takes
 	// precedence over any other event
-	if e.comp.config.CommandEvent.Ch == 0 {
+	if e.config.CommandEvent.Ch == 0 {
 		handled = e.handleCommandEvent(ev)
 		if handled {
 			return
@@ -455,7 +456,7 @@ func (e *Ex) Draw(w term.Writer) {
 }
 
 // Editor returns the underlying Editor implementation.
-func (e *Ex) Editor() Editor {
+func (e *Ex) Editor() editor.Editor {
 	return &e.comp
 }
 

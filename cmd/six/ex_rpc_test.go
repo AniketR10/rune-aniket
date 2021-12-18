@@ -1,4 +1,4 @@
-package editor
+package main
 
 import (
 	"fmt"
@@ -12,6 +12,7 @@ import (
 
 	"github.com/ernestrc/go-tui"
 	"github.com/ernestrc/go-tui/browser"
+	"github.com/ernestrc/go-tui/editor"
 	"github.com/ernestrc/go-tui/proto"
 	"github.com/ernestrc/go-tui/term"
 	log "github.com/sirupsen/logrus"
@@ -73,13 +74,16 @@ func (h *safeHandler) Close() error {
 func newTestRPCBrowser(t *testing.T,
 	destructor *func(),
 ) browserConstructor {
-	return func(ed Editor, opts ...Option) (tui.Handler, browser.Browser, error) {
+	return func(ed editor.Editor, opts ...editor.Option) (
+		tui.Handler, browser.Browser, error,
+	) {
 		var logger *log.Logger
 		// // uncomment to debug
 		// logger = log.New()
 		// logger.SetLevel(log.TraceLevel)
 
-		b := newTestBrowserHandler()
+		b := new(Ex)
+		opts = withOpenFileStubs(opts...)
 		err := b.Init(ed, opts...)
 		if err != nil {
 			return nil, nil, err
@@ -128,7 +132,8 @@ func TestIntegrationRPCBrowserDraw(t *testing.T) {
 
 func TestRPCBrowserCloseLeak(t *testing.T) {
 	var destructor func()
-	_, b, err := newTestRPCBrowser(t, &destructor)(&testEditor{}, WithFilepath(""))
+	_, b, err := newTestRPCBrowser(t, &destructor)(editor.Mock(),
+		editor.WithFilepath(""))
 	require.NoError(t, err)
 	defer destructor()
 
@@ -145,7 +150,8 @@ func TestRPCBrowserCloseLeak(t *testing.T) {
 // NOTE: run go test -race in order for this test to be useful.
 func TestClientSynchronizeHandlers(t *testing.T) {
 	var destructor func()
-	h, b, err := newTestRPCBrowser(t, &destructor)(&testEditor{}, WithFilepath(""))
+	h, b, err := newTestRPCBrowser(t, &destructor)(editor.Mock(),
+		editor.WithFilepath(""))
 	require.NoError(t, err)
 	defer destructor()
 	var wg sync.WaitGroup

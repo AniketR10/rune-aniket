@@ -1,7 +1,6 @@
-package editor
+package main
 
 import (
-	"errors"
 	"io"
 	"strconv"
 	"sync"
@@ -10,126 +9,14 @@ import (
 	"github.com/ernestrc/go-tui"
 	"github.com/ernestrc/go-tui/browser"
 	"github.com/ernestrc/go-tui/cell"
+	"github.com/ernestrc/go-tui/editor"
 	"github.com/ernestrc/go-tui/term"
 	testutil "github.com/ernestrc/go-tui/util/test"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-type browserConstructor func(ed Editor, opts ...Option) (tui.Handler, browser.Browser, error)
-
-type testEditor struct {
-	name string
-	buf  *cell.Buffer
-	subs map[EventType][]EventHandler
-}
-
-func (e *testEditor) Handle(ev Event) bool {
-	e.dispatchEvent(ev)
-	return false
-}
-
-func (e *testEditor) dispatchEvent(ev Event) {
-	if len(e.subs) == 0 {
-		return
-	}
-	subs, ok := e.subs[ev.Type]
-	if !ok {
-		return
-	}
-
-	remain := make([]EventHandler, 0, len(subs))
-	for _, sub := range subs {
-		exit := sub.Handle(ev)
-		if !exit {
-			remain = append(remain, sub)
-		}
-	}
-	e.subs[ev.Type] = remain
-}
-
-type testEditorHandler struct {
-	browser.TestHandler
-	locationList LocationList
-	parent       *testEditor
-	name         string
-}
-
-func (e *testEditor) Edit(name string, buf *cell.Buffer) (Handler, error) {
-	e.name = name
-	e.buf = buf
-
-	h := &testEditorHandler{name: name, parent: e, TestHandler: *browser.NewTestHandler()}
-	e.dispatchEvent(Event{
-		Type:         EventTypeOpen,
-		ResourceName: name,
-		Resource:     h,
-		Content:      buf.String(),
-	})
-
-	subs := CellSubscriber(name, h, e)
-	buf.Subscribe(subs)
-	return h, nil
-}
-
-func (e *testEditor) SetLocationList(h Handler, id string, loc LocationList) error {
-	h.(*testEditorHandler).locationList = loc
-	return nil
-}
-
-func (e *testEditorHandler) Handle(ev term.Event) (bool, bool) {
-	e.parent.dispatchEvent(Event{
-		Type:         EventTypeCursor,
-		ResourceName: e.name,
-		Resource:     e,
-	})
-	return e.TestHandler.Handle(ev)
-}
-
-func (e *testEditor) MoveToNextLocation(h Handler, ID string) error {
-	return nil
-}
-
-func (e *testEditor) MoveToPrevLocation(h Handler, ID string) error {
-	return nil
-}
-
-func (e *testEditor) SetCursor(h Handler, pos term.Coordinates) error {
-	h.(*testEditorHandler).CursorPos = pos
-	return nil
-}
-
-func (e *testEditor) Cursor(h Handler) (term.Coordinates, error) {
-	return h.(*testEditorHandler).CursorPos, nil
-}
-
-func (e *testEditor) Writer(h Handler) Writer {
-	return CellWriter(e.buf.Writer())
-}
-
-func (e *testEditor) Reader(h Handler) Reader {
-	return CellReader(e.buf.Reader())
-}
-
-func (e *testEditor) SubscribeCommand(cmd string, h CommandHandler) error {
-	return nil
-}
-
-func (e *testEditor) SubscribeEditorEvents(ev EventType, sub EventHandler) error {
-	if e.subs == nil {
-		e.subs = make(map[EventType][]EventHandler)
-	}
-	if _, ok := e.subs[ev]; !ok {
-		e.subs[ev] = []EventHandler{sub}
-		return nil
-	}
-	e.subs[ev] = append(e.subs[ev], sub)
-	return nil
-}
-
-func (e *testEditor) Editor(name string) (Handler, error) {
-	return nil, errors.New("nope")
-}
+type browserConstructor func(ed editor.Editor, opts ...editor.Option) (tui.Handler, browser.Browser, error)
 
 type testFileBuffer struct {
 	flushErr error
@@ -145,28 +32,27 @@ func (t *testFileBuffer) Close() error {
 }
 
 func openTestFile(filePath string, buf *cell.Buffer, swapDir string, readOnly bool) (
-	flusherCloser, error,
+	editor.FlusherCloser, error,
 ) {
 	return &testFileBuffer{}, nil
 }
 
 func recoverTestFile(filePath, swapFilePath string, buf *cell.Buffer) (
-	flusherCloser, error,
+	editor.FlusherCloser, error,
 ) {
 	return openTestFile(filePath, buf, "", false)
 }
 
-func newTestBrowserHandler() *Ex {
-	ret := new(Ex)
-	ret.comp.openFileFn = openTestFile
-	ret.comp.recoverFileFn = recoverTestFile
-	return ret
+func withOpenFileStubs(opts ...editor.Option) []editor.Option {
+	opts = append(opts, editor.WithOpenFileFn(openTestFile))
+	opts = append(opts, editor.WithRecoverFileFn(recoverTestFile))
+	return opts
 }
 
 func TestBrowserHandlerDraw(t *testing.T) {
-	testBrowserHandlerDraw(t, func(ed Editor, opts ...Option) (tui.Handler, browser.Browser, error) {
-		b := newTestBrowserHandler()
-		err := b.Init(ed, opts...)
+	testBrowserHandlerDraw(t, func(ed editor.Editor, opts ...editor.Option) (tui.Handler, browser.Browser, error) {
+		b := new(Ex)
+		err := b.Init(ed, withOpenFileStubs(opts...)...)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -324,9 +210,9 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 	// testutil.TestHandlerSequence maps ':' characters to the following event
 	// this is to work around ex's assumptions on underlying handler.
 	commandEvent := term.Event{Type: term.EventKey, Key: term.KeyCtrlBackslash}
-	bh, b, err := constructor(&testEditor{},
-		WithCommandEvent(commandEvent),
-		WithCommandKeyBinding(term.Event{Type: term.EventKey, Ch: '4'}, "close"),
+	bh, b, err := constructor(editor.Mock(),
+		editor.WithCommandEvent(commandEvent),
+		editor.WithCommandKeyBinding(term.Event{Type: term.EventKey, Ch: '4'}, "close"),
 	)
 	require.NoError(t, err)
 
@@ -605,8 +491,9 @@ func assertHandled(
 func newBrowserForSubscribeTest(t *testing.T, ev term.Event) (
 	*Ex, *browser.TestHandler, rune,
 ) {
-	b := newTestBrowserHandler()
-	require.NoError(t, b.Init(&testEditor{}))
+	b := new(Ex)
+	opts := withOpenFileStubs()
+	require.NoError(t, b.Init(editor.Mock(), opts...))
 
 	h := browser.NewTestHandler()
 	err := b.Browser().SubscribeTermEvents(ev, browser.HandlerEventHandler(h))
@@ -655,10 +542,11 @@ func TestBrowserHandlerSubscribe(t *testing.T) {
 func TestBrowserHandlerPublishInterrupt(t *testing.T) {
 	t.Run("calls interrupt handle asynchronously", func(t *testing.T) {
 		var wg sync.WaitGroup
-		browser := newTestBrowserHandler()
-		require.NoError(t, browser.Init(&testEditor{}))
+		browser := new(Ex)
+		opts := withOpenFileStubs()
+		opts = append(opts, editor.WithInterrupt(wg.Done))
+		require.NoError(t, browser.Init(editor.Mock(), opts...))
 		defer browser.Close()
-		browser.comp.interruptDraw = wg.Done
 
 		wg.Add(1)
 		browser.Browser().PublishInterrupt()
@@ -704,10 +592,13 @@ func TestMultipleFilesStartup(t *testing.T) {
 └──────────────────┘`},
 	}
 
-	b := newTestBrowserHandler()
-	err := b.Init(&testEditor{},
-		WithFilepath("cabin.go"),
-		WithFilepath("wi.go"),
+	b := new(Ex)
+	opts := withOpenFileStubs(
+		editor.WithFilepath("cabin.go"),
+		editor.WithFilepath("wi.go"),
+	)
+	err := b.Init(editor.Mock(),
+		opts...,
 	)
 	require.NoError(t, err)
 	defer b.Close()

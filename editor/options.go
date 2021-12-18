@@ -1,12 +1,22 @@
 package editor
 
 import (
+	"io"
+
 	"github.com/ernestrc/blue/datastore/document"
 	"github.com/ernestrc/go-tui/browser"
+	"github.com/ernestrc/go-tui/cell"
 	"github.com/ernestrc/go-tui/component"
 	"github.com/ernestrc/go-tui/term"
 	log "github.com/sirupsen/logrus"
 )
+
+// FlusherCloser wraps Flush and Close methods to be used
+// as editor file abstractions.
+type FlusherCloser interface {
+	Flush() error
+	io.Closer
+}
 
 // CommandOverlayConfig holds configuration for the
 // command's interface.
@@ -29,6 +39,9 @@ type Config struct {
 	CommandKeyBindings map[term.Event]string
 	Storage            document.Service
 	DirtyTabAttr       term.Attributes
+	OpenFileFn         func(filePath string, buf *cell.Buffer, swapDir string, readOnly bool) (FlusherCloser, error)
+	RecoverFileFn      func(filePath, swapFilePath string, buf *cell.Buffer) (FlusherCloser, error)
+	InterruptDraw      func()
 
 	CommandOverlay CommandOverlayConfig
 	browser.Config
@@ -59,11 +72,20 @@ func DefaultConfig() Config {
 		DirtyTabAttr:       term.Attributes{Fg: term.AttrBold},
 		CommandKeyBindings: make(map[term.Event]string),
 		CommandOverlay:     DefaultCommandOverlayConfig(),
+		OpenFileFn: func(filePath string,
+			buf *cell.Buffer, swapDir string, readOnly bool) (FlusherCloser, error) {
+			return NewFileBuffer(filePath, buf, swapDir, readOnly)
+		},
+		RecoverFileFn: func(filePath,
+			swapFilePath string, buf *cell.Buffer) (FlusherCloser, error) {
+			return RecoverFileBuffer(filePath, swapFilePath, buf)
+		},
+		InterruptDraw: term.Interrupt,
 	}
 	return cfg
 }
 
-// Option represents a configuration option for a browser.Handler.
+// Option represents a configuration option for Component.
 type Option func(*Config)
 
 // WithTabspaces sets the number of spaces used to render a tab.
@@ -147,23 +169,23 @@ func WithWindowManagerConfig(config component.WindowManagerConfig) Option {
 }
 
 // WithMessageBarAttr returns an Option that configures
-// the browser's message bar attr.
+// a Component's message bar attr.
 func WithMessageBarAttr(attr term.Attributes) Option {
 	return func(cfg *Config) {
 		cfg.MessageBarAttr = attr
 	}
 }
 
-// WithFocusTabAttr returns an Option that configures the attributes of the
-// browser's tab in focus.
+// WithFocusTabAttr returns an Option that configures the attributes of a
+// Components's tab in focus.
 func WithFocusTabAttr(attr term.Attributes) Option {
 	return func(cfg *Config) {
 		cfg.FocusTabAttr = attr
 	}
 }
 
-// WithNonFocusTabAttr returns an Option that configures the attributes of the
-// browser's tabs that are not in focus.
+// WithNonFocusTabAttr returns an Option that configures the attributes of a
+// Components's tabs that are not in focus.
 func WithNonFocusTabAttr(attr term.Attributes) Option {
 	return func(cfg *Config) {
 		cfg.NonFocusTabAttr = attr
@@ -212,9 +234,35 @@ func WithCommandOverlayConfig(c CommandOverlayConfig) Option {
 	}
 }
 
-// WithPromptConfig sets the browser's prompt properties.
+// WithPromptConfig sets the Components's prompt properties.
 func WithPromptConfig(c browser.PromptConfig) Option {
 	return func(cfg *Config) {
 		cfg.Config.PromptConfig = c
+	}
+}
+
+// WithOpenFileFn sets the Component's  OpenFile function to fn.
+// By default this is set to editor.NewFileBuffer.
+func WithOpenFileFn(
+	fn func(filePath string, buf *cell.Buffer, swapDir string, readOnly bool) (FlusherCloser, error)) Option {
+	return func(cfg *Config) {
+		cfg.OpenFileFn = fn
+	}
+}
+
+// WithRecoverFileFn sets the Component's RecoverFile function to fn.
+// By default this is set to editor.RecoverFileBuffer.
+func WithRecoverFileFn(
+	fn func(filePath, swapFilePath string, buf *cell.Buffer) (FlusherCloser, error)) Option {
+	return func(cfg *Config) {
+		cfg.RecoverFileFn = fn
+	}
+}
+
+// WithInterrupt sets the Component's interrupt function.
+// By default this is set to term.Interrupt.
+func WithInterrupt(fn func()) Option {
+	return func(cfg *Config) {
+		cfg.InterruptDraw = fn
 	}
 }

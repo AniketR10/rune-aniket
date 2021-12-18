@@ -42,18 +42,18 @@ func (t *testFlusherCloser) Flush() error {
 }
 
 func newTestComponentErr(ed Editor) (*Component, error) {
-	c, err := NewComponent(ed, DefaultConfig())
+	cfg := DefaultConfig()
+	cfg.OpenFileFn = func(filePath string,
+		buf *cell.Buffer, swapDir string, readOnly bool) (FlusherCloser, error) {
+		return &testFlusherCloser{}, nil
+	}
+	cfg.RecoverFileFn = func(filePath, swapFilePath string,
+		buf *cell.Buffer) (FlusherCloser, error) {
+		return &testFlusherCloser{}, nil
+	}
+	c, err := NewComponent(ed, cfg)
 	if err != nil {
 		return nil, err
-	}
-
-	c.openFileFn = func(filePath string,
-		buf *cell.Buffer, swapDir string, readOnly bool) (flusherCloser, error) {
-		return &testFlusherCloser{}, nil
-	}
-	c.recoverFileFn = func(filePath, swapFilePath string,
-		buf *cell.Buffer) (flusherCloser, error) {
-		return &testFlusherCloser{}, nil
 	}
 	return c, nil
 }
@@ -210,8 +210,8 @@ func TestComponentOpen(t *testing.T) {
 		_, ok := c.Browser().Tab(myName)
 		assert.True(t, ok)
 
-		c.openFileFn = func(filePath string,
-			buf *cell.Buffer, swapDir string, readOnly bool) (flusherCloser, error) {
+		c.config.OpenFileFn = func(filePath string,
+			buf *cell.Buffer, swapDir string, readOnly bool) (FlusherCloser, error) {
 			return nil, ErrFileAlreadyOpen
 		}
 
@@ -235,8 +235,8 @@ func TestComponentOpen(t *testing.T) {
 	t.Run("bubbles up open file error", func(t *testing.T) {
 		c, _ := newTestComponentWithFile(t, "lmao")
 		myErr := errors.New("oopsie daisy")
-		c.openFileFn = func(filePath string,
-			buf *cell.Buffer, swapDir string, readOnly bool) (flusherCloser, error) {
+		c.config.OpenFileFn = func(filePath string,
+			buf *cell.Buffer, swapDir string, readOnly bool) (FlusherCloser, error) {
 			return nil, myErr
 		}
 
@@ -247,8 +247,8 @@ func TestComponentOpen(t *testing.T) {
 	t.Run("if file is already open it returns its handler", func(t *testing.T) {
 		filename := "wasup"
 		c, h1 := newTestComponentWithFile(t, filename)
-		c.openFileFn = func(filePath string,
-			buf *cell.Buffer, swapDir string, readOnly bool) (flusherCloser, error) {
+		c.config.OpenFileFn = func(filePath string,
+			buf *cell.Buffer, swapDir string, readOnly bool) (FlusherCloser, error) {
 			t.Log("should not call openFileFn")
 			t.Fail()
 			return nil, nil
@@ -490,8 +490,8 @@ func TestComponentEditorSubscriber(t *testing.T) {
 			c.dispatchEvent(ev)
 			return nil
 		}}
-		c.openFileFn = func(filePath string,
-			buf *cell.Buffer, swapDir string, readOnly bool) (flusherCloser, error) {
+		c.config.OpenFileFn = func(filePath string,
+			buf *cell.Buffer, swapDir string, readOnly bool) (FlusherCloser, error) {
 			return &fc, nil
 		}
 
@@ -521,8 +521,8 @@ func TestComponentEditorSubscriber(t *testing.T) {
 
 			filename := "Toy Rory"
 
-			c.openFileFn = func(filePath string,
-				buf *cell.Buffer, swapDir string, readOnly bool) (flusherCloser, error) {
+			c.config.OpenFileFn = func(filePath string,
+				buf *cell.Buffer, swapDir string, readOnly bool) (FlusherCloser, error) {
 				buf.WriteString(content)
 				return &testFlusherCloser{}, nil
 			}
@@ -545,8 +545,8 @@ func TestComponentEditorSubscriber(t *testing.T) {
 		filename1 := "JJ.txt"
 		filename2 := "J2.txt"
 
-		c.openFileFn = func(filePath string,
-			buf *cell.Buffer, swapDir string, readOnly bool) (flusherCloser, error) {
+		c.config.OpenFileFn = func(filePath string,
+			buf *cell.Buffer, swapDir string, readOnly bool) (FlusherCloser, error) {
 			buf.WriteString(content)
 			return &testFlusherCloser{}, nil
 		}
