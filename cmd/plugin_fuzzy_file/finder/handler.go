@@ -122,7 +122,12 @@ func (h *fuzzyFinderHandler) getSearchHistory() error {
 	return err
 }
 
-func (h *fuzzyFinderHandler) addSearchHistory(searchQuery string) error {
+func (h *fuzzyFinderHandler) addSearchHistory(searchQuery string) {
+	if h.s == nil {
+		log.Debugf("Storage permission not granted; ignoring history feature")
+		return
+	}
+
 	h.history.Queries = append(h.history.Queries, searchQuery)
 	if len(h.history.Queries) > h.history.max {
 		h.history.Queries = h.history.Queries[1:]
@@ -134,7 +139,12 @@ func (h *fuzzyFinderHandler) addSearchHistory(searchQuery string) error {
 	h.mu.Unlock()
 	defer h.mu.Lock()
 
-	return h.s.Set(ctx, searchHistoryDocumentID, &h.history)
+	err := h.s.Set(ctx, searchHistoryDocumentID, &h.history)
+	if err != nil {
+		log.Errorf("error adding search history: %v", err)
+	} else {
+		log.Debugf("added %s to query history", searchQuery)
+	}
 }
 
 func (h *fuzzyFinderHandler) open(resource string) (browser.Handler, error) {
@@ -191,16 +201,6 @@ func (h *fuzzyFinderHandler) openResource(searchQuery, data string) {
 	if err != nil {
 		log.Errorf("error SetContent: %v", err)
 		return
-	}
-
-	// optinally store query for history browsing
-	if h.s != nil {
-		err := h.addSearchHistory(searchQuery)
-		if err != nil {
-			log.Errorf("error adding search history: %v", err)
-		} else {
-			log.Debugf("added %s to query history", searchQuery)
-		}
 	}
 }
 
@@ -301,7 +301,9 @@ func New(
 	listConfig := h.getListConfig(config)
 	h.list.Init(listConfig)
 	h.listHandler = search.Handler(&h.list, func(item string) {
-		h.openResource(h.list.Buffer().String(), item)
+		searchQuery := h.list.Buffer().String()
+		h.openResource(searchQuery, item)
+		h.addSearchHistory(searchQuery)
 	})
 
 	h.history.max, err = config.GetInt("history")
@@ -398,7 +400,6 @@ func (h *fuzzyFinderHandler) writeLastSearchQuery() {
 		return
 	}
 	search := h.history.Queries[0]
-	h.history.Queries = h.history.Queries[1:]
 	h.list.Buffer().Reset()
 	h.list.Buffer().WriteString(search)
 }
