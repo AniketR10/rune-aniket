@@ -440,8 +440,9 @@ func (c *Cursor) MoveLeft() (ok bool) {
 func (c *Cursor) MoveRight() (ok bool) {
 	if c.scroll.Wrap {
 		atScroll := c.cursorAtScroll()
-		if atScroll.Y >= c.rows() || (atScroll.X+1 >= c.buffer().Columns(atScroll.Y) &&
-			c.cursor.X+1 >= c.scroll.Width()) { // maintain same semantics as no wrap
+		if atScroll.Y >= c.rows() ||
+			(atScroll.X+1 > c.buffer().Columns(atScroll.Y) &&
+				c.cursor.X+1 >= c.scroll.Width()) {
 			return
 		}
 		ok = true

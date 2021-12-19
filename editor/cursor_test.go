@@ -434,10 +434,6 @@ func TestCursorMove(t *testing.T) {
 			"MoveRight should move cursor right even if past current line's end of line",
 			1000, 1000,
 			func(t *testing.T, e *Cursor) {
-				if e.scroll.Wrap {
-					t.Skip()
-					return
-				}
 				assert.True(t, e.MoveRight())
 			},
 			term.Coordinates{X: 1, Y: 0},
@@ -446,10 +442,6 @@ func TestCursorMove(t *testing.T) {
 			"MoveRight should move cursor right even if at the end of the line",
 			1000, 1000,
 			func(t *testing.T, e *Cursor) {
-				if e.scroll.Wrap {
-					t.Skip()
-					return
-				}
 				e.cursor.X = 1
 				assert.True(t, e.MoveRight())
 			},
@@ -1562,6 +1554,15 @@ func TestCursorWrap(t *testing.T) {
 		e.cursor.X = e.scroll.Width()
 		pos := e.Coordinates()
 		assert.Equal(t, term.Coordinates{Y: 1}, pos)
+	})
+	t.Run("MoveRight moves cursor past the end of line of a wrapped line", func(t *testing.T) {
+		e := setupCursor(t, 10, 10)
+		e.scroll.Wrap = true
+		e.MoveToScroll(term.Coordinates{X: 15, Y: 3})
+
+		require.True(t, e.MoveRight())
+		cursor := e.CursorAtScroll()
+		assert.Equal(t, term.Coordinates{Y: 3, X: 16}, cursor)
 	})
 }
 
