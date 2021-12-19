@@ -616,6 +616,20 @@ func TestCursorMove(t *testing.T) {
 			term.Coordinates{X: 33, Y: 2},
 		},
 		{
+			"MoveToNextChar should move the cursor to a matching character at the end of line",
+			10, 10,
+			func(t *testing.T, e *Cursor) {
+				e.MoveDown()
+				e.MoveDown()
+				e.MoveDown()
+				assert.True(t, e.MoveToNextChar('.'))
+
+				c, _ := e.scroll.Buffer().Cell(e.cursorAtScroll())
+				assert.Equal(t, '.', c.Ch)
+			},
+			term.Coordinates{X: 15, Y: 3},
+		},
+		{
 			"MoveToPrevChar should do nothing if there is no matches in the line",
 			10, 10,
 			func(t *testing.T, e *Cursor) {

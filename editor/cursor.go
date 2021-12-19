@@ -1154,10 +1154,7 @@ func (c *Cursor) moveToChar(
 	ch rune, findResult func(int, cell.Searcher) (term.Coordinates, bool),
 ) bool {
 	cursor := c.cursorAtScroll()
-	lastPos := c.buffer().Columns(cursor.Y) - 1
-	if lastPos < 0 {
-		lastPos = 0
-	}
+	lastPos := c.buffer().Columns(cursor.Y)
 	start := term.Coordinates{Y: cursor.Y}
 	end := term.Coordinates{Y: cursor.Y, X: lastPos}
 
