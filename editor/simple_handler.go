@@ -13,16 +13,16 @@ type simpleEditorHandler struct {
 	cursor Cursor
 }
 
-func newSimpleEditor(buf *cell.Buffer) *simpleEditorHandler {
+func newSimpleEditor(buf *cell.Buffer, wrap bool) *simpleEditorHandler {
 	ret := new(simpleEditorHandler)
-	ret.init(buf)
+	ret.init(buf, wrap)
 	return ret
 }
 
-func (h *simpleEditorHandler) init(buf *cell.Buffer) {
+func (h *simpleEditorHandler) init(buf *cell.Buffer, wrap bool) {
 	h.buf = buf
 	h.less.InitWithBuffer(buf, handler.LessConfig{
-		Wrap: true,
+		Wrap: wrap,
 		// TODO expose via configuration
 		// Debug:   vi.config.debug,
 		// ResAttr: vi.config.resAttr,

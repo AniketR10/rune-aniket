@@ -9,17 +9,19 @@ import (
 
 type simpleEditor struct {
 	pub Publisher
+	wrap bool
 }
 
 // Simple returns a simple to use Editor implementation.
-func Simple() Editor {
+func Simple(wrap bool) Editor {
 	ret := new(simpleEditor)
+	ret.wrap = wrap
 	ret.pub.Init()
 	return ret
 }
 
 func (e *simpleEditor) Edit(name string, buf *cell.Buffer) (Handler, error) {
-	root := newSimpleEditor(buf)
+	root := newSimpleEditor(buf, e.wrap)
 	return e.pub.PublishEdit(name, buf, root, &root.cursor), nil
 }
 
