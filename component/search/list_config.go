@@ -20,10 +20,6 @@ type ListConfig struct {
 	// Algorithm to use. See AlgoConfig.
 	Algo AlgoConfig
 
-	// SearchBase is the string to print before the cursor
-	// at the base of the search bar.
-	SearchBase string
-
 	// function to use to force a redraw of the list.
 	Interrupt func()
 
@@ -32,9 +28,6 @@ type ListConfig struct {
 
 	// Attributes to use on match and total count row
 	CountAttr *term.Attributes
-
-	// SearchBaseAttr attributes to use for SearchBase.
-	SearchBaseAttr *term.Attributes
 
 	// FocusElementAttr attributes to use for the element in focus.
 	FocusElementAttr *term.Attributes
@@ -62,9 +55,6 @@ func (c ListConfig) toInternal() listConfig {
 	}
 	if c.CountAttr != nil {
 		matchCountAttr = *c.CountAttr
-	}
-	if c.SearchBaseAttr != nil {
-		searchBaseAttr = *c.SearchBaseAttr
 	}
 	if c.FocusElementAttr != nil {
 		focusAttr = *c.FocusElementAttr
@@ -95,6 +85,5 @@ func (c ListConfig) toInternal() listConfig {
 		focusAttr:       focusAttr,
 		interrupt:       interrupt,
 		caseSensitive:   c.CaseSensitive,
-		searchBase:      c.SearchBase,
 	}
 }

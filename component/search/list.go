@@ -3,6 +3,7 @@ package search
 import (
 	"context"
 	"fmt"
+	"math"
 	"sync"
 
 	"github.com/ernestrc/go-tui/cell"
@@ -27,12 +28,11 @@ type listConfig struct {
 	algo            fzf.Algo
 	interrupt       func()
 	caseSensitive   bool
-	searchBase      string
 }
 
 // List is a collection of elements that can be interactively searched.
 type List struct {
-	mu           sync.RWMutex
+	mu           sync.Mutex
 	quitChan     chan struct{}
 	dataChan     chan []byte
 	input        [][]byte
@@ -44,9 +44,17 @@ type List struct {
 	cfg listConfig
 
 	searchBar struct {
-		cell.Buffer
-		component.Scroll
+		component.Responsive
 		component.Virtual
+		minInputHeight int
+
+		syncBuffer *cell.Buffer
+		// this cannot be modified from this component
+		// or else syncBuffer becomes out of sync.
+		// All updates to the search buffer must
+		// be performed via Buffer()
+		internalRead *cell.Buffer
+		dirty        bool
 	}
 
 	matchCountBar struct {
@@ -79,9 +87,19 @@ func NewList(cfg ListConfig) *List {
 // is to be called again to reset the list.
 func (l *List) Init(cfg ListConfig) {
 	l.cfg = cfg.toInternal()
-	l.searchBar.Buffer.Init()
-	l.searchBar.Scroll.InitWithBuffer(&l.searchBar.Buffer)
-	l.searchBar.C = &l.searchBar.Scroll
+
+	l.searchBar.internalRead = cell.NewBuffer()
+	l.searchBar.Responsive = component.BufferResponsive(
+		l.searchBar.internalRead, component.StringConfig{})
+	l.searchBar.C = l.searchBar.Responsive
+	l.searchBar.dirty = true
+	l.searchBar.syncBuffer = cell.NewBuffer()
+	l.searchBar.minInputHeight = 1
+	l.searchBar.syncBuffer.Subscribe(syncBuffer{
+		parent: l,
+		buf:    l.searchBar.internalRead,
+	})
+
 	l.matchCountBar.Buffer.Init()
 	l.matchCountBar.Scroll.InitWithBuffer(&l.matchCountBar.Buffer)
 	l.matchCountBar.C = &l.matchCountBar.Scroll
@@ -89,16 +107,37 @@ func (l *List) Init(cfg ListConfig) {
 	l.list.FocusList.InitWithAttr(l.cfg.textAttr, l.cfg.focusAttr)
 	l.list.C = &l.list.FocusList
 
-	if l.cfg.searchBase != "" {
-		l.searchBar.InsertStringWithAttr(term.Coordinates{},
-			l.cfg.searchBase, l.cfg.searchBaseAttr)
-	}
-
 	l.quitChan = make(chan struct{})
 	l.dataChan = make(chan []byte)
 	l.setFilesCount()
 
 	go l.consumeAsyncElements(l.quitChan)
+}
+
+type syncBuffer struct {
+	parent *List
+	buf    *cell.Buffer
+}
+
+func (s syncBuffer) OnWillInsert(at term.Coordinates, str string) {
+	s.parent.mu.Lock()
+	defer s.parent.mu.Unlock()
+	s.buf.InsertString(at, str)
+	s.parent.searchBar.dirty = true
+	s.parent.asyncSearch()
+}
+
+func (s syncBuffer) OnWillDelete(from, to term.Coordinates) {
+	s.parent.mu.Lock()
+	defer s.parent.mu.Unlock()
+	s.buf.Delete(from, to)
+	s.parent.searchBar.dirty = true
+	s.parent.asyncSearch()
+}
+
+func (s syncBuffer) OnDidDelete(start, end term.Coordinates, str string) {
+}
+func (s syncBuffer) OnDidInsert(from, to term.Coordinates) {
 }
 
 func addMatch(
@@ -134,22 +173,14 @@ func sortByResultScore(a, b component.WithAttributes) bool {
 	return ab.Match.res.Score > bb.Match.res.Score
 }
 
-// SearchQueryString returns the current search query.
-func (l *List) SearchQueryString() string {
-	l.mu.RLock()
-	defer l.mu.RUnlock()
-	return l.getSearchQuery()
-}
-
 func (l *List) getSearchQuery() string {
-	str := l.searchBar.Buffer.String()
-	return str[len(l.cfg.searchBase):]
+	return l.searchBar.internalRead.String()
 }
 
 // MatchCount returns how many elements match the search query so far.
 func (l *List) MatchCount() int {
-	l.mu.RLock()
-	defer l.mu.RUnlock()
+	l.mu.Lock()
+	defer l.mu.Unlock()
 
 	return l.list.Len()
 }
@@ -157,8 +188,8 @@ func (l *List) MatchCount() int {
 // TotalCount returns the total number of elements in the list, whether
 // they are matches or not.
 func (l *List) TotalCount() int {
-	l.mu.RLock()
-	defer l.mu.RUnlock()
+	l.mu.Lock()
+	defer l.mu.Unlock()
 
 	return len(l.input)
 }
@@ -228,9 +259,9 @@ func (l *List) consumeAsyncElements(quitChan chan struct{}) {
 				l.cfg.interrupt()
 				return
 			}
-			l.mu.RLock()
+			l.mu.Lock()
 			height := l.height
-			l.mu.RUnlock()
+			l.mu.Unlock()
 			redraw := i == height-1 || (i != 0 && i%redrawAt == 0)
 			l.pushData(data, slab, redraw)
 			if redraw {
@@ -328,8 +359,8 @@ func (l *List) FocusEnd() bool {
 
 // Focus returns the match in the list currently in focus.
 func (l *List) Focus() ([]byte, bool) {
-	l.mu.RLock()
-	defer l.mu.RUnlock()
+	l.mu.Lock()
+	defer l.mu.Unlock()
 	node, ok := l.list.Focus()
 	if !ok {
 		return nil, false
@@ -352,52 +383,6 @@ func (l *List) asyncSearch() {
 	go l.handleSearch(l.searchCtx, l.cancelSearch, input, searchInput)
 }
 
-// SearchQueryLen returns the length of the current search query.
-func (l *List) SearchQueryLen() int {
-	l.mu.RLock()
-	defer l.mu.RUnlock()
-
-	return l.searchBar.Columns(0)
-}
-
-// SearchQueryWrite adds r to the search query, canceling the
-// previous search if any. It asynchronously starts a new search.
-func (l *List) SearchQueryWrite(r rune) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-
-	l.searchBar.WriteString(string(r))
-	l.asyncSearch()
-}
-
-// Search clears current search query and uses str as the new search
-// query, canceling the previous search if any.
-// It asynchronously starts a new search.
-func (l *List) Search(str string) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-
-	l.searchBar.Reset()
-	l.searchBar.WriteString(str)
-	l.asyncSearch()
-}
-
-// SearchQueryDelete removes the last rune added to the search query,
-// canceling the previous search if any. It asynchronously performs
-// a new search.
-func (l *List) SearchQueryDelete() bool {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-
-	size := l.searchBar.Columns(0)
-	if size > len(l.cfg.searchBase) {
-		l.searchBar.Buffer.DeleteCell(term.Coordinates{X: size - 1, Y: 0})
-		l.asyncSearch()
-		return true
-	}
-	return false
-}
-
 // DataReset resets the current data list.
 func (l *List) DataReset() {
 	l.mu.Lock()
@@ -407,19 +392,11 @@ func (l *List) DataReset() {
 	l.setFilesCount()
 }
 
-// SearchReset removes the current search query and cancels any ongoing search.
-func (l *List) SearchReset() {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	l.searchBar.Reset()
-	l.asyncSearch()
-}
-
 // Wait waits for the current search to finish if any and returns.
 func (l *List) Wait() {
-	l.mu.RLock()
+	l.mu.Lock()
 	ctx := l.searchCtx
-	l.mu.RUnlock()
+	l.mu.Unlock()
 
 	if ctx == nil {
 		return
@@ -430,13 +407,19 @@ func (l *List) Wait() {
 
 // Draw satisfies tui.Component
 func (l *List) Draw(w term.Writer) {
-	l.mu.RLock()
-	defer l.mu.RUnlock()
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	// if search bar buffer has been modified, re-calculate dimensions
+	dirty := l.searchBar.dirty
+	if dirty {
+		l.resize(l.width, l.height)
+	}
 
 	l.list.Virtual.Draw(w)
 	l.searchBar.Virtual.Draw(w)
 	if l.matchCountBar.width != l.getMatchCountBarWidth() {
-		l.resizeMatchCountBar(l.width)
+		l.resize(l.width, l.height)
 	}
 	l.matchCountBar.Virtual.Draw(w)
 }
@@ -445,11 +428,17 @@ func (l *List) Draw(w term.Writer) {
 func (l *List) Resize(width, height int) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	l.resize(width, height)
+}
 
+func (l *List) resize(width, height int) {
 	l.height = height
 	l.width = width
+	l.searchBar.dirty = false
 
-	if height <= 1 {
+	inputHeight := l.inputHeight()
+
+	if height-inputHeight < 2 {
 		l.list.Move(term.Coordinates{Y: 0})
 		l.list.Virtual.Resize(width, height)
 		l.searchBar.Virtual.Resize(0, 0)
@@ -457,19 +446,19 @@ func (l *List) Resize(width, height int) {
 		return
 	}
 
-	l.list.Move(term.Coordinates{Y: 1})
-	l.list.Virtual.Resize(width, height-1)
+	l.list.Move(term.Coordinates{Y: inputHeight})
+	l.list.Virtual.Resize(width, height-inputHeight)
 
-	l.searchBar.Move(term.Coordinates{})
-	l.searchBar.Virtual.Resize(width, 1)
-	l.resizeMatchCountBar(width)
+	l.searchBar.Virtual.Move(term.Coordinates{})
+	l.searchBar.Virtual.Resize(width, inputHeight)
+	l.resizeMatchCountBar(inputHeight, width)
 }
 
 func (l *List) getMatchCountBarWidth() int {
 	return l.matchCountBar.Buffer.Columns(0)
 }
 
-func (l *List) resizeMatchCountBar(width int) {
+func (l *List) resizeMatchCountBar(inputHeight int, width int) {
 	lenFilesCounter := l.getMatchCountBarWidth()
 	if width-lenFilesCounter <= 0 {
 		l.matchCountBar.Virtual.Resize(0, 0)
@@ -477,8 +466,41 @@ func (l *List) resizeMatchCountBar(width int) {
 	}
 
 	l.matchCountBar.width = lenFilesCounter
-	l.matchCountBar.Move(term.Coordinates{X: width - lenFilesCounter})
+	l.matchCountBar.Move(term.Coordinates{
+		Y: inputHeight - 1,
+		X: width - lenFilesCounter,
+	})
 	l.matchCountBar.Virtual.Resize(lenFilesCounter, 1)
+}
+
+func (l *List) inputHeight() int {
+	// search bar is used as prompt so always return a min of 1,
+	// even if buffer is empty
+	return int(math.Max(float64(l.searchBar.minInputHeight),
+		float64(l.searchBar.Responsive.Height(l.width))))
+}
+
+// InputHeight returns the component.Responsive Height of the input search bar.
+func (l *List) InputHeight() int {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.inputHeight()
+}
+
+// SetMinInputHeight sets the minimum search input field height.
+func (l *List) SetMinInputHeight(height int) {
+	if height < 1 {
+		panic(fmt.Sprintf("invalid height: %d < 1", height))
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.searchBar.minInputHeight = height
+	l.resize(l.width, l.height)
+}
+
+// Buffer returns the search input buffer.
+func (l *List) Buffer() *cell.Buffer {
+	return l.searchBar.syncBuffer
 }
 
 // Close closes all the resources associated with this List.

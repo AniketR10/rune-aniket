@@ -2,11 +2,13 @@ package search
 
 import (
 	"github.com/ernestrc/go-tui"
+	"github.com/ernestrc/go-tui/editor"
 	"github.com/ernestrc/go-tui/term"
 )
 
 type simpleHandler struct {
 	*List
+	ed tui.Handler
 	fn func(string)
 }
 
@@ -16,7 +18,13 @@ type simpleHandler struct {
 // It handles esc key by exiting and handles arrow keys up/down
 // by scrolling up and down the list.
 func Handler(l *List, fn func(string)) tui.Handler {
-	return simpleHandler{List: l, fn: fn}
+	// this must be set for List searchBar Responsive logic to make sense
+	const wrap = true
+
+	buf := l.Buffer()
+	ed, _ := editor.Simple(wrap).Edit("", buf)
+	ret := simpleHandler{List: l, fn: fn, ed: ed}
+	return ret
 }
 
 func (s simpleHandler) Handle(ev term.Event) (exit, handled bool) {
@@ -26,6 +34,7 @@ func (s simpleHandler) Handle(ev term.Event) (exit, handled bool) {
 
 	switch ev.Key {
 	case term.KeyEnter:
+		s.Wait()
 		item, ok := s.Focus()
 		if ok {
 			handled = true
@@ -33,31 +42,30 @@ func (s simpleHandler) Handle(ev term.Event) (exit, handled bool) {
 			s.fn(string(item))
 		}
 	case term.KeyEsc:
+		handled = true
 		exit = true
 	case term.KeyArrowDown:
 		handled = s.FocusDown()
 	case term.KeyArrowUp:
 		handled = s.FocusUp()
-	case term.KeySpace:
-		ev.Ch = ' '
-	case term.KeyBackspace:
-		fallthrough
-	case term.KeyBackspace2:
-		handled = s.SearchQueryDelete()
-	}
-
-	if ev.Ch != 0 {
-		s.SearchQueryWrite(ev.Ch)
-		handled = true
+	default:
+		_, handled = s.ed.Handle(ev)
 	}
 
 	return
 }
 
-func (s simpleHandler) Cursor() (pos term.Coordinates, show bool) {
-	return term.Coordinates{X: s.SearchQueryLen()}, true
+func (s simpleHandler) Cursor() (term.Coordinates, bool) {
+	return s.ed.Cursor()
 }
 
 func (s simpleHandler) Man() tui.Manual {
-	return tui.Manual{}
+	panic("TODO")
+}
+
+func (s simpleHandler) Resize(width, height int) {
+	s.List.Resize(width, height)
+
+	inputHeight := s.InputHeight()
+	s.ed.Resize(width, inputHeight)
 }

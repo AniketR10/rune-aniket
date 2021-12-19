@@ -9,12 +9,17 @@ import (
 	"github.com/ernestrc/go-tui"
 	"github.com/ernestrc/go-tui/browser"
 	"github.com/ernestrc/go-tui/cell"
+	"github.com/ernestrc/go-tui/component"
 	"github.com/ernestrc/go-tui/editor"
 	"github.com/ernestrc/go-tui/term"
 	testutil "github.com/ernestrc/go-tui/util/test"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// testutil.TestHandlerSequence maps ':' characters to the following event
+// this is to work around ex's assumptions on underlying handler.
+var testCommandEvent = term.Event{Type: term.EventKey, Key: term.KeyCtrlBackslash}
 
 type browserConstructor func(ed editor.Editor, opts ...editor.Option) (tui.Handler, browser.Browser, error)
 
@@ -206,12 +211,8 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 │EEEEEEEEEEEEEEEEEE│
 └──────────────────┘`},
 	}
-
-	// testutil.TestHandlerSequence maps ':' characters to the following event
-	// this is to work around ex's assumptions on underlying handler.
-	commandEvent := term.Event{Type: term.EventKey, Key: term.KeyCtrlBackslash}
 	bh, b, err := constructor(editor.Mock(),
-		editor.WithCommandEvent(commandEvent),
+		editor.WithCommandEvent(testCommandEvent),
 		editor.WithCommandKeyBinding(term.Event{Type: term.EventKey, Ch: '4'}, "close"),
 	)
 	require.NoError(t, err)
@@ -604,4 +605,66 @@ func TestMultipleFilesStartup(t *testing.T) {
 	defer b.Close()
 
 	testutil.TestHandlerSequence(t, b, 20, 10, cases)
+}
+
+func TestExCommandResponsive(t *testing.T) {
+	cases := []testutil.HandlerSequenceTestCase{
+		{":edit",
+			`                    
+                    
+     ┌────────┐     
+     │edit▐   │     
+     │edit    │     
+     │        │     
+     └────────┘     
+                    
+                    
+                    `},
+		{":eeeeeeeeeeeeeeeeeeeeeeeeee",
+			`                    
+                    
+     ┌────────┐     
+     │eeeeeeee│     
+     │eeeeeeee│     
+     │eeeeeee▐│     
+     └────────┘     
+                    
+                    
+                    `},
+		{":e eeeeeeeeeeeeeeeeeeeeeeeee",
+			`                    
+                    
+     ┌────────┐     
+     │e eeeeee│     
+     │eeeeeeee│     
+     │eeeeeee▐│     
+     └────────┘     
+                    
+                    
+                    `},
+	}
+
+	var closeFns []func() error
+	fn := func(t *testing.T) tui.Handler {
+		b := new(Ex)
+		opts := withOpenFileStubs(
+			editor.WithCommandEvent(testCommandEvent),
+			editor.WithWindowManagerConfig(component.WindowManagerConfig{
+				Frame: false,
+			}),
+			editor.WithCommandOverlayConfig(editor.CommandOverlayConfig{
+				Width:  10,
+				Height: 5,
+				Frame:  true,
+			}),
+		)
+		err := b.Init(editor.Mock(), opts...)
+		require.NoError(t, err)
+		closeFns = append(closeFns, b.Close)
+		return b
+	}
+	testutil.TestHandlerIsolated(t, fn, 20, 10, cases)
+	for _, close := range closeFns {
+		close()
+	}
 }

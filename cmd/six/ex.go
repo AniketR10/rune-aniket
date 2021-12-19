@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 
@@ -51,6 +52,7 @@ type Ex struct {
 		// that separates the 'command' from its args
 		argsStartIdx int
 
+		component.Responsive
 		component.Virtual
 		cell.Buffer
 
@@ -75,7 +77,6 @@ func NewEx(ed editor.Editor, opts ...editor.Option) (e *Ex, err error) {
 // It returns an error if an initial filepath was given through WithFilePath option
 // and the file failed to be opened.
 func (e *Ex) Init(ed editor.Editor, opts ...editor.Option) (err error) {
-	e.command.Buffer.Init()
 	e.mode = modeDefault
 
 	e.config = editor.DefaultConfig()
@@ -83,13 +84,20 @@ func (e *Ex) Init(ed editor.Editor, opts ...editor.Option) (err error) {
 		o(&e.config)
 	}
 
+	if e.config.CommandOverlay.Width <= 0 || e.config.CommandOverlay.Height <= 0 {
+		msg := fmt.Sprintf("invalid CommandOverlay dimensions: %v",
+			e.config.CommandOverlay)
+		panic(msg)
+	}
+
 	// overlay buffer over the search list so we can
 	// stop the search for multiple argument commands
 	// but we can display arguments
-	var s component.Scroll
-	s.InitWithBuffer(&e.command.Buffer)
-	e.command.Virtual.C = &s
-	e.command.Virtual.Resize(e.config.CommandOverlay.Width, e.config.CommandOverlay.Height)
+	e.command.Buffer.Init()
+	responsive := component.BufferResponsive(&e.command.Buffer,
+		component.StringConfig{})
+	e.command.Responsive = responsive
+	e.command.Virtual.C = responsive
 
 	var commandOverlay tui.Component
 	if e.config.CommandOverlay.Frame {
@@ -110,7 +118,8 @@ func (e *Ex) Init(ed editor.Editor, opts ...editor.Option) (err error) {
 	}
 
 	e.command.List.Init(cfg)
-	e.command.Overlay.Init(&e.comp, commandOverlay, e.config.CommandOverlay.ElementAttr,
+	e.command.Overlay.Init(&e.comp, commandOverlay,
+		e.config.CommandOverlay.ElementAttr,
 		component.SpanConfig{
 			PadVertical:      -e.config.CommandOverlay.Height,
 			PadHorizontal:    -e.config.CommandOverlay.Width,
@@ -286,8 +295,8 @@ func (e *Ex) handleCommand(ev term.Event) (quit, handled bool) {
 		e.command.Buffer.DeleteCell(term.Coordinates{X: cols - 1})
 		if e.command.argsStartIdx == e.command.Buffer.Size() ||
 			e.command.argsStartIdx == 0 {
-			e.command.List.SearchReset()
-			e.command.List.Search(e.command.Buffer.String())
+			e.command.List.Buffer().Reset()
+			e.command.List.Buffer().WriteString(e.command.Buffer.String())
 			e.command.argsStartIdx = 0
 		}
 	default:
@@ -302,13 +311,14 @@ func (e *Ex) handleCommand(ev term.Event) (quit, handled bool) {
 		return
 	}
 
+	handled = true
 	if ev.Ch == ' ' && e.command.argsStartIdx == 0 {
 		e.command.argsStartIdx = e.command.Buffer.Size()
 	}
 	e.command.Buffer.WriteString(string([]rune{ev.Ch}))
 
 	if e.command.argsStartIdx == 0 {
-		e.command.List.SearchQueryWrite(ev.Ch)
+		e.command.List.Buffer().WriteString(string(ev.Ch))
 	}
 	return
 }
@@ -380,7 +390,7 @@ func (e *Ex) handleProxy(ev term.Event) (
 
 func (e *Ex) setNormalMode() {
 	e.command.Buffer.Reset()
-	e.command.List.SearchReset()
+	e.command.List.Buffer().Reset()
 	e.command.List.Wait()
 	e.command.argsStartIdx = 0
 	e.mode = modeDefault
@@ -421,11 +431,29 @@ func (e *Ex) overlayPosition() (pos term.Coordinates) {
 	return
 }
 
+func (e *Ex) commandOverlayDimensions() (width, height int) {
+	width, height = e.config.CommandOverlay.Width, e.config.CommandOverlay.Height
+	if e.config.CommandOverlay.Frame && width > 2 && height > 2 {
+		width -= 2
+		height -= 2
+	}
+	return
+}
+
 // Cursor satisfies tui.Handler.
 func (e *Ex) Cursor() (pos term.Coordinates, show bool) {
 	if e.mode == modeCommand {
 		pos := e.command.Virtual.Position()
-		pos.X += len(e.command.Buffer.String())
+		cmdWidth, cmdHeight := e.commandOverlayDimensions()
+		x := len(e.command.Buffer.String()) % cmdWidth
+		y := len(e.command.Buffer.String()) / cmdWidth
+		if y >= cmdHeight {
+			pos.X += cmdWidth - 1
+			pos.Y += cmdHeight - 1
+		} else {
+			pos.X += x
+			pos.Y += y
+		}
 		return pos, true
 	}
 	return e.comp.Browser().Cursor()
@@ -445,9 +473,29 @@ func (e *Ex) Resize(width, height int) {
 	e.command.Virtual.Move(pos)
 }
 
+func (e *Ex) resizeCommandOverlay() {
+	// propagate local cmd+args buffer height to
+	// search list, which only has cmd, in case args alone span
+	// multiple lines
+	cmdWidth, cmdHeight := e.commandOverlayDimensions()
+	height := e.command.Responsive.Height(cmdWidth)
+	// set to min 1, as it's being used as input field
+	// and max to the height of the overlayed component
+	height = int(math.Min(math.Max(1, float64(height)), float64(cmdHeight)))
+	// the list is very short so waiting is not a significant
+	// perf penalty and it makes tests easier to make deterministic
+	e.command.List.Wait()
+	e.command.List.SetMinInputHeight(height)
+	e.command.Virtual.Resize(cmdWidth, height)
+}
+
 // Draw satisfies tui.Component
 func (e *Ex) Draw(w term.Writer) {
 	if e.mode == modeCommand {
+		// resize on every draw because search.List uses a responsive
+		// input so local buffer changes must consider potential resize
+		// of search.List
+		e.resizeCommandOverlay()
 		e.command.Overlay.Draw(w)
 		e.command.Virtual.Draw(w)
 		return

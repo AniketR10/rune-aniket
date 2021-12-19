@@ -301,7 +301,7 @@ func New(
 	listConfig := h.getListConfig(config)
 	h.list.Init(listConfig)
 	h.listHandler = search.Handler(&h.list, func(item string) {
-		h.openResource(h.list.SearchQueryString(), item)
+		h.openResource(h.list.Buffer().String(), item)
 	})
 
 	h.history.max, err = config.GetInt("history")
@@ -340,14 +340,6 @@ func (h *fuzzyFinderHandler) getListConfig(config plugin.Config) search.ListConf
 		Algo:          algo,
 		Interrupt:     h.publishInterrupt,
 		CaseSensitive: caseSensitive,
-	}
-
-	searchBaseAttr, err := config.GetAttributes("search_base_attr")
-	if err != nil && err != plugin.ErrNotFound {
-		log.Errorf("failed to load 'search_base_attr' from config: %v", err)
-	} else if err == nil {
-		log.Tracef("loaded 'search_base_attr' from config: %v", searchBaseAttr)
-		cfg.SearchBaseAttr = &searchBaseAttr
 	}
 
 	matchedTextAttr, err := config.GetAttributes("match_text_attr")
@@ -390,14 +382,14 @@ func (h *fuzzyFinderHandler) Resize(width, height int) {
 	defer h.mu.Unlock()
 
 	h.height = height
-	h.list.Resize(width, height)
+	h.listHandler.Resize(width, height)
 }
 
 func (h *fuzzyFinderHandler) Draw(w term.Writer) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
-	h.list.Draw(w)
+	h.listHandler.Draw(w)
 }
 
 func (h *fuzzyFinderHandler) writeLastSearchQuery() {
@@ -407,7 +399,8 @@ func (h *fuzzyFinderHandler) writeLastSearchQuery() {
 	}
 	search := h.history.Queries[0]
 	h.history.Queries = h.history.Queries[1:]
-	h.list.Search(search)
+	h.list.Buffer().Reset()
+	h.list.Buffer().WriteString(search)
 }
 
 func (h *fuzzyFinderHandler) Handle(ev term.Event) (exit, handled bool) {

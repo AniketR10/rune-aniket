@@ -14,7 +14,8 @@ import (
 
 func assertNoLeaks(t *testing.T, l *List) {
 	assert.NoError(t, l.Close())
-	goleak.VerifyNone(t)
+	ignoreOpenCensus := goleak.IgnoreTopFunction("go.opencensus.io/stats/view.(*worker).start")
+	goleak.VerifyNone(t, ignoreOpenCensus)
 }
 
 func assertFocusEqual(t *testing.T, l *List, el []byte) {
@@ -32,20 +33,20 @@ func TestListCount(t *testing.T) {
 	assert.Equal(t, 1, l.MatchCount())
 
 	wg.Add(1)
-	l.SearchQueryWrite('c')
+	l.Buffer().WriteString("c")
 	wg.Wait()
 
 	assert.Equal(t, 1, l.TotalCount())
 	assert.Equal(t, 1, l.MatchCount())
 
 	wg.Add(1)
-	l.SearchQueryDelete()
+	l.Buffer().DeleteCell(term.Coordinates{X: 0})
 	wg.Wait()
 
 	// we cannot do two at a time because there's a race between canceling
 	// the original async search and calling interrupt.
 	wg.Add(1)
-	l.SearchQueryWrite('X')
+	l.Buffer().WriteString("X")
 	wg.Wait()
 
 	assert.Equal(t, 1, l.TotalCount())
@@ -130,9 +131,9 @@ func TestListAsyncPush(t *testing.T) {
 		wg.Wait()
 		wg.Add(2)
 
-		l.SearchQueryWrite('9')
+		l.Buffer().WriteString("9")
 		l.Wait()
-		l.SearchQueryWrite('9')
+		l.Buffer().WriteString("9")
 		l.Wait()
 
 		assert.Equal(t, height, l.TotalCount())
@@ -148,9 +149,9 @@ func TestListAsyncPush(t *testing.T) {
 		l.Resize(n, n)
 
 		wg.Add(3)
-		l.SearchQueryWrite('9')
+		l.Buffer().WriteString("9")
 		l.Wait() // make next search query doesn't cancel prev
-		l.SearchQueryWrite('9')
+		l.Buffer().WriteString("9")
 		l.Wait()
 		pushTestData(l, n)
 		wg.Wait()
@@ -173,9 +174,9 @@ func TestListAsyncPush(t *testing.T) {
 		wg.Add(3)
 		go pushTestData(l, n)
 
-		l.SearchQueryWrite('9')
+		l.Buffer().WriteString("9")
 		l.Wait()
-		l.SearchQueryWrite('9')
+		l.Buffer().WriteString("9")
 		l.Wait()
 
 		wg.Wait()
@@ -189,7 +190,7 @@ func TestListAsyncPush(t *testing.T) {
 }
 
 func TestListDraw(t *testing.T) {
-	l := NewList(ListConfig{SearchBase: ":"})
+	l := NewList(ListConfig{})
 	l.Resize(8, 4)
 
 	w := term.NewStringWriter(8, 4)
@@ -199,13 +200,13 @@ func TestListDraw(t *testing.T) {
 		expected string
 	}{{
 		nil, `
-:    0/0
+     0/0
         
         
         `,
 	}, {
 		func() { l.PushSync([]byte("Safe Changes - Talaboman")) }, `
-:    1/1
+     1/1
 Safe Cha
         
         `,
@@ -215,19 +216,39 @@ Safe Cha
 				l.PushSync([]byte("For the Time Being - Phonique"))
 			}
 		}, `
-:  20/20
+   20/20
 Safe Cha
 For the 
 For the `,
 	}, {
 		func() {
-			l.SearchQueryWrite('P')
+			l.Buffer().WriteString("P")
 			l.Wait()
 		}, `
-:P 19/20
+P  19/20
 For the 
 For the 
 For the `,
+	}, {
+		func() {
+			l.SetMinInputHeight(2)
+		}, `
+P       
+   19/20
+For the 
+For the `,
+	}, {
+		func() {
+			l.SetMinInputHeight(1)
+			for i := 0; i < 8; i++ {
+				l.Buffer().WriteString("P")
+			}
+			l.Wait()
+		}, `
+PPPPPPPP
+P   0/20
+        
+        `,
 	},
 	}
 
@@ -254,7 +275,26 @@ For the `,
 
 func TestListWait(t *testing.T) {
 	t.Run("does not panic a new list", func(t *testing.T) {
-		l := NewList(ListConfig{SearchBase: ":"})
+		l := NewList(ListConfig{})
 		assert.NotPanics(t, l.Wait)
+	})
+}
+
+func TestListBuffer(t *testing.T) {
+	t.Run("inserts on shared buffer are materialized on search buffer", func(t *testing.T) {
+		l := NewList(ListConfig{})
+		shared := l.Buffer()
+
+		shared.WriteString("blah")
+		assert.Equal(t, "blah", l.searchBar.internalRead.String())
+	})
+
+	t.Run("deletes on search buffer are materialized on shared buffer", func(t *testing.T) {
+		l := NewList(ListConfig{})
+
+		shared := l.Buffer()
+		shared.WriteString("blah")
+		assert.True(t, shared.TruncateFrom(term.Coordinates{X: 1}))
+		assert.Equal(t, "b", l.searchBar.internalRead.String())
 	})
 }

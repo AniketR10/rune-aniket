@@ -383,7 +383,7 @@ diff_buf_adjust(win_
 :             INSERT`},
 	}
 
-	newVi := func() tui.Handler {
+	newVi := func(t *testing.T) tui.Handler {
 		return setupVi(t, snippet, 2)
 	}
 	testutil.TestHandlerIsolated(t, newVi, 20, 10, cases)
@@ -459,7 +459,7 @@ diff_buf_adjust(win_
 :             INSERT`},
 	}
 
-	newVi := func() tui.Handler {
+	newVi := func(t *testing.T) tui.Handler {
 		return setupVi(t, snippet, 2)
 	}
 	testutil.TestHandlerIsolated(t, newVi, 20, 10, cases)
@@ -504,7 +504,7 @@ diff_buf_adjust(win_
 :             NORMAL`},
 	}
 
-	newVi := func() tui.Handler {
+	newVi := func(t *testing.T) tui.Handler {
 		return setupVi(t, snippet, 2)
 	}
 	testutil.TestHandlerIsolated(t, newVi, 20, 10, cases)

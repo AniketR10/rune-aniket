@@ -1,6 +1,7 @@
 package test
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -87,15 +88,17 @@ func handleTestCase(
 //
 // See TestHandlerSequence for more details.
 func TestHandlerIsolated(
-	t *testing.T, fn func() tui.Handler, width, height int,
+	t *testing.T, fn func(t *testing.T) tui.Handler, width, height int,
 	cases []HandlerSequenceTestCase,
 ) {
 	writer := term.NewStringWriter(width, height)
 
 	for i, tcase := range cases {
-		handler := fn()
-		handler.Resize(width, height)
-		handleTestCase(t, i, writer, handler, tcase, width, height)
+		t.Run(fmt.Sprintf("test case %d", i), func(t *testing.T) {
+			handler := fn(t)
+			handler.Resize(width, height)
+			handleTestCase(t, i, writer, handler, tcase, width, height)
+		})
 	}
 }
 
