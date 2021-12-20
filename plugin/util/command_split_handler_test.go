@@ -30,7 +30,7 @@ func (h *handlerCloser) Close() error {
 }
 
 func expectInitialization(
-	t *testing.T, ctrl *gomock.Controller, h *keySplitHandler,
+	t *testing.T, ctrl *gomock.Controller, h *cmdSplitHandler,
 ) *proto.MockMuxBroker {
 	broker := proto.NewMockMuxBroker(ctrl)
 	h.Connected(broker, emptyConfig)
@@ -81,11 +81,11 @@ func (n nopConn) Close() error {
 	return nil
 }
 
-func TestKeySplitHandlerEmpty(t *testing.T) {
+func TestCommandSplitHandlerEmpty(t *testing.T) {
 
-	t.Run("panics if key configuration is missing", func(t *testing.T) {
+	t.Run("panics if cmd configuration is missing", func(t *testing.T) {
 		assert.Panics(t, func() {
-			ServeKeySplitHandler(KeySplitHandlerConfig{})
+			ServeCommandSplitHandler(CommandSplitHandlerConfig{})
 		})
 	})
 
@@ -93,17 +93,17 @@ func TestKeySplitHandlerEmpty(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
-		config := KeySplitHandlerConfig{}
-		h := &keySplitHandler{config: config}
+		config := CommandSplitHandlerConfig{}
+		h := &cmdSplitHandler{config: config}
 
 		expectInitialization(t, ctrl, h)
 	})
 
-	t.Run("subscribe to key event when subscriber permission is received", func(t *testing.T) {
+	t.Run("subscribe to cmd event when subscriber permission is received", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
-		config := KeySplitHandlerConfig{Command: "blah"}
-		h := &keySplitHandler{config: config}
+		config := CommandSplitHandlerConfig{Command: "blah"}
+		h := &cmdSplitHandler{config: config}
 		broker := expectInitialization(t, ctrl, h)
 
 		token := uint32(123)
@@ -121,17 +121,17 @@ func TestKeySplitHandlerEmpty(t *testing.T) {
 	t.Run("does nothing if shutdown is called when window not active", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
-		config := KeySplitHandlerConfig{Command: "blah"}
-		h := &keySplitHandler{config: config}
+		config := CommandSplitHandlerConfig{Command: "blah"}
+		h := &cmdSplitHandler{config: config}
 		expectInitialization(t, ctrl, h)
 		h.Shutdown("you are being naughty")
 	})
 }
 
-func TestKeySplitHandlerOpenWindow(t *testing.T) {
+func TestCommandSplitHandlerOpenWindow(t *testing.T) {
 	t.Run("open a split window if command received", func(t *testing.T) {
 		cmdName := "blah"
-		config := KeySplitHandlerConfig{
+		config := CommandSplitHandlerConfig{
 			Command:          cmdName,
 			SplitOrientation: browser.OrientationLeft,
 		}
@@ -139,15 +139,15 @@ func TestKeySplitHandlerOpenWindow(t *testing.T) {
 			Token:      1555,
 			Permission: plugin.PermissionEditor,
 		}
-		testSplitWindow(t, config, grants, func(h *keySplitHandler) {
+		testSplitWindow(t, config, grants, func(h *cmdSplitHandler) {
 			assert.False(t, h.HandleCommand(editor.Command{Name: cmdName}))
 		})
 	})
 }
 
 func testSplitWindow(
-	t *testing.T, config KeySplitHandlerConfig,
-	grant plugin.Grant, action func(*keySplitHandler),
+	t *testing.T, config CommandSplitHandlerConfig,
+	grant plugin.Grant, action func(*cmdSplitHandler),
 ) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -157,7 +157,7 @@ func testSplitWindow(
 		return handler.NewTestHandler(), nil
 	}
 	mockWm := browser.NewMockWindowManager(ctrl)
-	h := &keySplitHandler{config: config, wm: mockWm}
+	h := &cmdSplitHandler{config: config, wm: mockWm}
 	mockWm.EXPECT().Focus().Return(nil, nil)
 	mockWm.EXPECT().
 		Split(gomock.Eq(config.SplitOrientation), gomock.Any()).

@@ -46,7 +46,7 @@ func main() {
 		log.Println(http.ListenAndServe("localhost:6061", nil))
 	}()
 
-	plugutil.ServeKeySplitHandler(plugutil.KeySplitHandlerConfig{
+	plugutil.ServeCommandSplitHandler(plugutil.CommandSplitHandlerConfig{
 		SplitOrientation: browser.OrientationBottom,
 		Handler:          newHandler,
 		Permissions:      finder.Permissions(),

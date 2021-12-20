@@ -13,9 +13,9 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-type keySplitHandler struct {
+type cmdSplitHandler struct {
 	mu     sync.Mutex
-	config KeySplitHandlerConfig
+	config CommandSplitHandlerConfig
 
 	broker  proto.MuxBroker
 	wm      browser.WindowManager
@@ -26,13 +26,13 @@ type keySplitHandler struct {
 	win     browser.Window
 }
 
-func (t *keySplitHandler) Connected(broker proto.MuxBroker, config plugin.Config) {
+func (t *cmdSplitHandler) Connected(broker proto.MuxBroker, config plugin.Config) {
 	log.Infof("plugin connected; config: %v", config)
 	t.broker = broker
 	t.pconfig = config
 }
 
-func (t *keySplitHandler) closeHandler() bool {
+func (t *cmdSplitHandler) closeHandler() bool {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
@@ -55,7 +55,7 @@ func (t *keySplitHandler) closeHandler() bool {
 	return true
 }
 
-func (t *keySplitHandler) cleanWindow() bool {
+func (t *cmdSplitHandler) cleanWindow() bool {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
@@ -75,14 +75,14 @@ func (t *keySplitHandler) cleanWindow() bool {
 	return true
 }
 
-func (t *keySplitHandler) closeWindow() {
+func (t *cmdSplitHandler) closeWindow() {
 	err := t.win.Close()
 	if err != nil {
 		log.Errorf("error closing plugin window: %s", err)
 	}
 }
 
-func (t *keySplitHandler) exitClean() {
+func (t *cmdSplitHandler) exitClean() {
 	log.Info("received exit signal; cleaning resources...")
 	if t.cleanWindow() {
 		log.Debug("cleaned window")
@@ -92,18 +92,18 @@ func (t *keySplitHandler) exitClean() {
 	}
 }
 
-func (t *keySplitHandler) openSplitWindow() {
+func (t *cmdSplitHandler) openSplitWindow() {
 	t.mu.Lock()
 	win := t.win
 	wm := t.wm
 	t.mu.Unlock()
 
 	if win != nil {
-		log.Debug("received key event but win is already open")
+		log.Debug("received cmd event but win is already open")
 		return
 	}
 	if wm == nil {
-		log.Warn("could not handle key event: could not resolve wm permission")
+		log.Warn("could not handle cmd event: could not resolve wm permission")
 		return
 	}
 
@@ -132,14 +132,14 @@ func (t *keySplitHandler) openSplitWindow() {
 	t.win = win
 }
 
-func (t *keySplitHandler) HandleCommand(cmd editor.Command) (exit bool) {
+func (t *cmdSplitHandler) HandleCommand(cmd editor.Command) (exit bool) {
 	if cmd.Name == t.config.Command {
 		t.openSplitWindow()
 	}
 	return false
 }
 
-func (t *keySplitHandler) PermissionGranted(grants []plugin.Grant) {
+func (t *cmdSplitHandler) PermissionGranted(grants []plugin.Grant) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
@@ -164,25 +164,25 @@ func (t *keySplitHandler) PermissionGranted(grants []plugin.Grant) {
 	t.grants = grants
 }
 
-func (t *keySplitHandler) PermissionDenied(perms []plugin.Permission) {
+func (t *cmdSplitHandler) PermissionDenied(perms []plugin.Permission) {
 	log.Warnf("permission denied: %v", perms)
 }
 
-func (t *keySplitHandler) Shutdown(reason string) error {
+func (t *cmdSplitHandler) Shutdown(reason string) error {
 	log.Warningf("plugin being shutdown: %s", reason)
 	t.closeHandler()
 	t.cleanWindow()
 	return nil
 }
 
-func (t *keySplitHandler) Health() error {
+func (t *cmdSplitHandler) Health() error {
 	return nil
 }
 
-// KeySplitHandlerConfig provides the configuration required to
-// use KeySplitHandler plugin.Grantee helper. See KeySplitHandler
+// CommandSplitHandlerConfig provides the configuration required to
+// use CommandSplitHandler plugin.Grantee helper. See CommandSplitHandler
 // for more details.
-type KeySplitHandlerConfig struct {
+type CommandSplitHandlerConfig struct {
 	// Command that triggers Split
 	Command string
 
@@ -191,7 +191,7 @@ type KeySplitHandlerConfig struct {
 
 	// Handler is the constructor used to install a handler
 	// on the split window. The focus argument represents
-	// the window in focus when key event was fired.
+	// the window in focus when cmd event was fired.
 	// If returned Handler satisfies io.Closer, then Close will be called
 	// when split window is closed.
 	Handler func([]plugin.Grant, proto.MuxBroker, browser.Window,
@@ -201,12 +201,12 @@ type KeySplitHandlerConfig struct {
 	Permissions []plugin.Permission
 }
 
-// ServeKeySplitHandler serves a plugin.Grantee that opens a split window
-// with a new handler when key event is fired or command called.
+// ServeCommandSplitHandler serves a plugin.Grantee that opens a split window
+// with a new handler when cmd event is fired or command called.
 // This function never returns.
-func ServeKeySplitHandler(config KeySplitHandlerConfig) {
+func ServeCommandSplitHandler(config CommandSplitHandlerConfig) {
 	if config.Handler == nil || config.Command == "" {
-		panic(fmt.Sprintf("invalid key split handler configuration: "+
+		panic(fmt.Sprintf("invalid cmd split handler configuration: "+
 			"Handler and Command must be set: %#v", config))
 	}
 
@@ -215,5 +215,5 @@ func ServeKeySplitHandler(config KeySplitHandlerConfig) {
 		plugin.PermissionEditor,
 	}
 	perms = append(perms, config.Permissions...)
-	plugin.Serve(&keySplitHandler{config: config}, perms...)
+	plugin.Serve(&cmdSplitHandler{config: config}, perms...)
 }

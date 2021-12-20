@@ -17,7 +17,7 @@ func main() {
 		log.Println(http.ListenAndServe("localhost:6062", nil))
 	}()
 
-	plugutil.ServeKeySplitHandler(plugutil.KeySplitHandlerConfig{
+	plugutil.ServeCommandSplitHandler(plugutil.CommandSplitHandlerConfig{
 		SplitOrientation: browser.OrientationRight,
 		Handler: func(grants []plugin.Grant, broker proto.MuxBroker,
 			invokeWindow browser.Window, config plugin.Config) (tui.Handler, error) {
