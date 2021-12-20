@@ -57,6 +57,7 @@ type fuzzyFinderHandler struct {
 	killed       bool
 
 	history struct {
+		idx     int
 		max     int
 		Queries []string
 	}
@@ -399,9 +400,13 @@ func (h *fuzzyFinderHandler) writeLastSearchQuery() {
 		log.Debugf("no search queries stored")
 		return
 	}
-	search := h.history.Queries[0]
+	search := h.history.Queries[h.history.idx]
 	h.list.Buffer().Reset()
 	h.list.Buffer().WriteString(search)
+	h.history.idx++
+	if h.history.idx == len(h.history.Queries) {
+		h.history.idx = 0
+	}
 }
 
 func (h *fuzzyFinderHandler) Handle(ev term.Event) (exit, handled bool) {
