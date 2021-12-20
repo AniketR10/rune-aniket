@@ -47,6 +47,7 @@ const (
 type Ex struct {
 	config  editor.Config
 	comp    editor.Component
+	ed      editor.Editor
 	command struct {
 		// argsStartIdx is the position of the first space
 		// that separates the 'command' from its args
@@ -125,6 +126,7 @@ func (e *Ex) Init(ed editor.Editor, opts ...editor.Option) (err error) {
 			PadHorizontal:    -e.config.CommandOverlay.Width,
 			ContentAlignment: component.SpanAlignmentCentered,
 		})
+	e.ed = ed
 	err = e.comp.Init(ed, e.config)
 	return
 }
@@ -199,12 +201,17 @@ func (e *Ex) forceQuit(args ...string) (bool, error) {
 
 func (e *Ex) dispatchCommand(cmd string, args ...string) (err error) {
 	name, h, ok := e.handlerInFocus()
-	if !ok {
-		err = errors.New("Cannot run registered command on non Tab")
-		return
+	scmd := editor.Command{
+		Name:         cmd,
+		Args:         args,
+		Resource:     h,
+		ResourceName: name,
 	}
-
-	handled := e.comp.DispatchCommand(h, name, cmd, args...)
+	if ok {
+		scmd.Cursor.Content, _ = e.ed.Cursor(h)
+		scmd.Cursor.Window, _ = h.Cursor()
+	}
+	handled := e.comp.DispatchCommand(scmd)
 	if !handled {
 		err = fmt.Errorf("Unknown command: '%s'", cmd)
 	}

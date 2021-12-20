@@ -407,25 +407,14 @@ func (c *Component) Publish(ev term.Event) (handled bool) {
 
 // DispatchCommand dispatches a EventTypeCommand with cmd to subscribers
 // subscribed via SubscribeEditorEvents.
-func (c *Component) DispatchCommand(
-	resource Handler, resourceName string, cmd string, args ...string,
-) (handled bool) {
-	commander, handled := c.cmdSubscribers[cmd]
+func (c *Component) DispatchCommand(cmd Command) (handled bool) {
+	commander, handled := c.cmdSubscribers[cmd.Name]
 	if !handled {
 		return false
 	}
-
-	strc := Command{
-		Name:         cmd,
-		Args:         args,
-		Resource:     resource,
-		ResourceName: resourceName,
-	}
-	strc.Cursor.Content, _ = c.ed.Cursor(resource)
-	strc.Cursor.Window, _ = resource.Cursor()
-	exit := commander.HandleCommand(strc)
+	exit := commander.HandleCommand(cmd)
 	if exit {
-		delete(c.cmdSubscribers, cmd)
+		delete(c.cmdSubscribers, cmd.Name)
 	}
 	return true
 }

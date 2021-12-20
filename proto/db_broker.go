@@ -38,6 +38,8 @@ func NewDatastoreBroker(svc document.Service, logger *log.Logger) MuxBroker {
 	ret := new(dbBroker)
 	ret.svc = svc
 	ret.logger = logger
+	// start with 1 so zero-valued uint32 can be interpreted as not valid
+	ret.id = 1
 	return ret
 }
 

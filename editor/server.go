@@ -53,13 +53,17 @@ func (s *serverEventHandler) Handle(ev Event) bool {
 		return true
 	}
 
-	brokerID, ok := s.s.nameToID[ev.ResourceName]
-	if !ok {
-		s.s.tryLog("(%p editor.Server): could NOT dispatch event: handler with resource name %s not found",
-			s.s, ev.ResourceName)
-		return true
+	// only overwrite resource if this event is for a particular resource
+	if ev.ResourceName != "" {
+		brokerID, ok := s.s.nameToID[ev.ResourceName]
+		if !ok {
+			s.s.tryLog("(%p editor.Server): could NOT dispatch event:"+
+				"handler with resource name %s not found",
+				s.s, ev.ResourceName)
+			return true
+		}
+		ev.Resource = browser.Token{ID: uint64(brokerID)}
 	}
-	ev.Resource = browser.Token{ID: uint64(brokerID)}
 
 	// do not hold mutex while waiting for I/O
 	s.s.editor.Unlock()

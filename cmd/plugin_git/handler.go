@@ -142,6 +142,9 @@ func newGitHandler(
 }
 
 func (h *gitEditorHandler) HandleCommand(cmd editor.Command) (exit bool) {
+	if cmd.Resource == nil {
+		return
+	}
 	switch cmd.Name {
 	case commandNextChange:
 		err := h.ed.MoveToNextLocation(cmd.Resource, h.gitDiffListID)

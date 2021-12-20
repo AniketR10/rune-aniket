@@ -1737,6 +1737,10 @@ func (h *lspEditorHandler) handleFormat(ed editor.Handler, filename string, impo
 }
 
 func (h *lspEditorHandler) HandleCommand(cmd editor.Command) (exit bool) {
+	if cmd.Resource == nil {
+		return
+	}
+
 	switch cmd.Name {
 	case commandNextDiagnostic:
 		err := h.ed.MoveToNextLocation(cmd.Resource, h.diagnosticListID)

@@ -25,6 +25,7 @@ type dialBroker struct {
 func NewDialBroker() MuxBroker {
 	ret := new(dialBroker)
 	ret.conns = make(map[uint32]brokerage)
+	ret.id = 1
 	return ret
 }
 

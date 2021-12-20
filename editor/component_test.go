@@ -571,7 +571,8 @@ func TestDispatchCommand(t *testing.T) {
 	t.Run("DispatchCommand returns false if there's no registered handler", func(t *testing.T) {
 		c := newTestComponent(t, &testEditor{})
 
-		assert.False(t, c.DispatchCommand(handler.NewTestHandler(), "jklfwe", "SELL"))
+		cmd := Command{Resource: handler.NewTestHandler(), ResourceName: "jklfwe", Name: "SELL"}
+		assert.False(t, c.DispatchCommand(cmd))
 	})
 }
 
@@ -638,14 +639,15 @@ func testRegister(t *testing.T,
 
 		wg.Add(1)
 		mu.Lock()
-		assert.True(t, c.DispatchCommand(h1, name1, myCmd, myArgs...))
+		cmd := Command{Resource: h1, ResourceName: name1, Name: myCmd, Args: myArgs}
+		assert.True(t, c.DispatchCommand(cmd))
 		mu.Unlock()
 
 		wg.Wait()
 
 		for i := 0; i < 20; i++ {
 			mu.Lock()
-			c.DispatchCommand(h1, name1, myCmd, myArgs...)
+			c.DispatchCommand(cmd)
 			mu.Unlock()
 		}
 

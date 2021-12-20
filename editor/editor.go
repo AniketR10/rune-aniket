@@ -29,8 +29,11 @@ type Reader interface {
 
 // Command represents a command issued by the user.
 type Command struct {
-	Name         string
-	Args         []string
+	Name string
+	Args []string
+
+	// optional. If command is dispatched while non-tab is in focus,
+	// then these fields will be zero-valued.
 	ResourceName string
 	Resource     Handler
 	Cursor       struct {

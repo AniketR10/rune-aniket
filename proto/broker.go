@@ -28,6 +28,8 @@ type MuxServer interface {
 
 // MuxBroker allows a client or server to multiplex over connections.
 type MuxBroker interface {
+	// NextId returns the next id to be used to Serve/Dial.
+	// The returned value must always be > 0.
 	NextId() uint32
 	Accept(id uint32) (net.Listener, error)
 	AcceptAndServe(ID uint32, srv func(opts []grpc.ServerOption) MuxServer)
