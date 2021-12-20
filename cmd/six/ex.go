@@ -351,29 +351,30 @@ func (e *Ex) handleProxy(ev term.Event) (
 		}
 	}
 
+	b := e.comp.Browser()
 	mev, cmd, _ := e.comp.KeyMapping(ev)
+	// if event was mapped to command
+	// dispatch command and dispatch event
 	if cmd != "" {
-		// command mappings take precedence over ev subscriptions
-		// or other ex key mappings
 		quit, err := e.runCommand(cmd, cmd)
 		if err != nil {
 			e.setError(err)
 		}
-		return quit, true
+		exit, _ = b.Handle(mev)
+		return quit || exit, true
 	}
 
-	browser := e.comp.Browser()
 	switch mev.Key {
 	case term.KeyCtrlA:
-		browser.RemoveAllTabs()
+		b.RemoveAllTabs()
 	case term.KeyCtrlW:
-		browser.RemoveWindowContent(browser.Focus())
+		b.RemoveWindowContent(b.Focus())
 	case term.KeyCtrlL:
-		browser.UpdateWindowTabNext(browser.Focus())
+		b.UpdateWindowTabNext(b.Focus())
 	case term.KeyCtrlH:
-		browser.UpdateWindowTabPrev(browser.Focus())
+		b.UpdateWindowTabPrev(b.Focus())
 	default:
-		exit, handled = browser.Handle(mev)
+		exit, handled = b.Handle(mev)
 		if handled {
 			return
 		}
