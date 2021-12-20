@@ -57,18 +57,6 @@ type WindowManager interface {
 	Bar(Orientation, tui.Handler) error
 }
 
-// EventHandler wraps the basic tui.Handler method Handle.
-type EventHandler interface {
-	Handle(term.Event) (exit bool)
-}
-
-// EventSubscriber handler is the interface that wraps
-// the method SubscribeTermEvents which allows clients to subscribe to
-// specific events.
-type EventSubscriber interface {
-	SubscribeTermEvents(term.Event, EventHandler) error
-}
-
 // KeyMapper is the interface that wraps the method MergeKeyMap
 // to merge new key mappings.
 type KeyMapper interface {
@@ -103,7 +91,6 @@ type Storage interface {
 // the user interface of a browser.
 type Browser interface {
 	WindowManager
-	EventSubscriber
 	EventPublisher
 	KeyMapper
 	ResourceOpener
@@ -139,14 +126,4 @@ type fnEventHandler func(term.Event) bool
 // Handle satisfies EventHandler
 func (h fnEventHandler) Handle(ev term.Event) bool {
 	return h(ev)
-}
-
-// FuncEventHandler wraps fn to satisfy EventHandler.
-func FuncEventHandler(fn func(term.Event) bool) EventHandler {
-	return fnEventHandler(fn)
-}
-
-// NopEventHandler returns an EventHandler that does nothing.
-func NopEventHandler(fn func(term.Event) bool) EventHandler {
-	return FuncEventHandler(func(term.Event) bool { return false })
 }

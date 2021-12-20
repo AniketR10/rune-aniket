@@ -36,7 +36,6 @@ type Client struct {
 	msg     proto.MessengerClient
 	mp      proto.KeyMapperClient
 	f       proto.ResourceOpenerClient
-	s       proto.EventSubscriberClient
 	p       proto.EventPublisherClient
 
 	// window client resources. windowClients are created on
@@ -96,7 +95,6 @@ func (c *Client) Init(
 	c.cc = cc
 	c.mp = proto.NewKeyMapperClient(cc)
 	c.f = proto.NewResourceOpenerClient(cc)
-	c.s = proto.NewEventSubscriberClient(cc)
 	c.p = proto.NewEventPublisherClient(cc)
 	c.broker = broker
 	c.clients = make(map[uint64]io.Closer)
@@ -299,30 +297,6 @@ func (c *Client) Open(resource string) (Handler, error) {
 	}
 
 	return Token{ID: uint64(res.GetHandlerId())}, err
-}
-
-// SubscribeTermEvents satisfies Browser.
-func (c *Client) SubscribeTermEvents(ev term.Event, h EventHandler) error {
-	ctx := context.Background()
-
-	protoEv := new(proto.Event)
-	err := protoEv.FromModel(ev)
-	if err != nil {
-		return err
-	}
-
-	evh := newClientEventHandler(c, h)
-	handlerID := c.serveHandler(evh)
-	evh.setHandlerID(handlerID)
-
-	req := proto.SubscribeRequest{Ev: protoEv, HandlerId: handlerID}
-
-	_, err = c.s.Subscribe(ctx, &req)
-	if err != nil {
-		reason := fmt.Sprintf("error on call to Subscribe: %v", err)
-		c.safeForceCloseHandler(handlerID, reason)
-	}
-	return err
 }
 
 // PublishInterrupt satisfies Browser.

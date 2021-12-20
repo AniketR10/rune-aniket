@@ -32,7 +32,6 @@ type Component struct {
 	ed              Editor
 	config          Config
 	keymap          map[term.Event]term.Event
-	termSubscribers map[term.Event]browser.EventHandler
 	edSubscribers   map[EventType][]EventHandler
 	cmdSubscribers  map[string]CommandHandler
 }
@@ -79,19 +78,6 @@ func (e *editorFlusherCloser) Close() error {
 	}
 	e.parent.dispatchEvent(ev)
 	return e.fc.Close()
-}
-
-type compEventHandler struct {
-	c *Component
-	h browser.EventHandler
-}
-
-func (h compEventHandler) Handle(ev term.Event) (exit bool) {
-	exit = h.h.Handle(ev)
-	if exit {
-		h.c.unsubscribe(ev)
-	}
-	return
 }
 
 // NewComponent allocates storage for a new Component and initializes it.
@@ -173,7 +159,6 @@ func (c *Component) Init(ed Editor, config Config) error {
 	c.comp.Init(c.config.Config)
 
 	c.ed = ed
-	c.termSubscribers = make(map[term.Event]browser.EventHandler)
 	c.edSubscribers = make(map[EventType][]EventHandler)
 	c.cmdSubscribers = make(map[string]CommandHandler)
 
@@ -384,27 +369,6 @@ func (c *Component) MergeKeyMap(keymap map[term.Event]term.Event) error {
 	return nil
 }
 
-// SubscribeTermEvents subscribers h EventHandler to term.Event ev.
-func (c *Component) SubscribeTermEvents(ev term.Event, h browser.EventHandler) error {
-	if ev.Type != term.EventKey {
-		return errors.New("invalid subscription of non-key event")
-	}
-	if _, ok := c.termSubscribers[ev]; ok {
-		return fmt.Errorf("there's already a subscriber subscribed to: %#v", ev)
-	}
-	c.termSubscribers[ev] = compEventHandler{c: c, h: h}
-	return nil
-}
-
-// Publish dispatches ev to subscribers, previously installed via Subscribe.
-func (c *Component) Publish(ev term.Event) (handled bool) {
-	if subscriber, ok := c.termSubscribers[ev]; ok {
-		subscriber.Handle(ev)
-		handled = true
-	}
-	return
-}
-
 // DispatchCommand dispatches a EventTypeCommand with cmd to subscribers
 // subscribed via SubscribeEditorEvents.
 func (c *Component) DispatchCommand(cmd Command) (handled bool) {
@@ -475,10 +439,6 @@ func (c *Component) Split(o browser.Orientation, h browser.Handler) (browser.Win
 func (c *Component) Bar(o browser.Orientation, h tui.Handler) error {
 	c.comp.Bar(o, h)
 	return nil
-}
-
-func (c *Component) unsubscribe(ev term.Event) {
-	delete(c.termSubscribers, ev)
 }
 
 // PublishInterrupt interrupts the main event loop to redraw the terminal.
@@ -707,7 +667,6 @@ func (c *Component) Floating(
 // Close closes all resources associated with this Component.
 func (c *Component) Close() error {
 	// avoid dispatching close events on flusherCloser callbacks
-	c.termSubscribers = make(map[term.Event]browser.EventHandler)
 	c.edSubscribers = make(map[EventType][]EventHandler)
 
 	err1 := c.comp.Close()

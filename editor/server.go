@@ -19,6 +19,7 @@ var (
 
 // Server serves an Editor over GRPC.
 type Server struct {
+	proto.UnimplementedEditorServer
 	Logger *log.Logger
 
 	broker proto.MuxBroker

@@ -231,6 +231,7 @@ func (c *Client) Close() error {
 
 // Server serves a tui.Handler implementation over GRPC.
 type Server struct {
+	proto.UnimplementedHandlerServer
 	handler tui.Handler
 	Logger  *log.Logger
 }

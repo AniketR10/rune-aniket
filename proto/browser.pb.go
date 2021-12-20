@@ -7,11 +7,7 @@
 package proto
 
 import (
-	context "context"
 	proto "github.com/golang/protobuf/proto"
-	grpc "google.golang.org/grpc"
-	codes "google.golang.org/grpc/codes"
-	status "google.golang.org/grpc/status"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
@@ -798,99 +794,6 @@ func (x *FocusResponse) GetWindowId() uint64 {
 	return 0
 }
 
-type SubscribeRequest struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
-	Ev        *Event `protobuf:"bytes,1,opt,name=ev,proto3" json:"ev,omitempty"`
-	HandlerId uint64 `protobuf:"varint,2,opt,name=handler_id,json=handlerId,proto3" json:"handler_id,omitempty"`
-}
-
-func (x *SubscribeRequest) Reset() {
-	*x = SubscribeRequest{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_browser_proto_msgTypes[15]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
-}
-
-func (x *SubscribeRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*SubscribeRequest) ProtoMessage() {}
-
-func (x *SubscribeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_browser_proto_msgTypes[15]
-	if protoimpl.UnsafeEnabled && x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use SubscribeRequest.ProtoReflect.Descriptor instead.
-func (*SubscribeRequest) Descriptor() ([]byte, []int) {
-	return file_browser_proto_rawDescGZIP(), []int{15}
-}
-
-func (x *SubscribeRequest) GetEv() *Event {
-	if x != nil {
-		return x.Ev
-	}
-	return nil
-}
-
-func (x *SubscribeRequest) GetHandlerId() uint64 {
-	if x != nil {
-		return x.HandlerId
-	}
-	return 0
-}
-
-type SubscribeResponse struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-}
-
-func (x *SubscribeResponse) Reset() {
-	*x = SubscribeResponse{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_browser_proto_msgTypes[16]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
-}
-
-func (x *SubscribeResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*SubscribeResponse) ProtoMessage() {}
-
-func (x *SubscribeResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_browser_proto_msgTypes[16]
-	if protoimpl.UnsafeEnabled && x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use SubscribeResponse.ProtoReflect.Descriptor instead.
-func (*SubscribeResponse) Descriptor() ([]byte, []int) {
-	return file_browser_proto_rawDescGZIP(), []int{16}
-}
-
 type PublishRequest struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
@@ -902,7 +805,7 @@ type PublishRequest struct {
 func (x *PublishRequest) Reset() {
 	*x = PublishRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_browser_proto_msgTypes[17]
+		mi := &file_browser_proto_msgTypes[15]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -915,7 +818,7 @@ func (x *PublishRequest) String() string {
 func (*PublishRequest) ProtoMessage() {}
 
 func (x *PublishRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_browser_proto_msgTypes[17]
+	mi := &file_browser_proto_msgTypes[15]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -928,7 +831,7 @@ func (x *PublishRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PublishRequest.ProtoReflect.Descriptor instead.
 func (*PublishRequest) Descriptor() ([]byte, []int) {
-	return file_browser_proto_rawDescGZIP(), []int{17}
+	return file_browser_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *PublishRequest) GetEv() *Event {
@@ -947,7 +850,7 @@ type PublishResponse struct {
 func (x *PublishResponse) Reset() {
 	*x = PublishResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_browser_proto_msgTypes[18]
+		mi := &file_browser_proto_msgTypes[16]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -960,7 +863,7 @@ func (x *PublishResponse) String() string {
 func (*PublishResponse) ProtoMessage() {}
 
 func (x *PublishResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_browser_proto_msgTypes[18]
+	mi := &file_browser_proto_msgTypes[16]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -973,7 +876,7 @@ func (x *PublishResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PublishResponse.ProtoReflect.Descriptor instead.
 func (*PublishResponse) Descriptor() ([]byte, []int) {
-	return file_browser_proto_rawDescGZIP(), []int{18}
+	return file_browser_proto_rawDescGZIP(), []int{16}
 }
 
 type WindowCloseRequest struct {
@@ -985,7 +888,7 @@ type WindowCloseRequest struct {
 func (x *WindowCloseRequest) Reset() {
 	*x = WindowCloseRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_browser_proto_msgTypes[19]
+		mi := &file_browser_proto_msgTypes[17]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -998,7 +901,7 @@ func (x *WindowCloseRequest) String() string {
 func (*WindowCloseRequest) ProtoMessage() {}
 
 func (x *WindowCloseRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_browser_proto_msgTypes[19]
+	mi := &file_browser_proto_msgTypes[17]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1011,7 +914,7 @@ func (x *WindowCloseRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WindowCloseRequest.ProtoReflect.Descriptor instead.
 func (*WindowCloseRequest) Descriptor() ([]byte, []int) {
-	return file_browser_proto_rawDescGZIP(), []int{19}
+	return file_browser_proto_rawDescGZIP(), []int{17}
 }
 
 type WindowCloseResponse struct {
@@ -1023,7 +926,7 @@ type WindowCloseResponse struct {
 func (x *WindowCloseResponse) Reset() {
 	*x = WindowCloseResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_browser_proto_msgTypes[20]
+		mi := &file_browser_proto_msgTypes[18]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1036,7 +939,7 @@ func (x *WindowCloseResponse) String() string {
 func (*WindowCloseResponse) ProtoMessage() {}
 
 func (x *WindowCloseResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_browser_proto_msgTypes[20]
+	mi := &file_browser_proto_msgTypes[18]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1049,7 +952,7 @@ func (x *WindowCloseResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WindowCloseResponse.ProtoReflect.Descriptor instead.
 func (*WindowCloseResponse) Descriptor() ([]byte, []int) {
-	return file_browser_proto_rawDescGZIP(), []int{20}
+	return file_browser_proto_rawDescGZIP(), []int{18}
 }
 
 type WindowSetContentRequest struct {
@@ -1063,7 +966,7 @@ type WindowSetContentRequest struct {
 func (x *WindowSetContentRequest) Reset() {
 	*x = WindowSetContentRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_browser_proto_msgTypes[21]
+		mi := &file_browser_proto_msgTypes[19]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1076,7 +979,7 @@ func (x *WindowSetContentRequest) String() string {
 func (*WindowSetContentRequest) ProtoMessage() {}
 
 func (x *WindowSetContentRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_browser_proto_msgTypes[21]
+	mi := &file_browser_proto_msgTypes[19]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1089,7 +992,7 @@ func (x *WindowSetContentRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WindowSetContentRequest.ProtoReflect.Descriptor instead.
 func (*WindowSetContentRequest) Descriptor() ([]byte, []int) {
-	return file_browser_proto_rawDescGZIP(), []int{21}
+	return file_browser_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *WindowSetContentRequest) GetHandlerId() uint64 {
@@ -1108,7 +1011,7 @@ type WindowSetContentResponse struct {
 func (x *WindowSetContentResponse) Reset() {
 	*x = WindowSetContentResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_browser_proto_msgTypes[22]
+		mi := &file_browser_proto_msgTypes[20]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1121,7 +1024,7 @@ func (x *WindowSetContentResponse) String() string {
 func (*WindowSetContentResponse) ProtoMessage() {}
 
 func (x *WindowSetContentResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_browser_proto_msgTypes[22]
+	mi := &file_browser_proto_msgTypes[20]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1134,7 +1037,7 @@ func (x *WindowSetContentResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WindowSetContentResponse.ProtoReflect.Descriptor instead.
 func (*WindowSetContentResponse) Descriptor() ([]byte, []int) {
-	return file_browser_proto_rawDescGZIP(), []int{22}
+	return file_browser_proto_rawDescGZIP(), []int{20}
 }
 
 type WindowContentRequest struct {
@@ -1146,7 +1049,7 @@ type WindowContentRequest struct {
 func (x *WindowContentRequest) Reset() {
 	*x = WindowContentRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_browser_proto_msgTypes[23]
+		mi := &file_browser_proto_msgTypes[21]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1159,7 +1062,7 @@ func (x *WindowContentRequest) String() string {
 func (*WindowContentRequest) ProtoMessage() {}
 
 func (x *WindowContentRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_browser_proto_msgTypes[23]
+	mi := &file_browser_proto_msgTypes[21]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1172,7 +1075,7 @@ func (x *WindowContentRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WindowContentRequest.ProtoReflect.Descriptor instead.
 func (*WindowContentRequest) Descriptor() ([]byte, []int) {
-	return file_browser_proto_rawDescGZIP(), []int{23}
+	return file_browser_proto_rawDescGZIP(), []int{21}
 }
 
 type WindowContentResponse struct {
@@ -1186,7 +1089,7 @@ type WindowContentResponse struct {
 func (x *WindowContentResponse) Reset() {
 	*x = WindowContentResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_browser_proto_msgTypes[24]
+		mi := &file_browser_proto_msgTypes[22]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1199,7 +1102,7 @@ func (x *WindowContentResponse) String() string {
 func (*WindowContentResponse) ProtoMessage() {}
 
 func (x *WindowContentResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_browser_proto_msgTypes[24]
+	mi := &file_browser_proto_msgTypes[22]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1212,7 +1115,7 @@ func (x *WindowContentResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WindowContentResponse.ProtoReflect.Descriptor instead.
 func (*WindowContentResponse) Descriptor() ([]byte, []int) {
-	return file_browser_proto_rawDescGZIP(), []int{24}
+	return file_browser_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *WindowContentResponse) GetHandlerId() uint64 {
@@ -1280,89 +1183,78 @@ var file_browser_proto_rawDesc = []byte{
 	0x0e, 0x0a, 0x0c, 0x46, 0x6f, 0x63, 0x75, 0x73, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x22,
 	0x2c, 0x0a, 0x0d, 0x46, 0x6f, 0x63, 0x75, 0x73, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65,
 	0x12, 0x1b, 0x0a, 0x09, 0x77, 0x69, 0x6e, 0x64, 0x6f, 0x77, 0x5f, 0x69, 0x64, 0x18, 0x01, 0x20,
-	0x01, 0x28, 0x04, 0x52, 0x08, 0x77, 0x69, 0x6e, 0x64, 0x6f, 0x77, 0x49, 0x64, 0x22, 0x4f, 0x0a,
-	0x10, 0x53, 0x75, 0x62, 0x73, 0x63, 0x72, 0x69, 0x62, 0x65, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73,
-	0x74, 0x12, 0x1c, 0x0a, 0x02, 0x65, 0x76, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x0c, 0x2e,
-	0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x45, 0x76, 0x65, 0x6e, 0x74, 0x52, 0x02, 0x65, 0x76, 0x12,
-	0x1d, 0x0a, 0x0a, 0x68, 0x61, 0x6e, 0x64, 0x6c, 0x65, 0x72, 0x5f, 0x69, 0x64, 0x18, 0x02, 0x20,
-	0x01, 0x28, 0x04, 0x52, 0x09, 0x68, 0x61, 0x6e, 0x64, 0x6c, 0x65, 0x72, 0x49, 0x64, 0x22, 0x13,
-	0x0a, 0x11, 0x53, 0x75, 0x62, 0x73, 0x63, 0x72, 0x69, 0x62, 0x65, 0x52, 0x65, 0x73, 0x70, 0x6f,
-	0x6e, 0x73, 0x65, 0x22, 0x2e, 0x0a, 0x0e, 0x50, 0x75, 0x62, 0x6c, 0x69, 0x73, 0x68, 0x52, 0x65,
-	0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x1c, 0x0a, 0x02, 0x65, 0x76, 0x18, 0x01, 0x20, 0x01, 0x28,
-	0x0b, 0x32, 0x0c, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x45, 0x76, 0x65, 0x6e, 0x74, 0x52,
-	0x02, 0x65, 0x76, 0x22, 0x11, 0x0a, 0x0f, 0x50, 0x75, 0x62, 0x6c, 0x69, 0x73, 0x68, 0x52, 0x65,
-	0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22, 0x14, 0x0a, 0x12, 0x57, 0x69, 0x6e, 0x64, 0x6f, 0x77,
-	0x43, 0x6c, 0x6f, 0x73, 0x65, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x22, 0x15, 0x0a, 0x13,
-	0x57, 0x69, 0x6e, 0x64, 0x6f, 0x77, 0x43, 0x6c, 0x6f, 0x73, 0x65, 0x52, 0x65, 0x73, 0x70, 0x6f,
-	0x6e, 0x73, 0x65, 0x22, 0x38, 0x0a, 0x17, 0x57, 0x69, 0x6e, 0x64, 0x6f, 0x77, 0x53, 0x65, 0x74,
-	0x43, 0x6f, 0x6e, 0x74, 0x65, 0x6e, 0x74, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x1d,
-	0x0a, 0x0a, 0x68, 0x61, 0x6e, 0x64, 0x6c, 0x65, 0x72, 0x5f, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01,
-	0x28, 0x04, 0x52, 0x09, 0x68, 0x61, 0x6e, 0x64, 0x6c, 0x65, 0x72, 0x49, 0x64, 0x22, 0x1a, 0x0a,
-	0x18, 0x57, 0x69, 0x6e, 0x64, 0x6f, 0x77, 0x53, 0x65, 0x74, 0x43, 0x6f, 0x6e, 0x74, 0x65, 0x6e,
-	0x74, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22, 0x16, 0x0a, 0x14, 0x57, 0x69, 0x6e,
+	0x01, 0x28, 0x04, 0x52, 0x08, 0x77, 0x69, 0x6e, 0x64, 0x6f, 0x77, 0x49, 0x64, 0x22, 0x2e, 0x0a,
+	0x0e, 0x50, 0x75, 0x62, 0x6c, 0x69, 0x73, 0x68, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12,
+	0x1c, 0x0a, 0x02, 0x65, 0x76, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x0c, 0x2e, 0x70, 0x72,
+	0x6f, 0x74, 0x6f, 0x2e, 0x45, 0x76, 0x65, 0x6e, 0x74, 0x52, 0x02, 0x65, 0x76, 0x22, 0x11, 0x0a,
+	0x0f, 0x50, 0x75, 0x62, 0x6c, 0x69, 0x73, 0x68, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65,
+	0x22, 0x14, 0x0a, 0x12, 0x57, 0x69, 0x6e, 0x64, 0x6f, 0x77, 0x43, 0x6c, 0x6f, 0x73, 0x65, 0x52,
+	0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x22, 0x15, 0x0a, 0x13, 0x57, 0x69, 0x6e, 0x64, 0x6f, 0x77,
+	0x43, 0x6c, 0x6f, 0x73, 0x65, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22, 0x38, 0x0a,
+	0x17, 0x57, 0x69, 0x6e, 0x64, 0x6f, 0x77, 0x53, 0x65, 0x74, 0x43, 0x6f, 0x6e, 0x74, 0x65, 0x6e,
+	0x74, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x1d, 0x0a, 0x0a, 0x68, 0x61, 0x6e, 0x64,
+	0x6c, 0x65, 0x72, 0x5f, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x04, 0x52, 0x09, 0x68, 0x61,
+	0x6e, 0x64, 0x6c, 0x65, 0x72, 0x49, 0x64, 0x22, 0x1a, 0x0a, 0x18, 0x57, 0x69, 0x6e, 0x64, 0x6f,
+	0x77, 0x53, 0x65, 0x74, 0x43, 0x6f, 0x6e, 0x74, 0x65, 0x6e, 0x74, 0x52, 0x65, 0x73, 0x70, 0x6f,
+	0x6e, 0x73, 0x65, 0x22, 0x16, 0x0a, 0x14, 0x57, 0x69, 0x6e, 0x64, 0x6f, 0x77, 0x43, 0x6f, 0x6e,
+	0x74, 0x65, 0x6e, 0x74, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x22, 0x36, 0x0a, 0x15, 0x57,
+	0x69, 0x6e, 0x64, 0x6f, 0x77, 0x43, 0x6f, 0x6e, 0x74, 0x65, 0x6e, 0x74, 0x52, 0x65, 0x73, 0x70,
+	0x6f, 0x6e, 0x73, 0x65, 0x12, 0x1d, 0x0a, 0x0a, 0x68, 0x61, 0x6e, 0x64, 0x6c, 0x65, 0x72, 0x5f,
+	0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x04, 0x52, 0x09, 0x68, 0x61, 0x6e, 0x64, 0x6c, 0x65,
+	0x72, 0x49, 0x64, 0x2a, 0x37, 0x0a, 0x0b, 0x4f, 0x72, 0x69, 0x65, 0x6e, 0x74, 0x61, 0x74, 0x69,
+	0x6f, 0x6e, 0x12, 0x07, 0x0a, 0x03, 0x54, 0x6f, 0x70, 0x10, 0x00, 0x12, 0x0a, 0x0a, 0x06, 0x42,
+	0x6f, 0x74, 0x74, 0x6f, 0x6d, 0x10, 0x01, 0x12, 0x08, 0x0a, 0x04, 0x4c, 0x65, 0x66, 0x74, 0x10,
+	0x02, 0x12, 0x09, 0x0a, 0x05, 0x52, 0x69, 0x67, 0x68, 0x74, 0x10, 0x03, 0x32, 0x51, 0x0a, 0x0e,
+	0x52, 0x65, 0x73, 0x6f, 0x75, 0x72, 0x63, 0x65, 0x4f, 0x70, 0x65, 0x6e, 0x65, 0x72, 0x12, 0x3f,
+	0x0a, 0x04, 0x4f, 0x70, 0x65, 0x6e, 0x12, 0x1a, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x4f,
+	0x70, 0x65, 0x6e, 0x52, 0x65, 0x73, 0x6f, 0x75, 0x72, 0x63, 0x65, 0x52, 0x65, 0x71, 0x75, 0x65,
+	0x73, 0x74, 0x1a, 0x1b, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x4f, 0x70, 0x65, 0x6e, 0x52,
+	0x65, 0x73, 0x6f, 0x75, 0x72, 0x63, 0x65, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x32,
+	0x4e, 0x0a, 0x09, 0x4d, 0x65, 0x73, 0x73, 0x65, 0x6e, 0x67, 0x65, 0x72, 0x12, 0x41, 0x0a, 0x0a,
+	0x53, 0x65, 0x74, 0x4d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x12, 0x18, 0x2e, 0x70, 0x72, 0x6f,
+	0x74, 0x6f, 0x2e, 0x53, 0x65, 0x74, 0x4d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x52, 0x65, 0x71,
+	0x75, 0x65, 0x73, 0x74, 0x1a, 0x19, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x53, 0x65, 0x74,
+	0x4d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x32,
+	0x51, 0x0a, 0x09, 0x4b, 0x65, 0x79, 0x4d, 0x61, 0x70, 0x70, 0x65, 0x72, 0x12, 0x44, 0x0a, 0x0b,
+	0x4d, 0x65, 0x72, 0x67, 0x65, 0x4b, 0x65, 0x79, 0x4d, 0x61, 0x70, 0x12, 0x19, 0x2e, 0x70, 0x72,
+	0x6f, 0x74, 0x6f, 0x2e, 0x4d, 0x65, 0x72, 0x67, 0x65, 0x4b, 0x65, 0x79, 0x4d, 0x61, 0x70, 0x52,
+	0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x1a, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x4d,
+	0x65, 0x72, 0x67, 0x65, 0x4b, 0x65, 0x79, 0x4d, 0x61, 0x70, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e,
+	0x73, 0x65, 0x32, 0x4a, 0x0a, 0x0e, 0x45, 0x76, 0x65, 0x6e, 0x74, 0x50, 0x75, 0x62, 0x6c, 0x69,
+	0x73, 0x68, 0x65, 0x72, 0x12, 0x38, 0x0a, 0x07, 0x50, 0x75, 0x62, 0x6c, 0x69, 0x73, 0x68, 0x12,
+	0x15, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x50, 0x75, 0x62, 0x6c, 0x69, 0x73, 0x68, 0x52,
+	0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x16, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x50,
+	0x75, 0x62, 0x6c, 0x69, 0x73, 0x68, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x32, 0xee,
+	0x01, 0x0a, 0x0d, 0x57, 0x69, 0x6e, 0x64, 0x6f, 0x77, 0x4d, 0x61, 0x6e, 0x61, 0x67, 0x65, 0x72,
+	0x12, 0x32, 0x0a, 0x05, 0x46, 0x6f, 0x63, 0x75, 0x73, 0x12, 0x13, 0x2e, 0x70, 0x72, 0x6f, 0x74,
+	0x6f, 0x2e, 0x46, 0x6f, 0x63, 0x75, 0x73, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x14,
+	0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x46, 0x6f, 0x63, 0x75, 0x73, 0x52, 0x65, 0x73, 0x70,
+	0x6f, 0x6e, 0x73, 0x65, 0x12, 0x32, 0x0a, 0x05, 0x53, 0x70, 0x6c, 0x69, 0x74, 0x12, 0x13, 0x2e,
+	0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x53, 0x70, 0x6c, 0x69, 0x74, 0x52, 0x65, 0x71, 0x75, 0x65,
+	0x73, 0x74, 0x1a, 0x14, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x53, 0x70, 0x6c, 0x69, 0x74,
+	0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x2c, 0x0a, 0x03, 0x42, 0x61, 0x72, 0x12,
+	0x11, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x42, 0x61, 0x72, 0x52, 0x65, 0x71, 0x75, 0x65,
+	0x73, 0x74, 0x1a, 0x12, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x42, 0x61, 0x72, 0x52, 0x65,
+	0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x47, 0x0a, 0x08, 0x46, 0x6c, 0x6f, 0x61, 0x74, 0x69,
+	0x6e, 0x67, 0x12, 0x1c, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x46, 0x6c, 0x6f, 0x61, 0x74,
+	0x69, 0x6e, 0x67, 0x57, 0x69, 0x6e, 0x64, 0x6f, 0x77, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74,
+	0x1a, 0x1d, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x46, 0x6c, 0x6f, 0x61, 0x74, 0x69, 0x6e,
+	0x67, 0x57, 0x69, 0x6e, 0x64, 0x6f, 0x77, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x32,
+	0xdd, 0x01, 0x0a, 0x06, 0x57, 0x69, 0x6e, 0x64, 0x6f, 0x77, 0x12, 0x4d, 0x0a, 0x0a, 0x53, 0x65,
+	0x74, 0x43, 0x6f, 0x6e, 0x74, 0x65, 0x6e, 0x74, 0x12, 0x1e, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f,
+	0x2e, 0x57, 0x69, 0x6e, 0x64, 0x6f, 0x77, 0x53, 0x65, 0x74, 0x43, 0x6f, 0x6e, 0x74, 0x65, 0x6e,
+	0x74, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x1f, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f,
+	0x2e, 0x57, 0x69, 0x6e, 0x64, 0x6f, 0x77, 0x53, 0x65, 0x74, 0x43, 0x6f, 0x6e, 0x74, 0x65, 0x6e,
+	0x74, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x44, 0x0a, 0x07, 0x43, 0x6f, 0x6e,
+	0x74, 0x65, 0x6e, 0x74, 0x12, 0x1b, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x57, 0x69, 0x6e,
 	0x64, 0x6f, 0x77, 0x43, 0x6f, 0x6e, 0x74, 0x65, 0x6e, 0x74, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73,
-	0x74, 0x22, 0x36, 0x0a, 0x15, 0x57, 0x69, 0x6e, 0x64, 0x6f, 0x77, 0x43, 0x6f, 0x6e, 0x74, 0x65,
-	0x6e, 0x74, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x1d, 0x0a, 0x0a, 0x68, 0x61,
-	0x6e, 0x64, 0x6c, 0x65, 0x72, 0x5f, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x04, 0x52, 0x09,
-	0x68, 0x61, 0x6e, 0x64, 0x6c, 0x65, 0x72, 0x49, 0x64, 0x2a, 0x37, 0x0a, 0x0b, 0x4f, 0x72, 0x69,
-	0x65, 0x6e, 0x74, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x12, 0x07, 0x0a, 0x03, 0x54, 0x6f, 0x70, 0x10,
-	0x00, 0x12, 0x0a, 0x0a, 0x06, 0x42, 0x6f, 0x74, 0x74, 0x6f, 0x6d, 0x10, 0x01, 0x12, 0x08, 0x0a,
-	0x04, 0x4c, 0x65, 0x66, 0x74, 0x10, 0x02, 0x12, 0x09, 0x0a, 0x05, 0x52, 0x69, 0x67, 0x68, 0x74,
-	0x10, 0x03, 0x32, 0x51, 0x0a, 0x0e, 0x52, 0x65, 0x73, 0x6f, 0x75, 0x72, 0x63, 0x65, 0x4f, 0x70,
-	0x65, 0x6e, 0x65, 0x72, 0x12, 0x3f, 0x0a, 0x04, 0x4f, 0x70, 0x65, 0x6e, 0x12, 0x1a, 0x2e, 0x70,
-	0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x4f, 0x70, 0x65, 0x6e, 0x52, 0x65, 0x73, 0x6f, 0x75, 0x72, 0x63,
-	0x65, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x1b, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f,
-	0x2e, 0x4f, 0x70, 0x65, 0x6e, 0x52, 0x65, 0x73, 0x6f, 0x75, 0x72, 0x63, 0x65, 0x52, 0x65, 0x73,
-	0x70, 0x6f, 0x6e, 0x73, 0x65, 0x32, 0x4e, 0x0a, 0x09, 0x4d, 0x65, 0x73, 0x73, 0x65, 0x6e, 0x67,
-	0x65, 0x72, 0x12, 0x41, 0x0a, 0x0a, 0x53, 0x65, 0x74, 0x4d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65,
-	0x12, 0x18, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x53, 0x65, 0x74, 0x4d, 0x65, 0x73, 0x73,
-	0x61, 0x67, 0x65, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x19, 0x2e, 0x70, 0x72, 0x6f,
-	0x74, 0x6f, 0x2e, 0x53, 0x65, 0x74, 0x4d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x52, 0x65, 0x73,
-	0x70, 0x6f, 0x6e, 0x73, 0x65, 0x32, 0x51, 0x0a, 0x09, 0x4b, 0x65, 0x79, 0x4d, 0x61, 0x70, 0x70,
-	0x65, 0x72, 0x12, 0x44, 0x0a, 0x0b, 0x4d, 0x65, 0x72, 0x67, 0x65, 0x4b, 0x65, 0x79, 0x4d, 0x61,
-	0x70, 0x12, 0x19, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x4d, 0x65, 0x72, 0x67, 0x65, 0x4b,
-	0x65, 0x79, 0x4d, 0x61, 0x70, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x1a, 0x2e, 0x70,
-	0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x4d, 0x65, 0x72, 0x67, 0x65, 0x4b, 0x65, 0x79, 0x4d, 0x61, 0x70,
-	0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x32, 0x51, 0x0a, 0x0f, 0x45, 0x76, 0x65, 0x6e,
-	0x74, 0x53, 0x75, 0x62, 0x73, 0x63, 0x72, 0x69, 0x62, 0x65, 0x72, 0x12, 0x3e, 0x0a, 0x09, 0x53,
-	0x75, 0x62, 0x73, 0x63, 0x72, 0x69, 0x62, 0x65, 0x12, 0x17, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f,
-	0x2e, 0x53, 0x75, 0x62, 0x73, 0x63, 0x72, 0x69, 0x62, 0x65, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73,
-	0x74, 0x1a, 0x18, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x53, 0x75, 0x62, 0x73, 0x63, 0x72,
-	0x69, 0x62, 0x65, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x32, 0x4a, 0x0a, 0x0e, 0x45,
-	0x76, 0x65, 0x6e, 0x74, 0x50, 0x75, 0x62, 0x6c, 0x69, 0x73, 0x68, 0x65, 0x72, 0x12, 0x38, 0x0a,
-	0x07, 0x50, 0x75, 0x62, 0x6c, 0x69, 0x73, 0x68, 0x12, 0x15, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f,
-	0x2e, 0x50, 0x75, 0x62, 0x6c, 0x69, 0x73, 0x68, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a,
-	0x16, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x50, 0x75, 0x62, 0x6c, 0x69, 0x73, 0x68, 0x52,
-	0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x32, 0xee, 0x01, 0x0a, 0x0d, 0x57, 0x69, 0x6e, 0x64,
-	0x6f, 0x77, 0x4d, 0x61, 0x6e, 0x61, 0x67, 0x65, 0x72, 0x12, 0x32, 0x0a, 0x05, 0x46, 0x6f, 0x63,
-	0x75, 0x73, 0x12, 0x13, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x46, 0x6f, 0x63, 0x75, 0x73,
-	0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x14, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e,
-	0x46, 0x6f, 0x63, 0x75, 0x73, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x32, 0x0a,
-	0x05, 0x53, 0x70, 0x6c, 0x69, 0x74, 0x12, 0x13, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x53,
-	0x70, 0x6c, 0x69, 0x74, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x14, 0x2e, 0x70, 0x72,
-	0x6f, 0x74, 0x6f, 0x2e, 0x53, 0x70, 0x6c, 0x69, 0x74, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73,
-	0x65, 0x12, 0x2c, 0x0a, 0x03, 0x42, 0x61, 0x72, 0x12, 0x11, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f,
-	0x2e, 0x42, 0x61, 0x72, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x12, 0x2e, 0x70, 0x72,
-	0x6f, 0x74, 0x6f, 0x2e, 0x42, 0x61, 0x72, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12,
-	0x47, 0x0a, 0x08, 0x46, 0x6c, 0x6f, 0x61, 0x74, 0x69, 0x6e, 0x67, 0x12, 0x1c, 0x2e, 0x70, 0x72,
-	0x6f, 0x74, 0x6f, 0x2e, 0x46, 0x6c, 0x6f, 0x61, 0x74, 0x69, 0x6e, 0x67, 0x57, 0x69, 0x6e, 0x64,
-	0x6f, 0x77, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x1d, 0x2e, 0x70, 0x72, 0x6f, 0x74,
-	0x6f, 0x2e, 0x46, 0x6c, 0x6f, 0x61, 0x74, 0x69, 0x6e, 0x67, 0x57, 0x69, 0x6e, 0x64, 0x6f, 0x77,
-	0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x32, 0xdd, 0x01, 0x0a, 0x06, 0x57, 0x69, 0x6e,
-	0x64, 0x6f, 0x77, 0x12, 0x4d, 0x0a, 0x0a, 0x53, 0x65, 0x74, 0x43, 0x6f, 0x6e, 0x74, 0x65, 0x6e,
-	0x74, 0x12, 0x1e, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x57, 0x69, 0x6e, 0x64, 0x6f, 0x77,
-	0x53, 0x65, 0x74, 0x43, 0x6f, 0x6e, 0x74, 0x65, 0x6e, 0x74, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73,
-	0x74, 0x1a, 0x1f, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x57, 0x69, 0x6e, 0x64, 0x6f, 0x77,
-	0x53, 0x65, 0x74, 0x43, 0x6f, 0x6e, 0x74, 0x65, 0x6e, 0x74, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e,
-	0x73, 0x65, 0x12, 0x44, 0x0a, 0x07, 0x43, 0x6f, 0x6e, 0x74, 0x65, 0x6e, 0x74, 0x12, 0x1b, 0x2e,
-	0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x57, 0x69, 0x6e, 0x64, 0x6f, 0x77, 0x43, 0x6f, 0x6e, 0x74,
-	0x65, 0x6e, 0x74, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x1c, 0x2e, 0x70, 0x72, 0x6f,
-	0x74, 0x6f, 0x2e, 0x57, 0x69, 0x6e, 0x64, 0x6f, 0x77, 0x43, 0x6f, 0x6e, 0x74, 0x65, 0x6e, 0x74,
-	0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x3e, 0x0a, 0x05, 0x43, 0x6c, 0x6f, 0x73,
-	0x65, 0x12, 0x19, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x57, 0x69, 0x6e, 0x64, 0x6f, 0x77,
-	0x43, 0x6c, 0x6f, 0x73, 0x65, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x1a, 0x2e, 0x70,
-	0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x57, 0x69, 0x6e, 0x64, 0x6f, 0x77, 0x43, 0x6c, 0x6f, 0x73, 0x65,
-	0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
+	0x74, 0x1a, 0x1c, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x57, 0x69, 0x6e, 0x64, 0x6f, 0x77,
+	0x43, 0x6f, 0x6e, 0x74, 0x65, 0x6e, 0x74, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12,
+	0x3e, 0x0a, 0x05, 0x43, 0x6c, 0x6f, 0x73, 0x65, 0x12, 0x19, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f,
+	0x2e, 0x57, 0x69, 0x6e, 0x64, 0x6f, 0x77, 0x43, 0x6c, 0x6f, 0x73, 0x65, 0x52, 0x65, 0x71, 0x75,
+	0x65, 0x73, 0x74, 0x1a, 0x1a, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x57, 0x69, 0x6e, 0x64,
+	0x6f, 0x77, 0x43, 0x6c, 0x6f, 0x73, 0x65, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x62,
+	0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
 }
 
 var (
@@ -1378,7 +1270,7 @@ func file_browser_proto_rawDescGZIP() []byte {
 }
 
 var file_browser_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_browser_proto_msgTypes = make([]protoimpl.MessageInfo, 25)
+var file_browser_proto_msgTypes = make([]protoimpl.MessageInfo, 23)
 var file_browser_proto_goTypes = []interface{}{
 	(Orientation)(0),                 // 0: proto.Orientation
 	(*OpenResourceRequest)(nil),      // 1: proto.OpenResourceRequest
@@ -1396,57 +1288,52 @@ var file_browser_proto_goTypes = []interface{}{
 	(*FloatingWindowResponse)(nil),   // 13: proto.FloatingWindowResponse
 	(*FocusRequest)(nil),             // 14: proto.FocusRequest
 	(*FocusResponse)(nil),            // 15: proto.FocusResponse
-	(*SubscribeRequest)(nil),         // 16: proto.SubscribeRequest
-	(*SubscribeResponse)(nil),        // 17: proto.SubscribeResponse
-	(*PublishRequest)(nil),           // 18: proto.PublishRequest
-	(*PublishResponse)(nil),          // 19: proto.PublishResponse
-	(*WindowCloseRequest)(nil),       // 20: proto.WindowCloseRequest
-	(*WindowCloseResponse)(nil),      // 21: proto.WindowCloseResponse
-	(*WindowSetContentRequest)(nil),  // 22: proto.WindowSetContentRequest
-	(*WindowSetContentResponse)(nil), // 23: proto.WindowSetContentResponse
-	(*WindowContentRequest)(nil),     // 24: proto.WindowContentRequest
-	(*WindowContentResponse)(nil),    // 25: proto.WindowContentResponse
-	(*Event)(nil),                    // 26: proto.Event
-	(*Coordinates)(nil),              // 27: proto.Coordinates
+	(*PublishRequest)(nil),           // 16: proto.PublishRequest
+	(*PublishResponse)(nil),          // 17: proto.PublishResponse
+	(*WindowCloseRequest)(nil),       // 18: proto.WindowCloseRequest
+	(*WindowCloseResponse)(nil),      // 19: proto.WindowCloseResponse
+	(*WindowSetContentRequest)(nil),  // 20: proto.WindowSetContentRequest
+	(*WindowSetContentResponse)(nil), // 21: proto.WindowSetContentResponse
+	(*WindowContentRequest)(nil),     // 22: proto.WindowContentRequest
+	(*WindowContentResponse)(nil),    // 23: proto.WindowContentResponse
+	(*Event)(nil),                    // 24: proto.Event
+	(*Coordinates)(nil),              // 25: proto.Coordinates
 }
 var file_browser_proto_depIdxs = []int32{
-	26, // 0: proto.Mapping.from:type_name -> proto.Event
-	26, // 1: proto.Mapping.to:type_name -> proto.Event
+	24, // 0: proto.Mapping.from:type_name -> proto.Event
+	24, // 1: proto.Mapping.to:type_name -> proto.Event
 	5,  // 2: proto.MergeKeyMapRequest.mappings:type_name -> proto.Mapping
 	0,  // 3: proto.SplitRequest.orientation:type_name -> proto.Orientation
 	0,  // 4: proto.BarRequest.orientation:type_name -> proto.Orientation
-	27, // 5: proto.FloatingWindowRequest.at:type_name -> proto.Coordinates
-	26, // 6: proto.SubscribeRequest.ev:type_name -> proto.Event
-	26, // 7: proto.PublishRequest.ev:type_name -> proto.Event
-	1,  // 8: proto.ResourceOpener.Open:input_type -> proto.OpenResourceRequest
-	3,  // 9: proto.Messenger.SetMessage:input_type -> proto.SetMessageRequest
-	6,  // 10: proto.KeyMapper.MergeKeyMap:input_type -> proto.MergeKeyMapRequest
-	16, // 11: proto.EventSubscriber.Subscribe:input_type -> proto.SubscribeRequest
-	18, // 12: proto.EventPublisher.Publish:input_type -> proto.PublishRequest
-	14, // 13: proto.WindowManager.Focus:input_type -> proto.FocusRequest
-	8,  // 14: proto.WindowManager.Split:input_type -> proto.SplitRequest
-	10, // 15: proto.WindowManager.Bar:input_type -> proto.BarRequest
-	12, // 16: proto.WindowManager.Floating:input_type -> proto.FloatingWindowRequest
-	22, // 17: proto.Window.SetContent:input_type -> proto.WindowSetContentRequest
-	24, // 18: proto.Window.Content:input_type -> proto.WindowContentRequest
-	20, // 19: proto.Window.Close:input_type -> proto.WindowCloseRequest
-	2,  // 20: proto.ResourceOpener.Open:output_type -> proto.OpenResourceResponse
-	4,  // 21: proto.Messenger.SetMessage:output_type -> proto.SetMessageResponse
-	7,  // 22: proto.KeyMapper.MergeKeyMap:output_type -> proto.MergeKeyMapResponse
-	17, // 23: proto.EventSubscriber.Subscribe:output_type -> proto.SubscribeResponse
-	19, // 24: proto.EventPublisher.Publish:output_type -> proto.PublishResponse
-	15, // 25: proto.WindowManager.Focus:output_type -> proto.FocusResponse
-	9,  // 26: proto.WindowManager.Split:output_type -> proto.SplitResponse
-	11, // 27: proto.WindowManager.Bar:output_type -> proto.BarResponse
-	13, // 28: proto.WindowManager.Floating:output_type -> proto.FloatingWindowResponse
-	23, // 29: proto.Window.SetContent:output_type -> proto.WindowSetContentResponse
-	25, // 30: proto.Window.Content:output_type -> proto.WindowContentResponse
-	21, // 31: proto.Window.Close:output_type -> proto.WindowCloseResponse
-	20, // [20:32] is the sub-list for method output_type
-	8,  // [8:20] is the sub-list for method input_type
-	8,  // [8:8] is the sub-list for extension type_name
-	8,  // [8:8] is the sub-list for extension extendee
-	0,  // [0:8] is the sub-list for field type_name
+	25, // 5: proto.FloatingWindowRequest.at:type_name -> proto.Coordinates
+	24, // 6: proto.PublishRequest.ev:type_name -> proto.Event
+	1,  // 7: proto.ResourceOpener.Open:input_type -> proto.OpenResourceRequest
+	3,  // 8: proto.Messenger.SetMessage:input_type -> proto.SetMessageRequest
+	6,  // 9: proto.KeyMapper.MergeKeyMap:input_type -> proto.MergeKeyMapRequest
+	16, // 10: proto.EventPublisher.Publish:input_type -> proto.PublishRequest
+	14, // 11: proto.WindowManager.Focus:input_type -> proto.FocusRequest
+	8,  // 12: proto.WindowManager.Split:input_type -> proto.SplitRequest
+	10, // 13: proto.WindowManager.Bar:input_type -> proto.BarRequest
+	12, // 14: proto.WindowManager.Floating:input_type -> proto.FloatingWindowRequest
+	20, // 15: proto.Window.SetContent:input_type -> proto.WindowSetContentRequest
+	22, // 16: proto.Window.Content:input_type -> proto.WindowContentRequest
+	18, // 17: proto.Window.Close:input_type -> proto.WindowCloseRequest
+	2,  // 18: proto.ResourceOpener.Open:output_type -> proto.OpenResourceResponse
+	4,  // 19: proto.Messenger.SetMessage:output_type -> proto.SetMessageResponse
+	7,  // 20: proto.KeyMapper.MergeKeyMap:output_type -> proto.MergeKeyMapResponse
+	17, // 21: proto.EventPublisher.Publish:output_type -> proto.PublishResponse
+	15, // 22: proto.WindowManager.Focus:output_type -> proto.FocusResponse
+	9,  // 23: proto.WindowManager.Split:output_type -> proto.SplitResponse
+	11, // 24: proto.WindowManager.Bar:output_type -> proto.BarResponse
+	13, // 25: proto.WindowManager.Floating:output_type -> proto.FloatingWindowResponse
+	21, // 26: proto.Window.SetContent:output_type -> proto.WindowSetContentResponse
+	23, // 27: proto.Window.Content:output_type -> proto.WindowContentResponse
+	19, // 28: proto.Window.Close:output_type -> proto.WindowCloseResponse
+	18, // [18:29] is the sub-list for method output_type
+	7,  // [7:18] is the sub-list for method input_type
+	7,  // [7:7] is the sub-list for extension type_name
+	7,  // [7:7] is the sub-list for extension extendee
+	0,  // [0:7] is the sub-list for field type_name
 }
 
 func init() { file_browser_proto_init() }
@@ -1638,30 +1525,6 @@ func file_browser_proto_init() {
 			}
 		}
 		file_browser_proto_msgTypes[15].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*SubscribeRequest); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_browser_proto_msgTypes[16].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*SubscribeResponse); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_browser_proto_msgTypes[17].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*PublishRequest); i {
 			case 0:
 				return &v.state
@@ -1673,7 +1536,7 @@ func file_browser_proto_init() {
 				return nil
 			}
 		}
-		file_browser_proto_msgTypes[18].Exporter = func(v interface{}, i int) interface{} {
+		file_browser_proto_msgTypes[16].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*PublishResponse); i {
 			case 0:
 				return &v.state
@@ -1685,7 +1548,7 @@ func file_browser_proto_init() {
 				return nil
 			}
 		}
-		file_browser_proto_msgTypes[19].Exporter = func(v interface{}, i int) interface{} {
+		file_browser_proto_msgTypes[17].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*WindowCloseRequest); i {
 			case 0:
 				return &v.state
@@ -1697,7 +1560,7 @@ func file_browser_proto_init() {
 				return nil
 			}
 		}
-		file_browser_proto_msgTypes[20].Exporter = func(v interface{}, i int) interface{} {
+		file_browser_proto_msgTypes[18].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*WindowCloseResponse); i {
 			case 0:
 				return &v.state
@@ -1709,7 +1572,7 @@ func file_browser_proto_init() {
 				return nil
 			}
 		}
-		file_browser_proto_msgTypes[21].Exporter = func(v interface{}, i int) interface{} {
+		file_browser_proto_msgTypes[19].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*WindowSetContentRequest); i {
 			case 0:
 				return &v.state
@@ -1721,7 +1584,7 @@ func file_browser_proto_init() {
 				return nil
 			}
 		}
-		file_browser_proto_msgTypes[22].Exporter = func(v interface{}, i int) interface{} {
+		file_browser_proto_msgTypes[20].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*WindowSetContentResponse); i {
 			case 0:
 				return &v.state
@@ -1733,7 +1596,7 @@ func file_browser_proto_init() {
 				return nil
 			}
 		}
-		file_browser_proto_msgTypes[23].Exporter = func(v interface{}, i int) interface{} {
+		file_browser_proto_msgTypes[21].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*WindowContentRequest); i {
 			case 0:
 				return &v.state
@@ -1745,7 +1608,7 @@ func file_browser_proto_init() {
 				return nil
 			}
 		}
-		file_browser_proto_msgTypes[24].Exporter = func(v interface{}, i int) interface{} {
+		file_browser_proto_msgTypes[22].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*WindowContentResponse); i {
 			case 0:
 				return &v.state
@@ -1764,9 +1627,9 @@ func file_browser_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: file_browser_proto_rawDesc,
 			NumEnums:      1,
-			NumMessages:   25,
+			NumMessages:   23,
 			NumExtensions: 0,
-			NumServices:   7,
+			NumServices:   6,
 		},
 		GoTypes:           file_browser_proto_goTypes,
 		DependencyIndexes: file_browser_proto_depIdxs,
@@ -1777,696 +1640,4 @@ func file_browser_proto_init() {
 	file_browser_proto_rawDesc = nil
 	file_browser_proto_goTypes = nil
 	file_browser_proto_depIdxs = nil
-}
-
-// Reference imports to suppress errors if they are not otherwise used.
-var _ context.Context
-var _ grpc.ClientConnInterface
-
-// This is a compile-time assertion to ensure that this generated file
-// is compatible with the grpc package it is being compiled against.
-const _ = grpc.SupportPackageIsVersion6
-
-// ResourceOpenerClient is the client API for ResourceOpener service.
-//
-// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://godoc.org/google.golang.org/grpc#ClientConn.NewStream.
-type ResourceOpenerClient interface {
-	Open(ctx context.Context, in *OpenResourceRequest, opts ...grpc.CallOption) (*OpenResourceResponse, error)
-}
-
-type resourceOpenerClient struct {
-	cc grpc.ClientConnInterface
-}
-
-func NewResourceOpenerClient(cc grpc.ClientConnInterface) ResourceOpenerClient {
-	return &resourceOpenerClient{cc}
-}
-
-func (c *resourceOpenerClient) Open(ctx context.Context, in *OpenResourceRequest, opts ...grpc.CallOption) (*OpenResourceResponse, error) {
-	out := new(OpenResourceResponse)
-	err := c.cc.Invoke(ctx, "/proto.ResourceOpener/Open", in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-// ResourceOpenerServer is the server API for ResourceOpener service.
-type ResourceOpenerServer interface {
-	Open(context.Context, *OpenResourceRequest) (*OpenResourceResponse, error)
-}
-
-// UnimplementedResourceOpenerServer can be embedded to have forward compatible implementations.
-type UnimplementedResourceOpenerServer struct {
-}
-
-func (*UnimplementedResourceOpenerServer) Open(context.Context, *OpenResourceRequest) (*OpenResourceResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method Open not implemented")
-}
-
-func RegisterResourceOpenerServer(s *grpc.Server, srv ResourceOpenerServer) {
-	s.RegisterService(&_ResourceOpener_serviceDesc, srv)
-}
-
-func _ResourceOpener_Open_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(OpenResourceRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(ResourceOpenerServer).Open(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/proto.ResourceOpener/Open",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ResourceOpenerServer).Open(ctx, req.(*OpenResourceRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-var _ResourceOpener_serviceDesc = grpc.ServiceDesc{
-	ServiceName: "proto.ResourceOpener",
-	HandlerType: (*ResourceOpenerServer)(nil),
-	Methods: []grpc.MethodDesc{
-		{
-			MethodName: "Open",
-			Handler:    _ResourceOpener_Open_Handler,
-		},
-	},
-	Streams:  []grpc.StreamDesc{},
-	Metadata: "browser.proto",
-}
-
-// MessengerClient is the client API for Messenger service.
-//
-// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://godoc.org/google.golang.org/grpc#ClientConn.NewStream.
-type MessengerClient interface {
-	SetMessage(ctx context.Context, in *SetMessageRequest, opts ...grpc.CallOption) (*SetMessageResponse, error)
-}
-
-type messengerClient struct {
-	cc grpc.ClientConnInterface
-}
-
-func NewMessengerClient(cc grpc.ClientConnInterface) MessengerClient {
-	return &messengerClient{cc}
-}
-
-func (c *messengerClient) SetMessage(ctx context.Context, in *SetMessageRequest, opts ...grpc.CallOption) (*SetMessageResponse, error) {
-	out := new(SetMessageResponse)
-	err := c.cc.Invoke(ctx, "/proto.Messenger/SetMessage", in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-// MessengerServer is the server API for Messenger service.
-type MessengerServer interface {
-	SetMessage(context.Context, *SetMessageRequest) (*SetMessageResponse, error)
-}
-
-// UnimplementedMessengerServer can be embedded to have forward compatible implementations.
-type UnimplementedMessengerServer struct {
-}
-
-func (*UnimplementedMessengerServer) SetMessage(context.Context, *SetMessageRequest) (*SetMessageResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method SetMessage not implemented")
-}
-
-func RegisterMessengerServer(s *grpc.Server, srv MessengerServer) {
-	s.RegisterService(&_Messenger_serviceDesc, srv)
-}
-
-func _Messenger_SetMessage_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(SetMessageRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(MessengerServer).SetMessage(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/proto.Messenger/SetMessage",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(MessengerServer).SetMessage(ctx, req.(*SetMessageRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-var _Messenger_serviceDesc = grpc.ServiceDesc{
-	ServiceName: "proto.Messenger",
-	HandlerType: (*MessengerServer)(nil),
-	Methods: []grpc.MethodDesc{
-		{
-			MethodName: "SetMessage",
-			Handler:    _Messenger_SetMessage_Handler,
-		},
-	},
-	Streams:  []grpc.StreamDesc{},
-	Metadata: "browser.proto",
-}
-
-// KeyMapperClient is the client API for KeyMapper service.
-//
-// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://godoc.org/google.golang.org/grpc#ClientConn.NewStream.
-type KeyMapperClient interface {
-	MergeKeyMap(ctx context.Context, in *MergeKeyMapRequest, opts ...grpc.CallOption) (*MergeKeyMapResponse, error)
-}
-
-type keyMapperClient struct {
-	cc grpc.ClientConnInterface
-}
-
-func NewKeyMapperClient(cc grpc.ClientConnInterface) KeyMapperClient {
-	return &keyMapperClient{cc}
-}
-
-func (c *keyMapperClient) MergeKeyMap(ctx context.Context, in *MergeKeyMapRequest, opts ...grpc.CallOption) (*MergeKeyMapResponse, error) {
-	out := new(MergeKeyMapResponse)
-	err := c.cc.Invoke(ctx, "/proto.KeyMapper/MergeKeyMap", in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-// KeyMapperServer is the server API for KeyMapper service.
-type KeyMapperServer interface {
-	MergeKeyMap(context.Context, *MergeKeyMapRequest) (*MergeKeyMapResponse, error)
-}
-
-// UnimplementedKeyMapperServer can be embedded to have forward compatible implementations.
-type UnimplementedKeyMapperServer struct {
-}
-
-func (*UnimplementedKeyMapperServer) MergeKeyMap(context.Context, *MergeKeyMapRequest) (*MergeKeyMapResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method MergeKeyMap not implemented")
-}
-
-func RegisterKeyMapperServer(s *grpc.Server, srv KeyMapperServer) {
-	s.RegisterService(&_KeyMapper_serviceDesc, srv)
-}
-
-func _KeyMapper_MergeKeyMap_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(MergeKeyMapRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(KeyMapperServer).MergeKeyMap(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/proto.KeyMapper/MergeKeyMap",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(KeyMapperServer).MergeKeyMap(ctx, req.(*MergeKeyMapRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-var _KeyMapper_serviceDesc = grpc.ServiceDesc{
-	ServiceName: "proto.KeyMapper",
-	HandlerType: (*KeyMapperServer)(nil),
-	Methods: []grpc.MethodDesc{
-		{
-			MethodName: "MergeKeyMap",
-			Handler:    _KeyMapper_MergeKeyMap_Handler,
-		},
-	},
-	Streams:  []grpc.StreamDesc{},
-	Metadata: "browser.proto",
-}
-
-// EventSubscriberClient is the client API for EventSubscriber service.
-//
-// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://godoc.org/google.golang.org/grpc#ClientConn.NewStream.
-type EventSubscriberClient interface {
-	Subscribe(ctx context.Context, in *SubscribeRequest, opts ...grpc.CallOption) (*SubscribeResponse, error)
-}
-
-type eventSubscriberClient struct {
-	cc grpc.ClientConnInterface
-}
-
-func NewEventSubscriberClient(cc grpc.ClientConnInterface) EventSubscriberClient {
-	return &eventSubscriberClient{cc}
-}
-
-func (c *eventSubscriberClient) Subscribe(ctx context.Context, in *SubscribeRequest, opts ...grpc.CallOption) (*SubscribeResponse, error) {
-	out := new(SubscribeResponse)
-	err := c.cc.Invoke(ctx, "/proto.EventSubscriber/Subscribe", in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-// EventSubscriberServer is the server API for EventSubscriber service.
-type EventSubscriberServer interface {
-	Subscribe(context.Context, *SubscribeRequest) (*SubscribeResponse, error)
-}
-
-// UnimplementedEventSubscriberServer can be embedded to have forward compatible implementations.
-type UnimplementedEventSubscriberServer struct {
-}
-
-func (*UnimplementedEventSubscriberServer) Subscribe(context.Context, *SubscribeRequest) (*SubscribeResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method Subscribe not implemented")
-}
-
-func RegisterEventSubscriberServer(s *grpc.Server, srv EventSubscriberServer) {
-	s.RegisterService(&_EventSubscriber_serviceDesc, srv)
-}
-
-func _EventSubscriber_Subscribe_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(SubscribeRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(EventSubscriberServer).Subscribe(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/proto.EventSubscriber/Subscribe",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(EventSubscriberServer).Subscribe(ctx, req.(*SubscribeRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-var _EventSubscriber_serviceDesc = grpc.ServiceDesc{
-	ServiceName: "proto.EventSubscriber",
-	HandlerType: (*EventSubscriberServer)(nil),
-	Methods: []grpc.MethodDesc{
-		{
-			MethodName: "Subscribe",
-			Handler:    _EventSubscriber_Subscribe_Handler,
-		},
-	},
-	Streams:  []grpc.StreamDesc{},
-	Metadata: "browser.proto",
-}
-
-// EventPublisherClient is the client API for EventPublisher service.
-//
-// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://godoc.org/google.golang.org/grpc#ClientConn.NewStream.
-type EventPublisherClient interface {
-	Publish(ctx context.Context, in *PublishRequest, opts ...grpc.CallOption) (*PublishResponse, error)
-}
-
-type eventPublisherClient struct {
-	cc grpc.ClientConnInterface
-}
-
-func NewEventPublisherClient(cc grpc.ClientConnInterface) EventPublisherClient {
-	return &eventPublisherClient{cc}
-}
-
-func (c *eventPublisherClient) Publish(ctx context.Context, in *PublishRequest, opts ...grpc.CallOption) (*PublishResponse, error) {
-	out := new(PublishResponse)
-	err := c.cc.Invoke(ctx, "/proto.EventPublisher/Publish", in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-// EventPublisherServer is the server API for EventPublisher service.
-type EventPublisherServer interface {
-	Publish(context.Context, *PublishRequest) (*PublishResponse, error)
-}
-
-// UnimplementedEventPublisherServer can be embedded to have forward compatible implementations.
-type UnimplementedEventPublisherServer struct {
-}
-
-func (*UnimplementedEventPublisherServer) Publish(context.Context, *PublishRequest) (*PublishResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method Publish not implemented")
-}
-
-func RegisterEventPublisherServer(s *grpc.Server, srv EventPublisherServer) {
-	s.RegisterService(&_EventPublisher_serviceDesc, srv)
-}
-
-func _EventPublisher_Publish_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(PublishRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(EventPublisherServer).Publish(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/proto.EventPublisher/Publish",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(EventPublisherServer).Publish(ctx, req.(*PublishRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-var _EventPublisher_serviceDesc = grpc.ServiceDesc{
-	ServiceName: "proto.EventPublisher",
-	HandlerType: (*EventPublisherServer)(nil),
-	Methods: []grpc.MethodDesc{
-		{
-			MethodName: "Publish",
-			Handler:    _EventPublisher_Publish_Handler,
-		},
-	},
-	Streams:  []grpc.StreamDesc{},
-	Metadata: "browser.proto",
-}
-
-// WindowManagerClient is the client API for WindowManager service.
-//
-// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://godoc.org/google.golang.org/grpc#ClientConn.NewStream.
-type WindowManagerClient interface {
-	Focus(ctx context.Context, in *FocusRequest, opts ...grpc.CallOption) (*FocusResponse, error)
-	Split(ctx context.Context, in *SplitRequest, opts ...grpc.CallOption) (*SplitResponse, error)
-	Bar(ctx context.Context, in *BarRequest, opts ...grpc.CallOption) (*BarResponse, error)
-	Floating(ctx context.Context, in *FloatingWindowRequest, opts ...grpc.CallOption) (*FloatingWindowResponse, error)
-}
-
-type windowManagerClient struct {
-	cc grpc.ClientConnInterface
-}
-
-func NewWindowManagerClient(cc grpc.ClientConnInterface) WindowManagerClient {
-	return &windowManagerClient{cc}
-}
-
-func (c *windowManagerClient) Focus(ctx context.Context, in *FocusRequest, opts ...grpc.CallOption) (*FocusResponse, error) {
-	out := new(FocusResponse)
-	err := c.cc.Invoke(ctx, "/proto.WindowManager/Focus", in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *windowManagerClient) Split(ctx context.Context, in *SplitRequest, opts ...grpc.CallOption) (*SplitResponse, error) {
-	out := new(SplitResponse)
-	err := c.cc.Invoke(ctx, "/proto.WindowManager/Split", in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *windowManagerClient) Bar(ctx context.Context, in *BarRequest, opts ...grpc.CallOption) (*BarResponse, error) {
-	out := new(BarResponse)
-	err := c.cc.Invoke(ctx, "/proto.WindowManager/Bar", in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *windowManagerClient) Floating(ctx context.Context, in *FloatingWindowRequest, opts ...grpc.CallOption) (*FloatingWindowResponse, error) {
-	out := new(FloatingWindowResponse)
-	err := c.cc.Invoke(ctx, "/proto.WindowManager/Floating", in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-// WindowManagerServer is the server API for WindowManager service.
-type WindowManagerServer interface {
-	Focus(context.Context, *FocusRequest) (*FocusResponse, error)
-	Split(context.Context, *SplitRequest) (*SplitResponse, error)
-	Bar(context.Context, *BarRequest) (*BarResponse, error)
-	Floating(context.Context, *FloatingWindowRequest) (*FloatingWindowResponse, error)
-}
-
-// UnimplementedWindowManagerServer can be embedded to have forward compatible implementations.
-type UnimplementedWindowManagerServer struct {
-}
-
-func (*UnimplementedWindowManagerServer) Focus(context.Context, *FocusRequest) (*FocusResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method Focus not implemented")
-}
-func (*UnimplementedWindowManagerServer) Split(context.Context, *SplitRequest) (*SplitResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method Split not implemented")
-}
-func (*UnimplementedWindowManagerServer) Bar(context.Context, *BarRequest) (*BarResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method Bar not implemented")
-}
-func (*UnimplementedWindowManagerServer) Floating(context.Context, *FloatingWindowRequest) (*FloatingWindowResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method Floating not implemented")
-}
-
-func RegisterWindowManagerServer(s *grpc.Server, srv WindowManagerServer) {
-	s.RegisterService(&_WindowManager_serviceDesc, srv)
-}
-
-func _WindowManager_Focus_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(FocusRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(WindowManagerServer).Focus(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/proto.WindowManager/Focus",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(WindowManagerServer).Focus(ctx, req.(*FocusRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _WindowManager_Split_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(SplitRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(WindowManagerServer).Split(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/proto.WindowManager/Split",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(WindowManagerServer).Split(ctx, req.(*SplitRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _WindowManager_Bar_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(BarRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(WindowManagerServer).Bar(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/proto.WindowManager/Bar",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(WindowManagerServer).Bar(ctx, req.(*BarRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _WindowManager_Floating_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(FloatingWindowRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(WindowManagerServer).Floating(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/proto.WindowManager/Floating",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(WindowManagerServer).Floating(ctx, req.(*FloatingWindowRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-var _WindowManager_serviceDesc = grpc.ServiceDesc{
-	ServiceName: "proto.WindowManager",
-	HandlerType: (*WindowManagerServer)(nil),
-	Methods: []grpc.MethodDesc{
-		{
-			MethodName: "Focus",
-			Handler:    _WindowManager_Focus_Handler,
-		},
-		{
-			MethodName: "Split",
-			Handler:    _WindowManager_Split_Handler,
-		},
-		{
-			MethodName: "Bar",
-			Handler:    _WindowManager_Bar_Handler,
-		},
-		{
-			MethodName: "Floating",
-			Handler:    _WindowManager_Floating_Handler,
-		},
-	},
-	Streams:  []grpc.StreamDesc{},
-	Metadata: "browser.proto",
-}
-
-// WindowClient is the client API for Window service.
-//
-// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://godoc.org/google.golang.org/grpc#ClientConn.NewStream.
-type WindowClient interface {
-	SetContent(ctx context.Context, in *WindowSetContentRequest, opts ...grpc.CallOption) (*WindowSetContentResponse, error)
-	Content(ctx context.Context, in *WindowContentRequest, opts ...grpc.CallOption) (*WindowContentResponse, error)
-	Close(ctx context.Context, in *WindowCloseRequest, opts ...grpc.CallOption) (*WindowCloseResponse, error)
-}
-
-type windowClient struct {
-	cc grpc.ClientConnInterface
-}
-
-func NewWindowClient(cc grpc.ClientConnInterface) WindowClient {
-	return &windowClient{cc}
-}
-
-func (c *windowClient) SetContent(ctx context.Context, in *WindowSetContentRequest, opts ...grpc.CallOption) (*WindowSetContentResponse, error) {
-	out := new(WindowSetContentResponse)
-	err := c.cc.Invoke(ctx, "/proto.Window/SetContent", in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *windowClient) Content(ctx context.Context, in *WindowContentRequest, opts ...grpc.CallOption) (*WindowContentResponse, error) {
-	out := new(WindowContentResponse)
-	err := c.cc.Invoke(ctx, "/proto.Window/Content", in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *windowClient) Close(ctx context.Context, in *WindowCloseRequest, opts ...grpc.CallOption) (*WindowCloseResponse, error) {
-	out := new(WindowCloseResponse)
-	err := c.cc.Invoke(ctx, "/proto.Window/Close", in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-// WindowServer is the server API for Window service.
-type WindowServer interface {
-	SetContent(context.Context, *WindowSetContentRequest) (*WindowSetContentResponse, error)
-	Content(context.Context, *WindowContentRequest) (*WindowContentResponse, error)
-	Close(context.Context, *WindowCloseRequest) (*WindowCloseResponse, error)
-}
-
-// UnimplementedWindowServer can be embedded to have forward compatible implementations.
-type UnimplementedWindowServer struct {
-}
-
-func (*UnimplementedWindowServer) SetContent(context.Context, *WindowSetContentRequest) (*WindowSetContentResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method SetContent not implemented")
-}
-func (*UnimplementedWindowServer) Content(context.Context, *WindowContentRequest) (*WindowContentResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method Content not implemented")
-}
-func (*UnimplementedWindowServer) Close(context.Context, *WindowCloseRequest) (*WindowCloseResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method Close not implemented")
-}
-
-func RegisterWindowServer(s *grpc.Server, srv WindowServer) {
-	s.RegisterService(&_Window_serviceDesc, srv)
-}
-
-func _Window_SetContent_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(WindowSetContentRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(WindowServer).SetContent(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/proto.Window/SetContent",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(WindowServer).SetContent(ctx, req.(*WindowSetContentRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _Window_Content_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(WindowContentRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(WindowServer).Content(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/proto.Window/Content",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(WindowServer).Content(ctx, req.(*WindowContentRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _Window_Close_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(WindowCloseRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(WindowServer).Close(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/proto.Window/Close",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(WindowServer).Close(ctx, req.(*WindowCloseRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-var _Window_serviceDesc = grpc.ServiceDesc{
-	ServiceName: "proto.Window",
-	HandlerType: (*WindowServer)(nil),
-	Methods: []grpc.MethodDesc{
-		{
-			MethodName: "SetContent",
-			Handler:    _Window_SetContent_Handler,
-		},
-		{
-			MethodName: "Content",
-			Handler:    _Window_Content_Handler,
-		},
-		{
-			MethodName: "Close",
-			Handler:    _Window_Close_Handler,
-		},
-	},
-	Streams:  []grpc.StreamDesc{},
-	Metadata: "browser.proto",
 }

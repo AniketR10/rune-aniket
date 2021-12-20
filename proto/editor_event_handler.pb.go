@@ -7,11 +7,7 @@
 package proto
 
 import (
-	context "context"
 	proto "github.com/golang/protobuf/proto"
-	grpc "google.golang.org/grpc"
-	codes "google.golang.org/grpc/codes"
-	status "google.golang.org/grpc/status"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
@@ -234,84 +230,4 @@ func file_editor_event_handler_proto_init() {
 	file_editor_event_handler_proto_rawDesc = nil
 	file_editor_event_handler_proto_goTypes = nil
 	file_editor_event_handler_proto_depIdxs = nil
-}
-
-// Reference imports to suppress errors if they are not otherwise used.
-var _ context.Context
-var _ grpc.ClientConnInterface
-
-// This is a compile-time assertion to ensure that this generated file
-// is compatible with the grpc package it is being compiled against.
-const _ = grpc.SupportPackageIsVersion6
-
-// EditorEventHandlerClient is the client API for EditorEventHandler service.
-//
-// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://godoc.org/google.golang.org/grpc#ClientConn.NewStream.
-type EditorEventHandlerClient interface {
-	Handle(ctx context.Context, in *EditorEventHandleRequest, opts ...grpc.CallOption) (*EditorEventHandleResponse, error)
-}
-
-type editorEventHandlerClient struct {
-	cc grpc.ClientConnInterface
-}
-
-func NewEditorEventHandlerClient(cc grpc.ClientConnInterface) EditorEventHandlerClient {
-	return &editorEventHandlerClient{cc}
-}
-
-func (c *editorEventHandlerClient) Handle(ctx context.Context, in *EditorEventHandleRequest, opts ...grpc.CallOption) (*EditorEventHandleResponse, error) {
-	out := new(EditorEventHandleResponse)
-	err := c.cc.Invoke(ctx, "/proto.EditorEventHandler/Handle", in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-// EditorEventHandlerServer is the server API for EditorEventHandler service.
-type EditorEventHandlerServer interface {
-	Handle(context.Context, *EditorEventHandleRequest) (*EditorEventHandleResponse, error)
-}
-
-// UnimplementedEditorEventHandlerServer can be embedded to have forward compatible implementations.
-type UnimplementedEditorEventHandlerServer struct {
-}
-
-func (*UnimplementedEditorEventHandlerServer) Handle(context.Context, *EditorEventHandleRequest) (*EditorEventHandleResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method Handle not implemented")
-}
-
-func RegisterEditorEventHandlerServer(s *grpc.Server, srv EditorEventHandlerServer) {
-	s.RegisterService(&_EditorEventHandler_serviceDesc, srv)
-}
-
-func _EditorEventHandler_Handle_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(EditorEventHandleRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(EditorEventHandlerServer).Handle(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/proto.EditorEventHandler/Handle",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(EditorEventHandlerServer).Handle(ctx, req.(*EditorEventHandleRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-var _EditorEventHandler_serviceDesc = grpc.ServiceDesc{
-	ServiceName: "proto.EditorEventHandler",
-	HandlerType: (*EditorEventHandlerServer)(nil),
-	Methods: []grpc.MethodDesc{
-		{
-			MethodName: "Handle",
-			Handler:    _EditorEventHandler_Handle_Handler,
-		},
-	},
-	Streams:  []grpc.StreamDesc{},
-	Metadata: "editor_event_handler.proto",
 }

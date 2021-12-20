@@ -229,11 +229,7 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 	h := browser.NewTestHandler()
 	h.Ch = 'Z' // helps identify in tests
 
-	err = b.SubscribeTermEvents(term.Event{Type: term.EventKey, Ch: '&'},
-		browser.FuncEventHandler(func(ev term.Event) bool {
-			b.Split(browser.OrientationBottom, h)
-			return false
-		}))
+	_, err = b.Split(browser.OrientationBottom, h)
 	require.NoError(t, err)
 
 	newMappings := map[term.Event]term.Event{
@@ -243,12 +239,12 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 	require.NoError(t, b.MergeKeyMap(newMappings))
 
 	cases = []testutil.HandlerSequenceTestCase{
-		{"&_",
+		{"_",
 			`┌──────────────────┐
 │cabin.go  other.go│
 ├────────┐┌────────┤
-│BBBBBBBB││EEEEEEEE│
-│BBBBBBBB││EEEEEEEE│
+│AAAAAAAA││EEEEEEEE│
+│AAAAAAAA││EEEEEEEE│
 └────────┘│EEEEEEEE│
 ┌────────┐│EEEEEEEE│
 │ZZZZZZZZ││EEEEEEEE│
@@ -258,8 +254,8 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 			`┌──────────────────┐
 │cabin.go  other.go│
 ├────────┐┌────────┤
-│BBBBBBBB││EEEEEEEE│
-│BBBBBBBB││EEEEEEEE│
+│AAAAAAAA││EEEEEEEE│
+│AAAAAAAA││EEEEEEEE│
 └────────┘│EEEEEEEE│
 ┌────────┐│EEEEEEEE│
 │cccccccc││EEEEEEEE│
@@ -487,57 +483,6 @@ func assertHandled(
 	require.False(t, exit)
 	require.True(t, handled)
 	assert.NotEqual(t, startingRune, h.Ch)
-}
-
-func newBrowserForSubscribeTest(t *testing.T, ev term.Event) (
-	*Ex, *browser.TestHandler, rune,
-) {
-	b := new(Ex)
-	opts := withOpenFileStubs()
-	require.NoError(t, b.Init(editor.Mock(), opts...))
-
-	h := browser.NewTestHandler()
-	err := b.Browser().SubscribeTermEvents(ev, browser.HandlerEventHandler(h))
-	require.NoError(t, err)
-
-	return b, h, h.Ch
-}
-
-func TestBrowserHandlerSubscribe(t *testing.T) {
-	ev := term.Event{Type: term.EventKey, Ch: '*'}
-	t.Run("proxies event to subscribed EventHandler", func(t *testing.T) {
-		b, h, startingRune := newBrowserForSubscribeTest(t, ev)
-		defer b.Close()
-
-		exit, handled := b.Handle(ev)
-		assertHandled(t, h, startingRune, exit, handled)
-	})
-
-	t.Run("returns error on second event Subscribe", func(t *testing.T) {
-		b, h, startingRune := newBrowserForSubscribeTest(t, ev)
-		defer b.Close()
-
-		h2 := browser.NewTestHandler()
-		err := b.Browser().SubscribeTermEvents(ev, browser.HandlerEventHandler(h2))
-		assert.Error(t, err)
-
-		exit, handled := b.Handle(ev)
-		assertHandled(t, h, startingRune, exit, handled)
-	})
-
-	t.Run("upon handler exit, it unsubscribes EventHandler", func(t *testing.T) {
-		b, h, startingRune := newBrowserForSubscribeTest(t, ev)
-		defer b.Close()
-		h.Exit = true
-
-		exit, handled := b.Handle(ev)
-		assertHandled(t, h, startingRune, exit, handled)
-
-		nextRune := h.Ch
-		exit, _ = b.Handle(ev)
-		assert.False(t, exit)
-		assert.Equal(t, nextRune, h.Ch)
-	})
 }
 
 func TestBrowserHandlerPublishInterrupt(t *testing.T) {

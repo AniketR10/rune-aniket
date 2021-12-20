@@ -38,8 +38,6 @@ func TestIntegrationRace(t *testing.T) {
 	keymap := map[term.Event]term.Event{
 		evKeyCtrlA: {Type: term.EventKey, Key: term.KeyCtrlB},
 	}
-	nopHandler := browser.FuncEventHandler(func(term.Event) bool { return false })
-
 	cache := document.NewInMemoryCache()
 	broker := proto.NewDatastoreBroker(cache, nil)
 	defer broker.Close()
@@ -55,7 +53,6 @@ func TestIntegrationRace(t *testing.T) {
 		PermissionBrowserKeyMapper:       broker.NextId(),
 		PermissionBrowserResourceOpener:  broker.NextId(),
 		PermissionBrowserMessenger:       broker.NextId(),
-		PermissionBrowserEventSubscriber: broker.NextId(),
 		PermissionBrowserEventPublisher:  broker.NextId(),
 		PermissionEditor:                 broker.NextId(),
 		PermissionBrowserStorage:         broker.NextId(),
@@ -116,13 +113,6 @@ func TestIntegrationRace(t *testing.T) {
 			return mock.SetMessage(gomock.Any()).Return(nil)
 		}, func(ifc interface{}) error {
 			return ifc.(browser.Messenger).SetMessage("")
-		}},
-		{PermissionBrowserEventSubscriber, func(token uint32, broker proto.MuxBroker) (interface{}, error) {
-			return EventSubscriber(token, broker)
-		}, func(ed *editor.MockEditorMockRecorder, mock *browser.MockBrowserMockRecorder) *gomock.Call {
-			return mock.SubscribeTermEvents(gomock.Any(), gomock.Any()).Return(nil)
-		}, func(ifc interface{}) error {
-			return ifc.(browser.EventSubscriber).SubscribeTermEvents(evKeyCtrlA, nopHandler)
 		}},
 		{PermissionBrowserEventPublisher, func(token uint32, broker proto.MuxBroker) (interface{}, error) {
 			return EventPublisher(token, broker)

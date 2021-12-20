@@ -330,43 +330,6 @@ func (mr *MockEventHandlerMockRecorder) Handle(arg0 interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Handle", reflect.TypeOf((*MockEventHandler)(nil).Handle), arg0)
 }
 
-// MockEventSubscriber is a mock of EventSubscriber interface.
-type MockEventSubscriber struct {
-	ctrl     *gomock.Controller
-	recorder *MockEventSubscriberMockRecorder
-}
-
-// MockEventSubscriberMockRecorder is the mock recorder for MockEventSubscriber.
-type MockEventSubscriberMockRecorder struct {
-	mock *MockEventSubscriber
-}
-
-// NewMockEventSubscriber creates a new mock instance.
-func NewMockEventSubscriber(ctrl *gomock.Controller) *MockEventSubscriber {
-	mock := &MockEventSubscriber{ctrl: ctrl}
-	mock.recorder = &MockEventSubscriberMockRecorder{mock}
-	return mock
-}
-
-// EXPECT returns an object that allows the caller to indicate expected use.
-func (m *MockEventSubscriber) EXPECT() *MockEventSubscriberMockRecorder {
-	return m.recorder
-}
-
-// SubscribeTermEvents mocks base method.
-func (m *MockEventSubscriber) SubscribeTermEvents(arg0 term.Event, arg1 EventHandler) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SubscribeTermEvents", arg0, arg1)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// SubscribeTermEvents indicates an expected call of SubscribeTermEvents.
-func (mr *MockEventSubscriberMockRecorder) SubscribeTermEvents(arg0, arg1 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubscribeTermEvents", reflect.TypeOf((*MockEventSubscriber)(nil).SubscribeTermEvents), arg0, arg1)
-}
-
 // MockKeyMapper is a mock of KeyMapper interface.
 type MockKeyMapper struct {
 	ctrl     *gomock.Controller
@@ -870,20 +833,6 @@ func (m *MockBrowser) Split(arg0 Orientation, arg1 Handler) (Window, error) {
 func (mr *MockBrowserMockRecorder) Split(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Split", reflect.TypeOf((*MockBrowser)(nil).Split), arg0, arg1)
-}
-
-// SubscribeTermEvents mocks base method.
-func (m *MockBrowser) SubscribeTermEvents(arg0 term.Event, arg1 EventHandler) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SubscribeTermEvents", arg0, arg1)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// SubscribeTermEvents indicates an expected call of SubscribeTermEvents.
-func (mr *MockBrowserMockRecorder) SubscribeTermEvents(arg0, arg1 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubscribeTermEvents", reflect.TypeOf((*MockBrowser)(nil).SubscribeTermEvents), arg0, arg1)
 }
 
 // Update mocks base method.

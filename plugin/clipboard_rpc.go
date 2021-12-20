@@ -17,6 +17,7 @@ const (
 )
 
 type clipboardSetterServer struct {
+	proto.UnimplementedClipboardServer
 	broker         proto.MuxBroker
 	mu             sync.Mutex
 	clients        map[uint64]io.Closer
@@ -149,6 +150,7 @@ type clipboardSetterClient struct {
 }
 
 type clipboardRegisterServer struct {
+	proto.UnimplementedClipboardRegisterServer
 	srv proto.MuxServer
 	r   ClipboardRegister
 }

@@ -17,6 +17,7 @@ const (
 )
 
 type granteeServer struct {
+	proto.UnimplementedGranteeServer
 	mu        sync.Mutex
 	req       []Permission
 	broker    proto.MuxBroker

@@ -377,11 +377,6 @@ func (e *Ex) handleProxy(ev term.Event) (
 		if handled {
 			return
 		}
-
-		handled = e.comp.Publish(mev)
-		if handled {
-			return
-		}
 		// If ex is configured with character
 		// command mode trigger event (i.e. ':')
 		// then we assume that the underlying editor is

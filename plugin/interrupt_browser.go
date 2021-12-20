@@ -10,7 +10,6 @@ import (
 type browserServer interface {
 	proto.WindowManagerServer
 	proto.EventPublisherServer
-	proto.EventSubscriberServer
 	proto.KeyMapperServer
 	proto.MessengerServer
 	proto.ResourceOpenerServer
@@ -20,6 +19,11 @@ type browserServer interface {
 // this structure wraps a browser.Browser to
 // provide interrupt on write requests coming from the wire
 type interruptBrowser struct {
+	proto.UnimplementedEventPublisherServer
+	proto.UnimplementedKeyMapperServer
+	proto.UnimplementedMessengerServer
+	proto.UnimplementedResourceOpenerServer
+	proto.UnimplementedWindowManagerServer
 	browserServer browserServer
 	interruptDraw func()
 }
@@ -94,15 +98,6 @@ func (s *interruptBrowser) Open(
 	ctx context.Context, req *proto.OpenResourceRequest,
 ) (*proto.OpenResourceResponse, error) {
 	res, err := s.browserServer.Open(ctx, req)
-	s.interruptDraw()
-	return res, err
-}
-
-// Subscribe satisfies proto.BrowserServer
-func (s *interruptBrowser) Subscribe(
-	ctx context.Context, req *proto.SubscribeRequest,
-) (*proto.SubscribeResponse, error) {
-	res, err := s.browserServer.Subscribe(ctx, req)
 	s.interruptDraw()
 	return res, err
 }

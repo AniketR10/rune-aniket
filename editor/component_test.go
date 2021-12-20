@@ -139,51 +139,6 @@ func TestComponentKeyMapper(t *testing.T) {
 	})
 }
 
-func TestComponentTermSubscriber(t *testing.T) {
-	t.Run("Publish on a non-mapped event returns false", func(t *testing.T) {
-		c := newTestComponent(t, &testEditor{})
-
-		ok := c.Publish(keya)
-		assert.False(t, ok)
-	})
-
-	t.Run("only allows Key event subscriptions", func(t *testing.T) {
-		c := newTestComponent(t, &testEditor{})
-
-		err := c.SubscribeTermEvents(evInterrupt, browser.FuncEventHandler(func(term.Event) bool { return false }))
-		require.Error(t, err)
-	})
-
-	t.Run("only allows ONE subscription. Second attempt returns error", func(t *testing.T) {
-		c := newTestComponent(t, &testEditor{})
-
-		err := c.SubscribeTermEvents(keya, browser.FuncEventHandler(func(term.Event) bool { return false }))
-		require.NoError(t, err)
-		err = c.SubscribeTermEvents(keya, browser.FuncEventHandler(func(term.Event) bool { return false }))
-		require.Error(t, err)
-	})
-
-	t.Run("Publish publishes event to ONE subscribed handler", func(t *testing.T) {
-		c := newTestComponent(t, &testEditor{})
-
-		var called int
-		err := c.SubscribeTermEvents(keya, browser.FuncEventHandler(func(term.Event) bool {
-			called++
-			return false
-		}))
-		require.NoError(t, err)
-		err = c.SubscribeTermEvents(keya, browser.FuncEventHandler(func(term.Event) bool {
-			called++
-			return false
-		}))
-		require.Error(t, err)
-
-		handled := c.Publish(keya)
-		assert.True(t, handled)
-		assert.Equal(t, 1, called)
-	})
-}
-
 func newTestComponentWithFile(
 	t *testing.T, filename string,
 ) (*Component, browser.Handler) {

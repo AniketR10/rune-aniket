@@ -16,7 +16,6 @@ import (
 	"github.com/ernestrc/go-tui/proto"
 	"github.com/ernestrc/go-tui/term"
 	log "github.com/sirupsen/logrus"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/goleak"
 	"google.golang.org/grpc"
@@ -102,7 +101,6 @@ func newTestRPCBrowser(t *testing.T,
 		proto.RegisterMessengerServer(grpcServer, server)
 		proto.RegisterKeyMapperServer(grpcServer, server)
 		proto.RegisterResourceOpenerServer(grpcServer, server)
-		proto.RegisterEventSubscriberServer(grpcServer, server)
 
 		go grpcServer.Serve(lis)
 
@@ -145,39 +143,6 @@ func TestRPCBrowserCloseLeak(t *testing.T) {
 	// NOTE: to reason about window/handler resource leaks
 	// uncomment next line and analyze running goroutines
 	// goleak.VerifyNone(t)
-}
-
-// NOTE: run go test -race in order for this test to be useful.
-func TestClientSynchronizeHandlers(t *testing.T) {
-	var destructor func()
-	h, b, err := newTestRPCBrowser(t, &destructor)(editor.Mock(),
-		editor.WithFilepath(""))
-	require.NoError(t, err)
-	defer destructor()
-	var wg sync.WaitGroup
-
-	h1 := browser.TestHandler{}
-
-	subs := []term.Event{
-		{Type: term.EventKey, Ch: 'A'},
-		{Type: term.EventKey, Ch: 'J'},
-		{Type: term.EventKey, Ch: 'H'},
-		{Type: term.EventKey, Ch: 'B'},
-	}
-
-	for _, ev := range subs {
-		h := &groupEventHandler{wg: &wg, h: &h1}
-		err = b.SubscribeTermEvents(ev, h)
-		require.NoError(t, err)
-	}
-
-	for _, ev := range subs {
-		wg.Add(1)
-		_, handled := h.Handle(ev)
-		assert.True(t, handled)
-	}
-
-	wg.Wait()
 }
 
 func TestMain(m *testing.M) {

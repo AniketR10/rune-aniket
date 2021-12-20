@@ -16,7 +16,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/connectivity"
 )
 
 const asyncResultsSleepDuration = 300 * time.Millisecond
@@ -268,117 +267,6 @@ func assertServerServersEqual(t *testing.T, expected int, s *Server) {
 	assert.Equal(t, expected, len(s.servers))
 }
 
-func TestServerSubscribe(t *testing.T) {
-	ctx := context.Background()
-	handlerID := uint64(31)
-	protoEv := proto.Event{Mod: proto.Event_Alt, Char: '5'}
-	req := proto.SubscribeRequest{
-		Ev:        &protoEv,
-		HandlerId: handlerID,
-	}
-
-	t.Run("dials to remote handler and delegates Subscribe to underlying Browser", func(t *testing.T) {
-		termEv := term.Event{Mod: term.ModAlt, Ch: '5'}
-		ctrl := gomock.NewController(t)
-		defer ctrl.Finish()
-		var mu sync.Mutex
-		mock := NewMockBrowser(ctrl)
-		mockBroker := proto.NewMockMuxBroker(ctrl)
-		s := NewServer(mockBroker, mock, &mu)
-
-		var h EventHandler
-		handlerConn := prototest.ExpectBrokerDial(t, ctrl, mockBroker, uint32(handlerID))
-		quitCh := prototest.ExpectMonitorConn(handlerConn)
-		mock.EXPECT().SubscribeTermEvents(gomock.Any(), gomock.Any()).
-			DoAndReturn(func(ev term.Event, _h EventHandler) error {
-				assert.Equal(t, termEv, ev)
-				h = _h
-				return nil
-			})
-
-		res, err := s.Subscribe(ctx, &req)
-		require.NoError(t, err)
-		assert.NotNil(t, res)
-
-		assertServerHandlerExitClose(t, handlerConn,
-			eventHandlerToHandler{h}, s, termEv, quitCh)
-	})
-
-	t.Run("returns browser Subscribe dial to handler error", func(t *testing.T) {
-		ctrl := gomock.NewController(t)
-		defer ctrl.Finish()
-		var mu sync.Mutex
-		s, _, mockBroker := newTestServer(ctrl, &mu)
-
-		prototest.ExpectBrokerDialError(t, ctrl, mockBroker, uint32(handlerID))
-
-		res, err := s.Subscribe(ctx, &req)
-		require.Error(t, err)
-		assert.Nil(t, res)
-
-		assertServerServersEqual(t, 0, s)
-	})
-
-	t.Run("returns browser Subscribe rpc error and so closes handler connection", func(t *testing.T) {
-		ctrl := gomock.NewController(t)
-		defer ctrl.Finish()
-		var mu sync.Mutex
-		s, mock, mockBroker := newTestServer(ctrl, &mu)
-
-		handlerConn := prototest.ExpectBrokerDial(t, ctrl, mockBroker, uint32(handlerID))
-		mock.EXPECT().SubscribeTermEvents(gomock.Any(), gomock.Any()).
-			Return(errors.New("woopsie"))
-
-		quitCh := prototest.ExpectMonitorConn(handlerConn)
-		handlerConn.EXPECT().Close().Times(1).
-			DoAndReturn(prototest.ExpectSignalExit(handlerConn, quitCh, nil))
-		res, err := s.Subscribe(ctx, &req)
-		require.Error(t, err)
-		assert.Nil(t, res)
-
-		waitForMonitoringExit(quitCh)
-
-		assertServerClientsEqual(t, 0, s)
-		assertServerServersEqual(t, 0, s)
-	})
-
-	t.Run("handles transient failures by eventually shutting down connection", func(t *testing.T) {
-		ctrl := gomock.NewController(t)
-		defer ctrl.Finish()
-		var mu sync.Mutex
-		s, mock, mockBroker := newTestServer(ctrl, &mu)
-		s.failureTimeout = 50 * time.Millisecond
-
-		handlerConn := prototest.ExpectBrokerDial(t, ctrl, mockBroker, uint32(handlerID))
-
-		quitCh := make(chan struct{})
-		handlerConn.EXPECT().GetState().Return(connectivity.TransientFailure).AnyTimes()
-		handlerConn.EXPECT().WaitForStateChange(gomock.Any(), gomock.Any()).
-			DoAndReturn(func(ctx context.Context, sourceState connectivity.State) bool {
-				switch sourceState {
-				case connectivity.TransientFailure:
-					select {
-					case <-ctx.Done():
-						return false
-					case _, ok := <-quitCh:
-						return ok
-					}
-				default:
-					return false
-				}
-			}).Times(1)
-
-		handlerConn.EXPECT().Close().Times(1).
-			DoAndReturn(prototest.ExpectSignalExit(handlerConn, quitCh, nil))
-		mock.EXPECT().SubscribeTermEvents(gomock.Any(), gomock.Any()).Return(nil)
-		_, err := s.Subscribe(ctx, &req)
-		require.NoError(t, err)
-
-		waitForMonitoringExit(quitCh)
-	})
-
-	assertNoLeaks(t)
-}
 
 func TestServerFloatingWindow(t *testing.T) {
 	// TODO

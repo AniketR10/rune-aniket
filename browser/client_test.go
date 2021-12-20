@@ -305,48 +305,6 @@ func TestClientOpen(t *testing.T) {
 	})
 }
 
-func TestClientSubscribe(t *testing.T) {
-	t.Run("bubbles up rpc error and so stops event handler resources", func(t *testing.T) {
-		ctrl := gomock.NewController(t)
-		defer ctrl.Finish()
-
-		client, mockCC, mockBroker := newMockedClient(ctrl)
-
-		prototest.ExpectBrokerServe(t, 1, mockBroker)
-		expectInvokeError(mockCC)
-
-		err := client.SubscribeTermEvents(term.Event{}, nil)
-		assertInvokeError(t, err)
-
-		assertClientServersEqual(t, 0, client)
-		assertClientClientsEqual(t, 0, client)
-	})
-
-	t.Run("sends event subscribe request to server", func(t *testing.T) {
-		ctrl := gomock.NewController(t)
-		defer ctrl.Finish()
-
-		client, mockCC, mockBroker := newMockedClient(ctrl)
-
-		prototest.ExpectBrokerServe(t, 1, mockBroker)
-
-		in := &proto.SubscribeRequest{Ev: &proto.Event{Char: 'a'}, HandlerId: 1}
-		out := new(proto.SubscribeResponse)
-
-		mockCC.EXPECT().
-			Invoke(gomock.Any(),
-				gomock.Eq("/proto.EventSubscriber/Subscribe"),
-				gomock.Eq(in), gomock.Eq(out)).
-			Times(1)
-
-		h := NewTestHandler()
-		err := client.SubscribeTermEvents(term.Event{Ch: 'a'}, handlerToEventHandler{h})
-		require.NoError(t, err)
-
-		assertClientHandlerExitClose(t, h, nil, client, false)
-	})
-}
-
 func TestClientPublish(t *testing.T) {
 	t.Run("bubbles up rpc error and so stops event handler resources", func(t *testing.T) {
 		ctrl := gomock.NewController(t)

@@ -74,15 +74,6 @@ message FocusResponse {
 	uint64 window_id = 1;
 }
 
-
-message SubscribeRequest {
-	Event ev = 1;
-	uint64 handler_id = 2;
-}
-
-message SubscribeResponse {
-}
-
 message PublishRequest {
 	Event ev = 1;
 }
@@ -100,10 +91,6 @@ service Messenger {
 
 service KeyMapper {
 	rpc MergeKeyMap(MergeKeyMapRequest) returns (MergeKeyMapResponse);
-}
-
-service EventSubscriber {
-	rpc Subscribe(SubscribeRequest) returns (SubscribeResponse);
 }
 
 service EventPublisher {

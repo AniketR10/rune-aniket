@@ -9,6 +9,7 @@ import (
 )
 
 type interruptWindow struct {
+	proto.UnimplementedWindowServer
 	srv           proto.WindowServer
 	interruptDraw func()
 }

@@ -88,6 +88,7 @@ func (w *windowClient) Close() (err error) {
 
 // satisfies proto.WindowServer
 type windowServer struct {
+	proto.UnimplementedWindowServer
 	win Window
 	s   *Server
 }

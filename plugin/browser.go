@@ -20,8 +20,6 @@ const (
 	PermissionBrowserResourceOpener = "_PermBrowserResourceOpener"
 	// PermissionBrowserMessenger requests access to send messages to the UI.
 	PermissionBrowserMessenger = "_PermBrowserMessenger"
-	// PermissionBrowserEventSubscriber requests access subscribe to term events.
-	PermissionBrowserEventSubscriber = "_PermBrowserEventSubscriber"
 	// PermissionBrowserEventPublisher requests access to publish term events.
 	// This is useful if your plugin handler does async updates to its state, as
 	// it enables interrupting the main event loop to redraw components.
@@ -68,7 +66,6 @@ func (s *browserResourceServer) Serve(
 			proto.RegisterKeyMapperServer(grpc, rpcServer)
 			proto.RegisterResourceOpenerServer(grpc, rpcServer)
 			proto.RegisterMessengerServer(grpc, rpcServer)
-			proto.RegisterEventSubscriberServer(grpc, rpcServer)
 			proto.RegisterEventPublisherServer(grpc, rpcServer)
 			bproto.RegisterDocumentStoreServer(grpc, rpcServer)
 		}
@@ -85,7 +82,6 @@ func BrowserResources(b browser.Browser) map[Permission]ResourceServer {
 		PermissionBrowserKeyMapper:       s,
 		PermissionBrowserResourceOpener:  s,
 		PermissionBrowserMessenger:       s,
-		PermissionBrowserEventSubscriber: s,
 		PermissionBrowserEventPublisher:  s,
 		PermissionBrowserStorage:         s,
 	}
@@ -135,14 +131,6 @@ func ResourceOpener(token uint32, broker proto.MuxBroker) (
 // resource with the given token.
 func Messenger(token uint32, broker proto.MuxBroker) (
 	browser.Messenger, error,
-) {
-	return dialBrowser(token, broker)
-}
-
-// EventSubscriber acquires the browser's EventSubscriber
-// resource with the given token.
-func EventSubscriber(token uint32, broker proto.MuxBroker) (
-	browser.EventSubscriber, error,
 ) {
 	return dialBrowser(token, broker)
 }

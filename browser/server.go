@@ -18,6 +18,11 @@ import (
 
 // Server serves a Browser over GRPC.
 type Server struct {
+	proto.UnimplementedEventPublisherServer
+	proto.UnimplementedKeyMapperServer
+	proto.UnimplementedMessengerServer
+	proto.UnimplementedResourceOpenerServer
+	proto.UnimplementedWindowManagerServer
 	document.Server
 
 	Logger *log.Logger
@@ -26,8 +31,8 @@ type Server struct {
 
 	failureTimeout time.Duration
 
-	// handler client resources are created on calls to Subscribe,
-	// Split* and SetContent. They are destroyed when OnUnmount is dispatched to handler server
+	// handler client resources are created on calls to Split* and SetContent.
+	// They are destroyed when OnUnmount is dispatched to handler server
 	// and so if server is closed, client connection
 	// Connections are also monitored and cleaned if irrecoverable errors are found.
 	clients map[uint64]io.Closer
@@ -395,34 +400,6 @@ func (s *Server) Open(
 
 	handlerID := s.ensureAvailable(h)
 	return &proto.OpenResourceResponse{HandlerId: handlerID}, nil
-}
-
-// Subscribe satisfies proto.BrowserServer
-func (s *Server) Subscribe(
-	ctx context.Context, req *proto.SubscribeRequest,
-) (*proto.SubscribeResponse, error) {
-	handlerID := req.GetHandlerId()
-	handler, err := s.dialHandler(handlerID)
-	if err != nil {
-		return nil, err
-	}
-	h := serverEventHandler{handlerID: handlerID, s: s, h: handler}
-
-	ev, err := req.GetEv().ToModel()
-	if err != nil {
-		return nil, err
-	}
-
-	s.browser.Lock()
-	defer s.browser.Unlock()
-	err = s.browser.SubscribeTermEvents(ev, h)
-	if err != nil {
-		reason := fmt.Sprintf("failed to subscribe: %v", err)
-		s.forceCloseHandler(handlerID, reason)
-		return nil, err
-	}
-
-	return new(proto.SubscribeResponse), nil
 }
 
 // Publish satisfies proto.BrowserServer

@@ -96,6 +96,7 @@ func (c *eventHandlerClient) Close() error {
 }
 
 type eventHandlerServer struct {
+	proto.UnimplementedEditorEventHandlerServer
 	handler EventHandler
 	logger  *log.Logger
 	onExit  func()
