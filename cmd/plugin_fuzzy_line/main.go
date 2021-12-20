@@ -18,7 +18,7 @@ import (
 
 const defaultCommand = `grep -n -r "" .`
 
-var defaultKey = term.Event{Type: term.EventKey, Key: term.KeyCtrlBackslash}
+var defaultHistoryKey = term.Event{Type: term.EventKey, Key: term.KeyCtrlBackslash}
 
 func parseLine(data string) (string, term.Coordinates) {
 	// NOTE: if ag breaks this or there's an edge case that it's not covered
@@ -37,8 +37,15 @@ func newHandler(grants []plugin.Grant, broker proto.MuxBroker,
 		}
 		cmdStr = defaultCommand
 	}
+	historyKey, err := config.GetEvent("history_key")
+	if err != nil {
+		if err != plugin.ErrNotFound {
+			log.Printf("failed to load 'command' config: %v", err)
+		}
+		historyKey = defaultHistoryKey
+	}
 	return finder.New(grants, broker, invokeWindow,
-		config, defaultKey, cmdStr, parseLine)
+		config, historyKey, cmdStr, parseLine)
 }
 
 func main() {
@@ -49,7 +56,6 @@ func main() {
 	plugutil.ServeKeySplitHandler(plugutil.KeySplitHandlerConfig{
 		SplitOrientation: browser.OrientationBottom,
 		Handler:          newHandler,
-		Key:              defaultKey,
 		Permissions:      finder.Permissions(),
 		Command:          "searchLine",
 	})

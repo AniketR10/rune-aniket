@@ -28,6 +28,7 @@ type Config interface {
 	GetAttributes(string) (term.Attributes, error)
 	GetRune(string) (rune, error)
 	GetFrameCharset(string, component.FrameCharSet) (component.FrameCharSet, error)
+	GetEvent(string) (term.Event, error)
 }
 
 type internalConfig interface {
@@ -137,6 +138,14 @@ func (c mapConfig) GetConfig(key string) (Config, error) {
 		return nil, err
 	}
 	return mapConfig(m), nil
+}
+
+func (c mapConfig) GetEvent(key string) (term.Event, error) {
+	s, err := c.GetString(key)
+	if err != nil {
+		return term.Event{}, err
+	}
+	return term.ParseKey(s)
 }
 
 func (c mapConfig) GetMap(key string) (map[string]interface{}, error) {

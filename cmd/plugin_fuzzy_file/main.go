@@ -15,8 +15,8 @@ import (
 )
 
 var (
-	defaultCommand = `set -o pipefail; command find -L . -mindepth 1 \( -path '*/\.*' -o -fstype 'sysfs' -o -fstype 'devfs' -o -fstype 'devtmpfs' -o -fstype 'proc' \) -prune -o -type f -print -o -type l -print 2> /dev/null | cut -b3-`
-	defaultKey     = term.Event{Type: term.EventKey, Key: term.KeyCtrlP}
+	defaultCommand    = `set -o pipefail; command find -L . -mindepth 1 \( -path '*/\.*' -o -fstype 'sysfs' -o -fstype 'devfs' -o -fstype 'devtmpfs' -o -fstype 'proc' \) -prune -o -type f -print -o -type l -print 2> /dev/null | cut -b3-`
+	defaultHistoryKey = term.Event{Type: term.EventKey, Key: term.KeyCtrlP}
 )
 
 func newHandler(grants []plugin.Grant, broker proto.MuxBroker,
@@ -28,8 +28,15 @@ func newHandler(grants []plugin.Grant, broker proto.MuxBroker,
 		}
 		cmdStr = defaultCommand
 	}
+	historyKey, err := config.GetEvent("history_key")
+	if err != nil {
+		if err != plugin.ErrNotFound {
+			log.Printf("failed to load 'command' config: %v", err)
+		}
+		historyKey = defaultHistoryKey
+	}
 	return finder.New(grants, broker, invokeWindow, config,
-		defaultKey, cmdStr, func(file string) (string, term.Coordinates) {
+		historyKey, cmdStr, func(file string) (string, term.Coordinates) {
 			return file, term.Coordinates{}
 		})
 }
@@ -42,7 +49,6 @@ func main() {
 	plugutil.ServeKeySplitHandler(plugutil.KeySplitHandlerConfig{
 		SplitOrientation: browser.OrientationBottom,
 		Handler:          newHandler,
-		Key:              defaultKey,
 		Permissions:      finder.Permissions(),
 		Command:          "searchFile",
 	})

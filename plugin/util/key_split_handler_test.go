@@ -11,10 +11,8 @@ import (
 	"github.com/ernestrc/go-tui/plugin"
 	"github.com/ernestrc/go-tui/proto"
 	prototest "github.com/ernestrc/go-tui/proto/test"
-	"github.com/ernestrc/go-tui/term"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/connectivity"
 )
@@ -42,20 +40,18 @@ func expectInitialization(
 
 func expectSubscribe(
 	t *testing.T, ctrl *gomock.Controller,
-	broker *proto.MockMuxBroker, ev term.Event, browserConnToken uint32,
+	broker *proto.MockMuxBroker, cmd string, token uint32,
 ) *proto.MockMuxConn {
 	subscribedHandlerToken := uint32(124)
 
-	protoEv := new(proto.Event)
-	require.NoError(t, protoEv.FromModel(ev))
-
-	conn := prototest.ExpectBrokerDial(t, ctrl, broker, browserConnToken)
+	conn := prototest.ExpectBrokerDial(t, ctrl, broker, token)
 	prototest.ExpectBrokerServe(t, subscribedHandlerToken, broker)
+	expected := proto.RegisterCommandRequest{HandlerId: subscribedHandlerToken, Command: cmd}
 
 	conn.EXPECT().
 		Invoke(gomock.Any(),
-			gomock.Eq("/proto.EventSubscriber/Subscribe"),
-			gomock.Eq(&proto.SubscribeRequest{HandlerId: uint64(subscribedHandlerToken), Ev: protoEv}),
+			gomock.Eq("/proto.Editor/Register"),
+			gomock.Eq(&expected),
 			gomock.Any()).
 		Times(1)
 
@@ -106,17 +102,17 @@ func TestKeySplitHandlerEmpty(t *testing.T) {
 	t.Run("subscribe to key event when subscriber permission is received", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
-		config := KeySplitHandlerConfig{Key: term.Event{Type: term.EventKey, Ch: 'a'}}
+		config := KeySplitHandlerConfig{Command: "blah"}
 		h := &keySplitHandler{config: config}
 		broker := expectInitialization(t, ctrl, h)
 
-		browserConnToken := uint32(123)
-		expectSubscribe(t, ctrl, broker, config.Key, browserConnToken)
+		token := uint32(123)
+		expectSubscribe(t, ctrl, broker, "blah", token)
 
 		grants := []plugin.Grant{
 			{
-				Token:      browserConnToken,
-				Permission: plugin.PermissionBrowserEventSubscriber,
+				Token:      token,
+				Permission: plugin.PermissionEditor,
 			},
 		}
 		h.PermissionGranted(grants)
@@ -125,7 +121,7 @@ func TestKeySplitHandlerEmpty(t *testing.T) {
 	t.Run("does nothing if shutdown is called when window not active", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
-		config := KeySplitHandlerConfig{Key: term.Event{Type: term.EventKey, Ch: 'a'}}
+		config := KeySplitHandlerConfig{Command: "blah"}
 		h := &keySplitHandler{config: config}
 		expectInitialization(t, ctrl, h)
 		h.Shutdown("you are being naughty")
@@ -133,21 +129,6 @@ func TestKeySplitHandlerEmpty(t *testing.T) {
 }
 
 func TestKeySplitHandlerOpenWindow(t *testing.T) {
-	t.Run("open a split window if key event is received", func(t *testing.T) {
-		keyEvent := term.Event{Type: term.EventKey, Ch: 'a'}
-		config := KeySplitHandlerConfig{
-			Key:              keyEvent,
-			SplitOrientation: browser.OrientationLeft,
-		}
-		grants := plugin.Grant{
-			Token:      1556,
-			Permission: plugin.PermissionBrowserWindowManager,
-		}
-		testSplitWindow(t, config, grants, func(h *keySplitHandler) {
-			assert.False(t, h.Handle(keyEvent))
-		})
-	})
-
 	t.Run("open a split window if command received", func(t *testing.T) {
 		cmdName := "blah"
 		config := KeySplitHandlerConfig{

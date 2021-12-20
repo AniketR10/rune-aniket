@@ -45,7 +45,7 @@ type fuzzyFinderHandler struct {
 	m            browser.Messenger
 	ed           editor.Editor
 	invokeWindow browser.Window
-	invokeKey    term.Event
+	historyKey   term.Event
 	mu           sync.Mutex
 	cmdStr       string
 	getResource  func(string) (string, term.Coordinates)
@@ -281,7 +281,7 @@ func (h *fuzzyFinderHandler) initGrants(
 func New(
 	grants []plugin.Grant, broker proto.MuxBroker,
 	invokeWindow browser.Window, config plugin.Config,
-	invokeKey term.Event, command string,
+	historyKey term.Event, command string,
 	getResource func(line string) (string, term.Coordinates),
 ) (tui.Handler, error) {
 	h := new(fuzzyFinderHandler)
@@ -291,7 +291,7 @@ func New(
 	}
 
 	h.invokeWindow = invokeWindow
-	h.invokeKey = invokeKey
+	h.historyKey = historyKey
 	h.getResource = getResource
 	h.cmdStr = command
 	log.Printf("using resource list command: %s", h.cmdStr)
@@ -412,7 +412,7 @@ func (h *fuzzyFinderHandler) Handle(ev term.Event) (exit, handled bool) {
 		return
 	}
 
-	if ev == h.invokeKey {
+	if ev == h.historyKey {
 		h.writeLastSearchQuery()
 		handled = true
 		return
