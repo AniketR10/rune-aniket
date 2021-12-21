@@ -237,7 +237,7 @@ func (b *Buffer) DeleteCell(pos term.Coordinates) (term.Coordinates, rune, bool)
 		return term.Coordinates{}, 0, false
 	}
 
-	start, _, str := b.writer.Delete(pos, to)
+	start, _, str := b.writer.Delete(from, to)
 	if str == "" {
 		return term.Coordinates{}, 0, false
 	}

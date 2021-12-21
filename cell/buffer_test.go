@@ -105,11 +105,17 @@ func TestBufferTruncateRowFrom2(t *testing.T) {
 	assert.Equal(t, "hello\nwo", buf.String())
 }
 
-func TestBufferTruncateCellAt(t *testing.T) {
+func TestBufferDeleteCell(t *testing.T) {
 	str := "hello\nworld"
 	buf := newBufferWithContent(t, str)
 
-	_, r, ok := buf.DeleteCell(term.Coordinates{X: 0, Y: 1})
+	_, r, ok := buf.DeleteCell(term.Coordinates{X: 100, Y: 0})
+	require.False(t, ok)
+
+	_, r, ok = buf.DeleteCell(term.Coordinates{X: 0, Y: 100})
+	require.False(t, ok)
+
+	_, r, ok = buf.DeleteCell(term.Coordinates{X: 0, Y: 1})
 	require.True(t, ok)
 	assert.Equal(t, 'w', r)
 	_, r, ok = buf.DeleteCell(term.Coordinates{X: 1, Y: 1})
