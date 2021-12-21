@@ -293,80 +293,6 @@ func (mr *MockWindowManagerMockRecorder) Split(arg0, arg1 interface{}) *gomock.C
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Split", reflect.TypeOf((*MockWindowManager)(nil).Split), arg0, arg1)
 }
 
-// MockEventHandler is a mock of EventHandler interface.
-type MockEventHandler struct {
-	ctrl     *gomock.Controller
-	recorder *MockEventHandlerMockRecorder
-}
-
-// MockEventHandlerMockRecorder is the mock recorder for MockEventHandler.
-type MockEventHandlerMockRecorder struct {
-	mock *MockEventHandler
-}
-
-// NewMockEventHandler creates a new mock instance.
-func NewMockEventHandler(ctrl *gomock.Controller) *MockEventHandler {
-	mock := &MockEventHandler{ctrl: ctrl}
-	mock.recorder = &MockEventHandlerMockRecorder{mock}
-	return mock
-}
-
-// EXPECT returns an object that allows the caller to indicate expected use.
-func (m *MockEventHandler) EXPECT() *MockEventHandlerMockRecorder {
-	return m.recorder
-}
-
-// Handle mocks base method.
-func (m *MockEventHandler) Handle(arg0 term.Event) bool {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Handle", arg0)
-	ret0, _ := ret[0].(bool)
-	return ret0
-}
-
-// Handle indicates an expected call of Handle.
-func (mr *MockEventHandlerMockRecorder) Handle(arg0 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Handle", reflect.TypeOf((*MockEventHandler)(nil).Handle), arg0)
-}
-
-// MockKeyMapper is a mock of KeyMapper interface.
-type MockKeyMapper struct {
-	ctrl     *gomock.Controller
-	recorder *MockKeyMapperMockRecorder
-}
-
-// MockKeyMapperMockRecorder is the mock recorder for MockKeyMapper.
-type MockKeyMapperMockRecorder struct {
-	mock *MockKeyMapper
-}
-
-// NewMockKeyMapper creates a new mock instance.
-func NewMockKeyMapper(ctrl *gomock.Controller) *MockKeyMapper {
-	mock := &MockKeyMapper{ctrl: ctrl}
-	mock.recorder = &MockKeyMapperMockRecorder{mock}
-	return mock
-}
-
-// EXPECT returns an object that allows the caller to indicate expected use.
-func (m *MockKeyMapper) EXPECT() *MockKeyMapperMockRecorder {
-	return m.recorder
-}
-
-// MergeKeyMap mocks base method.
-func (m *MockKeyMapper) MergeKeyMap(arg0 map[term.Event]term.Event) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "MergeKeyMap", arg0)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// MergeKeyMap indicates an expected call of MergeKeyMap.
-func (mr *MockKeyMapperMockRecorder) MergeKeyMap(arg0 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MergeKeyMap", reflect.TypeOf((*MockKeyMapper)(nil).MergeKeyMap), arg0)
-}
-
 // MockMessenger is a mock of Messenger interface.
 type MockMessenger struct {
 	ctrl     *gomock.Controller
@@ -742,20 +668,6 @@ func (m *MockBrowser) List(ctx context.Context, filters []document.Filter) (docu
 func (mr *MockBrowserMockRecorder) List(ctx, filters interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "List", reflect.TypeOf((*MockBrowser)(nil).List), ctx, filters)
-}
-
-// MergeKeyMap mocks base method.
-func (m *MockBrowser) MergeKeyMap(arg0 map[term.Event]term.Event) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "MergeKeyMap", arg0)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// MergeKeyMap indicates an expected call of MergeKeyMap.
-func (mr *MockBrowserMockRecorder) MergeKeyMap(arg0 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MergeKeyMap", reflect.TypeOf((*MockBrowser)(nil).MergeKeyMap), arg0)
 }
 
 // Open mocks base method.

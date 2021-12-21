@@ -24,13 +24,6 @@ message Mapping {
 	Event to = 2;
 }
 
-message MergeKeyMapRequest {
-	repeated Mapping mappings = 1;
-}
-
-message MergeKeyMapResponse {
-}
-
 enum Orientation {
 	Top = 0;
 	Bottom = 1;
@@ -87,10 +80,6 @@ service ResourceOpener {
 
 service Messenger {
 	rpc SetMessage(SetMessageRequest) returns (SetMessageResponse);
-}
-
-service KeyMapper {
-	rpc MergeKeyMap(MergeKeyMapRequest) returns (MergeKeyMapResponse);
 }
 
 service EventPublisher {

@@ -34,7 +34,6 @@ type Client struct {
 	storage document.Client
 	wm      proto.WindowManagerClient
 	msg     proto.MessengerClient
-	mp      proto.KeyMapperClient
 	f       proto.ResourceOpenerClient
 	p       proto.EventPublisherClient
 
@@ -93,7 +92,6 @@ func (c *Client) Init(
 	c.wm = proto.NewWindowManagerClient(cc)
 	c.msg = proto.NewMessengerClient(cc)
 	c.cc = cc
-	c.mp = proto.NewKeyMapperClient(cc)
 	c.f = proto.NewResourceOpenerClient(cc)
 	c.p = proto.NewEventPublisherClient(cc)
 	c.broker = broker
@@ -248,31 +246,6 @@ func (c *Client) Bar(o Orientation, h tui.Handler) error {
 		return err
 	}
 	return nil
-}
-
-// MergeKeyMap satisfies Browser.
-func (c *Client) MergeKeyMap(m map[term.Event]term.Event) error {
-	ctx := context.Background()
-	req := proto.MergeKeyMapRequest{}
-
-	for from, to := range m {
-		protoFrom, protoTo := new(proto.Event), new(proto.Event)
-		err := protoFrom.FromModel(from)
-		if err != nil {
-			return err
-		}
-		err = protoTo.FromModel(to)
-		if err != nil {
-			return err
-		}
-		req.Mappings = append(req.Mappings, &proto.Mapping{
-			From: protoFrom,
-			To:   protoTo,
-		})
-	}
-
-	_, err := c.mp.MergeKeyMap(ctx, &req)
-	return err
 }
 
 // SetMessage satisfies Browser.

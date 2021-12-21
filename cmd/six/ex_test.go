@@ -234,12 +234,6 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 	_, err = b.Split(browser.OrientationBottom, h)
 	require.NoError(t, err)
 
-	newMappings := map[term.Event]term.Event{
-		{Type: term.EventKey, Ch: ')'}: {Type: term.EventKey, Key: term.KeyCtrlL},
-		{Type: term.EventKey, Ch: '('}: {Type: term.EventKey, Key: term.KeyCtrlH},
-	}
-	require.NoError(t, b.MergeKeyMap(newMappings))
-
 	cases = []testutil.HandlerSequenceTestCase{
 		{"_",
 			`┌──────────────────┐
@@ -300,7 +294,7 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 
 	cases = []testutil.HandlerSequenceTestCase{
 		// test CommandKeyBindings
-		{"4)))",
+		{"4$$$",
 			`┌──────────────────┐
 │cabin.go  other.go│
 ├──────────────────┤
@@ -311,7 +305,7 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 │BBBBBBBBBBBBBBBBBB│
 │BBBBBBBBBBBBBBBBBB│
 └──────────────────┘`},
-		{":bcloseAll>:e other.go>bcde((((__",
+		{":bcloseAll>:e other.go>bcde####__",
 			`┌──────────────────┐
 │other.go          │
 ├──────────────────┤

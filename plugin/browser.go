@@ -14,8 +14,6 @@ import (
 const (
 	// PermissionBrowserWindowManager requests access to a browser's window manager.
 	PermissionBrowserWindowManager Permission = "_PermBrowserWindowManager"
-	// PermissionBrowserKeyMapper requests access to a browser's key mapper.
-	PermissionBrowserKeyMapper = "_PermBrowserKeyMapper"
 	// PermissionBrowserResourceOpener requests access to open new files.
 	PermissionBrowserResourceOpener = "_PermBrowserResourceOpener"
 	// PermissionBrowserMessenger requests access to send messages to the UI.
@@ -63,7 +61,6 @@ func (s *browserResourceServer) Serve(
 			server.Logger = l
 			rpcServer := interruptBrowserServer(server, term.Interrupt)
 			proto.RegisterWindowManagerServer(grpc, rpcServer)
-			proto.RegisterKeyMapperServer(grpc, rpcServer)
 			proto.RegisterResourceOpenerServer(grpc, rpcServer)
 			proto.RegisterMessengerServer(grpc, rpcServer)
 			proto.RegisterEventPublisherServer(grpc, rpcServer)
@@ -79,7 +76,6 @@ func BrowserResources(b browser.Browser) map[Permission]ResourceServer {
 	s := newBrowserResourceServer(b)
 	return map[Permission]ResourceServer{
 		PermissionBrowserWindowManager:   s,
-		PermissionBrowserKeyMapper:       s,
 		PermissionBrowserResourceOpener:  s,
 		PermissionBrowserMessenger:       s,
 		PermissionBrowserEventPublisher:  s,
@@ -107,14 +103,6 @@ func dialBrowser(token uint32, broker proto.MuxBroker) (
 // resource with the given token.
 func WindowManager(token uint32, broker proto.MuxBroker) (
 	browser.WindowManager, error,
-) {
-	return dialBrowser(token, broker)
-}
-
-// KeyMapper acquires the browser's KeyMapper
-// resource with the given token.
-func KeyMapper(token uint32, broker proto.MuxBroker) (
-	browser.KeyMapper, error,
 ) {
 	return dialBrowser(token, broker)
 }

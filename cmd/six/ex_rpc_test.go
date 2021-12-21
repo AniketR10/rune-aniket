@@ -99,7 +99,6 @@ func newTestRPCBrowser(t *testing.T,
 		server.Logger = logger
 		proto.RegisterWindowManagerServer(grpcServer, server)
 		proto.RegisterMessengerServer(grpcServer, server)
-		proto.RegisterKeyMapperServer(grpcServer, server)
 		proto.RegisterResourceOpenerServer(grpcServer, server)
 
 		go grpcServer.Serve(lis)

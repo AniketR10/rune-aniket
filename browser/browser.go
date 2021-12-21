@@ -57,12 +57,6 @@ type WindowManager interface {
 	Bar(Orientation, tui.Handler) error
 }
 
-// KeyMapper is the interface that wraps the method MergeKeyMap
-// to merge new key mappings.
-type KeyMapper interface {
-	MergeKeyMap(map[term.Event]term.Event) error
-}
-
 // Messenger is the interface that wraps methods to display
 // messages to the user.
 type Messenger interface {
@@ -92,7 +86,6 @@ type Storage interface {
 type Browser interface {
 	WindowManager
 	EventPublisher
-	KeyMapper
 	ResourceOpener
 	Messenger
 	Storage

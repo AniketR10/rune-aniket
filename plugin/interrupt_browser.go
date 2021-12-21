@@ -10,7 +10,6 @@ import (
 type browserServer interface {
 	proto.WindowManagerServer
 	proto.EventPublisherServer
-	proto.KeyMapperServer
 	proto.MessengerServer
 	proto.ResourceOpenerServer
 	bproto.DocumentStoreServer
@@ -20,7 +19,6 @@ type browserServer interface {
 // provide interrupt on write requests coming from the wire
 type interruptBrowser struct {
 	proto.UnimplementedEventPublisherServer
-	proto.UnimplementedKeyMapperServer
 	proto.UnimplementedMessengerServer
 	proto.UnimplementedResourceOpenerServer
 	proto.UnimplementedWindowManagerServer
@@ -71,15 +69,6 @@ func (s *interruptBrowser) Bar(
 	ctx context.Context, req *proto.BarRequest,
 ) (*proto.BarResponse, error) {
 	res, err := s.browserServer.Bar(ctx, req)
-	s.interruptDraw()
-	return res, err
-}
-
-// MergeKeyMap satisfies proto.BrowserServer
-func (s *interruptBrowser) MergeKeyMap(
-	ctx context.Context, req *proto.MergeKeyMapRequest,
-) (*proto.MergeKeyMapResponse, error) {
-	res, err := s.browserServer.MergeKeyMap(ctx, req)
 	s.interruptDraw()
 	return res, err
 }

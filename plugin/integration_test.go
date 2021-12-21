@@ -34,10 +34,6 @@ func TestIntegrationRace(t *testing.T) {
 
 	mockWin := browser.NopWindow()
 	h := browser.NewTestHandler()
-	evKeyCtrlA := term.Event{Type: term.EventKey, Key: term.KeyCtrlA}
-	keymap := map[term.Event]term.Event{
-		evKeyCtrlA: {Type: term.EventKey, Key: term.KeyCtrlB},
-	}
 	cache := document.NewInMemoryCache()
 	broker := proto.NewDatastoreBroker(cache, nil)
 	defer broker.Close()
@@ -50,7 +46,6 @@ func TestIntegrationRace(t *testing.T) {
 	// plugin manager serves each permission on a different grantID
 	perms := map[Permission]uint32{
 		PermissionBrowserWindowManager:   broker.NextId(),
-		PermissionBrowserKeyMapper:       broker.NextId(),
 		PermissionBrowserResourceOpener:  broker.NextId(),
 		PermissionBrowserMessenger:       broker.NextId(),
 		PermissionBrowserEventPublisher:  broker.NextId(),
@@ -91,13 +86,6 @@ func TestIntegrationRace(t *testing.T) {
 			return mock.Bar(gomock.Any(), gomock.Any()).Return(nil)
 		}, func(ifc interface{}) error {
 			return ifc.(browser.WindowManager).Bar(browser.OrientationBottom, h)
-		}},
-		{PermissionBrowserKeyMapper, func(token uint32, broker proto.MuxBroker) (interface{}, error) {
-			return KeyMapper(token, broker)
-		}, func(ed *editor.MockEditorMockRecorder, mock *browser.MockBrowserMockRecorder) *gomock.Call {
-			return mock.MergeKeyMap(gomock.Any()).Return(nil)
-		}, func(ifc interface{}) error {
-			return ifc.(browser.KeyMapper).MergeKeyMap(keymap)
 		}},
 		{PermissionBrowserResourceOpener, func(token uint32, broker proto.MuxBroker) (interface{}, error) {
 			return ResourceOpener(token, broker)

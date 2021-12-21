@@ -66,50 +66,6 @@ func TestServerSetMessage(t *testing.T) {
 	})
 }
 
-func TestServerMergeKeyMap(t *testing.T) {
-	ctx := context.Background()
-
-	t.Run("delegates MergeKeyMap to underlying Browser", func(t *testing.T) {
-		ctrl := gomock.NewController(t)
-		defer ctrl.Finish()
-		s, mock := newServerWithNoBroker(ctrl)
-
-		req := proto.MergeKeyMapRequest{
-			Mappings: []*proto.Mapping{
-				&proto.Mapping{From: &protoKey1, To: &protoKey2},
-				&proto.Mapping{From: &protoKey2, To: &protoKey3},
-				&proto.Mapping{From: &protoKey3, To: &protoKey1},
-			},
-		}
-		mock.EXPECT().MergeKeyMap(gomock.Any()).
-			DoAndReturn(func(m map[term.Event]term.Event) error {
-				expected := map[term.Event]term.Event{
-					key1: key2,
-					key2: key3,
-					key3: key1,
-				}
-				assert.Equal(t, expected, m)
-				return nil
-			})
-
-		res, err := s.MergeKeyMap(ctx, &req)
-		require.NoError(t, err)
-		assert.NotNil(t, res)
-	})
-
-	t.Run("bubbles up MergeKeyMap Browser error", func(t *testing.T) {
-		ctrl := gomock.NewController(t)
-		defer ctrl.Finish()
-		s, mock := newServerWithNoBroker(ctrl)
-
-		mock.EXPECT().MergeKeyMap(gomock.Any()).Return(errors.New("oopsie daisy"))
-
-		_, err := s.MergeKeyMap(ctx, new(proto.MergeKeyMapRequest))
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "oopsie")
-	})
-}
-
 func assertHandlerStored(t *testing.T, nextID uint32, s *Server, expected Handler) {
 	h, ok := s.opened[nextID]
 	require.True(t, ok)

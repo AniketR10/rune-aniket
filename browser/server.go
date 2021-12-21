@@ -19,7 +19,6 @@ import (
 // Server serves a Browser over GRPC.
 type Server struct {
 	proto.UnimplementedEventPublisherServer
-	proto.UnimplementedKeyMapperServer
 	proto.UnimplementedMessengerServer
 	proto.UnimplementedResourceOpenerServer
 	proto.UnimplementedWindowManagerServer
@@ -315,34 +314,6 @@ func (s *Server) Bar(
 		return nil, err
 	}
 	return new(proto.BarResponse), nil
-}
-
-// MergeKeyMap satisfies proto.BrowserServer
-func (s *Server) MergeKeyMap(
-	ctx context.Context, req *proto.MergeKeyMapRequest,
-) (*proto.MergeKeyMapResponse, error) {
-	m := make(map[term.Event]term.Event)
-
-	for _, mapping := range req.GetMappings() {
-		from, err := mapping.From.ToModel()
-		if err != nil {
-			return nil, err
-		}
-		to, err := mapping.To.ToModel()
-		if err != nil {
-			return nil, err
-		}
-		m[from] = to
-	}
-
-	s.browser.Lock()
-	defer s.browser.Unlock()
-
-	err := s.browser.MergeKeyMap(m)
-	if err != nil {
-		return nil, err
-	}
-	return new(proto.MergeKeyMapResponse), nil
 }
 
 func (s *Server) setBrowserMessage(msg string) error {
