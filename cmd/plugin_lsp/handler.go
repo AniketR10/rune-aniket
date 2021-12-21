@@ -482,24 +482,28 @@ func convertRange(
 	from, ok = cell.ConvertRuneCoordinates(cells, startLine, startChar)
 	if !ok {
 		log.Errorf("lspEditorHandler.convertRange: failed to convert lsp Start coordinates"+
-			" to term From coordinates: %#v->%#v", startLine, startChar)
+			" to term From coordinates: rng: (y=%d,x=%d) -> spn: %#v -> from:%#v",
+			rng.Start.Line, rng.Start.Character, spn.Start(), from)
 		return
 	}
 
 	log.Tracef("lspEditorHandler.convertRange: convert lsp Start coordinates"+
-		" to term From coordinates: %#v -> from:%#v", spn.Start(), from)
+		" to term From coordinates: rng: (y=%d,x=%d) -> spn: %#v -> from:%#v",
+		rng.Start.Line, rng.Start.Character, spn.Start(), from)
 
 	endLine := spn.End().Line() - 1
 	endChar := spn.End().Column() - 1
 	to, ok = cell.ConvertRuneCoordinates(cells, endLine, endChar)
 	if !ok {
 		log.Errorf("lspEditorHandler.convertRange: failed to convert lsp End coordinates to "+
-			"term To coordinates: %#v->%#v", endLine, endChar)
+			"term From coordinates: rng: (y=%d,x=%d) -> spn: %#v -> to:%#v",
+			rng.End.Line, rng.End.Character, spn.End(), to)
 		return
 	}
 
 	log.Tracef("lspEditorHandler.convertRange: convert lsp End coordinates to "+
-		"term To coordinates: %#v -> to:%#v", spn.End(), to)
+		" to term To coordinates: rng: (y=%d,x=%d) -> spn: %#v -> to:%#v",
+		rng.End.Line, rng.End.Character, spn.End(), to)
 
 	return
 }
