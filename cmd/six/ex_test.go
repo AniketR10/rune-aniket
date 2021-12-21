@@ -5,12 +5,14 @@ import (
 	"strconv"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/ernestrc/go-tui"
 	"github.com/ernestrc/go-tui/browser"
 	"github.com/ernestrc/go-tui/cell"
 	"github.com/ernestrc/go-tui/component"
 	"github.com/ernestrc/go-tui/editor"
+	"github.com/ernestrc/go-tui/handler"
 	"github.com/ernestrc/go-tui/term"
 	testutil "github.com/ernestrc/go-tui/util/test"
 	"github.com/stretchr/testify/assert"
@@ -602,6 +604,60 @@ func TestExCommandResponsive(t *testing.T) {
 				Height: 5,
 				Frame:  true,
 			}),
+		)
+		err := b.Init(editor.Mock(), opts...)
+		require.NoError(t, err)
+		closeFns = append(closeFns, b.Close)
+		return b
+	}
+	testutil.TestHandlerIsolated(t, fn, 20, 10, cases)
+	for _, close := range closeFns {
+		close()
+	}
+}
+
+func TestExKeySequence(t *testing.T) {
+	cases := []testutil.HandlerSequenceTestCase{
+		{"gl",
+			`┌──────────────────┐
+│10k.go  button.go │
+├──────────────────┤
+│BBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBB│
+└──────────────────┘`},
+		{"gg",
+			`┌──────────────────┐
+│                  │
+├──────────────────┤
+│                  │
+│                  │
+│                  │
+│                  │
+│                  │
+│                  │
+└──────────────────┘`},
+	}
+
+	var closeFns []func() error
+	fn := func(t *testing.T) tui.Handler {
+		b := new(Ex)
+		opts := withOpenFileStubs(
+			editor.WithFilepath("10k.go"),
+			editor.WithFilepath("button.go"),
+			editor.WithCommandEvent(testCommandEvent),
+			editor.WithCommandSequenceBinding(handler.Sequence{
+				First: term.Event{Type: term.EventKey, Ch: 'g'},
+				Last:  term.Event{Type: term.EventKey, Ch: 'l'},
+			}, "bufferNext"),
+			editor.WithCommandSequenceBinding(handler.Sequence{
+				First: term.Event{Type: term.EventKey, Ch: 'g'},
+				Last:  term.Event{Type: term.EventKey, Ch: 'g'},
+			}, "bufferCloseAll"),
+			editor.WithSequencerTimeout(10*time.Second),
 		)
 		err := b.Init(editor.Mock(), opts...)
 		require.NoError(t, err)

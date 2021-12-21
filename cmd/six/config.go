@@ -77,8 +77,8 @@ func (c ideConfig) command() (plugin.Config, bool) {
 	return c.getConfig(plugin.MapConfig(c.cfg), "command")
 }
 
-func (c ideConfig) commandKeyMappings() map[term.Event]string {
-	ret := make(map[term.Event]string)
+func (c ideConfig) commandKeyMappings() map[handler.Sequence]string {
+	ret := make(map[handler.Sequence]string)
 	cfg, ok := c.command()
 	if !ok {
 		return ret
@@ -92,17 +92,20 @@ func (c ideConfig) commandKeyMappings() map[term.Event]string {
 	}
 
 	for k, v := range m {
-		ev, err := term.ParseKey(k)
+		seq, err := handler.ParseSequence(k)
 		if err != nil {
-			c.errors["key_bindings."+k] = err
-			continue
+			seq.First, err = term.ParseKey(k)
+			if err != nil {
+				c.errors["key_bindings."+k] = err
+				continue
+			}
 		}
 		strValue, ok := v.(string)
 		if !ok {
 			c.errors["key_bindings."+k] = errors.New("expected string found unknown type")
 			continue
 		}
-		ret[ev] = strValue
+		ret[seq] = strValue
 	}
 
 	return ret

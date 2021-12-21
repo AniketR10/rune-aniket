@@ -10,7 +10,7 @@ import (
 // error if it fails to parse it. Note that this function
 // is not case sensitive.
 func ParseKey(str string) (Event, error) {
-	str = strings.ToLower(str)
+	str = strings.TrimSpace(strings.ToLower(str))
 	switch len(str) {
 	case 0:
 		return Event{}, errors.New("invalid empty input")

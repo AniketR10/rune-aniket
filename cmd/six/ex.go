@@ -13,6 +13,7 @@ import (
 	"github.com/ernestrc/go-tui/component"
 	"github.com/ernestrc/go-tui/component/search"
 	"github.com/ernestrc/go-tui/editor"
+	"github.com/ernestrc/go-tui/handler"
 	"github.com/ernestrc/go-tui/term"
 )
 
@@ -61,7 +62,8 @@ type Ex struct {
 		component.Frame
 		component.Overlay
 	}
-	mode mode
+	sequencer handler.Sequencer
+	mode      mode
 }
 
 // NewEx allocates storage for a new Ex and initializes it.
@@ -84,6 +86,13 @@ func (e *Ex) Init(ed editor.Editor, opts ...editor.Option) (err error) {
 	for _, o := range opts {
 		o(&e.config)
 	}
+
+	seqInterests := make([]handler.Sequence, 0,
+		len(e.config.CommandSequenceBindings))
+	for seq := range e.config.CommandSequenceBindings {
+		seqInterests = append(seqInterests, seq)
+	}
+	e.sequencer.Init(seqInterests, e.config.SequencerTimeout)
 
 	if e.config.CommandOverlay.Width <= 0 || e.config.CommandOverlay.Height <= 0 {
 		msg := fmt.Sprintf("invalid CommandOverlay dimensions: %v",
@@ -352,9 +361,22 @@ func (e *Ex) handleProxy(ev term.Event) (
 	}
 
 	b := e.comp.Browser()
-	mev, cmd, _ := e.comp.KeyMapping(ev)
-	// if event was mapped to command
-	// dispatch command and dispatch event
+
+	// first map event, and map to potential command
+	mev, cmd, ok := e.comp.KeyMapping(ev)
+
+	// if event sequence has a match though
+	// then priority is to dispatch sequence command
+	seq, match := e.sequencer.Handle(mev)
+	if match {
+		cmd, ok = e.config.CommandSequenceBindings[seq]
+		if !ok {
+			panic("key sequencer matched but no command configured")
+		}
+	}
+
+	// dispatch either sequence or event command and
+	// and dispatch event as well
 	if cmd != "" {
 		quit, err := e.runCommand(cmd, cmd)
 		if err != nil {
@@ -518,6 +540,7 @@ func (e *Ex) Browser() browser.Browser {
 
 // Close closes the resources associated with this browser.
 func (e *Ex) Close() error {
+	e.sequencer.Reset()
 	err1 := e.command.List.Close()
 	err2 := e.comp.Close()
 	if err2 != nil {

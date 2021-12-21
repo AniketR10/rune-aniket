@@ -92,8 +92,12 @@ func (i *IDE) init(cfgfilename, recfilename string, filenames ...string) error {
 		editor.WithPromptConfig(i.promptConfig()),
 	)
 
-	for ev, cmd := range i.ideConfig.commandKeyMappings() {
-		opts = append(opts, editor.WithCommandKeyBinding(ev, cmd))
+	for seq, cmd := range i.ideConfig.commandKeyMappings() {
+		if seq.Last != (term.Event{}) {
+			opts = append(opts, editor.WithCommandSequenceBinding(seq, cmd))
+		} else {
+			opts = append(opts, editor.WithCommandKeyBinding(seq.First, cmd))
+		}
 	}
 
 	if i.ideConfig.browserSwapDir() != "" {

@@ -2,11 +2,13 @@ package editor
 
 import (
 	"io"
+	"time"
 
 	"github.com/ernestrc/blue/datastore/document"
 	"github.com/ernestrc/go-tui/browser"
 	"github.com/ernestrc/go-tui/cell"
 	"github.com/ernestrc/go-tui/component"
+	"github.com/ernestrc/go-tui/handler"
 	"github.com/ernestrc/go-tui/term"
 	log "github.com/sirupsen/logrus"
 )
@@ -31,17 +33,20 @@ type CommandOverlayConfig struct {
 
 // Config holds configuration for an editor.Component.
 type Config struct {
-	Tabspaces          int
-	SwapDir            string
-	Filepaths          []string
-	RecoveryFilepath   string
-	CommandEvent       term.Event
-	CommandKeyBindings map[term.Event]string
-	Storage            document.Service
-	DirtyTabAttr       term.Attributes
-	OpenFileFn         func(filePath string, buf *cell.Buffer, swapDir string, readOnly bool) (FlusherCloser, error)
-	RecoverFileFn      func(filePath, swapFilePath string, buf *cell.Buffer) (FlusherCloser, error)
-	InterruptDraw      func()
+	Tabspaces               int
+	SwapDir                 string
+	Filepaths               []string
+	RecoveryFilepath        string
+	CommandEvent            term.Event
+	CommandKeyBindings      map[term.Event]string
+	CommandSequenceBindings map[handler.Sequence]string
+	SequencerTimeout        time.Duration
+	Storage                 document.Service
+	DirtyTabAttr            term.Attributes
+
+	OpenFileFn    func(filePath string, buf *cell.Buffer, swapDir string, readOnly bool) (FlusherCloser, error)
+	RecoverFileFn func(filePath, swapFilePath string, buf *cell.Buffer) (FlusherCloser, error)
+	InterruptDraw func()
 
 	CommandOverlay CommandOverlayConfig
 	browser.Config
@@ -62,16 +67,18 @@ func DefaultCommandOverlayConfig() (cfg CommandOverlayConfig) {
 // DefaultConfig returns the default Config.
 func DefaultConfig() Config {
 	cfg := Config{
-		Tabspaces:          4,
-		SwapDir:            "",
-		Filepaths:          nil,
-		RecoveryFilepath:   "",
-		CommandEvent:       term.Event{Ch: ':', Type: term.EventKey},
-		Config:             browser.DefaultConfig(),
-		Storage:            document.NewInMemoryCache(),
-		DirtyTabAttr:       term.Attributes{Fg: term.AttrBold},
-		CommandKeyBindings: make(map[term.Event]string),
-		CommandOverlay:     DefaultCommandOverlayConfig(),
+		Tabspaces:               4,
+		SwapDir:                 "",
+		Filepaths:               nil,
+		RecoveryFilepath:        "",
+		CommandEvent:            term.Event{Ch: ':', Type: term.EventKey},
+		Config:                  browser.DefaultConfig(),
+		Storage:                 document.NewInMemoryCache(),
+		DirtyTabAttr:            term.Attributes{Fg: term.AttrBold},
+		CommandKeyBindings:      make(map[term.Event]string),
+		CommandSequenceBindings: make(map[handler.Sequence]string),
+		SequencerTimeout:        400 * time.Millisecond,
+		CommandOverlay:          DefaultCommandOverlayConfig(),
 		OpenFileFn: func(filePath string,
 			buf *cell.Buffer, swapDir string, readOnly bool) (FlusherCloser, error) {
 			return NewFileBuffer(filePath, buf, swapDir, readOnly)
@@ -216,6 +223,37 @@ func WithCommandKeyBinding(ev term.Event, cmd string) Option {
 		}
 		sum := term.Event{Type: term.EventKey, Mod: ev.Mod, Ch: ev.Ch, Key: ev.Key}
 		cfg.CommandKeyBindings[sum] = cmd
+	}
+}
+
+// WithCommandSequenceBinding configures an editor to trigger
+// cmd when key sequence is pressed.
+func WithCommandSequenceBinding(sequence handler.Sequence, cmd string) Option {
+	return func(cfg *Config) {
+		for _, ev := range []term.Event{sequence.First, sequence.Last} {
+			if ev.Type != term.EventKey {
+				panic("invalid command key binding")
+			}
+		}
+		seq := handler.Sequence{
+			First: term.Event{
+				Type: term.EventKey, Mod: sequence.First.Mod,
+				Ch: sequence.First.Ch, Key: sequence.First.Key,
+			},
+			Last: term.Event{
+				Type: term.EventKey, Mod: sequence.Last.Mod,
+				Ch: sequence.Last.Ch, Key: sequence.Last.Key,
+			},
+		}
+		cfg.CommandSequenceBindings[seq] = cmd
+	}
+}
+
+// WithSequencerTimeout configures the time span during which two key events
+// can be considered as a sequence.
+func WithSequencerTimeout(t time.Duration) Option {
+	return func(cfg *Config) {
+		cfg.SequencerTimeout = t
 	}
 }
 

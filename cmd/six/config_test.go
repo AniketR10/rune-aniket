@@ -7,6 +7,7 @@ import (
 
 	"github.com/ernestrc/go-tui/browser"
 	"github.com/ernestrc/go-tui/component"
+	"github.com/ernestrc/go-tui/handler"
 	"github.com/ernestrc/go-tui/term"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
@@ -72,6 +73,16 @@ input_mode:
   - esc
 
 output_mode: color_256
+
+command:
+  key_bindings:
+    f: searchFile
+    l: searchLine
+    <c-x>: closeDoors
+    <c-x><c-p>: openAllDoors
+    f<c-p>: openSmallDoors
+    <c-x>f: openLargeDoors
+    <-x>f: invalidMapping
 
 browser:
     tabspaces: 4
@@ -172,4 +183,22 @@ browser:
 		Fg: term.Attribute(219)}, cfg.viResultAttr())
 	assert.True(t, cfg.viDebug())
 	assert.True(t, cfg.viWrap())
+	wantMappings := map[handler.Sequence]string{
+		{First: term.Event{Type: term.EventKey, Ch: 'f'}}:            "searchFile",
+		{First: term.Event{Type: term.EventKey, Ch: 'l'}}:            "searchLine",
+		{First: term.Event{Type: term.EventKey, Key: term.KeyCtrlX}}: "closeDoors",
+		{
+			First: term.Event{Type: term.EventKey, Key: term.KeyCtrlX},
+			Last:  term.Event{Type: term.EventKey, Key: term.KeyCtrlP},
+		}: "openAllDoors",
+		{
+			First: term.Event{Type: term.EventKey, Ch: 'f'},
+			Last:  term.Event{Type: term.EventKey, Key: term.KeyCtrlP},
+		}: "openSmallDoors",
+		{
+			First: term.Event{Type: term.EventKey, Key: term.KeyCtrlX},
+			Last:  term.Event{Type: term.EventKey, Ch: 'f'},
+		}: "openLargeDoors",
+	}
+	assert.Equal(t, wantMappings, cfg.commandKeyMappings())
 }
