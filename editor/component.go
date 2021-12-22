@@ -28,12 +28,12 @@ var (
 // Component is an implementation of browser.Browser for file editing.
 // It also satisfies tui.Component, and editor.Editor.
 type Component struct {
-	comp            browser.Component
-	ed              Editor
-	config          Config
-	keymap          map[term.Event]term.Event
-	edSubscribers   map[EventType][]EventHandler
-	cmdSubscribers  map[string]CommandHandler
+	comp           browser.Component
+	ed             Editor
+	config         Config
+	keymap         map[term.Event]term.Event
+	edSubscribers  map[EventType][]EventHandler
+	cmdSubscribers map[string]CommandHandler
 }
 
 // used to intercept calls to Close and Flush to dispatch
@@ -225,10 +225,14 @@ func getFileID(filename string) (string, error) {
 type compTabSubscriber Component
 
 func (s *compTabSubscriber) OnFocus(t *browser.Tab) {
+	res, ok := t.Handler().(Handler)
+	if !ok {
+		return
+	}
 	(*Component)(s).dispatchEvent(Event{
 		Type:         EventTypeFocus,
 		ResourceName: t.ID(),
-		Resource:     t.Handler(),
+		Resource:     res,
 	})
 }
 
@@ -333,7 +337,11 @@ func (c *Component) Editor(name string) (Handler, error) {
 
 	for _, tab := range c.comp.Tabs() {
 		if tab.ID() == filename {
-			return tab.Handler(), nil
+			h, ok := tab.Handler().(Handler)
+			if !ok {
+				continue
+			}
+			return h, nil
 		}
 	}
 	return nil, errors.New("handler not found")
@@ -526,7 +534,11 @@ func (c *Component) SubscribeEditorEvents(ev EventType, h EventHandler) error {
 	switch ev {
 	case EventTypeOpen:
 		for _, tab := range c.comp.Tabs() {
-			resHandler := tab.Handler()
+			resHandler, ok := tab.Handler().(Handler)
+			if !ok {
+				// tab handler does not implement Handler
+				continue
+			}
 			str, err := c.getContent(resHandler)
 			if err != nil {
 				return err
@@ -548,12 +560,15 @@ func (c *Component) SubscribeEditorEvents(ev EventType, h EventHandler) error {
 	case EventTypeFocus:
 		t, ok := c.comp.FocusTab()
 		if ok {
-			ev := Event{
-				Type:         EventTypeClose,
-				ResourceName: t.ID(),
-				Resource:     t.Handler(),
+			resHandler, ok := t.Handler().(Handler)
+			if ok {
+				ev := Event{
+					Type:         EventTypeClose,
+					ResourceName: t.ID(),
+					Resource:     resHandler,
+				}
+				h.Handle(ev)
 			}
-			h.Handle(ev)
 		}
 	}
 

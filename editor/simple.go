@@ -8,7 +8,7 @@ import (
 )
 
 type simpleEditor struct {
-	pub Publisher
+	pub  Publisher
 	wrap bool
 }
 
@@ -21,7 +21,7 @@ func Simple(wrap bool) Editor {
 }
 
 func (e *simpleEditor) Edit(name string, buf *cell.Buffer) (Handler, error) {
-	root := newSimpleEditor(buf, e.wrap)
+	root := newSimpleEditor(buf, name, e.wrap)
 	return e.pub.PublishEdit(name, buf, root, &root.cursor), nil
 }
 

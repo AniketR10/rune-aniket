@@ -57,9 +57,10 @@ func TestEventHandlerRPC(t *testing.T) {
 	ev := Event{
 		Type:         EventTypeFlush,
 		ResourceName: "myResourceName",
-		Resource:     browser.Token{ID: 1},
-		Content:      content,
-		cmdArgs:      cmdArgs,
+		Resource: Token{Token: browser.Token{ID: 1},
+			resource: "myResourceName"},
+		Content: content,
+		cmdArgs: cmdArgs,
 	}
 
 	t.Run("asynchronously dispatches events to remote event handler", func(t *testing.T) {

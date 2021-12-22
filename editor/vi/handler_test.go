@@ -54,7 +54,7 @@ func setupVi(
 	_, err := buf.ReadFrom(strings.NewReader(text))
 	require.NoError(t, err)
 
-	vi := New(buf, opts...)
+	vi := New(buf, "test", opts...)
 
 	return vi
 }

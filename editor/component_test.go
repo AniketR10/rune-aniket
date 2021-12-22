@@ -11,7 +11,6 @@ import (
 	"github.com/ernestrc/go-tui"
 	"github.com/ernestrc/go-tui/browser"
 	"github.com/ernestrc/go-tui/cell"
-	"github.com/ernestrc/go-tui/handler"
 	"github.com/ernestrc/go-tui/term"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -526,7 +525,11 @@ func TestDispatchCommand(t *testing.T) {
 	t.Run("DispatchCommand returns false if there's no registered handler", func(t *testing.T) {
 		c := newTestComponent(t, &testEditor{})
 
-		cmd := Command{Resource: handler.NewTestHandler(), ResourceName: "jklfwe", Name: "SELL"}
+		cmd := Command{
+			Resource:     NewTestHandler(),
+			ResourceName: "jklfwe",
+			Name:         "SELL",
+		}
 		assert.False(t, c.DispatchCommand(cmd))
 	})
 }

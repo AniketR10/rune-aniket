@@ -21,7 +21,7 @@ func Editor(opts ...Option) editor.Editor {
 }
 
 func (e *viEditor) Edit(name string, buf *cell.Buffer) (editor.Handler, error) {
-	root := New(buf, e.opts...)
+	root := New(buf, name, e.opts...)
 	return e.Publisher.PublishEdit(name, buf, root, &root.cursor), nil
 }
 

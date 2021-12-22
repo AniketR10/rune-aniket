@@ -14,7 +14,7 @@ type testEditor struct {
 	subs map[EventType][]EventHandler
 }
 
-// Mock returns a editor suitable for testing. 
+// Mock returns a editor suitable for testing.
 // It doesn't return real tui.Handler upon Edit but mimics
 // editor.Simple's subscription logic.
 func Mock() Editor {
@@ -52,11 +52,19 @@ type testEditorHandler struct {
 	name         string
 }
 
+func (e *testEditorHandler) Name() string {
+	return e.name
+}
+
 func (e *testEditor) Edit(name string, buf *cell.Buffer) (Handler, error) {
 	e.name = name
 	e.buf = buf
 
-	h := &testEditorHandler{name: name, parent: e, TestHandler: *browser.NewTestHandler()}
+	h := &testEditorHandler{
+		name:        name,
+		parent:      e,
+		TestHandler: *browser.NewTestHandler(),
+	}
 	e.dispatchEvent(Event{
 		Type:         EventTypeOpen,
 		ResourceName: name,

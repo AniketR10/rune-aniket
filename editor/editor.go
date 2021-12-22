@@ -14,6 +14,10 @@ import (
 // not be compatible with other APIs.
 type Handler interface {
 	tui.Handler
+
+	// This is only used to differentiate editor.Handler from the rest
+	// of tui.Handler in a browser.Component.
+	Name() string
 }
 
 // Writer is a cell.Writer that can fail.

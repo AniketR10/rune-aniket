@@ -103,7 +103,10 @@ func (e *Event) fromProto(pe *proto.EditorEvent) (err error) {
 	}
 	e.ResourceName = pe.GetResourceName()
 	if pe.ResourceId != 0 {
-		e.Resource = browser.Token{ID: uint64(pe.GetResourceId())}
+		e.Resource = Token{
+			Token:    browser.Token{ID: uint64(pe.GetResourceId())},
+			resource: e.ResourceName,
+		}
 	}
 	e.Start = pe.GetStart().ToModel()
 	e.End = pe.GetEnd().ToModel()
@@ -146,7 +149,7 @@ func (e *Event) toProto() proto.EditorEvent {
 
 	ret.ResourceName = e.ResourceName
 	if e.Resource != nil {
-		ret.ResourceId = uint32(e.Resource.(browser.Token).ID)
+		ret.ResourceId = uint32(e.Resource.(Token).ID)
 	}
 
 	var start, end, from, to proto.Coordinates

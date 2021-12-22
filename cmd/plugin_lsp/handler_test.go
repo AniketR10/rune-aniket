@@ -7,7 +7,6 @@ import (
 
 	"github.com/ernestrc/go-tui/cell"
 	"github.com/ernestrc/go-tui/editor"
-	"github.com/ernestrc/go-tui/handler"
 	"github.com/ernestrc/go-tui/plugin"
 	"github.com/ernestrc/go-tui/term"
 	"github.com/ernestrc/golang-internal-tools/lsp/protocol"
@@ -153,7 +152,7 @@ func dispatchOpen(
 		Type:         editor.EventTypeOpen,
 		ResourceName: name,
 		Content:      content,
-		Resource:     handler.NewTestHandler(),
+		Resource:     editor.NewTestHandler(),
 	}
 
 	expectDidOpen(t, server, name, content+"\n")
@@ -174,7 +173,7 @@ func dispatchFlush(
 		Type:         editor.EventTypeFlush,
 		ResourceName: name,
 		Content:      content,
-		Resource:     handler.NewTestHandler(),
+		Resource:     editor.NewTestHandler(),
 	}
 	changes := []protocol.TextDocumentContentChangeEvent{{Text: content+"\n"}}
 
@@ -233,7 +232,7 @@ func TestLspHandlerHandleInsertDelete(t *testing.T) {
 
 	buf := cell.NewBuffer()
 	buf.WriteString(filecontent1)
-	buf.Subscribe(editor.CellSubscriber(filename1, handler.NewTestHandler(),
+	buf.Subscribe(editor.CellSubscriber(filename1, editor.NewTestHandler(),
 		editor.FuncEventHandler(func(ev editor.Event) bool {
 			assert.False(t, h.Handle(ev))
 			return false

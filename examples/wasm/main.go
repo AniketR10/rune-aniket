@@ -32,7 +32,7 @@ func main() {
 	b := cell.NewBuffer()
 	b.WriteString(text)
 
-	editor := handler.NewFrame(vi.New(b))
+	editor := handler.NewFrame(vi.New(b, "go-tui-test"))
 
 	err = tui.Run(editor)
 	if err != nil {

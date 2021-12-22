@@ -53,6 +53,7 @@ type Vi struct {
 		From term.Coordinates
 		To   term.Coordinates
 	}
+	name string
 }
 
 // DefaultViConfig is a sane configuration defaults for Vi.
@@ -66,19 +67,20 @@ var defaultViConfig = viConfig{
 }
 
 // New allocates storage for a new Vi handler, initializes it and returns it.
-func New(buf *cell.Buffer, opts ...Option) *Vi {
+func New(buf *cell.Buffer, name string, opts ...Option) *Vi {
 	vi := new(Vi)
-	vi.Init(buf, opts...)
+	vi.Init(buf, name, opts...)
 	return vi
 }
 
 // Init initialies this vi handle with a new Buffer.
-func (vi *Vi) Init(buf *cell.Buffer, opts ...Option) {
+func (vi *Vi) Init(buf *cell.Buffer, name string, opts ...Option) {
 	vi.config = defaultViConfig
 	for _, o := range opts {
 		o(&vi.config)
 	}
 
+	vi.name = name
 	vi.less.InitWithBuffer(buf, handler.LessConfig{
 		Wrap:    vi.config.wrap,
 		Debug:   vi.config.debug,
@@ -836,4 +838,9 @@ func (vi *Vi) SetCursorAtScroll(pos term.Coordinates) bool {
 // CursorAtScroll sets the cursor of this Vi handler at content pos.
 func (vi *Vi) CursorAtScroll() term.Coordinates {
 	return vi.cursor.CursorAtScroll()
+}
+
+// Name satisfies editor.Handler.
+func (vi *Vi) Name() string {
+	return vi.name
 }

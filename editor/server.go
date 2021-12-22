@@ -63,7 +63,8 @@ func (s *serverEventHandler) Handle(ev Event) bool {
 				s.s, ev.ResourceName)
 			return true
 		}
-		ev.Resource = browser.Token{ID: uint64(brokerID)}
+		token := browser.Token{ID: uint64(brokerID)}
+		ev.Resource = Token{Token: token, resource: ev.ResourceName}
 	}
 
 	// do not hold mutex while waiting for I/O

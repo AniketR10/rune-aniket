@@ -8,19 +8,25 @@ import (
 )
 
 type simpleEditorHandler struct {
-	buf    *cell.Buffer
-	less   handler.Less
-	cursor Cursor
+	buf      *cell.Buffer
+	less     handler.Less
+	resource string
+	cursor   Cursor
 }
 
-func newSimpleEditor(buf *cell.Buffer, wrap bool) *simpleEditorHandler {
+func newSimpleEditor(
+	buf *cell.Buffer, resource string, wrap bool,
+) *simpleEditorHandler {
 	ret := new(simpleEditorHandler)
-	ret.init(buf, wrap)
+	ret.init(buf, resource, wrap)
 	return ret
 }
 
-func (h *simpleEditorHandler) init(buf *cell.Buffer, wrap bool) {
+func (h *simpleEditorHandler) init(
+	buf *cell.Buffer, resource string, wrap bool,
+) {
 	h.buf = buf
+	h.resource = resource
 	h.less.InitWithBuffer(buf, handler.LessConfig{
 		Wrap: wrap,
 		// TODO expose via configuration
@@ -112,4 +118,9 @@ func (h *simpleEditorHandler) Cursor() (pos term.Coordinates, show bool) {
 // Man satisfies tui.Handler
 func (h *simpleEditorHandler) Man() tui.Manual {
 	return tui.Manual{}
+}
+
+// Name satisfies editor.Handler.
+func (h *simpleEditorHandler) Name() string {
+	return h.resource
 }

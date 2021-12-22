@@ -6,7 +6,6 @@ import (
 	"github.com/ernestrc/go-tui/browser"
 	"github.com/ernestrc/go-tui/cell"
 	"github.com/ernestrc/go-tui/component"
-	"github.com/ernestrc/go-tui/handler"
 	"github.com/ernestrc/go-tui/proto"
 	"github.com/ernestrc/go-tui/term"
 	"github.com/stretchr/testify/assert"
@@ -26,10 +25,11 @@ func makeEventIntegrationCase(content string) (in, out *cell.Buffer, cursor *Cur
 
 func TestIntegrationInsert(t *testing.T) {
 	in, out, cursor := makeEventIntegrationCase("")
-	in.Subscribe(CellSubscriber("", handler.NewTestHandler(), FuncEventHandler(func(ev Event) bool {
-		out.InsertString(ev.Start, ev.Content)
-		return false
-	})))
+	in.Subscribe(CellSubscriber("", NewTestHandler(),
+		FuncEventHandler(func(ev Event) bool {
+			out.InsertString(ev.Start, ev.Content)
+			return false
+		})))
 
 	content := `package main
 func main() {
@@ -100,10 +100,11 @@ func main() {
 }`
 	in, out, cursor := makeEventIntegrationCase(content)
 
-	in.Subscribe(CellSubscriber("", handler.NewTestHandler(), FuncEventHandler(func(ev Event) bool {
-		out.Delete(ev.From, ev.To)
-		return false
-	})))
+	in.Subscribe(CellSubscriber("", NewTestHandler(),
+		FuncEventHandler(func(ev Event) bool {
+			out.Delete(ev.From, ev.To)
+			return false
+		})))
 
 	require.True(t, cursor.MoveDown())
 	require.True(t, cursor.MoveDown())
@@ -126,15 +127,16 @@ func main() {
 }`
 	in, out, cursor := makeEventIntegrationCase(content)
 
-	in.Subscribe(CellSubscriber("", handler.NewTestHandler(), FuncEventHandler(func(ev Event) bool {
-		switch ev.Type {
-		case EventTypeInsert:
-			out.InsertString(ev.Start, ev.Content)
-		case EventTypeDelete:
-			out.Delete(ev.From, ev.To)
-		}
-		return false
-	})))
+	in.Subscribe(CellSubscriber("", NewTestHandler(),
+		FuncEventHandler(func(ev Event) bool {
+			switch ev.Type {
+			case EventTypeInsert:
+				out.InsertString(ev.Start, ev.Content)
+			case EventTypeDelete:
+				out.Delete(ev.From, ev.To)
+			}
+			return false
+		})))
 
 	require.True(t, cursor.MoveDown())
 	require.True(t, cursor.MoveDown())
@@ -180,7 +182,8 @@ func TestEventProto(t *testing.T) {
 			in: Event{
 				Type:         EventTypeFocus,
 				ResourceName: "Ambient works",
-				Resource:     browser.Token{ID: 2},
+				Resource: Token{Token: browser.Token{ID: 2},
+					resource: "Ambient works"},
 			},
 			out: proto.EditorEvent{
 				Type:         proto.EditorEvent_TypeFocus,

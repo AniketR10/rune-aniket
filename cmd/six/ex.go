@@ -147,8 +147,11 @@ func (e *Ex) handlerInFocus() (string, editor.Handler, bool) {
 	if !ok {
 		return "", nil, false
 	}
-
-	return t.ID(), t.Handler().(editor.Handler), true
+	ret, ok := t.Handler().(editor.Handler)
+	if !ok {
+		return "", nil, false
+	}
+	return t.ID(), ret, true
 }
 
 func (e *Ex) moveFocusCursor(line int) error {

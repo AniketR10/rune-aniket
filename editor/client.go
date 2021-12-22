@@ -20,6 +20,17 @@ const (
 	defaultFailureTimeout = 5 * time.Second
 )
 
+// Token wraps a browser.Token to satisfy editor.Handler.
+type Token struct {
+	browser.Token
+	resource string
+}
+
+// Name satisfies Handler
+func (t Token) Name() string {
+	return t.resource
+}
+
 // Client satisfies editor.Editor by calling a remote editor over grpc.
 type Client struct {
 	Logger *log.Logger
@@ -99,7 +110,8 @@ func (c *Client) Edit(name string, buf *cell.Buffer) (Handler, error) {
 		return nil, err
 	}
 
-	return browser.Token{ID: uint64(res.GetHandlerId())}, nil
+	token := browser.Token{ID: uint64(res.GetHandlerId())}
+	return Token{Token: token, resource: name}, nil
 }
 
 // Editor satisfies editor.Editor
@@ -112,7 +124,8 @@ func (c *Client) Editor(name string) (Handler, error) {
 		return nil, err
 	}
 
-	return browser.Token{ID: uint64(res.GetHandlerId())}, nil
+	token := browser.Token{ID: uint64(res.GetHandlerId())}
+	return Token{Token: token, resource: name}, nil
 }
 
 // SubscribeEditorEvents requests the editor server to subscribe sub to ev.
@@ -191,7 +204,7 @@ func makeLocationListRequest(
 // via an EventHandler.
 func (c *Client) SetLocationList(h Handler, ID string, l LocationList) error {
 	ctx := context.Background()
-	token, ok := h.(browser.Token)
+	token, ok := h.(Token)
 	if !ok {
 		panic("SetLocationList: invalid Handler argument")
 	}
@@ -202,7 +215,7 @@ func (c *Client) SetLocationList(h Handler, ID string, l LocationList) error {
 
 func (c *Client) moveToLocation(h Handler, ID string, next bool) (err error) {
 	ctx := context.Background()
-	token, ok := h.(browser.Token)
+	token, ok := h.(Token)
 	if !ok {
 		panic("MoveToNextLocation: invalid Handler argument")
 	}
@@ -230,7 +243,7 @@ func (c *Client) MoveToNextLocation(h Handler, ID string) error {
 // SetCursor requests the editor server to move cursor to pos
 func (c *Client) SetCursor(h Handler, pos term.Coordinates) error {
 	ctx := context.Background()
-	token, ok := h.(browser.Token)
+	token, ok := h.(Token)
 	if !ok {
 		panic("SetCursor: invalid Handler argument")
 	}
@@ -244,7 +257,7 @@ func (c *Client) SetCursor(h Handler, pos term.Coordinates) error {
 // Cursor requests the editor server to move cursor to pos
 func (c *Client) Cursor(h Handler) (term.Coordinates, error) {
 	ctx := context.Background()
-	token, ok := h.(browser.Token)
+	token, ok := h.(Token)
 	if !ok {
 		panic("Cursor: invalid Handler argument")
 	}
@@ -258,7 +271,7 @@ func (c *Client) Cursor(h Handler) (term.Coordinates, error) {
 
 // Writer satisfies editor.Editor.
 func (c *Client) Writer(h Handler) Writer {
-	token, ok := h.(browser.Token)
+	token, ok := h.(Token)
 	if !ok {
 		panic("SetLocationList: invalid Handler argument")
 	}
@@ -267,7 +280,7 @@ func (c *Client) Writer(h Handler) Writer {
 
 // Reader satisfies editor.Editor.
 func (c *Client) Reader(h Handler) Reader {
-	token, ok := h.(browser.Token)
+	token, ok := h.(Token)
 	if !ok {
 		panic("SetLocationList: invalid Handler argument")
 	}
