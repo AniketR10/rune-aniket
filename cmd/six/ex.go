@@ -385,8 +385,8 @@ func (e *Ex) handleProxy(ev term.Event) (
 		if err != nil {
 			e.setError(err)
 		}
-		exit, _ = b.Handle(mev)
-		return quit || exit, true
+		_, _ = b.Handle(mev)
+		return quit, true
 	}
 
 	switch mev.Key {
@@ -399,7 +399,7 @@ func (e *Ex) handleProxy(ev term.Event) (
 	case term.KeyCtrlH:
 		b.UpdateWindowTabPrev(b.Focus())
 	default:
-		exit, handled = b.Handle(mev)
+		_, handled = b.Handle(mev)
 		if handled {
 			return
 		}

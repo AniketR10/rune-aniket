@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"io"
 	"strconv"
 	"sync"
@@ -662,4 +663,67 @@ func TestExKeySequence(t *testing.T) {
 	for _, close := range closeFns {
 		close()
 	}
+}
+
+func TestExExit(t *testing.T) {
+	commands := []string{
+		"writeQuit",
+		"writeForceQuit!",
+		"forceQuit!",
+		"quit",
+	}
+
+	for _, cmd := range commands {
+		t.Run(fmt.Sprintf("ex exits %s command is issued", cmd), func(t *testing.T) {
+			b := new(Ex)
+			defer b.Close()
+
+			err := b.Init(editor.Mock(),
+				editor.WithCommandEvent(testCommandEvent),
+			)
+			require.NoError(t, err)
+
+			// start command prompt
+			exit, handled := b.Handle(testCommandEvent)
+			assert.True(t, handled)
+			require.False(t, exit)
+
+			for _, ch := range cmd {
+				exit, handled := b.Handle(term.Event{Ch: ch, Type: term.EventKey})
+				assert.True(t, handled)
+				require.False(t, exit)
+			}
+
+			exit, handled = b.Handle(
+				term.Event{Key: term.KeyEnter, Type: term.EventKey})
+			assert.True(t, handled)
+			require.True(t, exit)
+
+		})
+	}
+
+	t.Run("ex does not exit when inner handler returns exit=true", func(t *testing.T) {
+		b := new(Ex)
+		defer b.Close()
+
+		err := b.Init(editor.Mock())
+		require.NoError(t, err)
+
+		h := browser.NewTestHandler()
+		h.Exit = true
+		h.Handled = true
+
+		tab, err := b.comp.Tab("a", "bleh", h)
+		require.NoError(t, err)
+
+		w, err := b.comp.Focus()
+		require.NoError(t, err)
+
+		err = w.SetContent(tab)
+		require.NoError(t, err)
+
+		exit, handled := b.Handle(term.Event{Ch: 'a', Type: term.EventKey})
+		assert.True(t, handled)
+		assert.False(t, exit)
+	})
 }
