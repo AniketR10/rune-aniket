@@ -46,15 +46,24 @@ type WindowManager interface {
 	// Focus returns the current Window in focus.
 	Focus() (Window, error)
 
-	// Split splits the current window in focus in two, and installs Handler in the new window.
+	// Split splits the current window in focus in two, and installs
+	// Handler in the new window.
 	Split(Orientation, Handler) (Window, error)
 
-	// Floating creates a new floating window at coordinates, with static width and height.
+	// Floating creates a new floating window at coordinates,
+	// with static width and height.
 	Floating(h Handler, at term.Coordinates, width, height int) (Window, error)
 
-	// Bar creates a status bar with Orientation and Handler. Bars differ from Split and Floating
-	// windows in that they can't be in focus and can only receive mouse events.
+	// Bar creates a status bar with Orientation and Handler.
+	// Bars differ from Split and Floating windows in that they can't
+	// be in focus and can only receive mouse events.
 	Bar(Orientation, tui.Handler) error
+
+	// Tab creates a new tab with h and returns a handle that can be
+	// used with the rest of methods that take a browser.Handler.
+	// ID is used to uniquely identify a tab and name is used as a label
+	// to display it in the tab bar.
+	Tab(ID, name string, h Handler) (Handler, error)
 }
 
 // Messenger is the interface that wraps methods to display

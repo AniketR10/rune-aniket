@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os/user"
 	"path/filepath"
 	"strings"
@@ -274,8 +275,7 @@ func (c *Component) OpenFileTab(
 	tabname := c.getTabName(filename)
 	c.tryLog(log.DebugLevel, "Open(%s): opening tab with tabname='%s'", filename, tabname)
 
-	t = c.comp.NewTab(filename, tabname, editor, fc)
-	t.Subscribe((*compTabSubscriber)(c))
+	t = c.newTab(filename, tabname, editor, fc)
 	return t, nil
 }
 
@@ -468,9 +468,7 @@ func (c *Component) Edit(name string, buf *cell.Buffer) (Handler, error) {
 		return nil, err
 	}
 
-	t := c.comp.NewTab(name, name, editor, nil)
-	t.Subscribe((*compTabSubscriber)(c))
-
+	c.newTab(name, name, editor, nil)
 	return editor, nil
 }
 
@@ -677,6 +675,28 @@ func (c *Component) Floating(
 		return nil, fmt.Errorf("invalid floating window coordinates: %v", at)
 	}
 	return c.comp.Floating(h, at, width, height), nil
+}
+
+func (c *Component) newTab(
+	id, name string, h tui.Handler, closer io.Closer,
+) *browser.Tab {
+	t := c.comp.NewTab(id, name, h, closer)
+	t.Subscribe((*compTabSubscriber)(c))
+	return t
+}
+
+// Tab satisfies browser.WindowManager.
+func (c *Component) Tab(id, name string, h browser.Handler) (
+	browser.Handler, error,
+) {
+	t, ok := c.comp.Tab(id)
+	if ok {
+		t, err := c.setFocusToTab(t)
+		return t, err
+	}
+
+	t = c.newTab(id, name, h, nil)
+	return t, nil
 }
 
 // Close closes all resources associated with this Component.

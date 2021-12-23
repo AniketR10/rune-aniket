@@ -280,6 +280,7 @@ type WindowManagerClient interface {
 	Split(ctx context.Context, in *SplitRequest, opts ...grpc.CallOption) (*SplitResponse, error)
 	Bar(ctx context.Context, in *BarRequest, opts ...grpc.CallOption) (*BarResponse, error)
 	Floating(ctx context.Context, in *FloatingWindowRequest, opts ...grpc.CallOption) (*FloatingWindowResponse, error)
+	Tab(ctx context.Context, in *TabRequest, opts ...grpc.CallOption) (*TabResponse, error)
 }
 
 type windowManagerClient struct {
@@ -326,6 +327,15 @@ func (c *windowManagerClient) Floating(ctx context.Context, in *FloatingWindowRe
 	return out, nil
 }
 
+func (c *windowManagerClient) Tab(ctx context.Context, in *TabRequest, opts ...grpc.CallOption) (*TabResponse, error) {
+	out := new(TabResponse)
+	err := c.cc.Invoke(ctx, "/proto.WindowManager/Tab", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // WindowManagerServer is the server API for WindowManager service.
 // All implementations must embed UnimplementedWindowManagerServer
 // for forward compatibility
@@ -334,6 +344,7 @@ type WindowManagerServer interface {
 	Split(context.Context, *SplitRequest) (*SplitResponse, error)
 	Bar(context.Context, *BarRequest) (*BarResponse, error)
 	Floating(context.Context, *FloatingWindowRequest) (*FloatingWindowResponse, error)
+	Tab(context.Context, *TabRequest) (*TabResponse, error)
 	mustEmbedUnimplementedWindowManagerServer()
 }
 
@@ -352,6 +363,9 @@ func (UnimplementedWindowManagerServer) Bar(context.Context, *BarRequest) (*BarR
 }
 func (UnimplementedWindowManagerServer) Floating(context.Context, *FloatingWindowRequest) (*FloatingWindowResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Floating not implemented")
+}
+func (UnimplementedWindowManagerServer) Tab(context.Context, *TabRequest) (*TabResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Tab not implemented")
 }
 func (UnimplementedWindowManagerServer) mustEmbedUnimplementedWindowManagerServer() {}
 
@@ -438,6 +452,24 @@ func _WindowManager_Floating_Handler(srv interface{}, ctx context.Context, dec f
 	return interceptor(ctx, in, info, handler)
 }
 
+func _WindowManager_Tab_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(TabRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WindowManagerServer).Tab(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/proto.WindowManager/Tab",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WindowManagerServer).Tab(ctx, req.(*TabRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // WindowManager_ServiceDesc is the grpc.ServiceDesc for WindowManager service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -460,6 +492,10 @@ var WindowManager_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Floating",
 			Handler:    _WindowManager_Floating_Handler,
+		},
+		{
+			MethodName: "Tab",
+			Handler:    _WindowManager_Tab_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

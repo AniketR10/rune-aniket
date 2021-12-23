@@ -223,11 +223,6 @@ func assertServerServersEqual(t *testing.T, expected int, s *Server) {
 	assert.Equal(t, expected, len(s.servers))
 }
 
-
-func TestServerFloatingWindow(t *testing.T) {
-	// TODO
-}
-
 func TestServerSplitHorizontalAbove(t *testing.T) {
 	testServerSplit(t, OrientationTop, proto.Orientation_Top)
 }

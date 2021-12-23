@@ -59,6 +59,15 @@ message FloatingWindowResponse {
 	uint64 window_id = 1;
 }
 
+message TabRequest {
+	uint64 handler_id = 1;
+    string resource_id = 2;
+    string resource_name = 3;
+}
+
+message TabResponse {
+	uint64 tab_handler_id = 1;
+}
 
 message FocusRequest {
 }
@@ -91,6 +100,7 @@ service WindowManager {
 	rpc Split(SplitRequest) returns (SplitResponse);
 	rpc Bar(BarRequest) returns (BarResponse);
 	rpc Floating(FloatingWindowRequest) returns (FloatingWindowResponse);
+	rpc Tab(TabRequest) returns (TabResponse);
 }
 
 message WindowCloseRequest {

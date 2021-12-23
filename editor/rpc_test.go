@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/ernestrc/go-tui"
+	"github.com/ernestrc/go-tui/browser"
 	"github.com/ernestrc/go-tui/cell"
 	"github.com/ernestrc/go-tui/handler"
 	"github.com/ernestrc/go-tui/proto"
@@ -20,27 +21,51 @@ import (
 	"google.golang.org/grpc"
 )
 
-func setupIntTest(
-	t *testing.T, broker proto.MuxBroker, s *Server,
-) (client *Client, closeFn func()) {
+func doSetupIntTest(
+	t *testing.T, broker proto.MuxBroker, register func(*grpc.Server),
+) (conn *grpc.ClientConn, closeFn func()) {
 	lis, err := net.Listen("tcp", ":0")
 	require.NoError(t, err)
 
 	grpcServer := grpc.NewServer()
-	proto.RegisterEditorServer(grpcServer, s)
+	register(grpcServer)
 
 	go grpcServer.Serve(lis)
 
-	conn, err := grpc.Dial(lis.Addr().String(), grpc.WithInsecure())
+	conn, err = grpc.Dial(lis.Addr().String(), grpc.WithInsecure())
 	require.NoError(t, err)
 
-	client = NewClient(broker, conn)
 	closeFn = func() {
-		client.Close()
 		grpcServer.Stop()
 		lis.Close()
 	}
 	return
+}
+
+func setupIntTest(
+	t *testing.T, broker proto.MuxBroker, s *Server,
+) (*Client, func()) {
+	conn, closeFn := doSetupIntTest(t, broker, func(grpcServer *grpc.Server) {
+		proto.RegisterEditorServer(grpcServer, s)
+	})
+	client := NewClient(broker, conn)
+	return client, func() {
+		client.Close()
+		closeFn()
+	}
+}
+
+func setupWmIntTest(
+	t *testing.T, broker proto.MuxBroker, s *browser.Server,
+) (*browser.Client, func()) {
+	conn, closeFn := doSetupIntTest(t, broker, func(grpcServer *grpc.Server) {
+		proto.RegisterWindowManagerServer(grpcServer, s)
+	})
+	client := browser.NewClient(broker, conn)
+	return client, func() {
+		client.Close()
+		closeFn()
+	}
 }
 
 func expectInitialServerSubscribe(t *testing.T, mock *MockEditor) {
@@ -295,6 +320,30 @@ func TestClientServerIntegration(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, "guacamole\npollos hermanos", cell.CellsToString(cells))
 	})
+}
+
+func TestRPCTab(t *testing.T) {
+	var closeFns []func()
+	testTabIntegration(t, func(ed Editor, mu *sync.Mutex) (*Component, browser.WindowManager, error) {
+		c, err := newTestComponentErr(ed)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		b := proto.NewDialBroker()
+		s := browser.NewServer(b, c, mu)
+
+		client, closeFn := setupWmIntTest(t, b, s)
+		closeFns = append(closeFns, func() {
+			s.Close()
+			closeFn()
+		})
+
+		return c, client, err
+	})
+	for _, closeFn := range closeFns {
+		closeFn()
+	}
 }
 
 func TestRPCRegister(t *testing.T) {

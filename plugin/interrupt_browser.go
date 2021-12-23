@@ -55,6 +55,15 @@ func (s *interruptBrowser) Floating(
 	return res, err
 }
 
+// Tab satisfies proto.BrowserServer
+func (s *interruptBrowser) Tab(
+	ctx context.Context, req *proto.TabRequest,
+) (*proto.TabResponse, error) {
+	res, err := s.browserServer.Tab(ctx, req)
+	s.interruptDraw()
+	return res, err
+}
+
 // Split satisfies proto.BrowserServer
 func (s *interruptBrowser) Split(
 	ctx context.Context, req *proto.SplitRequest,

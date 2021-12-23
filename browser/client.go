@@ -366,6 +366,24 @@ func (c *Client) Floating(
 	}, OrientationTop, h)
 }
 
+// Tab satisfies browser.WindowManager
+func (c *Client) Tab(id, name string, h Handler) (Handler, error) {
+	handlerID := c.serveHandler(h)
+	req := proto.TabRequest{
+		HandlerId:    handlerID,
+		ResourceId:   id,
+		ResourceName: name,
+	}
+	ctx := context.Background()
+	res, err := c.wm.Tab(ctx, &req)
+	if err != nil {
+		reason := fmt.Sprintf("browser.Tab: %v", err)
+		c.safeForceCloseHandler(handlerID, reason)
+		return nil, err
+	}
+	return Token{ID: uint64(res.GetTabHandlerId())}, err
+}
+
 // Close closes all resources associated with this Client.
 // This client should not be used after this method is called.
 func (c *Client) Close() (err error) {

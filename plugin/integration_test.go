@@ -45,13 +45,13 @@ func TestIntegrationRace(t *testing.T) {
 
 	// plugin manager serves each permission on a different grantID
 	perms := map[Permission]uint32{
-		PermissionBrowserWindowManager:   broker.NextId(),
-		PermissionBrowserResourceOpener:  broker.NextId(),
-		PermissionBrowserMessenger:       broker.NextId(),
-		PermissionBrowserEventPublisher:  broker.NextId(),
-		PermissionEditor:                 broker.NextId(),
-		PermissionBrowserStorage:         broker.NextId(),
-		PermissionClipboard:              broker.NextId(),
+		PermissionBrowserWindowManager:  broker.NextId(),
+		PermissionBrowserResourceOpener: broker.NextId(),
+		PermissionBrowserMessenger:      broker.NextId(),
+		PermissionBrowserEventPublisher: broker.NextId(),
+		PermissionEditor:                broker.NextId(),
+		PermissionBrowserStorage:        broker.NextId(),
+		PermissionClipboard:             broker.NextId(),
 	}
 	for perm, brokerID := range perms {
 		resources[perm].Serve("caliu-plugins-ltd", brokerID,
@@ -86,6 +86,22 @@ func TestIntegrationRace(t *testing.T) {
 			return mock.Bar(gomock.Any(), gomock.Any()).Return(nil)
 		}, func(ifc interface{}) error {
 			return ifc.(browser.WindowManager).Bar(browser.OrientationBottom, h)
+		}},
+		{PermissionBrowserWindowManager, func(token uint32, broker proto.MuxBroker) (interface{}, error) {
+			return WindowManager(token, broker)
+		}, func(ed *editor.MockEditorMockRecorder, mock *browser.MockBrowserMockRecorder) *gomock.Call {
+			return mock.Tab(gomock.Any(), gomock.Any(), gomock.Any()).Return(h, nil)
+		}, func(ifc interface{}) error {
+			_, err := ifc.(browser.WindowManager).Tab("", "", h)
+			return err
+		}},
+		{PermissionBrowserWindowManager, func(token uint32, broker proto.MuxBroker) (interface{}, error) {
+			return WindowManager(token, broker)
+		}, func(ed *editor.MockEditorMockRecorder, mock *browser.MockBrowserMockRecorder) *gomock.Call {
+			return mock.Floating(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(mockWin, nil)
+		}, func(ifc interface{}) error {
+			_, err := ifc.(browser.WindowManager).Floating(h, term.Coordinates{}, 1, 1)
+			return err
 		}},
 		{PermissionBrowserResourceOpener, func(token uint32, broker proto.MuxBroker) (interface{}, error) {
 			return ResourceOpener(token, broker)

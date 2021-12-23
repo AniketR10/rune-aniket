@@ -213,8 +213,8 @@ func (s *Server) forceCloseHandler(brokerID uint64, reason string) error {
 }
 
 func (s *Server) getContentHandler(handlerID uint64) (Handler, error) {
-	s.browser.Lock()
 	if handlerID < math.MaxUint32 {
+		s.browser.Lock()
 		h, ok := s.opened[uint32(handlerID)]
 		s.browser.Unlock()
 		if ok {
@@ -247,29 +247,29 @@ func (s *Server) getContentHandler(handlerID uint64) (Handler, error) {
 	return bHandler, nil
 }
 
-// SplitVerticalRight satisfies proto.BrowserServer
-func (s *Server) split(
+func (s *Server) newRemoteResource(
 	ctx context.Context, req interface{ GetHandlerId() uint64 },
-	split func(WindowManager, Handler) (Window, error),
-) (*proto.SplitResponse, error) {
+	action func(WindowManager, Handler) (Window, error),
+) (uint64, error) {
 	handlerID := req.GetHandlerId()
 	handler, err := s.getContentHandler(handlerID)
 	if err != nil {
-		return nil, err
+		return 0, err
 	}
 
 	s.browser.Lock()
 	defer s.browser.Unlock()
-	win, err := split(s.browser, handler)
+	win, err := action(s.browser, handler)
 	if err != nil {
-		reason := fmt.Sprintf("failed to create window: %s", err.Error())
+		reason := fmt.Sprintf("failed to create resource: %s", err.Error())
 		s.forceCloseHandler(handlerID, reason)
-		return nil, err
+		return 0, err
+	}
+	if win == nil {
+		return 0, nil
 	}
 
-	windowID := s.serveWindow(win)
-	res := &proto.SplitResponse{WindowId: windowID}
-	return res, nil
+	return s.serveWindow(win), nil
 }
 
 func protoToModelOrientation(p proto.Orientation) (o Orientation) {
@@ -290,9 +290,14 @@ func protoToModelOrientation(p proto.Orientation) (o Orientation) {
 func (s *Server) Split(
 	ctx context.Context, req *proto.SplitRequest,
 ) (*proto.SplitResponse, error) {
-	return s.split(ctx, req, func(wm WindowManager, h Handler) (Window, error) {
-		return wm.Split(protoToModelOrientation(req.GetOrientation()), h)
-	})
+	windowID, err := s.newRemoteResource(ctx, req,
+		func(wm WindowManager, h Handler) (Window, error) {
+			return wm.Split(protoToModelOrientation(req.GetOrientation()), h)
+		})
+	if err != nil {
+		return nil, err
+	}
+	return &proto.SplitResponse{WindowId: windowID}, nil
 }
 
 // Bar satisfies proto.BrowserServer
@@ -424,13 +429,33 @@ func (s *Server) Floating(
 	at := req.GetAt().ToModel()
 	height := int(req.GetHeight())
 	width := int(req.GetWidth())
-	resp, err := s.split(ctx, req, func(wm WindowManager, h Handler) (Window, error) {
-		return wm.Floating(h, at, height, width)
-	})
+	windowID, err := s.newRemoteResource(ctx, req,
+		func(wm WindowManager, h Handler) (Window, error) {
+			return wm.Floating(h, at, height, width)
+		})
 	if err != nil {
 		return nil, err
 	}
-	return &proto.FloatingWindowResponse{WindowId: resp.GetWindowId()}, nil
+	return &proto.FloatingWindowResponse{WindowId: windowID}, nil
+}
+
+// Tab satisfies proto.BrowserServer
+func (s *Server) Tab(
+	ctx context.Context, req *proto.TabRequest,
+) (*proto.TabResponse, error) {
+	name := req.GetResourceName()
+	id := req.GetResourceId()
+	var tab Handler
+	_, err := s.newRemoteResource(ctx, req,
+		func(wm WindowManager, h Handler) (w Window, err error) {
+			tab, err = wm.Tab(id, name, h)
+			return nil, err
+		})
+	if err != nil {
+		return nil, err
+	}
+	handlerID := s.ensureAvailable(tab)
+	return &proto.TabResponse{TabHandlerId: handlerID}, nil
 }
 
 // Close closes all resources associated with this server.

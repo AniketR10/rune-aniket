@@ -11,7 +11,9 @@ import (
 	"github.com/ernestrc/go-tui"
 	"github.com/ernestrc/go-tui/browser"
 	"github.com/ernestrc/go-tui/cell"
+	"github.com/ernestrc/go-tui/handler"
 	"github.com/ernestrc/go-tui/term"
+	testutil "github.com/ernestrc/go-tui/util/test"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -617,5 +619,53 @@ func TestComponentRegister(t *testing.T) {
 	testRegister(t, func(ed Editor, mu *sync.Mutex, resName string) (*Component, Editor, error) {
 		c, err := newTestComponentErr(ed)
 		return c, c, err
+	})
+}
+func TestTabIntegration(t *testing.T) {
+	testTabIntegration(t, func(ed Editor, mu *sync.Mutex) (*Component, browser.WindowManager, error) {
+		c, err := newTestComponentErr(ed)
+		return c, c, err
+	})
+}
+
+func testTabIntegration(t *testing.T,
+	constructor func(ed Editor, mu *sync.Mutex) (*Component, browser.WindowManager, error)) {
+	t.Run("switches to a tab upon call to SetContent", func(t *testing.T) {
+		cases := []testutil.HandlerSequenceTestCase{
+			{"",
+				`┌──────────────────┐
+│$$  ##            │
+├──────────────────┤
+│##################│
+│##################│
+│##################│
+│##################│
+│##################│
+│##################│
+└──────────────────┘`},
+		}
+
+		fn := func(t *testing.T) tui.Handler {
+			var mu sync.Mutex
+			c, wm, err := constructor(&testEditor{}, &mu)
+			require.NoError(t, err)
+
+			b1 := browser.NewTestHandler()
+			b1.Ch = '$'
+			_, err = wm.Tab("a", "$$", b1)
+			require.NoError(t, err)
+
+			b2 := browser.NewTestHandler()
+			b2.Ch = '#'
+			t2, err := wm.Tab("b", "##", b2)
+			require.NoError(t, err)
+
+			win, err := wm.Focus()
+			require.NoError(t, err)
+
+			require.NoError(t, win.SetContent(t2))
+			return handler.Sync(&mu, handler.Nop(&c.comp))
+		}
+		testutil.TestHandlerIsolated(t, fn, 20, 10, cases)
 	})
 }
