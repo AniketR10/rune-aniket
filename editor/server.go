@@ -184,7 +184,8 @@ func (s *Server) safeForceCloseHandler(brokerID uint32, reason string) error {
 	s.editor.Unlock()
 
 	s.tryLog("editor.Server.safeForceCloseHandler(%d, reason=%s)", brokerID, reason)
-	_, err := proto.ForceCloseResource(uint64(brokerID), s.getClients, s.Logger, s.editor.Locker)
+	_, err := proto.ForceCloseResource(uint64(brokerID), s.getClients,
+		s.Logger, s.editor.Locker)
 	return err
 }
 
@@ -209,9 +210,11 @@ func (s *Server) dialHandler(handlerID uint32) (EventHandler, error) {
 	client.logger = s.Logger
 
 	ctx, cancelFn := context.WithCancel(context.Background())
-	go proto.MonitorConnection(ctx, s.failureTimeout, handlerConn, func(reason string) {
-		s.safeForceCloseHandler(handlerID, reason)
-	})
+	go proto.MonitorConnection(ctx, s.failureTimeout, handlerConn,
+		func(reason string) {
+			reason = fmt.Sprintf("editor.MonitorConnection(handler): %s", reason)
+			s.safeForceCloseHandler(handlerID, reason)
+		})
 	go s.consumeErrors(ctx, client.errors())
 
 	s.editor.Lock()

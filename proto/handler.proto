@@ -39,11 +39,13 @@ message ManResponse {
 	Manual man = 1;
 }
 
-message OnUnmountRequest {}
-message OnUnmountResponse {}
+message CloseRequest {
+}
+
+message CloseResponse {}
 
 service Handler {
 	rpc Handle(HandleRequest) returns (HandleResponse);
 	rpc Man(ManRequest) returns (ManResponse);
-	rpc OnUnmount(OnUnmountRequest) returns (OnUnmountResponse);
+	rpc Close(CloseRequest) returns (CloseResponse);
 }

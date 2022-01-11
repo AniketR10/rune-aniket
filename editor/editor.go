@@ -5,7 +5,7 @@ package editor
 import (
 	"fmt"
 
-	"github.com/ernestrc/go-tui"
+	"github.com/ernestrc/go-tui/browser"
 	"github.com/ernestrc/go-tui/cell"
 	"github.com/ernestrc/go-tui/term"
 )
@@ -13,7 +13,7 @@ import (
 // Handler just wraps a tui.Handler to indicate that this API's handlers might
 // not be compatible with other APIs.
 type Handler interface {
-	tui.Handler
+	browser.Handler
 
 	// This is only used to differentiate editor.Handler from the rest
 	// of tui.Handler in a browser.Component.

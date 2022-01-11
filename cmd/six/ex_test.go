@@ -262,20 +262,14 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 
 	testutil.TestHandlerSequence(t, bh, 20, 10, cases)
 
-	var unmounted int
+	var closed int
 	hx := browser.NewTestHandler()
 	hx.Ch = '$'
-	hx.OnUnmountCallback = func() error { unmounted++; return nil }
+	hx.CloseCallback = func() error { closed++; return nil }
 	require.NoError(t, focus.SetContent(hx))
 
-	for i := 0; i < 10; i++ {
-		content, err := focus.Content()
-		require.NoError(t, err)
-		require.NoError(t, focus.SetContent(content))
-	}
-
 	cases = []testutil.HandlerSequenceTestCase{
-		{"_",
+		{"____",
 			`┌──────────────────┐
 │cabin.go  other.go│
 ├────────┐┌────────┤
@@ -469,7 +463,7 @@ EEEE`},
 
 	assert.NoError(t, bh.(io.Closer).Close())
 	assert.NoError(t, b.Close())
-	assert.Equal(t, 11, unmounted)
+	assert.Equal(t, 1, closed)
 }
 
 func assertHandled(

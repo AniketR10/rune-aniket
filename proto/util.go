@@ -199,18 +199,18 @@ func ForceCloseResource(
 
 	err := res.Close()
 	if err != nil && logger != nil {
-		logger.Errorf("resource.Close error: %v", err)
+		logger.Errorf("resource.Close %d error: %v", brokerID, err)
 	}
 
 	return res, err
 }
 
-// MonitorConnection blocks the calling goroutine and calls onClosed callback
+// MonitorConnection blocks the calling goroutine and calls doClosed callback
 // and returns only when connection state is shutdown, or it has been in a transient
 // failure for too long.
 func MonitorConnection(
 	ctx context.Context, failureTimeout time.Duration,
-	conn MuxConn, onClosed func(reason string),
+	conn MuxConn, doClosed func(reason string),
 ) {
 
 	for {
@@ -223,11 +223,11 @@ func MonitorConnection(
 			didChange := conn.WaitForStateChange(failureCtx, connectivity.TransientFailure)
 			cancelFn()
 			if !didChange {
-				onClosed("timeout waiting for transient failure to recover")
+				doClosed("timeout waiting for transient failure to recover")
 				return
 			}
 		case connectivity.Shutdown:
-			onClosed("grpc connection state = shutdown")
+			doClosed("grpc connection state = shutdown")
 			return
 		default:
 			panic(fmt.Sprintf("unknown connection state: %v", state))

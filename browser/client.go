@@ -16,6 +16,9 @@ import (
 	"google.golang.org/grpc"
 )
 
+// without access to underlying stream (i.e. SendClose),
+// waiting a prudent amount of time for all rpcs to finish
+// is the best we can do. See https://github.com/grpc/grpc-go/issues/1714
 const gracefulShutdownWait = 100 * time.Millisecond
 
 // Client satisfies Browser by talking to a browser server over RPC.
@@ -55,17 +58,14 @@ type browserClientHandler struct {
 	c *Client
 }
 
-func (c browserClientHandler) gracefulShutdown() {
+func (c browserClientHandler) gracefulShutdown(reason string) {
 	time.Sleep(gracefulShutdownWait)
-	c.c.safeForceCloseHandler(c.handlerID, "Handle()(exit=true)")
+	c.c.safeForceCloseHandler(c.handlerID, reason)
 }
 
-func (c browserClientHandler) Handle(ev term.Event) (bool, bool) {
-	exit, handled := c.Handler.Handle(ev)
-	if exit {
-		go c.gracefulShutdown()
-	}
-	return exit, handled
+func (c browserClientHandler) Close() error {
+	go c.gracefulShutdown("Close")
+	return c.Handler.Close()
 }
 
 // NewClient allocates storage for a new Client and initializes it.
@@ -100,11 +100,12 @@ func (c *Client) Init(
 	c.failureTimeout = defaultFailureTimeout
 }
 
-func (c *Client) serveHandler(h Handler) uint64 {
+func (c *Client) serveHandler(h Handler) (uint64, bool) {
 	var brokerID uint64
 	var srv proto.MuxServer
 
-	if tokenHandler, ok := h.(Token); ok {
+	tokenHandler, ok := h.(Token)
+	if ok {
 		brokerID = tokenHandler.ID
 	} else {
 		var brokerID32 uint32
@@ -125,10 +126,10 @@ func (c *Client) serveHandler(h Handler) uint64 {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.servers[brokerID] = &handlerServerResource{h: h, srv: srv, brokerID: brokerID}
-	return brokerID
+	return brokerID, !ok
 }
 
-func (c *Client) dialWindow(windowID uint64, handlerID int) (Window, error) {
+func (c *Client) dialWindow(windowID uint64) (Window, error) {
 	c.mu.Lock()
 	res, ok := c.clients[windowID]
 	c.mu.Unlock()
@@ -211,19 +212,23 @@ func toProtoOrientation(o Orientation) proto.Orientation {
 }
 
 func (c *Client) split(split clientSplit, o Orientation, h Handler) (Window, error) {
-	handlerID := c.serveHandler(h)
+	handlerID, created := c.serveHandler(h)
 	req := proto.SplitRequest{HandlerId: handlerID, Orientation: toProtoOrientation(o)}
 	ctx := context.Background()
 	res, err := split(c.wm, ctx, &req)
 	if err != nil {
-		reason := fmt.Sprintf("browser.Split: %v", err)
-		c.safeForceCloseHandler(handlerID, reason)
+		if created {
+			reason := fmt.Sprintf("browser.Split: %v", err)
+			c.safeForceCloseHandler(handlerID, reason)
+		}
 		return nil, err
 	}
-	win, err := c.dialWindow(res.GetWindowId(), int(handlerID))
+	win, err := c.dialWindow(res.GetWindowId())
 	if err != nil {
-		reason := fmt.Sprintf("error dialing to window: %v", err)
-		c.safeForceCloseHandler(handlerID, reason)
+		if created {
+			reason := fmt.Sprintf("error dialing to window: %v", err)
+			c.safeForceCloseHandler(handlerID, reason)
+		}
 		return nil, err
 	}
 	return win, nil
@@ -236,13 +241,15 @@ func (c *Client) Split(o Orientation, h Handler) (Window, error) {
 
 // Bar satisfies Browser.
 func (c *Client) Bar(o Orientation, h tui.Handler) error {
-	handlerID := c.serveHandler(NopHandler(h))
+	handlerID, created := c.serveHandler(NopHandler(h))
 	req := proto.BarRequest{HandlerId: handlerID, Orientation: toProtoOrientation(o)}
 	ctx := context.Background()
 	_, err := c.wm.Bar(ctx, &req)
 	if err != nil {
-		reason := fmt.Sprintf("browser.Bar: %v", err)
-		c.safeForceCloseHandler(handlerID, reason)
+		if created {
+			reason := fmt.Sprintf("browser.Bar: %v", err)
+			c.safeForceCloseHandler(handlerID, reason)
+		}
 		return err
 	}
 	return nil
@@ -294,7 +301,7 @@ func (c *Client) Focus() (Window, error) {
 	if err != nil {
 		return nil, err
 	}
-	return c.dialWindow(res.GetWindowId(), -1)
+	return c.dialWindow(res.GetWindowId())
 }
 
 // Create satisfies browser.Storage
@@ -368,7 +375,7 @@ func (c *Client) Floating(
 
 // Tab satisfies browser.WindowManager
 func (c *Client) Tab(id, name string, h Handler) (Handler, error) {
-	handlerID := c.serveHandler(h)
+	handlerID, created := c.serveHandler(h)
 	req := proto.TabRequest{
 		HandlerId:    handlerID,
 		ResourceId:   id,
@@ -377,8 +384,10 @@ func (c *Client) Tab(id, name string, h Handler) (Handler, error) {
 	ctx := context.Background()
 	res, err := c.wm.Tab(ctx, &req)
 	if err != nil {
-		reason := fmt.Sprintf("browser.Tab: %v", err)
-		c.safeForceCloseHandler(handlerID, reason)
+		if created {
+			reason := fmt.Sprintf("browser.Tab: %v", err)
+			c.safeForceCloseHandler(handlerID, reason)
+		}
 		return nil, err
 	}
 	return Token{ID: uint64(res.GetTabHandlerId())}, err

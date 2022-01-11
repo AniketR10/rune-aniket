@@ -46,34 +46,34 @@ type Component struct {
 
 // component.WindowManager sinchronously removes tui.Handlers
 // upon returning exit=true on calls to Handle. This
-// structure is used to call OnUnmount when this occurs.
+// structure is used to call Close when this occurs.
 type browserContent struct {
 	Handler
-	unmounted bool
-	c         *Component
+	closed bool
+	c      *Component
 }
 
 func (c *browserContent) Handle(ev term.Event) (exit, handled bool) {
 	exit, handled = c.Handler.Handle(ev)
 	if exit {
-		c.c.onUnmount(c, "component exit via Handle()(exit=true)")
+		c.c.closeHandler(c)
 	}
 	return
 }
 
-func (c *browserContent) OnUnmount() error {
-	if c.unmounted {
+func (c *browserContent) Close() error {
+	if c.closed {
 		return nil
 	}
-	c.unmounted = true
-	return c.Handler.OnUnmount()
+	c.closed = true
+	return c.Handler.Close()
 }
 
 // needed mutable to inverse a split
 type browserWindow struct {
 	parent  *Component
 	win     handler.Window
-	onClose func()
+	doClose func()
 }
 
 func (w *browserWindow) id() uint64 {
@@ -81,7 +81,7 @@ func (w *browserWindow) id() uint64 {
 }
 
 func (w *browserWindow) onWindowClosed(fn func()) {
-	w.onClose = fn
+	w.doClose = fn
 }
 
 func (w *browserWindow) Content() (Handler, error) {
@@ -105,17 +105,17 @@ func (w *browserWindow) Close() error {
 	}
 
 	parent := w.parent
-	onClose := w.onClose
-	w.onClose = nil
+	doClose := w.doClose
+	w.doClose = nil
 	w.parent = nil
 
 	err := parent.closeWindow(w)
 	if err != nil {
-		w.onClose = onClose
+		w.doClose = doClose
 		w.parent = parent
 		w.parent.setError(err)
-	} else if onClose != nil {
-		onClose()
+	} else if doClose != nil {
+		doClose()
 	}
 
 	return err
@@ -145,8 +145,7 @@ func (c *Component) closeWindow(win *browserWindow) error {
 
 	delete(c.windows, win.id())
 
-	reason := fmt.Sprintf("Close called on window: %p", win)
-	c.onUnmount(content, reason)
+	c.releaseHandler(content)
 	return nil
 }
 
@@ -190,7 +189,13 @@ func (c *Component) Init(config Config) {
 		Alignment:            component.SpanAlignmentCentered,
 	}
 	startText := component.StringWithConfig(c.config.StartText, strcfg)
-	c.startHandler = &browserContent{Handler: FuncHandler(handler.Nop(startText), func() {}), c: c}
+	c.startHandler = &browserContent{
+		Handler: FuncHandler(
+			handler.Nop(startText),
+			func() {},
+		),
+		c: c,
+	}
 	c.wm.Init(c.startHandler, handlerWmConfig)
 	_ = c.newWindow(c.wm.Focus()) // init handler with initial window
 	c.union.Init(&c.wm)
@@ -216,7 +221,7 @@ func (c *Component) Init(config Config) {
 }
 
 // NewTab adds a new tab to the list of tabs on this Component.
-func (c *Component) NewTab(id, name string, h tui.Handler, f io.Closer) *Tab {
+func (c *Component) NewTab(id, name string, h Handler, f io.Closer) *Tab {
 	t := newTab(c, id, h, f)
 	c.buffers = append(c.buffers, t)
 	c.tabs.Add(name)
@@ -268,7 +273,7 @@ func (c *Component) Tabs() (ret []*Tab) {
 }
 
 func (c *Component) closeTab(t *Tab) error {
-	err := t.doClose()
+	err := t.Close()
 	if err != nil && c.config.Logger != nil {
 		c.config.Logger.Warningf("tab Close error: %v", err)
 	}
@@ -388,12 +393,12 @@ func (c *Component) tryLog(msg string, args ...interface{}) {
 	c.config.Logger.Debugf(msg, args...)
 }
 
-func (c *Component) onUnmount(h Handler, reason string) {
-	err := h.OnUnmount()
+func (c *Component) closeHandler(h Handler) {
+	err := h.Close()
 	if err != nil && c.config.Logger != nil {
-		c.config.Logger.Warningf("OnUnmount error: %v", err)
+		c.config.Logger.Warningf("Close error: %v", err)
 	}
-	c.tryLog("Component.OnUnmount(%p): reason: %s", h, reason)
+	c.tryLog("Component.closeHandler(%p)", h)
 }
 
 func (c *Component) tryUpdateWindowContent(
@@ -411,11 +416,11 @@ func (c *Component) tryUpdateWindowContent(
 func (c *Component) updateWindowContent(
 	win *browserWindow, content Handler,
 ) Handler {
-	newBuf, ok := content.(*Tab)
+	tab, ok := content.(*Tab)
 	if ok {
-		id := c.findTabID(newBuf)
+		id := c.findTabID(tab)
 		c.tabs.SetFocus(id)
-		newBuf.setWindow()
+		tab.setWindow(win)
 	} else {
 		content = &browserContent{
 			Handler: content,
@@ -423,9 +428,17 @@ func (c *Component) updateWindowContent(
 		}
 	}
 	oldComponent := win.win.SetContent(content).(Handler)
-	reason := fmt.Sprintf("window content was updated: %p", win)
-	c.onUnmount(oldComponent, reason)
+	c.releaseHandler(oldComponent)
 	return oldComponent
+}
+
+// only tabs are able to be re-installed after content is updated.
+func (c *Component) releaseHandler(h Handler) {
+	if t, ok := h.(*Tab); ok {
+		t.setFree()
+	} else {
+		c.closeHandler(h)
+	}
 }
 
 func browserTabAtWindow(win *browserWindow) (*Tab, bool) {
@@ -435,20 +448,14 @@ func browserTabAtWindow(win *browserWindow) (*Tab, bool) {
 
 // RemoveAllTabs removes all tabs but the last one.
 func (c *Component) RemoveAllTabs() {
-	for _, t := range c.buffers {
-		c.closeTab(t)
-	}
-
 	c.wm.Iterate(func(w handler.Window) {
 		win, ok := c.findWindow(w.ID())
 		if !ok {
 			panic("corrupted browser: could not find WindowManager window")
 		}
-		c.updateWindowContent(win, c.startHandler)
+		for c.RemoveWindowContent(win) {
+		}
 	})
-
-	c.tabs.RemoveAll()
-	c.buffers = c.buffers[:0]
 }
 
 func (c *Component) freeTabs() []int {
@@ -538,28 +545,31 @@ func (c *Component) splitInverted(
 	return newBrowserWin, true
 }
 
-func (c *Component) newWindowContent(h Handler) Handler {
-	if t, ok := h.(*Tab); ok {
-		t.setWindow()
-	} else {
+func (c *Component) newWindowContent(h Handler) (Handler, bool) {
+	_, ok := h.(*Tab)
+	if !ok {
 		h = &browserContent{
 			Handler: h,
 			c:       c,
 		}
 	}
-	return h
+	return h, ok
 }
 
 func (c *Component) split(
 	split func(*handler.WindowManager, tui.Handler) (handler.Window, bool),
 	h Handler,
 ) *browserWindow {
-	h = c.newWindowContent(h)
+	h, isTab := c.newWindowContent(h)
 	win, ok := split(&c.wm, h)
 	if !ok {
 		return nil
 	}
-	return c.newWindow(win)
+	ret := c.newWindow(win)
+	if isTab {
+		h.(*Tab).setWindow(ret)
+	}
+	return ret
 }
 
 // Split splits the current window in two and installs h to the orientation
@@ -587,8 +597,11 @@ func (c *Component) Split(o Orientation, h Handler) (Window, bool) {
 func (c *Component) Floating(
 	h Handler, at term.Coordinates, width, height int,
 ) Window {
-	h = c.newWindowContent(h)
+	h, isTab := c.newWindowContent(h)
 	win := c.newWindow(c.wm.FloatingWindow(h, at, width, height))
+	if isTab {
+		h.(*Tab).setWindow(win)
+	}
 	c.wm.SetFocus(win.win)
 	return win
 }

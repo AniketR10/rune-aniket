@@ -844,3 +844,8 @@ func (vi *Vi) CursorAtScroll() term.Coordinates {
 func (vi *Vi) Name() string {
 	return vi.name
 }
+
+// Close satisfies editor.Handler.
+func (h *Vi) Close() error {
+	return nil
+}

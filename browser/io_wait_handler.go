@@ -44,10 +44,10 @@ func (h *ioUnlockHandler) Man(
 	return h.h.Man(ctx, in, opts...)
 }
 
-func (h *ioUnlockHandler) OnUnmount(
-	ctx context.Context, in *proto.OnUnmountRequest, opts ...grpc.CallOption,
-) (*proto.OnUnmountResponse, error) {
+func (h *ioUnlockHandler) Close(
+	ctx context.Context, in *proto.CloseRequest, opts ...grpc.CallOption,
+) (*proto.CloseResponse, error) {
 	h.lock.Unlock()
 	defer h.lock.Lock()
-	return h.h.OnUnmount(ctx, in, opts...)
+	return h.h.Close(ctx, in, opts...)
 }

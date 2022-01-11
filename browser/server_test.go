@@ -332,12 +332,8 @@ func testServerSplit(t *testing.T, expectedSplit Orientation, split proto.Orient
 
 		assertServerServersEqual(t, 1, s)
 
-		// unsubscribe
-		mockWindow.EXPECT().onWindowClosed(gomock.Any()).Times(1)
-		mockWindow.EXPECT().Close().Times(1)
-		callback()
-
 		// verify that resources are cleaned upon call to onWindowClosed callback
+		callback()
 		assertServerServersEqual(t, 0, s)
 	})
 

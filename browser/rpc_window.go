@@ -16,7 +16,7 @@ type windowClient struct {
 	logger        *log.Logger
 	pbClient      proto.WindowClient
 	browserClient *Client
-	onClose       func()
+	doClose       func()
 }
 
 func newWindowClient(
@@ -44,14 +44,15 @@ func (w *windowClient) Content() (Handler, error) {
 func (w *windowClient) SetContent(h Handler) error {
 	ctx := context.Background()
 
-	brokerID := w.browserClient.serveHandler(h)
+	brokerID, created := w.browserClient.serveHandler(h)
 
 	req := proto.WindowSetContentRequest{HandlerId: brokerID}
 	_, err := w.pbClient.SetContent(ctx, &req)
 	if err != nil {
-		reason := fmt.Sprintf("error on call to SetContent: %v", err)
-		w.browserClient.safeForceCloseHandler(brokerID, reason)
-		// handle typed errors
+		if created {
+			reason := fmt.Sprintf("error on call to SetContent: %v", err)
+			w.browserClient.safeForceCloseHandler(brokerID, reason)
+		}
 		if strings.Contains(err.Error(), ErrTabNotFree.Error()) {
 			return ErrTabNotFree
 		}
@@ -118,7 +119,7 @@ func (s *windowServer) Content(
 func (s *windowServer) SetContent(
 	ctx context.Context, req *proto.WindowSetContentRequest,
 ) (*proto.WindowSetContentResponse, error) {
-	client, err := s.s.getContentHandler(req.GetHandlerId())
+	client, created, err := s.s.getContentHandler(req.GetHandlerId())
 	if err != nil {
 		return nil, fmt.Errorf("failed to dial to remote handler: %v", err)
 	}
@@ -127,8 +128,10 @@ func (s *windowServer) SetContent(
 	err = s.win.SetContent(client)
 	s.s.browser.Unlock()
 	if err != nil {
-		reason := fmt.Sprintf("error on windowServer.SetContent: %v", err)
-		s.s.safeForceCloseHandler(req.GetHandlerId(), reason)
+		if created {
+			reason := fmt.Sprintf("error on windowServer.SetContent: %v", err)
+			s.s.safeForceCloseHandler(req.GetHandlerId(), reason)
+		}
 		return nil, fmt.Errorf("error on Window.SetContent: %v", err)
 	}
 
@@ -138,9 +141,17 @@ func (s *windowServer) SetContent(
 func (s *windowServer) Close(
 	ctx context.Context, req *proto.WindowCloseRequest,
 ) (*proto.WindowCloseResponse, error) {
-	err := s.s.safeForceCloseWindow(s.win.id(), "received WindowCloseRequest")
-	if err != nil {
-		return nil, err
+	s.s.browser.Lock()
+	defer s.s.browser.Unlock()
+	// unsubscribe, since we are already aware
+	s.win.onWindowClosed(nil)
+	err1 := s.win.Close()
+	err2 := s.s.forceCloseWindow(s.win.id(), "received WindowCloseRequest")
+	if err1 != nil {
+		return nil, err1
+	}
+	if err2 != nil {
+		return nil, err2
 	}
 	return new(proto.WindowCloseResponse), nil
 }

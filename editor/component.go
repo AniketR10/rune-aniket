@@ -678,7 +678,7 @@ func (c *Component) Floating(
 }
 
 func (c *Component) newTab(
-	id, name string, h tui.Handler, closer io.Closer,
+	id, name string, h browser.Handler, closer io.Closer,
 ) *browser.Tab {
 	t := c.comp.NewTab(id, name, h, closer)
 	t.Subscribe((*compTabSubscriber)(c))

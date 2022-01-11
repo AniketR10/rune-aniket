@@ -79,7 +79,7 @@ func assertInvokeError(t *testing.T, err error) {
 func assertClientHandlerExitClose(
 	t *testing.T,
 	h *TestHandler, mockWinConn *proto.MockMuxConn,
-	client *Client, callOnUnmount bool,
+	client *Client, callClose bool,
 ) {
 	assertClientServersEqual(t, 1, client)
 
@@ -94,8 +94,8 @@ func assertClientHandlerExitClose(
 	assert.True(t, exit)
 	assert.True(t, handled)
 
-	if callOnUnmount {
-		require.NoError(t, cliRes.(*handlerServerResource).h.(Handler).OnUnmount())
+	if callClose {
+		require.NoError(t, cliRes.(*handlerServerResource).h.(Handler).Close())
 	}
 
 	// unfortunately gracefulshutdowns are asynchronous
@@ -368,7 +368,7 @@ func testClientSplit(
 		assertClientClientsEqual(t, 0, client)
 	})
 
-	t.Run("gracefully closes resources if handler server is called OnUnmount", func(t *testing.T) {
+	t.Run("gracefully closes resources if handler server is called Close", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
@@ -383,7 +383,7 @@ func testClientSplit(
 
 		h := NewTestHandler()
 		var wg sync.WaitGroup
-		h.OnUnmountCallback = func() error {
+		h.CloseCallback = func() error {
 			wg.Done()
 			return nil
 		}
@@ -398,7 +398,7 @@ func testClientSplit(
 				h := client.servers[uint64(brokerID)].(*handlerServerResource).h.(Handler)
 				err := prototest.ExpectSignalExit(mockWinConn, quitCh, nil)()
 				// server would call this asynchronously
-				go h.OnUnmount()
+				go h.Close()
 				return err
 			})
 		require.NoError(t, win.Close())

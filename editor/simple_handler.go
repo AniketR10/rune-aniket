@@ -120,6 +120,11 @@ func (h *simpleEditorHandler) Man() tui.Manual {
 	return tui.Manual{}
 }
 
+// Close satisfies editor.Handler.
+func (h *simpleEditorHandler) Close() error {
+	return nil
+}
+
 // Name satisfies editor.Handler.
 func (h *simpleEditorHandler) Name() string {
 	return h.resource

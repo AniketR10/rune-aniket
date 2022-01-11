@@ -40,7 +40,7 @@ func (h Token) Draw(w term.Writer) {
 	panic(errMsg)
 }
 
-// OnUnmount does nothing if called.
-func (h Token) OnUnmount() error {
+// Close does nothing if called.
+func (h Token) Close() error {
 	return nil
 }

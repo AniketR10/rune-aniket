@@ -19,3 +19,7 @@ func NewTestHandler() (t *TestHandler) {
 func (t *TestHandler) Name() string {
 	return t.Resource
 }
+
+func (t *TestHandler) Close() error {
+	return nil
+}

@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"io"
 
 	"github.com/ernestrc/go-tui"
 	"github.com/ernestrc/go-tui/proto"
@@ -66,21 +67,17 @@ func (c *mockHandlerClient) Man(
 	return &proto.ManResponse{Man: &protoMan}, nil
 }
 
-func (c *mockHandlerClient) OnUnmount(
-	ctx context.Context, in *proto.OnUnmountRequest, opts ...grpc.CallOption,
-) (*proto.OnUnmountResponse, error) {
+func (c *mockHandlerClient) Close(
+	ctx context.Context, in *proto.CloseRequest, opts ...grpc.CallOption,
+) (*proto.CloseResponse, error) {
 	if c.rpcError != nil {
 		return nil, c.rpcError
 	}
-	if unmounter, ok := c.remote.(interface{ OnUnmount() error }); ok {
-		err := unmounter.OnUnmount()
+	if closer, ok := c.remote.(io.Closer); ok {
+		err := closer.Close()
 		if err != nil {
 			return nil, err
 		}
 	}
-	return &proto.OnUnmountResponse{}, nil
-}
-
-func (c *mockHandlerClient) Close() error {
-	return nil
+	return &proto.CloseResponse{}, nil
 }

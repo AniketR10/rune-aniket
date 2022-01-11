@@ -14,12 +14,26 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-const defaultRPCTimeout = 1000 * time.Millisecond
+const (
+	defaultRPCTimeout = 1000 * time.Millisecond
+	loadingCopy       = "LOADING"
+	smtgWrongCopy     = `
 
-type clientCloser interface {
-	proto.HandlerClient
-	io.Closer
-}
+          ___
+         /___/\_               
+        _\   \/_/\__           
+      __\       \/_/\          
+      \   __    __ \ \         
+     __\  \_\   \_\ \ \   __   
+    /_/\\   __   __  \ \_/_/\  
+    \_\/_\__\/\__\/\__\/_\_\/  
+       \_\/_/\       /_\_\/    
+          \_\/       \_\/      
+    
+
+Uh, Houston, we've had a problem
+`
+)
 
 // Client satisfies Handler by talking to a remote handler over GRPC.
 //
@@ -209,23 +223,17 @@ func tryLog(logger *log.Logger, msg string, args ...interface{}) {
 	}
 }
 
-// OnUnmount satisfies browser.Handler
-func (c *Client) OnUnmount() error {
+// Close satisfies browser.Handler
+// Close closes this client and all associated resources.
+func (c *Client) Close() error {
 	ctx, cancel := context.WithTimeout(context.Background(), defaultRPCTimeout)
 	defer cancel()
 
-	req := proto.OnUnmountRequest{}
-
-	_, err := c.client.OnUnmount(ctx, &req)
+	req := proto.CloseRequest{}
+	_, err := c.client.Close(ctx, &req)
 	if err != nil {
-		c.collectError("OnUnmount", err)
-		return err
+		return fmt.Errorf("proto.HandlerClient.Close: %w", err)
 	}
-	return nil
-}
-
-// Close closes this client and all associated resources.
-func (c *Client) Close() error {
 	return nil
 }
 
@@ -302,18 +310,18 @@ func (s *Server) Man(context.Context, *proto.ManRequest) (
 	return &proto.ManResponse{Man: protoMan}, nil
 }
 
-// OnUnmount is an RPC that handles request to an underlying
-// Handler's OnUnmount if it implements it, otherwise it ignores request.
-func (s *Server) OnUnmount(context.Context, *proto.OnUnmountRequest) (
-	*proto.OnUnmountResponse, error,
+// Close is an RPC that handles request to an underlying
+// Handler's Close if it implements it, otherwise it ignores request.
+func (s *Server) Close(ctx context.Context, req *proto.CloseRequest) (
+	*proto.CloseResponse, error,
 ) {
-	unmounter, ok := s.handler.(interface{ OnUnmount() error })
+	closer, ok := s.handler.(io.Closer)
 	if ok {
-		err := unmounter.OnUnmount()
+		err := closer.Close()
 		if err != nil {
-			return nil, fmt.Errorf("error OnUnmount: %v", err)
+			return nil, fmt.Errorf("error Close: %v", err)
 		}
 	}
-	tryLog(s.Logger, "handler.Server.OnUnmount: %v", ok)
-	return &proto.OnUnmountResponse{}, nil
+	tryLog(s.Logger, "handler.Server.Close: %v", ok)
+	return &proto.CloseResponse{}, nil
 }

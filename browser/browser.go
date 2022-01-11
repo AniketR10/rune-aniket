@@ -8,10 +8,10 @@ import (
 	"github.com/ernestrc/go-tui/term"
 )
 
-// Handler adds io.Closer to a tui.Handler.
+// Handler adds Close to a tui.Handler.
 type Handler interface {
 	tui.Handler
-	OnUnmount() error
+	Close() error
 }
 
 // Window is the interface that represents
@@ -101,26 +101,26 @@ type Browser interface {
 	// io.Closer by means of Storage
 }
 
-type unmountHandler struct {
+type closeHandler struct {
 	tui.Handler
-	onUnmount func()
+	doClose func()
 }
 
-func (h *unmountHandler) OnUnmount() error {
-	h.onUnmount()
+func (h *closeHandler) Close() error {
+	h.doClose()
 	return nil
 }
 
 // FuncHandler returns a Handler by wrapping a tui.Handler
-// with an OnUnmount callback.
-func FuncHandler(h tui.Handler, onUnmount func()) Handler {
-	return &unmountHandler{Handler: h, onUnmount: onUnmount}
+// with an Close callback.
+func FuncHandler(h tui.Handler, doClose func()) Handler {
+	return &closeHandler{Handler: h, doClose: doClose}
 }
 
 // NopHandler returns a Handler by wrapping a tui.Handler
-// with an nop OnUnmount callback.
+// with an nop Close callback.
 func NopHandler(h tui.Handler) Handler {
-	return &unmountHandler{Handler: h, onUnmount: func() {}}
+	return &closeHandler{Handler: h, doClose: func() {}}
 }
 
 type fnEventHandler func(term.Event) bool

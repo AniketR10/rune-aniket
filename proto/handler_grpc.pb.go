@@ -20,7 +20,7 @@ const _ = grpc.SupportPackageIsVersion7
 type HandlerClient interface {
 	Handle(ctx context.Context, in *HandleRequest, opts ...grpc.CallOption) (*HandleResponse, error)
 	Man(ctx context.Context, in *ManRequest, opts ...grpc.CallOption) (*ManResponse, error)
-	OnUnmount(ctx context.Context, in *OnUnmountRequest, opts ...grpc.CallOption) (*OnUnmountResponse, error)
+	Close(ctx context.Context, in *CloseRequest, opts ...grpc.CallOption) (*CloseResponse, error)
 }
 
 type handlerClient struct {
@@ -49,9 +49,9 @@ func (c *handlerClient) Man(ctx context.Context, in *ManRequest, opts ...grpc.Ca
 	return out, nil
 }
 
-func (c *handlerClient) OnUnmount(ctx context.Context, in *OnUnmountRequest, opts ...grpc.CallOption) (*OnUnmountResponse, error) {
-	out := new(OnUnmountResponse)
-	err := c.cc.Invoke(ctx, "/proto.Handler/OnUnmount", in, out, opts...)
+func (c *handlerClient) Close(ctx context.Context, in *CloseRequest, opts ...grpc.CallOption) (*CloseResponse, error) {
+	out := new(CloseResponse)
+	err := c.cc.Invoke(ctx, "/proto.Handler/Close", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -64,7 +64,7 @@ func (c *handlerClient) OnUnmount(ctx context.Context, in *OnUnmountRequest, opt
 type HandlerServer interface {
 	Handle(context.Context, *HandleRequest) (*HandleResponse, error)
 	Man(context.Context, *ManRequest) (*ManResponse, error)
-	OnUnmount(context.Context, *OnUnmountRequest) (*OnUnmountResponse, error)
+	Close(context.Context, *CloseRequest) (*CloseResponse, error)
 	mustEmbedUnimplementedHandlerServer()
 }
 
@@ -78,8 +78,8 @@ func (UnimplementedHandlerServer) Handle(context.Context, *HandleRequest) (*Hand
 func (UnimplementedHandlerServer) Man(context.Context, *ManRequest) (*ManResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Man not implemented")
 }
-func (UnimplementedHandlerServer) OnUnmount(context.Context, *OnUnmountRequest) (*OnUnmountResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method OnUnmount not implemented")
+func (UnimplementedHandlerServer) Close(context.Context, *CloseRequest) (*CloseResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Close not implemented")
 }
 func (UnimplementedHandlerServer) mustEmbedUnimplementedHandlerServer() {}
 
@@ -130,20 +130,20 @@ func _Handler_Man_Handler(srv interface{}, ctx context.Context, dec func(interfa
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Handler_OnUnmount_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(OnUnmountRequest)
+func _Handler_Close_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CloseRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(HandlerServer).OnUnmount(ctx, in)
+		return srv.(HandlerServer).Close(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/proto.Handler/OnUnmount",
+		FullMethod: "/proto.Handler/Close",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(HandlerServer).OnUnmount(ctx, req.(*OnUnmountRequest))
+		return srv.(HandlerServer).Close(ctx, req.(*CloseRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -164,8 +164,8 @@ var Handler_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _Handler_Man_Handler,
 		},
 		{
-			MethodName: "OnUnmount",
-			Handler:    _Handler_OnUnmount_Handler,
+			MethodName: "Close",
+			Handler:    _Handler_Close_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

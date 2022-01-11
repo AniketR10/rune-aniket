@@ -138,14 +138,17 @@ func TestComponentRemoveAllTabs(t *testing.T) {
 			c.UpdateWindowTabNextFree(c.Focus())
 
 			assert.Equal(t, before, c.tabs.Size())
+
+			for _, h := range handlers {
+				assert.Equal(t, 0, h.closed)
+			}
+
 			c.RemoveAllTabs()
 
 			assert.Equal(t, after, c.tabs.Size())
 			for _, h := range handlers {
-				assert.Equal(t, 1, h.closed)
-				// tab does not get called unmount
-				// because that's just for internal use
-				assert.Equal(t, 0, h.unmounted)
+				// closer + handler
+				assert.Equal(t, 2, h.closed)
 			}
 		})
 	}
@@ -153,15 +156,11 @@ func TestComponentRemoveAllTabs(t *testing.T) {
 
 type testCloser struct {
 	handler.TestHandler
-	closed, unmounted int
+	closed int
 }
 
 func (t *testCloser) Close() error {
 	t.closed++
-	return nil
-}
-func (t *testCloser) OnUnmount() error {
-	t.unmounted++
 	return nil
 }
 
@@ -294,39 +293,39 @@ func TestComponentSetContentUnmount(t *testing.T) {
 	win0 := c.Focus()
 	h1 := NewTestHandler()
 	h2 := NewTestHandler()
-	var unmounted int
-	h1.OnUnmountCallback = func() error {
-		unmounted++
+	var closed int
+	h1.CloseCallback = func() error {
+		closed++
 		return nil
 	}
 	assert.NoError(t, win0.SetContent(h1))
 	assertWindowContent(t, win0, h1)
 	assert.NoError(t, win0.SetContent(h2))
 	assertWindowContent(t, win0, h2)
-	assert.Equal(t, 1, unmounted)
+	assert.Equal(t, 1, closed)
 
 	assert.NoError(t, win0.SetContent(h1))
 	assertWindowContent(t, win0, h1)
-	assert.Equal(t, 1, unmounted)
+	assert.Equal(t, 1, closed)
 	content1, err := win0.Content()
 	require.NoError(t, err)
 
 	assert.NoError(t, win0.SetContent(content1))
 	assertWindowContent(t, win0, h1)
-	// unmounted and mounted again
-	assert.Equal(t, 2, unmounted)
+	// closed and mounted again
+	assert.Equal(t, 2, closed)
 
 	win1, ok := c.Split(OrientationBottom, h2)
 	require.True(t, ok)
-	assert.Equal(t, 2, unmounted)
+	assert.Equal(t, 2, closed)
 
 	assert.NoError(t, win0.Close())
-	assert.Equal(t, 3, unmounted)
+	assert.Equal(t, 3, closed)
 
 	assert.Equal(t, c.Focus(), win1)
 }
 
-func TestComponentHandlerUnmount(t *testing.T) {
+func TestComponentHandlerClose(t *testing.T) {
 	cfg := DefaultConfig()
 
 	for _, _tcase := range splitSuite {
@@ -388,7 +387,7 @@ func TestComponentHandlerUnmount(t *testing.T) {
 					require.True(t, ok)
 
 					tcase.fn(t, c, win, mock)
-					assert.Equal(t, 1, mock.unmounted)
+					assert.Equal(t, 1, mock.closed)
 				})
 			}
 		})
@@ -450,21 +449,21 @@ X────────┐X────────┐
 		}, {func() {
 			assert.True(t, c.FocusLeft())
 
-			var unmounted int
+			var closeCallbacked int
 			var closed int
 			h2.Exit = true
 			w2.onWindowClosed(func() {
 				closed++
 			})
-			h2.OnUnmountCallback = func() error {
+			h2.CloseCallback = func() error {
 				assert.NoError(t, w2.Close())
-				unmounted++
+				closeCallbacked++
 				return nil
 			}
 			h2.Handled = true
 			_, handled := c.Handle(term.Event{})
 			assert.True(t, handled)
-			assert.Equal(t, 1, unmounted)
+			assert.Equal(t, 1, closeCallbacked)
 			assert.Equal(t, 1, closed)
 		}, `
 X──────────────────┐

@@ -14,13 +14,14 @@ type Tab struct {
 	parent      *Component
 	id          string
 	closer      io.Closer
-	handler     tui.Handler
+	handler     Handler
 	free        bool
+	win         Window
 	subscribers []TabSubscriber
 }
 
 // newTab allocates storage for a new tab and initializes it.
-func newTab(c *Component, id string, h tui.Handler, f io.Closer) *Tab {
+func newTab(c *Component, id string, h Handler, f io.Closer) *Tab {
 	ret := new(Tab)
 	ret.init(c, id, h, f)
 	return ret
@@ -28,7 +29,7 @@ func newTab(c *Component, id string, h tui.Handler, f io.Closer) *Tab {
 
 // Init initializes this tab with id, h as the Handler, and f as the
 // io.Closer handle.
-func (b *Tab) init(c *Component, id string, h tui.Handler, f io.Closer) {
+func (b *Tab) init(c *Component, id string, h Handler, f io.Closer) {
 	b.parent = c
 	b.id = id
 	b.closer = f
@@ -36,8 +37,9 @@ func (b *Tab) init(c *Component, id string, h tui.Handler, f io.Closer) {
 	b.free = true
 }
 
-func (b *Tab) setWindow() {
+func (b *Tab) setWindow(win Window) {
 	b.free = false
+	b.win = win
 	for _, sub := range b.subscribers {
 		sub.OnFocus(b)
 	}
@@ -45,6 +47,7 @@ func (b *Tab) setWindow() {
 
 func (b *Tab) setFree() {
 	b.free = true
+	b.win = nil
 	for _, sub := range b.subscribers {
 		sub.OnFree(b)
 	}
@@ -62,7 +65,11 @@ func (b *Tab) Draw(w term.Writer) {
 
 // Handle satisfies tui.Handler
 func (b *Tab) Handle(ev term.Event) (exit, handled bool) {
-	return b.handler.Handle(ev)
+	exit, handled = b.handler.Handle(ev)
+	if exit {
+		b.parent.RemoveWindowContent(b.win)
+	}
+	return
 }
 
 // Cursor satisfies tui.Handler
@@ -75,19 +82,15 @@ func (b *Tab) Man() tui.Manual {
 	return b.handler.Man()
 }
 
-func (b *Tab) doClose() error {
+// Close satisfies browser.Handler.
+func (b *Tab) Close() error {
+	err1 := b.handler.Close()
 	if b.closer != nil {
-		err := b.closer.Close()
+		err2 := b.closer.Close()
 		b.closer = nil
-		return err
+		return err2
 	}
-	return nil
-}
-
-// OnUnmount satisfies browser.Handler.
-func (b *Tab) OnUnmount() error {
-	b.setFree()
-	return nil
+	return err1
 }
 
 // ID returns the identifier of this tab.
@@ -95,9 +98,9 @@ func (b *Tab) ID() string {
 	return b.id
 }
 
-// Handler returns the tui.Handler responsible for drawing
+// Handler returns the Handler responsible for drawing
 // the contents of this tab.
-func (b *Tab) Handler() tui.Handler {
+func (b *Tab) Handler() Handler {
 	return b.handler
 }
 

@@ -31,7 +31,7 @@ type Server struct {
 	failureTimeout time.Duration
 
 	// handler client resources are created on calls to Split* and SetContent.
-	// They are destroyed when OnUnmount is dispatched to handler server
+	// They are destroyed when Close is dispatched to handler server
 	// and so if server is closed, client connection
 	// Connections are also monitored and cleaned if irrecoverable errors are found.
 	clients map[uint64]io.Closer
@@ -55,7 +55,7 @@ type Server struct {
 }
 
 // browserServerHandler wraps a handler.Client to satisfy browser.Handler
-// and provide a hook on calls to OnUnmount. We could rely solely on the remote browser
+// and provide a hook on calls to Close. We could rely solely on the remote browser
 // server to close and our monitor goroutine to clean up, but we do not trust the remote
 // browser necessarily.
 type browserServerHandler struct {
@@ -64,17 +64,14 @@ type browserServerHandler struct {
 	handlerID uint64
 }
 
-func (s browserServerHandler) gracefulShutdown() {
+func (s browserServerHandler) gracefulShutdown(reason string) {
 	time.Sleep(gracefulShutdownWait)
-	s.s.safeForceCloseHandler(s.handlerID, "Handle()(exit=true)")
+	s.s.safeForceCloseHandler(s.handlerID, reason)
 }
 
-func (s browserServerHandler) Handle(ev term.Event) (bool, bool) {
-	exit, handled := s.Handler.Handle(ev)
-	if exit {
-		go s.gracefulShutdown()
-	}
-	return exit, handled
+func (s browserServerHandler) Close() error {
+	go s.gracefulShutdown("Close")
+	return s.Handler.Close()
 }
 
 // NewServer allocates storage for a new Server and initializes it.
@@ -102,7 +99,9 @@ func (s *Server) Init(
 	s.Server.Init(browser, nil)
 }
 
-func (s *Server) consumeErrors(ctx context.Context, handlerID uint64, ch <-chan error) {
+func (s *Server) consumeErrors(
+	ctx context.Context, handlerID uint64, ch <-chan error,
+) {
 	for {
 		select {
 		case <-ctx.Done():
@@ -119,7 +118,7 @@ func (s *Server) consumeErrors(ctx context.Context, handlerID uint64, ch <-chan 
 	}
 }
 
-func (s *Server) dialHandler(handlerID uint64) (handlerCloser, error) {
+func (s *Server) dialHandler(handlerID uint64) (Handler, error) {
 	s.tryLog("(%p browser.Server): dialing handlerID: %d", s, handlerID)
 	handlerConn, err := s.broker.Dial(uint32(handlerID))
 	if err != nil {
@@ -133,9 +132,11 @@ func (s *Server) dialHandler(handlerID uint64) (handlerCloser, error) {
 
 	ctx, cancelFn := context.WithCancel(context.Background())
 
-	go proto.MonitorConnection(ctx, s.failureTimeout, handlerConn, func(reason string) {
-		s.safeForceCloseHandler(handlerID, reason)
-	})
+	go proto.MonitorConnection(ctx, s.failureTimeout, handlerConn,
+		func(reason string) {
+			s.safeForceCloseHandler(uint64(handlerID),
+				fmt.Sprintf("browser.MonitorConnection(handler): %s", reason))
+		})
 
 	go s.consumeErrors(ctx, handlerID, cc.Errors())
 
@@ -169,7 +170,8 @@ func (s *Server) serveWindow(win Window) uint64 {
 	}
 
 	win.onWindowClosed(func() {
-		s.forceCloseWindow(win.id(), "underlying window called onWindowClosed callback")
+		s.forceCloseWindow(win.id(),
+			"underlying window called onWindowClosed callback")
 	})
 	return uint64(brokerID)
 }
@@ -185,12 +187,6 @@ func (s *Server) getServers() map[uint64]io.Closer {
 func (s *Server) forceCloseWindow(winID uint64, reason string) error {
 	s.tryLog("browser.Server.forceCloseWindow(%d, reason=%s)", winID, reason)
 	_, err := proto.ForceCloseResource(winID, s.getServers, s.Logger, nopLocker{})
-	return err
-}
-
-func (s *Server) safeForceCloseWindow(winID uint64, reason string) error {
-	s.tryLog("browser.Server.safeForceCloseWindow(%d, reason=%s)", winID, reason)
-	_, err := proto.ForceCloseResource(winID, s.getServers, s.Logger, &s.browser)
 	return err
 }
 
@@ -212,7 +208,7 @@ func (s *Server) forceCloseHandler(brokerID uint64, reason string) error {
 	return err
 }
 
-func (s *Server) getContentHandler(handlerID uint64) (Handler, error) {
+func (s *Server) getContentHandler(handlerID uint64) (Handler, bool, error) {
 	if handlerID < math.MaxUint32 {
 		s.browser.Lock()
 		h, ok := s.opened[uint32(handlerID)]
@@ -220,39 +216,38 @@ func (s *Server) getContentHandler(handlerID uint64) (Handler, error) {
 		if ok {
 			s.tryLog("(%p browser.Server): using return of Open/Content handler for handlerID: %d",
 				s, handlerID)
-			return h, nil
+			return h, false, nil
 		}
 	}
 
-	var cc handlerCloser
+	var ret Handler
 	s.browser.Lock()
 	res, ok := s.clients[handlerID]
 	s.browser.Unlock()
 	if ok {
 		s.tryLog("(%p browser.Server): found cached client for handlerID: %d", s, handlerID)
-		cc = res.(*handlerClientResource).client
+		ret = res.(*handlerClientResource).client
 	} else {
 		var err error
-		cc, err = s.dialHandler(handlerID)
+		ret, err = s.dialHandler(handlerID)
 		if err != nil {
-			return nil, err
+			return nil, false, err
 		}
 	}
 
 	bHandler := browserServerHandler{
 		handlerID: handlerID,
-		Handler:   cc,
+		Handler:   ret,
 		s:         s,
 	}
-	return bHandler, nil
+	return bHandler, !ok, nil
 }
 
 func (s *Server) newRemoteResource(
-	ctx context.Context, req interface{ GetHandlerId() uint64 },
+	ctx context.Context, handlerID uint64,
 	action func(WindowManager, Handler) (Window, error),
 ) (uint64, error) {
-	handlerID := req.GetHandlerId()
-	handler, err := s.getContentHandler(handlerID)
+	handler, created, err := s.getContentHandler(handlerID)
 	if err != nil {
 		return 0, err
 	}
@@ -261,8 +256,10 @@ func (s *Server) newRemoteResource(
 	defer s.browser.Unlock()
 	win, err := action(s.browser, handler)
 	if err != nil {
-		reason := fmt.Sprintf("failed to create resource: %s", err.Error())
-		s.forceCloseHandler(handlerID, reason)
+		if created {
+			reason := fmt.Sprintf("failed to create resource: %s", err.Error())
+			s.forceCloseHandler(handlerID, reason)
+		}
 		return 0, err
 	}
 	if win == nil {
@@ -290,7 +287,7 @@ func protoToModelOrientation(p proto.Orientation) (o Orientation) {
 func (s *Server) Split(
 	ctx context.Context, req *proto.SplitRequest,
 ) (*proto.SplitResponse, error) {
-	windowID, err := s.newRemoteResource(ctx, req,
+	windowID, err := s.newRemoteResource(ctx, req.GetHandlerId(),
 		func(wm WindowManager, h Handler) (Window, error) {
 			return wm.Split(protoToModelOrientation(req.GetOrientation()), h)
 		})
@@ -305,7 +302,7 @@ func (s *Server) Bar(
 	ctx context.Context, req *proto.BarRequest,
 ) (*proto.BarResponse, error) {
 	handlerID := req.GetHandlerId()
-	handler, err := s.getContentHandler(handlerID)
+	handler, created, err := s.getContentHandler(handlerID)
 	if err != nil {
 		return nil, err
 	}
@@ -314,8 +311,10 @@ func (s *Server) Bar(
 	defer s.browser.Unlock()
 	err = s.browser.Bar(protoToModelOrientation(req.GetOrientation()), handler)
 	if err != nil {
-		reason := fmt.Sprintf("failed to create window: %s", err.Error())
-		s.forceCloseHandler(handlerID, reason)
+		if created {
+			reason := fmt.Sprintf("failed to create window: %s", err.Error())
+			s.forceCloseHandler(handlerID, reason)
+		}
 		return nil, err
 	}
 	return new(proto.BarResponse), nil
@@ -429,7 +428,7 @@ func (s *Server) Floating(
 	at := req.GetAt().ToModel()
 	height := int(req.GetHeight())
 	width := int(req.GetWidth())
-	windowID, err := s.newRemoteResource(ctx, req,
+	windowID, err := s.newRemoteResource(ctx, req.GetHandlerId(),
 		func(wm WindowManager, h Handler) (Window, error) {
 			return wm.Floating(h, at, height, width)
 		})
@@ -446,7 +445,7 @@ func (s *Server) Tab(
 	name := req.GetResourceName()
 	id := req.GetResourceId()
 	var tab Handler
-	_, err := s.newRemoteResource(ctx, req,
+	_, err := s.newRemoteResource(ctx, req.GetHandlerId(),
 		func(wm WindowManager, h Handler) (w Window, err error) {
 			tab, err = wm.Tab(id, name, h)
 			return nil, err

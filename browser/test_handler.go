@@ -7,7 +7,7 @@ import (
 // TestHandler is a testing Handler.
 type TestHandler struct {
 	handler.TestHandler
-	OnUnmountCallback func() error
+	CloseCallback func() error
 }
 
 // NewTestHandler allocates storage for a new TestHandler and initializes it.
@@ -17,10 +17,10 @@ func NewTestHandler() *TestHandler {
 	return ret
 }
 
-// OnUnmount calls t.OnUnmount.
-func (t *TestHandler) OnUnmount() error {
-	if t.OnUnmountCallback != nil {
-		return t.OnUnmountCallback()
+// Close calls t.Close.
+func (t *TestHandler) Close() error {
+	if t.CloseCallback != nil {
+		return t.CloseCallback()
 	}
 	return nil
 }

@@ -1,8 +1,6 @@
 package browser
 
 import (
-	"io"
-
 	"github.com/ernestrc/go-tui"
 	"github.com/ernestrc/go-tui/proto"
 )
@@ -13,24 +11,14 @@ type windowServerResource struct {
 	brokerID uint64
 }
 
-type handlerCloser interface {
-	Handler
-	io.Closer
-}
-
 type handlerClientResource struct {
 	handlerConn   proto.MuxConn
-	client        handlerCloser
+	client        Handler
 	cancelMonitor func()
 }
 
 func (r *handlerClientResource) Close() (err error) {
 	defer r.cancelMonitor()
-
-	err1 := r.client.Close()
-	if err1 != nil {
-		err = err1
-	}
 
 	err2 := r.handlerConn.Close()
 	if err2 != nil {
@@ -42,12 +30,6 @@ func (r *handlerClientResource) Close() (err error) {
 
 func (r *windowServerResource) Close() error {
 	r.srv.Stop()
-	// unsubscribe, since we are already aware
-	r.win.onWindowClosed(nil)
-	err := r.win.Close()
-	if err != nil {
-		return err
-	}
 	return nil
 }
 
