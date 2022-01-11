@@ -266,6 +266,9 @@ func (h *gitEditorHandler) initScroll(name string) {
 // allow scroll to seek to same positions as editor buffer
 func (h *gitEditorHandler) setScrollMaxContent(ev editor.Event) {
 	rows := len(cell.StringToCells(ev.Content))
+	// best effort until #59 is resolved
+	rows *= 2
+	rows += 100
 	h.rows[ev.ResourceName] = rows
 	log.Debugf("setScrollMaxContent(%s): %d", ev.ResourceName, rows)
 }
@@ -281,7 +284,7 @@ func (h *gitEditorHandler) setScrollOffset(filename string, pos term.Coordinates
 	h.offsets[filename] = pos
 
 	if !ok {
-		log.Warnf("setScrollOffset(%s): %#v: could not set offset", filename, pos)
+		log.Errorf("setScrollOffset(%s): %#v: could not set offset", filename, pos)
 		return
 	}
 	log.Tracef("setScrollOffset(%s): %#v OK", filename, pos)
