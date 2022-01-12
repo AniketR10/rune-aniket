@@ -37,6 +37,7 @@ var (
 		editor.EventTypeFlush,
 		editor.EventTypeScroll,
 		editor.EventTypeFocus,
+		editor.EventTypeUnfocus,
 	}
 	gitHandlerPermissions = []plugin.Permission{
 		plugin.PermissionBrowserWindowManager,
@@ -236,6 +237,12 @@ func (h *gitEditorHandler) pushNewDiffLocations(
 	return h.ed.SetLocationList(resource, h.gitDiffListID, editor.LocationSlice(locs))
 }
 
+func (h *gitEditorHandler) resetScroll() {
+	h.scroll.Lock()
+	defer h.scroll.Unlock()
+	h.scroll.scroll.Init()
+}
+
 func (h *gitEditorHandler) initScroll(name string) {
 	h.scroll.Lock()
 	defer h.scroll.Unlock()
@@ -321,6 +328,9 @@ func (h *gitEditorHandler) handleEvents() {
 			fallthrough
 		case editor.EventTypeFocus:
 			err = h.pushNewDiffLocations(ev.ResourceName, ev.Resource)
+		case editor.EventTypeUnfocus:
+			h.resetScroll()
+			err = h.p.PublishInterrupt()
 		case editor.EventTypeScroll:
 			h.setScrollOffset(ev.ResourceName, ev.Start)
 			err = h.p.PublishInterrupt()
