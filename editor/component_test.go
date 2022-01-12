@@ -392,7 +392,8 @@ func TestComponentEditorSubscriber(t *testing.T) {
 			var fired int
 			usr, _ := user.Current()
 			dir := usr.HomeDir
-			c.SubscribeEditorEvents(tcase.evType, FuncEventHandler(func(ev Event) bool {
+			ev := []EventType{tcase.evType}
+			c.SubscribeEditorEvents(ev, FuncEventHandler(func(ev Event) bool {
 				// if preTrigger, then only assert relevant file event
 				if tcase.preTrigger == nil {
 					assert.Equal(t, filepath.Base(ev.ResourceName), "Joe_Biden.txt")
@@ -420,7 +421,8 @@ func TestComponentEditorSubscriber(t *testing.T) {
 			}
 
 			var fired int
-			c.SubscribeEditorEvents(tcase.evType, FuncEventHandler(func(ev Event) bool {
+			ev := []EventType{tcase.evType}
+			c.SubscribeEditorEvents(ev, FuncEventHandler(func(ev Event) bool {
 				if tcase.preTrigger == nil {
 					fired++
 				} else if filepath.Base(ev.ResourceName) == "Jill_Biden.txt" {
@@ -452,7 +454,8 @@ func TestComponentEditorSubscriber(t *testing.T) {
 		}
 
 		var fired int
-		c.SubscribeEditorEvents(EventTypeClose, FuncEventHandler(func(ev Event) bool {
+		evs := []EventType{EventTypeClose}
+		c.SubscribeEditorEvents(evs, FuncEventHandler(func(ev Event) bool {
 			fired++
 			return false
 		}))
@@ -484,7 +487,8 @@ func TestComponentEditorSubscriber(t *testing.T) {
 			}
 
 			var dispatched string
-			c.SubscribeEditorEvents(tcase.evType, FuncEventHandler(func(ev Event) bool {
+			evs := []EventType{tcase.evType}
+			c.SubscribeEditorEvents(evs, FuncEventHandler(func(ev Event) bool {
 				dispatched = ev.Content
 				return false
 			}))
@@ -513,7 +517,8 @@ func TestComponentEditorSubscriber(t *testing.T) {
 		require.NoError(t, err)
 
 		var fired int
-		c.SubscribeEditorEvents(EventTypeOpen, FuncEventHandler(func(ev Event) bool {
+		ev := []EventType{EventTypeOpen}
+		c.SubscribeEditorEvents(ev, FuncEventHandler(func(ev Event) bool {
 			fired++
 			assert.Equal(t, content, ev.Content)
 			return false

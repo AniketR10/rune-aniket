@@ -40,9 +40,9 @@ func (e *viEditor) Editor(name string) (editor.Handler, error) {
 // of dispatching EventTypeOpen, EventTypeInsert and EventTypeDelete
 // EventType events.
 func (e *viEditor) SubscribeEditorEvents(
-	ev editor.EventType, sub editor.EventHandler,
+	evs []editor.EventType, sub editor.EventHandler,
 ) error {
-	e.Publisher.SubscribeEditorEvents(ev, sub)
+	e.Publisher.SubscribeEditorEvents(evs, sub)
 	return nil
 }
 

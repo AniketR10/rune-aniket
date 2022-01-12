@@ -4,6 +4,8 @@ package editor
 
 // EventHandler wraps the basic method Handle.
 type EventHandler interface {
+	// Handle handles Event and returns true if it no longer needs to receive events,
+	// in other words it returns true if it's done processing events.
 	Handle(Event) bool
 }
 

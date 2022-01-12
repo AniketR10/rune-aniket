@@ -416,7 +416,7 @@ func (mr *MockEditorMockRecorder) SubscribeCommand(arg0, arg1 interface{}) *gomo
 }
 
 // SubscribeEditorEvents mocks base method.
-func (m *MockEditor) SubscribeEditorEvents(arg0 EventType, arg1 EventHandler) error {
+func (m *MockEditor) SubscribeEditorEvents(arg0 []EventType, arg1 EventHandler) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SubscribeEditorEvents", arg0, arg1)
 	ret0, _ := ret[0].(error)

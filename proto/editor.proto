@@ -40,7 +40,7 @@ message EditorEvent {
 }
 
 message EditorSubscribeRequest {
-	EditorEvent.Type type = 1;
+	repeated EditorEvent.Type type = 1;
 	uint32 handler_id = 2;
 }
 

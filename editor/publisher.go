@@ -77,12 +77,14 @@ func (p *Publisher) Handler(h Handler) Handler {
 }
 
 // SubscribeEditorEvents subsribes sub to ev.
-func (p *Publisher) SubscribeEditorEvents(ev EventType, sub EventHandler) {
-	if _, ok := p.subs[ev]; !ok {
-		p.subs[ev] = []EventHandler{sub}
-		return
+func (p *Publisher) SubscribeEditorEvents(evs []EventType, sub EventHandler) {
+	for _, ev := range evs {
+		if _, ok := p.subs[ev]; !ok {
+			p.subs[ev] = []EventHandler{sub}
+		} else {
+			p.subs[ev] = append(p.subs[ev], sub)
+		}
 	}
-	p.subs[ev] = append(p.subs[ev], sub)
 }
 
 func (p *Publisher) dispatchEvent(ev Event) {

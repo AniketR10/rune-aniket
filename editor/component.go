@@ -525,57 +525,87 @@ func (c *Component) getContent(h Handler) (string, error) {
 	return cell.CellsToString(cells), nil
 }
 
+func (c *Component) dispatchOpenTabs(h EventHandler) (error, bool) {
+	for _, tab := range c.comp.Tabs() {
+		resHandler, ok := tab.Handler().(Handler)
+		if !ok {
+			// tab handler does not implement Handler
+			continue
+		}
+		str, err := c.getContent(resHandler)
+		if err != nil {
+			return err, false
+		}
+		exit := h.Handle(Event{
+			Type:         EventTypeOpen,
+			ResourceName: tab.ID(),
+			Resource:     resHandler,
+			Content:      str,
+		})
+		if exit {
+			return nil, true
+		}
+	}
+	return nil, false
+}
+
+func (c *Component) dispatchFocusTab(h EventHandler) bool {
+	t, ok := c.comp.FocusTab()
+	if ok {
+		resHandler, ok := t.Handler().(Handler)
+		if ok {
+			ev := Event{
+				Type:         EventTypeClose,
+				ResourceName: t.ID(),
+				Resource:     resHandler,
+			}
+			return h.Handle(ev)
+		}
+	}
+	return false
+}
+
 // SubscribeEditorEvents subscribes h to editor events of type ev.
 // If ev is of type EventTypeOpen, an event will be dispatched for
 // every Tab currently open.
-func (c *Component) SubscribeEditorEvents(ev EventType, h EventHandler) error {
-	switch ev {
-	case EventTypeOpen:
-		for _, tab := range c.comp.Tabs() {
-			resHandler, ok := tab.Handler().(Handler)
-			if !ok {
-				// tab handler does not implement Handler
-				continue
-			}
-			str, err := c.getContent(resHandler)
+func (c *Component) SubscribeEditorEvents(evs []EventType, h EventHandler) error {
+	// iterate to dispatch immediate events
+	for _, ev := range evs {
+		switch ev {
+		case EventTypeOpen:
+			err, exit := c.dispatchOpenTabs(h)
 			if err != nil {
 				return err
 			}
-			exit := h.Handle(Event{
-				Type:         EventTypeOpen,
-				ResourceName: tab.ID(),
-				Resource:     resHandler,
-				Content:      str,
-			})
+			if exit {
+				return nil
+			}
+		case EventTypeFocus:
+			exit := c.dispatchFocusTab(h)
 			if exit {
 				return nil
 			}
 		}
-		fallthrough
-	// delegate open/insert/delete event dispatching to underlying editor.
-	case EventTypeDelete, EventTypeInsert, EventTypeScroll, EventTypeCursor:
-		return c.ed.SubscribeEditorEvents(ev, h)
-	case EventTypeFocus:
-		t, ok := c.comp.FocusTab()
-		if ok {
-			resHandler, ok := t.Handler().(Handler)
-			if ok {
-				ev := Event{
-					Type:         EventTypeClose,
-					ResourceName: t.ID(),
-					Resource:     resHandler,
-				}
-				h.Handle(ev)
+	}
+
+	// iterate again so if handler exited for any event, we have returned
+	// and we do not subscribe it
+	var delegated []EventType
+	for _, ev := range evs {
+		switch ev {
+		// delegate open/insert/delete event dispatching to underlying editor.
+		case EventTypeOpen, EventTypeDelete,
+			EventTypeInsert, EventTypeScroll, EventTypeCursor:
+			delegated = append(delegated, ev)
+		default:
+			if _, ok := c.edSubscribers[ev]; !ok {
+				c.edSubscribers[ev] = make([]EventHandler, 0, 1)
 			}
+			c.edSubscribers[ev] = append(c.edSubscribers[ev], h)
 		}
 	}
 
-	if _, ok := c.edSubscribers[ev]; !ok {
-		c.edSubscribers[ev] = make([]EventHandler, 0, 1)
-	}
-
-	c.edSubscribers[ev] = append(c.edSubscribers[ev], h)
-	return nil
+	return c.ed.SubscribeEditorEvents(delegated, h)
 }
 
 // Commands returns a list of commands registered via SubscribeCommand.

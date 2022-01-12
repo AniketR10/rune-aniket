@@ -17,22 +17,24 @@ func TestEditorDispatchFocus(t *testing.T) {
 	name := "Jolie"
 
 	var h editor.Handler
-	ed.SubscribeEditorEvents(editor.EventTypeOpen, editor.FuncEventHandler(func(ev editor.Event) bool {
-		assert.Equal(t, editor.EventTypeOpen, ev.Type)
-		assert.Equal(t, content, ev.Content)
-		assert.Equal(t, name, ev.ResourceName)
-		h = ev.Resource
-		return false
-	}))
+	ed.SubscribeEditorEvents([]editor.EventType{editor.EventTypeOpen},
+		editor.FuncEventHandler(func(ev editor.Event) bool {
+			assert.Equal(t, editor.EventTypeOpen, ev.Type)
+			assert.Equal(t, content, ev.Content)
+			assert.Equal(t, name, ev.ResourceName)
+			h = ev.Resource
+			return false
+		}))
 
 	var focusCalled int
-	ed.SubscribeEditorEvents(editor.EventTypeFocus, editor.FuncEventHandler(func(ev editor.Event) bool {
-		focusCalled++
-		assert.Equal(t, editor.EventTypeFocus, ev.Type)
-		assert.Equal(t, name, ev.ResourceName)
-		assert.Equal(t, h, ev.Resource)
-		return false
-	}))
+	ed.SubscribeEditorEvents([]editor.EventType{editor.EventTypeFocus},
+		editor.FuncEventHandler(func(ev editor.Event) bool {
+			focusCalled++
+			assert.Equal(t, editor.EventTypeFocus, ev.Type)
+			assert.Equal(t, name, ev.ResourceName)
+			assert.Equal(t, h, ev.Resource)
+			return false
+		}))
 
 	buf := cell.NewBuffer()
 	buf.WriteString(content)
@@ -57,10 +59,11 @@ func TestEditorDispatchScroll(t *testing.T) {
 	require.True(t, getScrollFromHandler(ed, h).SeekDown())
 
 	at := term.Coordinates{X: -1}
-	ed.SubscribeEditorEvents(editor.EventTypeScroll, editor.FuncEventHandler(func(ev editor.Event) bool {
-		at = ev.Start
-		return false
-	}))
+	ed.SubscribeEditorEvents([]editor.EventType{editor.EventTypeScroll},
+		editor.FuncEventHandler(func(ev editor.Event) bool {
+			at = ev.Start
+			return false
+		}))
 
 	require.True(t, getScrollFromHandler(ed, h).SeekUp())
 	assert.Equal(t, term.Coordinates{}, at)
@@ -86,13 +89,14 @@ func TestEditorDispatchCursor(t *testing.T) {
 
 	windowCursor := term.Coordinates{X: -1}
 	scrollCursor := term.Coordinates{X: -1}
-	ed.SubscribeEditorEvents(editor.EventTypeCursor, editor.FuncEventHandler(func(ev editor.Event) bool {
-		windowCursor = ev.Start
-		scrollCursor = ev.From
-		assert.Equal(t, ev.ResourceName, "zsh")
-		assert.Equal(t, ev.Resource, h)
-		return false
-	}))
+	ed.SubscribeEditorEvents([]editor.EventType{editor.EventTypeCursor},
+		editor.FuncEventHandler(func(ev editor.Event) bool {
+			windowCursor = ev.Start
+			scrollCursor = ev.From
+			assert.Equal(t, ev.ResourceName, "zsh")
+			assert.Equal(t, ev.Resource, h)
+			return false
+		}))
 
 	h.Handle(term.Event{Ch: 'k'})
 	assert.Equal(t, term.Coordinates{X: -1}, windowCursor)

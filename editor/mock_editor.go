@@ -120,15 +120,19 @@ func (e *testEditor) SubscribeCommand(cmd string, h CommandHandler) error {
 	return nil
 }
 
-func (e *testEditor) SubscribeEditorEvents(ev EventType, sub EventHandler) error {
-	if e.subs == nil {
-		e.subs = make(map[EventType][]EventHandler)
+func (e *testEditor) SubscribeEditorEvents(
+	evs []EventType, sub EventHandler,
+) error {
+	for _, ev := range evs {
+		if e.subs == nil {
+			e.subs = make(map[EventType][]EventHandler)
+		}
+		if _, ok := e.subs[ev]; !ok {
+			e.subs[ev] = []EventHandler{sub}
+		} else {
+			e.subs[ev] = append(e.subs[ev], sub)
+		}
 	}
-	if _, ok := e.subs[ev]; !ok {
-		e.subs[ev] = []EventHandler{sub}
-		return nil
-	}
-	e.subs[ev] = append(e.subs[ev], sub)
 	return nil
 }
 

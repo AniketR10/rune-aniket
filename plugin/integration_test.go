@@ -39,7 +39,7 @@ func TestIntegrationRace(t *testing.T) {
 	defer broker.Close()
 	mock := browser.NewMockBrowser(ctrl)
 	edMock := editor.NewMockEditor(ctrl)
-	edMock.EXPECT().SubscribeEditorEvents(gomock.Any(), gomock.Any()).Times(2)
+	edMock.EXPECT().SubscribeEditorEvents(gomock.Any(), gomock.Any()).Times(1)
 	resources := MergeResourceMap(BrowserResources(mock), EditorResources(edMock))
 	resources[PermissionClipboard] = NewClipboardManager()
 
@@ -139,7 +139,8 @@ func TestIntegrationRace(t *testing.T) {
 			return ed.SubscribeEditorEvents(gomock.Any(), gomock.Any()).Return(nil)
 		}, func(ifc interface{}) error {
 			h := editor.FuncEventHandler(func(editor.Event) bool { return false })
-			return ifc.(editor.Editor).SubscribeEditorEvents(editor.EventTypeFlush, h)
+			ev := []editor.EventType{editor.EventTypeFlush}
+			return ifc.(editor.Editor).SubscribeEditorEvents(ev, h)
 		}},
 		{PermissionEditor, func(token uint32, broker proto.MuxBroker) (interface{}, error) {
 			return Editor(token, broker)

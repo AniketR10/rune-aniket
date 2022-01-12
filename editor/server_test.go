@@ -30,7 +30,7 @@ func newTestServer(t *testing.T, ctrl *gomock.Controller) (*proto.MockMuxBroker,
 	broker := proto.NewMockMuxBroker(ctrl)
 	ed := NewMockEditor(ctrl)
 	expectInitialServerSubscribe(t, ed)
-	s := NewServer(broker, ed, nopLocker{})
+	s := NewServer(broker, ed, new(sync.Mutex))
 	return broker, ed, s
 }
 
@@ -91,16 +91,6 @@ func TestServerEdit(t *testing.T) {
 	})
 }
 
-func expectSubscribe(
-	t *testing.T, mock *MockEditor, expectedType EventType, expectedHandler EventHandler,
-) {
-	mock.EXPECT().SubscribeEditorEvents(gomock.Any(), gomock.Any()).Times(1).
-		DoAndReturn(func(evType EventType, h EventHandler) error {
-			assert.Equal(t, expectedType, evType)
-			return nil
-		})
-}
-
 func waitForMonitoringExit(quitCh chan struct{}) {
 	<-quitCh
 	time.Sleep(asyncResultsSleepDuration)
@@ -130,7 +120,6 @@ func assertServerHandlerExitClose(
 ) {
 	resource := &TestHandler{}
 	name := "sup"
-	ev := Event{Type: EventTypeClose, ResourceName: name, Resource: resource}
 	expectHandlerInvokeExit(t, handlerConn)
 
 	handlerConn.EXPECT().Close().Times(1).
@@ -141,7 +130,7 @@ func assertServerHandlerExitClose(
 	s.Handle(Event{Type: EventTypeOpen, ResourceName: name, Resource: resource})
 
 	s.editor.Lock()
-	_ = h.Handle(ev)
+	h.Handle(Event{Type: EventTypeClose, ResourceName: name, Resource: resource})
 	s.editor.Unlock()
 
 	waitForMonitoringExit(quitCh)
@@ -152,20 +141,63 @@ func assertServerHandlerExitClose(
 }
 
 func TestServerSubscribe(t *testing.T) {
-	nextID := uint32(12)
 	ctx := context.Background()
-
-	t.Run("cleans resources when handler subscriber returns exit=true", func(t *testing.T) {
+	t.Run("propagates subscribe with multiple event types", func(t *testing.T) {
+		nextID := uint32(12)
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
 		broker, mock, s := newTestServer(t, ctrl)
-		evType := EventTypeFlush
+		expectedEvTypes := []EventType{EventTypeFlush, EventTypeFocus}
 
-		var h EventHandler
+		var actualEvTypes []EventType
+		var wg sync.WaitGroup
 		mock.EXPECT().SubscribeEditorEvents(gomock.Any(), gomock.Any()).
-			DoAndReturn(func(ev EventType, _h EventHandler) error {
-				assert.Equal(t, evType, ev)
+			DoAndReturn(func(evs []EventType, _h EventHandler) error {
+				defer wg.Done()
+				actualEvTypes = evs
+				return nil
+			})
+		req := proto.EditorSubscribeRequest{
+			HandlerId: nextID,
+			Type: []proto.EditorEvent_Type{
+				proto.EditorEvent_TypeFlush,
+				proto.EditorEvent_TypeFocus,
+			},
+		}
+		conn := prototest.ExpectBrokerDial(t, ctrl, broker, nextID)
+		quitCh := prototest.ExpectMonitorConn(conn)
+
+		wg.Add(1)
+		res, err := s.Subscribe(ctx, &req)
+		require.NoError(t, err)
+		require.NotNil(t, res)
+
+		wg.Wait()
+
+		conn.EXPECT().Close().Times(1).
+			DoAndReturn(prototest.ExpectSignalExit(conn, quitCh, nil))
+
+		assert.Equal(t, expectedEvTypes, actualEvTypes)
+		assert.NoError(t, s.Close())
+		waitForMonitoringExit(quitCh)
+	})
+
+	t.Run("cleans resources when handler subscriber returns exit=true", func(t *testing.T) {
+		nextID := uint32(12222)
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		broker, mock, s := newTestServer(t, ctrl)
+		expectedEvTypes := []EventType{EventTypeFlush}
+
+		var actualEvTypes []EventType
+		var h EventHandler
+		var wg sync.WaitGroup
+		mock.EXPECT().SubscribeEditorEvents(gomock.Any(), gomock.Any()).
+			DoAndReturn(func(evs []EventType, _h EventHandler) error {
+				defer wg.Done()
+				actualEvTypes = evs
 				h = _h
 				return nil
 			})
@@ -174,13 +206,18 @@ func TestServerSubscribe(t *testing.T) {
 
 		req := proto.EditorSubscribeRequest{
 			HandlerId: nextID,
-			Type:      proto.EditorEvent_TypeFlush,
+			Type:      []proto.EditorEvent_Type{proto.EditorEvent_TypeFlush},
 		}
 
+		wg.Add(1)
 		res, err := s.Subscribe(ctx, &req)
 		require.NoError(t, err)
 		require.NotNil(t, res)
 
+		wg.Wait()
+
+		require.NotNil(t, h)
+		assert.Equal(t, expectedEvTypes, actualEvTypes)
 		assertServerHandlerExitClose(t, conn, h, s, quitCh, broker)
 	})
 }

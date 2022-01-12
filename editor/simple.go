@@ -33,8 +33,8 @@ func (e *simpleEditor) Editor(name string) (Handler, error) {
 	return nil, errors.New("not supported")
 }
 
-func (e *simpleEditor) SubscribeEditorEvents(ev EventType, sub EventHandler) error {
-	e.pub.SubscribeEditorEvents(ev, sub)
+func (e *simpleEditor) SubscribeEditorEvents(evs []EventType, sub EventHandler) error {
+	e.pub.SubscribeEditorEvents(evs, sub)
 	return nil
 }
 

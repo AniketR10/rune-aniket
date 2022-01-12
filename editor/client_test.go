@@ -88,7 +88,7 @@ func TestClientEdit(t *testing.T) {
 func expectClientSubscribe(
 	t *testing.T, mockCC *proto.MockClientConnInterface,
 	expectedHandlerID uint32,
-	expectedEventType EventType,
+	expectedEventTypes []EventType,
 ) {
 	mockCC.EXPECT().
 		Invoke(gomock.Any(),
@@ -102,7 +102,12 @@ func expectClientSubscribe(
 			require.True(t, ok)
 
 			assert.Equal(t, expectedHandlerID, req.GetHandlerId())
-			assert.Equal(t, Event{Type: expectedEventType}.protoType(), req.GetType())
+
+			var expectedProtoTypes []proto.EditorEvent_Type
+			for _, ev := range expectedEventTypes {
+				expectedProtoTypes = append(expectedProtoTypes, Event{Type: ev}.protoType())
+			}
+			assert.Equal(t, expectedProtoTypes, req.GetType())
 
 			_, ok = reply.(*proto.EditorSubscribeResponse)
 			assert.True(t, ok)
@@ -120,12 +125,12 @@ func TestClientSubscribe(t *testing.T) {
 		handler := NewMockEventHandler(ctrl)
 
 		brokerID := uint32(22)
-		evType := EventTypeFlush
-		expectClientSubscribe(t, cc, brokerID, evType)
+		evTypes := []EventType{EventTypeFlush, EventTypeClose, EventTypeOpen}
+		expectClientSubscribe(t, cc, brokerID, evTypes)
 
 		prototest.ExpectBrokerServe(t, brokerID, broker)
 
-		err := c.SubscribeEditorEvents(evType, handler)
+		err := c.SubscribeEditorEvents(evTypes, handler)
 		require.NoError(t, err)
 
 		assert.NoError(t, c.Close())

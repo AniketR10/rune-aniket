@@ -7,7 +7,6 @@ import (
 	"strings"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/ernestrc/go-tui"
 	"github.com/ernestrc/go-tui/browser"
@@ -69,8 +68,9 @@ func setupWmIntTest(
 }
 
 func expectInitialServerSubscribe(t *testing.T, mock *MockEditor) {
-	mock.EXPECT().SubscribeEditorEvents(gomock.Eq(EventTypeClose), gomock.Any()).Return(nil).AnyTimes()
-	mock.EXPECT().SubscribeEditorEvents(gomock.Eq(EventTypeOpen), gomock.Any()).Return(nil).AnyTimes()
+	mock.EXPECT().SubscribeEditorEvents(gomock.Any(), gomock.Any()).
+		Return(nil).
+		Times(1)
 }
 
 func TestClientServerIntegration(t *testing.T) {
@@ -183,8 +183,6 @@ func TestClientServerIntegration(t *testing.T) {
 			t.Run(tcase.name, func(t *testing.T) {
 				var wg sync.WaitGroup
 				var mu sync.Mutex
-				ctrl := gomock.NewController(t)
-				defer ctrl.Finish()
 				b := proto.NewDialBroker()
 				ed := &testEditor{}
 				s := NewServer(b, ed, &mu)
@@ -192,19 +190,20 @@ func TestClientServerIntegration(t *testing.T) {
 				client, closeFn := setupIntTest(t, b, s)
 				defer closeFn()
 
-				err := client.SubscribeEditorEvents(tcase.evType, FuncEventHandler(func(ev Event) bool {
-					defer wg.Done()
-					if tcase.start != nil {
-						assert.Equal(t, *tcase.start, ev.Start)
-					}
-					if tcase.end != nil {
-						assert.Equal(t, *tcase.end, ev.End)
-					}
-					if tcase.content != nil {
-						assert.Equal(t, *tcase.content, ev.Content)
-					}
-					return false
-				}))
+				err := client.SubscribeEditorEvents([]EventType{tcase.evType},
+					FuncEventHandler(func(ev Event) bool {
+						defer wg.Done()
+						if tcase.start != nil {
+							assert.Equal(t, *tcase.start, ev.Start)
+						}
+						if tcase.end != nil {
+							assert.Equal(t, *tcase.end, ev.End)
+						}
+						if tcase.content != nil {
+							assert.Equal(t, *tcase.content, ev.Content)
+						}
+						return false
+					}))
 				require.NoError(t, err)
 
 				wg.Add(1)
@@ -216,7 +215,6 @@ func TestClientServerIntegration(t *testing.T) {
 				wg.Wait()
 
 				assert.NoError(t, s.Close())
-				time.Sleep(asyncResultsSleepDuration)
 			})
 		}
 	})

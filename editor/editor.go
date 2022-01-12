@@ -61,7 +61,7 @@ type Editor interface {
 	// SubscribeEditorEvents subscribes EventHandler to events of type EventType.
 	// Note that it's suffixed with Editor so implementors
 	// can also implement browser.Subscriber.
-	SubscribeEditorEvents(EventType, EventHandler) error
+	SubscribeEditorEvents([]EventType, EventHandler) error
 
 	// Editor returns the editor.Handler with name or returns
 	// an error if no editor with name is open via Edit.

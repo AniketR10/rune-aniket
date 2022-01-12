@@ -129,13 +129,15 @@ func (c *Client) Editor(name string) (Handler, error) {
 }
 
 // SubscribeEditorEvents requests the editor server to subscribe sub to ev.
-func (c *Client) SubscribeEditorEvents(evType EventType, h EventHandler) error {
+func (c *Client) SubscribeEditorEvents(evs []EventType, h EventHandler) error {
 	ctx := context.Background()
 
 	handlerID := c.serveHandler(h)
 
-	protoType := Event{Type: evType}.protoType()
-	req := proto.EditorSubscribeRequest{Type: protoType, HandlerId: handlerID}
+	req := proto.EditorSubscribeRequest{HandlerId: handlerID}
+	for _, ev := range evs {
+		req.Type = append(req.Type, Event{Type: ev}.protoType())
+	}
 	_, err := c.ed.Subscribe(ctx, &req)
 	if err != nil {
 		reason := fmt.Sprintf("editor.Client.Subscribe: %v", err)

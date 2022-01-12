@@ -98,22 +98,11 @@ func (s *Server) Init(
 	s.failureTimeout = defaultFailureTimeout
 	s.errChan = make(chan error)
 
-	go func() {
-		s.editor.Locker.Lock()
-		defer s.editor.Locker.Unlock()
-		s.editor.SubscribeEditorEvents(EventTypeClose, s)
-		s.editor.SubscribeEditorEvents(EventTypeOpen, s)
-	}()
+	evs := []EventType{EventTypeClose, EventTypeOpen}
+	s.editor.SubscribeEditorEvents(evs, s)
 }
 
 func (s *Server) cleanResource(name string) {
-	// allow other subscribers to take action first
-	// TODO this breaks if client opens and closes quickly
-	time.Sleep(gracefulShutdownWait)
-
-	s.editor.Lock()
-	defer s.editor.Unlock()
-
 	handlerID, ok := s.nameToID[name]
 	if !ok {
 		s.tryLog("(%p editor.Server): could not find handler with resource name %s",
@@ -135,7 +124,7 @@ func (s *Server) Handle(ev Event) bool {
 			s.addNextHandlerResource(ev.ResourceName, ev.Resource)
 		}
 	case EventTypeClose:
-		go s.cleanResource(ev.ResourceName)
+		s.cleanResource(ev.ResourceName)
 	}
 
 	return false
@@ -294,13 +283,17 @@ func (s *Server) Subscribe(ctx context.Context, in *proto.EditorSubscribeRequest
 		return nil, err
 	}
 
-	evType, err := protoTypeToModel(in.GetType())
-	if err != nil {
-		return nil, err
+	var evTypes []EventType
+	for _, ev := range in.GetType() {
+		evType, err := protoTypeToModel(ev)
+		if err != nil {
+			return nil, err
+		}
+		evTypes = append(evTypes, evType)
 	}
 
 	s.editor.Lock()
-	err = s.editor.SubscribeEditorEvents(evType, handler)
+	err = s.editor.SubscribeEditorEvents(evTypes, handler)
 	s.editor.Unlock()
 	if err != nil {
 		reason := fmt.Sprintf("failed to subscribe: %v", err)

@@ -35,7 +35,7 @@ func TestPublisher(t *testing.T) {
 		name := "Teamshares"
 
 		var eventHandler Handler
-		pub.SubscribeEditorEvents(EventTypeOpen,
+		pub.SubscribeEditorEvents([]EventType{EventTypeOpen},
 			FuncEventHandler(func(ev Event) bool {
 				assert.Equal(t, EventTypeOpen, ev.Type)
 				assert.Equal(t, content, ev.Content)
@@ -57,7 +57,7 @@ func TestPublisher(t *testing.T) {
 		name := "Teamshares"
 
 		var eventHandler Handler
-		pub.SubscribeEditorEvents(EventTypeFocus,
+		pub.SubscribeEditorEvents([]EventType{EventTypeFocus},
 			FuncEventHandler(func(ev Event) bool {
 				assert.Equal(t, EventTypeFocus, ev.Type)
 				assert.Equal(t, name, ev.ResourceName)
@@ -68,6 +68,29 @@ func TestPublisher(t *testing.T) {
 		buf, _, cursor := newEdit(content)
 		returnedHandler := pub.PublishEdit(name, buf, newMock(ctrl), cursor)
 		assert.Equal(t, eventHandler, returnedHandler)
+	})
+
+	t.Run("subscribes to multiple events", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+
+		pub := NewPublisher()
+		content := "3. SHE GOT HIRED, I KNEW IT!!!"
+		name := "Teamshares"
+
+		var eventHandler Handler
+		var fired int
+		pub.SubscribeEditorEvents([]EventType{EventTypeOpen, EventTypeFocus},
+			FuncEventHandler(func(ev Event) bool {
+				fired++
+				assert.Equal(t, name, ev.ResourceName)
+				eventHandler = ev.Resource
+				return false
+			}))
+
+		buf, _, cursor := newEdit(content)
+		returnedHandler := pub.PublishEdit(name, buf, newMock(ctrl), cursor)
+		assert.Equal(t, eventHandler, returnedHandler)
+		assert.Equal(t, 2, fired)
 	})
 
 	t.Run("dispatches EventTypeCursor when given cursor changes on Handle", func(t *testing.T) {
@@ -82,7 +105,7 @@ func TestPublisher(t *testing.T) {
 		h.Resize(2, 2)
 
 		var called bool
-		pub.SubscribeEditorEvents(EventTypeCursor,
+		pub.SubscribeEditorEvents([]EventType{EventTypeCursor},
 			FuncEventHandler(func(ev Event) bool {
 				require.Equal(t, EventTypeCursor, ev.Type)
 				assert.Equal(t, ev.ResourceName, "zsh")
@@ -125,7 +148,7 @@ func TestPublisher(t *testing.T) {
 		require.True(t, scroll.SeekDown())
 
 		at := term.Coordinates{X: -1}
-		pub.SubscribeEditorEvents(EventTypeScroll,
+		pub.SubscribeEditorEvents([]EventType{EventTypeScroll},
 			FuncEventHandler(func(ev Event) bool {
 				require.Equal(t, EventTypeScroll, ev.Type)
 				assert.Equal(t, "zsh", ev.ResourceName)
@@ -151,7 +174,7 @@ func TestPublisher(t *testing.T) {
 		h.Resize(2, 2)
 
 		var called bool
-		pub.SubscribeEditorEvents(EventTypeInsert,
+		pub.SubscribeEditorEvents([]EventType{EventTypeInsert},
 			FuncEventHandler(func(ev Event) bool {
 				called = true
 				require.Equal(t, EventTypeInsert, ev.Type)
@@ -178,7 +201,7 @@ func TestPublisher(t *testing.T) {
 		h.Resize(2, 2)
 
 		var called bool
-		pub.SubscribeEditorEvents(EventTypeDelete,
+		pub.SubscribeEditorEvents([]EventType{EventTypeDelete},
 			FuncEventHandler(func(ev Event) bool {
 				called = true
 				require.Equal(t, EventTypeDelete, ev.Type)
