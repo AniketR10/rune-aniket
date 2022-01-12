@@ -491,37 +491,6 @@ func TestComponentEditorSubscriber(t *testing.T) {
 		assert.Equal(t, 0, fired)
 	})
 
-	for _, _tcase := range tsuite {
-		switch _tcase.evType {
-		case EventTypeFlush, EventTypeOpen:
-		default:
-			return
-		}
-
-		tcase := _tcase
-		t.Run(tcase.name+" events are dispatched with content", func(t *testing.T) {
-			c := newTestComponent(t, &testEditor{})
-
-			filename := "Toy Rory"
-
-			c.config.OpenFileFn = func(filePath string,
-				buf *cell.Buffer, swapDir string, readOnly bool) (FlusherCloser, error) {
-				buf.WriteString(content)
-				return &testFlusherCloser{}, nil
-			}
-
-			var dispatched string
-			evs := []EventType{tcase.evType}
-			c.SubscribeEditorEvents(evs, FuncEventHandler(func(ev Event) bool {
-				dispatched = ev.Content
-				return false
-			}))
-
-			tcase.trigger(t, c, filename)
-			assert.Equal(t, content, dispatched)
-		})
-	}
-
 	t.Run("one open event is dispatched per open tab upon subscribe to open", func(t *testing.T) {
 		c := newTestComponent(t, &testEditor{})
 
@@ -549,6 +518,37 @@ func TestComponentEditorSubscriber(t *testing.T) {
 		}))
 
 		assert.Equal(t, 2, fired)
+	})
+
+	t.Run("EventTypeUnfocus is dispatched before EventTypeFocus on content update", func(t *testing.T) {
+		c := newTestComponent(t, &testEditor{})
+		a, err := c.Open("a")
+		require.NoError(t, err)
+
+		b, err := c.Open("b")
+		require.NoError(t, err)
+
+		win, err := c.Focus()
+		require.NoError(t, err)
+
+		require.NoError(t, win.SetContent(a))
+
+		var i int
+		evs := []EventType{EventTypeFocus, EventTypeUnfocus}
+		c.SubscribeEditorEvents(evs, FuncEventHandler(func(ev Event) bool {
+			if i == 1 {
+				assert.Equal(t, EventTypeUnfocus, ev.Type)
+			} else {
+				assert.Equal(t, EventTypeFocus, ev.Type)
+			}
+			i++
+			return false
+		}))
+
+		// upon SubscribeEditorEvents, we dispatch first Focus
+		assert.Equal(t, 1, i)
+		require.NoError(t, win.SetContent(b))
+		assert.Equal(t, 3, i)
 	})
 }
 

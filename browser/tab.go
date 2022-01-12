@@ -37,12 +37,15 @@ func (b *Tab) init(c *Component, id string, h Handler, f io.Closer) {
 	b.free = true
 }
 
-func (b *Tab) setWindow(win Window) {
-	b.free = false
-	b.win = win
+func (b *Tab) callOnFocus() {
 	for _, sub := range b.subscribers {
 		sub.OnFocus(b)
 	}
+}
+
+func (b *Tab) setWindow(win Window) {
+	b.free = false
+	b.win = win
 }
 
 func (b *Tab) setFree() {

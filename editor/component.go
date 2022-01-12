@@ -563,7 +563,7 @@ func (c *Component) dispatchFocusTab(h EventHandler) bool {
 		resHandler, ok := t.Handler().(Handler)
 		if ok {
 			ev := Event{
-				Type:         EventTypeClose,
+				Type:         EventTypeFocus,
 				ResourceName: t.ID(),
 				Resource:     resHandler,
 			}

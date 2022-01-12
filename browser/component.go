@@ -428,7 +428,12 @@ func (c *Component) updateWindowContent(
 		}
 	}
 	oldComponent := win.win.SetContent(content).(Handler)
+	// first call OnFree
 	c.releaseHandler(oldComponent)
+	// then call OnFocus if applicable
+	if ok {
+		tab.callOnFocus()
+	}
 	return oldComponent
 }
 
@@ -568,6 +573,7 @@ func (c *Component) split(
 	ret := c.newWindow(win)
 	if isTab {
 		h.(*Tab).setWindow(ret)
+		h.(*Tab).callOnFocus()
 	}
 	return ret
 }
@@ -601,6 +607,7 @@ func (c *Component) Floating(
 	win := c.newWindow(c.wm.FloatingWindow(h, at, width, height))
 	if isTab {
 		h.(*Tab).setWindow(win)
+		h.(*Tab).callOnFocus()
 	}
 	c.wm.SetFocus(win.win)
 	return win
