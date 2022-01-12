@@ -193,6 +193,19 @@ func TestEventProto(t *testing.T) {
 		},
 		{
 			in: Event{
+				Type:         EventTypeUnfocus,
+				ResourceName: "COVID",
+				Resource: Token{Token: browser.Token{ID: 288},
+					resource: "COVID"},
+			},
+			out: proto.EditorEvent{
+				Type:         proto.EditorEvent_TypeUnfocus,
+				ResourceName: "COVID",
+				ResourceId:   288,
+			},
+		},
+		{
+			in: Event{
 				Type:  EventTypeScroll,
 				Start: term.Coordinates{X: 1, Y: 2},
 				End:   term.Coordinates{X: 3, Y: 4},

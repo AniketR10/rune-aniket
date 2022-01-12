@@ -237,8 +237,16 @@ func (s *compTabSubscriber) OnFocus(t *browser.Tab) {
 	})
 }
 
-func (s compTabSubscriber) OnFree(t *browser.Tab) {
-	// not used for now
+func (s *compTabSubscriber) OnFree(t *browser.Tab) {
+	res, ok := t.Handler().(Handler)
+	if !ok {
+		return
+	}
+	(*Component)(s).dispatchEvent(Event{
+		Type:         EventTypeUnfocus,
+		ResourceName: t.ID(),
+		Resource:     res,
+	})
 }
 
 // OpenFileTab opens the file at filename path, with an optional recovery file,

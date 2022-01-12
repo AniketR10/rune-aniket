@@ -311,11 +311,31 @@ func TestComponentEditorSubscriber(t *testing.T) {
 			nil,
 		},
 		{
+			"Window.SetContent->EventTypeUnfocus",
+			EventTypeUnfocus,
+			func(t *testing.T, c *Component, resourceName string) {
+				win, err := c.Focus()
+				require.NoError(t, err)
+
+				h, err := c.Open("bleh")
+				require.NoError(t, err)
+				require.NoError(t, win.SetContent(h))
+			},
+			func(t *testing.T, c *Component, resourceName string) {
+				h, err := c.Open(resourceName)
+				require.NoError(t, err)
+
+				win, err := c.Focus()
+				require.NoError(t, err)
+				require.NoError(t, win.SetContent(h))
+			},
+		},
+		{
 			"Window.SetContent->EventTypeFocus",
 			EventTypeFocus,
 			func(t *testing.T, c *Component, resourceName string) {
 				h, err := c.Open(resourceName)
-				assert.NoError(t, err)
+				require.NoError(t, err)
 
 				win, err := c.Focus()
 				require.NoError(t, err)
@@ -392,8 +412,8 @@ func TestComponentEditorSubscriber(t *testing.T) {
 			var fired int
 			usr, _ := user.Current()
 			dir := usr.HomeDir
-			ev := []EventType{tcase.evType}
-			c.SubscribeEditorEvents(ev, FuncEventHandler(func(ev Event) bool {
+			evs := []EventType{tcase.evType}
+			c.SubscribeEditorEvents(evs, FuncEventHandler(func(ev Event) bool {
 				// if preTrigger, then only assert relevant file event
 				if tcase.preTrigger == nil {
 					assert.Equal(t, filepath.Base(ev.ResourceName), "Joe_Biden.txt")
@@ -421,14 +441,18 @@ func TestComponentEditorSubscriber(t *testing.T) {
 			}
 
 			var fired int
-			ev := []EventType{tcase.evType}
-			c.SubscribeEditorEvents(ev, FuncEventHandler(func(ev Event) bool {
+			evs := []EventType{tcase.evType}
+			c.SubscribeEditorEvents(evs, FuncEventHandler(func(ev Event) bool {
 				if tcase.preTrigger == nil {
+					assert.Equal(t, filepath.Base(ev.ResourceName), "Jill_Biden.txt")
 					fired++
-				} else if filepath.Base(ev.ResourceName) == "Jill_Biden.txt" {
-					fired++
+					return true
 				}
-				return true
+				if filepath.Base(ev.ResourceName) == "Jill_Biden.txt" {
+					fired++
+					return true
+				}
+				return false
 			}))
 
 			tcase.trigger(t, c, filename)
