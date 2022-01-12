@@ -177,6 +177,8 @@ func TestServerSubscribe(t *testing.T) {
 
 		conn.EXPECT().Close().Times(1).
 			DoAndReturn(prototest.ExpectSignalExit(conn, quitCh, nil))
+		conn.EXPECT().Invoke(gomock.Any(), gomock.Any(),
+			gomock.Any(), gomock.Any()).AnyTimes()
 
 		assert.Equal(t, expectedEvTypes, actualEvTypes)
 		assert.NoError(t, s.Close())
