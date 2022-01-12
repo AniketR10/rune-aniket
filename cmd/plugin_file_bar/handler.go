@@ -30,6 +30,7 @@ var (
 		editor.EventTypeFlush,
 		editor.EventTypeCursor,
 		editor.EventTypeFocus,
+		editor.EventTypeUnfocus,
 	}
 	fileBarHandlerPermissions = []plugin.Permission{
 		plugin.PermissionBrowserWindowManager,
@@ -169,7 +170,7 @@ func (h *fileBarEditorHandler) refreshBarContent(name string) {
 	h.bar.coords.Init()
 	file, ok := h.files[name]
 	if !ok || file == nil {
-		log.Warnf("could not find file info file %s", name)
+		log.Tracef("could not find file info file %s", name)
 		return
 	}
 
@@ -258,6 +259,9 @@ func (h *fileBarEditorHandler) handleEvents() {
 			fallthrough
 		case editor.EventTypeFocus:
 			h.refreshBarContent(ev.ResourceName)
+			err = h.p.PublishInterrupt()
+		case editor.EventTypeUnfocus:
+			h.refreshBarContent("")
 			err = h.p.PublishInterrupt()
 		case editor.EventTypeCursor:
 			h.setCursorOffset(ev.ResourceName, ev.From)
