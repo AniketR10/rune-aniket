@@ -1,6 +1,7 @@
 package editor
 
 import (
+	"context"
 	"errors"
 
 	"github.com/ernestrc/go-tui/browser"
@@ -21,12 +22,12 @@ func Mock() Editor {
 	return &testEditor{}
 }
 
-func (e *testEditor) Handle(ev Event) bool {
-	e.dispatchEvent(ev)
+func (e *testEditor) Handle(ctx context.Context, ev Event) bool {
+	e.dispatchEvent(ctx, ev)
 	return false
 }
 
-func (e *testEditor) dispatchEvent(ev Event) {
+func (e *testEditor) dispatchEvent(ctx context.Context, ev Event) {
 	if len(e.subs) == 0 {
 		return
 	}
@@ -37,7 +38,7 @@ func (e *testEditor) dispatchEvent(ev Event) {
 
 	remain := make([]EventHandler, 0, len(subs))
 	for _, sub := range subs {
-		exit := sub.Handle(ev)
+		exit := sub.Handle(ctx, ev)
 		if !exit {
 			remain = append(remain, sub)
 		}
@@ -65,7 +66,7 @@ func (e *testEditor) Edit(name string, buf *cell.Buffer) (Handler, error) {
 		parent:      e,
 		TestHandler: *browser.NewTestHandler(),
 	}
-	e.dispatchEvent(Event{
+	e.dispatchEvent(context.Background(), Event{
 		Type:         EventTypeOpen,
 		ResourceName: name,
 		Resource:     h,
@@ -83,7 +84,7 @@ func (e *testEditor) SetLocationList(h Handler, id string, loc LocationList) err
 }
 
 func (e *testEditorHandler) Handle(ev term.Event) (bool, bool) {
-	e.parent.dispatchEvent(Event{
+	e.parent.dispatchEvent(context.Background(), Event{
 		Type:         EventTypeCursor,
 		ResourceName: e.name,
 		Resource:     e,

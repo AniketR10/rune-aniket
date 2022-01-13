@@ -5,6 +5,7 @@
 package editor
 
 import (
+	context "context"
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
@@ -34,15 +35,15 @@ func (m *MockEventHandler) EXPECT() *MockEventHandlerMockRecorder {
 }
 
 // Handle mocks base method.
-func (m *MockEventHandler) Handle(arg0 Event) bool {
+func (m *MockEventHandler) Handle(arg0 context.Context, arg1 Event) bool {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Handle", arg0)
+	ret := m.ctrl.Call(m, "Handle", arg0, arg1)
 	ret0, _ := ret[0].(bool)
 	return ret0
 }
 
 // Handle indicates an expected call of Handle.
-func (mr *MockEventHandlerMockRecorder) Handle(arg0 interface{}) *gomock.Call {
+func (mr *MockEventHandlerMockRecorder) Handle(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Handle", reflect.TypeOf((*MockEventHandler)(nil).Handle), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Handle", reflect.TypeOf((*MockEventHandler)(nil).Handle), arg0, arg1)
 }

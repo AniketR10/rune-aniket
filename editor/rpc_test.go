@@ -1,6 +1,7 @@
 package editor
 
 import (
+	"context"
 	"errors"
 	"net"
 	"strconv"
@@ -191,7 +192,7 @@ func TestClientServerIntegration(t *testing.T) {
 				defer closeFn()
 
 				err := client.SubscribeEditorEvents([]EventType{tcase.evType},
-					FuncEventHandler(func(ev Event) bool {
+					FuncEventHandler(func(ctx context.Context, ev Event) bool {
 						defer wg.Done()
 						if tcase.start != nil {
 							assert.Equal(t, *tcase.start, ev.Start)

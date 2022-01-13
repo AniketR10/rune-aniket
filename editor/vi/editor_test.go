@@ -1,6 +1,7 @@
 package vi
 
 import (
+	"context"
 	"testing"
 
 	"github.com/ernestrc/go-tui/cell"
@@ -18,7 +19,7 @@ func TestEditorDispatchFocus(t *testing.T) {
 
 	var h editor.Handler
 	ed.SubscribeEditorEvents([]editor.EventType{editor.EventTypeOpen},
-		editor.FuncEventHandler(func(ev editor.Event) bool {
+		editor.FuncEventHandler(func(ctx context.Context, ev editor.Event) bool {
 			assert.Equal(t, editor.EventTypeOpen, ev.Type)
 			assert.Equal(t, content, ev.Content)
 			assert.Equal(t, name, ev.ResourceName)
@@ -28,7 +29,7 @@ func TestEditorDispatchFocus(t *testing.T) {
 
 	var focusCalled int
 	ed.SubscribeEditorEvents([]editor.EventType{editor.EventTypeFocus},
-		editor.FuncEventHandler(func(ev editor.Event) bool {
+		editor.FuncEventHandler(func(ctx context.Context, ev editor.Event) bool {
 			focusCalled++
 			assert.Equal(t, editor.EventTypeFocus, ev.Type)
 			assert.Equal(t, name, ev.ResourceName)
@@ -60,7 +61,7 @@ func TestEditorDispatchScroll(t *testing.T) {
 
 	at := term.Coordinates{X: -1}
 	ed.SubscribeEditorEvents([]editor.EventType{editor.EventTypeScroll},
-		editor.FuncEventHandler(func(ev editor.Event) bool {
+		editor.FuncEventHandler(func(ctx context.Context, ev editor.Event) bool {
 			at = ev.Start
 			return false
 		}))
@@ -90,7 +91,7 @@ func TestEditorDispatchCursor(t *testing.T) {
 	windowCursor := term.Coordinates{X: -1}
 	scrollCursor := term.Coordinates{X: -1}
 	ed.SubscribeEditorEvents([]editor.EventType{editor.EventTypeCursor},
-		editor.FuncEventHandler(func(ev editor.Event) bool {
+		editor.FuncEventHandler(func(ctx context.Context, ev editor.Event) bool {
 			windowCursor = ev.Start
 			scrollCursor = ev.From
 			assert.Equal(t, ev.ResourceName, "zsh")

@@ -1,6 +1,7 @@
 package editor
 
 import (
+	"context"
 	"testing"
 
 	"github.com/ernestrc/go-tui/cell"
@@ -36,7 +37,7 @@ func TestPublisher(t *testing.T) {
 
 		var eventHandler Handler
 		pub.SubscribeEditorEvents([]EventType{EventTypeOpen},
-			FuncEventHandler(func(ev Event) bool {
+			FuncEventHandler(func(ctx context.Context, ev Event) bool {
 				assert.Equal(t, EventTypeOpen, ev.Type)
 				assert.Equal(t, content, ev.Content)
 				assert.Equal(t, name, ev.ResourceName)
@@ -58,7 +59,7 @@ func TestPublisher(t *testing.T) {
 
 		var eventHandler Handler
 		pub.SubscribeEditorEvents([]EventType{EventTypeFocus},
-			FuncEventHandler(func(ev Event) bool {
+			FuncEventHandler(func(ctx context.Context, ev Event) bool {
 				assert.Equal(t, EventTypeFocus, ev.Type)
 				assert.Equal(t, name, ev.ResourceName)
 				eventHandler = ev.Resource
@@ -80,7 +81,7 @@ func TestPublisher(t *testing.T) {
 		var eventHandler Handler
 		var fired int
 		pub.SubscribeEditorEvents([]EventType{EventTypeOpen, EventTypeFocus},
-			FuncEventHandler(func(ev Event) bool {
+			FuncEventHandler(func(ctx context.Context, ev Event) bool {
 				fired++
 				assert.Equal(t, name, ev.ResourceName)
 				eventHandler = ev.Resource
@@ -106,7 +107,7 @@ func TestPublisher(t *testing.T) {
 
 		var called bool
 		pub.SubscribeEditorEvents([]EventType{EventTypeCursor},
-			FuncEventHandler(func(ev Event) bool {
+			FuncEventHandler(func(ctx context.Context, ev Event) bool {
 				require.Equal(t, EventTypeCursor, ev.Type)
 				assert.Equal(t, ev.ResourceName, "zsh")
 				assert.Equal(t, ev.Resource, h)
@@ -149,7 +150,7 @@ func TestPublisher(t *testing.T) {
 
 		at := term.Coordinates{X: -1}
 		pub.SubscribeEditorEvents([]EventType{EventTypeScroll},
-			FuncEventHandler(func(ev Event) bool {
+			FuncEventHandler(func(ctx context.Context, ev Event) bool {
 				require.Equal(t, EventTypeScroll, ev.Type)
 				assert.Equal(t, "zsh", ev.ResourceName)
 				assert.Equal(t, h, ev.Resource)
@@ -175,7 +176,7 @@ func TestPublisher(t *testing.T) {
 
 		var called bool
 		pub.SubscribeEditorEvents([]EventType{EventTypeInsert},
-			FuncEventHandler(func(ev Event) bool {
+			FuncEventHandler(func(ctx context.Context, ev Event) bool {
 				called = true
 				require.Equal(t, EventTypeInsert, ev.Type)
 				assert.Equal(t, term.Coordinates{Y: 2}, ev.Start, "Start")
@@ -202,7 +203,7 @@ func TestPublisher(t *testing.T) {
 
 		var called bool
 		pub.SubscribeEditorEvents([]EventType{EventTypeDelete},
-			FuncEventHandler(func(ev Event) bool {
+			FuncEventHandler(func(ctx context.Context, ev Event) bool {
 				called = true
 				require.Equal(t, EventTypeDelete, ev.Type)
 				assert.Equal(t, term.Coordinates{}, ev.Start, "Start")

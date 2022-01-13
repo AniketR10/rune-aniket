@@ -1,6 +1,7 @@
 package editor
 
 import (
+	"context"
 	"testing"
 
 	"github.com/ernestrc/go-tui/browser"
@@ -26,7 +27,7 @@ func makeEventIntegrationCase(content string) (in, out *cell.Buffer, cursor *Cur
 func TestIntegrationInsert(t *testing.T) {
 	in, out, cursor := makeEventIntegrationCase("")
 	in.Subscribe(CellSubscriber("", NewTestHandler(),
-		FuncEventHandler(func(ev Event) bool {
+		FuncEventHandler(func(ctx context.Context, ev Event) bool {
 			out.InsertString(ev.Start, ev.Content)
 			return false
 		})))
@@ -101,7 +102,7 @@ func main() {
 	in, out, cursor := makeEventIntegrationCase(content)
 
 	in.Subscribe(CellSubscriber("", NewTestHandler(),
-		FuncEventHandler(func(ev Event) bool {
+		FuncEventHandler(func(ctx context.Context, ev Event) bool {
 			out.Delete(ev.From, ev.To)
 			return false
 		})))
@@ -128,7 +129,7 @@ func main() {
 	in, out, cursor := makeEventIntegrationCase(content)
 
 	in.Subscribe(CellSubscriber("", NewTestHandler(),
-		FuncEventHandler(func(ev Event) bool {
+		FuncEventHandler(func(ctx context.Context, ev Event) bool {
 			switch ev.Type {
 			case EventTypeInsert:
 				out.InsertString(ev.Start, ev.Content)

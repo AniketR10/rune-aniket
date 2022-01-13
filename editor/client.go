@@ -153,18 +153,19 @@ func (c *Client) SubscribeCommand(cmd string, h CommandHandler) error {
 	ctx := context.Background()
 
 	// re-use EventHandler logic
-	handlerID := c.serveHandler(FuncEventHandler(func(ev Event) bool {
-		cmd := Command{
-			Name:         ev.Content,
-			Args:         ev.cmdArgs,
-			ResourceName: ev.ResourceName,
-			Resource:     ev.Resource,
-		}
-		// as agreed with Server
-		cmd.Cursor.Content = ev.Start
-		cmd.Cursor.Window = ev.From
-		return h.HandleCommand(cmd)
-	}))
+	handlerID := c.serveHandler(
+		FuncEventHandler(func(ctx context.Context, ev Event) bool {
+			cmd := Command{
+				Name:         ev.Content,
+				Args:         ev.cmdArgs,
+				ResourceName: ev.ResourceName,
+				Resource:     ev.Resource,
+			}
+			// as agreed with Server
+			cmd.Cursor.Content = ev.Start
+			cmd.Cursor.Window = ev.From
+			return h.HandleCommand(cmd)
+		}))
 
 	req := proto.RegisterCommandRequest{Command: cmd, HandlerId: handlerID}
 	_, err := c.ed.Register(ctx, &req)

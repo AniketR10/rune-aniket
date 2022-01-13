@@ -159,7 +159,7 @@ func dispatchOpen(
 	expectSemanticTokens(t, server, tokenData)
 	expectLocationList(t, ed, expectedListID, expectedLocations, &wg)
 	wg.Add(1)
-	assert.False(t, h.Handle(evOpen))
+	assert.False(t, h.Handle(context.Background(), evOpen))
 	wg.Wait()
 }
 
@@ -175,13 +175,13 @@ func dispatchFlush(
 		Content:      content,
 		Resource:     editor.NewTestHandler(),
 	}
-	changes := []protocol.TextDocumentContentChangeEvent{{Text: content+"\n"}}
+	changes := []protocol.TextDocumentContentChangeEvent{{Text: content + "\n"}}
 
 	expectDidChange(t, server, name, version, changes)
 	expectSemanticTokens(t, server, tokenData)
 	expectLocationList(t, ed, expectedListID, expectedLocations, &wg)
 	wg.Add(1)
-	assert.False(t, h.Handle(ev))
+	assert.False(t, h.Handle(context.Background(), ev))
 	wg.Wait()
 }
 
@@ -233,8 +233,8 @@ func TestLspHandlerHandleInsertDelete(t *testing.T) {
 	buf := cell.NewBuffer()
 	buf.WriteString(filecontent1)
 	buf.Subscribe(editor.CellSubscriber(filename1, editor.NewTestHandler(),
-		editor.FuncEventHandler(func(ev editor.Event) bool {
-			assert.False(t, h.Handle(ev))
+		editor.FuncEventHandler(func(ctx context.Context, ev editor.Event) bool {
+			assert.False(t, h.Handle(ctx, ev))
 			return false
 		})))
 
@@ -265,7 +265,7 @@ func TestLspHandlerHandleInsertDelete(t *testing.T) {
 	expectedEvents = []protocol.TextDocumentContentChangeEvent{{
 		Range: &protocol.Range{
 			Start: protocol.Position{Line: 5, Character: 9},
-			End: protocol.Position{Line: 6, Character: 0},
+			End:   protocol.Position{Line: 6, Character: 0},
 		},
 		Text: "",
 	}}

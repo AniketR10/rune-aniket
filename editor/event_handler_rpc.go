@@ -80,7 +80,7 @@ func (c *eventHandlerClient) pipelineEvents() {
 	}
 }
 
-func (c *eventHandlerClient) Handle(ev Event) bool {
+func (c *eventHandlerClient) Handle(ctx context.Context, ev Event) bool {
 	protoEv := ev.toProto()
 	c.evChan <- protoEv
 
@@ -126,7 +126,10 @@ func (s *eventHandlerServer) Handle(
 		return nil, err
 	}
 
-	quit := s.handler.Handle(ev)
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	quit := s.handler.Handle(ctx, ev)
 
 	resp := &proto.EditorEventHandleResponse{Quit: quit}
 

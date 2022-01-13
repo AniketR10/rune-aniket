@@ -158,7 +158,7 @@ func (h *fuzzyFinderHandler) setContent(name string, b browser.Handler, pos term
 	h.mu.Unlock()
 	defer h.mu.Lock()
 	err := h.invokeWindow.SetContent(b)
-	if err != nil {
+	if err != nil && err != browser.ErrTabNotFree {
 		return err
 	}
 	if h.ed == nil {

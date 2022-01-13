@@ -135,11 +135,14 @@ func assertServerHandlerExitClose(
 		DoAndReturn(prototest.ExpectSignalExit(handlerConn, quitCh, nil))
 
 	broker.EXPECT().NextId().Return(uint32(88)).Times(1)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
 	// force server to store resource name and make an ID
-	s.Handle(Event{Type: EventTypeOpen, ResourceName: name, Resource: resource})
+	s.Handle(ctx, Event{Type: EventTypeOpen, ResourceName: name, Resource: resource})
 
 	s.editor.Lock()
-	h.Handle(Event{Type: EventTypeClose, ResourceName: name, Resource: resource})
+	h.Handle(ctx, Event{Type: EventTypeClose, ResourceName: name, Resource: resource})
 	s.editor.Unlock()
 
 	waitForMonitoringExit(quitCh)

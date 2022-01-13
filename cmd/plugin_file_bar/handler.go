@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -277,7 +278,9 @@ func (h *fileBarEditorHandler) handleEvents() {
 	}
 }
 
-func (h *fileBarEditorHandler) Handle(ev editor.Event) (exit bool) {
+func (h *fileBarEditorHandler) Handle(
+	ctx context.Context, ev editor.Event,
+) (exit bool) {
 	uexit := atomic.LoadUint32(&h.exit)
 	exit = uexit != 0
 	if exit {

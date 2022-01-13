@@ -49,7 +49,7 @@ type serverEventHandler struct {
 	exitNext bool
 }
 
-func (s *serverEventHandler) Handle(ev Event) bool {
+func (s *serverEventHandler) Handle(ctx context.Context, ev Event) bool {
 	if s.exitNext {
 		return true
 	}
@@ -73,7 +73,7 @@ func (s *serverEventHandler) Handle(ev Event) bool {
 
 	// cleaning up upon exit=true is performed via quitCallback
 	// of eventHandlerClient so there's no need to check for exit here.
-	return s.eventHandlerClient.Handle(ev)
+	return s.eventHandlerClient.Handle(ctx, ev)
 }
 
 // NewServer allocates storage for a new Server and initializes it.
@@ -118,7 +118,7 @@ func (s *Server) cleanResource(name string) {
 }
 
 // Handle satisfies editor.Editor so server can consume EventypeClose and Open events.
-func (s *Server) Handle(ev Event) bool {
+func (s *Server) Handle(ctx context.Context, ev Event) bool {
 	switch ev.Type {
 	case EventTypeOpen:
 		_, ok := s.nameToID[ev.ResourceName]
@@ -126,10 +126,11 @@ func (s *Server) Handle(ev Event) bool {
 			s.addNextHandlerResource(ev.ResourceName, ev.Resource)
 		}
 	case EventTypeClose:
-		// FIXME Server is one of the subscribers (plugins are other subs)
-		// if we cleanResource synchronously, then plugins never get
-		// an EventTypeClose for this resource
-		s.cleanResource(ev.ResourceName)
+		go func() {
+			// wait for other events to be dispatched before cleaning resources
+			<-ctx.Done()
+			s.cleanResource(ev.ResourceName)
+		}()
 	}
 
 	return false
@@ -340,7 +341,7 @@ func (s *Server) Register(ctx context.Context, in *proto.RegisterCommandRequest)
 	}
 
 	commander := FuncCommandHandler(func(cmd Command) bool {
-		return handler.Handle(Event{
+		return handler.Handle(context.Background(), Event{
 			Type:         eventTypeCommand,
 			Content:      cmd.Name,
 			Resource:     cmd.Resource,

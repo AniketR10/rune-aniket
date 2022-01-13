@@ -424,9 +424,12 @@ func (c *Component) dispatchEvent(ev Event) (handled bool) {
 		return
 	}
 
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	remain := make([]EventHandler, 0, len(subs))
 	for _, h := range subs {
-		exit := h.Handle(ev)
+		exit := h.Handle(ctx, ev)
 		if !exit {
 			remain = append(remain, h)
 		}
@@ -534,6 +537,9 @@ func (c *Component) getContent(h Handler) (string, error) {
 }
 
 func (c *Component) dispatchOpenTabs(h EventHandler) (error, bool) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	for _, tab := range c.comp.Tabs() {
 		resHandler, ok := tab.Handler().(Handler)
 		if !ok {
@@ -544,7 +550,7 @@ func (c *Component) dispatchOpenTabs(h EventHandler) (error, bool) {
 		if err != nil {
 			return err, false
 		}
-		exit := h.Handle(Event{
+		exit := h.Handle(ctx, Event{
 			Type:         EventTypeOpen,
 			ResourceName: tab.ID(),
 			Resource:     resHandler,
@@ -558,6 +564,9 @@ func (c *Component) dispatchOpenTabs(h EventHandler) (error, bool) {
 }
 
 func (c *Component) dispatchFocusTab(h EventHandler) bool {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	t, ok := c.comp.FocusTab()
 	if ok {
 		resHandler, ok := t.Handler().(Handler)
@@ -567,7 +576,7 @@ func (c *Component) dispatchFocusTab(h EventHandler) bool {
 				ResourceName: t.ID(),
 				Resource:     resHandler,
 			}
-			return h.Handle(ev)
+			return h.Handle(ctx, ev)
 		}
 	}
 	return false

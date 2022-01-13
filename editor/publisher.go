@@ -1,6 +1,8 @@
 package editor
 
 import (
+	"context"
+
 	"github.com/ernestrc/go-tui/cell"
 	"github.com/ernestrc/go-tui/term"
 )
@@ -45,7 +47,10 @@ func (p *Publisher) PublishEdit(
 		Handler: root,
 	}
 
-	p.dispatchEvent(Event{
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	p.dispatchEvent(ctx, Event{
 		Type:         EventTypeOpen,
 		ResourceName: name,
 		Resource:     h,
@@ -56,7 +61,7 @@ func (p *Publisher) PublishEdit(
 	// is always in focus. Consumers of this Editor should not
 	// delegate SubscribeEditor to this handler if there's some other
 	// focus mechanism in place.
-	p.dispatchEvent(Event{
+	p.dispatchEvent(ctx, Event{
 		Type:         EventTypeFocus,
 		ResourceName: name,
 		Resource:     h,
@@ -87,7 +92,7 @@ func (p *Publisher) SubscribeEditorEvents(evs []EventType, sub EventHandler) {
 	}
 }
 
-func (p *Publisher) dispatchEvent(ev Event) {
+func (p *Publisher) dispatchEvent(ctx context.Context, ev Event) {
 	subs, ok := p.subs[ev.Type]
 	if !ok {
 		return
@@ -95,7 +100,7 @@ func (p *Publisher) dispatchEvent(ev Event) {
 
 	remain := make([]EventHandler, 0, len(subs))
 	for _, sub := range subs {
-		exit := sub.Handle(ev)
+		exit := sub.Handle(ctx, ev)
 		if !exit {
 			remain = append(remain, sub)
 		}
@@ -104,8 +109,8 @@ func (p *Publisher) dispatchEvent(ev Event) {
 }
 
 // Handle handles ev by dispatching to subscribers.
-func (p *Publisher) Handle(ev Event) bool {
-	p.dispatchEvent(ev)
+func (p *Publisher) Handle(ctx context.Context, ev Event) bool {
+	p.dispatchEvent(ctx, ev)
 	return false
 }
 
@@ -120,7 +125,9 @@ func (p *cursorPublisher) Handle(ev term.Event) (bool, bool) {
 	cursorAtScroll1 := p.cursor.CursorAtScroll()
 
 	if cursor0 != cursor1 || cursorAtScroll0 != cursorAtScroll1 {
-		p.parent.dispatchEvent(Event{
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		p.parent.dispatchEvent(ctx, Event{
 			Type:         EventTypeCursor,
 			ResourceName: p.name,
 			Resource:     p,

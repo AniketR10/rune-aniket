@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -185,7 +186,9 @@ func (h *sedEditorHandler) HandleCommand(cmd editor.Command) (exit bool) {
 	return false
 }
 
-func (h *sedEditorHandler) Handle(ev editor.Event) (exit bool) {
+func (h *sedEditorHandler) Handle(
+	ctx context.Context, ev editor.Event,
+) (exit bool) {
 	uexit := atomic.LoadUint32(&h.exit)
 	exit = uexit != 0
 	return

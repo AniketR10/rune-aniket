@@ -1,6 +1,7 @@
 package editor
 
 import (
+	"context"
 	"errors"
 	"os/user"
 	"path/filepath"
@@ -413,7 +414,7 @@ func TestComponentEditorSubscriber(t *testing.T) {
 			usr, _ := user.Current()
 			dir := usr.HomeDir
 			evs := []EventType{tcase.evType}
-			c.SubscribeEditorEvents(evs, FuncEventHandler(func(ev Event) bool {
+			h := FuncEventHandler(func(ctx context.Context, ev Event) bool {
 				// if preTrigger, then only assert relevant file event
 				if tcase.preTrigger == nil {
 					assert.Equal(t, filepath.Base(ev.ResourceName), "Joe_Biden.txt")
@@ -426,7 +427,8 @@ func TestComponentEditorSubscriber(t *testing.T) {
 					assert.True(t, strings.Contains(ev.ResourceName, dir))
 				}
 				return false
-			}))
+			})
+			c.SubscribeEditorEvents(evs, h)
 
 			tcase.trigger(t, c, filename)
 			assert.Equal(t, 1, fired)
@@ -442,7 +444,7 @@ func TestComponentEditorSubscriber(t *testing.T) {
 
 			var fired int
 			evs := []EventType{tcase.evType}
-			c.SubscribeEditorEvents(evs, FuncEventHandler(func(ev Event) bool {
+			h := FuncEventHandler(func(ctx context.Context, ev Event) bool {
 				if tcase.preTrigger == nil {
 					assert.Equal(t, filepath.Base(ev.ResourceName), "Jill_Biden.txt")
 					fired++
@@ -453,7 +455,8 @@ func TestComponentEditorSubscriber(t *testing.T) {
 					return true
 				}
 				return false
-			}))
+			})
+			c.SubscribeEditorEvents(evs, h)
 
 			tcase.trigger(t, c, filename)
 			assert.Equal(t, 1, fired)
@@ -479,10 +482,11 @@ func TestComponentEditorSubscriber(t *testing.T) {
 
 		var fired int
 		evs := []EventType{EventTypeClose}
-		c.SubscribeEditorEvents(evs, FuncEventHandler(func(ev Event) bool {
+		h := FuncEventHandler(func(ctx context.Context, ev Event) bool {
 			fired++
 			return false
-		}))
+		})
+		c.SubscribeEditorEvents(evs, h)
 
 		_, err := c.Open(filename)
 		require.NoError(t, err)
@@ -511,11 +515,12 @@ func TestComponentEditorSubscriber(t *testing.T) {
 
 		var fired int
 		ev := []EventType{EventTypeOpen}
-		c.SubscribeEditorEvents(ev, FuncEventHandler(func(ev Event) bool {
+		h := FuncEventHandler(func(ctx context.Context, ev Event) bool {
 			fired++
 			assert.Equal(t, content, ev.Content)
 			return false
-		}))
+		})
+		c.SubscribeEditorEvents(ev, h)
 
 		assert.Equal(t, 2, fired)
 	})
@@ -535,7 +540,7 @@ func TestComponentEditorSubscriber(t *testing.T) {
 
 		var i int
 		evs := []EventType{EventTypeFocus, EventTypeUnfocus}
-		c.SubscribeEditorEvents(evs, FuncEventHandler(func(ev Event) bool {
+		h := FuncEventHandler(func(ctx context.Context, ev Event) bool {
 			if i == 1 {
 				assert.Equal(t, EventTypeUnfocus, ev.Type)
 			} else {
@@ -543,7 +548,8 @@ func TestComponentEditorSubscriber(t *testing.T) {
 			}
 			i++
 			return false
-		}))
+		})
+		c.SubscribeEditorEvents(evs, h)
 
 		// upon SubscribeEditorEvents, we dispatch first Focus
 		assert.Equal(t, 1, i)

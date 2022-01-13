@@ -1,6 +1,7 @@
 package editor
 
 import (
+	"context"
 	"io"
 	"net"
 	"sync"
@@ -74,14 +75,15 @@ func TestEventHandlerRPC(t *testing.T) {
 
 		go consumeError(t, &wg, client)
 
-		h.EXPECT().Handle(gomock.Any()).DoAndReturn(func(_ev Event) bool {
-			assert.Equal(t, ev, _ev)
-			wg.Done()
-			return false
-		}).Times(1)
+		h.EXPECT().Handle(gomock.Any(), gomock.Any()).
+			DoAndReturn(func(ctx context.Context, _ev Event) bool {
+				assert.Equal(t, ev, _ev)
+				wg.Done()
+				return false
+			}).Times(1)
 
 		wg.Add(1)
-		exit := client.Handle(ev)
+		exit := client.Handle(context.Background(), ev)
 		assert.False(t, exit)
 
 		wg.Wait()
@@ -99,10 +101,10 @@ func TestEventHandlerRPC(t *testing.T) {
 
 		go consumeError(t, &wg, client)
 
-		h.EXPECT().Handle(gomock.Eq(ev)).Return(true).Times(1)
+		h.EXPECT().Handle(gomock.Any(), gomock.Eq(ev)).Return(true).Times(1)
 
 		wg.Add(2)
-		exit := client.Handle(ev)
+		exit := client.Handle(context.Background(), ev)
 		assert.False(t, exit)
 
 		wg.Wait()
@@ -128,7 +130,7 @@ func TestEventHandlerRPC(t *testing.T) {
 		time.Sleep(gracefulShutdownWait)
 
 		wg.Add(1)
-		exit := client.Handle(ev)
+		exit := client.Handle(context.Background(), ev)
 		assert.False(t, exit)
 
 		wg.Wait()

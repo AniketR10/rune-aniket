@@ -3,6 +3,7 @@ package editor
 //go:generate mockgen -destination=./event_handler_gomock.go -package editor -self_package editor -source event.go
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/ernestrc/go-tui/browser"
@@ -211,7 +212,7 @@ func calculateInsertEnd(at term.Coordinates, str string) term.Coordinates {
 }
 
 func (s *cellSubscriber) OnDidInsert(from, to term.Coordinates) {
-	s.eh.Handle(Event{
+	s.eh.Handle(context.Background(), Event{
 		Type:         EventTypeInsert,
 		Resource:     s.h,
 		ResourceName: s.name,
@@ -229,7 +230,7 @@ func (s *cellSubscriber) OnWillDelete(from, to term.Coordinates) {
 }
 
 func (s *cellSubscriber) OnDidDelete(start, end term.Coordinates, str string) {
-	s.eh.Handle(Event{
+	s.eh.Handle(context.Background(), Event{
 		Type:         EventTypeDelete,
 		Resource:     s.h,
 		ResourceName: s.name,
@@ -253,7 +254,7 @@ type scrollSubscriber struct {
 }
 
 func (s scrollSubscriber) OnSeek(at term.Coordinates) {
-	s.eh.Handle(Event{
+	s.eh.Handle(context.Background(), Event{
 		Type:         EventTypeScroll,
 		Resource:     s.h,
 		ResourceName: s.name,

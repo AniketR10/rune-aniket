@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os/exec"
@@ -344,7 +345,9 @@ func (h *gitEditorHandler) handleEvents() {
 	}
 }
 
-func (h *gitEditorHandler) Handle(ev editor.Event) (exit bool) {
+func (h *gitEditorHandler) Handle(
+	ctx context.Context, ev editor.Event,
+) (exit bool) {
 	uexit := atomic.LoadUint32(&h.exit)
 	exit = uexit != 0
 	if exit {

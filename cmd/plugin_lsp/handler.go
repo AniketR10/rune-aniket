@@ -1802,7 +1802,9 @@ func (h *lspEditorHandler) handleEvents(ch chan editor.Event) {
 	}
 }
 
-func (h *lspEditorHandler) Handle(ev editor.Event) (exit bool) {
+func (h *lspEditorHandler) Handle(
+	ctx context.Context, ev editor.Event,
+) (exit bool) {
 	h.mu.Lock()
 	exit = h.exit
 	h.mu.Unlock()

@@ -138,7 +138,7 @@ func TestIntegrationRace(t *testing.T) {
 		}, func(ed *editor.MockEditorMockRecorder, mock *browser.MockBrowserMockRecorder) *gomock.Call {
 			return ed.SubscribeEditorEvents(gomock.Any(), gomock.Any()).Return(nil)
 		}, func(ifc interface{}) error {
-			h := editor.FuncEventHandler(func(editor.Event) bool { return false })
+			h := editor.FuncEventHandler(func(context.Context, editor.Event) bool { return false })
 			ev := []editor.EventType{editor.EventTypeFlush}
 			return ifc.(editor.Editor).SubscribeEditorEvents(ev, h)
 		}},
