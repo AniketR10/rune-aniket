@@ -191,6 +191,7 @@ func TestClientServerIntegration(t *testing.T) {
 				client, closeFn := setupIntTest(t, b, s)
 				defer closeFn()
 
+				wg.Add(1)
 				err := client.SubscribeEditorEvents([]EventType{tcase.evType},
 					FuncEventHandler(func(ctx context.Context, ev Event) bool {
 						defer wg.Done()
@@ -207,7 +208,6 @@ func TestClientServerIntegration(t *testing.T) {
 					}))
 				require.NoError(t, err)
 
-				wg.Add(1)
 				buf := cell.NewBuffer()
 				// simulate runtime mutex
 				mu.Lock()
