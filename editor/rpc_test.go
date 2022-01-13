@@ -106,7 +106,7 @@ func TestClientServerIntegration(t *testing.T) {
 
 		ed.EXPECT().Editor(gomock.Any()).Times(1).
 			DoAndReturn(func(_name string) (tui.Handler, error) {
-				assert.Equal(t, "zion", _name)
+				assert.Contains(t, _name, "zion")
 				return handler.NewTestHandler(), nil
 			})
 		_, err := client.Editor("zion")
@@ -124,7 +124,7 @@ func TestClientServerIntegration(t *testing.T) {
 		client, closeFn := setupIntTest(t, b, s)
 		defer closeFn()
 
-		ed.EXPECT().Edit(gomock.Eq("babylon"), gomock.Any()).
+		ed.EXPECT().Edit(gomock.Any(), gomock.Any()).
 			Return(nil, errors.New("The Upsetter")).
 			Times(1)
 

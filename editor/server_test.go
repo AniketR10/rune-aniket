@@ -37,7 +37,7 @@ func newTestServer(t *testing.T, ctrl *gomock.Controller) (*proto.MockMuxBroker,
 func expectEdit(t *testing.T, mock *MockEditor, resource, content string) {
 	mock.EXPECT().Edit(gomock.Any(), gomock.Any()).Times(1).
 		DoAndReturn(func(_name string, buf *cell.Buffer) (tui.Handler, error) {
-			assert.Equal(t, resource, _name)
+			assert.Contains(t, _name, resource)
 			assert.Equal(t, content, buf.String())
 			return handler.NewTestHandler(), nil
 		})
@@ -67,10 +67,19 @@ func TestServerEdit(t *testing.T) {
 	resourceName1 := "ULaptopNotLinux:@"
 	bufContent1 := "ULaptopWillLinux:)"
 
-	t.Run("happy path", func(t *testing.T) {
+	t.Run("Edit is propagated to underlying Editor", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		broker, mock, s := newTestServer(t, ctrl)
 		expectEdit(t, mock, resourceName1, bufContent1)
+		callServerEdit(t, ctx, broker, s, nextID, resourceName1, bufContent1)
+	})
+
+	t.Run("relative path is converted to absolute", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		broker, mock, s := newTestServer(t, ctrl)
+		expected, err := getFileID(resourceName1)
+		require.NoError(t, err)
+		expectEdit(t, mock, expected, bufContent1)
 		callServerEdit(t, ctx, broker, s, nextID, resourceName1, bufContent1)
 	})
 
@@ -78,7 +87,7 @@ func TestServerEdit(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		_, mock, s := newTestServer(t, ctrl)
 
-		mock.EXPECT().Edit(gomock.Eq(resourceName1), gomock.Any()).
+		mock.EXPECT().Edit(gomock.Any(), gomock.Any()).
 			Return(nil, errors.New("NOLINUX")).
 			Times(1)
 

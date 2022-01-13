@@ -184,9 +184,9 @@ func (c *Cursor) MoveToScroll(pos term.Coordinates) (
 	if pos.X > c.scroll.Buffer().Columns(pos.Y) {
 		return
 	}
-	ok = true
 	ret = c.cursorAtScroll()
 	c.moveToScroll(pos)
+	ok = ret != c.cursorAtScroll()
 	return
 }
 

@@ -58,9 +58,9 @@ func (s *serverEventHandler) Handle(ev Event) bool {
 	if ev.ResourceName != "" {
 		brokerID, ok := s.s.nameToID[ev.ResourceName]
 		if !ok {
-			s.s.tryLog("(%p editor.Server): could NOT dispatch event:"+
-				"handler with resource name %s not found",
-				s.s, ev.ResourceName)
+			s.s.tryLog(log.WarnLevel, "(%p editor.Server): could NOT"+
+				"dispatch event %#v: handler with resource name %s not found",
+				s.s, ev.Type, ev.ResourceName)
 			return true
 		}
 		token := browser.Token{ID: uint64(brokerID)}
@@ -105,13 +105,15 @@ func (s *Server) Init(
 func (s *Server) cleanResource(name string) {
 	handlerID, ok := s.nameToID[name]
 	if !ok {
-		s.tryLog("(%p editor.Server): could not find handler with resource name %s",
+		s.tryLog(log.DebugLevel,
+			"(%p editor.Server): could not find handler with resource name %s",
 			s, name)
 	} else {
 		delete(s.nameToID, name)
 		delete(s.idToHandler, handlerID)
-		s.tryLog("(%p editor.Server): cleaned handler with resource name %s",
-			s, name)
+		s.tryLog(log.DebugLevel,
+			"(%p editor.Server): cleaned handler %d with resource name %s",
+			s, handlerID, name)
 	}
 }
 
@@ -124,6 +126,9 @@ func (s *Server) Handle(ev Event) bool {
 			s.addNextHandlerResource(ev.ResourceName, ev.Resource)
 		}
 	case EventTypeClose:
+		// FIXME Server is one of the subscribers (plugins are other subs)
+		// if we cleanResource synchronously, then plugins never get
+		// an EventTypeClose for this resource
 		s.cleanResource(ev.ResourceName)
 	}
 
@@ -137,7 +142,7 @@ func (s *Server) consumeErrors(ctx context.Context, ch <-chan error) {
 			return
 		case err := <-ch:
 			err = fmt.Errorf("eventHandlerClient error: %v", err)
-			s.tryLog("%v", err)
+			s.tryLog(log.DebugLevel, "editor.Server: consumeErrors: %s", err)
 			select {
 			case s.errChan <- err:
 			default:
@@ -152,11 +157,11 @@ func (s *Server) Errors() <-chan error {
 	return s.errChan
 }
 
-func (s *Server) tryLog(msg string, args ...interface{}) {
+func (s *Server) tryLog(level log.Level, msg string, args ...interface{}) {
 	if s.Logger == nil {
 		return
 	}
-	s.Logger.Debugf(msg, args...)
+	s.Logger.Logf(level, msg, args...)
 }
 
 func (s *Server) getClients() map[uint64]io.Closer {
@@ -172,7 +177,8 @@ func (s *Server) safeForceCloseHandler(brokerID uint32, reason string) error {
 	}
 	s.editor.Unlock()
 
-	s.tryLog("editor.Server.safeForceCloseHandler(%d, reason=%s)", brokerID, reason)
+	s.tryLog(log.TraceLevel,
+		"editor.Server.safeForceCloseHandler(%d, reason=%s)", brokerID, reason)
 	_, err := proto.ForceCloseResource(uint64(brokerID), s.getClients,
 		s.Logger, s.editor.Locker)
 	return err
@@ -183,11 +189,14 @@ func (s *Server) dialHandler(handlerID uint32) (EventHandler, error) {
 	res, ok := s.clients[uint64(handlerID)]
 	s.editor.Unlock()
 	if ok {
-		s.tryLog("(%p editor.Server): found cached client for handlerID: %d", s, handlerID)
+		s.tryLog(log.DebugLevel,
+			"(%p editor.Server): found cached client for handlerID: %d",
+			s, handlerID)
 		return res.(*handlerClientResource).client, nil
 	}
 
-	s.tryLog("(%p editor.Server): dialing handlerID: %d", s, handlerID)
+	s.tryLog(log.TraceLevel,
+		"(%p editor.Server): dialing handlerID: %d", s, handlerID)
 	handlerConn, err := s.broker.Dial(handlerID)
 	if err != nil {
 		return nil, err
@@ -224,7 +233,9 @@ func (s *Server) addNextHandlerResource(name string, h Handler) uint32 {
 	handlerID := s.broker.NextId()
 	s.nameToID[name] = handlerID
 	s.idToHandler[handlerID] = h
-	s.tryLog("(%p editor.Server): stored handler with name, ID: %s,%d", s, name, handlerID)
+	s.tryLog(log.TraceLevel,
+		"(%p editor.Server): stored handler with name='%s', id=%d",
+		s, name, handlerID)
 	return handlerID
 }
 
@@ -236,21 +247,38 @@ func (s *Server) ensureAvailable(resourceName string, h Handler) uint32 {
 	return handlerID
 }
 
+func (s *Server) editHandler(
+	resourceName string, get func(string) (Handler, error),
+) (uint32, error) {
+	s.editor.Lock()
+	defer s.editor.Unlock()
+
+	resourceName, err := getFileID(resourceName)
+	if err != nil {
+		return 0, err
+	}
+	h, err := get(resourceName)
+	if err != nil {
+		return 0, err
+	}
+
+	handlerID := s.ensureAvailable(resourceName, h)
+
+	return handlerID, nil
+}
+
 // Edit satisfies proto.EditorServer
 func (s *Server) Edit(ctx context.Context, in *proto.EditRequest) (
 	*proto.EditResponse, error,
 ) {
-	s.editor.Lock()
-	defer s.editor.Unlock()
-
-	resourceName := in.GetResourceName()
-	buf := proto.EditRequestToBuffer(in)
-	h, err := s.editor.Edit(resourceName, buf)
+	handlerID, err := s.editHandler(in.GetResourceName(),
+		func(resourceName string) (Handler, error) {
+			buf := proto.EditRequestToBuffer(in)
+			return s.editor.Edit(resourceName, buf)
+		})
 	if err != nil {
 		return nil, err
 	}
-
-	handlerID := s.ensureAvailable(resourceName, h)
 
 	return &proto.EditResponse{HandlerId: handlerID}, nil
 }
@@ -259,16 +287,13 @@ func (s *Server) Edit(ctx context.Context, in *proto.EditRequest) (
 func (s *Server) Editor(ctx context.Context, in *proto.EditorRequest) (
 	*proto.EditorResponse, error,
 ) {
-	s.editor.Lock()
-	defer s.editor.Unlock()
-
-	resourceName := in.GetResourceName()
-	h, err := s.editor.Editor.Editor(resourceName)
+	handlerID, err := s.editHandler(in.GetResourceName(),
+		func(resourceName string) (Handler, error) {
+			return s.editor.Editor.Editor(resourceName)
+		})
 	if err != nil {
 		return nil, err
 	}
-
-	handlerID := s.ensureAvailable(resourceName, h)
 
 	return &proto.EditorResponse{HandlerId: handlerID}, nil
 }
@@ -363,7 +388,7 @@ func (s *Server) SetLocationList(ctx context.Context, in *proto.SetLocationListR
 	s.editor.Lock()
 	defer s.editor.Unlock()
 
-	h, ok := s.idToHandler[handlerID]
+	h, ok := s.getHandler("SetLocationList", handlerID)
 	if !ok {
 		return nil, errHandlerNotFound
 	}
@@ -400,7 +425,7 @@ func (s *Server) SetCursor(ctx context.Context, in *proto.SetCursorRequest) (
 	s.editor.Lock()
 	defer s.editor.Unlock()
 
-	h, ok := s.idToHandler[handlerID]
+	h, ok := s.getHandler("SetCursor", handlerID)
 	if !ok {
 		return nil, errHandlerNotFound
 	}
@@ -422,7 +447,7 @@ func (s *Server) Cursor(ctx context.Context, in *proto.CursorRequest) (
 	s.editor.Lock()
 	defer s.editor.Unlock()
 
-	h, ok := s.idToHandler[handlerID]
+	h, ok := s.getHandler("Cursor", handlerID)
 	if !ok {
 		return nil, errHandlerNotFound
 	}
@@ -447,7 +472,7 @@ func (s *Server) moveToLocation(
 	s.editor.Lock()
 	defer s.editor.Unlock()
 
-	h, ok := s.idToHandler[handlerID]
+	h, ok := s.getHandler("moveToLocation", handlerID)
 	if !ok {
 		return nil, errHandlerNotFound
 	}
@@ -477,7 +502,7 @@ func (s *Server) Insert(ctx context.Context, in *proto.InsertRequest) (
 	s.editor.Lock()
 	defer s.editor.Unlock()
 
-	h, ok := s.idToHandler[handlerID]
+	h, ok := s.getHandler("Insert", handlerID)
 	if !ok {
 		return nil, errHandlerNotFound
 	}
@@ -509,7 +534,7 @@ func (s *Server) Delete(ctx context.Context, in *proto.DeleteRequest) (
 	s.editor.Lock()
 	defer s.editor.Unlock()
 
-	h, ok := s.idToHandler[handlerID]
+	h, ok := s.getHandler("Delete", handlerID)
 	if !ok {
 		return nil, errHandlerNotFound
 	}
@@ -540,7 +565,7 @@ func (s *Server) RawCells(ctx context.Context, in *proto.RawCellsRequest) (
 	s.editor.Lock()
 	defer s.editor.Unlock()
 
-	h, ok := s.idToHandler[handlerID]
+	h, ok := s.getHandler("RawCells", handlerID)
 	if !ok {
 		return nil, errHandlerNotFound
 	}
@@ -568,4 +593,12 @@ func (s *Server) Close() (err error) {
 	s.clients = nil
 
 	return err
+}
+
+func (s *Server) getHandler(call string, handlerID uint32) (Handler, bool) {
+	h, ok := s.idToHandler[handlerID]
+	s.tryLog(log.TraceLevel,
+		"(%p editor.Server): %s: found handler with id %d: %p",
+		s, call, handlerID, h)
+	return h, ok
 }

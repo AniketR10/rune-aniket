@@ -1547,6 +1547,29 @@ func TestCursorSetLocationListMessages(t *testing.T) {
 	})
 }
 
+func TestCursorMoveToScroll(t *testing.T) {
+	t.Run("moves cursor to position within curr width,height", func(t *testing.T) {
+		e := setupCursor(t, 10, 10)
+		e.MoveToScroll(term.Coordinates{X: 1, Y: 3})
+		pos := e.Coordinates()
+		assert.Equal(t, term.Coordinates{Y: 3, X: 1}, pos)
+		pos = e.CursorAtScroll()
+		assert.Equal(t, term.Coordinates{Y: 3, X: 1}, pos)
+	})
+	t.Run("moves cursor to position past curr height", func(t *testing.T) {
+		e := setupCursor(t, 5, 5)
+		e.MoveToScroll(term.Coordinates{X: 0, Y: 6})
+		pos := e.CursorAtScroll()
+		assert.Equal(t, term.Coordinates{Y: 6, X: 0}, pos)
+	})
+	t.Run("moves cursor to position past curr width", func(t *testing.T) {
+		e := setupCursor(t, 5, 5)
+		e.MoveToScroll(term.Coordinates{X: 7, Y: 2})
+		pos := e.CursorAtScroll()
+		assert.Equal(t, term.Coordinates{Y: 2, X: 7}, pos)
+	})
+}
+
 func TestCursorWrap(t *testing.T) {
 	t.Run("takes wraps into consideration", func(t *testing.T) {
 		e := setupCursor(t, 10, 10)
