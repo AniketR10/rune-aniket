@@ -11,7 +11,7 @@ import (
 	"github.com/ernestrc/go-tui/browser"
 	"github.com/ernestrc/go-tui/cell"
 	"github.com/ernestrc/go-tui/component"
-	"github.com/ernestrc/go-tui/component/search"
+	"github.com/ernestrc/go-tui/handler/search"
 	"github.com/ernestrc/go-tui/handler"
 	"github.com/ernestrc/go-tui/term"
 	"github.com/ernestrc/go-tui/text"

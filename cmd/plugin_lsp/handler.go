@@ -19,7 +19,7 @@ import (
 
 	"github.com/ernestrc/go-tui/browser"
 	"github.com/ernestrc/go-tui/cell"
-	"github.com/ernestrc/go-tui/component/search"
+	"github.com/ernestrc/go-tui/handler/search"
 	"github.com/ernestrc/go-tui/handler"
 	"github.com/ernestrc/go-tui/plugin"
 	plugutil "github.com/ernestrc/go-tui/plugin/util"
