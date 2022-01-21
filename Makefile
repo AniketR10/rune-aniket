@@ -72,4 +72,7 @@ release: default
 	@ TARGET_OS=linux TARGET_ARCH=arm TARGET_ARCH_FLAGS=GOARM=7 $(MAKE) make_release
 	@ TARGET_OS=linux TARGET_ARCH=amd64 $(MAKE) make_release
 	@ TARGET_OS=darwin TARGET_ARCH=amd64 $(MAKE) make_release
-	@ cd $(TARGET) && tar -czvf six-release-`git describe --tags`.tar.gz *
+	@ cd $(TARGET) && tar -czvf six-release-`git describe --tags --dirty`.tar.gz *
+
+dist: release
+	@ ./dist.sh
