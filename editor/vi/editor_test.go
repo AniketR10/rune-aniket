@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"github.com/ernestrc/go-tui/cell"
-	"github.com/ernestrc/go-tui/component"
 	"github.com/ernestrc/go-tui/editor"
 	"github.com/ernestrc/go-tui/term"
 	"github.com/stretchr/testify/assert"
@@ -45,10 +44,6 @@ func TestEditorDispatchFocus(t *testing.T) {
 	assert.Equal(t, 1, focusCalled)
 }
 
-func getScrollFromHandler(e editor.Editor, h editor.Handler) *component.Scroll {
-	return e.(*viEditor).Publisher.Handler(h).(*Vi).less.Scroll()
-}
-
 func TestEditorDispatchScroll(t *testing.T) {
 	ed := Editor()
 	buf := cell.NewBuffer()
@@ -57,7 +52,7 @@ func TestEditorDispatchScroll(t *testing.T) {
 	require.NoError(t, err)
 
 	h.Resize(2, 2)
-	require.True(t, getScrollFromHandler(ed, h).SeekDown())
+	h.Handle(term.Event{Ch: 'j'})
 
 	at := term.Coordinates{X: -1}
 	ed.SubscribeEditorEvents([]editor.EventType{editor.EventTypeScroll},
@@ -66,15 +61,15 @@ func TestEditorDispatchScroll(t *testing.T) {
 			return false
 		}))
 
-	require.True(t, getScrollFromHandler(ed, h).SeekUp())
+	h.Handle(term.Event{Ch: 'k'})
 	assert.Equal(t, term.Coordinates{}, at)
 
 	at = term.Coordinates{X: -1}
-	require.True(t, getScrollFromHandler(ed, h).SeekDown())
+	h.Handle(term.Event{Ch: 'j'})
 	assert.Equal(t, term.Coordinates{Y: 1}, at)
 
 	at = term.Coordinates{X: -1}
-	require.False(t, getScrollFromHandler(ed, h).SeekDown())
+	h.Handle(term.Event{Ch: 'j'})
 	assert.Equal(t, term.Coordinates{X: -1}, at)
 }
 

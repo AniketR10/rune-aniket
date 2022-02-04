@@ -22,7 +22,9 @@ func Editor(opts ...Option) editor.Editor {
 
 func (e *viEditor) Edit(name string, buf *cell.Buffer) (editor.Handler, error) {
 	root := New(buf, name, e.opts...)
-	return e.Publisher.PublishEdit(name, buf, root, &root.cursor), nil
+	// publisher does not mutate cursor and it should never do so
+	cursor := &root.handler.cursor
+	return e.Publisher.PublishEdit(name, buf, root, cursor), nil
 }
 
 // SubscribeCommand is not supported.
@@ -62,11 +64,11 @@ func (e *viEditor) MoveToPrevLocation(h editor.Handler, ID string) error {
 }
 
 func (e *viEditor) Reader(h editor.Handler) editor.Reader {
-	return editor.CellReader(e.Publisher.Handler(h).(*Vi).less.Buffer().Reader())
+	return editor.CellReader(e.Publisher.Handler(h).(*Vi).Buffer().Reader())
 }
 
 func (e *viEditor) Writer(h editor.Handler) editor.Writer {
-	return editor.CellWriter(e.Publisher.Handler(h).(*Vi).less.Buffer().Writer())
+	return editor.CellWriter(e.Publisher.Handler(h).(*Vi).Buffer().Writer())
 }
 
 func (e *viEditor) SetCursor(h editor.Handler, pos term.Coordinates) error {

@@ -48,13 +48,14 @@ diff_buf_adjust(win_T *win)
 
 func setupVi(
 	t *testing.T, text string, tabspaces int, opts ...Option,
-) *Vi {
+) *viHandler {
 	buf := cell.NewBuffer()
 	buf.InitWithTabspaces(tabspaces)
 	_, err := buf.ReadFrom(strings.NewReader(text))
 	require.NoError(t, err)
 
-	vi := New(buf, "test", opts...)
+	vi := new(viHandler)
+	vi.init(buf, opts...)
 
 	return vi
 }
@@ -528,7 +529,7 @@ func TestIntegrationScrollEvent(t *testing.T) {
 		t.Run(tcase.desc, func(t *testing.T) {
 			vi := setupVi(t, snippet, 2)
 			vi.cursor.Insert('a')
-			vi.SetCursorAtScroll(tcase.cursorPos)
+			vi.setCursorAtScroll(tcase.cursorPos)
 			vi.Resize(4, 4)
 
 			var called int
