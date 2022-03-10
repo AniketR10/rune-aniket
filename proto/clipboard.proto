@@ -1,5 +1,7 @@
 syntax = "proto3";
 
+option go_package = "github.com/ernestrc/go-tui/proto;proto";
+
 package proto;
 
 message SetRegisterRequest {

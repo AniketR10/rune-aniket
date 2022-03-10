@@ -38,6 +38,8 @@ coverage: $(BIN)
 generate:
 	@ rm -rf $(GOMOCKS) $(PROTO)
 	@ go generate ./...
+	@ mv proto/github.com/ernestrc/go-tui/proto/*.pb.go proto/
+	@ rm -rf proto/github.com
 
 install:
 	@ go install ./...
