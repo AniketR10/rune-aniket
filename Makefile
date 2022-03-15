@@ -75,4 +75,5 @@ release: default
 	@ cd $(TARGET) && tar -czvf six-release-`git describe --tags --dirty`.tar.gz *
 
 dist: release
+	@ git pull origin --tags
 	@ ./dist.sh
