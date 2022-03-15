@@ -52,7 +52,7 @@ func getScrollFromHandler(e editor.Editor, h editor.Handler) *component.Scroll {
 func TestEditorDispatchScroll(t *testing.T) {
 	ed := Editor()
 	buf := cell.NewBuffer()
-	buf.WriteString("Daworg\nSurinach\n")
+	buf.WriteString("Daworg\nSurinach")
 	h, err := ed.Edit("oh my...", buf)
 	require.NoError(t, err)
 

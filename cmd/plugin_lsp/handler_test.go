@@ -155,7 +155,7 @@ func dispatchOpen(
 		Resource:     editor.NewTestHandler(),
 	}
 
-	expectDidOpen(t, server, name, content+"\n")
+	expectDidOpen(t, server, name, content)
 	expectSemanticTokens(t, server, tokenData)
 	expectLocationList(t, ed, expectedListID, expectedLocations, &wg)
 	wg.Add(1)
@@ -175,7 +175,7 @@ func dispatchFlush(
 		Content:      content,
 		Resource:     editor.NewTestHandler(),
 	}
-	changes := []protocol.TextDocumentContentChangeEvent{{Text: content + "\n"}}
+	changes := []protocol.TextDocumentContentChangeEvent{{Text: content}}
 
 	expectDidChange(t, server, name, version, changes)
 	expectSemanticTokens(t, server, tokenData)

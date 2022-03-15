@@ -18,8 +18,7 @@ KKKKXXLLLL
 9999999999
 8888888888
 3333333333
-11111111XX
-`
+11111111XX`
 
 func setup(t *testing.T, less *Less, width, height int) (*Less, *term.StringWriter) {
 	if less == nil {

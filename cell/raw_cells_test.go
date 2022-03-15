@@ -14,8 +14,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const testFilesLines = 3
-
 var (
 	rawCellsFortune = `Love in your heart wasn't put there to stay.
 Love isn't love 'til you give it away.
@@ -150,22 +148,31 @@ func TestRawCellsReadFrom(t *testing.T) {
 }
 
 func TestRawCellsStringReadFrom(t *testing.T) {
-	tsuite := []string{
-		"a",
-		"\nb",
-		"c\n",
-		"\n\n\n",
-		"\n\n\na",
+	tsuite := []struct {
+		in   string
+		want [][]term.Cell
+	}{
+		{"", [][]term.Cell{[]term.Cell{}}},
+		{"\n", [][]term.Cell{[]term.Cell{}, []term.Cell{}}},
+		{"\t\n", [][]term.Cell{[]term.Cell{{}, {}, {}, {Ch: '\t'}}, []term.Cell{}}},
+		{"\t", [][]term.Cell{[]term.Cell{{}, {}, {}, {Ch: '\t'}}}},
+		{"a", [][]term.Cell{[]term.Cell{{Ch: 'a'}}}},
+		{"\nb", [][]term.Cell{[]term.Cell{}, []term.Cell{{Ch: 'b'}}}},
+		{"c\n", [][]term.Cell{[]term.Cell{{Ch: 'c'}}, []term.Cell{}}},
+		{"\n\n\n", [][]term.Cell{[]term.Cell{}, []term.Cell{}, []term.Cell{}, []term.Cell{}}},
+		{"\n\n\na", [][]term.Cell{[]term.Cell{}, []term.Cell{}, []term.Cell{}, []term.Cell{{Ch: 'a'}}}},
 	}
+
 	for i, _tcase := range tsuite {
 		tcase := _tcase
 		t.Run(fmt.Sprintf("test case %d", i), func(t *testing.T) {
 			var c rawCells
 			c.init(defTabSpaces)
-			n, err := c.ReadFrom(strings.NewReader(tcase))
+			n, err := c.ReadFrom(strings.NewReader(tcase.in))
 			assert.NoError(t, err)
-			assert.Equal(t, int64(len(tcase)), n)
-			assert.Equal(t, tcase, c.String())
+			assert.Equal(t, int64(len(tcase.in)), n)
+			assert.Equal(t, tcase.in, c.String())
+			assert.Equal(t, tcase.want, c.RawCells())
 		})
 	}
 }
@@ -266,8 +273,10 @@ Love isn't love 'til you give it away.
 		} else {
 			input = baseRawCells
 		}
-		_, err := c.ReadFrom(strings.NewReader(input))
-		require.NoError(t, err)
+		if input != "" {
+			_, err := c.ReadFrom(strings.NewReader(input))
+			require.NoError(t, err)
+		}
 
 		actualFrom, actualTo := c.Insert(tcase.inputAt, tcase.inputStr)
 		assert.Equal(t, tcase.expectedFrom, actualFrom, "test case %d", i)

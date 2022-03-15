@@ -1,4 +1,4 @@
-package cell
+package editor
 
 import (
 	"fmt"
@@ -8,10 +8,13 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ernestrc/go-tui/cell"
 	"github.com/ernestrc/go-tui/term"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+const testFilesLines = 3
 
 var fileWithNoEOL string
 var fileWithEOL string
@@ -76,12 +79,11 @@ func TestUnixFile(t *testing.T) {
 	for i, tcase := range tsuite {
 		reader := tcase.input
 		{
-			var c rawCells
-			c.init(4)
+			c := cell.NewBuffer()
 			_, err := c.ReadFrom(tcase.input)
 			require.NoError(t, err)
 
-			reader := newUnixFileReader(&c)
+			reader := newUnixFileReader(c)
 
 			assert.Equal(t, tcase.rows, reader.Rows(), fmt.Sprintf("ReadFrom(%d)", i))
 			assert.Equal(t, tcase.expected, reader.String(), i)
@@ -91,13 +93,12 @@ func TestUnixFile(t *testing.T) {
 		s.Seek(0, 0)
 
 		{
-			var c rawCells
-			c.init(4)
+			c := cell.NewBuffer()
 			bytes, err := ioutil.ReadAll(tcase.input)
 			require.NoError(t, err)
-			c.Insert(term.Coordinates{}, string(bytes))
+			c.InsertString(term.Coordinates{}, string(bytes))
 
-			reader := newUnixFileReader(&c)
+			reader := newUnixFileReader(c)
 
 			assert.Equal(t, tcase.rows, reader.Rows(), fmt.Sprintf("insert(%d)", i))
 			assert.Equal(t, tcase.expected, reader.String(), i)

@@ -2,28 +2,20 @@ package cell
 
 import (
 	"io"
+	"strings"
 
 	"github.com/ernestrc/go-tui/term"
 	log "github.com/sirupsen/logrus"
 )
 
 // A Buffer offers a high level API to manipulate a matrix of term.Cell.
-// Note that this Buffer assumes to be a UNIX file buffer, so content written to it
-// is assumed to end in EOL.
-//
-// A text file, under UNIX-like systems, consists of a series of lines, each of which
-// ends with a newline character (\n). A file that is not empty and does not
-// end with a newline is therefore not a text file.
-//
-// The write-end of this UNIX behaviour is implemented by editor.FileBuffer.
 type Buffer struct {
-	cells      *rawCells
-	undoer     *undoer
-	selector   selector
-	unixReader *unixFileReader
-	rootPub    *syncPublisher
-	usagePub   *syncPublisher
-	safew      Writer
+	cells    *rawCells
+	undoer   *undoer
+	selector selector
+	rootPub  *syncPublisher
+	usagePub *syncPublisher
+	safew    Writer
 
 	// effective Reader and Writer
 	reader Reader
@@ -81,15 +73,10 @@ func NewBuffer() (b *Buffer) {
 	return b
 }
 
-func (b *Buffer) initWithCells(c *rawCells, logger *log.Logger, unixFile bool) {
+func (b *Buffer) initWithCells(c *rawCells, logger *log.Logger) {
 	b.cells = c
 	b.writer = b.cells
 	b.reader = b.cells
-
-	if unixFile {
-		b.unixReader = newUnixFileReader(b.reader)
-		b.reader = b.unixReader
-	}
 
 	if logger != nil {
 		cellLogger := newLogger(b.reader, b.cells, logger)
@@ -113,7 +100,7 @@ func (b *Buffer) initWithCells(c *rawCells, logger *log.Logger, unixFile bool) {
 func (b *Buffer) InitWithTabspaces(tabspaces int) {
 	cells := new(rawCells)
 	cells.init(tabspaces)
-	b.initWithCells(cells, nil, true)
+	b.initWithCells(cells, nil)
 }
 
 // Init initializes this Buffer with the default configuration.
@@ -124,14 +111,24 @@ func (b *Buffer) Init() {
 // WithLogger adds a cell logger which intercepts and logs all
 // the calls to the underlying Writer/Reader.
 func (b *Buffer) WithLogger(logger *log.Logger) {
-	b.initWithCells(b.cells, logger, b.unixReader != nil)
+	b.initWithCells(b.cells, logger)
 }
 
 // InsertRowAt inserts a new row at given position. If pos is out of bounds,
 // this method does not panic; instead, it will fill in the necessary
 // rows such that the new row is the last row in the buffer.
 func (b *Buffer) InsertRowAt(y int) {
-	b.writer.Insert(term.Coordinates{Y: y}, "\n")
+	if y == 0 {
+		b.writer.Insert(term.Coordinates{Y: y}, "\n")
+		return
+	}
+	// Insert fill-in feature takes care of inserting a row up to y
+	if y > b.Rows() {
+		b.writer.Insert(term.Coordinates{Y: y - 1}, "\n")
+		return
+	}
+	// insert new line at the end of previous row
+	b.writer.Insert(term.Coordinates{Y: y - 1, X: b.Columns(y - 1)}, "\n")
 }
 
 // Insert inserts a rune in the given position and shift the cells to the right
@@ -317,10 +314,14 @@ func (b *Buffer) DeleteLine(from, to term.Coordinates) (
 // information about how DeleteBlock selects the cells to delete.
 // See Delete for more information about the return values.
 func (b *Buffer) DeleteBlock(from, to term.Coordinates) (
-	start, end term.Coordinates,
+	start, end term.Coordinates, str string,
 ) {
+	var builder strings.Builder
 	b.selector.iterateBlocks(from, to,
 		func(i int, from, to term.Coordinates, cells []term.Cell) {
+			if i != 0 {
+				builder.WriteRune('\n')
+			}
 			columns := b.Columns(from.Y)
 			if columns == 0 || from.X > columns {
 				if i == 0 {
@@ -333,14 +334,16 @@ func (b *Buffer) DeleteBlock(from, to term.Coordinates) (
 			if to.X > columns {
 				to.X = columns
 			}
-			blockStart, blockEnd, _ := b.safew.Delete(from, to)
+			blockStart, blockEnd, str := b.safew.Delete(from, to)
 
 			if i == 0 {
 				start = blockStart
 			}
 			end = blockEnd
+			builder.WriteString(str)
 		})
 
+	str = builder.String()
 	return
 }
 
@@ -431,11 +434,6 @@ func (b *Buffer) SelectBlock(from term.Coordinates, to term.Coordinates) (
 
 func (b *Buffer) String() string {
 	return b.reader.String()
-}
-
-// EndsWithEOL returns true if the underlying text ends with an EOL character.
-func (b *Buffer) EndsWithEOL() bool {
-	return b.unixReader.endswithEOL()
 }
 
 // Tabspaces returns the number of tabspaces uses to initialized this Buffer.

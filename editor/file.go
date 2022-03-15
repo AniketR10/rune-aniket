@@ -10,6 +10,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/ernestrc/go-tui/cell"
@@ -52,7 +53,7 @@ type FileBuffer struct {
 	infoModTime     time.Time
 	swapInfoModTime time.Time
 	orig, swap      OsFile
-	reader          cell.PublisherReader
+	reader          cell.Reader
 	delayedError    error
 	unflushed       bool
 }
@@ -200,9 +201,9 @@ func (f *FileBuffer) initBuffer(buf *cell.Buffer, file OsFile) (err error) {
 		defer file.Seek(0, 0)
 	}
 
-	f.reader = buf
-
 	buf.Subscribe((*fileBuf)(f))
+
+	f.reader = buf
 
 	return nil
 }
@@ -325,15 +326,12 @@ func (f *fileBuf) copyFlushSwapFile() (ok bool) {
 		f.delayCopySwapError(err)
 		return
 	}
-	_, err = f.swap.WriteString(str)
-	if err != nil {
-		f.delayCopySwapError(err)
-		return
-	}
 
-	// files must end in EOL; cell.Buffer hides the last EOL
-	// so it is safe here to always write a last EOL.
-	_, err = f.swap.Write([]byte{'\n'})
+	// files must end in EOL
+	if !strings.HasSuffix(str, "\n") {
+		str += "\n"
+	}
+	_, err = f.swap.WriteString(str)
 	if err != nil {
 		f.delayCopySwapError(err)
 		return

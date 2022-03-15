@@ -185,7 +185,7 @@ func TestBufferTruncateFrom(t *testing.T) {
 		expected string
 	}{
 		{"hello\nworld\n", term.Coordinates{X: 4, Y: 0}, true, "hell"},
-		{"hello\nworld\n", term.Coordinates{X: 0, Y: 1}, true, "hello"},
+		{"hello\nworld\n", term.Coordinates{X: 0, Y: 1}, true, "hello\n"},
 		{longStr, term.Coordinates{X: 6, Y: 0}, true, "Love i"},
 	}
 
@@ -207,7 +207,7 @@ func TestBufferDelete(t *testing.T) {
 		_, err := b.ReadFrom(strings.NewReader("bla\nbleh"))
 		require.NoError(t, err)
 
-		start, end, str := b.Delete(term.Coordinates{}, term.Coordinates{Y:1})
+		start, end, str := b.Delete(term.Coordinates{}, term.Coordinates{Y: 1})
 		assert.Equal(t, term.Coordinates{}, start)
 		assert.Equal(t, term.Coordinates{Y: 1}, end)
 		assert.Equal(t, "bla\n", str)
@@ -218,7 +218,7 @@ func TestBufferDelete(t *testing.T) {
 		_, err := b.ReadFrom(strings.NewReader("bla\nbleh"))
 		require.NoError(t, err)
 
-		start, end, str := b.Delete(term.Coordinates{Y: 1}, term.Coordinates{Y:2})
+		start, end, str := b.Delete(term.Coordinates{Y: 1}, term.Coordinates{Y: 2})
 		assert.Equal(t, term.Coordinates{Y: 1}, start)
 		assert.Equal(t, term.Coordinates{Y: 2}, end)
 		assert.Equal(t, "bleh", str)
@@ -344,19 +344,6 @@ func TestBufferReset(t *testing.T) {
 	})
 }
 
-func TestBufferEndsWithEOL(t *testing.T) {
-	b := NewBuffer()
-	b.WriteString("1234")
-	assert.False(t, b.EndsWithEOL())
-
-	assert.Equal(t, "1234", b.String())
-
-	b.WriteString("\n")
-	assert.True(t, b.EndsWithEOL())
-
-	assert.Equal(t, "1234", b.String())
-}
-
 func TestBufferDeleteLine(t *testing.T) {
 	tsuite := []struct {
 		from, to   term.Coordinates
@@ -415,6 +402,7 @@ func TestBufferDeleteBlock(t *testing.T) {
 		from, to   term.Coordinates
 		input      string
 		start, end term.Coordinates
+		str        string
 	}{
 		{
 			from:  term.Coordinates{X: 1},
@@ -422,6 +410,7 @@ func TestBufferDeleteBlock(t *testing.T) {
 			input: "bla\nbleh",
 			start: term.Coordinates{X: 1},
 			end:   term.Coordinates{Y: 1, X: 2},
+			str:   "l\nl",
 		},
 		{ // inverted
 			to:    term.Coordinates{X: 1},
@@ -429,6 +418,7 @@ func TestBufferDeleteBlock(t *testing.T) {
 			input: "bla\nbleh",
 			start: term.Coordinates{X: 1},
 			end:   term.Coordinates{Y: 1, X: 2},
+			str:   "l\nl",
 		},
 		{
 			from:  term.Coordinates{},
@@ -436,6 +426,7 @@ func TestBufferDeleteBlock(t *testing.T) {
 			input: "\nbla\n\nbleh\n",
 			start: term.Coordinates{},
 			end:   term.Coordinates{Y: 2},
+			str:   "\n\n",
 		},
 	}
 
@@ -443,9 +434,10 @@ func TestBufferDeleteBlock(t *testing.T) {
 		b := NewBuffer()
 		b.WriteString(tcase.input)
 
-		start, end := b.DeleteBlock(tcase.from, tcase.to)
+		start, end, str := b.DeleteBlock(tcase.from, tcase.to)
 		assert.Equal(t, tcase.start, start)
 		assert.Equal(t, tcase.end, end)
+		assert.Equal(t, tcase.str, str)
 	}
 
 	const str = `/*
@@ -486,7 +478,7 @@ diff_buf_adjust(win_T *win)
 
 		assert.Equal(t, str, b.String())
 		to := term.Coordinates{X: 89, Y: 30}
-		start, end := b.DeleteBlock(term.Coordinates{}, to)
+		start, end, _ := b.DeleteBlock(term.Coordinates{}, to)
 		assert.Equal(t, term.Coordinates{}, start)
 		assert.Equal(t, to, end)
 	})
@@ -530,7 +522,7 @@ d
 		assert.Equal(t, str, b.String())
 		to := term.Coordinates{X: 1, Y: 0}
 		from := term.Coordinates{X: 89, Y: 30}
-		start, end := b.DeleteBlock(from, to)
+		start, end, _ := b.DeleteBlock(from, to)
 		assert.Equal(t, to, start)
 		assert.Equal(t, from, end)
 
@@ -732,4 +724,29 @@ func TestBufferWriteStringRawCells(t *testing.T) {
 
 	b.WriteString("xyz")
 	assert.Equal(t, [][]term.Cell{{{Ch: 'a'}}, {{Ch: 'b'}}, {{Ch: 'c'}, {Ch: 'x'}, {Ch: 'y'}, {Ch: 'z'}}}, b.RawCells())
+}
+
+func TestBufferInsertRowAt(t *testing.T) {
+	tsuite := []struct {
+		desc    string
+		inStr   string
+		inY     int
+		wantOut string
+	}{
+		{"first row", "", 0, "\n"},
+		{"first row above last row", "a", 0, "\na"},
+		{"last row", "a", 1, "a\n"},
+		{"past last row", "a", 2, "a\n\n"},
+		{"in the middle of buffer", "a\nb\nc", 1, "a\n\nb\nc"},
+	}
+
+	for _, tcase := range tsuite {
+		t.Run(tcase.desc, func(t *testing.T) {
+			b := NewBuffer()
+			b.WriteString(tcase.inStr)
+
+			b.InsertRowAt(tcase.inY)
+			assert.Equal(t, tcase.wantOut, b.String())
+		})
+	}
 }

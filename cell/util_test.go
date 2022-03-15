@@ -57,7 +57,6 @@ public class Rotor {
 
 	abuf := NewBuffer()
 	abuf.ReadFrom(strings.NewReader(filecontent1))
-	abuf.WriteString("\n") //unix EOL
 	astr0 := abuf.String()
 	arcells0 := abuf.RawCells()
 

@@ -203,6 +203,10 @@ func testFileBufferIntegration(t *testing.T, endsInEOL bool) {
 
 		f, err := NewFileBuffer(filename, buf, "", false)
 		require.NoError(t, err)
+		require.NoError(t, f.Flush())
+		b, err := ioutil.ReadFile(filename)
+		require.NoError(t, err)
+		assert.Equal(t, "", string(b))
 
 		buf.WriteString("blah\n")
 
@@ -212,7 +216,7 @@ func testFileBufferIntegration(t *testing.T, endsInEOL bool) {
 		require.NoError(t, err)
 		assert.True(t, fileInfo.Mode()&os.ModeSymlink == os.ModeSymlink)
 
-		b, err := ioutil.ReadFile(filename)
+		b, err = ioutil.ReadFile(filename)
 		require.NoError(t, err)
 		assert.Equal(t, "blah\n", string(b))
 
@@ -328,7 +332,7 @@ func TestFileBufferIntegrationNOEOL(t *testing.T) {
 }
 
 func assertRecoverFromSwapFile(t *testing.T, filename, swapname string, b *cell.Buffer) {
-	assert.Equal(t, sampleSnippet, b.String())
+	assert.Equal(t, sampleSnippet+"\n", b.String())
 
 	buf, err := ioutil.ReadFile(filename)
 	require.NoError(t, err)
@@ -843,9 +847,6 @@ func expectCopyToSwapPrepare(mock *MockOsFile) {
 	mock.EXPECT().Truncate(gomock.Eq(int64(0))).Return(nil)
 	mock.EXPECT().Seek(gomock.Eq(int64(0)), gomock.Eq(0)).Return(int64(0), nil)
 	mock.EXPECT().
-		Write(gomock.Eq([]byte("\n"))).
-		Return(1, nil)
-	mock.EXPECT().
 		Sync().
 		Return(nil)
 }
@@ -854,8 +855,8 @@ func expectCopyToSwap(mock *MockOsFile, newData string) {
 	expectedContent := newData + string(defaultFileData)
 	expectCopyToSwapPrepare(mock)
 	mock.EXPECT().
-		WriteString(gomock.Eq(expectedContent)).
-		Return(len(expectedContent), nil)
+		WriteString(gomock.Eq(expectedContent+"\n")).
+		Return(len(expectedContent)+1, nil)
 }
 
 type newBufferFunc func(*testing.T, *gomock.Controller) (*FileBuffer, *MockOsFile, *cell.Buffer)
@@ -979,8 +980,8 @@ func testFileBufferDelete(t *testing.T, newBuffer newBufferFunc) {
 		_, mock, buf := newBuffer(t, ctrl)
 		expectCopyToSwapPrepare(mock)
 		mock.EXPECT().
-			WriteString(gomock.Eq("")).
-			Return(len(""), nil)
+			WriteString(gomock.Eq("\n")).
+			Return(1, nil)
 		buf.DeleteRow(0)
 	})
 

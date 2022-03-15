@@ -1,6 +1,7 @@
 package editor
 
 import (
+	"fmt"
 	"strconv"
 	"strings"
 	"testing"
@@ -691,8 +692,15 @@ func TestCursorMove(t *testing.T) {
 func TestCursorInsertRow(t *testing.T) {
 	e := setupCursor(t, 10, 10)
 
+	assert.Equal(t, 32, e.scroll.Buffer().Rows())
+	assert.Equal(t, term.Coordinates{}, e.Coordinates())
+	assert.Equal(t, term.Coordinates{}, e.cursorAtScroll())
+
 	e.InsertRowAbove()
 	assert.Equal(t, 0, len(e.scroll.Buffer().RawCells()[0]))
+	assert.Equal(t, 33, e.scroll.Buffer().Rows())
+	assert.Equal(t, term.Coordinates{}, e.Coordinates())
+	assert.Equal(t, term.Coordinates{}, e.cursorAtScroll())
 
 	e.scroll.SeekEndLine()
 	e.cursor.Y = 2
@@ -700,13 +708,74 @@ func TestCursorInsertRow(t *testing.T) {
 
 	e.InsertRowAbove()
 	assert.Equal(t, 0, len(e.scroll.Buffer().RawCells()[2]))
+	assert.Equal(t, 34, e.scroll.Buffer().Rows())
+	assert.Equal(t, term.Coordinates{Y: 2, X: 0}, e.Coordinates())
+
+	e.MoveEndLine()
+	e.InsertRowBelow()
+	assert.Equal(t, 35, e.scroll.Buffer().Rows())
+	assert.Equal(t, term.Coordinates{Y: 3, X: 0}, e.Coordinates())
+	assert.Equal(t, term.Coordinates{Y: 3, X: 0}, e.cursorAtScroll())
 
 	e.MoveLastLine()
+	e.MoveStartLine()
+	assert.Equal(t, term.Coordinates{Y: 9, X: 0}, e.Coordinates())
+	assert.Equal(t, term.Coordinates{Y: 34}, e.cursorAtScroll())
 
-	r := e.scroll.Buffer().Rows()
 	e.InsertRowBelow()
+	assert.Equal(t, 36, e.scroll.Buffer().Rows())
+	assert.Equal(t, term.Coordinates{Y: 9, X: 0}, e.Coordinates())
+	assert.Equal(t, term.Coordinates{Y: 35}, e.cursorAtScroll())
+}
 
-	assert.Equal(t, r+1, e.scroll.Buffer().Rows())
+func TestCursorInsertRowBelow(t *testing.T) {
+	scroll := component.NewScroll()
+	scroll.Resize(10, 10)
+	cursor := NewCursor(scroll)
+	in := scroll.Buffer()
+
+	content := `package main
+func main() {
+}`
+	in.WriteString(content)
+	assert.Equal(t, in.String(), content)
+
+	require.True(t, cursor.MoveDown())
+	cursor.InsertRowBelow()
+	cursor.InsertRowBelow()
+	cursor.Insert('\t')
+	cursor.Insert('f')
+	cursor.Insert('m')
+	cursor.Insert('t')
+	cursor.Insert('.')
+
+	assert.Equal(t, `package main
+func main() {
+
+	fmt.
+}`, in.String())
+
+	require.True(t, cursor.MoveLastLine())
+
+	cursor.InsertRowBelow()
+	cursor.InsertRowBelow()
+	cursor.Insert('i')
+	cursor.InsertRowBelow()
+	cursor.Insert('\t')
+	cursor.Insert('X')
+	cursor.InsertRowBelow()
+	cursor.Insert('}')
+
+	assert.Equal(t, `package main
+func main() {
+
+	fmt.
+}
+
+i
+	X
+}`, in.String())
+
 }
 
 func TestCursorInsertDelete(t *testing.T) {
@@ -1047,14 +1116,16 @@ func testCursorDeleteSelection(t *testing.T, width, height int, typeSelect Selec
 			skipForMode: []SelectMode{LineSelection, BlockSelection},
 		},
 		{
-			initialBuf: "a\nb",
+			initialBuf: "a\nb\nc\nd",
 			selected:   true,
 			finalPos: func(c *Cursor) {
 				for i := 0; i < 100; i++ {
 					c.MoveDown()
 				}
 			},
-			deleted: true,
+			deleted:     true,
+			finalBuf:    "",
+			skipForMode: []SelectMode{BlockSelection},
 		},
 		{
 			initialBuf: "a\nb",
@@ -1070,14 +1141,15 @@ func testCursorDeleteSelection(t *testing.T, width, height int, typeSelect Selec
 			skipForMode: []SelectMode{LineSelection},
 		},
 		{
-			initialBuf: "a\nb",
+			initialBuf: "a\nb\nc\nd",
 			selected:   true,
 			finalPos: func(c *Cursor) {
 				c.MoveLastLine()
 				c.MoveEndLine()
 			},
-			deleted:  true,
-			finalBuf: "",
+			deleted:     true,
+			finalBuf:    "",
+			skipForMode: []SelectMode{BlockSelection},
 		},
 		{
 			initialBuf: "type Writer {\n\ta int\n\tb int\n}\n",
@@ -1095,41 +1167,42 @@ func testCursorDeleteSelection(t *testing.T, width, height int, typeSelect Selec
 	}
 
 	for i, tcase := range tsuite {
-		var skip bool
-		for _, mode := range tcase.skipForMode {
-			if mode == typeSelect {
-				skip = true
-				break
+		t.Run(fmt.Sprintf("select %v test case %d", typeSelect, i), func(t *testing.T) {
+			var skip bool
+			for _, mode := range tcase.skipForMode {
+				if mode == typeSelect {
+					skip = true
+					break
+				}
 			}
-		}
-		if skip {
-			continue
-		}
+			if skip {
+				return
+			}
 
-		c := setupCursorContent(t, width, height, tcase.initialBuf)
-		if tcase.initialPos != nil {
-			tcase.initialPos(c)
-		}
-		switch typeSelect {
-		case noSelection:
-			panic("hmm...")
-		case BlockSelection:
-			require.Equal(t, tcase.selected, c.SelectBlock())
-		case LineSelection:
-			require.Equal(t, tcase.selected, c.SelectLine())
-		case StandardSelection:
-			require.Equal(t, tcase.selected, c.Select(), "test case %d", i)
-		}
-		if !tcase.selected {
-			continue
-		}
-		tcase.finalPos(c)
-		require.Equal(t, tcase.deleted, c.DeleteSelection())
-		if !tcase.deleted {
-			continue
-		}
-		assert.Equal(t, tcase.finalBuf, c.scroll.Buffer().String(),
-			"test case %d", i)
+			c := setupCursorContent(t, width, height, tcase.initialBuf)
+			if tcase.initialPos != nil {
+				tcase.initialPos(c)
+			}
+			switch typeSelect {
+			case noSelection:
+				panic("hmm...")
+			case BlockSelection:
+				require.Equal(t, tcase.selected, c.SelectBlock())
+			case LineSelection:
+				require.Equal(t, tcase.selected, c.SelectLine())
+			case StandardSelection:
+				require.Equal(t, tcase.selected, c.Select())
+			}
+			if !tcase.selected {
+				return
+			}
+			tcase.finalPos(c)
+			require.Equal(t, tcase.deleted, c.DeleteSelection())
+			if !tcase.deleted {
+				return
+			}
+			assert.Equal(t, tcase.finalBuf, c.scroll.Buffer().String())
+		})
 	}
 }
 
@@ -1335,7 +1408,6 @@ func TestCursorMoveLocationList(t *testing.T) {
 	t.Run("MoveToNextLocation should wrap around to first location", func(t *testing.T) {
 		c := setupCursorContent(t, 10, 10, "\na\nb\nc \n")
 		require.True(t, c.MoveLastLine())
-		require.True(t, c.MoveEndLine())
 
 		assert.Nil(t, c.SetLocationList(locID, &testLocationList{locations: abcLocations}))
 		assert.True(t, c.MoveToNextLocation(locID))
@@ -1411,6 +1483,7 @@ func TestCursorSetLocationListAttr(t *testing.T) {
 		{{Ch: 'a', Bg: abcAttr.Bg, Fg: abcAttr.Fg}},
 		{{Ch: 'b', Bg: abcAttr.Bg, Fg: abcAttr.Fg}},
 		{{Ch: 'c', Bg: abcAttr.Bg, Fg: abcAttr.Fg}},
+		{},
 	}
 
 	abcList := &testLocationList{locations: abcLocations}
@@ -1435,6 +1508,7 @@ func TestCursorSetLocationListAttr(t *testing.T) {
 		{{Ch: 'b',
 			Fg: term.AttrBold, Bg: term.AttrUnderline | term.ColorRed}},
 		{{Ch: 'c'}},
+		{},
 	}
 	oldLocList := c.SetLocationList(locID, &testLocationList{locations: newLocations})
 	assert.Equal(t, abcList, oldLocList)
@@ -1455,6 +1529,7 @@ func TestCursorSetLocationListAttr(t *testing.T) {
 		{{Ch: 'a', Bg: term.ColorRed}},
 		{{Ch: 'b', Fg: term.AttrBold, Bg: term.AttrUnderline}},
 		{{Ch: 'c', Bg: term.ColorRed}},
+		{},
 	}
 	newL := c.SetLocationList(locID, &testLocationList{locations: newLocations})
 	assert.Equal(t, expected, buf.RawCells())
@@ -1466,6 +1541,7 @@ func TestCursorSetLocationListAttr(t *testing.T) {
 		{{Ch: 'a', Bg: term.ColorRed}},
 		{{Ch: 'b', Fg: term.AttrBold, Bg: term.AttrUnderline}},
 		{{Ch: 'c'}},
+		{},
 	}
 	assert.Equal(t, expected, buf.RawCells())
 }

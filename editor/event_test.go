@@ -53,14 +53,13 @@ func main() {
 
 	require.True(t, cursor.MoveLastLine())
 
-	cursor.InsertRowBelow()
-	cursor.InsertRowBelow()
-	cursor.MoveStartLine()
+	require.True(t, cursor.MoveRight())
+	cursor.Insert('\n')
+	cursor.Insert('\n')
 	cursor.Insert('i')
 	cursor.Insert('f')
 	cursor.Insert('{')
-	cursor.InsertRowBelow()
-	cursor.MoveStartLine()
+	cursor.Insert('\n')
 	cursor.Insert('\t')
 	cursor.Insert('X')
 	cursor.Insert('\n')
@@ -89,6 +88,7 @@ if{
 
 
 boom
+
 `, out.String())
 }
 

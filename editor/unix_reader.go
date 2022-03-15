@@ -1,15 +1,16 @@
-package cell
+package editor
 
 import (
+	"github.com/ernestrc/go-tui/cell"
 	"github.com/ernestrc/go-tui/term"
 )
 
 // unixFileReader is a reader that hides the last EOL if present.
 type unixFileReader struct {
-	reader Reader
+	reader cell.Reader
 }
 
-func newUnixFileReader(r Reader) *unixFileReader {
+func newUnixFileReader(r cell.Reader) *unixFileReader {
 	b := new(unixFileReader)
 	b.reader = r
 	return b
@@ -51,5 +52,5 @@ func (b *unixFileReader) String() string {
 	if !b.endswithEOL() {
 		return b.reader.String()
 	}
-	return CellsToString(b.RawCells())
+	return cell.CellsToString(b.RawCells())
 }

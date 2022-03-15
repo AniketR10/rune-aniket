@@ -210,7 +210,7 @@ func (s *Scroll) seekTo(pos term.Coordinates, xpadding, ypadding int) bool {
 		ypadding = max
 	}
 
-	// ypadding < 0 is used to signal force seek on the y axis
+	// ypadding < 0 is used to signal seek on the y axis with no padding
 	if ypadding == -1 {
 		yok = s.seekVertical(pos.Y, false)
 	} else if pos.Y >= s.offset.Y+s.height-ypadding {

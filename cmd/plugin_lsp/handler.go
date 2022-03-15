@@ -995,9 +995,6 @@ func (h *lspEditorHandler) handleFileFlush(ev editor.Event) {
 	ctx, cancelFn := context.WithTimeout(ctx, h.rpcTimeout)
 	defer cancelFn()
 
-	// see handleFileOpen
-	ev.Content += "\n"
-
 	f, ok := h.getFileWithName(ev.ResourceName)
 	if !ok {
 		f = h.newFile(ev.Resource, ev.ResourceName, ev.Content)
@@ -1075,10 +1072,6 @@ func (h *lspEditorHandler) handleFileOpen(ev editor.Event) {
 	ctx := context.Background()
 	ctx, cancelFn := context.WithTimeout(ctx, h.rpcTimeout)
 	defer cancelFn()
-
-	// content last EOL is trimmed by the buffer's unix file reader.
-	// lsp expects the last EOL
-	ev.Content += "\n"
 
 	f := h.newFile(ev.Resource, ev.ResourceName, ev.Content)
 	srv, ok := h.getServer(f.languageID)

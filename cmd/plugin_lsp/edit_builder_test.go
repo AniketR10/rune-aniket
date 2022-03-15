@@ -95,7 +95,6 @@ func TestApplyEdits(t *testing.T) {
 		var out cell.Buffer
 		out.Init()
 		out.WriteString(tcase.input)
-		out.WriteString("\n")
 
 		var b editBuilder
 		b.init(makeFile(), editor.CellWriter(out.Writer()), cell.StringToCells(tcase.input))

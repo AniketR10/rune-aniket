@@ -116,7 +116,6 @@ public class Rotor {
 	insertAt := term.Coordinates{Y: 5, X: 9}
 	abuf := NewBuffer()
 	abuf.ReadFrom(strings.NewReader(filecontent1))
-	abuf.WriteString("\n") //unix EOL
 	astr0 := abuf.String()
 	arcells0 := abuf.RawCells()
 
