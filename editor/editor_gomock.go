@@ -155,10 +155,10 @@ func (m *MockWriter) EXPECT() *MockWriterMockRecorder {
 	return m.recorder
 }
 
-// Delete mocks base method.
-func (m *MockWriter) Delete(from, to term.Coordinates) (term.Coordinates, term.Coordinates, string, error) {
+// Update mocks base method.
+func (m *MockWriter) Update(start, end term.Coordinates, str string) (term.Coordinates, term.Coordinates, string, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Delete", from, to)
+	ret := m.ctrl.Call(m, "Update", start, end, str)
 	ret0, _ := ret[0].(term.Coordinates)
 	ret1, _ := ret[1].(term.Coordinates)
 	ret2, _ := ret[2].(string)
@@ -166,26 +166,10 @@ func (m *MockWriter) Delete(from, to term.Coordinates) (term.Coordinates, term.C
 	return ret0, ret1, ret2, ret3
 }
 
-// Delete indicates an expected call of Delete.
-func (mr *MockWriterMockRecorder) Delete(from, to interface{}) *gomock.Call {
+// Update indicates an expected call of Update.
+func (mr *MockWriterMockRecorder) Update(start, end, str interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Delete", reflect.TypeOf((*MockWriter)(nil).Delete), from, to)
-}
-
-// Insert mocks base method.
-func (m *MockWriter) Insert(at term.Coordinates, str string) (term.Coordinates, term.Coordinates, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Insert", at, str)
-	ret0, _ := ret[0].(term.Coordinates)
-	ret1, _ := ret[1].(term.Coordinates)
-	ret2, _ := ret[2].(error)
-	return ret0, ret1, ret2
-}
-
-// Insert indicates an expected call of Insert.
-func (mr *MockWriterMockRecorder) Insert(at, str interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Insert", reflect.TypeOf((*MockWriter)(nil).Insert), at, str)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Update", reflect.TypeOf((*MockWriter)(nil).Update), start, end, str)
 }
 
 // MockReader is a mock of Reader interface.

@@ -101,19 +101,11 @@ func (c *curSubscriber) clearAllLocations() {
 	}
 }
 
-func (c *curSubscriber) OnWillInsert(at term.Coordinates, str string) {
+func (c *curSubscriber) OnWillUpdate(start, end term.Coordinates, str string) {
 	c.clearAllLocations()
 }
 
-func (c *curSubscriber) OnDidInsert(from, to term.Coordinates) {
-	c.c.setSearchLocationList(c.c.search)
-}
-
-func (c *curSubscriber) OnWillDelete(from, to term.Coordinates) {
-	c.clearAllLocations()
-}
-
-func (c *curSubscriber) OnDidDelete(start, end term.Coordinates, str string) {
+func (c *curSubscriber) OnDidUpdate(from, to term.Coordinates, old string) {
 	c.c.setSearchLocationList(c.c.search)
 }
 
@@ -1098,11 +1090,11 @@ func (c *Cursor) DeleteSelection() (ok bool) {
 	var str string
 	switch mode {
 	case StandardSelection:
-		start, _, str = c.buffer().Delete(from, to)
+		start, str = c.buffer().Delete(from, to)
 	case LineSelection:
-		start, _, str = c.buffer().DeleteLine(from, to)
+		start, str = c.buffer().DeleteLine(from, to)
 	case BlockSelection:
-		start, _, str = c.buffer().DeleteBlock(from, to)
+		start, str = c.buffer().DeleteBlock(from, to)
 	}
 	c.selection.mode = noSelection
 	c.setCursor(c.scrollToWindowCoordinates(start))

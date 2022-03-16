@@ -12,48 +12,27 @@ type clientWriter struct {
 	client    *Client
 }
 
-func (w clientWriter) Insert(
-	at term.Coordinates, str string,
-) (from, to term.Coordinates, err error) {
+func (w clientWriter) Update(
+	start, end term.Coordinates, str string,
+) (from, to term.Coordinates, old string, err error) {
 	ctx := context.Background()
 
-	var protoAt proto.Coordinates
-	protoAt.FromModel(at)
-	req := proto.InsertRequest{
+	var protoStart, protoEnd proto.Coordinates
+	protoStart.FromModel(start)
+	protoEnd.FromModel(end)
+	req := proto.UpdateRequest{
 		HandlerId: w.handlerID,
-		At:        &protoAt,
+		Start:     &protoStart,
+		End:       &protoEnd,
 		Str:       str,
 	}
-	res, err := w.client.ed.Insert(ctx, &req)
+	res, err := w.client.ed.Update(ctx, &req)
 	if err != nil {
-		return from, to, err
+		return from, to, "", err
 	}
 
 	from = res.GetFrom().ToModel()
 	to = res.GetTo().ToModel()
-	return
-}
-
-func (w clientWriter) Delete(
-	from, to term.Coordinates,
-) (start, end term.Coordinates, str string, err error) {
-	ctx := context.Background()
-	var protoTo, protoFrom proto.Coordinates
-	protoFrom.FromModel(from)
-	protoTo.FromModel(to)
-
-	req := proto.DeleteRequest{
-		HandlerId: w.handlerID,
-		From:      &protoFrom,
-		To:        &protoTo,
-	}
-	res, err := w.client.ed.Delete(ctx, &req)
-	if err != nil {
-		return start, end, str, err
-	}
-
-	start = res.GetStart().ToModel()
-	end = res.GetEnd().ToModel()
-	str = res.GetStr()
+	old = res.GetOld()
 	return
 }

@@ -28,15 +28,11 @@ const (
 	// Content represents the file content that was flushed.
 	EventTypeFlush
 
-	// EventTypeInsert is dispatched when new content is inserted into an editor buffer.
-	// Start, End represent the []byte coordinates.
-	// From, To represent the raw [][]term.Cell coordinates, which account
-	// for tab expansion. Content represents the content that was inserted.
-	EventTypeInsert
-
-	// EventTypeDelete is dispatched when content is deleted from an editor buffer.
-	// See EventTypeInsert. Content represents the content that was deleted.
-	EventTypeDelete
+	// EventTypeUpdate is dispatched when new content is inserted into an editor buffer.
+	// Start, End represent the input to Update whereas
+	// From, To represent output coordinates. See cell.Writer.Update for
+	// more details.
+	EventTypeUpdate
 
 	// EventTypeScroll is dispatched when content is scroll to a new offset.
 	// Start represents the scroll offset.
@@ -81,10 +77,8 @@ func protoTypeToModel(protoType proto.EditorEvent_Type) (ev EventType, err error
 		ev = EventTypeFlush
 	case proto.EditorEvent_TypeOpen:
 		ev = EventTypeOpen
-	case proto.EditorEvent_TypeDelete:
-		ev = EventTypeDelete
-	case proto.EditorEvent_TypeInsert:
-		ev = EventTypeInsert
+	case proto.EditorEvent_TypeUpdate:
+		ev = EventTypeUpdate
 	case proto.EditorEvent_TypeScroll:
 		ev = EventTypeScroll
 	case proto.EditorEvent_TypeCursor:
@@ -132,10 +126,8 @@ func (e Event) protoType() proto.EditorEvent_Type {
 		return proto.EditorEvent_TypeFlush
 	case EventTypeOpen:
 		return proto.EditorEvent_TypeOpen
-	case EventTypeDelete:
-		return proto.EditorEvent_TypeDelete
-	case EventTypeInsert:
-		return proto.EditorEvent_TypeInsert
+	case EventTypeUpdate:
+		return proto.EditorEvent_TypeUpdate
 	case EventTypeScroll:
 		return proto.EditorEvent_TypeScroll
 	case EventTypeCursor:
@@ -182,63 +174,27 @@ type cellSubscriber struct {
 	h    Handler
 	eh   EventHandler
 
-	onWillInsert     string
-	onWillInsertAt   term.Coordinates
-	onWillDeleteFrom term.Coordinates
-	onWillDeleteTo   term.Coordinates
+	onWillUpdateStr   string
+	onWillUpdateStart term.Coordinates
+	onWillUpdateEnd   term.Coordinates
 }
 
-func (s *cellSubscriber) OnWillInsert(at term.Coordinates, str string) {
-	s.onWillInsert = str
-	s.onWillInsertAt = at
+func (s *cellSubscriber) OnWillUpdate(start, end term.Coordinates, str string) {
+	s.onWillUpdateStr = str
+	s.onWillUpdateStart = start
+	s.onWillUpdateEnd = end
 }
 
-// cell.Writer API does not provide access to the "end" before tab expansion.
-func calculateInsertEnd(at term.Coordinates, str string) term.Coordinates {
-	var lines int
-	var lastLineLen int
-	for _, r := range str {
-		if r == '\n' {
-			lines++
-			lastLineLen = 0
-			continue
-		}
-		lastLineLen++
-	}
-	if lastLineLen > 0 {
-		lastLineLen--
-	}
-	return term.Coordinates{Y: at.Y + lines, X: lastLineLen}
-}
-
-func (s *cellSubscriber) OnDidInsert(from, to term.Coordinates) {
+func (s *cellSubscriber) OnDidUpdate(from, to term.Coordinates, old string) {
 	s.eh.Handle(context.Background(), Event{
-		Type:         EventTypeInsert,
+		Type:         EventTypeUpdate,
 		Resource:     s.h,
 		ResourceName: s.name,
-		Start:        s.onWillInsertAt,
-		End:          calculateInsertEnd(s.onWillInsertAt, s.onWillInsert),
 		From:         from,
 		To:           to,
-		Content:      s.onWillInsert,
-	})
-}
-
-func (s *cellSubscriber) OnWillDelete(from, to term.Coordinates) {
-	s.onWillDeleteFrom = from
-	s.onWillDeleteTo = to
-}
-
-func (s *cellSubscriber) OnDidDelete(start, end term.Coordinates, str string) {
-	s.eh.Handle(context.Background(), Event{
-		Type:         EventTypeDelete,
-		Resource:     s.h,
-		ResourceName: s.name,
-		Start:        start,
-		End:          end,
-		From:         s.onWillDeleteFrom,
-		To:           s.onWillDeleteTo,
-		Content:      str,
+		Start:        s.onWillUpdateStart,
+		End:          s.onWillUpdateEnd,
+		Content:      s.onWillUpdateStr,
 	})
 }
 

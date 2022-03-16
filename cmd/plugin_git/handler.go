@@ -33,8 +33,7 @@ var (
 	gitHandlerCommands = []string{commandNextChange, commandPrevChange}
 	gitHandlerEvents   = []editor.EventType{
 		editor.EventTypeOpen,
-		editor.EventTypeInsert,
-		editor.EventTypeDelete,
+		editor.EventTypeUpdate,
 		editor.EventTypeFlush,
 		editor.EventTypeScroll,
 		editor.EventTypeFocus,
@@ -319,7 +318,7 @@ func (h *gitEditorHandler) handleEvents() {
 
 		var err error
 		switch ev.Type {
-		case editor.EventTypeDelete, editor.EventTypeInsert:
+		case editor.EventTypeUpdate:
 			err = h.pushLastDiffLocations(ev.ResourceName, ev.Resource)
 		case editor.EventTypeOpen:
 			h.setScrollOffset(ev.ResourceName, term.Coordinates{})
@@ -354,16 +353,7 @@ func (h *gitEditorHandler) Handle(
 		return
 	}
 
-	switch ev.Type {
-	case editor.EventTypeInsert, editor.EventTypeDelete:
-		// drop event if busy
-		select {
-		case h.ch <- ev:
-		default:
-		}
-	default:
-		h.ch <- ev
-	}
+	h.ch <- ev
 	return
 }
 

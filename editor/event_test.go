@@ -103,7 +103,7 @@ func main() {
 
 	in.Subscribe(CellSubscriber("", NewTestHandler(),
 		FuncEventHandler(func(ctx context.Context, ev Event) bool {
-			out.Delete(ev.From, ev.To)
+			out.Delete(ev.Start, ev.End)
 			return false
 		})))
 
@@ -131,10 +131,8 @@ func main() {
 	in.Subscribe(CellSubscriber("", NewTestHandler(),
 		FuncEventHandler(func(ctx context.Context, ev Event) bool {
 			switch ev.Type {
-			case EventTypeInsert:
-				out.InsertString(ev.Start, ev.Content)
-			case EventTypeDelete:
-				out.Delete(ev.From, ev.To)
+			case EventTypeUpdate:
+				out.Update(ev.Start, ev.End, ev.Content)
 			}
 			return false
 		})))

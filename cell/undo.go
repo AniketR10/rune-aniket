@@ -77,34 +77,17 @@ func (u *undoer) resetRedoTimeline() {
 	u.redoTimeline = u.redoTimeline[:0]
 }
 
-// insert captures underlying writer insert so it can be undone. See cell.writer.insert
-func (u *undoer) Insert(at term.Coordinates, str string) (from, to term.Coordinates) {
+// update captures underlying writer update so it can be undone. See cell.writer.Update
+func (u *undoer) Update(start, end term.Coordinates, str string) (
+	from, to term.Coordinates, old string,
+) {
 	op := op{
-		at: at,
+		at: start,
 		do: func() {
-			from, to = u.w.Insert(at, str)
+			from, to, old = u.w.Update(start, end, str)
 		},
 		undo: func() {
-			u.w.Delete(from, to)
-		},
-	}
-
-	op.do()
-	u.version++
-	u.pushUndo(op)
-	u.resetRedoTimeline()
-	return
-}
-
-// delete captures underlying writer delete so it can be undone. See cell.writer.delete
-func (u *undoer) Delete(from, to term.Coordinates) (start, end term.Coordinates, str string) {
-	op := op{
-		at: from,
-		do: func() {
-			start, end, str = u.w.Delete(from, to)
-		},
-		undo: func() {
-			u.w.Insert(start, str)
+			u.w.Update(from, to, old)
 		},
 	}
 

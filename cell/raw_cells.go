@@ -130,7 +130,7 @@ func (c *rawCells) fillInCoords(pos term.Coordinates) (
 	return
 }
 
-func (c *rawCells) Insert(at term.Coordinates, str string) (
+func (c *rawCells) insert(at term.Coordinates, str string) (
 	from, to term.Coordinates,
 ) {
 	from, to = c.fillInCoords(at)
@@ -232,7 +232,7 @@ func (c *rawCells) skipPadding(start, end term.Coordinates) (
 	return start, end
 }
 
-func (c *rawCells) Delete(from, to term.Coordinates) (
+func (c *rawCells) delete(from, to term.Coordinates) (
 	start, end term.Coordinates, str string,
 ) {
 	assertValidCoords(from)
@@ -280,6 +280,23 @@ func (c *rawCells) Delete(from, to term.Coordinates) (
 	}
 
 	str = builder.String()
+
+	return
+}
+
+func (c *rawCells) Update(start, end term.Coordinates, str string) (
+	from, to term.Coordinates, old string,
+) {
+	from = start
+	to = start
+	if start != end {
+		from, _, old = c.delete(start, end)
+		to = from
+	}
+
+	if str != "" {
+		from, to = c.insert(from, str)
+	}
 
 	return
 }

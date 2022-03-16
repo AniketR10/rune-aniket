@@ -28,19 +28,11 @@ func AttrSearcher(
 	return as
 }
 
-func (s *attrSearcher) OnWillInsert(at term.Coordinates, str string) {
+func (s *attrSearcher) OnWillUpdate(start, end term.Coordinates, str string) {
 	s.setResultsAttr(term.Attributes{})
 }
 
-func (s *attrSearcher) OnWillDelete(from, to term.Coordinates) {
-	s.setResultsAttr(term.Attributes{})
-}
-
-func (s *attrSearcher) OnDidInsert(from, to term.Coordinates) {
-	s.searchMatches(s.text)
-}
-
-func (s *attrSearcher) OnDidDelete(start, end term.Coordinates, str string) {
+func (s *attrSearcher) OnDidUpdate(from, to term.Coordinates, old string) {
 	s.searchMatches(s.text)
 }
 

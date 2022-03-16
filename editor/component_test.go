@@ -287,8 +287,8 @@ func TestComponentEditorSubscriber(t *testing.T) {
 			nil,
 		},
 		{
-			"buf.WriteString->EventTypeInsert",
-			EventTypeInsert,
+			"buf.WriteString->EventTypeUpdate",
+			EventTypeUpdate,
 			func(t *testing.T, c *Component, resourceName string) {
 				buf := cell.NewBuffer()
 				_, err := c.Edit(resourceName, buf)
@@ -299,8 +299,8 @@ func TestComponentEditorSubscriber(t *testing.T) {
 			nil,
 		},
 		{
-			"buf.DeleteRow->EventTypeDelete",
-			EventTypeDelete,
+			"buf.DeleteRow->EventTypeUpdate",
+			EventTypeUpdate,
 			func(t *testing.T, c *Component, resourceName string) {
 				buf := cell.NewBuffer()
 				buf.WriteString("wasup")

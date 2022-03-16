@@ -15,10 +15,32 @@ Love isn't love 'til you give it away.
 
 func initUndoTestBuffer(t *testing.T) (u *undoer, b *Buffer) {
 	b = newBufferWithContent(t, undoFortune)
-
-	u = newUndoer(b.writer)
-	b.writer = u
+	u = b.undoer
 	return
+}
+
+func TestDebugUndo(t *testing.T) {
+	undoer, buf := initUndoTestBuffer(t)
+	prev := buf.String()
+
+	buf.DeleteCell(term.Coordinates{X: 4, Y: 2})
+	ok, _ := undoer.undo()
+	assert.True(t, ok)
+	assert.Equal(t, prev, buf.String())
+}
+
+func TestUndoRawUpdate(t *testing.T) {
+	undoer, buf := initUndoTestBuffer(t)
+	prev := buf.String()
+
+	buf.Update(term.Coordinates{Y: 2, X: 1}, term.Coordinates{Y: 2, X: 5}, "")
+	noTabs := "Love in your heart wasn't put there to stay.\nLove isn't love 'til you give it away.\n-- Oscar Hammerstein 中国"
+	assert.Equal(t, noTabs, buf.String())
+	ok, _ := undoer.undo()
+
+	assert.True(t, ok)
+	after := buf.String()
+	assert.Equal(t, prev, after)
 }
 
 func TestUndo(t *testing.T) {
@@ -46,6 +68,12 @@ func TestUndo(t *testing.T) {
 		}},
 		{"DeleteRow", func(b *Buffer) {
 			b.DeleteRow(0)
+		}},
+		{"Update which effectively replaces", func(b *Buffer) {
+			b.Update(term.Coordinates{Y: 2, X: 1}, term.Coordinates{Y: 2, X: 5}, "a\tb\t")
+		}},
+		{"multiline Update which effectively replaces", func(b *Buffer) {
+			b.Update(term.Coordinates{Y: 0, X: 1}, term.Coordinates{Y: 2}, "a\tb\n\t")
 		}},
 	}
 
@@ -119,11 +147,11 @@ public class Rotor {
 	astr0 := abuf.String()
 	arcells0 := abuf.RawCells()
 
-	afrom, ato := abuf.writer.Insert(insertAt, insertStr)
+	afrom, ato, _ := abuf.writer.Update(insertAt, insertAt, insertStr)
 	astr1 := abuf.String()
 	arcells1 := abuf.RawCells()
 
-	abuf.writer.Delete(afrom, ato)
+	abuf.writer.Update(afrom, ato, "")
 	astr2 := abuf.String()
 	arcells2 := abuf.RawCells()
 	assert.Equal(t, astr0, astr2)

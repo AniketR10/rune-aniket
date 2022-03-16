@@ -44,39 +44,22 @@ func (l *logger) wFields(method string) log.Fields {
 	}
 }
 
-func (l *logger) Insert(at term.Coordinates, str string) (
-	from, to term.Coordinates,
+func (l *logger) Update(start, end term.Coordinates, str string) (
+	from, to term.Coordinates, old string,
 ) {
-	fields := l.wFields("insert")
-	fields["at"] = at
-	fields["string"] = fmt.Sprintf("%s", str)
-	fields["length"] = len(str)
-
-	from, to = l.w.Insert(at, str)
-
-	fields["from"] = from
-	fields["to"] = to
-
-	l.out.WithFields(fields).Trace()
-	return
-}
-
-func (l *logger) Delete(from, to term.Coordinates) (
-	start, end term.Coordinates, str string,
-) {
-	fields := l.wFields("delete")
-	fields["from"] = from
-	fields["to"] = to
-
-	start, end, str = l.w.Delete(from, to)
-
-	fields["string"] = fmt.Sprintf("%s", str)
-	fields["length"] = len(str)
+	fields := l.wFields("update")
 	fields["start"] = start
 	fields["end"] = end
+	fields["string"] = fmt.Sprintf("%s", str)
+	fields["length"] = len(str)
+
+	from, to, old = l.w.Update(start, end, str)
+
+	fields["from"] = from
+	fields["to"] = to
+	fields["old"] = old
 
 	l.out.WithFields(fields).Trace()
-
 	return
 }
 

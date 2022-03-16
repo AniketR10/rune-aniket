@@ -22,8 +22,7 @@ type Handler interface {
 
 // Writer is a cell.Writer that can fail.
 type Writer interface {
-	Insert(at term.Coordinates, str string) (from, to term.Coordinates, err error)
-	Delete(from, to term.Coordinates) (start, end term.Coordinates, str string, err error)
+	Update(start, end term.Coordinates, str string) (from, to term.Coordinates, old string, err error)
 }
 
 // Reader wraps a subset of cell.Reader behaviour with an API that can fail.
@@ -109,25 +108,14 @@ type cellReader struct {
 	c cell.Reader
 }
 
-func (w cellWriter) Insert(
-	at term.Coordinates, str string,
-) (from, to term.Coordinates, err error) {
-	if at.Y < 0 || at.X < 0 {
-		err = fmt.Errorf("invalid coordinates: at=%v", at)
+func (w cellWriter) Update(
+	start, end term.Coordinates, str string,
+) (from, to term.Coordinates, old string, err error) {
+	if start.Y < 0 || end.Y < 0 || start.X < 0 || end.X < 0 {
+		err = fmt.Errorf("invalid coordinates: start=%v; end=%v", start, end)
 		return
 	}
-	from, to = w.c.Insert(at, str)
-	return
-}
-
-func (w cellWriter) Delete(
-	from, to term.Coordinates,
-) (start, end term.Coordinates, str string, err error) {
-	if from.Y < 0 || to.Y < 0 || from.X < 0 || to.X < 0 {
-		err = fmt.Errorf("invalid coordinates: from=%v; to=%v", from, to)
-		return
-	}
-	start, end, str = w.c.Delete(from, to)
+	from, to, old = w.c.Update(start, end, str)
 	return
 }
 

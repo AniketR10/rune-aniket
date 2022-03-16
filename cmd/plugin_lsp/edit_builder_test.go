@@ -1,13 +1,13 @@
 package main
 
 import (
-	"testing"
-	"github.com/ernestrc/golang-internal-tools/lsp/protocol"
-	"github.com/ernestrc/go-tui/editor"
 	"github.com/ernestrc/go-tui/cell"
+	"github.com/ernestrc/go-tui/editor"
+	"github.com/ernestrc/golang-internal-tools/lsp/protocol"
 	"github.com/ernestrc/golang-internal-tools/span"
-	"github.com/stretchr/testify/assert"
 	log "github.com/sirupsen/logrus"
+	"github.com/stretchr/testify/assert"
+	"testing"
 )
 
 const (
@@ -37,35 +37,38 @@ import (
 )
 `
 )
+
 var (
-	edits1 = []protocol.TextEdit{
-		{Range: protocol.Range{
-			Start: protocol.Position{Line:3, Character: 2},
-			End: protocol.Position{Line: 5, Character: 2}},
-		}}
-	edits2 = append(edits1, protocol.TextEdit{
+	edit1 = protocol.TextEdit{
 		Range: protocol.Range{
-			Start: protocol.Position{Line:5, Character: 20},
-			End: protocol.Position{Line: 5, Character: 20}},
-		NewText: "\"\n\t\"io\"\n\t\"os",
-		},
-	)
-	edits3 = []protocol.TextEdit{
-		{Range: protocol.Range{
-			Start: protocol.Position{Line:2, Character: 0},
-			End: protocol.Position{Line: 2, Character: 6}},
-		},
-		{Range: protocol.Range{
-			Start: protocol.Position{Line:2, Character: 6},
-			End: protocol.Position{Line: 2, Character: 6}},
-		 NewText: "imp",
-		},
-		{Range: protocol.Range{
-			Start: protocol.Position{Line:2, Character: 6},
-			End: protocol.Position{Line: 2, Character: 6}},
-		 NewText: "ort",
+			Start: protocol.Position{Line: 3, Character: 2},
+			End:   protocol.Position{Line: 5, Character: 2},
 		},
 	}
+	edit2 = protocol.TextEdit{
+		Range: protocol.Range{
+			Start: protocol.Position{Line: 5, Character: 20},
+			End:   protocol.Position{Line: 5, Character: 20},
+		},
+		NewText: "\"\n\t\"io\"\n\t\"os",
+	}
+	edit3 = protocol.TextEdit{Range: protocol.Range{
+		Start: protocol.Position{Line: 2, Character: 0},
+		End:   protocol.Position{Line: 2, Character: 6}},
+	}
+	edit4 = protocol.TextEdit{Range: protocol.Range{
+		Start: protocol.Position{Line: 2, Character: 6},
+		End:   protocol.Position{Line: 2, Character: 6}},
+		NewText: "imp",
+	}
+	edit5 = protocol.TextEdit{Range: protocol.Range{
+		Start: protocol.Position{Line: 2, Character: 6},
+		End:   protocol.Position{Line: 2, Character: 6}},
+		NewText: "ort",
+	}
+	edits1 = []protocol.TextEdit{edit1}
+	edits2 = []protocol.TextEdit{edit1, edit2}
+	edits3 = []protocol.TextEdit{edit3, edit4, edit5}
 )
 
 func makeFile() *file {
@@ -84,7 +87,7 @@ func TestApplyEdits(t *testing.T) {
 		input  string
 		ed     []protocol.TextEdit
 		output string
-	} {
+	}{
 		{"a", nil, "a"},
 		{fixture1, edits1, expected1},
 		{fixture1, edits2, expected2},
@@ -98,8 +101,27 @@ func TestApplyEdits(t *testing.T) {
 
 		var b editBuilder
 		b.init(makeFile(), editor.CellWriter(out.Writer()), cell.StringToCells(tcase.input))
-		b.applyEdits(tcase.ed)
+		edits := make([]protocol.TextEdit, len(tcase.ed))
+		copy(edits, tcase.ed)
+		b.applyEdits(edits)
 		assert.Equal(t, tcase.output, b.buf.String())
 		assert.Equal(t, tcase.output, out.String())
+	}
+}
+
+func TestSortEdits(t *testing.T) {
+	tsuite := []struct {
+		in  []protocol.TextEdit
+		out []protocol.TextEdit
+	}{
+		{edits1, edits1},
+		{edits2, []protocol.TextEdit{edit2, edit1}},
+		{edits3, []protocol.TextEdit{edit5, edit4, edit3}},
+	}
+	for _, tcase := range tsuite {
+		edits := make([]protocol.TextEdit, len(tcase.in))
+		copy(edits, tcase.in)
+		sortEdits(edits)
+		assert.Equal(t, tcase.out, edits)
 	}
 }

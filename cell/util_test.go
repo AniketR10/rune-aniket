@@ -65,7 +65,7 @@ public class Rotor {
 	brcells0 := bbuf.RawCells()
 	require.Equal(t, arcells0, brcells0)
 
-	afrom, ato := abuf.writer.Insert(insertAt, insertStr)
+	afrom, ato, _ := abuf.writer.Update(insertAt, insertAt, insertStr)
 	astr1 := abuf.String()
 	arcells1 := abuf.RawCells()
 
@@ -73,7 +73,7 @@ public class Rotor {
 	astr2 := abuf.String()
 	arcells2 := abuf.RawCells()
 
-	bfrom, bto := bbuf.writer.Insert(insertAt, insertStr)
+	bfrom, bto, _ := bbuf.writer.Update(insertAt, insertAt, insertStr)
 	bstr1 := bbuf.String()
 	brcells1 := bbuf.RawCells()
 

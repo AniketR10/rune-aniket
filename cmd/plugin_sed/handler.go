@@ -136,13 +136,9 @@ func (h *sedEditorHandler) writeHandlerContent(
 	hed editor.Handler, rows int, content string,
 ) error {
 	writer := h.ed.Writer(hed)
-	_, _, _, err := writer.Delete(term.Coordinates{}, term.Coordinates{Y: rows})
+	_, _, _, err := writer.Update(term.Coordinates{}, term.Coordinates{Y: rows}, content)
 	if err != nil {
 		return fmt.Errorf("Writer.Delete: %v", err)
-	}
-	_, _, err = writer.Insert(term.Coordinates{}, content)
-	if err != nil {
-		return fmt.Errorf("Writer.Insert: %v", err)
 	}
 	return nil
 }

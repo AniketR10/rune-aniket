@@ -119,25 +119,15 @@ type syncBuffer struct {
 	buf    *cell.Buffer
 }
 
-func (s syncBuffer) OnWillInsert(at term.Coordinates, str string) {
+func (s syncBuffer) OnWillUpdate(start, end term.Coordinates, str string) {
 	s.parent.mu.Lock()
 	defer s.parent.mu.Unlock()
-	s.buf.InsertString(at, str)
+	s.buf.Update(start, end, str)
 	s.parent.searchBar.dirty = true
 	s.parent.asyncSearch()
 }
 
-func (s syncBuffer) OnWillDelete(from, to term.Coordinates) {
-	s.parent.mu.Lock()
-	defer s.parent.mu.Unlock()
-	s.buf.Delete(from, to)
-	s.parent.searchBar.dirty = true
-	s.parent.asyncSearch()
-}
-
-func (s syncBuffer) OnDidDelete(start, end term.Coordinates, str string) {
-}
-func (s syncBuffer) OnDidInsert(from, to term.Coordinates) {
+func (s syncBuffer) OnDidUpdate(from, to term.Coordinates, old string) {
 }
 
 func addMatch(

@@ -48,17 +48,10 @@ type editorFlusherCloser struct {
 	lastFlush string
 }
 
-func (c editorFlusherCloser) OnWillInsert(at term.Coordinates, str string) {
+func (c editorFlusherCloser) OnWillUpdate(start, end term.Coordinates, str string) {
 }
 
-func (c editorFlusherCloser) OnDidInsert(from, to term.Coordinates) {
-	c.parent.setTabAttr(c.name, c.buf, c.lastFlush)
-}
-
-func (c editorFlusherCloser) OnWillDelete(from, to term.Coordinates) {
-}
-
-func (c editorFlusherCloser) OnDidDelete(start, end term.Coordinates, str string) {
+func (c editorFlusherCloser) OnDidUpdate(from, to term.Coordinates, old string) {
 	c.parent.setTabAttr(c.name, c.buf, c.lastFlush)
 }
 
@@ -610,9 +603,8 @@ func (c *Component) SubscribeEditorEvents(evs []EventType, h EventHandler) error
 	var delegated []EventType
 	for _, ev := range evs {
 		switch ev {
-		// delegate open/insert/delete event dispatching to underlying editor.
-		case EventTypeOpen, EventTypeDelete,
-			EventTypeInsert, EventTypeScroll, EventTypeCursor:
+		// delegate certain event dispatching to underlying editor.
+		case EventTypeOpen, EventTypeUpdate, EventTypeScroll, EventTypeCursor:
 			delegated = append(delegated, ev)
 		default:
 			if _, ok := c.edSubscribers[ev]; !ok {

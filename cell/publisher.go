@@ -17,28 +17,15 @@ func newPublisher(w Writer) *syncPublisher {
 	return p
 }
 
-func (p *syncPublisher) Delete(from, to term.Coordinates) (
-	start, end term.Coordinates, str string,
+func (p *syncPublisher) Update(start, end term.Coordinates, str string) (
+	from, to term.Coordinates, old string,
 ) {
 	for _, sub := range p.subscribers {
-		sub.OnWillDelete(from, to)
+		sub.OnWillUpdate(start, end, str)
 	}
-	start, end, str = p.w.Delete(from, to)
+	from, to, old = p.w.Update(start, end, str)
 	for _, sub := range p.subscribers {
-		sub.OnDidDelete(start, end, str)
-	}
-	return
-}
-
-func (p *syncPublisher) Insert(at term.Coordinates, str string) (
-	from, to term.Coordinates,
-) {
-	for _, sub := range p.subscribers {
-		sub.OnWillInsert(at, str)
-	}
-	from, to = p.w.Insert(at, str)
-	for _, sub := range p.subscribers {
-		sub.OnDidInsert(from, to)
+		sub.OnDidUpdate(from, to, old)
 	}
 	return
 }

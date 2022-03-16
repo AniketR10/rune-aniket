@@ -68,8 +68,7 @@ var (
 		editor.EventTypeClose,
 		editor.EventTypeFlush,
 		editor.EventTypeOpen,
-		editor.EventTypeInsert,
-		editor.EventTypeDelete,
+		editor.EventTypeUpdate,
 	}
 	lspHandlerPermissions = []plugin.Permission{
 		plugin.PermissionBrowserWindowManager,
@@ -1011,7 +1010,7 @@ func (h *lspEditorHandler) handleFileFlush(ev editor.Event) {
 	go h.semanticTokensFull(ctx, srv, f, h.getCells(f), ev.Content)
 }
 
-func (h *lspEditorHandler) handleFileUpdate(ev editor.Event, fn func(*cell.Buffer) string) {
+func (h *lspEditorHandler) handleFileUpdate(ev editor.Event) {
 	ctx := context.Background()
 	ctx, cancelFn := context.WithTimeout(ctx, h.rpcTimeout)
 	defer cancelFn()
@@ -1042,9 +1041,10 @@ func (h *lspEditorHandler) handleFileUpdate(ev editor.Event, fn func(*cell.Buffe
 
 	oldCells := h.getCells(f)
 	buf := cell.CellsToBuffer(oldCells)
-	content := fn(buf)
+	buf.Update(ev.Start, ev.End, ev.Content)
 	newCells := buf.RawCells()
-	_, err := h.sendIncrementalUpdate(ctx, srv, f, newCells, oldCells, content, ev.From, ev.To)
+	_, err := h.sendIncrementalUpdate(ctx, srv, f, newCells, oldCells,
+		ev.Content, ev.Start, ev.End)
 	h.setCells(f, newCells)
 	if err != nil {
 		return
@@ -1052,20 +1052,6 @@ func (h *lspEditorHandler) handleFileUpdate(ev editor.Event, fn func(*cell.Buffe
 
 	ctx = h.newSemanticTokensCtx()
 	go h.semanticTokensFull(ctx, srv, f, newCells, buf.String())
-}
-
-func (h *lspEditorHandler) handleFileInsert(ev editor.Event) {
-	h.handleFileUpdate(ev, func(buf *cell.Buffer) string {
-		buf.InsertString(ev.Start, ev.Content)
-		return ev.Content
-	})
-}
-
-func (h *lspEditorHandler) handleFileDelete(ev editor.Event) {
-	h.handleFileUpdate(ev, func(buf *cell.Buffer) string {
-		buf.Delete(ev.From, ev.To)
-		return ""
-	})
 }
 
 func (h *lspEditorHandler) handleFileOpen(ev editor.Event) {
@@ -1783,10 +1769,8 @@ func (h *lspEditorHandler) handleEvents(ch chan editor.Event) {
 			h.handleFileClose(ev)
 		case editor.EventTypeFlush:
 			h.handleFileFlush(ev)
-		case editor.EventTypeInsert:
-			h.handleFileInsert(ev)
-		case editor.EventTypeDelete:
-			h.handleFileDelete(ev)
+		case editor.EventTypeUpdate:
+			h.handleFileUpdate(ev)
 		}
 
 		if log.IsLevelEnabled(log.TraceLevel) {

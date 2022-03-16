@@ -24,13 +24,11 @@ func WithCopyDelete(registerID string, clipboard Clipboard, cur *Cursor, buf *ce
 	buf.SubscribeUsage(c)
 }
 
-func (c *delClip) OnWillInsert(at term.Coordinates, str string) {
-}
+func (c *delClip) OnWillUpdate(start, end term.Coordinates, str string) {
+	if start == end {
+		return
+	}
 
-func (c *delClip) OnDidInsert(from, to term.Coordinates) {
-}
-
-func (c *delClip) OnWillDelete(from, to term.Coordinates) {
 	var ok bool
 	c.mode, ok = c.cur.SelectionMode()
 	if !ok {
@@ -38,7 +36,9 @@ func (c *delClip) OnWillDelete(from, to term.Coordinates) {
 	}
 }
 
-func (c *delClip) OnDidDelete(start, end term.Coordinates, str string) {
-	c.clipboard.Copy(c.registerID, ClipboardData{Text: str, Metadata: c.mode})
+func (c *delClip) OnDidUpdate(from, to term.Coordinates, old string) {
+	if old != "" {
+		c.clipboard.Copy(c.registerID, ClipboardData{Text: old, Metadata: c.mode})
+	}
 	return
 }

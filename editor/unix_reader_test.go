@@ -96,7 +96,7 @@ func TestUnixFile(t *testing.T) {
 			c := cell.NewBuffer()
 			bytes, err := ioutil.ReadAll(tcase.input)
 			require.NoError(t, err)
-			c.InsertString(term.Coordinates{}, string(bytes))
+			c.Update(term.Coordinates{}, term.Coordinates{}, string(bytes))
 
 			reader := newUnixFileReader(c)
 

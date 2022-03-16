@@ -166,7 +166,7 @@ func TestPublisher(t *testing.T) {
 		assert.Equal(t, term.Coordinates{Y: 1}, at)
 	})
 
-	t.Run("dispatches EventTypeInsert when buffer content is inserted", func(t *testing.T) {
+	t.Run("dispatches EventTypeUpdate when buffer content is inserted", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		pub := NewPublisher()
 		buf, _, cursor := newEdit("\n\n")
@@ -175,12 +175,12 @@ func TestPublisher(t *testing.T) {
 		h.Resize(2, 2)
 
 		var called bool
-		pub.SubscribeEditorEvents([]EventType{EventTypeInsert},
+		pub.SubscribeEditorEvents([]EventType{EventTypeUpdate},
 			FuncEventHandler(func(ctx context.Context, ev Event) bool {
 				called = true
-				require.Equal(t, EventTypeInsert, ev.Type)
+				require.Equal(t, EventTypeUpdate, ev.Type)
 				assert.Equal(t, term.Coordinates{Y: 2}, ev.Start, "Start")
-				assert.Equal(t, term.Coordinates{Y: 2, X: 8}, ev.End, "End")
+				assert.Equal(t, term.Coordinates{Y: 2}, ev.End, "End")
 				assert.Equal(t, term.Coordinates{Y: 2}, ev.From, "From")
 				assert.Equal(t, term.Coordinates{Y: 2, X: 12}, ev.To, "To")
 				assert.Equal(t, "zsh", ev.ResourceName)
@@ -193,7 +193,7 @@ func TestPublisher(t *testing.T) {
 		require.True(t, called)
 	})
 
-	t.Run("dispatches EventTypeDelete when buffer content is deleted", func(t *testing.T) {
+	t.Run("dispatches EventTypeUpdate when buffer content is deleted", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		pub := NewPublisher()
 		buf, _, cursor := newEdit("aaa\nbbb")
@@ -202,17 +202,17 @@ func TestPublisher(t *testing.T) {
 		h.Resize(2, 2)
 
 		var called bool
-		pub.SubscribeEditorEvents([]EventType{EventTypeDelete},
+		pub.SubscribeEditorEvents([]EventType{EventTypeUpdate},
 			FuncEventHandler(func(ctx context.Context, ev Event) bool {
 				called = true
-				require.Equal(t, EventTypeDelete, ev.Type)
+				require.Equal(t, EventTypeUpdate, ev.Type)
 				assert.Equal(t, term.Coordinates{}, ev.Start, "Start")
 				assert.Equal(t, term.Coordinates{Y: 1}, ev.End, "End")
 				assert.Equal(t, term.Coordinates{}, ev.From, "From")
-				assert.Equal(t, term.Coordinates{Y: 1}, ev.To, "To")
+				assert.Equal(t, term.Coordinates{}, ev.To, "To")
 				assert.Equal(t, "zsh", ev.ResourceName)
 				assert.Equal(t, h, ev.Resource)
-				assert.Equal(t, "aaa\n", ev.Content)
+				assert.Equal(t, "", ev.Content)
 				return false
 			}))
 

@@ -13,10 +13,12 @@ import (
 //
 // Subscribers constructors SHOULD subscribe to a Publisher upon initialization.
 type Subscriber interface {
-	OnWillInsert(at term.Coordinates, str string)
-	OnDidInsert(from, to term.Coordinates)
-	OnWillDelete(from, to term.Coordinates)
-	OnDidDelete(start, end term.Coordinates, str string)
+	// OnWillUpdate start, end and str correspond the input values
+	// to an imminent call to Update.
+	OnWillUpdate(start, end term.Coordinates, str string)
+	// OnDidUpdate from, to and old correspond to the return values
+	// of a call to Update. See cell.Writer.Update for more details.
+	OnDidUpdate(from, to term.Coordinates, old string)
 }
 
 // Publisher is the interface that wraps the Subscribe method.

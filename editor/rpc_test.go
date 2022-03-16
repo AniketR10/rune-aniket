@@ -151,21 +151,21 @@ func TestClientServerIntegration(t *testing.T) {
 				}, nil, nil, nil,
 			},
 			{
-				"Edit->EventTypeInsert",
-				EventTypeInsert,
+				"Edit->EventTypeUpdate",
+				EventTypeUpdate,
 				func(t *testing.T, resourceName string, ed Editor, buf *cell.Buffer) {
 					ed.Edit(resourceName, buf)
 					buf.WriteString(str1)
-				}, &term.Coordinates{}, &term.Coordinates{X: 11}, &str1,
+				}, &term.Coordinates{}, &term.Coordinates{}, &str1,
 			},
 			{
-				"Edit->EventTypeDelete",
-				EventTypeDelete,
+				"Edit->EventTypeUpdate",
+				EventTypeUpdate,
 				func(t *testing.T, resourceName string, ed Editor, buf *cell.Buffer) {
 					buf.WriteString(str1)
 					ed.Edit(resourceName, buf)
 					buf.DeleteRow(0)
-				}, &term.Coordinates{}, &term.Coordinates{Y: 1}, &str1,
+				}, &term.Coordinates{}, &term.Coordinates{Y: 1}, nil,
 			},
 			{
 				"Handle->EventTypeCursor",
@@ -270,22 +270,24 @@ func TestClientServerIntegration(t *testing.T) {
 		h, err := client.Edit("locotron", buf)
 		require.NoError(t, err)
 
-		ed.EXPECT().Writer(gomock.Any()).Return(CellWriter(buf.Writer())).Times(2)
-
 		w := client.Writer(h)
-		from, to, err := w.Insert(term.Coordinates{X: 1}, "el\nAridio")
+		at := term.Coordinates{X: 1}
+
+		ed.EXPECT().Writer(gomock.Any()).Return(CellWriter(buf.Writer())).Times(1)
+		from, to, _, err := w.Update(at, at, "el\nAridio")
+
 		require.NoError(t, err)
-		assert.Equal(t, term.Coordinates{}, from)
-		assert.Equal(t, term.Coordinates{X: 6, Y: 1}, to)
+		require.Equal(t, term.Coordinates{}, from)
+		require.Equal(t, term.Coordinates{X: 6, Y: 1}, to)
+		require.Equal(t, " el\nAridio", buf.String())
 
-		assert.Equal(t, " el\nAridio", buf.String())
+		ed.EXPECT().Writer(gomock.Any()).Return(CellWriter(buf.Writer())).Times(1)
+		start, end, str, err := w.Update(term.Coordinates{}, term.Coordinates{Y: 1}, "")
 
-		start, end, str, err := w.Delete(term.Coordinates{}, term.Coordinates{Y: 1})
 		require.NoError(t, err)
 		assert.Equal(t, term.Coordinates{}, start)
-		assert.Equal(t, term.Coordinates{Y: 1}, end)
+		assert.Equal(t, term.Coordinates{}, end)
 		assert.Equal(t, " el\n", str)
-
 		assert.Equal(t, "Aridio", buf.String())
 	})
 

@@ -67,18 +67,10 @@ func (e *interruptEditor) MoveToPrevLocation(ctx context.Context, req *proto.Mov
 	return res, err
 
 }
-func (e *interruptEditor) Insert(ctx context.Context, req *proto.InsertRequest) (
-	*proto.InsertResponse, error,
+func (e *interruptEditor) Update(ctx context.Context, req *proto.UpdateRequest) (
+	*proto.UpdateResponse, error,
 ) {
-	res, err := e.EditorServer.Insert(ctx, req)
-	e.interruptDraw()
-	return res, err
-
-}
-func (e *interruptEditor) Delete(ctx context.Context, req *proto.DeleteRequest) (
-	*proto.DeleteResponse, error,
-) {
-	res, err := e.EditorServer.Delete(ctx, req)
+	res, err := e.EditorServer.Update(ctx, req)
 	e.interruptDraw()
 	return res, err
 

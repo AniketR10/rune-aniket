@@ -33,8 +33,7 @@ type EditorClient interface {
 	MoveToNextLocation(ctx context.Context, in *MoveToLocationRequest, opts ...grpc.CallOption) (*MoveToLocationResponse, error)
 	MoveToPrevLocation(ctx context.Context, in *MoveToLocationRequest, opts ...grpc.CallOption) (*MoveToLocationResponse, error)
 	// Writer
-	Insert(ctx context.Context, in *InsertRequest, opts ...grpc.CallOption) (*InsertResponse, error)
-	Delete(ctx context.Context, in *DeleteRequest, opts ...grpc.CallOption) (*DeleteResponse, error)
+	Update(ctx context.Context, in *UpdateRequest, opts ...grpc.CallOption) (*UpdateResponse, error)
 	// Reader
 	RawCells(ctx context.Context, in *RawCellsRequest, opts ...grpc.CallOption) (*RawCellsResponse, error)
 }
@@ -128,18 +127,9 @@ func (c *editorClient) MoveToPrevLocation(ctx context.Context, in *MoveToLocatio
 	return out, nil
 }
 
-func (c *editorClient) Insert(ctx context.Context, in *InsertRequest, opts ...grpc.CallOption) (*InsertResponse, error) {
-	out := new(InsertResponse)
-	err := c.cc.Invoke(ctx, "/proto.Editor/Insert", in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *editorClient) Delete(ctx context.Context, in *DeleteRequest, opts ...grpc.CallOption) (*DeleteResponse, error) {
-	out := new(DeleteResponse)
-	err := c.cc.Invoke(ctx, "/proto.Editor/Delete", in, out, opts...)
+func (c *editorClient) Update(ctx context.Context, in *UpdateRequest, opts ...grpc.CallOption) (*UpdateResponse, error) {
+	out := new(UpdateResponse)
+	err := c.cc.Invoke(ctx, "/proto.Editor/Update", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -170,8 +160,7 @@ type EditorServer interface {
 	MoveToNextLocation(context.Context, *MoveToLocationRequest) (*MoveToLocationResponse, error)
 	MoveToPrevLocation(context.Context, *MoveToLocationRequest) (*MoveToLocationResponse, error)
 	// Writer
-	Insert(context.Context, *InsertRequest) (*InsertResponse, error)
-	Delete(context.Context, *DeleteRequest) (*DeleteResponse, error)
+	Update(context.Context, *UpdateRequest) (*UpdateResponse, error)
 	// Reader
 	RawCells(context.Context, *RawCellsRequest) (*RawCellsResponse, error)
 	mustEmbedUnimplementedEditorServer()
@@ -208,11 +197,8 @@ func (UnimplementedEditorServer) MoveToNextLocation(context.Context, *MoveToLoca
 func (UnimplementedEditorServer) MoveToPrevLocation(context.Context, *MoveToLocationRequest) (*MoveToLocationResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method MoveToPrevLocation not implemented")
 }
-func (UnimplementedEditorServer) Insert(context.Context, *InsertRequest) (*InsertResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method Insert not implemented")
-}
-func (UnimplementedEditorServer) Delete(context.Context, *DeleteRequest) (*DeleteResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method Delete not implemented")
+func (UnimplementedEditorServer) Update(context.Context, *UpdateRequest) (*UpdateResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Update not implemented")
 }
 func (UnimplementedEditorServer) RawCells(context.Context, *RawCellsRequest) (*RawCellsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RawCells not implemented")
@@ -392,38 +378,20 @@ func _Editor_MoveToPrevLocation_Handler(srv interface{}, ctx context.Context, de
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Editor_Insert_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(InsertRequest)
+func _Editor_Update_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(EditorServer).Insert(ctx, in)
+		return srv.(EditorServer).Update(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/proto.Editor/Insert",
+		FullMethod: "/proto.Editor/Update",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(EditorServer).Insert(ctx, req.(*InsertRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _Editor_Delete_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(DeleteRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(EditorServer).Delete(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/proto.Editor/Delete",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(EditorServer).Delete(ctx, req.(*DeleteRequest))
+		return srv.(EditorServer).Update(ctx, req.(*UpdateRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -490,12 +458,8 @@ var Editor_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _Editor_MoveToPrevLocation_Handler,
 		},
 		{
-			MethodName: "Insert",
-			Handler:    _Editor_Insert_Handler,
-		},
-		{
-			MethodName: "Delete",
-			Handler:    _Editor_Delete_Handler,
+			MethodName: "Update",
+			Handler:    _Editor_Update_Handler,
 		},
 		{
 			MethodName: "RawCells",

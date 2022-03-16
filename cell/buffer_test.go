@@ -207,9 +207,8 @@ func TestBufferDelete(t *testing.T) {
 		_, err := b.ReadFrom(strings.NewReader("bla\nbleh"))
 		require.NoError(t, err)
 
-		start, end, str := b.Delete(term.Coordinates{}, term.Coordinates{Y: 1})
+		start, str := b.Delete(term.Coordinates{}, term.Coordinates{Y: 1})
 		assert.Equal(t, term.Coordinates{}, start)
-		assert.Equal(t, term.Coordinates{Y: 1}, end)
 		assert.Equal(t, "bla\n", str)
 	})
 
@@ -218,9 +217,8 @@ func TestBufferDelete(t *testing.T) {
 		_, err := b.ReadFrom(strings.NewReader("bla\nbleh"))
 		require.NoError(t, err)
 
-		start, end, str := b.Delete(term.Coordinates{Y: 1}, term.Coordinates{Y: 2})
+		start, str := b.Delete(term.Coordinates{Y: 1}, term.Coordinates{Y: 2})
 		assert.Equal(t, term.Coordinates{Y: 1}, start)
-		assert.Equal(t, term.Coordinates{Y: 2}, end)
 		assert.Equal(t, "bleh", str)
 	})
 
@@ -239,9 +237,8 @@ func TestBufferDelete(t *testing.T) {
 		_, err := b.ReadFrom(strings.NewReader("bla\nbleh"))
 		require.NoError(t, err)
 
-		start, end, str := b.Delete(term.Coordinates{X: 10}, term.Coordinates{X: 11})
+		start, str := b.Delete(term.Coordinates{X: 10}, term.Coordinates{X: 11})
 		assert.Equal(t, term.Coordinates{X: 3}, start)
-		assert.Equal(t, term.Coordinates{X: 3}, end)
 		assert.Equal(t, "", str)
 	})
 
@@ -250,9 +247,8 @@ func TestBufferDelete(t *testing.T) {
 		_, err := b.ReadFrom(strings.NewReader("bla\nbleh"))
 		require.NoError(t, err)
 
-		start, end, str := b.Delete(term.Coordinates{Y: 1}, term.Coordinates{Y: 1, X: 11})
+		start, str := b.Delete(term.Coordinates{Y: 1}, term.Coordinates{Y: 1, X: 11})
 		assert.Equal(t, term.Coordinates{Y: 1}, start)
-		assert.Equal(t, term.Coordinates{Y: 1, X: 4}, end)
 		assert.Equal(t, "bleh", str)
 	})
 
@@ -261,9 +257,8 @@ func TestBufferDelete(t *testing.T) {
 		_, err := b.ReadFrom(strings.NewReader("bla\nbleh"))
 		require.NoError(t, err)
 
-		start, end, str := b.Delete(term.Coordinates{Y: 1, X: 11}, term.Coordinates{Y: 2, X: 10})
+		start, str := b.Delete(term.Coordinates{Y: 1, X: 11}, term.Coordinates{Y: 2, X: 10})
 		assert.Equal(t, term.Coordinates{}, start)
-		assert.Equal(t, term.Coordinates{}, end)
 		assert.Equal(t, "", str)
 	})
 }
@@ -281,26 +276,15 @@ func TestBufferInsertString(t *testing.T) {
 }
 
 type testSubscriber struct {
-	onDidInsert, onDidDelete, onWillInsert, onWillDelete int
+	onDidUpdate, onWillUpdate int
 }
 
-func (t *testSubscriber) OnWillInsert(at term.Coordinates, str string) {
-	t.onWillInsert++
+func (t *testSubscriber) OnWillUpdate(from, to term.Coordinates, str string) {
+	t.onWillUpdate++
 }
 
-func (t *testSubscriber) OnDidInsert(from, to term.Coordinates) {
-	t.onDidInsert++
-}
-
-func (t *testSubscriber) OnWillDelete(from, to term.Coordinates) {
-	t.onWillDelete++
-}
-
-func (t *testSubscriber) OnDidDelete(start, end term.Coordinates, str string) {
-	t.onDidDelete++
-}
-
-func (t *testSubscriber) Unsubscribe() {
+func (t *testSubscriber) OnDidUpdate(start, end term.Coordinates, old string) {
+	t.onDidUpdate++
 }
 
 func TestBufferReset(t *testing.T) {
@@ -324,11 +308,9 @@ func TestBufferReset(t *testing.T) {
 		b.Reset()
 		b.InsertRowAt(0)
 		b.DeleteRow(0)
-		assert.Equal(t, 1, sub.onDidInsert)
-		assert.Equal(t, 1, sub.onWillInsert)
-		// 1 reset + 1 delete
-		assert.Equal(t, 2, sub.onWillDelete)
-		assert.Equal(t, 2, sub.onWillDelete)
+		// 1 reset + 1 delete + 1 insert
+		assert.Equal(t, 3, sub.onDidUpdate)
+		assert.Equal(t, 3, sub.onWillUpdate)
 	})
 
 	t.Run("does reset undo", func(t *testing.T) {
@@ -390,9 +372,8 @@ func TestBufferDeleteLine(t *testing.T) {
 		b := NewBuffer()
 		b.WriteString(tcase.input)
 
-		start, end, str := b.DeleteLine(tcase.from, tcase.to)
+		start, str := b.DeleteLine(tcase.from, tcase.to)
 		assert.Equal(t, tcase.start, start)
-		assert.Equal(t, tcase.end, end)
 		assert.Equal(t, tcase.output, str)
 	}
 }
@@ -434,9 +415,8 @@ func TestBufferDeleteBlock(t *testing.T) {
 		b := NewBuffer()
 		b.WriteString(tcase.input)
 
-		start, end, str := b.DeleteBlock(tcase.from, tcase.to)
+		start, str := b.DeleteBlock(tcase.from, tcase.to)
 		assert.Equal(t, tcase.start, start)
-		assert.Equal(t, tcase.end, end)
 		assert.Equal(t, tcase.str, str)
 	}
 
@@ -478,9 +458,8 @@ diff_buf_adjust(win_T *win)
 
 		assert.Equal(t, str, b.String())
 		to := term.Coordinates{X: 89, Y: 30}
-		start, end, _ := b.DeleteBlock(term.Coordinates{}, to)
+		start, _ := b.DeleteBlock(term.Coordinates{}, to)
 		assert.Equal(t, term.Coordinates{}, start)
-		assert.Equal(t, to, end)
 	})
 
 	t.Run("does not OOB for lines that are shorter than from", func(t *testing.T) {
@@ -522,9 +501,8 @@ d
 		assert.Equal(t, str, b.String())
 		to := term.Coordinates{X: 1, Y: 0}
 		from := term.Coordinates{X: 89, Y: 30}
-		start, end, _ := b.DeleteBlock(from, to)
+		start, _ := b.DeleteBlock(from, to)
 		assert.Equal(t, to, start)
-		assert.Equal(t, from, end)
 
 		assert.Equal(t, expected, b.String())
 	})
@@ -588,10 +566,8 @@ func TestBufferSubscribe(t *testing.T) {
 	buf.Subscribe(two)
 
 	buf.WriteString("\n")
-	assert.Equal(t, 1, one.onWillInsert)
-	assert.Equal(t, 1, one.onDidInsert)
-	assert.Equal(t, 1, two.onWillInsert)
-	assert.Equal(t, 1, two.onDidInsert)
+	assert.Equal(t, 1, one.onWillUpdate)
+	assert.Equal(t, 1, one.onDidUpdate)
 }
 
 func TestBufferInsertWithAttr(t *testing.T) {

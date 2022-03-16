@@ -21,13 +21,12 @@ message EditorEvent {
 	TypeOpen = 0;
 	TypeClose = 1;
 	TypeFlush = 2;
-	TypeInsert = 3;
-	TypeDelete = 4;
-	TypeCommand = 5;
-	TypeScroll = 6;
-	TypeFocus = 7;
-	TypeUnfocus = 8;
-	TypeCursor = 9;
+	TypeUpdate = 3;
+	TypeCommand = 4;
+	TypeScroll = 5;
+	TypeFocus = 6;
+	TypeUnfocus = 7;
+	TypeCursor = 8;
   }
 
   Type type = 1;
@@ -64,27 +63,17 @@ message SetLocationListRequest {
 
 message SetLocationListResponse {}
 
-message InsertRequest {
+message UpdateRequest {
 	uint32 handler_id = 1;
-	Coordinates at = 2;
-	string str = 3;
+	Coordinates start = 2;
+	Coordinates end = 3;
+	string str = 4;
 }
 
-message InsertResponse {
+message UpdateResponse {
 	Coordinates from = 1;
 	Coordinates to = 2;
-}
-
-message DeleteRequest {
-	uint32 handler_id = 1;
-	Coordinates from = 2;
-	Coordinates to = 3;
-}
-
-message DeleteResponse {
-	Coordinates start = 1;
-	Coordinates end = 2;
-	string str = 3;
+	string old = 3;
 }
 
 message RawCellsRequest {
@@ -149,8 +138,7 @@ service Editor {
 
 
 	// Writer
-	rpc Insert(InsertRequest) returns (InsertResponse);
-	rpc Delete(DeleteRequest) returns (DeleteResponse);
+	rpc Update(UpdateRequest) returns (UpdateResponse);
 
 	// Reader
 	rpc RawCells(RawCellsRequest) returns (RawCellsResponse);

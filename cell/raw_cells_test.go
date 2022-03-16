@@ -4,8 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
-	"os"
 	"strings"
 	"testing"
 
@@ -40,22 +38,24 @@ func TestRawCellsInsertMiddlePadding(t *testing.T) {
 
 	from := term.Coordinates{X: 0, Y: 1}
 	to := term.Coordinates{Y: 2}
-	start, end, str := c.Delete(from, to)
+	start, end, str := c.Update(from, to, "")
 	assert.Equal(t, from, start)
-	assert.Equal(t, to, end)
+	assert.Equal(t, from, end)
 	assert.Equal(t, "\tb\n", str)
 	require.Equal(t, "{\n\tc\n}\n", c.String())
 
-	from, to = c.Insert(term.Coordinates{X: 1, Y: 1}, "\tb\n")
+	at := term.Coordinates{X: 1, Y: 1}
+	from, to, _ = c.Update(at, at, "\tb\n")
 	assert.Equal(t, term.Coordinates{X: 0, Y: 1}, from)
 	assert.Equal(t, term.Coordinates{X: 0, Y: 2}, to)
 
-	start, end, str = c.Delete(from, to)
+	start, end, str = c.Update(from, to, "")
 	assert.Equal(t, term.Coordinates{X: 0, Y: 1}, start)
-	assert.Equal(t, term.Coordinates{Y: 2}, end)
+	assert.Equal(t, term.Coordinates{Y: 1, X: 0}, end)
 	assert.Equal(t, "\tb\n", str)
 
-	from, to = c.Insert(term.Coordinates{X: 0, Y: 1}, "\tb\n")
+	at = term.Coordinates{X: 0, Y: 1}
+	from, to, _ = c.Update(at, at, "\tb\n")
 	assert.Equal(t, term.Coordinates{X: 0, Y: 1}, from)
 	assert.Equal(t, term.Coordinates{Y: 2}, to)
 	assert.Equal(t, fixtureCells, c.RawCells())
@@ -79,17 +79,17 @@ func TestRawCellsPanicsNegativeCoordinates(t *testing.T) {
 
 		t.Run("insert()", func(t *testing.T) {
 			assert.Panics(t, func() {
-				c.Insert(pos, "r")
+				c.Update(pos, pos, "r")
 			})
 		})
 		t.Run("delete(from)", func(t *testing.T) {
 			assert.Panics(t, func() {
-				c.Delete(pos, term.Coordinates{X: 0, Y: 2})
+				c.Update(pos, term.Coordinates{X: 0, Y: 2}, "")
 			})
 		})
 		t.Run("delete(until)", func(t *testing.T) {
 			assert.Panics(t, func() {
-				c.Delete(term.Coordinates{X: 0, Y: 2}, pos)
+				c.Update(term.Coordinates{X: 0, Y: 2}, pos, "")
 			})
 		})
 	}
@@ -278,10 +278,11 @@ Love isn't love 'til you give it away.
 			require.NoError(t, err)
 		}
 
-		actualFrom, actualTo := c.Insert(tcase.inputAt, tcase.inputStr)
+		actualFrom, actualTo, actualOld := c.Update(tcase.inputAt, tcase.inputAt, tcase.inputStr)
 		assert.Equal(t, tcase.expectedFrom, actualFrom, "test case %d", i)
 		assert.Equal(t, tcase.expectedTo, actualTo, "test case %d", i)
 		assert.Equal(t, tcase.expectedRawCells, c.String())
+		assert.Zero(t, actualOld)
 	}
 }
 
@@ -411,9 +412,8 @@ Love isn't love 'til you give it away.
 			expectedRawCells: "",
 			inputFrom:        term.Coordinates{Y: 6},
 			inputTo:          term.Coordinates{},
-			// returns inverted from/to
 			expectedStart: &term.Coordinates{},
-			expectedEnd:   &term.Coordinates{Y: 6},
+			expectedEnd:   &term.Coordinates{},
 		},
 		{
 			expectedStr:      baseRawCells,
@@ -453,7 +453,6 @@ Love isn't love 'til you give it away.
 			expectedRawCells:     "b",
 			inputFrom:            term.Coordinates{},
 			inputTo:              term.Coordinates{X: 2},
-			expectedEnd:          &term.Coordinates{X: 5},
 		},
 		{
 			overrideBaseRawCells: "aa\tb",
@@ -462,7 +461,7 @@ Love isn't love 'til you give it away.
 			inputFrom:            term.Coordinates{X: 3},
 			inputTo:              term.Coordinates{X: 4},
 			expectedStart:        &term.Coordinates{X: 2},
-			expectedEnd:          &term.Coordinates{X: 6},
+			expectedEnd:          &term.Coordinates{X: 2},
 		},
 		{
 			overrideBaseRawCells: "a\n\tb",
@@ -470,7 +469,6 @@ Love isn't love 'til you give it away.
 			expectedRawCells:     "b",
 			inputFrom:            term.Coordinates{},
 			inputTo:              term.Coordinates{Y: 1, X: 2},
-			expectedEnd:          &term.Coordinates{Y: 1, X: 4},
 		},
 		{
 			overrideBaseRawCells: "a\n\tb\n\tc",
@@ -479,7 +477,7 @@ Love isn't love 'til you give it away.
 			inputFrom:            term.Coordinates{Y: 1, X: 2},
 			inputTo:              term.Coordinates{Y: 2, X: 3},
 			expectedStart:        &term.Coordinates{Y: 1, X: 0},
-			expectedEnd:          &term.Coordinates{Y: 2, X: 4},
+			expectedEnd:          &term.Coordinates{Y: 1, X: 0},
 		},
 		{
 			overrideBaseRawCells: "\t\t\ta",
@@ -488,7 +486,7 @@ Love isn't love 'til you give it away.
 			inputFrom:            term.Coordinates{X: 5},
 			inputTo:              term.Coordinates{X: 6},
 			expectedStart:        &term.Coordinates{X: 4},
-			expectedEnd:          &term.Coordinates{X: 8},
+			expectedEnd:          &term.Coordinates{X: 4},
 		},
 		{
 			overrideBaseRawCells: "\t\t\ta",
@@ -497,7 +495,7 @@ Love isn't love 'til you give it away.
 			inputFrom:            term.Coordinates{X: 3},
 			inputTo:              term.Coordinates{X: 4},
 			expectedStart:        &term.Coordinates{X: 0},
-			expectedEnd:          &term.Coordinates{X: 4},
+			expectedEnd:          &term.Coordinates{X: 0},
 		},
 		{
 			overrideBaseRawCells: "\t\t\ta",
@@ -520,7 +518,7 @@ Love isn't love 'til you give it away.
 			inputFrom:            term.Coordinates{X: 2, Y: 1},
 			inputTo:              term.Coordinates{X: 1},
 			expectedStart:        &term.Coordinates{X: 1},
-			expectedEnd:          &term.Coordinates{X: 2, Y: 1},
+			expectedEnd:          &term.Coordinates{X: 1},
 		},
 		{
 			overrideBaseRawCells: "\t\n",
@@ -543,7 +541,7 @@ Love isn't love 'til you give it away.
 			_, err := c.ReadFrom(strings.NewReader(base))
 			require.NoError(t, err)
 
-			actualStart, actualEnd, actualStr := c.Delete(tcase.inputFrom, tcase.inputTo)
+			actualStart, actualEnd, actualStr := c.Update(tcase.inputFrom, tcase.inputTo, "")
 			assert.Equal(t, tcase.expectedStr, actualStr,
 				"expected return string")
 			assert.Equal(t, tcase.expectedRawCells, c.String(),
@@ -553,17 +551,16 @@ Love isn't love 'til you give it away.
 				tcase.expectedStart = &tcase.inputFrom
 			}
 			if tcase.expectedEnd == nil {
-				tcase.expectedEnd = &tcase.inputTo
+				tcase.expectedEnd = &tcase.inputFrom
 			}
 			assert.Equal(t, *tcase.expectedStart, actualStart)
 			assert.Equal(t, *tcase.expectedEnd, actualEnd)
 
 			// test symmetry
-			from, to := c.Insert(actualStart, actualStr)
-			assert.Equal(t, actualStart, from)
-			assertEquivalentEnd(t, &c, actualEnd, to)
+			_, _, old := c.Update(actualStart, actualEnd, actualStr)
 			assert.Equal(t, base, c.String(),
 				"insert was not able to reverse delete")
+			assert.Zero(t, old)
 		})
 	}
 }
@@ -605,32 +602,27 @@ func TestRawCellsCell(t *testing.T) {
 	assert.False(t, ok)
 }
 
-func TestRawCellsInsertDeleteSymmetry(t *testing.T) {
-	// enable if want to brute-test insert/delete symmetry
-	t.SkipNow()
+func TestRawCellsUpdateSymmetryBug(t *testing.T) {
+	b := newBufferWithContent(t, longStr)
+	from := term.Coordinates{X: 4, Y: 2}
+	to := term.Coordinates{X: from.X + 1, Y: from.Y}
+	from, to, ok := fromToInBounds(b.cells, from, to)
+	require.True(t, ok)
+	start, end, str := b.writer.Update(from, to, "")
+	require.NotZero(t, str)
+	assert.Equal(t, term.Coordinates{X: 4, Y: 2}, start)
+	assert.Equal(t, term.Coordinates{X: 4, Y: 2}, end)
 
-	file, err := os.Open("raw_cells_test.go")
-	require.NoError(t, err)
-	defer file.Close()
+	expectedStr := `Love in your heart wasn't put there to stay.
+Love isn't love 'til you give it away.
+	-- Oscar Hammerstein 中国`
+	assert.Equal(t, expectedStr, b.String())
 
-	var r rawCells
-	r.init(defTabSpaces)
-	r.ReadFrom(file)
-
-	cells := r.RawCells()
-	for i, row := range cells {
-		for j := range row {
-			start, end, str := r.Delete(term.Coordinates{}, term.Coordinates{X: j, Y: i})
-			from, to := r.Insert(start, str)
-			assert.Equal(t, end, to)
-			assert.Equal(t, start, from)
-		}
-	}
-
-	file.Seek(0, 0)
-	b, err := ioutil.ReadAll(file)
-	require.NoError(t, err)
-	assert.Equal(t, string(b), r.String())
+	from, to, old := b.writer.Update(start, start, str)
+	assert.Zero(t, old)
+	assert.Equal(t, term.Coordinates{X: 4, Y: 2}, start)
+	assert.Equal(t, term.Coordinates{X: 4, Y: 2}, end)
+	assert.Equal(t, longStr, b.String())
 }
 
 func newBenchmarkRawCells(fortunes int) (*rawCells, string) {

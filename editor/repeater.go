@@ -49,9 +49,9 @@ func (r *Repeater) Repeat() (ok bool) {
 		from = cursor
 		to = cell.CoordinatesSum(from, diff)
 
-		// avoid consuming OnWillDelete
+		// avoid OnWillUpdate loop
 		r.repeating = true
-		_, _, str := r.buf.Delete(from, to)
+		_, str := r.buf.Delete(from, to)
 		r.repeating = false
 
 		ok = str != ""
@@ -60,28 +60,18 @@ func (r *Repeater) Repeat() (ok bool) {
 	return
 }
 
-// OnWillInsert satisfies cell.Subscriber.
-func (r *Repeater) OnWillInsert(at term.Coordinates, str string) {
-	r.d = false
-	r.i = true
-	r.insertStr = str
-}
-
-// OnDidInsert satisfies cell.Subscriber.
-func (r *Repeater) OnDidInsert(from, to term.Coordinates) {
-}
-
-// OnWillDelete satisfies cell.Subscriber.
-func (r *Repeater) OnWillDelete(from, to term.Coordinates) {
+// OnWillUpdate satisfies cell.Subscriber.
+func (r *Repeater) OnWillUpdate(start, end term.Coordinates, str string) {
 	if r.repeating {
 		return
 	}
-	r.i = false
-	r.d = true
-	r.deleteFrom = from
-	r.deleteTo = to
+	r.d = start != end
+	r.i = str != ""
+	r.insertStr = str
+	r.deleteFrom = start
+	r.deleteTo = end
 }
 
-// OnDidDelete satisfies cell.Subscriber.
-func (r *Repeater) OnDidDelete(start, end term.Coordinates, str string) {
+// OnDidUpdate satisfies cell.Subscriber.
+func (r *Repeater) OnDidUpdate(from, to term.Coordinates, old string) {
 }
