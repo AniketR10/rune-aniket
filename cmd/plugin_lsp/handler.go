@@ -5,6 +5,7 @@ package main
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -1635,6 +1636,11 @@ func (h *lspEditorHandler) handleReferences(
 	h.browseLocations(win, locs)
 }
 
+func toJSONEdits(edits []protocol.TextEdit) string {
+	m, _ := json.Marshal(edits)
+	return string(m)
+}
+
 func (h *lspEditorHandler) format(
 	ctx context.Context, f *file, srv execServer, builder *editBuilder,
 ) {
@@ -1655,7 +1661,10 @@ func (h *lspEditorHandler) format(
 		return
 	}
 
-	log.Tracef("lspEditorHandler.Server.Formatting(%s): %v", f.name, edits)
+	// json marshaling is expensive
+	if log.IsLevelEnabled(log.TraceLevel) {
+		log.Tracef("lspEditorHandler.Server.Formatting(%s): %v", f.name, toJSONEdits(edits))
+	}
 
 	builder.applyEdits(edits)
 }
