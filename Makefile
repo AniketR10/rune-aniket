@@ -69,9 +69,13 @@ make_release:
 	@ mkdir -p $(TARGET)/$(TARGET_OS)_$(TARGET_ARCH)
 	@ GOARCH=$(TARGET_ARCH) $(TARGET_ARCH_FLAGS) GOOS=$(TARGET_OS) go build $(GOFLAGS) -o `pwd`/$(TARGET)/$(TARGET_OS)_$(TARGET_ARCH) ./...
 
-release: default
+release_arm:
 	@ rm -rf $(TARGET)
 	@ TARGET_OS=linux TARGET_ARCH=arm TARGET_ARCH_FLAGS=GOARM=7 $(MAKE) make_release
+	@ cd $(TARGET) && tar -czvf six-release-`git describe --tags --dirty`.tar.gz *
+
+release: default
+	@ rm -rf $(TARGET)
 	@ TARGET_OS=linux TARGET_ARCH=amd64 $(MAKE) make_release
 	@ TARGET_OS=darwin TARGET_ARCH=amd64 $(MAKE) make_release
 	@ cd $(TARGET) && tar -czvf six-release-`git describe --tags --dirty`.tar.gz *
