@@ -173,10 +173,12 @@ func sendInitializeRequest(
 	} else {
 		params.RootURI = protocol.URIFromPath(cwd)
 		params.RootPath = cwd
-		params.Path = params.RootPath // backwards compat with tsserver
+		// TODO validate compat
+		// params.Path = params.RootPath // backwards compat with tsserver
 	}
 
 	params.Capabilities.Workspace.Configuration = false
+	params.Capabilities.Workspace.Symbol = new(protocol.WorkspaceSymbolClientCapabilities)
 	params.Capabilities.Workspace.Symbol.SymbolKind.ValueSet = []protocol.SymbolKind{}
 
 	// Make sure to respect configured options when sending initialize request.
@@ -185,8 +187,9 @@ func sendInitializeRequest(
 	params.Capabilities.TextDocument.Hover = protocol.HoverClientCapabilities{
 		ContentFormat: []protocol.MarkupKind{opts.PreferredContentFormat},
 	}
-	params.Capabilities.Workspace.WorkspaceClientCapabilities.ApplyEdit = true
-	params.Capabilities.Workspace.WorkspaceClientCapabilities.WorkspaceEdit.DocumentChanges = true
+	params.Capabilities.Workspace.ApplyEdit = true
+	params.Capabilities.Workspace.WorkspaceEdit = new(protocol.WorkspaceEditClientCapabilities)
+	params.Capabilities.Workspace.WorkspaceEdit.DocumentChanges = true
 	params.Capabilities.TextDocument.CodeAction.CodeActionLiteralSupport.CodeActionKind.ValueSet = []protocol.CodeActionKind{}
 	params.Capabilities.TextDocument.CodeAction.ResolveSupport.Properties = []string{}
 	params.Capabilities.TextDocument.Completion.CompletionItem.TagSupport.ValueSet = []protocol.CompletionItemTag{}
@@ -839,9 +842,13 @@ func (h *lspEditorHandler) semanticTokensFull(
 		log.Debugf("lspEditorHandler.Server.SemanticTokensFull(%s): stale result", f.name)
 		return
 	}
-	log.Tracef("lspEditorHandler.Server.SemanticTokensFull(%s): OK", f.name)
 
-	locations := parseLocationData(f.uri, cells, []byte(content), resp.Data, h.semanticTypesAttr)
+	locations := parseLocationData(f.uri, cells, []byte(content),
+		resp.Data, h.semanticTypesAttr)
+	if log.IsLevelEnabled(log.TraceLevel) {
+		log.Tracef("lspEditorHandler.Server.SemanticTokensFull(%s): OK: %v: locations: %v",
+			f.name, resp.Data, locations)
+	}
 	err = h.ed.SetLocationList(f.handler, h.semanticTokensListID, editor.LocationSlice(locations))
 	if err != nil {
 		log.Errorf("lspEditorHandler.SetLocationList(%s): %v", f.name, err)

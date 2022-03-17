@@ -6,7 +6,7 @@ require (
 	github.com/atotto/clipboard v0.1.2
 	github.com/ernestrc/blue v0.0.0-20210211011506-d4a38bdf2ac3
 	github.com/ernestrc/dom v0.2.5-0.20201125033726-789c946aa938
-	github.com/ernestrc/golang-internal-tools v0.0.0-20210305202447-4d3da0a94e4c
+	github.com/ernestrc/golang-internal-tools v0.0.0-20220317145801-f8b5a950857b
 	github.com/golang/mock v1.4.4
 	github.com/hashicorp/go-hclog v0.0.0-20180709165350-ff2cf002a8dd
 	github.com/hashicorp/go-plugin v1.0.1
@@ -42,13 +42,13 @@ require (
 	go.etcd.io/bbolt v1.3.4 // indirect
 	go.opencensus.io v0.22.4 // indirect
 	golang.org/x/lint v0.0.0-20200302205851-738671d3881b // indirect
-	golang.org/x/mod v0.4.1 // indirect
-	golang.org/x/net v0.0.0-20201224014010-6772e930b67b // indirect
+	golang.org/x/mod v0.6.0-dev.0.20220106191415-9b9b3d81d5e3 // indirect
+	golang.org/x/net v0.0.0-20211015210444-4f30a5c0130f // indirect
 	golang.org/x/oauth2 v0.0.0-20200107190931-bf48bf16ab8d // indirect
-	golang.org/x/sync v0.0.0-20201207232520-09787c993a3a // indirect
-	golang.org/x/sys v0.0.0-20210124154548-22da62e12c0c // indirect
-	golang.org/x/text v0.3.4 // indirect
-	golang.org/x/tools v0.1.1-0.20210119222907-0a1a9685734a // indirect
+	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c // indirect
+	golang.org/x/sys v0.0.0-20211019181941-9d821ace8654 // indirect
+	golang.org/x/text v0.3.7 // indirect
+	golang.org/x/tools v0.1.10 // indirect
 	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1 // indirect
 	google.golang.org/api v0.30.0 // indirect
 	google.golang.org/appengine v1.6.6 // indirect

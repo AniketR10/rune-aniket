@@ -130,7 +130,14 @@ func (h *lspClientHandler) ShowMessageRequest(
 
 func (h *lspClientHandler) ApplyEdit(
 	ctx context.Context, params *protocol.ApplyWorkspaceEditParams,
-) (*protocol.ApplyWorkspaceEditResponse, error) {
+) (*protocol.ApplyWorkspaceEditResult, error) {
 	log.Tracef("lspClientHandler.ApplyEdit: %#v", params)
-	return &protocol.ApplyWorkspaceEditResponse{Applied: false, FailureReason: "not implemented"}, nil
+	return &protocol.ApplyWorkspaceEditResult{Applied: false, FailureReason: "not implemented"}, nil
+}
+
+func (h *lspClientHandler) ShowDocument(
+	ctx context.Context, p *protocol.ShowDocumentParams,
+) (*protocol.ShowDocumentResult, error) {
+	log.Tracef("lspClientHandler.ShowDocument: %#v", p)
+	return &protocol.ShowDocumentResult{Success: false}, nil
 }
