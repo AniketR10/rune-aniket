@@ -23,7 +23,7 @@ func Editor(opts ...Option) editor.Editor {
 func (e *viEditor) Edit(name string, buf *cell.Buffer) (editor.Handler, error) {
 	root := New(buf, name, e.opts...)
 	// publisher does not mutate cursor and it should never do so
-	cursor := &root.handler.cursor
+	cursor := root.cursor
 	return e.Publisher.PublishEdit(name, buf, root, cursor), nil
 }
 

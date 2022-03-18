@@ -7,6 +7,7 @@ import (
 
 	"github.com/ernestrc/go-tui"
 	"github.com/ernestrc/go-tui/cell"
+	"github.com/ernestrc/go-tui/component"
 	"github.com/ernestrc/go-tui/editor"
 	"github.com/ernestrc/go-tui/handler"
 	"github.com/ernestrc/go-tui/term"
@@ -34,17 +35,29 @@ const (
 	moveToPrev
 )
 
-var _ tui.Handler = (*viHandler)(nil)
+var _ viHandler = (*viHandlerImpl)(nil)
 
-// viHandler implements a basic vi-like text editor which satisfies tui.Handler
+type viHandler interface {
+	tui.Handler
+
+	mode() viMode
+	moveToNextLocation(ID string)
+	moveToPrevLocation(ID string)
+	setLocationList(ID string, l editor.LocationList)
+	setCursorAtScroll(pos term.Coordinates) bool
+	cursorAtScroll() term.Coordinates
+	subscribeScroll(sub component.ScrollSubscriber)
+}
+
+// viHandlerImpl implements a basic vi-like text editor which satisfies tui.Handler
 // and tui.Component.
-type viHandler struct {
+type viHandlerImpl struct {
 	config       viConfig
 	less         handler.Less // used for message bar and text search capabilities
 	free         editor.CursorMark
 	cursor       editor.Cursor
 	repeater     editor.Repeater
-	mode         viMode
+	currMode     viMode
 	moveMode     moveMode
 	searchMode   moveMode
 	moveChar     rune
@@ -55,8 +68,8 @@ type viHandler struct {
 	}
 }
 
-// DefaultviHandlerConfig is a sane configuration defaults for viHandler.
-var defaultviHandlerConfig = viConfig{
+// DefaultviHandlerImplConfig is a sane configuration defaults for viHandlerImpl.
+var defaultviHandlerImplConfig = viConfig{
 	resAttr: term.Attributes{
 		Fg: term.AttrReverse,
 		Bg: term.ColorDefault,
@@ -65,8 +78,8 @@ var defaultviHandlerConfig = viConfig{
 	defaultRegister: editor.DefaultRegisterID,
 }
 
-func (vi *viHandler) init(buf *cell.Buffer, opts ...Option) {
-	vi.config = defaultviHandlerConfig
+func (vi *viHandlerImpl) init(buf *cell.Buffer, opts ...Option) {
+	vi.config = defaultviHandlerImplConfig
 	for _, o := range opts {
 		o(&vi.config)
 	}
@@ -87,11 +100,11 @@ func (vi *viHandler) init(buf *cell.Buffer, opts ...Option) {
 }
 
 // Resize : tui.Component
-func (vi *viHandler) Resize(width, height int) {
+func (vi *viHandlerImpl) Resize(width, height int) {
 	vi.less.Resize(width, height)
 }
 
-func (vi *viHandler) setActiveLocationListMessage(locs map[string]editor.Location) {
+func (vi *viHandlerImpl) setActiveLocationListMessage(locs map[string]editor.Location) {
 	// NOTE: if therea re multiple location lists with a message
 	// in current cursor position, then there's no guarantee of which one
 	// is going to be rendered.
@@ -102,23 +115,23 @@ func (vi *viHandler) setActiveLocationListMessage(locs map[string]editor.Locatio
 }
 
 // Draw : tui.Component
-func (vi *viHandler) Draw(w term.Writer) {
+func (vi *viHandlerImpl) Draw(w term.Writer) {
 	locs, ok := vi.cursor.Locations()
 	if ok {
 		vi.setActiveLocationListMessage(locs)
 	} else {
-		vi.setMode(vi.mode)
+		vi.setMode(vi.currMode)
 	}
 	vi.less.Draw(w)
 }
 
 // Man : tui.Handler
-func (vi *viHandler) Man() tui.Manual {
+func (vi *viHandlerImpl) Man() tui.Manual {
 	panic("TODO")
 }
 
 // Cursor : tui.Handler
-func (vi *viHandler) Cursor() (term.Coordinates, bool) {
+func (vi *viHandlerImpl) Cursor() (term.Coordinates, bool) {
 	// use less Cursor if we are in search mode
 	if vi.less.Mode() != handler.LessNormalMode {
 		return vi.less.Cursor()
@@ -126,7 +139,7 @@ func (vi *viHandler) Cursor() (term.Coordinates, bool) {
 	return vi.cursor.Coordinates(), true
 }
 
-func (vi *viHandler) setMode(mode viMode) {
+func (vi *viHandlerImpl) setMode(mode viMode) {
 	var text string
 	switch mode {
 	case normalMode:
@@ -154,11 +167,11 @@ func (vi *viHandler) setMode(mode viMode) {
 	}
 	vi.less.SetMessageAlt(":")
 	vi.less.SetMessage(text)
-	vi.mode = mode
+	vi.currMode = mode
 }
 
-func (vi *viHandler) setNormalMode() bool {
-	if vi.mode == normalMode && vi.moveMode == moveNone {
+func (vi *viHandlerImpl) setNormalMode() bool {
+	if vi.currMode == normalMode && vi.moveMode == moveNone {
 		return false
 	}
 	vi.setMode(normalMode)
@@ -166,52 +179,52 @@ func (vi *viHandler) setNormalMode() bool {
 	return true
 }
 
-func (vi *viHandler) setInsertMode() {
+func (vi *viHandlerImpl) setInsertMode() {
 	vi.blockRepeat.From = term.Coordinates{}
 	vi.blockRepeat.To = term.Coordinates{}
 	vi.setMode(insertMode)
 }
 
-func (vi *viHandler) setDeleteMode(thenInsert bool) {
+func (vi *viHandlerImpl) setDeleteMode(thenInsert bool) {
 	vi.setMode(deleteMode)
 	vi.deleteInsert = thenInsert
 }
 
-func (vi *viHandler) setGMode() {
+func (vi *viHandlerImpl) setGMode() {
 	vi.setMode(gMode)
 }
 
-func (vi *viHandler) setYankMode() {
+func (vi *viHandlerImpl) setYankMode() {
 	vi.setMode(yankMode)
 }
 
-func (vi *viHandler) setviHandlersualMode() {
+func (vi *viHandlerImpl) setviHandlerVisualMode() {
 	if vi.cursor.Select() {
 		vi.setMode(visualMode)
 	}
 }
 
-func (vi *viHandler) setviHandlersualLineMode() {
+func (vi *viHandlerImpl) setviHandlerVisualLineMode() {
 	if vi.cursor.SelectLine() {
 		vi.setMode(visualLineMode)
 	}
 }
 
-func (vi *viHandler) setviHandlersualBlockMode() {
+func (vi *viHandlerImpl) setviHandlerVisualBlockMode() {
 	if vi.cursor.SelectBlock() {
 		vi.setMode(visualBlockMode)
 	}
 }
 
-func (vi *viHandler) setMoveToCharacterMode(mode moveMode) {
+func (vi *viHandlerImpl) setMoveToCharacterMode(mode moveMode) {
 	vi.moveMode = mode
 }
 
-func (vi *viHandler) setReplaceMode() {
+func (vi *viHandlerImpl) setReplaceMode() {
 	vi.setMode(replaceMode)
 }
 
-func (vi *viHandler) setReplaceOneMode() {
+func (vi *viHandlerImpl) setReplaceOneMode() {
 	vi.setMode(replaceOneMode)
 }
 
@@ -219,7 +232,7 @@ func (vi *viHandler) setReplaceOneMode() {
 // and results seeking to Editor so this function makes sure that we only
 // perform the search once, at the same time we delegate the right logic to
 // Editor and Less.
-func (vi *viHandler) handleSearch(ev term.Event) (bool, bool) {
+func (vi *viHandlerImpl) handleSearch(ev term.Event) (bool, bool) {
 	switch ev.Key {
 	case term.KeyEnter:
 		text := vi.less.SearchText()
@@ -233,7 +246,7 @@ func (vi *viHandler) handleSearch(ev term.Event) (bool, bool) {
 	}
 }
 
-func (vi *viHandler) insertBlock(str string) {
+func (vi *viHandlerImpl) insertBlock(str string) {
 	reader := bufio.NewReader(strings.NewReader(str))
 	for {
 		str, err := reader.ReadString('\n')
@@ -250,14 +263,14 @@ func (vi *viHandler) insertBlock(str string) {
 	}
 }
 
-func (vi *viHandler) logError(err error) {
+func (vi *viHandlerImpl) logError(err error) {
 	if vi.config.logger == nil {
 		return
 	}
 	vi.config.logger.Error(err)
 }
 
-func (vi *viHandler) pasteClipboard(registerID string, after bool) bool {
+func (vi *viHandlerImpl) pasteClipboard(registerID string, after bool) bool {
 	paste, err := vi.config.clipboard.Paste(registerID)
 	if err != nil {
 		vi.logError(fmt.Errorf("clipboard.Get: %s", err))
@@ -312,7 +325,7 @@ func (vi *viHandler) pasteClipboard(registerID string, after bool) bool {
 	return true
 }
 
-func (vi *viHandler) handleNormal(ev term.Event) (quit, handled bool) {
+func (vi *viHandlerImpl) handleNormal(ev term.Event) (quit, handled bool) {
 	quit, handled = vi.handleMoveToCharacter(vi.moveMode, ev)
 	if handled {
 		return
@@ -416,9 +429,9 @@ func (vi *viHandler) handleNormal(ev term.Event) (quit, handled bool) {
 			vi.cursor.Delete()
 			vi.setInsertMode()
 		case 'v':
-			vi.setviHandlersualMode()
+			vi.setviHandlerVisualMode()
 		case 'V':
-			vi.setviHandlersualLineMode()
+			vi.setviHandlerVisualLineMode()
 		case 'w':
 			vi.cursor.MoveRightStartWord()
 		case 'W':
@@ -455,7 +468,7 @@ func (vi *viHandler) handleNormal(ev term.Event) (quit, handled bool) {
 			case term.KeyCtrlR:
 				vi.cursor.Redo()
 			case term.KeyCtrlV:
-				vi.setviHandlersualBlockMode()
+				vi.setviHandlerVisualBlockMode()
 			case term.KeyEsc:
 				handled = vi.setNormalMode()
 			default:
@@ -467,7 +480,7 @@ func (vi *viHandler) handleNormal(ev term.Event) (quit, handled bool) {
 	return
 }
 
-func (vi *viHandler) search(text string) {
+func (vi *viHandlerImpl) search(text string) {
 	vi.cursor.Search(text)
 	switch vi.searchMode {
 	case moveToNext:
@@ -478,7 +491,7 @@ func (vi *viHandler) search(text string) {
 	}
 }
 
-func (vi *viHandler) handleInsert(ev term.Event) (quit, handled bool) {
+func (vi *viHandlerImpl) handleInsert(ev term.Event) (quit, handled bool) {
 	handled = true
 	switch ev.Key {
 	case term.KeyEnter:
@@ -503,11 +516,11 @@ func (vi *viHandler) handleInsert(ev term.Event) (quit, handled bool) {
 	return
 }
 
-func (vi *viHandler) copySelection() {
+func (vi *viHandlerImpl) copySelection() {
 	vi.cursor.CopySelection(vi.config.defaultRegister, vi.config.clipboard)
 }
 
-func (vi *viHandler) repeatInsertStart() {
+func (vi *viHandlerImpl) repeatInsertStart() {
 	from, to := cell.SortFromTo(vi.blockRepeat.From, vi.blockRepeat.To)
 	n := to.Y - from.Y
 	for i := 0; i < n; i++ {
@@ -517,14 +530,14 @@ func (vi *viHandler) repeatInsertStart() {
 	}
 }
 
-func (vi *viHandler) handleviHandlersualBlockInsertStart() {
+func (vi *viHandlerImpl) handleviHandlerVisualBlockInsertStart() {
 	vi.setInsertMode()
 	vi.blockRepeat.From, _ = vi.cursor.SelectionFrom()
 	vi.blockRepeat.To = vi.cursor.CursorAtScroll()
 	vi.setCursorAtScroll(vi.blockRepeat.From)
 }
 
-func (vi *viHandler) handleviHandlersual(ev term.Event) (quit, handled bool) {
+func (vi *viHandlerImpl) handleviHandlerVisual(ev term.Event) (quit, handled bool) {
 	if ev.Key == term.KeyEsc {
 		vi.setNormalMode()
 		vi.cursor.Unselect()
@@ -549,9 +562,9 @@ func (vi *viHandler) handleviHandlersual(ev term.Event) (quit, handled bool) {
 			vi.cursor.DeleteSelection()
 			vi.setInsertMode()
 		case 'I':
-			switch vi.mode {
+			switch vi.currMode {
 			case visualBlockMode:
-				vi.handleviHandlersualBlockInsertStart()
+				vi.handleviHandlerVisualBlockInsertStart()
 			default:
 				handled = false
 			}
@@ -564,7 +577,7 @@ func (vi *viHandler) handleviHandlersual(ev term.Event) (quit, handled bool) {
 		quit, handled = vi.handleNormal(ev)
 	}
 
-	switch vi.mode {
+	switch vi.currMode {
 	case visualMode, visualLineMode, visualBlockMode:
 	default:
 		vi.cursor.Unselect()
@@ -573,7 +586,7 @@ func (vi *viHandler) handleviHandlersual(ev term.Event) (quit, handled bool) {
 	return
 }
 
-func (vi *viHandler) handleMoveToCharacter(mode moveMode, ev term.Event) (bool, bool) {
+func (vi *viHandlerImpl) handleMoveToCharacter(mode moveMode, ev term.Event) (bool, bool) {
 	switch ev.Type {
 	case term.EventKey:
 		switch mode {
@@ -592,7 +605,7 @@ func (vi *viHandler) handleMoveToCharacter(mode moveMode, ev term.Event) (bool, 
 	return false, true
 }
 
-func (vi *viHandler) handleReplace(ev term.Event) (quit, handled bool) {
+func (vi *viHandlerImpl) handleReplace(ev term.Event) (quit, handled bool) {
 	if ev.Type != term.EventKey {
 		return
 	}
@@ -624,7 +637,7 @@ func (vi *viHandler) handleReplace(ev term.Event) (quit, handled bool) {
 	return
 }
 
-func (vi *viHandler) handleMetaNormal(ev term.Event) (quit, handled, done bool) {
+func (vi *viHandlerImpl) handleMetaNormal(ev term.Event) (quit, handled, done bool) {
 	before := vi.cursor.Coordinates()
 	vi.cursor.Select()
 
@@ -665,7 +678,7 @@ func (vi *viHandler) handleMetaNormal(ev term.Event) (quit, handled, done bool) 
 	return
 }
 
-func (vi *viHandler) handleYank(ev term.Event) (quit, handled bool) {
+func (vi *viHandlerImpl) handleYank(ev term.Event) (quit, handled bool) {
 	if ev.Ch == 'y' {
 		if vi.cursor.SelectLine() {
 			vi.copySelection()
@@ -686,7 +699,7 @@ func (vi *viHandler) handleYank(ev term.Event) (quit, handled bool) {
 	return
 }
 
-func (vi *viHandler) handleDelete(ev term.Event) (quit, handled bool) {
+func (vi *viHandlerImpl) handleDelete(ev term.Event) (quit, handled bool) {
 	if !vi.deleteInsert && vi.moveMode == moveNone && ev.Ch == 'd' {
 		if vi.cursor.SelectLine() {
 			vi.cursor.DeleteSelection()
@@ -722,7 +735,7 @@ func (vi *viHandler) handleDelete(ev term.Event) (quit, handled bool) {
 	return
 }
 
-func (vi *viHandler) handleGo(ev term.Event) (quit, handled bool) {
+func (vi *viHandlerImpl) handleGo(ev term.Event) (quit, handled bool) {
 	defer vi.setNormalMode()
 
 	switch ev.Ch {
@@ -735,8 +748,8 @@ func (vi *viHandler) handleGo(ev term.Event) (quit, handled bool) {
 }
 
 // Handle : tui.Handler
-func (vi *viHandler) Handle(ev term.Event) (quit, handled bool) {
-	switch vi.mode {
+func (vi *viHandlerImpl) Handle(ev term.Event) (quit, handled bool) {
+	switch vi.currMode {
 	case normalMode:
 		if vi.less.Mode() != handler.LessNormalMode {
 			quit, handled = vi.handleSearch(ev)
@@ -752,7 +765,7 @@ func (vi *viHandler) Handle(ev term.Event) (quit, handled bool) {
 	case deleteMode:
 		quit, handled = vi.handleDelete(ev)
 	case visualMode, visualLineMode, visualBlockMode:
-		quit, handled = vi.handleviHandlersual(ev)
+		quit, handled = vi.handleviHandlerVisual(ev)
 	case replaceMode:
 		quit, handled = vi.handleReplace(ev)
 	case replaceOneMode:
@@ -760,7 +773,7 @@ func (vi *viHandler) Handle(ev term.Event) (quit, handled bool) {
 		handled = true
 		vi.setNormalMode()
 	default:
-		panic(fmt.Sprintf("unknown mode: %d", vi.mode))
+		panic(fmt.Sprintf("unknown mode: %d", vi.currMode))
 	}
 
 	// copy the cursor to maintain original cursor for next vertcial move
@@ -769,7 +782,7 @@ func (vi *viHandler) Handle(ev term.Event) (quit, handled bool) {
 		vi.free = vi.cursor.Mark()
 	}
 
-	switch vi.mode {
+	switch vi.currMode {
 	case normalMode, yankMode, gMode, deleteMode, visualMode, visualLineMode, visualBlockMode:
 		if !vi.config.debug {
 			vi.cursor.MoveToBounds(0)
@@ -780,7 +793,7 @@ func (vi *viHandler) Handle(ev term.Event) (quit, handled bool) {
 			vi.cursor.MoveToBounds(1)
 		}
 	default:
-		panic(fmt.Sprintf("unknown mode: %d", vi.mode))
+		panic(fmt.Sprintf("unknown mode: %d", vi.currMode))
 	}
 
 	return
@@ -788,31 +801,39 @@ func (vi *viHandler) Handle(ev term.Event) (quit, handled bool) {
 
 // MoveToNextLocation moves the cursor to the next location
 // in the location list identified by ID.
-func (vi *viHandler) moveToNextLocation(ID string) {
+func (vi *viHandlerImpl) moveToNextLocation(ID string) {
 	vi.cursor.MoveToNextLocation(ID)
 	vi.free = vi.cursor.Mark()
 }
 
 // MoveToPrevLocation moves the cursor to the previous location
 // in the location list identified by ID.
-func (vi *viHandler) moveToPrevLocation(ID string) {
+func (vi *viHandlerImpl) moveToPrevLocation(ID string) {
 	vi.cursor.MoveToPrevLocation(ID)
 	vi.free = vi.cursor.Mark()
 }
 
 // SetLocationList sets a location list of this handler. See Cursor.SetLocationList
-func (vi *viHandler) setLocationList(ID string, l editor.LocationList) {
+func (vi *viHandlerImpl) setLocationList(ID string, l editor.LocationList) {
 	_ = vi.cursor.SetLocationList(ID, l)
 }
 
-// SetCursorAtScroll sets the cursor of this viHandler handler at content pos.
-func (vi *viHandler) setCursorAtScroll(pos term.Coordinates) bool {
+// SetCursorAtScroll sets the cursor of this viHandlerImpl handler at content pos.
+func (vi *viHandlerImpl) setCursorAtScroll(pos term.Coordinates) bool {
 	_, ok := vi.cursor.MoveToScroll(pos)
 	vi.free = vi.cursor.Mark()
 	return ok
 }
 
-// CursorAtScroll sets the cursor of this viHandler handler at content pos.
-func (vi *viHandler) cursorAtScroll() term.Coordinates {
+// CursorAtScroll sets the cursor of this viHandlerImpl handler at content pos.
+func (vi *viHandlerImpl) cursorAtScroll() term.Coordinates {
 	return vi.cursor.CursorAtScroll()
+}
+
+func (vi *viHandlerImpl) subscribeScroll(sub component.ScrollSubscriber) {
+	vi.cursor.SubscribeScroll(sub)
+}
+
+func (vi *viHandlerImpl) mode() viMode {
+	return vi.currMode
 }

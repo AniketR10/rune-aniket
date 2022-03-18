@@ -48,13 +48,13 @@ diff_buf_adjust(win_T *win)
 
 func setupVi(
 	t *testing.T, text string, tabspaces int, opts ...Option,
-) *viHandler {
+) *viHandlerImpl {
 	buf := cell.NewBuffer()
 	buf.InitWithTabspaces(tabspaces)
 	_, err := buf.ReadFrom(strings.NewReader(text))
 	require.NoError(t, err)
 
-	vi := new(viHandler)
+	vi := new(viHandlerImpl)
 	vi.init(buf, opts...)
 
 	return vi

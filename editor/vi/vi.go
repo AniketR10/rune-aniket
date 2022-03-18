@@ -5,7 +5,9 @@ import (
 	"github.com/ernestrc/go-tui/cell"
 	"github.com/ernestrc/go-tui/component"
 	"github.com/ernestrc/go-tui/editor"
+	"github.com/ernestrc/go-tui/handler"
 	"github.com/ernestrc/go-tui/term"
+	log "github.com/sirupsen/logrus"
 )
 
 var _ tui.Handler = (*Vi)(nil)
@@ -13,8 +15,16 @@ var _ tui.Handler = (*Vi)(nil)
 // Vi implements a basic vi-like text editor which satisfies tui.Handler
 // and tui.Component.
 type Vi struct {
-	name    string
-	handler viHandler
+	name      string
+	handler   viHandler
+	buf       *cell.Buffer
+	cursor    *editor.Cursor
+	logger    *log.Logger
+	messenger editor.Messenger
+	less      *handler.Less
+
+	currUpdates []term.Event
+	lastUpdates []term.Event
 }
 
 // New allocates storage for a new Vi handler, initializes it and returns it.
@@ -27,7 +37,15 @@ func New(buf *cell.Buffer, name string, opts ...Option) *Vi {
 // Init initialies this vi handle with a new Buffer.
 func (vi *Vi) Init(buf *cell.Buffer, name string, opts ...Option) {
 	vi.name = name
-	vi.handler.init(buf, opts...)
+
+	viHandler := new(viHandlerImpl)
+	viHandler.init(buf, opts...)
+	vi.handler = viHandler
+	vi.buf = buf
+	vi.logger = viHandler.config.logger
+	vi.messenger = viHandler.config.messenger
+	vi.less = &viHandler.less
+	vi.cursor = &viHandler.cursor
 }
 
 func (vi *Vi) Cursor() (term.Coordinates, bool) {
@@ -52,15 +70,15 @@ func (vi *Vi) Resize(width, height int) {
 
 // SetMessage uses vi's configured Messenger to set msg with args.
 func (vi *Vi) SetMessage(msg string, args ...interface{}) {
-	if vi.handler.config.logger != nil {
-		vi.handler.config.logger.Debugf(msg, args...)
+	if vi.logger != nil {
+		vi.logger.Debugf(msg, args...)
 	}
 
-	if vi.handler.config.messenger != nil {
-		vi.handler.config.messenger.SetMessage(msg, args...)
+	if vi.messenger != nil {
+		vi.messenger.SetMessage(msg, args...)
 		return
 	}
-	vi.handler.less.SetMessage(msg, args...)
+	vi.less.SetMessage(msg, args...)
 }
 
 // MoveToNextLocation moves the cursor to the next location
@@ -87,15 +105,15 @@ func (vi *Vi) SetCursorAtScroll(pos term.Coordinates) bool {
 
 // CursorAtScroll sets the cursor of this Vi handler at content pos.
 func (vi *Vi) CursorAtScroll() term.Coordinates {
-	return vi.handler.cursor.CursorAtScroll()
-}
-
-func (vi *Vi) Buffer() *cell.Buffer {
-	return vi.handler.less.Buffer()
+	return vi.handler.cursorAtScroll()
 }
 
 func (vi *Vi) SubscribeScroll(sub component.ScrollSubscriber) {
-	vi.handler.cursor.SubscribeScroll(sub)
+	vi.handler.subscribeScroll(sub)
+}
+
+func (vi *Vi) Buffer() *cell.Buffer {
+	return vi.buf
 }
 
 // Name satisfies editor.Handler.
@@ -104,6 +122,6 @@ func (vi *Vi) Name() string {
 }
 
 // Close satisfies editor.Handler.
-func (h *Vi) Close() error {
+func (vi *Vi) Close() error {
 	return nil
 }
