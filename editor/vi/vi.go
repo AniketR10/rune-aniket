@@ -1,6 +1,8 @@
 package vi
 
 import (
+	"fmt"
+
 	"github.com/ernestrc/go-tui"
 	"github.com/ernestrc/go-tui/cell"
 	"github.com/ernestrc/go-tui/component"
@@ -13,7 +15,6 @@ import (
 var _ tui.Handler = (*Vi)(nil)
 
 // Vi implements a basic vi-like text editor which satisfies tui.Handler
-// and tui.Component.
 type Vi struct {
 	name      string
 	handler   viHandler
@@ -23,9 +24,13 @@ type Vi struct {
 	messenger editor.Messenger
 	less      *handler.Less
 
-	currUpdates []term.Event
-	lastUpdates []term.Event
+	currUpdated   bool
+	evUpdated     bool
+	currUpdates   []term.Event
+	repeatUpdates []term.Event
 }
+
+type viSubscriber Vi
 
 // New allocates storage for a new Vi handler, initializes it and returns it.
 func New(buf *cell.Buffer, name string, opts ...Option) *Vi {
@@ -46,24 +51,123 @@ func (vi *Vi) Init(buf *cell.Buffer, name string, opts ...Option) {
 	vi.messenger = viHandler.config.messenger
 	vi.less = &viHandler.less
 	vi.cursor = &viHandler.cursor
+
+	vi.repeatUpdates = make([]term.Event, 0)
+	vi.currUpdates = make([]term.Event, 0)
+
+	vi.buf.Subscribe((*viSubscriber)(vi))
 }
 
+// Cursor satisfies tui.Handler
 func (vi *Vi) Cursor() (term.Coordinates, bool) {
 	return vi.handler.Cursor()
 }
 
+// Draw satisfies tui.Component
 func (vi *Vi) Draw(w term.Writer) {
 	vi.handler.Draw(w)
 }
 
-func (vi *Vi) Handle(ev term.Event) (quit, handled bool) {
-	return vi.handler.Handle(ev)
+func isUpdateMode(mode viMode) bool {
+	switch mode {
+	case normalMode, gMode, yankMode, visualMode, visualLineMode, visualBlockMode:
+		return false
+	case insertMode, deleteMode, replaceMode, replaceOneMode:
+		return true
+	default:
+		panic(fmt.Sprintf("unknown vi mode: %v", mode))
+	}
 }
 
+func isSelectMode(mode viMode) bool {
+	return mode == visualMode || mode == visualLineMode || mode == visualBlockMode
+}
+
+func isUndoEvent(mode viMode, ev term.Event) bool {
+	return mode == normalMode && (ev.Ch == 'u' || ev.Key == term.KeyCtrlR)
+}
+
+func (vi *Vi) resetUpdates() {
+	vi.currUpdates = vi.currUpdates[:0]
+	vi.currUpdated = false
+}
+
+func (vi *Vi) appendLastUpdate(ev term.Event) {
+	vi.currUpdates = append(vi.currUpdates, ev)
+}
+
+func (vi *Vi) copyRepeat() {
+	if !vi.currUpdated {
+		return
+	}
+	vi.repeatUpdates = vi.repeatUpdates[:0]
+	vi.repeatUpdates = append(vi.repeatUpdates, vi.currUpdates...)
+	vi.resetUpdates()
+}
+
+func (vi *viSubscriber) OnWillUpdate(from, to term.Coordinates, str string) {
+}
+
+func (vi *viSubscriber) OnDidUpdate(start, end term.Coordinates, old string) {
+	vi.evUpdated = true
+	vi.currUpdated = true
+}
+
+// Handle satisfies tui.Handler
+func (vi *Vi) Handle(ev term.Event) (quit, handled bool) {
+	switch vi.handler.mode() {
+	case normalMode:
+		switch ev.Type {
+		case term.EventKey:
+			switch ev.Ch {
+			case '.':
+				handled = vi.repeat()
+				return
+			}
+		}
+	}
+
+	vi.evUpdated = false
+	prevMode := vi.handler.mode()
+	quit, handled = vi.handler.Handle(ev)
+	nextMode := vi.handler.mode()
+
+	if prevMode == nextMode {
+		if prevMode != normalMode {
+			vi.appendLastUpdate(ev)
+		}
+		if !isUpdateMode(prevMode) && vi.evUpdated && !isUndoEvent(prevMode, ev) {
+			vi.appendLastUpdate(ev)
+			vi.copyRepeat()
+		}
+		return
+	}
+
+	if !isUpdateMode(prevMode) && isUpdateMode(nextMode) {
+		if !isSelectMode(prevMode) {
+			vi.resetUpdates()
+		}
+		vi.appendLastUpdate(ev)
+	} else if isUpdateMode(prevMode) && !isUpdateMode(nextMode) {
+		vi.appendLastUpdate(ev)
+		vi.copyRepeat()
+	} else if isUpdateMode(prevMode) && isUpdateMode(nextMode) {
+		vi.appendLastUpdate(ev)
+	} else {
+		vi.appendLastUpdate(ev)
+		if vi.evUpdated {
+			vi.copyRepeat()
+		}
+	}
+	return quit, handled
+}
+
+// Man satisfies tui.Handler
 func (vi *Vi) Man() tui.Manual {
 	return vi.handler.Man()
 }
 
+// Resize satisfies tui.Component
 func (vi *Vi) Resize(width, height int) {
 	vi.handler.Resize(width, height)
 }
@@ -108,12 +212,19 @@ func (vi *Vi) CursorAtScroll() term.Coordinates {
 	return vi.handler.cursorAtScroll()
 }
 
+// SubscribeScroll subscribe sub to scroll events.
 func (vi *Vi) SubscribeScroll(sub component.ScrollSubscriber) {
 	vi.handler.subscribeScroll(sub)
 }
 
-func (vi *Vi) Buffer() *cell.Buffer {
-	return vi.buf
+// Reader returns the underlying cell.Reader.
+func (vi *Vi) Reader() cell.Reader {
+	return vi.buf.Reader()
+}
+
+// Writer returns the underlying cell.Writer.
+func (vi *Vi) Writer() cell.Writer {
+	return vi.buf.Writer()
 }
 
 // Name satisfies editor.Handler.
@@ -124,4 +235,12 @@ func (vi *Vi) Name() string {
 // Close satisfies editor.Handler.
 func (vi *Vi) Close() error {
 	return nil
+}
+
+func (vi *Vi) repeat() (handled bool) {
+	for _, ev := range vi.repeatUpdates {
+		handled = true
+		vi.handler.Handle(ev)
+	}
+	return
 }

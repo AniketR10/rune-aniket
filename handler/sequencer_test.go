@@ -87,7 +87,7 @@ func TestSequencer(t *testing.T) {
 		assert.False(t, match)
 		assert.Zero(t, seq)
 
-		time.Sleep(26 * time.Millisecond)
+		time.Sleep(40 * time.Millisecond)
 
 		seq, match = s.Handle(term.Event{Type: term.EventKey, MouseY: 1, Ch: 'd'})
 		require.False(t, match)

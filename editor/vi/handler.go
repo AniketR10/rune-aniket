@@ -56,7 +56,7 @@ type viHandlerImpl struct {
 	less         handler.Less // used for message bar and text search capabilities
 	free         editor.CursorMark
 	cursor       editor.Cursor
-	repeater     editor.Repeater
+	repeater     editor.Repeater // used for block repeat only
 	currMode     viMode
 	moveMode     moveMode
 	searchMode   moveMode
@@ -461,8 +461,6 @@ func (vi *viHandlerImpl) handleNormal(ev term.Event) (quit, handled bool) {
 		case '*':
 			vi.searchMode = moveToNext
 			vi.search(vi.cursor.Word())
-		case '.':
-			vi.repeater.Repeat()
 		default:
 			switch ev.Key {
 			case term.KeyCtrlR:

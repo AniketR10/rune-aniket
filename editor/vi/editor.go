@@ -64,11 +64,11 @@ func (e *viEditor) MoveToPrevLocation(h editor.Handler, ID string) error {
 }
 
 func (e *viEditor) Reader(h editor.Handler) editor.Reader {
-	return editor.CellReader(e.Publisher.Handler(h).(*Vi).Buffer().Reader())
+	return editor.CellReader(e.Publisher.Handler(h).(*Vi).Reader())
 }
 
 func (e *viEditor) Writer(h editor.Handler) editor.Writer {
-	return editor.CellWriter(e.Publisher.Handler(h).(*Vi).Buffer().Writer())
+	return editor.CellWriter(e.Publisher.Handler(h).(*Vi).Writer())
 }
 
 func (e *viEditor) SetCursor(h editor.Handler, pos term.Coordinates) error {
