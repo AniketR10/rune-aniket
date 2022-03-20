@@ -34,6 +34,8 @@ func (h *mockHandler) Handle(ev term.Event) (bool, bool) {
 	switch ev.Ch {
 	case '#': // map for convenience
 		ev = term.Event{Key: term.KeyEsc}
+	case '&':
+		ev = term.Event{Key: term.KeyEnter}
 	}
 	h.h.Handle(ev)
 	return false, true
@@ -134,6 +136,21 @@ func TestViHandle(t *testing.T) {
 			in:   ">i#.",
 			want: ">i#>",
 		},
+		{
+			desc: "handles search mode correctly",
+			in:   "/put&>i#/put&.",
+			want: "/put&>i#/put&>",
+		},
+		{
+			desc: "propagates '.' in search mode",
+			in:   "/.&>i#/.&.",
+			want: "/.&>i#/.&>",
+		},
+		{
+			desc: "does not repeat select events that did not wind up updating",
+			in:   ">jjvlllll#..ihell#.",
+			want: ">jjvlllll#>>ihell#ihell#",
+		},
 	}
 
 	testHandle := func(t *testing.T, in, want string) {
@@ -184,11 +201,13 @@ Love isn't love 'til you give it away.
 		{"Insert", "jji\t"},
 		{"InsertRowAt", "ji\n"},
 		{"DeleteCell", "jjllllx"},
-		{"ConflateRow", "jJ"},
+		{"ConflateRow", "J"},
 		{"TruncateRowFrom", "jlD"},
 		{"TruncateFrom", "lllllldG"},
 		{"DeleteRow", "dd"},
 		{"Update which effectively replaces", "jjlvlllld"},
+		{"Repeat", "jji\t#..."},
+		{"DeleteAll", "cGhello\nworld"},
 	}
 
 	for _, _tcase := range suite {
@@ -205,14 +224,14 @@ Love isn't love 'til you give it away.
 					ev := term.Event{Ch: ch}
 					vi.Handle(ev)
 				}
+				assert.NotEqual(t, undoFortune, buf.String())
 				vi.Handle(term.Event{Key: term.KeyEsc})
 				quit, handled := vi.Handle(term.Event{Ch: 'u'})
 				assert.False(t, quit)
 				assert.True(t, handled)
 			}
 
-			after := buf.String()
-			assert.Equal(t, undoFortune, after)
+			assert.Equal(t, undoFortune, buf.String())
 		})
 	}
 

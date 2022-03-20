@@ -27,6 +27,7 @@ const (
 	visualBlockMode
 	replaceMode
 	replaceOneMode
+	searchMode
 )
 
 const (
@@ -135,7 +136,7 @@ func (vi *viHandlerImpl) Man() tui.Manual {
 // Cursor : tui.Handler
 func (vi *viHandlerImpl) Cursor() (term.Coordinates, bool) {
 	// use less Cursor if we are in search mode
-	if vi.less.Mode() != handler.LessNormalMode {
+	if vi.mode() == searchMode {
 		return vi.less.Cursor()
 	}
 	return vi.cursor.Coordinates(), true
@@ -162,6 +163,8 @@ func (vi *viHandlerImpl) setMode(mode viMode) {
 		text = "V-BLOCK"
 	case replaceMode:
 		text = "REPLACE"
+	case searchMode:
+		text = "SEARCH"
 	case replaceOneMode:
 		text = "NORMAL"
 	default:
@@ -745,13 +748,11 @@ func (vi *viHandlerImpl) handleGo(ev term.Event) (quit, handled bool) {
 
 // Handle : tui.Handler
 func (vi *viHandlerImpl) Handle(ev term.Event) (quit, handled bool) {
-	switch vi.currMode {
+	switch vi.mode() {
+	case searchMode:
+		quit, handled = vi.handleSearch(ev)
 	case normalMode:
-		if vi.less.Mode() != handler.LessNormalMode {
-			quit, handled = vi.handleSearch(ev)
-		} else {
-			quit, handled = vi.handleNormal(ev)
-		}
+		quit, handled = vi.handleNormal(ev)
 	case insertMode:
 		quit, handled = vi.handleInsert(ev)
 	case gMode:
@@ -778,8 +779,9 @@ func (vi *viHandlerImpl) Handle(ev term.Event) (quit, handled bool) {
 		vi.free = vi.cursor.Mark()
 	}
 
-	switch vi.currMode {
-	case normalMode, yankMode, gMode, deleteMode, visualMode, visualLineMode, visualBlockMode:
+	switch vi.mode() {
+	case normalMode, yankMode, searchMode, gMode, deleteMode,
+		visualMode, visualLineMode, visualBlockMode:
 		if !vi.config.debug {
 			vi.cursor.MoveToBounds(0)
 			vi.cursor.MoveToNextNonNull()
@@ -831,6 +833,9 @@ func (vi *viHandlerImpl) subscribeScroll(sub component.ScrollSubscriber) {
 }
 
 func (vi *viHandlerImpl) mode() viMode {
+	if vi.currMode == normalMode && vi.less.Mode() != handler.LessNormalMode {
+		return searchMode
+	}
 	return vi.currMode
 }
 

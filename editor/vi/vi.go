@@ -33,6 +33,7 @@ type Vi struct {
 	messenger editor.Messenger
 	less      *handler.Less
 
+	repeating     bool
 	currUpdated   bool
 	evUpdated     bool
 	currSnapshot  snapshot
@@ -87,7 +88,8 @@ func (vi *Vi) Draw(w term.Writer) {
 
 func isUpdateMode(mode viMode) bool {
 	switch mode {
-	case normalMode, gMode, yankMode, visualMode, visualLineMode, visualBlockMode:
+	case normalMode, gMode, yankMode, searchMode,
+		visualMode, visualLineMode, visualBlockMode:
 		return false
 	case insertMode, deleteMode, replaceMode, replaceOneMode:
 		return true
@@ -131,7 +133,7 @@ func (vi *viSubscriber) OnWillUpdate(from, to term.Coordinates, str string) {
 }
 
 func (vi *viSubscriber) OnDidUpdate(start, end term.Coordinates, old string) {
-	if !vi.resetting {
+	if !vi.resetting && !vi.repeating {
 		vi.evUpdated = true
 		vi.currUpdated = true
 	}
@@ -170,7 +172,7 @@ func (vi *Vi) Handle(ev term.Event) (quit, handled bool) {
 			vi.copyRepeat()
 			vi.snapshotContent()
 			vi.resetUpdates()
-		} else if prevMode != normalMode {
+		} else if isSelectMode(prevMode) || isUpdateMode(prevMode) {
 			vi.appendLastUpdate(ev)
 		}
 		return
@@ -187,9 +189,12 @@ func (vi *Vi) Handle(ev term.Event) (quit, handled bool) {
 		vi.appendLastUpdate(ev)
 	} else {
 		vi.appendLastUpdate(ev)
-		if vi.evUpdated {
+		if vi.currUpdated || vi.repeating {
 			vi.copyRepeat()
 			vi.snapshotContent()
+			vi.resetUpdates()
+		} else if !isSelectMode(nextMode) {
+			// reset always if going back to normal
 			vi.resetUpdates()
 		}
 	}
@@ -272,10 +277,12 @@ func (vi *Vi) Close() error {
 }
 
 func (vi *Vi) repeat() (handled bool) {
+	vi.repeating = true
 	for _, ev := range vi.repeatUpdates {
 		handled = true
-		vi.handler.Handle(ev)
+		vi.Handle(ev)
 	}
+	vi.repeating = false
 	return
 }
 
