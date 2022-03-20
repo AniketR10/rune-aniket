@@ -1,6 +1,7 @@
 package vi
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -55,6 +56,12 @@ func (h *mockHandler) cursorAtScroll() term.Coordinates {
 }
 func (h *mockHandler) subscribeScroll(sub component.ScrollSubscriber) {
 }
+func (h *mockHandler) newMark(pos term.Coordinates) editor.CursorMark {
+	return h.h.newMark(pos)
+}
+func (h *mockHandler) moveToMark(m editor.CursorMark) {
+	h.h.moveToMark(m)
+}
 
 func TestViHandle(t *testing.T) {
 	tsuite := []struct {
@@ -105,7 +112,7 @@ func TestViHandle(t *testing.T) {
 		{
 			desc: "does no repeat undo",
 			in:   ">u...",
-			want: ">u>>>",
+			want: ">>>>",
 		},
 		{
 			desc: "does not repeat search events",
@@ -163,5 +170,95 @@ func TestViHandle(t *testing.T) {
 			want.WriteString(tcase.want)
 		}
 		testHandle(t, in.String(), want.String())
+	})
+}
+
+func TestUndo(t *testing.T) {
+	const undoFortune = `Love in your heart wasn't put there to stay.
+Love isn't love 'til you give it away.
+		-- Oscar Hammerstein 中国`
+	suite := []struct {
+		name string
+		cmd  string
+	}{
+		{"Insert", "jji\t"},
+		{"InsertRowAt", "ji\n"},
+		{"DeleteCell", "jjllllx"},
+		{"ConflateRow", "jJ"},
+		{"TruncateRowFrom", "jlD"},
+		{"TruncateFrom", "lllllldG"},
+		{"DeleteRow", "dd"},
+		{"Update which effectively replaces", "jjlvlllld"},
+	}
+
+	for _, _tcase := range suite {
+		tcase := _tcase
+		t.Run(fmt.Sprintf("undo %s", tcase.name), func(t *testing.T) {
+			buf := cell.NewBuffer()
+			buf.ReadFrom(strings.NewReader(undoFortune))
+
+			vi := New(buf, "")
+			vi.Resize(100, 100)
+
+			for i := 0; i < 5; i++ {
+				for _, ch := range tcase.cmd {
+					ev := term.Event{Ch: ch}
+					vi.Handle(ev)
+				}
+				vi.Handle(term.Event{Key: term.KeyEsc})
+				quit, handled := vi.Handle(term.Event{Ch: 'u'})
+				assert.False(t, quit)
+				assert.True(t, handled)
+			}
+
+			after := buf.String()
+			assert.Equal(t, undoFortune, after)
+		})
+	}
+
+	t.Run("undo/redo a series of updates", func(t *testing.T) {
+		buf := cell.NewBuffer()
+		buf.ReadFrom(strings.NewReader(undoFortune))
+		prev := buf.String()
+
+		vi := New(buf, "")
+		vi.Resize(100, 100)
+
+		for _, tcase := range suite {
+			for _, ch := range tcase.cmd {
+				ev := term.Event{Ch: ch}
+				vi.Handle(ev)
+			}
+			vi.Handle(term.Event{Key: term.KeyEsc})
+		}
+
+		middle := buf.String()
+
+		for range suite {
+			quit, handled := vi.Handle(term.Event{Ch: 'u'})
+			assert.False(t, quit)
+			assert.True(t, handled)
+		}
+
+		after := buf.String()
+		assert.Equal(t, prev, after)
+
+		for range suite {
+			quit, handled := vi.Handle(term.Event{Key: term.KeyCtrlR})
+			assert.False(t, quit)
+			assert.True(t, handled)
+		}
+
+		afterRedo := buf.String()
+		assert.Equal(t, middle, afterRedo)
+
+		for range suite {
+			quit, handled := vi.Handle(term.Event{Ch: 'u'})
+			assert.False(t, quit)
+			assert.True(t, handled)
+		}
+
+		after = buf.String()
+		assert.Equal(t, prev, after)
 	})
 }

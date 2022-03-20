@@ -14,6 +14,15 @@ import (
 
 var _ tui.Handler = (*Vi)(nil)
 
+type snapshot struct {
+	content string
+	cursor  editor.CursorMark
+}
+
+func (s snapshot) String() string {
+	return fmt.Sprintf("Snapshot{%q:%v}", s.content, s.cursor)
+}
+
 // Vi implements a basic vi-like text editor which satisfies tui.Handler
 type Vi struct {
 	name      string
@@ -26,8 +35,13 @@ type Vi struct {
 
 	currUpdated   bool
 	evUpdated     bool
+	currSnapshot  snapshot
 	currUpdates   []term.Event
 	repeatUpdates []term.Event
+
+	resetting    bool
+	undoTimeline []snapshot
+	redoTimeline []snapshot
 }
 
 type viSubscriber Vi
@@ -54,8 +68,11 @@ func (vi *Vi) Init(buf *cell.Buffer, name string, opts ...Option) {
 
 	vi.repeatUpdates = make([]term.Event, 0)
 	vi.currUpdates = make([]term.Event, 0)
+	vi.undoTimeline = make([]snapshot, 0)
+	vi.redoTimeline = make([]snapshot, 0)
 
 	vi.buf.Subscribe((*viSubscriber)(vi))
+	vi.snapshotContent()
 }
 
 // Cursor satisfies tui.Handler
@@ -83,10 +100,6 @@ func isSelectMode(mode viMode) bool {
 	return mode == visualMode || mode == visualLineMode || mode == visualBlockMode
 }
 
-func isUndoEvent(mode viMode, ev term.Event) bool {
-	return mode == normalMode && (ev.Ch == 'u' || ev.Key == term.KeyCtrlR)
-}
-
 func (vi *Vi) resetUpdates() {
 	vi.currUpdates = vi.currUpdates[:0]
 	vi.currUpdated = false
@@ -102,15 +115,26 @@ func (vi *Vi) copyRepeat() {
 	}
 	vi.repeatUpdates = vi.repeatUpdates[:0]
 	vi.repeatUpdates = append(vi.repeatUpdates, vi.currUpdates...)
-	vi.resetUpdates()
+}
+
+func (vi *Vi) pushNewSnapshot() {
+	vi.pushUndo(vi.currSnapshot)
 }
 
 func (vi *viSubscriber) OnWillUpdate(from, to term.Coordinates, str string) {
+	if !vi.currUpdated && !vi.resetting {
+		pubVi := (*Vi)(vi)
+		pubVi.currSnapshot.cursor = vi.handler.newMark(from)
+		pubVi.pushNewSnapshot()
+		pubVi.resetRedoTimeline()
+	}
 }
 
 func (vi *viSubscriber) OnDidUpdate(start, end term.Coordinates, old string) {
-	vi.evUpdated = true
-	vi.currUpdated = true
+	if !vi.resetting {
+		vi.evUpdated = true
+		vi.currUpdated = true
+	}
 }
 
 // Handle satisfies tui.Handler
@@ -123,6 +147,14 @@ func (vi *Vi) Handle(ev term.Event) (quit, handled bool) {
 			case '.':
 				handled = vi.repeat()
 				return
+			case 'u':
+				handled = vi.undo()
+				return
+			}
+			switch ev.Key {
+			case term.KeyCtrlR:
+				handled = vi.redo()
+				return
 			}
 		}
 	}
@@ -133,30 +165,32 @@ func (vi *Vi) Handle(ev term.Event) (quit, handled bool) {
 	nextMode := vi.handler.mode()
 
 	if prevMode == nextMode {
-		if prevMode != normalMode {
-			vi.appendLastUpdate(ev)
-		}
-		if !isUpdateMode(prevMode) && vi.evUpdated && !isUndoEvent(prevMode, ev) {
+		if !isUpdateMode(prevMode) && vi.evUpdated {
 			vi.appendLastUpdate(ev)
 			vi.copyRepeat()
+			vi.snapshotContent()
+			vi.resetUpdates()
+		} else if prevMode != normalMode {
+			vi.appendLastUpdate(ev)
 		}
 		return
 	}
 
 	if !isUpdateMode(prevMode) && isUpdateMode(nextMode) {
-		if !isSelectMode(prevMode) {
-			vi.resetUpdates()
-		}
 		vi.appendLastUpdate(ev)
 	} else if isUpdateMode(prevMode) && !isUpdateMode(nextMode) {
 		vi.appendLastUpdate(ev)
 		vi.copyRepeat()
+		vi.snapshotContent()
+		vi.resetUpdates()
 	} else if isUpdateMode(prevMode) && isUpdateMode(nextMode) {
 		vi.appendLastUpdate(ev)
 	} else {
 		vi.appendLastUpdate(ev)
 		if vi.evUpdated {
 			vi.copyRepeat()
+			vi.snapshotContent()
+			vi.resetUpdates()
 		}
 	}
 	return quit, handled
@@ -243,4 +277,64 @@ func (vi *Vi) repeat() (handled bool) {
 		vi.handler.Handle(ev)
 	}
 	return
+}
+
+func popSnapshot(timeline []snapshot) ([]snapshot, snapshot, bool) {
+	lastCmd := len(timeline) - 1
+	if lastCmd < 0 {
+		return timeline, snapshot{}, false
+	}
+	snap := timeline[lastCmd]
+	return timeline[:lastCmd], snap, true
+}
+
+func (vi *Vi) redo() bool {
+	redoTimeline, snapshot, ok := popSnapshot(vi.redoTimeline)
+	if !ok {
+		return false
+	}
+	vi.redoTimeline = redoTimeline
+
+	current := vi.currSnapshot
+	vi.resetToSnapshot(snapshot)
+	vi.pushUndo(current)
+	return ok
+}
+
+func (vi *Vi) undo() bool {
+	undoTimeline, snapshot, ok := popSnapshot(vi.undoTimeline)
+	if !ok {
+		return false
+	}
+	vi.undoTimeline = undoTimeline
+
+	current := vi.currSnapshot
+	vi.resetToSnapshot(snapshot)
+	vi.pushRedo(current)
+	return ok
+}
+
+func (vi *Vi) resetToSnapshot(s snapshot) {
+	from, to := term.Coordinates{}, term.Coordinates{Y: vi.buf.Rows()}
+	vi.resetting = true
+	vi.buf.Update(from, to, s.content)
+	vi.handler.moveToMark(s.cursor)
+	vi.currSnapshot = s
+	vi.resetting = false
+}
+
+func (vi *Vi) snapshotContent() {
+	vi.currSnapshot.content = vi.buf.String()
+}
+func (vi *Vi) pushUndo(content snapshot) {
+	// TODO pop last op if exceed mem limit
+	vi.undoTimeline = append(vi.undoTimeline, content)
+}
+
+func (vi *Vi) pushRedo(content snapshot) {
+	vi.redoTimeline = append(vi.redoTimeline, content)
+}
+
+func (vi *Vi) resetRedoTimeline() {
+	vi.redoTimeline = vi.redoTimeline[:0]
 }

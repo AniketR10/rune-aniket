@@ -521,7 +521,6 @@ func TestIntegrationScrollEvent(t *testing.T) {
 		{"MoveEndLine", term.Coordinates{Y: 2}, term.Event{Type: term.EventKey, Ch: '$'}},
 		{"MoveRightStartWord", term.Coordinates{X: 4, Y: 9}, term.Event{Type: term.EventKey, Ch: 'w'}},
 		{"MoveLeftStartWord", term.Coordinates{X: 21, Y: 9}, term.Event{Type: term.EventKey, Ch: 'B'}},
-		{"Undo", term.Coordinates{X: 5, Y: 10}, term.Event{Type: term.EventKey, Ch: 'u'}},
 	}
 
 	for _, tcase := range tsuite {

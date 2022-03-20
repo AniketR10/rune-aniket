@@ -1127,7 +1127,13 @@ func (c *Cursor) MoveToBounds(padding int) {
 	c.scroll.DisablePublishing()
 	defer c.enablePublishing()
 
+	for c.Row() < 0 && c.MoveDown() {
+	}
+
 	for c.Row() >= c.rows() && c.MoveUp() {
+	}
+
+	for c.Column() < 0 && c.MoveRight() {
 	}
 
 	for c.Column() >= c.reader().Columns(c.Row())+padding && c.MoveLeft() {
@@ -1490,4 +1496,9 @@ func (c *Cursor) Word() string {
 // multiple OnSeek dispatches rather than a single one.
 func (c *Cursor) SubscribeScroll(subs component.ScrollSubscriber) {
 	c.scroll.Subscribe(subs)
+}
+
+// NewMark returns a new cursor mark from the given pos content coordinates
+func (c *Cursor) NewMark(pos term.Coordinates) CursorMark {
+	return CursorMark{c.scrollToWindowCoordinates(pos)}
 }
