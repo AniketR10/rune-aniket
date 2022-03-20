@@ -726,3 +726,31 @@ func TestBufferInsertRowAt(t *testing.T) {
 		})
 	}
 }
+
+func TestBufferReplaceAll(t *testing.T) {
+	tsuite := []struct {
+		desc string
+		in   string
+		out  string
+	}{
+		{"replace small content with large content no newline", "a\nb\nc\n", "aaaa\nbbbb\nccccc\ndddd\n"},
+		{"replace small content with large content newline", "a\nb\nc\n", "aaaa\nbbbb\nccccc\ndddd\n"},
+		{"replace large content with small content no newline", "aaaa\nbbbb\nccccc\ndddd\n", "a\nb\nc\n"},
+		{"replace large content with small content newline", "aaaa\nbbbb\nccccc\ndddd\n", "a\nb\nc\n"},
+		{"replace empty content with non-empty", "", "a"},
+		{"replace empty content with newline", "", "\n"},
+		{"replace non-empty content with empty", "a", ""},
+		{"replace newline content with empty", "\n", ""},
+		{"replace newline content with empty", "a\n\tb\n", "\tc\nd\n"},
+	}
+
+	for _, tcase := range tsuite {
+		t.Run(tcase.desc, func(t *testing.T) {
+			b := NewBuffer()
+			b.WriteString(tcase.in)
+			b.Update(term.Coordinates{}, term.Coordinates{Y: b.Rows()}, tcase.out)
+			assert.Equal(t, tcase.out, b.String())
+		})
+	}
+
+}
