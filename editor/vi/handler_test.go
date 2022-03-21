@@ -542,3 +542,12 @@ func TestIntegrationScrollEvent(t *testing.T) {
 		})
 	}
 }
+
+func TestIntegrationNewFile(t *testing.T) {
+	vi := setupVi(t, "", 2)
+	vi.Resize(4, 4)
+	for _, ch := range "ihello\nworld" {
+		vi.Handle(term.Event{Ch: ch})
+	}
+	assert.Equal(t, "hello\nworld", vi.less.Buffer().String())
+}

@@ -49,13 +49,12 @@ type message struct {
 
 // Cursor is a helper structure which manages a cursor over a Scroll.
 type Cursor struct {
-	scroll     *component.Scroll
-	unixReader cell.Reader
-	search     string
-	cursor     term.Coordinates
-	locs       map[string]LocationList
-	messages   map[term.Coordinates][]message
-	selection  struct {
+	scroll    *component.Scroll
+	search    string
+	cursor    term.Coordinates
+	locs      map[string]LocationList
+	messages  map[term.Coordinates][]message
+	selection struct {
 		mode       SelectMode
 		scrollFrom term.Coordinates
 		cells      [][]term.Cell
@@ -85,7 +84,6 @@ func (c *Cursor) Init(scroll *component.Scroll) {
 	c.messages = make(map[term.Coordinates][]message)
 
 	c.scroll.Buffer().Subscribe(&c.subscriber)
-	c.unixReader = newUnixFileReader(c.scroll.Buffer())
 }
 
 func (c *curSubscriber) clearAllLocations() {
@@ -138,7 +136,7 @@ func (c *Cursor) Coordinates() term.Coordinates {
 }
 
 func (c *Cursor) reader() cell.Reader {
-	return c.unixReader
+	return c.buffer().Reader()
 }
 
 func (c *Cursor) buffer() *cell.Buffer {

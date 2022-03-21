@@ -16,14 +16,14 @@ func newUnixFileReader(r cell.Reader) *unixFileReader {
 	return b
 }
 
-func (b *unixFileReader) endswithEOL() bool {
-	rows := b.reader.Rows()
-	return rows != 0 && b.reader.Columns(rows-1) == 0
+func (b *unixFileReader) endsWithEOL() bool {
+	cells := b.reader.RawCells()
+	return len(cells) > 1 && len(cells[len(cells)-1]) == 0
 }
 
 func (b *unixFileReader) Rows() (rows int) {
 	rows = b.reader.Rows()
-	if !b.endswithEOL() {
+	if !b.endsWithEOL() {
 		return
 	}
 	rows--
@@ -41,7 +41,7 @@ func (b *unixFileReader) Cell(pos term.Coordinates) (term.Cell, bool) {
 
 func (b *unixFileReader) RawCells() (cells [][]term.Cell) {
 	cells = b.reader.RawCells()
-	if !b.endswithEOL() {
+	if !b.endsWithEOL() {
 		return
 	}
 	cells = cells[:len(cells)-1]
@@ -49,7 +49,7 @@ func (b *unixFileReader) RawCells() (cells [][]term.Cell) {
 }
 
 func (b *unixFileReader) String() string {
-	if !b.endswithEOL() {
+	if !b.endsWithEOL() {
 		return b.reader.String()
 	}
 	return cell.CellsToString(b.RawCells())

@@ -58,14 +58,20 @@ func (h *mockHandler) cursorAtScroll() term.Coordinates {
 }
 func (h *mockHandler) subscribeScroll(sub component.ScrollSubscriber) {
 }
-func (h *mockHandler) newMark(pos term.Coordinates) editor.CursorMark {
-	return h.h.newMark(pos)
-}
-func (h *mockHandler) moveToMark(m editor.CursorMark) {
-	h.h.moveToMark(m)
+
+func TestViHandle100(t *testing.T) {
+	testViHandleSize(t, 100, 100)
 }
 
-func TestViHandle(t *testing.T) {
+func TestViHandle10(t *testing.T) {
+	testViHandleSize(t, 10, 10)
+}
+
+func TestViHandle5(t *testing.T) {
+	testViHandleSize(t, 5, 5)
+}
+
+func testViHandleSize(t *testing.T, width, height int) {
 	tsuite := []struct {
 		desc string
 		in   string
@@ -128,13 +134,13 @@ func TestViHandle(t *testing.T) {
 		},
 		{
 			desc: "repeats delete a word to insert events",
-			in:   "jjwcwhello#.",
-			want: "jjwcwhello#cwhello#",
+			in:   "jjwcwhello#b.",
+			want: "jjwcwhello#bcwhello#",
 		},
 		{
 			desc: "does not capture combination if there was no update",
-			in:   ">i#.",
-			want: ">i#>",
+			in:   "jjj>i#.",
+			want: "jjj>i#>",
 		},
 		{
 			desc: "handles search mode correctly",
@@ -159,7 +165,7 @@ func TestViHandle(t *testing.T) {
 		vi := New(buf, "")
 		mock := newMockHandler(buf)
 		vi.handler = mock
-		vi.Resize(100, 100)
+		vi.Resize(width, height)
 		for _, ch := range in {
 			ev := term.Event{Ch: ch}
 			vi.Handle(ev)
@@ -176,21 +182,19 @@ func TestViHandle(t *testing.T) {
 			testHandle(t, tcase.in, tcase.want)
 		})
 	}
-
-	t.Run("state should be cleaned and reset properly on ESC", func(t *testing.T) {
-		var in strings.Builder
-		var want strings.Builder
-		for _, tcase := range tsuite {
-			in.WriteString("#") // ESC mapping by mock
-			in.WriteString(tcase.in)
-			want.WriteString("#")
-			want.WriteString(tcase.want)
-		}
-		testHandle(t, in.String(), want.String())
-	})
 }
 
-func TestUndo(t *testing.T) {
+func TestUndo100(t *testing.T) {
+	testUndoSize(t, 100, 100)
+}
+func TestUndo10(t *testing.T) {
+	testUndoSize(t, 10, 10)
+}
+func TestUndo5(t *testing.T) {
+	testUndoSize(t, 5, 5)
+}
+
+func testUndoSize(t *testing.T, width, height int) {
 	const undoFortune = `Love in your heart wasn't put there to stay.
 Love isn't love 'til you give it away.
 		-- Oscar Hammerstein 中国`
@@ -201,13 +205,13 @@ Love isn't love 'til you give it away.
 		{"Insert", "jji\t"},
 		{"InsertRowAt", "ji\n"},
 		{"DeleteCell", "jjllllx"},
-		{"ConflateRow", "J"},
+		{"ConflateRow", "ggJ"},
 		{"TruncateRowFrom", "jlD"},
 		{"TruncateFrom", "lllllldG"},
 		{"DeleteRow", "dd"},
-		{"Update which effectively replaces", "jjlvlllld"},
+		{"Update which effectively replaces", "jjlvllllchello"},
 		{"Repeat", "jji\t#..."},
-		{"DeleteAll", "cGhello\nworld"},
+		{"ReplaceAll", "kkcGhello\nworld"},
 	}
 
 	for _, _tcase := range suite {
@@ -217,7 +221,7 @@ Love isn't love 'til you give it away.
 			buf.ReadFrom(strings.NewReader(undoFortune))
 
 			vi := New(buf, "")
-			vi.Resize(100, 100)
+			vi.Resize(width, height)
 
 			for i := 0; i < 5; i++ {
 				for _, ch := range tcase.cmd {
@@ -241,7 +245,7 @@ Love isn't love 'til you give it away.
 		prev := buf.String()
 
 		vi := New(buf, "")
-		vi.Resize(100, 100)
+		vi.Resize(width, height)
 
 		for _, tcase := range suite {
 			for _, ch := range tcase.cmd {
@@ -253,28 +257,28 @@ Love isn't love 'til you give it away.
 
 		middle := buf.String()
 
-		for range suite {
+		for i := range suite {
 			quit, handled := vi.Handle(term.Event{Ch: 'u'})
-			assert.False(t, quit)
-			assert.True(t, handled)
+			assert.False(t, quit, i)
+			assert.True(t, handled, i)
 		}
 
 		after := buf.String()
 		assert.Equal(t, prev, after)
 
-		for range suite {
+		for i := range suite {
 			quit, handled := vi.Handle(term.Event{Key: term.KeyCtrlR})
-			assert.False(t, quit)
-			assert.True(t, handled)
+			assert.False(t, quit, i)
+			assert.True(t, handled, i)
 		}
 
 		afterRedo := buf.String()
 		assert.Equal(t, middle, afterRedo)
 
-		for range suite {
+		for i := range suite {
 			quit, handled := vi.Handle(term.Event{Ch: 'u'})
-			assert.False(t, quit)
-			assert.True(t, handled)
+			assert.False(t, quit, i)
+			assert.True(t, handled, i)
 		}
 
 		after = buf.String()

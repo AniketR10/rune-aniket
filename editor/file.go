@@ -190,6 +190,8 @@ func (f *FileBuffer) initFiles(filePath, swapDir string, readOnly bool) error {
 
 func (f *FileBuffer) initBuffer(buf *cell.Buffer, file OsFile) (err error) {
 	buf.Reset()
+	reader := newUnixFileReader(buf.Reader())
+	buf.WithReader(reader)
 
 	// file could be not created yet
 	if file != nil {
@@ -199,6 +201,10 @@ func (f *FileBuffer) initBuffer(buf *cell.Buffer, file OsFile) (err error) {
 		}
 
 		defer file.Seek(0, 0)
+	}
+
+	if !reader.endsWithEOL() {
+		buf.WriteString("\n")
 	}
 
 	buf.Subscribe((*fileBuf)(f))

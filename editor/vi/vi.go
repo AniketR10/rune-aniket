@@ -16,7 +16,7 @@ var _ tui.Handler = (*Vi)(nil)
 
 type snapshot struct {
 	content string
-	cursor  editor.CursorMark
+	cursor  term.Coordinates
 }
 
 func (s snapshot) String() string {
@@ -126,7 +126,7 @@ func (vi *Vi) pushNewSnapshot() {
 func (vi *viSubscriber) OnWillUpdate(from, to term.Coordinates, str string) {
 	if !vi.currUpdated && !vi.resetting {
 		pubVi := (*Vi)(vi)
-		pubVi.currSnapshot.cursor = vi.handler.newMark(from)
+		pubVi.currSnapshot.cursor = from
 		pubVi.pushNewSnapshot()
 		pubVi.resetRedoTimeline()
 	}
@@ -325,7 +325,7 @@ func (vi *Vi) resetToSnapshot(s snapshot) {
 	from, to := term.Coordinates{}, term.Coordinates{Y: vi.buf.Rows()}
 	vi.resetting = true
 	vi.buf.Update(from, to, s.content)
-	vi.handler.moveToMark(s.cursor)
+	vi.handler.setCursorAtScroll(s.cursor)
 	vi.currSnapshot = s
 	vi.resetting = false
 }

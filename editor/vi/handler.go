@@ -48,8 +48,6 @@ type viHandler interface {
 	setCursorAtScroll(pos term.Coordinates) bool
 	cursorAtScroll() term.Coordinates
 	subscribeScroll(sub component.ScrollSubscriber)
-	newMark(pos term.Coordinates) editor.CursorMark
-	moveToMark(m editor.CursorMark)
 }
 
 // viHandlerImpl implements a basic vi-like text editor which satisfies tui.Handler
@@ -837,13 +835,4 @@ func (vi *viHandlerImpl) mode() viMode {
 		return searchMode
 	}
 	return vi.currMode
-}
-
-func (vi *viHandlerImpl) newMark(pos term.Coordinates) editor.CursorMark {
-	return vi.cursor.NewMark(pos)
-}
-
-func (vi *viHandlerImpl) moveToMark(m editor.CursorMark) {
-	vi.cursor.MoveToMark(m)
-	vi.free = m
 }

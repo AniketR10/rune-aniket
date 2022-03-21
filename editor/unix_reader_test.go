@@ -69,7 +69,7 @@ func TestUnixFile(t *testing.T) {
 		expected string
 		rows     int
 	}{
-		{strings.NewReader(""), "", 0},
+		{strings.NewReader(""), "", 1},
 		{strings.NewReader("fjelkwfjlkew"), "fjelkwfjlkew", 1},
 		{strings.NewReader("fjelkwfjlkew\nfewjklfe"), "fjelkwfjlkew\nfewjklfe", 2},
 		{f, "LINE\nLINE\nLINE", testFilesLines},

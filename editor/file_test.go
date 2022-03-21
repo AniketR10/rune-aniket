@@ -208,7 +208,7 @@ func testFileBufferIntegration(t *testing.T, endsInEOL bool) {
 		require.NoError(t, err)
 		assert.Equal(t, "", string(b))
 
-		buf.WriteString("blah\n")
+		buf.InsertString(term.Coordinates{}, "blah\n")
 
 		require.NoError(t, f.Flush())
 
@@ -332,7 +332,7 @@ func TestFileBufferIntegrationNOEOL(t *testing.T) {
 }
 
 func assertRecoverFromSwapFile(t *testing.T, filename, swapname string, b *cell.Buffer) {
-	assert.Equal(t, sampleSnippet+"\n", b.String())
+	assert.Equal(t, sampleSnippet, b.String())
 
 	buf, err := ioutil.ReadFile(filename)
 	require.NoError(t, err)
@@ -549,6 +549,34 @@ func TestFileBufferInit(t *testing.T) {
 		expectInitBuffer(mock, data)
 
 		assert.NoError(t, f.Init(fileName, cell.NewBuffer(), "", false))
+	})
+
+	t.Run("masks whether there's a last EOL from clients", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		fileName := "CA"
+
+		for _, data := range [][]byte{[]byte("Oakland\n"), []byte("Oakland")} {
+			fileInfo := testFileInfo{}
+
+			f, mock := newTestFileBuffer(ctrl)
+			expectInitSwap(mock, fileName, fileInfo, data)
+			expectInitBuffer(mock, data)
+
+			buf := cell.NewBuffer()
+			assert.NoError(t, f.Init(fileName, buf, "", false))
+			assert.Equal(t, "Oakland", buf.String(), fmt.Sprintf("%q", string(data)))
+			assert.Equal(t, 1, buf.Rows(), fmt.Sprintf("%q", string(data)))
+
+			expectCopyToSwapPrepare(mock)
+			mock.EXPECT().
+				WriteString(gomock.Any()).
+				Return(1, nil)
+			buf.WriteString("\n")
+			assert.Equal(t, "Oakland\n", buf.String(), fmt.Sprintf("%q", string(data)))
+			assert.Equal(t, 2, buf.Rows(), fmt.Sprintf("%q", string(data)))
+		}
 	})
 
 	t.Run("returns error if original file is not regular or symlink file", func(t *testing.T) {

@@ -1074,7 +1074,7 @@ func testCursorDeleteSelection(t *testing.T, width, height int, typeSelect Selec
 	}{
 		{
 			initialBuf: "",
-			selected:   false,
+			selected:   true, // technically select is in bounds, which is what bool return means
 			finalPos:   func(*Cursor) {},
 			deleted:    false,
 			finalBuf:   "",
@@ -1235,6 +1235,80 @@ func TestCursorDeleteSelectionBlock1000(t *testing.T) {
 }
 
 func TestCursorMoveToBounds(t *testing.T) {
+	tsuite := []struct {
+		desc          string
+		content       string
+		cursorWin     term.Coordinates
+		offset        term.Coordinates
+		width, height int
+		padding       int
+
+		wantScroll term.Coordinates
+	}{
+		{"empty buf does nothing without padding",
+			"", term.Coordinates{}, term.Coordinates{}, 10, 10, 0,
+			term.Coordinates{}},
+		{"empty buf does nothing with padding",
+			"", term.Coordinates{}, term.Coordinates{}, 10, 10, 2,
+			term.Coordinates{}},
+		{"negative cursor window X",
+			"a\nb", term.Coordinates{Y: 3, X: -3}, term.Coordinates{}, 5, 5, 1,
+			term.Coordinates{Y: 1}},
+		{"negative cursor window Y",
+			"a\nb", term.Coordinates{X: 1, Y: -3}, term.Coordinates{}, 5, 5, 0,
+			term.Coordinates{}},
+		{"no offset, no padding out of X bounds first line",
+			"a\nb", term.Coordinates{X: 2}, term.Coordinates{}, 5, 5, 0,
+			term.Coordinates{X: 0}},
+		{"no offset, with padding out of X bounds first line",
+			"a\nb", term.Coordinates{X: 2}, term.Coordinates{}, 5, 5, 1,
+			term.Coordinates{X: 1}},
+		{"no offset, no padding out of X bounds last line",
+			"a\nb", term.Coordinates{X: 2, Y: 1}, term.Coordinates{}, 5, 5, 0,
+			term.Coordinates{X: 0, Y: 1}},
+		{"no offset, with padding out of X bounds last line",
+			"a\nb", term.Coordinates{X: 2, Y: 1}, term.Coordinates{}, 5, 5, 1,
+			term.Coordinates{X: 1, Y: 1}},
+		{"no offset, with padding NOT out of X bounds",
+			"a\nb", term.Coordinates{X: 2, Y: 1}, term.Coordinates{}, 5, 5, 2,
+			term.Coordinates{X: 2, Y: 1}},
+		{"offset, no padding out of X bounds first line",
+			"a\nbbbbb", term.Coordinates{X: 2}, term.Coordinates{X: 1}, 2, 2, 0,
+			term.Coordinates{X: 0}},
+		{"offset, with padding out of X bounds first line",
+			"a\nbbbbbb", term.Coordinates{X: 2}, term.Coordinates{X: 1}, 2, 2, 1,
+			term.Coordinates{X: 1}},
+		{"offset, no padding out of X bounds last line",
+			"aaaaaaa\nb", term.Coordinates{X: 1, Y: 1}, term.Coordinates{X: 1}, 2, 2, 0,
+			term.Coordinates{X: 0, Y: 1}},
+		{"offset, with padding out of X bounds last line",
+			"aaaaaaa\nb", term.Coordinates{X: 1, Y: 1}, term.Coordinates{X: 1}, 2, 2, 1,
+			term.Coordinates{X: 1, Y: 1}},
+		{"offset, with padding NOT out of X bounds",
+			"aaaaaaaaa\nb", term.Coordinates{X: 0, Y: 1}, term.Coordinates{X: 2}, 2, 2, 2,
+			term.Coordinates{X: 2, Y: 1}},
+		{"no offset, last EOL",
+			"a\n", term.Coordinates{X: 3, Y: 2}, term.Coordinates{}, 5, 5, 0,
+			term.Coordinates{X: 0, Y: 1}},
+		{"offset, last EOL",
+			"aaaaaaaaaaaa\n", term.Coordinates{}, term.Coordinates{X: 3, Y: 1}, 2, 1, 0,
+			term.Coordinates{X: 0, Y: 1}},
+	}
+	for _, tcase := range tsuite {
+		t.Run(tcase.desc, func(t *testing.T) {
+			e := setupCursorContent(t, tcase.width, tcase.height, tcase.content)
+			e.cursor = tcase.cursorWin
+			if tcase.offset != (term.Coordinates{}) {
+				require.True(t, e.scroll.SetOffset(tcase.offset))
+			}
+
+			e.MoveToBounds(tcase.padding)
+			assert.Equal(t, tcase.wantScroll, e.cursorAtScroll())
+		})
+	}
+}
+
+func TestCursorMoveToBoundsOld(t *testing.T) {
 	e := setupCursor(t, 100, 100)
 
 	pos := e.Coordinates()
@@ -1677,6 +1751,42 @@ func TestCursorWrap(t *testing.T) {
 		cursor := e.CursorAtScroll()
 		assert.Equal(t, term.Coordinates{Y: 3, X: 16}, cursor)
 	})
+}
+
+func TestCursorSelectWordInsertWord(t *testing.T) {
+	e := setupCursorContent(t, 5, 5, sampleSnippet+"\n")
+	require.True(t, e.MoveDown())
+	require.True(t, e.MoveDown())
+	require.True(t, e.MoveRightStartWord())
+	require.True(t, e.Select())
+	require.True(t, e.MoveRightStartWord())
+	require.True(t, e.DeleteSelection())
+	l := len(e.buffer().String())
+	e.Insert('h')
+	e.Insert('e')
+	e.Insert('l')
+	e.Insert('l')
+	e.Insert('o')
+	assert.Equal(t, l+5, len(e.buffer().String()))
+}
+
+func TestCursorReplaceAllWithNewline(t *testing.T) {
+	e := setupCursorContent(t, 5, 5, sampleSnippet+"\n")
+	require.True(t, e.SelectLine())
+	require.True(t, e.MoveLastLine())
+	require.True(t, e.DeleteSelection())
+	e.Insert('h')
+	e.Insert('e')
+	e.Insert('l')
+	e.Insert('l')
+	e.Insert('o')
+	e.Insert('\n')
+	e.Insert('w')
+	e.Insert('o')
+	e.Insert('r')
+	e.Insert('l')
+	e.Insert('d')
+	assert.Equal(t, "hello\nworld", e.buffer().String())
 }
 
 func newBenchmarkScroll(width, height int, fortunes int) (scroll *component.Scroll) {
