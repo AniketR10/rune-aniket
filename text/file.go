@@ -1,7 +1,5 @@
 package text
 
-//go:generate mockgen -destination=./file_gomock.go -package text -self_package text -source file.go
-
 import (
 	"errors"
 	"fmt"

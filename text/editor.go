@@ -1,7 +1,5 @@
 package text
 
-//go:generate mockgen -destination=./editor_gomock.go -package text -self_package text -source editor.go
-
 import (
 	"fmt"
 

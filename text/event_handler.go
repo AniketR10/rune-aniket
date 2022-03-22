@@ -2,8 +2,6 @@ package text
 
 import "context"
 
-//go:generate mockgen -destination=./event_handler_gomock.go -package text -self_package text -source event_handler.go
-
 // EventHandler wraps the basic method Handle.
 type EventHandler interface {
 	// Handle handles Event and returns true if it no longer needs to receive events,

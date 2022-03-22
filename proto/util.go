@@ -1,7 +1,5 @@
 package proto
 
-//go:generate mockgen -destination=./grpc_gomock.go -package proto google.golang.org/grpc ClientConnInterface
-
 import (
 	context "context"
 	fmt "fmt"

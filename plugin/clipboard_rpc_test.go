@@ -1,7 +1,5 @@
 package plugin
 
-//go:generate mockgen -destination=./closer_gomock_test.go -package plugin -self_package plugin -source clipboard_rpc_test.go
-
 import (
 	"net"
 	"testing"

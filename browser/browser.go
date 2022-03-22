@@ -1,7 +1,5 @@
 package browser
 
-//go:generate mockgen -destination=./browser_gomock.go -package browser -self_package browser -source browser.go
-
 import (
 	"github.com/ernestrc/blue/datastore/document"
 	"github.com/ernestrc/go-tui"

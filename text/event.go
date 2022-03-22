@@ -1,7 +1,5 @@
 package text
 
-//go:generate mockgen -destination=./event_handler_gomock.go -package text -self_package text -source event.go
-
 import (
 	"context"
 	"fmt"

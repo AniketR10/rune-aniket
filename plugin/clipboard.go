@@ -1,7 +1,5 @@
 package plugin
 
-//go:generate mockgen -destination=./clipboard_gomock_test.go -package plugin -self_package plugin -source clipboard.go
-
 import (
 	"errors"
 	"io"

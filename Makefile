@@ -36,7 +36,6 @@ coverage: $(BIN)
 	@ go tool cover -html=$(BIN)/coverage
 
 generate:
-	@ rm -rf $(GOMOCKS) $(PROTO)
 	@ go generate ./...
 	@ mv proto/github.com/ernestrc/go-tui/proto/*.pb.go proto/
 	@ rm -rf proto/github.com
