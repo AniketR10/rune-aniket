@@ -6,9 +6,9 @@ import (
 	"github.com/ernestrc/go-tui/term"
 )
 
-// selector extends a reader to perform cell selection operations.
+// selector extends a view to perform cell selection operations.
 type selector struct {
-	reader Reader
+	view View
 }
 
 func (s *selector) selectCells(from term.Coordinates, to term.Coordinates) (
@@ -16,7 +16,7 @@ func (s *selector) selectCells(from term.Coordinates, to term.Coordinates) (
 ) {
 	res = make([][]term.Cell, 0)
 	from, to = SortFromTo(from, to)
-	cells := s.reader.RawCells()
+	cells := s.view.RawCells()
 
 	for from.Y < to.Y && from.Y < len(cells) {
 		x := int(math.Min(float64(from.X), float64(len(cells[from.Y]))))
@@ -41,7 +41,7 @@ func (s *selector) selectLine(from term.Coordinates, to term.Coordinates) (
 ) {
 	res = make([][]term.Cell, 0)
 	from, to = SortFromTo(from, to)
-	cells := s.reader.RawCells()
+	cells := s.view.RawCells()
 
 	for from.Y <= to.Y && from.Y < len(cells) {
 		res = append(res, cells[from.Y][:])
@@ -61,7 +61,7 @@ func (s *selector) iterateBlocks(
 	from term.Coordinates, to term.Coordinates, op iterateBlockFunc,
 ) {
 	from, to = SortFromToBlock(from, to)
-	cells := s.reader.RawCells()
+	cells := s.view.RawCells()
 	i := 0
 	lencells := len(cells)
 	for from.Y <= to.Y && from.Y < lencells {

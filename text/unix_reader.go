@@ -7,10 +7,10 @@ import (
 
 // unixFileReader is a reader that hides the last EOL if present.
 type unixFileReader struct {
-	reader cell.Reader
+	reader cell.View
 }
 
-func newUnixFileReader(r cell.Reader) *unixFileReader {
+func newUnixFileReader(r cell.View) *unixFileReader {
 	b := new(unixFileReader)
 	b.reader = r
 	return b

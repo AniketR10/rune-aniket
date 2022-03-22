@@ -133,9 +133,9 @@ func TestComponentRemoveAllTabs(t *testing.T) {
 			c.NewTab("a", "a", &handlers[0], &handlers[0])
 			c.NewTab("b", "b", &handlers[1], &handlers[1])
 			c.NewTab("c", "c", &handlers[2], &handlers[2])
-			c.UpdateWindowTabNextFree(c.Focus())
+			c.EditWindowTabNextFree(c.Focus())
 			c.ShiftFocus()
-			c.UpdateWindowTabNextFree(c.Focus())
+			c.EditWindowTabNextFree(c.Focus())
 
 			assert.Equal(t, before, c.tabs.Size())
 
@@ -186,7 +186,7 @@ func TestComponentSetContent(t *testing.T) {
 			require.NoError(t, win0.SetContent(christmasTab))
 			assertFreeTab(t, christmasTab, false)
 			assertWindowContent(t, win0, christmasTab)
-			assert.False(t, c.UpdateWindowTabNext(win0))
+			assert.False(t, c.EditWindowTabNext(win0))
 
 			h2 := NopHandler(&handler.TestHandler{})
 			win1, ok := tcase.split(c, h2)
@@ -221,14 +221,14 @@ func (s *testTabSubscriber) OnFree(t *Tab) {
 	s.t = *t
 }
 
-func TestComponentUpdateWindowTab(t *testing.T) {
+func TestComponentEditWindowTab(t *testing.T) {
 	for _, _tcase := range splitSuite {
 		tcase := _tcase
 		t.Run(tcase.method, func(t *testing.T) {
 			c := NewComponent(Config{})
 			win0 := c.Focus()
 			amzn := c.NewTab("AMZN", "AMZN", NewTestHandler(), nil)
-			c.UpdateWindowTabNextFree(win0)
+			c.EditWindowTabNextFree(win0)
 			tsla := c.NewTab("TSLA", "TSLA", NewTestHandler(), nil)
 			goog := c.NewTab("GOOG", "GOOG", NewTestHandler(), nil)
 			win, ok := tcase.split(c, goog)
@@ -243,7 +243,7 @@ func TestComponentUpdateWindowTab(t *testing.T) {
 			assertFreeTab(t, &googSubs.t, false)
 
 			for i := 0; i < 3; i++ {
-				assert.True(t, c.UpdateWindowTabNext(win))
+				assert.True(t, c.EditWindowTabNext(win))
 			}
 
 			assertFreeTab(t, amzn, false)
@@ -252,7 +252,7 @@ func TestComponentUpdateWindowTab(t *testing.T) {
 			assertFreeTab(t, &googSubs.t, true)
 
 			for i := 0; i < 3; i++ {
-				assert.True(t, c.UpdateWindowTabPrev(win0))
+				assert.True(t, c.EditWindowTabPrev(win0))
 			}
 
 			assertFreeTab(t, amzn, true)
@@ -260,14 +260,14 @@ func TestComponentUpdateWindowTab(t *testing.T) {
 			assertFreeTab(t, goog, false)
 			assertFreeTab(t, &googSubs.t, false)
 
-			assert.True(t, c.UpdateWindowTabNextFree(win0))
+			assert.True(t, c.EditWindowTabNextFree(win0))
 
 			assertFreeTab(t, amzn, false)
 			assertFreeTab(t, tsla, false)
 			assertFreeTab(t, goog, true)
 			assertFreeTab(t, &googSubs.t, true)
 
-			assert.True(t, c.UpdateWindowTabLastFree(win0))
+			assert.True(t, c.EditWindowTabLastFree(win0))
 
 			assertFreeTab(t, amzn, true)
 			assertFreeTab(t, tsla, false)
@@ -336,19 +336,19 @@ func TestComponentHandlerClose(t *testing.T) {
 				fn   func(*testing.T, *Component, Window, *testCloser)
 			}{
 				{
-					"UpdateWindowTabNextFree",
+					"EditWindowTabNextFree",
 					func(t *testing.T, c *Component, win Window, h *testCloser) {
-						assert.True(t, c.UpdateWindowTabNextFree(win))
+						assert.True(t, c.EditWindowTabNextFree(win))
 					},
 				}, {
-					"UpdateWindowTabNext",
+					"EditWindowTabNext",
 					func(t *testing.T, c *Component, win Window, h *testCloser) {
-						assert.True(t, c.UpdateWindowTabNext(win))
+						assert.True(t, c.EditWindowTabNext(win))
 					},
 				}, {
-					"UpdateWindowTabPrev",
+					"EditWindowTabPrev",
 					func(t *testing.T, c *Component, win Window, h *testCloser) {
-						assert.True(t, c.UpdateWindowTabPrev(win))
+						assert.True(t, c.EditWindowTabPrev(win))
 					},
 				}, {
 					"Window.SetContent",

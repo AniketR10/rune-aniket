@@ -161,7 +161,7 @@ func (l *hcloggerLogrus) ResetNamed(name string) hclog.Logger {
 	return l.With(logging.KeyClass, name)
 }
 
-// Updates the level. This should affect all sub-loggers as well. If an
+// Edits the level. This should affect all sub-loggers as well. If an
 // implementation cannot update the level on the fly, it should no-op.
 func (l *hcloggerLogrus) SetLevel(level hclog.Level) {
 	var logrusLevel logrus.Level

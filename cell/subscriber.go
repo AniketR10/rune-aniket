@@ -5,20 +5,20 @@ import (
 )
 
 // Subscriber is the interface that wraps methods to receive to updates to
-// an underlying cell.Writer.
+// an underlying cell.Editor.
 //
-// Subscribers MUST NOT have mutable access to the underlying cell.Writer
+// Subscribers MUST NOT have mutable access to the underlying cell.Editor
 // they're subscribing to, as updates are published synchronously so
 // program could enter in an infinite loop.
 //
 // Subscribers constructors SHOULD subscribe to a Publisher upon initialization.
 type Subscriber interface {
-	// OnWillUpdate start, end and str correspond the input values
-	// to an imminent call to Update.
-	OnWillUpdate(start, end term.Coordinates, str string)
-	// OnDidUpdate from, to and old correspond to the return values
-	// of a call to Update. See cell.Writer.Update for more details.
-	OnDidUpdate(from, to term.Coordinates, old string)
+	// OnWillEdit start, end and str correspond the input values
+	// to an imminent call to Edit.
+	OnWillEdit(start, end term.Coordinates, str string)
+	// OnDidEdit from, to and old correspond to the return values
+	// of a call to Edit. See cell.Editor.Edit for more details.
+	OnDidEdit(from, to term.Coordinates, old string)
 }
 
 // Publisher is the interface that wraps the Subscribe method.
@@ -29,11 +29,11 @@ type Publisher interface {
 	Unsubscribe(Subscriber)
 }
 
-// PublisherReader is the interface that groups Publisher and Reader.
+// PublisherView is the interface that groups Publisher and Reader.
 //
 // This interface should be used within Subscribers which need to read from
 // a Reader when handling updates. See Subscriber.
-type PublisherReader interface {
+type PublisherView interface {
 	Publisher
-	Reader
+	View
 }

@@ -4,28 +4,28 @@ import (
 	"github.com/ernestrc/go-tui/term"
 )
 
-// A cell.Writer that synchronously
+// A cell.Editor that synchronously
 // publishes updated to a list of Subscribers
 type syncPublisher struct {
-	w           Writer
+	w           Editor
 	subscribers []Subscriber
 }
 
-func newPublisher(w Writer) *syncPublisher {
+func newPublisher(w Editor) *syncPublisher {
 	p := new(syncPublisher)
 	p.w = w
 	return p
 }
 
-func (p *syncPublisher) Update(start, end term.Coordinates, str string) (
+func (p *syncPublisher) Edit(start, end term.Coordinates, str string) (
 	from, to term.Coordinates, old string,
 ) {
 	for _, sub := range p.subscribers {
-		sub.OnWillUpdate(start, end, str)
+		sub.OnWillEdit(start, end, str)
 	}
-	from, to, old = p.w.Update(start, end, str)
+	from, to, old = p.w.Edit(start, end, str)
 	for _, sub := range p.subscribers {
-		sub.OnDidUpdate(from, to, old)
+		sub.OnDidEdit(from, to, old)
 	}
 	return
 }

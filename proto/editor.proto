@@ -21,7 +21,7 @@ message EditorEvent {
 	TypeOpen = 0;
 	TypeClose = 1;
 	TypeFlush = 2;
-	TypeUpdate = 3;
+	TypeEdit = 3;
 	TypeCommand = 4;
 	TypeScroll = 5;
 	TypeFocus = 6;
@@ -63,14 +63,14 @@ message SetLocationListRequest {
 
 message SetLocationListResponse {}
 
-message UpdateRequest {
+message EditCellRequest {
 	uint32 handler_id = 1;
 	Coordinates start = 2;
 	Coordinates end = 3;
 	string str = 4;
 }
 
-message UpdateResponse {
+message EditCellResponse {
 	Coordinates from = 1;
 	Coordinates to = 2;
 	string old = 3;
@@ -137,9 +137,9 @@ service Editor {
 	rpc MoveToPrevLocation(MoveToLocationRequest) returns (MoveToLocationResponse);
 
 
-	// Writer
-	rpc Update(UpdateRequest) returns (UpdateResponse);
+	// Editor
+	rpc EditCell(EditCellRequest) returns (EditCellResponse);
 
-	// Reader
+	// View
 	rpc RawCells(RawCellsRequest) returns (RawCellsResponse);
 }

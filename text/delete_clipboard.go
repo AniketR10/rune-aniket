@@ -13,7 +13,7 @@ type delClip struct {
 	mode       SelectMode
 }
 
-// WithCopyDelete installs a cell.Writer to a Buffer which persists all the deleted
+// WithCopyDelete installs a cell.Editor to a Buffer which persists all the deleted
 // content to a Clipboard.
 func WithCopyDelete(registerID string, clipboard Clipboard, cur *Cursor, buf *cell.Buffer) {
 	c := new(delClip)
@@ -24,7 +24,7 @@ func WithCopyDelete(registerID string, clipboard Clipboard, cur *Cursor, buf *ce
 	buf.SubscribeUsage(c)
 }
 
-func (c *delClip) OnWillUpdate(start, end term.Coordinates, str string) {
+func (c *delClip) OnWillEdit(start, end term.Coordinates, str string) {
 	if start == end {
 		return
 	}
@@ -36,7 +36,7 @@ func (c *delClip) OnWillUpdate(start, end term.Coordinates, str string) {
 	}
 }
 
-func (c *delClip) OnDidUpdate(from, to term.Coordinates, old string) {
+func (c *delClip) OnDidEdit(from, to term.Coordinates, old string) {
 	if old != "" {
 		c.clipboard.Copy(c.registerID, ClipboardData{Text: old, Metadata: c.mode})
 	}

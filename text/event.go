@@ -28,11 +28,11 @@ const (
 	// Content represents the file content that was flushed.
 	EventTypeFlush
 
-	// EventTypeUpdate is dispatched when new content is inserted into an editor buffer.
-	// Start, End represent the input to Update whereas
-	// From, To represent output coordinates. See cell.Writer.Update for
+	// EventTypeEdit is dispatched when new content is inserted into an editor buffer.
+	// Start, End represent the input to Edit whereas
+	// From, To represent output coordinates. See cell.Editor.Edit for
 	// more details.
-	EventTypeUpdate
+	EventTypeEdit
 
 	// EventTypeScroll is dispatched when content is scroll to a new offset.
 	// Start represents the scroll offset.
@@ -77,8 +77,8 @@ func protoTypeToModel(protoType proto.EditorEvent_Type) (ev EventType, err error
 		ev = EventTypeFlush
 	case proto.EditorEvent_TypeOpen:
 		ev = EventTypeOpen
-	case proto.EditorEvent_TypeUpdate:
-		ev = EventTypeUpdate
+	case proto.EditorEvent_TypeEdit:
+		ev = EventTypeEdit
 	case proto.EditorEvent_TypeScroll:
 		ev = EventTypeScroll
 	case proto.EditorEvent_TypeCursor:
@@ -126,8 +126,8 @@ func (e Event) protoType() proto.EditorEvent_Type {
 		return proto.EditorEvent_TypeFlush
 	case EventTypeOpen:
 		return proto.EditorEvent_TypeOpen
-	case EventTypeUpdate:
-		return proto.EditorEvent_TypeUpdate
+	case EventTypeEdit:
+		return proto.EditorEvent_TypeEdit
 	case EventTypeScroll:
 		return proto.EditorEvent_TypeScroll
 	case EventTypeCursor:
@@ -174,27 +174,27 @@ type cellSubscriber struct {
 	h    Handler
 	eh   EventHandler
 
-	onWillUpdateStr   string
-	onWillUpdateStart term.Coordinates
-	onWillUpdateEnd   term.Coordinates
+	onWillEditStr   string
+	onWillEditStart term.Coordinates
+	onWillEditEnd   term.Coordinates
 }
 
-func (s *cellSubscriber) OnWillUpdate(start, end term.Coordinates, str string) {
-	s.onWillUpdateStr = str
-	s.onWillUpdateStart = start
-	s.onWillUpdateEnd = end
+func (s *cellSubscriber) OnWillEdit(start, end term.Coordinates, str string) {
+	s.onWillEditStr = str
+	s.onWillEditStart = start
+	s.onWillEditEnd = end
 }
 
-func (s *cellSubscriber) OnDidUpdate(from, to term.Coordinates, old string) {
+func (s *cellSubscriber) OnDidEdit(from, to term.Coordinates, old string) {
 	s.eh.Handle(context.Background(), Event{
-		Type:         EventTypeUpdate,
+		Type:         EventTypeEdit,
 		Resource:     s.h,
 		ResourceName: s.name,
 		From:         from,
 		To:           to,
-		Start:        s.onWillUpdateStart,
-		End:          s.onWillUpdateEnd,
-		Content:      s.onWillUpdateStr,
+		Start:        s.onWillEditStart,
+		End:          s.onWillEditEnd,
+		Content:      s.onWillEditStr,
 	})
 }
 

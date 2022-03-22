@@ -11,13 +11,13 @@ import (
 
 type logger struct {
 	out   *log.Logger
-	r     Reader
+	r     View
 	rType string
-	w     Writer
+	w     Editor
 	wType string
 }
 
-func newLogger(r Reader, w Writer, out *log.Logger) *logger {
+func newLogger(r View, w Editor, out *log.Logger) *logger {
 	lg := &logger{
 		out:   out,
 		r:     r,
@@ -44,7 +44,7 @@ func (l *logger) wFields(method string) log.Fields {
 	}
 }
 
-func (l *logger) Update(start, end term.Coordinates, str string) (
+func (l *logger) Edit(start, end term.Coordinates, str string) (
 	from, to term.Coordinates, old string,
 ) {
 	fields := l.wFields("update")
@@ -53,7 +53,7 @@ func (l *logger) Update(start, end term.Coordinates, str string) (
 	fields["string"] = fmt.Sprintf("%s", str)
 	fields["length"] = len(str)
 
-	from, to, old = l.w.Update(start, end, str)
+	from, to, old = l.w.Edit(start, end, str)
 
 	fields["from"] = from
 	fields["to"] = to

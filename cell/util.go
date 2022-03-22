@@ -223,3 +223,9 @@ func CoordinatesSum(a, b term.Coordinates) term.Coordinates {
 		X: a.X + b.X,
 	}
 }
+
+func nextWrite(c View) term.Coordinates {
+	y := c.Rows() - 1
+	x := len(c.RawCells()[y])
+	return term.Coordinates{X: x, Y: y}
+}

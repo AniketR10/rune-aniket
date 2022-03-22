@@ -94,7 +94,7 @@ func (w *browserWindow) Content() (Handler, error) {
 }
 
 func (w *browserWindow) SetContent(h Handler) error {
-	return w.parent.tryUpdateWindowContent(w, h)
+	return w.parent.tryEditWindowContent(w, h)
 }
 
 // browserWindow is passed by value, so we store whether
@@ -172,7 +172,7 @@ func (c *Component) Init(config Config) {
 	c.tabs.Init()
 	c.tabs.OnClick = func(id int) {
 		t := c.buffers[id]
-		err := c.tryUpdateWindowContent(c.Focus().(*browserWindow), t)
+		err := c.tryEditWindowContent(c.Focus().(*browserWindow), t)
 		if err != nil {
 			c.setError(err)
 		}
@@ -325,8 +325,8 @@ func (c *Component) updateWindowTab(win *browserWindow, tabID int) bool {
 	return false
 }
 
-// UpdateWindowTabNextFree updates win with the next available tab.
-func (c *Component) UpdateWindowTabNextFree(win Window) bool {
+// EditWindowTabNextFree updates win with the next available tab.
+func (c *Component) EditWindowTabNextFree(win Window) bool {
 	freeBufs := c.freeTabs()
 	if len(freeBufs) != 0 {
 		c.updateWindowContent(win.(*browserWindow), c.buffers[freeBufs[0]])
@@ -336,8 +336,8 @@ func (c *Component) UpdateWindowTabNextFree(win Window) bool {
 	return false
 }
 
-// UpdateWindowTabLastFree updates win with the last available tab.
-func (c *Component) UpdateWindowTabLastFree(win Window) bool {
+// EditWindowTabLastFree updates win with the last available tab.
+func (c *Component) EditWindowTabLastFree(win Window) bool {
 	freeBufs := c.freeTabs()
 	if len(freeBufs) != 0 {
 		c.updateWindowContent(win.(*browserWindow), c.buffers[freeBufs[len(freeBufs)-1]])
@@ -347,12 +347,12 @@ func (c *Component) UpdateWindowTabLastFree(win Window) bool {
 	return false
 }
 
-// UpdateWindowTabPrev updates win with the tab before the current tab.
-func (c *Component) UpdateWindowTabPrev(win Window) bool {
+// EditWindowTabPrev updates win with the tab before the current tab.
+func (c *Component) EditWindowTabPrev(win Window) bool {
 	bWin := win.(*browserWindow)
 	t, id := c.browserTabID(bWin)
 	if t == nil {
-		return c.UpdateWindowTabNextFree(win)
+		return c.EditWindowTabNextFree(win)
 	}
 	for i := 0; i < len(c.buffers); i++ {
 		if id == 0 {
@@ -367,12 +367,12 @@ func (c *Component) UpdateWindowTabPrev(win Window) bool {
 	return false
 }
 
-// UpdateWindowTabNext updates win with the tab after the current tab.
-func (c *Component) UpdateWindowTabNext(win Window) bool {
+// EditWindowTabNext updates win with the tab after the current tab.
+func (c *Component) EditWindowTabNext(win Window) bool {
 	bWin := win.(*browserWindow)
 	t, id := c.browserTabID(bWin)
 	if t == nil {
-		return c.UpdateWindowTabNextFree(win)
+		return c.EditWindowTabNextFree(win)
 	}
 	for i := 0; i < len(c.buffers); i++ {
 		id++
@@ -401,7 +401,7 @@ func (c *Component) closeHandler(h Handler) {
 	c.tryLog("Component.closeHandler(%p)", h)
 }
 
-func (c *Component) tryUpdateWindowContent(
+func (c *Component) tryEditWindowContent(
 	win *browserWindow, content Handler,
 ) error {
 	if b, ok := content.(*Tab); ok {

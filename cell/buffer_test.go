@@ -274,15 +274,15 @@ func TestBufferInsertString(t *testing.T) {
 }
 
 type testSubscriber struct {
-	onDidUpdate, onWillUpdate int
+	onDidEdit, onWillEdit int
 }
 
-func (t *testSubscriber) OnWillUpdate(from, to term.Coordinates, str string) {
-	t.onWillUpdate++
+func (t *testSubscriber) OnWillEdit(from, to term.Coordinates, str string) {
+	t.onWillEdit++
 }
 
-func (t *testSubscriber) OnDidUpdate(start, end term.Coordinates, old string) {
-	t.onDidUpdate++
+func (t *testSubscriber) OnDidEdit(start, end term.Coordinates, old string) {
+	t.onDidEdit++
 }
 
 func TestBufferReset(t *testing.T) {
@@ -307,8 +307,8 @@ func TestBufferReset(t *testing.T) {
 		b.InsertRowAt(0)
 		b.DeleteRow(0)
 		// 1 reset + 1 delete + 1 insert
-		assert.Equal(t, 3, sub.onDidUpdate)
-		assert.Equal(t, 3, sub.onWillUpdate)
+		assert.Equal(t, 3, sub.onDidEdit)
+		assert.Equal(t, 3, sub.onWillEdit)
 	})
 
 	t.Run("does reset undo", func(t *testing.T) {
@@ -564,8 +564,8 @@ func TestBufferSubscribe(t *testing.T) {
 	buf.Subscribe(two)
 
 	buf.WriteString("\n")
-	assert.Equal(t, 1, one.onWillUpdate)
-	assert.Equal(t, 1, one.onDidUpdate)
+	assert.Equal(t, 1, one.onWillEdit)
+	assert.Equal(t, 1, one.onDidEdit)
 }
 
 func TestBufferInsertWithAttr(t *testing.T) {
@@ -747,7 +747,7 @@ func TestBufferReplaceAll(t *testing.T) {
 		t.Run(tcase.desc, func(t *testing.T) {
 			b := NewBuffer()
 			b.WriteString(tcase.in)
-			b.Update(term.Coordinates{}, term.Coordinates{Y: b.Rows()}, tcase.out)
+			b.Edit(term.Coordinates{}, term.Coordinates{Y: b.Rows()}, tcase.out)
 			assert.Equal(t, tcase.out, b.String())
 		})
 	}

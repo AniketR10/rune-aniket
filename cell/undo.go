@@ -8,7 +8,7 @@ import (
 // It satifies the cell.writer interface and it should be used as a replacement.
 type undoer struct {
 	version      int
-	w            Writer
+	w            Editor
 	undoTimeline []op
 	redoTimeline []op
 }
@@ -20,14 +20,14 @@ type op struct {
 }
 
 // Newundoer returns new instance of undoer to undo/redo operations of w.
-func newUndoer(w Writer) *undoer {
+func newUndoer(w Editor) *undoer {
 	u := new(undoer)
 	u.init(w)
 	return u
 }
 
 // Init initializes this undoer to undo/redo operations of w.
-func (u *undoer) init(w Writer) {
+func (u *undoer) init(w Editor) {
 	u.w = w
 	u.undoTimeline = make([]op, 0)
 	u.redoTimeline = make([]op, 0)
@@ -77,17 +77,17 @@ func (u *undoer) resetRedoTimeline() {
 	u.redoTimeline = u.redoTimeline[:0]
 }
 
-// update captures underlying writer update so it can be undone. See cell.writer.Update
-func (u *undoer) Update(start, end term.Coordinates, str string) (
+// update captures underlying writer update so it can be undone. See cell.writer.Edit
+func (u *undoer) Edit(start, end term.Coordinates, str string) (
 	from, to term.Coordinates, old string,
 ) {
 	op := op{
 		at: start,
 		do: func() {
-			from, to, old = u.w.Update(start, end, str)
+			from, to, old = u.w.Edit(start, end, str)
 		},
 		undo: func() {
-			u.w.Update(from, to, old)
+			u.w.Edit(from, to, old)
 		},
 	}
 

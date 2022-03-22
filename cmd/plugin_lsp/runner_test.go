@@ -53,7 +53,7 @@ func TestLSPFormatting(t *testing.T) {
 			require.NoError(t, err)
 
 			var b editBuilder
-			b.init(makeFile(), text.CellWriter(buffer.Writer()), cell.StringToCells(buffer.String()))
+			b.init(makeFile(), text.NewCellEditor(buffer.Editor()), cell.StringToCells(buffer.String()))
 			b.applyEdits(edits)
 			assert.Equal(t, string(want), b.buf.String())
 		})

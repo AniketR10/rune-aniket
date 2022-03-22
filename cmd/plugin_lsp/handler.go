@@ -1,7 +1,5 @@
 package main
 
-//go:generate mockgen -destination=./lsp_server_gomock.go -package main -self_package main github.com/ernestrc/golang-internal-tools/lsp/protocol Server
-
 import (
 	"bufio"
 	"context"
@@ -69,7 +67,7 @@ var (
 		text.EventTypeClose,
 		text.EventTypeFlush,
 		text.EventTypeOpen,
-		text.EventTypeUpdate,
+		text.EventTypeEdit,
 	}
 	lspHandlerPermissions = []plugin.Permission{
 		plugin.PermissionBrowserWindowManager,
@@ -915,7 +913,7 @@ func (h *lspEditorHandler) incrementVersion(f *file) int32 {
 
 // TODO client is expected to support both incremental and full synchronization
 // based on h.protocol server capabilities. Right now we are assuming incremental.
-func (h *lspEditorHandler) pushFullUpdate(
+func (h *lspEditorHandler) pushFullEdit(
 	ctx context.Context, srv execServer, f *file, content string,
 ) {
 	version := h.incrementVersion(f)
@@ -928,7 +926,7 @@ func (h *lspEditorHandler) pushFullUpdate(
 	}
 }
 
-func (h *lspEditorHandler) sendIncrementalUpdate(
+func (h *lspEditorHandler) sendIncrementalEdit(
 	ctx context.Context, srv execServer, f *file, newCells,
 	oldCells [][]term.Cell, content string, from, to term.Coordinates,
 ) (protocol.Range, error) {
@@ -984,13 +982,13 @@ func (h *lspEditorHandler) handleFileFlush(ev text.Event) {
 		return
 	}
 
-	h.pushFullUpdate(ctx, srv, f, ev.Content)
+	h.pushFullEdit(ctx, srv, f, ev.Content)
 	h.setCells(f, cell.StringToCells(ev.Content))
 	ctx = h.newSemanticTokensCtx()
 	go h.semanticTokensFull(ctx, srv, f, h.getCells(f), ev.Content)
 }
 
-func (h *lspEditorHandler) handleFileUpdate(ev text.Event) {
+func (h *lspEditorHandler) handleFileEdit(ev text.Event) {
 	ctx := context.Background()
 	ctx, cancelFn := context.WithTimeout(ctx, h.rpcTimeout)
 	defer cancelFn()
@@ -1021,9 +1019,9 @@ func (h *lspEditorHandler) handleFileUpdate(ev text.Event) {
 
 	oldCells := h.getCells(f)
 	buf := cell.CellsToBuffer(oldCells)
-	buf.Update(ev.Start, ev.End, ev.Content)
+	buf.Edit(ev.Start, ev.End, ev.Content)
 	newCells := buf.RawCells()
-	_, err := h.sendIncrementalUpdate(ctx, srv, f, newCells, oldCells,
+	_, err := h.sendIncrementalEdit(ctx, srv, f, newCells, oldCells,
 		ev.Content, ev.Start, ev.End)
 	h.setCells(f, newCells)
 	if err != nil {
@@ -1694,7 +1692,7 @@ func (h *lspEditorHandler) handleFormat(ed text.Handler, filename string, import
 	if !ok {
 		return
 	}
-	w := h.ed.Writer(ed)
+	w := h.ed.CellEditor(ed)
 
 	// this cells are used to map edit ranges to term.Coordinates
 	// but discarded because only Insert/Delete events should
@@ -1761,8 +1759,8 @@ func (h *lspEditorHandler) handleEvents(ch chan text.Event) {
 			h.handleFileClose(ev)
 		case text.EventTypeFlush:
 			h.handleFileFlush(ev)
-		case text.EventTypeUpdate:
-			h.handleFileUpdate(ev)
+		case text.EventTypeEdit:
+			h.handleFileEdit(ev)
 		}
 
 		if log.IsLevelEnabled(log.TraceLevel) {

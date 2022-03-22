@@ -272,8 +272,8 @@ func (c *Client) Cursor(h Handler) (term.Coordinates, error) {
 	return res.GetPos().ToModel(), nil
 }
 
-// Writer satisfies editor.Editor.
-func (c *Client) Writer(h Handler) Writer {
+// CellEditor satisfies text.Editor.
+func (c *Client) CellEditor (h Handler) CellEditor {
 	token, ok := h.(Token)
 	if !ok {
 		panic("SetLocationList: invalid Handler argument")
@@ -281,8 +281,8 @@ func (c *Client) Writer(h Handler) Writer {
 	return clientWriter{client: c, handlerID: uint32(token.ID)}
 }
 
-// Reader satisfies editor.Editor.
-func (c *Client) Reader(h Handler) Reader {
+// CellView satisfies text.Editor.
+func (c *Client) CellView(h Handler) CellView {
 	token, ok := h.(Token)
 	if !ok {
 		panic("SetLocationList: invalid Handler argument")

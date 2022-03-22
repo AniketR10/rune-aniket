@@ -32,9 +32,9 @@ type EditorClient interface {
 	SetLocationList(ctx context.Context, in *SetLocationListRequest, opts ...grpc.CallOption) (*SetLocationListResponse, error)
 	MoveToNextLocation(ctx context.Context, in *MoveToLocationRequest, opts ...grpc.CallOption) (*MoveToLocationResponse, error)
 	MoveToPrevLocation(ctx context.Context, in *MoveToLocationRequest, opts ...grpc.CallOption) (*MoveToLocationResponse, error)
-	// Writer
-	Update(ctx context.Context, in *UpdateRequest, opts ...grpc.CallOption) (*UpdateResponse, error)
-	// Reader
+	// Editor
+	EditCell(ctx context.Context, in *EditCellRequest, opts ...grpc.CallOption) (*EditCellResponse, error)
+	// View
 	RawCells(ctx context.Context, in *RawCellsRequest, opts ...grpc.CallOption) (*RawCellsResponse, error)
 }
 
@@ -127,9 +127,9 @@ func (c *editorClient) MoveToPrevLocation(ctx context.Context, in *MoveToLocatio
 	return out, nil
 }
 
-func (c *editorClient) Update(ctx context.Context, in *UpdateRequest, opts ...grpc.CallOption) (*UpdateResponse, error) {
-	out := new(UpdateResponse)
-	err := c.cc.Invoke(ctx, "/proto.Editor/Update", in, out, opts...)
+func (c *editorClient) EditCell(ctx context.Context, in *EditCellRequest, opts ...grpc.CallOption) (*EditCellResponse, error) {
+	out := new(EditCellResponse)
+	err := c.cc.Invoke(ctx, "/proto.Editor/EditCell", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -159,9 +159,9 @@ type EditorServer interface {
 	SetLocationList(context.Context, *SetLocationListRequest) (*SetLocationListResponse, error)
 	MoveToNextLocation(context.Context, *MoveToLocationRequest) (*MoveToLocationResponse, error)
 	MoveToPrevLocation(context.Context, *MoveToLocationRequest) (*MoveToLocationResponse, error)
-	// Writer
-	Update(context.Context, *UpdateRequest) (*UpdateResponse, error)
-	// Reader
+	// Editor
+	EditCell(context.Context, *EditCellRequest) (*EditCellResponse, error)
+	// View
 	RawCells(context.Context, *RawCellsRequest) (*RawCellsResponse, error)
 	mustEmbedUnimplementedEditorServer()
 }
@@ -197,8 +197,8 @@ func (UnimplementedEditorServer) MoveToNextLocation(context.Context, *MoveToLoca
 func (UnimplementedEditorServer) MoveToPrevLocation(context.Context, *MoveToLocationRequest) (*MoveToLocationResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method MoveToPrevLocation not implemented")
 }
-func (UnimplementedEditorServer) Update(context.Context, *UpdateRequest) (*UpdateResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method Update not implemented")
+func (UnimplementedEditorServer) EditCell(context.Context, *EditCellRequest) (*EditCellResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method EditCell not implemented")
 }
 func (UnimplementedEditorServer) RawCells(context.Context, *RawCellsRequest) (*RawCellsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RawCells not implemented")
@@ -378,20 +378,20 @@ func _Editor_MoveToPrevLocation_Handler(srv interface{}, ctx context.Context, de
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Editor_Update_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(UpdateRequest)
+func _Editor_EditCell_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(EditCellRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(EditorServer).Update(ctx, in)
+		return srv.(EditorServer).EditCell(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/proto.Editor/Update",
+		FullMethod: "/proto.Editor/EditCell",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(EditorServer).Update(ctx, req.(*UpdateRequest))
+		return srv.(EditorServer).EditCell(ctx, req.(*EditCellRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -458,8 +458,8 @@ var Editor_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _Editor_MoveToPrevLocation_Handler,
 		},
 		{
-			MethodName: "Update",
-			Handler:    _Editor_Update_Handler,
+			MethodName: "EditCell",
+			Handler:    _Editor_EditCell_Handler,
 		},
 		{
 			MethodName: "RawCells",

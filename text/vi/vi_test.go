@@ -210,7 +210,7 @@ Love isn't love 'til you give it away.
 		{"TruncateRowFrom", "jlD"},
 		{"TruncateFrom", "lllllldG"},
 		{"DeleteRow", "dd"},
-		{"Update which effectively replaces", "jjlvllllchello"},
+		{"Edit which effectively replaces", "jjlvllllchello"},
 		{"Repeat", "jji\t#..."},
 		{"ReplaceAll", "kkcGhello\nworld"},
 		{"InsertRowBelow", "Gohello"},

@@ -16,23 +16,23 @@ type attrSearcher struct {
 // AttrSearcher returns a Searcher that sets/unsets the search results
 // cell attributes upon matching.
 func AttrSearcher(
-	s Searcher, r Reader, attr term.Attributes,
+	s Searcher, r View, attr term.Attributes,
 ) SubscriberSearcher {
 
 	as := new(attrSearcher)
 
 	as.root = s
 	as.attr = attr
-	as.sel = selector{reader: r}
+	as.sel = selector{view: r}
 
 	return as
 }
 
-func (s *attrSearcher) OnWillUpdate(start, end term.Coordinates, str string) {
+func (s *attrSearcher) OnWillEdit(start, end term.Coordinates, str string) {
 	s.setResultsAttr(term.Attributes{})
 }
 
-func (s *attrSearcher) OnDidUpdate(from, to term.Coordinates, old string) {
+func (s *attrSearcher) OnDidEdit(from, to term.Coordinates, old string) {
 	s.searchMatches(s.text)
 }
 

@@ -48,10 +48,10 @@ type editorFlusherCloser struct {
 	lastFlush string
 }
 
-func (c editorFlusherCloser) OnWillUpdate(start, end term.Coordinates, str string) {
+func (c editorFlusherCloser) OnWillEdit(start, end term.Coordinates, str string) {
 }
 
-func (c editorFlusherCloser) OnDidUpdate(from, to term.Coordinates, old string) {
+func (c editorFlusherCloser) OnDidEdit(from, to term.Coordinates, old string) {
 	c.parent.setTabAttr(c.name, c.buf, c.lastFlush)
 }
 
@@ -491,14 +491,14 @@ func (c *Component) MoveToPrevLocation(h Handler, ID string) error {
 	return c.ed.MoveToPrevLocation(h, ID)
 }
 
-// Reader satisfies editor.Editor.
-func (c *Component) Reader(h Handler) Reader {
-	return c.ed.Reader(h)
+// CellView satisfies text.Editor.
+func (c *Component) CellView(h Handler) CellView {
+	return c.ed.CellView(h)
 }
 
-// Writer satisfies editor.Editor.
-func (c *Component) Writer(h Handler) Writer {
-	return c.ed.Writer(h)
+// CellEditor satisfies text.Editor.
+func (c *Component) CellEditor(h Handler) CellEditor {
+	return c.ed.CellEditor(h)
 }
 
 // Flush flushes the contents of the buffer at win, if this buffer
@@ -522,7 +522,7 @@ func (c *Component) Flush(win browser.Window) error {
 }
 
 func (c *Component) getContent(h Handler) (string, error) {
-	cells, err := c.ed.Reader(h).RawCells()
+	cells, err := c.ed.CellView(h).RawCells()
 	if err != nil {
 		return "", fmt.Errorf("Error dispatching event content: RawCells: %v", err)
 	}
@@ -604,7 +604,7 @@ func (c *Component) SubscribeEditorEvents(evs []EventType, h EventHandler) error
 	for _, ev := range evs {
 		switch ev {
 		// delegate certain event dispatching to underlying editor.
-		case EventTypeOpen, EventTypeUpdate, EventTypeScroll, EventTypeCursor:
+		case EventTypeOpen, EventTypeEdit, EventTypeScroll, EventTypeCursor:
 			delegated = append(delegated, ev)
 		default:
 			if _, ok := c.edSubscribers[ev]; !ok {

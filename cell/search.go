@@ -6,9 +6,9 @@ import (
 	"github.com/ernestrc/go-tui/term"
 )
 
-// Searcher is an interface that wraps methods to search text in a Reader.
+// Searcher is an interface that wraps methods to search text in a View.
 //
-// Search performs a text search on a Reader. It populates a search list
+// Search performs a text search on a View. It populates a search list
 // so subsequent calls to PrevResult and NextResult can scroll through the results.
 // The return value represents number of text occurrences found.
 //
@@ -43,14 +43,14 @@ type SubscriberSearcher interface {
 }
 
 type simpleSearcher struct {
-	reader  Reader
+	reader  View
 	reslist list.List
 	result  *list.Element
 }
 
 // NewSimpleSearcher returns a Searcher which uses a simple O(n) algorithm to
 // preemptively find all occurrences of the given string upon calling Search.
-func NewSimpleSearcher(reader Reader) Searcher {
+func NewSimpleSearcher(reader View) Searcher {
 	s := new(simpleSearcher)
 	s.reader = reader
 	s.Reset()

@@ -15,19 +15,19 @@ type Buffer struct {
 	selector selector
 	rootPub  *syncPublisher
 	usagePub *syncPublisher
-	safew    Writer
+	safew    Editor
 
-	// effective Reader and Writer
-	reader Reader
-	writer Writer
+	// effective View and Editor
+	view   View
+	editor Editor
 }
 
-type safeWriter struct {
-	writer Writer
-	reader Reader
+type safeEditor struct {
+	editor Editor
+	view   View
 }
 
-func fromToInBounds(cells Reader, from, to term.Coordinates) (
+func fromToInBounds(cells View, from, to term.Coordinates) (
 	newFrom, newTo term.Coordinates, ok bool,
 ) {
 	rows := cells.Rows()
@@ -49,18 +49,18 @@ func fromToInBounds(cells Reader, from, to term.Coordinates) (
 	return from, to, true
 }
 
-func (s safeWriter) Update(start, end term.Coordinates, str string) (
+func (s safeEditor) Edit(start, end term.Coordinates, str string) (
 	from, to term.Coordinates, old string,
 ) {
 	// only check in case of delete range
 	if start != end {
 		var ok bool
-		start, end, ok = fromToInBounds(s.reader, start, end)
+		start, end, ok = fromToInBounds(s.view, start, end)
 		if !ok {
 			return
 		}
 	}
-	return s.writer.Update(start, end, str)
+	return s.editor.Edit(start, end, str)
 }
 
 // NewBuffer allocates storage for a new Buffer and initializes it.
@@ -72,25 +72,25 @@ func NewBuffer() (b *Buffer) {
 
 func (b *Buffer) initWithCells(c *rawCells, logger *log.Logger) {
 	b.cells = c
-	b.writer = b.cells
-	b.reader = b.cells
+	b.editor = b.cells
+	b.view = b.cells
 
 	if logger != nil {
-		cellLogger := newLogger(b.reader, b.cells, logger)
-		b.reader = cellLogger
-		b.writer = cellLogger
+		cellLogger := newLogger(b.view, b.cells, logger)
+		b.view = cellLogger
+		b.editor = cellLogger
 	}
 
-	// setup the root publisher as the deepest Writer
-	b.rootPub = newPublisher(b.writer)
+	// setup the root publisher as the deepest Editor
+	b.rootPub = newPublisher(b.editor)
 	b.undoer = newUndoer(b.rootPub)
-	b.writer = b.undoer
-	// setup the usage publisher at the shallowest Writer
-	b.usagePub = newPublisher(b.writer)
-	b.writer = b.usagePub
-	b.safew = safeWriter{writer: b.writer, reader: b.reader}
+	b.editor = b.undoer
+	// setup the usage publisher at the shallowest Editor
+	b.usagePub = newPublisher(b.editor)
+	b.editor = b.usagePub
+	b.safew = safeEditor{editor: b.editor, view: b.view}
 
-	b.selector.reader = b.reader
+	b.selector.view = b.view
 }
 
 // InitWithTabspaces initializes this Buffer with
@@ -106,7 +106,7 @@ func (b *Buffer) Init() {
 }
 
 // WithLogger adds a cell logger which intercepts and logs all
-// the calls to the underlying Writer/Reader.
+// the calls to the underlying Editor/View.
 func (b *Buffer) WithLogger(logger *log.Logger) {
 	b.initWithCells(b.cells, logger)
 }
@@ -125,12 +125,12 @@ func (b *Buffer) InsertRowAt(y int) {
 		// insert new line at the end of previous row
 		at = term.Coordinates{Y: y - 1, X: b.Columns(y - 1)}
 	}
-	b.writer.Update(at, at, "\n")
+	b.editor.Edit(at, at, "\n")
 }
 
 // Insert inserts a rune in the given position and shift the cells to the right
 func (b *Buffer) Insert(pos term.Coordinates, r rune) (next term.Coordinates) {
-	_, next, _ = b.writer.Update(pos, pos, string(r))
+	_, next, _ = b.editor.Edit(pos, pos, string(r))
 	return
 }
 
@@ -169,7 +169,7 @@ func (b *Buffer) InsertStringWithAttr(
 
 // DeleteRow deletes the row at term.Coordinates.Y
 func (b *Buffer) DeleteRow(y int) (ok bool) {
-	if ok = y < b.reader.Rows(); !ok {
+	if ok = y < b.view.Rows(); !ok {
 		return
 	}
 	var from, to term.Coordinates
@@ -177,10 +177,10 @@ func (b *Buffer) DeleteRow(y int) (ok bool) {
 		from = term.Coordinates{Y: y}
 		to = term.Coordinates{Y: y + 1}
 	} else {
-		from = term.Coordinates{Y: y - 1, X: b.reader.Columns(y - 1)}
-		to = term.Coordinates{Y: y, X: b.reader.Columns(y)}
+		from = term.Coordinates{Y: y - 1, X: b.view.Columns(y - 1)}
+		to = term.Coordinates{Y: y, X: b.view.Columns(y)}
 	}
-	_, _, old := b.writer.Update(from, to, "")
+	_, _, old := b.editor.Edit(from, to, "")
 	ok = old != ""
 	return
 }
@@ -189,28 +189,28 @@ func (b *Buffer) DeleteRow(y int) (ok bool) {
 // from term.Coordinates.X
 func (b *Buffer) TruncateRowFrom(from term.Coordinates) (ok bool) {
 	to := term.Coordinates{Y: from.Y}
-	from, to, ok = fromToInBounds(b.reader, from, to)
+	from, to, ok = fromToInBounds(b.view, from, to)
 	if !ok {
 		return
 	}
-	cols := b.reader.Columns(to.Y)
+	cols := b.view.Columns(to.Y)
 	if cols == 0 {
 		ok = false
 		return
 	}
 	to.X = cols
-	b.writer.Update(from, to, "")
+	b.editor.Edit(from, to, "")
 	return
 }
 
 // TruncateFrom truncates from the given position to the end of the buffer.
 func (b *Buffer) TruncateFrom(from term.Coordinates) (ok bool) {
-	to := term.Coordinates{Y: b.reader.Rows()}
-	from, to, ok = fromToInBounds(b.reader, from, to)
+	to := term.Coordinates{Y: b.view.Rows()}
+	from, to, ok = fromToInBounds(b.view, from, to)
 	if !ok {
 		return
 	}
-	b.writer.Update(from, to, "")
+	b.editor.Edit(from, to, "")
 	return
 }
 
@@ -218,12 +218,12 @@ func (b *Buffer) TruncateFrom(from term.Coordinates) (ok bool) {
 func (b *Buffer) ConflateRow(y int) (ok bool) {
 	from := term.Coordinates{Y: y}
 	to := term.Coordinates{Y: y + 1}
-	from, to, ok = fromToInBounds(b.reader, from, to)
+	from, to, ok = fromToInBounds(b.view, from, to)
 	if !ok {
 		return
 	}
-	from.X = b.reader.Columns(from.Y)
-	b.writer.Update(from, to, "")
+	from.X = b.view.Columns(from.Y)
+	b.editor.Edit(from, to, "")
 	return
 }
 
@@ -233,12 +233,12 @@ func (b *Buffer) ConflateRow(y int) (ok bool) {
 func (b *Buffer) DeleteCell(pos term.Coordinates) (term.Coordinates, rune, bool) {
 	from := pos
 	to := term.Coordinates{X: from.X + 1, Y: from.Y}
-	from, to, ok := fromToInBounds(b.reader, from, to)
+	from, to, ok := fromToInBounds(b.view, from, to)
 	if !ok {
 		return term.Coordinates{}, 0, false
 	}
 
-	start, _, str := b.writer.Update(from, to, "")
+	start, _, str := b.editor.Edit(from, to, "")
 	if str == "" {
 		return term.Coordinates{}, 0, false
 	}
@@ -248,12 +248,12 @@ func (b *Buffer) DeleteCell(pos term.Coordinates) (term.Coordinates, rune, bool)
 
 // Rows returns the number of rows in the Buffer.
 func (b *Buffer) Rows() int {
-	return b.reader.Rows()
+	return b.view.Rows()
 }
 
 // Columns returns the number of cells of row at index y.
 func (b *Buffer) Columns(y int) int {
-	return b.reader.Columns(y)
+	return b.view.Columns(y)
 }
 
 // MaxColumns returns the max number of columns.
@@ -269,12 +269,12 @@ func (b *Buffer) MaxColumns() (max int) {
 // Cell returns the cell and true or a zero-valued cell and false if there is no
 // cell at position.
 func (b *Buffer) Cell(pos term.Coordinates) (term.Cell, bool) {
-	return b.reader.Cell(pos)
+	return b.view.Cell(pos)
 }
 
 // RawCells gives clients access to the underlying cell matrix.
 func (b *Buffer) RawCells() [][]term.Cell {
-	return b.reader.RawCells()
+	return b.view.RawCells()
 }
 
 // InsertString inserts string in the given position and shifts the remaining cells.
@@ -285,7 +285,7 @@ func (b *Buffer) RawCells() [][]term.Cell {
 func (b *Buffer) InsertString(at term.Coordinates, str string) (
 	from, until term.Coordinates,
 ) {
-	from, until, _ = b.writer.Update(at, at, str)
+	from, until, _ = b.editor.Edit(at, at, str)
 	return
 }
 
@@ -293,22 +293,22 @@ func (b *Buffer) InsertString(at term.Coordinates, str string) (
 // and returns the corresponding string representation of the cells removed,
 // along with the true start of the range, which accounts for padding.
 func (b *Buffer) Delete(from, to term.Coordinates) (start term.Coordinates, str string) {
-	start, _, str = b.safew.Update(from, to, "")
+	start, _, str = b.safew.Edit(from, to, "")
 	return
 }
 
-// Update removes cells in left-inclusive right-exclusive range (start, end) and
+// Edit removes cells in left-inclusive right-exclusive range (start, end) and
 // inserts s at the start of the range. It returns the corresponding string
 // representation of the content removed and the true from, to range, which
 // accounts for possible padding added or removed.
 //
-// As opposed to cell.Writer.Update, this method does not panic if range
+// As opposed to cell.Editor.Edit, this method does not panic if range
 // is out of bounds. Instead, it trims the coordinates to be in-bounds or
 // simply does nothing and returned str is empty.
-func (b *Buffer) Update(start, end term.Coordinates, s string) (
+func (b *Buffer) Edit(start, end term.Coordinates, s string) (
 	from, to term.Coordinates, old string,
 ) {
-	return b.safew.Update(start, end, s)
+	return b.safew.Edit(start, end, s)
 }
 
 // DeleteLine deletes the lines starting at from, between from, to and including end.
@@ -319,11 +319,11 @@ func (b *Buffer) DeleteLine(from, to term.Coordinates) (
 	from, to = SortFromTo(from, to)
 	from.X, to.X = 0, 0
 	to.Y++
-	from, to, ok := fromToInBounds(b.reader, from, to)
+	from, to, ok := fromToInBounds(b.view, from, to)
 	if !ok {
 		return
 	}
-	start, _, str = b.writer.Update(from, to, "")
+	start, _, str = b.editor.Edit(from, to, "")
 	return
 }
 
@@ -350,7 +350,7 @@ func (b *Buffer) DeleteBlock(from, to term.Coordinates) (
 			if to.X > columns {
 				to.X = columns
 			}
-			blockStart, _, str := b.safew.Update(from, to, "")
+			blockStart, _, str := b.safew.Edit(from, to, "")
 
 			if i == 0 {
 				start = blockStart
@@ -380,23 +380,23 @@ func (b *Buffer) ReadFrom(r io.Reader) (int64, error) {
 	return b.cells.ReadFrom(r)
 }
 
-// io.Writer
+// io.Editor
 func (b *Buffer) Write(p []byte) (int, error) {
-	nextWrite := nextWrite(b.reader)
-	b.writer.Update(nextWrite, nextWrite, string(p))
+	nextWrite := nextWrite(b.view)
+	b.editor.Edit(nextWrite, nextWrite, string(p))
 	return len(p), nil
 }
 
 // WriteString writes the given string at the end of the buffer
 func (b *Buffer) WriteString(p string) {
-	nextWrite := nextWrite(b.reader)
-	b.writer.Update(nextWrite, nextWrite, p)
+	nextWrite := nextWrite(b.view)
+	b.editor.Edit(nextWrite, nextWrite, p)
 }
 
 // WriteStringWithAttr inserts str with the given attr as the background
 // and foreground cell term.Attributes.
 func (b *Buffer) WriteStringWithAttr(str string, attr term.Attributes) {
-	at := nextWrite(b.reader)
+	at := nextWrite(b.view)
 	b.InsertStringWithAttr(at, str, attr)
 }
 
@@ -416,7 +416,7 @@ func (b *Buffer) Redo() (bool, term.Coordinates) {
 func (b *Buffer) Select(from term.Coordinates, to term.Coordinates) (
 	[][]term.Cell, bool,
 ) {
-	from, to, ok := fromToInBounds(b.reader, from, to)
+	from, to, ok := fromToInBounds(b.view, from, to)
 	if !ok {
 		return nil, false
 	}
@@ -428,7 +428,7 @@ func (b *Buffer) Select(from term.Coordinates, to term.Coordinates) (
 func (b *Buffer) SelectLine(from term.Coordinates, to term.Coordinates) (
 	[][]term.Cell, bool,
 ) {
-	from, to, ok := fromToInBounds(b.reader, from, to)
+	from, to, ok := fromToInBounds(b.view, from, to)
 	if !ok {
 		return nil, false
 	}
@@ -440,7 +440,7 @@ func (b *Buffer) SelectLine(from term.Coordinates, to term.Coordinates) (
 func (b *Buffer) SelectBlock(from term.Coordinates, to term.Coordinates) (
 	[][]term.Cell, bool,
 ) {
-	from, to, ok := fromToInBounds(b.reader, from, to)
+	from, to, ok := fromToInBounds(b.view, from, to)
 	if !ok {
 		return nil, false
 	}
@@ -448,7 +448,7 @@ func (b *Buffer) SelectBlock(from term.Coordinates, to term.Coordinates) (
 }
 
 func (b *Buffer) String() string {
-	return b.reader.String()
+	return b.view.String()
 }
 
 // Tabspaces returns the number of tabspaces uses to initialized this Buffer.
@@ -467,13 +467,13 @@ func (b *Buffer) ShiftRowRight(row int) int {
 // the number of cells that the line was shifted.
 func (b *Buffer) ShiftRowLeft(row int) (chars int) {
 	from, to := term.Coordinates{Y: row}, term.Coordinates{Y: row, X: 1}
-	from, to, ok := fromToInBounds(b.reader, from, to)
+	from, to, ok := fromToInBounds(b.view, from, to)
 	if !ok {
 		return
 	}
 	origLen := b.Columns(row)
 	for chars < b.Tabspaces() {
-		c, ok := b.reader.Cell(from)
+		c, ok := b.view.Cell(from)
 		if !ok {
 			return
 		}
@@ -509,12 +509,12 @@ func (b *Buffer) UnsubscribeUsage(s Subscriber) {
 	b.usagePub.Unsubscribe(s)
 }
 
-// Height returns the required height if this Buffer was to be drawn on a term.Writer.
+// Height returns the required height if this Buffer was to be drawn on a term.Editor.
 func (b *Buffer) Height() int {
 	return b.Rows()
 }
 
-// Width returns the required width if this Buffer was to be drawn on a term.Writer.
+// Width returns the required width if this Buffer was to be drawn on a term.Editor.
 func (b *Buffer) Width() int {
 	var ret int
 	for _, row := range b.RawCells() {
@@ -525,13 +525,13 @@ func (b *Buffer) Width() int {
 	return ret
 }
 
-// Reader returns this Buffer as a cell.Reader.
-func (b *Buffer) Reader() Reader {
-	return b.reader
+// View returns this Buffer as a cell.View.
+func (b *Buffer) View() View {
+	return b.view
 }
 
-// Writer returns a cell.Writer that doesn't panic on out-of-bounds calls.
-func (b *Buffer) Writer() Writer {
+// Editor returns a cell.Editor that doesn't panic on out-of-bounds calls.
+func (b *Buffer) Editor() Editor {
 	return b.safew
 }
 

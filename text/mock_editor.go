@@ -109,12 +109,12 @@ func (e *testEditor) Cursor(h Handler) (term.Coordinates, error) {
 	return h.(*testEditorHandler).CursorPos, nil
 }
 
-func (e *testEditor) Writer(h Handler) Writer {
-	return CellWriter(e.buf.Writer())
+func (e *testEditor) CellEditor(h Handler) CellEditor {
+	return NewCellEditor(e.buf.Editor())
 }
 
-func (e *testEditor) Reader(h Handler) Reader {
-	return CellReader(e.buf.Reader())
+func (e *testEditor) CellView(h Handler) CellView {
+	return NewCellView(e.buf.View())
 }
 
 func (e *testEditor) SubscribeCommand(cmd string, h CommandHandler) error {

@@ -26,7 +26,7 @@ var (
 	fileBarHandlerCommands = []string{}
 	fileBarHandlerEvents   = []text.EventType{
 		text.EventTypeOpen,
-		text.EventTypeUpdate,
+		text.EventTypeEdit,
 		text.EventTypeFlush,
 		text.EventTypeCursor,
 		text.EventTypeFocus,
@@ -244,7 +244,7 @@ func (h *fileBarEditorHandler) handleEvents() {
 
 		var err error
 		switch ev.Type {
-		case text.EventTypeUpdate:
+		case text.EventTypeEdit:
 			h.setFileDirty(ev.ResourceName, true)
 			h.refreshBarContent(ev.ResourceName)
 			err = h.p.PublishInterrupt()

@@ -4,8 +4,8 @@ import (
 	"errors"
 
 	"github.com/ernestrc/go-tui/cell"
-	"github.com/ernestrc/go-tui/text"
 	"github.com/ernestrc/go-tui/term"
+	"github.com/ernestrc/go-tui/text"
 )
 
 type viEditor struct {
@@ -63,12 +63,12 @@ func (e *viEditor) MoveToPrevLocation(h text.Handler, ID string) error {
 	return nil
 }
 
-func (e *viEditor) Reader(h text.Handler) text.Reader {
-	return text.CellReader(e.Publisher.Handler(h).(*Vi).Reader())
+func (e *viEditor) CellView(h text.Handler) text.CellView {
+	return text.NewCellView(e.Publisher.Handler(h).(*Vi).CellView())
 }
 
-func (e *viEditor) Writer(h text.Handler) text.Writer {
-	return text.CellWriter(e.Publisher.Handler(h).(*Vi).Writer())
+func (e *viEditor) CellEditor(h text.Handler) text.CellEditor {
+	return text.NewCellEditor(e.Publisher.Handler(h).(*Vi).CellEditor())
 }
 
 func (e *viEditor) SetCursor(h text.Handler, pos term.Coordinates) error {

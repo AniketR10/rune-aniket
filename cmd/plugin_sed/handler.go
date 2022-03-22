@@ -12,11 +12,11 @@ import (
 
 	"github.com/ernestrc/go-tui/browser"
 	"github.com/ernestrc/go-tui/cell"
-	"github.com/ernestrc/go-tui/text"
 	"github.com/ernestrc/go-tui/plugin"
 	plugutil "github.com/ernestrc/go-tui/plugin/util"
 	"github.com/ernestrc/go-tui/proto"
 	"github.com/ernestrc/go-tui/term"
+	"github.com/ernestrc/go-tui/text"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -124,8 +124,8 @@ func (h *sedEditorHandler) setMessage(msg string, args ...interface{}) {
 }
 
 func (h *sedEditorHandler) readHandlerContent(hed text.Handler) (int, string, error) {
-	reader := h.ed.Reader(hed)
-	cells, err := reader.RawCells()
+	view := h.ed.CellView(hed)
+	cells, err := view.RawCells()
 	if err != nil {
 		return 0, "", fmt.Errorf("Reader.RawCells: %v", err)
 	}
@@ -135,8 +135,8 @@ func (h *sedEditorHandler) readHandlerContent(hed text.Handler) (int, string, er
 func (h *sedEditorHandler) writeHandlerContent(
 	hed text.Handler, rows int, content string,
 ) error {
-	writer := h.ed.Writer(hed)
-	_, _, _, err := writer.Update(term.Coordinates{}, term.Coordinates{Y: rows}, content)
+	editor := h.ed.CellEditor(hed)
+	_, _, _, err := editor.Edit(term.Coordinates{}, term.Coordinates{Y: rows}, content)
 	if err != nil {
 		return fmt.Errorf("Writer.Delete: %v", err)
 	}

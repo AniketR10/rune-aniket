@@ -151,16 +151,16 @@ func TestClientServerIntegration(t *testing.T) {
 				}, nil, nil, nil,
 			},
 			{
-				"Edit->EventTypeUpdate",
-				EventTypeUpdate,
+				"Edit->EventTypeEdit",
+				EventTypeEdit,
 				func(t *testing.T, resourceName string, ed Editor, buf *cell.Buffer) {
 					ed.Edit(resourceName, buf)
 					buf.WriteString(str1)
 				}, &term.Coordinates{}, &term.Coordinates{}, &str1,
 			},
 			{
-				"Edit->EventTypeUpdate",
-				EventTypeUpdate,
+				"Edit->EventTypeEdit",
+				EventTypeEdit,
 				func(t *testing.T, resourceName string, ed Editor, buf *cell.Buffer) {
 					buf.WriteString(str1)
 					ed.Edit(resourceName, buf)
@@ -270,19 +270,19 @@ func TestClientServerIntegration(t *testing.T) {
 		h, err := client.Edit("locotron", buf)
 		require.NoError(t, err)
 
-		w := client.Writer(h)
+		w := client.CellEditor(h)
 		at := term.Coordinates{X: 1}
 
-		ed.EXPECT().Writer(gomock.Any()).Return(CellWriter(buf.Writer())).Times(1)
-		from, to, _, err := w.Update(at, at, "el\nAridio")
+		ed.EXPECT().CellEditor(gomock.Any()).Return(NewCellEditor(buf.Editor())).Times(1)
+		from, to, _, err := w.Edit(at, at, "el\nAridio")
 
 		require.NoError(t, err)
 		require.Equal(t, term.Coordinates{}, from)
 		require.Equal(t, term.Coordinates{X: 6, Y: 1}, to)
 		require.Equal(t, " el\nAridio", buf.String())
 
-		ed.EXPECT().Writer(gomock.Any()).Return(CellWriter(buf.Writer())).Times(1)
-		start, end, str, err := w.Update(term.Coordinates{}, term.Coordinates{Y: 1}, "")
+		ed.EXPECT().CellEditor(gomock.Any()).Return(NewCellEditor(buf.Editor())).Times(1)
+		start, end, str, err := w.Edit(term.Coordinates{}, term.Coordinates{Y: 1}, "")
 
 		require.NoError(t, err)
 		assert.Equal(t, term.Coordinates{}, start)
@@ -308,9 +308,9 @@ func TestClientServerIntegration(t *testing.T) {
 		h, err := client.Edit("sup'App", buf)
 		require.NoError(t, err)
 
-		ed.EXPECT().Reader(gomock.Any()).Return(CellReader(buf.Reader())).Times(2)
+		ed.EXPECT().CellView(gomock.Any()).Return(NewCellView(buf.View())).Times(2)
 
-		r := client.Reader(h)
+		r := client.CellView(h)
 		cells, err := r.RawCells()
 		require.NoError(t, err)
 		assert.Equal(t, "guacamole", cell.CellsToString(cells))

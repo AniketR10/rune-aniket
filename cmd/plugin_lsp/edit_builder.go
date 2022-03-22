@@ -13,13 +13,13 @@ import (
 
 type editBuilder struct {
 	f        *file
-	w        text.Writer
+	w        text.CellEditor
 	original *cell.Buffer
 	buf      *cell.Buffer
 	colmap   protocol.ColumnMapper
 }
 
-func (b *editBuilder) init(f *file, w text.Writer, cells [][]term.Cell) {
+func (b *editBuilder) init(f *file, w text.CellEditor, cells [][]term.Cell) {
 	b.f = f
 	b.w = w
 	b.original = cell.CellsToBuffer(cells)
@@ -34,8 +34,8 @@ func (b *editBuilder) applyEdit(ed protocol.TextEdit) error {
 	}
 
 	// update remote and local buffer
-	_, _, _, err := b.w.Update(start, end, ed.NewText)
-	_, _, _ = b.buf.Update(start, end, ed.NewText)
+	_, _, _, err := b.w.Edit(start, end, ed.NewText)
+	_, _, _ = b.buf.Edit(start, end, ed.NewText)
 	return err
 }
 

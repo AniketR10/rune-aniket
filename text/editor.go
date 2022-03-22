@@ -20,13 +20,13 @@ type Handler interface {
 	Name() string
 }
 
-// Writer is a cell.Writer that can fail.
-type Writer interface {
-	Update(start, end term.Coordinates, str string) (from, to term.Coordinates, old string, err error)
+// CellEditor is a cell.Editor that can fail.
+type CellEditor interface {
+	Edit(start, end term.Coordinates, str string) (from, to term.Coordinates, old string, err error)
 }
 
-// Reader wraps a subset of cell.Reader behaviour with an API that can fail.
-type Reader interface {
+// CellView wraps a subset of cell.View behaviour with an API that can fail.
+type CellView interface {
 	RawCells() ([][]term.Cell, error)
 }
 
@@ -92,46 +92,46 @@ type Editor interface {
 	// SetCursor sets the cursor of Handler to the given Coordinates.
 	SetCursor(Handler, term.Coordinates) error
 
-	// Reader returns a Reader which allows to read the editor's internal buffer.
-	Reader(Handler) Reader
+	// CellView returns a CellView which allows to read the editor's internal buffer.
+	CellView(Handler) CellView
 
-	// Writer returns a cell.Writer which allows for direct write access
+	// CellEditor returns a CellEditor which allows for direct write access
 	// to the editor's internal buffer.
-	Writer(Handler) Writer
+	CellEditor(Handler) CellEditor
 }
 
-type cellWriter struct {
-	c cell.Writer
+type cellEditor struct {
+	c cell.Editor
 }
 
-type cellReader struct {
-	c cell.Reader
+type cellView struct {
+	c cell.View
 }
 
-func (w cellWriter) Update(
+func (w cellEditor) Edit(
 	start, end term.Coordinates, str string,
 ) (from, to term.Coordinates, old string, err error) {
 	if start.Y < 0 || end.Y < 0 || start.X < 0 || end.X < 0 {
 		err = fmt.Errorf("invalid coordinates: start=%v; end=%v", start, end)
 		return
 	}
-	from, to, old = w.c.Update(start, end, str)
+	from, to, old = w.c.Edit(start, end, str)
 	return
 }
 
-func (r cellReader) RawCells() ([][]term.Cell, error) {
+func (r cellView) RawCells() ([][]term.Cell, error) {
 	return r.c.RawCells(), nil
 }
 
-// CellWriter wraps a cell.Writer with a Writer that detects invalid input calls
+// NewCellEditor wraps a cell.Editor with a CellEditor that detects invalid input calls
 // and returns the corresponding errors.
-func CellWriter(c cell.Writer) Writer {
-	return cellWriter{c}
+func NewCellEditor(c cell.Editor) CellEditor {
+	return cellEditor{c}
 }
 
-// CellReader wraps a cell.Reder with a Reader that returns no errors.
-func CellReader(c cell.Reader) Reader {
-	return cellReader{c}
+// NewCellView wraps a cell.Reder with a Reader that returns no errors.
+func NewCellView(c cell.View) CellView {
+	return cellView{c}
 }
 
 type fnCommandHandler struct {

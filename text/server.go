@@ -492,9 +492,9 @@ func (s *Server) moveToLocation(
 	return res, nil
 }
 
-// Update satisfies proto.EditorServer
-func (s *Server) Update(ctx context.Context, in *proto.UpdateRequest) (
-	*proto.UpdateResponse, error,
+// EditCell satisfies proto.EditorServer
+func (s *Server) EditCell(ctx context.Context, in *proto.EditCellRequest) (
+	*proto.EditCellResponse, error,
 ) {
 	handlerID := in.GetHandlerId()
 	start := in.GetStart().ToModel()
@@ -504,12 +504,12 @@ func (s *Server) Update(ctx context.Context, in *proto.UpdateRequest) (
 	s.editor.Lock()
 	defer s.editor.Unlock()
 
-	h, ok := s.getHandler("Update", handlerID)
+	h, ok := s.getHandler("Edit", handlerID)
 	if !ok {
 		return nil, errHandlerNotFound
 	}
 
-	from, to, old, err := s.editor.Writer(h).Update(start, end, str)
+	from, to, old, err := s.editor.CellEditor(h).Edit(start, end, str)
 	if err != nil {
 		return nil, err
 	}
@@ -518,7 +518,7 @@ func (s *Server) Update(ctx context.Context, in *proto.UpdateRequest) (
 	protoFrom.FromModel(from)
 	protoTo.FromModel(to)
 
-	res := &proto.UpdateResponse{
+	res := &proto.EditCellResponse{
 		From: &protoFrom,
 		To:   &protoTo,
 		Old: old,
@@ -540,7 +540,7 @@ func (s *Server) RawCells(ctx context.Context, in *proto.RawCellsRequest) (
 		return nil, errHandlerNotFound
 	}
 
-	cells, err := s.editor.Reader(h).RawCells()
+	cells, err := s.editor.CellView(h).RawCells()
 	if err != nil {
 		return nil, err
 	}

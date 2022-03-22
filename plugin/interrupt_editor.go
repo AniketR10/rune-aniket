@@ -67,10 +67,10 @@ func (e *interruptEditor) MoveToPrevLocation(ctx context.Context, req *proto.Mov
 	return res, err
 
 }
-func (e *interruptEditor) Update(ctx context.Context, req *proto.UpdateRequest) (
-	*proto.UpdateResponse, error,
+func (e *interruptEditor) EditCell(ctx context.Context, req *proto.EditCellRequest) (
+	*proto.EditCellResponse, error,
 ) {
-	res, err := e.EditorServer.Update(ctx, req)
+	res, err := e.EditorServer.EditCell(ctx, req)
 	e.interruptDraw()
 	return res, err
 

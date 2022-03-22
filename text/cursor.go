@@ -99,11 +99,11 @@ func (c *curSubscriber) clearAllLocations() {
 	}
 }
 
-func (c *curSubscriber) OnWillUpdate(start, end term.Coordinates, str string) {
+func (c *curSubscriber) OnWillEdit(start, end term.Coordinates, str string) {
 	c.clearAllLocations()
 }
 
-func (c *curSubscriber) OnDidUpdate(from, to term.Coordinates, old string) {
+func (c *curSubscriber) OnDidEdit(from, to term.Coordinates, old string) {
 	c.c.setSearchLocationList(c.c.search)
 }
 
@@ -135,8 +135,8 @@ func (c *Cursor) Coordinates() term.Coordinates {
 	return ret
 }
 
-func (c *Cursor) reader() cell.Reader {
-	return c.buffer().Reader()
+func (c *Cursor) view() cell.View {
+	return c.buffer().View()
 }
 
 func (c *Cursor) buffer() *cell.Buffer {
@@ -164,7 +164,7 @@ func (c *Cursor) MoveToMark(mark CursorMark) CursorMark {
 }
 
 func (c *Cursor) rows() int {
-	return c.reader().Rows()
+	return c.view().Rows()
 }
 
 // CursorAtScroll returns the current position of the cursor relative
@@ -191,7 +191,7 @@ func (c *Cursor) MoveToScroll(pos term.Coordinates) (
 	if pos.Y >= c.rows() {
 		return
 	}
-	if pos.X > c.reader().Columns(pos.Y) {
+	if pos.X > c.view().Columns(pos.Y) {
 		return
 	}
 	ret = c.cursorAtScroll()
@@ -331,7 +331,7 @@ func (c *Cursor) moveEndLine() (ok bool) {
 		return
 	}
 
-	cols := c.reader().Columns(y)
+	cols := c.view().Columns(y)
 	width := c.scroll.Width()
 	if cols == 0 || width == 0 {
 		return
@@ -451,7 +451,7 @@ func (c *Cursor) MoveRight() (ok bool) {
 	if c.scroll.Wrap {
 		atScroll := c.cursorAtScroll()
 		if atScroll.Y >= c.rows() ||
-			(atScroll.X+1 > c.reader().Columns(atScroll.Y) &&
+			(atScroll.X+1 > c.view().Columns(atScroll.Y) &&
 				c.cursor.X+1 >= c.scroll.Width()) {
 			return
 		}
@@ -507,7 +507,7 @@ func (c *Cursor) cursorAtScroll() term.Coordinates {
 
 func (c *Cursor) cellAtCursor() (cell term.Cell, ok bool) {
 	cursorAtScroll := c.cursorAtScroll()
-	cells := c.reader().RawCells()
+	cells := c.view().RawCells()
 	if cursorAtScroll.Y >= len(cells) ||
 		cursorAtScroll.X >= len(cells[cursorAtScroll.Y]) {
 		return
@@ -843,7 +843,7 @@ func (c *Cursor) Conflate() (ok bool) {
 	ok = true
 
 	c.moveEndLine()
-	length := c.reader().Columns(pos.Y)
+	length := c.view().Columns(pos.Y)
 	if length == 0 {
 		ok = c.buffer().DeleteRow(pos.Y)
 		if !ok {
@@ -928,7 +928,7 @@ func (c *Cursor) cursorAtScrollBounds() (pos term.Coordinates, ok bool) {
 		return
 	}
 
-	cols := c.reader().Columns(pos.Y)
+	cols := c.view().Columns(pos.Y)
 	if pos.X > cols {
 		pos.X = cols
 	}
@@ -1134,7 +1134,7 @@ func (c *Cursor) MoveToBounds(padding int) {
 	for c.Column() < 0 && c.MoveRight() {
 	}
 
-	for c.Column() >= c.reader().Columns(c.Row())+padding && c.MoveLeft() {
+	for c.Column() >= c.view().Columns(c.Row())+padding && c.MoveLeft() {
 	}
 }
 
@@ -1166,7 +1166,7 @@ func (c *Cursor) moveToChar(
 	ch rune, findResult func(int, cell.Searcher) (term.Coordinates, bool),
 ) bool {
 	cursor := c.cursorAtScroll()
-	lastPos := c.reader().Columns(cursor.Y)
+	lastPos := c.view().Columns(cursor.Y)
 	start := term.Coordinates{Y: cursor.Y}
 	end := term.Coordinates{Y: cursor.Y, X: lastPos}
 
@@ -1175,9 +1175,9 @@ func (c *Cursor) moveToChar(
 		return false
 	}
 
-	reader := cell.NewReader(cells, c.buffer().Tabspaces())
+	view := cell.NewView(cells, c.buffer().Tabspaces())
 
-	searcher := cell.NewSimpleSearcher(reader)
+	searcher := cell.NewSimpleSearcher(view)
 	n := searcher.Search(string(ch))
 	if n == 0 {
 		return false

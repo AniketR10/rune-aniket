@@ -140,7 +140,7 @@ func TestResponsiveHeight(t *testing.T) {
 	}
 }
 
-func TestBufferWithUpdates(t *testing.T) {
+func TestBufferWithEdits(t *testing.T) {
 	t.Run("Height", func(t *testing.T) {
 		b := cell.CellsToBuffer(nil)
 		b.WriteString("aa")

@@ -26,7 +26,7 @@ const (
 	EditorEvent_TypeOpen    EditorEvent_Type = 0
 	EditorEvent_TypeClose   EditorEvent_Type = 1
 	EditorEvent_TypeFlush   EditorEvent_Type = 2
-	EditorEvent_TypeUpdate  EditorEvent_Type = 3
+	EditorEvent_TypeEdit    EditorEvent_Type = 3
 	EditorEvent_TypeCommand EditorEvent_Type = 4
 	EditorEvent_TypeScroll  EditorEvent_Type = 5
 	EditorEvent_TypeFocus   EditorEvent_Type = 6
@@ -40,7 +40,7 @@ var (
 		0: "TypeOpen",
 		1: "TypeClose",
 		2: "TypeFlush",
-		3: "TypeUpdate",
+		3: "TypeEdit",
 		4: "TypeCommand",
 		5: "TypeScroll",
 		6: "TypeFocus",
@@ -51,7 +51,7 @@ var (
 		"TypeOpen":    0,
 		"TypeClose":   1,
 		"TypeFlush":   2,
-		"TypeUpdate":  3,
+		"TypeEdit":  3,
 		"TypeCommand": 4,
 		"TypeScroll":  5,
 		"TypeFocus":   6,
@@ -494,7 +494,7 @@ func (*SetLocationListResponse) Descriptor() ([]byte, []int) {
 	return file_editor_proto_rawDescGZIP(), []int{6}
 }
 
-type UpdateRequest struct {
+type EditCellRequest struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
@@ -505,8 +505,8 @@ type UpdateRequest struct {
 	Str       string       `protobuf:"bytes,4,opt,name=str,proto3" json:"str,omitempty"`
 }
 
-func (x *UpdateRequest) Reset() {
-	*x = UpdateRequest{}
+func (x *EditCellRequest) Reset() {
+	*x = EditCellRequest{}
 	if protoimpl.UnsafeEnabled {
 		mi := &file_editor_proto_msgTypes[7]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -514,13 +514,13 @@ func (x *UpdateRequest) Reset() {
 	}
 }
 
-func (x *UpdateRequest) String() string {
+func (x *EditCellRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*UpdateRequest) ProtoMessage() {}
+func (*EditCellRequest) ProtoMessage() {}
 
-func (x *UpdateRequest) ProtoReflect() protoreflect.Message {
+func (x *EditCellRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_editor_proto_msgTypes[7]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -532,40 +532,40 @@ func (x *UpdateRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use UpdateRequest.ProtoReflect.Descriptor instead.
-func (*UpdateRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use EditCellRequest.ProtoReflect.Descriptor instead.
+func (*EditCellRequest) Descriptor() ([]byte, []int) {
 	return file_editor_proto_rawDescGZIP(), []int{7}
 }
 
-func (x *UpdateRequest) GetHandlerId() uint32 {
+func (x *EditCellRequest) GetHandlerId() uint32 {
 	if x != nil {
 		return x.HandlerId
 	}
 	return 0
 }
 
-func (x *UpdateRequest) GetStart() *Coordinates {
+func (x *EditCellRequest) GetStart() *Coordinates {
 	if x != nil {
 		return x.Start
 	}
 	return nil
 }
 
-func (x *UpdateRequest) GetEnd() *Coordinates {
+func (x *EditCellRequest) GetEnd() *Coordinates {
 	if x != nil {
 		return x.End
 	}
 	return nil
 }
 
-func (x *UpdateRequest) GetStr() string {
+func (x *EditCellRequest) GetStr() string {
 	if x != nil {
 		return x.Str
 	}
 	return ""
 }
 
-type UpdateResponse struct {
+type EditCellResponse struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
@@ -575,8 +575,8 @@ type UpdateResponse struct {
 	Old  string       `protobuf:"bytes,3,opt,name=old,proto3" json:"old,omitempty"`
 }
 
-func (x *UpdateResponse) Reset() {
-	*x = UpdateResponse{}
+func (x *EditCellResponse) Reset() {
+	*x = EditCellResponse{}
 	if protoimpl.UnsafeEnabled {
 		mi := &file_editor_proto_msgTypes[8]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -584,13 +584,13 @@ func (x *UpdateResponse) Reset() {
 	}
 }
 
-func (x *UpdateResponse) String() string {
+func (x *EditCellResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*UpdateResponse) ProtoMessage() {}
+func (*EditCellResponse) ProtoMessage() {}
 
-func (x *UpdateResponse) ProtoReflect() protoreflect.Message {
+func (x *EditCellResponse) ProtoReflect() protoreflect.Message {
 	mi := &file_editor_proto_msgTypes[8]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -602,26 +602,26 @@ func (x *UpdateResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use UpdateResponse.ProtoReflect.Descriptor instead.
-func (*UpdateResponse) Descriptor() ([]byte, []int) {
+// Deprecated: Use EditCellResponse.ProtoReflect.Descriptor instead.
+func (*EditCellResponse) Descriptor() ([]byte, []int) {
 	return file_editor_proto_rawDescGZIP(), []int{8}
 }
 
-func (x *UpdateResponse) GetFrom() *Coordinates {
+func (x *EditCellResponse) GetFrom() *Coordinates {
 	if x != nil {
 		return x.From
 	}
 	return nil
 }
 
-func (x *UpdateResponse) GetTo() *Coordinates {
+func (x *EditCellResponse) GetTo() *Coordinates {
 	if x != nil {
 		return x.To
 	}
 	return nil
 }
 
-func (x *UpdateResponse) GetOld() string {
+func (x *EditCellResponse) GetOld() string {
 	if x != nil {
 		return x.Old
 	}
@@ -1465,8 +1465,8 @@ var file_editor_proto_goTypes = []interface{}{
 	(*EditorSubscribeResponse)(nil),         // 5: proto.EditorSubscribeResponse
 	(*SetLocationListRequest)(nil),          // 6: proto.SetLocationListRequest
 	(*SetLocationListResponse)(nil),         // 7: proto.SetLocationListResponse
-	(*UpdateRequest)(nil),                   // 8: proto.UpdateRequest
-	(*UpdateResponse)(nil),                  // 9: proto.UpdateResponse
+	(*EditCellRequest)(nil),                   // 8: proto.EditCellRequest
+	(*EditCellResponse)(nil),                  // 9: proto.EditCellResponse
 	(*RawCellsRequest)(nil),                 // 10: proto.RawCellsRequest
 	(*RawCellsResponse)(nil),                // 11: proto.RawCellsResponse
 	(*MoveToLocationRequest)(nil),           // 12: proto.MoveToLocationRequest
@@ -1493,10 +1493,10 @@ var file_editor_proto_depIdxs = []int32{
 	24, // 5: proto.EditorEvent.to:type_name -> proto.Coordinates
 	0,  // 6: proto.EditorSubscribeRequest.type:type_name -> proto.EditorEvent.Type
 	22, // 7: proto.SetLocationListRequest.locations:type_name -> proto.SetLocationListRequest.Location
-	24, // 8: proto.UpdateRequest.start:type_name -> proto.Coordinates
-	24, // 9: proto.UpdateRequest.end:type_name -> proto.Coordinates
-	24, // 10: proto.UpdateResponse.from:type_name -> proto.Coordinates
-	24, // 11: proto.UpdateResponse.to:type_name -> proto.Coordinates
+	24, // 8: proto.EditCellRequest.start:type_name -> proto.Coordinates
+	24, // 9: proto.EditCellRequest.end:type_name -> proto.Coordinates
+	24, // 10: proto.EditCellResponse.from:type_name -> proto.Coordinates
+	24, // 11: proto.EditCellResponse.to:type_name -> proto.Coordinates
 	23, // 12: proto.RawCellsResponse.rows:type_name -> proto.CellRow
 	24, // 13: proto.SetCursorRequest.pos:type_name -> proto.Coordinates
 	24, // 14: proto.CursorResponse.pos:type_name -> proto.Coordinates
@@ -1512,7 +1512,7 @@ var file_editor_proto_depIdxs = []int32{
 	6,  // 24: proto.Editor.SetLocationList:input_type -> proto.SetLocationListRequest
 	12, // 25: proto.Editor.MoveToNextLocation:input_type -> proto.MoveToLocationRequest
 	12, // 26: proto.Editor.MoveToPrevLocation:input_type -> proto.MoveToLocationRequest
-	8,  // 27: proto.Editor.Update:input_type -> proto.UpdateRequest
+	8,  // 27: proto.Editor.Update:input_type -> proto.EditCellRequest
 	10, // 28: proto.Editor.RawCells:input_type -> proto.RawCellsRequest
 	2,  // 29: proto.Editor.Edit:output_type -> proto.EditResponse
 	5,  // 30: proto.Editor.Subscribe:output_type -> proto.EditorSubscribeResponse
@@ -1523,7 +1523,7 @@ var file_editor_proto_depIdxs = []int32{
 	7,  // 35: proto.Editor.SetLocationList:output_type -> proto.SetLocationListResponse
 	13, // 36: proto.Editor.MoveToNextLocation:output_type -> proto.MoveToLocationResponse
 	13, // 37: proto.Editor.MoveToPrevLocation:output_type -> proto.MoveToLocationResponse
-	9,  // 38: proto.Editor.Update:output_type -> proto.UpdateResponse
+	9,  // 38: proto.Editor.Update:output_type -> proto.EditCellResponse
 	11, // 39: proto.Editor.RawCells:output_type -> proto.RawCellsResponse
 	29, // [29:40] is the sub-list for method output_type
 	18, // [18:29] is the sub-list for method input_type
@@ -1625,7 +1625,7 @@ func file_editor_proto_init() {
 			}
 		}
 		file_editor_proto_msgTypes[7].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*UpdateRequest); i {
+			switch v := v.(*EditCellRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -1637,7 +1637,7 @@ func file_editor_proto_init() {
 			}
 		}
 		file_editor_proto_msgTypes[8].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*UpdateResponse); i {
+			switch v := v.(*EditCellResponse); i {
 			case 0:
 				return &v.state
 			case 1:

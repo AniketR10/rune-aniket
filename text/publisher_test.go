@@ -166,7 +166,7 @@ func TestPublisher(t *testing.T) {
 		assert.Equal(t, term.Coordinates{Y: 1}, at)
 	})
 
-	t.Run("dispatches EventTypeUpdate when buffer content is inserted", func(t *testing.T) {
+	t.Run("dispatches EventTypeEdit when buffer content is inserted", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		pub := NewPublisher()
 		buf, _, cursor := newEdit("\n\n")
@@ -175,10 +175,10 @@ func TestPublisher(t *testing.T) {
 		h.Resize(2, 2)
 
 		var called bool
-		pub.SubscribeEditorEvents([]EventType{EventTypeUpdate},
+		pub.SubscribeEditorEvents([]EventType{EventTypeEdit},
 			FuncEventHandler(func(ctx context.Context, ev Event) bool {
 				called = true
-				require.Equal(t, EventTypeUpdate, ev.Type)
+				require.Equal(t, EventTypeEdit, ev.Type)
 				assert.Equal(t, term.Coordinates{Y: 2}, ev.Start, "Start")
 				assert.Equal(t, term.Coordinates{Y: 2}, ev.End, "End")
 				assert.Equal(t, term.Coordinates{Y: 2}, ev.From, "From")
@@ -193,7 +193,7 @@ func TestPublisher(t *testing.T) {
 		require.True(t, called)
 	})
 
-	t.Run("dispatches EventTypeUpdate when buffer content is deleted", func(t *testing.T) {
+	t.Run("dispatches EventTypeEdit when buffer content is deleted", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		pub := NewPublisher()
 		buf, _, cursor := newEdit("aaa\nbbb")
@@ -202,10 +202,10 @@ func TestPublisher(t *testing.T) {
 		h.Resize(2, 2)
 
 		var called bool
-		pub.SubscribeEditorEvents([]EventType{EventTypeUpdate},
+		pub.SubscribeEditorEvents([]EventType{EventTypeEdit},
 			FuncEventHandler(func(ctx context.Context, ev Event) bool {
 				called = true
-				require.Equal(t, EventTypeUpdate, ev.Type)
+				require.Equal(t, EventTypeEdit, ev.Type)
 				assert.Equal(t, term.Coordinates{}, ev.Start, "Start")
 				assert.Equal(t, term.Coordinates{Y: 1}, ev.End, "End")
 				assert.Equal(t, term.Coordinates{}, ev.From, "From")

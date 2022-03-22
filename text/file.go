@@ -53,12 +53,12 @@ type FileBuffer struct {
 	infoModTime     time.Time
 	swapInfoModTime time.Time
 	orig, swap      OsFile
-	reader          cell.Reader
+	reader          cell.View
 	delayedError    error
 	unflushed       bool
 }
 
-// FileBuffer cell.Writer API should not be used publicly
+// FileBuffer cell.Editor API should not be used publicly
 type fileBuf FileBuffer
 
 func swapFileName(swapDir, filePath string) (string, string) {
@@ -201,7 +201,7 @@ func (f *FileBuffer) initBuffer(buf *cell.Buffer, file OsFile) (err error) {
 		defer file.Seek(0, 0)
 	}
 
-	reader := newUnixFileReader(buf.Reader())
+	reader := newUnixFileReader(buf.View())
 	if reader.endsWithEOL() {
 		ok := buf.DeleteRow(buf.Rows()-1)
 		if !ok {
@@ -356,10 +356,10 @@ func (f *fileBuf) copyFlushSwapFile() (ok bool) {
 	return
 }
 
-func (f *fileBuf) OnWillUpdate(start, end term.Coordinates, str string) {
+func (f *fileBuf) OnWillEdit(start, end term.Coordinates, str string) {
 }
 
-func (f *fileBuf) OnDidUpdate(from, to term.Coordinates, old string) {
+func (f *fileBuf) OnDidEdit(from, to term.Coordinates, old string) {
 	if f.swap == nil {
 		return
 	}

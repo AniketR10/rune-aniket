@@ -297,7 +297,7 @@ func (c *rawCells) delete(from, to term.Coordinates) (
 	return
 }
 
-func (c *rawCells) Update(start, end term.Coordinates, str string) (
+func (c *rawCells) Edit(start, end term.Coordinates, str string) (
 	from, to term.Coordinates, old string,
 ) {
 	from = start
@@ -371,10 +371,4 @@ func (c *rawCells) ReadFrom(r io.Reader) (int64, error) {
 		}
 		rowY++
 	}
-}
-
-func nextWrite(c Reader) term.Coordinates {
-	y := c.Rows() - 1
-	x := len(c.RawCells()[y])
-	return term.Coordinates{X: x, Y: y}
 }

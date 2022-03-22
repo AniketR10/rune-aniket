@@ -131,8 +131,8 @@ func main() {
 	in.Subscribe(CellSubscriber("", NewTestHandler(),
 		FuncEventHandler(func(ctx context.Context, ev Event) bool {
 			switch ev.Type {
-			case EventTypeUpdate:
-				out.Update(ev.Start, ev.End, ev.Content)
+			case EventTypeEdit:
+				out.Edit(ev.Start, ev.End, ev.Content)
 			}
 			return false
 		})))

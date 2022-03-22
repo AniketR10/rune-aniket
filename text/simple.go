@@ -53,12 +53,12 @@ func (e *simpleEditor) MoveToPrevLocation(h Handler, ID string) error {
 	return nil
 }
 
-func (e *simpleEditor) Reader(h Handler) Reader {
-	return CellReader(e.pub.Handler(h).(*simpleEditorHandler).buf.Reader())
+func (e *simpleEditor) CellView(h Handler) CellView {
+	return NewCellView(e.pub.Handler(h).(*simpleEditorHandler).buf.View())
 }
 
-func (e *simpleEditor) Writer(h Handler) Writer {
-	return CellWriter(e.pub.Handler(h).(*simpleEditorHandler).buf.Writer())
+func (e *simpleEditor) CellEditor(h Handler) CellEditor {
+	return NewCellEditor(e.pub.Handler(h).(*simpleEditorHandler).buf.Editor())
 }
 
 func (e *simpleEditor) SetCursor(h Handler, pos term.Coordinates) error {

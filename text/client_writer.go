@@ -12,7 +12,7 @@ type clientWriter struct {
 	client    *Client
 }
 
-func (w clientWriter) Update(
+func (w clientWriter) Edit(
 	start, end term.Coordinates, str string,
 ) (from, to term.Coordinates, old string, err error) {
 	ctx := context.Background()
@@ -20,13 +20,13 @@ func (w clientWriter) Update(
 	var protoStart, protoEnd proto.Coordinates
 	protoStart.FromModel(start)
 	protoEnd.FromModel(end)
-	req := proto.UpdateRequest{
+	req := proto.EditCellRequest{
 		HandlerId: w.handlerID,
 		Start:     &protoStart,
 		End:       &protoEnd,
 		Str:       str,
 	}
-	res, err := w.client.ed.Update(ctx, &req)
+	res, err := w.client.ed.EditCell(ctx, &req)
 	if err != nil {
 		return from, to, "", err
 	}

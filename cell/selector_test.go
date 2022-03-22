@@ -119,7 +119,7 @@ itsme`
 	}
 
 	for i, tcase := range testCases {
-		selector := selector{reader: buf.reader}
+		selector := selector{view: buf.view}
 		selection := selector.selectCells(tcase.from, tcase.to)
 		if !reflect.DeepEqual(selection, tcase.expected) {
 			t.Errorf("tcase %d: expected %q found %q", i,
@@ -204,7 +204,7 @@ func TestSelectLine(t *testing.T) {
 	}
 
 	for _, tcase := range testCases {
-		selector := selector{reader: buf.reader}
+		selector := selector{view: buf.view}
 		selection := selector.selectLine(tcase.from, tcase.to)
 		if CellsToString(selection) != CellsToString(tcase.expected) {
 			t.Errorf("expected %q found %q", CellsToString(tcase.expected), CellsToString(selection))
@@ -266,7 +266,7 @@ func TestSelectBlock(t *testing.T) {
 	}
 
 	for _, tcase := range testCases {
-		selector := selector{reader: buf.reader}
+		selector := selector{view: buf.view}
 		selection := selector.selectBlock(tcase.from, tcase.to)
 		if !reflect.DeepEqual(selection, tcase.expected) {
 			t.Errorf("expected %q found %q", CellsToString(tcase.expected), CellsToString(selection))

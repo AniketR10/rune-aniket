@@ -155,10 +155,10 @@ func (m *MockWriter) EXPECT() *MockWriterMockRecorder {
 	return m.recorder
 }
 
-// Update mocks base method.
-func (m *MockWriter) Update(start, end term.Coordinates, str string) (term.Coordinates, term.Coordinates, string, error) {
+// Edit  mocks base method.
+func (m *MockWriter) Edit(start, end term.Coordinates, str string) (term.Coordinates, term.Coordinates, string, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Update", start, end, str)
+	ret := m.ctrl.Call(m, "Edit", start, end, str)
 	ret0, _ := ret[0].(term.Coordinates)
 	ret1, _ := ret[1].(term.Coordinates)
 	ret2, _ := ret[2].(string)
@@ -166,10 +166,10 @@ func (m *MockWriter) Update(start, end term.Coordinates, str string) (term.Coord
 	return ret0, ret1, ret2, ret3
 }
 
-// Update indicates an expected call of Update.
-func (mr *MockWriterMockRecorder) Update(start, end, str interface{}) *gomock.Call {
+// Edit indicates an expected call of Edit.
+func (mr *MockWriterMockRecorder) Edit(start, end, str interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Update", reflect.TypeOf((*MockWriter)(nil).Update), start, end, str)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Edit", reflect.TypeOf((*MockWriter)(nil).Edit), start, end, str)
 }
 
 // MockReader is a mock of Reader interface.
@@ -343,18 +343,18 @@ func (mr *MockEditorMockRecorder) MoveToPrevLocation(h, ID interface{}) *gomock.
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MoveToPrevLocation", reflect.TypeOf((*MockEditor)(nil).MoveToPrevLocation), h, ID)
 }
 
-// Reader mocks base method.
-func (m *MockEditor) Reader(arg0 Handler) Reader {
+// CellView mocks base method.
+func (m *MockEditor) CellView(arg0 Handler) CellView{
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Reader", arg0)
-	ret0, _ := ret[0].(Reader)
+	ret := m.ctrl.Call(m, "CellView", arg0)
+	ret0, _ := ret[0].(CellView)
 	return ret0
 }
 
-// Reader indicates an expected call of Reader.
-func (mr *MockEditorMockRecorder) Reader(arg0 interface{}) *gomock.Call {
+// CellView indicates an expected call of Reader.
+func (mr *MockEditorMockRecorder) CellView (arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Reader", reflect.TypeOf((*MockEditor)(nil).Reader), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CellView", reflect.TypeOf((*MockEditor)(nil).CellView), arg0)
 }
 
 // SetCursor mocks base method.
@@ -413,16 +413,16 @@ func (mr *MockEditorMockRecorder) SubscribeEditorEvents(arg0, arg1 interface{}) 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubscribeEditorEvents", reflect.TypeOf((*MockEditor)(nil).SubscribeEditorEvents), arg0, arg1)
 }
 
-// Writer mocks base method.
-func (m *MockEditor) Writer(arg0 Handler) Writer {
+// CellEditor mocks base method.
+func (m *MockEditor) CellEditor (arg0 Handler) CellEditor {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Writer", arg0)
-	ret0, _ := ret[0].(Writer)
+	ret := m.ctrl.Call(m, "CellEditor ", arg0)
+	ret0, _ := ret[0].(CellEditor)
 	return ret0
 }
 
-// Writer indicates an expected call of Writer.
-func (mr *MockEditorMockRecorder) Writer(arg0 interface{}) *gomock.Call {
+// CellEditorindicates an expected call of CellEditor.
+func (mr *MockEditorMockRecorder) CellEditor(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Writer", reflect.TypeOf((*MockEditor)(nil).Writer), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CellEditor", reflect.TypeOf((*MockEditor)(nil).CellEditor), arg0)
 }

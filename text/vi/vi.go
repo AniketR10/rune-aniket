@@ -6,9 +6,9 @@ import (
 	"github.com/ernestrc/go-tui"
 	"github.com/ernestrc/go-tui/cell"
 	"github.com/ernestrc/go-tui/component"
-	"github.com/ernestrc/go-tui/text"
 	"github.com/ernestrc/go-tui/handler"
 	"github.com/ernestrc/go-tui/term"
+	"github.com/ernestrc/go-tui/text"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -33,12 +33,12 @@ type Vi struct {
 	messenger text.Messenger
 	less      *handler.Less
 
-	repeating     bool
-	currUpdated   bool
-	evUpdated     bool
-	currSnapshot  snapshot
-	currUpdates   []term.Event
-	repeatUpdates []term.Event
+	repeating    bool
+	currEditd    bool
+	evEditd      bool
+	currSnapshot snapshot
+	currEdits    []term.Event
+	repeatEdits  []term.Event
 
 	resetting    bool
 	undoTimeline []snapshot
@@ -67,8 +67,8 @@ func (vi *Vi) Init(buf *cell.Buffer, name string, opts ...Option) {
 	vi.less = &viHandler.less
 	vi.cursor = &viHandler.cursor
 
-	vi.repeatUpdates = make([]term.Event, 0)
-	vi.currUpdates = make([]term.Event, 0)
+	vi.repeatEdits = make([]term.Event, 0)
+	vi.currEdits = make([]term.Event, 0)
 	vi.undoTimeline = make([]snapshot, 0)
 	vi.redoTimeline = make([]snapshot, 0)
 
@@ -86,7 +86,7 @@ func (vi *Vi) Draw(w term.Writer) {
 	vi.handler.Draw(w)
 }
 
-func isUpdateMode(mode viMode) bool {
+func isEditMode(mode viMode) bool {
 	switch mode {
 	case normalMode, gMode, yankMode, searchMode,
 		visualMode, visualLineMode, visualBlockMode:
@@ -102,29 +102,29 @@ func isSelectMode(mode viMode) bool {
 	return mode == visualMode || mode == visualLineMode || mode == visualBlockMode
 }
 
-func (vi *Vi) resetUpdates() {
-	vi.currUpdates = vi.currUpdates[:0]
-	vi.currUpdated = false
+func (vi *Vi) resetEdits() {
+	vi.currEdits = vi.currEdits[:0]
+	vi.currEditd = false
 }
 
-func (vi *Vi) appendLastUpdate(ev term.Event) {
-	vi.currUpdates = append(vi.currUpdates, ev)
+func (vi *Vi) appendLastEdit(ev term.Event) {
+	vi.currEdits = append(vi.currEdits, ev)
 }
 
 func (vi *Vi) copyRepeat() {
-	if !vi.currUpdated {
+	if !vi.currEditd {
 		return
 	}
-	vi.repeatUpdates = vi.repeatUpdates[:0]
-	vi.repeatUpdates = append(vi.repeatUpdates, vi.currUpdates...)
+	vi.repeatEdits = vi.repeatEdits[:0]
+	vi.repeatEdits = append(vi.repeatEdits, vi.currEdits...)
 }
 
 func (vi *Vi) pushNewSnapshot() {
 	vi.pushUndo(vi.currSnapshot)
 }
 
-func (vi *viSubscriber) OnWillUpdate(from, to term.Coordinates, str string) {
-	if !vi.currUpdated && !vi.resetting {
+func (vi *viSubscriber) OnWillEdit(from, to term.Coordinates, str string) {
+	if !vi.currEditd && !vi.resetting {
 		pubVi := (*Vi)(vi)
 		pubVi.currSnapshot.cursor = from
 		pubVi.pushNewSnapshot()
@@ -132,10 +132,10 @@ func (vi *viSubscriber) OnWillUpdate(from, to term.Coordinates, str string) {
 	}
 }
 
-func (vi *viSubscriber) OnDidUpdate(start, end term.Coordinates, old string) {
+func (vi *viSubscriber) OnDidEdit(start, end term.Coordinates, old string) {
 	if !vi.resetting && !vi.repeating {
-		vi.evUpdated = true
-		vi.currUpdated = true
+		vi.evEditd = true
+		vi.currEditd = true
 	}
 }
 
@@ -161,41 +161,41 @@ func (vi *Vi) Handle(ev term.Event) (quit, handled bool) {
 		}
 	}
 
-	vi.evUpdated = false
+	vi.evEditd = false
 	prevMode := vi.handler.mode()
 	quit, handled = vi.handler.Handle(ev)
 	nextMode := vi.handler.mode()
 
 	if prevMode == nextMode {
-		if !isUpdateMode(prevMode) && vi.evUpdated {
-			vi.appendLastUpdate(ev)
+		if !isEditMode(prevMode) && vi.evEditd {
+			vi.appendLastEdit(ev)
 			vi.copyRepeat()
 			vi.snapshotContent()
-			vi.resetUpdates()
-		} else if isSelectMode(prevMode) || isUpdateMode(prevMode) {
-			vi.appendLastUpdate(ev)
+			vi.resetEdits()
+		} else if isSelectMode(prevMode) || isEditMode(prevMode) {
+			vi.appendLastEdit(ev)
 		}
 		return
 	}
 
-	if !isUpdateMode(prevMode) && isUpdateMode(nextMode) {
-		vi.appendLastUpdate(ev)
-	} else if isUpdateMode(prevMode) && !isUpdateMode(nextMode) {
-		vi.appendLastUpdate(ev)
+	if !isEditMode(prevMode) && isEditMode(nextMode) {
+		vi.appendLastEdit(ev)
+	} else if isEditMode(prevMode) && !isEditMode(nextMode) {
+		vi.appendLastEdit(ev)
 		vi.copyRepeat()
 		vi.snapshotContent()
-		vi.resetUpdates()
-	} else if isUpdateMode(prevMode) && isUpdateMode(nextMode) {
-		vi.appendLastUpdate(ev)
+		vi.resetEdits()
+	} else if isEditMode(prevMode) && isEditMode(nextMode) {
+		vi.appendLastEdit(ev)
 	} else {
-		vi.appendLastUpdate(ev)
-		if vi.currUpdated || vi.repeating {
+		vi.appendLastEdit(ev)
+		if vi.currEditd || vi.repeating {
 			vi.copyRepeat()
 			vi.snapshotContent()
-			vi.resetUpdates()
+			vi.resetEdits()
 		} else if !isSelectMode(nextMode) {
 			// reset always if going back to normal
-			vi.resetUpdates()
+			vi.resetEdits()
 		}
 	}
 	return quit, handled
@@ -256,14 +256,14 @@ func (vi *Vi) SubscribeScroll(sub component.ScrollSubscriber) {
 	vi.handler.subscribeScroll(sub)
 }
 
-// Reader returns the underlying cell.Reader.
-func (vi *Vi) Reader() cell.Reader {
-	return vi.buf.Reader()
+// CellView returns the underlying cell.View.
+func (vi *Vi) CellView() cell.View {
+	return vi.buf.View()
 }
 
-// Writer returns the underlying cell.Writer.
-func (vi *Vi) Writer() cell.Writer {
-	return vi.buf.Writer()
+// CellEditor returns the underlying cell.Editor.
+func (vi *Vi) CellEditor() cell.Editor {
+	return vi.buf.Editor()
 }
 
 // Name satisfies editor.Handler.
@@ -278,7 +278,7 @@ func (vi *Vi) Close() error {
 
 func (vi *Vi) repeat() (handled bool) {
 	vi.repeating = true
-	for _, ev := range vi.repeatUpdates {
+	for _, ev := range vi.repeatEdits {
 		handled = true
 		vi.Handle(ev)
 	}
@@ -324,7 +324,7 @@ func (vi *Vi) undo() bool {
 func (vi *Vi) resetToSnapshot(s snapshot) {
 	from, to := term.Coordinates{}, term.Coordinates{Y: vi.buf.Rows()}
 	vi.resetting = true
-	vi.buf.Update(from, to, s.content)
+	vi.buf.Edit(from, to, s.content)
 	vi.handler.setCursorAtScroll(s.cursor)
 	vi.currSnapshot = s
 	vi.resetting = false

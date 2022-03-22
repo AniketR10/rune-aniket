@@ -170,13 +170,13 @@ func (e *Ex) moveFocusCursor(line int) error {
 
 func (e *Ex) previousBuffer(args ...string) (bool, error) {
 	b := e.comp.Browser()
-	b.UpdateWindowTabPrev(b.Focus())
+	b.EditWindowTabPrev(b.Focus())
 	return false, nil
 }
 
 func (e *Ex) nextBuffer(args ...string) (bool, error) {
 	b := e.comp.Browser()
-	b.UpdateWindowTabNext(b.Focus())
+	b.EditWindowTabNext(b.Focus())
 	return false, nil
 }
 
@@ -395,9 +395,9 @@ func (e *Ex) handleProxy(ev term.Event) (
 	case term.KeyCtrlW:
 		b.RemoveWindowContent(b.Focus())
 	case term.KeyCtrlL:
-		b.UpdateWindowTabNext(b.Focus())
+		b.EditWindowTabNext(b.Focus())
 	case term.KeyCtrlH:
-		b.UpdateWindowTabPrev(b.Focus())
+		b.EditWindowTabPrev(b.Focus())
 	default:
 		_, handled = b.Handle(mev)
 		if handled {
