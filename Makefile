@@ -82,3 +82,6 @@ release: default
 dist: release
 	@ git pull origin --tags
 	@ ./dist.sh
+
+lint:
+	@ .githooks/pre-commit
