@@ -10,6 +10,7 @@ import (
 	"github.com/ernestrc/go-tui/editor"
 	"github.com/ernestrc/go-tui/term"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 type mockHandler struct {
@@ -212,6 +213,7 @@ Love isn't love 'til you give it away.
 		{"Update which effectively replaces", "jjlvllllchello"},
 		{"Repeat", "jji\t#..."},
 		{"ReplaceAll", "kkcGhello\nworld"},
+		{"InsertRowBelow", "Gohello"},
 	}
 
 	for _, _tcase := range suite {
@@ -284,4 +286,26 @@ Love isn't love 'til you give it away.
 		after = buf.String()
 		assert.Equal(t, prev, after)
 	})
+}
+
+func TestIntegrationInsertRowBelow(t *testing.T) {
+	buf := cell.NewBuffer()
+	buf.ReadFrom(strings.NewReader("hello"))
+	vi := New(buf, "")
+	vi.Resize(4, 4)
+
+	for _, ch := range "Goworld" {
+		vi.Handle(term.Event{Ch: ch})
+	}
+	assert.Equal(t, "hello\nworld", vi.less.Buffer().String())
+
+	vi.Handle(term.Event{Key: term.KeyEsc})
+	_, handled := vi.Handle(term.Event{Ch: 'u'})
+	require.True(t, handled)
+	require.Equal(t, "hello", vi.less.Buffer().String())
+
+	for _, ch := range "Goworld" {
+		vi.Handle(term.Event{Ch: ch})
+	}
+	assert.Equal(t, "hello\nworld", vi.less.Buffer().String())
 }

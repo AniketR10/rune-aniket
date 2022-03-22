@@ -262,27 +262,54 @@ Love isn't love 'til you give it away.
 			expectedFrom:         term.Coordinates{},
 			expectedTo:           term.Coordinates{Y: 1},
 		},
+		{
+			overrideBaseRawCells: &emptyString,
+			inputAt:              term.Coordinates{Y: 1},
+			inputStr:             "\n",
+			expectedFrom:         term.Coordinates{Y: 0},
+			expectedTo:           term.Coordinates{Y: 1},
+			expectedRawCells:     "\n",
+		},
+		{
+			overrideBaseRawCells: &emptyString,
+			inputAt:              term.Coordinates{Y: 2},
+			inputStr:             "\n\n",
+			expectedFrom:         term.Coordinates{Y: 0},
+			expectedTo:           term.Coordinates{Y: 2},
+			expectedRawCells:     "\n\n",
+		},
 	}
 
 	for i, tcase := range tsuite {
-		var c rawCells
-		c.init(defTabSpaces)
-		var input string
-		if tcase.overrideBaseRawCells != nil {
-			input = *tcase.overrideBaseRawCells
-		} else {
-			input = baseRawCells
-		}
-		if input != "" {
-			_, err := c.ReadFrom(strings.NewReader(input))
-			require.NoError(t, err)
-		}
+		t.Run(fmt.Sprintf("test case %d", i), func(t *testing.T) {
+			var c rawCells
+			c.init(defTabSpaces)
+			var input string
+			if tcase.overrideBaseRawCells != nil {
+				input = *tcase.overrideBaseRawCells
+			} else {
+				input = baseRawCells
+			}
+			if input != "" {
+				_, err := c.ReadFrom(strings.NewReader(input))
+				require.NoError(t, err)
+			}
 
-		actualFrom, actualTo, actualOld := c.Update(tcase.inputAt, tcase.inputAt, tcase.inputStr)
-		assert.Equal(t, tcase.expectedFrom, actualFrom, "test case %d", i)
-		assert.Equal(t, tcase.expectedTo, actualTo, "test case %d", i)
-		assert.Equal(t, tcase.expectedRawCells, c.String())
-		assert.Zero(t, actualOld)
+			actualFrom, actualTo, actualOld := c.Update(tcase.inputAt, tcase.inputAt, tcase.inputStr)
+			assert.Equal(t, tcase.expectedFrom, actualFrom, "test case %d", i)
+			assert.Equal(t, tcase.expectedTo, actualTo, "test case %d", i)
+			assert.Equal(t, tcase.expectedRawCells, c.String())
+			assert.Zero(t, actualOld)
+
+			from, to, old := c.Update(actualFrom, actualTo, actualOld)
+			assert.Equal(t, input, c.String())
+
+			from, to, old = c.Update(from, to, old)
+			assert.Equal(t, tcase.expectedRawCells, c.String())
+
+			_, _, old = c.Update(from, to, old)
+			assert.Equal(t, input, c.String())
+		})
 	}
 }
 
@@ -527,6 +554,34 @@ Love isn't love 'til you give it away.
 			inputFrom:            term.Coordinates{},
 			inputTo:              term.Coordinates{Y: 1},
 		},
+		{
+			overrideBaseRawCells: "a\n",
+			expectedStr:          "\n",
+			expectedRawCells:     "a",
+			inputFrom:            term.Coordinates{X: 1},
+			inputTo:              term.Coordinates{Y: 1},
+		},
+		{
+			overrideBaseRawCells: "a\nb\nc",
+			expectedStr:          "b\n",
+			expectedRawCells:     "a\nc",
+			inputFrom:            term.Coordinates{Y: 1},
+			inputTo:              term.Coordinates{Y: 2},
+		},
+		{
+			overrideBaseRawCells: "a\n\n",
+			expectedStr:          "\n",
+			expectedRawCells:     "a\n",
+			inputFrom:            term.Coordinates{Y: 1},
+			inputTo:              term.Coordinates{Y: 3},
+		},
+		{
+			overrideBaseRawCells: "a\n\n",
+			expectedStr:          "\n",
+			expectedRawCells:     "a\n",
+			inputFrom:            term.Coordinates{Y: 1},
+			inputTo:              term.Coordinates{Y: 2},
+		},
 	}
 
 	for i, tcase := range tsuite {
@@ -556,11 +611,14 @@ Love isn't love 'til you give it away.
 			assert.Equal(t, *tcase.expectedStart, actualStart)
 			assert.Equal(t, *tcase.expectedEnd, actualEnd)
 
-			// test symmetry
-			_, _, old := c.Update(actualStart, actualEnd, actualStr)
-			assert.Equal(t, base, c.String(),
-				"insert was not able to reverse delete")
-			assert.Zero(t, old)
+			from, to, old := c.Update(actualStart, actualEnd, actualStr)
+			assert.Equal(t, base, c.String())
+
+			from, to, old = c.Update(from, to, old)
+			assert.Equal(t, tcase.expectedRawCells, c.String())
+
+			_, _, old = c.Update(from, to, old)
+			assert.Equal(t, base, c.String())
 		})
 	}
 }

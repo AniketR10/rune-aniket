@@ -114,12 +114,17 @@ func (c *rawCells) fillInColumns(pos term.Coordinates) (n int) {
 }
 
 func (c *rawCells) fillInCoords(pos term.Coordinates) (
-	from, to term.Coordinates,
+	from, to term.Coordinates, rowsFilled int,
 ) {
 	assertValidCoords(pos)
 	from = pos
-	if filled := c.fillInRows(pos.Y); filled != 0 {
-		from.Y -= filled
+	if rowsFilled = c.fillInRows(pos.Y); rowsFilled != 0 {
+		from.Y -= rowsFilled
+		// if rawCells was un-initialized or for some
+		// reason base row was removed i.e. a truncate op
+		if from.Y < 0 {
+			from.Y = 0
+		}
 		from.X = c.Columns(from.Y)
 		c.fillInColumns(pos)
 	} else {
@@ -133,7 +138,15 @@ func (c *rawCells) fillInCoords(pos term.Coordinates) (
 func (c *rawCells) insert(at term.Coordinates, str string) (
 	from, to term.Coordinates,
 ) {
-	from, to = c.fillInCoords(at)
+	var rowsFilled int
+	from, to, rowsFilled = c.fillInCoords(at)
+	// fillInCoords fills in with newlines up to Y
+	if rowsFilled != 0 {
+		var i int
+		for ; i < len(str) && str[i] == '\n'; i++ {
+		}
+		str = str[i:]
+	}
 	// avoid breaking padding blocks in half
 	if from == at {
 		from, _ = c.skipPadding(at, at)
@@ -331,7 +344,7 @@ func (c *rawCells) Cell(pos term.Coordinates) (
 }
 
 func (c *rawCells) ReadFrom(r io.Reader) (int64, error) {
-	rowY := c.nextWrite().Y
+	rowY := nextWrite(c).Y
 	reader := bufio.NewReader(r)
 	n := int64(0)
 	for {
@@ -339,6 +352,7 @@ func (c *rawCells) ReadFrom(r io.Reader) (int64, error) {
 		for _, r := range str {
 			switch r {
 			case '\n':
+				c.cells = append(c.cells, makeNewRow(0, defColumnCap))
 			case '\t':
 				for i := 1; r == '\t' && i < c.tabspaces; i++ {
 					c.cells[rowY] = append(c.cells[rowY], term.Cell{})
@@ -355,14 +369,12 @@ func (c *rawCells) ReadFrom(r io.Reader) (int64, error) {
 			}
 			return n, err
 		}
-		c.cells = append(c.cells, makeNewRow(0, defColumnCap))
 		rowY++
 	}
 }
 
-// nextWrite returns the position of the write cursor.
-func (c *rawCells) nextWrite() term.Coordinates {
+func nextWrite(c Reader) term.Coordinates {
 	y := c.Rows() - 1
-	x := len(c.cells[y])
+	x := len(c.RawCells()[y])
 	return term.Coordinates{X: x, Y: y}
 }

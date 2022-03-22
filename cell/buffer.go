@@ -167,14 +167,21 @@ func (b *Buffer) InsertStringWithAttr(
 	return
 }
 
-// DeleteRow truncates the row at term.Coordinates.Y
+// DeleteRow deletes the row at term.Coordinates.Y
 func (b *Buffer) DeleteRow(y int) (ok bool) {
 	if ok = y < b.reader.Rows(); !ok {
 		return
 	}
-	from := term.Coordinates{Y: y}
-	to := term.Coordinates{Y: y + 1}
-	b.writer.Update(from, to, "")
+	var from, to term.Coordinates
+	if y == 0 {
+		from = term.Coordinates{Y: y}
+		to = term.Coordinates{Y: y + 1}
+	} else {
+		from = term.Coordinates{Y: y - 1, X: b.reader.Columns(y - 1)}
+		to = term.Coordinates{Y: y, X: b.reader.Columns(y)}
+	}
+	_, _, old := b.writer.Update(from, to, "")
+	ok = old != ""
 	return
 }
 
@@ -182,7 +189,7 @@ func (b *Buffer) DeleteRow(y int) (ok bool) {
 // from term.Coordinates.X
 func (b *Buffer) TruncateRowFrom(from term.Coordinates) (ok bool) {
 	to := term.Coordinates{Y: from.Y}
-	from, to, ok = fromToInBounds(b.cells, from, to)
+	from, to, ok = fromToInBounds(b.reader, from, to)
 	if !ok {
 		return
 	}
@@ -199,7 +206,7 @@ func (b *Buffer) TruncateRowFrom(from term.Coordinates) (ok bool) {
 // TruncateFrom truncates from the given position to the end of the buffer.
 func (b *Buffer) TruncateFrom(from term.Coordinates) (ok bool) {
 	to := term.Coordinates{Y: b.reader.Rows()}
-	from, to, ok = fromToInBounds(b.cells, from, to)
+	from, to, ok = fromToInBounds(b.reader, from, to)
 	if !ok {
 		return
 	}
@@ -211,7 +218,7 @@ func (b *Buffer) TruncateFrom(from term.Coordinates) (ok bool) {
 func (b *Buffer) ConflateRow(y int) (ok bool) {
 	from := term.Coordinates{Y: y}
 	to := term.Coordinates{Y: y + 1}
-	from, to, ok = fromToInBounds(b.cells, from, to)
+	from, to, ok = fromToInBounds(b.reader, from, to)
 	if !ok {
 		return
 	}
@@ -226,7 +233,7 @@ func (b *Buffer) ConflateRow(y int) (ok bool) {
 func (b *Buffer) DeleteCell(pos term.Coordinates) (term.Coordinates, rune, bool) {
 	from := pos
 	to := term.Coordinates{X: from.X + 1, Y: from.Y}
-	from, to, ok := fromToInBounds(b.cells, from, to)
+	from, to, ok := fromToInBounds(b.reader, from, to)
 	if !ok {
 		return term.Coordinates{}, 0, false
 	}
@@ -312,7 +319,7 @@ func (b *Buffer) DeleteLine(from, to term.Coordinates) (
 	from, to = SortFromTo(from, to)
 	from.X, to.X = 0, 0
 	to.Y++
-	from, to, ok := fromToInBounds(b.cells, from, to)
+	from, to, ok := fromToInBounds(b.reader, from, to)
 	if !ok {
 		return
 	}
@@ -375,21 +382,21 @@ func (b *Buffer) ReadFrom(r io.Reader) (int64, error) {
 
 // io.Writer
 func (b *Buffer) Write(p []byte) (int, error) {
-	nextWrite := b.cells.nextWrite()
+	nextWrite := nextWrite(b.reader)
 	b.writer.Update(nextWrite, nextWrite, string(p))
 	return len(p), nil
 }
 
 // WriteString writes the given string at the end of the buffer
 func (b *Buffer) WriteString(p string) {
-	nextWrite := b.cells.nextWrite()
+	nextWrite := nextWrite(b.reader)
 	b.writer.Update(nextWrite, nextWrite, p)
 }
 
 // WriteStringWithAttr inserts str with the given attr as the background
 // and foreground cell term.Attributes.
 func (b *Buffer) WriteStringWithAttr(str string, attr term.Attributes) {
-	at := b.cells.nextWrite()
+	at := nextWrite(b.reader)
 	b.InsertStringWithAttr(at, str, attr)
 }
 
@@ -409,7 +416,7 @@ func (b *Buffer) Redo() (bool, term.Coordinates) {
 func (b *Buffer) Select(from term.Coordinates, to term.Coordinates) (
 	[][]term.Cell, bool,
 ) {
-	from, to, ok := fromToInBounds(b.cells, from, to)
+	from, to, ok := fromToInBounds(b.reader, from, to)
 	if !ok {
 		return nil, false
 	}
@@ -421,7 +428,7 @@ func (b *Buffer) Select(from term.Coordinates, to term.Coordinates) (
 func (b *Buffer) SelectLine(from term.Coordinates, to term.Coordinates) (
 	[][]term.Cell, bool,
 ) {
-	from, to, ok := fromToInBounds(b.cells, from, to)
+	from, to, ok := fromToInBounds(b.reader, from, to)
 	if !ok {
 		return nil, false
 	}
@@ -433,7 +440,7 @@ func (b *Buffer) SelectLine(from term.Coordinates, to term.Coordinates) (
 func (b *Buffer) SelectBlock(from term.Coordinates, to term.Coordinates) (
 	[][]term.Cell, bool,
 ) {
-	from, to, ok := fromToInBounds(b.cells, from, to)
+	from, to, ok := fromToInBounds(b.reader, from, to)
 	if !ok {
 		return nil, false
 	}
@@ -460,7 +467,7 @@ func (b *Buffer) ShiftRowRight(row int) int {
 // the number of cells that the line was shifted.
 func (b *Buffer) ShiftRowLeft(row int) (chars int) {
 	from, to := term.Coordinates{Y: row}, term.Coordinates{Y: row, X: 1}
-	from, to, ok := fromToInBounds(b.cells, from, to)
+	from, to, ok := fromToInBounds(b.reader, from, to)
 	if !ok {
 		return
 	}
@@ -534,10 +541,4 @@ func (b *Buffer) Size() (ret int) {
 		ret += len(row)
 	}
 	return
-}
-
-// WithReader installs a new reader and returns this Buffer's previous reader.
-// This should only be utilized for advanced use cases.
-func (b *Buffer) WithReader(r Reader) {
-	b.reader = r
 }

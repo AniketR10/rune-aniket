@@ -294,8 +294,8 @@ func TestLspHandlerHandleInsertDelete(t *testing.T) {
 	// Delete 3
 	expectedEvents = []protocol.TextDocumentContentChangeEvent{{
 		Range: &protocol.Range{
-			Start: protocol.Position{Line: 1, Character: 0},
-			End:   protocol.Position{Line: 2, Character: 0},
+			Start: protocol.Position{Line: 0, Character: 25},
+			End:   protocol.Position{Line: 1, Character: 20},
 		},
 		Text: "",
 	}}

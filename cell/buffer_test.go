@@ -1,6 +1,7 @@
 package cell
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -10,7 +11,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const str = "hello\n\tworld\n"
 const longStr = `Love in your heart wasn't put there to stay.
 Love isn't love 'til you give it away.
 		-- Oscar Hammerstein 中国`
@@ -61,30 +61,28 @@ func TestBufferInsert(t *testing.T) {
 }
 
 func TestBufferDeleteRow(t *testing.T) {
-	str := "hello\nworld"
-	buf := newBufferWithContent(t, str)
+	tsuite := []struct {
+		content     string
+		in          int
+		wantOk      bool
+		wantContent string
+	}{
+		{"hello\nworld", 0, true, "world"},
+		{"world", 0, true, ""},
+		{"\nworld", 0, true, "world"},
+		{"1234", 1, false, "1234"},
+		{"ya-basic\n", 1, true, "ya-basic"},
+		{"ya-basic\na", 1, true, "ya-basic"},
+		{"a\nb\nc", 1, true, "a\nc"},
+	}
 
-	assert.True(t, buf.DeleteRow(0))
-	assert.Equal(t, "world", buf.String())
-
-	assert.True(t, buf.DeleteRow(0))
-	assert.Equal(t, "", buf.String())
-}
-
-func TestBufferDeleteRow2(t *testing.T) {
-	str := "\nworld"
-	buf := newBufferWithContent(t, str)
-
-	assert.True(t, buf.DeleteRow(0))
-	assert.Equal(t, "world", buf.String())
-}
-
-func TestBufferDeleteRowNotPanic(t *testing.T) {
-	str := "1234"
-	buf := newBufferWithContent(t, str)
-
-	assert.False(t, buf.DeleteRow(1))
-	assert.Equal(t, "1234", buf.String())
+	for i, tcase := range tsuite {
+		t.Run(fmt.Sprintf("test case %d", i), func(t *testing.T) {
+			buf := newBufferWithContent(t, tcase.content)
+			assert.Equal(t, tcase.wantOk, buf.DeleteRow(tcase.in))
+			assert.Equal(t, tcase.wantContent, buf.String())
+		})
+	}
 }
 
 func TestBufferTruncateRowFrom1(t *testing.T) {
@@ -637,6 +635,7 @@ func TestBufferHeightWidth(t *testing.T) {
 }
 
 func TestBufferMaxColumns(t *testing.T) {
+	const str = "hello\n\tworld\n"
 	buf := newBufferWithContent(t, longStr)
 	assert.Equal(t, buf.MaxColumns(), 44)
 
@@ -712,7 +711,7 @@ func TestBufferInsertRowAt(t *testing.T) {
 		{"first row", "", 0, "\n"},
 		{"first row above last row", "a", 0, "\na"},
 		{"last row", "a", 1, "a\n"},
-		{"past last row", "a", 2, "a\n\n"},
+		{"past last row", "a", 2, "a\n"},
 		{"in the middle of buffer", "a\nb\nc", 1, "a\n\nb\nc"},
 	}
 
@@ -738,7 +737,7 @@ func TestBufferReplaceAll(t *testing.T) {
 		{"replace large content with small content no newline", "aaaa\nbbbb\nccccc\ndddd\n", "a\nb\nc\n"},
 		{"replace large content with small content newline", "aaaa\nbbbb\nccccc\ndddd\n", "a\nb\nc\n"},
 		{"replace empty content with non-empty", "", "a"},
-		{"replace empty content with newline", "", "\n"},
+		{"replace empty content", "", ""},
 		{"replace non-empty content with empty", "a", ""},
 		{"replace newline content with empty", "\n", ""},
 		{"replace newline content with empty", "a\n\tb\n", "\tc\nd\n"},
