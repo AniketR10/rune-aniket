@@ -13,11 +13,11 @@ import (
 )
 
 var (
-	Version = "development"
+	Version    = "development"
 	configpath *string
 
 	flagRecover = flag.String("r", "", "recover from recovery file")
-	flagPprof = flag.Bool("p", false, "start pprof server at :6060")
+	flagPprof   = flag.Bool("p", false, "start pprof server at :6060")
 	flagVersion = flag.Bool("v", false, "print version information")
 )
 
@@ -54,7 +54,7 @@ func main() {
 	}
 
 	var i *IDE
-	if *flagRecover!= "" && len(filenames) != 0 {
+	if *flagRecover != "" && len(filenames) != 0 {
 		i, err = NewRecovery(*configpath, filenames[0], *flagRecover)
 	} else if *flagRecover != "" {
 		log.Fatal("flag -r requires to pass the original filename filename")

@@ -539,5 +539,5 @@ func (b *Buffer) Size() (ret int) {
 // WithReader installs a new reader and returns this Buffer's previous reader.
 // This should only be utilized for advanced use cases.
 func (b *Buffer) WithReader(r Reader) {
-       b.reader = r
+	b.reader = r
 }

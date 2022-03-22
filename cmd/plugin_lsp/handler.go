@@ -856,26 +856,8 @@ func (h *lspEditorHandler) semanticTokensFull(
 	}
 }
 
-func makeInsertProtocolRange(
-	newCells [][]term.Cell, from, to term.Coordinates,
-) protocol.Range {
-	starty, startx, ok := cell.ConvertTermCoordinates(newCells, from)
-	if !ok {
-		panic("coordinates out of sync")
-	}
-	return protocol.Range{
-		Start: protocol.Position{
-			Line:      uint32(starty),
-			Character: uint32(startx),
-		},
-		End: protocol.Position{
-			Line:      uint32(starty),
-			Character: uint32(startx),
-		},
-	}
-}
-
-func makeDeleteProtocolRange(
+// https://microsoft.github.io/language-server-protocol/specifications/specification-current/#range
+func makeProtocolRange(
 	oldCells [][]term.Cell, from, to term.Coordinates,
 ) protocol.Range {
 	from, to = cell.SortFromTo(from, to)
@@ -898,20 +880,6 @@ func makeDeleteProtocolRange(
 			Character: uint32(endx),
 		},
 	}
-}
-
-// https://microsoft.github.io/language-server-protocol/specifications/specification-current/#range
-func makeProtocolRange(
-	content string, newCells, oldCells [][]term.Cell,
-	from, to term.Coordinates,
-) protocol.Range {
-	// the problem we face is that for delete, from, to are the coordinates that refer
-	// to the original cells, but for insert, they refer to the new cells, thus
-	// translation needs to be performed with a different set of cells
-	if content == "" {
-		return makeDeleteProtocolRange(oldCells, from, to)
-	}
-	return makeInsertProtocolRange(newCells, from, to)
 }
 
 func (h *lspEditorHandler) callServerDidChange(
@@ -967,7 +935,7 @@ func (h *lspEditorHandler) sendIncrementalUpdate(
 	version := h.incrementVersion(f)
 
 	// https://microsoft.github.io/language-server-protocol/specification#textDocument_didChange
-	rng := makeProtocolRange(content, newCells, oldCells, from, to)
+	rng := makeProtocolRange(oldCells, from, to)
 	evts := []protocol.TextDocumentContentChangeEvent{{Text: content, Range: &rng}}
 
 	log.Tracef("sending incremental file update: file=%v, length=%v, version=%v,"+
@@ -1001,6 +969,10 @@ func (h *lspEditorHandler) handleFileFlush(ev editor.Event) {
 	ctx := context.Background()
 	ctx, cancelFn := context.WithTimeout(ctx, h.rpcTimeout)
 	defer cancelFn()
+
+	// content last EOL is trimmed by the buffer's unix file reader.
+	// lsp expects the last EOL
+	ev.Content += "\n"
 
 	f, ok := h.getFileWithName(ev.ResourceName)
 	if !ok {
@@ -1066,6 +1038,10 @@ func (h *lspEditorHandler) handleFileOpen(ev editor.Event) {
 	ctx := context.Background()
 	ctx, cancelFn := context.WithTimeout(ctx, h.rpcTimeout)
 	defer cancelFn()
+
+	// content last EOL is trimmed by the buffer's unix file reader.
+	// lsp expects the last EOL
+	ev.Content += "\n"
 
 	f := h.newFile(ev.Resource, ev.ResourceName, ev.Content)
 	srv, ok := h.getServer(f.languageID)

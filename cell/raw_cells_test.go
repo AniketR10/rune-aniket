@@ -412,8 +412,8 @@ Love isn't love 'til you give it away.
 			expectedRawCells: "",
 			inputFrom:        term.Coordinates{Y: 6},
 			inputTo:          term.Coordinates{},
-			expectedStart: &term.Coordinates{},
-			expectedEnd:   &term.Coordinates{},
+			expectedStart:    &term.Coordinates{},
+			expectedEnd:      &term.Coordinates{},
 		},
 		{
 			expectedStr:      baseRawCells,

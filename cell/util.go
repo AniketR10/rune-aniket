@@ -148,34 +148,52 @@ func CellsToBuffer(c [][]term.Cell) *Buffer {
 // ConvertRuneCoordinates converts x and y, which use the buffer runes as offsets
 // into term.Coordinates, which account for tab expansion. It returns false if y is out
 // of bounds.
-func ConvertRuneCoordinates(cells [][]term.Cell, y, x int) (term.Coordinates, bool) {
-	if y >= len(cells) {
-		return term.Coordinates{}, false
+func ConvertRuneCoordinates(cells [][]term.Cell, y, x int) (
+	ret term.Coordinates, ok bool,
+) {
+	if y > len(cells) || len(cells) == 0 {
+		return
 	}
-	line := cells[y]
+
+	ret = term.Coordinates{Y: y, X: x}
+
+	if ret.Y == len(cells) {
+		ok = ret.X == 0
+		return
+	}
+
+	line := cells[ret.Y]
 
 	for xi, c := range line {
-		if xi == x {
+		if xi == ret.X {
 			break
 		}
 		if c.Ch == 0 {
-			x++
+			ret.X++
 		}
 	}
-	return term.Coordinates{Y: y, X: x}, true
+
+	ok = true
+	return
 }
 
 // ConvertTermCoordinates converts c, which use the terminal system of coordinates, which
 // account for tab expansion, into rune offsets. It returns false if y is out
 // of bounds.
 func ConvertTermCoordinates(cells [][]term.Cell, c term.Coordinates) (y, x int, ok bool) {
-	if c.Y >= len(cells) {
+	if c.Y > len(cells) || len(cells) == 0 {
+		return
+	}
+
+	y = c.Y
+	x = c.X
+
+	if c.Y == len(cells) {
+		ok = c.X == 0
 		return
 	}
 
 	line := cells[c.Y]
-	y = c.Y
-	x = c.X
 
 	for xi, cell := range line {
 		if xi == c.X {
