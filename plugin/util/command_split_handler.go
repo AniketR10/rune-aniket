@@ -7,7 +7,7 @@ import (
 
 	"github.com/ernestrc/go-tui"
 	"github.com/ernestrc/go-tui/browser"
-	"github.com/ernestrc/go-tui/editor"
+	"github.com/ernestrc/go-tui/text"
 	"github.com/ernestrc/go-tui/plugin"
 	"github.com/ernestrc/go-tui/proto"
 	log "github.com/sirupsen/logrus"
@@ -19,7 +19,7 @@ type cmdSplitHandler struct {
 
 	broker  proto.MuxBroker
 	wm      browser.WindowManager
-	ed      editor.Editor
+	ed      text.Editor
 	pconfig plugin.Config
 	grants  []plugin.Grant
 	h       tui.Handler
@@ -132,7 +132,7 @@ func (t *cmdSplitHandler) openSplitWindow() {
 	t.win = win
 }
 
-func (t *cmdSplitHandler) HandleCommand(cmd editor.Command) (exit bool) {
+func (t *cmdSplitHandler) HandleCommand(cmd text.Command) (exit bool) {
 	if cmd.Name == t.config.Command {
 		t.openSplitWindow()
 	}

@@ -8,7 +8,7 @@ import (
 
 	"github.com/ernestrc/go-tui/browser"
 	"github.com/ernestrc/go-tui/component"
-	"github.com/ernestrc/go-tui/editor"
+	"github.com/ernestrc/go-tui/text"
 	"github.com/ernestrc/go-tui/handler"
 	"github.com/ernestrc/go-tui/plugin"
 	"github.com/ernestrc/go-tui/term"
@@ -111,7 +111,7 @@ func (c ideConfig) commandKeyMappings() map[handler.Sequence]string {
 	return ret
 }
 func (c ideConfig) commandOverlayFrame() (ret bool) {
-	ret = editor.DefaultCommandOverlayConfig().Frame
+	ret = text.DefaultCommandOverlayConfig().Frame
 	cfg, ok := c.command()
 	if !ok {
 		return
@@ -128,7 +128,7 @@ func (c ideConfig) commandOverlayFrame() (ret bool) {
 }
 
 func (c ideConfig) commandOverlayWidth() (ret int) {
-	ret = editor.DefaultCommandOverlayConfig().Width
+	ret = text.DefaultCommandOverlayConfig().Width
 	cfg, ok := c.command()
 	if !ok {
 		return
@@ -145,7 +145,7 @@ func (c ideConfig) commandOverlayWidth() (ret int) {
 }
 
 func (c ideConfig) commandOverlayHeight() (ret int) {
-	ret = editor.DefaultCommandOverlayConfig().Height
+	ret = text.DefaultCommandOverlayConfig().Height
 	cfg, ok := c.command()
 	if !ok {
 		return
@@ -245,23 +245,23 @@ func (c ideConfig) promptHighlightAttr() term.Attributes {
 
 func (c ideConfig) commandOverlayMatchedTextAttr() (ret term.Attributes) {
 	return c.getCommandAttr("matched_text_attr",
-		editor.DefaultCommandOverlayConfig().MatchedTextAttr)
+		text.DefaultCommandOverlayConfig().MatchedTextAttr)
 }
 
 func (c ideConfig) commandOverlayCountAttr() (ret term.Attributes) {
-	return c.getCommandAttr("count_attr", editor.DefaultCommandOverlayConfig().CountAttr)
+	return c.getCommandAttr("count_attr", text.DefaultCommandOverlayConfig().CountAttr)
 }
 
 func (c ideConfig) commandOverlayFocusElementAttr() (ret term.Attributes) {
-	return c.getCommandAttr("focus_element_attr", editor.DefaultCommandOverlayConfig().FocusElementAttr)
+	return c.getCommandAttr("focus_element_attr", text.DefaultCommandOverlayConfig().FocusElementAttr)
 }
 
 func (c ideConfig) commandOverlayElementAttr() (ret term.Attributes) {
-	return c.getCommandAttr("element_attr", editor.DefaultCommandOverlayConfig().ElementAttr)
+	return c.getCommandAttr("element_attr", text.DefaultCommandOverlayConfig().ElementAttr)
 }
 
-func (c ideConfig) commandOverlayConfig() editor.CommandOverlayConfig {
-	return editor.CommandOverlayConfig{
+func (c ideConfig) commandOverlayConfig() text.CommandOverlayConfig {
+	return text.CommandOverlayConfig{
 		Frame:            c.commandOverlayFrame(),
 		Width:            c.commandOverlayWidth(),
 		Height:           c.commandOverlayHeight(),
@@ -363,7 +363,7 @@ func (c ideConfig) startTextBackgroundAttr() term.Attributes {
 
 func (c ideConfig) dirtyTabAttr() term.Attributes {
 	return c.getBrowserAttr("dirty_tab_attr",
-		editor.DefaultConfig().DirtyTabAttr)
+		text.DefaultConfig().DirtyTabAttr)
 }
 
 func (c ideConfig) windowFrameCharset() (cs component.FrameCharSet) {
@@ -514,7 +514,7 @@ func (c ideConfig) viBool(name string) (ret bool) {
 }
 
 func (c ideConfig) browserTabspaces() (tabs int) {
-	tabs = editor.DefaultConfig().Tabspaces
+	tabs = text.DefaultConfig().Tabspaces
 	cfg, ok := c.browser()
 	if !ok {
 		return
@@ -548,7 +548,7 @@ func (c ideConfig) browserStartText() (text string) {
 }
 
 func (c ideConfig) browserSwapDir() (dir string) {
-	dir = editor.DefaultConfig().SwapDir
+	dir = text.DefaultConfig().SwapDir
 	cfg, ok := c.browser()
 	if !ok {
 		return

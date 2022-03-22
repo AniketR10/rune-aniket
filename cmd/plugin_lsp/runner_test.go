@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	"github.com/ernestrc/go-tui/cell"
-	"github.com/ernestrc/go-tui/editor"
+	"github.com/ernestrc/go-tui/text"
 	"github.com/ernestrc/golang-internal-tools/lsp/protocol"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -53,7 +53,7 @@ func TestLSPFormatting(t *testing.T) {
 			require.NoError(t, err)
 
 			var b editBuilder
-			b.init(makeFile(), editor.CellWriter(buffer.Writer()), cell.StringToCells(buffer.String()))
+			b.init(makeFile(), text.CellWriter(buffer.Writer()), cell.StringToCells(buffer.String()))
 			b.applyEdits(edits)
 			assert.Equal(t, string(want), b.buf.String())
 		})

@@ -6,7 +6,7 @@ import (
 	"github.com/ernestrc/go-tui/proto"
 )
 
-// this structure wraps a editor.Editor to
+// this structure wraps a text.Editor to
 // provide interrupt on write requests coming from the wire
 type interruptEditor struct {
 	proto.EditorServer

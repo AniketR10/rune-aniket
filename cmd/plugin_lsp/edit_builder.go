@@ -5,7 +5,7 @@ import (
 	"sort"
 
 	"github.com/ernestrc/go-tui/cell"
-	"github.com/ernestrc/go-tui/editor"
+	"github.com/ernestrc/go-tui/text"
 	"github.com/ernestrc/go-tui/term"
 	"github.com/ernestrc/golang-internal-tools/lsp/protocol"
 	log "github.com/sirupsen/logrus"
@@ -13,13 +13,13 @@ import (
 
 type editBuilder struct {
 	f        *file
-	w        editor.Writer
+	w        text.Writer
 	original *cell.Buffer
 	buf      *cell.Buffer
 	colmap   protocol.ColumnMapper
 }
 
-func (b *editBuilder) init(f *file, w editor.Writer, cells [][]term.Cell) {
+func (b *editBuilder) init(f *file, w text.Writer, cells [][]term.Cell) {
 	b.f = f
 	b.w = w
 	b.original = cell.CellsToBuffer(cells)

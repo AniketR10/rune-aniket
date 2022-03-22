@@ -4,7 +4,7 @@ import (
 	"io"
 	"sync"
 
-	"github.com/ernestrc/go-tui/editor"
+	"github.com/ernestrc/go-tui/text"
 	"github.com/ernestrc/go-tui/plugin"
 	"github.com/ernestrc/go-tui/proto"
 	log "github.com/sirupsen/logrus"
@@ -12,21 +12,21 @@ import (
 
 // CommandEventHandler combines EventHandler with CommandHandler.
 type CommandEventHandler interface {
-	editor.EventHandler
-	editor.CommandHandler
+	text.EventHandler
+	text.CommandHandler
 	io.Closer
 }
 
 type editorGrantee struct {
 	mu         sync.Mutex
 	broker     proto.MuxBroker
-	ed         editor.Editor
+	ed         text.Editor
 	handler    CommandEventHandler
-	newHandler func(editor.Editor, []plugin.Grant, proto.MuxBroker, plugin.Config) (CommandEventHandler, error)
+	newHandler func(text.Editor, []plugin.Grant, proto.MuxBroker, plugin.Config) (CommandEventHandler, error)
 	cmds       []string
 	pconfig    plugin.Config
 	err        error
-	evs        []editor.EventType
+	evs        []text.EventType
 }
 
 func (t *editorGrantee) Connected(broker proto.MuxBroker, config plugin.Config) {
@@ -116,8 +116,8 @@ func (t *editorGrantee) Health() error {
 // permissions is denied, the plugin will exit with an error.
 func ServeEditorEventHandler(
 	cmds []string,
-	fn func(editor.Editor, []plugin.Grant, proto.MuxBroker, plugin.Config) (CommandEventHandler, error),
-	events []editor.EventType,
+	fn func(text.Editor, []plugin.Grant, proto.MuxBroker, plugin.Config) (CommandEventHandler, error),
+	events []text.EventType,
 	extraPerms ...plugin.Permission,
 ) {
 	perms := []plugin.Permission{

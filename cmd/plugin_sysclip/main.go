@@ -3,7 +3,7 @@ package main
 import (
 	"sync"
 
-	"github.com/ernestrc/go-tui/editor"
+	"github.com/ernestrc/go-tui/text"
 	"github.com/ernestrc/go-tui/plugin"
 	"github.com/ernestrc/go-tui/proto"
 
@@ -51,7 +51,7 @@ func (c *systemClipboard) Connected(broker proto.MuxBroker, config plugin.Config
 
 	log.Infof("plugin connected; config: %#v", config)
 	c.broker = broker
-	c.registerID = editor.DefaultRegisterID
+	c.registerID = text.DefaultRegisterID
 
 	registerID, err := config.GetString("register")
 	if err != nil {

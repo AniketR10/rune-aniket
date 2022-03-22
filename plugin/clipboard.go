@@ -7,7 +7,7 @@ import (
 	"io"
 	"sync"
 
-	"github.com/ernestrc/go-tui/editor"
+	"github.com/ernestrc/go-tui/text"
 	"github.com/ernestrc/go-tui/proto"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
@@ -44,7 +44,7 @@ type ClipboardManager struct {
 	s   *clipboardSetterServer
 	// editor.Clipboard is re-used but each implementation is only
 	// used for its registered registerID.
-	registers map[string]editor.Clipboard
+	registers map[string]text.Clipboard
 }
 
 // NewClipboardManager allocates storage for a new ClipboardManager and initializes it.
@@ -56,8 +56,8 @@ func NewClipboardManager() *ClipboardManager {
 
 // Init initializes this ClipboardManager.
 func (s *ClipboardManager) Init() {
-	s.registers = make(map[string]editor.Clipboard)
-	s.registers[editor.DefaultRegisterID] = editor.NewInMemoryClipboard()
+	s.registers = make(map[string]text.Clipboard)
+	s.registers[text.DefaultRegisterID] = text.NewInMemoryClipboard()
 }
 
 // Serve satisfies ResourceServer.
@@ -91,7 +91,7 @@ func (s *ClipboardManager) Serve(
 }
 
 // Paste satisfies ClipboardRegister.
-func (s *ClipboardManager) Paste(registerID string) (d editor.ClipboardData, err error) {
+func (s *ClipboardManager) Paste(registerID string) (d text.ClipboardData, err error) {
 	s.mu.Lock()
 	reg, ok := s.registers[registerID]
 	s.mu.Unlock()
@@ -103,11 +103,11 @@ func (s *ClipboardManager) Paste(registerID string) (d editor.ClipboardData, err
 }
 
 // Copy satisfies ClipboardRegister.
-func (s *ClipboardManager) Copy(registerID string, data editor.ClipboardData) error {
+func (s *ClipboardManager) Copy(registerID string, data text.ClipboardData) error {
 	s.mu.Lock()
 	reg, ok := s.registers[registerID]
 	if !ok {
-		reg = editor.NewInMemoryClipboard()
+		reg = text.NewInMemoryClipboard()
 		s.registers[registerID] = reg
 	}
 	s.mu.Unlock()
@@ -171,7 +171,7 @@ type pluginRegister struct {
 	r        ClipboardRegister
 }
 
-func (r *pluginRegister) Paste(registerID string) (d editor.ClipboardData, err error) {
+func (r *pluginRegister) Paste(registerID string) (d text.ClipboardData, err error) {
 	d.Text, err = r.r.Paste()
 	if err != nil {
 		return
@@ -180,7 +180,7 @@ func (r *pluginRegister) Paste(registerID string) (d editor.ClipboardData, err e
 	return
 }
 
-func (r *pluginRegister) Copy(registerID string, data editor.ClipboardData) error {
+func (r *pluginRegister) Copy(registerID string, data text.ClipboardData) error {
 	err := r.r.Copy(data.Text)
 	if err != nil {
 		return err

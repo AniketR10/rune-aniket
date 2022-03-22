@@ -12,7 +12,7 @@ import (
 	"github.com/ernestrc/go-tui/browser"
 	"github.com/ernestrc/go-tui/cell"
 	"github.com/ernestrc/go-tui/component"
-	"github.com/ernestrc/go-tui/editor"
+	"github.com/ernestrc/go-tui/text"
 	"github.com/ernestrc/go-tui/handler"
 	"github.com/ernestrc/go-tui/term"
 	testutil "github.com/ernestrc/go-tui/util/test"
@@ -24,7 +24,7 @@ import (
 // this is to work around ex's assumptions on underlying handler.
 var testCommandEvent = term.Event{Type: term.EventKey, Key: term.KeyCtrlBackslash}
 
-type browserConstructor func(ed editor.Editor, opts ...editor.Option) (tui.Handler, browser.Browser, error)
+type browserConstructor func(ed text.Editor, opts ...text.Option) (tui.Handler, browser.Browser, error)
 
 type testFileBuffer struct {
 	flushErr error
@@ -40,25 +40,25 @@ func (t *testFileBuffer) Close() error {
 }
 
 func openTestFile(filePath string, buf *cell.Buffer, swapDir string, readOnly bool) (
-	editor.FlusherCloser, error,
+	text.FlusherCloser, error,
 ) {
 	return &testFileBuffer{}, nil
 }
 
 func recoverTestFile(filePath, swapFilePath string, buf *cell.Buffer) (
-	editor.FlusherCloser, error,
+	text.FlusherCloser, error,
 ) {
 	return openTestFile(filePath, buf, "", false)
 }
 
-func withOpenFileStubs(opts ...editor.Option) []editor.Option {
-	opts = append(opts, editor.WithOpenFileFn(openTestFile))
-	opts = append(opts, editor.WithRecoverFileFn(recoverTestFile))
+func withOpenFileStubs(opts ...text.Option) []text.Option {
+	opts = append(opts, text.WithOpenFileFn(openTestFile))
+	opts = append(opts, text.WithRecoverFileFn(recoverTestFile))
 	return opts
 }
 
 func TestBrowserHandlerDraw(t *testing.T) {
-	testBrowserHandlerDraw(t, func(ed editor.Editor, opts ...editor.Option) (tui.Handler, browser.Browser, error) {
+	testBrowserHandlerDraw(t, func(ed text.Editor, opts ...text.Option) (tui.Handler, browser.Browser, error) {
 		b := new(Ex)
 		err := b.Init(ed, withOpenFileStubs(opts...)...)
 		if err != nil {
@@ -214,9 +214,9 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 │EEEEEEEEEEEEEEEEEE│
 └──────────────────┘`},
 	}
-	bh, b, err := constructor(editor.Mock(),
-		editor.WithCommandEvent(testCommandEvent),
-		editor.WithCommandKeyBinding(term.Event{Type: term.EventKey, Ch: '4'}, "close"),
+	bh, b, err := constructor(text.Mock(),
+		text.WithCommandEvent(testCommandEvent),
+		text.WithCommandKeyBinding(term.Event{Type: term.EventKey, Ch: '4'}, "close"),
 	)
 	require.NoError(t, err)
 
@@ -481,8 +481,8 @@ func TestBrowserHandlerPublishInterrupt(t *testing.T) {
 		var wg sync.WaitGroup
 		browser := new(Ex)
 		opts := withOpenFileStubs()
-		opts = append(opts, editor.WithInterrupt(wg.Done))
-		require.NoError(t, browser.Init(editor.Mock(), opts...))
+		opts = append(opts, text.WithInterrupt(wg.Done))
+		require.NoError(t, browser.Init(text.Mock(), opts...))
 		defer browser.Close()
 
 		wg.Add(1)
@@ -531,10 +531,10 @@ func TestMultipleFilesStartup(t *testing.T) {
 
 	b := new(Ex)
 	opts := withOpenFileStubs(
-		editor.WithFilepath("cabin.go"),
-		editor.WithFilepath("wi.go"),
+		text.WithFilepath("cabin.go"),
+		text.WithFilepath("wi.go"),
 	)
-	err := b.Init(editor.Mock(),
+	err := b.Init(text.Mock(),
 		opts...,
 	)
 	require.NoError(t, err)
@@ -584,17 +584,17 @@ func TestExCommandResponsive(t *testing.T) {
 	fn := func(t *testing.T) tui.Handler {
 		b := new(Ex)
 		opts := withOpenFileStubs(
-			editor.WithCommandEvent(testCommandEvent),
-			editor.WithWindowManagerConfig(component.WindowManagerConfig{
+			text.WithCommandEvent(testCommandEvent),
+			text.WithWindowManagerConfig(component.WindowManagerConfig{
 				Frame: false,
 			}),
-			editor.WithCommandOverlayConfig(editor.CommandOverlayConfig{
+			text.WithCommandOverlayConfig(text.CommandOverlayConfig{
 				Width:  10,
 				Height: 5,
 				Frame:  true,
 			}),
 		)
-		err := b.Init(editor.Mock(), opts...)
+		err := b.Init(text.Mock(), opts...)
 		require.NoError(t, err)
 		closeFns = append(closeFns, b.Close)
 		return b
@@ -635,20 +635,20 @@ func TestExKeySequence(t *testing.T) {
 	fn := func(t *testing.T) tui.Handler {
 		b := new(Ex)
 		opts := withOpenFileStubs(
-			editor.WithFilepath("10k.go"),
-			editor.WithFilepath("button.go"),
-			editor.WithCommandEvent(testCommandEvent),
-			editor.WithCommandSequenceBinding(handler.Sequence{
+			text.WithFilepath("10k.go"),
+			text.WithFilepath("button.go"),
+			text.WithCommandEvent(testCommandEvent),
+			text.WithCommandSequenceBinding(handler.Sequence{
 				First: term.Event{Type: term.EventKey, Ch: 'g'},
 				Last:  term.Event{Type: term.EventKey, Ch: 'l'},
 			}, "bufferNext"),
-			editor.WithCommandSequenceBinding(handler.Sequence{
+			text.WithCommandSequenceBinding(handler.Sequence{
 				First: term.Event{Type: term.EventKey, Ch: 'g'},
 				Last:  term.Event{Type: term.EventKey, Ch: 'g'},
 			}, "bufferCloseAll"),
-			editor.WithSequencerTimeout(10*time.Second),
+			text.WithSequencerTimeout(10*time.Second),
 		)
-		err := b.Init(editor.Mock(), opts...)
+		err := b.Init(text.Mock(), opts...)
 		require.NoError(t, err)
 		closeFns = append(closeFns, b.Close)
 		return b
@@ -672,8 +672,8 @@ func TestExExit(t *testing.T) {
 			b := new(Ex)
 			defer b.Close()
 
-			err := b.Init(editor.Mock(),
-				editor.WithCommandEvent(testCommandEvent),
+			err := b.Init(text.Mock(),
+				text.WithCommandEvent(testCommandEvent),
 			)
 			require.NoError(t, err)
 
@@ -700,7 +700,7 @@ func TestExExit(t *testing.T) {
 		b := new(Ex)
 		defer b.Close()
 
-		err := b.Init(editor.Mock())
+		err := b.Init(text.Mock())
 		require.NoError(t, err)
 
 		h := browser.NewTestHandler()

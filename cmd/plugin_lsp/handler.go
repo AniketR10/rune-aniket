@@ -22,8 +22,8 @@ import (
 	"github.com/ernestrc/go-tui/browser"
 	"github.com/ernestrc/go-tui/cell"
 	"github.com/ernestrc/go-tui/component/search"
-	"github.com/ernestrc/go-tui/editor"
-	"github.com/ernestrc/go-tui/editor/vi"
+	"github.com/ernestrc/go-tui/text"
+	"github.com/ernestrc/go-tui/text/vi"
 	"github.com/ernestrc/go-tui/handler"
 	"github.com/ernestrc/go-tui/plugin"
 	plugutil "github.com/ernestrc/go-tui/plugin/util"
@@ -65,11 +65,11 @@ var (
 		commandHover, commandGoToDef, commandFormat, commandReferences,
 		commandAddWorkspace, commandRemoveWorkspace, commandOrganizeImports,
 	}
-	lspHandlerEvents = []editor.EventType{
-		editor.EventTypeClose,
-		editor.EventTypeFlush,
-		editor.EventTypeOpen,
-		editor.EventTypeUpdate,
+	lspHandlerEvents = []text.EventType{
+		text.EventTypeClose,
+		text.EventTypeFlush,
+		text.EventTypeOpen,
+		text.EventTypeUpdate,
 	}
 	lspHandlerPermissions = []plugin.Permission{
 		plugin.PermissionBrowserWindowManager,
@@ -119,7 +119,7 @@ var (
 type file struct {
 	name       string
 	languageID string
-	handler    editor.Handler
+	handler    text.Handler
 	docID      protocol.TextDocumentIdentifier
 	uri        span.URI
 
@@ -138,9 +138,9 @@ type execServer struct {
 
 type lspEditorHandler struct {
 	mu     sync.Mutex
-	evChan chan editor.Event
+	evChan chan text.Event
 
-	ed editor.Editor
+	ed text.Editor
 	wm browser.WindowManager
 	m  browser.Messenger
 	o  browser.ResourceOpener
@@ -533,7 +533,7 @@ func getDuration(
 }
 
 func newLspHandler(
-	ed editor.Editor, grants []plugin.Grant,
+	ed text.Editor, grants []plugin.Grant,
 	broker proto.MuxBroker, pconfig plugin.Config,
 ) (plugutil.CommandEventHandler, error) {
 	ret := new(lspEditorHandler)
@@ -541,7 +541,7 @@ func newLspHandler(
 	ret.files = make(map[span.URI]*file)
 	ret.pendingDiagnostic = make(map[span.URI][]protocol.Diagnostic)
 	ret.pendingGoTo = make(map[span.URI]protocol.Range)
-	ret.evChan = make(chan editor.Event, handleBackpressureEvs)
+	ret.evChan = make(chan text.Event, handleBackpressureEvs)
 
 	var err error
 	ret.semanticTypesAttr, err = getSemanticTypesAttr(pconfig)
@@ -639,7 +639,7 @@ func (h *lspEditorHandler) getServer(languageID string) (
 	return proc, true
 }
 
-func (h *lspEditorHandler) newFile(handler editor.Handler, name, content string) *file {
+func (h *lspEditorHandler) newFile(handler text.Handler, name, content string) *file {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
@@ -757,7 +757,7 @@ func (h *lspEditorHandler) getFile(uri span.URI) (*file, bool) {
 func parseLocationData(
 	uri span.URI, cells [][]term.Cell, content []byte, d []uint32,
 	semanticTypes map[string]term.Attributes,
-) (ret []editor.Location) {
+) (ret []text.Location) {
 	tc := span.NewContentConverter(uri.Filename(), content)
 	colmap := protocol.ColumnMapper{
 		URI:       uri,
@@ -803,7 +803,7 @@ func parseLocationData(
 			continue
 		}
 
-		loc := editor.Location{From: from, To: to, Attr: attr}
+		loc := text.Location{From: from, To: to, Attr: attr}
 		ret = append(ret, loc)
 	}
 	return ret
@@ -849,7 +849,7 @@ func (h *lspEditorHandler) semanticTokensFull(
 		log.Tracef("lspEditorHandler.Server.SemanticTokensFull(%s): OK: %v: locations: %v",
 			f.name, resp.Data, locations)
 	}
-	err = h.ed.SetLocationList(f.handler, h.semanticTokensListID, editor.LocationSlice(locations))
+	err = h.ed.SetLocationList(f.handler, h.semanticTokensListID, text.LocationSlice(locations))
 	if err != nil {
 		log.Errorf("lspEditorHandler.SetLocationList(%s): %v", f.name, err)
 		return
@@ -965,7 +965,7 @@ func (h *lspEditorHandler) getCells(f *file) (cells [][]term.Cell) {
 	return f._cells
 }
 
-func (h *lspEditorHandler) handleFileFlush(ev editor.Event) {
+func (h *lspEditorHandler) handleFileFlush(ev text.Event) {
 	ctx := context.Background()
 	ctx, cancelFn := context.WithTimeout(ctx, h.rpcTimeout)
 	defer cancelFn()
@@ -990,7 +990,7 @@ func (h *lspEditorHandler) handleFileFlush(ev editor.Event) {
 	go h.semanticTokensFull(ctx, srv, f, h.getCells(f), ev.Content)
 }
 
-func (h *lspEditorHandler) handleFileUpdate(ev editor.Event) {
+func (h *lspEditorHandler) handleFileUpdate(ev text.Event) {
 	ctx := context.Background()
 	ctx, cancelFn := context.WithTimeout(ctx, h.rpcTimeout)
 	defer cancelFn()
@@ -1034,7 +1034,7 @@ func (h *lspEditorHandler) handleFileUpdate(ev editor.Event) {
 	go h.semanticTokensFull(ctx, srv, f, newCells, buf.String())
 }
 
-func (h *lspEditorHandler) handleFileOpen(ev editor.Event) {
+func (h *lspEditorHandler) handleFileOpen(ev text.Event) {
 	ctx := context.Background()
 	ctx, cancelFn := context.WithTimeout(ctx, h.rpcTimeout)
 	defer cancelFn()
@@ -1102,7 +1102,7 @@ func (h *lspEditorHandler) sendDidClose(
 	log.Tracef("lspEditorHandler.Server.DidClose(%s)", uri)
 }
 
-func (h *lspEditorHandler) handleFileClose(ev editor.Event) {
+func (h *lspEditorHandler) handleFileClose(ev text.Event) {
 	ctx := context.Background()
 	ctx, cancelFn := context.WithTimeout(ctx, h.rpcTimeout)
 	defer cancelFn()
@@ -1122,12 +1122,12 @@ func (h *lspEditorHandler) handleFileClose(ev editor.Event) {
 
 func (h *lspEditorHandler) parseDiagnostics(
 	f *file, d []protocol.Diagnostic,
-) []editor.Location {
+) []text.Location {
 	cells := h.getCells(f)
 	buf := cell.CellsToBuffer(cells)
 	colmap := getColumnMapper(f.uri, buf)
 
-	locs := make([]editor.Location, 0, len(d))
+	locs := make([]text.Location, 0, len(d))
 	for _, d := range d {
 		from, to, ok := convertRange(d.Range, cells, colmap)
 		if !ok {
@@ -1141,7 +1141,7 @@ func (h *lspEditorHandler) parseDiagnostics(
 			continue
 		}
 
-		loc := editor.Location{Message: msg, From: from, To: to, Attr: attr}
+		loc := text.Location{Message: msg, From: from, To: to, Attr: attr}
 		locs = append(locs, loc)
 	}
 
@@ -1189,7 +1189,7 @@ func (h *lspEditorHandler) setDiagnosticsLocationList(
 	ctx context.Context, f *file, ds []protocol.Diagnostic,
 ) {
 	locs := h.parseDiagnostics(f, ds)
-	err := h.ed.SetLocationList(f.handler, h.diagnosticListID, editor.LocationSlice(locs))
+	err := h.ed.SetLocationList(f.handler, h.diagnosticListID, text.LocationSlice(locs))
 	if err != nil {
 		log.Errorf("lspEditorHandler.SetLocationList(%s): %v", f.name, err)
 		return
@@ -1268,7 +1268,7 @@ func (h *lspEditorHandler) getFilePosition(cursor term.Coordinates, filename str
 }
 
 func (h *lspEditorHandler) handleGoToDefinition(
-	cursor term.Coordinates, ed editor.Handler, filename string,
+	cursor term.Coordinates, ed text.Handler, filename string,
 ) {
 	f, pos, ok := h.getFilePosition(cursor, filename)
 	if !ok {
@@ -1333,7 +1333,7 @@ func findBestFloatingWindowPosition(cursorAtWindow term.Coordinates, width, heig
 
 func (h *lspEditorHandler) handleHover(
 	cursorAtScroll, cursorAtWindow term.Coordinates,
-	ed editor.Handler, filename string,
+	ed text.Handler, filename string,
 ) {
 	f, pos, ok := h.getFilePosition(cursorAtScroll, filename)
 	if !ok {
@@ -1508,8 +1508,8 @@ func (h *lspEditorHandler) browseLocations(
 		}
 
 		attrs := term.Attributes{Bg: term.AttrReverse, Fg: term.AttrReverse}
-		loc := editor.Location{From: from, To: to, Attr: attrs}
-		ed.SetLocationList(edh, locID, editor.LocationSlice([]editor.Location{loc}))
+		loc := text.Location{From: from, To: to, Attr: attrs}
+		ed.SetLocationList(edh, locID, text.LocationSlice([]text.Location{loc}))
 		ed.MoveToPrevLocation(edh, locID)
 	}
 
@@ -1573,7 +1573,7 @@ func (h *lspEditorHandler) browseLocations(
 
 func (h *lspEditorHandler) handleReferences(
 	cursorAtScroll, cursorAtWindow term.Coordinates,
-	ed editor.Handler, filename string,
+	ed text.Handler, filename string,
 ) {
 	win, err := h.wm.Focus()
 	if err != nil {
@@ -1679,7 +1679,7 @@ func (h *lspEditorHandler) organizeImports(
 	}
 }
 
-func (h *lspEditorHandler) handleFormat(ed editor.Handler, filename string, imports bool) {
+func (h *lspEditorHandler) handleFormat(ed text.Handler, filename string, imports bool) {
 	ctx := context.Background()
 	ctx, cancelFn := context.WithTimeout(ctx, h.rpcTimeout)
 	defer cancelFn()
@@ -1711,7 +1711,7 @@ func (h *lspEditorHandler) handleFormat(ed editor.Handler, filename string, impo
 	}
 }
 
-func (h *lspEditorHandler) HandleCommand(cmd editor.Command) (exit bool) {
+func (h *lspEditorHandler) HandleCommand(cmd text.Command) (exit bool) {
 	if cmd.Resource == nil {
 		return
 	}
@@ -1746,7 +1746,7 @@ func (h *lspEditorHandler) HandleCommand(cmd editor.Command) (exit bool) {
 	return false
 }
 
-func (h *lspEditorHandler) handleEvents(ch chan editor.Event) {
+func (h *lspEditorHandler) handleEvents(ch chan text.Event) {
 	for ev := range ch {
 		var start time.Time
 		if log.IsLevelEnabled(log.TraceLevel) {
@@ -1755,13 +1755,13 @@ func (h *lspEditorHandler) handleEvents(ch chan editor.Event) {
 		}
 
 		switch ev.Type {
-		case editor.EventTypeOpen:
+		case text.EventTypeOpen:
 			h.handleFileOpen(ev)
-		case editor.EventTypeClose:
+		case text.EventTypeClose:
 			h.handleFileClose(ev)
-		case editor.EventTypeFlush:
+		case text.EventTypeFlush:
 			h.handleFileFlush(ev)
-		case editor.EventTypeUpdate:
+		case text.EventTypeUpdate:
 			h.handleFileUpdate(ev)
 		}
 
@@ -1772,7 +1772,7 @@ func (h *lspEditorHandler) handleEvents(ch chan editor.Event) {
 }
 
 func (h *lspEditorHandler) Handle(
-	ctx context.Context, ev editor.Event,
+	ctx context.Context, ev text.Event,
 ) (exit bool) {
 	h.mu.Lock()
 	exit = h.exit

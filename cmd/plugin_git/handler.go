@@ -13,7 +13,7 @@ import (
 	"github.com/ernestrc/go-tui/browser"
 	"github.com/ernestrc/go-tui/cell"
 	"github.com/ernestrc/go-tui/component"
-	"github.com/ernestrc/go-tui/editor"
+	"github.com/ernestrc/go-tui/text"
 	"github.com/ernestrc/go-tui/handler"
 	"github.com/ernestrc/go-tui/plugin"
 	plugutil "github.com/ernestrc/go-tui/plugin/util"
@@ -31,13 +31,13 @@ const (
 
 var (
 	gitHandlerCommands = []string{commandNextChange, commandPrevChange}
-	gitHandlerEvents   = []editor.EventType{
-		editor.EventTypeOpen,
-		editor.EventTypeUpdate,
-		editor.EventTypeFlush,
-		editor.EventTypeScroll,
-		editor.EventTypeFocus,
-		editor.EventTypeUnfocus,
+	gitHandlerEvents   = []text.EventType{
+		text.EventTypeOpen,
+		text.EventTypeUpdate,
+		text.EventTypeFlush,
+		text.EventTypeScroll,
+		text.EventTypeFocus,
+		text.EventTypeUnfocus,
 	}
 	gitHandlerPermissions = []plugin.Permission{
 		plugin.PermissionBrowserWindowManager,
@@ -51,11 +51,11 @@ var (
 )
 
 type gitEditorHandler struct {
-	ed     editor.Editor
+	ed     text.Editor
 	wm     browser.WindowManager
 	p      browser.EventPublisher
 	exit   uint32
-	ch     chan editor.Event
+	ch     chan text.Event
 	scroll struct {
 		sync.Mutex
 		scroll component.Scroll
@@ -65,11 +65,11 @@ type gitEditorHandler struct {
 	addAttr       term.Attributes
 	rows          map[string]int
 	offsets       map[string]term.Coordinates
-	lastLocs      map[string][]editor.Location
+	lastLocs      map[string][]text.Location
 }
 
 func newGitHandler(
-	ed editor.Editor, grants []plugin.Grant,
+	ed text.Editor, grants []plugin.Grant,
 	broker proto.MuxBroker, pconfig plugin.Config,
 
 ) (plugutil.CommandEventHandler, error) {
@@ -77,8 +77,8 @@ func newGitHandler(
 	ret.ed = ed
 	ret.rows = make(map[string]int)
 	ret.offsets = make(map[string]term.Coordinates)
-	ret.ch = make(chan editor.Event)
-	ret.lastLocs = make(map[string][]editor.Location)
+	ret.ch = make(chan text.Event)
+	ret.lastLocs = make(map[string][]text.Location)
 	ret.scroll.scroll.Init()
 
 	var err error
@@ -142,7 +142,7 @@ func newGitHandler(
 	return ret, nil
 }
 
-func (h *gitEditorHandler) HandleCommand(cmd editor.Command) (exit bool) {
+func (h *gitEditorHandler) HandleCommand(cmd text.Command) (exit bool) {
 	if cmd.Resource == nil {
 		return
 	}
@@ -162,17 +162,17 @@ func (h *gitEditorHandler) HandleCommand(cmd editor.Command) (exit bool) {
 	return false
 }
 
-func (h *gitEditorHandler) parseDiff(diff *diff.FileDiff) []editor.Location {
+func (h *gitEditorHandler) parseDiff(diff *diff.FileDiff) []text.Location {
 	h.scroll.Lock()
 	defer h.scroll.Unlock()
 
-	var locs []editor.Location
+	var locs []text.Location
 	for _, hunk := range diff.Hunks {
 		log.Tracef("Read file diff hunk: %#v", hunk)
 		if hunk.NewLines == 0 {
 			// FIXME https://github.com/ernestrc/go-tui/issues/59
 			at := term.Coordinates{Y: int(hunk.NewStartLine - 1)}
-			locs = append(locs, editor.Location{
+			locs = append(locs, text.Location{
 				From: at,
 				To:   term.Coordinates{Y: at.Y, X: 1},
 				// Attr: deleteAttr,
@@ -184,7 +184,7 @@ func (h *gitEditorHandler) parseDiff(diff *diff.FileDiff) []editor.Location {
 
 		from := term.Coordinates{Y: int(hunk.NewStartLine - 1)}
 		to := term.Coordinates{Y: int(hunk.NewStartLine - 1 + hunk.NewLines)}
-		locs = append(locs, editor.Location{From: from, To: to})
+		locs = append(locs, text.Location{From: from, To: to})
 
 		for y := from.Y; y < to.Y; y++ {
 			at := term.Coordinates{Y: y}
@@ -197,7 +197,7 @@ func (h *gitEditorHandler) parseDiff(diff *diff.FileDiff) []editor.Location {
 }
 
 func (h *gitEditorHandler) pushNewDiffLocations(
-	filename string, resource editor.Handler,
+	filename string, resource text.Handler,
 ) error {
 	c := exec.Command("git", "diff", "-U0", filename)
 
@@ -234,7 +234,7 @@ func (h *gitEditorHandler) pushNewDiffLocations(
 	locs := h.parseDiff(diff)
 	h.lastLocs[filename] = locs
 
-	return h.ed.SetLocationList(resource, h.gitDiffListID, editor.LocationSlice(locs))
+	return h.ed.SetLocationList(resource, h.gitDiffListID, text.LocationSlice(locs))
 }
 
 func (h *gitEditorHandler) resetScroll() {
@@ -271,7 +271,7 @@ func (h *gitEditorHandler) initScroll(name string) {
 }
 
 // allow scroll to seek to same positions as editor buffer
-func (h *gitEditorHandler) setScrollMaxContent(ev editor.Event) {
+func (h *gitEditorHandler) setScrollMaxContent(ev text.Event) {
 	rows := len(cell.StringToCells(ev.Content))
 	// best effort until #59 is resolved
 	rows *= 2
@@ -297,7 +297,7 @@ func (h *gitEditorHandler) setScrollOffset(filename string, pos term.Coordinates
 	log.Tracef("setScrollOffset(%s): %#v OK", filename, pos)
 }
 
-func (h *gitEditorHandler) pushLastDiffLocations(filename string, resource editor.Handler) error {
+func (h *gitEditorHandler) pushLastDiffLocations(filename string, resource text.Handler) error {
 	locs, ok := h.lastLocs[filename]
 	if !ok {
 		log.Debugf("pushLastDiffLocations(%s): no locations found", filename)
@@ -305,7 +305,7 @@ func (h *gitEditorHandler) pushLastDiffLocations(filename string, resource edito
 	}
 
 	log.Tracef("pushLastDiffLocations(%s): locations found: %#v", filename, locs)
-	return h.ed.SetLocationList(resource, h.gitDiffListID, editor.LocationSlice(locs))
+	return h.ed.SetLocationList(resource, h.gitDiffListID, text.LocationSlice(locs))
 }
 
 func (h *gitEditorHandler) handleEvents() {
@@ -318,20 +318,20 @@ func (h *gitEditorHandler) handleEvents() {
 
 		var err error
 		switch ev.Type {
-		case editor.EventTypeUpdate:
+		case text.EventTypeUpdate:
 			err = h.pushLastDiffLocations(ev.ResourceName, ev.Resource)
-		case editor.EventTypeOpen:
+		case text.EventTypeOpen:
 			h.setScrollOffset(ev.ResourceName, term.Coordinates{})
 			fallthrough
-		case editor.EventTypeFlush:
+		case text.EventTypeFlush:
 			h.setScrollMaxContent(ev)
 			fallthrough
-		case editor.EventTypeFocus:
+		case text.EventTypeFocus:
 			err = h.pushNewDiffLocations(ev.ResourceName, ev.Resource)
-		case editor.EventTypeUnfocus:
+		case text.EventTypeUnfocus:
 			h.resetScroll()
 			err = h.p.PublishInterrupt()
-		case editor.EventTypeScroll:
+		case text.EventTypeScroll:
 			h.setScrollOffset(ev.ResourceName, ev.Start)
 			err = h.p.PublishInterrupt()
 		}
@@ -345,7 +345,7 @@ func (h *gitEditorHandler) handleEvents() {
 }
 
 func (h *gitEditorHandler) Handle(
-	ctx context.Context, ev editor.Event,
+	ctx context.Context, ev text.Event,
 ) (exit bool) {
 	uexit := atomic.LoadUint32(&h.exit)
 	exit = uexit != 0

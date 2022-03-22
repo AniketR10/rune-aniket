@@ -6,7 +6,7 @@ import (
 
 	"github.com/ernestrc/go-tui"
 	"github.com/ernestrc/go-tui/browser"
-	"github.com/ernestrc/go-tui/editor"
+	"github.com/ernestrc/go-tui/text"
 	"github.com/ernestrc/go-tui/handler"
 	"github.com/ernestrc/go-tui/plugin"
 	"github.com/ernestrc/go-tui/proto"
@@ -140,7 +140,7 @@ func TestCommandSplitHandlerOpenWindow(t *testing.T) {
 			Permission: plugin.PermissionEditor,
 		}
 		testSplitWindow(t, config, grants, func(h *cmdSplitHandler) {
-			assert.False(t, h.HandleCommand(editor.Command{Name: cmdName}))
+			assert.False(t, h.HandleCommand(text.Command{Name: cmdName}))
 		})
 	})
 }

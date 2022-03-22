@@ -14,7 +14,7 @@ import (
 	"github.com/ernestrc/go-tui"
 	"github.com/ernestrc/go-tui/browser"
 	"github.com/ernestrc/go-tui/component/search"
-	"github.com/ernestrc/go-tui/editor"
+	"github.com/ernestrc/go-tui/text"
 	"github.com/ernestrc/go-tui/plugin"
 	"github.com/ernestrc/go-tui/proto"
 	"github.com/ernestrc/go-tui/term"
@@ -43,7 +43,7 @@ type fuzzyFinderHandler struct {
 	f            browser.ResourceOpener
 	p            browser.EventPublisher
 	m            browser.Messenger
-	ed           editor.Editor
+	ed           text.Editor
 	invokeWindow browser.Window
 	historyKey   term.Event
 	mu           sync.Mutex

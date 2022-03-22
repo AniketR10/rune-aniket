@@ -12,7 +12,7 @@ import (
 
 	"github.com/ernestrc/go-tui"
 	"github.com/ernestrc/go-tui/browser"
-	"github.com/ernestrc/go-tui/editor"
+	"github.com/ernestrc/go-tui/text"
 	"github.com/ernestrc/go-tui/proto"
 	"github.com/ernestrc/go-tui/term"
 	log "github.com/sirupsen/logrus"
@@ -73,7 +73,7 @@ func (h *safeHandler) Close() error {
 func newTestRPCBrowser(t *testing.T,
 	destructor *func(),
 ) browserConstructor {
-	return func(ed editor.Editor, opts ...editor.Option) (
+	return func(ed text.Editor, opts ...text.Option) (
 		tui.Handler, browser.Browser, error,
 	) {
 		var logger *log.Logger
@@ -129,8 +129,8 @@ func TestIntegrationRPCBrowserDraw(t *testing.T) {
 
 func TestRPCBrowserCloseLeak(t *testing.T) {
 	var destructor func()
-	_, b, err := newTestRPCBrowser(t, &destructor)(editor.Mock(),
-		editor.WithFilepath(""))
+	_, b, err := newTestRPCBrowser(t, &destructor)(text.Mock(),
+		text.WithFilepath(""))
 	require.NoError(t, err)
 	defer destructor()
 

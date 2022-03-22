@@ -2,7 +2,7 @@ package search
 
 import (
 	"github.com/ernestrc/go-tui"
-	"github.com/ernestrc/go-tui/editor"
+	"github.com/ernestrc/go-tui/text"
 	"github.com/ernestrc/go-tui/term"
 )
 
@@ -22,7 +22,7 @@ func Handler(l *List, fn func(string)) tui.Handler {
 	const wrap = true
 
 	buf := l.Buffer()
-	ed, _ := editor.Simple(wrap).Edit("", buf)
+	ed, _ := text.SimpleEditor(wrap).Edit("", buf)
 	ret := simpleHandler{List: l, fn: fn, ed: ed}
 	return ret
 }

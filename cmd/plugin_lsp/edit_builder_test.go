@@ -2,7 +2,7 @@ package main
 
 import (
 	"github.com/ernestrc/go-tui/cell"
-	"github.com/ernestrc/go-tui/editor"
+	"github.com/ernestrc/go-tui/text"
 	"github.com/ernestrc/golang-internal-tools/lsp/protocol"
 	"github.com/ernestrc/golang-internal-tools/span"
 	log "github.com/sirupsen/logrus"
@@ -100,7 +100,7 @@ func TestApplyEdits(t *testing.T) {
 		out.WriteString(tcase.input)
 
 		var b editBuilder
-		b.init(makeFile(), editor.CellWriter(out.Writer()), cell.StringToCells(tcase.input))
+		b.init(makeFile(), text.CellWriter(out.Writer()), cell.StringToCells(tcase.input))
 		edits := make([]protocol.TextEdit, len(tcase.ed))
 		copy(edits, tcase.ed)
 		b.applyEdits(edits)

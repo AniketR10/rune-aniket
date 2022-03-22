@@ -12,7 +12,7 @@ import (
 	"github.com/ernestrc/go-tui/cell"
 	"github.com/ernestrc/go-tui/component"
 	"github.com/ernestrc/go-tui/component/search"
-	"github.com/ernestrc/go-tui/editor"
+	"github.com/ernestrc/go-tui/text"
 	"github.com/ernestrc/go-tui/handler"
 	"github.com/ernestrc/go-tui/term"
 )
@@ -46,9 +46,9 @@ const (
 // Ex implements a tui.Handler by wrapping an editor.Component and
 // providing an ex editor type of interface.
 type Ex struct {
-	config  editor.Config
-	comp    editor.Component
-	ed      editor.Editor
+	config  text.Config
+	comp    text.Component
+	ed      text.Editor
 	command struct {
 		// argsStartIdx is the position of the first space
 		// that separates the 'command' from its args
@@ -67,7 +67,7 @@ type Ex struct {
 }
 
 // NewEx allocates storage for a new Ex and initializes it.
-func NewEx(ed editor.Editor, opts ...editor.Option) (e *Ex, err error) {
+func NewEx(ed text.Editor, opts ...text.Option) (e *Ex, err error) {
 	e = new(Ex)
 	err = e.Init(ed, opts...)
 	if err != nil {
@@ -79,10 +79,10 @@ func NewEx(ed editor.Editor, opts ...editor.Option) (e *Ex, err error) {
 // Init initializes this Ex with the given editor and Options.
 // It returns an error if an initial filepath was given through WithFilePath option
 // and the file failed to be opened.
-func (e *Ex) Init(ed editor.Editor, opts ...editor.Option) (err error) {
+func (e *Ex) Init(ed text.Editor, opts ...text.Option) (err error) {
 	e.mode = modeDefault
 
-	e.config = editor.DefaultConfig()
+	e.config = text.DefaultConfig()
 	for _, o := range opts {
 		o(&e.config)
 	}
@@ -140,14 +140,14 @@ func (e *Ex) Init(ed editor.Editor, opts ...editor.Option) (err error) {
 	return
 }
 
-func (e *Ex) handlerInFocus() (string, editor.Handler, bool) {
+func (e *Ex) handlerInFocus() (string, text.Handler, bool) {
 	focus, _ := e.comp.Focus()
 	content, _ := focus.Content()
 	t, ok := content.(*browser.Tab)
 	if !ok {
 		return "", nil, false
 	}
-	ret, ok := t.Handler().(editor.Handler)
+	ret, ok := t.Handler().(text.Handler)
 	if !ok {
 		return "", nil, false
 	}
@@ -213,7 +213,7 @@ func (e *Ex) forceQuit(args ...string) (bool, error) {
 
 func (e *Ex) dispatchCommand(cmd string, args ...string) (err error) {
 	name, h, ok := e.handlerInFocus()
-	scmd := editor.Command{
+	scmd := text.Command{
 		Name:         cmd,
 		Args:         args,
 		Resource:     h,
@@ -532,7 +532,7 @@ func (e *Ex) Draw(w term.Writer) {
 }
 
 // Editor returns the underlying Editor implementation.
-func (e *Ex) Editor() editor.Editor {
+func (e *Ex) Editor() text.Editor {
 	return &e.comp
 }
 

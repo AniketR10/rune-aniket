@@ -13,7 +13,7 @@ import (
 	"github.com/ernestrc/go-tui/browser"
 	"github.com/ernestrc/go-tui/cell"
 	"github.com/ernestrc/go-tui/component"
-	"github.com/ernestrc/go-tui/editor"
+	"github.com/ernestrc/go-tui/text"
 	"github.com/ernestrc/go-tui/handler"
 	"github.com/ernestrc/go-tui/plugin"
 	plugutil "github.com/ernestrc/go-tui/plugin/util"
@@ -24,13 +24,13 @@ import (
 
 var (
 	fileBarHandlerCommands = []string{}
-	fileBarHandlerEvents   = []editor.EventType{
-		editor.EventTypeOpen,
-		editor.EventTypeUpdate,
-		editor.EventTypeFlush,
-		editor.EventTypeCursor,
-		editor.EventTypeFocus,
-		editor.EventTypeUnfocus,
+	fileBarHandlerEvents   = []text.EventType{
+		text.EventTypeOpen,
+		text.EventTypeUpdate,
+		text.EventTypeFlush,
+		text.EventTypeCursor,
+		text.EventTypeFocus,
+		text.EventTypeUnfocus,
 	}
 	fileBarHandlerPermissions = []plugin.Permission{
 		plugin.PermissionBrowserWindowManager,
@@ -54,7 +54,7 @@ type fileBarEditorHandler struct {
 	p    browser.EventPublisher
 	cwd  string
 	exit uint32
-	ch   chan editor.Event
+	ch   chan text.Event
 
 	filenameAttributes      term.Attributes
 	filenameDirtyAttributes term.Attributes
@@ -71,13 +71,13 @@ type fileBarEditorHandler struct {
 }
 
 func newFileBarEditorHandler(
-	ed editor.Editor, grants []plugin.Grant,
+	ed text.Editor, grants []plugin.Grant,
 	broker proto.MuxBroker, pconfig plugin.Config,
 
 ) (plugutil.CommandEventHandler, error) {
 	ret := new(fileBarEditorHandler)
 	ret.files = make(map[string]*fileInfo)
-	ret.ch = make(chan editor.Event)
+	ret.ch = make(chan text.Event)
 
 	var err error
 	ret.cwd, err = os.Getwd()
@@ -151,7 +151,7 @@ func newFileBarEditorHandler(
 	return ret, nil
 }
 
-func (h *fileBarEditorHandler) HandleCommand(cmd editor.Command) (exit bool) {
+func (h *fileBarEditorHandler) HandleCommand(cmd text.Command) (exit bool) {
 	return
 }
 
@@ -218,7 +218,7 @@ func (h *fileBarEditorHandler) getFileInfo(name string) *fileInfo {
 	return ret
 }
 
-func (h *fileBarEditorHandler) setScrollMaxContent(ev editor.Event) {
+func (h *fileBarEditorHandler) setScrollMaxContent(ev text.Event) {
 	cells := cell.StringToCells(ev.Content)
 	h.getFileInfo(ev.ResourceName).cells = cells
 	log.Debugf("setScrollMaxContent(%s): %d", ev.ResourceName, len(cells))
@@ -244,26 +244,26 @@ func (h *fileBarEditorHandler) handleEvents() {
 
 		var err error
 		switch ev.Type {
-		case editor.EventTypeUpdate:
+		case text.EventTypeUpdate:
 			h.setFileDirty(ev.ResourceName, true)
 			h.refreshBarContent(ev.ResourceName)
 			err = h.p.PublishInterrupt()
-		case editor.EventTypeOpen:
+		case text.EventTypeOpen:
 			h.setCursorOffset(ev.ResourceName, term.Coordinates{})
 			h.setScrollMaxContent(ev)
 			h.refreshBarContent(ev.ResourceName)
 			err = h.p.PublishInterrupt()
-		case editor.EventTypeFlush:
+		case text.EventTypeFlush:
 			h.setFileDirty(ev.ResourceName, false)
 			h.setScrollMaxContent(ev)
 			fallthrough
-		case editor.EventTypeFocus:
+		case text.EventTypeFocus:
 			h.refreshBarContent(ev.ResourceName)
 			err = h.p.PublishInterrupt()
-		case editor.EventTypeUnfocus:
+		case text.EventTypeUnfocus:
 			h.refreshBarContent("")
 			err = h.p.PublishInterrupt()
-		case editor.EventTypeCursor:
+		case text.EventTypeCursor:
 			h.setCursorOffset(ev.ResourceName, ev.From)
 			h.refreshBarContent(ev.ResourceName)
 			err = h.p.PublishInterrupt()
@@ -278,7 +278,7 @@ func (h *fileBarEditorHandler) handleEvents() {
 }
 
 func (h *fileBarEditorHandler) Handle(
-	ctx context.Context, ev editor.Event,
+	ctx context.Context, ev text.Event,
 ) (exit bool) {
 	uexit := atomic.LoadUint32(&h.exit)
 	exit = uexit != 0

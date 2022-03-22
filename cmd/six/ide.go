@@ -7,8 +7,8 @@ import (
 	"github.com/ernestrc/blue/logging"
 	"github.com/ernestrc/go-tui"
 	"github.com/ernestrc/go-tui/browser"
-	"github.com/ernestrc/go-tui/editor"
-	"github.com/ernestrc/go-tui/editor/vi"
+	"github.com/ernestrc/go-tui/text"
+	"github.com/ernestrc/go-tui/text/vi"
 	"github.com/ernestrc/go-tui/plugin"
 	"github.com/ernestrc/go-tui/term"
 	log "github.com/sirupsen/logrus"
@@ -64,44 +64,44 @@ func (i *IDE) initPlugins(l *log.Logger) {
 func (i *IDE) init(cfgfilename, recfilename string, filenames ...string) error {
 	configErr := loadConfig(&i.ideConfig, cfgfilename)
 
-	opts := make([]editor.Option, 0)
+	opts := make([]text.Option, 0)
 	viOpts := make([]vi.Option, 0)
 	pluginOpts := make([]plugin.Option, 0)
 
 	if recfilename != "" {
-		opts = append(opts, editor.WithRecoveryFile(recfilename))
+		opts = append(opts, text.WithRecoveryFile(recfilename))
 	}
 
 	for _, filename := range filenames {
-		opts = append(opts, editor.WithFilepath(filename))
+		opts = append(opts, text.WithFilepath(filename))
 	}
 
 	opts = append(opts,
-		editor.WithTabspaces(i.ideConfig.browserTabspaces()),
-		editor.WithStartText(i.ideConfig.browserStartText()),
-		editor.WithWindowManagerConfig(i.ideConfig.windowManagerConfig()),
-		editor.WithFrameUnionCharSet(i.ideConfig.frameUnionCharset()),
-		editor.WithCommandEvent(term.Event{Type: term.EventKey, Ch: ':'}),
-		editor.WithMessageBarAttr(i.ideConfig.messageBarAttr()),
-		editor.WithFocusTabAttr(i.ideConfig.focusTabAttr()),
-		editor.WithNonFocusTabAttr(i.ideConfig.nonFocusTabAttr()),
-		editor.WithStartTextAttr(i.ideConfig.startTextAttr()),
-		editor.WithStartTextBackgroundAttr(i.ideConfig.startTextBackgroundAttr()),
-		editor.WithDirtyTabAttr(i.ideConfig.dirtyTabAttr()),
-		editor.WithCommandOverlayConfig(i.commandOverlayConfig()),
-		editor.WithPromptConfig(i.promptConfig()),
+		text.WithTabspaces(i.ideConfig.browserTabspaces()),
+		text.WithStartText(i.ideConfig.browserStartText()),
+		text.WithWindowManagerConfig(i.ideConfig.windowManagerConfig()),
+		text.WithFrameUnionCharSet(i.ideConfig.frameUnionCharset()),
+		text.WithCommandEvent(term.Event{Type: term.EventKey, Ch: ':'}),
+		text.WithMessageBarAttr(i.ideConfig.messageBarAttr()),
+		text.WithFocusTabAttr(i.ideConfig.focusTabAttr()),
+		text.WithNonFocusTabAttr(i.ideConfig.nonFocusTabAttr()),
+		text.WithStartTextAttr(i.ideConfig.startTextAttr()),
+		text.WithStartTextBackgroundAttr(i.ideConfig.startTextBackgroundAttr()),
+		text.WithDirtyTabAttr(i.ideConfig.dirtyTabAttr()),
+		text.WithCommandOverlayConfig(i.commandOverlayConfig()),
+		text.WithPromptConfig(i.promptConfig()),
 	)
 
 	for seq, cmd := range i.ideConfig.commandKeyMappings() {
 		if seq.Last != (term.Event{}) {
-			opts = append(opts, editor.WithCommandSequenceBinding(seq, cmd))
+			opts = append(opts, text.WithCommandSequenceBinding(seq, cmd))
 		} else {
-			opts = append(opts, editor.WithCommandKeyBinding(seq.First, cmd))
+			opts = append(opts, text.WithCommandKeyBinding(seq.First, cmd))
 		}
 	}
 
 	if i.ideConfig.browserSwapDir() != "" {
-		opts = append(opts, editor.WithSwapDir(i.ideConfig.browserSwapDir()))
+		opts = append(opts, text.WithSwapDir(i.ideConfig.browserSwapDir()))
 	}
 
 	viOpts = append(viOpts,
@@ -128,7 +128,7 @@ func (i *IDE) init(cfgfilename, recfilename string, filenames ...string) error {
 		l.SetOutput(f)
 		l.SetLevel(level)
 		l.SetFormatter(&logging.LogrusFormatter{})
-		opts = append(opts, editor.WithLogger(l))
+		opts = append(opts, text.WithLogger(l))
 		viOpts = append(viOpts, vi.WithLogger(l))
 		pluginOpts = append(pluginOpts, plugin.WithLogger(l))
 	}

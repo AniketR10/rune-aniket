@@ -12,7 +12,7 @@ import (
 
 	"github.com/ernestrc/go-tui/browser"
 	"github.com/ernestrc/go-tui/cell"
-	"github.com/ernestrc/go-tui/editor"
+	"github.com/ernestrc/go-tui/text"
 	"github.com/ernestrc/go-tui/plugin"
 	plugutil "github.com/ernestrc/go-tui/plugin/util"
 	"github.com/ernestrc/go-tui/proto"
@@ -27,7 +27,7 @@ const (
 
 var (
 	sedHandlerCommands    = []string{commandSed}
-	sedHandlerEvents      = []editor.EventType{}
+	sedHandlerEvents      = []text.EventType{}
 	sedHandlerPermissions = []plugin.Permission{
 		plugin.PermissionEditor,
 		plugin.PermissionBrowserMessenger,
@@ -35,18 +35,18 @@ var (
 )
 
 type sedEditorHandler struct {
-	ed editor.Editor
+	ed text.Editor
 	p  browser.EventPublisher
 	m  browser.Messenger
 
-	resource     editor.Handler
+	resource     text.Handler
 	resourceName string
 
 	exit uint32
 }
 
 func newSedHandler(
-	ed editor.Editor, grants []plugin.Grant,
+	ed text.Editor, grants []plugin.Grant,
 	broker proto.MuxBroker, pconfig plugin.Config,
 ) (plugutil.CommandEventHandler, error) {
 	ret := new(sedEditorHandler)
@@ -123,7 +123,7 @@ func (h *sedEditorHandler) setMessage(msg string, args ...interface{}) {
 	}
 }
 
-func (h *sedEditorHandler) readHandlerContent(hed editor.Handler) (int, string, error) {
+func (h *sedEditorHandler) readHandlerContent(hed text.Handler) (int, string, error) {
 	reader := h.ed.Reader(hed)
 	cells, err := reader.RawCells()
 	if err != nil {
@@ -133,7 +133,7 @@ func (h *sedEditorHandler) readHandlerContent(hed editor.Handler) (int, string, 
 }
 
 func (h *sedEditorHandler) writeHandlerContent(
-	hed editor.Handler, rows int, content string,
+	hed text.Handler, rows int, content string,
 ) error {
 	writer := h.ed.Writer(hed)
 	_, _, _, err := writer.Update(term.Coordinates{}, term.Coordinates{Y: rows}, content)
@@ -143,7 +143,7 @@ func (h *sedEditorHandler) writeHandlerContent(
 	return nil
 }
 
-func (h *sedEditorHandler) HandleCommand(cmd editor.Command) (exit bool) {
+func (h *sedEditorHandler) HandleCommand(cmd text.Command) (exit bool) {
 	var start time.Time
 	if log.IsLevelEnabled(log.TraceLevel) {
 		start = time.Now()
@@ -183,7 +183,7 @@ func (h *sedEditorHandler) HandleCommand(cmd editor.Command) (exit bool) {
 }
 
 func (h *sedEditorHandler) Handle(
-	ctx context.Context, ev editor.Event,
+	ctx context.Context, ev text.Event,
 ) (exit bool) {
 	uexit := atomic.LoadUint32(&h.exit)
 	exit = uexit != 0
