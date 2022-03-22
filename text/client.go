@@ -287,7 +287,7 @@ func (c *Client) CellView(h Handler) CellView {
 	if !ok {
 		panic("SetLocationList: invalid Handler argument")
 	}
-	return clientReader{client: c, handlerID: uint32(token.ID)}
+	return clientView{client: c, handlerID: uint32(token.ID)}
 }
 
 // Close closes all resources associated with this client.

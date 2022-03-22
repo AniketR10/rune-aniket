@@ -29,10 +29,10 @@ type Publisher interface {
 	Unsubscribe(Subscriber)
 }
 
-// PublisherView is the interface that groups Publisher and Reader.
+// PublisherView is the interface that groups Publisher and View.
 //
 // This interface should be used within Subscribers which need to read from
-// a Reader when handling updates. See Subscriber.
+// a View when handling updates. See Subscriber.
 type PublisherView interface {
 	Publisher
 	View

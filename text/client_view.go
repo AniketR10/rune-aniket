@@ -7,12 +7,12 @@ import (
 	"github.com/ernestrc/go-tui/term"
 )
 
-type clientReader struct {
+type clientView struct {
 	handlerID uint32
 	client    *Client
 }
 
-func (r clientReader) RawCells() ([][]term.Cell, error) {
+func (r clientView) RawCells() ([][]term.Cell, error) {
 	ctx := context.Background()
 	req := proto.RawCellsRequest{HandlerId: r.handlerID}
 
