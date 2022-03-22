@@ -521,7 +521,7 @@ func (s *Server) EditCell(ctx context.Context, in *proto.EditCellRequest) (
 	res := &proto.EditCellResponse{
 		From: &protoFrom,
 		To:   &protoTo,
-		Old: old,
+		Old:  old,
 	}
 	return res, nil
 }

@@ -13,7 +13,7 @@ type viEditor struct {
 	opts []Option
 }
 
-// Editor returns a Vi editor.Editor.
+// Editor returns a Vi text.Editor.
 func Editor(opts ...Option) text.Editor {
 	ret := &viEditor{opts: opts}
 	ret.Publisher.Init()

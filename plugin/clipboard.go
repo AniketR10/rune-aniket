@@ -5,8 +5,8 @@ import (
 	"io"
 	"sync"
 
-	"github.com/ernestrc/go-tui/text"
 	"github.com/ernestrc/go-tui/proto"
+	"github.com/ernestrc/go-tui/text"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 )

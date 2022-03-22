@@ -20,13 +20,13 @@ import (
 	"github.com/ernestrc/go-tui/browser"
 	"github.com/ernestrc/go-tui/cell"
 	"github.com/ernestrc/go-tui/component/search"
-	"github.com/ernestrc/go-tui/text"
-	"github.com/ernestrc/go-tui/text/vi"
 	"github.com/ernestrc/go-tui/handler"
 	"github.com/ernestrc/go-tui/plugin"
 	plugutil "github.com/ernestrc/go-tui/plugin/util"
 	"github.com/ernestrc/go-tui/proto"
 	"github.com/ernestrc/go-tui/term"
+	"github.com/ernestrc/go-tui/text"
+	"github.com/ernestrc/go-tui/text/vi"
 	"github.com/ernestrc/golang-internal-tools/fakenet"
 	"github.com/ernestrc/golang-internal-tools/jsonrpc2"
 	"github.com/ernestrc/golang-internal-tools/lsp"
@@ -1003,7 +1003,7 @@ func (h *lspEditorHandler) handleFileEdit(ev text.Event) {
 		return
 	}
 
-	// editor.Editor requires clients to re-send locations on every update.
+	// text.Editor requires clients to re-send locations on every update.
 	// unfortunately it seems that the LSP spec is a bit confusing regarding
 	// what to do when there are updates to the buffer but changes do not affect diagnostics.
 	// Certain LSP servers (rls, clangd, tsserver) re-send the diagnostics

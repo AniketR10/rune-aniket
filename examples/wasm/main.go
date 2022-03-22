@@ -5,8 +5,8 @@ import (
 
 	"github.com/ernestrc/go-tui"
 	"github.com/ernestrc/go-tui/cell"
-	"github.com/ernestrc/go-tui/text/vi"
 	"github.com/ernestrc/go-tui/handler"
+	"github.com/ernestrc/go-tui/text/vi"
 )
 
 const text = `

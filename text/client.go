@@ -31,7 +31,7 @@ func (t Token) Name() string {
 	return t.resource
 }
 
-// Client satisfies editor.Editor by calling a remote editor over grpc.
+// Client satisfies text.Editor by calling a remote editor over grpc.
 type Client struct {
 	Logger *log.Logger
 
@@ -114,7 +114,7 @@ func (c *Client) Edit(name string, buf *cell.Buffer) (Handler, error) {
 	return Token{Token: token, resource: name}, nil
 }
 
-// Editor satisfies editor.Editor
+// Editor satisfies text.Editor
 func (c *Client) Editor(name string) (Handler, error) {
 	ctx := context.Background()
 	req := proto.EditorRequest{ResourceName: name}
@@ -273,7 +273,7 @@ func (c *Client) Cursor(h Handler) (term.Coordinates, error) {
 }
 
 // CellEditor satisfies text.Editor.
-func (c *Client) CellEditor (h Handler) CellEditor {
+func (c *Client) CellEditor(h Handler) CellEditor {
 	token, ok := h.(Token)
 	if !ok {
 		panic("SetLocationList: invalid Handler argument")

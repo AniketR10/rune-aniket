@@ -7,10 +7,10 @@ import (
 	"github.com/ernestrc/blue/logging"
 	"github.com/ernestrc/go-tui"
 	"github.com/ernestrc/go-tui/browser"
-	"github.com/ernestrc/go-tui/text"
-	"github.com/ernestrc/go-tui/text/vi"
 	"github.com/ernestrc/go-tui/plugin"
 	"github.com/ernestrc/go-tui/term"
+	"github.com/ernestrc/go-tui/text"
+	"github.com/ernestrc/go-tui/text/vi"
 	log "github.com/sirupsen/logrus"
 )
 

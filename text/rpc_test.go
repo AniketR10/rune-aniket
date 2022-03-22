@@ -94,7 +94,7 @@ func TestClientServerIntegration(t *testing.T) {
 		require.NoError(t, err)
 	})
 
-	t.Run("client through server calls underlying editor Editor", func(t *testing.T) {
+	t.Run("client through server calls underlying Editor", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 		b := proto.NewDialBroker()

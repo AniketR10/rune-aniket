@@ -75,11 +75,11 @@ func (s *browserResourceServer) Serve(
 func BrowserResources(b browser.Browser) map[Permission]ResourceServer {
 	s := newBrowserResourceServer(b)
 	return map[Permission]ResourceServer{
-		PermissionBrowserWindowManager:   s,
-		PermissionBrowserResourceOpener:  s,
-		PermissionBrowserMessenger:       s,
-		PermissionBrowserEventPublisher:  s,
-		PermissionBrowserStorage:         s,
+		PermissionBrowserWindowManager:  s,
+		PermissionBrowserResourceOpener: s,
+		PermissionBrowserMessenger:      s,
+		PermissionBrowserEventPublisher: s,
+		PermissionBrowserStorage:        s,
 	}
 }
 

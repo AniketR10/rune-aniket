@@ -1,8 +1,8 @@
 package vi
 
 import (
-	"github.com/ernestrc/go-tui/text"
 	"github.com/ernestrc/go-tui/term"
+	"github.com/ernestrc/go-tui/text"
 	log "github.com/sirupsen/logrus"
 )
 

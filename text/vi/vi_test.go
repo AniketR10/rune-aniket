@@ -7,8 +7,8 @@ import (
 
 	"github.com/ernestrc/go-tui/cell"
 	"github.com/ernestrc/go-tui/component"
-	"github.com/ernestrc/go-tui/text"
 	"github.com/ernestrc/go-tui/term"
+	"github.com/ernestrc/go-tui/text"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

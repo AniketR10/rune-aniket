@@ -201,7 +201,7 @@ func (f *FileBuffer) initBuffer(buf *cell.Buffer, file OsFile) (err error) {
 
 	reader := newUnixFileReader(buf.View())
 	if reader.endsWithEOL() {
-		ok := buf.DeleteRow(buf.Rows()-1)
+		ok := buf.DeleteRow(buf.Rows() - 1)
 		if !ok {
 			panic("failed to mask last EOL")
 		}

@@ -1,4 +1,3 @@
-
 package handler
 
 import (
@@ -16,7 +15,7 @@ type wrapHandler struct {
 // methods are delegated directly to h, so if h.Handle needs to be
 // called, it's the client's responsibility to do so.
 //
-// Additionally to the usual term.Events, term.EventResize events 
+// Additionally to the usual term.Events, term.EventResize events
 // are also dispatched as events to fn, after Resize has been called on h.
 func Wrap(h tui.Handler, fn func(term.Event) (bool, bool)) tui.Handler {
 	return wrapHandler{h: h, fn: fn}

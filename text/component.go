@@ -27,7 +27,7 @@ var (
 )
 
 // Component is an implementation of browser.Browser for file editing.
-// It also satisfies tui.Component, and editor.Editor.
+// It also satisfies tui.Component, and text.Editor.
 type Component struct {
 	comp           browser.Component
 	ed             Editor
@@ -476,17 +476,17 @@ func (c *Component) Edit(name string, buf *cell.Buffer) (Handler, error) {
 	return editor, nil
 }
 
-// SetLocationList satisfies editor.Editor.
+// SetLocationList satisfies text.Editor.
 func (c *Component) SetLocationList(h Handler, ID string, loc LocationList) error {
 	return c.ed.SetLocationList(h, ID, loc)
 }
 
-// MoveToNextLocation satisfies editor.Editor.
+// MoveToNextLocation satisfies text.Editor.
 func (c *Component) MoveToNextLocation(h Handler, ID string) error {
 	return c.ed.MoveToNextLocation(h, ID)
 }
 
-// MoveToPrevLocation satisfies editor.Editor.
+// MoveToPrevLocation satisfies text.Editor.
 func (c *Component) MoveToPrevLocation(h Handler, ID string) error {
 	return c.ed.MoveToPrevLocation(h, ID)
 }
@@ -696,12 +696,12 @@ func (c *Component) List(
 	return c.config.Storage.List(ctx, filters)
 }
 
-// SetCursor satisfies editor.Editor
+// SetCursor satisfies text.Editor
 func (c *Component) SetCursor(h Handler, pos term.Coordinates) error {
 	return c.ed.SetCursor(h, pos)
 }
 
-// Cursor satisfies editor.Editor
+// Cursor satisfies text.Editor
 func (c *Component) Cursor(h Handler) (term.Coordinates, error) {
 	return c.ed.Cursor(h)
 }

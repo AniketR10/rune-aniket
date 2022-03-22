@@ -2,8 +2,8 @@ package search
 
 import (
 	"github.com/ernestrc/go-tui"
-	"github.com/ernestrc/go-tui/text"
 	"github.com/ernestrc/go-tui/term"
+	"github.com/ernestrc/go-tui/text"
 )
 
 type simpleHandler struct {

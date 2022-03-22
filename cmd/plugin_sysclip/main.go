@@ -3,9 +3,9 @@ package main
 import (
 	"sync"
 
-	"github.com/ernestrc/go-tui/text"
 	"github.com/ernestrc/go-tui/plugin"
 	"github.com/ernestrc/go-tui/proto"
+	"github.com/ernestrc/go-tui/text"
 
 	"github.com/atotto/clipboard"
 	log "github.com/sirupsen/logrus"
