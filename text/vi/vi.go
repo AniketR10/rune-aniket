@@ -302,6 +302,9 @@ func (vi *Vi) repeat() (handled bool) {
 		vi.Handle(ev)
 	}
 	vi.repeating = false
+	if handled {
+		vi.handler.moveToBounds()
+	}
 	return
 }
 
@@ -324,6 +327,7 @@ func (vi *Vi) redo() bool {
 	current := vi.currSnapshot
 	vi.resetToSnapshot(snapshot)
 	vi.pushUndo(current)
+	vi.handler.moveToBounds()
 	return ok
 }
 
@@ -337,6 +341,7 @@ func (vi *Vi) undo() bool {
 	current := vi.currSnapshot
 	vi.resetToSnapshot(snapshot)
 	vi.pushRedo(current)
+	vi.handler.moveToBounds()
 	return ok
 }
 

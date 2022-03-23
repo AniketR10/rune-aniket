@@ -48,6 +48,7 @@ type viHandler interface {
 	setCursorAtScroll(pos term.Coordinates) bool
 	cursorAtScroll() term.Coordinates
 	subscribeScroll(sub component.ScrollSubscriber)
+	moveToBounds()
 }
 
 // viHandlerImpl implements a basic vi-like text editor which satisfies tui.Handler
@@ -769,6 +770,11 @@ func (vi *viHandlerImpl) Handle(ev term.Event) (quit, handled bool) {
 		panic(fmt.Sprintf("unknown mode: %d", vi.currMode))
 	}
 
+	vi.moveToBounds()
+	return
+}
+
+func (vi *viHandlerImpl) moveToBounds() {
 	// copy the cursor to maintain original cursor for next vertcial move
 	// except when moving the cursor beyond last line
 	if vi.cursor.CursorAtScroll().Y < vi.less.Buffer().Rows() {
@@ -789,8 +795,6 @@ func (vi *viHandlerImpl) Handle(ev term.Event) (quit, handled bool) {
 	default:
 		panic(fmt.Sprintf("unknown mode: %d", vi.currMode))
 	}
-
-	return
 }
 
 // MoveToNextLocation moves the cursor to the next location

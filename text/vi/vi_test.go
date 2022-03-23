@@ -51,6 +51,8 @@ func (h *mockHandler) moveToPrevLocation(ID string) {
 }
 func (h *mockHandler) setLocationList(ID string, l text.LocationList) {
 }
+func (h *mockHandler) moveToBounds() {
+}
 func (h *mockHandler) setCursorAtScroll(pos term.Coordinates) bool {
 	return false
 }
