@@ -418,10 +418,15 @@ func (c *Cursor) MoveDown() (ok bool) {
 // MoveUp moves the cursor the the line above the current line, scrolling
 // the content up if required.
 func (c *Cursor) MoveUp() (ok bool) {
-	if c.cursor.Y == 0 {
+	if c.cursor.Y <= 0 {
 		ok = c.scroll.SeekUp()
-		if ok {
-			c.setCursor(c.cursor)
+		cursor := c.cursor
+		if ok || cursor.Y < 0 {
+			if cursor.Y < 0 {
+				cursor.Y = 0
+				ok = true
+			}
+			c.setCursor(cursor)
 		}
 		return
 	}
@@ -433,10 +438,15 @@ func (c *Cursor) MoveUp() (ok bool) {
 // MoveLeft moves the cursor to the cell left of the current cell, scrolling
 // the content left if required.
 func (c *Cursor) MoveLeft() (ok bool) {
-	if c.cursor.X == 0 {
+	if c.cursor.X <= 0 {
 		ok = c.scroll.SeekLeft()
-		if ok {
-			c.setCursor(c.cursor)
+		cursor := c.cursor
+		if ok || cursor.X < 0 {
+			if cursor.X < 0 {
+				cursor.X = 0
+				ok = true
+			}
+			c.setCursor(cursor)
 		}
 		return
 	}
@@ -509,7 +519,8 @@ func (c *Cursor) cellAtCursor() (cell term.Cell, ok bool) {
 	cursorAtScroll := c.cursorAtScroll()
 	cells := c.view().RawCells()
 	if cursorAtScroll.Y >= len(cells) ||
-		cursorAtScroll.X >= len(cells[cursorAtScroll.Y]) {
+		cursorAtScroll.X >= len(cells[cursorAtScroll.Y]) ||
+		cursorAtScroll.Y < 0 || cursorAtScroll.X < 0 {
 		return
 	}
 	ok = true

@@ -358,6 +358,15 @@ func TestCursorMove(t *testing.T) {
 			term.Coordinates{X: 0, Y: 0},
 		},
 		{
+			"MoveUp should fix cursor position if negative",
+			1000, 1000,
+			func(t *testing.T, e *Cursor) {
+				e.cursor.Y = -1
+				assert.True(t, e.MoveUp())
+			},
+			term.Coordinates{X: 0, Y: 0},
+		},
+		{
 			"MoveUp should move the cursor up one line",
 			1000, 1000,
 			func(t *testing.T, e *Cursor) {
@@ -400,6 +409,15 @@ func TestCursorMove(t *testing.T) {
 			1000, 1000,
 			func(t *testing.T, e *Cursor) {
 				e.cursor.X = 1
+				assert.True(t, e.MoveLeft())
+			},
+			term.Coordinates{X: 0, Y: 0},
+		},
+		{
+			"MoveLeft fixes cursor pos if negative",
+			1000, 1000,
+			func(t *testing.T, e *Cursor) {
+				e.cursor.X = -1
 				assert.True(t, e.MoveLeft())
 			},
 			term.Coordinates{X: 0, Y: 0},
@@ -1383,6 +1401,21 @@ func TestCursorSkipNulls(t *testing.T) {
 
 	pos = e.Coordinates()
 	assert.Equal(t, term.Coordinates{X: 7, Y: 16}, pos)
+
+	t.Run("does not infinite loop if cursor has negative coords", func(t *testing.T) {
+		e := setupCursor(t, 100, 100)
+		e.cursor = term.Coordinates{X: -1}
+		e.MoveToNextNonNull()
+	})
+}
+
+func TestCursorCell(t *testing.T) {
+	t.Run("does not panic if cursor has negative coords", func(t *testing.T) {
+		e := setupCursor(t, 100, 100)
+		e.cursor = term.Coordinates{X: -1}
+		_, ok := e.Cell()
+		assert.False(t, ok)
+	})
 }
 
 func TestCursorShiftLine(t *testing.T) {
