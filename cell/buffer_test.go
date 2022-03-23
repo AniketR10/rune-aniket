@@ -326,10 +326,10 @@ func TestBufferReset(t *testing.T) {
 
 func TestBufferDeleteLine(t *testing.T) {
 	tsuite := []struct {
-		from, to   term.Coordinates
-		input      string
-		output     string
-		start, end term.Coordinates
+		from, to term.Coordinates
+		input    string
+		output   string
+		start    term.Coordinates
 	}{
 		{
 			from:   term.Coordinates{X: 1},
@@ -337,7 +337,6 @@ func TestBufferDeleteLine(t *testing.T) {
 			input:  "bla\nbleh",
 			output: "bla\nbleh",
 			start:  term.Coordinates{},
-			end:    term.Coordinates{Y: 2},
 		},
 		{
 			// inverted from/to
@@ -346,7 +345,6 @@ func TestBufferDeleteLine(t *testing.T) {
 			input:  "bla\nbleh",
 			output: "bla\nbleh",
 			start:  term.Coordinates{},
-			end:    term.Coordinates{Y: 2},
 		},
 		{
 			from:   term.Coordinates{X: 1}, // should not matter that is oob
@@ -354,25 +352,28 @@ func TestBufferDeleteLine(t *testing.T) {
 			input:  "\nbla\n\nbleh\n",
 			output: "\nbla\n\n",
 			start:  term.Coordinates{},
-			end:    term.Coordinates{Y: 3},
 		},
 		{
-			from:   term.Coordinates{Y: 1},
-			to:     term.Coordinates{Y: 2},
-			input:  "{\n\tb\n\tc\n}",
+			from: term.Coordinates{Y: 1},
+			to:   term.Coordinates{Y: 2},
+			input: `{
+	b
+	c
+}`,
 			output: "\tb\n\tc\n",
 			start:  term.Coordinates{Y: 1},
-			end:    term.Coordinates{Y: 3},
 		},
 	}
 
-	for _, tcase := range tsuite {
-		b := NewBuffer()
-		b.WriteString(tcase.input)
+	for i, tcase := range tsuite {
+		t.Run(fmt.Sprintf("test case %d", i), func(t *testing.T) {
+			b := NewBuffer()
+			b.WriteString(tcase.input)
 
-		start, str := b.DeleteLine(tcase.from, tcase.to)
-		assert.Equal(t, tcase.start, start)
-		assert.Equal(t, tcase.output, str)
+			start, str := b.DeleteLine(tcase.from, tcase.to)
+			assert.Equal(t, tcase.start, start)
+			assert.Equal(t, tcase.output, str)
+		})
 	}
 }
 
