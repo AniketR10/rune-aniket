@@ -13,9 +13,12 @@ type delClip struct {
 	mode       SelectMode
 }
 
-// WithCopyDelete installs a cell.Editor to a Buffer which persists all the deleted
-// content to a Clipboard.
-func WithCopyDelete(registerID string, clipboard Clipboard, cur *Cursor, buf *cell.Buffer) {
+// WithCopyDelete installs a cell.Subscriber to a cell.Buffer
+// which persists all the deleted content to a Clipboard.
+func WithCopyDelete(
+	registerID string, clipboard Clipboard,
+	cur *Cursor, buf *cell.Buffer,
+) {
 	c := new(delClip)
 	c.clipboard = clipboard
 	c.pub = buf

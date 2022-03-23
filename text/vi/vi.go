@@ -32,6 +32,7 @@ type Vi struct {
 	logger    *log.Logger
 	messenger text.Messenger
 	less      *handler.Less
+	clipboard text.Clipboard
 
 	repeating    bool
 	currEditd    bool
@@ -66,6 +67,7 @@ func (vi *Vi) Init(buf *cell.Buffer, name string, opts ...Option) {
 	vi.messenger = viHandler.config.messenger
 	vi.less = &viHandler.less
 	vi.cursor = &viHandler.cursor
+	vi.clipboard = viHandler.config.clipboard
 
 	vi.repeatEdits = make([]term.Event, 0)
 	vi.currEdits = make([]term.Event, 0)
@@ -74,6 +76,9 @@ func (vi *Vi) Init(buf *cell.Buffer, name string, opts ...Option) {
 
 	vi.buf.Subscribe((*viSubscriber)(vi))
 	vi.snapshotContent()
+
+	text.WithCopyDelete(viHandler.config.defaultRegister,
+		vi, vi.cursor, buf)
 }
 
 // Cursor satisfies tui.Handler
@@ -137,6 +142,20 @@ func (vi *viSubscriber) OnDidEdit(start, end term.Coordinates, old string) {
 		vi.evEditd = true
 		vi.currEditd = true
 	}
+}
+
+// Paste satisfies text.Clipboard. See Copy.
+func (vi *Vi) Paste(registerID string) (text.ClipboardData, error) {
+	return vi.clipboard.Paste(registerID)
+}
+
+// Copy satisfies text.Clipboard to make sure undo/redo deletes
+// are not being copied to the clipboard.
+func (vi *Vi) Copy(registerID string, data text.ClipboardData) error {
+	if vi.resetting {
+		return nil
+	}
+	return vi.clipboard.Copy(registerID, data)
 }
 
 // Handle satisfies tui.Handler

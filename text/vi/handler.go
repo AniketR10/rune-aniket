@@ -91,8 +91,6 @@ func (vi *viHandlerImpl) init(buf *cell.Buffer, opts ...Option) {
 		ResAttr: vi.config.resAttr,
 	})
 	vi.cursor.Init(vi.less.Scroll())
-
-	text.WithCopyDelete(vi.config.defaultRegister, vi.config.clipboard, &vi.cursor, buf)
 	vi.repeater.Init(&vi.cursor, buf)
 
 	vi.free = vi.cursor.Mark()

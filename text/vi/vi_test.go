@@ -309,3 +309,55 @@ func TestIntegrationInsertRowBelow(t *testing.T) {
 	}
 	assert.Equal(t, "hello\nworld", vi.less.Buffer().String())
 }
+
+type mockClip struct {
+	data text.ClipboardData
+}
+
+func (m *mockClip) Paste(registerID string) (text.ClipboardData, error) {
+	return m.data, nil
+}
+
+func (m *mockClip) Copy(registerID string, data text.ClipboardData) error {
+	m.data = data
+	return nil
+}
+
+func TestCopyDelete(t *testing.T) {
+	tsuite := []struct {
+		desc     string
+		content  string
+		in       string
+		wantCopy string
+	}{
+		{"copies delete data", "a", "x", "a"},
+		{"does not copy insert data", "a", "ihello", ""},
+		{"does not copy undo of an insert", "", "ihello#u", ""},
+		{"does not copy undo of an insert (preserve old data)", "a", "xihello#u", "a"},
+		{"copies remove portion of a delete select", "a", "clb", "a"},
+		{"copies redo of a delete (or leaves previous delete)", "a", "xuR", "a"},
+	}
+
+	for _, tcase := range tsuite {
+		t.Run(tcase.desc, func(t *testing.T) {
+			buf := cell.NewBuffer()
+			buf.ReadFrom(strings.NewReader(tcase.content))
+
+			mock := new(mockClip)
+			vi := New(buf, "", WithClipboard(mock))
+			vi.Resize(10, 10)
+
+			for _, ch := range tcase.in {
+				ev := term.Event{Ch: ch}
+				if ch == '#' {
+					ev = term.Event{Key: term.KeyEsc}
+				} else if ch == 'R' {
+					ev = term.Event{Key: term.KeyCtrlR}
+				}
+				vi.Handle(ev)
+			}
+
+			assert.Equal(t, tcase.wantCopy, mock.data.Text)
+		})
+	}
+}

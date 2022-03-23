@@ -60,6 +60,19 @@ func setupVi(
 	return vi
 }
 
+func setupViIntegration(
+	t *testing.T, text string, tabspaces int, opts ...Option,
+) tui.Handler {
+	buf := cell.NewBuffer()
+	buf.InitWithTabspaces(tabspaces)
+	_, err := buf.ReadFrom(strings.NewReader(text))
+	require.NoError(t, err)
+
+	vi := New(buf, "", opts...)
+
+	return vi
+}
+
 func TestCellAtCursor(t *testing.T) {
 	cases := []struct {
 		input string
@@ -97,7 +110,7 @@ func TestCellAtCursor(t *testing.T) {
 	}
 }
 
-func TestViCursorSequence(t *testing.T) {
+func TestViIntegrationSequence(t *testing.T) {
 	cases := []testutil.HandlerSequenceTestCase{
 		{"",
 			`▐                   
@@ -354,7 +367,7 @@ diff_buf_adjust(win_
 :             INSERT`},
 	}
 
-	vi := setupVi(t, snippet, 2)
+	vi := setupViIntegration(t, snippet, 2)
 	testutil.TestHandlerSequence(t, vi, 20, 10, cases)
 }
 
@@ -506,7 +519,7 @@ diff_buf_adjust(win_
 	}
 
 	newVi := func(t *testing.T) tui.Handler {
-		return setupVi(t, snippet, 2)
+		return setupViIntegration(t, snippet, 2)
 	}
 	testutil.TestHandlerIsolated(t, newVi, 20, 10, cases)
 }
