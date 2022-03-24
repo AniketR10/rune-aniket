@@ -350,7 +350,9 @@ func (s *Scroll) drawDebug(writer term.Writer) {
 		if y >= ywindow {
 			break
 		}
-		for x, c := range r {
+		var x int
+		var c term.Cell
+		for x, c = range r {
 			if x >= xwindow {
 				break
 			}
@@ -369,6 +371,14 @@ func (s *Scroll) drawDebug(writer term.Writer) {
 			}
 			writer.SetCell(term.Coordinates{X: xi, Y: y}, c)
 		}
+		if x >= xwindow {
+			break
+		}
+		x = x - s.offset.X
+		if x != 0 {
+			x++
+		}
+		writer.SetCell(term.Coordinates{X: x, Y: y}, term.Cell{Ch: '¬'})
 	}
 	return
 }
