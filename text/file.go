@@ -188,6 +188,7 @@ func (f *FileBuffer) initFiles(filePath, swapDir string, readOnly bool) error {
 
 func (f *FileBuffer) initBuffer(buf *cell.Buffer, file OsFile) (err error) {
 	buf.Reset()
+	view := newUnixFileReader(buf.View())
 
 	// file could be not created yet
 	if file != nil {
@@ -199,15 +200,12 @@ func (f *FileBuffer) initBuffer(buf *cell.Buffer, file OsFile) (err error) {
 		defer file.Seek(0, 0)
 	}
 
-	reader := newUnixFileReader(buf.View())
-	if reader.endsWithEOL() {
-		ok := buf.DeleteRow(buf.Rows() - 1)
-		if !ok {
-			panic("failed to mask last EOL")
-		}
+	if !view.endsWithEOL() {
+		buf.WriteString("\n")
 	}
 
 	buf.Subscribe((*fileBuf)(f))
+	buf.WithView(view)
 
 	f.reader = buf
 

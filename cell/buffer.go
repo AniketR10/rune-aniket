@@ -542,3 +542,11 @@ func (b *Buffer) Size() (ret int) {
 	}
 	return
 }
+
+// WithView installs a new view and returns this Buffer's previous view.
+// This should only be utilized for advanced use cases.
+func (b *Buffer) WithView(r View) (ret View) {
+	ret = b.view
+	b.view = r
+	return
+}

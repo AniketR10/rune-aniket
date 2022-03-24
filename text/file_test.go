@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/ernestrc/go-tui/cell"
+	"github.com/ernestrc/go-tui/component"
 	"github.com/ernestrc/go-tui/term"
 	gomock "github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
@@ -1087,4 +1088,57 @@ func testFileBufferFlushed(t *testing.T, newBuffer newBufferFunc) {
 		require.NoError(t, f.Flush())
 		assert.True(t, f.Flushed())
 	})
+}
+
+func TestFileCursorIntegration(t *testing.T) {
+	tsuite := []struct {
+		description string
+		lastEOL     bool
+		test        func(t *testing.T, c *Cursor)
+	}{
+		{"does not move beyond line before last EOL", true, func(t *testing.T, cursor *Cursor) {
+			assert.True(t, cursor.MoveLastLine())
+			assert.Equal(t, term.Coordinates{Y: 31}, cursor.CursorAtScroll())
+			assert.False(t, cursor.MoveDown())
+		}},
+		{"does not move beyond last line", false, func(t *testing.T, cursor *Cursor) {
+			assert.True(t, cursor.MoveLastLine())
+			assert.Equal(t, term.Coordinates{Y: 31}, cursor.CursorAtScroll())
+			assert.False(t, cursor.MoveDown())
+		}},
+		{"is able to insert at last line + 1", false, func(t *testing.T, cursor *Cursor) {
+			assert.True(t, cursor.MoveLastLine())
+			assert.False(t, cursor.MoveDown())
+			cursor.InsertRowBelow()
+			assert.Equal(t, term.Coordinates{Y: 32}, cursor.CursorAtScroll())
+			assert.False(t, cursor.MoveDown())
+			assert.Equal(t, sampleSnippet+"\n", cursor.buffer().String())
+		}},
+		{"is able to insert at last EOL", true, func(t *testing.T, cursor *Cursor) {
+			assert.True(t, cursor.MoveLastLine())
+			assert.False(t, cursor.MoveDown())
+			cursor.InsertRowBelow()
+			assert.Equal(t, term.Coordinates{Y: 32}, cursor.CursorAtScroll())
+			assert.False(t, cursor.MoveDown())
+			assert.Equal(t, sampleSnippet+"\n", cursor.buffer().String())
+		}},
+	}
+
+	for _, tcase := range tsuite {
+		t.Run(tcase.description, func(t *testing.T) {
+			b, file, cleanup := newIntegrationTestCase(t, tcase.lastEOL)
+			defer cleanup()
+
+			scroll := component.NewScroll()
+			scroll.Resize(10, 10)
+			scroll.InitWithBuffer(b)
+			cursor := NewCursor(scroll)
+
+			// installs unix reader
+			_, err := NewFileBuffer(file.Name(), b, "", false)
+			require.NoError(t, err)
+
+			tcase.test(t, cursor)
+		})
+	}
 }
