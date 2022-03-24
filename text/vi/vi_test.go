@@ -338,6 +338,10 @@ func TestCopyDelete(t *testing.T) {
 		{"does not copy undo of an insert (preserve old data)", "a", "xihello#u", "a"},
 		{"copies remove portion of a delete select", "a", "clb", "a"},
 		{"copies redo of a delete (or leaves previous delete)", "a", "xuR", "a"},
+		{"does not copy backspace within an insert", "x", "ddihella<o#", "x"},
+		{"does copy text deleted through C", "x", "Ca#", "x"},
+		{"does copy text deleted through c", "x", "cla#", "x"},
+		{"does copy text deleted through cc", "x\ny", "ccz#", "x"},
 	}
 
 	for _, tcase := range tsuite {
@@ -353,6 +357,8 @@ func TestCopyDelete(t *testing.T) {
 				ev := term.Event{Ch: ch}
 				if ch == '#' {
 					ev = term.Event{Key: term.KeyEsc}
+				} else if ch == '<' {
+					ev = term.Event{Key: term.KeyBackspace}
 				} else if ch == 'R' {
 					ev = term.Event{Key: term.KeyCtrlR}
 				}

@@ -35,8 +35,8 @@ type Vi struct {
 	clipboard text.Clipboard
 
 	repeating    bool
-	currEditd    bool
-	evEditd      bool
+	currEdited   bool
+	evEdited     bool
 	currSnapshot snapshot
 	currEdits    []term.Event
 	repeatEdits  []term.Event
@@ -109,7 +109,7 @@ func isSelectMode(mode viMode) bool {
 
 func (vi *Vi) resetEdits() {
 	vi.currEdits = vi.currEdits[:0]
-	vi.currEditd = false
+	vi.currEdited = false
 }
 
 func (vi *Vi) appendLastEdit(ev term.Event) {
@@ -117,7 +117,7 @@ func (vi *Vi) appendLastEdit(ev term.Event) {
 }
 
 func (vi *Vi) copyRepeat() {
-	if !vi.currEditd {
+	if !vi.currEdited {
 		return
 	}
 	vi.repeatEdits = vi.repeatEdits[:0]
@@ -129,7 +129,7 @@ func (vi *Vi) pushNewSnapshot() {
 }
 
 func (vi *viSubscriber) OnWillEdit(from, to term.Coordinates, str string) {
-	if !vi.currEditd && !vi.resetting {
+	if !vi.currEdited && !vi.resetting {
 		pubVi := (*Vi)(vi)
 		pubVi.currSnapshot.cursor = from
 		pubVi.pushNewSnapshot()
@@ -139,8 +139,8 @@ func (vi *viSubscriber) OnWillEdit(from, to term.Coordinates, str string) {
 
 func (vi *viSubscriber) OnDidEdit(start, end term.Coordinates, old string) {
 	if !vi.resetting && !vi.repeating {
-		vi.evEditd = true
-		vi.currEditd = true
+		vi.evEdited = true
+		vi.currEdited = true
 	}
 }
 
@@ -150,9 +150,9 @@ func (vi *Vi) Paste(registerID string) (text.ClipboardData, error) {
 }
 
 // Copy satisfies text.Clipboard to make sure undo/redo deletes
-// are not being copied to the clipboard.
+// are not being copied to the clipboard or backspace deletes within insert.
 func (vi *Vi) Copy(registerID string, data text.ClipboardData) error {
-	if vi.resetting {
+	if vi.resetting || vi.handler.mode() == insertMode {
 		return nil
 	}
 	return vi.clipboard.Copy(registerID, data)
@@ -180,13 +180,13 @@ func (vi *Vi) Handle(ev term.Event) (quit, handled bool) {
 		}
 	}
 
-	vi.evEditd = false
+	vi.evEdited = false
 	prevMode := vi.handler.mode()
 	quit, handled = vi.handler.Handle(ev)
 	nextMode := vi.handler.mode()
 
 	if prevMode == nextMode {
-		if !isEditMode(prevMode) && vi.evEditd {
+		if !isEditMode(prevMode) && vi.evEdited {
 			vi.appendLastEdit(ev)
 			vi.copyRepeat()
 			vi.snapshotContent()
@@ -208,7 +208,7 @@ func (vi *Vi) Handle(ev term.Event) (quit, handled bool) {
 		vi.appendLastEdit(ev)
 	} else {
 		vi.appendLastEdit(ev)
-		if vi.currEditd || vi.repeating {
+		if vi.currEdited || vi.repeating {
 			vi.copyRepeat()
 			vi.snapshotContent()
 			vi.resetEdits()

@@ -418,8 +418,11 @@ func (vi *viHandlerImpl) handleNormal(ev term.Event) (quit, handled bool) {
 			vi.cursor.MoveEndLine()
 			vi.cursor.MoveRight()
 		case 'C':
+			if vi.cursor.Select() {
+				vi.cursor.MoveEndLine()
+				vi.cursor.DeleteSelection()
+			}
 			vi.setInsertMode()
-			fallthrough
 		case 'D':
 			if vi.cursor.Select() {
 				vi.cursor.MoveEndLine()
