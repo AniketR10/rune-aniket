@@ -104,27 +104,63 @@ func TestBufferTruncateRowFrom2(t *testing.T) {
 }
 
 func TestBufferDeleteCell(t *testing.T) {
-	str := "hello\nworld"
-	buf := newBufferWithContent(t, str)
+	tsuite := []struct {
+		description string
+		content     string
+		pos         term.Coordinates
+		wantOk      bool
+		wantRune    rune
+		wantStart   term.Coordinates
+	}{
+		{"delete cell out of X bounds returns false",
+			"a", term.Coordinates{X: 2}, false, 0, term.Coordinates{}},
+		{"delete cell exactly out of X bounds returns false",
+			"a", term.Coordinates{X: 1}, false, 0, term.Coordinates{}},
+		{"delete cell out of Y bounds returns false",
+			"a\nb", term.Coordinates{Y: 2}, false, 0, term.Coordinates{}},
+		{"delete last cell of buffer",
+			"a\nb", term.Coordinates{Y: 1}, true, 'b', term.Coordinates{Y: 1}},
+		{"delete first cell of buffer",
+			"a\nb", term.Coordinates{}, true, 'a', term.Coordinates{}},
+		{"delete start of the line tab at tab",
+			"\ta", term.Coordinates{X: 3}, true, '\t', term.Coordinates{}},
+		{"delete start of the line tab at null 0",
+			"\ta", term.Coordinates{}, true, '\t', term.Coordinates{}},
+		{"delete start of the line tab at null 1",
+			"\ta", term.Coordinates{X: 1}, true, '\t', term.Coordinates{}},
+		{"delete start of the line tab at null 2",
+			"\ta", term.Coordinates{X: 2}, true, '\t', term.Coordinates{}},
+		{"delete end of the line tab at tab",
+			"a\t", term.Coordinates{X: 4}, true, '\t', term.Coordinates{X: 1}},
+		{"delete end of the line tab at null 0",
+			"a\t", term.Coordinates{X: 1}, true, '\t', term.Coordinates{X: 1}},
+		{"delete end of the line tab at null 1",
+			"a\t", term.Coordinates{X: 2}, true, '\t', term.Coordinates{X: 1}},
+		{"delete end of the line tab at null 2",
+			"a\t", term.Coordinates{X: 3}, true, '\t', term.Coordinates{X: 1}},
+		{"handle ending null with no tab (by silently cleaning up nulls)",
+			"a\x00\x00", term.Coordinates{X: 1}, false, 0, term.Coordinates{}},
+		{"delete next character if starting null not part of tab expansion (and nulls)",
+			"\x00\x00a", term.Coordinates{X: 1}, true, 'a', term.Coordinates{}},
+		{"delete start and end of the line tab at tab",
+			"\t", term.Coordinates{X: 3}, true, '\t', term.Coordinates{X: 0}},
+		{"delete start and end of the line tab at null 0",
+			"\t", term.Coordinates{X: 0}, true, '\t', term.Coordinates{X: 0}},
+		{"delete start and end of the line tab at null 1",
+			"\t", term.Coordinates{X: 1}, true, '\t', term.Coordinates{X: 0}},
+		{"delete start and end of the line tab at null 2",
+			"\t", term.Coordinates{X: 2}, true, '\t', term.Coordinates{X: 0}},
+	}
 
-	_, r, ok := buf.DeleteCell(term.Coordinates{X: 100, Y: 0})
-	require.False(t, ok)
-
-	_, r, ok = buf.DeleteCell(term.Coordinates{X: 0, Y: 100})
-	require.False(t, ok)
-
-	_, r, ok = buf.DeleteCell(term.Coordinates{X: 0, Y: 1})
-	require.True(t, ok)
-	assert.Equal(t, 'w', r)
-	_, r, ok = buf.DeleteCell(term.Coordinates{X: 1, Y: 1})
-	require.True(t, ok)
-	assert.Equal(t, 'r', r)
-	buf.ConflateRow(0)
-	_, r, ok = buf.DeleteCell(term.Coordinates{X: 7, Y: 0})
-	require.True(t, ok)
-	assert.Equal(t, 'd', r)
-
-	assert.Equal(t, "hellool", buf.String())
+	for _, tcase := range tsuite {
+		t.Run(tcase.description, func(t *testing.T) {
+			buf := newBufferWithContent(t, tcase.content)
+			actualPos, actualR, actualOk := buf.DeleteCell(tcase.pos)
+			require.Equal(t, tcase.wantOk, actualOk, buf.RawCells())
+			assert.Equal(t, tcase.wantRune, actualR, buf.RawCells())
+			assert.Equal(t, tcase.wantStart, actualPos, buf.RawCells())
+		})
+	}
 }
 
 func TestBufferDeleteCellAtTab(t *testing.T) {

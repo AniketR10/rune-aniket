@@ -205,44 +205,48 @@ func (c *rawCells) deleteRowRange(
 }
 
 func (c *rawCells) skipPadding(start, end term.Coordinates) (
-	term.Coordinates, term.Coordinates,
+	from term.Coordinates, to term.Coordinates,
 ) {
 
+	from, to = start, end
 	tokens := c.tabspaces - 1
-	// end is right exclusive
-	if end.X > 0 {
-		// end.Y == len(c.cells) should never occur here since the only
-		// correct way for clients to pass that is if end.X == 0,
+	// to is right exclusive
+	if to.X > 0 {
+		// to.Y == len(c.cells) should never occur here since the only
+		// correct way for clients to pass that is if to.X == 0,
 		// which we are checking above
-		endLastIdx := len(c.cells[end.Y])
-		end.X--
-		for tokens > 0 && end.X > 0 && end.X < endLastIdx &&
-			c.cells[end.Y][end.X].Ch == 0 {
-			end.X++
+		endLastIdx := len(c.cells[to.Y])
+		to.X--
+		for tokens > 0 && to.X < endLastIdx && c.cells[to.Y][to.X].Ch == 0 {
+			to.X++
 			tokens--
 		}
-		end.X++
+		to.X++
+		// handle unexpected nulls at the end of line
+		if to.X > endLastIdx {
+			to.X = end.X
+		}
 	}
 
-	startLastIdx := len(c.cells[start.Y]) - 1
-	if start.X > 0 && start.X <= startLastIdx &&
-		c.cells[start.Y][start.X].Ch == '\t' {
-		start.X--
+	startLastIdx := len(c.cells[from.Y]) - 1
+	if from.X > 0 && from.X <= startLastIdx &&
+		c.cells[from.Y][from.X].Ch == '\t' {
+		from.X--
 	}
 
 	tokens = c.tabspaces - 1
-	for tokens > 0 && start.X > 0 &&
-		start.X <= startLastIdx && c.cells[start.Y][start.X].Ch == 0 {
-		start.X--
+	for tokens > 0 && from.X > 0 &&
+		from.X <= startLastIdx && c.cells[from.Y][from.X].Ch == 0 {
+		from.X--
 		tokens--
 	}
 
 	// we need the last pad's position, but on the left there's no \t delimiter,
 	// so we need to rollback one cell
-	if tokens != c.tabspaces-1 && c.cells[start.Y][start.X].Ch != 0 {
-		start.X++
+	if tokens != c.tabspaces-1 && c.cells[from.Y][from.X].Ch != 0 {
+		from.X++
 	}
-	return start, end
+	return from, to
 }
 
 func (c *rawCells) delete(from, to term.Coordinates) (
