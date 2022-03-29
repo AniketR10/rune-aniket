@@ -143,7 +143,8 @@ func (i *IDE) init(cfgfilename, recfilename string, filenames ...string) error {
 	}
 
 	vi := vi.Editor(viOpts...)
-	ex, err := NewEx(vi, opts...)
+	m := workspace.NewManager()
+	ex, err := NewEx(vi, m, opts...)
 	if err != nil {
 		return err
 	}

@@ -68,9 +68,11 @@ type Ex struct {
 }
 
 // NewEx allocates storage for a new Ex and initializes it.
-func NewEx(ed text.Editor, opts ...text.Option) (e *Ex, err error) {
+func NewEx(ed text.Editor, m *workspace.Manager, opts ...text.Option) (
+	e *Ex, err error,
+) {
 	e = new(Ex)
-	err = e.Init(ed, opts...)
+	err = e.Init(ed, m, opts...)
 	if err != nil {
 		return
 	}
@@ -80,7 +82,18 @@ func NewEx(ed text.Editor, opts ...text.Option) (e *Ex, err error) {
 // Init initializes this Ex with the given editor and Options.
 // It returns an error if an initial filepath was given through WithFilePath option
 // and the file failed to be opened.
-func (e *Ex) Init(ed text.Editor, opts ...text.Option) (err error) {
+func (e *Ex) Init(ed text.Editor, m *workspace.Manager, opts ...text.Option) (
+	err error,
+) {
+	err = e.init(ed, opts...)
+	if err != nil {
+		return
+	}
+	return e.comp.Init(ed, m, e.config)
+}
+
+// init is used for internal testing
+func (e *Ex) init(ed text.Editor, opts ...text.Option) (err error) {
 	e.mode = modeDefault
 
 	e.config = text.DefaultConfig()
@@ -137,7 +150,6 @@ func (e *Ex) Init(ed text.Editor, opts ...text.Option) (err error) {
 			ContentAlignment: component.SpanAlignmentCentered,
 		})
 	e.ed = ed
-	err = e.comp.Init(ed, e.config)
 	return
 }
 

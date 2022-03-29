@@ -83,11 +83,11 @@ func newTestRPCBrowser(t *testing.T,
 		// logger.SetLevel(log.TraceLevel)
 
 		b := new(Ex)
-		opts = withOpenFileStubs(opts...)
-		err := b.Init(ed, opts...)
+		err := b.init(ed, opts...)
 		if err != nil {
 			return nil, nil, err
 		}
+		require.NoError(t, b.comp.Init(ed, &testWorkspace{}, b.config))
 
 		lis, err := net.Listen("tcp", ":0")
 		require.NoError(t, err)

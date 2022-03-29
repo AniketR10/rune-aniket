@@ -28,6 +28,7 @@ var (
 // It also satisfies tui.Component, and text.Editor.
 type Component struct {
 	comp           browser.Component
+	workspace      workspace.ResourceOpener
 	ed             Editor
 	config         Config
 	keymap         map[term.Event]term.Event
@@ -73,9 +74,11 @@ func (e *editorFlusherCloser) Close() error {
 }
 
 // NewComponent allocates storage for a new Component and initializes it.
-func NewComponent(ed Editor, config Config) (c *Component, err error) {
+func NewComponent(ed Editor, w workspace.ResourceOpener, config Config) (
+	c *Component, err error,
+) {
 	c = new(Component)
-	err = c.Init(ed, config)
+	err = c.Init(ed, w, config)
 	if err != nil {
 		return
 	}
@@ -130,12 +133,12 @@ func (c *Component) newFileBuffer(
 ) (ret *editorFlusherCloser, err error) {
 	var fc workspace.FlusherCloser
 	if recSwapFile != (workspace.URI{}) {
-		fc, err = c.config.RecoverFileFn(file, recSwapFile, buf)
+		fc, err = c.workspace.Recover(file, recSwapFile, buf)
 	} else {
 		var swapDir workspace.URI
 		swapDir, err = c.getSwapDir(file)
 		if err == nil {
-			fc, err = c.config.OpenFileFn(file, buf, swapDir, readOnly)
+			fc, err = c.workspace.Open(file, buf, swapDir, readOnly)
 		}
 	}
 
@@ -159,12 +162,13 @@ func (c *Component) newFileBuffer(
 // Init initializes this Component with the given editor and Options.
 // It returns an error if an initial filepath was given through WithFilePath option
 // and the file failed to be opened.
-func (c *Component) Init(ed Editor, config Config) error {
+func (c *Component) Init(ed Editor, w workspace.ResourceOpener, config Config) error {
 	c.config = config
 
 	c.comp.Init(c.config.Config)
 
 	c.ed = ed
+	c.workspace = w
 	c.edSubscribers = make(map[EventType][]EventHandler)
 	c.cmdSubscribers = make(map[string]CommandHandler)
 

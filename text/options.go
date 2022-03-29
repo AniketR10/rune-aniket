@@ -5,16 +5,12 @@ import (
 
 	"github.com/ernestrc/blue/datastore/document"
 	"github.com/ernestrc/go-tui/browser"
-	"github.com/ernestrc/go-tui/cell"
 	"github.com/ernestrc/go-tui/component"
 	"github.com/ernestrc/go-tui/handler"
 	"github.com/ernestrc/go-tui/term"
 	"github.com/ernestrc/go-tui/workspace"
 	log "github.com/sirupsen/logrus"
 )
-
-type OpenFileFn func(file workspace.URI, buf *cell.Buffer, swapDir workspace.URI, readOnly bool) (workspace.FlusherCloser, error)
-type RecoverFileFn func(file, swapFilePath workspace.URI, buf *cell.Buffer) (workspace.FlusherCloser, error)
 
 // CommandOverlayConfig holds configuration for the
 // command's interface.
@@ -40,8 +36,6 @@ type Config struct {
 	Storage                 document.Service
 	DirtyTabAttr            term.Attributes
 
-	OpenFileFn
-	RecoverFileFn
 	InterruptDraw func()
 
 	CommandOverlay CommandOverlayConfig
@@ -75,15 +69,7 @@ func DefaultConfig() Config {
 		CommandSequenceBindings: make(map[handler.Sequence]string),
 		SequencerTimeout:        400 * time.Millisecond,
 		CommandOverlay:          DefaultCommandOverlayConfig(),
-		OpenFileFn: func(uri workspace.URI, buf *cell.Buffer,
-			swapDir workspace.URI, readOnly bool) (workspace.FlusherCloser, error) {
-			return workspace.Open(uri, buf, swapDir, readOnly)
-		},
-		RecoverFileFn: func(uri, swapFilePath workspace.URI,
-			buf *cell.Buffer) (workspace.FlusherCloser, error) {
-			return workspace.Recover(uri, swapFilePath, buf)
-		},
-		InterruptDraw: term.Interrupt,
+		InterruptDraw:           term.Interrupt,
 	}
 	return cfg
 }
@@ -273,22 +259,6 @@ func WithCommandOverlayConfig(c CommandOverlayConfig) Option {
 func WithPromptConfig(c browser.PromptConfig) Option {
 	return func(cfg *Config) {
 		cfg.Config.PromptConfig = c
-	}
-}
-
-// WithOpenFileFn sets the Component's  OpenFile function to fn.
-// By default this is set to editor.NewFileBuffer.
-func WithOpenFileFn(fn OpenFileFn) Option {
-	return func(cfg *Config) {
-		cfg.OpenFileFn = fn
-	}
-}
-
-// WithRecoverFileFn sets the Component's RecoverFile function to fn.
-// By default this is set to editor.RecoverFileBuffer.
-func WithRecoverFileFn(fn RecoverFileFn) Option {
-	return func(cfg *Config) {
-		cfg.RecoverFileFn = fn
 	}
 }
 

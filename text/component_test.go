@@ -43,17 +43,36 @@ func (t *testFlusherCloser) Flush() error {
 	return nil
 }
 
+type testWorkspace struct {
+	content       string
+	flusherCloser *testFlusherCloser
+	expectError   error
+}
+
+func (t *testWorkspace) Open(
+	file workspace.URI, buf *cell.Buffer, swapDir workspace.URI, readOnly bool,
+) (workspace.FlusherCloser, error) {
+	if t.expectError != nil {
+		return nil, t.expectError
+	}
+	if t.flusherCloser != nil {
+		return t.flusherCloser, nil
+	}
+	if t.content != "" {
+		buf.WriteString(t.content)
+	}
+	return &testFlusherCloser{}, nil
+}
+
+func (t *testWorkspace) Recover(
+	file, swapFilePath workspace.URI, buf *cell.Buffer,
+) (workspace.FlusherCloser, error) {
+	return t.Open(file, buf, workspace.URI{}, false)
+}
+
 func newTestComponentErr(ed Editor) (*Component, error) {
 	cfg := DefaultConfig()
-	cfg.OpenFileFn = func(filePath workspace.URI,
-		buf *cell.Buffer, swapDir workspace.URI, readOnly bool) (workspace.FlusherCloser, error) {
-		return &testFlusherCloser{}, nil
-	}
-	cfg.RecoverFileFn = func(filePath, swapFilePath workspace.URI,
-		buf *cell.Buffer) (workspace.FlusherCloser, error) {
-		return &testFlusherCloser{}, nil
-	}
-	c, err := NewComponent(ed, cfg)
+	c, err := NewComponent(ed, &testWorkspace{}, cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -68,7 +87,7 @@ func newTestComponent(t *testing.T, ed Editor) *Component {
 
 func TestComponentInterfaces(t *testing.T) {
 	// this test is just a compile-time test
-	c, err := NewComponent(&testEditor{}, DefaultConfig())
+	c, err := NewComponent(&testEditor{}, &testWorkspace{}, DefaultConfig())
 	require.NoError(t, err)
 
 	var ed Editor
@@ -169,10 +188,7 @@ func TestComponentOpen(t *testing.T) {
 		_, ok := c.Browser().Tab(uri)
 		assert.True(t, ok)
 
-		c.config.OpenFileFn = func(filePath workspace.URI,
-			buf *cell.Buffer, swapDir workspace.URI, readOnly bool) (workspace.FlusherCloser, error) {
-			return nil, workspace.ErrFileAlreadyOpen
-		}
+		c.workspace.(*testWorkspace).expectError = workspace.ErrFileAlreadyOpen
 
 		h2, err := c.Open(uri)
 		require.NoError(t, err)
@@ -194,10 +210,7 @@ func TestComponentOpen(t *testing.T) {
 	t.Run("bubbles up open file error", func(t *testing.T) {
 		c, _, _ := newTestComponentWithFile(t, "file:///tmp/lmao")
 		myErr := errors.New("oopsie daisy")
-		c.config.OpenFileFn = func(filePath workspace.URI,
-			buf *cell.Buffer, swapDir workspace.URI, readOnly bool) (workspace.FlusherCloser, error) {
-			return nil, myErr
-		}
+		c.workspace.(*testWorkspace).expectError = myErr
 
 		uri, err := workspace.ParseURI("file:///Holmes.xd")
 		require.NoError(t, err)
@@ -207,12 +220,7 @@ func TestComponentOpen(t *testing.T) {
 
 	t.Run("if file is already open it returns its handler", func(t *testing.T) {
 		c, h1, uri := newTestComponentWithFile(t, "file:///tmp/wasup")
-		c.config.OpenFileFn = func(filePath workspace.URI,
-			buf *cell.Buffer, swapDir workspace.URI, readOnly bool) (workspace.FlusherCloser, error) {
-			t.Log("should not call openFileFn")
-			t.Fail()
-			return nil, nil
-		}
+		c.workspace.(*testWorkspace).expectError = errors.New("should not be called")
 
 		h2, err := c.Open(uri)
 		require.NoError(t, err)
@@ -489,10 +497,8 @@ func TestComponentEditorSubscriber(t *testing.T) {
 			c.dispatchEvent(ev)
 			return nil
 		}}
-		c.config.OpenFileFn = func(filePath workspace.URI,
-			buf *cell.Buffer, swapDir workspace.URI, readOnly bool) (workspace.FlusherCloser, error) {
-			return &fc, nil
-		}
+
+		c.workspace.(*testWorkspace).flusherCloser = &fc
 
 		var fired int
 		evs := []EventType{EventTypeClose}
@@ -517,12 +523,7 @@ func TestComponentEditorSubscriber(t *testing.T) {
 		require.NoError(t, err)
 
 		content := "how bout that"
-
-		c.config.OpenFileFn = func(filePath workspace.URI,
-			buf *cell.Buffer, swapDir workspace.URI, readOnly bool) (workspace.FlusherCloser, error) {
-			buf.WriteString(content)
-			return &testFlusherCloser{}, nil
-		}
+		c.workspace.(*testWorkspace).content = content
 
 		_, err = c.Open(uri1)
 		require.NoError(t, err)

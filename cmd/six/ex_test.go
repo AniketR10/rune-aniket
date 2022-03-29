@@ -40,31 +40,24 @@ func (t *testFileBuffer) Close() error {
 	return t.closeErr
 }
 
-func openTestFile(filePath workspace.URI, buf *cell.Buffer, swapDir workspace.URI, readOnly bool) (
+type testWorkspace struct{}
+
+func (w *testWorkspace) Open(filePath workspace.URI, buf *cell.Buffer, swapDir workspace.URI, readOnly bool) (
 	workspace.FlusherCloser, error,
 ) {
 	return &testFileBuffer{}, nil
 }
 
-func recoverTestFile(filePath, swapFilePath workspace.URI, buf *cell.Buffer) (
+func (w *testWorkspace) Recover(filePath, swapFilePath workspace.URI, buf *cell.Buffer) (
 	workspace.FlusherCloser, error,
 ) {
-	return openTestFile(filePath, buf, swapFilePath, false)
-}
-
-func withOpenFileStubs(opts ...text.Option) []text.Option {
-	opts = append(opts, text.WithOpenFileFn(openTestFile))
-	opts = append(opts, text.WithRecoverFileFn(recoverTestFile))
-	return opts
+	return w.Open(filePath, buf, swapFilePath, false)
 }
 
 func TestBrowserHandlerDraw(t *testing.T) {
 	testBrowserHandlerDraw(t, func(ed text.Editor, opts ...text.Option) (tui.Handler, browser.Browser, error) {
 		b := new(Ex)
-		err := b.Init(ed, withOpenFileStubs(opts...)...)
-		if err != nil {
-			return nil, nil, err
-		}
+		initExForTesting(t, b, ed, opts...)
 		return b, b.Browser(), nil
 	})
 }
@@ -483,9 +476,8 @@ func TestBrowserHandlerPublishInterrupt(t *testing.T) {
 	t.Run("calls interrupt handle asynchronously", func(t *testing.T) {
 		var wg sync.WaitGroup
 		browser := new(Ex)
-		opts := withOpenFileStubs()
-		opts = append(opts, text.WithInterrupt(wg.Done))
-		require.NoError(t, browser.Init(text.Mock(), opts...))
+		opts := []text.Option{text.WithInterrupt(wg.Done)}
+		initExForTesting(t, browser, text.Mock(), opts...)
 		defer browser.Close()
 
 		wg.Add(1)
@@ -537,14 +529,11 @@ func TestMultipleFilesStartup(t *testing.T) {
 	file2, err := workspace.ParseURI("file:///wi.go")
 	require.NoError(t, err)
 	b := new(Ex)
-	opts := withOpenFileStubs(
+	opts := []text.Option{
 		text.WithFile(file1),
 		text.WithFile(file2),
-	)
-	err = b.Init(text.Mock(),
-		opts...,
-	)
-	require.NoError(t, err)
+	}
+	initExForTesting(t, b, text.Mock(), opts...)
 	defer b.Close()
 
 	testutil.TestHandlerSequence(t, b, 20, 10, cases)
@@ -590,7 +579,7 @@ func TestExCommandResponsive(t *testing.T) {
 	var closeFns []func() error
 	fn := func(t *testing.T) tui.Handler {
 		b := new(Ex)
-		opts := withOpenFileStubs(
+		opts := []text.Option{
 			text.WithCommandEvent(testCommandEvent),
 			text.WithWindowManagerConfig(component.WindowManagerConfig{
 				Frame: false,
@@ -600,9 +589,8 @@ func TestExCommandResponsive(t *testing.T) {
 				Height: 5,
 				Frame:  true,
 			}),
-		)
-		err := b.Init(text.Mock(), opts...)
-		require.NoError(t, err)
+		}
+		initExForTesting(t, b, text.Mock(), opts...)
 		closeFns = append(closeFns, b.Close)
 		return b
 	}
@@ -645,7 +633,7 @@ func TestExKeySequence(t *testing.T) {
 		require.NoError(t, err)
 		file2, err := workspace.ParseURI("file:///button.go")
 		require.NoError(t, err)
-		opts := withOpenFileStubs(
+		opts := []text.Option{
 			text.WithFile(file1),
 			text.WithFile(file2),
 			text.WithCommandEvent(testCommandEvent),
@@ -657,10 +645,9 @@ func TestExKeySequence(t *testing.T) {
 				First: term.Event{Type: term.EventKey, Ch: 'g'},
 				Last:  term.Event{Type: term.EventKey, Ch: 'g'},
 			}, "bufferCloseAll"),
-			text.WithSequencerTimeout(10*time.Second),
-		)
-		err = b.Init(text.Mock(), opts...)
-		require.NoError(t, err)
+			text.WithSequencerTimeout(10 * time.Second),
+		}
+		initExForTesting(t, b, text.Mock(), opts...)
 		closeFns = append(closeFns, b.Close)
 		return b
 	}
@@ -681,12 +668,10 @@ func TestExExit(t *testing.T) {
 	for _, cmd := range commands {
 		t.Run(fmt.Sprintf("ex exits %s command is issued", cmd), func(t *testing.T) {
 			b := new(Ex)
-			defer b.Close()
-
-			err := b.Init(text.Mock(),
+			initExForTesting(t, b, text.Mock(),
 				text.WithCommandEvent(testCommandEvent),
 			)
-			require.NoError(t, err)
+			defer b.Close()
 
 			// start command prompt
 			exit, handled := b.Handle(testCommandEvent)
@@ -709,10 +694,8 @@ func TestExExit(t *testing.T) {
 
 	t.Run("ex does not exit when inner handler returns exit=true", func(t *testing.T) {
 		b := new(Ex)
+		initExForTesting(t, b, text.Mock())
 		defer b.Close()
-
-		err := b.Init(text.Mock())
-		require.NoError(t, err)
 
 		h := browser.NewTestHandler()
 		h.Exit = true
@@ -734,4 +717,9 @@ func TestExExit(t *testing.T) {
 		assert.True(t, handled)
 		assert.False(t, exit)
 	})
+}
+
+func initExForTesting(t *testing.T, ex *Ex, ed text.Editor, opts ...text.Option) {
+	require.NoError(t, ex.init(text.Mock(), opts...))
+	require.NoError(t, ex.comp.Init(ex.ed, &testWorkspace{}, ex.config))
 }

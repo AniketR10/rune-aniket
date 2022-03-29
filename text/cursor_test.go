@@ -1888,7 +1888,8 @@ func TestFileCursorIntegration(t *testing.T) {
 			require.NoError(t, err)
 
 			// installs unix reader
-			_, err = workspace.Open(uri, b, swapDir, false)
+			m := workspace.NewManager()
+			_, err = m.Open(uri, b, swapDir, false)
 			require.NoError(t, err)
 
 			tcase.test(t, cursor)
