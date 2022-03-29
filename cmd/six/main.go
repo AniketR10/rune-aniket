@@ -9,6 +9,7 @@ import (
 	"path"
 	"runtime"
 
+	"github.com/ernestrc/go-tui/workspace"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -16,9 +17,10 @@ var (
 	Version    = "development"
 	configpath *string
 
-	flagRecover = flag.String("r", "", "recover from recovery file")
-	flagPprof   = flag.Bool("p", false, "start pprof server at :6060")
-	flagVersion = flag.Bool("v", false, "print version information")
+	flagRecover   = flag.String("r", "", "recover from recovery file")
+	flagPprof     = flag.Bool("p", false, "start pprof server at :6060")
+	flagVersion   = flag.Bool("v", false, "print version information")
+	flagWorkspace = flag.String("w", cwdURI().String(), "workspace URI")
 )
 
 func init() {
@@ -28,6 +30,18 @@ func init() {
 	}
 	defaultConfigPath := path.Join(home, ".six.yml")
 	configpath = flag.String("c", defaultConfigPath, "config file path")
+}
+
+func cwdURI() workspace.URI {
+	wd, err := os.Getwd()
+	if err != nil {
+		log.Fatalf("Failed to get working directory: %s", err)
+	}
+	uri, err := workspace.LocalURI(wd)
+	if err != nil {
+		log.Fatalf("Failed to parse working directory as URI %s: %s", wd, err)
+	}
+	return uri
 }
 
 func main() {
@@ -53,13 +67,22 @@ func main() {
 		}()
 	}
 
+	uri, err := workspace.ParseURI(*flagWorkspace)
+	if err != nil {
+		log.Fatalf("Failed to parse working directory as URI %s: %s", *flagWorkspace, err)
+	}
+	manager, err := workspace.NewManager(uri)
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	var i *IDE
 	if *flagRecover != "" && len(filenames) != 0 {
-		i, err = NewRecovery(*configpath, filenames[0], *flagRecover)
+		i, err = NewRecovery(manager, *configpath, filenames[0], *flagRecover)
 	} else if *flagRecover != "" {
 		log.Fatal("flag -r requires to pass the original filename filename")
 	} else {
-		i, err = New(*configpath, filenames...)
+		i, err = New(manager, *configpath, filenames...)
 	}
 
 	if err != nil {

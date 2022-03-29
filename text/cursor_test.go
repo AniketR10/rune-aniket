@@ -1825,6 +1825,18 @@ func TestCursorReplaceAllWithNewline(t *testing.T) {
 	assert.Equal(t, "hello\nworld", e.buffer().String())
 }
 
+func cwdURI(t *testing.T) workspace.URI {
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Failed to get working directory: %s", err)
+	}
+	uri, err := workspace.LocalURI(wd)
+	if err != nil {
+		t.Fatalf("Failed to parse working directory as URI %s: %s", wd, err)
+	}
+	return uri
+}
+
 func TestFileCursorIntegration(t *testing.T) {
 	tsuite := []struct {
 		description string
@@ -1888,7 +1900,8 @@ func TestFileCursorIntegration(t *testing.T) {
 			require.NoError(t, err)
 
 			// installs unix reader
-			m := workspace.NewManager()
+			m, err := workspace.NewManager(cwdURI(t))
+			require.NoError(t, err)
 			_, err = m.Open(uri, b, swapDir, false)
 			require.NoError(t, err)
 

@@ -26,22 +26,26 @@ type IDE struct {
 // New allocates storage for a new IDE and initializes it with config
 // at cfgfilename and filename. Note that if filename is empty, a default inmutable
 // buffer will be loaded.
-func New(cfgfilename string, filenames ...string) (i *IDE, err error) {
+func New(cwd *workspace.Manager, cfgfilename string, filenames ...string) (
+	i *IDE, err error,
+) {
 	i = new(IDE)
-	err = i.init(cfgfilename, "", filenames...)
+	err = i.init(cwd, cfgfilename, "", filenames...)
 	return
 }
 
 // NewRecovery allocates storage for a new IDe and initializes in recovery mode.
 // The underlying editor will use recfilename to try to recover file at filename.
 // Note that this function panics if either filename or recfilename are empty.
-func NewRecovery(cfgfilename, filename string, recfilename string) (i *IDE, err error) {
+func NewRecovery(
+	cwd *workspace.Manager, cfgfilename, filename string, recfilename string,
+) (i *IDE, err error) {
 	if filename == "" || recfilename == "" {
 		panic(fmt.Sprintf("invalid input: filename='%s', recfilename='%s'",
 			filename, recfilename))
 	}
 	i = new(IDE)
-	err = i.init(cfgfilename, recfilename, filename)
+	err = i.init(cwd, cfgfilename, recfilename, filename)
 	return
 }
 
@@ -62,7 +66,7 @@ func (i *IDE) initPlugins(l *log.Logger) {
 	}
 }
 
-func (i *IDE) init(cfgfilename, recfilename string, filenames ...string) error {
+func (i *IDE) init(cwd *workspace.Manager, cfgfilename, recfilename string, filenames ...string) error {
 	configErr := loadConfig(&i.ideConfig, cfgfilename)
 
 	opts := make([]text.Option, 0)
@@ -143,8 +147,7 @@ func (i *IDE) init(cfgfilename, recfilename string, filenames ...string) error {
 	}
 
 	vi := vi.Editor(viOpts...)
-	m := workspace.NewManager()
-	ex, err := NewEx(vi, m, opts...)
+	ex, err := NewEx(vi, cwd, opts...)
 	if err != nil {
 		return err
 	}

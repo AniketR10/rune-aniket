@@ -557,14 +557,24 @@ func LocalURI(path string) (URI, error) {
 }
 
 func extractAbsPath(filename string) (string, error) {
-	usr, _ := user.Current()
-	dir := usr.HomeDir
 	if filename == "~" {
-		filename = dir
+		usr, err := user.Current()
+		if err != nil {
+			return "", fmt.Errorf("could not get current user: %s", err)
+		}
+		filename = usr.HomeDir
 	} else if strings.HasPrefix(filename, "~/") {
-		filename = filepath.Join(dir, filename[2:])
+		usr, err := user.Current()
+		if err != nil {
+			return "", fmt.Errorf("could not get current user: %s", err)
+		}
+		filename = filepath.Join(usr.HomeDir, filename[2:])
 	}
-	return filepath.Abs(filename)
+	abs, err := filepath.Abs(filename)
+	if err != nil {
+		return "", fmt.Errorf("failed to get absolute path of %s: %s", filename, err)
+	}
+	return abs, nil
 }
 
 func sanitizeFilePath(resource string) string {
