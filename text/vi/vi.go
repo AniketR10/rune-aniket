@@ -9,6 +9,7 @@ import (
 	"github.com/ernestrc/go-tui/handler"
 	"github.com/ernestrc/go-tui/term"
 	"github.com/ernestrc/go-tui/text"
+	"github.com/ernestrc/go-tui/workspace"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -25,7 +26,7 @@ func (s snapshot) String() string {
 
 // Vi implements a basic vi-like text editor which satisfies tui.Handler
 type Vi struct {
-	name      string
+	resource  workspace.URI
 	handler   viHandler
 	buf       *cell.Buffer
 	cursor    *text.Cursor
@@ -49,15 +50,15 @@ type Vi struct {
 type viSubscriber Vi
 
 // New allocates storage for a new Vi handler, initializes it and returns it.
-func New(buf *cell.Buffer, name string, opts ...Option) *Vi {
+func New(buf *cell.Buffer, resource workspace.URI, opts ...Option) *Vi {
 	vi := new(Vi)
-	vi.Init(buf, name, opts...)
+	vi.Init(buf, resource, opts...)
 	return vi
 }
 
 // Init initialies this vi handle with a new Buffer.
-func (vi *Vi) Init(buf *cell.Buffer, name string, opts ...Option) {
-	vi.name = name
+func (vi *Vi) Init(buf *cell.Buffer, resource workspace.URI, opts ...Option) {
+	vi.resource = resource
 
 	viHandler := new(viHandlerImpl)
 	viHandler.init(buf, opts...)
@@ -285,9 +286,9 @@ func (vi *Vi) CellEditor() cell.Editor {
 	return vi.buf.Editor()
 }
 
-// Name satisfies editor.Handler.
-func (vi *Vi) Name() string {
-	return vi.name
+// Resource satisfies editor.Handler.
+func (vi *Vi) Resource() workspace.URI {
+	return vi.resource
 }
 
 // Close satisfies editor.Handler.

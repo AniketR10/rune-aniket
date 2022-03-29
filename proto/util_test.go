@@ -5,6 +5,7 @@ import (
 
 	"github.com/ernestrc/go-tui/cell"
 	"github.com/ernestrc/go-tui/component"
+	"github.com/ernestrc/go-tui/workspace"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -16,6 +17,7 @@ func TestBufferEditRequest(t *testing.T) {
 		{
 			in: "a",
 			out: EditRequest{
+				ResourceName: &URI{Uri: ""},
 				Buffer: []*CellRow{
 					&CellRow{Cells: []*Cell{&Cell{Character: 'a'}}},
 				},
@@ -24,6 +26,7 @@ func TestBufferEditRequest(t *testing.T) {
 		{
 			in: "a\nbb\nccc",
 			out: EditRequest{
+				ResourceName: &URI{Uri: ""},
 				Buffer: []*CellRow{
 					&CellRow{Cells: []*Cell{&Cell{Character: 'a'}}},
 					&CellRow{Cells: []*Cell{&Cell{Character: 'b'}, &Cell{Character: 'b'}}},
@@ -36,7 +39,7 @@ func TestBufferEditRequest(t *testing.T) {
 	for _, tcase := range tsuite {
 		buf := cell.NewBuffer()
 		buf.WriteString(tcase.in)
-		out := BufferToEditRequest(buf)
+		out := NewEditRequest(workspace.URI{}, buf)
 		assert.Equal(t, tcase.out, out)
 
 		outbuf := EditRequestToBuffer(&out)
@@ -140,7 +143,7 @@ func benchmarkEditRequest(b *testing.B, width, height int) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_ = BufferToEditRequest(buf)
+		_ = NewEditRequest(workspace.URI{}, buf)
 	}
 }
 

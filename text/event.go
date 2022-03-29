@@ -9,6 +9,7 @@ import (
 	"github.com/ernestrc/go-tui/component"
 	"github.com/ernestrc/go-tui/proto"
 	"github.com/ernestrc/go-tui/term"
+	"github.com/ernestrc/go-tui/workspace"
 )
 
 // EventType is a type of editor event.
@@ -55,9 +56,9 @@ const (
 
 // Event encapsulates eventual information about a particular editor resource.
 type Event struct {
-	Type         EventType
-	ResourceName string
-	Resource     Handler
+	Type     EventType
+	URI      workspace.URI
+	Resource Handler
 
 	Start, End term.Coordinates
 	From, To   term.Coordinates
@@ -100,11 +101,16 @@ func (e *Event) fromProto(pe *proto.EditorEvent) (err error) {
 	if err != nil {
 		return
 	}
-	e.ResourceName = pe.GetResourceName()
+	if pe.GetResourceName().GetUri() != "" {
+		e.URI, err = proto.NewURIFromProto(pe.GetResourceName())
+		if err != nil {
+			return
+		}
+	}
 	if pe.ResourceId != 0 {
 		e.Resource = Token{
 			Token:    browser.Token{ID: uint64(pe.GetResourceId())},
-			resource: e.ResourceName,
+			resource: e.URI,
 		}
 	}
 	e.Start = pe.GetStart().ToModel()
@@ -146,7 +152,7 @@ func (e *Event) toProto() proto.EditorEvent {
 	ret := proto.EditorEvent{}
 	ret.Type = e.protoType()
 
-	ret.ResourceName = e.ResourceName
+	ret.ResourceName = proto.NewURI(e.URI)
 	if e.Resource != nil {
 		ret.ResourceId = uint32(e.Resource.(Token).ID)
 	}
@@ -168,9 +174,9 @@ func (e *Event) toProto() proto.EditorEvent {
 }
 
 type cellSubscriber struct {
-	name string
-	h    Handler
-	eh   EventHandler
+	uri workspace.URI
+	h   Handler
+	eh  EventHandler
 
 	onWillEditStr   string
 	onWillEditStart term.Coordinates
@@ -185,38 +191,38 @@ func (s *cellSubscriber) OnWillEdit(start, end term.Coordinates, str string) {
 
 func (s *cellSubscriber) OnDidEdit(from, to term.Coordinates, old string) {
 	s.eh.Handle(context.Background(), Event{
-		Type:         EventTypeEdit,
-		Resource:     s.h,
-		ResourceName: s.name,
-		From:         from,
-		To:           to,
-		Start:        s.onWillEditStart,
-		End:          s.onWillEditEnd,
-		Content:      s.onWillEditStr,
+		Type:     EventTypeEdit,
+		Resource: s.h,
+		URI:      s.uri,
+		From:     from,
+		To:       to,
+		Start:    s.onWillEditStart,
+		End:      s.onWillEditEnd,
+		Content:  s.onWillEditStr,
 	})
 }
 
 // CellSubscriber returns a cell.Subscriber which forwards Insert/Delete events to evHandler
-func CellSubscriber(name string, h Handler, evHandler EventHandler) cell.Subscriber {
-	return &cellSubscriber{name: name, h: h, eh: evHandler}
+func CellSubscriber(uri workspace.URI, h Handler, evHandler EventHandler) cell.Subscriber {
+	return &cellSubscriber{uri: uri, h: h, eh: evHandler}
 }
 
 type scrollSubscriber struct {
-	name string
-	h    Handler
-	eh   EventHandler
+	uri workspace.URI
+	h   Handler
+	eh  EventHandler
 }
 
 func (s scrollSubscriber) OnSeek(at term.Coordinates) {
 	s.eh.Handle(context.Background(), Event{
-		Type:         EventTypeScroll,
-		Resource:     s.h,
-		ResourceName: s.name,
-		Start:        at,
+		Type:     EventTypeScroll,
+		Resource: s.h,
+		URI:      s.uri,
+		Start:    at,
 	})
 }
 
 // ScrollSubscriber returns a component.ScrollSubscriber which forwarsd Scroll events to evHandler
-func ScrollSubscriber(name string, h Handler, evHandler EventHandler) component.ScrollSubscriber {
-	return scrollSubscriber{name: name, h: h, eh: evHandler}
+func ScrollSubscriber(resource workspace.URI, h Handler, evHandler EventHandler) component.ScrollSubscriber {
+	return scrollSubscriber{uri: resource, h: h, eh: evHandler}
 }

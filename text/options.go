@@ -1,7 +1,6 @@
 package text
 
 import (
-	"io"
 	"time"
 
 	"github.com/ernestrc/blue/datastore/document"
@@ -10,15 +9,12 @@ import (
 	"github.com/ernestrc/go-tui/component"
 	"github.com/ernestrc/go-tui/handler"
 	"github.com/ernestrc/go-tui/term"
+	"github.com/ernestrc/go-tui/workspace"
 	log "github.com/sirupsen/logrus"
 )
 
-// FlusherCloser wraps Flush and Close methods to be used
-// as editor file abstractions.
-type FlusherCloser interface {
-	Flush() error
-	io.Closer
-}
+type OpenFileFn func(file workspace.URI, buf *cell.Buffer, swapDir workspace.URI, readOnly bool) (workspace.FlusherCloser, error)
+type RecoverFileFn func(file, swapFilePath workspace.URI, buf *cell.Buffer) (workspace.FlusherCloser, error)
 
 // CommandOverlayConfig holds configuration for the
 // command's interface.
@@ -34,9 +30,9 @@ type CommandOverlayConfig struct {
 // Config holds configuration for an editor.Component.
 type Config struct {
 	Tabspaces               int
-	SwapDir                 string
-	Filepaths               []string
-	RecoveryFilepath        string
+	SwapDir                 *workspace.URI
+	Filepaths               []workspace.URI
+	RecoveryFilepath        workspace.URI
 	CommandEvent            term.Event
 	CommandKeyBindings      map[term.Event]string
 	CommandSequenceBindings map[handler.Sequence]string
@@ -44,8 +40,8 @@ type Config struct {
 	Storage                 document.Service
 	DirtyTabAttr            term.Attributes
 
-	OpenFileFn    func(filePath string, buf *cell.Buffer, swapDir string, readOnly bool) (FlusherCloser, error)
-	RecoverFileFn func(filePath, swapFilePath string, buf *cell.Buffer) (FlusherCloser, error)
+	OpenFileFn
+	RecoverFileFn
 	InterruptDraw func()
 
 	CommandOverlay CommandOverlayConfig
@@ -68,9 +64,9 @@ func DefaultCommandOverlayConfig() (cfg CommandOverlayConfig) {
 func DefaultConfig() Config {
 	cfg := Config{
 		Tabspaces:               4,
-		SwapDir:                 "",
+		SwapDir:                 nil,
 		Filepaths:               nil,
-		RecoveryFilepath:        "",
+		RecoveryFilepath:        workspace.URI{},
 		CommandEvent:            term.Event{Ch: ':', Type: term.EventKey},
 		Config:                  browser.DefaultConfig(),
 		Storage:                 document.NewInMemoryCache(),
@@ -79,13 +75,13 @@ func DefaultConfig() Config {
 		CommandSequenceBindings: make(map[handler.Sequence]string),
 		SequencerTimeout:        400 * time.Millisecond,
 		CommandOverlay:          DefaultCommandOverlayConfig(),
-		OpenFileFn: func(filePath string,
-			buf *cell.Buffer, swapDir string, readOnly bool) (FlusherCloser, error) {
-			return NewFileBuffer(filePath, buf, swapDir, readOnly)
+		OpenFileFn: func(uri workspace.URI, buf *cell.Buffer,
+			swapDir workspace.URI, readOnly bool) (workspace.FlusherCloser, error) {
+			return workspace.Open(uri, buf, swapDir, readOnly)
 		},
-		RecoverFileFn: func(filePath,
-			swapFilePath string, buf *cell.Buffer) (FlusherCloser, error) {
-			return RecoverFileBuffer(filePath, swapFilePath, buf)
+		RecoverFileFn: func(uri, swapFilePath workspace.URI,
+			buf *cell.Buffer) (workspace.FlusherCloser, error) {
+			return workspace.Recover(uri, swapFilePath, buf)
 		},
 		InterruptDraw: term.Interrupt,
 	}
@@ -105,9 +101,10 @@ func WithTabspaces(tabspaces int) Option {
 // WithSwapDir defines the swap directory to use if WithFilepath option is set.
 // The swap directory is used to keep persist recovery files. If this option is not
 // defined, the directory of WithFilepath is used as a swap directory.
-func WithSwapDir(dir string) Option {
+func WithSwapDir(dir workspace.URI) Option {
 	return func(cfg *Config) {
-		cfg.SwapDir = dir
+		cfg.SwapDir = new(workspace.URI)
+		*cfg.SwapDir = dir
 	}
 }
 
@@ -121,7 +118,7 @@ func WithStorage(svc document.Service) Option {
 // WithRecoveryFile indicates that an Editor is to be initialized
 // from recovery file swapFilePath. This option overrides WithSwapDir because
 // the swap directory of swapFilePath is used instead.
-func WithRecoveryFile(swapFilePath string) Option {
+func WithRecoveryFile(swapFilePath workspace.URI) Option {
 	return func(cfg *Config) {
 		cfg.RecoveryFilepath = swapFilePath
 	}
@@ -129,9 +126,9 @@ func WithRecoveryFile(swapFilePath string) Option {
 
 // WithFilepath returns an Option that sets the filepath of the file to open with
 // a Editor handler.
-func WithFilepath(filepath string) Option {
+func WithFile(file workspace.URI) Option {
 	return func(cfg *Config) {
-		cfg.Filepaths = append(cfg.Filepaths, filepath)
+		cfg.Filepaths = append(cfg.Filepaths, file)
 	}
 }
 
@@ -281,8 +278,7 @@ func WithPromptConfig(c browser.PromptConfig) Option {
 
 // WithOpenFileFn sets the Component's  OpenFile function to fn.
 // By default this is set to editor.NewFileBuffer.
-func WithOpenFileFn(
-	fn func(filePath string, buf *cell.Buffer, swapDir string, readOnly bool) (FlusherCloser, error)) Option {
+func WithOpenFileFn(fn OpenFileFn) Option {
 	return func(cfg *Config) {
 		cfg.OpenFileFn = fn
 	}
@@ -290,8 +286,7 @@ func WithOpenFileFn(
 
 // WithRecoverFileFn sets the Component's RecoverFile function to fn.
 // By default this is set to editor.RecoverFileBuffer.
-func WithRecoverFileFn(
-	fn func(filePath, swapFilePath string, buf *cell.Buffer) (FlusherCloser, error)) Option {
+func WithRecoverFileFn(fn RecoverFileFn) Option {
 	return func(cfg *Config) {
 		cfg.RecoverFileFn = fn
 	}

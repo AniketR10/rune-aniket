@@ -5,15 +5,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os/user"
-	"path/filepath"
-	"strings"
 
 	"github.com/ernestrc/blue/datastore/document"
 	"github.com/ernestrc/go-tui"
 	"github.com/ernestrc/go-tui/browser"
 	"github.com/ernestrc/go-tui/cell"
 	"github.com/ernestrc/go-tui/term"
+	"github.com/ernestrc/go-tui/workspace"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -41,9 +39,9 @@ type Component struct {
 // corresponding events to subscribers.
 type editorFlusherCloser struct {
 	parent    *Component
-	fc        FlusherCloser
+	fc        workspace.FlusherCloser
 	h         Handler
-	name      string
+	uri       workspace.URI
 	buf       *cell.Buffer
 	lastFlush string
 }
@@ -52,11 +50,11 @@ func (c editorFlusherCloser) OnWillEdit(start, end term.Coordinates, str string)
 }
 
 func (c editorFlusherCloser) OnDidEdit(from, to term.Coordinates, old string) {
-	c.parent.setTabAttr(c.name, c.buf, c.lastFlush)
+	c.parent.setTabAttr(c.uri, c.buf, c.lastFlush)
 }
 
 func (e *editorFlusherCloser) Flush() error {
-	content, err := e.parent.dispatchFlush(e.name, e.h)
+	content, err := e.parent.dispatchFlush(e.uri, e.h)
 	if err != nil {
 		return err
 	}
@@ -66,9 +64,9 @@ func (e *editorFlusherCloser) Flush() error {
 
 func (e *editorFlusherCloser) Close() error {
 	ev := Event{
-		Type:         EventTypeClose,
-		ResourceName: e.name,
-		Resource:     e.h,
+		Type:     EventTypeClose,
+		URI:      e.uri,
+		Resource: e.h,
 	}
 	e.parent.dispatchEvent(ev)
 	return e.fc.Close()
@@ -101,30 +99,44 @@ func (c *Component) newCellBuffer() *cell.Buffer {
 	return buf
 }
 
-func (c *Component) resetTabProperties(id string) {
-	c.comp.SetTabAttr(id, term.Attributes{})
-	c.comp.SetTabName(id, c.getTabName(id))
+func (c *Component) resetTabProperties(file workspace.URI) {
+	c.comp.SetTabAttr(file, term.Attributes{})
+	c.comp.SetTabName(file, file.Name())
 }
 
-func (c *Component) setTabAttr(id string, buf *cell.Buffer, lastFlush string) {
+// TODO this is a very inefficient way of checking if a file was changed.
+// We should instead collect edits and check for undos by comparing arguments
+// and return values.
+func (c *Component) setTabAttr(file workspace.URI, buf *cell.Buffer, lastFlush string) {
 	content := buf.String()
 	if content == lastFlush {
-		c.resetTabProperties(id)
+		c.resetTabProperties(file)
 		return
 	}
-	c.comp.SetTabAttr(id, c.config.DirtyTabAttr)
-	tabname := fmt.Sprintf("%s*", c.getTabName(id))
-	c.comp.SetTabName(id, tabname)
+	c.comp.SetTabAttr(file, c.config.DirtyTabAttr)
+	tabname := fmt.Sprintf("%s*", file.Name())
+	c.comp.SetTabName(file, tabname)
+}
+
+func (c *Component) getSwapDir(file workspace.URI) (workspace.URI, error) {
+	if c.config.SwapDir == nil {
+		return workspace.DefaultLocalSwapDirectory(file)
+	}
+	return *c.config.SwapDir, nil
 }
 
 func (c *Component) newFileBuffer(
-	filename, recSwapFile string, buf *cell.Buffer, readOnly bool,
+	file, recSwapFile workspace.URI, buf *cell.Buffer, readOnly bool,
 ) (ret *editorFlusherCloser, err error) {
-	var fc FlusherCloser
-	if recSwapFile != "" {
-		fc, err = c.config.RecoverFileFn(filename, recSwapFile, buf)
+	var fc workspace.FlusherCloser
+	if recSwapFile != (workspace.URI{}) {
+		fc, err = c.config.RecoverFileFn(file, recSwapFile, buf)
 	} else {
-		fc, err = c.config.OpenFileFn(filename, buf, c.config.SwapDir, readOnly)
+		var swapDir workspace.URI
+		swapDir, err = c.getSwapDir(file)
+		if err == nil {
+			fc, err = c.config.OpenFileFn(file, buf, swapDir, readOnly)
+		}
 	}
 
 	if err != nil {
@@ -134,7 +146,7 @@ func (c *Component) newFileBuffer(
 	efc := &editorFlusherCloser{
 		parent:    c,
 		fc:        fc,
-		name:      filename,
+		uri:       file,
 		buf:       buf,
 		lastFlush: buf.String(),
 	}
@@ -158,11 +170,11 @@ func (c *Component) Init(ed Editor, config Config) error {
 
 	var first browser.Handler
 
-	if c.config.RecoveryFilepath != "" {
+	if c.config.RecoveryFilepath != (workspace.URI{}) {
 		if len(c.config.Filepaths) != 1 {
 			return errors.New("only one file expected if recovery file is passed")
 		}
-		h, err := c.OpenFileTab(c.config.Filepaths[0], c.config.RecoveryFilepath, false)
+		h, err := c.RecoverFileTab(c.config.Filepaths[0], c.config.RecoveryFilepath, false)
 		if err != nil {
 			return err
 		}
@@ -171,7 +183,7 @@ func (c *Component) Init(ed Editor, config Config) error {
 
 	for _, filename := range c.config.Filepaths {
 		h, err := c.Open(filename)
-		if err == ErrFileAlreadyOpen {
+		if err == workspace.ErrFileAlreadyOpen {
 			// handled via user Prompt
 			err = nil
 		}
@@ -200,22 +212,6 @@ func (c *Component) setFocusToTab(t *browser.Tab) (browser.Handler, error) {
 	return t, nil
 }
 
-func (c *Component) getTabName(filename string) string {
-	return filepath.Base(filename)
-}
-
-func getFileID(filename string) (string, error) {
-	usr, _ := user.Current()
-	dir := usr.HomeDir
-	if filename == "~" {
-		filename = dir
-	} else if strings.HasPrefix(filename, "~/") {
-		filename = filepath.Join(dir, filename[2:])
-	}
-	// needed as tab ID
-	return filepath.Abs(filename)
-}
-
 type compTabSubscriber Component
 
 func (s *compTabSubscriber) OnFocus(t *browser.Tab) {
@@ -224,9 +220,9 @@ func (s *compTabSubscriber) OnFocus(t *browser.Tab) {
 		return
 	}
 	(*Component)(s).dispatchEvent(Event{
-		Type:         EventTypeFocus,
-		ResourceName: t.ID(),
-		Resource:     res,
+		Type:     EventTypeFocus,
+		URI:      t.URI(),
+		Resource: res,
 	})
 }
 
@@ -236,51 +232,63 @@ func (s *compTabSubscriber) OnFree(t *browser.Tab) {
 		return
 	}
 	(*Component)(s).dispatchEvent(Event{
-		Type:         EventTypeUnfocus,
-		ResourceName: t.ID(),
-		Resource:     res,
+		Type:     EventTypeUnfocus,
+		URI:      t.URI(),
+		Resource: res,
 	})
 }
 
-// OpenFileTab opens the file at filename path, with an optional recovery file,
-// as a new browser tab. It's up to the caller to use the returned
-// browser.Handler and switch any of the active windows to use it.
+// OpenFileTab opens the file at filename path, as a new browser tab.
+// It's up to the caller to use the returned browser.Handler and switch
+// any of the active windows to use it.
 //
 // If recoveryFilename is not empty, then the file will be recovered from the
 // contents of recoveryFilename.
-func (c *Component) OpenFileTab(
-	filename, recoveryFilename string, readOnly bool,
-) (browser.Handler, error) {
-	filename, err := getFileID(filename)
-	if err != nil {
-		return nil, fmt.Errorf("could not evaluate file path '%s': %v", filename, err)
+func (c *Component) OpenFileTab(file workspace.URI, readOnly bool) (
+	browser.Handler, error,
+) {
+	if file == (workspace.URI{}) {
+		return nil, errors.New("empty URI")
 	}
+	return c.openFileTab(file, workspace.URI{}, readOnly)
+}
 
-	t, ok := c.comp.Tab(filename)
+// RecoverFileTab recovers the file at filename by using the file at recoverFilename
+// and opens a tab it like OpenFileTab. See OpenFileTab for more details.
+func (c *Component) RecoverFileTab(
+	file workspace.URI, recoveryFilename workspace.URI, readOnly bool,
+) (browser.Handler, error) {
+	if file == (workspace.URI{}) || recoveryFilename == (workspace.URI{}) {
+		return nil, errors.New("empty URI")
+	}
+	return c.openFileTab(file, recoveryFilename, readOnly)
+}
+
+func (c *Component) openFileTab(
+	file workspace.URI, recoveryFilename workspace.URI, readOnly bool,
+) (browser.Handler, error) {
+	t, ok := c.comp.Tab(file)
 	if ok {
 		return c.setFocusToTab(t)
 	}
 
 	buf := c.newCellBuffer()
-	fc, err := c.newFileBuffer(filename, recoveryFilename, buf, readOnly)
+	fc, err := c.newFileBuffer(file, recoveryFilename, buf, readOnly)
 	if err != nil {
 		return nil, err
 	}
 
-	editor, err := c.ed.Edit(filename, buf)
+	editor, err := c.ed.Edit(file, buf)
 	if err != nil {
 		return nil, err
 	}
 	fc.h = editor
 
-	tabname := c.getTabName(filename)
-	c.tryLog(log.DebugLevel, "Open(%s): opening tab with tabname='%s'", filename, tabname)
-
-	t = c.newTab(filename, tabname, editor, fc)
+	t = c.newTab(file, file.Name(), editor, fc)
 	return t, nil
 }
 
-func (c *Component) openRecoveryPrompt(file string) {
+func (c *Component) openRecoveryPrompt(file workspace.URI) {
 	const (
 		recoverOpt  = "Recover"
 		readOnlyOpt = "Open Read-Only"
@@ -300,11 +308,16 @@ an edit session for this file crashed.`, file)
 
 			switch opt {
 			case recoverOpt:
-				file, _ = getFileID(file) // to get right swap file name
-				_, swapFileName := swapFileName(c.config.SwapDir, file)
-				h, err = c.OpenFileTab(file, swapFileName, false)
+				var swapDir, swapFile workspace.URI
+				swapDir, err = c.getSwapDir(file)
+				if err == nil {
+					swapFile, err = workspace.DefaultLocalSwapFile(swapDir, file)
+					if err == nil {
+						h, err = c.RecoverFileTab(file, swapFile, false)
+					}
+				}
 			case readOnlyOpt:
-				h, err = c.OpenFileTab(file, "", true)
+				h, err = c.OpenFileTab(file, true)
 			case skipOpt:
 			}
 			if h != nil {
@@ -321,23 +334,18 @@ an edit session for this file crashed.`, file)
 // Open opens the given file in a new browser tab. If file is already
 // open by another session or the last edit session crashed, it
 // will create a prompt for the user to decide what to do.
-func (c *Component) Open(file string) (browser.Handler, error) {
-	h, err := c.OpenFileTab(file, "", false)
-	if err != nil && err == ErrFileAlreadyOpen {
+func (c *Component) Open(file workspace.URI) (browser.Handler, error) {
+	h, err := c.OpenFileTab(file, false)
+	if err != nil && err == workspace.ErrFileAlreadyOpen {
 		c.openRecoveryPrompt(file)
 	}
 	return h, err
 }
 
 // Editor satisfies Editor interface.
-func (c *Component) Editor(name string) (Handler, error) {
-	filename, err := getFileID(name)
-	if err != nil {
-		return nil, fmt.Errorf("could not evaluate file path '%s': %v", filename, err)
-	}
-
+func (c *Component) Editor(file workspace.URI) (Handler, error) {
 	for _, tab := range c.comp.Tabs() {
-		if tab.ID() == filename {
+		if tab.URI().String() == file.String() {
 			h, ok := tab.Handler().(Handler)
 			if !ok {
 				continue
@@ -392,20 +400,20 @@ func (c *Component) DispatchCommand(cmd Command) (handled bool) {
 	return true
 }
 
-func (c *Component) dispatchFlush(id string, h Handler) (string, error) {
+func (c *Component) dispatchFlush(file workspace.URI, h Handler) (string, error) {
 	content, err := c.getContent(h)
 	if err != nil {
 		return "", err
 	}
 
 	ev := Event{
-		Type:         EventTypeFlush,
-		ResourceName: id,
-		Resource:     h,
-		Content:      content,
+		Type:     EventTypeFlush,
+		URI:      file,
+		Resource: h,
+		Content:  content,
 	}
 	// clear dirty/flushed attributes
-	c.resetTabProperties(id)
+	c.resetTabProperties(file)
 	c.dispatchEvent(ev)
 	return content, nil
 }
@@ -466,13 +474,13 @@ func (c *Component) Focus() (browser.Window, error) {
 
 // Edit edits the resource with name and buffer with the underlying Editor
 // in a new browser buffer.
-func (c *Component) Edit(name string, buf *cell.Buffer) (Handler, error) {
-	editor, err := c.ed.Edit(name, buf)
+func (c *Component) Edit(file workspace.URI, buf *cell.Buffer) (Handler, error) {
+	editor, err := c.ed.Edit(file, buf)
 	if err != nil {
 		return nil, err
 	}
 
-	c.newTab(name, name, editor, nil)
+	c.newTab(file, file.Name(), editor, nil)
 	return editor, nil
 }
 
@@ -513,7 +521,7 @@ func (c *Component) Flush(win browser.Window) error {
 		return ErrInvalidSave
 	}
 
-	fc := t.Closer().(FlusherCloser)
+	fc := t.Closer().(workspace.FlusherCloser)
 	err = fc.Flush()
 	if err != nil {
 		return fmt.Errorf("editor.Component.Flush: %v", err)
@@ -544,10 +552,10 @@ func (c *Component) dispatchOpenTabs(h EventHandler) (error, bool) {
 			return err, false
 		}
 		exit := h.Handle(ctx, Event{
-			Type:         EventTypeOpen,
-			ResourceName: tab.ID(),
-			Resource:     resHandler,
-			Content:      str,
+			Type:     EventTypeOpen,
+			URI:      tab.URI(),
+			Resource: resHandler,
+			Content:  str,
 		})
 		if exit {
 			return nil, true
@@ -565,9 +573,9 @@ func (c *Component) dispatchFocusTab(h EventHandler) bool {
 		resHandler, ok := t.Handler().(Handler)
 		if ok {
 			ev := Event{
-				Type:         EventTypeFocus,
-				ResourceName: t.ID(),
-				Resource:     resHandler,
+				Type:     EventTypeFocus,
+				URI:      t.URI(),
+				Resource: resHandler,
 			}
 			return h.Handle(ctx, ev)
 		}
@@ -717,24 +725,24 @@ func (c *Component) Floating(
 }
 
 func (c *Component) newTab(
-	id, name string, h browser.Handler, closer io.Closer,
+	resource workspace.URI, name string, h browser.Handler, closer io.Closer,
 ) *browser.Tab {
-	t := c.comp.NewTab(id, name, h, closer)
+	t := c.comp.NewTab(resource, name, h, closer)
 	t.Subscribe((*compTabSubscriber)(c))
 	return t
 }
 
 // Tab satisfies browser.WindowManager.
-func (c *Component) Tab(id, name string, h browser.Handler) (
+func (c *Component) Tab(resource workspace.URI, name string, h browser.Handler) (
 	browser.Handler, error,
 ) {
-	t, ok := c.comp.Tab(id)
+	t, ok := c.comp.Tab(resource)
 	if ok {
 		t, err := c.setFocusToTab(t)
 		return t, err
 	}
 
-	t = c.newTab(id, name, h, nil)
+	t = c.newTab(resource, name, h, nil)
 	return t, nil
 }
 

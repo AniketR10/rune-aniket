@@ -11,6 +11,7 @@ import (
 	plugutil "github.com/ernestrc/go-tui/plugin/util"
 	"github.com/ernestrc/go-tui/proto"
 	"github.com/ernestrc/go-tui/term"
+	"github.com/ernestrc/go-tui/workspace"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -36,8 +37,9 @@ func newHandler(grants []plugin.Grant, broker proto.MuxBroker,
 		historyKey = defaultHistoryKey
 	}
 	return finder.New(grants, broker, invokeWindow, config,
-		historyKey, cmdStr, func(file string) (string, term.Coordinates) {
-			return file, term.Coordinates{}
+		historyKey, cmdStr, func(file string) (workspace.URI, term.Coordinates) {
+			uri, _ := workspace.LocalURI(file)
+			return uri, term.Coordinates{}
 		})
 }
 

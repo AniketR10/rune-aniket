@@ -12,6 +12,7 @@ import (
 	"github.com/ernestrc/go-tui/handler"
 	"github.com/ernestrc/go-tui/proto"
 	"github.com/ernestrc/go-tui/term"
+	"github.com/ernestrc/go-tui/workspace"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 )
@@ -20,6 +21,8 @@ import (
 // waiting a prudent amount of time for all rpcs to finish
 // is the best we can do. See https://github.com/grpc/grpc-go/issues/1714
 const gracefulShutdownWait = 100 * time.Millisecond
+
+var _ Browser = (*Client)(nil)
 
 // Client satisfies Browser by talking to a browser server over RPC.
 type Client struct {
@@ -267,9 +270,9 @@ func (c *Client) SetMessage(msg string, args ...interface{}) error {
 }
 
 // Open satisfies Browser.
-func (c *Client) Open(resource string) (Handler, error) {
+func (c *Client) Open(resource workspace.URI) (Handler, error) {
 	ctx := context.Background()
-	req := proto.OpenResourceRequest{Resource: resource}
+	req := proto.OpenResourceRequest{Resource: resource.String()}
 
 	res, err := c.f.Open(ctx, &req)
 	if err != nil {
@@ -374,11 +377,11 @@ func (c *Client) Floating(
 }
 
 // Tab satisfies browser.WindowManager
-func (c *Client) Tab(id, name string, h Handler) (Handler, error) {
+func (c *Client) Tab(uri workspace.URI, name string, h Handler) (Handler, error) {
 	handlerID, created := c.serveHandler(h)
 	req := proto.TabRequest{
 		HandlerId:    handlerID,
-		ResourceId:   id,
+		ResourceId:   uri.String(),
 		ResourceName: name,
 	}
 	ctx := context.Background()

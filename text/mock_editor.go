@@ -7,10 +7,11 @@ import (
 	"github.com/ernestrc/go-tui/browser"
 	"github.com/ernestrc/go-tui/cell"
 	"github.com/ernestrc/go-tui/term"
+	"github.com/ernestrc/go-tui/workspace"
 )
 
 type testEditor struct {
-	name string
+	uri  workspace.URI
 	buf  *cell.Buffer
 	subs map[EventType][]EventHandler
 }
@@ -50,30 +51,30 @@ type testEditorHandler struct {
 	browser.TestHandler
 	locationList LocationList
 	parent       *testEditor
-	name         string
+	uri          workspace.URI
 }
 
-func (e *testEditorHandler) Name() string {
-	return e.name
+func (e *testEditorHandler) Resource() workspace.URI {
+	return e.uri
 }
 
-func (e *testEditor) Edit(name string, buf *cell.Buffer) (Handler, error) {
-	e.name = name
+func (e *testEditor) Edit(resource workspace.URI, buf *cell.Buffer) (Handler, error) {
+	e.uri = resource
 	e.buf = buf
 
 	h := &testEditorHandler{
-		name:        name,
+		uri:         resource,
 		parent:      e,
 		TestHandler: *browser.NewTestHandler(),
 	}
 	e.dispatchEvent(context.Background(), Event{
-		Type:         EventTypeOpen,
-		ResourceName: name,
-		Resource:     h,
-		Content:      buf.String(),
+		Type:     EventTypeOpen,
+		URI:      resource,
+		Resource: h,
+		Content:  buf.String(),
 	})
 
-	subs := CellSubscriber(name, h, e)
+	subs := CellSubscriber(resource, h, e)
 	buf.Subscribe(subs)
 	return h, nil
 }
@@ -85,9 +86,9 @@ func (e *testEditor) SetLocationList(h Handler, id string, loc LocationList) err
 
 func (e *testEditorHandler) Handle(ev term.Event) (bool, bool) {
 	e.parent.dispatchEvent(context.Background(), Event{
-		Type:         EventTypeCursor,
-		ResourceName: e.name,
-		Resource:     e,
+		Type:     EventTypeCursor,
+		URI:      e.uri,
+		Resource: e,
 	})
 	return e.TestHandler.Handle(ev)
 }
@@ -137,6 +138,6 @@ func (e *testEditor) SubscribeEditorEvents(
 	return nil
 }
 
-func (e *testEditor) Editor(name string) (Handler, error) {
+func (e *testEditor) Editor(file workspace.URI) (Handler, error) {
 	return nil, errors.New("nope")
 }

@@ -5,6 +5,7 @@ import (
 
 	"github.com/ernestrc/go-tui/cell"
 	"github.com/ernestrc/go-tui/term"
+	"github.com/ernestrc/go-tui/workspace"
 )
 
 // Publisher implements pub/sub functionality for Editor implementations.
@@ -14,7 +15,7 @@ type Publisher struct {
 
 type cursorPublisher struct {
 	parent *Publisher
-	name   string
+	uri    workspace.URI
 	buf    *cell.Buffer
 	cursor *Cursor
 	Handler
@@ -37,12 +38,12 @@ func (p *Publisher) Init() {
 // It also subscribes to scroll changes to dispatch EventTypeScroll, and
 // subscribes to buffer updates to dispatch EventTypeDelete and EventTypeInsert.
 func (p *Publisher) PublishEdit(
-	name string, buf *cell.Buffer, root Handler, cursor *Cursor,
+	resource workspace.URI, buf *cell.Buffer, root Handler, cursor *Cursor,
 ) Handler {
 	h := &cursorPublisher{
 		buf:     buf,
 		parent:  p,
-		name:    name,
+		uri:     resource,
 		cursor:  cursor,
 		Handler: root,
 	}
@@ -51,10 +52,10 @@ func (p *Publisher) PublishEdit(
 	defer cancel()
 
 	p.dispatchEvent(ctx, Event{
-		Type:         EventTypeOpen,
-		ResourceName: name,
-		Resource:     h,
-		Content:      buf.String(),
+		Type:     EventTypeOpen,
+		URI:      resource,
+		Resource: h,
+		Content:  buf.String(),
 	})
 
 	// if simple is the final tui.Handler, then the underlying handler
@@ -62,15 +63,15 @@ func (p *Publisher) PublishEdit(
 	// delegate SubscribeEditor to this handler if there's some other
 	// focus mechanism in place.
 	p.dispatchEvent(ctx, Event{
-		Type:         EventTypeFocus,
-		ResourceName: name,
-		Resource:     h,
+		Type:     EventTypeFocus,
+		URI:      resource,
+		Resource: h,
 	})
 
-	bsub := CellSubscriber(name, h, p)
+	bsub := CellSubscriber(resource, h, p)
 	buf.Subscribe(bsub)
 
-	csub := ScrollSubscriber(name, h, p)
+	csub := ScrollSubscriber(resource, h, p)
 	cursor.SubscribeScroll(csub)
 
 	return h
@@ -128,11 +129,11 @@ func (p *cursorPublisher) Handle(ev term.Event) (bool, bool) {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 		p.parent.dispatchEvent(ctx, Event{
-			Type:         EventTypeCursor,
-			ResourceName: p.name,
-			Resource:     p,
-			Start:        cursor1,
-			From:         cursorAtScroll1,
+			Type:     EventTypeCursor,
+			URI:      p.uri,
+			Resource: p,
+			Start:    cursor1,
+			From:     cursorAtScroll1,
 		})
 	}
 	return exit, handled

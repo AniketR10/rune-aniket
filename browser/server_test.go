@@ -12,6 +12,7 @@ import (
 	"github.com/ernestrc/go-tui/proto"
 	prototest "github.com/ernestrc/go-tui/proto/test"
 	"github.com/ernestrc/go-tui/term"
+	"github.com/ernestrc/go-tui/workspace"
 	gomock "github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -79,12 +80,14 @@ func TestServerOpen(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 		s, mock, broker := newTestServer(ctrl, new(sync.Mutex))
+		uri, err := workspace.ParseURI("file:///tmp/coronavirus.sql")
+		require.NoError(t, err)
 
 		h := NewTestHandler()
-		mock.EXPECT().Open(gomock.Eq("/tmp/coronavirus.sql")).Return(h, nil)
+		mock.EXPECT().Open(gomock.Eq(uri)).Return(h, nil)
 		broker.EXPECT().NextId().Return(uint32(1))
 
-		req := proto.OpenResourceRequest{Resource: "/tmp/coronavirus.sql"}
+		req := proto.OpenResourceRequest{Resource: "file:///tmp/coronavirus.sql"}
 		res, err := s.Open(ctx, &req)
 		require.NoError(t, err)
 		assert.NotNil(t, res)
@@ -97,7 +100,8 @@ func TestServerOpen(t *testing.T) {
 
 		mock.EXPECT().Open(gomock.Any()).Return(nil, errors.New("oopsie daisy"))
 
-		_, err := s.Open(ctx, new(proto.OpenResourceRequest))
+		req := proto.OpenResourceRequest{Resource: "file:///a"}
+		_, err := s.Open(ctx, &req)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "oopsie")
 	})
@@ -112,7 +116,7 @@ func TestServerOpen(t *testing.T) {
 		mock.EXPECT().Open(gomock.Any()).Return(h, nil)
 		broker.EXPECT().NextId().Return(nextID)
 
-		req := proto.OpenResourceRequest{Resource: "Caliu"}
+		req := proto.OpenResourceRequest{Resource: "file:///Caliu"}
 		res, err := s.Open(ctx, &req)
 		require.NoError(t, err)
 		require.NotNil(t, res)

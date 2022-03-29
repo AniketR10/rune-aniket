@@ -13,6 +13,7 @@ import (
 	"github.com/ernestrc/go-tui/proto"
 	prototest "github.com/ernestrc/go-tui/proto/test"
 	"github.com/ernestrc/go-tui/term"
+	"github.com/ernestrc/go-tui/workspace"
 	gomock "github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -34,10 +35,10 @@ func newTestServer(t *testing.T, ctrl *gomock.Controller) (*proto.MockMuxBroker,
 	return broker, ed, s
 }
 
-func expectEdit(t *testing.T, mock *MockEditor, resource, content string) {
+func expectEdit(t *testing.T, mock *MockEditor, resource workspace.URI, content string) {
 	mock.EXPECT().Edit(gomock.Any(), gomock.Any()).Times(1).
-		DoAndReturn(func(_name string, buf *cell.Buffer) (tui.Handler, error) {
-			assert.Contains(t, _name, resource)
+		DoAndReturn(func(_uri workspace.URI, buf *cell.Buffer) (tui.Handler, error) {
+			assert.Equal(t, resource, _uri)
 			assert.Equal(t, content, buf.String())
 			return handler.NewTestHandler(), nil
 		})
@@ -45,14 +46,13 @@ func expectEdit(t *testing.T, mock *MockEditor, resource, content string) {
 
 func callServerEdit(
 	t *testing.T, ctx context.Context, broker *proto.MockMuxBroker,
-	s *Server, nextID uint32, name, content string,
+	s *Server, nextID uint32, uri workspace.URI, content string,
 ) {
 	broker.EXPECT().NextId().Return(nextID).Times(1)
 
 	buf := cell.NewBuffer()
 	buf.WriteString(content)
-	req := proto.BufferToEditRequest(buf)
-	req.ResourceName = name
+	req := proto.NewEditRequest(uri, buf)
 
 	res, err := s.Edit(ctx, &req)
 	require.NoError(t, err)
@@ -64,23 +64,23 @@ func callServerEdit(
 func TestServerEdit(t *testing.T) {
 	nextID := uint32(99)
 	ctx := context.Background()
-	resourceName1 := "ULaptopNotLinux:@"
+	resource, err := workspace.ParseURI("file:///ULaptopNotLinux:@")
+	require.NoError(t, err)
 	bufContent1 := "ULaptopWillLinux:)"
 
 	t.Run("Edit is propagated to underlying Editor", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		broker, mock, s := newTestServer(t, ctrl)
-		expectEdit(t, mock, resourceName1, bufContent1)
-		callServerEdit(t, ctx, broker, s, nextID, resourceName1, bufContent1)
+		expectEdit(t, mock, resource, bufContent1)
+		callServerEdit(t, ctx, broker, s, nextID, resource, bufContent1)
 	})
 
 	t.Run("relative path is converted to absolute", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		broker, mock, s := newTestServer(t, ctrl)
-		expected, err := getFileID(resourceName1)
 		require.NoError(t, err)
-		expectEdit(t, mock, expected, bufContent1)
-		callServerEdit(t, ctx, broker, s, nextID, resourceName1, bufContent1)
+		expectEdit(t, mock, resource, bufContent1)
+		callServerEdit(t, ctx, broker, s, nextID, resource, bufContent1)
 	})
 
 	t.Run("bubbles up underlying's Editor Edit errors", func(t *testing.T) {
@@ -91,8 +91,7 @@ func TestServerEdit(t *testing.T) {
 			Return(nil, errors.New("NOLINUX")).
 			Times(1)
 
-		req := proto.BufferToEditRequest(cell.NewBuffer())
-		req.ResourceName = resourceName1
+		req := proto.NewEditRequest(resource, cell.NewBuffer())
 
 		res, err := s.Edit(ctx, &req)
 		require.Error(t, err)
@@ -128,7 +127,6 @@ func assertServerHandlerExitClose(
 	broker *proto.MockMuxBroker,
 ) {
 	resource := &TestHandler{}
-	name := "sup"
 	expectHandlerInvokeExit(t, handlerConn)
 
 	handlerConn.EXPECT().Close().Times(1).
@@ -139,10 +137,10 @@ func assertServerHandlerExitClose(
 	cancel()
 
 	// force server to store resource name and make an ID
-	s.Handle(ctx, Event{Type: EventTypeOpen, ResourceName: name, Resource: resource})
+	s.Handle(ctx, Event{Type: EventTypeOpen, URI: uri, Resource: resource})
 
 	s.editor.Lock()
-	h.Handle(ctx, Event{Type: EventTypeClose, ResourceName: name, Resource: resource})
+	h.Handle(ctx, Event{Type: EventTypeClose, URI: uri, Resource: resource})
 	s.editor.Unlock()
 
 	waitForMonitoringExit(quitCh)
@@ -254,6 +252,9 @@ func assertEqualLocations(t *testing.T, loc, expected LocationList) {
 }
 
 func TestServerSetLocationList(t *testing.T) {
+	resource, err := workspace.ParseURI("file:///go-tui")
+	require.NoError(t, err)
+
 	t.Run("calls underlying editor SetLocationList", func(t *testing.T) {
 		ctx := context.Background()
 		ctrl := gomock.NewController(t)
@@ -261,11 +262,10 @@ func TestServerSetLocationList(t *testing.T) {
 
 		broker, mock, s := newTestServer(t, ctrl)
 
-		name := "go-tui"
 		content := "main"
 		nextID := uint32(232)
-		expectEdit(t, mock, name, content)
-		callServerEdit(t, ctx, broker, s, nextID, name, content)
+		expectEdit(t, mock, resource, content)
+		callServerEdit(t, ctx, broker, s, nextID, resource, content)
 
 		locs := LocationSlice([]Location{{Message: "wsb: hold AMC", To: term.Coordinates{X: 3}}})
 		mock.EXPECT().SetLocationList(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).Times(1)
@@ -287,10 +287,9 @@ func TestServerSetLocationList(t *testing.T) {
 		require.NoError(t, err)
 		s := NewServer(broker, c, new(sync.Mutex))
 
-		name := "go-tui"
 		content := "main"
 		nextID := uint32(232)
-		callServerEdit(t, ctx, broker, s, nextID, name, content)
+		callServerEdit(t, ctx, broker, s, nextID, resource, content)
 
 		locs := []Location{
 			{From: term.Coordinates{X: 0, Y: 0}, To: term.Coordinates{X: 3, Y: 0}},
@@ -340,11 +339,12 @@ func TestServerSetCursor(t *testing.T) {
 
 		broker, mock, s := newTestServer(t, ctrl)
 
-		name := "SetCursorer"
+		resource, err := workspace.ParseURI("file:///SetCursorer")
+		require.NoError(t, err)
 		content := "Oh my"
 		nextID := uint32(12888)
-		expectEdit(t, mock, name, content)
-		callServerEdit(t, ctx, broker, s, nextID, name, content)
+		expectEdit(t, mock, resource, content)
+		callServerEdit(t, ctx, broker, s, nextID, resource, content)
 
 		pos := term.Coordinates{X: 4, Y: 5}
 		mock.EXPECT().SetCursor(gomock.Any(), gomock.Eq(pos)).Return(nil).Times(1)
@@ -367,10 +367,11 @@ func TestServerCursor(t *testing.T) {
 
 		broker, mock, s := newTestServer(t, ctrl)
 
-		name := "Cursorer"
+		resource, err := workspace.ParseURI("file:///Cursorer")
+		require.NoError(t, err)
 		nextID := uint32(12888)
-		expectEdit(t, mock, name, "")
-		callServerEdit(t, ctx, broker, s, nextID, name, "")
+		expectEdit(t, mock, resource, "")
+		callServerEdit(t, ctx, broker, s, nextID, resource, "")
 
 		pos := term.Coordinates{X: 4, Y: 5}
 		mock.EXPECT().Cursor(gomock.Any()).Return(pos, nil).Times(1)

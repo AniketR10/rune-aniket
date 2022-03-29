@@ -16,6 +16,7 @@ import (
 	"github.com/ernestrc/go-tui/term"
 	"github.com/ernestrc/go-tui/text"
 	testutil "github.com/ernestrc/go-tui/util/test"
+	"github.com/ernestrc/go-tui/workspace"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -39,16 +40,16 @@ func (t *testFileBuffer) Close() error {
 	return t.closeErr
 }
 
-func openTestFile(filePath string, buf *cell.Buffer, swapDir string, readOnly bool) (
-	text.FlusherCloser, error,
+func openTestFile(filePath workspace.URI, buf *cell.Buffer, swapDir workspace.URI, readOnly bool) (
+	workspace.FlusherCloser, error,
 ) {
 	return &testFileBuffer{}, nil
 }
 
-func recoverTestFile(filePath, swapFilePath string, buf *cell.Buffer) (
-	text.FlusherCloser, error,
+func recoverTestFile(filePath, swapFilePath workspace.URI, buf *cell.Buffer) (
+	workspace.FlusherCloser, error,
 ) {
-	return openTestFile(filePath, buf, "", false)
+	return openTestFile(filePath, buf, swapFilePath, false)
 }
 
 func withOpenFileStubs(opts ...text.Option) []text.Option {
@@ -338,7 +339,9 @@ EEEE`},
 	}
 	testutil.TestHandlerSequence(t, bh, 20, 10, cases)
 
-	nh, err := b.Open("bugz")
+	uri, err := workspace.ParseURI("file:///bugz")
+	require.NoError(t, err)
+	nh, err := b.Open(uri)
 	require.NoError(t, err)
 	focus, err = b.Focus()
 	require.NoError(t, err)
@@ -529,12 +532,16 @@ func TestMultipleFilesStartup(t *testing.T) {
 └──────────────────┘`},
 	}
 
+	file1, err := workspace.ParseURI("file:///cabin.go")
+	require.NoError(t, err)
+	file2, err := workspace.ParseURI("file:///wi.go")
+	require.NoError(t, err)
 	b := new(Ex)
 	opts := withOpenFileStubs(
-		text.WithFilepath("cabin.go"),
-		text.WithFilepath("wi.go"),
+		text.WithFile(file1),
+		text.WithFile(file2),
 	)
-	err := b.Init(text.Mock(),
+	err = b.Init(text.Mock(),
 		opts...,
 	)
 	require.NoError(t, err)
@@ -634,9 +641,13 @@ func TestExKeySequence(t *testing.T) {
 	var closeFns []func() error
 	fn := func(t *testing.T) tui.Handler {
 		b := new(Ex)
+		file1, err := workspace.ParseURI("file:///10k.go")
+		require.NoError(t, err)
+		file2, err := workspace.ParseURI("file:///button.go")
+		require.NoError(t, err)
 		opts := withOpenFileStubs(
-			text.WithFilepath("10k.go"),
-			text.WithFilepath("button.go"),
+			text.WithFile(file1),
+			text.WithFile(file2),
 			text.WithCommandEvent(testCommandEvent),
 			text.WithCommandSequenceBinding(handler.Sequence{
 				First: term.Event{Type: term.EventKey, Ch: 'g'},
@@ -648,7 +659,7 @@ func TestExKeySequence(t *testing.T) {
 			}, "bufferCloseAll"),
 			text.WithSequencerTimeout(10*time.Second),
 		)
-		err := b.Init(text.Mock(), opts...)
+		err = b.Init(text.Mock(), opts...)
 		require.NoError(t, err)
 		closeFns = append(closeFns, b.Close)
 		return b
@@ -707,7 +718,10 @@ func TestExExit(t *testing.T) {
 		h.Exit = true
 		h.Handled = true
 
-		tab, err := b.comp.Tab("a", "bleh", h)
+		uri, err := workspace.ParseURI("file:///bols")
+		require.NoError(t, err)
+
+		tab, err := b.comp.Tab(uri, "bleh", h)
 		require.NoError(t, err)
 
 		w, err := b.comp.Focus()

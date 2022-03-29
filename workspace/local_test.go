@@ -1,26 +1,89 @@
-package text
+package workspace
 
 import (
-	"errors"
 	"fmt"
-	"io"
-	"io/ioutil"
-	"math/rand"
-	"os"
-	"path"
-	"path/filepath"
 	"testing"
-	"time"
 
-	"github.com/ernestrc/go-tui/cell"
-	"github.com/ernestrc/go-tui/component"
-	"github.com/ernestrc/go-tui/term"
-	gomock "github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
-/* INTEGRATION TESTS */
+const sampleSnippet = `
+/*
+ * Check if the current buffer should be added to or removed from the list of
+ * diff buffers.
+ */
+	void
+diff_buf_adjust(win_T *win)
+{
+	win_T	*wp;
+	int		i;
+
+	if (!win->w_p_diff)
+	{
+	/* When there is no window showing a diff for this buffer, remove
+	 * it from the diffs. */
+	FOR_ALL_WINDOWS(wp)
+		if (wp->w_buffer == win->w_buffer && wp->w_p_diff)
+		break;
+	if (wp == NULL)
+	{
+		i = diff_buf_idx(win->w_buffer);
+		if (i != DB_COUNT)
+		{
+		curtab->tp_diffbuf[i] = NULL;
+		curtab->tp_diff_invalid = TRUE;
+		diff_redraw(TRUE);
+		}
+	}
+	}
+	else
+	diff_buf_add(win->w_buffer);
+} /* { */ `
+
+func TestSanitizeFilename(t *testing.T) {
+	tsuite := []struct {
+		in  string
+		out string
+	}{
+		{"", "."},
+		{"file.sql", "file.sql"},
+		{"/file.sql", "/file.sql"},
+		{"w\x00ps", "wps"},
+		{"RE\nADME.md\n", "README.md"},
+	}
+
+	for _, tcase := range tsuite {
+		out := sanitizeFilePath(tcase.in)
+		assert.Equal(t, tcase.out, out)
+	}
+}
+
+func TestDefaultLocalSwapDirectory(t *testing.T) {
+	tsuite := []struct {
+		file    string
+		wantDir string
+		wantErr bool
+	}{
+		{"other:///tmp/a.go", "", true},
+		{"file:///a.go", "file:///", false},
+		{"file:///tmp/a.go", "file:///tmp", false},
+	}
+
+	for _, tcase := range tsuite {
+		t.Run(fmt.Sprintf("DefaultLocalSwapDirecotyr of %s", tcase.file), func(t *testing.T) {
+			uri := URI{uri: tcase.file}
+			out, err := DefaultLocalSwapDirectory(uri)
+			if tcase.wantErr {
+				assert.Error(t, err)
+			} else {
+				assert.Equal(t, tcase.wantDir, out.String())
+			}
+		})
+	}
+}
+
+/* FIXME refactor to workspace struct first
+// INTEGRATION TESTS
 
 func newIntegrationTestCase(t *testing.T, endsInEOL bool) (
 	*cell.Buffer, *os.File, func(),
@@ -43,6 +106,14 @@ func newIntegrationTestCase(t *testing.T, endsInEOL bool) (
 	}
 }
 
+// refactor shim
+func openFile(
+	t *testing.T, filename string, buf *cell.Buffer, swapDir string, readOnly bool,
+) (FlusherCloser, error) {
+	file, err := LocalURI(filename)
+	require.NoError(t, err)
+}
+
 // tests FileBuffer with real os.File's. endsInEOL refers to the original file.
 func testFileBufferIntegration(t *testing.T, endsInEOL bool) {
 	t.Run("if file does not exist, create it upon Flush", func(t *testing.T) {
@@ -54,7 +125,7 @@ func testFileBufferIntegration(t *testing.T, endsInEOL bool) {
 		filename := file.Name()
 		require.NoError(t, os.Remove(filename))
 
-		f, err := NewFileBuffer(filename, buf, "", false)
+		f, err := openFile(filename, buf, "", false)
 		require.NoError(t, err)
 
 		_, err = os.Stat(filename)
@@ -75,7 +146,7 @@ func testFileBufferIntegration(t *testing.T, endsInEOL bool) {
 		filename := file.Name()
 		require.NoError(t, os.Remove(filename))
 
-		_, err = NewFileBuffer(filename, buf, "", true)
+		_, err = openFile(filename, buf, "", true)
 		require.Error(t, err)
 
 		_, err = os.Stat(filename)
@@ -91,7 +162,7 @@ func testFileBufferIntegration(t *testing.T, endsInEOL bool) {
 		ioutil.WriteFile(filename, []byte("blah"), 0000)
 		require.NoError(t, file.Close())
 
-		f, err := NewFileBuffer(filename, buf, "", true)
+		f, err := openFile(filename, buf, "", true)
 		require.NoError(t, err)
 		defer f.Close()
 
@@ -114,7 +185,7 @@ func testFileBufferIntegration(t *testing.T, endsInEOL bool) {
 		swapDir, err := ioutil.TempDir("", "")
 		require.NoError(t, err)
 
-		f, err := NewFileBuffer(filename, buf, swapDir, true)
+		f, err := openFile(filename, buf, swapDir, true)
 		require.NoError(t, err)
 		defer f.Close()
 
@@ -132,11 +203,11 @@ func testFileBufferIntegration(t *testing.T, endsInEOL bool) {
 		filename := file.Name()
 		require.NoError(t, file.Close())
 
-		f1, err := NewFileBuffer(filename, buf, "", false)
+		f1, err := openFile(filename, buf, "", false)
 		require.NoError(t, err)
 		defer f1.Close()
 
-		f2, err := NewFileBuffer(filename, buf, "", true)
+		f2, err := openFile(filename, buf, "", true)
 		require.NoError(t, err)
 		defer f2.Close()
 	})
@@ -149,15 +220,15 @@ func testFileBufferIntegration(t *testing.T, endsInEOL bool) {
 		filename := file.Name()
 		require.NoError(t, file.Close())
 
-		f1, err := NewFileBuffer(filename, buf, "", false)
+		f1, err := openFile(filename, buf, "", false)
 		require.NoError(t, err)
 
-		_, err = NewFileBuffer(filename, buf, "", false)
+		_, err = openFile(filename, buf, "", false)
 		require.Error(t, err)
 
 		assert.NoError(t, f1.Close())
 
-		f2, err := NewFileBuffer(filename, buf, "", false)
+		f2, err := openFile(filename, buf, "", false)
 		require.NoError(t, err)
 		assert.NoError(t, f2.Close())
 	})
@@ -173,7 +244,7 @@ func testFileBufferIntegration(t *testing.T, endsInEOL bool) {
 		require.NoError(t, err)
 		require.NoError(t, file.Close())
 
-		f, err := NewFileBuffer(filename, buf, "", false)
+		f, err := openFile(filename, buf, "", false)
 		require.NoError(t, err)
 
 		fileInfo, err := os.Stat(filename)
@@ -202,7 +273,7 @@ func testFileBufferIntegration(t *testing.T, endsInEOL bool) {
 
 		require.NoError(t, orig.Close())
 
-		f, err := NewFileBuffer(filename, buf, "", false)
+		f, err := openFile(filename, buf, "", false)
 		require.NoError(t, err)
 		require.NoError(t, f.Flush())
 		b, err := ioutil.ReadFile(filename)
@@ -231,7 +302,7 @@ func testFileBufferIntegration(t *testing.T, endsInEOL bool) {
 		rand.Seed(int64(time.Now().Nanosecond()))
 		filename := fmt.Sprintf("/tmp/mpo/tmp/tmp/tmp/tmp/%d.go", rand.Int())
 
-		f, err := NewFileBuffer(filename, buf, os.TempDir(), false)
+		f, err := openFile(filename, buf, os.TempDir(), false)
 		require.NoError(t, err)
 
 		_, err = os.Stat(filename)
@@ -252,7 +323,7 @@ func testFileBufferIntegration(t *testing.T, endsInEOL bool) {
 		_, err = os.Stat(swapFileName)
 		require.Error(t, err)
 
-		f, err := NewFileBuffer(file.Name(), b, swapDir, false)
+		f, err := openFile(file.Name(), b, swapDir, false)
 		require.NoError(t, err)
 
 		_, err = os.Stat(swapFileName)
@@ -268,7 +339,7 @@ func testFileBufferIntegration(t *testing.T, endsInEOL bool) {
 		b, file, cleanup := newIntegrationTestCase(t, endsInEOL)
 		defer cleanup()
 
-		f, err := NewFileBuffer(file.Name(), b, "", false)
+		f, err := openFile(file.Name(), b, "", false)
 		require.NoError(t, err)
 
 		defer f.Close()
@@ -294,7 +365,7 @@ func testFileBufferIntegration(t *testing.T, endsInEOL bool) {
 		b, file, cleanup := newIntegrationTestCase(t, endsInEOL)
 		defer cleanup()
 
-		f, err := NewFileBuffer(file.Name(), b, "", false)
+		f, err := openFile(file.Name(), b, "", false)
 		require.NoError(t, err)
 		defer f.Close()
 
@@ -315,11 +386,11 @@ func testFileBufferIntegration(t *testing.T, endsInEOL bool) {
 		swapDir, err := ioutil.TempDir("", "")
 		require.NoError(t, err)
 
-		f, err := NewFileBuffer(file.Name(), b, swapDir, false)
+		f, err := openFile(file.Name(), b, swapDir, false)
 		require.NoError(t, err)
 		defer f.Close()
 
-		_, err = NewFileBuffer(file.Name(), b, swapDir, false)
+		_, err = openFile(file.Name(), b, swapDir, false)
 		assert.Equal(t, ErrFileAlreadyOpen, err)
 	})
 }
@@ -364,7 +435,7 @@ func TestFileBufferRecover(t *testing.T) {
 		defer cleanup()
 
 		filepath, swapFilepath := file.Name(), swap.Name()
-		f, err := RecoverFileBuffer(filepath, swapFilepath, b)
+		f, err := openFile(filepath, swapFilepath, b)
 		require.NoError(t, err)
 		defer f.Close()
 
@@ -378,7 +449,7 @@ func TestFileBufferRecover(t *testing.T) {
 		swapFilepath := swap.Name()
 		swapFileName := path.Base(swapFilepath)
 		filepath := path.Join(path.Dir(swapFilepath), "my_actual_file"+swapFileName)
-		f, err := RecoverFileBuffer(filepath, swapFilepath, b)
+		f, err := openFile(filepath, swapFilepath, b)
 		require.NoError(t, err, filepath)
 		defer f.Close()
 
@@ -394,7 +465,7 @@ func TestFileBufferRecover(t *testing.T) {
 		file.Sync()
 
 		filepath, swapFilepath := file.Name(), swap.Name()
-		_, err := RecoverFileBuffer(filepath, swapFilepath, b)
+		_, err := openFile(filepath, swapFilepath, b)
 		require.Equal(t, ErrStaleData, err)
 	})
 
@@ -404,7 +475,7 @@ func TestFileBufferRecover(t *testing.T) {
 
 		swapDir := filepath.Dir(file.Name())
 
-		f1, err := NewFileBuffer(file.Name(), b, swapDir, false)
+		f1, err := openFile(file.Name(), b, swapDir, false)
 		require.NoError(t, err)
 		defer f1.Close()
 
@@ -412,7 +483,7 @@ func TestFileBufferRecover(t *testing.T) {
 		time.Sleep(10 * time.Millisecond)
 
 		b2 := cell.NewBuffer()
-		f2, err := RecoverFileBuffer(file.Name(), f1.swapFileName, b2)
+		f2, err := openFile(file.Name(), f1.swapFileName, b2)
 		require.NoError(t, err)
 		defer f2.Close()
 
@@ -420,12 +491,12 @@ func TestFileBufferRecover(t *testing.T) {
 
 		require.Equal(t, ErrStaleData, f1.Flush())
 
-		_, err = NewFileBuffer(file.Name(), b, swapDir, false)
+		_, err = openFile(file.Name(), b, swapDir, false)
 		require.Error(t, err)
 	})
 }
 
-/* UNIT TESTS */
+// UNIT TESTS
 
 // implements os.FileInfo
 type testFileInfo struct {
@@ -1089,56 +1160,4 @@ func testFileBufferFlushed(t *testing.T, newBuffer newBufferFunc) {
 		assert.True(t, f.Flushed())
 	})
 }
-
-func TestFileCursorIntegration(t *testing.T) {
-	tsuite := []struct {
-		description string
-		lastEOL     bool
-		test        func(t *testing.T, c *Cursor)
-	}{
-		{"does not move beyond line before last EOL", true, func(t *testing.T, cursor *Cursor) {
-			assert.True(t, cursor.MoveLastLine())
-			assert.Equal(t, term.Coordinates{Y: 31}, cursor.CursorAtScroll())
-			assert.False(t, cursor.MoveDown())
-		}},
-		{"does not move beyond last line", false, func(t *testing.T, cursor *Cursor) {
-			assert.True(t, cursor.MoveLastLine())
-			assert.Equal(t, term.Coordinates{Y: 31}, cursor.CursorAtScroll())
-			assert.False(t, cursor.MoveDown())
-		}},
-		{"is able to insert at last line + 1", false, func(t *testing.T, cursor *Cursor) {
-			assert.True(t, cursor.MoveLastLine())
-			assert.False(t, cursor.MoveDown())
-			cursor.InsertRowBelow()
-			assert.Equal(t, term.Coordinates{Y: 32}, cursor.CursorAtScroll())
-			assert.False(t, cursor.MoveDown())
-			assert.Equal(t, sampleSnippet+"\n", cursor.buffer().String())
-		}},
-		{"is able to insert at last EOL", true, func(t *testing.T, cursor *Cursor) {
-			assert.True(t, cursor.MoveLastLine())
-			assert.False(t, cursor.MoveDown())
-			cursor.InsertRowBelow()
-			assert.Equal(t, term.Coordinates{Y: 32}, cursor.CursorAtScroll())
-			assert.False(t, cursor.MoveDown())
-			assert.Equal(t, sampleSnippet+"\n", cursor.buffer().String())
-		}},
-	}
-
-	for _, tcase := range tsuite {
-		t.Run(tcase.description, func(t *testing.T) {
-			b, file, cleanup := newIntegrationTestCase(t, tcase.lastEOL)
-			defer cleanup()
-
-			scroll := component.NewScroll()
-			scroll.Resize(10, 10)
-			scroll.InitWithBuffer(b)
-			cursor := NewCursor(scroll)
-
-			// installs unix reader
-			_, err := NewFileBuffer(file.Name(), b, "", false)
-			require.NoError(t, err)
-
-			tcase.test(t, cursor)
-		})
-	}
-}
+*/

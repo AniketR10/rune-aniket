@@ -9,6 +9,7 @@ import (
 	"github.com/ernestrc/go-tui/plugin"
 	"github.com/ernestrc/go-tui/term"
 	"github.com/ernestrc/go-tui/text"
+	"github.com/ernestrc/go-tui/workspace"
 	"github.com/ernestrc/golang-internal-tools/lsp/protocol"
 	"github.com/ernestrc/golang-internal-tools/span"
 	"github.com/golang/mock/gomock"
@@ -17,7 +18,7 @@ import (
 )
 
 var (
-	filename1    = "wa_tup.go"
+	filename1    workspace.URI
 	filecontent1 = `package me.drton.jmavsim;
 public class	Rotor {
      sta  mtyp;
@@ -43,6 +44,14 @@ public class	Rotor {
 	}
 )
 
+func init() {
+	var err error
+	filename1, err = workspace.ParseURI("file:///wa_tup.go")
+	if err != nil {
+		panic(err)
+	}
+}
+
 func makePluginConfig() plugin.Config {
 	m := make(map[string]interface{})
 	return plugin.MapConfig(m)
@@ -65,10 +74,10 @@ func newTestLspHandler(
 	return ret
 }
 
-func expectDidOpen(t *testing.T, mock *MockServer, file, content string) {
+func expectDidOpen(t *testing.T, mock *MockServer, file workspace.URI, content string) {
 	expected := &protocol.DidOpenTextDocumentParams{
 		TextDocument: protocol.TextDocumentItem{
-			URI:        protocol.URIFromSpanURI(span.URIFromPath(file)),
+			URI:        protocol.URIFromSpanURI(span.URIFromPath(file.String())),
 			LanguageID: ".go",
 			Version:    1,
 			Text:       content,
@@ -82,14 +91,14 @@ func expectDidOpen(t *testing.T, mock *MockServer, file, content string) {
 }
 
 func expectDidChange(
-	t *testing.T, mock *MockServer, file string, version int32,
+	t *testing.T, mock *MockServer, file workspace.URI, version int32,
 	expectedEvents []protocol.TextDocumentContentChangeEvent,
 ) {
 	expected := &protocol.DidChangeTextDocumentParams{
 		TextDocument: protocol.VersionedTextDocumentIdentifier{
 			Version: version,
 			TextDocumentIdentifier: protocol.TextDocumentIdentifier{
-				URI: protocol.URIFromSpanURI(span.URIFromPath(file)),
+				URI: protocol.URIFromSpanURI(span.URIFromPath(file.String())),
 			},
 		},
 		ContentChanges: expectedEvents,
@@ -144,18 +153,18 @@ func expectAnyLocationList(
 
 func dispatchOpen(
 	t *testing.T, h *lspEditorHandler, server *MockServer, ed *text.MockEditor,
-	name, content string, tokenData []uint32, expectedListID string,
+	uri workspace.URI, content string, tokenData []uint32, expectedListID string,
 	expectedLocations []text.Location,
 ) {
 	var wg sync.WaitGroup
 	evOpen := text.Event{
-		Type:         text.EventTypeOpen,
-		ResourceName: name,
-		Content:      content,
-		Resource:     text.NewTestHandler(),
+		Type:     text.EventTypeOpen,
+		URI:      uri,
+		Content:  content,
+		Resource: text.NewTestHandler(),
 	}
 
-	expectDidOpen(t, server, name, content+"\n")
+	expectDidOpen(t, server, uri, content+"\n")
 	expectSemanticTokens(t, server, tokenData)
 	expectLocationList(t, ed, expectedListID, expectedLocations, &wg)
 	wg.Add(1)
@@ -165,19 +174,19 @@ func dispatchOpen(
 
 func dispatchFlush(
 	t *testing.T, h *lspEditorHandler, server *MockServer, ed *text.MockEditor,
-	name, content string, version int32, tokenData []uint32,
+	uri workspace.URI, content string, version int32, tokenData []uint32,
 	expectedListID string, expectedLocations []text.Location,
 ) {
 	var wg sync.WaitGroup
 	ev := text.Event{
-		Type:         text.EventTypeFlush,
-		ResourceName: name,
-		Content:      content,
-		Resource:     text.NewTestHandler(),
+		Type:     text.EventTypeFlush,
+		URI:      uri,
+		Content:  content,
+		Resource: text.NewTestHandler(),
 	}
 	changes := []protocol.TextDocumentContentChangeEvent{{Text: content + "\n"}}
 
-	expectDidChange(t, server, name, version, changes)
+	expectDidChange(t, server, uri, version, changes)
 	expectSemanticTokens(t, server, tokenData)
 	expectLocationList(t, ed, expectedListID, expectedLocations, &wg)
 	wg.Add(1)

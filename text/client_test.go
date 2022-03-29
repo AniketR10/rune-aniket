@@ -9,6 +9,7 @@ import (
 	"github.com/ernestrc/go-tui/proto"
 	prototest "github.com/ernestrc/go-tui/proto/test"
 	"github.com/ernestrc/go-tui/term"
+	"github.com/ernestrc/go-tui/workspace"
 	gomock "github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -26,7 +27,7 @@ func newTestClient(ctrl *gomock.Controller) (
 
 func expectClientEdit(
 	t *testing.T, mockCC *proto.MockClientConnInterface,
-	expectedContent string,
+	expectedContent string, uri workspace.URI,
 ) {
 	mockCC.EXPECT().
 		Invoke(gomock.Any(),
@@ -41,6 +42,7 @@ func expectClientEdit(
 
 			buf := proto.EditRequestToBuffer(editReq)
 			assert.Equal(t, expectedContent, buf.String())
+			assert.Equal(t, uri.String(), editReq.ResourceName.GetUri())
 
 			_, ok = reply.(*proto.EditResponse)
 			assert.True(t, ok)
@@ -50,19 +52,20 @@ func expectClientEdit(
 }
 
 func TestClientEdit(t *testing.T) {
-	resourceName1 := "54-46 Was My Number"
 	bufContent1 := "The Maytals"
 
 	t.Run("happy path", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		_, cc, c := newTestClient(ctrl)
+		uri, err := workspace.ParseURI("file:///tmp/hello")
+		require.NoError(t, err)
 
 		buf := cell.NewBuffer()
 		buf.WriteString(bufContent1)
 
-		expectClientEdit(t, cc, bufContent1)
+		expectClientEdit(t, cc, bufContent1, uri)
 
-		h, err := c.Edit(resourceName1, buf)
+		h, err := c.Edit(uri, buf)
 		require.NoError(t, err)
 		require.NotNil(t, h)
 	})
@@ -79,7 +82,7 @@ func TestClientEdit(t *testing.T) {
 			Times(1).
 			Return(errors.New("Would be a change of plan"))
 
-		h, err := c.Edit(resourceName1, cell.NewBuffer())
+		h, err := c.Edit(workspace.URI{}, cell.NewBuffer())
 		require.Error(t, err)
 		require.Nil(t, h)
 	})

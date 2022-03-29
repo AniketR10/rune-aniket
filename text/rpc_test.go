@@ -15,6 +15,7 @@ import (
 	"github.com/ernestrc/go-tui/handler"
 	"github.com/ernestrc/go-tui/proto"
 	"github.com/ernestrc/go-tui/term"
+	"github.com/ernestrc/go-tui/workspace"
 	gomock "github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -75,6 +76,8 @@ func expectInitialServerSubscribe(t *testing.T, mock *MockEditor) {
 }
 
 func TestClientServerIntegration(t *testing.T) {
+	uri, err := workspace.ParseURI("file:///test")
+	require.NoError(t, err)
 	t.Run("client through server calls underlying editor Edit", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
@@ -86,11 +89,11 @@ func TestClientServerIntegration(t *testing.T) {
 		client, closeFn := setupIntTest(t, b, s)
 		defer closeFn()
 
-		expectEdit(t, ed, "zion", "hero")
+		expectEdit(t, ed, uri, "hero")
 		buf := cell.NewBuffer()
 		buf.WriteString("hero")
 
-		_, err := client.Edit("zion", buf)
+		_, err := client.Edit(uri, buf)
 		require.NoError(t, err)
 	})
 
@@ -106,11 +109,11 @@ func TestClientServerIntegration(t *testing.T) {
 		defer closeFn()
 
 		ed.EXPECT().Editor(gomock.Any()).Times(1).
-			DoAndReturn(func(_name string) (tui.Handler, error) {
-				assert.Contains(t, _name, "zion")
+			DoAndReturn(func(_uri workspace.URI) (tui.Handler, error) {
+				assert.Equal(t, _uri, uri)
 				return handler.NewTestHandler(), nil
 			})
-		_, err := client.Editor("zion")
+		_, err := client.Editor(uri)
 		require.NoError(t, err)
 	})
 
@@ -129,7 +132,7 @@ func TestClientServerIntegration(t *testing.T) {
 			Return(nil, errors.New("The Upsetter")).
 			Times(1)
 
-		_, err := client.Edit("babylon", cell.NewBuffer())
+		_, err := client.Edit(uri, cell.NewBuffer())
 		require.Error(t, err)
 		assert.True(t, strings.Contains(err.Error(), "The Upsetter"))
 	})
@@ -147,14 +150,14 @@ func TestClientServerIntegration(t *testing.T) {
 				"Edit->EventTypeOpen",
 				EventTypeOpen,
 				func(t *testing.T, resourceName string, ed Editor, buf *cell.Buffer) {
-					ed.Edit(resourceName, buf)
+					ed.Edit(uri, buf)
 				}, nil, nil, nil,
 			},
 			{
 				"Edit->EventTypeEdit",
 				EventTypeEdit,
 				func(t *testing.T, resourceName string, ed Editor, buf *cell.Buffer) {
-					ed.Edit(resourceName, buf)
+					ed.Edit(uri, buf)
 					buf.WriteString(str1)
 				}, &term.Coordinates{}, &term.Coordinates{}, &str1,
 			},
@@ -163,7 +166,7 @@ func TestClientServerIntegration(t *testing.T) {
 				EventTypeEdit,
 				func(t *testing.T, resourceName string, ed Editor, buf *cell.Buffer) {
 					buf.WriteString(str1)
-					ed.Edit(resourceName, buf)
+					ed.Edit(uri, buf)
 					buf.DeleteRow(0)
 				}, &term.Coordinates{}, &term.Coordinates{Y: 1}, nil,
 			},
@@ -172,7 +175,7 @@ func TestClientServerIntegration(t *testing.T) {
 				EventTypeCursor,
 				func(t *testing.T, resourceName string, ed Editor, buf *cell.Buffer) {
 					buf.WriteString(str1)
-					h, err := ed.Edit(resourceName, buf)
+					h, err := ed.Edit(uri, buf)
 					assert.NoError(t, err)
 					h.Handle(term.Event{Ch: 'l'})
 				}, &term.Coordinates{}, &term.Coordinates{}, nil,
@@ -232,8 +235,8 @@ func TestClientServerIntegration(t *testing.T) {
 		client, closeFn := setupIntTest(t, b, s)
 		defer closeFn()
 
-		expectEdit(t, ed, "Tais", "")
-		h, err := client.Edit("Tais", cell.NewBuffer())
+		expectEdit(t, ed, uri, "")
+		h, err := client.Edit(uri, cell.NewBuffer())
 		require.NoError(t, err)
 
 		l := LocationSlice([]Location{loc2})
@@ -266,8 +269,8 @@ func TestClientServerIntegration(t *testing.T) {
 		defer closeFn()
 
 		buf := cell.NewBuffer()
-		expectEdit(t, ed, "locotron", "")
-		h, err := client.Edit("locotron", buf)
+		expectEdit(t, ed, uri, "")
+		h, err := client.Edit(uri, buf)
 		require.NoError(t, err)
 
 		w := client.CellEditor(h)
@@ -304,8 +307,8 @@ func TestClientServerIntegration(t *testing.T) {
 
 		buf := cell.NewBuffer()
 		buf.WriteString("guacamole")
-		expectEdit(t, ed, "sup'App", "guacamole")
-		h, err := client.Edit("sup'App", buf)
+		expectEdit(t, ed, uri, "guacamole")
+		h, err := client.Edit(uri, buf)
 		require.NoError(t, err)
 
 		ed.EXPECT().CellView(gomock.Any()).Return(NewCellView(buf.View())).Times(2)
@@ -350,7 +353,7 @@ func TestRPCTab(t *testing.T) {
 func TestRPCRegister(t *testing.T) {
 	var closeFns []func()
 
-	testRegister(t, func(ed Editor, mu *sync.Mutex, resName string) (*Component, Editor, error) {
+	testRegister(t, func(ed Editor, mu *sync.Mutex, res workspace.URI) (*Component, Editor, error) {
 		c, err := newTestComponentErr(ed)
 		if err != nil {
 			return nil, nil, err

@@ -7,5 +7,5 @@ package tui
 //go:generate mockgen -destination=./plugin/clipboard_gomock_test.go -package plugin -self_package github.com/ernestrc/go-tui/plugin -source ./plugin/clipboard.go
 //go:generate mockgen -destination=./text/event_handler_gomock.go -package text -self_package github.com/ernestrc/go-tui/text -source ./text/event_handler.go
 //go:generate mockgen -destination=./text/editor_gomock.go -package text -self_package github.com/ernestrc/go-tui/text -source ./text/editor.go
-//go:generate mockgen -destination=./text/file_gomock.go -package text -self_package github.com/ernestrc/go-tui/text -source ./text/file.go
+//go:generate mockgen -destination=./text/file_gomock.go -package text -self_package github.com/ernestrc/go-tui/text -source ./workspace/local.go
 //go:generate mockgen -destination=./text/event_handler_gomock.go -package text -self_package github.com/ernestrc/go-tui/text -source ./text/event_handler.go

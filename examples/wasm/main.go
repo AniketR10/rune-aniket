@@ -7,6 +7,7 @@ import (
 	"github.com/ernestrc/go-tui/cell"
 	"github.com/ernestrc/go-tui/handler"
 	"github.com/ernestrc/go-tui/text/vi"
+	"github.com/ernestrc/go-tui/workspace"
 )
 
 const text = `
@@ -32,7 +33,12 @@ func main() {
 	b := cell.NewBuffer()
 	b.WriteString(text)
 
-	editor := handler.NewFrame(vi.New(b, "go-tui-test"))
+	uri, err := workspace.ParseURI("vi:///test")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	editor := handler.NewFrame(vi.New(b, uri))
 
 	err = tui.Run(editor)
 	if err != nil {

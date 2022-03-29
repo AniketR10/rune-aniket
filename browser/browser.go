@@ -4,6 +4,7 @@ import (
 	"github.com/ernestrc/blue/datastore/document"
 	"github.com/ernestrc/go-tui"
 	"github.com/ernestrc/go-tui/term"
+	"github.com/ernestrc/go-tui/workspace"
 )
 
 // Handler adds Close to a tui.Handler.
@@ -61,7 +62,7 @@ type WindowManager interface {
 	// used with the rest of methods that take a browser.Handler.
 	// ID is used to uniquely identify a tab and name is used as a label
 	// to display it in the tab bar.
-	Tab(ID, name string, h Handler) (Handler, error)
+	Tab(uri workspace.URI, name string, h Handler) (Handler, error)
 }
 
 // Messenger is the interface that wraps methods to display
@@ -72,7 +73,7 @@ type Messenger interface {
 
 // ResourceOpener is the interface that wraps the method Open.
 type ResourceOpener interface {
-	Open(resource string) (Handler, error)
+	Open(resource workspace.URI) (Handler, error)
 }
 
 // EventPublisher is the interface that wraps the method PublishInterrupt.

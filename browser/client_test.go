@@ -11,6 +11,7 @@ import (
 	"github.com/ernestrc/go-tui/proto"
 	prototest "github.com/ernestrc/go-tui/proto/test"
 	"github.com/ernestrc/go-tui/term"
+	"github.com/ernestrc/go-tui/workspace"
 	gomock "github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -192,8 +193,8 @@ func TestClientSetMessage(t *testing.T) {
 	})
 }
 
-func expectResourceOpen(mockCC *proto.MockClientConnInterface, myResource string) {
-	in := &proto.OpenResourceRequest{Resource: myResource}
+func expectResourceOpen(mockCC *proto.MockClientConnInterface, myResource workspace.URI) {
+	in := &proto.OpenResourceRequest{Resource: myResource.String()}
 	out := new(proto.OpenResourceResponse)
 	mockCC.EXPECT().
 		Invoke(gomock.Any(),
@@ -209,11 +210,12 @@ func TestClientOpen(t *testing.T) {
 
 		client, mockCC, _ := newMockedClient(ctrl)
 
-		myResource := "fjkelwjfeklw"
+		myResource, err := workspace.ParseURI("file:///fjkelwjfeklw")
+		require.NoError(t, err)
 
 		expectResourceOpen(mockCC, myResource)
 
-		_, err := client.Open(myResource)
+		_, err = client.Open(myResource)
 		require.NoError(t, err)
 	})
 
@@ -225,7 +227,7 @@ func TestClientOpen(t *testing.T) {
 
 		expectInvokeError(mockCC)
 
-		_, err := client.Open("")
+		_, err := client.Open(workspace.URI{})
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "woopsie")
 	})

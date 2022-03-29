@@ -12,6 +12,7 @@ import (
 	"github.com/ernestrc/go-tui"
 	"github.com/ernestrc/go-tui/cell"
 	"github.com/ernestrc/go-tui/term"
+	"github.com/ernestrc/go-tui/workspace"
 	log "github.com/sirupsen/logrus"
 	grpc "google.golang.org/grpc"
 	"google.golang.org/grpc/connectivity"
@@ -36,9 +37,12 @@ func NewRawCellsResponse(cells [][]term.Cell) *RawCellsResponse {
 	return &RawCellsResponse{Rows: rawCellsToProtoCells(cells)}
 }
 
-// BufferToEditRequest converts a buf into an EditRequest.
-func BufferToEditRequest(buf *cell.Buffer) EditRequest {
-	return EditRequest{Buffer: rawCellsToProtoCells(buf.RawCells())}
+// NewEditRequests converts a buf into an EditRequest.
+func NewEditRequest(file workspace.URI, buf *cell.Buffer) EditRequest {
+	return EditRequest{
+		Buffer:       rawCellsToProtoCells(buf.RawCells()),
+		ResourceName: NewURI(file),
+	}
 }
 
 func rawCellsToProtoCells(cells [][]term.Cell) []*CellRow {
@@ -260,4 +264,14 @@ func AcceptAndServe(
 	wg.Wait()
 
 	return brokerID, srv
+}
+
+// NewURIFromProto maps proto.URI into a workspace.URI.
+func NewURIFromProto(u *URI) (workspace.URI, error) {
+	return workspace.ParseURI(u.GetUri())
+}
+
+// NewProtoURI maps a workspace.URI into a proto.URI.
+func NewURI(u workspace.URI) *URI {
+	return &URI{Uri: u.String()}
 }

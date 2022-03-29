@@ -9,9 +9,25 @@ import (
 	"github.com/ernestrc/go-tui/component"
 	"github.com/ernestrc/go-tui/proto"
 	"github.com/ernestrc/go-tui/term"
+	"github.com/ernestrc/go-tui/workspace"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+var (
+	uri      workspace.URI
+	protoURI proto.URI
+)
+
+func init() {
+	var err error
+	uri, err = workspace.ParseURI("file:///test")
+	if err != nil {
+		panic(err)
+	}
+
+	protoURI = *proto.NewURI(uri)
+}
 
 func makeEventIntegrationCase(content string) (in, out *cell.Buffer, cursor *Cursor) {
 	in, out = cell.NewBuffer(), cell.NewBuffer()
@@ -26,7 +42,7 @@ func makeEventIntegrationCase(content string) (in, out *cell.Buffer, cursor *Cur
 
 func TestIntegrationInsert(t *testing.T) {
 	in, out, cursor := makeEventIntegrationCase("")
-	in.Subscribe(CellSubscriber("", NewTestHandler(),
+	in.Subscribe(CellSubscriber(uri, NewTestHandler(),
 		FuncEventHandler(func(ctx context.Context, ev Event) bool {
 			out.InsertString(ev.Start, ev.Content)
 			return false
@@ -101,7 +117,7 @@ func main() {
 }`
 	in, out, cursor := makeEventIntegrationCase(content)
 
-	in.Subscribe(CellSubscriber("", NewTestHandler(),
+	in.Subscribe(CellSubscriber(uri, NewTestHandler(),
 		FuncEventHandler(func(ctx context.Context, ev Event) bool {
 			out.Delete(ev.Start, ev.End)
 			return false
@@ -128,7 +144,7 @@ func main() {
 }`
 	in, out, cursor := makeEventIntegrationCase(content)
 
-	in.Subscribe(CellSubscriber("", NewTestHandler(),
+	in.Subscribe(CellSubscriber(uri, NewTestHandler(),
 		FuncEventHandler(func(ctx context.Context, ev Event) bool {
 			switch ev.Type {
 			case EventTypeEdit:
@@ -165,41 +181,43 @@ func TestEventProto(t *testing.T) {
 	}{
 		{
 			in: Event{
-				Type:         EventTypeOpen,
-				ResourceName: "Aphex Twin",
-				Resource:     nil,
-				Content:      "Ageispolis",
+				Type:     EventTypeOpen,
+				URI:      uri,
+				Resource: nil,
+				Content:  "Ageispolis",
 			},
 			out: proto.EditorEvent{
 				Type:         proto.EditorEvent_TypeOpen,
-				ResourceName: "Aphex Twin",
+				ResourceName: &protoURI,
 				ResourceId:   0,
 				Content:      "Ageispolis",
 			},
 		},
 		{
 			in: Event{
-				Type:         EventTypeFocus,
-				ResourceName: "Ambient works",
-				Resource: Token{Token: browser.Token{ID: 2},
-					resource: "Ambient works"},
+				Type: EventTypeFocus,
+				URI:  uri,
+				Resource: Token{
+					Token:    browser.Token{ID: 2},
+					resource: uri,
+				},
 			},
 			out: proto.EditorEvent{
 				Type:         proto.EditorEvent_TypeFocus,
-				ResourceName: "Ambient works",
+				ResourceName: &protoURI,
 				ResourceId:   2,
 			},
 		},
 		{
 			in: Event{
-				Type:         EventTypeUnfocus,
-				ResourceName: "COVID",
+				Type: EventTypeUnfocus,
+				URI:  uri,
 				Resource: Token{Token: browser.Token{ID: 288},
-					resource: "COVID"},
+					resource: uri},
 			},
 			out: proto.EditorEvent{
 				Type:         proto.EditorEvent_TypeUnfocus,
-				ResourceName: "COVID",
+				ResourceName: &protoURI,
 				ResourceId:   288,
 			},
 		},
@@ -239,7 +257,7 @@ func TestEventProto(t *testing.T) {
 
 func assertEqualProto(t *testing.T, expected, actual proto.EditorEvent) {
 	assert.Equal(t, expected.Type, actual.Type)
-	assert.Equal(t, expected.ResourceName, actual.ResourceName)
+	assert.Equal(t, expected.ResourceName.GetUri(), actual.ResourceName.GetUri())
 	assert.Equal(t, expected.ResourceId, actual.ResourceId)
 	assert.Equal(t, expected.Start.GetX(), actual.Start.GetX())
 	assert.Equal(t, expected.Start.GetY(), actual.Start.GetY())
@@ -254,7 +272,7 @@ func assertEqualProto(t *testing.T, expected, actual proto.EditorEvent) {
 
 func assertEqualEvent(t *testing.T, expected, actual Event) {
 	assert.Equal(t, expected.Type, actual.Type)
-	assert.Equal(t, expected.ResourceName, actual.ResourceName)
+	assert.Equal(t, expected.URI.String(), actual.URI.String())
 	assert.Equal(t, expected.Resource, actual.Resource)
 	assert.Equal(t, expected.Start, actual.Start)
 	assert.Equal(t, expected.From, actual.From)

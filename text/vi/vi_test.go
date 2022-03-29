@@ -9,9 +9,20 @@ import (
 	"github.com/ernestrc/go-tui/component"
 	"github.com/ernestrc/go-tui/term"
 	"github.com/ernestrc/go-tui/text"
+	"github.com/ernestrc/go-tui/workspace"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+var uri workspace.URI
+
+func init() {
+	var err error
+	uri, err = workspace.ParseURI("file:///vi_test")
+	if err != nil {
+		panic(err)
+	}
+}
 
 type mockHandler struct {
 	text.MockHandler
@@ -165,7 +176,7 @@ func testViHandleSize(t *testing.T, width, height int) {
 	testHandle := func(t *testing.T, in, want string) {
 		buf := cell.NewBuffer()
 		buf.ReadFrom(strings.NewReader(snippet))
-		vi := New(buf, "")
+		vi := New(buf, uri)
 		mock := newMockHandler(buf)
 		vi.handler = mock
 		vi.Resize(width, height)
@@ -224,7 +235,7 @@ Love isn't love 'til you give it away.
 			buf := cell.NewBuffer()
 			buf.ReadFrom(strings.NewReader(undoFortune))
 
-			vi := New(buf, "")
+			vi := New(buf, uri)
 			vi.Resize(width, height)
 
 			for i := 0; i < 5; i++ {
@@ -248,7 +259,7 @@ Love isn't love 'til you give it away.
 		buf.ReadFrom(strings.NewReader(undoFortune))
 		prev := buf.String()
 
-		vi := New(buf, "")
+		vi := New(buf, uri)
 		vi.Resize(width, height)
 
 		for _, tcase := range suite {
@@ -293,7 +304,7 @@ Love isn't love 'til you give it away.
 func TestIntegrationInsertRowBelow(t *testing.T) {
 	buf := cell.NewBuffer()
 	buf.ReadFrom(strings.NewReader("hello"))
-	vi := New(buf, "")
+	vi := New(buf, uri)
 	vi.Resize(4, 4)
 
 	for _, ch := range "Goworld" {
@@ -350,7 +361,7 @@ func TestCopyDelete(t *testing.T) {
 			buf.ReadFrom(strings.NewReader(tcase.content))
 
 			mock := new(mockClip)
-			vi := New(buf, "", WithClipboard(mock))
+			vi := New(buf, uri, WithClipboard(mock))
 			vi.Resize(10, 10)
 
 			for _, ch := range tcase.in {

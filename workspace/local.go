@@ -1,11 +1,13 @@
-package text
+package workspace
 
 import (
 	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
+	"net/url"
 	"os"
+	"os/user"
 	"path"
 	"path/filepath"
 	"strings"
@@ -13,12 +15,16 @@ import (
 
 	"github.com/ernestrc/go-tui/cell"
 	"github.com/ernestrc/go-tui/term"
+	"github.com/ernestrc/go-tui/util"
 )
 
-const defaultFileMode os.FileMode = 0644
+const (
+	defaultFileMode os.FileMode = 0644
+	fileScheme                  = "file"
+)
 
-// OsFile is used to abstract *os.File.
-type OsFile interface {
+// osFile is used to abstract *os.File.
+type osFile interface {
 	Name() string
 	Stat() (os.FileInfo, error)
 	Sync() error
@@ -31,14 +37,14 @@ type OsFile interface {
 	io.Writer
 }
 
-type openFunc func(name string, flag int, perm os.FileMode) (OsFile, error)
+type openFunc func(name string, flag int, perm os.FileMode) (osFile, error)
 type removeFunc func(name string) error
 type renameFunc func(oldpath, newpath string) error
 type statFunc func(name string) (os.FileInfo, error)
 
-// FileBuffer is a struture which persists all updates to a swap file
+// localFile is a struture which persists all updates to a swap file
 // and exposes methods to effectively fsync the contents to disk.
-type FileBuffer struct {
+type localFile struct {
 	openFunc        openFunc
 	removeFunc      removeFunc
 	renameFunc      renameFunc
@@ -50,14 +56,14 @@ type FileBuffer struct {
 	readOnly        bool
 	infoModTime     time.Time
 	swapInfoModTime time.Time
-	orig, swap      OsFile
+	orig, swap      osFile
 	reader          cell.View
 	delayedError    error
 	unflushed       bool
 }
 
-// FileBuffer cell.Editor API should not be used publicly
-type fileBuf FileBuffer
+// localFile cell.Editor API should not be used publicly
+type fileBuf localFile
 
 func swapFileName(swapDir, filePath string) (string, string) {
 	if swapDir == "" {
@@ -66,7 +72,7 @@ func swapFileName(swapDir, filePath string) (string, string) {
 	return swapDir, path.Join(swapDir, fmt.Sprintf(".%s.swp", filepath.Base(filePath)))
 }
 
-func (f *FileBuffer) initSwap(swapDir string, orig OsFile, origPerms os.FileMode) (OsFile, error) {
+func (f *localFile) initSwap(swapDir string, orig osFile, origPerms os.FileMode) (osFile, error) {
 	swap, err := f.openFunc(f.swapFileName, os.O_RDWR|os.O_CREATE|os.O_EXCL, origPerms)
 	if err != nil {
 		if os.IsExist(err) {
@@ -98,7 +104,7 @@ func (f *FileBuffer) initSwap(swapDir string, orig OsFile, origPerms os.FileMode
 	return swap, nil
 }
 
-func validateFileType(file OsFile) (os.FileInfo, error) {
+func validateFileType(file osFile) (os.FileInfo, error) {
 	fileInfo, err := file.Stat()
 	if err != nil {
 		return nil, err
@@ -116,8 +122,8 @@ func validateFileType(file OsFile) (os.FileInfo, error) {
 	return nil, ErrFileIsNotRegular
 }
 
-func (f *FileBuffer) openFile(filePath string, flag int) (
-	file OsFile, fileInfo os.FileInfo, err error,
+func (f *localFile) openFile(filePath string, flag int) (
+	file osFile, fileInfo os.FileInfo, err error,
 ) {
 	file, err = f.openFunc(filePath, flag, 0000)
 	if err != nil {
@@ -130,7 +136,7 @@ func (f *FileBuffer) openFile(filePath string, flag int) (
 	return
 }
 
-func (f *FileBuffer) initFiles(filePath, swapDir string, readOnly bool) error {
+func (f *localFile) initFiles(filePath, swapDir string, readOnly bool) error {
 	flag := os.O_RDWR
 	if readOnly {
 		flag = os.O_RDONLY
@@ -186,7 +192,7 @@ func (f *FileBuffer) initFiles(filePath, swapDir string, readOnly bool) error {
 	return nil
 }
 
-func (f *FileBuffer) initBuffer(buf *cell.Buffer, file OsFile) (err error) {
+func (f *localFile) initBuffer(buf *cell.Buffer, file osFile) (err error) {
 	buf.Reset()
 	view := newUnixFileReader(buf.View())
 
@@ -212,7 +218,7 @@ func (f *FileBuffer) initBuffer(buf *cell.Buffer, file OsFile) (err error) {
 	return nil
 }
 
-func (f *FileBuffer) recoverFile(filePath, swapFilePath string, buf *cell.Buffer) error {
+func (f *localFile) recoverFile(filePath, swapFilePath string, buf *cell.Buffer) error {
 	var err error
 	f.orig, _, err = f.openFile(filePath, os.O_RDWR)
 	if err != nil && os.IsNotExist(err) {
@@ -250,13 +256,13 @@ func (f *FileBuffer) recoverFile(filePath, swapFilePath string, buf *cell.Buffer
 }
 
 func osOpenFileFunc() openFunc {
-	return func(path string, flag int, perm os.FileMode) (OsFile, error) {
+	return func(path string, flag int, perm os.FileMode) (osFile, error) {
 		return os.OpenFile(path, flag, perm)
 	}
 }
 
-func newOsFileBuffer() *FileBuffer {
-	ret := new(FileBuffer)
+func newOsLocalFile() *localFile {
+	ret := new(localFile)
 	ret.openFunc = osOpenFileFunc()
 	ret.removeFunc = os.Remove
 	ret.renameFunc = os.Rename
@@ -265,13 +271,42 @@ func newOsFileBuffer() *FileBuffer {
 	return ret
 }
 
-// RecoverFileBuffer recovers the file at filePath with the swap file swapFilePath.
-func RecoverFileBuffer(filePath, swapFilePath string, buf *cell.Buffer) (
-	*FileBuffer, error,
-) {
-	ret := newOsFileBuffer()
+// LocalPath attempts to return a unix path in the local system
+// or returns an error if URI could not be mapped to path.
+// This function returns an error if URI is empty.
+func LocalPath(u URI) (string, error) {
+	if u == (URI{}) {
+		return "", errors.New("empty URI")
+	}
+	return localPath(u)
+}
 
-	err := ret.recoverFile(filePath, swapFilePath, buf)
+func localPath(u URI) (string, error) {
+	url, err := url.ParseRequestURI(u.String())
+	if err != nil {
+		return "", fmt.Errorf("failed to parse URI: %s: %s", u.String(), err)
+	}
+	if url.Scheme != fileScheme {
+		return "", fmt.Errorf("non supported scheme: %s", url.Scheme)
+	}
+	return url.Path, nil
+}
+
+// recoverlocalFile recovers the file at filePath with the swap file swapFilePath.
+func recoverLocalFile(file, swapFile URI, buf *cell.Buffer) (
+	FlusherCloser, error,
+) {
+	ret := newOsLocalFile()
+	filePath, err := localPath(file)
+	if err != nil {
+		return nil, err
+	}
+	swapFilePath, err := localPath(swapFile)
+	if err != nil {
+		return nil, err
+	}
+
+	err = ret.recoverFile(filePath, swapFilePath, buf)
 	if err != nil {
 		return nil, err
 	}
@@ -281,10 +316,10 @@ func RecoverFileBuffer(filePath, swapFilePath string, buf *cell.Buffer) (
 // Init instantiates opens the file at filePath and initializes
 // buf with the contents of it. If swapDir is "", then filePath directory is
 // used as a swap directory
-func (f *FileBuffer) Init(
-	filePath string, buf *cell.Buffer, swapDir string, readOnly bool,
+func (f *localFile) init(
+	file string, buf *cell.Buffer, swapDir string, readOnly bool,
 ) error {
-	err := f.initFiles(filePath, swapDir, readOnly)
+	err := f.initFiles(file, swapDir, readOnly)
 	if err != nil {
 		return err
 	}
@@ -298,15 +333,21 @@ func (f *FileBuffer) Init(
 	return nil
 }
 
-// NewFileBuffer allocates store for a new FileBuffer and then calls Init.
-func NewFileBuffer(
-	filePath string, buf *cell.Buffer, swapDir string, readOnly bool,
-) (
-	*FileBuffer, error,
+// openLocalFile allocates store for a new localFile and then calls Init.
+func openLocalFile(file URI, buf *cell.Buffer, swapDir URI, readOnly bool) (
+	FlusherCloser, error,
 ) {
-	ret := newOsFileBuffer()
+	ret := newOsLocalFile()
+	filePath, err := localPath(file)
+	if err != nil {
+		return nil, err
+	}
+	swapDirPath, err := localPath(swapDir)
+	if err != nil {
+		return nil, err
+	}
 
-	err := ret.Init(filePath, buf, swapDir, readOnly)
+	err = ret.init(filePath, buf, swapDirPath, readOnly)
 	if err != nil {
 		return nil, err
 	}
@@ -363,7 +404,7 @@ func (f *fileBuf) OnDidEdit(from, to term.Coordinates, old string) {
 	return
 }
 
-func (f *FileBuffer) moveFile(sourcePath, destPath string) error {
+func (f *localFile) moveFile(sourcePath, destPath string) error {
 	err := f.renameFunc(sourcePath, destPath)
 	if err != nil {
 		return err
@@ -371,11 +412,11 @@ func (f *FileBuffer) moveFile(sourcePath, destPath string) error {
 	return nil
 }
 
-func (f *FileBuffer) touchFile() (err error) {
+func (f *localFile) touchFile() (err error) {
 	f.orig, err = f.openFunc(f.fileName, os.O_RDWR|os.O_CREATE|os.O_EXCL, defaultFileMode)
 	if err != nil {
-		// file was not created when instantiating this FileBuffer, but now
-		// file seems to be there so FileBuffer must be stale.
+		// file was not created when instantiating this localFile, but now
+		// file seems to be there so localFile must be stale.
 		if os.IsExist(err) {
 			err = ErrStaleData
 		}
@@ -385,13 +426,13 @@ func (f *FileBuffer) touchFile() (err error) {
 }
 
 // Flushed returns true if the contents of the Buffer have been flushed to file system.
-func (f *FileBuffer) Flushed() bool {
+func (f *localFile) Flushed() bool {
 	return !f.unflushed
 }
 
 // Flush saves the contents of the buffer to disk. If file was modified by some
 // other process, this method returns ErrStaleData.
-func (f *FileBuffer) Flush() error {
+func (f *localFile) Flush() error {
 	if f.swap == nil {
 		return ErrFileIsNotWritable
 	}
@@ -463,9 +504,9 @@ func (f *FileBuffer) Flush() error {
 }
 
 // Close should be called once when this structure is not to be used anymore.
-func (f *FileBuffer) Close() error {
+func (f *localFile) Close() error {
 	if f.fileName == "" {
-		return errors.New("trying to Close an uninitialized FileBuffer")
+		return errors.New("trying to Close an uninitialized localFile")
 	}
 
 	f.fileName = ""
@@ -500,4 +541,62 @@ func (f *FileBuffer) Close() error {
 	}
 
 	return nil
+}
+
+// LocalURI returns a URI that references the file at local path.
+func LocalURI(path string) (URI, error) {
+	absPath, err := extractAbsPath(path)
+	if err != nil {
+		return URI{}, err
+	}
+
+	return URI{
+		uri:  "file://" + absPath,
+		name: filepath.Base(absPath),
+	}, nil
+}
+
+func extractAbsPath(filename string) (string, error) {
+	usr, _ := user.Current()
+	dir := usr.HomeDir
+	if filename == "~" {
+		filename = dir
+	} else if strings.HasPrefix(filename, "~/") {
+		filename = filepath.Join(dir, filename[2:])
+	}
+	return filepath.Abs(filename)
+}
+
+func sanitizeFilePath(resource string) string {
+	resolvedPath, err := filepath.EvalSymlinks(resource)
+	if err != nil {
+		resolvedPath = filepath.Clean(resource)
+	}
+	return util.SanitizeLine(resolvedPath)
+}
+
+// DefaultLocalSwapFile returns a file's default swap directory in the
+// local file system.
+func DefaultLocalSwapFile(swapDir URI, file URI) (URI, error) {
+	filePath, err := LocalPath(file)
+	if err != nil {
+		return URI{}, err
+	}
+	swapDirPath, err := LocalPath(swapDir)
+	if err != nil {
+		return URI{}, err
+	}
+	_, swapFilePath := swapFileName(swapDirPath, filePath)
+	return LocalURI(swapFilePath)
+}
+
+// DefaultLocalSwapFile returns a file's default swap directory in the
+// local file system.
+func DefaultLocalSwapDirectory(file URI) (URI, error) {
+	filePath, err := LocalPath(file)
+	if err != nil {
+		return URI{}, err
+	}
+	_, swapFilePath := swapFileName(filepath.Dir(filePath), filePath)
+	return LocalURI(filepath.Dir(swapFilePath))
 }

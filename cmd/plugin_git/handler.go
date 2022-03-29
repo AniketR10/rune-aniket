@@ -19,6 +19,7 @@ import (
 	"github.com/ernestrc/go-tui/proto"
 	"github.com/ernestrc/go-tui/term"
 	"github.com/ernestrc/go-tui/text"
+	"github.com/ernestrc/go-tui/workspace"
 	log "github.com/sirupsen/logrus"
 	"github.com/sourcegraph/go-diff/diff"
 )
@@ -271,13 +272,13 @@ func (h *gitEditorHandler) initScroll(name string) {
 }
 
 // allow scroll to seek to same positions as editor buffer
-func (h *gitEditorHandler) setScrollMaxContent(ev text.Event) {
+func (h *gitEditorHandler) setScrollMaxContent(resourceName string, ev text.Event) {
 	rows := len(cell.StringToCells(ev.Content))
 	// best effort until #59 is resolved
 	rows *= 2
 	rows += 100
-	h.rows[ev.ResourceName] = rows
-	log.Debugf("setScrollMaxContent(%s): %d", ev.ResourceName, rows)
+	h.rows[resourceName] = rows
+	log.Debugf("setScrollMaxContent(%s): %d", ev.URI, rows)
 }
 
 func (h *gitEditorHandler) setScrollOffset(filename string, pos term.Coordinates) {
@@ -316,23 +317,28 @@ func (h *gitEditorHandler) handleEvents() {
 			log.Tracef("Handle(%#v)", ev.Type)
 		}
 
-		var err error
+		resourceName, err := workspace.LocalPath(ev.URI)
+		if err != nil {
+			log.Errorf("Handle(%#v): LocalPath: %v", ev.URI, err)
+			return
+		}
+
 		switch ev.Type {
 		case text.EventTypeEdit:
-			err = h.pushLastDiffLocations(ev.ResourceName, ev.Resource)
+			err = h.pushLastDiffLocations(resourceName, ev.Resource)
 		case text.EventTypeOpen:
-			h.setScrollOffset(ev.ResourceName, term.Coordinates{})
+			h.setScrollOffset(resourceName, term.Coordinates{})
 			fallthrough
 		case text.EventTypeFlush:
-			h.setScrollMaxContent(ev)
+			h.setScrollMaxContent(resourceName, ev)
 			fallthrough
 		case text.EventTypeFocus:
-			err = h.pushNewDiffLocations(ev.ResourceName, ev.Resource)
+			err = h.pushNewDiffLocations(resourceName, ev.Resource)
 		case text.EventTypeUnfocus:
 			h.resetScroll()
 			err = h.p.PublishInterrupt()
 		case text.EventTypeScroll:
-			h.setScrollOffset(ev.ResourceName, ev.Start)
+			h.setScrollOffset(resourceName, ev.Start)
 			err = h.p.PublishInterrupt()
 		}
 		if err != nil {

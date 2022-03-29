@@ -5,6 +5,7 @@ import (
 
 	"github.com/ernestrc/go-tui/cell"
 	"github.com/ernestrc/go-tui/term"
+	"github.com/ernestrc/go-tui/workspace"
 )
 
 type simpleEditor struct {
@@ -20,16 +21,16 @@ func SimpleEditor(wrap bool) Editor {
 	return ret
 }
 
-func (e *simpleEditor) Edit(name string, buf *cell.Buffer) (Handler, error) {
-	root := newSimpleEditor(buf, name, e.wrap)
-	return e.pub.PublishEdit(name, buf, root, &root.cursor), nil
+func (e *simpleEditor) Edit(file workspace.URI, buf *cell.Buffer) (Handler, error) {
+	root := newSimpleEditor(buf, file, e.wrap)
+	return e.pub.PublishEdit(file, buf, root, &root.cursor), nil
 }
 
 func (e *simpleEditor) SubscribeCommand(cmd string, h CommandHandler) error {
 	return errors.New("not supported")
 }
 
-func (e *simpleEditor) Editor(name string) (Handler, error) {
+func (e *simpleEditor) Editor(file workspace.URI) (Handler, error) {
 	return nil, errors.New("not supported")
 }
 

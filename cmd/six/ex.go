@@ -11,10 +11,11 @@ import (
 	"github.com/ernestrc/go-tui/browser"
 	"github.com/ernestrc/go-tui/cell"
 	"github.com/ernestrc/go-tui/component"
-	"github.com/ernestrc/go-tui/handler/search"
 	"github.com/ernestrc/go-tui/handler"
+	"github.com/ernestrc/go-tui/handler/search"
 	"github.com/ernestrc/go-tui/term"
 	"github.com/ernestrc/go-tui/text"
+	"github.com/ernestrc/go-tui/workspace"
 )
 
 var (
@@ -140,18 +141,18 @@ func (e *Ex) Init(ed text.Editor, opts ...text.Option) (err error) {
 	return
 }
 
-func (e *Ex) handlerInFocus() (string, text.Handler, bool) {
+func (e *Ex) handlerInFocus() (workspace.URI, text.Handler, bool) {
 	focus, _ := e.comp.Focus()
 	content, _ := focus.Content()
 	t, ok := content.(*browser.Tab)
 	if !ok {
-		return "", nil, false
+		return workspace.URI{}, nil, false
 	}
 	ret, ok := t.Handler().(text.Handler)
 	if !ok {
-		return "", nil, false
+		return workspace.URI{}, nil, false
 	}
-	return t.ID(), ret, true
+	return t.URI(), ret, true
 }
 
 func (e *Ex) moveFocusCursor(line int) error {
@@ -212,12 +213,12 @@ func (e *Ex) forceQuit(args ...string) (bool, error) {
 }
 
 func (e *Ex) dispatchCommand(cmd string, args ...string) (err error) {
-	name, h, ok := e.handlerInFocus()
+	uri, h, ok := e.handlerInFocus()
 	scmd := text.Command{
-		Name:         cmd,
-		Args:         args,
-		Resource:     h,
-		ResourceName: name,
+		Name:     cmd,
+		Args:     args,
+		Resource: h,
+		URI:      uri,
 	}
 	if ok {
 		scmd.Cursor.Content, _ = e.ed.Cursor(h)
@@ -248,8 +249,11 @@ func (e *Ex) editFile(args ...string) (bool, error) {
 	if len(args) == 0 {
 		return false, errors.New("Expected file name")
 	}
-	var h browser.Handler
-	h, err := e.comp.Open(args[0])
+	uri, err := workspace.LocalURI(args[0])
+	if err != nil {
+		return false, err
+	}
+	h, err := e.comp.Open(uri)
 	if err != nil {
 		return false, err
 	}

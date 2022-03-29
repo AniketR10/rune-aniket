@@ -56,10 +56,10 @@ func TestEventHandlerRPC(t *testing.T) {
 	content := "myContent"
 	cmdArgs := []string{"a", "b"}
 	ev := Event{
-		Type:         EventTypeFlush,
-		ResourceName: "myResourceName",
+		Type: EventTypeFlush,
+		URI:  uri,
 		Resource: Token{Token: browser.Token{ID: 1},
-			resource: "myResourceName"},
+			resource: uri},
 		Content: content,
 		cmdArgs: cmdArgs,
 	}

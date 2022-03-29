@@ -10,6 +10,7 @@ import (
 
 	"github.com/ernestrc/go-tui/browser"
 	"github.com/ernestrc/go-tui/proto"
+	"github.com/ernestrc/go-tui/workspace"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -25,7 +26,7 @@ type Server struct {
 	broker proto.MuxBroker
 
 	// editor handlers currently open
-	nameToID    map[string]uint32
+	uriToID     map[string]uint32
 	idToHandler map[uint32]Handler
 
 	clients map[uint64]io.Closer
@@ -55,16 +56,16 @@ func (s *serverEventHandler) Handle(ctx context.Context, ev Event) bool {
 	}
 
 	// only overwrite resource if this event is for a particular resource
-	if ev.ResourceName != "" {
-		brokerID, ok := s.s.nameToID[ev.ResourceName]
+	if ev.URI != (workspace.URI{}) {
+		brokerID, ok := s.s.uriToID[ev.URI.String()]
 		if !ok {
 			s.s.tryLog(log.WarnLevel, "(%p editor.Server): could NOT"+
 				"dispatch event %#v: handler with resource name %s not found",
-				s.s, ev.Type, ev.ResourceName)
+				s.s, ev.Type, ev.URI)
 			return true
 		}
 		token := browser.Token{ID: uint64(brokerID)}
-		ev.Resource = Token{Token: token, resource: ev.ResourceName}
+		ev.Resource = Token{Token: token, resource: ev.URI}
 	}
 
 	// do not hold mutex while waiting for I/O
@@ -92,7 +93,7 @@ func (s *Server) Init(
 	s.broker = broker
 	s.editor.Editor = editor
 	s.editor.Locker = lock
-	s.nameToID = make(map[string]uint32)
+	s.uriToID = make(map[string]uint32)
 	s.idToHandler = make(map[uint32]Handler)
 	s.clients = make(map[uint64]io.Closer)
 	s.failureTimeout = defaultFailureTimeout
@@ -102,14 +103,15 @@ func (s *Server) Init(
 	s.editor.SubscribeEditorEvents(evs, s)
 }
 
-func (s *Server) cleanResource(name string) {
-	handlerID, ok := s.nameToID[name]
+func (s *Server) cleanResource(resource workspace.URI) {
+	name := resource.String()
+	handlerID, ok := s.uriToID[name]
 	if !ok {
 		s.tryLog(log.DebugLevel,
 			"(%p editor.Server): could not find handler with resource name %s",
 			s, name)
 	} else {
-		delete(s.nameToID, name)
+		delete(s.uriToID, name)
 		delete(s.idToHandler, handlerID)
 		s.tryLog(log.DebugLevel,
 			"(%p editor.Server): cleaned handler %d with resource name %s",
@@ -121,15 +123,15 @@ func (s *Server) cleanResource(name string) {
 func (s *Server) Handle(ctx context.Context, ev Event) bool {
 	switch ev.Type {
 	case EventTypeOpen:
-		_, ok := s.nameToID[ev.ResourceName]
+		_, ok := s.uriToID[ev.URI.String()]
 		if !ok {
-			s.addNextHandlerResource(ev.ResourceName, ev.Resource)
+			s.addNextHandlerResource(ev.URI, ev.Resource)
 		}
 	case EventTypeClose:
 		go func() {
 			// wait for other events to be dispatched before cleaning resources
 			<-ctx.Done()
-			s.cleanResource(ev.ResourceName)
+			s.cleanResource(ev.URI)
 		}()
 	}
 
@@ -230,40 +232,36 @@ func (s *Server) dialHandler(handlerID uint32) (EventHandler, error) {
 	return h, nil
 }
 
-func (s *Server) addNextHandlerResource(name string, h Handler) uint32 {
+func (s *Server) addNextHandlerResource(resource workspace.URI, h Handler) uint32 {
 	handlerID := s.broker.NextId()
-	s.nameToID[name] = handlerID
+	s.uriToID[resource.String()] = handlerID
 	s.idToHandler[handlerID] = h
 	s.tryLog(log.TraceLevel,
 		"(%p editor.Server): stored handler with name='%s', id=%d",
-		s, name, handlerID)
+		s, resource.String(), handlerID)
 	return handlerID
 }
 
-func (s *Server) ensureAvailable(resourceName string, h Handler) uint32 {
-	handlerID, ok := s.nameToID[resourceName]
+func (s *Server) ensureAvailable(resource workspace.URI, h Handler) uint32 {
+	handlerID, ok := s.uriToID[resource.String()]
 	if !ok {
-		handlerID = s.addNextHandlerResource(resourceName, h)
+		handlerID = s.addNextHandlerResource(resource, h)
 	}
 	return handlerID
 }
 
 func (s *Server) editHandler(
-	resourceName string, get func(string) (Handler, error),
+	resource workspace.URI, get func(workspace.URI) (Handler, error),
 ) (uint32, error) {
 	s.editor.Lock()
 	defer s.editor.Unlock()
 
-	resourceName, err := getFileID(resourceName)
-	if err != nil {
-		return 0, err
-	}
-	h, err := get(resourceName)
+	h, err := get(resource)
 	if err != nil {
 		return 0, err
 	}
 
-	handlerID := s.ensureAvailable(resourceName, h)
+	handlerID := s.ensureAvailable(resource, h)
 
 	return handlerID, nil
 }
@@ -272,10 +270,15 @@ func (s *Server) editHandler(
 func (s *Server) Edit(ctx context.Context, in *proto.EditRequest) (
 	*proto.EditResponse, error,
 ) {
-	handlerID, err := s.editHandler(in.GetResourceName(),
-		func(resourceName string) (Handler, error) {
+	uri, err := proto.NewURIFromProto(in.GetResourceName())
+	if err != nil {
+		return nil, err
+	}
+
+	handlerID, err := s.editHandler(uri,
+		func(resource workspace.URI) (Handler, error) {
 			buf := proto.EditRequestToBuffer(in)
-			return s.editor.Edit(resourceName, buf)
+			return s.editor.Edit(uri, buf)
 		})
 	if err != nil {
 		return nil, err
@@ -288,9 +291,14 @@ func (s *Server) Edit(ctx context.Context, in *proto.EditRequest) (
 func (s *Server) Editor(ctx context.Context, in *proto.EditorRequest) (
 	*proto.EditorResponse, error,
 ) {
-	handlerID, err := s.editHandler(in.GetResourceName(),
-		func(resourceName string) (Handler, error) {
-			return s.editor.Editor.Editor(resourceName)
+	uri, err := proto.NewURIFromProto(in.GetResourceName())
+	if err != nil {
+		return nil, err
+	}
+
+	handlerID, err := s.editHandler(uri,
+		func(resource workspace.URI) (Handler, error) {
+			return s.editor.Editor.Editor(uri)
 		})
 	if err != nil {
 		return nil, err
@@ -342,13 +350,13 @@ func (s *Server) Register(ctx context.Context, in *proto.RegisterCommandRequest)
 
 	commander := FuncCommandHandler(func(cmd Command) bool {
 		return handler.Handle(context.Background(), Event{
-			Type:         eventTypeCommand,
-			Content:      cmd.Name,
-			Resource:     cmd.Resource,
-			ResourceName: cmd.ResourceName,
-			Start:        cmd.Cursor.Content,
-			From:         cmd.Cursor.Window,
-			cmdArgs:      cmd.Args,
+			Type:     eventTypeCommand,
+			Content:  cmd.Name,
+			Resource: cmd.Resource,
+			URI:      cmd.URI,
+			Start:    cmd.Cursor.Content,
+			From:     cmd.Cursor.Window,
+			cmdArgs:  cmd.Args,
 		})
 	})
 

@@ -71,7 +71,7 @@ func (b *editBuilder) applyEdits(eds []protocol.TextEdit) {
 	for _, ed := range eds {
 		err := b.applyEdit(ed)
 		if err != nil {
-			log.Errorf("lspEditorHandler.applyEdit(%s): %v", b.f.name, err)
+			log.Errorf("lspEditorHandler.applyEdit(%s): %v", b.f.uri, err)
 			return
 		}
 	}

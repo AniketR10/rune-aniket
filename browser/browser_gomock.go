@@ -11,6 +11,7 @@ import (
 	document "github.com/ernestrc/blue/datastore/document"
 	go_tui "github.com/ernestrc/go-tui"
 	term "github.com/ernestrc/go-tui/term"
+	workspace "github.com/ernestrc/go-tui/workspace"
 	gomock "github.com/golang/mock/gomock"
 )
 
@@ -294,18 +295,18 @@ func (mr *MockWindowManagerMockRecorder) Split(arg0, arg1 interface{}) *gomock.C
 }
 
 // Tab mocks base method.
-func (m *MockWindowManager) Tab(ID, name string, h Handler) (Handler, error) {
+func (m *MockWindowManager) Tab(uri workspace.URI, name string, h Handler) (Handler, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Tab", ID, name, h)
+	ret := m.ctrl.Call(m, "Tab", uri, name, h)
 	ret0, _ := ret[0].(Handler)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Tab indicates an expected call of Tab.
-func (mr *MockWindowManagerMockRecorder) Tab(ID, name, h interface{}) *gomock.Call {
+func (mr *MockWindowManagerMockRecorder) Tab(uri, name, h interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Tab", reflect.TypeOf((*MockWindowManager)(nil).Tab), ID, name, h)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Tab", reflect.TypeOf((*MockWindowManager)(nil).Tab), uri, name, h)
 }
 
 // MockMessenger is a mock of Messenger interface.
@@ -374,7 +375,7 @@ func (m *MockResourceOpener) EXPECT() *MockResourceOpenerMockRecorder {
 }
 
 // Open mocks base method.
-func (m *MockResourceOpener) Open(resource string) (Handler, error) {
+func (m *MockResourceOpener) Open(resource workspace.URI) (Handler, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Open", resource)
 	ret0, _ := ret[0].(Handler)
@@ -686,7 +687,7 @@ func (mr *MockBrowserMockRecorder) List(ctx, filters interface{}) *gomock.Call {
 }
 
 // Open mocks base method.
-func (m *MockBrowser) Open(resource string) (Handler, error) {
+func (m *MockBrowser) Open(resource workspace.URI) (Handler, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Open", resource)
 	ret0, _ := ret[0].(Handler)
@@ -763,18 +764,18 @@ func (mr *MockBrowserMockRecorder) Split(arg0, arg1 interface{}) *gomock.Call {
 }
 
 // Tab mocks base method.
-func (m *MockBrowser) Tab(ID, name string, h Handler) (Handler, error) {
+func (m *MockBrowser) Tab(uri workspace.URI, name string, h Handler) (Handler, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Tab", ID, name, h)
+	ret := m.ctrl.Call(m, "Tab", uri, name, h)
 	ret0, _ := ret[0].(Handler)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Tab indicates an expected call of Tab.
-func (mr *MockBrowserMockRecorder) Tab(ID, name, h interface{}) *gomock.Call {
+func (mr *MockBrowserMockRecorder) Tab(uri, name, h interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Tab", reflect.TypeOf((*MockBrowser)(nil).Tab), ID, name, h)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Tab", reflect.TypeOf((*MockBrowser)(nil).Tab), uri, name, h)
 }
 
 // Update mocks base method.

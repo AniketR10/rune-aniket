@@ -10,6 +10,7 @@ import (
 	go_tui "github.com/ernestrc/go-tui"
 	cell "github.com/ernestrc/go-tui/cell"
 	term "github.com/ernestrc/go-tui/term"
+	workspace "github.com/ernestrc/go-tui/workspace"
 	gomock "github.com/golang/mock/gomock"
 )
 
@@ -106,20 +107,6 @@ func (mr *MockHandlerMockRecorder) Man() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Man", reflect.TypeOf((*MockHandler)(nil).Man))
 }
 
-// Name mocks base method.
-func (m *MockHandler) Name() string {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Name")
-	ret0, _ := ret[0].(string)
-	return ret0
-}
-
-// Name indicates an expected call of Name.
-func (mr *MockHandlerMockRecorder) Name() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Name", reflect.TypeOf((*MockHandler)(nil).Name))
-}
-
 // Resize mocks base method.
 func (m *MockHandler) Resize(width, height int) {
 	m.ctrl.T.Helper()
@@ -130,6 +117,20 @@ func (m *MockHandler) Resize(width, height int) {
 func (mr *MockHandlerMockRecorder) Resize(width, height interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Resize", reflect.TypeOf((*MockHandler)(nil).Resize), width, height)
+}
+
+// Resource mocks base method.
+func (m *MockHandler) Resource() workspace.URI {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Resource")
+	ret0, _ := ret[0].(workspace.URI)
+	return ret0
+}
+
+// Resource indicates an expected call of Resource.
+func (mr *MockHandlerMockRecorder) Resource() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Resource", reflect.TypeOf((*MockHandler)(nil).Resource))
 }
 
 // MockCellEditor is a mock of CellEditor interface.
@@ -314,33 +315,33 @@ func (mr *MockEditorMockRecorder) Cursor(arg0 interface{}) *gomock.Call {
 }
 
 // Edit mocks base method.
-func (m *MockEditor) Edit(name string, buf *cell.Buffer) (Handler, error) {
+func (m *MockEditor) Edit(file workspace.URI, buf *cell.Buffer) (Handler, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Edit", name, buf)
+	ret := m.ctrl.Call(m, "Edit", file, buf)
 	ret0, _ := ret[0].(Handler)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Edit indicates an expected call of Edit.
-func (mr *MockEditorMockRecorder) Edit(name, buf interface{}) *gomock.Call {
+func (mr *MockEditorMockRecorder) Edit(file, buf interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Edit", reflect.TypeOf((*MockEditor)(nil).Edit), name, buf)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Edit", reflect.TypeOf((*MockEditor)(nil).Edit), file, buf)
 }
 
 // Editor mocks base method.
-func (m *MockEditor) Editor(name string) (Handler, error) {
+func (m *MockEditor) Editor(file workspace.URI) (Handler, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Editor", name)
+	ret := m.ctrl.Call(m, "Editor", file)
 	ret0, _ := ret[0].(Handler)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Editor indicates an expected call of Editor.
-func (mr *MockEditorMockRecorder) Editor(name interface{}) *gomock.Call {
+func (mr *MockEditorMockRecorder) Editor(file interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Editor", reflect.TypeOf((*MockEditor)(nil).Editor), name)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Editor", reflect.TypeOf((*MockEditor)(nil).Editor), file)
 }
 
 // MoveToNextLocation mocks base method.

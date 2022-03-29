@@ -19,14 +19,15 @@ import (
 
 	"github.com/ernestrc/go-tui/browser"
 	"github.com/ernestrc/go-tui/cell"
-	"github.com/ernestrc/go-tui/handler/search"
 	"github.com/ernestrc/go-tui/handler"
+	"github.com/ernestrc/go-tui/handler/search"
 	"github.com/ernestrc/go-tui/plugin"
 	plugutil "github.com/ernestrc/go-tui/plugin/util"
 	"github.com/ernestrc/go-tui/proto"
 	"github.com/ernestrc/go-tui/term"
 	"github.com/ernestrc/go-tui/text"
 	"github.com/ernestrc/go-tui/text/vi"
+	"github.com/ernestrc/go-tui/workspace"
 	"github.com/ernestrc/golang-internal-tools/fakenet"
 	"github.com/ernestrc/golang-internal-tools/jsonrpc2"
 	"github.com/ernestrc/golang-internal-tools/lsp"
@@ -115,7 +116,6 @@ var (
 )
 
 type file struct {
-	name       string
 	languageID string
 	handler    text.Handler
 	docID      protocol.TextDocumentIdentifier
@@ -637,17 +637,18 @@ func (h *lspEditorHandler) getServer(languageID string) (
 	return proc, true
 }
 
-func (h *lspEditorHandler) newFile(handler text.Handler, name, content string) *file {
+func (h *lspEditorHandler) newFile(
+	handler text.Handler, resource workspace.URI, content string,
+) *file {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
-	uri := span.URIFromPath(name)
+	uri := span.URIFromPath(resource.String())
 	languageID := filepath.Ext(uri.Filename())
 
 	f := &file{
 		_version: firstFileVersion,
 		handler:  handler,
-		name:     name,
 		docID: protocol.TextDocumentIdentifier{
 			URI: protocol.URIFromSpanURI(uri),
 		},
@@ -719,7 +720,7 @@ func (h *lspEditorHandler) handleGoTo(f *file, rs protocol.Range) {
 
 	err := h.ed.SetCursor(f.handler, pos)
 	if err != nil {
-		log.Errorf("lspEditorHandler.SetCursor(%s): %v", f.name, err)
+		log.Errorf("lspEditorHandler.SetCursor(%s): %v", f.uri, err)
 	}
 }
 
@@ -826,18 +827,18 @@ func (h *lspEditorHandler) semanticTokensFull(
 ) {
 	// NOTE: gopls does not pass semanticTokensProvider
 	if srv.caps.SemanticTokensProvider == nil && srv.langID != ".go" {
-		log.Debugf("lspEditorHandler.Server.SemanticTokensFull(%s): server does not support semantic tokens", f.name)
+		log.Debugf("lspEditorHandler.Server.SemanticTokensFull(%s): server does not support semantic tokens", f.uri)
 		return
 	}
 	version := h.getVersion(f)
 	p2 := protocol.SemanticTokensParams{TextDocument: f.docID}
 	resp, err := srv.srv.SemanticTokensFull(ctx, &p2)
 	if err != nil {
-		log.Errorf("lspEditorHandler.Server.SemanticTokensFull(%s): %v", f.name, err)
+		log.Errorf("lspEditorHandler.Server.SemanticTokensFull(%s): %v", f.uri, err)
 		return
 	}
 	if h.getVersion(f) != version {
-		log.Debugf("lspEditorHandler.Server.SemanticTokensFull(%s): stale result", f.name)
+		log.Debugf("lspEditorHandler.Server.SemanticTokensFull(%s): stale result", f.uri)
 		return
 	}
 
@@ -845,11 +846,11 @@ func (h *lspEditorHandler) semanticTokensFull(
 		resp.Data, h.semanticTypesAttr)
 	if log.IsLevelEnabled(log.TraceLevel) {
 		log.Tracef("lspEditorHandler.Server.SemanticTokensFull(%s): OK: %v: locations: %v",
-			f.name, resp.Data, locations)
+			f.uri, resp.Data, locations)
 	}
 	err = h.ed.SetLocationList(f.handler, h.semanticTokensListID, text.LocationSlice(locations))
 	if err != nil {
-		log.Errorf("lspEditorHandler.SetLocationList(%s): %v", f.name, err)
+		log.Errorf("lspEditorHandler.SetLocationList(%s): %v", f.uri, err)
 		return
 	}
 }
@@ -893,7 +894,7 @@ func (h *lspEditorHandler) callServerDidChange(
 	}
 	err := srv.srv.DidChange(ctx, &params)
 	if err != nil {
-		log.Errorf("lspEditorHandler.Server.DidChange(%s): %v", f.name, err)
+		log.Errorf("lspEditorHandler.Server.DidChange(%s): %v", f.uri, err)
 	}
 	return err
 }
@@ -922,7 +923,7 @@ func (h *lspEditorHandler) pushFullEdit(
 	err := h.callServerDidChange(ctx, srv, f, evts)
 	if err == nil {
 		log.Tracef("sent full file update: file=%v, length=%v, version=%v",
-			f.name, len(content), version)
+			f.uri, len(content), version)
 	}
 }
 
@@ -938,7 +939,7 @@ func (h *lspEditorHandler) sendIncrementalEdit(
 
 	log.Tracef("sending incremental file update: file=%v, length=%v, version=%v,"+
 		" rangeStart: %#v, rangeEnd: %#v, from=%#v, to=%#v: content='%s'",
-		f.name, len(content), version, rng.Start, rng.End, from, to, content)
+		f.uri, len(content), version, rng.Start, rng.End, from, to, content)
 
 	err := h.callServerDidChange(ctx, srv, f, evts)
 	if err != nil {
@@ -972,9 +973,9 @@ func (h *lspEditorHandler) handleFileFlush(ev text.Event) {
 	// lsp expects the last EOL
 	ev.Content += "\n"
 
-	f, ok := h.getFileWithName(ev.ResourceName)
+	f, ok := h.getFileWithName(ev.URI.String())
 	if !ok {
-		f = h.newFile(ev.Resource, ev.ResourceName, ev.Content)
+		f = h.newFile(ev.Resource, ev.URI, ev.Content)
 	}
 
 	srv, ok := h.getServer(f.languageID)
@@ -992,7 +993,7 @@ func (h *lspEditorHandler) handleFileEdit(ev text.Event) {
 	ctx := context.Background()
 	ctx, cancelFn := context.WithTimeout(ctx, h.rpcTimeout)
 	defer cancelFn()
-	f, ok := h.getFileWithName(ev.ResourceName)
+	f, ok := h.getFileWithName(ev.URI.String())
 	if !ok {
 		log.Warnf("lspEditorHandler: Received insert/delete event for an unknown file: %#v", ev)
 		return
@@ -1041,7 +1042,7 @@ func (h *lspEditorHandler) handleFileOpen(ev text.Event) {
 	// lsp expects the last EOL
 	ev.Content += "\n"
 
-	f := h.newFile(ev.Resource, ev.ResourceName, ev.Content)
+	f := h.newFile(ev.Resource, ev.URI, ev.Content)
 	srv, ok := h.getServer(f.languageID)
 	if !ok {
 		log.Warnf("could not connect to lsp server for %s: "+
@@ -1059,10 +1060,11 @@ func (h *lspEditorHandler) handleFileOpen(ev text.Event) {
 	}
 
 	if err := srv.srv.DidOpen(ctx, &p); err != nil {
-		log.Errorf("lspEditorHandler.Server.DidOpen(%s, %s): %v", f.name, f.languageID, err)
+		log.Errorf("lspEditorHandler.Server.DidOpen(%s, %s): %v",
+			f.uri, f.languageID, err)
 		return
 	}
-	log.Tracef("lspEditorHandler.Server.DidOpen(%s, %s)", f.name, f.languageID)
+	log.Tracef("lspEditorHandler.Server.DidOpen(%s, %s)", f.uri, f.languageID)
 
 	h.dispatchPendingDiagnostics(ctx, f.uri)
 	h.dispatchPendingGoTo(ctx, srv, f)
@@ -1070,8 +1072,8 @@ func (h *lspEditorHandler) handleFileOpen(ev text.Event) {
 	go h.semanticTokensFull(ctx, srv, f, h.getCells(f), ev.Content)
 }
 
-func (h *lspEditorHandler) removeFile(name string) (*file, bool) {
-	f, ok := h.getFileWithName(name)
+func (h *lspEditorHandler) removeFile(resource workspace.URI) (*file, bool) {
+	f, ok := h.getFileWithName(resource.String())
 	if !ok {
 		return nil, false
 	}
@@ -1104,7 +1106,7 @@ func (h *lspEditorHandler) handleFileClose(ev text.Event) {
 	ctx := context.Background()
 	ctx, cancelFn := context.WithTimeout(ctx, h.rpcTimeout)
 	defer cancelFn()
-	f, ok := h.removeFile(ev.ResourceName)
+	f, ok := h.removeFile(ev.URI)
 	if !ok {
 		log.Warnf("lspEditorHandler: Received close event for an unknown file: %#v", ev)
 		return
@@ -1175,7 +1177,7 @@ func (h *lspEditorHandler) handleDiagnostics(
 
 	if version != h.getVersion(f) {
 		log.Debugf("lspEditorHandler: Received diagnostic for "+
-			"outdated version of file '%s': %#v", f.name, version)
+			"outdated version of file '%s': %#v", f.uri, version)
 		// it seems that tsserver does not send any version info
 		// return
 	}
@@ -1189,7 +1191,7 @@ func (h *lspEditorHandler) setDiagnosticsLocationList(
 	locs := h.parseDiagnostics(f, ds)
 	err := h.ed.SetLocationList(f.handler, h.diagnosticListID, text.LocationSlice(locs))
 	if err != nil {
-		log.Errorf("lspEditorHandler.SetLocationList(%s): %v", f.name, err)
+		log.Errorf("lspEditorHandler.SetLocationList(%s): %v", f.uri, err)
 		return
 	}
 }
@@ -1212,19 +1214,23 @@ func (h *lspEditorHandler) HandleDiagnostics(
 }
 
 func (h *lspEditorHandler) goToLocation(win browser.Window, l protocol.Location) {
-	uri := l.URI.SpanURI()
-	filename := uri.Filename()
-
-	f, alreadyOpen := h.getFileWithName(filename)
+	spanUri := l.URI.SpanURI()
+	f, alreadyOpen := h.getFileWithName(spanUri.Filename())
 	if !alreadyOpen {
-		h.addPendingGoTo(uri, l.Range)
+		h.addPendingGoTo(spanUri, l.Range)
 	}
 
-	buf, err := h.o.Open(filename)
+	uri, err := workspace.ParseURI(string(spanUri))
+	if err != nil {
+		log.Tracef("lspEditorHandler.getToLocation(%#v): %s", spanUri, err)
+		return
+	}
+
+	buf, err := h.o.Open(uri)
 	if err != nil {
 		h.m.SetMessage("Open: %v", err)
-		log.Errorf("lspEditorHandler.Open(%s): %v", filename, err)
-		h.removePendingGoTo(uri)
+		log.Errorf("lspEditorHandler.Open(%s): %v", uri, err)
+		h.removePendingGoTo(spanUri)
 		return
 	}
 
@@ -1291,11 +1297,13 @@ func (h *lspEditorHandler) handleGoToDefinition(
 
 	locs, err := srv.srv.Definition(ctx, &p)
 	if err != nil {
-		log.Errorf("lspEditorHandler.Server.Definition(%s, %s): %v", f.name, f.languageID, err)
+		log.Errorf("lspEditorHandler.Server.Definition(%s, %s): %v",
+			f.uri, f.languageID, err)
 		return
 	}
 
-	log.Tracef("lspEditorHandler.Server.Definition(%s, %s): %#v", f.name, f.languageID, locs)
+	log.Tracef("lspEditorHandler.Server.Definition(%s, %s): %#v",
+		f.uri, f.languageID, locs)
 
 	if len(locs) == 0 {
 		return
@@ -1356,11 +1364,11 @@ func (h *lspEditorHandler) handleHover(
 
 	hover, err := srv.srv.Hover(ctx, &p)
 	if err != nil || hover == nil {
-		log.Errorf("lspEditorHandler.Server.Hover(%s, %s): %v", f.name, f.languageID, err)
+		log.Errorf("lspEditorHandler.Server.Hover(%s, %s): %v", f.uri, f.languageID, err)
 		return
 	}
 
-	log.Tracef("lspEditorHandler.Server.Hover(%s, %s): %#v", f.name, f.languageID, hover)
+	log.Tracef("lspEditorHandler.Server.Hover(%s, %s): %#v", f.uri, f.languageID, hover)
 
 	less := handler.NewLess(handler.DefaultLessConfig())
 	less.Buffer().WriteString(hover.Contents.Value)
@@ -1370,7 +1378,7 @@ func (h *lspEditorHandler) handleHover(
 	at, width, height := findBestFloatingWindowPosition(cursorAtWindow, width, height)
 	_, err = h.wm.Floating(bh, at, width, height)
 	if err != nil {
-		log.Errorf("lspEditorHandler.SplitHorizontalAbove(%s): %v", f.name, err)
+		log.Errorf("lspEditorHandler.SplitHorizontalAbove(%s): %v", f.uri, err)
 	}
 }
 
@@ -1454,7 +1462,7 @@ func (h *lspEditorHandler) browseLocations(
 	textToLocation := make(map[string]protocol.Location)
 	buf := cell.NewBuffer()
 	ed := vi.Editor()
-	edh, _ := ed.Edit("", buf)
+	edh, _ := ed.Edit(workspace.URI{}, buf)
 
 	for _, l := range locs {
 		uri := l.URI.SpanURI()
@@ -1603,11 +1611,11 @@ func (h *lspEditorHandler) handleReferences(
 
 	locs, err := srv.srv.References(ctx, &p)
 	if err != nil {
-		log.Errorf("lspEditorHandler.Server.References(%s, %s): %v", f.name, f.languageID, err)
+		log.Errorf("lspEditorHandler.Server.References(%s, %s): %v", f.uri, f.languageID, err)
 		return
 	}
 
-	log.Tracef("lspEditorHandler.Server.References(%s, %s): %#v", f.name, f.languageID, locs)
+	log.Tracef("lspEditorHandler.Server.References(%s, %s): %#v", f.uri, f.languageID, locs)
 
 	if len(locs) == 0 {
 		h.m.SetMessage("No references found")
@@ -1638,13 +1646,13 @@ func (h *lspEditorHandler) format(
 
 	edits, err := srv.srv.Formatting(ctx, &p)
 	if err != nil {
-		log.Errorf("lspEditorHandler.Server.Formatting(%s): %v", f.name, err)
+		log.Errorf("lspEditorHandler.Server.Formatting(%s): %v", f.uri, err)
 		return
 	}
 
 	// json marshaling is expensive
 	if log.IsLevelEnabled(log.TraceLevel) {
-		log.Tracef("lspEditorHandler.Server.Formatting(%s): %v", f.name, toJSONEdits(edits))
+		log.Tracef("lspEditorHandler.Server.Formatting(%s): %v", f.uri, toJSONEdits(edits))
 	}
 
 	builder.applyEdits(edits)
@@ -1661,7 +1669,7 @@ func (h *lspEditorHandler) organizeImports(
 	}
 	codeActions, err := srv.srv.CodeAction(ctx, &p)
 	if err != nil {
-		log.Errorf("lspEditorHandler.Server.CodeAction(%s): %v", f.name, err)
+		log.Errorf("lspEditorHandler.Server.CodeAction(%s): %v", f.uri, err)
 		return
 	}
 
@@ -1671,7 +1679,7 @@ func (h *lspEditorHandler) organizeImports(
 	for _, ca := range codeActions {
 		switch ca.Kind {
 		case protocol.Source, protocol.SourceOrganizeImports:
-			log.Tracef("lspEditorHandler.Server.CodeAction(%s): %v", f.name, ca.Edit)
+			log.Tracef("lspEditorHandler.Server.CodeAction(%s): %v", f.uri, ca.Edit)
 			builder.applyWorkspaceEdit(ca.Edit)
 		}
 	}
@@ -1726,19 +1734,19 @@ func (h *lspEditorHandler) HandleCommand(cmd text.Command) (exit bool) {
 			log.Errorf("lspEditorHandler.MoveToNextLocation(%s): %v", cmd.Name, err)
 		}
 	case commandHover:
-		h.handleHover(cmd.Cursor.Content, cmd.Cursor.Window, cmd.Resource, cmd.ResourceName)
+		h.handleHover(cmd.Cursor.Content, cmd.Cursor.Window, cmd.Resource, cmd.URI.String())
 	case commandGoToDef:
-		h.handleGoToDefinition(cmd.Cursor.Content, cmd.Resource, cmd.ResourceName)
+		h.handleGoToDefinition(cmd.Cursor.Content, cmd.Resource, cmd.URI.String())
 	case commandReferences:
-		h.handleReferences(cmd.Cursor.Content, cmd.Cursor.Window, cmd.Resource, cmd.ResourceName)
+		h.handleReferences(cmd.Cursor.Content, cmd.Cursor.Window, cmd.Resource, cmd.URI.String())
 	case commandAddWorkspace:
-		h.handleAddWorkspace(cmd.ResourceName, cmd.Args)
+		h.handleAddWorkspace(cmd.URI.String(), cmd.Args)
 	case commandRemoveWorkspace:
-		h.handleRemoveWorkspace(cmd.ResourceName, cmd.Args)
+		h.handleRemoveWorkspace(cmd.URI.String(), cmd.Args)
 	case commandFormat:
-		h.handleFormat(cmd.Resource, cmd.ResourceName, false)
+		h.handleFormat(cmd.Resource, cmd.URI.String(), false)
 	case commandOrganizeImports:
-		h.handleFormat(cmd.Resource, cmd.ResourceName, true)
+		h.handleFormat(cmd.Resource, cmd.URI.String(), true)
 	}
 
 	return false

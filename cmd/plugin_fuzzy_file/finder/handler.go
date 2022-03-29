@@ -18,6 +18,7 @@ import (
 	"github.com/ernestrc/go-tui/proto"
 	"github.com/ernestrc/go-tui/term"
 	"github.com/ernestrc/go-tui/text"
+	"github.com/ernestrc/go-tui/workspace"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -48,7 +49,7 @@ type fuzzyFinderHandler struct {
 	historyKey   term.Event
 	mu           sync.Mutex
 	cmdStr       string
-	getResource  func(string) (string, term.Coordinates)
+	getResource  func(string) (workspace.URI, term.Coordinates)
 	exec         *exec.Cmd
 	quitChan     chan struct{}
 	height       int
@@ -148,13 +149,15 @@ func (h *fuzzyFinderHandler) addSearchHistory(searchQuery string) {
 	}
 }
 
-func (h *fuzzyFinderHandler) open(resource string) (browser.Handler, error) {
+func (h *fuzzyFinderHandler) open(resource workspace.URI) (browser.Handler, error) {
 	h.mu.Unlock()
 	defer h.mu.Lock()
 	return h.f.Open(resource)
 }
 
-func (h *fuzzyFinderHandler) setContent(name string, b browser.Handler, pos term.Coordinates) error {
+func (h *fuzzyFinderHandler) setContent(
+	resource workspace.URI, b browser.Handler, pos term.Coordinates,
+) error {
 	h.mu.Unlock()
 	defer h.mu.Lock()
 	err := h.invokeWindow.SetContent(b)
@@ -166,7 +169,7 @@ func (h *fuzzyFinderHandler) setContent(name string, b browser.Handler, pos term
 		return nil
 	}
 
-	hed, err := h.ed.Editor(name)
+	hed, err := h.ed.Editor(resource)
 	if err != nil {
 		return err
 	}
@@ -283,7 +286,7 @@ func New(
 	grants []plugin.Grant, broker proto.MuxBroker,
 	invokeWindow browser.Window, config plugin.Config,
 	historyKey term.Event, command string,
-	getResource func(line string) (string, term.Coordinates),
+	getResource func(line string) (workspace.URI, term.Coordinates),
 ) (tui.Handler, error) {
 	h := new(fuzzyFinderHandler)
 	err := h.initGrants(broker, grants)

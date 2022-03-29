@@ -4,6 +4,7 @@ import (
 	"github.com/ernestrc/go-tui"
 	"github.com/ernestrc/go-tui/term"
 	"github.com/ernestrc/go-tui/text"
+	"github.com/ernestrc/go-tui/workspace"
 )
 
 type simpleHandler struct {
@@ -22,7 +23,7 @@ func Handler(l *List, fn func(string)) tui.Handler {
 	const wrap = true
 
 	buf := l.Buffer()
-	ed, _ := text.SimpleEditor(wrap).Edit("", buf)
+	ed, _ := text.SimpleEditor(wrap).Edit(workspace.URI{}, buf)
 	ret := simpleHandler{List: l, fn: fn, ed: ed}
 	return ret
 }

@@ -1,4 +1,4 @@
-package text
+package workspace
 
 import "errors"
 

@@ -12,6 +12,7 @@ import (
 	"github.com/ernestrc/go-tui/plugin"
 	"github.com/ernestrc/go-tui/term"
 	"github.com/ernestrc/go-tui/text"
+	"github.com/ernestrc/go-tui/workspace"
 	log "github.com/sirupsen/logrus"
 	yaml "gopkg.in/yaml.v3"
 )
@@ -547,7 +548,7 @@ func (c ideConfig) browserStartText() (text string) {
 	return
 }
 
-func (c ideConfig) browserSwapDir() (dir string) {
+func (c ideConfig) browserSwapDir() (dir *workspace.URI) {
 	dir = text.DefaultConfig().SwapDir
 	cfg, ok := c.browser()
 	if !ok {
@@ -560,7 +561,16 @@ func (c ideConfig) browserSwapDir() (dir string) {
 		}
 		return
 	}
-	dir = cfgDir
+	var localDir workspace.URI
+	localDir, err = workspace.LocalURI(cfgDir)
+	if err != nil {
+		if err != plugin.ErrNotFound {
+			c.errors["browser.swap_dir"] = err
+		}
+		return
+	}
+	dir = new(workspace.URI)
+	*dir = localDir
 	return
 }
 

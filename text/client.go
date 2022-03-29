@@ -11,6 +11,7 @@ import (
 	"github.com/ernestrc/go-tui/cell"
 	"github.com/ernestrc/go-tui/proto"
 	"github.com/ernestrc/go-tui/term"
+	"github.com/ernestrc/go-tui/workspace"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 )
@@ -23,11 +24,11 @@ const (
 // Token wraps a browser.Token to satisfy editor.Handler.
 type Token struct {
 	browser.Token
-	resource string
+	resource workspace.URI
 }
 
-// Name satisfies Handler
-func (t Token) Name() string {
+// Resource satisfies Handler
+func (t Token) Resource() workspace.URI {
 	return t.resource
 }
 
@@ -100,10 +101,9 @@ func (c *Client) serveHandler(h EventHandler) uint32 {
 }
 
 // Edit requests editor server to edit buf.
-func (c *Client) Edit(name string, buf *cell.Buffer) (Handler, error) {
+func (c *Client) Edit(file workspace.URI, buf *cell.Buffer) (Handler, error) {
 	ctx := context.Background()
-	req := proto.BufferToEditRequest(buf)
-	req.ResourceName = name
+	req := proto.NewEditRequest(file, buf)
 
 	res, err := c.ed.Edit(ctx, &req)
 	if err != nil {
@@ -111,13 +111,13 @@ func (c *Client) Edit(name string, buf *cell.Buffer) (Handler, error) {
 	}
 
 	token := browser.Token{ID: uint64(res.GetHandlerId())}
-	return Token{Token: token, resource: name}, nil
+	return Token{Token: token, resource: file}, nil
 }
 
 // Editor satisfies text.Editor
-func (c *Client) Editor(name string) (Handler, error) {
+func (c *Client) Editor(file workspace.URI) (Handler, error) {
 	ctx := context.Background()
-	req := proto.EditorRequest{ResourceName: name}
+	req := proto.EditorRequest{ResourceName: proto.NewURI(file)}
 
 	res, err := c.ed.Editor(ctx, &req)
 	if err != nil {
@@ -125,7 +125,7 @@ func (c *Client) Editor(name string) (Handler, error) {
 	}
 
 	token := browser.Token{ID: uint64(res.GetHandlerId())}
-	return Token{Token: token, resource: name}, nil
+	return Token{Token: token, resource: file}, nil
 }
 
 // SubscribeEditorEvents requests the editor server to subscribe sub to ev.
@@ -156,10 +156,10 @@ func (c *Client) SubscribeCommand(cmd string, h CommandHandler) error {
 	handlerID := c.serveHandler(
 		FuncEventHandler(func(ctx context.Context, ev Event) bool {
 			cmd := Command{
-				Name:         ev.Content,
-				Args:         ev.cmdArgs,
-				ResourceName: ev.ResourceName,
-				Resource:     ev.Resource,
+				Name:     ev.Content,
+				Args:     ev.cmdArgs,
+				URI:      ev.URI,
+				Resource: ev.Resource,
 			}
 			// as agreed with Server
 			cmd.Cursor.Content = ev.Start

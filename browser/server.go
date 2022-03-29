@@ -13,6 +13,7 @@ import (
 	"github.com/ernestrc/go-tui/proto"
 	"github.com/ernestrc/go-tui/term"
 	"github.com/ernestrc/go-tui/util"
+	"github.com/ernestrc/go-tui/workspace"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -363,12 +364,15 @@ func (s *Server) ensureAvailable(h Handler) uint64 {
 func (s *Server) Open(
 	ctx context.Context, req *proto.OpenResourceRequest,
 ) (*proto.OpenResourceResponse, error) {
-	resource := util.SanitizeResourceName(req.GetResource())
+	uri, err := workspace.ParseURI(req.GetResource())
+	if err != nil {
+		return nil, err
+	}
 
 	s.browser.Lock()
 	defer s.browser.Unlock()
 
-	h, err := s.browser.Open(resource)
+	h, err := s.browser.Open(uri)
 	if err != nil {
 		return nil, err
 	}
@@ -444,10 +448,14 @@ func (s *Server) Tab(
 ) (*proto.TabResponse, error) {
 	name := req.GetResourceName()
 	id := req.GetResourceId()
+	uri, err := workspace.ParseURI(id)
+	if err != nil {
+		return nil, err
+	}
 	var tab Handler
-	_, err := s.newRemoteResource(ctx, req.GetHandlerId(),
+	_, err = s.newRemoteResource(ctx, req.GetHandlerId(),
 		func(wm WindowManager, h Handler) (w Window, err error) {
-			tab, err = wm.Tab(id, name, h)
+			tab, err = wm.Tab(uri, name, h)
 			return nil, err
 		})
 	if err != nil {

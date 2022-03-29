@@ -19,6 +19,7 @@ import (
 	"github.com/ernestrc/go-tui/proto"
 	"github.com/ernestrc/go-tui/term"
 	"github.com/ernestrc/go-tui/text"
+	"github.com/ernestrc/go-tui/workspace"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -218,10 +219,10 @@ func (h *fileBarEditorHandler) getFileInfo(name string) *fileInfo {
 	return ret
 }
 
-func (h *fileBarEditorHandler) setScrollMaxContent(ev text.Event) {
+func (h *fileBarEditorHandler) setScrollMaxContent(resourceName string, ev text.Event) {
 	cells := cell.StringToCells(ev.Content)
-	h.getFileInfo(ev.ResourceName).cells = cells
-	log.Debugf("setScrollMaxContent(%s): %d", ev.ResourceName, len(cells))
+	h.getFileInfo(resourceName).cells = cells
+	log.Debugf("setScrollMaxContent(%s): %d", resourceName, len(cells))
 }
 
 func (h *fileBarEditorHandler) setCursorOffset(filename string, pos term.Coordinates) {
@@ -242,30 +243,35 @@ func (h *fileBarEditorHandler) handleEvents() {
 			log.Tracef("Handle(%#v)", ev.Type)
 		}
 
-		var err error
+		resourceName, err := workspace.LocalPath(ev.URI)
+		if err != nil {
+			log.Errorf("Handle(%#v): LocalPath: %v", ev.URI, err)
+			return
+		}
+
 		switch ev.Type {
 		case text.EventTypeEdit:
-			h.setFileDirty(ev.ResourceName, true)
-			h.refreshBarContent(ev.ResourceName)
+			h.setFileDirty(resourceName, true)
+			h.refreshBarContent(resourceName)
 			err = h.p.PublishInterrupt()
 		case text.EventTypeOpen:
-			h.setCursorOffset(ev.ResourceName, term.Coordinates{})
-			h.setScrollMaxContent(ev)
-			h.refreshBarContent(ev.ResourceName)
+			h.setCursorOffset(resourceName, term.Coordinates{})
+			h.setScrollMaxContent(resourceName, ev)
+			h.refreshBarContent(resourceName)
 			err = h.p.PublishInterrupt()
 		case text.EventTypeFlush:
-			h.setFileDirty(ev.ResourceName, false)
-			h.setScrollMaxContent(ev)
+			h.setFileDirty(resourceName, false)
+			h.setScrollMaxContent(resourceName, ev)
 			fallthrough
 		case text.EventTypeFocus:
-			h.refreshBarContent(ev.ResourceName)
+			h.refreshBarContent(resourceName)
 			err = h.p.PublishInterrupt()
 		case text.EventTypeUnfocus:
 			h.refreshBarContent("")
 			err = h.p.PublishInterrupt()
 		case text.EventTypeCursor:
-			h.setCursorOffset(ev.ResourceName, ev.From)
-			h.refreshBarContent(ev.ResourceName)
+			h.setCursorOffset(resourceName, ev.From)
+			h.refreshBarContent(resourceName)
 			err = h.p.PublishInterrupt()
 		}
 		if err != nil {

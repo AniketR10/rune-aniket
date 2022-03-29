@@ -15,6 +15,7 @@ import (
 	"github.com/ernestrc/go-tui/proto"
 	"github.com/ernestrc/go-tui/term"
 	"github.com/ernestrc/go-tui/text"
+	"github.com/ernestrc/go-tui/workspace"
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/goleak"
@@ -128,9 +129,10 @@ func TestIntegrationRPCBrowserDraw(t *testing.T) {
 }
 
 func TestRPCBrowserCloseLeak(t *testing.T) {
+	uri, err := workspace.ParseURI("file:///a")
+	require.NoError(t, err)
 	var destructor func()
-	_, b, err := newTestRPCBrowser(t, &destructor)(text.Mock(),
-		text.WithFilepath(""))
+	_, b, err := newTestRPCBrowser(t, &destructor)(text.Mock(), text.WithFile(uri))
 	require.NoError(t, err)
 	defer destructor()
 

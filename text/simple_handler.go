@@ -5,17 +5,18 @@ import (
 	"github.com/ernestrc/go-tui/cell"
 	"github.com/ernestrc/go-tui/handler"
 	"github.com/ernestrc/go-tui/term"
+	"github.com/ernestrc/go-tui/workspace"
 )
 
 type simpleEditorHandler struct {
 	buf      *cell.Buffer
 	less     handler.Less
-	resource string
+	resource workspace.URI
 	cursor   Cursor
 }
 
 func newSimpleEditor(
-	buf *cell.Buffer, resource string, wrap bool,
+	buf *cell.Buffer, resource workspace.URI, wrap bool,
 ) *simpleEditorHandler {
 	ret := new(simpleEditorHandler)
 	ret.init(buf, resource, wrap)
@@ -23,7 +24,7 @@ func newSimpleEditor(
 }
 
 func (h *simpleEditorHandler) init(
-	buf *cell.Buffer, resource string, wrap bool,
+	buf *cell.Buffer, resource workspace.URI, wrap bool,
 ) {
 	h.buf = buf
 	h.resource = resource
@@ -125,7 +126,7 @@ func (h *simpleEditorHandler) Close() error {
 	return nil
 }
 
-// Name satisfies editor.Handler.
-func (h *simpleEditorHandler) Name() string {
+// Resource satisfies editor.Handler.
+func (h *simpleEditorHandler) Resource() workspace.URI {
 	return h.resource
 }

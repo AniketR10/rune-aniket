@@ -19,7 +19,7 @@ func assertDefaultConfig(t *testing.T, cfg *ideConfig) {
 	assert.Equal(t, 4, cfg.browserTabspaces())
 	assert.NotZero(t, cfg.browserStartText())
 	assert.Equal(t, component.DefaultWindowManagerConfig(), cfg.windowManagerConfig())
-	assert.Equal(t, "", cfg.browserSwapDir())
+	assert.Nil(t, cfg.browserSwapDir())
 	assert.Equal(t, "", cfg.logOutputPath())
 	assert.Equal(t, logrus.ErrorLevel, cfg.logLevel())
 	assert.Equal(t, term.Output256, cfg.outputMode())
@@ -136,7 +136,7 @@ browser:
 
 	assert.Equal(t, 4, cfg.browserTabspaces())
 	assert.Equal(t, "abc", cfg.browserStartText())
-	assert.Equal(t, "/tmp/util", cfg.browserSwapDir())
+	assert.Equal(t, "file:///tmp/util", cfg.browserSwapDir().String())
 	assert.Equal(t, "/tmp/debug.log", cfg.logOutputPath())
 	assert.Equal(t, logrus.TraceLevel, cfg.logLevel())
 	assert.Equal(t, term.Output256, cfg.outputMode())

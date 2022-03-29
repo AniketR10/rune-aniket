@@ -6,6 +6,7 @@ import (
 	"github.com/ernestrc/go-tui/cell"
 	"github.com/ernestrc/go-tui/term"
 	"github.com/ernestrc/go-tui/text"
+	"github.com/ernestrc/go-tui/workspace"
 )
 
 type viEditor struct {
@@ -20,11 +21,11 @@ func Editor(opts ...Option) text.Editor {
 	return ret
 }
 
-func (e *viEditor) Edit(name string, buf *cell.Buffer) (text.Handler, error) {
-	root := New(buf, name, e.opts...)
+func (e *viEditor) Edit(file workspace.URI, buf *cell.Buffer) (text.Handler, error) {
+	root := New(buf, file, e.opts...)
 	// publisher does not mutate cursor and it should never do so
 	cursor := root.cursor
-	return e.Publisher.PublishEdit(name, buf, root, cursor), nil
+	return e.Publisher.PublishEdit(file, buf, root, cursor), nil
 }
 
 // SubscribeCommand is not supported.
@@ -33,7 +34,7 @@ func (e *viEditor) SubscribeCommand(cmd string, h text.CommandHandler) error {
 }
 
 // Editor is not supported
-func (e *viEditor) Editor(name string) (text.Handler, error) {
+func (e *viEditor) Editor(file workspace.URI) (text.Handler, error) {
 	// NOTE: it would be dead code
 	return nil, errors.New("not supported")
 }

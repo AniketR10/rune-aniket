@@ -13,6 +13,7 @@ import (
 	plugutil "github.com/ernestrc/go-tui/plugin/util"
 	"github.com/ernestrc/go-tui/proto"
 	"github.com/ernestrc/go-tui/term"
+	"github.com/ernestrc/go-tui/workspace"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -20,12 +21,14 @@ const defaultCommand = `grep -n -r "" .`
 
 var defaultHistoryKey = term.Event{Type: term.EventKey, Key: term.KeyCtrlBackslash}
 
-func parseLine(data string) (string, term.Coordinates) {
+func parseLine(data string) (workspace.URI, term.Coordinates) {
 	// NOTE: if ag breaks this or there's an edge case that it's not covered
 	// let it panic so we catch it early and fix it
 	chunks := strings.Split(data, ":")
 	y, _ := strconv.Atoi(chunks[1])
-	return chunks[0], term.Coordinates{Y: y - 1}
+	name := chunks[0]
+	uri, _ := workspace.LocalURI(name)
+	return uri, term.Coordinates{Y: y - 1}
 }
 
 func newHandler(grants []plugin.Grant, broker proto.MuxBroker,

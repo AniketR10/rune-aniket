@@ -77,7 +77,7 @@ func makeFile() *file {
 	docID := protocol.TextDocumentIdentifier{
 		URI: protocol.URIFromSpanURI(uri),
 	}
-	return &file{uri: uri, docID: docID, name: name}
+	return &file{uri: uri, docID: docID}
 }
 
 func TestApplyEdits(t *testing.T) {

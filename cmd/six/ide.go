@@ -11,6 +11,7 @@ import (
 	"github.com/ernestrc/go-tui/term"
 	"github.com/ernestrc/go-tui/text"
 	"github.com/ernestrc/go-tui/text/vi"
+	"github.com/ernestrc/go-tui/workspace"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -69,11 +70,19 @@ func (i *IDE) init(cfgfilename, recfilename string, filenames ...string) error {
 	pluginOpts := make([]plugin.Option, 0)
 
 	if recfilename != "" {
-		opts = append(opts, text.WithRecoveryFile(recfilename))
+		recFile, err := workspace.LocalURI(recfilename)
+		if err != nil {
+			return err
+		}
+		opts = append(opts, text.WithRecoveryFile(recFile))
 	}
 
 	for _, filename := range filenames {
-		opts = append(opts, text.WithFilepath(filename))
+		file, err := workspace.LocalURI(filename)
+		if err != nil {
+			return err
+		}
+		opts = append(opts, text.WithFile(file))
 	}
 
 	opts = append(opts,
@@ -100,8 +109,8 @@ func (i *IDE) init(cfgfilename, recfilename string, filenames ...string) error {
 		}
 	}
 
-	if i.ideConfig.browserSwapDir() != "" {
-		opts = append(opts, text.WithSwapDir(i.ideConfig.browserSwapDir()))
+	if i.ideConfig.browserSwapDir() != nil {
+		opts = append(opts, text.WithSwapDir(*i.ideConfig.browserSwapDir()))
 	}
 
 	viOpts = append(viOpts,

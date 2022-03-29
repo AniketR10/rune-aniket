@@ -12,6 +12,7 @@ import (
 	"github.com/ernestrc/go-tui/proto"
 	"github.com/ernestrc/go-tui/term"
 	"github.com/ernestrc/go-tui/text"
+	"github.com/ernestrc/go-tui/workspace"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 )
@@ -42,6 +43,9 @@ func TestIntegrationRace(t *testing.T) {
 	edMock.EXPECT().SubscribeEditorEvents(gomock.Any(), gomock.Any()).Times(1)
 	resources := MergeResourceMap(BrowserResources(mock), EditorResources(edMock))
 	resources[PermissionClipboard] = NewClipboardManager()
+
+	uri, err := workspace.ParseURI("file:///tmp/test")
+	require.NoError(t, err)
 
 	// plugin manager serves each permission on a different grantID
 	perms := map[Permission]uint32{
@@ -92,7 +96,7 @@ func TestIntegrationRace(t *testing.T) {
 		}, func(ed *text.MockEditorMockRecorder, mock *browser.MockBrowserMockRecorder) *gomock.Call {
 			return mock.Tab(gomock.Any(), gomock.Any(), gomock.Any()).Return(h, nil)
 		}, func(ifc interface{}) error {
-			_, err := ifc.(browser.WindowManager).Tab("", "", h)
+			_, err := ifc.(browser.WindowManager).Tab(uri, "", h)
 			return err
 		}},
 		{PermissionBrowserWindowManager, func(token uint32, broker proto.MuxBroker) (interface{}, error) {
@@ -108,7 +112,7 @@ func TestIntegrationRace(t *testing.T) {
 		}, func(ed *text.MockEditorMockRecorder, mock *browser.MockBrowserMockRecorder) *gomock.Call {
 			return mock.Open(gomock.Any()).Return(h, nil)
 		}, func(ifc interface{}) error {
-			_, err := ifc.(browser.ResourceOpener).Open("")
+			_, err := ifc.(browser.ResourceOpener).Open(uri)
 			return err
 		}},
 		{PermissionBrowserMessenger, func(token uint32, broker proto.MuxBroker) (interface{}, error) {
@@ -130,7 +134,7 @@ func TestIntegrationRace(t *testing.T) {
 		}, func(ed *text.MockEditorMockRecorder, mock *browser.MockBrowserMockRecorder) *gomock.Call {
 			return ed.Edit(gomock.Any(), gomock.Any()).Return(nil, nil)
 		}, func(ifc interface{}) error {
-			_, err := ifc.(text.Editor).Edit("", cell.NewBuffer())
+			_, err := ifc.(text.Editor).Edit(uri, cell.NewBuffer())
 			return err
 		}},
 		{PermissionEditor, func(token uint32, broker proto.MuxBroker) (interface{}, error) {
@@ -149,7 +153,7 @@ func TestIntegrationRace(t *testing.T) {
 			return ed.SetCursor(gomock.Any(), gomock.Any()).Return(nil)
 		}, func(ifc interface{}) error {
 			// force cache token
-			h, err := ifc.(text.Editor).Edit("", cell.NewBuffer())
+			h, err := ifc.(text.Editor).Edit(uri, cell.NewBuffer())
 			if err != nil {
 				return err
 			}
@@ -162,7 +166,7 @@ func TestIntegrationRace(t *testing.T) {
 			return ed.Cursor(gomock.Any()).Return(term.Coordinates{}, nil)
 		}, func(ifc interface{}) error {
 			// force cache token
-			h, err := ifc.(text.Editor).Edit("", cell.NewBuffer())
+			h, err := ifc.(text.Editor).Edit(uri, cell.NewBuffer())
 			if err != nil {
 				return err
 			}

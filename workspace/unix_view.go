@@ -1,4 +1,4 @@
-package text
+package workspace
 
 import (
 	"github.com/ernestrc/go-tui/cell"

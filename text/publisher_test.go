@@ -7,6 +7,7 @@ import (
 	"github.com/ernestrc/go-tui/cell"
 	"github.com/ernestrc/go-tui/component"
 	"github.com/ernestrc/go-tui/term"
+	"github.com/ernestrc/go-tui/workspace"
 	gomock "github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -28,25 +29,26 @@ func newMock(ctrl *gomock.Controller) *MockHandler {
 }
 
 func TestPublisher(t *testing.T) {
+	uri, err := workspace.ParseURI("file:///Teamshares")
+	require.NoError(t, err)
 	t.Run("publishes EventTypeOpen when PublishEdit is called", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 
 		pub := NewPublisher()
 		content := "1. She interviews"
-		name := "Teamshares"
 
 		var eventHandler Handler
 		pub.SubscribeEditorEvents([]EventType{EventTypeOpen},
 			FuncEventHandler(func(ctx context.Context, ev Event) bool {
 				assert.Equal(t, EventTypeOpen, ev.Type)
 				assert.Equal(t, content, ev.Content)
-				assert.Equal(t, name, ev.ResourceName)
+				assert.Equal(t, uri, ev.URI)
 				eventHandler = ev.Resource
 				return false
 			}))
 
 		buf, _, cursor := newEdit(content)
-		returnedHandler := pub.PublishEdit(name, buf, newMock(ctrl), cursor)
+		returnedHandler := pub.PublishEdit(uri, buf, newMock(ctrl), cursor)
 		assert.Equal(t, eventHandler, returnedHandler)
 	})
 
@@ -55,19 +57,18 @@ func TestPublisher(t *testing.T) {
 
 		pub := NewPublisher()
 		content := "2. She gets hired"
-		name := "Teamshares"
 
 		var eventHandler Handler
 		pub.SubscribeEditorEvents([]EventType{EventTypeFocus},
 			FuncEventHandler(func(ctx context.Context, ev Event) bool {
 				assert.Equal(t, EventTypeFocus, ev.Type)
-				assert.Equal(t, name, ev.ResourceName)
+				assert.Equal(t, uri, ev.URI)
 				eventHandler = ev.Resource
 				return false
 			}))
 
 		buf, _, cursor := newEdit(content)
-		returnedHandler := pub.PublishEdit(name, buf, newMock(ctrl), cursor)
+		returnedHandler := pub.PublishEdit(uri, buf, newMock(ctrl), cursor)
 		assert.Equal(t, eventHandler, returnedHandler)
 	})
 
@@ -76,20 +77,19 @@ func TestPublisher(t *testing.T) {
 
 		pub := NewPublisher()
 		content := "3. SHE GOT HIRED, I KNEW IT!!!"
-		name := "Teamshares"
 
 		var eventHandler Handler
 		var fired int
 		pub.SubscribeEditorEvents([]EventType{EventTypeOpen, EventTypeFocus},
 			FuncEventHandler(func(ctx context.Context, ev Event) bool {
 				fired++
-				assert.Equal(t, name, ev.ResourceName)
+				assert.Equal(t, uri, ev.URI)
 				eventHandler = ev.Resource
 				return false
 			}))
 
 		buf, _, cursor := newEdit(content)
-		returnedHandler := pub.PublishEdit(name, buf, newMock(ctrl), cursor)
+		returnedHandler := pub.PublishEdit(uri, buf, newMock(ctrl), cursor)
 		assert.Equal(t, eventHandler, returnedHandler)
 		assert.Equal(t, 2, fired)
 	})
@@ -102,15 +102,15 @@ func TestPublisher(t *testing.T) {
 		mock := newMock(ctrl)
 		buf, _, cursor := newEdit("\n\n")
 
-		h := pub.PublishEdit("zsh", buf, mock, cursor)
+		h := pub.PublishEdit(uri, buf, mock, cursor)
 		h.Resize(2, 2)
 
 		var called bool
 		pub.SubscribeEditorEvents([]EventType{EventTypeCursor},
 			FuncEventHandler(func(ctx context.Context, ev Event) bool {
 				require.Equal(t, EventTypeCursor, ev.Type)
-				assert.Equal(t, ev.ResourceName, "zsh")
-				assert.Equal(t, ev.Resource, h)
+				assert.Equal(t, uri, ev.URI)
+				assert.Equal(t, h, ev.Resource)
 				assert.Equal(t, term.Coordinates{Y: 2}, ev.Start)
 				assert.Equal(t, term.Coordinates{}, ev.From)
 				called = true
@@ -144,7 +144,7 @@ func TestPublisher(t *testing.T) {
 		pub := NewPublisher()
 		buf, scroll, cursor := newEdit("\n\n")
 
-		h := pub.PublishEdit("zsh", buf, newMock(ctrl), cursor)
+		h := pub.PublishEdit(uri, buf, newMock(ctrl), cursor)
 		h.Resize(2, 2)
 		require.True(t, scroll.SeekDown())
 
@@ -152,7 +152,7 @@ func TestPublisher(t *testing.T) {
 		pub.SubscribeEditorEvents([]EventType{EventTypeScroll},
 			FuncEventHandler(func(ctx context.Context, ev Event) bool {
 				require.Equal(t, EventTypeScroll, ev.Type)
-				assert.Equal(t, "zsh", ev.ResourceName)
+				assert.Equal(t, uri, ev.URI)
 				assert.Equal(t, h, ev.Resource)
 				at = ev.Start
 				return false
@@ -171,7 +171,7 @@ func TestPublisher(t *testing.T) {
 		pub := NewPublisher()
 		buf, _, cursor := newEdit("\n\n")
 
-		h := pub.PublishEdit("zsh", buf, newMock(ctrl), cursor)
+		h := pub.PublishEdit(uri, buf, newMock(ctrl), cursor)
 		h.Resize(2, 2)
 
 		var called bool
@@ -183,7 +183,7 @@ func TestPublisher(t *testing.T) {
 				assert.Equal(t, term.Coordinates{Y: 2}, ev.End, "End")
 				assert.Equal(t, term.Coordinates{Y: 2}, ev.From, "From")
 				assert.Equal(t, term.Coordinates{Y: 2, X: 12}, ev.To, "To")
-				assert.Equal(t, "zsh", ev.ResourceName)
+				assert.Equal(t, uri, ev.URI)
 				assert.Equal(t, h, ev.Resource)
 				assert.Equal(t, "blah\tbleh", ev.Content)
 				return false
@@ -198,7 +198,7 @@ func TestPublisher(t *testing.T) {
 		pub := NewPublisher()
 		buf, _, cursor := newEdit("aaa\nbbb")
 
-		h := pub.PublishEdit("zsh", buf, newMock(ctrl), cursor)
+		h := pub.PublishEdit(uri, buf, newMock(ctrl), cursor)
 		h.Resize(2, 2)
 
 		var called bool
@@ -210,7 +210,7 @@ func TestPublisher(t *testing.T) {
 				assert.Equal(t, term.Coordinates{Y: 1}, ev.End, "End")
 				assert.Equal(t, term.Coordinates{}, ev.From, "From")
 				assert.Equal(t, term.Coordinates{}, ev.To, "To")
-				assert.Equal(t, "zsh", ev.ResourceName)
+				assert.Equal(t, uri, ev.URI)
 				assert.Equal(t, h, ev.Resource)
 				assert.Equal(t, "", ev.Content)
 				return false

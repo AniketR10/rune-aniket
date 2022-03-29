@@ -10,6 +10,7 @@ import (
 	"github.com/ernestrc/go-tui/component"
 	"github.com/ernestrc/go-tui/handler"
 	"github.com/ernestrc/go-tui/term"
+	"github.com/ernestrc/go-tui/workspace"
 )
 
 var (
@@ -221,8 +222,8 @@ func (c *Component) Init(config Config) {
 }
 
 // NewTab adds a new tab to the list of tabs on this Component.
-func (c *Component) NewTab(id, name string, h Handler, f io.Closer) *Tab {
-	t := newTab(c, id, h, f)
+func (c *Component) NewTab(resource workspace.URI, name string, h Handler, f io.Closer) *Tab {
+	t := newTab(c, resource, h, f)
 	c.buffers = append(c.buffers, t)
 	c.tabs.Add(name)
 	return t
@@ -230,9 +231,9 @@ func (c *Component) NewTab(id, name string, h Handler, f io.Closer) *Tab {
 
 // Tab returns the tab with name and true if there's a tab with such name
 // or nil and false otherwise.
-func (c *Component) Tab(id string) (*Tab, bool) {
+func (c *Component) Tab(uri workspace.URI) (*Tab, bool) {
 	for _, t := range c.buffers {
-		if t.id == id {
+		if t.uri.String() == uri.String() {
 			return t, true
 		}
 	}
@@ -241,9 +242,9 @@ func (c *Component) Tab(id string) (*Tab, bool) {
 
 // SetTabAttr sets the attributes of the tab with ID id. It returns false
 // if there's no tab with id.
-func (c *Component) SetTabAttr(id string, attr term.Attributes) bool {
+func (c *Component) SetTabAttr(uri workspace.URI, attr term.Attributes) bool {
 	for i, t := range c.buffers {
-		if t.id == id {
+		if t.uri.String() == uri.String() {
 			c.tabs.SetTabAttr(i, attr)
 			return true
 		}
@@ -253,9 +254,9 @@ func (c *Component) SetTabAttr(id string, attr term.Attributes) bool {
 
 // SetTabName sets the tab name of the tab with ID id. It returns false
 // if there's no tab with id.
-func (c *Component) SetTabName(id string, name string) bool {
+func (c *Component) SetTabName(uri workspace.URI, name string) bool {
 	for i, t := range c.buffers {
-		if t.id == id {
+		if t.uri.String() == uri.String() {
 			c.tabs.SetTabName(i, name)
 			return true
 		}

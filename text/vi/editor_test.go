@@ -7,6 +7,7 @@ import (
 	"github.com/ernestrc/go-tui/cell"
 	"github.com/ernestrc/go-tui/term"
 	"github.com/ernestrc/go-tui/text"
+	"github.com/ernestrc/go-tui/workspace"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -14,14 +15,15 @@ import (
 func TestEditorDispatchFocus(t *testing.T) {
 	ed := Editor()
 	content := "Clement"
-	name := "Jolie"
+	uri, err := workspace.ParseURI("file:///Jolie")
+	require.NoError(t, err)
 
 	var h text.Handler
 	ed.SubscribeEditorEvents([]text.EventType{text.EventTypeOpen},
 		text.FuncEventHandler(func(ctx context.Context, ev text.Event) bool {
 			assert.Equal(t, text.EventTypeOpen, ev.Type)
 			assert.Equal(t, content, ev.Content)
-			assert.Equal(t, name, ev.ResourceName)
+			assert.Equal(t, uri, ev.URI)
 			h = ev.Resource
 			return false
 		}))
@@ -31,14 +33,14 @@ func TestEditorDispatchFocus(t *testing.T) {
 		text.FuncEventHandler(func(ctx context.Context, ev text.Event) bool {
 			focusCalled++
 			assert.Equal(t, text.EventTypeFocus, ev.Type)
-			assert.Equal(t, name, ev.ResourceName)
+			assert.Equal(t, uri, ev.URI)
 			assert.Equal(t, h, ev.Resource)
 			return false
 		}))
 
 	buf := cell.NewBuffer()
 	buf.WriteString(content)
-	_, err := ed.Edit(name, buf)
+	_, err = ed.Edit(uri, buf)
 	require.NoError(t, err)
 
 	assert.Equal(t, 1, focusCalled)
@@ -48,7 +50,7 @@ func TestEditorDispatchScroll(t *testing.T) {
 	ed := Editor()
 	buf := cell.NewBuffer()
 	buf.WriteString("Daworg\nSurinach")
-	h, err := ed.Edit("oh my...", buf)
+	h, err := ed.Edit(workspace.URI{}, buf)
 	require.NoError(t, err)
 
 	h.Resize(2, 2)
@@ -74,10 +76,12 @@ func TestEditorDispatchScroll(t *testing.T) {
 }
 
 func TestEditorDispatchCursor(t *testing.T) {
+	uri, err := workspace.ParseURI("file:///tmp/zsh.sh")
+	require.NoError(t, err)
 	ed := Editor()
 	buf := cell.NewBuffer()
 	buf.WriteString("Matias\nGiordano\n")
-	h, err := ed.Edit("zsh", buf)
+	h, err := ed.Edit(uri, buf)
 	require.NoError(t, err)
 
 	// should scroll as well, but changes in cursorAtScroll is what we are expecting
@@ -89,7 +93,7 @@ func TestEditorDispatchCursor(t *testing.T) {
 		text.FuncEventHandler(func(ctx context.Context, ev text.Event) bool {
 			windowCursor = ev.Start
 			scrollCursor = ev.From
-			assert.Equal(t, ev.ResourceName, "zsh")
+			assert.Equal(t, ev.URI.String(), "file:///tmp/zsh.sh")
 			assert.Equal(t, ev.Resource, h)
 			return false
 		}))

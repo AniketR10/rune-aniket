@@ -5,6 +5,7 @@ import (
 
 	"github.com/ernestrc/go-tui"
 	"github.com/ernestrc/go-tui/term"
+	"github.com/ernestrc/go-tui/workspace"
 )
 
 // Tab is a structure that represents a tab in a Browser.Component.
@@ -12,7 +13,7 @@ import (
 // with browser.Browser API. See browser.Component.NewTab for more details.
 type Tab struct {
 	parent      *Component
-	id          string
+	uri         workspace.URI
 	closer      io.Closer
 	handler     Handler
 	free        bool
@@ -21,17 +22,17 @@ type Tab struct {
 }
 
 // newTab allocates storage for a new tab and initializes it.
-func newTab(c *Component, id string, h Handler, f io.Closer) *Tab {
+func newTab(c *Component, uri workspace.URI, h Handler, f io.Closer) *Tab {
 	ret := new(Tab)
-	ret.init(c, id, h, f)
+	ret.init(c, uri, h, f)
 	return ret
 }
 
 // Init initializes this tab with id, h as the Handler, and f as the
 // io.Closer handle.
-func (b *Tab) init(c *Component, id string, h Handler, f io.Closer) {
+func (b *Tab) init(c *Component, uri workspace.URI, h Handler, f io.Closer) {
 	b.parent = c
-	b.id = id
+	b.uri = uri
 	b.closer = f
 	b.handler = h
 	b.free = true
@@ -96,9 +97,9 @@ func (b *Tab) Close() error {
 	return err1
 }
 
-// ID returns the identifier of this tab.
-func (b *Tab) ID() string {
-	return b.id
+// URI returns the identifier of this tab.
+func (b *Tab) URI() workspace.URI {
+	return b.uri
 }
 
 // Handler returns the Handler responsible for drawing

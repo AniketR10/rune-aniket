@@ -7,6 +7,7 @@ import (
 	"github.com/ernestrc/go-tui/handler"
 	"github.com/ernestrc/go-tui/term"
 	testutil "github.com/ernestrc/go-tui/util/test"
+	"github.com/ernestrc/go-tui/workspace"
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -49,10 +50,12 @@ func TestComponentCloseWindow(t *testing.T) {
 		tcase := _tcase
 		t.Run(tcase.method+"closes window correctly", func(t *testing.T) {
 			c := NewComponent(Config{})
+			uri, err := workspace.ParseURI("file:///OAK")
+			require.NoError(t, err)
 
 			var h Handler
 			h = NewTestHandler()
-			h = c.NewTab("OAK", "OAK", h, nil)
+			h = c.NewTab(uri, "OAK", h, nil)
 
 			win, ok := tcase.split(c, h)
 			require.True(t, ok)
@@ -129,10 +132,17 @@ func TestComponentRemoveAllTabs(t *testing.T) {
 		before := tcase.before
 		after := tcase.after
 		t.Run(tcase.description, func(t *testing.T) {
+			uri1, err := workspace.ParseURI("file:///a")
+			require.NoError(t, err)
+			uri2, err := workspace.ParseURI("file:///b")
+			require.NoError(t, err)
+			uri3, err := workspace.ParseURI("file:///c")
+			require.NoError(t, err)
+
 			handlers := [3]testCloser{}
-			c.NewTab("a", "a", &handlers[0], &handlers[0])
-			c.NewTab("b", "b", &handlers[1], &handlers[1])
-			c.NewTab("c", "c", &handlers[2], &handlers[2])
+			c.NewTab(uri1, "a", &handlers[0], &handlers[0])
+			c.NewTab(uri2, "b", &handlers[1], &handlers[1])
+			c.NewTab(uri3, "c", &handlers[2], &handlers[2])
 			c.EditWindowTabNextFree(c.Focus())
 			c.ShiftFocus()
 			c.EditWindowTabNextFree(c.Focus())
@@ -180,7 +190,10 @@ func TestComponentSetContent(t *testing.T) {
 		t.Run(tcase.method, func(t *testing.T) {
 			c := NewComponent(Config{})
 			win0 := c.Focus()
-			christmasTab := c.NewTab("Merry Christmas", "Merry Christmas", NewTestHandler(), nil)
+			uri, err := workspace.ParseURI("file:///Merry_Christmas")
+			require.NoError(t, err)
+
+			christmasTab := c.NewTab(uri, "Merry Christmas", NewTestHandler(), nil)
 
 			assertFreeTab(t, christmasTab, true)
 			require.NoError(t, win0.SetContent(christmasTab))
@@ -227,10 +240,17 @@ func TestComponentEditWindowTab(t *testing.T) {
 		t.Run(tcase.method, func(t *testing.T) {
 			c := NewComponent(Config{})
 			win0 := c.Focus()
-			amzn := c.NewTab("AMZN", "AMZN", NewTestHandler(), nil)
+			uri1, err := workspace.ParseURI("file:///AMZN")
+			require.NoError(t, err)
+			uri2, err := workspace.ParseURI("file:///TSLA")
+			require.NoError(t, err)
+			uri3, err := workspace.ParseURI("file:///GOOG")
+			require.NoError(t, err)
+
+			amzn := c.NewTab(uri1, "AMZN", NewTestHandler(), nil)
 			c.EditWindowTabNextFree(win0)
-			tsla := c.NewTab("TSLA", "TSLA", NewTestHandler(), nil)
-			goog := c.NewTab("GOOG", "GOOG", NewTestHandler(), nil)
+			tsla := c.NewTab(uri2, "TSLA", NewTestHandler(), nil)
+			goog := c.NewTab(uri3, "GOOG", NewTestHandler(), nil)
 			win, ok := tcase.split(c, goog)
 			require.True(t, ok)
 
@@ -381,8 +401,13 @@ func TestComponentHandlerClose(t *testing.T) {
 				t.Run(tcase.name, func(t *testing.T) {
 					mock := &testCloser{}
 					c := NewComponent(cfg)
-					c.NewTab("Robinhood", "Robinhood", NewTestHandler(), nil)
-					c.NewTab("Stash", "Stash", NewTestHandler(), nil)
+					uri1, err := workspace.ParseURI("file:///Robinhood")
+					require.NoError(t, err)
+					uri2, err := workspace.ParseURI("file:///Stash")
+					require.NoError(t, err)
+
+					c.NewTab(uri1, "Robinhood", NewTestHandler(), nil)
+					c.NewTab(uri2, "Stash", NewTestHandler(), nil)
 					win, ok := split(c, mock)
 					require.True(t, ok)
 
