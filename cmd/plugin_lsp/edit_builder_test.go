@@ -1,13 +1,15 @@
 package main
 
 import (
+	"testing"
+
 	"github.com/ernestrc/go-tui/cell"
 	"github.com/ernestrc/go-tui/text"
+	"github.com/ernestrc/go-tui/workspace"
 	"github.com/ernestrc/golang-internal-tools/lsp/protocol"
 	"github.com/ernestrc/golang-internal-tools/span"
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
-	"testing"
 )
 
 const (
@@ -77,7 +79,11 @@ func makeFile() *file {
 	docID := protocol.TextDocumentIdentifier{
 		URI: protocol.URIFromSpanURI(uri),
 	}
-	return &file{uri: uri, docID: docID}
+	u, err := workspace.ParseURI(string(uri))
+	if err != nil {
+		panic(err)
+	}
+	return &file{uri: u, docID: docID}
 }
 
 func TestApplyEdits(t *testing.T) {

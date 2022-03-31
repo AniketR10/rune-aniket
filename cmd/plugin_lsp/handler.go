@@ -116,10 +116,10 @@ var (
 )
 
 type file struct {
+	uri        workspace.URI
 	languageID string
 	handler    text.Handler
 	docID      protocol.TextDocumentIdentifier
-	uri        span.URI
 
 	// handler use getters
 	_version     int32
@@ -153,9 +153,9 @@ type lspEditorHandler struct {
 
 	cwd               string
 	exit              bool
-	files             map[span.URI]*file
-	pendingDiagnostic map[span.URI][]protocol.Diagnostic
-	pendingGoTo       map[span.URI]protocol.Range
+	files             map[workspace.URI]*file
+	pendingDiagnostic map[workspace.URI][]protocol.Diagnostic
+	pendingGoTo       map[workspace.URI]protocol.Range
 	servers           map[string]execServer
 	cancelTokensReq   func()
 }
@@ -536,9 +536,9 @@ func newLspHandler(
 ) (plugutil.CommandEventHandler, error) {
 	ret := new(lspEditorHandler)
 	ret.ed = ed
-	ret.files = make(map[span.URI]*file)
-	ret.pendingDiagnostic = make(map[span.URI][]protocol.Diagnostic)
-	ret.pendingGoTo = make(map[span.URI]protocol.Range)
+	ret.files = make(map[workspace.URI]*file)
+	ret.pendingDiagnostic = make(map[workspace.URI][]protocol.Diagnostic)
+	ret.pendingGoTo = make(map[workspace.URI]protocol.Range)
 	ret.evChan = make(chan text.Event, handleBackpressureEvs)
 
 	var err error
@@ -643,32 +643,32 @@ func (h *lspEditorHandler) newFile(
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
-	uri := span.URIFromPath(resource.String())
-	languageID := filepath.Ext(uri.Filename())
+	spanURI := workspaceURIToSpan(resource)
+	languageID := filepath.Ext(resource.Path())
 
 	f := &file{
 		_version: firstFileVersion,
 		handler:  handler,
 		docID: protocol.TextDocumentIdentifier{
-			URI: protocol.URIFromSpanURI(uri),
+			URI: protocol.URIFromSpanURI(spanURI),
 		},
-		uri:        uri,
+		uri:        resource,
 		_cells:     cell.StringToCells(content),
 		languageID: languageID,
 	}
 
-	h.files[uri] = f
+	h.files[resource] = f
 	return f
 }
 
-func (h *lspEditorHandler) removePendingGoTo(uri span.URI) {
+func (h *lspEditorHandler) removePendingGoTo(uri workspace.URI) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	delete(h.pendingGoTo, uri)
 }
 
 func (h *lspEditorHandler) addPendingGoTo(
-	uri span.URI, rs protocol.Range,
+	uri workspace.URI, rs protocol.Range,
 ) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -677,7 +677,7 @@ func (h *lspEditorHandler) addPendingGoTo(
 }
 
 func (h *lspEditorHandler) addPendingDiagnostics(
-	uri span.URI, ds []protocol.Diagnostic,
+	uri workspace.URI, ds []protocol.Diagnostic,
 ) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -686,7 +686,7 @@ func (h *lspEditorHandler) addPendingDiagnostics(
 }
 
 func (h *lspEditorHandler) dispatchPendingDiagnostics(
-	ctx context.Context, uri span.URI,
+	ctx context.Context, uri workspace.URI,
 ) {
 	h.mu.Lock()
 	ds, ok := h.pendingDiagnostic[uri]
@@ -712,7 +712,8 @@ func getColumnMapper(uri span.URI, buf *cell.Buffer) protocol.ColumnMapper {
 func (h *lspEditorHandler) handleGoTo(f *file, rs protocol.Range) {
 	cells := h.getCells(f)
 	buf := cell.CellsToBuffer(cells)
-	colmap := getColumnMapper(f.uri, buf)
+	spanURI := workspaceURIToSpan(f.uri)
+	colmap := getColumnMapper(spanURI, buf)
 	pos, _, ok := convertRange(rs, cells, colmap)
 	if !ok {
 		return
@@ -740,12 +741,7 @@ func (h *lspEditorHandler) dispatchPendingGoTo(
 	h.handleGoTo(f, rs)
 }
 
-func (h *lspEditorHandler) getFileWithName(name string) (*file, bool) {
-	uri := span.URIFromPath(name)
-	return h.getFile(uri)
-}
-
-func (h *lspEditorHandler) getFile(uri span.URI) (*file, bool) {
+func (h *lspEditorHandler) getFile(uri workspace.URI) (*file, bool) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
@@ -842,7 +838,8 @@ func (h *lspEditorHandler) semanticTokensFull(
 		return
 	}
 
-	locations := parseLocationData(f.uri, cells, []byte(content),
+	spanURI := workspaceURIToSpan(f.uri)
+	locations := parseLocationData(spanURI, cells, []byte(content),
 		resp.Data, h.semanticTypesAttr)
 	if log.IsLevelEnabled(log.TraceLevel) {
 		log.Tracef("lspEditorHandler.Server.SemanticTokensFull(%s): OK: %v: locations: %v",
@@ -973,7 +970,7 @@ func (h *lspEditorHandler) handleFileFlush(ev text.Event) {
 	// lsp expects the last EOL
 	ev.Content += "\n"
 
-	f, ok := h.getFileWithName(ev.URI.String())
+	f, ok := h.getFile(ev.URI)
 	if !ok {
 		f = h.newFile(ev.Resource, ev.URI, ev.Content)
 	}
@@ -993,7 +990,7 @@ func (h *lspEditorHandler) handleFileEdit(ev text.Event) {
 	ctx := context.Background()
 	ctx, cancelFn := context.WithTimeout(ctx, h.rpcTimeout)
 	defer cancelFn()
-	f, ok := h.getFileWithName(ev.URI.String())
+	f, ok := h.getFile(ev.URI)
 	if !ok {
 		log.Warnf("lspEditorHandler: Received insert/delete event for an unknown file: %#v", ev)
 		return
@@ -1050,9 +1047,10 @@ func (h *lspEditorHandler) handleFileOpen(ev text.Event) {
 		return
 	}
 
+	spanURI := workspaceURIToSpan(f.uri)
 	p := protocol.DidOpenTextDocumentParams{
 		TextDocument: protocol.TextDocumentItem{
-			URI:        protocol.URIFromSpanURI(f.uri),
+			URI:        protocol.URIFromSpanURI(spanURI),
 			LanguageID: f.languageID,
 			Version:    h.getVersion(f),
 			Text:       ev.Content,
@@ -1073,7 +1071,7 @@ func (h *lspEditorHandler) handleFileOpen(ev text.Event) {
 }
 
 func (h *lspEditorHandler) removeFile(resource workspace.URI) (*file, bool) {
-	f, ok := h.getFileWithName(resource.String())
+	f, ok := h.getFile(resource)
 	if !ok {
 		return nil, false
 	}
@@ -1087,11 +1085,12 @@ func (h *lspEditorHandler) removeFile(resource workspace.URI) (*file, bool) {
 }
 
 func (h *lspEditorHandler) sendDidClose(
-	ctx context.Context, srv execServer, uri span.URI,
+	ctx context.Context, srv execServer, uri workspace.URI,
 ) {
+	spanURI := workspaceURIToSpan(uri)
 	p := protocol.DidCloseTextDocumentParams{
 		TextDocument: protocol.TextDocumentIdentifier{
-			URI: protocol.URIFromSpanURI(uri),
+			URI: protocol.URIFromSpanURI(spanURI),
 		},
 	}
 
@@ -1125,7 +1124,8 @@ func (h *lspEditorHandler) parseDiagnostics(
 ) []text.Location {
 	cells := h.getCells(f)
 	buf := cell.CellsToBuffer(cells)
-	colmap := getColumnMapper(f.uri, buf)
+	spanURI := workspaceURIToSpan(f.uri)
+	colmap := getColumnMapper(spanURI, buf)
 
 	locs := make([]text.Location, 0, len(d))
 	for _, d := range d {
@@ -1163,13 +1163,13 @@ func (h *lspEditorHandler) getDiagnostics(f *file) (ds []protocol.Diagnostic) {
 }
 
 func (h *lspEditorHandler) handleDiagnostics(
-	ctx context.Context, uri span.URI,
+	ctx context.Context, file workspace.URI,
 	ds []protocol.Diagnostic, version int32,
 ) {
-	f, ok := h.getFile(uri)
+	f, ok := h.getFile(file)
 	if !ok {
-		h.addPendingDiagnostics(uri, ds)
-		log.Tracef("lspEditorHandler: Received diagnostic for a unopened file: %#v", uri)
+		h.addPendingDiagnostics(file, ds)
+		log.Tracef("lspEditorHandler: Received diagnostic for a unopened file: %#v", file)
 		return
 	}
 
@@ -1196,6 +1196,19 @@ func (h *lspEditorHandler) setDiagnosticsLocationList(
 	}
 }
 
+func spanURIToWorkspace(u span.URI) (workspace.URI, error) {
+	file, err := workspace.ParseURI(string(u))
+	if err != nil {
+		log.Errorf("failed to convert span URI to workspace URI %s: %s", u, err)
+		return workspace.URI{}, err
+	}
+	return file, err
+}
+
+func workspaceURIToSpan(u workspace.URI) span.URI {
+	return span.URI(u.String())
+}
+
 func (h *lspEditorHandler) HandleDiagnostics(
 	ctx context.Context, p *protocol.PublishDiagnosticsParams,
 
@@ -1205,8 +1218,12 @@ func (h *lspEditorHandler) HandleDiagnostics(
 		start = time.Now()
 		log.Tracef("lspEditorHandler.HandleDiagnostics(%#v)", p.URI)
 	}
+	file, err := spanURIToWorkspace(p.URI.SpanURI())
+	if err != nil {
+		return
+	}
 
-	h.handleDiagnostics(ctx, p.URI.SpanURI(), p.Diagnostics, p.Version)
+	h.handleDiagnostics(ctx, file, p.Diagnostics, p.Version)
 
 	if log.IsLevelEnabled(log.TraceLevel) {
 		log.Tracef("lspEditorHandler.HandleDiagnostics(%#v) in %s", p.URI, time.Since(start))
@@ -1214,23 +1231,20 @@ func (h *lspEditorHandler) HandleDiagnostics(
 }
 
 func (h *lspEditorHandler) goToLocation(win browser.Window, l protocol.Location) {
-	spanUri := l.URI.SpanURI()
-	f, alreadyOpen := h.getFileWithName(spanUri.Filename())
-	if !alreadyOpen {
-		h.addPendingGoTo(spanUri, l.Range)
-	}
-
-	uri, err := workspace.ParseURI(string(spanUri))
+	uri, err := spanURIToWorkspace(l.URI.SpanURI())
 	if err != nil {
-		log.Tracef("lspEditorHandler.getToLocation(%#v): %s", spanUri, err)
 		return
+	}
+	f, alreadyOpen := h.getFile(uri)
+	if !alreadyOpen {
+		h.addPendingGoTo(uri, l.Range)
 	}
 
 	buf, err := h.o.Open(uri)
 	if err != nil {
 		h.m.SetMessage("Open: %v", err)
 		log.Errorf("lspEditorHandler.Open(%s): %v", uri, err)
-		h.removePendingGoTo(spanUri)
+		h.removePendingGoTo(uri)
 		return
 	}
 
@@ -1245,11 +1259,9 @@ func (h *lspEditorHandler) goToLocation(win browser.Window, l protocol.Location)
 	}
 }
 
-func (h *lspEditorHandler) getFilePosition(cursor term.Coordinates, filename string) (
+func (h *lspEditorHandler) getFilePosition(cursor term.Coordinates, uri workspace.URI) (
 	f *file, pos protocol.Position, ok bool,
 ) {
-	uri := span.URIFromPath(filename)
-
 	f, ok = h.getFile(uri)
 	if !ok {
 		log.Warnf("lspEditorHandler: Received hover request for an unknown file: %#v", uri)
@@ -1272,9 +1284,9 @@ func (h *lspEditorHandler) getFilePosition(cursor term.Coordinates, filename str
 }
 
 func (h *lspEditorHandler) handleGoToDefinition(
-	cursor term.Coordinates, ed text.Handler, filename string,
+	cursor term.Coordinates, ed text.Handler, uri workspace.URI,
 ) {
-	f, pos, ok := h.getFilePosition(cursor, filename)
+	f, pos, ok := h.getFilePosition(cursor, uri)
 	if !ok {
 		return
 	}
@@ -1339,9 +1351,9 @@ func findBestFloatingWindowPosition(cursorAtWindow term.Coordinates, width, heig
 
 func (h *lspEditorHandler) handleHover(
 	cursorAtScroll, cursorAtWindow term.Coordinates,
-	ed text.Handler, filename string,
+	ed text.Handler, uri workspace.URI,
 ) {
-	f, pos, ok := h.getFilePosition(cursorAtScroll, filename)
+	f, pos, ok := h.getFilePosition(cursorAtScroll, uri)
 	if !ok {
 		return
 	}
@@ -1390,11 +1402,9 @@ func makeWorkspaceFolder(in string) protocol.WorkspaceFolder {
 }
 
 func (h *lspEditorHandler) handleChangedWorkspace(
-	name string, added []string, removed []string,
+	uri workspace.URI, added []string, removed []string,
 ) {
-	uri := span.URIFromPath(name)
-	languageID := filepath.Ext(uri.Filename())
-
+	languageID := filepath.Ext(uri.Path())
 	srv, ok := h.getServer(languageID)
 	if !ok {
 		return
@@ -1430,18 +1440,18 @@ func (h *lspEditorHandler) handleChangedWorkspace(
 	err := srv.srv.DidChangeWorkspaceFolders(ctx, &req)
 	if err != nil {
 		h.m.SetMessage("DidChangeWorkspaceFolders: %v", err)
-		log.Errorf("lspEditorHandler.Server.DidChangeWorkspaceFolders(%s): %v", name, err)
+		log.Errorf("lspEditorHandler.Server.DidChangeWorkspaceFolders(%s): %v", uri, err)
 	}
 }
 
-func (h *lspEditorHandler) handleAddWorkspace(name string, args []string) {
+func (h *lspEditorHandler) handleAddWorkspace(uri workspace.URI, args []string) {
 	log.Tracef("lspEditorHandler.handleAddWorkspace(%v)", args)
-	h.handleChangedWorkspace(name, args, nil)
+	h.handleChangedWorkspace(uri, args, nil)
 }
 
-func (h *lspEditorHandler) handleRemoveWorkspace(name string, args []string) {
+func (h *lspEditorHandler) handleRemoveWorkspace(uri workspace.URI, args []string) {
 	log.Tracef("lspEditorHandler.handleRemoveWorkspace(%v)", args)
-	h.handleChangedWorkspace(name, nil, args)
+	h.handleChangedWorkspace(uri, nil, args)
 }
 
 func (h *lspEditorHandler) browseLocations(
@@ -1579,7 +1589,7 @@ func (h *lspEditorHandler) browseLocations(
 
 func (h *lspEditorHandler) handleReferences(
 	cursorAtScroll, cursorAtWindow term.Coordinates,
-	ed text.Handler, filename string,
+	ed text.Handler, uri workspace.URI,
 ) {
 	win, err := h.wm.Focus()
 	if err != nil {
@@ -1587,7 +1597,7 @@ func (h *lspEditorHandler) handleReferences(
 		return
 	}
 
-	f, pos, ok := h.getFilePosition(cursorAtScroll, filename)
+	f, pos, ok := h.getFilePosition(cursorAtScroll, uri)
 	if !ok {
 		return
 	}
@@ -1636,6 +1646,7 @@ func (h *lspEditorHandler) format(
 	p := protocol.DocumentFormattingParams{
 		TextDocument: f.docID,
 		Options: protocol.FormattingOptions{
+			// TODO expose tabsize with Open event
 			TabSize:                4,
 			InsertSpaces:           false,
 			TrimTrailingWhitespace: true,
@@ -1685,14 +1696,14 @@ func (h *lspEditorHandler) organizeImports(
 	}
 }
 
-func (h *lspEditorHandler) handleFormat(ed text.Handler, filename string, imports bool) {
+func (h *lspEditorHandler) handleFormat(ed text.Handler, uri workspace.URI, imports bool) {
 	ctx := context.Background()
 	ctx, cancelFn := context.WithTimeout(ctx, h.rpcTimeout)
 	defer cancelFn()
 
-	f, ok := h.getFileWithName(filename)
+	f, ok := h.getFile(uri)
 	if !ok {
-		log.Errorf("lspEditorHandler: Received format event for an unknown file: %#v", filename)
+		log.Errorf("lspEditorHandler: Received format event for an unknown file: %#v", uri)
 		return
 	}
 
@@ -1734,19 +1745,19 @@ func (h *lspEditorHandler) HandleCommand(cmd text.Command) (exit bool) {
 			log.Errorf("lspEditorHandler.MoveToNextLocation(%s): %v", cmd.Name, err)
 		}
 	case commandHover:
-		h.handleHover(cmd.Cursor.Content, cmd.Cursor.Window, cmd.Resource, cmd.URI.String())
+		h.handleHover(cmd.Cursor.Content, cmd.Cursor.Window, cmd.Resource, cmd.URI)
 	case commandGoToDef:
-		h.handleGoToDefinition(cmd.Cursor.Content, cmd.Resource, cmd.URI.String())
+		h.handleGoToDefinition(cmd.Cursor.Content, cmd.Resource, cmd.URI)
 	case commandReferences:
-		h.handleReferences(cmd.Cursor.Content, cmd.Cursor.Window, cmd.Resource, cmd.URI.String())
+		h.handleReferences(cmd.Cursor.Content, cmd.Cursor.Window, cmd.Resource, cmd.URI)
 	case commandAddWorkspace:
-		h.handleAddWorkspace(cmd.URI.String(), cmd.Args)
+		h.handleAddWorkspace(cmd.URI, cmd.Args)
 	case commandRemoveWorkspace:
-		h.handleRemoveWorkspace(cmd.URI.String(), cmd.Args)
+		h.handleRemoveWorkspace(cmd.URI, cmd.Args)
 	case commandFormat:
-		h.handleFormat(cmd.Resource, cmd.URI.String(), false)
+		h.handleFormat(cmd.Resource, cmd.URI, false)
 	case commandOrganizeImports:
-		h.handleFormat(cmd.Resource, cmd.URI.String(), true)
+		h.handleFormat(cmd.Resource, cmd.URI, true)
 	}
 
 	return false

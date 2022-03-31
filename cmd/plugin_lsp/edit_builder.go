@@ -24,7 +24,8 @@ func (b *editBuilder) init(f *file, w text.CellEditor, cells [][]term.Cell) {
 	b.w = w
 	b.original = cell.CellsToBuffer(cells)
 	b.buf = cell.CellsToBuffer(cells)
-	b.colmap = getColumnMapper(b.f.uri, b.original)
+	spanURI := workspaceURIToSpan(b.f.uri)
+	b.colmap = getColumnMapper(spanURI, b.original)
 }
 
 func (b *editBuilder) applyEdit(ed protocol.TextEdit) error {

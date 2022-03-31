@@ -63,7 +63,7 @@ func newTestLspHandler(
 ) *lspEditorHandler {
 	ret := new(lspEditorHandler)
 	ret.ed = ed
-	ret.files = make(map[span.URI]*file)
+	ret.files = make(map[workspace.URI]*file)
 	ret.servers = map[string]execServer{".go": {langID: ".go", srv: server}}
 	ret.semanticTokensListID = defaultSemanticTokensListID
 	ret.diagnosticListID = defaultDiagnosticListID
@@ -77,7 +77,7 @@ func newTestLspHandler(
 func expectDidOpen(t *testing.T, mock *MockServer, file workspace.URI, content string) {
 	expected := &protocol.DidOpenTextDocumentParams{
 		TextDocument: protocol.TextDocumentItem{
-			URI:        protocol.URIFromSpanURI(span.URIFromPath(file.String())),
+			URI:        protocol.URIFromSpanURI(span.URIFromURI(file.String())),
 			LanguageID: ".go",
 			Version:    1,
 			Text:       content,
@@ -98,7 +98,7 @@ func expectDidChange(
 		TextDocument: protocol.VersionedTextDocumentIdentifier{
 			Version: version,
 			TextDocumentIdentifier: protocol.TextDocumentIdentifier{
-				URI: protocol.URIFromSpanURI(span.URIFromPath(file.String())),
+				URI: protocol.URIFromSpanURI(span.URIFromURI(file.String())),
 			},
 		},
 		ContentChanges: expectedEvents,
