@@ -86,7 +86,7 @@ func newFileBarEditorHandler(
 		return nil, err
 	}
 
-	ret.filenameAttributes, err = pconfig.GetAttributes("filename_attr")
+	ret.filenameAttributes, err = plugin.GetAttributes(pconfig, "filename_attr")
 	if err != nil {
 		if err != plugin.ErrNotFound {
 			log.Warningf("failed to get 'filename_attr' from config: %v", err)
@@ -94,7 +94,7 @@ func newFileBarEditorHandler(
 		ret.filenameAttributes = defaultScrollAttr
 	}
 
-	ret.backgroundAttributes, err = pconfig.GetAttributes("background_attr")
+	ret.backgroundAttributes, err = plugin.GetAttributes(pconfig, "background_attr")
 	if err != nil {
 		if err != plugin.ErrNotFound {
 			log.Warningf("failed to get 'background_attr' from config: %v", err)
@@ -111,7 +111,7 @@ func newFileBarEditorHandler(
 		ret.showDirty = true
 	}
 
-	ret.filenameDirtyAttributes, err = pconfig.GetAttributes("filename_dirty_attr")
+	ret.filenameDirtyAttributes, err = plugin.GetAttributes(pconfig, "filename_dirty_attr")
 	if err != nil {
 		if err != plugin.ErrNotFound {
 			log.Warningf("failed to get 'filename_dirty_attr' from config: %v", err)
@@ -119,7 +119,7 @@ func newFileBarEditorHandler(
 		ret.filenameDirtyAttributes = defaultDirtyAttr
 	}
 
-	ret.bar.coords.Attributes, err = pconfig.GetAttributes("coordinates_attr")
+	ret.bar.coords.Attributes, err = plugin.GetAttributes(pconfig, "coordinates_attr")
 	if err != nil {
 		if err != plugin.ErrNotFound {
 			log.Warningf("failed to get 'coordinates_attr' from config: %v", err)

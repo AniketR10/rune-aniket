@@ -67,22 +67,13 @@ func main() {
 		}()
 	}
 
-	uri, err := workspace.ParseURI(*flagWorkspace)
-	if err != nil {
-		log.Fatalf("Failed to parse working directory as URI %s: %s", *flagWorkspace, err)
-	}
-	manager, err := workspace.NewManager(uri)
-	if err != nil {
-		log.Fatal(err)
-	}
-
 	var i *IDE
 	if *flagRecover != "" && len(filenames) != 0 {
-		i, err = NewRecovery(manager, *configpath, filenames[0], *flagRecover)
+		i, err = NewRecovery(*flagWorkspace, *configpath, filenames[0], *flagRecover)
 	} else if *flagRecover != "" {
 		log.Fatal("flag -r requires to pass the original filename filename")
 	} else {
-		i, err = New(manager, *configpath, filenames...)
+		i, err = New(*flagWorkspace, *configpath, filenames...)
 	}
 
 	if err != nil {

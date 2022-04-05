@@ -404,7 +404,7 @@ func getSemanticTypesAttr(pconfig plugin.Config) (map[string]term.Attributes, er
 	}
 
 	for semanticType := range defaultSemanticTypeAttr {
-		attr, err := colors.GetAttributes(semanticType)
+		attr, err := plugin.GetAttributes(colors, semanticType)
 		if err != nil {
 			if err != plugin.ErrNotFound {
 				err = fmt.Errorf("Error getting 'syntax_highlighting.%s' "+
@@ -453,7 +453,7 @@ func getDiagnosticAttr(pconfig plugin.Config) (
 
 	for s := range defaultDiagnosticAttr {
 		name := severityToString(s)
-		attr, err := colors.GetAttributes(name)
+		attr, err := plugin.GetAttributes(colors, name)
 		if err != nil {
 			if err != plugin.ErrNotFound {
 				err = fmt.Errorf("Error getting 'diagnostics.%s' "+
@@ -509,27 +509,6 @@ func convertRange(
 	return
 }
 
-func getDuration(
-	pconfig plugin.Config, key string, def time.Duration,
-) (time.Duration, error) {
-	durStr, err := pconfig.GetString(key)
-	if err != nil {
-		if err != plugin.ErrNotFound {
-			err = fmt.Errorf("Error getting '%s' from plugin config: %v", key, err)
-			return 0, err
-		}
-		return def, nil
-	}
-
-	duration, err := time.ParseDuration(durStr)
-	if err != nil {
-		err = fmt.Errorf("Error parsing duration '%s' from plugin config: %v", key, err)
-		return 0, err
-	}
-
-	return duration, nil
-}
-
 func newLspHandler(
 	ed text.Editor, grants []plugin.Grant,
 	broker proto.MuxBroker, pconfig plugin.Config,
@@ -570,19 +549,19 @@ func newLspHandler(
 		ret.diagnosticListID = defaultDiagnosticListID
 	}
 
-	ret.connectTimeout, err = getDuration(pconfig,
+	ret.connectTimeout, err = plugin.GetDuration(pconfig,
 		"connect_timeout", defaultConnectTimeout)
 	if err != nil {
 		return nil, err
 	}
 
-	ret.disconnectTimeout, err = getDuration(pconfig,
+	ret.disconnectTimeout, err = plugin.GetDuration(pconfig,
 		"disconnect_timeout", defaultDisconnectTimeout)
 	if err != nil {
 		return nil, err
 	}
 
-	ret.rpcTimeout, err = getDuration(pconfig,
+	ret.rpcTimeout, err = plugin.GetDuration(pconfig,
 		"rpc_timeout", defaultRpcTimeout)
 	if err != nil {
 		return nil, err

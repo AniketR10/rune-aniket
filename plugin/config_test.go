@@ -2,6 +2,7 @@ package plugin
 
 import (
 	"testing"
+	"time"
 
 	"github.com/ernestrc/go-tui/component"
 	"github.com/ernestrc/go-tui/term"
@@ -34,13 +35,13 @@ func TestConfigOk(t *testing.T) {
 	_, err = c.GetAttribute("mk")
 	assert.Equal(t, ErrNotFound, err)
 
-	_, err = c.GetAttributes("mk")
+	_, err = GetAttributes(c, "mk")
 	assert.Equal(t, ErrNotFound, err)
 
 	_, err = c.GetRune("mk")
 	assert.Equal(t, ErrNotFound, err)
 
-	_, err = c.GetFrameCharset("mk", component.FrameCharSetDefault())
+	_, err = GetFrameCharset(c, "mk", component.FrameCharSetDefault())
 	assert.Equal(t, ErrNotFound, err)
 }
 func TestConfigTypes(t *testing.T) {
@@ -66,7 +67,8 @@ func TestConfigTypes(t *testing.T) {
 		"charset_1": map[string]interface{}{"topleft": "a",
 			"topright": "b", "bottomleft": "c",
 			"bottomright": "d", "horizontalbottom": "e", "verticalleft": "f"},
-		"charset_2": map[string]interface{}{"topleft": 'a'},
+		"charset_2":  map[string]interface{}{"topleft": 'a'},
+		"duration_1": "2s",
 	}
 
 	c1 := MapConfig(m)
@@ -132,18 +134,18 @@ func TestConfigTypes(t *testing.T) {
 			require.NoError(t, err)
 			assert.Equal(t, false, out)
 
-			attrs, err := c.GetAttributes("attr_1")
+			attrs, err := GetAttributes(c, "attr_1")
 			require.NoError(t, err)
 			assert.True(t, attrs.Fg&term.ColorBlue != 0)
 			assert.True(t, attrs.Bg&term.ColorCyan != 0)
 
-			attrs, err = c.GetAttributes("attr_2")
+			attrs, err = GetAttributes(c, "attr_2")
 			require.NoError(t, err)
 			assert.True(t, attrs.Fg&term.ColorRed != 0)
 			assert.True(t, attrs.Fg&term.AttrBold != 0)
 			assert.Equal(t, term.ColorDefault, attrs.Bg)
 
-			charset, err := c.GetFrameCharset("charset_1", component.FrameCharSetDefault())
+			charset, err := GetFrameCharset(c, "charset_1", component.FrameCharSetDefault())
 			require.NoError(t, err)
 			assert.Equal(t, 'a', charset.TopLeft)
 			assert.Equal(t, 'b', charset.TopRight)
@@ -154,11 +156,19 @@ func TestConfigTypes(t *testing.T) {
 			assert.Equal(t, '─', charset.HorizontalTop)
 			assert.Equal(t, '│', charset.VerticalRight)
 
-			charset, err = c.GetFrameCharset("charset_2", component.FrameCharSetDefault())
+			charset, err = GetFrameCharset(c, "charset_2", component.FrameCharSetDefault())
 			require.NoError(t, err)
 			assert.Equal(t, 'a', charset.TopLeft)
 			charset.TopLeft = '┌'
 			assert.Equal(t, charset, component.FrameCharSetDefault())
+
+			duration, err := GetDuration(c, "duration_1", 1*time.Second)
+			require.NoError(t, err)
+			assert.Equal(t, 2*time.Second, duration)
+
+			duration, err = GetDuration(c, "duration_2", 1*time.Second)
+			require.NoError(t, err)
+			assert.Equal(t, 1*time.Second, duration)
 		})
 	}
 }

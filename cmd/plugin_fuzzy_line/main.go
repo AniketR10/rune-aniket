@@ -40,7 +40,7 @@ func newHandler(grants []plugin.Grant, broker proto.MuxBroker,
 		}
 		cmdStr = defaultCommand
 	}
-	historyKey, err := config.GetEvent("history_key")
+	historyKey, err := plugin.GetEvent(config, "history_key")
 	if err != nil {
 		if err != plugin.ErrNotFound {
 			log.Printf("failed to load 'command' config: %v", err)

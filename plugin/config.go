@@ -4,6 +4,8 @@ import (
 	"encoding"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"time"
 
 	"github.com/ernestrc/go-tui/component"
 	"github.com/ernestrc/go-tui/term"
@@ -25,10 +27,8 @@ type Config interface {
 	GetConfig(string) (Config, error)
 	GetMap(string) (map[string]interface{}, error)
 	GetAttribute(string) (term.Attribute, error)
-	GetAttributes(string) (term.Attributes, error)
 	GetRune(string) (rune, error)
-	GetFrameCharset(string, component.FrameCharSet) (component.FrameCharSet, error)
-	GetEvent(string) (term.Event, error)
+	GetSlice(string) ([]interface{}, error)
 }
 
 type internalConfig interface {
@@ -140,20 +140,25 @@ func (c mapConfig) GetConfig(key string) (Config, error) {
 	return mapConfig(m), nil
 }
 
-func (c mapConfig) GetEvent(key string) (term.Event, error) {
-	s, err := c.GetString(key)
-	if err != nil {
-		return term.Event{}, err
-	}
-	return term.ParseKey(s)
-}
-
 func (c mapConfig) GetMap(key string) (map[string]interface{}, error) {
 	v, ok := c[key]
 	if !ok {
 		return nil, ErrNotFound
 	}
 	vt, ok := v.(map[string]interface{})
+	if !ok {
+		return nil, ErrInvalidType
+	}
+
+	return vt, nil
+}
+
+func (c mapConfig) GetSlice(key string) ([]interface{}, error) {
+	v, ok := c[key]
+	if !ok {
+		return nil, ErrNotFound
+	}
+	vt, ok := v.([]interface{})
 	if !ok {
 		return nil, ErrInvalidType
 	}
@@ -254,7 +259,61 @@ func (c mapConfig) GetRune(key string) (rune, error) {
 	return rune(i), nil
 }
 
-func (c mapConfig) GetFrameCharset(key string, def component.FrameCharSet) (
+// MapConfig wraps m to satisfy plugin.Config.
+func MapConfig(m map[string]interface{}) Config {
+	if m == nil {
+		panic("invalid argument: map cannot be nil")
+	}
+	return mapConfig(m)
+}
+
+// NOTE(ernestrc): whatever impl we return in NewConfig,
+// should be the same one cast here. There should not
+// be any other Config castings in the codebase.
+func toInternalConfig(c Config) mapConfig {
+	return c.(mapConfig)
+}
+
+// GetAttributes is a helper which extracts and parses a term.Attributes as a map
+// of fg, bg string keys to an attribute. See GetAttribute for more details.
+func GetAttributes(c Config, key string) (term.Attributes, error) {
+	cfg, err := c.GetConfig(key)
+	if err != nil {
+		return term.Attributes{}, err
+	}
+
+	var attr term.Attributes
+	attr.Fg, _ = cfg.GetAttribute("fg")
+	attr.Bg, _ = cfg.GetAttribute("bg")
+	return attr, nil
+}
+
+// GetDuration is a helper which extracts and parses a time.Duration as a string
+// from a Config.
+func GetDuration(
+	pconfig Config, key string, def time.Duration,
+) (time.Duration, error) {
+	durStr, err := pconfig.GetString(key)
+	if err != nil {
+		if err != ErrNotFound {
+			err = fmt.Errorf("Error getting '%s' from plugin config: %v", key, err)
+			return 0, err
+		}
+		return def, nil
+	}
+
+	duration, err := time.ParseDuration(durStr)
+	if err != nil {
+		err = fmt.Errorf("Error parsing duration '%s' from plugin config: %v", key, err)
+		return 0, err
+	}
+
+	return duration, nil
+}
+
+// GetEvent is a helper which extracts and parses a component.FrameCharSet
+//  as a map of string to runes from a Config.
+func GetFrameCharset(c Config, key string, def component.FrameCharSet) (
 	component.FrameCharSet, error,
 ) {
 	cfg, err := c.GetConfig(key)
@@ -298,29 +357,12 @@ func (c mapConfig) GetFrameCharset(key string, def component.FrameCharSet) (
 	return cs, nil
 }
 
-func (c mapConfig) GetAttributes(key string) (term.Attributes, error) {
-	cfg, err := c.GetConfig(key)
+// GetEvent is a helper which extracts and parses a term.Event as a string
+// from a Config.
+func GetEvent(c Config, key string) (term.Event, error) {
+	s, err := c.GetString(key)
 	if err != nil {
-		return term.Attributes{}, err
+		return term.Event{}, err
 	}
-
-	var attr term.Attributes
-	attr.Fg, _ = cfg.GetAttribute("fg")
-	attr.Bg, _ = cfg.GetAttribute("bg")
-	return attr, nil
-}
-
-// MapConfig wraps m to satisfy plugin.Config.
-func MapConfig(m map[string]interface{}) Config {
-	if m == nil {
-		panic("invalid argument: map cannot be nil")
-	}
-	return mapConfig(m)
-}
-
-// NOTE(ernestrc): whatever impl we return in NewConfig,
-// should be the same one cast here. There should not
-// be any other Config castings in the codebase.
-func toInternalConfig(c Config) mapConfig {
-	return c.(mapConfig)
+	return term.ParseKey(s)
 }

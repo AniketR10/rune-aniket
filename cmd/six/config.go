@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"time"
 
 	"github.com/ernestrc/go-tui/browser"
 	"github.com/ernestrc/go-tui/component"
@@ -48,6 +49,7 @@ const (
 
 var (
 	defaultWindowManagerConfig = handler.DefaultWindowManagerConfig()
+	defSSHTimeout              = 10 * time.Second
 )
 
 type pluginConfig struct {
@@ -214,7 +216,7 @@ func (c ideConfig) getCfgAttr(
 	if !ok {
 		return
 	}
-	cfgAttr, err := cfg.GetAttributes(key)
+	cfgAttr, err := plugin.GetAttributes(cfg, key)
 	if err != nil {
 		if err != plugin.ErrNotFound {
 			c.errors[cfgKey+"."+key] = err
@@ -307,7 +309,7 @@ func (c ideConfig) windowFrameAttr() (attr term.Attributes) {
 	if !ok {
 		return
 	}
-	cfgAttr, err := cfg.GetAttributes("frame_attr")
+	cfgAttr, err := plugin.GetAttributes(cfg, "frame_attr")
 	if err != nil {
 		if err != plugin.ErrNotFound {
 			c.errors["window_manager.frame_attr"] = err
@@ -326,7 +328,7 @@ func (c ideConfig) getBrowserAttr(
 	if !ok {
 		return
 	}
-	cfgAttr, err := cfg.GetAttributes(key)
+	cfgAttr, err := plugin.GetAttributes(cfg, key)
 	if err != nil {
 		if err != plugin.ErrNotFound {
 			c.errors["window_manager."+key] = err
@@ -373,7 +375,7 @@ func (c ideConfig) windowFrameCharset() (cs component.FrameCharSet) {
 	if !ok {
 		return
 	}
-	cfgCs, err := cfg.GetFrameCharset("frame_charset", cs)
+	cfgCs, err := plugin.GetFrameCharset(cfg, "frame_charset", cs)
 	if err != nil {
 		if err != plugin.ErrNotFound {
 			c.errors["window_manager.frame_charset"] = err
@@ -483,7 +485,7 @@ func (c ideConfig) viResultAttr() (attr term.Attributes) {
 	if !ok {
 		return
 	}
-	attr, err := cfg.GetAttributes("search_attr")
+	attr, err := plugin.GetAttributes(cfg, "search_attr")
 	if err != nil {
 		if err != plugin.ErrNotFound {
 			c.errors["vi.search_attr"] = err

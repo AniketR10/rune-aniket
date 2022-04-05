@@ -83,7 +83,7 @@ func newGitHandler(
 	ret.scroll.scroll.Init()
 
 	var err error
-	ret.scroll.scroll.Attributes, err = pconfig.GetAttributes("bar_attr")
+	ret.scroll.scroll.Attributes, err = plugin.GetAttributes(pconfig, "bar_attr")
 	if err != nil {
 		if err != plugin.ErrNotFound {
 			log.Warningf("failed to get 'bar_attr' from config: %v", err)
@@ -122,7 +122,7 @@ func newGitHandler(
 		ret.gitDiffListID = defaultGitDiffListID
 	}
 
-	ret.addAttr, err = pconfig.GetAttributes("add_attr")
+	ret.addAttr, err = plugin.GetAttributes(pconfig, "add_attr")
 	if err != nil {
 		if err != plugin.ErrNotFound {
 			log.Warningf("failed to get 'add_attr' from config: %v", err)
@@ -130,7 +130,7 @@ func newGitHandler(
 		ret.addAttr = defaultAddAttr
 	}
 
-	ret.delAttr, err = pconfig.GetAttributes("del_attr")
+	ret.delAttr, err = plugin.GetAttributes(pconfig, "del_attr")
 	if err != nil {
 		if err != plugin.ErrNotFound {
 			log.Warningf("failed to get 'del_attr' from config: %v", err)

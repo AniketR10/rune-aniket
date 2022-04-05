@@ -348,7 +348,7 @@ func (h *fuzzyFinderHandler) getListConfig(config plugin.Config) search.ListConf
 		CaseSensitive: caseSensitive,
 	}
 
-	matchedTextAttr, err := config.GetAttributes("match_text_attr")
+	matchedTextAttr, err := plugin.GetAttributes(config, "match_text_attr")
 	if err != nil && err != plugin.ErrNotFound {
 		log.Errorf("failed to load 'match_base_attr' from config: %v", err)
 	} else if err == nil {
@@ -356,7 +356,7 @@ func (h *fuzzyFinderHandler) getListConfig(config plugin.Config) search.ListConf
 		cfg.MatchedTextAttr = &matchedTextAttr
 	}
 
-	countAttr, err := config.GetAttributes("count_attr")
+	countAttr, err := plugin.GetAttributes(config, "count_attr")
 	if err != nil && err != plugin.ErrNotFound {
 		log.Errorf("failed to load 'count_attr' from config: %v", err)
 	} else if err == nil {
@@ -364,7 +364,7 @@ func (h *fuzzyFinderHandler) getListConfig(config plugin.Config) search.ListConf
 		cfg.CountAttr = &countAttr
 	}
 
-	textAttr, err := config.GetAttributes("element_attr")
+	textAttr, err := plugin.GetAttributes(config, "element_attr")
 	if err != nil && err != plugin.ErrNotFound {
 		log.Errorf("failed to load 'element_attr' from config: %v", err)
 	} else if err == nil {
@@ -372,7 +372,7 @@ func (h *fuzzyFinderHandler) getListConfig(config plugin.Config) search.ListConf
 		cfg.ElementAttr = &textAttr
 	}
 
-	focusAttr, err := config.GetAttributes("focus_element_attr")
+	focusAttr, err := plugin.GetAttributes(config, "focus_element_attr")
 	if err != nil && err != plugin.ErrNotFound {
 		log.Errorf("failed to load 'focus_element_attr' from config: %v", err)
 	} else if err == nil {

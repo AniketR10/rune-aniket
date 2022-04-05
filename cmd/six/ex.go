@@ -261,9 +261,13 @@ func (e *Ex) editFile(args ...string) (bool, error) {
 	if len(args) == 0 {
 		return false, errors.New("Expected file name")
 	}
-	uri, err := workspace.LocalURI(args[0])
+	// attempt to parse URI otherwise expect local file path
+	uri, err := workspace.ParseURI(args[0])
 	if err != nil {
-		return false, err
+		uri, err = workspace.LocalURI(args[0])
+		if err != nil {
+			return false, err
+		}
 	}
 	h, err := e.comp.Open(uri)
 	if err != nil {

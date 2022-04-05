@@ -26,7 +26,7 @@ type IDE struct {
 // New allocates storage for a new IDE and initializes it with config
 // at cfgfilename and filename. Note that if filename is empty, a default inmutable
 // buffer will be loaded.
-func New(cwd *workspace.Manager, cfgfilename string, filenames ...string) (
+func New(cwd, cfgfilename string, filenames ...string) (
 	i *IDE, err error,
 ) {
 	i = new(IDE)
@@ -38,7 +38,7 @@ func New(cwd *workspace.Manager, cfgfilename string, filenames ...string) (
 // The underlying editor will use recfilename to try to recover file at filename.
 // Note that this function panics if either filename or recfilename are empty.
 func NewRecovery(
-	cwd *workspace.Manager, cfgfilename, filename string, recfilename string,
+	cwd, cfgfilename, filename string, recfilename string,
 ) (i *IDE, err error) {
 	if filename == "" || recfilename == "" {
 		panic(fmt.Sprintf("invalid input: filename='%s', recfilename='%s'",
@@ -66,12 +66,14 @@ func (i *IDE) initPlugins(l *log.Logger) {
 	}
 }
 
-func (i *IDE) init(cwd *workspace.Manager, cfgfilename, recfilename string, filenames ...string) error {
+func (i *IDE) init(cwd, cfgfilename, recfilename string, filenames ...string) error {
 	configErr := loadConfig(&i.ideConfig, cfgfilename)
 
-	opts := make([]text.Option, 0)
-	viOpts := make([]vi.Option, 0)
-	pluginOpts := make([]plugin.Option, 0)
+	var (
+		opts       []text.Option
+		viOpts     []vi.Option
+		pluginOpts []plugin.Option
+	)
 
 	if recfilename != "" {
 		recFile, err := workspace.LocalURI(recfilename)
@@ -146,8 +148,18 @@ func (i *IDE) init(cwd *workspace.Manager, cfgfilename, recfilename string, file
 		pluginOpts = append(pluginOpts, plugin.WithLogger(l))
 	}
 
+	cwdURI, err := workspace.ParseURI(cwd)
+	if err != nil {
+		return err
+	}
+
+	manager, err := workspace.NewManager(cwdURI)
+	if err != nil {
+		return err
+	}
+
 	vi := vi.Editor(viOpts...)
-	ex, err := NewEx(vi, cwd, opts...)
+	ex, err := NewEx(vi, manager, opts...)
 	if err != nil {
 		return err
 	}
