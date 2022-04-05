@@ -95,10 +95,10 @@ func (h *fuzzyFinderHandler) readCommand(src io.Reader) {
 
 	reader := bufio.NewReaderSize(src, readerBufferSize)
 	for {
-		data, err := reader.ReadBytes(byte('\n'))
+		data, err := reader.ReadBytes('\n')
 		if len(data) > 0 {
 			select {
-			case datachan <- data:
+			case datachan <- data[:len(data)-1]:
 			case <-h.quitChan:
 				return
 			}
