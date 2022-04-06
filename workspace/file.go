@@ -40,9 +40,6 @@ type file struct {
 	unflushed       bool
 }
 
-// file cell.Editor API should not be used publicly
-type fileBuf file
-
 func swapFileName(swapDir, filePath string) (string, string) {
 	if swapDir == "" {
 		swapDir = filepath.Dir(filePath)
@@ -193,7 +190,7 @@ func (f *file) initBuffer(buf *cell.Buffer, file osFile) (err error) {
 		buf.WriteString("\n")
 	}
 
-	buf.Subscribe((*fileBuf)(f))
+	buf.Subscribe(f)
 	buf.WithView(view)
 
 	f.reader = buf
@@ -260,11 +257,11 @@ func (f *file) init(
 	return nil
 }
 
-func (f *fileBuf) delayCopySwapError(err error) {
+func (f *file) delayCopySwapError(err error) {
 	f.delayedError = fmt.Errorf("Swap file error %s: %s", f.swap.Name(), err)
 }
 
-func (f *fileBuf) copyFlushSwapFile() (ok bool) {
+func (f *file) copyFlushSwapFile() (ok bool) {
 	f.unflushed = true
 	str := f.reader.String()
 	err := f.swap.Truncate(0)
@@ -299,10 +296,10 @@ func (f *fileBuf) copyFlushSwapFile() (ok bool) {
 	return
 }
 
-func (f *fileBuf) OnWillEdit(start, end term.Coordinates, str string) {
+func (f *file) OnWillEdit(start, end term.Coordinates, str string) {
 }
 
-func (f *fileBuf) OnDidEdit(from, to term.Coordinates, old string) {
+func (f *file) OnDidEdit(from, to term.Coordinates, old string) {
 	if f.swap == nil {
 		return
 	}
@@ -346,7 +343,7 @@ func (f *file) Flush() error {
 	err := f.delayedError
 	if err != nil {
 		f.delayedError = nil
-		if !(*fileBuf)(f).copyFlushSwapFile() {
+		if !f.copyFlushSwapFile() {
 			return err
 		}
 	}
