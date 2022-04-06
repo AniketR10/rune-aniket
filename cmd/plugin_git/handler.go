@@ -19,7 +19,6 @@ import (
 	"github.com/ernestrc/go-tui/proto"
 	"github.com/ernestrc/go-tui/term"
 	"github.com/ernestrc/go-tui/text"
-	"github.com/ernestrc/go-tui/workspace"
 	log "github.com/sirupsen/logrus"
 	"github.com/sourcegraph/go-diff/diff"
 )
@@ -321,12 +320,9 @@ func (h *gitEditorHandler) handleEvents() {
 			log.Tracef("Handle(%#v)", ev.Type)
 		}
 
-		resourceName, err := workspace.LocalPath(ev.URI)
-		if err != nil {
-			log.Errorf("Handle(%#v): LocalPath: %v", ev.URI, err)
-			continue
-		}
+		resourceName := ev.URI.Path()
 
+		var err error
 		switch ev.Type {
 		case text.EventTypeEdit:
 			err = h.pushLastDiffLocations(resourceName, ev.Resource)

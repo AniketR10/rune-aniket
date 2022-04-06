@@ -1003,6 +1003,7 @@ func testFileBufferInsert(
 
 		mock.EXPECT().Truncate(gomock.Eq(int64(0))).Return(myError)
 		buf.InsertString(term.Coordinates{}, myString)
+		f.wg.Wait()
 
 		wait := expectCopyToSwap(f, mock, myString+myString)
 		defer wait()
@@ -1021,6 +1022,7 @@ func testFileBufferInsert(
 		mock.EXPECT().Truncate(gomock.Eq(int64(0))).Return(nil)
 		mock.EXPECT().Seek(gomock.Eq(int64(0)), gomock.Eq(0)).Return(int64(0), myError)
 		buf.InsertString(term.Coordinates{}, myString)
+		f.wg.Wait()
 
 		wait := expectCopyToSwap(f, mock, myString)
 		defer wait()
@@ -1040,6 +1042,7 @@ func testFileBufferInsert(
 
 		mock.EXPECT().Truncate(gomock.Eq(int64(0))).Return(myError)
 		buf.InsertString(term.Coordinates{}, myString)
+		f.wg.Wait()
 
 		mock.EXPECT().Truncate(gomock.Eq(int64(0))).Return(myError)
 		assert.Error(t, f.Flush())
@@ -1055,6 +1058,7 @@ func testFileBufferInsert(
 
 		mock.EXPECT().Truncate(gomock.Eq(int64(0))).Return(myError)
 		buf.InsertString(term.Coordinates{}, myString)
+		f.wg.Wait()
 
 		mock.EXPECT().Truncate(gomock.Eq(int64(0))).Return(myError)
 		err := f.Flush()

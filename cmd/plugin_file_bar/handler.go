@@ -19,7 +19,6 @@ import (
 	"github.com/ernestrc/go-tui/proto"
 	"github.com/ernestrc/go-tui/term"
 	"github.com/ernestrc/go-tui/text"
-	"github.com/ernestrc/go-tui/workspace"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -243,12 +242,9 @@ func (h *fileBarEditorHandler) handleEvents() {
 			log.Tracef("Handle(%#v)", ev.Type)
 		}
 
-		resourceName, err := workspace.LocalPath(ev.URI)
-		if err != nil {
-			log.Errorf("Handle(%#v): LocalPath: %v", ev.URI, err)
-			continue
-		}
+		resourceName := ev.URI.Path()
 
+		var err error
 		switch ev.Type {
 		case text.EventTypeEdit:
 			h.setFileDirty(resourceName, true)

@@ -1,7 +1,6 @@
 package workspace
 
 import (
-	"errors"
 	"fmt"
 	"net/url"
 	"os"
@@ -11,16 +10,6 @@ import (
 
 	"github.com/ernestrc/go-tui/cell"
 )
-
-// LocalPath attempts to return a unix path in the local system
-// or returns an error if URI could not be mapped to path.
-// This function returns an error if URI is empty.
-func LocalPath(u URI) (string, error) {
-	if u == (URI{}) {
-		return "", errors.New("empty URI")
-	}
-	return localPath(u)
-}
 
 // LocalURI returns a URI that references the file at local path.
 func LocalURI(path string) (URI, error) {

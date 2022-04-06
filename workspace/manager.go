@@ -79,7 +79,7 @@ func (m *Manager) initLocal() error {
 	if err != nil {
 		return err
 	}
-	workspacewd, err := LocalPath(m.workspace)
+	workspacewd, err := localPath(m.workspace)
 	if err != nil {
 		return err
 	}
