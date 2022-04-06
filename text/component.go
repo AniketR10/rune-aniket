@@ -154,6 +154,8 @@ func (c *Component) newFileBuffer(
 		lastFlush: buf.String(),
 	}
 
+	// no need to unsubscribe upon Close since the assumption
+	// is that a Component always outlives a cell.Buffer
 	buf.Subscribe(efc)
 
 	return efc, nil

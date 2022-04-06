@@ -8,6 +8,7 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/ernestrc/go-tui/cell"
@@ -22,12 +23,19 @@ const (
 // file is a struture which persists all updates to a swap file
 // and exposes methods to effectively fsync the contents to disk.
 type file struct {
-	openFunc        openFunc
-	removeFunc      removeFunc
-	renameFunc      renameFunc
-	statFunc        statFunc
-	lstatFunc       statFunc
-	readLinkFunc    readLinkFunc
+	openFunc     openFunc
+	removeFunc   removeFunc
+	renameFunc   renameFunc
+	statFunc     statFunc
+	lstatFunc    statFunc
+	readLinkFunc readLinkFunc
+	// used by Flush, Close and worker only
+	// since async work goroutine only starts after
+	// file has been fully initialized
+	wg sync.WaitGroup
+	ch chan string
+
+	buf             *cell.Buffer
 	swapDir         string
 	swapFileName    string
 	fileName        string
@@ -194,6 +202,7 @@ func (f *file) initBuffer(buf *cell.Buffer, file osFile) (err error) {
 	buf.WithView(view)
 
 	f.reader = buf
+	f.buf = buf
 
 	return nil
 }
@@ -221,6 +230,8 @@ func (f *file) recoverFile(filePath, swapFilePath string, buf *cell.Buffer) erro
 	f.swapDir = filepath.Dir(swapFilePath)
 	f.fileName = filePath
 
+	f.setupCopySwapWorker()
+
 	err = f.initBuffer(buf, f.swap)
 	if err != nil {
 		f.Close()
@@ -237,7 +248,21 @@ func (f *file) recoverFile(filePath, swapFilePath string, buf *cell.Buffer) erro
 	return nil
 }
 
-// Init instantiates opens the file at filePath and initializes
+func (f *file) setupCopySwapWorker() {
+	// a buffered channel of 1 guarantees that if worker
+	// is busy and the call to copyFlushSwap is skipped
+	// we are going to copyFlushSwap at least one final time
+	f.ch = make(chan string, 1)
+
+	go func(ch chan string) {
+		for str := range ch {
+			f.copyFlushSwapFile(str)
+			f.wg.Done()
+		}
+	}(f.ch)
+}
+
+// init instantiates opens the file at filePath and initializes
 // buf with the contents of it. If swapDir is "", then filePath directory is
 // used as a swap directory
 func (f *file) init(
@@ -247,6 +272,8 @@ func (f *file) init(
 	if err != nil {
 		return err
 	}
+
+	f.setupCopySwapWorker()
 
 	err = f.initBuffer(buf, f.orig)
 	if err != nil {
@@ -261,9 +288,12 @@ func (f *file) delayCopySwapError(err error) {
 	f.delayedError = fmt.Errorf("Swap file error %s: %s", f.swap.Name(), err)
 }
 
-func (f *file) copyFlushSwapFile() (ok bool) {
+func (f *file) copyFlushSwapFile(str string) (ok bool) {
+	if f.swap == nil {
+		return
+	}
+
 	f.unflushed = true
-	str := f.reader.String()
 	err := f.swap.Truncate(0)
 	if err != nil {
 		f.delayCopySwapError(err)
@@ -297,14 +327,17 @@ func (f *file) copyFlushSwapFile() (ok bool) {
 }
 
 func (f *file) OnWillEdit(start, end term.Coordinates, str string) {
+	f.wg.Add(1)
 }
 
+// TODO debug why sending multiple commands blocks connection indefinetly
+// should be able to spin up local debugger since blocking is local
 func (f *file) OnDidEdit(from, to term.Coordinates, old string) {
-	if f.swap == nil {
-		return
+	select {
+	case f.ch <- f.reader.String():
+	default:
+		f.wg.Done()
 	}
-	f.copyFlushSwapFile()
-	return
 }
 
 func (f *file) moveFile(sourcePath, destPath string) error {
@@ -328,14 +361,12 @@ func (f *file) touchFile() error {
 	return nil
 }
 
-// Flushed returns true if the contents of the Buffer have been flushed to file system.
-func (f *file) Flushed() bool {
-	return !f.unflushed
-}
-
 // Flush saves the contents of the buffer to disk. If file was modified by some
-// other process, this method returns ErrStaleData.
+// other process, this method returns ErrStaleData. Flush blocks until
+// all edits have been processed.
 func (f *file) Flush() error {
+	f.wg.Wait()
+
 	if f.swap == nil {
 		return ErrFileIsNotWritable
 	}
@@ -343,7 +374,7 @@ func (f *file) Flush() error {
 	err := f.delayedError
 	if err != nil {
 		f.delayedError = nil
-		if !f.copyFlushSwapFile() {
+		if !f.copyFlushSwapFile(f.reader.String()) {
 			return err
 		}
 	}
@@ -413,6 +444,19 @@ func (f *file) Close() error {
 	}
 
 	f.fileName = ""
+
+	// Wait for all async work to complete.
+	// Calling goroutine should be the same goroutine
+	// that calls OnDidEdit so no more work should be added
+	f.wg.Wait()
+
+	if f.ch != nil {
+		close(f.ch)
+	}
+
+	if f.buf != nil {
+		f.buf.Unsubscribe(f)
+	}
 
 	var err2, err3 error
 	if f.swap != nil {

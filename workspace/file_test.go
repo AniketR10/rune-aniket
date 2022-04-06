@@ -359,6 +359,9 @@ func testFileBufferIntegration(t *testing.T, endsInEOL bool) {
 		const writeStr = "XXXXXX"
 		b.InsertString(term.Coordinates{}, writeStr)
 
+		// wait for updates
+		f.wg.Wait()
+
 		buf, err = ioutil.ReadFile(f.swap.Name())
 		require.NoError(t, err)
 
@@ -645,13 +648,14 @@ func TestFileBufferInit(t *testing.T) {
 			assert.Equal(t, "Oakland", buf.String(), fmt.Sprintf("%q", string(data)))
 			assert.Equal(t, 1, buf.Rows(), fmt.Sprintf("%q", string(data)))
 
-			expectCopyToSwapPrepare(mock)
+			wait := expectCopyToSwapPrepare(f, mock)
 			mock.EXPECT().
 				Write(gomock.Any()).
 				Return(1, nil)
 			buf.WriteString("\n")
 			assert.Equal(t, "Oakland\n", buf.String(), fmt.Sprintf("%q", string(data)))
 			assert.Equal(t, 2, buf.Rows(), fmt.Sprintf("%q", string(data)))
+			wait()
 		}
 	})
 
@@ -963,24 +967,27 @@ func TestRecoverFileBufferFlush(t *testing.T) {
 	testFileBufferFlush(t, newRecoveredTestFileBuffer)
 }
 
-func expectCopyToSwapPrepare(mock *MockOsFile) {
+func expectCopyToSwapPrepare(f *file, mock *MockOsFile) func() {
 	mock.EXPECT().Truncate(gomock.Eq(int64(0))).Return(nil)
 	mock.EXPECT().Seek(gomock.Eq(int64(0)), gomock.Eq(0)).Return(int64(0), nil)
 	mock.EXPECT().
 		Sync().
 		Return(nil)
+	return f.wg.Wait
 }
 
-func expectCopyToSwap(mock *MockOsFile, newData string) {
+func expectCopyToSwap(f *file, mock *MockOsFile, newData string) func() {
 	expectedContent := newData + string(defaultFileData)
-	expectCopyToSwapPrepare(mock)
+	clean := expectCopyToSwapPrepare(f, mock)
 	mock.EXPECT().
 		Write(gomock.Eq([]byte(expectedContent+"\n"))).
 		Return(len(expectedContent)+1, nil)
+	return clean
 }
 
 type newBufferFunc func(*testing.T, *gomock.Controller) (*file, *MockOsFile, *cell.Buffer)
 
+// TODO debug why it's failing sometimes
 func testFileBufferInsert(
 	t *testing.T,
 	newBuffer newBufferFunc,
@@ -990,14 +997,16 @@ func testFileBufferInsert(
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
-		_, mock, buf := newBuffer(t, ctrl)
+		f, mock, buf := newBuffer(t, ctrl)
 		myString := "my string\n"
 		myError := errors.New("I feel clammy")
 
 		mock.EXPECT().Truncate(gomock.Eq(int64(0))).Return(myError)
 		buf.InsertString(term.Coordinates{}, myString)
 
-		expectCopyToSwap(mock, myString+myString)
+		wait := expectCopyToSwap(f, mock, myString+myString)
+		defer wait()
+
 		buf.InsertString(term.Coordinates{}, myString)
 	})
 
@@ -1013,7 +1022,9 @@ func testFileBufferInsert(
 		mock.EXPECT().Seek(gomock.Eq(int64(0)), gomock.Eq(0)).Return(int64(0), myError)
 		buf.InsertString(term.Coordinates{}, myString)
 
-		expectCopyToSwap(mock, myString)
+		wait := expectCopyToSwap(f, mock, myString)
+		defer wait()
+
 		mock.EXPECT().Close().Return(nil).Times(2)
 		expectInitSwap(mock, defaultFileName, testFileInfo{}, defaultFileData)
 		assert.NoError(t, f.Flush())
@@ -1055,17 +1066,22 @@ func testFileBufferInsert(
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
-		_, mock, buf := newBuffer(t, ctrl)
+		f, mock, buf := newBuffer(t, ctrl)
 		myString := "my string\n"
 
-		expectCopyToSwap(mock, myString)
+		// wait for all of them otherwise if test goroutine is slow
+		// file could chose to skip one of the syncs
+		wait := expectCopyToSwap(f, mock, myString)
 		buf.InsertString(term.Coordinates{}, myString)
+		wait()
 
-		expectCopyToSwap(mock, "")
+		wait = expectCopyToSwap(f, mock, "")
 		buf.Undo()
+		wait()
 
-		expectCopyToSwap(mock, myString)
+		wait = expectCopyToSwap(f, mock, myString)
 		buf.Redo()
+		wait()
 	})
 
 	t.Run("upon Insert, it copies content to swap file", func(t *testing.T) {
@@ -1077,7 +1093,8 @@ func testFileBufferInsert(
 		require.Equal(t, string(defaultFileData), f.reader.String())
 
 		myString := "my string\n"
-		expectCopyToSwap(mock, myString)
+		wait := expectCopyToSwap(f, mock, myString)
+		defer wait()
 
 		buf.InsertString(term.Coordinates{}, myString)
 	})
@@ -1097,8 +1114,10 @@ func testFileBufferDelete(t *testing.T, newBuffer newBufferFunc) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
-		_, mock, buf := newBuffer(t, ctrl)
-		expectCopyToSwapPrepare(mock)
+		f, mock, buf := newBuffer(t, ctrl)
+		wait := expectCopyToSwapPrepare(f, mock)
+		defer wait()
+
 		mock.EXPECT().
 			Write(gomock.Eq([]byte("\n"))).
 			Return(1, nil)
@@ -1129,54 +1148,4 @@ func TestRecoverFileBufferDelete(t *testing.T) {
 
 func TestRecoverFileBufferInsert(t *testing.T) {
 	testFileBufferInsert(t, newRecoveredTestFileBuffer)
-}
-
-func testFileBufferFlushed(t *testing.T, newBuffer newBufferFunc) {
-	t.Run("Flushed should return true upon initialization", func(t *testing.T) {
-		ctrl := gomock.NewController(t)
-		defer ctrl.Finish()
-
-		f, _, _ := newBuffer(t, ctrl)
-		assert.True(t, f.Flushed())
-	})
-
-	t.Run("Flushed should return false after insert is called", func(t *testing.T) {
-		ctrl := gomock.NewController(t)
-		defer ctrl.Finish()
-
-		f, mock, buf := newBuffer(t, ctrl)
-
-		myString := "fjklew"
-		expectCopyToSwap(mock, myString)
-		buf.InsertString(term.Coordinates{}, myString)
-
-		assert.False(t, f.Flushed())
-	})
-
-	t.Run("Flushed should return false after delete is called", func(t *testing.T) {
-		ctrl := gomock.NewController(t)
-		defer ctrl.Finish()
-
-		f, mock, buf := newBuffer(t, ctrl)
-
-		myString := "fjklew"
-		expectCopyToSwap(mock, myString)
-		buf.DeleteRow(0)
-
-		assert.False(t, f.Flushed())
-	})
-
-	t.Run("Flushed should return false after delete is called", func(t *testing.T) {
-		ctrl := gomock.NewController(t)
-		defer ctrl.Finish()
-
-		f, mock, buf := newBuffer(t, ctrl)
-
-		myString := ""
-		expectCopyToSwap(mock, myString)
-		buf.DeleteRow(0)
-
-		require.NoError(t, f.Flush())
-		assert.True(t, f.Flushed())
-	})
 }

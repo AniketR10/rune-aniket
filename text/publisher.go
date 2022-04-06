@@ -69,6 +69,9 @@ func (p *Publisher) PublishEdit(
 	})
 
 	bsub := CellSubscriber(resource, h, p)
+
+	// NOTE: should probably find a way to unsubscribe, since
+	// a cell.Buffer can outlive this Publisher
 	buf.Subscribe(bsub)
 
 	csub := ScrollSubscriber(resource, h, p)
