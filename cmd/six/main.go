@@ -17,10 +17,11 @@ var (
 	Version    = "development"
 	configpath *string
 
-	flagRecover   = flag.String("r", "", "recover from recovery file")
-	flagPprof     = flag.Bool("p", false, "start pprof server at :6060")
-	flagVersion   = flag.Bool("v", false, "print version information")
-	flagWorkspace = flag.String("w", cwdURI().String(), "workspace URI")
+	flagRecover         = flag.String("r", "", "recover from recovery file")
+	flagPprof           = flag.Bool("p", false, "start pprof server at :6060")
+	flagVersion         = flag.Bool("v", false, "print version information")
+	flagWorkspace       = flag.String("w", cwdURI().String(), "workspace URI")
+	flagWorkspaceServer = flag.String("x", "", "runs workspace server from standard input and output")
 )
 
 func init() {
@@ -65,6 +66,15 @@ func main() {
 		go func() {
 			log.Println(http.ListenAndServe(":6060", nil))
 		}()
+	}
+
+	if *flagWorkspaceServer != "" {
+		server := workspace.NewServer()
+		err := workspace.StartWorkspaceServer(server)
+		if err != nil {
+			log.Fatal(err)
+		}
+		os.Exit(0)
 	}
 
 	var i *IDE

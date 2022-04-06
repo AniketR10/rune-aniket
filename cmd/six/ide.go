@@ -18,9 +18,10 @@ import (
 // IDE binds together a text editor/browser with a plugin manager.
 type IDE struct {
 	ideConfig
-	ex        *Ex
-	manager   *plugin.Manager
-	clipboard *plugin.ClipboardManager
+	ex               *Ex
+	manager          *plugin.Manager
+	workspaceManager *workspace.Manager
+	clipboard        *plugin.ClipboardManager
 }
 
 // New allocates storage for a new IDE and initializes it with config
@@ -70,9 +71,10 @@ func (i *IDE) init(cwd, cfgfilename, recfilename string, filenames ...string) er
 	configErr := loadConfig(&i.ideConfig, cfgfilename)
 
 	var (
-		opts       []text.Option
-		viOpts     []vi.Option
-		pluginOpts []plugin.Option
+		opts          []text.Option
+		viOpts        []vi.Option
+		pluginOpts    []plugin.Option
+		workspaceOpts []workspace.Option
 	)
 
 	if recfilename != "" {
@@ -148,18 +150,24 @@ func (i *IDE) init(cwd, cfgfilename, recfilename string, filenames ...string) er
 		pluginOpts = append(pluginOpts, plugin.WithLogger(l))
 	}
 
+	for _, key := range i.ideConfig.workspaceSSHPrivateKeys() {
+		workspaceOpts = append(workspaceOpts, workspace.WithSSHPrivateKey(key))
+	}
+	workspaceOpts = append(workspaceOpts,
+		workspace.WithSSHTimeout(i.ideConfig.workspaceSSHTimeout()))
+
 	cwdURI, err := workspace.ParseURI(cwd)
 	if err != nil {
 		return err
 	}
 
-	manager, err := workspace.NewManager(cwdURI)
+	i.workspaceManager, err = workspace.NewManager(cwdURI, workspaceOpts...)
 	if err != nil {
 		return err
 	}
 
 	vi := vi.Editor(viOpts...)
-	ex, err := NewEx(vi, manager, opts...)
+	ex, err := NewEx(vi, i.workspaceManager, opts...)
 	if err != nil {
 		return err
 	}
@@ -220,6 +228,7 @@ func (i *IDE) closeResources() error {
 	err1 := i.manager.Close()
 	err2 := i.ex.Close()
 	err3 := i.clipboard.Close()
+	err4 := i.workspaceManager.Close()
 
 	if err1 != nil {
 		return err1
@@ -229,6 +238,9 @@ func (i *IDE) closeResources() error {
 	}
 	if err3 != nil {
 		return err3
+	}
+	if err4 != nil {
+		return err4
 	}
 
 	return nil

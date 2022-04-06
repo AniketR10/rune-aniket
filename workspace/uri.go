@@ -54,7 +54,7 @@ func makeURI(u *url.URL) (URI, error) {
 	if u.Scheme == fileScheme {
 		return makeFileURI(u)
 	}
-	if u.Scheme == "ssh" {
+	if u.Scheme == sshScheme {
 		return makeSSHURI(u)
 	}
 	return URI{}, fmt.Errorf("unsupported scheme: %s", u.Scheme)

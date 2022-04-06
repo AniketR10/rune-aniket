@@ -727,6 +727,56 @@ func (c pluginConfig) config() (plugin.Config, bool) {
 	return cfg, true
 }
 
+func (c ideConfig) workspace() (plugin.Config, bool) {
+	if c.cfg == nil {
+		return nil, false
+	}
+	return c.getConfig(plugin.MapConfig(c.cfg), "workspace")
+}
+
+func (c ideConfig) workspaceSSHTimeout() (ret time.Duration) {
+	ret = defSSHTimeout
+
+	cfg, ok := c.workspace()
+	if !ok {
+		return
+	}
+
+	sshTimeout, err := plugin.GetDuration(cfg, "ssh_timeout", defSSHTimeout)
+	if err != nil {
+		c.errors["workspace.ssh_timeout"] = err
+		return
+	}
+
+	ret = sshTimeout
+	return
+}
+
+func (c ideConfig) workspaceSSHPrivateKeys() (ret []string) {
+	cfg, ok := c.workspace()
+	if !ok {
+		return
+	}
+
+	keyIfcs, err := cfg.GetSlice("ssh_private_keys")
+	if err != nil {
+		c.errors["workspace.ssh_private_keys"] = err
+		return
+	}
+
+	for i, keyIfc := range keyIfcs {
+		key, ok := keyIfc.(string)
+		if !ok {
+			errorID := fmt.Sprintf("workspace.ssh_private_keys.%d", i)
+			c.errors[errorID] = fmt.Errorf("string expected but found %v", key)
+			continue
+		}
+		ret = append(ret, key)
+	}
+
+	return ret
+}
+
 func decodeConfig(r io.Reader) (cfg map[string]interface{}, err error) {
 	d := yaml.NewDecoder(r)
 

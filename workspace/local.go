@@ -3,7 +3,6 @@ package workspace
 import (
 	"errors"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"net/url"
 	"os"
@@ -22,25 +21,6 @@ const (
 	fileScheme                  = "file"
 )
 
-// osFile is used to abstract *os.File.
-type osFile interface {
-	Name() string
-	Stat() (os.FileInfo, error)
-	Sync() error
-	Truncate(size int64) error
-	WriteString(str string) (int, error)
-
-	io.Seeker
-	io.Reader
-	io.Closer
-	io.Writer
-}
-
-type openFunc func(name string, flag int, perm os.FileMode) (osFile, error)
-type removeFunc func(name string) error
-type renameFunc func(oldpath, newpath string) error
-type statFunc func(name string) (os.FileInfo, error)
-
 // localFile is a struture which persists all updates to a swap file
 // and exposes methods to effectively fsync the contents to disk.
 type localFile struct {
@@ -49,6 +29,7 @@ type localFile struct {
 	renameFunc      renameFunc
 	statFunc        statFunc
 	lstatFunc       statFunc
+	readLinkFunc    readLinkFunc
 	swapDir         string
 	swapFileName    string
 	fileName        string
@@ -72,12 +53,12 @@ func swapFileName(swapDir, filePath string) (string, string) {
 }
 
 func (f *localFile) initSwap(swapDir string, orig osFile, origPerms os.FileMode) (osFile, error) {
-	swap, err := f.openFunc(f.swapFileName, os.O_RDWR|os.O_CREATE|os.O_EXCL, origPerms)
-	if err != nil {
-		if os.IsExist(err) {
+	swap, osErr := f.openFunc(f.swapFileName, os.O_RDWR|os.O_CREATE|os.O_EXCL, origPerms)
+	if osErr != nil {
+		if osErr.isExist {
 			return nil, ErrFileAlreadyOpen
 		}
-		return nil, err
+		return nil, osErr
 	}
 
 	if orig == nil {
@@ -122,17 +103,19 @@ func validateFileType(file osFile) (os.FileInfo, error) {
 }
 
 func (f *localFile) openFile(filePath string, flag int) (
-	file osFile, fileInfo os.FileInfo, err error,
+	osFile, os.FileInfo, error,
 ) {
-	file, err = f.openFunc(filePath, flag, 0000)
+	file, err := f.openFunc(filePath, flag, 0000)
 	if err != nil {
-		file = nil
-		return
+		return nil, nil, err
 	}
 
-	fileInfo, err = validateFileType(file)
+	fileInfo, verr := validateFileType(file)
+	if verr != nil {
+		return nil, nil, verr
+	}
 
-	return
+	return file, fileInfo, nil
 }
 
 func (f *localFile) initFiles(filePath, swapDir string, readOnly bool) error {
@@ -141,17 +124,20 @@ func (f *localFile) initFiles(filePath, swapDir string, readOnly bool) error {
 		flag = os.O_RDONLY
 	}
 	file, fileInfo, err := f.openFile(filePath, flag)
-	if err != nil && os.IsNotExist(err) && !readOnly {
-		// delegate opening file to Flush
-		err = nil
-	}
-	if err != nil && os.IsPermission(err) {
-		// delegate write error to Flush
-		file, fileInfo, err = f.openFile(filePath, os.O_RDONLY)
-		if err != nil {
-			return err
+	if err != nil {
+		if osErr, ok := err.(*osError); ok && osErr.isNotExist && !readOnly {
+			err = nil
 		}
-		readOnly = true
+	}
+	if err != nil {
+		// delegate write error to Flush
+		if osErr, ok := err.(*osError); ok && osErr.isPermission {
+			file, fileInfo, err = f.openFile(filePath, os.O_RDONLY)
+			if err != nil {
+				return err
+			}
+			readOnly = true
+		}
 	}
 	if err != nil {
 		return err
@@ -220,15 +206,17 @@ func (f *localFile) initBuffer(buf *cell.Buffer, file osFile) (err error) {
 func (f *localFile) recoverFile(filePath, swapFilePath string, buf *cell.Buffer) error {
 	var err error
 	f.orig, _, err = f.openFile(filePath, os.O_RDWR)
-	if err != nil && os.IsNotExist(err) {
-		err = nil
+	if err != nil {
+		if osErr, ok := err.(*osError); ok && osErr.isNotExist {
+			err = nil
+		}
 	}
 	if err != nil {
 		return err
 	}
-	swap, swapFileInfo, err := f.openFile(swapFilePath, os.O_RDWR)
-	if err != nil {
-		return err
+	swap, swapFileInfo, osErr := f.openFile(swapFilePath, os.O_RDWR)
+	if osErr != nil {
+		return osErr
 	}
 
 	f.swap = swap
@@ -254,12 +242,6 @@ func (f *localFile) recoverFile(filePath, swapFilePath string, buf *cell.Buffer)
 	return nil
 }
 
-func osOpenFileFunc() openFunc {
-	return func(path string, flag int, perm os.FileMode) (osFile, error) {
-		return os.OpenFile(path, flag, perm)
-	}
-}
-
 func newOsLocalFile() *localFile {
 	ret := new(localFile)
 	ret.openFunc = osOpenFileFunc()
@@ -267,6 +249,7 @@ func newOsLocalFile() *localFile {
 	ret.renameFunc = os.Rename
 	ret.statFunc = os.Stat
 	ret.lstatFunc = os.Lstat
+	ret.readLinkFunc = os.Readlink
 	return ret
 }
 
@@ -353,6 +336,16 @@ func openLocalFile(file URI, buf *cell.Buffer, swapDir URI, readOnly bool) (
 	return ret, nil
 }
 
+func initFile(f *localFile, file URI, buf *cell.Buffer, swapDir URI, readOnly bool) (
+	FlusherCloser, error,
+) {
+	err := f.init(file.Path(), buf, swapDir.Path(), readOnly)
+	if err != nil {
+		return nil, err
+	}
+	return f, nil
+}
+
 func (f *fileBuf) delayCopySwapError(err error) {
 	f.delayedError = fmt.Errorf("Swap file error %s: %s", f.swap.Name(), err)
 }
@@ -375,7 +368,7 @@ func (f *fileBuf) copyFlushSwapFile() (ok bool) {
 	if !strings.HasSuffix(str, "\n") {
 		str += "\n"
 	}
-	_, err = f.swap.WriteString(str)
+	_, err = f.swap.Write([]byte(str))
 	if err != nil {
 		f.delayCopySwapError(err)
 		return
@@ -411,17 +404,17 @@ func (f *localFile) moveFile(sourcePath, destPath string) error {
 	return nil
 }
 
-func (f *localFile) touchFile() (err error) {
+func (f *localFile) touchFile() error {
+	var err *osError
 	f.orig, err = f.openFunc(f.fileName, os.O_RDWR|os.O_CREATE|os.O_EXCL, defaultFileMode)
 	if err != nil {
 		// file was not created when instantiating this localFile, but now
 		// file seems to be there so localFile must be stale.
-		if os.IsExist(err) {
-			err = ErrStaleData
+		if err.isExist {
+			return ErrStaleData
 		}
-		return
 	}
-	return
+	return nil
 }
 
 // Flushed returns true if the contents of the Buffer have been flushed to file system.
@@ -467,7 +460,7 @@ func (f *localFile) Flush() error {
 			return err
 		}
 		if newFileInfo.Mode()&os.ModeSymlink != 0 {
-			origTarget, err = os.Readlink(origTarget)
+			origTarget, err = f.readLinkFunc(origTarget)
 			if err != nil {
 				return err
 			}

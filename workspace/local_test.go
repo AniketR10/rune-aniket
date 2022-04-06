@@ -538,7 +538,7 @@ func (t testFileInfo) Sys() interface{} {
 func newTestFileBuffer(ctrl *gomock.Controller) (*localFile, *MockOsFile) {
 	f := new(localFile)
 	mock := NewMockOsFile(ctrl)
-	f.openFunc = func(name string, flag int, perm os.FileMode) (osFile, error) {
+	f.openFunc = func(name string, flag int, perm os.FileMode) (osFile, *osError) {
 		return mock, nil
 	}
 	f.removeFunc = func(name string) error {
@@ -647,7 +647,7 @@ func TestFileBufferInit(t *testing.T) {
 
 			expectCopyToSwapPrepare(mock)
 			mock.EXPECT().
-				WriteString(gomock.Any()).
+				Write(gomock.Any()).
 				Return(1, nil)
 			buf.WriteString("\n")
 			assert.Equal(t, "Oakland\n", buf.String(), fmt.Sprintf("%q", string(data)))
@@ -676,9 +676,9 @@ func TestFileBufferInit(t *testing.T) {
 	})
 
 	t.Run("bubble up original file open error", func(t *testing.T) {
-		accessDeniedErr := errors.New("access denied")
+		accessDeniedErr := nopOsError(errors.New("access denied"))
 		f := new(localFile)
-		f.openFunc = func(name string, flag int, perm os.FileMode) (osFile, error) {
+		f.openFunc = func(name string, flag int, perm os.FileMode) (osFile, *osError) {
 			return nil, accessDeniedErr
 		}
 		assert.Equal(t, accessDeniedErr, f.init("fjkelw", cell.NewBuffer(), "", false))
@@ -688,11 +688,11 @@ func TestFileBufferInit(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
-		accessDeniedErr := errors.New("access denied")
+		accessDeniedErr := nopOsError(errors.New("access denied"))
 		origFileMock := NewMockOsFile(ctrl)
 		f := new(localFile)
 		i := 0
-		f.openFunc = func(name string, flag int, perm os.FileMode) (osFile, error) {
+		f.openFunc = func(name string, flag int, perm os.FileMode) (osFile, *osError) {
 			i++
 			if i == 1 {
 				return origFileMock, nil
@@ -724,15 +724,31 @@ func newInitializedTestFileBuffer(t *testing.T, ctrl *gomock.Controller) (
 	return f, mock, buf
 }
 
+type testOsError struct {
+	isExistErr      bool
+	isNotExistErr   bool
+	isPermissionErr bool
+}
+
+func (t testOsError) isPermission() bool {
+	return t.isPermissionErr
+}
+func (t testOsError) isExist() bool {
+	return t.isExistErr
+}
+func (t testOsError) isNotExist() bool {
+	return t.isNotExistErr
+}
+
 func newUninitializedTestFileBuffer(t *testing.T, ctrl *gomock.Controller) (
 	*localFile, *MockOsFile, *cell.Buffer,
 ) {
 	f, mock := newTestFileBuffer(ctrl)
-	f.openFunc = func(name string, flag int, perm os.FileMode) (osFile, error) {
+	f.openFunc = func(name string, flag int, perm os.FileMode) (osFile, *osError) {
 		if flag&os.O_CREATE != 0 {
 			return mock, nil
 		}
-		return nil, &os.PathError{Err: os.ErrNotExist}
+		return nil, &osError{isNotExist: true}
 	}
 
 	mock.EXPECT().Name().Return(defaultFileName).AnyTimes()
@@ -746,9 +762,9 @@ func newReadOnlyTestFileBuffer(t *testing.T, ctrl *gomock.Controller) (
 	*localFile, *MockOsFile, *cell.Buffer,
 ) {
 	f, mock := newTestFileBuffer(ctrl)
-	f.openFunc = func(name string, flag int, perm os.FileMode) (osFile, error) {
+	f.openFunc = func(name string, flag int, perm os.FileMode) (osFile, *osError) {
 		if flag&os.O_RDWR != 0 || flag&os.O_CREATE != 0 {
-			return nil, &os.PathError{Err: os.ErrPermission}
+			return nil, &osError{isPermission: true}
 		}
 		return mock, nil
 	}
@@ -935,9 +951,9 @@ func TestNewFileBufferFlush(t *testing.T) {
 		f, _, _ := newUninitializedTestFileBuffer(t, ctrl)
 		require.Nil(t, f.orig)
 
-		f.openFunc = func(name string, flag int, perm os.FileMode) (osFile, error) {
+		f.openFunc = func(name string, flag int, perm os.FileMode) (osFile, *osError) {
 			assert.NotZero(t, flag&os.O_CREATE)
-			return nil, &os.PathError{Err: os.ErrExist}
+			return nil, &osError{isExist: true}
 		}
 		assert.Equal(t, ErrStaleData, f.Flush())
 	})
@@ -959,7 +975,7 @@ func expectCopyToSwap(mock *MockOsFile, newData string) {
 	expectedContent := newData + string(defaultFileData)
 	expectCopyToSwapPrepare(mock)
 	mock.EXPECT().
-		WriteString(gomock.Eq(expectedContent+"\n")).
+		Write(gomock.Eq([]byte(expectedContent+"\n"))).
 		Return(len(expectedContent)+1, nil)
 }
 
@@ -1084,7 +1100,7 @@ func testFileBufferDelete(t *testing.T, newBuffer newBufferFunc) {
 		_, mock, buf := newBuffer(t, ctrl)
 		expectCopyToSwapPrepare(mock)
 		mock.EXPECT().
-			WriteString(gomock.Eq("\n")).
+			Write(gomock.Eq([]byte("\n"))).
 			Return(1, nil)
 		buf.DeleteRow(0)
 	})
