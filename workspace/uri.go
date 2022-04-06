@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"net/url"
 	"path/filepath"
+
+	"github.com/ernestrc/go-tui/util"
 )
 
 // URI represents a parsed URI reference.
@@ -29,6 +31,54 @@ func (u URI) Path() string {
 	return u.parsed.Path
 }
 
+func sanitizeFilePath(resource string) string {
+	resolvedPath, err := filepath.EvalSymlinks(resource)
+	if err != nil {
+		resolvedPath = filepath.Clean(resource)
+	}
+	return util.SanitizeLine(resolvedPath)
+}
+
+func makeSSHURI(u *url.URL) (URI, error) {
+	name := fmt.Sprintf("%s://%s%s", u.Scheme, u.Host, u.Path)
+	return URI{uri: u.String(), parsed: *u, name: name}, nil
+}
+
+func makeFileURI(u *url.URL) (URI, error) {
+	path := sanitizeFilePath(u.Path)
+	u.Path = path
+	return URI{uri: u.String(), parsed: *u, name: filepath.Base(path)}, nil
+}
+
+func makeURI(u *url.URL) (URI, error) {
+	if u.Scheme == fileScheme {
+		return makeFileURI(u)
+	}
+	if u.Scheme == "ssh" {
+		return makeSSHURI(u)
+	}
+	return URI{}, fmt.Errorf("unsupported scheme: %s", u.Scheme)
+}
+
+func checkURIRelative(a, b URI) error {
+	if a.parsed.Scheme != b.parsed.Scheme {
+		return fmt.Errorf("unexpected different schemes: %s vs %s",
+			a.String(), b.String())
+	}
+	if a.parsed.Scheme == fileScheme {
+		return nil
+	}
+	if a.parsed.Host != b.parsed.Host {
+		return fmt.Errorf("unexpected different hosts: %s vs %s",
+			a.String(), b.String())
+	}
+	if a.parsed.User.String() != b.parsed.User.String() {
+		return fmt.Errorf("unexpected different users: %s vs %s",
+			a.String(), b.String())
+	}
+	return nil
+}
+
 // ParseURI parses s as a URI in the form of:
 // [scheme:][//[userinfo@]host][/]path[?query][#fragment]
 func ParseURI(s string) (URI, error) {
@@ -36,13 +86,25 @@ func ParseURI(s string) (URI, error) {
 	if err != nil {
 		return URI{}, fmt.Errorf("failed to parse URI: %s", err)
 	}
-	if u.Scheme == "file" {
-		return makeFileURI(u)
-	}
-	return URI{}, fmt.Errorf("unsupported scheme: %s", s)
+	return makeURI(u)
 }
 
-func makeFileURI(u *url.URL) (URI, error) {
-	path := sanitizeFilePath(u.Path)
-	return URI{uri: u.String(), parsed: *u, name: filepath.Base(path)}, nil
+// DefaultSwapFile returns a file's default swap directory in the
+// local or remote workspace.
+func DefaultSwapFile(swapDir URI, file URI) (URI, error) {
+	err := checkURIRelative(swapDir, file)
+	if err != nil {
+		return URI{}, err
+	}
+	_, swapFilePath := swapFileName(swapDir.parsed.Path, file.parsed.Path)
+	file.parsed.Path = swapFilePath
+	return makeURI(&file.parsed)
+}
+
+// DefaultSwapDirectory returns a file's default swap directory in the
+// local or remote workspace.
+func DefaultSwapDirectory(file URI) (URI, error) {
+	swapDir, _ := swapFileName(filepath.Dir(file.parsed.Path), file.parsed.Path)
+	file.parsed.Path = swapDir
+	return makeURI(&file.parsed)
 }

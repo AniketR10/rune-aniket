@@ -52,76 +52,6 @@ diff_buf_adjust(win_T *win)
 	diff_buf_add(win->w_buffer);
 } /* { */ `
 
-func TestSanitizeFilename(t *testing.T) {
-	tsuite := []struct {
-		in  string
-		out string
-	}{
-		{"", "."},
-		{"file.sql", "file.sql"},
-		{"/file.sql", "/file.sql"},
-		{"w\x00ps", "wps"},
-		{"RE\nADME.md\n", "README.md"},
-	}
-
-	for _, tcase := range tsuite {
-		out := sanitizeFilePath(tcase.in)
-		assert.Equal(t, tcase.out, out)
-	}
-}
-
-func TestDefaultLocalSwapDirectory(t *testing.T) {
-	tsuite := []struct {
-		file    string
-		wantDir string
-		wantErr bool
-	}{
-		{"other:///tmp/a.go", "", true},
-		{"file:///a.go", "file:///", false},
-		{"file:///tmp/a.go", "file:///tmp", false},
-	}
-
-	for _, tcase := range tsuite {
-		t.Run(fmt.Sprintf("DefaultLocalSwapDirectory of %s", tcase.file), func(t *testing.T) {
-			uri := URI{uri: tcase.file}
-			out, err := DefaultLocalSwapDirectory(uri)
-			if tcase.wantErr {
-				assert.Error(t, err)
-			} else {
-				assert.Equal(t, tcase.wantDir, out.String())
-			}
-		})
-	}
-}
-
-func TestDefaultLocalSwapFile(t *testing.T) {
-	tsuite := []struct {
-		fileIn    string
-		swapDirIn string
-		wantDir   string
-		wantErr   bool
-	}{
-		{"other:///tmp/a.go", "other:///tmp", "", true},
-		{"file:///a.go", "file:///tmp", "file:///tmp/.a.go.swp", false},
-		{"file:///a.go", "file:///", "file:///.a.go.swp", false},
-		{"file:///tmp/a.go", "file:///tmp", "file:///tmp/.a.go.swp", false},
-		{"file:///tmp/a.go", "file:///", "file:///.a.go.swp", false},
-	}
-
-	for _, tcase := range tsuite {
-		t.Run(fmt.Sprintf("DefaultLocalSwapFile of %s", tcase.fileIn), func(t *testing.T) {
-			uri := URI{uri: tcase.fileIn}
-			swapUri := URI{uri: tcase.swapDirIn}
-			out, err := DefaultLocalSwapFile(swapUri, uri)
-			if tcase.wantErr {
-				assert.Error(t, err)
-			} else {
-				assert.Equal(t, tcase.wantDir, out.String())
-			}
-		})
-	}
-}
-
 // INTEGRATION TESTS
 
 func newIntegrationTestCase(t *testing.T, endsInEOL bool) (
@@ -155,7 +85,7 @@ func openFile(
 	}
 	var swap URI
 	if swapDir == "" {
-		swap, err = DefaultLocalSwapDirectory(file)
+		swap, err = DefaultSwapDirectory(file)
 	} else {
 		swap, err = LocalURI(swapDir)
 	}

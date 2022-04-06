@@ -123,7 +123,7 @@ func (c *Component) setTabAttr(file workspace.URI, buf *cell.Buffer, lastFlush s
 
 func (c *Component) getSwapDir(file workspace.URI) (workspace.URI, error) {
 	if c.config.SwapDir == nil {
-		return workspace.DefaultLocalSwapDirectory(file)
+		return workspace.DefaultSwapDirectory(file)
 	}
 	return *c.config.SwapDir, nil
 }
@@ -315,7 +315,7 @@ an edit session for this file crashed.`, file)
 				var swapDir, swapFile workspace.URI
 				swapDir, err = c.getSwapDir(file)
 				if err == nil {
-					swapFile, err = workspace.DefaultLocalSwapFile(swapDir, file)
+					swapFile, err = workspace.DefaultSwapFile(swapDir, file)
 					if err == nil {
 						h, err = c.RecoverFileTab(file, swapFile, false)
 					}

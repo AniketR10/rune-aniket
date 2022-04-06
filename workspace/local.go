@@ -15,7 +15,6 @@ import (
 
 	"github.com/ernestrc/go-tui/cell"
 	"github.com/ernestrc/go-tui/term"
-	"github.com/ernestrc/go-tui/util"
 )
 
 const (
@@ -549,10 +548,16 @@ func LocalURI(path string) (URI, error) {
 	if err != nil {
 		return URI{}, err
 	}
+	uriStr := "file://" + absPath
+	u, err := url.Parse(uriStr)
+	if err != nil {
+		return URI{}, err
+	}
 
 	return URI{
-		uri:  "file://" + absPath,
-		name: filepath.Base(absPath),
+		uri:    uriStr,
+		name:   filepath.Base(absPath),
+		parsed: *u,
 	}, nil
 }
 
@@ -575,38 +580,4 @@ func extractAbsPath(filename string) (string, error) {
 		return "", fmt.Errorf("failed to get absolute path of %s: %s", filename, err)
 	}
 	return abs, nil
-}
-
-func sanitizeFilePath(resource string) string {
-	resolvedPath, err := filepath.EvalSymlinks(resource)
-	if err != nil {
-		resolvedPath = filepath.Clean(resource)
-	}
-	return util.SanitizeLine(resolvedPath)
-}
-
-// DefaultLocalSwapFile returns a file's default swap directory in the
-// local file system.
-func DefaultLocalSwapFile(swapDir URI, file URI) (URI, error) {
-	filePath, err := LocalPath(file)
-	if err != nil {
-		return URI{}, err
-	}
-	swapDirPath, err := LocalPath(swapDir)
-	if err != nil {
-		return URI{}, err
-	}
-	_, swapFilePath := swapFileName(swapDirPath, filePath)
-	return LocalURI(swapFilePath)
-}
-
-// DefaultLocalSwapFile returns a file's default swap directory in the
-// local file system.
-func DefaultLocalSwapDirectory(file URI) (URI, error) {
-	filePath, err := LocalPath(file)
-	if err != nil {
-		return URI{}, err
-	}
-	_, swapFilePath := swapFileName(filepath.Dir(filePath), filePath)
-	return LocalURI(filepath.Dir(swapFilePath))
 }
