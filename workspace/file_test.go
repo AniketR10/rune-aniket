@@ -78,32 +78,32 @@ func newIntegrationTestCase(t *testing.T, endsInEOL bool) (
 // refactor shim
 func openFile(
 	filename string, buf *cell.Buffer, swapDir string, readOnly bool,
-) (*localFile, error) {
-	file, err := LocalURI(filename)
+) (*file, error) {
+	fileURI, err := LocalURI(filename)
 	if err != nil {
 		return nil, err
 	}
 	var swap URI
 	if swapDir == "" {
-		swap, err = DefaultSwapDirectory(file)
+		swap, err = DefaultSwapDirectory(fileURI)
 	} else {
 		swap, err = LocalURI(swapDir)
 	}
 	if err != nil {
 		return nil, err
 	}
-	l, err := openLocalFile(file, buf, swap, readOnly)
+	l, err := openLocalFile(fileURI, buf, swap, readOnly)
 	if err != nil {
 		return nil, err
 	}
-	return l.(*localFile), nil
+	return l.(*file), nil
 }
 
 // refactor shim
 func recoverFile(
 	filename, recoverFilename string, buf *cell.Buffer,
-) (*localFile, error) {
-	file, err := LocalURI(filename)
+) (*file, error) {
+	fileURI, err := LocalURI(filename)
 	if err != nil {
 		return nil, err
 	}
@@ -111,11 +111,11 @@ func recoverFile(
 	if err != nil {
 		return nil, err
 	}
-	l, err := recoverLocalFile(file, recoverFile, buf)
+	l, err := recoverLocalFile(fileURI, recoverFile, buf)
 	if err != nil {
 		return nil, err
 	}
-	return l.(*localFile), nil
+	return l.(*file), nil
 }
 
 // tests FileBuffer with real os.File's. endsInEOL refers to the original file.
@@ -535,8 +535,8 @@ func (t testFileInfo) Sys() interface{} {
 }
 
 // returns an un-initialized (but dep injected) FileBuffer along with the mocked OsFile
-func newTestFileBuffer(ctrl *gomock.Controller) (*localFile, *MockOsFile) {
-	f := new(localFile)
+func newTestFileBuffer(ctrl *gomock.Controller) (*file, *MockOsFile) {
+	f := new(file)
 	mock := NewMockOsFile(ctrl)
 	f.openFunc = func(name string, flag int, perm os.FileMode) (osFile, *osError) {
 		return mock, nil
@@ -677,7 +677,7 @@ func TestFileBufferInit(t *testing.T) {
 
 	t.Run("bubble up original file open error", func(t *testing.T) {
 		accessDeniedErr := nopOsError(errors.New("access denied"))
-		f := new(localFile)
+		f := new(file)
 		f.openFunc = func(name string, flag int, perm os.FileMode) (osFile, *osError) {
 			return nil, accessDeniedErr
 		}
@@ -690,7 +690,7 @@ func TestFileBufferInit(t *testing.T) {
 
 		accessDeniedErr := nopOsError(errors.New("access denied"))
 		origFileMock := NewMockOsFile(ctrl)
-		f := new(localFile)
+		f := new(file)
 		i := 0
 		f.openFunc = func(name string, flag int, perm os.FileMode) (osFile, *osError) {
 			i++
@@ -714,7 +714,7 @@ const defaultFileName = "myOhDear.go"
 var defaultFileData = []byte("oh, dear")
 
 func newInitializedTestFileBuffer(t *testing.T, ctrl *gomock.Controller) (
-	*localFile, *MockOsFile, *cell.Buffer,
+	*file, *MockOsFile, *cell.Buffer,
 ) {
 	f, mock := newTestFileBuffer(ctrl)
 	expectInitSwap(mock, defaultFileName, testFileInfo{}, defaultFileData)
@@ -741,7 +741,7 @@ func (t testOsError) isNotExist() bool {
 }
 
 func newUninitializedTestFileBuffer(t *testing.T, ctrl *gomock.Controller) (
-	*localFile, *MockOsFile, *cell.Buffer,
+	*file, *MockOsFile, *cell.Buffer,
 ) {
 	f, mock := newTestFileBuffer(ctrl)
 	f.openFunc = func(name string, flag int, perm os.FileMode) (osFile, *osError) {
@@ -759,7 +759,7 @@ func newUninitializedTestFileBuffer(t *testing.T, ctrl *gomock.Controller) (
 }
 
 func newReadOnlyTestFileBuffer(t *testing.T, ctrl *gomock.Controller) (
-	*localFile, *MockOsFile, *cell.Buffer,
+	*file, *MockOsFile, *cell.Buffer,
 ) {
 	f, mock := newTestFileBuffer(ctrl)
 	f.openFunc = func(name string, flag int, perm os.FileMode) (osFile, *osError) {
@@ -780,7 +780,7 @@ func newReadOnlyTestFileBuffer(t *testing.T, ctrl *gomock.Controller) (
 }
 
 func newRecoveredTestFileBuffer(t *testing.T, ctrl *gomock.Controller) (
-	*localFile, *MockOsFile, *cell.Buffer,
+	*file, *MockOsFile, *cell.Buffer,
 ) {
 	f, mock := newTestFileBuffer(ctrl)
 	mock.EXPECT().Stat().Return(testFileInfo{}, nil).AnyTimes()
@@ -979,7 +979,7 @@ func expectCopyToSwap(mock *MockOsFile, newData string) {
 		Return(len(expectedContent)+1, nil)
 }
 
-type newBufferFunc func(*testing.T, *gomock.Controller) (*localFile, *MockOsFile, *cell.Buffer)
+type newBufferFunc func(*testing.T, *gomock.Controller) (*file, *MockOsFile, *cell.Buffer)
 
 func testFileBufferInsert(
 	t *testing.T,

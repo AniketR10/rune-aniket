@@ -22,8 +22,8 @@ const (
 	sshScheme = "ssh"
 )
 
-func (m *Manager) newOsRemoteFile(file URI) *localFile {
-	ret := new(localFile)
+func (m *Manager) newOsRemoteFile() *file {
+	ret := new(file)
 	ret.openFunc = func(path string, flag int, perm os.FileMode) (osFile, *osError) {
 		m.mu.Lock()
 		err := m.sshErr
@@ -293,7 +293,7 @@ func (m *Manager) openRemoteFile(
 	if err != nil {
 		return nil, err
 	}
-	f := m.newOsRemoteFile(file)
+	f := m.newOsRemoteFile()
 	err = f.init(file.Path(), buf, swapDir.Path(), readOnly)
 	if err != nil {
 		return nil, err
@@ -316,7 +316,7 @@ func (m *Manager) recoverRemoteFile(file, swapFile URI, buf *cell.Buffer) (
 	if err != nil {
 		return nil, err
 	}
-	f := m.newOsRemoteFile(file)
+	f := m.newOsRemoteFile()
 	err = f.recoverFile(file.Path(), swapFile.Path(), buf)
 	if err != nil {
 		return nil, err
