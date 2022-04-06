@@ -246,7 +246,7 @@ func (h *fileBarEditorHandler) handleEvents() {
 		resourceName, err := workspace.LocalPath(ev.URI)
 		if err != nil {
 			log.Errorf("Handle(%#v): LocalPath: %v", ev.URI, err)
-			return
+			continue
 		}
 
 		switch ev.Type {

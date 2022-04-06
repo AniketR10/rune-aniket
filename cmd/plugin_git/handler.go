@@ -285,6 +285,10 @@ func (h *gitEditorHandler) setScrollOffset(filename string, pos term.Coordinates
 	h.scroll.Lock()
 	defer h.scroll.Unlock()
 
+	if h.scroll.scroll.Offset().Y == pos.Y {
+		return
+	}
+
 	// we're only interested in the vertical scroll
 	pos.X = 0
 
@@ -320,7 +324,7 @@ func (h *gitEditorHandler) handleEvents() {
 		resourceName, err := workspace.LocalPath(ev.URI)
 		if err != nil {
 			log.Errorf("Handle(%#v): LocalPath: %v", ev.URI, err)
-			return
+			continue
 		}
 
 		switch ev.Type {
