@@ -143,7 +143,9 @@ func (h *sedEditorHandler) writeHandlerContent(
 	return nil
 }
 
-func (h *sedEditorHandler) HandleCommand(cmd text.Command) (exit bool) {
+func (h *sedEditorHandler) HandleCommand(
+	ctx context.Context, cmd text.Command,
+) (exit bool) {
 	var start time.Time
 	if log.IsLevelEnabled(log.TraceLevel) {
 		start = time.Now()

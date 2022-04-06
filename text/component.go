@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"time"
 
 	"github.com/ernestrc/blue/datastore/document"
 	"github.com/ernestrc/go-tui"
@@ -23,6 +24,9 @@ var (
 	// ErrInvalidSplit is returned when attempting to split over a floating window.
 	ErrInvalidSplit = errors.New("Cannot split this window")
 )
+
+// used for command and event handlers
+const defaultTimeout = 1 * time.Second
 
 // Component is an implementation of browser.Browser for file editing.
 // It also satisfies tui.Component, and text.Editor.
@@ -399,7 +403,10 @@ func (c *Component) DispatchCommand(cmd Command) (handled bool) {
 	if !handled {
 		return false
 	}
-	exit := commander.HandleCommand(cmd)
+	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
+	defer cancel()
+
+	exit := commander.HandleCommand(ctx, cmd)
 	if exit {
 		delete(c.cmdSubscribers, cmd.Name)
 	}
@@ -431,7 +438,7 @@ func (c *Component) dispatchEvent(ev Event) (handled bool) {
 		return
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
 	defer cancel()
 
 	remain := make([]EventHandler, 0, len(subs))

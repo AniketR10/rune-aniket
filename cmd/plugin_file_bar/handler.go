@@ -151,7 +151,9 @@ func newFileBarEditorHandler(
 	return ret, nil
 }
 
-func (h *fileBarEditorHandler) HandleCommand(cmd text.Command) (exit bool) {
+func (h *fileBarEditorHandler) HandleCommand(ctx context.Context, cmd text.Command) (
+	exit bool,
+) {
 	return
 }
 

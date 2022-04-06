@@ -140,7 +140,7 @@ func TestCommandSplitHandlerOpenWindow(t *testing.T) {
 			Permission: plugin.PermissionEditor,
 		}
 		testSplitWindow(t, config, grants, func(h *cmdSplitHandler) {
-			assert.False(t, h.HandleCommand(text.Command{Name: cmdName}))
+			assert.False(t, h.HandleCommand(context.Background(), text.Command{Name: cmdName}))
 		})
 	})
 }

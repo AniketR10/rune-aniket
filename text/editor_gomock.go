@@ -5,6 +5,7 @@
 package text
 
 import (
+	context "context"
 	reflect "reflect"
 
 	go_tui "github.com/ernestrc/go-tui"
@@ -235,17 +236,17 @@ func (m *MockCommandHandler) EXPECT() *MockCommandHandlerMockRecorder {
 }
 
 // HandleCommand mocks base method.
-func (m *MockCommandHandler) HandleCommand(arg0 Command) bool {
+func (m *MockCommandHandler) HandleCommand(arg0 context.Context, arg1 Command) bool {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "HandleCommand", arg0)
+	ret := m.ctrl.Call(m, "HandleCommand", arg0, arg1)
 	ret0, _ := ret[0].(bool)
 	return ret0
 }
 
 // HandleCommand indicates an expected call of HandleCommand.
-func (mr *MockCommandHandlerMockRecorder) HandleCommand(arg0 interface{}) *gomock.Call {
+func (mr *MockCommandHandlerMockRecorder) HandleCommand(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleCommand", reflect.TypeOf((*MockCommandHandler)(nil).HandleCommand), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleCommand", reflect.TypeOf((*MockCommandHandler)(nil).HandleCommand), arg0, arg1)
 }
 
 // MockEditor is a mock of Editor interface.

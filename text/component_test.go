@@ -622,7 +622,7 @@ func TestComponentCommands(t *testing.T) {
 
 	t.Run("returns registered commands", func(t *testing.T) {
 		c := newTestComponent(t, &testEditor{})
-		c.SubscribeCommand("myCmd", FuncCommandHandler(func(Command) bool {
+		c.SubscribeCommand("myCmd", FuncCommandHandler(func(context.Context, Command) bool {
 			return true
 		}))
 		cmds := c.Commands()
@@ -649,7 +649,7 @@ func testRegister(t *testing.T,
 
 		var called int
 		var wg sync.WaitGroup
-		sut.SubscribeCommand(myCmd, FuncCommandHandler(func(cmd Command) bool {
+		sut.SubscribeCommand(myCmd, FuncCommandHandler(func(ctx context.Context, cmd Command) bool {
 			defer wg.Done()
 			assert.Equal(t, myCmd, cmd.Name)
 			assert.Equal(t, myArgs, cmd.Args)

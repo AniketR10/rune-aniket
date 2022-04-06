@@ -1,6 +1,7 @@
 package text
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/ernestrc/go-tui/browser"
@@ -47,7 +48,7 @@ type Command struct {
 // CommandHandler is a callback interface that wraps the basic method Command.
 type CommandHandler interface {
 	// Handle is called when user issued a command previously registered via Register.
-	HandleCommand(Command) (exit bool)
+	HandleCommand(context.Context, Command) (exit bool)
 }
 
 // Editor is the interface that wraps an API to manage a text editor.
@@ -134,16 +135,16 @@ func NewCellView(c cell.View) CellView {
 }
 
 type fnCommandHandler struct {
-	cb func(Command) bool
+	cb func(context.Context, Command) bool
 }
 
-func (f fnCommandHandler) HandleCommand(c Command) bool {
-	return f.cb(c)
+func (f fnCommandHandler) HandleCommand(ctx context.Context, c Command) bool {
+	return f.cb(ctx, c)
 }
 
 // FuncCommandHandler returns an CommandHandler that calls fn
 // every time Handle is invoked.
-func FuncCommandHandler(fn func(Command) bool) CommandHandler {
+func FuncCommandHandler(fn func(context.Context, Command) bool) CommandHandler {
 	return fnCommandHandler{
 		cb: fn,
 	}

@@ -142,7 +142,9 @@ func newGitHandler(
 	return ret, nil
 }
 
-func (h *gitEditorHandler) HandleCommand(cmd text.Command) (exit bool) {
+func (h *gitEditorHandler) HandleCommand(ctx context.Context, cmd text.Command) (
+	exit bool,
+) {
 	if cmd.Resource == nil {
 		return
 	}

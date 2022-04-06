@@ -1,6 +1,7 @@
 package util
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"sync"
@@ -132,7 +133,7 @@ func (t *cmdSplitHandler) openSplitWindow() {
 	t.win = win
 }
 
-func (t *cmdSplitHandler) HandleCommand(cmd text.Command) (exit bool) {
+func (t *cmdSplitHandler) HandleCommand(ctx context.Context, cmd text.Command) (exit bool) {
 	if cmd.Name == t.config.Command {
 		t.openSplitWindow()
 	}

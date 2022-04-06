@@ -164,7 +164,7 @@ func (c *Client) SubscribeCommand(cmd string, h CommandHandler) error {
 			// as agreed with Server
 			cmd.Cursor.Content = ev.Start
 			cmd.Cursor.Window = ev.From
-			return h.HandleCommand(cmd)
+			return h.HandleCommand(ctx, cmd)
 		}))
 
 	req := proto.RegisterCommandRequest{Command: cmd, HandlerId: handlerID}

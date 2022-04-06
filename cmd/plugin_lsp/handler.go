@@ -1707,7 +1707,9 @@ func (h *lspEditorHandler) handleFormat(ed text.Handler, uri workspace.URI, impo
 	}
 }
 
-func (h *lspEditorHandler) HandleCommand(cmd text.Command) (exit bool) {
+func (h *lspEditorHandler) HandleCommand(
+	ctx context.Context, cmd text.Command,
+) (exit bool) {
 	if cmd.Resource == nil {
 		return
 	}
