@@ -336,16 +336,6 @@ func openLocalFile(file URI, buf *cell.Buffer, swapDir URI, readOnly bool) (
 	return ret, nil
 }
 
-func initFile(f *localFile, file URI, buf *cell.Buffer, swapDir URI, readOnly bool) (
-	FlusherCloser, error,
-) {
-	err := f.init(file.Path(), buf, swapDir.Path(), readOnly)
-	if err != nil {
-		return nil, err
-	}
-	return f, nil
-}
-
 func (f *fileBuf) delayCopySwapError(err error) {
 	f.delayedError = fmt.Errorf("Swap file error %s: %s", f.swap.Name(), err)
 }

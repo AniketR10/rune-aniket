@@ -32,7 +32,10 @@ func (m *Manager) newOsRemoteFile(file URI) *localFile {
 			return nil, nopOsError(err)
 		}
 		f, err := m.workspaceClient.Open(path, flag, perm)
-		return f, err.(*osError)
+		if err != nil {
+			return nil, err.(*osError)
+		}
+		return f, nil
 	}
 	ret.removeFunc = func(path string) error {
 		m.mu.Lock()
@@ -272,16 +275,51 @@ func (m *Manager) initWorkspaceClient() error {
 	return nil
 }
 
+func checkFileIsFromWorkspace(file, workspace URI) error {
+	if file.parsed.Host != workspace.parsed.Host ||
+		file.parsed.User.String() != workspace.parsed.User.String() {
+		return errors.New("remote file's does not match remote workspace connection's user or host")
+	}
+	return nil
+}
+
 func (m *Manager) openRemoteFile(
 	file URI, buf *cell.Buffer, swapDir URI, readOnly bool,
 ) (FlusherCloser, error) {
 	if m.sshConn == nil {
 		return nil, errors.New("cannot open remote file without a connection to a remote workspace")
 	}
-	if file.parsed.Host != m.workspace.parsed.Host ||
-		file.parsed.User.String() != m.workspace.parsed.User.String() {
-		return nil, errors.New("remote file's does not match remote workspace connection's user or host")
+	err := checkFileIsFromWorkspace(file, m.workspace)
+	if err != nil {
+		return nil, err
 	}
 	f := m.newOsRemoteFile(file)
-	return initFile(f, file, buf, swapDir, readOnly)
+	err = f.init(file.Path(), buf, swapDir.Path(), readOnly)
+	if err != nil {
+		return nil, err
+	}
+
+	return f, nil
+}
+
+func (m *Manager) recoverRemoteFile(file, swapFile URI, buf *cell.Buffer) (
+	FlusherCloser, error,
+) {
+	if m.sshConn == nil {
+		return nil, errors.New("cannot open remote file without a connection to a remote workspace")
+	}
+	err := checkFileIsFromWorkspace(file, m.workspace)
+	if err != nil {
+		return nil, err
+	}
+	err = checkFileIsFromWorkspace(swapFile, m.workspace)
+	if err != nil {
+		return nil, err
+	}
+	f := m.newOsRemoteFile(file)
+	err = f.recoverFile(file.Path(), swapFile.Path(), buf)
+	if err != nil {
+		return nil, err
+	}
+	return f, nil
 }

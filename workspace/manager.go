@@ -1,7 +1,6 @@
 package workspace
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -114,7 +113,7 @@ func (m *Manager) Recover(file, swapFile URI, buf *cell.Buffer) (
 		return recoverLocalFile(file, swapFile, buf)
 	}
 	if isSSHURI(file) {
-		return nil, errors.New("recover over ssh not supported")
+		return m.recoverRemoteFile(file, swapFile, buf)
 	}
 	return nil, fmt.Errorf("unknown scheme: %s", file.uri)
 }
