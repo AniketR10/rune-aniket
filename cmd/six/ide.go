@@ -18,10 +18,10 @@ import (
 // IDE binds together a text editor/browser with a plugin manager.
 type IDE struct {
 	ideConfig
-	ex               *Ex
-	manager          *plugin.Manager
-	workspaceManager *workspace.Manager
-	clipboard        *plugin.ClipboardManager
+	ex        *ex
+	manager   *plugin.Manager
+	workspace *workspace.Manager
+	clipboard *plugin.ClipboardManager
 }
 
 // New allocates storage for a new IDE and initializes it with config
@@ -78,7 +78,7 @@ func (i *IDE) init(cwd, cfgfilename, recfilename string, filenames ...string) er
 	)
 
 	if recfilename != "" {
-		recFile, err := workspace.LocalURI(recfilename)
+		recFile, err := i.workspace.URI(recfilename)
 		if err != nil {
 			return err
 		}
@@ -86,7 +86,7 @@ func (i *IDE) init(cwd, cfgfilename, recfilename string, filenames ...string) er
 	}
 
 	for _, filename := range filenames {
-		file, err := workspace.LocalURI(filename)
+		file, err := i.workspace.URI(filename)
 		if err != nil {
 			return err
 		}
@@ -115,10 +115,6 @@ func (i *IDE) init(cwd, cfgfilename, recfilename string, filenames ...string) er
 		} else {
 			opts = append(opts, text.WithCommandKeyBinding(seq.First, cmd))
 		}
-	}
-
-	if i.ideConfig.browserSwapDir() != nil {
-		opts = append(opts, text.WithSwapDir(*i.ideConfig.browserSwapDir()))
 	}
 
 	viOpts = append(viOpts,
@@ -161,13 +157,13 @@ func (i *IDE) init(cwd, cfgfilename, recfilename string, filenames ...string) er
 		return err
 	}
 
-	i.workspaceManager, err = workspace.NewManager(cwdURI, workspaceOpts...)
+	i.workspace, err = workspace.NewManager(cwdURI, workspaceOpts...)
 	if err != nil {
 		return err
 	}
 
 	vi := vi.Editor(viOpts...)
-	ex, err := NewEx(vi, i.workspaceManager, opts...)
+	ex, err := newEx(vi, i.workspace, opts...)
 	if err != nil {
 		return err
 	}
@@ -175,7 +171,7 @@ func (i *IDE) init(cwd, cfgfilename, recfilename string, filenames ...string) er
 
 	res := plugin.BrowserResources(i.ex.Browser())
 	res = plugin.MergeResourceMap(res, plugin.EditorResources(i.ex.Editor()))
-	res = plugin.MergeResourceMap(res, plugin.WorkspaceResources(i.workspaceManager))
+	res = plugin.MergeResourceMap(res, plugin.WorkspaceResources(i.workspace))
 	res[plugin.PermissionClipboard] = i.clipboard
 
 	i.manager, err = plugin.NewManager(plugin.GrantAll(res), pluginOpts...)
@@ -229,7 +225,7 @@ func (i *IDE) closeResources() error {
 	err1 := i.manager.Close()
 	err2 := i.ex.Close()
 	err3 := i.clipboard.Close()
-	err4 := i.workspaceManager.Close()
+	err4 := i.workspace.Close()
 
 	if err1 != nil {
 		return err1

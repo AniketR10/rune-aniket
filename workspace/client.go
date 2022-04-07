@@ -3,6 +3,7 @@ package workspace
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"syscall"
@@ -358,6 +359,22 @@ func (c *Client) Wait(pid Pid) error {
 		return err
 	}
 	return nil
+}
+
+func (c *Client) URI(path string) (URI, error) {
+	ctx, cleanup := ctxWithTimeout()
+	defer cleanup()
+
+	req := workspacepb.URIRequest{Path: path}
+	resp, err := c.client.URI(ctx, &req)
+	if err != nil {
+		return URI{}, err
+	}
+	uri, err := ParseURI(resp.GetUri())
+	if err != nil {
+		return URI{}, fmt.Errorf("Could not parse URI response from server: %w", err)
+	}
+	return uri, nil
 }
 
 func ctxWithTimeout() (context.Context, func()) {

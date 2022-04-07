@@ -6,6 +6,8 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"os/user"
+	"path/filepath"
 	"strings"
 	"sync"
 	"syscall"
@@ -33,8 +35,10 @@ type Manager struct {
 	sshErr          error
 	workspaceClient *Client
 
-	osChdir func(string) error
-	osGetwd func() (string, error)
+	initRemote func() (err error)
+	osChdir    func(string) error
+	osGetwd    func() (string, error)
+	userLookup func(string) (*user.User, error)
 }
 
 type managerCfg struct {
@@ -65,12 +69,19 @@ func NewManager(workspace URI, opts ...Option) (*Manager, error) {
 func (m *Manager) Init(workspace URI, opts ...Option) error {
 	m.osChdir = os.Chdir
 	m.osGetwd = os.Getwd
-	m.cmds = make(map[Pid]*exec.Cmd)
+	m.initRemote = func() (err error) {
+		m.sshConn, err = connectOverSSH(m.managerCfg, m.workspace)
+		if err != nil {
+			return err
+		}
+		return m.initWorkspaceClient()
+	}
 	return m.init(workspace, opts...)
 }
 
 func (m *Manager) init(workspace URI, opts ...Option) error {
 	m.workspace = workspace
+	m.cmds = make(map[Pid]*exec.Cmd)
 	for _, o := range opts {
 		o(&m.managerCfg)
 	}
@@ -83,39 +94,66 @@ func (m *Manager) init(workspace URI, opts ...Option) error {
 	return fmt.Errorf("unknown scheme: %s", workspace)
 }
 
+func (m *Manager) getUser() (*user.User, error) {
+	if m.workspace.parsed.User == nil {
+		return user.Current()
+	}
+	username := m.workspace.parsed.User.Username()
+	return m.userLookup(username)
+}
+
+func (m *Manager) extractAbsPath(filename string) (string, error) {
+	return extractAbsPath(filename, m.getUser, func() (string, error) {
+		return m.workspace.Path(), nil
+	})
+}
+
+func extractAbsPath(
+	filename string,
+	getUser func() (*user.User, error),
+	cwdFn func() (string, error),
+) (string, error) {
+	if filename == "~" {
+		usr, err := getUser()
+		if err != nil {
+			return "", fmt.Errorf("could not get current user: %s", err)
+		}
+		filename = usr.HomeDir
+	} else if strings.HasPrefix(filename, "~/") {
+		usr, err := getUser()
+		if err != nil {
+			return "", fmt.Errorf("could not get current user: %s", err)
+		}
+		filename = filepath.Join(usr.HomeDir, filename[2:])
+	}
+	if filepath.IsAbs(filename) {
+		return filename, nil
+	}
+	cwd, err := cwdFn()
+	if err != nil {
+		return "", fmt.Errorf("could not get cwd: %s", err)
+	}
+	abs := filepath.Join(cwd, filename)
+	return abs, nil
+}
+
 func (m *Manager) initLocal() error {
 	cwd, err := m.osGetwd()
 	if err != nil {
 		return fmt.Errorf("Failed to get working directory: %s", err)
 	}
-	absCwd, err := extractAbsPath(cwd)
-	if err != nil {
-		return err
+	workspacewd := m.workspace.Path()
+	if !filepath.IsAbs(workspacewd) {
+		workspacewd = filepath.Join(cwd, workspacewd)
 	}
-	workspacewd, err := localPath(m.workspace)
-	if err != nil {
-		return err
-	}
-	absWorkspacewd, err := extractAbsPath(workspacewd)
-	if err != nil {
-		return err
-	}
-	if absCwd != absWorkspacewd {
-		err = m.osChdir(absWorkspacewd)
+	if cwd != workspacewd {
+		err = m.osChdir(workspacewd)
 		if err != nil {
 			return fmt.Errorf("failed to change to workspace directory %s: %s",
-				absWorkspacewd, err)
+				workspacewd, err)
 		}
 	}
 	return nil
-}
-
-func (m *Manager) initRemote() (err error) {
-	m.sshConn, err = connectOverSSH(m.managerCfg, m.workspace)
-	if err != nil {
-		return err
-	}
-	return m.initWorkspaceClient()
 }
 
 // Recover recovers the file with the swap file.
@@ -295,6 +333,16 @@ func (m *Manager) Wait(pid Pid) error {
 	}
 	if isSSHURI(m.workspace) {
 		return m.workspaceClient.Wait(pid)
+	}
+	panic("manager has an invalid workspace URI")
+}
+
+func (m *Manager) URI(path string) (URI, error) {
+	if isFileURI(m.workspace) {
+		return m.localURI(path)
+	}
+	if isSSHURI(m.workspace) {
+		return m.remoteURI(path)
 	}
 	panic("manager has an invalid workspace URI")
 }

@@ -22,6 +22,7 @@ const _ = grpc.SupportPackageIsVersion7
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type WorkspaceClient interface {
+	URI(ctx context.Context, in *URIRequest, opts ...grpc.CallOption) (*URIResponse, error)
 	Open(ctx context.Context, in *OpenRequest, opts ...grpc.CallOption) (*OpenResponse, error)
 	Remove(ctx context.Context, in *RemoveRequest, opts ...grpc.CallOption) (*RemoveResponse, error)
 	Rename(ctx context.Context, in *RenameRequest, opts ...grpc.CallOption) (*RenameResponse, error)
@@ -50,6 +51,15 @@ type workspaceClient struct {
 
 func NewWorkspaceClient(cc grpc.ClientConnInterface) WorkspaceClient {
 	return &workspaceClient{cc}
+}
+
+func (c *workspaceClient) URI(ctx context.Context, in *URIRequest, opts ...grpc.CallOption) (*URIResponse, error) {
+	out := new(URIResponse)
+	err := c.cc.Invoke(ctx, "/proto.Workspace/URI", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 func (c *workspaceClient) Open(ctx context.Context, in *OpenRequest, opts ...grpc.CallOption) (*OpenResponse, error) {
@@ -218,6 +228,7 @@ func (c *workspaceClient) StdinPipe(ctx context.Context, in *StdioPipeRequest, o
 // All implementations must embed UnimplementedWorkspaceServer
 // for forward compatibility
 type WorkspaceServer interface {
+	URI(context.Context, *URIRequest) (*URIResponse, error)
 	Open(context.Context, *OpenRequest) (*OpenResponse, error)
 	Remove(context.Context, *RemoveRequest) (*RemoveResponse, error)
 	Rename(context.Context, *RenameRequest) (*RenameResponse, error)
@@ -245,6 +256,9 @@ type WorkspaceServer interface {
 type UnimplementedWorkspaceServer struct {
 }
 
+func (UnimplementedWorkspaceServer) URI(context.Context, *URIRequest) (*URIResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method URI not implemented")
+}
 func (UnimplementedWorkspaceServer) Open(context.Context, *OpenRequest) (*OpenResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Open not implemented")
 }
@@ -310,6 +324,24 @@ type UnsafeWorkspaceServer interface {
 
 func RegisterWorkspaceServer(s grpc.ServiceRegistrar, srv WorkspaceServer) {
 	s.RegisterService(&Workspace_ServiceDesc, srv)
+}
+
+func _Workspace_URI_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(URIRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WorkspaceServer).URI(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/proto.Workspace/URI",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WorkspaceServer).URI(ctx, req.(*URIRequest))
+	}
+	return interceptor(ctx, in, info, handler)
 }
 
 func _Workspace_Open_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
@@ -643,6 +675,10 @@ var Workspace_ServiceDesc = grpc.ServiceDesc{
 	ServiceName: "proto.Workspace",
 	HandlerType: (*WorkspaceServer)(nil),
 	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "URI",
+			Handler:    _Workspace_URI_Handler,
+		},
 		{
 			MethodName: "Open",
 			Handler:    _Workspace_Open_Handler,

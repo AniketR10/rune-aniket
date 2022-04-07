@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net"
+	"net/url"
 	os "os"
 	"os/user"
 	"path"
@@ -322,4 +323,23 @@ func (m *Manager) recoverRemoteFile(file, swapFile URI, buf *cell.Buffer) (
 		return nil, err
 	}
 	return f, nil
+}
+
+// RemoteURI builds a URI with the current workspace and the given path.
+func (m *Manager) remoteURI(path string) (URI, error) {
+	if m.sshConn == nil {
+		return URI{}, errors.New("cannot make a remote URI without a connection to a remote workspace")
+	}
+	absPath, err := m.extractAbsPath(path)
+	if err != nil {
+		return URI{}, err
+	}
+	uriStr := fmt.Sprintf("ssh://%s@%s%s",
+		m.workspace.parsed.User.Username(), m.workspace.parsed.Host, absPath)
+	u, err := url.Parse(uriStr)
+	if err != nil {
+		return URI{}, err
+	}
+
+	return makeSSHURI(u), nil
 }

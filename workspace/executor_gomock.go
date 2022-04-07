@@ -128,6 +128,21 @@ func (mr *MockExecutorMockRecorder) StdoutPipe(arg0 interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StdoutPipe", reflect.TypeOf((*MockExecutor)(nil).StdoutPipe), arg0)
 }
 
+// URI mocks base method.
+func (m *MockExecutor) URI(arg0 string) (URI, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "URI", arg0)
+	ret0, _ := ret[0].(URI)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// URI indicates an expected call of URI.
+func (mr *MockExecutorMockRecorder) URI(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "URI", reflect.TypeOf((*MockExecutor)(nil).URI), arg0)
+}
+
 // Wait mocks base method.
 func (m *MockExecutor) Wait(arg0 Pid) error {
 	m.ctrl.T.Helper()

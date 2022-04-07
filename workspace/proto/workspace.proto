@@ -146,7 +146,17 @@ message StdioPipeResponse {
 	int32 handler_id = 1;
 }
 
+message URIRequest {
+	string path = 1;
+}
+
+message URIResponse {
+	string uri = 1;
+}
+
 service Workspace {
+	rpc URI(URIRequest) returns (URIResponse);
+
 	rpc Open(OpenRequest) returns (OpenResponse);
 	rpc Remove(RemoveRequest) returns (RemoveResponse);
 	rpc Rename(RenameRequest) returns (RenameResponse);

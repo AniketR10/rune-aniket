@@ -3,9 +3,9 @@ package finder
 import (
 	"bufio"
 	"context"
+	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"sync"
 	"syscall"
 	"time"
@@ -36,6 +36,7 @@ func Permissions() []plugin.Permission {
 		plugin.PermissionBrowserMessenger,
 		plugin.PermissionBrowserStorage,
 		plugin.PermissionEditor,
+		plugin.PermissionWorkspaceExecutor,
 	}
 }
 
@@ -45,12 +46,13 @@ type fuzzyFinderHandler struct {
 	p            browser.EventPublisher
 	m            browser.Messenger
 	ed           text.Editor
+	executor     workspace.Executor
 	invokeWindow browser.Window
 	historyKey   term.Event
 	mu           sync.Mutex
 	cmdStr       string
-	getResource  func(string) (workspace.URI, term.Coordinates)
-	exec         *exec.Cmd
+	getResource  func(workspace.Executor, string) (workspace.URI, term.Coordinates)
+	pid          workspace.Pid
 	quitChan     chan struct{}
 	height       int
 	list         search.List
@@ -64,26 +66,26 @@ type fuzzyFinderHandler struct {
 	}
 }
 
-func execCommand(command string, setpgid bool) *exec.Cmd {
+func (h *fuzzyFinderHandler) execCommand(command string) (workspace.Pid, error) {
 	shell := os.Getenv("SHELL")
 	if len(shell) == 0 {
 		shell = "sh"
 	}
-	return execCommandWith(shell, command, setpgid)
+	return h.execCommandWith(shell, command)
 }
 
 // ExecCommandWith executes the given command with the specified shell
-func execCommandWith(shell string, command string, setpgid bool) *exec.Cmd {
-	cmd := exec.Command(shell, "-c", command)
-	if setpgid {
-		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+func (h *fuzzyFinderHandler) execCommandWith(shell string, command string) (workspace.Pid, error) {
+	cmd, err := h.executor.Command(shell, "-c", command)
+	if err != nil {
+		return 0, fmt.Errorf("failed to create command: %w", err)
 	}
-	return cmd
+	return cmd, nil
 }
 
 // KillCommand kills the process for the given command
 func (h *fuzzyFinderHandler) killCommand() error {
-	return syscall.Kill(-h.exec.Process.Pid, syscall.SIGKILL)
+	return h.executor.Signal(h.pid, syscall.SIGKILL)
 }
 
 func (h *fuzzyFinderHandler) readCommand(src io.Reader) {
@@ -190,7 +192,7 @@ func (h *fuzzyFinderHandler) setMessage(msg string, args ...interface{}) error {
 }
 
 func (h *fuzzyFinderHandler) openResource(searchQuery, data string) {
-	resource, pos := h.getResource(data)
+	resource, pos := h.getResource(h.executor, data)
 	handler, err := h.open(resource)
 	if err != nil {
 		merr := h.setMessage("Open: %v", err)
@@ -216,17 +218,21 @@ func (h *fuzzyFinderHandler) publishInterrupt() {
 }
 
 func (h *fuzzyFinderHandler) scanData() {
+	exec, err := h.execCommand(h.cmdStr)
 	h.mu.Lock()
-	h.exec = execCommand(h.cmdStr, true)
-	exec := h.exec
+	h.pid = exec
 	h.mu.Unlock()
+	if err != nil {
+		log.Error(err)
+		return
+	}
 
-	out, err := exec.StdoutPipe()
+	out, err := h.executor.StdoutPipe(h.pid)
 	if err != nil {
 		log.Errorf("command stdout failed; %v", err)
 		return
 	}
-	err = exec.Start()
+	err = h.executor.Start(h.pid)
 	if err != nil {
 		log.Errorf("command start failed; %v", err)
 		return
@@ -234,13 +240,13 @@ func (h *fuzzyFinderHandler) scanData() {
 
 	h.readCommand(out)
 
-	err = exec.Wait()
+	err = h.executor.Wait(h.pid)
 
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
 	killed := h.killed
-	h.exec = nil
+	h.pid = 0
 
 	if !killed && err != nil {
 		merr := h.setMessage("failed to execute '%s': %v", h.cmdStr, err)
@@ -256,6 +262,8 @@ func (h *fuzzyFinderHandler) initGrants(
 ) (err error) {
 	for _, grant := range grants {
 		switch grant.Permission {
+		case plugin.PermissionWorkspaceExecutor:
+			h.executor, err = plugin.WorkspaceExecutor(grant.Token, broker)
 		case plugin.PermissionEditor:
 			h.ed, err = plugin.Editor(grant.Token, broker)
 		case plugin.PermissionBrowserMessenger:
@@ -286,7 +294,7 @@ func New(
 	grants []plugin.Grant, broker proto.MuxBroker,
 	invokeWindow browser.Window, config plugin.Config,
 	historyKey term.Event, command string,
-	getResource func(line string) (workspace.URI, term.Coordinates),
+	getResource func(exec workspace.Executor, line string) (workspace.URI, term.Coordinates),
 ) (tui.Handler, error) {
 	h := new(fuzzyFinderHandler)
 	err := h.initGrants(broker, grants)
@@ -445,9 +453,9 @@ func (h *fuzzyFinderHandler) Close() error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
-	log.Tracef("fuzzyFinderHandler.Close(): %#v", h.exec)
+	log.Tracef("fuzzyFinderHandler.Close(): %#v", h.pid)
 
-	if h.exec != nil {
+	if h.pid != 0 {
 		h.killed = true
 		_ = h.killCommand()
 	}

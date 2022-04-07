@@ -1,33 +1,43 @@
 package workspace
 
 import (
-	"fmt"
 	"net/url"
 	"os"
 	"os/user"
-	"path/filepath"
-	"strings"
 
 	"github.com/ernestrc/go-tui/cell"
 )
 
-// LocalURI returns a URI that references the file at local path.
-func LocalURI(path string) (URI, error) {
-	absPath, err := extractAbsPath(path)
+// CurrentUserHostURI builds a URI from a path. If path is relative
+// it uses the current working directory as the base of the path and
+// if ~ is used to identify the home directory, the current user's home
+// directory is used as the base.
+// This should only used instead of Manager.URI before a workspace.Manager is
+// constructed or for other advanced uses cases.
+func CurrentUserHostURI(path string) (URI, error) {
+	absPath, err := extractAbsPath(path, user.Current, os.Getwd)
 	if err != nil {
 		return URI{}, err
 	}
-	uriStr := "file://" + absPath
+	return makeLocalURI(absPath)
+}
+
+func makeLocalURI(path string) (URI, error) {
+	uriStr := "file://" + path
 	u, err := url.Parse(uriStr)
 	if err != nil {
 		return URI{}, err
 	}
 
-	return URI{
-		uri:    uriStr,
-		name:   filepath.Base(absPath),
-		parsed: *u,
-	}, nil
+	return makeFileURI(u), nil
+}
+
+func (m *Manager) localURI(path string) (URI, error) {
+	absPath, err := m.extractAbsPath(path)
+	if err != nil {
+		return URI{}, err
+	}
+	return makeLocalURI(absPath)
 }
 
 func newOsLocalFile() *file {
@@ -41,53 +51,12 @@ func newOsLocalFile() *file {
 	return ret
 }
 
-func extractAbsPath(filename string) (string, error) {
-	if filename == "~" {
-		usr, err := user.Current()
-		if err != nil {
-			return "", fmt.Errorf("could not get current user: %s", err)
-		}
-		filename = usr.HomeDir
-	} else if strings.HasPrefix(filename, "~/") {
-		usr, err := user.Current()
-		if err != nil {
-			return "", fmt.Errorf("could not get current user: %s", err)
-		}
-		filename = filepath.Join(usr.HomeDir, filename[2:])
-	}
-	abs, err := filepath.Abs(filename)
-	if err != nil {
-		return "", fmt.Errorf("failed to get absolute path of %s: %s", filename, err)
-	}
-	return abs, nil
-}
-
-func localPath(u URI) (string, error) {
-	url, err := url.ParseRequestURI(u.String())
-	if err != nil {
-		return "", fmt.Errorf("failed to parse URI: %s: %s", u.String(), err)
-	}
-	if url.Scheme != fileScheme {
-		return "", fmt.Errorf("non supported scheme: %s", url.Scheme)
-	}
-	return url.Path, nil
-}
-
 // recoverfile recovers the file at filePath with the swap file swapFilePath.
 func recoverLocalFile(file, swapFile URI, buf *cell.Buffer) (
 	FlusherCloser, error,
 ) {
 	ret := newOsLocalFile()
-	filePath, err := localPath(file)
-	if err != nil {
-		return nil, err
-	}
-	swapFilePath, err := localPath(swapFile)
-	if err != nil {
-		return nil, err
-	}
-
-	err = ret.recoverFile(filePath, swapFilePath, buf)
+	err := ret.recoverFile(file.Path(), swapFile.Path(), buf)
 	if err != nil {
 		return nil, err
 	}
@@ -99,16 +68,7 @@ func openLocalFile(file URI, buf *cell.Buffer, swapDir URI, readOnly bool) (
 	FlusherCloser, error,
 ) {
 	ret := newOsLocalFile()
-	filePath, err := localPath(file)
-	if err != nil {
-		return nil, err
-	}
-	swapDirPath, err := localPath(swapDir)
-	if err != nil {
-		return nil, err
-	}
-
-	err = ret.init(filePath, buf, swapDirPath, readOnly)
+	err := ret.init(file.Path(), buf, swapDir.Path(), readOnly)
 	if err != nil {
 		return nil, err
 	}

@@ -1830,7 +1830,7 @@ func cwdURI(t *testing.T) workspace.URI {
 	if err != nil {
 		t.Fatalf("Failed to get working directory: %s", err)
 	}
-	uri, err := workspace.LocalURI(wd)
+	uri, err := workspace.CurrentUserHostURI(wd)
 	if err != nil {
 		t.Fatalf("Failed to parse working directory as URI %s: %s", wd, err)
 	}
@@ -1893,10 +1893,10 @@ func TestFileCursorIntegration(t *testing.T) {
 			scroll.InitWithBuffer(b)
 			cursor := NewCursor(scroll)
 
-			uri, err := workspace.LocalURI(file.Name())
+			uri, err := workspace.CurrentUserHostURI(file.Name())
 			require.NoError(t, err)
 
-			swapDir, err := workspace.LocalURI("/tmp")
+			swapDir, err := workspace.CurrentUserHostURI("/tmp")
 			require.NoError(t, err)
 
 			// installs unix reader

@@ -410,6 +410,21 @@ func (s *Server) StdinPipe(ctx context.Context, req *workspacepb.StdioPipeReques
 	return resp, nil
 }
 
+func (s *Server) URI(ctx context.Context, req *workspacepb.URIRequest) (
+	*workspacepb.URIResponse, error,
+) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	uri, err := s.executor.URI(req.GetPath())
+	if err != nil {
+		return nil, err
+	}
+	resp := new(workspacepb.URIResponse)
+	resp.Uri = uri.String()
+	return resp, nil
+}
+
 func (s *Server) Stop() {
 	s.mu.Lock()
 	defer s.mu.Unlock()

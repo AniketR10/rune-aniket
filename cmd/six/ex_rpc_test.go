@@ -82,8 +82,8 @@ func newTestRPCBrowser(t *testing.T,
 		// logger = log.New()
 		// logger.SetLevel(log.TraceLevel)
 
-		b := new(Ex)
-		err := b.init(ed, opts...)
+		b := new(ex)
+		err := b.doInit(ed, &testWorkspace{}, opts...)
 		if err != nil {
 			return nil, nil, err
 		}

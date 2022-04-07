@@ -21,13 +21,15 @@ const defaultCommand = `grep -n -r "" .`
 
 var defaultHistoryKey = term.Event{Type: term.EventKey, Key: term.KeyCtrlBackslash}
 
-func parseLine(data string) (workspace.URI, term.Coordinates) {
+func parseLine(workspace workspace.Executor, data string) (
+	workspace.URI, term.Coordinates,
+) {
 	// NOTE: if ag breaks this or there's an edge case that it's not covered
 	// let it panic so we catch it early and fix it
 	chunks := strings.Split(data, ":")
 	y, _ := strconv.Atoi(chunks[1])
 	name := chunks[0]
-	uri, _ := workspace.LocalURI(name)
+	uri, _ := workspace.URI(name)
 	return uri, term.Coordinates{Y: y - 1}
 }
 

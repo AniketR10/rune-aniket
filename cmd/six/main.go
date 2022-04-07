@@ -38,7 +38,7 @@ func cwdURI() workspace.URI {
 	if err != nil {
 		log.Fatalf("Failed to get working directory: %s", err)
 	}
-	uri, err := workspace.LocalURI(wd)
+	uri, err := workspace.CurrentUserHostURI(wd)
 	if err != nil {
 		log.Fatalf("Failed to parse working directory as URI %s: %s", wd, err)
 	}
@@ -69,7 +69,7 @@ func main() {
 	}
 
 	if *flagWorkspaceServer != "" {
-		uri, err := workspace.LocalURI(*flagWorkspaceServer)
+		uri, err := workspace.CurrentUserHostURI(*flagWorkspaceServer)
 		if err != nil {
 			log.Fatal(err)
 		}

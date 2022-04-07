@@ -39,23 +39,23 @@ func sanitizeFilePath(resource string) string {
 	return util.SanitizeLine(resolvedPath)
 }
 
-func makeSSHURI(u *url.URL) (URI, error) {
+func makeSSHURI(u *url.URL) URI {
 	name := fmt.Sprintf("%s://%s%s", u.Scheme, u.Host, u.Path)
-	return URI{uri: u.String(), parsed: *u, name: name}, nil
+	return URI{uri: u.String(), parsed: *u, name: name}
 }
 
-func makeFileURI(u *url.URL) (URI, error) {
+func makeFileURI(u *url.URL) URI {
 	path := sanitizeFilePath(u.Path)
 	u.Path = path
-	return URI{uri: u.String(), parsed: *u, name: filepath.Base(path)}, nil
+	return URI{uri: u.String(), parsed: *u, name: filepath.Base(path)}
 }
 
 func makeURI(u *url.URL) (URI, error) {
 	if u.Scheme == fileScheme {
-		return makeFileURI(u)
+		return makeFileURI(u), nil
 	}
 	if u.Scheme == sshScheme {
-		return makeSSHURI(u)
+		return makeSSHURI(u), nil
 	}
 	return URI{}, fmt.Errorf("unsupported scheme: %s", u.Scheme)
 }

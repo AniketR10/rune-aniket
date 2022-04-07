@@ -79,7 +79,7 @@ func newIntegrationTestCase(t *testing.T, endsInEOL bool) (
 func openFile(
 	filename string, buf *cell.Buffer, swapDir string, readOnly bool,
 ) (*file, error) {
-	fileURI, err := LocalURI(filename)
+	fileURI, err := makeLocalURI(filename)
 	if err != nil {
 		return nil, err
 	}
@@ -87,7 +87,7 @@ func openFile(
 	if swapDir == "" {
 		swap, err = DefaultSwapDirectory(fileURI)
 	} else {
-		swap, err = LocalURI(swapDir)
+		swap, err = makeLocalURI(swapDir)
 	}
 	if err != nil {
 		return nil, err
@@ -103,11 +103,11 @@ func openFile(
 func recoverFile(
 	filename, recoverFilename string, buf *cell.Buffer,
 ) (*file, error) {
-	fileURI, err := LocalURI(filename)
+	fileURI, err := makeLocalURI(filename)
 	if err != nil {
 		return nil, err
 	}
-	recoverFile, err := LocalURI(recoverFilename)
+	recoverFile, err := makeLocalURI(recoverFilename)
 	if err != nil {
 		return nil, err
 	}

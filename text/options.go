@@ -26,7 +26,6 @@ type CommandOverlayConfig struct {
 // Config holds configuration for an editor.Component.
 type Config struct {
 	Tabspaces               int
-	SwapDir                 *workspace.URI
 	Filepaths               []workspace.URI
 	RecoveryFilepath        workspace.URI
 	CommandEvent            term.Event
@@ -58,7 +57,6 @@ func DefaultCommandOverlayConfig() (cfg CommandOverlayConfig) {
 func DefaultConfig() Config {
 	cfg := Config{
 		Tabspaces:               4,
-		SwapDir:                 nil,
 		Filepaths:               nil,
 		RecoveryFilepath:        workspace.URI{},
 		CommandEvent:            term.Event{Ch: ':', Type: term.EventKey},
@@ -81,16 +79,6 @@ type Option func(*Config)
 func WithTabspaces(tabspaces int) Option {
 	return func(cfg *Config) {
 		cfg.Tabspaces = tabspaces
-	}
-}
-
-// WithSwapDir defines the swap directory to use if WithFilepath option is set.
-// The swap directory is used to keep persist recovery files. If this option is not
-// defined, the directory of WithFilepath is used as a swap directory.
-func WithSwapDir(dir workspace.URI) Option {
-	return func(cfg *Config) {
-		cfg.SwapDir = new(workspace.URI)
-		*cfg.SwapDir = dir
 	}
 }
 

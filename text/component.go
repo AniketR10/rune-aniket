@@ -126,10 +126,7 @@ func (c *Component) setTabAttr(file workspace.URI, buf *cell.Buffer, lastFlush s
 }
 
 func (c *Component) getSwapDir(file workspace.URI) (workspace.URI, error) {
-	if c.config.SwapDir == nil {
-		return workspace.DefaultSwapDirectory(file)
-	}
-	return *c.config.SwapDir, nil
+	return workspace.DefaultSwapDirectory(file)
 }
 
 func (c *Component) newFileBuffer(

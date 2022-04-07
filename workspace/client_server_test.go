@@ -543,6 +543,20 @@ func TestClientServer(t *testing.T) {
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), "boom")
 		}},
+		{"URI happy path", func(t *testing.T, mock *MockOsFile, c *Client, s *Server) {
+			uri, err := ParseURI("ssh://user@my_host:8080/tmp/hello/world.go")
+			require.NoError(t, err)
+			s.executor.(*MockExecutor).EXPECT().URI(gomock.Eq("/tmp/hello_world.go")).Return(uri, nil)
+			actualUri, err := c.URI("/tmp/hello_world.go")
+			assert.NoError(t, err)
+			assert.Equal(t, uri.String(), actualUri.String())
+		}},
+		{"URI error", func(t *testing.T, mock *MockOsFile, c *Client, s *Server) {
+			s.executor.(*MockExecutor).EXPECT().URI(gomock.Any()).Return(URI{}, errors.New("boom"))
+			_, err := c.URI("/tmp/hello_world.go")
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "boom")
+		}},
 	}
 
 	for _, tcase := range tsuite {

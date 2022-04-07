@@ -21,19 +21,19 @@ import (
 var (
 	commandBarAttr      = term.Attributes{Bg: term.ColorWhite, Fg: term.ColorBlack}
 	errInvalidSetCursor = errors.New("Cannot set cursor on this buffer")
-	exCommands          = map[string]func(*Ex, ...string) (bool, error){
-		"bufferPrev":      (*Ex).previousBuffer,
-		"bufferNext":      (*Ex).nextBuffer,
-		"bufferClose":     (*Ex).closeBuffer,
-		"bufferCloseAll":  (*Ex).closeAllBuffers,
-		"close":           (*Ex).closeFocusWindow,
-		"writeQuit":       (*Ex).flushCloseIgnoreNonFlushed,
-		"writeForceQuit!": (*Ex).flushCloseIgnoreNonFlushed,
-		"write":           (*Ex).forceFlush,
-		"forceWrite!":     (*Ex).forceFlush,
-		"forceQuit!":      (*Ex).forceQuit,
-		"quit":            (*Ex).forceQuit,
-		"edit":            (*Ex).editFile,
+	exCommands          = map[string]func(*ex, ...string) (bool, error){
+		"bufferPrev":      (*ex).previousBuffer,
+		"bufferNext":      (*ex).nextBuffer,
+		"bufferClose":     (*ex).closeBuffer,
+		"bufferCloseAll":  (*ex).closeAllBuffers,
+		"close":           (*ex).closeFocusWindow,
+		"writeQuit":       (*ex).flushCloseIgnoreNonFlushed,
+		"writeForceQuit!": (*ex).flushCloseIgnoreNonFlushed,
+		"write":           (*ex).forceFlush,
+		"forceWrite!":     (*ex).forceFlush,
+		"forceQuit!":      (*ex).forceQuit,
+		"quit":            (*ex).forceQuit,
+		"edit":            (*ex).editFile,
 	}
 )
 
@@ -44,13 +44,20 @@ const (
 	modeCommand
 )
 
-// Ex implements a tui.Handler by wrapping an editor.Component and
+// used to abstract workspace.Manager
+type workspaceURI interface {
+	workspace.ResourceOpener
+	URI(string) (workspace.URI, error)
+}
+
+// ex implements a tui.Handler by wrapping an editor.Component and
 // providing an ex editor type of interface.
-type Ex struct {
-	config  text.Config
-	comp    text.Component
-	ed      text.Editor
-	command struct {
+type ex struct {
+	config    text.Config
+	comp      text.Component
+	ed        text.Editor
+	workspace workspaceURI
+	command   struct {
 		// argsStartIdx is the position of the first space
 		// that separates the 'command' from its args
 		argsStartIdx int
@@ -67,25 +74,24 @@ type Ex struct {
 	mode      mode
 }
 
-// NewEx allocates storage for a new Ex and initializes it.
-func NewEx(ed text.Editor, m *workspace.Manager, opts ...text.Option) (
-	e *Ex, err error,
+func newEx(ed text.Editor, m workspaceURI, opts ...text.Option) (
+	e *ex, err error,
 ) {
-	e = new(Ex)
-	err = e.Init(ed, m, opts...)
+	e = new(ex)
+	err = e.init(ed, m, opts...)
 	if err != nil {
 		return
 	}
 	return
 }
 
-// Init initializes this Ex with the given editor and Options.
+// Init initializes this ex with the given editor and Options.
 // It returns an error if an initial filepath was given through WithFilePath option
 // and the file failed to be opened.
-func (e *Ex) Init(ed text.Editor, m *workspace.Manager, opts ...text.Option) (
+func (e *ex) init(ed text.Editor, m workspaceURI, opts ...text.Option) (
 	err error,
 ) {
-	err = e.init(ed, opts...)
+	err = e.doInit(ed, m, opts...)
 	if err != nil {
 		return
 	}
@@ -93,8 +99,11 @@ func (e *Ex) Init(ed text.Editor, m *workspace.Manager, opts ...text.Option) (
 }
 
 // init is used for internal testing
-func (e *Ex) init(ed text.Editor, opts ...text.Option) (err error) {
+func (e *ex) doInit(
+	ed text.Editor, m workspaceURI, opts ...text.Option,
+) (err error) {
 	e.mode = modeDefault
+	e.workspace = m
 
 	e.config = text.DefaultConfig()
 	for _, o := range opts {
@@ -153,7 +162,7 @@ func (e *Ex) init(ed text.Editor, opts ...text.Option) (err error) {
 	return
 }
 
-func (e *Ex) handlerInFocus() (workspace.URI, text.Handler, bool) {
+func (e *ex) handlerInFocus() (workspace.URI, text.Handler, bool) {
 	focus, _ := e.comp.Focus()
 	content, _ := focus.Content()
 	t, ok := content.(*browser.Tab)
@@ -167,7 +176,7 @@ func (e *Ex) handlerInFocus() (workspace.URI, text.Handler, bool) {
 	return t.URI(), ret, true
 }
 
-func (e *Ex) moveFocusCursor(line int) error {
+func (e *ex) moveFocusCursor(line int) error {
 	_, h, ok := e.handlerInFocus()
 	if !ok {
 		return errInvalidSetCursor
@@ -181,50 +190,50 @@ func (e *Ex) moveFocusCursor(line int) error {
 	return e.comp.SetCursor(h, term.Coordinates{Y: line})
 }
 
-func (e *Ex) previousBuffer(args ...string) (bool, error) {
+func (e *ex) previousBuffer(args ...string) (bool, error) {
 	b := e.comp.Browser()
 	b.EditWindowTabPrev(b.Focus())
 	return false, nil
 }
 
-func (e *Ex) nextBuffer(args ...string) (bool, error) {
+func (e *ex) nextBuffer(args ...string) (bool, error) {
 	b := e.comp.Browser()
 	b.EditWindowTabNext(b.Focus())
 	return false, nil
 }
 
-func (e *Ex) closeBuffer(args ...string) (bool, error) {
+func (e *ex) closeBuffer(args ...string) (bool, error) {
 	b := e.comp.Browser()
 	b.RemoveWindowContent(b.Focus())
 	return false, nil
 }
 
-func (e *Ex) closeAllBuffers(args ...string) (bool, error) {
+func (e *ex) closeAllBuffers(args ...string) (bool, error) {
 	b := e.comp.Browser()
 	b.RemoveAllTabs()
 	return false, nil
 }
 
-func (e *Ex) closeFocusWindow(args ...string) (bool, error) {
+func (e *ex) closeFocusWindow(args ...string) (bool, error) {
 	b := e.comp.Browser()
 	return false, b.Focus().Close()
 }
 
-func (e *Ex) flushCloseIgnoreNonFlushed(args ...string) (bool, error) {
+func (e *ex) flushCloseIgnoreNonFlushed(args ...string) (bool, error) {
 	b := e.comp.Browser()
 	return true, e.comp.Flush(b.Focus())
 }
 
-func (e *Ex) forceFlush(args ...string) (bool, error) {
+func (e *ex) forceFlush(args ...string) (bool, error) {
 	b := e.comp.Browser()
 	return false, e.comp.Flush(b.Focus())
 }
 
-func (e *Ex) forceQuit(args ...string) (bool, error) {
+func (e *ex) forceQuit(args ...string) (bool, error) {
 	return true, nil
 }
 
-func (e *Ex) dispatchCommand(cmd string, args ...string) (err error) {
+func (e *ex) dispatchCommand(cmd string, args ...string) (err error) {
 	uri, h, ok := e.handlerInFocus()
 	scmd := text.Command{
 		Name:     cmd,
@@ -243,7 +252,7 @@ func (e *Ex) dispatchCommand(cmd string, args ...string) (err error) {
 	return
 }
 
-func (e *Ex) runSingleCommand(cmd string) (quit bool, err error) {
+func (e *ex) runSingleCommand(cmd string) (quit bool, err error) {
 	fnCmd, ok := exCommands[cmd]
 	if ok {
 		return fnCmd(e)
@@ -257,14 +266,14 @@ func (e *Ex) runSingleCommand(cmd string) (quit bool, err error) {
 	return false, e.dispatchCommand(cmd)
 }
 
-func (e *Ex) editFile(args ...string) (bool, error) {
+func (e *ex) editFile(args ...string) (bool, error) {
 	if len(args) == 0 {
-		return false, errors.New("Expected file name")
+		return false, errors.New("expected file name")
 	}
 	// attempt to parse URI otherwise expect local file path
 	uri, err := workspace.ParseURI(args[0])
 	if err != nil {
-		uri, err = workspace.LocalURI(args[0])
+		uri, err = e.workspace.URI(args[0])
 		if err != nil {
 			return false, err
 		}
@@ -280,7 +289,7 @@ func (e *Ex) editFile(args ...string) (bool, error) {
 	return false, err
 }
 
-func (e *Ex) runCommand(cmd string, cmdAndArgs string) (quit bool, err error) {
+func (e *ex) runCommand(cmd string, cmdAndArgs string) (quit bool, err error) {
 	parts := strings.Split(cmdAndArgs, " ")
 	if len(parts) == 1 {
 		if len(cmd) == 0 {
@@ -297,11 +306,11 @@ func (e *Ex) runCommand(cmd string, cmdAndArgs string) (quit bool, err error) {
 	return false, e.dispatchCommand(cmd, parts[1:]...)
 }
 
-func (e *Ex) setError(err error) {
+func (e *ex) setError(err error) {
 	e.comp.Browser().SetMessage("Error: %s", err)
 }
 
-func (e *Ex) handleCommand(ev term.Event) (quit, handled bool) {
+func (e *ex) handleCommand(ev term.Event) (quit, handled bool) {
 	handled = true
 
 	switch ev.Key {
@@ -362,7 +371,7 @@ func (e *Ex) handleCommand(ev term.Event) (quit, handled bool) {
 	return
 }
 
-func (e *Ex) handleCommandEvent(ev term.Event) bool {
+func (e *ex) handleCommandEvent(ev term.Event) bool {
 	if ev == e.config.CommandEvent {
 		e.setCommandMode()
 		return true
@@ -370,10 +379,10 @@ func (e *Ex) handleCommandEvent(ev term.Event) bool {
 	return false
 }
 
-func (e *Ex) handleProxy(ev term.Event) (
+func (e *ex) handleProxy(ev term.Event) (
 	exit, handled bool,
 ) {
-	// If Ex is configured with non character
+	// If ex is configured with non character
 	// command mode trigger event, then this takes
 	// precedence over any other event
 	if e.config.CommandEvent.Ch == 0 {
@@ -436,7 +445,7 @@ func (e *Ex) handleProxy(ev term.Event) (
 	return false, true
 }
 
-func (e *Ex) setNormalMode() {
+func (e *ex) setNormalMode() {
 	e.command.Buffer.Reset()
 	e.command.List.Buffer().Reset()
 	e.command.List.Wait()
@@ -444,7 +453,7 @@ func (e *Ex) setNormalMode() {
 	e.mode = modeDefault
 }
 
-func (e *Ex) setCommandMode() {
+func (e *ex) setCommandMode() {
 	e.mode = modeCommand
 
 	// commands can be registered dynamicall via Editor.Register:
@@ -459,7 +468,7 @@ func (e *Ex) setCommandMode() {
 }
 
 // Handle satisfies tui.Handler.
-func (e *Ex) Handle(ev term.Event) (bool, bool) {
+func (e *ex) Handle(ev term.Event) (bool, bool) {
 	switch e.mode {
 	case modeDefault:
 		return e.handleProxy(ev)
@@ -470,7 +479,7 @@ func (e *Ex) Handle(ev term.Event) (bool, bool) {
 	}
 }
 
-func (e *Ex) overlayPosition() (pos term.Coordinates) {
+func (e *ex) overlayPosition() (pos term.Coordinates) {
 	pos = e.command.Overlay.ContentOffset()
 	if e.config.CommandOverlay.Frame {
 		pos.Y++
@@ -479,7 +488,7 @@ func (e *Ex) overlayPosition() (pos term.Coordinates) {
 	return
 }
 
-func (e *Ex) commandOverlayDimensions() (width, height int) {
+func (e *ex) commandOverlayDimensions() (width, height int) {
 	width, height = e.config.CommandOverlay.Width, e.config.CommandOverlay.Height
 	if e.config.CommandOverlay.Frame && width > 2 && height > 2 {
 		width -= 2
@@ -489,7 +498,7 @@ func (e *Ex) commandOverlayDimensions() (width, height int) {
 }
 
 // Cursor satisfies tui.Handler.
-func (e *Ex) Cursor() (pos term.Coordinates, show bool) {
+func (e *ex) Cursor() (pos term.Coordinates, show bool) {
 	if e.mode == modeCommand {
 		pos := e.command.Virtual.Position()
 		cmdWidth, cmdHeight := e.commandOverlayDimensions()
@@ -508,12 +517,12 @@ func (e *Ex) Cursor() (pos term.Coordinates, show bool) {
 }
 
 // Man satisfies tui.Handler.
-func (e *Ex) Man() tui.Manual {
+func (e *ex) Man() tui.Manual {
 	panic("TODO")
 }
 
 // Resize satisfies tui.Component
-func (e *Ex) Resize(width, height int) {
+func (e *ex) Resize(width, height int) {
 	// internally resizes e.comp
 	e.command.Overlay.Resize(width, height)
 
@@ -521,7 +530,7 @@ func (e *Ex) Resize(width, height int) {
 	e.command.Virtual.Move(pos)
 }
 
-func (e *Ex) resizeCommandOverlay() {
+func (e *ex) resizeCommandOverlay() {
 	// propagate local cmd+args buffer height to
 	// search list, which only has cmd, in case args alone span
 	// multiple lines
@@ -538,7 +547,7 @@ func (e *Ex) resizeCommandOverlay() {
 }
 
 // Draw satisfies tui.Component
-func (e *Ex) Draw(w term.Writer) {
+func (e *ex) Draw(w term.Writer) {
 	if e.mode == modeCommand {
 		// resize on every draw because search.List uses a responsive
 		// input so local buffer changes must consider potential resize
@@ -552,17 +561,17 @@ func (e *Ex) Draw(w term.Writer) {
 }
 
 // Editor returns the underlying Editor implementation.
-func (e *Ex) Editor() text.Editor {
+func (e *ex) Editor() text.Editor {
 	return &e.comp
 }
 
 // Browser returns the underlying browser.Browser implementaiton.
-func (e *Ex) Browser() browser.Browser {
+func (e *ex) Browser() browser.Browser {
 	return &e.comp
 }
 
 // Close closes the resources associated with this browser.
-func (e *Ex) Close() error {
+func (e *ex) Close() error {
 	e.sequencer.Reset()
 	err1 := e.command.List.Close()
 	err2 := e.comp.Close()

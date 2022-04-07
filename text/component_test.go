@@ -422,7 +422,7 @@ func TestComponentEditorSubscriber(t *testing.T) {
 			c := newTestComponent(t, &testEditor{})
 
 			filename := "~/Joe_Biden.txt"
-			uri, err := workspace.LocalURI(filename)
+			uri, err := workspace.CurrentUserHostURI(filename)
 			require.NoError(t, err)
 			if tcase.preTrigger != nil {
 				tcase.preTrigger(t, c, uri)

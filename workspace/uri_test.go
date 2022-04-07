@@ -63,7 +63,7 @@ func TestDefaultSwapDirectory(t *testing.T) {
 		{"file:///a.go", "file:///", false},
 		{"file:///tmp/a.go", "file:///tmp", false},
 		{"file://tmp/a.go", "file://tmp/", false},
-		// TODO add ssh:// tests
+		{"ssh://unstable.build/tmp/a.go", "ssh://unstable.build/tmp", false},
 	}
 
 	for _, tcase := range tsuite {
