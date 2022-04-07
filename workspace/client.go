@@ -220,8 +220,9 @@ func (c *fileClient) Seek(offset int64, whence int) (int64, error) {
 }
 
 func (c *fileClient) Read(p []byte) (n int, err error) {
-	ctx, cleanup := ctxWithTimeout()
-	defer cleanup()
+	// Read should not ever timeout as it is expected to block
+	// if data is not available yet.
+	ctx := context.Background()
 
 	req := workspacepb.ReadRequest{HandlerId: c.handlerID, N: int64(len(p))}
 	resp, err := c.client.Read(ctx, &req)
@@ -254,8 +255,9 @@ func (c *fileClient) Close() error {
 }
 
 func (c *fileClient) Write(p []byte) (n int, err error) {
-	ctx, cleanup := ctxWithTimeout()
-	defer cleanup()
+	// Write should not ever timeout as it is expected to block
+	// if data is not available yet.
+	ctx := context.Background()
 
 	req := workspacepb.WriteRequest{HandlerId: c.handlerID, Data: string(p)}
 	resp, err := c.client.Write(ctx, &req)

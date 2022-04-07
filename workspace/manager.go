@@ -76,6 +76,7 @@ func (m *Manager) Init(workspace URI, opts ...Option) error {
 		}
 		return m.initWorkspaceClient()
 	}
+	m.userLookup = user.Lookup
 	return m.init(workspace, opts...)
 }
 
@@ -186,14 +187,24 @@ func (m *Manager) Open(
 }
 
 func (m *Manager) commandLocal(name string, arg ...string) (Pid, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
 	cmd := exec.Command(name, arg...)
 	m.nextPid++
 	m.cmds[Pid(m.nextPid)] = cmd
 	return Pid(m.nextPid), nil
 }
 
-func (m *Manager) startLocal(pid Pid) error {
+func (m *Manager) getCmdForPid(pid Pid) (*exec.Cmd, bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	f, ok := m.cmds[pid]
+	return f, ok
+}
+
+func (m *Manager) startLocal(pid Pid) error {
+	f, ok := m.getCmdForPid(pid)
 	if !ok {
 		return errProcNotFound
 	}
@@ -205,7 +216,7 @@ func (m *Manager) startLocal(pid Pid) error {
 }
 
 func (m *Manager) signalLocal(pid Pid, signal syscall.Signal) error {
-	f, ok := m.cmds[pid]
+	f, ok := m.getCmdForPid(pid)
 	if !ok {
 		return errProcNotFound
 	}
@@ -220,7 +231,7 @@ func (m *Manager) signalLocal(pid Pid, signal syscall.Signal) error {
 }
 
 func (m *Manager) stderrPipeLocal(pid Pid) (io.ReadCloser, error) {
-	f, ok := m.cmds[pid]
+	f, ok := m.getCmdForPid(pid)
 	if !ok {
 		return nil, errProcNotFound
 	}
@@ -232,7 +243,7 @@ func (m *Manager) stderrPipeLocal(pid Pid) (io.ReadCloser, error) {
 }
 
 func (m *Manager) stdinPipeLocal(pid Pid) (io.WriteCloser, error) {
-	f, ok := m.cmds[pid]
+	f, ok := m.getCmdForPid(pid)
 	if !ok {
 		return nil, errProcNotFound
 	}
@@ -244,7 +255,7 @@ func (m *Manager) stdinPipeLocal(pid Pid) (io.WriteCloser, error) {
 }
 
 func (m *Manager) stdoutPipeLocal(pid Pid) (io.ReadCloser, error) {
-	f, ok := m.cmds[pid]
+	f, ok := m.getCmdForPid(pid)
 	if !ok {
 		return nil, errProcNotFound
 	}
@@ -256,7 +267,7 @@ func (m *Manager) stdoutPipeLocal(pid Pid) (io.ReadCloser, error) {
 }
 
 func (m *Manager) waitLocal(pid Pid) error {
-	f, ok := m.cmds[pid]
+	f, ok := m.getCmdForPid(pid)
 	if !ok {
 		return errProcNotFound
 	}
@@ -353,7 +364,16 @@ func (m *Manager) Close() error {
 	if m.sshConn != nil {
 		ret = m.sshConn.Close()
 	}
+
+	// do not block while sending signals
+	m.mu.Lock()
+	var copyCmds []*exec.Cmd
 	for _, cmd := range m.cmds {
+		copyCmds = append(copyCmds, cmd)
+	}
+	m.mu.Unlock()
+
+	for _, cmd := range copyCmds {
 		if cmd.Process != nil {
 			err := syscall.Kill(cmd.Process.Pid, syscall.SIGTERM)
 			if err != nil {
@@ -361,5 +381,6 @@ func (m *Manager) Close() error {
 			}
 		}
 	}
+	m.cmds = nil
 	return ret
 }

@@ -53,6 +53,8 @@ func (s *Server) Init(executor Executor) {
 }
 
 func (s *Server) getFile(handlerID int32) (osFile, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	h, ok := s.handles[handlerID]
 	if !ok {
 		return nil, ok
@@ -62,6 +64,8 @@ func (s *Server) getFile(handlerID int32) (osFile, bool) {
 }
 
 func (s *Server) getWriter(handlerID int32) (io.WriteCloser, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	h, ok := s.handles[handlerID]
 	if !ok {
 		return nil, ok
@@ -71,6 +75,8 @@ func (s *Server) getWriter(handlerID int32) (io.WriteCloser, bool) {
 }
 
 func (s *Server) getReader(handlerID int32) (io.ReadCloser, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	h, ok := s.handles[handlerID]
 	if !ok {
 		return nil, ok
@@ -80,10 +86,14 @@ func (s *Server) getReader(handlerID int32) (io.ReadCloser, bool) {
 }
 
 func (s *Server) removeFile(handlerID int32) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	delete(s.handles, handlerID)
 }
 
 func (s *Server) addHandle(f io.Closer) int32 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.nextHandlerID++
 	s.handles[s.nextHandlerID] = f
 	return s.nextHandlerID
@@ -92,9 +102,6 @@ func (s *Server) addHandle(f io.Closer) int32 {
 func (s *Server) Open(ctx context.Context, req *workspacepb.OpenRequest) (
 	*workspacepb.OpenResponse, error,
 ) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	filename := req.GetFilename()
 	f, err := s.openFunc(filename, int(req.GetFlag()), os.FileMode(req.GetMode()))
 	if err != nil {
@@ -107,6 +114,7 @@ func (s *Server) Open(ctx context.Context, req *workspacepb.OpenRequest) (
 		}
 		return nil, fmt.Errorf("open %s error: %s", filename, err)
 	}
+
 	handlerID := s.addHandle(f)
 	resp := new(workspacepb.OpenResponse)
 	resp.HandlerId = handlerID
@@ -116,9 +124,6 @@ func (s *Server) Open(ctx context.Context, req *workspacepb.OpenRequest) (
 func (s *Server) Remove(ctx context.Context, req *workspacepb.RemoveRequest) (
 	*workspacepb.RemoveResponse, error,
 ) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	filename := req.GetFilename()
 	err := s.removeFunc(filename)
 	if err != nil {
@@ -130,9 +135,6 @@ func (s *Server) Remove(ctx context.Context, req *workspacepb.RemoveRequest) (
 func (s *Server) Rename(ctx context.Context, req *workspacepb.RenameRequest) (
 	*workspacepb.RenameResponse, error,
 ) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	filename := req.GetFilename()
 	err := s.renameFunc(filename, req.GetNewfilename())
 	if err != nil {
@@ -144,9 +146,6 @@ func (s *Server) Rename(ctx context.Context, req *workspacepb.RenameRequest) (
 func (s *Server) Stat(ctx context.Context, req *workspacepb.StatRequest) (
 	*workspacepb.StatResponse, error,
 ) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	var err error
 	var fs os.FileInfo
 	if req.GetLstat() {
@@ -171,9 +170,6 @@ func (s *Server) Stat(ctx context.Context, req *workspacepb.StatRequest) (
 func (s *Server) Sync(ctx context.Context, req *workspacepb.SyncRequest) (
 	*workspacepb.SyncResponse, error,
 ) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	f, ok := s.getFile(req.GetHandlerId())
 	if !ok {
 		return nil, errFileNotOpen
@@ -188,9 +184,6 @@ func (s *Server) Sync(ctx context.Context, req *workspacepb.SyncRequest) (
 func (s *Server) Truncate(ctx context.Context, req *workspacepb.TruncateRequest) (
 	*workspacepb.TruncateResponse, error,
 ) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	f, ok := s.getFile(req.GetHandlerId())
 	if !ok {
 		return nil, errFileNotOpen
@@ -205,9 +198,6 @@ func (s *Server) Truncate(ctx context.Context, req *workspacepb.TruncateRequest)
 func (s *Server) Close(ctx context.Context, req *workspacepb.CloseFileRequest) (
 	*workspacepb.CloseFileResponse, error,
 ) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	f, ok := s.getFile(req.GetHandlerId())
 	if !ok {
 		return nil, errFileNotOpen
@@ -223,9 +213,6 @@ func (s *Server) Close(ctx context.Context, req *workspacepb.CloseFileRequest) (
 func (s *Server) Seek(ctx context.Context, req *workspacepb.SeekRequest) (
 	*workspacepb.SeekResponse, error,
 ) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	f, ok := s.getFile(req.GetHandlerId())
 	if !ok {
 		return nil, errFileNotOpen
@@ -242,9 +229,6 @@ func (s *Server) Seek(ctx context.Context, req *workspacepb.SeekRequest) (
 func (s *Server) Read(ctx context.Context, req *workspacepb.ReadRequest) (
 	*workspacepb.ReadResponse, error,
 ) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	f, ok := s.getReader(req.GetHandlerId())
 	if !ok {
 		return nil, errFileNotOpen
@@ -264,9 +248,6 @@ func (s *Server) Read(ctx context.Context, req *workspacepb.ReadRequest) (
 func (s *Server) Write(ctx context.Context, req *workspacepb.WriteRequest) (
 	*workspacepb.WriteResponse, error,
 ) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	f, ok := s.getWriter(req.GetHandlerId())
 	if !ok {
 		return nil, errFileNotOpen
@@ -283,9 +264,6 @@ func (s *Server) Write(ctx context.Context, req *workspacepb.WriteRequest) (
 func (s *Server) ReadLink(ctx context.Context, req *workspacepb.ReadLinkRequest) (
 	*workspacepb.ReadLinkResponse, error,
 ) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	filename := req.GetFilename()
 	fil, err := s.readLinkFunc(filename)
 	if err != nil {
@@ -299,9 +277,6 @@ func (s *Server) ReadLink(ctx context.Context, req *workspacepb.ReadLinkRequest)
 func (s *Server) Command(ctx context.Context, req *workspacepb.CommandRequest) (
 	*workspacepb.CommandResponse, error,
 ) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	name := req.GetName()
 	args := req.GetArgs()
 	pid, err := s.executor.Command(name, args...)
@@ -316,9 +291,6 @@ func (s *Server) Command(ctx context.Context, req *workspacepb.CommandRequest) (
 func (s *Server) Start(ctx context.Context, req *workspacepb.StartRequest) (
 	*workspacepb.StartResponse, error,
 ) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	pid := req.GetPid()
 	err := s.executor.Start(Pid(pid))
 	if err != nil {
@@ -331,9 +303,6 @@ func (s *Server) Start(ctx context.Context, req *workspacepb.StartRequest) (
 func (s *Server) Wait(ctx context.Context, req *workspacepb.WaitRequest) (
 	*workspacepb.WaitResponse, error,
 ) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	pid := req.GetPid()
 	err := s.executor.Wait(Pid(pid))
 	if err != nil {
@@ -346,9 +315,6 @@ func (s *Server) Wait(ctx context.Context, req *workspacepb.WaitRequest) (
 func (s *Server) Signal(ctx context.Context, req *workspacepb.SignalRequest) (
 	*workspacepb.SignalResponse, error,
 ) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	pid := req.GetPid()
 	signal := req.GetSig()
 	err := s.executor.Signal(Pid(pid), syscall.Signal(signal))
@@ -362,9 +328,6 @@ func (s *Server) Signal(ctx context.Context, req *workspacepb.SignalRequest) (
 func (s *Server) StderrPipe(ctx context.Context, req *workspacepb.StdioPipeRequest) (
 	*workspacepb.StdioPipeResponse, error,
 ) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	pid := req.GetPid()
 	pipe, err := s.executor.StderrPipe(Pid(pid))
 	if err != nil {
@@ -379,9 +342,6 @@ func (s *Server) StderrPipe(ctx context.Context, req *workspacepb.StdioPipeReque
 func (s *Server) StdoutPipe(ctx context.Context, req *workspacepb.StdioPipeRequest) (
 	*workspacepb.StdioPipeResponse, error,
 ) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	pid := req.GetPid()
 	pipe, err := s.executor.StdoutPipe(Pid(pid))
 	if err != nil {
@@ -396,9 +356,6 @@ func (s *Server) StdoutPipe(ctx context.Context, req *workspacepb.StdioPipeReque
 func (s *Server) StdinPipe(ctx context.Context, req *workspacepb.StdioPipeRequest) (
 	*workspacepb.StdioPipeResponse, error,
 ) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	pid := req.GetPid()
 	pipe, err := s.executor.StdinPipe(Pid(pid))
 	if err != nil {
@@ -413,9 +370,6 @@ func (s *Server) StdinPipe(ctx context.Context, req *workspacepb.StdioPipeReques
 func (s *Server) URI(ctx context.Context, req *workspacepb.URIRequest) (
 	*workspacepb.URIResponse, error,
 ) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	uri, err := s.executor.URI(req.GetPath())
 	if err != nil {
 		return nil, err
