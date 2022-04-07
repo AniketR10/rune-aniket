@@ -21,9 +21,11 @@ GOMOCKS=$(wildcard **/*_gomock.go)
 
 .PHONY: clean test coverage example_wasm generate
 
+default: CGO_ENABLED=CGO_ENABLED=0
 default: $(EXAMPLES) $(EXECS)
 
 debug: GOFLAGS=-race
+debug: CGO_ENABLED=CGO_ENABLED=1
 debug: $(EXAMPLES) $(EXECS)
 
 example_wasm: $(EXAMPLE_WASM_BLOB)
@@ -56,17 +58,17 @@ $(WASM_EXAMPLE_TARGET): $(BIN) $(WASM_EXAMPLE_STATIC)
 	@cp `go env GOROOT`/misc/wasm/wasm_exec.js $(WASM_EXAMPLE_TARGET)/js
 
 $(EXAMPLE_WASM_BLOB): $(WASM_EXAMPLE) $(LIBSRC) $(WASM_EXAMPLE_TARGET)
-	CGO_ENABLED=0 @GOOS=js GOARCH=wasm $(GO) build -o $(EXAMPLE_WASM_BLOB) $(WASM_EXAMPLE)
+	$(CGO_ENABLED) GOOS=js GOARCH=wasm $(GO) build -o $(EXAMPLE_WASM_BLOB) $(WASM_EXAMPLE)
 
 $(EXAMPLES_NON_WASM): $(EXAMPLESRC) $(LIBSRC) $(BIN)
-	@cd $(patsubst bin/example_%,examples/%,$@) && CGO_ENABLED=0 $(GO) build $(GOFLAGS) -o ../../$@
+	@cd $(patsubst bin/example_%,examples/%,$@) && $(CGO_ENABLED) $(GO) build $(GOFLAGS) -o ../../$@
 
 $(EXECS): $(EXECSRC) $(LIBSRC) $(BIN)
-	@cd $(patsubst bin/%,cmd/%,$@) && CGO_ENABLED=0 $(GO) build $(GOFLAGS) -o ../../$@
+	@cd $(patsubst bin/%,cmd/%,$@) && $(CGO_ENABLED) $(GO) build $(GOFLAGS) -o ../../$@
 
 make_release:
 	@ mkdir -p $(TARGET)/$(TARGET_OS)_$(TARGET_ARCH)
-	@ CGO_ENABLED=0 GOARCH=$(TARGET_ARCH) $(TARGET_ARCH_FLAGS) GOOS=$(TARGET_OS) $(GO) build $(GOFLAGS) -o `pwd`/$(TARGET)/$(TARGET_OS)_$(TARGET_ARCH) ./...
+	@ $(CGO_ENABLED) GOARCH=$(TARGET_ARCH) $(TARGET_ARCH_FLAGS) GOOS=$(TARGET_OS) $(GO) build $(GOFLAGS) -o `pwd`/$(TARGET)/$(TARGET_OS)_$(TARGET_ARCH) ./...
 
 release_arm:
 	@ rm -rf $(TARGET)
