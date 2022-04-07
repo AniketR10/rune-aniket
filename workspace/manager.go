@@ -1,20 +1,32 @@
 package workspace
 
 import (
+	"errors"
 	"fmt"
+	"io"
 	"os"
+	"os/exec"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/ernestrc/go-tui/cell"
 	"golang.org/x/crypto/ssh"
 )
 
+var (
+	_                 Executor = (*Manager)(nil)
+	errProcNotFound            = errors.New("process not found")
+	errProcNotRunning          = errors.New("process not running")
+)
+
 // Manager manages resources on a workspace. It satisfies ResourceOpener.
 type Manager struct {
 	managerCfg
 	workspace URI
+	cmds      map[Pid]*exec.Cmd
+	nextPid   int32
 
 	mu              sync.Mutex
 	sshConn         *ssh.Client
@@ -53,6 +65,7 @@ func NewManager(workspace URI, opts ...Option) (*Manager, error) {
 func (m *Manager) Init(workspace URI, opts ...Option) error {
 	m.osChdir = os.Chdir
 	m.osGetwd = os.Getwd
+	m.cmds = make(map[Pid]*exec.Cmd)
 	return m.init(workspace, opts...)
 }
 
@@ -134,10 +147,171 @@ func (m *Manager) Open(
 	return nil, fmt.Errorf("unknown scheme: %s", file.uri)
 }
 
-// Close closes all resources associated with this Manager.
-func (m *Manager) Close() error {
-	if m.sshConn != nil {
-		return m.sshConn.Close()
+func (m *Manager) commandLocal(name string, arg ...string) (Pid, error) {
+	cmd := exec.Command(name, arg...)
+	m.nextPid++
+	m.cmds[Pid(m.nextPid)] = cmd
+	return Pid(m.nextPid), nil
+}
+
+func (m *Manager) startLocal(pid Pid) error {
+	f, ok := m.cmds[pid]
+	if !ok {
+		return errProcNotFound
+	}
+	err := f.Start()
+	if err != nil {
+		return fmt.Errorf("Cmd.Start: %w", err)
 	}
 	return nil
+}
+
+func (m *Manager) signalLocal(pid Pid, signal syscall.Signal) error {
+	f, ok := m.cmds[pid]
+	if !ok {
+		return errProcNotFound
+	}
+	if f.Process == nil {
+		return errProcNotRunning
+	}
+	err := syscall.Kill(int(f.Process.Pid), signal)
+	if err != nil {
+		return fmt.Errorf("syscall.Kill: %w", err)
+	}
+	return nil
+}
+
+func (m *Manager) stderrPipeLocal(pid Pid) (io.ReadCloser, error) {
+	f, ok := m.cmds[pid]
+	if !ok {
+		return nil, errProcNotFound
+	}
+	pipe, err := f.StderrPipe()
+	if err != nil {
+		return nil, fmt.Errorf("Cmd.StderrPipe: %w", err)
+	}
+	return pipe, err
+}
+
+func (m *Manager) stdinPipeLocal(pid Pid) (io.WriteCloser, error) {
+	f, ok := m.cmds[pid]
+	if !ok {
+		return nil, errProcNotFound
+	}
+	pipe, err := f.StdinPipe()
+	if err != nil {
+		return nil, fmt.Errorf("Cmd.StdinPipe: %w", err)
+	}
+	return pipe, err
+}
+
+func (m *Manager) stdoutPipeLocal(pid Pid) (io.ReadCloser, error) {
+	f, ok := m.cmds[pid]
+	if !ok {
+		return nil, errProcNotFound
+	}
+	pipe, err := f.StdoutPipe()
+	if err != nil {
+		return nil, fmt.Errorf("Cmd.StdoutPipe: %w", err)
+	}
+	return pipe, err
+}
+
+func (m *Manager) waitLocal(pid Pid) error {
+	f, ok := m.cmds[pid]
+	if !ok {
+		return errProcNotFound
+	}
+	err := f.Wait()
+	if err != nil {
+		return fmt.Errorf("Cmd.Wait: %w", err)
+	}
+	return err
+}
+
+func (m *Manager) Command(name string, arg ...string) (Pid, error) {
+	if isFileURI(m.workspace) {
+		return m.commandLocal(name, arg...)
+	}
+	if isSSHURI(m.workspace) {
+		return m.workspaceClient.Command(name, arg...)
+	}
+	panic("manager has an invalid workspace URI")
+}
+
+func (m *Manager) Start(pid Pid) error {
+	if isFileURI(m.workspace) {
+		return m.startLocal(pid)
+	}
+	if isSSHURI(m.workspace) {
+		return m.workspaceClient.Start(pid)
+	}
+	panic("manager has an invalid workspace URI")
+}
+
+func (m *Manager) Signal(pid Pid, sig syscall.Signal) error {
+	if isFileURI(m.workspace) {
+		return m.signalLocal(pid, sig)
+	}
+	if isSSHURI(m.workspace) {
+		return m.workspaceClient.Signal(pid, sig)
+	}
+	panic("manager has an invalid workspace URI")
+}
+
+func (m *Manager) StderrPipe(pid Pid) (io.ReadCloser, error) {
+	if isFileURI(m.workspace) {
+		return m.stderrPipeLocal(pid)
+	}
+	if isSSHURI(m.workspace) {
+		return m.workspaceClient.StderrPipe(pid)
+	}
+	panic("manager has an invalid workspace URI")
+}
+
+func (m *Manager) StdinPipe(pid Pid) (io.WriteCloser, error) {
+	if isFileURI(m.workspace) {
+		return m.stdinPipeLocal(pid)
+	}
+	if isSSHURI(m.workspace) {
+		return m.workspaceClient.StdinPipe(pid)
+	}
+	panic("manager has an invalid workspace URI")
+}
+
+func (m *Manager) StdoutPipe(pid Pid) (io.ReadCloser, error) {
+	if isFileURI(m.workspace) {
+		return m.stdoutPipeLocal(pid)
+	}
+	if isSSHURI(m.workspace) {
+		return m.workspaceClient.StdoutPipe(pid)
+	}
+	panic("manager has an invalid workspace URI")
+}
+
+func (m *Manager) Wait(pid Pid) error {
+	if isFileURI(m.workspace) {
+		return m.waitLocal(pid)
+	}
+	if isSSHURI(m.workspace) {
+		return m.workspaceClient.Wait(pid)
+	}
+	panic("manager has an invalid workspace URI")
+}
+
+// Close closes all resources associated with this Manager.
+func (m *Manager) Close() error {
+	var ret error
+	if m.sshConn != nil {
+		ret = m.sshConn.Close()
+	}
+	for _, cmd := range m.cmds {
+		if cmd.Process != nil {
+			err := syscall.Kill(cmd.Process.Pid, syscall.SIGTERM)
+			if err != nil {
+				ret = err
+			}
+		}
+	}
+	return ret
 }

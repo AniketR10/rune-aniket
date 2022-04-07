@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"sync"
+	"syscall"
 	"time"
 
 	workspacepb "github.com/ernestrc/go-tui/workspace/proto"
@@ -26,37 +27,63 @@ type Server struct {
 	lstatFunc    statFunc
 	readLinkFunc readLinkFunc
 
+	// for proc API
+	executor Executor
+
 	mu            sync.Mutex
-	handles       map[int32]osFile
+	handles       map[int32]io.Closer
 	nextHandlerID int32
 }
 
-func NewServer() *Server {
+func NewServer(executor Executor) *Server {
 	ret := new(Server)
-	ret.Init()
+	ret.Init(executor)
 	return ret
 }
 
-func (s *Server) Init() {
-	s.handles = make(map[int32]osFile)
+func (s *Server) Init(executor Executor) {
+	s.handles = make(map[int32]io.Closer)
 	s.nextHandlerID = 0
 	s.openFunc = osOpenFileFunc()
 	s.removeFunc = os.Remove
 	s.renameFunc = os.Rename
 	s.statFunc = os.Stat
 	s.lstatFunc = os.Lstat
+	s.executor = executor
 }
 
 func (s *Server) getFile(handlerID int32) (osFile, bool) {
-	f, ok := s.handles[handlerID]
+	h, ok := s.handles[handlerID]
+	if !ok {
+		return nil, ok
+	}
+	f, ok := h.(osFile)
 	return f, ok
+}
+
+func (s *Server) getWriter(handlerID int32) (io.WriteCloser, bool) {
+	h, ok := s.handles[handlerID]
+	if !ok {
+		return nil, ok
+	}
+	p, ok := h.(io.WriteCloser)
+	return p, ok
+}
+
+func (s *Server) getReader(handlerID int32) (io.ReadCloser, bool) {
+	h, ok := s.handles[handlerID]
+	if !ok {
+		return nil, ok
+	}
+	p, ok := h.(io.ReadCloser)
+	return p, ok
 }
 
 func (s *Server) removeFile(handlerID int32) {
 	delete(s.handles, handlerID)
 }
 
-func (s *Server) addFile(f osFile) int32 {
+func (s *Server) addHandle(f io.Closer) int32 {
 	s.nextHandlerID++
 	s.handles[s.nextHandlerID] = f
 	return s.nextHandlerID
@@ -80,7 +107,7 @@ func (s *Server) Open(ctx context.Context, req *workspacepb.OpenRequest) (
 		}
 		return nil, fmt.Errorf("open %s error: %s", filename, err)
 	}
-	handlerID := s.addFile(f)
+	handlerID := s.addHandle(f)
 	resp := new(workspacepb.OpenResponse)
 	resp.HandlerId = handlerID
 	return resp, nil
@@ -218,7 +245,7 @@ func (s *Server) Read(ctx context.Context, req *workspacepb.ReadRequest) (
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	f, ok := s.getFile(req.GetHandlerId())
+	f, ok := s.getReader(req.GetHandlerId())
 	if !ok {
 		return nil, errFileNotOpen
 	}
@@ -240,7 +267,7 @@ func (s *Server) Write(ctx context.Context, req *workspacepb.WriteRequest) (
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	f, ok := s.getFile(req.GetHandlerId())
+	f, ok := s.getWriter(req.GetHandlerId())
 	if !ok {
 		return nil, errFileNotOpen
 	}
@@ -266,6 +293,120 @@ func (s *Server) ReadLink(ctx context.Context, req *workspacepb.ReadLinkRequest)
 	}
 	resp := new(workspacepb.ReadLinkResponse)
 	resp.Filename = fil
+	return resp, nil
+}
+
+func (s *Server) Command(ctx context.Context, req *workspacepb.CommandRequest) (
+	*workspacepb.CommandResponse, error,
+) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	name := req.GetName()
+	args := req.GetArgs()
+	pid, err := s.executor.Command(name, args...)
+	if err != nil {
+		return nil, err
+	}
+	resp := new(workspacepb.CommandResponse)
+	resp.Pid = int32(pid)
+	return resp, nil
+}
+
+func (s *Server) Start(ctx context.Context, req *workspacepb.StartRequest) (
+	*workspacepb.StartResponse, error,
+) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	pid := req.GetPid()
+	err := s.executor.Start(Pid(pid))
+	if err != nil {
+		return nil, err
+	}
+	resp := new(workspacepb.StartResponse)
+	return resp, nil
+}
+
+func (s *Server) Wait(ctx context.Context, req *workspacepb.WaitRequest) (
+	*workspacepb.WaitResponse, error,
+) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	pid := req.GetPid()
+	err := s.executor.Wait(Pid(pid))
+	if err != nil {
+		return nil, err
+	}
+	resp := new(workspacepb.WaitResponse)
+	return resp, nil
+}
+
+func (s *Server) Signal(ctx context.Context, req *workspacepb.SignalRequest) (
+	*workspacepb.SignalResponse, error,
+) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	pid := req.GetPid()
+	signal := req.GetSig()
+	err := s.executor.Signal(Pid(pid), syscall.Signal(signal))
+	if err != nil {
+		return nil, err
+	}
+	resp := new(workspacepb.SignalResponse)
+	return resp, nil
+}
+
+func (s *Server) StderrPipe(ctx context.Context, req *workspacepb.StdioPipeRequest) (
+	*workspacepb.StdioPipeResponse, error,
+) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	pid := req.GetPid()
+	pipe, err := s.executor.StderrPipe(Pid(pid))
+	if err != nil {
+		return nil, err
+	}
+	resp := new(workspacepb.StdioPipeResponse)
+	handlerID := s.addHandle(pipe)
+	resp.HandlerId = handlerID
+	return resp, nil
+}
+
+func (s *Server) StdoutPipe(ctx context.Context, req *workspacepb.StdioPipeRequest) (
+	*workspacepb.StdioPipeResponse, error,
+) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	pid := req.GetPid()
+	pipe, err := s.executor.StdoutPipe(Pid(pid))
+	if err != nil {
+		return nil, err
+	}
+	resp := new(workspacepb.StdioPipeResponse)
+	handlerID := s.addHandle(pipe)
+	resp.HandlerId = handlerID
+	return resp, nil
+}
+
+func (s *Server) StdinPipe(ctx context.Context, req *workspacepb.StdioPipeRequest) (
+	*workspacepb.StdioPipeResponse, error,
+) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	pid := req.GetPid()
+	pipe, err := s.executor.StdinPipe(Pid(pid))
+	if err != nil {
+		return nil, err
+	}
+	resp := new(workspacepb.StdioPipeResponse)
+	handlerID := s.addHandle(pipe)
+	resp.HandlerId = handlerID
 	return resp, nil
 }
 

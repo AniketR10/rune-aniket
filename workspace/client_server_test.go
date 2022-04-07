@@ -5,6 +5,7 @@ import (
 	"io"
 	"net"
 	"os"
+	"syscall"
 	"testing"
 	"time"
 
@@ -52,7 +53,8 @@ func setupClientServerUnitTest(t *testing.T) (*Client, *Server, *MockOsFile, fun
 	defer ctrl.Finish()
 
 	mock := NewMockOsFile(ctrl)
-	server := NewServer()
+	mockExecutor := NewMockExecutor(ctrl)
+	server := NewServer(mockExecutor)
 	server.openFunc = func(name string, flag int, perm os.FileMode) (osFile, *osError) {
 		return mock, nil
 	}
@@ -70,6 +72,10 @@ func setupClientServerUnitTest(t *testing.T) (*Client, *Server, *MockOsFile, fun
 	}
 	client, cleanup := setupClientServerTest(t, server)
 	return client, server, mock, cleanup
+}
+
+func expectCommand(t *testing.T, s *Server, pid int) {
+	s.executor.(*MockExecutor).EXPECT().Command(gomock.Any(), gomock.Any()).Return(Pid(pid), nil)
 }
 
 func TestClientServer(t *testing.T) {
@@ -373,6 +379,167 @@ func TestClientServer(t *testing.T) {
 				return "", errors.New("boom")
 			}
 			_, err := c.ReadLink("myFile")
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "boom")
+		}},
+		{"Command happy path", func(t *testing.T, mock *MockOsFile, c *Client, s *Server) {
+			s.executor.(*MockExecutor).EXPECT().Command(gomock.Eq("six"), gomock.Eq("arg1")).Return(Pid(1), nil)
+			pid, err := c.Command("six", "arg1")
+			require.NoError(t, err)
+			assert.Equal(t, Pid(1), pid)
+		}},
+		{"Command error", func(t *testing.T, mock *MockOsFile, c *Client, s *Server) {
+			s.executor.(*MockExecutor).EXPECT().Command(gomock.Any(), gomock.Any()).
+				Return(Pid(0), errors.New("boom"))
+			_, err := c.Command("six", "arg1")
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "boom")
+		}},
+		{"Start happy path", func(t *testing.T, mock *MockOsFile, c *Client, s *Server) {
+			expectCommand(t, s, 99)
+			pid, err := c.Command("six", "arg1")
+			require.NoError(t, err)
+
+			s.executor.(*MockExecutor).EXPECT().Start(gomock.Eq(Pid(99))).Return(nil)
+			err = c.Start(pid)
+			assert.NoError(t, err)
+		}},
+		{"Start error", func(t *testing.T, mock *MockOsFile, c *Client, s *Server) {
+			expectCommand(t, s, 99)
+			pid, err := c.Command("six", "arg1")
+			require.NoError(t, err)
+
+			s.executor.(*MockExecutor).EXPECT().Start(gomock.Any()).Return(errors.New("boom"))
+			err = c.Start(pid)
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "boom")
+		}},
+		{"Wait happy path", func(t *testing.T, mock *MockOsFile, c *Client, s *Server) {
+			expectCommand(t, s, 99)
+			pid, err := c.Command("six", "arg1")
+			require.NoError(t, err)
+
+			s.executor.(*MockExecutor).EXPECT().Wait(gomock.Eq(Pid(99))).Return(nil)
+			err = c.Wait(pid)
+			assert.NoError(t, err)
+		}},
+		{"Wait error", func(t *testing.T, mock *MockOsFile, c *Client, s *Server) {
+			expectCommand(t, s, 99)
+			pid, err := c.Command("six", "arg1")
+			require.NoError(t, err)
+
+			s.executor.(*MockExecutor).EXPECT().Wait(gomock.Any()).Return(errors.New("boom"))
+			err = c.Wait(pid)
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "boom")
+		}},
+		{"Signal happy path", func(t *testing.T, mock *MockOsFile, c *Client, s *Server) {
+			expectCommand(t, s, 99)
+			pid, err := c.Command("six", "arg1")
+			require.NoError(t, err)
+
+			s.executor.(*MockExecutor).EXPECT().Signal(gomock.Eq(Pid(99)), gomock.Eq(syscall.SIGTERM)).
+				Return(nil)
+			err = c.Signal(pid, syscall.SIGTERM)
+			assert.NoError(t, err)
+		}},
+		{"Signal error", func(t *testing.T, mock *MockOsFile, c *Client, s *Server) {
+			expectCommand(t, s, 99)
+			pid, err := c.Command("six", "arg1")
+			require.NoError(t, err)
+
+			s.executor.(*MockExecutor).EXPECT().Signal(gomock.Any(), gomock.Any()).
+				Return(errors.New("boom"))
+			err = c.Signal(pid, syscall.SIGKILL)
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "boom")
+		}},
+		{"StdinPipe happy path", func(t *testing.T, mock *MockOsFile, c *Client, s *Server) {
+			expectCommand(t, s, 99)
+			pid, err := c.Command("six", "arg1")
+			require.NoError(t, err)
+
+			s.executor.(*MockExecutor).EXPECT().StdinPipe(gomock.Eq(Pid(99))).Return(mock, nil)
+			pipe, err := c.StdinPipe(pid)
+			require.NoError(t, err)
+
+			mock.EXPECT().Write(gomock.Eq([]byte("NYC is dirty"))).Return(10, nil)
+			n, err := pipe.Write([]byte("NYC is dirty"))
+			require.NoError(t, err)
+			assert.Equal(t, 10, n)
+
+			mock.EXPECT().Write(gomock.Eq([]byte("NYC is dirty"))).Return(0, errors.New("boom"))
+			_, err = pipe.Write([]byte("NYC is dirty"))
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "boom")
+		}},
+		{"StdinPipe error", func(t *testing.T, mock *MockOsFile, c *Client, s *Server) {
+			expectCommand(t, s, 99)
+			pid, err := c.Command("six", "arg1")
+			require.NoError(t, err)
+
+			s.executor.(*MockExecutor).EXPECT().StdinPipe(gomock.Any()).Return(nil, errors.New("boom"))
+			_, err = c.StdinPipe(pid)
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "boom")
+		}},
+		{"StdoutPipe happy path", func(t *testing.T, mock *MockOsFile, c *Client, s *Server) {
+			expectCommand(t, s, 99)
+			pid, err := c.Command("six", "arg1")
+			require.NoError(t, err)
+
+			s.executor.(*MockExecutor).EXPECT().StdoutPipe(gomock.Eq(Pid(99))).Return(mock, nil)
+			pipe, err := c.StdoutPipe(pid)
+			require.NoError(t, err)
+
+			mock.EXPECT().Read(gomock.Any()).Return(10, nil)
+			buf := make([]byte, 10)
+			n, err := pipe.Read(buf)
+			require.NoError(t, err)
+			assert.Equal(t, 10, n)
+
+			mock.EXPECT().Read(gomock.Any()).Return(0, errors.New("boom"))
+			_, err = pipe.Read([]byte{})
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "boom")
+		}},
+		{"StdoutPipe error", func(t *testing.T, mock *MockOsFile, c *Client, s *Server) {
+			expectCommand(t, s, 99)
+			pid, err := c.Command("six", "arg1")
+			require.NoError(t, err)
+
+			s.executor.(*MockExecutor).EXPECT().StdoutPipe(gomock.Any()).Return(nil, errors.New("boom"))
+			_, err = c.StdoutPipe(pid)
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "boom")
+		}},
+		{"StderrPipe happy path", func(t *testing.T, mock *MockOsFile, c *Client, s *Server) {
+			expectCommand(t, s, 99)
+			pid, err := c.Command("six", "arg1")
+			require.NoError(t, err)
+
+			s.executor.(*MockExecutor).EXPECT().StderrPipe(gomock.Eq(Pid(99))).Return(mock, nil)
+			pipe, err := c.StderrPipe(pid)
+			require.NoError(t, err)
+
+			mock.EXPECT().Read(gomock.Any()).Return(10, nil)
+			buf := make([]byte, 10)
+			n, err := pipe.Read(buf)
+			require.NoError(t, err)
+			assert.Equal(t, 10, n)
+
+			mock.EXPECT().Read(gomock.Any()).Return(0, errors.New("boom"))
+			_, err = pipe.Read([]byte{})
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "boom")
+		}},
+		{"StderrPipe error", func(t *testing.T, mock *MockOsFile, c *Client, s *Server) {
+			expectCommand(t, s, 99)
+			pid, err := c.Command("six", "arg1")
+			require.NoError(t, err)
+
+			s.executor.(*MockExecutor).EXPECT().StderrPipe(gomock.Any()).Return(nil, errors.New("boom"))
+			_, err = c.StderrPipe(pid)
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), "boom")
 		}},

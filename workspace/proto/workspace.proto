@@ -107,12 +107,52 @@ message ReadLinkResponse {
 	string filename = 1;
 }
 
+message CommandRequest {
+	string name = 1;
+	repeated string args = 2;
+}
+
+message CommandResponse {
+	int32 pid = 1;
+}
+
+message StartRequest {
+	int32 pid = 1;
+}
+
+message StartResponse {
+}
+
+message WaitRequest {
+	int32 pid = 1;
+}
+
+message WaitResponse {
+}
+
+message SignalRequest {
+	int32 pid = 1;
+	int32 sig = 2;
+}
+
+message SignalResponse {
+}
+
+message StdioPipeRequest {
+	int32 pid = 1;
+}
+
+message StdioPipeResponse {
+	int32 handler_id = 1;
+}
+
 service Workspace {
 	rpc Open(OpenRequest) returns (OpenResponse);
 	rpc Remove(RemoveRequest) returns (RemoveResponse);
 	rpc Rename(RenameRequest) returns (RenameResponse);
 	rpc Stat(StatRequest) returns (StatResponse);
 	rpc ReadLink(ReadLinkRequest) returns (ReadLinkResponse);
+	rpc Command(CommandRequest) returns (CommandResponse);
 
 	// handler_id based
 	rpc Sync(SyncRequest) returns (SyncResponse);
@@ -121,4 +161,12 @@ service Workspace {
 	rpc Seek(SeekRequest) returns (SeekResponse);
 	rpc Read(ReadRequest) returns (ReadResponse);
 	rpc Write(WriteRequest) returns (WriteResponse);
+	
+	// proc API
+	rpc Start(StartRequest) returns (StartResponse);
+	rpc Wait(WaitRequest) returns (WaitResponse);
+	rpc Signal(SignalRequest) returns (SignalResponse);
+	rpc StderrPipe(StdioPipeRequest) returns (StdioPipeResponse);
+	rpc StdoutPipe(StdioPipeRequest) returns (StdioPipeResponse);
+	rpc StdinPipe(StdioPipeRequest) returns (StdioPipeResponse);
 }

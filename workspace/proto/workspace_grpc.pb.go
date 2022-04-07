@@ -27,6 +27,7 @@ type WorkspaceClient interface {
 	Rename(ctx context.Context, in *RenameRequest, opts ...grpc.CallOption) (*RenameResponse, error)
 	Stat(ctx context.Context, in *StatRequest, opts ...grpc.CallOption) (*StatResponse, error)
 	ReadLink(ctx context.Context, in *ReadLinkRequest, opts ...grpc.CallOption) (*ReadLinkResponse, error)
+	Command(ctx context.Context, in *CommandRequest, opts ...grpc.CallOption) (*CommandResponse, error)
 	// handler_id based
 	Sync(ctx context.Context, in *SyncRequest, opts ...grpc.CallOption) (*SyncResponse, error)
 	Truncate(ctx context.Context, in *TruncateRequest, opts ...grpc.CallOption) (*TruncateResponse, error)
@@ -34,6 +35,13 @@ type WorkspaceClient interface {
 	Seek(ctx context.Context, in *SeekRequest, opts ...grpc.CallOption) (*SeekResponse, error)
 	Read(ctx context.Context, in *ReadRequest, opts ...grpc.CallOption) (*ReadResponse, error)
 	Write(ctx context.Context, in *WriteRequest, opts ...grpc.CallOption) (*WriteResponse, error)
+	// proc API
+	Start(ctx context.Context, in *StartRequest, opts ...grpc.CallOption) (*StartResponse, error)
+	Wait(ctx context.Context, in *WaitRequest, opts ...grpc.CallOption) (*WaitResponse, error)
+	Signal(ctx context.Context, in *SignalRequest, opts ...grpc.CallOption) (*SignalResponse, error)
+	StderrPipe(ctx context.Context, in *StdioPipeRequest, opts ...grpc.CallOption) (*StdioPipeResponse, error)
+	StdoutPipe(ctx context.Context, in *StdioPipeRequest, opts ...grpc.CallOption) (*StdioPipeResponse, error)
+	StdinPipe(ctx context.Context, in *StdioPipeRequest, opts ...grpc.CallOption) (*StdioPipeResponse, error)
 }
 
 type workspaceClient struct {
@@ -83,6 +91,15 @@ func (c *workspaceClient) Stat(ctx context.Context, in *StatRequest, opts ...grp
 func (c *workspaceClient) ReadLink(ctx context.Context, in *ReadLinkRequest, opts ...grpc.CallOption) (*ReadLinkResponse, error) {
 	out := new(ReadLinkResponse)
 	err := c.cc.Invoke(ctx, "/proto.Workspace/ReadLink", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *workspaceClient) Command(ctx context.Context, in *CommandRequest, opts ...grpc.CallOption) (*CommandResponse, error) {
+	out := new(CommandResponse)
+	err := c.cc.Invoke(ctx, "/proto.Workspace/Command", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -143,6 +160,60 @@ func (c *workspaceClient) Write(ctx context.Context, in *WriteRequest, opts ...g
 	return out, nil
 }
 
+func (c *workspaceClient) Start(ctx context.Context, in *StartRequest, opts ...grpc.CallOption) (*StartResponse, error) {
+	out := new(StartResponse)
+	err := c.cc.Invoke(ctx, "/proto.Workspace/Start", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *workspaceClient) Wait(ctx context.Context, in *WaitRequest, opts ...grpc.CallOption) (*WaitResponse, error) {
+	out := new(WaitResponse)
+	err := c.cc.Invoke(ctx, "/proto.Workspace/Wait", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *workspaceClient) Signal(ctx context.Context, in *SignalRequest, opts ...grpc.CallOption) (*SignalResponse, error) {
+	out := new(SignalResponse)
+	err := c.cc.Invoke(ctx, "/proto.Workspace/Signal", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *workspaceClient) StderrPipe(ctx context.Context, in *StdioPipeRequest, opts ...grpc.CallOption) (*StdioPipeResponse, error) {
+	out := new(StdioPipeResponse)
+	err := c.cc.Invoke(ctx, "/proto.Workspace/StderrPipe", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *workspaceClient) StdoutPipe(ctx context.Context, in *StdioPipeRequest, opts ...grpc.CallOption) (*StdioPipeResponse, error) {
+	out := new(StdioPipeResponse)
+	err := c.cc.Invoke(ctx, "/proto.Workspace/StdoutPipe", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *workspaceClient) StdinPipe(ctx context.Context, in *StdioPipeRequest, opts ...grpc.CallOption) (*StdioPipeResponse, error) {
+	out := new(StdioPipeResponse)
+	err := c.cc.Invoke(ctx, "/proto.Workspace/StdinPipe", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // WorkspaceServer is the server API for Workspace service.
 // All implementations must embed UnimplementedWorkspaceServer
 // for forward compatibility
@@ -152,6 +223,7 @@ type WorkspaceServer interface {
 	Rename(context.Context, *RenameRequest) (*RenameResponse, error)
 	Stat(context.Context, *StatRequest) (*StatResponse, error)
 	ReadLink(context.Context, *ReadLinkRequest) (*ReadLinkResponse, error)
+	Command(context.Context, *CommandRequest) (*CommandResponse, error)
 	// handler_id based
 	Sync(context.Context, *SyncRequest) (*SyncResponse, error)
 	Truncate(context.Context, *TruncateRequest) (*TruncateResponse, error)
@@ -159,6 +231,13 @@ type WorkspaceServer interface {
 	Seek(context.Context, *SeekRequest) (*SeekResponse, error)
 	Read(context.Context, *ReadRequest) (*ReadResponse, error)
 	Write(context.Context, *WriteRequest) (*WriteResponse, error)
+	// proc API
+	Start(context.Context, *StartRequest) (*StartResponse, error)
+	Wait(context.Context, *WaitRequest) (*WaitResponse, error)
+	Signal(context.Context, *SignalRequest) (*SignalResponse, error)
+	StderrPipe(context.Context, *StdioPipeRequest) (*StdioPipeResponse, error)
+	StdoutPipe(context.Context, *StdioPipeRequest) (*StdioPipeResponse, error)
+	StdinPipe(context.Context, *StdioPipeRequest) (*StdioPipeResponse, error)
 	mustEmbedUnimplementedWorkspaceServer()
 }
 
@@ -181,6 +260,9 @@ func (UnimplementedWorkspaceServer) Stat(context.Context, *StatRequest) (*StatRe
 func (UnimplementedWorkspaceServer) ReadLink(context.Context, *ReadLinkRequest) (*ReadLinkResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ReadLink not implemented")
 }
+func (UnimplementedWorkspaceServer) Command(context.Context, *CommandRequest) (*CommandResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Command not implemented")
+}
 func (UnimplementedWorkspaceServer) Sync(context.Context, *SyncRequest) (*SyncResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Sync not implemented")
 }
@@ -198,6 +280,24 @@ func (UnimplementedWorkspaceServer) Read(context.Context, *ReadRequest) (*ReadRe
 }
 func (UnimplementedWorkspaceServer) Write(context.Context, *WriteRequest) (*WriteResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Write not implemented")
+}
+func (UnimplementedWorkspaceServer) Start(context.Context, *StartRequest) (*StartResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Start not implemented")
+}
+func (UnimplementedWorkspaceServer) Wait(context.Context, *WaitRequest) (*WaitResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Wait not implemented")
+}
+func (UnimplementedWorkspaceServer) Signal(context.Context, *SignalRequest) (*SignalResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Signal not implemented")
+}
+func (UnimplementedWorkspaceServer) StderrPipe(context.Context, *StdioPipeRequest) (*StdioPipeResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method StderrPipe not implemented")
+}
+func (UnimplementedWorkspaceServer) StdoutPipe(context.Context, *StdioPipeRequest) (*StdioPipeResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method StdoutPipe not implemented")
+}
+func (UnimplementedWorkspaceServer) StdinPipe(context.Context, *StdioPipeRequest) (*StdioPipeResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method StdinPipe not implemented")
 }
 func (UnimplementedWorkspaceServer) mustEmbedUnimplementedWorkspaceServer() {}
 
@@ -298,6 +398,24 @@ func _Workspace_ReadLink_Handler(srv interface{}, ctx context.Context, dec func(
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(WorkspaceServer).ReadLink(ctx, req.(*ReadLinkRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Workspace_Command_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CommandRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WorkspaceServer).Command(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/proto.Workspace/Command",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WorkspaceServer).Command(ctx, req.(*CommandRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -410,6 +528,114 @@ func _Workspace_Write_Handler(srv interface{}, ctx context.Context, dec func(int
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Workspace_Start_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(StartRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WorkspaceServer).Start(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/proto.Workspace/Start",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WorkspaceServer).Start(ctx, req.(*StartRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Workspace_Wait_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WaitRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WorkspaceServer).Wait(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/proto.Workspace/Wait",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WorkspaceServer).Wait(ctx, req.(*WaitRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Workspace_Signal_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SignalRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WorkspaceServer).Signal(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/proto.Workspace/Signal",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WorkspaceServer).Signal(ctx, req.(*SignalRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Workspace_StderrPipe_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(StdioPipeRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WorkspaceServer).StderrPipe(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/proto.Workspace/StderrPipe",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WorkspaceServer).StderrPipe(ctx, req.(*StdioPipeRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Workspace_StdoutPipe_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(StdioPipeRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WorkspaceServer).StdoutPipe(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/proto.Workspace/StdoutPipe",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WorkspaceServer).StdoutPipe(ctx, req.(*StdioPipeRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Workspace_StdinPipe_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(StdioPipeRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WorkspaceServer).StdinPipe(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/proto.Workspace/StdinPipe",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WorkspaceServer).StdinPipe(ctx, req.(*StdioPipeRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // Workspace_ServiceDesc is the grpc.ServiceDesc for Workspace service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -438,6 +664,10 @@ var Workspace_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _Workspace_ReadLink_Handler,
 		},
 		{
+			MethodName: "Command",
+			Handler:    _Workspace_Command_Handler,
+		},
+		{
 			MethodName: "Sync",
 			Handler:    _Workspace_Sync_Handler,
 		},
@@ -460,6 +690,30 @@ var Workspace_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Write",
 			Handler:    _Workspace_Write_Handler,
+		},
+		{
+			MethodName: "Start",
+			Handler:    _Workspace_Start_Handler,
+		},
+		{
+			MethodName: "Wait",
+			Handler:    _Workspace_Wait_Handler,
+		},
+		{
+			MethodName: "Signal",
+			Handler:    _Workspace_Signal_Handler,
+		},
+		{
+			MethodName: "StderrPipe",
+			Handler:    _Workspace_StderrPipe_Handler,
+		},
+		{
+			MethodName: "StdoutPipe",
+			Handler:    _Workspace_StdoutPipe_Handler,
+		},
+		{
+			MethodName: "StdinPipe",
+			Handler:    _Workspace_StdinPipe_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

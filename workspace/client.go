@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"os"
+	"syscall"
 	"time"
 
 	workspacepb "github.com/ernestrc/go-tui/workspace/proto"
@@ -18,10 +19,10 @@ type Client struct {
 	cc     grpc.ClientConnInterface
 	client workspacepb.WorkspaceClient
 
-	files map[int32]*FileClient
+	files map[int32]*fileClient
 }
 
-type FileClient struct {
+type fileClient struct {
 	client    workspacepb.WorkspaceClient
 	handlerID int32
 	filename  string
@@ -65,8 +66,8 @@ func (c *Client) Init(cc grpc.ClientConnInterface) {
 	c.client = workspacepb.NewWorkspaceClient(cc)
 }
 
-func (c *Client) newFileClient(filename string, handlerID int32) *FileClient {
-	return &FileClient{
+func (c *Client) newfileClient(filename string, handlerID int32) *fileClient {
+	return &fileClient{
 		client:    c.client,
 		handlerID: handlerID,
 		filename:  filename,
@@ -74,7 +75,7 @@ func (c *Client) newFileClient(filename string, handlerID int32) *FileClient {
 }
 
 func (c *Client) Open(name string, flag int, perm os.FileMode) (
-	*FileClient, error,
+	*fileClient, error,
 ) {
 	ctx, cleanup := ctxWithTimeout()
 	defer cleanup()
@@ -91,7 +92,7 @@ func (c *Client) Open(name string, flag int, perm os.FileMode) (
 			isPermission: resp.GetIsPermissionErr(),
 		}
 	}
-	return c.newFileClient(name, resp.GetHandlerId()), nil
+	return c.newfileClient(name, resp.GetHandlerId()), nil
 }
 
 func (c *Client) Remove(name string) error {
@@ -161,11 +162,11 @@ func (c *Client) Close() (err error) {
 	return err
 }
 
-func (c *FileClient) Name() string {
+func (c *fileClient) Name() string {
 	return c.filename
 }
 
-func (c *FileClient) Stat() (os.FileInfo, error) {
+func (c *fileClient) Stat() (os.FileInfo, error) {
 	ctx, cleanup := ctxWithTimeout()
 	defer cleanup()
 
@@ -177,7 +178,7 @@ func (c *FileClient) Stat() (os.FileInfo, error) {
 	return fileClientInfo{StatResponse: *resp}, nil
 }
 
-func (c *FileClient) Sync() error {
+func (c *fileClient) Sync() error {
 	ctx, cleanup := ctxWithTimeout()
 	defer cleanup()
 
@@ -189,7 +190,7 @@ func (c *FileClient) Sync() error {
 	return nil
 }
 
-func (c *FileClient) Truncate(size int64) error {
+func (c *fileClient) Truncate(size int64) error {
 	ctx, cleanup := ctxWithTimeout()
 	defer cleanup()
 
@@ -201,7 +202,7 @@ func (c *FileClient) Truncate(size int64) error {
 	return nil
 }
 
-func (c *FileClient) Seek(offset int64, whence int) (int64, error) {
+func (c *fileClient) Seek(offset int64, whence int) (int64, error) {
 	ctx, cleanup := ctxWithTimeout()
 	defer cleanup()
 
@@ -217,7 +218,7 @@ func (c *FileClient) Seek(offset int64, whence int) (int64, error) {
 	return resp.GetNewOffset(), nil
 }
 
-func (c *FileClient) Read(p []byte) (n int, err error) {
+func (c *fileClient) Read(p []byte) (n int, err error) {
 	ctx, cleanup := ctxWithTimeout()
 	defer cleanup()
 
@@ -239,7 +240,7 @@ func (c *FileClient) Read(p []byte) (n int, err error) {
 	return int(resp.GetN()), err
 }
 
-func (c *FileClient) Close() error {
+func (c *fileClient) Close() error {
 	ctx, cleanup := ctxWithTimeout()
 	defer cleanup()
 
@@ -251,7 +252,7 @@ func (c *FileClient) Close() error {
 	return nil
 }
 
-func (c *FileClient) Write(p []byte) (n int, err error) {
+func (c *fileClient) Write(p []byte) (n int, err error) {
 	ctx, cleanup := ctxWithTimeout()
 	defer cleanup()
 
@@ -273,6 +274,90 @@ func (c *Client) ReadLink(filename string) (string, error) {
 		return "", err
 	}
 	return resp.GetFilename(), nil
+}
+
+func (c *Client) Command(name string, arg ...string) (Pid, error) {
+	ctx, cleanup := ctxWithTimeout()
+	defer cleanup()
+
+	req := workspacepb.CommandRequest{Name: name, Args: arg}
+	resp, err := c.client.Command(ctx, &req)
+	if err != nil {
+		return 0, err
+	}
+	return Pid(resp.GetPid()), nil
+}
+
+func (c *Client) Start(pid Pid) error {
+	ctx, cleanup := ctxWithTimeout()
+	defer cleanup()
+
+	req := workspacepb.StartRequest{Pid: int32(pid)}
+	_, err := c.client.Start(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (c *Client) Signal(pid Pid, sig syscall.Signal) error {
+	ctx, cleanup := ctxWithTimeout()
+	defer cleanup()
+
+	req := workspacepb.SignalRequest{Pid: int32(pid), Sig: int32(sig)}
+	_, err := c.client.Signal(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (c *Client) StderrPipe(pid Pid) (io.ReadCloser, error) {
+	ctx, cleanup := ctxWithTimeout()
+	defer cleanup()
+
+	req := workspacepb.StdioPipeRequest{Pid: int32(pid)}
+	resp, err := c.client.StderrPipe(ctx, &req)
+	if err != nil {
+		return nil, err
+	}
+	return c.newfileClient("/dev/stderr", int32(resp.GetHandlerId())), nil
+}
+
+func (c *Client) StdinPipe(pid Pid) (io.WriteCloser, error) {
+	ctx, cleanup := ctxWithTimeout()
+	defer cleanup()
+
+	req := workspacepb.StdioPipeRequest{Pid: int32(pid)}
+	resp, err := c.client.StdinPipe(ctx, &req)
+	if err != nil {
+		return nil, err
+	}
+	return c.newfileClient("/dev/stdin", int32(resp.GetHandlerId())), nil
+}
+
+func (c *Client) StdoutPipe(pid Pid) (io.ReadCloser, error) {
+	ctx, cleanup := ctxWithTimeout()
+	defer cleanup()
+
+	req := workspacepb.StdioPipeRequest{Pid: int32(pid)}
+	resp, err := c.client.StdoutPipe(ctx, &req)
+	if err != nil {
+		return nil, err
+	}
+	return c.newfileClient("/dev/stdout", int32(resp.GetHandlerId())), nil
+}
+
+func (c *Client) Wait(pid Pid) error {
+	ctx, cleanup := ctxWithTimeout()
+	defer cleanup()
+
+	req := workspacepb.WaitRequest{Pid: int32(pid)}
+	_, err := c.client.Wait(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func ctxWithTimeout() (context.Context, func()) {
