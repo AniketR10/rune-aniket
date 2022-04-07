@@ -2,7 +2,9 @@ package plugin
 
 import (
 	"context"
+	"io/ioutil"
 	_ "net/http/pprof"
+	"strings"
 	"sync"
 	"testing"
 
@@ -44,6 +46,9 @@ func TestIntegrationRace(t *testing.T) {
 	resources := MergeResourceMap(BrowserResources(mock), EditorResources(edMock))
 	resources[PermissionClipboard] = NewClipboardManager()
 
+	execMock := workspace.NewMockExecutor(ctrl)
+	resources = MergeResourceMap(resources, WorkspaceResources(execMock))
+
 	uri, err := workspace.ParseURI("file:///tmp/test")
 	require.NoError(t, err)
 
@@ -56,6 +61,7 @@ func TestIntegrationRace(t *testing.T) {
 		PermissionEditor:                broker.NextId(),
 		PermissionBrowserStorage:        broker.NextId(),
 		PermissionClipboard:             broker.NextId(),
+		PermissionWorkspaceExecutor:     broker.NextId(),
 	}
 	for perm, brokerID := range perms {
 		resources[perm].Serve("caliu-plugins-ltd", brokerID,
@@ -65,12 +71,12 @@ func TestIntegrationRace(t *testing.T) {
 	tsuite := []struct {
 		perm           Permission
 		createResource func(uint32, proto.MuxBroker) (interface{}, error)
-		expect         func(*text.MockEditorMockRecorder, *browser.MockBrowserMockRecorder) *gomock.Call
+		expect         func(*workspace.MockExecutorMockRecorder, *text.MockEditorMockRecorder, *browser.MockBrowserMockRecorder) *gomock.Call
 		method         func(ifc interface{}) error
 	}{
 		{PermissionBrowserWindowManager, func(token uint32, broker proto.MuxBroker) (interface{}, error) {
 			return WindowManager(token, broker)
-		}, func(ed *text.MockEditorMockRecorder, mock *browser.MockBrowserMockRecorder) *gomock.Call {
+		}, func(_ *workspace.MockExecutorMockRecorder, ed *text.MockEditorMockRecorder, mock *browser.MockBrowserMockRecorder) *gomock.Call {
 			return mock.Focus().Return(mockWin, nil)
 		}, func(ifc interface{}) error {
 			_, err := ifc.(browser.WindowManager).Focus()
@@ -78,7 +84,7 @@ func TestIntegrationRace(t *testing.T) {
 		}},
 		{PermissionBrowserWindowManager, func(token uint32, broker proto.MuxBroker) (interface{}, error) {
 			return WindowManager(token, broker)
-		}, func(ed *text.MockEditorMockRecorder, mock *browser.MockBrowserMockRecorder) *gomock.Call {
+		}, func(_ *workspace.MockExecutorMockRecorder, ed *text.MockEditorMockRecorder, mock *browser.MockBrowserMockRecorder) *gomock.Call {
 			return mock.Split(gomock.Any(), gomock.Any()).Return(mockWin, nil)
 		}, func(ifc interface{}) error {
 			_, err := ifc.(browser.WindowManager).Split(browser.OrientationBottom, h)
@@ -86,14 +92,14 @@ func TestIntegrationRace(t *testing.T) {
 		}},
 		{PermissionBrowserWindowManager, func(token uint32, broker proto.MuxBroker) (interface{}, error) {
 			return WindowManager(token, broker)
-		}, func(ed *text.MockEditorMockRecorder, mock *browser.MockBrowserMockRecorder) *gomock.Call {
+		}, func(_ *workspace.MockExecutorMockRecorder, ed *text.MockEditorMockRecorder, mock *browser.MockBrowserMockRecorder) *gomock.Call {
 			return mock.Bar(gomock.Any(), gomock.Any()).Return(nil)
 		}, func(ifc interface{}) error {
 			return ifc.(browser.WindowManager).Bar(browser.OrientationBottom, h)
 		}},
 		{PermissionBrowserWindowManager, func(token uint32, broker proto.MuxBroker) (interface{}, error) {
 			return WindowManager(token, broker)
-		}, func(ed *text.MockEditorMockRecorder, mock *browser.MockBrowserMockRecorder) *gomock.Call {
+		}, func(_ *workspace.MockExecutorMockRecorder, ed *text.MockEditorMockRecorder, mock *browser.MockBrowserMockRecorder) *gomock.Call {
 			return mock.Tab(gomock.Any(), gomock.Any(), gomock.Any()).Return(h, nil)
 		}, func(ifc interface{}) error {
 			_, err := ifc.(browser.WindowManager).Tab(uri, "", h)
@@ -101,7 +107,7 @@ func TestIntegrationRace(t *testing.T) {
 		}},
 		{PermissionBrowserWindowManager, func(token uint32, broker proto.MuxBroker) (interface{}, error) {
 			return WindowManager(token, broker)
-		}, func(ed *text.MockEditorMockRecorder, mock *browser.MockBrowserMockRecorder) *gomock.Call {
+		}, func(_ *workspace.MockExecutorMockRecorder, ed *text.MockEditorMockRecorder, mock *browser.MockBrowserMockRecorder) *gomock.Call {
 			return mock.Floating(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(mockWin, nil)
 		}, func(ifc interface{}) error {
 			_, err := ifc.(browser.WindowManager).Floating(h, term.Coordinates{}, 1, 1)
@@ -109,7 +115,7 @@ func TestIntegrationRace(t *testing.T) {
 		}},
 		{PermissionBrowserResourceOpener, func(token uint32, broker proto.MuxBroker) (interface{}, error) {
 			return ResourceOpener(token, broker)
-		}, func(ed *text.MockEditorMockRecorder, mock *browser.MockBrowserMockRecorder) *gomock.Call {
+		}, func(_ *workspace.MockExecutorMockRecorder, ed *text.MockEditorMockRecorder, mock *browser.MockBrowserMockRecorder) *gomock.Call {
 			return mock.Open(gomock.Any()).Return(h, nil)
 		}, func(ifc interface{}) error {
 			_, err := ifc.(browser.ResourceOpener).Open(uri)
@@ -117,21 +123,21 @@ func TestIntegrationRace(t *testing.T) {
 		}},
 		{PermissionBrowserMessenger, func(token uint32, broker proto.MuxBroker) (interface{}, error) {
 			return Messenger(token, broker)
-		}, func(ed *text.MockEditorMockRecorder, mock *browser.MockBrowserMockRecorder) *gomock.Call {
+		}, func(_ *workspace.MockExecutorMockRecorder, ed *text.MockEditorMockRecorder, mock *browser.MockBrowserMockRecorder) *gomock.Call {
 			return mock.SetMessage(gomock.Any()).Return(nil)
 		}, func(ifc interface{}) error {
 			return ifc.(browser.Messenger).SetMessage("")
 		}},
 		{PermissionBrowserEventPublisher, func(token uint32, broker proto.MuxBroker) (interface{}, error) {
 			return EventPublisher(token, broker)
-		}, func(ed *text.MockEditorMockRecorder, mock *browser.MockBrowserMockRecorder) *gomock.Call {
+		}, func(_ *workspace.MockExecutorMockRecorder, ed *text.MockEditorMockRecorder, mock *browser.MockBrowserMockRecorder) *gomock.Call {
 			return mock.PublishInterrupt().Return(nil)
 		}, func(ifc interface{}) error {
 			return ifc.(browser.EventPublisher).PublishInterrupt()
 		}},
 		{PermissionEditor, func(token uint32, broker proto.MuxBroker) (interface{}, error) {
 			return Editor(token, broker)
-		}, func(ed *text.MockEditorMockRecorder, mock *browser.MockBrowserMockRecorder) *gomock.Call {
+		}, func(_ *workspace.MockExecutorMockRecorder, ed *text.MockEditorMockRecorder, mock *browser.MockBrowserMockRecorder) *gomock.Call {
 			return ed.Edit(gomock.Any(), gomock.Any()).Return(nil, nil)
 		}, func(ifc interface{}) error {
 			_, err := ifc.(text.Editor).Edit(uri, cell.NewBuffer())
@@ -139,7 +145,7 @@ func TestIntegrationRace(t *testing.T) {
 		}},
 		{PermissionEditor, func(token uint32, broker proto.MuxBroker) (interface{}, error) {
 			return Editor(token, broker)
-		}, func(ed *text.MockEditorMockRecorder, mock *browser.MockBrowserMockRecorder) *gomock.Call {
+		}, func(_ *workspace.MockExecutorMockRecorder, ed *text.MockEditorMockRecorder, mock *browser.MockBrowserMockRecorder) *gomock.Call {
 			return ed.SubscribeEditorEvents(gomock.Any(), gomock.Any()).Return(nil)
 		}, func(ifc interface{}) error {
 			h := text.FuncEventHandler(func(context.Context, text.Event) bool { return false })
@@ -148,7 +154,7 @@ func TestIntegrationRace(t *testing.T) {
 		}},
 		{PermissionEditor, func(token uint32, broker proto.MuxBroker) (interface{}, error) {
 			return Editor(token, broker)
-		}, func(ed *text.MockEditorMockRecorder, mock *browser.MockBrowserMockRecorder) *gomock.Call {
+		}, func(_ *workspace.MockExecutorMockRecorder, ed *text.MockEditorMockRecorder, mock *browser.MockBrowserMockRecorder) *gomock.Call {
 			ed.Edit(gomock.Any(), gomock.Any()).Return(nil, nil).AnyTimes()
 			return ed.SetCursor(gomock.Any(), gomock.Any()).Return(nil)
 		}, func(ifc interface{}) error {
@@ -161,7 +167,7 @@ func TestIntegrationRace(t *testing.T) {
 		}},
 		{PermissionEditor, func(token uint32, broker proto.MuxBroker) (interface{}, error) {
 			return Editor(token, broker)
-		}, func(ed *text.MockEditorMockRecorder, mock *browser.MockBrowserMockRecorder) *gomock.Call {
+		}, func(_ *workspace.MockExecutorMockRecorder, ed *text.MockEditorMockRecorder, mock *browser.MockBrowserMockRecorder) *gomock.Call {
 			ed.Edit(gomock.Any(), gomock.Any()).Return(nil, nil).AnyTimes()
 			return ed.Cursor(gomock.Any()).Return(term.Coordinates{}, nil)
 		}, func(ifc interface{}) error {
@@ -175,14 +181,14 @@ func TestIntegrationRace(t *testing.T) {
 		}},
 		{PermissionBrowserStorage, func(token uint32, broker proto.MuxBroker) (interface{}, error) {
 			return Storage(token, broker)
-		}, func(ed *text.MockEditorMockRecorder, mock *browser.MockBrowserMockRecorder) *gomock.Call {
+		}, func(_ *workspace.MockExecutorMockRecorder, ed *text.MockEditorMockRecorder, mock *browser.MockBrowserMockRecorder) *gomock.Call {
 			return mock.Create(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
 		}, func(ifc interface{}) error {
 			return ifc.(browser.Storage).Create(context.Background(), "", map[string]interface{}{"a": "b"})
 		}},
 		{PermissionBrowserStorage, func(token uint32, broker proto.MuxBroker) (interface{}, error) {
 			return Storage(token, broker)
-		}, func(ed *text.MockEditorMockRecorder, mock *browser.MockBrowserMockRecorder) *gomock.Call {
+		}, func(_ *workspace.MockExecutorMockRecorder, ed *text.MockEditorMockRecorder, mock *browser.MockBrowserMockRecorder) *gomock.Call {
 			return mock.Get(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
 		}, func(ifc interface{}) error {
 			var recv map[string]interface{}
@@ -190,14 +196,14 @@ func TestIntegrationRace(t *testing.T) {
 		}},
 		{PermissionBrowserStorage, func(token uint32, broker proto.MuxBroker) (interface{}, error) {
 			return Storage(token, broker)
-		}, func(ed *text.MockEditorMockRecorder, mock *browser.MockBrowserMockRecorder) *gomock.Call {
+		}, func(_ *workspace.MockExecutorMockRecorder, ed *text.MockEditorMockRecorder, mock *browser.MockBrowserMockRecorder) *gomock.Call {
 			return mock.Update(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
 		}, func(ifc interface{}) error {
 			return ifc.(browser.Storage).Update(context.Background(), "", []document.Update{{FieldPath: []string{"a"}, Value: "b"}})
 		}},
 		{PermissionBrowserStorage, func(token uint32, broker proto.MuxBroker) (interface{}, error) {
 			return Storage(token, broker)
-		}, func(ed *text.MockEditorMockRecorder, mock *browser.MockBrowserMockRecorder) *gomock.Call {
+		}, func(_ *workspace.MockExecutorMockRecorder, ed *text.MockEditorMockRecorder, mock *browser.MockBrowserMockRecorder) *gomock.Call {
 			return mock.Delete(gomock.Any(), gomock.Any()).Return(nil)
 		}, func(ifc interface{}) error {
 			return ifc.(browser.Storage).Delete(context.Background(), "")
@@ -207,6 +213,22 @@ func TestIntegrationRace(t *testing.T) {
 			// we test ClipboardManager directly
 		}, nil, func(ifc interface{}) error {
 			return ifc.(ClipboardSetter).SetRegister(text.DefaultRegisterID, nil)
+		}},
+		{PermissionWorkspaceExecutor, func(token uint32, broker proto.MuxBroker) (interface{}, error) {
+			return WorkspaceExecutor(token, broker)
+		}, func(exec *workspace.MockExecutorMockRecorder, ed *text.MockEditorMockRecorder, mock *browser.MockBrowserMockRecorder) *gomock.Call {
+			return exec.Command(gomock.Any(), gomock.Any()).Return(workspace.Pid(1), nil)
+		}, func(ifc interface{}) error {
+			_, err := ifc.(workspace.Executor).Command("", "")
+			return err
+		}},
+		{PermissionWorkspaceExecutor, func(token uint32, broker proto.MuxBroker) (interface{}, error) {
+			return WorkspaceExecutor(token, broker)
+		}, func(exec *workspace.MockExecutorMockRecorder, ed *text.MockEditorMockRecorder, mock *browser.MockBrowserMockRecorder) *gomock.Call {
+			return exec.StdoutPipe(gomock.Any()).Return(ioutil.NopCloser(strings.NewReader(":")), nil)
+		}, func(ifc interface{}) error {
+			_, err := ifc.(workspace.Executor).StdoutPipe(workspace.Pid(0))
+			return err
 		}},
 		/* FIXME: CI tests are failing due to mock.List not being called
 		{PermissionBrowserStorage, func(token uint32, broker proto.MuxBroker) (interface{}, error) {
@@ -237,7 +259,7 @@ func TestIntegrationRace(t *testing.T) {
 
 		n := 5
 		if tcase.expect != nil {
-			tcase.expect(edMock.EXPECT(), mock.EXPECT()).Times(n * 2)
+			tcase.expect(execMock.EXPECT(), edMock.EXPECT(), mock.EXPECT()).Times(n * 2)
 		}
 		for i := 0; i < n; i++ {
 			wg.Add(2)

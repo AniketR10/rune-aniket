@@ -69,8 +69,16 @@ func main() {
 	}
 
 	if *flagWorkspaceServer != "" {
-		server := workspace.NewServer()
-		err := workspace.StartWorkspaceServer(server)
+		uri, err := workspace.LocalURI(*flagWorkspaceServer)
+		if err != nil {
+			log.Fatal(err)
+		}
+		manager, err := workspace.NewManager(uri)
+		if err != nil {
+			log.Fatal(err)
+		}
+		server := workspace.NewServer(manager)
+		err = workspace.StartWorkspaceServer(server)
 		if err != nil {
 			log.Fatal(err)
 		}

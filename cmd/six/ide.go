@@ -175,6 +175,7 @@ func (i *IDE) init(cwd, cfgfilename, recfilename string, filenames ...string) er
 
 	res := plugin.BrowserResources(i.ex.Browser())
 	res = plugin.MergeResourceMap(res, plugin.EditorResources(i.ex.Editor()))
+	res = plugin.MergeResourceMap(res, plugin.WorkspaceResources(i.workspaceManager))
 	res[plugin.PermissionClipboard] = i.clipboard
 
 	i.manager, err = plugin.NewManager(plugin.GrantAll(res), pluginOpts...)
