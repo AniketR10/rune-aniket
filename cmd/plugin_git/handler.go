@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"os/exec"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -19,6 +18,7 @@ import (
 	"github.com/ernestrc/go-tui/proto"
 	"github.com/ernestrc/go-tui/term"
 	"github.com/ernestrc/go-tui/text"
+	"github.com/ernestrc/go-tui/workspace"
 	log "github.com/sirupsen/logrus"
 	"github.com/sourcegraph/go-diff/diff"
 )
@@ -43,6 +43,7 @@ var (
 		plugin.PermissionBrowserWindowManager,
 		plugin.PermissionBrowserEventPublisher,
 		plugin.PermissionEditor,
+		plugin.PermissionWorkspaceExecutor,
 	}
 
 	defaultScrollAttr = term.Attributes{Fg: term.ColorBlack}
@@ -54,6 +55,7 @@ type gitEditorHandler struct {
 	ed     text.Editor
 	wm     browser.WindowManager
 	p      browser.EventPublisher
+	exec   workspace.Executor
 	exit   uint32
 	ch     chan text.Event
 	scroll struct {
@@ -92,6 +94,11 @@ func newGitHandler(
 
 	for _, grant := range grants {
 		switch grant.Permission {
+		case plugin.PermissionWorkspaceExecutor:
+			ret.exec, err = plugin.WorkspaceExecutor(grant.Token, broker)
+			if err != nil {
+				return nil, err
+			}
 		case plugin.PermissionBrowserEventPublisher:
 			ret.p, err = plugin.EventPublisher(grant.Token, broker)
 			if err != nil {
@@ -201,14 +208,17 @@ func (h *gitEditorHandler) parseDiff(diff *diff.FileDiff) []text.Location {
 func (h *gitEditorHandler) pushNewDiffLocations(
 	filename string, resource text.Handler,
 ) error {
-	c := exec.Command("git", "diff", "-U0", filename)
+	pid, err := h.exec.Command("git", "diff", "-U0", filename)
+	if err != nil {
+		return fmt.Errorf("failed to create command: %v", err)
+	}
 
-	stdout, err := c.StdoutPipe()
+	stdout, err := h.exec.StdoutPipe(pid)
 	if err != nil {
 		return fmt.Errorf("failed to create stdout pipe: %v", err)
 	}
 
-	err = c.Start()
+	err = h.exec.Start(pid)
 	if err != nil {
 		return fmt.Errorf("failed to start executable: %v", err)
 	}
@@ -228,7 +238,7 @@ func (h *gitEditorHandler) pushNewDiffLocations(
 	}
 
 	// releases associated resources; error is ignored because
-	err = c.Wait()
+	err = h.exec.Wait(pid)
 	if err != nil {
 		return fmt.Errorf("git process error: %v", err)
 	}

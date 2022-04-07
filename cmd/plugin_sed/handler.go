@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"os/exec"
 	"sync/atomic"
 	"time"
 
@@ -17,6 +16,7 @@ import (
 	"github.com/ernestrc/go-tui/proto"
 	"github.com/ernestrc/go-tui/term"
 	"github.com/ernestrc/go-tui/text"
+	"github.com/ernestrc/go-tui/workspace"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -31,13 +31,15 @@ var (
 	sedHandlerPermissions = []plugin.Permission{
 		plugin.PermissionEditor,
 		plugin.PermissionBrowserMessenger,
+		plugin.PermissionWorkspaceExecutor,
 	}
 )
 
 type sedEditorHandler struct {
-	ed text.Editor
-	p  browser.EventPublisher
-	m  browser.Messenger
+	ed   text.Editor
+	p    browser.EventPublisher
+	m    browser.Messenger
+	exec workspace.Executor
 
 	resource     text.Handler
 	resourceName string
@@ -55,11 +57,13 @@ func newSedHandler(
 	var err error
 	for _, grant := range grants {
 		switch grant.Permission {
+		case plugin.PermissionWorkspaceExecutor:
+			ret.exec, err = plugin.WorkspaceExecutor(grant.Token, broker)
 		case plugin.PermissionBrowserMessenger:
 			ret.m, err = plugin.Messenger(grant.Token, broker)
-			if err != nil {
-				return nil, err
-			}
+		}
+		if err != nil {
+			return nil, err
 		}
 	}
 
@@ -69,24 +73,27 @@ func newSedHandler(
 func (h *sedEditorHandler) execSed(
 	command, content string,
 ) (result string, err error) {
-	c := exec.Command("sed", command)
+	c, err := h.exec.Command("sed", command)
+	if err != nil {
+		return "", fmt.Errorf("failed to create command: %v", err)
+	}
 
-	stdout, err := c.StdoutPipe()
+	stdout, err := h.exec.StdoutPipe(c)
 	if err != nil {
 		return "", fmt.Errorf("failed to create stdout pipe: %v", err)
 	}
 
-	stdin, err := c.StdinPipe()
+	stdin, err := h.exec.StdinPipe(c)
 	if err != nil {
 		return "", fmt.Errorf("failed to create stdin pipe: %v", err)
 	}
 
-	stderr, err := c.StderrPipe()
+	stderr, err := h.exec.StderrPipe(c)
 	if err != nil {
 		return "", fmt.Errorf("failed to create stderr pipe: %v", err)
 	}
 
-	err = c.Start()
+	err = h.exec.Start(c)
 	if err != nil {
 		return "", fmt.Errorf("failed to start executable: %v", err)
 	}
@@ -108,7 +115,7 @@ func (h *sedEditorHandler) execSed(
 
 	stderrContent, _ := ioutil.ReadAll(stderr)
 
-	err = c.Wait()
+	err = h.exec.Wait(c)
 	if err != nil {
 		return "", fmt.Errorf("%v: %s", err, stderrContent)
 	}
