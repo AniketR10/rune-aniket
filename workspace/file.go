@@ -32,8 +32,10 @@ type file struct {
 	// used by Flush, Close and worker only
 	// since async work goroutine only starts after
 	// file has been fully initialized
-	wg sync.WaitGroup
-	ch chan string
+	wg      sync.WaitGroup
+	ch      chan struct{}
+	mu      sync.Mutex
+	content string
 
 	buf             *cell.Buffer
 	swapDir         string
@@ -43,7 +45,6 @@ type file struct {
 	infoModTime     time.Time
 	swapInfoModTime time.Time
 	orig, swap      osFile
-	reader          cell.View
 	delayedError    error
 	unflushed       bool
 }
@@ -201,7 +202,6 @@ func (f *file) initBuffer(buf *cell.Buffer, file osFile) (err error) {
 	buf.Subscribe(f)
 	buf.WithView(view)
 
-	f.reader = buf
 	f.buf = buf
 
 	return nil
@@ -252,10 +252,13 @@ func (f *file) setupCopySwapWorker() {
 	// a buffered channel of 1 guarantees that if worker
 	// is busy and the call to copyFlushSwap is skipped
 	// we are going to copyFlushSwap at least one final time
-	f.ch = make(chan string, 1)
+	f.ch = make(chan struct{}, 1)
 
-	go func(ch chan string) {
-		for str := range ch {
+	go func(ch chan struct{}) {
+		for range ch {
+			f.mu.Lock()
+			str := f.content
+			f.mu.Unlock()
 			f.copyFlushSwapFile(str)
 			f.wg.Done()
 		}
@@ -333,8 +336,13 @@ func (f *file) OnWillEdit(start, end term.Coordinates, str string) {
 // TODO debug why sending multiple commands blocks connection indefinetly
 // should be able to spin up local debugger since blocking is local
 func (f *file) OnDidEdit(from, to term.Coordinates, old string) {
+	// store the latest version of the buffer so the last
+	// copyFlushSwap to run uses the up-to-date version.
+	f.mu.Lock()
+	f.content = f.buf.String()
+	f.mu.Unlock()
 	select {
-	case f.ch <- f.reader.String():
+	case f.ch <- struct{}{}:
 	default:
 		f.wg.Done()
 	}
@@ -374,7 +382,7 @@ func (f *file) Flush() error {
 	err := f.delayedError
 	if err != nil {
 		f.delayedError = nil
-		if !f.copyFlushSwapFile(f.reader.String()) {
+		if !f.copyFlushSwapFile(f.buf.String()) {
 			return err
 		}
 	}

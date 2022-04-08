@@ -9,6 +9,7 @@ import (
 	os "os"
 	"path"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -1094,7 +1095,6 @@ func testFileBufferInsert(
 
 		f, mock, buf := newBuffer(t, ctrl)
 		require.Equal(t, string(defaultFileData), buf.String())
-		require.Equal(t, string(defaultFileData), f.reader.String())
 
 		myString := "my string\n"
 		wait := expectCopyToSwap(f, mock, myString)
@@ -1152,4 +1152,28 @@ func TestRecoverFileBufferDelete(t *testing.T) {
 
 func TestRecoverFileBufferInsert(t *testing.T) {
 	testFileBufferInsert(t, newRecoveredTestFileBuffer)
+}
+
+func TestFileMissingLastCopySwap(t *testing.T) {
+	buf, osFile, clean := newIntegrationTestCase(t, true)
+	defer clean()
+
+	f, err := openFile(osFile.Name(), buf, "", false)
+	require.NoError(t, err)
+	defer f.Close()
+
+	var builder strings.Builder
+	builder.Write([]byte(sampleSnippet))
+
+	for i := 0; i < 1000; i++ {
+		buf.WriteString("a")
+		builder.WriteString("a")
+	}
+	require.NoError(t, f.Flush())
+
+	builder.Write([]byte("\n"))
+	want := builder.String()
+	actual, err := ioutil.ReadFile(osFile.Name())
+	require.NoError(t, f.Flush())
+	assert.Equal(t, want, string(actual))
 }
