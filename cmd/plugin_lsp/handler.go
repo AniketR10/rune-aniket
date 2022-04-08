@@ -9,12 +9,11 @@ import (
 	"io"
 	"io/ioutil"
 	"math"
-	"net"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/ernestrc/go-tui/browser"
@@ -74,6 +73,7 @@ var (
 		plugin.PermissionBrowserWindowManager,
 		plugin.PermissionBrowserResourceOpener,
 		plugin.PermissionBrowserMessenger,
+		plugin.PermissionWorkspaceExecutor,
 	}
 	defaultSemanticTokensListID = "lsp_syntax_highlighting"
 	defaultDiagnosticListID     = "lsp_diagnostic"
@@ -129,7 +129,7 @@ type file struct {
 
 type execServer struct {
 	langID string
-	cmd    *exec.Cmd
+	cmd    workspace.Pid
 	srv    protocol.Server
 	caps   protocol.ServerCapabilities
 }
@@ -138,10 +138,11 @@ type lspEditorHandler struct {
 	mu     sync.Mutex
 	evChan chan text.Event
 
-	ed text.Editor
-	wm browser.WindowManager
-	m  browser.Messenger
-	o  browser.ResourceOpener
+	ed   text.Editor
+	wm   browser.WindowManager
+	m    browser.Messenger
+	o    browser.ResourceOpener
+	exec workspace.Executor
 
 	semanticTypesAttr    map[string]term.Attributes
 	diagnosticAttr       map[protocol.DiagnosticSeverity]term.Attributes
@@ -156,6 +157,7 @@ type lspEditorHandler struct {
 	files             map[workspace.URI]*file
 	pendingDiagnostic map[workspace.URI][]protocol.Diagnostic
 	pendingGoTo       map[workspace.URI]protocol.Range
+	serversCfg        map[string]interface{}
 	servers           map[string]execServer
 	cancelTokensReq   func()
 }
@@ -245,30 +247,31 @@ func streamRPC(cc jsonrpc2.Conn, h *lspEditorHandler) {
 	}
 }
 
-func initializeConnection(ctx context.Context, ret *lspEditorHandler, conn net.Conn) (
-	protocol.Server, error,
-) {
+func initializeConnection(
+	h *lspEditorHandler, reader io.ReadCloser, writer io.WriteCloser,
+) (protocol.Server, error) {
+	conn := fakenet.NewConn("stdio", reader, writer)
 	stream := jsonrpc2.NewHeaderStream(conn)
 	cc := jsonrpc2.NewConn(stream)
 	server := protocol.ServerDispatcher(cc)
-	go streamRPC(cc, ret)
+	go streamRPC(cc, h)
 
 	return server, nil
 }
 
-func getPipes(cmd *exec.Cmd) (
+func (h *lspEditorHandler) getPipes(pid workspace.Pid) (
 	io.WriteCloser, io.ReadCloser, io.ReadCloser, error,
 ) {
-	stdin, err := cmd.StdinPipe()
+	stdin, err := h.exec.StdinPipe(pid)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to create stdin pipe: %v", err)
 	}
-	stdout, err := cmd.StdoutPipe()
+	stdout, err := h.exec.StdoutPipe(pid)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to create stdout pipe: %v", err)
 	}
 
-	stderr, err := cmd.StderrPipe()
+	stderr, err := h.exec.StderrPipe(pid)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to create stderr pipe: %v", err)
 	}
@@ -276,14 +279,14 @@ func getPipes(cmd *exec.Cmd) (
 	return stdin, stdout, stderr, nil
 }
 
-func parseCmd(arg interface{}) (*exec.Cmd, error) {
+func (h *lspEditorHandler) parseCmd(arg interface{}) (workspace.Pid, error) {
 	str, ok := arg.(string)
 	cmd := strings.Split(str, " ")
 	if !ok || len(cmd) == 0 {
-		return nil, fmt.Errorf("invalid command: %v", arg)
+		return 0, fmt.Errorf("invalid command: %v", arg)
 	}
 
-	return exec.Command(cmd[0], cmd[1:]...), nil
+	return h.exec.Command(cmd[0], cmd[1:]...)
 }
 
 func logStderr(langID string, stderr io.ReadCloser) {
@@ -308,30 +311,30 @@ func (w nopWriter) Close() error {
 	return nil
 }
 
-func startLanguageServer(
-	h *lspEditorHandler, ret map[string]execServer, langID string, arg interface{},
-) {
+func (h *lspEditorHandler) startLanguageServer(
+	langID string, cmd interface{},
+) (execServer, error) {
 	ctx := context.Background()
 	ctx, cancelFn := context.WithTimeout(ctx, h.connectTimeout)
 	defer cancelFn()
 
-	c, err := parseCmd(arg)
+	pid, err := h.parseCmd(cmd)
 	if err != nil {
-		log.Errorf("failed to parse language %s command: %v", langID, err)
-		return
+		err = fmt.Errorf("failed to parse language %s command: %v", langID, err)
+		return execServer{}, err
 	}
 
-	stdin, stdout, stderr, err := getPipes(c)
+	stdin, stdout, stderr, err := h.getPipes(pid)
 	if err != nil {
-		log.Errorf("failed to create net.Conn for '%s': %v", langID, err)
-		return
+		err = fmt.Errorf("failed to create net.Conn for '%s': %v", langID, err)
+		return execServer{}, err
 	}
 
-	log.Debugf("Starting lsp server '%s' with cmd: %#v", langID, c)
-	err = c.Start()
+	log.Debugf("Starting lsp server '%s' with cmd: %#v", langID, pid)
+	err = h.exec.Start(pid)
 	if err != nil {
-		log.Errorf("failed to start exec for '%s': %v", langID, err)
-		return
+		err = fmt.Errorf("failed to start exec for '%s': %v", langID, err)
+		return execServer{}, err
 	}
 
 	// helps debug
@@ -339,53 +342,37 @@ func startLanguageServer(
 		go logStderr(langID, stderr)
 	}
 
-	reader := ioutil.NopCloser(stdout)
-	writer := nopWriter{Writer: stdin}
-	conn := fakenet.NewConn("stdio", reader, writer)
-	server, err := initializeConnection(ctx, h, conn)
+	server, err := initializeConnection(h, stdout, stdin)
 	if err != nil {
-		log.Errorf("failed to initialize LSP server for '%s': %v", langID, err)
-		return
+		err = fmt.Errorf("failed to initialize LSP server for '%s': %v", langID, err)
+		return execServer{}, err
 	}
 
-	srv := execServer{langID: langID, cmd: c, srv: server}
+	srv := execServer{langID: langID, cmd: pid, srv: server}
 	initRes, err := sendInitializeRequest(ctx, h.cwd, srv)
 	if err != nil {
-		return
+		return execServer{}, err
 	}
 
 	srv.caps = initRes.Capabilities
 
-	h.mu.Lock()
-	ret[langID] = srv
-	h.mu.Unlock()
-
 	log.Infof("connected to '%s' LSP server '%s' with version %s: ",
 		langID, initRes.ServerInfo.Name, initRes.ServerInfo.Version)
+
+	return srv, nil
 }
 
-func startLanguageServers(
-	h *lspEditorHandler, ret map[string]execServer, cfg map[string]interface{},
-) {
-	for langID, v := range cfg {
-		go startLanguageServer(h, ret, langID, v)
-	}
-}
-
-func initLanguageServers(h *lspEditorHandler, pconfig plugin.Config) (
-	map[string]execServer, error,
-) {
+func (h *lspEditorHandler) initLanguageServers(pconfig plugin.Config) error {
 	cfg, err := pconfig.GetMap("exec")
 	if err != nil {
-		err = fmt.Errorf("Failed to get remote lsp server address: %v", err)
-		return nil, err
+		err = fmt.Errorf("Failed to get lsp servers 'exec' config: %v", err)
+		return err
 	}
 
-	ret := make(map[string]execServer)
+	h.servers = make(map[string]execServer)
+	h.serversCfg = cfg
 
-	startLanguageServers(h, ret, cfg)
-
-	return ret, nil
+	return nil
 }
 
 func getSemanticTypesAttr(pconfig plugin.Config) (map[string]term.Attributes, error) {
@@ -572,13 +559,18 @@ func newLspHandler(
 		return nil, err
 	}
 
-	ret.servers, err = initLanguageServers(ret, pconfig)
+	err = ret.initLanguageServers(pconfig)
 	if err != nil {
 		return nil, err
 	}
 
 	for _, g := range grants {
 		switch g.Permission {
+		case plugin.PermissionWorkspaceExecutor:
+			ret.exec, err = plugin.WorkspaceExecutor(g.Token, broker)
+			if err != nil {
+				return nil, err
+			}
 		case plugin.PermissionBrowserResourceOpener:
 			ret.o, err = plugin.ResourceOpener(g.Token, broker)
 			if err != nil {
@@ -606,24 +598,42 @@ func (h *lspEditorHandler) getServer(languageID string) (
 	execServer, bool,
 ) {
 	h.mu.Lock()
-	defer h.mu.Unlock()
-
 	proc, ok := h.servers[languageID]
+	h.mu.Unlock()
+	if ok {
+		return proc, true
+	}
+
+	h.mu.Lock()
+	cmd, ok := h.serversCfg[languageID]
+	h.mu.Unlock()
 	if !ok {
+		// language server not configured for language
+		return proc, true
+	}
+
+	srv, err := h.startLanguageServer(languageID, cmd)
+	if err != nil {
+		log.Errorf("Failed to start language server for %q: %s", languageID, err)
 		return execServer{}, false
 	}
 
-	return proc, true
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	h.servers[languageID] = srv
+
+	return srv, true
 }
 
 func (h *lspEditorHandler) newFile(
-	handler text.Handler, resource workspace.URI, content string,
+	handler text.Handler, uri workspace.URI, content string,
 ) *file {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
-	spanURI := workspaceURIToSpan(resource)
-	languageID := filepath.Ext(resource.Path())
+	spanURI := workspaceURIToSpan(uri)
+	languageID := filepath.Ext(uri.Path())
 
 	f := &file{
 		_version: firstFileVersion,
@@ -631,12 +641,12 @@ func (h *lspEditorHandler) newFile(
 		docID: protocol.TextDocumentIdentifier{
 			URI: protocol.URIFromSpanURI(spanURI),
 		},
-		uri:        resource,
+		uri:        uri,
 		_cells:     cell.StringToCells(content),
 		languageID: languageID,
 	}
 
-	h.files[resource] = f
+	h.files[uri] = f
 	return f
 }
 
@@ -808,7 +818,7 @@ func (h *lspEditorHandler) semanticTokensFull(
 	version := h.getVersion(f)
 	p2 := protocol.SemanticTokensParams{TextDocument: f.docID}
 	resp, err := srv.srv.SemanticTokensFull(ctx, &p2)
-	if err != nil {
+	if err != nil || resp == nil {
 		log.Errorf("lspEditorHandler.Server.SemanticTokensFull(%s): %v", f.uri, err)
 		return
 	}
@@ -818,8 +828,8 @@ func (h *lspEditorHandler) semanticTokensFull(
 	}
 
 	spanURI := workspaceURIToSpan(f.uri)
-	locations := parseLocationData(spanURI, cells, []byte(content),
-		resp.Data, h.semanticTypesAttr)
+	locations := parseLocationData(spanURI, cells, []byte(content), resp.Data,
+		h.semanticTypesAttr)
 	if log.IsLevelEnabled(log.TraceLevel) {
 		log.Tracef("lspEditorHandler.Server.SemanticTokensFull(%s): OK: %v: locations: %v",
 			f.uri, resp.Data, locations)
@@ -897,7 +907,10 @@ func (h *lspEditorHandler) pushFullEdit(
 
 	evts := []protocol.TextDocumentContentChangeEvent{{Text: content}}
 	err := h.callServerDidChange(ctx, srv, f, evts)
-	if err == nil {
+	if err != nil {
+		log.Errorf("failed to send file update: file=%v, length=%v, version=%v, err=%s",
+			f.uri, len(content), version, err)
+	} else {
 		log.Tracef("sent full file update: file=%v, length=%v, version=%v",
 			f.uri, len(content), version)
 	}
@@ -1185,7 +1198,10 @@ func spanURIToWorkspace(u span.URI) (workspace.URI, error) {
 }
 
 func workspaceURIToSpan(u workspace.URI) span.URI {
-	return span.URI(u.String())
+	// the workspace is always local for the language server
+	// if URI is a remote uri, then the language server is executed
+	// in the remote host as well.
+	return span.URI(fmt.Sprintf("file://%s", u.Path()))
 }
 
 func (h *lspEditorHandler) HandleDiagnostics(
@@ -1792,9 +1808,6 @@ func (h *lspEditorHandler) Close() error {
 
 	var errs []string
 	for _, server := range h.servers {
-		if server.cmd.Process == nil {
-			continue
-		}
 		ctx, cancel := context.WithTimeout(context.Background(), h.disconnectTimeout)
 
 		h.mu.Unlock()
@@ -1805,7 +1818,7 @@ func (h *lspEditorHandler) Close() error {
 		if err != nil {
 			errs = append(errs, err.Error())
 		}
-		err = server.cmd.Process.Kill()
+		err = h.exec.Signal(server.cmd, syscall.SIGTERM)
 		if err != nil {
 			errs = append(errs, err.Error())
 		}
