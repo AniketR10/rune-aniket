@@ -4,6 +4,7 @@ import (
 	"errors"
 	"io"
 	"net"
+	"sync"
 	"time"
 )
 
@@ -13,10 +14,11 @@ var _ net.Conn = (*stdConn)(nil)
 
 // stdConn is used to satisfy net.Conn by combining a io.Reader and a io.Writer.
 type stdConn struct {
+	mu        sync.Mutex
 	closeHook func()
 	in        io.Reader
 	out       io.Writer
-	closed    bool
+	close     bool
 	local     *stdinAddr
 	remote    *stdinAddr
 }
@@ -54,25 +56,33 @@ func (s *stdConn) RemoteAddr() net.Addr {
 	return s.remote
 }
 
+func (s *stdConn) closed() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.close
+}
+
 func (s *stdConn) Read(b []byte) (n int, err error) {
-	if s.closed {
+	if s.closed() {
 		return 0, errStreamClosed
 	}
 	return s.in.Read(b)
 }
 
 func (s *stdConn) Write(b []byte) (n int, err error) {
-	if s.closed {
+	if s.closed() {
 		return 0, errStreamClosed
 	}
 	return s.out.Write(b)
 }
 
 func (s *stdConn) Close() error {
-	if s.closed {
+	if s.closed() {
 		return nil
 	}
-	s.closed = true
+	s.mu.Lock()
+	s.close = true
+	s.mu.Unlock()
 	s.closeHook()
 	s.closeHook = nil
 	return nil
