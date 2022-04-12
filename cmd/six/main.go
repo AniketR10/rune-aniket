@@ -14,7 +14,10 @@ import (
 )
 
 var (
-	Version    = "development"
+	Tag     = "development"
+	Commit  = "HEAD"
+	Version string
+
 	configpath *string
 
 	flagRecover         = flag.String("r", "", "recover from recovery file")
@@ -31,6 +34,8 @@ func init() {
 	}
 	defaultConfigPath := path.Join(home, ".six.yml")
 	configpath = flag.String("c", defaultConfigPath, "config file path")
+
+	Version = fmt.Sprintf("%s (HEAD is %s)", Tag, Commit)
 }
 
 func cwdURI() workspace.URI {
