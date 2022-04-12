@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/ernestrc/blue/logging"
+	multierr "github.com/ernestrc/go-multierror"
 	"github.com/ernestrc/go-tui"
 	"github.com/ernestrc/go-tui/browser"
 	"github.com/ernestrc/go-tui/plugin"
@@ -31,7 +32,7 @@ func New(cwd, cfgfilename string, filenames ...string) (
 	i *IDE, err error,
 ) {
 	i = new(IDE)
-	err = i.init(cwd, cfgfilename, "", filenames...)
+	err = i.init(true, cwd, cfgfilename, "", filenames...)
 	return
 }
 
@@ -46,7 +47,7 @@ func NewRecovery(
 			filename, recfilename))
 	}
 	i = new(IDE)
-	err = i.init(cwd, cfgfilename, recfilename, filename)
+	err = i.init(true, cwd, cfgfilename, recfilename, filename)
 	return
 }
 
@@ -67,7 +68,7 @@ func (i *IDE) initPlugins(l *log.Logger) {
 	}
 }
 
-func (i *IDE) init(cwd, cfgfilename, recfilename string, filenames ...string) error {
+func (i *IDE) init(initTUI bool, cwd, cfgfilename, recfilename string, filenames ...string) error {
 	configErr := loadConfig(&i.ideConfig, cfgfilename)
 
 	var (
@@ -76,6 +77,22 @@ func (i *IDE) init(cwd, cfgfilename, recfilename string, filenames ...string) er
 		pluginOpts    []plugin.Option
 		workspaceOpts []workspace.Option
 	)
+
+	for _, key := range i.ideConfig.workspaceSSHPrivateKeys() {
+		workspaceOpts = append(workspaceOpts, workspace.WithSSHPrivateKey(key))
+	}
+	workspaceOpts = append(workspaceOpts,
+		workspace.WithSSHTimeout(i.ideConfig.workspaceSSHTimeout()))
+
+	cwdURI, err := workspace.ParseURI(cwd)
+	if err != nil {
+		return err
+	}
+
+	i.workspace, err = workspace.NewManager(cwdURI, workspaceOpts...)
+	if err != nil {
+		return err
+	}
 
 	if recfilename != "" {
 		recFile, err := i.workspace.URI(recfilename)
@@ -146,22 +163,6 @@ func (i *IDE) init(cwd, cfgfilename, recfilename string, filenames ...string) er
 		pluginOpts = append(pluginOpts, plugin.WithLogger(l))
 	}
 
-	for _, key := range i.ideConfig.workspaceSSHPrivateKeys() {
-		workspaceOpts = append(workspaceOpts, workspace.WithSSHPrivateKey(key))
-	}
-	workspaceOpts = append(workspaceOpts,
-		workspace.WithSSHTimeout(i.ideConfig.workspaceSSHTimeout()))
-
-	cwdURI, err := workspace.ParseURI(cwd)
-	if err != nil {
-		return err
-	}
-
-	i.workspace, err = workspace.NewManager(cwdURI, workspaceOpts...)
-	if err != nil {
-		return err
-	}
-
 	vi := vi.Editor(viOpts...)
 	ex, err := newEx(vi, i.workspace, opts...)
 	if err != nil {
@@ -174,20 +175,21 @@ func (i *IDE) init(cwd, cfgfilename, recfilename string, filenames ...string) er
 	res = plugin.MergeResourceMap(res, plugin.WorkspaceResources(i.workspace))
 	res[plugin.PermissionClipboard] = i.clipboard
 
-	i.manager, err = plugin.NewManager(plugin.GrantAll(res), pluginOpts...)
-	if err != nil {
-		return fmt.Errorf("error initializing plugin manager: %v", err)
+	if initTUI {
+		i.manager, err = plugin.NewManager(plugin.GrantAll(res), pluginOpts...)
+		if err != nil {
+			return fmt.Errorf("error initializing plugin manager: %v", err)
+		}
+		go i.initPlugins(l)
+
+		err = tui.Init()
+		if err != nil {
+			return err
+		}
+
+		term.SetOutputMode(i.ideConfig.outputMode())
+		term.SetInputMode(i.ideConfig.inputMode())
 	}
-
-	go i.initPlugins(l)
-
-	err = tui.Init()
-	if err != nil {
-		return err
-	}
-
-	term.SetOutputMode(i.ideConfig.outputMode())
-	term.SetInputMode(i.ideConfig.inputMode())
 
 	reportNonFatalErrs(i.ex.Browser(), l, configErr, i.ideConfig.errors)
 	return nil
@@ -221,26 +223,24 @@ func (i *IDE) Run() error {
 	return nil
 }
 
-func (i *IDE) closeResources() error {
-	err1 := i.manager.Close()
-	err2 := i.ex.Close()
-	err3 := i.clipboard.Close()
-	err4 := i.workspace.Close()
-
-	if err1 != nil {
-		return err1
-	}
-	if err2 != nil {
-		return err2
-	}
-	if err3 != nil {
-		return err3
-	}
-	if err4 != nil {
-		return err4
+func (i *IDE) closeResources() (ret error) {
+	if i.manager != nil {
+		if err := i.manager.Close(); err != nil {
+			ret = multierr.Append(ret, err)
+		}
 	}
 
-	return nil
+	if err := i.ex.Close(); err != nil {
+		ret = multierr.Append(ret, err)
+	}
+	if err := i.clipboard.Close(); err != nil {
+		ret = multierr.Append(ret, err)
+	}
+	if err := i.workspace.Close(); err != nil {
+		ret = multierr.Append(ret, err)
+	}
+
+	return
 }
 
 // Close satisfies io.Closer by closing this all IDE's resources, including

@@ -14,43 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func assertDefaultConfig(t *testing.T, cfg *ideConfig) {
-	assert.Len(t, cfg.plugins(), 0)
-	assert.Equal(t, 4, cfg.browserTabspaces())
-	assert.NotZero(t, cfg.browserStartText())
-	assert.Equal(t, component.DefaultWindowManagerConfig(), cfg.windowManagerConfig())
-	assert.Equal(t, "", cfg.logOutputPath())
-	assert.Equal(t, logrus.ErrorLevel, cfg.logLevel())
-	assert.Equal(t, term.Output256, cfg.outputMode())
-	assert.Equal(t, term.InputCurrent, cfg.inputMode())
-	assert.Equal(t, component.DefaultFrameUnionCharSet(), cfg.frameUnionCharset())
-	assert.Equal(t, browser.DefaultConfig().MessageBarAttr, cfg.messageBarAttr())
-	assert.Equal(t, browser.DefaultConfig().FocusTabAttr, cfg.focusTabAttr())
-	assert.Equal(t, browser.DefaultConfig().NonFocusTabAttr, cfg.nonFocusTabAttr())
-	assert.Equal(t, browser.DefaultConfig().StartTextAttr, cfg.startTextAttr())
-	assert.Equal(t, browser.DefaultConfig().StartTextBackgroundAttr, cfg.startTextBackgroundAttr())
-}
-
-func TestDefaultConfig(t *testing.T) {
-	ret := new(ideConfig)
-	initDefaultConfig(ret)
-	assertDefaultConfig(t, ret)
-}
-
-func TestDecodeConfigError(t *testing.T) {
-	f, err := ioutil.TempFile("", "")
-	require.NoError(t, err)
-	_, err = f.WriteString("||\\n\x00{'BABY':'$$'}")
-	require.NoError(t, err)
-
-	var ret ideConfig
-	err = loadConfig(&ret, f.Name())
-	assert.Error(t, err)
-	assertDefaultConfig(t, &ret)
-}
-
-func TestConfigSetting(t *testing.T) {
-	input := `
+var sampleConfig = `
 plugins:
     fuzzy_file:
         path: "/home/ernestrc/src/go-tui/bin/plugin_fuzzy_file"
@@ -126,7 +90,44 @@ browser:
         bg: white
 
 `
-	m, err := decodeConfig(strings.NewReader(input))
+
+func assertDefaultConfig(t *testing.T, cfg *ideConfig) {
+	assert.Len(t, cfg.plugins(), 0)
+	assert.Equal(t, 4, cfg.browserTabspaces())
+	assert.NotZero(t, cfg.browserStartText())
+	assert.Equal(t, component.DefaultWindowManagerConfig(), cfg.windowManagerConfig())
+	assert.Equal(t, "", cfg.logOutputPath())
+	assert.Equal(t, logrus.ErrorLevel, cfg.logLevel())
+	assert.Equal(t, term.Output256, cfg.outputMode())
+	assert.Equal(t, term.InputCurrent, cfg.inputMode())
+	assert.Equal(t, component.DefaultFrameUnionCharSet(), cfg.frameUnionCharset())
+	assert.Equal(t, browser.DefaultConfig().MessageBarAttr, cfg.messageBarAttr())
+	assert.Equal(t, browser.DefaultConfig().FocusTabAttr, cfg.focusTabAttr())
+	assert.Equal(t, browser.DefaultConfig().NonFocusTabAttr, cfg.nonFocusTabAttr())
+	assert.Equal(t, browser.DefaultConfig().StartTextAttr, cfg.startTextAttr())
+	assert.Equal(t, browser.DefaultConfig().StartTextBackgroundAttr, cfg.startTextBackgroundAttr())
+}
+
+func TestDefaultConfig(t *testing.T) {
+	ret := new(ideConfig)
+	initDefaultConfig(ret)
+	assertDefaultConfig(t, ret)
+}
+
+func TestDecodeConfigError(t *testing.T) {
+	f, err := ioutil.TempFile("", "")
+	require.NoError(t, err)
+	_, err = f.WriteString("||\\n\x00{'BABY':'$$'}")
+	require.NoError(t, err)
+
+	var ret ideConfig
+	err = loadConfig(&ret, f.Name())
+	assert.Error(t, err)
+	assertDefaultConfig(t, &ret)
+}
+
+func TestConfigSetting(t *testing.T) {
+	m, err := decodeConfig(strings.NewReader(sampleConfig))
 	require.NoError(t, err)
 
 	var cfg ideConfig

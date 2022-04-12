@@ -59,6 +59,8 @@ github.com/ernestrc/blue v0.0.0-20210211011506-d4a38bdf2ac3 h1:A+l6Sk18p2iNPKciM
 github.com/ernestrc/blue v0.0.0-20210211011506-d4a38bdf2ac3/go.mod h1:7DR1dghzu3gWV6GYEOAvPHkXXdndOnW+XWcdGXMHuu0=
 github.com/ernestrc/dom v0.2.5-0.20201125033726-789c946aa938 h1:f/aC0hFDoMkao3chzwSlyBnwxcQj77I3i/D6HEbcuTE=
 github.com/ernestrc/dom v0.2.5-0.20201125033726-789c946aa938/go.mod h1:zkvVMhrl7iSWniJU2txvm5E6pF5bkHVK5ALYLlNBcO0=
+github.com/ernestrc/go-multierror v1.1.2 h1:9EYH71nYIsHEC9DSTtsT9GypDxmHAQ2gcOY6BMnXot8=
+github.com/ernestrc/go-multierror v1.1.2/go.mod h1:DUlo5/81Y4/bn7/eCKZJaVXlDRc+RQmJnLw3tjg95Do=
 github.com/ernestrc/golang-internal-tools v0.0.0-20220317145801-f8b5a950857b h1:RbqZaQ3JIvTkY89eYRlmW7ltIQqMZjkelnJQJN/wzAA=
 github.com/ernestrc/golang-internal-tools v0.0.0-20220317145801-f8b5a950857b/go.mod h1:UpiAb0rlHx9+ssJP0Y1WjRS2G5khIWsgOhz+BRUY6gU=
 github.com/ernestrc/logd-go v0.0.0-20180509171507-65871c1d5504 h1:+v3dfsJghDlJelEJwUE3LeUKkw/EosxDwZ7AT0yNDLI=
@@ -126,6 +128,8 @@ github.com/googleapis/gax-go/v2 v2.0.4/go.mod h1:0Wqv26UfaUD9n4G6kQubkQ+KchISgw+
 github.com/googleapis/gax-go/v2 v2.0.5 h1:sjZBwGj9Jlw33ImPtvFviGYvseOtDM7hkSKB7+Tv3SM=
 github.com/googleapis/gax-go/v2 v2.0.5/go.mod h1:DWXyrwAJ9X0FpwwEdw+IPEYBICEFu5mhpdKc/us6bOk=
 github.com/gorilla/websocket v1.4.1/go.mod h1:YR8l580nyteQvAITg2hZ9XVh4b55+EU/adAjf1fMHhE=
+github.com/hashicorp/errwrap v1.0.0 h1:hLrqtEDnRye3+sgx6z4qVLNuviH3MR5aQ0ykNJa/UYA=
+github.com/hashicorp/errwrap v1.0.0/go.mod h1:YH+1FKiLXxHSkmPseP+kNlulaMuP3n2brvKWEqk/Jc4=
 github.com/hashicorp/go-hclog v0.0.0-20180709165350-ff2cf002a8dd h1:rNuUHR+CvK1IS89MMtcF0EpcVMZtjKfPRp4MEmt/aTs=
 github.com/hashicorp/go-hclog v0.0.0-20180709165350-ff2cf002a8dd/go.mod h1:9bjs9uLqI8l75knNv3lV1kA55veR+WUPSiKIWcQHudI=
 github.com/hashicorp/go-plugin v1.0.1 h1:4OtAfUGbnKC6yS48p0CtMX2oFYtzFZVv6rok3cRWgnE=
