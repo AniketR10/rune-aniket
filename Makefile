@@ -68,7 +68,7 @@ $(EXECS): $(EXECSRC) $(LIBSRC) $(BIN)
 
 make_release:
 	@ mkdir -p $(TARGET)/$(TARGET_OS)_$(TARGET_ARCH)
-	@ $(CGO_ENABLED) GOARCH=$(TARGET_ARCH) $(TARGET_ARCH_FLAGS) GOOS=$(TARGET_OS) $(GO) build $(GOFLAGS) -o `pwd`/$(TARGET)/$(TARGET_OS)_$(TARGET_ARCH) ./...
+	@ CGO_ENABLED=0 GOARCH=$(TARGET_ARCH) $(TARGET_ARCH_FLAGS) GOOS=$(TARGET_OS) $(GO) build $(GOFLAGS) -o `pwd`/$(TARGET)/$(TARGET_OS)_$(TARGET_ARCH) ./...
 
 release_arm:
 	@ rm -rf $(TARGET)
