@@ -11,6 +11,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"syscall"
@@ -303,11 +304,23 @@ func logStderr(langID string, stderr io.ReadCloser) {
 	}
 }
 
-type nopWriter struct {
+type nop struct {
 	io.Writer
+	io.Reader
 }
 
-func (w nopWriter) Close() error {
+func (w nop) Close() error {
+	if log.IsLevelEnabled(log.DebugLevel) {
+		buf := make([]byte, 1<<16)
+		n := runtime.Stack(buf, true)
+		var pipe string
+		if w.Writer != nil {
+			pipe = "stdin"
+		} else {
+			pipe = "stdout"
+		}
+		log.Warningf("Close called on lsp server's %s pipe: \n%s", pipe, buf[:n])
+	}
 	return nil
 }
 
@@ -342,6 +355,8 @@ func (h *lspEditorHandler) startLanguageServer(
 		go logStderr(langID, stderr)
 	}
 
+	stdout = nop{Reader: stdout}
+	stdin = nop{Writer: stdin}
 	server, err := initializeConnection(h, stdout, stdin)
 	if err != nil {
 		err = fmt.Errorf("failed to initialize LSP server for '%s': %v", langID, err)
