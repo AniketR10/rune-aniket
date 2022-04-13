@@ -74,7 +74,7 @@ var (
 		plugin.PermissionBrowserWindowManager,
 		plugin.PermissionBrowserResourceOpener,
 		plugin.PermissionBrowserMessenger,
-		plugin.PermissionWorkspaceExecutor,
+		plugin.PermissionWorkspace,
 	}
 	defaultSemanticTokensListID = "lsp_syntax_highlighting"
 	defaultDiagnosticListID     = "lsp_diagnostic"
@@ -143,7 +143,7 @@ type lspEditorHandler struct {
 	wm   browser.WindowManager
 	m    browser.Messenger
 	o    browser.ResourceOpener
-	exec workspace.Executor
+	exec workspace.Workspace
 
 	semanticTypesAttr    map[string]term.Attributes
 	diagnosticAttr       map[protocol.DiagnosticSeverity]term.Attributes
@@ -581,8 +581,8 @@ func newLspHandler(
 
 	for _, g := range grants {
 		switch g.Permission {
-		case plugin.PermissionWorkspaceExecutor:
-			ret.exec, err = plugin.WorkspaceExecutor(g.Token, broker)
+		case plugin.PermissionWorkspace:
+			ret.exec, err = plugin.Workspace(g.Token, broker)
 			if err != nil {
 				return nil, err
 			}

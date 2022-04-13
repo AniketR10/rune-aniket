@@ -21,7 +21,7 @@ const defaultCommand = `grep -n -r "" .`
 
 var defaultHistoryKey = term.Event{Type: term.EventKey, Key: term.KeyCtrlBackslash}
 
-func parseLine(workspace workspace.Executor, data string) (
+func parseLine(workspace workspace.Workspace, data string) (
 	workspace.URI, term.Coordinates,
 ) {
 	// NOTE: if ag breaks this or there's an edge case that it's not covered

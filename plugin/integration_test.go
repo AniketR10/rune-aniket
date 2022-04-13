@@ -61,7 +61,7 @@ func TestIntegrationRace(t *testing.T) {
 		PermissionEditor:                broker.NextId(),
 		PermissionBrowserStorage:        broker.NextId(),
 		PermissionClipboard:             broker.NextId(),
-		PermissionWorkspaceExecutor:     broker.NextId(),
+		PermissionWorkspace:             broker.NextId(),
 	}
 	for perm, brokerID := range perms {
 		resources[perm].Serve("caliu-plugins-ltd", brokerID,
@@ -214,16 +214,16 @@ func TestIntegrationRace(t *testing.T) {
 		}, nil, func(ifc interface{}) error {
 			return ifc.(ClipboardSetter).SetRegister(text.DefaultRegisterID, nil)
 		}},
-		{PermissionWorkspaceExecutor, func(token uint32, broker proto.MuxBroker) (interface{}, error) {
-			return WorkspaceExecutor(token, broker)
+		{PermissionWorkspace, func(token uint32, broker proto.MuxBroker) (interface{}, error) {
+			return Workspace(token, broker)
 		}, func(exec *workspace.MockExecutorMockRecorder, ed *text.MockEditorMockRecorder, mock *browser.MockBrowserMockRecorder) *gomock.Call {
 			return exec.Command(gomock.Any(), gomock.Any()).Return(workspace.Pid(1), nil)
 		}, func(ifc interface{}) error {
 			_, err := ifc.(workspace.Executor).Command("", "")
 			return err
 		}},
-		{PermissionWorkspaceExecutor, func(token uint32, broker proto.MuxBroker) (interface{}, error) {
-			return WorkspaceExecutor(token, broker)
+		{PermissionWorkspace, func(token uint32, broker proto.MuxBroker) (interface{}, error) {
+			return Workspace(token, broker)
 		}, func(exec *workspace.MockExecutorMockRecorder, ed *text.MockEditorMockRecorder, mock *browser.MockBrowserMockRecorder) *gomock.Call {
 			return exec.StdoutPipe(gomock.Any()).Return(ioutil.NopCloser(strings.NewReader(":")), nil)
 		}, func(ifc interface{}) error {

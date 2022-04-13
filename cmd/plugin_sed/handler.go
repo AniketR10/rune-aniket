@@ -31,7 +31,7 @@ var (
 	sedHandlerPermissions = []plugin.Permission{
 		plugin.PermissionEditor,
 		plugin.PermissionBrowserMessenger,
-		plugin.PermissionWorkspaceExecutor,
+		plugin.PermissionWorkspace,
 	}
 )
 
@@ -39,7 +39,7 @@ type sedEditorHandler struct {
 	ed   text.Editor
 	p    browser.EventPublisher
 	m    browser.Messenger
-	exec workspace.Executor
+	exec workspace.Workspace
 
 	resource     text.Handler
 	resourceName string
@@ -57,8 +57,8 @@ func newSedHandler(
 	var err error
 	for _, grant := range grants {
 		switch grant.Permission {
-		case plugin.PermissionWorkspaceExecutor:
-			ret.exec, err = plugin.WorkspaceExecutor(grant.Token, broker)
+		case plugin.PermissionWorkspace:
+			ret.exec, err = plugin.Workspace(grant.Token, broker)
 		case plugin.PermissionBrowserMessenger:
 			ret.m, err = plugin.Messenger(grant.Token, broker)
 		}

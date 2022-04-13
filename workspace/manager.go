@@ -18,9 +18,9 @@ import (
 )
 
 var (
-	_                 Executor = (*Manager)(nil)
-	errProcNotFound            = errors.New("process not found")
-	errProcNotRunning          = errors.New("process not running")
+	_                 Workspace = (*Manager)(nil)
+	errProcNotFound             = errors.New("process not found")
+	errProcNotRunning           = errors.New("process not running")
 )
 
 // Manager manages resources on a workspace. It satisfies ResourceOpener.

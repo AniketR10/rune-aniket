@@ -11,17 +11,17 @@ import (
 )
 
 const (
-	// PermissionWorkspaceExecutor requests access to execute a process in a workspace.
-	PermissionWorkspaceExecutor Permission = "_PermWorkspaceExecutor"
+	// PermissionWorkspace requests access to execute a process in a workspace.
+	PermissionWorkspace Permission = "_PermWorkspace"
 )
 
 type workspaceResourceServer struct {
 	mu  sync.Mutex
-	b   workspace.Executor
+	b   workspace.Workspace
 	srv proto.MuxServer
 }
 
-func newWorkspaceResourceServer(b workspace.Executor) *workspaceResourceServer {
+func newWorkspaceResourceServer(b workspace.Workspace) *workspaceResourceServer {
 	ret := new(workspaceResourceServer)
 	ret.b = b
 	return ret
@@ -52,18 +52,18 @@ func (s *workspaceResourceServer) Serve(
 
 // WorkspaceResources returns a map of Permission to a ResourceServer
 // capable of serving each of the b Workspace's resources.
-func WorkspaceResources(b workspace.Executor) map[Permission]ResourceServer {
+func WorkspaceResources(b workspace.Workspace) map[Permission]ResourceServer {
 	s := newWorkspaceResourceServer(b)
 	return map[Permission]ResourceServer{
-		PermissionWorkspaceExecutor: s,
+		PermissionWorkspace: s,
 	}
 }
 
 func dialWorkspace(token uint32, broker proto.MuxBroker) (
-	workspace.Executor, error,
+	workspace.Workspace, error,
 ) {
 	if c, ok := clients.Load(token); ok {
-		return c.(workspace.Executor), nil
+		return c.(workspace.Workspace), nil
 	}
 	conn, err := broker.Dial(token)
 	if err != nil {
@@ -74,9 +74,9 @@ func dialWorkspace(token uint32, broker proto.MuxBroker) (
 	return c, nil
 }
 
-// WorkspaceExecutor acquires the workspace's process executor with the given token.
-func WorkspaceExecutor(token uint32, broker proto.MuxBroker) (
-	workspace.Executor, error,
+// Workspace acquires the workspace's process executor with the given token.
+func Workspace(token uint32, broker proto.MuxBroker) (
+	workspace.Workspace, error,
 ) {
 	return dialWorkspace(token, broker)
 }

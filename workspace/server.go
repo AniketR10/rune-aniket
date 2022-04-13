@@ -28,20 +28,20 @@ type Server struct {
 	readLinkFunc readLinkFunc
 
 	// for proc API
-	executor Executor
+	executor Workspace
 
 	mu            sync.Mutex
 	handles       map[int32]io.Closer
 	nextHandlerID int32
 }
 
-func NewServer(executor Executor) *Server {
+func NewServer(executor Workspace) *Server {
 	ret := new(Server)
 	ret.Init(executor)
 	return ret
 }
 
-func (s *Server) Init(executor Executor) {
+func (s *Server) Init(executor Workspace) {
 	s.handles = make(map[int32]io.Closer)
 	s.nextHandlerID = 0
 	s.openFunc = osOpenFileFunc()

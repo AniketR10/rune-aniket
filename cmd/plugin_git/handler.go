@@ -43,7 +43,7 @@ var (
 		plugin.PermissionBrowserWindowManager,
 		plugin.PermissionBrowserEventPublisher,
 		plugin.PermissionEditor,
-		plugin.PermissionWorkspaceExecutor,
+		plugin.PermissionWorkspace,
 	}
 
 	defaultScrollAttr = term.Attributes{Fg: term.ColorBlack}
@@ -55,7 +55,7 @@ type gitEditorHandler struct {
 	ed     text.Editor
 	wm     browser.WindowManager
 	p      browser.EventPublisher
-	exec   workspace.Executor
+	exec   workspace.Workspace
 	exit   uint32
 	ch     chan text.Event
 	scroll struct {
@@ -94,8 +94,8 @@ func newGitHandler(
 
 	for _, grant := range grants {
 		switch grant.Permission {
-		case plugin.PermissionWorkspaceExecutor:
-			ret.exec, err = plugin.WorkspaceExecutor(grant.Token, broker)
+		case plugin.PermissionWorkspace:
+			ret.exec, err = plugin.Workspace(grant.Token, broker)
 			if err != nil {
 				return nil, err
 			}

@@ -36,7 +36,7 @@ func Permissions() []plugin.Permission {
 		plugin.PermissionBrowserMessenger,
 		plugin.PermissionBrowserStorage,
 		plugin.PermissionEditor,
-		plugin.PermissionWorkspaceExecutor,
+		plugin.PermissionWorkspace,
 	}
 }
 
@@ -46,12 +46,12 @@ type fuzzyFinderHandler struct {
 	p            browser.EventPublisher
 	m            browser.Messenger
 	ed           text.Editor
-	executor     workspace.Executor
+	executor     workspace.Workspace
 	invokeWindow browser.Window
 	historyKey   term.Event
 	mu           sync.Mutex
 	cmdStr       string
-	getResource  func(workspace.Executor, string) (workspace.URI, term.Coordinates)
+	getResource  func(workspace.Workspace, string) (workspace.URI, term.Coordinates)
 	pid          workspace.Pid
 	quitChan     chan struct{}
 	height       int
@@ -262,8 +262,8 @@ func (h *fuzzyFinderHandler) initGrants(
 ) (err error) {
 	for _, grant := range grants {
 		switch grant.Permission {
-		case plugin.PermissionWorkspaceExecutor:
-			h.executor, err = plugin.WorkspaceExecutor(grant.Token, broker)
+		case plugin.PermissionWorkspace:
+			h.executor, err = plugin.Workspace(grant.Token, broker)
 		case plugin.PermissionEditor:
 			h.ed, err = plugin.Editor(grant.Token, broker)
 		case plugin.PermissionBrowserMessenger:
@@ -294,7 +294,7 @@ func New(
 	grants []plugin.Grant, broker proto.MuxBroker,
 	invokeWindow browser.Window, config plugin.Config,
 	historyKey term.Event, command string,
-	getResource func(exec workspace.Executor, line string) (workspace.URI, term.Coordinates),
+	getResource func(exec workspace.Workspace, line string) (workspace.URI, term.Coordinates),
 ) (tui.Handler, error) {
 	h := new(fuzzyFinderHandler)
 	err := h.initGrants(broker, grants)

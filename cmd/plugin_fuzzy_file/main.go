@@ -37,7 +37,7 @@ func newHandler(grants []plugin.Grant, broker proto.MuxBroker,
 		historyKey = defaultHistoryKey
 	}
 	return finder.New(grants, broker, invokeWindow, config,
-		historyKey, cmdStr, func(workspace workspace.Executor, file string) (
+		historyKey, cmdStr, func(workspace workspace.Workspace, file string) (
 			workspace.URI, term.Coordinates,
 		) {
 			uri, _ := workspace.URI(file)
