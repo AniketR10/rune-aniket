@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/ernestrc/go-tui/cell"
+	log "github.com/sirupsen/logrus"
 )
 
 var (
@@ -25,6 +26,7 @@ var (
 // Manager manages resources on a workspace. It satisfies ResourceOpener.
 type Manager struct {
 	managerCfg
+	logger    *log.Logger
 	workspace URI
 	cmds      map[Pid]*exec.Cmd
 	nextPid   int32
@@ -33,6 +35,7 @@ type Manager struct {
 	sshConn         sshClient
 	sshErr          error
 	workspaceClient *Client
+	isInitProxy     bool
 
 	initRemote func() (err error)
 	osChdir    func(string) error
@@ -43,6 +46,7 @@ type Manager struct {
 type managerCfg struct {
 	sshPrivateKeys []string
 	sshTimeout     time.Duration
+	sshCommand     string
 }
 
 func isFileURI(file URI) bool {
@@ -54,9 +58,11 @@ func isSSHURI(file URI) bool {
 }
 
 // NewManager allocates storage fore a new Manage and initializes it with workspace.
-func NewManager(workspace URI, opts ...Option) (*Manager, error) {
+func NewManager(
+	l *log.Logger, workspace URI, opts ...Option,
+) (*Manager, error) {
 	ret := new(Manager)
-	err := ret.Init(workspace, opts...)
+	err := ret.Init(l, workspace, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -65,21 +71,18 @@ func NewManager(workspace URI, opts ...Option) (*Manager, error) {
 
 // Init initializes m with workspace and calles os.Chdir to the new workspace
 // if current working directory is not already equal to the given workspace.
-func (m *Manager) Init(workspace URI, opts ...Option) error {
+func (m *Manager) Init(l *log.Logger, workspace URI, opts ...Option) error {
 	m.osChdir = os.Chdir
 	m.osGetwd = os.Getwd
 	m.initRemote = func() (err error) {
-		m.sshConn, err = connectOverSSH(m.managerCfg, m.workspace)
-		if err != nil {
-			return err
-		}
-		return m.initWorkspaceClient()
+		return m.initWorkspaceClient(m.managerCfg, m.workspace)
 	}
 	m.userLookup = user.Lookup
-	return m.init(workspace, opts...)
+	return m.init(l, workspace, opts...)
 }
 
-func (m *Manager) init(workspace URI, opts ...Option) error {
+func (m *Manager) init(l *log.Logger, workspace URI, opts ...Option) error {
+	m.logger = l
 	m.workspace = workspace
 	m.cmds = make(map[Pid]*exec.Cmd)
 	for _, o := range opts {
@@ -277,88 +280,116 @@ func (m *Manager) waitLocal(pid Pid) error {
 	return err
 }
 
-func (m *Manager) Command(name string, arg ...string) (Pid, error) {
-	if isFileURI(m.workspace) {
-		return m.commandLocal(name, arg...)
+func (m *Manager) Command(name string, arg ...string) (pid Pid, err error) {
+	m.logger.Tracef("workspace.Manager.Command(%s, %#v)", name, arg)
+	if m.isInitProxy || isFileURI(m.workspace) {
+		pid, err = m.commandLocal(name, arg...)
+	} else if isSSHURI(m.workspace) {
+		pid, err = m.workspaceClient.Command(name, arg...)
+	} else {
+		panic("manager has an invalid workspace URI")
 	}
-	if isSSHURI(m.workspace) {
-		return m.workspaceClient.Command(name, arg...)
-	}
-	panic("manager has an invalid workspace URI")
+	m.logger.Debugf("workspace.Manager.Command(%s, %#v): %d, %v",
+		name, arg, pid, err)
+	return
 }
 
-func (m *Manager) Start(pid Pid) error {
-	if isFileURI(m.workspace) {
-		return m.startLocal(pid)
+func (m *Manager) Start(pid Pid) (err error) {
+	m.logger.Tracef("workspace.Manager.Start(%v)", pid)
+	if m.isInitProxy || isFileURI(m.workspace) {
+		err = m.startLocal(pid)
+	} else if isSSHURI(m.workspace) {
+		err = m.workspaceClient.Start(pid)
+	} else {
+		panic("manager has an invalid workspace URI")
 	}
-	if isSSHURI(m.workspace) {
-		return m.workspaceClient.Start(pid)
-	}
-	panic("manager has an invalid workspace URI")
+	m.logger.Debugf("workspace.Manager.Start(%v): %v", pid, err)
+	return
 }
 
-func (m *Manager) Signal(pid Pid, sig syscall.Signal) error {
-	if isFileURI(m.workspace) {
-		return m.signalLocal(pid, sig)
+func (m *Manager) Signal(pid Pid, sig syscall.Signal) (err error) {
+	m.logger.Tracef("workspace.Manager.Signal(%v, %d)", pid, sig)
+	if m.isInitProxy || isFileURI(m.workspace) {
+		err = m.signalLocal(pid, sig)
+	} else if isSSHURI(m.workspace) {
+		err = m.workspaceClient.Signal(pid, sig)
+	} else {
+		panic("manager has an invalid workspace URI")
 	}
-	if isSSHURI(m.workspace) {
-		return m.workspaceClient.Signal(pid, sig)
-	}
-	panic("manager has an invalid workspace URI")
+	m.logger.Debugf("workspace.Manager.Signal(%v, %#v): %v",
+		pid, sig, err)
+	return
 }
 
-func (m *Manager) StderrPipe(pid Pid) (io.ReadCloser, error) {
-	if isFileURI(m.workspace) {
-		return m.stderrPipeLocal(pid)
+func (m *Manager) StderrPipe(pid Pid) (ret io.ReadCloser, err error) {
+	m.logger.Tracef("workspace.Manager.StderrPipe(%v)", pid)
+	if m.isInitProxy || isFileURI(m.workspace) {
+		ret, err = m.stderrPipeLocal(pid)
+	} else if isSSHURI(m.workspace) {
+		ret, err = m.workspaceClient.StderrPipe(pid)
+	} else {
+		panic("manager has an invalid workspace URI")
 	}
-	if isSSHURI(m.workspace) {
-		return m.workspaceClient.StderrPipe(pid)
-	}
-	panic("manager has an invalid workspace URI")
+	m.logger.Debugf("workspace.Manager.StderrPipe(%v): %v", pid, err)
+	return
 }
 
-func (m *Manager) StdinPipe(pid Pid) (io.WriteCloser, error) {
-	if isFileURI(m.workspace) {
-		return m.stdinPipeLocal(pid)
+func (m *Manager) StdinPipe(pid Pid) (ret io.WriteCloser, err error) {
+	m.logger.Tracef("workspace.Manager.StdinPipe(%v)", pid)
+	if m.isInitProxy || isFileURI(m.workspace) {
+		ret, err = m.stdinPipeLocal(pid)
+	} else if isSSHURI(m.workspace) {
+		ret, err = m.workspaceClient.StdinPipe(pid)
+	} else {
+		panic("manager has an invalid workspace URI")
 	}
-	if isSSHURI(m.workspace) {
-		return m.workspaceClient.StdinPipe(pid)
-	}
-	panic("manager has an invalid workspace URI")
+	m.logger.Debugf("workspace.Manager.StdinPipe(%v): %v", pid, err)
+	return
 }
 
-func (m *Manager) StdoutPipe(pid Pid) (io.ReadCloser, error) {
-	if isFileURI(m.workspace) {
-		return m.stdoutPipeLocal(pid)
+func (m *Manager) StdoutPipe(pid Pid) (ret io.ReadCloser, err error) {
+	m.logger.Tracef("workspace.Manager.StdoutPipe(%v)", pid)
+	if m.isInitProxy || isFileURI(m.workspace) {
+		ret, err = m.stdoutPipeLocal(pid)
+	} else if isSSHURI(m.workspace) {
+		ret, err = m.workspaceClient.StdoutPipe(pid)
+	} else {
+		panic("manager has an invalid workspace URI")
 	}
-	if isSSHURI(m.workspace) {
-		return m.workspaceClient.StdoutPipe(pid)
-	}
-	panic("manager has an invalid workspace URI")
+	m.logger.Debugf("workspace.Manager.StdoutPipe(%v): %v", pid, err)
+	return
 }
 
-func (m *Manager) Wait(pid Pid) error {
-	if isFileURI(m.workspace) {
-		return m.waitLocal(pid)
+func (m *Manager) Wait(pid Pid) (err error) {
+	m.logger.Tracef("workspace.Manager.Wait(%v)", pid)
+	if m.isInitProxy || isFileURI(m.workspace) {
+		err = m.waitLocal(pid)
+	} else if isSSHURI(m.workspace) {
+		err = m.workspaceClient.Wait(pid)
+	} else {
+		panic("manager has an invalid workspace URI")
 	}
-	if isSSHURI(m.workspace) {
-		return m.workspaceClient.Wait(pid)
-	}
-	panic("manager has an invalid workspace URI")
+	m.logger.Debugf("workspace.Manager.Wait(%v): %v", pid, err)
+	return
 }
 
-func (m *Manager) URI(path string) (URI, error) {
+func (m *Manager) URI(path string) (uri URI, err error) {
+	m.logger.Tracef("workspace.Manager.URI(%s)", path)
 	if isFileURI(m.workspace) {
-		return m.localURI(path)
+		uri, err = m.localURI(path)
+	} else if isSSHURI(m.workspace) {
+		uri, err = m.remoteURI(path)
+	} else {
+		panic("manager has an invalid workspace URI")
 	}
-	if isSSHURI(m.workspace) {
-		return m.remoteURI(path)
-	}
-	panic("manager has an invalid workspace URI")
+	m.logger.Debugf("workspace.Manager.URI(%s): %s, %v",
+		path, uri, err)
+	return
 }
 
 // Close closes all resources associated with this Manager.
 func (m *Manager) Close() error {
+	m.logger.Trace("workspace.Manager.Close()")
 	var ret error
 	if m.sshConn != nil {
 		ret = m.sshConn.Close()
@@ -381,5 +412,6 @@ func (m *Manager) Close() error {
 		}
 	}
 	m.cmds = nil
+	m.logger.Debugf("workspace.Manager.Close(): %v", ret)
 	return ret
 }

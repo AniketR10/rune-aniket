@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io/ioutil"
 	"net/http"
 	_ "net/http/pprof"
 	"os"
@@ -78,7 +79,10 @@ func main() {
 		if err != nil {
 			log.Fatal(err)
 		}
-		manager, err := workspace.NewManager(uri)
+		l := log.New()
+		l.Out = ioutil.Discard
+		l.Level = log.PanicLevel
+		manager, err := workspace.NewManager(l, uri)
 		if err != nil {
 			log.Fatal(err)
 		}

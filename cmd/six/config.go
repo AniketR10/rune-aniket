@@ -725,6 +725,21 @@ func (c ideConfig) workspaceSSHTimeout() (ret time.Duration) {
 	return
 }
 
+func (c ideConfig) workspaceSSHCommand() string {
+	cfg, ok := c.workspace()
+	if !ok {
+		return ""
+	}
+
+	cmd, err := cfg.GetString("ssh_command")
+	if err != nil {
+		c.errors["workspace.ssh_command"] = err
+		return ""
+	}
+
+	return cmd
+}
+
 func (c ideConfig) workspaceSSHPrivateKeys() (ret []string) {
 	cfg, ok := c.workspace()
 	if !ok {

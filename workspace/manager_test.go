@@ -1,13 +1,22 @@
 package workspace
 
 import (
+	"io/ioutil"
 	"os/user"
 	"testing"
 
+	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/crypto/ssh"
 )
+
+var discardLogger = log.New()
+
+func init() {
+	discardLogger.Out = ioutil.Discard
+	discardLogger.Level = log.PanicLevel
+}
 
 func TestManagerInitLocal(t *testing.T) {
 	tsuite := []struct {
@@ -34,7 +43,7 @@ func TestManagerInitLocal(t *testing.T) {
 			}
 			uri, err := ParseURI(tcase.inWorkspace)
 			require.NoError(t, err)
-			require.NoError(t, m.init(uri))
+			require.NoError(t, m.init(discardLogger, uri))
 			assert.Equal(t, tcase.wantChdir, actualChdir)
 		})
 	}
@@ -79,7 +88,7 @@ func TestManagerURI(t *testing.T) {
 		}
 		workspaceURI, err := ParseURI(tcase.inWorkspace)
 		require.NoError(t, err)
-		require.NoError(t, m.init(workspaceURI))
+		require.NoError(t, m.init(discardLogger, workspaceURI))
 
 		wantURI, err := ParseURI(tcase.wantURI)
 		require.NoError(t, err)

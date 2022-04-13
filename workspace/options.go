@@ -20,3 +20,13 @@ func WithSSHTimeout(t time.Duration) Option {
 		c.sshTimeout = t
 	}
 }
+
+// WithSSHCommand sets a Manager's ssh command to use
+// rather than using Go's ssh library. This is useful
+// when advanced openSSH features like ProxyCommand are needed
+// to connect to a remote workspace.
+func WithSSHCommand(cmd string) Option {
+	return func(c *managerCfg) {
+		c.sshCommand = cmd
+	}
+}

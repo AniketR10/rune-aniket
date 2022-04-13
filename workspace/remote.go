@@ -8,16 +8,9 @@ import (
 	"net"
 	"net/url"
 	os "os"
-	"os/user"
-	"path"
-	"strings"
-	"syscall"
 	"time"
 
 	"github.com/ernestrc/go-tui/cell"
-	"golang.org/x/crypto/ssh"
-	"golang.org/x/crypto/ssh/knownhosts"
-	"golang.org/x/term"
 	"google.golang.org/grpc"
 )
 
@@ -25,93 +18,9 @@ const (
 	sshScheme = "ssh"
 )
 
-var sigMap = map[syscall.Signal]ssh.Signal{
-	syscall.SIGABRT: "ABRT",
-	syscall.SIGALRM: "ALRM",
-	syscall.SIGFPE:  "FPE",
-	syscall.SIGHUP:  "HUP",
-	syscall.SIGILL:  "ILL",
-	syscall.SIGINT:  "INT",
-	syscall.SIGKILL: "KILL",
-	syscall.SIGPIPE: "PIPE",
-	syscall.SIGQUIT: "QUIT",
-	syscall.SIGSEGV: "SEGV",
-	syscall.SIGTERM: "TERM",
-	syscall.SIGUSR1: "USR1",
-	syscall.SIGUSR2: "USR2",
-}
-
 type sshClient interface {
 	NewSession() (Executor, error)
 	Close() error
-}
-
-// used to adapt ssh.Client to sshClient
-type goSshClient struct {
-	client *ssh.Client
-}
-
-// used to adapt ssh.Session to Executor
-type goSshSession struct {
-	cmd  string
-	args []string
-	ses  *ssh.Session
-}
-
-func (s goSshSession) Command(name string, arg ...string) (Pid, error) {
-	s.cmd, s.args = name, arg
-	return Pid(0), nil
-}
-
-func (s *goSshSession) Start(Pid) error {
-	if s.cmd == "" {
-		return errors.New("invalid ssh.Session Executor state: must call Command first")
-	}
-	return s.ses.Start(fmt.Sprintf("%s %s", s.cmd, strings.Join(s.args, " ")))
-}
-
-func (s *goSshSession) Signal(_ Pid, sig syscall.Signal) error {
-	signal, ok := sigMap[sig]
-	if !ok {
-		return errors.New("unknown signal")
-	}
-	return s.ses.Signal(signal)
-}
-
-func (s *goSshSession) StderrPipe(Pid) (io.ReadCloser, error) {
-	r, err := s.ses.StderrPipe()
-	return io.NopCloser(r), err
-}
-
-type nopWriteCloser struct {
-	io.Writer
-}
-
-func (n nopWriteCloser) Close() error {
-	return nil
-}
-
-func (s *goSshSession) StdinPipe(Pid) (io.WriteCloser, error) {
-	r, err := s.ses.StdinPipe()
-	return nopWriteCloser{r}, err
-}
-
-func (s *goSshSession) StdoutPipe(Pid) (io.ReadCloser, error) {
-	r, err := s.ses.StdoutPipe()
-	return io.NopCloser(r), err
-}
-
-func (s *goSshSession) Wait(Pid) error {
-	return s.ses.Wait()
-}
-
-func (r goSshClient) NewSession() (Executor, error) {
-	ses, err := r.client.NewSession()
-	return &goSshSession{ses: ses}, err
-}
-
-func (r goSshClient) Close() error {
-	return r.client.Close()
 }
 
 func (m *Manager) newOsRemoteFile() *file {
@@ -177,136 +86,48 @@ func (m *Manager) newOsRemoteFile() *file {
 	return ret
 }
 
-func getCurrentUser() (string, error) {
-	u, err := user.Current()
+func startProc(exec Executor, pid Pid) (
+	stdout io.ReadCloser, stderr io.ReadCloser, stdin io.WriteCloser, err error,
+) {
+	stdout, err = exec.StdoutPipe(pid)
 	if err != nil {
-		return "", fmt.Errorf("failed to get default user: %s", err)
+		err = fmt.Errorf("could not get stdout pipe: %s", err)
+		return
 	}
-	return u.Username, nil
+
+	stdin, err = exec.StdinPipe(pid)
+	if err != nil {
+		err = fmt.Errorf("could not get stdin pipe: %s", err)
+		return
+	}
+
+	stderr, err = exec.StderrPipe(pid)
+	if err != nil {
+		err = fmt.Errorf("could not get stderr pipe: %s", err)
+		return
+	}
+
+	err = exec.Start(pid)
+	if err != nil {
+		err = fmt.Errorf("could not start remote command: %s", err)
+		return
+	}
+	return
 }
 
-func hostPortFromURI(u URI) string {
-	hostname, port := u.parsed.Hostname(), u.parsed.Port()
-	if port == "" {
-		port = "22"
-	}
-	return fmt.Sprintf("%s:%s", hostname, port)
-}
+func (m *Manager) initWorkspaceClient(config managerCfg, workspace URI) (err error) {
 
-func currentHomePath() (string, error) {
-	u, err := user.Current()
+	m.isInitProxy = true
+
+	if config.sshCommand == "" {
+		m.sshConn, err = m.connectOverStdSSH()
+	} else {
+		m.sshConn, err = m.connectOverProcSSH()
+	}
 	if err != nil {
-		return "", fmt.Errorf("failed to lookup current username: %s", err)
-	}
-	return u.HomeDir, nil
-}
-func readPassphrase(key string) (string, error) {
-	fmt.Fprintf(os.Stdout, "Key %s requires a passphrase: ", key)
-	bytePassword, err := term.ReadPassword(int(syscall.Stdin))
-	if err != nil {
-		return "", err
+		return err
 	}
 
-	password := string(bytePassword)
-	return password, nil
-}
-
-func privateKeySigner(privateKeyPath string) (ssh.Signer, error) {
-	privateKey, err := ioutil.ReadFile(privateKeyPath)
-	if err != nil {
-		return nil, fmt.Errorf("could not read private key file %s: %s",
-			privateKeyPath, err)
-	}
-	signer, err := ssh.ParsePrivateKey(privateKey)
-	if err == nil {
-		return signer, nil
-	}
-	if _, ok := err.(*ssh.PassphraseMissingError); !ok {
-		return nil, fmt.Errorf("could not parse private key at %s: %s",
-			privateKeyPath, err)
-	}
-
-	// handle passhprase errors by reading password from stdin
-	passphrase, err := readPassphrase(privateKeyPath)
-	if err != nil {
-		return nil, fmt.Errorf("could not read passphrase for private key at %s: %s",
-			privateKeyPath, err)
-	}
-	signer, err = ssh.ParsePrivateKeyWithPassphrase(privateKey, []byte(passphrase))
-	if err != nil {
-		return nil, fmt.Errorf("could not parse private key with passphrase at %s: %s",
-			privateKeyPath, err)
-	}
-	return signer, nil
-}
-
-func authMethodsFromURI(config managerCfg, workspace URI) ([]ssh.AuthMethod, error) {
-	var auths []ssh.AuthMethod
-	for _, key := range config.sshPrivateKeys {
-		signer, err := privateKeySigner(key)
-		if err != nil {
-			return nil, err
-		}
-		auths = append(auths, ssh.PublicKeys(signer))
-	}
-	if pass, ok := workspace.parsed.User.Password(); ok {
-		auths = append(auths, ssh.Password(pass))
-	}
-	return auths, nil
-}
-
-func usernameFromURI(workspace URI) (string, error) {
-	if workspace.parsed.User != nil && workspace.parsed.User.Username() != "" {
-		return workspace.parsed.User.Username(), nil
-	}
-	return getCurrentUser()
-}
-
-func defaultHostkeyCallback() (ssh.HostKeyCallback, error) {
-	home, err := currentHomePath()
-	if err != nil {
-		return nil, err
-	}
-
-	knownHostsPath := path.Join(home, ".ssh/known_hosts")
-	hostkeyCallback, err := knownhosts.New(knownHostsPath)
-	if err != nil {
-		return nil, fmt.Errorf("could not read %s: %s", knownHostsPath, err)
-	}
-	return hostkeyCallback, nil
-}
-
-func connectOverSSH(config managerCfg, workspace URI) (sshClient, error) {
-	username, err := usernameFromURI(workspace)
-	if err != nil {
-		return nil, err
-	}
-
-	auths, err := authMethodsFromURI(config, workspace)
-	if err != nil {
-		return nil, err
-	}
-
-	hostkeyCallback, err := defaultHostkeyCallback()
-	if err != nil {
-		return nil, err
-	}
-	conf := &ssh.ClientConfig{
-		User:            username,
-		HostKeyCallback: hostkeyCallback,
-		Auth:            auths,
-		Timeout:         config.sshTimeout,
-	}
-
-	hostport := hostPortFromURI(workspace)
-	conn, err := ssh.Dial("tcp", hostport, conf)
-	if err != nil {
-		return nil, fmt.Errorf("failed to ssh dial: %s", err)
-	}
-	return goSshClient{conn}, nil
-}
-
-func (m *Manager) initWorkspaceClient() error {
 	path := m.workspace.Path()
 	if path == "" {
 		path = "."
@@ -322,25 +143,9 @@ func (m *Manager) initWorkspaceClient() error {
 		return fmt.Errorf("could not create command: %s", err)
 	}
 
-	stdout, err := ses.StdoutPipe(pid)
+	stdout, stderr, stdin, err := startProc(ses, pid)
 	if err != nil {
-		return fmt.Errorf("could not get stdout pipe: %s", err)
-	}
-
-	stdin, err := ses.StdinPipe(pid)
-	if err != nil {
-		return fmt.Errorf("could not get stdin pipe: %s", err)
-	}
-
-	stderr, err := ses.StderrPipe(pid)
-	if err != nil {
-		return fmt.Errorf("could not get stderr pipe: %s", err)
-	}
-
-	// expects six to be in the path of the user
-	err = ses.Start(pid)
-	if err != nil {
-		return fmt.Errorf("could not start remote six: %s", err)
+		return err
 	}
 
 	conn, err := grpc.Dial("", grpc.WithInsecure(),
@@ -372,6 +177,9 @@ func (m *Manager) initWorkspaceClient() error {
 			}
 		}
 	}()
+
+	m.isInitProxy = false
+
 	return nil
 }
 

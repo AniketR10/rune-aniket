@@ -12,9 +12,17 @@ import (
 	"github.com/ernestrc/go-tui/component"
 	"github.com/ernestrc/go-tui/term"
 	"github.com/ernestrc/go-tui/workspace"
+	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+var discardLogger = log.New()
+
+func init() {
+	discardLogger.Out = ioutil.Discard
+	discardLogger.Level = log.PanicLevel
+}
 
 const locID = "errors"
 const sampleSnippet = `
@@ -1900,7 +1908,7 @@ func TestFileCursorIntegration(t *testing.T) {
 			require.NoError(t, err)
 
 			// installs unix reader
-			m, err := workspace.NewManager(cwdURI(t))
+			m, err := workspace.NewManager(discardLogger, cwdURI(t))
 			require.NoError(t, err)
 			_, err = m.Open(uri, b, swapDir, false)
 			require.NoError(t, err)

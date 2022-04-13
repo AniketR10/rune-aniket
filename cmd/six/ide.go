@@ -78,8 +78,31 @@ func (i *IDE) init(initTUI bool, cwd, cfgfilename, recfilename string, filenames
 		workspaceOpts []workspace.Option
 	)
 
+	var l *log.Logger
+	if i.ideConfig.logOutputPath() != "" {
+		f, err := os.OpenFile(i.ideConfig.logOutputPath(), os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
+		if err != nil {
+			return err
+		}
+
+		level := i.ideConfig.logLevel()
+		plugin.SetLoggingOutput(f)
+		plugin.SetLoggingLevel(level)
+
+		l = log.New()
+		l.SetOutput(f)
+		l.SetLevel(level)
+		l.SetFormatter(&logging.LogrusFormatter{})
+		opts = append(opts, text.WithLogger(l))
+		viOpts = append(viOpts, vi.WithLogger(l))
+		pluginOpts = append(pluginOpts, plugin.WithLogger(l))
+	}
+
 	for _, key := range i.ideConfig.workspaceSSHPrivateKeys() {
 		workspaceOpts = append(workspaceOpts, workspace.WithSSHPrivateKey(key))
+	}
+	if cmd := i.ideConfig.workspaceSSHCommand(); cmd != "" {
+		workspaceOpts = append(workspaceOpts, workspace.WithSSHCommand(cmd))
 	}
 	workspaceOpts = append(workspaceOpts,
 		workspace.WithSSHTimeout(i.ideConfig.workspaceSSHTimeout()))
@@ -89,7 +112,7 @@ func (i *IDE) init(initTUI bool, cwd, cfgfilename, recfilename string, filenames
 		return err
 	}
 
-	i.workspace, err = workspace.NewManager(cwdURI, workspaceOpts...)
+	i.workspace, err = workspace.NewManager(l, cwdURI, workspaceOpts...)
 	if err != nil {
 		return err
 	}
@@ -142,26 +165,6 @@ func (i *IDE) init(initTUI bool, cwd, cfgfilename, recfilename string, filenames
 
 	i.clipboard = plugin.NewClipboardManager()
 	viOpts = append(viOpts, vi.WithClipboard(i.clipboard))
-
-	var l *log.Logger
-	if i.ideConfig.logOutputPath() != "" {
-		f, err := os.OpenFile(i.ideConfig.logOutputPath(), os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
-		if err != nil {
-			return err
-		}
-
-		level := i.ideConfig.logLevel()
-		plugin.SetLoggingOutput(f)
-		plugin.SetLoggingLevel(level)
-
-		l = log.New()
-		l.SetOutput(f)
-		l.SetLevel(level)
-		l.SetFormatter(&logging.LogrusFormatter{})
-		opts = append(opts, text.WithLogger(l))
-		viOpts = append(viOpts, vi.WithLogger(l))
-		pluginOpts = append(pluginOpts, plugin.WithLogger(l))
-	}
 
 	vi := vi.Editor(viOpts...)
 	ex, err := newEx(vi, i.workspace, opts...)
