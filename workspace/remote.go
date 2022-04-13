@@ -3,12 +3,14 @@ package workspace
 import (
 	"errors"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net"
 	"net/url"
 	os "os"
 	"os/user"
 	"path"
+	"strings"
 	"syscall"
 	"time"
 
@@ -22,6 +24,95 @@ import (
 const (
 	sshScheme = "ssh"
 )
+
+var sigMap = map[syscall.Signal]ssh.Signal{
+	syscall.SIGABRT: "ABRT",
+	syscall.SIGALRM: "ALRM",
+	syscall.SIGFPE:  "FPE",
+	syscall.SIGHUP:  "HUP",
+	syscall.SIGILL:  "ILL",
+	syscall.SIGINT:  "INT",
+	syscall.SIGKILL: "KILL",
+	syscall.SIGPIPE: "PIPE",
+	syscall.SIGQUIT: "QUIT",
+	syscall.SIGSEGV: "SEGV",
+	syscall.SIGTERM: "TERM",
+	syscall.SIGUSR1: "USR1",
+	syscall.SIGUSR2: "USR2",
+}
+
+type sshClient interface {
+	NewSession() (Executor, error)
+	Close() error
+}
+
+// used to adapt ssh.Client to sshClient
+type goSshClient struct {
+	client *ssh.Client
+}
+
+// used to adapt ssh.Session to Executor
+type goSshSession struct {
+	cmd  string
+	args []string
+	ses  *ssh.Session
+}
+
+func (s goSshSession) Command(name string, arg ...string) (Pid, error) {
+	s.cmd, s.args = name, arg
+	return Pid(0), nil
+}
+
+func (s *goSshSession) Start(Pid) error {
+	if s.cmd == "" {
+		return errors.New("invalid ssh.Session Executor state: must call Command first")
+	}
+	return s.ses.Start(fmt.Sprintf("%s %s", s.cmd, strings.Join(s.args, " ")))
+}
+
+func (s *goSshSession) Signal(_ Pid, sig syscall.Signal) error {
+	signal, ok := sigMap[sig]
+	if !ok {
+		return errors.New("unknown signal")
+	}
+	return s.ses.Signal(signal)
+}
+
+func (s *goSshSession) StderrPipe(Pid) (io.ReadCloser, error) {
+	r, err := s.ses.StderrPipe()
+	return io.NopCloser(r), err
+}
+
+type nopWriteCloser struct {
+	io.Writer
+}
+
+func (n nopWriteCloser) Close() error {
+	return nil
+}
+
+func (s *goSshSession) StdinPipe(Pid) (io.WriteCloser, error) {
+	r, err := s.ses.StdinPipe()
+	return nopWriteCloser{r}, err
+}
+
+func (s *goSshSession) StdoutPipe(Pid) (io.ReadCloser, error) {
+	r, err := s.ses.StdoutPipe()
+	return io.NopCloser(r), err
+}
+
+func (s *goSshSession) Wait(Pid) error {
+	return s.ses.Wait()
+}
+
+func (r goSshClient) NewSession() (Executor, error) {
+	ses, err := r.client.NewSession()
+	return &goSshSession{ses: ses}, err
+}
+
+func (r goSshClient) Close() error {
+	return r.client.Close()
+}
 
 func (m *Manager) newOsRemoteFile() *file {
 	ret := new(file)
@@ -185,7 +276,7 @@ func defaultHostkeyCallback() (ssh.HostKeyCallback, error) {
 	return hostkeyCallback, nil
 }
 
-func connectOverSSH(config managerCfg, workspace URI) (*ssh.Client, error) {
+func connectOverSSH(config managerCfg, workspace URI) (sshClient, error) {
 	username, err := usernameFromURI(workspace)
 	if err != nil {
 		return nil, err
@@ -212,34 +303,42 @@ func connectOverSSH(config managerCfg, workspace URI) (*ssh.Client, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to ssh dial: %s", err)
 	}
-	return conn, nil
+	return goSshClient{conn}, nil
 }
 
 func (m *Manager) initWorkspaceClient() error {
-	ses, err := m.sshConn.NewSession()
-	if err != nil {
-		return err
-	}
-	stdout, err := ses.StdoutPipe()
-	if err != nil {
-		return fmt.Errorf("could not get stdout pipe: %s", err)
-	}
-	stdin, err := ses.StdinPipe()
-	if err != nil {
-		return fmt.Errorf("could not get stdin pipe: %s", err)
-	}
-	stderr, err := ses.StderrPipe()
-	if err != nil {
-		return fmt.Errorf("could not get stderr pipe: %s", err)
-	}
-
 	path := m.workspace.Path()
 	if path == "" {
 		path = "."
 	}
 
+	ses, err := m.sshConn.NewSession()
+	if err != nil {
+		return err
+	}
+
+	pid, err := ses.Command(fmt.Sprintf("six -x %s", path))
+	if err != nil {
+		return fmt.Errorf("could not create command: %s", err)
+	}
+
+	stdout, err := ses.StdoutPipe(pid)
+	if err != nil {
+		return fmt.Errorf("could not get stdout pipe: %s", err)
+	}
+
+	stdin, err := ses.StdinPipe(pid)
+	if err != nil {
+		return fmt.Errorf("could not get stdin pipe: %s", err)
+	}
+
+	stderr, err := ses.StderrPipe(pid)
+	if err != nil {
+		return fmt.Errorf("could not get stderr pipe: %s", err)
+	}
+
 	// expects six to be in the path of the user
-	err = ses.Start(fmt.Sprintf("six -x %s", path))
+	err = ses.Start(pid)
 	if err != nil {
 		return fmt.Errorf("could not start remote six: %s", err)
 	}
@@ -260,7 +359,7 @@ func (m *Manager) initWorkspaceClient() error {
 	m.workspaceClient = NewClient(conn)
 
 	go func() {
-		err := ses.Wait()
+		err := ses.Wait(pid)
 		if err != nil {
 			stderrStr, rerr := ioutil.ReadAll(stderr)
 			m.mu.Lock()

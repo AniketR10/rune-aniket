@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/ernestrc/go-tui/cell"
-	"golang.org/x/crypto/ssh"
 )
 
 var (
@@ -31,7 +30,7 @@ type Manager struct {
 	nextPid   int32
 
 	mu              sync.Mutex
-	sshConn         *ssh.Client
+	sshConn         sshClient
 	sshErr          error
 	workspaceClient *Client
 

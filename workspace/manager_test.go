@@ -74,7 +74,7 @@ func TestManagerURI(t *testing.T) {
 			return tcase.getUser, nil
 		}
 		m.initRemote = func() error {
-			m.sshConn = new(ssh.Client)
+			m.sshConn = goSshClient{new(ssh.Client)}
 			return nil
 		}
 		workspaceURI, err := ParseURI(tcase.inWorkspace)
