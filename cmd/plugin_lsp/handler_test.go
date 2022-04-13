@@ -63,7 +63,7 @@ func newTestLspHandler(
 ) *lspEditorHandler {
 	ret := new(lspEditorHandler)
 	ret.ed = ed
-	ret.files = make(map[workspace.URI]*file)
+	ret.files = make(map[string]*file)
 	ret.servers = map[string]execServer{".go": {langID: ".go", srv: server}}
 	ret.semanticTokensListID = defaultSemanticTokensListID
 	ret.diagnosticListID = defaultDiagnosticListID

@@ -155,9 +155,9 @@ type lspEditorHandler struct {
 
 	cwd               string
 	exit              bool
-	files             map[workspace.URI]*file
-	pendingDiagnostic map[workspace.URI][]protocol.Diagnostic
-	pendingGoTo       map[workspace.URI]protocol.Range
+	files             map[string]*file
+	pendingDiagnostic map[string][]protocol.Diagnostic
+	pendingGoTo       map[string]protocol.Range
 	serversCfg        map[string]interface{}
 	servers           map[string]execServer
 	cancelTokensReq   func()
@@ -517,9 +517,9 @@ func newLspHandler(
 ) (plugutil.CommandEventHandler, error) {
 	ret := new(lspEditorHandler)
 	ret.ed = ed
-	ret.files = make(map[workspace.URI]*file)
-	ret.pendingDiagnostic = make(map[workspace.URI][]protocol.Diagnostic)
-	ret.pendingGoTo = make(map[workspace.URI]protocol.Range)
+	ret.files = make(map[string]*file)
+	ret.pendingDiagnostic = make(map[string][]protocol.Diagnostic)
+	ret.pendingGoTo = make(map[string]protocol.Range)
 	ret.evChan = make(chan text.Event, handleBackpressureEvs)
 
 	var err error
@@ -661,14 +661,14 @@ func (h *lspEditorHandler) newFile(
 		languageID: languageID,
 	}
 
-	h.files[uri] = f
+	h.files[uri.String()] = f
 	return f
 }
 
 func (h *lspEditorHandler) removePendingGoTo(uri workspace.URI) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	delete(h.pendingGoTo, uri)
+	delete(h.pendingGoTo, uri.String())
 }
 
 func (h *lspEditorHandler) addPendingGoTo(
@@ -677,7 +677,7 @@ func (h *lspEditorHandler) addPendingGoTo(
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
-	h.pendingGoTo[uri] = rs
+	h.pendingGoTo[uri.String()] = rs
 }
 
 func (h *lspEditorHandler) addPendingDiagnostics(
@@ -686,15 +686,15 @@ func (h *lspEditorHandler) addPendingDiagnostics(
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
-	h.pendingDiagnostic[uri] = ds
+	h.pendingDiagnostic[uri.String()] = ds
 }
 
 func (h *lspEditorHandler) dispatchPendingDiagnostics(
 	ctx context.Context, uri workspace.URI,
 ) {
 	h.mu.Lock()
-	ds, ok := h.pendingDiagnostic[uri]
-	delete(h.pendingDiagnostic, uri)
+	ds, ok := h.pendingDiagnostic[uri.String()]
+	delete(h.pendingDiagnostic, uri.String())
 	h.mu.Unlock()
 	if !ok {
 		return
@@ -735,8 +735,8 @@ func (h *lspEditorHandler) dispatchPendingGoTo(
 	uri := f.uri
 
 	h.mu.Lock()
-	rs, ok := h.pendingGoTo[uri]
-	delete(h.pendingGoTo, uri)
+	rs, ok := h.pendingGoTo[uri.String()]
+	delete(h.pendingGoTo, uri.String())
 	h.mu.Unlock()
 	if !ok {
 		return
@@ -749,7 +749,7 @@ func (h *lspEditorHandler) getFile(uri workspace.URI) (*file, bool) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
-	f, ok := h.files[uri]
+	f, ok := h.files[uri.String()]
 	return f, ok
 }
 
@@ -1086,7 +1086,7 @@ func (h *lspEditorHandler) removeFile(resource workspace.URI) (*file, bool) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
-	delete(h.files, f.uri)
+	delete(h.files, f.uri.String())
 
 	return f, true
 }
