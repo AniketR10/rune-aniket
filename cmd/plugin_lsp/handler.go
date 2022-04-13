@@ -97,6 +97,7 @@ var (
 		"property":      {},
 		"enumMember":    {},
 		"event":         {},
+		"method":        {},
 		"function":      {},
 		"member":        {},
 		"macro":         {},
