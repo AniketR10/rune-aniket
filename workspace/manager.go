@@ -180,15 +180,31 @@ func (m *Manager) Recover(file, swapFile URI, buf *cell.Buffer) (
 func (m *Manager) Open(
 	file URI, buf *cell.Buffer, swapDir URI, readOnly bool,
 ) (
-	FlusherCloser, error,
+	fc FlusherCloser, err error,
 ) {
 	if isFileURI(file) {
-		return openLocalFile(file, buf, swapDir, readOnly)
+		fc, err = openLocalFile(file, buf, swapDir, readOnly)
+	} else if isSSHURI(file) {
+		fc, err = m.openRemoteFile(file, buf, swapDir, readOnly)
+	} else {
+		return nil, fmt.Errorf("unknown scheme: %s", file.uri)
 	}
-	if isSSHURI(file) {
-		return m.openRemoteFile(file, buf, swapDir, readOnly)
+
+	if err == nil {
+		return fc, nil
 	}
-	return nil, fmt.Errorf("unknown scheme: %s", file.uri)
+
+	osErr, ok := err.(*osError)
+	if !ok {
+		return nil, err
+	}
+	if osErr.isPermission {
+		return nil, os.ErrPermission
+	}
+	if osErr.isNotExist {
+		return nil, os.ErrNotExist
+	}
+	return nil, err
 }
 
 func (m *Manager) commandLocal(name string, arg ...string) (Pid, error) {

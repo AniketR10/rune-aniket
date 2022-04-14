@@ -805,7 +805,7 @@ func loadLocalConfig(m *workspace.Manager, cwd workspace.URI, c *ideConfig) erro
 		if os.IsNotExist(err) {
 			return nil
 		}
-		return fmt.Errorf("failed to stat local config file: %s", err)
+		return fmt.Errorf("failed to open local config file: %s", err)
 	}
 	defer closer.Close()
 

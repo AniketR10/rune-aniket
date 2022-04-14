@@ -2,9 +2,11 @@ package workspace
 
 import (
 	"io/ioutil"
+	"os"
 	"os/user"
 	"testing"
 
+	"github.com/ernestrc/go-tui/cell"
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -98,4 +100,35 @@ func TestManagerURI(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, wantURI.String(), actualURI.String())
 	}
+}
+
+func TestManagerOpenIntegration(t *testing.T) {
+	t.Run("returns os.ErrNotExist if file does not exist in read-only mode", func(t *testing.T) {
+		m := new(Manager)
+		m.osGetwd = func() (string, error) {
+			return "", nil
+		}
+		m.osChdir = func(chdir string) error {
+			return nil
+		}
+		m.userLookup = func(name string) (*user.User, error) {
+			return new(user.User), nil
+		}
+		cwd, err := CurrentUserHostURI(".")
+		require.NoError(t, err)
+		require.NoError(t, m.init(discardLogger, cwd))
+
+		// only way to guarantee that the file won't exist
+		// is creating it and then removing it
+		f, err := ioutil.TempFile("", "workspace_test")
+		require.NoError(t, err)
+		err = os.Remove(f.Name())
+		require.NoError(t, err)
+		nonexistent, err := CurrentUserHostURI(f.Name())
+
+		// sut
+		_, err = m.Open(nonexistent, cell.NewBuffer(), URI{}, true)
+		require.Equal(t, os.ErrNotExist, err)
+		require.True(t, os.IsNotExist(err))
+	})
 }
