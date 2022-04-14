@@ -2,6 +2,7 @@ package main
 
 import (
 	"io/ioutil"
+	"os"
 	"testing"
 
 	"github.com/ernestrc/go-tui/workspace"
@@ -9,21 +10,48 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func makeTestFiles(t *testing.T) (*os.File, *os.File) {
+	configFile, err := ioutil.TempFile("", "six_ide_test")
+	require.NoError(t, err)
+	require.NoError(t, configFile.Close())
+
+	file, err := ioutil.TempFile("", "six_ide_test")
+	require.NoError(t, err)
+	require.NoError(t, file.Close())
+
+	return configFile, file
+}
+
 func TestIDEInitialization(t *testing.T) {
-	t.Run("does not panic", func(t *testing.T) {
-		configFile, err := ioutil.TempFile("", "six_ide_test")
-		require.NoError(t, err)
-		require.NoError(t, configFile.Close())
-
-		file1, err := ioutil.TempFile("", "six_ide_test")
-		require.NoError(t, err)
-		require.NoError(t, file1.Close())
-
+	t.Run("does not panic with sample config", func(t *testing.T) {
+		configFile, file1 := makeTestFiles(t)
 		file2, err := ioutil.TempFile("", "six_ide_test")
 		require.NoError(t, err)
 		require.NoError(t, file2.Close())
 
 		err = ioutil.WriteFile(configFile.Name(), []byte(sampleConfig), 0666)
+		require.NoError(t, err)
+
+		cwdURI, err := workspace.CurrentUserHostURI(".")
+		require.NoError(t, err)
+
+		i := new(IDE)
+		err = i.init(false, cwdURI.String(), configFile.Name(), "", file1.Name(), file2.Name())
+		require.NoError(t, err)
+
+		require.NotNil(t, i.workspace)
+		require.NotNil(t, i.clipboard)
+
+		assert.NoError(t, i.closeResources())
+	})
+
+	t.Run("does not panic with empty config", func(t *testing.T) {
+		configFile, file1 := makeTestFiles(t)
+		file2, err := ioutil.TempFile("", "six_ide_test")
+		require.NoError(t, err)
+		require.NoError(t, file2.Close())
+
+		err = ioutil.WriteFile(configFile.Name(), []byte("{}"), 0666)
 		require.NoError(t, err)
 
 		cwdURI, err := workspace.CurrentUserHostURI(".")

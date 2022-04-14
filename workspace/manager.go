@@ -61,6 +61,9 @@ func isSSHURI(file URI) bool {
 func NewManager(
 	l *log.Logger, workspace URI, opts ...Option,
 ) (*Manager, error) {
+	if l == nil {
+		panic("invalid logger")
+	}
 	ret := new(Manager)
 	err := ret.Init(l, workspace, opts...)
 	if err != nil {

@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"io/ioutil"
 	"os"
 
 	"github.com/ernestrc/blue/logging"
@@ -96,6 +97,10 @@ func (i *IDE) init(initTUI bool, cwd, cfgfilename, recfilename string, filenames
 		opts = append(opts, text.WithLogger(l))
 		viOpts = append(viOpts, vi.WithLogger(l))
 		pluginOpts = append(pluginOpts, plugin.WithLogger(l))
+	} else {
+		l = log.New()
+		l.Out = ioutil.Discard
+		l.Level = log.PanicLevel
 	}
 
 	for _, key := range i.ideConfig.workspaceSSHPrivateKeys() {
