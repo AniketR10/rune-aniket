@@ -132,9 +132,16 @@ func (h *fuzzyFinderHandler) addSearchHistory(searchQuery string) {
 		return
 	}
 
-	h.history.Queries = append(h.history.Queries, searchQuery)
+	if searchQuery == "" {
+		return
+	}
+
+	h.history.Queries = append(h.history.Queries, "")
+	copy(h.history.Queries[1:], h.history.Queries)
+	h.history.Queries[0] = searchQuery
+
 	if len(h.history.Queries) > h.history.max {
-		h.history.Queries = h.history.Queries[1:]
+		h.history.Queries = h.history.Queries[:h.history.max]
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), defaultStoreTimeout)
