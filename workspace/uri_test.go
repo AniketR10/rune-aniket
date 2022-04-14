@@ -143,3 +143,41 @@ func TestSanitizeFilename(t *testing.T) {
 		assert.Equal(t, tcase.out, out)
 	}
 }
+
+func TestJoin(t *testing.T) {
+	tsuite := []struct {
+		uri      string
+		elems    []string
+		wantURI  string
+		wantName string
+	}{
+		{"file:///tmp", nil, "file:///tmp", "tmp"},
+		{"file:///tmp", []string{".sixrc"}, "file:///tmp/.sixrc", ".sixrc"},
+		{"file:///tmp", []string{"test", ".sixrc"}, "file:///tmp/test/.sixrc", ".sixrc"},
+		{"file:///", nil, "file:///", "/"},
+		{"file:///", []string{".sixrc"}, "file:///.sixrc", ".sixrc"},
+		{"file:///", []string{"test", ".sixrc"}, "file:///test/.sixrc", ".sixrc"},
+		{"ssh://ernestrc@six.build/tmp", nil, "ssh://ernestrc@six.build/tmp", "ssh://six.build/tmp"},
+		{"ssh://ernestrc@six.build/tmp", []string{".sixrc"}, "ssh://ernestrc@six.build/tmp/.sixrc", "ssh://six.build/tmp/.sixrc"},
+		{"ssh://ernestrc@six.build/tmp", []string{"test", ".sixrc"}, "ssh://ernestrc@six.build/tmp/test/.sixrc", "ssh://six.build/tmp/test/.sixrc"},
+		{"ssh://six.build/", nil, "ssh://six.build/", "ssh://six.build/"},
+		{"ssh://six.build/", []string{".sixrc"}, "ssh://six.build/.sixrc", "ssh://six.build/.sixrc"},
+		{"ssh://six.build/", []string{"test", ".sixrc"}, "ssh://six.build/test/.sixrc", "ssh://six.build/test/.sixrc"},
+	}
+
+	for i, tcase := range tsuite {
+		t.Run(fmt.Sprintf("test case %d", i), func(t *testing.T) {
+			u, err := url.Parse(tcase.uri)
+			require.NoError(t, err)
+			uri := URI{uri: tcase.uri, parsed: *u}
+
+			o, err := url.Parse(tcase.wantURI)
+			require.NoError(t, err)
+			want := URI{uri: tcase.wantURI, parsed: *o, name: tcase.wantName}
+
+			// sut
+			actual := Join(uri, tcase.elems...)
+			assert.Equal(t, want, actual)
+		})
+	}
+}

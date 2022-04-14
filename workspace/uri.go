@@ -3,6 +3,7 @@ package workspace
 import (
 	"fmt"
 	"net/url"
+	"path"
 	"path/filepath"
 
 	"github.com/ernestrc/go-tui/util"
@@ -107,4 +108,19 @@ func DefaultSwapDirectory(file URI) (URI, error) {
 	swapDir, _ := swapFileName(filepath.Dir(file.parsed.Path), file.parsed.Path)
 	file.parsed.Path = swapDir
 	return makeURI(&file.parsed)
+}
+
+// Join joins any number of path elements into this URI's path, separating them
+// with slashes. For more details see path.Join.
+func Join(uri URI, elem ...string) URI {
+	pathElems := make([]string, 0, len(elem)+1)
+	pathElems = append(pathElems, uri.Path())
+	pathElems = append(pathElems, elem...)
+	newPath := path.Join(pathElems...)
+	uri.parsed.Path = newPath
+	ret, err := ParseURI(uri.parsed.String())
+	if err != nil {
+		panic("failed to parse internally generated URI")
+	}
+	return ret
 }
