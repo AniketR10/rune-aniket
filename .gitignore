@@ -20,3 +20,4 @@ target
 
 # fractal swap files
 *.swp
+.sixrc
