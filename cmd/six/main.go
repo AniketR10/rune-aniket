@@ -33,7 +33,7 @@ func init() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	defaultConfigPath := path.Join(home, ".six.yml")
+	defaultConfigPath := path.Join(home, ".sixrc")
 	configpath = flag.String("c", defaultConfigPath, "config file path")
 
 	Version = fmt.Sprintf("%s (HEAD is %s)", Tag, Commit)
