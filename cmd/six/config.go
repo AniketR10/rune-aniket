@@ -5,14 +5,17 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/ernestrc/go-tui/browser"
+	"github.com/ernestrc/go-tui/cell"
 	"github.com/ernestrc/go-tui/component"
 	"github.com/ernestrc/go-tui/handler"
 	"github.com/ernestrc/go-tui/plugin"
 	"github.com/ernestrc/go-tui/term"
 	"github.com/ernestrc/go-tui/text"
+	"github.com/ernestrc/go-tui/workspace"
 	log "github.com/sirupsen/logrus"
 	yaml "gopkg.in/yaml.v3"
 )
@@ -60,6 +63,27 @@ type pluginConfig struct {
 type ideConfig struct {
 	cfg    map[string]interface{}
 	errors map[string]error
+}
+
+func overrideConfig(ideConfig, cfg map[string]interface{}) {
+	for key, new := range cfg {
+		prev, ok := ideConfig[key]
+		if !ok {
+			ideConfig[key] = new
+			continue
+		}
+		prevMap, ok := prev.(map[string]interface{})
+		if !ok {
+			ideConfig[key] = new
+			continue
+		}
+		newMap, ok := new.(map[string]interface{})
+		if !ok {
+			ideConfig[key] = new
+			continue
+		}
+		overrideConfig(prevMap, newMap)
+	}
 }
 
 func initConfig(c *ideConfig, cfg map[string]interface{}) {
@@ -773,14 +797,36 @@ func decodeConfig(r io.Reader) (cfg map[string]interface{}, err error) {
 	return
 }
 
+func loadLocalConfig(m *workspace.Manager, cwd workspace.URI, c *ideConfig) error {
+	localConfigPath := workspace.Join(cwd, ".sixrc")
+	buf := cell.NewBuffer()
+	closer, err := m.Open(localConfigPath, buf, workspace.URI{}, true)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("failed to stat local config file: %s", err)
+	}
+	defer closer.Close()
+
+	reader := strings.NewReader(buf.String())
+	cfg, err := decodeConfig(reader)
+	if err != nil {
+		return err
+	}
+
+	overrideConfig(c.cfg, cfg)
+	return nil
+}
+
 func loadConfig(c *ideConfig, configpath string) error {
 	f, err := os.Open(configpath)
 	if err != nil {
 		initDefaultConfig(c)
-		if err != os.ErrNotExist {
-			return err
+		if os.IsNotExist(err) {
+			return nil
 		}
-		return nil
+		return err
 	}
 
 	cfg, err := decodeConfig(f)

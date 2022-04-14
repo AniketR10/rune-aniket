@@ -122,6 +122,13 @@ func (i *IDE) init(initTUI bool, cwd, cfgfilename, recfilename string, filenames
 		return err
 	}
 
+	// workspace manager local configs and logger config for Manager
+	// are ignored
+	localConfigErr := loadLocalConfig(i.workspace, cwdURI, &i.ideConfig)
+	if localConfigErr != nil {
+		configErr = multierr.Append(configErr, localConfigErr)
+	}
+
 	if recfilename != "" {
 		recFile, err := i.workspace.URI(recfilename)
 		if err != nil {
