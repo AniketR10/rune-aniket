@@ -726,4 +726,41 @@ func TestExExit(t *testing.T) {
 func initExForTesting(t *testing.T, ex *ex, ed text.Editor, opts ...text.Option) {
 	require.NoError(t, ex.doInit(text.Mock(), &testWorkspace{}, opts...))
 	require.NoError(t, ex.comp.Init(ex.ed, &testWorkspace{}, ex.config))
+	ex.command.History.Init(ex.Browser(), "docID", 10)
+}
+
+func TestCommandHistory(t *testing.T) {
+	cases := []testutil.HandlerSequenceTestCase{
+		{":e hello.go>:e wi.go>1234",
+			`┌──────────────────┐
+│hello.go  wi.go   │
+├──────────────────┤
+│EEEEEEEEEEEEEEEEEE│
+│EEEEEEEEEEEEEEEEEE│
+│EEEEEEEEEEEEEEEEEE│
+│EEEEEEEEEEEEEEEEEE│
+│EEEEEEEEEEEEEEEEEE│
+│EEEEEEEEEEEEEEEEEE│
+└──────────────────┘`},
+		{":::>",
+			`┌──────────────────┐
+│hello.go  wi.go   │
+├──────────────────┤
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+└──────────────────┘`},
+	}
+
+	b := new(ex)
+	opts := []text.Option{
+		text.WithCommandEvent(testCommandEvent),
+	}
+	initExForTesting(t, b, text.Mock(), opts...)
+	defer b.Close()
+
+	testutil.TestHandlerSequence(t, b, 20, 10, cases)
 }

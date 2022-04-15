@@ -29,6 +29,7 @@ type Config struct {
 	Filepaths               []workspace.URI
 	RecoveryFilepath        workspace.URI
 	CommandEvent            term.Event
+	CommandMaxHistory       int
 	CommandKeyBindings      map[term.Event]string
 	CommandSequenceBindings map[handler.Sequence]string
 	SequencerTimeout        time.Duration
@@ -60,6 +61,7 @@ func DefaultConfig() Config {
 		Filepaths:               nil,
 		RecoveryFilepath:        workspace.URI{},
 		CommandEvent:            term.Event{Ch: ':', Type: term.EventKey},
+		CommandMaxHistory:       10,
 		Config:                  browser.DefaultConfig(),
 		Storage:                 document.NewInMemoryCache(),
 		DirtyTabAttr:            term.Attributes{Fg: term.AttrBold},
@@ -194,6 +196,13 @@ func WithCommandKeyBinding(ev term.Event, cmd string) Option {
 		}
 		sum := term.Event{Type: term.EventKey, Mod: ev.Mod, Ch: ev.Ch, Key: ev.Key}
 		cfg.CommandKeyBindings[sum] = cmd
+	}
+}
+
+// WithCommandMaxHistory sets the max command history to store for searching back through it.
+func WithCommandMaxHistory(max int) Option {
+	return func(cfg *Config) {
+		cfg.CommandMaxHistory = max
 	}
 }
 

@@ -16,8 +16,9 @@ import (
 )
 
 var (
-	defaultCommand    = `set -o pipefail; command find -L . -mindepth 1 \( -path '*/\.*' -o -fstype 'sysfs' -o -fstype 'devfs' -o -fstype 'devtmpfs' -o -fstype 'proc' \) -prune -o -type f -print -o -type l -print 2> /dev/null | cut -b3-`
-	defaultHistoryKey = term.Event{Type: term.EventKey, Key: term.KeyCtrlP}
+	defaultCommand           = `set -o pipefail; command find -L . -mindepth 1 \( -path '*/\.*' -o -fstype 'sysfs' -o -fstype 'devfs' -o -fstype 'devtmpfs' -o -fstype 'proc' \) -prune -o -type f -print -o -type l -print 2> /dev/null | cut -b3-`
+	defaultHistoryKey        = term.Event{Type: term.EventKey, Key: term.KeyCtrlP}
+	defaultHistoryDocumentID = "plugin-fuzzy-file-history"
 )
 
 func newHandler(grants []plugin.Grant, broker proto.MuxBroker,
@@ -37,7 +38,7 @@ func newHandler(grants []plugin.Grant, broker proto.MuxBroker,
 		historyKey = defaultHistoryKey
 	}
 	return finder.New(grants, broker, invokeWindow, config,
-		historyKey, cmdStr, func(workspace workspace.Workspace, file string) (
+		historyKey, defaultHistoryDocumentID, cmdStr, func(workspace workspace.Workspace, file string) (
 			workspace.URI, term.Coordinates,
 		) {
 			uri, _ := workspace.URI(file)

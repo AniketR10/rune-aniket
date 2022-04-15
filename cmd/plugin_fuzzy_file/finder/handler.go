@@ -2,7 +2,6 @@ package finder
 
 import (
 	"bufio"
-	"context"
 	"fmt"
 	"io"
 	"os"
@@ -10,7 +9,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/ernestrc/blue/datastore/document"
 	"github.com/ernestrc/go-tui"
 	"github.com/ernestrc/go-tui/browser"
 	"github.com/ernestrc/go-tui/handler/search"
@@ -23,10 +21,9 @@ import (
 )
 
 const (
-	readerBufferSize        = 64 * 1024
-	defaultStoreTimeout     = 5 * time.Second
-	searchHistoryDocumentID = "search-history"
-	defaultMaxHistory       = 20
+	readerBufferSize    = 64 * 1024
+	defaultStoreTimeout = 5 * time.Second
+	defaultMaxHistory   = 20
 )
 
 func Permissions() []plugin.Permission {
@@ -59,11 +56,7 @@ type fuzzyFinderHandler struct {
 	listHandler  tui.Handler
 	killed       bool
 
-	history struct {
-		idx     int
-		max     int
-		Queries []string
-	}
+	history search.History
 }
 
 func (h *fuzzyFinderHandler) execCommand(command string) (workspace.Pid, error) {
@@ -111,50 +104,25 @@ func (h *fuzzyFinderHandler) readCommand(src io.Reader) {
 	}
 }
 
-func (h *fuzzyFinderHandler) getSearchHistory() error {
-	ctx, cancel := context.WithTimeout(context.Background(), defaultStoreTimeout)
-	defer cancel()
-
-	err := h.s.Get(ctx, searchHistoryDocumentID, &h.history)
-	if err == document.ErrNotFound {
-		err = nil
-	}
-	if err == nil {
-		log.Debugf("retrieved query history; %#v", h.history.Queries)
-	}
-
-	return err
-}
-
 func (h *fuzzyFinderHandler) addSearchHistory(searchQuery string) {
 	if h.s == nil {
-		log.Debugf("Storage permission not granted; ignoring history feature")
+		log.Debug("Storage permission not granted; ignoring history feature")
 		return
 	}
 
 	if searchQuery == "" {
+		log.Trace("skipping persisting of empty query")
 		return
 	}
-
-	h.history.Queries = append(h.history.Queries, "")
-	copy(h.history.Queries[1:], h.history.Queries)
-	h.history.Queries[0] = searchQuery
-
-	if len(h.history.Queries) > h.history.max {
-		h.history.Queries = h.history.Queries[:h.history.max]
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), defaultStoreTimeout)
-	defer cancel()
 
 	h.mu.Unlock()
 	defer h.mu.Lock()
 
-	err := h.s.Set(ctx, searchHistoryDocumentID, &h.history)
+	err := h.history.Add(searchQuery)
 	if err != nil {
 		log.Errorf("error adding search history: %v", err)
 	} else {
-		log.Debugf("added %s to query history", searchQuery)
+		log.Debugf("added %q to query history: %v", searchQuery, h.history)
 	}
 }
 
@@ -266,6 +234,7 @@ func (h *fuzzyFinderHandler) scanData() {
 
 func (h *fuzzyFinderHandler) initGrants(
 	broker proto.MuxBroker, grants []plugin.Grant,
+	historyDocumentID string, maxHistory int,
 ) (err error) {
 	for _, grant := range grants {
 		switch grant.Permission {
@@ -282,7 +251,7 @@ func (h *fuzzyFinderHandler) initGrants(
 		case plugin.PermissionBrowserStorage:
 			h.s, err = plugin.Storage(grant.Token, broker)
 			if err == nil {
-				err = h.getSearchHistory()
+				err = h.history.Init(h.s, historyDocumentID, maxHistory)
 			}
 		}
 		if err != nil {
@@ -300,11 +269,20 @@ func (h *fuzzyFinderHandler) initGrants(
 func New(
 	grants []plugin.Grant, broker proto.MuxBroker,
 	invokeWindow browser.Window, config plugin.Config,
-	historyKey term.Event, command string,
+	historyKey term.Event, historyDocumentID string, command string,
 	getResource func(exec workspace.Workspace, line string) (workspace.URI, term.Coordinates),
 ) (tui.Handler, error) {
 	h := new(fuzzyFinderHandler)
-	err := h.initGrants(broker, grants)
+	maxHistory, err := config.GetInt("history")
+	if err != nil {
+		if err != plugin.ErrNotFound {
+			log.Errorf("failed to load 'history' from config: %v", err)
+		}
+		maxHistory = defaultMaxHistory
+	} else {
+		log.Tracef("loaded 'history' from config: %v", maxHistory)
+	}
+	err = h.initGrants(broker, grants, historyDocumentID, maxHistory)
 	if err != nil {
 		return nil, err
 	}
@@ -324,16 +302,6 @@ func New(
 		h.openResource(searchQuery, item)
 		h.addSearchHistory(searchQuery)
 	})
-
-	h.history.max, err = config.GetInt("history")
-	if err != nil {
-		if err != plugin.ErrNotFound {
-			log.Errorf("failed to load 'history' from config: %v", err)
-		}
-		h.history.max = defaultMaxHistory
-	} else {
-		log.Tracef("loaded 'history' from config: %v", h.history.max)
-	}
 
 	go h.scanData()
 
@@ -414,17 +382,13 @@ func (h *fuzzyFinderHandler) Draw(w term.Writer) {
 }
 
 func (h *fuzzyFinderHandler) writeLastSearchQuery() {
-	if len(h.history.Queries) == 0 {
+	search := h.history.Next()
+	if search == "" {
 		log.Debugf("no search queries stored")
 		return
 	}
-	search := h.history.Queries[h.history.idx]
 	h.list.Buffer().Reset()
 	h.list.Buffer().WriteString(search)
-	h.history.idx++
-	if h.history.idx == len(h.history.Queries) {
-		h.history.idx = 0
-	}
 }
 
 func (h *fuzzyFinderHandler) Handle(ev term.Event) (exit, handled bool) {

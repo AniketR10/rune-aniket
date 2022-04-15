@@ -151,6 +151,7 @@ func (i *IDE) init(initTUI bool, cwd, cfgfilename, recfilename string, filenames
 		text.WithWindowManagerConfig(i.ideConfig.windowManagerConfig()),
 		text.WithFrameUnionCharSet(i.ideConfig.frameUnionCharset()),
 		text.WithCommandEvent(term.Event{Type: term.EventKey, Ch: ':'}),
+		text.WithCommandMaxHistory(i.ideConfig.commandMaxHistory()),
 		text.WithMessageBarAttr(i.ideConfig.messageBarAttr()),
 		text.WithFocusTabAttr(i.ideConfig.focusTabAttr()),
 		text.WithNonFocusTabAttr(i.ideConfig.nonFocusTabAttr()),

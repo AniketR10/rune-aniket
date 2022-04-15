@@ -88,6 +88,7 @@ func newTestRPCBrowser(t *testing.T,
 			return nil, nil, err
 		}
 		require.NoError(t, b.comp.Init(ed, &testWorkspace{}, b.config))
+		b.command.History.Init(b.Browser(), "docID", 10)
 
 		lis, err := net.Listen("tcp", ":0")
 		require.NoError(t, err)

@@ -17,7 +17,10 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-const defaultCommand = `grep -n -r "" .`
+const (
+	defaultCommand           = `grep -n -r "" .`
+	defaultHistoryDocumentID = "plugin-fuzzy-line-history"
+)
 
 var defaultHistoryKey = term.Event{Type: term.EventKey, Key: term.KeyCtrlBackslash}
 
@@ -50,7 +53,7 @@ func newHandler(grants []plugin.Grant, broker proto.MuxBroker,
 		historyKey = defaultHistoryKey
 	}
 	return finder.New(grants, broker, invokeWindow,
-		config, historyKey, cmdStr, parseLine)
+		config, historyKey, defaultHistoryDocumentID, cmdStr, parseLine)
 }
 
 func main() {

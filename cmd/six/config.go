@@ -187,6 +187,23 @@ func (c ideConfig) commandOverlayHeight() (ret int) {
 	return
 }
 
+func (c ideConfig) commandMaxHistory() (ret int) {
+	ret = text.DefaultConfig().CommandMaxHistory
+	b, ok := c.command()
+	if !ok {
+		return
+	}
+	height, err := b.GetInt("max_history")
+	if err != nil {
+		if err != plugin.ErrNotFound {
+			c.errors["command.max_history"] = err
+		}
+		return
+	}
+	ret = height
+	return
+}
+
 func (c ideConfig) prompt() (plugin.Config, bool) {
 	b, ok := c.browser()
 	if !ok {

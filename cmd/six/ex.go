@@ -18,6 +18,10 @@ import (
 	"github.com/ernestrc/go-tui/workspace"
 )
 
+const (
+	commandHistoryDocumentID = "ex-command-history"
+)
+
 var (
 	commandBarAttr      = term.Attributes{Bg: term.ColorWhite, Fg: term.ColorBlack}
 	errInvalidSetCursor = errors.New("Cannot set cursor on this buffer")
@@ -67,6 +71,7 @@ type ex struct {
 		cell.Buffer
 
 		search.List
+		search.History
 		component.Frame
 		component.Overlay
 	}
@@ -95,7 +100,13 @@ func (e *ex) init(ed text.Editor, m workspaceURI, opts ...text.Option) (
 	if err != nil {
 		return
 	}
-	return e.comp.Init(ed, m, e.config)
+	err = e.comp.Init(ed, m, e.config)
+	if err != nil {
+		return
+	}
+	e.command.History.Init(e.Browser(),
+		commandHistoryDocumentID, e.config.CommandMaxHistory)
+	return nil
 }
 
 // init is used for internal testing
@@ -310,8 +321,33 @@ func (e *ex) setError(err error) {
 	e.comp.Browser().SetMessage("Error: %s", err)
 }
 
+func (e *ex) writeLastCommandQuery() {
+	cmd := e.command.History.Next()
+	if cmd == "" {
+		return
+	}
+	e.command.Buffer.Reset()
+	e.command.Buffer.WriteString(cmd)
+
+	listCmdArgs := strings.Split(cmd, " ")
+	listCmd := listCmdArgs[0]
+	if len(listCmd) > 0 {
+		e.command.argsStartIdx = len(listCmd)
+	} else {
+		e.command.argsStartIdx = 0
+	}
+	e.command.List.Buffer().Reset()
+	e.command.List.Buffer().WriteString(listCmd)
+	e.command.List.Wait()
+}
+
 func (e *ex) handleCommand(ev term.Event) (quit, handled bool) {
 	handled = true
+
+	if ev == e.config.CommandEvent {
+		e.writeLastCommandQuery()
+		return
+	}
 
 	switch ev.Key {
 	case term.KeyEnter:
@@ -320,10 +356,16 @@ func (e *ex) handleCommand(ev term.Event) (quit, handled bool) {
 
 		command, _ := e.command.List.Focus()
 		var err error
-		quit, err = e.runCommand(string(command), e.command.Buffer.String())
+		bufStr := e.command.Buffer.String()
+		quit, err = e.runCommand(string(command), bufStr)
 		e.setNormalMode()
 		if err != nil {
 			e.setError(err)
+		} else if bufStr != "" {
+			err := e.command.History.Add(bufStr)
+			if err != nil {
+				e.setError(err)
+			}
 		}
 	case term.KeyEsc:
 		e.setNormalMode()
@@ -363,7 +405,7 @@ func (e *ex) handleCommand(ev term.Event) (quit, handled bool) {
 	if ev.Ch == ' ' && e.command.argsStartIdx == 0 {
 		e.command.argsStartIdx = e.command.Buffer.Size()
 	}
-	e.command.Buffer.WriteString(string([]rune{ev.Ch}))
+	e.command.Buffer.WriteString(string(ev.Ch))
 
 	if e.command.argsStartIdx == 0 {
 		e.command.List.Buffer().WriteString(string(ev.Ch))
