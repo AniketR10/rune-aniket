@@ -30,6 +30,7 @@ type browserConstructor func(ed text.Editor, opts ...text.Option) (tui.Handler, 
 type testFileBuffer struct {
 	flushErr error
 	closeErr error
+	closed bool
 }
 
 func (t *testFileBuffer) Flush() error {
@@ -37,14 +38,20 @@ func (t *testFileBuffer) Flush() error {
 }
 
 func (t *testFileBuffer) Close() error {
+	t.closed = true
 	return t.closeErr
 }
 
-type testWorkspace struct{}
+type testWorkspace struct {
+	buf *testFileBuffer
+}
 
 func (w *testWorkspace) Open(filePath workspace.URI, buf *cell.Buffer, swapDir workspace.URI, readOnly bool) (
 	workspace.FlusherCloser, error,
 ) {
+	if w.buf != nil {
+		return w.buf, nil
+	}
 	return &testFileBuffer{}, nil
 }
 
@@ -400,6 +407,17 @@ EEEE`},
 │BBBBBBBBBBBBBBBBBB│
 │BBBBBBBBBBBBBBBBBB│
 └──────────────────┘`},
+		{":reload>___", // test reload non file
+			`┌──────────────────┐
+│other.go  bugz    │
+├──────────────────┤
+│┌────┐BBBBBBBBBBBB│
+││AAAA│BBBBBBBBBBBB│
+││AAAA│BBBBBBBBBBBB│
+│└────┘BBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBB│
+│Error: not a file │
+└──────────────────┘`},
 	}
 
 	testutil.TestHandlerSequence(t, bh, 20, 10, cases)
@@ -416,7 +434,7 @@ EEEE`},
 │BBBBBBBBBBBBBBBBBB│
 │BBBBBBBBBBBBBBBBBB│
 │BBBBBBBBBBBBBBBBBB│
-│BBBBBBBBBBBBBBBBBB│
+│Error: not a file │
 └──────────────────┘`},
 	}
 	testutil.TestHandlerSequence(t, bh, 20, 10, cases)
@@ -526,6 +544,17 @@ func TestMultipleFilesStartup(t *testing.T) {
 │AAAAAAAAAAAAAAAAAA│
 │AAAAAAAAAAAAAAAAAA│
 └──────────────────┘`},
+		{"#:reload>",
+			`┌──────────────────┐
+│wi.go  cabin.go   │
+├──────────────────┤
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+└──────────────────┘`},
 	}
 
 	file1, err := workspace.ParseURI("file:///cabin.go")
@@ -536,11 +565,16 @@ func TestMultipleFilesStartup(t *testing.T) {
 	opts := []text.Option{
 		text.WithFile(file1),
 		text.WithFile(file2),
+		text.WithCommandEvent(testCommandEvent),
 	}
-	initExForTesting(t, b, text.Mock(), opts...)
+	mockBuf := testFileBuffer{}
+	workspace := testWorkspace{buf: &mockBuf}
+	initExForTestingWithWorkspace(t, b, &workspace, text.Mock(), opts...)
 	defer b.Close()
 
 	testutil.TestHandlerSequence(t, b, 20, 10, cases)
+
+	assert.True(t, mockBuf.closed)
 }
 
 func TestExCommandResponsive(t *testing.T) {
@@ -723,10 +757,17 @@ func TestExExit(t *testing.T) {
 	})
 }
 
-func initExForTesting(t *testing.T, ex *ex, ed text.Editor, opts ...text.Option) {
-	require.NoError(t, ex.doInit(text.Mock(), &testWorkspace{}, opts...))
-	require.NoError(t, ex.comp.Init(ex.ed, &testWorkspace{}, ex.config))
+func initExForTestingWithWorkspace(
+	t *testing.T, ex *ex, workspace *testWorkspace,
+	ed text.Editor, opts ...text.Option,
+) {
+	require.NoError(t, ex.doInit(ed, workspace, opts...))
+	require.NoError(t, ex.comp.Init(ex.ed, workspace, ex.config))
 	ex.command.History.Init(ex.Browser(), "docID", 10)
+}
+
+func initExForTesting(t *testing.T, ex *ex, ed text.Editor, opts ...text.Option) {
+	initExForTestingWithWorkspace(t, ex, &testWorkspace{}, ed, opts...)
 }
 
 func TestCommandHistory(t *testing.T) {

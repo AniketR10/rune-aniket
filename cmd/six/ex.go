@@ -38,6 +38,7 @@ var (
 		"forceQuit!":      (*ex).forceQuit,
 		"quit":            (*ex).forceQuit,
 		"edit":            (*ex).editFile,
+		"reload":          (*ex).reloadFile,
 	}
 )
 
@@ -277,6 +278,18 @@ func (e *ex) runSingleCommand(cmd string) (quit bool, err error) {
 	return false, e.dispatchCommand(cmd)
 }
 
+func (e *ex) editFileURI(uri workspace.URI) error {
+	h, err := e.comp.Open(uri)
+	if err != nil {
+		return err
+	}
+	err = e.comp.Browser().Focus().SetContent(h)
+	if err == browser.ErrTabNotFree {
+		err = nil
+	}
+	return err
+}
+
 func (e *ex) editFile(args ...string) (bool, error) {
 	if len(args) == 0 {
 		return false, errors.New("expected file name")
@@ -289,15 +302,18 @@ func (e *ex) editFile(args ...string) (bool, error) {
 			return false, err
 		}
 	}
-	h, err := e.comp.Open(uri)
-	if err != nil {
-		return false, err
+	return false, e.editFileURI(uri)
+}
+
+func (e *ex) reloadFile(args ...string) (bool, error) {
+	b := e.comp.Browser()
+	focus := b.Focus()
+	uri, _, ok := e.handlerInFocus()
+	if !ok {
+		return false, errors.New("not a file")
 	}
-	err = e.comp.Browser().Focus().SetContent(h)
-	if err == browser.ErrTabNotFree {
-		return false, nil
-	}
-	return false, err
+	b.RemoveWindowContent(focus)
+	return false, e.editFileURI(uri)
 }
 
 func (e *ex) runCommand(cmd string, cmdAndArgs string) (quit bool, err error) {
