@@ -45,9 +45,9 @@ func (s simpleHandler) Handle(ev term.Event) (exit, handled bool) {
 	case term.KeyEsc:
 		handled = true
 		exit = true
-	case term.KeyArrowDown:
+	case term.KeyCtrlJ, term.KeyArrowDown:
 		handled = s.FocusDown()
-	case term.KeyArrowUp:
+	case term.KeyCtrlK, term.KeyArrowUp:
 		handled = s.FocusUp()
 	default:
 		_, handled = s.ed.Handle(ev)
