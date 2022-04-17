@@ -625,7 +625,7 @@ func (h *lspEditorHandler) getServer(languageID string) (
 	h.mu.Unlock()
 	if !ok {
 		// language server not configured for language
-		return proc, true
+		return execServer{}, false
 	}
 
 	srv, err := h.startLanguageServer(languageID, cmd)

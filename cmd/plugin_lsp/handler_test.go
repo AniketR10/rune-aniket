@@ -18,8 +18,9 @@ import (
 )
 
 var (
-	filename1    workspace.URI
-	filecontent1 = `package me.drton.jmavsim;
+	filename1         workspace.URI
+	nonConfiguredFile workspace.URI
+	filecontent1      = `package me.drton.jmavsim;
 public class	Rotor {
      sta  mtyp;
 
@@ -47,6 +48,10 @@ public class	Rotor {
 func init() {
 	var err error
 	filename1, err = workspace.ParseURI("file:///wa_tup.go")
+	if err != nil {
+		panic(err)
+	}
+	nonConfiguredFile, err = workspace.ParseURI("file:///server.MISSING")
 	if err != nil {
 		panic(err)
 	}
@@ -195,18 +200,39 @@ func dispatchFlush(
 }
 
 func TestLspHandlerHandleOpen(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
+	t.Run("happy path", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
 
-	log.SetLevel(log.TraceLevel)
+		log.SetLevel(log.TraceLevel)
 
-	ed := text.NewMockEditor(ctrl)
-	cfg := makePluginConfig()
-	server := NewMockServer(ctrl)
+		ed := text.NewMockEditor(ctrl)
+		cfg := makePluginConfig()
+		server := NewMockServer(ctrl)
 
-	h := newTestLspHandler(ctrl, ed, cfg, server)
-	dispatchOpen(t, h, server, ed, filename1, filecontent1,
-		tokenData1, h.semanticTokensListID, expectedLocations1)
+		h := newTestLspHandler(ctrl, ed, cfg, server)
+		dispatchOpen(t, h, server, ed, filename1, filecontent1,
+			tokenData1, h.semanticTokensListID, expectedLocations1)
+	})
+	t.Run("file with missing configuration does not panic", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		log.SetLevel(log.TraceLevel)
+
+		ed := text.NewMockEditor(ctrl)
+		cfg := makePluginConfig()
+		server := NewMockServer(ctrl)
+
+		h := newTestLspHandler(ctrl, ed, cfg, server)
+		evOpen := text.Event{
+			Type:     text.EventTypeOpen,
+			URI:      nonConfiguredFile,
+			Content:  "",
+			Resource: text.NewTestHandler(),
+		}
+		assert.False(t, h.Handle(context.Background(), evOpen))
+	})
 }
 
 func TestLspHandlerHandleFlush(t *testing.T) {
