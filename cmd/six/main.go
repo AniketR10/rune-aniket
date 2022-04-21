@@ -10,6 +10,7 @@ import (
 	"path"
 	"runtime"
 
+	"github.com/ernestrc/go-tui/proto"
 	"github.com/ernestrc/go-tui/workspace"
 	log "github.com/sirupsen/logrus"
 )
@@ -73,6 +74,8 @@ func main() {
 			log.Println(http.ListenAndServe(":6060", nil))
 		}()
 	}
+
+	proto.DisableGRPCLogging()
 
 	if *flagWorkspaceServer != "" {
 		uri, err := workspace.CurrentUserHostURI(*flagWorkspaceServer)

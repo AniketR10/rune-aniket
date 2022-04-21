@@ -4,7 +4,9 @@ import (
 	context "context"
 	fmt "fmt"
 	"io"
+	"io/ioutil"
 	math "math"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -16,6 +18,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	grpc "google.golang.org/grpc"
 	"google.golang.org/grpc/connectivity"
+	"google.golang.org/grpc/grpclog"
 )
 
 var zeroCell = Cell{}
@@ -274,4 +277,12 @@ func NewURIFromProto(u *URI) (workspace.URI, error) {
 // NewProtoURI maps a workspace.URI into a proto.URI.
 func NewURI(u workspace.URI) *URI {
 	return &URI{Uri: u.String()}
+}
+
+// DisableGRPCLogging disables grpc stderr loggers.
+func DisableGRPCLogging() {
+	os.Setenv("GRPC_GO_LOG_SEVERITY_LEVEL", "FATAL")
+	os.Setenv("GRPC_GO_LOG_VERBOSITY_LEVEL", "0")
+	discard := grpclog.NewLoggerV2WithVerbosity(ioutil.Discard, ioutil.Discard, ioutil.Discard, 0)
+	grpclog.SetLoggerV2(discard)
 }

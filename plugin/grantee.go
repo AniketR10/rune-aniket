@@ -118,6 +118,8 @@ func Serve(grantee Grantee, request ...Permission) {
 	log.SetLevel(level)
 	log.SetFormatter(formatter)
 
+	proto.DisableGRPCLogging()
+
 	pluginMap := map[string]plugin.Plugin{
 		typeGranteePlugin: &granteePlugin{
 			logger:    &pluginLogger,
