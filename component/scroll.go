@@ -514,17 +514,20 @@ func (s *Scroll) Draw(writer term.Writer) {
 	s.draw(writer)
 }
 
-// WordAt returns the word at pos or an empty string if there's
-// no word at pos.
+// WordAt returns the word at the given position or an empty string if token
+// at the given position is not a word. See TokenAt for more details.
 func (s *Scroll) WordAt(pos term.Coordinates) string {
-	return s.tokenAt(pos, func(c rune) bool {
+	return s.TokenAt(pos, func(c rune) bool {
 		return (c >= 'A' && c <= 'Z') ||
 			(c >= 'a' && c <= 'z') || c == '_' ||
 			(c >= '0' && c <= '9')
 	})
 }
 
-func (s *Scroll) tokenAt(pos term.Coordinates, is func(rune) bool) string {
+// TokenAt returns the token that satisfies the isAllowed function, and starts,
+// ends or simply is position at the given position. It returns an empty string
+// if the token at the given position does not satisfy isAllowed.
+func (s *Scroll) TokenAt(pos term.Coordinates, isAllowed func(rune) bool) string {
 	var b strings.Builder
 	cells := s.buf.RawCells()
 	rows := s.buf.Rows()
@@ -532,7 +535,7 @@ func (s *Scroll) tokenAt(pos term.Coordinates, is func(rune) bool) string {
 	start := pos
 	for start.Y < rows && start.X < s.buf.Columns(start.Y) && start.X >= 0 {
 		c := cells[start.Y][start.X]
-		if is(c.Ch) {
+		if isAllowed(c.Ch) {
 			start.X--
 			continue
 		}
@@ -547,7 +550,7 @@ func (s *Scroll) tokenAt(pos term.Coordinates, is func(rune) bool) string {
 	end := start
 	for end.Y < rows && end.X < s.buf.Columns(end.Y) && end.X >= 0 {
 		c := cells[end.Y][end.X]
-		if is(c.Ch) {
+		if isAllowed(c.Ch) {
 			end.X++
 			b.WriteRune(c.Ch)
 			continue
