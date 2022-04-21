@@ -37,16 +37,10 @@ type Scroll struct {
 }
 
 // NewScroll allocates storage for a Scroll and initializes it.
-func NewScroll() (s *Scroll) {
+func NewScroll(buf *cell.Buffer) (s *Scroll) {
 	s = new(Scroll)
-	s.Init()
+	s.Init(buf)
 	return
-}
-
-// Init initializes this scroll and allocates a new cell.Buffer.
-func (s *Scroll) Init() {
-	buf := cell.NewBuffer()
-	s.InitWithBuffer(buf)
 }
 
 func (s *Scroll) initBuffer(buf *cell.Buffer) {
@@ -59,8 +53,8 @@ func (s *Scroll) initBuffer(buf *cell.Buffer) {
 	s.buf.Subscribe(s.searcher)
 }
 
-// InitWithBuffer initializes this scroll with buf.
-func (s *Scroll) InitWithBuffer(buf *cell.Buffer) {
+// Init initializes this scroll with buf.
+func (s *Scroll) Init(buf *cell.Buffer) {
 	if s.ResultsAttr == (term.Attributes{}) {
 		s.ResultsAttr.Fg, s.ResultsAttr.Bg = term.AttrReverse, term.AttrReverse
 	}

@@ -21,6 +21,7 @@ const (
 	// PermissionBrowserEventPublisher requests access to publish term events.
 	// This is useful if your plugin handler does async updates to its state, as
 	// it enables interrupting the main event loop to redraw components.
+	// TODO rename to Interrupt
 	PermissionBrowserEventPublisher = "_PermBrowserEventPublisher"
 	// PermissionBrowserStorage requests access to storage.
 	PermissionBrowserStorage = "_PermBrowserStorage"

@@ -14,7 +14,7 @@ func TestDeleteClipboard(t *testing.T) {
 	buf := cell.NewBuffer()
 	clip := NewInMemoryClipboard()
 	var scroll component.Scroll
-	scroll.InitWithBuffer(buf)
+	scroll.Init(buf)
 	c := NewCursor(&scroll)
 	WithCopyDelete("", clip, c, buf)
 

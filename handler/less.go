@@ -366,13 +366,13 @@ func (l *Less) Init(cfg LessConfig) {
 // If config is nil, the default one is used.
 func (l *Less) InitWithBuffer(buf *cell.Buffer, cfg LessConfig) {
 	l.delEOF = false
-	l.scroll.InitWithBuffer(buf)
+	l.scroll.Init(buf)
 	if cfg.ResAttr == (term.Attributes{}) {
 		cfg.ResAttr = DefaultLessConfig().ResAttr
 	}
 
 	l.config = cfg
-	l.searchScroll.C = component.NewScroll()
+	l.searchScroll.C = component.NewScroll(cell.NewBuffer())
 
 	// initialize message comps
 	l.setMessage("")

@@ -90,7 +90,7 @@ func (s *AttrSetter) Draw(w term.Writer) {
 	}
 
 	var sc Scroll
-	sc.InitWithBuffer(&buf.Buffer)
+	sc.Init(&buf.Buffer)
 	sc.Resize(s.width, s.height)
 	sc.Draw(w)
 }

@@ -59,7 +59,7 @@ diff_buf_adjust(win_T *win)
 } /* { */ `
 
 func setupCursorContent(t *testing.T, width, height int, cont string) (e *Cursor) {
-	scroll := component.NewScroll()
+	scroll := component.NewScroll(cell.NewBuffer())
 	e = NewCursor(scroll)
 	scroll.Buffer().ReadFrom(strings.NewReader(cont))
 	scroll.Resize(width, height)
@@ -758,7 +758,7 @@ func TestCursorInsertRow(t *testing.T) {
 }
 
 func TestCursorInsertRowBelow(t *testing.T) {
-	scroll := component.NewScroll()
+	scroll := component.NewScroll(cell.NewBuffer())
 	scroll.Resize(10, 10)
 	cursor := NewCursor(scroll)
 	in := scroll.Buffer()
@@ -1896,9 +1896,8 @@ func TestFileCursorIntegration(t *testing.T) {
 			defer file.Close()
 			defer os.Remove(file.Name())
 
-			scroll := component.NewScroll()
+			scroll := component.NewScroll(b)
 			scroll.Resize(10, 10)
-			scroll.InitWithBuffer(b)
 			cursor := NewCursor(scroll)
 
 			uri, err := workspace.CurrentUserHostURI(file.Name())
@@ -1919,7 +1918,7 @@ func TestFileCursorIntegration(t *testing.T) {
 }
 
 func newBenchmarkScroll(width, height int, fortunes int) (scroll *component.Scroll) {
-	scroll = component.NewScroll()
+	scroll = component.NewScroll(cell.NewBuffer())
 	for i := 0; i < fortunes; i++ {
 		_, _ = scroll.Buffer().ReadFrom(strings.NewReader(sampleSnippet))
 	}

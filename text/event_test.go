@@ -31,8 +31,7 @@ func init() {
 
 func makeEventIntegrationCase(content string) (in, out *cell.Buffer, cursor *Cursor) {
 	in, out = cell.NewBuffer(), cell.NewBuffer()
-	scroll := component.NewScroll()
-	scroll.InitWithBuffer(in)
+	scroll := component.NewScroll(in)
 	scroll.Resize(100, 100)
 	cursor = NewCursor(scroll)
 	in.WriteString(content)

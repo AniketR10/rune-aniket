@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/ernestrc/go-tui"
+	"github.com/ernestrc/go-tui/cell"
 	"github.com/ernestrc/go-tui/term"
 	testutil "github.com/ernestrc/go-tui/util/test"
 	"github.com/stretchr/testify/assert"
@@ -263,7 +264,8 @@ YYYYYYYY`,
 
 func TestListNode(t *testing.T) {
 	l := NewList(1)
-	c1, c2, c3, c4 := NewScroll(), NewScroll(), NewScroll(), NewScroll()
+	c1, c2 := NewScroll(cell.NewBuffer()), NewScroll(cell.NewBuffer())
+	c3, c4 := NewScroll(cell.NewBuffer()), NewScroll(cell.NewBuffer())
 	el1 := l.PushFront(c1)
 	el2 := l.PushBack(c2)
 	el4 := l.InsertAfter(c4, el2)

@@ -168,8 +168,8 @@ func (h *fileBarEditorHandler) refreshBarContent(name string) {
 	h.bar.Lock()
 	defer h.bar.Unlock()
 
-	h.bar.filename.Init()
-	h.bar.coords.Init()
+	h.bar.filename.Init(cell.NewBuffer())
+	h.bar.coords.Init(cell.NewBuffer())
 	file, ok := h.files[name]
 	if !ok || file == nil {
 		log.Tracef("could not find file info file %s", name)

@@ -39,8 +39,7 @@ var fortunewidth = 44
 func newScroll(tabspaces int, wrap bool, width, height int) (scroll *Scroll) {
 	buf := cell.NewBuffer()
 	buf.InitWithTabspaces(tabspaces)
-	scroll = NewScroll()
-	scroll.InitWithBuffer(buf)
+	scroll = NewScroll(buf)
 	scroll.Resize(width, height)
 	scroll.Wrap = wrap
 	return
@@ -365,7 +364,7 @@ func TestScrollWraps(t *testing.T) {
 }
 
 func TestRowLastIndex(t *testing.T) {
-	scroll := NewScroll()
+	scroll := NewScroll(cell.NewBuffer())
 	cases := []struct {
 		content  string
 		line     int
@@ -425,7 +424,7 @@ func TestScrollDrawOffsetOOB(t *testing.T) {
 }
 
 func newBigScroll(fortunes int) (scroll *Scroll) {
-	scroll = NewScroll()
+	scroll = NewScroll(cell.NewBuffer())
 	for i := 0; i < fortunes; i++ {
 		_, _ = scroll.Buffer().ReadFrom(strings.NewReader(fortune))
 	}

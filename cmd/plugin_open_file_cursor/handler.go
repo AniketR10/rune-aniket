@@ -52,7 +52,7 @@ type gfEditorHandler struct {
 func newFile(content string) *file {
 	f := new(file)
 	f.Buffer.Init()
-	f.Scroll.InitWithBuffer(&f.Buffer)
+	f.Scroll.Init(&f.Buffer)
 	f.Cursor.Init(&f.Scroll)
 	f.Buffer.WriteString(content)
 	return f

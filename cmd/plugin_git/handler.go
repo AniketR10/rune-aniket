@@ -81,7 +81,7 @@ func newGitHandler(
 	ret.offsets = make(map[string]term.Coordinates)
 	ret.ch = make(chan text.Event)
 	ret.lastLocs = make(map[string][]text.Location)
-	ret.scroll.scroll.Init()
+	ret.scroll.scroll.Init(cell.NewBuffer())
 
 	var err error
 	ret.scroll.scroll.Attributes, err = plugin.GetAttributes(pconfig, "bar_attr")
@@ -252,14 +252,14 @@ func (h *gitEditorHandler) pushNewDiffLocations(
 func (h *gitEditorHandler) resetScroll() {
 	h.scroll.Lock()
 	defer h.scroll.Unlock()
-	h.scroll.scroll.Init()
+	h.scroll.scroll.Init(cell.NewBuffer())
 }
 
 func (h *gitEditorHandler) initScroll(name string) {
 	h.scroll.Lock()
 	defer h.scroll.Unlock()
 
-	h.scroll.scroll.Init()
+	h.scroll.scroll.Init(cell.NewBuffer())
 	rows, ok := h.rows[name]
 	if !ok {
 		log.Warnf("could not find max rows for file %s", name)

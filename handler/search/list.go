@@ -101,7 +101,7 @@ func (l *List) Init(cfg ListConfig) {
 	})
 
 	l.matchCountBar.Buffer.Init()
-	l.matchCountBar.Scroll.InitWithBuffer(&l.matchCountBar.Buffer)
+	l.matchCountBar.Scroll.Init(&l.matchCountBar.Buffer)
 	l.matchCountBar.C = &l.matchCountBar.Scroll
 
 	l.list.FocusList.InitWithAttr(l.cfg.textAttr, l.cfg.focusAttr)

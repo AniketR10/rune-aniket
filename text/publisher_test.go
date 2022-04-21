@@ -16,8 +16,7 @@ import (
 func newEdit(content string) (*cell.Buffer, *component.Scroll, *Cursor) {
 	buf := cell.NewBuffer()
 	buf.WriteString(content)
-	scroll := component.NewScroll()
-	scroll.InitWithBuffer(buf)
+	scroll := component.NewScroll(buf)
 	cursor := NewCursor(scroll)
 	return buf, scroll, cursor
 }

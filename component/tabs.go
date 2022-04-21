@@ -41,8 +41,7 @@ func newListFrame(
 	scrollAttr, frameAttr term.Attributes, buf *cell.Buffer, border bool,
 	frameBorders FrameCharSet,
 ) (content tui.Component) {
-	scroll := NewScroll()
-	scroll.InitWithBuffer(buf)
+	scroll := NewScroll(buf)
 	scroll.Attributes = scrollAttr
 	background := term.Cell{Bg: scroll.Attributes.Bg, Fg: scroll.Attributes.Fg}
 	spanCfg := SpanConfig{
