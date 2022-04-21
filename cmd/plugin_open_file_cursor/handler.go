@@ -32,6 +32,7 @@ var (
 	gfHandlerPermissions = []plugin.Permission{
 		plugin.PermissionWorkspace,
 		plugin.PermissionBrowserResourceOpener,
+		plugin.PermissionBrowserWindowManager,
 	}
 )
 
@@ -44,6 +45,7 @@ type file struct {
 type gfEditorHandler struct {
 	ed  text.Editor
 	o   browser.ResourceOpener
+	wm  browser.WindowManager
 	cwd workspace.Workspace
 
 	files map[string]*file
@@ -72,6 +74,8 @@ func newGFHandler(
 		switch grant.Permission {
 		case plugin.PermissionWorkspace:
 			ret.cwd, err = plugin.Workspace(grant.Token, broker)
+		case plugin.PermissionBrowserWindowManager:
+			ret.wm, err = plugin.WindowManager(grant.Token, broker)
 		case plugin.PermissionBrowserResourceOpener:
 			ret.o, err = plugin.ResourceOpener(grant.Token, broker)
 		}
@@ -111,9 +115,20 @@ func (h *gfEditorHandler) openFileUnderCursor(uri workspace.URI) error {
 	if err != nil {
 		return fmt.Errorf("could not build a URI from word under cursor: %v", err)
 	}
-	_, err = h.o.Open(uri)
+
+	opened, err := h.o.Open(uri)
 	if err != nil {
 		return fmt.Errorf("could not Open URI: %v", err)
+	}
+
+	focus, err := h.wm.Focus()
+	if err != nil {
+		err = fmt.Errorf("wm.Focus: %s", err)
+		return err
+	}
+	err = focus.SetContent(opened)
+	if err != nil && err != browser.ErrTabNotFree {
+		return err
 	}
 	return nil
 }
