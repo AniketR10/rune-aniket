@@ -40,6 +40,12 @@ var (
 		"edit":            (*ex).editFile,
 		"reload":          (*ex).reloadFile,
 	}
+	exDefaultBindings = map[term.Event]string{
+		{Type: term.EventKey, Key: term.KeyCtrlA}: "bufferCloseAll",
+		{Type: term.EventKey, Key: term.KeyCtrlW}: "bufferClose",
+		{Type: term.EventKey, Key: term.KeyCtrlL}: "bufferNext",
+		{Type: term.EventKey, Key: term.KeyCtrlH}: "bufferPrev",
+	}
 )
 
 type mode int8
@@ -118,6 +124,10 @@ func (e *ex) doInit(
 	e.workspace = m
 
 	e.config = text.DefaultConfig()
+
+	for ev, cmd := range exDefaultBindings {
+		opts = append(opts, text.WithCommandKeyBinding(ev, cmd))
+	}
 	for _, o := range opts {
 		o(&e.config)
 	}
@@ -454,10 +464,14 @@ func (e *ex) handleProxy(ev term.Event) (
 
 	// first map event, and map to potential command
 	mev, cmd, ok := e.comp.KeyMapping(ev)
-
-	// if event sequence has a match though
-	// then priority is to dispatch sequence command
 	seq, match := e.sequencer.Handle(mev)
+
+	// if focus handle handled event, then that takes precedence
+	_, handled = b.Handle(mev)
+	if handled {
+		return
+	}
+
 	if match {
 		cmd, ok = e.config.CommandSequenceBindings[seq]
 		if !ok {
@@ -465,42 +479,26 @@ func (e *ex) handleProxy(ev term.Event) (
 		}
 	}
 
-	// dispatch either sequence or event command and
-	// and dispatch event as well
+	// dispatch bound event command or sequence command and dispatch event as well
 	if cmd != "" {
 		quit, err := e.runCommand(cmd, cmd)
 		if err != nil {
 			e.setError(err)
 		}
-		_, _ = b.Handle(mev)
 		return quit, true
 	}
 
-	switch mev.Key {
-	case term.KeyCtrlA:
-		b.RemoveAllTabs()
-	case term.KeyCtrlW:
-		b.RemoveWindowContent(b.Focus())
-	case term.KeyCtrlL:
-		b.EditWindowTabNext(b.Focus())
-	case term.KeyCtrlH:
-		b.EditWindowTabPrev(b.Focus())
-	default:
-		_, handled = b.Handle(mev)
-		if handled {
-			return
-		}
-		// If ex is configured with character
-		// command mode trigger event (i.e. ':')
-		// then we assume that the underlying editor is
-		// a modal editor, and so does not handle
-		// the command trigger event in its "initial" mode
-		// (in vi terms, this would be normal mode).
-		handled = e.handleCommandEvent(mev)
+	// If ex is configured with character
+	// command mode trigger event (i.e. ':')
+	// then we assume that the underlying editor is
+	// a modal editor, and so does not handle
+	// the command trigger event in its "initial" mode
+	// (in vi terms, this would be normal mode).
+	handled = e.handleCommandEvent(mev)
+	if handled {
 		return
 	}
-
-	return false, true
+	return
 }
 
 func (e *ex) setNormalMode() {

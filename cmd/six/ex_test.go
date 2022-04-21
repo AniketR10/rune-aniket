@@ -134,17 +134,6 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 			`┌──────────────────┐
 │cabin.go  other.go│
 ├──────────────────┤
-│AAAAAAAAAAAAAAAAAA│
-│AAAAAAAAAAAAAAAAAA│
-│AAAAAAAAAAAAAAAAAA│
-│AAAAAAAAAAAAAAAAAA│
-│AAAAAAAAAAAAAAAAAA│
-│AAAAAAAAAAAAAAAAAA│
-└──────────────────┘`},
-		{"$", // simulates ctrl-l
-			`┌──────────────────┐
-│cabin.go  other.go│
-├──────────────────┤
 │BBBBBBBBBBBBBBBBBB│
 │BBBBBBBBBBBBBBBBBB│
 │BBBBBBBBBBBBBBBBBB│
@@ -156,45 +145,56 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 			`┌──────────────────┐
 │cabin.go  other.go│
 ├──────────────────┤
-│AAAAAAAAAAAAAAAAAA│
-│AAAAAAAAAAAAAAAAAA│
-│AAAAAAAAAAAAAAAAAA│
-│AAAAAAAAAAAAAAAAAA│
-│AAAAAAAAAAAAAAAAAA│
-│AAAAAAAAAAAAAAAAAA│
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+└──────────────────┘`},
+		{"$", // simulates ctrl-l
+			`┌──────────────────┐
+│cabin.go  other.go│
+├──────────────────┤
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
 └──────────────────┘`},
 		{":bclose>",
 			`┌──────────────────┐
 │cabin.go          │
 ├──────────────────┤
-│BBBBBBBBBBBBBBBBBB│
-│BBBBBBBBBBBBBBBBBB│
-│BBBBBBBBBBBBBBBBBB│
-│BBBBBBBBBBBBBBBBBB│
-│BBBBBBBBBBBBBBBBBB│
-│BBBBBBBBBBBBBBBBBB│
+│DDDDDDDDDDDDDDDDDD│
+│DDDDDDDDDDDDDDDDDD│
+│DDDDDDDDDDDDDDDDDD│
+│DDDDDDDDDDDDDDDDDD│
+│DDDDDDDDDDDDDDDDDD│
+│DDDDDDDDDDDDDDDDDD│
 └──────────────────┘`},
 		{":wq!^^^^^",
 			`┌──────────────────┐
 │cabin.go          │
 ├──────────────────┤
-│BBBBBBBBBBBBBBBBBB│
-│BBBBBBBBBBBBBBBBBB│
-│BBBBBBBBBBBBBBBBBB│
-│BBBBBBBBBBBBBBBBBB│
-│BBBBBBBBBBBBBBBBBB│
-│BBBBBBBBBBBBBBBBBB│
+│EEEEEEEEEEEEEEEEEE│
+│EEEEEEEEEEEEEEEEEE│
+│EEEEEEEEEEEEEEEEEE│
+│EEEEEEEEEEEEEEEEEE│
+│EEEEEEEEEEEEEEEEEE│
+│EEEEEEEEEEEEEEEEEE│
 └──────────────────┘`},
 		{":<",
 			`┌──────────────────┐
 │cabin.go          │
 ├──────────────────┤
-│BBBBBBBBBBBBBBBBBB│
-│BBBBBBBBBBBBBBBBBB│
-│BBBBBBBBBBBBBBBBBB│
-│BBBBBBBBBBBBBBBBBB│
-│BBBBBBBBBBBBBBBBBB│
-│BBBBBBBBBBBBBBBBBB│
+│EEEEEEEEEEEEEEEEEE│
+│EEEEEEEEEEEEEEEEEE│
+│EEEEEEEEEEEEEEEEEE│
+│EEEEEEEEEEEEEEEEEE│
+│EEEEEEEEEEEEEEEEEE│
+│EEEEEEEEEEEEEEEEEE│
 └──────────────────┘`},
 		{":e other.go>1111",
 			`┌──────────────────┐
@@ -211,12 +211,12 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 			`┌──────────────────┐
 │cabin.go  other.go│
 ├──────────────────┤
-│EEEEEEEEEEEEEEEEEE│
-│EEEEEEEEEEEEEEEEEE│
-│EEEEEEEEEEEEEEEEEE│
-│EEEEEEEEEEEEEEEEEE│
-│EEEEEEEEEEEEEEEEEE│
-│EEEEEEEEEEEEEEEEEE│
+│GGGGGGGGGGGGGGGGGG│
+│GGGGGGGGGGGGGGGGGG│
+│GGGGGGGGGGGGGGGGGG│
+│GGGGGGGGGGGGGGGGGG│
+│GGGGGGGGGGGGGGGGGG│
+│GGGGGGGGGGGGGGGGGG│
 └──────────────────┘`},
 	}
 	bh, b, err := constructor(text.Mock(),
@@ -245,23 +245,23 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 			`┌──────────────────┐
 │cabin.go  other.go│
 ├────────┐┌────────┤
-│AAAAAAAA││EEEEEEEE│
-│AAAAAAAA││EEEEEEEE│
-└────────┘│EEEEEEEE│
-┌────────┐│EEEEEEEE│
-│ZZZZZZZZ││EEEEEEEE│
-│ZZZZZZZZ││EEEEEEEE│
+│AAAAAAAA││GGGGGGGG│
+│AAAAAAAA││GGGGGGGG│
+└────────┘│GGGGGGGG│
+┌────────┐│GGGGGGGG│
+│ZZZZZZZZ││GGGGGGGG│
+│ZZZZZZZZ││GGGGGGGG│
 └────────┘└────────┘`},
 		{":<111111111_",
 			`┌──────────────────┐
 │cabin.go  other.go│
 ├────────┐┌────────┤
-│AAAAAAAA││EEEEEEEE│
-│AAAAAAAA││EEEEEEEE│
-└────────┘│EEEEEEEE│
-┌────────┐│EEEEEEEE│
-│cccccccc││EEEEEEEE│
-│cccccccc││EEEEEEEE│
+│AAAAAAAA││GGGGGGGG│
+│AAAAAAAA││GGGGGGGG│
+└────────┘│GGGGGGGG│
+┌────────┐│GGGGGGGG│
+│cccccccc││GGGGGGGG│
+│cccccccc││GGGGGGGG│
 └────────┘└────────┘`},
 	}
 
@@ -278,12 +278,12 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 			`┌──────────────────┐
 │cabin.go  other.go│
 ├────────┐┌────────┤
-│$$$$$$$$││EEEEEEEE│
-│$$$$$$$$││EEEEEEEE│
-└────────┘│EEEEEEEE│
-┌────────┐│EEEEEEEE│
-│cccccccc││EEEEEEEE│
-│cccccccc││EEEEEEEE│
+│$$$$$$$$││GGGGGGGG│
+│$$$$$$$$││GGGGGGGG│
+└────────┘│GGGGGGGG│
+┌────────┐│GGGGGGGG│
+│cccccccc││GGGGGGGG│
+│cccccccc││GGGGGGGG│
 └────────┘└────────┘`},
 	}
 
@@ -298,23 +298,23 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 			`┌──────────────────┐
 │cabin.go  other.go│
 ├──────────────────┤
-│BBBBBBBBBBBBBBBBBB│
-│BBBBBBBBBBBBBBBBBB│
-│BBBBBBBBBBBBBBBBBB│
-│BBBBBBBBBBBBBBBBBB│
-│BBBBBBBBBBBBBBBBBB│
-│BBBBBBBBBBBBBBBBBB│
+│HHHHHHHHHHHHHHHHHH│
+│HHHHHHHHHHHHHHHHHH│
+│HHHHHHHHHHHHHHHHHH│
+│HHHHHHHHHHHHHHHHHH│
+│HHHHHHHHHHHHHHHHHH│
+│HHHHHHHHHHHHHHHHHH│
 └──────────────────┘`},
 		{":bcloseAll>:e other.go>bcde####__",
 			`┌──────────────────┐
 │other.go          │
 ├──────────────────┤
-│EEEEEEEEEEEEEEEEEE│
-│EEEEEEEEEEEEEEEEEE│
-│EEEEEEEEEEEEEEEEEE│
-│EEEEEEEEEEEEEEEEEE│
-│EEEEEEEEEEEEEEEEEE│
-│EEEEEEEEEEEEEEEEEE│
+│IIIIIIIIIIIIIIIIII│
+│IIIIIIIIIIIIIIIIII│
+│IIIIIIIIIIIIIIIIII│
+│IIIIIIIIIIIIIIIIII│
+│IIIIIIIIIIIIIIIIII│
+│IIIIIIIIIIIIIIIIII│
 └──────────────────┘`},
 	}
 	testutil.TestHandlerSequence(t, bh, 20, 10, cases)
@@ -322,8 +322,8 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 	cases = []testutil.HandlerSequenceTestCase{
 		{"", `┌──┐
 │..│
-├EE┤
-EEEE`},
+├II┤
+IIII`},
 	}
 	testutil.TestHandlerSequence(t, bh, 4, 4, cases)
 
@@ -333,11 +333,11 @@ EEEE`},
 			`┌──────────────────┐
 │other.go          │
 ├──────────────────┤
-│EEEEEEEEEEEEEEEEEE│
-│EEEEEEEEEEEEEEEEEE│
-│EEEEEEEEEEEEEEEEEE│
-│EEEEEEEEEEEEEEEEEE│
-│EEEEEEEEEEEEEEEEEE│
+│IIIIIIIIIIIIIIIIII│
+│IIIIIIIIIIIIIIIIII│
+│IIIIIIIIIIIIIIIIII│
+│IIIIIIIIIIIIIIIIII│
+│IIIIIIIIIIIIIIIIII│
 │wasup: Z          │
 └──────────────────┘`},
 	}
@@ -522,16 +522,16 @@ func TestMultipleFilesStartup(t *testing.T) {
 │AAAAAAAAAAAAAAAAAA│
 │AAAAAAAAAAAAAAAAAA│
 └──────────────────┘`},
-		{"a",
+		{"aa",
 			`┌──────────────────┐
 │cabin.go  wi.go   │
 ├──────────────────┤
-│BBBBBBBBBBBBBBBBBB│
-│BBBBBBBBBBBBBBBBBB│
-│BBBBBBBBBBBBBBBBBB│
-│BBBBBBBBBBBBBBBBBB│
-│BBBBBBBBBBBBBBBBBB│
-│BBBBBBBBBBBBBBBBBB│
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
 └──────────────────┘`},
 		{"#", // simulates ctrl-h
 			`┌──────────────────┐
@@ -644,12 +644,12 @@ func TestExKeySequence(t *testing.T) {
 			`┌──────────────────┐
 │10k.go  button.go │
 ├──────────────────┤
-│BBBBBBBBBBBBBBBBBB│
-│BBBBBBBBBBBBBBBBBB│
-│BBBBBBBBBBBBBBBBBB│
-│BBBBBBBBBBBBBBBBBB│
-│BBBBBBBBBBBBBBBBBB│
-│BBBBBBBBBBBBBBBBBB│
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
 └──────────────────┘`},
 		{"gg",
 			`┌──────────────────┐
