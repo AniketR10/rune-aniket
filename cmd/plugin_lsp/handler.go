@@ -9,7 +9,6 @@ import (
 	"io"
 	"io/ioutil"
 	"math"
-	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -140,11 +139,11 @@ type lspEditorHandler struct {
 	mu     sync.Mutex
 	evChan chan text.Event
 
-	ed   text.Editor
-	wm   browser.WindowManager
-	m    browser.Messenger
-	o    browser.ResourceOpener
-	exec workspace.Workspace
+	ed text.Editor
+	wm browser.WindowManager
+	m  browser.Messenger
+	o  browser.ResourceOpener
+	wp workspace.Workspace
 
 	semanticTypesAttr    map[string]term.Attributes
 	diagnosticAttr       map[protocol.DiagnosticSeverity]term.Attributes
@@ -264,16 +263,16 @@ func initializeConnection(
 func (h *lspEditorHandler) getPipes(pid workspace.Pid) (
 	io.WriteCloser, io.ReadCloser, io.ReadCloser, error,
 ) {
-	stdin, err := h.exec.StdinPipe(pid)
+	stdin, err := h.wp.StdinPipe(pid)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to create stdin pipe: %v", err)
 	}
-	stdout, err := h.exec.StdoutPipe(pid)
+	stdout, err := h.wp.StdoutPipe(pid)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to create stdout pipe: %v", err)
 	}
 
-	stderr, err := h.exec.StderrPipe(pid)
+	stderr, err := h.wp.StderrPipe(pid)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to create stderr pipe: %v", err)
 	}
@@ -288,7 +287,7 @@ func (h *lspEditorHandler) parseCmd(arg interface{}) (workspace.Pid, error) {
 		return 0, fmt.Errorf("invalid command: %v", arg)
 	}
 
-	return h.exec.Command(cmd[0], cmd[1:]...)
+	return h.wp.Command(cmd[0], cmd[1:]...)
 }
 
 func logStderr(langID string, stderr io.ReadCloser) {
@@ -345,7 +344,7 @@ func (h *lspEditorHandler) startLanguageServer(
 	}
 
 	log.Debugf("Starting lsp server '%s' with cmd: %#v", langID, pid)
-	err = h.exec.Start(pid)
+	err = h.wp.Start(pid)
 	if err != nil {
 		err = fmt.Errorf("failed to start exec for '%s': %v", langID, err)
 		return execServer{}, err
@@ -570,11 +569,6 @@ func newLspHandler(
 		return nil, err
 	}
 
-	ret.cwd, err = os.Getwd()
-	if err != nil {
-		return nil, err
-	}
-
 	err = ret.initLanguageServers(pconfig)
 	if err != nil {
 		return nil, err
@@ -583,10 +577,15 @@ func newLspHandler(
 	for _, g := range grants {
 		switch g.Permission {
 		case plugin.PermissionWorkspace:
-			ret.exec, err = plugin.Workspace(g.Token, broker)
+			ret.wp, err = plugin.Workspace(g.Token, broker)
 			if err != nil {
 				return nil, err
 			}
+			cwdURI, err := ret.wp.Getwd()
+			if err != nil {
+				return nil, err
+			}
+			ret.cwd = cwdURI.Path()
 		case plugin.PermissionBrowserResourceOpener:
 			ret.o, err = plugin.ResourceOpener(g.Token, broker)
 			if err != nil {
@@ -604,6 +603,8 @@ func newLspHandler(
 			}
 		}
 	}
+
+	log.Infof("Initialized LSP handler with cwd %q", ret.cwd)
 
 	go ret.handleEvents(ret.evChan)
 
@@ -1834,7 +1835,7 @@ func (h *lspEditorHandler) Close() error {
 		if err != nil {
 			errs = append(errs, err.Error())
 		}
-		err = h.exec.Signal(server.cmd, syscall.SIGTERM)
+		err = h.wp.Signal(server.cmd, syscall.SIGTERM)
 		if err != nil {
 			errs = append(errs, err.Error())
 		}

@@ -16,6 +16,8 @@ import (
 
 const defaultTimeout = 10 * time.Second
 
+var _ Workspace = (*Client)(nil)
+
 type Client struct {
 	cc     grpc.ClientConnInterface
 	client workspacepb.WorkspaceClient
@@ -369,6 +371,22 @@ func (c *Client) URI(path string) (URI, error) {
 
 	req := workspacepb.URIRequest{Path: path}
 	resp, err := c.client.URI(ctx, &req)
+	if err != nil {
+		return URI{}, err
+	}
+	uri, err := ParseURI(resp.GetUri())
+	if err != nil {
+		return URI{}, fmt.Errorf("Could not parse URI response from server: %w", err)
+	}
+	return uri, nil
+}
+
+func (c *Client) Getwd() (URI, error) {
+	ctx, cleanup := ctxWithTimeout()
+	defer cleanup()
+
+	req := workspacepb.GetwdRequest{}
+	resp, err := c.client.Getwd(ctx, &req)
 	if err != nil {
 		return URI{}, err
 	}

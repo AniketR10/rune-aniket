@@ -154,8 +154,12 @@ message URIResponse {
 	string uri = 1;
 }
 
+message GetwdRequest {
+}
+
 service Workspace {
 	rpc URI(URIRequest) returns (URIResponse);
+	rpc Getwd(GetwdRequest) returns (URIResponse);
 
 	rpc Open(OpenRequest) returns (OpenResponse);
 	rpc Remove(RemoveRequest) returns (RemoveResponse);

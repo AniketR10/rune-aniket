@@ -28,20 +28,20 @@ type Server struct {
 	readLinkFunc readLinkFunc
 
 	// for proc API
-	executor Workspace
+	wp Workspace
 
 	mu            sync.Mutex
 	handles       map[int32]io.Closer
 	nextHandlerID int32
 }
 
-func NewServer(executor Workspace) *Server {
+func NewServer(wp Workspace) *Server {
 	ret := new(Server)
-	ret.Init(executor)
+	ret.Init(wp)
 	return ret
 }
 
-func (s *Server) Init(executor Workspace) {
+func (s *Server) Init(wp Workspace) {
 	s.handles = make(map[int32]io.Closer)
 	s.nextHandlerID = 0
 	s.openFunc = osOpenFileFunc()
@@ -49,7 +49,7 @@ func (s *Server) Init(executor Workspace) {
 	s.renameFunc = os.Rename
 	s.statFunc = os.Stat
 	s.lstatFunc = os.Lstat
-	s.executor = executor
+	s.wp = wp
 }
 
 func (s *Server) getFile(handlerID int32) (osFile, bool) {
@@ -279,7 +279,7 @@ func (s *Server) Command(ctx context.Context, req *workspacepb.CommandRequest) (
 ) {
 	name := req.GetName()
 	args := req.GetArgs()
-	pid, err := s.executor.Command(name, args...)
+	pid, err := s.wp.Command(name, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -292,7 +292,7 @@ func (s *Server) Start(ctx context.Context, req *workspacepb.StartRequest) (
 	*workspacepb.StartResponse, error,
 ) {
 	pid := req.GetPid()
-	err := s.executor.Start(Pid(pid))
+	err := s.wp.Start(Pid(pid))
 	if err != nil {
 		return nil, err
 	}
@@ -304,7 +304,7 @@ func (s *Server) Wait(ctx context.Context, req *workspacepb.WaitRequest) (
 	*workspacepb.WaitResponse, error,
 ) {
 	pid := req.GetPid()
-	err := s.executor.Wait(Pid(pid))
+	err := s.wp.Wait(Pid(pid))
 	if err != nil {
 		return nil, err
 	}
@@ -317,7 +317,7 @@ func (s *Server) Signal(ctx context.Context, req *workspacepb.SignalRequest) (
 ) {
 	pid := req.GetPid()
 	signal := req.GetSig()
-	err := s.executor.Signal(Pid(pid), syscall.Signal(signal))
+	err := s.wp.Signal(Pid(pid), syscall.Signal(signal))
 	if err != nil {
 		return nil, err
 	}
@@ -329,7 +329,7 @@ func (s *Server) StderrPipe(ctx context.Context, req *workspacepb.StdioPipeReque
 	*workspacepb.StdioPipeResponse, error,
 ) {
 	pid := req.GetPid()
-	pipe, err := s.executor.StderrPipe(Pid(pid))
+	pipe, err := s.wp.StderrPipe(Pid(pid))
 	if err != nil {
 		return nil, err
 	}
@@ -343,7 +343,7 @@ func (s *Server) StdoutPipe(ctx context.Context, req *workspacepb.StdioPipeReque
 	*workspacepb.StdioPipeResponse, error,
 ) {
 	pid := req.GetPid()
-	pipe, err := s.executor.StdoutPipe(Pid(pid))
+	pipe, err := s.wp.StdoutPipe(Pid(pid))
 	if err != nil {
 		return nil, err
 	}
@@ -357,7 +357,7 @@ func (s *Server) StdinPipe(ctx context.Context, req *workspacepb.StdioPipeReques
 	*workspacepb.StdioPipeResponse, error,
 ) {
 	pid := req.GetPid()
-	pipe, err := s.executor.StdinPipe(Pid(pid))
+	pipe, err := s.wp.StdinPipe(Pid(pid))
 	if err != nil {
 		return nil, err
 	}
@@ -370,7 +370,19 @@ func (s *Server) StdinPipe(ctx context.Context, req *workspacepb.StdioPipeReques
 func (s *Server) URI(ctx context.Context, req *workspacepb.URIRequest) (
 	*workspacepb.URIResponse, error,
 ) {
-	uri, err := s.executor.URI(req.GetPath())
+	uri, err := s.wp.URI(req.GetPath())
+	if err != nil {
+		return nil, err
+	}
+	resp := new(workspacepb.URIResponse)
+	resp.Uri = uri.String()
+	return resp, nil
+}
+
+func (s *Server) Getwd(ctx context.Context, req *workspacepb.GetwdRequest) (
+	*workspacepb.URIResponse, error,
+) {
+	uri, err := s.wp.Getwd()
 	if err != nil {
 		return nil, err
 	}

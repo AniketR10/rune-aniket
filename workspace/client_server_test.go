@@ -53,7 +53,7 @@ func setupClientServerUnitTest(t *testing.T) (*Client, *Server, *MockOsFile, fun
 	defer ctrl.Finish()
 
 	mock := NewMockOsFile(ctrl)
-	mockExecutor := NewMockExecutor(ctrl)
+	mockExecutor := NewMockWorkspace(ctrl)
 	server := NewServer(mockExecutor)
 	server.openFunc = func(name string, flag int, perm os.FileMode) (osFile, *osError) {
 		return mock, nil
@@ -75,7 +75,7 @@ func setupClientServerUnitTest(t *testing.T) (*Client, *Server, *MockOsFile, fun
 }
 
 func expectCommand(t *testing.T, s *Server, pid int) {
-	s.executor.(*MockExecutor).EXPECT().Command(gomock.Any(), gomock.Any()).Return(Pid(pid), nil)
+	s.wp.(*MockWorkspace).EXPECT().Command(gomock.Any(), gomock.Any()).Return(Pid(pid), nil)
 }
 
 func TestClientServer(t *testing.T) {
@@ -383,13 +383,13 @@ func TestClientServer(t *testing.T) {
 			assert.Contains(t, err.Error(), "boom")
 		}},
 		{"Command happy path", func(t *testing.T, mock *MockOsFile, c *Client, s *Server) {
-			s.executor.(*MockExecutor).EXPECT().Command(gomock.Eq("six"), gomock.Eq("arg1")).Return(Pid(1), nil)
+			s.wp.(*MockWorkspace).EXPECT().Command(gomock.Eq("six"), gomock.Eq("arg1")).Return(Pid(1), nil)
 			pid, err := c.Command("six", "arg1")
 			require.NoError(t, err)
 			assert.Equal(t, Pid(1), pid)
 		}},
 		{"Command error", func(t *testing.T, mock *MockOsFile, c *Client, s *Server) {
-			s.executor.(*MockExecutor).EXPECT().Command(gomock.Any(), gomock.Any()).
+			s.wp.(*MockWorkspace).EXPECT().Command(gomock.Any(), gomock.Any()).
 				Return(Pid(0), errors.New("boom"))
 			_, err := c.Command("six", "arg1")
 			require.Error(t, err)
@@ -400,7 +400,7 @@ func TestClientServer(t *testing.T) {
 			pid, err := c.Command("six", "arg1")
 			require.NoError(t, err)
 
-			s.executor.(*MockExecutor).EXPECT().Start(gomock.Eq(Pid(99))).Return(nil)
+			s.wp.(*MockWorkspace).EXPECT().Start(gomock.Eq(Pid(99))).Return(nil)
 			err = c.Start(pid)
 			assert.NoError(t, err)
 		}},
@@ -409,7 +409,7 @@ func TestClientServer(t *testing.T) {
 			pid, err := c.Command("six", "arg1")
 			require.NoError(t, err)
 
-			s.executor.(*MockExecutor).EXPECT().Start(gomock.Any()).Return(errors.New("boom"))
+			s.wp.(*MockWorkspace).EXPECT().Start(gomock.Any()).Return(errors.New("boom"))
 			err = c.Start(pid)
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), "boom")
@@ -419,7 +419,7 @@ func TestClientServer(t *testing.T) {
 			pid, err := c.Command("six", "arg1")
 			require.NoError(t, err)
 
-			s.executor.(*MockExecutor).EXPECT().Wait(gomock.Eq(Pid(99))).Return(nil)
+			s.wp.(*MockWorkspace).EXPECT().Wait(gomock.Eq(Pid(99))).Return(nil)
 			err = c.Wait(pid)
 			assert.NoError(t, err)
 		}},
@@ -428,7 +428,7 @@ func TestClientServer(t *testing.T) {
 			pid, err := c.Command("six", "arg1")
 			require.NoError(t, err)
 
-			s.executor.(*MockExecutor).EXPECT().Wait(gomock.Any()).Return(errors.New("boom"))
+			s.wp.(*MockWorkspace).EXPECT().Wait(gomock.Any()).Return(errors.New("boom"))
 			err = c.Wait(pid)
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), "boom")
@@ -438,7 +438,7 @@ func TestClientServer(t *testing.T) {
 			pid, err := c.Command("six", "arg1")
 			require.NoError(t, err)
 
-			s.executor.(*MockExecutor).EXPECT().Signal(gomock.Eq(Pid(99)), gomock.Eq(syscall.SIGTERM)).
+			s.wp.(*MockWorkspace).EXPECT().Signal(gomock.Eq(Pid(99)), gomock.Eq(syscall.SIGTERM)).
 				Return(nil)
 			err = c.Signal(pid, syscall.SIGTERM)
 			assert.NoError(t, err)
@@ -448,7 +448,7 @@ func TestClientServer(t *testing.T) {
 			pid, err := c.Command("six", "arg1")
 			require.NoError(t, err)
 
-			s.executor.(*MockExecutor).EXPECT().Signal(gomock.Any(), gomock.Any()).
+			s.wp.(*MockWorkspace).EXPECT().Signal(gomock.Any(), gomock.Any()).
 				Return(errors.New("boom"))
 			err = c.Signal(pid, syscall.SIGKILL)
 			require.Error(t, err)
@@ -459,7 +459,7 @@ func TestClientServer(t *testing.T) {
 			pid, err := c.Command("six", "arg1")
 			require.NoError(t, err)
 
-			s.executor.(*MockExecutor).EXPECT().StdinPipe(gomock.Eq(Pid(99))).Return(mock, nil)
+			s.wp.(*MockWorkspace).EXPECT().StdinPipe(gomock.Eq(Pid(99))).Return(mock, nil)
 			pipe, err := c.StdinPipe(pid)
 			require.NoError(t, err)
 
@@ -478,7 +478,7 @@ func TestClientServer(t *testing.T) {
 			pid, err := c.Command("six", "arg1")
 			require.NoError(t, err)
 
-			s.executor.(*MockExecutor).EXPECT().StdinPipe(gomock.Any()).Return(nil, errors.New("boom"))
+			s.wp.(*MockWorkspace).EXPECT().StdinPipe(gomock.Any()).Return(nil, errors.New("boom"))
 			_, err = c.StdinPipe(pid)
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), "boom")
@@ -488,7 +488,7 @@ func TestClientServer(t *testing.T) {
 			pid, err := c.Command("six", "arg1")
 			require.NoError(t, err)
 
-			s.executor.(*MockExecutor).EXPECT().StdoutPipe(gomock.Eq(Pid(99))).Return(mock, nil)
+			s.wp.(*MockWorkspace).EXPECT().StdoutPipe(gomock.Eq(Pid(99))).Return(mock, nil)
 			pipe, err := c.StdoutPipe(pid)
 			require.NoError(t, err)
 
@@ -508,7 +508,7 @@ func TestClientServer(t *testing.T) {
 			pid, err := c.Command("six", "arg1")
 			require.NoError(t, err)
 
-			s.executor.(*MockExecutor).EXPECT().StdoutPipe(gomock.Any()).Return(nil, errors.New("boom"))
+			s.wp.(*MockWorkspace).EXPECT().StdoutPipe(gomock.Any()).Return(nil, errors.New("boom"))
 			_, err = c.StdoutPipe(pid)
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), "boom")
@@ -518,7 +518,7 @@ func TestClientServer(t *testing.T) {
 			pid, err := c.Command("six", "arg1")
 			require.NoError(t, err)
 
-			s.executor.(*MockExecutor).EXPECT().StderrPipe(gomock.Eq(Pid(99))).Return(mock, nil)
+			s.wp.(*MockWorkspace).EXPECT().StderrPipe(gomock.Eq(Pid(99))).Return(mock, nil)
 			pipe, err := c.StderrPipe(pid)
 			require.NoError(t, err)
 
@@ -538,7 +538,7 @@ func TestClientServer(t *testing.T) {
 			pid, err := c.Command("six", "arg1")
 			require.NoError(t, err)
 
-			s.executor.(*MockExecutor).EXPECT().StderrPipe(gomock.Any()).Return(nil, errors.New("boom"))
+			s.wp.(*MockWorkspace).EXPECT().StderrPipe(gomock.Any()).Return(nil, errors.New("boom"))
 			_, err = c.StderrPipe(pid)
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), "boom")
@@ -546,14 +546,28 @@ func TestClientServer(t *testing.T) {
 		{"URI happy path", func(t *testing.T, mock *MockOsFile, c *Client, s *Server) {
 			uri, err := ParseURI("ssh://user@my_host:8080/tmp/hello/world.go")
 			require.NoError(t, err)
-			s.executor.(*MockExecutor).EXPECT().URI(gomock.Eq("/tmp/hello_world.go")).Return(uri, nil)
+			s.wp.(*MockWorkspace).EXPECT().URI(gomock.Eq("/tmp/hello_world.go")).Return(uri, nil)
 			actualUri, err := c.URI("/tmp/hello_world.go")
 			assert.NoError(t, err)
 			assert.Equal(t, uri.String(), actualUri.String())
 		}},
 		{"URI error", func(t *testing.T, mock *MockOsFile, c *Client, s *Server) {
-			s.executor.(*MockExecutor).EXPECT().URI(gomock.Any()).Return(URI{}, errors.New("boom"))
+			s.wp.(*MockWorkspace).EXPECT().URI(gomock.Any()).Return(URI{}, errors.New("boom"))
 			_, err := c.URI("/tmp/hello_world.go")
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "boom")
+		}},
+		{"Getwd happy path", func(t *testing.T, mock *MockOsFile, c *Client, s *Server) {
+			uri, err := ParseURI("ssh://user@my_host:8080/tmp/hello/world.go")
+			require.NoError(t, err)
+			s.wp.(*MockWorkspace).EXPECT().Getwd().Return(uri, nil)
+			actualUri, err := c.Getwd()
+			assert.NoError(t, err)
+			assert.Equal(t, uri.String(), actualUri.String())
+		}},
+		{"Getwd error", func(t *testing.T, mock *MockOsFile, c *Client, s *Server) {
+			s.wp.(*MockWorkspace).EXPECT().Getwd().Return(URI{}, errors.New("boom"))
+			_, err := c.Getwd()
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), "boom")
 		}},

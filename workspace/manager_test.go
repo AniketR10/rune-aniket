@@ -1,9 +1,12 @@
 package workspace
 
 import (
+	"errors"
 	"io/ioutil"
 	"os"
 	"os/user"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/ernestrc/go-tui/cell"
@@ -22,31 +25,33 @@ func init() {
 
 func TestManagerInitLocal(t *testing.T) {
 	tsuite := []struct {
-		desc        string
-		inWorkspace string
-		expectGetwd string
-		wantChdir   string
+		desc         string
+		inWorkspace  string
+		expectosStat string
+		wantErr      bool
 	}{
-		{"does not change working directory if already current dir",
-			"file:///tmp", "/tmp", ""},
-		{"changes working directory if not current dir",
-			"file:///tmp", "/tmp/hello", "/tmp"},
+		{"returns an error if workspace is not a directory",
+			"file:///tmp", "/tmp", true},
+		{"returns no error if workspace is a directory",
+			"file:///tmp", "/tmp/hello", false},
 	}
 	for _, tcase := range tsuite {
 		t.Run(tcase.desc, func(t *testing.T) {
 			m := new(Manager)
-			m.osGetwd = func() (string, error) {
-				return tcase.expectGetwd, nil
-			}
-			var actualChdir string
-			m.osChdir = func(chdir string) error {
-				actualChdir = chdir
-				return nil
+			m.osStat = func(name string) (os.FileInfo, error) {
+				if tcase.wantErr {
+					return nil, errors.New("oops")
+				}
+				return testFileInfo{isDir: true}, nil
 			}
 			uri, err := ParseURI(tcase.inWorkspace)
 			require.NoError(t, err)
-			require.NoError(t, m.init(discardLogger, uri))
-			assert.Equal(t, tcase.wantChdir, actualChdir)
+			err = m.init(discardLogger, uri)
+			if tcase.wantErr {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+			}
 		})
 	}
 }
@@ -75,11 +80,8 @@ func TestManagerURI(t *testing.T) {
 	}
 	for _, tcase := range tsuite {
 		m := new(Manager)
-		m.osGetwd = func() (string, error) {
-			return tcase.getcwd, nil
-		}
-		m.osChdir = func(chdir string) error {
-			panic("should not change cwd")
+		m.osStat = func(string) (os.FileInfo, error) {
+			return testFileInfo{isDir: true}, nil
 		}
 		m.userLookup = func(name string) (*user.User, error) {
 			return tcase.getUser, nil
@@ -102,21 +104,23 @@ func TestManagerURI(t *testing.T) {
 	}
 }
 
+func newManagerIntegration(t *testing.T) *Manager {
+	m := new(Manager)
+	m.osStat = func(string) (os.FileInfo, error) {
+		return testFileInfo{isDir: true}, nil
+	}
+	m.userLookup = func(name string) (*user.User, error) {
+		return new(user.User), nil
+	}
+	cwd, err := CurrentUserHostURI(".")
+	require.NoError(t, err)
+	require.NoError(t, m.init(discardLogger, cwd))
+	return m
+}
+
 func TestManagerOpenIntegration(t *testing.T) {
 	t.Run("returns os.ErrNotExist if file does not exist in read-only mode", func(t *testing.T) {
-		m := new(Manager)
-		m.osGetwd = func() (string, error) {
-			return "", nil
-		}
-		m.osChdir = func(chdir string) error {
-			return nil
-		}
-		m.userLookup = func(name string) (*user.User, error) {
-			return new(user.User), nil
-		}
-		cwd, err := CurrentUserHostURI(".")
-		require.NoError(t, err)
-		require.NoError(t, m.init(discardLogger, cwd))
+		m := newManagerIntegration(t)
 
 		// only way to guarantee that the file won't exist
 		// is creating it and then removing it
@@ -130,5 +134,39 @@ func TestManagerOpenIntegration(t *testing.T) {
 		_, err = m.Open(nonexistent, cell.NewBuffer(), URI{}, true)
 		require.Equal(t, os.ErrNotExist, err)
 		require.True(t, os.IsNotExist(err))
+	})
+}
+
+func TestManagerIntegration(t *testing.T) {
+	t.Run("sets the command dir to the workspace directory", func(t *testing.T) {
+		m := newManagerIntegration(t)
+
+		// create a file in a known directory
+		tempDir, err := ioutil.TempDir("", "workspace_test")
+		require.NoError(t, err)
+		f, err := ioutil.TempFile(tempDir, "workspace_test")
+		require.NoError(t, err)
+
+		// re-initialize with temp dir as cwd
+		tempDirURI, err := CurrentUserHostURI(tempDir)
+		require.NoError(t, err)
+		require.NoError(t, m.init(discardLogger, tempDirURI))
+
+		// sut
+		pid, err := m.Command("ls", "-altrh", ".")
+
+		stdout, err := m.StdoutPipe(pid)
+		require.NoError(t, err)
+
+		err = m.Start(pid)
+		require.NoError(t, err)
+
+		data, err := ioutil.ReadAll(stdout)
+		require.NoError(t, err)
+
+		err = m.Wait(pid)
+		require.NoError(t, err)
+
+		assert.True(t, strings.Contains(string(data), filepath.Base(f.Name())))
 	})
 }

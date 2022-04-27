@@ -33,6 +33,7 @@ type Pid int32
 
 // Identifier abstracts the basic method URI.
 type Identifier interface {
+	Getwd() (URI, error)
 	// URI builds a URI from a path in the current workspace.
 	URI(string) (URI, error)
 }
