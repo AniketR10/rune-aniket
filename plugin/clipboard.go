@@ -34,9 +34,8 @@ type ClipboardSetter interface {
 // ClipboardManager satisfies editor.Clipboard by means of a plugin.ClipboardSetter
 // which can be used to install arbitrary plugin.ClipboardRegister implementations.
 type ClipboardManager struct {
-	mu  sync.Mutex
-	s   *clipboardSetterServer
-	srv []proto.MuxServer
+	mu sync.Mutex
+	s  *clipboardSetterServer
 	// editor.Clipboard is re-used but each implementation is only
 	// used for its registered registerID.
 	registers map[string]*pluginRegister
@@ -77,7 +76,6 @@ func (s *ClipboardManager) Serve(
 		// for all resource requests.
 		s.s = newClipboardSetterServer(l, broker, s)
 		proto.RegisterClipboardServer(grpc, s.s)
-		s.srv = append(s.srv, srv)
 
 		return srv
 	})
@@ -165,9 +163,6 @@ func (s *ClipboardManager) Close() (ret error) {
 	}
 	if s.s != nil {
 		closers = append(closers, s.s)
-	}
-	for _, srv := range s.srv {
-		srv.Stop()
 	}
 	s.mu.Unlock()
 
