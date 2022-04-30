@@ -1,6 +1,7 @@
 package workspace
 
 import (
+	"errors"
 	"fmt"
 	"net/url"
 	"path"
@@ -45,18 +46,24 @@ func makeSSHURI(u *url.URL) URI {
 	return URI{uri: u.String(), parsed: *u, name: name}
 }
 
-func makeFileURI(u *url.URL) URI {
+func makeFileURI(u *url.URL) (URI, error) {
 	path := sanitizeFilePath(u.Path)
 	u.Path = path
-	return URI{uri: u.String(), parsed: *u, name: filepath.Base(path)}
+	if u.Scheme == "" {
+		if !filepath.IsAbs(path) {
+			return URI{}, errors.New("cannot parse relative path without current workspace. Use workspace.Manager.URI instead.")
+		}
+		u.Scheme = "file"
+	}
+	return URI{uri: u.String(), parsed: *u, name: filepath.Base(path)}, nil
 }
 
 func makeURI(u *url.URL) (URI, error) {
-	if u.Scheme == fileScheme {
-		return makeFileURI(u), nil
-	}
 	if u.Scheme == sshScheme {
 		return makeSSHURI(u), nil
+	}
+	if u.Scheme == "" || u.Scheme == fileScheme {
+		return makeFileURI(u)
 	}
 	return URI{}, fmt.Errorf("unsupported scheme: %s", u.Scheme)
 }

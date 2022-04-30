@@ -107,37 +107,40 @@ func (m *Manager) getUser() (*user.User, error) {
 }
 
 func (m *Manager) extractAbsPath(filename string) (string, error) {
-	return extractAbsPath(filename, m.getUser, func() (string, error) {
+	return ExpandPath(filename, m.getUser, func() (string, error) {
 		return m.workspace.Path(), nil
 	})
 }
 
-func extractAbsPath(
-	filename string,
+// ExpandPath finds the absolute path of a relative path and
+// expands the home shortcut (~) if any. If path is already
+// absolute then this function returns the path unchanged.
+func ExpandPath(
+	path string,
 	getUser func() (*user.User, error),
 	cwdFn func() (string, error),
 ) (string, error) {
-	if filename == "~" {
+	if path == "~" {
 		usr, err := getUser()
 		if err != nil {
 			return "", fmt.Errorf("could not get current user: %s", err)
 		}
-		filename = usr.HomeDir
-	} else if strings.HasPrefix(filename, "~/") {
+		path = usr.HomeDir
+	} else if strings.HasPrefix(path, "~/") {
 		usr, err := getUser()
 		if err != nil {
 			return "", fmt.Errorf("could not get current user: %s", err)
 		}
-		filename = filepath.Join(usr.HomeDir, filename[2:])
+		path = filepath.Join(usr.HomeDir, path[2:])
 	}
-	if filepath.IsAbs(filename) {
-		return filename, nil
+	if filepath.IsAbs(path) {
+		return path, nil
 	}
 	cwd, err := cwdFn()
 	if err != nil {
 		return "", fmt.Errorf("could not get cwd: %s", err)
 	}
-	abs := filepath.Join(cwd, filename)
+	abs := filepath.Join(cwd, path)
 	return abs, nil
 }
 

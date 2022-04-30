@@ -427,7 +427,12 @@ func (h *workspaceManagerHandler) commandAddWorkspace(args ...string) (bool, err
 		return false, errors.New("workspace tab is not empty. " +
 			"Switch to an empty workspace tab to add a workspace")
 	}
-	uri, err := workspace.ParseURI(args[0])
+	path := args[0]
+	path, err := workspace.ExpandPath(path, user.Current, os.Getwd)
+	if err != nil {
+		return false, fmt.Errorf("ExpandPath: %s", err)
+	}
+	uri, err := workspace.ParseURI(path)
 	if err != nil {
 		return false, fmt.Errorf("ParseURI: %s", err)
 	}

@@ -15,7 +15,7 @@ import (
 // This should only used instead of Manager.URI before a workspace.Manager is
 // constructed or for other advanced uses cases.
 func CurrentUserHostURI(path string) (URI, error) {
-	absPath, err := extractAbsPath(path, user.Current, os.Getwd)
+	absPath, err := ExpandPath(path, user.Current, os.Getwd)
 	if err != nil {
 		return URI{}, err
 	}
@@ -29,7 +29,7 @@ func makeLocalURI(path string) (URI, error) {
 		return URI{}, err
 	}
 
-	return makeFileURI(u), nil
+	return makeFileURI(u)
 }
 
 func (m *Manager) localURI(path string) (URI, error) {

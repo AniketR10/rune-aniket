@@ -36,7 +36,10 @@ func TestParseURI(t *testing.T) {
 				User:   url.UserPassword("potato", "farmer"),
 			},
 		}, false},
-		{"/tmp/a", URI{}, true},
+		{"/tmp/a", URI{
+			uri: "file:///tmp/a", name: "a", parsed: url.URL{Scheme: "file", Path: "/tmp/a"},
+		}, false},
+		{"tmp/a", URI{}, true},
 		{"f$le://", URI{}, true},
 	}
 
