@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	multierr "github.com/ernestrc/go-multierror"
 	"github.com/ernestrc/go-tui/proto"
 	log "github.com/sirupsen/logrus"
 
@@ -30,6 +31,7 @@ type clipboardRegisterClient struct {
 	cc            proto.MuxConn
 	c             proto.ClipboardRegisterClient
 	cancelMonitor func()
+	hook          func() error
 }
 
 func (c *clipboardRegisterClient) Paste() (string, error) {
@@ -54,12 +56,20 @@ func (c *clipboardRegisterClient) Copy(data string) error {
 	return nil
 }
 
-func (c *clipboardRegisterClient) Close() error {
+func (c *clipboardRegisterClient) Close() (ret error) {
 	if c.cancelMonitor == nil {
 		return nil
 	}
+	if c.hook != nil {
+		if err := c.hook(); err != nil {
+			ret = multierr.Append(ret, err)
+		}
+	}
 	c.cancelMonitor()
-	return c.cc.Close()
+	if err := c.cc.Close(); err != nil {
+		ret = multierr.Append(ret, err)
+	}
+	return
 }
 
 func newClipboardSetterServer(
@@ -90,6 +100,11 @@ func (s *clipboardSetterServer) dialRegister(handlerID uint32) (ClipboardRegiste
 	ctx, cancelFn := context.WithCancel(context.Background())
 	go proto.MonitorConnection(ctx, s.failureTimeout, handlerConn, func(reason string) {
 		_, _ = proto.ForceCloseResource(uint64(handlerID), s.getClients, s.logger, &s.mu)
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		if client.hook != nil {
+			client.hook()
+		}
 	})
 
 	client.cancelMonitor = cancelFn
@@ -111,12 +126,6 @@ func (s *clipboardSetterServer) SetRegister(ctx context.Context, req *proto.SetR
 	}
 
 	registerID := req.GetRegisterId()
-
-	r, _ := s.c.register(registerID)
-	if closer, ok := r.(io.Closer); ok {
-		closer.Close()
-	}
-
 	err = s.c.SetRegister(registerID, register)
 	if err != nil {
 		return nil, err

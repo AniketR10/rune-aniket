@@ -59,7 +59,6 @@ func TestClipboardIntegration(t *testing.T) {
 		client, closeFn := setupClipboardIntTest(t, mock)
 		defer closeFn()
 
-		mock.EXPECT().register(gomock.Any()).Return(nil, nil)
 		mock.EXPECT().SetRegister(gomock.Any(), gomock.Any()).Return(nil)
 
 		err := client.SetRegister(registerID, nil)
@@ -73,9 +72,6 @@ func TestClipboardIntegration(t *testing.T) {
 		mock := NewMockClipboardSetter(ctrl)
 		client, closeFn := setupClipboardIntTest(t, mock)
 
-		closer := NewMockClipboardRegisterCloser(ctrl)
-		mock.EXPECT().register(gomock.Any()).Return(closer, nil)
-		closer.EXPECT().Close().Return(nil)
 		mock.EXPECT().SetRegister(gomock.Any(), gomock.Any()).Return(nil)
 
 		err := client.SetRegister(registerID, nil)
