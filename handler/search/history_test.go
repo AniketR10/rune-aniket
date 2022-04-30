@@ -10,7 +10,8 @@ import (
 
 func TestHistory(t *testing.T) {
 	store := document.NewInMemoryCache()
-	history, err := NewHistory(store, "id", 4)
+	history := NewHistory(store, "id", 4)
+	err := history.Load()
 	require.NoError(t, err)
 
 	require.NoError(t, history.Add("jmac"))
@@ -26,7 +27,8 @@ func TestHistory(t *testing.T) {
 	assert.Equal(t, "jj", history.Next())
 
 	// queries are persisted across stores
-	history2, err := NewHistory(store, "id", 4)
+	history2 := NewHistory(store, "id", 4)
+	err = history2.Load()
 	require.NoError(t, err)
 	assert.Equal(t, "Kom", history2.Next())
 	assert.Equal(t, "jj", history2.Next())
@@ -47,7 +49,8 @@ func TestHistory(t *testing.T) {
 	assert.Equal(t, "5", history.Next())
 
 	// queries are NOT persisted across stores with diff IDs
-	history3, err := NewHistory(store, "id2", 4)
+	history3 := NewHistory(store, "id2", 4)
+	err = history3.Load()
 	require.NoError(t, err)
 	assert.Equal(t, "", history3.Next())
 	require.NoError(t, history3.Add("a"))

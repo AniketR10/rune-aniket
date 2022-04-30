@@ -3,16 +3,14 @@ package main
 import (
 	"errors"
 	"fmt"
-	"math"
 	"strconv"
 	"strings"
 
+	multierr "github.com/ernestrc/go-multierror"
 	"github.com/ernestrc/go-tui"
 	"github.com/ernestrc/go-tui/browser"
-	"github.com/ernestrc/go-tui/cell"
 	"github.com/ernestrc/go-tui/component"
 	"github.com/ernestrc/go-tui/handler"
-	"github.com/ernestrc/go-tui/handler/search"
 	"github.com/ernestrc/go-tui/term"
 	"github.com/ernestrc/go-tui/text"
 	"github.com/ernestrc/go-tui/workspace"
@@ -56,41 +54,33 @@ const (
 )
 
 // used to abstract workspace.Manager
-type workspaceURI interface {
-	workspace.ResourceOpener
+type workspaceIfc interface {
+	workspace.ResourceOpener // needed by text.Component
 	URI(string) (workspace.URI, error)
 }
 
 // ex implements a tui.Handler by wrapping an editor.Component and
 // providing an ex editor type of interface.
 type ex struct {
-	config    text.Config
-	comp      text.Component
-	ed        text.Editor
-	workspace workspaceURI
-	command   struct {
-		// argsStartIdx is the position of the first space
-		// that separates the 'command' from its args
-		argsStartIdx int
-
-		component.Responsive
-		component.Virtual
-		cell.Buffer
-
-		search.List
-		search.History
-		component.Frame
-		component.Overlay
-	}
-	sequencer handler.Sequencer
-	mode      mode
+	config          text.Config
+	comp            text.Component
+	ed              text.Editor
+	workspace       workspaceIfc
+	sequencer       handler.Sequencer
+	cmdOverride     func([]string) (bool, bool, error)
+	enabledCommands []string
+	mode            mode
+	cmd             commandListHandler
+	overlay         component.Overlay
 }
 
-func newEx(ed text.Editor, m workspaceURI, opts ...text.Option) (
-	e *ex, err error,
-) {
+func newEx(
+	ed text.Editor, m workspaceIfc, enabledCommands []string,
+	commandOverride func([]string) (bool, bool, error),
+	opts ...text.Option,
+) (e *ex, err error) {
 	e = new(ex)
-	err = e.init(ed, m, opts...)
+	err = e.init(ed, m, enabledCommands, commandOverride, opts...)
 	if err != nil {
 		return
 	}
@@ -100,10 +90,12 @@ func newEx(ed text.Editor, m workspaceURI, opts ...text.Option) (
 // Init initializes this ex with the given editor and Options.
 // It returns an error if an initial filepath was given through WithFilePath option
 // and the file failed to be opened.
-func (e *ex) init(ed text.Editor, m workspaceURI, opts ...text.Option) (
-	err error,
-) {
-	err = e.doInit(ed, m, opts...)
+func (e *ex) init(
+	ed text.Editor, m workspaceIfc, enabledCommands []string,
+	commandOverride func([]string) (bool, bool, error),
+	opts ...text.Option,
+) (err error) {
+	err = e.doInit(ed, m, enabledCommands, commandOverride, opts...)
 	if err != nil {
 		return
 	}
@@ -111,17 +103,20 @@ func (e *ex) init(ed text.Editor, m workspaceURI, opts ...text.Option) (
 	if err != nil {
 		return
 	}
-	e.command.History.Init(e.Browser(),
-		commandHistoryDocumentID, e.config.CommandMaxHistory)
+	e.cmd.loadHistory()
 	return nil
 }
 
 // init is used for internal testing
 func (e *ex) doInit(
-	ed text.Editor, m workspaceURI, opts ...text.Option,
+	ed text.Editor, m workspaceIfc, enabledCommands []string,
+	commandOverride func([]string) (bool, bool, error),
+	opts ...text.Option,
 ) (err error) {
 	e.mode = modeDefault
 	e.workspace = m
+	e.cmdOverride = commandOverride
+	e.enabledCommands = enabledCommands
 
 	e.config = text.DefaultConfig()
 
@@ -145,41 +140,32 @@ func (e *ex) doInit(
 		panic(msg)
 	}
 
-	// overlay buffer over the search list so we can
-	// stop the search for multiple argument commands
-	// but we can display arguments
-	e.command.Buffer.Init()
-	responsive := component.BufferResponsive(&e.command.Buffer,
-		component.StringConfig{})
-	e.command.Responsive = responsive
-	e.command.Virtual.C = responsive
+	e.cmd.init(e.Browser(), e.config.CommandMaxHistory,
+		e.config.CommandOverlay, e.config.CommandEvent,
+		func(command string, cmdAndArgs string) bool {
+			quit, err := e.runCommand(string(command), cmdAndArgs)
+			e.setProxyMode()
+			if err != nil {
+				e.setError(err)
+			}
+			return quit
+		})
 
 	var commandOverlay tui.Component
 	if e.config.CommandOverlay.Frame {
-		commandOverlay = &e.command.Frame
-		e.command.Frame.Init(&e.command.List)
+		commandOverlay = component.NewFrame(&e.cmd)
 	} else {
-		commandOverlay = &e.command.List
+		commandOverlay = &e.cmd
 	}
 
-	cfg := search.ListConfig{
-		Algo:             search.FuzzyMatch,
-		Interrupt:        term.Interrupt,
-		CaseSensitive:    false,
-		MatchedTextAttr:  &e.config.CommandOverlay.MatchedTextAttr,
-		CountAttr:        &e.config.CommandOverlay.CountAttr,
-		FocusElementAttr: &e.config.CommandOverlay.FocusElementAttr,
-		ElementAttr:      &e.config.CommandOverlay.ElementAttr,
-	}
-
-	e.command.List.Init(cfg)
-	e.command.Overlay.Init(&e.comp, commandOverlay,
+	e.overlay.Init(&e.comp, commandOverlay,
 		e.config.CommandOverlay.ElementAttr,
 		component.SpanConfig{
 			PadVertical:      -e.config.CommandOverlay.Height,
 			PadHorizontal:    -e.config.CommandOverlay.Width,
 			ContentAlignment: component.SpanAlignmentCentered,
 		})
+
 	e.ed = ed
 	return
 }
@@ -328,115 +314,34 @@ func (e *ex) reloadFile(args ...string) (bool, error) {
 
 func (e *ex) runCommand(cmd string, cmdAndArgs string) (quit bool, err error) {
 	parts := strings.Split(cmdAndArgs, " ")
-	if len(parts) == 1 {
-		if len(cmd) == 0 {
-			cmd = cmdAndArgs
-		}
-		return e.runSingleCommand(cmd)
+	// check to workaround default :<number> command to go to line:
+	// cmd is empty because it didn't match any command in the list
+	// but default behaviour is to move cursor to line
+	if cmd != "" {
+		parts[0] = cmd // cmdAndArgs contains fuzzy completed command
 	}
 
-	fnCmd, ok := exCommands[cmd]
+	if e.cmdOverride != nil {
+		quit, handled, err := e.cmdOverride(parts)
+		if quit || handled || err != nil {
+			return quit, err
+		}
+	}
+
+	if len(parts) == 1 {
+		return e.runSingleCommand(parts[0])
+	}
+
+	fnCmd, ok := exCommands[parts[0]]
 	if ok {
 		return fnCmd(e, parts[1:]...)
 	}
 
-	return false, e.dispatchCommand(cmd, parts[1:]...)
+	return false, e.dispatchCommand(parts[0], parts[1:]...)
 }
 
 func (e *ex) setError(err error) {
 	e.comp.Browser().SetMessage("Error: %s", err)
-}
-
-func (e *ex) writeLastCommandQuery() {
-	cmd := e.command.History.Next()
-	if cmd == "" {
-		return
-	}
-	e.command.Buffer.Reset()
-	e.command.Buffer.WriteString(cmd)
-
-	listCmdArgs := strings.Split(cmd, " ")
-	listCmd := listCmdArgs[0]
-	if len(listCmd) > 0 {
-		e.command.argsStartIdx = len(listCmd)
-	} else {
-		e.command.argsStartIdx = 0
-	}
-	e.command.List.Buffer().Reset()
-	e.command.List.Buffer().WriteString(listCmd)
-	e.command.List.Wait()
-}
-
-func (e *ex) handleCommand(ev term.Event) (quit, handled bool) {
-	handled = true
-
-	if ev == e.config.CommandEvent {
-		e.writeLastCommandQuery()
-		return
-	}
-
-	switch ev.Key {
-	case term.KeyEnter:
-		// before selecting command wait for previous search to finish
-		e.command.List.Wait()
-
-		command, _ := e.command.List.Focus()
-		var err error
-		bufStr := e.command.Buffer.String()
-		quit, err = e.runCommand(string(command), bufStr)
-		e.setNormalMode()
-		if err != nil {
-			e.setError(err)
-		} else if bufStr != "" {
-			err := e.command.History.Add(bufStr)
-			if err != nil {
-				e.setError(err)
-			}
-		}
-	case term.KeyEsc:
-		e.setNormalMode()
-	case term.KeyArrowDown:
-		e.command.List.FocusDown()
-	case term.KeyArrowUp:
-		e.command.List.FocusUp()
-	case term.KeySpace:
-		ev.Ch = ' '
-		handled = false
-	case term.KeyBackspace, term.KeyBackspace2:
-		cols := e.command.Buffer.Columns(0)
-		if cols == 0 {
-			e.setNormalMode()
-			return
-		}
-		e.command.Buffer.DeleteCell(term.Coordinates{X: cols - 1})
-		if e.command.argsStartIdx == e.command.Buffer.Size() ||
-			e.command.argsStartIdx == 0 {
-			e.command.List.Buffer().Reset()
-			e.command.List.Buffer().WriteString(e.command.Buffer.String())
-			e.command.argsStartIdx = 0
-		}
-	default:
-		handled = false
-	}
-
-	if handled {
-		return
-	}
-
-	if ev.Ch == 0 {
-		return
-	}
-
-	handled = true
-	if ev.Ch == ' ' && e.command.argsStartIdx == 0 {
-		e.command.argsStartIdx = e.command.Buffer.Size()
-	}
-	e.command.Buffer.WriteString(string(ev.Ch))
-
-	if e.command.argsStartIdx == 0 {
-		e.command.List.Buffer().WriteString(string(ev.Ch))
-	}
-	return
 }
 
 func (e *ex) handleCommandEvent(ev term.Event) bool {
@@ -479,7 +384,7 @@ func (e *ex) handleProxy(ev term.Event) (
 		}
 	}
 
-	// dispatch bound event command or sequence command and dispatch event as well
+	// dispatch bound event command or sequence command
 	if cmd != "" {
 		quit, err := e.runCommand(cmd, cmd)
 		if err != nil {
@@ -501,11 +406,8 @@ func (e *ex) handleProxy(ev term.Event) (
 	return
 }
 
-func (e *ex) setNormalMode() {
-	e.command.Buffer.Reset()
-	e.command.List.Buffer().Reset()
-	e.command.List.Wait()
-	e.command.argsStartIdx = 0
+func (e *ex) setProxyMode() {
+	e.cmd.reset()
 	e.mode = modeDefault
 }
 
@@ -514,13 +416,14 @@ func (e *ex) setCommandMode() {
 
 	// commands can be registered dynamicall via Editor.Register:
 	// compile a new list every time we switch to command mode
-	e.command.List.DataReset()
-	for cmd := range exCommands {
-		e.command.List.PushSync([]byte(cmd))
+	var commands []string
+	for _, cmd := range e.enabledCommands {
+		commands = append(commands, cmd)
 	}
 	for _, cmd := range e.comp.Commands() {
-		e.command.List.PushSync([]byte(cmd))
+		commands = append(commands, cmd)
 	}
+	e.cmd.dataReset(commands)
 }
 
 // Handle satisfies tui.Handler.
@@ -529,14 +432,22 @@ func (e *ex) Handle(ev term.Event) (bool, bool) {
 	case modeDefault:
 		return e.handleProxy(ev)
 	case modeCommand:
-		return e.handleCommand(ev)
+		quit, handled := e.cmd.Handle(ev)
+		if quit {
+			// hack to signal proc exit
+			if !handled {
+				return true, true
+			}
+			e.setProxyMode()
+		}
+		return false, handled
 	default:
 		panic(fmt.Sprintf("unknown mode: %+v", e.mode))
 	}
 }
 
 func (e *ex) overlayPosition() (pos term.Coordinates) {
-	pos = e.command.Overlay.ContentOffset()
+	pos = e.overlay.ContentOffset()
 	if e.config.CommandOverlay.Frame {
 		pos.Y++
 		pos.X++
@@ -544,30 +455,14 @@ func (e *ex) overlayPosition() (pos term.Coordinates) {
 	return
 }
 
-func (e *ex) commandOverlayDimensions() (width, height int) {
-	width, height = e.config.CommandOverlay.Width, e.config.CommandOverlay.Height
-	if e.config.CommandOverlay.Frame && width > 2 && height > 2 {
-		width -= 2
-		height -= 2
-	}
-	return
-}
-
 // Cursor satisfies tui.Handler.
 func (e *ex) Cursor() (pos term.Coordinates, show bool) {
 	if e.mode == modeCommand {
-		pos := e.command.Virtual.Position()
-		cmdWidth, cmdHeight := e.commandOverlayDimensions()
-		x := len(e.command.Buffer.String()) % cmdWidth
-		y := len(e.command.Buffer.String()) / cmdWidth
-		if y >= cmdHeight {
-			pos.X += cmdWidth - 1
-			pos.Y += cmdHeight - 1
-		} else {
-			pos.X += x
-			pos.Y += y
-		}
-		return pos, true
+		overlay := e.overlayPosition()
+		pos, show = e.cmd.Cursor()
+		pos.X += overlay.X
+		pos.Y += overlay.Y
+		return
 	}
 	return e.comp.Browser().Cursor()
 }
@@ -579,38 +474,13 @@ func (e *ex) Man() tui.Manual {
 
 // Resize satisfies tui.Component
 func (e *ex) Resize(width, height int) {
-	// internally resizes e.comp
-	e.command.Overlay.Resize(width, height)
-
-	pos := e.overlayPosition()
-	e.command.Virtual.Move(pos)
-}
-
-func (e *ex) resizeCommandOverlay() {
-	// propagate local cmd+args buffer height to
-	// search list, which only has cmd, in case args alone span
-	// multiple lines
-	cmdWidth, cmdHeight := e.commandOverlayDimensions()
-	height := e.command.Responsive.Height(cmdWidth)
-	// set to min 1, as it's being used as input field
-	// and max to the height of the overlayed component
-	height = int(math.Min(math.Max(1, float64(height)), float64(cmdHeight)))
-	// the list is very short so waiting is not a significant
-	// perf penalty and it makes tests easier to make deterministic
-	e.command.List.Wait()
-	e.command.List.SetMinInputHeight(height)
-	e.command.Virtual.Resize(cmdWidth, height)
+	e.overlay.Resize(width, height)
 }
 
 // Draw satisfies tui.Component
 func (e *ex) Draw(w term.Writer) {
 	if e.mode == modeCommand {
-		// resize on every draw because search.List uses a responsive
-		// input so local buffer changes must consider potential resize
-		// of search.List
-		e.resizeCommandOverlay()
-		e.command.Overlay.Draw(w)
-		e.command.Virtual.Draw(w)
+		e.overlay.Draw(w)
 		return
 	}
 	e.comp.Draw(w)
@@ -627,12 +497,13 @@ func (e *ex) Browser() browser.Browser {
 }
 
 // Close closes the resources associated with this browser.
-func (e *ex) Close() error {
+func (e *ex) Close() (ret error) {
 	e.sequencer.Reset()
-	err1 := e.command.List.Close()
-	err2 := e.comp.Close()
-	if err2 != nil {
-		return err2
+	if err := e.cmd.Close(); err != nil {
+		ret = multierr.Append(ret, err)
 	}
-	return err1
+	if err := e.comp.Close(); err != nil {
+		ret = multierr.Append(ret, err)
+	}
+	return
 }

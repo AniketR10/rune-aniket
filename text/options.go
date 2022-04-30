@@ -123,10 +123,10 @@ func WithLogger(l *log.Logger) Option {
 	}
 }
 
-// WithStartText sets the starting buffer default text.
-func WithStartText(text string) Option {
+// WithWallpaper sets the starting buffer default text wallpaper.
+func WithWallpaper(text string) Option {
 	return func(cfg *Config) {
-		cfg.StartText = text
+		cfg.Wallpaper = text
 	}
 }
 
@@ -172,19 +172,19 @@ func WithNonFocusTabAttr(attr term.Attributes) Option {
 	}
 }
 
-// WithStartTextAttr returns an Option that configures the attributes of the
-// text passed to WithStartText.
-func WithStartTextAttr(attr term.Attributes) Option {
+// WithWallpaperAttr returns an Option that configures the attributes of the
+// text passed to WithWallpaper.
+func WithWallpaperAttr(attr term.Attributes) Option {
 	return func(cfg *Config) {
-		cfg.StartTextAttr = attr
+		cfg.WallpaperAttr = attr
 	}
 }
 
-// WithStartTextBackgroundAttr returns an Option that configures the attributes of the
-// padded background around text passed to WithStartText.
-func WithStartTextBackgroundAttr(attr term.Attributes) Option {
+// WithWallpaperBackgroundAttr returns an Option that configures the attributes of the
+// padded background around text passed to WithWallpaper.
+func WithWallpaperBackgroundAttr(attr term.Attributes) Option {
 	return func(cfg *Config) {
-		cfg.StartTextBackgroundAttr = attr
+		cfg.WallpaperBackgroundAttr = attr
 	}
 }
 

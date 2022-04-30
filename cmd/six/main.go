@@ -16,6 +16,7 @@ import (
 )
 
 var (
+	// compile-time variables
 	Tag     = "development"
 	Commit  = "HEAD"
 	Version string
@@ -97,13 +98,13 @@ func main() {
 		os.Exit(0)
 	}
 
-	var i *IDE
+	var i *ide
 	if *flagRecover != "" && len(filenames) != 0 {
-		i, err = NewRecovery(*flagWorkspace, *configpath, filenames[0], *flagRecover)
+		i, err = newIdeRecovery(*flagWorkspace, *configpath, filenames[0], *flagRecover)
 	} else if *flagRecover != "" {
 		log.Fatal("flag -r requires to pass the original filename filename")
 	} else {
-		i, err = New(*flagWorkspace, *configpath, filenames...)
+		i, err = newIde(*flagWorkspace, *configpath, filenames...)
 	}
 
 	if err != nil {
@@ -111,7 +112,7 @@ func main() {
 	}
 
 	defer i.Close()
-	err = i.Run()
+	err = i.run()
 	if err != nil {
 		log.Fatal(err)
 	}

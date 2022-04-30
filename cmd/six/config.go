@@ -28,7 +28,7 @@ const (
 	inputAlt               = "alt"
 	inputMouse             = "mouse"
 	inputCurrent           = "current"
-	legacyDefaultStartText = `
+	legacyDefaultWallpaper = `
          __       
         /\ \      
        /  \ \     
@@ -40,7 +40,7 @@ const (
  / / /__\ \ \     
 / / /____\ \ \    
 \/__________\/    `
-	defaultStartText = `
+	defaultWallpaper = `
 ███████╗██╗██╗ ██╗
 ██╔════╝██║██████║
 ███████╗██║╚═██╔═╝
@@ -136,6 +136,7 @@ func (c ideConfig) commandKeyMappings() map[handler.Sequence]string {
 
 	return ret
 }
+
 func (c ideConfig) commandOverlayFrame() (ret bool) {
 	ret = text.DefaultCommandOverlayConfig().Frame
 	cfg, ok := c.command()
@@ -150,6 +151,30 @@ func (c ideConfig) commandOverlayFrame() (ret bool) {
 		return
 	}
 	ret = cfgFrame
+	return
+}
+
+func (c ideConfig) commandEvent() (ret term.Event) {
+	ret = defaultCommandEvent
+	cfg, ok := c.command()
+	if !ok {
+		return
+	}
+	cfgKey, err := cfg.GetString("key")
+	if err != nil {
+		if err != plugin.ErrNotFound {
+			c.errors["command.key"] = err
+		}
+		return
+	}
+	key, err := term.ParseKey(cfgKey)
+	if err != nil {
+		if err != plugin.ErrNotFound {
+			c.errors["command.key"] = err
+		}
+		return
+	}
+	ret = key
 	return
 }
 
@@ -359,24 +384,32 @@ func (c ideConfig) windowFrameAttr() (attr term.Attributes) {
 	attr = cfgAttr
 	return
 }
-
-func (c ideConfig) getBrowserAttr(
-	key string, def term.Attributes,
+func (c ideConfig) getConfigAttr(
+	cfgKey, key string, def term.Attributes,
 ) (attr term.Attributes) {
 	attr = def
-	cfg, ok := c.browser()
+	if c.cfg == nil {
+		return
+	}
+	cfg, ok := c.getConfig(plugin.MapConfig(c.cfg), cfgKey)
 	if !ok {
 		return
 	}
 	cfgAttr, err := plugin.GetAttributes(cfg, key)
 	if err != nil {
 		if err != plugin.ErrNotFound {
-			c.errors["window_manager."+key] = err
+			c.errors[fmt.Sprintf("%s.%s", cfgKey, key)] = err
 		}
 		return
 	}
 	attr = cfgAttr
 	return
+}
+
+func (c ideConfig) getBrowserAttr(
+	key string, def term.Attributes,
+) (attr term.Attributes) {
+	return c.getConfigAttr("browser", key, def)
 }
 
 func (c ideConfig) messageBarAttr() term.Attributes {
@@ -394,14 +427,14 @@ func (c ideConfig) nonFocusTabAttr() term.Attributes {
 		browser.DefaultConfig().NonFocusTabAttr)
 }
 
-func (c ideConfig) startTextAttr() term.Attributes {
-	return c.getBrowserAttr("start_text_attr",
-		browser.DefaultConfig().StartTextAttr)
+func (c ideConfig) browserWallpaperAttr() term.Attributes {
+	return c.getBrowserAttr("wallpaper_attr",
+		browser.DefaultConfig().WallpaperAttr)
 }
 
-func (c ideConfig) startTextBackgroundAttr() term.Attributes {
-	return c.getBrowserAttr("start_text_background_attr",
-		browser.DefaultConfig().StartTextBackgroundAttr)
+func (c ideConfig) browserWallpaperBackgroundAttr() term.Attributes {
+	return c.getBrowserAttr("wallpaper_background_attr",
+		browser.DefaultConfig().WallpaperBackgroundAttr)
 }
 
 func (c ideConfig) dirtyTabAttr() term.Attributes {
@@ -573,21 +606,28 @@ func (c ideConfig) browserTabspaces() (tabs int) {
 	return
 }
 
-func (c ideConfig) browserStartText() (text string) {
-	text = defaultStartText
-	cfg, ok := c.browser()
+func (c ideConfig) wallpaperFrom(cfgKey string) (text string) {
+	text = defaultWallpaper
+	if c.cfg == nil {
+		return
+	}
+	cfg, ok := c.getConfig(plugin.MapConfig(c.cfg), cfgKey)
 	if !ok {
 		return
 	}
-	cfgText, err := cfg.GetString("start_text")
+	cfgText, err := cfg.GetString("wallpaper")
 	if err != nil {
 		if err != plugin.ErrNotFound {
-			c.errors["browser.start_text"] = err
+			c.errors[fmt.Sprintf("%s.wallpaper", cfgKey)] = err
 		}
 		return
 	}
 	text = cfgText
 	return
+}
+
+func (c ideConfig) browserWallpaper() (text string) {
+	return c.wallpaperFrom("browser")
 }
 
 func (c ideConfig) logOutputPath() string {
@@ -746,6 +786,20 @@ func (c ideConfig) workspace() (plugin.Config, bool) {
 		return nil, false
 	}
 	return c.getConfig(plugin.MapConfig(c.cfg), "workspace")
+}
+
+func (c ideConfig) workspaceWallpaper() (text string) {
+	return c.wallpaperFrom("workspace")
+}
+
+func (c ideConfig) workspaceWallpaperAttr() term.Attributes {
+	return c.getConfigAttr("workspace", "wallpaper_attr",
+		browser.DefaultConfig().WallpaperAttr)
+}
+
+func (c ideConfig) workspaceWallpaperBackgroundAttr() term.Attributes {
+	return c.getConfigAttr("workspace", "wallpaper_background_attr",
+		browser.DefaultConfig().WallpaperBackgroundAttr)
 }
 
 func (c ideConfig) workspaceSSHTimeout() (ret time.Duration) {

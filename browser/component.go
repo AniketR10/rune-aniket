@@ -185,14 +185,14 @@ func (c *Component) Init(config Config) {
 		WindowManagerConfig: config.WindowManagerConfig,
 	}
 	strcfg := component.StringConfig{
-		Attributes:           c.config.StartTextAttr,
-		BackgroundAttributes: c.config.StartTextBackgroundAttr,
+		Attributes:           c.config.WallpaperAttr,
+		BackgroundAttributes: c.config.WallpaperBackgroundAttr,
 		Alignment:            component.SpanAlignmentCentered,
 	}
-	startText := component.StringWithConfig(c.config.StartText, strcfg)
+	wallpaper := component.StringWithConfig(c.config.Wallpaper, strcfg)
 	c.startHandler = &browserContent{
 		Handler: FuncHandler(
-			handler.Nop(startText),
+			handler.Nop(wallpaper),
 			func() {},
 		),
 		c: c,

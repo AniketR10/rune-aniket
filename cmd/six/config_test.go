@@ -17,7 +17,7 @@ import (
 var sampleConfig = `
 plugins:
     fuzzy_file:
-        path: "/home/ernestrc/src/go-tui/bin/plugin_fuzzy_file"
+        path: "/path/plugin_fuzzy_file"
         config:
             command: ag -g ""
 
@@ -82,11 +82,11 @@ browser:
         fg: 219
     non_focus_tab_attr:
         fg: white
-    start_text: abc
-    start_text_attr:
+    wallpaper: abc
+    wallpaper_attr:
         fg: yellow
         bg: white
-    start_text_background_attr:
+    wallpaper_background_attr:
         bg: white
 
 `
@@ -94,7 +94,7 @@ browser:
 func assertDefaultConfig(t *testing.T, cfg *ideConfig) {
 	assert.Len(t, cfg.plugins(), 0)
 	assert.Equal(t, 4, cfg.browserTabspaces())
-	assert.NotZero(t, cfg.browserStartText())
+	assert.NotZero(t, cfg.browserWallpaper())
 	assert.Equal(t, component.DefaultWindowManagerConfig(), cfg.windowManagerConfig())
 	assert.Equal(t, "", cfg.logOutputPath())
 	assert.Equal(t, logrus.ErrorLevel, cfg.logLevel())
@@ -104,8 +104,8 @@ func assertDefaultConfig(t *testing.T, cfg *ideConfig) {
 	assert.Equal(t, browser.DefaultConfig().MessageBarAttr, cfg.messageBarAttr())
 	assert.Equal(t, browser.DefaultConfig().FocusTabAttr, cfg.focusTabAttr())
 	assert.Equal(t, browser.DefaultConfig().NonFocusTabAttr, cfg.nonFocusTabAttr())
-	assert.Equal(t, browser.DefaultConfig().StartTextAttr, cfg.startTextAttr())
-	assert.Equal(t, browser.DefaultConfig().StartTextBackgroundAttr, cfg.startTextBackgroundAttr())
+	assert.Equal(t, browser.DefaultConfig().WallpaperAttr, cfg.browserWallpaperAttr())
+	assert.Equal(t, browser.DefaultConfig().WallpaperBackgroundAttr, cfg.browserWallpaperBackgroundAttr())
 }
 
 func TestDefaultConfig(t *testing.T) {
@@ -134,7 +134,7 @@ func TestConfigSetting(t *testing.T) {
 	initConfig(&cfg, m)
 
 	assert.Equal(t, 4, cfg.browserTabspaces())
-	assert.Equal(t, "abc", cfg.browserStartText())
+	assert.Equal(t, "abc", cfg.browserWallpaper())
 	assert.Equal(t, "/tmp/debug.log", cfg.logOutputPath())
 	assert.Equal(t, logrus.TraceLevel, cfg.logLevel())
 	assert.Equal(t, term.Output256, cfg.outputMode())
@@ -166,8 +166,8 @@ func TestConfigSetting(t *testing.T) {
 	assert.Equal(t, term.Attributes{Fg: term.ColorWhite, Bg: term.ColorCyan}, cfg.messageBarAttr())
 	assert.Equal(t, term.Attributes{Fg: term.Attribute(219)}, cfg.focusTabAttr())
 	assert.Equal(t, term.Attributes{Fg: term.ColorWhite}, cfg.nonFocusTabAttr())
-	assert.Equal(t, term.Attributes{Fg: term.ColorYellow, Bg: term.ColorWhite}, cfg.startTextAttr())
-	assert.Equal(t, term.Attributes{Bg: term.ColorWhite}, cfg.startTextBackgroundAttr())
+	assert.Equal(t, term.Attributes{Fg: term.ColorYellow, Bg: term.ColorWhite}, cfg.browserWallpaperAttr())
+	assert.Equal(t, term.Attributes{Bg: term.ColorWhite}, cfg.browserWallpaperBackgroundAttr())
 
 	expectedPrompt := browser.PromptConfig{
 		Width:         20,

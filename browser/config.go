@@ -13,7 +13,7 @@ func DefaultConfig() Config {
 		MessageBarAttr:      term.Attributes{Bg: term.ColorRed, Fg: term.ColorWhite},
 		FocusTabAttr:        term.Attributes{Fg: term.ColorWhite},
 		NonFocusTabAttr:     term.Attributes{Fg: term.ColorRed},
-		StartTextAttr:       term.Attributes{Fg: term.ColorRed | term.AttrBold},
+		WallpaperAttr:       term.Attributes{Fg: term.ColorRed | term.AttrBold},
 		FrameUnionCharSet:   component.DefaultFrameUnionCharSet(),
 		WindowManagerConfig: component.DefaultWindowManagerConfig(),
 		PromptConfig: PromptConfig{
@@ -34,14 +34,16 @@ type PromptConfig struct {
 
 // Config holds configuration for an browser.Component.
 type Config struct {
-	Logger    *log.Logger
-	StartText string
+	Logger *log.Logger
 
-	StartTextAttr           term.Attributes
-	StartTextBackgroundAttr term.Attributes
-	MessageBarAttr          term.Attributes
-	FocusTabAttr            term.Attributes
-	NonFocusTabAttr         term.Attributes
+	Wallpaper               string
+	WallpaperAttr           term.Attributes
+	WallpaperBackgroundAttr term.Attributes
+
+	MessageBarAttr term.Attributes
+
+	FocusTabAttr    term.Attributes
+	NonFocusTabAttr term.Attributes
 
 	PromptConfig
 

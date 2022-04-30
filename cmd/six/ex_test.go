@@ -30,7 +30,7 @@ type browserConstructor func(ed text.Editor, opts ...text.Option) (tui.Handler, 
 type testFileBuffer struct {
 	flushErr error
 	closeErr error
-	closed bool
+	closed   bool
 }
 
 func (t *testFileBuffer) Flush() error {
@@ -761,9 +761,8 @@ func initExForTestingWithWorkspace(
 	t *testing.T, ex *ex, workspace *testWorkspace,
 	ed text.Editor, opts ...text.Option,
 ) {
-	require.NoError(t, ex.doInit(ed, workspace, opts...))
+	require.NoError(t, ex.doInit(ed, workspace, exCommandList, nil, opts...))
 	require.NoError(t, ex.comp.Init(ex.ed, workspace, ex.config))
-	ex.command.History.Init(ex.Browser(), "docID", 10)
 }
 
 func initExForTesting(t *testing.T, ex *ex, ed text.Editor, opts ...text.Option) {
