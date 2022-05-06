@@ -38,11 +38,11 @@ var (
 		"edit":            (*ex).editFile,
 		"reload":          (*ex).reloadFile,
 	}
-	exDefaultBindings = map[term.Event]string{
-		{Type: term.EventKey, Key: term.KeyCtrlA}: "bufferCloseAll",
-		{Type: term.EventKey, Key: term.KeyCtrlW}: "bufferClose",
-		{Type: term.EventKey, Key: term.KeyCtrlL}: "bufferNext",
-		{Type: term.EventKey, Key: term.KeyCtrlH}: "bufferPrev",
+	exDefaultBindings = map[term.KeyComb]string{
+		{Key: term.KeyCtrlA}: "bufferCloseAll",
+		{Key: term.KeyCtrlW}: "bufferClose",
+		{Key: term.KeyCtrlL}: "bufferNext",
+		{Key: term.KeyCtrlH}: "bufferPrev",
 	}
 )
 
@@ -345,7 +345,7 @@ func (e *ex) setError(err error) {
 }
 
 func (e *ex) handleCommandEvent(ev term.Event) bool {
-	if ev == e.config.CommandEvent {
+	if ev.KeyComb() == e.config.CommandEvent {
 		e.setCommandMode()
 		return true
 	}
@@ -368,9 +368,14 @@ func (e *ex) handleProxy(ev term.Event) (
 	b := e.comp.Browser()
 
 	// first map event, and map to potential command
-	mev, cmd, ok := e.comp.KeyMapping(ev)
+	mk, cmd, ok := e.comp.KeyMapping(ev.KeyComb())
+	mev := term.Event{
+		Type: term.EventKey,
+		Ch:   mk.Ch,
+		Key:  mk.Key,
+		Mod:  mk.Mod,
+	}
 	seq, match := e.sequencer.Handle(mev)
-
 	// if focus handle handled event, then that takes precedence
 	_, handled = b.Handle(mev)
 	if handled {
