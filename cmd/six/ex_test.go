@@ -841,7 +841,7 @@ func initExForTesting(t *testing.T, ex *ex, ed text.Editor, opts ...text.Option)
 
 func TestNewWindow(t *testing.T) {
 	cases := []testutil.HandlerSequenceTestCase{
-		{":newWindow>:changeSplitOrientation>:newWindow>",
+		{":newWindow>:changeSplitOrientation h>:newWindow>",
 			`┌──────────────────┐
 │                  │
 ├────────┐┌────────┤

@@ -21,9 +21,19 @@ const (
 )
 
 var (
-	commandBarAttr      = term.Attributes{Bg: term.ColorWhite, Fg: term.ColorBlack}
-	errInvalidSetCursor = errors.New("Cannot set cursor on this buffer")
-	exCommands          = map[string]func(*ex, ...string) (bool, error){
+	commandBarAttr        = term.Attributes{Bg: term.ColorWhite, Fg: term.ColorBlack}
+	errInvalidSetCursor   = errors.New("Cannot set cursor on this buffer")
+	windowControlCommands = map[string]struct{}{
+		"changeSplitOrientation": {},
+		"splitWindow":            {},
+		"newWindow":              {},
+		"focusNextWindow":        {},
+		"focusPrevWindow":        {},
+		"focusAboveWindow":       {},
+		"focusBelowWindow":       {},
+		"switchToWorkspace":      {}, // workspace_handler
+	}
+	exCommands = map[string]func(*ex, ...string) (bool, error){
 		"bufferPrev":             (*ex).previousBuffer,
 		"bufferNext":             (*ex).nextBuffer,
 		"bufferClose":            (*ex).closeBuffer,
@@ -51,21 +61,23 @@ var (
 		{Key: term.KeyCtrlL}: "bufferNext",
 		{Key: term.KeyCtrlH}: "bufferPrev",
 	}
-	exDefaultSequences = map[handler.Sequence]string{
+	exDefaultSequences = map[handler.Sequence][]string{
 		{First: term.KeyComb{Key: term.KeyCtrlX},
-			Last: term.KeyComb{Key: term.KeyCtrlN}}: "newWindow",
+			Last: term.KeyComb{Key: term.KeyEnter}}: {"newWindow"},
 		{First: term.KeyComb{Key: term.KeyCtrlX},
-			Last: term.KeyComb{Key: term.KeyCtrlH}}: "focusPrevWindow",
+			Last: term.KeyComb{Key: term.KeyCtrlH}}: {"focusPrevWindow"},
 		{First: term.KeyComb{Key: term.KeyCtrlX},
-			Last: term.KeyComb{Key: term.KeyCtrlL}}: "focusNextWindow",
+			Last: term.KeyComb{Key: term.KeyCtrlL}}: {"focusNextWindow"},
 		{First: term.KeyComb{Key: term.KeyCtrlX},
-			Last: term.KeyComb{Key: term.KeyCtrlJ}}: "focusBelowWindow",
+			Last: term.KeyComb{Key: term.KeyCtrlJ}}: {"focusBelowWindow"},
 		{First: term.KeyComb{Key: term.KeyCtrlX},
-			Last: term.KeyComb{Key: term.KeyCtrlK}}: "focusAboveWindow",
+			Last: term.KeyComb{Key: term.KeyCtrlK}}: {"focusAboveWindow"},
 		{First: term.KeyComb{Key: term.KeyCtrlX},
-			Last: term.KeyComb{Key: term.KeyCtrlO}}: "changeSplitOrientation",
+			Last: term.KeyComb{Ch: 'h'}}: {"changeSplitOrientation", "h"},
 		{First: term.KeyComb{Key: term.KeyCtrlX},
-			Last: term.KeyComb{Key: term.KeyCtrlQ}}: "close",
+			Last: term.KeyComb{Ch: 'v'}}: {"changeSplitOrientation", "v"},
+		{First: term.KeyComb{Key: term.KeyCtrlX},
+			Last: term.KeyComb{Key: term.KeyCtrlW}}: {"close"},
 	}
 )
 
@@ -95,7 +107,6 @@ type ex struct {
 	cmd             commandListHandler
 	overlay         component.Overlay
 	mode            mode
-	nextSplit       bool
 }
 
 func newEx(
@@ -149,7 +160,7 @@ func (e *ex) doInit(
 	}
 	// write default sequences
 	for seq, cmdAndArgs := range exDefaultSequences {
-		e.config.CommandSequenceBindings[seq] = []string{cmdAndArgs}
+		e.config.CommandSequenceBindings[seq] = cmdAndArgs
 	}
 
 	for _, o := range opts {
@@ -343,12 +354,16 @@ func (e *ex) reloadFile(args ...string) (bool, error) {
 }
 
 func (e *ex) splitDirectionChange(args ...string) (bool, error) {
-	e.nextSplit = !e.nextSplit
+	if len(args) == 0 {
+		return false, errors.New("expecting argument 'horizontal', 'h', 'vertical', 'v'")
+	}
+
 	b := e.comp.Browser()
-	if e.nextSplit {
+	switch args[0] {
+	case "horizontal", "h":
 		b.SetDefaultSplit(browser.OrientationBottom)
 		b.SetMessage("changed split direction to horizontal")
-	} else {
+	case "vertical", "v":
 		b.SetDefaultSplit(browser.OrientationRight)
 		b.SetMessage("changed split direction to vertical")
 	}
@@ -424,6 +439,12 @@ func (e *ex) handleCommandEvent(ev term.Event) bool {
 	return false
 }
 
+func isWindowControlCommand(cmdAndArgs []string) bool {
+	cmd := cmdAndArgs[0]
+	_, ok := windowControlCommands[cmd]
+	return ok
+}
+
 func (e *ex) handleProxy(ev term.Event) (
 	exit, handled bool,
 ) {
@@ -437,14 +458,6 @@ func (e *ex) handleProxy(ev term.Event) (
 		}
 	}
 
-	b := e.comp.Browser()
-
-	// if focus handle handled event, then that takes precedence
-	_, handled = b.Handle(ev)
-	if handled {
-		return
-	}
-
 	cmdAndArgs, ok := e.comp.KeyMapping(ev.KeyComb())
 	seq, match := e.sequencer.Handle(ev)
 	if match {
@@ -454,7 +467,23 @@ func (e *ex) handleProxy(ev term.Event) (
 		}
 	}
 
-	// dispatch bound event command or sequence command
+	// first dispatch window control commands
+	if len(cmdAndArgs) != 0 && isWindowControlCommand(cmdAndArgs) {
+		quit, err := e.runCommand(cmdAndArgs[0], cmdAndArgs)
+		if err != nil {
+			e.setError(err)
+		}
+		return quit, true
+	}
+
+	// then the focus handler takes precedence
+	b := e.comp.Browser()
+	_, handled = b.Handle(ev)
+	if handled {
+		return
+	}
+
+	// finally dispatch user event command or sequence command
 	if len(cmdAndArgs) != 0 {
 		quit, err := e.runCommand(cmdAndArgs[0], cmdAndArgs)
 		if err != nil {

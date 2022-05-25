@@ -36,7 +36,29 @@ var (
 		"quit":               (*workspaceManagerHandler).commandQuit,
 		"forceQuit!":         (*workspaceManagerHandler).commandQuit,
 	}
-	defaultCommandKey = term.KeyComb{Ch: ':'}
+	defaultCommandKey         = term.KeyComb{Ch: ':'}
+	defaultWorkspaceSequences = map[handler.Sequence][]string{
+		{First: term.KeyComb{Key: term.KeyCtrlX},
+			Last: term.KeyComb{Ch: '1'}}: {"switchToWorkspace", "1"},
+		{First: term.KeyComb{Key: term.KeyCtrlX},
+			Last: term.KeyComb{Ch: '2'}}: {"switchToWorkspace", "2"},
+		{First: term.KeyComb{Key: term.KeyCtrlX},
+			Last: term.KeyComb{Ch: '3'}}: {"switchToWorkspace", "3"},
+		{First: term.KeyComb{Key: term.KeyCtrlX},
+			Last: term.KeyComb{Ch: '4'}}: {"switchToWorkspace", "4"},
+		{First: term.KeyComb{Key: term.KeyCtrlX},
+			Last: term.KeyComb{Ch: '5'}}: {"switchToWorkspace", "5"},
+		{First: term.KeyComb{Key: term.KeyCtrlX},
+			Last: term.KeyComb{Ch: '6'}}: {"switchToWorkspace", "6"},
+		{First: term.KeyComb{Key: term.KeyCtrlX},
+			Last: term.KeyComb{Ch: '7'}}: {"switchToWorkspace", "7"},
+		{First: term.KeyComb{Key: term.KeyCtrlX},
+			Last: term.KeyComb{Ch: '8'}}: {"switchToWorkspace", "8"},
+		{First: term.KeyComb{Key: term.KeyCtrlX},
+			Last: term.KeyComb{Ch: '9'}}: {"switchToWorkspace", "9"},
+		{First: term.KeyComb{Key: term.KeyCtrlX},
+			Last: term.KeyComb{Ch: '0'}}: {"switchToWorkspace", "10"},
+	}
 
 	workspaceCommandList []string
 	exCommandList        []string
@@ -270,6 +292,10 @@ func (h *workspaceManagerHandler) textOpts(cfg ideConfig) []text.Option {
 		text.WithPromptConfig(cfg.promptConfig()),
 		text.WithStorage(h.storage),
 		text.WithLogger(h.logger),
+	}
+
+	for seq, cmd := range defaultWorkspaceSequences {
+		ret = append(ret, text.WithCommandSequenceBinding(seq, cmd))
 	}
 
 	for seq, cmd := range cfg.commandKeyMappings() {
