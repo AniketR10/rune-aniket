@@ -103,8 +103,8 @@ func (c ideConfig) command() (plugin.Config, bool) {
 	return c.getConfig(plugin.MapConfig(c.cfg), "command")
 }
 
-func (c ideConfig) commandKeyMappings() map[handler.Sequence]string {
-	ret := make(map[handler.Sequence]string)
+func (c ideConfig) commandKeyMappings() map[handler.Sequence][]string {
+	ret := make(map[handler.Sequence][]string)
 	cfg, ok := c.command()
 	if !ok {
 		return ret
@@ -126,12 +126,34 @@ func (c ideConfig) commandKeyMappings() map[handler.Sequence]string {
 				continue
 			}
 		}
-		strValue, ok := v.(string)
-		if !ok {
-			c.errors["key_bindings."+k] = errors.New("expected string found unknown type")
-			continue
+		cmdAndArgsSliceIfc, ok := v.([]interface{})
+		if ok {
+			var cmdAndArgs []string
+			for _, ifc := range cmdAndArgsSliceIfc {
+				cmdOrArg, ok := ifc.(string)
+				if !ok {
+					c.errors["key_bindings."+k] = errors.New(
+						"expected space-separated multi-word " +
+							"string or []string but found unknown type")
+					cmdAndArgs = nil
+					break
+				}
+				cmdAndArgs = append(cmdAndArgs, cmdOrArg)
+			}
+			if len(cmdAndArgs) != 0 {
+				ret[seq] = cmdAndArgs
+			}
+		} else {
+			cmd, ok := v.(string)
+			if !ok {
+				c.errors["key_bindings."+k] = errors.New(
+					"expected space-separated multi-word string or " +
+						"[]string but found unknown type")
+				continue
+			}
+			parts := strings.Split(strings.Trim(cmd, " "), " ")
+			ret[seq] = parts
 		}
-		ret[seq] = strValue
 	}
 
 	return ret

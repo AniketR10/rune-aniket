@@ -30,8 +30,8 @@ type Config struct {
 	RecoveryFilepath        workspace.URI
 	CommandEvent            term.KeyComb
 	CommandMaxHistory       int
-	CommandKeyBindings      map[term.KeyComb]string
-	CommandSequenceBindings map[handler.Sequence]string
+	CommandKeyBindings      map[term.KeyComb][]string
+	CommandSequenceBindings map[handler.Sequence][]string
 	SequencerTimeout        time.Duration
 	Storage                 document.Service
 	DirtyTabAttr            term.Attributes
@@ -66,8 +66,8 @@ func DefaultConfig() Config {
 		Config:                  browser.DefaultConfig(),
 		Storage:                 document.NewInMemoryCache(),
 		DirtyTabAttr:            term.Attributes{Fg: term.AttrBold},
-		CommandKeyBindings:      make(map[term.KeyComb]string),
-		CommandSequenceBindings: make(map[handler.Sequence]string),
+		CommandKeyBindings:      make(map[term.KeyComb][]string),
+		CommandSequenceBindings: make(map[handler.Sequence][]string),
 		SequencerTimeout:        400 * time.Millisecond,
 		CommandOverlay:          DefaultCommandOverlayConfig(),
 		SendInterrupt:           term.Interrupt,
@@ -191,10 +191,10 @@ func WithWallpaperBackgroundAttr(attr term.Attributes) Option {
 }
 
 // WithCommandKeyBinding maps key to issue cmd.
-func WithCommandKeyBinding(key term.KeyComb, cmd string) Option {
+func WithCommandKeyBinding(key term.KeyComb, cmdAndArgs []string) Option {
 	return func(cfg *Config) {
 		sum := term.KeyComb{Mod: key.Mod, Ch: key.Ch, Key: key.Key}
-		cfg.CommandKeyBindings[sum] = cmd
+		cfg.CommandKeyBindings[sum] = cmdAndArgs
 	}
 }
 
@@ -207,7 +207,7 @@ func WithCommandMaxHistory(max int) Option {
 
 // WithCommandSequenceBinding configures an editor to trigger
 // cmd when key sequence is pressed.
-func WithCommandSequenceBinding(sequence handler.Sequence, cmd string) Option {
+func WithCommandSequenceBinding(sequence handler.Sequence, cmdAndArgs []string) Option {
 	return func(cfg *Config) {
 		seq := handler.Sequence{
 			First: term.KeyComb{
@@ -221,7 +221,7 @@ func WithCommandSequenceBinding(sequence handler.Sequence, cmd string) Option {
 				Key: sequence.Last.Key,
 			},
 		}
-		cfg.CommandSequenceBindings[seq] = cmd
+		cfg.CommandSequenceBindings[seq] = cmdAndArgs
 	}
 }
 

@@ -145,11 +145,11 @@ func (e *ex) doInit(
 	e.config = text.DefaultConfig()
 
 	for ev, cmd := range exDefaultBindings {
-		opts = append(opts, text.WithCommandKeyBinding(ev, cmd))
+		opts = append(opts, text.WithCommandKeyBinding(ev, []string{cmd}))
 	}
 	// write default sequences
-	for seq, cmd := range exDefaultSequences {
-		e.config.CommandSequenceBindings[seq] = cmd
+	for seq, cmdAndArgs := range exDefaultSequences {
+		e.config.CommandSequenceBindings[seq] = []string{cmdAndArgs}
 	}
 
 	for _, o := range opts {
@@ -172,7 +172,8 @@ func (e *ex) doInit(
 	e.cmd.init(e.Browser(), e.config.CommandMaxHistory,
 		e.config.CommandOverlay, e.config.CommandEvent,
 		func(command string, cmdAndArgs string) bool {
-			quit, err := e.runCommand(string(command), cmdAndArgs)
+			parts := strings.Split(cmdAndArgs, " ")
+			quit, err := e.runCommand(string(command), parts)
 			e.setProxyMode()
 			if err != nil {
 				e.setError(err)
@@ -384,8 +385,7 @@ func (e *ex) newWindow(args ...string) (bool, error) {
 	return false, nil
 }
 
-func (e *ex) runCommand(cmd string, cmdAndArgs string) (quit bool, err error) {
-	parts := strings.Split(cmdAndArgs, " ")
+func (e *ex) runCommand(cmd string, parts []string) (quit bool, err error) {
 	// check to workaround default :<number> command to go to line:
 	// cmd is empty because it didn't match any command in the list
 	// but default behaviour is to move cursor to line
@@ -445,18 +445,18 @@ func (e *ex) handleProxy(ev term.Event) (
 		return
 	}
 
-	cmd, ok := e.comp.KeyMapping(ev.KeyComb())
+	cmdAndArgs, ok := e.comp.KeyMapping(ev.KeyComb())
 	seq, match := e.sequencer.Handle(ev)
 	if match {
-		cmd, ok = e.config.CommandSequenceBindings[seq]
+		cmdAndArgs, ok = e.config.CommandSequenceBindings[seq]
 		if !ok {
 			panic("key sequencer matched but no command configured")
 		}
 	}
 
 	// dispatch bound event command or sequence command
-	if cmd != "" {
-		quit, err := e.runCommand(cmd, cmd)
+	if len(cmdAndArgs) != 0 {
+		quit, err := e.runCommand(cmdAndArgs[0], cmdAndArgs)
 		if err != nil {
 			e.setError(err)
 		}

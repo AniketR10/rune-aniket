@@ -225,34 +225,7 @@ func (h *workspaceManagerHandler) switchToWorkspace(i int) {
 }
 
 func (h *workspaceManagerHandler) Handle(ev term.Event) (exit, handled bool) {
-	exit, handled = h.focusHandler().Handle(ev)
-	if exit || handled {
-		return exit, handled
-	}
-	handled = true
-	switch ev.Ch {
-	case '1':
-		h.switchToWorkspace(0)
-	case '2':
-		h.switchToWorkspace(1)
-	case '3':
-		h.switchToWorkspace(2)
-	case '4':
-		h.switchToWorkspace(3)
-	case '5':
-		h.switchToWorkspace(4)
-	case '6':
-		h.switchToWorkspace(5)
-	case '7':
-		h.switchToWorkspace(6)
-	case '8':
-		h.switchToWorkspace(7)
-	case '9':
-		h.switchToWorkspace(8)
-	case '0':
-		h.switchToWorkspace(9)
-	}
-	return
+	return h.focusHandler().Handle(ev)
 }
 
 func (h *workspaceManagerHandler) Cursor() (pos term.Coordinates, show bool) {

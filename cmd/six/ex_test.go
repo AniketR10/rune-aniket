@@ -221,7 +221,7 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 	}
 	bh, b, err := constructor(text.Mock(),
 		text.WithCommandKey(testCommandKey),
-		text.WithCommandKeyBinding(term.KeyComb{Ch: '4'}, "close"),
+		text.WithCommandKeyBinding(term.KeyComb{Ch: '4'}, []string{"close"}),
 	)
 	require.NoError(t, err)
 
@@ -689,11 +689,11 @@ func TestExKeySequence(t *testing.T) {
 			text.WithCommandSequenceBinding(handler.Sequence{
 				First: term.KeyComb{Ch: 'g'},
 				Last:  term.KeyComb{Ch: 'l'},
-			}, "bufferNext"),
+			}, []string{"bufferNext"}),
 			text.WithCommandSequenceBinding(handler.Sequence{
 				First: term.KeyComb{Ch: 'g'},
 				Last:  term.KeyComb{Ch: 'g'},
-			}, "bufferCloseAll"),
+			}, []string{"bufferCloseAll"}),
 			text.WithSequencerTimeout(10 * time.Second),
 		}
 		initExForTesting(t, b, text.Mock(), opts...)
@@ -867,7 +867,7 @@ func TestNewWindow(t *testing.T) {
 
 	b := new(ex)
 	opts := []text.Option{
-		text.WithCommandEvent(testCommandEvent),
+		text.WithCommandKey(testCommandKey),
 	}
 	initExForTesting(t, b, text.Mock(), opts...)
 	defer b.Close()

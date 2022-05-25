@@ -52,6 +52,18 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 					"key":    "<c-\\>", // see testutil.TestHandlerIsolated
 					"width":  10,
 					"height": 5,
+					"key_bindings": map[string]interface{}{
+						"1": "switchToWorkspace 1",
+						"2": "switchToWorkspace 2",
+						"3": "switchToWorkspace 3",
+						"4": "switchToWorkspace 4",
+						"5": "switchToWorkspace 5",
+						"6": "switchToWorkspace 6",
+						"7": "switchToWorkspace 7",
+						"8": "switchToWorkspace 8",
+						"9": "switchToWorkspace 9",
+						"0": "switchToWorkspace 10",
+					},
 				},
 				"workspace": map[string]interface{}{
 					"wallpaper": "workspaceWallpaper",

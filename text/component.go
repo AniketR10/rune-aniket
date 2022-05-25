@@ -365,7 +365,7 @@ func (c *Component) Editor(file workspace.URI) (Handler, error) {
 // KeyMapping returns a command that was mapped to the given key
 // combination and true or an empty string and false if there was
 // no command mapped to the given key.
-func (c *Component) KeyMapping(key term.KeyComb) (string, bool) {
+func (c *Component) KeyMapping(key term.KeyComb) ([]string, bool) {
 	cmd, ok := c.config.CommandKeyBindings[key]
 	c.tryLog(log.TraceLevel, "KeyMapping(%#v): %s", key, cmd)
 	return cmd, ok

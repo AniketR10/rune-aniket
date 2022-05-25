@@ -43,8 +43,14 @@ command:
     l: searchLine
     <c-x>: closeDoors
     <c-x><c-p>: openAllDoors
-    f<c-p>: openSmallDoors
-    <c-x>f: openLargeDoors
+    f<c-p>: openDoors small
+    <c-x>9:
+      - openDoors
+      - large
+    <c-x>p:
+      - invalid
+      - smtg:
+        - else
     <-x>f: invalidMapping
 
 browser:
@@ -188,22 +194,22 @@ func TestConfigSetting(t *testing.T) {
 		Fg: term.Attribute(219)}, cfg.viResultAttr())
 	assert.True(t, cfg.viDebug())
 	assert.True(t, cfg.viWrap())
-	wantMappings := map[handler.Sequence]string{
-		{First: term.KeyComb{Ch: 'f'}}:            "searchFile",
-		{First: term.KeyComb{Ch: 'l'}}:            "searchLine",
-		{First: term.KeyComb{Key: term.KeyCtrlX}}: "closeDoors",
+	wantMappings := map[handler.Sequence][]string{
+		{First: term.KeyComb{Ch: 'f'}}:            {"searchFile"},
+		{First: term.KeyComb{Ch: 'l'}}:            {"searchLine"},
+		{First: term.KeyComb{Key: term.KeyCtrlX}}: {"closeDoors"},
 		{
 			First: term.KeyComb{Key: term.KeyCtrlX},
 			Last:  term.KeyComb{Key: term.KeyCtrlP},
-		}: "openAllDoors",
+		}: {"openAllDoors"},
 		{
 			First: term.KeyComb{Ch: 'f'},
 			Last:  term.KeyComb{Key: term.KeyCtrlP},
-		}: "openSmallDoors",
+		}: {"openDoors", "small"},
 		{
 			First: term.KeyComb{Key: term.KeyCtrlX},
-			Last:  term.KeyComb{Ch: 'f'},
-		}: "openLargeDoors",
+			Last:  term.KeyComb{Ch: '9'},
+		}: {"openDoors", "large"},
 	}
 	assert.Equal(t, wantMappings, cfg.commandKeyMappings())
 }

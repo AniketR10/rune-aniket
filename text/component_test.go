@@ -113,10 +113,18 @@ func TestComponentKeyMapper(t *testing.T) {
 
 	t.Run("KeyMapping returns mapped command", func(t *testing.T) {
 		c := newTestComponent(t, &testEditor{})
-		c.config.CommandKeyBindings[keya] = "myCmd"
+		c.config.CommandKeyBindings[keya] = []string{"myCmd"}
 		cmd, ok := c.KeyMapping(keya)
 		assert.True(t, ok)
-		assert.Equal(t, "myCmd", cmd)
+		assert.Equal(t, []string{"myCmd"}, cmd)
+	})
+
+	t.Run("KeyMapping returns mapped command and args", func(t *testing.T) {
+		c := newTestComponent(t, &testEditor{})
+		c.config.CommandKeyBindings[keya] = []string{"myCmd", "1"}
+		cmd, ok := c.KeyMapping(keya)
+		assert.True(t, ok)
+		assert.Equal(t, []string{"myCmd", "1"}, cmd)
 	})
 }
 
