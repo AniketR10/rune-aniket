@@ -31,6 +31,13 @@ func (w Window) SetContent(h tui.Handler) (
 	comp := w.Window.Content()
 	prev = comp.(tui.Handler)
 	w.Window.SetContent(h)
+	// SetContent creates a new frame if necessary
+	// make sure that the frame created is set with
+	// the focus attr if this Window is in focus
+	if w.wm.focus.ID() == w.ID() {
+		w.SetFrameAttr(w.wm.config.FocusFrameAttr)
+		w.SetFrameCharSet(w.wm.config.FocusFrameCharSet)
+	}
 	return
 }
 

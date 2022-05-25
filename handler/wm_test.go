@@ -86,252 +86,6 @@ func TestWindowManagerHandle(t *testing.T) {
 		assert.Equal(t, 1, actualEv.MouseX)
 		assert.Equal(t, 1, actualEv.MouseY)
 	})
-
-	t.Run("delegates to correct children", func(t *testing.T) {
-		topLeftHandler := NewTestHandler()
-		width, height := 8, 4
-		writer, handler := prepareTest(width, height, false, topLeftHandler)
-
-		bottomLeftHandler := NewTestHandler()
-		bottomleft, ok := handler.SplitHorizontal(bottomLeftHandler)
-		require.True(t, ok)
-
-		topRightHandler := NewTestHandler()
-		_, ok = handler.SplitVertical(topRightHandler)
-		require.True(t, ok)
-
-		topLeft := handler.SetFocus(bottomleft)
-		bottomRightHandler := NewTestHandler()
-		_, ok = handler.SplitVertical(bottomRightHandler)
-		require.True(t, ok)
-
-		handler.SetFocus(topLeft)
-
-		cases := []testutil.HandlerTestCase{
-			{
-				term.Event{}, `
-BBBBAAAA
-BBBBAAAA
-AAAAAAAA
-AAAAAAAA`,
-			},
-			{
-				altEvent('l'), `
-BBBBAAAA
-BBBBAAAA
-AAAAAAAA
-AAAAAAAA`,
-			},
-			{
-				term.Event{}, `
-BBBBBBBB
-BBBBBBBB
-AAAAAAAA
-AAAAAAAA`,
-			},
-			{
-				altEvent('l'), `
-BBBBBBBB
-BBBBBBBB
-AAAAAAAA
-AAAAAAAA`,
-			},
-			{
-				term.Event{}, `
-BBBBCCCC
-BBBBCCCC
-AAAAAAAA
-AAAAAAAA`,
-			},
-			{
-				altEvent('h'), `
-BBBBCCCC
-BBBBCCCC
-AAAAAAAA
-AAAAAAAA`,
-			},
-			{
-				term.Event{}, `
-CCCCCCCC
-CCCCCCCC
-AAAAAAAA
-AAAAAAAA`,
-			},
-			{
-				altEvent('j'), `
-CCCCCCCC
-CCCCCCCC
-AAAAAAAA
-AAAAAAAA`,
-			},
-			{
-				term.Event{}, `
-CCCCCCCC
-CCCCCCCC
-BBBBAAAA
-BBBBAAAA`,
-			},
-			{
-				altEvent('l'), `
-CCCCCCCC
-CCCCCCCC
-BBBBAAAA
-BBBBAAAA`,
-			},
-			{
-				term.Event{}, `
-CCCCCCCC
-CCCCCCCC
-BBBBBBBB
-BBBBBBBB`,
-			},
-			{
-				term.Event{}, `
-CCCCCCCC
-CCCCCCCC
-BBBBCCCC
-BBBBCCCC`,
-			},
-			{
-				altEvent('k'), `
-CCCCCCCC
-CCCCCCCC
-BBBBCCCC
-BBBBCCCC`,
-			},
-			{
-				term.Event{}, `
-CCCCDDDD
-CCCCDDDD
-BBBBCCCC
-BBBBCCCC`,
-			},
-		}
-
-		testutil.TestHandler(t, handler, cases, writer)
-
-		topRightHandler.Exit = true
-
-		cases = []testutil.HandlerTestCase{
-			{
-				// testhandler will return after this event active = false
-				term.Event{}, `
-CCCCCCCC
-CCCCCCCC
-BBBBCCCC
-BBBBCCCC`,
-			},
-			{
-				term.Event{}, `
-DDDDDDDD
-DDDDDDDD
-BBBBCCCC
-BBBBCCCC`,
-			},
-			{
-				altEvent('j'), `
-DDDDDDDD
-DDDDDDDD
-BBBBCCCC
-BBBBCCCC`,
-			},
-			{
-				altEvent('h'), `
-DDDDDDDD
-DDDDDDDD
-BBBBCCCC
-BBBBCCCC`,
-			},
-			{
-				term.Event{}, `
-DDDDDDDD
-DDDDDDDD
-CCCCCCCC
-CCCCCCCC`,
-			},
-			{
-				term.Event{}, `
-DDDDDDDD
-DDDDDDDD
-DDDDCCCC
-DDDDCCCC`,
-			},
-		}
-
-		testutil.TestHandler(t, handler, cases, writer)
-
-		bottomLeftHandler.Exit = true
-
-		cases = []testutil.HandlerTestCase{
-			{
-				// testhandler will return after this event active = false
-				term.Event{}, `
-DDDDDDDD
-DDDDDDDD
-CCCCCCCC
-CCCCCCCC`,
-			},
-			{
-				altEvent('k'), `
-DDDDDDDD
-DDDDDDDD
-CCCCCCCC
-CCCCCCCC`,
-			},
-			{
-				term.Event{}, `
-EEEEEEEE
-EEEEEEEE
-CCCCCCCC
-CCCCCCCC`,
-			},
-		}
-
-		testutil.TestHandler(t, handler, cases, writer)
-
-		topLeftHandler.Exit = true
-
-		cases = []testutil.HandlerTestCase{
-			{
-				// testhandler will return after this event active = false
-				term.Event{}, `
-CCCCCCCC
-CCCCCCCC
-CCCCCCCC
-CCCCCCCC`,
-			},
-			{
-				term.Event{}, `
-DDDDDDDD
-DDDDDDDD
-DDDDDDDD
-DDDDDDDD`,
-			},
-			{
-				altEvent('k'), `
-DDDDDDDD
-DDDDDDDD
-DDDDDDDD
-DDDDDDDD`,
-			},
-			{
-				altEvent('l'), `
-DDDDDDDD
-DDDDDDDD
-DDDDDDDD
-DDDDDDDD`,
-			},
-			{
-				term.Event{}, `
-EEEEEEEE
-EEEEEEEE
-EEEEEEEE
-EEEEEEEE`,
-			},
-		}
-
-		testutil.TestHandler(t, handler, cases, writer)
-	})
 }
 
 func TestWindowManagerHandleFrame(t *testing.T) {
@@ -347,15 +101,22 @@ func TestWindowManagerHandleFrame(t *testing.T) {
 		{
 			term.Event{}, `
 ┌────┐┌────┐
-│BBBB││AAAA│
-│BBBB││AAAA│
+│AAAA││BBBB│
+│AAAA││BBBB│
 └────┘└────┘`,
 		},
+	}
+
+	require.True(t, handler.FocusRight())
+
+	testutil.TestHandler(t, handler, cases, writer)
+
+	cases = []testutil.HandlerTestCase{
 		{
-			altEvent('l'), `
+			term.Event{}, `
 ┌────┐┌────┐
-│BBBB││AAAA│
-│BBBB││AAAA│
+│AAAA││CCCC│
+│AAAA││CCCC│
 └────┘└────┘`,
 		},
 	}
@@ -416,21 +177,9 @@ func TestWindowManagerSetFocusContent(t *testing.T) {
 │BB││BB│
 └──┘└──┘`,
 		},
-		{
-			altEvent('l'), `
-┌──┐┌──┐
-│BB││BB│
-│BB││BB│
-└──┘└──┘`,
-		},
-		{
-			term.Event{}, `
-┌──┐┌──┐
-│CC││CC│
-│CC││CC│
-└──┘└──┘`,
-		},
 	}
+
+	require.True(t, wm.FocusRight())
 
 	testutil.TestHandler(t, wm, cases, writer)
 
@@ -451,8 +200,8 @@ func TestWindowManagerSetFocusContent(t *testing.T) {
 		{
 			term.Event{}, `
 ┌──┐╔══╗
-│DD│║DD║
-│DD│║DD║
+│CC│║CC║
+│CC│║CC║
 └──┘╚══╝`,
 		},
 	}
@@ -475,14 +224,26 @@ func TestWindowManagerSetAttr(t *testing.T) {
 	wm.SplitHorizontal(NewTestHandler())
 	wm.SetAttr(term.Attributes{Bg: cyan, Fg: red}, term.Attributes{Bg: red, Fg: cyan})
 
-	focus := wm.Focus()
-	b, ok := focus.FrameAttr()
+	w1 := wm.Focus()
+	b, ok := w1.FrameAttr()
+	require.True(t, ok)
+	assert.Equal(t, red, b.Bg)
+	assert.Equal(t, cyan, b.Fg)
+
+	w1.SetContent(NewTestHandler())
+	b, ok = w1.FrameAttr()
 	require.True(t, ok)
 	assert.Equal(t, red, b.Bg)
 	assert.Equal(t, cyan, b.Fg)
 
 	wm.ShiftFocus()
-	b, ok = focus.FrameAttr()
+	b, ok = w1.FrameAttr()
+	require.True(t, ok)
+	assert.Equal(t, cyan, b.Bg)
+	assert.Equal(t, red, b.Fg)
+
+	w1.SetContent(NewTestHandler())
+	b, ok = w1.FrameAttr()
 	require.True(t, ok)
 	assert.Equal(t, cyan, b.Bg)
 	assert.Equal(t, red, b.Fg)

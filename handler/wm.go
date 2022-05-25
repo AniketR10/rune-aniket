@@ -73,23 +73,6 @@ func (wm *WindowManager) SetAttr(def, focus term.Attributes) {
 
 // Handle : Handler
 func (wm *WindowManager) Handle(ev term.Event) (exit bool, handled bool) {
-	if ev.Type == term.EventKey && ev.Mod == term.ModAlt {
-		switch ev.Ch {
-		case 'q':
-			exit = true
-		case 'k':
-			wm.FocusUp()
-		case 'j':
-			wm.FocusDown()
-		case 'h':
-			wm.FocusLeft()
-		case 'l':
-			wm.FocusRight()
-		}
-		handled = true
-		return
-	}
-
 	if ev.Type == term.EventMouse {
 		mousePos := term.Coordinates{X: ev.MouseX, Y: ev.MouseY}
 		childAtMouse, ok := wm.comp.WindowAt(mousePos)
@@ -135,7 +118,7 @@ func (wm *WindowManager) Handle(ev term.Event) (exit bool, handled bool) {
 			return
 		}
 		curr := wm.focus
-		if curr == focus {
+		if curr.ID() == focus.ID() {
 			wm.ShiftFocus()
 			curr.Close()
 		}
