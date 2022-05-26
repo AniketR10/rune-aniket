@@ -131,6 +131,9 @@ func (s *Server) Handle(ctx context.Context, ev Event) bool {
 		go func() {
 			// wait for other events to be dispatched before cleaning resources
 			<-ctx.Done()
+			s.editor.Lock()
+			defer s.editor.Unlock()
+
 			s.cleanResource(ev.URI)
 		}()
 	}
