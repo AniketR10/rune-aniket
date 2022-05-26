@@ -204,10 +204,10 @@ func (h *fileBarEditorHandler) refreshBarContent(name string) {
 	}
 	fileSpan := component.NewSpan(&h.bar.filename, fileSpanCfg)
 	coordsSpan := component.NewSpan(&h.bar.coords, coordsSpanCfg)
-	h.bar.comp.Component = component.WithBackground(
+	h.bar.comp.Init(component.WithBackground(
 		component.Grid([][]tui.Component{{fileSpan, coordsSpan}}),
 		term.Cell{Bg: h.backgroundAttributes.Bg, Fg: h.backgroundAttributes.Fg},
-	)
+	))
 }
 
 func (h *fileBarEditorHandler) getFileInfo(name string) *fileInfo {
