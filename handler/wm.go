@@ -62,8 +62,21 @@ func (wm *WindowManager) SetFrameCharSet(def, focus component.FrameCharSet) {
 	if !wm.config.Frame {
 		return
 	}
+	wm.config.FocusFrameCharSet = focus
+	wm.config.FrameCharSet = def
 	wm.comp.SetFrameCharSet(def)
-	wm.focus.SetFrameCharSet(focus)
+	wm.setFocusAttr(wm.focus)
+}
+
+func (wm *WindowManager) setFocusAttr(win Window) {
+	// only set focus attr+charset if there's more than one window
+	if wm.Size() > 1 {
+		win.SetFrameAttr(wm.config.FocusFrameAttr)
+		win.SetFrameCharSet(wm.config.FocusFrameCharSet)
+	} else {
+		win.SetFrameAttr(wm.config.FrameAttr)
+		win.SetFrameCharSet(wm.config.FrameCharSet)
+	}
 }
 
 // SetAttr sets the default and focus window border attributes. Note that
@@ -75,7 +88,7 @@ func (wm *WindowManager) SetAttr(def, focus term.Attributes) {
 	wm.config.FocusFrameAttr = focus
 	wm.config.FrameAttr = def
 	wm.comp.SetFrameAttr(def)
-	wm.focus.SetFrameAttr(focus)
+	wm.setFocusAttr(wm.focus)
 }
 
 // Handle : Handler
@@ -92,11 +105,7 @@ func (wm *WindowManager) Handle(ev term.Event) (exit bool, handled bool) {
 			}
 			return
 		}
-		offset, ok := childAtMouse.Position()
-		if !ok {
-			panic("corrupted WindowManager: window at" +
-				" mouse is a zero-valued Window")
-		}
+		offset := childAtMouse.Position()
 		if wm.config.Frame {
 			offset.Y++
 			offset.X++
@@ -140,7 +149,9 @@ func (wm *WindowManager) SplitVertical(h tui.Handler) (Window, bool) {
 	if !ok {
 		return Window{}, false
 	}
-	return wm.newNode(w), true
+	ret := wm.newNode(w)
+	wm.setFocusAttr(wm.focus)
+	return ret, true
 }
 
 // SplitHorizontal creates a new horizontal split over the tile currently in focus.
@@ -149,14 +160,18 @@ func (wm *WindowManager) SplitHorizontal(h tui.Handler) (Window, bool) {
 	if !ok {
 		return Window{}, false
 	}
-	return wm.newNode(w), true
+	ret := wm.newNode(w)
+	wm.setFocusAttr(wm.focus)
+	return ret, true
 }
 
 // FloatingWindow creates a floating window.
 func (wm *WindowManager) FloatingWindow(
 	content tui.Handler, at term.Coordinates, width, height int,
 ) Window {
-	return wm.newNode(wm.comp.FloatingWindow(content, at, width, height))
+	ret := wm.newNode(wm.comp.FloatingWindow(content, at, width, height))
+	wm.setFocusAttr(wm.focus)
+	return ret
 }
 
 func (wm *WindowManager) switchFocus(tileFn func(Window) (Window, bool)) bool {
@@ -237,10 +252,7 @@ func (wm *WindowManager) Shiftable() (w Window, ok bool) {
 
 // Cursor returns the cursor coordinates of the tile in focus.
 func (wm *WindowManager) Cursor() (term.Coordinates, bool) {
-	offset, ok := wm.focus.Window.Position()
-	if !ok {
-		panic("corrupted WindowManager: focus is a zero-valued Window")
-	}
+	offset := wm.focus.Window.Position()
 	content := wm.focus.Content()
 	if wm.config.Frame {
 		offset.Y++
@@ -300,9 +312,8 @@ func (wm *WindowManager) SetFocus(tile Window) (
 	}
 	if wm.config.Frame {
 		wm.focus.Window.SetFrameAttr(wm.config.FrameAttr)
-		tile.Window.SetFrameAttr(wm.config.FocusFrameAttr)
 		wm.focus.Window.SetFrameCharSet(wm.config.FrameCharSet)
-		tile.Window.SetFrameCharSet(wm.config.FocusFrameCharSet)
+		wm.setFocusAttr(tile)
 	}
 	prev = wm.focus
 	wm.focus = tile

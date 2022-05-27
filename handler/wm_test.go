@@ -411,13 +411,20 @@ func TestWindowManagerSubscribe(t *testing.T) {
 	assert.Zero(t, mock.lastFocus)
 }
 
-func TestComponentWindowSplit(t *testing.T) {
+func TestWindowManagerSplit(t *testing.T) {
 	w := term.NewStringWriter(20, 8)
 
 	h1 := TestHandler{TestComponent: component.TestComponent{Ch: 'A'}}
 	wm := NewWindowManager(&h1, DefaultWindowManagerConfig())
 	w1 := wm.Focus()
 	wm.Resize(20, 8)
+
+	cfg := DefaultWindowManagerConfig()
+	cfg.FocusFrameCharSet.TopLeft = 'A'
+	cfg.FocusFrameCharSet.TopRight = 'B'
+	cfg.FocusFrameCharSet.BottomLeft = 'C'
+	cfg.FocusFrameCharSet.BottomRight = 'D'
+	wm.SetFrameCharSet(cfg.FrameCharSet, cfg.FocusFrameCharSet)
 
 	var w2 Window
 	var w3 Window
@@ -440,10 +447,10 @@ func TestComponentWindowSplit(t *testing.T) {
 			w2, ok = wm.SplitHorizontal(&h2)
 			require.True(t, ok)
 		}, `
-┌──────────────────┐
+A──────────────────B
 │AAAAAAAAAAAAAAAAAA│
 │AAAAAAAAAAAAAAAAAA│
-└──────────────────┘
+C──────────────────D
 ┌──────────────────┐
 │BBBBBBBBBBBBBBBBBB│
 │BBBBBBBBBBBBBBBBBB│
@@ -457,10 +464,10 @@ func TestComponentWindowSplit(t *testing.T) {
 │AAAAAAAAAAAAAAAAAA│
 │AAAAAAAAAAAAAAAAAA│
 └──────────────────┘
-┌────────┐┌────────┐
+A────────B┌────────┐
 │BBBBBBBB││CCCCCCCC│
 │BBBBBBBB││CCCCCCCC│
-└────────┘└────────┘`,
+C────────D└────────┘`,
 		}, {func() {
 			h2.HandleOverride = func(ev term.Event) (bool, bool) {
 				assert.NoError(t, w2.Close())
@@ -470,10 +477,10 @@ func TestComponentWindowSplit(t *testing.T) {
 			assert.False(t, exit)
 			assert.True(t, handled)
 		}, `
-┌──────────────────┐
+A──────────────────B
 │AAAAAAAAAAAAAAAAAA│
 │AAAAAAAAAAAAAAAAAA│
-└──────────────────┘
+C──────────────────D
 ┌──────────────────┐
 │CCCCCCCCCCCCCCCCCC│
 │CCCCCCCCCCCCCCCCCC│
@@ -506,19 +513,6 @@ func TestComponentWindowSplit(t *testing.T) {
 			assert.True(t, handled)
 		}, `
 ┌──────────────────┐
-│CCCCCCCCCCCCCCCCCC│
-│CCCCCCCCCCCCCCCCCC│
-│CCCCCCCCCCCCCCCCCC│
-│CCCCCCCCCCCCCCCCCC│
-│CCCCCCCCCCCCCCCCCC│
-│CCCCCCCCCCCCCCCCCC│
-└──────────────────┘`,
-		}, {func() {
-			cfg := DefaultWindowManagerConfig()
-			cfg.FocusFrameCharSet.TopLeft = 'X'
-			wm.SetFrameCharSet(cfg.FrameCharSet, cfg.FocusFrameCharSet)
-		}, `
-X──────────────────┐
 │CCCCCCCCCCCCCCCCCC│
 │CCCCCCCCCCCCCCCCCC│
 │CCCCCCCCCCCCCCCCCC│

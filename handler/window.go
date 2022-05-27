@@ -5,6 +5,7 @@ import (
 
 	"github.com/ernestrc/go-tui"
 	"github.com/ernestrc/go-tui/component"
+	"github.com/ernestrc/go-tui/term"
 )
 
 var errCalledZeroValuedWin = "called method on zero-valued Window"
@@ -40,8 +41,7 @@ func (w Window) SetContent(h tui.Handler) (
 	// make sure that the frame created is set with
 	// the focus attr if this Window is in focus
 	if w.wm.focus.ID() == w.ID() {
-		w.SetFrameAttr(w.wm.config.FocusFrameAttr)
-		w.SetFrameCharSet(w.wm.config.FocusFrameCharSet)
+		w.wm.setFocusAttr(w)
 	}
 	return
 }
@@ -79,6 +79,22 @@ func (w Window) TileUp() (Window, bool) {
 	return w.wm.newNode(win), ok
 }
 
+// Position returns this Window's position offset from the window
+// manager's relative position.
+func (w Window) Position() term.Coordinates {
+	return w.Window.Position()
+}
+
+// Width returns the width of this window.
+func (w Window) Width() int {
+	return w.Window.Width()
+}
+
+// Height returns the width of this window.
+func (w Window) Height() int {
+	return w.Window.Height()
+}
+
 // Close removes this window from the tree.
 // It returns an error if window is last window on the WindowManager.
 func (w Window) Close() error {
@@ -95,6 +111,9 @@ func (w Window) Close() error {
 	}
 
 	w.Window.Close()
+
+	// make sure that focus attrs are "reset" if wm size is 1
+	w.wm.setFocusAttr(w.wm.Focus())
 
 	return nil
 }
