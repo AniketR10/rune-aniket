@@ -152,6 +152,16 @@ func (u *FrameUnion) MainPosition() (offset term.Coordinates) {
 	return u.main.Position()
 }
 
+// MainWidth returns the main component's width.
+func (u *FrameUnion) MainWidth() int {
+	return u.main.Width()
+}
+
+// MainHeight returns the main component's height.
+func (u *FrameUnion) MainHeight() int {
+	return u.main.Height()
+}
+
 func (u *FrameUnion) resizeTopBottom(width, height int) (int, int) {
 	var frameOverlap int
 	if u.Frame {

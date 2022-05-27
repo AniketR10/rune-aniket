@@ -28,13 +28,11 @@ type Window struct {
 
 // Position returns the position of this Window, or false
 // if this Window is a zero-valued Window.
-func (w Window) Position() (pos term.Coordinates, ok bool) {
+func (w Window) Position() term.Coordinates {
 	if w.wm == nil {
 		panic(errCalledZeroValuedWin)
 	}
-	ok = true
-	pos = w.node.Position()
-	return
+	return w.node.Position()
 }
 
 // Width returns the width of this Window.

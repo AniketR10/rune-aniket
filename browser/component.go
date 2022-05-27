@@ -40,9 +40,10 @@ type Component struct {
 	height     int
 	nextSplit  Orientation
 
-	config  Config
-	buffers []*Tab
-	windows map[uint64]*browserWindow
+	focusWindow handler.Window
+	config      Config
+	buffers     []*Tab
+	windows     map[uint64]*browserWindow
 }
 
 // component.WindowManager sinchronously removes tui.Handlers
@@ -182,6 +183,15 @@ func (c *Component) wallpaper() Handler {
 	}
 }
 
+// satisfies handler.WindowSubscriber to
+// override union attrs of focus window
+type wmSubscriber Component
+
+func (s *wmSubscriber) OnFocus(prev, focus handler.Window) {
+	c := (*Component)(s)
+	c.focusWindow = focus
+}
+
 // Init initializes this Component with config.
 func (c *Component) Init(config Config) {
 	c.config = config
@@ -201,8 +211,10 @@ func (c *Component) Init(config Config) {
 	}
 
 	c.wm.Init(c.wallpaper(), config.WindowManagerConfig)
-	_ = c.newWindow(c.wm.Focus()) // init handler with initial window
+	c.focusWindow = c.wm.Focus()
+	_ = c.newWindow(c.focusWindow) // init handler with initial window
 	c.union.Init(&c.wm)
+	c.wm.Subscribe((*wmSubscriber)(c))
 	c.buffers = make([]*Tab, 0)
 
 	// make sure that frame union attrs are same as window manager attrs
@@ -679,6 +691,44 @@ func (c *Component) Resize(width, height int) {
 	}
 }
 
+func (c *Component) overwriteFocusWindowUnion(w term.Writer) {
+	if !c.config.Frame || c.focusWindow == (handler.Window{}) || c.wm.Size() <= 1 {
+		return
+	}
+	topleft := c.focusWindow.Position()
+	mainPos := c.union.MainPosition()
+	mainWidth := c.union.MainWidth()
+	mainHeight := c.union.MainHeight()
+	attr := c.config.WindowManagerConfig.FocusFrameAttr
+	cs := c.config.WindowManagerConfig.FocusFrameCharSet
+
+	if topleft == (term.Coordinates{}) {
+		cell := term.Cell{Ch: cs.TopLeft, Bg: attr.Bg, Fg: attr.Fg}
+		w.SetCell(mainPos, cell)
+	}
+
+	topright := term.Coordinates{X: topleft.X + c.focusWindow.Width(), Y: topleft.Y}
+	if topright == (term.Coordinates{X: mainWidth, Y: 0}) {
+		cell := term.Cell{Ch: cs.TopRight, Bg: attr.Bg, Fg: attr.Fg}
+		pos := term.Coordinates{X: mainPos.X + mainWidth - 1, Y: mainPos.Y}
+		w.SetCell(pos, cell)
+	}
+
+	bottomleft := term.Coordinates{X: topleft.X, Y: topleft.Y + c.focusWindow.Height()}
+	if bottomleft == (term.Coordinates{Y: mainHeight, X: 0}) {
+		cell := term.Cell{Ch: cs.BottomLeft, Bg: attr.Bg, Fg: attr.Fg}
+		pos := term.Coordinates{X: mainPos.X, Y: mainPos.Y + mainHeight - 1}
+		w.SetCell(pos, cell)
+	}
+
+	bottomright := term.Coordinates{X: topleft.X + c.focusWindow.Width(), Y: topleft.Y + c.focusWindow.Height()}
+	if bottomright == (term.Coordinates{Y: mainHeight, X: mainWidth}) {
+		cell := term.Cell{Ch: cs.BottomRight, Bg: attr.Bg, Fg: attr.Fg}
+		pos := term.Coordinates{X: mainPos.X + mainWidth - 1, Y: mainPos.Y + mainHeight - 1}
+		w.SetCell(pos, cell)
+	}
+}
+
 // Draw satisfies tui.Component
 func (c *Component) Draw(w term.Writer) {
 	c.tabs.ResetFocus()
@@ -701,6 +751,9 @@ func (c *Component) Draw(w term.Writer) {
 	} else {
 		c.logBuf.Reset()
 	}
+
+	// set correct attributes for focus window union charset
+	c.overwriteFocusWindowUnion(w)
 }
 
 // ShiftFocus calls the underlying WindowManager.ShiftFocus.
@@ -774,19 +827,6 @@ func (c *Component) SetFocus(win Window) Window {
 	return ret
 }
 
-// Close closes the resources associated with this browser.
-func (c *Component) Close() (ret error) {
-	for _, f := range c.buffers {
-		err := c.closeTab(f)
-		if err != nil {
-			ret = err
-		}
-	}
-	c.buffers = c.buffers[:0]
-	c.wm.UnsubscribeAll()
-	return ret
-}
-
 // Handle proxies events to either the underlying Tabs or WindowManager.
 func (c *Component) Handle(ev term.Event) (exit, handled bool) {
 	if len(c.prompts) != 0 {
@@ -843,4 +883,17 @@ func (c *Component) Prompt(
 // Subscribe subscribes sub to window focus events.
 func (c *Component) Subscribe(sub handler.WindowSubscriber) {
 	c.wm.Subscribe(sub)
+}
+
+// Close closes the resources associated with this browser.
+func (c *Component) Close() (ret error) {
+	for _, f := range c.buffers {
+		err := c.closeTab(f)
+		if err != nil {
+			ret = err
+		}
+	}
+	c.buffers = c.buffers[:0]
+	c.wm.UnsubscribeAll()
+	return ret
 }
