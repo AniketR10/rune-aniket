@@ -464,6 +464,8 @@ func TestClientClose(t *testing.T) {
 	assertNoLeaks(t)
 }
 
+/* tested via ex integration tests */
 func TestClientSetContent(t *testing.T) {
-	/* tested via ex integration tests */
+}
+func TestClientFocus(t *testing.T) {
 }

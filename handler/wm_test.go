@@ -44,7 +44,9 @@ func testWindowManagerSetFocus(t *testing.T, frame bool) {
 	right, ok := wm.SplitHorizontal(NewTestHandler())
 	require.True(t, ok)
 
+	assert.False(t, right.Focus())
 	wm.SetFocus(right)
+	assert.True(t, right.Focus())
 
 	if focus := wm.Focus(); focus != right {
 		t.Errorf("focus should be %+v, instead of %+v", right, focus)
@@ -362,6 +364,51 @@ func TestHandlerWindowZeroValue(t *testing.T) {
 			win.TileDown()
 		})
 	})
+}
+
+type testWindowSubscriber struct {
+	lastPrev  Window
+	lastFocus Window
+}
+
+func (w *testWindowSubscriber) reset() {
+	w.lastPrev = Window{}
+	w.lastFocus = Window{}
+}
+
+func (w *testWindowSubscriber) OnFocus(prev, focus Window) {
+	w.lastPrev = prev
+	w.lastFocus = focus
+}
+
+func TestWindowManagerSubscribe(t *testing.T) {
+	h1 := NewTestHandler()
+	h2 := NewTestHandler()
+	wm := NewWindowManager(h1, DefaultWindowManagerConfig())
+	mock := new(testWindowSubscriber)
+	wm.Subscribe(mock)
+
+	w1 := wm.Focus()
+	w2, ok := wm.SplitVertical(h2)
+	require.True(t, ok)
+	wm.SetFocus(w2)
+	assert.Equal(t, w1.ID(), mock.lastPrev.ID())
+	assert.Equal(t, w2.ID(), mock.lastFocus.ID())
+
+	wm.SetFocus(w1)
+	assert.Equal(t, w2.ID(), mock.lastPrev.ID())
+	assert.Equal(t, w1.ID(), mock.lastFocus.ID())
+
+	mock.reset()
+	wm.SetFocus(w1)
+	assert.Zero(t, mock.lastPrev)
+	assert.Zero(t, mock.lastFocus)
+
+	mock.reset()
+	wm.UnsubscribeAll()
+	wm.SetFocus(w1)
+	assert.Zero(t, mock.lastPrev)
+	assert.Zero(t, mock.lastFocus)
 }
 
 func TestComponentWindowSplit(t *testing.T) {

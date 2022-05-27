@@ -172,6 +172,21 @@ func (mr *MockWindowMockRecorder) Content() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Content", reflect.TypeOf((*MockWindow)(nil).Content))
 }
 
+// Focus mocks base method.
+func (m *MockWindow) Focus() (bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Focus")
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Focus indicates an expected call of Focus.
+func (mr *MockWindowMockRecorder) Focus() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Focus", reflect.TypeOf((*MockWindow)(nil).Focus))
+}
+
 // SetContent mocks base method.
 func (m *MockWindow) SetContent(arg0 Handler) error {
 	m.ctrl.T.Helper()

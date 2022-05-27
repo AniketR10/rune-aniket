@@ -11,6 +11,7 @@ import (
 	"github.com/ernestrc/go-tui"
 	"github.com/ernestrc/go-tui/browser"
 	"github.com/ernestrc/go-tui/cell"
+	"github.com/ernestrc/go-tui/handler"
 	"github.com/ernestrc/go-tui/term"
 	"github.com/ernestrc/go-tui/workspace"
 	log "github.com/sirupsen/logrus"
@@ -27,6 +28,10 @@ var (
 
 // used for command and event handlers
 const defaultTimeout = 1 * time.Second
+
+var _ tui.Component = (*Component)(nil)
+var _ browser.Browser = (*Component)(nil)
+var _ Editor = (*Component)(nil)
 
 // Component is an implementation of browser.Browser for file editing.
 // It also satisfies tui.Component, and text.Editor.
@@ -168,6 +173,7 @@ func (c *Component) Init(ed Editor, w workspace.ResourceOpener, config Config) e
 	c.config = config
 
 	c.comp.Init(c.config.Config)
+	c.comp.Subscribe((*windowFocusSubscriber)(c))
 
 	c.ed = ed
 	c.workspace = w
@@ -208,6 +214,30 @@ func (c *Component) Init(ed Editor, w workspace.ResourceOpener, config Config) e
 	return nil
 }
 
+type windowFocusSubscriber Component
+
+func (c *windowFocusSubscriber) OnFocus(old, focus handler.Window) {
+	c.tryDispatchEvent(old, EventTypeUnfocus)
+	c.tryDispatchEvent(focus, EventTypeFocus)
+}
+
+func (c *windowFocusSubscriber) tryDispatchEvent(win handler.Window, evType EventType) {
+	content := win.Content()
+	t, ok := content.(*browser.Tab)
+	if !ok {
+		return
+	}
+	res, ok := t.Handler().(Handler)
+	if !ok {
+		return
+	}
+	(*Component)(c).dispatchEvent(Event{
+		Type:     evType,
+		URI:      t.URI(),
+		Resource: res,
+	})
+}
+
 func (c *Component) setFocusToTab(t *browser.Tab) (browser.Handler, error) {
 	err := c.comp.Focus().SetContent(t)
 	if err != nil {
@@ -218,14 +248,28 @@ func (c *Component) setFocusToTab(t *browser.Tab) (browser.Handler, error) {
 	return t, nil
 }
 
-type compTabSubscriber Component
+type compTabSubscriber struct {
+	parent *Component
+	window browser.Window
+}
 
 func (s *compTabSubscriber) OnFocus(t *browser.Tab) {
 	res, ok := t.Handler().(Handler)
 	if !ok {
 		return
 	}
-	(*Component)(s).dispatchEvent(Event{
+	w, ok := t.Window()
+	if !ok {
+		// this should never happen, given that we just received OnFocus
+		return
+	}
+	s.window = w
+	if ok, err := w.Focus(); err != nil || !ok {
+		// tab has been assigned to window but window
+		// is not main window
+		return
+	}
+	s.parent.dispatchEvent(Event{
 		Type:     EventTypeFocus,
 		URI:      t.URI(),
 		Resource: res,
@@ -237,7 +281,15 @@ func (s *compTabSubscriber) OnFree(t *browser.Tab) {
 	if !ok {
 		return
 	}
-	(*Component)(s).dispatchEvent(Event{
+	if s.window == nil {
+		// should not happen, if OnFree is called
+		// OnFocus should have been called before
+		return
+	}
+	if ok, err := s.window.Focus(); err != nil || !ok {
+		return
+	}
+	s.parent.dispatchEvent(Event{
 		Type:     EventTypeUnfocus,
 		URI:      t.URI(),
 		Resource: res,
@@ -729,7 +781,7 @@ func (c *Component) newTab(
 	resource workspace.URI, name string, h browser.Handler, closer io.Closer,
 ) *browser.Tab {
 	t := c.comp.NewTab(resource, name, h, closer)
-	t.Subscribe((*compTabSubscriber)(c))
+	t.Subscribe(&compTabSubscriber{parent: c})
 	return t
 }
 

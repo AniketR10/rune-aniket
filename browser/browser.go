@@ -18,6 +18,8 @@ type Handler interface {
 type Window interface {
 	SetContent(Handler) error
 	Content() (Handler, error)
+	// Focus returns whether this window is in focus.
+	Focus() (bool, error)
 
 	// Close closes the window.
 	Close() error

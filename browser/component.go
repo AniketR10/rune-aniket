@@ -77,6 +77,10 @@ type browserWindow struct {
 	doClose func()
 }
 
+func (w *browserWindow) Focus() (bool, error) {
+	return w.win.Focus(), nil
+}
+
 func (w *browserWindow) id() uint64 {
 	return w.win.ID()
 }
@@ -325,8 +329,7 @@ func (c *Component) updateWindowTab(win *browserWindow, tabID int) bool {
 	return false
 }
 
-// EditWindowTabNextFree updates win with the next available tab.
-func (c *Component) EditWindowTabNextFree(win Window) bool {
+func (c *Component) updateWithNextFreeTab(win Window) bool {
 	freeBufs := c.freeTabs()
 	if len(freeBufs) != 0 {
 		c.updateWindowContent(win.(*browserWindow), c.buffers[freeBufs[0]])
@@ -336,23 +339,16 @@ func (c *Component) EditWindowTabNextFree(win Window) bool {
 	return false
 }
 
-// EditWindowTabLastFree updates win with the last available tab.
-func (c *Component) EditWindowTabLastFree(win Window) bool {
-	freeBufs := c.freeTabs()
-	if len(freeBufs) != 0 {
-		c.updateWindowContent(win.(*browserWindow), c.buffers[freeBufs[len(freeBufs)-1]])
-		return true
-	}
-
-	return false
-}
-
-// EditWindowTabPrev updates win with the tab before the current tab.
-func (c *Component) EditWindowTabPrev(win Window) bool {
+// PreviousTab updates win with the tab before the current tab.
+func (c *Component) PreviousTab(win Window) bool {
 	bWin := win.(*browserWindow)
+	// already closed
+	if bWin.parent == nil {
+		return false
+	}
 	t, id := c.browserTabID(bWin)
 	if t == nil {
-		return c.EditWindowTabNextFree(win)
+		return c.updateWithNextFreeTab(win)
 	}
 	for i := 0; i < len(c.buffers); i++ {
 		if id == 0 {
@@ -367,12 +363,16 @@ func (c *Component) EditWindowTabPrev(win Window) bool {
 	return false
 }
 
-// EditWindowTabNext updates win with the tab after the current tab.
-func (c *Component) EditWindowTabNext(win Window) bool {
+// NextTab updates win with the tab after the current tab.
+func (c *Component) NextTab(win Window) bool {
 	bWin := win.(*browserWindow)
+	// already closed
+	if bWin.parent == nil {
+		return false
+	}
 	t, id := c.browserTabID(bWin)
 	if t == nil {
-		return c.EditWindowTabNextFree(win)
+		return c.updateWithNextFreeTab(win)
 	}
 	for i := 0; i < len(c.buffers); i++ {
 		id++
@@ -783,6 +783,7 @@ func (c *Component) Close() (ret error) {
 		}
 	}
 	c.buffers = c.buffers[:0]
+	c.wm.UnsubscribeAll()
 	return ret
 }
 
@@ -837,4 +838,9 @@ func (c *Component) Prompt(
 		})
 	prompt.Resize(c.width, c.height)
 	c.prompts = append([]tui.Handler{prompt}, c.prompts...)
+}
+
+// Subscribe subscribes sub to window focus events.
+func (c *Component) Subscribe(sub handler.WindowSubscriber) {
+	c.wm.Subscribe(sub)
 }

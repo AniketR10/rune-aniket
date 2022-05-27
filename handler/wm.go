@@ -22,6 +22,13 @@ type WindowManager struct {
 	comp   component.WindowManager
 	config WindowManagerConfig
 	focus  Window
+	subs   []WindowSubscriber
+}
+
+// WindowSubscriber wraps the OnFocus callback used
+// to subscribe to window focus.
+type WindowSubscriber interface {
+	OnFocus(prevFocus, newFocus Window)
 }
 
 // NewWindowManager allocates storage for a new WindowManager and initializes it with the
@@ -299,6 +306,9 @@ func (wm *WindowManager) SetFocus(tile Window) (
 	}
 	prev = wm.focus
 	wm.focus = tile
+	if prev != tile {
+		wm.dispatchOnFocus(prev, wm.focus)
+	}
 	return
 }
 
@@ -324,4 +334,20 @@ func (wm *WindowManager) Iterate(fn func(Window)) {
 	wm.comp.Iterate(func(c component.Window) {
 		fn(wm.newNode(c))
 	})
+}
+
+func (wm *WindowManager) dispatchOnFocus(prev, focus Window) {
+	for _, sub := range wm.subs {
+		sub.OnFocus(prev, focus)
+	}
+}
+
+// Subscribe subscribes sub to window focus events.
+func (wm *WindowManager) Subscribe(sub WindowSubscriber) {
+	wm.subs = append(wm.subs, sub)
+}
+
+// UnsubscribeAll unsubscribes all WindowSubscriber.
+func (wm *WindowManager) UnsubscribeAll() {
+	wm.subs = nil
 }

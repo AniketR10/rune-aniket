@@ -30,6 +30,14 @@ func newWindowClient(
 	return ret
 }
 
+func (w *windowClient) Focus() (bool, error) {
+	fw, err := w.browserClient.Focus()
+	if err != nil {
+		return false, err
+	}
+	return fw.id() == w.id(), nil
+}
+
 func (w *windowClient) Content() (Handler, error) {
 	ctx := context.Background()
 
@@ -70,7 +78,8 @@ func (w *windowClient) onWindowClosed(fn func()) {
 }
 
 func (w *windowClient) id() uint64 {
-	panic("id not implemented on window client")
+	// NOTE: assumes that browser client caches windows correctly
+	return w.brokerID
 }
 
 func (w *windowClient) Close() (err error) {

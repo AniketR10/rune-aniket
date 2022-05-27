@@ -241,13 +241,13 @@ func (e *ex) moveFocusCursor(line int) error {
 
 func (e *ex) previousBuffer(args ...string) (bool, error) {
 	b := e.comp.Browser()
-	b.EditWindowTabPrev(b.Focus())
+	b.PreviousTab(b.Focus())
 	return false, nil
 }
 
 func (e *ex) nextBuffer(args ...string) (bool, error) {
 	b := e.comp.Browser()
-	b.EditWindowTabNext(b.Focus())
+	b.NextTab(b.Focus())
 	return false, nil
 }
 

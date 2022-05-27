@@ -15,6 +15,7 @@ import (
 	"github.com/ernestrc/go-tui/term"
 	testutil "github.com/ernestrc/go-tui/util/test"
 	"github.com/ernestrc/go-tui/workspace"
+	gomock "github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -546,6 +547,89 @@ func TestComponentEditorSubscriber(t *testing.T) {
 		require.NoError(t, win.SetContent(b))
 		assert.Equal(t, 3, i)
 	})
+}
+
+func expectEvent(
+	t *testing.T, mock *MockEventHandler, uri workspace.URI, tpe EventType,
+) {
+	mock.EXPECT().Handle(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, ev Event) bool {
+			if tpe == ev.Type {
+				assert.Equal(t, uri.String(), ev.URI.String())
+			}
+			return false
+		})
+}
+
+func TestEventTypeFocusIntegration(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	c := newTestComponent(t, &testEditor{})
+	mock := NewMockEventHandler(ctrl)
+	c.SubscribeEditorEvents([]EventType{EventTypeFocus, EventTypeUnfocus}, mock)
+
+	uri1, err := workspace.ParseURI("file:///Elon.txt")
+	require.NoError(t, err)
+
+	uri2, err := workspace.ParseURI("file:///Jeffrey.txt")
+	require.NoError(t, err)
+
+	h1, err := c.OpenFileTab(uri1, false)
+	require.NoError(t, err)
+
+	h2, err := c.OpenFileTab(uri2, false)
+	require.NoError(t, err)
+
+	w1, err := c.Focus()
+	require.NoError(t, err)
+
+	// sut
+	expectEvent(t, mock, uri2, EventTypeUnfocus)
+	expectEvent(t, mock, uri1, EventTypeFocus)
+	require.NoError(t, c.Browser().Focus().SetContent(h1))
+
+	expectEvent(t, mock, uri1, EventTypeUnfocus)
+	expectEvent(t, mock, uri2, EventTypeFocus)
+	require.NoError(t, c.Browser().Focus().SetContent(h2))
+
+	expectEvent(t, mock, uri2, EventTypeUnfocus)
+	expectEvent(t, mock, uri1, EventTypeFocus)
+	w2, err := c.Split(browser.OrientationRight, h1)
+	require.NoError(t, err)
+
+	expectEvent(t, mock, uri1, EventTypeUnfocus)
+	expectEvent(t, mock, uri2, EventTypeFocus)
+	_, err = c.SetFocus(w1)
+	require.NoError(t, err)
+
+	expectEvent(t, mock, uri2, EventTypeUnfocus)
+	expectEvent(t, mock, uri1, EventTypeFocus)
+	_, err = c.SetFocus(w2)
+	require.NoError(t, err)
+
+	ok := c.Browser().NextTab(w2)
+	require.False(t, ok)
+
+	expectEvent(t, mock, uri1, EventTypeUnfocus)
+	expectEvent(t, mock, uri2, EventTypeFocus)
+	ok = c.Browser().ShiftFocus()
+	require.True(t, ok)
+
+	expectEvent(t, mock, uri2, EventTypeUnfocus)
+	expectEvent(t, mock, uri1, EventTypeFocus)
+	ok = c.Browser().ShiftFocus()
+	require.True(t, ok)
+
+	expectEvent(t, mock, uri1, EventTypeUnfocus)
+	expectEvent(t, mock, uri2, EventTypeFocus)
+	require.NoError(t, w2.Close())
+
+	ok = c.Browser().NextTab(w2)
+	require.False(t, ok)
+
+	expectEvent(t, mock, uri2, EventTypeUnfocus)
+	expectEvent(t, mock, uri1, EventTypeFocus)
+	ok = c.Browser().NextTab(w1)
+	require.True(t, ok)
 }
 
 func TestDispatchCommand(t *testing.T) {

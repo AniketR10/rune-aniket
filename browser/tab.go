@@ -102,6 +102,12 @@ func (b *Tab) URI() workspace.URI {
 	return b.uri
 }
 
+// Window returns this tab's Window and true or nil and false
+// if this tab is not currently active on any window.
+func (b *Tab) Window() (Window, bool) {
+	return b.win, !b.free
+}
+
 // Handler returns the Handler responsible for drawing
 // the contents of this tab.
 func (b *Tab) Handler() Handler {

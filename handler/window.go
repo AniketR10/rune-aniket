@@ -24,6 +24,11 @@ func (w Window) Content() tui.Handler {
 	return c.(tui.Handler)
 }
 
+// Focus returns true if window is in focus.
+func (w Window) Focus() bool {
+	return w.wm.focus == w
+}
+
 // SetContent sets the content of the window to h.
 func (w Window) SetContent(h tui.Handler) (
 	prev tui.Handler,
