@@ -111,8 +111,8 @@ func main() {
 		log.Fatal(err)
 	}
 
-	defer i.Close()
 	err = i.run()
+	i.Close()
 	if err != nil {
 		log.Fatal(err)
 	}
