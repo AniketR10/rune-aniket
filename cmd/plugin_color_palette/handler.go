@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"strconv"
 
 	"github.com/ernestrc/go-tui"
@@ -11,6 +12,8 @@ import (
 type colorPaletteHandler struct {
 	width, height int
 	grid          tui.Component
+	dim           bool
+	dirty         bool
 }
 
 func (h *colorPaletteHandler) Resize(width, height int) {
@@ -21,7 +24,7 @@ func (h *colorPaletteHandler) Resize(width, height int) {
 	h.height = height
 }
 
-func makeColorGrid() tui.Component {
+func makeColorGrid(dim bool) tui.Component {
 	ret := make([][]tui.Component, 16)
 	var nameNum int
 	for y := 0; y < 16; y++ {
@@ -52,6 +55,10 @@ func makeColorGrid() tui.Component {
 			default:
 				name = strconv.Itoa(nameNum)
 			}
+			if dim {
+				attr = term.DimAttr(attr)
+				name = fmt.Sprintf("D%s", name)
+			}
 			ret[y][x] = component.StringWithConfig(name,
 				component.StringConfig{
 					Attributes:           term.Attributes{Bg: attr},
@@ -64,8 +71,9 @@ func makeColorGrid() tui.Component {
 }
 
 func (h *colorPaletteHandler) Draw(w term.Writer) {
-	if h.grid == nil {
-		h.grid = makeColorGrid()
+	if h.grid == nil || h.dirty {
+		h.dirty = false
+		h.grid = makeColorGrid(h.dim)
 		h.grid.Resize(h.width, h.height)
 	}
 	h.grid.Draw(w)
@@ -73,6 +81,11 @@ func (h *colorPaletteHandler) Draw(w term.Writer) {
 
 func (h *colorPaletteHandler) Handle(ev term.Event) (exit, handled bool) {
 	if ev.Type != term.EventKey {
+		return
+	}
+	if ev.Key == term.KeyCtrlD {
+		h.dim = !h.dim
+		h.dirty = true
 		return
 	}
 	exit = ev.Key == term.KeyEsc
