@@ -12,13 +12,44 @@ func DimWriter(w Writer) Writer {
 // dims the color, except if color is already black,
 // in which case it changes it to gray.
 func DimAttr(attr Attribute) Attribute {
+	mode := SetOutputMode(OutputCurrent)
+	switch mode {
+	case OutputNormal, Output216:
+		return dimAttrNormal(attr)
+	case Output256:
+		return dimAttr256(attr)
+	case OutputGrayscale:
+		return dimAttrGrayscale(attr)
+	default:
+		return attr
+	}
+}
+
+func dimAttrNormal(attr Attribute) Attribute {
+	return ColorDefault
+}
+
+func dimAttrGrayscale(attr Attribute) Attribute {
+	attr &= 0x1ff
+
+	if attr == 0 {
+		return 20
+	} else if attr <= 10 {
+		return 10
+	} else {
+		attr -= 9
+	}
+	return attr
+}
+
+func dimAttr256(attr Attribute) Attribute {
 	// remove attributes
 	attr &= 0x1ff
 
 	switch attr {
 	case 0:
 		attr = 103
-	case 17, 233:
+	case 1, 17, 233:
 		/* cannot dim a black */
 	case 53, 89, 125, 161, 197:
 		attr -= 36
@@ -34,9 +65,9 @@ func DimAttr(attr Attribute) Attribute {
 	case ColorGreen:
 		attr = 71
 	case ColorYellow:
-		attr = 215
+		attr = 137
 	case ColorBlue:
-		attr = 20
+		attr = 238
 	case 6:
 		attr = 131
 	case 7:
@@ -52,7 +83,7 @@ func DimAttr(attr Attribute) Attribute {
 	case 12:
 		attr = ColorYellow
 	case 13:
-		attr = 25
+		attr = ColorBlue
 	case 14:
 		attr = 6
 	case 15:
@@ -67,7 +98,6 @@ func DimAttr(attr Attribute) Attribute {
 
 func dimAttrs(attrs Attributes) Attributes {
 	attrs.Fg = DimAttr(attrs.Fg)
-	attrs.Bg = attrs.Bg
 	return attrs
 
 }

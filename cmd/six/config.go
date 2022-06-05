@@ -23,6 +23,7 @@ import (
 const (
 	outputNormal           = "normal"
 	output256              = "color_256"
+	output216              = "color_216"
 	outputGrayscale        = "grayscale"
 	inputEsc               = "esc"
 	inputAlt               = "alt"
@@ -734,6 +735,8 @@ func (c ideConfig) outputMode() (out term.OutputMode) {
 		out = term.OutputNormal
 	case output256:
 		out = term.Output256
+	case output216:
+		out = term.Output216
 	case outputGrayscale:
 		out = term.OutputGrayscale
 	default:
