@@ -21,7 +21,7 @@ type WindowManager struct {
 	config        WindowManagerConfig
 }
 
-func (wm *WindowManager) withFrame(handler tui.Component) tui.Component {
+func (wm *WindowManager) withFrame(handler tui.Component) *Frame {
 	f := NewFrame(handler)
 	f.FrameCharSet = wm.config.FrameCharSet
 	f.Attributes = wm.config.FrameAttr

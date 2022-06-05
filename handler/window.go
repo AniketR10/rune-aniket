@@ -30,20 +30,26 @@ func (w Window) Focus() bool {
 	return w.wm.focus == w
 }
 
-// SetContent sets the content of the window to h.
-func (w Window) SetContent(h tui.Handler) (
+func (w Window) setContentResize(h tui.Handler, resize bool) (
 	prev tui.Handler,
 ) {
 	comp := w.Window.Content()
 	prev = comp.(tui.Handler)
-	w.Window.SetContent(h)
+	w.Window.SetContentResize(h, resize)
 	// SetContent creates a new frame if necessary
 	// make sure that the frame created is set with
 	// the focus attr if this Window is in focus
 	if w.wm.focus.ID() == w.ID() {
 		w.wm.setFocusAttr(w)
 	}
-	return
+	return prev
+}
+
+// SetContent sets the content of the window to h.
+func (w Window) SetContent(h tui.Handler) (
+	prev tui.Handler,
+) {
+	return w.setContentResize(h, true)
 }
 
 // Size returns the total number of win under this Window.

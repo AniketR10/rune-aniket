@@ -100,7 +100,7 @@ func (w *browserWindow) Content() (Handler, error) {
 }
 
 func (w *browserWindow) SetContent(h Handler) error {
-	return w.parent.tryEditWindowContent(w, h)
+	return w.parent.tryUpdateWindowContent(w, h)
 }
 
 // browserWindow is passed by value, so we store whether
@@ -204,7 +204,7 @@ func (c *Component) Init(config Config) {
 	c.tabs.Init()
 	c.tabs.OnClick = func(id int) {
 		t := c.buffers[id]
-		err := c.tryEditWindowContent(c.Focus().(*browserWindow), t)
+		err := c.tryUpdateWindowContent(c.Focus().(*browserWindow), t)
 		if err != nil {
 			c.setError(err)
 		}
@@ -413,7 +413,7 @@ func (c *Component) closeHandler(h Handler) {
 	c.tryLog("Component.closeHandler(%p)", h)
 }
 
-func (c *Component) tryEditWindowContent(
+func (c *Component) tryUpdateWindowContent(
 	win *browserWindow, content Handler,
 ) error {
 	if b, ok := content.(*Tab); ok {

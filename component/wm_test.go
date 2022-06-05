@@ -6,6 +6,7 @@ import (
 	"github.com/ernestrc/go-tui/term"
 	testutil "github.com/ernestrc/go-tui/util/test"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestComponentWindowZeroValue(t *testing.T) {
@@ -147,6 +148,36 @@ func TestComponentWindowSplit(t *testing.T) {
 │CCCCCCCCCCCCCCCCCC│
 │CCCCCCCCCCCCCCCCCC│
 │CCCCCCCCCCCCCCCCCC│
+└──────────────────┘`,
+		}, {func() {
+			wx, ok := wm.WindowAt(term.Coordinates{})
+			require.True(t, ok)
+			comp := TestComponent{Ch: '#'}
+			comp.Resize(3, 3)
+			wx.SetContentResize(&comp, true)
+		}, `
+┌──────────────────┐
+│##################│
+│##################│
+│##################│
+│##################│
+│##################│
+│##################│
+└──────────────────┘`,
+		}, {func() {
+			wx, ok := wm.WindowAt(term.Coordinates{})
+			require.True(t, ok)
+			comp := TestComponent{Ch: '$'}
+			comp.Resize(3, 3)
+			wx.SetContentResize(&comp, false)
+		}, `
+┌──────────────────┐
+│$$$               │
+│$$$               │
+│$$$               │
+│                  │
+│                  │
+│                  │
 └──────────────────┘`,
 		},
 	}

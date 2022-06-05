@@ -478,11 +478,13 @@ func (t *TileTree) TileAt(pos term.Coordinates) *TileNode {
 	return t.root.tileAt(pos)
 }
 
-// SetContent sets the content of a TileNode to c.
-func (t *TileNode) SetContent(c tui.Component) (prev tui.Component) {
+// SetContentResize sets the content of a TileNode to c.
+func (t *TileNode) SetContentResize(c tui.Component, resize bool) (prev tui.Component) {
 	prev = t.content
 	t.content = c
-	t.content.Resize(t.width, t.height)
+	if resize {
+		t.content.Resize(t.width, t.height)
+	}
 	return
 }
 

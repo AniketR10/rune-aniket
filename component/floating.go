@@ -31,7 +31,7 @@ func newFloatingNode(
 	ret.maxWidth = maxWidth
 	ret.maxHeight = maxHeight
 	ret.wm = wm
-	ret.SetContent(content)
+	ret.SetContentResize(content, true)
 	return ret
 }
 
@@ -55,10 +55,14 @@ func (w *floatingNode) Draw(wr term.Writer) {
 	w.content.Draw(wr)
 }
 
-func (w *floatingNode) SetContent(c tui.Component) (prev tui.Component) {
+func (w *floatingNode) SetContentResize(c tui.Component, resize bool) (
+	prev tui.Component,
+) {
 	prev = w.content.C
 	w.content.C = c
-	w.resize()
+	if resize {
+		w.resize()
+	}
 	return
 }
 

@@ -14,7 +14,7 @@ type windowNode interface {
 	Width() int
 	Height() int
 	Content() tui.Component
-	SetContent(tui.Component) tui.Component
+	SetContentResize(tui.Component, bool) tui.Component
 	Size() int
 	Close()
 	Position() term.Coordinates
@@ -72,11 +72,31 @@ func (w Window) Content() (c tui.Component) {
 func (w Window) SetContent(content tui.Component) (
 	prev tui.Component,
 ) {
-	prev = w.Content()
-	if w.wm.config.Frame {
+	return w.SetContentResize(content, true)
+}
+
+// SetContentResize sets the content of this Window to content and
+// returns the previous content, without resizing Content to the
+// size and width of this window. This is useful for optimizing
+// hot-swapping content between windows that are of the same size.
+func (w Window) SetContentResize(content tui.Component, resize bool) (
+	prev tui.Component,
+) {
+	if w.wm == nil {
+		panic(errCalledZeroValuedWin)
+	}
+
+	if w.wm.config.Frame && !resize {
+		// frame needs a Resize but avoid resizing content
+		// as per resize arg.
+		frame := w.wm.withFrame(Nop())
+		frame.Resize(w.Width(), w.Height())
+		frame.content.C = content
+		content = frame
+	} else if w.wm.config.Frame {
 		content = w.wm.withFrame(content)
 	}
-	w.node.SetContent(content)
+	prev = w.node.SetContentResize(content, resize)
 	return
 }
 

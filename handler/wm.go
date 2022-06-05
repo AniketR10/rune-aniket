@@ -293,7 +293,39 @@ func (wm *WindowManager) Man() tui.Manual {
 
 // Draw : tui.Component
 func (wm *WindowManager) Draw(w term.Writer) {
-	wm.comp.Draw(w)
+	if wm.comp.Size() == 1 {
+		wm.comp.Draw(w)
+		return
+	}
+
+	// optimization to not draw focus window content twice
+	// capture the state of the world here before we call Draw
+	// to avoid race conditions, since Draw might call a remote
+	// handler and unlock the event loop mutex.
+	focusContent := wm.focus.setContentResize(Nop(component.Nop()), false)
+	focus := wm.focus
+	focusWin := focus.Window
+	offset := focusWin.Position()
+	if wm.config.Frame {
+		offset.X++
+		offset.Y++
+	}
+	// Set C to Nop for now so resize does not resize focus window
+	// on every call to Draw
+	v := component.Virtual{C: component.Nop()}
+	v.Resize(focusWin.Width(), focusWin.Height())
+	v.Move(offset)
+	v.C = focusContent
+
+	// draw all with dimming term.Writer
+	wm.comp.Draw(term.DimWriter(w))
+
+	// reset focus window content
+	focus.setContentResize(focusContent, false)
+
+	// finally draw focus window content with standard term.Writer
+	// over nop component
+	v.Draw(w)
 }
 
 // Resize : tui.Component
