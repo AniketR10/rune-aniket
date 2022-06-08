@@ -302,7 +302,6 @@ func (wm *WindowManager) Draw(w term.Writer) {
 	// capture the state of the world here before we call Draw
 	// to avoid race conditions, since Draw might call a remote
 	// handler and unlock the event loop mutex.
-	focusContent := wm.focus.setContentResize(Nop(component.Nop()), false)
 	focus := wm.focus
 	focusWin := focus.Window
 	offset := focusWin.Position()
@@ -315,6 +314,8 @@ func (wm *WindowManager) Draw(w term.Writer) {
 	v := component.Virtual{C: component.Nop()}
 	v.Resize(focusWin.Width(), focusWin.Height())
 	v.Move(offset)
+
+	focusContent := focus.setContentResize(Nop(component.Nop()), false)
 	v.C = focusContent
 
 	// draw all with dimming term.Writer

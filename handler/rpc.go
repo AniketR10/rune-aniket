@@ -288,6 +288,8 @@ func (s *Server) Handle(ctx context.Context, req *proto.HandleRequest) (
 		return nil, err
 	}
 
+	tryLog(s.Logger, "handler.Server.Handle(%v)", ev)
+
 	var exit, handled bool
 	if ev.Type != term.EventInterrupt {
 		exit, handled = s.handler.Handle(ev)
