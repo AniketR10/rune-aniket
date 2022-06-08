@@ -1,10 +1,12 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	multierr "github.com/ernestrc/go-multierror"
 	"github.com/ernestrc/go-tui"
@@ -18,6 +20,7 @@ import (
 
 const (
 	commandHistoryDocumentID = "ex-command-history"
+	reissuePadding           = 10 * time.Millisecond
 )
 
 var (
@@ -97,16 +100,20 @@ type workspaceIfc interface {
 // ex implements a tui.Handler by wrapping an editor.Component and
 // providing an ex editor type of interface.
 type ex struct {
-	config          text.Config
-	comp            text.Component
-	ed              text.Editor
-	workspace       workspaceIfc
-	sequencer       handler.Sequencer
-	cmdOverride     func([]string) (bool, bool, error)
-	enabledCommands []string
-	cmd             commandListHandler
-	overlay         component.Overlay
-	mode            mode
+	config               text.Config
+	comp                 text.Component
+	ed                   text.Editor
+	workspace            workspaceIfc
+	sequencer            handler.Sequencer
+	publishEvent         func(term.Event)
+	cmdOverride          func([]string) (bool, bool, error)
+	enabledCommands      []string
+	cmd                  commandListHandler
+	overlay              component.Overlay
+	mode                 mode
+	cancelPartialReissue func()
+	ctxPartialReissue    context.Context
+	reissueEvent         term.Event
 }
 
 func newEx(
@@ -122,7 +129,7 @@ func newEx(
 	return
 }
 
-// Init initializes this ex with the given editor and Options.
+// init initializes this ex with the given editor and Options.
 // It returns an error if an initial filepath was given through WithFilePath option
 // and the file failed to be opened.
 func (e *ex) init(
@@ -139,6 +146,7 @@ func (e *ex) init(
 		return
 	}
 	e.cmd.loadHistory()
+	e.publishEvent = term.PublishEvent
 	return nil
 }
 
@@ -208,6 +216,7 @@ func (e *ex) doInit(
 		})
 
 	e.ed = ed
+	e.cleanPartialReissueState()
 	return
 }
 
@@ -458,13 +467,59 @@ func (e *ex) handleProxy(ev term.Event) (
 		}
 	}
 
-	cmdAndArgs, ok := e.comp.KeyMapping(ev.KeyComb())
-	seq, match := e.sequencer.Handle(ev)
-	if match {
+	var seq handler.Sequence
+	var match handler.SequenceMatchResult
+	// err nil indicates that match is still valid as timer hasn't expired
+	// and it was not canceled yet or simply it hasn't even started and
+	// this is first event in sequence.
+	if e.ctxPartialReissue.Err() == nil {
+		seq, match = e.sequencer.Sequence(ev.KeyComb())
+	}
+
+	var cmdAndArgs []string
+	var ok bool
+	switch match {
+	case handler.SequenceMatch:
 		cmdAndArgs, ok = e.config.CommandSequenceBindings[seq]
 		if !ok {
 			panic("key sequencer matched but no command configured")
 		}
+		if e.cancelPartialReissue != nil {
+			e.cancelPartialReissue()
+			e.cleanPartialReissueState()
+		}
+	case handler.SequencePartialMatch:
+		if e.cancelPartialReissue == nil {
+			// this is not a re-issue of a partial command, so set
+			// timer to re-issue if user doesn't complete sequence,
+			// and if timer expires
+			ctx := context.Background()
+			e.ctxPartialReissue, e.cancelPartialReissue = context.WithTimeout(ctx,
+				e.config.SequencerTimeout+reissuePadding)
+			e.reissueEvent = ev
+			go func(ctx context.Context) {
+				<-ctx.Done()
+				if ctx.Err() == context.DeadlineExceeded {
+					// timer expired, reissue event because
+					// user didn't send a matching key combination.
+					e.publishEvent(ev)
+				}
+			}(e.ctxPartialReissue)
+			return
+		}
+		// this is a re-issue so continue processing
+	default:
+		if e.cancelPartialReissue != nil {
+			err := e.ctxPartialReissue.Err()
+			e.cancelPartialReissue()
+			e.cleanPartialReissueState()
+			if err == nil {
+				// issue previous event right before this next one
+				// since we know now it's not a match.
+				_, _ = e.comp.Browser().Handle(e.reissueEvent)
+			}
+		}
+		cmdAndArgs, ok = e.comp.KeyMapping(ev.KeyComb())
 	}
 
 	// first dispatch window control commands
@@ -476,11 +531,13 @@ func (e *ex) handleProxy(ev term.Event) (
 		return quit, true
 	}
 
-	// then the focus handler takes precedence
-	b := e.comp.Browser()
-	_, handled = b.Handle(ev)
-	if handled {
-		return
+	if match != handler.SequenceMatch {
+		// then the focus handler takes precedence
+		b := e.comp.Browser()
+		_, handled = b.Handle(ev)
+		if handled {
+			return
+		}
 	}
 
 	// finally dispatch user event command or sequence command
@@ -595,6 +652,11 @@ func (e *ex) Browser() browser.Browser {
 	return &e.comp
 }
 
+func (e *ex) cleanPartialReissueState() {
+	e.cancelPartialReissue = nil
+	e.ctxPartialReissue = context.Background()
+}
+
 // Close closes the resources associated with this browser.
 func (e *ex) Close() (ret error) {
 	e.sequencer.Reset()
@@ -603,6 +665,10 @@ func (e *ex) Close() (ret error) {
 	}
 	if err := e.comp.Close(); err != nil {
 		ret = multierr.Append(ret, err)
+	}
+	if e.cancelPartialReissue != nil {
+		e.cancelPartialReissue()
+		e.cleanPartialReissueState()
 	}
 	return
 }
