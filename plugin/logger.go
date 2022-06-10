@@ -71,6 +71,21 @@ func (l *hcloggerLogrus) Trace(msg string, args ...interface{}) {
 	l.logger.WithFields(lf.fields).Trace(msg)
 }
 
+func (l *hcloggerLogrus) Log(level hclog.Level, msg string, args ...interface{}) {
+	switch level {
+	case hclog.Trace:
+		l.Trace(msg, args)
+	case hclog.Debug:
+		l.Debug(msg, args)
+	case hclog.Info:
+		l.Info(msg, args)
+	case hclog.Warn:
+		l.Warn(msg, args)
+	case hclog.Error:
+		l.Error(msg, args)
+	}
+}
+
 // Emit a message and key/value pairs at the DEBUG level
 func (l *hcloggerLogrus) Debug(msg string, args ...interface{}) {
 	lf := l.With(args).(*hcloggerLogrus)
@@ -156,6 +171,18 @@ func (l *hcloggerLogrus) Named(name string) hclog.Logger {
 	return l.With(logging.KeyClass, name)
 }
 
+func (l *hcloggerLogrus) Name() string {
+	v, ok := l.fields[logging.KeyClass]
+	if !ok {
+		return ""
+	}
+	vs, ok := v.(string)
+	if !ok {
+		return ""
+	}
+	return vs
+}
+
 // Create a logger that will prepend the name string on the front of all messages.
 func (l *hcloggerLogrus) ResetNamed(name string) hclog.Logger {
 	return l.With(logging.KeyClass, name)
@@ -182,6 +209,14 @@ func (l *hcloggerLogrus) SetLevel(level hclog.Level) {
 	l.logger.SetLevel(logrusLevel)
 }
 
+func (l *hcloggerLogrus) StandardWriter(opts *hclog.StandardLoggerOptions) io.Writer {
+	return l.logger.Writer()
+}
+
 func (l *hcloggerLogrus) StandardLogger(opts *hclog.StandardLoggerOptions) *log.Logger {
 	return log.New(l.logger.Writer(), "", log.LstdFlags)
+}
+
+func (l *hcloggerLogrus) ImpliedArgs() []interface{} {
+	return nil
 }

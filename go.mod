@@ -11,7 +11,7 @@ require (
 	github.com/ernestrc/golang-internal-tools v0.0.0-20220317145801-f8b5a950857b
 	github.com/ernestrc/tcell/v2 v2.5.2-0.20220608211033-642cdbd75d71
 	github.com/golang/mock v1.4.4
-	github.com/hashicorp/go-hclog v0.0.0-20180709165350-ff2cf002a8dd
+	github.com/hashicorp/go-hclog v0.14.1
 	github.com/hashicorp/go-plugin v1.0.1
 	github.com/junegunn/fzf v0.0.0-20201216124428-ab3937ee5a62
 	github.com/mattn/go-runewidth v0.0.13
@@ -62,8 +62,12 @@ require (
 )
 
 require (
+	github.com/fatih/color v1.7.0 // indirect
 	github.com/golang/protobuf v1.4.2 // indirect
 	github.com/google/go-cmp v0.5.2 // indirect
+	github.com/mattn/go-colorable v0.1.4 // indirect
 	google.golang.org/genproto v0.0.0-20201214200347-8c77b98c765d // indirect
 	gopkg.in/check.v1 v1.0.0-20190902080502-41f04d3bba15 // indirect
 )
+
+replace github.com/hashicorp/go-plugin => github.com/ernestrc/go-plugin v1.4.5
