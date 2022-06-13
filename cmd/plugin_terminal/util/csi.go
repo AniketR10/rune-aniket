@@ -1,7 +1,9 @@
 package termutil
 
 import (
+	"bufio"
 	"fmt"
+	"io"
 	"strconv"
 	"strings"
 
@@ -9,22 +11,24 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-func parseCSI(readChan chan MeasuredRune) (final rune, params []string, intermediate []rune, raw []rune) {
-	var b MeasuredRune
-
+func parseCSI(readChan *bufio.Reader) (final rune, params []string, intermediate []rune, raw []rune, exit bool) {
 	param := ""
 	intermediate = []rune{}
 CSI:
 	for {
-		b = <-readChan
-		raw = append(raw, b.Rune)
+		rune, _, err := readChan.ReadRune()
+		if err == io.EOF {
+			exit = true
+			return
+		}
+		raw = append(raw, rune)
 		switch true {
-		case b.Rune >= 0x30 && b.Rune <= 0x3F:
-			param = param + string(b.Rune)
-		case b.Rune > 0 && b.Rune <= 0x2F:
-			intermediate = append(intermediate, b.Rune)
-		case b.Rune >= 0x40 && b.Rune <= 0x7e:
-			final = b.Rune
+		case rune >= 0x30 && rune <= 0x3F:
+			param = param + string(rune)
+		case rune > 0 && rune <= 0x2F:
+			intermediate = append(intermediate, rune)
+		case rune >= 0x40 && rune <= 0x7e:
+			final = rune
 			break CSI
 		}
 	}
@@ -40,78 +44,81 @@ CSI:
 		}
 	}
 
-	return final, params, intermediate, raw
+	return final, params, intermediate, raw, false
 }
 
-func (t *Terminal) handleCSI(readChan chan MeasuredRune) (renderRequired bool) {
-	final, params, intermediate, raw := parseCSI(readChan)
+func (t *Terminal) handleCSI() (renderRequired, exit bool) {
+	final, params, intermediate, raw, exit := parseCSI(t.reader)
+	if exit {
+		return false, exit
+	}
 
 	t.log("Terminal.handleCSI: P(%q) I(%q) %c", strings.Join(params, ";"), string(intermediate), final)
 
 	switch final {
 	case 'c':
-		return t.csiSendDeviceAttributesHandler(params)
+		return t.csiSendDeviceAttributesHandler(params), false
 	case 'd':
-		return t.csiLinePositionAbsoluteHandler(params)
+		return t.csiLinePositionAbsoluteHandler(params), false
 	case 'f':
-		return t.csiCursorPositionHandler(params)
+		return t.csiCursorPositionHandler(params), false
 	case 'g':
-		return t.csiTabClearHandler(params)
+		return t.csiTabClearHandler(params), false
 	case 'h':
-		return t.csiSetModeHandler(params)
+		return t.csiSetModeHandler(params), false
 	case 'l':
-		return t.csiResetModeHandler(params)
+		return t.csiResetModeHandler(params), false
 	case 'm':
-		return t.sgrSequenceHandler(params)
+		return t.sgrSequenceHandler(params), false
 	case 'n':
-		return t.csiDeviceStatusReportHandler(params)
+		return t.csiDeviceStatusReportHandler(params), false
 	case 'r':
-		return t.csiSetMarginsHandler(params)
+		return t.csiSetMarginsHandler(params), false
 	case 't':
-		return t.csiWindowManipulation(params)
+		return t.csiWindowManipulation(params), false
 	case 'q':
 		if string(intermediate) == " " {
-			return t.csiCursorSelection(params)
+			return t.csiCursorSelection(params), false
 		}
 	case 'A':
-		return t.csiCursorUpHandler(params)
+		return t.csiCursorUpHandler(params), false
 	case 'B':
-		return t.csiCursorDownHandler(params)
+		return t.csiCursorDownHandler(params), false
 	case 'C':
-		return t.csiCursorForwardHandler(params)
+		return t.csiCursorForwardHandler(params), false
 	case 'D':
-		return t.csiCursorBackwardHandler(params)
+		return t.csiCursorBackwardHandler(params), false
 	case 'E':
-		return t.csiCursorNextLineHandler(params)
+		return t.csiCursorNextLineHandler(params), false
 	case 'F':
-		return t.csiCursorPrecedingLineHandler(params)
+		return t.csiCursorPrecedingLineHandler(params), false
 	case 'G':
-		return t.csiCursorCharacterAbsoluteHandler(params)
+		return t.csiCursorCharacterAbsoluteHandler(params), false
 	case 'H':
-		return t.csiCursorPositionHandler(params)
+		return t.csiCursorPositionHandler(params), false
 	case 'J':
-		return t.csiEraseInDisplayHandler(params)
+		return t.csiEraseInDisplayHandler(params), false
 	case 'K':
-		return t.csiEraseInLineHandler(params)
+		return t.csiEraseInLineHandler(params), false
 	case 'L':
-		return t.csiInsertLinesHandler(params)
+		return t.csiInsertLinesHandler(params), false
 	case 'M':
-		return t.csiDeleteLinesHandler(params)
+		return t.csiDeleteLinesHandler(params), false
 	case 'P':
-		return t.csiDeleteHandler(params)
+		return t.csiDeleteHandler(params), false
 	case 'S':
-		return t.csiScrollUpHandler(params)
+		return t.csiScrollUpHandler(params), false
 	case 'T':
-		return t.csiScrollDownHandler(params)
+		return t.csiScrollDownHandler(params), false
 	case 'X':
-		return t.csiEraseCharactersHandler(params)
+		return t.csiEraseCharactersHandler(params), false
 	case '@':
-		return t.csiInsertBlankCharactersHandler(params)
+		return t.csiInsertBlankCharactersHandler(params), false
 	case 'p': // reset handler
 		if string(intermediate) == "!" {
-			return t.csiSoftResetHandler(params)
+			return t.csiSoftResetHandler(params), false
 		}
-		return false
+		return false, false
 	}
 
 	for _, b := range intermediate {
@@ -126,7 +133,7 @@ func (t *Terminal) handleCSI(readChan chan MeasuredRune) (renderRequired bool) {
 	//_ = t.writeToRealStdOut(append([]rune{0x1b, '['}, raw...)...)
 	_ = raw
 	log.Warningf("UNKNOWN CSI P(%s) I(%s) %c", strings.Join(params, ";"), string(intermediate), final)
-	return false
+	return false, false
 
 }
 

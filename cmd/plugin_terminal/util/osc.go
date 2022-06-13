@@ -2,34 +2,34 @@ package termutil
 
 import (
 	"fmt"
+	"io"
 )
 
-func (t *Terminal) handleOSC(readChan chan MeasuredRune) (renderRequired bool) {
+func (t *Terminal) handleOSC() (renderRequired, exit bool) {
 
 	params := []string{}
 	param := ""
 
 READ:
 	for {
-		select {
-		case b := <-readChan:
-			if t.isOSCTerminator(b.Rune) {
-				params = append(params, param)
-				break READ
-			}
-			if b.Rune == ';' {
-				params = append(params, param)
-				param = ""
-				continue
-			}
-			param = fmt.Sprintf("%s%c", param, b.Rune)
-		default:
-			return false
+		r, _, err := t.reader.ReadRune()
+		if err == io.EOF {
+			return false, true
 		}
+		if t.isOSCTerminator(r) {
+			params = append(params, param)
+			break READ
+		}
+		if r == ';' {
+			params = append(params, param)
+			param = ""
+			continue
+		}
+		param = fmt.Sprintf("%s%c", param, r)
 	}
 
 	if len(params) == 0 {
-		return false
+		return false, false
 	}
 
 	pT := params[len(params)-1]
@@ -56,7 +56,7 @@ READ:
 			}
 		}
 	}
-	return false
+	return false, false
 }
 
 func (t *Terminal) isOSCTerminator(r rune) bool {

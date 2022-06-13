@@ -1,5 +1,7 @@
 package termutil
 
+import "io"
+
 var charSets = map[rune]*map[rune]rune{
 	'0': &decSpecGraphics,
 	'B': nil, // ASCII
@@ -41,24 +43,27 @@ var decSpecGraphics = map[rune]rune{
 	0x7e: 0x00B7, // MIDDLE DOT
 }
 
-func (t *Terminal) handleSCS0(pty chan MeasuredRune) bool {
-	return t.scsHandler(pty, 0)
+func (t *Terminal) handleSCS0() (bool, bool) {
+	return t.scsHandler(0)
 }
 
-func (t *Terminal) handleSCS1(pty chan MeasuredRune) bool {
-	return t.scsHandler(pty, 1)
+func (t *Terminal) handleSCS1() (bool, bool) {
+	return t.scsHandler(1)
 }
 
-func (t *Terminal) scsHandler(pty chan MeasuredRune, which int) bool {
-	b := <-pty
+func (t *Terminal) scsHandler(which int) (bool, bool) {
+	r, _, err := t.reader.ReadRune()
+	if err == io.EOF {
+		return false, true
+	}
 
-	cs, ok := charSets[b.Rune]
+	cs, ok := charSets[r]
 	if ok {
 		//terminal.logger.Debugf("Selected charset %v into G%v", string(b), which)
 		t.activeBuffer.charsets[which] = cs
-		return false
+		return false, false
 	}
 
 	t.activeBuffer.charsets[which] = nil
-	return false
+	return false, false
 }

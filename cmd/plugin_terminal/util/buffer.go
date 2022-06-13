@@ -35,7 +35,8 @@ type Buffer struct {
 	cursorPosition        Position // raw
 	cursorAttr            term.Attributes
 	scrollLinesFromBottom uint
-	maxLines              uint64
+	maxLinesLowWaterMark  uint64
+	maxLinesHighWaterMark uint64
 	tabStops              []uint16
 	charsets              []*map[rune]rune // array of 2 charsets, nil means ASCII (no conversion)
 	currentCharset        int              // active charset index in charsets array, valid values are 0 or 1
@@ -68,14 +69,15 @@ type Position struct {
 // NewBuffer creates a new terminal buffer
 func NewBuffer(width, height uint16, maxLines uint64, attr term.Attributes) *Buffer {
 	b := &Buffer{
-		lines:        []Line{},
-		viewHeight:   height,
-		viewWidth:    width,
-		maxLines:     maxLines,
-		topMargin:    0,
-		bottomMargin: uint(height - 1),
-		cursorAttr:   attr,
-		charsets:     []*map[rune]rune{nil, nil},
+		lines:                 []Line{},
+		viewHeight:            height,
+		viewWidth:             width,
+		maxLinesLowWaterMark:  maxLines,
+		maxLinesHighWaterMark: maxLines * 2,
+		topMargin:             0,
+		bottomMargin:          uint(height - 1),
+		cursorAttr:            attr,
+		charsets:              []*map[rune]rune{nil, nil},
 		modes: Modes{
 			LineFeedMode:   true,
 			AutoWrap:       true,
@@ -280,7 +282,7 @@ func (buffer *Buffer) insertLine() {
 
 	if !buffer.InScrollableRegion() {
 		pos := buffer.RawLine()
-		maxLines := buffer.GetMaxLines()
+		maxLines, _ := buffer.GetMaxLines()
 		newLineCount := uint64(len(buffer.lines) + 1)
 		if newLineCount > maxLines {
 			newLineCount = maxLines
@@ -376,10 +378,10 @@ func (buffer *Buffer) index() {
 
 	if cursorVY >= buffer.ViewHeight()-1 {
 		buffer.lines = append(buffer.lines, newLine())
-		maxLines := buffer.GetMaxLines()
-		if uint64(len(buffer.lines)) > maxLines {
-			copy(buffer.lines, buffer.lines[uint64(len(buffer.lines))-maxLines:])
-			buffer.lines = buffer.lines[:maxLines]
+		lowWaterMark, highWaterMark := buffer.GetMaxLines()
+		if uint64(len(buffer.lines)) > highWaterMark {
+			copy(buffer.lines, buffer.lines[uint64(len(buffer.lines))-lowWaterMark:])
+			buffer.lines = buffer.lines[:lowWaterMark]
 		}
 	}
 	buffer.cursorPosition.Line++
@@ -783,13 +785,13 @@ func (buffer *Buffer) eraseDisplayToCursor() {
 	}
 }
 
-func (buffer *Buffer) GetMaxLines() uint64 {
-	result := buffer.maxLines
+func (buffer *Buffer) GetMaxLines() (uint64, uint64) {
+	result := buffer.maxLinesLowWaterMark
 	if result < uint64(buffer.viewHeight) {
 		result = uint64(buffer.viewHeight)
 	}
 
-	return result
+	return result, buffer.maxLinesHighWaterMark
 }
 
 func (buffer *Buffer) setVerticalMargins(top uint, bottom uint) {

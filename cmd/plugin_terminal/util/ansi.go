@@ -1,33 +1,41 @@
 package termutil
 
-import log "github.com/sirupsen/logrus"
+import (
+	"bufio"
+	"io"
 
-func (t *Terminal) handleANSI(readChan chan MeasuredRune) (renderRequired bool) {
+	log "github.com/sirupsen/logrus"
+)
+
+func (t *Terminal) handleANSI() (renderRequired, exit bool) {
 	// if the byte is an escape character, read the next byte to determine which one
-	r := <-readChan
+	r, _, err := t.reader.ReadRune()
+	if err == io.EOF {
+		return false, true
+	}
 
 	// log.Tracef("Terminal.handleANSI: %c 0x%X", r.Rune, r.Rune)
 
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	switch r.Rune {
+	switch r {
 	case '[':
-		return t.handleCSI(readChan)
+		return t.handleCSI()
 	case ']':
-		return t.handleOSC(readChan)
+		return t.handleOSC()
 	case '(':
-		return t.handleSCS0(readChan) // select character set into G0
+		return t.handleSCS0() // select character set into G0
 	case ')':
-		return t.handleSCS1(readChan) // select character set into G1
+		return t.handleSCS1() // select character set into G1
 	case '*':
-		return swallowHandler(1)(readChan) // character set bullshit
+		return swallowHandler(1, t.reader) // character set bullshit
 	case '+':
-		return swallowHandler(1)(readChan) // character set bullshit
+		return swallowHandler(1, t.reader) // character set bullshit
 	case '>':
-		return swallowHandler(0)(readChan) // numeric char selection
+		return false, false // numeric char selection
 	case '=':
-		return swallowHandler(0)(readChan) // alt char selection
+		return false, false // alt char selection
 	case '7':
 		t.GetActiveBuffer().saveCursor()
 	case '8':
@@ -41,33 +49,37 @@ func (t *Terminal) handleANSI(readChan chan MeasuredRune) (renderRequired bool) 
 	case 'M':
 		t.GetActiveBuffer().reverseIndex()
 	case 'P': // sixel
-		return false
+		return false, false
 	case 'c':
 		t.GetActiveBuffer().clear()
 	case '#':
-		return t.handleScreenState(readChan)
+		return t.handleScreenState()
 	case '^':
-		return t.handlePrivacyMessage(readChan)
+		return t.handlePrivacyMessage()
 	default:
-		log.Warnf("UNKNOWN ESCAPE SEQUENCE: 0x%X", r.Rune)
-		return false
+		log.Warnf("UNKNOWN ESCAPE SEQUENCE: 0x%X", r)
+		return false, false
 	}
 
-	return true
+	return true, false
 }
 
-func swallowHandler(size int) func(pty chan MeasuredRune) bool {
-	return func(pty chan MeasuredRune) bool {
-		for i := 0; i < size; i++ {
-			<-pty
+func swallowHandler(size int, reader *bufio.Reader) (bool, bool) {
+	for i := 0; i < size; i++ {
+		_, _, err := reader.ReadRune()
+		if err == io.EOF {
+			return false, true
 		}
-		return false
 	}
+	return false, false
 }
 
-func (t *Terminal) handleScreenState(readChan chan MeasuredRune) bool {
-	b := <-readChan
-	switch b.Rune {
+func (t *Terminal) handleScreenState() (bool, bool) {
+	r, _, err := t.reader.ReadRune()
+	if err == io.EOF {
+		return false, true
+	}
+	switch r {
 	case '8': // DECALN -- Screen Alignment Pattern
 
 		// hide cursor?
@@ -88,24 +100,27 @@ func (t *Terminal) handleScreenState(readChan chan MeasuredRune) bool {
 		// restore cursor
 		buffer.setPosition(0, 0)
 	default:
-		return false
+		return false, false
 	}
-	return true
+	return true, false
 }
 
-func (t *Terminal) handlePrivacyMessage(readChan chan MeasuredRune) bool {
+func (t *Terminal) handlePrivacyMessage() (bool, bool) {
 	isEscaped := false
 	for {
-		b := <-readChan
-		if b.Rune == 0x18 /*CAN*/ || b.Rune == 0x1a /*SUB*/ || (b.Rune == 0x5c /*backslash*/ && isEscaped) {
+		r, _, err := t.reader.ReadRune()
+		if err == io.EOF {
+			return false, true
+		}
+		if r == 0x18 /*CAN*/ || r == 0x1a /*SUB*/ || (r == 0x5c /*backslash*/ && isEscaped) {
 			break
 		}
 		if isEscaped {
 			isEscaped = false
-		} else if b.Rune == 0x1b {
+		} else if r == 0x1b {
 			isEscaped = true
 			continue
 		}
 	}
-	return false
+	return false, false
 }

@@ -2,7 +2,6 @@ package termutil
 
 import (
 	"bufio"
-	"bytes"
 	"fmt"
 	"io"
 	"os"
@@ -24,8 +23,8 @@ type Terminal struct {
 	mu                sync.Mutex
 	windowManipulator WindowManipulator
 	pty               *os.File
+	reader            *bufio.Reader
 	updateChan        chan struct{}
-	processChan       chan MeasuredRune
 	closeChan         chan struct{}
 	buffers           []*Buffer
 	activeBuffer      *Buffer
@@ -43,9 +42,8 @@ type Terminal struct {
 // NewTerminal creates a new terminal instance
 func New(options ...Option) *Terminal {
 	term := &Terminal{
-		processChan: make(chan MeasuredRune, 0xffff),
-		closeChan:   make(chan struct{}),
-		theme:       &Theme{},
+		closeChan: make(chan struct{}),
+		theme:     &Theme{},
 	}
 	for _, opt := range options {
 		opt(term)
@@ -90,8 +88,6 @@ func (t *Terminal) CreatePty() (*exec.Cmd, error) {
 		t.stdinFd = fd
 		t.stdinOldState = oldState
 	}
-
-	go t.process()
 
 	if t.initialCommand != "" {
 		if err := t.WriteToPty([]byte(t.initialCommand)); err != nil {
@@ -139,19 +135,6 @@ func (t *Terminal) Theme() *Theme {
 	return t.theme
 }
 
-// write takes data from StdOut of the child shell and processes it
-func (t *Terminal) Write(data []byte) (n int, err error) {
-	reader := bufio.NewReader(bytes.NewBuffer(data))
-	for {
-		r, size, err := reader.ReadRune()
-		if err == io.EOF {
-			break
-		}
-		t.processChan <- MeasuredRune{Rune: r, Width: size}
-	}
-	return len(data), nil
-}
-
 func (t *Terminal) SetSize(rows, cols uint16) error {
 	if t.pty == nil {
 		return fmt.Errorf("terminal is not running")
@@ -176,11 +159,24 @@ func (t *Terminal) Run(updateChan chan struct{}) error {
 	t.mu.Lock()
 	t.updateChan = updateChan
 	t.running = true
+	t.reader = bufio.NewReaderSize(t.pty, 1024*1024)
 	t.mu.Unlock()
 
 	defer func() { _ = term.Restore(t.stdinFd, t.stdinOldState) }() // Best effort.
 
-	_, _ = io.Copy(t, t.pty)
+	for {
+		r, size, err := t.reader.ReadRune()
+		if err == io.EOF {
+			break
+		}
+		render, exit := t.processSequence(MeasuredRune{Rune: r, Width: size})
+		if exit {
+			break
+		}
+		if render {
+			t.requestRender()
+		}
+	}
 	close(t.closeChan)
 	return nil
 }
@@ -198,33 +194,11 @@ func (t *Terminal) requestRender() {
 	}
 }
 
-func (t *Terminal) processSequence(mr MeasuredRune) (render bool) {
+func (t *Terminal) processSequence(mr MeasuredRune) (render, exit bool) {
 	if mr.Rune == 0x1b {
-		return t.handleANSI(t.processChan)
+		return t.handleANSI()
 	}
-	return t.processRunes(mr)
-}
-
-func (t *Terminal) process() {
-	for {
-		// to avoid closing on updateChan twice
-		// we check if closeChan is closed here
-		// otherwise processChan could technically have
-		// a ready rune and steal from the <-t.closeChan
-		select {
-		case <-t.closeChan:
-			return
-		default:
-		}
-		select {
-		case <-t.closeChan:
-			return
-		case mr := <-t.processChan:
-			if t.processSequence(mr) {
-				t.requestRender()
-			}
-		}
-	}
+	return t.processRunes(mr), false
 }
 
 func (t *Terminal) processRunes(runes ...MeasuredRune) (renderRequired bool) {

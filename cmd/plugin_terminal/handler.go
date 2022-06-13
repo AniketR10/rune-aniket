@@ -97,7 +97,7 @@ func (e *emulator) init(
 	e.mouseDriver = &mouseDriver{t: e.terminal, clipboard: c}
 	e.mouse = text.NewMouse(e.mouseDriver)
 
-	e.updateCh = make(chan struct{})
+	e.updateCh = make(chan struct{}, 1)
 	e.sema = make(chan struct{})
 	// set initial width/height to avoid panics
 	// we control drawing outside of bounds in Draw
@@ -294,16 +294,6 @@ func (e *emulator) handleInput(ev term.Event) (exit, handled bool, raw []byte) {
 	return
 }
 
-// TODO handle signals elegantly so plugins know that they should interrupt whatever.
-// TODO reading from stdout should not block the next resize
-// TODO add fullscreen handling for window manager
-// TODO fix control of windows, it should work in all scenarios
-// TODO workspaces switching, no hardcoded defaults. Should use <c-x><c-{i}>
-// what's probably happenning is a thundering herd effect
-// calls to publish interrupt are flooding client and server goroutine pools
-// so a resize is unlikely to go through responsively
-// TODO implement adding SysProcAttr to workspace Start command
-// then hook into creaty.pty to use workspace command
 func (e *emulator) Handle(ev term.Event) (exit, handled bool) {
 	exit, handled, raw := e.handleInput(ev)
 	if exit || handled || len(raw) == 0 {

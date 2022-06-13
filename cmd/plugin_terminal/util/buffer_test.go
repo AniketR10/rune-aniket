@@ -622,10 +622,14 @@ func TestBufferMaxLines(t *testing.T) {
 	writeRaw(b, []rune("funny")...)
 	b.newLine()
 	writeRaw(b, []rune("world")...)
+	b.newLine()
+	writeRaw(b, []rune("hell")...)
+	b.newLine()
+	writeRaw(b, []rune("break")...)
 
 	assert.Equal(t, 2, len(b.lines))
-	assert.Equal(t, "funny", b.lines[0].String())
-	assert.Equal(t, "world", b.lines[1].String())
+	assert.Equal(t, "hell", b.lines[0].String())
+	assert.Equal(t, "break", b.lines[1].String())
 }
 
 func TestShrinkingThenGrowing(t *testing.T) {
