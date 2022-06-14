@@ -13,6 +13,7 @@ import (
 type WindowManagerConfig struct {
 	component.WindowManagerConfig
 
+	Dim               bool
 	FocusFrameAttr    term.Attributes
 	FocusFrameCharSet component.FrameCharSet
 }
@@ -293,6 +294,39 @@ func (wm *WindowManager) Man() tui.Manual {
 
 // Draw : tui.Component
 func (wm *WindowManager) Draw(w term.Writer) {
+	if wm.comp.Size() == 1 || !wm.config.Dim {
+		wm.comp.Draw(w)
+		return
+	}
+
+	focusWin := wm.focus.Window
+	offset := focusWin.Position()
+	if wm.config.Frame {
+		offset.X++
+		offset.Y++
+	}
+	// Set C to Nop for now so resize does not resize focus window
+	// on every call to Draw
+	v := component.Virtual{C: component.Nop()}
+	v.Resize(focusWin.Width(), focusWin.Height())
+	v.Move(offset)
+	v.C = wm.focus.Content()
+
+	// draw everything, including focus handler with a dim writer
+	wm.comp.Draw(term.DimWriter(w))
+
+	// then overwrite focus handler with regular writer
+	v.Draw(w)
+}
+
+// NOTE: this logic introduces a race-condition: If this WindowManager
+// has any rpc handler's then there's a chance that this WindowManager will
+// not be the first to acquire the lock after the draw request has completed
+// and so it could break invariants accross the codebase (i.e. browser assuming
+// all handlers are browser.Handler, which can cause panics or other issues.
+// I haven't figured out a way to bypass this so drawing the current handler
+// in focus twice seems like a better outcome that this nasty race-condition.
+func (wm *WindowManager) _DrawOptimized(w term.Writer) {
 	if wm.comp.Size() == 1 {
 		wm.comp.Draw(w)
 		return
@@ -359,6 +393,7 @@ func (wm *WindowManager) SetFocus(tile Window) (
 // DefaultWindowManagerConfig returns a sane WindowManagerConfig ready to use.
 func DefaultWindowManagerConfig() WindowManagerConfig {
 	return WindowManagerConfig{
+		Dim:                 true,
 		WindowManagerConfig: component.DefaultWindowManagerConfig(),
 		FocusFrameCharSet:   component.FrameCharSetDefault(),
 		FocusFrameAttr: term.Attributes{

@@ -65,6 +65,7 @@ browser:
             fg: 219
     window_manager:
         frame: true
+        dim: false
         frame_attr:
             fg: red
         frame_charset:
@@ -156,6 +157,7 @@ func TestConfigSetting(t *testing.T) {
 			FrameAttr:    term.Attributes{Fg: term.ColorRed},
 			FrameCharSet: component.FrameCharSetHighlight(),
 		},
+		Dim:               false,
 		FocusFrameAttr:    handler.DefaultWindowManagerConfig().FrameAttr,
 		FocusFrameCharSet: handler.DefaultWindowManagerConfig().FrameCharSet,
 	}

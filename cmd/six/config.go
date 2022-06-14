@@ -513,21 +513,29 @@ func (c ideConfig) windowCharset(key string, def component.FrameCharSet) (
 	return
 }
 
-func (c ideConfig) frame() (frame bool) {
-	frame = defaultWindowManagerConfig.Frame
+func (c ideConfig) windowManagerBool(key string, def bool) (frame bool) {
+	frame = def
 	cfg, ok := c.windowManager()
 	if !ok {
 		return
 	}
-	cfgFrame, err := cfg.GetBool("frame")
+	cfgFrame, err := cfg.GetBool(key)
 	if err != nil {
 		if err != plugin.ErrNotFound {
-			c.errors["window_manager.frame"] = err
+			c.errors[fmt.Sprintf("window_manager.%s", key)] = err
 		}
 		return
 	}
 	frame = cfgFrame
 	return
+}
+
+func (c ideConfig) frame() (frame bool) {
+	return c.windowManagerBool("frame", defaultWindowManagerConfig.Frame)
+}
+
+func (c ideConfig) dim() (frame bool) {
+	return c.windowManagerBool("dim", defaultWindowManagerConfig.Dim)
 }
 
 func (c ideConfig) frameUnionCharset() (cs component.FrameUnionCharSet) {
@@ -586,6 +594,7 @@ func (c ideConfig) frameUnionCharset() (cs component.FrameUnionCharSet) {
 
 func (c ideConfig) windowManagerConfig() handler.WindowManagerConfig {
 	return handler.WindowManagerConfig{
+		Dim:               c.dim(),
 		FocusFrameAttr:    c.windowFocusFrameAttr(),
 		FocusFrameCharSet: c.windowFocusFrameCharset(),
 		WindowManagerConfig: component.WindowManagerConfig{
