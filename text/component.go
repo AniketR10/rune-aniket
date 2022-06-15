@@ -134,11 +134,12 @@ func (c *Component) getSwapDir(file workspace.URI) (workspace.URI, error) {
 }
 
 func (c *Component) newFileBuffer(
-	file, recSwapFile workspace.URI, buf *cell.Buffer, readOnly bool,
+	file, recSwapFile workspace.URI, buf *cell.Buffer,
+	readOnly, forceRecover bool,
 ) (ret *editorFlusherCloser, err error) {
 	var fc workspace.FlusherCloser
 	if recSwapFile != (workspace.URI{}) {
-		fc, err = c.workspace.Recover(file, recSwapFile, buf)
+		fc, err = c.workspace.Recover(file, recSwapFile, buf, forceRecover)
 	} else {
 		var swapDir workspace.URI
 		swapDir, err = c.getSwapDir(file)
@@ -186,7 +187,8 @@ func (c *Component) Init(ed Editor, w workspace.ResourceOpener, config Config) e
 		if len(c.config.Filepaths) != 1 {
 			return errors.New("only one file expected if recovery file is passed")
 		}
-		h, err := c.RecoverFileTab(c.config.Filepaths[0], c.config.RecoveryFilepath, false)
+		h, err := c.RecoverFileTab(c.config.Filepaths[0],
+			c.config.RecoveryFilepath, false)
 		if err != nil {
 			return err
 		}
@@ -308,7 +310,7 @@ func (c *Component) OpenFileTab(file workspace.URI, readOnly bool) (
 	if file == (workspace.URI{}) {
 		return nil, errors.New("empty URI")
 	}
-	return c.openFileTab(file, workspace.URI{}, readOnly)
+	return c.openFileTab(file, workspace.URI{}, readOnly, false)
 }
 
 // RecoverFileTab recovers the file at filename by using the file at recoverFilename
@@ -319,11 +321,12 @@ func (c *Component) RecoverFileTab(
 	if file == (workspace.URI{}) || recoveryFilename == (workspace.URI{}) {
 		return nil, errors.New("empty URI")
 	}
-	return c.openFileTab(file, recoveryFilename, readOnly)
+	return c.openFileTab(file, recoveryFilename, readOnly, false)
 }
 
 func (c *Component) openFileTab(
-	file workspace.URI, recoveryFilename workspace.URI, readOnly bool,
+	file workspace.URI, recoveryFilename workspace.URI,
+	readOnly, forceRecover bool,
 ) (browser.Handler, error) {
 	t, ok := c.comp.Tab(file)
 	if ok {
@@ -331,7 +334,7 @@ func (c *Component) openFileTab(
 	}
 
 	buf := c.newCellBuffer()
-	fc, err := c.newFileBuffer(file, recoveryFilename, buf, readOnly)
+	fc, err := c.newFileBuffer(file, recoveryFilename, buf, readOnly, forceRecover)
 	if err != nil {
 		return nil, err
 	}
@@ -344,6 +347,47 @@ func (c *Component) openFileTab(
 
 	t = c.newTab(file, file.Name(), editor, fc)
 	return t, nil
+}
+
+func (c *Component) openAreYouSurePrompt(file workspace.URI) {
+	const (
+		yesOpt = "Yes"
+		noOpt  = "No"
+	)
+
+	msg := fmt.Sprintf(`File %s
+has been updated since the last back up was created.
+Are you sure you want to recover it
+and lose all the new updates?`, file)
+
+	c.comp.Prompt(msg, []string{yesOpt, noOpt},
+		[]term.KeyComb{{Ch: 'Y'}, {Ch: 'N'}},
+		func(i int, opt string) {
+
+			var h browser.Handler
+			var err error
+
+			switch opt {
+			case yesOpt:
+				var swapDir, swapFile workspace.URI
+				swapDir, err = c.getSwapDir(file)
+				if err == nil {
+					swapFile, err = workspace.DefaultSwapFile(swapDir, file)
+					if err == nil {
+						h, err = c.openFileTab(file, swapFile, false, true)
+					}
+				}
+			case noOpt:
+			}
+			if h != nil {
+				err = c.comp.Focus().SetContent(h)
+			}
+			if err != nil {
+				c.tryLog(log.ErrorLevel, "recovery prompt: %v", err)
+				c.SetMessage("%v", err)
+				return
+			}
+		})
 }
 
 func (c *Component) openRecoveryPrompt(file workspace.URI) {
@@ -372,6 +416,10 @@ an edit session for this file crashed.`, file)
 					swapFile, err = workspace.DefaultSwapFile(swapDir, file)
 					if err == nil {
 						h, err = c.RecoverFileTab(file, swapFile, false)
+						if err == workspace.ErrStaleData {
+							c.openAreYouSurePrompt(file)
+							return
+						}
 					}
 				}
 			case readOnlyOpt:

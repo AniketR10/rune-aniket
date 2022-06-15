@@ -102,7 +102,7 @@ func openFile(
 
 // refactor shim
 func recoverFile(
-	filename, recoverFilename string, buf *cell.Buffer,
+	filename, recoverFilename string, buf *cell.Buffer, force bool,
 ) (*file, error) {
 	fileURI, err := makeLocalURI(filename)
 	if err != nil {
@@ -112,7 +112,7 @@ func recoverFile(
 	if err != nil {
 		return nil, err
 	}
-	l, err := recoverLocalFile(fileURI, recoverFile, buf)
+	l, err := recoverLocalFile(fileURI, recoverFile, buf, force)
 	if err != nil {
 		return nil, err
 	}
@@ -443,7 +443,7 @@ func TestFileBufferRecover(t *testing.T) {
 		defer cleanup()
 
 		filepath, swapFilepath := file.Name(), swap.Name()
-		f, err := recoverFile(filepath, swapFilepath, b)
+		f, err := recoverFile(filepath, swapFilepath, b, false)
 		require.NoError(t, err)
 		defer f.Close()
 
@@ -457,24 +457,68 @@ func TestFileBufferRecover(t *testing.T) {
 		swapFilepath := swap.Name()
 		swapFileName := path.Base(swapFilepath)
 		filepath := path.Join(path.Dir(swapFilepath), "my_actual_file"+swapFileName)
-		f, err := recoverFile(filepath, swapFilepath, b)
+		f, err := recoverFile(filepath, swapFilepath, b, false)
 		require.NoError(t, err, filepath)
 		defer f.Close()
 
 		assertRecoverFromSwapFile(t, filepath, swapFilepath, b)
 	})
 
-	t.Run("returns error if file was modified after swap", func(t *testing.T) {
+	t.Run("returns error if file was modified after swap and does not remove swap", func(t *testing.T) {
 		b, file, swap, cleanup := newRecoveryIntegrationCase(t)
 		defer cleanup()
 
-		time.Sleep(100 * time.Millisecond)
-		file.WriteString("blah")
-		file.Sync()
+		filepath, swapFilepath := file.Name(), swap.Name()
+
+		time.Sleep(10 * time.Millisecond)
+		_, err := file.WriteString("blah")
+		require.NoError(t, err)
+		require.NoError(t, file.Sync())
+
+		_, err = recoverFile(filepath, swapFilepath, b, false)
+		assert.Equal(t, ErrStaleData, err)
+
+		_, err = os.Stat(swapFilepath)
+		require.NoError(t, err)
+	})
+
+	t.Run("recovers if file was modified after swap and recover was called with force=true", func(t *testing.T) {
+		b, file, swap, cleanup := newRecoveryIntegrationCase(t)
+		defer cleanup()
 
 		filepath, swapFilepath := file.Name(), swap.Name()
-		_, err := recoverFile(filepath, swapFilepath, b)
-		require.Equal(t, ErrStaleData, err)
+
+		time.Sleep(10 * time.Millisecond)
+		_, err := file.WriteString("Inma")
+		require.NoError(t, err)
+		require.NoError(t, file.Sync())
+
+		_, err = recoverFile(filepath, swapFilepath, b, true)
+		assert.NoError(t, err)
+
+		assertRecoverFromSwapFile(t, filepath, swapFilepath, b)
+	})
+
+	t.Run("recovers file and updates it with swap contents if swap is ahead", func(t *testing.T) {
+		b, file, swap, cleanup := newRecoveryIntegrationCase(t)
+		defer cleanup()
+
+		filepath, swapFilepath := file.Name(), swap.Name()
+
+		time.Sleep(10 * time.Millisecond)
+		_, err := swap.WriteString("blah")
+		require.NoError(t, err)
+		require.NoError(t, swap.Sync())
+
+		swapContent, err := ioutil.ReadFile(swapFilepath)
+		require.NoError(t, err)
+
+		_, err = recoverFile(filepath, swapFilepath, b, false)
+		require.NoError(t, err)
+
+		fileContent, err := ioutil.ReadFile(filepath)
+		require.NoError(t, err)
+		assert.Equal(t, swapContent, fileContent)
 	})
 
 	t.Run("if a recover buffer takes over swap, it should now allow for other NewFileBuffer to open it", func(t *testing.T) {
@@ -491,7 +535,7 @@ func TestFileBufferRecover(t *testing.T) {
 		time.Sleep(10 * time.Millisecond)
 
 		b2 := cell.NewBuffer()
-		f2, err := recoverFile(file.Name(), f1.swapFileName, b2)
+		f2, err := recoverFile(file.Name(), f1.swapFileName, b2, false)
 		require.NoError(t, err)
 		defer f2.Close()
 
@@ -793,7 +837,8 @@ func newRecoveredTestFileBuffer(t *testing.T, ctrl *gomock.Controller) (
 	expectInitSwap(mock, defaultFileName, testFileInfo{}, defaultFileData)
 	expectInitBuffer(mock, defaultFileData)
 	buf := cell.NewBuffer()
-	require.NoError(t, f.recoverFile(defaultFileName, "."+defaultFileName+".swp", buf))
+	require.NoError(t, f.recoverFile(defaultFileName,
+		"."+defaultFileName+".swp", buf, false))
 	return f, mock, buf
 }
 

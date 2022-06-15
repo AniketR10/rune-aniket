@@ -157,14 +157,14 @@ func (m *Manager) initLocal() error {
 }
 
 // Recover recovers the file with the swap file.
-func (m *Manager) Recover(file, swapFile URI, buf *cell.Buffer) (
+func (m *Manager) Recover(file, swapFile URI, buf *cell.Buffer, force bool) (
 	FlusherCloser, error,
 ) {
 	if isFileURI(file) {
-		return recoverLocalFile(file, swapFile, buf)
+		return recoverLocalFile(file, swapFile, buf, force)
 	}
 	if isSSHURI(file) {
-		return m.recoverRemoteFile(file, swapFile, buf)
+		return m.recoverRemoteFile(file, swapFile, buf, force)
 	}
 	return nil, fmt.Errorf("unknown scheme: %s", file.uri)
 }

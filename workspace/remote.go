@@ -210,7 +210,7 @@ func (m *Manager) openRemoteFile(
 	return f, nil
 }
 
-func (m *Manager) recoverRemoteFile(file, swapFile URI, buf *cell.Buffer) (
+func (m *Manager) recoverRemoteFile(file, swapFile URI, buf *cell.Buffer, force bool) (
 	FlusherCloser, error,
 ) {
 	if m.sshConn == nil {
@@ -225,7 +225,7 @@ func (m *Manager) recoverRemoteFile(file, swapFile URI, buf *cell.Buffer) (
 		return nil, err
 	}
 	f := m.newOsRemoteFile()
-	err = f.recoverFile(file.Path(), swapFile.Path(), buf)
+	err = f.recoverFile(file.Path(), swapFile.Path(), buf, force)
 	if err != nil {
 		return nil, err
 	}

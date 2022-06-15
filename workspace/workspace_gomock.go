@@ -103,18 +103,18 @@ func (mr *MockResourceOpenerMockRecorder) Open(file, buf, swapDir, readOnly inte
 }
 
 // Recover mocks base method.
-func (m *MockResourceOpener) Recover(file, swapFilePath URI, buf *cell.Buffer) (FlusherCloser, error) {
+func (m *MockResourceOpener) Recover(file, swapFilePath URI, buf *cell.Buffer, force bool) (FlusherCloser, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Recover", file, swapFilePath, buf)
+	ret := m.ctrl.Call(m, "Recover", file, swapFilePath, buf, force)
 	ret0, _ := ret[0].(FlusherCloser)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Recover indicates an expected call of Recover.
-func (mr *MockResourceOpenerMockRecorder) Recover(file, swapFilePath, buf interface{}) *gomock.Call {
+func (mr *MockResourceOpenerMockRecorder) Recover(file, swapFilePath, buf, force interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Recover", reflect.TypeOf((*MockResourceOpener)(nil).Recover), file, swapFilePath, buf)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Recover", reflect.TypeOf((*MockResourceOpener)(nil).Recover), file, swapFilePath, buf, force)
 }
 
 // MockWorkspace is a mock of Workspace interface.

@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	multierr "github.com/ernestrc/go-multierror"
 	"github.com/ernestrc/go-tui/cell"
 	"github.com/ernestrc/go-tui/term"
 )
@@ -77,7 +78,6 @@ func (f *file) initSwap(swapDir string, orig osFile, origPerms os.FileMode) (osF
 
 	_, err = swap.Write(content)
 	if err != nil {
-		swap.Close()
 		return nil, err
 	}
 
@@ -207,9 +207,8 @@ func (f *file) initBuffer(buf *cell.Buffer, file osFile) (err error) {
 	return nil
 }
 
-func (f *file) recoverFile(filePath, swapFilePath string, buf *cell.Buffer) error {
-	var err error
-	f.orig, _, err = f.openFile(filePath, os.O_RDWR)
+func (f *file) recoverFile(filePath, swapFilePath string, buf *cell.Buffer, force bool) error {
+	orig, info, err := f.openFile(filePath, os.O_RDWR)
 	if err != nil {
 		if osErr, ok := err.(*osError); ok && osErr.isNotExist {
 			err = nil
@@ -223,27 +222,44 @@ func (f *file) recoverFile(filePath, swapFilePath string, buf *cell.Buffer) erro
 		return osErr
 	}
 
+	f.orig = orig
 	f.swap = swap
-	f.infoModTime = swapFileInfo.ModTime()
+	if info != nil {
+		f.infoModTime = info.ModTime()
+	}
 	f.swapInfoModTime = swapFileInfo.ModTime()
 	f.swapFileName = swapFilePath
 	f.swapDir = filepath.Dir(swapFilePath)
 	f.fileName = filePath
 
-	f.setupCopySwapWorker()
-
 	err = f.initBuffer(buf, f.swap)
 	if err != nil {
-		f.Close()
+		// do not remove swap if error is that swap is out of date
+		// let use decide what to do with it
+		if clerr := f.swap.Close(); clerr != nil {
+			err = multierr.Append(err, clerr)
+		}
+		f.swap = nil
+		if clerr := f.Close(); clerr != nil {
+			err = multierr.Append(err, clerr)
+		}
 		return err
 	}
 
-	err = f.Flush()
+	err = f.flush(force)
 	if err != nil {
 		buf.Reset()
-		f.Close()
+		if clerr := f.swap.Close(); clerr != nil {
+			err = multierr.Append(err, clerr)
+		}
+		f.swap = nil
+		if clerr := f.Close(); clerr != nil {
+			err = multierr.Append(err, clerr)
+		}
 		return err
 	}
+
+	f.setupCopySwapWorker()
 
 	return nil
 }
@@ -276,13 +292,15 @@ func (f *file) init(
 		return err
 	}
 
-	f.setupCopySwapWorker()
-
 	err = f.initBuffer(buf, f.orig)
 	if err != nil {
-		f.Close()
+		if clerr := f.Close(); clerr != nil {
+			err = multierr.Append(err, clerr)
+		}
 		return err
 	}
+
+	f.setupCopySwapWorker()
 
 	return nil
 }
@@ -373,6 +391,10 @@ func (f *file) touchFile() error {
 // other process, this method returns ErrStaleData. Flush blocks until
 // all edits have been processed.
 func (f *file) Flush() error {
+	return f.flush(false)
+}
+
+func (f *file) flush(force bool) error {
 	f.wg.Wait()
 
 	if f.swap == nil {
@@ -401,7 +423,8 @@ func (f *file) Flush() error {
 		if err != nil {
 			return err
 		}
-		if newFileInfo.ModTime().After(f.infoModTime) {
+		if !force && (newFileInfo.ModTime().After(f.swapInfoModTime) ||
+			newFileInfo.ModTime().After(f.infoModTime)) {
 			return ErrStaleData
 		}
 
@@ -421,7 +444,7 @@ func (f *file) Flush() error {
 	if err != nil {
 		return err
 	}
-	if newSwapInfo.ModTime().After(f.swapInfoModTime) {
+	if !force && newSwapInfo.ModTime().After(f.swapInfoModTime) {
 		return ErrStaleData
 	}
 
@@ -446,7 +469,7 @@ func (f *file) Flush() error {
 }
 
 // Close should be called once when this structure is not to be used anymore.
-func (f *file) Close() error {
+func (f *file) Close() (ret error) {
 	if f.fileName == "" {
 		return errors.New("trying to Close an uninitialized file")
 	}
@@ -466,34 +489,31 @@ func (f *file) Close() error {
 		f.buf.Unsubscribe(f)
 	}
 
-	var err2, err3 error
 	if f.swap != nil {
 		swapFileName := f.swap.Name()
-		err2 = f.swap.Close()
-
+		if err := f.swap.Close(); err != nil {
+			ret = multierr.Append(ret, err)
+		}
 		newSwapInfo, err := f.statFunc(f.swap.Name())
 		if err != nil {
-			return err
-		}
-		if !newSwapInfo.ModTime().After(f.swapInfoModTime) {
-			err3 = f.removeFunc(swapFileName)
+			ret = multierr.Append(ret, err)
+		} else {
+			// do not remove a swap from another process
+			if !newSwapInfo.ModTime().After(f.swapInfoModTime) {
+				if err := f.removeFunc(swapFileName); err != nil {
+					ret = multierr.Append(ret, err)
+				}
+			}
 		}
 		f.swap = nil
 	}
 
 	if f.orig != nil {
-		err := f.orig.Close()
-		if err != nil {
-			return err
+		if err := f.orig.Close(); err != nil {
+			ret = multierr.Append(ret, err)
 		}
+		f.orig = nil
 	}
 
-	if err2 != nil {
-		return err2
-	}
-	if err3 != nil {
-		return err3
-	}
-
-	return nil
+	return ret
 }

@@ -52,11 +52,11 @@ func newOsLocalFile() *file {
 }
 
 // recoverfile recovers the file at filePath with the swap file swapFilePath.
-func recoverLocalFile(file, swapFile URI, buf *cell.Buffer) (
+func recoverLocalFile(file, swapFile URI, buf *cell.Buffer, force bool) (
 	FlusherCloser, error,
 ) {
 	ret := newOsLocalFile()
-	err := ret.recoverFile(file.Path(), swapFile.Path(), buf)
+	err := ret.recoverFile(file.Path(), swapFile.Path(), buf, force)
 	if err != nil {
 		return nil, err
 	}

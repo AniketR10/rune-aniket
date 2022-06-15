@@ -55,7 +55,10 @@ func (w *testWorkspace) Open(filePath workspace.URI, buf *cell.Buffer, swapDir w
 	return &testFileBuffer{}, nil
 }
 
-func (w *testWorkspace) Recover(filePath, swapFilePath workspace.URI, buf *cell.Buffer) (
+func (w *testWorkspace) Recover(
+	filePath, swapFilePath workspace.URI,
+	buf *cell.Buffer, force bool,
+) (
 	workspace.FlusherCloser, error,
 ) {
 	return w.Open(filePath, buf, swapFilePath, false)

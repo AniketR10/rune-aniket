@@ -14,7 +14,7 @@ func (n nopWorkspace) Open(
 	panic("called Open on nop workspace")
 }
 func (n nopWorkspace) Recover(
-	file, swapFilePath workspace.URI, buf *cell.Buffer,
+	file, swapFilePath workspace.URI, buf *cell.Buffer, force bool,
 ) (workspace.FlusherCloser, error) {
 	panic("called Recover on nop workspace")
 }

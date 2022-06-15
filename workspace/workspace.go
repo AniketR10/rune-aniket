@@ -18,7 +18,7 @@ type FlusherCloser interface {
 // a Manager.
 type ResourceOpener interface {
 	Open(file URI, buf *cell.Buffer, swapDir URI, readOnly bool) (FlusherCloser, error)
-	Recover(file, swapFilePath URI, buf *cell.Buffer) (FlusherCloser, error)
+	Recover(file, swapFilePath URI, buf *cell.Buffer, force bool) (FlusherCloser, error)
 }
 
 // Workspace abstract the public-facing API of a workspace.
