@@ -830,11 +830,19 @@ func (c *Component) SetFocus(win Window) Window {
 // Handle proxies events to either the underlying Tabs or WindowManager.
 func (c *Component) Handle(ev term.Event) (exit, handled bool) {
 	if len(c.prompts) != 0 {
-		exit, handled = c.prompts[0].Handle(ev)
-		if exit {
-			exit = false
-			c.prompts = c.prompts[1:]
+		// the position of the current prompt handler can change
+		// if one the actions is to open another prompt,
+		// so we wouldn't be able to remove it if it has exited.
+		promptHandler := c.prompts[0]
+		c.prompts = c.prompts[1:]
+		exit, handled = promptHandler.Handle(ev)
+		if !exit {
+			// re-add focus prompt if it's still active
+			c.prompts = append(c.prompts, nil)
+			copy(c.prompts[1:], c.prompts[:])
+			c.prompts[0] = promptHandler
 		}
+		exit = false
 		if handled {
 			return
 		}

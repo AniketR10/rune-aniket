@@ -585,7 +585,9 @@ func TestComponentPrompt(t *testing.T) {
 │888888888888888888│    
 └──────────────────┘    `,
 		}, {func() {
-			c.Prompt("Tokischa?", []string{"Yay", "Nay"}, nil, func(int, string) {})
+			c.Prompt("Tokischa?", []string{"Yay", "Nay"}, nil, func(int, string) {
+				c.Prompt("Robert Love", []string{"YAS!"}, nil, func(int, string) {})
+			})
 			c.Prompt("Rosalia?", []string{"Yay", "Nay"}, nil, func(int, string) {})
 		}, `
 ┌┌────────────────┐┐    
@@ -638,6 +640,17 @@ func TestComponentPrompt(t *testing.T) {
 ││┌─────┐ ┌─────┐ ││    
 │││ Yay │ │ Nay │ ││    
 ││└─────┘ └─────┘ ││    
+│└────────────────┘│    
+└──────────────────┘    `,
+		}, {func() {
+			c.Handle(term.Event{Key: term.KeyEnter})
+		}, `
+┌┌────────────────┐┐    
+││  Robert Love   ││    
+├│                │┤    
+││    ┌──────┐    ││    
+││    │ YAS! │    ││    
+││    └──────┘    ││    
 │└────────────────┘│    
 └──────────────────┘    `,
 		}, {func() {
