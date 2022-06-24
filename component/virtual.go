@@ -52,12 +52,7 @@ func (c *Virtual) Resize(width, height int) {
 // Draw uses a virtual writer to perform bound checking and
 // if successful draw the inner component in the virtual coordinate space.
 func (c *Virtual) Draw(writer term.Writer) {
-	writer = &virtualWriter{
-		writer: writer,
-		offset: c.pos,
-		height: c.height,
-		width:  c.width,
-	}
+	writer = VirtualWriter(writer, c.pos, c.height, c.width)
 	c.C.Draw(writer)
 }
 
@@ -81,4 +76,17 @@ func (c *Virtual) Height() int {
 // in the virtual coordinate space.
 func (c *Virtual) Position() term.Coordinates {
 	return c.pos
+}
+
+// VirtualWriter wraps the given w with a writer that applies an
+// offset and SetCell clipping according to offset, height and width.
+func VirtualWriter(
+	w term.Writer, offset term.Coordinates, height, width int,
+) term.Writer {
+	return &virtualWriter{
+		writer: w,
+		offset: offset,
+		height: height,
+		width:  width,
+	}
 }

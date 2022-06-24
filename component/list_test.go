@@ -61,6 +61,7 @@ type testList interface {
 	SeekEnd() (ok bool)
 	SeekStart() (ok bool)
 	SeekUp() bool
+	MaxOffset() int
 	SetElementHeight(height int)
 	Sort(func(a, b tui.Component) bool)
 	Reset()
@@ -165,7 +166,7 @@ YYYYYYYY
 ########
 $$$$$$$$`,
 		}, {
-			func() { l.SeekDown() }, `
+			func() { l.SeekEnd() }, `
 XXXXXXXX
 YYYYYYYY
 ########
@@ -242,6 +243,105 @@ ZZZZZZZZ
 $$$$$$$$
 XXXXXXXX
 YYYYYYYY`,
+		}, {
+			func() {
+				front, ok := l.Front()
+				require.True(t, ok)
+				l.Remove(front)
+			}, `
+$$$$$$$$
+XXXXXXXX
+YYYYYYYY
+ZZZZZZZZ`,
+		}, {
+			func() {
+				require.False(t, l.SeekEnd())
+				require.Equal(t, 4, l.Len())
+				for i := 'a'; i < 'a'+16; i++ {
+					l.PushFront(&TestComponent{Ch: rune(i)})
+				}
+				require.Equal(t, 20, l.Len())
+				require.True(t, l.SeekEnd())
+			}, `
+$$$$$$$$
+XXXXXXXX
+YYYYYYYY
+ZZZZZZZZ`,
+		}, {
+			func() {
+				z, ok := l.Back()
+				require.True(t, ok)
+				l.Remove(z)
+			}, `
+aaaaaaaa
+$$$$$$$$
+XXXXXXXX
+YYYYYYYY`,
+		}, {
+			func() {
+				y, ok := l.Back()
+				require.True(t, ok)
+				x, ok := y.Prev()
+				require.True(t, ok)
+				dollas, ok := x.Prev()
+				require.True(t, ok)
+				head, ok := dollas.Prev()
+				require.True(t, ok)
+				l.Remove(head)
+			}, `
+bbbbbbbb
+$$$$$$$$
+XXXXXXXX
+YYYYYYYY`,
+		}, {
+			func() {
+				y, ok := l.Back()
+				require.True(t, ok)
+				x, ok := y.Prev()
+				require.True(t, ok)
+				dollas, ok := x.Prev()
+				require.True(t, ok)
+				b, ok := dollas.Prev()
+				require.True(t, ok)
+				c, ok := b.Prev()
+				require.True(t, ok)
+				l.Remove(c)
+			}, `
+bbbbbbbb
+$$$$$$$$
+XXXXXXXX
+YYYYYYYY`,
+		}, {
+			func() {
+				y, ok := l.Back()
+				require.True(t, ok)
+				x, ok := y.Prev()
+				require.True(t, ok)
+				dollas, ok := x.Prev()
+				require.True(t, ok)
+				b, ok := dollas.Prev()
+				require.True(t, ok)
+				for i := 0; i < 4; i++ {
+					require.True(t, l.SeekUp())
+				}
+				l.Remove(b)
+			}, `
+gggggggg
+ffffffff
+eeeeeeee
+dddddddd`,
+		}, {
+			func() {
+				for node, ok := l.Back(); ok; node, ok = l.Front() {
+					l.Remove(node)
+				}
+				require.Equal(t, 0, l.Len())
+				l.PushBack(&TestComponent{Ch: '%'})
+			}, `
+%%%%%%%%
+        
+        
+        `,
 		},
 	}
 
@@ -496,6 +596,48 @@ func testListSort(t *testing.T, constructor func(int) testList) {
 	})
 }
 
+func TestListMaxOffset(t *testing.T) {
+	testListMaxOffset(t, newTestList)
+}
+
+func testListMaxOffset(t *testing.T, constructor func(int) testList) {
+	tsuite := []struct {
+		description   string
+		height        int
+		elementHeight int
+		elements      int
+		want          int
+	}{
+		{"enough height, zero elements with element height of 1", 10, 1, 0, 0},
+		{"enough height, zero elements with element height of 2", 10, 2, 0, 0},
+		{"enough height, one element with element height of 1", 10, 1, 1, 0},
+		{"enough height, one element with element height of 2", 10, 2, 1, 0},
+		{"limited height, one element with element height of 1", 1, 1, 1, 0},
+		{"limited height < element height, one element with element height of 2", 1, 2, 1, 0},
+		{"limited height < element height, two elements with element height of 1", 1, 2, 2, 1},
+		{"limited height < element height, two elements with element height of 2", 1, 2, 2, 1},
+		{"limited height, three elements with element height of 1", 1, 1, 3, 2},
+		{"limited height < element height, three elements with element height of 2", 1, 2, 3, 2},
+		{"limited height > element height, many elements with element height of 1", 10, 1, 30, 20},
+		{"limited height > element height, many (even) elements with element height of 2", 10, 2, 30, 25},
+		{"limited height > element height, many (odd) elements with element height of 2", 10, 2, 31, 26},
+	}
+
+	for _, tcase := range tsuite {
+		t.Run(tcase.description, func(t *testing.T) {
+			l := constructor(tcase.elementHeight)
+			l.Resize(10, tcase.height)
+
+			for i := 0; i < tcase.elements; i++ {
+				l.PushBack(&TestComponent{})
+			}
+
+			require.Equal(t, tcase.elements, l.Len())
+			assert.Equal(t, tcase.want, l.MaxOffset())
+		})
+	}
+}
+
 func TestListDraw(t *testing.T) {
 	testListDraw(t, nil, newTestList)
 }
@@ -518,10 +660,26 @@ func TestEmptyListDraw(t *testing.T) {
 
 func benchmarkListDraw(b *testing.B, n int) {
 	l := NewList(1)
+	l.Resize(1000, 1000)
 	for i := 0; i < n; i++ {
 		l.PushBack(String(strconv.Itoa(i)))
 	}
 
+	var w term.NoopWriter
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		l.Draw(w)
+	}
+}
+
+func benchmarkListSeekEndDraw(b *testing.B, n int) {
+	l := NewList(1)
+	l.Resize(1000, 1000)
+	for i := 0; i < n; i++ {
+		l.PushBack(String(strconv.Itoa(i)))
+	}
+
+	l.SeekEnd()
 	var w term.NoopWriter
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -547,4 +705,24 @@ func BenchmarkListDraw1000(b *testing.B) {
 
 func BenchmarkListDraw100000(b *testing.B) {
 	benchmarkListDraw(b, 100000)
+}
+
+func BenchmarkListSeekEndDraw1(b *testing.B) {
+	benchmarkListSeekEndDraw(b, 1)
+}
+
+func BenchmarkListSeekEndDraw10(b *testing.B) {
+	benchmarkListSeekEndDraw(b, 10)
+}
+
+func BenchmarkListSeekEndDraw100(b *testing.B) {
+	benchmarkListSeekEndDraw(b, 100)
+}
+
+func BenchmarkListSeekEndDraw1000(b *testing.B) {
+	benchmarkListSeekEndDraw(b, 1000)
+}
+
+func BenchmarkListSeekEndDraw100000(b *testing.B) {
+	benchmarkListSeekEndDraw(b, 100000)
 }

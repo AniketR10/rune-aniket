@@ -31,6 +31,48 @@ type focusListTestList struct {
 	*FocusList
 }
 
+func (l *focusListTestList) MaxOffset() int {
+	return l.FocusList.list.MaxOffset()
+}
+
+func (l *focusListTestList) SeekDown() (ok bool) {
+	if l.list.SeekDown() {
+		l.focusIdx--
+		ok = true
+	}
+	return
+}
+
+func (l *focusListTestList) SeekUp() (ok bool) {
+	if l.list.SeekUp() {
+		l.focusIdx++
+		ok = true
+	}
+	return
+}
+
+func (l *focusListTestList) SeekEnd() (ok bool) {
+	for l.SeekDown() {
+		ok = true
+	}
+	return
+}
+
+func (l *focusListTestList) SeekStart() (ok bool) {
+	for l.SeekUp() {
+		ok = true
+	}
+	return
+}
+
+func (l *focusListTestList) CanSeekDown() bool {
+	return l.list.CanSeekDown()
+}
+
+func (l *focusListTestList) CanSeekUp() bool {
+	return l.list.CanSeekUp()
+}
+
 func (l *focusListTestList) PushBackList(other testList) {
 	l.FocusList.PushBackList(other.(*focusListTestList).FocusList)
 }
@@ -180,18 +222,16 @@ func TestFocusListSort(t *testing.T) {
 		l.PushBack(newCompWithAttr(&TestComponent{Ch: 'x'}))
 		l.PushBack(newCompWithAttr(&TestComponent{Ch: 'a'}))
 		l.Resize(1, 1)
-		require.True(t, l.SeekEnd())
-		require.True(t, l.CanSeekUp())
-		require.False(t, l.CanSeekDown())
+		require.True(t, l.FocusEnd())
+		require.True(t, l.CanFocusUp())
+		require.False(t, l.CanFocusDown())
 
 		l.Sort(func(a, b WithAttributes) bool {
 			return a.(*compWithAttr).Component.(*TestComponent).Ch <
 				b.(*compWithAttr).Component.(*TestComponent).Ch
 		})
 
-		assert.False(t, l.CanSeekUp())
 		assert.False(t, l.CanFocusUp())
-		assert.True(t, l.CanSeekDown())
 		assert.True(t, l.CanFocusDown())
 	})
 }
@@ -202,6 +242,10 @@ func TestFocusListFrontBack(t *testing.T) {
 
 func TestFocusListListRemove(t *testing.T) {
 	testListRemove(t, newFocusTestList)
+}
+
+func TestFocusListMaxOffset(t *testing.T) {
+	testListMaxOffset(t, newFocusTestList)
 }
 
 func TestFocusListEmptyDraw(t *testing.T) {

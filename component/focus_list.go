@@ -21,9 +21,10 @@ var (
 // FocusList wraps a List to provide an element Focus. It takes WithAttributes
 // components.
 type FocusList struct {
+	Inverted      bool
 	list          *List
 	focus         ListNode
-	focusOffset   int
+	focusIdx      int
 	height, width int
 	textAttr      term.Attributes
 	focusAttr     term.Attributes
@@ -46,7 +47,7 @@ func (l *FocusList) Init() {
 func (l *FocusList) InitWithAttr(text, focus term.Attributes) {
 	l.list = NewList(defaultElementHeight)
 	l.focus = ListNode{}
-	l.focusOffset = 0
+	l.focusIdx = 0
 	l.textAttr = text
 	l.focusAttr = focus
 }
@@ -74,7 +75,7 @@ func (l *FocusList) trySetFirstFocus(node ListNode) bool {
 // Reset resets the contents of this FocusList.
 func (l *FocusList) Reset() {
 	l.list.Reset()
-	l.focusOffset = 0
+	l.focusIdx = 0
 	l.focus = ListNode{}
 }
 
@@ -139,7 +140,7 @@ func (l *FocusList) PushFront(c WithAttributes) ListNode {
 	n := l.list.PushFront(c)
 	setAttr(n, l.textAttr)
 	if !l.trySetFirstFocus(n) {
-		l.focusOffset++
+		l.focusIdx++
 	}
 	return n
 }
@@ -181,52 +182,6 @@ func (l *FocusList) Resize(width, height int) {
 	l.list.Resize(width, height)
 }
 
-// SeekDown shifts the contents of this list one row down.
-func (l *FocusList) SeekDown() (ok bool) {
-	if l.list.SeekDown() {
-		l.focusOffset--
-		ok = true
-	}
-	return
-}
-
-// SeekUp shifts the contents of this list one row up.
-func (l *FocusList) SeekUp() (ok bool) {
-	if l.list.SeekUp() {
-		l.focusOffset++
-		ok = true
-	}
-	return
-}
-
-// SeekEnd shifts the contents of this list such that the last element
-// is drawn at the top of the list.
-func (l *FocusList) SeekEnd() (ok bool) {
-	for l.SeekDown() {
-		ok = true
-	}
-	return
-}
-
-// SeekStart shifts the contents of this list such that the first element
-// is drawn at the top f the list.
-func (l *FocusList) SeekStart() (ok bool) {
-	for l.SeekUp() {
-		ok = true
-	}
-	return
-}
-
-// CanSeekDown returns whether SeekUp would seek one row down.
-func (l *FocusList) CanSeekDown() bool {
-	return l.list.CanSeekDown()
-}
-
-// CanSeekUp returns whether SeekUp would seek one row up.
-func (l *FocusList) CanSeekUp() bool {
-	return l.list.CanSeekUp()
-}
-
 // SetElementHeight sets the height for each element of this list.
 func (l *FocusList) SetElementHeight(height int) {
 	l.list.SetElementHeight(height)
@@ -238,10 +193,10 @@ func (l *FocusList) SetElementHeight(height int) {
 func (l *FocusList) FocusDown() bool {
 	next, ok := l.focus.Next()
 	if ok {
-		l.focusOffset++
+		l.focusIdx++
 		l.switchFocus(next)
-		if l.focusOffset == l.height-1 {
-			l.SeekDown()
+		if l.focusIdx-l.list.Offset() >= l.height-1 {
+			l.list.SeekDown()
 		}
 	}
 	return ok
@@ -265,10 +220,10 @@ func (l *FocusList) CanFocusUp() bool {
 func (l *FocusList) FocusUp() bool {
 	prev, ok := l.focus.Prev()
 	if ok {
-		l.focusOffset--
+		l.focusIdx--
 		l.switchFocus(prev)
-		if l.focusOffset == 0 {
-			l.SeekUp()
+		if l.focusIdx-l.list.Offset() <= 0 {
+			l.list.SeekUp()
 		}
 	}
 	return ok
@@ -276,18 +231,26 @@ func (l *FocusList) FocusUp() bool {
 
 // FocusStart sets the focus to the first node of l.
 func (l *FocusList) FocusStart() (ok bool) {
-	for l.FocusUp() {
-		ok = true
+	front, ok := l.Front()
+	if !ok {
+		return ok
 	}
-	return
+	l.list.SeekStart()
+	l.focusIdx = 0
+	l.switchFocus(front)
+	return ok
 }
 
 // FocusEnd sets the focus to the last node of l.
 func (l *FocusList) FocusEnd() (ok bool) {
-	for l.FocusDown() {
-		ok = true
+	back, ok := l.Back()
+	if !ok {
+		return ok
 	}
-	return
+	l.list.SeekEnd()
+	l.focusIdx = l.list.Len() - 1
+	l.switchFocus(back)
+	return ok
 }
 
 // Focus returns the current node in focus.
@@ -299,19 +262,16 @@ func (l *FocusList) Focus() (ListNode, bool) {
 }
 
 // Sort sorts the elements of this list with the provided less function.
+// It also resets the current focus node, according to the Inverted
+// property in FocusList.
 func (l *FocusList) Sort(less func(a, b WithAttributes) bool) {
 	l.list.Sort(func(a, b tui.Component) bool {
 		return less(a.(WithAttributes), b.(WithAttributes))
 	})
 
-	if l.focus.Value() != nil {
-		setAttr(l.focus, l.textAttr)
+	if l.Inverted {
+		l.FocusEnd()
+	} else {
+		l.FocusStart()
 	}
-	l.focusOffset = 0
-	var ok bool
-	l.focus, ok = l.Front()
-	if ok {
-		setAttr(l.focus, l.focusAttr)
-	}
-	l.list.SeekStart()
 }

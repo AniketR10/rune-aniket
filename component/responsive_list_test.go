@@ -70,7 +70,7 @@ func newResponsiveTestList(i int) testList {
 }
 
 func TestResponsiveListDraw(t *testing.T) {
-	testListDraw(t, []int{13, 14, 15, 16, 17}, newResponsiveTestList)
+	testListDraw(t, []int{13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24}, newResponsiveTestList)
 }
 
 func TestResponsiveListSort(t *testing.T) {

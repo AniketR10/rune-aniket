@@ -105,14 +105,14 @@ func (l *ResponsiveList) Remove(e ListNode) Responsive {
 
 // CanSeekDown returns whether SeekDown would seek one row down.
 func (l *ResponsiveList) CanSeekDown() bool {
-	return l.offset+l.drawn < l.Len()
+	return l.offset.value+l.drawn < l.Len()
 }
 
 // SeekDown shifts the contents of this list one row down.
 func (l *ResponsiveList) SeekDown() bool {
 	ok := l.CanSeekDown()
 	if ok {
-		l.offset++
+		l.offset.value++
 		l.simulateDraw()
 		l.setDrawOffset()
 	}
@@ -133,7 +133,7 @@ func (l *ResponsiveList) SeekEnd() (ok bool) {
 func (l *ResponsiveList) setDrawOffset() {
 	l.loffset = 0
 	// only set loffset if we are at last offset
-	if l.offset+l.drawn != l.Len() {
+	if l.offset.value+l.drawn != l.Len() {
 		return
 	}
 	// only set loffset if drawn elements overflowed height
@@ -149,7 +149,7 @@ func (l *ResponsiveList) simulateDraw() {
 	var i int
 	for el, ok := l.Front(); ok; el, ok = el.Next() {
 		comp := el.el.Value.(*Virtual)
-		if i < l.offset {
+		if i < l.offset.value {
 			i++
 			continue
 		}
@@ -173,7 +173,7 @@ func (l *ResponsiveList) Resize(width, height int) {
 	var i int
 	for el, ok := l.Front(); ok; el, ok = el.Next() {
 		comp := el.el.Value.(*Virtual)
-		if i < l.offset {
+		if i < l.offset.value {
 			// clean break signal for Draw
 			comp.Move(term.Coordinates{X: 0, Y: 0})
 			i++
@@ -209,7 +209,7 @@ func (l *ResponsiveList) Draw(w term.Writer) {
 
 	var i int
 	for el, ok := l.Front(); ok; el, ok = el.Next() {
-		if i < l.offset {
+		if i < l.offset.value {
 			i++
 			continue
 		}
@@ -239,7 +239,7 @@ func (l *ResponsiveList) ElementAt(pos term.Coordinates) (ListNode, bool) {
 		return ListNode{}, ok
 	}
 
-	for i := 0; i < l.offset; i++ {
+	for i := 0; i < l.offset.value; i++ {
 		el, _ = el.Next()
 	}
 

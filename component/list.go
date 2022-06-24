@@ -2,6 +2,7 @@ package component
 
 import (
 	"container/list"
+	"math"
 	"sort"
 
 	"github.com/ernestrc/go-tui"
@@ -22,9 +23,16 @@ type ListNode struct {
 // it can be modified later with SetElementHeight.
 type List struct {
 	elementHeight int
+	// API indirectly exposes internal list so we need
+	// to make sure that the elements are properly position and sized
+	// before drawing
+	dirty         bool
 	width, height int
-	offset        int
-	list          list.List // list of Virtual
+	offset        struct {
+		value int
+		head  ListNode
+	}
+	list list.List // list of Virtual
 }
 
 // NewList allocates storage for a new List and initializes it.
@@ -41,10 +49,57 @@ func (l *List) listNode(el *list.Element) ListNode {
 	}
 }
 
+func (l *List) setMaxOffset() {
+	l.offset.value = l.MaxOffset()
+	l.offset.head, _ = l.Back()
+	for i := 1; i < l.height/l.elementHeight; i++ {
+		l.offset.head, _ = l.offset.head.Prev()
+	}
+}
+
+/* offset.value and offset.head are out of sync
+   because an element has been inserted or removed before offset.head */
+
+func (l *List) findNodeBeforeOffset(node ListNode) bool {
+	for n, ok := l.offset.head, true; ok; n, ok = n.Prev() {
+		if n == node {
+			return true
+		}
+	}
+	return false
+}
+
+func (l *List) fixOffsetRemove(removed, nextAfterOffsetHead ListNode) {
+	if l.offset.value > l.MaxOffset() {
+		l.setMaxOffset()
+		return
+	}
+	if removed == l.offset.head {
+		if nextAfterOffsetHead.el == nil {
+			l.setMaxOffset()
+			return
+		}
+		l.offset.head = nextAfterOffsetHead
+		return
+	}
+	found := l.findNodeBeforeOffset(removed)
+	if found {
+		l.offset.head, _ = l.offset.head.Next()
+	}
+}
+
+func (l *List) fixOffsetAdd(node ListNode) {
+	found := l.findNodeBeforeOffset(node)
+	if found {
+		l.offset.head, _ = l.offset.head.Prev()
+	}
+}
+
 // Reset resets the contents of this List.
 func (l *List) Reset() {
 	l.list.Init()
-	l.offset = 0
+	l.offset.value = 0
+	l.offset.head, _ = l.Front()
 }
 
 // Init initializes this List.
@@ -59,7 +114,7 @@ func (l *List) Init(elementHeight int) {
 // SetElementHeight sets the height for each element of this list.
 func (l *List) SetElementHeight(height int) {
 	l.elementHeight = height
-	l.Resize(l.width, l.height)
+	l.dirty = true
 }
 
 // ElementHeight returns the height for each element of this list.
@@ -69,19 +124,38 @@ func (l *List) ElementHeight() int {
 
 // CanSeekUp returns whether SeekUp would seek one row up.
 func (l *List) CanSeekUp() bool {
-	return l.offset > 0
+	return l.offset.value > 0
+}
+
+// Offset returns this list's current seek offset.
+func (l *List) Offset() int {
+	return l.offset.value
+}
+
+// MaxOffset returns this list's max seek offset.
+func (l *List) MaxOffset() int {
+	if l.height == 0 {
+		return 0
+	}
+	denom := l.elementHeight
+	if denom > l.height {
+		denom = l.height
+	}
+	return int(math.Max(0, float64(l.list.Len()-l.height/denom)))
 }
 
 // CanSeekDown returns whether SeekUp would seek one row down.
 func (l *List) CanSeekDown() bool {
-	return l.offset < l.list.Len()-l.height/l.elementHeight
+	return l.offset.value < l.MaxOffset()
 }
 
 // SeekUp shifts the contents of this list one row up.
 func (l *List) SeekUp() bool {
 	ok := l.CanSeekUp()
 	if ok {
-		l.offset--
+		l.offset.value--
+		l.offset.head, _ = l.offset.head.Prev()
+		l.dirty = true
 	}
 	return ok
 }
@@ -90,7 +164,9 @@ func (l *List) SeekUp() bool {
 func (l *List) SeekDown() bool {
 	ok := l.CanSeekDown()
 	if ok {
-		l.offset++
+		l.offset.value++
+		l.offset.head, _ = l.offset.head.Next()
+		l.dirty = true
 	}
 	return ok
 }
@@ -99,8 +175,9 @@ func (l *List) SeekDown() bool {
 // is drawn at the top of the list.
 func (l *List) SeekEnd() (ok bool) {
 	if l.CanSeekDown() {
-		l.offset = l.list.Len() - l.height/l.elementHeight
+		l.setMaxOffset()
 		ok = true
+		l.dirty = true
 	}
 	return
 }
@@ -108,40 +185,36 @@ func (l *List) SeekEnd() (ok bool) {
 // SeekStart shifts the contents of this list such that the first element
 // is drawn at the top f the list.
 func (l *List) SeekStart() (ok bool) {
-	if l.offset != 0 {
+	if l.offset.value != 0 {
 		ok = true
+		l.offset.value = 0
+		l.offset.head, _ = l.Front()
+		l.dirty = true
 	}
-	l.offset = 0
 	return
 }
 
 // Resize resizes this list to fit within width and height.
 func (l *List) Resize(width, height int) {
 	l.width, l.height = width, height
-	lastVisible := l.height/l.elementHeight + l.offset
-	for i, el := 0, l.list.Front(); i < lastVisible && el != nil; el, i = el.Next(), i+1 {
-		if i < l.offset {
-			continue
-		}
+	lastVisible := l.height/l.elementHeight + l.offset.value
+	for i, el := l.offset.value, l.offset.head.el; i < lastVisible && el != nil; el, i = el.Next(), i+1 {
 		comp := el.Value.(*Virtual)
 		comp.Resize(l.width, l.elementHeight)
-		ypos := (i - l.offset) * l.elementHeight
+		ypos := (i - l.offset.value) * l.elementHeight
 		comp.Move(term.Coordinates{X: 0, Y: ypos})
 	}
+	l.dirty = false
 }
 
 // Draw draws this list's elements with the current seek offset.
 func (l *List) Draw(w term.Writer) {
-	// API exposes internal list so we need
-	// to make sure that the elements are properly position and sized
-	// before drawing
-	l.Resize(l.width, l.height)
-	lastVisible := l.height/l.elementHeight + l.offset
+	if l.dirty {
+		l.Resize(l.width, l.height)
+	}
 
-	for i, el := 0, l.list.Front(); i < lastVisible && el != nil; i, el = i+1, el.Next() {
-		if i < l.offset {
-			continue
-		}
+	lastVisible := l.height/l.elementHeight + l.offset.value
+	for i, el := l.offset.value, l.offset.head.el; i < lastVisible && el != nil; i, el = i+1, el.Next() {
 		el.Value.(*Virtual).Draw(w)
 	}
 
@@ -169,26 +242,6 @@ func (l *List) Front() (ListNode, bool) {
 // Len returns the number of nodes of list l in O(1).
 func (l *List) Len() int { return l.list.Len() }
 
-// MoveAfter moves node e to its new position after mark. If e or mark is
-// not an node of l, or e == mark, the list is not modified.
-func (l *List) MoveAfter(e, mark ListNode) {
-	l.list.MoveAfter(e.el, mark.el)
-}
-
-// MoveBefore moves node e to its new position before mark. If e or mark is
-// not a node of l, or e == mark, the list is not modified.
-func (l *List) MoveBefore(e, mark ListNode) {
-	l.list.MoveBefore(e.el, mark.el)
-}
-
-// MoveToBack moves node e to the back of list l. If e is not an node of
-// l, the list is not modified.
-func (l *List) MoveToBack(e ListNode) { l.list.MoveToBack(e.el) }
-
-// MoveToFront moves element e to the front of list l. If e is not an element
-// of l, the list is not modified. The element must not be nil.
-func (l *List) MoveToFront(e ListNode) { l.list.MoveToFront(e.el) }
-
 // PushBackList inserts a copy of an other list at the back of list l. The
 // lists l and other must NOT be the same or nil.
 func (l *List) PushBackList(other *List) {
@@ -196,6 +249,11 @@ func (l *List) PushBackList(other *List) {
 		panic("other list cannot be self: components can't be deep cloned")
 	}
 	l.list.PushBackList(&other.list)
+	l.dirty = true
+	if l.Len() == other.Len() {
+		l.offset.value = 0
+		l.offset.head, _ = l.Front()
+	}
 }
 
 // PushFrontList inserts a copy of an other list at the front of list l. The
@@ -205,6 +263,13 @@ func (l *List) PushFrontList(other *List) {
 		panic("other list cannot be self: components can't be deep cloned")
 	}
 	l.list.PushFrontList(&other.list)
+	l.dirty = true
+	if l.Len() == other.Len() {
+		l.offset.value = 0
+		l.offset.head, _ = l.Front()
+	} else {
+		l.offset.value += other.list.Len()
+	}
 }
 
 // InsertAfter inserts a new element c immediately after mark and
@@ -212,6 +277,8 @@ func (l *List) PushFrontList(other *List) {
 // is not modified.
 func (l *List) InsertAfter(c tui.Component, mark ListNode) ListNode {
 	v := &Virtual{C: c}
+	l.dirty = true
+	l.fixOffsetAdd(mark)
 	return l.listNode(l.list.InsertAfter(v, mark.el))
 }
 
@@ -220,6 +287,8 @@ func (l *List) InsertAfter(c tui.Component, mark ListNode) ListNode {
 // the list is not modified.
 func (l *List) InsertBefore(c tui.Component, mark ListNode) ListNode {
 	v := &Virtual{C: c}
+	l.dirty = true
+	l.fixOffsetAdd(mark)
 	return l.listNode(l.list.InsertBefore(v, mark.el))
 }
 
@@ -227,20 +296,43 @@ func (l *List) InsertBefore(c tui.Component, mark ListNode) ListNode {
 // returns the linked node.
 func (l *List) PushBack(c tui.Component) ListNode {
 	v := &Virtual{C: c}
-	return l.listNode(l.list.PushBack(v))
+	l.dirty = true
+	ret := l.listNode(l.list.PushBack(v))
+	if l.Len() == 1 {
+		l.offset.value = 0
+		l.offset.head = ret
+	}
+	return ret
 }
 
 // PushFront inserts a new element c at the front of list l and
 // returns the linked node.
 func (l *List) PushFront(c tui.Component) ListNode {
 	v := &Virtual{C: c}
-	return l.listNode(l.list.PushFront(v))
+	l.dirty = true
+	ret := l.listNode(l.list.PushFront(v))
+	if l.Len() == 1 {
+		l.offset.value = 0
+		l.offset.head = ret
+	} else {
+		l.fixOffsetAdd(ret)
+	}
+	return ret
 }
 
 // Remove removes e from l if e is a node of list l.
 // It returns the element value e.Value.
 func (l *List) Remove(e ListNode) tui.Component {
-	return l.list.Remove(e.el).(*Virtual).C
+	l.dirty = true
+	nextAfterOffsetHead, _ := l.offset.head.Next()
+	ret := l.list.Remove(e.el).(*Virtual).C
+	if l.Len() == 0 {
+		l.offset.value = 0
+		l.offset.head = ListNode{}
+	} else {
+		l.fixOffsetRemove(e, nextAfterOffsetHead)
+	}
+	return ret
 }
 
 // SetValue sets the tui.Component value in ListNode.
@@ -250,6 +342,8 @@ func (e ListNode) SetValue(c tui.Component) {
 	}
 	v := e.el.Value.(*Virtual)
 	v.C = c
+	// C needs resize
+	e.l.dirty = true
 }
 
 // Value gets the tui.Component value in ListNode.
@@ -283,13 +377,9 @@ func (l *List) ElementAt(pos term.Coordinates) (ListNode, bool) {
 		panic("negative coordinates")
 	}
 
-	el, ok := l.Front()
+	el, ok := l.offset.head, l.offset.head != (ListNode{})
 	if !ok {
 		return ListNode{}, ok
-	}
-
-	for i := 0; i < l.offset; i++ {
-		el, _ = el.Next()
 	}
 
 	i := 0
@@ -306,7 +396,8 @@ func (l *List) ElementAt(pos term.Coordinates) (ListNode, bool) {
 	return ListNode{}, false
 }
 
-// Sort returns a copy of this List sorted with the provided less function.
+// Sort in-place sorts this List with the provided less function.
+// It resets the current seek offset, if any.
 func (l *List) Sort(less func(a, b tui.Component) bool) {
 	els := make([]ListNode, l.Len())
 	i := 0
@@ -322,6 +413,10 @@ func (l *List) Sort(less func(a, b tui.Component) bool) {
 	})
 
 	for i := l.Len() - 1; i >= 0; i-- {
-		l.MoveToFront(els[i])
+		l.list.MoveToFront(els[i].el)
 	}
+
+	l.offset.value = 0
+	l.offset.head, _ = l.Front()
+	l.dirty = true
 }
