@@ -65,11 +65,11 @@ func (s *AttrSetter) Draw(w term.Writer) {
 		compWithAttr.SetAttr(s.def)
 	}
 
-	var buf cell.BufferWriter
-	buf.Init(s.width, s.height)
+	var bw cell.BufferWriter
+	bw.Init(s.width, s.height)
 	s.comp.Resize(s.width, s.height)
-	s.comp.Draw(&buf)
-	cells := buf.RawCells()
+	s.comp.Draw(&bw)
+	cells := bw.RawCells()
 
 	if !is {
 		for y, row := range cells {
@@ -89,8 +89,10 @@ func (s *AttrSetter) Draw(w term.Writer) {
 		cells[attrAt.Y][attrAt.X].Fg |= attrAt.Attributes.Fg
 	}
 
+	var buf cell.Buffer
+	bw.ToBuffer(&buf)
 	var sc Scroll
-	sc.Init(&buf.Buffer)
+	sc.Init(&buf)
 	sc.Resize(s.width, s.height)
 	sc.Draw(w)
 }

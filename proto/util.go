@@ -5,7 +5,6 @@ import (
 	fmt "fmt"
 	"io"
 	"io/ioutil"
-	math "math"
 	"os"
 	"strings"
 	"sync"
@@ -90,7 +89,15 @@ func RawCellsResponseToBuffer(in *RawCellsResponse) *cell.Buffer {
 }
 
 func rowsToBuffer(in []*CellRow) *cell.Buffer {
-	w := cell.NewBufferWriter(math.MaxInt32, math.MaxInt32)
+	var maxWidth int
+	for _, row := range in {
+		if len(row.Cells) > maxWidth {
+			maxWidth = len(row.Cells)
+		}
+	}
+
+	var w cell.BufferWriter
+	w.Init(maxWidth, len(in))
 
 	for y, rows := range in {
 		for x, cell := range rows.Cells {
@@ -98,7 +105,9 @@ func rowsToBuffer(in []*CellRow) *cell.Buffer {
 		}
 	}
 
-	return &w.Buffer
+	ret := new(cell.Buffer)
+	w.ToBuffer(ret)
+	return ret
 }
 
 type drawResponseWriter struct {
