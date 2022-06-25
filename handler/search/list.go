@@ -159,10 +159,7 @@ func addMatch(
 	list *component.FocusList, match Match,
 	matchTextAttr term.Attributes,
 ) {
-	b := component.NewSpan(component.String(string(match.data)), component.SpanConfig{
-		ContentAlignment: component.SpanAlignmentLeft,
-	})
-
+	b := component.String(string(match.data))
 	comp := component.WithAttrSetter(b)
 	if match.tokens != nil {
 		for _, t := range *match.tokens {
@@ -635,6 +632,21 @@ func (l *List) SetMinInputHeight(height int) {
 // Buffer returns the search input buffer.
 func (l *List) Buffer() *cell.Buffer {
 	return l.searchBar.syncBuffer
+}
+
+// Offset returns this list's current seek offset.
+func (l *List) Offset() int {
+	return l.list.Offset()
+}
+
+// FocusOffset returns this list's focus index in the underlying list.
+func (l *List) FocusOffset() int {
+	return l.list.FocusOffset()
+}
+
+// ElementHeight returns the height for each element of this list.
+func (l *List) ElementHeight() int {
+	return l.list.ElementHeight()
 }
 
 // Close closes all the resources associated with this List.
