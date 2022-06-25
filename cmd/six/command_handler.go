@@ -113,6 +113,9 @@ func (h *commandListHandler) Draw(w term.Writer) {
 	// input so local buffer changes must consider potential resize
 	// of search.List
 	h.resizeCommandOverlay()
+	// the list is very short so waiting is not a significant
+	// perf penalty and it makes tests easier to make deterministic
+	h.list.Wait()
 	h.list.Draw(w)
 	h.responsive.Draw(w)
 }
@@ -154,9 +157,9 @@ func (h *commandListHandler) Handle(ev term.Event) (quit, handled bool) {
 		// before selecting command wait for previous search to finish
 		h.list.Wait()
 
-		command, _ := h.list.Focus()
+		_, command, _ := h.list.Focus()
 		bufStr := h.buf.String()
-		quit := h.callback(string(command), bufStr)
+		quit := h.callback(string(command.Data()), bufStr)
 		if bufStr != "" {
 			_ = h.history.Add(bufStr)
 		}

@@ -333,6 +333,8 @@ func (h *fuzzyFinderHandler) getListConfig(config plugin.Config) search.ListConf
 	algo := search.FuzzyMatch
 	if algoStr == "equal" {
 		algo = search.EqualMatch
+	} else if algoStr == "contains" {
+		algo = search.ContainsMatch
 	}
 
 	cfg := search.ListConfig{

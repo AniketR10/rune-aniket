@@ -1556,15 +1556,15 @@ func (h *lspEditorHandler) browseLocations(
 	// wrap to detect when focus has changed
 	// and re-render window.
 	bh := handler.Wrap(sh, func(ev term.Event) (bool, bool) {
-		before, _ := list.Focus()
+		_, before, _ := list.Focus()
 		exit, handle := sh.Handle(ev)
 		list.Wait()
-		after, _ := list.Focus()
-		afterStr := string(after)
+		_, after, _ := list.Focus()
+		afterStr := string(after.Data())
 		if exit {
 			done = true
 		}
-		if string(before) != afterStr {
+		if string(before.Data()) != afterStr {
 			renderFile(textToLocation[afterStr])
 		}
 		return exit, handle
@@ -1576,8 +1576,8 @@ func (h *lspEditorHandler) browseLocations(
 
 		if ev.Type == term.EventResize {
 			list.Wait()
-			focus, _ := list.Focus()
-			renderFile(textToLocation[string(focus)])
+			_, focus, _ := list.Focus()
+			renderFile(textToLocation[string(focus.Data())])
 			return false, true
 		}
 

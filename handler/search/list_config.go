@@ -13,6 +13,8 @@ const (
 	FuzzyMatch AlgoConfig = iota
 	// EqualMatch instructs list to perform equal string matching.
 	EqualMatch
+	// ContainsMatch instructs list to match strings that contain search term.
+	ContainsMatch
 )
 
 // ListConfig is used to initialize a List.
@@ -35,7 +37,12 @@ type ListConfig struct {
 	// ElementAttr attributes to use for the list elements.
 	ElementAttr *term.Attributes
 
+	// CaseSensitive determines whether Algo is case sensitive.
 	CaseSensitive bool
+
+	// BottomSearchBar determines whether the search bar and therefore
+	// the highest score matches should be at the top or at the bottom.
+	BottomSearchBar bool
 }
 
 func (c ListConfig) toInternal() listConfig {
@@ -72,6 +79,8 @@ func (c ListConfig) toInternal() listConfig {
 	switch c.Algo {
 	case EqualMatch:
 		algo = fzf.EqualMatch
+	case ContainsMatch:
+		algo = containsMatch
 	default:
 		algo = fzf.FuzzyMatchV2
 	}
@@ -85,5 +94,6 @@ func (c ListConfig) toInternal() listConfig {
 		focusAttr:       focusAttr,
 		interrupt:       interrupt,
 		caseSensitive:   c.CaseSensitive,
+		bottomSearchBar: c.BottomSearchBar,
 	}
 }

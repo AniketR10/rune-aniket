@@ -6,47 +6,85 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/ernestrc/go-tui/cell"
+	"github.com/ernestrc/go-tui/component"
 	"github.com/ernestrc/go-tui/term"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/goleak"
 )
 
-func assertNoLeaks(t *testing.T, l *List) {
+type listConstructor func(ListConfig) (listIfc, *cell.Buffer)
+
+type listIfc interface {
+	Close() error
+	DataReset()
+	Draw(w term.Writer)
+	Focus() (component.WithAttributes, Match, bool)
+	FocusDown() bool
+	FocusEnd() bool
+	FocusStart() bool
+	FocusUp() bool
+	InputHeight() int
+	MatchCount() int
+	Push() chan<- []byte
+	PushSync(b []byte) (matched bool)
+	Resize(width, height int)
+	SetMinInputHeight(height int)
+	TotalCount() int
+	Wait()
+}
+
+func assertNoLeaks(t *testing.T, l listIfc) {
 	assert.NoError(t, l.Close())
 	ignoreOpenCensus := goleak.IgnoreTopFunction("go.opencensus.io/stats/view.(*worker).start")
 	goleak.VerifyNone(t, ignoreOpenCensus)
 }
 
-func assertFocusEqual(t *testing.T, l *List, el []byte) {
-	ret, ok := l.Focus()
+func assertFocusEqual(t *testing.T, l listIfc, el []byte) {
+	_, ret, ok := l.Focus()
 	require.True(t, ok)
-	assert.Equal(t, el, ret)
+	assert.Equal(t, string(el), string(ret.Data()))
+}
+
+func newSimpleList(cfg ListConfig) (listIfc, *cell.Buffer) {
+	l := NewList(cfg)
+	return l, l.Buffer()
+}
+
+func newSimpleListBottomSearchBar(cfg ListConfig) (listIfc, *cell.Buffer) {
+	cfg.BottomSearchBar = true
+	l := NewList(cfg)
+	return l, l.Buffer()
 }
 
 func TestListCount(t *testing.T) {
+	testListCount(t, newSimpleList)
+}
+
+func testListCount(t *testing.T, constructor listConstructor) {
 	var wg sync.WaitGroup
-	l := NewList(ListConfig{Interrupt: wg.Done})
+	l, buf := constructor(ListConfig{Interrupt: wg.Done})
 
 	l.PushSync([]byte("capitol insurrection"))
 	assert.Equal(t, 1, l.TotalCount())
 	assert.Equal(t, 1, l.MatchCount())
 
 	wg.Add(1)
-	l.Buffer().WriteString("c")
+	buf.WriteString("c")
 	wg.Wait()
 
 	assert.Equal(t, 1, l.TotalCount())
 	assert.Equal(t, 1, l.MatchCount())
 
 	wg.Add(1)
-	l.Buffer().DeleteCell(term.Coordinates{X: 0})
+	buf.DeleteCell(term.Coordinates{X: 0})
 	wg.Wait()
 
 	// we cannot do two at a time because there's a race between canceling
 	// the original async search and calling interrupt.
 	wg.Add(1)
-	l.Buffer().WriteString("X")
+	buf.WriteString("X")
 	wg.Wait()
 
 	assert.Equal(t, 1, l.TotalCount())
@@ -60,8 +98,12 @@ func TestListCount(t *testing.T) {
 }
 
 func TestListFocus(t *testing.T) {
-	l := NewList(ListConfig{})
-	_, ok := l.Focus()
+	testListFocus(t, newSimpleList)
+}
+
+func testListFocus(t *testing.T, constructor listConstructor) {
+	l, _ := constructor(ListConfig{})
+	_, _, ok := l.Focus()
 	assert.False(t, ok)
 
 	el1 := []byte("angry pants")
@@ -88,7 +130,41 @@ func TestListFocus(t *testing.T) {
 	assertNoLeaks(t, l)
 }
 
-func pushTestData(l *List, n int) {
+func TestListFocusBottomSearchBar(t *testing.T) {
+	testListFocusBottomSearchBar(t, newSimpleList)
+}
+
+func testListFocusBottomSearchBar(t *testing.T, constructor listConstructor) {
+	l, _ := constructor(ListConfig{BottomSearchBar: true})
+	_, _, ok := l.Focus()
+	assert.False(t, ok)
+
+	el1 := []byte("angry pants")
+	el2 := []byte("angry girls")
+	el3 := []byte("pants :@")
+	l.PushSync(el1)
+	l.PushSync(el2)
+	l.PushSync(el3)
+	assertFocusEqual(t, l, el3)
+
+	assert.False(t, l.FocusDown())
+	assert.True(t, l.FocusUp())
+	assert.True(t, l.FocusUp())
+	assertFocusEqual(t, l, el1)
+
+	assert.True(t, l.FocusStart())
+	assertFocusEqual(t, l, el1)
+
+	assert.True(t, l.FocusEnd())
+	assertFocusEqual(t, l, el3)
+
+	assert.True(t, l.FocusUp())
+	assertFocusEqual(t, l, el2)
+
+	assertNoLeaks(t, l)
+}
+
+func pushTestData(l listIfc, n int) {
 	// push exactly the number of elements equal to
 	// this component's height, so only interrupt should
 	// be called only once while processing data
@@ -98,10 +174,18 @@ func pushTestData(l *List, n int) {
 }
 
 func TestListAsyncPush(t *testing.T) {
+	testListAsyncPush(t, newSimpleList)
+}
+
+func TestListAsyncPushBottomSearchBar(t *testing.T) {
+	testListAsyncPush(t, newSimpleListBottomSearchBar)
+}
+
+func testListAsyncPush(t *testing.T, constructor listConstructor) {
 	t.Run("no search", func(t *testing.T) {
 		var wg sync.WaitGroup
 
-		l := NewList(ListConfig{Interrupt: wg.Done})
+		l, _ := constructor(ListConfig{Interrupt: wg.Done})
 		height := 100
 		l.Resize(100, height)
 
@@ -122,7 +206,7 @@ func TestListAsyncPush(t *testing.T) {
 
 	t.Run("search query after items pushed", func(t *testing.T) {
 		var wg sync.WaitGroup
-		l := NewList(ListConfig{Interrupt: wg.Done})
+		l, buf := constructor(ListConfig{Interrupt: wg.Done})
 		height := 100
 		l.Resize(100, height)
 
@@ -131,9 +215,9 @@ func TestListAsyncPush(t *testing.T) {
 		wg.Wait()
 		wg.Add(2)
 
-		l.Buffer().WriteString("9")
+		buf.WriteString("9")
 		l.Wait()
-		l.Buffer().WriteString("9")
+		buf.WriteString("9")
 		l.Wait()
 
 		assert.Equal(t, height, l.TotalCount())
@@ -144,14 +228,14 @@ func TestListAsyncPush(t *testing.T) {
 
 	t.Run("search query before items pushed", func(t *testing.T) {
 		var wg sync.WaitGroup
-		l := NewList(ListConfig{Interrupt: wg.Done})
+		l, buf := constructor(ListConfig{Interrupt: wg.Done})
 		n := 100
 		l.Resize(n, n)
 
 		wg.Add(3)
-		l.Buffer().WriteString("9")
+		buf.WriteString("9")
 		l.Wait() // make next search query doesn't cancel prev
-		l.Buffer().WriteString("9")
+		buf.WriteString("9")
 		l.Wait()
 		pushTestData(l, n)
 		wg.Wait()
@@ -167,16 +251,16 @@ func TestListAsyncPush(t *testing.T) {
 
 	t.Run("concurrent search query", func(t *testing.T) {
 		var wg sync.WaitGroup
-		l := NewList(ListConfig{Interrupt: wg.Done})
+		l, buf := constructor(ListConfig{Interrupt: wg.Done})
 		n := 100
 		l.Resize(n, n)
 
 		wg.Add(3)
 		go pushTestData(l, n)
 
-		l.Buffer().WriteString("9")
+		buf.WriteString("9")
 		l.Wait()
-		l.Buffer().WriteString("9")
+		buf.WriteString("9")
 		l.Wait()
 
 		wg.Wait()
@@ -190,8 +274,13 @@ func TestListAsyncPush(t *testing.T) {
 }
 
 func TestListDraw(t *testing.T) {
-	l := NewList(ListConfig{})
+	testListDraw(t, newSimpleList)
+}
+
+func testListDraw(t *testing.T, constructor listConstructor) {
+	l, buf := constructor(ListConfig{})
 	l.Resize(8, 4)
+	defer l.Close()
 
 	w := term.NewStringWriter(8, 4)
 
@@ -222,7 +311,7 @@ For the
 For the `,
 	}, {
 		func() {
-			l.Buffer().WriteString("P")
+			buf.WriteString("P")
 			l.Wait()
 		}, `
 P  19/20
@@ -241,7 +330,7 @@ For the `,
 		func() {
 			l.SetMinInputHeight(1)
 			for i := 0; i < 8; i++ {
-				l.Buffer().WriteString("P")
+				buf.WriteString("P")
 			}
 			l.Wait()
 		}, `
@@ -273,10 +362,104 @@ P   0/20
 	}
 }
 
+func TestListDrawBottomSearchBar(t *testing.T) {
+	testListDrawBottomSearchBar(t, newSimpleList)
+}
+
+func testListDrawBottomSearchBar(t *testing.T, constructor listConstructor) {
+	l, buf := constructor(ListConfig{BottomSearchBar: true})
+	l.Resize(8, 4)
+	defer l.Close()
+
+	w := term.NewStringWriter(8, 4)
+
+	tests := []struct {
+		action   func()
+		expected string
+	}{{
+		nil, `
+        
+        
+        
+     0/0`,
+	}, {
+		func() { l.PushSync([]byte("Safe Changes - Talaboman")) }, `
+Safe Cha
+        
+        
+     1/1`,
+	}, {
+		func() {
+			for i := 0; i < 19; i++ {
+				l.PushSync([]byte("For the Time Being - Phonique"))
+			}
+		}, `
+For the 
+For the 
+For the 
+   20/20`,
+	}, {
+		func() {
+			buf.WriteString("P")
+			l.Wait()
+		}, `
+For the 
+For the 
+For the 
+P  19/20`,
+	}, {
+		func() {
+			l.SetMinInputHeight(2)
+		}, `
+For the 
+For the 
+P       
+   19/20`,
+	}, {
+		func() {
+			l.SetMinInputHeight(1)
+			for i := 0; i < 8; i++ {
+				buf.WriteString("P")
+			}
+			l.Wait()
+		}, `
+        
+        
+PPPPPPPP
+P   0/20`,
+	},
+	}
+
+	for _, tcase := range tests {
+		if err := w.Clear(term.Attributes{}); err != nil {
+			t.Fatal(err)
+		}
+
+		if tcase.action != nil {
+			tcase.action()
+		}
+
+		l.Draw(w)
+
+		if err := w.Flush(); err != nil {
+			t.Fatal(err)
+		}
+
+		// for readability, we expected strings are written starting with \n
+		expected := strings.TrimLeft(tcase.expected, "\n")
+		assert.Equal(t, expected, w.String())
+	}
+}
+
 func TestListWait(t *testing.T) {
+	testListWait(t, newSimpleList)
+}
+
+func testListWait(t *testing.T, constructor listConstructor) {
 	t.Run("does not panic a new list", func(t *testing.T) {
-		l := NewList(ListConfig{})
-		assert.NotPanics(t, l.Wait)
+		l, _ := constructor(ListConfig{})
+		require.NotPanics(t, l.Wait)
+		assert.NoError(t, l.Close())
 	})
 }
 
@@ -284,6 +467,7 @@ func TestListBuffer(t *testing.T) {
 	t.Run("inserts on shared buffer are materialized on search buffer", func(t *testing.T) {
 		l := NewList(ListConfig{})
 		shared := l.Buffer()
+		defer l.Close()
 
 		shared.WriteString("blah")
 		assert.Equal(t, "blah", l.searchBar.internalRead.String())
@@ -291,10 +475,22 @@ func TestListBuffer(t *testing.T) {
 
 	t.Run("deletes on search buffer are materialized on shared buffer", func(t *testing.T) {
 		l := NewList(ListConfig{})
+		defer l.Close()
 
 		shared := l.Buffer()
 		shared.WriteString("blah")
 		assert.True(t, shared.TruncateFrom(term.Coordinates{X: 1}))
 		assert.Equal(t, "b", l.searchBar.internalRead.String())
+	})
+}
+
+func TestListLeak(t *testing.T) {
+	testListLeak(t, newSimpleList)
+}
+
+func testListLeak(t *testing.T, constructor listConstructor) {
+	t.Run("does not leak when Init + Close", func(t *testing.T) {
+		l, _ := constructor(ListConfig{})
+		assertNoLeaks(t, l)
 	})
 }

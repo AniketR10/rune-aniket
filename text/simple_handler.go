@@ -85,9 +85,9 @@ func (h *simpleEditorHandler) Handle(ev term.Event) (exit, handled bool) {
 		h.cursor.Insert('\t')
 	case term.KeyBackspace, term.KeyBackspace2:
 		if h.cursor.Selection() != "" {
-			h.cursor.DeleteSelection()
+			handled = h.cursor.DeleteSelection()
 		} else {
-			h.cursor.Backspace()
+			handled = h.cursor.Backspace()
 		}
 	case term.KeyCtrlA:
 		h.cursor.MoveStartLine()

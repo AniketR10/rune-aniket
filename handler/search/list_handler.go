@@ -36,11 +36,11 @@ func (s simpleHandler) Handle(ev term.Event) (exit, handled bool) {
 	switch ev.Key {
 	case term.KeyEnter:
 		s.Wait()
-		item, ok := s.Focus()
+		_, item, ok := s.Focus()
 		if ok {
 			handled = true
 			exit = true
-			s.fn(string(item))
+			s.fn(string(item.data))
 		}
 	case term.KeyEsc:
 		handled = true
@@ -57,7 +57,11 @@ func (s simpleHandler) Handle(ev term.Event) (exit, handled bool) {
 }
 
 func (s simpleHandler) Cursor() (term.Coordinates, bool) {
-	return s.ed.Cursor()
+	c, ok := s.ed.Cursor()
+	if s.cfg.bottomSearchBar {
+		c.Y += (s.List.height - s.List.inputHeight())
+	}
+	return c, ok
 }
 
 func (s simpleHandler) Man() tui.Manual {

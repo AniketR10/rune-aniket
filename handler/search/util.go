@@ -14,8 +14,10 @@ const (
 
 // Match represents a search match.
 type Match struct {
-	data []byte
-	res  fzf.Result
+	idx    int
+	data   []byte
+	tokens *[]int
+	res    fzf.Result
 }
 
 // Data returns the matched data.
@@ -35,7 +37,7 @@ func makeSlab() *util.Slab {
 func search(
 	algo fzf.Algo, input [][]byte, searchQuery string,
 	slab *util.Slab, caseSensitive bool,
-	onMatch func(Match, *[]int) bool,
+	onMatch func(Match) bool,
 ) {
 	const (
 		forward   = false
@@ -50,15 +52,15 @@ func search(
 	}
 
 	searchRunes := []rune(searchQuery)
-	for _, data := range input {
+	for i, data := range input {
 		chars := util.ToChars(data)
 		res, tokens := algo(caseSensitive, normalize, forward, &chars,
 			searchRunes, withPos, slab)
 		if res.Start < 0 {
 			continue
 		}
-		match := Match{data: data, res: res}
-		if !onMatch(match, tokens) {
+		match := Match{data: data, res: res, tokens: tokens, idx: i}
+		if !onMatch(match) {
 			return
 		}
 	}
@@ -70,7 +72,7 @@ func simpleSearch(
 	res := make([]Match, 0)
 	slab := makeSlab()
 	search(algo, input, query, slab, caseSensitive,
-		func(m Match, _ *[]int) bool {
+		func(m Match) bool {
 			res = append(res, m)
 			return true
 		})
@@ -87,4 +89,41 @@ func Fuzzy(input [][]byte, query string, caseSensitive bool) []Match {
 // returns a list of matching results.
 func Equal(input [][]byte, query string, caseSensitive bool) []Match {
 	return simpleSearch(fzf.EqualMatch, input, query, caseSensitive)
+}
+
+// Contains performs a string contains search on input with query and
+// returns a list of matching results.
+func Contains(input [][]byte, query string, caseSensitive bool) []Match {
+	return simpleSearch(containsMatch, input, query, caseSensitive)
+}
+
+func containsMatch(
+	caseSensitive bool, normalize bool,
+	forward bool, text *util.Chars, pattern []rune, withPos bool, slab *util.Slab,
+) (fzf.Result, *[]int) {
+	lenPattern := len(pattern)
+	if lenPattern == 0 {
+		return fzf.Result{Start: 0, End: 0, Score: 1}, nil
+	}
+
+	runesStr := string(text.ToRunes())
+	if !caseSensitive {
+		runesStr = strings.ToLower(runesStr)
+	}
+
+	idx := strings.Index(runesStr, string(pattern))
+	if idx == -1 {
+		return fzf.Result{Start: -1, End: -1, Score: 0}, nil
+	}
+
+	tokens := make([]int, 0, len(pattern))
+	for i := idx; i < idx+len(pattern); i++ {
+		tokens = append(tokens, i)
+	}
+
+	return fzf.Result{
+		Start: idx,
+		End:   idx + lenPattern,
+		Score: lenPattern,
+	}, &tokens
 }
