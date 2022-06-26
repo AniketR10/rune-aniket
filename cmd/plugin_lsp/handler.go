@@ -55,7 +55,6 @@ const (
 	handleBackpressureEvs    = 64
 	referencesWindowWidth    = 50
 	referencesWindowHeight   = 15
-	defaultTabspaces         = 4
 )
 
 var (
@@ -75,6 +74,7 @@ var (
 		plugin.PermissionBrowserResourceOpener,
 		plugin.PermissionBrowserMessenger,
 		plugin.PermissionWorkspace,
+		plugin.PermissionConfig,
 	}
 	defaultSemanticTokensListID = "lsp_syntax_highlighting"
 	defaultDiagnosticListID     = "lsp_diagnostic"
@@ -535,15 +535,6 @@ func newLspHandler(
 		return nil, err
 	}
 
-	ret.tabspaces, err = pconfig.GetInt("tabspaces")
-	if err != nil {
-		if err != plugin.ErrNotFound {
-			err = fmt.Errorf("failed to get 'tabspaces' from config: %v", err)
-			return nil, err
-		}
-		ret.tabspaces = defaultTabspaces
-	}
-
 	ret.semanticTokensListID, err = pconfig.GetString("semantic_tokens_list_id")
 	if err != nil {
 		if err != plugin.ErrNotFound {
@@ -611,6 +602,17 @@ func newLspHandler(
 			ret.m, err = plugin.Messenger(g.Token, broker)
 			if err != nil {
 				return nil, err
+			}
+		case plugin.PermissionConfig:
+			config, err := plugin.FetchConfig(g.Token, broker)
+			if err != nil {
+				return nil, err
+			}
+			ret.tabspaces, err = plugutil.Tabspaces(config)
+			if err != nil {
+				ret.tabspaces = cell.DefaultTabspaces
+				log.Warnf("Could not get tabspaces from config: %s.. Using default of %d",
+					err, ret.tabspaces)
 			}
 		}
 	}

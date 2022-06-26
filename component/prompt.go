@@ -65,9 +65,8 @@ func (p *Prompt) init(
 // always contain at least one option and PromptConfig.Message must not be empty.
 // If one of these two rules is violated this method panics.
 func (p *Prompt) Init(cfg PromptConfig) {
-	const defaultTabspaces = 4
 	p.init(func(msg string, cfg PromptConfig) WithAttributes {
-		cells := cell.StringToCells(msg, defaultTabspaces)
+		cells := cell.StringToCells(msg, cell.DefaultTabspaces)
 		return newStringComp(cells, term.Attributes{},
 			0, term.Attributes{}, cfg.Frame, 2, 0, SpanAlignmentCentered)
 	}, cfg)

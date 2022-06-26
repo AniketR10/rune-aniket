@@ -23,8 +23,6 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-const defaultTabspaces = 4
-
 var (
 	fileBarHandlerCommands = []string{}
 	fileBarHandlerEvents   = []text.EventType{
@@ -39,6 +37,7 @@ var (
 		plugin.PermissionBrowserWindowManager,
 		plugin.PermissionBrowserEventPublisher,
 		plugin.PermissionEditor,
+		plugin.PermissionConfig,
 	}
 
 	defaultScrollAttr     = term.Attributes{Fg: term.ColorDefault}
@@ -105,14 +104,6 @@ func newFileBarEditorHandler(
 		ret.backgroundAttributes = defaultBackgroundAttr
 	}
 
-	ret.tabspaces, err = pconfig.GetInt("tabspaces")
-	if err != nil {
-		if err != plugin.ErrNotFound {
-			log.Warningf("failed to get 'tabspaces' from config: %v", err)
-		}
-		ret.tabspaces = defaultTabspaces
-	}
-
 	ret.showDirty, err = pconfig.GetBool("show_dirty")
 	if err != nil {
 		if err != plugin.ErrNotFound {
@@ -154,6 +145,18 @@ func newFileBarEditorHandler(
 			if err != nil {
 				return nil, err
 			}
+		case plugin.PermissionConfig:
+			config, err := plugin.FetchConfig(grant.Token, broker)
+			if err != nil {
+				return nil, err
+			}
+			ret.tabspaces, err = plugutil.Tabspaces(config)
+			if err != nil {
+				ret.tabspaces = cell.DefaultTabspaces
+				log.Warnf("Could not get tabspaces from config: %s.. Using default of %d",
+					err, ret.tabspaces)
+			}
+
 		}
 	}
 

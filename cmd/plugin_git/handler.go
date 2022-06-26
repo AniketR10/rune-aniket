@@ -27,7 +27,6 @@ const (
 	defaultGitDiffListID = "git_diff"
 	commandNextChange    = "gitNextChange"
 	commandPrevChange    = "gitPrevChange"
-	defaultTabspaces     = 4
 )
 
 var (
@@ -45,6 +44,7 @@ var (
 		plugin.PermissionBrowserEventPublisher,
 		plugin.PermissionEditor,
 		plugin.PermissionWorkspace,
+		plugin.PermissionConfig,
 	}
 
 	defaultScrollAttr = term.Attributes{Fg: term.ColorBlack}
@@ -94,14 +94,6 @@ func newGitHandler(
 		ret.scroll.scroll.Attributes = defaultScrollAttr
 	}
 
-	ret.tabspaces, err = pconfig.GetInt("tabspaces")
-	if err != nil {
-		if err != plugin.ErrNotFound {
-			log.Warningf("failed to get 'tabspaces' from config: %v", err)
-		}
-		ret.tabspaces = defaultTabspaces
-	}
-
 	for _, grant := range grants {
 		switch grant.Permission {
 		case plugin.PermissionWorkspace:
@@ -126,6 +118,17 @@ func newGitHandler(
 			err = ret.wm.Bar(browser.OrientationLeft, handler.Nop(syncComp))
 			if err != nil {
 				return nil, err
+			}
+		case plugin.PermissionConfig:
+			config, err := plugin.FetchConfig(grant.Token, broker)
+			if err != nil {
+				return nil, err
+			}
+			ret.tabspaces, err = plugutil.Tabspaces(config)
+			if err != nil {
+				ret.tabspaces = cell.DefaultTabspaces
+				log.Warnf("Could not get tabspaces from config: %s.. Using default of %d",
+					err, ret.tabspaces)
 			}
 		}
 	}
