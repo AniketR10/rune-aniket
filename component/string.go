@@ -14,6 +14,7 @@ type StringConfig struct {
 	FrameCharSet
 	BackgroundAttributes term.Attributes
 	BackgroundRune       rune
+	Tabspaces            int
 }
 
 type stringComp struct {
@@ -125,7 +126,7 @@ func newStringComp(
 // all configurable through cfg. The returned component is significantly
 // slower to Draw and Resize than the component returned by String.
 func StringWithConfig(str string, cfg StringConfig) WithAttributes {
-	cells := cell.StringToCells(str)
+	cells := cell.StringToCells(str, cfg.Tabspaces)
 	return newStringComp(cells, cfg.Attributes, cfg.BackgroundRune,
 		cfg.BackgroundAttributes, cfg.FrameCharSet, 0, 0, cfg.Alignment)
 }

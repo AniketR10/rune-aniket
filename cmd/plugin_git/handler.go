@@ -27,6 +27,7 @@ const (
 	defaultGitDiffListID = "git_diff"
 	commandNextChange    = "gitNextChange"
 	commandPrevChange    = "gitPrevChange"
+	defaultTabspaces     = 4
 )
 
 var (
@@ -65,6 +66,7 @@ type gitEditorHandler struct {
 	gitDiffListID string
 	delAttr       term.Attributes
 	addAttr       term.Attributes
+	tabspaces     int
 	rows          map[string]int
 	offsets       map[string]term.Coordinates
 	lastLocs      map[string][]text.Location
@@ -90,6 +92,14 @@ func newGitHandler(
 			log.Warningf("failed to get 'bar_attr' from config: %v", err)
 		}
 		ret.scroll.scroll.Attributes = defaultScrollAttr
+	}
+
+	ret.tabspaces, err = pconfig.GetInt("tabspaces")
+	if err != nil {
+		if err != plugin.ErrNotFound {
+			log.Warningf("failed to get 'tabspaces' from config: %v", err)
+		}
+		ret.tabspaces = defaultTabspaces
 	}
 
 	for _, grant := range grants {
@@ -284,7 +294,7 @@ func (h *gitEditorHandler) initScroll(name string) {
 
 // allow scroll to seek to same positions as editor buffer
 func (h *gitEditorHandler) setScrollMaxContent(resourceName string, ev text.Event) {
-	rows := len(cell.StringToCells(ev.Content))
+	rows := len(cell.StringToCells(ev.Content, h.tabspaces))
 	// best effort until #59 is resolved
 	rows *= 2
 	rows += 100

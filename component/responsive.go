@@ -24,7 +24,7 @@ type Responsive interface {
 // StringResponsive returns a Responsive implementation of
 // a string tui.Component.
 func StringResponsive(str string, cfg StringConfig) Responsive {
-	return CellsResponsive(cell.StringToCells(str), cfg)
+	return CellsResponsive(cell.StringToCells(str, cfg.Tabspaces), cfg)
 }
 
 // CellsResponsive returns a Responsive implementation for a matrix of cells.

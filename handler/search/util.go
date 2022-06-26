@@ -25,9 +25,22 @@ func (m Match) Data() []byte {
 	return m.data
 }
 
+// Index returns the original input index of this Match.
+func (m Match) Index() int {
+	return m.idx
+}
+
 // Score returns the match score.
 func (m Match) Score() int {
 	return m.res.Score
+}
+
+// Tokens returns the match matching tokens as indeces in Data.
+func (m Match) Tokens() []int {
+	if m.tokens == nil {
+		return nil
+	}
+	return *m.tokens
 }
 
 func makeSlab() *util.Slab {

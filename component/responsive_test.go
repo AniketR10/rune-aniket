@@ -131,7 +131,7 @@ func TestResponsiveHeight(t *testing.T) {
 			assert.Equal(t, tcase.out, out)
 		})
 		t.Run("BufferResponsive", func(t *testing.T) {
-			b := cell.CellsToBuffer(nil)
+			b := cell.CellsToBuffer(nil, 4)
 			b.WriteString(tcase.in)
 			s := BufferResponsive(b, StringConfig{})
 			out := s.Height(tcase.width)
@@ -142,7 +142,7 @@ func TestResponsiveHeight(t *testing.T) {
 
 func TestBufferWithEdits(t *testing.T) {
 	t.Run("Height", func(t *testing.T) {
-		b := cell.CellsToBuffer(nil)
+		b := cell.CellsToBuffer(nil, 4)
 		b.WriteString("aa")
 		s := BufferResponsive(b, StringConfig{})
 
@@ -157,7 +157,7 @@ func TestBufferWithEdits(t *testing.T) {
 
 	t.Run("Draw", func(t *testing.T) {
 		w := term.NewStringWriter(5, 5)
-		b := cell.CellsToBuffer(nil)
+		b := cell.CellsToBuffer(nil, 4)
 		b.WriteString("a\nb\nc")
 		s := BufferResponsive(b, StringConfig{})
 		s.Resize(4, 4)

@@ -78,35 +78,11 @@ func CellsToString(cells [][]term.Cell) string {
 }
 
 // StringToCells returns the cell matrix representation of the given string.
-func StringToCells(str string) (cells [][]term.Cell) {
+func StringToCells(str string, tabspaces int) (cells [][]term.Cell) {
 	var builder rawCells
-	builder.init(defTabSpaces)
+	builder.init(tabspaces)
 	builder.ReadFrom(strings.NewReader(str))
 	return builder.RawCells()
-}
-
-func findTabspaces(in [][]term.Cell) int {
-	var zeroRunes int
-	for _, r := range in {
-		for _, c := range r {
-			if c.Ch == 0 {
-				zeroRunes++
-				continue
-			}
-
-			if zeroRunes == 0 {
-				continue
-			}
-
-			if c.Ch == '\t' {
-				return zeroRunes + 1
-			}
-
-			zeroRunes = 0
-		}
-	}
-
-	return 1
 }
 
 // CloneCells returns a deep clone of in.
@@ -127,12 +103,10 @@ func CloneCells(in [][]term.Cell) [][]term.Cell {
 //
 // Furthermore, it won't treat the last EOL as mandatory so it can be used
 // as an in-memory buffer.
-func CellsToBuffer(c [][]term.Cell) *Buffer {
+func CellsToBuffer(c [][]term.Cell, tabspaces int) *Buffer {
 	cells := new(rawCells)
 
-	tabspaces := findTabspaces(c)
 	cells.init(tabspaces)
-
 	cells.cells = CloneCells(c)
 
 	// rawCells hasthe property that there's always at least one row

@@ -19,11 +19,11 @@ type editBuilder struct {
 	colmap   protocol.ColumnMapper
 }
 
-func (b *editBuilder) init(f *file, w text.CellEditor, cells [][]term.Cell) {
+func (b *editBuilder) init(tabspaces int, f *file, w text.CellEditor, cells [][]term.Cell) {
 	b.f = f
 	b.w = w
-	b.original = cell.CellsToBuffer(cells)
-	b.buf = cell.CellsToBuffer(cells)
+	b.original = cell.CellsToBuffer(cells, tabspaces)
+	b.buf = cell.CellsToBuffer(cells, tabspaces)
 	spanURI := workspaceURIToSpan(b.f.uri)
 	b.colmap = getColumnMapper(spanURI, b.original)
 }

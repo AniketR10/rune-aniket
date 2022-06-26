@@ -261,6 +261,16 @@ func (l *FocusList) Focus() (ListNode, bool) {
 	return l.focus, true
 }
 
+// Offset returns this list's current seek offset.
+func (l *FocusList) Offset() int {
+	return l.list.Offset()
+}
+
+// FocusOffset returns this list's focus index in the underlying list.
+func (l *FocusList) FocusOffset() int {
+	return l.focusIdx
+}
+
 // Sort sorts the elements of this list with the provided less function.
 // It also resets the current focus node, according to the Inverted
 // property in FocusList.

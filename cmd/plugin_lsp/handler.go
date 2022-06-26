@@ -55,6 +55,7 @@ const (
 	handleBackpressureEvs    = 64
 	referencesWindowWidth    = 50
 	referencesWindowHeight   = 15
+	defaultTabspaces         = 4
 )
 
 var (
@@ -145,6 +146,7 @@ type lspEditorHandler struct {
 	o  browser.ResourceOpener
 	wp workspace.Workspace
 
+	tabspaces            int
 	semanticTypesAttr    map[string]term.Attributes
 	diagnosticAttr       map[protocol.DiagnosticSeverity]term.Attributes
 	semanticTokensListID string
@@ -533,6 +535,15 @@ func newLspHandler(
 		return nil, err
 	}
 
+	ret.tabspaces, err = pconfig.GetInt("tabspaces")
+	if err != nil {
+		if err != plugin.ErrNotFound {
+			err = fmt.Errorf("failed to get 'tabspaces' from config: %v", err)
+			return nil, err
+		}
+		ret.tabspaces = defaultTabspaces
+	}
+
 	ret.semanticTokensListID, err = pconfig.GetString("semantic_tokens_list_id")
 	if err != nil {
 		if err != plugin.ErrNotFound {
@@ -659,7 +670,7 @@ func (h *lspEditorHandler) newFile(
 			URI: protocol.URIFromSpanURI(spanURI),
 		},
 		uri:        uri,
-		_cells:     cell.StringToCells(content),
+		_cells:     cell.StringToCells(content, h.tabspaces),
 		languageID: languageID,
 	}
 
@@ -717,7 +728,7 @@ func getColumnMapper(uri span.URI, buf *cell.Buffer) protocol.ColumnMapper {
 
 func (h *lspEditorHandler) handleGoTo(f *file, rs protocol.Range) {
 	cells := h.getCells(f)
-	buf := cell.CellsToBuffer(cells)
+	buf := cell.CellsToBuffer(cells, h.tabspaces)
 	spanURI := workspaceURIToSpan(f.uri)
 	colmap := getColumnMapper(spanURI, buf)
 	pos, _, ok := convertRange(rs, cells, colmap)
@@ -990,7 +1001,7 @@ func (h *lspEditorHandler) handleFileFlush(ev text.Event) {
 	}
 
 	h.pushFullEdit(ctx, srv, f, ev.Content)
-	h.setCells(f, cell.StringToCells(ev.Content))
+	h.setCells(f, cell.StringToCells(ev.Content, h.tabspaces))
 	ctx = h.newSemanticTokensCtx()
 	go h.semanticTokensFull(ctx, srv, f, h.getCells(f), ev.Content)
 }
@@ -1025,7 +1036,7 @@ func (h *lspEditorHandler) handleFileEdit(ev text.Event) {
 	}
 
 	oldCells := h.getCells(f)
-	buf := cell.CellsToBuffer(oldCells)
+	buf := cell.CellsToBuffer(oldCells, h.tabspaces)
 	buf.Edit(ev.Start, ev.End, ev.Content)
 	newCells := buf.RawCells()
 	_, err := h.sendIncrementalEdit(ctx, srv, f, newCells, oldCells,
@@ -1132,7 +1143,7 @@ func (h *lspEditorHandler) parseDiagnostics(
 	f *file, d []protocol.Diagnostic,
 ) []text.Location {
 	cells := h.getCells(f)
-	buf := cell.CellsToBuffer(cells)
+	buf := cell.CellsToBuffer(cells, h.tabspaces)
 	spanURI := workspaceURIToSpan(f.uri)
 	colmap := getColumnMapper(spanURI, buf)
 
@@ -1658,8 +1669,7 @@ func (h *lspEditorHandler) format(
 	p := protocol.DocumentFormattingParams{
 		TextDocument: f.docID,
 		Options: protocol.FormattingOptions{
-			// TODO expose tabsize with Open event
-			TabSize:                4,
+			TabSize:                uint32(h.tabspaces),
 			InsertSpaces:           false,
 			TrimTrailingWhitespace: true,
 			InsertFinalNewline:     false,
@@ -1731,7 +1741,7 @@ func (h *lspEditorHandler) handleFormat(ed text.Handler, uri workspace.URI, impo
 	cells := h.getCells(f)
 
 	var b editBuilder
-	b.init(f, w, cells)
+	b.init(h.tabspaces, f, w, cells)
 
 	if imports {
 		h.organizeImports(ctx, f, srv, &b)

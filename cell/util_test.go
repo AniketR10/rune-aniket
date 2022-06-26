@@ -37,7 +37,7 @@ func TestConvertCoordinates(t *testing.T) {
 }
 func TestCellsToBufferZero(t *testing.T) {
 	t.Run("returned buffer should always have at least one row", func(t *testing.T) {
-		buf := CellsToBuffer(nil)
+		buf := CellsToBuffer(nil, 1)
 		require.Equal(t, 1, buf.Rows())
 		assert.Equal(t, 0, buf.Columns(0))
 	})
@@ -61,7 +61,7 @@ public class Rotor {
 	astr0 := abuf.String()
 	arcells0 := abuf.RawCells()
 
-	bbuf := CellsToBuffer(arcells0)
+	bbuf := CellsToBuffer(arcells0, defTabSpaces)
 	bstr0 := bbuf.String()
 	brcells0 := bbuf.RawCells()
 	require.Equal(t, arcells0, brcells0)
@@ -100,7 +100,7 @@ func benchmarkCellToBuffer(b *testing.B, n int) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_ = CellsToBuffer(c)
+		_ = CellsToBuffer(c, defTabSpaces)
 	}
 }
 

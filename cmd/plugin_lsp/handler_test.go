@@ -75,6 +75,7 @@ func newTestLspHandler(
 	ret.semanticTypesAttr = defaultSemanticTypeAttr
 	ret.diagnosticAttr = defaultDiagnosticAttr
 	ret.evChan = make(chan text.Event)
+	ret.tabspaces = 4
 	go ret.handleEvents(ret.evChan)
 	return ret
 }

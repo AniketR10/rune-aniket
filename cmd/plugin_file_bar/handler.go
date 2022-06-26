@@ -23,6 +23,8 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+const defaultTabspaces = 4
+
 var (
 	fileBarHandlerCommands = []string{}
 	fileBarHandlerEvents   = []text.EventType{
@@ -61,6 +63,7 @@ type fileBarEditorHandler struct {
 	filenameDirtyAttributes term.Attributes
 	backgroundAttributes    term.Attributes
 	showDirty               bool
+	tabspaces               int
 
 	bar struct {
 		sync.Mutex
@@ -102,7 +105,14 @@ func newFileBarEditorHandler(
 		ret.backgroundAttributes = defaultBackgroundAttr
 	}
 
-	ret.showDirty = true
+	ret.tabspaces, err = pconfig.GetInt("tabspaces")
+	if err != nil {
+		if err != plugin.ErrNotFound {
+			log.Warningf("failed to get 'tabspaces' from config: %v", err)
+		}
+		ret.tabspaces = defaultTabspaces
+	}
+
 	ret.showDirty, err = pconfig.GetBool("show_dirty")
 	if err != nil {
 		if err != plugin.ErrNotFound {
@@ -222,7 +232,7 @@ func (h *fileBarEditorHandler) getFileInfo(name string) *fileInfo {
 }
 
 func (h *fileBarEditorHandler) setScrollMaxContent(resourceName string, ev text.Event) {
-	cells := cell.StringToCells(ev.Content)
+	cells := cell.StringToCells(ev.Content, h.tabspaces)
 	h.getFileInfo(resourceName).cells = cells
 	log.Debugf("setScrollMaxContent(%s): %d", resourceName, len(cells))
 }
