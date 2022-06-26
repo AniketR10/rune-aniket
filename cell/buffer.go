@@ -102,7 +102,7 @@ func (b *Buffer) InitWithTabspaces(tabspaces int) {
 
 // Init initializes this Buffer with the default configuration.
 func (b *Buffer) Init() {
-	b.InitWithTabspaces(defTabSpaces)
+	b.InitWithTabspaces(DefaultTabspaces)
 }
 
 // WithLogger adds a cell logger which intercepts and logs all

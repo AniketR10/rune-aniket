@@ -136,7 +136,7 @@ func TestRawCellsReadFrom(t *testing.T) {
 
 	for i, tcase := range tsuite {
 		var c rawCells
-		c.init(defTabSpaces)
+		c.init(DefaultTabspaces)
 		reads := tcase.reads
 		n, err := c.ReadFrom(&tcase)
 		assert.Equal(t, tcase.expectedErr, err, "tcase %d", i)
@@ -167,7 +167,7 @@ func TestRawCellsStringReadFrom(t *testing.T) {
 		tcase := _tcase
 		t.Run(fmt.Sprintf("test case %d", i), func(t *testing.T) {
 			var c rawCells
-			c.init(defTabSpaces)
+			c.init(DefaultTabspaces)
 			n, err := c.ReadFrom(strings.NewReader(tcase.in))
 			assert.NoError(t, err)
 			assert.Equal(t, int64(len(tcase.in)), n)
@@ -283,7 +283,7 @@ Love isn't love 'til you give it away.
 	for i, tcase := range tsuite {
 		t.Run(fmt.Sprintf("test case %d", i), func(t *testing.T) {
 			var c rawCells
-			c.init(defTabSpaces)
+			c.init(DefaultTabspaces)
 			var input string
 			if tcase.overrideBaseRawCells != nil {
 				input = *tcase.overrideBaseRawCells
@@ -587,7 +587,7 @@ Love isn't love 'til you give it away.
 	for i, tcase := range tsuite {
 		t.Run(fmt.Sprintf("test case %d", i), func(t *testing.T) {
 			var c rawCells
-			c.init(defTabSpaces)
+			c.init(DefaultTabspaces)
 			base := baseRawCells
 			if tcase.overrideBaseRawCells != "" {
 				base = tcase.overrideBaseRawCells
@@ -639,7 +639,7 @@ func assertEquivalentEnd(
 
 func TestRawCellsCell(t *testing.T) {
 	var c rawCells
-	c.init(defTabSpaces)
+	c.init(DefaultTabspaces)
 	c.ReadFrom(strings.NewReader(benchmarkFortune))
 
 	cell, ok := c.Cell(term.Coordinates{})
@@ -685,7 +685,7 @@ Love isn't love 'til you give it away.
 
 func newBenchmarkRawCells(fortunes int) (*rawCells, string) {
 	cells := new(rawCells)
-	cells.init(defTabSpaces)
+	cells.init(DefaultTabspaces)
 	payload := ""
 	for i := 0; i < fortunes; i++ {
 		payload = payload + benchmarkFortune

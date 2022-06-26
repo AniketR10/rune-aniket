@@ -61,7 +61,7 @@ public class Rotor {
 	astr0 := abuf.String()
 	arcells0 := abuf.RawCells()
 
-	bbuf := CellsToBuffer(arcells0, defTabSpaces)
+	bbuf := CellsToBuffer(arcells0, DefaultTabspaces)
 	bstr0 := bbuf.String()
 	brcells0 := bbuf.RawCells()
 	require.Equal(t, arcells0, brcells0)
@@ -100,7 +100,7 @@ func benchmarkCellToBuffer(b *testing.B, n int) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_ = CellsToBuffer(c, defTabSpaces)
+		_ = CellsToBuffer(c, DefaultTabspaces)
 	}
 }
 
