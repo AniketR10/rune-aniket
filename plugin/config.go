@@ -1,7 +1,8 @@
 package plugin
 
+//go:generate protoc proto/config.proto --go_out=. --go-grpc_out=. --go_opt=Mproto/config.proto=/proto
+
 import (
-	"encoding"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -31,17 +32,10 @@ type Config interface {
 	GetSlice(string) ([]interface{}, error)
 }
 
-type internalConfig interface {
-	encoding.TextMarshaler
-	encoding.TextUnmarshaler
-	Config
-}
-
 type jsonMap struct {
 	mapConfig
 }
 
-// satisfies Config but not internalConfig
 type mapConfig map[string]interface{}
 
 func (c *jsonMap) MarshalText() ([]byte, error) {

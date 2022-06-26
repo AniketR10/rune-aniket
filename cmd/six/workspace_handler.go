@@ -375,6 +375,7 @@ func (h *workspaceManagerHandler) addWorkspace(
 	res := plugin.BrowserResources(ex.Browser())
 	res = plugin.MergeResourceMap(res, plugin.EditorResources(ex.Editor()))
 	res = plugin.MergeResourceMap(res, plugin.WorkspaceResources(workspaceManager))
+	res = plugin.MergeResourceMap(res, plugin.ConfigResources(plugin.MapConfig(h.cfg.cfg)))
 	res[plugin.PermissionClipboard] = h.clipboard
 
 	pluginOpts := []plugin.Option{
