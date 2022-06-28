@@ -217,9 +217,9 @@ func (c *Client) Man() tui.Manual {
 	return tuiMan
 }
 
-func tryLog(logger *log.Logger, msg string, args ...interface{}) {
+func tryLog(logger *log.Logger, level log.Level, msg string, args ...interface{}) {
 	if logger != nil {
-		logger.Debugf(msg, args...)
+		logger.Logf(level, msg, args...)
 	}
 }
 
@@ -288,7 +288,7 @@ func (s *Server) Handle(ctx context.Context, req *proto.HandleRequest) (
 		return nil, err
 	}
 
-	tryLog(s.Logger, "handler.Server.Handle(%v)", ev)
+	tryLog(s.Logger, log.TraceLevel, "handler.Server.Handle(%v)", ev)
 
 	var exit, handled bool
 	if ev.Type != term.EventInterrupt {
@@ -330,6 +330,6 @@ func (s *Server) Close(ctx context.Context, req *proto.CloseRequest) (
 			return nil, fmt.Errorf("error Close: %v", err)
 		}
 	}
-	tryLog(s.Logger, "handler.Server.Close: %v", ok)
+	tryLog(s.Logger, log.DebugLevel, "handler.Server.Close: %v", ok)
 	return &proto.CloseResponse{}, nil
 }
