@@ -88,9 +88,17 @@ func TestString(t *testing.T) {
 	}
 
 	for _, tcase := range tcases {
-		testString(t, func(str string) tui.Component {
-			return String(str)
-		}, 5, 5, tcase.in, tcase.out)
+		t.Run("String", func(t *testing.T) {
+			testString(t, func(str string) tui.Component {
+				return String(str)
+			}, 5, 5, tcase.in, tcase.out)
+		})
+		t.Run("LazyBytes", func(t *testing.T) {
+			testString(t, func(str string) tui.Component {
+				// add Virtual so it clips oob requests
+				return &Virtual{C: &LazyBytes{Data: []byte(str)}}
+			}, 5, 5, tcase.in, tcase.out)
+		})
 	}
 }
 

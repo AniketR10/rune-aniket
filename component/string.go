@@ -141,3 +141,66 @@ func String(str string) WithAttributes {
 	}
 	return &stringComp{cells: [][]term.Cell{row}}
 }
+
+// LazyBytes is an immutable String component that is allocation free
+// until the first call to Draw.
+//
+// Akin to String, it compacts string into one line and but it
+// takes data as a slice of bytes and a set of x positions
+// to apply TokenAttributes to. In contrast, SetAttr it's a O(n)
+// rather than String's O(1), so do not call it for every string
+// after they have been drawn once, otherwise just use String,
+// which will offer better features and performance characteristics.
+//
+// It should be wrapped by a Virtual component or used with
+// a term.Writer to handle out of bound calls to SetCell.
+//
+// It is useful for collections, where not all strings need to
+// be drawn and there's a clear performance requirement
+// that offsets its limitations.
+type LazyBytes struct {
+	Data            []byte
+	Tokens          []int
+	Attributes      term.Attributes
+	TokenAttributes term.Attributes
+	cells           []term.Cell
+}
+
+// Resize is ignored.
+func (l *LazyBytes) Resize(width, height int) {
+}
+
+// SetAttr sets the default attributes of the next call to Draw.
+// If Draw has already been called, then this method is force all
+// cells to be re-computed, so it should be used with care.
+func (l *LazyBytes) SetAttr(attr term.Attributes) {
+	l.Attributes = attr
+	if l.cells != nil {
+		l.build()
+	}
+}
+
+func (l *LazyBytes) build() {
+	l.cells = make([]term.Cell, len(l.Data))
+	for i, r := range l.Data {
+		l.cells[i] = term.Cell{
+			Ch: rune(r),
+			Fg: l.Attributes.Fg,
+			Bg: l.Attributes.Bg,
+		}
+	}
+	for _, t := range l.Tokens {
+		l.cells[t].Bg |= l.TokenAttributes.Bg
+		l.cells[t].Fg |= l.TokenAttributes.Fg
+	}
+}
+
+// Draw satisfies tui.Component.
+func (l *LazyBytes) Draw(w term.Writer) {
+	if l.cells == nil {
+		l.build()
+	}
+	for x, c := range l.cells {
+		w.SetCell(term.Coordinates{X: x, Y: 0}, c)
+	}
+}
