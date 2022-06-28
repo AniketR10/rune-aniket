@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"os/user"
+	"sort"
 	"strconv"
 	"sync"
 
@@ -73,6 +74,7 @@ func init() {
 	}
 	exCommandList = append(exCommandList, cmdSwitchToWorkspace)
 	exCommandList = append(exCommandList, cmdCloseWorkspace)
+	sort.Strings(exCommandList)
 }
 
 type workspaceHandler struct {
