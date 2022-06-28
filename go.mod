@@ -63,6 +63,7 @@ require (
 
 require (
 	github.com/fatih/color v1.7.0 // indirect
+	github.com/fsnotify/fsnotify v1.5.4 // indirect
 	github.com/golang/protobuf v1.4.2 // indirect
 	github.com/google/go-cmp v0.5.2 // indirect
 	github.com/mattn/go-colorable v0.1.4 // indirect
