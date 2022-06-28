@@ -76,7 +76,7 @@ type List struct {
 }
 
 type searchResultComponent struct {
-	*component.AttrSetter
+	*component.LazyBytes
 	Match
 }
 
@@ -157,22 +157,23 @@ func (s syncBuffer) OnDidEdit(from, to term.Coordinates, old string) {
 
 func addMatch(
 	list *component.FocusList, match Match,
-	matchTextAttr term.Attributes,
+	textAttr, matchTextAttr term.Attributes,
 ) {
-	b := component.String(string(match.data))
-	comp := component.WithAttrSetter(b)
+	// this is a very hot path, performance critical
+	// when loading large amounts of data into a search list.
+	// Use LazyBytes, which defers all allocations until the next
+	// call to Draw, this way all components that do not need to
+	// be drawn barely imply any allocations (list uses a *Virtual
+	// under the hood but that's about it).
+	b := component.LazyBytes{Data: match.data, Attributes: textAttr}
 	if match.tokens != nil {
-		for _, t := range *match.tokens {
-			comp.SetAttrAt(term.Coordinates{X: t}, matchTextAttr)
-		}
+		b.Tokens = *match.tokens
+		b.TokenAttributes = matchTextAttr
 	}
-
-	resComp := searchResultComponent{
-		AttrSetter: comp,
-		Match:      match,
-	}
-
-	list.PushBack(resComp)
+	list.PushBack(searchResultComponent{
+		LazyBytes: &b,
+		Match:     match,
+	})
 }
 
 func sortByResultScore(a, b component.WithAttributes) bool {
@@ -246,7 +247,7 @@ func (l *List) pushData(data []byte, slab *util.Slab, sortList bool) (matched bo
 	if len(searchInput) == 0 {
 		m := Match{data: data, idx: len(l.input)}
 		matched = true
-		addMatch(&l.list.FocusList, m, l.cfg.matchedTextAttr)
+		addMatch(&l.list.FocusList, m, l.cfg.textAttr, l.cfg.matchedTextAttr)
 		if sortList && l.cfg.bottomSearchBar {
 			l.sortMatchesList()
 		} else if sortList {
@@ -259,7 +260,7 @@ func (l *List) pushData(data []byte, slab *util.Slab, sortList bool) (matched bo
 		func(match Match) bool {
 			match.idx = len(l.input)
 			matched = true
-			addMatch(&l.list.FocusList, match, l.cfg.matchedTextAttr)
+			addMatch(&l.list.FocusList, match, l.cfg.textAttr, l.cfg.matchedTextAttr)
 			return false
 		})
 
@@ -324,24 +325,6 @@ func (l *List) handleSearch(
 	ctx context.Context, cancelFn func(), input [][]byte,
 	searchInput string,
 ) {
-	timer := time.NewTimer(searchRefreshEveryDuration)
-	// update at least every searchRefreshEveryDuration
-	go func() {
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-timer.C:
-				l.mu.Lock()
-				l.sortMatchesList()
-				interrupt := l.cfg.interrupt
-				l.mu.Unlock()
-				interrupt()
-				timer.Reset(searchRefreshEveryDuration)
-			}
-		}
-	}()
-
 	slab := makeSlab()
 	search(l.cfg.algo, input, searchInput, slab, l.cfg.caseSensitive,
 		func(match Match) bool {
@@ -356,18 +339,12 @@ func (l *List) handleSearch(
 				// that should be the only goroutine with access to l.list
 				l.mu.Lock()
 				defer l.mu.Unlock()
-				addMatch(&l.list.FocusList, match, l.cfg.matchedTextAttr)
+				addMatch(&l.list.FocusList, match, l.cfg.textAttr, l.cfg.matchedTextAttr)
 				return true
 			}
 		})
 
 	l.mu.Lock()
-	select {
-	case <-ctx.Done():
-		l.mu.Unlock()
-		return
-	default:
-	}
 	l.sortMatchesList()
 	cancelFn()
 	interrupt := l.cfg.interrupt
@@ -461,15 +438,15 @@ func (l *List) FocusEnd() bool {
 }
 
 // Focus returns the match in the list currently in focus.
-func (l *List) Focus() (component.WithAttributes, Match, bool) {
+func (l *List) Focus() (Match, bool) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	node, ok := l.list.Focus()
 	if !ok {
-		return nil, Match{}, false
+		return Match{}, false
 	}
 	comp := node.Value().(component.WithAttributes)
-	return comp, comp.(searchResultComponent).Match, true
+	return comp.(searchResultComponent).Match, true
 }
 
 func (l *List) asyncSearch() {
@@ -516,7 +493,6 @@ func (l *List) drawList(w term.Writer) {
 }
 
 func (l *List) drawSearchBar(w term.Writer) {
-	// if search bar buffer has been modified, re-calculate dimensions
 	dirty := l.searchBar.dirty
 	if dirty {
 		l.resize(l.width, l.height)

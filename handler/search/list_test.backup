@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/ernestrc/go-tui/cell"
+	"github.com/ernestrc/go-tui/component"
 	"github.com/ernestrc/go-tui/term"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -22,7 +23,7 @@ type listIfc interface {
 	Close() error
 	DataReset()
 	Draw(w term.Writer)
-	Focus() (Match, bool)
+	Focus() (component.WithAttributes, Match, bool)
 	FocusDown() bool
 	FocusEnd() bool
 	FocusStart() bool
@@ -44,7 +45,7 @@ func assertNoLeaks(t *testing.T, l listIfc) {
 }
 
 func assertFocusEqual(t *testing.T, l listIfc, el []byte) {
-	ret, ok := l.Focus()
+	_, ret, ok := l.Focus()
 	require.True(t, ok)
 	assert.Equal(t, string(el), string(ret.Data()))
 }
@@ -105,7 +106,7 @@ func TestListFocus(t *testing.T) {
 
 func testListFocus(t *testing.T, constructor listConstructor) {
 	l, _ := constructor(ListConfig{})
-	_, ok := l.Focus()
+	_, _, ok := l.Focus()
 	assert.False(t, ok)
 
 	el1 := []byte("angry pants")
@@ -138,7 +139,7 @@ func TestListFocusBottomSearchBar(t *testing.T) {
 
 func testListFocusBottomSearchBar(t *testing.T, constructor listConstructor) {
 	l, _ := constructor(ListConfig{BottomSearchBar: true})
-	_, ok := l.Focus()
+	_, _, ok := l.Focus()
 	assert.False(t, ok)
 
 	el1 := []byte("angry pants")
@@ -498,32 +499,22 @@ func testListLeak(t *testing.T, constructor listConstructor) {
 }
 
 func BenchmarkHandleSearch10(b *testing.B) {
-	benchmarkHandleSearch(b, 10, false)
+	benchmarkHandleSearch(b, 10)
 }
+
 func BenchmarkHandleSearch100(b *testing.B) {
-	benchmarkHandleSearch(b, 100, false)
+	benchmarkHandleSearch(b, 100)
 }
+
 func BenchmarkHandleSearch1000(b *testing.B) {
-	benchmarkHandleSearch(b, 1000, false)
+	benchmarkHandleSearch(b, 1000)
 }
+
 func BenchmarkHandleSearch1000000(b *testing.B) {
-	benchmarkHandleSearch(b, 1000000, false)
+	benchmarkHandleSearch(b, 1000000)
 }
 
-func BenchmarkHandleSearchBottomSearchBar10(b *testing.B) {
-	benchmarkHandleSearch(b, 10, true)
-}
-func BenchmarkHandleSearchBottomSearchBar100(b *testing.B) {
-	benchmarkHandleSearch(b, 100, true)
-}
-func BenchmarkHandleSearchBottomSearchBar1000(b *testing.B) {
-	benchmarkHandleSearch(b, 1000, true)
-}
-func BenchmarkHandleSearchBottomSearchBar1000000(b *testing.B) {
-	benchmarkHandleSearch(b, 1000000, true)
-}
-
-func benchmarkHandleSearch(b *testing.B, n int, bottomSearchBar bool) {
+func benchmarkHandleSearch(b *testing.B, n int) {
 	const sample = `2022-06-17 15:45:24.985	WARNING	[-]	-	msg: 3 errors occurred: Failed to load \"key_bindings.<m-k>\": invalid key: '<m-k>'; Failed to load \"key_bindings.<m-j>\": invalid key: '<m-j>'; Failed to load \"browser.frameunion_charset\": type is invalid
 2022-06-17 15:45:24.985	WARNING	[-]	-	msg: 3 errors occurred: Failed to load \"key_bindings.<m-k>\": invalid key: '<m-k>'; Failed to load \"key_bindings.<m-j>\": invalid key: '<m-j>'; Failed to load \"browser.frameunion_charset\": type is invalid
 2022-06-17 15:45:24.985	DEBUG	[-]	-	msg: starting plugin
@@ -542,7 +533,7 @@ func benchmarkHandleSearch(b *testing.B, n int, bottomSearchBar bool) {
 		}
 	}
 
-	l := NewList(ListConfig{BottomSearchBar: bottomSearchBar})
+	l := NewList(ListConfig{})
 	w := term.NoopWriter{}
 	l.Resize(300, 200)
 

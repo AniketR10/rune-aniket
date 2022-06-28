@@ -347,7 +347,7 @@ func (h *fuzzyFinderHandler) getListConfig(config plugin.Config) search.ListConf
 	if err != nil && err != plugin.ErrNotFound {
 		log.Errorf("failed to load 'matched_text_attr' from config: %v", err)
 	} else if err == nil {
-		log.Tracef("loaded 'matchied_text_attr' from config: %v", matchedTextAttr)
+		log.Tracef("loaded 'matched_text_attr' from config: %v", matchedTextAttr)
 		cfg.MatchedTextAttr = &matchedTextAttr
 	}
 

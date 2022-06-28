@@ -157,7 +157,7 @@ func (h *commandListHandler) Handle(ev term.Event) (quit, handled bool) {
 		// before selecting command wait for previous search to finish
 		h.list.Wait()
 
-		_, command, _ := h.list.Focus()
+		command, _ := h.list.Focus()
 		bufStr := h.buf.String()
 		quit := h.callback(string(command.Data()), bufStr)
 		if bufStr != "" {
