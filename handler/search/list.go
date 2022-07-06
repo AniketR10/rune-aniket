@@ -245,7 +245,7 @@ func (l *List) pushData(data []byte, slab *util.Slab, sortList bool) (matched bo
 
 	searchInput := l.getSearchQuery()
 	if len(searchInput) == 0 {
-		m := Match{data: data, idx: len(l.input)}
+		m := Match{data: data, idx: len(l.input) - 1}
 		matched = true
 		addMatch(&l.list.FocusList, m, l.cfg.textAttr, l.cfg.matchedTextAttr)
 		if sortList && l.cfg.bottomSearchBar {
@@ -258,7 +258,7 @@ func (l *List) pushData(data []byte, slab *util.Slab, sortList bool) (matched bo
 
 	search(l.cfg.algo, linebuf[:], searchInput, slab, l.cfg.caseSensitive,
 		func(match Match) bool {
-			match.idx = len(l.input)
+			match.idx = len(l.input) - 1
 			matched = true
 			addMatch(&l.list.FocusList, match, l.cfg.textAttr, l.cfg.matchedTextAttr)
 			return false
@@ -623,6 +623,16 @@ func (l *List) FocusOffset() int {
 // ElementHeight returns the height for each element of this list.
 func (l *List) ElementHeight() int {
 	return l.list.ElementHeight()
+}
+
+// ElementAt returns the Match at the given position and true, if there's any
+// or a zero-valued Match and false if there's none.
+func (l *List) ElementAt(pos term.Coordinates) (Match, bool) {
+	node, ok := l.list.ElementAt(pos)
+	if !ok {
+		return Match{}, false
+	}
+	return node.Value().(searchResultComponent).Match, true
 }
 
 // Close closes all the resources associated with this List.
