@@ -8,6 +8,7 @@ import (
 	"github.com/ernestrc/blue/logging"
 	multierr "github.com/ernestrc/go-multierror"
 	"github.com/ernestrc/go-tui"
+	"github.com/ernestrc/go-tui/debug"
 	"github.com/ernestrc/go-tui/plugin"
 	"github.com/ernestrc/go-tui/term"
 	"github.com/ernestrc/go-tui/workspace"
@@ -76,6 +77,8 @@ func (i *ide) init(cwd, cfgfilename, recfilename string, filenames ...string) er
 		l.Out = ioutil.Discard
 		l.Level = log.PanicLevel
 	}
+
+	debug.InitLogger(l)
 
 	i.clipboard = plugin.NewClipboardManager()
 
