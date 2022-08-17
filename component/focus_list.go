@@ -72,6 +72,55 @@ func (l *FocusList) trySetFirstFocus(node ListNode) bool {
 	return false
 }
 
+// SetFocus sets the focus of this FocusList to node.
+func (l *FocusList) SetFocus(node ListNode) {
+	if node.l != l.list {
+		panic("ListNode does not belong to FocusList")
+	}
+
+	defer l.switchFocus(node)
+
+	// In order to find the new focusIdx, first attempt to scan
+	// the current view to optimize SetFocus for calls with a node currently
+	// rendered on screen.
+	idx := l.focusIdx
+	for n, ok := l.focus.Next(); ok; n, ok = n.Next() {
+		idx++
+		if n == node {
+			l.focusIdx = idx
+			return
+		}
+		// Ignore element height and use height as a vague representation
+		// of the current view over this FocusList.
+		if idx > l.focusIdx+l.height {
+			break
+		}
+	}
+
+	idx = l.focusIdx
+	for n, ok := l.focus.Prev(); ok; n, ok = n.Prev() {
+		idx--
+		if n == node {
+			l.focusIdx = idx
+			return
+		}
+		if idx < l.focusIdx-l.height {
+			break
+		}
+	}
+
+	// fallback to iterating entire list
+	l.focusIdx = 0
+	for n, ok := l.list.Front(); ok; n, ok = n.Next() {
+		if n == node {
+			return
+		}
+		l.focusIdx++
+	}
+
+	panic("could not finde ListNode in FocusList")
+}
+
 // Reset resets the contents of this FocusList.
 func (l *FocusList) Reset() {
 	l.list.Reset()
@@ -160,6 +209,7 @@ func (l *FocusList) PushFrontList(other *FocusList) {
 // Remove removes e from l if e is a node of list l. It returns the element
 // value e.Value. If the removed node is the focus, the focus will be switched
 // first to the element below, and if not possible, to the element above.
+// TODO add test with focusIdx validation
 func (l *FocusList) Remove(e ListNode) WithAttributes {
 	if l.focus == e {
 		if !l.FocusDown() {

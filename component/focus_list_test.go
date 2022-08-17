@@ -170,6 +170,84 @@ func TestFocusListFocus(t *testing.T) {
 	})
 }
 
+func TestSetFocus(t *testing.T) {
+	tsuite := []struct {
+		description string
+		sut         func(*testing.T, *FocusList)
+	}{
+		{
+			"extraneous ListNode should panic",
+			func(t *testing.T, l *FocusList) {
+				assert.Panics(t, func() {
+					l.SetFocus(ListNode{})
+				})
+			},
+		},
+		{
+			"setting current focus is no-op",
+			func(t *testing.T, l *FocusList) {
+				node := l.PushBack(newCompWithAttr(&TestComponent{}))
+				actual, ok := l.Focus()
+				require.True(t, ok)
+				assert.Equal(t, node, actual)
+				assert.Equal(t, 0, l.FocusOffset())
+
+				l.SetFocus(node)
+				actual, ok = l.Focus()
+				require.True(t, ok)
+				assert.Equal(t, node, actual)
+
+				assert.Equal(t, 0, l.FocusOffset())
+			},
+		},
+		{
+			"set next",
+			func(t *testing.T, l *FocusList) {
+				node1 := l.PushBack(newCompWithAttr(&TestComponent{}))
+				node2 := l.PushBack(newCompWithAttr(&TestComponent{}))
+
+				actual, ok := l.Focus()
+				require.True(t, ok)
+				assert.Equal(t, node1, actual)
+
+				l.SetFocus(node2)
+				actual, ok = l.Focus()
+				require.True(t, ok)
+				assert.Equal(t, node2, actual)
+
+				assert.Equal(t, 1, l.FocusOffset())
+			},
+		},
+		{
+			"set prev",
+			func(t *testing.T, l *FocusList) {
+				node1 := l.PushBack(newCompWithAttr(&TestComponent{}))
+				node2 := l.PushBack(newCompWithAttr(&TestComponent{}))
+				require.True(t, l.FocusDown())
+				assert.Equal(t, 1, l.FocusOffset())
+
+				actual, ok := l.Focus()
+				require.True(t, ok)
+				assert.Equal(t, node2, actual)
+
+				l.SetFocus(node1)
+				actual, ok = l.Focus()
+				require.True(t, ok)
+				assert.Equal(t, node1, actual)
+
+				assert.Equal(t, 0, l.FocusOffset())
+			},
+		},
+	}
+
+	for _, tcase := range tsuite {
+		t.Run(tcase.description, func(t *testing.T) {
+			l := NewFocusList()
+			tcase.sut(t, l)
+		})
+	}
+}
+
 func TestFocusAddAttr(t *testing.T) {
 	var (
 		redAttr   = term.Attributes{Fg: term.ColorRed}
@@ -250,4 +328,98 @@ func TestFocusListMaxOffset(t *testing.T) {
 
 func TestFocusListEmptyDraw(t *testing.T) {
 	testEmptyListDraw(t, newFocusTestList)
+}
+
+func makeFocusList(n int) *FocusList {
+	ret := NewFocusList()
+	for i := 0; i < n; i++ {
+		ret.PushBack(newCompWithAttr(&TestComponent{Ch: rune(i)}))
+	}
+	// set to a sensible size
+	ret.Resize(100, 50)
+	return ret
+}
+
+func benchmarkSetFocus(b *testing.B, n int) {
+	b.Run("toggle focus between first and middle", func(b *testing.B) {
+		l := makeFocusList(n)
+		i := 0
+		front, _ := l.Front()
+		var middle ListNode
+		for node, ok := l.Front(); ok; node, ok = node.Next() {
+			if n/2 == i {
+				middle = node
+				break
+			}
+			i++
+		}
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			l.SetFocus(middle)
+			l.SetFocus(front)
+		}
+	})
+	b.Run("toggle focus between first and second", func(b *testing.B) {
+		l := makeFocusList(n)
+		front, _ := l.Front()
+		focus, _ := front.Next()
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			l.SetFocus(focus)
+			l.SetFocus(front)
+		}
+	})
+	b.Run("toggle focus between first and last", func(b *testing.B) {
+		l := makeFocusList(n)
+		front, _ := l.Front()
+		focus, _ := l.Back()
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			l.SetFocus(focus)
+			l.SetFocus(front)
+		}
+	})
+	b.Run("toggle focus between last and second to last", func(b *testing.B) {
+		l := makeFocusList(n)
+		last, _ := l.Back()
+		secondLast, _ := last.Prev()
+		l.SetFocus(secondLast)
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			l.SetFocus(last)
+			l.SetFocus(secondLast)
+		}
+	})
+	b.Run("toggle focus between middle and last", func(b *testing.B) {
+		l := makeFocusList(n)
+		last, _ := l.Back()
+		var middle ListNode
+		i := 0
+		for node, ok := l.Front(); ok; node, ok = node.Next() {
+			if n/2 == i {
+				middle = node
+				break
+			}
+			i++
+		}
+		l.SetFocus(middle)
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			l.SetFocus(last)
+			l.SetFocus(middle)
+		}
+	})
+}
+
+func BenchmarkSetFocus10(b *testing.B) {
+	benchmarkSetFocus(b, 10)
+}
+func BenchmarkSetFocus100(b *testing.B) {
+	benchmarkSetFocus(b, 100)
+}
+func BenchmarkSetFocus1000(b *testing.B) {
+	benchmarkSetFocus(b, 1000)
+}
+func BenchmarkSetFocus1000000(b *testing.B) {
+	benchmarkSetFocus(b, 1000000)
 }
