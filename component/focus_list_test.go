@@ -88,8 +88,16 @@ func (l *focusListTestList) PushFront(c tui.Component) ListNode {
 	return l.FocusList.PushFront(newCompWithAttr(c))
 }
 
+// Remove is not supported on a FocusList due to complexity to maintain focusIdx.
+// it's not used atm and I don't see the use case.
 func (l *focusListTestList) Remove(e ListNode) tui.Component {
-	return l.FocusList.Remove(e).(*compWithAttr).Component
+	if l.focus == e {
+		if !l.FocusDown() {
+			l.FocusUp()
+		}
+	}
+	return l.list.Remove(e).(WithAttributes)
+
 }
 
 func (l *focusListTestList) Sort(less func(a, b tui.Component) bool) {

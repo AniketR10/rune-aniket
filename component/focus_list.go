@@ -206,19 +206,6 @@ func (l *FocusList) PushFrontList(other *FocusList) {
 	}
 }
 
-// Remove removes e from l if e is a node of list l. It returns the element
-// value e.Value. If the removed node is the focus, the focus will be switched
-// first to the element below, and if not possible, to the element above.
-// TODO add test with focusIdx validation
-func (l *FocusList) Remove(e ListNode) WithAttributes {
-	if l.focus == e {
-		if !l.FocusDown() {
-			l.FocusUp()
-		}
-	}
-	return l.list.Remove(e).(WithAttributes)
-}
-
 // Iterate iterates over all elements in l.
 func (l *FocusList) Iterate(fn func(WithAttributes)) {
 	for node, ok := l.list.Front(); ok; node, ok = node.Next() {
