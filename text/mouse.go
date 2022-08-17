@@ -74,6 +74,12 @@ func (m *Mouse) Init(d MouseDelegate) {
 
 // Handle satisfies tui.Handler.
 func (h *Mouse) Handle(ev term.Event) (exit, handled bool) {
+	defer func() {
+		h.mousePressedLeft = ev.Key == term.MouseLeft
+		h.mousePressedMiddle = ev.Key == term.MouseMiddle
+		h.mousePressedRight = ev.Key == term.MouseRight
+	}()
+
 	if ev.Type != term.EventMouse {
 		return
 	}
@@ -85,12 +91,6 @@ func (h *Mouse) Handle(ev term.Event) (exit, handled bool) {
 	wheelUp := ev.Key == term.MouseWheelUp
 	wheelDown := ev.Key == term.MouseWheelDown
 	released := ev.Key == term.MouseRelease
-
-	defer func() {
-		h.mousePressedLeft = ev.Key == term.MouseLeft
-		h.mousePressedMiddle = ev.Key == term.MouseMiddle
-		h.mousePressedRight = ev.Key == term.MouseRight
-	}()
 
 	var action MouseAction
 	switch true {
