@@ -61,7 +61,9 @@ func (l *FocusList) switchFocus(newFocus ListNode) {
 		setAttr(l.focus, l.textAttr)
 	}
 	l.focus = newFocus
-	setAttr(l.focus, l.focusAttr)
+	if l.focus.Value() != nil {
+		setAttr(l.focus, l.focusAttr)
+	}
 }
 
 func (l *FocusList) trySetFirstFocus(node ListNode) bool {
@@ -123,9 +125,9 @@ func (l *FocusList) SetFocus(node ListNode) {
 
 // Reset resets the contents of this FocusList.
 func (l *FocusList) Reset() {
-	l.list.Reset()
+	l.switchFocus(ListNode{})
 	l.focusIdx = 0
-	l.focus = ListNode{}
+	l.list.Reset()
 }
 
 // Back returns the last node of list l or nil if the list is empty.

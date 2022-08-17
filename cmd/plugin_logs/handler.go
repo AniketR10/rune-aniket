@@ -4,6 +4,7 @@ import (
 	"strconv"
 
 	"github.com/ernestrc/go-tui"
+	"github.com/ernestrc/go-tui/cell"
 	"github.com/ernestrc/go-tui/component"
 	"github.com/ernestrc/go-tui/handler/search"
 	"github.com/ernestrc/go-tui/term"
@@ -39,8 +40,10 @@ type logsHandler struct {
 	pinAttr         term.Attributes
 	textAttr        term.Attributes
 
-	scroll int
-	pinned component.Virtual
+	hScroll        int
+	pinned         []*component.Virtual
+	mouse          text.Mouse
+	selectionStart term.Coordinates
 }
 
 func newLogsHandler(
@@ -63,12 +66,12 @@ func newLogsHandler(
 	}
 	ret.textAttr = *textAttr
 
-	ret.pinned.C = component.StringResponsive("", component.StringConfig{})
-
 	buf := l.Buffer()
 	ret.ed, _ = text.SimpleEditor(true).Edit(workspace.URI{}, buf)
 
 	ret.l.C = ret.withBackground(ret.l.C)
+
+	ret.mouse.Init(ret)
 
 	return ret
 }
@@ -84,9 +87,12 @@ func (s *logsHandler) Handle(ev term.Event) (exit, handled bool) {
 	}
 }
 
-func (s *logsHandler) positionPinned() {
+func (s *logsHandler) positionFocusPinned() {
 	pos := term.Coordinates{Y: s.l.FocusOffset() - s.l.Offset()}
-	s.pinned.Move(pos)
+	for _, v := range s.pinned {
+		v.Move(pos)
+		pos.Y++
+	}
 }
 
 func (s *logsHandler) setTokenAttr(
@@ -104,11 +110,13 @@ func (s *logsHandler) newPinnedResponsive(match search.Match) {
 	attrSetter := component.WithAttrSetter(str)
 	s.setTokenAttr(match, 0, attrSetter, s.matchedTextAttr)
 	comp := s.withBackground(attrSetter)
-	s.pinned.C = comp
-
 	height := str.Height(s.width)
-	s.pinned.Resize(s.width, height)
-	s.positionPinned()
+
+	v := &component.Virtual{C: comp}
+	v.Resize(s.width, height)
+
+	s.pinned = s.pinned[:0]
+	s.pinned = append(s.pinned, v)
 }
 
 func (s *logsHandler) withBackground(comp tui.Component) tui.Component {
@@ -116,18 +124,22 @@ func (s *logsHandler) withBackground(comp tui.Component) tui.Component {
 		term.Cell{Ch: ' ', Fg: s.textAttr.Fg, Bg: s.textAttr.Bg})
 }
 
-func (s *logsHandler) newScrolled(match search.Match) {
+func (s *logsHandler) setPinned(matches []search.Match) {
 	cfg := s.defaultStringConfig()
+	s.pinned = s.pinned[:0]
 
-	str := component.StringResponsive(string(match.Data()[s.scroll:]), cfg)
-	attrSetter := component.WithAttrSetter(str)
-	s.setTokenAttr(match, s.scroll, attrSetter, s.matchedTextAttr)
-	comp := s.withBackground(attrSetter)
-	s.pinned.C = comp
+	for _, match := range matches {
+		str := component.StringResponsive(string(match.Data()[s.hScroll:]), cfg)
+		attrSetter := component.WithAttrSetter(str)
+		s.setTokenAttr(match, s.hScroll, attrSetter, s.matchedTextAttr)
+		comp := s.withBackground(attrSetter)
+		height := s.l.ElementHeight()
 
-	height := s.l.ElementHeight()
-	s.pinned.Resize(s.width, height)
-	s.positionPinned()
+		v := &component.Virtual{C: comp}
+		v.Resize(s.width, height)
+
+		s.pinned = append(s.pinned, v)
+	}
 }
 
 func (s *logsHandler) defaultStringConfig() component.StringConfig {
@@ -140,20 +152,22 @@ func (s *logsHandler) defaultStringConfig() component.StringConfig {
 
 func (s *logsHandler) newScrolledRight(match search.Match) bool {
 	data := match.Data()
-	if len(data) < s.width || s.scroll == len(data)-1-s.width {
+	if len(data) < s.width || s.hScroll == len(data)-1-s.width {
 		return false
 	}
-	s.scroll++
-	s.newScrolled(match)
+	s.hScroll++
+	s.setPinned([]search.Match{match})
+	s.positionFocusPinned()
 	return true
 }
 func (s *logsHandler) newScrolledLeft(match search.Match) bool {
-	if s.scroll <= 1 {
-		s.resetPinned()
+	if s.hScroll <= 1 {
+		s.pinFocus()
 		return false
 	}
-	s.scroll--
-	s.newScrolled(match)
+	s.hScroll--
+	s.setPinned([]search.Match{match})
+	s.positionFocusPinned()
 	return true
 }
 
@@ -173,14 +187,24 @@ func (s *logsHandler) scrollRight() bool {
 	return false
 }
 
+func (s *logsHandler) pinFocus() {
+	s.hScroll = 0
+	match, ok := s.l.Focus()
+	if !ok {
+		return
+	}
+	s.setPinned([]search.Match{match})
+	s.positionFocusPinned()
+}
+
 func (s *logsHandler) resetPinned() {
-	s.scroll = 0
-	s.pinned.Resize(0, 0)
+	s.hScroll = 0
+	s.setPinned(nil)
 }
 
 func (s *logsHandler) setFilterMode() {
 	s.mode = logsMode
-	s.resetPinned()
+	s.pinFocus()
 }
 
 func (s *logsHandler) moveMultiply() int {
@@ -193,33 +217,29 @@ func (s *logsHandler) moveMultiply() int {
 
 func (s *logsHandler) focusUp() bool {
 	ret := s.l.FocusUp()
-	s.resetPinned()
+	s.pinFocus()
 	return ret
 }
 
 func (s *logsHandler) focusDown() bool {
 	ret := s.l.FocusDown()
-	s.resetPinned()
+	s.pinFocus()
 	return ret
 }
 
 func (s *logsHandler) focusStart() bool {
 	ret := s.l.FocusStart()
-	s.resetPinned()
+	s.pinFocus()
 	return ret
 }
 
 func (s *logsHandler) focusEnd() bool {
 	ret := s.l.FocusEnd()
-	s.resetPinned()
+	s.pinFocus()
 	return ret
 }
 
-func (s *logsHandler) handleNormal(ev term.Event) (exit, handled bool) {
-	if ev.Type != term.EventKey {
-		return
-	}
-
+func (s *logsHandler) handleNormalKey(ev term.Event) (exit, handled bool) {
 	switch ev.Key {
 	case term.KeyTab:
 		s.toggleCaseSensitivity()
@@ -234,6 +254,7 @@ func (s *logsHandler) handleNormal(ev term.Event) (exit, handled bool) {
 		if ok {
 			handled = true
 			s.newPinnedResponsive(data)
+			s.positionFocusPinned()
 		}
 	case term.KeyCtrlJ, term.KeyArrowDown:
 		handled = s.focusDown()
@@ -286,14 +307,34 @@ func (s *logsHandler) handleNormal(ev term.Event) (exit, handled bool) {
 	}
 	s.moveMultiplier = s.moveMultiplier[:0]
 
-	return
+	return false, handled
+}
+
+func (s *logsHandler) handleNormal(ev term.Event) (exit, handled bool) {
+	_, handled = s.mouse.Handle(ev)
+	if handled {
+		return
+	}
+
+	switch ev.Type {
+	case term.EventKey:
+		return s.handleNormalKey(ev)
+	default:
+		return
+	}
 }
 
 func (s *logsHandler) toggleCaseSensitivity() {
 	s.l.ToggleCaseSensitivity()
+	s.resetPinned()
 }
 
 func (s *logsHandler) handleFilter(ev term.Event) (exit, handled bool) {
+	_, handled = s.mouse.Handle(ev)
+	if handled {
+		return
+	}
+
 	if ev.Type != term.EventKey {
 		return
 	}
@@ -310,6 +351,7 @@ func (s *logsHandler) handleFilter(ev term.Event) (exit, handled bool) {
 		handled = true
 	case term.KeyBackspace, term.KeyBackspace2:
 		_, handled = s.currentEd().Handle(ev)
+		s.resetPinned()
 		if handled {
 			return
 		}
@@ -320,6 +362,7 @@ func (s *logsHandler) handleFilter(ev term.Event) (exit, handled bool) {
 		s.l.Buffer().Reset()
 	default:
 		_, handled = s.currentEd().Handle(ev)
+		s.resetPinned()
 	}
 	return
 }
@@ -342,14 +385,99 @@ func (s *logsHandler) currentEd() tui.Handler {
 	return s.ed
 }
 
+func (s *logsHandler) ScrollUp(n int) bool {
+	ok := s.focusUp()
+	for i := 1; ok && i < n; i++ {
+		ok = s.focusUp()
+	}
+	return ok
+}
+
+func (s *logsHandler) ScrollDown(n int) bool {
+	ok := s.focusDown()
+	for i := 1; ok && i < n; i++ {
+		ok = s.focusDown()
+	}
+	return ok
+}
+
+func (s *logsHandler) setSelection(to term.Coordinates) {
+	s.pinned = s.pinned[:0]
+
+	from, to := cell.SortFromTo(s.selectionStart, to)
+
+	var first component.ListNode
+	var matches []search.Match
+	var poss []term.Coordinates
+	for i := from.Y; i <= to.Y; i++ {
+		pos := term.Coordinates{Y: i}
+		match, node, ok := s.l.ElementAt(pos)
+		if ok {
+			if i == from.Y {
+				first = node
+			}
+			matches = append(matches, match)
+			poss = append(poss, pos)
+		}
+	}
+	s.setPinned(matches)
+
+	for i, v := range s.pinned {
+		v.Move(poss[i])
+	}
+
+	if len(matches) != 0 {
+		s.l.SetFocus(first)
+	}
+}
+
+func (s *logsHandler) SetSelectionEnd(pos term.Coordinates) {
+	s.setSelection(pos)
+}
+
+func (s *logsHandler) SetSelectionStart(pos term.Coordinates) {
+	s.selectionStart = pos
+	s.setSelection(pos)
+}
+
+func (s *logsHandler) ClearSelection() {
+	s.pinFocus()
+}
+
+func (s *logsHandler) SelectWordAt(pos term.Coordinates) {
+	s.SetSelectionStart(pos)
+}
+
+func (s *logsHandler) SelectLine(y int) {
+	s.SetSelectionStart(term.Coordinates{Y: y})
+}
+
+func (s *logsHandler) Width() int {
+	return s.width
+}
+
+func (s *logsHandler) Height() int {
+	return s.height
+}
+
+func (s *logsHandler) OnAction(pos term.Coordinates, action text.MouseAction) bool {
+	return false
+}
+
+// Resize satisfies tui.Component
 func (s *logsHandler) Resize(width, height int) {
 	s.width, s.height = width, height
 	s.l.Virtual.Resize(width, height)
 	inputHeight := s.l.InputHeight()
 	s.ed.Resize(width, inputHeight)
-	s.resetPinned()
+	s.pinFocus()
 }
+
+// Draw satisfies tui.Component
 func (s *logsHandler) Draw(w term.Writer) {
 	s.l.Virtual.Draw(w)
-	s.pinned.Draw(w)
+	// overwrite with selection/pinned
+	for _, v := range s.pinned {
+		v.Draw(w)
+	}
 }

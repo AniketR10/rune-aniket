@@ -449,6 +449,21 @@ func (l *List) Focus() (Match, bool) {
 	return comp.(searchResultComponent).Match, true
 }
 
+// SetFocus sets the focus of this List to node.
+func (l *List) SetFocus(node component.ListNode) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	// Note: due to performance reasons, Match has to be
+	// stack allocated and therefore it canot contain
+	// a pointer to its component.ListNode, thus forcing
+	// this List's API to take both ListNode and Match
+	// rendering it somewhat inconsistent.
+	// TODO: benchcmp with heap allocated Match exclusively
+	// vs stack allocated but also perform holistic benchmark
+	// with GC on a real live session.
+	l.list.SetFocus(node)
+}
+
 func (l *List) asyncSearch() {
 	if l.cancelSearch != nil {
 		l.cancelSearch()
@@ -627,12 +642,14 @@ func (l *List) ElementHeight() int {
 
 // ElementAt returns the Match at the given position and true, if there's any
 // or a zero-valued Match and false if there's none.
-func (l *List) ElementAt(pos term.Coordinates) (Match, bool) {
+func (l *List) ElementAt(pos term.Coordinates) (Match, component.ListNode, bool) {
+	// NOTE returning a ListNode solely exist to enable usage of SetFocus. If SetFocus
+	// ever uses a Match, this method should be removed.
 	node, ok := l.list.ElementAt(pos)
 	if !ok {
-		return Match{}, false
+		return Match{}, component.ListNode{}, false
 	}
-	return node.Value().(searchResultComponent).Match, true
+	return node.Value().(searchResultComponent).Match, node, true
 }
 
 // Close closes all the resources associated with this List.

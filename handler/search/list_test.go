@@ -494,19 +494,19 @@ func TestListElementAt(t *testing.T) {
 	l.PushSync([]byte("JT"))
 	l.PushSync([]byte("Gladiator"))
 
-	match1, ok := l.ElementAt(term.Coordinates{})
+	match1, _, ok := l.ElementAt(term.Coordinates{})
 	require.True(t, ok)
 
 	assert.Equal(t, 0, match1.Index())
 	assert.Equal(t, "JT", string(match1.Data()))
 
-	match2, ok := l.ElementAt(term.Coordinates{Y: 1, X: 7})
+	match2, _, ok := l.ElementAt(term.Coordinates{Y: 1, X: 7})
 	require.True(t, ok)
 
 	assert.Equal(t, 1, match2.Index())
 	assert.Equal(t, "Gladiator", string(match2.Data()))
 
-	match2, ok = l.ElementAt(term.Coordinates{Y: 2})
+	match2, _, ok = l.ElementAt(term.Coordinates{Y: 2})
 	require.False(t, ok)
 }
 
