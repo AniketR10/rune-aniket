@@ -64,6 +64,19 @@ func (t *dialBroker) Dial(ID uint32) (conn MuxConn, err error) {
 	return grpc.Dial(br.Listener.Addr().String(), grpc.WithInsecure())
 }
 
+func (t *dialBroker) Cleanup(ID uint32) error {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	brokerage, ok := t.conns[ID]
+	if !ok {
+		return nil
+	}
+	err := brokerage.Listener.Close()
+	delete(t.conns, ID)
+	return err
+}
+
 func (t *dialBroker) Close() error {
 	t.mu.Lock()
 	defer t.mu.Unlock()

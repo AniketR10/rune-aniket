@@ -231,6 +231,20 @@ func (mr *MockMuxBrokerMockRecorder) Accept(id interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Accept", reflect.TypeOf((*MockMuxBroker)(nil).Accept), id)
 }
 
+// Cleanup mocks base method.
+func (m *MockMuxBroker) Cleanup(ID uint32) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Cleanup", ID)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Cleanup indicates an expected call of Cleanup.
+func (mr *MockMuxBrokerMockRecorder) Cleanup(ID interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Cleanup", reflect.TypeOf((*MockMuxBroker)(nil).Cleanup), ID)
+}
+
 // Close mocks base method.
 func (m *MockMuxBroker) Close() error {
 	m.ctrl.T.Helper()

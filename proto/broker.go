@@ -31,5 +31,6 @@ type MuxBroker interface {
 	NextId() uint32
 	Accept(id uint32) (net.Listener, error)
 	Dial(ID uint32) (conn MuxConn, err error)
+	Cleanup(ID uint32) error
 	Close() error
 }
