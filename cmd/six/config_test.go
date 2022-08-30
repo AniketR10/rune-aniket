@@ -89,6 +89,8 @@ browser:
         fg: 219
     non_focus_tab_attr:
         fg: white
+
+workspace:
     wallpaper: abc
     wallpaper_attr:
         fg: yellow
@@ -101,7 +103,7 @@ browser:
 func assertDefaultConfig(t *testing.T, cfg *ideConfig) {
 	assert.Len(t, cfg.plugins(), 0)
 	assert.Equal(t, 4, cfg.browserTabspaces())
-	assert.NotZero(t, cfg.browserWallpaper())
+	assert.NotZero(t, cfg.workspaceWallpaper())
 	defWmConfig := handler.DefaultWindowManagerConfig()
 	defWmConfig.FocusFrameAttr = defWmConfig.FrameAttr
 	defWmConfig.FocusFrameCharSet = defWmConfig.FrameCharSet
@@ -114,8 +116,8 @@ func assertDefaultConfig(t *testing.T, cfg *ideConfig) {
 	assert.Equal(t, browser.DefaultConfig().MessageBarAttr, cfg.messageBarAttr())
 	assert.Equal(t, browser.DefaultConfig().FocusTabAttr, cfg.focusTabAttr())
 	assert.Equal(t, browser.DefaultConfig().NonFocusTabAttr, cfg.nonFocusTabAttr())
-	assert.Equal(t, browser.DefaultConfig().WallpaperAttr, cfg.browserWallpaperAttr())
-	assert.Equal(t, browser.DefaultConfig().WallpaperBackgroundAttr, cfg.browserWallpaperBackgroundAttr())
+	assert.Equal(t, browser.DefaultConfig().WallpaperAttr, cfg.workspaceWallpaperAttr())
+	assert.Equal(t, browser.DefaultConfig().WallpaperBackgroundAttr, cfg.workspaceWallpaperBackgroundAttr())
 }
 
 func TestDefaultConfig(t *testing.T) {
@@ -144,7 +146,7 @@ func TestConfigSetting(t *testing.T) {
 	initConfig(&cfg, m)
 
 	assert.Equal(t, 4, cfg.browserTabspaces())
-	assert.Equal(t, "abc", cfg.browserWallpaper())
+	assert.Equal(t, "abc", cfg.workspaceWallpaper())
 	assert.Equal(t, "/tmp/debug.log", cfg.logOutputPath())
 	assert.Equal(t, logrus.TraceLevel, cfg.logLevel())
 	assert.Equal(t, term.Output256, cfg.outputMode())
@@ -181,8 +183,8 @@ func TestConfigSetting(t *testing.T) {
 	assert.Equal(t, term.Attributes{Fg: term.ColorWhite, Bg: term.ColorCyan}, cfg.messageBarAttr())
 	assert.Equal(t, term.Attributes{Fg: term.Attribute(219)}, cfg.focusTabAttr())
 	assert.Equal(t, term.Attributes{Fg: term.ColorWhite}, cfg.nonFocusTabAttr())
-	assert.Equal(t, term.Attributes{Fg: term.ColorYellow, Bg: term.ColorWhite}, cfg.browserWallpaperAttr())
-	assert.Equal(t, term.Attributes{Bg: term.ColorWhite}, cfg.browserWallpaperBackgroundAttr())
+	assert.Equal(t, term.Attributes{Fg: term.ColorYellow, Bg: term.ColorWhite}, cfg.workspaceWallpaperAttr())
+	assert.Equal(t, term.Attributes{Bg: term.ColorWhite}, cfg.workspaceWallpaperBackgroundAttr())
 
 	expectedPrompt := browser.PromptConfig{
 		Width:         20,

@@ -470,16 +470,6 @@ func (c ideConfig) nonFocusTabAttr() term.Attributes {
 		browser.DefaultConfig().NonFocusTabAttr)
 }
 
-func (c ideConfig) browserWallpaperAttr() term.Attributes {
-	return c.getBrowserAttr("wallpaper_attr",
-		browser.DefaultConfig().WallpaperAttr)
-}
-
-func (c ideConfig) browserWallpaperBackgroundAttr() term.Attributes {
-	return c.getBrowserAttr("wallpaper_background_attr",
-		browser.DefaultConfig().WallpaperBackgroundAttr)
-}
-
 func (c ideConfig) dirtyTabAttr() term.Attributes {
 	return c.getBrowserAttr("dirty_tab_attr",
 		text.DefaultConfig().DirtyTabAttr)
@@ -691,10 +681,6 @@ func (c ideConfig) wallpaperFrom(cfgKey string) (text string) {
 	}
 	text = cfgText
 	return
-}
-
-func (c ideConfig) browserWallpaper() (text string) {
-	return c.wallpaperFrom("browser")
 }
 
 func (c ideConfig) logOutputPath() string {

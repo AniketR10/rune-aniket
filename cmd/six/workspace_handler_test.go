@@ -45,9 +45,6 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 		cfg := ideConfig{
 			errors: map[string]error{},
 			cfg: map[string]interface{}{
-				"browser": map[string]interface{}{
-					"wallpaper": "browserWallpaper",
-				},
 				"command": map[string]interface{}{
 					"key":    "<c-\\>", // see testutil.TestHandlerIsolated
 					"width":  10,
@@ -95,7 +92,7 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 ├──────────────────┤
 │                  │
 │                  │
-│ browserWallpaper │
+│workspaceWallpaper│
 │                  │
 │                  │
 │                  │
@@ -106,7 +103,7 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 ├────┌────────┐────┤
 │    │edit▐   │    │
 │    │edit    │    │
-│ bro│        │per │
+│work│        │aper│
 │    └────────┘    │
 │                  │
 │                  │
@@ -150,7 +147,7 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 ├──────────────────┤
 │                  │
 │                  │
-│ browserWallpaper │
+│workspaceWallpaper│
 │                  │
 │                  │
 │                  │
@@ -172,7 +169,7 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 ├──────────────────┤
 │                  │
 │                  │
-│ browserWallpaper │
+│workspaceWallpaper│
 │Error: invalid wor│
 │kspace: there's on│
 │ly 10 workspaces  │
@@ -183,7 +180,7 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 ├──────────────────┤
 │                  │
 │                  │
-│ browserWallpaper │
+│workspaceWallpaper│
 │Error: Unknown com│
 │mand: 'addWorkspac│
 │e'                │

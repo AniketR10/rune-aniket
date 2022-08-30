@@ -289,6 +289,7 @@ func (h *workspaceManagerHandler) textOpts(cfg ideConfig) []text.Option {
 		text.WithNonFocusTabAttr(cfg.nonFocusTabAttr()),
 		text.WithWallpaperAttr(cfg.workspaceWallpaperAttr()),
 		text.WithWallpaperBackgroundAttr(cfg.workspaceWallpaperBackgroundAttr()),
+		text.WithWallpaper(cfg.workspaceWallpaper()),
 		text.WithDirtyTabAttr(cfg.dirtyTabAttr()),
 		text.WithCommandOverlayConfig(cfg.commandOverlayConfig()),
 		text.WithPromptConfig(cfg.promptConfig()),
@@ -339,7 +340,6 @@ func (h *workspaceManagerHandler) addWorkspace(
 	configErr := loadLocalConfig(workspaceManager, uri, &cfg)
 
 	textOpts := h.textOpts(cfg)
-	textOpts = append(textOpts, text.WithWallpaper(cfg.browserWallpaper()))
 	if recfilename != "" {
 		recFile, err := workspaceManager.URI(recfilename)
 		if err != nil {
