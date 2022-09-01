@@ -143,7 +143,6 @@ func (h *workspaceManagerHandler) init(
 	h.storage = document.NewInMemoryCache()
 
 	globalOpts := h.textOpts(h.cfg)
-	globalOpts = append(globalOpts, text.WithWallpaper(cfg.workspaceWallpaper()))
 	h.empty, _ = newEx(h.newEditor(cfg), nopWorkspace{}, workspaceCommandList,
 		func(argv []string) (bool, bool, error) {
 			fn, ok := workspaceCommands[argv[0]]
@@ -289,7 +288,7 @@ func (h *workspaceManagerHandler) textOpts(cfg ideConfig) []text.Option {
 		text.WithNonFocusTabAttr(cfg.nonFocusTabAttr()),
 		text.WithWallpaperAttr(cfg.workspaceWallpaperAttr()),
 		text.WithWallpaperBackgroundAttr(cfg.workspaceWallpaperBackgroundAttr()),
-		text.WithWallpaper(cfg.workspaceWallpaper()),
+		text.WithWallpaper(cfg.wallpaper()),
 		text.WithDirtyTabAttr(cfg.dirtyTabAttr()),
 		text.WithCommandOverlayConfig(cfg.commandOverlayConfig()),
 		text.WithPromptConfig(cfg.promptConfig()),

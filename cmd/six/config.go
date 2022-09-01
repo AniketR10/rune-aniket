@@ -689,19 +689,19 @@ func (c ideConfig) browserTabspaces() (tabs int) {
 	return
 }
 
-func (c ideConfig) wallpaperFrom(cfgKey string) (text string) {
+func (c ideConfig) wallpaper() (text string) {
 	text = defaultWallpaper
 	if c.cfg == nil {
 		return
 	}
-	cfg, ok := c.getConfig(plugin.MapConfig(c.cfg), cfgKey)
+	cfg, ok := c.workspace()
 	if !ok {
 		return
 	}
 	cfgText, err := cfg.GetString("wallpaper")
 	if err != nil {
 		if err != plugin.ErrNotFound {
-			c.errors[fmt.Sprintf("%s.wallpaper", cfgKey)] = err
+			c.errors["workspace.wallpaper"] = err
 		}
 		return
 	}
@@ -867,10 +867,6 @@ func (c ideConfig) workspace() (plugin.Config, bool) {
 		return nil, false
 	}
 	return c.getConfig(plugin.MapConfig(c.cfg), "workspace")
-}
-
-func (c ideConfig) workspaceWallpaper() (text string) {
-	return c.wallpaperFrom("workspace")
 }
 
 func (c ideConfig) workspaceWallpaperAttr() term.Attributes {

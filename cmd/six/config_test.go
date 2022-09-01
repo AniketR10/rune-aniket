@@ -108,7 +108,7 @@ workspace:
 func assertDefaultConfig(t *testing.T, cfg *ideConfig) {
 	assert.Len(t, cfg.plugins(), 0)
 	assert.Equal(t, 4, cfg.browserTabspaces())
-	assert.NotZero(t, cfg.workspaceWallpaper())
+	assert.NotZero(t, cfg.wallpaper())
 	defWmConfig := handler.DefaultWindowManagerConfig()
 	defWmConfig.FocusFrameAttr = defWmConfig.FrameAttr
 	defWmConfig.FocusFrameCharSet = defWmConfig.FrameCharSet
@@ -151,7 +151,7 @@ func TestConfigSetting(t *testing.T) {
 	initConfig(&cfg, m)
 
 	assert.Equal(t, 4, cfg.browserTabspaces())
-	assert.Equal(t, "abc", cfg.workspaceWallpaper())
+	assert.Equal(t, "abc", cfg.wallpaper())
 	assert.Equal(t, "/tmp/debug.log", cfg.logOutputPath())
 	assert.Equal(t, logrus.TraceLevel, cfg.logLevel())
 	assert.Equal(t, term.Output256, cfg.outputMode())
