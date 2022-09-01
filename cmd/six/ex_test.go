@@ -637,9 +637,10 @@ func TestExCommandResponsive(t *testing.T) {
 			text.WithWindowManagerConfig(handler.WindowManagerConfig{
 				WindowManagerConfig: component.WindowManagerConfig{Frame: false}}),
 			text.WithCommandOverlayConfig(text.CommandOverlayConfig{
-				Width:  10,
-				Height: 5,
-				Frame:  true,
+				FrameCharSet: component.FrameCharSetDefault(),
+				Width:        10,
+				Height:       5,
+				Frame:        true,
 			}),
 		}
 		initExForTesting(t, b, text.Mock(), opts...)

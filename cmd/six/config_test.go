@@ -38,6 +38,11 @@ input_mode:
 output_mode: color_256
 
 command:
+  frame_charset:
+    horizontalbottom: '━'
+  frame_attr:
+    bg: red
+    fg: 219
   key_bindings:
     f: searchFile
     l: searchLine
@@ -175,10 +180,15 @@ func TestConfigSetting(t *testing.T) {
 
 	cmd, err := pluginCfg.GetString("command")
 	require.NoError(t, err)
+	assert.Equal(t, term.Attributes{Bg: term.ColorRed,
+		Fg: term.Attribute(219)}, cfg.commandOverlayFrameAttr())
+	expectedCs := component.FrameCharSetDefault()
+	expectedCs.HorizontalBottom = '━'
+	assert.Equal(t, expectedCs, cfg.commandOverlayFrameCharSet())
 	assert.Equal(t, "ag -g \"\"", cmd)
 
-	expectedCs := component.FrameUnionCharSet{Left: '┣', Right: '┫', Top: '┫', Bottom: '┫'}
-	assert.Equal(t, expectedCs, cfg.frameUnionCharset())
+	expectedFUCs := component.FrameUnionCharSet{Left: '┣', Right: '┫', Top: '┫', Bottom: '┫'}
+	assert.Equal(t, expectedFUCs, cfg.frameUnionCharset())
 
 	assert.Equal(t, term.Attributes{Fg: term.ColorWhite, Bg: term.ColorCyan}, cfg.messageBarAttr())
 	assert.Equal(t, term.Attributes{Fg: term.Attribute(219)}, cfg.focusTabAttr())

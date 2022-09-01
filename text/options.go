@@ -16,6 +16,8 @@ import (
 // command's interface.
 type CommandOverlayConfig struct {
 	Frame            bool
+	FrameCharSet     component.FrameCharSet
+	FrameAttributes  term.Attributes
 	Width, Height    int
 	MatchedTextAttr  term.Attributes
 	FocusElementAttr term.Attributes

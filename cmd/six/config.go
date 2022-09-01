@@ -358,10 +358,36 @@ func (c ideConfig) commandOverlayElementAttr(frame bool) (ret term.Attributes) {
 	return c.getCommandAttr("element_attr", def)
 }
 
+func (c ideConfig) commandOverlayFrameAttr() (attr term.Attributes) {
+	return c.getCommandAttr("frame_attr", term.Attributes{})
+}
+
+func (c ideConfig) commandOverlayFrameCharSet() (
+	cs component.FrameCharSet,
+) {
+	key := "frame_charset"
+	cs = component.FrameCharSetDefault()
+	cfg, ok := c.command()
+	if !ok {
+		return
+	}
+	cfgCs, err := plugin.GetFrameCharset(cfg, key, cs)
+	if err != nil {
+		if err != plugin.ErrNotFound {
+			c.errors[fmt.Sprintf("command.%s", key)] = err
+		}
+		return
+	}
+	cs = cfgCs
+	return
+}
+
 func (c ideConfig) commandOverlayConfig() text.CommandOverlayConfig {
 	frame := c.commandOverlayFrame()
 	cfg := text.CommandOverlayConfig{
 		Frame:            frame,
+		FrameAttributes:  c.commandOverlayFrameAttr(),
+		FrameCharSet:     c.commandOverlayFrameCharSet(),
 		Width:            c.commandOverlayWidth(),
 		Height:           c.commandOverlayHeight(),
 		MatchedTextAttr:  c.commandOverlayMatchedTextAttr(frame),

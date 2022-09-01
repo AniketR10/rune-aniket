@@ -202,7 +202,10 @@ func (e *ex) doInit(
 
 	var commandOverlay tui.Component
 	if e.config.CommandOverlay.Frame {
-		commandOverlay = component.NewFrame(&e.cmd)
+		frame := component.NewFrame(&e.cmd)
+		frame.FrameCharSet = e.config.CommandOverlay.FrameCharSet
+		frame.Attributes = e.config.CommandOverlay.FrameAttributes
+		commandOverlay = frame
 	} else {
 		commandOverlay = &e.cmd
 	}
