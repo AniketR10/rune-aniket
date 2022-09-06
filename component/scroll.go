@@ -369,7 +369,7 @@ func (s *Scroll) drawDebug(writer term.Writer) {
 			break
 		}
 		x = x - s.offset.X
-		if x != 0 {
+		if len(r) != 0 {
 			x++
 		}
 		writer.SetCell(term.Coordinates{X: x, Y: y}, term.Cell{Ch: '¬'})
@@ -600,7 +600,7 @@ func (s *Scroll) Height() int {
 	return s.height
 }
 
-// Wraps returns a the wraps visible in last call to Draw,
+// Wraps returns the wraps visible in last call to Draw,
 // indexed by their Y coordinate.
 // If Draw has not been called yet, then this method returns an
 // empty map.
