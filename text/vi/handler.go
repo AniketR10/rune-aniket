@@ -1,9 +1,7 @@
 package vi
 
 import (
-	"bufio"
 	"fmt"
-	"strings"
 
 	"github.com/ernestrc/go-tui"
 	"github.com/ernestrc/go-tui/cell"
@@ -248,23 +246,6 @@ func (vi *viHandlerImpl) handleSearch(ev term.Event) (bool, bool) {
 	}
 }
 
-func (vi *viHandlerImpl) insertBlock(str string) {
-	reader := bufio.NewReader(strings.NewReader(str))
-	for {
-		str, err := reader.ReadString('\n')
-		if err == nil && len(str) > 0 {
-			str = str[:len(str)-1]
-		}
-		cur := vi.cursor.Mark()
-		vi.cursor.InsertString(str)
-		if err != nil {
-			break
-		}
-		vi.cursor.MoveToMark(cur)
-		vi.cursor.MoveDown()
-	}
-}
-
 func (vi *viHandlerImpl) logError(err error) {
 	if vi.config.logger == nil {
 		return
@@ -278,49 +259,13 @@ func (vi *viHandlerImpl) pasteClipboard(registerID string, after bool) bool {
 		vi.logError(fmt.Errorf("clipboard.Get: %s", err))
 		return false
 	}
-
 	str := paste.Text
 	mode, ok := paste.Metadata.(text.SelectMode)
 	if !ok {
 		mode = text.StandardSelection
 	}
 
-	// FIXME this is not correct in all cases
-	cur := vi.cursor.Mark()
-
-	switch mode {
-	case text.StandardSelection:
-		if after {
-			vi.cursor.MoveRight()
-			vi.cursor.InsertString(str)
-		} else {
-			vi.cursor.InsertString(str)
-			vi.cursor.MoveToMark(cur)
-		}
-	case text.LineSelection:
-		if after {
-			vi.cursor.MoveDown()
-			vi.cursor.MoveStartLine()
-			cur = vi.cursor.Mark()
-			vi.cursor.InsertString(str)
-			vi.cursor.MoveToMark(cur)
-		} else {
-			vi.cursor.MoveStartLine()
-			vi.cursor.InsertString(str)
-			vi.cursor.MoveToMark(cur)
-			vi.cursor.MoveStartLine()
-		}
-	case text.BlockSelection:
-		if after {
-			vi.cursor.MoveRight()
-			vi.insertBlock(str)
-			vi.cursor.MoveToMark(cur)
-			vi.cursor.MoveRight()
-		} else {
-			vi.insertBlock(str)
-			vi.cursor.MoveToMark(cur)
-		}
-	}
+	vi.cursor.Paste(str, mode, after)
 	return true
 }
 

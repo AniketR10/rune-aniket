@@ -168,7 +168,7 @@ diff_buf_adjust(win_
  }                  
 :             NORMAL`},
 		{"p",
-			`f (wp == NULL)hell▐ 
+			`f (wp == NULL)▐ello 
                     
  i = diff_buf_idx(wi
  if (i != DB_COUNT) 

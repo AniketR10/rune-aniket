@@ -1917,6 +1917,88 @@ func TestFileCursorIntegration(t *testing.T) {
 	}
 }
 
+func TestCursorPaste(t *testing.T) {
+	const initialContent = "a\nb\nc\nd"
+	tsuite := []struct {
+		initialPosition term.Coordinates
+		endPosition     term.Coordinates
+		txt             string
+		mode            SelectMode
+		after           bool
+		expected        string
+	}{
+		{term.Coordinates{}, term.Coordinates{},
+			"z", noSelection, false, "za\nb\nc\nd"},
+		{term.Coordinates{}, term.Coordinates{},
+			"z", StandardSelection, false, "za\nb\nc\nd"},
+		{term.Coordinates{}, term.Coordinates{X: 1},
+			"z", StandardSelection, true, "az\nb\nc\nd"},
+		{term.Coordinates{}, term.Coordinates{},
+			"z\nx", StandardSelection, false, "z\nxa\nb\nc\nd"},
+		{term.Coordinates{}, term.Coordinates{X: 1},
+			"z\nx", StandardSelection, true, "az\nx\nb\nc\nd"},
+		{term.Coordinates{Y: 3}, term.Coordinates{Y: 3},
+			"z", StandardSelection, false, "a\nb\nc\nzd"},
+		{term.Coordinates{Y: 3}, term.Coordinates{Y: 3, X: 1},
+			"z", StandardSelection, true, "a\nb\nc\ndz"},
+		{term.Coordinates{Y: 3}, term.Coordinates{Y: 3},
+			"z\nx", StandardSelection, false, "a\nb\nc\nz\nxd"},
+		{term.Coordinates{Y: 3}, term.Coordinates{Y: 3, X: 1},
+			"z\nx", StandardSelection, true, "a\nb\nc\ndz\nx"},
+		{term.Coordinates{X: 1}, term.Coordinates{},
+			"z", LineSelection, false, "za\nb\nc\nd"},
+		{term.Coordinates{X: 1}, term.Coordinates{Y: 1},
+			"z", LineSelection, true, "a\nzb\nc\nd"},
+		{term.Coordinates{X: 1}, term.Coordinates{},
+			"z\nx", LineSelection, false, "z\nxa\nb\nc\nd"},
+		{term.Coordinates{X: 1}, term.Coordinates{Y: 1},
+			"z\nx", LineSelection, true, "a\nz\nxb\nc\nd"},
+		{term.Coordinates{X: 1, Y: 3}, term.Coordinates{Y: 3},
+			"z", LineSelection, false, "a\nb\nc\nzd"},
+		{term.Coordinates{X: 1, Y: 3}, term.Coordinates{Y: 4},
+			"z", LineSelection, true, "a\nb\nc\nd\nz"},
+		{term.Coordinates{X: 1, Y: 3}, term.Coordinates{Y: 3},
+			"z\nx", LineSelection, false, "a\nb\nc\nz\nxd"},
+		{term.Coordinates{X: 1, Y: 3}, term.Coordinates{Y: 4},
+			"z\nx", LineSelection, true, "a\nb\nc\nd\nz\nx"},
+		// block selection is like standard but with InsertBlock so we test that instead
+	}
+
+	for i, tcase := range tsuite {
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+			c := setupCursorContent(t, 5, 5, initialContent)
+			c.MoveToScroll(tcase.initialPosition)
+			c.Paste(tcase.txt, tcase.mode, tcase.after)
+			assert.Equal(t, tcase.expected, c.buffer().String())
+			assert.Equal(t, tcase.endPosition, c.Coordinates())
+		})
+	}
+}
+
+func TestCursorInsertBlock(t *testing.T) {
+	const initialContent = "a\nb\nc"
+	tsuite := []struct {
+		initialPosition term.Coordinates
+		txt             string
+		expected        string
+	}{
+		{term.Coordinates{}, "a\nb\nc", "aa\nbb\ncc"},
+		{term.Coordinates{Y: 1}, "a\nb\nc", "a\nab\nbc\nc"},
+		{term.Coordinates{Y: 1, X: 1}, "a\nb\nc", "a\nba\ncb\n c"},
+		{term.Coordinates{Y: 2}, "a\nb\nc", "a\nb\nac\nb\nc"},
+		{term.Coordinates{Y: 2, X: 1}, "a\nb\nc", "a\nb\nca\n b\n c"},
+	}
+
+	for i, tcase := range tsuite {
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+			c := setupCursorContent(t, 5, 5, initialContent)
+			c.MoveToScroll(tcase.initialPosition)
+			c.InsertBlock(tcase.txt)
+			assert.Equal(t, tcase.expected, c.buffer().String())
+		})
+	}
+}
+
 func newBenchmarkScroll(width, height int, fortunes int) (scroll *component.Scroll) {
 	scroll = component.NewScroll(cell.NewBuffer())
 	for i := 0; i < fortunes; i++ {

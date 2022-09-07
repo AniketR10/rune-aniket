@@ -1,7 +1,9 @@
 package text
 
 import (
+	"bufio"
 	"fmt"
+	"strings"
 
 	"github.com/ernestrc/go-tui/cell"
 	"github.com/ernestrc/go-tui/component"
@@ -811,8 +813,72 @@ func (c *Cursor) InsertString(str string) {
 
 	_, until := c.buffer().InsertString(c.cursorAtScroll(), str)
 	c.selection.mode = mode
+
 	c.setSelection()
 	c.setCursor(c.scrollToWindowCoordinates(until))
+}
+
+// InsertBlock inserts a string in a block-wise fashion meaning it
+// will insert each of the lines at corresponding relative x and y positions
+// shifting content to the right accordingly.
+func (c *Cursor) InsertBlock(str string) {
+	reader := bufio.NewReader(strings.NewReader(str))
+	for {
+		str, err := reader.ReadString('\n')
+		if err == nil && len(str) > 0 {
+			str = str[:len(str)-1]
+		}
+		cur := c.Mark()
+		c.InsertString(str)
+		if err != nil {
+			break
+		}
+		c.MoveToMark(cur)
+		c.MoveDown()
+	}
+}
+
+// Paste pastes the given string on the underlying scroll at the current
+// cursor position.
+func (c *Cursor) Paste(str string, mode SelectMode, after bool) {
+	switch mode {
+	case StandardSelection, noSelection:
+		if after {
+			c.MoveRight()
+			cur := c.Mark()
+			c.InsertString(str)
+			c.MoveToMark(cur)
+		} else {
+			cur := c.Mark()
+			c.InsertString(str)
+			c.MoveToMark(cur)
+		}
+	case LineSelection:
+		if after {
+			c.MoveDown()
+			c.MoveStartLine()
+			cur := c.Mark()
+			c.InsertString(str)
+			c.MoveToMark(cur)
+		} else {
+			cur := c.Mark()
+			c.MoveStartLine()
+			c.InsertString(str)
+			c.MoveToMark(cur)
+			c.MoveStartLine()
+		}
+	case BlockSelection:
+		if after {
+			c.MoveRight()
+			cur := c.Mark()
+			c.InsertBlock(str)
+			c.MoveToMark(cur)
+		} else {
+			cur := c.Mark()
+			c.InsertBlock(str)
+			c.MoveToMark(cur)
+		}
+	}
 }
 
 // Delete deletes the cell at the current cursor position.
