@@ -1,4 +1,4 @@
-package test
+package main
 
 import (
 	"fmt"
@@ -44,8 +44,10 @@ func newIntegrationTestCase(t *testing.T, content string) (
 	require.NoError(t, err)
 
 	return buffer, fc, uri, func() {
+		manager.Close()
 		file.Close()
 		os.Remove(file.Name())
+		fc.Close()
 	}
 }
 
@@ -81,7 +83,7 @@ func TestLastEOLUndoFileIntegration(t *testing.T) {
 		[][]term.Cell{{{Ch: 'a'}}, []term.Cell{}}, newCells)
 }
 
-func TestIntegrationVi(t *testing.T) {
+func TestIntegration(t *testing.T) {
 	t.Run("last EOL", func(t *testing.T) {
 		for _, content := range []string{"hello", "hello\n"} {
 			t.Run(fmt.Sprintf("insert word below last line: %q", content), func(t *testing.T) {
@@ -134,5 +136,35 @@ func TestIntegrationVi(t *testing.T) {
 				assert.Equal(t, "hello\n\n", buf.String())
 			})
 		}
+	})
+
+	t.Run("line select paste on last EOL", func(t *testing.T) {
+		buf, _, uri, clean := newIntegrationTestCase(t, "a\nb\nc\nd\n")
+		defer clean()
+
+		vi := vi.New(buf, uri)
+		vi.Resize(4, 4)
+
+		for _, ch := range "Gkyyp" {
+			_, handled := vi.Handle(term.Event{Type: term.EventKey, Ch: ch})
+			require.True(t, handled)
+		}
+
+		require.Equal(t, "a\nb\nc\nc\nd", buf.String())
+	})
+
+	t.Run("line select copy last line after", func(t *testing.T) {
+		buf, _, uri, clean := newIntegrationTestCase(t, "a\nb\nc\nd\n")
+		defer clean()
+
+		vi := vi.New(buf, uri)
+		vi.Resize(4, 4)
+
+		for _, ch := range "Gyyggp" {
+			_, handled := vi.Handle(term.Event{Type: term.EventKey, Ch: ch})
+			require.True(t, handled)
+		}
+
+		require.Equal(t, "a\nd\nb\nc\nd", buf.String())
 	})
 }

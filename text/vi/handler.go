@@ -285,6 +285,7 @@ func (vi *viHandlerImpl) pasteClipboard(registerID string, after bool) bool {
 		mode = text.StandardSelection
 	}
 
+	// FIXME this is not correct in all cases
 	cur := vi.cursor.Mark()
 
 	switch mode {
@@ -298,15 +299,11 @@ func (vi *viHandlerImpl) pasteClipboard(registerID string, after bool) bool {
 		}
 	case text.LineSelection:
 		if after {
-			vi.cursor.MoveStartLine()
-			if !vi.cursor.MoveDown() {
-				vi.cursor.InsertString(fmt.Sprintf("%s\n", str))
-			} else {
-				vi.cursor.InsertString(str)
-			}
-			vi.cursor.MoveToMark(cur)
 			vi.cursor.MoveDown()
 			vi.cursor.MoveStartLine()
+			cur = vi.cursor.Mark()
+			vi.cursor.InsertString(str)
+			vi.cursor.MoveToMark(cur)
 		} else {
 			vi.cursor.MoveStartLine()
 			vi.cursor.InsertString(str)

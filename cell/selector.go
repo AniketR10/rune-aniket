@@ -48,9 +48,7 @@ func (s *selector) selectLine(from term.Coordinates, to term.Coordinates) (
 		from.Y++
 	}
 
-	if from.Y < len(cells)-1 {
-		res = append(res, make([]term.Cell, 0))
-	}
+	res = append(res, make([]term.Cell, 0))
 
 	return
 }

@@ -879,7 +879,7 @@ func testCursorSelect(t *testing.T, width, height int) {
 		require.True(t, e.MoveLastLine())
 		// test that we can switch between after move
 		require.True(t, e.SelectLine())
-		assert.Equal(t, str, e.Selection())
+		assert.Equal(t, fmt.Sprintf("%s\n", str), e.Selection())
 		return e
 	}
 
@@ -997,7 +997,7 @@ func testCursorSelect(t *testing.T, width, height int) {
 
 		data, err := clipboard.Paste(DefaultRegisterID)
 		require.NoError(t, err)
-		assert.Equal(t, e.scroll.Buffer().String(), data.Text)
+		assert.Equal(t, fmt.Sprintf("%s\n", e.scroll.Buffer().String()), data.Text)
 	})
 
 	t.Run("SelectBlock/CopySelection copies from start to end in block", func(t *testing.T) {

@@ -1,10 +1,12 @@
 package cell
 
 import (
+	"fmt"
 	"reflect"
 	"testing"
 
 	"github.com/ernestrc/go-tui/term"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestSelect(t *testing.T) {
@@ -165,6 +167,7 @@ func TestSelectLine(t *testing.T) {
 				{{Ch: 'h'}, {Ch: 'e'}, {Ch: 'l'}, {Ch: 'l'}, {Ch: 'o'}},
 				{{}, {}, {}, {Ch: '\t'}, {Ch: 'w'}, {Ch: 'o'}, {Ch: 'r'}, {Ch: 'l'}, {Ch: 'd'}},
 				{},
+				{},
 			},
 		},
 		{
@@ -173,6 +176,7 @@ func TestSelectLine(t *testing.T) {
 			expected: [][]term.Cell{
 				{{Ch: 'h'}, {Ch: 'e'}, {Ch: 'l'}, {Ch: 'l'}, {Ch: 'o'}},
 				{{}, {}, {}, {Ch: '\t'}, {Ch: 'w'}, {Ch: 'o'}, {Ch: 'r'}, {Ch: 'l'}, {Ch: 'd'}},
+				{},
 				{},
 			},
 		},
@@ -184,6 +188,7 @@ func TestSelectLine(t *testing.T) {
 				{{}, {}, {}, {Ch: '\t'}, {Ch: 'w'}, {Ch: 'o'}, {Ch: 'r'}, {Ch: 'l'}, {Ch: 'd'}},
 				{},
 				{{Ch: 'i'}, {Ch: 't'}, {Ch: 's'}, {Ch: 'm'}, {Ch: 'e'}},
+				{},
 			},
 		},
 		{
@@ -199,16 +204,25 @@ func TestSelectLine(t *testing.T) {
 			to:   term.Coordinates{X: 0, Y: 3},
 			expected: [][]term.Cell{
 				{{Ch: 'i'}, {Ch: 't'}, {Ch: 's'}, {Ch: 'm'}, {Ch: 'e'}},
+				{},
+			},
+		},
+		{
+			from: term.Coordinates{X: 0, Y: 2},
+			to:   term.Coordinates{X: 0, Y: 2},
+			expected: [][]term.Cell{
+				{},
+				{},
 			},
 		},
 	}
 
-	for _, tcase := range testCases {
-		selector := selector{view: buf.view}
-		selection := selector.selectLine(tcase.from, tcase.to)
-		if CellsToString(selection) != CellsToString(tcase.expected) {
-			t.Errorf("expected %q found %q", CellsToString(tcase.expected), CellsToString(selection))
-		}
+	for i, tcase := range testCases {
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+			selector := selector{view: buf.view}
+			selection := selector.selectLine(tcase.from, tcase.to)
+			assert.Equal(t, CellsToString(tcase.expected), CellsToString(selection))
+		})
 	}
 }
 
