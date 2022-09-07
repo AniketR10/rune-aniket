@@ -235,6 +235,36 @@ func TestBufferTruncateFrom(t *testing.T) {
 	}
 }
 
+func TestBufferTruncateFromWithUnixView(t *testing.T) {
+
+	tsuite := []struct {
+		contents               string
+		input                  term.Coordinates
+		ok                     bool
+		expectedInternalString string
+	}{
+		{"hello\nworld", term.Coordinates{X: 4, Y: 0}, true, "hell"},
+		{"hello\nworld", term.Coordinates{X: 0, Y: 1}, true, "hello\n"},
+		{"hello\nworld\n", term.Coordinates{X: 4, Y: 0}, true, "hell\n"},
+		{"hello\nworld\n", term.Coordinates{X: 0, Y: 1}, true, "hello\n\n"},
+	}
+
+	for i, tcase := range tsuite {
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+			buf := newBufferWithContent(t, tcase.contents)
+			buf.WithView(&testView{reader: buf.View()})
+
+			ok := buf.TruncateFrom(tcase.input)
+			if tcase.ok {
+				assert.True(t, ok)
+				assert.Equal(t, tcase.expectedInternalString, buf.cells.String())
+			} else {
+				assert.False(t, ok)
+			}
+		})
+	}
+}
+
 func TestBufferDelete(t *testing.T) {
 	t.Run("calls underlying writer Delete", func(t *testing.T) {
 		b := NewBuffer()
@@ -747,8 +777,9 @@ func TestBufferInsertRowAt(t *testing.T) {
 	}{
 		{"first row", "", 0, "\n"},
 		{"first row above last row", "a", 0, "\na"},
-		{"last row", "a", 1, "a\n"},
-		{"past last row", "a", 2, "a\n"},
+		{"last row only one row", "a", 1, "a\n"},
+		{"last row with prev rows", "z\na", 2, "z\na\n"},
+		{"past last row", "a", 2, "a\n\n"},
 		{"in the middle of buffer", "a\nb\nc", 1, "a\n\nb\nc"},
 	}
 
@@ -756,6 +787,97 @@ func TestBufferInsertRowAt(t *testing.T) {
 		t.Run(tcase.desc, func(t *testing.T) {
 			b := NewBuffer()
 			b.WriteString(tcase.inStr)
+
+			b.InsertRowAt(tcase.inY)
+			assert.Equal(t, tcase.wantOut, b.String())
+		})
+	}
+}
+
+type testView struct {
+	reader View
+}
+
+func newUnixFileReader(r View) *testView {
+	b := new(testView)
+	b.reader = r
+	return b
+}
+
+func (b *testView) endsWithEOL() bool {
+	cells := b.reader.RawCells()
+	return len(cells) > 1 && len(cells[len(cells)-1]) == 0
+}
+
+func (b *testView) Rows() (rows int) {
+	rows = b.reader.Rows()
+	if !b.endsWithEOL() {
+		return
+	}
+	rows--
+	return
+
+}
+
+func (b *testView) Columns(row int) int {
+	return b.reader.Columns(row)
+}
+
+func (b *testView) Cell(pos term.Coordinates) (term.Cell, bool) {
+	return b.reader.Cell(pos)
+}
+
+func (b *testView) RawCells() (cells [][]term.Cell) {
+	cells = b.reader.RawCells()
+	if !b.endsWithEOL() {
+		return
+	}
+	cells = cells[:len(cells)-1]
+	return
+}
+
+func (b *testView) String() string {
+	if !b.endsWithEOL() {
+		return b.reader.String()
+	}
+	return CellsToString(b.RawCells())
+}
+
+func TestBufferInsertRowAtWithUnixView(t *testing.T) {
+	tsuite := []struct {
+		desc    string
+		inStr   string
+		inY     int
+		wantOut string
+	}{
+		{"(with EOL) first row", "\n", 0, "\n"},
+		{"(with EOL) first row above last row", "a\n", 0, "\na"},
+		{"(with EOL) last row only one row", "a\n", 1, "a\n"},
+		{"(with EOL) last row with prev rows", "z\na\n", 2, "z\na\n"},
+		{"(with EOL) past last row", "a\n", 2, "a\n"},
+		{"(with EOL) in the middle of buffer", "a\nb\nc\n", 1, "a\n\nb\nc"},
+		{"(no EOL) first row", "", 0, ""},
+		{"(no EOL) first row above last row", "a", 0, "\na"},
+		{"(no EOL) last row only one row", "a", 1, "a"},
+		{"(no EOL) last row with prev rows", "z\na", 2, "z\na"},
+		{"(no EOL) past last row", "a", 2, "a\n"},
+		{"(no EOL) in the middle of buffer", "a\nb\nc", 1, "a\n\nb\nc"},
+	}
+
+	for _, tcase := range tsuite {
+		t.Run("WriteString "+tcase.desc, func(t *testing.T) {
+			b := NewBuffer()
+			b.WithView(&testView{reader: b.View()})
+			b.WriteString(tcase.inStr)
+
+			b.InsertRowAt(tcase.inY)
+			assert.Equal(t, tcase.wantOut, b.String())
+		})
+
+		t.Run("ReadFrom "+tcase.desc, func(t *testing.T) {
+			b := NewBuffer()
+			b.WithView(&testView{reader: b.View()})
+			b.ReadFrom(strings.NewReader(tcase.inStr))
 
 			b.InsertRowAt(tcase.inY)
 			assert.Equal(t, tcase.wantOut, b.String())

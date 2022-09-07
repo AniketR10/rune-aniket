@@ -351,10 +351,11 @@ Love isn't love 'til you give it away.
 		-- Oscar Hammerstein 中国`
 
 	tsuite := []struct {
-		expectedStr          string
-		expectedRawCells     string
-		inputFrom, inputTo   term.Coordinates
-		overrideBaseRawCells string //optional; otherwise baseRawCells is used
+		expectedStr              string
+		expectedRawCells         string
+		expectedRawCellsRawCells [][]term.Cell // optional;
+		inputFrom, inputTo       term.Coordinates
+		overrideBaseRawCells     string //optional; otherwise baseRawCells is used
 		//optional; otherwise inputFrom and inputTo is assumed to be returned
 		expectedStart, expectedEnd *term.Coordinates
 	}{
@@ -582,6 +583,22 @@ Love isn't love 'til you give it away.
 			inputFrom:            term.Coordinates{Y: 1},
 			inputTo:              term.Coordinates{Y: 2},
 		},
+		{
+			overrideBaseRawCells:     "a\n",
+			expectedStr:              "a\n",
+			expectedRawCells:         "",
+			expectedRawCellsRawCells: [][]term.Cell{[]term.Cell{}},
+			inputFrom:                term.Coordinates{},
+			inputTo:                  term.Coordinates{Y: 1},
+		},
+		{
+			// emulate truncateFrom with a -1 rows view
+			overrideBaseRawCells: "a\n\n",
+			expectedStr:          "a\n",
+			expectedRawCells:     "\n",
+			inputFrom:            term.Coordinates{},
+			inputTo:              term.Coordinates{Y: 1, X: 0},
+		},
 	}
 
 	for i, tcase := range tsuite {
@@ -616,6 +633,9 @@ Love isn't love 'til you give it away.
 
 			from, to, old = c.Edit(from, to, old)
 			assert.Equal(t, tcase.expectedRawCells, c.String())
+			if tcase.expectedRawCellsRawCells != nil {
+				assert.Equal(t, tcase.expectedRawCellsRawCells, c.RawCells())
+			}
 
 			_, _, old = c.Edit(from, to, old)
 			assert.Equal(t, base, c.String())
@@ -729,3 +749,28 @@ func BenchmarkBufferReadFrom10000(b *testing.B) {
 // func BenchmarkBufferReadFrom100MB(b *testing.B) {
 // 	benchmarkBufferReadFrom(b, 1000000)
 // }
+
+func benchmarkCellToString(b *testing.B, n int) {
+	c := make([][]term.Cell, n)
+	for i := 0; i < n; i++ {
+		c[i] = make([]term.Cell, n)
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = CellsToString(c)
+	}
+}
+
+func BenchmarkCellToString10(b *testing.B) {
+	benchmarkCellToString(b, 10)
+}
+func BenchmarkCellToString100(b *testing.B) {
+	benchmarkCellToString(b, 100)
+}
+func BenchmarkCellToString1000(b *testing.B) {
+	benchmarkCellToString(b, 1000)
+}
+func BenchmarkCellToString10000(b *testing.B) {
+	benchmarkCellToString(b, 10000)
+}

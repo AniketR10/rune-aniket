@@ -11,7 +11,6 @@ import (
 	"github.com/ernestrc/go-tui/text"
 	"github.com/ernestrc/go-tui/workspace"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 var uri workspace.URI
@@ -299,28 +298,6 @@ Love isn't love 'til you give it away.
 		after = buf.String()
 		assert.Equal(t, prev, after)
 	})
-}
-
-func TestIntegrationInsertRowBelow(t *testing.T) {
-	buf := cell.NewBuffer()
-	buf.ReadFrom(strings.NewReader("hello"))
-	vi := New(buf, uri)
-	vi.Resize(4, 4)
-
-	for _, ch := range "Goworld" {
-		vi.Handle(term.Event{Type: term.EventKey, Ch: ch})
-	}
-	assert.Equal(t, "hello\nworld", vi.less.Buffer().String())
-
-	vi.Handle(term.Event{Type: term.EventKey, Key: term.KeyEsc})
-	_, handled := vi.Handle(term.Event{Type: term.EventKey, Ch: 'u'})
-	require.True(t, handled)
-	require.Equal(t, "hello", vi.less.Buffer().String())
-
-	for _, ch := range "Goworld" {
-		vi.Handle(term.Event{Type: term.EventKey, Ch: ch})
-	}
-	assert.Equal(t, "hello\nworld", vi.less.Buffer().String())
 }
 
 type mockClip struct {

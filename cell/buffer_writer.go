@@ -58,7 +58,7 @@ func (w *BufferWriter) ToBuffer(b *Buffer) {
 	cells := new(rawCells)
 	cells.cells = w.cells
 	cells.tabspaces = 1
-	b.initWithCells(cells, nil)
+	b.initWithCells(cells)
 }
 
 func (w *BufferWriter) RawCells() [][]term.Cell {

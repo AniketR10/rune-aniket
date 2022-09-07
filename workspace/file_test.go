@@ -132,6 +132,7 @@ func testFileBufferIntegration(t *testing.T, endsInEOL bool) {
 
 		f, err := openFile(filename, buf, "", false)
 		require.NoError(t, err)
+		defer f.Close()
 
 		_, err = os.Stat(filename)
 		require.Error(t, err)
@@ -251,6 +252,7 @@ func testFileBufferIntegration(t *testing.T, endsInEOL bool) {
 
 		f, err := openFile(filename, buf, "", false)
 		require.NoError(t, err)
+		defer f.Close()
 
 		fileInfo, err := os.Stat(filename)
 		require.NoError(t, err)
@@ -280,6 +282,7 @@ func testFileBufferIntegration(t *testing.T, endsInEOL bool) {
 
 		f, err := openFile(filename, buf, "", false)
 		require.NoError(t, err)
+		defer f.Close()
 		require.NoError(t, f.Flush())
 		b, err := ioutil.ReadFile(filename)
 		require.NoError(t, err)
@@ -309,6 +312,7 @@ func testFileBufferIntegration(t *testing.T, endsInEOL bool) {
 
 		f, err := openFile(filename, buf, os.TempDir(), false)
 		require.NoError(t, err)
+		defer f.Close()
 
 		_, err = os.Stat(filename)
 		require.Error(t, err)

@@ -115,7 +115,7 @@ func CellsToBuffer(c [][]term.Cell, tabspaces int) *Buffer {
 	}
 
 	ret := new(Buffer)
-	ret.initWithCells(cells, nil)
+	ret.initWithCells(cells)
 	return ret
 }
 

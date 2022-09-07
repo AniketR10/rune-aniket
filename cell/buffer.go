@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	"github.com/ernestrc/go-tui/term"
-	log "github.com/sirupsen/logrus"
 )
 
 // A Buffer offers a high level API to manipulate a matrix of term.Cell.
@@ -15,7 +14,7 @@ type Buffer struct {
 	selector selector
 	rootPub  *syncPublisher
 	usagePub *syncPublisher
-	safew    Editor
+	safew    safeEditor
 
 	// effective View and Editor
 	view   View
@@ -40,8 +39,8 @@ func fromToInBounds(cells View, from, to term.Coordinates) (
 	}
 
 	if to.Y >= rows {
-		to.Y = rows
-		to.X = 0
+		to.Y = rows - 1
+		to.X = cells.Columns(rows - 1)
 	} else if cols := cells.Columns(to.Y); to.X > cols {
 		to.X = cols
 	}
@@ -70,16 +69,9 @@ func NewBuffer() (b *Buffer) {
 	return b
 }
 
-func (b *Buffer) initWithCells(c *rawCells, logger *log.Logger) {
+func (b *Buffer) initWithCells(c *rawCells) {
 	b.cells = c
 	b.editor = b.cells
-	b.view = b.cells
-
-	if logger != nil {
-		cellLogger := newLogger(b.view, b.cells, logger)
-		b.view = cellLogger
-		b.editor = cellLogger
-	}
 
 	// setup the root publisher as the deepest Editor
 	b.rootPub = newPublisher(b.editor)
@@ -88,8 +80,14 @@ func (b *Buffer) initWithCells(c *rawCells, logger *log.Logger) {
 	// setup the usage publisher at the shallowest Editor
 	b.usagePub = newPublisher(b.editor)
 	b.editor = b.usagePub
-	b.safew = safeEditor{editor: b.editor, view: b.view}
+	b.safew.editor = b.editor
 
+	b.setView(b.cells)
+}
+
+func (b *Buffer) setView(view View) {
+	b.view = view
+	b.safew.view = b.view
 	b.selector.view = b.view
 }
 
@@ -97,7 +95,7 @@ func (b *Buffer) initWithCells(c *rawCells, logger *log.Logger) {
 func (b *Buffer) InitWithTabspaces(tabspaces int) {
 	cells := new(rawCells)
 	cells.init(tabspaces)
-	b.initWithCells(cells, nil)
+	b.initWithCells(cells)
 }
 
 // Init initializes this Buffer with the default configuration.
@@ -105,26 +103,11 @@ func (b *Buffer) Init() {
 	b.InitWithTabspaces(DefaultTabspaces)
 }
 
-// WithLogger adds a cell logger which intercepts and logs all
-// the calls to the underlying Editor/View.
-func (b *Buffer) WithLogger(logger *log.Logger) {
-	b.initWithCells(b.cells, logger)
-}
-
 // InsertRowAt inserts a new row at given position. If pos is out of bounds,
 // this method does not panic; instead, it will fill in the necessary
 // rows such that the new row is the last row in the buffer.
 func (b *Buffer) InsertRowAt(y int) {
-	var at term.Coordinates
-	if y == 0 {
-		at = term.Coordinates{Y: y}
-	} else if y > b.Rows() {
-		// insert fill-in feature takes care of inserting a row up to y
-		at = term.Coordinates{Y: y - 1}
-	} else {
-		// insert new line at the end of previous row
-		at = term.Coordinates{Y: y - 1, X: b.Columns(y - 1)}
-	}
+	at := term.Coordinates{Y: y}
 	b.editor.Edit(at, at, "\n")
 }
 
@@ -545,8 +528,8 @@ func (b *Buffer) Size() (ret int) {
 
 // WithView installs a new view and returns this Buffer's previous view.
 // This should only be utilized for advanced use cases.
-func (b *Buffer) WithView(r View) (ret View) {
+func (b *Buffer) WithView(v View) (ret View) {
 	ret = b.view
-	b.view = r
+	b.setView(v)
 	return
 }
