@@ -300,12 +300,12 @@ func (b *Buffer) DeleteLine(from, to term.Coordinates) (
 	start term.Coordinates, str string,
 ) {
 	from, to = SortFromTo(from, to)
-	from.X, to.X = 0, 0
-	to.Y++
 	from, to, ok := fromToInBounds(b.view, from, to)
 	if !ok {
 		return
 	}
+	from.X, to.X = 0, 0
+	to.Y++
 	start, _, str = b.editor.Edit(from, to, "")
 	return
 }

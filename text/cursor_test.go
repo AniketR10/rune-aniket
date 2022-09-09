@@ -1117,6 +1117,14 @@ func testCursorDeleteSelection(t *testing.T, width, height int, typeSelect Selec
 			finalBuf:   "",
 		},
 		{
+			initialBuf: "\n",
+			selected:   true,
+			finalPos:   func(*Cursor) {},
+			deleted:    true,
+			finalBuf:   "",
+			skipForMode: []SelectMode{StandardSelection, BlockSelection},
+		},
+		{
 			initialBuf:  "a\nb",
 			selected:    true,
 			finalPos:    func(c *Cursor) { c.MoveRight() },
