@@ -36,7 +36,6 @@ type Vi struct {
 	less      *handler.Less
 	clipboard text.Clipboard
 
-	repeating    bool
 	currEdited   bool
 	evEdited     bool
 	currSnapshot snapshot
@@ -141,7 +140,7 @@ func (vi *viSubscriber) OnWillEdit(from, to term.Coordinates, str string) {
 }
 
 func (vi *viSubscriber) OnDidEdit(start, end term.Coordinates, old string) {
-	if !vi.resetting && !vi.repeating {
+	if !vi.resetting {
 		vi.evEdited = true
 		vi.currEdited = true
 	}
@@ -215,7 +214,7 @@ func (vi *Vi) Handle(ev term.Event) (quit, handled bool) {
 		vi.appendLastEdit(ev)
 	} else {
 		vi.appendLastEdit(ev)
-		if vi.currEdited || vi.repeating {
+		if vi.currEdited {
 			vi.copyRepeat()
 			vi.snapshotContent()
 			vi.resetEdits()
@@ -303,12 +302,10 @@ func (vi *Vi) Close() error {
 }
 
 func (vi *Vi) repeat() (handled bool) {
-	vi.repeating = true
 	for _, ev := range vi.repeatEdits {
 		handled = true
 		vi.Handle(ev)
 	}
-	vi.repeating = false
 	if handled {
 		vi.handler.moveToBounds()
 	}

@@ -180,8 +180,7 @@ func testViHandleSize(t *testing.T, width, height int) {
 		vi.handler = mock
 		vi.Resize(width, height)
 		for _, ch := range in {
-			ev := term.Event{Type: term.EventKey, Ch: ch}
-			vi.Handle(ev)
+			vi.Handle(term.Event{Type: term.EventKey, Ch: ch})
 		}
 		var received strings.Builder
 		for _, ev := range mock.received {
@@ -252,6 +251,39 @@ Love isn't love 'til you give it away.
 			assert.Equal(t, undoFortune, buf.String())
 		})
 	}
+	t.Run("undo/redo repeats", func(t *testing.T) {
+		buf := cell.NewBuffer()
+		buf.ReadFrom(strings.NewReader(undoFortune))
+		vi := New(buf, uri)
+		vi.Resize(width, height)
+
+		for _, ch := range "iasdfgh#.." {
+			if ch == '#' {
+				vi.Handle(term.Event{Type: term.EventKey, Key: term.KeyEsc})
+			} else {
+				vi.Handle(term.Event{Type: term.EventKey, Ch: ch})
+			}
+		}
+		assert.NotEqual(t, undoFortune, buf.String())
+		for i := 0; i < 3; i++ {
+			quit, handled := vi.Handle(term.Event{Type: term.EventKey, Ch: 'u'})
+			assert.False(t, quit, i)
+			assert.True(t, handled, i)
+		}
+		assert.Equal(t, undoFortune, buf.String())
+		for i := 0; i < 3; i++ {
+			quit, handled := vi.Handle(term.Event{Type: term.EventKey, Key: term.KeyCtrlR})
+			assert.False(t, quit, i)
+			assert.True(t, handled, i)
+		}
+		assert.NotEqual(t, undoFortune, buf.String())
+		for i := 0; i < 3; i++ {
+			quit, handled := vi.Handle(term.Event{Type: term.EventKey, Ch: 'u'})
+			assert.False(t, quit, i)
+			assert.True(t, handled, i)
+		}
+		assert.Equal(t, undoFortune, buf.String())
+	})
 
 	t.Run("undo/redo a series of updates", func(t *testing.T) {
 		buf := cell.NewBuffer()
