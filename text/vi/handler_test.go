@@ -506,13 +506,13 @@ diff_buf_adjust(win_
 :             NORMAL`},
 		// check yank paste after last line
 		{"Gyyp",
-			`    curtab->tp_diff_
-    diff_redraw(TRUE
+			`    diff_redraw(TRUE
     }               
   }                 
   }                 
   else              
   diff_buf_add(win->
+}                   
 }                   
 ▐                   
 :             NORMAL`},

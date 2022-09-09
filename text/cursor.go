@@ -404,7 +404,7 @@ func (c *Cursor) MoveLastLine() (ok bool) {
 // of the content is reached.
 func (c *Cursor) MoveDown() (ok bool) {
 	pos := c.Coordinates() // use actual render coordinates, wraps included
-	if pos.Y+1 >= c.scroll.Height() {
+	if pos.Y >= c.scroll.Height() {
 		ok = c.scroll.SeekDown()
 		if ok {
 			c.setCursor(c.cursor)

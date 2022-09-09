@@ -6,6 +6,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/ernestrc/go-tui"
 	"github.com/ernestrc/go-tui/cell"
 	"github.com/ernestrc/go-tui/debug"
 	"github.com/ernestrc/go-tui/term"
@@ -51,6 +52,17 @@ func newIntegrationTestCase(t *testing.T, content string) (
 	}
 }
 
+func newViIntegrationTestCase(
+	t *testing.T, content string, width, height int,
+) (*cell.Buffer, tui.Handler, func()) {
+	buf, _, uri, clean := newIntegrationTestCase(t, content)
+	defer clean()
+
+	vi := vi.New(buf, uri)
+	vi.Resize(width, height)
+	return buf, vi, clean
+}
+
 func TestLastEOLUndoFileIntegration(t *testing.T) {
 	buf, _, _, cleanup := newIntegrationTestCase(t, "a\n")
 	defer cleanup()
@@ -83,15 +95,12 @@ func TestLastEOLUndoFileIntegration(t *testing.T) {
 		[][]term.Cell{{{Ch: 'a'}}, []term.Cell{}}, newCells)
 }
 
-func TestIntegration(t *testing.T) {
+func TestViIntegration(t *testing.T) {
 	t.Run("last EOL", func(t *testing.T) {
 		for _, content := range []string{"hello", "hello\n"} {
 			t.Run(fmt.Sprintf("insert word below last line: %q", content), func(t *testing.T) {
-				buf, _, uri, cleanup := newIntegrationTestCase(t, content)
+				buf, vi, cleanup := newViIntegrationTestCase(t, content, 4, 4)
 				defer cleanup()
-
-				vi := vi.New(buf, uri)
-				vi.Resize(4, 4)
 
 				for _, ch := range "Goworld" {
 					vi.Handle(term.Event{Type: term.EventKey, Ch: ch})
@@ -112,11 +121,8 @@ func TestIntegration(t *testing.T) {
 			})
 
 			t.Run(fmt.Sprintf("insert a newline last line: %q", content), func(t *testing.T) {
-				buf, _, uri, clean := newIntegrationTestCase(t, content)
+				buf, vi, clean := newViIntegrationTestCase(t, content, 4, 4)
 				defer clean()
-
-				vi := vi.New(buf, uri)
-				vi.Resize(4, 4)
 
 				for _, ch := range "Go\n" {
 					vi.Handle(term.Event{Type: term.EventKey, Ch: ch})
@@ -139,11 +145,8 @@ func TestIntegration(t *testing.T) {
 	})
 
 	t.Run("line select paste on last EOL", func(t *testing.T) {
-		buf, _, uri, clean := newIntegrationTestCase(t, "a\nb\nc\nd\n")
+		buf, vi, clean := newViIntegrationTestCase(t, "a\nb\nc\nd\n", 4, 4)
 		defer clean()
-
-		vi := vi.New(buf, uri)
-		vi.Resize(4, 4)
 
 		for _, ch := range "Gkyyp" {
 			_, handled := vi.Handle(term.Event{Type: term.EventKey, Ch: ch})
@@ -154,11 +157,8 @@ func TestIntegration(t *testing.T) {
 	})
 
 	t.Run("line select copy last line after", func(t *testing.T) {
-		buf, _, uri, clean := newIntegrationTestCase(t, "a\nb\nc\nd\n")
+		buf, vi, clean := newViIntegrationTestCase(t, "a\nb\nc\nd\n", 4, 4)
 		defer clean()
-
-		vi := vi.New(buf, uri)
-		vi.Resize(4, 4)
 
 		for _, ch := range "Gyyggp" {
 			_, handled := vi.Handle(term.Event{Type: term.EventKey, Ch: ch})
@@ -166,5 +166,17 @@ func TestIntegration(t *testing.T) {
 		}
 
 		require.Equal(t, "a\nd\nb\nc\nd", buf.String())
+	})
+
+	t.Run("paste line after last line", func(t *testing.T) {
+		buf, vi, clean := newViIntegrationTestCase(t, "a\nb\nc\nd\n", 2, 2)
+		defer clean()
+
+		for _, ch := range "VjyGp" {
+			_, handled := vi.Handle(term.Event{Type: term.EventKey, Ch: ch})
+			require.True(t, handled)
+		}
+
+		require.Equal(t, "a\nb\nc\nd\na\nb", buf.String())
 	})
 }

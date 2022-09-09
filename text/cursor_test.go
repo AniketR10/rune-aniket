@@ -336,7 +336,7 @@ func TestCursorMove(t *testing.T) {
 					e.MoveDown()
 				}
 			},
-			term.Coordinates{X: 0, Y: 999},
+			term.Coordinates{X: 0, Y: 1000},
 		},
 		{
 			"MoveDown should seek down if reached last line in window but not at last line",
@@ -355,10 +355,11 @@ func TestCursorMove(t *testing.T) {
 				e.cursor.Y = 9
 				e.scroll.SeekEndFile()
 				offsetY := e.scroll.Offset().Y
+				assert.True(t, e.MoveDown())
 				assert.False(t, e.MoveDown())
 				assert.Equal(t, offsetY, e.scroll.Offset().Y)
 			},
-			term.Coordinates{X: 0, Y: 31},
+			term.Coordinates{X: 0, Y: 32},
 		},
 		{
 			"MoveUp should do nothing if already on first line",
@@ -1854,27 +1855,21 @@ func TestFileCursorIntegration(t *testing.T) {
 		{"does not move beyond line before last EOL", true, func(t *testing.T, cursor *Cursor) {
 			assert.True(t, cursor.MoveLastLine())
 			assert.Equal(t, term.Coordinates{Y: 31}, cursor.CursorAtScroll())
-			assert.False(t, cursor.MoveDown())
 		}},
 		{"does not move beyond last line", false, func(t *testing.T, cursor *Cursor) {
 			assert.True(t, cursor.MoveLastLine())
 			assert.Equal(t, term.Coordinates{Y: 31}, cursor.CursorAtScroll())
-			assert.False(t, cursor.MoveDown())
 		}},
 		{"is able to insert at last line + 1", false, func(t *testing.T, cursor *Cursor) {
 			assert.True(t, cursor.MoveLastLine())
-			assert.False(t, cursor.MoveDown())
 			cursor.InsertRowBelow()
 			assert.Equal(t, term.Coordinates{Y: 32}, cursor.CursorAtScroll())
-			assert.False(t, cursor.MoveDown())
 			assert.Equal(t, sampleSnippet+"\n", cursor.buffer().String())
 		}},
 		{"is able to insert at last EOL", true, func(t *testing.T, cursor *Cursor) {
 			assert.True(t, cursor.MoveLastLine())
-			assert.False(t, cursor.MoveDown())
 			cursor.InsertRowBelow()
 			assert.Equal(t, term.Coordinates{Y: 32}, cursor.CursorAtScroll())
-			assert.False(t, cursor.MoveDown())
 			assert.Equal(t, sampleSnippet+"\n", cursor.buffer().String())
 		}},
 	}
