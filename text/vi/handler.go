@@ -728,13 +728,13 @@ func (vi *viHandlerImpl) moveToBounds() {
 	}
 
 	switch vi.mode() {
-	case normalMode, yankMode, searchMode, gMode, deleteMode,
-		visualMode, visualLineMode, visualBlockMode:
+	case normalMode, yankMode, searchMode, gMode, deleteMode:
 		if !vi.config.debug {
 			vi.cursor.MoveToBounds(0)
 			vi.cursor.MoveToNextNonNull()
 		}
-	case insertMode, replaceMode, replaceOneMode:
+	case insertMode, replaceMode, replaceOneMode,
+		 visualMode, visualLineMode, visualBlockMode:
 		if !vi.config.debug {
 			vi.cursor.MoveToBounds(1)
 		}

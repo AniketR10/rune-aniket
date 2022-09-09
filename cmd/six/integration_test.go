@@ -192,11 +192,35 @@ func TestViIntegration(t *testing.T) {
 		require.Equal(t, "a\nb\nc\nd", buf.String())
 	})
 
+	t.Run("delete last empty line and second to last", func(t *testing.T) {
+		buf, vi, clean := newViIntegrationTestCase(t, "a\nb\nc\nd\n\n", 4, 4)
+		defer clean()
+
+		for _, ch := range "Gdddd" {
+			_, handled := vi.Handle(term.Event{Type: term.EventKey, Ch: ch})
+			require.True(t, handled)
+		}
+
+		require.Equal(t, "a\nb\nc", buf.String())
+	})
+
 	t.Run("delete any empty line", func(t *testing.T) {
 		buf, vi, clean := newViIntegrationTestCase(t, "a\n\nc", 4, 4)
 		defer clean()
 
 		for _, ch := range "jdd" {
+			_, handled := vi.Handle(term.Event{Type: term.EventKey, Ch: ch})
+			require.True(t, handled)
+		}
+
+		require.Equal(t, "a\nc", buf.String())
+	})
+
+	t.Run("delete only newline in visual mode", func(t *testing.T) {
+		buf, vi, clean := newViIntegrationTestCase(t, "a\n\nc", 4, 4)
+		defer clean()
+
+		for _, ch := range "jvkld" {
 			_, handled := vi.Handle(term.Event{Type: term.EventKey, Ch: ch})
 			require.True(t, handled)
 		}
