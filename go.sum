@@ -72,6 +72,8 @@ github.com/ernestrc/logd-go v0.0.0-20180509171507-65871c1d5504/go.mod h1:T9+4zGz
 github.com/ernestrc/sensible v0.0.0-20170704153812-102a955adfdf/go.mod h1:8URznYhzYlQLd3VKEJvgyHCgjV7/S2nOC1QH8Yx7C/o=
 github.com/ernestrc/tcell/v2 v2.5.2-0.20220808183504-153763d70506 h1:Qf/v8sB+ve/eTu/at46nYaEw+fJvimzdHb1/fSLTPEQ=
 github.com/ernestrc/tcell/v2 v2.5.2-0.20220808183504-153763d70506/go.mod h1:UZWG2X0Yg4ot5rDASltgKz0+PQ35Vk45J6S0GcAN1oE=
+github.com/ernestrc/tcell/v2 v2.5.2-0.20220910003222-dfe85cea12e8 h1:XXDoZsvNk94tIGT+n6hLUiYfq3AGMbgM2+g0YTYSLyk=
+github.com/ernestrc/tcell/v2 v2.5.2-0.20220910003222-dfe85cea12e8/go.mod h1:UZWG2X0Yg4ot5rDASltgKz0+PQ35Vk45J6S0GcAN1oE=
 github.com/fatih/color v1.7.0 h1:DkWD4oS2D8LGGgTQ6IvwJJXSL5Vp2ffcQg58nFV38Ys=
 github.com/fatih/color v1.7.0/go.mod h1:Zm6kSWBoL9eyXnKyktHP6abPY2pDugNf5KwzbycvMj4=
 github.com/fsnotify/fsnotify v1.5.4 h1:jRbGcIw6P2Meqdwuo0H1p6JVLbL5DHKAKlYndzMwVZI=
