@@ -162,11 +162,13 @@ func (vi *Vi) Copy(registerID string, data text.ClipboardData) error {
 
 // Handle satisfies tui.Handler
 func (vi *Vi) Handle(ev term.Event) (quit, handled bool) {
-	if ev.Type == term.EventMouse {
+	mode := vi.handler.mode()
+
+	if ev.Type == term.EventMouse && mode != insertMode {
 		return vi.mouse.Handle(ev)
 	}
 
-	switch vi.handler.mode() {
+	switch mode {
 	case normalMode:
 		switch ev.Type {
 		case term.EventKey:
