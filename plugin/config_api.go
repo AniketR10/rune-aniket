@@ -29,24 +29,25 @@ func newConfigResourceServer(cfg Config) *configResourceServer {
 func (s *configResourceServer) Serve(
 	pluginID string, grantID uint32, broker proto.MuxBroker,
 	l *log.Logger, lock sync.Locker,
-) {
-	broker.AcceptAndServe(grantID, func(opts []grpc.ServerOption) proto.MuxServer {
-		s.mu.Lock()
-		defer s.mu.Unlock()
-		if s.srv == nil {
-			var srv proto.MuxServer
-			if l != nil && l.IsLevelEnabled(log.TraceLevel) {
-				srv = proto.LoggingGRPCServer(l, opts...)
-			} else {
-				srv = proto.GRPCServer(opts...)
+) error {
+	return acceptAndServe(broker, grantID,
+		func(opts []grpc.ServerOption) proto.MuxServer {
+			s.mu.Lock()
+			defer s.mu.Unlock()
+			if s.srv == nil {
+				var srv proto.MuxServer
+				if l != nil && l.IsLevelEnabled(log.TraceLevel) {
+					srv = proto.LoggingGRPCServer(l, opts...)
+				} else {
+					srv = proto.GRPCServer(opts...)
+				}
+				grpc := srv.GRPC()
+				s.srv = srv
+				server := newConfigServer(s.cfg)
+				configpb.RegisterConfigServer(grpc, server)
 			}
-			grpc := srv.GRPC()
-			s.srv = srv
-			server := newConfigServer(s.cfg)
-			configpb.RegisterConfigServer(grpc, server)
-		}
-		return s.srv
-	})
+			return s.srv
+		})
 }
 
 // ConfigResources returns a map of Permission to a ResourceServer

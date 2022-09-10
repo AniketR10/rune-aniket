@@ -30,7 +30,6 @@ type MuxBroker interface {
 	// The returned value must always be > 0.
 	NextId() uint32
 	Accept(id uint32) (net.Listener, error)
-	AcceptAndServe(ID uint32, srv func(opts []grpc.ServerOption) MuxServer)
 	Dial(ID uint32) (conn MuxConn, err error)
 	Close() error
 }

@@ -67,8 +67,8 @@ func (s *ClipboardManager) Init() {
 func (s *ClipboardManager) Serve(
 	pluginID string, grantID uint32, broker proto.MuxBroker,
 	l *log.Logger, lock sync.Locker,
-) {
-	broker.AcceptAndServe(grantID, func(opts []grpc.ServerOption) proto.MuxServer {
+) error {
+	return acceptAndServe(broker, grantID, func(opts []grpc.ServerOption) proto.MuxServer {
 		lock.Lock()
 		defer lock.Unlock()
 

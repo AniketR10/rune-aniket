@@ -30,27 +30,28 @@ func newEditorResourceServer(b text.Editor) *editorResourceServer {
 func (s *editorResourceServer) Serve(
 	pluginID string, grantID uint32, broker proto.MuxBroker,
 	l *log.Logger, lock sync.Locker,
-) {
-	broker.AcceptAndServe(grantID, func(opts []grpc.ServerOption) proto.MuxServer {
-		s.mu.Lock()
-		defer s.mu.Unlock()
-		if s.srv == nil {
-			var srv proto.MuxServer
-			if l != nil && l.IsLevelEnabled(log.TraceLevel) {
-				srv = proto.LoggingGRPCServer(l, opts...)
-			} else {
-				srv = proto.GRPCServer(opts...)
+) error {
+	return acceptAndServe(broker, grantID,
+		func(opts []grpc.ServerOption) proto.MuxServer {
+			s.mu.Lock()
+			defer s.mu.Unlock()
+			if s.srv == nil {
+				var srv proto.MuxServer
+				if l != nil && l.IsLevelEnabled(log.TraceLevel) {
+					srv = proto.LoggingGRPCServer(l, opts...)
+				} else {
+					srv = proto.GRPCServer(opts...)
+				}
+				grpc := srv.GRPC()
+				s.srv = srv
+				server := text.NewServer(broker, s.b, lock)
+				lock.Lock()
+				server.Logger = l
+				lock.Unlock()
+				proto.RegisterEditorServer(grpc, interruptEditorServer(server, term.Interrupt))
 			}
-			grpc := srv.GRPC()
-			s.srv = srv
-			server := text.NewServer(broker, s.b, lock)
-			lock.Lock()
-			server.Logger = l
-			lock.Unlock()
-			proto.RegisterEditorServer(grpc, interruptEditorServer(server, term.Interrupt))
-		}
-		return s.srv
-	})
+			return s.srv
+		})
 }
 
 // EditorResources returns a map of Permission to a ResourceServer

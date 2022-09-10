@@ -98,17 +98,6 @@ func (t *dbBroker) Accept(id uint32) (net.Listener, error) {
 	return listener, nil
 }
 
-func (t *dbBroker) AcceptAndServe(
-	ID uint32, srv func(opts []grpc.ServerOption) MuxServer,
-) {
-	lis, err := t.Accept(ID)
-	if err != nil {
-		panic(err)
-	}
-	server := srv([]grpc.ServerOption{})
-	go server.Serve(lis)
-}
-
 func (t *dbBroker) Dial(ID uint32) (conn MuxConn, err error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()

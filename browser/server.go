@@ -155,16 +155,19 @@ func (s *Server) dialHandler(handlerID uint64) (Handler, error) {
 	return cc, nil
 }
 
-func (s *Server) serveWindow(win Window) uint64 {
+func (s *Server) serveWindow(win Window) (uint64, error) {
 	if res, ok := s.servers[win.id()]; ok {
-		return res.(*windowServerResource).brokerID
+		return res.(*windowServerResource).brokerID, nil
 	}
 
-	brokerID, srv := proto.AcceptAndServe(s.broker, s.Logger,
+	brokerID, srv, err := proto.AcceptAndServe(s.broker, s.Logger,
 		func(windowBrokerID uint32, srv proto.MuxServer) {
 			winSrv := s.windowServer(s, win)
 			proto.RegisterWindowServer(srv.GRPC(), winSrv)
 		})
+	if err != nil {
+		return 0, err
+	}
 
 	s.servers[win.id()] = &windowServerResource{
 		srv:      srv,
@@ -178,7 +181,7 @@ func (s *Server) serveWindow(win Window) uint64 {
 			"underlying window called onWindowClosed callback")
 		delete(s.brokerIDToWinID, uint64(brokerID))
 	})
-	return uint64(brokerID)
+	return uint64(brokerID), nil
 }
 
 func (s *Server) getClients() map[uint64]io.Closer {
@@ -271,7 +274,15 @@ func (s *Server) newRemoteResource(
 		return 0, nil
 	}
 
-	return s.serveWindow(win), nil
+	winID, err := s.serveWindow(win)
+	if err != nil {
+		if created {
+			reason := fmt.Sprintf("failed to create resource: %s", err.Error())
+			s.forceCloseHandler(handlerID, reason)
+		}
+		return 0, fmt.Errorf("serveWindow: %w", err)
+	}
+	return winID, nil
 }
 
 func protoToModelOrientation(p proto.Orientation) (o Orientation) {
@@ -428,7 +439,11 @@ func (s *Server) Focus(
 		return nil, err
 	}
 
-	windowID := s.serveWindow(win)
+	windowID, err := s.serveWindow(win)
+	if err != nil {
+		return nil, fmt.Errorf("serveWindow: %w", err)
+	}
+
 	res := &proto.FocusResponse{
 		WindowId: windowID,
 	}
@@ -456,7 +471,11 @@ func (s *Server) SetFocus(
 		return nil, err
 	}
 
-	windowID := s.serveWindow(prev)
+	windowID, err := s.serveWindow(prev)
+	if err != nil {
+		return nil, fmt.Errorf("serveWindow: %w", err)
+	}
+
 	res := &proto.FocusResponse{
 		WindowId: windowID,
 	}

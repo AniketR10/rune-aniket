@@ -52,10 +52,13 @@ func (w *windowClient) Content() (Handler, error) {
 func (w *windowClient) SetContent(h Handler) error {
 	ctx := context.Background()
 
-	brokerID, created := w.browserClient.serveHandler(h)
+	brokerID, created, err := w.browserClient.serveHandler(h)
+	if err != nil {
+		return fmt.Errorf("serveHandler: %w", err)
+	}
 
 	req := proto.WindowSetContentRequest{HandlerId: brokerID}
-	_, err := w.pbClient.SetContent(ctx, &req)
+	_, err = w.pbClient.SetContent(ctx, &req)
 	if err != nil {
 		if created {
 			reason := fmt.Sprintf("error on call to SetContent: %v", err)

@@ -4,7 +4,6 @@ import (
 	"net"
 
 	log "github.com/sirupsen/logrus"
-	grpc "google.golang.org/grpc"
 )
 
 type loggingBroker struct {
@@ -27,11 +26,6 @@ func (b loggingBroker) Accept(id uint32) (net.Listener, error) {
 	lis, err := b.root.Accept(id)
 	b.logger.Tracef("loggingBroker: Accept(%d): (%v, %v)", id, lis, err)
 	return lis, err
-}
-
-func (b loggingBroker) AcceptAndServe(ID uint32, srv func(opts []grpc.ServerOption) MuxServer) {
-	b.root.AcceptAndServe(ID, srv)
-	b.logger.Tracef("loggingBroker: AcceptAndServe(%d)", ID)
 }
 
 func (b loggingBroker) Dial(ID uint32) (conn MuxConn, err error) {

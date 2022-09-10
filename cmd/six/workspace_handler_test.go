@@ -26,7 +26,10 @@ type clipboardManagerTest struct {
 	text.Clipboard
 }
 
-func (m *clipboardManagerTest) Serve(string, uint32, proto.MuxBroker, *log.Logger, sync.Locker) {
+func (m *clipboardManagerTest) Serve(
+	string, uint32, proto.MuxBroker, *log.Logger, sync.Locker,
+) error {
+	return nil
 }
 func (m *clipboardManagerTest) Close() error {
 	return nil

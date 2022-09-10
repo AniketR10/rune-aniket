@@ -3,21 +3,36 @@ package prototest
 import (
 	"context"
 	"errors"
+	"net"
 	"testing"
 
 	"github.com/ernestrc/go-tui/proto"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
-	"google.golang.org/grpc"
 	"google.golang.org/grpc/connectivity"
 )
 
+type testListener struct {
+}
+
+func (t testListener) Accept() (net.Conn, error) {
+	return nil, errors.New("nope")
+}
+
+func (t testListener) Close() error {
+	return nil
+}
+
+func (t testListener) Addr() net.Addr {
+	return nil
+}
+
 func ExpectBrokerServe(t *testing.T, brokerID uint32, mockBroker *proto.MockMuxBroker) {
 	mockBroker.EXPECT().NextId().Return(uint32(brokerID))
-	mockBroker.EXPECT().AcceptAndServe(gomock.Any(), gomock.Any()).
-		DoAndReturn(func(brokerId uint32, serverFunc func(opts []grpc.ServerOption) proto.MuxServer) {
+	mockBroker.EXPECT().Accept(gomock.Any()).
+		DoAndReturn(func(brokerId uint32) (net.Listener, error) {
 			assert.Equal(t, uint32(brokerID), brokerId)
-			serverFunc(make([]grpc.ServerOption, 0))
+			return testListener{}, nil
 		}).
 		Times(1)
 }

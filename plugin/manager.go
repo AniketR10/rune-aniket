@@ -191,7 +191,13 @@ func (m *Manager) doGrant(
 		// such that one plugin => one grpc server for all the resources
 		// requested. Right now, each call to serve, spins a new listener
 		// and a new GRPC server.
-		go srv.Serve(pluginID, grantID, m.broker, m.config.logger, m.rmu)
+		go func() {
+			err := srv.Serve(pluginID, grantID, m.broker, m.config.logger, m.rmu)
+			if err != nil && m.config.logger != nil {
+				m.config.logger.Errorf("Could not communicate with plugin %q: %v",
+					pluginID, err)
+			}
+		}()
 	}
 
 	return client.client.sendGrants(ctx, denied, granted)

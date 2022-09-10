@@ -42,33 +42,34 @@ func newBrowserResourceServer(b browser.Browser) *browserResourceServer {
 func (s *browserResourceServer) Serve(
 	pluginID string, grantID uint32, broker proto.MuxBroker,
 	l *log.Logger, lock sync.Locker,
-) {
-	broker.AcceptAndServe(grantID, func(opts []grpc.ServerOption) proto.MuxServer {
-		s.mu.Lock()
-		defer s.mu.Unlock()
-		// NOTE: unfortunately all plugins must share the same browser.Server,
-		// because it's internal state is not shared.
-		if s.srv == nil {
-			var srv proto.MuxServer
-			if l != nil && l.IsLevelEnabled(log.TraceLevel) {
-				srv = proto.LoggingGRPCServer(l, opts...)
-			} else {
-				srv = proto.GRPCServer(opts...)
+) error {
+	return acceptAndServe(broker, grantID,
+		func(opts []grpc.ServerOption) proto.MuxServer {
+			s.mu.Lock()
+			defer s.mu.Unlock()
+			// NOTE: unfortunately all plugins must share the same browser.Server,
+			// because it's internal state is not shared.
+			if s.srv == nil {
+				var srv proto.MuxServer
+				if l != nil && l.IsLevelEnabled(log.TraceLevel) {
+					srv = proto.LoggingGRPCServer(l, opts...)
+				} else {
+					srv = proto.GRPCServer(opts...)
+				}
+				grpc := srv.GRPC()
+				s.srv = srv
+				server := new(browser.Server)
+				server.Init(broker, s.b, lock, interruptWindowServer)
+				server.Logger = l
+				rpcServer := interruptBrowserServer(server, term.Interrupt)
+				proto.RegisterWindowManagerServer(grpc, rpcServer)
+				proto.RegisterResourceOpenerServer(grpc, rpcServer)
+				proto.RegisterMessengerServer(grpc, rpcServer)
+				proto.RegisterEventPublisherServer(grpc, rpcServer)
+				bproto.RegisterDocumentStoreServer(grpc, rpcServer)
 			}
-			grpc := srv.GRPC()
-			s.srv = srv
-			server := new(browser.Server)
-			server.Init(broker, s.b, lock, interruptWindowServer)
-			server.Logger = l
-			rpcServer := interruptBrowserServer(server, term.Interrupt)
-			proto.RegisterWindowManagerServer(grpc, rpcServer)
-			proto.RegisterResourceOpenerServer(grpc, rpcServer)
-			proto.RegisterMessengerServer(grpc, rpcServer)
-			proto.RegisterEventPublisherServer(grpc, rpcServer)
-			bproto.RegisterDocumentStoreServer(grpc, rpcServer)
-		}
-		return s.srv
-	})
+			return s.srv
+		})
 }
 
 // BrowserResources returns a map of Permission to a ResourceServer

@@ -84,8 +84,8 @@ func (c *Client) safeForceCloseHandler(brokerID uint32, reason string) error {
 	return err
 }
 
-func (c *Client) serveHandler(h EventHandler) uint32 {
-	brokerID, srv := proto.AcceptAndServe(c.broker, c.Logger,
+func (c *Client) serveHandler(h EventHandler) (uint32, error) {
+	brokerID, srv, err := proto.AcceptAndServe(c.broker, c.Logger,
 		func(handlerID uint32, srv proto.MuxServer) {
 			s := newEventHandlerServer(h, func() {
 				time.Sleep(gracefulShutdownWait)
@@ -94,10 +94,14 @@ func (c *Client) serveHandler(h EventHandler) uint32 {
 			s.logger = c.Logger
 			proto.RegisterEditorEventHandlerServer(srv.GRPC(), s)
 		})
+	if err != nil {
+		return 0, err
+	}
+
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.servers[uint64(brokerID)] = &handlerServerResource{h: h, srv: srv}
-	return brokerID
+	return brokerID, nil
 }
 
 // Edit requests editor server to edit buf.
@@ -132,13 +136,16 @@ func (c *Client) Editor(file workspace.URI) (Handler, error) {
 func (c *Client) SubscribeEditorEvents(evs []EventType, h EventHandler) error {
 	ctx := context.Background()
 
-	handlerID := c.serveHandler(h)
+	handlerID, err := c.serveHandler(h)
+	if err != nil {
+		return fmt.Errorf("serveHandler: %w", err)
+	}
 
 	req := proto.EditorSubscribeRequest{HandlerId: handlerID}
 	for _, ev := range evs {
 		req.Type = append(req.Type, Event{Type: ev}.protoType())
 	}
-	_, err := c.ed.Subscribe(ctx, &req)
+	_, err = c.ed.Subscribe(ctx, &req)
 	if err != nil {
 		reason := fmt.Sprintf("editor.Client.Subscribe: %v", err)
 		c.safeForceCloseHandler(handlerID, reason)
@@ -153,7 +160,7 @@ func (c *Client) SubscribeCommand(cmd string, h CommandHandler) error {
 	ctx := context.Background()
 
 	// re-use EventHandler logic
-	handlerID := c.serveHandler(
+	handlerID, err := c.serveHandler(
 		FuncEventHandler(func(ctx context.Context, ev Event) bool {
 			cmd := Command{
 				Name:     ev.Content,
@@ -166,9 +173,12 @@ func (c *Client) SubscribeCommand(cmd string, h CommandHandler) error {
 			cmd.Cursor.Window = ev.From
 			return h.HandleCommand(ctx, cmd)
 		}))
+	if err != nil {
+		return fmt.Errorf("serveHandler: %w", err)
+	}
 
 	req := proto.RegisterCommandRequest{Command: cmd, HandlerId: handlerID}
-	_, err := c.ed.Register(ctx, &req)
+	_, err = c.ed.Register(ctx, &req)
 	if err != nil {
 		reason := fmt.Sprintf("editor.Client.Register: %v", err)
 		c.safeForceCloseHandler(handlerID, reason)

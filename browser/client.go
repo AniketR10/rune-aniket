@@ -103,16 +103,17 @@ func (c *Client) Init(
 	c.failureTimeout = defaultFailureTimeout
 }
 
-func (c *Client) serveHandler(h Handler) (uint64, bool) {
+func (c *Client) serveHandler(h Handler) (uint64, bool, error) {
 	var brokerID uint64
 	var srv proto.MuxServer
+	var err error
 
 	tokenHandler, ok := h.(Token)
 	if ok {
 		brokerID = tokenHandler.ID
 	} else {
 		var brokerID32 uint32
-		brokerID32, srv = proto.AcceptAndServe(c.broker, c.Logger,
+		brokerID32, srv, err = proto.AcceptAndServe(c.broker, c.Logger,
 			func(handlerID uint32, srv proto.MuxServer) {
 				h = browserClientHandler{
 					Handler:   h,
@@ -124,12 +125,15 @@ func (c *Client) serveHandler(h Handler) (uint64, bool) {
 				proto.RegisterHandlerServer(srv.GRPC(), hsrv)
 			})
 		brokerID = uint64(brokerID32)
+		if err != nil {
+			return 0, false, err
+		}
 	}
 
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.servers[brokerID] = &handlerServerResource{h: h, srv: srv, brokerID: brokerID}
-	return brokerID, !ok
+	return brokerID, !ok, nil
 }
 
 func (c *Client) dialWindow(windowID uint64) (Window, error) {
@@ -217,7 +221,10 @@ func toProtoOrientation(o Orientation) proto.Orientation {
 }
 
 func (c *Client) split(split clientSplit, o Orientation, h Handler) (Window, error) {
-	handlerID, created := c.serveHandler(h)
+	handlerID, created, err := c.serveHandler(h)
+	if err != nil {
+		return nil, fmt.Errorf("serveHandler: %w", err)
+	}
 	req := proto.SplitRequest{HandlerId: handlerID, Orientation: toProtoOrientation(o)}
 	ctx := context.Background()
 	res, err := split(c.wm, ctx, &req)
@@ -246,10 +253,13 @@ func (c *Client) Split(o Orientation, h Handler) (Window, error) {
 
 // Bar satisfies Browser.
 func (c *Client) Bar(o Orientation, h tui.Handler) error {
-	handlerID, created := c.serveHandler(NopHandler(h))
+	handlerID, created, err := c.serveHandler(NopHandler(h))
+	if err != nil {
+		return fmt.Errorf("serveHandler: %w", err)
+	}
 	req := proto.BarRequest{HandlerId: handlerID, Orientation: toProtoOrientation(o)}
 	ctx := context.Background()
-	_, err := c.wm.Bar(ctx, &req)
+	_, err = c.wm.Bar(ctx, &req)
 	if err != nil {
 		if created {
 			reason := fmt.Sprintf("browser.Bar: %v", err)
@@ -406,7 +416,10 @@ func (c *Client) Floating(
 
 // Tab satisfies browser.WindowManager
 func (c *Client) Tab(uri workspace.URI, name string, h Handler) (Handler, error) {
-	handlerID, created := c.serveHandler(h)
+	handlerID, created, err := c.serveHandler(h)
+	if err != nil {
+		return nil, fmt.Errorf("serveHandler: %w", err)
+	}
 	req := proto.TabRequest{
 		HandlerId:    handlerID,
 		ResourceId:   uri.String(),

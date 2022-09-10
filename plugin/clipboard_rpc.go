@@ -2,6 +2,7 @@ package plugin
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"sync"
 	"time"
@@ -243,14 +244,17 @@ func newClipboardClient(
 
 func (c *clipboardClient) serveClipboardRegister(
 	r ClipboardRegister,
-) (*clipboardRegisterServer, uint32) {
+) (*clipboardRegisterServer, uint32, error) {
 	rs := &clipboardRegisterServer{r: r, locker: &c.mu}
-	brokerID, srv := proto.AcceptAndServe(c.broker, c.logger,
+	brokerID, srv, err := proto.AcceptAndServe(c.broker, c.logger,
 		func(handlerID uint32, srv proto.MuxServer) {
 			proto.RegisterClipboardRegisterServer(srv.GRPC(), rs)
 		})
+	if err != nil {
+		return nil, 0, err
+	}
 	rs.srv = srv
-	return rs, brokerID
+	return rs, brokerID, nil
 }
 
 func (c *clipboardClient) register(registerID string) (ClipboardRegister, error) {
@@ -272,9 +276,12 @@ func (c *clipboardClient) SetRegister(registerID string, r ClipboardRegister) er
 	}
 	c.mu.Unlock()
 	ctx := context.Background()
-	cc, handlerID := c.serveClipboardRegister(r)
+	cc, handlerID, err := c.serveClipboardRegister(r)
+	if err != nil {
+		return fmt.Errorf("serveClipboardRegister: %w", err)
+	}
 	req := proto.SetRegisterRequest{HandlerId: uint64(handlerID), RegisterId: registerID}
-	_, err := c.c.SetRegister(ctx, &req)
+	_, err = c.c.SetRegister(ctx, &req)
 	if err != nil {
 		_ = cc.Close()
 		return err

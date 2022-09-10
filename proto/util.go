@@ -15,7 +15,6 @@ import (
 	"github.com/ernestrc/go-tui/term"
 	"github.com/ernestrc/go-tui/workspace"
 	log "github.com/sirupsen/logrus"
-	grpc "google.golang.org/grpc"
 	"google.golang.org/grpc/connectivity"
 	"google.golang.org/grpc/grpclog"
 )
@@ -255,27 +254,25 @@ func MonitorConnection(
 func AcceptAndServe(
 	broker MuxBroker, logger *log.Logger,
 	register func(uint32, MuxServer),
-) (uint32, MuxServer) {
+) (uint32, MuxServer, error) {
 	brokerID := broker.NextId()
-
-	var wg sync.WaitGroup
-	var srv MuxServer
-	serverFunc := func(opts []grpc.ServerOption) MuxServer {
-		defer wg.Done()
-		if logger != nil && logger.IsLevelEnabled(log.TraceLevel) {
-			srv = LoggingGRPCServer(logger, opts...)
-		} else {
-			srv = GRPCServer(opts...)
-		}
-		register(brokerID, srv)
-		return srv
+	lis, err := broker.Accept(brokerID)
+	if err != nil {
+		return 0, nil, fmt.Errorf("Accept: %w", err)
 	}
 
-	wg.Add(1)
-	go broker.AcceptAndServe(brokerID, serverFunc)
-	wg.Wait()
+	var srv MuxServer
+	if logger != nil && logger.IsLevelEnabled(log.TraceLevel) {
+		srv = LoggingGRPCServer(logger)
+	} else {
+		srv = GRPCServer()
+	}
 
-	return brokerID, srv
+	register(brokerID, srv)
+
+	go srv.Serve(lis)
+
+	return brokerID, srv, nil
 }
 
 // NewURIFromProto maps proto.URI into a workspace.URI.

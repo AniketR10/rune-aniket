@@ -5,7 +5,6 @@ import (
 	"net"
 
 	"github.com/ernestrc/blue/retry"
-	grpc "google.golang.org/grpc"
 )
 
 type retryBroker struct {
@@ -32,15 +31,6 @@ func (b retryBroker) Accept(id uint32) (lis net.Listener, err error) {
 		return false
 	})
 	return
-}
-
-func (b retryBroker) AcceptAndServe(ID uint32, srv func(opts []grpc.ServerOption) MuxServer) {
-	lis, err := b.Accept(ID)
-	if err != nil {
-		panic(err)
-	}
-	server := srv([]grpc.ServerOption{})
-	go server.Serve(lis)
 }
 
 func (b retryBroker) Dial(ID uint32) (conn MuxConn, err error) {

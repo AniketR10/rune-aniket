@@ -10,7 +10,6 @@ import (
 
 type brokerage struct {
 	net.Listener
-	MuxServer
 }
 
 // satisfies to MuxBroker
@@ -37,28 +36,21 @@ func (t *dialBroker) NextId() uint32 {
 	return t.id
 }
 
-func (t *dialBroker) Accept(id uint32) (net.Listener, error) {
-	return net.Listen("tcp", ":0")
-}
-
-func (t *dialBroker) AcceptAndServe(
-	ID uint32, srv func(opts []grpc.ServerOption) MuxServer,
-) {
+func (t *dialBroker) Accept(ID uint32) (net.Listener, error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
 	if _, ok := t.conns[ID]; ok {
-		panic(fmt.Sprintf("trying to serve a connection that has been served already: %v", ID))
+		return nil, fmt.Errorf("trying to serve a connection that has been served already: %v", ID)
 	}
 
-	lis, err := t.Accept(ID)
+	lis, err := net.Listen("tcp", ":0")
 	if err != nil {
-		panic(err)
+		return nil, fmt.Errorf("Listen: %w", err)
 	}
-	server := srv([]grpc.ServerOption{})
-	go server.Serve(lis)
 
-	t.conns[ID] = brokerage{Listener: lis, MuxServer: server}
+	t.conns[ID] = brokerage{Listener: lis}
+	return lis, nil
 }
 
 func (t *dialBroker) Dial(ID uint32) (conn MuxConn, err error) {
@@ -78,7 +70,6 @@ func (t *dialBroker) Close() error {
 
 	for _, br := range t.conns {
 		br.Listener.Close()
-		br.MuxServer.Stop()
 	}
 	t.conns = make(map[uint32]brokerage)
 	return nil

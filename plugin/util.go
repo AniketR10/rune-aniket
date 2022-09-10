@@ -1,5 +1,10 @@
 package plugin
 
+import (
+	"github.com/ernestrc/go-tui/proto"
+	"google.golang.org/grpc"
+)
+
 // MergeResourceMap merges m1 with mn.
 // If permissions are overlapping, the last of passed prevails.
 func MergeResourceMap(
@@ -15,4 +20,17 @@ func MergeResourceMap(
 		}
 	}
 	return ret
+}
+
+func acceptAndServe(
+	broker proto.MuxBroker, ID uint32,
+	srv func(opts []grpc.ServerOption) proto.MuxServer,
+) error {
+	lis, err := broker.Accept(ID)
+	if err != nil {
+		return err
+	}
+	server := srv([]grpc.ServerOption{})
+	go server.Serve(lis)
+	return nil
 }

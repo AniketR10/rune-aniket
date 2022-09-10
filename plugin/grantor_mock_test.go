@@ -16,12 +16,13 @@ type mockResourceServer struct {
 func (s *mockResourceServer) Serve(
 	pluginID string, uid uint32,
 	mux proto.MuxBroker, l *log.Logger, lock sync.Locker,
-) {
+) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	s.muxes = append(s.muxes, mux)
 	s.srvd = append(s.srvd, uid)
+	return nil
 }
 
 func (s *mockResourceServer) served() []uint32 {

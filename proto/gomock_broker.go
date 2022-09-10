@@ -231,18 +231,6 @@ func (mr *MockMuxBrokerMockRecorder) Accept(id interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Accept", reflect.TypeOf((*MockMuxBroker)(nil).Accept), id)
 }
 
-// AcceptAndServe mocks base method.
-func (m *MockMuxBroker) AcceptAndServe(ID uint32, srv func([]grpc.ServerOption) MuxServer) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "AcceptAndServe", ID, srv)
-}
-
-// AcceptAndServe indicates an expected call of AcceptAndServe.
-func (mr *MockMuxBrokerMockRecorder) AcceptAndServe(ID, srv interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AcceptAndServe", reflect.TypeOf((*MockMuxBroker)(nil).AcceptAndServe), ID, srv)
-}
-
 // Close mocks base method.
 func (m *MockMuxBroker) Close() error {
 	m.ctrl.T.Helper()
