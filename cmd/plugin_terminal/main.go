@@ -4,9 +4,7 @@ import (
 	"context"
 	"net/http"
 	_ "net/http/pprof"
-	"strconv"
 	"sync"
-	"sync/atomic"
 
 	multierr "github.com/ernestrc/go-multierror"
 	"github.com/ernestrc/go-tui/browser"
@@ -55,7 +53,6 @@ type emulatorGrantee struct {
 	selectionAttr term.Attributes
 	shell         string
 	initialCmd    string
-	counter       int32
 }
 
 func (e *emulatorGrantee) Connected(broker proto.MuxBroker, config plugin.Config) {
@@ -159,10 +156,9 @@ func (e *emulatorGrantee) HandleCommand(
 		return
 	}
 
-	counter := atomic.AddInt32(&e.counter, 1)
 	log.Tracef("HandleCommand: creating new emulator handler")
 	h, err := newEmulator(e.wm, e.wp, e.p, e.m, e.c, e.shell,
-		e.initialCmd, strconv.Itoa(int(counter)), e.defAttr, e.selectionAttr)
+		e.initialCmd, e.defAttr, e.selectionAttr)
 	if err != nil {
 		log.Errorf("NewHandler: %s", err)
 		return

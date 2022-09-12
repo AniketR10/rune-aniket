@@ -7,8 +7,10 @@ import (
 	"os"
 	"os/exec"
 	"sync"
+	"syscall"
 
 	"github.com/creack/pty"
+	multierr "github.com/ernestrc/go-multierror"
 	"golang.org/x/term"
 )
 
@@ -23,6 +25,7 @@ type Terminal struct {
 	mu                sync.Mutex
 	windowManipulator WindowManipulator
 	pty               *os.File
+	tty               *os.File
 	reader            *bufio.Reader
 	updateChan        chan struct{}
 	closeChan         chan struct{}
@@ -61,6 +64,40 @@ func New(options ...Option) *Terminal {
 	return term
 }
 
+func (t *Terminal) start(cmd *exec.Cmd) (ret error) {
+	if cmd.SysProcAttr == nil {
+		cmd.SysProcAttr = &syscall.SysProcAttr{}
+	}
+	cmd.SysProcAttr.Setsid = true
+	cmd.SysProcAttr.Setctty = true
+
+	t.pty, t.tty, ret = pty.Open()
+	if ret != nil {
+		return ret
+	}
+
+	if cmd.Stdout == nil {
+		cmd.Stdout = t.tty
+	}
+	if cmd.Stderr == nil {
+		cmd.Stderr = t.tty
+	}
+	if cmd.Stdin == nil {
+		cmd.Stdin = t.tty
+	}
+
+	if err := cmd.Start(); err != nil {
+		ret = multierr.Append(ret, err)
+		if err := t.pty.Close(); err != nil {
+			ret = multierr.Append(ret, err)
+		}
+	}
+	if err := t.tty.Close(); err != nil {
+		ret = multierr.Append(ret, err)
+	}
+	return ret
+}
+
 func (t *Terminal) CreatePty() (*exec.Cmd, error) {
 	if t.shell == "" {
 		t.shell = os.Getenv("SHELL")
@@ -73,8 +110,7 @@ func (t *Terminal) CreatePty() (*exec.Cmd, error) {
 	c := exec.Command(t.shell)
 
 	// Start the command with a pty.
-	var err error
-	t.pty, err = pty.Start(c)
+	err := t.start(c)
 	if err != nil {
 		return nil, err
 	}
@@ -120,6 +156,11 @@ func (t *Terminal) reset() {
 // Pty exposes the underlying terminal pty, if it exists
 func (t *Terminal) Pty() *os.File {
 	return t.pty
+}
+
+// Tty exposes the underlying terminal tty, if it exists
+func (t *Terminal) Tty() *os.File {
+	return t.tty
 }
 
 func (t *Terminal) WriteToPty(data []byte) error {

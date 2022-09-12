@@ -43,12 +43,12 @@ func newEmulator(
 	wm browser.WindowManager, wp workspace.Workspace,
 	p browser.EventPublisher, m browser.Messenger,
 	c plugin.Clipboard,
-	shell string, initialCmd string, title string,
+	shell string, initialCmd string,
 	defAttr, selectionAttr term.Attributes,
 ) (*emulator, error) {
 	ret := new(emulator)
 	err := ret.init(wm, wp, p, m, c, shell, initialCmd,
-		title, defAttr, selectionAttr)
+		defAttr, selectionAttr)
 	if err != nil {
 		return nil, err
 	}
@@ -59,7 +59,7 @@ func (e *emulator) init(
 	wm browser.WindowManager, wp workspace.Workspace,
 	p browser.EventPublisher, m browser.Messenger,
 	c plugin.Clipboard,
-	shell string, initialCmd string, title string,
+	shell string, initialCmd string,
 	defAttr, selectionAttr term.Attributes,
 ) error {
 	e.wm = wm
@@ -93,7 +93,7 @@ func (e *emulator) init(
 	if err != nil {
 		return err
 	}
-	e.windowManipulator.SetTitle(e.terminal.Pty().Name() + title)
+	e.windowManipulator.SetTitle(e.terminal.Tty().Name())
 	e.mouseDriver = &mouseDriver{t: e.terminal, clipboard: c}
 	e.mouse = text.NewMouse(e.mouseDriver)
 
@@ -367,16 +367,20 @@ func (e *emulator) Close() error {
 	e.terminal.Lock()
 	defer e.terminal.Unlock()
 
-	if e.closed {
+	if e.closed || e.terminal == nil {
 		return nil
 	}
 
 	// undo circular dependency
 	e.mouseDriver.clipboard = nil
 	e.mouseDriver = nil
-
-	err := e.terminal.Pty().Close()
-	log.Debugf("(%p).emulator.Close: %s", e, err)
 	e.closed = true
-	return err
+
+	var ret error
+	if err := e.terminal.Pty().Close(); err != nil {
+		ret = multierr.Append(ret, err)
+		log.Errorf("(%p).emulator.Close(Pty): %s", e, err)
+	}
+	// we can't remove /dev/pts files so leave it up to the system
+	return ret
 }
