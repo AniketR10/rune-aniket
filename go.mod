@@ -9,7 +9,7 @@ require (
 	github.com/ernestrc/dom v0.2.5-0.20201125033726-789c946aa938
 	github.com/ernestrc/go-multierror v1.1.2
 	github.com/ernestrc/golang-internal-tools v0.0.0-20220317145801-f8b5a950857b
-	github.com/ernestrc/tcell/v2 v2.5.2-0.20220910003222-dfe85cea12e8
+	github.com/ernestrc/tcell/v2 v2.5.4-0.20220912211008-369b274e58ab
 	github.com/fsnotify/fsnotify v1.5.4
 	github.com/golang/mock v1.4.4
 	github.com/hashicorp/go-hclog v0.14.1

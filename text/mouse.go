@@ -122,9 +122,9 @@ func (h *Mouse) Handle(ev term.Event) (exit, handled bool) {
 
 	switch ev.Key {
 	case term.MouseWheelUp:
-		handled = h.delegate.ScrollUp(5)
+		handled = h.delegate.ScrollUp(1)
 	case term.MouseWheelDown:
-		handled = h.delegate.ScrollDown(5)
+		handled = h.delegate.ScrollDown(1)
 	case term.MouseLeft:
 		handled = h.handleLeftClickSelect(pos)
 	}
@@ -136,9 +136,9 @@ func (h *Mouse) handleLeftClickSelect(pos term.Coordinates) (handled bool) {
 		handled = true
 		h.delegate.SetSelectionEnd(pos)
 		if pos.Y < 4 {
-			h.delegate.ScrollUp(3)
+			h.delegate.ScrollUp(1)
 		} else if pos.Y > h.delegate.Height()-4 {
-			h.delegate.ScrollDown(3)
+			h.delegate.ScrollDown(1)
 		}
 		return
 	}

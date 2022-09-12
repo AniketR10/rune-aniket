@@ -138,7 +138,7 @@ func TestMouseHandle(t *testing.T) {
 			[]expect{
 				multiExpect(
 					expectIgnoreMouseAction(),
-					expectScrollUp(t, 5),
+					expectScrollUp(t, 1),
 				),
 			},
 			[]term.Event{evMouseKey(4, 8, term.MouseWheelUp)}},
@@ -146,7 +146,7 @@ func TestMouseHandle(t *testing.T) {
 			[]expect{
 				multiExpect(
 					expectIgnoreMouseAction(),
-					expectScrollDown(t, 5),
+					expectScrollDown(t, 1),
 				),
 			},
 			[]term.Event{evMouseKey(4, 8, term.MouseWheelDown)}},
@@ -158,11 +158,11 @@ func TestMouseHandle(t *testing.T) {
 					expectSetSelectionStart(t, 1, 2),
 				),
 				multiExpect(
-					expectScrollDown(t, 3),
+					expectScrollDown(t, 1),
 					expectSetSelectionEnd(t, 4, 8),
 				),
 				multiExpect(
-					expectScrollDown(t, 3),
+					expectScrollDown(t, 1),
 					expectSetSelectionEnd(t, 4, 9),
 				),
 				multiExpect(
