@@ -251,6 +251,7 @@ Love isn't love 'til you give it away.
 			assert.Equal(t, undoFortune, buf.String())
 		})
 	}
+
 	t.Run("undo/redo repeats", func(t *testing.T) {
 		buf := cell.NewBuffer()
 		buf.ReadFrom(strings.NewReader(undoFortune))
@@ -281,6 +282,70 @@ Love isn't love 'til you give it away.
 			quit, handled := vi.Handle(term.Event{Type: term.EventKey, Ch: 'u'})
 			assert.False(t, quit, i)
 			assert.True(t, handled, i)
+		}
+		assert.Equal(t, undoFortune, buf.String())
+	})
+
+	t.Run("undo/redo oob edits", func(t *testing.T) {
+		buf := cell.NewBuffer()
+		buf.ReadFrom(strings.NewReader(undoFortune))
+		vi := New(buf, uri)
+		vi.Resize(width, height)
+
+		buf.Edit(term.Coordinates{}, term.Coordinates{}, "abc")
+		assert.Equal(t, "abc"+undoFortune, buf.String())
+
+		quit, handled := vi.Handle(term.Event{Type: term.EventKey, Ch: 'u'})
+		assert.False(t, quit)
+		assert.True(t, handled)
+		assert.Equal(t, undoFortune, buf.String())
+
+		quit, handled = vi.Handle(term.Event{Type: term.EventKey, Key: term.KeyCtrlR})
+		assert.False(t, quit)
+		assert.True(t, handled)
+		assert.Equal(t, "abc"+undoFortune, buf.String())
+
+		quit, handled = vi.Handle(term.Event{Type: term.EventKey, Ch: 'u'})
+		assert.False(t, quit)
+		assert.True(t, handled)
+		assert.Equal(t, undoFortune, buf.String())
+	})
+
+	t.Run("undo/redo oob edits with regular edits", func(t *testing.T) {
+		buf := cell.NewBuffer()
+		buf.ReadFrom(strings.NewReader(undoFortune))
+		vi := New(buf, uri)
+		vi.Resize(width, height)
+
+		buf.Edit(term.Coordinates{}, term.Coordinates{}, "abc")
+		assert.Equal(t, "abc"+undoFortune, buf.String())
+		for _, ch := range "iasdfgh#" {
+			if ch == '#' {
+				vi.Handle(term.Event{Type: term.EventKey, Key: term.KeyEsc})
+			} else {
+				vi.Handle(term.Event{Type: term.EventKey, Ch: ch})
+			}
+		}
+		assert.Equal(t, "asdfghabc"+undoFortune, buf.String())
+
+		for i := 0; i < 2; i++ {
+			quit, handled := vi.Handle(term.Event{Type: term.EventKey, Ch: 'u'})
+			assert.False(t, quit)
+			assert.True(t, handled)
+		}
+		assert.Equal(t, undoFortune, buf.String())
+
+		for i := 0; i < 2; i++ {
+			quit, handled := vi.Handle(term.Event{Type: term.EventKey, Key: term.KeyCtrlR})
+			assert.False(t, quit)
+			assert.True(t, handled)
+		}
+		assert.Equal(t, "asdfghabc"+undoFortune, buf.String())
+
+		for i := 0; i < 2; i++ {
+			quit, handled := vi.Handle(term.Event{Type: term.EventKey, Ch: 'u'})
+			assert.False(t, quit)
+			assert.True(t, handled)
 		}
 		assert.Equal(t, undoFortune, buf.String())
 	})

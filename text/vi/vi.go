@@ -38,6 +38,8 @@ type Vi struct {
 
 	currEdited   bool
 	evEdited     bool
+	oob          bool // out-of-band edits (i.e. via CellEditor)
+	oobEdited    bool
 	currSnapshot snapshot
 	currEdits    []term.Event
 	repeatEdits  []term.Event
@@ -75,6 +77,7 @@ func (vi *Vi) Init(buf *cell.Buffer, resource workspace.URI, opts ...Option) {
 	vi.currEdits = make([]term.Event, 0)
 	vi.undoTimeline = make([]snapshot, 0)
 	vi.redoTimeline = make([]snapshot, 0)
+	vi.oob = true
 
 	vi.buf.Subscribe((*viSubscriber)(vi))
 	vi.snapshotContent()
@@ -131,7 +134,7 @@ func (vi *Vi) pushNewSnapshot() {
 }
 
 func (vi *viSubscriber) OnWillEdit(from, to term.Coordinates, str string) {
-	if !vi.currEdited && !vi.resetting {
+	if (!vi.oob && vi.oobEdited) || (!vi.currEdited && !vi.resetting) {
 		pubVi := (*Vi)(vi)
 		pubVi.currSnapshot.cursor = from
 		pubVi.pushNewSnapshot()
@@ -144,6 +147,7 @@ func (vi *viSubscriber) OnDidEdit(start, end term.Coordinates, old string) {
 		vi.evEdited = true
 		vi.currEdited = true
 	}
+	vi.oobEdited = vi.oob
 }
 
 // Paste satisfies text.Clipboard. See Copy.
@@ -168,6 +172,13 @@ func (vi *Vi) Handle(ev term.Event) (quit, handled bool) {
 		return vi.mouse.Handle(ev)
 	}
 
+	oobEdited := vi.oobEdited
+	if oobEdited {
+		vi.snapshotContent()
+		vi.resetEdits()
+		vi.oobEdited = false
+	}
+
 	switch mode {
 	case normalMode:
 		switch ev.Type {
@@ -189,9 +200,15 @@ func (vi *Vi) Handle(ev term.Event) (quit, handled bool) {
 	}
 
 	vi.evEdited = false
+	vi.oob = false
 	prevMode := vi.handler.mode()
 	quit, handled = vi.handler.Handle(ev)
 	nextMode := vi.handler.mode()
+	vi.oob = true
+
+	if oobEdited {
+		return
+	}
 
 	if prevMode == nextMode {
 		if !isEditMode(prevMode) && vi.evEdited {
