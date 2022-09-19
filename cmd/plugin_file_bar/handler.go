@@ -314,7 +314,10 @@ func (h *fileBarEditorHandler) Handle(
 }
 
 func (h *fileBarEditorHandler) Close() error {
-	atomic.StoreUint32(&h.exit, 1)
+	closing := atomic.CompareAndSwapUint32(&h.exit, 0, 1)
+	if !closing {
+		return nil // already closed
+	}
 	close(h.ch)
 	return nil
 }
