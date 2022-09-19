@@ -3,7 +3,7 @@ package plugin
 import (
 	"context"
 
-	bproto "github.com/ernestrc/blue/rpc"
+	bproto "github.com/ernestrc/blue/datastore/rpc"
 	"github.com/ernestrc/go-tui/proto"
 )
 
@@ -18,6 +18,7 @@ type browserServer interface {
 // this structure wraps a browser.Browser to
 // provide interrupt on write requests coming from the wire
 type interruptBrowser struct {
+	bproto.UnimplementedDocumentStoreServer
 	proto.UnimplementedEventPublisherServer
 	proto.UnimplementedMessengerServer
 	proto.UnimplementedResourceOpenerServer

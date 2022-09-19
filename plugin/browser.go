@@ -3,7 +3,7 @@ package plugin
 import (
 	"sync"
 
-	bproto "github.com/ernestrc/blue/rpc"
+	bproto "github.com/ernestrc/blue/datastore/rpc"
 	"github.com/ernestrc/go-tui/browser"
 	"github.com/ernestrc/go-tui/proto"
 	"github.com/ernestrc/go-tui/term"

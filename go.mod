@@ -5,7 +5,7 @@ go 1.18
 require (
 	github.com/atotto/clipboard v0.1.2
 	github.com/creack/pty v1.1.18
-	github.com/ernestrc/blue v0.0.0-20210211011506-d4a38bdf2ac3
+	github.com/ernestrc/blue v1.6.0
 	github.com/ernestrc/dom v0.2.5-0.20201125033726-789c946aa938
 	github.com/ernestrc/go-multierror v1.1.2
 	github.com/ernestrc/golang-internal-tools v0.0.0-20220317145801-f8b5a950857b
@@ -18,12 +18,12 @@ require (
 	github.com/mattn/go-runewidth v0.0.13
 	github.com/sirupsen/logrus v1.6.0
 	github.com/sourcegraph/go-diff v0.6.1
-	github.com/stretchr/testify v1.6.1
+	github.com/stretchr/testify v1.7.0
 	go.uber.org/goleak v1.0.0
 	golang.org/x/crypto v0.0.0-20220321153916-2c7772ba3064
 	golang.org/x/term v0.0.0-20220722155259-a9ba230a4035
-	google.golang.org/grpc v1.34.0
-	google.golang.org/protobuf v1.25.0
+	google.golang.org/grpc v1.45.0
+	google.golang.org/protobuf v1.27.1
 	gopkg.in/yaml.v3 v3.0.0-20200615113413-eeeca48fe776
 )
 
@@ -50,7 +50,7 @@ require (
 	go.opencensus.io v0.22.4 // indirect
 	golang.org/x/lint v0.0.0-20200302205851-738671d3881b // indirect
 	golang.org/x/mod v0.6.0-dev.0.20220106191415-9b9b3d81d5e3 // indirect
-	golang.org/x/net v0.0.0-20211112202133-69e39bad7dc2 // indirect
+	golang.org/x/net v0.0.0-20220225172249-27dd8689420f // indirect
 	golang.org/x/oauth2 v0.0.0-20200107190931-bf48bf16ab8d // indirect
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c // indirect
 	golang.org/x/sys v0.0.0-20220808155132-1c4a2a72c664 // indirect
@@ -63,12 +63,11 @@ require (
 )
 
 require (
-	github.com/fatih/color v1.7.0 // indirect
-	github.com/golang/protobuf v1.4.2 // indirect
-	github.com/google/go-cmp v0.5.2 // indirect
-	github.com/mattn/go-colorable v0.1.4 // indirect
-	google.golang.org/genproto v0.0.0-20201214200347-8c77b98c765d // indirect
-	gopkg.in/check.v1 v1.0.0-20190902080502-41f04d3bba15 // indirect
+	github.com/fatih/color v1.10.0 // indirect
+	github.com/golang/protobuf v1.5.2 // indirect
+	github.com/google/go-cmp v0.5.5 // indirect
+	github.com/mattn/go-colorable v0.1.8 // indirect
+	google.golang.org/genproto v0.0.0-20220314164441-57ef72a4c106 // indirect
 )
 
 replace github.com/hashicorp/go-plugin => github.com/ernestrc/go-plugin v1.4.5

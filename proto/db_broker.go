@@ -63,21 +63,21 @@ func (t *dbBroker) NextId() uint32 {
 
 	ctx := context.Background()
 	retries := 3 // retries for unknown errors
-	retry.Retry(ctx, retry.LimitStrategy(math.MaxInt32), func(ctx context.Context) bool {
+	retry.Retry(ctx, retry.LimitStrategy(math.MaxInt32), func(ctx context.Context) (bool, error) {
 		t.id++
 		key, doc := makeNextIDDocument(t.id)
 		err := t.svc.Create(ctx, key, doc)
 		if err == document.ErrAlreadyExists {
-			return true
+			return true, err
 		}
 		if err != nil {
 			if retries == 0 {
 				panic(err)
 			}
 			retries--
-			return true
+			return true, err
 		}
-		return false
+		return false, err
 	})
 
 	return t.id

@@ -5,7 +5,7 @@ import (
 	"sync"
 	"testing"
 
-	bproto "github.com/ernestrc/blue/rpc"
+	bproto "github.com/ernestrc/blue/datastore/rpc"
 	"github.com/ernestrc/go-tui/proto"
 	gomock "github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"

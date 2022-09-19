@@ -23,24 +23,18 @@ func (b retryBroker) NextId() uint32 {
 
 func (b retryBroker) Accept(id uint32) (lis net.Listener, err error) {
 	ctx := context.Background()
-	retry.Retry(ctx, b.s, func(ctx context.Context) bool {
+	retry.Retry(ctx, b.s, func(ctx context.Context) (bool, error) {
 		lis, err = b.b.Accept(id)
-		if err != nil {
-			return true
-		}
-		return false
+		return true, err
 	})
 	return
 }
 
 func (b retryBroker) Dial(ID uint32) (conn MuxConn, err error) {
 	ctx := context.Background()
-	retry.Retry(ctx, b.s, func(ctx context.Context) bool {
+	retry.Retry(ctx, b.s, func(ctx context.Context) (bool, error) {
 		conn, err = b.b.Dial(ID)
-		if err != nil {
-			return true
-		}
-		return false
+		return true, err
 	})
 	return
 }
