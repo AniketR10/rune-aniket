@@ -161,7 +161,7 @@ func (c *Cursor) Mark() CursorMark {
 // MoveToMark moves the cursor to the position represented by mark.
 func (c *Cursor) MoveToMark(mark CursorMark) CursorMark {
 	ret := c.cursor
-	c.setCursor(mark.internal)
+	c.setCursor(mark.internal, true)
 	return CursorMark{internal: ret}
 }
 
@@ -205,7 +205,7 @@ func (c *Cursor) MoveToScroll(pos term.Coordinates) (
 // the bounds of the current view, then underlying scroll is used
 // to seek to pos.
 func (c *Cursor) moveToScroll(pos term.Coordinates) {
-	c.setCursor(c.scrollToWindowCoordinates(pos))
+	c.setCursor(c.scrollToWindowCoordinates(pos), true)
 }
 
 func (c *Cursor) seekToScrollCoordinates() {
@@ -241,12 +241,20 @@ func (c *Cursor) seekToScrollCoordinates() {
 }
 
 // note that pos is window coordinates, not scroll coordinates
-func (c *Cursor) setCursor(pos term.Coordinates) {
+func (c *Cursor) setCursor(pos term.Coordinates, seek bool) {
+	if c.cursor == pos {
+		// even if pos is the same, content could have scrolled
+		if c.selection.mode != noSelection {
+			c.setSelection()
+		}
+		return
+	}
+
 	c.cursor = pos
 
 	// this is an optimization to disable expensive calculations
 	// during composite moves that call setCursor multiple times
-	if c.scroll.PublishingEnabled() {
+	if seek && c.scroll.PublishingEnabled() {
 		c.seekToScrollCoordinates()
 	}
 
@@ -308,7 +316,7 @@ func (c *Cursor) MoveStartLine() (ok bool) {
 	if !ok {
 		ok = pos != c.cursor
 	}
-	c.setCursor(pos)
+	c.setCursor(pos, false)
 	return
 }
 
@@ -328,7 +336,7 @@ func (c *Cursor) MoveEndLine() (ok bool) {
 func (c *Cursor) moveEndLine() (ok bool) {
 	y := c.cursorAtScroll().Y
 	if y >= c.rows() {
-		c.setCursor(term.Coordinates{X: 0, Y: c.cursor.Y})
+		c.setCursor(term.Coordinates{X: 0, Y: c.cursor.Y}, false)
 		return
 	}
 
@@ -363,7 +371,7 @@ func (c *Cursor) moveEndLine() (ok bool) {
 		ok = c.scroll.SeekLeft()
 	}
 	ok = c.cursor != pos
-	c.setCursor(pos)
+	c.setCursor(pos, false)
 
 	return
 }
@@ -376,7 +384,7 @@ func (c *Cursor) MoveFirstLine() (ok bool) {
 	if !ok {
 		ok = pos != c.cursor
 	}
-	c.setCursor(pos)
+	c.setCursor(pos, false)
 	return
 }
 
@@ -394,7 +402,7 @@ func (c *Cursor) MoveLastLine() (ok bool) {
 	if !ok {
 		ok = pos != c.cursor
 	}
-	c.setCursor(pos)
+	c.setCursor(pos, false)
 
 	return
 }
@@ -404,15 +412,15 @@ func (c *Cursor) MoveLastLine() (ok bool) {
 // of the content is reached.
 func (c *Cursor) MoveDown() (ok bool) {
 	pos := c.Coordinates() // use actual render coordinates, wraps included
-	if pos.Y >= c.scroll.Height() {
+	if pos.Y+1 >= c.scroll.Height() {
 		ok = c.scroll.SeekDown()
 		if ok {
-			c.setCursor(c.cursor)
+			c.setCursor(c.cursor, false)
 		}
 		return
 	}
 	ok = true
-	c.setCursor(term.Coordinates{X: c.cursor.X, Y: c.cursor.Y + 1})
+	c.setCursor(term.Coordinates{X: c.cursor.X, Y: c.cursor.Y + 1}, false)
 	return
 }
 
@@ -427,12 +435,12 @@ func (c *Cursor) MoveUp() (ok bool) {
 				cursor.Y = 0
 				ok = true
 			}
-			c.setCursor(cursor)
+			c.setCursor(cursor, false)
 		}
 		return
 	}
 	ok = true
-	c.setCursor(term.Coordinates{X: c.cursor.X, Y: c.cursor.Y - 1})
+	c.setCursor(term.Coordinates{X: c.cursor.X, Y: c.cursor.Y - 1}, false)
 	return
 }
 
@@ -447,12 +455,12 @@ func (c *Cursor) MoveLeft() (ok bool) {
 				cursor.X = 0
 				ok = true
 			}
-			c.setCursor(cursor)
+			c.setCursor(cursor, false)
 		}
 		return
 	}
 	ok = true
-	c.setCursor(term.Coordinates{X: c.cursor.X - 1, Y: c.cursor.Y})
+	c.setCursor(term.Coordinates{X: c.cursor.X - 1, Y: c.cursor.Y}, false)
 	return
 }
 
@@ -467,18 +475,18 @@ func (c *Cursor) MoveRight() (ok bool) {
 			return
 		}
 		ok = true
-		c.setCursor(term.Coordinates{X: c.cursor.X + 1, Y: c.cursor.Y})
+		c.setCursor(term.Coordinates{X: c.cursor.X + 1, Y: c.cursor.Y}, false)
 		return
 	}
 	if c.cursor.X+1 >= c.scroll.Width() {
 		ok = c.scroll.SeekRight()
 		if ok {
-			c.setCursor(c.cursor)
+			c.setCursor(c.cursor, false)
 		}
 		return
 	}
 	ok = true
-	c.setCursor(term.Coordinates{X: c.cursor.X + 1, Y: c.cursor.Y})
+	c.setCursor(term.Coordinates{X: c.cursor.X + 1, Y: c.cursor.Y}, false)
 	return
 }
 
@@ -599,7 +607,7 @@ func (c *Cursor) moveAfterRune(skip, special map[rune]struct{}, move func() bool
 }
 
 func (c *Cursor) revertTo(pos, offset term.Coordinates) {
-	c.setCursor(pos)
+	c.setCursor(pos, true)
 	c.scroll.SetOffset(offset)
 }
 
@@ -802,7 +810,7 @@ func (c *Cursor) Insert(r rune) {
 	pos := c.buffer().Insert(c.cursorAtScroll(), r)
 	c.selection.mode = mode
 	c.setSelection()
-	c.setCursor(c.scrollToWindowCoordinates(pos))
+	c.setCursor(c.scrollToWindowCoordinates(pos), true)
 }
 
 // InsertString inserts str at the current cursor's position.
@@ -815,7 +823,7 @@ func (c *Cursor) InsertString(str string) {
 	c.selection.mode = mode
 
 	c.setSelection()
-	c.setCursor(c.scrollToWindowCoordinates(until))
+	c.setCursor(c.scrollToWindowCoordinates(until), true)
 }
 
 // InsertBlock inserts a string in a block-wise fashion meaning it
@@ -855,9 +863,16 @@ func (c *Cursor) Paste(str string, mode SelectMode, after bool) {
 		}
 	case LineSelection:
 		if after {
-			c.MoveDown()
-			c.MoveStartLine()
-			cur := c.Mark()
+			movedDown := c.MoveDown()
+			var cur CursorMark
+			if !movedDown {
+				// force set cursor past last line
+				cur = c.Mark()
+				c.setCursor(term.Coordinates{X: 0, Y: c.cursor.Y + 1}, false)
+			} else {
+				c.MoveStartLine()
+				cur = c.Mark()
+			}
 			c.InsertString(str)
 			c.MoveToMark(cur)
 		} else {
@@ -886,7 +901,7 @@ func (c *Cursor) Delete() (ok bool) {
 	var pos term.Coordinates
 	pos, _, ok = c.buffer().DeleteCell(c.cursorAtScroll())
 	if ok {
-		c.setCursor(c.scrollToWindowCoordinates(pos))
+		c.setCursor(c.scrollToWindowCoordinates(pos), true)
 	}
 	return
 }
@@ -1101,7 +1116,7 @@ func (c *Cursor) Redo() bool {
 	if !ok {
 		return false
 	}
-	c.setCursor(c.scrollToWindowCoordinates(at))
+	c.setCursor(c.scrollToWindowCoordinates(at), true)
 	return true
 }
 
@@ -1114,7 +1129,7 @@ func (c *Cursor) Undo() bool {
 	if !ok {
 		return false
 	}
-	c.setCursor(c.scrollToWindowCoordinates(at))
+	c.setCursor(c.scrollToWindowCoordinates(at), true)
 	return true
 }
 
@@ -1171,7 +1186,7 @@ func (c *Cursor) DeleteSelection() (ok bool) {
 		start, str = c.buffer().DeleteBlock(from, to)
 	}
 	c.selection.mode = noSelection
-	c.setCursor(c.scrollToWindowCoordinates(start))
+	c.setCursor(c.scrollToWindowCoordinates(start), true)
 	ok = str != ""
 	return
 }
@@ -1186,7 +1201,7 @@ func (c *Cursor) CopySelection(registerID string, clip Clipboard) (ok bool, err 
 	selection := c.Selection()
 	mode := c.selection.mode
 	c.Unselect()
-	c.setCursor(c.scrollToWindowCoordinates(c.selection.scrollFrom))
+	c.setCursor(c.scrollToWindowCoordinates(c.selection.scrollFrom), true)
 
 	ok = true
 	clip.Copy(registerID, ClipboardData{Text: selection, Metadata: mode})
@@ -1267,7 +1282,7 @@ func (c *Cursor) moveToChar(
 	resultAtScroll := term.Coordinates{Y: cursor.Y, X: result.X}
 
 	resultAtWindow := c.scrollToWindowCoordinates(resultAtScroll)
-	c.setCursor(resultAtWindow)
+	c.setCursor(resultAtWindow, true)
 
 	return true
 }
@@ -1307,7 +1322,7 @@ func (c *Cursor) ShiftLineRight() {
 	cursor := c.cursorAtScroll()
 	n := c.buffer().ShiftRowRight(cursor.Y)
 	cursor.X += n
-	c.setCursor(c.scrollToWindowCoordinates(cursor))
+	c.setCursor(c.scrollToWindowCoordinates(cursor), true)
 }
 
 // ShiftLineLeft shifts the current cursor's line one tab to the left. It returns
@@ -1322,7 +1337,7 @@ func (c *Cursor) ShiftLineLeft() bool {
 	if cursor.X < 0 {
 		cursor.X = 0
 	}
-	c.setCursor(c.scrollToWindowCoordinates(cursor))
+	c.setCursor(c.scrollToWindowCoordinates(cursor), true)
 	return true
 }
 

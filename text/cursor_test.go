@@ -336,7 +336,7 @@ func TestCursorMove(t *testing.T) {
 					e.MoveDown()
 				}
 			},
-			term.Coordinates{X: 0, Y: 1000},
+			term.Coordinates{X: 0, Y: 999},
 		},
 		{
 			"MoveDown should seek down if reached last line in window but not at last line",
@@ -355,11 +355,10 @@ func TestCursorMove(t *testing.T) {
 				e.cursor.Y = 9
 				e.scroll.SeekEndFile()
 				offsetY := e.scroll.Offset().Y
-				assert.True(t, e.MoveDown())
 				assert.False(t, e.MoveDown())
 				assert.Equal(t, offsetY, e.scroll.Offset().Y)
 			},
-			term.Coordinates{X: 0, Y: 32},
+			term.Coordinates{X: 0, Y: 31},
 		},
 		{
 			"MoveUp should do nothing if already on first line",
