@@ -10,7 +10,6 @@ import (
 
 	"github.com/ernestrc/blue/datastore/document"
 	browserpb "github.com/ernestrc/go-tui/browser/rpc"
-	"github.com/ernestrc/go-tui/handler"
 	handlerpb "github.com/ernestrc/go-tui/handler/rpc"
 	"github.com/ernestrc/go-tui/proto"
 	"github.com/ernestrc/go-tui/term"
@@ -132,7 +131,7 @@ func (s *Server) dialHandler(handlerID uint64) (Handler, error) {
 
 	pbClient := handlerpb.NewHandlerClient(handlerConn)
 	pbClient = newIOWaitUnlockHandlerClient(pbClient, s.browser.Locker)
-	cc := handler.NewClient(pbClient)
+	cc := handlerpb.NewClient(pbClient)
 	cc.Logger = s.Logger
 
 	ctx, cancelFn := context.WithCancel(context.Background())

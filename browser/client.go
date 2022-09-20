@@ -10,7 +10,6 @@ import (
 	"github.com/ernestrc/blue/datastore/document"
 	"github.com/ernestrc/go-tui"
 	browserpb "github.com/ernestrc/go-tui/browser/rpc"
-	"github.com/ernestrc/go-tui/handler"
 	handlerpb "github.com/ernestrc/go-tui/handler/rpc"
 	"github.com/ernestrc/go-tui/proto"
 	"github.com/ernestrc/go-tui/term"
@@ -123,7 +122,7 @@ func (c *Client) serveHandler(h Handler) (uint64, bool, error) {
 					c:         c,
 					handlerID: uint64(handlerID),
 				}
-				hsrv := handler.NewServer(h)
+				hsrv := handlerpb.NewServer(h)
 				hsrv.Logger = c.Logger
 				handlerpb.RegisterHandlerServer(srv.GRPC(), hsrv)
 			})

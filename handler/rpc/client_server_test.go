@@ -1,4 +1,4 @@
-package handler
+package rpc
 
 import (
 	"errors"
@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/ernestrc/go-tui"
-	handlerpb "github.com/ernestrc/go-tui/handler/rpc"
+	"github.com/ernestrc/go-tui/handler"
 	"github.com/ernestrc/go-tui/term"
 	testutil "github.com/ernestrc/go-tui/util/test"
 	"github.com/stretchr/testify/assert"
@@ -30,7 +30,7 @@ func init() {
 }
 
 func testHandler() tui.Handler {
-	ret := NewTestHandler()
+	ret := handler.NewTestHandler()
 	ret.Manual.Summary = testHandlerManualDesc
 	ret.Manual.Keys = testHandlerKeys
 	return ret
@@ -73,7 +73,7 @@ func testRPCHandlerCursor(t *testing.T, rpcHandler *Client) {
 }
 
 type testResizeHandler struct {
-	TestHandler
+	handler.TestHandler
 	width, height int
 }
 
@@ -153,14 +153,14 @@ func newServerClient(t *testing.T, testHandler tui.Handler) (*Client, func()) {
 	require.NoError(t, err)
 
 	grpcServer := grpc.NewServer()
-	handlerpb.RegisterHandlerServer(grpcServer, NewServer(testHandler))
+	RegisterHandlerServer(grpcServer, NewServer(testHandler))
 
 	go grpcServer.Serve(lis)
 
 	conn, err := grpc.Dial(lis.Addr().String(), grpc.WithInsecure())
 	require.NoError(t, err)
 
-	return NewClient(handlerpb.NewHandlerClient(conn)), func() {
+	return NewClient(NewHandlerClient(conn)), func() {
 		conn.Close()
 		grpcServer.Stop()
 	}
