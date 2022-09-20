@@ -1,4 +1,4 @@
-package text
+package rpc
 
 import (
 	"context"
@@ -16,7 +16,8 @@ import (
 	"github.com/ernestrc/go-tui/handler"
 	"github.com/ernestrc/go-tui/proto"
 	"github.com/ernestrc/go-tui/term"
-	textpb "github.com/ernestrc/go-tui/text/rpc"
+	"github.com/ernestrc/go-tui/text"
+	testutil "github.com/ernestrc/go-tui/util/test"
 	"github.com/ernestrc/go-tui/workspace"
 	gomock "github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
@@ -49,7 +50,7 @@ func setupIntTest(
 	t *testing.T, broker proto.MuxBroker, s *Server,
 ) (*Client, func()) {
 	conn, closeFn := doSetupIntTest(t, broker, func(grpcServer *grpc.Server) {
-		textpb.RegisterEditorServer(grpcServer, s)
+		RegisterEditorServer(grpcServer, s)
 	})
 	client := NewClient(broker, conn)
 	return client, func() {
@@ -71,7 +72,7 @@ func setupWmIntTest(
 	}
 }
 
-func expectInitialServerSubscribe(t *testing.T, mock *MockEditor) {
+func expectInitialServerSubscribe(t *testing.T, mock *text.MockEditor) {
 	mock.EXPECT().SubscribeEditorEvents(gomock.Any(), gomock.Any()).
 		Return(nil).
 		Times(1)
@@ -84,7 +85,7 @@ func TestClientServerIntegration(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 		b := proto.NewDialBroker()
-		ed := NewMockEditor(ctrl)
+		ed := text.NewMockEditor(ctrl)
 		expectInitialServerSubscribe(t, ed)
 		s := NewServer(b, ed, nopLocker{})
 
@@ -103,7 +104,7 @@ func TestClientServerIntegration(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 		b := proto.NewDialBroker()
-		ed := NewMockEditor(ctrl)
+		ed := text.NewMockEditor(ctrl)
 		expectInitialServerSubscribe(t, ed)
 		s := NewServer(b, ed, nopLocker{})
 
@@ -123,7 +124,7 @@ func TestClientServerIntegration(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 		b := proto.NewDialBroker()
-		ed := NewMockEditor(ctrl)
+		ed := text.NewMockEditor(ctrl)
 		expectInitialServerSubscribe(t, ed)
 		s := NewServer(b, ed, nopLocker{})
 
@@ -143,30 +144,30 @@ func TestClientServerIntegration(t *testing.T) {
 		str1 := "Granola Lola"
 		tsuite := []struct {
 			name       string
-			evType     EventType
-			trigger    func(t *testing.T, resourceName string, ed Editor, buf *cell.Buffer)
+			evType     text.EventType
+			trigger    func(t *testing.T, resourceName string, ed text.Editor, buf *cell.Buffer)
 			start, end *term.Coordinates
 			content    *string
 		}{
 			{
 				"Edit->EventTypeOpen",
-				EventTypeOpen,
-				func(t *testing.T, resourceName string, ed Editor, buf *cell.Buffer) {
+				text.EventTypeOpen,
+				func(t *testing.T, resourceName string, ed text.Editor, buf *cell.Buffer) {
 					ed.Edit(uri, buf)
 				}, nil, nil, nil,
 			},
 			{
 				"Edit->EventTypeEdit",
-				EventTypeEdit,
-				func(t *testing.T, resourceName string, ed Editor, buf *cell.Buffer) {
+				text.EventTypeEdit,
+				func(t *testing.T, resourceName string, ed text.Editor, buf *cell.Buffer) {
 					ed.Edit(uri, buf)
 					buf.WriteString(str1)
 				}, &term.Coordinates{}, &term.Coordinates{}, &str1,
 			},
 			{
 				"Edit->EventTypeEdit",
-				EventTypeEdit,
-				func(t *testing.T, resourceName string, ed Editor, buf *cell.Buffer) {
+				text.EventTypeEdit,
+				func(t *testing.T, resourceName string, ed text.Editor, buf *cell.Buffer) {
 					buf.WriteString(str1)
 					ed.Edit(uri, buf)
 					buf.DeleteRow(0)
@@ -174,8 +175,8 @@ func TestClientServerIntegration(t *testing.T) {
 			},
 			{
 				"Handle->EventTypeCursor",
-				EventTypeCursor,
-				func(t *testing.T, resourceName string, ed Editor, buf *cell.Buffer) {
+				text.EventTypeCursor,
+				func(t *testing.T, resourceName string, ed text.Editor, buf *cell.Buffer) {
 					buf.WriteString(str1)
 					h, err := ed.Edit(uri, buf)
 					assert.NoError(t, err)
@@ -190,15 +191,15 @@ func TestClientServerIntegration(t *testing.T) {
 				var wg sync.WaitGroup
 				var mu sync.Mutex
 				b := proto.NewDialBroker()
-				ed := &testEditor{}
+				ed := text.NopEditor()
 				s := NewServer(b, ed, &mu)
 
 				client, closeFn := setupIntTest(t, b, s)
 				defer closeFn()
 
 				wg.Add(1)
-				err := client.SubscribeEditorEvents([]EventType{tcase.evType},
-					FuncEventHandler(func(ctx context.Context, ev Event) bool {
+				err := client.SubscribeEditorEvents([]text.EventType{tcase.evType},
+					text.FuncEventHandler(func(ctx context.Context, ev text.Event) bool {
 						defer wg.Done()
 						if tcase.start != nil {
 							assert.Equal(t, *tcase.start, ev.Start)
@@ -230,7 +231,7 @@ func TestClientServerIntegration(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 		b := proto.NewDialBroker()
-		ed := NewMockEditor(ctrl)
+		ed := text.NewMockEditor(ctrl)
 		expectInitialServerSubscribe(t, ed)
 		s := NewServer(b, ed, new(sync.Mutex))
 
@@ -241,10 +242,10 @@ func TestClientServerIntegration(t *testing.T) {
 		h, err := client.Edit(uri, cell.NewBuffer())
 		require.NoError(t, err)
 
-		l := LocationSlice([]Location{loc2})
+		l := text.LocationSlice([]text.Location{loc2})
 
 		ed.EXPECT().SetLocationList(gomock.Any(), gomock.Any(), gomock.Any()).
-			DoAndReturn(func(h Handler, id string, ll LocationList) error {
+			DoAndReturn(func(h text.Handler, id string, ll text.LocationList) error {
 				defer wg.Done()
 				assertLocation(t, ll, 0, loc2)
 				assert.Equal(t, locID, id)
@@ -263,7 +264,7 @@ func TestClientServerIntegration(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 		b := proto.NewDialBroker()
-		ed := NewMockEditor(ctrl)
+		ed := text.NewMockEditor(ctrl)
 		expectInitialServerSubscribe(t, ed)
 		s := NewServer(b, ed, nopLocker{})
 
@@ -278,7 +279,7 @@ func TestClientServerIntegration(t *testing.T) {
 		w := client.CellEditor(h)
 		at := term.Coordinates{X: 1}
 
-		ed.EXPECT().CellEditor(gomock.Any()).Return(NewCellEditor(buf.Editor())).Times(1)
+		ed.EXPECT().CellEditor(gomock.Any()).Return(text.NewCellEditor(buf.Editor())).Times(1)
 		from, to, _, err := w.Edit(at, at, "el\nAridio")
 
 		require.NoError(t, err)
@@ -286,7 +287,7 @@ func TestClientServerIntegration(t *testing.T) {
 		require.Equal(t, term.Coordinates{X: 6, Y: 1}, to)
 		require.Equal(t, " el\nAridio", buf.String())
 
-		ed.EXPECT().CellEditor(gomock.Any()).Return(NewCellEditor(buf.Editor())).Times(1)
+		ed.EXPECT().CellEditor(gomock.Any()).Return(text.NewCellEditor(buf.Editor())).Times(1)
 		start, end, str, err := w.Edit(term.Coordinates{}, term.Coordinates{Y: 1}, "")
 
 		require.NoError(t, err)
@@ -300,7 +301,7 @@ func TestClientServerIntegration(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 		b := proto.NewDialBroker()
-		ed := NewMockEditor(ctrl)
+		ed := text.NewMockEditor(ctrl)
 		expectInitialServerSubscribe(t, ed)
 		s := NewServer(b, ed, nopLocker{})
 
@@ -313,7 +314,7 @@ func TestClientServerIntegration(t *testing.T) {
 		h, err := client.Edit(uri, buf)
 		require.NoError(t, err)
 
-		ed.EXPECT().CellView(gomock.Any()).Return(NewCellView(buf.View())).Times(2)
+		ed.EXPECT().CellView(gomock.Any()).Return(text.NewCellView(buf.View())).Times(2)
 
 		r := client.CellView(h)
 		cells, err := r.RawCells()
@@ -330,7 +331,7 @@ func TestClientServerIntegration(t *testing.T) {
 
 func TestRPCTab(t *testing.T) {
 	var closeFns []func()
-	testTabIntegration(t, func(ed Editor, mu *sync.Mutex) (*Component, browser.WindowManager, error) {
+	testTabIntegration(t, func(ed text.Editor, mu *sync.Mutex) (*text.Component, browser.WindowManager, error) {
 		c, err := newTestComponentErr(ed)
 		if err != nil {
 			return nil, nil, err
@@ -355,13 +356,13 @@ func TestRPCTab(t *testing.T) {
 func TestRPCRegister(t *testing.T) {
 	var closeFns []func()
 
-	testRegister(t, func(ed Editor, mu *sync.Mutex, res workspace.URI) (*Component, Editor, error) {
+	testRegister(t, func(ed text.Editor, mu *sync.Mutex, res workspace.URI) (*text.Component, text.Editor, error) {
 		c, err := newTestComponentErr(ed)
 		if err != nil {
 			return nil, nil, err
 		}
 
-		if m, ok := ed.(*MockEditor); ok {
+		if m, ok := ed.(*text.MockEditor); ok {
 			expectInitialServerSubscribe(t, m)
 		}
 
@@ -380,4 +381,177 @@ func TestRPCRegister(t *testing.T) {
 	for _, closeFn := range closeFns {
 		closeFn()
 	}
+}
+
+func assertLocation(t *testing.T, l text.LocationList, idx int, loca text.Location) {
+	resetLocationList(l)
+	var i int
+	for loc, ok := l.Current(); ok; loc, ok = l.Next() {
+		if idx == i {
+			assert.Equal(t, loca, loc)
+			return
+		}
+		i++
+	}
+}
+func assertLocationListLen(t *testing.T, l text.LocationList, length int) {
+	resetLocationList(l)
+	var i int
+	for _, ok := l.Current(); ok; _, ok = l.Next() {
+		i++
+	}
+	assert.Equal(t, length, i)
+}
+
+func resetLocationList(l text.LocationList) {
+	for {
+		_, ok := l.Prev()
+		if !ok {
+			break
+		}
+	}
+}
+
+func testTabIntegration(t *testing.T,
+	constructor func(ed text.Editor, mu *sync.Mutex) (*text.Component, browser.WindowManager, error)) {
+	t.Run("switches to a tab upon call to SetContent", func(t *testing.T) {
+		cases := []testutil.HandlerSequenceTestCase{
+			{"",
+				`┌──────────────────┐
+│$$  ##            │
+├──────────────────┤
+│##################│
+│##################│
+│##################│
+│##################│
+│##################│
+│##################│
+└──────────────────┘`},
+		}
+
+		fn := func(t *testing.T) tui.Handler {
+			var mu sync.Mutex
+			c, wm, err := constructor(text.NopEditor(), &mu)
+			require.NoError(t, err)
+
+			resource1, err := workspace.ParseURI("file:///a")
+			require.NoError(t, err)
+			resource2, err := workspace.ParseURI("file:///b")
+			require.NoError(t, err)
+			b1 := browser.NewTestHandler()
+			b1.Ch = '$'
+			_, err = wm.Tab(resource1, "$$", b1)
+			require.NoError(t, err)
+
+			b2 := browser.NewTestHandler()
+			b2.Ch = '#'
+			t2, err := wm.Tab(resource2, "##", b2)
+			require.NoError(t, err)
+
+			win, err := wm.Focus()
+			require.NoError(t, err)
+
+			require.NoError(t, win.SetContent(t2))
+			return handler.Sync(&mu, handler.Nop(c.Browser()))
+		}
+		testutil.TestHandlerIsolated(t, fn, 20, 10, cases)
+	})
+}
+
+type testWorkspace struct {
+	content       string
+	flusherCloser *testFlusherCloser
+	expectError   error
+}
+
+type testFlusherCloser struct {
+	closeFn func() error
+	flushFn func() error
+}
+
+func (t *testFlusherCloser) Close() error {
+	if t.closeFn != nil {
+		return t.closeFn()
+	}
+	return nil
+}
+func (t *testFlusherCloser) Flush() error {
+	if t.flushFn != nil {
+		return t.flushFn()
+	}
+	return nil
+}
+
+func (t *testWorkspace) Open(
+	file workspace.URI, buf *cell.Buffer, swapDir workspace.URI, readOnly bool,
+) (workspace.FlusherCloser, error) {
+	if t.expectError != nil {
+		return nil, t.expectError
+	}
+	if t.flusherCloser != nil {
+		return t.flusherCloser, nil
+	}
+	if t.content != "" {
+		buf.WriteString(t.content)
+	}
+	return &testFlusherCloser{}, nil
+}
+
+func (t *testWorkspace) Recover(
+	file, swapFilePath workspace.URI, buf *cell.Buffer, force bool,
+) (workspace.FlusherCloser, error) {
+	return t.Open(file, buf, workspace.URI{}, false)
+}
+
+func newTestComponentErr(ed text.Editor) (*text.Component, error) {
+	cfg := text.DefaultConfig()
+	c, err := text.NewComponent(ed, &testWorkspace{}, cfg)
+	if err != nil {
+		return nil, err
+	}
+	return c, nil
+}
+
+func testRegister(t *testing.T,
+	constructor func(ed text.Editor, mu *sync.Mutex, resource workspace.URI) (*text.Component, text.Editor, error)) {
+	t.Run("Registered handler is unsubscribed upon returning exit=true", func(t *testing.T) {
+		var mu sync.Mutex
+		resource1, err := workspace.ParseURI("file:///HERS")
+		require.NoError(t, err)
+		myArgs := []string{"a", "bbbbbbbbbbbbbbbbbbbbb"}
+		myCmd := "BUY"
+		c, sut, err := constructor(text.NopEditor(), &mu, resource1)
+		require.NoError(t, err)
+
+		mu.Lock()
+		h1, err := c.Edit(resource1, cell.NewBuffer())
+		mu.Unlock()
+		require.NoError(t, err)
+
+		var called int
+		var wg sync.WaitGroup
+		sut.SubscribeCommand(myCmd, text.FuncCommandHandler(func(ctx context.Context, cmd text.Command) bool {
+			defer wg.Done()
+			assert.Equal(t, myCmd, cmd.Name)
+			assert.Equal(t, myArgs, cmd.Args)
+			called++
+			return true
+		}))
+
+		wg.Add(1)
+		mu.Lock()
+		cmd := text.Command{Resource: h1, URI: resource1, Name: myCmd, Args: myArgs}
+		assert.True(t, c.DispatchCommand(cmd))
+		mu.Unlock()
+
+		wg.Wait()
+
+		for i := 0; i < 20; i++ {
+			mu.Lock()
+			c.DispatchCommand(cmd)
+			mu.Unlock()
+		}
+
+		assert.Equal(t, 1, called)
+	})
 }

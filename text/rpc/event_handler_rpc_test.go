@@ -1,4 +1,4 @@
-package text
+package rpc
 
 import (
 	"context"
@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/ernestrc/go-tui/browser"
-	textpb "github.com/ernestrc/go-tui/text/rpc"
+	"github.com/ernestrc/go-tui/text"
 	gomock "github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -17,7 +17,7 @@ import (
 )
 
 func newClientServerIntegration(
-	t *testing.T, h *MockEventHandler,
+	t *testing.T, h *text.MockEventHandler,
 	serverQuitCallback, clientQuitCallback func(),
 ) (*eventHandlerClient, func()) {
 	lis, err := net.Listen("tcp", ":0")
@@ -25,7 +25,7 @@ func newClientServerIntegration(
 
 	grpcServer := grpc.NewServer()
 	server := newEventHandlerServer(h, serverQuitCallback)
-	textpb.RegisterEditorEventHandlerServer(grpcServer, server)
+	RegisterEditorEventHandlerServer(grpcServer, server)
 
 	go grpcServer.Serve(lis)
 
@@ -55,20 +55,20 @@ func consumeError(t *testing.T, wg *sync.WaitGroup, client *eventHandlerClient) 
 func TestEventHandlerRPC(t *testing.T) {
 	content := "myContent"
 	cmdArgs := []string{"a", "b"}
-	ev := Event{
-		Type: EventTypeFlush,
+	ev := text.Event{
+		Type: text.EventTypeFlush,
 		URI:  uri,
 		Resource: Token{Token: browser.Token{ID: 1},
 			resource: uri},
 		Content: content,
-		cmdArgs: cmdArgs,
+		Args:    cmdArgs,
 	}
 
 	t.Run("asynchronously dispatches events to remote event handler", func(t *testing.T) {
 		var wg sync.WaitGroup
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
-		h := NewMockEventHandler(ctrl)
+		h := text.NewMockEventHandler(ctrl)
 
 		client, closeFn := newClientServerIntegration(t, h, func() {}, func() {})
 		defer closeFn()
@@ -76,7 +76,7 @@ func TestEventHandlerRPC(t *testing.T) {
 		go consumeError(t, &wg, client)
 
 		h.EXPECT().Handle(gomock.Any(), gomock.Any()).
-			DoAndReturn(func(ctx context.Context, _ev Event) bool {
+			DoAndReturn(func(ctx context.Context, _ev text.Event) bool {
 				assert.Equal(t, ev, _ev)
 				wg.Done()
 				return false
@@ -94,7 +94,7 @@ func TestEventHandlerRPC(t *testing.T) {
 
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
-		h := NewMockEventHandler(ctrl)
+		h := text.NewMockEventHandler(ctrl)
 
 		client, closeFn := newClientServerIntegration(t, h, wg.Done, wg.Done)
 		defer closeFn()
@@ -114,7 +114,7 @@ func TestEventHandlerRPC(t *testing.T) {
 		var wg sync.WaitGroup
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
-		h := NewMockEventHandler(ctrl)
+		h := text.NewMockEventHandler(ctrl)
 
 		client, closeFn := newClientServerIntegration(t, h, func() {}, func() {})
 		defer closeFn()

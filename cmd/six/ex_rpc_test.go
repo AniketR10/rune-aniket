@@ -133,7 +133,7 @@ func TestRPCBrowserCloseLeak(t *testing.T) {
 	uri, err := workspace.ParseURI("file:///a")
 	require.NoError(t, err)
 	var destructor func()
-	_, b, err := newTestRPCBrowser(t, &destructor)(text.Mock(), text.WithFile(uri))
+	_, b, err := newTestRPCBrowser(t, &destructor)(text.NopEditor(), text.WithFile(uri))
 	require.NoError(t, err)
 	defer destructor()
 

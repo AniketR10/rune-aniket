@@ -1,10 +1,13 @@
-package text
+package rpc
 
-import "github.com/ernestrc/go-tui/proto"
+import (
+	"github.com/ernestrc/go-tui/proto"
+	"github.com/ernestrc/go-tui/text"
+)
 
 type handlerServerResource struct {
 	srv proto.MuxServer
-	h   EventHandler
+	h   text.EventHandler
 }
 
 func (r *handlerServerResource) Close() error {

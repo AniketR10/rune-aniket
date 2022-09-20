@@ -1,4 +1,4 @@
-package text
+package rpc
 
 import (
 	"context"
@@ -11,7 +11,7 @@ import (
 	"github.com/ernestrc/go-tui/browser"
 	"github.com/ernestrc/go-tui/proto"
 	termpb "github.com/ernestrc/go-tui/term/rpc"
-	textpb "github.com/ernestrc/go-tui/text/rpc"
+	"github.com/ernestrc/go-tui/text"
 	"github.com/ernestrc/go-tui/workspace"
 	log "github.com/sirupsen/logrus"
 )
@@ -22,19 +22,19 @@ var (
 
 // Server serves an Editor over GRPC.
 type Server struct {
-	textpb.UnimplementedEditorServer
+	UnimplementedEditorServer
 	Logger *log.Logger
 
 	broker proto.MuxBroker
 
 	// editor handlers currently open
 	uriToID     map[string]uint32
-	idToHandler map[uint32]Handler
+	idToHandler map[uint32]text.Handler
 
 	clients map[uint64]io.Closer
 
 	editor struct {
-		Editor
+		text.Editor
 		sync.Locker
 	}
 
@@ -52,7 +52,7 @@ type serverEventHandler struct {
 	exitNext bool
 }
 
-func (s *serverEventHandler) Handle(ctx context.Context, ev Event) bool {
+func (s *serverEventHandler) Handle(ctx context.Context, ev text.Event) bool {
 	if s.exitNext {
 		return true
 	}
@@ -81,7 +81,7 @@ func (s *serverEventHandler) Handle(ctx context.Context, ev Event) bool {
 
 // NewServer allocates storage for a new Server and initializes it.
 func NewServer(
-	broker proto.MuxBroker, editor Editor, lock sync.Locker,
+	broker proto.MuxBroker, editor text.Editor, lock sync.Locker,
 ) *Server {
 	ret := new(Server)
 	ret.Init(broker, editor, lock)
@@ -90,18 +90,18 @@ func NewServer(
 
 // Init initializes this Server with broker and browser.
 func (s *Server) Init(
-	broker proto.MuxBroker, editor Editor, lock sync.Locker,
+	broker proto.MuxBroker, editor text.Editor, lock sync.Locker,
 ) {
 	s.broker = broker
 	s.editor.Editor = editor
 	s.editor.Locker = lock
 	s.uriToID = make(map[string]uint32)
-	s.idToHandler = make(map[uint32]Handler)
+	s.idToHandler = make(map[uint32]text.Handler)
 	s.clients = make(map[uint64]io.Closer)
 	s.failureTimeout = defaultFailureTimeout
 	s.errChan = make(chan error)
 
-	evs := []EventType{EventTypeClose, EventTypeOpen}
+	evs := []text.EventType{text.EventTypeClose, text.EventTypeOpen}
 	s.editor.SubscribeEditorEvents(evs, s)
 }
 
@@ -122,14 +122,14 @@ func (s *Server) cleanResource(resource workspace.URI) {
 }
 
 // Handle satisfies editor.Editor so server can consume EventypeClose and Open events.
-func (s *Server) Handle(ctx context.Context, ev Event) bool {
+func (s *Server) Handle(ctx context.Context, ev text.Event) bool {
 	switch ev.Type {
-	case EventTypeOpen:
+	case text.EventTypeOpen:
 		_, ok := s.uriToID[ev.URI.String()]
 		if !ok {
 			s.addNextHandlerResource(ev.URI, ev.Resource)
 		}
-	case EventTypeClose:
+	case text.EventTypeClose:
 		go func() {
 			// wait for other events to be dispatched before cleaning resources
 			<-ctx.Done()
@@ -192,7 +192,7 @@ func (s *Server) safeForceCloseHandler(brokerID uint32, reason string) error {
 	return err
 }
 
-func (s *Server) dialHandler(handlerID uint32) (EventHandler, error) {
+func (s *Server) dialHandler(handlerID uint32) (text.EventHandler, error) {
 	s.editor.Lock()
 	res, ok := s.clients[uint64(handlerID)]
 	s.editor.Unlock()
@@ -237,7 +237,7 @@ func (s *Server) dialHandler(handlerID uint32) (EventHandler, error) {
 	return h, nil
 }
 
-func (s *Server) addNextHandlerResource(resource workspace.URI, h Handler) uint32 {
+func (s *Server) addNextHandlerResource(resource workspace.URI, h text.Handler) uint32 {
 	handlerID := s.broker.NextId()
 	s.uriToID[resource.String()] = handlerID
 	s.idToHandler[handlerID] = h
@@ -247,7 +247,7 @@ func (s *Server) addNextHandlerResource(resource workspace.URI, h Handler) uint3
 	return handlerID
 }
 
-func (s *Server) ensureAvailable(resource workspace.URI, h Handler) uint32 {
+func (s *Server) ensureAvailable(resource workspace.URI, h text.Handler) uint32 {
 	handlerID, ok := s.uriToID[resource.String()]
 	if !ok {
 		handlerID = s.addNextHandlerResource(resource, h)
@@ -256,7 +256,7 @@ func (s *Server) ensureAvailable(resource workspace.URI, h Handler) uint32 {
 }
 
 func (s *Server) editHandler(
-	resource workspace.URI, get func(workspace.URI) (Handler, error),
+	resource workspace.URI, get func(workspace.URI) (text.Handler, error),
 ) (uint32, error) {
 	s.editor.Lock()
 	defer s.editor.Unlock()
@@ -271,50 +271,50 @@ func (s *Server) editHandler(
 	return handlerID, nil
 }
 
-// Edit satisfies textpb.EditorServer
-func (s *Server) Edit(ctx context.Context, in *textpb.EditRequest) (
-	*textpb.EditResponse, error,
+// Edit satisfies EditorServer
+func (s *Server) Edit(ctx context.Context, in *EditRequest) (
+	*EditResponse, error,
 ) {
-	uri, err := textpb.NewURIFromProto(in.GetResourceName())
+	uri, err := NewURIFromProto(in.GetResourceName())
 	if err != nil {
 		return nil, err
 	}
 
 	handlerID, err := s.editHandler(uri,
-		func(resource workspace.URI) (Handler, error) {
-			buf := textpb.EditRequestToBuffer(in)
+		func(resource workspace.URI) (text.Handler, error) {
+			buf := EditRequestToBuffer(in)
 			return s.editor.Edit(uri, buf)
 		})
 	if err != nil {
 		return nil, err
 	}
 
-	return &textpb.EditResponse{HandlerId: handlerID}, nil
+	return &EditResponse{HandlerId: handlerID}, nil
 }
 
-// Editor satisfies textpb.EditorServer
-func (s *Server) Editor(ctx context.Context, in *textpb.EditorRequest) (
-	*textpb.EditorResponse, error,
+// Editor satisfies EditorServer
+func (s *Server) Editor(ctx context.Context, in *EditorRequest) (
+	*EditorResponse, error,
 ) {
-	uri, err := textpb.NewURIFromProto(in.GetResourceName())
+	uri, err := NewURIFromProto(in.GetResourceName())
 	if err != nil {
 		return nil, err
 	}
 
 	handlerID, err := s.editHandler(uri,
-		func(resource workspace.URI) (Handler, error) {
+		func(resource workspace.URI) (text.Handler, error) {
 			return s.editor.Editor.Editor(uri)
 		})
 	if err != nil {
 		return nil, err
 	}
 
-	return &textpb.EditorResponse{HandlerId: handlerID}, nil
+	return &EditorResponse{HandlerId: handlerID}, nil
 }
 
-// Subscribe satisfies textpb.EditorServer
-func (s *Server) Subscribe(ctx context.Context, in *textpb.EditorSubscribeRequest) (
-	*textpb.EditorSubscribeResponse, error,
+// Subscribe satisfies EditorServer
+func (s *Server) Subscribe(ctx context.Context, in *EditorSubscribeRequest) (
+	*EditorSubscribeResponse, error,
 ) {
 	handlerID := in.GetHandlerId()
 	handler, err := s.dialHandler(handlerID)
@@ -322,7 +322,7 @@ func (s *Server) Subscribe(ctx context.Context, in *textpb.EditorSubscribeReques
 		return nil, err
 	}
 
-	var evTypes []EventType
+	var evTypes []text.EventType
 	for _, ev := range in.GetType() {
 		evType, err := protoTypeToModel(ev)
 		if err != nil {
@@ -340,12 +340,12 @@ func (s *Server) Subscribe(ctx context.Context, in *textpb.EditorSubscribeReques
 		return nil, err
 	}
 
-	return new(textpb.EditorSubscribeResponse), nil
+	return new(EditorSubscribeResponse), nil
 }
 
-// Register satisfies textpb.EditorServer
-func (s *Server) Register(ctx context.Context, in *textpb.RegisterCommandRequest) (
-	*textpb.RegisterCommandResponse, error,
+// Register satisfies EditorServer
+func (s *Server) Register(ctx context.Context, in *RegisterCommandRequest) (
+	*RegisterCommandResponse, error,
 ) {
 	handlerID := in.GetHandlerId()
 	handler, err := s.dialHandler(handlerID)
@@ -353,15 +353,15 @@ func (s *Server) Register(ctx context.Context, in *textpb.RegisterCommandRequest
 		return nil, err
 	}
 
-	commander := FuncCommandHandler(func(ctx context.Context, cmd Command) bool {
-		return handler.Handle(ctx, Event{
-			Type:     eventTypeCommand,
+	commander := text.FuncCommandHandler(func(ctx context.Context, cmd text.Command) bool {
+		return handler.Handle(ctx, text.Event{
+			Type:     text.EventTypeCommand,
 			Content:  cmd.Name,
 			Resource: cmd.Resource,
 			URI:      cmd.URI,
 			Start:    cmd.Cursor.Content,
 			From:     cmd.Cursor.Window,
-			cmdArgs:  cmd.Args,
+			Args:  cmd.Args,
 		})
 	})
 
@@ -376,12 +376,12 @@ func (s *Server) Register(ctx context.Context, in *textpb.RegisterCommandRequest
 		return nil, err
 	}
 
-	return new(textpb.RegisterCommandResponse), nil
+	return new(RegisterCommandResponse), nil
 }
 
-func getLocations(locs []*textpb.SetLocationListRequest_Location) (ret []Location) {
+func getLocations(locs []*SetLocationListRequest_Location) (ret []text.Location) {
 	for _, loc := range locs {
-		ret = append(ret, Location{
+		ret = append(ret, text.Location{
 			Attr:    loc.GetAttr().ToModel(),
 			From:    loc.GetFrom().ToModel(),
 			To:      loc.GetTo().ToModel(),
@@ -391,9 +391,9 @@ func getLocations(locs []*textpb.SetLocationListRequest_Location) (ret []Locatio
 	return
 }
 
-// SetLocationList satisfies textpb.EditorServer
-func (s *Server) SetLocationList(ctx context.Context, in *textpb.SetLocationListRequest) (
-	*textpb.SetLocationListResponse, error,
+// SetLocationList satisfies EditorServer
+func (s *Server) SetLocationList(ctx context.Context, in *SetLocationListRequest) (
+	*SetLocationListResponse, error,
 ) {
 	handlerID := in.GetHandlerId()
 	locs := in.GetLocations()
@@ -407,31 +407,31 @@ func (s *Server) SetLocationList(ctx context.Context, in *textpb.SetLocationList
 		return nil, errHandlerNotFound
 	}
 
-	err := s.editor.SetLocationList(h, id, LocationSlice(getLocations(locs)))
+	err := s.editor.SetLocationList(h, id, text.LocationSlice(getLocations(locs)))
 	if err != nil {
 		return nil, err
 	}
 
-	return new(textpb.SetLocationListResponse), nil
+	return new(SetLocationListResponse), nil
 }
 
-// MoveToNextLocation satisfies textpb.EditorServer
-func (s *Server) MoveToNextLocation(ctx context.Context, in *textpb.MoveToLocationRequest) (
-	res *textpb.MoveToLocationResponse, err error,
+// MoveToNextLocation satisfies EditorServer
+func (s *Server) MoveToNextLocation(ctx context.Context, in *MoveToLocationRequest) (
+	res *MoveToLocationResponse, err error,
 ) {
 	return s.moveToLocation(ctx, in, true)
 }
 
-// MoveToPrevLocation satisfies textpb.EditorServer
-func (s *Server) MoveToPrevLocation(ctx context.Context, in *textpb.MoveToLocationRequest) (
-	res *textpb.MoveToLocationResponse, err error,
+// MoveToPrevLocation satisfies EditorServer
+func (s *Server) MoveToPrevLocation(ctx context.Context, in *MoveToLocationRequest) (
+	res *MoveToLocationResponse, err error,
 ) {
 	return s.moveToLocation(ctx, in, false)
 }
 
-// SetCursor satisfies textpb.EditorServer
-func (s *Server) SetCursor(ctx context.Context, in *textpb.SetCursorRequest) (
-	*textpb.SetCursorResponse, error,
+// SetCursor satisfies EditorServer
+func (s *Server) SetCursor(ctx context.Context, in *SetCursorRequest) (
+	*SetCursorResponse, error,
 ) {
 	handlerID := in.GetHandlerId()
 	pos := in.GetPos()
@@ -449,12 +449,12 @@ func (s *Server) SetCursor(ctx context.Context, in *textpb.SetCursorRequest) (
 		return nil, err
 	}
 
-	return new(textpb.SetCursorResponse), nil
+	return new(SetCursorResponse), nil
 }
 
-// Cursor satisfies textpb.EditorServer
-func (s *Server) Cursor(ctx context.Context, in *textpb.CursorRequest) (
-	*textpb.CursorResponse, error,
+// Cursor satisfies EditorServer
+func (s *Server) Cursor(ctx context.Context, in *CursorRequest) (
+	*CursorResponse, error,
 ) {
 	handlerID := in.GetHandlerId()
 
@@ -474,12 +474,12 @@ func (s *Server) Cursor(ctx context.Context, in *textpb.CursorRequest) (
 	var protoPos termpb.Coordinates
 	protoPos.FromModel(pos)
 
-	return &textpb.CursorResponse{Pos: &protoPos}, nil
+	return &CursorResponse{Pos: &protoPos}, nil
 }
 
 func (s *Server) moveToLocation(
-	ctx context.Context, in *textpb.MoveToLocationRequest, next bool,
-) (res *textpb.MoveToLocationResponse, err error) {
+	ctx context.Context, in *MoveToLocationRequest, next bool,
+) (res *MoveToLocationResponse, err error) {
 	handlerID := in.GetHandlerId()
 	id := in.GetListId()
 
@@ -501,13 +501,13 @@ func (s *Server) moveToLocation(
 		return nil, err
 	}
 
-	res = new(textpb.MoveToLocationResponse)
+	res = new(MoveToLocationResponse)
 	return res, nil
 }
 
-// EditCell satisfies textpb.EditorServer
-func (s *Server) EditCell(ctx context.Context, in *textpb.EditCellRequest) (
-	*textpb.EditCellResponse, error,
+// EditCell satisfies EditorServer
+func (s *Server) EditCell(ctx context.Context, in *EditCellRequest) (
+	*EditCellResponse, error,
 ) {
 	handlerID := in.GetHandlerId()
 	start := in.GetStart().ToModel()
@@ -531,7 +531,7 @@ func (s *Server) EditCell(ctx context.Context, in *textpb.EditCellRequest) (
 	protoFrom.FromModel(from)
 	protoTo.FromModel(to)
 
-	res := &textpb.EditCellResponse{
+	res := &EditCellResponse{
 		From: &protoFrom,
 		To:   &protoTo,
 		Old:  old,
@@ -539,9 +539,9 @@ func (s *Server) EditCell(ctx context.Context, in *textpb.EditCellRequest) (
 	return res, nil
 }
 
-// RawCells satisfies textpb.EditorServer
-func (s *Server) RawCells(ctx context.Context, in *textpb.RawCellsRequest) (
-	*textpb.RawCellsResponse, error,
+// RawCells satisfies EditorServer
+func (s *Server) RawCells(ctx context.Context, in *RawCellsRequest) (
+	*RawCellsResponse, error,
 ) {
 	handlerID := in.GetHandlerId()
 
@@ -558,7 +558,7 @@ func (s *Server) RawCells(ctx context.Context, in *textpb.RawCellsRequest) (
 		return nil, err
 	}
 
-	return textpb.NewRawCellsResponse(cells), nil
+	return NewRawCellsResponse(cells), nil
 }
 
 // Close closes all resources associated with this server.
@@ -578,7 +578,7 @@ func (s *Server) Close() (err error) {
 	return err
 }
 
-func (s *Server) getHandler(call string, handlerID uint32) (Handler, bool) {
+func (s *Server) getHandler(call string, handlerID uint32) (text.Handler, bool) {
 	h, ok := s.idToHandler[handlerID]
 	s.tryLog(log.TraceLevel,
 		"(%p editor.Server): %s: found handler with id %d: %p",

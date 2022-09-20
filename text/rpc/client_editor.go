@@ -1,11 +1,10 @@
-package text
+package rpc
 
 import (
 	"context"
 
 	"github.com/ernestrc/go-tui/term"
 	termpb "github.com/ernestrc/go-tui/term/rpc"
-	textpb "github.com/ernestrc/go-tui/text/rpc"
 )
 
 type clientWriter struct {
@@ -21,7 +20,7 @@ func (w clientWriter) Edit(
 	var protoStart, protoEnd termpb.Coordinates
 	protoStart.FromModel(start)
 	protoEnd.FromModel(end)
-	req := textpb.EditCellRequest{
+	req := EditCellRequest{
 		HandlerId: w.handlerID,
 		Start:     &protoStart,
 		End:       &protoEnd,

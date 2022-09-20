@@ -1,4 +1,4 @@
-package text
+package rpc
 
 import (
 	"context"
@@ -10,12 +10,25 @@ import (
 	prototest "github.com/ernestrc/go-tui/proto/test"
 	"github.com/ernestrc/go-tui/term"
 	termpb "github.com/ernestrc/go-tui/term/rpc"
-	textpb "github.com/ernestrc/go-tui/text/rpc"
+	"github.com/ernestrc/go-tui/text"
 	"github.com/ernestrc/go-tui/workspace"
 	gomock "github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
+)
+
+var (
+	loc1 = text.Location{
+		To:   term.Coordinates{X: 1, Y: 3},
+		Attr: term.Attributes{Fg: term.AttrBold},
+	}
+	loc2 = text.Location{
+		From:    term.Coordinates{X: 1, Y: 3},
+		Attr:    term.Attributes{Fg: term.ColorBlack, Bg: term.ColorGreen},
+		Message: "wsb: hold BBBY",
+	}
+	loc3 = text.Location{}
 )
 
 func newTestClient(ctrl *gomock.Controller) (
@@ -39,14 +52,14 @@ func expectClientEdit(
 		DoAndReturn(func(
 			ctx context.Context, method string, args interface{},
 			reply interface{}, opts ...grpc.CallOption) error {
-			editReq, ok := args.(*textpb.EditRequest)
+			editReq, ok := args.(*EditRequest)
 			require.True(t, ok)
 
-			buf := textpb.EditRequestToBuffer(editReq)
+			buf := EditRequestToBuffer(editReq)
 			assert.Equal(t, expectedContent, buf.String())
 			assert.Equal(t, uri.String(), editReq.ResourceName.GetUri())
 
-			_, ok = reply.(*textpb.EditResponse)
+			_, ok = reply.(*EditResponse)
 			assert.True(t, ok)
 			return nil
 		}).
@@ -93,7 +106,7 @@ func TestClientEdit(t *testing.T) {
 func expectClientSubscribe(
 	t *testing.T, mockCC *proto.MockClientConnInterface,
 	expectedHandlerID uint32,
-	expectedEventTypes []EventType,
+	expectedEventTypes []text.EventType,
 ) {
 	mockCC.EXPECT().
 		Invoke(gomock.Any(),
@@ -103,18 +116,18 @@ func expectClientSubscribe(
 		DoAndReturn(func(
 			ctx context.Context, method string, args interface{},
 			reply interface{}, opts ...grpc.CallOption) error {
-			req, ok := args.(*textpb.EditorSubscribeRequest)
+			req, ok := args.(*EditorSubscribeRequest)
 			require.True(t, ok)
 
 			assert.Equal(t, expectedHandlerID, req.GetHandlerId())
 
-			var expectedProtoTypes []textpb.EditorEvent_Type
+			var expectedProtoTypes []EditorEvent_Type
 			for _, ev := range expectedEventTypes {
-				expectedProtoTypes = append(expectedProtoTypes, Event{Type: ev}.protoType())
+				expectedProtoTypes = append(expectedProtoTypes, protoType(text.Event{Type: ev}))
 			}
 			assert.Equal(t, expectedProtoTypes, req.GetType())
 
-			_, ok = reply.(*textpb.EditorSubscribeResponse)
+			_, ok = reply.(*EditorSubscribeResponse)
 			assert.True(t, ok)
 			return nil
 		}).
@@ -127,10 +140,10 @@ func TestClientSubscribe(t *testing.T) {
 		defer ctrl.Finish()
 
 		broker, cc, c := newTestClient(ctrl)
-		handler := NewMockEventHandler(ctrl)
+		handler := text.NewMockEventHandler(ctrl)
 
 		brokerID := uint32(22)
-		evTypes := []EventType{EventTypeFlush, EventTypeClose, EventTypeOpen}
+		evTypes := []text.EventType{text.EventTypeFlush, text.EventTypeClose, text.EventTypeOpen}
 		expectClientSubscribe(t, cc, brokerID, evTypes)
 
 		prototest.ExpectBrokerServe(t, brokerID, broker)
@@ -144,9 +157,9 @@ func TestClientSubscribe(t *testing.T) {
 
 func TestSetLocationListRequest(t *testing.T) {
 	t.Run("non-nil zero slice", func(t *testing.T) {
-		l := LocationSlice([]Location{})
+		l := text.LocationSlice([]text.Location{})
 		handlerID := uint32(23)
-		expected := textpb.SetLocationListRequest{
+		expected := SetLocationListRequest{
 			HandlerId: handlerID,
 			ListId:    locID,
 			Locations: nil,
@@ -155,9 +168,9 @@ func TestSetLocationListRequest(t *testing.T) {
 	})
 
 	t.Run("nil zero slice", func(t *testing.T) {
-		l := LocationSlice(nil)
+		l := text.LocationSlice(nil)
 		handlerID := uint32(23)
-		expected := textpb.SetLocationListRequest{
+		expected := SetLocationListRequest{
 			HandlerId: handlerID,
 			ListId:    locID,
 			Locations: nil,
@@ -165,16 +178,16 @@ func TestSetLocationListRequest(t *testing.T) {
 		assert.Equal(t, expected, makeLocationListRequest(handlerID, locID, l))
 	})
 	t.Run("non-zero slice", func(t *testing.T) {
-		l := LocationSlice([]Location{
+		l := text.LocationSlice([]text.Location{
 			loc1,
 			loc2,
 			loc3,
 		})
 		handlerID := uint32(23)
-		expected := textpb.SetLocationListRequest{
+		expected := SetLocationListRequest{
 			HandlerId: handlerID,
 			ListId:    locID,
-			Locations: []*textpb.SetLocationListRequest_Location{
+			Locations: []*SetLocationListRequest_Location{
 				{
 					From: &termpb.Coordinates{},
 					To:   &termpb.Coordinates{X: 1, Y: 3},
@@ -201,7 +214,7 @@ func TestSetLocationListRequest(t *testing.T) {
 	})
 	t.Run("with message", func(t *testing.T) {
 		myMsg := "wsb: HOLD GME"
-		l := LocationSlice([]Location{
+		l := text.LocationSlice([]text.Location{
 			{
 				To:      term.Coordinates{X: 1, Y: 3},
 				Attr:    term.Attributes{Fg: term.AttrBold},
@@ -209,10 +222,10 @@ func TestSetLocationListRequest(t *testing.T) {
 			},
 		})
 		handlerID := uint32(23)
-		expected := textpb.SetLocationListRequest{
+		expected := SetLocationListRequest{
 			HandlerId: handlerID,
 			ListId:    locID,
-			Locations: []*textpb.SetLocationListRequest_Location{
+			Locations: []*SetLocationListRequest_Location{
 				{
 					From: &termpb.Coordinates{},
 					To:   &termpb.Coordinates{X: 1, Y: 3},
@@ -227,9 +240,9 @@ func TestSetLocationListRequest(t *testing.T) {
 }
 
 func benchmarkSetLocationListRequest(b *testing.B, n int) {
-	l := make([]Location, n)
+	l := make([]text.Location, n)
 	for i := 0; i < n; i++ {
-		l[i] = Location{
+		l[i] = text.Location{
 			From: term.Coordinates{X: i, Y: n},
 			To:   term.Coordinates{X: n, Y: n},
 			Attr: term.Attributes{Fg: term.AttrBold},
@@ -238,7 +251,7 @@ func benchmarkSetLocationListRequest(b *testing.B, n int) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		ll := LocationSlice(l)
+		ll := text.LocationSlice(l)
 		_ = makeLocationListRequest(45, locID, ll)
 	}
 }

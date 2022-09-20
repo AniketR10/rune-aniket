@@ -1,4 +1,4 @@
-package text
+package rpc
 
 import (
 	"context"
@@ -9,7 +9,7 @@ import (
 	"github.com/ernestrc/go-tui/component"
 	"github.com/ernestrc/go-tui/term"
 	termpb "github.com/ernestrc/go-tui/term/rpc"
-	textpb "github.com/ernestrc/go-tui/text/rpc"
+	"github.com/ernestrc/go-tui/text"
 	"github.com/ernestrc/go-tui/workspace"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -17,7 +17,7 @@ import (
 
 var (
 	uri      workspace.URI
-	protoURI textpb.URI
+	protoURI URI
 )
 
 func init() {
@@ -27,14 +27,14 @@ func init() {
 		panic(err)
 	}
 
-	protoURI = *textpb.NewURI(uri)
+	protoURI = *NewURI(uri)
 }
 
-func makeEventIntegrationCase(content string) (in, out *cell.Buffer, cursor *Cursor) {
+func makeEventIntegrationCase(content string) (in, out *cell.Buffer, cursor *text.Cursor) {
 	in, out = cell.NewBuffer(), cell.NewBuffer()
 	scroll := component.NewScroll(in)
 	scroll.Resize(100, 100)
-	cursor = NewCursor(scroll)
+	cursor = text.NewCursor(scroll)
 	in.WriteString(content)
 	out.WriteString(content)
 	return
@@ -42,8 +42,8 @@ func makeEventIntegrationCase(content string) (in, out *cell.Buffer, cursor *Cur
 
 func TestIntegrationInsert(t *testing.T) {
 	in, out, cursor := makeEventIntegrationCase("")
-	in.Subscribe(CellSubscriber(uri, NewTestHandler(),
-		FuncEventHandler(func(ctx context.Context, ev Event) bool {
+	in.Subscribe(text.CellSubscriber(uri, text.NewTestHandler(),
+		text.FuncEventHandler(func(ctx context.Context, ev text.Event) bool {
 			out.InsertString(ev.Start, ev.Content)
 			return false
 		})))
@@ -117,8 +117,8 @@ func main() {
 }`
 	in, out, cursor := makeEventIntegrationCase(content)
 
-	in.Subscribe(CellSubscriber(uri, NewTestHandler(),
-		FuncEventHandler(func(ctx context.Context, ev Event) bool {
+	in.Subscribe(text.CellSubscriber(uri, text.NewTestHandler(),
+		text.FuncEventHandler(func(ctx context.Context, ev text.Event) bool {
 			out.Delete(ev.Start, ev.End)
 			return false
 		})))
@@ -144,10 +144,10 @@ func main() {
 }`
 	in, out, cursor := makeEventIntegrationCase(content)
 
-	in.Subscribe(CellSubscriber(uri, NewTestHandler(),
-		FuncEventHandler(func(ctx context.Context, ev Event) bool {
+	in.Subscribe(text.CellSubscriber(uri, text.NewTestHandler(),
+		text.FuncEventHandler(func(ctx context.Context, ev text.Event) bool {
 			switch ev.Type {
-			case EventTypeEdit:
+			case text.EventTypeEdit:
 				out.Edit(ev.Start, ev.End, ev.Content)
 			}
 			return false
@@ -176,61 +176,61 @@ func main() {
 
 func TestEventProto(t *testing.T) {
 	tsuite := []struct {
-		in  Event
-		out textpb.EditorEvent
+		in  text.Event
+		out EditorEvent
 	}{
 		{
-			in: Event{
-				Type:     EventTypeOpen,
+			in: text.Event{
+				Type:     text.EventTypeOpen,
 				URI:      uri,
 				Resource: nil,
 				Content:  "Ageispolis",
 			},
-			out: textpb.EditorEvent{
-				Type:         textpb.EditorEvent_TypeOpen,
+			out: EditorEvent{
+				Type:         EditorEvent_TypeOpen,
 				ResourceName: &protoURI,
 				ResourceId:   0,
 				Content:      "Ageispolis",
 			},
 		},
 		{
-			in: Event{
-				Type: EventTypeFocus,
+			in: text.Event{
+				Type: text.EventTypeFocus,
 				URI:  uri,
 				Resource: Token{
 					Token:    browser.Token{ID: 2},
 					resource: uri,
 				},
 			},
-			out: textpb.EditorEvent{
-				Type:         textpb.EditorEvent_TypeFocus,
+			out: EditorEvent{
+				Type:         EditorEvent_TypeFocus,
 				ResourceName: &protoURI,
 				ResourceId:   2,
 			},
 		},
 		{
-			in: Event{
-				Type: EventTypeUnfocus,
+			in: text.Event{
+				Type: text.EventTypeUnfocus,
 				URI:  uri,
 				Resource: Token{Token: browser.Token{ID: 288},
 					resource: uri},
 			},
-			out: textpb.EditorEvent{
-				Type:         textpb.EditorEvent_TypeUnfocus,
+			out: EditorEvent{
+				Type:         EditorEvent_TypeUnfocus,
 				ResourceName: &protoURI,
 				ResourceId:   288,
 			},
 		},
 		{
-			in: Event{
-				Type:  EventTypeScroll,
+			in: text.Event{
+				Type:  text.EventTypeScroll,
 				Start: term.Coordinates{X: 1, Y: 2},
 				End:   term.Coordinates{X: 3, Y: 4},
 				From:  term.Coordinates{X: 5, Y: 6},
 				To:    term.Coordinates{X: 7, Y: 8},
 			},
-			out: textpb.EditorEvent{
-				Type:  textpb.EditorEvent_TypeScroll,
+			out: EditorEvent{
+				Type:  EditorEvent_TypeScroll,
 				Start: &termpb.Coordinates{X: 1, Y: 2},
 				End:   &termpb.Coordinates{X: 3, Y: 4},
 				From:  &termpb.Coordinates{X: 5, Y: 6},
@@ -239,23 +239,23 @@ func TestEventProto(t *testing.T) {
 		},
 	}
 
-	t.Run("editor.Event -> textpb.EditorEvent", func(t *testing.T) {
+	t.Run("editor.Event -> EditorEvent", func(t *testing.T) {
 		for _, tcase := range tsuite {
-			actual := tcase.in.toProto()
+			actual := toProto(tcase.in)
 			assertEqualProto(t, tcase.out, actual)
 		}
 	})
 
-	t.Run("textpb.EditorEvent -> editor.Event ", func(t *testing.T) {
+	t.Run("EditorEvent -> editor.Event ", func(t *testing.T) {
 		for _, tcase := range tsuite {
-			actual := Event{}
-			actual.fromProto(&tcase.out)
+			actual := text.Event{}
+			fromProto(&actual, &tcase.out)
 			assertEqualEvent(t, tcase.in, actual)
 		}
 	})
 }
 
-func assertEqualProto(t *testing.T, expected, actual textpb.EditorEvent) {
+func assertEqualProto(t *testing.T, expected, actual EditorEvent) {
 	assert.Equal(t, expected.Type, actual.Type)
 	assert.Equal(t, expected.ResourceName.GetUri(), actual.ResourceName.GetUri())
 	assert.Equal(t, expected.ResourceId, actual.ResourceId)
@@ -270,7 +270,7 @@ func assertEqualProto(t *testing.T, expected, actual textpb.EditorEvent) {
 	assert.Equal(t, expected.Content, actual.Content)
 }
 
-func assertEqualEvent(t *testing.T, expected, actual Event) {
+func assertEqualEvent(t *testing.T, expected, actual text.Event) {
 	assert.Equal(t, expected.Type, actual.Type)
 	assert.Equal(t, expected.URI.String(), actual.URI.String())
 	assert.Equal(t, expected.Resource, actual.Resource)

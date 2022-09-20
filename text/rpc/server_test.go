@@ -1,4 +1,4 @@
-package text
+package rpc
 
 import (
 	"context"
@@ -14,7 +14,7 @@ import (
 	prototest "github.com/ernestrc/go-tui/proto/test"
 	"github.com/ernestrc/go-tui/term"
 	termpb "github.com/ernestrc/go-tui/term/rpc"
-	textpb "github.com/ernestrc/go-tui/text/rpc"
+	"github.com/ernestrc/go-tui/text"
 	"github.com/ernestrc/go-tui/workspace"
 	gomock "github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
@@ -23,22 +23,23 @@ import (
 )
 
 const asyncResultsSleepDuration = 300 * time.Millisecond
+const locID = "errors"
 
 type nopLocker struct{}
 
 func (l nopLocker) Lock()   {}
 func (l nopLocker) Unlock() {}
 
-func newTestServer(t *testing.T, ctrl *gomock.Controller) (*proto.MockMuxBroker, *MockEditor, *Server) {
+func newTestServer(t *testing.T, ctrl *gomock.Controller) (*proto.MockMuxBroker, *text.MockEditor, *Server) {
 	broker := proto.NewMockMuxBroker(ctrl)
-	ed := NewMockEditor(ctrl)
+	ed := text.NewMockEditor(ctrl)
 	expectInitialServerSubscribe(t, ed)
 	s := NewServer(broker, ed, new(sync.Mutex))
 	broker.EXPECT().Cleanup(gomock.Any()).AnyTimes()
 	return broker, ed, s
 }
 
-func expectEdit(t *testing.T, mock *MockEditor, resource workspace.URI, content string) {
+func expectEdit(t *testing.T, mock *text.MockEditor, resource workspace.URI, content string) {
 	mock.EXPECT().Edit(gomock.Any(), gomock.Any()).Times(1).
 		DoAndReturn(func(_uri workspace.URI, buf *cell.Buffer) (tui.Handler, error) {
 			assert.Equal(t, resource, _uri)
@@ -55,7 +56,7 @@ func callServerEdit(
 
 	buf := cell.NewBuffer()
 	buf.WriteString(content)
-	req := textpb.NewEditRequest(uri, buf)
+	req := NewEditRequest(uri, buf)
 
 	res, err := s.Edit(ctx, &req)
 	require.NoError(t, err)
@@ -94,7 +95,7 @@ func TestServerEdit(t *testing.T) {
 			Return(nil, errors.New("NOLINUX")).
 			Times(1)
 
-		req := textpb.NewEditRequest(resource, cell.NewBuffer())
+		req := NewEditRequest(resource, cell.NewBuffer())
 
 		res, err := s.Edit(ctx, &req)
 		require.Error(t, err)
@@ -115,7 +116,7 @@ func expectHandlerInvokeExit(t *testing.T, handlerConn *proto.MockMuxConn) {
 		DoAndReturn(func(ctx context.Context,
 			method string, args interface{},
 			reply interface{}, opts ...grpc.CallOption) error {
-			res, ok := reply.(*textpb.EditorEventHandleResponse)
+			res, ok := reply.(*EditorEventHandleResponse)
 			require.True(t, ok)
 
 			res.Quit = true
@@ -126,10 +127,10 @@ func expectHandlerInvokeExit(t *testing.T, handlerConn *proto.MockMuxConn) {
 
 func assertServerHandlerExitClose(
 	t *testing.T, handlerConn *proto.MockMuxConn,
-	h EventHandler, s *Server, quitCh chan struct{},
+	h text.EventHandler, s *Server, quitCh chan struct{},
 	broker *proto.MockMuxBroker,
 ) {
-	resource := &TestHandler{}
+	resource := &text.TestHandler{}
 	expectHandlerInvokeExit(t, handlerConn)
 
 	handlerConn.EXPECT().Close().Times(1).
@@ -140,10 +141,10 @@ func assertServerHandlerExitClose(
 	cancel()
 
 	// force server to store resource name and make an ID
-	s.Handle(ctx, Event{Type: EventTypeOpen, URI: uri, Resource: resource})
+	s.Handle(ctx, text.Event{Type: text.EventTypeOpen, URI: uri, Resource: resource})
 
 	s.editor.Lock()
-	h.Handle(ctx, Event{Type: EventTypeClose, URI: uri, Resource: resource})
+	h.Handle(ctx, text.Event{Type: text.EventTypeClose, URI: uri, Resource: resource})
 	s.editor.Unlock()
 
 	waitForMonitoringExit(quitCh)
@@ -161,21 +162,21 @@ func TestServerSubscribe(t *testing.T) {
 		defer ctrl.Finish()
 
 		broker, mock, s := newTestServer(t, ctrl)
-		expectedEvTypes := []EventType{EventTypeFlush, EventTypeFocus}
+		expectedEvTypes := []text.EventType{text.EventTypeFlush, text.EventTypeFocus}
 
-		var actualEvTypes []EventType
+		var actualEvTypes []text.EventType
 		var wg sync.WaitGroup
 		mock.EXPECT().SubscribeEditorEvents(gomock.Any(), gomock.Any()).
-			DoAndReturn(func(evs []EventType, _h EventHandler) error {
+			DoAndReturn(func(evs []text.EventType, _h text.EventHandler) error {
 				defer wg.Done()
 				actualEvTypes = evs
 				return nil
 			})
-		req := textpb.EditorSubscribeRequest{
+		req := EditorSubscribeRequest{
 			HandlerId: nextID,
-			Type: []textpb.EditorEvent_Type{
-				textpb.EditorEvent_TypeFlush,
-				textpb.EditorEvent_TypeFocus,
+			Type: []EditorEvent_Type{
+				EditorEvent_TypeFlush,
+				EditorEvent_TypeFocus,
 			},
 		}
 		conn := prototest.ExpectBrokerDial(t, ctrl, broker, nextID)
@@ -204,13 +205,13 @@ func TestServerSubscribe(t *testing.T) {
 		defer ctrl.Finish()
 
 		broker, mock, s := newTestServer(t, ctrl)
-		expectedEvTypes := []EventType{EventTypeFlush}
+		expectedEvTypes := []text.EventType{text.EventTypeFlush}
 
-		var actualEvTypes []EventType
-		var h EventHandler
+		var actualEvTypes []text.EventType
+		var h text.EventHandler
 		var wg sync.WaitGroup
 		mock.EXPECT().SubscribeEditorEvents(gomock.Any(), gomock.Any()).
-			DoAndReturn(func(evs []EventType, _h EventHandler) error {
+			DoAndReturn(func(evs []text.EventType, _h text.EventHandler) error {
 				defer wg.Done()
 				actualEvTypes = evs
 				h = _h
@@ -219,9 +220,9 @@ func TestServerSubscribe(t *testing.T) {
 		conn := prototest.ExpectBrokerDial(t, ctrl, broker, nextID)
 		quitCh := prototest.ExpectMonitorConn(conn)
 
-		req := textpb.EditorSubscribeRequest{
+		req := EditorSubscribeRequest{
 			HandlerId: nextID,
-			Type:      []textpb.EditorEvent_Type{textpb.EditorEvent_TypeFlush},
+			Type:      []EditorEvent_Type{EditorEvent_TypeFlush},
 		}
 
 		wg.Add(1)
@@ -237,8 +238,8 @@ func TestServerSubscribe(t *testing.T) {
 	})
 }
 
-func assertEqualLocations(t *testing.T, loc, expected LocationList) {
-	var locations, expectedLocations []Location
+func assertEqualLocations(t *testing.T, loc, expected text.LocationList) {
+	var locations, expectedLocations []text.Location
 	for ok := true; ok; _, ok = loc.Prev() {
 
 	}
@@ -270,7 +271,7 @@ func TestServerSetLocationList(t *testing.T) {
 		expectEdit(t, mock, resource, content)
 		callServerEdit(t, ctx, broker, s, nextID, resource, content)
 
-		locs := LocationSlice([]Location{{Message: "wsb: hold AMC", To: term.Coordinates{X: 3}}})
+		locs := text.LocationSlice([]text.Location{{Message: "wsb: hold AMC", To: term.Coordinates{X: 3}}})
 		mock.EXPECT().SetLocationList(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).Times(1)
 
 		req := makeLocationListRequest(nextID, locID, locs)
@@ -285,8 +286,8 @@ func TestServerSetLocationList(t *testing.T) {
 		defer ctrl.Finish()
 
 		broker := proto.NewMockMuxBroker(ctrl)
-		ed := &testEditor{}
-		c, err := NewComponent(ed, &testWorkspace{}, Config{})
+		ed := text.NopEditor()
+		c, err := text.NewComponent(ed, &testWorkspace{}, text.Config{})
 		require.NoError(t, err)
 		s := NewServer(broker, c, new(sync.Mutex))
 
@@ -294,7 +295,7 @@ func TestServerSetLocationList(t *testing.T) {
 		nextID := uint32(232)
 		callServerEdit(t, ctx, broker, s, nextID, resource, content)
 
-		locs := []Location{
+		locs := []text.Location{
 			{From: term.Coordinates{X: 0, Y: 0}, To: term.Coordinates{X: 3, Y: 0}},
 			{From: term.Coordinates{X: 1, Y: 4}, To: term.Coordinates{X: 2, Y: 4}},
 			{From: term.Coordinates{X: 0, Y: 5}, To: term.Coordinates{X: 0, Y: 6}},
@@ -306,7 +307,7 @@ func TestServerSetLocationList(t *testing.T) {
 		for i := 0; i < n; i++ {
 			go func() {
 				defer wg.Done()
-				l := LocationSlice(locs)
+				l := text.LocationSlice(locs)
 
 				req := makeLocationListRequest(nextID, locID, l)
 				res, err := s.SetLocationList(ctx, &req)
@@ -326,11 +327,11 @@ func TestServerSetLocationList(t *testing.T) {
 			return
 		}
 
-		l, ok := h.(*testEditorHandler)
+		l, ok := h.(*text.TestEditorHandler)
 		if !assert.True(t, ok) {
 			return
 		}
-		assertEqualLocations(t, LocationSlice(locs), l.locationList)
+		assertEqualLocations(t, text.LocationSlice(locs), l.LocationList)
 	})
 }
 
@@ -355,7 +356,7 @@ func TestServerSetCursor(t *testing.T) {
 		var protoPos termpb.Coordinates
 		protoPos.FromModel(pos)
 
-		req := textpb.SetCursorRequest{HandlerId: nextID, Pos: &protoPos}
+		req := SetCursorRequest{HandlerId: nextID, Pos: &protoPos}
 		res, err := s.SetCursor(ctx, &req)
 		require.NoError(t, err)
 		require.NotNil(t, res)
@@ -379,7 +380,7 @@ func TestServerCursor(t *testing.T) {
 		pos := term.Coordinates{X: 4, Y: 5}
 		mock.EXPECT().Cursor(gomock.Any()).Return(pos, nil).Times(1)
 
-		req := textpb.CursorRequest{HandlerId: nextID}
+		req := CursorRequest{HandlerId: nextID}
 		res, err := s.Cursor(ctx, &req)
 		require.NoError(t, err)
 		require.NotNil(t, res)

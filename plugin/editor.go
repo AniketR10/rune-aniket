@@ -45,7 +45,7 @@ func (s *editorResourceServer) Serve(
 				}
 				grpc := srv.GRPC()
 				s.srv = srv
-				server := text.NewServer(broker, s.b, lock)
+				server := textpb.NewServer(broker, s.b, lock)
 				lock.Lock()
 				server.Logger = l
 				lock.Unlock()
@@ -74,7 +74,7 @@ func dialEditor(token uint32, broker proto.MuxBroker) (
 	if err != nil {
 		return nil, err
 	}
-	c := text.NewClient(broker, conn)
+	c := textpb.NewClient(broker, conn)
 	c.Logger = &pluginLogger
 	clients.Store(token, c)
 	return c, nil

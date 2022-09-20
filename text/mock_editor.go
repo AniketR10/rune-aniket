@@ -16,10 +16,10 @@ type testEditor struct {
 	subs map[EventType][]EventHandler
 }
 
-// Mock returns a editor suitable for testing.
+// NopEditor returns a editor suitable for testing.
 // It doesn't return real tui.Handler upon Edit but mimics
 // editor.Simple's subscription logic.
-func Mock() Editor {
+func NopEditor() Editor {
 	return &testEditor{}
 }
 
@@ -47,14 +47,14 @@ func (e *testEditor) dispatchEvent(ctx context.Context, ev Event) {
 	e.subs[ev.Type] = remain
 }
 
-type testEditorHandler struct {
+type TestEditorHandler struct {
 	browser.TestHandler
-	locationList LocationList
+	LocationList LocationList
 	parent       *testEditor
 	uri          workspace.URI
 }
 
-func (e *testEditorHandler) Resource() workspace.URI {
+func (e *TestEditorHandler) Resource() workspace.URI {
 	return e.uri
 }
 
@@ -62,7 +62,7 @@ func (e *testEditor) Edit(resource workspace.URI, buf *cell.Buffer) (Handler, er
 	e.uri = resource
 	e.buf = buf
 
-	h := &testEditorHandler{
+	h := &TestEditorHandler{
 		uri:         resource,
 		parent:      e,
 		TestHandler: *browser.NewTestHandler(),
@@ -80,11 +80,11 @@ func (e *testEditor) Edit(resource workspace.URI, buf *cell.Buffer) (Handler, er
 }
 
 func (e *testEditor) SetLocationList(h Handler, id string, loc LocationList) error {
-	h.(*testEditorHandler).locationList = loc
+	h.(*TestEditorHandler).LocationList = loc
 	return nil
 }
 
-func (e *testEditorHandler) Handle(ev term.Event) (bool, bool) {
+func (e *TestEditorHandler) Handle(ev term.Event) (bool, bool) {
 	e.parent.dispatchEvent(context.Background(), Event{
 		Type:     EventTypeCursor,
 		URI:      e.uri,
@@ -102,12 +102,12 @@ func (e *testEditor) MoveToPrevLocation(h Handler, ID string) error {
 }
 
 func (e *testEditor) SetCursor(h Handler, pos term.Coordinates) error {
-	h.(*testEditorHandler).CursorPos = pos
+	h.(*TestEditorHandler).CursorPos = pos
 	return nil
 }
 
 func (e *testEditor) Cursor(h Handler) (term.Coordinates, error) {
-	return h.(*testEditorHandler).CursorPos, nil
+	return h.(*TestEditorHandler).CursorPos, nil
 }
 
 func (e *testEditor) CellEditor(h Handler) CellEditor {

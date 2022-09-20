@@ -222,7 +222,7 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 │GGGGGGGGGGGGGGGGGG│
 └──────────────────┘`},
 	}
-	bh, b, err := constructor(text.Mock(),
+	bh, b, err := constructor(text.NopEditor(),
 		text.WithCommandKey(testCommandKey),
 		text.WithCommandKeyBinding(term.KeyComb{Ch: '4'}, []string{"close"}),
 	)
@@ -502,7 +502,7 @@ func TestBrowserHandlerInterrupts(t *testing.T) {
 		var wg sync.WaitGroup
 		browser := new(ex)
 		opts := []text.Option{text.WithInterrupt(wg.Done)}
-		initExForTesting(t, browser, text.Mock(), opts...)
+		initExForTesting(t, browser, text.NopEditor(), opts...)
 		defer browser.Close()
 
 		wg.Add(1)
@@ -514,7 +514,7 @@ func TestBrowserHandlerInterrupts(t *testing.T) {
 		var wg sync.WaitGroup
 		browser := new(ex)
 		opts := []text.Option{text.WithSendNone(wg.Done)}
-		initExForTesting(t, browser, text.Mock(), opts...)
+		initExForTesting(t, browser, text.NopEditor(), opts...)
 		defer browser.Close()
 
 		wg.Add(1)
@@ -584,7 +584,7 @@ func TestMultipleFilesStartup(t *testing.T) {
 	}
 	mockBuf := testFileBuffer{}
 	workspace := testWorkspace{buf: &mockBuf}
-	initExForTestingWithWorkspace(t, b, &workspace, text.Mock(), opts...)
+	initExForTestingWithWorkspace(t, b, &workspace, text.NopEditor(), opts...)
 	defer b.Close()
 
 	testutil.TestHandlerSequence(t, b, 20, 10, cases)
@@ -643,7 +643,7 @@ func TestExCommandResponsive(t *testing.T) {
 				Frame:        true,
 			}),
 		}
-		initExForTesting(t, b, text.Mock(), opts...)
+		initExForTesting(t, b, text.NopEditor(), opts...)
 		closeFns = append(closeFns, b.Close)
 		return b
 	}
@@ -736,7 +736,7 @@ func TestExKeySequence(t *testing.T) {
 			}, []string{"bufferCloseAll"}),
 			text.WithSequencerTimeout(1 * time.Second),
 		}
-		initExForTesting(t, b, text.Mock(), opts...)
+		initExForTesting(t, b, text.NopEditor(), opts...)
 		b.publishEvent = func(ev term.Event) {
 			mu.Lock()
 			defer mu.Unlock()
@@ -787,7 +787,7 @@ func TestExTabIntegration(t *testing.T) {
 		opts := []text.Option{
 			text.WithCommandKey(testCommandKey),
 		}
-		initExForTesting(t, b, text.Mock(), opts...)
+		initExForTesting(t, b, text.NopEditor(), opts...)
 		uri1, err := workspace.ParseURI("file:///Fieshta")
 		require.NoError(t, err)
 		uri2, err := workspace.ParseURI("file:///Pahty")
@@ -819,7 +819,7 @@ func TestExExit(t *testing.T) {
 	for _, cmd := range commands {
 		t.Run(fmt.Sprintf("ex exits %s command is issued", cmd), func(t *testing.T) {
 			b := new(ex)
-			initExForTesting(t, b, text.Mock(),
+			initExForTesting(t, b, text.NopEditor(),
 				text.WithCommandKey(testCommandKey),
 			)
 			defer b.Close()
@@ -851,7 +851,7 @@ func TestExExit(t *testing.T) {
 
 	t.Run("ex does not exit when inner handler returns exit=true", func(t *testing.T) {
 		b := new(ex)
-		initExForTesting(t, b, text.Mock())
+		initExForTesting(t, b, text.NopEditor())
 		defer b.Close()
 
 		h := browser.NewTestHandler()
@@ -920,7 +920,7 @@ func TestNewWindow(t *testing.T) {
 	opts := []text.Option{
 		text.WithCommandKey(testCommandKey),
 	}
-	initExForTesting(t, b, text.Mock(), opts...)
+	initExForTesting(t, b, text.NopEditor(), opts...)
 	defer b.Close()
 
 	testutil.TestHandlerSequence(t, b, 20, 10, cases)
@@ -955,7 +955,7 @@ func TestCommandHistory(t *testing.T) {
 	opts := []text.Option{
 		text.WithCommandKey(testCommandKey),
 	}
-	initExForTesting(t, b, text.Mock(), opts...)
+	initExForTesting(t, b, text.NopEditor(), opts...)
 	defer b.Close()
 
 	testutil.TestHandlerSequence(t, b, 20, 10, cases)
