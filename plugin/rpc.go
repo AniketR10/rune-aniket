@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	pluginpb "github.com/ernestrc/go-tui/plugin/rpc"
 	"github.com/ernestrc/go-tui/proto"
 	"github.com/hashicorp/go-plugin"
 )
@@ -17,7 +18,7 @@ const (
 )
 
 type granteeServer struct {
-	proto.UnimplementedGranteeServer
+	pluginpb.UnimplementedGranteeServer
 	mu        sync.Mutex
 	req       []Permission
 	broker    proto.MuxBroker
@@ -33,7 +34,7 @@ type granteeServer struct {
 func newGranteeServer(
 	broker proto.MuxBroker, grantee Grantee, req []Permission,
 	keepAlive time.Duration,
-) proto.GranteeServer {
+) pluginpb.GranteeServer {
 	ret := new(granteeServer)
 	ret.broker = broker
 	ret.grantee = grantee
@@ -76,20 +77,20 @@ func (s *granteeServer) monitorKeepAlive() {
 	}
 }
 
-func (s *granteeServer) Permissions(ctx context.Context, req *proto.PermRequest) (
-	*proto.PermResponse, error,
+func (s *granteeServer) Permissions(ctx context.Context, req *pluginpb.PermRequest) (
+	*pluginpb.PermResponse, error,
 ) {
-	resp := new(proto.PermResponse)
+	resp := new(pluginpb.PermResponse)
 	for _, perm := range s.req {
-		resp.Perms = append(resp.Perms, &proto.Permission{Id: string(perm)})
+		resp.Perms = append(resp.Perms, &pluginpb.Permission{Id: string(perm)})
 	}
 
 	var cfg jsonMap
-	protoCfg := req.GetConfig()
-	if protoCfg == nil {
+	protocfg := req.GetConfig()
+	if protocfg == nil {
 		cfg.mapConfig = make(map[string]interface{})
 	} else {
-		err := cfg.UnmarshalText(protoCfg)
+		err := cfg.UnmarshalText(protocfg)
 		if err != nil {
 			return nil, fmt.Errorf("could not decode incoming plugin config: %v", err)
 		}
@@ -112,8 +113,8 @@ func (s *granteeServer) Permissions(ctx context.Context, req *proto.PermRequest)
 	return resp, nil
 }
 
-func (s *granteeServer) OnGrant(ctx context.Context, req *proto.OnPermGrantRequest) (
-	*proto.OnPermGrantResponse, error,
+func (s *granteeServer) OnGrant(ctx context.Context, req *pluginpb.OnPermGrantRequest) (
+	*pluginpb.OnPermGrantResponse, error,
 ) {
 	/* only trigger OnPermission* for permissions that were actually requested */
 
@@ -145,7 +146,7 @@ func (s *granteeServer) OnGrant(ctx context.Context, req *proto.OnPermGrantReque
 		s.grantee.PermissionDenied(denied)
 	}
 
-	return new(proto.OnPermGrantResponse), nil
+	return new(pluginpb.OnPermGrantResponse), nil
 }
 
 func (s *granteeServer) doShutdown(reason string) error {
@@ -169,18 +170,18 @@ func (s *granteeServer) doShutdown(reason string) error {
 	return nil
 }
 
-func (s *granteeServer) Shutdown(ctx context.Context, in *proto.ShutdownRequest) (
-	*proto.ShutdownResponse, error,
+func (s *granteeServer) Shutdown(ctx context.Context, in *pluginpb.ShutdownRequest) (
+	*pluginpb.ShutdownResponse, error,
 ) {
 	err := s.doShutdown(in.GetReason())
 	if err != nil {
 		return nil, err
 	}
-	return new(proto.ShutdownResponse), nil
+	return new(pluginpb.ShutdownResponse), nil
 }
 
-func (s *granteeServer) Health(context.Context, *proto.HealthRequest) (
-	*proto.HealthResponse, error,
+func (s *granteeServer) Health(context.Context, *pluginpb.HealthRequest) (
+	*pluginpb.HealthResponse, error,
 ) {
 	if err := s.grantee.Health(); err != nil {
 		return nil, err
@@ -194,18 +195,18 @@ func (s *granteeServer) Health(context.Context, *proto.HealthRequest) (
 		case s.keepAlive <- struct{}{}:
 		}
 	}
-	return new(proto.HealthResponse), nil
+	return new(pluginpb.HealthResponse), nil
 }
 
 type granteeClient struct {
 	mBroker proto.MuxBroker
-	client  proto.GranteeClient
+	client  pluginpb.GranteeClient
 
 	pClient *plugin.Client
 }
 
 func newGranteeClient(
-	broker proto.MuxBroker, client proto.GranteeClient,
+	broker proto.MuxBroker, client pluginpb.GranteeClient,
 ) *granteeClient {
 	ret := new(granteeClient)
 	ret.client = client
@@ -218,9 +219,9 @@ func (c *granteeClient) broker() proto.MuxBroker {
 }
 
 func (c *granteeClient) permissions(ctx context.Context, config Config) (
-	perms []*proto.Permission, err error,
+	perms []*pluginpb.Permission, err error,
 ) {
-	var req proto.PermRequest
+	var req pluginpb.PermRequest
 	if config == nil {
 		req.Config = []byte("{}")
 	} else {
@@ -242,10 +243,10 @@ func (c *granteeClient) permissions(ctx context.Context, config Config) (
 
 func (c *granteeClient) sendGrants(
 	ctx context.Context,
-	denied []*proto.Permission,
-	granted map[string]*proto.PermissionGrant,
+	denied []*pluginpb.Permission,
+	granted map[string]*pluginpb.PermissionGrant,
 ) error {
-	req := new(proto.OnPermGrantRequest)
+	req := new(pluginpb.OnPermGrantRequest)
 
 	for _, dn := range denied {
 		req.Denied = append(req.Denied, dn)
@@ -260,7 +261,7 @@ func (c *granteeClient) sendGrants(
 }
 
 func (c *granteeClient) health(ctx context.Context) error {
-	req := proto.HealthRequest{}
+	req := pluginpb.HealthRequest{}
 	_, err := c.client.Health(ctx, &req)
 	return err
 }
@@ -282,7 +283,7 @@ func (c *granteeClient) shutdown(reason string) error {
 	ctx, cancelFn := context.WithTimeout(context.Background(), defDurationGracefulShutClient)
 	defer cancelFn()
 
-	req := proto.ShutdownRequest{Reason: reason}
+	req := pluginpb.ShutdownRequest{Reason: reason}
 	_, err := c.client.Shutdown(ctx, &req)
 	return err
 }

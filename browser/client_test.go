@@ -8,9 +8,11 @@ import (
 	"testing"
 	"time"
 
+	browserpb "github.com/ernestrc/go-tui/browser/rpc"
 	"github.com/ernestrc/go-tui/proto"
 	prototest "github.com/ernestrc/go-tui/proto/test"
 	"github.com/ernestrc/go-tui/term"
+	termpb "github.com/ernestrc/go-tui/term/rpc"
 	"github.com/ernestrc/go-tui/workspace"
 	gomock "github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
@@ -24,17 +26,17 @@ var (
 	key2 = term.Event{Type: term.EventKey,
 		Mod: term.ModAlt, Key: term.KeyBackspace}
 	key3      = term.Event{Type: term.EventMouse, MouseX: 10, MouseY: 11111}
-	protoKey1 = proto.Event{
-		Type: proto.Event_TypeKey,
-		Key:  proto.Event_Ctrl4,
+	protoKey1 = termpb.Event{
+		Type: termpb.Event_TypeKey,
+		Key:  termpb.Event_Ctrl4,
 	}
-	protoKey2 = proto.Event{
-		Type: proto.Event_TypeKey,
-		Key:  proto.Event_CtrlH,
-		Mod:  proto.Event_Alt,
+	protoKey2 = termpb.Event{
+		Type: termpb.Event_TypeKey,
+		Key:  termpb.Event_CtrlH,
+		Mod:  termpb.Event_Alt,
 	}
-	protoKey3 = proto.Event{
-		Type:   proto.Event_TypeMouse,
+	protoKey3 = termpb.Event{
+		Type:   termpb.Event_TypeMouse,
 		MouseX: 10,
 		MouseY: 11111,
 	}
@@ -111,17 +113,17 @@ func assertClientHandlerExitClose(
 
 func expectSplit(
 	t *testing.T, mockCC *proto.MockClientConnInterface,
-	handlerID, windowID uint64, orientation proto.Orientation,
+	handlerID, windowID uint64, orientation browserpb.Orientation,
 ) {
 	mockCC.EXPECT().
 		Invoke(gomock.Any(),
-			gomock.Eq("/proto.WindowManager/Split"),
-			gomock.Eq(&proto.SplitRequest{Orientation: orientation, HandlerId: handlerID}),
+			gomock.Eq("/browser.WindowManager/Split"),
+			gomock.Eq(&browserpb.SplitRequest{Orientation: orientation, HandlerId: handlerID}),
 			gomock.Any()).
 		DoAndReturn(func(
 			ctx context.Context, method string, args interface{},
 			reply interface{}, opts ...grpc.CallOption) error {
-			splitRes, ok := reply.(*proto.SplitResponse)
+			splitRes, ok := reply.(*browserpb.SplitResponse)
 			require.True(t, ok)
 			splitRes.WindowId = windowID
 			return nil
@@ -135,13 +137,13 @@ func expectFocus(
 ) {
 	mockCC.EXPECT().
 		Invoke(gomock.Any(),
-			gomock.Eq("/proto.WindowManager/Focus"),
-			gomock.Eq(&proto.FocusRequest{}),
+			gomock.Eq("/browser.WindowManager/Focus"),
+			gomock.Eq(&browserpb.FocusRequest{}),
 			gomock.Any()).
 		DoAndReturn(func(
 			ctx context.Context, method string, args interface{},
 			reply interface{}, opts ...grpc.CallOption) error {
-			focusRes, ok := reply.(*proto.FocusResponse)
+			focusRes, ok := reply.(*browserpb.FocusResponse)
 			require.True(t, ok)
 			focusRes.WindowId = windowID
 			return nil
@@ -154,9 +156,9 @@ func expectWindowClose(
 ) {
 	mockWinConn.EXPECT().
 		Invoke(gomock.Any(),
-			gomock.Eq("/proto.Window/Close"),
-			gomock.Eq(&proto.WindowCloseRequest{}),
-			gomock.Eq(&proto.WindowCloseResponse{})).
+			gomock.Eq("/browser.Window/Close"),
+			gomock.Eq(&browserpb.WindowCloseRequest{}),
+			gomock.Eq(&browserpb.WindowCloseResponse{})).
 		Times(1)
 	mockWinConn.EXPECT().Close().Times(1).
 		DoAndReturn(prototest.ExpectSignalExit(mockWinConn, quitCh, nil))
@@ -170,12 +172,12 @@ func TestClientSetMessage(t *testing.T) {
 		client, mockCC, _ := newMockedClient(ctrl)
 
 		myMsg, arg1, arg2 := "oh la la: %s %d", "obla di obla da", 5
-		in := &proto.SetMessageRequest{Msg: fmt.Sprintf(myMsg, arg1, arg2)}
-		out := new(proto.SetMessageResponse)
+		in := &browserpb.SetMessageRequest{Msg: fmt.Sprintf(myMsg, arg1, arg2)}
+		out := new(browserpb.SetMessageResponse)
 
 		mockCC.EXPECT().
 			Invoke(gomock.Any(),
-				gomock.Eq("/proto.Messenger/SetMessage"),
+				gomock.Eq("/browser.Messenger/SetMessage"),
 				gomock.Eq(in), gomock.Eq(out)).
 			Times(1)
 
@@ -196,11 +198,11 @@ func TestClientSetMessage(t *testing.T) {
 }
 
 func expectResourceOpen(mockCC *proto.MockClientConnInterface, myResource workspace.URI) {
-	in := &proto.OpenResourceRequest{Resource: myResource.String()}
-	out := new(proto.OpenResourceResponse)
+	in := &browserpb.OpenResourceRequest{Resource: myResource.String()}
+	out := new(browserpb.OpenResourceResponse)
 	mockCC.EXPECT().
 		Invoke(gomock.Any(),
-			gomock.Eq("/proto.ResourceOpener/Open"),
+			gomock.Eq("/browser.ResourceOpener/Open"),
 			gomock.Eq(in), gomock.Eq(out)).
 		Times(1)
 }
@@ -239,10 +241,10 @@ func TestClientPublish(t *testing.T) {
 	tsuite := []struct {
 		rpc string
 		fn  func(*Client) error
-		ev  *proto.Event
+		ev  *termpb.Event
 	}{
-		{"PublishInterrupt", (*Client).PublishInterrupt, &proto.Event{Type: proto.Event_TypeInterrupt}},
-		{"PublishEventNone", (*Client).PublishEventNone, &proto.Event{Type: proto.Event_TypeNone}},
+		{"PublishInterrupt", (*Client).PublishInterrupt, &termpb.Event{Type: termpb.Event_TypeInterrupt}},
+		{"PublishEventNone", (*Client).PublishEventNone, &termpb.Event{Type: termpb.Event_TypeNone}},
 	}
 	for _, tcase := range tsuite {
 		t.Run(fmt.Sprintf("%s bubbles up rpc error and so stops event handler resources", tcase.rpc),
@@ -253,7 +255,7 @@ func TestClientPublish(t *testing.T) {
 				client, mockCC, _ := newMockedClient(ctrl)
 				mockCC.EXPECT().
 					Invoke(gomock.Any(),
-						gomock.Eq("/proto.EventPublisher/Publish"),
+						gomock.Eq("/browser.EventPublisher/Publish"),
 						gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(errors.New("uRich"))
@@ -269,12 +271,12 @@ func TestClientPublish(t *testing.T) {
 
 				client, mockCC, _ := newMockedClient(ctrl)
 				ev := tcase.ev
-				in := &proto.PublishRequest{Ev: ev}
-				out := new(proto.PublishResponse)
+				in := &browserpb.PublishRequest{Ev: ev}
+				out := new(browserpb.PublishResponse)
 
 				mockCC.EXPECT().
 					Invoke(gomock.Any(),
-						gomock.Eq("/proto.EventPublisher/Publish"),
+						gomock.Eq("/browser.EventPublisher/Publish"),
 						gomock.Eq(in), gomock.Eq(out)).
 					Times(1)
 
@@ -285,23 +287,23 @@ func TestClientPublish(t *testing.T) {
 }
 
 func TestClientSplitHorizontalBelow(t *testing.T) {
-	testClientSplit(t, OrientationBottom, proto.Orientation_Bottom)
+	testClientSplit(t, OrientationBottom, browserpb.Orientation_Bottom)
 }
 
 func TestClientSplitVerticalRight(t *testing.T) {
-	testClientSplit(t, OrientationRight, proto.Orientation_Right)
+	testClientSplit(t, OrientationRight, browserpb.Orientation_Right)
 }
 
 func TestClientSplitHorizontalAbove(t *testing.T) {
-	testClientSplit(t, OrientationTop, proto.Orientation_Top)
+	testClientSplit(t, OrientationTop, browserpb.Orientation_Top)
 }
 
 func TestClientSplitDefault(t *testing.T) {
-	testClientSplit(t, OrientationDefault, proto.Orientation_Default)
+	testClientSplit(t, OrientationDefault, browserpb.Orientation_Default)
 }
 
 func TestClientSplitVerticalLeft(t *testing.T) {
-	testClientSplit(t, OrientationLeft, proto.Orientation_Left)
+	testClientSplit(t, OrientationLeft, browserpb.Orientation_Left)
 }
 
 func assertClientClientsEqual(t *testing.T, expected int, c *Client) {
@@ -319,7 +321,7 @@ func assertClientServersEqual(t *testing.T, expected int, c *Client) {
 func testClientSplit(
 	t *testing.T,
 	split Orientation,
-	expectedSplit proto.Orientation,
+	expectedSplit browserpb.Orientation,
 ) {
 	t.Run("serves handler and dials to window", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
@@ -442,7 +444,7 @@ func TestClientClose(t *testing.T) {
 		windowID := uint64(i)
 		handlerID := uint64(i)
 		prototest.ExpectBrokerServe(t, uint32(handlerID), mockBroker)
-		expectSplit(t, mockCC, handlerID, windowID, proto.Orientation_Right)
+		expectSplit(t, mockCC, handlerID, windowID, browserpb.Orientation_Right)
 		mockWinConn := prototest.ExpectBrokerDial(t, ctrl, mockBroker, uint32(windowID))
 		quitCh := prototest.ExpectMonitorConn(mockWinConn)
 

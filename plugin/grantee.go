@@ -6,6 +6,7 @@ import (
 	"os"
 	"time"
 
+	pluginpb "github.com/ernestrc/go-tui/plugin/rpc"
 	"github.com/ernestrc/go-tui/proto"
 	"github.com/hashicorp/go-plugin"
 	log "github.com/sirupsen/logrus"
@@ -63,7 +64,7 @@ func (p *granteePlugin) GRPCServer(_ *plugin.GRPCBroker, s *grpc.Server) error {
 	if p.logger.IsLevelEnabled(log.TraceLevel) {
 		server = &loggingGranteeServer{Logger: p.logger, GranteeServer: server}
 	}
-	proto.RegisterGranteeServer(s, server)
+	pluginpb.RegisterGranteeServer(s, server)
 	return nil
 }
 
@@ -71,7 +72,7 @@ func (p *granteePlugin) GRPCServer(_ *plugin.GRPCBroker, s *grpc.Server) error {
 func (p *granteePlugin) GRPCClient(
 	ctx context.Context, _ *plugin.GRPCBroker, c *grpc.ClientConn,
 ) (interface{}, error) {
-	pbClient := proto.NewGranteeClient(c)
+	pbClient := pluginpb.NewGranteeClient(c)
 	if p.logger.IsLevelEnabled(log.TraceLevel) {
 		pbClient = &loggingGranteeClient{Logger: p.logger, GranteeClient: pbClient}
 	}

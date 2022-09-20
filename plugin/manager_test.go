@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	pluginpb "github.com/ernestrc/go-tui/plugin/rpc"
 	"github.com/ernestrc/go-tui/proto"
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
@@ -105,7 +106,7 @@ func TestManagerRun(t *testing.T) {
 		mgr, pbClient, _ := newTestManager(&grantor)
 		defer mgr.Close()
 
-		pbClient.fixturePermissions = []*proto.Permission{{Id: "read"}, {Id: "read"}}
+		pbClient.fixturePermissions = []*pluginpb.Permission{{Id: "read"}, {Id: "read"}}
 		testRunAndWait(t, mgr, pbClient)
 
 		assert.NotNil(t, pbClient.permissions)
@@ -117,7 +118,7 @@ func TestManagerRun(t *testing.T) {
 		assert.Len(t, grant.Denied, 0)
 		require.Len(t, grant.Granted, 1)
 
-		expected := []*proto.PermissionGrant{
+		expected := []*pluginpb.PermissionGrant{
 			{Id: "read", GrantId: 1},
 		}
 		assert.Equal(t, expected, grant.Granted)
@@ -174,7 +175,7 @@ func TestManagerRun(t *testing.T) {
 		defer mgr.Close()
 
 		pbClient.fixturePermissions =
-			[]*proto.Permission{{Id: "read"}}
+			[]*pluginpb.Permission{{Id: "read"}}
 		pbClient.err = errors.New("woopsie")
 		pbClient.onShutdownChan = make(chan struct{})
 
@@ -190,7 +191,7 @@ func TestManagerRun(t *testing.T) {
 		defer mgr.Close()
 
 		pbClient.fixturePermissions =
-			[]*proto.Permission{{Id: "read"}}
+			[]*pluginpb.Permission{{Id: "read"}}
 		pbClient.sleepPermissions = 2 * time.Second
 		pbClient.onShutdownChan = make(chan struct{})
 
@@ -206,7 +207,7 @@ func TestManagerRun(t *testing.T) {
 		defer mgr.Close()
 
 		pbClient.fixturePermissions =
-			[]*proto.Permission{{Id: "read"}}
+			[]*pluginpb.Permission{{Id: "read"}}
 		pbClient.onShutdownChan = make(chan struct{})
 
 		err := mgr.Run("green", "/here/is/my/plugin", nil)
@@ -224,7 +225,7 @@ func TestManagerRun(t *testing.T) {
 		defer mgr.Close()
 
 		pbClient.fixturePermissions =
-			[]*proto.Permission{{Id: "read"}}
+			[]*pluginpb.Permission{{Id: "read"}}
 		pbClient.onShutdownChan = make(chan struct{})
 
 		err := mgr.Run("yellow", "/here/is/my/plugin", nil)
@@ -252,7 +253,7 @@ func TestManagerRun(t *testing.T) {
 	t.Run("should wait for plugin Shutdown before returning from a call to Close", func(t *testing.T) {
 		mgr, pbClient, broker := newTestManager(&mockGrantor{})
 
-		pbClient.fixturePermissions = []*proto.Permission{{Id: "read"}}
+		pbClient.fixturePermissions = []*pluginpb.Permission{{Id: "read"}}
 		pbClient.onShutdownChan = make(chan struct{})
 
 		pluginIDs := []string{"green", "blue"}

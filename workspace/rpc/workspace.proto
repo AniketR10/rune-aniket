@@ -1,0 +1,186 @@
+syntax = "proto3";
+
+option go_package = "github.com/ernestrc/go-tui/workspace/rpc";
+
+package workspace;
+
+import "google/protobuf/timestamp.proto";
+
+message OpenRequest {
+	string filename = 1;
+	int32  flag = 2;
+	int32  mode = 3;
+}
+
+message OpenResponse {
+	int32 handler_id = 1;
+	bool is_exist_err = 2;
+	bool is_not_exist_err = 3;
+	bool is_permission_err = 4;
+}
+
+message RemoveRequest {
+	string filename = 1;
+}
+
+message RemoveResponse {}
+
+message RenameRequest {
+	string filename = 1;
+	string newfilename = 2;
+}
+
+message RenameResponse {}
+
+message StatRequest {
+	string filename = 1;
+	bool lstat = 2;
+}
+
+message StatResponse {
+	string name = 1;
+	int64 size = 2;
+	int32 mode = 3;
+	google.protobuf.Timestamp mod_time = 4;
+	bool is_dir = 5;
+}
+
+
+message SyncRequest {
+	int32 handler_id = 1;
+}
+
+message SyncResponse {
+}
+
+message TruncateRequest {
+	int32 handler_id = 1;
+	int64 size = 2;
+}
+
+message TruncateResponse {
+}
+
+message CloseFileRequest {
+	int32 handler_id = 1;
+}
+
+message CloseFileResponse {
+}
+
+message SeekRequest {
+	int32 handler_id = 1;
+	int64 offset = 2;
+	int64 whence = 3;
+}
+
+message SeekResponse {
+	int64 new_offset = 1;
+}
+
+message ReadRequest {
+	int32 handler_id = 1;
+	int64 n = 2;
+}
+
+message ReadResponse {
+	int64 n = 1;
+	string data = 2;
+	bool is_eof = 3;
+}
+
+message WriteRequest {
+	int32 handler_id = 1;
+	string data = 2;
+}
+
+message WriteResponse {
+	int64 n = 1;
+}
+
+
+message ReadLinkRequest {
+	string filename = 1;
+}
+
+message ReadLinkResponse {
+	string filename = 1;
+}
+
+message CommandRequest {
+	string name = 1;
+	repeated string args = 2;
+}
+
+message CommandResponse {
+	int32 pid = 1;
+}
+
+message StartRequest {
+	int32 pid = 1;
+}
+
+message StartResponse {
+}
+
+message WaitRequest {
+	int32 pid = 1;
+}
+
+message WaitResponse {
+}
+
+message SignalRequest {
+	int32 pid = 1;
+	int32 sig = 2;
+}
+
+message SignalResponse {
+}
+
+message StdioPipeRequest {
+	int32 pid = 1;
+}
+
+message StdioPipeResponse {
+	int32 handler_id = 1;
+}
+
+message URIRequest {
+	string path = 1;
+}
+
+message URIResponse {
+	string uri = 1;
+}
+
+message GetwdRequest {
+}
+
+service Workspace {
+	rpc URI(URIRequest) returns (URIResponse);
+	rpc Getwd(GetwdRequest) returns (URIResponse);
+
+	rpc Open(OpenRequest) returns (OpenResponse);
+	rpc Remove(RemoveRequest) returns (RemoveResponse);
+	rpc Rename(RenameRequest) returns (RenameResponse);
+	rpc Stat(StatRequest) returns (StatResponse);
+	rpc ReadLink(ReadLinkRequest) returns (ReadLinkResponse);
+	rpc Command(CommandRequest) returns (CommandResponse);
+
+	// handler_id based
+	rpc Sync(SyncRequest) returns (SyncResponse);
+	rpc Truncate(TruncateRequest) returns (TruncateResponse);
+	rpc Close(CloseFileRequest) returns (CloseFileResponse);
+	rpc Seek(SeekRequest) returns (SeekResponse);
+	rpc Read(ReadRequest) returns (ReadResponse);
+	rpc Write(WriteRequest) returns (WriteResponse);
+	
+	// proc API
+	rpc Start(StartRequest) returns (StartResponse);
+	rpc Wait(WaitRequest) returns (WaitResponse);
+	rpc Signal(SignalRequest) returns (SignalResponse);
+	rpc StderrPipe(StdioPipeRequest) returns (StdioPipeResponse);
+	rpc StdoutPipe(StdioPipeRequest) returns (StdioPipeResponse);
+	rpc StdinPipe(StdioPipeRequest) returns (StdioPipeResponse);
+}

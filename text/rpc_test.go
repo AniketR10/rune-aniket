@@ -11,10 +11,12 @@ import (
 
 	"github.com/ernestrc/go-tui"
 	"github.com/ernestrc/go-tui/browser"
+	browserpb "github.com/ernestrc/go-tui/browser/rpc"
 	"github.com/ernestrc/go-tui/cell"
 	"github.com/ernestrc/go-tui/handler"
 	"github.com/ernestrc/go-tui/proto"
 	"github.com/ernestrc/go-tui/term"
+	textpb "github.com/ernestrc/go-tui/text/rpc"
 	"github.com/ernestrc/go-tui/workspace"
 	gomock "github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
@@ -47,7 +49,7 @@ func setupIntTest(
 	t *testing.T, broker proto.MuxBroker, s *Server,
 ) (*Client, func()) {
 	conn, closeFn := doSetupIntTest(t, broker, func(grpcServer *grpc.Server) {
-		proto.RegisterEditorServer(grpcServer, s)
+		textpb.RegisterEditorServer(grpcServer, s)
 	})
 	client := NewClient(broker, conn)
 	return client, func() {
@@ -60,7 +62,7 @@ func setupWmIntTest(
 	t *testing.T, broker proto.MuxBroker, s *browser.Server,
 ) (*browser.Client, func()) {
 	conn, closeFn := doSetupIntTest(t, broker, func(grpcServer *grpc.Server) {
-		proto.RegisterWindowManagerServer(grpcServer, s)
+		browserpb.RegisterWindowManagerServer(grpcServer, s)
 	})
 	client := browser.NewClient(broker, conn)
 	return client, func() {

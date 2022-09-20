@@ -10,7 +10,7 @@ import (
 	"syscall"
 	"time"
 
-	workspacepb "github.com/ernestrc/go-tui/workspace/proto"
+	workspacepb "github.com/ernestrc/go-tui/workspace/rpc"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 

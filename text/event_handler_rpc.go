@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/ernestrc/go-tui/proto"
+	textpb "github.com/ernestrc/go-tui/text/rpc"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 )
@@ -18,8 +18,8 @@ const (
 
 type eventHandlerClient struct {
 	conn         grpc.ClientConnInterface
-	pb           proto.EditorEventHandlerClient
-	evChan       chan proto.EditorEvent
+	pb           textpb.EditorEventHandlerClient
+	evChan       chan textpb.EditorEvent
 	errChan      chan error
 	quitChan     chan struct{}
 	quitCallback func()
@@ -30,10 +30,10 @@ func newEventHandlerClient(
 	cc grpc.ClientConnInterface, quitCallback func(),
 ) *eventHandlerClient {
 	ret := new(eventHandlerClient)
-	ret.pb = proto.NewEditorEventHandlerClient(cc)
+	ret.pb = textpb.NewEditorEventHandlerClient(cc)
 	ret.errChan = make(chan error)
 	ret.quitChan = make(chan struct{})
-	ret.evChan = make(chan proto.EditorEvent, handleBackpressureThres)
+	ret.evChan = make(chan textpb.EditorEvent, handleBackpressureThres)
 	ret.quitCallback = quitCallback
 	ret.conn = cc
 
@@ -58,7 +58,7 @@ func (c *eventHandlerClient) handleError(err error) {
 }
 
 func (c *eventHandlerClient) pipelineEvents() {
-	var protoEv proto.EditorEvent
+	var protoEv textpb.EditorEvent
 	for {
 		select {
 		case <-c.quitChan:
@@ -68,7 +68,7 @@ func (c *eventHandlerClient) pipelineEvents() {
 
 		ctx := context.Background()
 		ctx, cancelFn := context.WithTimeout(ctx, defaultClientTimeout)
-		req := proto.EditorEventHandleRequest{Event: &protoEv}
+		req := textpb.EditorEventHandleRequest{Event: &protoEv}
 		resp, err := c.pb.Handle(ctx, &req)
 		cancelFn()
 		if err != nil {
@@ -96,7 +96,7 @@ func (c *eventHandlerClient) Close() error {
 }
 
 type eventHandlerServer struct {
-	proto.UnimplementedEditorEventHandlerServer
+	textpb.UnimplementedEditorEventHandlerServer
 	handler EventHandler
 	logger  *log.Logger
 	onExit  func()
@@ -112,8 +112,8 @@ func newEventHandlerServer(
 }
 
 func (s *eventHandlerServer) Handle(
-	ctx context.Context, req *proto.EditorEventHandleRequest,
-) (*proto.EditorEventHandleResponse, error) {
+	ctx context.Context, req *textpb.EditorEventHandleRequest,
+) (*textpb.EditorEventHandleResponse, error) {
 	protoEv := req.GetEvent()
 	if protoEv == nil {
 		return nil, errors.New("invalid handle request: missing event property")
@@ -131,7 +131,7 @@ func (s *eventHandlerServer) Handle(
 
 	quit := s.handler.Handle(ctx, ev)
 
-	resp := &proto.EditorEventHandleResponse{Quit: quit}
+	resp := &textpb.EditorEventHandleResponse{Quit: quit}
 
 	if quit {
 		s.onExit()

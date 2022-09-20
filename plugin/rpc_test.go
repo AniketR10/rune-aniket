@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	pluginpb "github.com/ernestrc/go-tui/plugin/rpc"
 	"github.com/ernestrc/go-tui/proto"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -18,59 +19,59 @@ import (
 type testGranteePbClient struct {
 	mu                 sync.Mutex
 	err                error
-	fixturePermissions []*proto.Permission
+	fixturePermissions []*pluginpb.Permission
 	sleepPermissions   time.Duration
 	healthChan         chan struct{}
 	onShutdownChan     chan struct{}
 
-	_permissions *proto.PermRequest
-	_onGrant     *proto.OnPermGrantRequest
-	_shutdown    *proto.ShutdownRequest
-	_health      *proto.HealthRequest
+	_permissions *pluginpb.PermRequest
+	_onGrant     *pluginpb.OnPermGrantRequest
+	_shutdown    *pluginpb.ShutdownRequest
+	_health      *pluginpb.HealthRequest
 }
 
-func (c *testGranteePbClient) permissions() (proto.PermRequest, bool) {
+func (c *testGranteePbClient) permissions() (pluginpb.PermRequest, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c._permissions == nil {
-		return proto.PermRequest{}, false
+		return pluginpb.PermRequest{}, false
 	}
 	return *c._permissions, true
 }
-func (c *testGranteePbClient) onGrant() (proto.OnPermGrantRequest, bool) {
+func (c *testGranteePbClient) onGrant() (pluginpb.OnPermGrantRequest, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c._onGrant == nil {
-		return proto.OnPermGrantRequest{}, false
+		return pluginpb.OnPermGrantRequest{}, false
 	}
 	return *c._onGrant, true
 }
-func (c *testGranteePbClient) shutdown() (proto.ShutdownRequest, bool) {
+func (c *testGranteePbClient) shutdown() (pluginpb.ShutdownRequest, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c._shutdown == nil {
-		return proto.ShutdownRequest{}, false
+		return pluginpb.ShutdownRequest{}, false
 
 	}
 	return *c._shutdown, true
 }
-func (c *testGranteePbClient) health() (proto.HealthRequest, bool) {
+func (c *testGranteePbClient) health() (pluginpb.HealthRequest, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c._health == nil {
-		return proto.HealthRequest{}, false
+		return pluginpb.HealthRequest{}, false
 
 	}
 	return *c._health, true
 }
 
 func (c *testGranteePbClient) Permissions(
-	ctx context.Context, in *proto.PermRequest, opts ...grpc.CallOption,
-) (*proto.PermResponse, error) {
+	ctx context.Context, in *pluginpb.PermRequest, opts ...grpc.CallOption,
+) (*pluginpb.PermResponse, error) {
 	c.mu.Lock()
 	c._permissions = in
 	c.mu.Unlock()
-	permissions := new(proto.PermResponse)
+	permissions := new(pluginpb.PermResponse)
 	if c.err != nil {
 		return nil, c.err
 	}
@@ -80,20 +81,20 @@ func (c *testGranteePbClient) Permissions(
 }
 
 func (c *testGranteePbClient) OnGrant(
-	ctx context.Context, in *proto.OnPermGrantRequest, opts ...grpc.CallOption,
-) (*proto.OnPermGrantResponse, error) {
+	ctx context.Context, in *pluginpb.OnPermGrantRequest, opts ...grpc.CallOption,
+) (*pluginpb.OnPermGrantResponse, error) {
 	c.mu.Lock()
 	c._onGrant = in
 	c.mu.Unlock()
 	if c.err != nil {
 		return nil, c.err
 	}
-	return new(proto.OnPermGrantResponse), nil
+	return new(pluginpb.OnPermGrantResponse), nil
 }
 
 func (c *testGranteePbClient) Shutdown(
-	ctx context.Context, in *proto.ShutdownRequest, opts ...grpc.CallOption,
-) (*proto.ShutdownResponse, error) {
+	ctx context.Context, in *pluginpb.ShutdownRequest, opts ...grpc.CallOption,
+) (*pluginpb.ShutdownResponse, error) {
 	c.mu.Lock()
 	c._shutdown = in
 	c.mu.Unlock()
@@ -105,12 +106,12 @@ func (c *testGranteePbClient) Shutdown(
 	if c.err != nil {
 		return nil, c.err
 	}
-	return new(proto.ShutdownResponse), nil
+	return new(pluginpb.ShutdownResponse), nil
 }
 
 func (c *testGranteePbClient) Health(
-	ctx context.Context, in *proto.HealthRequest, opts ...grpc.CallOption,
-) (*proto.HealthResponse, error) {
+	ctx context.Context, in *pluginpb.HealthRequest, opts ...grpc.CallOption,
+) (*pluginpb.HealthResponse, error) {
 	if c.err != nil {
 		return nil, c.err
 	}
@@ -122,14 +123,14 @@ func (c *testGranteePbClient) Health(
 			c._health = in
 		}
 	}
-	return new(proto.HealthResponse), nil
+	return new(pluginpb.HealthResponse), nil
 }
 
 func TestUnitClient(t *testing.T) {
 	t.Run("permissions sends permissions", func(t *testing.T) {
 		mockpbClient := &testGranteePbClient{}
 		mockpbClient.fixturePermissions =
-			[]*proto.Permission{&proto.Permission{Id: "ballz"}}
+			[]*pluginpb.Permission{&pluginpb.Permission{Id: "ballz"}}
 
 		client := newGranteeClient(nil, mockpbClient)
 
@@ -151,9 +152,9 @@ func TestUnitClient(t *testing.T) {
 		mockpbClient := &testGranteePbClient{}
 		client := newGranteeClient(nil, mockpbClient)
 
-		grant := &proto.PermissionGrant{Id: "shits", GrantId: uint32(1234)}
-		granted := map[string]*proto.PermissionGrant{"poopers": grant}
-		denied := []*proto.Permission{{Id: "poops"}}
+		grant := &pluginpb.PermissionGrant{Id: "shits", GrantId: uint32(1234)}
+		granted := map[string]*pluginpb.PermissionGrant{"poopers": grant}
+		denied := []*pluginpb.Permission{{Id: "poops"}}
 
 		err := client.sendGrants(context.Background(), denied, granted)
 		require.NoError(t, err)
@@ -161,7 +162,7 @@ func TestUnitClient(t *testing.T) {
 		onGrant, ok := mockpbClient.onGrant()
 		require.True(t, ok)
 		assert.Equal(t, onGrant.GetDenied(), denied)
-		assert.Equal(t, []*proto.PermissionGrant{grant}, onGrant.GetGranted())
+		assert.Equal(t, []*pluginpb.PermissionGrant{grant}, onGrant.GetGranted())
 	})
 
 	t.Run("sendGrants bubbles up error", func(t *testing.T) {
@@ -257,14 +258,14 @@ func setupIntTest(
 	grpcServer := grpc.NewServer()
 	server := newGranteeServer(nil, granteeMock, perms, time.Duration(0))
 	server.(*granteeServer).osExit = nil
-	proto.RegisterGranteeServer(grpcServer, server)
+	pluginpb.RegisterGranteeServer(grpcServer, server)
 
 	go grpcServer.Serve(lis)
 
 	conn, err := grpc.Dial(lis.Addr().String(), grpc.WithInsecure())
 	require.NoError(t, err)
 
-	client = newGranteeClient(nil, proto.NewGranteeClient(conn))
+	client = newGranteeClient(nil, pluginpb.NewGranteeClient(conn))
 	closeFn = func() {
 		client.shutdown("test harness")
 		grpcServer.Stop()
@@ -282,8 +283,8 @@ func TestIntegrationPluginClientServer(t *testing.T) {
 		protoPerms, err := client.permissions(context.Background(), nil)
 		require.NoError(t, err)
 
-		assert.Equal(t, []*proto.Permission{
-			&proto.Permission{Id: "write"}, &proto.Permission{Id: "read"},
+		assert.Equal(t, []*pluginpb.Permission{
+			&pluginpb.Permission{Id: "write"}, &pluginpb.Permission{Id: "read"},
 		}, protoPerms)
 		assert.Equal(t, 1, grantee.onConnected)
 	})
@@ -347,8 +348,8 @@ func TestIntegrationPluginClientServer(t *testing.T) {
 		client, closeFn := setupIntTest(t, &grantee, perms)
 		defer closeFn()
 
-		denied := []*proto.Permission{&proto.Permission{Id: "append"}}
-		granted := map[string]*proto.PermissionGrant{"read": &proto.PermissionGrant{Id: "read", GrantId: 1}}
+		denied := []*pluginpb.Permission{&pluginpb.Permission{Id: "append"}}
+		granted := map[string]*pluginpb.PermissionGrant{"read": &pluginpb.PermissionGrant{Id: "read", GrantId: 1}}
 		err := client.sendGrants(context.Background(), denied, granted)
 		require.NoError(t, err)
 
@@ -362,10 +363,10 @@ func TestIntegrationPluginClientServer(t *testing.T) {
 		client, closeFn := setupIntTest(t, &grantee, perms)
 		defer closeFn()
 
-		denied := []*proto.Permission{&proto.Permission{Id: "garbage"}}
-		granted := map[string]*proto.PermissionGrant{
-			"write": &proto.PermissionGrant{Id: "write", GrantId: 1},
-			"trash": &proto.PermissionGrant{Id: "trash", GrantId: 2},
+		denied := []*pluginpb.Permission{&pluginpb.Permission{Id: "garbage"}}
+		granted := map[string]*pluginpb.PermissionGrant{
+			"write": &pluginpb.PermissionGrant{Id: "write", GrantId: 1},
+			"trash": &pluginpb.PermissionGrant{Id: "trash", GrantId: 2},
 		}
 		err := client.sendGrants(context.Background(), denied, granted)
 		require.NoError(t, err)
@@ -380,9 +381,9 @@ func TestIntegrationPluginClientServer(t *testing.T) {
 		client, closeFn := setupIntTest(t, &grantee, perms)
 		defer closeFn()
 
-		denied := []*proto.Permission{&proto.Permission{Id: "garbage"}}
-		granted := map[string]*proto.PermissionGrant{
-			"write": &proto.PermissionGrant{Id: "write", GrantId: 1},
+		denied := []*pluginpb.Permission{&pluginpb.Permission{Id: "garbage"}}
+		granted := map[string]*pluginpb.PermissionGrant{
+			"write": &pluginpb.PermissionGrant{Id: "write", GrantId: 1},
 		}
 		err := client.sendGrants(context.Background(), denied, granted)
 		require.NoError(t, err)

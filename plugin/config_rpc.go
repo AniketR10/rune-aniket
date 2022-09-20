@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	configpb "github.com/ernestrc/go-tui/plugin/proto"
+	configpb "github.com/ernestrc/go-tui/plugin/rpc"
 	"google.golang.org/grpc"
 )
 

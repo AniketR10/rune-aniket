@@ -12,6 +12,7 @@ import (
 
 	"github.com/ernestrc/go-tui"
 	"github.com/ernestrc/go-tui/browser"
+	browserpb "github.com/ernestrc/go-tui/browser/rpc"
 	"github.com/ernestrc/go-tui/proto"
 	"github.com/ernestrc/go-tui/term"
 	"github.com/ernestrc/go-tui/text"
@@ -98,9 +99,9 @@ func newTestRPCBrowser(t *testing.T,
 		grpcServer := grpc.NewServer()
 		server := browser.NewServer(broker, b.Browser(), &serverMutex)
 		server.Logger = logger
-		proto.RegisterWindowManagerServer(grpcServer, server)
-		proto.RegisterMessengerServer(grpcServer, server)
-		proto.RegisterResourceOpenerServer(grpcServer, server)
+		browserpb.RegisterWindowManagerServer(grpcServer, server)
+		browserpb.RegisterMessengerServer(grpcServer, server)
+		browserpb.RegisterResourceOpenerServer(grpcServer, server)
 
 		go grpcServer.Serve(lis)
 

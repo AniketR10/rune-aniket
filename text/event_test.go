@@ -7,8 +7,9 @@ import (
 	"github.com/ernestrc/go-tui/browser"
 	"github.com/ernestrc/go-tui/cell"
 	"github.com/ernestrc/go-tui/component"
-	"github.com/ernestrc/go-tui/proto"
 	"github.com/ernestrc/go-tui/term"
+	termpb "github.com/ernestrc/go-tui/term/rpc"
+	textpb "github.com/ernestrc/go-tui/text/rpc"
 	"github.com/ernestrc/go-tui/workspace"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -16,7 +17,7 @@ import (
 
 var (
 	uri      workspace.URI
-	protoURI proto.URI
+	protoURI textpb.URI
 )
 
 func init() {
@@ -26,7 +27,7 @@ func init() {
 		panic(err)
 	}
 
-	protoURI = *proto.NewURI(uri)
+	protoURI = *textpb.NewURI(uri)
 }
 
 func makeEventIntegrationCase(content string) (in, out *cell.Buffer, cursor *Cursor) {
@@ -176,7 +177,7 @@ func main() {
 func TestEventProto(t *testing.T) {
 	tsuite := []struct {
 		in  Event
-		out proto.EditorEvent
+		out textpb.EditorEvent
 	}{
 		{
 			in: Event{
@@ -185,8 +186,8 @@ func TestEventProto(t *testing.T) {
 				Resource: nil,
 				Content:  "Ageispolis",
 			},
-			out: proto.EditorEvent{
-				Type:         proto.EditorEvent_TypeOpen,
+			out: textpb.EditorEvent{
+				Type:         textpb.EditorEvent_TypeOpen,
 				ResourceName: &protoURI,
 				ResourceId:   0,
 				Content:      "Ageispolis",
@@ -201,8 +202,8 @@ func TestEventProto(t *testing.T) {
 					resource: uri,
 				},
 			},
-			out: proto.EditorEvent{
-				Type:         proto.EditorEvent_TypeFocus,
+			out: textpb.EditorEvent{
+				Type:         textpb.EditorEvent_TypeFocus,
 				ResourceName: &protoURI,
 				ResourceId:   2,
 			},
@@ -214,8 +215,8 @@ func TestEventProto(t *testing.T) {
 				Resource: Token{Token: browser.Token{ID: 288},
 					resource: uri},
 			},
-			out: proto.EditorEvent{
-				Type:         proto.EditorEvent_TypeUnfocus,
+			out: textpb.EditorEvent{
+				Type:         textpb.EditorEvent_TypeUnfocus,
 				ResourceName: &protoURI,
 				ResourceId:   288,
 			},
@@ -228,24 +229,24 @@ func TestEventProto(t *testing.T) {
 				From:  term.Coordinates{X: 5, Y: 6},
 				To:    term.Coordinates{X: 7, Y: 8},
 			},
-			out: proto.EditorEvent{
-				Type:  proto.EditorEvent_TypeScroll,
-				Start: &proto.Coordinates{X: 1, Y: 2},
-				End:   &proto.Coordinates{X: 3, Y: 4},
-				From:  &proto.Coordinates{X: 5, Y: 6},
-				To:    &proto.Coordinates{X: 7, Y: 8},
+			out: textpb.EditorEvent{
+				Type:  textpb.EditorEvent_TypeScroll,
+				Start: &termpb.Coordinates{X: 1, Y: 2},
+				End:   &termpb.Coordinates{X: 3, Y: 4},
+				From:  &termpb.Coordinates{X: 5, Y: 6},
+				To:    &termpb.Coordinates{X: 7, Y: 8},
 			},
 		},
 	}
 
-	t.Run("editor.Event -> proto.EditorEvent", func(t *testing.T) {
+	t.Run("editor.Event -> textpb.EditorEvent", func(t *testing.T) {
 		for _, tcase := range tsuite {
 			actual := tcase.in.toProto()
 			assertEqualProto(t, tcase.out, actual)
 		}
 	})
 
-	t.Run("proto.EditorEvent -> editor.Event ", func(t *testing.T) {
+	t.Run("textpb.EditorEvent -> editor.Event ", func(t *testing.T) {
 		for _, tcase := range tsuite {
 			actual := Event{}
 			actual.fromProto(&tcase.out)
@@ -254,7 +255,7 @@ func TestEventProto(t *testing.T) {
 	})
 }
 
-func assertEqualProto(t *testing.T, expected, actual proto.EditorEvent) {
+func assertEqualProto(t *testing.T, expected, actual textpb.EditorEvent) {
 	assert.Equal(t, expected.Type, actual.Type)
 	assert.Equal(t, expected.ResourceName.GetUri(), actual.ResourceName.GetUri())
 	assert.Equal(t, expected.ResourceId, actual.ResourceId)

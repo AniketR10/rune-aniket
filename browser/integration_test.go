@@ -5,7 +5,8 @@ import (
 	"sync"
 	"testing"
 
-	bproto "github.com/ernestrc/blue/datastore/rpc"
+	storepb "github.com/ernestrc/blue/datastore/rpc"
+	browserpb "github.com/ernestrc/go-tui/browser/rpc"
 	"github.com/ernestrc/go-tui/proto"
 	gomock "github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
@@ -23,11 +24,11 @@ func newClientServerIntegration(
 
 	grpcServer := grpc.NewServer()
 	rpcServer := NewServer(broker, h, mutex)
-	proto.RegisterWindowManagerServer(grpcServer, rpcServer)
-	proto.RegisterResourceOpenerServer(grpcServer, rpcServer)
-	proto.RegisterMessengerServer(grpcServer, rpcServer)
-	proto.RegisterEventPublisherServer(grpcServer, rpcServer)
-	bproto.RegisterDocumentStoreServer(grpcServer, rpcServer)
+	browserpb.RegisterWindowManagerServer(grpcServer, rpcServer)
+	browserpb.RegisterResourceOpenerServer(grpcServer, rpcServer)
+	browserpb.RegisterMessengerServer(grpcServer, rpcServer)
+	browserpb.RegisterEventPublisherServer(grpcServer, rpcServer)
+	storepb.RegisterDocumentStoreServer(grpcServer, rpcServer)
 
 	go grpcServer.Serve(lis)
 

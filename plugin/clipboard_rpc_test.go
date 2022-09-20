@@ -5,6 +5,7 @@ import (
 	"sync"
 	"testing"
 
+	pluginpb "github.com/ernestrc/go-tui/plugin/rpc"
 	"github.com/ernestrc/go-tui/proto"
 	gomock "github.com/golang/mock/gomock"
 	log "github.com/sirupsen/logrus"
@@ -24,8 +25,8 @@ func setupClipboardIntTest(
 
 	grpcServer := grpc.NewServer()
 	srv := newClipboardServer(log.New(), broker, root, new(sync.Mutex))
-	proto.RegisterClipboardServer(grpcServer, srv)
-	proto.RegisterClipboardRegisterServer(grpcServer, srv.defaultRegisterServer)
+	pluginpb.RegisterClipboardServer(grpcServer, srv)
+	pluginpb.RegisterClipboardRegisterServer(grpcServer, srv.defaultRegisterServer)
 
 	conn, err := grpc.Dial(lis.Addr().String(), grpc.WithInsecure())
 	require.NoError(t, err)

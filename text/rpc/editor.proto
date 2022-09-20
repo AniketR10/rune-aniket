@@ -1,0 +1,161 @@
+syntax = "proto3";
+
+option go_package = "github.com/ernestrc/go-tui/text/rpc";
+
+package text;
+
+import "term/rpc/term.proto";
+
+message URI {
+	string uri = 1;
+}
+
+message EditRequest {
+	URI resource_name = 1;
+	repeated term.CellRow buffer = 2;
+}
+
+message EditResponse {
+	uint32 handler_id = 1;
+}
+
+message EditorEvent {
+  enum Type {
+	TypeOpen = 0;
+	TypeClose = 1;
+	TypeFlush = 2;
+	TypeEdit = 3;
+	TypeCommand = 4;
+	TypeScroll = 5;
+	TypeFocus = 6;
+	TypeUnfocus = 7;
+	TypeCursor = 8;
+  }
+
+  Type type = 1;
+  URI resource_name = 2;
+  uint32 resource_id = 3;
+
+  term.Coordinates start = 4;
+  term.Coordinates end = 5;
+  term.Coordinates from = 6;
+  term.Coordinates to = 7;
+  string content = 8;
+  repeated string cmdArgs = 9;
+}
+
+message EditorSubscribeRequest {
+	repeated EditorEvent.Type type = 1;
+	uint32 handler_id = 2;
+}
+
+message EditorSubscribeResponse {
+}
+
+message SetLocationListRequest {
+	message Location {
+		term.Coordinates from = 1;
+		term.Coordinates to = 2;
+		term.Attributes attr = 3;
+		string msg = 4;
+	}
+	uint32 handler_id = 1;
+	string list_id = 2;
+	repeated Location locations = 3;
+}
+
+message SetLocationListResponse {}
+
+message EditCellRequest {
+	uint32 handler_id = 1;
+	term.Coordinates start = 2;
+	term.Coordinates end = 3;
+	string str = 4;
+}
+
+message EditCellResponse {
+	term.Coordinates from = 1;
+	term.Coordinates to = 2;
+	string old = 3;
+}
+
+message RawCellsRequest {
+	uint32 handler_id = 1;
+}
+
+message RawCellsResponse {
+	repeated term.CellRow rows = 1;
+}
+
+message MoveToLocationRequest {
+	uint32 handler_id = 1;
+	string list_id = 2;
+}
+
+message MoveToLocationResponse {
+}
+
+message RegisterCommandRequest {
+	string command = 1;
+	uint32 handler_id = 2;
+}
+
+message RegisterCommandResponse {}
+
+message SetCursorRequest {
+	term.Coordinates pos = 1;
+	uint32 handler_id = 2;
+}
+
+message SetCursorResponse {
+}
+
+message CursorRequest {
+	uint32 handler_id = 1;
+}
+
+message CursorResponse {
+	term.Coordinates pos = 1;
+}
+
+message EditorRequest {
+	URI resource_name = 1;
+}
+
+message EditorResponse {
+	uint32 handler_id = 1;
+}
+
+service Editor {
+	rpc Edit(EditRequest) returns (EditResponse);
+	rpc Subscribe(EditorSubscribeRequest) returns (EditorSubscribeResponse);
+	rpc Register(RegisterCommandRequest) returns (RegisterCommandResponse);
+	rpc SetCursor(SetCursorRequest) returns (SetCursorResponse);
+	rpc Cursor(CursorRequest) returns (CursorResponse);
+	rpc Editor(EditorRequest) returns (EditorResponse);
+
+	// locations
+	rpc SetLocationList(SetLocationListRequest) returns (SetLocationListResponse);
+	rpc MoveToNextLocation(MoveToLocationRequest) returns (MoveToLocationResponse);
+	rpc MoveToPrevLocation(MoveToLocationRequest) returns (MoveToLocationResponse);
+
+
+	// Editor
+	rpc EditCell(EditCellRequest) returns (EditCellResponse);
+
+	// View
+	rpc RawCells(RawCellsRequest) returns (RawCellsResponse);
+}
+
+message EditorEventHandleRequest {
+	EditorEvent event = 1;
+}
+
+message EditorEventHandleResponse {
+	bool quit = 1;
+	bool handled = 2;
+}
+
+service EditorEventHandler {
+	rpc Handle(EditorEventHandleRequest) returns (EditorEventHandleResponse);
+}

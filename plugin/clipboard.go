@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	multierr "github.com/ernestrc/go-multierror"
+	pluginpb "github.com/ernestrc/go-tui/plugin/rpc"
 	"github.com/ernestrc/go-tui/proto"
 	"github.com/ernestrc/go-tui/text"
 	log "github.com/sirupsen/logrus"
@@ -85,8 +86,8 @@ func (s *ClipboardManager) Serve(
 		// uses this ClipboardManager as the clipboard implementation
 		// for all resource requests.
 		s.s = newClipboardServer(l, broker, (*clipboardManagerServer)(s), lock)
-		proto.RegisterClipboardServer(grpc, s.s)
-		proto.RegisterClipboardRegisterServer(grpc, s.s.defaultRegisterServer)
+		pluginpb.RegisterClipboardServer(grpc, s.s)
+		pluginpb.RegisterClipboardRegisterServer(grpc, s.s.defaultRegisterServer)
 
 		return srv
 	})

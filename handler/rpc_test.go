@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/ernestrc/go-tui"
-	"github.com/ernestrc/go-tui/proto"
+	handlerpb "github.com/ernestrc/go-tui/handler/rpc"
 	"github.com/ernestrc/go-tui/term"
 	testutil "github.com/ernestrc/go-tui/util/test"
 	"github.com/stretchr/testify/assert"
@@ -153,14 +153,14 @@ func newServerClient(t *testing.T, testHandler tui.Handler) (*Client, func()) {
 	require.NoError(t, err)
 
 	grpcServer := grpc.NewServer()
-	proto.RegisterHandlerServer(grpcServer, NewServer(testHandler))
+	handlerpb.RegisterHandlerServer(grpcServer, NewServer(testHandler))
 
 	go grpcServer.Serve(lis)
 
 	conn, err := grpc.Dial(lis.Addr().String(), grpc.WithInsecure())
 	require.NoError(t, err)
 
-	return NewClient(proto.NewHandlerClient(conn)), func() {
+	return NewClient(handlerpb.NewHandlerClient(conn)), func() {
 		conn.Close()
 		grpcServer.Stop()
 	}

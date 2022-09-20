@@ -3,8 +3,9 @@ package text
 import (
 	"context"
 
-	"github.com/ernestrc/go-tui/proto"
 	"github.com/ernestrc/go-tui/term"
+	termpb "github.com/ernestrc/go-tui/term/rpc"
+	textpb "github.com/ernestrc/go-tui/text/rpc"
 )
 
 type clientWriter struct {
@@ -17,10 +18,10 @@ func (w clientWriter) Edit(
 ) (from, to term.Coordinates, old string, err error) {
 	ctx := context.Background()
 
-	var protoStart, protoEnd proto.Coordinates
+	var protoStart, protoEnd termpb.Coordinates
 	protoStart.FromModel(start)
 	protoEnd.FromModel(end)
-	req := proto.EditCellRequest{
+	req := textpb.EditCellRequest{
 		HandlerId: w.handlerID,
 		Start:     &protoStart,
 		End:       &protoEnd,

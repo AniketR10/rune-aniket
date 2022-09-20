@@ -6,6 +6,7 @@ import (
 	"github.com/ernestrc/go-tui/proto"
 	"github.com/ernestrc/go-tui/term"
 	"github.com/ernestrc/go-tui/text"
+	textpb "github.com/ernestrc/go-tui/text/rpc"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 )
@@ -48,7 +49,7 @@ func (s *editorResourceServer) Serve(
 				lock.Lock()
 				server.Logger = l
 				lock.Unlock()
-				proto.RegisterEditorServer(grpc, interruptEditorServer(server, term.Interrupt))
+				textpb.RegisterEditorServer(grpc, interruptEditorServer(server, term.Interrupt))
 			}
 			return s.srv
 		})

@@ -11,6 +11,8 @@ import (
 	"github.com/ernestrc/go-tui/cell"
 	"github.com/ernestrc/go-tui/proto"
 	"github.com/ernestrc/go-tui/term"
+	termpb "github.com/ernestrc/go-tui/term/rpc"
+	textpb "github.com/ernestrc/go-tui/text/rpc"
 	"github.com/ernestrc/go-tui/workspace"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
@@ -41,7 +43,7 @@ type Client struct {
 
 	broker proto.MuxBroker
 	cc     grpc.ClientConnInterface
-	ed     proto.EditorClient
+	ed     textpb.EditorClient
 
 	// event handler server resources. event handler servers are created on
 	// calls to Subscribe.
@@ -61,7 +63,7 @@ func NewClient(
 func (c *Client) Init(
 	broker proto.MuxBroker, cc grpc.ClientConnInterface,
 ) {
-	c.ed = proto.NewEditorClient(cc)
+	c.ed = textpb.NewEditorClient(cc)
 	c.cc = cc
 	c.broker = broker
 	c.servers = make(map[uint64]io.Closer)
@@ -93,7 +95,7 @@ func (c *Client) serveHandler(h EventHandler) (uint32, error) {
 				c.safeForceCloseHandler(handlerID, "editorEventHandlerServer.onExit")
 			})
 			s.logger = c.Logger
-			proto.RegisterEditorEventHandlerServer(srv.GRPC(), s)
+			textpb.RegisterEditorEventHandlerServer(srv.GRPC(), s)
 		})
 	if err != nil {
 		return 0, err
@@ -108,7 +110,7 @@ func (c *Client) serveHandler(h EventHandler) (uint32, error) {
 // Edit requests editor server to edit buf.
 func (c *Client) Edit(file workspace.URI, buf *cell.Buffer) (Handler, error) {
 	ctx := context.Background()
-	req := proto.NewEditRequest(file, buf)
+	req := textpb.NewEditRequest(file, buf)
 
 	res, err := c.ed.Edit(ctx, &req)
 	if err != nil {
@@ -122,7 +124,7 @@ func (c *Client) Edit(file workspace.URI, buf *cell.Buffer) (Handler, error) {
 // Editor satisfies text.Editor
 func (c *Client) Editor(file workspace.URI) (Handler, error) {
 	ctx := context.Background()
-	req := proto.EditorRequest{ResourceName: proto.NewURI(file)}
+	req := textpb.EditorRequest{ResourceName: textpb.NewURI(file)}
 
 	res, err := c.ed.Editor(ctx, &req)
 	if err != nil {
@@ -142,7 +144,7 @@ func (c *Client) SubscribeEditorEvents(evs []EventType, h EventHandler) error {
 		return fmt.Errorf("serveHandler: %w", err)
 	}
 
-	req := proto.EditorSubscribeRequest{HandlerId: handlerID}
+	req := textpb.EditorSubscribeRequest{HandlerId: handlerID}
 	for _, ev := range evs {
 		req.Type = append(req.Type, Event{Type: ev}.protoType())
 	}
@@ -178,7 +180,7 @@ func (c *Client) SubscribeCommand(cmd string, h CommandHandler) error {
 		return fmt.Errorf("serveHandler: %w", err)
 	}
 
-	req := proto.RegisterCommandRequest{Command: cmd, HandlerId: handlerID}
+	req := textpb.RegisterCommandRequest{Command: cmd, HandlerId: handlerID}
 	_, err = c.ed.Register(ctx, &req)
 	if err != nil {
 		reason := fmt.Sprintf("editor.Client.Register: %v", err)
@@ -191,19 +193,19 @@ func (c *Client) SubscribeCommand(cmd string, h CommandHandler) error {
 
 func makeLocationListRequest(
 	handlerID uint32, listID string, l LocationList,
-) proto.SetLocationListRequest {
-	req := proto.SetLocationListRequest{
+) textpb.SetLocationListRequest {
+	req := textpb.SetLocationListRequest{
 		HandlerId: handlerID,
 		ListId:    listID,
 	}
 
 	for loc, ok := l.Current(); ok; loc, ok = l.Next() {
-		var from, to proto.Coordinates
-		var attr proto.Attributes
+		var from, to termpb.Coordinates
+		var attr termpb.Attributes
 		from.FromModel(loc.From)
 		to.FromModel(loc.To)
 		attr.FromModel(loc.Attr)
-		req.Locations = append(req.Locations, &proto.SetLocationListRequest_Location{
+		req.Locations = append(req.Locations, &textpb.SetLocationListRequest_Location{
 			From: &from,
 			To:   &to,
 			Attr: &attr,
@@ -233,7 +235,7 @@ func (c *Client) moveToLocation(h Handler, ID string, next bool) (err error) {
 	if !ok {
 		panic("MoveToNextLocation: invalid Handler argument")
 	}
-	req := proto.MoveToLocationRequest{HandlerId: uint32(token.ID), ListId: ID}
+	req := textpb.MoveToLocationRequest{HandlerId: uint32(token.ID), ListId: ID}
 	if next {
 		_, err = c.ed.MoveToNextLocation(ctx, &req)
 	} else {
@@ -261,9 +263,9 @@ func (c *Client) SetCursor(h Handler, pos term.Coordinates) error {
 	if !ok {
 		panic("SetCursor: invalid Handler argument")
 	}
-	var protoPos proto.Coordinates
+	var protoPos termpb.Coordinates
 	protoPos.FromModel(pos)
-	req := proto.SetCursorRequest{Pos: &protoPos, HandlerId: uint32(token.ID)}
+	req := textpb.SetCursorRequest{Pos: &protoPos, HandlerId: uint32(token.ID)}
 	_, err := c.ed.SetCursor(ctx, &req)
 	return err
 }
@@ -275,7 +277,7 @@ func (c *Client) Cursor(h Handler) (term.Coordinates, error) {
 	if !ok {
 		panic("Cursor: invalid Handler argument")
 	}
-	req := proto.CursorRequest{HandlerId: uint32(token.ID)}
+	req := textpb.CursorRequest{HandlerId: uint32(token.ID)}
 	res, err := c.ed.Cursor(ctx, &req)
 	if err != nil {
 		return term.Coordinates{}, err

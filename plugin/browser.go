@@ -5,6 +5,7 @@ import (
 
 	bproto "github.com/ernestrc/blue/datastore/rpc"
 	"github.com/ernestrc/go-tui/browser"
+	browserpb "github.com/ernestrc/go-tui/browser/rpc"
 	"github.com/ernestrc/go-tui/proto"
 	"github.com/ernestrc/go-tui/term"
 	log "github.com/sirupsen/logrus"
@@ -62,10 +63,10 @@ func (s *browserResourceServer) Serve(
 				server.Init(broker, s.b, lock, interruptWindowServer)
 				server.Logger = l
 				rpcServer := interruptBrowserServer(server, term.Interrupt)
-				proto.RegisterWindowManagerServer(grpc, rpcServer)
-				proto.RegisterResourceOpenerServer(grpc, rpcServer)
-				proto.RegisterMessengerServer(grpc, rpcServer)
-				proto.RegisterEventPublisherServer(grpc, rpcServer)
+				browserpb.RegisterWindowManagerServer(grpc, rpcServer)
+				browserpb.RegisterResourceOpenerServer(grpc, rpcServer)
+				browserpb.RegisterMessengerServer(grpc, rpcServer)
+				browserpb.RegisterEventPublisherServer(grpc, rpcServer)
 				bproto.RegisterDocumentStoreServer(grpc, rpcServer)
 			}
 			return s.srv

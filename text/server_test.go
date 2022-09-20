@@ -13,6 +13,8 @@ import (
 	"github.com/ernestrc/go-tui/proto"
 	prototest "github.com/ernestrc/go-tui/proto/test"
 	"github.com/ernestrc/go-tui/term"
+	termpb "github.com/ernestrc/go-tui/term/rpc"
+	textpb "github.com/ernestrc/go-tui/text/rpc"
 	"github.com/ernestrc/go-tui/workspace"
 	gomock "github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
@@ -53,7 +55,7 @@ func callServerEdit(
 
 	buf := cell.NewBuffer()
 	buf.WriteString(content)
-	req := proto.NewEditRequest(uri, buf)
+	req := textpb.NewEditRequest(uri, buf)
 
 	res, err := s.Edit(ctx, &req)
 	require.NoError(t, err)
@@ -92,7 +94,7 @@ func TestServerEdit(t *testing.T) {
 			Return(nil, errors.New("NOLINUX")).
 			Times(1)
 
-		req := proto.NewEditRequest(resource, cell.NewBuffer())
+		req := textpb.NewEditRequest(resource, cell.NewBuffer())
 
 		res, err := s.Edit(ctx, &req)
 		require.Error(t, err)
@@ -107,13 +109,13 @@ func waitForMonitoringExit(quitCh chan struct{}) {
 
 func expectHandlerInvokeExit(t *testing.T, handlerConn *proto.MockMuxConn) {
 	handlerConn.EXPECT().
-		Invoke(gomock.Any(), gomock.Eq("/proto.EditorEventHandler/Handle"),
+		Invoke(gomock.Any(), gomock.Eq("/text.EditorEventHandler/Handle"),
 			gomock.Any(),
 			gomock.Any()).
 		DoAndReturn(func(ctx context.Context,
 			method string, args interface{},
 			reply interface{}, opts ...grpc.CallOption) error {
-			res, ok := reply.(*proto.EditorEventHandleResponse)
+			res, ok := reply.(*textpb.EditorEventHandleResponse)
 			require.True(t, ok)
 
 			res.Quit = true
@@ -169,11 +171,11 @@ func TestServerSubscribe(t *testing.T) {
 				actualEvTypes = evs
 				return nil
 			})
-		req := proto.EditorSubscribeRequest{
+		req := textpb.EditorSubscribeRequest{
 			HandlerId: nextID,
-			Type: []proto.EditorEvent_Type{
-				proto.EditorEvent_TypeFlush,
-				proto.EditorEvent_TypeFocus,
+			Type: []textpb.EditorEvent_Type{
+				textpb.EditorEvent_TypeFlush,
+				textpb.EditorEvent_TypeFocus,
 			},
 		}
 		conn := prototest.ExpectBrokerDial(t, ctrl, broker, nextID)
@@ -217,9 +219,9 @@ func TestServerSubscribe(t *testing.T) {
 		conn := prototest.ExpectBrokerDial(t, ctrl, broker, nextID)
 		quitCh := prototest.ExpectMonitorConn(conn)
 
-		req := proto.EditorSubscribeRequest{
+		req := textpb.EditorSubscribeRequest{
 			HandlerId: nextID,
-			Type:      []proto.EditorEvent_Type{proto.EditorEvent_TypeFlush},
+			Type:      []textpb.EditorEvent_Type{textpb.EditorEvent_TypeFlush},
 		}
 
 		wg.Add(1)
@@ -350,10 +352,10 @@ func TestServerSetCursor(t *testing.T) {
 		pos := term.Coordinates{X: 4, Y: 5}
 		mock.EXPECT().SetCursor(gomock.Any(), gomock.Eq(pos)).Return(nil).Times(1)
 
-		var protoPos proto.Coordinates
+		var protoPos termpb.Coordinates
 		protoPos.FromModel(pos)
 
-		req := proto.SetCursorRequest{HandlerId: nextID, Pos: &protoPos}
+		req := textpb.SetCursorRequest{HandlerId: nextID, Pos: &protoPos}
 		res, err := s.SetCursor(ctx, &req)
 		require.NoError(t, err)
 		require.NotNil(t, res)
@@ -377,7 +379,7 @@ func TestServerCursor(t *testing.T) {
 		pos := term.Coordinates{X: 4, Y: 5}
 		mock.EXPECT().Cursor(gomock.Any()).Return(pos, nil).Times(1)
 
-		req := proto.CursorRequest{HandlerId: nextID}
+		req := textpb.CursorRequest{HandlerId: nextID}
 		res, err := s.Cursor(ctx, &req)
 		require.NoError(t, err)
 		require.NotNil(t, res)

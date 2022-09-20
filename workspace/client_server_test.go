@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	workspacepb "github.com/ernestrc/go-tui/workspace/proto"
+	workspacepb "github.com/ernestrc/go-tui/workspace/rpc"
 	gomock "github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

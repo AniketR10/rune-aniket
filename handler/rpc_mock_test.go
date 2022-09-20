@@ -5,8 +5,9 @@ import (
 	"io"
 
 	"github.com/ernestrc/go-tui"
-	"github.com/ernestrc/go-tui/proto"
+	handlerpb "github.com/ernestrc/go-tui/handler/rpc"
 	"github.com/ernestrc/go-tui/term"
+	termpb "github.com/ernestrc/go-tui/term/rpc"
 	"google.golang.org/grpc"
 )
 
@@ -18,13 +19,13 @@ type mockHandlerClient struct {
 }
 
 func (c *mockHandlerClient) Handle(
-	ctx context.Context, in *proto.HandleRequest, opts ...grpc.CallOption,
-) (*proto.HandleResponse, error) {
+	ctx context.Context, in *handlerpb.HandleRequest, opts ...grpc.CallOption,
+) (*handlerpb.HandleResponse, error) {
 	if c.rpcError != nil {
 		return nil, c.rpcError
 	}
 
-	resp := new(proto.HandleResponse)
+	resp := new(handlerpb.HandleResponse)
 	ev, err := in.GetEvent().ToModel()
 	if err != nil {
 		return nil, err
@@ -33,9 +34,9 @@ func (c *mockHandlerClient) Handle(
 	width, height := int(in.GetDraw().GetWidth()), int(in.GetDraw().GetHeight())
 	c.remote.Resize(width, height)
 	pos, show := c.remote.Cursor()
-	resp.Draw = proto.NewDrawResponse(c.remote, width, height)
-	resp.Draw.Cursor = &proto.DrawResponse_Cursor{
-		Position: &proto.Coordinates{
+	resp.Draw = handlerpb.NewDrawResponse(c.remote, width, height)
+	resp.Draw.Cursor = &handlerpb.DrawResponse_Cursor{
+		Position: &termpb.Coordinates{
 			X: int32(pos.X),
 			Y: int32(pos.Y),
 		},
@@ -54,22 +55,22 @@ func (c *mockHandlerClient) Handle(
 }
 
 func (c *mockHandlerClient) Man(
-	ctx context.Context, in *proto.ManRequest, opts ...grpc.CallOption,
-) (*proto.ManResponse, error) {
+	ctx context.Context, in *handlerpb.ManRequest, opts ...grpc.CallOption,
+) (*handlerpb.ManResponse, error) {
 	if c.rpcError != nil {
 		return nil, c.rpcError
 	}
 
 	man := c.remote.Man()
-	protoMan := proto.Manual{}
+	protoMan := termpb.Manual{}
 	protoMan.FromModel(man)
 
-	return &proto.ManResponse{Man: &protoMan}, nil
+	return &handlerpb.ManResponse{Man: &protoMan}, nil
 }
 
 func (c *mockHandlerClient) Close(
-	ctx context.Context, in *proto.CloseRequest, opts ...grpc.CallOption,
-) (*proto.CloseResponse, error) {
+	ctx context.Context, in *handlerpb.CloseRequest, opts ...grpc.CallOption,
+) (*handlerpb.CloseResponse, error) {
 	if c.rpcError != nil {
 		return nil, c.rpcError
 	}
@@ -79,5 +80,5 @@ func (c *mockHandlerClient) Close(
 			return nil, err
 		}
 	}
-	return &proto.CloseResponse{}, nil
+	return &handlerpb.CloseResponse{}, nil
 }

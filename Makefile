@@ -16,7 +16,6 @@ EXAMPLES=$(EXAMPLES_NON_WASM)
 EXECSRC=$(wildcard cmd/**/*.go) $(wildcard cmd/**/**/*.go)
 EXECDIRS=$(sort $(dir $(EXECSRC)))
 EXECS=$(patsubst cmd/%/,$(BIN)/%,$(EXECDIRS))
-PROTO=proto/*.pb.go
 GOMOCKS=$(wildcard **/*_gomock.go)
 
 .PHONY: clean test coverage example_wasm generate
@@ -38,9 +37,14 @@ coverage: $(BIN)
 	@ go tool cover -html=$(BIN)/coverage
 
 generate:
+	@ rm -rf **/rpc/*.pb.go
 	@ go generate ./...
-	@ mv proto/github.com/ernestrc/go-tui/proto/*.pb.go proto/
-	@ rm -rf proto/github.com
+	@ mv browser/github.com/ernestrc/go-tui/browser/rpc/* browser/rpc
+	@ mv text/github.com/ernestrc/go-tui/text/rpc/* text/rpc
+	@ mv plugin/github.com/ernestrc/go-tui/plugin/rpc/* plugin/rpc
+	@ mv workspace/github.com/ernestrc/go-tui/workspace/rpc/* workspace/rpc
+	@ mv term/github.com/ernestrc/go-tui/term/rpc/* term/rpc
+	@ mv handler/github.com/ernestrc/go-tui/handler/rpc/* handler/rpc
 
 install:
 	@ go install ./...

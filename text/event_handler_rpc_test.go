@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/ernestrc/go-tui/browser"
-	"github.com/ernestrc/go-tui/proto"
+	textpb "github.com/ernestrc/go-tui/text/rpc"
 	gomock "github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -25,7 +25,7 @@ func newClientServerIntegration(
 
 	grpcServer := grpc.NewServer()
 	server := newEventHandlerServer(h, serverQuitCallback)
-	proto.RegisterEditorEventHandlerServer(grpcServer, server)
+	textpb.RegisterEditorEventHandlerServer(grpcServer, server)
 
 	go grpcServer.Serve(lis)
 

@@ -1,7 +1,5 @@
 package plugin
 
-//go:generate protoc proto/config.proto --go_out=. --go-grpc_out=. --go_opt=Mproto/config.proto=/proto
-
 import (
 	"encoding/json"
 	"errors"
@@ -306,7 +304,8 @@ func GetDuration(
 }
 
 // GetEvent is a helper which extracts and parses a component.FrameCharSet
-//  as a map of string to runes from a Config.
+//
+//	as a map of string to runes from a Config.
 func GetFrameCharset(c Config, key string, def component.FrameCharSet) (
 	component.FrameCharSet, error,
 ) {

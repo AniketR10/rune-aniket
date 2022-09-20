@@ -9,8 +9,9 @@ import (
 
 	"github.com/ernestrc/go-tui"
 	"github.com/ernestrc/go-tui/component"
-	"github.com/ernestrc/go-tui/proto"
+	handlerpb "github.com/ernestrc/go-tui/handler/rpc"
 	"github.com/ernestrc/go-tui/term"
+	termpb "github.com/ernestrc/go-tui/term/rpc"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -50,22 +51,22 @@ type Client struct {
 	}
 
 	errors chan error
-	client proto.HandlerClient
+	client handlerpb.HandlerClient
 	resp   struct {
-		*proto.HandleResponse
+		*handlerpb.HandleResponse
 		height, width int
 	}
 }
 
 // NewClient allocates storage for a new Client and initializes it.
-func NewClient(pbClient proto.HandlerClient) *Client {
+func NewClient(pbClient handlerpb.HandlerClient) *Client {
 	ret := new(Client)
 	ret.Init(pbClient)
 	return ret
 }
 
 // Init initialies this Client with pbClient and the given interrupt func.
-func (c *Client) Init(pbClient proto.HandlerClient) {
+func (c *Client) Init(pbClient handlerpb.HandlerClient) {
 	c.client = pbClient
 	// NOTE client breaker is a great concept but interruptDraw is global
 	// so if there are multiple client breakers, it's hard to figure out when
@@ -97,7 +98,7 @@ func (c *Client) Resize(width, height int) {
 	c.width, c.height = width, height
 }
 
-func (c *Client) doDraw(w term.Writer, resp *proto.DrawResponse) {
+func (c *Client) doDraw(w term.Writer, resp *handlerpb.DrawResponse) {
 	for y, row := range resp.GetRows() {
 		for x, c := range row.Cells {
 			cell := c.ToModel()
@@ -108,8 +109,8 @@ func (c *Client) doDraw(w term.Writer, resp *proto.DrawResponse) {
 
 func (c *Client) setNewHandleResponse(comp tui.Component) {
 	comp.Resize(c.width, c.height)
-	draw := proto.NewDrawResponse(comp, c.width, c.height)
-	c.resp.HandleResponse = &proto.HandleResponse{Draw: draw}
+	draw := handlerpb.NewDrawResponse(comp, c.width, c.height)
+	c.resp.HandleResponse = &handlerpb.HandleResponse{Draw: draw}
 	c.resp.width = c.width
 	c.resp.height = c.height
 	c.cursor.show = false
@@ -145,7 +146,7 @@ func (c *Client) handle(ev term.Event) (exit, handled bool, err error) {
 	ctx, cancel := context.WithTimeout(context.Background(), defaultRPCTimeout)
 	defer cancel()
 
-	protoEv := proto.Event{}
+	protoEv := termpb.Event{}
 	err = protoEv.FromModel(ev)
 	if err != nil {
 		c.collectError("Handle", err)
@@ -154,9 +155,9 @@ func (c *Client) handle(ev term.Event) (exit, handled bool, err error) {
 		return
 	}
 
-	drawReq := proto.DrawRequest{Width: int32(c.width), Height: int32(c.height)}
+	drawReq := handlerpb.DrawRequest{Width: int32(c.width), Height: int32(c.height)}
 
-	req := proto.HandleRequest{Event: &protoEv, Draw: &drawReq}
+	req := handlerpb.HandleRequest{Event: &protoEv, Draw: &drawReq}
 	resp, err := c.client.Handle(ctx, &req)
 	if err != nil {
 		c.collectError("Handle", err)
@@ -194,7 +195,7 @@ func (c *Client) Man() tui.Manual {
 	ctx, cancel := context.WithTimeout(context.Background(), defaultRPCTimeout)
 	defer cancel()
 
-	req := proto.ManRequest{}
+	req := handlerpb.ManRequest{}
 
 	resp, err := c.client.Man(ctx, &req)
 	if err != nil {
@@ -229,7 +230,7 @@ func (c *Client) Close() error {
 	ctx, cancel := context.WithTimeout(context.Background(), defaultRPCTimeout)
 	defer cancel()
 
-	req := proto.CloseRequest{}
+	req := handlerpb.CloseRequest{}
 	_, err := c.client.Close(ctx, &req)
 	if err != nil {
 		return fmt.Errorf("proto.HandlerClient.Close: %w", err)
@@ -239,7 +240,7 @@ func (c *Client) Close() error {
 
 // Server serves a tui.Handler implementation over GRPC.
 type Server struct {
-	proto.UnimplementedHandlerServer
+	handlerpb.UnimplementedHandlerServer
 	handler tui.Handler
 	Logger  *log.Logger
 	width   int
@@ -258,8 +259,8 @@ func (s *Server) Init(handler tui.Handler) {
 	s.handler = handler
 }
 
-func (s *Server) draw(ctx context.Context, in *proto.DrawRequest) (
-	*proto.DrawResponse, error,
+func (s *Server) draw(ctx context.Context, in *handlerpb.DrawRequest) (
+	*handlerpb.DrawResponse, error,
 ) {
 	if int(in.Width) != s.width || int(in.Height) != s.height {
 		s.handler.Resize(int(in.Width), int(in.Height))
@@ -267,7 +268,7 @@ func (s *Server) draw(ctx context.Context, in *proto.DrawRequest) (
 	s.width = int(in.Width)
 	s.height = int(in.Height)
 	cursor, show := s.handler.Cursor()
-	res := proto.NewDrawResponse(s.handler, int(in.Width), int(in.Height))
+	res := handlerpb.NewDrawResponse(s.handler, int(in.Width), int(in.Height))
 	res.Cursor.Position.X = int32(cursor.X)
 	res.Cursor.Position.Y = int32(cursor.Y)
 	res.Cursor.Show = show
@@ -276,8 +277,8 @@ func (s *Server) draw(ctx context.Context, in *proto.DrawRequest) (
 
 // Handle is an RPC that handles request to an underlying Handler's
 // Handle over RPC.
-func (s *Server) Handle(ctx context.Context, req *proto.HandleRequest) (
-	*proto.HandleResponse, error,
+func (s *Server) Handle(ctx context.Context, req *handlerpb.HandleRequest) (
+	*handlerpb.HandleResponse, error,
 ) {
 	pev := req.GetEvent()
 	if pev == nil {
@@ -300,7 +301,7 @@ func (s *Server) Handle(ctx context.Context, req *proto.HandleRequest) (
 		return nil, err
 	}
 
-	return &proto.HandleResponse{
+	return &handlerpb.HandleResponse{
 		Quit:    exit,
 		Handled: handled,
 		Draw:    resp,
@@ -309,19 +310,19 @@ func (s *Server) Handle(ctx context.Context, req *proto.HandleRequest) (
 
 // Man is an RPC that handles request to an underlying
 // Handler's Man over RPC.
-func (s *Server) Man(context.Context, *proto.ManRequest) (
-	*proto.ManResponse, error,
+func (s *Server) Man(context.Context, *handlerpb.ManRequest) (
+	*handlerpb.ManResponse, error,
 ) {
 	man := s.handler.Man()
-	protoMan := new(proto.Manual)
+	protoMan := new(termpb.Manual)
 	protoMan.FromModel(man)
-	return &proto.ManResponse{Man: protoMan}, nil
+	return &handlerpb.ManResponse{Man: protoMan}, nil
 }
 
 // Close is an RPC that handles request to an underlying
 // Handler's Close if it implements it, otherwise it ignores request.
-func (s *Server) Close(ctx context.Context, req *proto.CloseRequest) (
-	*proto.CloseResponse, error,
+func (s *Server) Close(ctx context.Context, req *handlerpb.CloseRequest) (
+	*handlerpb.CloseResponse, error,
 ) {
 	closer, ok := s.handler.(io.Closer)
 	if ok {
@@ -331,5 +332,5 @@ func (s *Server) Close(ctx context.Context, req *proto.CloseRequest) (
 		}
 	}
 	tryLog(s.Logger, log.DebugLevel, "handler.Server.Close: %v", ok)
-	return &proto.CloseResponse{}, nil
+	return &handlerpb.CloseResponse{}, nil
 }

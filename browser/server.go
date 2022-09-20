@@ -9,7 +9,9 @@ import (
 	"time"
 
 	"github.com/ernestrc/blue/datastore/document"
+	browserpb "github.com/ernestrc/go-tui/browser/rpc"
 	"github.com/ernestrc/go-tui/handler"
+	handlerpb "github.com/ernestrc/go-tui/handler/rpc"
 	"github.com/ernestrc/go-tui/proto"
 	"github.com/ernestrc/go-tui/term"
 	"github.com/ernestrc/go-tui/util"
@@ -19,10 +21,10 @@ import (
 
 // Server serves a Browser over GRPC.
 type Server struct {
-	proto.UnimplementedEventPublisherServer
-	proto.UnimplementedMessengerServer
-	proto.UnimplementedResourceOpenerServer
-	proto.UnimplementedWindowManagerServer
+	browserpb.UnimplementedEventPublisherServer
+	browserpb.UnimplementedMessengerServer
+	browserpb.UnimplementedResourceOpenerServer
+	browserpb.UnimplementedWindowManagerServer
 	document.Server
 
 	Logger *log.Logger
@@ -53,7 +55,7 @@ type Server struct {
 		sync.Locker
 	}
 
-	windowServer func(*Server, Window) proto.WindowServer
+	windowServer func(*Server, Window) browserpb.WindowServer
 }
 
 // browserServerHandler wraps a handler.Client to satisfy browser.Handler
@@ -88,7 +90,7 @@ func NewServer(
 // Init initializes this Server with broker and browser.
 func (s *Server) Init(
 	broker proto.MuxBroker, browser Browser, lock sync.Locker,
-	windowServer func(*Server, Window) proto.WindowServer,
+	windowServer func(*Server, Window) browserpb.WindowServer,
 ) {
 	s.broker = broker
 	s.browser.Browser = browser
@@ -128,7 +130,7 @@ func (s *Server) dialHandler(handlerID uint64) (Handler, error) {
 		return nil, err
 	}
 
-	pbClient := proto.NewHandlerClient(handlerConn)
+	pbClient := handlerpb.NewHandlerClient(handlerConn)
 	pbClient = newIOWaitUnlockHandlerClient(pbClient, s.browser.Locker)
 	cc := handler.NewClient(pbClient)
 	cc.Logger = s.Logger
@@ -163,7 +165,7 @@ func (s *Server) serveWindow(win Window) (uint64, error) {
 	brokerID, srv, err := proto.AcceptAndServe(s.broker, s.Logger,
 		func(windowBrokerID uint32, srv proto.MuxServer) {
 			winSrv := s.windowServer(s, win)
-			proto.RegisterWindowServer(srv.GRPC(), winSrv)
+			browserpb.RegisterWindowServer(srv.GRPC(), winSrv)
 		})
 	if err != nil {
 		return 0, err
@@ -288,26 +290,26 @@ func (s *Server) newRemoteResource(
 	return winID, nil
 }
 
-func protoToModelOrientation(p proto.Orientation) (o Orientation) {
+func protoToModelOrientation(p browserpb.Orientation) (o Orientation) {
 	switch p {
-	case proto.Orientation_Default:
+	case browserpb.Orientation_Default:
 		o = OrientationDefault
-	case proto.Orientation_Top:
+	case browserpb.Orientation_Top:
 		o = OrientationTop
-	case proto.Orientation_Bottom:
+	case browserpb.Orientation_Bottom:
 		o = OrientationBottom
-	case proto.Orientation_Left:
+	case browserpb.Orientation_Left:
 		o = OrientationLeft
-	case proto.Orientation_Right:
+	case browserpb.Orientation_Right:
 		o = OrientationRight
 	}
 	return
 }
 
-// Split satisfies proto.BrowserServer
+// Split satisfies BrowserServer
 func (s *Server) Split(
-	ctx context.Context, req *proto.SplitRequest,
-) (*proto.SplitResponse, error) {
+	ctx context.Context, req *browserpb.SplitRequest,
+) (*browserpb.SplitResponse, error) {
 	windowID, err := s.newRemoteResource(ctx, req.GetHandlerId(),
 		func(wm WindowManager, h Handler) (Window, error) {
 			return wm.Split(protoToModelOrientation(req.GetOrientation()), h)
@@ -315,13 +317,13 @@ func (s *Server) Split(
 	if err != nil {
 		return nil, err
 	}
-	return &proto.SplitResponse{WindowId: windowID}, nil
+	return &browserpb.SplitResponse{WindowId: windowID}, nil
 }
 
-// Bar satisfies proto.BrowserServer
+// Bar satisfies BrowserServer
 func (s *Server) Bar(
-	ctx context.Context, req *proto.BarRequest,
-) (*proto.BarResponse, error) {
+	ctx context.Context, req *browserpb.BarRequest,
+) (*browserpb.BarResponse, error) {
 	handlerID := req.GetHandlerId()
 	handler, created, err := s.getContentHandler(handlerID)
 	if err != nil {
@@ -338,7 +340,7 @@ func (s *Server) Bar(
 		}
 		return nil, err
 	}
-	return new(proto.BarResponse), nil
+	return new(browserpb.BarResponse), nil
 }
 
 func (s *Server) setBrowserMessage(msg string) error {
@@ -348,16 +350,16 @@ func (s *Server) setBrowserMessage(msg string) error {
 	return s.browser.SetMessage(msg)
 }
 
-// SetMessage satisfies proto.BrowserServer
+// SetMessage satisfies BrowserServer
 func (s *Server) SetMessage(
-	ctx context.Context, req *proto.SetMessageRequest,
-) (*proto.SetMessageResponse, error) {
+	ctx context.Context, req *browserpb.SetMessageRequest,
+) (*browserpb.SetMessageResponse, error) {
 	msg := util.SanitizeLine(req.GetMsg())
 	err := s.setBrowserMessage(msg)
 	if err != nil {
 		return nil, err
 	}
-	return new(proto.SetMessageResponse), nil
+	return new(browserpb.SetMessageResponse), nil
 }
 
 // ensureAvailable stores h for future calls to SetContent or Split methods
@@ -380,10 +382,10 @@ func (s *Server) ensureAvailable(h Handler) uint64 {
 	return uint64(handlerID)
 }
 
-// Open satisfies proto.BrowserServer
+// Open satisfies BrowserServer
 func (s *Server) Open(
-	ctx context.Context, req *proto.OpenResourceRequest,
-) (*proto.OpenResourceResponse, error) {
+	ctx context.Context, req *browserpb.OpenResourceRequest,
+) (*browserpb.OpenResourceResponse, error) {
 	uri, err := workspace.ParseURI(req.GetResource())
 	if err != nil {
 		return nil, err
@@ -398,13 +400,13 @@ func (s *Server) Open(
 	}
 
 	handlerID := s.ensureAvailable(h)
-	return &proto.OpenResourceResponse{HandlerId: handlerID}, nil
+	return &browserpb.OpenResourceResponse{HandlerId: handlerID}, nil
 }
 
-// Publish satisfies proto.BrowserServer
+// Publish satisfies BrowserServer
 func (s *Server) Publish(
-	ctx context.Context, req *proto.PublishRequest,
-) (*proto.PublishResponse, error) {
+	ctx context.Context, req *browserpb.PublishRequest,
+) (*browserpb.PublishResponse, error) {
 	ev, err := req.GetEv().ToModel()
 	if err != nil {
 		return nil, err
@@ -427,13 +429,13 @@ func (s *Server) Publish(
 		return nil, err
 	}
 
-	return new(proto.PublishResponse), nil
+	return new(browserpb.PublishResponse), nil
 }
 
-// Focus satisfies proto.BrowserServer
+// Focus satisfies BrowserServer
 func (s *Server) Focus(
-	ctx context.Context, req *proto.FocusRequest,
-) (*proto.FocusResponse, error) {
+	ctx context.Context, req *browserpb.FocusRequest,
+) (*browserpb.FocusResponse, error) {
 	s.browser.Lock()
 	defer s.browser.Unlock()
 	win, err := s.browser.Focus()
@@ -447,17 +449,17 @@ func (s *Server) Focus(
 		return nil, fmt.Errorf("serveWindow: %w", err)
 	}
 
-	res := &proto.FocusResponse{
+	res := &browserpb.FocusResponse{
 		WindowId: windowID,
 	}
 
 	return res, nil
 }
 
-// SetFocus satisfies proto.BrowserServer
+// SetFocus satisfies BrowserServer
 func (s *Server) SetFocus(
-	ctx context.Context, req *proto.SetFocusRequest,
-) (*proto.FocusResponse, error) {
+	ctx context.Context, req *browserpb.SetFocusRequest,
+) (*browserpb.FocusResponse, error) {
 	s.browser.Lock()
 	defer s.browser.Unlock()
 
@@ -479,17 +481,17 @@ func (s *Server) SetFocus(
 		return nil, fmt.Errorf("serveWindow: %w", err)
 	}
 
-	res := &proto.FocusResponse{
+	res := &browserpb.FocusResponse{
 		WindowId: windowID,
 	}
 
 	return res, nil
 }
 
-// Floating satisfies proto.BrowserServer
+// Floating satisfies BrowserServer
 func (s *Server) Floating(
-	ctx context.Context, req *proto.FloatingWindowRequest,
-) (*proto.FloatingWindowResponse, error) {
+	ctx context.Context, req *browserpb.FloatingWindowRequest,
+) (*browserpb.FloatingWindowResponse, error) {
 	at := req.GetAt().ToModel()
 	height := int(req.GetHeight())
 	width := int(req.GetWidth())
@@ -500,13 +502,13 @@ func (s *Server) Floating(
 	if err != nil {
 		return nil, err
 	}
-	return &proto.FloatingWindowResponse{WindowId: windowID}, nil
+	return &browserpb.FloatingWindowResponse{WindowId: windowID}, nil
 }
 
-// Tab satisfies proto.BrowserServer
+// Tab satisfies BrowserServer
 func (s *Server) Tab(
-	ctx context.Context, req *proto.TabRequest,
-) (*proto.TabResponse, error) {
+	ctx context.Context, req *browserpb.TabRequest,
+) (*browserpb.TabResponse, error) {
 	name := req.GetResourceName()
 	id := req.GetResourceId()
 	uri, err := workspace.ParseURI(id)
@@ -523,7 +525,7 @@ func (s *Server) Tab(
 		return nil, err
 	}
 	handlerID := s.ensureAvailable(tab)
-	return &proto.TabResponse{TabHandlerId: handlerID}, nil
+	return &browserpb.TabResponse{TabHandlerId: handlerID}, nil
 }
 
 // Close closes all resources associated with this server.

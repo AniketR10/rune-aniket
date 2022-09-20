@@ -10,6 +10,8 @@ import (
 
 	"github.com/ernestrc/go-tui/browser"
 	"github.com/ernestrc/go-tui/proto"
+	termpb "github.com/ernestrc/go-tui/term/rpc"
+	textpb "github.com/ernestrc/go-tui/text/rpc"
 	"github.com/ernestrc/go-tui/workspace"
 	log "github.com/sirupsen/logrus"
 )
@@ -20,7 +22,7 @@ var (
 
 // Server serves an Editor over GRPC.
 type Server struct {
-	proto.UnimplementedEditorServer
+	textpb.UnimplementedEditorServer
 	Logger *log.Logger
 
 	broker proto.MuxBroker
@@ -269,32 +271,32 @@ func (s *Server) editHandler(
 	return handlerID, nil
 }
 
-// Edit satisfies proto.EditorServer
-func (s *Server) Edit(ctx context.Context, in *proto.EditRequest) (
-	*proto.EditResponse, error,
+// Edit satisfies textpb.EditorServer
+func (s *Server) Edit(ctx context.Context, in *textpb.EditRequest) (
+	*textpb.EditResponse, error,
 ) {
-	uri, err := proto.NewURIFromProto(in.GetResourceName())
+	uri, err := textpb.NewURIFromProto(in.GetResourceName())
 	if err != nil {
 		return nil, err
 	}
 
 	handlerID, err := s.editHandler(uri,
 		func(resource workspace.URI) (Handler, error) {
-			buf := proto.EditRequestToBuffer(in)
+			buf := textpb.EditRequestToBuffer(in)
 			return s.editor.Edit(uri, buf)
 		})
 	if err != nil {
 		return nil, err
 	}
 
-	return &proto.EditResponse{HandlerId: handlerID}, nil
+	return &textpb.EditResponse{HandlerId: handlerID}, nil
 }
 
-// Editor satisfies proto.EditorServer
-func (s *Server) Editor(ctx context.Context, in *proto.EditorRequest) (
-	*proto.EditorResponse, error,
+// Editor satisfies textpb.EditorServer
+func (s *Server) Editor(ctx context.Context, in *textpb.EditorRequest) (
+	*textpb.EditorResponse, error,
 ) {
-	uri, err := proto.NewURIFromProto(in.GetResourceName())
+	uri, err := textpb.NewURIFromProto(in.GetResourceName())
 	if err != nil {
 		return nil, err
 	}
@@ -307,12 +309,12 @@ func (s *Server) Editor(ctx context.Context, in *proto.EditorRequest) (
 		return nil, err
 	}
 
-	return &proto.EditorResponse{HandlerId: handlerID}, nil
+	return &textpb.EditorResponse{HandlerId: handlerID}, nil
 }
 
-// Subscribe satisfies proto.EditorServer
-func (s *Server) Subscribe(ctx context.Context, in *proto.EditorSubscribeRequest) (
-	*proto.EditorSubscribeResponse, error,
+// Subscribe satisfies textpb.EditorServer
+func (s *Server) Subscribe(ctx context.Context, in *textpb.EditorSubscribeRequest) (
+	*textpb.EditorSubscribeResponse, error,
 ) {
 	handlerID := in.GetHandlerId()
 	handler, err := s.dialHandler(handlerID)
@@ -338,12 +340,12 @@ func (s *Server) Subscribe(ctx context.Context, in *proto.EditorSubscribeRequest
 		return nil, err
 	}
 
-	return new(proto.EditorSubscribeResponse), nil
+	return new(textpb.EditorSubscribeResponse), nil
 }
 
-// Register satisfies proto.EditorServer
-func (s *Server) Register(ctx context.Context, in *proto.RegisterCommandRequest) (
-	*proto.RegisterCommandResponse, error,
+// Register satisfies textpb.EditorServer
+func (s *Server) Register(ctx context.Context, in *textpb.RegisterCommandRequest) (
+	*textpb.RegisterCommandResponse, error,
 ) {
 	handlerID := in.GetHandlerId()
 	handler, err := s.dialHandler(handlerID)
@@ -374,10 +376,10 @@ func (s *Server) Register(ctx context.Context, in *proto.RegisterCommandRequest)
 		return nil, err
 	}
 
-	return new(proto.RegisterCommandResponse), nil
+	return new(textpb.RegisterCommandResponse), nil
 }
 
-func getLocations(locs []*proto.SetLocationListRequest_Location) (ret []Location) {
+func getLocations(locs []*textpb.SetLocationListRequest_Location) (ret []Location) {
 	for _, loc := range locs {
 		ret = append(ret, Location{
 			Attr:    loc.GetAttr().ToModel(),
@@ -389,9 +391,9 @@ func getLocations(locs []*proto.SetLocationListRequest_Location) (ret []Location
 	return
 }
 
-// SetLocationList satisfies proto.EditorServer
-func (s *Server) SetLocationList(ctx context.Context, in *proto.SetLocationListRequest) (
-	*proto.SetLocationListResponse, error,
+// SetLocationList satisfies textpb.EditorServer
+func (s *Server) SetLocationList(ctx context.Context, in *textpb.SetLocationListRequest) (
+	*textpb.SetLocationListResponse, error,
 ) {
 	handlerID := in.GetHandlerId()
 	locs := in.GetLocations()
@@ -410,26 +412,26 @@ func (s *Server) SetLocationList(ctx context.Context, in *proto.SetLocationListR
 		return nil, err
 	}
 
-	return new(proto.SetLocationListResponse), nil
+	return new(textpb.SetLocationListResponse), nil
 }
 
-// MoveToNextLocation satisfies proto.EditorServer
-func (s *Server) MoveToNextLocation(ctx context.Context, in *proto.MoveToLocationRequest) (
-	res *proto.MoveToLocationResponse, err error,
+// MoveToNextLocation satisfies textpb.EditorServer
+func (s *Server) MoveToNextLocation(ctx context.Context, in *textpb.MoveToLocationRequest) (
+	res *textpb.MoveToLocationResponse, err error,
 ) {
 	return s.moveToLocation(ctx, in, true)
 }
 
-// MoveToPrevLocation satisfies proto.EditorServer
-func (s *Server) MoveToPrevLocation(ctx context.Context, in *proto.MoveToLocationRequest) (
-	res *proto.MoveToLocationResponse, err error,
+// MoveToPrevLocation satisfies textpb.EditorServer
+func (s *Server) MoveToPrevLocation(ctx context.Context, in *textpb.MoveToLocationRequest) (
+	res *textpb.MoveToLocationResponse, err error,
 ) {
 	return s.moveToLocation(ctx, in, false)
 }
 
-// SetCursor satisfies proto.EditorServer
-func (s *Server) SetCursor(ctx context.Context, in *proto.SetCursorRequest) (
-	*proto.SetCursorResponse, error,
+// SetCursor satisfies textpb.EditorServer
+func (s *Server) SetCursor(ctx context.Context, in *textpb.SetCursorRequest) (
+	*textpb.SetCursorResponse, error,
 ) {
 	handlerID := in.GetHandlerId()
 	pos := in.GetPos()
@@ -447,12 +449,12 @@ func (s *Server) SetCursor(ctx context.Context, in *proto.SetCursorRequest) (
 		return nil, err
 	}
 
-	return new(proto.SetCursorResponse), nil
+	return new(textpb.SetCursorResponse), nil
 }
 
-// Cursor satisfies proto.EditorServer
-func (s *Server) Cursor(ctx context.Context, in *proto.CursorRequest) (
-	*proto.CursorResponse, error,
+// Cursor satisfies textpb.EditorServer
+func (s *Server) Cursor(ctx context.Context, in *textpb.CursorRequest) (
+	*textpb.CursorResponse, error,
 ) {
 	handlerID := in.GetHandlerId()
 
@@ -469,15 +471,15 @@ func (s *Server) Cursor(ctx context.Context, in *proto.CursorRequest) (
 		return nil, err
 	}
 
-	var protoPos proto.Coordinates
+	var protoPos termpb.Coordinates
 	protoPos.FromModel(pos)
 
-	return &proto.CursorResponse{Pos: &protoPos}, nil
+	return &textpb.CursorResponse{Pos: &protoPos}, nil
 }
 
 func (s *Server) moveToLocation(
-	ctx context.Context, in *proto.MoveToLocationRequest, next bool,
-) (res *proto.MoveToLocationResponse, err error) {
+	ctx context.Context, in *textpb.MoveToLocationRequest, next bool,
+) (res *textpb.MoveToLocationResponse, err error) {
 	handlerID := in.GetHandlerId()
 	id := in.GetListId()
 
@@ -499,13 +501,13 @@ func (s *Server) moveToLocation(
 		return nil, err
 	}
 
-	res = new(proto.MoveToLocationResponse)
+	res = new(textpb.MoveToLocationResponse)
 	return res, nil
 }
 
-// EditCell satisfies proto.EditorServer
-func (s *Server) EditCell(ctx context.Context, in *proto.EditCellRequest) (
-	*proto.EditCellResponse, error,
+// EditCell satisfies textpb.EditorServer
+func (s *Server) EditCell(ctx context.Context, in *textpb.EditCellRequest) (
+	*textpb.EditCellResponse, error,
 ) {
 	handlerID := in.GetHandlerId()
 	start := in.GetStart().ToModel()
@@ -525,11 +527,11 @@ func (s *Server) EditCell(ctx context.Context, in *proto.EditCellRequest) (
 		return nil, err
 	}
 
-	var protoFrom, protoTo proto.Coordinates
+	var protoFrom, protoTo termpb.Coordinates
 	protoFrom.FromModel(from)
 	protoTo.FromModel(to)
 
-	res := &proto.EditCellResponse{
+	res := &textpb.EditCellResponse{
 		From: &protoFrom,
 		To:   &protoTo,
 		Old:  old,
@@ -537,9 +539,9 @@ func (s *Server) EditCell(ctx context.Context, in *proto.EditCellRequest) (
 	return res, nil
 }
 
-// RawCells satisfies proto.EditorServer
-func (s *Server) RawCells(ctx context.Context, in *proto.RawCellsRequest) (
-	*proto.RawCellsResponse, error,
+// RawCells satisfies textpb.EditorServer
+func (s *Server) RawCells(ctx context.Context, in *textpb.RawCellsRequest) (
+	*textpb.RawCellsResponse, error,
 ) {
 	handlerID := in.GetHandlerId()
 
@@ -556,7 +558,7 @@ func (s *Server) RawCells(ctx context.Context, in *proto.RawCellsRequest) (
 		return nil, err
 	}
 
-	return proto.NewRawCellsResponse(cells), nil
+	return textpb.NewRawCellsResponse(cells), nil
 }
 
 // Close closes all resources associated with this server.

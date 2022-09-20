@@ -3,7 +3,7 @@ package plugin
 import (
 	"sync"
 
-	configpb "github.com/ernestrc/go-tui/plugin/proto"
+	configpb "github.com/ernestrc/go-tui/plugin/rpc"
 	"github.com/ernestrc/go-tui/proto"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"

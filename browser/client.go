@@ -9,9 +9,12 @@ import (
 
 	"github.com/ernestrc/blue/datastore/document"
 	"github.com/ernestrc/go-tui"
+	browserpb "github.com/ernestrc/go-tui/browser/rpc"
 	"github.com/ernestrc/go-tui/handler"
+	handlerpb "github.com/ernestrc/go-tui/handler/rpc"
 	"github.com/ernestrc/go-tui/proto"
 	"github.com/ernestrc/go-tui/term"
+	termpb "github.com/ernestrc/go-tui/term/rpc"
 	"github.com/ernestrc/go-tui/workspace"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
@@ -38,10 +41,10 @@ type Client struct {
 	broker  proto.MuxBroker
 	cc      grpc.ClientConnInterface
 	storage document.Client
-	wm      proto.WindowManagerClient
-	msg     proto.MessengerClient
-	f       proto.ResourceOpenerClient
-	p       proto.EventPublisherClient
+	wm      browserpb.WindowManagerClient
+	msg     browserpb.MessengerClient
+	f       browserpb.ResourceOpenerClient
+	p       browserpb.EventPublisherClient
 
 	// window client resources. windowClients are created on
 	// calls to Split* or Focus. They are destroyed when client
@@ -92,11 +95,11 @@ func (c *Client) Init(
 	broker proto.MuxBroker, cc grpc.ClientConnInterface,
 ) {
 	c.storage.Init(cc)
-	c.wm = proto.NewWindowManagerClient(cc)
-	c.msg = proto.NewMessengerClient(cc)
+	c.wm = browserpb.NewWindowManagerClient(cc)
+	c.msg = browserpb.NewMessengerClient(cc)
 	c.cc = cc
-	c.f = proto.NewResourceOpenerClient(cc)
-	c.p = proto.NewEventPublisherClient(cc)
+	c.f = browserpb.NewResourceOpenerClient(cc)
+	c.p = browserpb.NewEventPublisherClient(cc)
 	c.broker = broker
 	c.clients = make(map[uint64]io.Closer)
 	c.servers = make(map[uint64]io.Closer)
@@ -122,7 +125,7 @@ func (c *Client) serveHandler(h Handler) (uint64, bool, error) {
 				}
 				hsrv := handler.NewServer(h)
 				hsrv.Logger = c.Logger
-				proto.RegisterHandlerServer(srv.GRPC(), hsrv)
+				handlerpb.RegisterHandlerServer(srv.GRPC(), hsrv)
 			})
 		brokerID = uint64(brokerID32)
 		if err != nil {
@@ -149,7 +152,7 @@ func (c *Client) dialWindow(windowID uint64) (Window, error) {
 		return nil, err
 	}
 
-	cc := proto.NewWindowClient(winConn)
+	cc := browserpb.NewWindowClient(winConn)
 	client := newWindowClient(windowID, c, cc)
 	client.logger = c.Logger
 
@@ -201,22 +204,22 @@ func (c *Client) safeForceCloseWindow(brokerID uint64, reason string) error {
 	return err
 }
 
-type clientSplit func(cc proto.WindowManagerClient,
-	ctx context.Context, req *proto.SplitRequest,
-	opts ...grpc.CallOption) (*proto.SplitResponse, error)
+type clientSplit func(cc browserpb.WindowManagerClient,
+	ctx context.Context, req *browserpb.SplitRequest,
+	opts ...grpc.CallOption) (*browserpb.SplitResponse, error)
 
-func toProtoOrientation(o Orientation) proto.Orientation {
+func toProtoOrientation(o Orientation) browserpb.Orientation {
 	switch o {
 	case OrientationDefault:
-		return proto.Orientation_Default
+		return browserpb.Orientation_Default
 	case OrientationTop:
-		return proto.Orientation_Top
+		return browserpb.Orientation_Top
 	case OrientationBottom:
-		return proto.Orientation_Bottom
+		return browserpb.Orientation_Bottom
 	case OrientationLeft:
-		return proto.Orientation_Left
+		return browserpb.Orientation_Left
 	case OrientationRight:
-		return proto.Orientation_Right
+		return browserpb.Orientation_Right
 	default:
 		panic("invalid orientation")
 	}
@@ -227,7 +230,7 @@ func (c *Client) split(split clientSplit, o Orientation, h Handler) (Window, err
 	if err != nil {
 		return nil, fmt.Errorf("serveHandler: %w", err)
 	}
-	req := proto.SplitRequest{HandlerId: handlerID, Orientation: toProtoOrientation(o)}
+	req := browserpb.SplitRequest{HandlerId: handlerID, Orientation: toProtoOrientation(o)}
 	ctx := context.Background()
 	res, err := split(c.wm, ctx, &req)
 	if err != nil {
@@ -250,7 +253,7 @@ func (c *Client) split(split clientSplit, o Orientation, h Handler) (Window, err
 
 // Split satisfies Browser.
 func (c *Client) Split(o Orientation, h Handler) (Window, error) {
-	return c.split((proto.WindowManagerClient).Split, o, h)
+	return c.split((browserpb.WindowManagerClient).Split, o, h)
 }
 
 // Bar satisfies Browser.
@@ -259,7 +262,7 @@ func (c *Client) Bar(o Orientation, h tui.Handler) error {
 	if err != nil {
 		return fmt.Errorf("serveHandler: %w", err)
 	}
-	req := proto.BarRequest{HandlerId: handlerID, Orientation: toProtoOrientation(o)}
+	req := browserpb.BarRequest{HandlerId: handlerID, Orientation: toProtoOrientation(o)}
 	ctx := context.Background()
 	_, err = c.wm.Bar(ctx, &req)
 	if err != nil {
@@ -277,7 +280,7 @@ func (c *Client) SetMessage(msg string, args ...interface{}) error {
 	msg = fmt.Sprintf(msg, args...)
 
 	ctx := context.Background()
-	req := proto.SetMessageRequest{Msg: msg}
+	req := browserpb.SetMessageRequest{Msg: msg}
 
 	_, err := c.msg.SetMessage(ctx, &req)
 	return err
@@ -286,7 +289,7 @@ func (c *Client) SetMessage(msg string, args ...interface{}) error {
 // Open satisfies Browser.
 func (c *Client) Open(resource workspace.URI) (Handler, error) {
 	ctx := context.Background()
-	req := proto.OpenResourceRequest{Resource: resource.String()}
+	req := browserpb.OpenResourceRequest{Resource: resource.String()}
 
 	res, err := c.f.Open(ctx, &req)
 	if err != nil {
@@ -299,12 +302,12 @@ func (c *Client) Open(resource workspace.URI) (Handler, error) {
 // PublishEventNone satisfies Browser.
 func (c *Client) PublishEventNone() error {
 	ctx := context.Background()
-	protoEv := new(proto.Event)
+	protoEv := new(termpb.Event)
 	err := protoEv.FromModel(term.Event{Type: term.EventNone})
 	if err != nil {
 		return err
 	}
-	req := proto.PublishRequest{Ev: protoEv}
+	req := browserpb.PublishRequest{Ev: protoEv}
 
 	_, err = c.p.Publish(ctx, &req)
 	return err
@@ -313,12 +316,12 @@ func (c *Client) PublishEventNone() error {
 // PublishInterrupt satisfies Browser.
 func (c *Client) PublishInterrupt() error {
 	ctx := context.Background()
-	protoEv := new(proto.Event)
+	protoEv := new(termpb.Event)
 	err := protoEv.FromModel(term.Event{Type: term.EventInterrupt})
 	if err != nil {
 		return err
 	}
-	req := proto.PublishRequest{Ev: protoEv}
+	req := browserpb.PublishRequest{Ev: protoEv}
 
 	_, err = c.p.Publish(ctx, &req)
 	return err
@@ -328,7 +331,7 @@ func (c *Client) PublishInterrupt() error {
 func (c *Client) SetFocus(win Window) (Window, error) {
 	ctx := context.Background()
 	client := win.(*windowClient)
-	req := proto.SetFocusRequest{WindowId: client.brokerID}
+	req := browserpb.SetFocusRequest{WindowId: client.brokerID}
 	res, err := c.wm.SetFocus(ctx, &req)
 	if err != nil {
 		return nil, err
@@ -339,7 +342,7 @@ func (c *Client) SetFocus(win Window) (Window, error) {
 // Focus satisfies Browser.
 func (c *Client) Focus() (Window, error) {
 	ctx := context.Background()
-	req := proto.FocusRequest{}
+	req := browserpb.FocusRequest{}
 	res, err := c.wm.Focus(ctx, &req)
 	if err != nil {
 		return nil, err
@@ -393,18 +396,18 @@ func (c *Client) List(
 func (c *Client) Floating(
 	h Handler, at term.Coordinates, height, width int,
 ) (Window, error) {
-	var atProto proto.Coordinates
+	var atProto termpb.Coordinates
 	atProto.FromModel(at)
 
-	freq := proto.FloatingWindowRequest{
+	freq := browserpb.FloatingWindowRequest{
 		At:     &atProto,
 		Height: int32(height),
 		Width:  int32(width),
 	}
 
-	return c.split(func(cc proto.WindowManagerClient,
-		ctx context.Context, req *proto.SplitRequest,
-		opts ...grpc.CallOption) (*proto.SplitResponse, error) {
+	return c.split(func(cc browserpb.WindowManagerClient,
+		ctx context.Context, req *browserpb.SplitRequest,
+		opts ...grpc.CallOption) (*browserpb.SplitResponse, error) {
 
 		freq.HandlerId = req.GetHandlerId()
 
@@ -412,7 +415,7 @@ func (c *Client) Floating(
 		if err != nil {
 			return nil, err
 		}
-		return &proto.SplitResponse{WindowId: fres.GetWindowId()}, nil
+		return &browserpb.SplitResponse{WindowId: fres.GetWindowId()}, nil
 	}, OrientationDefault, h)
 }
 
@@ -422,7 +425,7 @@ func (c *Client) Tab(uri workspace.URI, name string, h Handler) (Handler, error)
 	if err != nil {
 		return nil, fmt.Errorf("serveHandler: %w", err)
 	}
-	req := proto.TabRequest{
+	req := browserpb.TabRequest{
 		HandlerId:    handlerID,
 		ResourceId:   uri.String(),
 		ResourceName: name,

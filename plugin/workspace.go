@@ -5,7 +5,7 @@ import (
 
 	"github.com/ernestrc/go-tui/proto"
 	"github.com/ernestrc/go-tui/workspace"
-	workspacepb "github.com/ernestrc/go-tui/workspace/proto"
+	workspacepb "github.com/ernestrc/go-tui/workspace/rpc"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 )

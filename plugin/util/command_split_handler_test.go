@@ -11,6 +11,7 @@ import (
 	"github.com/ernestrc/go-tui/proto"
 	prototest "github.com/ernestrc/go-tui/proto/test"
 	"github.com/ernestrc/go-tui/text"
+	textpb "github.com/ernestrc/go-tui/text/rpc"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/grpc"
@@ -46,11 +47,11 @@ func expectSubscribe(
 
 	conn := prototest.ExpectBrokerDial(t, ctrl, broker, token)
 	prototest.ExpectBrokerServe(t, subscribedHandlerToken, broker)
-	expected := proto.RegisterCommandRequest{HandlerId: subscribedHandlerToken, Command: cmd}
+	expected := textpb.RegisterCommandRequest{HandlerId: subscribedHandlerToken, Command: cmd}
 
 	conn.EXPECT().
 		Invoke(gomock.Any(),
-			gomock.Eq("/proto.Editor/Register"),
+			gomock.Eq("/text.Editor/Register"),
 			gomock.Eq(&expected),
 			gomock.Any()).
 		Times(1)

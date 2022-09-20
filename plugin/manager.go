@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/ernestrc/blue/datastore/document"
+	pluginpb "github.com/ernestrc/go-tui/plugin/rpc"
 	"github.com/ernestrc/go-tui/proto"
 	"github.com/ernestrc/go-tui/util"
 	"github.com/ernestrc/go-tui/workspace"
@@ -162,10 +163,10 @@ func (m *Manager) doGrant(
 	ctx context.Context,
 	pluginID string,
 	client *granteeClientWrap,
-	perms []*proto.Permission,
+	perms []*pluginpb.Permission,
 ) error {
-	var denied []*proto.Permission
-	granted := make(map[string]*proto.PermissionGrant)
+	var denied []*pluginpb.Permission
+	granted := make(map[string]*pluginpb.PermissionGrant)
 
 	for _, p := range perms {
 		permissionID := util.SanitizeLine(p.GetId())
@@ -181,7 +182,7 @@ func (m *Manager) doGrant(
 
 		grantID := m.broker.NextId()
 
-		granted[permissionID] = &proto.PermissionGrant{
+		granted[permissionID] = &pluginpb.PermissionGrant{
 			Id:      permissionID,
 			GrantId: grantID,
 		}

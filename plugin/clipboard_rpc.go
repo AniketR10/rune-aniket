@@ -8,6 +8,7 @@ import (
 	"time"
 
 	multierr "github.com/ernestrc/go-multierror"
+	pluginpb "github.com/ernestrc/go-tui/plugin/rpc"
 	"github.com/ernestrc/go-tui/proto"
 	log "github.com/sirupsen/logrus"
 
@@ -19,7 +20,7 @@ const (
 )
 
 type clipboardServer struct {
-	proto.UnimplementedClipboardServer
+	pluginpb.UnimplementedClipboardServer
 	broker                proto.MuxBroker
 	locker                sync.Locker
 	clients               map[uint64]io.Closer
@@ -31,14 +32,14 @@ type clipboardServer struct {
 
 type clipboardRegisterClient struct {
 	cc            proto.MuxConn
-	c             proto.ClipboardRegisterClient
+	c             pluginpb.ClipboardRegisterClient
 	cancelMonitor func()
 	hook          func() error
 }
 
 func (c *clipboardRegisterClient) Paste() (string, error) {
 	ctx := context.Background()
-	req := proto.ClipboardPasteRequest{}
+	req := pluginpb.ClipboardPasteRequest{}
 
 	res, err := c.c.Paste(ctx, &req)
 	if err != nil {
@@ -49,7 +50,7 @@ func (c *clipboardRegisterClient) Paste() (string, error) {
 
 func (c *clipboardRegisterClient) Copy(data string) error {
 	ctx := context.Background()
-	req := proto.ClipboardCopyRequest{Data: data}
+	req := pluginpb.ClipboardCopyRequest{Data: data}
 
 	_, err := c.c.Copy(ctx, &req)
 	if err != nil {
@@ -103,7 +104,7 @@ func (s *clipboardServer) dialRegister(handlerID uint32) (ClipboardRegister, err
 		return nil, err
 	}
 
-	c := proto.NewClipboardRegisterClient(handlerConn)
+	c := pluginpb.NewClipboardRegisterClient(handlerConn)
 	client := &clipboardRegisterClient{c: c, cc: handlerConn}
 
 	ctx, cancelFn := context.WithCancel(context.Background())
@@ -126,8 +127,8 @@ func (s *clipboardServer) dialRegister(handlerID uint32) (ClipboardRegister, err
 	return client, nil
 }
 
-func (s *clipboardServer) SetRegister(ctx context.Context, req *proto.SetRegisterRequest) (
-	*proto.SetRegisterResponse, error,
+func (s *clipboardServer) SetRegister(ctx context.Context, req *pluginpb.SetRegisterRequest) (
+	*pluginpb.SetRegisterResponse, error,
 ) {
 	handlerID := req.GetHandlerId()
 	register, err := s.dialRegister(uint32(handlerID))
@@ -144,7 +145,7 @@ func (s *clipboardServer) SetRegister(ctx context.Context, req *proto.SetRegiste
 		return nil, err
 	}
 
-	return new(proto.SetRegisterResponse), nil
+	return new(pluginpb.SetRegisterResponse), nil
 }
 
 func (s *clipboardServer) Close() (ret error) {
@@ -178,21 +179,21 @@ type clipboardClient struct {
 
 	broker         proto.MuxBroker
 	cc             grpc.ClientConnInterface
-	c              proto.ClipboardClient
+	c              pluginpb.ClipboardClient
 	logger         *log.Logger
 	remoteRegister *clipboardRegisterClient
 }
 
 type clipboardRegisterServer struct {
-	proto.UnimplementedClipboardRegisterServer
+	pluginpb.UnimplementedClipboardRegisterServer
 	srv    proto.MuxServer
 	r      ClipboardRegister
 	locker sync.Locker
 }
 
 func (c *clipboardRegisterServer) Copy(
-	ctx context.Context, req *proto.ClipboardCopyRequest,
-) (res *proto.ClipboardCopyResponse, err error) {
+	ctx context.Context, req *pluginpb.ClipboardCopyRequest,
+) (res *pluginpb.ClipboardCopyResponse, err error) {
 	c.locker.Lock()
 	defer c.locker.Unlock()
 
@@ -201,17 +202,17 @@ func (c *clipboardRegisterServer) Copy(
 	if err != nil {
 		return
 	}
-	res = new(proto.ClipboardCopyResponse)
+	res = new(pluginpb.ClipboardCopyResponse)
 	return
 }
 
 func (c *clipboardRegisterServer) Paste(
-	ctx context.Context, req *proto.ClipboardPasteRequest,
-) (res *proto.ClipboardPasteResponse, err error) {
+	ctx context.Context, req *pluginpb.ClipboardPasteRequest,
+) (res *pluginpb.ClipboardPasteResponse, err error) {
 	c.locker.Lock()
 	defer c.locker.Unlock()
 
-	res = new(proto.ClipboardPasteResponse)
+	res = new(pluginpb.ClipboardPasteResponse)
 	res.Data, err = c.r.Paste()
 	if err != nil {
 		res = nil
@@ -234,10 +235,10 @@ func newClipboardClient(
 	ret.broker = broker
 	ret.cc = cc
 	ret.logger = logger
-	ret.c = proto.NewClipboardClient(cc)
+	ret.c = pluginpb.NewClipboardClient(cc)
 	ret.registers = make(map[string]*clipboardRegisterServer)
 
-	c := proto.NewClipboardRegisterClient(cc)
+	c := pluginpb.NewClipboardRegisterClient(cc)
 	ret.remoteRegister = &clipboardRegisterClient{c: c, cc: cc}
 
 	return ret
@@ -249,7 +250,7 @@ func (c *clipboardClient) serveClipboardRegister(
 	rs := &clipboardRegisterServer{r: r, locker: &c.mu}
 	brokerID, srv, err := proto.AcceptAndServe(c.broker, c.logger,
 		func(handlerID uint32, srv proto.MuxServer) {
-			proto.RegisterClipboardRegisterServer(srv.GRPC(), rs)
+			pluginpb.RegisterClipboardRegisterServer(srv.GRPC(), rs)
 		})
 	if err != nil {
 		return nil, 0, err
@@ -281,7 +282,7 @@ func (c *clipboardClient) SetRegister(registerID string, r ClipboardRegister) er
 	if err != nil {
 		return fmt.Errorf("serveClipboardRegister: %w", err)
 	}
-	req := proto.SetRegisterRequest{HandlerId: uint64(handlerID), RegisterId: registerID}
+	req := pluginpb.SetRegisterRequest{HandlerId: uint64(handlerID), RegisterId: registerID}
 	_, err = c.c.SetRegister(ctx, &req)
 	if err != nil {
 		_ = cc.Close()

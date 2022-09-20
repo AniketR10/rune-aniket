@@ -9,6 +9,8 @@ import (
 	"github.com/ernestrc/go-tui/proto"
 	prototest "github.com/ernestrc/go-tui/proto/test"
 	"github.com/ernestrc/go-tui/term"
+	termpb "github.com/ernestrc/go-tui/term/rpc"
+	textpb "github.com/ernestrc/go-tui/text/rpc"
 	"github.com/ernestrc/go-tui/workspace"
 	gomock "github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
@@ -31,20 +33,20 @@ func expectClientEdit(
 ) {
 	mockCC.EXPECT().
 		Invoke(gomock.Any(),
-			gomock.Eq("/proto.Editor/Edit"),
+			gomock.Eq("/text.Editor/Edit"),
 			gomock.Any(),
 			gomock.Any()).
 		DoAndReturn(func(
 			ctx context.Context, method string, args interface{},
 			reply interface{}, opts ...grpc.CallOption) error {
-			editReq, ok := args.(*proto.EditRequest)
+			editReq, ok := args.(*textpb.EditRequest)
 			require.True(t, ok)
 
-			buf := proto.EditRequestToBuffer(editReq)
+			buf := textpb.EditRequestToBuffer(editReq)
 			assert.Equal(t, expectedContent, buf.String())
 			assert.Equal(t, uri.String(), editReq.ResourceName.GetUri())
 
-			_, ok = reply.(*proto.EditResponse)
+			_, ok = reply.(*textpb.EditResponse)
 			assert.True(t, ok)
 			return nil
 		}).
@@ -76,7 +78,7 @@ func TestClientEdit(t *testing.T) {
 
 		cc.EXPECT().
 			Invoke(gomock.Any(),
-				gomock.Eq("/proto.Editor/Edit"),
+				gomock.Eq("/text.Editor/Edit"),
 				gomock.Any(),
 				gomock.Any()).
 			Times(1).
@@ -95,24 +97,24 @@ func expectClientSubscribe(
 ) {
 	mockCC.EXPECT().
 		Invoke(gomock.Any(),
-			gomock.Eq("/proto.Editor/Subscribe"),
+			gomock.Eq("/text.Editor/Subscribe"),
 			gomock.Any(),
 			gomock.Any()).
 		DoAndReturn(func(
 			ctx context.Context, method string, args interface{},
 			reply interface{}, opts ...grpc.CallOption) error {
-			req, ok := args.(*proto.EditorSubscribeRequest)
+			req, ok := args.(*textpb.EditorSubscribeRequest)
 			require.True(t, ok)
 
 			assert.Equal(t, expectedHandlerID, req.GetHandlerId())
 
-			var expectedProtoTypes []proto.EditorEvent_Type
+			var expectedProtoTypes []textpb.EditorEvent_Type
 			for _, ev := range expectedEventTypes {
 				expectedProtoTypes = append(expectedProtoTypes, Event{Type: ev}.protoType())
 			}
 			assert.Equal(t, expectedProtoTypes, req.GetType())
 
-			_, ok = reply.(*proto.EditorSubscribeResponse)
+			_, ok = reply.(*textpb.EditorSubscribeResponse)
 			assert.True(t, ok)
 			return nil
 		}).
@@ -144,7 +146,7 @@ func TestSetLocationListRequest(t *testing.T) {
 	t.Run("non-nil zero slice", func(t *testing.T) {
 		l := LocationSlice([]Location{})
 		handlerID := uint32(23)
-		expected := proto.SetLocationListRequest{
+		expected := textpb.SetLocationListRequest{
 			HandlerId: handlerID,
 			ListId:    locID,
 			Locations: nil,
@@ -155,7 +157,7 @@ func TestSetLocationListRequest(t *testing.T) {
 	t.Run("nil zero slice", func(t *testing.T) {
 		l := LocationSlice(nil)
 		handlerID := uint32(23)
-		expected := proto.SetLocationListRequest{
+		expected := textpb.SetLocationListRequest{
 			HandlerId: handlerID,
 			ListId:    locID,
 			Locations: nil,
@@ -169,28 +171,28 @@ func TestSetLocationListRequest(t *testing.T) {
 			loc3,
 		})
 		handlerID := uint32(23)
-		expected := proto.SetLocationListRequest{
+		expected := textpb.SetLocationListRequest{
 			HandlerId: handlerID,
 			ListId:    locID,
-			Locations: []*proto.SetLocationListRequest_Location{
+			Locations: []*textpb.SetLocationListRequest_Location{
 				{
-					From: &proto.Coordinates{},
-					To:   &proto.Coordinates{X: 1, Y: 3},
-					Attr: &proto.Attributes{Foreground: uint32(term.AttrBold)},
+					From: &termpb.Coordinates{},
+					To:   &termpb.Coordinates{X: 1, Y: 3},
+					Attr: &termpb.Attributes{Foreground: uint32(term.AttrBold)},
 				},
 				{
-					To:   &proto.Coordinates{},
-					From: &proto.Coordinates{X: 1, Y: 3},
-					Attr: &proto.Attributes{
+					To:   &termpb.Coordinates{},
+					From: &termpb.Coordinates{X: 1, Y: 3},
+					Attr: &termpb.Attributes{
 						Foreground: uint32(term.ColorBlack),
 						Background: uint32(term.ColorGreen),
 					},
 					Msg: "wsb: hold BBBY",
 				},
 				{
-					From: &proto.Coordinates{},
-					To:   &proto.Coordinates{},
-					Attr: &proto.Attributes{},
+					From: &termpb.Coordinates{},
+					To:   &termpb.Coordinates{},
+					Attr: &termpb.Attributes{},
 				},
 			},
 		}
@@ -207,14 +209,14 @@ func TestSetLocationListRequest(t *testing.T) {
 			},
 		})
 		handlerID := uint32(23)
-		expected := proto.SetLocationListRequest{
+		expected := textpb.SetLocationListRequest{
 			HandlerId: handlerID,
 			ListId:    locID,
-			Locations: []*proto.SetLocationListRequest_Location{
+			Locations: []*textpb.SetLocationListRequest_Location{
 				{
-					From: &proto.Coordinates{},
-					To:   &proto.Coordinates{X: 1, Y: 3},
-					Attr: &proto.Attributes{Foreground: uint32(term.AttrBold)},
+					From: &termpb.Coordinates{},
+					To:   &termpb.Coordinates{X: 1, Y: 3},
+					Attr: &termpb.Attributes{Foreground: uint32(term.AttrBold)},
 					Msg:  myMsg,
 				},
 			},

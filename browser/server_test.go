@@ -8,10 +8,13 @@ import (
 	"time"
 
 	"github.com/ernestrc/go-tui"
+	browserpb "github.com/ernestrc/go-tui/browser/rpc"
 	"github.com/ernestrc/go-tui/component"
+	handlerpb "github.com/ernestrc/go-tui/handler/rpc"
 	"github.com/ernestrc/go-tui/proto"
 	prototest "github.com/ernestrc/go-tui/proto/test"
 	"github.com/ernestrc/go-tui/term"
+	termpb "github.com/ernestrc/go-tui/term/rpc"
 	"github.com/ernestrc/go-tui/workspace"
 	gomock "github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
@@ -51,7 +54,7 @@ func TestServerSetMessage(t *testing.T) {
 
 		mock.EXPECT().SetMessage(gomock.Eq("blah")).Return(nil)
 
-		req := proto.SetMessageRequest{Msg: "blah"}
+		req := browserpb.SetMessageRequest{Msg: "blah"}
 		res, err := s.SetMessage(ctx, &req)
 		require.NoError(t, err)
 		assert.NotNil(t, res)
@@ -64,7 +67,7 @@ func TestServerSetMessage(t *testing.T) {
 
 		mock.EXPECT().SetMessage(gomock.Any()).Return(errors.New("oopsie daisy"))
 
-		_, err := s.SetMessage(ctx, new(proto.SetMessageRequest))
+		_, err := s.SetMessage(ctx, new(browserpb.SetMessageRequest))
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "oopsie")
 	})
@@ -90,7 +93,7 @@ func TestServerOpen(t *testing.T) {
 		mock.EXPECT().Open(gomock.Eq(uri)).Return(h, nil)
 		broker.EXPECT().NextId().Return(uint32(1))
 
-		req := proto.OpenResourceRequest{Resource: "file:///tmp/coronavirus.sql"}
+		req := browserpb.OpenResourceRequest{Resource: "file:///tmp/coronavirus.sql"}
 		res, err := s.Open(ctx, &req)
 		require.NoError(t, err)
 		assert.NotNil(t, res)
@@ -103,7 +106,7 @@ func TestServerOpen(t *testing.T) {
 
 		mock.EXPECT().Open(gomock.Any()).Return(nil, errors.New("oopsie daisy"))
 
-		req := proto.OpenResourceRequest{Resource: "file:///a"}
+		req := browserpb.OpenResourceRequest{Resource: "file:///a"}
 		_, err := s.Open(ctx, &req)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "oopsie")
@@ -119,15 +122,15 @@ func TestServerOpen(t *testing.T) {
 		mock.EXPECT().Open(gomock.Any()).Return(h, nil)
 		broker.EXPECT().NextId().Return(nextID)
 
-		req := proto.OpenResourceRequest{Resource: "file:///Caliu"}
+		req := browserpb.OpenResourceRequest{Resource: "file:///Caliu"}
 		res, err := s.Open(ctx, &req)
 		require.NoError(t, err)
 		require.NotNil(t, res)
 		assertHandlerStored(t, nextID, s, h)
 
-		sreq := proto.SplitRequest{
+		sreq := browserpb.SplitRequest{
 			HandlerId:   uint64(nextID),
-			Orientation: proto.Orientation_Right,
+			Orientation: browserpb.Orientation_Right,
 		}
 		windowID := uint32(999)
 		prototest.ExpectBrokerServe(t, windowID, broker)
@@ -146,20 +149,20 @@ func insertDrawResponse(t *testing.T, quit bool) func(ctx context.Context, metho
 		method string, args interface{},
 		reply interface{}, opts ...grpc.CallOption) error {
 		// validate mappings with finer grained control
-		res, ok := reply.(*proto.HandleResponse)
+		res, ok := reply.(*handlerpb.HandleResponse)
 		require.True(t, ok)
 
-		res.Draw = proto.NewDrawResponse(component.String(""), 0, 0)
+		res.Draw = handlerpb.NewDrawResponse(component.String(""), 0, 0)
 		res.Quit = quit
 		res.Handled = true
 		return nil
 	}
 }
 
-func expectHandlerInvoke(t *testing.T, handlerConn *proto.MockMuxConn, protoEv *proto.Event) {
+func expectHandlerInvoke(t *testing.T, handlerConn *proto.MockMuxConn, protoEv *termpb.Event) {
 	handlerConn.EXPECT().
-		Invoke(gomock.Any(), gomock.Eq("/proto.Handler/Handle"),
-			gomock.Eq(&proto.HandleRequest{Event: protoEv, Draw: &proto.DrawRequest{}}),
+		Invoke(gomock.Any(), gomock.Eq("/handler.Handler/Handle"),
+			gomock.Eq(&handlerpb.HandleRequest{Event: protoEv, Draw: &handlerpb.DrawRequest{}}),
 			gomock.Any()).
 		Times(1).
 		DoAndReturn(insertDrawResponse(t, false))
@@ -167,7 +170,7 @@ func expectHandlerInvoke(t *testing.T, handlerConn *proto.MockMuxConn, protoEv *
 
 func expectHandlerInvokeExit(t *testing.T, handlerConn *proto.MockMuxConn) {
 	handlerConn.EXPECT().
-		Invoke(gomock.Any(), gomock.Eq("/proto.Handler/Handle"),
+		Invoke(gomock.Any(), gomock.Eq("/handler.Handler/Handle"),
 			gomock.Any(),
 			gomock.Any()).
 		DoAndReturn(insertDrawResponse(t, true)).
@@ -182,7 +185,7 @@ func TestServerPublish(t *testing.T) {
 		defer ctrl.Finish()
 		var mu sync.Mutex
 		s, mock, _ := newTestServer(ctrl, &mu)
-		req := proto.PublishRequest{Ev: &proto.Event{Type: proto.Event_TypeInterrupt}}
+		req := browserpb.PublishRequest{Ev: &termpb.Event{Type: termpb.Event_TypeInterrupt}}
 
 		mock.EXPECT().PublishInterrupt().Times(1)
 
@@ -196,7 +199,7 @@ func TestServerPublish(t *testing.T) {
 		defer ctrl.Finish()
 		var mu sync.Mutex
 		s, mock, _ := newTestServer(ctrl, &mu)
-		req := proto.PublishRequest{Ev: &proto.Event{Type: proto.Event_TypeNone}}
+		req := browserpb.PublishRequest{Ev: &termpb.Event{Type: termpb.Event_TypeNone}}
 
 		mock.EXPECT().PublishEventNone().Times(1)
 
@@ -210,7 +213,7 @@ func TestServerPublish(t *testing.T) {
 		defer ctrl.Finish()
 		var mu sync.Mutex
 		s, _, _ := newTestServer(ctrl, &mu)
-		req := proto.PublishRequest{Ev: &proto.Event{Type: proto.Event_TypeKey}}
+		req := browserpb.PublishRequest{Ev: &termpb.Event{Type: termpb.Event_TypeKey}}
 
 		res, err := s.Publish(ctx, &req)
 		require.Error(t, err)
@@ -222,7 +225,7 @@ func TestServerPublish(t *testing.T) {
 		defer ctrl.Finish()
 		var mu sync.Mutex
 		s, mock, _ := newTestServer(ctrl, &mu)
-		req := proto.PublishRequest{Ev: &proto.Event{Type: proto.Event_TypeInterrupt}}
+		req := browserpb.PublishRequest{Ev: &termpb.Event{Type: termpb.Event_TypeInterrupt}}
 
 		mock.EXPECT().PublishInterrupt().Return(errors.New("uRock"))
 
@@ -236,7 +239,7 @@ func TestServerPublish(t *testing.T) {
 		defer ctrl.Finish()
 		var mu sync.Mutex
 		s, mock, _ := newTestServer(ctrl, &mu)
-		req := proto.PublishRequest{Ev: &proto.Event{Type: proto.Event_TypeNone}}
+		req := browserpb.PublishRequest{Ev: &termpb.Event{Type: termpb.Event_TypeNone}}
 
 		mock.EXPECT().PublishEventNone().Return(errors.New("uRock"))
 
@@ -259,23 +262,23 @@ func assertServerServersEqual(t *testing.T, expected int, s *Server) {
 }
 
 func TestServerSplitHorizontalAbove(t *testing.T) {
-	testServerSplit(t, OrientationTop, proto.Orientation_Top)
+	testServerSplit(t, OrientationTop, browserpb.Orientation_Top)
 }
 
 func TestServerSplitDefault(t *testing.T) {
-	testServerSplit(t, OrientationDefault, proto.Orientation_Default)
+	testServerSplit(t, OrientationDefault, browserpb.Orientation_Default)
 }
 
 func TestServerSplitHorizontalBelow(t *testing.T) {
-	testServerSplit(t, OrientationBottom, proto.Orientation_Bottom)
+	testServerSplit(t, OrientationBottom, browserpb.Orientation_Bottom)
 }
 
 func TestServerSplitVerticalLeft(t *testing.T) {
-	testServerSplit(t, OrientationLeft, proto.Orientation_Left)
+	testServerSplit(t, OrientationLeft, browserpb.Orientation_Left)
 }
 
 func TestServerSplitVerticalRight(t *testing.T) {
-	testServerSplit(t, OrientationRight, proto.Orientation_Right)
+	testServerSplit(t, OrientationRight, browserpb.Orientation_Right)
 }
 
 func waitForMonitoringExit(quitCh chan struct{}) {
@@ -303,18 +306,18 @@ func assertServerHandlerExitClose(
 	assertServerClientsEqual(t, 0, s)
 }
 
-func testServerSplit(t *testing.T, expectedSplit Orientation, split proto.Orientation) {
+func testServerSplit(t *testing.T, expectedSplit Orientation, split browserpb.Orientation) {
 	ctx := context.Background()
 	handlerID := uint32(21)
 	windowID := uint32(111111)
-	req := proto.SplitRequest{
+	req := browserpb.SplitRequest{
 		HandlerId:   uint64(handlerID),
 		Orientation: split,
 	}
-	protoEv := proto.Event{
-		Type:   proto.Event_TypeMouse,
-		Key:    proto.Event_MouseMiddle,
-		Mod:    proto.Event_Motion,
+	protoEv := termpb.Event{
+		Type:   termpb.Event_TypeMouse,
+		Key:    termpb.Event_MouseMiddle,
+		Mod:    termpb.Event_Motion,
 		MouseX: 10,
 		MouseY: 1393291,
 	}

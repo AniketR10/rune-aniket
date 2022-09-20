@@ -7,8 +7,9 @@ import (
 	"github.com/ernestrc/go-tui/browser"
 	"github.com/ernestrc/go-tui/cell"
 	"github.com/ernestrc/go-tui/component"
-	"github.com/ernestrc/go-tui/proto"
 	"github.com/ernestrc/go-tui/term"
+	termpb "github.com/ernestrc/go-tui/term/rpc"
+	textpb "github.com/ernestrc/go-tui/text/rpc"
 	"github.com/ernestrc/go-tui/workspace"
 )
 
@@ -68,25 +69,25 @@ type Event struct {
 	cmdArgs []string
 }
 
-func protoTypeToModel(protoType proto.EditorEvent_Type) (ev EventType, err error) {
+func protoTypeToModel(protoType textpb.EditorEvent_Type) (ev EventType, err error) {
 	switch protoType {
-	case proto.EditorEvent_TypeClose:
+	case textpb.EditorEvent_TypeClose:
 		ev = EventTypeClose
-	case proto.EditorEvent_TypeFlush:
+	case textpb.EditorEvent_TypeFlush:
 		ev = EventTypeFlush
-	case proto.EditorEvent_TypeOpen:
+	case textpb.EditorEvent_TypeOpen:
 		ev = EventTypeOpen
-	case proto.EditorEvent_TypeEdit:
+	case textpb.EditorEvent_TypeEdit:
 		ev = EventTypeEdit
-	case proto.EditorEvent_TypeScroll:
+	case textpb.EditorEvent_TypeScroll:
 		ev = EventTypeScroll
-	case proto.EditorEvent_TypeCursor:
+	case textpb.EditorEvent_TypeCursor:
 		ev = EventTypeCursor
-	case proto.EditorEvent_TypeFocus:
+	case textpb.EditorEvent_TypeFocus:
 		ev = EventTypeFocus
-	case proto.EditorEvent_TypeUnfocus:
+	case textpb.EditorEvent_TypeUnfocus:
 		ev = EventTypeUnfocus
-	case proto.EditorEvent_TypeCommand:
+	case textpb.EditorEvent_TypeCommand:
 		ev = eventTypeCommand
 	default:
 		err = fmt.Errorf("failed to convert proto editor event: invalid type: %v",
@@ -96,13 +97,13 @@ func protoTypeToModel(protoType proto.EditorEvent_Type) (ev EventType, err error
 	return
 }
 
-func (e *Event) fromProto(pe *proto.EditorEvent) (err error) {
+func (e *Event) fromProto(pe *textpb.EditorEvent) (err error) {
 	e.Type, err = protoTypeToModel(pe.GetType())
 	if err != nil {
 		return
 	}
 	if pe.GetResourceName().GetUri() != "" {
-		e.URI, err = proto.NewURIFromProto(pe.GetResourceName())
+		e.URI, err = textpb.NewURIFromProto(pe.GetResourceName())
 		if err != nil {
 			return
 		}
@@ -122,42 +123,42 @@ func (e *Event) fromProto(pe *proto.EditorEvent) (err error) {
 	return nil
 }
 
-func (e Event) protoType() proto.EditorEvent_Type {
+func (e Event) protoType() textpb.EditorEvent_Type {
 	switch e.Type {
 	case EventTypeClose:
-		return proto.EditorEvent_TypeClose
+		return textpb.EditorEvent_TypeClose
 	case EventTypeFlush:
-		return proto.EditorEvent_TypeFlush
+		return textpb.EditorEvent_TypeFlush
 	case EventTypeOpen:
-		return proto.EditorEvent_TypeOpen
+		return textpb.EditorEvent_TypeOpen
 	case EventTypeEdit:
-		return proto.EditorEvent_TypeEdit
+		return textpb.EditorEvent_TypeEdit
 	case EventTypeScroll:
-		return proto.EditorEvent_TypeScroll
+		return textpb.EditorEvent_TypeScroll
 	case EventTypeCursor:
-		return proto.EditorEvent_TypeCursor
+		return textpb.EditorEvent_TypeCursor
 	case EventTypeFocus:
-		return proto.EditorEvent_TypeFocus
+		return textpb.EditorEvent_TypeFocus
 	case EventTypeUnfocus:
-		return proto.EditorEvent_TypeUnfocus
+		return textpb.EditorEvent_TypeUnfocus
 	case eventTypeCommand:
-		return proto.EditorEvent_TypeCommand
+		return textpb.EditorEvent_TypeCommand
 	default:
 		panic(fmt.Sprintf("failed to convert editor event to proto: invalid type: %v", e.Type))
 	}
 }
 
 // expects ev Resource to be a browser.Token
-func (e *Event) toProto() proto.EditorEvent {
-	ret := proto.EditorEvent{}
+func (e *Event) toProto() textpb.EditorEvent {
+	ret := textpb.EditorEvent{}
 	ret.Type = e.protoType()
 
-	ret.ResourceName = proto.NewURI(e.URI)
+	ret.ResourceName = textpb.NewURI(e.URI)
 	if e.Resource != nil {
 		ret.ResourceId = uint32(e.Resource.(Token).ID)
 	}
 
-	var start, end, from, to proto.Coordinates
+	var start, end, from, to termpb.Coordinates
 	start.FromModel(e.Start)
 	end.FromModel(e.End)
 	from.FromModel(e.From)

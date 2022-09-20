@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/ernestrc/go-tui/proto"
+	browserpb "github.com/ernestrc/go-tui/browser/rpc"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -14,14 +14,14 @@ import (
 type windowClient struct {
 	brokerID      uint64
 	logger        *log.Logger
-	pbClient      proto.WindowClient
+	pbClient      browserpb.WindowClient
 	browserClient *Client
 	doClose       func()
 }
 
 func newWindowClient(
 	brokerID uint64, browserClient *Client,
-	pbClient proto.WindowClient,
+	pbClient browserpb.WindowClient,
 ) *windowClient {
 	ret := new(windowClient)
 	ret.browserClient = browserClient
@@ -41,7 +41,7 @@ func (w *windowClient) Focus() (bool, error) {
 func (w *windowClient) Content() (Handler, error) {
 	ctx := context.Background()
 
-	req := proto.WindowContentRequest{}
+	req := browserpb.WindowContentRequest{}
 	res, err := w.pbClient.Content(ctx, &req)
 	if err != nil {
 		return nil, fmt.Errorf("pbClient.Content: %v", err)
@@ -57,7 +57,7 @@ func (w *windowClient) SetContent(h Handler) error {
 		return fmt.Errorf("serveHandler: %w", err)
 	}
 
-	req := proto.WindowSetContentRequest{HandlerId: brokerID}
+	req := browserpb.WindowSetContentRequest{HandlerId: brokerID}
 	_, err = w.pbClient.SetContent(ctx, &req)
 	if err != nil {
 		if created {
@@ -87,7 +87,7 @@ func (w *windowClient) id() uint64 {
 
 func (w *windowClient) Close() (err error) {
 	ctx := context.Background()
-	req := proto.WindowCloseRequest{}
+	req := browserpb.WindowCloseRequest{}
 	_, _ = w.pbClient.Close(ctx, &req)
 
 	// now we're ready to finally close window client connection and remove
@@ -99,15 +99,15 @@ func (w *windowClient) Close() (err error) {
 	return
 }
 
-// satisfies proto.WindowServer
+// satisfies browserpb.WindowServer
 type windowServer struct {
-	proto.UnimplementedWindowServer
+	browserpb.UnimplementedWindowServer
 	win Window
 	s   *Server
 }
 
-// NewWindowServer returns a proto.WindowServer.
-func NewWindowServer(s *Server, win Window) proto.WindowServer {
+// NewWindowServer returns a browserpb.WindowServer.
+func NewWindowServer(s *Server, win Window) browserpb.WindowServer {
 	ret := new(windowServer)
 	ret.win = win
 	ret.s = s
@@ -115,8 +115,8 @@ func NewWindowServer(s *Server, win Window) proto.WindowServer {
 }
 
 func (s *windowServer) Content(
-	ctx context.Context, req *proto.WindowContentRequest,
-) (*proto.WindowContentResponse, error) {
+	ctx context.Context, req *browserpb.WindowContentRequest,
+) (*browserpb.WindowContentResponse, error) {
 	s.s.browser.Lock()
 	defer s.s.browser.Unlock()
 
@@ -125,12 +125,12 @@ func (s *windowServer) Content(
 		return nil, fmt.Errorf("windowServer.Content: %v", err)
 	}
 	handlerID := s.s.ensureAvailable(content)
-	return &proto.WindowContentResponse{HandlerId: handlerID}, nil
+	return &browserpb.WindowContentResponse{HandlerId: handlerID}, nil
 }
 
 func (s *windowServer) SetContent(
-	ctx context.Context, req *proto.WindowSetContentRequest,
-) (*proto.WindowSetContentResponse, error) {
+	ctx context.Context, req *browserpb.WindowSetContentRequest,
+) (*browserpb.WindowSetContentResponse, error) {
 	client, created, err := s.s.getContentHandler(req.GetHandlerId())
 	if err != nil {
 		return nil, fmt.Errorf("failed to dial to remote handler: %v", err)
@@ -147,12 +147,12 @@ func (s *windowServer) SetContent(
 		return nil, fmt.Errorf("error on Window.SetContent: %v", err)
 	}
 
-	return new(proto.WindowSetContentResponse), nil
+	return new(browserpb.WindowSetContentResponse), nil
 }
 
 func (s *windowServer) Close(
-	ctx context.Context, req *proto.WindowCloseRequest,
-) (*proto.WindowCloseResponse, error) {
+	ctx context.Context, req *browserpb.WindowCloseRequest,
+) (*browserpb.WindowCloseResponse, error) {
 	s.s.browser.Lock()
 	defer s.s.browser.Unlock()
 	// unsubscribe, since we are already aware
@@ -165,5 +165,5 @@ func (s *windowServer) Close(
 	if err2 != nil {
 		return nil, err2
 	}
-	return new(proto.WindowCloseResponse), nil
+	return new(browserpb.WindowCloseResponse), nil
 }
