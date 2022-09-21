@@ -35,7 +35,7 @@ func NewConfigClient(cc grpc.ClientConnInterface) ConfigClient {
 
 func (c *configClient) Get(ctx context.Context, in *GetRequest, opts ...grpc.CallOption) (*GetResponse, error) {
 	out := new(GetResponse)
-	err := c.cc.Invoke(ctx, "/plugin.Config/Get", in, out, opts...)
+	err := c.cc.Invoke(ctx, "/config.Config/Get", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -80,7 +80,7 @@ func _Config_Get_Handler(srv interface{}, ctx context.Context, dec func(interfac
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/plugin.Config/Get",
+		FullMethod: "/config.Config/Get",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(ConfigServer).Get(ctx, req.(*GetRequest))
@@ -92,7 +92,7 @@ func _Config_Get_Handler(srv interface{}, ctx context.Context, dec func(interfac
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
 var Config_ServiceDesc = grpc.ServiceDesc{
-	ServiceName: "plugin.Config",
+	ServiceName: "config.Config",
 	HandlerType: (*ConfigServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{

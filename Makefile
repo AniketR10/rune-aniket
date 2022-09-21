@@ -45,6 +45,7 @@ generate:
 	@ mv workspace/github.com/ernestrc/go-tui/workspace/rpc/* workspace/rpc
 	@ mv term/github.com/ernestrc/go-tui/term/rpc/* term/rpc
 	@ mv handler/github.com/ernestrc/go-tui/handler/rpc/* handler/rpc
+	@ mv config/github.com/ernestrc/go-tui/config/rpc/* config/rpc
 
 install:
 	@ go install ./...

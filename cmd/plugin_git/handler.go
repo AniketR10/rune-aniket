@@ -12,6 +12,7 @@ import (
 	"github.com/ernestrc/go-tui/browser"
 	"github.com/ernestrc/go-tui/cell"
 	"github.com/ernestrc/go-tui/component"
+	"github.com/ernestrc/go-tui/config"
 	"github.com/ernestrc/go-tui/handler"
 	"github.com/ernestrc/go-tui/plugin"
 	plugutil "github.com/ernestrc/go-tui/plugin/util"
@@ -74,7 +75,7 @@ type gitEditorHandler struct {
 
 func newGitHandler(
 	ed text.Editor, grants []plugin.Grant,
-	broker proto.MuxBroker, pconfig plugin.Config,
+	broker proto.MuxBroker, pconfig config.Config,
 
 ) (plugutil.CommandEventHandler, error) {
 	ret := new(gitEditorHandler)
@@ -86,9 +87,9 @@ func newGitHandler(
 	ret.scroll.scroll.Init(cell.NewBuffer())
 
 	var err error
-	ret.scroll.scroll.Attributes, err = plugin.GetAttributes(pconfig, "bar_attr")
+	ret.scroll.scroll.Attributes, err = config.GetAttributes(pconfig, "bar_attr")
 	if err != nil {
-		if err != plugin.ErrNotFound {
+		if err != config.ErrNotFound {
 			log.Warningf("failed to get 'bar_attr' from config: %v", err)
 		}
 		ret.scroll.scroll.Attributes = defaultScrollAttr
@@ -135,23 +136,23 @@ func newGitHandler(
 
 	ret.gitDiffListID, err = pconfig.GetString("git_diff_list_id")
 	if err != nil {
-		if err != plugin.ErrNotFound {
+		if err != config.ErrNotFound {
 			log.Warningf("failed to get 'git_diff_list_id' from config: %v", err)
 		}
 		ret.gitDiffListID = defaultGitDiffListID
 	}
 
-	ret.addAttr, err = plugin.GetAttributes(pconfig, "add_attr")
+	ret.addAttr, err = config.GetAttributes(pconfig, "add_attr")
 	if err != nil {
-		if err != plugin.ErrNotFound {
+		if err != config.ErrNotFound {
 			log.Warningf("failed to get 'add_attr' from config: %v", err)
 		}
 		ret.addAttr = defaultAddAttr
 	}
 
-	ret.delAttr, err = plugin.GetAttributes(pconfig, "del_attr")
+	ret.delAttr, err = config.GetAttributes(pconfig, "del_attr")
 	if err != nil {
-		if err != plugin.ErrNotFound {
+		if err != config.ErrNotFound {
 			log.Warningf("failed to get 'del_attr' from config: %v", err)
 		}
 		ret.delAttr = defaultDelAttr

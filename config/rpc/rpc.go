@@ -1,28 +1,29 @@
-package plugin
+package rpc
 
 import (
 	"context"
 	"fmt"
 
-	configpb "github.com/ernestrc/go-tui/plugin/rpc"
+	"github.com/ernestrc/go-tui/config"
 	"google.golang.org/grpc"
 )
 
 type configServer struct {
-	cfg jsonMap
-	configpb.UnimplementedConfigServer
+	cfg config.JSON
+	UnimplementedConfigServer
 }
 
-func newConfigServer(cfg Config) *configServer {
+// NewServer returns a configpb.ConfigServer that serves cfg.
+func NewServer(cfg config.Config) ConfigServer {
 	ret := new(configServer)
-	m := toInternalConfig(cfg)
-	ret.cfg.mapConfig = m
+	ret.cfg = config.JSONFromConfig(cfg)
 	return ret
 }
 
+// Get satisfies configpb.ConfigServer.
 func (s *configServer) Get(
-	ctx context.Context, req *configpb.GetRequest,
-) (res *configpb.GetResponse, err error) {
+	ctx context.Context, req *GetRequest,
+) (res *GetResponse, err error) {
 
 	var data []byte
 	data, err = s.cfg.MarshalText()
@@ -31,24 +32,26 @@ func (s *configServer) Get(
 		return
 	}
 
-	res = new(configpb.GetResponse)
+	res = new(GetResponse)
 	res.Data = string(data)
 	return
 }
 
-func newConfigFromServer(cc grpc.ClientConnInterface) (Config, error) {
-	client := configpb.NewConfigClient(cc)
-	req := configpb.GetRequest{}
+// FetchConfig fetches a config.Config from a configpb.ConfigServer over
+// the given connection.
+func FetchConfig(cc grpc.ClientConnInterface) (config.Config, error) {
+	client := NewConfigClient(cc)
+	req := GetRequest{}
 	res, err := client.Get(context.Background(), &req)
 	if err != nil {
 		err = fmt.Errorf("Could not fetch config from server: %w", err)
 		return nil, err
 	}
-	var cfg jsonMap
+	var cfg config.JSON
 	err = cfg.UnmarshalText([]byte(res.GetData()))
 	if err != nil {
 		err = fmt.Errorf("Could unmarshal config from server: %w", err)
 		return nil, err
 	}
-	return cfg.mapConfig, nil
+	return cfg, nil
 }

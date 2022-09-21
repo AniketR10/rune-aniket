@@ -13,6 +13,7 @@ import (
 
 	multierr "github.com/ernestrc/go-multierror"
 	"github.com/ernestrc/go-tui/browser"
+	"github.com/ernestrc/go-tui/config"
 	"github.com/ernestrc/go-tui/handler/search"
 	"github.com/ernestrc/go-tui/plugin"
 	"github.com/ernestrc/go-tui/proto"
@@ -48,30 +49,30 @@ type logsGrantee struct {
 	wm browser.WindowManager
 	m  browser.Messenger
 	p  browser.EventPublisher
-	c  plugin.Config
+	c  config.Config
 	w  workspace.Workspace
 
 	logFile string
 	cfg     search.ListConfig
 }
 
-func (e *logsGrantee) Connected(broker proto.MuxBroker, config plugin.Config) {
+func (e *logsGrantee) Connected(broker proto.MuxBroker, pconfig config.Config) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
-	log.Infof("plugin connected; config: %#v", config)
+	log.Infof("plugin connected; config: %#v", pconfig)
 	e.broker = broker
 
-	caseSensitive, err := config.GetBool("case_sensitive")
+	caseSensitive, err := pconfig.GetBool("case_sensitive")
 	if err != nil {
-		if err != plugin.ErrNotFound {
+		if err != config.ErrNotFound {
 			log.Errorf("failed to load 'case_sensitive' from config: %v", err)
 		}
 		caseSensitive = true
 	}
 
-	algoStr, err := config.GetString("algo")
-	if err != nil && err != plugin.ErrNotFound {
+	algoStr, err := pconfig.GetString("algo")
+	if err != nil && err != config.ErrNotFound {
 		log.Errorf("failed to load 'algo' from config: %v", err)
 	}
 	algo := search.FuzzyMatch
@@ -93,37 +94,37 @@ func (e *logsGrantee) Connected(broker proto.MuxBroker, config plugin.Config) {
 		BottomSearchBar: true,
 	}
 
-	matchedTextAttr, err := plugin.GetAttributes(config, "matched_text_attr")
-	if err != nil && err != plugin.ErrNotFound {
+	matchedTextAttr, err := config.GetAttributes(pconfig, "matched_text_attr")
+	if err != nil && err != config.ErrNotFound {
 		log.Errorf("failed to load 'matched_text_attr' from config: %v", err)
 	} else if err == nil {
 		log.Tracef("loaded 'matched_text_attr' from config: %v", matchedTextAttr)
 		e.cfg.MatchedTextAttr = &matchedTextAttr
 	}
 
-	countAttr, err := plugin.GetAttributes(config, "count_attr")
-	if err != nil && err != plugin.ErrNotFound {
+	countAttr, err := config.GetAttributes(pconfig, "count_attr")
+	if err != nil && err != config.ErrNotFound {
 		log.Errorf("failed to load 'count_attr' from config: %v", err)
 	} else if err == nil {
 		log.Tracef("loaded 'count_attr' from config: %v", countAttr)
 		e.cfg.CountAttr = &countAttr
 	}
 
-	textAttr, err := plugin.GetAttributes(config, "element_attr")
-	if err != nil && err != plugin.ErrNotFound {
+	textAttr, err := config.GetAttributes(pconfig, "element_attr")
+	if err != nil && err != config.ErrNotFound {
 		log.Errorf("failed to load 'element_attr' from config: %v", err)
 	} else if err == nil {
 		log.Tracef("loaded 'element_attr' from config: %v", textAttr)
 		e.cfg.ElementAttr = &textAttr
 	}
 
-	focusAttr, err := plugin.GetAttributes(config, "focus_element_attr")
-	if err != nil && err != plugin.ErrNotFound {
+	focusAttr, err := config.GetAttributes(pconfig, "focus_element_attr")
+	if err != nil && err != config.ErrNotFound {
 		log.Errorf("failed to load 'focus_element_attr' from config: %v", err)
 	} else if err == nil {
 		log.Tracef("loaded 'focus_element_attr' from config: %v", focusAttr)
 		e.cfg.FocusElementAttr = &focusAttr
-	} else if err == plugin.ErrNotFound {
+	} else if err == config.ErrNotFound {
 		e.cfg.FocusElementAttr = &defaultPinAttr
 	}
 

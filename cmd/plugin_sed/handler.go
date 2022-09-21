@@ -11,6 +11,7 @@ import (
 
 	"github.com/ernestrc/go-tui/browser"
 	"github.com/ernestrc/go-tui/cell"
+	"github.com/ernestrc/go-tui/config"
 	"github.com/ernestrc/go-tui/plugin"
 	plugutil "github.com/ernestrc/go-tui/plugin/util"
 	"github.com/ernestrc/go-tui/proto"
@@ -49,7 +50,7 @@ type sedEditorHandler struct {
 
 func newSedHandler(
 	ed text.Editor, grants []plugin.Grant,
-	broker proto.MuxBroker, pconfig plugin.Config,
+	broker proto.MuxBroker, pconfig config.Config,
 ) (plugutil.CommandEventHandler, error) {
 	ret := new(sedEditorHandler)
 	ret.ed = ed

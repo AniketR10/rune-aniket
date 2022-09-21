@@ -7,6 +7,7 @@ import (
 	"github.com/ernestrc/go-tui"
 	"github.com/ernestrc/go-tui/browser"
 	"github.com/ernestrc/go-tui/cmd/plugin_fuzzy_file/finder"
+	"github.com/ernestrc/go-tui/config"
 	"github.com/ernestrc/go-tui/plugin"
 	plugutil "github.com/ernestrc/go-tui/plugin/util"
 	"github.com/ernestrc/go-tui/proto"
@@ -22,22 +23,22 @@ var (
 )
 
 func newHandler(grants []plugin.Grant, broker proto.MuxBroker,
-	invokeWindow browser.Window, config plugin.Config) (tui.Handler, error) {
-	cmdStr, err := config.GetString("command")
+	invokeWindow browser.Window, c config.Config) (tui.Handler, error) {
+	cmdStr, err := c.GetString("command")
 	if err != nil {
-		if err != plugin.ErrNotFound {
+		if err != config.ErrNotFound {
 			log.Printf("failed to load 'command' config: %v", err)
 		}
 		cmdStr = defaultCommand
 	}
-	historyKey, err := plugin.GetKey(config, "history_key")
+	historyKey, err := config.GetKey(c, "history_key")
 	if err != nil {
-		if err != plugin.ErrNotFound {
+		if err != config.ErrNotFound {
 			log.Printf("failed to load 'command' config: %v", err)
 		}
 		historyKey = defaultHistoryKey
 	}
-	return finder.New(grants, broker, invokeWindow, config,
+	return finder.New(grants, broker, invokeWindow, c,
 		historyKey, defaultHistoryDocumentID, cmdStr, func(workspace workspace.Workspace, file string) (
 			workspace.URI, term.Coordinates,
 		) {

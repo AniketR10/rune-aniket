@@ -4,6 +4,7 @@ import (
 	"io"
 	"sync"
 
+	"github.com/ernestrc/go-tui/config"
 	"github.com/ernestrc/go-tui/plugin"
 	"github.com/ernestrc/go-tui/proto"
 	"github.com/ernestrc/go-tui/text"
@@ -22,14 +23,14 @@ type editorGrantee struct {
 	broker     proto.MuxBroker
 	ed         text.Editor
 	handler    CommandEventHandler
-	newHandler func(text.Editor, []plugin.Grant, proto.MuxBroker, plugin.Config) (CommandEventHandler, error)
+	newHandler func(text.Editor, []plugin.Grant, proto.MuxBroker, config.Config) (CommandEventHandler, error)
 	cmds       []string
-	pconfig    plugin.Config
+	pconfig    config.Config
 	err        error
 	evs        []text.EventType
 }
 
-func (t *editorGrantee) Connected(broker proto.MuxBroker, config plugin.Config) {
+func (t *editorGrantee) Connected(broker proto.MuxBroker, config config.Config) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
@@ -116,7 +117,7 @@ func (t *editorGrantee) Health() error {
 // permissions is denied, the plugin will exit with an error.
 func ServeEditorEventHandler(
 	cmds []string,
-	fn func(text.Editor, []plugin.Grant, proto.MuxBroker, plugin.Config) (CommandEventHandler, error),
+	fn func(text.Editor, []plugin.Grant, proto.MuxBroker, config.Config) (CommandEventHandler, error),
 	events []text.EventType,
 	extraPerms ...plugin.Permission,
 ) {

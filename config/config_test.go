@@ -1,4 +1,4 @@
-package plugin
+package config
 
 import (
 	"testing"
@@ -84,11 +84,11 @@ func TestConfigTypes(t *testing.T) {
 	m["a2"] = "a"
 	m["a4"] = "a"
 	m["a5"] = "a"
-	j1 := jsonMap{mapConfig(m)}
+	j1 := JSON{mapConfig(m)}
 	data, err := j1.MarshalText()
 	require.NoError(t, err)
 
-	var j2 jsonMap
+	var j2 JSON
 	err = j2.UnmarshalText(data)
 	require.NoError(t, err)
 	cunmarshaled := j2.mapConfig

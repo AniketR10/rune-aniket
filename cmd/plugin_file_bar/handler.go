@@ -13,6 +13,7 @@ import (
 	"github.com/ernestrc/go-tui/browser"
 	"github.com/ernestrc/go-tui/cell"
 	"github.com/ernestrc/go-tui/component"
+	"github.com/ernestrc/go-tui/config"
 	"github.com/ernestrc/go-tui/handler"
 	"github.com/ernestrc/go-tui/plugin"
 	plugutil "github.com/ernestrc/go-tui/plugin/util"
@@ -75,7 +76,7 @@ type fileBarEditorHandler struct {
 
 func newFileBarEditorHandler(
 	ed text.Editor, grants []plugin.Grant,
-	broker proto.MuxBroker, pconfig plugin.Config,
+	broker proto.MuxBroker, pconfig config.Config,
 
 ) (plugutil.CommandEventHandler, error) {
 	ret := new(fileBarEditorHandler)
@@ -88,17 +89,17 @@ func newFileBarEditorHandler(
 		return nil, err
 	}
 
-	ret.filenameAttributes, err = plugin.GetAttributes(pconfig, "filename_attr")
+	ret.filenameAttributes, err = config.GetAttributes(pconfig, "filename_attr")
 	if err != nil {
-		if err != plugin.ErrNotFound {
+		if err != config.ErrNotFound {
 			log.Warningf("failed to get 'filename_attr' from config: %v", err)
 		}
 		ret.filenameAttributes = defaultScrollAttr
 	}
 
-	ret.backgroundAttributes, err = plugin.GetAttributes(pconfig, "background_attr")
+	ret.backgroundAttributes, err = config.GetAttributes(pconfig, "background_attr")
 	if err != nil {
-		if err != plugin.ErrNotFound {
+		if err != config.ErrNotFound {
 			log.Warningf("failed to get 'background_attr' from config: %v", err)
 		}
 		ret.backgroundAttributes = defaultBackgroundAttr
@@ -106,23 +107,23 @@ func newFileBarEditorHandler(
 
 	ret.showDirty, err = pconfig.GetBool("show_dirty")
 	if err != nil {
-		if err != plugin.ErrNotFound {
+		if err != config.ErrNotFound {
 			log.Warningf("failed to get 'show_dirty' from config: %v", err)
 		}
 		ret.showDirty = true
 	}
 
-	ret.filenameDirtyAttributes, err = plugin.GetAttributes(pconfig, "filename_dirty_attr")
+	ret.filenameDirtyAttributes, err = config.GetAttributes(pconfig, "filename_dirty_attr")
 	if err != nil {
-		if err != plugin.ErrNotFound {
+		if err != config.ErrNotFound {
 			log.Warningf("failed to get 'filename_dirty_attr' from config: %v", err)
 		}
 		ret.filenameDirtyAttributes = defaultDirtyAttr
 	}
 
-	ret.bar.coords.Attributes, err = plugin.GetAttributes(pconfig, "coordinates_attr")
+	ret.bar.coords.Attributes, err = config.GetAttributes(pconfig, "coordinates_attr")
 	if err != nil {
-		if err != plugin.ErrNotFound {
+		if err != config.ErrNotFound {
 			log.Warningf("failed to get 'coordinates_attr' from config: %v", err)
 		}
 		ret.bar.coords.Attributes = defaultScrollAttr

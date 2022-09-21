@@ -8,6 +8,7 @@ import (
 
 	"github.com/ernestrc/go-tui"
 	"github.com/ernestrc/go-tui/browser"
+	"github.com/ernestrc/go-tui/config"
 	"github.com/ernestrc/go-tui/plugin"
 	"github.com/ernestrc/go-tui/proto"
 	"github.com/ernestrc/go-tui/text"
@@ -21,13 +22,13 @@ type cmdSplitHandler struct {
 	broker  proto.MuxBroker
 	wm      browser.WindowManager
 	ed      text.Editor
-	pconfig plugin.Config
+	pconfig config.Config
 	grants  []plugin.Grant
 	h       tui.Handler
 	win     browser.Window
 }
 
-func (t *cmdSplitHandler) Connected(broker proto.MuxBroker, config plugin.Config) {
+func (t *cmdSplitHandler) Connected(broker proto.MuxBroker, config config.Config) {
 	log.Infof("plugin connected; config: %v", config)
 	t.broker = broker
 	t.pconfig = config
@@ -196,7 +197,7 @@ type CommandSplitHandlerConfig struct {
 	// If returned Handler satisfies io.Closer, then Close will be called
 	// when split window is closed.
 	Handler func([]plugin.Grant, proto.MuxBroker, browser.Window,
-		plugin.Config) (tui.Handler, error)
+		config.Config) (tui.Handler, error)
 
 	// Permissions to be requested for Handler.
 	Permissions []plugin.Permission

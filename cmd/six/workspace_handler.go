@@ -15,6 +15,7 @@ import (
 	multierr "github.com/ernestrc/go-multierror"
 	"github.com/ernestrc/go-tui"
 	"github.com/ernestrc/go-tui/browser"
+	"github.com/ernestrc/go-tui/config"
 	"github.com/ernestrc/go-tui/handler"
 	"github.com/ernestrc/go-tui/plugin"
 	"github.com/ernestrc/go-tui/term"
@@ -265,11 +266,11 @@ func (h *workspaceManagerHandler) initPlugins(l *log.Logger, manager *plugin.Man
 		if !ok {
 			continue
 		}
-		config, ok := p.config()
+		pconfig, ok := p.config()
 		if !ok {
-			config = plugin.MapConfig(make(map[string]interface{}))
+			pconfig = config.MapConfig(make(map[string]interface{}))
 		}
-		err := manager.Run(id, path, config)
+		err := manager.Run(id, path, pconfig)
 		if err != nil {
 			l.Errorf("failed to run plugin: could not run plugin with id '%s': %v", id, err)
 		}
@@ -376,7 +377,7 @@ func (h *workspaceManagerHandler) addWorkspace(
 	res := plugin.BrowserResources(ex.Browser())
 	res = plugin.MergeResourceMap(res, plugin.EditorResources(ex.Editor()))
 	res = plugin.MergeResourceMap(res, plugin.WorkspaceResources(workspaceManager))
-	res = plugin.MergeResourceMap(res, plugin.ConfigResources(plugin.MapConfig(h.cfg.cfg)))
+	res = plugin.MergeResourceMap(res, plugin.ConfigResources(config.MapConfig(h.cfg.cfg)))
 	res[plugin.PermissionClipboard] = h.clipboard
 
 	pluginOpts := []plugin.Option{

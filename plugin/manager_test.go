@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ernestrc/go-tui/config"
 	pluginpb "github.com/ernestrc/go-tui/plugin/rpc"
 	"github.com/ernestrc/go-tui/proto"
 	log "github.com/sirupsen/logrus"
@@ -85,7 +86,7 @@ func newTestManager(grantor Grantor, opts ...Option) (*Manager, *testGranteePbCl
 }
 
 func testRunAndWait(t *testing.T, mgr *Manager, pbClient *testGranteePbClient) {
-	cfg := mapConfig(make(map[string]interface{}))
+	cfg := config.MapConfig(make(map[string]interface{}))
 	err := mgr.Run("myId", "/here/is/my/plugin", cfg)
 	require.NoError(t, err)
 

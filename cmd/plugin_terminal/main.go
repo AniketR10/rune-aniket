@@ -8,6 +8,7 @@ import (
 
 	multierr "github.com/ernestrc/go-multierror"
 	"github.com/ernestrc/go-tui/browser"
+	"github.com/ernestrc/go-tui/config"
 	"github.com/ernestrc/go-tui/plugin"
 	"github.com/ernestrc/go-tui/proto"
 	"github.com/ernestrc/go-tui/term"
@@ -55,23 +56,23 @@ type emulatorGrantee struct {
 	initialCmd    string
 }
 
-func (e *emulatorGrantee) Connected(broker proto.MuxBroker, config plugin.Config) {
+func (e *emulatorGrantee) Connected(broker proto.MuxBroker, pconfig config.Config) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
-	log.Infof("plugin connected; config: %#v", config)
+	log.Infof("plugin connected; config: %#v", pconfig)
 	e.broker = broker
 
-	attr, err := plugin.GetAttributes(config, "attr")
-	if err != nil && err != plugin.ErrNotFound {
+	attr, err := config.GetAttributes(pconfig, "attr")
+	if err != nil && err != config.ErrNotFound {
 		log.Errorf("coud not read 'attr' property: %v", err)
 		return
 	}
 	e.defAttr = attr
 
-	attr, err = plugin.GetAttributes(config, "selection_attr")
+	attr, err = config.GetAttributes(pconfig, "selection_attr")
 	if err != nil {
-		if err != plugin.ErrNotFound {
+		if err != config.ErrNotFound {
 			log.Errorf("coud not read 'selection_attr' property: %v", err)
 			return
 		}
@@ -79,15 +80,15 @@ func (e *emulatorGrantee) Connected(broker proto.MuxBroker, config plugin.Config
 	}
 	e.selectionAttr = attr
 
-	shell, err := config.GetString("shell")
-	if err != nil && err != plugin.ErrNotFound {
+	shell, err := pconfig.GetString("shell")
+	if err != nil && err != config.ErrNotFound {
 		log.Errorf("coud not read 'shell' property: %v", err)
 		return
 	}
 	e.shell = shell
 
-	initialCmd, err := config.GetString("cmd")
-	if err != nil && err != plugin.ErrNotFound {
+	initialCmd, err := pconfig.GetString("cmd")
+	if err != nil && err != config.ErrNotFound {
 		log.Errorf("coud not read 'initalCmd' property: %v", err)
 		return
 	}

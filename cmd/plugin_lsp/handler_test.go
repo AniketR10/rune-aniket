@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/ernestrc/go-tui/cell"
-	"github.com/ernestrc/go-tui/plugin"
+	"github.com/ernestrc/go-tui/config"
 	"github.com/ernestrc/go-tui/term"
 	"github.com/ernestrc/go-tui/text"
 	"github.com/ernestrc/go-tui/workspace"
@@ -57,14 +57,14 @@ func init() {
 	}
 }
 
-func makePluginConfig() plugin.Config {
+func makePluginConfig() config.Config {
 	m := make(map[string]interface{})
-	return plugin.MapConfig(m)
+	return config.MapConfig(m)
 }
 
 func newTestLspHandler(
 	ctrl *gomock.Controller, ed text.Editor,
-	cfg plugin.Config, server protocol.Server,
+	cfg config.Config, server protocol.Server,
 ) *lspEditorHandler {
 	ret := new(lspEditorHandler)
 	ret.ed = ed

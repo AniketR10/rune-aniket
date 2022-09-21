@@ -12,6 +12,7 @@ import (
 	"github.com/ernestrc/go-tui"
 	"github.com/ernestrc/go-tui/browser"
 	"github.com/ernestrc/go-tui/component"
+	"github.com/ernestrc/go-tui/config"
 	"github.com/ernestrc/go-tui/handler/search"
 	"github.com/ernestrc/go-tui/plugin"
 	"github.com/ernestrc/go-tui/proto"
@@ -271,14 +272,14 @@ func (h *fuzzyFinderHandler) initGrants(
 // to interactively search the command's stdout lines.
 func New(
 	grants []plugin.Grant, broker proto.MuxBroker,
-	invokeWindow browser.Window, config plugin.Config,
+	invokeWindow browser.Window, cfg config.Config,
 	historyKey term.KeyComb, historyDocumentID string, command string,
 	getResource func(exec workspace.Workspace, line string) (workspace.URI, term.Coordinates),
 ) (tui.Handler, error) {
 	h := new(fuzzyFinderHandler)
-	maxHistory, err := config.GetInt("history")
+	maxHistory, err := cfg.GetInt("history")
 	if err != nil {
-		if err != plugin.ErrNotFound {
+		if err != config.ErrNotFound {
 			log.Errorf("failed to load 'history' from config: %v", err)
 		}
 		maxHistory = defaultMaxHistory
@@ -298,7 +299,7 @@ func New(
 
 	h.quitChan = make(chan struct{})
 
-	listConfig := h.getListConfig(config)
+	listConfig := h.getListConfig(cfg)
 	h.list.Init(listConfig)
 	h.listHandler = search.Handler(&h.list, func(item string) {
 		searchQuery := h.list.Buffer().String()
@@ -318,16 +319,16 @@ func New(
 	return h, nil
 }
 
-func (h *fuzzyFinderHandler) getListConfig(config plugin.Config) search.ListConfig {
-	caseSensitive, err := config.GetBool("case_sensitive")
+func (h *fuzzyFinderHandler) getListConfig(c config.Config) search.ListConfig {
+	caseSensitive, err := c.GetBool("case_sensitive")
 	if err != nil {
-		if err != plugin.ErrNotFound {
+		if err != config.ErrNotFound {
 			log.Errorf("failed to load 'case_sensitive' from config: %v", err)
 		}
 		caseSensitive = true
 	}
-	algoStr, err := config.GetString("algo")
-	if err != nil && err != plugin.ErrNotFound {
+	algoStr, err := c.GetString("algo")
+	if err != nil && err != config.ErrNotFound {
 		log.Errorf("failed to load 'algo' from config: %v", err)
 	}
 	algo := search.FuzzyMatch
@@ -343,32 +344,32 @@ func (h *fuzzyFinderHandler) getListConfig(config plugin.Config) search.ListConf
 		CaseSensitive: caseSensitive,
 	}
 
-	matchedTextAttr, err := plugin.GetAttributes(config, "matched_text_attr")
-	if err != nil && err != plugin.ErrNotFound {
+	matchedTextAttr, err := config.GetAttributes(c, "matched_text_attr")
+	if err != nil && err != config.ErrNotFound {
 		log.Errorf("failed to load 'matched_text_attr' from config: %v", err)
 	} else if err == nil {
 		log.Tracef("loaded 'matched_text_attr' from config: %v", matchedTextAttr)
 		cfg.MatchedTextAttr = &matchedTextAttr
 	}
 
-	countAttr, err := plugin.GetAttributes(config, "count_attr")
-	if err != nil && err != plugin.ErrNotFound {
+	countAttr, err := config.GetAttributes(c, "count_attr")
+	if err != nil && err != config.ErrNotFound {
 		log.Errorf("failed to load 'count_attr' from config: %v", err)
 	} else if err == nil {
 		log.Tracef("loaded 'count_attr' from config: %v", countAttr)
 		cfg.CountAttr = &countAttr
 	}
 
-	textAttr, err := plugin.GetAttributes(config, "element_attr")
-	if err != nil && err != plugin.ErrNotFound {
+	textAttr, err := config.GetAttributes(c, "element_attr")
+	if err != nil && err != config.ErrNotFound {
 		log.Errorf("failed to load 'element_attr' from config: %v", err)
 	} else if err == nil {
 		log.Tracef("loaded 'element_attr' from config: %v", textAttr)
 		cfg.ElementAttr = &textAttr
 	}
 
-	focusAttr, err := plugin.GetAttributes(config, "focus_element_attr")
-	if err != nil && err != plugin.ErrNotFound {
+	focusAttr, err := config.GetAttributes(c, "focus_element_attr")
+	if err != nil && err != config.ErrNotFound {
 		log.Errorf("failed to load 'focus_element_attr' from config: %v", err)
 	} else if err == nil {
 		log.Tracef("loaded 'focus_element_attr' from config: %v", focusAttr)

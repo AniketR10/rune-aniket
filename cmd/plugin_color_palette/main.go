@@ -6,6 +6,7 @@ import (
 
 	"github.com/ernestrc/go-tui"
 	"github.com/ernestrc/go-tui/browser"
+	"github.com/ernestrc/go-tui/config"
 	"github.com/ernestrc/go-tui/plugin"
 	plugutil "github.com/ernestrc/go-tui/plugin/util"
 	"github.com/ernestrc/go-tui/proto"
@@ -20,7 +21,7 @@ func main() {
 	plugutil.ServeCommandSplitHandler(plugutil.CommandSplitHandlerConfig{
 		SplitOrientation: browser.OrientationRight,
 		Handler: func(grants []plugin.Grant, broker proto.MuxBroker,
-			invokeWindow browser.Window, config plugin.Config) (tui.Handler, error) {
+			invokeWindow browser.Window, config config.Config) (tui.Handler, error) {
 			return new(colorPaletteHandler), nil
 		},
 		Command: "colorPalette",

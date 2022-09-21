@@ -18,6 +18,7 @@ import (
 
 	"github.com/ernestrc/go-tui/browser"
 	"github.com/ernestrc/go-tui/cell"
+	"github.com/ernestrc/go-tui/config"
 	"github.com/ernestrc/go-tui/handler"
 	"github.com/ernestrc/go-tui/handler/search"
 	"github.com/ernestrc/go-tui/plugin"
@@ -379,7 +380,7 @@ func (h *lspEditorHandler) startLanguageServer(
 	return srv, nil
 }
 
-func (h *lspEditorHandler) initLanguageServers(pconfig plugin.Config) error {
+func (h *lspEditorHandler) initLanguageServers(pconfig config.Config) error {
 	cfg, err := pconfig.GetMap("exec")
 	if err != nil {
 		err = fmt.Errorf("Failed to get lsp servers 'exec' config: %v", err)
@@ -392,7 +393,7 @@ func (h *lspEditorHandler) initLanguageServers(pconfig plugin.Config) error {
 	return nil
 }
 
-func getSemanticTypesAttr(pconfig plugin.Config) (map[string]term.Attributes, error) {
+func getSemanticTypesAttr(pconfig config.Config) (map[string]term.Attributes, error) {
 	ret := make(map[string]term.Attributes, len(defaultSemanticTypeAttr))
 	for k, v := range defaultSemanticTypeAttr {
 		ret[k] = v
@@ -400,7 +401,7 @@ func getSemanticTypesAttr(pconfig plugin.Config) (map[string]term.Attributes, er
 
 	colors, err := pconfig.GetConfig("syntax_highlighting")
 	if err != nil {
-		if err != plugin.ErrNotFound {
+		if err != config.ErrNotFound {
 			err = fmt.Errorf("Error getting 'syntax_highlighting' from plugin config: %v", err)
 			return nil, err
 		}
@@ -408,9 +409,9 @@ func getSemanticTypesAttr(pconfig plugin.Config) (map[string]term.Attributes, er
 	}
 
 	for semanticType := range defaultSemanticTypeAttr {
-		attr, err := plugin.GetAttributes(colors, semanticType)
+		attr, err := config.GetAttributes(colors, semanticType)
 		if err != nil {
-			if err != plugin.ErrNotFound {
+			if err != config.ErrNotFound {
 				err = fmt.Errorf("Error getting 'syntax_highlighting.%s' "+
 					"from plugin config: %v", semanticType, err)
 				return nil, err
@@ -438,7 +439,7 @@ func severityToString(s protocol.DiagnosticSeverity) string {
 	}
 }
 
-func getDiagnosticAttr(pconfig plugin.Config) (
+func getDiagnosticAttr(pconfig config.Config) (
 	map[protocol.DiagnosticSeverity]term.Attributes, error,
 ) {
 	ret := make(map[protocol.DiagnosticSeverity]term.Attributes, len(defaultDiagnosticAttr))
@@ -448,7 +449,7 @@ func getDiagnosticAttr(pconfig plugin.Config) (
 
 	colors, err := pconfig.GetConfig("diagnostics")
 	if err != nil {
-		if err != plugin.ErrNotFound {
+		if err != config.ErrNotFound {
 			err = fmt.Errorf("Error getting 'diagnostics' from plugin config: %v", err)
 			return nil, err
 		}
@@ -457,9 +458,9 @@ func getDiagnosticAttr(pconfig plugin.Config) (
 
 	for s := range defaultDiagnosticAttr {
 		name := severityToString(s)
-		attr, err := plugin.GetAttributes(colors, name)
+		attr, err := config.GetAttributes(colors, name)
 		if err != nil {
-			if err != plugin.ErrNotFound {
+			if err != config.ErrNotFound {
 				err = fmt.Errorf("Error getting 'diagnostics.%s' "+
 					"from plugin config: %v", name, err)
 				return nil, err
@@ -515,7 +516,7 @@ func convertRange(
 
 func newLspHandler(
 	ed text.Editor, grants []plugin.Grant,
-	broker proto.MuxBroker, pconfig plugin.Config,
+	broker proto.MuxBroker, pconfig config.Config,
 ) (plugutil.CommandEventHandler, error) {
 	ret := new(lspEditorHandler)
 	ret.ed = ed
@@ -537,7 +538,7 @@ func newLspHandler(
 
 	ret.semanticTokensListID, err = pconfig.GetString("semantic_tokens_list_id")
 	if err != nil {
-		if err != plugin.ErrNotFound {
+		if err != config.ErrNotFound {
 			err = fmt.Errorf("failed to get 'semantic_tokens_list_id' from config: %v", err)
 			return nil, err
 		}
@@ -546,26 +547,26 @@ func newLspHandler(
 
 	ret.diagnosticListID, err = pconfig.GetString("diagnostic_list_id")
 	if err != nil {
-		if err != plugin.ErrNotFound {
+		if err != config.ErrNotFound {
 			err = fmt.Errorf("failed to get 'diagnostic_list_id' from config: %v", err)
 			return nil, err
 		}
 		ret.diagnosticListID = defaultDiagnosticListID
 	}
 
-	ret.connectTimeout, err = plugin.GetDuration(pconfig,
+	ret.connectTimeout, err = config.GetDuration(pconfig,
 		"connect_timeout", defaultConnectTimeout)
 	if err != nil {
 		return nil, err
 	}
 
-	ret.disconnectTimeout, err = plugin.GetDuration(pconfig,
+	ret.disconnectTimeout, err = config.GetDuration(pconfig,
 		"disconnect_timeout", defaultDisconnectTimeout)
 	if err != nil {
 		return nil, err
 	}
 
-	ret.rpcTimeout, err = plugin.GetDuration(pconfig,
+	ret.rpcTimeout, err = config.GetDuration(pconfig,
 		"rpc_timeout", defaultRpcTimeout)
 	if err != nil {
 		return nil, err

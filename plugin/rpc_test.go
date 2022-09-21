@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ernestrc/go-tui/config"
 	pluginpb "github.com/ernestrc/go-tui/plugin/rpc"
 	"github.com/ernestrc/go-tui/proto"
 	"github.com/stretchr/testify/assert"
@@ -214,12 +215,12 @@ func TestUnitClient(t *testing.T) {
 type granteeMock struct {
 	err                  error
 	onConnected          int
-	cfgs                 []Config
+	cfgs                 []config.Config
 	onGrant, onDenied    []Permission
 	onHealth, onShutdown bool
 }
 
-func (g *granteeMock) Connected(b proto.MuxBroker, cfg Config) {
+func (g *granteeMock) Connected(b proto.MuxBroker, cfg config.Config) {
 	g.cfgs = append(g.cfgs, cfg)
 	g.onConnected++
 }
@@ -303,7 +304,7 @@ func TestIntegrationPluginClientServer(t *testing.T) {
 				"raven": math.MaxFloat64,
 			},
 		}
-		_, err := client.permissions(context.Background(), MapConfig(in))
+		_, err := client.permissions(context.Background(), config.MapConfig(in))
 		require.NoError(t, err)
 
 		require.Len(t, grantee.cfgs, 1)

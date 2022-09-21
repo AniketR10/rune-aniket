@@ -11,8 +11,8 @@ import (
 	"github.com/ernestrc/go-tui/browser"
 	"github.com/ernestrc/go-tui/cell"
 	"github.com/ernestrc/go-tui/component"
+	"github.com/ernestrc/go-tui/config"
 	"github.com/ernestrc/go-tui/handler"
-	"github.com/ernestrc/go-tui/plugin"
 	"github.com/ernestrc/go-tui/term"
 	"github.com/ernestrc/go-tui/text"
 	"github.com/ernestrc/go-tui/workspace"
@@ -58,7 +58,7 @@ var (
 type pluginConfig struct {
 	id     string
 	parent *ideConfig
-	cfg    plugin.Config
+	cfg    config.Config
 }
 
 type ideConfig struct {
@@ -97,11 +97,11 @@ func initDefaultConfig(c *ideConfig) {
 	initConfig(c, cfg)
 }
 
-func (c ideConfig) command() (plugin.Config, bool) {
+func (c ideConfig) command() (config.Config, bool) {
 	if c.cfg == nil {
 		return nil, false
 	}
-	return c.getConfig(plugin.MapConfig(c.cfg), "command")
+	return c.getConfig(config.MapConfig(c.cfg), "command")
 }
 
 func (c ideConfig) commandKeyMappings() map[handler.Sequence][]string {
@@ -112,7 +112,7 @@ func (c ideConfig) commandKeyMappings() map[handler.Sequence][]string {
 	}
 	m, err := cfg.GetMap("key_bindings")
 	if err != nil {
-		if err != plugin.ErrNotFound {
+		if err != config.ErrNotFound {
 			c.errors["key_bindings"] = err
 		}
 		return ret
@@ -168,7 +168,7 @@ func (c ideConfig) commandOverlayFrame() (ret bool) {
 	}
 	cfgFrame, err := cfg.GetBool("frame")
 	if err != nil {
-		if err != plugin.ErrNotFound {
+		if err != config.ErrNotFound {
 			c.errors["command.frame"] = err
 		}
 		return
@@ -185,14 +185,14 @@ func (c ideConfig) commandKey() (ret term.KeyComb) {
 	}
 	cfgKey, err := cfg.GetString("key")
 	if err != nil {
-		if err != plugin.ErrNotFound {
+		if err != config.ErrNotFound {
 			c.errors["command.key"] = err
 		}
 		return
 	}
 	key, err := term.ParseKey(cfgKey)
 	if err != nil {
-		if err != plugin.ErrNotFound {
+		if err != config.ErrNotFound {
 			c.errors["command.key"] = err
 		}
 		return
@@ -209,7 +209,7 @@ func (c ideConfig) commandOverlayWidth() (ret int) {
 	}
 	width, err := cfg.GetInt("width")
 	if err != nil {
-		if err != plugin.ErrNotFound {
+		if err != config.ErrNotFound {
 			c.errors["command.width"] = err
 		}
 		return
@@ -226,7 +226,7 @@ func (c ideConfig) commandOverlayHeight() (ret int) {
 	}
 	height, err := cfg.GetInt("height")
 	if err != nil {
-		if err != plugin.ErrNotFound {
+		if err != config.ErrNotFound {
 			c.errors["command.height"] = err
 		}
 		return
@@ -243,7 +243,7 @@ func (c ideConfig) commandMaxHistory() (ret int) {
 	}
 	height, err := b.GetInt("max_history")
 	if err != nil {
-		if err != plugin.ErrNotFound {
+		if err != config.ErrNotFound {
 			c.errors["command.max_history"] = err
 		}
 		return
@@ -252,7 +252,7 @@ func (c ideConfig) commandMaxHistory() (ret int) {
 	return
 }
 
-func (c ideConfig) prompt() (plugin.Config, bool) {
+func (c ideConfig) prompt() (config.Config, bool) {
 	b, ok := c.browser()
 	if !ok {
 		return nil, false
@@ -268,7 +268,7 @@ func (c ideConfig) promptWidth() (ret int) {
 	}
 	width, err := cfg.GetInt("width")
 	if err != nil {
-		if err != plugin.ErrNotFound {
+		if err != config.ErrNotFound {
 			c.errors["prompt.width"] = err
 		}
 		return
@@ -285,7 +285,7 @@ func (c ideConfig) promptHeight() (ret int) {
 	}
 	height, err := cfg.GetInt("height")
 	if err != nil {
-		if err != plugin.ErrNotFound {
+		if err != config.ErrNotFound {
 			c.errors["prompt.height"] = err
 		}
 		return
@@ -297,16 +297,16 @@ func (c ideConfig) promptHeight() (ret int) {
 func (c ideConfig) getCfgAttr(
 	key string, def term.Attributes,
 	cfgKey string,
-	cfgFn func() (plugin.Config, bool),
+	cfgFn func() (config.Config, bool),
 ) (attr term.Attributes) {
 	attr = def
 	cfg, ok := cfgFn()
 	if !ok {
 		return
 	}
-	cfgAttr, err := plugin.GetAttributes(cfg, key)
+	cfgAttr, err := config.GetAttributes(cfg, key)
 	if err != nil {
-		if err != plugin.ErrNotFound {
+		if err != config.ErrNotFound {
 			c.errors[cfgKey+"."+key] = err
 		}
 		return
@@ -371,9 +371,9 @@ func (c ideConfig) commandOverlayFrameCharSet() (
 	if !ok {
 		return
 	}
-	cfgCs, err := plugin.GetFrameCharset(cfg, key, cs)
+	cfgCs, err := config.GetFrameCharset(cfg, key, cs)
 	if err != nil {
-		if err != plugin.ErrNotFound {
+		if err != config.ErrNotFound {
 			c.errors[fmt.Sprintf("command.%s", key)] = err
 		}
 		return
@@ -406,10 +406,10 @@ func (c ideConfig) promptConfig() browser.PromptConfig {
 	}
 }
 
-func (c ideConfig) getConfig(cfg plugin.Config, key string) (plugin.Config, bool) {
+func (c ideConfig) getConfig(cfg config.Config, key string) (config.Config, bool) {
 	cfg, err := cfg.GetConfig(key)
 	if err != nil {
-		if err != plugin.ErrNotFound {
+		if err != config.ErrNotFound {
 			c.errors[key] = err
 		}
 		return nil, false
@@ -417,7 +417,7 @@ func (c ideConfig) getConfig(cfg plugin.Config, key string) (plugin.Config, bool
 	return cfg, true
 }
 
-func (c ideConfig) windowManager() (plugin.Config, bool) {
+func (c ideConfig) windowManager() (config.Config, bool) {
 	b, ok := c.browser()
 	if !ok {
 		return nil, false
@@ -442,9 +442,9 @@ func (c ideConfig) windowAttr(key string, def term.Attributes) (
 	if !ok {
 		return
 	}
-	cfgAttr, err := plugin.GetAttributes(cfg, key)
+	cfgAttr, err := config.GetAttributes(cfg, key)
 	if err != nil {
-		if err != plugin.ErrNotFound {
+		if err != config.ErrNotFound {
 			c.errors[fmt.Sprintf("window_manager.%s", key)] = err
 		}
 		return
@@ -460,13 +460,13 @@ func (c ideConfig) getConfigAttr(
 	if c.cfg == nil {
 		return
 	}
-	cfg, ok := c.getConfig(plugin.MapConfig(c.cfg), cfgKey)
+	cfg, ok := c.getConfig(config.MapConfig(c.cfg), cfgKey)
 	if !ok {
 		return
 	}
-	cfgAttr, err := plugin.GetAttributes(cfg, key)
+	cfgAttr, err := config.GetAttributes(cfg, key)
 	if err != nil {
-		if err != plugin.ErrNotFound {
+		if err != config.ErrNotFound {
 			c.errors[fmt.Sprintf("%s.%s", cfgKey, key)] = err
 		}
 		return
@@ -518,9 +518,9 @@ func (c ideConfig) windowCharset(key string, def component.FrameCharSet) (
 	if !ok {
 		return
 	}
-	cfgCs, err := plugin.GetFrameCharset(cfg, key, cs)
+	cfgCs, err := config.GetFrameCharset(cfg, key, cs)
 	if err != nil {
-		if err != plugin.ErrNotFound {
+		if err != config.ErrNotFound {
 			c.errors[fmt.Sprintf("window_manager.%s", key)] = err
 		}
 		return
@@ -537,7 +537,7 @@ func (c ideConfig) windowManagerBool(key string, def bool) (frame bool) {
 	}
 	cfgFrame, err := cfg.GetBool(key)
 	if err != nil {
-		if err != plugin.ErrNotFound {
+		if err != config.ErrNotFound {
 			c.errors[fmt.Sprintf("window_manager.%s", key)] = err
 		}
 		return
@@ -563,7 +563,7 @@ func (c ideConfig) frameUnionCharset() (cs component.FrameUnionCharSet) {
 
 	cfg, err := cfg.GetConfig("frameunion_charset")
 	if err != nil {
-		if err != plugin.ErrNotFound {
+		if err != config.ErrNotFound {
 			c.errors["browser.frameunion_charset"] = err
 		}
 		return
@@ -571,7 +571,7 @@ func (c ideConfig) frameUnionCharset() (cs component.FrameUnionCharSet) {
 
 	left, err := cfg.GetRune("left")
 	if err != nil {
-		if err != plugin.ErrNotFound {
+		if err != config.ErrNotFound {
 			c.errors["browser.frameunion_charset.left"] = err
 		}
 	} else {
@@ -580,7 +580,7 @@ func (c ideConfig) frameUnionCharset() (cs component.FrameUnionCharSet) {
 
 	right, err := cfg.GetRune("right")
 	if err != nil {
-		if err != plugin.ErrNotFound {
+		if err != config.ErrNotFound {
 			c.errors["browser.frameunion_charset.right"] = err
 		}
 	} else {
@@ -589,7 +589,7 @@ func (c ideConfig) frameUnionCharset() (cs component.FrameUnionCharSet) {
 
 	top, err := cfg.GetRune("top")
 	if err != nil {
-		if err != plugin.ErrNotFound {
+		if err != config.ErrNotFound {
 			c.errors["browser.frameunion_charset.top"] = err
 		}
 	} else {
@@ -598,7 +598,7 @@ func (c ideConfig) frameUnionCharset() (cs component.FrameUnionCharSet) {
 
 	bottom, err := cfg.GetRune("bottom")
 	if err != nil {
-		if err != plugin.ErrNotFound {
+		if err != config.ErrNotFound {
 			c.errors["browser.frameunion_charset.bottom"] = err
 		}
 	} else {
@@ -621,18 +621,18 @@ func (c ideConfig) windowManagerConfig() handler.WindowManagerConfig {
 	}
 }
 
-func (c ideConfig) browser() (plugin.Config, bool) {
+func (c ideConfig) browser() (config.Config, bool) {
 	if c.cfg == nil {
 		return nil, false
 	}
-	return c.getConfig(plugin.MapConfig(c.cfg), "browser")
+	return c.getConfig(config.MapConfig(c.cfg), "browser")
 }
 
-func (c ideConfig) vi() (plugin.Config, bool) {
+func (c ideConfig) vi() (config.Config, bool) {
 	if c.cfg == nil {
 		return nil, false
 	}
-	return c.getConfig(plugin.MapConfig(c.cfg), "vi")
+	return c.getConfig(config.MapConfig(c.cfg), "vi")
 }
 
 func (c ideConfig) viResultAttr() (attr term.Attributes) {
@@ -641,9 +641,9 @@ func (c ideConfig) viResultAttr() (attr term.Attributes) {
 	if !ok {
 		return
 	}
-	attr, err := plugin.GetAttributes(cfg, "search_attr")
+	attr, err := config.GetAttributes(cfg, "search_attr")
 	if err != nil {
-		if err != plugin.ErrNotFound {
+		if err != config.ErrNotFound {
 			c.errors["vi.search_attr"] = err
 		}
 	}
@@ -665,7 +665,7 @@ func (c ideConfig) viBool(name string) (ret bool) {
 	}
 	ret, err := cfg.GetBool(name)
 	if err != nil {
-		if err != plugin.ErrNotFound {
+		if err != config.ErrNotFound {
 			c.errors["vi."+name] = err
 		}
 	}
@@ -680,7 +680,7 @@ func (c ideConfig) browserTabspaces() (tabs int) {
 	}
 	cfgTabs, err := cfg.GetInt("tabspaces")
 	if err != nil {
-		if err != plugin.ErrNotFound {
+		if err != config.ErrNotFound {
 			c.errors["browser.tabspaces"] = err
 		}
 		return
@@ -700,7 +700,7 @@ func (c ideConfig) wallpaper() (text string) {
 	}
 	cfgText, err := cfg.GetString("wallpaper")
 	if err != nil {
-		if err != plugin.ErrNotFound {
+		if err != config.ErrNotFound {
 			c.errors["workspace.wallpaper"] = err
 		}
 		return
@@ -714,9 +714,9 @@ func (c ideConfig) logOutputPath() string {
 		return ""
 
 	}
-	path, err := plugin.MapConfig(c.cfg).GetString("log_path")
+	path, err := config.MapConfig(c.cfg).GetString("log_path")
 	if err != nil {
-		if err != plugin.ErrNotFound {
+		if err != config.ErrNotFound {
 			c.errors["log_path"] = err
 		}
 		return ""
@@ -729,9 +729,9 @@ func (c ideConfig) logLevel() log.Level {
 		return log.ErrorLevel
 
 	}
-	levelStr, err := plugin.MapConfig(c.cfg).GetString("log_level")
+	levelStr, err := config.MapConfig(c.cfg).GetString("log_level")
 	if err != nil {
-		if err != plugin.ErrNotFound {
+		if err != config.ErrNotFound {
 			c.errors["log_level"] = err
 		}
 		return log.ErrorLevel
@@ -832,7 +832,7 @@ func (c ideConfig) plugins() map[string]pluginConfig {
 		ret[id] = pluginConfig{
 			id:     id,
 			parent: &c,
-			cfg:    plugin.MapConfig(pcfg),
+			cfg:    config.MapConfig(pcfg),
 		}
 	}
 
@@ -850,10 +850,10 @@ func (c pluginConfig) path() (string, bool) {
 	return path, true
 }
 
-func (c pluginConfig) config() (plugin.Config, bool) {
+func (c pluginConfig) config() (config.Config, bool) {
 	cfg, err := c.cfg.GetConfig("config")
 	if err != nil {
-		if err != plugin.ErrNotFound {
+		if err != config.ErrNotFound {
 			errorID := fmt.Sprintf("plugin.%s.config", c.id)
 			c.parent.errors[errorID] = err
 		}
@@ -862,11 +862,11 @@ func (c pluginConfig) config() (plugin.Config, bool) {
 	return cfg, true
 }
 
-func (c ideConfig) workspace() (plugin.Config, bool) {
+func (c ideConfig) workspace() (config.Config, bool) {
 	if c.cfg == nil {
 		return nil, false
 	}
-	return c.getConfig(plugin.MapConfig(c.cfg), "workspace")
+	return c.getConfig(config.MapConfig(c.cfg), "workspace")
 }
 
 func (c ideConfig) workspaceWallpaperAttr() term.Attributes {
@@ -887,7 +887,7 @@ func (c ideConfig) workspaceSSHTimeout() (ret time.Duration) {
 		return
 	}
 
-	sshTimeout, err := plugin.GetDuration(cfg, "ssh_timeout", defSSHTimeout)
+	sshTimeout, err := config.GetDuration(cfg, "ssh_timeout", defSSHTimeout)
 	if err != nil {
 		c.errors["workspace.ssh_timeout"] = err
 		return

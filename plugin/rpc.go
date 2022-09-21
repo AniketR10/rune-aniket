@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ernestrc/go-tui/config"
 	pluginpb "github.com/ernestrc/go-tui/plugin/rpc"
 	"github.com/ernestrc/go-tui/proto"
 	"github.com/hashicorp/go-plugin"
@@ -85,10 +86,12 @@ func (s *granteeServer) Permissions(ctx context.Context, req *pluginpb.PermReque
 		resp.Perms = append(resp.Perms, &pluginpb.Permission{Id: string(perm)})
 	}
 
-	var cfg jsonMap
+	// Note: this is how Manager sends the config
+	// if that ever changes, this code will break
+	var cfg config.JSON
 	protocfg := req.GetConfig()
 	if protocfg == nil {
-		cfg.mapConfig = make(map[string]interface{})
+		cfg = config.JSONFromMap(make(map[string]interface{}))
 	} else {
 		err := cfg.UnmarshalText(protocfg)
 		if err != nil {
@@ -218,16 +221,15 @@ func (c *granteeClient) broker() proto.MuxBroker {
 	return c.mBroker
 }
 
-func (c *granteeClient) permissions(ctx context.Context, config Config) (
+func (c *granteeClient) permissions(ctx context.Context, cfg config.Config) (
 	perms []*pluginpb.Permission, err error,
 ) {
 	var req pluginpb.PermRequest
-	if config == nil {
+	if cfg == nil {
 		req.Config = []byte("{}")
 	} else {
-		mConfig := toInternalConfig(config)
-		jsonConfig := jsonMap{mConfig}
-		req.Config, err = jsonConfig.MarshalText()
+		jcfg := config.JSONFromConfig(cfg)
+		req.Config, err = jcfg.MarshalText()
 		if err != nil {
 			err = fmt.Errorf("could not marshal config: %v", err)
 			return

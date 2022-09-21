@@ -3,6 +3,7 @@ package main
 import (
 	"sync"
 
+	"github.com/ernestrc/go-tui/config"
 	"github.com/ernestrc/go-tui/plugin"
 	"github.com/ernestrc/go-tui/proto"
 	"github.com/ernestrc/go-tui/text"
@@ -41,7 +42,7 @@ func (c *systemClipboard) Copy(data string) error {
 	return clipboard.WriteAll(data)
 }
 
-func (c *systemClipboard) Connected(broker proto.MuxBroker, config plugin.Config) {
+func (c *systemClipboard) Connected(broker proto.MuxBroker, pconfig config.Config) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -49,11 +50,11 @@ func (c *systemClipboard) Connected(broker proto.MuxBroker, config plugin.Config
 		log.Fatal("clipboard package does not support this system: terminating plugin")
 	}
 
-	log.Infof("plugin connected; config: %#v", config)
+	log.Infof("plugin connected; config: %#v", pconfig)
 	c.broker = broker
 	c.registerID = text.DefaultRegisterID
 
-	registerID, err := config.GetString("register")
+	registerID, err := pconfig.GetString("register")
 	if err != nil {
 		log.Infof("coud not read 'register' property: %v", err)
 		return

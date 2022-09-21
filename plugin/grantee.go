@@ -6,6 +6,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/ernestrc/go-tui/config"
 	pluginpb "github.com/ernestrc/go-tui/plugin/rpc"
 	"github.com/ernestrc/go-tui/proto"
 	"github.com/hashicorp/go-plugin"
@@ -29,7 +30,7 @@ type Grant struct {
 // Grantee needs to be implemented by plugins that want
 // to access plugin host resources.
 type Grantee interface {
-	Connected(proto.MuxBroker, Config)
+	Connected(proto.MuxBroker, config.Config)
 	PermissionGranted([]Grant)
 	PermissionDenied([]Permission)
 	Shutdown(reason string) error

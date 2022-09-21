@@ -6,6 +6,7 @@ import (
 
 	"github.com/ernestrc/go-tui"
 	"github.com/ernestrc/go-tui/browser"
+	"github.com/ernestrc/go-tui/config"
 	"github.com/ernestrc/go-tui/handler"
 	"github.com/ernestrc/go-tui/plugin"
 	"github.com/ernestrc/go-tui/proto"
@@ -18,7 +19,7 @@ import (
 	"google.golang.org/grpc/connectivity"
 )
 
-var emptyConfig = plugin.MapConfig(make(map[string]interface{}))
+var emptyConfig = config.MapConfig(make(map[string]interface{}))
 
 type handlerCloser struct {
 	tui.Handler
@@ -147,21 +148,21 @@ func TestCommandSplitHandlerOpenWindow(t *testing.T) {
 }
 
 func testSplitWindow(
-	t *testing.T, config CommandSplitHandlerConfig,
+	t *testing.T, cfg CommandSplitHandlerConfig,
 	grant plugin.Grant, action func(*cmdSplitHandler),
 ) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	config.Handler = func(grants []plugin.Grant, broker proto.MuxBroker,
-		focus browser.Window, config plugin.Config) (tui.Handler, error) {
+	cfg.Handler = func(grants []plugin.Grant, broker proto.MuxBroker,
+		focus browser.Window, c config.Config) (tui.Handler, error) {
 		return handler.NewTestHandler(), nil
 	}
 	mockWm := browser.NewMockWindowManager(ctrl)
-	h := &cmdSplitHandler{config: config, wm: mockWm}
+	h := &cmdSplitHandler{config: cfg, wm: mockWm}
 	mockWm.EXPECT().Focus().Return(nil, nil)
 	mockWm.EXPECT().
-		Split(gomock.Eq(config.SplitOrientation), gomock.Any()).
+		Split(gomock.Eq(cfg.SplitOrientation), gomock.Any()).
 		Return(nil, nil)
 	action(h)
 }

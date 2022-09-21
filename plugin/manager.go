@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/ernestrc/blue/datastore/document"
+	"github.com/ernestrc/go-tui/config"
 	pluginpb "github.com/ernestrc/go-tui/plugin/rpc"
 	"github.com/ernestrc/go-tui/proto"
 	"github.com/ernestrc/go-tui/util"
@@ -121,7 +122,7 @@ func (m *Manager) log(level log.Level, msg string, args ...interface{}) {
 	m.config.logger.Logf(level, msg, args...)
 }
 
-func (m *Manager) runPlugin(pluginID, path string, config Config) error {
+func (m *Manager) runPlugin(pluginID, path string, config config.Config) error {
 	client, err := m.builder(pluginID, path, m.grantor, m.config.logger)
 	if err != nil {
 		return err
@@ -149,7 +150,7 @@ func (m *Manager) runPlugin(pluginID, path string, config Config) error {
 // if something went wrong when finding and executing the plugin executable.
 // Once the plugin is up and running, errors can be retrieved with Stat.
 // Note that config is an optional argument.
-func (m *Manager) Run(pluginID, path string, config Config) error {
+func (m *Manager) Run(pluginID, path string, config config.Config) error {
 	m.mu.Lock()
 	_, ok := m.clients[pluginID]
 	m.mu.Unlock()
@@ -306,7 +307,7 @@ func (m *Manager) setRunning(pluginID string) {
 }
 
 func (m *Manager) handshake(
-	pluginID string, client *granteeClientWrap, config Config,
+	pluginID string, client *granteeClientWrap, config config.Config,
 ) {
 	ctx := context.Background()
 	ctx, closeFn := context.WithTimeout(ctx, m.config.handshakeTimeout)
