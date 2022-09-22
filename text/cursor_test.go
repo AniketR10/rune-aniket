@@ -10,6 +10,7 @@ import (
 
 	"github.com/ernestrc/go-tui/cell"
 	"github.com/ernestrc/go-tui/component"
+	"github.com/ernestrc/go-tui/config"
 	"github.com/ernestrc/go-tui/term"
 	"github.com/ernestrc/go-tui/workspace"
 	log "github.com/sirupsen/logrus"
@@ -1116,11 +1117,11 @@ func testCursorDeleteSelection(t *testing.T, width, height int, typeSelect Selec
 			finalBuf:   "",
 		},
 		{
-			initialBuf: "\n",
-			selected:   true,
-			finalPos:   func(*Cursor) {},
-			deleted:    true,
-			finalBuf:   "",
+			initialBuf:  "\n",
+			selected:    true,
+			finalPos:    func(*Cursor) {},
+			deleted:     true,
+			finalBuf:    "",
 			skipForMode: []SelectMode{StandardSelection, BlockSelection},
 		},
 		{
@@ -1909,9 +1910,13 @@ func TestFileCursorIntegration(t *testing.T) {
 			require.NoError(t, err)
 
 			// installs unix reader
-			m, err := workspace.NewManager(discardLogger, cwdURI(t))
+			m := workspace.NewManager(discardLogger, config.NopConfig())
 			require.NoError(t, err)
-			_, err = m.Open(uri, b, swapDir, false)
+			err = m.RegisterScheme(workspace.FileScheme, workspace.NewFileScheme)
+			require.NoError(t, err)
+			workspace, err := m.AddWorkspace(cwdURI(t))
+			require.NoError(t, err)
+			_, err = workspace.Load(uri, b, swapDir, false)
 			require.NoError(t, err)
 
 			tcase.test(t, cursor)

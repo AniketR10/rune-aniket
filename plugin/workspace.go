@@ -44,7 +44,7 @@ func (s *workspaceResourceServer) Serve(
 				}
 				grpc := srv.GRPC()
 				s.srv = srv
-				server := workspace.NewServer(s.b)
+				server := workspacepb.NewServer(s.b)
 				workspacepb.RegisterWorkspaceServer(grpc, server)
 			}
 			return s.srv
@@ -61,23 +61,23 @@ func WorkspaceResources(b workspace.Workspace) map[Permission]ResourceServer {
 }
 
 func dialWorkspace(token uint32, broker proto.MuxBroker) (
-	workspace.Workspace, error,
+	workspace.API, error,
 ) {
 	if c, ok := clients.Load(token); ok {
-		return c.(workspace.Workspace), nil
+		return c.(workspace.API), nil
 	}
 	conn, err := broker.Dial(token)
 	if err != nil {
 		return nil, err
 	}
-	c := workspace.NewClient(conn)
+	c := workspacepb.NewClient(conn)
 	clients.Store(token, c)
 	return c, nil
 }
 
 // Workspace acquires the workspace's process executor with the given token.
 func Workspace(token uint32, broker proto.MuxBroker) (
-	workspace.Workspace, error,
+	workspace.API, error,
 ) {
 	return dialWorkspace(token, broker)
 }

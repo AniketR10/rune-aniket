@@ -16,9 +16,9 @@ EXAMPLES=$(EXAMPLES_NON_WASM)
 EXECSRC=$(wildcard cmd/**/*.go) $(wildcard cmd/**/**/*.go)
 EXECDIRS=$(sort $(dir $(EXECSRC)))
 EXECS=$(patsubst cmd/%/,$(BIN)/%,$(EXECDIRS))
-GOMOCKS=$(wildcard **/*_gomock.go)
+GOMOCKS=$(wildcard **/**/*_gomock.go) $(wildcard **/*_gomock.go)
 
-.PHONY: clean test coverage example_wasm generate
+.PHONY: debug clean test coverage example_wasm generate
 
 default: CGO_ENABLED=CGO_ENABLED=0
 default: $(EXAMPLES) $(EXECS)

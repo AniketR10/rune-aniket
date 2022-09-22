@@ -57,7 +57,7 @@ type gitEditorHandler struct {
 	ed     text.Editor
 	wm     browser.WindowManager
 	p      browser.EventPublisher
-	exec   workspace.Workspace
+	exec   workspace.API
 	exit   uint32
 	ch     chan text.Event
 	scroll struct {

@@ -5,6 +5,7 @@ import (
 	"os/exec"
 	"strings"
 
+	"github.com/ernestrc/go-tui/workspace"
 	"github.com/hashicorp/go-plugin"
 	log "github.com/sirupsen/logrus"
 )
@@ -26,11 +27,15 @@ func goPluginGranteeBuilder(m *Manager) pluginBuilder {
 		cmd := exec.Command(path)
 		// if local workspace, then do set dir in a best effort for
 		// plugins that do not use APIs and call os functions directly.
-		if !strings.HasPrefix("ssh://", m.config.workspace.String()) {
+		if strings.HasPrefix("file://", m.config.workspace.String()) {
 			// if URI is zero-valued, then Path returns an empty string
 			// which fits the default in exec.Cmd.Dir which is to not
 			// set the command's dir.
-			cmd.Dir = m.config.workspace.Path()
+			var err error
+			cmd.Dir, err = workspace.ExpandPathWithURI(m.config.workspace.Path(), m.config.workspace)
+			if err != nil {
+				return nil, fmt.Errorf("could not expand workspace path: %q", m.config.workspace.Path())
+			}
 		}
 		cmd.Env = append(cmd.Env, makeBrokerRemoteAddrEnv(m.brokerAddr.String()))
 		cmd.Env = append(cmd.Env, makeLogLevelEnv(logger.GetLevel()))

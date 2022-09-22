@@ -43,7 +43,7 @@ type emulatorGrantee struct {
 	mu     sync.Mutex
 	broker proto.MuxBroker
 
-	wp workspace.Workspace
+	wp workspace.API
 	wm browser.WindowManager
 	p  browser.EventPublisher
 	ed text.Editor

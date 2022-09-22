@@ -3,437 +3,143 @@ package workspace
 import (
 	"errors"
 	"fmt"
-	"io"
 	"os"
-	"os/exec"
-	"os/user"
-	"path/filepath"
-	"strings"
-	"sync"
-	"syscall"
-	"time"
 
-	"github.com/ernestrc/go-tui/cell"
-	log "github.com/sirupsen/logrus"
+	multierr "github.com/ernestrc/go-multierror"
+	"github.com/ernestrc/go-tui/config"
 )
 
 var (
-	_                 Workspace = (*Manager)(nil)
-	errProcNotFound             = errors.New("process not found")
-	errProcNotRunning           = errors.New("process not running")
+	errProcNotFound   = errors.New("process not found")
+	errProcNotRunning = errors.New("process not running")
 )
 
-// Manager manages resources on a workspace. It satisfies ResourceOpener.
+// Manager manages resources for a collection of workspaces.
+// It allows clients to register new Schemes and add new workspaces.
 type Manager struct {
-	managerCfg
-	logger    *log.Logger
-	workspace URI
-	cmds      map[Pid]*exec.Cmd
-	nextPid   int32
+	cfg config.Config
 
-	mu              sync.Mutex
-	sshConn         sshClient
-	sshErr          error
-	workspaceClient *Client
-	isInitProxy     bool
-
-	initRemote func() (err error)
-	osStat     func(string) (os.FileInfo, error)
-	userLookup func(string) (*user.User, error)
+	schemes    map[string]func(config.Config, URI) (Scheme, error)
+	workspaces map[string]Workspace
 }
 
-type managerCfg struct {
-	sshPrivateKeys []string
-	sshTimeout     time.Duration
-	sshCommand     string
+// adds remove on Close
+type managerWorkspace struct {
+	m   *Manager
+	uri URI
+	Workspace
 }
 
-func isFileURI(file URI) bool {
-	return strings.HasPrefix(file.uri, "file://")
+func (w managerWorkspace) Close() error {
+	ret := w.Workspace.Close()
+	w.m.removeWorkspace(w.uri)
+	return ret
 }
 
-func isSSHURI(file URI) bool {
-	return strings.HasPrefix(file.uri, "ssh://")
-}
-
-// NewManager allocates storage fore a new Manage and initializes it with workspace.
-func NewManager(
-	l *log.Logger, workspace URI, opts ...Option,
-) (*Manager, error) {
-	if l == nil {
-		panic("invalid logger")
-	}
+// NewManager allocates storage for a new Manager and initializes it.
+// See Manager.Init for more details.
+func NewManager(cfg config.Config) *Manager {
 	ret := new(Manager)
-	err := ret.Init(l, workspace, opts...)
+	ret.Init(cfg)
+	return ret
+}
+
+// Init initializes m and register a default implementation for local file management
+// under the file:// scheme.
+func (m *Manager) Init(cfg config.Config) {
+	m.cfg = cfg
+	m.schemes = make(map[string]func(config.Config, URI) (Scheme, error))
+	m.workspaces = make(map[string]Workspace)
+}
+
+// RegisterScheme registers a new scheme for the given scheme and uses fn
+// to allocate it for new workspaces. It returns an error if there's already
+// a scheme registered for the given scheme.
+func (m *Manager) RegisterScheme(scheme string, fn func(config.Config, URI) (Scheme, error)) error {
+	_, ok := m.schemes[scheme]
+	if ok {
+		return fmt.Errorf("scheme %q already registered", scheme)
+	}
+	m.schemes[scheme] = fn
+	return nil
+}
+
+func (m *Manager) removeWorkspace(uri URI) {
+	delete(m.workspaces, uri.String())
+}
+
+// AddWorkspace returns a Workspace capable of managing resources on
+// the given URI. It returns an error if no Scheme has been registered
+// (previously via RegisterScheme) for the given workspace's scheme or
+// if this workspace has already been added for the given URI. Note that
+// the given URI can be a file URI, in which case the workspace will default
+// to the file's directory as the workspace URI.
+func (m *Manager) AddWorkspace(uri URI) (Workspace, error) {
+	if _, ok := m.WorkspaceFile(uri); ok {
+		return nil, errors.New("workspace already added")
+	}
+
+	schemeFn, ok := m.schemes[uri.parsed.Scheme]
+	if !ok {
+		return nil, fmt.Errorf("scheme not registered %q", uri.parsed.Scheme)
+	}
+	cfg, err := m.cfg.GetConfig(uri.parsed.Scheme)
+	if err != nil && err != config.ErrNotFound {
+		return nil, fmt.Errorf("unable to load scheme config: %s", err)
+	}
+	if cfg == nil {
+		cfg = config.NopConfig()
+	}
+	scheme, err := schemeFn(cfg, uri)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("could not add new workspace %q: %w", uri, err)
 	}
-	return ret, nil
+
+	workspace := NewSchemeWorkspace(uri, scheme)
+	// wrap to provide multi-scheme support
+	// for one-off requests to open a file out of the current
+	workspace = newMulti(m, uri, workspace)
+	workspace = managerWorkspace{uri: uri, m: m, Workspace: workspace}
+	m.workspaces[uri.String()] = workspace
+	return workspace, nil
 }
 
-// Init initializes m or returns an error if there was a problem with
-// the given workspace URI.
-func (m *Manager) Init(l *log.Logger, workspace URI, opts ...Option) error {
-	m.initRemote = func() (err error) {
-		return m.initWorkspaceClient(m.managerCfg, m.workspace)
-	}
-	m.osStat = os.Stat
-	m.userLookup = user.Lookup
-	return m.init(l, workspace, opts...)
-}
-
-func (m *Manager) init(l *log.Logger, workspace URI, opts ...Option) error {
-	m.logger = l
-	m.workspace = workspace
-	m.cmds = make(map[Pid]*exec.Cmd)
-	for _, o := range opts {
-		o(&m.managerCfg)
-	}
-	if isFileURI(workspace) {
-		return m.initLocal()
-	}
-	if isSSHURI(workspace) {
-		return m.initRemote()
-	}
-	return fmt.Errorf("unknown scheme: %s", workspace)
-}
-
-func (m *Manager) getUser() (*user.User, error) {
-	if m.workspace.parsed.User == nil {
-		return user.Current()
-	}
-	username := m.workspace.parsed.User.Username()
-	return m.userLookup(username)
-}
-
-func (m *Manager) extractAbsPath(filename string) (string, error) {
-	return ExpandPath(filename, m.getUser, func() (string, error) {
-		return m.workspace.Path(), nil
-	})
-}
-
-// ExpandPath finds the absolute path of a relative path and
-// expands the home shortcut (~) if any. If path is already
-// absolute then this function returns the path unchanged.
-func ExpandPath(
-	path string,
-	getUser func() (*user.User, error),
-	cwdFn func() (string, error),
-) (string, error) {
-	if path == "~" {
-		usr, err := getUser()
-		if err != nil {
-			return "", fmt.Errorf("could not get current user: %s", err)
+// WorkspaceFile returns a Workspace suitable for the given file
+// or false if there's currently no Workspace initialized.
+func (m *Manager) WorkspaceFile(file URI) (Workspace, bool) {
+	for _, workspace := range m.workspaces {
+		if IsWorkspaceURI(workspace, file) {
+			return workspace, true
 		}
-		path = usr.HomeDir
-	} else if strings.HasPrefix(path, "~/") {
-		usr, err := getUser()
-		if err != nil {
-			return "", fmt.Errorf("could not get current user: %s", err)
-		}
-		path = filepath.Join(usr.HomeDir, path[2:])
 	}
-	if filepath.IsAbs(path) {
-		return path, nil
-	}
-	cwd, err := cwdFn()
-	if err != nil {
-		return "", fmt.Errorf("could not get cwd: %s", err)
-	}
-	abs := filepath.Join(cwd, path)
-	return abs, nil
-}
-
-func (m *Manager) initLocal() error {
-	workspacewd := m.workspace.Path()
-	fs, err := m.osStat(workspacewd)
-	if err != nil {
-		return err
-	}
-	if !fs.IsDir() {
-		return errors.New("workspace is not a directory")
-	}
-	return nil
-}
-
-// Recover recovers the file with the swap file.
-func (m *Manager) Recover(file, swapFile URI, buf *cell.Buffer, force bool) (
-	FlusherCloser, error,
-) {
-	if isFileURI(file) {
-		return recoverLocalFile(file, swapFile, buf, force)
-	}
-	if isSSHURI(file) {
-		return m.recoverRemoteFile(file, swapFile, buf, force)
-	}
-	return nil, fmt.Errorf("unknown scheme: %s", file.uri)
-}
-
-// Open opens the file at the given URI and initializes buf with the contents of it.
-// It uses swapDir as the file recovery and swap directory.
-func (m *Manager) Open(
-	file URI, buf *cell.Buffer, swapDir URI, readOnly bool,
-) (
-	fc FlusherCloser, err error,
-) {
-	if isFileURI(file) {
-		fc, err = openLocalFile(file, buf, swapDir, readOnly)
-	} else if isSSHURI(file) {
-		fc, err = m.openRemoteFile(file, buf, swapDir, readOnly)
-	} else {
-		return nil, fmt.Errorf("unknown scheme: %s", file.uri)
-	}
-
-	if err == nil {
-		return fc, nil
-	}
-
-	osErr, ok := err.(*osError)
-	if !ok {
-		return nil, err
-	}
-	if osErr.isPermission {
-		return nil, os.ErrPermission
-	}
-	if osErr.isNotExist {
-		return nil, os.ErrNotExist
-	}
-	return nil, err
-}
-
-func (m *Manager) commandLocal(name string, arg ...string) (Pid, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if m.cmds == nil {
-		return 0, errors.New("workspace is closing")
-	}
-
-	cmd := exec.Command(name, arg...)
-	cmd.Dir = m.workspace.Path()
-	m.nextPid++
-	m.cmds[Pid(m.nextPid)] = cmd
-	return Pid(m.nextPid), nil
-}
-
-func (m *Manager) getCmdForPid(pid Pid) (*exec.Cmd, bool) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	f, ok := m.cmds[pid]
-	return f, ok
-}
-
-func (m *Manager) startLocal(pid Pid) error {
-	f, ok := m.getCmdForPid(pid)
-	if !ok {
-		return errProcNotFound
-	}
-	err := f.Start()
-	if err != nil {
-		return fmt.Errorf("Cmd.Start: %w", err)
-	}
-	return nil
-}
-
-func (m *Manager) signalLocal(pid Pid, signal syscall.Signal) error {
-	f, ok := m.getCmdForPid(pid)
-	if !ok {
-		return errProcNotFound
-	}
-	if f.Process == nil {
-		return errProcNotRunning
-	}
-	err := syscall.Kill(int(f.Process.Pid), signal)
-	if err != nil {
-		return fmt.Errorf("syscall.Kill: %w", err)
-	}
-	return nil
-}
-
-func (m *Manager) stderrPipeLocal(pid Pid) (io.ReadCloser, error) {
-	f, ok := m.getCmdForPid(pid)
-	if !ok {
-		return nil, errProcNotFound
-	}
-	pipe, err := f.StderrPipe()
-	if err != nil {
-		return nil, fmt.Errorf("Cmd.StderrPipe: %w", err)
-	}
-	return pipe, err
-}
-
-func (m *Manager) stdinPipeLocal(pid Pid) (io.WriteCloser, error) {
-	f, ok := m.getCmdForPid(pid)
-	if !ok {
-		return nil, errProcNotFound
-	}
-	pipe, err := f.StdinPipe()
-	if err != nil {
-		return nil, fmt.Errorf("Cmd.StdinPipe: %w", err)
-	}
-	return pipe, err
-}
-
-func (m *Manager) stdoutPipeLocal(pid Pid) (io.ReadCloser, error) {
-	f, ok := m.getCmdForPid(pid)
-	if !ok {
-		return nil, errProcNotFound
-	}
-	pipe, err := f.StdoutPipe()
-	if err != nil {
-		return nil, fmt.Errorf("Cmd.StdoutPipe: %w", err)
-	}
-	return pipe, err
-}
-
-func (m *Manager) waitLocal(pid Pid) error {
-	f, ok := m.getCmdForPid(pid)
-	if !ok {
-		return errProcNotFound
-	}
-	err := f.Wait()
-	if err != nil {
-		return fmt.Errorf("Cmd.Wait: %w", err)
-	}
-	return err
-}
-
-func (m *Manager) Command(name string, arg ...string) (pid Pid, err error) {
-	m.logger.Tracef("workspace.Manager.Command(%s, %#v)", name, arg)
-	if m.isInitProxy || isFileURI(m.workspace) {
-		pid, err = m.commandLocal(name, arg...)
-	} else if isSSHURI(m.workspace) {
-		pid, err = m.workspaceClient.Command(name, arg...)
-	} else {
-		panic("manager has an invalid workspace URI")
-	}
-	m.logger.Debugf("workspace.Manager.Command(%s, %#v): %d, %v",
-		name, arg, pid, err)
-	return
-}
-
-func (m *Manager) Start(pid Pid) (err error) {
-	m.logger.Tracef("workspace.Manager.Start(%v)", pid)
-	if m.isInitProxy || isFileURI(m.workspace) {
-		err = m.startLocal(pid)
-	} else if isSSHURI(m.workspace) {
-		err = m.workspaceClient.Start(pid)
-	} else {
-		panic("manager has an invalid workspace URI")
-	}
-	m.logger.Debugf("workspace.Manager.Start(%v): %v", pid, err)
-	return
-}
-
-func (m *Manager) Signal(pid Pid, sig syscall.Signal) (err error) {
-	m.logger.Tracef("workspace.Manager.Signal(%v, %d)", pid, sig)
-	if m.isInitProxy || isFileURI(m.workspace) {
-		err = m.signalLocal(pid, sig)
-	} else if isSSHURI(m.workspace) {
-		err = m.workspaceClient.Signal(pid, sig)
-	} else {
-		panic("manager has an invalid workspace URI")
-	}
-	m.logger.Debugf("workspace.Manager.Signal(%v, %#v): %v",
-		pid, sig, err)
-	return
-}
-
-func (m *Manager) StderrPipe(pid Pid) (ret io.ReadCloser, err error) {
-	m.logger.Tracef("workspace.Manager.StderrPipe(%v)", pid)
-	if m.isInitProxy || isFileURI(m.workspace) {
-		ret, err = m.stderrPipeLocal(pid)
-	} else if isSSHURI(m.workspace) {
-		ret, err = m.workspaceClient.StderrPipe(pid)
-	} else {
-		panic("manager has an invalid workspace URI")
-	}
-	m.logger.Debugf("workspace.Manager.StderrPipe(%v): %v", pid, err)
-	return
-}
-
-func (m *Manager) StdinPipe(pid Pid) (ret io.WriteCloser, err error) {
-	m.logger.Tracef("workspace.Manager.StdinPipe(%v)", pid)
-	if m.isInitProxy || isFileURI(m.workspace) {
-		ret, err = m.stdinPipeLocal(pid)
-	} else if isSSHURI(m.workspace) {
-		ret, err = m.workspaceClient.StdinPipe(pid)
-	} else {
-		panic("manager has an invalid workspace URI")
-	}
-	m.logger.Debugf("workspace.Manager.StdinPipe(%v): %v", pid, err)
-	return
-}
-
-func (m *Manager) StdoutPipe(pid Pid) (ret io.ReadCloser, err error) {
-	m.logger.Tracef("workspace.Manager.StdoutPipe(%v)", pid)
-	if m.isInitProxy || isFileURI(m.workspace) {
-		ret, err = m.stdoutPipeLocal(pid)
-	} else if isSSHURI(m.workspace) {
-		ret, err = m.workspaceClient.StdoutPipe(pid)
-	} else {
-		panic("manager has an invalid workspace URI")
-	}
-	m.logger.Debugf("workspace.Manager.StdoutPipe(%v): %v", pid, err)
-	return
-}
-
-func (m *Manager) Wait(pid Pid) (err error) {
-	m.logger.Tracef("workspace.Manager.Wait(%v)", pid)
-	if m.isInitProxy || isFileURI(m.workspace) {
-		err = m.waitLocal(pid)
-	} else if isSSHURI(m.workspace) {
-		err = m.workspaceClient.Wait(pid)
-	} else {
-		panic("manager has an invalid workspace URI")
-	}
-	m.logger.Debugf("workspace.Manager.Wait(%v): %v", pid, err)
-	return
-}
-
-func (m *Manager) URI(path string) (uri URI, err error) {
-	m.logger.Tracef("workspace.Manager.URI(%s)", path)
-	if isFileURI(m.workspace) {
-		uri, err = m.localURI(path)
-	} else if isSSHURI(m.workspace) {
-		uri, err = m.remoteURI(path)
-	} else {
-		panic("manager has an invalid workspace URI")
-	}
-	m.logger.Debugf("workspace.Manager.URI(%s): %s, %v",
-		path, uri, err)
-	return
-}
-
-// Getwd returns the current wd as a workspace.URI.
-func (m *Manager) Getwd() (uri URI, err error) {
-	return m.workspace, nil
+	return nil, false
 }
 
 // Close closes all resources associated with this Manager.
 func (m *Manager) Close() error {
-	m.logger.Trace("workspace.Manager.Close()")
 	var ret error
-	if m.sshConn != nil {
-		ret = m.sshConn.Close()
-	}
-
-	// do not block while sending signals
-	m.mu.Lock()
-	var copyCmds []*exec.Cmd
-	for _, cmd := range m.cmds {
-		copyCmds = append(copyCmds, cmd)
-	}
-	m.mu.Unlock()
-
-	for _, cmd := range copyCmds {
-		if cmd.Process != nil {
-			err := syscall.Kill(cmd.Process.Pid, syscall.SIGTERM)
-			if err != nil {
-				ret = err
-			}
+	for _, workspace := range m.workspaces {
+		if err := workspace.Close(); err != nil {
+			ret = multierr.Append(ret, err)
 		}
 	}
-	m.cmds = nil
-	m.logger.Debugf("workspace.Manager.Close(): %v", ret)
 	return ret
+}
+
+func mapErrors(err error) error {
+	osErr, ok := err.(*Error)
+	if !ok {
+		return err
+	}
+	if osErr.IsPermission {
+		return os.ErrPermission
+	}
+	if osErr.IsNotExist {
+		return os.ErrNotExist
+	}
+	if osErr.IsExist {
+		return os.ErrExist
+	}
+
+	return osErr.Err
 }

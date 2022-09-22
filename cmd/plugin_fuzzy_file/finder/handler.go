@@ -45,12 +45,12 @@ type fuzzyFinderHandler struct {
 	p            browser.EventPublisher
 	m            browser.Messenger
 	ed           text.Editor
-	executor     workspace.Workspace
+	executor     workspace.API
 	invokeWindow browser.Window
 	historyKey   term.KeyComb
 	mu           sync.Mutex
 	cmdStr       string
-	getResource  func(workspace.Workspace, string) (workspace.URI, term.Coordinates)
+	getResource  func(workspace.API, string) (workspace.URI, term.Coordinates)
 	pid          workspace.Pid
 	quitChan     chan struct{}
 	height       int
@@ -274,7 +274,7 @@ func New(
 	grants []plugin.Grant, broker proto.MuxBroker,
 	invokeWindow browser.Window, cfg config.Config,
 	historyKey term.KeyComb, historyDocumentID string, command string,
-	getResource func(exec workspace.Workspace, line string) (workspace.URI, term.Coordinates),
+	getResource func(exec workspace.API, line string) (workspace.URI, term.Coordinates),
 ) (tui.Handler, error) {
 	h := new(fuzzyFinderHandler)
 	maxHistory, err := cfg.GetInt("history")

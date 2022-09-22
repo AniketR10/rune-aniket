@@ -40,7 +40,7 @@ type sedEditorHandler struct {
 	ed   text.Editor
 	p    browser.EventPublisher
 	m    browser.Messenger
-	exec workspace.Workspace
+	exec workspace.Executor
 
 	resource     text.Handler
 	resourceName string

@@ -18,6 +18,15 @@ func TestParseURI(t *testing.T) {
 		{"file:///", URI{
 			uri: "file:///", name: "/", parsed: url.URL{Scheme: "file", Path: "/"},
 		}, false},
+		{"file:///~", URI{
+			uri: "file:///~", name: "~", parsed: url.URL{Scheme: "file", Path: "/~"},
+		}, false},
+		{"file:///~/src", URI{
+			uri: "file:///~/src", name: "src", parsed: url.URL{Scheme: "file", Path: "/~/src"},
+		}, false},
+		{"file:///~/src/../", URI{
+			uri: "file:///~", name: "~", parsed: url.URL{Scheme: "file", Path: "/~"},
+		}, false},
 		{"file:///tmp/a", URI{
 			uri: "file:///tmp/a", name: "a", parsed: url.URL{Scheme: "file", Path: "/tmp/a"},
 		}, false},
@@ -25,6 +34,16 @@ func TestParseURI(t *testing.T) {
 			uri:    "ssh://unstable.build/tmp/a",
 			name:   "ssh://unstable.build/tmp/a",
 			parsed: url.URL{Scheme: "ssh", Host: "unstable.build", Path: "/tmp/a"},
+		}, false},
+		{"ssh://unstable.build", URI{
+			uri:    "ssh://unstable.build/",
+			name:   "ssh://unstable.build/",
+			parsed: url.URL{Scheme: "ssh", Host: "unstable.build", Path: "/"},
+		}, false},
+		{"ssh://unstable.build/~", URI{
+			uri:    "ssh://unstable.build/~",
+			name:   "ssh://unstable.build/~",
+			parsed: url.URL{Scheme: "ssh", Host: "unstable.build", Path: "/~"},
 		}, false},
 		{"ssh://potato:farmer@unstable.build/tmp/a", URI{
 			uri:  "ssh://potato:farmer@unstable.build/tmp/a",
@@ -62,7 +81,7 @@ func TestDefaultSwapDirectory(t *testing.T) {
 		wantDir string
 		wantErr bool
 	}{
-		{"other:///tmp/a.go", "", true},
+		{"other:///tmp/a.go", "other:///tmp", false},
 		{"file:///a.go", "file:///", false},
 		{"file:///tmp/a.go", "file:///tmp", false},
 		{"file://tmp/a.go", "file://tmp/", false},
@@ -91,7 +110,7 @@ func TestDefaultSwapFile(t *testing.T) {
 		wantSwapFile string
 		wantErr      bool
 	}{
-		{"other:///tmp/a.go", "other:///tmp", "", true},
+		{"other:///tmp/a.go", "other:///tmp", "other:///tmp/.a.go.swp", false},
 		{"file:///a.go", "file:///tmp", "file:///tmp/.a.go.swp", false},
 		{"file:///a.go", "file:///", "file:///.a.go.swp", false},
 		{"file:///tmp/a.go", "file:///tmp", "file:///tmp/.a.go.swp", false},
@@ -181,6 +200,41 @@ func TestJoin(t *testing.T) {
 			// sut
 			actual := Join(uri, tcase.elems...)
 			assert.Equal(t, want, actual)
+		})
+	}
+}
+
+func TestIsWorkspaceURI(t *testing.T) {
+	tsuite := []struct {
+		workspaceURI string
+		uri          string
+		expectedOut  bool
+	}{
+		{"file:///", "file:///tmp", true},
+		{"file:///tmp", "file:///tmp", true},
+		{"file:///var", "file:///tmp/file", true}, // different folder but workspace can handle it
+		{"file:///var", "file:///var/file", true},
+		{"file:///var", "file:///var/file", true},
+		{"file:///var", "file:///var/dir/dir/dir/file", true},
+		{"file:///var/", "file:///var/file", true},
+		{"file:///", "ssh:///tmp", false},
+	}
+
+	for i, tcase := range tsuite {
+		t.Run(fmt.Sprintf("test case %d", i), func(t *testing.T) {
+			inURI, err := ParseURI(tcase.uri)
+			require.NoError(t, err)
+
+			inWorkspaceURI, err := ParseURI(tcase.workspaceURI)
+			require.NoError(t, err)
+
+			fileScheme, err := newTestFileScheme(inWorkspaceURI)
+			require.NoError(t, err)
+			inWorkspace := NewSchemeWorkspace(inWorkspaceURI, fileScheme)
+
+			// sut
+			actualOut := IsWorkspaceURI(inWorkspace, inURI)
+			assert.Equal(t, tcase.expectedOut, actualOut)
 		})
 	}
 }

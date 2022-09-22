@@ -25,7 +25,7 @@ const (
 
 var defaultHistoryKey = term.KeyComb{Key: term.KeyCtrlBackslash}
 
-func parseLine(workspace workspace.Workspace, data string) (
+func parseLine(workspace workspace.API, data string) (
 	workspace.URI, term.Coordinates,
 ) {
 	// NOTE: if ag breaks this or there's an edge case that it's not covered

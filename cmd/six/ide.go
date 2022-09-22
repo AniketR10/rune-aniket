@@ -12,6 +12,7 @@ import (
 	"github.com/ernestrc/go-tui/plugin"
 	"github.com/ernestrc/go-tui/term"
 	"github.com/ernestrc/go-tui/workspace"
+	"github.com/ernestrc/go-tui/workspace/ssh"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -82,8 +83,13 @@ func (i *ide) init(cwd, cfgfilename, recfilename string, filenames ...string) er
 
 	i.clipboard = plugin.NewClipboardManager()
 
+	// register default schemes
+	workspaceManager := workspace.NewManager(i.ideConfig.workspace())
+	workspaceManager.RegisterScheme(ssh.Scheme, ssh.New)
+	workspaceManager.RegisterScheme(workspace.FileScheme, workspace.NewFileScheme)
+
 	root, err := newWorkspaceManagerHandler(l, i.clipboard, cwdURI,
-		i.ideConfig, recfilename, filenames)
+		workspaceManager, i.ideConfig, recfilename, filenames)
 	if err != nil {
 		return err
 	}

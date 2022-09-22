@@ -2,171 +2,116 @@ package workspace
 
 import (
 	"errors"
-	"io/ioutil"
-	"os"
-	"os/user"
-	"path/filepath"
-	"strings"
 	"testing"
 
-	"github.com/ernestrc/go-tui/cell"
-	log "github.com/sirupsen/logrus"
+	"github.com/ernestrc/go-tui/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/crypto/ssh"
 )
 
-var discardLogger = log.New()
-
-func init() {
-	discardLogger.Out = ioutil.Discard
-	discardLogger.Level = log.PanicLevel
-}
-
-func TestManagerInitLocal(t *testing.T) {
-	tsuite := []struct {
-		desc         string
-		inWorkspace  string
-		expectosStat string
-		wantErr      bool
-	}{
-		{"returns an error if workspace is not a directory",
-			"file:///tmp", "/tmp", true},
-		{"returns no error if workspace is a directory",
-			"file:///tmp", "/tmp/hello", false},
-	}
-	for _, tcase := range tsuite {
-		t.Run(tcase.desc, func(t *testing.T) {
-			m := new(Manager)
-			m.osStat = func(name string) (os.FileInfo, error) {
-				if tcase.wantErr {
-					return nil, errors.New("oops")
-				}
-				return testFileInfo{isDir: true}, nil
-			}
-			uri, err := ParseURI(tcase.inWorkspace)
-			require.NoError(t, err)
-			err = m.init(discardLogger, uri)
-			if tcase.wantErr {
-				require.Error(t, err)
-			} else {
-				require.NoError(t, err)
-			}
-		})
-	}
-}
-
-func TestManagerURI(t *testing.T) {
-	tsuite := []struct {
-		desc        string
-		inWorkspace string
-		getcwd      string
-		getUser     *user.User
-		inPath      string
-		wantURI     string
-	}{
-		{"handles relative path with local workspace",
-			"file:///tmp", "/tmp", &user.User{}, "relative_path/file.go", "file:///tmp/relative_path/file.go"},
-		{"handles abs path with local workspace",
-			"file:///tmp", "/tmp", &user.User{}, "/var/log/abs_path/file.go", "file:///var/log/abs_path/file.go"},
-		{"handles abs path with remote workspace",
-			"ssh://ernicles@my_host:8080/home/ipad", "/home/ipad", &user.User{},
-			"/var/log/abs_path/file.go", "ssh://ernicles@my_host:8080/var/log/abs_path/file.go"},
-		{"handles relative path with remote workspace",
-			"ssh://ernicles@my_host:8080/home/ipad", "/home/ipad", &user.User{},
-			"relative_path/file.go", "ssh://ernicles@my_host:8080/home/ipad/relative_path/file.go"},
-		{"handles ~/ path", // has to be remote otherwise we use user.Current and we cannot mock the homedir
-			"ssh://kombutcha@my_host/home/ipad", "/tmp", &user.User{HomeDir: "/home/kombutcha"}, "~/file.go", "ssh://kombutcha@my_host/home/kombutcha/file.go"},
-	}
-	for _, tcase := range tsuite {
-		m := new(Manager)
-		m.osStat = func(string) (os.FileInfo, error) {
-			return testFileInfo{isDir: true}, nil
-		}
-		m.userLookup = func(name string) (*user.User, error) {
-			return tcase.getUser, nil
-		}
-		m.initRemote = func() error {
-			m.sshConn = goSshClient{new(ssh.Client)}
-			return nil
-		}
-		workspaceURI, err := ParseURI(tcase.inWorkspace)
-		require.NoError(t, err)
-		require.NoError(t, m.init(discardLogger, workspaceURI))
-
-		wantURI, err := ParseURI(tcase.wantURI)
-		require.NoError(t, err)
-
-		// sut
-		actualURI, err := m.URI(tcase.inPath)
-		require.NoError(t, err)
-		assert.Equal(t, wantURI.String(), actualURI.String())
-	}
-}
-
-func newManagerIntegration(t *testing.T) *Manager {
-	m := new(Manager)
-	m.osStat = func(string) (os.FileInfo, error) {
-		return testFileInfo{isDir: true}, nil
-	}
-	m.userLookup = func(name string) (*user.User, error) {
-		return new(user.User), nil
-	}
-	cwd, err := CurrentUserHostURI(".")
+func parseURI(t *testing.T, uriStr string) URI {
+	u, err := ParseURI(uriStr)
 	require.NoError(t, err)
-	require.NoError(t, m.init(discardLogger, cwd))
-	return m
+	return u
 }
 
-func TestManagerOpenIntegration(t *testing.T) {
-	t.Run("returns os.ErrNotExist if file does not exist in read-only mode", func(t *testing.T) {
-		m := newManagerIntegration(t)
+func TestManager(t *testing.T) {
 
-		// only way to guarantee that the file won't exist
-		// is creating it and then removing it
-		f, err := ioutil.TempFile("", "workspace_test")
+	t.Run("registers scheme to be used by AddWorkspace", func(*testing.T) {
+		m := NewManager(config.NopConfig())
+		err := m.RegisterScheme("test", NewNopScheme)
 		require.NoError(t, err)
-		err = os.Remove(f.Name())
-		require.NoError(t, err)
-		nonexistent, err := CurrentUserHostURI(f.Name())
 
-		// sut
-		_, err = m.Open(nonexistent, cell.NewBuffer(), URI{}, true)
-		require.Equal(t, os.ErrNotExist, err)
-		require.True(t, os.IsNotExist(err))
+		w, ok := m.WorkspaceFile(parseURI(t, "test:///tmp/file.txt"))
+		assert.Nil(t, w)
+		require.False(t, ok)
+
+		w, err = m.AddWorkspace(parseURI(t, "test:///tmp/"))
+		assert.NotNil(t, w)
+		require.NoError(t, err)
+
+		w1, ok := m.WorkspaceFile(parseURI(t, "test:///tmp/file.txt"))
+		require.True(t, ok)
+		assert.Equal(t, w, w1)
+
+		require.NoError(t, m.Close())
 	})
-}
 
-func TestManagerIntegration(t *testing.T) {
-	t.Run("sets the command dir to the workspace directory", func(t *testing.T) {
-		m := newManagerIntegration(t)
-
-		// create a file in a known directory
-		tempDir, err := ioutil.TempDir("", "workspace_test")
-		require.NoError(t, err)
-		f, err := ioutil.TempFile(tempDir, "workspace_test")
+	t.Run("removes Workspace upon call to workspace.Close", func(*testing.T) {
+		m := NewManager(config.NopConfig())
+		err := m.RegisterScheme("test", NewNopScheme)
 		require.NoError(t, err)
 
-		// re-initialize with temp dir as cwd
-		tempDirURI, err := CurrentUserHostURI(tempDir)
-		require.NoError(t, err)
-		require.NoError(t, m.init(discardLogger, tempDirURI))
-
-		// sut
-		pid, err := m.Command("ls", "-altrh", ".")
-
-		stdout, err := m.StdoutPipe(pid)
+		w, err := m.AddWorkspace(parseURI(t, "test:///tmp/"))
+		assert.NotNil(t, w)
 		require.NoError(t, err)
 
-		err = m.Start(pid)
+		w1, ok := m.WorkspaceFile(parseURI(t, "test:///tmp/file.txt"))
+		require.True(t, ok)
+		assert.Equal(t, w, w1)
+
+		require.NoError(t, w1.Close())
+
+		w1, ok = m.WorkspaceFile(parseURI(t, "test:///tmp/file.txt"))
+		require.False(t, ok)
+		assert.Nil(t, w1)
+
+		require.NoError(t, m.Close())
+	})
+
+	t.Run("register same scheme twice returns error", func(t *testing.T) {
+		m := NewManager(config.NopConfig())
+		err := m.RegisterScheme("test", NewNopScheme)
+		require.NoError(t, err)
+		err = m.RegisterScheme("test", NewNopScheme)
+		require.Error(t, err)
+	})
+
+	t.Run("buubles up scheme constructor errors", func(t *testing.T) {
+		m := NewManager(config.NopConfig())
+		err := m.RegisterScheme("test", func(cfg config.Config, uri URI) (Scheme, error) {
+			return nil, errors.New("boom")
+		})
 		require.NoError(t, err)
 
-		data, err := ioutil.ReadAll(stdout)
+		w, err := m.AddWorkspace(parseURI(t, "test:///tmp/"))
+		assert.Nil(t, w)
+		require.Error(t, err)
+
+		require.NoError(t, m.Close())
+	})
+
+	t.Run("passes scheme config to scheme constructor", func(*testing.T) {
+		m := NewManager(config.MapConfig(map[string]interface{}{
+			"test": map[string]interface{}{
+				"key": "value",
+			},
+			"file": map[string]interface{}{
+				"kk": "vv",
+			},
+		}))
+
+		var called bool
+		err := m.RegisterScheme("test", func(cfg config.Config, uri URI) (Scheme, error) {
+
+			value, err := cfg.GetString("key")
+			assert.NoError(t, err)
+			assert.Equal(t, "value", value)
+
+			value, err = cfg.GetString("kk")
+			assert.Equal(t, config.ErrNotFound, err)
+			assert.Zero(t, value)
+
+			called = true
+			return &testScheme{}, nil
+		})
 		require.NoError(t, err)
 
-		err = m.Wait(pid)
+		w, err := m.AddWorkspace(parseURI(t, "test:///tmp/"))
 		require.NoError(t, err)
+		assert.NotNil(t, w)
+		assert.True(t, called)
 
-		assert.True(t, strings.Contains(string(data), filepath.Base(f.Name())))
+		require.NoError(t, m.Close())
 	})
 }

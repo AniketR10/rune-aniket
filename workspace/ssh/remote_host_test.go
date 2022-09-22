@@ -1,4 +1,4 @@
-package workspace
+package ssh
 
 import (
 	"bytes"

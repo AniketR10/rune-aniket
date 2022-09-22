@@ -1,4 +1,4 @@
-package workspace
+package ssh
 
 import (
 	"errors"
@@ -11,6 +11,8 @@ import (
 	"strings"
 	"syscall"
 
+	multierr "github.com/ernestrc/go-multierror"
+	"github.com/ernestrc/go-tui/workspace"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/knownhosts"
 	"golang.org/x/term"
@@ -33,7 +35,7 @@ var sigMap = map[syscall.Signal]ssh.Signal{
 }
 
 // used to adapt ssh.Client to sshClient
-type goSshClient struct {
+type stdRemote struct {
 	client *ssh.Client
 }
 
@@ -44,19 +46,73 @@ type goSshSession struct {
 	ses  *ssh.Session
 }
 
-func (s goSshSession) Command(name string, arg ...string) (Pid, error) {
-	s.cmd, s.args = name, arg
-	return Pid(0), nil
+func validateStdRemote(c sshConfig, uri workspace.URI) (ret error) {
+	_, err := usernameOrCurrent(uri)
+	if err != nil {
+		ret = multierr.Append(ret, err)
+	}
+	_, err = authMethodsFromURI(c, uri)
+	if err != nil {
+		ret = multierr.Append(ret, err)
+	}
+
+	_, err = defaultHostkeyCallback()
+	if err != nil {
+		ret = multierr.Append(ret, err)
+	}
+	return ret
 }
 
-func (s *goSshSession) Start(Pid) error {
+func newStdRemote(cfg sshConfig, uri workspace.URI) (
+	remote, error,
+) {
+	username, err := usernameOrCurrent(uri)
+	if err != nil {
+		return nil, err
+	}
+	auths, err := authMethodsFromURI(cfg, uri)
+	if err != nil {
+		return nil, err
+	}
+
+	hostkeyCallback, err := defaultHostkeyCallback()
+	if err != nil {
+		return nil, err
+	}
+	conf := &ssh.ClientConfig{
+		User:            username,
+		HostKeyCallback: hostkeyCallback,
+		Auth:            auths,
+		Timeout:         cfg.timeout,
+	}
+
+	hostport := hostPortFromURI(uri)
+	conn, err := ssh.Dial("tcp", hostport, conf)
+	if err != nil {
+		return nil, fmt.Errorf("failed to ssh dial: %s", err)
+	}
+	return stdRemote{conn}, nil
+}
+
+func (s *goSshSession) Command(name string, arg ...string) (workspace.Pid, error) {
+	if name == "" {
+		return 0, errors.New("invalid empty command")
+	}
+	if s.cmd != "" {
+		panic("Command called more than once on an ssh session")
+	}
+	s.cmd, s.args = name, arg
+	return workspace.Pid(0), nil
+}
+
+func (s *goSshSession) Start(workspace.Pid) error {
 	if s.cmd == "" {
 		return errors.New("invalid ssh.Session Executor state: must call Command first")
 	}
 	return s.ses.Start(fmt.Sprintf("%s %s", s.cmd, strings.Join(s.args, " ")))
 }
 
-func (s *goSshSession) Signal(_ Pid, sig syscall.Signal) error {
+func (s *goSshSession) Signal(_ workspace.Pid, sig syscall.Signal) error {
 	signal, ok := sigMap[sig]
 	if !ok {
 		return errors.New("unknown signal")
@@ -64,7 +120,7 @@ func (s *goSshSession) Signal(_ Pid, sig syscall.Signal) error {
 	return s.ses.Signal(signal)
 }
 
-func (s *goSshSession) StderrPipe(Pid) (io.ReadCloser, error) {
+func (s *goSshSession) StderrPipe(workspace.Pid) (io.ReadCloser, error) {
 	r, err := s.ses.StderrPipe()
 	return io.NopCloser(r), err
 }
@@ -77,39 +133,43 @@ func (n nopWriteCloser) Close() error {
 	return nil
 }
 
-func (s *goSshSession) StdinPipe(Pid) (io.WriteCloser, error) {
+func (s *goSshSession) StdinPipe(workspace.Pid) (io.WriteCloser, error) {
 	r, err := s.ses.StdinPipe()
 	return nopWriteCloser{r}, err
 }
 
-func (s *goSshSession) StdoutPipe(Pid) (io.ReadCloser, error) {
+func (s *goSshSession) StdoutPipe(workspace.Pid) (io.ReadCloser, error) {
 	r, err := s.ses.StdoutPipe()
 	return io.NopCloser(r), err
 }
 
-func (s *goSshSession) Wait(Pid) error {
+func (s *goSshSession) Wait(workspace.Pid) error {
 	return s.ses.Wait()
 }
 
-func (r goSshClient) NewSession() (Executor, error) {
+func (r *goSshSession) Close() error {
+	return r.ses.Close()
+}
+
+func (r stdRemote) NewSession() (workspace.Executor, error) {
 	ses, err := r.client.NewSession()
 	return &goSshSession{ses: ses}, err
 }
 
-func (r goSshClient) Close() error {
+func (r stdRemote) Close() error {
 	return r.client.Close()
 }
 
-func authMethodsFromURI(config managerCfg, workspace URI) ([]ssh.AuthMethod, error) {
+func authMethodsFromURI(config sshConfig, uri workspace.URI) ([]ssh.AuthMethod, error) {
 	var auths []ssh.AuthMethod
-	for _, key := range config.sshPrivateKeys {
+	for _, key := range config.privateKeys {
 		signer, err := privateKeySigner(key)
 		if err != nil {
 			return nil, err
 		}
 		auths = append(auths, ssh.PublicKeys(signer))
 	}
-	if pass, ok := workspace.parsed.User.Password(); ok {
+	if pass, ok := uri.Password(); ok {
 		auths = append(auths, ssh.Password(pass))
 	}
 	return auths, nil
@@ -137,46 +197,15 @@ func getCurrentUser() (string, error) {
 	return u.Username, nil
 }
 
-func usernameFromURI(workspace URI) (string, error) {
-	if workspace.parsed.User != nil && workspace.parsed.User.Username() != "" {
-		return workspace.parsed.User.Username(), nil
+func usernameOrCurrent(uri workspace.URI) (string, error) {
+	if uri.User() != "" {
+		return uri.User(), nil
 	}
 	return getCurrentUser()
 }
 
-func (m *Manager) connectOverStdSSH() (
-	sshClient, error,
-) {
-	username, err := usernameFromURI(m.workspace)
-	if err != nil {
-		return nil, err
-	}
-	auths, err := authMethodsFromURI(m.managerCfg, m.workspace)
-	if err != nil {
-		return nil, err
-	}
-
-	hostkeyCallback, err := defaultHostkeyCallback()
-	if err != nil {
-		return nil, err
-	}
-	conf := &ssh.ClientConfig{
-		User:            username,
-		HostKeyCallback: hostkeyCallback,
-		Auth:            auths,
-		Timeout:         m.managerCfg.sshTimeout,
-	}
-
-	hostport := hostPortFromURI(m.workspace)
-	conn, err := ssh.Dial("tcp", hostport, conf)
-	if err != nil {
-		return nil, fmt.Errorf("failed to ssh dial: %s", err)
-	}
-	return goSshClient{conn}, nil
-}
-
-func hostPortFromURI(u URI) string {
-	hostname, port := u.parsed.Hostname(), u.parsed.Port()
+func hostPortFromURI(uri workspace.URI) string {
+	hostname, port := uri.Hostname(), uri.Port()
 	if port == "" {
 		port = "22"
 	}

@@ -93,11 +93,19 @@ func openFile(
 	if err != nil {
 		return nil, err
 	}
-	l, err := openLocalFile(fileURI, buf, swap, readOnly)
+	workspaceURI, err := makeLocalURI(filepath.Dir(filename))
 	if err != nil {
 		return nil, err
 	}
-	return l.(*file), nil
+	scheme, err := newTestFileScheme(workspaceURI)
+	if err != nil {
+		return nil, err
+	}
+	l, err := newFile(scheme, fileURI, buf, swap, readOnly)
+	if err != nil {
+		return nil, err
+	}
+	return l, nil
 }
 
 // refactor shim
@@ -112,11 +120,19 @@ func recoverFile(
 	if err != nil {
 		return nil, err
 	}
-	l, err := recoverLocalFile(fileURI, recoverFile, buf, force)
+	workspaceURI, err := makeLocalURI(filepath.Dir(filename))
 	if err != nil {
 		return nil, err
 	}
-	return l.(*file), nil
+	scheme, err := newTestFileScheme(workspaceURI)
+	if err != nil {
+		return nil, err
+	}
+	l, err := newFileRecover(scheme, fileURI, recoverFile, buf, force)
+	if err != nil {
+		return nil, err
+	}
+	return l, nil
 }
 
 // tests FileBuffer with real os.File's. endsInEOL refers to the original file.
@@ -554,57 +570,16 @@ func TestFileBufferRecover(t *testing.T) {
 
 // UNIT TESTS
 
-// implements os.FileInfo
-type testFileInfo struct {
-	name    string
-	isDir   bool
-	modTime time.Time
-	size    int64
-	mode    os.FileMode
-}
-
-func (t testFileInfo) Name() string {
-	return t.name
-}
-func (t testFileInfo) Size() int64 {
-	return t.size
-}
-
-func (t testFileInfo) Mode() os.FileMode {
-	return t.mode
-}
-
-func (t testFileInfo) ModTime() time.Time {
-	return t.modTime
-}
-
-func (t testFileInfo) IsDir() bool {
-	return t.isDir
-}
-
-func (t testFileInfo) Sys() interface{} {
-	return nil
-}
-
 // returns an un-initialized (but dep injected) FileBuffer along with the mocked OsFile
 func newTestFileBuffer(ctrl *gomock.Controller) (*file, *MockOsFile) {
-	f := new(file)
+	schemeIfc, _ := NewNopScheme(nil, URI{})
+	scheme := schemeIfc.(*testScheme)
 	mock := NewMockOsFile(ctrl)
-	f.openFunc = func(name string, flag int, perm os.FileMode) (osFile, *osError) {
+	scheme.openFunc = func(name string, flag int, perm os.FileMode) (File, *Error) {
 		return mock, nil
 	}
-	f.removeFunc = func(name string) error {
-		return nil
-	}
-	f.renameFunc = func(oldName, newName string) error {
-		return nil
-	}
-	f.statFunc = func(name string) (os.FileInfo, error) {
-		return testFileInfo{}, nil
-	}
-	f.lstatFunc = func(name string) (os.FileInfo, error) {
-		return testFileInfo{}, nil
-	}
+	f := new(file)
+	f.scheme = scheme
 	return f, mock
 }
 
@@ -729,9 +704,10 @@ func TestFileBufferInit(t *testing.T) {
 	})
 
 	t.Run("bubble up original file open error", func(t *testing.T) {
-		accessDeniedErr := nopOsError(errors.New("access denied"))
+		accessDeniedErr := NopError(errors.New("access denied"))
 		f := new(file)
-		f.openFunc = func(name string, flag int, perm os.FileMode) (osFile, *osError) {
+		f.scheme = &testScheme{}
+		f.scheme.(*testScheme).openFunc = func(name string, flag int, perm os.FileMode) (File, *Error) {
 			return nil, accessDeniedErr
 		}
 		assert.Equal(t, accessDeniedErr, f.init("fjkelw", cell.NewBuffer(), "", false))
@@ -741,11 +717,12 @@ func TestFileBufferInit(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
-		accessDeniedErr := nopOsError(errors.New("access denied"))
+		accessDeniedErr := NopError(errors.New("access denied"))
 		origFileMock := NewMockOsFile(ctrl)
 		f := new(file)
+		f.scheme = &testScheme{}
 		i := 0
-		f.openFunc = func(name string, flag int, perm os.FileMode) (osFile, *osError) {
+		f.scheme.(*testScheme).openFunc = func(name string, flag int, perm os.FileMode) (File, *Error) {
 			i++
 			if i == 1 {
 				return origFileMock, nil
@@ -797,11 +774,11 @@ func newUninitializedTestFileBuffer(t *testing.T, ctrl *gomock.Controller) (
 	*file, *MockOsFile, *cell.Buffer,
 ) {
 	f, mock := newTestFileBuffer(ctrl)
-	f.openFunc = func(name string, flag int, perm os.FileMode) (osFile, *osError) {
+	f.scheme.(*testScheme).openFunc = func(name string, flag int, perm os.FileMode) (File, *Error) {
 		if flag&os.O_CREATE != 0 {
 			return mock, nil
 		}
-		return nil, &osError{isNotExist: true}
+		return nil, &Error{IsNotExist: true}
 	}
 
 	mock.EXPECT().Name().Return(defaultFileName).AnyTimes()
@@ -815,9 +792,9 @@ func newReadOnlyTestFileBuffer(t *testing.T, ctrl *gomock.Controller) (
 	*file, *MockOsFile, *cell.Buffer,
 ) {
 	f, mock := newTestFileBuffer(ctrl)
-	f.openFunc = func(name string, flag int, perm os.FileMode) (osFile, *osError) {
+	f.scheme.(*testScheme).openFunc = func(name string, flag int, perm os.FileMode) (File, *Error) {
 		if flag&os.O_RDWR != 0 || flag&os.O_CREATE != 0 {
-			return nil, &osError{isPermission: true}
+			return nil, &Error{IsPermission: true}
 		}
 		return mock, nil
 	}
@@ -841,7 +818,7 @@ func newRecoveredTestFileBuffer(t *testing.T, ctrl *gomock.Controller) (
 	expectInitSwap(mock, defaultFileName, testFileInfo{}, defaultFileData)
 	expectInitBuffer(mock, defaultFileData)
 	buf := cell.NewBuffer()
-	require.NoError(t, f.recoverFile(defaultFileName,
+	require.NoError(t, f.initRecover(defaultFileName,
 		"."+defaultFileName+".swp", buf, false))
 	return f, mock, buf
 }
@@ -878,7 +855,7 @@ func testFileBufferClose(t *testing.T, newBuffer newBufferFunc) {
 
 		f, mock, _ := newBuffer(t, ctrl)
 		called := false
-		f.removeFunc = func(name string) error {
+		f.scheme.(*testScheme).removeFunc = func(name string) error {
 			called = true
 			return nil
 		}
@@ -938,7 +915,7 @@ func testFileBufferFlush(t *testing.T, newBuffer newBufferFunc) {
 		f, _, _ := newBuffer(t, ctrl)
 
 		myErr := errors.New("what?")
-		f.statFunc = func(name string) (os.FileInfo, error) {
+		f.scheme.(*testScheme).statFunc = func(name string) (os.FileInfo, error) {
 			return nil, myErr
 		}
 		assert.Equal(t, myErr, f.Flush())
@@ -950,7 +927,7 @@ func testFileBufferFlush(t *testing.T, newBuffer newBufferFunc) {
 
 		f, mock, _ := newBuffer(t, ctrl)
 		called := false
-		f.renameFunc = func(oldName, newName string) error {
+		f.scheme.(*testScheme).renameFunc = func(oldName, newName string) error {
 			called = true
 			return nil
 		}
@@ -968,7 +945,7 @@ func testFileBufferFlush(t *testing.T, newBuffer newBufferFunc) {
 
 		f, _, _ := newBuffer(t, ctrl)
 		myErr := errors.New("wtf")
-		f.renameFunc = func(oldName, newName string) error {
+		f.scheme.(*testScheme).renameFunc = func(oldName, newName string) error {
 			return myErr
 		}
 
@@ -980,7 +957,7 @@ func testFileBufferFlush(t *testing.T, newBuffer newBufferFunc) {
 		defer ctrl.Finish()
 
 		f, _, _ := newBuffer(t, ctrl)
-		f.statFunc = func(name string) (os.FileInfo, error) {
+		f.scheme.(*testScheme).statFunc = func(name string) (os.FileInfo, error) {
 			return testFileInfo{modTime: time.Now()}, nil
 		}
 		assert.Error(t, ErrStaleData, f.Flush())
@@ -1005,9 +982,9 @@ func TestNewFileBufferFlush(t *testing.T) {
 		f, _, _ := newUninitializedTestFileBuffer(t, ctrl)
 		require.Nil(t, f.orig)
 
-		f.openFunc = func(name string, flag int, perm os.FileMode) (osFile, *osError) {
+		f.scheme.(*testScheme).openFunc = func(name string, flag int, perm os.FileMode) (File, *Error) {
 			assert.NotZero(t, flag&os.O_CREATE)
-			return nil, &osError{isExist: true}
+			return nil, &Error{IsExist: true}
 		}
 		assert.Equal(t, ErrStaleData, f.Flush())
 	})
@@ -1204,10 +1181,10 @@ func TestRecoverFileBufferInsert(t *testing.T) {
 }
 
 func TestFileMissingLastCopySwap(t *testing.T) {
-	buf, osFile, clean := newIntegrationTestCase(t, true)
+	buf, file, clean := newIntegrationTestCase(t, true)
 	defer clean()
 
-	f, err := openFile(osFile.Name(), buf, "", false)
+	f, err := openFile(file.Name(), buf, "", false)
 	require.NoError(t, err)
 	defer f.Close()
 
@@ -1222,7 +1199,7 @@ func TestFileMissingLastCopySwap(t *testing.T) {
 
 	builder.Write([]byte("\n"))
 	want := builder.String()
-	actual, err := ioutil.ReadFile(osFile.Name())
+	actual, err := ioutil.ReadFile(file.Name())
 	require.NoError(t, f.Flush())
 	assert.Equal(t, want, string(actual))
 }

@@ -6,7 +6,6 @@ import (
 	"io"
 	"os"
 	"strings"
-	"time"
 
 	"github.com/ernestrc/go-tui/browser"
 	"github.com/ernestrc/go-tui/cell"
@@ -52,7 +51,6 @@ const (
 
 var (
 	defaultWindowManagerConfig = handler.DefaultWindowManagerConfig()
-	defSSHTimeout              = 10 * time.Second
 )
 
 type pluginConfig struct {
@@ -694,10 +692,7 @@ func (c ideConfig) wallpaper() (text string) {
 	if c.cfg == nil {
 		return
 	}
-	cfg, ok := c.workspace()
-	if !ok {
-		return
-	}
+	cfg := c.workspace()
 	cfgText, err := cfg.GetString("wallpaper")
 	if err != nil {
 		if err != config.ErrNotFound {
@@ -862,11 +857,15 @@ func (c pluginConfig) config() (config.Config, bool) {
 	return cfg, true
 }
 
-func (c ideConfig) workspace() (config.Config, bool) {
+func (c ideConfig) workspace() config.Config {
 	if c.cfg == nil {
-		return nil, false
+		return config.NopConfig()
 	}
-	return c.getConfig(config.MapConfig(c.cfg), "workspace")
+	cfg, ok := c.getConfig(config.MapConfig(c.cfg), "workspace")
+	if ok {
+		return cfg
+	}
+	return config.NopConfig()
 }
 
 func (c ideConfig) workspaceWallpaperAttr() term.Attributes {
@@ -879,64 +878,6 @@ func (c ideConfig) workspaceWallpaperBackgroundAttr() term.Attributes {
 		browser.DefaultConfig().WallpaperBackgroundAttr)
 }
 
-func (c ideConfig) workspaceSSHTimeout() (ret time.Duration) {
-	ret = defSSHTimeout
-
-	cfg, ok := c.workspace()
-	if !ok {
-		return
-	}
-
-	sshTimeout, err := config.GetDuration(cfg, "ssh_timeout", defSSHTimeout)
-	if err != nil {
-		c.errors["workspace.ssh_timeout"] = err
-		return
-	}
-
-	ret = sshTimeout
-	return
-}
-
-func (c ideConfig) workspaceSSHCommand() string {
-	cfg, ok := c.workspace()
-	if !ok {
-		return ""
-	}
-
-	cmd, err := cfg.GetString("ssh_command")
-	if err != nil {
-		c.errors["workspace.ssh_command"] = err
-		return ""
-	}
-
-	return cmd
-}
-
-func (c ideConfig) workspaceSSHPrivateKeys() (ret []string) {
-	cfg, ok := c.workspace()
-	if !ok {
-		return
-	}
-
-	keyIfcs, err := cfg.GetSlice("ssh_private_keys")
-	if err != nil {
-		c.errors["workspace.ssh_private_keys"] = err
-		return
-	}
-
-	for i, keyIfc := range keyIfcs {
-		key, ok := keyIfc.(string)
-		if !ok {
-			errorID := fmt.Sprintf("workspace.ssh_private_keys.%d", i)
-			c.errors[errorID] = fmt.Errorf("string expected but found %v", key)
-			continue
-		}
-		ret = append(ret, key)
-	}
-
-	return ret
-}
-
 func decodeConfig(r io.Reader) (cfg map[string]interface{}, err error) {
 	d := yaml.NewDecoder(r)
 
@@ -945,10 +886,10 @@ func decodeConfig(r io.Reader) (cfg map[string]interface{}, err error) {
 	return
 }
 
-func loadLocalConfig(m *workspace.Manager, cwd workspace.URI, c *ideConfig) error {
+func loadWorkspaceConfig(m workspace.Loader, cwd workspace.URI, c *ideConfig) error {
 	localConfigPath := workspace.Join(cwd, ".sixrc")
 	buf := cell.NewBuffer()
-	closer, err := m.Open(localConfigPath, buf, workspace.URI{}, true)
+	closer, err := m.Load(localConfigPath, buf, workspace.URI{}, true)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil

@@ -37,7 +37,7 @@ var _ Editor = (*Component)(nil)
 // It also satisfies tui.Component, and text.Editor.
 type Component struct {
 	comp           browser.Component
-	workspace      workspace.ResourceOpener
+	workspace      workspace.Loader
 	ed             Editor
 	config         Config
 	edSubscribers  map[EventType][]EventHandler
@@ -82,7 +82,7 @@ func (e *editorFlusherCloser) Close() error {
 }
 
 // NewComponent allocates storage for a new Component and initializes it.
-func NewComponent(ed Editor, w workspace.ResourceOpener, config Config) (
+func NewComponent(ed Editor, w workspace.Loader, config Config) (
 	c *Component, err error,
 ) {
 	c = new(Component)
@@ -144,7 +144,7 @@ func (c *Component) newFileBuffer(
 		var swapDir workspace.URI
 		swapDir, err = c.getSwapDir(file)
 		if err == nil {
-			fc, err = c.workspace.Open(file, buf, swapDir, readOnly)
+			fc, err = c.workspace.Load(file, buf, swapDir, readOnly)
 		}
 	}
 
@@ -170,7 +170,7 @@ func (c *Component) newFileBuffer(
 // Init initializes this Component with the given editor and Options.
 // It returns an error if an initial filepath was given through WithFilePath option
 // and the file failed to be opened.
-func (c *Component) Init(ed Editor, w workspace.ResourceOpener, config Config) error {
+func (c *Component) Init(ed Editor, w workspace.Loader, config Config) error {
 	c.config = config
 
 	c.comp.Init(c.config.Config)

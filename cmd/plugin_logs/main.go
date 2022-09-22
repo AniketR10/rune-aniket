@@ -50,7 +50,7 @@ type logsGrantee struct {
 	m  browser.Messenger
 	p  browser.EventPublisher
 	c  config.Config
-	w  workspace.Workspace
+	w  workspace.API
 
 	logFile string
 	cfg     search.ListConfig

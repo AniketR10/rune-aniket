@@ -80,8 +80,8 @@ func init() {
 
 type workspaceHandler struct {
 	tui.Handler
-	*workspace.Manager
-	Plugins *plugin.Manager
+	workspaceCloser io.Closer
+	Plugins         *plugin.Manager
 }
 
 type workspaceManagerHandler struct {
@@ -90,6 +90,7 @@ type workspaceManagerHandler struct {
 	cfg       ideConfig
 	logger    *log.Logger
 	storage   browser.Storage
+	workspace workspaceManagerIfc
 
 	union          handler.FrameUnion
 	bar            handler.Tabs
@@ -107,14 +108,19 @@ type clipboardManagerIfc interface {
 	io.Closer
 }
 
+type workspaceManagerIfc interface {
+	AddWorkspace(uri workspace.URI) (workspace.Workspace, error)
+}
+
 func newWorkspaceManagerHandler(
 	logger *log.Logger,
 	clipboard clipboardManagerIfc, initial workspace.URI,
+	manager workspaceManagerIfc,
 	cfg ideConfig, recfilename string, filenames []string,
 ) (*workspaceManagerHandler, error) {
 	ret := new(workspaceManagerHandler)
 	err := ret.init(logger,
-		clipboard, initial, cfg, recfilename, filenames)
+		clipboard, initial, manager, cfg, recfilename, filenames)
 	if err != nil {
 		return nil, err
 	}
@@ -134,7 +140,8 @@ func (h *workspaceManagerHandler) newEditor(cfg ideConfig) text.Editor {
 
 func (h *workspaceManagerHandler) init(
 	logger *log.Logger,
-	clipboard clipboardManagerIfc, uri workspace.URI, cfg ideConfig,
+	clipboard clipboardManagerIfc, uri workspace.URI,
+	manager workspaceManagerIfc, cfg ideConfig,
 	recfilename string, filenames []string,
 ) error {
 	h.workspaces = make([]*workspaceHandler, 10)
@@ -142,9 +149,10 @@ func (h *workspaceManagerHandler) init(
 	h.cfg = cfg
 	h.clipboard = clipboard
 	h.storage = document.NewInMemoryCache()
+	h.workspace = manager
 
 	globalOpts := h.textOpts(h.cfg)
-	h.empty, _ = newEx(h.newEditor(cfg), nopWorkspace{}, workspaceCommandList,
+	h.empty, _ = newEx(h.newEditor(cfg), nopLoader{}, workspaceCommandList,
 		func(argv []string) (bool, bool, error) {
 			fn, ok := workspaceCommands[argv[0]]
 			if !ok {
@@ -312,36 +320,19 @@ func (h *workspaceManagerHandler) textOpts(cfg ideConfig) []text.Option {
 	return ret
 }
 
-func (h *workspaceManagerHandler) workspaceOpts(cfg ideConfig) []workspace.Option {
-	var workspaceOpts []workspace.Option
-
-	for _, key := range cfg.workspaceSSHPrivateKeys() {
-		workspaceOpts = append(workspaceOpts, workspace.WithSSHPrivateKey(key))
-	}
-	if cmd := cfg.workspaceSSHCommand(); cmd != "" {
-		workspaceOpts = append(workspaceOpts, workspace.WithSSHCommand(cmd))
-	}
-	workspaceOpts = append(workspaceOpts,
-		workspace.WithSSHTimeout(cfg.workspaceSSHTimeout()))
-
-	return workspaceOpts
-}
-
 func (h *workspaceManagerHandler) addWorkspace(
 	uri workspace.URI, cfg ideConfig, recfilename string, filenames []string,
 ) error {
-	// workspace manager local configs and logger config for Manager are ignored
-	workspaceOpts := h.workspaceOpts(cfg)
-	workspaceManager, err := workspace.NewManager(h.logger, uri, workspaceOpts...)
+	workspace, err := h.workspace.AddWorkspace(uri)
 	if err != nil {
-		return fmt.Errorf("Failed to create new workspace manager: %s", err)
+		return fmt.Errorf("Failed to create new workspace for %q: %s", uri, err)
 	}
 
-	configErr := loadLocalConfig(workspaceManager, uri, &cfg)
+	configErr := loadWorkspaceConfig(workspace, uri, &cfg)
 
 	textOpts := h.textOpts(cfg)
 	if recfilename != "" {
-		recFile, err := workspaceManager.URI(recfilename)
+		recFile, err := workspace.URI(recfilename)
 		if err != nil {
 			return err
 		}
@@ -349,14 +340,14 @@ func (h *workspaceManagerHandler) addWorkspace(
 	}
 
 	for _, filename := range filenames {
-		file, err := workspaceManager.URI(filename)
+		file, err := workspace.URI(filename)
 		if err != nil {
 			return err
 		}
 		textOpts = append(textOpts, text.WithFile(file))
 	}
 
-	ex, err := newEx(h.newEditor(cfg), workspaceManager, exCommandList,
+	ex, err := newEx(h.newEditor(cfg), workspace, exCommandList,
 		func(argv []string) (bool, bool, error) {
 			var err error
 			handled := true
@@ -376,7 +367,7 @@ func (h *workspaceManagerHandler) addWorkspace(
 
 	res := plugin.BrowserResources(ex.Browser())
 	res = plugin.MergeResourceMap(res, plugin.EditorResources(ex.Editor()))
-	res = plugin.MergeResourceMap(res, plugin.WorkspaceResources(workspaceManager))
+	res = plugin.MergeResourceMap(res, plugin.WorkspaceResources(workspace))
 	res = plugin.MergeResourceMap(res, plugin.ConfigResources(config.MapConfig(h.cfg.cfg)))
 	res[plugin.PermissionClipboard] = h.clipboard
 
@@ -393,9 +384,9 @@ func (h *workspaceManagerHandler) addWorkspace(
 	go h.initPlugins(h.logger, pluginManager, cfg)
 
 	h.workspaces[h.focus] = &workspaceHandler{
-		Handler: ex,
-		Manager: workspaceManager,
-		Plugins: pluginManager,
+		Handler:         ex,
+		workspaceCloser: workspace,
+		Plugins:         pluginManager,
 	}
 	h.workspaceCount++
 	h.switchToWorkspace(h.focus)
@@ -449,7 +440,7 @@ func (h *workspaceManagerHandler) commandCloseWorkspace(args ...string) (
 	}
 
 	hm := h.workspaces[h.focus]
-	if err := hm.Manager.Close(); err != nil {
+	if err := hm.workspaceCloser.Close(); err != nil {
 		ret = multierr.Append(ret, err)
 	}
 	if err := hm.Handler.(*ex).Close(); err != nil {
@@ -505,7 +496,7 @@ func (h *workspaceManagerHandler) Close() (ret error) {
 		if err := hm.Handler.(*ex).Close(); err != nil {
 			ret = multierror.Append(ret, err)
 		}
-		if err := hm.Manager.Close(); err != nil {
+		if err := hm.workspaceCloser.Close(); err != nil {
 			ret = multierror.Append(ret, err)
 		}
 		if err := hm.Plugins.Close(); err != nil {

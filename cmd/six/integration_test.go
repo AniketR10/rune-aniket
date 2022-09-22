@@ -8,6 +8,7 @@ import (
 
 	"github.com/ernestrc/go-tui"
 	"github.com/ernestrc/go-tui/cell"
+	"github.com/ernestrc/go-tui/config"
 	"github.com/ernestrc/go-tui/debug"
 	"github.com/ernestrc/go-tui/term"
 	"github.com/ernestrc/go-tui/text/vi"
@@ -25,7 +26,9 @@ func newIntegrationTestCase(t *testing.T, content string) (
 	workspaceURI, err := workspace.CurrentUserHostURI(tempDir)
 	require.NoError(t, err)
 
-	manager, err := workspace.NewManager(debug.StandardLogger(), workspaceURI)
+	manager := workspace.NewManager(debug.StandardLogger(), config.NopConfig())
+	require.NoError(t, manager.RegisterScheme(workspace.FileScheme, workspace.NewFileScheme))
+	w, err := manager.AddWorkspace(workspaceURI)
 	require.NoError(t, err)
 
 	file, err := ioutil.TempFile(tempDir, "workspace_int_test")
@@ -41,7 +44,7 @@ func newIntegrationTestCase(t *testing.T, content string) (
 	require.NoError(t, err)
 
 	buffer := cell.NewBuffer()
-	fc, err := manager.Open(uri, buffer, swapURI, false)
+	fc, err := w.Load(uri, buffer, swapURI, false)
 	require.NoError(t, err)
 
 	return buffer, fc, uri, func() {

@@ -89,7 +89,7 @@ func protoType(e text.Event) EditorEvent_Type {
 
 // expects ev Resource to be a browser.Token
 func toProto(e text.Event) EditorEvent {
-	ret := EditorEvent{}
+	var ret EditorEvent
 	ret.Type = protoType(e)
 
 	ret.ResourceName = NewURI(e.URI)

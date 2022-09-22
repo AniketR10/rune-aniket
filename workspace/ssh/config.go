@@ -1,0 +1,84 @@
+package ssh
+
+import (
+	"fmt"
+	"time"
+
+	multierr "github.com/ernestrc/go-multierror"
+	"github.com/ernestrc/go-tui/config"
+)
+
+const (
+	defSSHTimeout = 10 * time.Second
+)
+
+type sshConfig struct {
+	privateKeys []string
+	timeout     time.Duration
+	command     string
+}
+
+func fromConfig(cfg config.Config) (ret sshConfig, retErr error) {
+	timeout, err := getTimeout(cfg)
+	if err != nil && err != config.ErrNotFound {
+		retErr = multierr.Append(retErr, err)
+	}
+	command, err := getCommand(cfg)
+	if err != nil && err != config.ErrNotFound {
+		retErr = multierr.Append(retErr, err)
+	}
+	privateKeys, err := getPrivateKeys(cfg)
+	if err != nil && err != config.ErrNotFound {
+		retErr = multierr.Append(retErr, err)
+	}
+	if retErr != nil {
+		retErr = fmt.Errorf("could not load ssh config: %s", retErr)
+		return
+	}
+
+	ret.timeout = timeout
+	ret.command = command
+	ret.privateKeys = privateKeys
+	return
+}
+
+func getTimeout(cfg config.Config) (ret time.Duration, err error) {
+	ret = defSSHTimeout
+
+	sshTimeout, err := config.GetDuration(cfg, "timeout", defSSHTimeout)
+	if err != nil {
+		return 0, err
+	}
+
+	ret = sshTimeout
+	return
+}
+
+func getCommand(cfg config.Config) (string, error) {
+	cmd, err := cfg.GetString("command")
+	if err != nil {
+		return "", err
+	}
+
+	return cmd, nil
+}
+
+func getPrivateKeys(cfg config.Config) (ret []string, err error) {
+	keyIfcs, err := cfg.GetSlice("private_keys")
+	if err != nil {
+		return nil, err
+	}
+
+	for _, keyIfc := range keyIfcs {
+		key, ok := keyIfc.(string)
+		if !ok {
+			err = multierr.Append(err, fmt.Errorf("slice of strings expected for 'private_keys' but found %v", key))
+			continue
+		}
+		ret = append(ret, key)
+	}
+	if err != nil {
+		return nil, err
+	}
+	return ret, err
+}

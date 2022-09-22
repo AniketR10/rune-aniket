@@ -10,8 +10,11 @@ import (
 	"path"
 	"runtime"
 
+	"github.com/ernestrc/go-tui/config"
 	"github.com/ernestrc/go-tui/proto"
 	"github.com/ernestrc/go-tui/workspace"
+	workspacepb "github.com/ernestrc/go-tui/workspace/rpc"
+	"github.com/ernestrc/go-tui/workspace/ssh"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -86,12 +89,12 @@ func main() {
 		l := log.New()
 		l.Out = ioutil.Discard
 		l.Level = log.PanicLevel
-		manager, err := workspace.NewManager(l, uri)
+		manager, err := workspace.NewFileScheme(config.NopConfig(), uri)
 		if err != nil {
 			log.Fatal(err)
 		}
-		server := workspace.NewServer(manager)
-		err = workspace.StartWorkspaceServer(server)
+		server := workspacepb.NewSchemeServer(manager)
+		err = ssh.StartSchemeServer(server)
 		if err != nil {
 			log.Fatal(err)
 		}

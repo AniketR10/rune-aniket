@@ -287,7 +287,7 @@ func TestServerSetLocationList(t *testing.T) {
 
 		broker := proto.NewMockMuxBroker(ctrl)
 		ed := text.NopEditor()
-		c, err := text.NewComponent(ed, &testWorkspace{}, text.Config{})
+		c, err := text.NewComponent(ed, &testLoader{}, text.Config{})
 		require.NoError(t, err)
 		s := NewServer(broker, c, new(sync.Mutex))
 

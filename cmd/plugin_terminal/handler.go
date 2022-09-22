@@ -19,7 +19,7 @@ import (
 
 type emulator struct {
 	wm browser.WindowManager
-	wp workspace.Workspace
+	wp workspace.API
 	p  browser.EventPublisher
 	m  browser.Messenger
 
@@ -40,7 +40,7 @@ type emulator struct {
 }
 
 func newEmulator(
-	wm browser.WindowManager, wp workspace.Workspace,
+	wm browser.WindowManager, wp workspace.API,
 	p browser.EventPublisher, m browser.Messenger,
 	c plugin.Clipboard,
 	shell string, initialCmd string,
@@ -56,7 +56,7 @@ func newEmulator(
 }
 
 func (e *emulator) init(
-	wm browser.WindowManager, wp workspace.Workspace,
+	wm browser.WindowManager, wp workspace.API,
 	p browser.EventPublisher, m browser.Messenger,
 	c plugin.Clipboard,
 	shell string, initialCmd string,

@@ -4,8 +4,10 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"os/user"
 	"path"
 	"path/filepath"
+	"strings"
 
 	"github.com/ernestrc/go-tui/util"
 )
@@ -28,9 +30,50 @@ func (u URI) Name() string {
 	return u.name
 }
 
+// Scheme returns the scheme of this URI.
+func (u URI) Scheme() string {
+	return u.parsed.Scheme
+}
+
 // Path relative or absolute path component of this URI.
 func (u URI) Path() string {
 	return u.parsed.Path
+}
+
+// Hostname returns the hostname of this URI or an empty string
+// if hostname is not specified.
+func (u URI) Hostname() string {
+	return u.parsed.Hostname()
+}
+
+// Host returns the host of this URI or an empty string
+// if host is not specified.
+func (u URI) Host() string {
+	return u.parsed.Host
+}
+
+// Port returns the port of this URI or an empty string
+// if port is not specified.
+func (u URI) Port() string {
+	return u.parsed.Port()
+}
+
+// User returns the user of this URI or an empty string
+// if a user is not specified.
+func (u URI) User() string {
+	if u.parsed.User != nil {
+		return u.parsed.User.Username()
+	}
+	return ""
+}
+
+// Password returns the password of this URI or an empty string
+// if a password is not specified.
+func (u URI) Password() (string, bool) {
+	if u.parsed.User != nil {
+		return u.parsed.User.Password()
+	}
+	return "", false
 }
 
 func sanitizeFilePath(resource string) string {
@@ -41,8 +84,11 @@ func sanitizeFilePath(resource string) string {
 	return util.SanitizeLine(resolvedPath)
 }
 
-func makeSSHURI(u *url.URL) URI {
-	name := fmt.Sprintf("%s://%s%s", u.Scheme, u.Host, u.Path)
+func makeRemoteURI(u *url.URL) URI {
+	if u.Path == "" {
+		u.Path = "/"
+	}
+	name := fmt.Sprintf("%s://%s%s", u.Scheme, u.Host, path.Join("/", u.Path))
 	return URI{uri: u.String(), parsed: *u, name: name}
 }
 
@@ -58,14 +104,11 @@ func makeFileURI(u *url.URL) (URI, error) {
 	return URI{uri: u.String(), parsed: *u, name: filepath.Base(path)}, nil
 }
 
-func makeURI(u *url.URL) (URI, error) {
-	if u.Scheme == sshScheme {
-		return makeSSHURI(u), nil
+func uriFromURL(u *url.URL) (URI, error) {
+	if u.Host != "" {
+		return makeRemoteURI(u), nil
 	}
-	if u.Scheme == "" || u.Scheme == fileScheme {
-		return makeFileURI(u)
-	}
-	return URI{}, fmt.Errorf("unsupported scheme: %s", u.Scheme)
+	return makeFileURI(u)
 }
 
 func checkURIRelative(a, b URI) error {
@@ -73,7 +116,7 @@ func checkURIRelative(a, b URI) error {
 		return fmt.Errorf("unexpected different schemes: %s vs %s",
 			a.String(), b.String())
 	}
-	if a.parsed.Scheme == fileScheme {
+	if a.parsed.Scheme == FileScheme {
 		return nil
 	}
 	if a.parsed.Host != b.parsed.Host {
@@ -94,7 +137,7 @@ func ParseURI(s string) (URI, error) {
 	if err != nil {
 		return URI{}, fmt.Errorf("failed to parse URI: %s", err)
 	}
-	return makeURI(u)
+	return uriFromURL(u)
 }
 
 // DefaultSwapFile returns a file's default swap directory in the
@@ -106,7 +149,7 @@ func DefaultSwapFile(swapDir URI, file URI) (URI, error) {
 	}
 	_, swapFilePath := swapFileName(swapDir.parsed.Path, file.parsed.Path)
 	file.parsed.Path = swapFilePath
-	return makeURI(&file.parsed)
+	return uriFromURL(&file.parsed)
 }
 
 // DefaultSwapDirectory returns a file's default swap directory in the
@@ -114,7 +157,7 @@ func DefaultSwapFile(swapDir URI, file URI) (URI, error) {
 func DefaultSwapDirectory(file URI) (URI, error) {
 	swapDir, _ := swapFileName(filepath.Dir(file.parsed.Path), file.parsed.Path)
 	file.parsed.Path = swapDir
-	return makeURI(&file.parsed)
+	return uriFromURL(&file.parsed)
 }
 
 // Join joins any number of path elements into this URI's path, separating them
@@ -130,4 +173,89 @@ func Join(uri URI, elem ...string) URI {
 		panic("failed to parse internally generated URI")
 	}
 	return ret
+}
+
+// Dir returns all but the last element of this URI's path.
+func Dir(uri URI) URI {
+	uri.parsed.Path = filepath.Dir(uri.parsed.Path)
+	ret, err := ParseURI(uri.parsed.String())
+	if err != nil {
+		panic("failed to parse internally generated URI")
+	}
+	return ret
+}
+
+// ExpandPathWithURI finds the absolute path of a relative path.
+// It uses the given URI to resolve user and cwd so ~ is an alias
+// for a path relative to the base of the URI.
+// See ExpandPath for more details.
+func ExpandPathWithURI(
+	path string, uri URI,
+) (string, error) {
+	return ExpandPath(path, func() (*user.User, error) {
+		return &user.User{
+			Username: uri.User(),
+			HomeDir:  uri.Path(),
+		}, nil
+	}, func() (string, error) {
+		return uri.Path(), nil
+	})
+}
+
+// ExpandPath finds the absolute path of a relative path and
+// expands the home shortcut (~) if any. If path is already
+// absolute then this function returns the path unchanged.
+func ExpandPath(
+	path string, getUser func() (*user.User, error),
+	cwdFn func() (string, error),
+) (string, error) {
+	if path == "~" || path == "/~" {
+		usr, err := getUser()
+		if err != nil {
+			return "", fmt.Errorf("could not get current user: %s", err)
+		}
+		path = usr.HomeDir
+	} else if strings.HasPrefix(path, "~/") {
+		usr, err := getUser()
+		if err != nil {
+			return "", fmt.Errorf("could not get current user: %s", err)
+		}
+		path = filepath.Join(usr.HomeDir, path[2:])
+	} else if strings.HasPrefix(path, "/~/") {
+		usr, err := getUser()
+		if err != nil {
+			return "", fmt.Errorf("could not get current user: %s", err)
+		}
+		path = filepath.Join(usr.HomeDir, path[3:])
+	}
+	if filepath.IsAbs(path) {
+		return path, nil
+	}
+	cwd, err := cwdFn()
+	if err != nil {
+		return "", fmt.Errorf("could not get cwd: %s", err)
+	}
+	abs := filepath.Join(cwd, path)
+	return abs, nil
+}
+
+// IsWorkspaceURI returns whether uri belongs to the given workspace.
+func IsWorkspaceURI(workspace Workspace, uri URI) bool {
+	uriAtWorkspace, err := workspace.URI(uri.Path())
+	if err != nil {
+		return false
+	}
+	if uri.Scheme() != uriAtWorkspace.Scheme() {
+		return false
+	}
+	if uri.Hostname() != uriAtWorkspace.Hostname() {
+		return false
+	}
+	if uri.Port() != uriAtWorkspace.Port() {
+		return false
+	}
+	if uri.User() != uriAtWorkspace.User() {
+		return false
+	}
+	return true
 }

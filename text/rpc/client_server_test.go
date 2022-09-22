@@ -458,7 +458,7 @@ func testTabIntegration(t *testing.T,
 	})
 }
 
-type testWorkspace struct {
+type testLoader struct {
 	content       string
 	flusherCloser *testFlusherCloser
 	expectError   error
@@ -482,7 +482,7 @@ func (t *testFlusherCloser) Flush() error {
 	return nil
 }
 
-func (t *testWorkspace) Open(
+func (t *testLoader) Load(
 	file workspace.URI, buf *cell.Buffer, swapDir workspace.URI, readOnly bool,
 ) (workspace.FlusherCloser, error) {
 	if t.expectError != nil {
@@ -497,15 +497,18 @@ func (t *testWorkspace) Open(
 	return &testFlusherCloser{}, nil
 }
 
-func (t *testWorkspace) Recover(
+func (t *testLoader) Recover(
 	file, swapFilePath workspace.URI, buf *cell.Buffer, force bool,
 ) (workspace.FlusherCloser, error) {
-	return t.Open(file, buf, workspace.URI{}, false)
+	return t.Load(file, buf, workspace.URI{}, false)
+}
+func (t *testLoader) URI(path string) (workspace.URI, error) {
+	panic("unused")
 }
 
 func newTestComponentErr(ed text.Editor) (*text.Component, error) {
 	cfg := text.DefaultConfig()
-	c, err := text.NewComponent(ed, &testWorkspace{}, cfg)
+	c, err := text.NewComponent(ed, &testLoader{}, cfg)
 	if err != nil {
 		return nil, err
 	}

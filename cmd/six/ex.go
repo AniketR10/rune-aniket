@@ -91,19 +91,13 @@ const (
 	modeCommand
 )
 
-// used to abstract workspace.Manager
-type workspaceIfc interface {
-	workspace.ResourceOpener // needed by text.Component
-	URI(string) (workspace.URI, error)
-}
-
 // ex implements a tui.Handler by wrapping an editor.Component and
 // providing an ex editor type of interface.
 type ex struct {
 	config               text.Config
 	comp                 text.Component
 	ed                   text.Editor
-	workspace            workspaceIfc
+	workspace            workspace.Loader
 	sequencer            handler.Sequencer
 	publishEvent         func(term.Event)
 	cmdOverride          func([]string) (bool, bool, error)
@@ -117,7 +111,7 @@ type ex struct {
 }
 
 func newEx(
-	ed text.Editor, m workspaceIfc, enabledCommands []string,
+	ed text.Editor, m workspace.Loader, enabledCommands []string,
 	commandOverride func([]string) (bool, bool, error),
 	opts ...text.Option,
 ) (e *ex, err error) {
@@ -133,7 +127,7 @@ func newEx(
 // It returns an error if an initial filepath was given through WithFilePath option
 // and the file failed to be opened.
 func (e *ex) init(
-	ed text.Editor, m workspaceIfc, enabledCommands []string,
+	ed text.Editor, m workspace.Loader, enabledCommands []string,
 	commandOverride func([]string) (bool, bool, error),
 	opts ...text.Option,
 ) (err error) {
@@ -152,7 +146,7 @@ func (e *ex) init(
 
 // init is used for internal testing
 func (e *ex) doInit(
-	ed text.Editor, m workspaceIfc, enabledCommands []string,
+	ed text.Editor, m workspace.Loader, enabledCommands []string,
 	commandOverride func([]string) (bool, bool, error),
 	opts ...text.Option,
 ) (err error) {

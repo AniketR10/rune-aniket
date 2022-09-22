@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/ernestrc/go-tui"
+	"github.com/ernestrc/go-tui/config"
 	"github.com/ernestrc/go-tui/proto"
 	"github.com/ernestrc/go-tui/text"
 	testutil "github.com/ernestrc/go-tui/util/test"
@@ -78,7 +79,9 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 		uri, err := workspace.CurrentUserHostURI(dir)
 		require.NoError(t, err)
 
-		m, err := newWorkspaceManagerHandler(discardLogger, clip, uri, cfg, "", []string{})
+		manager := workspace.NewManager(discardLogger, config.NopConfig())
+		require.NoError(t, manager.RegisterScheme(workspace.FileScheme, workspace.NewFileScheme))
+		m, err := newWorkspaceManagerHandler(discardLogger, clip, uri, manager, cfg, "", []string{})
 		require.NoError(t, err)
 
 		closeFns = append(closeFns, m.Close)

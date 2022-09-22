@@ -47,7 +47,7 @@ type gfEditorHandler struct {
 	ed  text.Editor
 	o   browser.ResourceOpener
 	wm  browser.WindowManager
-	cwd workspace.Workspace
+	cwd workspace.API
 
 	files map[string]*file
 }

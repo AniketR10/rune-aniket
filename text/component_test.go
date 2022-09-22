@@ -15,6 +15,7 @@ import (
 	"github.com/ernestrc/go-tui/term"
 	testutil "github.com/ernestrc/go-tui/util/test"
 	"github.com/ernestrc/go-tui/workspace"
+	workspacetest "github.com/ernestrc/go-tui/workspace/test"
 	gomock "github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -43,13 +44,13 @@ func (t *testFlusherCloser) Flush() error {
 	return nil
 }
 
-type testWorkspace struct {
+type testLoader struct {
 	content       string
 	flusherCloser *testFlusherCloser
 	expectError   error
 }
 
-func (t *testWorkspace) Open(
+func (t *testLoader) Load(
 	file workspace.URI, buf *cell.Buffer, swapDir workspace.URI, readOnly bool,
 ) (workspace.FlusherCloser, error) {
 	if t.expectError != nil {
@@ -64,15 +65,19 @@ func (t *testWorkspace) Open(
 	return &testFlusherCloser{}, nil
 }
 
-func (t *testWorkspace) Recover(
+func (t *testLoader) Recover(
 	file, swapFilePath workspace.URI, buf *cell.Buffer, force bool,
 ) (workspace.FlusherCloser, error) {
-	return t.Open(file, buf, workspace.URI{}, false)
+	return t.Load(file, buf, workspace.URI{}, false)
+}
+
+func (t *testLoader) URI(path string) (workspace.URI, error) {
+	panic("unused")
 }
 
 func newTestComponentErr(ed Editor) (*Component, error) {
 	cfg := DefaultConfig()
-	c, err := NewComponent(ed, &testWorkspace{}, cfg)
+	c, err := NewComponent(ed, &testLoader{}, cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -87,7 +92,7 @@ func newTestComponent(t *testing.T, ed Editor) *Component {
 
 func TestComponentInterfaces(t *testing.T) {
 	// this test is just a compile-time test
-	c, err := NewComponent(&testEditor{}, &testWorkspace{}, DefaultConfig())
+	c, err := NewComponent(&testEditor{}, &testLoader{}, DefaultConfig())
 	require.NoError(t, err)
 
 	var ed Editor
@@ -157,7 +162,7 @@ func TestComponentOpen(t *testing.T) {
 		_, ok := c.Browser().Tab(uri)
 		assert.True(t, ok)
 
-		c.workspace.(*testWorkspace).expectError = workspace.ErrFileAlreadyOpen
+		c.workspace.(*testLoader).expectError = workspace.ErrFileAlreadyOpen
 
 		h2, err := c.Open(uri)
 		require.NoError(t, err)
@@ -179,7 +184,7 @@ func TestComponentOpen(t *testing.T) {
 	t.Run("bubbles up open file error", func(t *testing.T) {
 		c, _, _ := newTestComponentWithFile(t, "file:///tmp/lmao")
 		myErr := errors.New("oopsie daisy")
-		c.workspace.(*testWorkspace).expectError = myErr
+		c.workspace.(*testLoader).expectError = myErr
 
 		uri, err := workspace.ParseURI("file:///Holmes.xd")
 		require.NoError(t, err)
@@ -189,7 +194,7 @@ func TestComponentOpen(t *testing.T) {
 
 	t.Run("if file is already open it returns its handler", func(t *testing.T) {
 		c, h1, uri := newTestComponentWithFile(t, "file:///tmp/wasup")
-		c.workspace.(*testWorkspace).expectError = errors.New("should not be called")
+		c.workspace.(*testLoader).expectError = errors.New("should not be called")
 
 		h2, err := c.Open(uri)
 		require.NoError(t, err)
@@ -467,7 +472,7 @@ func TestComponentEditorSubscriber(t *testing.T) {
 			return nil
 		}}
 
-		c.workspace.(*testWorkspace).flusherCloser = &fc
+		c.workspace.(*testLoader).flusherCloser = &fc
 
 		var fired int
 		evs := []EventType{EventTypeClose}
@@ -492,7 +497,7 @@ func TestComponentEditorSubscriber(t *testing.T) {
 		require.NoError(t, err)
 
 		content := "how bout that"
-		c.workspace.(*testWorkspace).content = content
+		c.workspace.(*testLoader).content = content
 
 		_, err = c.Open(uri1)
 		require.NoError(t, err)
@@ -794,8 +799,8 @@ func TestFlush(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		mock := NewMockHandler(ctrl)
 		mockEditor := NewMockEditor(ctrl)
-		mockWorkspace := workspace.NewMockResourceOpener(ctrl)
-		mockFlusherCloser := workspace.NewMockFlusherCloser(ctrl)
+		mockWorkspace := workspacetest.NewMockLoader(ctrl)
+		mockFlusherCloser := workspacetest.NewMockFlusherCloser(ctrl)
 
 		c := newTestComponent(t, mockEditor)
 		c.workspace = mockWorkspace
@@ -803,7 +808,7 @@ func TestFlush(t *testing.T) {
 		win, err := c.Focus()
 		require.NoError(t, err)
 
-		mockWorkspace.EXPECT().Open(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		mockWorkspace.EXPECT().Load(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 			Return(mockFlusherCloser, nil).Times(1)
 		mock.EXPECT().Resize(gomock.Any(), gomock.Any()).Times(1)
 		mockEditor.EXPECT().CellView(gomock.Any()).

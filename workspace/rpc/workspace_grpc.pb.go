@@ -24,26 +24,17 @@ const _ = grpc.SupportPackageIsVersion7
 type WorkspaceClient interface {
 	URI(ctx context.Context, in *URIRequest, opts ...grpc.CallOption) (*URIResponse, error)
 	Getwd(ctx context.Context, in *GetwdRequest, opts ...grpc.CallOption) (*URIResponse, error)
-	Open(ctx context.Context, in *OpenRequest, opts ...grpc.CallOption) (*OpenResponse, error)
-	Remove(ctx context.Context, in *RemoveRequest, opts ...grpc.CallOption) (*RemoveResponse, error)
-	Rename(ctx context.Context, in *RenameRequest, opts ...grpc.CallOption) (*RenameResponse, error)
-	Stat(ctx context.Context, in *StatRequest, opts ...grpc.CallOption) (*StatResponse, error)
-	ReadLink(ctx context.Context, in *ReadLinkRequest, opts ...grpc.CallOption) (*ReadLinkResponse, error)
+	// Executor Service
 	Command(ctx context.Context, in *CommandRequest, opts ...grpc.CallOption) (*CommandResponse, error)
-	// handler_id based
-	Sync(ctx context.Context, in *SyncRequest, opts ...grpc.CallOption) (*SyncResponse, error)
-	Truncate(ctx context.Context, in *TruncateRequest, opts ...grpc.CallOption) (*TruncateResponse, error)
-	Close(ctx context.Context, in *CloseFileRequest, opts ...grpc.CallOption) (*CloseFileResponse, error)
-	Seek(ctx context.Context, in *SeekRequest, opts ...grpc.CallOption) (*SeekResponse, error)
-	Read(ctx context.Context, in *ReadRequest, opts ...grpc.CallOption) (*ReadResponse, error)
-	Write(ctx context.Context, in *WriteRequest, opts ...grpc.CallOption) (*WriteResponse, error)
-	// proc API
 	Start(ctx context.Context, in *StartRequest, opts ...grpc.CallOption) (*StartResponse, error)
 	Wait(ctx context.Context, in *WaitRequest, opts ...grpc.CallOption) (*WaitResponse, error)
 	Signal(ctx context.Context, in *SignalRequest, opts ...grpc.CallOption) (*SignalResponse, error)
 	StderrPipe(ctx context.Context, in *StdioPipeRequest, opts ...grpc.CallOption) (*StdioPipeResponse, error)
 	StdoutPipe(ctx context.Context, in *StdioPipeRequest, opts ...grpc.CallOption) (*StdioPipeResponse, error)
 	StdinPipe(ctx context.Context, in *StdioPipeRequest, opts ...grpc.CallOption) (*StdioPipeResponse, error)
+	Close(ctx context.Context, in *CloseFileRequest, opts ...grpc.CallOption) (*CloseFileResponse, error)
+	Read(ctx context.Context, in *ReadRequest, opts ...grpc.CallOption) (*ReadResponse, error)
+	Write(ctx context.Context, in *WriteRequest, opts ...grpc.CallOption) (*WriteResponse, error)
 }
 
 type workspaceClient struct {
@@ -72,108 +63,9 @@ func (c *workspaceClient) Getwd(ctx context.Context, in *GetwdRequest, opts ...g
 	return out, nil
 }
 
-func (c *workspaceClient) Open(ctx context.Context, in *OpenRequest, opts ...grpc.CallOption) (*OpenResponse, error) {
-	out := new(OpenResponse)
-	err := c.cc.Invoke(ctx, "/workspace.Workspace/Open", in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *workspaceClient) Remove(ctx context.Context, in *RemoveRequest, opts ...grpc.CallOption) (*RemoveResponse, error) {
-	out := new(RemoveResponse)
-	err := c.cc.Invoke(ctx, "/workspace.Workspace/Remove", in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *workspaceClient) Rename(ctx context.Context, in *RenameRequest, opts ...grpc.CallOption) (*RenameResponse, error) {
-	out := new(RenameResponse)
-	err := c.cc.Invoke(ctx, "/workspace.Workspace/Rename", in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *workspaceClient) Stat(ctx context.Context, in *StatRequest, opts ...grpc.CallOption) (*StatResponse, error) {
-	out := new(StatResponse)
-	err := c.cc.Invoke(ctx, "/workspace.Workspace/Stat", in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *workspaceClient) ReadLink(ctx context.Context, in *ReadLinkRequest, opts ...grpc.CallOption) (*ReadLinkResponse, error) {
-	out := new(ReadLinkResponse)
-	err := c.cc.Invoke(ctx, "/workspace.Workspace/ReadLink", in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
 func (c *workspaceClient) Command(ctx context.Context, in *CommandRequest, opts ...grpc.CallOption) (*CommandResponse, error) {
 	out := new(CommandResponse)
 	err := c.cc.Invoke(ctx, "/workspace.Workspace/Command", in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *workspaceClient) Sync(ctx context.Context, in *SyncRequest, opts ...grpc.CallOption) (*SyncResponse, error) {
-	out := new(SyncResponse)
-	err := c.cc.Invoke(ctx, "/workspace.Workspace/Sync", in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *workspaceClient) Truncate(ctx context.Context, in *TruncateRequest, opts ...grpc.CallOption) (*TruncateResponse, error) {
-	out := new(TruncateResponse)
-	err := c.cc.Invoke(ctx, "/workspace.Workspace/Truncate", in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *workspaceClient) Close(ctx context.Context, in *CloseFileRequest, opts ...grpc.CallOption) (*CloseFileResponse, error) {
-	out := new(CloseFileResponse)
-	err := c.cc.Invoke(ctx, "/workspace.Workspace/Close", in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *workspaceClient) Seek(ctx context.Context, in *SeekRequest, opts ...grpc.CallOption) (*SeekResponse, error) {
-	out := new(SeekResponse)
-	err := c.cc.Invoke(ctx, "/workspace.Workspace/Seek", in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *workspaceClient) Read(ctx context.Context, in *ReadRequest, opts ...grpc.CallOption) (*ReadResponse, error) {
-	out := new(ReadResponse)
-	err := c.cc.Invoke(ctx, "/workspace.Workspace/Read", in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *workspaceClient) Write(ctx context.Context, in *WriteRequest, opts ...grpc.CallOption) (*WriteResponse, error) {
-	out := new(WriteResponse)
-	err := c.cc.Invoke(ctx, "/workspace.Workspace/Write", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -234,32 +126,50 @@ func (c *workspaceClient) StdinPipe(ctx context.Context, in *StdioPipeRequest, o
 	return out, nil
 }
 
+func (c *workspaceClient) Close(ctx context.Context, in *CloseFileRequest, opts ...grpc.CallOption) (*CloseFileResponse, error) {
+	out := new(CloseFileResponse)
+	err := c.cc.Invoke(ctx, "/workspace.Workspace/Close", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *workspaceClient) Read(ctx context.Context, in *ReadRequest, opts ...grpc.CallOption) (*ReadResponse, error) {
+	out := new(ReadResponse)
+	err := c.cc.Invoke(ctx, "/workspace.Workspace/Read", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *workspaceClient) Write(ctx context.Context, in *WriteRequest, opts ...grpc.CallOption) (*WriteResponse, error) {
+	out := new(WriteResponse)
+	err := c.cc.Invoke(ctx, "/workspace.Workspace/Write", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // WorkspaceServer is the server API for Workspace service.
 // All implementations must embed UnimplementedWorkspaceServer
 // for forward compatibility
 type WorkspaceServer interface {
 	URI(context.Context, *URIRequest) (*URIResponse, error)
 	Getwd(context.Context, *GetwdRequest) (*URIResponse, error)
-	Open(context.Context, *OpenRequest) (*OpenResponse, error)
-	Remove(context.Context, *RemoveRequest) (*RemoveResponse, error)
-	Rename(context.Context, *RenameRequest) (*RenameResponse, error)
-	Stat(context.Context, *StatRequest) (*StatResponse, error)
-	ReadLink(context.Context, *ReadLinkRequest) (*ReadLinkResponse, error)
+	// Executor Service
 	Command(context.Context, *CommandRequest) (*CommandResponse, error)
-	// handler_id based
-	Sync(context.Context, *SyncRequest) (*SyncResponse, error)
-	Truncate(context.Context, *TruncateRequest) (*TruncateResponse, error)
-	Close(context.Context, *CloseFileRequest) (*CloseFileResponse, error)
-	Seek(context.Context, *SeekRequest) (*SeekResponse, error)
-	Read(context.Context, *ReadRequest) (*ReadResponse, error)
-	Write(context.Context, *WriteRequest) (*WriteResponse, error)
-	// proc API
 	Start(context.Context, *StartRequest) (*StartResponse, error)
 	Wait(context.Context, *WaitRequest) (*WaitResponse, error)
 	Signal(context.Context, *SignalRequest) (*SignalResponse, error)
 	StderrPipe(context.Context, *StdioPipeRequest) (*StdioPipeResponse, error)
 	StdoutPipe(context.Context, *StdioPipeRequest) (*StdioPipeResponse, error)
 	StdinPipe(context.Context, *StdioPipeRequest) (*StdioPipeResponse, error)
+	Close(context.Context, *CloseFileRequest) (*CloseFileResponse, error)
+	Read(context.Context, *ReadRequest) (*ReadResponse, error)
+	Write(context.Context, *WriteRequest) (*WriteResponse, error)
 	mustEmbedUnimplementedWorkspaceServer()
 }
 
@@ -273,41 +183,8 @@ func (UnimplementedWorkspaceServer) URI(context.Context, *URIRequest) (*URIRespo
 func (UnimplementedWorkspaceServer) Getwd(context.Context, *GetwdRequest) (*URIResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Getwd not implemented")
 }
-func (UnimplementedWorkspaceServer) Open(context.Context, *OpenRequest) (*OpenResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method Open not implemented")
-}
-func (UnimplementedWorkspaceServer) Remove(context.Context, *RemoveRequest) (*RemoveResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method Remove not implemented")
-}
-func (UnimplementedWorkspaceServer) Rename(context.Context, *RenameRequest) (*RenameResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method Rename not implemented")
-}
-func (UnimplementedWorkspaceServer) Stat(context.Context, *StatRequest) (*StatResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method Stat not implemented")
-}
-func (UnimplementedWorkspaceServer) ReadLink(context.Context, *ReadLinkRequest) (*ReadLinkResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method ReadLink not implemented")
-}
 func (UnimplementedWorkspaceServer) Command(context.Context, *CommandRequest) (*CommandResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Command not implemented")
-}
-func (UnimplementedWorkspaceServer) Sync(context.Context, *SyncRequest) (*SyncResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method Sync not implemented")
-}
-func (UnimplementedWorkspaceServer) Truncate(context.Context, *TruncateRequest) (*TruncateResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method Truncate not implemented")
-}
-func (UnimplementedWorkspaceServer) Close(context.Context, *CloseFileRequest) (*CloseFileResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method Close not implemented")
-}
-func (UnimplementedWorkspaceServer) Seek(context.Context, *SeekRequest) (*SeekResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method Seek not implemented")
-}
-func (UnimplementedWorkspaceServer) Read(context.Context, *ReadRequest) (*ReadResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method Read not implemented")
-}
-func (UnimplementedWorkspaceServer) Write(context.Context, *WriteRequest) (*WriteResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method Write not implemented")
 }
 func (UnimplementedWorkspaceServer) Start(context.Context, *StartRequest) (*StartResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Start not implemented")
@@ -326,6 +203,15 @@ func (UnimplementedWorkspaceServer) StdoutPipe(context.Context, *StdioPipeReques
 }
 func (UnimplementedWorkspaceServer) StdinPipe(context.Context, *StdioPipeRequest) (*StdioPipeResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method StdinPipe not implemented")
+}
+func (UnimplementedWorkspaceServer) Close(context.Context, *CloseFileRequest) (*CloseFileResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Close not implemented")
+}
+func (UnimplementedWorkspaceServer) Read(context.Context, *ReadRequest) (*ReadResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Read not implemented")
+}
+func (UnimplementedWorkspaceServer) Write(context.Context, *WriteRequest) (*WriteResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Write not implemented")
 }
 func (UnimplementedWorkspaceServer) mustEmbedUnimplementedWorkspaceServer() {}
 
@@ -376,96 +262,6 @@ func _Workspace_Getwd_Handler(srv interface{}, ctx context.Context, dec func(int
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Workspace_Open_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(OpenRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(WorkspaceServer).Open(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/workspace.Workspace/Open",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(WorkspaceServer).Open(ctx, req.(*OpenRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _Workspace_Remove_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(RemoveRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(WorkspaceServer).Remove(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/workspace.Workspace/Remove",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(WorkspaceServer).Remove(ctx, req.(*RemoveRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _Workspace_Rename_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(RenameRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(WorkspaceServer).Rename(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/workspace.Workspace/Rename",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(WorkspaceServer).Rename(ctx, req.(*RenameRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _Workspace_Stat_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(StatRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(WorkspaceServer).Stat(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/workspace.Workspace/Stat",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(WorkspaceServer).Stat(ctx, req.(*StatRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _Workspace_ReadLink_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ReadLinkRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(WorkspaceServer).ReadLink(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/workspace.Workspace/ReadLink",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(WorkspaceServer).ReadLink(ctx, req.(*ReadLinkRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
 func _Workspace_Command_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(CommandRequest)
 	if err := dec(in); err != nil {
@@ -480,114 +276,6 @@ func _Workspace_Command_Handler(srv interface{}, ctx context.Context, dec func(i
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(WorkspaceServer).Command(ctx, req.(*CommandRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _Workspace_Sync_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(SyncRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(WorkspaceServer).Sync(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/workspace.Workspace/Sync",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(WorkspaceServer).Sync(ctx, req.(*SyncRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _Workspace_Truncate_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(TruncateRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(WorkspaceServer).Truncate(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/workspace.Workspace/Truncate",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(WorkspaceServer).Truncate(ctx, req.(*TruncateRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _Workspace_Close_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(CloseFileRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(WorkspaceServer).Close(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/workspace.Workspace/Close",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(WorkspaceServer).Close(ctx, req.(*CloseFileRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _Workspace_Seek_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(SeekRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(WorkspaceServer).Seek(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/workspace.Workspace/Seek",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(WorkspaceServer).Seek(ctx, req.(*SeekRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _Workspace_Read_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ReadRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(WorkspaceServer).Read(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/workspace.Workspace/Read",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(WorkspaceServer).Read(ctx, req.(*ReadRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _Workspace_Write_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(WriteRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(WorkspaceServer).Write(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/workspace.Workspace/Write",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(WorkspaceServer).Write(ctx, req.(*WriteRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -700,6 +388,60 @@ func _Workspace_StdinPipe_Handler(srv interface{}, ctx context.Context, dec func
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Workspace_Close_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CloseFileRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WorkspaceServer).Close(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/workspace.Workspace/Close",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WorkspaceServer).Close(ctx, req.(*CloseFileRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Workspace_Read_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ReadRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WorkspaceServer).Read(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/workspace.Workspace/Read",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WorkspaceServer).Read(ctx, req.(*ReadRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Workspace_Write_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WriteRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WorkspaceServer).Write(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/workspace.Workspace/Write",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WorkspaceServer).Write(ctx, req.(*WriteRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // Workspace_ServiceDesc is the grpc.ServiceDesc for Workspace service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -716,52 +458,8 @@ var Workspace_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _Workspace_Getwd_Handler,
 		},
 		{
-			MethodName: "Open",
-			Handler:    _Workspace_Open_Handler,
-		},
-		{
-			MethodName: "Remove",
-			Handler:    _Workspace_Remove_Handler,
-		},
-		{
-			MethodName: "Rename",
-			Handler:    _Workspace_Rename_Handler,
-		},
-		{
-			MethodName: "Stat",
-			Handler:    _Workspace_Stat_Handler,
-		},
-		{
-			MethodName: "ReadLink",
-			Handler:    _Workspace_ReadLink_Handler,
-		},
-		{
 			MethodName: "Command",
 			Handler:    _Workspace_Command_Handler,
-		},
-		{
-			MethodName: "Sync",
-			Handler:    _Workspace_Sync_Handler,
-		},
-		{
-			MethodName: "Truncate",
-			Handler:    _Workspace_Truncate_Handler,
-		},
-		{
-			MethodName: "Close",
-			Handler:    _Workspace_Close_Handler,
-		},
-		{
-			MethodName: "Seek",
-			Handler:    _Workspace_Seek_Handler,
-		},
-		{
-			MethodName: "Read",
-			Handler:    _Workspace_Read_Handler,
-		},
-		{
-			MethodName: "Write",
-			Handler:    _Workspace_Write_Handler,
 		},
 		{
 			MethodName: "Start",
@@ -786,6 +484,1168 @@ var Workspace_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "StdinPipe",
 			Handler:    _Workspace_StdinPipe_Handler,
+		},
+		{
+			MethodName: "Close",
+			Handler:    _Workspace_Close_Handler,
+		},
+		{
+			MethodName: "Read",
+			Handler:    _Workspace_Read_Handler,
+		},
+		{
+			MethodName: "Write",
+			Handler:    _Workspace_Write_Handler,
+		},
+	},
+	Streams:  []grpc.StreamDesc{},
+	Metadata: "rpc/workspace.proto",
+}
+
+// SchemeClient is the client API for Scheme service.
+//
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
+type SchemeClient interface {
+	URI(ctx context.Context, in *URIRequest, opts ...grpc.CallOption) (*URIResponse, error)
+	// Scheme API
+	Open(ctx context.Context, in *OpenRequest, opts ...grpc.CallOption) (*OpenResponse, error)
+	Remove(ctx context.Context, in *RemoveRequest, opts ...grpc.CallOption) (*RemoveResponse, error)
+	Rename(ctx context.Context, in *RenameRequest, opts ...grpc.CallOption) (*RenameResponse, error)
+	Stat(ctx context.Context, in *StatRequest, opts ...grpc.CallOption) (*StatResponse, error)
+	ReadLink(ctx context.Context, in *ReadLinkRequest, opts ...grpc.CallOption) (*ReadLinkResponse, error)
+	// Scheme API, handler_id based
+	Sync(ctx context.Context, in *SyncRequest, opts ...grpc.CallOption) (*SyncResponse, error)
+	Truncate(ctx context.Context, in *TruncateRequest, opts ...grpc.CallOption) (*TruncateResponse, error)
+	Seek(ctx context.Context, in *SeekRequest, opts ...grpc.CallOption) (*SeekResponse, error)
+	Close(ctx context.Context, in *CloseFileRequest, opts ...grpc.CallOption) (*CloseFileResponse, error)
+	Read(ctx context.Context, in *ReadRequest, opts ...grpc.CallOption) (*ReadResponse, error)
+	Write(ctx context.Context, in *WriteRequest, opts ...grpc.CallOption) (*WriteResponse, error)
+	// Executor Service
+	Command(ctx context.Context, in *CommandRequest, opts ...grpc.CallOption) (*CommandResponse, error)
+	Start(ctx context.Context, in *StartRequest, opts ...grpc.CallOption) (*StartResponse, error)
+	Wait(ctx context.Context, in *WaitRequest, opts ...grpc.CallOption) (*WaitResponse, error)
+	Signal(ctx context.Context, in *SignalRequest, opts ...grpc.CallOption) (*SignalResponse, error)
+	StderrPipe(ctx context.Context, in *StdioPipeRequest, opts ...grpc.CallOption) (*StdioPipeResponse, error)
+	StdoutPipe(ctx context.Context, in *StdioPipeRequest, opts ...grpc.CallOption) (*StdioPipeResponse, error)
+	StdinPipe(ctx context.Context, in *StdioPipeRequest, opts ...grpc.CallOption) (*StdioPipeResponse, error)
+}
+
+type schemeClient struct {
+	cc grpc.ClientConnInterface
+}
+
+func NewSchemeClient(cc grpc.ClientConnInterface) SchemeClient {
+	return &schemeClient{cc}
+}
+
+func (c *schemeClient) URI(ctx context.Context, in *URIRequest, opts ...grpc.CallOption) (*URIResponse, error) {
+	out := new(URIResponse)
+	err := c.cc.Invoke(ctx, "/workspace.Scheme/URI", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *schemeClient) Open(ctx context.Context, in *OpenRequest, opts ...grpc.CallOption) (*OpenResponse, error) {
+	out := new(OpenResponse)
+	err := c.cc.Invoke(ctx, "/workspace.Scheme/Open", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *schemeClient) Remove(ctx context.Context, in *RemoveRequest, opts ...grpc.CallOption) (*RemoveResponse, error) {
+	out := new(RemoveResponse)
+	err := c.cc.Invoke(ctx, "/workspace.Scheme/Remove", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *schemeClient) Rename(ctx context.Context, in *RenameRequest, opts ...grpc.CallOption) (*RenameResponse, error) {
+	out := new(RenameResponse)
+	err := c.cc.Invoke(ctx, "/workspace.Scheme/Rename", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *schemeClient) Stat(ctx context.Context, in *StatRequest, opts ...grpc.CallOption) (*StatResponse, error) {
+	out := new(StatResponse)
+	err := c.cc.Invoke(ctx, "/workspace.Scheme/Stat", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *schemeClient) ReadLink(ctx context.Context, in *ReadLinkRequest, opts ...grpc.CallOption) (*ReadLinkResponse, error) {
+	out := new(ReadLinkResponse)
+	err := c.cc.Invoke(ctx, "/workspace.Scheme/ReadLink", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *schemeClient) Sync(ctx context.Context, in *SyncRequest, opts ...grpc.CallOption) (*SyncResponse, error) {
+	out := new(SyncResponse)
+	err := c.cc.Invoke(ctx, "/workspace.Scheme/Sync", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *schemeClient) Truncate(ctx context.Context, in *TruncateRequest, opts ...grpc.CallOption) (*TruncateResponse, error) {
+	out := new(TruncateResponse)
+	err := c.cc.Invoke(ctx, "/workspace.Scheme/Truncate", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *schemeClient) Seek(ctx context.Context, in *SeekRequest, opts ...grpc.CallOption) (*SeekResponse, error) {
+	out := new(SeekResponse)
+	err := c.cc.Invoke(ctx, "/workspace.Scheme/Seek", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *schemeClient) Close(ctx context.Context, in *CloseFileRequest, opts ...grpc.CallOption) (*CloseFileResponse, error) {
+	out := new(CloseFileResponse)
+	err := c.cc.Invoke(ctx, "/workspace.Scheme/Close", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *schemeClient) Read(ctx context.Context, in *ReadRequest, opts ...grpc.CallOption) (*ReadResponse, error) {
+	out := new(ReadResponse)
+	err := c.cc.Invoke(ctx, "/workspace.Scheme/Read", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *schemeClient) Write(ctx context.Context, in *WriteRequest, opts ...grpc.CallOption) (*WriteResponse, error) {
+	out := new(WriteResponse)
+	err := c.cc.Invoke(ctx, "/workspace.Scheme/Write", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *schemeClient) Command(ctx context.Context, in *CommandRequest, opts ...grpc.CallOption) (*CommandResponse, error) {
+	out := new(CommandResponse)
+	err := c.cc.Invoke(ctx, "/workspace.Scheme/Command", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *schemeClient) Start(ctx context.Context, in *StartRequest, opts ...grpc.CallOption) (*StartResponse, error) {
+	out := new(StartResponse)
+	err := c.cc.Invoke(ctx, "/workspace.Scheme/Start", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *schemeClient) Wait(ctx context.Context, in *WaitRequest, opts ...grpc.CallOption) (*WaitResponse, error) {
+	out := new(WaitResponse)
+	err := c.cc.Invoke(ctx, "/workspace.Scheme/Wait", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *schemeClient) Signal(ctx context.Context, in *SignalRequest, opts ...grpc.CallOption) (*SignalResponse, error) {
+	out := new(SignalResponse)
+	err := c.cc.Invoke(ctx, "/workspace.Scheme/Signal", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *schemeClient) StderrPipe(ctx context.Context, in *StdioPipeRequest, opts ...grpc.CallOption) (*StdioPipeResponse, error) {
+	out := new(StdioPipeResponse)
+	err := c.cc.Invoke(ctx, "/workspace.Scheme/StderrPipe", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *schemeClient) StdoutPipe(ctx context.Context, in *StdioPipeRequest, opts ...grpc.CallOption) (*StdioPipeResponse, error) {
+	out := new(StdioPipeResponse)
+	err := c.cc.Invoke(ctx, "/workspace.Scheme/StdoutPipe", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *schemeClient) StdinPipe(ctx context.Context, in *StdioPipeRequest, opts ...grpc.CallOption) (*StdioPipeResponse, error) {
+	out := new(StdioPipeResponse)
+	err := c.cc.Invoke(ctx, "/workspace.Scheme/StdinPipe", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// SchemeServer is the server API for Scheme service.
+// All implementations must embed UnimplementedSchemeServer
+// for forward compatibility
+type SchemeServer interface {
+	URI(context.Context, *URIRequest) (*URIResponse, error)
+	// Scheme API
+	Open(context.Context, *OpenRequest) (*OpenResponse, error)
+	Remove(context.Context, *RemoveRequest) (*RemoveResponse, error)
+	Rename(context.Context, *RenameRequest) (*RenameResponse, error)
+	Stat(context.Context, *StatRequest) (*StatResponse, error)
+	ReadLink(context.Context, *ReadLinkRequest) (*ReadLinkResponse, error)
+	// Scheme API, handler_id based
+	Sync(context.Context, *SyncRequest) (*SyncResponse, error)
+	Truncate(context.Context, *TruncateRequest) (*TruncateResponse, error)
+	Seek(context.Context, *SeekRequest) (*SeekResponse, error)
+	Close(context.Context, *CloseFileRequest) (*CloseFileResponse, error)
+	Read(context.Context, *ReadRequest) (*ReadResponse, error)
+	Write(context.Context, *WriteRequest) (*WriteResponse, error)
+	// Executor Service
+	Command(context.Context, *CommandRequest) (*CommandResponse, error)
+	Start(context.Context, *StartRequest) (*StartResponse, error)
+	Wait(context.Context, *WaitRequest) (*WaitResponse, error)
+	Signal(context.Context, *SignalRequest) (*SignalResponse, error)
+	StderrPipe(context.Context, *StdioPipeRequest) (*StdioPipeResponse, error)
+	StdoutPipe(context.Context, *StdioPipeRequest) (*StdioPipeResponse, error)
+	StdinPipe(context.Context, *StdioPipeRequest) (*StdioPipeResponse, error)
+	mustEmbedUnimplementedSchemeServer()
+}
+
+// UnimplementedSchemeServer must be embedded to have forward compatible implementations.
+type UnimplementedSchemeServer struct {
+}
+
+func (UnimplementedSchemeServer) URI(context.Context, *URIRequest) (*URIResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method URI not implemented")
+}
+func (UnimplementedSchemeServer) Open(context.Context, *OpenRequest) (*OpenResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Open not implemented")
+}
+func (UnimplementedSchemeServer) Remove(context.Context, *RemoveRequest) (*RemoveResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Remove not implemented")
+}
+func (UnimplementedSchemeServer) Rename(context.Context, *RenameRequest) (*RenameResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Rename not implemented")
+}
+func (UnimplementedSchemeServer) Stat(context.Context, *StatRequest) (*StatResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Stat not implemented")
+}
+func (UnimplementedSchemeServer) ReadLink(context.Context, *ReadLinkRequest) (*ReadLinkResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ReadLink not implemented")
+}
+func (UnimplementedSchemeServer) Sync(context.Context, *SyncRequest) (*SyncResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Sync not implemented")
+}
+func (UnimplementedSchemeServer) Truncate(context.Context, *TruncateRequest) (*TruncateResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Truncate not implemented")
+}
+func (UnimplementedSchemeServer) Seek(context.Context, *SeekRequest) (*SeekResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Seek not implemented")
+}
+func (UnimplementedSchemeServer) Close(context.Context, *CloseFileRequest) (*CloseFileResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Close not implemented")
+}
+func (UnimplementedSchemeServer) Read(context.Context, *ReadRequest) (*ReadResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Read not implemented")
+}
+func (UnimplementedSchemeServer) Write(context.Context, *WriteRequest) (*WriteResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Write not implemented")
+}
+func (UnimplementedSchemeServer) Command(context.Context, *CommandRequest) (*CommandResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Command not implemented")
+}
+func (UnimplementedSchemeServer) Start(context.Context, *StartRequest) (*StartResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Start not implemented")
+}
+func (UnimplementedSchemeServer) Wait(context.Context, *WaitRequest) (*WaitResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Wait not implemented")
+}
+func (UnimplementedSchemeServer) Signal(context.Context, *SignalRequest) (*SignalResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Signal not implemented")
+}
+func (UnimplementedSchemeServer) StderrPipe(context.Context, *StdioPipeRequest) (*StdioPipeResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method StderrPipe not implemented")
+}
+func (UnimplementedSchemeServer) StdoutPipe(context.Context, *StdioPipeRequest) (*StdioPipeResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method StdoutPipe not implemented")
+}
+func (UnimplementedSchemeServer) StdinPipe(context.Context, *StdioPipeRequest) (*StdioPipeResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method StdinPipe not implemented")
+}
+func (UnimplementedSchemeServer) mustEmbedUnimplementedSchemeServer() {}
+
+// UnsafeSchemeServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to SchemeServer will
+// result in compilation errors.
+type UnsafeSchemeServer interface {
+	mustEmbedUnimplementedSchemeServer()
+}
+
+func RegisterSchemeServer(s grpc.ServiceRegistrar, srv SchemeServer) {
+	s.RegisterService(&Scheme_ServiceDesc, srv)
+}
+
+func _Scheme_URI_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(URIRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SchemeServer).URI(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/workspace.Scheme/URI",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SchemeServer).URI(ctx, req.(*URIRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Scheme_Open_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(OpenRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SchemeServer).Open(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/workspace.Scheme/Open",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SchemeServer).Open(ctx, req.(*OpenRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Scheme_Remove_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RemoveRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SchemeServer).Remove(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/workspace.Scheme/Remove",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SchemeServer).Remove(ctx, req.(*RemoveRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Scheme_Rename_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RenameRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SchemeServer).Rename(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/workspace.Scheme/Rename",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SchemeServer).Rename(ctx, req.(*RenameRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Scheme_Stat_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(StatRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SchemeServer).Stat(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/workspace.Scheme/Stat",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SchemeServer).Stat(ctx, req.(*StatRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Scheme_ReadLink_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ReadLinkRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SchemeServer).ReadLink(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/workspace.Scheme/ReadLink",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SchemeServer).ReadLink(ctx, req.(*ReadLinkRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Scheme_Sync_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SyncRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SchemeServer).Sync(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/workspace.Scheme/Sync",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SchemeServer).Sync(ctx, req.(*SyncRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Scheme_Truncate_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(TruncateRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SchemeServer).Truncate(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/workspace.Scheme/Truncate",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SchemeServer).Truncate(ctx, req.(*TruncateRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Scheme_Seek_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SeekRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SchemeServer).Seek(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/workspace.Scheme/Seek",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SchemeServer).Seek(ctx, req.(*SeekRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Scheme_Close_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CloseFileRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SchemeServer).Close(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/workspace.Scheme/Close",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SchemeServer).Close(ctx, req.(*CloseFileRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Scheme_Read_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ReadRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SchemeServer).Read(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/workspace.Scheme/Read",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SchemeServer).Read(ctx, req.(*ReadRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Scheme_Write_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WriteRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SchemeServer).Write(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/workspace.Scheme/Write",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SchemeServer).Write(ctx, req.(*WriteRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Scheme_Command_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CommandRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SchemeServer).Command(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/workspace.Scheme/Command",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SchemeServer).Command(ctx, req.(*CommandRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Scheme_Start_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(StartRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SchemeServer).Start(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/workspace.Scheme/Start",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SchemeServer).Start(ctx, req.(*StartRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Scheme_Wait_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WaitRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SchemeServer).Wait(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/workspace.Scheme/Wait",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SchemeServer).Wait(ctx, req.(*WaitRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Scheme_Signal_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SignalRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SchemeServer).Signal(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/workspace.Scheme/Signal",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SchemeServer).Signal(ctx, req.(*SignalRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Scheme_StderrPipe_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(StdioPipeRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SchemeServer).StderrPipe(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/workspace.Scheme/StderrPipe",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SchemeServer).StderrPipe(ctx, req.(*StdioPipeRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Scheme_StdoutPipe_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(StdioPipeRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SchemeServer).StdoutPipe(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/workspace.Scheme/StdoutPipe",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SchemeServer).StdoutPipe(ctx, req.(*StdioPipeRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Scheme_StdinPipe_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(StdioPipeRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SchemeServer).StdinPipe(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/workspace.Scheme/StdinPipe",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SchemeServer).StdinPipe(ctx, req.(*StdioPipeRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+// Scheme_ServiceDesc is the grpc.ServiceDesc for Scheme service.
+// It's only intended for direct use with grpc.RegisterService,
+// and not to be introspected or modified (even as a copy)
+var Scheme_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "workspace.Scheme",
+	HandlerType: (*SchemeServer)(nil),
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "URI",
+			Handler:    _Scheme_URI_Handler,
+		},
+		{
+			MethodName: "Open",
+			Handler:    _Scheme_Open_Handler,
+		},
+		{
+			MethodName: "Remove",
+			Handler:    _Scheme_Remove_Handler,
+		},
+		{
+			MethodName: "Rename",
+			Handler:    _Scheme_Rename_Handler,
+		},
+		{
+			MethodName: "Stat",
+			Handler:    _Scheme_Stat_Handler,
+		},
+		{
+			MethodName: "ReadLink",
+			Handler:    _Scheme_ReadLink_Handler,
+		},
+		{
+			MethodName: "Sync",
+			Handler:    _Scheme_Sync_Handler,
+		},
+		{
+			MethodName: "Truncate",
+			Handler:    _Scheme_Truncate_Handler,
+		},
+		{
+			MethodName: "Seek",
+			Handler:    _Scheme_Seek_Handler,
+		},
+		{
+			MethodName: "Close",
+			Handler:    _Scheme_Close_Handler,
+		},
+		{
+			MethodName: "Read",
+			Handler:    _Scheme_Read_Handler,
+		},
+		{
+			MethodName: "Write",
+			Handler:    _Scheme_Write_Handler,
+		},
+		{
+			MethodName: "Command",
+			Handler:    _Scheme_Command_Handler,
+		},
+		{
+			MethodName: "Start",
+			Handler:    _Scheme_Start_Handler,
+		},
+		{
+			MethodName: "Wait",
+			Handler:    _Scheme_Wait_Handler,
+		},
+		{
+			MethodName: "Signal",
+			Handler:    _Scheme_Signal_Handler,
+		},
+		{
+			MethodName: "StderrPipe",
+			Handler:    _Scheme_StderrPipe_Handler,
+		},
+		{
+			MethodName: "StdoutPipe",
+			Handler:    _Scheme_StdoutPipe_Handler,
+		},
+		{
+			MethodName: "StdinPipe",
+			Handler:    _Scheme_StdinPipe_Handler,
+		},
+	},
+	Streams:  []grpc.StreamDesc{},
+	Metadata: "rpc/workspace.proto",
+}
+
+// ExecutorClient is the client API for Executor service.
+//
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
+type ExecutorClient interface {
+	Command(ctx context.Context, in *CommandRequest, opts ...grpc.CallOption) (*CommandResponse, error)
+	Start(ctx context.Context, in *StartRequest, opts ...grpc.CallOption) (*StartResponse, error)
+	Wait(ctx context.Context, in *WaitRequest, opts ...grpc.CallOption) (*WaitResponse, error)
+	Signal(ctx context.Context, in *SignalRequest, opts ...grpc.CallOption) (*SignalResponse, error)
+	StderrPipe(ctx context.Context, in *StdioPipeRequest, opts ...grpc.CallOption) (*StdioPipeResponse, error)
+	StdoutPipe(ctx context.Context, in *StdioPipeRequest, opts ...grpc.CallOption) (*StdioPipeResponse, error)
+	StdinPipe(ctx context.Context, in *StdioPipeRequest, opts ...grpc.CallOption) (*StdioPipeResponse, error)
+	Close(ctx context.Context, in *CloseFileRequest, opts ...grpc.CallOption) (*CloseFileResponse, error)
+	Read(ctx context.Context, in *ReadRequest, opts ...grpc.CallOption) (*ReadResponse, error)
+	Write(ctx context.Context, in *WriteRequest, opts ...grpc.CallOption) (*WriteResponse, error)
+}
+
+type executorClient struct {
+	cc grpc.ClientConnInterface
+}
+
+func NewExecutorClient(cc grpc.ClientConnInterface) ExecutorClient {
+	return &executorClient{cc}
+}
+
+func (c *executorClient) Command(ctx context.Context, in *CommandRequest, opts ...grpc.CallOption) (*CommandResponse, error) {
+	out := new(CommandResponse)
+	err := c.cc.Invoke(ctx, "/workspace.Executor/Command", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *executorClient) Start(ctx context.Context, in *StartRequest, opts ...grpc.CallOption) (*StartResponse, error) {
+	out := new(StartResponse)
+	err := c.cc.Invoke(ctx, "/workspace.Executor/Start", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *executorClient) Wait(ctx context.Context, in *WaitRequest, opts ...grpc.CallOption) (*WaitResponse, error) {
+	out := new(WaitResponse)
+	err := c.cc.Invoke(ctx, "/workspace.Executor/Wait", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *executorClient) Signal(ctx context.Context, in *SignalRequest, opts ...grpc.CallOption) (*SignalResponse, error) {
+	out := new(SignalResponse)
+	err := c.cc.Invoke(ctx, "/workspace.Executor/Signal", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *executorClient) StderrPipe(ctx context.Context, in *StdioPipeRequest, opts ...grpc.CallOption) (*StdioPipeResponse, error) {
+	out := new(StdioPipeResponse)
+	err := c.cc.Invoke(ctx, "/workspace.Executor/StderrPipe", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *executorClient) StdoutPipe(ctx context.Context, in *StdioPipeRequest, opts ...grpc.CallOption) (*StdioPipeResponse, error) {
+	out := new(StdioPipeResponse)
+	err := c.cc.Invoke(ctx, "/workspace.Executor/StdoutPipe", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *executorClient) StdinPipe(ctx context.Context, in *StdioPipeRequest, opts ...grpc.CallOption) (*StdioPipeResponse, error) {
+	out := new(StdioPipeResponse)
+	err := c.cc.Invoke(ctx, "/workspace.Executor/StdinPipe", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *executorClient) Close(ctx context.Context, in *CloseFileRequest, opts ...grpc.CallOption) (*CloseFileResponse, error) {
+	out := new(CloseFileResponse)
+	err := c.cc.Invoke(ctx, "/workspace.Executor/Close", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *executorClient) Read(ctx context.Context, in *ReadRequest, opts ...grpc.CallOption) (*ReadResponse, error) {
+	out := new(ReadResponse)
+	err := c.cc.Invoke(ctx, "/workspace.Executor/Read", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *executorClient) Write(ctx context.Context, in *WriteRequest, opts ...grpc.CallOption) (*WriteResponse, error) {
+	out := new(WriteResponse)
+	err := c.cc.Invoke(ctx, "/workspace.Executor/Write", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// ExecutorServer is the server API for Executor service.
+// All implementations must embed UnimplementedExecutorServer
+// for forward compatibility
+type ExecutorServer interface {
+	Command(context.Context, *CommandRequest) (*CommandResponse, error)
+	Start(context.Context, *StartRequest) (*StartResponse, error)
+	Wait(context.Context, *WaitRequest) (*WaitResponse, error)
+	Signal(context.Context, *SignalRequest) (*SignalResponse, error)
+	StderrPipe(context.Context, *StdioPipeRequest) (*StdioPipeResponse, error)
+	StdoutPipe(context.Context, *StdioPipeRequest) (*StdioPipeResponse, error)
+	StdinPipe(context.Context, *StdioPipeRequest) (*StdioPipeResponse, error)
+	Close(context.Context, *CloseFileRequest) (*CloseFileResponse, error)
+	Read(context.Context, *ReadRequest) (*ReadResponse, error)
+	Write(context.Context, *WriteRequest) (*WriteResponse, error)
+	mustEmbedUnimplementedExecutorServer()
+}
+
+// UnimplementedExecutorServer must be embedded to have forward compatible implementations.
+type UnimplementedExecutorServer struct {
+}
+
+func (UnimplementedExecutorServer) Command(context.Context, *CommandRequest) (*CommandResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Command not implemented")
+}
+func (UnimplementedExecutorServer) Start(context.Context, *StartRequest) (*StartResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Start not implemented")
+}
+func (UnimplementedExecutorServer) Wait(context.Context, *WaitRequest) (*WaitResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Wait not implemented")
+}
+func (UnimplementedExecutorServer) Signal(context.Context, *SignalRequest) (*SignalResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Signal not implemented")
+}
+func (UnimplementedExecutorServer) StderrPipe(context.Context, *StdioPipeRequest) (*StdioPipeResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method StderrPipe not implemented")
+}
+func (UnimplementedExecutorServer) StdoutPipe(context.Context, *StdioPipeRequest) (*StdioPipeResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method StdoutPipe not implemented")
+}
+func (UnimplementedExecutorServer) StdinPipe(context.Context, *StdioPipeRequest) (*StdioPipeResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method StdinPipe not implemented")
+}
+func (UnimplementedExecutorServer) Close(context.Context, *CloseFileRequest) (*CloseFileResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Close not implemented")
+}
+func (UnimplementedExecutorServer) Read(context.Context, *ReadRequest) (*ReadResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Read not implemented")
+}
+func (UnimplementedExecutorServer) Write(context.Context, *WriteRequest) (*WriteResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Write not implemented")
+}
+func (UnimplementedExecutorServer) mustEmbedUnimplementedExecutorServer() {}
+
+// UnsafeExecutorServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to ExecutorServer will
+// result in compilation errors.
+type UnsafeExecutorServer interface {
+	mustEmbedUnimplementedExecutorServer()
+}
+
+func RegisterExecutorServer(s grpc.ServiceRegistrar, srv ExecutorServer) {
+	s.RegisterService(&Executor_ServiceDesc, srv)
+}
+
+func _Executor_Command_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CommandRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ExecutorServer).Command(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/workspace.Executor/Command",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ExecutorServer).Command(ctx, req.(*CommandRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Executor_Start_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(StartRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ExecutorServer).Start(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/workspace.Executor/Start",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ExecutorServer).Start(ctx, req.(*StartRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Executor_Wait_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WaitRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ExecutorServer).Wait(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/workspace.Executor/Wait",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ExecutorServer).Wait(ctx, req.(*WaitRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Executor_Signal_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SignalRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ExecutorServer).Signal(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/workspace.Executor/Signal",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ExecutorServer).Signal(ctx, req.(*SignalRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Executor_StderrPipe_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(StdioPipeRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ExecutorServer).StderrPipe(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/workspace.Executor/StderrPipe",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ExecutorServer).StderrPipe(ctx, req.(*StdioPipeRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Executor_StdoutPipe_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(StdioPipeRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ExecutorServer).StdoutPipe(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/workspace.Executor/StdoutPipe",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ExecutorServer).StdoutPipe(ctx, req.(*StdioPipeRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Executor_StdinPipe_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(StdioPipeRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ExecutorServer).StdinPipe(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/workspace.Executor/StdinPipe",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ExecutorServer).StdinPipe(ctx, req.(*StdioPipeRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Executor_Close_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CloseFileRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ExecutorServer).Close(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/workspace.Executor/Close",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ExecutorServer).Close(ctx, req.(*CloseFileRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Executor_Read_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ReadRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ExecutorServer).Read(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/workspace.Executor/Read",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ExecutorServer).Read(ctx, req.(*ReadRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Executor_Write_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WriteRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ExecutorServer).Write(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/workspace.Executor/Write",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ExecutorServer).Write(ctx, req.(*WriteRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+// Executor_ServiceDesc is the grpc.ServiceDesc for Executor service.
+// It's only intended for direct use with grpc.RegisterService,
+// and not to be introspected or modified (even as a copy)
+var Executor_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "workspace.Executor",
+	HandlerType: (*ExecutorServer)(nil),
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "Command",
+			Handler:    _Executor_Command_Handler,
+		},
+		{
+			MethodName: "Start",
+			Handler:    _Executor_Start_Handler,
+		},
+		{
+			MethodName: "Wait",
+			Handler:    _Executor_Wait_Handler,
+		},
+		{
+			MethodName: "Signal",
+			Handler:    _Executor_Signal_Handler,
+		},
+		{
+			MethodName: "StderrPipe",
+			Handler:    _Executor_StderrPipe_Handler,
+		},
+		{
+			MethodName: "StdoutPipe",
+			Handler:    _Executor_StdoutPipe_Handler,
+		},
+		{
+			MethodName: "StdinPipe",
+			Handler:    _Executor_StdinPipe_Handler,
+		},
+		{
+			MethodName: "Close",
+			Handler:    _Executor_Close_Handler,
+		},
+		{
+			MethodName: "Read",
+			Handler:    _Executor_Read_Handler,
+		},
+		{
+			MethodName: "Write",
+			Handler:    _Executor_Write_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

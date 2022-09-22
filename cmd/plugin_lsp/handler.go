@@ -145,7 +145,7 @@ type lspEditorHandler struct {
 	wm browser.WindowManager
 	m  browser.Messenger
 	o  browser.ResourceOpener
-	wp workspace.Workspace
+	wp workspace.API
 
 	tabspaces            int
 	semanticTypesAttr    map[string]term.Attributes

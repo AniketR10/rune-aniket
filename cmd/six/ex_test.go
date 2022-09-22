@@ -42,11 +42,11 @@ func (t *testFileBuffer) Close() error {
 	return t.closeErr
 }
 
-type testWorkspace struct {
+type testLoader struct {
 	buf *testFileBuffer
 }
 
-func (w *testWorkspace) Open(filePath workspace.URI, buf *cell.Buffer, swapDir workspace.URI, readOnly bool) (
+func (w *testLoader) Load(filePath workspace.URI, buf *cell.Buffer, swapDir workspace.URI, readOnly bool) (
 	workspace.FlusherCloser, error,
 ) {
 	if w.buf != nil {
@@ -55,16 +55,16 @@ func (w *testWorkspace) Open(filePath workspace.URI, buf *cell.Buffer, swapDir w
 	return &testFileBuffer{}, nil
 }
 
-func (w *testWorkspace) Recover(
+func (w *testLoader) Recover(
 	filePath, swapFilePath workspace.URI,
 	buf *cell.Buffer, force bool,
 ) (
 	workspace.FlusherCloser, error,
 ) {
-	return w.Open(filePath, buf, swapFilePath, false)
+	return w.Load(filePath, buf, swapFilePath, false)
 }
 
-func (w *testWorkspace) URI(path string) (workspace.URI, error) {
+func (w *testLoader) URI(path string) (workspace.URI, error) {
 	return workspace.CurrentUserHostURI(path)
 }
 
@@ -583,7 +583,7 @@ func TestMultipleFilesStartup(t *testing.T) {
 		text.WithCommandKey(testCommandKey),
 	}
 	mockBuf := testFileBuffer{}
-	workspace := testWorkspace{buf: &mockBuf}
+	workspace := testLoader{buf: &mockBuf}
 	initExForTestingWithWorkspace(t, b, &workspace, text.NopEditor(), opts...)
 	defer b.Close()
 
@@ -877,7 +877,7 @@ func TestExExit(t *testing.T) {
 }
 
 func initExForTestingWithWorkspace(
-	t *testing.T, ex *ex, workspace *testWorkspace,
+	t *testing.T, ex *ex, workspace *testLoader,
 	ed text.Editor, opts ...text.Option,
 ) {
 	require.NoError(t, ex.doInit(ed, workspace, exCommandList, nil, opts...))
@@ -887,7 +887,7 @@ func initExForTestingWithWorkspace(
 }
 
 func initExForTesting(t *testing.T, ex *ex, ed text.Editor, opts ...text.Option) {
-	initExForTestingWithWorkspace(t, ex, &testWorkspace{}, ed, opts...)
+	initExForTestingWithWorkspace(t, ex, &testLoader{}, ed, opts...)
 }
 
 func TestNewWindow(t *testing.T) {

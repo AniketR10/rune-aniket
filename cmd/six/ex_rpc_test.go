@@ -84,11 +84,11 @@ func newTestRPCBrowser(t *testing.T,
 		// logger.SetLevel(log.TraceLevel)
 
 		b := new(ex)
-		err := b.doInit(ed, &testWorkspace{}, exCommandList, nil, opts...)
+		err := b.doInit(ed, &testLoader{}, exCommandList, nil, opts...)
 		if err != nil {
 			return nil, nil, err
 		}
-		require.NoError(t, b.comp.Init(ed, &testWorkspace{}, b.config))
+		require.NoError(t, b.comp.Init(ed, &testLoader{}, b.config))
 
 		lis, err := net.Listen("tcp", ":0")
 		require.NoError(t, err)

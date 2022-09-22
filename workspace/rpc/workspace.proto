@@ -160,27 +160,62 @@ message GetwdRequest {
 service Workspace {
 	rpc URI(URIRequest) returns (URIResponse);
 	rpc Getwd(GetwdRequest) returns (URIResponse);
-
-	rpc Open(OpenRequest) returns (OpenResponse);
-	rpc Remove(RemoveRequest) returns (RemoveResponse);
-	rpc Rename(RenameRequest) returns (RenameResponse);
-	rpc Stat(StatRequest) returns (StatResponse);
-	rpc ReadLink(ReadLinkRequest) returns (ReadLinkResponse);
-	rpc Command(CommandRequest) returns (CommandResponse);
-
-	// handler_id based
-	rpc Sync(SyncRequest) returns (SyncResponse);
-	rpc Truncate(TruncateRequest) returns (TruncateResponse);
-	rpc Close(CloseFileRequest) returns (CloseFileResponse);
-	rpc Seek(SeekRequest) returns (SeekResponse);
-	rpc Read(ReadRequest) returns (ReadResponse);
-	rpc Write(WriteRequest) returns (WriteResponse);
 	
-	// proc API
+	// Executor Service
+	rpc Command(CommandRequest) returns (CommandResponse);
 	rpc Start(StartRequest) returns (StartResponse);
 	rpc Wait(WaitRequest) returns (WaitResponse);
 	rpc Signal(SignalRequest) returns (SignalResponse);
 	rpc StderrPipe(StdioPipeRequest) returns (StdioPipeResponse);
 	rpc StdoutPipe(StdioPipeRequest) returns (StdioPipeResponse);
 	rpc StdinPipe(StdioPipeRequest) returns (StdioPipeResponse);
+
+	rpc Close(CloseFileRequest) returns (CloseFileResponse);
+	rpc Read(ReadRequest) returns (ReadResponse);
+	rpc Write(WriteRequest) returns (WriteResponse);
+}
+
+service Scheme {
+	rpc URI(URIRequest) returns (URIResponse);
+
+	// Scheme API
+	rpc Open(OpenRequest) returns (OpenResponse);
+	rpc Remove(RemoveRequest) returns (RemoveResponse);
+	rpc Rename(RenameRequest) returns (RenameResponse);
+	rpc Stat(StatRequest) returns (StatResponse);
+	rpc ReadLink(ReadLinkRequest) returns (ReadLinkResponse);
+
+	// Scheme API, handler_id based
+	rpc Sync(SyncRequest) returns (SyncResponse);
+	rpc Truncate(TruncateRequest) returns (TruncateResponse);
+	rpc Seek(SeekRequest) returns (SeekResponse);
+	rpc Close(CloseFileRequest) returns (CloseFileResponse);
+	rpc Read(ReadRequest) returns (ReadResponse);
+	rpc Write(WriteRequest) returns (WriteResponse);
+	
+	// Executor Service
+	rpc Command(CommandRequest) returns (CommandResponse);
+	rpc Start(StartRequest) returns (StartResponse);
+	rpc Wait(WaitRequest) returns (WaitResponse);
+	rpc Signal(SignalRequest) returns (SignalResponse);
+	rpc StderrPipe(StdioPipeRequest) returns (StdioPipeResponse);
+	rpc StdoutPipe(StdioPipeRequest) returns (StdioPipeResponse);
+	rpc StdinPipe(StdioPipeRequest) returns (StdioPipeResponse);
+}
+
+// cannot fully embed and so we duplicate to make
+// sure we can implement an executor client that
+// shares a common client interface
+service Executor {
+	rpc Command(CommandRequest) returns (CommandResponse);
+	rpc Start(StartRequest) returns (StartResponse);
+	rpc Wait(WaitRequest) returns (WaitResponse);
+	rpc Signal(SignalRequest) returns (SignalResponse);
+	rpc StderrPipe(StdioPipeRequest) returns (StdioPipeResponse);
+	rpc StdoutPipe(StdioPipeRequest) returns (StdioPipeResponse);
+	rpc StdinPipe(StdioPipeRequest) returns (StdioPipeResponse);
+
+	rpc Close(CloseFileRequest) returns (CloseFileResponse);
+	rpc Read(ReadRequest) returns (ReadResponse);
+	rpc Write(WriteRequest) returns (WriteResponse);
 }

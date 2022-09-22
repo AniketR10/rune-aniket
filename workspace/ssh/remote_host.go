@@ -1,4 +1,4 @@
-package workspace
+package ssh
 
 import (
 	"errors"
@@ -64,12 +64,12 @@ func (lis *readerWriterListener) Addr() net.Addr {
 	return newStdinAddr("listener")
 }
 
-// StartWorkspaceServer installs server to handle incoming workspacepb requests
+// StartSchemeServer installs server to handle incoming workspacepb requests
 // over the calling process' os.Stdin and sends responses over os.Stdout.
-func StartWorkspaceServer(server *Server) error {
+func StartSchemeServer(server workspacepb.SchemeServer) error {
 	lis := newReaderWriterListener(os.Stdin, os.Stdout)
 	grpcServer := grpc.NewServer()
-	workspacepb.RegisterWorkspaceServer(grpcServer, server)
+	workspacepb.RegisterSchemeServer(grpcServer, server)
 	if err := grpcServer.Serve(lis); err != nil {
 		return fmt.Errorf("Server: %s", err)
 	}

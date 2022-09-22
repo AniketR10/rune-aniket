@@ -1,4 +1,4 @@
-package workspace
+package ssh
 
 import (
 	"errors"
@@ -77,14 +77,16 @@ func (s *stdConn) Write(b []byte) (n int, err error) {
 }
 
 func (s *stdConn) Close() error {
-	if s.closed() {
+	s.mu.Lock()
+	if s.close {
+		s.mu.Unlock()
 		return nil
 	}
-	s.mu.Lock()
 	s.close = true
-	s.mu.Unlock()
-	s.closeHook()
+	closeHook := s.closeHook
 	s.closeHook = nil
+	s.mu.Unlock()
+	closeHook()
 	return nil
 }
 
