@@ -9,7 +9,9 @@ import (
 	"time"
 
 	"github.com/ernestrc/blue/datastore/document"
+	"github.com/ernestrc/blue/logging"
 	browserpb "github.com/ernestrc/go-tui/browser/rpc"
+	"github.com/ernestrc/go-tui/debug"
 	handlerpb "github.com/ernestrc/go-tui/handler/rpc"
 	"github.com/ernestrc/go-tui/proto"
 	"github.com/ernestrc/go-tui/term"
@@ -25,8 +27,6 @@ type Server struct {
 	browserpb.UnimplementedResourceOpenerServer
 	browserpb.UnimplementedWindowManagerServer
 	document.Server
-
-	Logger *log.Logger
 
 	broker proto.MuxBroker
 
@@ -103,6 +103,11 @@ func (s *Server) Init(
 	s.Server.Init(browser, nil)
 }
 
+func (s *Server) log(level log.Level, msg string, args ...interface{}) {
+	debug.StandardLogger().
+		WithField(logging.KeyClass, "browser.Server").Logf(level, msg, args...)
+}
+
 func (s *Server) consumeErrors(
 	ctx context.Context, handlerID uint64, ch <-chan error,
 ) {
@@ -112,10 +117,10 @@ func (s *Server) consumeErrors(
 			return
 		case err := <-ch:
 			err = fmt.Errorf("handler.Client %d error: %v", handlerID, err)
-			s.tryLog("%v", err)
+			s.log(log.WarnLevel, "%v", err)
 			msgErr := s.setBrowserMessage(err.Error())
 			if msgErr != nil {
-				s.tryLog("error calling browser.SetMessage upon handler.Client"+
+				s.log(log.WarnLevel, "error calling browser.SetMessage upon handler.Client"+
 					" error: %v: %v", msgErr, err)
 			}
 		}
@@ -123,7 +128,7 @@ func (s *Server) consumeErrors(
 }
 
 func (s *Server) dialHandler(handlerID uint64) (Handler, error) {
-	s.tryLog("(%p browser.Server): dialing handlerID: %d", s, handlerID)
+	s.log(log.DebugLevel, "(%p browser.Server): dialing handlerID: %d", s, handlerID)
 	handlerConn, err := s.broker.Dial(uint32(handlerID))
 	if err != nil {
 		return nil, err
@@ -132,7 +137,6 @@ func (s *Server) dialHandler(handlerID uint64) (Handler, error) {
 	pbClient := handlerpb.NewHandlerClient(handlerConn)
 	pbClient = newIOWaitUnlockHandlerClient(pbClient, s.browser.Locker)
 	cc := handlerpb.NewClient(pbClient)
-	cc.Logger = s.Logger
 
 	ctx, cancelFn := context.WithCancel(context.Background())
 
@@ -161,7 +165,7 @@ func (s *Server) serveWindow(win Window) (uint64, error) {
 		return res.(*windowServerResource).brokerID, nil
 	}
 
-	brokerID, srv, err := proto.AcceptAndServe(s.broker, s.Logger,
+	brokerID, srv, err := proto.AcceptAndServe(s.broker,
 		func(windowBrokerID uint32, srv proto.MuxServer) {
 			winSrv := s.windowServer(s, win)
 			browserpb.RegisterWindowServer(srv.GRPC(), winSrv)
@@ -194,27 +198,20 @@ func (s *Server) getServers() map[uint64]io.Closer {
 }
 
 func (s *Server) forceCloseWindow(winID uint64, reason string) error {
-	s.tryLog("browser.Server.forceCloseWindow(%d, reason=%s)", winID, reason)
+	s.log(log.DebugLevel, "browser.Server.forceCloseWindow(%d, reason=%s)", winID, reason)
 	_, err := proto.ForceCloseResource(s.broker, winID,
 		s.getServers, nopLocker{})
 	return err
 }
 
-func (s *Server) tryLog(msg string, args ...interface{}) {
-	if s.Logger == nil {
-		return
-	}
-	s.Logger.Debugf(msg, args...)
-}
-
 func (s *Server) safeForceCloseHandler(brokerID uint64, reason string) error {
-	s.tryLog("browser.Server.safeForceCloseHandler(%d, reason=%s)", brokerID, reason)
+	s.log(log.DebugLevel, "browser.Server.safeForceCloseHandler(%d, reason=%s)", brokerID, reason)
 	_, err := proto.ForceCloseResource(s.broker, brokerID,
 		s.getClients, &s.browser)
 	return err
 }
 func (s *Server) forceCloseHandler(brokerID uint64, reason string) error {
-	s.tryLog("browser.Server.forceCloseHandler(%d, reason=%s)", brokerID, reason)
+	s.log(log.DebugLevel, "browser.Server.forceCloseHandler(%d, reason=%s)", brokerID, reason)
 	_, err := proto.ForceCloseResource(s.broker, brokerID,
 		s.getClients, nopLocker{})
 	return err
@@ -226,7 +223,7 @@ func (s *Server) getContentHandler(handlerID uint64) (Handler, bool, error) {
 		h, ok := s.opened[uint32(handlerID)]
 		s.browser.Unlock()
 		if ok {
-			s.tryLog("(%p browser.Server): using return of Open/Content handler for handlerID: %d",
+			s.log(log.DebugLevel, "(%p browser.Server): using return of Open/Content handler for handlerID: %d",
 				s, handlerID)
 			return h, false, nil
 		}
@@ -237,7 +234,7 @@ func (s *Server) getContentHandler(handlerID uint64) (Handler, bool, error) {
 	res, ok := s.clients[handlerID]
 	s.browser.Unlock()
 	if ok {
-		s.tryLog("(%p browser.Server): found cached client for handlerID: %d", s, handlerID)
+		s.log(log.DebugLevel, "(%p browser.Server): found cached client for handlerID: %d", s, handlerID)
 		ret = res.(*handlerClientResource).client
 	} else {
 		var err error
@@ -377,7 +374,7 @@ func (s *Server) ensureAvailable(h Handler) uint64 {
 
 	handlerID := s.broker.NextId()
 	s.opened[handlerID] = h
-	s.tryLog("(%p browser.Server): stored handler with ID %d", s, handlerID)
+	s.log(log.DebugLevel, "(%p browser.Server): stored handler with ID %d", s, handlerID)
 	return uint64(handlerID)
 }
 

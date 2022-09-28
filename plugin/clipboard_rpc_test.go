@@ -8,7 +8,6 @@ import (
 	pluginpb "github.com/ernestrc/go-tui/plugin/rpc"
 	"github.com/ernestrc/go-tui/proto"
 	gomock "github.com/golang/mock/gomock"
-	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/goleak"
@@ -24,7 +23,7 @@ func setupClipboardIntTest(
 	broker := proto.NewDialBroker()
 
 	grpcServer := grpc.NewServer()
-	srv := newClipboardServer(log.New(), broker, root, new(sync.Mutex))
+	srv := newClipboardServer(broker, root, new(sync.Mutex))
 	pluginpb.RegisterClipboardServer(grpcServer, srv)
 	pluginpb.RegisterClipboardRegisterServer(grpcServer, srv.defaultRegisterServer)
 
@@ -33,7 +32,7 @@ func setupClipboardIntTest(
 
 	go grpcServer.Serve(lis)
 
-	client = newClipboardClient(log.New(), broker, conn)
+	client = newClipboardClient(broker, conn)
 	closeFn = func() {
 		client.(*clipboardClient).Close()
 		grpcServer.Stop()

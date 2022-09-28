@@ -7,14 +7,15 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ernestrc/blue/logging"
 	"github.com/ernestrc/go-tui/browser"
 	"github.com/ernestrc/go-tui/cell"
+	"github.com/ernestrc/go-tui/debug"
 	"github.com/ernestrc/go-tui/proto"
 	"github.com/ernestrc/go-tui/term"
 	termpb "github.com/ernestrc/go-tui/term/rpc"
 	"github.com/ernestrc/go-tui/text"
 	"github.com/ernestrc/go-tui/workspace"
-	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 )
 
@@ -36,8 +37,6 @@ func (t Token) Resource() workspace.URI {
 
 // Client satisfies text.Editor by calling a remote editor over grpc.
 type Client struct {
-	Logger *log.Logger
-
 	// resources invariant
 	mu sync.Mutex
 
@@ -69,11 +68,9 @@ func (c *Client) Init(
 	c.servers = make(map[uint64]io.Closer)
 }
 
-func (c *Client) tryLog(msg string, args ...interface{}) {
-	if c.Logger == nil {
-		return
-	}
-	c.Logger.Debugf(msg, args...)
+func (c *Client) log(msg string, args ...interface{}) {
+	debug.StandardLogger().
+		WithField(logging.KeyClass, "text.Client").Debugf(msg, args...)
 }
 
 func (c *Client) getServers() map[uint64]io.Closer {
@@ -81,20 +78,19 @@ func (c *Client) getServers() map[uint64]io.Closer {
 }
 
 func (c *Client) safeForceCloseHandler(brokerID uint32, reason string) error {
-	c.tryLog("editor.Client.safeForceCloseHandler(%d, reason=%s)", brokerID, reason)
+	c.log("editor.Client.safeForceCloseHandler(%d, reason=%s)", brokerID, reason)
 	_, err := proto.ForceCloseResource(c.broker, uint64(brokerID),
 		c.getServers, &c.mu)
 	return err
 }
 
 func (c *Client) serveHandler(h text.EventHandler) (uint32, error) {
-	brokerID, srv, err := proto.AcceptAndServe(c.broker, c.Logger,
+	brokerID, srv, err := proto.AcceptAndServe(c.broker,
 		func(handlerID uint32, srv proto.MuxServer) {
 			s := newEventHandlerServer(h, func() {
 				time.Sleep(gracefulShutdownWait)
 				c.safeForceCloseHandler(handlerID, "editorEventHandlerServer.onExit")
 			})
-			s.logger = c.Logger
 			RegisterEditorEventHandlerServer(srv.GRPC(), s)
 		})
 	if err != nil {

@@ -7,8 +7,10 @@ import (
 	"io"
 	"time"
 
+	"github.com/ernestrc/blue/logging"
 	"github.com/ernestrc/go-tui"
 	"github.com/ernestrc/go-tui/component"
+	"github.com/ernestrc/go-tui/debug"
 	"github.com/ernestrc/go-tui/term"
 	termpb "github.com/ernestrc/go-tui/term/rpc"
 	log "github.com/sirupsen/logrus"
@@ -41,8 +43,6 @@ Uh, Houston, we've had a problem
 // Client relies on the fact that runtime first Resizes, then calls Draw,
 // and then gets the Cursor.
 type Client struct {
-	Logger *log.Logger
-
 	width, height int
 	cursor        struct {
 		term.Coordinates
@@ -86,10 +86,13 @@ func (c *Client) collectError(call string, err error) {
 	select {
 	case c.errors <- err:
 	default:
-		if c.Logger != nil {
-			c.Logger.Errorf("handler.Client error: %s: %s", call, err)
-		}
+		c.log(log.ErrorLevel, "handler.Client error: %s: %s", call, err)
 	}
+}
+
+func (c *Client) log(level log.Level, msg string, args ...interface{}) {
+	debug.StandardLogger().
+		WithField(logging.KeyClass, "handler.Client").Logf(level, msg, args...)
 }
 
 // Resize satisfies tui.Handler
@@ -217,12 +220,6 @@ func (c *Client) Man() tui.Manual {
 	return tuiMan
 }
 
-func tryLog(logger *log.Logger, level log.Level, msg string, args ...interface{}) {
-	if logger != nil {
-		logger.Logf(level, msg, args...)
-	}
-}
-
 // Close satisfies browser.Handler
 // Close closes this client and all associated resources.
 func (c *Client) Close() error {
@@ -241,7 +238,6 @@ func (c *Client) Close() error {
 type Server struct {
 	UnimplementedHandlerServer
 	handler tui.Handler
-	Logger  *log.Logger
 	width   int
 	height  int
 }
@@ -274,6 +270,11 @@ func (s *Server) draw(ctx context.Context, in *DrawRequest) (
 	return res, nil
 }
 
+func (s *Server) log(level log.Level, msg string, args ...interface{}) {
+	debug.StandardLogger().
+		WithField(logging.KeyClass, "handler.Server").Logf(level, msg, args...)
+}
+
 // Handle is an RPC that handles request to an underlying Handler's
 // Handle over RPC.
 func (s *Server) Handle(ctx context.Context, req *HandleRequest) (
@@ -288,7 +289,7 @@ func (s *Server) Handle(ctx context.Context, req *HandleRequest) (
 		return nil, err
 	}
 
-	tryLog(s.Logger, log.TraceLevel, "handler.Server.Handle(%v)", ev)
+	s.log(log.TraceLevel, "handler.Server.Handle(%v)", ev)
 
 	var exit, handled bool
 	if ev.Type != term.EventInterrupt {
@@ -330,6 +331,6 @@ func (s *Server) Close(ctx context.Context, req *CloseRequest) (
 			return nil, fmt.Errorf("error Close: %v", err)
 		}
 	}
-	tryLog(s.Logger, log.DebugLevel, "handler.Server.Close: %v", ok)
+	s.log(log.DebugLevel, "handler.Server.Close: %v", ok)
 	return &CloseResponse{}, nil
 }

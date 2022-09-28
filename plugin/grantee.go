@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/ernestrc/go-tui/config"
+	"github.com/ernestrc/go-tui/debug"
 	pluginpb "github.com/ernestrc/go-tui/plugin/rpc"
 	"github.com/ernestrc/go-tui/proto"
 	"github.com/hashicorp/go-plugin"
@@ -51,7 +52,6 @@ const typeGranteePlugin = "tui_grantee_plugin"
 
 type granteePlugin struct {
 	plugin.Plugin
-	logger    *log.Logger
 	requested []Permission
 	grantee   Grantee
 	grantor   Grantor
@@ -62,8 +62,8 @@ type granteePlugin struct {
 // GRPCServer satisfies plugin.GRPCPlugin
 func (p *granteePlugin) GRPCServer(_ *plugin.GRPCBroker, s *grpc.Server) error {
 	server := newGranteeServer(p.broker, p.grantee, p.requested, p.keepAlive)
-	if p.logger.IsLevelEnabled(log.TraceLevel) {
-		server = &loggingGranteeServer{Logger: p.logger, GranteeServer: server}
+	if debug.StandardLogger().IsLevelEnabled(log.TraceLevel) {
+		server = &loggingGranteeServer{Logger: debug.StandardLogger(), GranteeServer: server}
 	}
 	pluginpb.RegisterGranteeServer(s, server)
 	return nil
@@ -74,8 +74,8 @@ func (p *granteePlugin) GRPCClient(
 	ctx context.Context, _ *plugin.GRPCBroker, c *grpc.ClientConn,
 ) (interface{}, error) {
 	pbClient := pluginpb.NewGranteeClient(c)
-	if p.logger.IsLevelEnabled(log.TraceLevel) {
-		pbClient = &loggingGranteeClient{Logger: p.logger, GranteeClient: pbClient}
+	if debug.StandardLogger().IsLevelEnabled(log.TraceLevel) {
+		pbClient = &loggingGranteeClient{Logger: debug.StandardLogger(), GranteeClient: pbClient}
 	}
 	client := newGranteeClient(p.broker, pbClient)
 	return client, nil
@@ -112,6 +112,7 @@ func Serve(grantee Grantee, request ...Permission) {
 	level := getLogLevelEnv()
 	formatter := jsonFormatter()
 
+	initPluginLogger()
 	SetLoggingOutput(os.Stderr)
 	SetLoggingLevel(level)
 	SetLoggingFormatter(formatter)
@@ -124,7 +125,6 @@ func Serve(grantee Grantee, request ...Permission) {
 
 	pluginMap := map[string]plugin.Plugin{
 		typeGranteePlugin: &granteePlugin{
-			logger:    &pluginLogger,
 			requested: request,
 			grantee:   grantee,
 			keepAlive: defaultHealthCheckTicker,

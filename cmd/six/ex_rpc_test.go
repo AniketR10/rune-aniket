@@ -17,7 +17,6 @@ import (
 	"github.com/ernestrc/go-tui/term"
 	"github.com/ernestrc/go-tui/text"
 	"github.com/ernestrc/go-tui/workspace"
-	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/goleak"
 	"google.golang.org/grpc"
@@ -78,11 +77,6 @@ func newTestRPCBrowser(t *testing.T,
 	return func(ed text.Editor, opts ...text.Option) (
 		tui.Handler, browser.Browser, error,
 	) {
-		var logger *log.Logger
-		// // uncomment to debug
-		// logger = log.New()
-		// logger.SetLevel(log.TraceLevel)
-
 		b := new(ex)
 		err := b.doInit(ed, &testLoader{}, exCommandList, nil, opts...)
 		if err != nil {
@@ -98,7 +92,6 @@ func newTestRPCBrowser(t *testing.T,
 		var serverMutex sync.Mutex
 		grpcServer := grpc.NewServer()
 		server := browser.NewServer(broker, b.Browser(), &serverMutex)
-		server.Logger = logger
 		browserpb.RegisterWindowManagerServer(grpcServer, server)
 		browserpb.RegisterMessengerServer(grpcServer, server)
 		browserpb.RegisterResourceOpenerServer(grpcServer, server)
@@ -109,7 +102,6 @@ func newTestRPCBrowser(t *testing.T,
 		require.NoError(t, err)
 
 		bc := browser.NewClient(broker, conn)
-		bc.Logger = logger
 		h := &safeHandler{Handler: b, mu: &serverMutex}
 		*destructor = func() {
 			bc.Close()

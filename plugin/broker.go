@@ -40,7 +40,7 @@ func initHostBroker(
 
 	go srv.Serve(lis)
 
-	broker := proto.NewDatastoreBroker(svc, config.logger)
+	broker := proto.NewDatastoreBroker(svc)
 	broker = proto.WithRetryBroker(broker, retry.DefaultStrategy)
 	return broker, lis.Addr(), nil
 }
@@ -51,7 +51,7 @@ func initClientBroker(logger *log.Logger) proto.MuxBroker {
 	if err != nil {
 		panic(err)
 	}
-	broker := proto.NewDatastoreBroker(store, logger)
+	broker := proto.NewDatastoreBroker(store)
 	broker = proto.WithRetryBroker(broker, retry.DefaultStrategy)
 	if logger.IsLevelEnabled(log.TraceLevel) {
 		broker = proto.LoggingBroker(broker, logger)

@@ -98,7 +98,6 @@ func (c *eventHandlerClient) Close() error {
 type eventHandlerServer struct {
 	UnimplementedEditorEventHandlerServer
 	handler text.EventHandler
-	logger  *log.Logger
 	onExit  func()
 }
 

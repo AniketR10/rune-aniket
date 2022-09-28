@@ -9,7 +9,9 @@ import (
 	"time"
 
 	"github.com/ernestrc/blue/datastore/document"
+	"github.com/ernestrc/blue/logging"
 	"github.com/ernestrc/go-tui/config"
+	"github.com/ernestrc/go-tui/debug"
 	pluginpb "github.com/ernestrc/go-tui/plugin/rpc"
 	"github.com/ernestrc/go-tui/proto"
 	"github.com/ernestrc/go-tui/util"
@@ -28,7 +30,6 @@ var defaultManagerConfig = managerConfig{
 	handshakeTimeout:  defaultHandshakeTimeout,
 	healthCheckTicker: defaultHealthCheckTicker,
 	healthRetries:     defaultHealthRetries,
-	logger:            &pluginLogger,
 	locker:            new(sync.Mutex),
 }
 
@@ -49,8 +50,6 @@ type Stat struct {
 }
 
 type managerConfig struct {
-	logger *log.Logger
-
 	handshakeTimeout  time.Duration
 	healthCheckTicker time.Duration
 	healthRetries     int
@@ -62,7 +61,7 @@ type managerConfig struct {
 type Option func(cfg *managerConfig)
 
 type pluginBuilder func(pluginID, path string,
-	grantor Grantor, log *log.Logger) (*granteeClient, error)
+	grantor Grantor) (*granteeClient, error)
 
 // Manager manages the lifecycle of plugins.
 type Manager struct {
@@ -116,14 +115,12 @@ func (m *Manager) Init(grantor Grantor, opts ...Option) (err error) {
 }
 
 func (m *Manager) log(level log.Level, msg string, args ...interface{}) {
-	if m.config.logger == nil {
-		return
-	}
-	m.config.logger.Logf(level, msg, args...)
+	debug.StandardLogger().
+		WithField(logging.KeyClass, "plugin.Manager").Logf(level, msg, args...)
 }
 
 func (m *Manager) runPlugin(pluginID, path string, config config.Config) error {
-	client, err := m.builder(pluginID, path, m.grantor, m.config.logger)
+	client, err := m.builder(pluginID, path, m.grantor)
 	if err != nil {
 		return err
 	}
@@ -194,9 +191,9 @@ func (m *Manager) doGrant(
 		// requested. Right now, each call to serve, spins a new listener
 		// and a new GRPC server.
 		go func() {
-			err := srv.Serve(pluginID, grantID, m.broker, m.config.logger, m.rmu)
-			if err != nil && m.config.logger != nil {
-				m.config.logger.Errorf("Could not communicate with plugin %q: %v",
+			err := srv.Serve(pluginID, grantID, m.broker, m.rmu)
+			if err != nil {
+				debug.StandardLogger().Errorf("Could not communicate with plugin %q: %v",
 					pluginID, err)
 			}
 		}()

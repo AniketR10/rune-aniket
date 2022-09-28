@@ -3,6 +3,7 @@ package plugin
 import (
 	"sync"
 
+	"github.com/ernestrc/go-tui/debug"
 	"github.com/ernestrc/go-tui/proto"
 	"github.com/ernestrc/go-tui/workspace"
 	workspacepb "github.com/ernestrc/go-tui/workspace/rpc"
@@ -29,7 +30,7 @@ func newWorkspaceResourceServer(b workspace.Workspace) *workspaceResourceServer 
 
 func (s *workspaceResourceServer) Serve(
 	pluginID string, grantID uint32, broker proto.MuxBroker,
-	l *log.Logger, lock sync.Locker,
+	lock sync.Locker,
 ) error {
 	return acceptAndServe(broker, grantID,
 		func(opts []grpc.ServerOption) proto.MuxServer {
@@ -37,6 +38,7 @@ func (s *workspaceResourceServer) Serve(
 			defer s.mu.Unlock()
 			if s.srv == nil {
 				var srv proto.MuxServer
+				l := debug.StandardLogger()
 				if l != nil && l.IsLevelEnabled(log.TraceLevel) {
 					srv = proto.LoggingGRPCServer(l, opts...)
 				} else {

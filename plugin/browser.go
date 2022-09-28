@@ -6,6 +6,7 @@ import (
 	bproto "github.com/ernestrc/blue/datastore/rpc"
 	"github.com/ernestrc/go-tui/browser"
 	browserpb "github.com/ernestrc/go-tui/browser/rpc"
+	"github.com/ernestrc/go-tui/debug"
 	"github.com/ernestrc/go-tui/proto"
 	"github.com/ernestrc/go-tui/term"
 	log "github.com/sirupsen/logrus"
@@ -42,7 +43,7 @@ func newBrowserResourceServer(b browser.Browser) *browserResourceServer {
 
 func (s *browserResourceServer) Serve(
 	pluginID string, grantID uint32, broker proto.MuxBroker,
-	l *log.Logger, lock sync.Locker,
+	lock sync.Locker,
 ) error {
 	return acceptAndServe(broker, grantID,
 		func(opts []grpc.ServerOption) proto.MuxServer {
@@ -52,7 +53,8 @@ func (s *browserResourceServer) Serve(
 			// because it's internal state is not shared.
 			if s.srv == nil {
 				var srv proto.MuxServer
-				if l != nil && l.IsLevelEnabled(log.TraceLevel) {
+				l := debug.StandardLogger()
+				if l.IsLevelEnabled(log.TraceLevel) {
 					srv = proto.LoggingGRPCServer(l, opts...)
 				} else {
 					srv = proto.GRPCServer(opts...)
@@ -61,7 +63,6 @@ func (s *browserResourceServer) Serve(
 				s.srv = srv
 				server := new(browser.Server)
 				server.Init(broker, s.b, lock, interruptWindowServer)
-				server.Logger = l
 				rpcServer := interruptBrowserServer(server, term.Interrupt)
 				browserpb.RegisterWindowManagerServer(grpc, rpcServer)
 				browserpb.RegisterResourceOpenerServer(grpc, rpcServer)
@@ -97,7 +98,6 @@ func dialBrowser(token uint32, broker proto.MuxBroker) (
 		return nil, err
 	}
 	c := browser.NewClient(broker, conn)
-	c.Logger = &pluginLogger
 	clients.Store(token, c)
 	return c, nil
 }

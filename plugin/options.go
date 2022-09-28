@@ -5,16 +5,7 @@ import (
 	"time"
 
 	"github.com/ernestrc/go-tui/workspace"
-	log "github.com/sirupsen/logrus"
 )
-
-// WithLogger returns an Option which configures a manager
-// to use logger.
-func WithLogger(logger *log.Logger) Option {
-	return func(cfg *managerConfig) {
-		cfg.logger = logger
-	}
-}
 
 // WithHandshakeTimeout returns an Option which
 // configures a manager to timeout plugins if handshake is not

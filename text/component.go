@@ -8,9 +8,11 @@ import (
 	"time"
 
 	"github.com/ernestrc/blue/datastore/document"
+	"github.com/ernestrc/blue/logging"
 	"github.com/ernestrc/go-tui"
 	"github.com/ernestrc/go-tui/browser"
 	"github.com/ernestrc/go-tui/cell"
+	"github.com/ernestrc/go-tui/debug"
 	"github.com/ernestrc/go-tui/handler"
 	"github.com/ernestrc/go-tui/term"
 	"github.com/ernestrc/go-tui/workspace"
@@ -93,20 +95,14 @@ func NewComponent(ed Editor, w workspace.Loader, config Config) (
 	return
 }
 
-func (c *Component) tryLog(level log.Level, msg string, args ...interface{}) {
-	if c.config.Logger != nil {
-		c.config.Logger.Logf(level, msg, args...)
-	}
+func (c *Component) log(level log.Level, msg string, args ...interface{}) {
+	debug.StandardLogger().
+		WithField(logging.KeyClass, "text.Component").Logf(level, msg, args...)
 }
 
 func (c *Component) newCellBuffer() *cell.Buffer {
 	buf := cell.NewBuffer()
 	buf.InitWithTabspaces(c.config.Tabspaces)
-	if c.config.Logger != nil {
-		// NOTE: only enable when trying to debug low level buffer bugs
-		// as it degrades performance quite a bit.
-		// buf.WithLogger(c.config.Logger)
-	}
 	return buf
 }
 
@@ -383,7 +379,7 @@ and lose all the new updates?`, file)
 				err = c.comp.Focus().SetContent(h)
 			}
 			if err != nil {
-				c.tryLog(log.ErrorLevel, "recovery prompt: %v", err)
+				c.log(log.ErrorLevel, "recovery prompt: %v", err)
 				c.SetMessage("%v", err)
 				return
 			}
@@ -430,7 +426,7 @@ an edit session for this file crashed.`, file)
 				err = c.comp.Focus().SetContent(h)
 			}
 			if err != nil {
-				c.tryLog(log.ErrorLevel, "recovery prompt: %v", err)
+				c.log(log.ErrorLevel, "recovery prompt: %v", err)
 				c.SetMessage("%v", err)
 				return
 			}
@@ -467,7 +463,7 @@ func (c *Component) Editor(file workspace.URI) (Handler, error) {
 // no command mapped to the given key.
 func (c *Component) KeyMapping(key term.KeyComb) ([]string, bool) {
 	cmd, ok := c.config.CommandKeyBindings[key]
-	c.tryLog(log.TraceLevel, "KeyMapping(%#v): %s", key, cmd)
+	c.log(log.TraceLevel, "KeyMapping(%#v): %s", key, cmd)
 	return cmd, ok
 }
 
@@ -855,10 +851,10 @@ func (c *Component) Close() error {
 	err1 := c.comp.Close()
 	err2 := c.config.Storage.Close()
 	if err2 != nil {
-		c.tryLog(log.ErrorLevel, "config.Storage.Close error: %v", err2)
+		c.log(log.ErrorLevel, "config.Storage.Close error: %v", err2)
 	}
 	if err1 != nil {
-		c.tryLog(log.ErrorLevel, "browser.Component.Close error: %v", err1)
+		c.log(log.ErrorLevel, "browser.Component.Close error: %v", err1)
 		return err1
 	}
 	return err2

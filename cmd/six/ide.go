@@ -88,13 +88,13 @@ func (i *ide) init(cwd, cfgfilename, recfilename string, filenames ...string) er
 	workspaceManager.RegisterScheme(ssh.Scheme, ssh.New)
 	workspaceManager.RegisterScheme(workspace.FileScheme, workspace.NewFileScheme)
 
-	root, err := newWorkspaceManagerHandler(l, i.clipboard, cwdURI,
+	root, err := newWorkspaceManagerHandler(i.clipboard, cwdURI,
 		workspaceManager, i.ideConfig, recfilename, filenames)
 	if err != nil {
 		return err
 	}
 	i.root = root
-	logNonFatalErrs(l, configErr, i.ideConfig.errors)
+	logNonFatalErrs(configErr, i.ideConfig.errors)
 
 	return nil
 }

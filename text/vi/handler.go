@@ -3,9 +3,11 @@ package vi
 import (
 	"fmt"
 
+	"github.com/ernestrc/blue/logging"
 	"github.com/ernestrc/go-tui"
 	"github.com/ernestrc/go-tui/cell"
 	"github.com/ernestrc/go-tui/component"
+	"github.com/ernestrc/go-tui/debug"
 	"github.com/ernestrc/go-tui/handler"
 	"github.com/ernestrc/go-tui/term"
 	"github.com/ernestrc/go-tui/text"
@@ -247,10 +249,8 @@ func (vi *viHandlerImpl) handleSearch(ev term.Event) (bool, bool) {
 }
 
 func (vi *viHandlerImpl) logError(err error) {
-	if vi.config.logger == nil {
-		return
-	}
-	vi.config.logger.Error(err)
+	debug.StandardLogger().
+		WithField(logging.KeyClass, "vi.handler").Error(err)
 }
 
 func (vi *viHandlerImpl) pasteClipboard(registerID string, after bool) bool {
@@ -734,7 +734,7 @@ func (vi *viHandlerImpl) moveToBounds() {
 			vi.cursor.MoveToNextNonNull()
 		}
 	case insertMode, replaceMode, replaceOneMode,
-		 visualMode, visualLineMode, visualBlockMode:
+		visualMode, visualLineMode, visualBlockMode:
 		if !vi.config.debug {
 			vi.cursor.MoveToBounds(1)
 		}

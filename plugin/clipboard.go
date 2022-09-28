@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	multierr "github.com/ernestrc/go-multierror"
+	"github.com/ernestrc/go-tui/debug"
 	pluginpb "github.com/ernestrc/go-tui/plugin/rpc"
 	"github.com/ernestrc/go-tui/proto"
 	"github.com/ernestrc/go-tui/text"
@@ -67,7 +68,7 @@ func (s *ClipboardManager) Init() {
 // Serve satisfies ResourceServer.
 func (s *ClipboardManager) Serve(
 	pluginID string, grantID uint32, broker proto.MuxBroker,
-	l *log.Logger, lock sync.Locker,
+	lock sync.Locker,
 ) error {
 	return acceptAndServe(broker, grantID, func(opts []grpc.ServerOption) proto.MuxServer {
 		lock.Lock()
@@ -76,7 +77,8 @@ func (s *ClipboardManager) Serve(
 		// create a new server every time Serve is called
 		// so ClipboardManager can be shared across workspaces
 		var srv proto.MuxServer
-		if l != nil && l.IsLevelEnabled(log.TraceLevel) {
+		l := debug.StandardLogger()
+		if l.IsLevelEnabled(log.TraceLevel) {
 			srv = proto.LoggingGRPCServer(l, opts...)
 		} else {
 			srv = proto.GRPCServer(opts...)
@@ -85,7 +87,7 @@ func (s *ClipboardManager) Serve(
 
 		// uses this ClipboardManager as the clipboard implementation
 		// for all resource requests.
-		s.s = newClipboardServer(l, broker, (*clipboardManagerServer)(s), lock)
+		s.s = newClipboardServer(broker, (*clipboardManagerServer)(s), lock)
 		pluginpb.RegisterClipboardServer(grpc, s.s)
 		pluginpb.RegisterClipboardRegisterServer(grpc, s.s.defaultRegisterServer)
 
@@ -273,7 +275,7 @@ func dialClipboard(token uint32, broker proto.MuxBroker) (
 	if err != nil {
 		return nil, err
 	}
-	c := newClipboardClient(&pluginLogger, broker, conn)
+	c := newClipboardClient(broker, conn)
 	return c, nil
 }
 

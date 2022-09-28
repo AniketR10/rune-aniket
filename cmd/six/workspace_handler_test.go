@@ -12,23 +12,15 @@ import (
 	"github.com/ernestrc/go-tui/text"
 	testutil "github.com/ernestrc/go-tui/util/test"
 	"github.com/ernestrc/go-tui/workspace"
-	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 )
-
-var discardLogger = log.New()
-
-func init() {
-	discardLogger.Out = ioutil.Discard
-	discardLogger.Level = log.PanicLevel
-}
 
 type clipboardManagerTest struct {
 	text.Clipboard
 }
 
 func (m *clipboardManagerTest) Serve(
-	string, uint32, proto.MuxBroker, *log.Logger, sync.Locker,
+	string, uint32, proto.MuxBroker, sync.Locker,
 ) error {
 	return nil
 }
@@ -79,9 +71,9 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 		uri, err := workspace.CurrentUserHostURI(dir)
 		require.NoError(t, err)
 
-		manager := workspace.NewManager(discardLogger, config.NopConfig())
+		manager := workspace.NewManager(config.NopConfig())
 		require.NoError(t, manager.RegisterScheme(workspace.FileScheme, workspace.NewFileScheme))
-		m, err := newWorkspaceManagerHandler(discardLogger, clip, uri, manager, cfg, "", []string{})
+		m, err := newWorkspaceManagerHandler(clip, uri, manager, cfg, "", []string{})
 		require.NoError(t, err)
 
 		closeFns = append(closeFns, m.Close)

@@ -8,7 +8,6 @@ import (
 	"github.com/ernestrc/go-tui/term"
 	testutil "github.com/ernestrc/go-tui/util/test"
 	"github.com/ernestrc/go-tui/workspace"
-	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -423,8 +422,6 @@ func TestComponentMultipleWindow(t *testing.T) {
 	w := term.NewStringWriter(20, 8)
 
 	cfg := DefaultConfig()
-	cfg.Logger = log.New()
-	cfg.Logger.SetLevel(log.TraceLevel)
 	cfg.WindowManagerConfig.TopLeft = 'O'
 	cfg.WindowManagerConfig.FocusFrameCharSet.TopLeft = 'X'
 	c := NewComponent(cfg)

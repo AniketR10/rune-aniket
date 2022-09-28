@@ -10,7 +10,7 @@ import (
 
 // ResourceServer wraps the basic Serve method, to serve resources over a mux broker.
 type ResourceServer interface {
-	Serve(string, uint32, proto.MuxBroker, *log.Logger, sync.Locker) error
+	Serve(string, uint32, proto.MuxBroker, sync.Locker) error
 }
 
 // enables functions matching signature of Serve to

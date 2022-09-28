@@ -6,14 +6,12 @@ import (
 	"strings"
 
 	browserpb "github.com/ernestrc/go-tui/browser/rpc"
-	log "github.com/sirupsen/logrus"
 )
 
 // WindowClient satisfies Window by talking to a
 // remote window over GRPC.
 type windowClient struct {
 	brokerID      uint64
-	logger        *log.Logger
 	pbClient      browserpb.WindowClient
 	browserClient *Client
 	doClose       func()

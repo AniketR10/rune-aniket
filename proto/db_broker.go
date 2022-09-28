@@ -11,6 +11,7 @@ import (
 	"github.com/ernestrc/blue/datastore/document"
 	"github.com/ernestrc/blue/retry"
 	multierr "github.com/ernestrc/go-multierror"
+	"github.com/ernestrc/go-tui/debug"
 	"github.com/ernestrc/go-tui/util"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
@@ -22,7 +23,6 @@ type dbBroker struct {
 	id        uint32
 	svc       document.Service
 	listeners map[uint32]net.Listener
-	logger    *log.Logger
 }
 
 type nextIDDoc struct {
@@ -35,10 +35,9 @@ type listenerDoc struct {
 
 // NewDatastoreBroker provides brokerage by employing a datastore to share
 // connection information.
-func NewDatastoreBroker(svc document.Service, logger *log.Logger) MuxBroker {
+func NewDatastoreBroker(svc document.Service) MuxBroker {
 	ret := new(dbBroker)
 	ret.svc = svc
-	ret.logger = logger
 	// start with 1 so zero-valued uint32 can be interpreted as not valid
 	ret.id = 1
 	ret.listeners = make(map[uint32]net.Listener)
@@ -141,8 +140,9 @@ func (t *dbBroker) Dial(ID uint32) (conn MuxConn, err error) {
 		return
 	}
 
-	if t.logger != nil && t.logger.IsLevelEnabled(log.TraceLevel) {
-		conn = loggingConn{t.logger, conn}
+	logger := debug.StandardLogger()
+	if logger.IsLevelEnabled(log.TraceLevel) {
+		conn = loggingConn{logger, conn}
 	}
 	return
 }

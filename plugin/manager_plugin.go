@@ -5,6 +5,7 @@ import (
 	"os/exec"
 	"strings"
 
+	"github.com/ernestrc/go-tui/debug"
 	"github.com/ernestrc/go-tui/workspace"
 	"github.com/hashicorp/go-plugin"
 	log "github.com/sirupsen/logrus"
@@ -19,9 +20,9 @@ func makeLogLevelEnv(l log.Level) string {
 }
 
 func goPluginGranteeBuilder(m *Manager) pluginBuilder {
-	return func(pluginID, path string, grantor Grantor, logger *log.Logger) (*granteeClient, error) {
+	return func(pluginID, path string, grantor Grantor) (*granteeClient, error) {
 		pluginMap := map[string]plugin.Plugin{
-			typeGranteePlugin: &granteePlugin{broker: m.broker, logger: logger, grantor: grantor},
+			typeGranteePlugin: &granteePlugin{broker: m.broker, grantor: grantor},
 		}
 
 		cmd := exec.Command(path)
@@ -38,13 +39,13 @@ func goPluginGranteeBuilder(m *Manager) pluginBuilder {
 			}
 		}
 		cmd.Env = append(cmd.Env, makeBrokerRemoteAddrEnv(m.brokerAddr.String()))
-		cmd.Env = append(cmd.Env, makeLogLevelEnv(logger.GetLevel()))
+		cmd.Env = append(cmd.Env, makeLogLevelEnv(debug.StandardLogger().GetLevel()))
 
 		config := &plugin.ClientConfig{
 			HandshakeConfig:  handshakeConfig,
 			Plugins:          pluginMap,
 			Cmd:              cmd,
-			Logger:           NewHCLogLogrus(logger),
+			Logger:           NewHCLogLogrus(debug.StandardLogger()),
 			AllowedProtocols: []plugin.Protocol{plugin.ProtocolGRPC},
 			// TODO we should validate integrity of plugins
 			// SecureConfig:    &secureCfg,

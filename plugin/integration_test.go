@@ -39,7 +39,7 @@ func TestIntegrationRace(t *testing.T) {
 	mockWin := browser.NopWindow()
 	h := browser.NewTestHandler()
 	cache := document.NewInMemoryCache()
-	broker := proto.NewDatastoreBroker(cache, nil)
+	broker := proto.NewDatastoreBroker(cache)
 	defer broker.Close()
 	mock := browser.NewMockBrowser(ctrl)
 	edMock := text.NewMockEditor(ctrl)
@@ -66,7 +66,7 @@ func TestIntegrationRace(t *testing.T) {
 	}
 	for perm, brokerID := range perms {
 		resources[perm].Serve("caliu-plugins-ltd", brokerID,
-			broker, nil, new(sync.Mutex))
+			broker, new(sync.Mutex))
 	}
 
 	tsuite := []struct {

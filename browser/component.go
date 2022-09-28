@@ -5,12 +5,15 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/ernestrc/blue/logging"
 	"github.com/ernestrc/go-tui"
 	"github.com/ernestrc/go-tui/cell"
 	"github.com/ernestrc/go-tui/component"
+	"github.com/ernestrc/go-tui/debug"
 	"github.com/ernestrc/go-tui/handler"
 	"github.com/ernestrc/go-tui/term"
 	"github.com/ernestrc/go-tui/workspace"
+	log "github.com/sirupsen/logrus"
 )
 
 var (
@@ -290,9 +293,7 @@ func (c *Component) Tabs() (ret []*Tab) {
 
 func (c *Component) closeTab(t *Tab) error {
 	err := t.Close()
-	if err != nil && c.config.Logger != nil {
-		c.config.Logger.Warningf("tab Close error: %v", err)
-	}
+	c.log(log.WarnLevel, "tab Close error: %v", err)
 	return err
 }
 
@@ -398,19 +399,17 @@ func (c *Component) NextTab(win Window) bool {
 	return false
 }
 
-func (c *Component) tryLog(msg string, args ...interface{}) {
-	if c.config.Logger == nil {
-		return
-	}
-	c.config.Logger.Debugf(msg, args...)
+func (c *Component) log(level log.Level, msg string, args ...interface{}) {
+	debug.StandardLogger().
+		WithField(logging.KeyClass, "browser.Component").Logf(level, msg, args...)
 }
 
 func (c *Component) closeHandler(h Handler) {
 	err := h.Close()
-	if err != nil && c.config.Logger != nil {
-		c.config.Logger.Warningf("Close error: %v", err)
+	if err != nil {
+		c.log(log.WarnLevel, "Close error: %v", err)
 	}
-	c.tryLog("Component.closeHandler(%p)", h)
+	c.log(log.DebugLevel, "Component.closeHandler(%p)", h)
 }
 
 func (c *Component) tryUpdateWindowContent(
@@ -674,9 +673,7 @@ func (c *Component) setError(err error) {
 // SetMessage formats the given msg and args and displays it on next Draw.
 func (c *Component) SetMessage(msg string, args ...interface{}) {
 	msg = fmt.Sprintf(msg, args...)
-	if c.config.Logger != nil {
-		c.config.Logger.Infof("Message: %s", msg)
-	}
+	c.log(log.InfoLevel, "Message: %s", msg)
 	c.logBuf.Reset()
 	c.logBuf.WriteString(msg)
 	c.logBufDraw = logBufDrawTimes

@@ -3,14 +3,15 @@ package vi
 import (
 	"fmt"
 
+	"github.com/ernestrc/blue/logging"
 	"github.com/ernestrc/go-tui"
 	"github.com/ernestrc/go-tui/cell"
 	"github.com/ernestrc/go-tui/component"
+	"github.com/ernestrc/go-tui/debug"
 	"github.com/ernestrc/go-tui/handler"
 	"github.com/ernestrc/go-tui/term"
 	"github.com/ernestrc/go-tui/text"
 	"github.com/ernestrc/go-tui/workspace"
-	log "github.com/sirupsen/logrus"
 )
 
 var _ tui.Handler = (*Vi)(nil)
@@ -31,7 +32,6 @@ type Vi struct {
 	buf       *cell.Buffer
 	cursor    *text.Cursor
 	mouse     *text.Mouse
-	logger    *log.Logger
 	messenger text.Messenger
 	less      *handler.Less
 	clipboard text.Clipboard
@@ -66,7 +66,6 @@ func (vi *Vi) Init(buf *cell.Buffer, resource workspace.URI, opts ...Option) {
 	viHandler.init(buf, opts...)
 	vi.handler = viHandler
 	vi.buf = buf
-	vi.logger = viHandler.config.logger
 	vi.messenger = viHandler.config.messenger
 	vi.less = &viHandler.less
 	vi.cursor = &viHandler.cursor
@@ -257,9 +256,8 @@ func (vi *Vi) Resize(width, height int) {
 
 // SetMessage uses vi's configured Messenger to set msg with args.
 func (vi *Vi) SetMessage(msg string, args ...interface{}) {
-	if vi.logger != nil {
-		vi.logger.Debugf(msg, args...)
-	}
+	debug.StandardLogger().
+		WithField(logging.KeyClass, "vi.Vi").Debugf(msg, args...)
 
 	if vi.messenger != nil {
 		vi.messenger.SetMessage(msg, args...)

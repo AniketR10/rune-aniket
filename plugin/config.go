@@ -5,6 +5,7 @@ import (
 
 	"github.com/ernestrc/go-tui/config"
 	configpb "github.com/ernestrc/go-tui/config/rpc"
+	"github.com/ernestrc/go-tui/debug"
 	"github.com/ernestrc/go-tui/proto"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
@@ -29,7 +30,7 @@ func newConfigResourceServer(cfg config.Config) *configResourceServer {
 
 func (s *configResourceServer) Serve(
 	pluginID string, grantID uint32, broker proto.MuxBroker,
-	l *log.Logger, lock sync.Locker,
+	lock sync.Locker,
 ) error {
 	return acceptAndServe(broker, grantID,
 		func(opts []grpc.ServerOption) proto.MuxServer {
@@ -37,7 +38,8 @@ func (s *configResourceServer) Serve(
 			defer s.mu.Unlock()
 			if s.srv == nil {
 				var srv proto.MuxServer
-				if l != nil && l.IsLevelEnabled(log.TraceLevel) {
+				l := debug.StandardLogger()
+				if l.IsLevelEnabled(log.TraceLevel) {
 					srv = proto.LoggingGRPCServer(l, opts...)
 				} else {
 					srv = proto.GRPCServer(opts...)

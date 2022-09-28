@@ -10,7 +10,6 @@ import (
 	multierr "github.com/ernestrc/go-multierror"
 	pluginpb "github.com/ernestrc/go-tui/plugin/rpc"
 	"github.com/ernestrc/go-tui/proto"
-	log "github.com/sirupsen/logrus"
 
 	"google.golang.org/grpc"
 )
@@ -26,7 +25,6 @@ type clipboardServer struct {
 	clients               map[uint64]io.Closer
 	c                     ClipboardSetter
 	failureTimeout        time.Duration
-	logger                *log.Logger
 	defaultRegisterServer *clipboardRegisterServer
 }
 
@@ -78,13 +76,12 @@ func (c *clipboardRegisterClient) Close() (ret error) {
 
 // newClipboardServer expects c, Clipboard to be safe to use concurrently
 func newClipboardServer(
-	logger *log.Logger, broker proto.MuxBroker, c Clipboard,
+	broker proto.MuxBroker, c Clipboard,
 	locker sync.Locker,
 ) *clipboardServer {
 	ret := new(clipboardServer)
 	ret.broker = broker
 	ret.c = c
-	ret.logger = logger
 	ret.failureTimeout = defaultFailureTimeout
 	ret.clients = make(map[uint64]io.Closer)
 	ret.locker = locker
@@ -180,7 +177,6 @@ type clipboardClient struct {
 	broker         proto.MuxBroker
 	cc             grpc.ClientConnInterface
 	c              pluginpb.ClipboardClient
-	logger         *log.Logger
 	remoteRegister *clipboardRegisterClient
 }
 
@@ -229,12 +225,11 @@ func (c *clipboardRegisterServer) Close() error {
 }
 
 func newClipboardClient(
-	logger *log.Logger, broker proto.MuxBroker, cc proto.MuxConn,
+	broker proto.MuxBroker, cc proto.MuxConn,
 ) Clipboard {
 	ret := new(clipboardClient)
 	ret.broker = broker
 	ret.cc = cc
-	ret.logger = logger
 	ret.c = pluginpb.NewClipboardClient(cc)
 	ret.registers = make(map[string]*clipboardRegisterServer)
 
@@ -248,7 +243,7 @@ func (c *clipboardClient) serveClipboardRegister(
 	r ClipboardRegister,
 ) (*clipboardRegisterServer, uint32, error) {
 	rs := &clipboardRegisterServer{r: r, locker: &c.mu}
-	brokerID, srv, err := proto.AcceptAndServe(c.broker, c.logger,
+	brokerID, srv, err := proto.AcceptAndServe(c.broker,
 		func(handlerID uint32, srv proto.MuxServer) {
 			pluginpb.RegisterClipboardRegisterServer(srv.GRPC(), rs)
 		})

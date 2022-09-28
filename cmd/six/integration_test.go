@@ -9,7 +9,6 @@ import (
 	"github.com/ernestrc/go-tui"
 	"github.com/ernestrc/go-tui/cell"
 	"github.com/ernestrc/go-tui/config"
-	"github.com/ernestrc/go-tui/debug"
 	"github.com/ernestrc/go-tui/term"
 	"github.com/ernestrc/go-tui/text/vi"
 	"github.com/ernestrc/go-tui/workspace"
@@ -26,7 +25,7 @@ func newIntegrationTestCase(t *testing.T, content string) (
 	workspaceURI, err := workspace.CurrentUserHostURI(tempDir)
 	require.NoError(t, err)
 
-	manager := workspace.NewManager(debug.StandardLogger(), config.NopConfig())
+	manager := workspace.NewManager(config.NopConfig())
 	require.NoError(t, manager.RegisterScheme(workspace.FileScheme, workspace.NewFileScheme))
 	w, err := manager.AddWorkspace(workspaceURI)
 	require.NoError(t, err)

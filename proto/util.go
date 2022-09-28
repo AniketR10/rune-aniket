@@ -82,7 +82,7 @@ func MonitorConnection(
 // with a new brokerID, and potentially an instrumented grpc.Server,
 // if and only if the level enabled at logger is Trace.
 func AcceptAndServe(
-	broker MuxBroker, logger *log.Logger,
+	broker MuxBroker,
 	register func(uint32, MuxServer),
 ) (uint32, MuxServer, error) {
 	brokerID := broker.NextId()
@@ -91,8 +91,9 @@ func AcceptAndServe(
 		return 0, nil, fmt.Errorf("Accept: %w", err)
 	}
 
+	logger := debug.StandardLogger()
 	var srv MuxServer
-	if logger != nil && logger.IsLevelEnabled(log.TraceLevel) {
+	if logger.IsLevelEnabled(log.TraceLevel) {
 		srv = LoggingGRPCServer(logger)
 	} else {
 		srv = GRPCServer()

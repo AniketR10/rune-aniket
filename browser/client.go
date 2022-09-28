@@ -8,14 +8,15 @@ import (
 	"time"
 
 	"github.com/ernestrc/blue/datastore/document"
+	"github.com/ernestrc/blue/logging"
 	"github.com/ernestrc/go-tui"
 	browserpb "github.com/ernestrc/go-tui/browser/rpc"
+	"github.com/ernestrc/go-tui/debug"
 	handlerpb "github.com/ernestrc/go-tui/handler/rpc"
 	"github.com/ernestrc/go-tui/proto"
 	"github.com/ernestrc/go-tui/term"
 	termpb "github.com/ernestrc/go-tui/term/rpc"
 	"github.com/ernestrc/go-tui/workspace"
-	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 )
 
@@ -28,8 +29,6 @@ var _ Browser = (*Client)(nil)
 
 // Client satisfies Browser by talking to a browser server over RPC.
 type Client struct {
-	Logger *log.Logger
-
 	// resources invariant
 	mu sync.Mutex
 
@@ -83,10 +82,8 @@ func NewClient(
 }
 
 func (c *Client) tryLog(msg string, args ...interface{}) {
-	if c.Logger == nil {
-		return
-	}
-	c.Logger.Debugf(msg, args...)
+	debug.StandardLogger().
+		WithField(logging.KeyClass, "browser.Client").Debugf(msg, args...)
 }
 
 // Init initializes this Client with broker and client.
@@ -115,7 +112,7 @@ func (c *Client) serveHandler(h Handler) (uint64, bool, error) {
 		brokerID = tokenHandler.ID
 	} else {
 		var brokerID32 uint32
-		brokerID32, srv, err = proto.AcceptAndServe(c.broker, c.Logger,
+		brokerID32, srv, err = proto.AcceptAndServe(c.broker,
 			func(handlerID uint32, srv proto.MuxServer) {
 				h = browserClientHandler{
 					Handler:   h,
@@ -123,7 +120,6 @@ func (c *Client) serveHandler(h Handler) (uint64, bool, error) {
 					handlerID: uint64(handlerID),
 				}
 				hsrv := handlerpb.NewServer(h)
-				hsrv.Logger = c.Logger
 				handlerpb.RegisterHandlerServer(srv.GRPC(), hsrv)
 			})
 		brokerID = uint64(brokerID32)
@@ -153,7 +149,6 @@ func (c *Client) dialWindow(windowID uint64) (Window, error) {
 
 	cc := browserpb.NewWindowClient(winConn)
 	client := newWindowClient(windowID, c, cc)
-	client.logger = c.Logger
 
 	ctx, cancelFn := context.WithCancel(context.Background())
 

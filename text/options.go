@@ -9,7 +9,6 @@ import (
 	"github.com/ernestrc/go-tui/handler"
 	"github.com/ernestrc/go-tui/term"
 	"github.com/ernestrc/go-tui/workspace"
-	log "github.com/sirupsen/logrus"
 )
 
 // CommandOverlayConfig holds configuration for the
@@ -115,13 +114,6 @@ func WithFile(file workspace.URI) Option {
 func WithCommandKey(event term.KeyComb) Option {
 	return func(cfg *Config) {
 		cfg.CommandEvent = event
-	}
-}
-
-// WithLogger sets a logger that the editor can use to log debugging data.
-func WithLogger(l *log.Logger) Option {
-	return func(cfg *Config) {
-		cfg.Logger = l
 	}
 }
 

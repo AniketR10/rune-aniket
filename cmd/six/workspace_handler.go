@@ -16,13 +16,13 @@ import (
 	"github.com/ernestrc/go-tui"
 	"github.com/ernestrc/go-tui/browser"
 	"github.com/ernestrc/go-tui/config"
+	"github.com/ernestrc/go-tui/debug"
 	"github.com/ernestrc/go-tui/handler"
 	"github.com/ernestrc/go-tui/plugin"
 	"github.com/ernestrc/go-tui/term"
 	"github.com/ernestrc/go-tui/text"
 	"github.com/ernestrc/go-tui/text/vi"
 	"github.com/ernestrc/go-tui/workspace"
-	log "github.com/sirupsen/logrus"
 )
 
 const (
@@ -88,7 +88,6 @@ type workspaceManagerHandler struct {
 	mu        sync.Mutex
 	clipboard clipboardManagerIfc
 	cfg       ideConfig
-	logger    *log.Logger
 	storage   browser.Storage
 	workspace workspaceManagerIfc
 
@@ -113,14 +112,12 @@ type workspaceManagerIfc interface {
 }
 
 func newWorkspaceManagerHandler(
-	logger *log.Logger,
 	clipboard clipboardManagerIfc, initial workspace.URI,
 	manager workspaceManagerIfc,
 	cfg ideConfig, recfilename string, filenames []string,
 ) (*workspaceManagerHandler, error) {
 	ret := new(workspaceManagerHandler)
-	err := ret.init(logger,
-		clipboard, initial, manager, cfg, recfilename, filenames)
+	err := ret.init(clipboard, initial, manager, cfg, recfilename, filenames)
 	if err != nil {
 		return nil, err
 	}
@@ -133,19 +130,16 @@ func (h *workspaceManagerHandler) newEditor(cfg ideConfig) text.Editor {
 		vi.WithDebug(cfg.viDebug()),
 		vi.WithWrap(cfg.viWrap()),
 		vi.WithClipboard(h.clipboard),
-		vi.WithLogger(h.logger),
 	)
 	return vi.Editor(viOpts...)
 }
 
 func (h *workspaceManagerHandler) init(
-	logger *log.Logger,
 	clipboard clipboardManagerIfc, uri workspace.URI,
 	manager workspaceManagerIfc, cfg ideConfig,
 	recfilename string, filenames []string,
 ) error {
 	h.workspaces = make([]*workspaceHandler, 10)
-	h.logger = logger
 	h.cfg = cfg
 	h.clipboard = clipboard
 	h.storage = document.NewInMemoryCache()
@@ -268,7 +262,7 @@ func (h *workspaceManagerHandler) Man() tui.Manual {
 	return h.focusHandler().Man()
 }
 
-func (h *workspaceManagerHandler) initPlugins(l *log.Logger, manager *plugin.Manager, cfg ideConfig) {
+func (h *workspaceManagerHandler) initPlugins(manager *plugin.Manager, cfg ideConfig) {
 	for id, p := range cfg.plugins() {
 		path, ok := p.path()
 		if !ok {
@@ -280,7 +274,7 @@ func (h *workspaceManagerHandler) initPlugins(l *log.Logger, manager *plugin.Man
 		}
 		err := manager.Run(id, path, pconfig)
 		if err != nil {
-			l.Errorf("failed to run plugin: could not run plugin with id '%s': %v", id, err)
+			debug.StandardLogger().Errorf("failed to run plugin with id %q: %v", id, err)
 		}
 	}
 }
@@ -302,7 +296,6 @@ func (h *workspaceManagerHandler) textOpts(cfg ideConfig) []text.Option {
 		text.WithCommandOverlayConfig(cfg.commandOverlayConfig()),
 		text.WithPromptConfig(cfg.promptConfig()),
 		text.WithStorage(h.storage),
-		text.WithLogger(h.logger),
 	}
 
 	for seq, cmd := range defaultWorkspaceSequences {
@@ -372,7 +365,6 @@ func (h *workspaceManagerHandler) addWorkspace(
 	res[plugin.PermissionClipboard] = h.clipboard
 
 	pluginOpts := []plugin.Option{
-		plugin.WithLogger(h.logger),
 		plugin.WithLocker(&h.mu),
 		plugin.WithWorkspace(uri),
 	}
@@ -381,7 +373,7 @@ func (h *workspaceManagerHandler) addWorkspace(
 		return fmt.Errorf("error initializing plugin manager: %v", err)
 	}
 
-	go h.initPlugins(h.logger, pluginManager, cfg)
+	go h.initPlugins(pluginManager, cfg)
 
 	h.workspaces[h.focus] = &workspaceHandler{
 		Handler:         ex,
@@ -391,13 +383,12 @@ func (h *workspaceManagerHandler) addWorkspace(
 	h.workspaceCount++
 	h.switchToWorkspace(h.focus)
 
-	logNonFatalErrs(h.logger, configErr, cfg.errors)
+	logNonFatalErrs(configErr, cfg.errors)
 
 	return nil
 }
 
 func logNonFatalErrs(
-	l *log.Logger,
 	configErr error,
 	configErrs map[string]error,
 ) {
@@ -406,8 +397,8 @@ func logNonFatalErrs(
 		err = fmt.Errorf("Failed to load %q: %v", key, err)
 		all = multierr.Append(all, err)
 	}
-	if l != nil && all != nil {
-		l.Warn(all)
+	if all != nil {
+		debug.StandardLogger().Warn(all)
 	}
 }
 

@@ -8,13 +8,14 @@ import (
 	"time"
 
 	"github.com/ernestrc/blue/logging"
+	"github.com/ernestrc/go-tui/debug"
 	"github.com/hashicorp/go-hclog"
 	"github.com/sirupsen/logrus"
 )
 
 var pluginLogger logrus.Logger
 
-func init() {
+func initPluginLogger() {
 	pluginLogger = *logrus.New()
 	SetLoggingOutput(ioutil.Discard)
 	SetLoggingLevel(logrus.InfoLevel)
@@ -22,6 +23,7 @@ func init() {
 		DisableColors:   true,
 		TimestampFormat: time.StampMilli,
 	})
+	debug.InitLogger(&pluginLogger)
 }
 
 // Logger returns the global plugins logger.
@@ -168,11 +170,11 @@ func (l *hcloggerLogrus) With(args ...interface{}) hclog.Logger {
 // name, instead it will substitue it. This does not conform to the original hclog.Logger
 // interface requirements.
 func (l *hcloggerLogrus) Named(name string) hclog.Logger {
-	return l.With(logging.KeyClass, name)
+	return l.With(logging.KeyThread, name)
 }
 
 func (l *hcloggerLogrus) Name() string {
-	v, ok := l.fields[logging.KeyClass]
+	v, ok := l.fields[logging.KeyThread]
 	if !ok {
 		return ""
 	}
@@ -185,7 +187,7 @@ func (l *hcloggerLogrus) Name() string {
 
 // Create a logger that will prepend the name string on the front of all messages.
 func (l *hcloggerLogrus) ResetNamed(name string) hclog.Logger {
-	return l.With(logging.KeyClass, name)
+	return l.With(logging.KeyThread, name)
 }
 
 // Edits the level. This should affect all sub-loggers as well. If an

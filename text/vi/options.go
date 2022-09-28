@@ -3,7 +3,6 @@ package vi
 import (
 	"github.com/ernestrc/go-tui/term"
 	"github.com/ernestrc/go-tui/text"
-	log "github.com/sirupsen/logrus"
 )
 
 // viConfig holds configuration for Vi.
@@ -11,7 +10,6 @@ type viConfig struct {
 	resAttr         term.Attributes
 	clipboard       text.Clipboard
 	defaultRegister string
-	logger          *log.Logger
 	messenger       text.Messenger
 	debug           bool
 	wrap            bool
@@ -31,13 +29,6 @@ func WithResAttr(attr term.Attributes) Option {
 func WithClipboard(clip text.Clipboard) Option {
 	return func(cfg *viConfig) {
 		cfg.clipboard = clip
-	}
-}
-
-// WithLogger sets the editor.Clipboard to use.
-func WithLogger(l *log.Logger) Option {
-	return func(cfg *viConfig) {
-		cfg.logger = l
 	}
 }
 

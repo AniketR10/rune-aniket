@@ -10,7 +10,6 @@ import (
 	"github.com/ernestrc/go-tui/config"
 	pluginpb "github.com/ernestrc/go-tui/plugin/rpc"
 	"github.com/ernestrc/go-tui/proto"
-	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
@@ -76,7 +75,7 @@ func newTestManager(grantor Grantor, opts ...Option) (*Manager, *testGranteePbCl
 		healthChan: make(chan struct{}),
 	}
 
-	m.builder = func(pluginID, path string, grantor Grantor, logger *log.Logger) (*granteeClient, error) {
+	m.builder = func(pluginID, path string, grantor Grantor) (*granteeClient, error) {
 		return newGranteeClient(m.broker, mockpb), nil
 	}
 	m.Init(grantor, opts...)

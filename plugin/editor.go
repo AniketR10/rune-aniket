@@ -3,6 +3,7 @@ package plugin
 import (
 	"sync"
 
+	"github.com/ernestrc/go-tui/debug"
 	"github.com/ernestrc/go-tui/proto"
 	"github.com/ernestrc/go-tui/term"
 	"github.com/ernestrc/go-tui/text"
@@ -30,7 +31,7 @@ func newEditorResourceServer(b text.Editor) *editorResourceServer {
 
 func (s *editorResourceServer) Serve(
 	pluginID string, grantID uint32, broker proto.MuxBroker,
-	l *log.Logger, lock sync.Locker,
+	lock sync.Locker,
 ) error {
 	return acceptAndServe(broker, grantID,
 		func(opts []grpc.ServerOption) proto.MuxServer {
@@ -38,6 +39,7 @@ func (s *editorResourceServer) Serve(
 			defer s.mu.Unlock()
 			if s.srv == nil {
 				var srv proto.MuxServer
+				l := debug.StandardLogger()
 				if l != nil && l.IsLevelEnabled(log.TraceLevel) {
 					srv = proto.LoggingGRPCServer(l, opts...)
 				} else {
@@ -75,7 +77,6 @@ func dialEditor(token uint32, broker proto.MuxBroker) (
 		return nil, err
 	}
 	c := textpb.NewClient(broker, conn)
-	c.Logger = &pluginLogger
 	clients.Store(token, c)
 	return c, nil
 }
