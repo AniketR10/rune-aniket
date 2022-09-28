@@ -10,7 +10,9 @@ import (
 	_ "net/http/pprof"
 	"os"
 	"sync"
+	"time"
 
+	"github.com/ernestrc/blue/retry"
 	multierr "github.com/ernestrc/go-multierror"
 	"github.com/ernestrc/go-tui/browser"
 	"github.com/ernestrc/go-tui/config"
@@ -39,6 +41,8 @@ var (
 	commands = []string{
 		cmdLogs,
 	}
+
+	retryStrategy = retry.ExponentialStrategy(10*time.Millisecond, 10*time.Second)
 )
 
 type logsGrantee struct {
@@ -189,36 +193,21 @@ func (e *logsGrantee) Health() error {
 func consumeAvailableData(
 	reader *bufio.Reader, l *search.List,
 	ch chan<- []byte, quit chan struct{},
-) (ret error) {
-	const maxReadErrorsAllowed = 4
-	var errors int
-	for {
-		data, err := reader.ReadBytes('\n')
-		if len(data) != 0 {
-			select {
-			case ch <- data:
-			case <-quit:
-				close(ch)
-				return
-			}
+) error {
+	data, err := reader.ReadBytes('\n')
+	if len(data) != 0 {
+		select {
+		case ch <- data:
+		case <-quit:
+			close(ch)
+			return nil
 		}
-		if err == io.EOF {
-			l.Pause()
-			break
-		}
-		if err != nil {
-			log.Errorf("error reading from logs file: %s", err)
-			errors++
-			ret = multierr.Append(ret, err)
-			if errors == maxReadErrorsAllowed {
-				break
-			}
-			continue
-		}
-		errors = 0
-		ret = nil
 	}
-	return ret
+	if err == io.EOF {
+		l.Pause()
+		return nil
+	}
+	return err
 }
 
 func consumeData(
@@ -234,21 +223,33 @@ func consumeData(
 		return
 	}
 
+	ctx := context.Background()
 	for {
-		select {
-		case ev := <-watcher.Events:
-			switch ev.Op {
-			case fsnotify.Write:
-				if err := consumeAvailableData(reader, l, ch, quit); err != nil {
-					log.Warnf("max number of reading errors allowed while"+
-						" reading from file; stopping reading: %s", err)
-					return
+		// retry reads and collect watcher errors
+		err := retry.Retry(ctx, retryStrategy, func(ctx context.Context) (bool, error) {
+			select {
+			case ev := <-watcher.Events:
+				switch ev.Op {
+				case fsnotify.Write:
+					if err := consumeAvailableData(reader, l, ch, quit); err != nil {
+						return true, fmt.Errorf("read error: %s", err)
+					}
 				}
+				return false, nil
+			case err := <-watcher.Errors:
+				return true, fmt.Errorf("notify error: %s", err)
+			case <-quit:
+				return false, nil
 			}
-		case err := <-watcher.Errors:
-			log.Warnf("notify error: %s", err)
+		})
+
+		select {
 		case <-quit:
 			return
+		default:
+			if err != nil {
+				log.Warn(err)
+			}
 		}
 	}
 }
