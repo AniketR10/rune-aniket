@@ -1,15 +1,21 @@
 package debug
 
 import (
+	"io/ioutil"
 	"sync"
 
 	log "github.com/sirupsen/logrus"
 )
 
 var (
-	defaultLogger *log.Logger
+	defaultLogger = log.New()
 	mu            sync.Mutex
 )
+
+func init() {
+	defaultLogger.Out = ioutil.Discard
+	defaultLogger.Level = log.PanicLevel
+}
 
 // InitLogger initializes the default debug logger.
 // Note that this should never run production quality code.
@@ -27,9 +33,5 @@ func InitLogger(logger *log.Logger) {
 func StandardLogger() *log.Logger {
 	mu.Lock()
 	defer mu.Unlock()
-
-	if defaultLogger != nil {
-		return defaultLogger
-	}
-	return log.StandardLogger()
+	return defaultLogger
 }
