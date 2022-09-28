@@ -43,8 +43,11 @@ body {
 	cursorStyle       = "background: red; animation: blinker 1s linear infinite;"
 )
 
-/* wrapper to work around:
+/*
+	wrapper to work around:
+
 "syscall/js".Value does not implement jsValue (wrong type for Get method)
+
 	have Get(string) "syscall/js".Value
 	want Get(string) jsValue
 */
@@ -64,8 +67,11 @@ func (v jsValueWrapper) Set(name string, val interface{}) {
 	v.Value.Set(name, val)
 }
 
-/* wrapper to work around:
+/*
+	wrapper to work around:
+
 *dom.Window does not implement domEventEmitter (wrong type for AddEventListener method)
+
 	have AddEventListener(string, dom.EventHandler)
 	want AddEventListener(string, domEventHandler)
 */

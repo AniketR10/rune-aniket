@@ -10,12 +10,12 @@ import (
 	"path"
 	"runtime"
 
-	"github.com/ernestrc/go-tui/config"
-	"github.com/ernestrc/go-tui/proto"
-	"github.com/ernestrc/go-tui/workspace"
-	workspacepb "github.com/ernestrc/go-tui/workspace/rpc"
-	"github.com/ernestrc/go-tui/workspace/ssh"
 	log "github.com/sirupsen/logrus"
+	"unstable.build/go-tui/config"
+	"unstable.build/go-tui/proto"
+	"unstable.build/go-tui/workspace"
+	workspacepb "unstable.build/go-tui/workspace/rpc"
+	"unstable.build/go-tui/workspace/ssh"
 )
 
 var (

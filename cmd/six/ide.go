@@ -7,13 +7,13 @@ import (
 
 	"github.com/ernestrc/blue/logging"
 	multierr "github.com/ernestrc/go-multierror"
-	"github.com/ernestrc/go-tui"
-	"github.com/ernestrc/go-tui/debug"
-	"github.com/ernestrc/go-tui/plugin"
-	"github.com/ernestrc/go-tui/term"
-	"github.com/ernestrc/go-tui/workspace"
-	"github.com/ernestrc/go-tui/workspace/ssh"
 	log "github.com/sirupsen/logrus"
+	"unstable.build/go-tui"
+	"unstable.build/go-tui/debug"
+	"unstable.build/go-tui/plugin"
+	"unstable.build/go-tui/term"
+	"unstable.build/go-tui/workspace"
+	"unstable.build/go-tui/workspace/ssh"
 )
 
 // ide runs a terminal TUI session with a workspaceManagerHandler

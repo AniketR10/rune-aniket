@@ -9,7 +9,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/ernestrc/go-tui/config"
+	"unstable.build/go-tui/config"
 )
 
 // NewNopScheme returns a scheme that does nothing and workspace.Executor API panics.

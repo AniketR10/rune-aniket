@@ -1,9 +1,9 @@
 package browser
 
 import (
-	"github.com/ernestrc/go-tui/component"
-	"github.com/ernestrc/go-tui/handler"
-	"github.com/ernestrc/go-tui/term"
+	"unstable.build/go-tui/component"
+	"unstable.build/go-tui/handler"
+	"unstable.build/go-tui/term"
 )
 
 // DefaultConfig returns the default Config.

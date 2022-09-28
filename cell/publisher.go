@@ -1,7 +1,7 @@
 package cell
 
 import (
-	"github.com/ernestrc/go-tui/term"
+	"unstable.build/go-tui/term"
 )
 
 // A cell.Editor that synchronously

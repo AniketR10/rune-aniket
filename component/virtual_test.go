@@ -4,9 +4,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ernestrc/go-tui/term"
-	testutil "github.com/ernestrc/go-tui/util/test"
 	"github.com/stretchr/testify/require"
+	"unstable.build/go-tui/term"
+	testutil "unstable.build/go-tui/util/test"
 )
 
 func TestIntegrationScroll(t *testing.T) {

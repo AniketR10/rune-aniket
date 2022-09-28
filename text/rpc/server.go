@@ -8,12 +8,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ernestrc/go-tui/browser"
-	"github.com/ernestrc/go-tui/proto"
-	termpb "github.com/ernestrc/go-tui/term/rpc"
-	"github.com/ernestrc/go-tui/text"
-	"github.com/ernestrc/go-tui/workspace"
 	log "github.com/sirupsen/logrus"
+	"unstable.build/go-tui/browser"
+	"unstable.build/go-tui/proto"
+	termpb "unstable.build/go-tui/term/rpc"
+	"unstable.build/go-tui/text"
+	"unstable.build/go-tui/workspace"
 )
 
 var (
@@ -361,7 +361,7 @@ func (s *Server) Register(ctx context.Context, in *RegisterCommandRequest) (
 			URI:      cmd.URI,
 			Start:    cmd.Cursor.Content,
 			From:     cmd.Cursor.Window,
-			Args:  cmd.Args,
+			Args:     cmd.Args,
 		})
 	})
 

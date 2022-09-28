@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/ernestrc/go-tui/util"
+	"unstable.build/go-tui/util"
 )
 
 // URI represents a parsed URI reference.

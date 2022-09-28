@@ -1,8 +1,8 @@
 package rpc
 
 import (
-	"github.com/ernestrc/go-tui/proto"
-	"github.com/ernestrc/go-tui/text"
+	"unstable.build/go-tui/proto"
+	"unstable.build/go-tui/text"
 )
 
 type handlerServerResource struct {

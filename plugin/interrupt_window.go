@@ -3,9 +3,9 @@ package plugin
 import (
 	"context"
 
-	"github.com/ernestrc/go-tui/browser"
-	browserpb "github.com/ernestrc/go-tui/browser/rpc"
-	"github.com/ernestrc/go-tui/term"
+	"unstable.build/go-tui/browser"
+	browserpb "unstable.build/go-tui/browser/rpc"
+	"unstable.build/go-tui/term"
 )
 
 type interruptWindow struct {

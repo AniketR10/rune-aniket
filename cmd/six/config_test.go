@@ -5,13 +5,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ernestrc/go-tui/browser"
-	"github.com/ernestrc/go-tui/component"
-	"github.com/ernestrc/go-tui/handler"
-	"github.com/ernestrc/go-tui/term"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"unstable.build/go-tui/browser"
+	"unstable.build/go-tui/component"
+	"unstable.build/go-tui/handler"
+	"unstable.build/go-tui/term"
 )
 
 var sampleConfig = `

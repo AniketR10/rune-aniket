@@ -11,8 +11,8 @@ import (
 	"runtime"
 	"runtime/pprof"
 
-	"github.com/ernestrc/go-tui"
-	"github.com/ernestrc/go-tui/handler"
+	"unstable.build/go-tui"
+	"unstable.build/go-tui/handler"
 )
 
 var (

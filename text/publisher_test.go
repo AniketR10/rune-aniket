@@ -4,13 +4,13 @@ import (
 	"context"
 	"testing"
 
-	"github.com/ernestrc/go-tui/cell"
-	"github.com/ernestrc/go-tui/component"
-	"github.com/ernestrc/go-tui/term"
-	"github.com/ernestrc/go-tui/workspace"
 	gomock "github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"unstable.build/go-tui/cell"
+	"unstable.build/go-tui/component"
+	"unstable.build/go-tui/term"
+	"unstable.build/go-tui/workspace"
 )
 
 func newEdit(content string) (*cell.Buffer, *component.Scroll, *Cursor) {

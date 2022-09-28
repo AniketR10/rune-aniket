@@ -6,13 +6,13 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/ernestrc/go-tui"
-	"github.com/ernestrc/go-tui/config"
-	"github.com/ernestrc/go-tui/proto"
-	"github.com/ernestrc/go-tui/text"
-	testutil "github.com/ernestrc/go-tui/util/test"
-	"github.com/ernestrc/go-tui/workspace"
 	"github.com/stretchr/testify/require"
+	"unstable.build/go-tui"
+	"unstable.build/go-tui/config"
+	"unstable.build/go-tui/proto"
+	"unstable.build/go-tui/text"
+	testutil "unstable.build/go-tui/util/test"
+	"unstable.build/go-tui/workspace"
 )
 
 type clipboardManagerTest struct {

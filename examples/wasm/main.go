@@ -3,11 +3,11 @@ package main
 import (
 	"log"
 
-	"github.com/ernestrc/go-tui"
-	"github.com/ernestrc/go-tui/cell"
-	"github.com/ernestrc/go-tui/handler"
-	"github.com/ernestrc/go-tui/text/vi"
-	"github.com/ernestrc/go-tui/workspace"
+	"unstable.build/go-tui"
+	"unstable.build/go-tui/cell"
+	"unstable.build/go-tui/handler"
+	"unstable.build/go-tui/text/vi"
+	"unstable.build/go-tui/workspace"
 )
 
 const text = `

@@ -5,16 +5,16 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/ernestrc/go-tui/cell"
-	"github.com/ernestrc/go-tui/config"
-	"github.com/ernestrc/go-tui/term"
-	"github.com/ernestrc/go-tui/text"
-	"github.com/ernestrc/go-tui/workspace"
 	"github.com/ernestrc/golang-internal-tools/lsp/protocol"
 	"github.com/ernestrc/golang-internal-tools/span"
 	"github.com/golang/mock/gomock"
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
+	"unstable.build/go-tui/cell"
+	"unstable.build/go-tui/config"
+	"unstable.build/go-tui/term"
+	"unstable.build/go-tui/text"
+	"unstable.build/go-tui/workspace"
 )
 
 var (

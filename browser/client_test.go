@@ -8,17 +8,17 @@ import (
 	"testing"
 	"time"
 
-	browserpb "github.com/ernestrc/go-tui/browser/rpc"
-	"github.com/ernestrc/go-tui/proto"
-	prototest "github.com/ernestrc/go-tui/proto/test"
-	"github.com/ernestrc/go-tui/term"
-	termpb "github.com/ernestrc/go-tui/term/rpc"
-	"github.com/ernestrc/go-tui/workspace"
 	gomock "github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/goleak"
 	"google.golang.org/grpc"
+	browserpb "unstable.build/go-tui/browser/rpc"
+	"unstable.build/go-tui/proto"
+	prototest "unstable.build/go-tui/proto/test"
+	"unstable.build/go-tui/term"
+	termpb "unstable.build/go-tui/term/rpc"
+	"unstable.build/go-tui/workspace"
 )
 
 var (

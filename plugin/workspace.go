@@ -3,12 +3,12 @@ package plugin
 import (
 	"sync"
 
-	"github.com/ernestrc/go-tui/debug"
-	"github.com/ernestrc/go-tui/proto"
-	"github.com/ernestrc/go-tui/workspace"
-	workspacepb "github.com/ernestrc/go-tui/workspace/rpc"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
+	"unstable.build/go-tui/debug"
+	"unstable.build/go-tui/proto"
+	"unstable.build/go-tui/workspace"
+	workspacepb "unstable.build/go-tui/workspace/rpc"
 )
 
 const (

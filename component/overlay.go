@@ -1,8 +1,8 @@
 package component
 
 import (
-	"github.com/ernestrc/go-tui"
-	"github.com/ernestrc/go-tui/term"
+	"unstable.build/go-tui"
+	"unstable.build/go-tui/term"
 )
 
 // Overlay overlays one component over another one, with potentially padding

@@ -4,7 +4,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ernestrc/go-tui/workspace"
+	"unstable.build/go-tui/workspace"
 )
 
 // WithHandshakeTimeout returns an Option which

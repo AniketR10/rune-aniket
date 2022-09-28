@@ -3,13 +3,13 @@ package main
 import (
 	"strconv"
 
-	"github.com/ernestrc/go-tui"
-	"github.com/ernestrc/go-tui/cell"
-	"github.com/ernestrc/go-tui/component"
-	"github.com/ernestrc/go-tui/handler/search"
-	"github.com/ernestrc/go-tui/term"
-	"github.com/ernestrc/go-tui/text"
-	"github.com/ernestrc/go-tui/workspace"
+	"unstable.build/go-tui"
+	"unstable.build/go-tui/cell"
+	"unstable.build/go-tui/component"
+	"unstable.build/go-tui/handler/search"
+	"unstable.build/go-tui/term"
+	"unstable.build/go-tui/text"
+	"unstable.build/go-tui/workspace"
 )
 
 type mode uint8

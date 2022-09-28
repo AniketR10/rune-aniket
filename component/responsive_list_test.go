@@ -3,11 +3,11 @@ package component
 import (
 	"testing"
 
-	"github.com/ernestrc/go-tui"
-	"github.com/ernestrc/go-tui/term"
-	testutil "github.com/ernestrc/go-tui/util/test"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"unstable.build/go-tui"
+	"unstable.build/go-tui/term"
+	testutil "unstable.build/go-tui/util/test"
 )
 
 type responsiveTestList struct {

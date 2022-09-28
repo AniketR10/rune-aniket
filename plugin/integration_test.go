@@ -9,15 +9,15 @@ import (
 	"testing"
 
 	"github.com/ernestrc/blue/datastore/document"
-	"github.com/ernestrc/go-tui/browser"
-	"github.com/ernestrc/go-tui/cell"
-	"github.com/ernestrc/go-tui/proto"
-	"github.com/ernestrc/go-tui/term"
-	"github.com/ernestrc/go-tui/text"
-	"github.com/ernestrc/go-tui/workspace"
-	workspacetest "github.com/ernestrc/go-tui/workspace/test"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
+	"unstable.build/go-tui/browser"
+	"unstable.build/go-tui/cell"
+	"unstable.build/go-tui/proto"
+	"unstable.build/go-tui/term"
+	"unstable.build/go-tui/text"
+	"unstable.build/go-tui/workspace"
+	workspacetest "unstable.build/go-tui/workspace/test"
 )
 
 func assertClientMethodNoError(

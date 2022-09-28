@@ -5,10 +5,10 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/ernestrc/go-tui/debug"
-	"github.com/ernestrc/go-tui/workspace"
 	"github.com/hashicorp/go-plugin"
 	log "github.com/sirupsen/logrus"
+	"unstable.build/go-tui/debug"
+	"unstable.build/go-tui/workspace"
 )
 
 const (

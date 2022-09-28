@@ -6,14 +6,14 @@ import (
 	"io"
 
 	"github.com/ernestrc/blue/logging"
-	"github.com/ernestrc/go-tui"
-	"github.com/ernestrc/go-tui/cell"
-	"github.com/ernestrc/go-tui/component"
-	"github.com/ernestrc/go-tui/debug"
-	"github.com/ernestrc/go-tui/handler"
-	"github.com/ernestrc/go-tui/term"
-	"github.com/ernestrc/go-tui/workspace"
 	log "github.com/sirupsen/logrus"
+	"unstable.build/go-tui"
+	"unstable.build/go-tui/cell"
+	"unstable.build/go-tui/component"
+	"unstable.build/go-tui/debug"
+	"unstable.build/go-tui/handler"
+	"unstable.build/go-tui/term"
+	"unstable.build/go-tui/workspace"
 )
 
 var (

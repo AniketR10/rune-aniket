@@ -4,13 +4,13 @@ import (
 	"sync"
 
 	bproto "github.com/ernestrc/blue/datastore/rpc"
-	"github.com/ernestrc/go-tui/browser"
-	browserpb "github.com/ernestrc/go-tui/browser/rpc"
-	"github.com/ernestrc/go-tui/debug"
-	"github.com/ernestrc/go-tui/proto"
-	"github.com/ernestrc/go-tui/term"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
+	"unstable.build/go-tui/browser"
+	browserpb "unstable.build/go-tui/browser/rpc"
+	"unstable.build/go-tui/debug"
+	"unstable.build/go-tui/proto"
+	"unstable.build/go-tui/term"
 )
 
 const (

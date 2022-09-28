@@ -4,13 +4,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ernestrc/go-tui"
-	"github.com/ernestrc/go-tui/cell"
-	"github.com/ernestrc/go-tui/component"
-	"github.com/ernestrc/go-tui/term"
-	testutil "github.com/ernestrc/go-tui/util/test"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"unstable.build/go-tui"
+	"unstable.build/go-tui/cell"
+	"unstable.build/go-tui/component"
+	"unstable.build/go-tui/term"
+	testutil "unstable.build/go-tui/util/test"
 )
 
 const snippet = `
@@ -509,16 +509,16 @@ diff_buf_adjust(win_
 		// unix View that trims last EOL, this must in turn translatre in
 		// some internal difference which renders this test failure
 		/*{"Gyyp",
-			`    curtab->tp_diff_
-    diff_redraw(TRUE
-    }               
-  }                 
-  }                 
-  else              
-  diff_buf_add(win->
-}                   
-▐                   
-:             NORMAL`}, */
+					`    curtab->tp_diff_
+		    diff_redraw(TRUE
+		    }
+		  }
+		  }
+		  else
+		  diff_buf_add(win->
+		}
+		▐
+		:             NORMAL`}, */
 	}
 
 	newVi := func(t *testing.T) tui.Handler {

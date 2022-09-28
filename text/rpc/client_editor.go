@@ -3,8 +3,8 @@ package rpc
 import (
 	"context"
 
-	"github.com/ernestrc/go-tui/term"
-	termpb "github.com/ernestrc/go-tui/term/rpc"
+	"unstable.build/go-tui/term"
+	termpb "unstable.build/go-tui/term/rpc"
 )
 
 type clientWriter struct {

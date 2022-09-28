@@ -1,6 +1,6 @@
 package text
 
-import "github.com/ernestrc/go-tui/term"
+import "unstable.build/go-tui/term"
 
 // LocationList is the interface that groups Prev and Next
 // location methods to fetch the previous and next item respectively.

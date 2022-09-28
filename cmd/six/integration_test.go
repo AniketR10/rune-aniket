@@ -6,14 +6,14 @@ import (
 	"os"
 	"testing"
 
-	"github.com/ernestrc/go-tui"
-	"github.com/ernestrc/go-tui/cell"
-	"github.com/ernestrc/go-tui/config"
-	"github.com/ernestrc/go-tui/term"
-	"github.com/ernestrc/go-tui/text/vi"
-	"github.com/ernestrc/go-tui/workspace"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"unstable.build/go-tui"
+	"unstable.build/go-tui/cell"
+	"unstable.build/go-tui/config"
+	"unstable.build/go-tui/term"
+	"unstable.build/go-tui/text/vi"
+	"unstable.build/go-tui/workspace"
 )
 
 func newIntegrationTestCase(t *testing.T, content string) (

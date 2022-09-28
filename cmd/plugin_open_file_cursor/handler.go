@@ -5,16 +5,16 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/ernestrc/go-tui/browser"
-	"github.com/ernestrc/go-tui/cell"
-	"github.com/ernestrc/go-tui/component"
-	"github.com/ernestrc/go-tui/config"
-	"github.com/ernestrc/go-tui/plugin"
-	plugutil "github.com/ernestrc/go-tui/plugin/util"
-	"github.com/ernestrc/go-tui/proto"
-	"github.com/ernestrc/go-tui/text"
-	"github.com/ernestrc/go-tui/workspace"
 	log "github.com/sirupsen/logrus"
+	"unstable.build/go-tui/browser"
+	"unstable.build/go-tui/cell"
+	"unstable.build/go-tui/component"
+	"unstable.build/go-tui/config"
+	"unstable.build/go-tui/plugin"
+	plugutil "unstable.build/go-tui/plugin/util"
+	"unstable.build/go-tui/proto"
+	"unstable.build/go-tui/text"
+	"unstable.build/go-tui/workspace"
 )
 
 const (

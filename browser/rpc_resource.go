@@ -1,8 +1,8 @@
 package browser
 
 import (
-	"github.com/ernestrc/go-tui"
-	"github.com/ernestrc/go-tui/proto"
+	"unstable.build/go-tui"
+	"unstable.build/go-tui/proto"
 )
 
 type windowServerResource struct {

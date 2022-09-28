@@ -3,7 +3,7 @@ package plugin
 import (
 	"context"
 
-	textpb "github.com/ernestrc/go-tui/text/rpc"
+	textpb "unstable.build/go-tui/text/rpc"
 )
 
 // this structure wraps a text.Editor to

@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/ernestrc/go-tui/component"
-	"github.com/ernestrc/go-tui/term"
+	"unstable.build/go-tui/component"
+	"unstable.build/go-tui/term"
 )
 
 // ErrNotFound is returned when config property is not in config.

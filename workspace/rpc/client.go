@@ -6,8 +6,8 @@ import (
 	"io"
 	"time"
 
-	"github.com/ernestrc/go-tui/workspace"
 	"google.golang.org/grpc"
+	"unstable.build/go-tui/workspace"
 )
 
 const defaultTimeout = 10 * time.Second

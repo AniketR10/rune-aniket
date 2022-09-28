@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ernestrc/go-tui/term"
+	"unstable.build/go-tui/term"
 )
 
 type SequenceMatchResult uint8

@@ -3,10 +3,10 @@ package main
 import (
 	"fmt"
 
-	termutil "github.com/ernestrc/go-tui/cmd/plugin_terminal/util"
-	"github.com/ernestrc/go-tui/plugin"
-	"github.com/ernestrc/go-tui/term"
-	"github.com/ernestrc/go-tui/text"
+	termutil "unstable.build/go-tui/cmd/plugin_terminal/util"
+	"unstable.build/go-tui/plugin"
+	"unstable.build/go-tui/term"
+	"unstable.build/go-tui/text"
 )
 
 type mouseDriver struct {

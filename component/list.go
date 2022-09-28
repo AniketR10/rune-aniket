@@ -5,8 +5,8 @@ import (
 	"math"
 	"sort"
 
-	"github.com/ernestrc/go-tui"
-	"github.com/ernestrc/go-tui/term"
+	"unstable.build/go-tui"
+	"unstable.build/go-tui/term"
 )
 
 // ListNode is an element of a component List.

@@ -4,16 +4,16 @@ import (
 	"net/http"
 	_ "net/http/pprof"
 
-	"github.com/ernestrc/go-tui"
-	"github.com/ernestrc/go-tui/browser"
-	"github.com/ernestrc/go-tui/cmd/plugin_fuzzy_file/finder"
-	"github.com/ernestrc/go-tui/config"
-	"github.com/ernestrc/go-tui/plugin"
-	plugutil "github.com/ernestrc/go-tui/plugin/util"
-	"github.com/ernestrc/go-tui/proto"
-	"github.com/ernestrc/go-tui/term"
-	"github.com/ernestrc/go-tui/workspace"
 	log "github.com/sirupsen/logrus"
+	"unstable.build/go-tui"
+	"unstable.build/go-tui/browser"
+	"unstable.build/go-tui/cmd/plugin_fuzzy_file/finder"
+	"unstable.build/go-tui/config"
+	"unstable.build/go-tui/plugin"
+	plugutil "unstable.build/go-tui/plugin/util"
+	"unstable.build/go-tui/proto"
+	"unstable.build/go-tui/term"
+	"unstable.build/go-tui/workspace"
 )
 
 var (

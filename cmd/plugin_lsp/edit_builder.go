@@ -4,11 +4,11 @@ import (
 	"errors"
 	"sort"
 
-	"github.com/ernestrc/go-tui/cell"
-	"github.com/ernestrc/go-tui/term"
-	"github.com/ernestrc/go-tui/text"
 	"github.com/ernestrc/golang-internal-tools/lsp/protocol"
 	log "github.com/sirupsen/logrus"
+	"unstable.build/go-tui/cell"
+	"unstable.build/go-tui/term"
+	"unstable.build/go-tui/text"
 )
 
 type editBuilder struct {

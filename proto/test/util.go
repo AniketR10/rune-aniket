@@ -6,10 +6,10 @@ import (
 	"net"
 	"testing"
 
-	"github.com/ernestrc/go-tui/proto"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/grpc/connectivity"
+	"unstable.build/go-tui/proto"
 )
 
 type testListener struct {

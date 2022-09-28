@@ -1,7 +1,7 @@
 package browser
 
 import (
-	"github.com/ernestrc/go-tui/handler"
+	"unstable.build/go-tui/handler"
 )
 
 // TestHandler is a testing Handler.

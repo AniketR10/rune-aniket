@@ -3,9 +3,9 @@ package rpc
 import (
 	"fmt"
 
-	"github.com/ernestrc/go-tui/browser"
-	termpb "github.com/ernestrc/go-tui/term/rpc"
-	"github.com/ernestrc/go-tui/text"
+	"unstable.build/go-tui/browser"
+	termpb "unstable.build/go-tui/term/rpc"
+	"unstable.build/go-tui/text"
 )
 
 func protoTypeToModel(protoType EditorEvent_Type) (ev text.EventType, err error) {

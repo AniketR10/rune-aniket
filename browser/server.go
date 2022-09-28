@@ -10,14 +10,14 @@ import (
 
 	"github.com/ernestrc/blue/datastore/document"
 	"github.com/ernestrc/blue/logging"
-	browserpb "github.com/ernestrc/go-tui/browser/rpc"
-	"github.com/ernestrc/go-tui/debug"
-	handlerpb "github.com/ernestrc/go-tui/handler/rpc"
-	"github.com/ernestrc/go-tui/proto"
-	"github.com/ernestrc/go-tui/term"
-	"github.com/ernestrc/go-tui/util"
-	"github.com/ernestrc/go-tui/workspace"
 	log "github.com/sirupsen/logrus"
+	browserpb "unstable.build/go-tui/browser/rpc"
+	"unstable.build/go-tui/debug"
+	handlerpb "unstable.build/go-tui/handler/rpc"
+	"unstable.build/go-tui/proto"
+	"unstable.build/go-tui/term"
+	"unstable.build/go-tui/util"
+	"unstable.build/go-tui/workspace"
 )
 
 // Server serves a Browser over GRPC.

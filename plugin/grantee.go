@@ -6,13 +6,13 @@ import (
 	"os"
 	"time"
 
-	"github.com/ernestrc/go-tui/config"
-	"github.com/ernestrc/go-tui/debug"
-	pluginpb "github.com/ernestrc/go-tui/plugin/rpc"
-	"github.com/ernestrc/go-tui/proto"
 	"github.com/hashicorp/go-plugin"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
+	"unstable.build/go-tui/config"
+	"unstable.build/go-tui/debug"
+	pluginpb "unstable.build/go-tui/plugin/rpc"
+	"unstable.build/go-tui/proto"
 )
 
 // Permission represents a type of resource access.

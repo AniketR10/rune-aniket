@@ -4,8 +4,8 @@ import (
 	"io"
 	"strings"
 
-	"github.com/ernestrc/go-tui/cell"
-	"github.com/ernestrc/go-tui/term"
+	"unstable.build/go-tui/cell"
+	"unstable.build/go-tui/term"
 )
 
 // Scroll adds Draw to a Buffer along with

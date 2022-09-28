@@ -3,7 +3,7 @@ Go-TUI is a simple library for writing text-based user interfaces.
 It builds upon tcell's [termbox](https://github.com/ernestrc/tcell) to provide a data model that is simple yet sufficiently expressive to implement classic UNIX TUI programs like less or vi.
 
 # Installation
-Install and update this go package with `go get -u github.com/ernestrc/go-tui`.
+Install and update this go package with `go get -u unstable.build/go-tui`.
 
 # Examples
 For examples of how to use some of the provided building blocks, see the [./examples](./examples) folder. You can compile them by running `make`, which will compile each of the examples into a running executable in the [./bin](./bin) folder.
@@ -21,7 +21,7 @@ This library can be compiled and used in a browser environment:
 - Go to `locahost:8080` with your browser.
 
 ## Documentation
-See https://godoc.org/github.com/ernestrc/go-tui.
+See https://godoc.org/unstable.build/go-tui.
 
 # License
 Copyright (C) Ernest Romero Climent - All Rights Reserved

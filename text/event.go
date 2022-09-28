@@ -3,10 +3,10 @@ package text
 import (
 	"context"
 
-	"github.com/ernestrc/go-tui/cell"
-	"github.com/ernestrc/go-tui/component"
-	"github.com/ernestrc/go-tui/term"
-	"github.com/ernestrc/go-tui/workspace"
+	"unstable.build/go-tui/cell"
+	"unstable.build/go-tui/component"
+	"unstable.build/go-tui/term"
+	"unstable.build/go-tui/workspace"
 )
 
 // EventType is a type of editor event.

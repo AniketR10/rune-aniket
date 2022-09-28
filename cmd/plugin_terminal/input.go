@@ -3,8 +3,8 @@ package main
 import (
 	"fmt"
 
-	termutil "github.com/ernestrc/go-tui/cmd/plugin_terminal/util"
-	"github.com/ernestrc/go-tui/term"
+	termutil "unstable.build/go-tui/cmd/plugin_terminal/util"
+	"unstable.build/go-tui/term"
 )
 
 func getModifierStr(ev term.Event) string {

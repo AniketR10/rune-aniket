@@ -7,10 +7,10 @@ import (
 
 	"github.com/ernestrc/blue/datastore/document"
 	"github.com/ernestrc/blue/retry"
-	"github.com/ernestrc/go-tui/proto"
-	"github.com/ernestrc/go-tui/util"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
+	"unstable.build/go-tui/proto"
+	"unstable.build/go-tui/util"
 )
 
 const (

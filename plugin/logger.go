@@ -8,9 +8,9 @@ import (
 	"time"
 
 	"github.com/ernestrc/blue/logging"
-	"github.com/ernestrc/go-tui/debug"
 	"github.com/hashicorp/go-hclog"
 	"github.com/sirupsen/logrus"
+	"unstable.build/go-tui/debug"
 )
 
 var pluginLogger logrus.Logger

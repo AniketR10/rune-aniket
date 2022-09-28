@@ -1,8 +1,8 @@
 package search
 
 import (
-	"github.com/ernestrc/go-tui/term"
 	fzf "github.com/junegunn/fzf/src/algo"
+	"unstable.build/go-tui/term"
 )
 
 // AlgoConfig is the algoritum to use to search through the input data.

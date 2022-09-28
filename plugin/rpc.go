@@ -7,10 +7,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ernestrc/go-tui/config"
-	pluginpb "github.com/ernestrc/go-tui/plugin/rpc"
-	"github.com/ernestrc/go-tui/proto"
 	"github.com/hashicorp/go-plugin"
+	"unstable.build/go-tui/config"
+	pluginpb "unstable.build/go-tui/plugin/rpc"
+	"unstable.build/go-tui/proto"
 )
 
 const (

@@ -8,8 +8,8 @@ import (
 	"os"
 	"sync"
 
-	workspacepb "github.com/ernestrc/go-tui/workspace/rpc"
 	"google.golang.org/grpc"
+	workspacepb "unstable.build/go-tui/workspace/rpc"
 )
 
 // readerWriterListener satisfies net.Listener by accepting

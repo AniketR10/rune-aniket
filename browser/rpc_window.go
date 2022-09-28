@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	browserpb "github.com/ernestrc/go-tui/browser/rpc"
+	browserpb "unstable.build/go-tui/browser/rpc"
 )
 
 // WindowClient satisfies Window by talking to a

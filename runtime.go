@@ -3,7 +3,7 @@ package tui
 import (
 	"sync"
 
-	"github.com/ernestrc/go-tui/term"
+	"unstable.build/go-tui/term"
 )
 
 func redraw(root Handler, lock sync.Locker, termw term.Writer) (err error) {

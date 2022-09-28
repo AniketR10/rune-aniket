@@ -3,9 +3,9 @@ package text
 import (
 	"testing"
 
-	"github.com/ernestrc/go-tui/term"
 	gomock "github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
+	"unstable.build/go-tui/term"
 )
 
 func evMouseKey(x, y int, key term.Key) term.Event {

@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 
-	"github.com/ernestrc/go-tui/workspace"
+	"unstable.build/go-tui/workspace"
 )
 
 var errFileNotOpen = errors.New("file is not open")

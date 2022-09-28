@@ -1,6 +1,6 @@
 package config
 
-import "github.com/ernestrc/go-tui/term"
+import "unstable.build/go-tui/term"
 
 type nopConfig struct{}
 

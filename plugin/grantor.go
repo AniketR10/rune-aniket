@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/ernestrc/go-tui/proto"
 	log "github.com/sirupsen/logrus"
+	"unstable.build/go-tui/proto"
 )
 
 // ResourceServer wraps the basic Serve method, to serve resources over a mux broker.

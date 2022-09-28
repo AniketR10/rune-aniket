@@ -4,11 +4,11 @@ import (
 	"time"
 
 	"github.com/ernestrc/blue/datastore/document"
-	"github.com/ernestrc/go-tui/browser"
-	"github.com/ernestrc/go-tui/component"
-	"github.com/ernestrc/go-tui/handler"
-	"github.com/ernestrc/go-tui/term"
-	"github.com/ernestrc/go-tui/workspace"
+	"unstable.build/go-tui/browser"
+	"unstable.build/go-tui/component"
+	"unstable.build/go-tui/handler"
+	"unstable.build/go-tui/term"
+	"unstable.build/go-tui/workspace"
 )
 
 // CommandOverlayConfig holds configuration for the

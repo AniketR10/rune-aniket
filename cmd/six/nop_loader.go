@@ -1,8 +1,8 @@
 package main
 
 import (
-	"github.com/ernestrc/go-tui/cell"
-	"github.com/ernestrc/go-tui/workspace"
+	"unstable.build/go-tui/cell"
+	"unstable.build/go-tui/workspace"
 )
 
 type nopLoader struct {

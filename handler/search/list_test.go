@@ -9,11 +9,11 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/ernestrc/go-tui/cell"
-	"github.com/ernestrc/go-tui/term"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/goleak"
+	"unstable.build/go-tui/cell"
+	"unstable.build/go-tui/term"
 )
 
 type listConstructor func(ListConfig) (listIfc, *cell.Buffer)

@@ -1,7 +1,7 @@
 package main
 
 import (
-	plugutil "github.com/ernestrc/go-tui/plugin/util"
+	plugutil "unstable.build/go-tui/plugin/util"
 )
 
 func main() {

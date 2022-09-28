@@ -12,8 +12,8 @@ import (
 	"time"
 
 	multierr "github.com/ernestrc/go-multierror"
-	"github.com/ernestrc/go-tui/cell"
-	"github.com/ernestrc/go-tui/term"
+	"unstable.build/go-tui/cell"
+	"unstable.build/go-tui/term"
 )
 
 const (

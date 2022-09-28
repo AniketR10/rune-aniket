@@ -1,7 +1,7 @@
 package component
 
 import (
-	"github.com/ernestrc/go-tui/term"
+	"unstable.build/go-tui/term"
 )
 
 // TestComponent draws rune Ch, and attributes Bg, Fg on every cell

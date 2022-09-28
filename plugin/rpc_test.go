@@ -9,12 +9,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ernestrc/go-tui/config"
-	pluginpb "github.com/ernestrc/go-tui/plugin/rpc"
-	"github.com/ernestrc/go-tui/proto"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
+	"unstable.build/go-tui/config"
+	pluginpb "unstable.build/go-tui/plugin/rpc"
+	"unstable.build/go-tui/proto"
 )
 
 type testGranteePbClient struct {

@@ -1,9 +1,9 @@
 package handler
 
 import (
-	"github.com/ernestrc/go-tui"
-	"github.com/ernestrc/go-tui/component"
-	"github.com/ernestrc/go-tui/term"
+	"unstable.build/go-tui"
+	"unstable.build/go-tui/component"
+	"unstable.build/go-tui/term"
 )
 
 // TestHandler is a handler used to test composite handlers. Each event

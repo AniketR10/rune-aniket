@@ -5,13 +5,13 @@ import (
 	"sync"
 	"testing"
 
-	pluginpb "github.com/ernestrc/go-tui/plugin/rpc"
-	"github.com/ernestrc/go-tui/proto"
 	gomock "github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/goleak"
 	"google.golang.org/grpc"
+	pluginpb "unstable.build/go-tui/plugin/rpc"
+	"unstable.build/go-tui/proto"
 )
 
 func setupClipboardIntTest(

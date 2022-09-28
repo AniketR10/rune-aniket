@@ -7,8 +7,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/ernestrc/go-tui/term"
 	log "github.com/sirupsen/logrus"
+	"unstable.build/go-tui/term"
 )
 
 func parseCSI(readChan *bufio.Reader) (final rune, params []string, intermediate []rune, raw []rune, exit bool) {

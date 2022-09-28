@@ -1,10 +1,10 @@
 package rpc
 
 import (
-	"github.com/ernestrc/go-tui/cell"
-	"github.com/ernestrc/go-tui/term"
-	termpb "github.com/ernestrc/go-tui/term/rpc"
-	"github.com/ernestrc/go-tui/workspace"
+	"unstable.build/go-tui/cell"
+	"unstable.build/go-tui/term"
+	termpb "unstable.build/go-tui/term/rpc"
+	"unstable.build/go-tui/workspace"
 )
 
 // NewEditRequests converts a buf into an EditRequest.

@@ -6,12 +6,12 @@ import (
 	"testing"
 
 	storepb "github.com/ernestrc/blue/datastore/rpc"
-	browserpb "github.com/ernestrc/go-tui/browser/rpc"
-	"github.com/ernestrc/go-tui/proto"
 	gomock "github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
+	browserpb "unstable.build/go-tui/browser/rpc"
+	"unstable.build/go-tui/proto"
 )
 
 func newClientServerIntegration(

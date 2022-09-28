@@ -8,12 +8,12 @@ import (
 	"time"
 
 	"github.com/ernestrc/blue/logging"
-	"github.com/ernestrc/go-tui"
-	"github.com/ernestrc/go-tui/component"
-	"github.com/ernestrc/go-tui/debug"
-	"github.com/ernestrc/go-tui/term"
-	termpb "github.com/ernestrc/go-tui/term/rpc"
 	log "github.com/sirupsen/logrus"
+	"unstable.build/go-tui"
+	"unstable.build/go-tui/component"
+	"unstable.build/go-tui/debug"
+	"unstable.build/go-tui/term"
+	termpb "unstable.build/go-tui/term/rpc"
 )
 
 const (

@@ -3,10 +3,10 @@ package main
 import (
 	"sync"
 
-	"github.com/ernestrc/go-tui/config"
-	"github.com/ernestrc/go-tui/plugin"
-	"github.com/ernestrc/go-tui/proto"
-	"github.com/ernestrc/go-tui/text"
+	"unstable.build/go-tui/config"
+	"unstable.build/go-tui/plugin"
+	"unstable.build/go-tui/proto"
+	"unstable.build/go-tui/text"
 
 	"github.com/atotto/clipboard"
 	log "github.com/sirupsen/logrus"

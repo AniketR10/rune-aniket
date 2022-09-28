@@ -3,9 +3,9 @@ package component
 import (
 	"math"
 
-	"github.com/ernestrc/go-tui"
-	"github.com/ernestrc/go-tui/cell"
-	"github.com/ernestrc/go-tui/term"
+	"unstable.build/go-tui"
+	"unstable.build/go-tui/cell"
+	"unstable.build/go-tui/term"
 )
 
 // Responsive components implement a backpressure mechanism (Height) for

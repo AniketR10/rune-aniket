@@ -4,10 +4,10 @@ import (
 	"context"
 	"io"
 
-	"github.com/ernestrc/go-tui"
-	"github.com/ernestrc/go-tui/term"
-	termpb "github.com/ernestrc/go-tui/term/rpc"
 	"google.golang.org/grpc"
+	"unstable.build/go-tui"
+	"unstable.build/go-tui/term"
+	termpb "unstable.build/go-tui/term/rpc"
 )
 
 type mockHandlerClient struct {

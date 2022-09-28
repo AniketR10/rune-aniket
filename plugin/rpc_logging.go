@@ -3,9 +3,9 @@ package plugin
 import (
 	"context"
 
-	pluginpb "github.com/ernestrc/go-tui/plugin/rpc"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
+	pluginpb "unstable.build/go-tui/plugin/rpc"
 )
 
 type loggingGranteeServer struct {

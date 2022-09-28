@@ -13,11 +13,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ernestrc/go-tui/cell"
-	"github.com/ernestrc/go-tui/term"
 	gomock "github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"unstable.build/go-tui/cell"
+	"unstable.build/go-tui/term"
 )
 
 const sampleSnippet = `

@@ -4,7 +4,7 @@ import (
 	"image"
 	"sync"
 
-	"github.com/ernestrc/go-tui/term"
+	"unstable.build/go-tui/term"
 )
 
 const TabSize = 8

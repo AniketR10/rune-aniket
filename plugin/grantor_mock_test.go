@@ -3,7 +3,7 @@ package plugin
 import (
 	"sync"
 
-	"github.com/ernestrc/go-tui/proto"
+	"unstable.build/go-tui/proto"
 )
 
 type mockResourceServer struct {

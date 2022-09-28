@@ -7,19 +7,19 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ernestrc/go-tui"
-	"github.com/ernestrc/go-tui/cell"
-	"github.com/ernestrc/go-tui/handler"
-	"github.com/ernestrc/go-tui/proto"
-	prototest "github.com/ernestrc/go-tui/proto/test"
-	"github.com/ernestrc/go-tui/term"
-	termpb "github.com/ernestrc/go-tui/term/rpc"
-	"github.com/ernestrc/go-tui/text"
-	"github.com/ernestrc/go-tui/workspace"
 	gomock "github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
+	"unstable.build/go-tui"
+	"unstable.build/go-tui/cell"
+	"unstable.build/go-tui/handler"
+	"unstable.build/go-tui/proto"
+	prototest "unstable.build/go-tui/proto/test"
+	"unstable.build/go-tui/term"
+	termpb "unstable.build/go-tui/term/rpc"
+	"unstable.build/go-tui/text"
+	"unstable.build/go-tui/workspace"
 )
 
 const asyncResultsSleepDuration = 300 * time.Millisecond

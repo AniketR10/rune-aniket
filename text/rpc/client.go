@@ -8,15 +8,15 @@ import (
 	"time"
 
 	"github.com/ernestrc/blue/logging"
-	"github.com/ernestrc/go-tui/browser"
-	"github.com/ernestrc/go-tui/cell"
-	"github.com/ernestrc/go-tui/debug"
-	"github.com/ernestrc/go-tui/proto"
-	"github.com/ernestrc/go-tui/term"
-	termpb "github.com/ernestrc/go-tui/term/rpc"
-	"github.com/ernestrc/go-tui/text"
-	"github.com/ernestrc/go-tui/workspace"
 	"google.golang.org/grpc"
+	"unstable.build/go-tui/browser"
+	"unstable.build/go-tui/cell"
+	"unstable.build/go-tui/debug"
+	"unstable.build/go-tui/proto"
+	"unstable.build/go-tui/term"
+	termpb "unstable.build/go-tui/term/rpc"
+	"unstable.build/go-tui/text"
+	"unstable.build/go-tui/workspace"
 )
 
 const (

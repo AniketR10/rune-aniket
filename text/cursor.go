@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/ernestrc/go-tui/cell"
-	"github.com/ernestrc/go-tui/component"
-	"github.com/ernestrc/go-tui/term"
+	"unstable.build/go-tui/cell"
+	"unstable.build/go-tui/component"
+	"unstable.build/go-tui/term"
 )
 
 // SelectMode represents a select mode.

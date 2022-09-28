@@ -3,9 +3,9 @@ package text
 import (
 	"errors"
 
-	"github.com/ernestrc/go-tui/cell"
-	"github.com/ernestrc/go-tui/term"
-	"github.com/ernestrc/go-tui/workspace"
+	"unstable.build/go-tui/cell"
+	"unstable.build/go-tui/term"
+	"unstable.build/go-tui/workspace"
 )
 
 type simpleEditor struct {

@@ -4,9 +4,9 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/ernestrc/go-tui/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"unstable.build/go-tui/config"
 )
 
 func parseURI(t *testing.T, uriStr string) URI {

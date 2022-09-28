@@ -3,9 +3,9 @@ package handler
 import (
 	"testing"
 
-	"github.com/ernestrc/go-tui"
-	"github.com/ernestrc/go-tui/term"
-	testutil "github.com/ernestrc/go-tui/util/test"
+	"unstable.build/go-tui"
+	"unstable.build/go-tui/term"
+	testutil "unstable.build/go-tui/util/test"
 )
 
 func TestKeyMappedLessHandle(t *testing.T) {

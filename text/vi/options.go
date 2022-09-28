@@ -1,8 +1,8 @@
 package vi
 
 import (
-	"github.com/ernestrc/go-tui/term"
-	"github.com/ernestrc/go-tui/text"
+	"unstable.build/go-tui/term"
+	"unstable.build/go-tui/text"
 )
 
 // viConfig holds configuration for Vi.

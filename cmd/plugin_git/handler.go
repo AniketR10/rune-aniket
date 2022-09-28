@@ -9,19 +9,19 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/ernestrc/go-tui/browser"
-	"github.com/ernestrc/go-tui/cell"
-	"github.com/ernestrc/go-tui/component"
-	"github.com/ernestrc/go-tui/config"
-	"github.com/ernestrc/go-tui/handler"
-	"github.com/ernestrc/go-tui/plugin"
-	plugutil "github.com/ernestrc/go-tui/plugin/util"
-	"github.com/ernestrc/go-tui/proto"
-	"github.com/ernestrc/go-tui/term"
-	"github.com/ernestrc/go-tui/text"
-	"github.com/ernestrc/go-tui/workspace"
 	log "github.com/sirupsen/logrus"
 	"github.com/sourcegraph/go-diff/diff"
+	"unstable.build/go-tui/browser"
+	"unstable.build/go-tui/cell"
+	"unstable.build/go-tui/component"
+	"unstable.build/go-tui/config"
+	"unstable.build/go-tui/handler"
+	"unstable.build/go-tui/plugin"
+	plugutil "unstable.build/go-tui/plugin/util"
+	"unstable.build/go-tui/proto"
+	"unstable.build/go-tui/term"
+	"unstable.build/go-tui/text"
+	"unstable.build/go-tui/workspace"
 )
 
 const (
@@ -193,7 +193,7 @@ func (h *gitEditorHandler) parseDiff(diff *diff.FileDiff) []text.Location {
 	for _, hunk := range diff.Hunks {
 		log.Tracef("Read file diff hunk: %#v", hunk)
 		if hunk.NewLines == 0 {
-			// FIXME https://github.com/ernestrc/go-tui/issues/59
+			// FIXME https://unstable.build/go-tui/issues/59
 			at := term.Coordinates{Y: int(hunk.NewStartLine - 1)}
 			locs = append(locs, text.Location{
 				From: at,

@@ -4,11 +4,11 @@ import (
 	"io"
 	"sync"
 
-	"github.com/ernestrc/go-tui/config"
-	"github.com/ernestrc/go-tui/plugin"
-	"github.com/ernestrc/go-tui/proto"
-	"github.com/ernestrc/go-tui/text"
 	log "github.com/sirupsen/logrus"
+	"unstable.build/go-tui/config"
+	"unstable.build/go-tui/plugin"
+	"unstable.build/go-tui/proto"
+	"unstable.build/go-tui/text"
 )
 
 // CommandEventHandler combines EventHandler with CommandHandler.

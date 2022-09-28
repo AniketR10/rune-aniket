@@ -4,11 +4,11 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/ernestrc/go-tui/proto"
-	"github.com/ernestrc/go-tui/text"
 	gomock "github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"unstable.build/go-tui/proto"
+	"unstable.build/go-tui/text"
 )
 
 func testCopyPaste(t *testing.T, registerID string, m text.Clipboard) {

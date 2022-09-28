@@ -5,9 +5,9 @@ import (
 	"os"
 	"time"
 
-	"github.com/ernestrc/go-tui/workspace"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/timestamppb"
+	"unstable.build/go-tui/workspace"
 )
 
 var _ workspace.Scheme = (*schemeClientImpl)(nil)

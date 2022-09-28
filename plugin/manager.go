@@ -10,13 +10,13 @@ import (
 
 	"github.com/ernestrc/blue/datastore/document"
 	"github.com/ernestrc/blue/logging"
-	"github.com/ernestrc/go-tui/config"
-	"github.com/ernestrc/go-tui/debug"
-	pluginpb "github.com/ernestrc/go-tui/plugin/rpc"
-	"github.com/ernestrc/go-tui/proto"
-	"github.com/ernestrc/go-tui/util"
-	"github.com/ernestrc/go-tui/workspace"
 	log "github.com/sirupsen/logrus"
+	"unstable.build/go-tui/config"
+	"unstable.build/go-tui/debug"
+	pluginpb "unstable.build/go-tui/plugin/rpc"
+	"unstable.build/go-tui/proto"
+	"unstable.build/go-tui/util"
+	"unstable.build/go-tui/workspace"
 )
 
 const (

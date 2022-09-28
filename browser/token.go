@@ -1,8 +1,8 @@
 package browser
 
 import (
-	"github.com/ernestrc/go-tui"
-	"github.com/ernestrc/go-tui/term"
+	"unstable.build/go-tui"
+	"unstable.build/go-tui/term"
 )
 
 const errMsg = "this Handler is a token handler that cannot be used directly"

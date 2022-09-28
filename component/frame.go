@@ -1,8 +1,8 @@
 package component
 
 import (
-	"github.com/ernestrc/go-tui"
-	"github.com/ernestrc/go-tui/term"
+	"unstable.build/go-tui"
+	"unstable.build/go-tui/term"
 )
 
 // FrameCharSet is a struct used to store the set of characters used to
@@ -10,21 +10,21 @@ import (
 //
 // Example characters (ASCII 9472-9580):
 //
-//   '─', '━', '│', '┃', '┄', '┅', '┆', '┇', '┈', '┉', '┊', '┋', '┌', '┍',
+//	'─', '━', '│', '┃', '┄', '┅', '┆', '┇', '┈', '┉', '┊', '┋', '┌', '┍',
 //
-//   '┎', '┏', '┐', '┑', '┒', '┓', '└', '┕', '┖', '┗', '┘', '┙', '┚', '┛',
+//	'┎', '┏', '┐', '┑', '┒', '┓', '└', '┕', '┖', '┗', '┘', '┙', '┚', '┛',
 //
-//   '├', '┝', '┞', '┟', '┠', '┡', '┢', '┣', '┤', '┥', '┦', '┧', '┨', '┩',
+//	'├', '┝', '┞', '┟', '┠', '┡', '┢', '┣', '┤', '┥', '┦', '┧', '┨', '┩',
 //
-//   '┪', '┫', '┬', '┭', '┮', '┯', '┰', '┱', '┲', '┳', '┴', '┵', '┶', '┷',
+//	'┪', '┫', '┬', '┭', '┮', '┯', '┰', '┱', '┲', '┳', '┴', '┵', '┶', '┷',
 //
-//   '┸', '┹', '┺', '┻', '┼', '┽', '┾', '┿', '╀', '╁', '╂', '╃', '╄', '╅',
+//	'┸', '┹', '┺', '┻', '┼', '┽', '┾', '┿', '╀', '╁', '╂', '╃', '╄', '╅',
 //
-//   '╆', '╇', '╈', '╉', '╊', '╋', '╌', '╍', '╎', '╏', '═', '║', '╒', '╓',
+//	'╆', '╇', '╈', '╉', '╊', '╋', '╌', '╍', '╎', '╏', '═', '║', '╒', '╓',
 //
-//   '╔', '╕', '╖', '╗', '╘', '╙', '╚', '╛', '╜', '╝', '╞', '╟', '╠', '╡',
+//	'╔', '╕', '╖', '╗', '╘', '╙', '╚', '╛', '╜', '╝', '╞', '╟', '╠', '╡',
 //
-//   '╢', '╣', '╤', '╥', '╦', '╧', '╨', '╩'
+//	'╢', '╣', '╤', '╥', '╦', '╧', '╨', '╩'
 type FrameCharSet struct {
 	TopLeft, TopRight               rune
 	BottomLeft, BottomRight         rune
@@ -35,10 +35,9 @@ type FrameCharSet struct {
 // FrameCharSetDefault returns the default FrameCharSet
 // used accross the library. It produces the following frame:
 //
-//   ┌─┐
-//   │ │
-//   └─┘
-//
+//	┌─┐
+//	│ │
+//	└─┘
 func FrameCharSetDefault() FrameCharSet {
 	return FrameCharSet{
 		HorizontalTop:    '─',
@@ -54,10 +53,9 @@ func FrameCharSetDefault() FrameCharSet {
 
 // FrameCharSetHighlight returns a charset that produces the following frame:
 //
-//   ┏━┓
-//   ┃ ┃
-//   ┗━┛
-//
+//	┏━┓
+//	┃ ┃
+//	┗━┛
 func FrameCharSetHighlight() FrameCharSet {
 	return FrameCharSet{
 		HorizontalTop:    '━',
@@ -73,10 +71,9 @@ func FrameCharSetHighlight() FrameCharSet {
 
 // FrameCharSetStack returns a charset that produces the following frame:
 //
-//   ├─┤
-//   │ │
-//   ├─┤
-//
+//	├─┤
+//	│ │
+//	├─┤
 func FrameCharSetStack() FrameCharSet {
 	return FrameCharSet{
 		HorizontalTop:    '─',
@@ -92,10 +89,9 @@ func FrameCharSetStack() FrameCharSet {
 
 // FrameCharSetStackHighlight returns a charset that produces the following frame:
 //
-//   ┢━┪
-//   ┃ ┃
-//   ┡━┩
-//
+//	┢━┪
+//	┃ ┃
+//	┡━┩
 func FrameCharSetStackHighlight() FrameCharSet {
 	return FrameCharSet{
 		HorizontalTop:    '━',
@@ -111,10 +107,9 @@ func FrameCharSetStackHighlight() FrameCharSet {
 
 // FrameCharSetStackHead returns a charset that produces the following frame:
 //
-//   ┌─┐
-//   │ │
-//   ├─┤
-//
+//	┌─┐
+//	│ │
+//	├─┤
 func FrameCharSetStackHead() FrameCharSet {
 	return FrameCharSet{
 		HorizontalTop:    '─',
@@ -130,10 +125,9 @@ func FrameCharSetStackHead() FrameCharSet {
 
 // FrameCharSetStackHeadHighlight returns a charset that produces the following frame:
 //
-//   ┏━┓
-//   ┃ ┃
-//   ┡━┩
-//
+//	┏━┓
+//	┃ ┃
+//	┡━┩
 func FrameCharSetStackHeadHighlight() FrameCharSet {
 	return FrameCharSet{
 		HorizontalTop:    '━',
@@ -149,10 +143,9 @@ func FrameCharSetStackHeadHighlight() FrameCharSet {
 
 // FrameCharSetStackTail returns a charset that produces the following frame:
 //
-//   ├─┤
-//   │ │
-//   └─┘
-//
+//	├─┤
+//	│ │
+//	└─┘
 func FrameCharSetStackTail() FrameCharSet {
 	return FrameCharSet{
 		HorizontalTop:    '─',
@@ -168,10 +161,9 @@ func FrameCharSetStackTail() FrameCharSet {
 
 // FrameCharSetStackTailHighlight returns a charset that produces the following frame:
 //
-//   ┢━┪
-//   ┃ ┃
-//   ┗━┛
-//
+//	┢━┪
+//	┃ ┃
+//	┗━┛
 func FrameCharSetStackTailHighlight() FrameCharSet {
 	return FrameCharSet{
 		HorizontalTop:    '━',

@@ -4,7 +4,7 @@ import (
 	"io"
 	"syscall"
 
-	"github.com/ernestrc/go-tui/cell"
+	"unstable.build/go-tui/cell"
 )
 
 // simple Scheme-backed Workspace implementation.

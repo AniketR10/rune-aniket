@@ -3,7 +3,7 @@ package cell
 import (
 	"container/list"
 
-	"github.com/ernestrc/go-tui/term"
+	"unstable.build/go-tui/term"
 )
 
 // Searcher is an interface that wraps methods to search text in a View.

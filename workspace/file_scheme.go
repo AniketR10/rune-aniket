@@ -10,7 +10,7 @@ import (
 	"os/user"
 	"syscall"
 
-	"github.com/ernestrc/go-tui/config"
+	"unstable.build/go-tui/config"
 )
 
 const (

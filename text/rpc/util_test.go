@@ -3,10 +3,10 @@ package rpc
 import (
 	"testing"
 
-	"github.com/ernestrc/go-tui/cell"
-	termpb "github.com/ernestrc/go-tui/term/rpc"
-	"github.com/ernestrc/go-tui/workspace"
 	"github.com/stretchr/testify/assert"
+	"unstable.build/go-tui/cell"
+	termpb "unstable.build/go-tui/term/rpc"
+	"unstable.build/go-tui/workspace"
 )
 
 func TestBufferEditRequest(t *testing.T) {

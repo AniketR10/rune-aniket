@@ -3,9 +3,9 @@ package component
 import (
 	"testing"
 
-	"github.com/ernestrc/go-tui/term"
-	testutil "github.com/ernestrc/go-tui/util/test"
 	"github.com/stretchr/testify/assert"
+	"unstable.build/go-tui/term"
+	testutil "unstable.build/go-tui/util/test"
 )
 
 func testDrawPrompt(t *testing.T, cfg PromptConfig, expectedOut string) {

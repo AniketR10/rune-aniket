@@ -39,13 +39,14 @@ coverage: $(BIN)
 generate:
 	@ rm -rf **/rpc/*.pb.go
 	@ go generate ./...
-	@ mv browser/github.com/ernestrc/go-tui/browser/rpc/* browser/rpc
-	@ mv text/github.com/ernestrc/go-tui/text/rpc/* text/rpc
-	@ mv plugin/github.com/ernestrc/go-tui/plugin/rpc/* plugin/rpc
-	@ mv workspace/github.com/ernestrc/go-tui/workspace/rpc/* workspace/rpc
-	@ mv term/github.com/ernestrc/go-tui/term/rpc/* term/rpc
-	@ mv handler/github.com/ernestrc/go-tui/handler/rpc/* handler/rpc
-	@ mv config/github.com/ernestrc/go-tui/config/rpc/* config/rpc
+	@ mv browser/unstable.build/go-tui/browser/rpc/* browser/rpc
+	@ mv text/unstable.build/go-tui/text/rpc/* text/rpc
+	@ mv plugin/unstable.build/go-tui/plugin/rpc/* plugin/rpc
+	@ mv workspace/unstable.build/go-tui/workspace/rpc/* workspace/rpc
+	@ mv term/unstable.build/go-tui/term/rpc/* term/rpc
+	@ mv handler/unstable.build/go-tui/handler/rpc/* handler/rpc
+	@ mv config/unstable.build/go-tui/config/rpc/* config/rpc
+	@ rm -rf **/unstable.build **/github.com
 
 install:
 	@ go install ./...

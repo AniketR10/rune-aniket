@@ -11,10 +11,10 @@ import (
 	"time"
 
 	"github.com/ernestrc/blue/retry"
-	"github.com/ernestrc/go-tui/workspace"
-	workspacetest "github.com/ernestrc/go-tui/workspace/test"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
+	"unstable.build/go-tui/workspace"
+	workspacetest "unstable.build/go-tui/workspace/test"
 )
 
 func expectSchemeAPISuccess(t *testing.T, mock *workspacetest.MockScheme, scheme workspace.Scheme) {

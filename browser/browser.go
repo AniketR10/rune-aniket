@@ -2,9 +2,9 @@ package browser
 
 import (
 	"github.com/ernestrc/blue/datastore/document"
-	"github.com/ernestrc/go-tui"
-	"github.com/ernestrc/go-tui/term"
-	"github.com/ernestrc/go-tui/workspace"
+	"unstable.build/go-tui"
+	"unstable.build/go-tui/term"
+	"unstable.build/go-tui/workspace"
 )
 
 // Handler adds Close to a tui.Handler.

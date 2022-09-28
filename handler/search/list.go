@@ -7,11 +7,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ernestrc/go-tui/cell"
-	"github.com/ernestrc/go-tui/component"
-	"github.com/ernestrc/go-tui/term"
 	fzf "github.com/junegunn/fzf/src/algo"
 	"github.com/junegunn/fzf/src/util"
+	"unstable.build/go-tui/cell"
+	"unstable.build/go-tui/component"
+	"unstable.build/go-tui/term"
 )
 
 const (

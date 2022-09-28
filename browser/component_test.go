@@ -3,13 +3,13 @@ package browser
 import (
 	"testing"
 
-	"github.com/ernestrc/go-tui"
-	"github.com/ernestrc/go-tui/handler"
-	"github.com/ernestrc/go-tui/term"
-	testutil "github.com/ernestrc/go-tui/util/test"
-	"github.com/ernestrc/go-tui/workspace"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"unstable.build/go-tui"
+	"unstable.build/go-tui/handler"
+	"unstable.build/go-tui/term"
+	testutil "unstable.build/go-tui/util/test"
+	"unstable.build/go-tui/workspace"
 )
 
 func splitVerticalLeft(c *Component, h Handler) (Window, bool) {

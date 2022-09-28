@@ -1,8 +1,8 @@
 package workspace
 
 import (
-	"github.com/ernestrc/go-tui/cell"
-	"github.com/ernestrc/go-tui/term"
+	"unstable.build/go-tui/cell"
+	"unstable.build/go-tui/term"
 )
 
 // unixFileView is a reader that hides the last EOL if present.

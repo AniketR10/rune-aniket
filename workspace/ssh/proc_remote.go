@@ -9,8 +9,8 @@ import (
 	"syscall"
 
 	"github.com/ernestrc/go-multierror"
-	"github.com/ernestrc/go-tui/config"
-	"github.com/ernestrc/go-tui/workspace"
+	"unstable.build/go-tui/config"
+	"unstable.build/go-tui/workspace"
 )
 
 var (

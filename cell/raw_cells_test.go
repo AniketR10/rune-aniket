@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ernestrc/go-tui/term"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"unstable.build/go-tui/term"
 )
 
 var (

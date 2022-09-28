@@ -5,12 +5,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ernestrc/go-tui/cell"
-	"github.com/ernestrc/go-tui/component"
-	"github.com/ernestrc/go-tui/term"
-	"github.com/ernestrc/go-tui/text"
-	"github.com/ernestrc/go-tui/workspace"
 	"github.com/stretchr/testify/assert"
+	"unstable.build/go-tui/cell"
+	"unstable.build/go-tui/component"
+	"unstable.build/go-tui/term"
+	"unstable.build/go-tui/text"
+	"unstable.build/go-tui/workspace"
 )
 
 var uri workspace.URI

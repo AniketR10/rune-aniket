@@ -3,9 +3,9 @@ package handler
 import (
 	"testing"
 
-	"github.com/ernestrc/go-tui/component"
-	"github.com/ernestrc/go-tui/term"
 	"github.com/stretchr/testify/assert"
+	"unstable.build/go-tui/component"
+	"unstable.build/go-tui/term"
 )
 
 func TestPromptDefaults(t *testing.T) {

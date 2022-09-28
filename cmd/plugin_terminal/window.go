@@ -1,8 +1,8 @@
 package main
 
 import (
-	"github.com/ernestrc/go-tui/browser"
-	termutil "github.com/ernestrc/go-tui/cmd/plugin_terminal/util"
+	"unstable.build/go-tui/browser"
+	termutil "unstable.build/go-tui/cmd/plugin_terminal/util"
 )
 
 var _ termutil.WindowManipulator = (*windowManipulator)(nil)

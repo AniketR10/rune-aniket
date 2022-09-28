@@ -3,7 +3,7 @@ package cell
 import (
 	"fmt"
 
-	"github.com/ernestrc/go-tui/term"
+	"unstable.build/go-tui/term"
 )
 
 // View is the interface that wraps methods to query a 2D matrix of term.Cell.

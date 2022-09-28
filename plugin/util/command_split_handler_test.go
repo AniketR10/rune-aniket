@@ -4,19 +4,19 @@ import (
 	"context"
 	"testing"
 
-	"github.com/ernestrc/go-tui"
-	"github.com/ernestrc/go-tui/browser"
-	"github.com/ernestrc/go-tui/config"
-	"github.com/ernestrc/go-tui/handler"
-	"github.com/ernestrc/go-tui/plugin"
-	"github.com/ernestrc/go-tui/proto"
-	prototest "github.com/ernestrc/go-tui/proto/test"
-	"github.com/ernestrc/go-tui/text"
-	textpb "github.com/ernestrc/go-tui/text/rpc"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/connectivity"
+	"unstable.build/go-tui"
+	"unstable.build/go-tui/browser"
+	"unstable.build/go-tui/config"
+	"unstable.build/go-tui/handler"
+	"unstable.build/go-tui/plugin"
+	"unstable.build/go-tui/proto"
+	prototest "unstable.build/go-tui/proto/test"
+	"unstable.build/go-tui/text"
+	textpb "unstable.build/go-tui/text/rpc"
 )
 
 var emptyConfig = config.MapConfig(make(map[string]interface{}))

@@ -10,16 +10,16 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ernestrc/go-tui"
-	"github.com/ernestrc/go-tui/browser"
-	browserpb "github.com/ernestrc/go-tui/browser/rpc"
-	"github.com/ernestrc/go-tui/proto"
-	"github.com/ernestrc/go-tui/term"
-	"github.com/ernestrc/go-tui/text"
-	"github.com/ernestrc/go-tui/workspace"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/goleak"
 	"google.golang.org/grpc"
+	"unstable.build/go-tui"
+	"unstable.build/go-tui/browser"
+	browserpb "unstable.build/go-tui/browser/rpc"
+	"unstable.build/go-tui/proto"
+	"unstable.build/go-tui/term"
+	"unstable.build/go-tui/text"
+	"unstable.build/go-tui/workspace"
 )
 
 const testingShutdownWait = 500 * time.Millisecond

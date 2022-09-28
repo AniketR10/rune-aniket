@@ -3,8 +3,8 @@ package util
 import (
 	"fmt"
 
-	"github.com/ernestrc/go-tui/cell"
-	"github.com/ernestrc/go-tui/config"
+	"unstable.build/go-tui/cell"
+	"unstable.build/go-tui/config"
 )
 
 // Tabspaces extract browser.tabspaces from the given cfg.

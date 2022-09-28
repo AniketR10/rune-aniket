@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/ernestrc/go-tui/config"
 	"google.golang.org/grpc"
+	"unstable.build/go-tui/config"
 )
 
 type configServer struct {

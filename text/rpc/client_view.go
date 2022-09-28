@@ -3,7 +3,7 @@ package rpc
 import (
 	"context"
 
-	"github.com/ernestrc/go-tui/term"
+	"unstable.build/go-tui/term"
 )
 
 type clientView struct {

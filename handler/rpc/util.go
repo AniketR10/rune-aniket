@@ -3,9 +3,9 @@ package rpc
 import (
 	"strings"
 
-	"github.com/ernestrc/go-tui"
-	"github.com/ernestrc/go-tui/term"
-	termpb "github.com/ernestrc/go-tui/term/rpc"
+	"unstable.build/go-tui"
+	"unstable.build/go-tui/term"
+	termpb "unstable.build/go-tui/term/rpc"
 )
 
 var zeroCell = termpb.Cell{}

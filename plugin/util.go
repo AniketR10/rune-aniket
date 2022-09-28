@@ -1,8 +1,8 @@
 package plugin
 
 import (
-	"github.com/ernestrc/go-tui/proto"
 	"google.golang.org/grpc"
+	"unstable.build/go-tui/proto"
 )
 
 // MergeResourceMap merges m1 with mn.

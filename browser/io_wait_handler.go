@@ -4,8 +4,8 @@ import (
 	context "context"
 	"sync"
 
-	handlerpb "github.com/ernestrc/go-tui/handler/rpc"
 	"google.golang.org/grpc"
+	handlerpb "unstable.build/go-tui/handler/rpc"
 )
 
 // wraps a handlerpb.HandlerClient to provide unlocking a resource mutex while waiting

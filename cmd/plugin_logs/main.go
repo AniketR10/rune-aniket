@@ -14,15 +14,15 @@ import (
 
 	"github.com/ernestrc/blue/retry"
 	multierr "github.com/ernestrc/go-multierror"
-	"github.com/ernestrc/go-tui/browser"
-	"github.com/ernestrc/go-tui/config"
-	"github.com/ernestrc/go-tui/handler/search"
-	"github.com/ernestrc/go-tui/plugin"
-	"github.com/ernestrc/go-tui/proto"
-	"github.com/ernestrc/go-tui/text"
-	"github.com/ernestrc/go-tui/workspace"
 	"github.com/fsnotify/fsnotify"
 	log "github.com/sirupsen/logrus"
+	"unstable.build/go-tui/browser"
+	"unstable.build/go-tui/config"
+	"unstable.build/go-tui/handler/search"
+	"unstable.build/go-tui/plugin"
+	"unstable.build/go-tui/proto"
+	"unstable.build/go-tui/text"
+	"unstable.build/go-tui/workspace"
 )
 
 const (

@@ -3,9 +3,9 @@ package handler
 import (
 	"errors"
 
-	"github.com/ernestrc/go-tui"
-	"github.com/ernestrc/go-tui/component"
-	"github.com/ernestrc/go-tui/term"
+	"unstable.build/go-tui"
+	"unstable.build/go-tui/component"
+	"unstable.build/go-tui/term"
 )
 
 var errCalledZeroValuedWin = "called method on zero-valued Window"

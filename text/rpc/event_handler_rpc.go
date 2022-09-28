@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/ernestrc/go-tui/text"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
+	"unstable.build/go-tui/text"
 )
 
 const (

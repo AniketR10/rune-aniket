@@ -12,10 +12,10 @@ import (
 	"syscall"
 
 	multierr "github.com/ernestrc/go-multierror"
-	"github.com/ernestrc/go-tui/workspace"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/knownhosts"
 	"golang.org/x/term"
+	"unstable.build/go-tui/workspace"
 )
 
 var sigMap = map[syscall.Signal]ssh.Signal{

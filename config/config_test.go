@@ -4,10 +4,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ernestrc/go-tui/component"
-	"github.com/ernestrc/go-tui/term"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"unstable.build/go-tui/component"
+	"unstable.build/go-tui/term"
 )
 
 func TestConfigOk(t *testing.T) {

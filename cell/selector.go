@@ -3,7 +3,7 @@ package cell
 import (
 	"math"
 
-	"github.com/ernestrc/go-tui/term"
+	"unstable.build/go-tui/term"
 )
 
 // selector extends a view to perform cell selection operations.

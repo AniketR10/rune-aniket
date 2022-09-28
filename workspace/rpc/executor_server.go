@@ -7,7 +7,7 @@ import (
 	"sync"
 	"syscall"
 
-	"github.com/ernestrc/go-tui/workspace"
+	"unstable.build/go-tui/workspace"
 )
 
 type executorServer struct {

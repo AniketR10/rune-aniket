@@ -7,8 +7,8 @@ package text
 import (
 	reflect "reflect"
 
-	term "github.com/ernestrc/go-tui/term"
 	gomock "github.com/golang/mock/gomock"
+	term "unstable.build/go-tui/term"
 )
 
 // MockMouseDelegate is a mock of MouseDelegate interface.

@@ -8,17 +8,17 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ernestrc/go-tui"
-	"github.com/ernestrc/go-tui/browser"
-	"github.com/ernestrc/go-tui/cell"
-	"github.com/ernestrc/go-tui/component"
-	"github.com/ernestrc/go-tui/handler"
-	"github.com/ernestrc/go-tui/term"
-	"github.com/ernestrc/go-tui/text"
-	testutil "github.com/ernestrc/go-tui/util/test"
-	"github.com/ernestrc/go-tui/workspace"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"unstable.build/go-tui"
+	"unstable.build/go-tui/browser"
+	"unstable.build/go-tui/cell"
+	"unstable.build/go-tui/component"
+	"unstable.build/go-tui/handler"
+	"unstable.build/go-tui/term"
+	"unstable.build/go-tui/text"
+	testutil "unstable.build/go-tui/util/test"
+	"unstable.build/go-tui/workspace"
 )
 
 // testutil.TestHandlerSequence maps ':' characters to the following event

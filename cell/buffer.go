@@ -4,7 +4,7 @@ import (
 	"io"
 	"strings"
 
-	"github.com/ernestrc/go-tui/term"
+	"unstable.build/go-tui/term"
 )
 
 // A Buffer offers a high level API to manipulate a matrix of term.Cell.

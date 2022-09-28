@@ -10,9 +10,9 @@ import (
 	reflect "reflect"
 	syscall "syscall"
 
-	cell "github.com/ernestrc/go-tui/cell"
-	workspace "github.com/ernestrc/go-tui/workspace"
 	gomock "github.com/golang/mock/gomock"
+	cell "unstable.build/go-tui/cell"
+	workspace "unstable.build/go-tui/workspace"
 )
 
 // MockAPI is a mock of API interface.

@@ -1,8 +1,8 @@
 package text
 
 import (
-	"github.com/ernestrc/go-tui/handler"
-	"github.com/ernestrc/go-tui/workspace"
+	"unstable.build/go-tui/handler"
+	"unstable.build/go-tui/workspace"
 )
 
 // TestHandler is a handler used to test composite handlers. See

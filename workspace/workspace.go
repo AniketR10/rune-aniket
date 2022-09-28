@@ -5,7 +5,7 @@ import (
 	os "os"
 	"syscall"
 
-	"github.com/ernestrc/go-tui/cell"
+	"unstable.build/go-tui/cell"
 )
 
 // API abstract the public-facing API of a workspace.

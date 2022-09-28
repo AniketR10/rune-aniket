@@ -11,10 +11,10 @@ import (
 	"github.com/ernestrc/blue/datastore/document"
 	"github.com/ernestrc/blue/retry"
 	multierr "github.com/ernestrc/go-multierror"
-	"github.com/ernestrc/go-tui/debug"
-	"github.com/ernestrc/go-tui/util"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
+	"unstable.build/go-tui/debug"
+	"unstable.build/go-tui/util"
 )
 
 // satisfies to MuxBroker

@@ -3,9 +3,9 @@ package rpc
 import (
 	"testing"
 
-	"github.com/ernestrc/go-tui/component"
-	termpb "github.com/ernestrc/go-tui/term/rpc"
 	"github.com/stretchr/testify/assert"
+	"unstable.build/go-tui/component"
+	termpb "unstable.build/go-tui/term/rpc"
 )
 
 func TestNewDrawResponse(t *testing.T) {

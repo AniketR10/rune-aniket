@@ -9,15 +9,15 @@ import (
 
 	"github.com/ernestrc/blue/datastore/document"
 	"github.com/ernestrc/blue/logging"
-	"github.com/ernestrc/go-tui"
-	browserpb "github.com/ernestrc/go-tui/browser/rpc"
-	"github.com/ernestrc/go-tui/debug"
-	handlerpb "github.com/ernestrc/go-tui/handler/rpc"
-	"github.com/ernestrc/go-tui/proto"
-	"github.com/ernestrc/go-tui/term"
-	termpb "github.com/ernestrc/go-tui/term/rpc"
-	"github.com/ernestrc/go-tui/workspace"
 	"google.golang.org/grpc"
+	"unstable.build/go-tui"
+	browserpb "unstable.build/go-tui/browser/rpc"
+	"unstable.build/go-tui/debug"
+	handlerpb "unstable.build/go-tui/handler/rpc"
+	"unstable.build/go-tui/proto"
+	"unstable.build/go-tui/term"
+	termpb "unstable.build/go-tui/term/rpc"
+	"unstable.build/go-tui/workspace"
 )
 
 // without access to underlying stream (i.e. SendClose),

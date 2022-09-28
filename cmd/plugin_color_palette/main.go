@@ -4,13 +4,13 @@ import (
 	"net/http"
 	_ "net/http/pprof"
 
-	"github.com/ernestrc/go-tui"
-	"github.com/ernestrc/go-tui/browser"
-	"github.com/ernestrc/go-tui/config"
-	"github.com/ernestrc/go-tui/plugin"
-	plugutil "github.com/ernestrc/go-tui/plugin/util"
-	"github.com/ernestrc/go-tui/proto"
 	log "github.com/sirupsen/logrus"
+	"unstable.build/go-tui"
+	"unstable.build/go-tui/browser"
+	"unstable.build/go-tui/config"
+	"unstable.build/go-tui/plugin"
+	plugutil "unstable.build/go-tui/plugin/util"
+	"unstable.build/go-tui/proto"
 )
 
 func main() {

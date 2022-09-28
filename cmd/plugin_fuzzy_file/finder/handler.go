@@ -9,17 +9,17 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/ernestrc/go-tui"
-	"github.com/ernestrc/go-tui/browser"
-	"github.com/ernestrc/go-tui/component"
-	"github.com/ernestrc/go-tui/config"
-	"github.com/ernestrc/go-tui/handler/search"
-	"github.com/ernestrc/go-tui/plugin"
-	"github.com/ernestrc/go-tui/proto"
-	"github.com/ernestrc/go-tui/term"
-	"github.com/ernestrc/go-tui/text"
-	"github.com/ernestrc/go-tui/workspace"
 	log "github.com/sirupsen/logrus"
+	"unstable.build/go-tui"
+	"unstable.build/go-tui/browser"
+	"unstable.build/go-tui/component"
+	"unstable.build/go-tui/config"
+	"unstable.build/go-tui/handler/search"
+	"unstable.build/go-tui/plugin"
+	"unstable.build/go-tui/proto"
+	"unstable.build/go-tui/term"
+	"unstable.build/go-tui/text"
+	"unstable.build/go-tui/workspace"
 )
 
 const (

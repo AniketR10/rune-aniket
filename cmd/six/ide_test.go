@@ -5,9 +5,9 @@ import (
 	"os"
 	"testing"
 
-	"github.com/ernestrc/go-tui/workspace"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"unstable.build/go-tui/workspace"
 )
 
 func makeTestFiles(t *testing.T) (*os.File, *os.File) {

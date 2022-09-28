@@ -9,10 +9,10 @@ import (
 	"syscall"
 	"testing"
 
-	"github.com/ernestrc/go-tui/config"
-	"github.com/ernestrc/go-tui/workspace"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"unstable.build/go-tui/config"
+	"unstable.build/go-tui/workspace"
 )
 
 type nopExecutor struct {

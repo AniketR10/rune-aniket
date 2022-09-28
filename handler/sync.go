@@ -3,8 +3,8 @@ package handler
 import (
 	"sync"
 
-	"github.com/ernestrc/go-tui"
-	"github.com/ernestrc/go-tui/term"
+	"unstable.build/go-tui"
+	"unstable.build/go-tui/term"
 )
 
 type hsync struct {

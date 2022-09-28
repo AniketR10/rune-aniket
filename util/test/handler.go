@@ -6,10 +6,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ernestrc/go-tui"
-	"github.com/ernestrc/go-tui/term"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"unstable.build/go-tui"
+	"unstable.build/go-tui/term"
 )
 
 // HandlerSequenceTestCase represents an input sequence and

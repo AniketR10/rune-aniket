@@ -8,12 +8,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ernestrc/go-tui/workspace"
-	workspacetest "github.com/ernestrc/go-tui/workspace/test"
 	gomock "github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
+	"unstable.build/go-tui/workspace"
+	workspacetest "unstable.build/go-tui/workspace/test"
 )
 
 func doSetupSchemeClientServerTest(

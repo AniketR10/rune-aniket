@@ -4,7 +4,7 @@ import (
 	"context"
 
 	storepb "github.com/ernestrc/blue/datastore/rpc"
-	browserpb "github.com/ernestrc/go-tui/browser/rpc"
+	browserpb "unstable.build/go-tui/browser/rpc"
 )
 
 type browserServer interface {

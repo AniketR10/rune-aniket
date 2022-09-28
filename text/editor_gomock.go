@@ -8,11 +8,11 @@ import (
 	context "context"
 	reflect "reflect"
 
-	go_tui "github.com/ernestrc/go-tui"
-	cell "github.com/ernestrc/go-tui/cell"
-	term "github.com/ernestrc/go-tui/term"
-	workspace "github.com/ernestrc/go-tui/workspace"
 	gomock "github.com/golang/mock/gomock"
+	go_tui "unstable.build/go-tui"
+	cell "unstable.build/go-tui/cell"
+	term "unstable.build/go-tui/term"
+	workspace "unstable.build/go-tui/workspace"
 )
 
 // MockHandler is a mock of Handler interface.

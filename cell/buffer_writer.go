@@ -1,7 +1,7 @@
 package cell
 
 import (
-	"github.com/ernestrc/go-tui/term"
+	"unstable.build/go-tui/term"
 )
 
 // BufferWriter satisfies term.Writer with a Buffer.

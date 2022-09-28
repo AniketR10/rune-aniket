@@ -7,7 +7,7 @@ import (
 	"syscall"
 
 	multierr "github.com/ernestrc/go-multierror"
-	"github.com/ernestrc/go-tui/workspace"
+	"unstable.build/go-tui/workspace"
 )
 
 type executorClientImpl struct {

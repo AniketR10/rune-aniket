@@ -12,10 +12,10 @@ import (
 	"time"
 
 	multierr "github.com/ernestrc/go-multierror"
-	"github.com/ernestrc/go-tui/config"
-	"github.com/ernestrc/go-tui/workspace"
-	workspacepb "github.com/ernestrc/go-tui/workspace/rpc"
 	"google.golang.org/grpc"
+	"unstable.build/go-tui/config"
+	"unstable.build/go-tui/workspace"
+	workspacepb "unstable.build/go-tui/workspace/rpc"
 )
 
 const (

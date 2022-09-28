@@ -3,7 +3,7 @@ package termutil
 import (
 	"strings"
 
-	"github.com/ernestrc/go-tui/term"
+	"unstable.build/go-tui/term"
 )
 
 type Line struct {

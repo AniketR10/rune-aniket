@@ -4,10 +4,10 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/ernestrc/go-tui/browser"
-	"github.com/ernestrc/go-tui/cell"
-	"github.com/ernestrc/go-tui/term"
-	"github.com/ernestrc/go-tui/workspace"
+	"unstable.build/go-tui/browser"
+	"unstable.build/go-tui/cell"
+	"unstable.build/go-tui/term"
+	"unstable.build/go-tui/workspace"
 )
 
 // Handler just wraps a tui.Handler to indicate that this API's handlers might

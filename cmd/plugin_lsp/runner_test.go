@@ -9,11 +9,11 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/ernestrc/go-tui/cell"
-	"github.com/ernestrc/go-tui/text"
 	"github.com/ernestrc/golang-internal-tools/lsp/protocol"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"unstable.build/go-tui/cell"
+	"unstable.build/go-tui/text"
 )
 
 //go:embed test/*.in

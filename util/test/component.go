@@ -4,9 +4,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ernestrc/go-tui"
-	"github.com/ernestrc/go-tui/term"
 	"github.com/stretchr/testify/assert"
+	"unstable.build/go-tui"
+	"unstable.build/go-tui/term"
 )
 
 // ComponentTestCase represents an action and how a component

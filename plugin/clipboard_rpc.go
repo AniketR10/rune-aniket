@@ -8,8 +8,8 @@ import (
 	"time"
 
 	multierr "github.com/ernestrc/go-multierror"
-	pluginpb "github.com/ernestrc/go-tui/plugin/rpc"
-	"github.com/ernestrc/go-tui/proto"
+	pluginpb "unstable.build/go-tui/plugin/rpc"
+	"unstable.build/go-tui/proto"
 
 	"google.golang.org/grpc"
 )

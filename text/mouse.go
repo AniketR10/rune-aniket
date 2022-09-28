@@ -3,7 +3,7 @@ package text
 import (
 	"time"
 
-	"github.com/ernestrc/go-tui/term"
+	"unstable.build/go-tui/term"
 )
 
 // TODO should be defaults. add config or options

@@ -10,10 +10,10 @@ import (
 	"time"
 
 	multierr "github.com/ernestrc/go-multierror"
-	"github.com/ernestrc/go-tui/debug"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc/connectivity"
 	"google.golang.org/grpc/grpclog"
+	"unstable.build/go-tui/debug"
 )
 
 // ForceCloseResource is a helper function to remove a resource

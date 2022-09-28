@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-option go_package = "github.com/ernestrc/go-tui/plugin/rpc";
+option go_package = "unstable.build/go-tui/plugin/rpc";
 
 package plugin;
 

@@ -11,8 +11,8 @@ import (
 
 	"github.com/ernestrc/blue/logging"
 	"github.com/ernestrc/blue/retry"
-	"github.com/ernestrc/go-tui/debug"
-	"github.com/ernestrc/go-tui/workspace"
+	"unstable.build/go-tui/debug"
+	"unstable.build/go-tui/workspace"
 )
 
 // retry forever, starting with every 10 ms up until every 5s
