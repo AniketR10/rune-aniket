@@ -108,6 +108,7 @@ type clipboardManagerIfc interface {
 }
 
 type workspaceManagerIfc interface {
+	workspace.SchemeManager
 	AddWorkspace(uri workspace.URI) (workspace.Workspace, error)
 }
 
@@ -361,6 +362,7 @@ func (h *workspaceManagerHandler) addWorkspace(
 	res := plugin.BrowserResources(ex.Browser())
 	res = plugin.MergeResourceMap(res, plugin.EditorResources(ex.Editor()))
 	res = plugin.MergeResourceMap(res, plugin.WorkspaceResources(workspace))
+	res = plugin.MergeResourceMap(res, plugin.SchemeManagerResources(h.workspace))
 	res = plugin.MergeResourceMap(res, plugin.ConfigResources(config.MapConfig(h.cfg.cfg)))
 	res[plugin.PermissionClipboard] = h.clipboard
 

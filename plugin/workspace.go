@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	// PermissionWorkspace requests access to execute a process in a workspace.
+	// PermissionWorkspace requests access to manage a workspace.
 	PermissionWorkspace Permission = "_PermWorkspace"
 )
 
@@ -77,7 +77,7 @@ func dialWorkspace(token uint32, broker proto.MuxBroker) (
 	return c, nil
 }
 
-// Workspace acquires the workspace's process executor with the given token.
+// Workspace acquires the workspace's API server with the given token.
 func Workspace(token uint32, broker proto.MuxBroker) (
 	workspace.API, error,
 ) {

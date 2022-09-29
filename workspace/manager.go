@@ -5,8 +5,11 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/ernestrc/blue/logging"
 	multierr "github.com/ernestrc/go-multierror"
+	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui/config"
+	"unstable.build/go-tui/debug"
 )
 
 var (
@@ -14,13 +17,15 @@ var (
 	errProcNotRunning = errors.New("process not running")
 )
 
+var _ SchemeManager = (*Manager)(nil)
+
 // Manager manages resources for a collection of workspaces.
 // It allows clients to register new Schemes and add new workspaces.
 type Manager struct {
 	cfg config.Config
 
 	schemes    map[string]func(config.Config, URI) (Scheme, error)
-	workspaces map[string]Workspace
+	workspaces map[string]managerWorkspace
 }
 
 // adds remove on Close
@@ -49,17 +54,18 @@ func NewManager(cfg config.Config) *Manager {
 func (m *Manager) Init(cfg config.Config) {
 	m.cfg = cfg
 	m.schemes = make(map[string]func(config.Config, URI) (Scheme, error))
-	m.workspaces = make(map[string]Workspace)
+	m.workspaces = make(map[string]managerWorkspace)
 }
 
 // RegisterScheme registers a new scheme for the given scheme and uses fn
 // to allocate it for new workspaces. It returns an error if there's already
 // a scheme registered for the given scheme.
-func (m *Manager) RegisterScheme(scheme string, fn func(config.Config, URI) (Scheme, error)) error {
+func (m *Manager) RegisterScheme(scheme string, fn SchemeFunc) error {
 	_, ok := m.schemes[scheme]
 	if ok {
 		return fmt.Errorf("scheme %q already registered", scheme)
 	}
+	m.log(log.DebugLevel, "RegisterScheme %q", scheme)
 	m.schemes[scheme] = fn
 	return nil
 }
@@ -68,15 +74,30 @@ func (m *Manager) removeWorkspace(uri URI) {
 	delete(m.workspaces, uri.String())
 }
 
+// Scheme returns a SchemeFunc for the given URI.
+func (m *Manager) Scheme(uri URI) (SchemeFunc, error) {
+	schemeFn, ok := m.schemes[uri.parsed.Scheme]
+	if !ok {
+		return nil, fmt.Errorf("scheme not registered %q", uri.parsed.Scheme)
+	}
+	return schemeFn, nil
+}
+
 // AddWorkspace returns a Workspace capable of managing resources on
 // the given URI. It returns an error if no Scheme has been registered
-// (previously via RegisterScheme) for the given workspace's scheme or
-// if this workspace has already been added for the given URI. Note that
+// (previously via RegisterScheme) for the given workspace's scheme. Note that
 // the given URI can be a file URI, in which case the workspace will default
 // to the file's directory as the workspace URI.
+//
+// If a workspace has already been added for the given URI, then this
+// method returns it.
 func (m *Manager) AddWorkspace(uri URI) (Workspace, error) {
-	if _, ok := m.WorkspaceFile(uri); ok {
-		return nil, errors.New("workspace already added")
+	w, ok, err := m.WorkspaceFile(uri)
+	if err != nil {
+		return nil, fmt.Errorf("WorkspaceFile: %s", err)
+	}
+	if ok {
+		return w, nil
 	}
 
 	schemeFn, ok := m.schemes[uri.parsed.Scheme]
@@ -99,20 +120,30 @@ func (m *Manager) AddWorkspace(uri URI) (Workspace, error) {
 	// wrap to provide multi-scheme support
 	// for one-off requests to open a file out of the current
 	workspace = newMulti(m, uri, workspace)
-	workspace = managerWorkspace{uri: uri, m: m, Workspace: workspace}
-	m.workspaces[uri.String()] = workspace
-	return workspace, nil
+	managerWorkspace := managerWorkspace{uri: uri, m: m, Workspace: workspace}
+	m.workspaces[uri.String()] = managerWorkspace
+
+	m.log(log.DebugLevel, "AddWorkspace(%q)", uri.String())
+
+	return managerWorkspace, nil
 }
 
 // WorkspaceFile returns a Workspace suitable for the given file
 // or false if there's currently no Workspace initialized.
-func (m *Manager) WorkspaceFile(file URI) (Workspace, bool) {
+func (m *Manager) WorkspaceFile(file URI) (Workspace, bool, error) {
 	for _, workspace := range m.workspaces {
-		if IsWorkspaceURI(workspace, file) {
-			return workspace, true
+		// avoid multi triggering AddWorkspace which would
+		// call this function in an infinite loop
+		actualWorkspace := workspace.Workspace.(*multi).def
+		is, err := IsWorkspaceURI(actualWorkspace, file)
+		if err != nil {
+			return nil, false, fmt.Errorf("IsWorkspaceURI: %s", err)
+		}
+		if is {
+			return workspace, true, nil
 		}
 	}
-	return nil, false
+	return nil, false, nil
 }
 
 // Close closes all resources associated with this Manager.
@@ -124,6 +155,11 @@ func (m *Manager) Close() error {
 		}
 	}
 	return ret
+}
+
+func (m *Manager) log(level log.Level, msg string, args ...interface{}) {
+	debug.StandardLogger().
+		WithField(logging.KeyClass, "workspace.Manager").Logf(level, msg, args...)
 }
 
 func mapErrors(err error) error {

@@ -233,7 +233,8 @@ func TestIsWorkspaceURI(t *testing.T) {
 			inWorkspace := NewSchemeWorkspace(inWorkspaceURI, fileScheme)
 
 			// sut
-			actualOut := IsWorkspaceURI(inWorkspace, inURI)
+			actualOut, err := IsWorkspaceURI(inWorkspace, inURI)
+			require.NoError(t, err)
 			assert.Equal(t, tcase.expectedOut, actualOut)
 		})
 	}

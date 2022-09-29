@@ -22,7 +22,8 @@ func TestManager(t *testing.T) {
 		err := m.RegisterScheme("test", NewNopScheme)
 		require.NoError(t, err)
 
-		w, ok := m.WorkspaceFile(parseURI(t, "test:///tmp/file.txt"))
+		w, ok, err := m.WorkspaceFile(parseURI(t, "test:///tmp/file.txt"))
+		require.NoError(t, err)
 		assert.Nil(t, w)
 		require.False(t, ok)
 
@@ -30,7 +31,8 @@ func TestManager(t *testing.T) {
 		assert.NotNil(t, w)
 		require.NoError(t, err)
 
-		w1, ok := m.WorkspaceFile(parseURI(t, "test:///tmp/file.txt"))
+		w1, ok, err := m.WorkspaceFile(parseURI(t, "test:///tmp/file.txt"))
+		require.NoError(t, err)
 		require.True(t, ok)
 		assert.Equal(t, w, w1)
 
@@ -46,13 +48,15 @@ func TestManager(t *testing.T) {
 		assert.NotNil(t, w)
 		require.NoError(t, err)
 
-		w1, ok := m.WorkspaceFile(parseURI(t, "test:///tmp/file.txt"))
+		w1, ok, err := m.WorkspaceFile(parseURI(t, "test:///tmp/file.txt"))
+		require.NoError(t, err)
 		require.True(t, ok)
 		assert.Equal(t, w, w1)
 
 		require.NoError(t, w1.Close())
 
-		w1, ok = m.WorkspaceFile(parseURI(t, "test:///tmp/file.txt"))
+		w1, ok, err = m.WorkspaceFile(parseURI(t, "test:///tmp/file.txt"))
+		require.NoError(t, err)
 		require.False(t, ok)
 		assert.Nil(t, w1)
 

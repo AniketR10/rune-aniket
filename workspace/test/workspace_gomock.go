@@ -189,6 +189,43 @@ func (mr *MockAPIMockRecorder) Wait(arg0 interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Wait", reflect.TypeOf((*MockAPI)(nil).Wait), arg0)
 }
 
+// MockSchemeManager is a mock of SchemeManager interface.
+type MockSchemeManager struct {
+	ctrl     *gomock.Controller
+	recorder *MockSchemeManagerMockRecorder
+}
+
+// MockSchemeManagerMockRecorder is the mock recorder for MockSchemeManager.
+type MockSchemeManagerMockRecorder struct {
+	mock *MockSchemeManager
+}
+
+// NewMockSchemeManager creates a new mock instance.
+func NewMockSchemeManager(ctrl *gomock.Controller) *MockSchemeManager {
+	mock := &MockSchemeManager{ctrl: ctrl}
+	mock.recorder = &MockSchemeManagerMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockSchemeManager) EXPECT() *MockSchemeManagerMockRecorder {
+	return m.recorder
+}
+
+// RegisterScheme mocks base method.
+func (m *MockSchemeManager) RegisterScheme(arg0 string, arg1 workspace.SchemeFunc) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RegisterScheme", arg0, arg1)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// RegisterScheme indicates an expected call of RegisterScheme.
+func (mr *MockSchemeManagerMockRecorder) RegisterScheme(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RegisterScheme", reflect.TypeOf((*MockSchemeManager)(nil).RegisterScheme), arg0, arg1)
+}
+
 // MockExecutor is a mock of Executor interface.
 type MockExecutor struct {
 	ctrl     *gomock.Controller

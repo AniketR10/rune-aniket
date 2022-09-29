@@ -1651,3 +1651,175 @@ var Executor_ServiceDesc = grpc.ServiceDesc{
 	Streams:  []grpc.StreamDesc{},
 	Metadata: "rpc/workspace.proto",
 }
+
+// ProxySchemeClient is the client API for ProxyScheme service.
+//
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
+type ProxySchemeClient interface {
+	InitializeProxy(ctx context.Context, in *InitializeProxyRequest, opts ...grpc.CallOption) (*InitializeProxyResponse, error)
+}
+
+type proxySchemeClient struct {
+	cc grpc.ClientConnInterface
+}
+
+func NewProxySchemeClient(cc grpc.ClientConnInterface) ProxySchemeClient {
+	return &proxySchemeClient{cc}
+}
+
+func (c *proxySchemeClient) InitializeProxy(ctx context.Context, in *InitializeProxyRequest, opts ...grpc.CallOption) (*InitializeProxyResponse, error) {
+	out := new(InitializeProxyResponse)
+	err := c.cc.Invoke(ctx, "/workspace.ProxyScheme/InitializeProxy", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// ProxySchemeServer is the server API for ProxyScheme service.
+// All implementations must embed UnimplementedProxySchemeServer
+// for forward compatibility
+type ProxySchemeServer interface {
+	InitializeProxy(context.Context, *InitializeProxyRequest) (*InitializeProxyResponse, error)
+	mustEmbedUnimplementedProxySchemeServer()
+}
+
+// UnimplementedProxySchemeServer must be embedded to have forward compatible implementations.
+type UnimplementedProxySchemeServer struct {
+}
+
+func (UnimplementedProxySchemeServer) InitializeProxy(context.Context, *InitializeProxyRequest) (*InitializeProxyResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method InitializeProxy not implemented")
+}
+func (UnimplementedProxySchemeServer) mustEmbedUnimplementedProxySchemeServer() {}
+
+// UnsafeProxySchemeServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to ProxySchemeServer will
+// result in compilation errors.
+type UnsafeProxySchemeServer interface {
+	mustEmbedUnimplementedProxySchemeServer()
+}
+
+func RegisterProxySchemeServer(s grpc.ServiceRegistrar, srv ProxySchemeServer) {
+	s.RegisterService(&ProxyScheme_ServiceDesc, srv)
+}
+
+func _ProxyScheme_InitializeProxy_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(InitializeProxyRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ProxySchemeServer).InitializeProxy(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/workspace.ProxyScheme/InitializeProxy",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ProxySchemeServer).InitializeProxy(ctx, req.(*InitializeProxyRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+// ProxyScheme_ServiceDesc is the grpc.ServiceDesc for ProxyScheme service.
+// It's only intended for direct use with grpc.RegisterService,
+// and not to be introspected or modified (even as a copy)
+var ProxyScheme_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "workspace.ProxyScheme",
+	HandlerType: (*ProxySchemeServer)(nil),
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "InitializeProxy",
+			Handler:    _ProxyScheme_InitializeProxy_Handler,
+		},
+	},
+	Streams:  []grpc.StreamDesc{},
+	Metadata: "rpc/workspace.proto",
+}
+
+// ManagerClient is the client API for Manager service.
+//
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
+type ManagerClient interface {
+	RegisterScheme(ctx context.Context, in *RegisterSchemeRequest, opts ...grpc.CallOption) (*RegisterSchemeResponse, error)
+}
+
+type managerClient struct {
+	cc grpc.ClientConnInterface
+}
+
+func NewManagerClient(cc grpc.ClientConnInterface) ManagerClient {
+	return &managerClient{cc}
+}
+
+func (c *managerClient) RegisterScheme(ctx context.Context, in *RegisterSchemeRequest, opts ...grpc.CallOption) (*RegisterSchemeResponse, error) {
+	out := new(RegisterSchemeResponse)
+	err := c.cc.Invoke(ctx, "/workspace.Manager/RegisterScheme", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// ManagerServer is the server API for Manager service.
+// All implementations must embed UnimplementedManagerServer
+// for forward compatibility
+type ManagerServer interface {
+	RegisterScheme(context.Context, *RegisterSchemeRequest) (*RegisterSchemeResponse, error)
+	mustEmbedUnimplementedManagerServer()
+}
+
+// UnimplementedManagerServer must be embedded to have forward compatible implementations.
+type UnimplementedManagerServer struct {
+}
+
+func (UnimplementedManagerServer) RegisterScheme(context.Context, *RegisterSchemeRequest) (*RegisterSchemeResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method RegisterScheme not implemented")
+}
+func (UnimplementedManagerServer) mustEmbedUnimplementedManagerServer() {}
+
+// UnsafeManagerServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to ManagerServer will
+// result in compilation errors.
+type UnsafeManagerServer interface {
+	mustEmbedUnimplementedManagerServer()
+}
+
+func RegisterManagerServer(s grpc.ServiceRegistrar, srv ManagerServer) {
+	s.RegisterService(&Manager_ServiceDesc, srv)
+}
+
+func _Manager_RegisterScheme_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RegisterSchemeRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ManagerServer).RegisterScheme(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/workspace.Manager/RegisterScheme",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ManagerServer).RegisterScheme(ctx, req.(*RegisterSchemeRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+// Manager_ServiceDesc is the grpc.ServiceDesc for Manager service.
+// It's only intended for direct use with grpc.RegisterService,
+// and not to be introspected or modified (even as a copy)
+var Manager_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "workspace.Manager",
+	HandlerType: (*ManagerServer)(nil),
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "RegisterScheme",
+			Handler:    _Manager_RegisterScheme_Handler,
+		},
+	},
+	Streams:  []grpc.StreamDesc{},
+	Metadata: "rpc/workspace.proto",
+}

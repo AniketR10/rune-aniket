@@ -157,6 +157,23 @@ message URIResponse {
 message GetwdRequest {
 }
 
+message RegisterSchemeRequest {
+	uint32 proxy_id = 1;
+	string scheme = 2;
+}
+
+message RegisterSchemeResponse {
+}
+
+message InitializeProxyRequest {
+	string uri = 1;
+	string config_json = 2;
+}
+
+message InitializeProxyResponse {
+	uint32 token_id = 1;
+}
+
 service Workspace {
 	rpc URI(URIRequest) returns (URIResponse);
 	rpc Getwd(GetwdRequest) returns (URIResponse);
@@ -218,4 +235,12 @@ service Executor {
 	rpc Close(CloseFileRequest) returns (CloseFileResponse);
 	rpc Read(ReadRequest) returns (ReadResponse);
 	rpc Write(WriteRequest) returns (WriteResponse);
+}
+
+service ProxyScheme {
+	rpc InitializeProxy(InitializeProxyRequest) returns (InitializeProxyResponse);
+}
+
+service Manager {
+	rpc RegisterScheme(RegisterSchemeRequest) returns (RegisterSchemeResponse);
 }

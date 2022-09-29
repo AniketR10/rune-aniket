@@ -10,8 +10,6 @@ import (
 	"unstable.build/go-tui/workspace"
 )
 
-var _ workspace.Scheme = (*schemeClientImpl)(nil)
-
 // NewScheme returns a workspace.Scheme RPC-based client over
 // the given connection. It expects a SchemeServer to be listening
 // on the other side of the connection.

@@ -137,6 +137,23 @@ func (s *SchemeServerImpl) ReadLink(ctx context.Context, req *ReadLinkRequest) (
 	return resp, nil
 }
 
+// URI satisfies SchemeServer.
+func (s *SchemeServerImpl) URI(ctx context.Context, req *URIRequest) (
+	*URIResponse, error,
+) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	path := req.GetPath()
+	uri, err := s.scheme.URI(path)
+	if err != nil {
+		return nil, fmt.Errorf("URI %s error: %s", path, err)
+	}
+	resp := new(URIResponse)
+	resp.Uri = uri.String()
+	return resp, nil
+}
+
 // Command satisfies SchemeServer
 func (s *SchemeServerImpl) Command(
 	ctx context.Context, req *CommandRequest,

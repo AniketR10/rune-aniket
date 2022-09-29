@@ -6,6 +6,7 @@ import (
 	"syscall"
 
 	"unstable.build/go-tui/cell"
+	"unstable.build/go-tui/config"
 )
 
 // API abstract the public-facing API of a workspace.
@@ -17,6 +18,14 @@ type API interface {
 	URI(path string) (URI, error)
 
 	Executor
+}
+
+// SchemeFunc represents a Scheme constructor.
+type SchemeFunc func(config.Config, URI) (Scheme, error)
+
+// SchemeManager abstracts the ability to register new URI schemes.
+type SchemeManager interface {
+	RegisterScheme(string, SchemeFunc) error
 }
 
 // Pid is an Executor's command identifier. It doesn't necessarily translate

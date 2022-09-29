@@ -1,6 +1,7 @@
 package workspace
 
 import (
+	"fmt"
 	"io"
 	"syscall"
 
@@ -22,14 +23,22 @@ func newMulti(manager *Manager, defURI URI, def Workspace) *multi {
 }
 
 func (m multi) Load(file URI, buf *cell.Buffer, swapDir URI, readOnly bool) (FlusherCloser, error) {
-	if !IsWorkspaceURI(m.def, file) {
+	is, err := IsWorkspaceURI(m.def, file)
+	if err != nil {
+		return nil, fmt.Errorf("multi.IsWorkspaceURI: %s", err)
+	}
+	if !is {
 		return m.loadExtraneous(file, buf, swapDir, readOnly)
 	}
 	return m.def.Load(file, buf, swapDir, readOnly)
 }
 
 func (m multi) Recover(file, swapFilePath URI, buf *cell.Buffer, force bool) (FlusherCloser, error) {
-	if !IsWorkspaceURI(m.def, file) {
+	is, err := IsWorkspaceURI(m.def, file)
+	if err != nil {
+		return nil, fmt.Errorf("multi.IsWorkspaceURI: %s", err)
+	}
+	if !is {
 		return m.recoverExtraneous(file, swapFilePath, buf, force)
 	}
 	return m.def.Recover(file, swapFilePath, buf, force)
@@ -78,12 +87,15 @@ func (m multi) Close() error {
 }
 
 func (m multi) loadExtraneous(file URI, buf *cell.Buffer, swapDir URI, readOnly bool) (FlusherCloser, error) {
-	workspace, ok := m.manager.WorkspaceFile(file)
+	workspace, ok, err := m.manager.WorkspaceFile(file)
+	if err != nil {
+		return nil, fmt.Errorf("WorkspaceFile: %s", err)
+	}
 	if ok {
 		return workspace.Load(file, buf, swapDir, readOnly)
 	}
 
-	workspace, err := m.manager.AddWorkspace(file)
+	workspace, err = m.manager.AddWorkspace(file)
 	if err != nil {
 		return nil, err
 	}
@@ -91,12 +103,15 @@ func (m multi) loadExtraneous(file URI, buf *cell.Buffer, swapDir URI, readOnly 
 }
 
 func (m multi) recoverExtraneous(file, swapFilePath URI, buf *cell.Buffer, force bool) (FlusherCloser, error) {
-	workspace, ok := m.manager.WorkspaceFile(file)
+	workspace, ok, err := m.manager.WorkspaceFile(file)
+	if err != nil {
+		return nil, fmt.Errorf("WorkspaceFile: %s", err)
+	}
 	if ok {
 		return workspace.Recover(file, swapFilePath, buf, force)
 	}
 
-	workspace, err := m.manager.AddWorkspace(file)
+	workspace, err = m.manager.AddWorkspace(file)
 	if err != nil {
 		return nil, err
 	}

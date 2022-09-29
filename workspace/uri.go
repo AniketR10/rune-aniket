@@ -240,22 +240,22 @@ func ExpandPath(
 }
 
 // IsWorkspaceURI returns whether uri belongs to the given workspace.
-func IsWorkspaceURI(workspace Workspace, uri URI) bool {
+func IsWorkspaceURI(workspace Workspace, uri URI) (bool, error) {
 	uriAtWorkspace, err := workspace.URI(uri.Path())
 	if err != nil {
-		return false
+		return false, err
 	}
 	if uri.Scheme() != uriAtWorkspace.Scheme() {
-		return false
+		return false, nil
 	}
 	if uri.Hostname() != uriAtWorkspace.Hostname() {
-		return false
+		return false, nil
 	}
 	if uri.Port() != uriAtWorkspace.Port() {
-		return false
+		return false, nil
 	}
 	if uri.User() != uriAtWorkspace.User() {
-		return false
+		return false, nil
 	}
-	return true
+	return true, nil
 }
