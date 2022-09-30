@@ -8,6 +8,7 @@ import (
 	"os/user"
 	"sort"
 	"strconv"
+	"strings"
 	"sync"
 
 	"github.com/ernestrc/blue/datastore/document"
@@ -411,13 +412,23 @@ func (h *workspaceManagerHandler) commandAddWorkspace(args ...string) (bool, err
 			"Switch to an empty workspace tab to add a workspace")
 	}
 	path := args[0]
+
+	// if literal URI use as-is
+	if strings.Contains(path, "://") {
+		uri, err := workspace.ParseURI(path)
+		if err == nil {
+			return false, h.addWorkspace(uri, h.cfg, "", nil)
+		}
+		return false, fmt.Errorf("malformed URI: %s", err)
+	}
+
 	path, err := workspace.ExpandPath(path, user.Current, os.Getwd)
 	if err != nil {
 		return false, fmt.Errorf("ExpandPath: %s", err)
 	}
 	uri, err := workspace.ParseURI(path)
 	if err != nil {
-		return false, fmt.Errorf("ParseURI: %s", err)
+		return false, fmt.Errorf("malformed URI: %s", err)
 	}
 	return false, h.addWorkspace(uri, h.cfg, "", nil)
 }

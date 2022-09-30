@@ -5,6 +5,7 @@ import (
 	"os/exec"
 	"strings"
 
+	"github.com/ernestrc/blue/logging"
 	"github.com/hashicorp/go-plugin"
 	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui/debug"
@@ -38,6 +39,10 @@ func goPluginGranteeBuilder(m *Manager) pluginBuilder {
 				return nil, fmt.Errorf("could not expand workspace path: %q", m.config.workspace.Path())
 			}
 		}
+
+		debug.StandardLogger().WithField(logging.KeyClass, "plugin.Manager").
+			Debugf("plugin command Cmd=%#v for workspace=%q", cmd, m.config.workspace)
+
 		cmd.Env = append(cmd.Env, makeBrokerRemoteAddrEnv(m.brokerAddr.String()))
 		cmd.Env = append(cmd.Env, makeLogLevelEnv(debug.StandardLogger().GetLevel()))
 
