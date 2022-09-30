@@ -25,6 +25,7 @@ require (
 	google.golang.org/grpc v1.45.0
 	google.golang.org/protobuf v1.27.1
 	gopkg.in/yaml.v3 v3.0.0-20200615113413-eeeca48fe776
+	upspin.io v0.0.0-20220526012102-c626106d18af
 )
 
 require (
@@ -68,6 +69,7 @@ require (
 	github.com/google/go-cmp v0.5.5 // indirect
 	github.com/mattn/go-colorable v0.1.8 // indirect
 	google.golang.org/genproto v0.0.0-20220314164441-57ef72a4c106 // indirect
+	gopkg.in/yaml.v2 v2.4.0 // indirect
 )
 
 replace github.com/hashicorp/go-plugin => github.com/ernestrc/go-plugin v1.4.5
