@@ -293,7 +293,9 @@ func (c *Component) Tabs() (ret []*Tab) {
 
 func (c *Component) closeTab(t *Tab) error {
 	err := t.Close()
-	c.log(log.WarnLevel, "tab Close error: %v", err)
+	if err != nil {
+		c.log(log.WarnLevel, "tab Close error: %v", err)
+	}
 	return err
 }
 
