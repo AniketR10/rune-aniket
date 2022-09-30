@@ -13,25 +13,61 @@ import (
 )
 
 // NewNopScheme returns a scheme that does nothing and workspace.Executor API panics.
-func NewNopScheme(cfg config.Config, uri URI) (Scheme, error) {
-	scheme := &testScheme{}
-	scheme.openFunc = func(name string, flag int, perm os.FileMode) (File, *Error) {
-		return nil, nil
+func NewNopScheme(scheme string) SchemeFunc {
+	return func(cfg config.Config, uri URI) (Scheme, error) {
+		scheme := &testScheme{scheme: scheme}
+		scheme.openFunc = func(name string, flag int, perm os.FileMode) (File, *Error) {
+			return testFile{}, nil
+		}
+		scheme.removeFunc = func(name string) error {
+			return nil
+		}
+		scheme.renameFunc = func(oldName, newName string) error {
+			return nil
+		}
+		scheme.statFunc = func(name string) (os.FileInfo, error) {
+			// best effort
+			return testFileInfo{isDir: !strings.Contains(name, ".")}, nil
+		}
+		scheme.lstatFunc = func(name string) (os.FileInfo, error) {
+			return testFileInfo{}, nil
+		}
+		return scheme, nil
 	}
-	scheme.removeFunc = func(name string) error {
-		return nil
-	}
-	scheme.renameFunc = func(oldName, newName string) error {
-		return nil
-	}
-	scheme.statFunc = func(name string) (os.FileInfo, error) {
-		// best effort
-		return testFileInfo{isDir: !strings.Contains(name, ".")}, nil
-	}
-	scheme.lstatFunc = func(name string) (os.FileInfo, error) {
-		return testFileInfo{}, nil
-	}
-	return scheme, nil
+}
+
+type testFile struct {
+}
+
+func (t testFile) Name() string {
+	return ""
+}
+
+func (t testFile) Stat() (os.FileInfo, error) {
+	return testFileInfo{}, nil
+}
+
+func (t testFile) Sync() error {
+	return nil
+}
+func (t testFile) Truncate(size int64) error {
+	return nil
+}
+
+func (t testFile) Seek(x int64, y int) (int64, error) {
+	return 0, nil
+}
+
+func (t testFile) Read(b []byte) (int, error) {
+	return 0, io.EOF
+}
+
+func (t testFile) Write(b []byte) (int, error) {
+	return 0, nil
+}
+
+func (t testFile) Close() error {
+	return nil
 }
 
 // implements os.FileInfo
@@ -67,6 +103,7 @@ func (t testFileInfo) Sys() interface{} {
 }
 
 type testScheme struct {
+	scheme     string
 	openFunc   func(name string, flag int, perm os.FileMode) (File, *Error)
 	removeFunc func(name string) error
 	renameFunc func(oldName, newName string) error
@@ -97,7 +134,7 @@ func (t *testScheme) Wait(Pid) error {
 }
 
 func (t *testScheme) URI(path string) (URI, error) {
-	return ParseURI(fmt.Sprintf("test://%s", filepath.Join("/", path)))
+	return ParseURI(fmt.Sprintf("%s://%s", t.scheme, filepath.Join("/", path)))
 }
 
 func (t *testScheme) Open(path string, flag int, perm os.FileMode) (File, *Error) {

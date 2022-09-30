@@ -6,6 +6,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/config"
 )
 
@@ -19,10 +20,10 @@ func TestManager(t *testing.T) {
 
 	t.Run("registers scheme to be used by AddWorkspace", func(*testing.T) {
 		m := NewManager(config.NopConfig())
-		err := m.RegisterScheme("test", NewNopScheme)
+		err := m.RegisterScheme("test", NewNopScheme("test"))
 		require.NoError(t, err)
 
-		w, ok, err := m.WorkspaceFile(parseURI(t, "test:///tmp/file.txt"))
+		w, ok, err := m.Workspace(parseURI(t, "test:///tmp/file.txt"))
 		require.NoError(t, err)
 		assert.Nil(t, w)
 		require.False(t, ok)
@@ -31,7 +32,7 @@ func TestManager(t *testing.T) {
 		assert.NotNil(t, w)
 		require.NoError(t, err)
 
-		w1, ok, err := m.WorkspaceFile(parseURI(t, "test:///tmp/file.txt"))
+		w1, ok, err := m.Workspace(parseURI(t, "test:///tmp/file.txt"))
 		require.NoError(t, err)
 		require.True(t, ok)
 		assert.Equal(t, w, w1)
@@ -41,21 +42,21 @@ func TestManager(t *testing.T) {
 
 	t.Run("removes Workspace upon call to workspace.Close", func(*testing.T) {
 		m := NewManager(config.NopConfig())
-		err := m.RegisterScheme("test", NewNopScheme)
+		err := m.RegisterScheme("test", NewNopScheme("test"))
 		require.NoError(t, err)
 
 		w, err := m.AddWorkspace(parseURI(t, "test:///tmp/"))
 		assert.NotNil(t, w)
 		require.NoError(t, err)
 
-		w1, ok, err := m.WorkspaceFile(parseURI(t, "test:///tmp/file.txt"))
+		w1, ok, err := m.Workspace(parseURI(t, "test:///tmp/file.txt"))
 		require.NoError(t, err)
 		require.True(t, ok)
 		assert.Equal(t, w, w1)
 
 		require.NoError(t, w1.Close())
 
-		w1, ok, err = m.WorkspaceFile(parseURI(t, "test:///tmp/file.txt"))
+		w1, ok, err = m.Workspace(parseURI(t, "test:///tmp/file.txt"))
 		require.NoError(t, err)
 		require.False(t, ok)
 		assert.Nil(t, w1)
@@ -65,9 +66,9 @@ func TestManager(t *testing.T) {
 
 	t.Run("register same scheme twice returns error", func(t *testing.T) {
 		m := NewManager(config.NopConfig())
-		err := m.RegisterScheme("test", NewNopScheme)
+		err := m.RegisterScheme("test", NewNopScheme("test"))
 		require.NoError(t, err)
-		err = m.RegisterScheme("test", NewNopScheme)
+		err = m.RegisterScheme("test", NewNopScheme("test"))
 		require.Error(t, err)
 	})
 
@@ -117,5 +118,50 @@ func TestManager(t *testing.T) {
 		assert.True(t, called)
 
 		require.NoError(t, m.Close())
+	})
+}
+
+func TestIntegrationManagerWithWorkspaceLoad(t *testing.T) {
+	finnWorkspaceURI, err := ParseURI("finn:///tmp/hello")
+	require.NoError(t, err)
+
+	jakeFileURI, err := ParseURI("jake:///tmp/hello")
+	require.NoError(t, err)
+
+	jakeSwapDirURI, err := ParseURI("jake:///tmp/hello/.hallo.txt.swp")
+	require.NoError(t, err)
+
+	t.Run("default workspace is NOT able to load files from other schemes", func(t *testing.T) {
+		manager := NewManager(config.NopConfig())
+		require.NoError(t, manager.RegisterScheme("finn", NewNopScheme("finn")))
+		require.NoError(t, manager.RegisterScheme("jake", NewNopScheme("jake")))
+
+		finnWorkspace, err := manager.AddWorkspace(finnWorkspaceURI)
+		require.NoError(t, err)
+
+		_, err = finnWorkspace.Load(jakeFileURI, cell.NewBuffer(), jakeSwapDirURI, false)
+		require.Error(t, err)
+
+		_, err = finnWorkspace.Recover(jakeFileURI, jakeSwapDirURI, cell.NewBuffer(), false)
+		require.Error(t, err)
+	})
+
+	t.Run("default workspace wrapped with multi is able to load files from other schemes", func(t *testing.T) {
+		manager := NewManager(config.NopConfig())
+		require.NoError(t, manager.RegisterScheme("finn", LoggingScheme("finn", NewNopScheme("finn"))))
+		require.NoError(t, manager.RegisterScheme("jake", LoggingScheme("jake", NewNopScheme("jake"))))
+
+		finnWorkspace, err := manager.AddWorkspace(finnWorkspaceURI)
+		require.NoError(t, err)
+
+		finnWorkspace = Multi(manager, finnWorkspace, finnWorkspaceURI)
+
+		ret, err := finnWorkspace.Load(jakeFileURI, cell.NewBuffer(), jakeSwapDirURI, false)
+		require.NoError(t, err)
+		require.NoError(t, ret.Close())
+
+		ret, err = finnWorkspace.Recover(jakeFileURI, jakeSwapDirURI, cell.NewBuffer(), false)
+		require.NoError(t, err)
+		require.NoError(t, ret.Close())
 	})
 }

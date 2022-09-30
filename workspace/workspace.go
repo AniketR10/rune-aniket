@@ -28,6 +28,12 @@ type SchemeManager interface {
 	RegisterScheme(string, SchemeFunc) error
 }
 
+// WorkspaceManager abstracts the ability to register schemes and workspaces.
+type WorkspaceManager interface {
+	SchemeManager
+	AddWorkspace(URI) (Workspace, error)
+}
+
 // Pid is an Executor's command identifier. It doesn't necessarily translate
 // to an os.Process.Pid.
 type Pid int32

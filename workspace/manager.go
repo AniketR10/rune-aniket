@@ -66,6 +66,9 @@ func (m *Manager) RegisterScheme(scheme string, fn SchemeFunc) error {
 		return fmt.Errorf("scheme %q already registered", scheme)
 	}
 	m.log(log.DebugLevel, "RegisterScheme %q", scheme)
+	if debug.StandardLogger().IsLevelEnabled(log.TraceLevel) {
+		fn = LoggingScheme(scheme, fn)
+	}
 	m.schemes[scheme] = fn
 	return nil
 }
@@ -92,9 +95,9 @@ func (m *Manager) Scheme(uri URI) (SchemeFunc, error) {
 // If a workspace has already been added for the given URI, then this
 // method returns it.
 func (m *Manager) AddWorkspace(uri URI) (Workspace, error) {
-	w, ok, err := m.WorkspaceFile(uri)
+	w, ok, err := m.Workspace(uri)
 	if err != nil {
-		return nil, fmt.Errorf("WorkspaceFile: %s", err)
+		return nil, fmt.Errorf("Workspace: %s", err)
 	}
 	if ok {
 		return w, nil
@@ -117,9 +120,6 @@ func (m *Manager) AddWorkspace(uri URI) (Workspace, error) {
 	}
 
 	workspace := NewSchemeWorkspace(uri, scheme)
-	// wrap to provide multi-scheme support
-	// for one-off requests to open a file out of the current
-	workspace = newMulti(m, uri, workspace)
 	managerWorkspace := managerWorkspace{uri: uri, m: m, Workspace: workspace}
 	m.workspaces[uri.String()] = managerWorkspace
 
@@ -128,14 +128,11 @@ func (m *Manager) AddWorkspace(uri URI) (Workspace, error) {
 	return managerWorkspace, nil
 }
 
-// WorkspaceFile returns a Workspace suitable for the given file
+// Workspace returns a Workspace suitable for the given file
 // or false if there's currently no Workspace initialized.
-func (m *Manager) WorkspaceFile(file URI) (Workspace, bool, error) {
+func (m *Manager) Workspace(file URI) (Workspace, bool, error) {
 	for _, workspace := range m.workspaces {
-		// avoid multi triggering AddWorkspace which would
-		// call this function in an infinite loop
-		actualWorkspace := workspace.Workspace.(*multi).def
-		is, err := IsWorkspaceURI(actualWorkspace, file)
+		is, err := IsWorkspaceURI(workspace, file)
 		if err != nil {
 			return nil, false, fmt.Errorf("IsWorkspaceURI: %s", err)
 		}

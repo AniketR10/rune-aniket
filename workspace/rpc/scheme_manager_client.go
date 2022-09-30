@@ -47,7 +47,7 @@ func (c *schemeManagerClient) serveProxyServer(scheme string, fn workspace.Schem
 	var psrv *proxySchemeServerImpl
 	ret, _, err := proto.AcceptAndServe(c.broker,
 		func(proxyID uint32, srv proto.MuxServer) {
-			psrv := newProxySchemeServerImpl(c.broker, srv, scheme, fn)
+			psrv = newProxySchemeServerImpl(c.broker, srv, scheme, fn)
 			RegisterProxySchemeServer(srv.GRPC(), psrv)
 		})
 	if err != nil {

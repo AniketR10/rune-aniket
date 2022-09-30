@@ -89,7 +89,7 @@ func (c *schemeClientImpl) Open(name string, flag int, perm os.FileMode) (
 	ctx, cleanup := ctxWithTimeout()
 	defer cleanup()
 
-	req := OpenRequest{Filename: name, Flag: int32(flag), Mode: int32(perm)}
+	req := OpenRequest{Filename: name, Flag: int64(flag), Mode: int32(perm)}
 	resp, err := c.client.Open(ctx, &req)
 	if err != nil {
 		return nil, &workspace.Error{Err: err}

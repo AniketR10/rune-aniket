@@ -80,19 +80,6 @@ func newIntegrationTestCase(t *testing.T, endsInEOL bool) (
 func openFile(
 	filename string, buf *cell.Buffer, swapDir string, readOnly bool,
 ) (*file, error) {
-	fileURI, err := makeLocalURI(filename)
-	if err != nil {
-		return nil, err
-	}
-	var swap URI
-	if swapDir == "" {
-		swap, err = DefaultSwapDirectory(fileURI)
-	} else {
-		swap, err = makeLocalURI(swapDir)
-	}
-	if err != nil {
-		return nil, err
-	}
 	workspaceURI, err := makeLocalURI(filepath.Dir(filename))
 	if err != nil {
 		return nil, err
@@ -101,7 +88,7 @@ func openFile(
 	if err != nil {
 		return nil, err
 	}
-	l, err := newFile(scheme, fileURI, buf, swap, readOnly)
+	l, err := newFile(scheme, filename, buf, swapDir, readOnly)
 	if err != nil {
 		return nil, err
 	}
@@ -112,14 +99,6 @@ func openFile(
 func recoverFile(
 	filename, recoverFilename string, buf *cell.Buffer, force bool,
 ) (*file, error) {
-	fileURI, err := makeLocalURI(filename)
-	if err != nil {
-		return nil, err
-	}
-	recoverFile, err := makeLocalURI(recoverFilename)
-	if err != nil {
-		return nil, err
-	}
 	workspaceURI, err := makeLocalURI(filepath.Dir(filename))
 	if err != nil {
 		return nil, err
@@ -128,7 +107,7 @@ func recoverFile(
 	if err != nil {
 		return nil, err
 	}
-	l, err := newFileRecover(scheme, fileURI, recoverFile, buf, force)
+	l, err := newFileRecover(scheme, filename, recoverFilename, buf, force)
 	if err != nil {
 		return nil, err
 	}
@@ -572,7 +551,7 @@ func TestFileBufferRecover(t *testing.T) {
 
 // returns an un-initialized (but dep injected) FileBuffer along with the mocked OsFile
 func newTestFileBuffer(ctrl *gomock.Controller) (*file, *MockOsFile) {
-	schemeIfc, _ := NewNopScheme(nil, URI{})
+	schemeIfc, _ := NewNopScheme("test")(nil, URI{})
 	scheme := schemeIfc.(*testScheme)
 	mock := NewMockOsFile(ctrl)
 	scheme.openFunc = func(name string, flag int, perm os.FileMode) (File, *Error) {

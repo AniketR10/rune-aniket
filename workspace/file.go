@@ -43,26 +43,26 @@ type file struct {
 	unflushed       bool
 }
 
-func newFile(p Scheme, uri URI, buf *cell.Buffer, swapDir URI, readOnly bool) (
+func newFile(p Scheme, path string, buf *cell.Buffer, swapDir string, readOnly bool) (
 	*file, error,
 ) {
 	ret := new(file)
 	ret.scheme = p
 
-	err := ret.init(uri.Path(), buf, swapDir.Path(), readOnly)
+	err := ret.init(path, buf, swapDir, readOnly)
 	if err != nil {
 		return nil, err
 	}
 	return ret, nil
 }
 
-func newFileRecover(p Scheme, uri, swapFileURI URI, buf *cell.Buffer, force bool) (
+func newFileRecover(p Scheme, path, swapFilePath string, buf *cell.Buffer, force bool) (
 	*file, error,
 ) {
 	ret := new(file)
 	ret.scheme = p
 
-	err := ret.initRecover(uri.Path(), swapFileURI.Path(), buf, force)
+	err := ret.initRecover(path, swapFilePath, buf, force)
 	if err != nil {
 		return nil, err
 	}

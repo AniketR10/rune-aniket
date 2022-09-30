@@ -89,7 +89,7 @@ type workspaceManagerHandler struct {
 	clipboard clipboardManagerIfc
 	cfg       ideConfig
 	storage   browser.Storage
-	workspace workspaceManagerIfc
+	workspace workspace.WorkspaceManager
 
 	union          handler.FrameUnion
 	bar            handler.Tabs
@@ -107,14 +107,9 @@ type clipboardManagerIfc interface {
 	io.Closer
 }
 
-type workspaceManagerIfc interface {
-	workspace.SchemeManager
-	AddWorkspace(uri workspace.URI) (workspace.Workspace, error)
-}
-
 func newWorkspaceManagerHandler(
 	clipboard clipboardManagerIfc, initial workspace.URI,
-	manager workspaceManagerIfc,
+	manager workspace.WorkspaceManager,
 	cfg ideConfig, recfilename string, filenames []string,
 ) (*workspaceManagerHandler, error) {
 	ret := new(workspaceManagerHandler)
@@ -137,7 +132,7 @@ func (h *workspaceManagerHandler) newEditor(cfg ideConfig) text.Editor {
 
 func (h *workspaceManagerHandler) init(
 	clipboard clipboardManagerIfc, uri workspace.URI,
-	manager workspaceManagerIfc, cfg ideConfig,
+	manager workspace.WorkspaceManager, cfg ideConfig,
 	recfilename string, filenames []string,
 ) error {
 	h.workspaces = make([]*workspaceHandler, 10)
@@ -317,16 +312,18 @@ func (h *workspaceManagerHandler) textOpts(cfg ideConfig) []text.Option {
 func (h *workspaceManagerHandler) addWorkspace(
 	uri workspace.URI, cfg ideConfig, recfilename string, filenames []string,
 ) error {
-	workspace, err := h.workspace.AddWorkspace(uri)
+	w, err := h.workspace.AddWorkspace(uri)
 	if err != nil {
 		return fmt.Errorf("Failed to create new workspace for %q: %s", uri, err)
 	}
 
-	configErr := loadWorkspaceConfig(workspace, uri, &cfg)
+	w = workspace.Multi(h.workspace, w, uri)
+
+	configErr := loadWorkspaceConfig(w, uri, &cfg)
 
 	textOpts := h.textOpts(cfg)
 	if recfilename != "" {
-		recFile, err := workspace.URI(recfilename)
+		recFile, err := w.URI(recfilename)
 		if err != nil {
 			return err
 		}
@@ -334,14 +331,14 @@ func (h *workspaceManagerHandler) addWorkspace(
 	}
 
 	for _, filename := range filenames {
-		file, err := workspace.URI(filename)
+		file, err := w.URI(filename)
 		if err != nil {
 			return err
 		}
 		textOpts = append(textOpts, text.WithFile(file))
 	}
 
-	ex, err := newEx(h.newEditor(cfg), workspace, exCommandList,
+	ex, err := newEx(h.newEditor(cfg), w, exCommandList,
 		func(argv []string) (bool, bool, error) {
 			var err error
 			handled := true
@@ -361,7 +358,7 @@ func (h *workspaceManagerHandler) addWorkspace(
 
 	res := plugin.BrowserResources(ex.Browser())
 	res = plugin.MergeResourceMap(res, plugin.EditorResources(ex.Editor()))
-	res = plugin.MergeResourceMap(res, plugin.WorkspaceResources(workspace))
+	res = plugin.MergeResourceMap(res, plugin.WorkspaceResources(w))
 	res = plugin.MergeResourceMap(res, plugin.SchemeManagerResources(h.workspace))
 	res = plugin.MergeResourceMap(res, plugin.ConfigResources(config.MapConfig(h.cfg.cfg)))
 	res[plugin.PermissionClipboard] = h.clipboard
@@ -379,7 +376,7 @@ func (h *workspaceManagerHandler) addWorkspace(
 
 	h.workspaces[h.focus] = &workspaceHandler{
 		Handler:         ex,
-		workspaceCloser: workspace,
+		workspaceCloser: w,
 		Plugins:         pluginManager,
 	}
 	h.workspaceCount++

@@ -10,15 +10,19 @@ import (
 
 var _ Workspace = (multi)(multi{})
 
-// multi wraps a Workspace to provide oob Recover and Load requests to other workspaces/schemes
+// Multi wraps a Workspace to provide oob Recover and Load requests to other workspaces/schemes
 // whether initialized or not.
+func Multi(m WorkspaceManager, workspace Workspace, uri URI) Workspace {
+	return newMulti(m, uri, workspace)
+}
+
 type multi struct {
 	defURI  URI
 	def     Workspace
-	manager *Manager
+	manager WorkspaceManager
 }
 
-func newMulti(manager *Manager, defURI URI, def Workspace) *multi {
+func newMulti(manager WorkspaceManager, defURI URI, def Workspace) *multi {
 	return &multi{def: def, defURI: defURI, manager: manager}
 }
 
@@ -87,15 +91,7 @@ func (m multi) Close() error {
 }
 
 func (m multi) loadExtraneous(file URI, buf *cell.Buffer, swapDir URI, readOnly bool) (FlusherCloser, error) {
-	workspace, ok, err := m.manager.WorkspaceFile(file)
-	if err != nil {
-		return nil, fmt.Errorf("WorkspaceFile: %s", err)
-	}
-	if ok {
-		return workspace.Load(file, buf, swapDir, readOnly)
-	}
-
-	workspace, err = m.manager.AddWorkspace(file)
+	workspace, err := m.manager.AddWorkspace(file)
 	if err != nil {
 		return nil, err
 	}
@@ -103,15 +99,7 @@ func (m multi) loadExtraneous(file URI, buf *cell.Buffer, swapDir URI, readOnly 
 }
 
 func (m multi) recoverExtraneous(file, swapFilePath URI, buf *cell.Buffer, force bool) (FlusherCloser, error) {
-	workspace, ok, err := m.manager.WorkspaceFile(file)
-	if err != nil {
-		return nil, fmt.Errorf("WorkspaceFile: %s", err)
-	}
-	if ok {
-		return workspace.Recover(file, swapFilePath, buf, force)
-	}
-
-	workspace, err = m.manager.AddWorkspace(file)
+	workspace, err := m.manager.AddWorkspace(file)
 	if err != nil {
 		return nil, err
 	}

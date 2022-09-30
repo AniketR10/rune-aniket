@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"os/user"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"testing"
@@ -62,7 +64,7 @@ func (n nopRemote) Close() error {
 	return nil
 }
 
-func newTestScheme(workspaceURI workspace.URI) (*scheme, error) {
+func newTestScheme(cfg config.Config, workspaceURI workspace.URI) (workspace.Scheme, error) {
 	s := new(scheme)
 	s.remoteFn = func(sshConfig, workspace.URI) (remote, error) {
 		return nopRemote{}, nil
@@ -71,7 +73,7 @@ func newTestScheme(workspaceURI workspace.URI) (*scheme, error) {
 		return &user.User{Username: "git", HomeDir: "/home/git"}, nil
 	}
 	s.connectSchemeFn = func(uri workspace.URI, closeHook func(error)) (workspace.Scheme, error) {
-		return workspace.NewNopScheme(config.NopConfig(), workspace.URI{})
+		return workspace.NewNopScheme("test")(config.NopConfig(), workspace.URI{})
 	}
 
 	err := s.init(sshConfig{}, workspaceURI)
@@ -82,9 +84,9 @@ func newTestScheme(workspaceURI workspace.URI) (*scheme, error) {
 }
 
 func newNopScheme(t *testing.T, workspaceURI workspace.URI) *scheme {
-	s, err := newTestScheme(workspaceURI)
+	s, err := newTestScheme(config.NopConfig(), workspaceURI)
 	require.NoError(t, err)
-	return s
+	return s.(*scheme)
 }
 
 func TestNewScheme(t *testing.T) {
@@ -109,7 +111,7 @@ func TestNewScheme(t *testing.T) {
 			require.NoError(t, err)
 
 			// sut
-			_, err = newTestScheme(workspaceURI)
+			_, err = newTestScheme(config.NopConfig(), workspaceURI)
 			if tcase.expectedErr != "" {
 				assert.EqualError(t, err, tcase.expectedErr)
 			} else {
@@ -206,6 +208,7 @@ func TestIntegrationIsWorkspaceURI(t *testing.T) {
 		{"ssh://root@ernest.photography:1999/var/", "ssh://root@ernest.photography:1999/var/file.txt", true},
 		// test workspace uri with file
 		{"ssh://root@ernest.photography:1999/var/file.txt", "ssh://root@ernest.photography:1999/var/hello.txt", true},
+		{"ssh://ernest.photography/~/hello.txt", "ssh://ernest.photography/~/src/hola.txt", true},
 	}
 
 	for i, tcase := range tsuite {
@@ -223,6 +226,50 @@ func TestIntegrationIsWorkspaceURI(t *testing.T) {
 			actual, err := workspace.IsWorkspaceURI(inWorkspace, inURI)
 			require.NoError(t, err)
 			assert.Equal(t, tcase.expectedOut, actual)
+		})
+	}
+}
+
+func TestIntegrationManagerIsWorkspaceFile(t *testing.T) {
+	fileWorkspacePath, err := ioutil.TempDir("", "")
+	require.NoError(t, err)
+	fileWorkspaceURI, err := workspace.ParseURI(filepath.Join("file://", fileWorkspacePath))
+	require.NoError(t, err)
+
+	sshWorkspaceURI, err := workspace.ParseURI("ssh://ernest.photography/~/hello.txt")
+	require.NoError(t, err)
+
+	manager := workspace.NewManager(config.NopConfig())
+	require.NoError(t, manager.RegisterScheme(workspace.FileScheme, workspace.NewFileScheme))
+	require.NoError(t, manager.RegisterScheme(Scheme, newTestScheme))
+
+	fileWorkspace, err := manager.AddWorkspace(fileWorkspaceURI)
+	require.NoError(t, err)
+
+	sshWorkspace, err := manager.AddWorkspace(sshWorkspaceURI)
+	require.NoError(t, err)
+
+	tsuite := []struct {
+		uri               string
+		expectedWorkspace workspace.Workspace
+		expectedFound     bool
+	}{
+		{"ssh://ernest.photography/~/hello.txt", sshWorkspace, true},
+		{"ssh://unstable.build/~/hello.txt", nil, false},
+		{"file:///hello.txt", fileWorkspace, true},
+		{"file:///home/git/hello.txt", fileWorkspace, true},
+	}
+
+	for _, tcase := range tsuite {
+		t.Run(tcase.uri, func(t *testing.T) {
+			inURI, err := workspace.ParseURI(tcase.uri)
+			require.NoError(t, err)
+
+			// sut
+			actual, ok, err := manager.Workspace(inURI)
+			require.NoError(t, err)
+			assert.Equal(t, ok, tcase.expectedFound)
+			assert.Equal(t, tcase.expectedWorkspace, actual)
 		})
 	}
 }
