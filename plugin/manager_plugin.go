@@ -3,7 +3,6 @@ package plugin
 import (
 	"fmt"
 	"os/exec"
-	"strings"
 
 	"github.com/ernestrc/blue/logging"
 	"github.com/hashicorp/go-plugin"
@@ -29,7 +28,7 @@ func goPluginGranteeBuilder(m *Manager) pluginBuilder {
 		cmd := exec.Command(path)
 		// if local workspace, then do set dir in a best effort for
 		// plugins that do not use APIs and call os functions directly.
-		if strings.HasPrefix("file://", m.config.workspace.String()) {
+		if m.config.workspace.Scheme() == workspace.FileScheme {
 			// if URI is zero-valued, then Path returns an empty string
 			// which fits the default in exec.Cmd.Dir which is to not
 			// set the command's dir.

@@ -313,18 +313,16 @@ func (h *workspaceManagerHandler) textOpts(cfg ideConfig) []text.Option {
 func (h *workspaceManagerHandler) addWorkspace(
 	uri workspace.URI, cfg ideConfig, recfilename string, filenames []string,
 ) error {
-	w, err := h.workspace.AddWorkspace(uri)
+	cwd, err := h.workspace.AddWorkspace(uri)
 	if err != nil {
 		return fmt.Errorf("Failed to create new workspace for %q: %s", uri, err)
 	}
 
-	w = workspace.Multi(h.workspace, w, uri)
-
-	configErr := loadWorkspaceConfig(w, uri, &cfg)
+	configErr := loadWorkspaceConfig(cwd, uri, &cfg)
 
 	textOpts := h.textOpts(cfg)
 	if recfilename != "" {
-		recFile, err := w.URI(recfilename)
+		recFile, err := cwd.URI(recfilename)
 		if err != nil {
 			return err
 		}
@@ -332,14 +330,16 @@ func (h *workspaceManagerHandler) addWorkspace(
 	}
 
 	for _, filename := range filenames {
-		file, err := w.URI(filename)
+		file, err := cwd.URI(filename)
 		if err != nil {
 			return err
 		}
 		textOpts = append(textOpts, text.WithFile(file))
 	}
 
-	ex, err := newEx(h.newEditor(cfg), w, exCommandList,
+	// workspace capable of opening URIs other than the workspace URI
+	multicwd := workspace.Multi(h.workspace, cwd, uri)
+	ex, err := newEx(h.newEditor(cfg), multicwd, exCommandList,
 		func(argv []string) (bool, bool, error) {
 			var err error
 			handled := true
@@ -359,7 +359,8 @@ func (h *workspaceManagerHandler) addWorkspace(
 
 	res := plugin.BrowserResources(ex.Browser())
 	res = plugin.MergeResourceMap(res, plugin.EditorResources(ex.Editor()))
-	res = plugin.MergeResourceMap(res, plugin.WorkspaceResources(w))
+	res = plugin.MergeResourceMap(res, plugin.WorkspaceResources(cwd))
+	// NOTE: plugins that register new schemes will fail for subsequent workspaces
 	res = plugin.MergeResourceMap(res, plugin.SchemeManagerResources(h.workspace))
 	res = plugin.MergeResourceMap(res, plugin.ConfigResources(config.MapConfig(h.cfg.cfg)))
 	res[plugin.PermissionClipboard] = h.clipboard
@@ -377,7 +378,7 @@ func (h *workspaceManagerHandler) addWorkspace(
 
 	h.workspaces[h.focus] = &workspaceHandler{
 		Handler:         ex,
-		workspaceCloser: w,
+		workspaceCloser: cwd,
 		Plugins:         pluginManager,
 	}
 	h.workspaceCount++

@@ -239,7 +239,11 @@ func ExpandPath(
 	return abs, nil
 }
 
-// IsWorkspaceURI returns whether uri belongs to the given workspace.
+// IsWorkspaceURI returns whether this uri can be managed by
+// the given workspace. For Scheme implementations that
+// do not support user and host/port, this method returns
+// true if the URI schemes of the workspace and the supplied uri
+// are the same.
 func IsWorkspaceURI(workspace Workspace, uri URI) (bool, error) {
 	uriAtWorkspace, err := workspace.URI(uri.Path())
 	if err != nil {

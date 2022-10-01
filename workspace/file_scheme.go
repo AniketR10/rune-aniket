@@ -10,7 +10,9 @@ import (
 	"os/user"
 	"syscall"
 
+	"github.com/ernestrc/blue/logging"
 	"unstable.build/go-tui/config"
+	"unstable.build/go-tui/debug"
 )
 
 const (
@@ -131,6 +133,12 @@ func (m *fileScheme) Command(name string, arg ...string) (Pid, error) {
 	cmd := exec.Command(name, arg...)
 	cmd.Dir = m.workspace.Path()
 	m.nextPid++
+
+	debug.StandardLogger().
+		WithField(logging.KeyClass, "fileScheme").
+		WithField("URI", m.workspace.String()).
+		Debugf("exec.Command: (%#v, pid=%d)", cmd, m.nextPid)
+
 	m.cmds[Pid(m.nextPid)] = cmd
 	return Pid(m.nextPid), nil
 }

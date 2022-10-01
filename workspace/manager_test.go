@@ -64,6 +64,61 @@ func TestManager(t *testing.T) {
 		require.NoError(t, m.Close())
 	})
 
+	t.Run("AddWorkspace creates a new Workspace if URI is different", func(*testing.T) {
+		m := NewManager(config.NopConfig())
+		err := m.RegisterScheme("test", NewNopScheme("test"))
+		require.NoError(t, err)
+
+		w0, err := m.AddWorkspace(parseURI(t, "test:///tmp/"))
+		assert.NotNil(t, w0)
+		require.NoError(t, err)
+
+		w1, err := m.AddWorkspace(parseURI(t, "test:///tmp/blah"))
+		assert.NotNil(t, w1)
+		require.NoError(t, err)
+
+		assert.NotEqual(t, w0, w1)
+
+		w2, err := m.AddWorkspace(parseURI(t, "test:///tmp/blah/hello.txt"))
+		assert.NotNil(t, w2)
+		require.NoError(t, err)
+
+		assert.NotEqual(t, w1, w2)
+
+		// same as w2
+		w3, err := m.AddWorkspace(parseURI(t, "test:///tmp/blah/hello.txt"))
+		assert.NotNil(t, w2)
+		require.NoError(t, err)
+
+		assert.Equal(t, w2, w3)
+
+		require.NoError(t, m.Close())
+	})
+
+	t.Run("Workspace returns the FIRST workspace capable "+
+		"of handling a uri, as defined by IsWorkspaceURI", func(*testing.T) {
+		m := NewManager(config.NopConfig())
+		err := m.RegisterScheme("test", NewNopScheme("test"))
+		require.NoError(t, err)
+
+		w0, err := m.AddWorkspace(parseURI(t, "test:///var/"))
+		assert.NotNil(t, w0)
+		require.NoError(t, err)
+
+		w1, err := m.AddWorkspace(parseURI(t, "test:///tmp/blah"))
+		assert.NotNil(t, w1)
+		require.NoError(t, err)
+
+		assert.NotEqual(t, w0, w1)
+
+		w2, ok, err := m.Workspace(parseURI(t, "test:///tmp/blah/hello.txt"))
+		require.NoError(t, err)
+		assert.True(t, ok)
+		assert.Equal(t, w2, w0)
+
+		require.NoError(t, m.Close())
+	})
+
 	t.Run("register same scheme twice returns error", func(t *testing.T) {
 		m := NewManager(config.NopConfig())
 		err := m.RegisterScheme("test", NewNopScheme("test"))
