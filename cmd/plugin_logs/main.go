@@ -18,6 +18,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/config"
+	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/handler/search"
 	"unstable.build/go-tui/plugin"
 	"unstable.build/go-tui/proto"
@@ -42,7 +43,7 @@ var (
 		cmdLogs,
 	}
 
-	retryStrategy = retry.ExponentialStrategy(10*time.Millisecond, 10*time.Second)
+	retryStrategy = retry.ExponentialStrategy(10*time.Millisecond, 1*time.Second)
 )
 
 type logsGrantee struct {
@@ -167,8 +168,6 @@ func (e *logsGrantee) PermissionGranted(grants []plugin.Grant) {
 		}
 	}
 
-	// TODO: make PermissionConfig optional and take argument with file
-	// TODO this will require better handling of file lifecycle
 	e.logFile, err = e.c.GetString("log_path")
 	if err != nil {
 		log.Fatalf("Could not get 'log_path' from config: %s", err)
@@ -194,20 +193,25 @@ func consumeAvailableData(
 	reader *bufio.Reader, l *search.List,
 	ch chan<- []byte, quit chan struct{},
 ) error {
-	data, err := reader.ReadBytes('\n')
-	if len(data) != 0 {
-		select {
-		case ch <- data:
-		case <-quit:
-			close(ch)
+	for {
+		data, err := reader.ReadBytes('\n')
+		if len(data) != 0 {
+			select {
+			case ch <- data:
+			case <-quit:
+				close(ch)
+				return nil
+			}
+		}
+		if err == io.EOF {
+			l.Pause()
 			return nil
 		}
+		if err != nil {
+			log.Warnf("read error: %s", err)
+			return err
+		}
 	}
-	if err == io.EOF {
-		l.Pause()
-		return nil
-	}
-	return err
 }
 
 func consumeData(
@@ -218,9 +222,7 @@ func consumeData(
 
 	defer close(ch)
 	if err := consumeAvailableData(reader, l, ch, quit); err != nil {
-		log.Warnf("max number of reading errors allowed while"+
-			" reading initial batch of data; stopping reading: %s", err)
-		return
+		log.Warnf("error reading initial data on log file: %s", err)
 	}
 
 	ctx := context.Background()
@@ -255,19 +257,33 @@ func consumeData(
 }
 
 func (e *logsGrantee) showLogs(args []string) (bool, error) {
-	if log.IsLevelEnabled(log.TraceLevel) {
+	if log.IsLevelEnabled(log.TraceLevel) && len(args) == 0 {
 		return false, errors.New("Cannot show logs in Trace level to avoid " +
 			"an infinite loop. Check Manually.")
 	}
-	if e.logFile == "" {
-		return false, errors.New("Cannot show logs if logging not logging " +
-			"to a file. Check 'log_path' in configuration.")
+	if e.logFile == "" && len(args) == 0 {
+		return false, errors.New("Cannot show logs if 'log_path' in config is empty " +
+			"and no arguments were supplied to 'logs' command.")
 	}
 
-	uri, err := e.w.URI(e.logFile)
-	if err != nil {
-		return false, err
+	logFile := e.logFile
+	if len(args) != 0 {
+		logFile = args[0]
 	}
+
+	uri, err := workspace.ParseURI(logFile)
+	if err != nil {
+		uri, err = e.w.URI(logFile)
+		if err != nil {
+			return false, err
+		}
+	}
+
+	if uri.Scheme() != workspace.FileScheme {
+		return false, fmt.Errorf("cannot read non file scheme log file: %s", uri)
+	}
+
+	log.Debugf("Opening log file at %s (raw arg=%s)", uri, logFile)
 
 	// NOTE: log_path is always referencing a local path so until
 	// we containerize plugins, it's safe to call os.Open
@@ -304,15 +320,15 @@ func (e *logsGrantee) showLogs(args []string) (bool, error) {
 		return
 	}
 
-	logsHandler := newLogsHandler(l, e.cfg.ElementAttr,
-		e.cfg.MatchedTextAttr, e.cfg.FocusElementAttr)
+	logsHandler := handler.Sync(new(sync.Mutex), newLogsHandler(l, e.cfg.ElementAttr,
+		e.cfg.MatchedTextAttr, e.cfg.FocusElementAttr))
 	h := browser.FuncHandler(logsHandler, func() {
 		cleanup()
 	})
 
 	go consumeData(file, l, e.quitCh, watcher)
 
-	t, err := e.wm.Tab(uri, "logs", h)
+	t, err := e.wm.Tab(uri, "logs:"+uri.Name(), h)
 	if err != nil {
 		_ = cleanup()
 		return false, fmt.Errorf("Tab: %s", err)
