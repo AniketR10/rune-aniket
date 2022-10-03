@@ -15,12 +15,13 @@ import (
 	"unstable.build/go-tui/workspace"
 )
 
-// retry forever, starting with every 10 ms up until every 5s
-var retryStrategy = retry.ExponentialStrategy(10*time.Millisecond, 5*time.Second)
+var (
+	retryStrategy = retry.ExponentialStrategy(100*time.Millisecond, 5*time.Second)
+)
 
 type connectSchemeFn func(uri workspace.URI, closeHook func(error)) (workspace.Scheme, error)
 
-// wraps another workspace.Scheme to be resilient to intermitent connection failures
+// wraps another workspace.Scheme to be resilient against intermitent connection failures
 type remoteScheme struct {
 	mu               sync.Mutex
 	closeChan        chan struct{}
@@ -34,38 +35,46 @@ func (s *remoteScheme) maintainConnection(
 ) {
 	logger := debug.StandardLogger().WithField(logging.KeyClass, "ssh")
 
-	var unlockedSema bool
-	for {
-		ctx, cancel := context.WithCancel(context.Background())
+	var initSema bool
+	retry.Retry(context.Background(), retryStrategy,
+		func(ctx context.Context) (bool, error) {
+			ctx, cancel := context.WithCancel(context.Background())
 
-		retry.Retry(ctx, retryStrategy, func(ctx context.Context) (bool, error) {
 			logger.Debugf("attempting to connect to %s", uri)
 
 			// block Scheme API until we're connected
 			s.mu.Lock()
-			if !unlockedSema {
+			if !initSema {
+				// unlock initialization semaphore
+				// so next call to Scheme API blocks until
+				// we're connected
 				sema.Unlock()
-				unlockedSema = true
+				initSema = true
 			}
 			if s.scheme != nil {
 				_ = s.scheme.Close()
 			}
 
-			var canceled bool // close hook could be called multiple times
+			// close hook could be called multiple times
+			var canceled bool
 			s.scheme, s.lastSessionError = connect(uri, func(err error) {
+				logger.Warnf("lost connectivity to %s: %s", uri, err)
 				s.mu.Lock()
 				defer s.mu.Unlock()
-				if canceled {
-					return
+				if !canceled {
+					s.lastSessionError = err
+					canceled = true
+					cancel()
 				}
-				canceled = true
-				s.lastSessionError = err
-				logger.Warnf("lost connectivity to %s: %s", uri, err)
-				cancel() // unlock outer loop to retry connecting
+				return
 			})
 
 			if s.lastSessionError != nil {
 				logger.Warnf("failed to connect to %s: %s", uri, s.lastSessionError)
+				if !canceled {
+					canceled = true // do not trust connect code
+					cancel()
+				}
 				s.mu.Unlock()
 				return true, s.lastSessionError
 			}
@@ -78,20 +87,17 @@ func (s *remoteScheme) maintainConnection(
 			case <-ctx.Done():
 				s.mu.Lock()
 				defer s.mu.Unlock()
+				if s.lastSessionError == nil {
+					s.lastSessionError = errors.New("lost connection to remote")
+					logger.Warn(s.lastSessionError)
+				}
 				return true, s.lastSessionError
 			case <-closeChan:
 				return false, nil
 			}
 		})
 
-		// wait until connection is closed either via Close
-		// or due to connectivity issues
-		select {
-		case <-ctx.Done():
-		case <-closeChan:
-			return
-		}
-	}
+	logger.Debugf("stopped trying to re-connect to remote %s", uri)
 }
 
 func newRemoteScheme(connect connectSchemeFn, uri workspace.URI) workspace.Scheme {
