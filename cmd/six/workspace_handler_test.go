@@ -180,8 +180,8 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 │                  │
 │workspaceWallpaper│
 │Error: Unknown com│
-│mand: 'addWorkspac│
-│e'                │
+│mand "addWorkspace│
+│" or alias targets│
 └──────────────────┘`},
 		{"1234567890",
 			`┌──────────────────┐

@@ -78,12 +78,10 @@ func newTestRPCBrowser(t *testing.T,
 		tui.Handler, browser.Browser, error,
 	) {
 		b := new(ex)
-		err := b.doInit(ed, &testLoader{}, exCommandList, nil, opts...)
+		err := b.init(ed, &testLoader{}, exCommandList, nil, opts...)
 		if err != nil {
 			return nil, nil, err
 		}
-		require.NoError(t, b.comp.Init(ed, &testLoader{}, b.config))
-
 		lis, err := net.Listen("tcp", ":0")
 		require.NoError(t, err)
 

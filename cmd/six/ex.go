@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -101,13 +102,13 @@ type ex struct {
 	sequencer            handler.Sequencer
 	publishEvent         func(term.Event)
 	cmdOverride          func([]string) (bool, bool, error)
-	enabledCommands      []string
 	cmd                  commandListHandler
 	overlay              component.Overlay
 	mode                 mode
 	cancelPartialReissue func()
 	ctxPartialReissue    context.Context
 	reissueEvent         term.Event
+	quit                 bool
 }
 
 func newEx(
@@ -131,7 +132,7 @@ func (e *ex) init(
 	commandOverride func([]string) (bool, bool, error),
 	opts ...text.Option,
 ) (err error) {
-	err = e.doInit(ed, m, enabledCommands, commandOverride, opts...)
+	err = e.doInit(ed, m, commandOverride, opts...)
 	if err != nil {
 		return
 	}
@@ -139,21 +140,34 @@ func (e *ex) init(
 	if err != nil {
 		return
 	}
+	for _, cmd := range enabledCommands {
+		e.comp.SubscribeCommand(cmd, text.FuncCommandHandler(
+			func(ctx context.Context, cmd text.Command) bool {
+				fn, ok := exCommands[cmd.Name]
+				if !ok {
+					return true
+				}
+				unsubscribe, err := fn(e, cmd.Args...)
+				if err != nil {
+					e.setError(err)
+				}
+				return unsubscribe
+			}))
+	}
+	e.resetCommandList()
 	e.cmd.loadHistory()
 	e.publishEvent = term.PublishEvent
 	return nil
 }
 
-// init is used for internal testing
 func (e *ex) doInit(
-	ed text.Editor, m workspace.Loader, enabledCommands []string,
+	ed text.Editor, m workspace.Loader,
 	commandOverride func([]string) (bool, bool, error),
 	opts ...text.Option,
 ) (err error) {
 	e.mode = modeDefault
 	e.workspace = m
 	e.cmdOverride = commandOverride
-	e.enabledCommands = enabledCommands
 
 	e.config = text.DefaultConfig()
 
@@ -276,6 +290,7 @@ func (e *ex) closeFocusWindow(args ...string) (bool, error) {
 
 func (e *ex) flushCloseIgnoreNonFlushed(args ...string) (bool, error) {
 	b := e.comp.Browser()
+	e.quit = true
 	return true, e.comp.Flush(b.Focus())
 }
 
@@ -285,6 +300,7 @@ func (e *ex) forceFlush(args ...string) (bool, error) {
 }
 
 func (e *ex) forceQuit(args ...string) (bool, error) {
+	e.quit = true
 	return true, nil
 }
 
@@ -302,23 +318,9 @@ func (e *ex) dispatchCommand(cmd string, args ...string) (err error) {
 	}
 	handled := e.comp.DispatchCommand(scmd)
 	if !handled {
-		err = fmt.Errorf("Unknown command: '%s'", cmd)
+		err = fmt.Errorf("Unknown command %q or alias targets", cmd)
 	}
 	return
-}
-
-func (e *ex) runSingleCommand(cmd string) (quit bool, err error) {
-	fnCmd, ok := exCommands[cmd]
-	if ok {
-		return fnCmd(e)
-	}
-
-	line, cerr := strconv.Atoi(cmd)
-	if cerr == nil {
-		err = e.moveFocusCursor(line - 1)
-		return
-	}
-	return false, e.dispatchCommand(cmd)
 }
 
 func (e *ex) editFileURI(uri workspace.URI) error {
@@ -422,15 +424,15 @@ func (e *ex) runCommand(cmd string, parts []string) (quit bool, err error) {
 	}
 
 	if len(parts) == 1 {
-		return e.runSingleCommand(parts[0])
+		line, cerr := strconv.Atoi(parts[0])
+		if cerr == nil {
+			err = e.moveFocusCursor(line - 1)
+			return
+		}
+		return e.quit, e.dispatchCommand(parts[0])
 	}
 
-	fnCmd, ok := exCommands[parts[0]]
-	if ok {
-		return fnCmd(e, parts[1:]...)
-	}
-
-	return false, e.dispatchCommand(parts[0], parts[1:]...)
+	return e.quit, e.dispatchCommand(parts[0], parts[1:]...)
 }
 
 func (e *ex) setError(err error) {
@@ -564,19 +566,20 @@ func (e *ex) setProxyMode() {
 	e.mode = modeDefault
 }
 
-func (e *ex) setCommandMode() {
-	e.mode = modeCommand
-
+func (e *ex) resetCommandList() {
 	// commands can be registered dynamicall via Editor.Register:
 	// compile a new list every time we switch to command mode
 	var commands []string
-	for _, cmd := range e.enabledCommands {
-		commands = append(commands, cmd)
-	}
 	for _, cmd := range e.comp.Commands() {
 		commands = append(commands, cmd)
 	}
+	sort.Strings(commands)
 	e.cmd.dataReset(commands)
+}
+
+func (e *ex) setCommandMode() {
+	e.mode = modeCommand
+	e.resetCommandList()
 }
 
 // Handle satisfies tui.Handler.

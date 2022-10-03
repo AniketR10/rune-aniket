@@ -880,8 +880,7 @@ func initExForTestingWithWorkspace(
 	t *testing.T, ex *ex, workspace *testLoader,
 	ed text.Editor, opts ...text.Option,
 ) {
-	require.NoError(t, ex.doInit(ed, workspace, exCommandList, nil, opts...))
-	require.NoError(t, ex.comp.Init(ex.ed, workspace, ex.config))
+	require.NoError(t, ex.init(ed, workspace, exCommandList, nil, opts...))
 	ex.publishEvent = func(ev term.Event) {
 	}
 }
@@ -925,6 +924,7 @@ func TestNewWindow(t *testing.T) {
 
 	testutil.TestHandlerSequence(t, b, 20, 10, cases)
 }
+
 func TestCommandHistory(t *testing.T) {
 	cases := []testutil.HandlerSequenceTestCase{
 		{":e hello.go>:e wi.go>1234",
@@ -954,6 +954,46 @@ func TestCommandHistory(t *testing.T) {
 	b := new(ex)
 	opts := []text.Option{
 		text.WithCommandKey(testCommandKey),
+	}
+	initExForTesting(t, b, text.NopEditor(), opts...)
+	defer b.Close()
+
+	testutil.TestHandlerSequence(t, b, 20, 10, cases)
+}
+
+func TestCommandAliases(t *testing.T) {
+	cases := []testutil.HandlerSequenceTestCase{
+		{":todo>1234",
+			`┌──────────────────┐
+│hello.go  wi.go   │
+├──────────────────┤
+│EEEEEEEEEEEEEEEEEE│
+│EEEEEEEEEEEEEEEEEE│
+│EEEEEEEEEEEEEEEEEE│
+│EEEEEEEEEEEEEEEEEE│
+│EEEEEEEEEEEEEEEEEE│
+│EEEEEEEEEEEEEEEEEE│
+└──────────────────┘`},
+		{":bp>",
+			`┌──────────────────┐
+│hello.go  wi.go   │
+├──────────────────┤
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+└──────────────────┘`},
+	}
+
+	b := new(ex)
+	opts := []text.Option{
+		text.WithCommandKey(testCommandKey),
+		text.WithCommandAliases(map[string][]string{
+			"todo": []string{"edit hello.go", "edit wi.go"},
+			"bp":   []string{"bufferNext"},
+		}),
 	}
 	initExForTesting(t, b, text.NopEditor(), opts...)
 	defer b.Close()
