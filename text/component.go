@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strings"
 	"time"
 
 	"github.com/ernestrc/blue/datastore/document"
@@ -207,6 +208,19 @@ func (c *Component) Init(ed Editor, w workspace.Loader, config Config) error {
 
 	if first != nil {
 		return c.comp.Focus().SetContent(first)
+	}
+
+	// validate that config aliases are not recursive
+	seenAliased := map[string]struct{}{}
+	for k := range c.config.CommandAliases {
+		seenAliased[k] = struct{}{}
+	}
+	for _, v := range c.config.CommandAliases {
+		for _, v := range v {
+			if _, ok := seenAliased[v]; ok {
+				return fmt.Errorf("a command alias cannot reference other command aliases")
+			}
+		}
 	}
 
 	return nil
@@ -470,6 +484,18 @@ func (c *Component) KeyMapping(key term.KeyComb) ([]string, bool) {
 // DispatchCommand dispatches a EventTypeCommand with cmd to subscribers
 // subscribed via SubscribeEditorEvents.
 func (c *Component) DispatchCommand(cmd Command) (handled bool) {
+	targets, ok := c.config.CommandAliases[cmd.Name]
+	if ok {
+		c.log(log.InfoLevel, "Dispatching alias %s: %#v", cmd.Name, targets)
+		for _, target := range targets {
+			argv := strings.Split(target, " ")
+			cmd.Name = argv[0]
+			cmd.Args = argv[1:]
+			targetHandled := c.DispatchCommand(cmd)
+			handled = handled || targetHandled
+		}
+		return
+	}
 	commander, handled := c.cmdSubscribers[cmd.Name]
 	if !handled {
 		return false
@@ -722,13 +748,17 @@ func (c *Component) SubscribeEditorEvents(evs []EventType, h EventHandler) error
 	return c.ed.SubscribeEditorEvents(delegated, h)
 }
 
-// Commands returns a list of commands registered via SubscribeCommand.
+// Commands returns a list of commands registered via SubscribeCommand
+// or via Config.CommandAliases.
 func (c *Component) Commands() (ret []string) {
 	ret = make([]string, len(c.cmdSubscribers))
 	var i int
 	for cmd := range c.cmdSubscribers {
 		ret[i] = cmd
 		i++
+	}
+	for k := range c.config.CommandAliases {
+		ret = append(ret, k)
 	}
 	return ret
 }

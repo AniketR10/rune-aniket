@@ -7,6 +7,7 @@ import (
 	"os"
 	"strings"
 
+	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
 	yaml "gopkg.in/yaml.v3"
 	"unstable.build/go-tui/browser"
@@ -377,6 +378,46 @@ func (c ideConfig) commandOverlayFrameCharSet() (
 		return
 	}
 	cs = cfgCs
+	return
+}
+
+func (c ideConfig) commandAliases() (ret map[string][]string) {
+	key := "aliases"
+	ret = make(map[string][]string)
+	cfg, ok := c.command()
+	if !ok {
+		return
+	}
+
+	cfgsAliases, err := cfg.GetMap(key)
+	if err != nil {
+		if err != config.ErrNotFound {
+			c.errors[fmt.Sprintf("command.%s", key)] = err
+		}
+		return
+	}
+
+	for k, v := range cfgsAliases {
+		switch v.(type) {
+		case string:
+			ret[k] = make([]string, 1)
+			ret[k][0] = v.(string)
+		case []interface{}:
+			ret[k] = make([]string, 0)
+			for _, v := range v.([]interface{}) {
+				switch v.(type) {
+				case string:
+					ret[k] = append(ret[k], v.(string))
+				default:
+					err = multierr.Append(err,
+						fmt.Errorf("invalid value type for command.%s.%s", key, k))
+				}
+			}
+		}
+	}
+	if err != nil {
+		c.errors[fmt.Sprintf("command.%s", key)] = err
+	}
 	return
 }
 

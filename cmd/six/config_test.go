@@ -43,6 +43,12 @@ command:
   frame_attr:
     bg: red
     fg: 219
+  aliases:
+    cherry: bomb
+    todo:
+      - e file:///tmp/todo.md
+      - jenesaisquoi
+    error: 1
   key_bindings:
     f: searchFile
     l: searchLine
@@ -186,6 +192,12 @@ func TestConfigSetting(t *testing.T) {
 	expectedCs.HorizontalBottom = '━'
 	assert.Equal(t, expectedCs, cfg.commandOverlayFrameCharSet())
 	assert.Equal(t, "ag -g \"\"", cmd)
+
+	expectedCommandAliases := map[string][]string{
+		"todo":   []string{"e file:///tmp/todo.md", "jenesaisquoi"},
+		"cherry": []string{"bomb"},
+	}
+	assert.Equal(t, expectedCommandAliases, cfg.commandAliases())
 
 	expectedFUCs := component.FrameUnionCharSet{Left: '┣', Right: '┫', Top: '┫', Bottom: '┫'}
 	assert.Equal(t, expectedFUCs, cfg.frameUnionCharset())

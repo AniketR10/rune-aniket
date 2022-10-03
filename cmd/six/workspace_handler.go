@@ -291,6 +291,7 @@ func (h *workspaceManagerHandler) textOpts(cfg ideConfig) []text.Option {
 		text.WithWallpaper(cfg.wallpaper()),
 		text.WithDirtyTabAttr(cfg.dirtyTabAttr()),
 		text.WithCommandOverlayConfig(cfg.commandOverlayConfig()),
+		text.WithCommandAliases(cfg.commandAliases()),
 		text.WithPromptConfig(cfg.promptConfig()),
 		text.WithStorage(h.storage),
 	}

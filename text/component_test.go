@@ -638,10 +638,11 @@ func TestEventTypeFocusIntegration(t *testing.T) {
 }
 
 func TestDispatchCommand(t *testing.T) {
-	t.Run("DispatchCommand returns false if there's no registered handler", func(t *testing.T) {
+	uri, err := workspace.ParseURI("file:///MacMecMic")
+	require.NoError(t, err)
+
+	t.Run("returns false if there's no registered handler", func(t *testing.T) {
 		c := newTestComponent(t, &testEditor{})
-		uri, err := workspace.ParseURI("file:///MacMecMic")
-		require.NoError(t, err)
 
 		cmd := Command{
 			Resource: NewTestHandler(),
@@ -649,6 +650,83 @@ func TestDispatchCommand(t *testing.T) {
 			Name:     "SELL",
 		}
 		assert.False(t, c.DispatchCommand(cmd))
+	})
+
+	t.Run("uses aliases from config to dispatch", func(t *testing.T) {
+		c := newTestComponent(t, &testEditor{})
+
+		c.config.CommandAliases = map[string][]string{
+			"workstation_layout": []string{
+				"newWindow",
+				"edit /tmp/todo.md",
+			},
+		}
+
+		var newWindowCalled, editCalled bool
+
+		c.SubscribeCommand("newWindow", FuncCommandHandler(func(ctx context.Context, cmd Command) bool {
+			newWindowCalled = true
+			assert.Equal(t, cmd.Name, "newWindow")
+			assert.Equal(t, cmd.Args, []string{})
+			return false
+		}))
+
+		c.SubscribeCommand("edit", FuncCommandHandler(func(ctx context.Context, cmd Command) bool {
+			editCalled = true
+			assert.Equal(t, cmd.Name, "edit")
+			assert.Equal(t, cmd.Args, []string{"/tmp/todo.md"})
+			return false
+		}))
+
+		cmd := Command{
+			Resource: NewTestHandler(),
+			URI:      uri,
+			Name:     "workstation_layout",
+		}
+		assert.True(t, c.DispatchCommand(cmd))
+		assert.True(t, newWindowCalled)
+		assert.True(t, editCalled)
+	})
+
+	t.Run("handles bad aliases", func(t *testing.T) {
+		c := newTestComponent(t, &testEditor{})
+
+		c.config.CommandAliases = map[string][]string{
+			"bad1": []string{""},
+			"bad2": []string{},
+			"bad3": nil,
+		}
+
+		for _, cmd := range []string{"bad1", "bad2", "bad3"} {
+			cmd := Command{
+				Resource: NewTestHandler(),
+				URI:      uri,
+				Name:     cmd,
+			}
+			assert.False(t, c.DispatchCommand(cmd))
+		}
+	})
+
+	t.Run("handles aliases missing from config", func(t *testing.T) {
+		c := newTestComponent(t, &testEditor{})
+
+		c.config.CommandAliases = nil
+		cmd := Command{
+			Resource: NewTestHandler(),
+			URI:      uri,
+			Name:     "kaboom",
+		}
+		assert.False(t, c.DispatchCommand(cmd))
+	})
+
+	t.Run("NewComponent returns error if aliases is recursive", func(t *testing.T) {
+		cfg := DefaultConfig()
+		cfg.CommandAliases = map[string][]string{
+			"blah": []string{"bleh"},
+			"bleh": []string{"blah"},
+		}
+		_, err := NewComponent(&testEditor{}, &testLoader{}, cfg)
+		require.Error(t, err)
 	})
 }
 
@@ -685,6 +763,17 @@ func TestComponentCommands(t *testing.T) {
 		cmds := c.Commands()
 		require.Len(t, cmds, 1)
 		assert.Equal(t, "myCmd", cmds[0])
+	})
+	t.Run("returns configured aliases", func(t *testing.T) {
+		cfg := DefaultConfig()
+		cfg.CommandAliases = map[string][]string{
+			"blah": []string{},
+		}
+		c, err := NewComponent(&testEditor{}, &testLoader{}, cfg)
+		require.NoError(t, err)
+		cmds := c.Commands()
+		require.Len(t, cmds, 1)
+		assert.Equal(t, "blah", cmds[0])
 	})
 }
 

@@ -32,6 +32,7 @@ type Config struct {
 	CommandMaxHistory       int
 	CommandKeyBindings      map[term.KeyComb][]string
 	CommandSequenceBindings map[handler.Sequence][]string
+	CommandAliases          map[string][]string
 	SequencerTimeout        time.Duration
 	Storage                 document.Service
 	DirtyTabAttr            term.Attributes
@@ -67,6 +68,7 @@ func DefaultConfig() Config {
 		DirtyTabAttr:            term.Attributes{Fg: term.AttrBold},
 		CommandKeyBindings:      make(map[term.KeyComb][]string),
 		CommandSequenceBindings: make(map[handler.Sequence][]string),
+		CommandAliases:          make(map[string][]string),
 		SequencerTimeout:        400 * time.Millisecond,
 		CommandOverlay:          DefaultCommandOverlayConfig(),
 		SendInterrupt:           term.Interrupt,
@@ -237,6 +239,13 @@ func WithDirtyTabAttr(attr term.Attributes) Option {
 func WithCommandOverlayConfig(c CommandOverlayConfig) Option {
 	return func(cfg *Config) {
 		cfg.CommandOverlay = c
+	}
+}
+
+// WithCommandAliases defines command aliases.
+func WithCommandAliases(aliases map[string][]string) Option {
+	return func(cfg *Config) {
+		cfg.CommandAliases = aliases
 	}
 }
 
