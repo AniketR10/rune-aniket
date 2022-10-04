@@ -201,7 +201,7 @@ func (e *emulatorGrantee) HandleCommand(
 
 func main() {
 	go func() {
-		log.Println(http.ListenAndServe("localhost:6068", nil))
+		log.Println(http.ListenAndServe("localhost:2268", nil))
 	}()
 
 	s := emulatorGrantee{}

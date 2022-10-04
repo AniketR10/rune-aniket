@@ -23,10 +23,7 @@ type emulator struct {
 	p  browser.EventPublisher
 	m  browser.Messenger
 
-	clipboard struct {
-		data    string
-		updated time.Time
-	}
+	clipboard         plugin.ClipboardRegister
 	mouse             *text.Mouse
 	mouseDriver       *mouseDriver
 	windowManipulator *windowManipulator
@@ -45,7 +42,7 @@ type emulator struct {
 func newEmulator(
 	wm browser.WindowManager, wp workspace.API,
 	p browser.EventPublisher, m browser.Messenger,
-	c plugin.Clipboard,
+	c plugin.ClipboardRegister,
 	shell string, initialCmd string,
 	defAttr, selectionAttr term.Attributes,
 ) (*emulator, error) {
@@ -61,7 +58,7 @@ func newEmulator(
 func (e *emulator) init(
 	wm browser.WindowManager, wp workspace.API,
 	p browser.EventPublisher, m browser.Messenger,
-	c plugin.Clipboard,
+	c plugin.ClipboardRegister,
 	shell string, initialCmd string,
 	defAttr, selectionAttr term.Attributes,
 ) error {
@@ -71,13 +68,7 @@ func (e *emulator) init(
 	e.defAttr = defAttr
 	e.selectAttr = selectionAttr
 	e.m = m
-
-	if c != nil {
-		err := c.SetRegister(text.DefaultRegisterID, e)
-		if err != nil {
-			return err
-		}
-	}
+	e.clipboard = c
 
 	e.theme = &termutil.Theme{Default: defAttr}
 	e.windowManipulator = newWindowManipulator(e.wm, e.m)
@@ -152,15 +143,11 @@ func (e *emulator) init(
 }
 
 func (e *emulator) Paste() (string, time.Time, error) {
-	log.Tracef("(%p).terminal.emulator.Paste: %s", e, e.clipboard.data)
-	return e.clipboard.data, e.clipboard.updated, nil
+	return e.clipboard.Paste()
 }
 
 func (e *emulator) Copy(data string, ts time.Time) error {
-	log.Tracef("(%p).terminal.emulator.Copy: %s", e, data)
-	e.clipboard.data = data
-	e.clipboard.updated = ts
-	return nil
+	return e.clipboard.Copy(data, ts)
 }
 
 func (e *emulator) Resize(width, height int) {
