@@ -377,7 +377,7 @@ func (e *emulator) Close() error {
 	e.closed = true
 
 	var ret error
-	if err := e.terminal.Pty().Close(); err != nil {
+	if err := e.terminal.Close(); err != nil {
 		ret = multierr.Append(ret, err)
 		log.Errorf("(%p).emulator.Close(Pty): %s", e, err)
 	}

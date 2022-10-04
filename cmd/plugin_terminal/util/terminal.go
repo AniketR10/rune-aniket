@@ -10,7 +10,9 @@ import (
 	"syscall"
 
 	"github.com/creack/pty"
+	"github.com/ernestrc/blue/logging"
 	multierr "github.com/ernestrc/go-multierror"
+	log "github.com/sirupsen/logrus"
 	"golang.org/x/term"
 )
 
@@ -35,7 +37,7 @@ type Terminal struct {
 	mouseExtMode      MouseExtMode
 	logFile           *os.File
 	theme             *Theme
-	running           bool
+	closed            bool
 	shell             string
 	initialCommand    string
 	stdinFd           int
@@ -139,8 +141,8 @@ func (t *Terminal) SetWindowManipulator(m WindowManipulator) {
 }
 
 func (t *Terminal) log(line string, params ...interface{}) {
-	// NOTE: enable to debug sequences
-	// log.Trace(line+"\n", params...)
+	log.WithField(logging.KeyClass, "util.Terminal").
+		Tracef(line, params...)
 }
 
 func (t *Terminal) reset() {
@@ -199,7 +201,6 @@ func (t *Terminal) SetSize(rows, cols uint16) error {
 func (t *Terminal) Run(updateChan chan struct{}) error {
 	t.mu.Lock()
 	t.updateChan = updateChan
-	t.running = true
 	t.reader = bufio.NewReaderSize(t.pty, 1024*1024)
 	t.mu.Unlock()
 
@@ -222,10 +223,6 @@ func (t *Terminal) Run(updateChan chan struct{}) error {
 	return nil
 }
 
-func (t *Terminal) IsRunning() bool {
-	return t.running
-}
-
 func (t *Terminal) requestRender() {
 	select {
 	case <-t.closeChan:
@@ -239,18 +236,21 @@ func (t *Terminal) processSequence(mr MeasuredRune) (render, exit bool) {
 	if mr.Rune == 0x1b {
 		return t.handleANSI()
 	}
-	return t.processRunes(mr), false
+	return t.processRunes(mr)
 }
 
-func (t *Terminal) processRunes(runes ...MeasuredRune) (renderRequired bool) {
+func (t *Terminal) processRunes(runes ...MeasuredRune) (renderRequired, exit bool) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
 	for _, r := range runes {
 
-		t.log("Terminal.processRunes: %c 0x%X", r.Rune, r.Rune)
+		// t.log("Terminal.processRunes: %c 0x%X", r.Rune, r.Rune)
 
 		switch r.Rune {
+		case 0x0, 0x1, 0x2, 0x3, 0x4, 0x6, 0x10,
+			0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19:
+			continue
 		case 0x05: //enq
 			continue
 		case 0x07: //bell
@@ -276,17 +276,14 @@ func (t *Terminal) processRunes(runes ...MeasuredRune) (renderRequired bool) {
 		case 0xf: //shiftIn
 			t.activeBuffer.currentCharset = 0
 		default:
-			if r.Rune < 0x20 {
-				// handle any other control chars here?
-				continue
-			}
-
 			t.activeBuffer.write(t.translateRune(r))
 			renderRequired = true
 		}
 	}
 
-	return renderRequired
+	// it doesn't matter whether we shortcircuit processing of runes
+	// upon close so lower "is-closed" checks on a critical path
+	return renderRequired, t.closed
 }
 
 func (t *Terminal) translateRune(b MeasuredRune) MeasuredRune {
@@ -344,4 +341,10 @@ func (t *Terminal) Lock() {
 
 func (t *Terminal) Unlock() {
 	t.mu.Unlock()
+}
+
+// assumes lock has been acquired by caller
+func (t *Terminal) Close() error {
+	t.closed = true
+	return t.pty.Close()
 }
