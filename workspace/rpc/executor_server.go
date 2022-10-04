@@ -7,6 +7,9 @@ import (
 	"sync"
 	"syscall"
 
+	"github.com/ernestrc/blue/logging"
+	log "github.com/sirupsen/logrus"
+	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/workspace"
 )
 
@@ -174,12 +177,12 @@ func (s *executorServer) Write(ctx context.Context, req *WriteRequest) (
 func (s *executorServer) Close(ctx context.Context, req *CloseFileRequest) (
 	*CloseFileResponse, error,
 ) {
-	f, ok := s.getFile(req.GetHandlerId())
+	closer, ok := s.handles[req.GetHandlerId()]
 	if !ok {
 		return nil, errFileNotOpen
 	}
 	defer s.removeHandle(req.GetHandlerId())
-	err := f.Close()
+	err := closer.Close()
 	if err != nil {
 		return nil, fmt.Errorf("close error: %s", err)
 	}
@@ -190,6 +193,14 @@ func (s *executorServer) init(e workspace.Executor) {
 	s.handles = make(map[int32]io.Closer)
 	s.nextHandlerID = 0
 	s.e = e
+}
+
+func (s *executorServer) log(
+	level log.Level, msg string, args ...interface{},
+) {
+	debug.StandardLogger().
+		WithField(logging.KeyClass, "executorServer").
+		Logf(level, msg, args...)
 }
 
 // NOTE expects callers to use executorServer Mutex to synchronize for s.handles
@@ -210,7 +221,7 @@ func (s *executorServer) getWriter(handlerID int32) (io.WriteCloser, bool) {
 	defer s.mu.Unlock()
 	h, ok := s.handles[handlerID]
 	if !ok {
-		return nil, ok
+		return nil, false
 	}
 	p, ok := h.(io.WriteCloser)
 	return p, ok
@@ -221,7 +232,7 @@ func (s *executorServer) getReader(handlerID int32) (io.ReadCloser, bool) {
 	defer s.mu.Unlock()
 	h, ok := s.handles[handlerID]
 	if !ok {
-		return nil, ok
+		return nil, false
 	}
 	p, ok := h.(io.ReadCloser)
 	return p, ok
@@ -232,7 +243,7 @@ func (s *executorServer) getFile(handlerID int32) (workspace.File, bool) {
 	defer s.mu.Unlock()
 	h, ok := s.handles[handlerID]
 	if !ok {
-		return nil, ok
+		return nil, false
 	}
 	f, ok := h.(workspace.File)
 	return f, ok
@@ -246,6 +257,8 @@ func (s *executorServer) stop() {
 		_ = h.Close()
 	}
 	s.handles = nil
+
+	s.log(log.TraceLevel, "stop")
 }
 
 // sync over individual handles over locking entire executorServer

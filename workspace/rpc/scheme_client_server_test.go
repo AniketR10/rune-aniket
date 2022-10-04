@@ -3,8 +3,10 @@ package rpc
 import (
 	"errors"
 	"io"
+	"io/ioutil"
 	"net"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -351,6 +353,14 @@ func testSchemeClientServer(
 			_, err := f.Seek(10, 1)
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), "boom")
+		}},
+		{"Close non-files", func(t *testing.T, ctrl *gomock.Controller, c workspace.Scheme, s *workspacetest.MockScheme) {
+			s.EXPECT().
+				StdoutPipe(gomock.Any()).
+				Return(ioutil.NopCloser(strings.NewReader("")), nil)
+			p, err := c.StdoutPipe(0)
+			require.NoError(t, err)
+			require.NoError(t, p.Close())
 		}},
 		{"file Close happy path", func(t *testing.T, ctrl *gomock.Controller, c workspace.Scheme, s *workspacetest.MockScheme) {
 			mock := workspace.NewMockOsFile(ctrl)
