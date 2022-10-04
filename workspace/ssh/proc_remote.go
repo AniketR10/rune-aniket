@@ -18,7 +18,6 @@ var (
 )
 
 type procRemote struct {
-	pid      int
 	mu       sync.Mutex
 	cmd      string
 	args     []string
@@ -32,14 +31,6 @@ type procSession struct {
 	executor workspace.Executor
 
 	pid workspace.Pid
-}
-
-func validateProcRemote(c sshConfig, uri workspace.URI) error {
-	if c.command == "" {
-		return errors.New("empty command")
-	}
-	_, err := workspace.CurrentUserHostURI(".")
-	return err
 }
 
 func newProcRemote(cfg sshConfig, uri workspace.URI) (
@@ -71,7 +62,7 @@ func newProcRemote(cfg sshConfig, uri workspace.URI) (
 		return nil, fmt.Errorf("could initialize local executor on URI %q: %s", uri.String(), err)
 	}
 
-	return &procRemote{pid: -1, executor: localExecutor, cmd: args[0], args: args[1:]}, nil
+	return &procRemote{executor: localExecutor, cmd: args[0], args: args[1:]}, nil
 }
 
 func (m *procRemote) NewSession() (workspace.Executor, error) {
@@ -82,6 +73,7 @@ func (m *procRemote) NewSession() (workspace.Executor, error) {
 		sshCmd:   m.cmd,
 		sshArgs:  m.args,
 		executor: m.executor,
+		pid:      -1,
 	}
 	m.session = ses
 	return ses, nil

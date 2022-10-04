@@ -11,7 +11,6 @@ import (
 	"strings"
 	"syscall"
 
-	multierr "github.com/ernestrc/go-multierror"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/knownhosts"
 	"golang.org/x/term"
@@ -44,23 +43,6 @@ type goSshSession struct {
 	cmd  string
 	args []string
 	ses  *ssh.Session
-}
-
-func validateStdRemote(c sshConfig, uri workspace.URI) (ret error) {
-	_, err := usernameOrCurrent(uri)
-	if err != nil {
-		ret = multierr.Append(ret, err)
-	}
-	_, err = authMethodsFromURI(c, uri)
-	if err != nil {
-		ret = multierr.Append(ret, err)
-	}
-
-	_, err = defaultHostkeyCallback()
-	if err != nil {
-		ret = multierr.Append(ret, err)
-	}
-	return ret
 }
 
 func newStdRemote(cfg sshConfig, uri workspace.URI) (
