@@ -199,7 +199,6 @@ func consumeAvailableData(
 			select {
 			case ch <- data:
 			case <-quit:
-				close(ch)
 				return nil
 			}
 		}
