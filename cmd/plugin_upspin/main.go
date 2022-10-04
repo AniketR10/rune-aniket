@@ -40,8 +40,6 @@ func (e *upspinGrantee) PermissionGranted(grants []plugin.Grant) {
 			if err != nil {
 				log.Fatalf("PermissionGranted: %+v: %s", g.Permission, err)
 			}
-			// TODO expose reconnecting scheme from workspace
-			// TODO or better, automatically install on every client scheme
 			err = m.RegisterScheme(upspinScheme, newScheme)
 			if err != nil {
 				log.Fatalf("Could not register scheme:  %s", err)

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	stdErrors "errors"
 	"fmt"
 	"io"
@@ -9,6 +10,7 @@ import (
 	"syscall"
 
 	blupspin "github.com/ernestrc/blue/upspin"
+	multierr "github.com/ernestrc/go-multierror"
 	"unstable.build/go-tui/config"
 	"unstable.build/go-tui/workspace"
 	upclient "upspin.io/client"
@@ -22,6 +24,8 @@ const upspinScheme = "upspin"
 
 var (
 	errExecute = stdErrors.New("cannot execute commands on upspin server")
+	configKeys = []string{"username", "keyserver",
+		"dirserver", "storeserver", "packing", "secrets", "tlscerts"}
 )
 
 type scheme struct {
@@ -41,12 +45,62 @@ func newScheme(config config.Config, uri workspace.URI) (workspace.Scheme, error
 	return ret, nil
 }
 
-func (s *scheme) init(config config.Config, uri workspace.URI) error {
-	// NOTE: assume for now default upspin config dir/file is used
-	// which is $HOME/upspin/config
-	cfg, err := upcfg.InitConfig(nil)
+// notes on upspin configuration, taken from upspin docs:
+// Any endpoints (keyserver, dirserver, storeserver) not set in the data for
+// the config will be set to the "unassigned" transport and an empty network
+// address, except keyserver which defaults to "remote,key.upspin.io:443".
+// If an endpoint is specified without a transport it is assumed to be
+// the address component of a remote endpoint.
+// If a remote endpoint is specified without a port in its address component
+// the port is assumed to be 443.
+// The default value for secrets is "$HOME/.ssh/$USERNAME".
+// The special value "none" indicates there are no secrets to load;
+// The default value for tlscerts is the empty string,
+// in which case just the system roots are used.
+// The default value for packing is "ee".
+func configToReader(c config.Config) (ret io.Reader, retErr error) {
+	var buf bytes.Buffer
+	for _, key := range configKeys {
+		value, err := c.GetString(key)
+		if err != nil && err != config.ErrNotFound {
+			retErr = multierr.Append(retErr, fmt.Errorf("%s: %v", key, err))
+		}
+		if value != "" {
+			buf.WriteString(fmt.Sprintf("%s: %s \n", key, value))
+		}
+	}
+	if retErr != nil {
+		return
+	}
+	if buf.Len() == 0 {
+		return
+	}
+	ret = &buf
+	return
+}
+
+func initUpspinConfig(c config.Config) (ret upspin.Config, retErr error) {
+	r, err := configToReader(c)
 	if err != nil {
-		return fmt.Errorf("upspin.InitConfig: %v", err)
+		retErr = multierr.Append(retErr,
+			fmt.Errorf("Failed to load provided config via workspace.upspin: %v", err))
+		// fallback to default config
+	}
+	ret, err = upcfg.InitConfig(r)
+	if err != nil {
+		if r == nil {
+			retErr = multierr.Append(retErr, fmt.Errorf("Failed to load default config at $HOME/upspin/config: %v", err))
+		} else {
+			retErr = multierr.Append(retErr, fmt.Errorf("upspin.InitConfig: %v", err))
+		}
+	}
+	return
+}
+
+func (s *scheme) init(config config.Config, uri workspace.URI) error {
+	cfg, err := initUpspinConfig(config)
+	if err != nil {
+		return err
 	}
 
 	// initialize and register transports
