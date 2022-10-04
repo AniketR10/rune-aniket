@@ -2,6 +2,7 @@ package main
 
 import (
 	"sync"
+	"time"
 
 	"unstable.build/go-tui/config"
 	"unstable.build/go-tui/plugin"
@@ -19,26 +20,34 @@ var (
 )
 
 type systemClipboard struct {
-	mu         sync.Mutex
-	broker     proto.MuxBroker
-	registerID string
+	mu          sync.Mutex
+	data        string
+	lastUpdated time.Time
+	broker      proto.MuxBroker
+	registerID  string
 }
 
-func (c *systemClipboard) Paste() (string, error) {
+func (c *systemClipboard) Paste() (string, time.Time, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	text, err := clipboard.ReadAll()
 	if err != nil {
-		return "", err
+		return "", time.Time{}, err
 	}
-	return text, nil
+	// if data didn't come from Copy, then assume
+	// it's always the most up to date
+	if c.data != text {
+		return text, time.Now(), nil
+	}
+	return text, c.lastUpdated, nil
 }
 
-func (c *systemClipboard) Copy(data string) error {
+func (c *systemClipboard) Copy(data string, ts time.Time) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-
+	c.lastUpdated = ts
+	c.data = data
 	return clipboard.WriteAll(data)
 }
 
@@ -50,14 +59,16 @@ func (c *systemClipboard) Connected(broker proto.MuxBroker, pconfig config.Confi
 		log.Fatal("clipboard package does not support this system: terminating plugin")
 	}
 
-	log.Infof("plugin connected; config: %#v", pconfig)
+	log.Debugf("plugin connected; config: %#v", pconfig)
 	c.broker = broker
 	c.registerID = text.DefaultRegisterID
 
 	registerID, err := pconfig.GetString("register")
 	if err != nil {
-		log.Infof("coud not read 'register' property: %v", err)
-		return
+		if err != config.ErrNotFound {
+			log.Warnf("coud not read 'register' property: %v, using default register", err)
+		}
+		registerID = text.DefaultRegisterID
 	}
 	c.registerID = registerID
 }

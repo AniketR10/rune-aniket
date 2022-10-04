@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"time"
 
 	termutil "unstable.build/go-tui/cmd/plugin_terminal/util"
 	"unstable.build/go-tui/plugin"
@@ -72,7 +73,7 @@ func (e *mouseDriver) OnAction(pos term.Coordinates, action text.MouseAction) bo
 		fallthrough
 	default:
 		if action == text.MouseMiddleClick {
-			paste, _ := e.clipboard.Paste()
+			paste, _, _ := e.clipboard.Paste()
 			e.hookRawBytes = []byte(paste)
 			return true
 		}
@@ -134,7 +135,7 @@ func (e *mouseDriver) SetSelectionStart(pos term.Coordinates) {
 
 func (e *mouseDriver) copySelectionToClipboard() {
 	data, _ := e.t.GetActiveBuffer().GetSelection()
-	e.clipboard.Copy(data)
+	e.clipboard.Copy(data, time.Now())
 }
 
 func (e *mouseDriver) SetSelectionEnd(pos term.Coordinates) {

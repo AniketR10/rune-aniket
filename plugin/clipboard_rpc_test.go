@@ -4,6 +4,7 @@ import (
 	"net"
 	"sync"
 	"testing"
+	"time"
 
 	gomock "github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
@@ -67,13 +68,15 @@ func TestClipboardIntegration(t *testing.T) {
 		client, closeFn := setupClipboardIntTest(t, mock)
 		defer closeFn()
 
-		mock.EXPECT().Copy(gomock.Eq("Montessori")).Return(nil)
+		mock.EXPECT().Copy(gomock.Eq("Montessori"), gomock.Any()).Return(nil)
 
-		err := client.Copy("Montessori")
+		now := time.Now()
+		err := client.Copy("Montessori", now)
 		require.NoError(t, err)
 
-		mock.EXPECT().Paste().Return("Montessori", nil)
-		paste, err := client.Paste()
+		mock.EXPECT().Paste().Return("Montessori", now, nil)
+		paste, ts, err := client.Paste()
+		require.Equal(t, now.UnixNano(), ts.UnixNano())
 		require.NoError(t, err)
 		assert.Equal(t, "Montessori", paste)
 	})

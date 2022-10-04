@@ -6,6 +6,7 @@ package plugin
 
 import (
 	reflect "reflect"
+	time "time"
 
 	gomock "github.com/golang/mock/gomock"
 )
@@ -34,26 +35,27 @@ func (m *MockClipboardRegister) EXPECT() *MockClipboardRegisterMockRecorder {
 }
 
 // Copy mocks base method.
-func (m *MockClipboardRegister) Copy(arg0 string) error {
+func (m *MockClipboardRegister) Copy(arg0 string, arg1 time.Time) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Copy", arg0)
+	ret := m.ctrl.Call(m, "Copy", arg0, arg1)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // Copy indicates an expected call of Copy.
-func (mr *MockClipboardRegisterMockRecorder) Copy(arg0 interface{}) *gomock.Call {
+func (mr *MockClipboardRegisterMockRecorder) Copy(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Copy", reflect.TypeOf((*MockClipboardRegister)(nil).Copy), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Copy", reflect.TypeOf((*MockClipboardRegister)(nil).Copy), arg0, arg1)
 }
 
 // Paste mocks base method.
-func (m *MockClipboardRegister) Paste() (string, error) {
+func (m *MockClipboardRegister) Paste() (string, time.Time, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Paste")
 	ret0, _ := ret[0].(string)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	ret1, _ := ret[1].(time.Time)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
 }
 
 // Paste indicates an expected call of Paste.
@@ -123,26 +125,27 @@ func (m *MockClipboard) EXPECT() *MockClipboardMockRecorder {
 }
 
 // Copy mocks base method.
-func (m *MockClipboard) Copy(arg0 string) error {
+func (m *MockClipboard) Copy(arg0 string, arg1 time.Time) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Copy", arg0)
+	ret := m.ctrl.Call(m, "Copy", arg0, arg1)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // Copy indicates an expected call of Copy.
-func (mr *MockClipboardMockRecorder) Copy(arg0 interface{}) *gomock.Call {
+func (mr *MockClipboardMockRecorder) Copy(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Copy", reflect.TypeOf((*MockClipboard)(nil).Copy), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Copy", reflect.TypeOf((*MockClipboard)(nil).Copy), arg0, arg1)
 }
 
 // Paste mocks base method.
-func (m *MockClipboard) Paste() (string, error) {
+func (m *MockClipboard) Paste() (string, time.Time, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Paste")
 	ret0, _ := ret[0].(string)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	ret1, _ := ret[1].(time.Time)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
 }
 
 // Paste indicates an expected call of Paste.

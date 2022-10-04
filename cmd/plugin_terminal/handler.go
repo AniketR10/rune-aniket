@@ -23,7 +23,10 @@ type emulator struct {
 	p  browser.EventPublisher
 	m  browser.Messenger
 
-	clipboard         string
+	clipboard struct {
+		data    string
+		updated time.Time
+	}
 	mouse             *text.Mouse
 	mouseDriver       *mouseDriver
 	windowManipulator *windowManipulator
@@ -148,14 +151,15 @@ func (e *emulator) init(
 	return nil
 }
 
-func (e *emulator) Paste() (string, error) {
-	log.Tracef("(%p).terminal.emulator.Paste: %s", e, e.clipboard)
-	return e.clipboard, nil
+func (e *emulator) Paste() (string, time.Time, error) {
+	log.Tracef("(%p).terminal.emulator.Paste: %s", e, e.clipboard.data)
+	return e.clipboard.data, e.clipboard.updated, nil
 }
 
-func (e *emulator) Copy(data string) error {
+func (e *emulator) Copy(data string, ts time.Time) error {
 	log.Tracef("(%p).terminal.emulator.Copy: %s", e, data)
-	e.clipboard = data
+	e.clipboard.data = data
+	e.clipboard.updated = ts
 	return nil
 }
 

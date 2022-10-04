@@ -35,20 +35,20 @@ type clipboardRegisterClient struct {
 	hook          func() error
 }
 
-func (c *clipboardRegisterClient) Paste() (string, error) {
+func (c *clipboardRegisterClient) Paste() (string, time.Time, error) {
 	ctx := context.Background()
 	req := pluginpb.ClipboardPasteRequest{}
 
 	res, err := c.c.Paste(ctx, &req)
 	if err != nil {
-		return "", err
+		return "", time.Time{}, err
 	}
-	return res.GetData(), nil
+	return res.GetData(), protoTimeToStd(res.GetTimestamp()), nil
 }
 
-func (c *clipboardRegisterClient) Copy(data string) error {
+func (c *clipboardRegisterClient) Copy(data string, ts time.Time) error {
 	ctx := context.Background()
-	req := pluginpb.ClipboardCopyRequest{Data: data}
+	req := pluginpb.ClipboardCopyRequest{Data: data, Timestamp: stdTimeToProto(ts)}
 
 	_, err := c.c.Copy(ctx, &req)
 	if err != nil {
@@ -194,7 +194,7 @@ func (c *clipboardRegisterServer) Copy(
 	defer c.locker.Unlock()
 
 	data := req.GetData()
-	err = c.r.Copy(data)
+	err = c.r.Copy(data, protoTimeToStd(req.GetTimestamp()))
 	if err != nil {
 		return
 	}
@@ -209,11 +209,13 @@ func (c *clipboardRegisterServer) Paste(
 	defer c.locker.Unlock()
 
 	res = new(pluginpb.ClipboardPasteResponse)
-	res.Data, err = c.r.Paste()
+	var ts time.Time
+	res.Data, ts, err = c.r.Paste()
 	if err != nil {
 		res = nil
 		return
 	}
+	res.Timestamp = stdTimeToProto(ts)
 	return
 }
 
@@ -258,12 +260,12 @@ func (c *clipboardClient) register(registerID string) (ClipboardRegister, error)
 	panic("this should not be called")
 }
 
-func (c *clipboardClient) Paste() (string, error) {
+func (c *clipboardClient) Paste() (string, time.Time, error) {
 	return c.remoteRegister.Paste()
 }
 
-func (c *clipboardClient) Copy(data string) error {
-	return c.remoteRegister.Copy(data)
+func (c *clipboardClient) Copy(data string, ts time.Time) error {
+	return c.remoteRegister.Copy(data, ts)
 }
 
 func (c *clipboardClient) SetRegister(registerID string, r ClipboardRegister) error {

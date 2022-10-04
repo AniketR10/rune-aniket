@@ -1,7 +1,10 @@
 package plugin
 
 import (
+	"time"
+
 	"google.golang.org/grpc"
+	"google.golang.org/protobuf/types/known/timestamppb"
 	"unstable.build/go-tui/proto"
 )
 
@@ -33,4 +36,14 @@ func acceptAndServe(
 	server := srv([]grpc.ServerOption{})
 	go server.Serve(lis)
 	return nil
+}
+
+func stdTimeToProto(ts time.Time) *timestamppb.Timestamp {
+	seconds := ts.Unix()
+	nanos := ts.Nanosecond()
+	return &timestamppb.Timestamp{Seconds: seconds, Nanos: int32(nanos)}
+}
+
+func protoTimeToStd(ts *timestamppb.Timestamp) time.Time {
+	return time.Unix(ts.GetSeconds(), int64(ts.GetNanos()))
 }

@@ -4,6 +4,8 @@ option go_package = "unstable.build/go-tui/plugin/rpc";
 
 package plugin;
 
+import "google/protobuf/timestamp.proto";
+
 message SetRegisterRequest {
 	string register_id = 1;
 	uint64 handler_id = 2;
@@ -19,6 +21,7 @@ service Clipboard {
 
 message ClipboardCopyRequest {
 	string data = 1;
+    google.protobuf.Timestamp timestamp = 2;
 }
 
 message ClipboardCopyResponse {
@@ -28,7 +31,9 @@ message ClipboardPasteRequest {
 }
 
 message ClipboardPasteResponse {
-	string data = 1;
+    string data = 1;
+    google.protobuf.Timestamp timestamp = 2;
+
 }
 
 service ClipboardRegister {
