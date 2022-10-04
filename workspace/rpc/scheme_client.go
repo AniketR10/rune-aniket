@@ -233,7 +233,9 @@ func (c *schemeClientImpl) newFileClient(
 			handlerID: handlerID,
 		},
 	}
-	c.addCloser(handlerID, ret)
+	// workspace.Pid is not necessary (and/or available) for files
+	// because it's only used for Wait cleanup
+	c.addCloser(workspace.Pid(-1), handlerID, ret)
 	return ret
 }
 

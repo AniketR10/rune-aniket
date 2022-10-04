@@ -3,20 +3,23 @@ package rpc
 import (
 	"context"
 	"fmt"
+	sync "sync"
 
 	"google.golang.org/grpc"
 	"unstable.build/go-tui/config"
 )
 
 type configServer struct {
-	cfg config.JSON
 	UnimplementedConfigServer
+	cfg    config.JSON
+	locker sync.Locker
 }
 
 // NewServer returns a configpb.ConfigServer that serves cfg.
-func NewServer(cfg config.Config) ConfigServer {
+func NewServer(cfg config.Config, locker sync.Locker) ConfigServer {
 	ret := new(configServer)
 	ret.cfg = config.JSONFromConfig(cfg)
+	ret.locker = locker
 	return ret
 }
 
@@ -24,6 +27,8 @@ func NewServer(cfg config.Config) ConfigServer {
 func (s *configServer) Get(
 	ctx context.Context, req *GetRequest,
 ) (res *GetResponse, err error) {
+	s.locker.Lock()
+	defer s.locker.Unlock()
 
 	var data []byte
 	data, err = s.cfg.MarshalText()

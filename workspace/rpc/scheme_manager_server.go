@@ -26,10 +26,19 @@ type SchemeManagerServer struct {
 	UnimplementedManagerServer
 
 	failureTimeout time.Duration
-	mu             sync.Mutex
-	manager        workspace.SchemeManager
 	broker         proto.MuxBroker
-	clients        map[uint64]io.Closer
+
+	// manager locker
+	locker  sync.Locker
+	manager workspace.SchemeManager
+
+	// resources locker; needed because we AddWorkspace
+	// is called from the main goroutine, which calls dialScheme
+	// and read/writes clients, at the same time we run a goroutine
+	// to monitor the underlying connection, which also writes
+	// to clients
+	rmu     sync.Mutex
+	clients map[uint64]io.Closer
 }
 
 // ties together all resources into an io.Closer
@@ -56,27 +65,29 @@ func (s *schemeManagerResource) Close() (ret error) {
 
 // NewSchemeManagerServer allocates storage for a new SchemeManagerServer and initializes it
 // with the given SchemeManager.
-func NewSchemeManagerServer(broker proto.MuxBroker, manager workspace.SchemeManager) *SchemeManagerServer {
+func NewSchemeManagerServer(
+	broker proto.MuxBroker, manager workspace.SchemeManager,
+	locker sync.Locker,
+) *SchemeManagerServer {
 	ret := new(SchemeManagerServer)
 	ret.failureTimeout = defaultTimeout
-	ret.Init(broker, manager)
+	ret.Init(broker, manager, locker)
 	return ret
 }
 
 // Init initializes this SchemeServerImpl with the given scheme.
-func (s *SchemeManagerServer) Init(broker proto.MuxBroker, manager workspace.SchemeManager) {
+func (s *SchemeManagerServer) Init(
+	broker proto.MuxBroker, manager workspace.SchemeManager,
+	locker sync.Locker,
+) {
 	s.manager = manager
 	s.broker = broker
+	s.locker = locker
 	s.clients = make(map[uint64]io.Closer)
 }
 
 func (s *SchemeManagerServer) getClients() map[uint64]io.Closer {
 	return s.clients
-}
-
-func (s *SchemeManagerServer) safeForceCloseHandler(brokerID uint64, reason string) error {
-	_, err := proto.ForceCloseResource(s.broker, brokerID, s.getClients, &s.mu)
-	return err
 }
 
 func (c *SchemeManagerServer) log(level log.Level, msg string, args ...interface{}) {
@@ -95,12 +106,12 @@ func (s *SchemeManagerServer) dialScheme(proxyID uint32, cfg config.Config, uri 
 	ctx, cancelFn := context.WithCancel(context.Background())
 	go proto.MonitorConnection(ctx, s.failureTimeout, conn,
 		func(reason string) {
-			s.safeForceCloseHandler(uint64(proxyID),
-				fmt.Sprintf("rpc.SchemeManagerServer(proxyID=%d): %s", proxyID, reason))
+			reason = fmt.Sprintf("rpc.SchemeManagerServer(proxyID=%d): %s", proxyID, reason)
+			_, _ = proto.ForceCloseResource(s.broker, uint64(proxyID), s.getClients, &s.rmu)
 		})
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.rmu.Lock()
+	defer s.rmu.Unlock()
 
 	s.clients[uint64(proxyID)] = &schemeManagerResource{
 		conn:          conn,
@@ -118,8 +129,8 @@ func (s *SchemeManagerServer) RegisterScheme(ctx context.Context, req *RegisterS
 	s.log(log.TraceLevel, "RegisterScheme: %d %s", req.GetProxyId(), req.GetScheme())
 	defer s.log(log.TraceLevel, "RegisterScheme: %d %s: err=%s", req.GetProxyId(), req.GetScheme(), err)
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.locker.Lock()
+	defer s.locker.Unlock()
 
 	proxyID := req.GetProxyId()
 	err = s.manager.RegisterScheme(req.GetScheme(),

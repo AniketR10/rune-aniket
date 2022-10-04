@@ -17,17 +17,14 @@ type executorServer struct {
 	wp workspace.API
 	e  workspace.Executor
 
-	mu            sync.Mutex
-	handles       map[int32]io.Closer
+	mu            sync.Locker
+	resources     map[int32]executorResource
 	nextHandlerID int32
 }
 
 func (s *executorServer) Command(ctx context.Context, req *CommandRequest) (
 	*CommandResponse, error,
 ) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	name := req.GetName()
 	args := req.GetArgs()
 	pid, err := s.e.Command(name, args...)
@@ -42,9 +39,6 @@ func (s *executorServer) Command(ctx context.Context, req *CommandRequest) (
 func (s *executorServer) Start(ctx context.Context, req *StartRequest) (
 	*StartResponse, error,
 ) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	pid := req.GetPid()
 	err := s.e.Start(workspace.Pid(pid))
 	if err != nil {
@@ -54,13 +48,39 @@ func (s *executorServer) Start(ctx context.Context, req *StartRequest) (
 	return resp, nil
 }
 
+func removePidResources(
+	mu sync.Locker, res map[int32]executorResource, pid workspace.Pid,
+) []executorResource {
+	mu.Lock()
+	defer mu.Unlock()
+
+	var ids []int32
+	for handlerID, res := range res {
+		if res.pid == pid {
+			ids = append(ids, handlerID)
+			_ = res.closer.Close()
+		}
+	}
+
+	var ret []executorResource
+	for _, id := range ids {
+		ret = append(ret, res[id])
+		delete(res, id)
+	}
+	return ret
+}
+
+func (s *executorServer) removePidResources(pid workspace.Pid) {
+	res := removePidResources(s.mu, s.resources, pid)
+	s.log(log.TraceLevel, "cleaned all resources of pid %d: %#v", pid, res)
+}
+
 func (s *executorServer) Wait(ctx context.Context, req *WaitRequest) (
 	*WaitResponse, error,
 ) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	pid := req.GetPid()
+	s.log(log.TraceLevel, "Wait(pid=%d)", pid)
+	defer s.removePidResources(workspace.Pid(pid))
 	err := s.e.Wait(workspace.Pid(pid))
 	if err != nil {
 		return nil, err
@@ -72,9 +92,6 @@ func (s *executorServer) Wait(ctx context.Context, req *WaitRequest) (
 func (s *executorServer) Signal(ctx context.Context, req *SignalRequest) (
 	*SignalResponse, error,
 ) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	pid := req.GetPid()
 	signal := req.GetSig()
 	err := s.e.Signal(workspace.Pid(pid), syscall.Signal(signal))
@@ -88,16 +105,13 @@ func (s *executorServer) Signal(ctx context.Context, req *SignalRequest) (
 func (s *executorServer) StderrPipe(ctx context.Context, req *StdioPipeRequest) (
 	*StdioPipeResponse, error,
 ) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	pid := req.GetPid()
 	pipe, err := s.e.StderrPipe(workspace.Pid(pid))
 	if err != nil {
 		return nil, err
 	}
 	resp := new(StdioPipeResponse)
-	handlerID := s.addHandle(&syncReader{reader: pipe})
+	handlerID := s.addHandle(workspace.Pid(pid), &syncReader{reader: pipe})
 	resp.HandlerId = handlerID
 	return resp, nil
 }
@@ -105,16 +119,13 @@ func (s *executorServer) StderrPipe(ctx context.Context, req *StdioPipeRequest) 
 func (s *executorServer) StdoutPipe(ctx context.Context, req *StdioPipeRequest) (
 	*StdioPipeResponse, error,
 ) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	pid := req.GetPid()
 	pipe, err := s.e.StdoutPipe(workspace.Pid(pid))
 	if err != nil {
 		return nil, err
 	}
 	resp := new(StdioPipeResponse)
-	handlerID := s.addHandle(&syncReader{reader: pipe})
+	handlerID := s.addHandle(workspace.Pid(pid), &syncReader{reader: pipe})
 	resp.HandlerId = handlerID
 	return resp, nil
 }
@@ -122,16 +133,13 @@ func (s *executorServer) StdoutPipe(ctx context.Context, req *StdioPipeRequest) 
 func (s *executorServer) StdinPipe(ctx context.Context, req *StdioPipeRequest) (
 	*StdioPipeResponse, error,
 ) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	pid := req.GetPid()
 	pipe, err := s.e.StdinPipe(workspace.Pid(pid))
 	if err != nil {
 		return nil, err
 	}
 	resp := new(StdioPipeResponse)
-	handlerID := s.addHandle(&syncWriter{writer: pipe})
+	handlerID := s.addHandle(workspace.Pid(pid), &syncWriter{writer: pipe})
 	resp.HandlerId = handlerID
 	return resp, nil
 }
@@ -177,21 +185,23 @@ func (s *executorServer) Write(ctx context.Context, req *WriteRequest) (
 func (s *executorServer) Close(ctx context.Context, req *CloseFileRequest) (
 	*CloseFileResponse, error,
 ) {
-	closer, ok := s.handles[req.GetHandlerId()]
+	res, ok := s.resources[req.GetHandlerId()]
 	if !ok {
 		return nil, errFileNotOpen
 	}
 	defer s.removeHandle(req.GetHandlerId())
-	err := closer.Close()
+	s.log(log.DebugLevel, "Close called on resource with handlerID: %d", req.GetHandlerId())
+	err := res.closer.Close()
 	if err != nil {
 		return nil, fmt.Errorf("close error: %s", err)
 	}
 	return new(CloseFileResponse), nil
 }
 
-func (s *executorServer) init(e workspace.Executor) {
-	s.handles = make(map[int32]io.Closer)
+func (s *executorServer) init(e workspace.Executor, locker sync.Locker) {
+	s.resources = make(map[int32]executorResource)
 	s.nextHandlerID = 0
+	s.mu = locker
 	s.e = e
 }
 
@@ -203,49 +213,57 @@ func (s *executorServer) log(
 		Logf(level, msg, args...)
 }
 
-// NOTE expects callers to use executorServer Mutex to synchronize for s.handles
-func (s *executorServer) addHandle(f io.Closer) int32 {
+func (s *executorServer) addHandle(pid workspace.Pid, closer io.Closer) int32 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	s.nextHandlerID++
-	s.handles[s.nextHandlerID] = f
+	res := executorResource{closer: closer, pid: pid}
+	s.resources[s.nextHandlerID] = res
+	s.log(log.TraceLevel, "added resource %#v with handlerID %d",
+		res, s.nextHandlerID)
 	return s.nextHandlerID
 }
 
 func (s *executorServer) removeHandle(handlerID int32) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	delete(s.handles, handlerID)
+	res, _ := s.resources[handlerID]
+	s.log(log.TraceLevel, "removing resource %#v with handlerID %d",
+		res, handlerID)
+	delete(s.resources, handlerID)
 }
 
 func (s *executorServer) getWriter(handlerID int32) (io.WriteCloser, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	h, ok := s.handles[handlerID]
+	h, ok := s.resources[handlerID]
 	if !ok {
 		return nil, false
 	}
-	p, ok := h.(io.WriteCloser)
+	p, ok := h.closer.(io.WriteCloser)
 	return p, ok
 }
 
 func (s *executorServer) getReader(handlerID int32) (io.ReadCloser, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	h, ok := s.handles[handlerID]
+	h, ok := s.resources[handlerID]
 	if !ok {
 		return nil, false
 	}
-	p, ok := h.(io.ReadCloser)
+	p, ok := h.closer.(io.ReadCloser)
 	return p, ok
 }
 
 func (s *executorServer) getFile(handlerID int32) (workspace.File, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	h, ok := s.handles[handlerID]
+	h, ok := s.resources[handlerID]
 	if !ok {
 		return nil, false
 	}
-	f, ok := h.(workspace.File)
+	f, ok := h.closer.(workspace.File)
 	return f, ok
 }
 
@@ -253,10 +271,10 @@ func (s *executorServer) stop() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	for _, h := range s.handles {
-		_ = h.Close()
+	for _, h := range s.resources {
+		_ = h.closer.Close()
 	}
-	s.handles = nil
+	s.resources = nil
 
 	s.log(log.TraceLevel, "stop")
 }

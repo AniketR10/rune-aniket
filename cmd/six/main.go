@@ -9,6 +9,7 @@ import (
 	"os"
 	"path"
 	"runtime"
+	"sync"
 
 	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui/config"
@@ -93,7 +94,7 @@ func main() {
 		if err != nil {
 			log.Fatal(err)
 		}
-		server := workspacepb.NewSchemeServer(manager)
+		server := workspacepb.NewSchemeServer(manager, new(sync.Mutex))
 		err = ssh.StartSchemeServer(server)
 		if err != nil {
 			log.Fatal(err)

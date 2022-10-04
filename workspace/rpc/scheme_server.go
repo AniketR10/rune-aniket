@@ -24,15 +24,15 @@ type SchemeServerImpl struct {
 
 // NewSchemeServer allocates storage for a new SchemeServerImpl and initializes it
 // with the given scheme.
-func NewSchemeServer(scheme workspace.Scheme) *SchemeServerImpl {
+func NewSchemeServer(scheme workspace.Scheme, locker sync.Locker) *SchemeServerImpl {
 	ret := new(SchemeServerImpl)
-	ret.Init(scheme)
+	ret.Init(scheme, locker)
 	return ret
 }
 
 // Init initializes this SchemeServerImpl with the given scheme.
-func (s *SchemeServerImpl) Init(scheme workspace.Scheme) {
-	s.executorServer.init(scheme)
+func (s *SchemeServerImpl) Init(scheme workspace.Scheme, locker sync.Locker) {
+	s.executorServer.init(scheme, locker)
 	s.scheme = scheme
 }
 
@@ -40,9 +40,6 @@ func (s *SchemeServerImpl) Init(scheme workspace.Scheme) {
 func (s *SchemeServerImpl) Open(ctx context.Context, req *OpenRequest) (
 	*OpenResponse, error,
 ) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	filename := req.GetFilename()
 	f, err := s.scheme.Open(filename, int(req.GetFlag()), os.FileMode(req.GetMode()))
 	if err != nil {
@@ -56,7 +53,7 @@ func (s *SchemeServerImpl) Open(ctx context.Context, req *OpenRequest) (
 		return nil, fmt.Errorf("open %s error: %s", filename, err)
 	}
 
-	handlerID := s.addHandle(&syncFile{file: f})
+	handlerID := s.addHandle(workspace.Pid(-1), &syncFile{file: f})
 	resp := new(OpenResponse)
 	resp.HandlerId = handlerID
 	return resp, nil
@@ -66,9 +63,6 @@ func (s *SchemeServerImpl) Open(ctx context.Context, req *OpenRequest) (
 func (s *SchemeServerImpl) Remove(ctx context.Context, req *RemoveRequest) (
 	*RemoveResponse, error,
 ) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	filename := req.GetFilename()
 	err := s.scheme.Remove(filename)
 	if err != nil {
@@ -81,9 +75,6 @@ func (s *SchemeServerImpl) Remove(ctx context.Context, req *RemoveRequest) (
 func (s *SchemeServerImpl) Rename(ctx context.Context, req *RenameRequest) (
 	*RenameResponse, error,
 ) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	filename := req.GetFilename()
 	err := s.scheme.Rename(filename, req.GetNewfilename())
 	if err != nil {
@@ -96,9 +87,6 @@ func (s *SchemeServerImpl) Rename(ctx context.Context, req *RenameRequest) (
 func (s *SchemeServerImpl) Stat(ctx context.Context, req *StatRequest) (
 	*StatResponse, error,
 ) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	var err error
 	var fs os.FileInfo
 	if req.GetLstat() {
@@ -124,9 +112,6 @@ func (s *SchemeServerImpl) Stat(ctx context.Context, req *StatRequest) (
 func (s *SchemeServerImpl) ReadLink(ctx context.Context, req *ReadLinkRequest) (
 	*ReadLinkResponse, error,
 ) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	filename := req.GetFilename()
 	fil, err := s.scheme.ReadLink(filename)
 	if err != nil {
@@ -141,9 +126,6 @@ func (s *SchemeServerImpl) ReadLink(ctx context.Context, req *ReadLinkRequest) (
 func (s *SchemeServerImpl) URI(ctx context.Context, req *URIRequest) (
 	*URIResponse, error,
 ) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	path := req.GetPath()
 	uri, err := s.scheme.URI(path)
 	if err != nil {

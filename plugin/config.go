@@ -46,7 +46,7 @@ func (s *configResourceServer) Serve(
 				}
 				grpc := srv.GRPC()
 				s.srv = srv
-				server := configpb.NewServer(s.cfg)
+				server := configpb.NewServer(s.cfg, lock)
 				configpb.RegisterConfigServer(grpc, server)
 			}
 			return s.srv

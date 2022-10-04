@@ -3,6 +3,7 @@ package rpc
 import (
 	"context"
 	"errors"
+	"sync"
 
 	"unstable.build/go-tui/workspace"
 )
@@ -19,15 +20,15 @@ type Server struct {
 }
 
 // NewServer allocates storage for a new server and initializes it with wp.
-func NewServer(wp workspace.Workspace) *Server {
+func NewServer(wp workspace.Workspace, locker sync.Locker) *Server {
 	ret := new(Server)
-	ret.Init(wp)
+	ret.Init(wp, locker)
 	return ret
 }
 
 // Init initializes this Server with the given workspace
-func (s *Server) Init(wp workspace.Workspace) {
-	s.executorServer.init(wp)
+func (s *Server) Init(wp workspace.Workspace, locker sync.Locker) {
+	s.executorServer.init(wp, locker)
 	s.wp = wp
 }
 
@@ -35,9 +36,6 @@ func (s *Server) Init(wp workspace.Workspace) {
 func (s *Server) URI(ctx context.Context, req *URIRequest) (
 	*URIResponse, error,
 ) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	uri, err := s.wp.URI(req.GetPath())
 	if err != nil {
 		return nil, err
@@ -51,9 +49,6 @@ func (s *Server) URI(ctx context.Context, req *URIRequest) (
 func (s *Server) Getwd(ctx context.Context, req *GetwdRequest) (
 	*URIResponse, error,
 ) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	uri, err := s.wp.Getwd()
 	if err != nil {
 		return nil, err

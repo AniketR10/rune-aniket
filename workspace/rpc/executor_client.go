@@ -6,13 +6,16 @@ import (
 	"io"
 	"syscall"
 
+	"github.com/ernestrc/blue/logging"
 	multierr "github.com/ernestrc/go-multierror"
+	log "github.com/sirupsen/logrus"
+	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/workspace"
 )
 
 type executorClientImpl struct {
-	client ExecutorClient
-	files  map[int32]io.Closer
+	client    ExecutorClient
+	resources map[int32]executorResource
 }
 
 type ioClient struct {
@@ -20,9 +23,16 @@ type ioClient struct {
 	client    ExecutorClient
 }
 
+type nopLocker struct{}
+
+func (l nopLocker) Lock() {
+}
+func (l nopLocker) Unlock() {
+}
+
 func (c *executorClientImpl) init(client ExecutorClient) {
 	c.client = client
-	c.files = make(map[int32]io.Closer)
+	c.resources = make(map[int32]executorResource)
 }
 
 func (c *executorClientImpl) Command(name string, arg ...string) (workspace.Pid, error) {
@@ -70,7 +80,7 @@ func (c *executorClientImpl) StderrPipe(pid workspace.Pid) (io.ReadCloser, error
 	if err != nil {
 		return nil, err
 	}
-	return c.newIOClient("/dev/stderr", int32(resp.GetHandlerId())), nil
+	return c.newIOClient(pid, "/dev/stderr", int32(resp.GetHandlerId())), nil
 }
 
 func (c *executorClientImpl) StdinPipe(pid workspace.Pid) (io.WriteCloser, error) {
@@ -82,7 +92,7 @@ func (c *executorClientImpl) StdinPipe(pid workspace.Pid) (io.WriteCloser, error
 	if err != nil {
 		return nil, err
 	}
-	return c.newIOClient("/dev/stdin", int32(resp.GetHandlerId())), nil
+	return c.newIOClient(pid, "/dev/stdin", int32(resp.GetHandlerId())), nil
 }
 
 func (c *executorClientImpl) StdoutPipe(pid workspace.Pid) (io.ReadCloser, error) {
@@ -94,28 +104,45 @@ func (c *executorClientImpl) StdoutPipe(pid workspace.Pid) (io.ReadCloser, error
 	if err != nil {
 		return nil, err
 	}
-	return c.newIOClient("/dev/stdout", int32(resp.GetHandlerId())), nil
+	return c.newIOClient(pid, "/dev/stdout", int32(resp.GetHandlerId())), nil
+}
+
+func (c *executorClientImpl) log(level log.Level, msg string, args ...interface{}) {
+	debug.StandardLogger().
+		WithField(logging.KeyClass, "executorClientImpl").
+		Logf(level, msg, args...)
+}
+
+func (c *executorClientImpl) removePidResources(pid workspace.Pid) {
+	res := removePidResources(nopLocker{}, c.resources, pid)
+	c.log(log.TraceLevel, "cleaned all resources of pid %d: %#v", pid, res)
 }
 
 func (c *executorClientImpl) Wait(pid workspace.Pid) error {
-	ctx, cleanup := ctxWithTimeout()
-	defer cleanup()
+	// do not set timeout for Wait, as there's no guarantee it should ever return,
+	// for instance when plugins run servers that last the entire tui session.
+	ctx := context.Background()
+
+	c.log(log.TraceLevel, "Wait(pid=%d)", pid)
 
 	req := WaitRequest{Pid: int32(pid)}
 	_, err := c.client.Wait(ctx, &req)
 	if err != nil {
 		return err
 	}
+	// Wait waits for the command and copying to stdin or from stdout/err
+	// so it's safe to cleanup all resources of pid here
+	c.removePidResources(pid)
 	return nil
 }
 
 func (c *executorClientImpl) Close() (ret error) {
-	for _, res := range c.files {
-		if err := res.Close(); err != nil {
+	for _, res := range c.resources {
+		if err := res.closer.Close(); err != nil {
 			ret = multierr.Append(ret, err)
 		}
 	}
-	c.files = nil
+	c.resources = nil
 	return
 }
 
@@ -164,26 +191,43 @@ func (c *ioClient) Close() error {
 	if err != nil {
 		return err
 	}
+
+	debug.StandardLogger().
+		WithField(logging.KeyClass, "ioClient").
+		Debugf("close called for handler ID %d", c.handlerID)
+
 	return nil
 }
 
-func (c *executorClientImpl) addCloser(handlerID int32, closer io.Closer) {
+type executorResource struct {
+	pid    workspace.Pid
+	closer io.Closer
+}
+
+func (c *executorClientImpl) addCloser(
+	pid workspace.Pid, handlerID int32, closer io.Closer,
+) {
 	// NOTE this should never happen, but server is boss here
 	// so make sure we do not leak resources
-	f, ok := c.files[handlerID]
+	f, ok := c.resources[handlerID]
 	if ok {
-		_ = f.Close()
+		c.log(log.WarnLevel, "overriding handler ID %d for pid %d",
+			handlerID, pid)
+		_ = f.closer.Close()
 	}
-	c.files[handlerID] = closer
+	c.log(log.TraceLevel, "add closer %d for pid %d", handlerID, pid)
+	c.resources[handlerID] = executorResource{pid: pid, closer: closer}
 }
 
 func (c *executorClientImpl) newIOClient(
-	filename string, handlerID int32,
+	pid workspace.Pid, filename string, handlerID int32,
 ) *ioClient {
 	ret := &ioClient{
 		handlerID: handlerID,
 		client:    c.client,
 	}
-	c.addCloser(handlerID, ret)
+	c.log(log.TraceLevel, "new I/O client with name %s and handlerID %d for pid %d",
+		filename, handlerID, pid)
+	c.addCloser(pid, handlerID, ret)
 	return ret
 }

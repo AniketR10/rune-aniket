@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -55,7 +56,7 @@ func setupSchemeClientServerUnitTest(t *testing.T, ctrl *gomock.Controller) (
 ) {
 
 	mockScheme := workspacetest.NewMockScheme(ctrl)
-	server := NewSchemeServer(mockScheme)
+	server := NewSchemeServer(mockScheme, new(sync.Mutex))
 	client, cleanup := setupSchemeClientServerTest(t, server)
 	return client, server, cleanup
 }

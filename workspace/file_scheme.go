@@ -8,6 +8,8 @@ import (
 	"os"
 	"os/exec"
 	"os/user"
+	"sync"
+	"sync/atomic"
 	"syscall"
 
 	"github.com/ernestrc/blue/logging"
@@ -39,7 +41,7 @@ type fileScheme struct {
 	getUser    func() (*user.User, error)
 	lookupUser func(string) (*user.User, error)
 	workspace  URI
-	cmds       map[Pid]*exec.Cmd
+	cmds       sync.Map
 	nextPid    int32
 }
 
@@ -70,7 +72,6 @@ func (p *fileScheme) init(workspace URI) error {
 		workspace = Dir(workspace)
 	}
 	p.workspace = workspace
-	p.cmds = make(map[Pid]*exec.Cmd)
 	return nil
 }
 
@@ -126,26 +127,25 @@ func (p *fileScheme) URI(path string) (URI, error) {
 }
 
 func (m *fileScheme) Command(name string, arg ...string) (Pid, error) {
-	if m.cmds == nil {
-		return 0, errors.New("workspace is closing")
-	}
-
 	cmd := exec.Command(name, arg...)
 	cmd.Dir = m.workspace.Path()
-	m.nextPid++
+	nextPid := atomic.AddInt32(&m.nextPid, 1)
 
 	debug.StandardLogger().
 		WithField(logging.KeyClass, "fileScheme").
 		WithField("URI", m.workspace.String()).
-		Debugf("exec.Command: (%#v, pid=%d)", cmd, m.nextPid)
+		Debugf("exec.Command: (%#v, pid=%d)", cmd, nextPid)
 
-	m.cmds[Pid(m.nextPid)] = cmd
-	return Pid(m.nextPid), nil
+	m.cmds.Store(Pid(nextPid), cmd)
+	return Pid(nextPid), nil
 }
 
 func (m *fileScheme) getCmdForPid(pid Pid) (*exec.Cmd, bool) {
-	f, ok := m.cmds[pid]
-	return f, ok
+	f, ok := m.cmds.Load(pid)
+	if ok {
+		return f.(*exec.Cmd), true
+	}
+	return nil, false
 }
 
 func (m *fileScheme) Start(pid Pid) error {
@@ -216,6 +216,7 @@ func (m *fileScheme) Wait(pid Pid) error {
 	if !ok {
 		return errProcNotFound
 	}
+	defer m.cmds.Delete(pid)
 	err := f.Wait()
 	if err != nil {
 		return fmt.Errorf("Cmd.Wait: %w", err)
@@ -224,18 +225,15 @@ func (m *fileScheme) Wait(pid Pid) error {
 }
 
 func (m *fileScheme) Close() error {
-	// idempotent Close
-	if m.cmds == nil {
-		return nil
-	}
-
 	var ret error
 
 	var copyCmds []*exec.Cmd
-	for _, cmd := range m.cmds {
-		copyCmds = append(copyCmds, cmd)
-	}
-
+	var keys []interface{}
+	m.cmds.Range(func(key, cmd interface{}) bool {
+		copyCmds = append(copyCmds, cmd.(*exec.Cmd))
+		keys = append(keys, key)
+		return true
+	})
 	for _, cmd := range copyCmds {
 		if cmd.Process != nil {
 			err := syscall.Kill(cmd.Process.Pid, syscall.SIGTERM)
@@ -244,7 +242,10 @@ func (m *fileScheme) Close() error {
 			}
 		}
 	}
-	m.cmds = nil
+
+	for _, key := range keys {
+		m.cmds.Delete(key)
+	}
 	return ret
 }
 

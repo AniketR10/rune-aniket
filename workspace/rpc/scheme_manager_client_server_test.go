@@ -3,6 +3,7 @@ package rpc
 import (
 	"context"
 	"net"
+	"sync"
 	"testing"
 	"time"
 
@@ -50,7 +51,7 @@ func TestSchemeManagerClientServerScheme(t *testing.T) {
 		mockScheme := workspacetest.NewMockScheme(ctrl)
 
 		// host-side
-		srv := NewSchemeManagerServer(broker, manager)
+		srv := NewSchemeManagerServer(broker, manager, new(sync.Mutex))
 		conn, closeFn := doSetupSchemeManagerClientServerTest(t, srv)
 
 		// plugin-side

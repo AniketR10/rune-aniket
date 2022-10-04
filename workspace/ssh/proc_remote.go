@@ -155,5 +155,6 @@ func (s *procSession) Wait(pid workspace.Pid) error {
 }
 
 func (s *procSession) Close() error {
+	// executor already closed by procRemote
 	return nil
 }

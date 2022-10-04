@@ -3,6 +3,7 @@ package rpc
 import (
 	"errors"
 	"net"
+	"sync"
 	"syscall"
 	"testing"
 
@@ -52,7 +53,7 @@ func setupClientServerUnitTest(t *testing.T) (*Client, *Server, *workspace.MockO
 
 	mock := workspace.NewMockOsFile(ctrl)
 	mockExecutor := workspacetest.NewMockWorkspace(ctrl)
-	server := NewServer(mockExecutor)
+	server := NewServer(mockExecutor, new(sync.Mutex))
 	client, cleanup := setupClientServerTest(t, server)
 	return client, server, mock, cleanup
 }

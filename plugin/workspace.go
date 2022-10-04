@@ -46,7 +46,7 @@ func (s *workspaceResourceServer) Serve(
 				}
 				grpc := srv.GRPC()
 				s.srv = srv
-				server := workspacepb.NewServer(s.b)
+				server := workspacepb.NewServer(s.b, lock)
 				workspacepb.RegisterWorkspaceServer(grpc, server)
 			}
 			return s.srv

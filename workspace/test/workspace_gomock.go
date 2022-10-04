@@ -226,6 +226,58 @@ func (mr *MockSchemeManagerMockRecorder) RegisterScheme(arg0, arg1 interface{}) 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RegisterScheme", reflect.TypeOf((*MockSchemeManager)(nil).RegisterScheme), arg0, arg1)
 }
 
+// MockWorkspaceManager is a mock of WorkspaceManager interface.
+type MockWorkspaceManager struct {
+	ctrl     *gomock.Controller
+	recorder *MockWorkspaceManagerMockRecorder
+}
+
+// MockWorkspaceManagerMockRecorder is the mock recorder for MockWorkspaceManager.
+type MockWorkspaceManagerMockRecorder struct {
+	mock *MockWorkspaceManager
+}
+
+// NewMockWorkspaceManager creates a new mock instance.
+func NewMockWorkspaceManager(ctrl *gomock.Controller) *MockWorkspaceManager {
+	mock := &MockWorkspaceManager{ctrl: ctrl}
+	mock.recorder = &MockWorkspaceManagerMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockWorkspaceManager) EXPECT() *MockWorkspaceManagerMockRecorder {
+	return m.recorder
+}
+
+// AddWorkspace mocks base method.
+func (m *MockWorkspaceManager) AddWorkspace(arg0 workspace.URI) (workspace.Workspace, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AddWorkspace", arg0)
+	ret0, _ := ret[0].(workspace.Workspace)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// AddWorkspace indicates an expected call of AddWorkspace.
+func (mr *MockWorkspaceManagerMockRecorder) AddWorkspace(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddWorkspace", reflect.TypeOf((*MockWorkspaceManager)(nil).AddWorkspace), arg0)
+}
+
+// RegisterScheme mocks base method.
+func (m *MockWorkspaceManager) RegisterScheme(arg0 string, arg1 workspace.SchemeFunc) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RegisterScheme", arg0, arg1)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// RegisterScheme indicates an expected call of RegisterScheme.
+func (mr *MockWorkspaceManagerMockRecorder) RegisterScheme(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RegisterScheme", reflect.TypeOf((*MockWorkspaceManager)(nil).RegisterScheme), arg0, arg1)
+}
+
 // MockExecutor is a mock of Executor interface.
 type MockExecutor struct {
 	ctrl     *gomock.Controller

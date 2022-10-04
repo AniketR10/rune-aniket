@@ -46,7 +46,7 @@ func (s *schemeManagerResourceServer) Serve(
 				}
 				grpc := srv.GRPC()
 				s.srv = srv
-				server := workspacepb.NewSchemeManagerServer(broker, s.b)
+				server := workspacepb.NewSchemeManagerServer(broker, s.b, lock)
 				workspacepb.RegisterManagerServer(grpc, server)
 			}
 			return s.srv

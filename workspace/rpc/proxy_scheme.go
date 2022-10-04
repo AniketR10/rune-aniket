@@ -60,9 +60,12 @@ func (s *proxySchemeServerImpl) serveScheme(scheme workspace.Scheme) (uint32, er
 	var server *SchemeServerImpl
 	ret, srv, err := proto.AcceptAndServe(s.broker,
 		func(_ uint32, srv proto.MuxServer) {
-			server = NewSchemeServer(scheme)
+			server = NewSchemeServer(scheme, &s.mu)
 			RegisterSchemeServer(srv.GRPC(), server)
 		})
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
 	s.servers[ret] = proxySchemeResource{srv: srv, scheme: scheme, server: server}
 	return ret, err
@@ -85,9 +88,6 @@ func (s *proxySchemeServerImpl) InitializeProxy(
 	if err != nil {
 		return nil, err
 	}
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
 
 	scheme, err := s.fn(cfg, uri)
 	if err != nil {
