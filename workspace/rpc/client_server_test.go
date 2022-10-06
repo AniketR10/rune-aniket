@@ -3,6 +3,8 @@ package rpc
 import (
 	"errors"
 	"net"
+	"os"
+	"strings"
 	"sync"
 	"syscall"
 	"testing"
@@ -301,6 +303,42 @@ func TestClientServer(t *testing.T) {
 			_, err := c.Getwd()
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), "boom")
+		}},
+		{"Remove happy path", func(t *testing.T, mock *workspace.MockOsFile, c *Client, s *Server) {
+			s.wp.(*workspacetest.MockWorkspace).EXPECT().
+				Remove(gomock.Eq("/tmp/hello_world.go")).
+				Return(nil)
+
+			err := c.Remove("/tmp/hello_world.go")
+			assert.NoError(t, err)
+		}},
+		{"Remove error", func(t *testing.T, mock *workspace.MockOsFile, c *Client, s *Server) {
+			s.wp.(*workspacetest.MockWorkspace).EXPECT().
+				Remove(gomock.Eq("/tmp/hello_world.go")).
+				Return(errors.New("pow"))
+
+			err := c.Remove("/tmp/hello_world.go")
+			require.NotNil(t, err)
+			assert.True(t, strings.Contains(err.Error(), "pow"))
+		}},
+		{"Open happy path", func(t *testing.T, mock *workspace.MockOsFile, c *Client, s *Server) {
+			s.wp.(*workspacetest.MockWorkspace).EXPECT().
+				Open(gomock.Eq("/tmp/hello_world.go"), gomock.Eq(1), gomock.Eq(os.FileMode(2))).
+				Return(nil, nil)
+
+			f, err := c.Open("/tmp/hello_world.go", 1, 2)
+			assert.Nil(t, err)
+			assert.NotNil(t, f)
+		}},
+		{"Open error", func(t *testing.T, mock *workspace.MockOsFile, c *Client, s *Server) {
+			s.wp.(*workspacetest.MockWorkspace).EXPECT().
+				Open(gomock.Eq("/tmp/hello_world.go"), gomock.Eq(1), gomock.Eq(os.FileMode(2))).
+				Return(nil, &workspace.Error{Err: errors.New("pow")})
+
+			f, err := c.Open("/tmp/hello_world.go", 1, 2)
+			require.NotNil(t, err)
+			assert.True(t, strings.Contains(err.Err.Error(), "pow"))
+			assert.Nil(t, f)
 		}},
 	}
 

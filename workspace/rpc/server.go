@@ -14,7 +14,7 @@ var _ WorkspaceServer = (*Server)(nil)
 // Server is a workspace server implementation which processes one request at a time.
 type Server struct {
 	UnimplementedWorkspaceServer
-	executorServer
+	openRemoveImpl
 
 	wp workspace.API
 }
@@ -28,7 +28,8 @@ func NewServer(wp workspace.Workspace, locker sync.Locker) *Server {
 
 // Init initializes this Server with the given workspace
 func (s *Server) Init(wp workspace.Workspace, locker sync.Locker) {
-	s.executorServer.init(wp, locker)
+	s.openRemoveImpl.executorServer.init(wp, locker)
+	s.openRemoveImpl.scheme = wp
 	s.wp = wp
 }
 
@@ -108,6 +109,20 @@ func (s *Server) Read(ctx context.Context, req *ReadRequest) (*ReadResponse, err
 // Write satisfies WorkspaceServer
 func (s *Server) Write(ctx context.Context, req *WriteRequest) (*WriteResponse, error) {
 	return s.executorServer.Write(ctx, req)
+}
+
+// Open satisfies SchemeServer.
+func (s *Server) Open(ctx context.Context, req *OpenRequest) (
+	*OpenResponse, error,
+) {
+	return s.openRemoveImpl.Open(ctx, req)
+}
+
+// Remove satisfies SchemeServer.
+func (s *Server) Remove(ctx context.Context, req *RemoveRequest) (
+	*RemoveResponse, error,
+) {
+	return s.openRemoveImpl.Remove(ctx, req)
 }
 
 // Stop closes all resources associated with this server.

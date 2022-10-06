@@ -1,6 +1,7 @@
 package rpc
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"time"
@@ -21,11 +22,34 @@ func NewScheme(cc grpc.ClientConnInterface) workspace.Scheme {
 
 type schemeClientImpl struct {
 	client SchemeClient
+	openRemoveClientImpl
+}
+
+type openRemoveClientImpl struct {
 	executorClientImpl
+	client interface {
+		Open(ctx context.Context, in *OpenRequest, opts ...grpc.CallOption) (*OpenResponse, error)
+		Remove(ctx context.Context, in *RemoveRequest, opts ...grpc.CallOption) (*RemoveResponse, error)
+		Close(ctx context.Context, in *CloseFileRequest, opts ...grpc.CallOption) (*CloseFileResponse, error)
+		Read(ctx context.Context, in *ReadRequest, opts ...grpc.CallOption) (*ReadResponse, error)
+		Write(ctx context.Context, in *WriteRequest, opts ...grpc.CallOption) (*WriteResponse, error)
+		Sync(ctx context.Context, in *SyncRequest, opts ...grpc.CallOption) (*SyncResponse, error)
+		Truncate(ctx context.Context, in *TruncateRequest, opts ...grpc.CallOption) (*TruncateResponse, error)
+		Seek(ctx context.Context, in *SeekRequest, opts ...grpc.CallOption) (*SeekResponse, error)
+		Stat(ctx context.Context, in *StatRequest, opts ...grpc.CallOption) (*StatResponse, error)
+	}
 }
 
 type fileClient struct {
-	client    SchemeClient
+	client interface {
+		Sync(ctx context.Context, in *SyncRequest, opts ...grpc.CallOption) (*SyncResponse, error)
+		Truncate(ctx context.Context, in *TruncateRequest, opts ...grpc.CallOption) (*TruncateResponse, error)
+		Seek(ctx context.Context, in *SeekRequest, opts ...grpc.CallOption) (*SeekResponse, error)
+		Close(ctx context.Context, in *CloseFileRequest, opts ...grpc.CallOption) (*CloseFileResponse, error)
+		Read(ctx context.Context, in *ReadRequest, opts ...grpc.CallOption) (*ReadResponse, error)
+		Write(ctx context.Context, in *WriteRequest, opts ...grpc.CallOption) (*WriteResponse, error)
+		Stat(ctx context.Context, in *StatRequest, opts ...grpc.CallOption) (*StatResponse, error)
+	}
 	handlerID int32
 	filename  string
 	ioClient
@@ -59,8 +83,10 @@ func (f fileClientInfo) Sys() interface{} {
 }
 
 func (c *schemeClientImpl) Init(cc grpc.ClientConnInterface) {
-	c.client = NewSchemeClient(cc)
-	c.executorClientImpl.init(c.client)
+	client := NewSchemeClient(cc)
+	c.client = client
+	c.openRemoveClientImpl.executorClientImpl.init(c.client)
+	c.openRemoveClientImpl.client = client
 }
 
 func (c *schemeClientImpl) Stop() {
@@ -83,7 +109,7 @@ func (c *schemeClientImpl) URI(path string) (workspace.URI, error) {
 	return uri, nil
 }
 
-func (c *schemeClientImpl) Open(name string, flag int, perm os.FileMode) (
+func (c *openRemoveClientImpl) Open(name string, flag int, perm os.FileMode) (
 	workspace.File, *workspace.Error,
 ) {
 	ctx, cleanup := ctxWithTimeout()
@@ -104,7 +130,7 @@ func (c *schemeClientImpl) Open(name string, flag int, perm os.FileMode) (
 	return c.newFileClient(name, resp.GetHandlerId()), nil
 }
 
-func (c *schemeClientImpl) Remove(name string) error {
+func (c *openRemoveClientImpl) Remove(name string) error {
 	ctx, cleanup := ctxWithTimeout()
 	defer cleanup()
 
@@ -220,7 +246,7 @@ func (c *fileClient) Seek(offset int64, whence int) (int64, error) {
 	return resp.GetNewOffset(), nil
 }
 
-func (c *schemeClientImpl) newFileClient(
+func (c *openRemoveClientImpl) newFileClient(
 	filename string, handlerID int32,
 ) *fileClient {
 	ret := &fileClient{

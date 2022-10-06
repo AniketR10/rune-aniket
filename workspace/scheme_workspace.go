@@ -3,6 +3,7 @@ package workspace
 import (
 	"fmt"
 	"io"
+	"os"
 	"syscall"
 
 	"github.com/ernestrc/blue/logging"
@@ -116,6 +117,14 @@ func (w *schemeWorkspace) Load(
 		return
 	}
 	return
+}
+
+func (w *schemeWorkspace) Open(path string, flag int, mode os.FileMode) (File, *Error) {
+	return w.p.Open(path, flag, mode)
+}
+
+func (w *schemeWorkspace) Remove(path string) error {
+	return w.p.Remove(path)
 }
 
 func (w *schemeWorkspace) Getwd() (URI, error) {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 	"time"
 
 	"google.golang.org/grpc"
@@ -17,7 +18,7 @@ var _ workspace.API = (*Client)(nil)
 type Client struct {
 	cc     grpc.ClientConnInterface
 	client WorkspaceClient
-	executorClientImpl
+	openRemoveClientImpl
 }
 
 func NewClient(cc grpc.ClientConnInterface) *Client {
@@ -27,11 +28,24 @@ func NewClient(cc grpc.ClientConnInterface) *Client {
 }
 
 func (c *Client) Init(cc grpc.ClientConnInterface) {
+	client := NewWorkspaceClient(cc)
 	c.cc = cc
-	c.client = NewWorkspaceClient(cc)
-	c.executorClientImpl.init(c.client)
+	c.client = client
+	c.openRemoveClientImpl.executorClientImpl.init(c.client)
+	c.openRemoveClientImpl.client = client
 }
 
+// Open satisfies workspace.API.
+func (c *Client) Open(path string, flag int, mode os.FileMode) (workspace.File, *workspace.Error) {
+	return c.openRemoveClientImpl.Open(path, flag, mode)
+}
+
+// Remove satisfies workspace.API.
+func (c *Client) Remove(path string) error {
+	return c.openRemoveClientImpl.Remove(path)
+}
+
+// URI satisfies workspace.API.
 func (c *Client) URI(path string) (workspace.URI, error) {
 	ctx, cleanup := ctxWithTimeout()
 	defer cleanup()
@@ -48,6 +62,7 @@ func (c *Client) URI(path string) (workspace.URI, error) {
 	return uri, nil
 }
 
+// Getwd satisfies workspace.API.
 func (c *Client) Getwd() (workspace.URI, error) {
 	ctx, cleanup := ctxWithTimeout()
 	defer cleanup()
@@ -64,6 +79,7 @@ func (c *Client) Getwd() (workspace.URI, error) {
 	return uri, nil
 }
 
+// Close closes all resources associated with this client.
 func (c *Client) Close() (err error) {
 	if closer, ok := c.cc.(io.Closer); ok {
 		ccErr := closer.Close()

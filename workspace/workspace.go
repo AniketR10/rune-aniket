@@ -17,6 +17,12 @@ type API interface {
 	// URI builds a URI from a path in the current workspace.
 	URI(path string) (URI, error)
 
+	// Open opens a file at path with the given flag and mode.
+	Open(path string, flag int, mode os.FileMode) (File, *Error)
+
+	// Remove removes the file at path.
+	Remove(path string) error
+
 	Executor
 }
 

@@ -17,9 +17,17 @@ var _ SchemeServer = (*SchemeServerImpl)(nil)
 // satisfies SchemeServer grpc interface.
 type SchemeServerImpl struct {
 	UnimplementedSchemeServer
-	executorServer
-
+	openRemoveImpl
 	scheme workspace.Scheme
+}
+
+// used to share Open/Remove with API server.
+type openRemoveImpl struct {
+	executorServer
+	scheme interface {
+		Open(path string, flag int, mode os.FileMode) (workspace.File, *workspace.Error)
+		Remove(path string) error
+	}
 }
 
 // NewSchemeServer allocates storage for a new SchemeServerImpl and initializes it
@@ -32,12 +40,19 @@ func NewSchemeServer(scheme workspace.Scheme, locker sync.Locker) *SchemeServerI
 
 // Init initializes this SchemeServerImpl with the given scheme.
 func (s *SchemeServerImpl) Init(scheme workspace.Scheme, locker sync.Locker) {
-	s.executorServer.init(scheme, locker)
+	s.openRemoveImpl.executorServer.init(scheme, locker)
+	s.openRemoveImpl.scheme = scheme
 	s.scheme = scheme
 }
 
 // Open satisfies SchemeServer.
 func (s *SchemeServerImpl) Open(ctx context.Context, req *OpenRequest) (
+	*OpenResponse, error,
+) {
+	return s.openRemoveImpl.Open(ctx, req)
+}
+
+func (s *openRemoveImpl) Open(ctx context.Context, req *OpenRequest) (
 	*OpenResponse, error,
 ) {
 	filename := req.GetFilename()
@@ -61,6 +76,12 @@ func (s *SchemeServerImpl) Open(ctx context.Context, req *OpenRequest) (
 
 // Remove satisfies SchemeServer.
 func (s *SchemeServerImpl) Remove(ctx context.Context, req *RemoveRequest) (
+	*RemoveResponse, error,
+) {
+	return s.openRemoveImpl.Remove(ctx, req)
+}
+
+func (s *openRemoveImpl) Remove(ctx context.Context, req *RemoveRequest) (
 	*RemoveResponse, error,
 ) {
 	filename := req.GetFilename()

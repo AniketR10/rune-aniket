@@ -177,6 +177,8 @@ message InitializeProxyResponse {
 service Workspace {
 	rpc URI(URIRequest) returns (URIResponse);
 	rpc Getwd(GetwdRequest) returns (URIResponse);
+	rpc Open(OpenRequest) returns (OpenResponse);
+	rpc Remove(RemoveRequest) returns (RemoveResponse);
 	
 	// Executor Service
 	rpc Command(CommandRequest) returns (CommandResponse);
@@ -187,9 +189,14 @@ service Workspace {
 	rpc StdoutPipe(StdioPipeRequest) returns (StdioPipeResponse);
 	rpc StdinPipe(StdioPipeRequest) returns (StdioPipeResponse);
 
+	// operate workspace.File
+	rpc Sync(SyncRequest) returns (SyncResponse);
+	rpc Truncate(TruncateRequest) returns (TruncateResponse);
+	rpc Seek(SeekRequest) returns (SeekResponse);
 	rpc Close(CloseFileRequest) returns (CloseFileResponse);
 	rpc Read(ReadRequest) returns (ReadResponse);
 	rpc Write(WriteRequest) returns (WriteResponse);
+	rpc Stat(StatRequest) returns (StatResponse);
 }
 
 service Scheme {

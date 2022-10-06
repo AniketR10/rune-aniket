@@ -87,6 +87,35 @@ func (mr *MockAPIMockRecorder) Getwd() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Getwd", reflect.TypeOf((*MockAPI)(nil).Getwd))
 }
 
+// Open mocks base method.
+func (m *MockAPI) Open(path string, flag int, mode os.FileMode) (workspace.File, *workspace.Error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Open", path, flag, mode)
+	ret0, _ := ret[0].(workspace.File)
+	ret1, _ := ret[1].(*workspace.Error)
+	return ret0, ret1
+}
+
+// Open indicates an expected call of Open.
+func (mr *MockAPIMockRecorder) Open(path, flag, mode interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Open", reflect.TypeOf((*MockAPI)(nil).Open), path, flag, mode)
+}
+
+// Remove mocks base method.
+func (m *MockAPI) Remove(path string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Remove", path)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Remove indicates an expected call of Remove.
+func (mr *MockAPIMockRecorder) Remove(path interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Remove", reflect.TypeOf((*MockAPI)(nil).Remove), path)
+}
+
 // Signal mocks base method.
 func (m *MockAPI) Signal(arg0 workspace.Pid, arg1 syscall.Signal) error {
 	m.ctrl.T.Helper()
@@ -509,6 +538,21 @@ func (mr *MockWorkspaceMockRecorder) Load(file, buf, swapDir, readOnly interface
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Load", reflect.TypeOf((*MockWorkspace)(nil).Load), file, buf, swapDir, readOnly)
 }
 
+// Open mocks base method.
+func (m *MockWorkspace) Open(path string, flag int, mode os.FileMode) (workspace.File, *workspace.Error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Open", path, flag, mode)
+	ret0, _ := ret[0].(workspace.File)
+	ret1, _ := ret[1].(*workspace.Error)
+	return ret0, ret1
+}
+
+// Open indicates an expected call of Open.
+func (mr *MockWorkspaceMockRecorder) Open(path, flag, mode interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Open", reflect.TypeOf((*MockWorkspace)(nil).Open), path, flag, mode)
+}
+
 // Recover mocks base method.
 func (m *MockWorkspace) Recover(file, swapFilePath workspace.URI, buf *cell.Buffer, force bool) (workspace.FlusherCloser, error) {
 	m.ctrl.T.Helper()
@@ -522,6 +566,20 @@ func (m *MockWorkspace) Recover(file, swapFilePath workspace.URI, buf *cell.Buff
 func (mr *MockWorkspaceMockRecorder) Recover(file, swapFilePath, buf, force interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Recover", reflect.TypeOf((*MockWorkspace)(nil).Recover), file, swapFilePath, buf, force)
+}
+
+// Remove mocks base method.
+func (m *MockWorkspace) Remove(path string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Remove", path)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Remove indicates an expected call of Remove.
+func (mr *MockWorkspaceMockRecorder) Remove(path interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Remove", reflect.TypeOf((*MockWorkspace)(nil).Remove), path)
 }
 
 // Signal mocks base method.

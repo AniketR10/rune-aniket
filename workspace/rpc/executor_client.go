@@ -9,6 +9,7 @@ import (
 	"github.com/ernestrc/blue/logging"
 	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
+	"google.golang.org/grpc"
 	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/workspace"
 )
@@ -20,7 +21,11 @@ type executorClientImpl struct {
 
 type ioClient struct {
 	handlerID int32
-	client    ExecutorClient
+	client    interface {
+		Close(ctx context.Context, in *CloseFileRequest, opts ...grpc.CallOption) (*CloseFileResponse, error)
+		Read(ctx context.Context, in *ReadRequest, opts ...grpc.CallOption) (*ReadResponse, error)
+		Write(ctx context.Context, in *WriteRequest, opts ...grpc.CallOption) (*WriteResponse, error)
+	}
 }
 
 type nopLocker struct{}
