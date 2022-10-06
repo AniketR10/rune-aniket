@@ -139,6 +139,19 @@ func (t loggingScheme) ReadLink(path string) (ret string, err error) {
 	t.trace("ReadLink(%q): %q, %v", path, ret, err)
 	return
 }
+func (t loggingScheme) NewPty() (ret Pty, err error) {
+	t.trace("NewPty()")
+	ret, err = t.other.NewPty()
+	t.trace("NewPty(): %q, %v", ret, err)
+	return
+}
+
+func (t loggingScheme) SetPtySize(p Pty, width, height int) (err error) {
+	t.trace("SetPtySize(%v, %d, %d)", p, width, height)
+	err = t.other.SetPtySize(p, width, height)
+	t.trace("SetPtySize(%v, %d, %d): %v", p, width, height, err)
+	return
+}
 
 func (t loggingScheme) Close() (err error) {
 	t.trace("Close")

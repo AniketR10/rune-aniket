@@ -17,16 +17,18 @@ var _ SchemeServer = (*SchemeServerImpl)(nil)
 // satisfies SchemeServer grpc interface.
 type SchemeServerImpl struct {
 	UnimplementedSchemeServer
-	openRemoveImpl
+	sharedRPCImpl
 	scheme workspace.Scheme
 }
 
 // used to share Open/Remove with API server.
-type openRemoveImpl struct {
+type sharedRPCImpl struct {
 	executorServer
 	scheme interface {
 		Open(path string, flag int, mode os.FileMode) (workspace.File, *workspace.Error)
 		Remove(path string) error
+		NewPty() (workspace.Pty, error)
+		SetPtySize(p workspace.Pty, width, height int) error
 	}
 }
 
@@ -40,8 +42,8 @@ func NewSchemeServer(scheme workspace.Scheme, locker sync.Locker) *SchemeServerI
 
 // Init initializes this SchemeServerImpl with the given scheme.
 func (s *SchemeServerImpl) Init(scheme workspace.Scheme, locker sync.Locker) {
-	s.openRemoveImpl.executorServer.init(scheme, locker)
-	s.openRemoveImpl.scheme = scheme
+	s.sharedRPCImpl.executorServer.init(scheme, locker)
+	s.sharedRPCImpl.scheme = scheme
 	s.scheme = scheme
 }
 
@@ -49,10 +51,10 @@ func (s *SchemeServerImpl) Init(scheme workspace.Scheme, locker sync.Locker) {
 func (s *SchemeServerImpl) Open(ctx context.Context, req *OpenRequest) (
 	*OpenResponse, error,
 ) {
-	return s.openRemoveImpl.Open(ctx, req)
+	return s.sharedRPCImpl.Open(ctx, req)
 }
 
-func (s *openRemoveImpl) Open(ctx context.Context, req *OpenRequest) (
+func (s *sharedRPCImpl) Open(ctx context.Context, req *OpenRequest) (
 	*OpenResponse, error,
 ) {
 	filename := req.GetFilename()
@@ -78,10 +80,10 @@ func (s *openRemoveImpl) Open(ctx context.Context, req *OpenRequest) (
 func (s *SchemeServerImpl) Remove(ctx context.Context, req *RemoveRequest) (
 	*RemoveResponse, error,
 ) {
-	return s.openRemoveImpl.Remove(ctx, req)
+	return s.sharedRPCImpl.Remove(ctx, req)
 }
 
-func (s *openRemoveImpl) Remove(ctx context.Context, req *RemoveRequest) (
+func (s *sharedRPCImpl) Remove(ctx context.Context, req *RemoveRequest) (
 	*RemoveResponse, error,
 ) {
 	filename := req.GetFilename()
@@ -90,6 +92,55 @@ func (s *openRemoveImpl) Remove(ctx context.Context, req *RemoveRequest) (
 		return nil, fmt.Errorf("remove %s error: %s", filename, err)
 	}
 	return new(RemoveResponse), nil
+}
+
+// NewPty satisfies SchemeServer.
+func (s *SchemeServerImpl) NewPty(ctx context.Context, req *NewPtyRequest) (
+	*NewPtyResponse, error,
+) {
+	return s.sharedRPCImpl.NewPty(ctx, req)
+}
+
+func (s *sharedRPCImpl) NewPty(ctx context.Context, req *NewPtyRequest) (
+	*NewPtyResponse, error,
+) {
+	pty, err := s.scheme.NewPty()
+	if err != nil {
+		return nil, fmt.Errorf("SetPtySize: %s", err)
+	}
+	master := s.addHandle(pty.Pid, pty.Master)
+	ret := &NewPtyResponse{
+		Pid:    int32(pty.Pid),
+		Master: master,
+		Slave:  pty.Slave,
+	}
+	return ret, nil
+}
+
+// SetPtySize satisfies SchemeServer.
+func (s *SchemeServerImpl) SetPtySize(ctx context.Context, req *SetPtySizeRequest) (
+	*SetPtySizeResponse, error,
+) {
+	return s.sharedRPCImpl.SetPtySize(ctx, req)
+}
+
+func (s *sharedRPCImpl) SetPtySize(ctx context.Context, req *SetPtySizeRequest) (
+	*SetPtySizeResponse, error,
+) {
+	f, ok := s.getFile(req.GetMaster())
+	if !ok {
+		return nil, fmt.Errorf("Pty: %s", errFileNotOpen)
+	}
+	pty := workspace.Pty{
+		Master: f,
+		Slave:  req.GetSlave(),
+		Pid:    workspace.Pid(req.GetPid()),
+	}
+	err := s.scheme.SetPtySize(pty, int(req.GetWidth()), int(req.GetHeight()))
+	if err != nil {
+		return nil, fmt.Errorf("SetPtySize: %s", err)
+	}
+	return new(SetPtySizeResponse), nil
 }
 
 // Rename satisfies SchemeServer.

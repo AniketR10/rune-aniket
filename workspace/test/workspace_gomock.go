@@ -87,6 +87,21 @@ func (mr *MockAPIMockRecorder) Getwd() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Getwd", reflect.TypeOf((*MockAPI)(nil).Getwd))
 }
 
+// NewPty mocks base method.
+func (m *MockAPI) NewPty() (workspace.Pty, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "NewPty")
+	ret0, _ := ret[0].(workspace.Pty)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// NewPty indicates an expected call of NewPty.
+func (mr *MockAPIMockRecorder) NewPty() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewPty", reflect.TypeOf((*MockAPI)(nil).NewPty))
+}
+
 // Open mocks base method.
 func (m *MockAPI) Open(path string, flag int, mode os.FileMode) (workspace.File, *workspace.Error) {
 	m.ctrl.T.Helper()
@@ -114,6 +129,20 @@ func (m *MockAPI) Remove(path string) error {
 func (mr *MockAPIMockRecorder) Remove(path interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Remove", reflect.TypeOf((*MockAPI)(nil).Remove), path)
+}
+
+// SetPtySize mocks base method.
+func (m *MockAPI) SetPtySize(p workspace.Pty, width, height int) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SetPtySize", p, width, height)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// SetPtySize indicates an expected call of SetPtySize.
+func (mr *MockAPIMockRecorder) SetPtySize(p, width, height interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetPtySize", reflect.TypeOf((*MockAPI)(nil).SetPtySize), p, width, height)
 }
 
 // Signal mocks base method.
@@ -538,6 +567,21 @@ func (mr *MockWorkspaceMockRecorder) Load(file, buf, swapDir, readOnly interface
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Load", reflect.TypeOf((*MockWorkspace)(nil).Load), file, buf, swapDir, readOnly)
 }
 
+// NewPty mocks base method.
+func (m *MockWorkspace) NewPty() (workspace.Pty, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "NewPty")
+	ret0, _ := ret[0].(workspace.Pty)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// NewPty indicates an expected call of NewPty.
+func (mr *MockWorkspaceMockRecorder) NewPty() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewPty", reflect.TypeOf((*MockWorkspace)(nil).NewPty))
+}
+
 // Open mocks base method.
 func (m *MockWorkspace) Open(path string, flag int, mode os.FileMode) (workspace.File, *workspace.Error) {
 	m.ctrl.T.Helper()
@@ -580,6 +624,20 @@ func (m *MockWorkspace) Remove(path string) error {
 func (mr *MockWorkspaceMockRecorder) Remove(path interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Remove", reflect.TypeOf((*MockWorkspace)(nil).Remove), path)
+}
+
+// SetPtySize mocks base method.
+func (m *MockWorkspace) SetPtySize(p workspace.Pty, width, height int) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SetPtySize", p, width, height)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// SetPtySize indicates an expected call of SetPtySize.
+func (mr *MockWorkspaceMockRecorder) SetPtySize(p, width, height interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetPtySize", reflect.TypeOf((*MockWorkspace)(nil).SetPtySize), p, width, height)
 }
 
 // Signal mocks base method.
@@ -656,18 +714,18 @@ func (mr *MockWorkspaceMockRecorder) StdoutPipe(arg0 interface{}) *gomock.Call {
 }
 
 // URI mocks base method.
-func (m *MockWorkspace) URI(arg0 string) (workspace.URI, error) {
+func (m *MockWorkspace) URI(path string) (workspace.URI, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "URI", arg0)
+	ret := m.ctrl.Call(m, "URI", path)
 	ret0, _ := ret[0].(workspace.URI)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // URI indicates an expected call of URI.
-func (mr *MockWorkspaceMockRecorder) URI(arg0 interface{}) *gomock.Call {
+func (mr *MockWorkspaceMockRecorder) URI(path interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "URI", reflect.TypeOf((*MockWorkspace)(nil).URI), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "URI", reflect.TypeOf((*MockWorkspace)(nil).URI), path)
 }
 
 // Wait mocks base method.
@@ -875,6 +933,21 @@ func (mr *MockSchemeMockRecorder) Lstat(path interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Lstat", reflect.TypeOf((*MockScheme)(nil).Lstat), path)
 }
 
+// NewPty mocks base method.
+func (m *MockScheme) NewPty() (workspace.Pty, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "NewPty")
+	ret0, _ := ret[0].(workspace.Pty)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// NewPty indicates an expected call of NewPty.
+func (mr *MockSchemeMockRecorder) NewPty() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewPty", reflect.TypeOf((*MockScheme)(nil).NewPty))
+}
+
 // Open mocks base method.
 func (m *MockScheme) Open(path string, flag int, perm os.FileMode) (workspace.File, *workspace.Error) {
 	m.ctrl.T.Helper()
@@ -931,6 +1004,20 @@ func (m *MockScheme) Rename(old, new string) error {
 func (mr *MockSchemeMockRecorder) Rename(old, new interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Rename", reflect.TypeOf((*MockScheme)(nil).Rename), old, new)
+}
+
+// SetPtySize mocks base method.
+func (m *MockScheme) SetPtySize(p workspace.Pty, width, height int) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SetPtySize", p, width, height)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// SetPtySize indicates an expected call of SetPtySize.
+func (mr *MockSchemeMockRecorder) SetPtySize(p, width, height interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetPtySize", reflect.TypeOf((*MockScheme)(nil).SetPtySize), p, width, height)
 }
 
 // Signal mocks base method.

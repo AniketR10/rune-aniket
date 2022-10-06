@@ -234,6 +234,22 @@ func (s *remoteScheme) Wait(p workspace.Pid) error {
 	return scheme.Wait(p)
 }
 
+func (s *remoteScheme) NewPty() (workspace.Pty, error) {
+	err, scheme := s.state()
+	if err != nil {
+		return workspace.Pty{}, err
+	}
+	return scheme.NewPty()
+}
+
+func (s *remoteScheme) SetPtySize(pty workspace.Pty, width, height int) error {
+	err, scheme := s.state()
+	if err != nil {
+		return err
+	}
+	return scheme.SetPtySize(pty, width, height)
+}
+
 func (s *remoteScheme) Close() (ret error) {
 	s.mu.Lock()
 	s.lastSessionError = errors.New("remote closed")

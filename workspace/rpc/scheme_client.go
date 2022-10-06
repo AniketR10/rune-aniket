@@ -127,7 +127,9 @@ func (c *openRemoveClientImpl) Open(name string, flag int, perm os.FileMode) (
 			IsPermission: resp.GetIsPermissionErr(),
 		}
 	}
-	return c.newFileClient(name, resp.GetHandlerId()), nil
+	// workspace.Pid is not necessary (and/or available) for files
+	// because it's only used for Wait cleanup
+	return c.newFileClient(-1, name, resp.GetHandlerId()), nil
 }
 
 func (c *openRemoveClientImpl) Remove(name string) error {
@@ -246,8 +248,8 @@ func (c *fileClient) Seek(offset int64, whence int) (int64, error) {
 	return resp.GetNewOffset(), nil
 }
 
-func (c *openRemoveClientImpl) newFileClient(
-	filename string, handlerID int32,
+func (c *executorClientImpl) newFileClient(
+	pid workspace.Pid, filename string, handlerID int32,
 ) *fileClient {
 	ret := &fileClient{
 		handlerID: handlerID,
@@ -259,8 +261,6 @@ func (c *openRemoveClientImpl) newFileClient(
 			handlerID: handlerID,
 		},
 	}
-	// workspace.Pid is not necessary (and/or available) for files
-	// because it's only used for Wait cleanup
 	c.addCloser(workspace.Pid(-1), handlerID, ret)
 	return ret
 }

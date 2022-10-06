@@ -95,6 +95,14 @@ func (m multi) Wait(p Pid) error {
 	return m.def.Wait(p)
 }
 
+func (m multi) NewPty() (Pty, error) {
+	return m.def.NewPty()
+}
+
+func (m multi) SetPtySize(p Pty, width, height int) error {
+	return m.def.SetPtySize(p, width, height)
+}
+
 func (m multi) Close() error {
 	return m.def.Close()
 }

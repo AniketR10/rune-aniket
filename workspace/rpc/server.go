@@ -14,7 +14,7 @@ var _ WorkspaceServer = (*Server)(nil)
 // Server is a workspace server implementation which processes one request at a time.
 type Server struct {
 	UnimplementedWorkspaceServer
-	openRemoveImpl
+	sharedRPCImpl
 
 	wp workspace.API
 }
@@ -28,8 +28,8 @@ func NewServer(wp workspace.Workspace, locker sync.Locker) *Server {
 
 // Init initializes this Server with the given workspace
 func (s *Server) Init(wp workspace.Workspace, locker sync.Locker) {
-	s.openRemoveImpl.executorServer.init(wp, locker)
-	s.openRemoveImpl.scheme = wp
+	s.sharedRPCImpl.executorServer.init(wp, locker)
+	s.sharedRPCImpl.scheme = wp
 	s.wp = wp
 }
 
@@ -111,18 +111,32 @@ func (s *Server) Write(ctx context.Context, req *WriteRequest) (*WriteResponse, 
 	return s.executorServer.Write(ctx, req)
 }
 
-// Open satisfies SchemeServer.
+// NewPty satisfies WorkspaceServer.
+func (s *Server) NewPty(ctx context.Context, req *NewPtyRequest) (
+	*NewPtyResponse, error,
+) {
+	return s.sharedRPCImpl.NewPty(ctx, req)
+}
+
+// SetPtySize satisfies WorkspaceServer.
+func (s *Server) SetPtySize(ctx context.Context, req *SetPtySizeRequest) (
+	*SetPtySizeResponse, error,
+) {
+	return s.sharedRPCImpl.SetPtySize(ctx, req)
+}
+
+// Open satisfies WorkspaceServer.
 func (s *Server) Open(ctx context.Context, req *OpenRequest) (
 	*OpenResponse, error,
 ) {
-	return s.openRemoveImpl.Open(ctx, req)
+	return s.sharedRPCImpl.Open(ctx, req)
 }
 
-// Remove satisfies SchemeServer.
+// Remove satisfies WorkspaceServer.
 func (s *Server) Remove(ctx context.Context, req *RemoveRequest) (
 	*RemoveResponse, error,
 ) {
-	return s.openRemoveImpl.Remove(ctx, req)
+	return s.sharedRPCImpl.Remove(ctx, req)
 }
 
 // Stop closes all resources associated with this server.

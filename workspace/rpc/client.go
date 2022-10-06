@@ -21,12 +21,16 @@ type Client struct {
 	openRemoveClientImpl
 }
 
+// NewClient allocates storage for a new workspace.Client and
+// initializes it with cc. Client satisfies workspace.API
+// by connecting to a Server via the given grpc connection.
 func NewClient(cc grpc.ClientConnInterface) *Client {
 	ret := new(Client)
 	ret.Init(cc)
 	return ret
 }
 
+// Init initializes this client with cc.
 func (c *Client) Init(cc grpc.ClientConnInterface) {
 	client := NewWorkspaceClient(cc)
 	c.cc = cc

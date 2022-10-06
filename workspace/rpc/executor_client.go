@@ -3,6 +3,7 @@ package rpc
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"syscall"
 
@@ -17,6 +18,7 @@ import (
 type executorClientImpl struct {
 	client    ExecutorClient
 	resources map[int32]executorResource
+	ptys      map[workspace.Pid]int32
 }
 
 type ioClient struct {
@@ -38,6 +40,7 @@ func (l nopLocker) Unlock() {
 func (c *executorClientImpl) init(client ExecutorClient) {
 	c.client = client
 	c.resources = make(map[int32]executorResource)
+	c.ptys = make(map[workspace.Pid]int32)
 }
 
 func (c *executorClientImpl) Command(name string, arg ...string) (workspace.Pid, error) {
@@ -120,6 +123,7 @@ func (c *executorClientImpl) log(level log.Level, msg string, args ...interface{
 
 func (c *executorClientImpl) removePidResources(pid workspace.Pid) {
 	res := removePidResources(nopLocker{}, c.resources, pid)
+	delete(c.ptys, pid)
 	c.log(log.TraceLevel, "cleaned all resources of pid %d: %#v", pid, res)
 }
 
@@ -139,6 +143,48 @@ func (c *executorClientImpl) Wait(pid workspace.Pid) error {
 	// so it's safe to cleanup all resources of pid here
 	c.removePidResources(pid)
 	return nil
+}
+
+func (c *executorClientImpl) NewPty() (workspace.Pty, error) {
+	ctx, cleanup := ctxWithTimeout()
+	defer cleanup()
+
+	req := NewPtyRequest{}
+	resp, err := c.client.NewPty(ctx, &req)
+	if err != nil {
+		return workspace.Pty{}, err
+	}
+	// allow cleanup of master File upon return of Wait
+	pid := workspace.Pid(resp.GetPid())
+	file := c.newFileClient(pid, "/dev/ptmx", resp.GetMaster())
+	ret := workspace.Pty{
+		Pid:    pid,
+		Master: file,
+		Slave:  resp.GetSlave(),
+	}
+
+	c.ptys[ret.Pid] = resp.GetMaster()
+	return ret, nil
+}
+
+func (c *executorClientImpl) SetPtySize(p workspace.Pty, width, height int) error {
+	ctx, cleanup := ctxWithTimeout()
+	defer cleanup()
+
+	master, ok := c.ptys[p.Pid]
+	if !ok {
+		return fmt.Errorf("Extraneous Pty Pid %d", p.Pid)
+	}
+
+	req := SetPtySizeRequest{
+		Pid:    int32(p.Pid),
+		Master: master,
+		Slave:  p.Slave,
+		Width:  int32(width),
+		Height: int32(height),
+	}
+	_, err := c.client.SetPtySize(ctx, &req)
+	return err
 }
 
 func (c *executorClientImpl) Close() (ret error) {

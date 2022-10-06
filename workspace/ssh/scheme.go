@@ -220,12 +220,12 @@ func (s *scheme) ReadLink(path string) (string, error) {
 	return s.Scheme.ReadLink(path)
 }
 
-func (s *scheme) expandPath(path string) (string, error) {
-	return workspace.ExpandPath(path, func() (*user.User, error) {
-		return &user.User{Username: s.user, HomeDir: s.homedir}, nil
-	}, func() (string, error) {
-		return s.basePath, nil
-	})
+func (s *scheme) NewPty() (workspace.Pty, error) {
+	return s.Scheme.NewPty()
+}
+
+func (s *scheme) SetPtySize(pty workspace.Pty, width, height int) error {
+	return s.Scheme.SetPtySize(pty, width, height)
 }
 
 func (s *scheme) URI(path string) (workspace.URI, error) {
@@ -249,6 +249,14 @@ func (s *scheme) Close() (ret error) {
 		ret = multierr.Append(ret, err)
 	}
 	return ret
+}
+
+func (s *scheme) expandPath(path string) (string, error) {
+	return workspace.ExpandPath(path, func() (*user.User, error) {
+		return &user.User{Username: s.user, HomeDir: s.homedir}, nil
+	}, func() (string, error) {
+		return s.basePath, nil
+	})
 }
 
 func startProc(exec workspace.Executor, pid workspace.Pid) (

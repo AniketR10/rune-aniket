@@ -252,6 +252,14 @@ func (s *scheme) Wait(workspace.Pid) error {
 	return errExecute
 }
 
+func (s *scheme) NewPty() (workspace.Pty, error) {
+	return workspace.Pty{}, errExecute
+}
+
+func (s *scheme) SetPtySize(workspace.Pty, int, int) error {
+	return errExecute
+}
+
 func (s *scheme) Close() error {
 	return nil
 }

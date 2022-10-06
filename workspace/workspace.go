@@ -23,7 +23,29 @@ type API interface {
 	// Remove removes the file at path.
 	Remove(path string) error
 
+	Terminal
+
 	Executor
+}
+
+// Terminal abstracts the ability to manage pseudoterminals.
+type Terminal interface {
+	// NewPty creates a new pseudoterminal.
+	NewPty() (Pty, error)
+
+	// SetPtySize sets the width and height in columns and rows of
+	// a pseudoterminal.
+	SetPtySize(p Pty, width, height int) error
+}
+
+// Pty is a pseudoterminal on a Workspace.
+type Pty struct {
+	// Pid of the underlying command.
+	Pid
+	// Master is the pty master device file.
+	Master File
+	// Slave is the pseudoterminal slave device path.
+	Slave string
 }
 
 // SchemeFunc represents a Scheme constructor.
@@ -78,10 +100,10 @@ type Executor interface {
 
 // Workspace binds a Loader and an API together for use in internal
 // packages that both need to share API with external resources
-// and use a Loader to load resources.
+// and use a Loader to load resources into buffers.
 type Workspace interface {
-	Loader
 	API
+	Loader
 }
 
 // FlusherCloser wraps Flush and Close methods to be used
@@ -103,6 +125,7 @@ type Loader interface {
 // Scheme abstracts internal workspace scheme-based implementations.
 type Scheme interface {
 	Executor
+	Terminal
 
 	URI(path string) (URI, error)
 

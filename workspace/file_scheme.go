@@ -13,8 +13,10 @@ import (
 	"syscall"
 
 	"github.com/ernestrc/blue/logging"
+	multierr "github.com/ernestrc/go-multierror"
 	"unstable.build/go-tui/config"
 	"unstable.build/go-tui/debug"
+	"unstable.build/go-tui/term/pty"
 )
 
 const (
@@ -222,6 +224,68 @@ func (m *fileScheme) Wait(pid Pid) error {
 		return fmt.Errorf("Cmd.Wait: %w", err)
 	}
 	return err
+}
+
+func (m *fileScheme) NewPty() (Pty, error) {
+	shell := os.Getenv("SHELL")
+	if shell == "" {
+		shell = "/bin/sh"
+	}
+
+	// setup command
+	pid, _ := m.Command(shell)
+	cmd, _ := m.getCmdForPid(pid)
+	if cmd.SysProcAttr == nil {
+		cmd.SysProcAttr = &syscall.SysProcAttr{}
+	}
+	cmd.SysProcAttr.Setsid = true
+	cmd.SysProcAttr.Setctty = true
+
+	// open master/slave files
+	pty, tty, err := pty.Open()
+	if err != nil {
+		return Pty{}, fmt.Errorf("pty.Open: %v", err)
+	}
+	cmd.Stdout = tty
+	cmd.Stderr = tty
+	cmd.Stdin = tty
+
+	// start process
+	var startErr error
+	if err := cmd.Start(); err != nil {
+		startErr = multierr.Append(startErr, err)
+		if err := pty.Close(); err != nil {
+			startErr = multierr.Append(startErr, err)
+		}
+	}
+	if err := tty.Close(); err != nil {
+		startErr = multierr.Append(startErr, err)
+	}
+	if startErr != nil {
+		return Pty{}, startErr
+	}
+
+	return Pty{
+		Pid:    pid,
+		Master: pty,
+		Slave:  tty.Name(),
+	}, nil
+}
+
+func (m *fileScheme) SetPtySize(p Pty, width, height int) error {
+	ptyFile, ok := p.Master.(*os.File)
+	if !ok {
+		return fmt.Errorf("extraneous Pty: %#v", p)
+	}
+
+	err := pty.Setsize(ptyFile, &pty.Winsize{
+		Rows: uint16(height),
+		Cols: uint16(width),
+	})
+	if err != nil {
+		return fmt.Errorf("pty.Setsize: %v", err)
+	}
+	return nil
 }
 
 func (m *fileScheme) Close() error {

@@ -153,6 +153,14 @@ func (t *testScheme) Stat(path string) (os.FileInfo, error) {
 	return t.statFunc(path)
 }
 
+func (t *testScheme) NewPty() (ret Pty, err error) {
+	panic("unimplemented")
+}
+
+func (t *testScheme) SetPtySize(p Pty, width, height int) (err error) {
+	panic("unimplemented")
+}
+
 func (t *testScheme) Lstat(path string) (os.FileInfo, error) {
 	return t.lstatFunc(path)
 }

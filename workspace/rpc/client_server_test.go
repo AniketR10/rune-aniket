@@ -2,6 +2,8 @@ package rpc
 
 import (
 	"errors"
+	"io"
+	"io/ioutil"
 	"net"
 	"os"
 	"strings"
@@ -339,6 +341,85 @@ func TestClientServer(t *testing.T) {
 			require.NotNil(t, err)
 			assert.True(t, strings.Contains(err.Err.Error(), "pow"))
 			assert.Nil(t, f)
+		}},
+		{"NewPty happy path", func(t *testing.T, mock *workspace.MockOsFile, c *Client, s *Server) {
+			ctrl := gomock.NewController(t)
+			mockFile := workspacetest.NewMockFile(ctrl)
+			s.wp.(*workspacetest.MockWorkspace).EXPECT().
+				NewPty().
+				Return(workspace.Pty{Pid: 1, Master: mockFile, Slave: "follower"}, nil)
+
+			pty, err := c.NewPty()
+			require.NoError(t, err)
+			assert.Equal(t, workspace.Pid(1), pty.Pid)
+			assert.Equal(t, "follower", pty.Slave)
+
+			mockFile.EXPECT().Read(gomock.Any()).DoAndReturn(func(b []byte) (n int, err error) {
+				b[0] = []byte("a")[0]
+				return 1, io.EOF
+			})
+			b, err := ioutil.ReadAll(pty.Master)
+			require.NoError(t, err)
+			assert.Equal(t, "a", string(b))
+
+			mockFile.EXPECT().Close().Return(nil)
+			assert.NoError(t, pty.Master.Close())
+		}},
+		{"NewPty error", func(t *testing.T, mock *workspace.MockOsFile, c *Client, s *Server) {
+			s.wp.(*workspacetest.MockWorkspace).EXPECT().
+				NewPty().
+				Return(workspace.Pty{}, errors.New("bummer"))
+
+			_, err := c.NewPty()
+			assert.Error(t, err)
+			assert.Contains(t, err.Error(), "bummer")
+		}},
+		{"SetPtySize happy path", func(t *testing.T, mock *workspace.MockOsFile, c *Client, s *Server) {
+			ctrl := gomock.NewController(t)
+			mockFile := workspacetest.NewMockFile(ctrl)
+			s.wp.(*workspacetest.MockWorkspace).EXPECT().
+				NewPty().
+				Return(workspace.Pty{Pid: 1, Slave: "one", Master: mockFile}, nil)
+			pty, err := c.NewPty()
+			require.NoError(t, err)
+
+			s.wp.(*workspacetest.MockWorkspace).EXPECT().
+				SetPtySize(gomock.Any(), gomock.Eq(1), gomock.Eq(1)).
+				DoAndReturn(func(pty workspace.Pty, width, height int) error {
+					assert.Equal(t, "one", pty.Slave)
+					assert.Equal(t, workspace.Pid(1), pty.Pid)
+					assert.Equal(t, 1, width)
+					assert.Equal(t, 1, height)
+					assert.NotNil(t, pty.Master)
+					return nil
+				})
+			err = c.SetPtySize(pty, 1, 1)
+			assert.NoError(t, err)
+		}},
+		{"SetPtySize error", func(t *testing.T, mock *workspace.MockOsFile, c *Client, s *Server) {
+			ctrl := gomock.NewController(t)
+			mockFile := workspacetest.NewMockFile(ctrl)
+			s.wp.(*workspacetest.MockWorkspace).EXPECT().
+				NewPty().
+				Return(workspace.Pty{Master: mockFile}, nil)
+			pty, err := c.NewPty()
+			require.NoError(t, err)
+
+			s.wp.(*workspacetest.MockWorkspace).EXPECT().
+				SetPtySize(gomock.Any(), gomock.Eq(1), gomock.Eq(1)).
+				Return(errors.New("bummer"))
+			err = c.SetPtySize(pty, 1, 1)
+			assert.Error(t, err)
+			assert.Contains(t, err.Error(), "bummer")
+		}},
+		{"Remove error", func(t *testing.T, mock *workspace.MockOsFile, c *Client, s *Server) {
+			s.wp.(*workspacetest.MockWorkspace).EXPECT().
+				Remove(gomock.Eq("/tmp/hello_world.go")).
+				Return(errors.New("pow"))
+
+			err := c.Remove("/tmp/hello_world.go")
+			require.NotNil(t, err)
+			assert.True(t, strings.Contains(err.Error(), "pow"))
 		}},
 	}
 

@@ -159,6 +159,14 @@ func (m *schemeWorkspace) StdoutPipe(pid Pid) (ret io.ReadCloser, err error) {
 	return m.p.StdoutPipe(pid)
 }
 
+func (m *schemeWorkspace) NewPty() (Pty, error) {
+	return m.p.NewPty()
+}
+
+func (m *schemeWorkspace) SetPtySize(p Pty, width, height int) error {
+	return m.p.SetPtySize(p, width, height)
+}
+
 func (m *schemeWorkspace) Wait(pid Pid) (err error) {
 	return m.p.Wait(pid)
 }
