@@ -38,27 +38,32 @@ func run(root Handler, lock sync.Locker, termw term.Writer) (err error) {
 	root.Resize(width, height)
 	lock.Unlock()
 
-	var hexit bool
+	var exit bool
 
-	for !hexit && err == nil {
+	for !exit && err == nil {
 		if err = redraw(root, lock, termw); err != nil {
 			return
 		}
 
-		ev := term.PollEvent()
-		switch ev.Type {
-		case term.EventInterrupt:
-		case term.EventError:
-			err = ev.Err
-		case term.EventResize:
-			width, height := ev.Width, ev.Height
-			lock.Lock()
-			root.Resize(width, height)
-			lock.Unlock()
-		default:
-			lock.Lock()
-			hexit, _ = root.Handle(ev)
-			lock.Unlock()
+		for {
+			ev := term.PollEvent()
+			switch ev.Type {
+			case term.EventInterrupt:
+			case term.EventError:
+				err = ev.Err
+			case term.EventResize:
+				width, height := ev.Width, ev.Height
+				lock.Lock()
+				root.Resize(width, height)
+				lock.Unlock()
+			default:
+				lock.Lock()
+				exit, _ = root.Handle(ev)
+				lock.Unlock()
+			}
+			if exit || !term.HasPendingEvent() {
+				break // redraw
+			}
 		}
 	}
 
