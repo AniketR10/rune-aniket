@@ -5,15 +5,11 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"sync"
-	"syscall"
 
-	"github.com/creack/pty"
 	"github.com/ernestrc/blue/logging"
-	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
-	"golang.org/x/term"
+	"unstable.build/go-tui/workspace"
 )
 
 const (
@@ -24,10 +20,10 @@ const (
 
 // Terminal communicates with the underlying terminal
 type Terminal struct {
+	workspace         workspace.API
 	mu                sync.Mutex
+	pty               workspace.Pty
 	windowManipulator WindowManipulator
-	pty               *os.File
-	tty               *os.File
 	reader            *bufio.Reader
 	updateChan        chan struct{}
 	closeChan         chan struct{}
@@ -40,12 +36,10 @@ type Terminal struct {
 	closed            bool
 	shell             string
 	initialCommand    string
-	stdinFd           int
-	stdinOldState     *term.State
 }
 
 // NewTerminal creates a new terminal instance
-func New(options ...Option) *Terminal {
+func New(w workspace.API, options ...Option) *Terminal {
 	term := &Terminal{
 		closeChan: make(chan struct{}),
 		theme:     &Theme{},
@@ -60,80 +54,23 @@ func New(options ...Option) *Terminal {
 		NewBuffer(1, 1, 0xffff, attr),
 	}
 	term.activeBuffer = term.buffers[0]
-
-	os.Setenv("TERM", "xterm-256color")
+	term.workspace = w
 
 	return term
 }
 
-func (t *Terminal) start(cmd *exec.Cmd) (ret error) {
-	if cmd.SysProcAttr == nil {
-		cmd.SysProcAttr = &syscall.SysProcAttr{}
-	}
-	cmd.SysProcAttr.Setsid = true
-	cmd.SysProcAttr.Setctty = true
-
-	t.pty, t.tty, ret = pty.Open()
-	if ret != nil {
-		return ret
-	}
-
-	if cmd.Stdout == nil {
-		cmd.Stdout = t.tty
-	}
-	if cmd.Stderr == nil {
-		cmd.Stderr = t.tty
-	}
-	if cmd.Stdin == nil {
-		cmd.Stdin = t.tty
-	}
-
-	if err := cmd.Start(); err != nil {
-		ret = multierr.Append(ret, err)
-		if err := t.pty.Close(); err != nil {
-			ret = multierr.Append(ret, err)
-		}
-	}
-	if err := t.tty.Close(); err != nil {
-		ret = multierr.Append(ret, err)
-	}
-	return ret
-}
-
-func (t *Terminal) CreatePty() (*exec.Cmd, error) {
-	if t.shell == "" {
-		t.shell = os.Getenv("SHELL")
-		if t.shell == "" {
-			t.shell = "/bin/sh"
-		}
-	}
-
-	// Create arbitrary command.
-	c := exec.Command(t.shell)
-
-	// Start the command with a pty.
-	err := t.start(c)
+func (t *Terminal) CreatePty() (workspace.Pty, error) {
+	pty, err := t.workspace.NewPty()
 	if err != nil {
-		return nil, err
+		return pty, err
 	}
-
-	// Set stdin in raw mode.
-	if fd := int(os.Stdin.Fd()); term.IsTerminal(fd) {
-		oldState, err := term.MakeRaw(fd)
-		if err != nil {
-			t.windowManipulator.ReportError(err)
-		}
-		t.stdinFd = fd
-		t.stdinOldState = oldState
-	}
-
 	if t.initialCommand != "" {
 		if err := t.WriteToPty([]byte(t.initialCommand)); err != nil {
-			return nil, err
+			return pty, err
 		}
 	}
-
-	return c, nil
+	t.pty = pty
+	return pty, nil
 }
 
 func (t *Terminal) SetWindowManipulator(m WindowManipulator) {
@@ -156,17 +93,12 @@ func (t *Terminal) reset() {
 }
 
 // Pty exposes the underlying terminal pty, if it exists
-func (t *Terminal) Pty() *os.File {
+func (t *Terminal) Pty() workspace.Pty {
 	return t.pty
 }
 
-// Tty exposes the underlying terminal tty, if it exists
-func (t *Terminal) Tty() *os.File {
-	return t.tty
-}
-
 func (t *Terminal) WriteToPty(data []byte) error {
-	_, err := t.pty.Write(data)
+	_, err := t.pty.Master.Write(data)
 	return err
 }
 
@@ -179,7 +111,7 @@ func (t *Terminal) Theme() *Theme {
 }
 
 func (t *Terminal) SetSize(rows, cols uint16) error {
-	if t.pty == nil {
+	if t.pty.Master == nil {
 		return fmt.Errorf("terminal is not running")
 	}
 
@@ -187,10 +119,8 @@ func (t *Terminal) SetSize(rows, cols uint16) error {
 
 	t.activeBuffer.resizeView(cols, rows)
 
-	if err := pty.Setsize(t.pty, &pty.Winsize{
-		Rows: rows,
-		Cols: cols,
-	}); err != nil {
+	err := t.workspace.SetPtySize(t.pty, int(cols), int(rows))
+	if err != nil {
 		return err
 	}
 
@@ -201,10 +131,8 @@ func (t *Terminal) SetSize(rows, cols uint16) error {
 func (t *Terminal) Run(updateChan chan struct{}) error {
 	t.mu.Lock()
 	t.updateChan = updateChan
-	t.reader = bufio.NewReaderSize(t.pty, 1024*1024)
+	t.reader = bufio.NewReaderSize(t.pty.Master, 1024*1024)
 	t.mu.Unlock()
-
-	defer func() { _ = term.Restore(t.stdinFd, t.stdinOldState) }() // Best effort.
 
 	for {
 		r, size, err := t.reader.ReadRune()
@@ -346,5 +274,5 @@ func (t *Terminal) Unlock() {
 // assumes lock has been acquired by caller
 func (t *Terminal) Close() error {
 	t.closed = true
-	return t.pty.Close()
+	return t.pty.Master.Close()
 }

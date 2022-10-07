@@ -82,12 +82,12 @@ func (e *emulator) init(
 	if initialCmd != "" {
 		opts = append(opts, termutil.WithInitialCommand(initialCmd))
 	}
-	e.terminal = termutil.New(opts...)
-	cmd, err := e.terminal.CreatePty()
+	e.terminal = termutil.New(wp, opts...)
+	pty, err := e.terminal.CreatePty()
 	if err != nil {
 		return err
 	}
-	e.windowManipulator.SetTitle(e.terminal.Tty().Name())
+	e.windowManipulator.SetTitle(e.terminal.Pty().Slave)
 	e.mouseDriver = &mouseDriver{t: e.terminal, clipboard: c}
 	e.mouse = text.NewMouse(e.mouseDriver)
 
@@ -104,7 +104,7 @@ func (e *emulator) init(
 
 	go func() {
 		var logErr error
-		if err := cmd.Wait(); err != nil {
+		if err := wp.Wait(pty.Pid); err != nil {
 			err = fmt.Errorf("terminal.Cmd.Wait: %s", err)
 			logErr = multierr.Append(logErr, err)
 		}

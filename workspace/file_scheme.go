@@ -240,6 +240,8 @@ func (m *fileScheme) NewPty() (Pty, error) {
 	}
 	cmd.SysProcAttr.Setsid = true
 	cmd.SysProcAttr.Setctty = true
+	// NOTE: this should probably be an option
+	cmd.Env = append(os.Environ(), "TERM=xterm-256color")
 
 	// open master/slave files
 	pty, tty, err := pty.Open()
