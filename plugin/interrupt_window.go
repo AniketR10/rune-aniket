@@ -5,7 +5,6 @@ import (
 
 	"unstable.build/go-tui/browser"
 	browserpb "unstable.build/go-tui/browser/rpc"
-	"unstable.build/go-tui/term"
 )
 
 type interruptWindow struct {
@@ -17,7 +16,7 @@ type interruptWindow struct {
 func interruptWindowServer(s *browser.Server, win browser.Window) browserpb.WindowServer {
 	return &interruptWindow{
 		srv:           browser.NewWindowServer(s, win),
-		interruptDraw: term.Interrupt,
+		interruptDraw: interrupt,
 	}
 }
 

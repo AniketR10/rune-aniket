@@ -7,7 +7,6 @@ import (
 	"google.golang.org/grpc"
 	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/proto"
-	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
 	textpb "unstable.build/go-tui/text/rpc"
 )
@@ -51,7 +50,7 @@ func (s *editorResourceServer) Serve(
 				lock.Lock()
 				server.Logger = l
 				lock.Unlock()
-				textpb.RegisterEditorServer(grpc, interruptEditorServer(server, term.Interrupt))
+				textpb.RegisterEditorServer(grpc, interruptEditorServer(server, interrupt))
 			}
 			return s.srv
 		})

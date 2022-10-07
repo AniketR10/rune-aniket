@@ -84,11 +84,12 @@ type workspaceHandler struct {
 }
 
 type workspaceManagerHandler struct {
-	mu        sync.Mutex
-	clipboard clipboardManagerIfc
-	cfg       ideConfig
-	storage   browser.Storage
-	workspace workspace.WorkspaceManager
+	mu           sync.Mutex
+	clipboard    clipboardManagerIfc
+	cfg          ideConfig
+	storage      browser.Storage
+	workspace    workspace.WorkspaceManager
+	publishEvent func(term.Event) bool
 
 	union          handler.FrameUnion
 	bar            handler.Tabs
@@ -110,9 +111,11 @@ func newWorkspaceManagerHandler(
 	clipboard clipboardManagerIfc, initial workspace.URI,
 	manager workspace.WorkspaceManager,
 	cfg ideConfig, recfilename string, filenames []string,
+	publishEvent func(term.Event) bool,
 ) (*workspaceManagerHandler, error) {
 	ret := new(workspaceManagerHandler)
-	err := ret.init(clipboard, initial, manager, cfg, recfilename, filenames)
+
+	err := ret.init(clipboard, initial, manager, cfg, recfilename, filenames, publishEvent)
 	if err != nil {
 		return nil, err
 	}
@@ -133,10 +136,12 @@ func (h *workspaceManagerHandler) init(
 	clipboard clipboardManagerIfc, uri workspace.URI,
 	manager workspace.WorkspaceManager, cfg ideConfig,
 	recfilename string, filenames []string,
+	publishEvent func(term.Event) bool,
 ) error {
 	h.workspaces = make([]*workspaceHandler, 10)
 	h.cfg = cfg
 	h.clipboard = clipboard
+	h.publishEvent = publishEvent
 	h.storage = document.NewInMemoryCache()
 	h.workspace = manager
 
@@ -149,7 +154,7 @@ func (h *workspaceManagerHandler) init(
 			}
 			quit, err := fn(h, argv[1:]...)
 			return quit, true, err
-		}, globalOpts...)
+		}, h.publishEvent, globalOpts...)
 
 	h.bar.Init()
 	h.bar.OnClick = h.switchToWorkspace
@@ -292,6 +297,12 @@ func (h *workspaceManagerHandler) textOpts(cfg ideConfig) []text.Option {
 		text.WithCommandAliases(cfg.commandAliases()),
 		text.WithPromptConfig(cfg.promptConfig()),
 		text.WithStorage(h.storage),
+		text.WithInterrupt(func() {
+			h.publishEvent(term.Event{Type: term.EventInterrupt})
+		}),
+		text.WithSendNone(func() {
+			forcePublishEvent(h.publishEvent)(term.Event{Type: term.EventNone})
+		}),
 	}
 
 	for seq, cmd := range defaultWorkspaceSequences {
@@ -351,7 +362,7 @@ func (h *workspaceManagerHandler) addWorkspace(
 				handled = false
 			}
 			return false, handled, err
-		}, textOpts...)
+		}, h.publishEvent, textOpts...)
 	if err != nil {
 		return err
 	}

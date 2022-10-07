@@ -36,7 +36,8 @@ func TestIDEInitializationIntegration(t *testing.T) {
 		require.NoError(t, err)
 
 		i := new(ide)
-		err = i.init(cwdURI.String(), configFile.Name(), "", file1.Name(), file2.Name())
+		err = i.init(cwdURI.String(), configFile.Name(), "",
+			nopPublishEvent, file1.Name(), file2.Name())
 		require.NoError(t, err)
 
 		require.NotNil(t, i.workspace)
@@ -55,7 +56,8 @@ func TestIDEInitializationIntegration(t *testing.T) {
 		require.NoError(t, err)
 
 		i := new(ide)
-		err = i.init(cwdURI.String(), configFile.Name(), "", file1.Name())
+		err = i.init(cwdURI.String(), configFile.Name(), "",
+			nopPublishEvent, file1.Name())
 		require.NoError(t, err)
 
 		require.NotNil(t, i.workspace)

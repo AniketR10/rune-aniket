@@ -10,7 +10,6 @@ import (
 	browserpb "unstable.build/go-tui/browser/rpc"
 	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/proto"
-	"unstable.build/go-tui/term"
 )
 
 const (
@@ -63,7 +62,7 @@ func (s *browserResourceServer) Serve(
 				s.srv = srv
 				server := new(browser.Server)
 				server.Init(broker, s.b, lock, interruptWindowServer)
-				rpcServer := interruptBrowserServer(server, term.Interrupt)
+				rpcServer := interruptBrowserServer(server, interrupt)
 				browserpb.RegisterWindowManagerServer(grpc, rpcServer)
 				browserpb.RegisterResourceOpenerServer(grpc, rpcServer)
 				browserpb.RegisterMessengerServer(grpc, rpcServer)

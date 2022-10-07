@@ -26,11 +26,13 @@ type ide struct {
 // newIde allocates storage for a new ide and initializes it with config
 // at cfgfilename and filename. Note that if filename is empty, a default inmutable
 // buffer will be loaded.
-func newIde(cwd, cfgfilename string, filenames ...string) (
-	i *ide, err error,
-) {
+func newIde(
+	cwd, cfgfilename string,
+	publishEvent func(term.Event) bool,
+	filenames ...string,
+) (i *ide, err error) {
 	i = new(ide)
-	err = i.init(cwd, cfgfilename, "", filenames...)
+	err = i.init(cwd, cfgfilename, "", publishEvent, filenames...)
 	return
 }
 
@@ -39,17 +41,19 @@ func newIde(cwd, cfgfilename string, filenames ...string) (
 // Note that this function panics if either filename or recfilename are empty.
 func newIdeRecovery(
 	cwd, cfgfilename, filename string, recfilename string,
+	publishEvent func(term.Event) bool,
 ) (i *ide, err error) {
 	if filename == "" || recfilename == "" {
 		panic(fmt.Sprintf("invalid input: filename='%s', recfilename='%s'",
 			filename, recfilename))
 	}
 	i = new(ide)
-	err = i.init(cwd, cfgfilename, recfilename, filename)
+	err = i.init(cwd, cfgfilename, recfilename, publishEvent, filename)
 	return
 }
 
-func (i *ide) init(cwd, cfgfilename, recfilename string, filenames ...string) error {
+func (i *ide) init(cwd, cfgfilename, recfilename string,
+	publishEvent func(term.Event) bool, filenames ...string) error {
 	configErr := loadConfig(&i.ideConfig, cfgfilename)
 
 	cwdURI, err := workspace.ParseURI(cwd)
@@ -89,7 +93,7 @@ func (i *ide) init(cwd, cfgfilename, recfilename string, filenames ...string) er
 	workspaceManager.RegisterScheme(workspace.FileScheme, workspace.NewFileScheme)
 
 	root, err := newWorkspaceManagerHandler(i.clipboard, cwdURI,
-		workspaceManager, i.ideConfig, recfilename, filenames)
+		workspaceManager, i.ideConfig, recfilename, filenames, publishEvent)
 	if err != nil {
 		return err
 	}

@@ -3,18 +3,10 @@
 package term
 
 import (
-	"sync"
-
 	"github.com/ernestrc/tcell/v2/termbox"
 )
 
 var (
-	quit          chan struct{}
-	events        chan Event
-	interrupt     int32
-	interruptNone int32
-	mu            sync.Mutex
-
 	defaultAttr = Attributes{Fg: ColorDefault, Bg: ColorDefault}
 
 	// DefaultWriter returns the global terminal Writer.
@@ -94,42 +86,10 @@ func Attr() Attributes {
 // After successful initialization, the writer must be finalized using 'Close'
 // function.
 func Init() error {
-	mu.Lock()
-	defer mu.Unlock()
-
 	err := termbox.Init()
 	if err != nil {
 		return err
 	}
-
-	events = make(chan Event)
-	quit = make(chan struct{})
-
-	// start polling events
-	go func() {
-		for {
-			var ev Event
-
-			tev := termbox.PollEvent()
-			ev.Type = EventType(tev.Type)
-			ev.Mod = Modifier(tev.Mod)
-			ev.Key = Key(tev.Key)
-			ev.Ch = tev.Ch
-			ev.Width = tev.Width
-			ev.Height = tev.Height
-			ev.Err = tev.Err
-			ev.MouseX = tev.MouseX
-			ev.MouseY = tev.MouseY
-			ev.Raw = tev.Raw
-
-			select {
-			case <-quit:
-				return
-			case events <- ev:
-			}
-		}
-	}()
-
 	return nil
 }
 
@@ -141,28 +101,23 @@ func Size() (width int, height int) {
 // PollEvent waits for an event and returns it.
 // This is a blocking function call.
 func PollEvent() (ev Event) {
-	mu.Lock()
-	if interrupt != 0 {
-		interrupt = 0
-		ev = Event{Type: EventInterrupt}
-		mu.Unlock()
-		return
-	}
-	if interruptNone != 0 {
-		interruptNone = 0
-		ev = Event{Type: EventNone}
-		mu.Unlock()
-		return
-	}
-	mu.Unlock()
-	ev = <-events
-	return
+	tev := termbox.PollEvent()
+	ev.Type = EventType(tev.Type)
+	ev.Mod = Modifier(tev.Mod)
+	ev.Key = Key(tev.Key)
+	ev.Ch = tev.Ch
+	ev.Width = tev.Width
+	ev.Height = tev.Height
+	ev.Err = tev.Err
+	ev.MouseX = tev.MouseX
+	ev.MouseY = tev.MouseY
+	ev.Raw = tev.Raw
+	return ev
 }
 
 // Close writer; should be called after successful initialization
 // when termbox's functionality isn't required anymore.
 func Close() {
-	close(quit)
 	termbox.Close()
 }
 
@@ -170,28 +125,32 @@ func Close() {
 // This is useful when the root handler's has been updated by another goroutine,
 // other than the main event loop goroutine.
 func Interrupt() {
-	mu.Lock()
-	select {
-	case events <- Event{Type: EventInterrupt}:
-	default:
-		interrupt++
-	}
-	mu.Unlock()
+	termbox.Interrupt()
 }
 
 // PublishEvent sends a synthetic event to the event poller.
-func PublishEvent(ev Event) {
-	events <- ev
+// If the event queue is full then this method does not
+// publish the event and returns false.
+func PublishEvent(ev Event) bool {
+	tev := termbox.Event{}
+	tev.Type = termbox.EventType(ev.Type)
+	tev.Mod = termbox.Modifier(ev.Mod)
+	tev.Key = termbox.Key(ev.Key)
+	tev.Ch = ev.Ch
+	tev.Width = ev.Width
+	tev.Height = ev.Height
+	tev.Err = ev.Err
+	tev.MouseX = ev.MouseX
+	tev.MouseY = ev.MouseY
+	tev.Raw = ev.Raw
+	return termbox.PublishEvent(tev)
 }
 
-// PublishNoneEvent sends a term.EventNone to the event poller and
-// forces event handling which in turn forces redraw.
-func PublishNoneEvent() {
-	mu.Lock()
-	select {
-	case events <- Event{Type: EventNone}:
-	default:
-		interruptNone++
-	}
-	mu.Unlock()
+// HasPendingEvent returns true if PollEvent would return an event
+// without blocking.  If the screen is stopped and PollEvent would
+// return nil, then the return value from this function is unspecified.
+// The purpose of this function is to allow multiple events to be collected
+// at once, to minimize screen redraws.
+func HasPendingEvent() bool {
+	return termbox.HasPendingEvent()
 }

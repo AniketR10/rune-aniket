@@ -71,8 +71,8 @@ func DefaultConfig() Config {
 		CommandAliases:          make(map[string][]string),
 		SequencerTimeout:        400 * time.Millisecond,
 		CommandOverlay:          DefaultCommandOverlayConfig(),
-		SendInterrupt:           term.Interrupt,
-		SendEventNone:           term.PublishNoneEvent,
+		SendInterrupt:           func() {},
+		SendEventNone:           func() {},
 	}
 	return cfg
 }
@@ -257,7 +257,6 @@ func WithPromptConfig(c browser.PromptConfig) Option {
 }
 
 // WithInterrupt sets the Component's interrupt function.
-// By default this is set to term.Interrupt.
 func WithInterrupt(fn func()) Option {
 	return func(cfg *Config) {
 		cfg.SendInterrupt = fn

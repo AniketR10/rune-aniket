@@ -10,6 +10,7 @@ import (
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/config"
 	"unstable.build/go-tui/proto"
+	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
 	testutil "unstable.build/go-tui/util/test"
 	"unstable.build/go-tui/workspace"
@@ -73,7 +74,10 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 
 		manager := workspace.NewManager(config.NopConfig())
 		require.NoError(t, manager.RegisterScheme(workspace.FileScheme, workspace.NewFileScheme))
-		m, err := newWorkspaceManagerHandler(clip, uri, manager, cfg, "", []string{})
+		m, err := newWorkspaceManagerHandler(clip, uri, manager, cfg, "", []string{},
+			func(term.Event) bool {
+				return true
+			})
 		require.NoError(t, err)
 
 		closeFns = append(closeFns, m.Close)

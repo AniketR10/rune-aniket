@@ -6,7 +6,10 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"unstable.build/go-tui/proto"
+	"unstable.build/go-tui/term"
 )
+
+var interrupt = term.Interrupt
 
 // MergeResourceMap merges m1 with mn.
 // If permissions are overlapping, the last of passed prevails.

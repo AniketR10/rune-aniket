@@ -49,6 +49,10 @@ func TestIntegrationRace(t *testing.T) {
 
 	wpMock := workspacetest.NewMockWorkspace(ctrl)
 	resources = MergeResourceMap(resources, WorkspaceResources(wpMock))
+	interrupt = func() {}
+	defer func() {
+		interrupt = term.Interrupt
+	}()
 
 	uri, err := workspace.ParseURI("file:///tmp/test")
 	require.NoError(t, err)

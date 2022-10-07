@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ernestrc/blue/retry"
 	multierr "github.com/ernestrc/go-multierror"
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/browser"
@@ -83,6 +84,8 @@ var (
 		{First: term.KeyComb{Key: term.KeyCtrlX},
 			Last: term.KeyComb{Key: term.KeyCtrlW}}: {"close"},
 	}
+	errEventStreamNotReady = errors.New("event stream not ready to publish")
+	forcePublishRetry      = retry.SequentialStrategy(5 * time.Millisecond)
 )
 
 type mode int8
@@ -100,7 +103,7 @@ type ex struct {
 	ed                   text.Editor
 	workspace            workspace.Loader
 	sequencer            handler.Sequencer
-	publishEvent         func(term.Event)
+	publishEvent         func(term.Event) bool
 	cmdOverride          func([]string) (bool, bool, error)
 	cmd                  commandListHandler
 	overlay              component.Overlay
@@ -114,14 +117,24 @@ type ex struct {
 func newEx(
 	ed text.Editor, m workspace.Loader, enabledCommands []string,
 	commandOverride func([]string) (bool, bool, error),
+	publishEvent func(term.Event) bool,
 	opts ...text.Option,
 ) (e *ex, err error) {
 	e = new(ex)
-	err = e.init(ed, m, enabledCommands, commandOverride, opts...)
+	err = e.init(ed, m, enabledCommands, commandOverride, publishEvent, opts...)
 	if err != nil {
 		return
 	}
 	return
+}
+
+func forcePublishEvent(publishEvent func(term.Event) bool) func(ev term.Event) {
+	return func(ev term.Event) {
+		retry.Retry(context.Background(), forcePublishRetry, func(context.Context) (bool, error) {
+			ok := publishEvent(ev)
+			return !ok, errEventStreamNotReady
+		})
+	}
 }
 
 // init initializes this ex with the given editor and Options.
@@ -130,9 +143,10 @@ func newEx(
 func (e *ex) init(
 	ed text.Editor, m workspace.Loader, enabledCommands []string,
 	commandOverride func([]string) (bool, bool, error),
+	publishEvent func(term.Event) bool,
 	opts ...text.Option,
 ) (err error) {
-	err = e.doInit(ed, m, commandOverride, opts...)
+	err = e.doInit(ed, m, commandOverride, publishEvent, opts...)
 	if err != nil {
 		return
 	}
@@ -156,18 +170,23 @@ func (e *ex) init(
 	}
 	e.resetCommandList()
 	e.cmd.loadHistory()
-	e.publishEvent = term.PublishEvent
 	return nil
+}
+
+func (e *ex) publishInterrupt() {
+	e.publishEvent(term.Event{Type: term.EventInterrupt})
 }
 
 func (e *ex) doInit(
 	ed text.Editor, m workspace.Loader,
 	commandOverride func([]string) (bool, bool, error),
+	publishEvent func(term.Event) bool,
 	opts ...text.Option,
 ) (err error) {
 	e.mode = modeDefault
 	e.workspace = m
 	e.cmdOverride = commandOverride
+	e.publishEvent = publishEvent
 
 	e.config = text.DefaultConfig()
 
@@ -206,7 +225,7 @@ func (e *ex) doInit(
 				e.setError(err)
 			}
 			return quit
-		})
+		}, e.publishInterrupt)
 
 	var commandOverlay tui.Component
 	if e.config.CommandOverlay.Frame {
@@ -501,7 +520,7 @@ func (e *ex) handleProxy(ev term.Event) (
 				if ctx.Err() == context.DeadlineExceeded {
 					// timer expired, reissue event because
 					// user didn't send a matching key combination.
-					e.publishEvent(ev)
+					forcePublishEvent(e.publishEvent)(ev)
 				}
 			}(e.ctxPartialReissue)
 			return

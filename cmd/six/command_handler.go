@@ -37,9 +37,10 @@ type commandListHandler struct {
 func newCommandListHandler(
 	b browser.Storage, max int, overlayCfg text.CommandOverlayConfig,
 	commandKey term.KeyComb, callback func(string, string) bool,
+	interrupt func(),
 ) *commandListHandler {
 	ret := new(commandListHandler)
-	ret.init(b, max, overlayCfg, commandKey, callback)
+	ret.init(b, max, overlayCfg, commandKey, callback, interrupt)
 	return ret
 }
 
@@ -50,6 +51,7 @@ func (h *commandListHandler) loadHistory() error {
 func (h *commandListHandler) init(
 	store browser.Storage, max int, overlayCfg text.CommandOverlayConfig,
 	commandKey term.KeyComb, callback func(string, string) bool,
+	interrupt func(),
 ) {
 	h.commandKey = commandKey
 	h.overlayCfg = overlayCfg
@@ -69,7 +71,7 @@ func (h *commandListHandler) init(
 
 	cfg := search.ListConfig{
 		Algo:             search.FuzzyMatch,
-		Interrupt:        term.Interrupt,
+		Interrupt:        interrupt,
 		CaseSensitive:    false,
 		MatchedTextAttr:  &overlayCfg.MatchedTextAttr,
 		FocusElementAttr: &overlayCfg.FocusElementAttr,

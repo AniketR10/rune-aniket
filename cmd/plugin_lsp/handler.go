@@ -73,6 +73,7 @@ var (
 	lspHandlerPermissions = []plugin.Permission{
 		plugin.PermissionBrowserWindowManager,
 		plugin.PermissionBrowserResourceOpener,
+		plugin.PermissionBrowserEventPublisher,
 		plugin.PermissionBrowserMessenger,
 		plugin.PermissionWorkspace,
 		plugin.PermissionConfig,
@@ -146,6 +147,7 @@ type lspEditorHandler struct {
 	m  browser.Messenger
 	o  browser.ResourceOpener
 	wp workspace.API
+	p  browser.EventPublisher
 
 	tabspaces            int
 	semanticTypesAttr    map[string]term.Attributes
@@ -589,6 +591,11 @@ func newLspHandler(
 				return nil, err
 			}
 			ret.cwd = cwdURI.Path()
+		case plugin.PermissionBrowserEventPublisher:
+			ret.p, err = plugin.EventPublisher(g.Token, broker)
+			if err != nil {
+				return nil, err
+			}
 		case plugin.PermissionBrowserResourceOpener:
 			ret.o, err = plugin.ResourceOpener(g.Token, broker)
 			if err != nil {
@@ -1490,8 +1497,13 @@ func (h *lspEditorHandler) browseLocations(
 		done            bool
 	)
 	cfg := search.ListConfig{
-		Algo:          search.FuzzyMatch,
-		Interrupt:     term.Interrupt,
+		Algo: search.FuzzyMatch,
+		Interrupt: func() {
+			err := h.p.PublishInterrupt()
+			if err != nil {
+				log.Errorf("PublishInterrupt: %v", err)
+			}
+		},
 		CaseSensitive: false,
 	}
 	list := search.NewList(cfg)

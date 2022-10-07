@@ -24,6 +24,10 @@ import (
 
 const testingShutdownWait = 500 * time.Millisecond
 
+func nopPublishEvent(term.Event) bool {
+	return true
+}
+
 type groupEventHandler struct {
 	h  *browser.TestHandler
 	wg *sync.WaitGroup
@@ -78,7 +82,7 @@ func newTestRPCBrowser(t *testing.T,
 		tui.Handler, browser.Browser, error,
 	) {
 		b := new(ex)
-		err := b.init(ed, &testLoader{}, exCommandList, nil, opts...)
+		err := b.init(ed, &testLoader{}, exCommandList, nil, nopPublishEvent, opts...)
 		if err != nil {
 			return nil, nil, err
 		}

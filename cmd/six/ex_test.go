@@ -737,10 +737,11 @@ func TestExKeySequence(t *testing.T) {
 			text.WithSequencerTimeout(1 * time.Second),
 		}
 		initExForTesting(t, b, text.NopEditor(), opts...)
-		b.publishEvent = func(ev term.Event) {
+		b.publishEvent = func(ev term.Event) bool {
 			mu.Lock()
 			defer mu.Unlock()
 			b.Handle(ev)
+			return true
 		}
 		closeFns = append(closeFns, func() error {
 			mu.Lock()
@@ -880,9 +881,8 @@ func initExForTestingWithWorkspace(
 	t *testing.T, ex *ex, workspace *testLoader,
 	ed text.Editor, opts ...text.Option,
 ) {
-	require.NoError(t, ex.init(ed, workspace, exCommandList, nil, opts...))
-	ex.publishEvent = func(ev term.Event) {
-	}
+	require.NoError(t, ex.init(ed, workspace, exCommandList,
+		nil, nopPublishEvent, opts...))
 }
 
 func initExForTesting(t *testing.T, ex *ex, ed text.Editor, opts ...text.Option) {

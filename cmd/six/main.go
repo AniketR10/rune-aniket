@@ -14,6 +14,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui/config"
 	"unstable.build/go-tui/proto"
+	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/workspace"
 	workspacepb "unstable.build/go-tui/workspace/rpc"
 	"unstable.build/go-tui/workspace/ssh"
@@ -104,11 +105,13 @@ func main() {
 
 	var i *ide
 	if *flagRecover != "" && len(filenames) != 0 {
-		i, err = newIdeRecovery(*flagWorkspace, *configpath, filenames[0], *flagRecover)
+		i, err = newIdeRecovery(*flagWorkspace, *configpath,
+			filenames[0], *flagRecover, term.PublishEvent)
 	} else if *flagRecover != "" {
 		log.Fatal("flag -r requires to pass the original filename filename")
 	} else {
-		i, err = newIde(*flagWorkspace, *configpath, filenames...)
+		i, err = newIde(*flagWorkspace, *configpath,
+			term.PublishEvent, filenames...)
 	}
 
 	if err != nil {
