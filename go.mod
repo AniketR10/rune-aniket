@@ -4,7 +4,6 @@ go 1.18
 
 require (
 	github.com/atotto/clipboard v0.1.2
-	github.com/creack/pty v1.1.18
 	github.com/ernestrc/blue v1.6.0
 	github.com/ernestrc/dom v0.2.5-0.20201125033726-789c946aa938
 	github.com/ernestrc/go-multierror v1.1.2
