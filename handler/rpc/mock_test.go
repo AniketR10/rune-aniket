@@ -42,6 +42,11 @@ func (c *mockHandlerClient) Handle(
 		Show: show,
 	}
 
+	// mimic server
+	if ev.Type == term.EventInterrupt {
+		return resp, err
+	}
+
 	resp.Quit, resp.Handled = c.remote.Handle(ev)
 	if c.handledCh != nil {
 		select {

@@ -18,7 +18,6 @@ import (
 
 const (
 	defaultRPCTimeout = 1000 * time.Millisecond
-	loadingCopy       = "LOADING"
 	smtgWrongCopy     = `
 
           ___
@@ -120,18 +119,17 @@ func (c *Client) setNewHandleResponse(comp tui.Component) {
 
 // Draw satisfies tui.Handler
 func (c *Client) Draw(w term.Writer) {
-	if c.resp.HandleResponse == nil {
-		c.Handle(term.Event{Type: term.EventInterrupt})
-	}
-
-	if c.height != c.resp.height || c.width != c.resp.width {
-		c.setNewHandleResponse(component.StringWithConfig(loadingCopy,
-			component.StringConfig{Alignment: component.SpanAlignmentCentered}))
-	}
-
+	// NOTE conflating Draw+Handle at the proto level
+	// is pointless if we call Handle on every Draw, but
+	// this is leftovers from having a client circuit breaker
+	// which we will be able to re-introduce once interrupts
+	// with context are implemented.
+	// This effectively fixes Interrupts handled in bundle
+	// with other events not triggering a second call to Draw
+	// which is what would wind up calling the server's Handle/Draw
+	// method.
+	c.Handle(term.Event{Type: term.EventInterrupt})
 	c.doDraw(w, c.resp.HandleResponse.GetDraw())
-
-	c.resp.HandleResponse = nil
 }
 
 // Handle satisfies tui.Handler
