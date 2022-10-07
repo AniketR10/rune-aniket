@@ -82,6 +82,8 @@ github.com/ernestrc/tcell/v2 v2.5.4-0.20220912211008-369b274e58ab h1:ZLfV+kMikO9
 github.com/ernestrc/tcell/v2 v2.5.4-0.20220912211008-369b274e58ab/go.mod h1:UZWG2X0Yg4ot5rDASltgKz0+PQ35Vk45J6S0GcAN1oE=
 github.com/ernestrc/tcell/v2 v2.5.4-0.20221007172013-2f6d3ed6c322 h1:/QEr4wo1L5Ke+sdj+WAF+7DlbWWdl3bF2U4ZITa8Cd0=
 github.com/ernestrc/tcell/v2 v2.5.4-0.20221007172013-2f6d3ed6c322/go.mod h1:Gce2y7w3FUaA02fWLMqAywHOzyUN5bgw9gZSECwWl1s=
+github.com/ernestrc/tcell/v2 v2.5.4-0.20221007185330-3a06e9ace178 h1:X+plsmtGqm1SstbAS0hfVvYbvY2gdg6q2rdU+cMyOZs=
+github.com/ernestrc/tcell/v2 v2.5.4-0.20221007185330-3a06e9ace178/go.mod h1:Gce2y7w3FUaA02fWLMqAywHOzyUN5bgw9gZSECwWl1s=
 github.com/fatih/color v1.7.0/go.mod h1:Zm6kSWBoL9eyXnKyktHP6abPY2pDugNf5KwzbycvMj4=
 github.com/fatih/color v1.10.0 h1:s36xzo75JdqLaaWoiEHk767eHiwo0598uUxyfiPkDsg=
 github.com/fatih/color v1.10.0/go.mod h1:ELkj/draVOlAH/xkhN6mQ50Qd0MPOk5AAr3maGEBuJM=

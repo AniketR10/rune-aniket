@@ -3,6 +3,7 @@
 package term
 
 import (
+	"github.com/ernestrc/tcell/v2"
 	"github.com/ernestrc/tcell/v2/termbox"
 )
 
@@ -98,10 +99,7 @@ func Size() (width int, height int) {
 	return termbox.Size()
 }
 
-// PollEvent waits for an event and returns it.
-// This is a blocking function call.
-func PollEvent() (ev Event) {
-	tev := termbox.PollEvent()
+func makeEvent(tev termbox.Event) (ev Event) {
 	ev.Type = EventType(tev.Type)
 	ev.Mod = Modifier(tev.Mod)
 	ev.Key = Key(tev.Key)
@@ -112,7 +110,14 @@ func PollEvent() (ev Event) {
 	ev.MouseX = tev.MouseX
 	ev.MouseY = tev.MouseY
 	ev.Raw = tev.Raw
-	return ev
+	return
+}
+
+// PollEvent waits for an event and returns it.
+// This is a blocking function call.
+func PollEvent() (ev Event) {
+	tev := termbox.PollEvent()
+	return makeEvent(tev)
 }
 
 // Close writer; should be called after successful initialization
@@ -153,4 +158,13 @@ func PublishEvent(ev Event) bool {
 // at once, to minimize screen redraws.
 func HasPendingEvent() bool {
 	return termbox.HasPendingEvent()
+}
+
+// Poll gives access to the underlying tcell.Event channel.
+func Poll() <-chan tcell.Event {
+	return termbox.Screen().Poll()
+}
+
+func FromTcellEvent(tev tcell.Event) Event {
+	return makeEvent(termbox.NewEvent(tev))
 }
