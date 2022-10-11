@@ -8,7 +8,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/ernestrc/blue/datastore/document"
+	"github.com/ernestrc/blue/document"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"unstable.build/go-tui/browser"

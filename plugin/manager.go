@@ -8,7 +8,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ernestrc/blue/datastore/document"
+	"github.com/ernestrc/blue/document"
+	docrpc "github.com/ernestrc/blue/document/rpc"
 	"github.com/ernestrc/blue/logging"
 	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui/config"
@@ -76,7 +77,7 @@ type Manager struct {
 	// used to abstract out go-plugin specific functionality
 	builder pluginBuilder
 
-	brokerServer *document.Server
+	brokerServer *docrpc.Server
 	broker       proto.MuxBroker
 	brokerAddr   net.Addr
 	config       managerConfig
@@ -105,7 +106,7 @@ func (m *Manager) Init(grantor Grantor, opts ...Option) (err error) {
 	m.rmu = m.config.locker
 
 	cache := document.NewInMemoryCache()
-	m.brokerServer = document.NewServer(cache)
+	m.brokerServer = docrpc.NewServer(cache)
 	m.broker, m.brokerAddr, err = initHostBroker(m.config, cache, m.brokerServer)
 	if err != nil {
 		return

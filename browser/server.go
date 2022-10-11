@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ernestrc/blue/datastore/document"
+	docrpc "github.com/ernestrc/blue/document/rpc"
 	"github.com/ernestrc/blue/logging"
 	log "github.com/sirupsen/logrus"
 	browserpb "unstable.build/go-tui/browser/rpc"
@@ -26,7 +26,7 @@ type Server struct {
 	browserpb.UnimplementedMessengerServer
 	browserpb.UnimplementedResourceOpenerServer
 	browserpb.UnimplementedWindowManagerServer
-	document.Server
+	docrpc.Server
 
 	broker proto.MuxBroker
 

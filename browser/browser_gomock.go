@@ -8,7 +8,7 @@ import (
 	context "context"
 	reflect "reflect"
 
-	document "github.com/ernestrc/blue/datastore/document"
+	document "github.com/ernestrc/blue/document"
 	gomock "github.com/golang/mock/gomock"
 	go_tui "unstable.build/go-tui"
 	term "unstable.build/go-tui/term"

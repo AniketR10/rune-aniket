@@ -5,7 +5,7 @@ import (
 	"sync"
 	"testing"
 
-	storepb "github.com/ernestrc/blue/datastore/rpc"
+	storepb "github.com/ernestrc/blue/document/rpc/proto"
 	gomock "github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

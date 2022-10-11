@@ -3,7 +3,7 @@ package text
 import (
 	"time"
 
-	"github.com/ernestrc/blue/datastore/document"
+	"github.com/ernestrc/blue/document"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/handler"

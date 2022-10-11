@@ -5,7 +5,8 @@ import (
 	"net"
 	"os"
 
-	"github.com/ernestrc/blue/datastore/document"
+	"github.com/ernestrc/blue/document"
+	docrpc "github.com/ernestrc/blue/document/rpc"
 	"github.com/ernestrc/blue/retry"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
@@ -31,7 +32,7 @@ func getBrokerRemoteAddrEnv() net.Addr {
 }
 
 func initHostBroker(
-	config managerConfig, svc document.Service, srv *document.Server,
+	config managerConfig, svc document.Service, srv *docrpc.Server,
 ) (proto.MuxBroker, net.Addr, error) {
 	lis, err := util.TempUnixListener()
 	if err != nil {
@@ -47,7 +48,7 @@ func initHostBroker(
 
 func initClientBroker(logger *log.Logger) proto.MuxBroker {
 	remoteAddr := getBrokerRemoteAddrEnv()
-	store, err := document.NewClient(remoteAddr, grpc.WithInsecure())
+	store, err := docrpc.NewClient(remoteAddr, grpc.WithInsecure())
 	if err != nil {
 		panic(err)
 	}

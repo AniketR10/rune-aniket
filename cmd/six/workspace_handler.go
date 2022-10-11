@@ -10,7 +10,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/ernestrc/blue/datastore/document"
+	"github.com/ernestrc/blue/document"
 	"github.com/ernestrc/go-multierror"
 	multierr "github.com/ernestrc/go-multierror"
 	"unstable.build/go-tui"

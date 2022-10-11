@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ernestrc/blue/datastore/document"
+	"github.com/ernestrc/blue/document"
 	"github.com/ernestrc/blue/retry"
 	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"

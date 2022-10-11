@@ -7,7 +7,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ernestrc/blue/datastore/document"
+	"github.com/ernestrc/blue/document"
+	docrpc "github.com/ernestrc/blue/document/rpc"
 	"github.com/ernestrc/blue/logging"
 	"google.golang.org/grpc"
 	"unstable.build/go-tui"
@@ -38,7 +39,7 @@ type Client struct {
 
 	broker  proto.MuxBroker
 	cc      grpc.ClientConnInterface
-	storage document.Client
+	storage docrpc.Client
 	wm      browserpb.WindowManagerClient
 	msg     browserpb.MessengerClient
 	f       browserpb.ResourceOpenerClient

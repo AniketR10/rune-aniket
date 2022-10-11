@@ -3,7 +3,7 @@ package plugin
 import (
 	"context"
 
-	storepb "github.com/ernestrc/blue/datastore/rpc"
+	storepb "github.com/ernestrc/blue/document/rpc/proto"
 	browserpb "unstable.build/go-tui/browser/rpc"
 )
 

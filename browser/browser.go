@@ -1,7 +1,7 @@
 package browser
 
 import (
-	"github.com/ernestrc/blue/datastore/document"
+	"github.com/ernestrc/blue/document"
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/workspace"

@@ -67,8 +67,8 @@ func newTestManager(grantor Grantor, opts ...Option) (*Manager, *testGranteePbCl
 	m := new(Manager)
 
 	opts = append([]Option{
-		WithHandshakeTimeout(500 * time.Millisecond),
-		WithHealthTimeout(500 * time.Millisecond),
+		WithHandshakeTimeout(1000 * time.Millisecond),
+		WithHealthTimeout(1000 * time.Millisecond),
 		WithHealthRetries(0),
 	}, opts...)
 	mockpb := &testGranteePbClient{

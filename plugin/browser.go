@@ -3,7 +3,7 @@ package plugin
 import (
 	"sync"
 
-	bproto "github.com/ernestrc/blue/datastore/rpc"
+	bproto "github.com/ernestrc/blue/document/rpc/proto"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 	"unstable.build/go-tui/browser"
