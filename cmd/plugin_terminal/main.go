@@ -5,7 +5,10 @@ import (
 	"fmt"
 	"net/http"
 	_ "net/http/pprof"
+	"os"
+	"os/signal"
 	"sync"
+	"syscall"
 
 	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
@@ -41,6 +44,7 @@ var (
 )
 
 type emulatorGrantee struct {
+	ch     chan struct{}
 	mu     sync.Mutex
 	broker proto.MuxBroker
 
@@ -141,6 +145,7 @@ func (e *emulatorGrantee) PermissionDenied(perms []plugin.Permission) {
 
 func (e *emulatorGrantee) Shutdown(reason string) error {
 	log.Debugf("plugin being shutdown: %s", reason)
+	close(e.ch)
 	return nil
 }
 
@@ -210,6 +215,30 @@ func main() {
 		log.Println(http.ListenAndServe("localhost:2268", nil))
 	}()
 
-	s := emulatorGrantee{}
+	// log unhandled signals for debugging
+	ch := make(chan os.Signal, 1)
+	quitch := make(chan struct{})
+	signal.Notify(ch)
+	go func() {
+		for {
+			select {
+			case sig := <-ch:
+				switch sig {
+				case syscall.SIGTERM, syscall.SIGKILL:
+					log.Info("Received kill signal: exiting")
+					os.Exit(1)
+				case syscall.SIGURG:
+					/* received when socket urgent data is ready to be read */
+				default:
+					log.Debugf("Received unhandled signal: %#v", sig)
+				}
+			case <-quitch:
+				signal.Reset()
+				return
+			}
+		}
+	}()
+
+	s := emulatorGrantee{ch: quitch}
 	plugin.Serve(&s, requiredPermissions...)
 }
