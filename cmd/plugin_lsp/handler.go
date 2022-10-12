@@ -9,6 +9,7 @@ import (
 	"io"
 	"io/ioutil"
 	"math"
+	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -1249,13 +1250,19 @@ func (h *lspEditorHandler) setDiagnosticsLocationList(
 	return err
 }
 
-func spanURIToWorkspace(u span.URI) (workspace.URI, error) {
-	file, err := workspace.ParseURI(string(u))
+func (h *lspEditorHandler) spanURIToWorkspace(u span.URI) (workspace.URI, error) {
+	localFile, err := workspace.ParseURI(string(u))
 	if err != nil {
-		log.Errorf("failed to convert span URI to workspace URI %s: %s", u, err)
+		err = fmt.Errorf("ParseURI: convert LSP URI to workspace URI %s: %s", u, err)
 		return workspace.URI{}, err
 	}
-	return file, err
+	// convert local LSP file URI to the current workspace's URI scheme
+	// which could be remote or something else.
+	workspaceFile, err := h.wp.URI(localFile.Path())
+	if err != nil {
+		return workspace.URI{}, fmt.Errorf("workspace.URI: %s", err)
+	}
+	return workspaceFile, err
 }
 
 func workspaceURIToSpan(u workspace.URI) span.URI {
@@ -1273,7 +1280,7 @@ func (h *lspEditorHandler) HandleDiagnostics(
 		start = time.Now()
 		log.Tracef("lspEditorHandler.HandleDiagnostics(%#v)", p.URI)
 	}
-	file, err := spanURIToWorkspace(p.URI.SpanURI())
+	file, err := h.spanURIToWorkspace(p.URI.SpanURI())
 	if err != nil {
 		return err
 	}
@@ -1288,7 +1295,7 @@ func (h *lspEditorHandler) HandleDiagnostics(
 }
 
 func (h *lspEditorHandler) goToLocation(win browser.Window, l protocol.Location) error {
-	uri, err := spanURIToWorkspace(l.URI.SpanURI())
+	uri, err := h.spanURIToWorkspace(l.URI.SpanURI())
 	if err != nil {
 		return err
 	}
@@ -1577,9 +1584,15 @@ func (h *lspEditorHandler) browseLocations(
 
 	renderFile := func(l protocol.Location) {
 		uri := l.URI.SpanURI()
-		data, err := ioutil.ReadFile(uri.Filename())
+		// Open assumes path in current workspace
+		f, oerr := h.wp.Open(uri.Filename(), os.O_RDONLY, 0)
+		if oerr != nil {
+			log.Errorf("could not render preview file: Open: %v", oerr)
+			return
+		}
+		data, err := ioutil.ReadAll(f)
 		if err != nil {
-			log.Errorf("lspEditorHandler.ReadFile: %v", err)
+			log.Errorf("could not render preview file: Read: %v", err)
 			return
 		}
 		content := string(data)
