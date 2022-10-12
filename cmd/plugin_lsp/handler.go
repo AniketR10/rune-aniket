@@ -257,14 +257,14 @@ func streamRPC(cc jsonrpc2.Conn, h *lspEditorHandler) {
 
 func initializeConnection(
 	h *lspEditorHandler, reader io.ReadCloser, writer io.WriteCloser,
-) (protocol.Server, error) {
+) protocol.Server {
 	conn := fakenet.NewConn("stdio", reader, writer)
 	stream := jsonrpc2.NewHeaderStream(conn)
 	cc := jsonrpc2.NewConn(stream)
 	server := protocol.ServerDispatcher(cc)
 	go streamRPC(cc, h)
 
-	return server, nil
+	return server
 }
 
 func (h *lspEditorHandler) getPipes(pid workspace.Pid) (
@@ -340,20 +340,18 @@ func (h *lspEditorHandler) startLanguageServer(
 
 	pid, err := h.parseCmd(cmd)
 	if err != nil {
-		err = fmt.Errorf("failed to parse language %s command: %v", langID, err)
 		return execServer{}, err
 	}
 
 	stdin, stdout, stderr, err := h.getPipes(pid)
 	if err != nil {
-		err = fmt.Errorf("failed to create net.Conn for '%s': %v", langID, err)
 		return execServer{}, err
 	}
 
 	log.Debugf("Starting lsp server '%s' with cmd: %#v", langID, pid)
 	err = h.wp.Start(pid)
 	if err != nil {
-		err = fmt.Errorf("failed to start exec for '%s': %v", langID, err)
+		err = fmt.Errorf("workspace.Start: %v", err)
 		return execServer{}, err
 	}
 
@@ -364,11 +362,7 @@ func (h *lspEditorHandler) startLanguageServer(
 
 	stdout = nop{Reader: stdout}
 	stdin = nop{Writer: stdin}
-	server, err := initializeConnection(h, stdout, stdin)
-	if err != nil {
-		err = fmt.Errorf("failed to initialize LSP server for '%s': %v", langID, err)
-		return execServer{}, err
-	}
+	server := initializeConnection(h, stdout, stdin)
 
 	srv := execServer{langID: langID, cmd: pid, srv: server}
 	initRes, err := sendInitializeRequest(ctx, h.cwd, srv)

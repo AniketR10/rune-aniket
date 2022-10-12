@@ -9,6 +9,7 @@ import (
 	os "os"
 	"os/user"
 	"path/filepath"
+	"strings"
 	"time"
 
 	multierr "github.com/ernestrc/go-multierror"
@@ -194,6 +195,16 @@ func (s *scheme) init(cc sshConfig, uri workspace.URI) (err error) {
 	}
 
 	return nil
+}
+
+// override to provide user with an error message that guides to a solution
+func (s *scheme) Start(pid workspace.Pid) error {
+	err := s.Scheme.Start(pid)
+	if err != nil && strings.Contains(err.Error(), "executable file not found in $PATH") {
+		return fmt.Errorf("%w. Make sure that $PATH is configured "+
+			"even for non-interactive shells (i.e. .bashrc, .profile, etc.)", err)
+	}
+	return err
 }
 
 func (s *scheme) Open(path string, flag int, perm os.FileMode) (workspace.File, *workspace.Error) {

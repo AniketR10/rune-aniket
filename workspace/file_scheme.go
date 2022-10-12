@@ -143,19 +143,19 @@ func (m *fileScheme) Command(name string, arg ...string) (Pid, error) {
 }
 
 func (m *fileScheme) getCmdForPid(pid Pid) (*exec.Cmd, bool) {
-	f, ok := m.cmds.Load(pid)
+	c, ok := m.cmds.Load(pid)
 	if ok {
-		return f.(*exec.Cmd), true
+		return c.(*exec.Cmd), true
 	}
 	return nil, false
 }
 
 func (m *fileScheme) Start(pid Pid) error {
-	f, ok := m.getCmdForPid(pid)
+	c, ok := m.getCmdForPid(pid)
 	if !ok {
 		return errProcNotFound
 	}
-	err := f.Start()
+	err := c.Start()
 	if err != nil {
 		return fmt.Errorf("Cmd.Start: %w", err)
 	}
@@ -163,14 +163,14 @@ func (m *fileScheme) Start(pid Pid) error {
 }
 
 func (m *fileScheme) Signal(pid Pid, signal syscall.Signal) error {
-	f, ok := m.getCmdForPid(pid)
+	c, ok := m.getCmdForPid(pid)
 	if !ok {
 		return errProcNotFound
 	}
-	if f.Process == nil {
+	if c.Process == nil {
 		return errProcNotRunning
 	}
-	err := syscall.Kill(int(f.Process.Pid), signal)
+	err := syscall.Kill(int(c.Process.Pid), signal)
 	if err != nil {
 		return fmt.Errorf("syscall.Kill: %w", err)
 	}
@@ -178,11 +178,11 @@ func (m *fileScheme) Signal(pid Pid, signal syscall.Signal) error {
 }
 
 func (m *fileScheme) StderrPipe(pid Pid) (io.ReadCloser, error) {
-	f, ok := m.getCmdForPid(pid)
+	c, ok := m.getCmdForPid(pid)
 	if !ok {
 		return nil, errProcNotFound
 	}
-	pipe, err := f.StderrPipe()
+	pipe, err := c.StderrPipe()
 	if err != nil {
 		return nil, fmt.Errorf("Cmd.StderrPipe: %w", err)
 	}
@@ -190,11 +190,11 @@ func (m *fileScheme) StderrPipe(pid Pid) (io.ReadCloser, error) {
 }
 
 func (m *fileScheme) StdinPipe(pid Pid) (io.WriteCloser, error) {
-	f, ok := m.getCmdForPid(pid)
+	c, ok := m.getCmdForPid(pid)
 	if !ok {
 		return nil, errProcNotFound
 	}
-	pipe, err := f.StdinPipe()
+	pipe, err := c.StdinPipe()
 	if err != nil {
 		return nil, fmt.Errorf("Cmd.StdinPipe: %w", err)
 	}
@@ -202,11 +202,11 @@ func (m *fileScheme) StdinPipe(pid Pid) (io.WriteCloser, error) {
 }
 
 func (m *fileScheme) StdoutPipe(pid Pid) (io.ReadCloser, error) {
-	f, ok := m.getCmdForPid(pid)
+	c, ok := m.getCmdForPid(pid)
 	if !ok {
 		return nil, errProcNotFound
 	}
-	pipe, err := f.StdoutPipe()
+	pipe, err := c.StdoutPipe()
 	if err != nil {
 		return nil, fmt.Errorf("Cmd.StdoutPipe: %w", err)
 	}
@@ -214,12 +214,12 @@ func (m *fileScheme) StdoutPipe(pid Pid) (io.ReadCloser, error) {
 }
 
 func (m *fileScheme) Wait(pid Pid) error {
-	f, ok := m.getCmdForPid(pid)
+	c, ok := m.getCmdForPid(pid)
 	if !ok {
 		return errProcNotFound
 	}
 	defer m.cmds.Delete(pid)
-	err := f.Wait()
+	err := c.Wait()
 	if err != nil {
 		return fmt.Errorf("Cmd.Wait: %w", err)
 	}
