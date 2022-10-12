@@ -112,3 +112,30 @@ func TestEditorDispatchCursor(t *testing.T) {
 	assert.Equal(t, term.Coordinates{X: 1}, windowCursor)
 	assert.Equal(t, term.Coordinates{Y: 1, X: 1}, scrollCursor)
 }
+
+func TestEditorSetCursor(t *testing.T) {
+	uri, err := workspace.ParseURI("file:///tmp/zsh.sh")
+	require.NoError(t, err)
+
+	t.Run("does not return error if cursor already at position", func(t *testing.T) {
+		ed := Editor()
+		h, err := ed.Edit(uri, cell.NewBuffer())
+		require.NoError(t, err)
+
+		err = ed.SetCursor(h, term.Coordinates{})
+		require.NoError(t, err)
+	})
+	t.Run("sets cursor at position", func(t *testing.T) {
+		buf := cell.NewBuffer()
+		buf.WriteString("a")
+		ed := Editor()
+		h, err := ed.Edit(uri, buf)
+		require.NoError(t, err)
+
+		err = ed.SetCursor(h, term.Coordinates{X: 1})
+		require.NoError(t, err)
+		pos, err := ed.Cursor(h)
+		require.NoError(t, err)
+		assert.Equal(t, term.Coordinates{X: 1}, pos)
+	})
+}

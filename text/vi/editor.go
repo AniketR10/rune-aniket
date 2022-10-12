@@ -73,8 +73,13 @@ func (e *viEditor) CellEditor(h text.Handler) text.CellEditor {
 }
 
 func (e *viEditor) SetCursor(h text.Handler, pos term.Coordinates) error {
-	ok := e.Publisher.Handler(h).(*Vi).SetCursorAtScroll(pos)
+	vi := e.Publisher.Handler(h).(*Vi)
+	ok := vi.SetCursorAtScroll(pos)
 	if !ok {
+		if vi.CursorAtScroll() == pos {
+			// already set at position
+			return nil
+		}
 		return errors.New("SetCursor: invalid cursor position")
 	}
 	return nil
