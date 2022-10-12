@@ -166,7 +166,7 @@ func (e Error) Error() string {
 		return "permission denied"
 	}
 	if e.IsNotExist {
-		return "file does not exist"
+		return "file does not exist or directory structure does not support operation"
 	}
 	if e.IsExist {
 		return "file exists"
