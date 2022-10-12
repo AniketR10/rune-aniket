@@ -160,8 +160,8 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 ├──────────────────┤
 │                  │
 │workspaceWallpaper│
-│Error: workspace t│
-│ab is empty       │
+│workspace tab is e│
+│mpty              │
 ├──────────────────┤
 │1                 │
 └──────────────────┘`},
@@ -172,9 +172,9 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 │                  │
 │                  │
 │workspaceWallpaper│
-│Error: invalid wor│
-│kspace: there's on│
-│ly 10 workspaces  │
+│invalid workspace:│
+│ there's only 10 w│
+│orkspaces         │
 └──────────────────┘`},
 		{":addWorkspace blabla>",
 			`┌──────────────────┐
@@ -183,9 +183,9 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 │                  │
 │                  │
 │workspaceWallpaper│
-│Error: Unknown com│
-│mand "addWorkspace│
-│" or alias targets│
+│Unknown command "a│
+│ddWorkspace" or al│
+│ias targets       │
 └──────────────────┘`},
 		{"1234567890",
 			`┌──────────────────┐
@@ -202,10 +202,10 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 			`┌──────────────────┐
 │                  │
 ├──────────────────┤
-│Error: invalid arg│
-│uments. Expecting │
-│1 argument with wo│
-│rkspace URI       │
+│invalid arguments.│
+│ Expecting 1 argum│
+│ent with workspace│
+│ URI              │
 ├──────────────────┤
 │1  2              │
 └──────────────────┘`},
@@ -213,10 +213,10 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 			`┌──────────────────┐
 │                  │
 ├──────────────────┤
-│Error: invalid arg│
-│uments. Expecting │
-│1 argument with wo│
-│rkspace number    │
+│invalid arguments.│
+│ Expecting 1 argum│
+│ent with workspace│
+│ number           │
 ├──────────────────┤
 │1  2              │
 └──────────────────┘`},

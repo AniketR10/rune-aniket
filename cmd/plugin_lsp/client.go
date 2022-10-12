@@ -24,7 +24,7 @@ func (h *lspClientHandler) LogMessage(
 ) error {
 	switch p.Type {
 	case protocol.Error:
-		log.Error("protocol.Client:", p.Message)
+		log.Warn("protocol.Client:", p.Message)
 	case protocol.Warning:
 		log.Warn("protocol.Client: ", p.Message)
 	case protocol.Info:
@@ -48,8 +48,7 @@ func (h *lspClientHandler) PublishDiagnostics(
 	ctx context.Context, p *protocol.PublishDiagnosticsParams,
 ) error {
 	log.Tracef("lspClientHandler.PublishDiagnostics: %#v", p)
-	h.h.HandleDiagnostics(ctx, p)
-	return nil
+	return h.h.HandleDiagnostics(ctx, p)
 }
 
 func (h *lspClientHandler) Progress(

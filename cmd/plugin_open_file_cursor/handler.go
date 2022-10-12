@@ -106,8 +106,8 @@ func (h *gfEditorHandler) openFileUnderCursor(uri workspace.URI) error {
 
 	word := f.uriAtCursor()
 	if word == "" {
-		log.Debugf("Could not open file under cursor: word under cursor is empty")
-		return nil
+		err := fmt.Errorf("word under cursor is empty")
+		return err
 	}
 
 	uri, err := workspace.ParseURI(word)
@@ -136,7 +136,7 @@ func (h *gfEditorHandler) openFileUnderCursor(uri workspace.URI) error {
 }
 
 func (h *gfEditorHandler) HandleCommand(ctx context.Context, cmd text.Command) (
-	exit bool,
+	exit bool, err error,
 ) {
 	if cmd.Resource == nil {
 		return
@@ -144,11 +144,7 @@ func (h *gfEditorHandler) HandleCommand(ctx context.Context, cmd text.Command) (
 
 	switch cmd.Name {
 	case commandOpenFileCursor:
-		err := h.openFileUnderCursor(cmd.URI)
-		if err != nil {
-			log.Error(err)
-			return
-		}
+		err = h.openFileUnderCursor(cmd.URI)
 	}
 
 	return
@@ -191,7 +187,8 @@ func (h *gfEditorHandler) Handle(
 
 	err := h.syncBuffers(ev)
 	if err != nil {
-		log.Errorf("Handle(%#v): %v", ev.Type, err)
+		err = fmt.Errorf("syncBuffers(%v): %s", ev.Type, err)
+		log.Error(err)
 	}
 	if log.IsLevelEnabled(log.TraceLevel) {
 		log.Tracef("Handle(%#v) in %s", ev.Type, time.Since(start))

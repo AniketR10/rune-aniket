@@ -164,25 +164,25 @@ func newGitHandler(
 }
 
 func (h *gitEditorHandler) HandleCommand(ctx context.Context, cmd text.Command) (
-	exit bool,
+	exit bool, err error,
 ) {
 	if cmd.Resource == nil {
 		return
 	}
 	switch cmd.Name {
 	case commandNextChange:
-		err := h.ed.MoveToNextLocation(cmd.Resource, h.gitDiffListID)
+		err = h.ed.MoveToNextLocation(cmd.Resource, h.gitDiffListID)
 		if err != nil {
-			log.Errorf("lspEditorHandler.MoveToNextLocation(%s): %v", cmd.Name, err)
+			err = fmt.Errorf("ed.MoveToNextLocation(%s): %v", cmd.Name, err)
 		}
 	case commandPrevChange:
-		err := h.ed.MoveToPrevLocation(cmd.Resource, h.gitDiffListID)
+		err = h.ed.MoveToPrevLocation(cmd.Resource, h.gitDiffListID)
 		if err != nil {
-			log.Errorf("lspEditorHandler.MoveToNextLocation(%s): %v", cmd.Name, err)
+			err = fmt.Errorf("ed.MoveToPrevLocation(%s): %v", cmd.Name, err)
 		}
 	}
 
-	return false
+	return
 }
 
 func (h *gitEditorHandler) parseDiff(diff *diff.FileDiff) []text.Location {
@@ -276,7 +276,7 @@ func (h *gitEditorHandler) initScroll(name string) {
 	h.scroll.scroll.Init(cell.NewBuffer())
 	rows, ok := h.rows[name]
 	if !ok {
-		log.Warnf("could not find max rows for file %s", name)
+		log.Debugf("could not find max rows for file %s", name)
 		return
 	}
 

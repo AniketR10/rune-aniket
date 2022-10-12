@@ -61,9 +61,9 @@ func (s *serverEventHandler) Handle(ctx context.Context, ev text.Event) bool {
 	if ev.URI != (workspace.URI{}) {
 		brokerID, ok := s.s.uriToID[ev.URI.String()]
 		if !ok {
-			s.s.tryLog(log.WarnLevel, "(%p editor.Server): could NOT"+
-				"dispatch event %#v: handler with resource name %s not found",
-				s.s, ev.Type, ev.URI)
+			err := fmt.Errorf("could NOT dispatch event %v: handler with resource name %s not found",
+				ev.Type, ev.URI)
+			s.s.tryLog(log.WarnLevel, "%s", err)
 			return true
 		}
 		token := browser.Token{ID: uint64(brokerID)}
@@ -237,6 +237,48 @@ func (s *Server) dialHandler(handlerID uint32) (text.EventHandler, error) {
 	return h, nil
 }
 
+func (s *Server) dialCommandHandler(handlerID uint32) (text.CommandHandler, error) {
+	s.editor.Lock()
+	res, ok := s.clients[uint64(handlerID)]
+	s.editor.Unlock()
+	if ok {
+		s.tryLog(log.DebugLevel,
+			"(%p editor.Server): found cached command client for handlerID: %d",
+			s, handlerID)
+		// NOTE if this ever panics, it means that something is very wrong with
+		// the proto.MuxBroker at use.
+		return res.(*commandClientResource).client, nil
+	}
+
+	s.tryLog(log.TraceLevel,
+		"(%p editor.Server): dialing command handler with id: %d", s, handlerID)
+
+	handlerConn, err := s.broker.Dial(handlerID)
+	if err != nil {
+		return nil, err
+	}
+
+	ctx, cancelFn := context.WithCancel(context.Background())
+	go proto.MonitorConnection(ctx, s.failureTimeout, handlerConn,
+		func(reason string) {
+			reason = fmt.Sprintf("editor.MonitorConnection(command): %s", reason)
+			s.safeForceCloseHandler(handlerID, reason)
+		})
+
+	client := newCommandClient(handlerConn, s)
+
+	s.editor.Lock()
+	defer s.editor.Unlock()
+
+	s.clients[uint64(handlerID)] = &commandClientResource{
+		handlerConn:   handlerConn,
+		client:        client,
+		cancelMonitor: cancelFn,
+	}
+
+	return client, nil
+}
+
 func (s *Server) addNextHandlerResource(resource workspace.URI, h text.Handler) uint32 {
 	handlerID := s.broker.NextId()
 	s.uriToID[resource.String()] = handlerID
@@ -348,22 +390,10 @@ func (s *Server) Register(ctx context.Context, in *RegisterCommandRequest) (
 	*RegisterCommandResponse, error,
 ) {
 	handlerID := in.GetHandlerId()
-	handler, err := s.dialHandler(handlerID)
+	commander, err := s.dialCommandHandler(handlerID)
 	if err != nil {
 		return nil, err
 	}
-
-	commander := text.FuncCommandHandler(func(ctx context.Context, cmd text.Command) bool {
-		return handler.Handle(ctx, text.Event{
-			Type:     text.EventTypeCommand,
-			Content:  cmd.Name,
-			Resource: cmd.Resource,
-			URI:      cmd.URI,
-			Start:    cmd.Cursor.Content,
-			From:     cmd.Cursor.Window,
-			Args:     cmd.Args,
-		})
-	})
 
 	cmd := in.GetCommand()
 

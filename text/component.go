@@ -10,6 +10,7 @@ import (
 
 	"github.com/ernestrc/blue/document"
 	"github.com/ernestrc/blue/logging"
+	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/browser"
@@ -483,7 +484,7 @@ func (c *Component) KeyMapping(key term.KeyComb) ([]string, bool) {
 
 // DispatchCommand dispatches a EventTypeCommand with cmd to subscribers
 // subscribed via SubscribeEditorEvents.
-func (c *Component) DispatchCommand(cmd Command) (handled bool) {
+func (c *Component) DispatchCommand(cmd Command) (handled bool, err error) {
 	targets, ok := c.config.CommandAliases[cmd.Name]
 	if ok {
 		c.log(log.InfoLevel, "Dispatching alias %s: %#v", cmd.Name, targets)
@@ -491,23 +492,29 @@ func (c *Component) DispatchCommand(cmd Command) (handled bool) {
 			argv := strings.Split(target, " ")
 			cmd.Name = argv[0]
 			cmd.Args = argv[1:]
-			targetHandled := c.DispatchCommand(cmd)
+			targetHandled, targetErr := c.DispatchCommand(cmd)
+			if targetErr != nil {
+				return targetHandled, fmt.Errorf("%s: %s", target, targetErr)
+			}
 			handled = handled || targetHandled
 		}
-		return
+		return handled, nil
 	}
 	commander, handled := c.cmdSubscribers[cmd.Name]
 	if !handled {
-		return false
+		return false, nil
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
 	defer cancel()
 
-	exit := commander.HandleCommand(ctx, cmd)
+	exit, err := commander.HandleCommand(ctx, cmd)
+	if err != nil {
+		return true, err
+	}
 	if exit {
 		delete(c.cmdSubscribers, cmd.Name)
 	}
-	return true
+	return true, nil
 }
 
 func (c *Component) dispatchFlush(file workspace.URI, h Handler) (string, error) {
@@ -655,7 +662,7 @@ func (c *Component) Flush(win browser.Window) error {
 func (c *Component) getContent(h Handler) (string, error) {
 	cells, err := c.ed.CellView(h).RawCells()
 	if err != nil {
-		return "", fmt.Errorf("Error dispatching event content: RawCells: %v", err)
+		return "", fmt.Errorf("CellView.RawCells: %v", err)
 	}
 	return cell.CellsToString(cells), nil
 }
@@ -664,6 +671,7 @@ func (c *Component) dispatchOpenTabs(h EventHandler) (error, bool) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	var ret error
 	for _, tab := range c.comp.Tabs() {
 		resHandler, ok := tab.Handler().(Handler)
 		if !ok {
@@ -672,7 +680,8 @@ func (c *Component) dispatchOpenTabs(h EventHandler) (error, bool) {
 		}
 		str, err := c.getContent(resHandler)
 		if err != nil {
-			return err, false
+			ret = multierr.Append(ret, err)
+			continue
 		}
 		exit := h.Handle(ctx, Event{
 			Type:     EventTypeOpen,
@@ -681,10 +690,10 @@ func (c *Component) dispatchOpenTabs(h EventHandler) (error, bool) {
 			Content:  str,
 		})
 		if exit {
-			return nil, true
+			return ret, true
 		}
 	}
-	return nil, false
+	return ret, false
 }
 
 func (c *Component) dispatchFocusTab(h EventHandler) bool {

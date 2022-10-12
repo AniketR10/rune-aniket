@@ -419,7 +419,7 @@ IIII`},
 ││AAAA│BBBBBBBBBBBB│
 │└────┘BBBBBBBBBBBB│
 │BBBBBBBBBBBBBBBBBB│
-│Error: not a file │
+│not a file        │
 └──────────────────┘`},
 	}
 
@@ -437,7 +437,7 @@ IIII`},
 │BBBBBBBBBBBBBBBBBB│
 │BBBBBBBBBBBBBBBBBB│
 │BBBBBBBBBBBBBBBBBB│
-│Error: not a file │
+│not a file        │
 └──────────────────┘`},
 	}
 	testutil.TestHandlerSequence(t, bh, 20, 10, cases)

@@ -2,6 +2,7 @@ package util
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"sync"
@@ -94,7 +95,7 @@ func (t *cmdSplitHandler) exitClean() {
 	}
 }
 
-func (t *cmdSplitHandler) openSplitWindow() {
+func (t *cmdSplitHandler) openSplitWindow() error {
 	t.mu.Lock()
 	win := t.win
 	wm := t.wm
@@ -102,29 +103,28 @@ func (t *cmdSplitHandler) openSplitWindow() {
 
 	if win != nil {
 		log.Debug("received cmd event but win is already open")
-		return
+		return nil
 	}
 	if wm == nil {
-		log.Warn("could not handle cmd event: could not resolve wm permission")
-		return
+		return errors.New("insufficient permissions: WindowManager permission was denied")
 	}
 
 	focus, err := wm.Focus()
 	if err != nil {
-		log.Errorf("failed to get focus: %s", err)
-		return
+		err = fmt.Errorf("wm.Focus: %s", err)
+		return err
 	}
 
 	h, err := t.config.Handler(t.grants, t.broker, focus, t.pconfig)
 	if err != nil {
-		log.Errorf("error building window handler: %v", err)
-		return
+		err = fmt.Errorf("config.Handler: %v", err)
+		return err
 	}
 
 	win, err = t.wm.Split(t.config.SplitOrientation, browser.FuncHandler(h, t.exitClean))
 	if err != nil {
-		log.Errorf("error opening new window: %s", err)
-		return
+		err = fmt.Errorf("wm.Split: %s", err)
+		return err
 	}
 
 	t.mu.Lock()
@@ -132,13 +132,18 @@ func (t *cmdSplitHandler) openSplitWindow() {
 
 	t.h = h
 	t.win = win
+	return nil
 }
 
-func (t *cmdSplitHandler) HandleCommand(ctx context.Context, cmd text.Command) (exit bool) {
+func (t *cmdSplitHandler) HandleCommand(ctx context.Context, cmd text.Command) (exit bool, err error) {
 	if cmd.Name == t.config.Command {
-		t.openSplitWindow()
+		err = t.openSplitWindow()
+		if err != nil {
+			log.Error(err)
+		}
+		return false, err
 	}
-	return false
+	return false, nil
 }
 
 func (t *cmdSplitHandler) PermissionGranted(grants []plugin.Grant) {

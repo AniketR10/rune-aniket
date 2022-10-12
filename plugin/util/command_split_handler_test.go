@@ -6,6 +6,7 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/connectivity"
 	"unstable.build/go-tui"
@@ -142,7 +143,9 @@ func TestCommandSplitHandlerOpenWindow(t *testing.T) {
 			Permission: plugin.PermissionEditor,
 		}
 		testSplitWindow(t, config, grants, func(h *cmdSplitHandler) {
-			assert.False(t, h.HandleCommand(context.Background(), text.Command{Name: cmdName}))
+			ok, err := h.HandleCommand(context.Background(), text.Command{Name: cmdName})
+			require.NoError(t, err)
+			assert.False(t, ok)
 		})
 	})
 }

@@ -60,8 +60,6 @@ type Event struct {
 	Start, End term.Coordinates
 	From, To   term.Coordinates
 	Content    string
-
-	Args []string
 }
 
 type cellSubscriber struct {

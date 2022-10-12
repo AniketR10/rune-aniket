@@ -41,7 +41,6 @@ message EditorEvent {
   term.Coordinates from = 6;
   term.Coordinates to = 7;
   string content = 8;
-  repeated string cmdArgs = 9;
 }
 
 message EditorSubscribeRequest {
@@ -158,4 +157,21 @@ message EditorEventHandleResponse {
 
 service EditorEventHandler {
 	rpc Handle(EditorEventHandleRequest) returns (EditorEventHandleResponse);
+}
+
+message HandleCommandRequest {
+	string name = 1;
+	repeated string args = 2;
+	URI resource_name = 3;
+	uint32 resource_id = 4;
+	term.Coordinates content = 5;
+	term.Coordinates window = 6;
+}
+
+message HandleCommandResponse {
+	bool exit = 1;
+}
+
+service CommandHandler {
+	rpc HandleCommand(HandleCommandRequest) returns (HandleCommandResponse);
 }

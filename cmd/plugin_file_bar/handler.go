@@ -167,7 +167,7 @@ func newFileBarEditorHandler(
 }
 
 func (h *fileBarEditorHandler) HandleCommand(ctx context.Context, cmd text.Command) (
-	exit bool,
+	exit bool, err error,
 ) {
 	return
 }
@@ -187,7 +187,7 @@ func (h *fileBarEditorHandler) refreshBarContent(name string) {
 	h.bar.coords.Init(cell.NewBuffer())
 	file, ok := h.files[name]
 	if !ok || file == nil {
-		log.Errorf("could not find file info for file %q", name)
+		log.Debugf("could not find file info for file %q", name)
 		return
 	}
 

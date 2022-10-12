@@ -135,7 +135,7 @@ func (h *sedEditorHandler) readHandlerContent(hed text.Handler) (int, string, er
 	view := h.ed.CellView(hed)
 	cells, err := view.RawCells()
 	if err != nil {
-		return 0, "", fmt.Errorf("Reader.RawCells: %v", err)
+		return 0, "", fmt.Errorf("CellView.RawCells: %v", err)
 	}
 	return len(cells), cell.CellsToString(cells), nil
 }
@@ -146,14 +146,14 @@ func (h *sedEditorHandler) writeHandlerContent(
 	editor := h.ed.CellEditor(hed)
 	_, _, _, err := editor.Edit(term.Coordinates{}, term.Coordinates{Y: rows}, content)
 	if err != nil {
-		return fmt.Errorf("Writer.Delete: %v", err)
+		return fmt.Errorf("CellEditor.Delete: %v", err)
 	}
 	return nil
 }
 
 func (h *sedEditorHandler) HandleCommand(
 	ctx context.Context, cmd text.Command,
-) (exit bool) {
+) (bool, error) {
 	var start time.Time
 	if log.IsLevelEnabled(log.TraceLevel) {
 		start = time.Now()
@@ -163,33 +163,27 @@ func (h *sedEditorHandler) HandleCommand(
 	case commandSed:
 		if len(cmd.Args) != 1 {
 			err := errors.New("Usage: sed <script>")
-			log.Error(err)
-			h.setMessage(err.Error())
-			return
+			return false, err
 		}
 		rows, content, err := h.readHandlerContent(cmd.Resource)
 		if err != nil {
-			log.Error(err)
-			return
+			return false, err
 		}
 		result, err := h.execSed(cmd.Args[0], content)
 		if err != nil {
-			log.Error(err)
-			h.setMessage("sed: %v", err.Error())
-			return
+			return false, err
 		}
 
 		err = h.writeHandlerContent(cmd.Resource, rows, result)
 		if err != nil {
-			log.Error(err)
-			return
+			return false, err
 		}
 	}
 	if log.IsLevelEnabled(log.TraceLevel) {
 		log.Tracef("HandleCommand(%#v) in %s", cmd, time.Since(start))
 	}
 
-	return false
+	return false, nil
 }
 
 func (h *sedEditorHandler) Handle(

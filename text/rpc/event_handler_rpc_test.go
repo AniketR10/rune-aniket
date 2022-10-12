@@ -54,14 +54,12 @@ func consumeError(t *testing.T, wg *sync.WaitGroup, client *eventHandlerClient) 
 
 func TestEventHandlerRPC(t *testing.T) {
 	content := "myContent"
-	cmdArgs := []string{"a", "b"}
 	ev := text.Event{
 		Type: text.EventTypeFlush,
 		URI:  uri,
 		Resource: Token{Token: browser.Token{ID: 1},
 			resource: uri},
 		Content: content,
-		Args:    cmdArgs,
 	}
 
 	t.Run("asynchronously dispatches events to remote event handler", func(t *testing.T) {

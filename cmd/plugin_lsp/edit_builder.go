@@ -2,10 +2,11 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"sort"
 
+	multierr "github.com/ernestrc/go-multierror"
 	"github.com/ernestrc/golang-internal-tools/lsp/protocol"
-	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
@@ -40,13 +41,16 @@ func (b *editBuilder) applyEdit(ed protocol.TextEdit) error {
 	return err
 }
 
-func (b *editBuilder) applyWorkspaceEdit(ed protocol.WorkspaceEdit) {
+func (b *editBuilder) applyWorkspaceEdit(ed protocol.WorkspaceEdit) (ret error) {
 	for _, ch := range ed.DocumentChanges {
 		if ch.TextDocument.TextDocumentIdentifier != b.f.docID {
 			continue
 		}
-		b.applyEdits(ch.Edits)
+		if err := b.applyEdits(ch.Edits); err != nil {
+			ret = multierr.Append(ret, err)
+		}
 	}
+	return ret
 }
 
 func sortEdits(eds []protocol.TextEdit) {
@@ -67,13 +71,13 @@ func sortEdits(eds []protocol.TextEdit) {
 	})
 }
 
-func (b *editBuilder) applyEdits(eds []protocol.TextEdit) {
+func (b *editBuilder) applyEdits(eds []protocol.TextEdit) (ret error) {
 	sortEdits(eds)
 	for _, ed := range eds {
 		err := b.applyEdit(ed)
 		if err != nil {
-			log.Errorf("lspEditorHandler.applyEdit(%s): %v", b.f.uri, err)
-			return
+			ret = multierr.Append(fmt.Errorf("applyEdit(%s): %v", b.f.uri, err))
 		}
 	}
+	return ret
 }

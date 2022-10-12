@@ -649,7 +649,9 @@ func TestDispatchCommand(t *testing.T) {
 			URI:      uri,
 			Name:     "SELL",
 		}
-		assert.False(t, c.DispatchCommand(cmd))
+		ok, err := c.DispatchCommand(cmd)
+		require.NoError(t, err)
+		assert.False(t, ok)
 	})
 
 	t.Run("uses aliases from config to dispatch", func(t *testing.T) {
@@ -664,18 +666,18 @@ func TestDispatchCommand(t *testing.T) {
 
 		var newWindowCalled, editCalled bool
 
-		c.SubscribeCommand("newWindow", FuncCommandHandler(func(ctx context.Context, cmd Command) bool {
+		c.SubscribeCommand("newWindow", FuncCommandHandler(func(ctx context.Context, cmd Command) (bool, error) {
 			newWindowCalled = true
 			assert.Equal(t, cmd.Name, "newWindow")
 			assert.Equal(t, cmd.Args, []string{})
-			return false
+			return false, nil
 		}))
 
-		c.SubscribeCommand("edit", FuncCommandHandler(func(ctx context.Context, cmd Command) bool {
+		c.SubscribeCommand("edit", FuncCommandHandler(func(ctx context.Context, cmd Command) (bool, error) {
 			editCalled = true
 			assert.Equal(t, cmd.Name, "edit")
 			assert.Equal(t, cmd.Args, []string{"/tmp/todo.md"})
-			return false
+			return false, nil
 		}))
 
 		cmd := Command{
@@ -683,9 +685,28 @@ func TestDispatchCommand(t *testing.T) {
 			URI:      uri,
 			Name:     "workstation_layout",
 		}
-		assert.True(t, c.DispatchCommand(cmd))
+		ok, err := c.DispatchCommand(cmd)
+		assert.True(t, ok)
+		require.NoError(t, err)
 		assert.True(t, newWindowCalled)
 		assert.True(t, editCalled)
+	})
+
+	t.Run("bubbles up HandleCommand errors", func(t *testing.T) {
+		c := newTestComponent(t, &testEditor{})
+		c.SubscribeCommand("bla", FuncCommandHandler(func(ctx context.Context, cmd Command) (bool, error) {
+			return false, errors.New("boom")
+		}))
+
+		cmd := Command{
+			Resource: NewTestHandler(),
+			URI:      uri,
+			Name:     "bla",
+		}
+		ok, err := c.DispatchCommand(cmd)
+		assert.True(t, ok)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "boom")
 	})
 
 	t.Run("handles bad aliases", func(t *testing.T) {
@@ -703,7 +724,9 @@ func TestDispatchCommand(t *testing.T) {
 				URI:      uri,
 				Name:     cmd,
 			}
-			assert.False(t, c.DispatchCommand(cmd))
+			ok, err := c.DispatchCommand(cmd)
+			assert.False(t, ok)
+			require.NoError(t, err)
 		}
 	})
 
@@ -716,7 +739,9 @@ func TestDispatchCommand(t *testing.T) {
 			URI:      uri,
 			Name:     "kaboom",
 		}
-		assert.False(t, c.DispatchCommand(cmd))
+		ok, err := c.DispatchCommand(cmd)
+		assert.False(t, ok)
+		require.NoError(t, err)
 	})
 
 	t.Run("NewComponent returns error if aliases is recursive", func(t *testing.T) {
@@ -757,8 +782,8 @@ func TestComponentCommands(t *testing.T) {
 
 	t.Run("returns registered commands", func(t *testing.T) {
 		c := newTestComponent(t, &testEditor{})
-		c.SubscribeCommand("myCmd", FuncCommandHandler(func(context.Context, Command) bool {
-			return true
+		c.SubscribeCommand("myCmd", FuncCommandHandler(func(context.Context, Command) (bool, error) {
+			return true, nil
 		}))
 		cmds := c.Commands()
 		require.Len(t, cmds, 1)
@@ -795,18 +820,20 @@ func testRegister(t *testing.T,
 
 		var called int
 		var wg sync.WaitGroup
-		sut.SubscribeCommand(myCmd, FuncCommandHandler(func(ctx context.Context, cmd Command) bool {
+		sut.SubscribeCommand(myCmd, FuncCommandHandler(func(ctx context.Context, cmd Command) (bool, error) {
 			defer wg.Done()
 			assert.Equal(t, myCmd, cmd.Name)
 			assert.Equal(t, myArgs, cmd.Args)
 			called++
-			return true
+			return true, nil
 		}))
 
 		wg.Add(1)
 		mu.Lock()
 		cmd := Command{Resource: h1, URI: resource1, Name: myCmd, Args: myArgs}
-		assert.True(t, c.DispatchCommand(cmd))
+		ok, err := c.DispatchCommand(cmd)
+		assert.True(t, ok)
+		require.NoError(t, err)
 		mu.Unlock()
 
 		wg.Wait()

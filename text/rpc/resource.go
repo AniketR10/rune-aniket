@@ -1,13 +1,12 @@
 package rpc
 
 import (
+	multierr "github.com/ernestrc/go-multierror"
 	"unstable.build/go-tui/proto"
-	"unstable.build/go-tui/text"
 )
 
 type handlerServerResource struct {
 	srv proto.MuxServer
-	h   text.EventHandler
 }
 
 func (r *handlerServerResource) Close() error {
@@ -21,18 +20,30 @@ type handlerClientResource struct {
 	cancelMonitor func()
 }
 
-func (r *handlerClientResource) Close() (err error) {
+func (r *handlerClientResource) Close() (ret error) {
 	defer r.cancelMonitor()
-
-	err1 := r.client.Close()
-	if err1 != nil {
-		err = err1
+	if err := r.client.Close(); err != nil {
+		ret = multierr.Append(ret, err)
 	}
-
-	err2 := r.handlerConn.Close()
-	if err2 != nil {
-		err = err2
+	if err := r.handlerConn.Close(); err != nil {
+		ret = multierr.Append(ret, err)
 	}
+	return ret
+}
 
-	return err
+type commandClientResource struct {
+	handlerConn   proto.MuxConn
+	client        *commandClient
+	cancelMonitor func()
+}
+
+func (r *commandClientResource) Close() (ret error) {
+	defer r.cancelMonitor()
+	if err := r.client.Close(); err != nil {
+		ret = multierr.Append(ret, err)
+	}
+	if err := r.handlerConn.Close(); err != nil {
+		ret = multierr.Append(ret, err)
+	}
+	return ret
 }

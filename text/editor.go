@@ -47,8 +47,8 @@ type Command struct {
 
 // CommandHandler is a callback interface that wraps the basic method Command.
 type CommandHandler interface {
-	// Handle is called when user issued a command previously registered via Register.
-	HandleCommand(context.Context, Command) (exit bool)
+	// Handle is called when user issued a command previously registered via SubscribeCommand.
+	HandleCommand(context.Context, Command) (exit bool, err error)
 }
 
 // Editor is the interface that wraps an API to manage a text editor.
@@ -135,16 +135,16 @@ func NewCellView(c cell.View) CellView {
 }
 
 type fnCommandHandler struct {
-	cb func(context.Context, Command) bool
+	cb func(context.Context, Command) (bool, error)
 }
 
-func (f fnCommandHandler) HandleCommand(ctx context.Context, c Command) bool {
+func (f fnCommandHandler) HandleCommand(ctx context.Context, c Command) (bool, error) {
 	return f.cb(ctx, c)
 }
 
 // FuncCommandHandler returns an CommandHandler that calls fn
 // every time Handle is invoked.
-func FuncCommandHandler(fn func(context.Context, Command) bool) CommandHandler {
+func FuncCommandHandler(fn func(context.Context, Command) (bool, error)) CommandHandler {
 	return fnCommandHandler{
 		cb: fn,
 	}

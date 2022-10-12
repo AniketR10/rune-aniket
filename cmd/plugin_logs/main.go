@@ -350,17 +350,11 @@ func (e *logsGrantee) showLogs(args []string) (bool, error) {
 
 func (e *logsGrantee) HandleCommand(
 	ctx context.Context, cmd text.Command,
-) bool {
+) (bool, error) {
 	if cmd.Name != cmdLogs {
-		log.Warningf("HandleCommand: unknown command %q", cmd.Name)
-		return false
+		panic("extraneous command")
 	}
-
-	exit, err := e.showLogs(cmd.Args)
-	if err != nil {
-		_ = e.m.SetMessage(err.Error())
-	}
-	return exit
+	return e.showLogs(cmd.Args)
 }
 
 func main() {

@@ -247,6 +247,58 @@ func (mr *MockAPIMockRecorder) Wait(arg0 interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Wait", reflect.TypeOf((*MockAPI)(nil).Wait), arg0)
 }
 
+// MockTerminal is a mock of Terminal interface.
+type MockTerminal struct {
+	ctrl     *gomock.Controller
+	recorder *MockTerminalMockRecorder
+}
+
+// MockTerminalMockRecorder is the mock recorder for MockTerminal.
+type MockTerminalMockRecorder struct {
+	mock *MockTerminal
+}
+
+// NewMockTerminal creates a new mock instance.
+func NewMockTerminal(ctrl *gomock.Controller) *MockTerminal {
+	mock := &MockTerminal{ctrl: ctrl}
+	mock.recorder = &MockTerminalMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockTerminal) EXPECT() *MockTerminalMockRecorder {
+	return m.recorder
+}
+
+// NewPty mocks base method.
+func (m *MockTerminal) NewPty() (workspace.Pty, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "NewPty")
+	ret0, _ := ret[0].(workspace.Pty)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// NewPty indicates an expected call of NewPty.
+func (mr *MockTerminalMockRecorder) NewPty() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewPty", reflect.TypeOf((*MockTerminal)(nil).NewPty))
+}
+
+// SetPtySize mocks base method.
+func (m *MockTerminal) SetPtySize(p workspace.Pty, width, height int) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SetPtySize", p, width, height)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// SetPtySize indicates an expected call of SetPtySize.
+func (mr *MockTerminalMockRecorder) SetPtySize(p, width, height interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetPtySize", reflect.TypeOf((*MockTerminal)(nil).SetPtySize), p, width, height)
+}
+
 // MockSchemeManager is a mock of SchemeManager interface.
 type MockSchemeManager struct {
 	ctrl     *gomock.Controller

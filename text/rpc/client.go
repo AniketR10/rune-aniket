@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/ernestrc/blue/logging"
+	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/cell"
@@ -68,9 +69,9 @@ func (c *Client) Init(
 	c.servers = make(map[uint64]io.Closer)
 }
 
-func (c *Client) log(msg string, args ...interface{}) {
+func (c *Client) log(level log.Level, msg string, args ...interface{}) {
 	debug.StandardLogger().
-		WithField(logging.KeyClass, "text.Client").Debugf(msg, args...)
+		WithField(logging.KeyClass, "text.Client").Logf(level, msg, args...)
 }
 
 func (c *Client) getServers() map[uint64]io.Closer {
@@ -78,7 +79,7 @@ func (c *Client) getServers() map[uint64]io.Closer {
 }
 
 func (c *Client) safeForceCloseHandler(brokerID uint32, reason string) error {
-	c.log("editor.Client.safeForceCloseHandler(%d, reason=%s)", brokerID, reason)
+	c.log(log.DebugLevel, "editor.Client.safeForceCloseHandler(%d, reason=%s)", brokerID, reason)
 	_, err := proto.ForceCloseResource(c.broker, uint64(brokerID),
 		c.getServers, &c.mu)
 	return err
@@ -99,7 +100,23 @@ func (c *Client) serveHandler(h text.EventHandler) (uint32, error) {
 
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.servers[uint64(brokerID)] = &handlerServerResource{h: h, srv: srv}
+	c.servers[uint64(brokerID)] = &handlerServerResource{srv: srv}
+	return brokerID, nil
+}
+
+func (c *Client) serveCommandHandler(h text.CommandHandler) (uint32, error) {
+	brokerID, srv, err := proto.AcceptAndServe(c.broker,
+		func(handlerID uint32, srv proto.MuxServer) {
+			s := newCommandServer(h)
+			RegisterCommandHandlerServer(srv.GRPC(), s)
+		})
+	if err != nil {
+		return 0, err
+	}
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.servers[uint64(brokerID)] = &handlerServerResource{srv: srv}
 	return brokerID, nil
 }
 
@@ -159,19 +176,7 @@ func (c *Client) SubscribeCommand(cmd string, h text.CommandHandler) error {
 	ctx := context.Background()
 
 	// re-use EventHandler logic
-	handlerID, err := c.serveHandler(
-		text.FuncEventHandler(func(ctx context.Context, ev text.Event) bool {
-			cmd := text.Command{
-				Name:     ev.Content,
-				Args:     ev.Args,
-				URI:      ev.URI,
-				Resource: ev.Resource,
-			}
-			// as agreed with Server
-			cmd.Cursor.Content = ev.Start
-			cmd.Cursor.Window = ev.From
-			return h.HandleCommand(ctx, cmd)
-		}))
+	handlerID, err := c.serveCommandHandler(h)
 	if err != nil {
 		return fmt.Errorf("serveHandler: %w", err)
 	}

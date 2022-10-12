@@ -555,3 +555,89 @@ var EditorEventHandler_ServiceDesc = grpc.ServiceDesc{
 	Streams:  []grpc.StreamDesc{},
 	Metadata: "rpc/editor.proto",
 }
+
+// CommandHandlerClient is the client API for CommandHandler service.
+//
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
+type CommandHandlerClient interface {
+	HandleCommand(ctx context.Context, in *HandleCommandRequest, opts ...grpc.CallOption) (*HandleCommandResponse, error)
+}
+
+type commandHandlerClient struct {
+	cc grpc.ClientConnInterface
+}
+
+func NewCommandHandlerClient(cc grpc.ClientConnInterface) CommandHandlerClient {
+	return &commandHandlerClient{cc}
+}
+
+func (c *commandHandlerClient) HandleCommand(ctx context.Context, in *HandleCommandRequest, opts ...grpc.CallOption) (*HandleCommandResponse, error) {
+	out := new(HandleCommandResponse)
+	err := c.cc.Invoke(ctx, "/text.CommandHandler/HandleCommand", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// CommandHandlerServer is the server API for CommandHandler service.
+// All implementations must embed UnimplementedCommandHandlerServer
+// for forward compatibility
+type CommandHandlerServer interface {
+	HandleCommand(context.Context, *HandleCommandRequest) (*HandleCommandResponse, error)
+	mustEmbedUnimplementedCommandHandlerServer()
+}
+
+// UnimplementedCommandHandlerServer must be embedded to have forward compatible implementations.
+type UnimplementedCommandHandlerServer struct {
+}
+
+func (UnimplementedCommandHandlerServer) HandleCommand(context.Context, *HandleCommandRequest) (*HandleCommandResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method HandleCommand not implemented")
+}
+func (UnimplementedCommandHandlerServer) mustEmbedUnimplementedCommandHandlerServer() {}
+
+// UnsafeCommandHandlerServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to CommandHandlerServer will
+// result in compilation errors.
+type UnsafeCommandHandlerServer interface {
+	mustEmbedUnimplementedCommandHandlerServer()
+}
+
+func RegisterCommandHandlerServer(s grpc.ServiceRegistrar, srv CommandHandlerServer) {
+	s.RegisterService(&CommandHandler_ServiceDesc, srv)
+}
+
+func _CommandHandler_HandleCommand_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(HandleCommandRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CommandHandlerServer).HandleCommand(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/text.CommandHandler/HandleCommand",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CommandHandlerServer).HandleCommand(ctx, req.(*HandleCommandRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+// CommandHandler_ServiceDesc is the grpc.ServiceDesc for CommandHandler service.
+// It's only intended for direct use with grpc.RegisterService,
+// and not to be introspected or modified (even as a copy)
+var CommandHandler_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "text.CommandHandler",
+	HandlerType: (*CommandHandlerServer)(nil),
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "HandleCommand",
+			Handler:    _CommandHandler_HandleCommand_Handler,
+		},
+	},
+	Streams:  []grpc.StreamDesc{},
+	Metadata: "rpc/editor.proto",
+}

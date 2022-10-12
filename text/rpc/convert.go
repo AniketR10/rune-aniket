@@ -58,7 +58,26 @@ func fromProto(e *text.Event, pe *EditorEvent) (err error) {
 	e.From = pe.GetFrom().ToModel()
 	e.To = pe.GetTo().ToModel()
 	e.Content = pe.GetContent()
-	e.Args = pe.GetCmdArgs()
+	return nil
+}
+
+func commandFromProto(e *text.Command, pe *HandleCommandRequest) (err error) {
+	if pe.GetResourceName().GetUri() != "" {
+		e.URI, err = NewURIFromProto(pe.GetResourceName())
+		if err != nil {
+			return
+		}
+	}
+	if pe.ResourceId != 0 {
+		e.Resource = Token{
+			Token:    browser.Token{ID: uint64(pe.GetResourceId())},
+			resource: e.URI,
+		}
+	}
+	e.Cursor.Window = pe.GetWindow().ToModel()
+	e.Cursor.Content = pe.GetContent().ToModel()
+	e.Args = pe.GetArgs()
+	e.Name = pe.GetName()
 	return nil
 }
 
@@ -108,7 +127,6 @@ func toProto(e text.Event) EditorEvent {
 	ret.Content = e.Content
 	ret.From = &from
 	ret.To = &to
-	ret.CmdArgs = e.Args
 
 	return ret
 }

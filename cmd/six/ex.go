@@ -155,22 +155,21 @@ func (e *ex) init(
 		return
 	}
 	for _, cmd := range enabledCommands {
-		e.comp.SubscribeCommand(cmd, text.FuncCommandHandler(
-			func(ctx context.Context, cmd text.Command) bool {
+		serr := e.comp.SubscribeCommand(cmd, text.FuncCommandHandler(
+			func(ctx context.Context, cmd text.Command) (bool, error) {
 				fn, ok := exCommands[cmd.Name]
 				if !ok {
-					return true
+					return true, nil
 				}
-				unsubscribe, err := fn(e, cmd.Args...)
-				if err != nil {
-					e.setError(err)
-				}
-				return unsubscribe
+				return fn(e, cmd.Args...)
 			}))
+		if serr != nil {
+			err = multierr.Append(err, serr)
+		}
 	}
 	e.resetCommandList()
 	e.cmd.loadHistory()
-	return nil
+	return err
 }
 
 func (e *ex) publishInterrupt() {
@@ -335,7 +334,11 @@ func (e *ex) dispatchCommand(cmd string, args ...string) (err error) {
 		scmd.Cursor.Content, _ = e.ed.Cursor(h)
 		scmd.Cursor.Window, _ = h.Cursor()
 	}
-	handled := e.comp.DispatchCommand(scmd)
+	var handled bool
+	handled, err = e.comp.DispatchCommand(scmd)
+	if err != nil {
+		return
+	}
 	if !handled {
 		err = fmt.Errorf("Unknown command %q or alias targets", cmd)
 	}
@@ -455,7 +458,7 @@ func (e *ex) runCommand(cmd string, parts []string) (quit bool, err error) {
 }
 
 func (e *ex) setError(err error) {
-	e.comp.Browser().SetMessage("Error: %s", err)
+	e.comp.Browser().SetMessage("%s", err)
 }
 
 func (e *ex) handleCommandEvent(ev term.Event) bool {

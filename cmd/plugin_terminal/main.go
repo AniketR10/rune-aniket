@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	_ "net/http/pprof"
 	"sync"
@@ -149,33 +150,40 @@ func (e *emulatorGrantee) Health() error {
 
 func (e *emulatorGrantee) HandleCommand(
 	ctx context.Context, cmd text.Command,
-) (exit bool) {
+) (bool, error) {
+	exit, err := e.handleCommand(ctx, cmd)
+	if err != nil {
+		log.Error(err)
+	}
+	return exit, err
+}
+
+func (e *emulatorGrantee) handleCommand(
+	ctx context.Context, cmd text.Command,
+) (bool, error) {
 	switch cmd.Name {
 	case cmdSplitWindowTerminal, cmdTerminalTab:
 	default:
-		log.Warningf("HandleCommand: unknown command %q", cmd.Name)
-		return
+		panic("unknown command")
 	}
 
 	log.Tracef("HandleCommand: creating new emulator handler")
 	h, err := newEmulator(e.wm, e.wp, e.p, e.m, e.c, e.shell,
 		e.initialCmd, e.defAttr, e.selectionAttr)
 	if err != nil {
-		log.Errorf("NewHandler: %s", err)
-		return
+		err = fmt.Errorf("newEmulator: %s", err)
+		return false, err
 	}
 
 	uri, err := h.URI()
 	if err != nil {
-		log.Errorf("URI: %s", err)
 		_ = h.Close()
-		return
+		return false, err
 	}
 	t, err := e.wm.Tab(uri, h.Title(), h)
 	if err != nil {
 		_ = h.Close()
-		log.Errorf("Tab: %s", err)
-		return
+		return false, fmt.Errorf("wm.Tab: %s", err)
 	}
 
 	log.Tracef("HandleCommand: created new emulator handler: %p", h)
@@ -190,13 +198,11 @@ func (e *emulatorGrantee) HandleCommand(
 		}
 	}
 	if err != nil {
-		log.Error(err)
 		_ = t.Close()
 		_ = h.Close()
-		return
+		return false, err
 	}
-	log.Debugf("HandleCommand: success %q", cmd.Name)
-	return
+	return false, nil
 }
 
 func main() {

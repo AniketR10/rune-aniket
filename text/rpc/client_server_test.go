@@ -533,18 +533,21 @@ func testRegister(t *testing.T,
 
 		var called int
 		var wg sync.WaitGroup
-		sut.SubscribeCommand(myCmd, text.FuncCommandHandler(func(ctx context.Context, cmd text.Command) bool {
-			defer wg.Done()
-			assert.Equal(t, myCmd, cmd.Name)
-			assert.Equal(t, myArgs, cmd.Args)
-			called++
-			return true
-		}))
+		sut.SubscribeCommand(myCmd,
+			text.FuncCommandHandler(func(ctx context.Context, cmd text.Command) (bool, error) {
+				defer wg.Done()
+				assert.Equal(t, myCmd, cmd.Name)
+				assert.Equal(t, myArgs, cmd.Args)
+				called++
+				return true, nil
+			}))
 
 		wg.Add(1)
 		mu.Lock()
 		cmd := text.Command{Resource: h1, URI: resource1, Name: myCmd, Args: myArgs}
-		assert.True(t, c.DispatchCommand(cmd))
+		ok, err := c.DispatchCommand(cmd)
+		require.NoError(t, err)
+		assert.True(t, ok)
 		mu.Unlock()
 
 		wg.Wait()
