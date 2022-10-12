@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"sync"
 	"syscall"
 
 	"github.com/ernestrc/blue/logging"
@@ -16,6 +17,8 @@ import (
 )
 
 type executorClientImpl struct {
+	// all Scheme implementations must be goroutine-safe
+	mu        sync.Mutex
 	client    ExecutorClient
 	resources map[int32]executorResource
 	ptys      map[workspace.Pid]int32
@@ -122,8 +125,10 @@ func (c *executorClientImpl) log(level log.Level, msg string, args ...interface{
 }
 
 func (c *executorClientImpl) removePidResources(pid workspace.Pid) {
-	res := removePidResources(nopLocker{}, c.resources, pid)
+	res := removePidResources(&c.mu, c.resources, pid)
+	c.mu.Lock()
 	delete(c.ptys, pid)
+	c.mu.Unlock()
 	c.log(log.TraceLevel, "cleaned all resources of pid %d: %#v", pid, res)
 }
 
@@ -163,6 +168,9 @@ func (c *executorClientImpl) NewPty() (workspace.Pty, error) {
 		Slave:  resp.GetSlave(),
 	}
 
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	c.ptys[ret.Pid] = resp.GetMaster()
 	return ret, nil
 }
@@ -171,7 +179,9 @@ func (c *executorClientImpl) SetPtySize(p workspace.Pty, width, height int) erro
 	ctx, cleanup := ctxWithTimeout()
 	defer cleanup()
 
+	c.mu.Lock()
 	master, ok := c.ptys[p.Pid]
+	c.mu.Unlock()
 	if !ok {
 		return fmt.Errorf("Extraneous Pty Pid %d", p.Pid)
 	}
@@ -188,6 +198,9 @@ func (c *executorClientImpl) SetPtySize(p workspace.Pty, width, height int) erro
 }
 
 func (c *executorClientImpl) Close() (ret error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	for _, res := range c.resources {
 		if err := res.closer.Close(); err != nil {
 			ret = multierr.Append(ret, err)
@@ -258,6 +271,9 @@ type executorResource struct {
 func (c *executorClientImpl) addCloser(
 	pid workspace.Pid, handlerID int32, closer io.Closer,
 ) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	// NOTE this should never happen, but server is boss here
 	// so make sure we do not leak resources
 	f, ok := c.resources[handlerID]
@@ -279,6 +295,23 @@ func (c *executorClientImpl) newIOClient(
 	}
 	c.log(log.TraceLevel, "new I/O client with name %s and handlerID %d for pid %d",
 		filename, handlerID, pid)
+	c.addCloser(pid, handlerID, ret)
+	return ret
+}
+
+func (c *executorClientImpl) newFileClient(
+	pid workspace.Pid, filename string, handlerID int32,
+) *fileClient {
+	ret := &fileClient{
+		handlerID: handlerID,
+		client:    c.client,
+		filename:  filename,
+		// satisfies Read/Write/Close
+		ioClient: ioClient{
+			client:    c.client,
+			handlerID: handlerID,
+		},
+	}
 	c.addCloser(pid, handlerID, ret)
 	return ret
 }

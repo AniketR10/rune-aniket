@@ -248,23 +248,6 @@ func (c *fileClient) Seek(offset int64, whence int) (int64, error) {
 	return resp.GetNewOffset(), nil
 }
 
-func (c *executorClientImpl) newFileClient(
-	pid workspace.Pid, filename string, handlerID int32,
-) *fileClient {
-	ret := &fileClient{
-		handlerID: handlerID,
-		client:    c.client,
-		filename:  filename,
-		// satisfies Read/Write/Close
-		ioClient: ioClient{
-			client:    c.client,
-			handlerID: handlerID,
-		},
-	}
-	c.addCloser(workspace.Pid(-1), handlerID, ret)
-	return ret
-}
-
 func protoTimeToStd(ts *timestamppb.Timestamp) time.Time {
 	return time.Unix(ts.GetSeconds(), int64(ts.GetNanos()))
 }

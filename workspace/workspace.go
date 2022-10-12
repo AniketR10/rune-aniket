@@ -122,7 +122,7 @@ type Loader interface {
 	Recover(file, swapFilePath URI, buf *cell.Buffer, force bool) (FlusherCloser, error)
 }
 
-// Scheme abstracts internal workspace scheme-based implementations.
+// Scheme abstracts internal workspace scheme-based gouroutine-safe implementations.
 type Scheme interface {
 	Executor
 	Terminal
