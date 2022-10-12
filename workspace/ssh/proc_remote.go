@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"strings"
-	"sync"
 	"syscall"
 
 	"github.com/ernestrc/go-multierror"
@@ -18,19 +17,18 @@ var (
 )
 
 type procRemote struct {
-	mu       sync.Mutex
-	cmd      string
-	args     []string
+	cmd  string
+	args []string
+
 	executor workspace.Executor
-	session  *procSession
+	sessions []*procSession
 }
 
 type procSession struct {
 	sshCmd   string
 	sshArgs  []string
 	executor workspace.Executor
-
-	pid workspace.Pid
+	pids     map[workspace.Pid]struct{}
 }
 
 func newProcRemote(cfg sshConfig, uri workspace.URI) (
@@ -66,36 +64,35 @@ func newProcRemote(cfg sshConfig, uri workspace.URI) (
 }
 
 func (m *procRemote) NewSession() (workspace.Executor, error) {
-	if m.session != nil {
-		return nil, errors.New("session already started and can create only one session")
-	}
 	ses := &procSession{
 		sshCmd:   m.cmd,
 		sshArgs:  m.args,
 		executor: m.executor,
-		pid:      -1,
+		pids:     make(map[workspace.Pid]struct{}),
 	}
-	m.session = ses
+
+	m.sessions = append(m.sessions, ses)
 	return ses, nil
 }
 
 func (m *procRemote) Close() (ret error) {
-	if err := m.executor.Signal(m.session.pid, syscall.SIGTERM); err != nil {
-		ret = multierror.Append(ret, err)
+	for _, ses := range m.sessions {
+		if err := ses.Close(); err != nil {
+			ret = multierror.Append(ret, err)
+		}
 	}
+	m.sessions = nil
+
 	if err := m.executor.Close(); err != nil {
 		ret = multierror.Append(ret, err)
 	}
+
 	return ret
 }
 
 func (s *procSession) Command(name string, arg ...string) (workspace.Pid, error) {
 	if name == "" {
 		return 0, errors.New("invalid empty command")
-	}
-	if s.pid != -1 {
-		panic("Command called more than once on an ssh session")
-
 	}
 
 	args := fmt.Sprintf("%s %s %s %s",
@@ -104,57 +101,47 @@ func (s *procSession) Command(name string, arg ...string) (workspace.Pid, error)
 	argv := strings.Split(args, " ")
 	name = argv[0]
 	arg = argv[1:]
+
 	pid, err := s.executor.Command(name, arg...)
 	if err != nil {
 		return workspace.Pid(0), fmt.Errorf("Failed to create ssh command: %s", err)
 	}
-	s.pid = pid
+	s.pids[pid] = struct{}{}
 	return pid, nil
 }
 
 func (s *procSession) Start(pid workspace.Pid) error {
-	if pid != s.pid {
-		return errInvalidPID
-	}
-	return s.executor.Start(s.pid)
+	return s.executor.Start(pid)
 }
 
 func (s *procSession) Signal(pid workspace.Pid, sig syscall.Signal) error {
-	if pid != s.pid {
-		return errInvalidPID
-	}
 	return s.executor.Signal(pid, sig)
 }
 
 func (s *procSession) StderrPipe(pid workspace.Pid) (io.ReadCloser, error) {
-	if pid != s.pid {
-		return nil, errInvalidPID
-	}
 	return s.executor.StderrPipe(pid)
 }
 
 func (s *procSession) StdinPipe(pid workspace.Pid) (io.WriteCloser, error) {
-	if pid != s.pid {
-		return nil, errInvalidPID
-	}
 	return s.executor.StdinPipe(pid)
 }
 
 func (s *procSession) StdoutPipe(pid workspace.Pid) (io.ReadCloser, error) {
-	if pid != s.pid {
-		return nil, errInvalidPID
-	}
 	return s.executor.StdoutPipe(pid)
 }
 
 func (s *procSession) Wait(pid workspace.Pid) error {
-	if pid != s.pid {
-		return errInvalidPID
-	}
-	return s.executor.Wait(pid)
+	err := s.executor.Wait(pid)
+	delete(s.pids, pid)
+	return err
 }
 
-func (s *procSession) Close() error {
-	// executor already closed by procRemote
-	return nil
+func (s *procSession) Close() (ret error) {
+	for pid := range s.pids {
+		if err := s.executor.Signal(pid, syscall.SIGTERM); err != nil {
+			ret = multierror.Append(ret, err)
+		}
+	}
+	s.pids = nil
+	return ret
 }

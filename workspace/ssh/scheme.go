@@ -110,7 +110,33 @@ func parseWorkspaceURI(u workspace.URI, getUser func() (*user.User, error)) (
 	return
 }
 
+func (s *scheme) whichCommand(remote remote, uri workspace.URI, cmd string) (bool, error) {
+	ses, err := remote.NewSession()
+	if err != nil {
+		return false, err
+	}
+
+	pid, err := ses.Command(fmt.Sprintf("which %s", cmd))
+	if err != nil {
+		return false, err
+	}
+
+	err = ses.Start(pid)
+	if err != nil {
+		return false, err
+	}
+
+	err = ses.Wait(pid)
+	if err != nil {
+		return false, nil
+	}
+
+	return true, nil
+}
+
 func (s *scheme) connectScheme(uri workspace.URI, closeHook func(error)) (workspace.Scheme, error) {
+	const six = "six"
+
 	sshPath := s.basePath
 	if sshPath == "" {
 		sshPath = "."
@@ -121,12 +147,22 @@ func (s *scheme) connectScheme(uri workspace.URI, closeHook func(error)) (worksp
 		return nil, fmt.Errorf("could not initialize remote: %w", err)
 	}
 
+	avail, err := s.whichCommand(remote, uri, six)
+	if err != nil {
+		return nil, fmt.Errorf("could not check if %s executable is in PATH: %w", six, err)
+	}
+
+	if !avail {
+		return nil, fmt.Errorf("%s executable was not found on remote. "+
+			"Make sure it's installed and available via $PATH to a non-interactive shell", six)
+	}
+
 	ses, err := remote.NewSession()
 	if err != nil {
 		return nil, err
 	}
 
-	pid, err := ses.Command(fmt.Sprintf("six -x %s", sshPath))
+	pid, err := ses.Command(fmt.Sprintf("%s -x %s", six, sshPath))
 	if err != nil {
 		return nil, fmt.Errorf("could not create command: %s", err)
 	}
