@@ -49,25 +49,29 @@ func (w *schemeWorkspace) Recover(
 	// but first check if it's from this workspace
 	is, err := IsWorkspaceURI(w, uri)
 	if err != nil {
-		return nil, fmt.Errorf("schemeWorkspace.IsWorkspaceURI: %s", err)
+		err = fmt.Errorf("schemeWorkspace.IsWorkspaceURI: %s", err)
+		return
 	}
 	if !is {
-		return nil, fmt.Errorf("invalid file URI %q for workspace with URI %q", uri, w.w)
+		err = fmt.Errorf("invalid file URI %q for workspace with URI %q", uri, w.w)
+		return
 	}
 	is, err = IsWorkspaceURI(w, swapURI)
 	if err != nil {
-		return nil, fmt.Errorf("schemeWorkspace.IsWorkspaceURI: %s", err)
+		err = fmt.Errorf("schemeWorkspace.IsWorkspaceURI: %s", err)
+		return
 	}
 	if !is {
-		return nil, fmt.Errorf("invalid file URI %q for workspace with URI %q", swapURI, w.w)
+		err = fmt.Errorf("invalid file URI %q for workspace with URI %q", swapURI, w.w)
+		return
 	}
 	uri, err = w.p.URI(uri.Path())
 	if err != nil {
-		return nil, err
+		return
 	}
 	swapURI, err = w.p.URI(swapURI.Path())
 	if err != nil {
-		return nil, err
+		return
 	}
 
 	ret, err = newFileRecover(w.p, uri.Path(), swapURI.Path(), buf, force)
@@ -89,26 +93,29 @@ func (w *schemeWorkspace) Load(
 	// but first check if it's from this workspace
 	is, err := IsWorkspaceURI(w, uri)
 	if err != nil {
-		return nil, fmt.Errorf("schemeWorkspace.IsWorkspaceURI: %s", err)
+		err = fmt.Errorf("schemeWorkspace.IsWorkspaceURI: %s", err)
+		return
 	}
 	if !is {
 		return nil, fmt.Errorf("invalid file URI %q for workspace with URI %q", uri, w.w)
 	}
 	is, err = IsWorkspaceURI(w, swapDir)
 	if err != nil {
-		return nil, fmt.Errorf("schemeWorkspace.IsWorkspaceURI: %s", err)
+		err = fmt.Errorf("schemeWorkspace.IsWorkspaceURI: %s", err)
+		return
 	}
 	if !is {
-		return nil, fmt.Errorf("invalid file URI %q for workspace with URI %q", swapDir, w.w)
+		err = fmt.Errorf("invalid file URI %q for workspace with URI %q", swapDir, w.w)
+		return
 	}
 
 	uri, err = w.p.URI(uri.Path())
 	if err != nil {
-		return nil, err
+		return
 	}
 	swapDir, err = w.p.URI(swapDir.Path())
 	if err != nil {
-		return nil, err
+		return
 	}
 
 	ret, err = newFile(w.p, uri.Path(), buf, swapDir.Path(), readOnly)
