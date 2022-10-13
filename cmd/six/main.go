@@ -11,8 +11,10 @@ import (
 	"runtime"
 	"sync"
 
+	"github.com/ernestrc/blue/logging"
 	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui/config"
+	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/proto"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/workspace"
@@ -28,11 +30,12 @@ var (
 
 	configpath *string
 
-	flagRecover         = flag.String("r", "", "recover from recovery file")
-	flagPprof           = flag.Bool("p", false, "start pprof server at :6060")
-	flagVersion         = flag.Bool("v", false, "print version information")
-	flagWorkspace       = flag.String("w", cwdURI().String(), "workspace URI")
-	flagWorkspaceServer = flag.String("x", "", "runs workspace server from standard input and output")
+	flagRecover                = flag.String("r", "", "recover from recovery file")
+	flagPprof                  = flag.Bool("p", false, "start pprof server at :6060")
+	flagVersion                = flag.Bool("v", false, "print version information")
+	flagWorkspace              = flag.String("w", cwdURI().String(), "workspace URI")
+	flagWorkspaceServer        = flag.String("x", "", "runs workspace server from standard input and output")
+	flagWorkspaceServerLogFile = flag.String("o", "", "log workspace server TRACE level logs to given file")
 )
 
 func init() {
@@ -84,18 +87,39 @@ func main() {
 	proto.DisableGRPCLogging()
 
 	if *flagWorkspaceServer != "" {
+		l := log.New()
+
+		newScheme := workspace.NewFileScheme
+
+		if serverLogs := *flagWorkspaceServerLogFile; serverLogs != "" {
+			f, err := os.OpenFile(serverLogs,
+				os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
+			if err != nil {
+				log.Fatal(err)
+			}
+			l.SetOutput(f)
+			l.SetLevel(log.TraceLevel)
+			l.SetFormatter(&logging.LogrusFormatter{})
+
+			newScheme = workspace.LoggingScheme("file", newScheme)
+
+		} else {
+			l.SetOutput(ioutil.Discard)
+			l.SetLevel(log.PanicLevel)
+		}
+
+		debug.InitLogger(l)
+
 		uri, err := workspace.CurrentUserHostURI(*flagWorkspaceServer)
 		if err != nil {
 			log.Fatal(err)
 		}
-		l := log.New()
-		l.Out = ioutil.Discard
-		l.Level = log.PanicLevel
-		manager, err := workspace.NewFileScheme(config.NopConfig(), uri)
+		scheme, err := newScheme(config.NopConfig(), uri)
 		if err != nil {
-			log.Fatal(err)
+			l.Fatal(err)
 		}
-		server := workspacepb.NewSchemeServer(manager, new(sync.Mutex))
+
+		server := workspacepb.NewSchemeServer(scheme, new(sync.Mutex))
 		err = ssh.StartSchemeServer(server)
 		if err != nil {
 			log.Fatal(err)

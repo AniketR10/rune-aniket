@@ -13,8 +13,10 @@ import (
 	"time"
 
 	multierr "github.com/ernestrc/go-multierror"
+	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 	"unstable.build/go-tui/config"
+	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/workspace"
 	workspacepb "unstable.build/go-tui/workspace/rpc"
 )
@@ -162,7 +164,12 @@ func (s *scheme) connectScheme(uri workspace.URI, closeHook func(error)) (worksp
 		return nil, err
 	}
 
-	pid, err := ses.Command(fmt.Sprintf("%s -x %s", six, sshPath))
+	var extraArgs string
+	if debug.StandardLogger().IsLevelEnabled(log.TraceLevel) {
+		extraArgs = "-o six-workspace-server.log"
+	}
+
+	pid, err := ses.Command(fmt.Sprintf("%s -x %s %s", six, sshPath, extraArgs))
 	if err != nil {
 		return nil, fmt.Errorf("could not create command: %s", err)
 	}
