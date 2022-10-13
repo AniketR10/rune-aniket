@@ -3,7 +3,6 @@ package workspace
 import (
 	"errors"
 	"fmt"
-	"os"
 
 	"github.com/ernestrc/blue/logging"
 	multierr "github.com/ernestrc/go-multierror"
@@ -163,22 +162,4 @@ func (m *Manager) Close() error {
 func (m *Manager) log(level log.Level, msg string, args ...interface{}) {
 	debug.StandardLogger().
 		WithField(logging.KeyClass, "workspace.Manager").Logf(level, msg, args...)
-}
-
-func mapErrors(err error) error {
-	osErr, ok := err.(*Error)
-	if !ok {
-		return err
-	}
-	if osErr.IsPermission {
-		return os.ErrPermission
-	}
-	if osErr.IsNotExist {
-		return os.ErrNotExist
-	}
-	if osErr.IsExist {
-		return os.ErrExist
-	}
-
-	return osErr.Err
 }

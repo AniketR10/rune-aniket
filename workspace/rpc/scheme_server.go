@@ -67,7 +67,7 @@ func (s *sharedRPCImpl) Open(ctx context.Context, req *OpenRequest) (
 			resp.IsPermissionErr = err.IsPermission
 			return resp, nil
 		}
-		return nil, fmt.Errorf("open %s error: %s", filename, err)
+		return nil, err.ToError()
 	}
 
 	handlerID := s.addHandle(workspace.Pid(-1), &syncFile{file: f})

@@ -43,8 +43,8 @@ func expectSchemeAPISuccess(t *testing.T, mock *workspacetest.MockScheme, scheme
 	require.NoError(t, err)
 
 	mock.EXPECT().Open(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil).Times(1)
-	_, err = scheme.Open("", 0, 0)
-	require.Nil(t, err)
+	_, osErr := scheme.Open("", 0, 0)
+	require.Nil(t, osErr)
 
 	mock.EXPECT().Remove(gomock.Any()).Return(nil).Times(1)
 	err = scheme.Remove("")

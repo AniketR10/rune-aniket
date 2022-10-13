@@ -683,11 +683,11 @@ func TestFileBufferInit(t *testing.T) {
 	})
 
 	t.Run("bubble up original file open error", func(t *testing.T) {
-		accessDeniedErr := NopError(errors.New("access denied"))
+		accessDeniedErr := errors.New("access denied")
 		f := new(file)
 		f.scheme = &testScheme{}
 		f.scheme.(*testScheme).openFunc = func(name string, flag int, perm os.FileMode) (File, *Error) {
-			return nil, accessDeniedErr
+			return nil, NopError(accessDeniedErr)
 		}
 		assert.Equal(t, accessDeniedErr, f.init("fjkelw", cell.NewBuffer(), "", false))
 	})
@@ -696,7 +696,7 @@ func TestFileBufferInit(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
-		accessDeniedErr := NopError(errors.New("access denied"))
+		accessDeniedErr := errors.New("access denied")
 		origFileMock := NewMockOsFile(ctrl)
 		f := new(file)
 		f.scheme = &testScheme{}
@@ -706,7 +706,7 @@ func TestFileBufferInit(t *testing.T) {
 			if i == 1 {
 				return origFileMock, nil
 			}
-			return nil, accessDeniedErr
+			return nil, NopError(accessDeniedErr)
 		}
 
 		fileName := "fjklewjflk"

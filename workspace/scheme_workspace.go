@@ -1,6 +1,7 @@
 package workspace
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -49,7 +50,7 @@ func (w *schemeWorkspace) Recover(
 	// but first check if it's from this workspace
 	is, err := IsWorkspaceURI(w, uri)
 	if err != nil {
-		err = fmt.Errorf("schemeWorkspace.IsWorkspaceURI: %s", err)
+		err = fmt.Errorf("IsWorkspaceURI: %s", err)
 		return
 	}
 	if !is {
@@ -58,7 +59,7 @@ func (w *schemeWorkspace) Recover(
 	}
 	is, err = IsWorkspaceURI(w, swapURI)
 	if err != nil {
-		err = fmt.Errorf("schemeWorkspace.IsWorkspaceURI: %s", err)
+		err = fmt.Errorf("IsWorkspaceURI: %s", err)
 		return
 	}
 	if !is {
@@ -75,10 +76,6 @@ func (w *schemeWorkspace) Recover(
 	}
 
 	ret, err = newFileRecover(w.p, uri.Path(), swapURI.Path(), buf, force)
-	if err != nil {
-		err = mapErrors(err)
-		return
-	}
 	return
 }
 
@@ -93,15 +90,16 @@ func (w *schemeWorkspace) Load(
 	// but first check if it's from this workspace
 	is, err := IsWorkspaceURI(w, uri)
 	if err != nil {
-		err = fmt.Errorf("schemeWorkspace.IsWorkspaceURI: %s", err)
+		err = fmt.Errorf("IsWorkspaceURI: %s", err)
 		return
 	}
 	if !is {
-		return nil, fmt.Errorf("invalid file URI %q for workspace with URI %q", uri, w.w)
+		err = fmt.Errorf("invalid file URI %q for workspace with URI %q", uri, w.w)
+		return
 	}
 	is, err = IsWorkspaceURI(w, swapDir)
 	if err != nil {
-		err = fmt.Errorf("schemeWorkspace.IsWorkspaceURI: %s", err)
+		err = fmt.Errorf("IsWorkspaceURI: %s", err)
 		return
 	}
 	if !is {
@@ -119,9 +117,12 @@ func (w *schemeWorkspace) Load(
 	}
 
 	ret, err = newFile(w.p, uri.Path(), buf, swapDir.Path(), readOnly)
-	if err != nil {
-		err = mapErrors(err)
-		return
+	if err == os.ErrNotExist {
+		if readOnly {
+			err = errors.New("cannot open file that doesn't exist in read-only")
+		} else {
+			err = errors.New("directory structure does not support creating file")
+		}
 	}
 	return
 }

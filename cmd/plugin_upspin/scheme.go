@@ -153,12 +153,11 @@ func (s *scheme) Remove(path string) error {
 	}
 	err = s.client.Delete(uname)
 	if err != nil {
-		return mapUpspinError(err)
+		return err
 	}
 	return nil
 }
 
-// TODO review this
 func (s *scheme) Rename(oldpath, newpath string) error {
 	uold, err := s.makeUpspinPathname(oldpath)
 	if err != nil {
@@ -176,12 +175,12 @@ func (s *scheme) Rename(oldpath, newpath string) error {
 	// ignore error if there's already a backup to avoid
 	// always having an extra rountrip to delete first
 	if err != nil && !errors.Is(errors.Exist, err) {
-		return mapUpspinError(err)
+		return err
 	}
 
 	_, err = s.client.Rename(uold, unew)
 	if err != nil {
-		return mapUpspinError(err)
+		return err
 	}
 
 	go s.client.Delete(backup)
@@ -195,7 +194,7 @@ func (s *scheme) Stat(path string) (os.FileInfo, error) {
 	}
 	entry, err := s.client.Lookup(uname, true)
 	if err != nil {
-		return nil, mapUpspinError(err)
+		return nil, err
 	}
 	return entryAdapter{entry: entry}, nil
 }
@@ -207,7 +206,7 @@ func (s *scheme) Lstat(path string) (os.FileInfo, error) {
 	}
 	entry, err := s.client.Lookup(uname, false)
 	if err != nil {
-		return nil, mapUpspinError(err)
+		return nil, err
 	}
 	return entryAdapter{entry: entry}, nil
 }
@@ -219,7 +218,7 @@ func (s *scheme) ReadLink(path string) (string, error) {
 	}
 	entry, err := s.client.Lookup(uname, false)
 	if err != nil {
-		return "", mapUpspinError(err)
+		return "", err
 	}
 	return string(entry.Link), nil
 }

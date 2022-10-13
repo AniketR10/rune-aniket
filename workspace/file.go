@@ -82,7 +82,7 @@ func (f *file) initSwap(swapDir string, orig File, origPerms os.FileMode) (File,
 		if osErr.IsExist {
 			return nil, ErrFileAlreadyOpen
 		}
-		return nil, osErr
+		return nil, osErr.ToError()
 	}
 
 	if orig == nil {
@@ -130,7 +130,7 @@ func (f *file) openFile(filePath string, flag int) (
 ) {
 	file, err := f.scheme.Open(filePath, flag, 0000)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, err.ToError()
 	}
 
 	fileInfo, verr := validateFileType(file)
@@ -147,20 +147,16 @@ func (f *file) initFiles(filePath, swapDir string, readOnly bool) error {
 		flag = os.O_RDONLY
 	}
 	file, fileInfo, err := f.openFile(filePath, flag)
-	if err != nil {
-		if osErr, ok := err.(*Error); ok && osErr.IsNotExist && !readOnly {
+	switch err {
+	case os.ErrNotExist:
+		// create unless read-only mode
+		if !readOnly {
 			err = nil
 		}
-	}
-	if err != nil {
+	case os.ErrPermission:
 		// delegate write error to Flush
-		if osErr, ok := err.(*Error); ok && osErr.IsPermission {
-			file, fileInfo, err = f.openFile(filePath, os.O_RDONLY)
-			if err != nil {
-				return err
-			}
-			readOnly = true
-		}
+		file, fileInfo, err = f.openFile(filePath, os.O_RDONLY)
+		readOnly = true
 	}
 	if err != nil {
 		return err
@@ -228,10 +224,8 @@ func (f *file) initBuffer(buf *cell.Buffer, file File) (err error) {
 
 func (f *file) initRecover(filePath, swapFilePath string, buf *cell.Buffer, force bool) error {
 	orig, info, err := f.openFile(filePath, os.O_RDWR)
-	if err != nil {
-		if osErr, ok := err.(*Error); ok && osErr.IsNotExist {
-			err = nil
-		}
+	if err == os.ErrNotExist {
+		err = nil
 	}
 	if err != nil {
 		return err

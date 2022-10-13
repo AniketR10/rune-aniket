@@ -325,10 +325,10 @@ func TestClientServer(t *testing.T) {
 		}},
 		{"Open happy path", func(t *testing.T, mock *workspace.MockOsFile, c *Client, s *Server) {
 			s.wp.(*workspacetest.MockWorkspace).EXPECT().
-				Open(gomock.Eq("/tmp/hello_world.go"), gomock.Eq(1), gomock.Eq(os.FileMode(2))).
+				Open(gomock.Eq("/tmp/hello_world.go"), gomock.Eq(os.O_RDWR|os.O_CREATE|os.O_EXCL), gomock.Eq(os.FileMode(0666))).
 				Return(nil, nil)
 
-			f, err := c.Open("/tmp/hello_world.go", 1, 2)
+			f, err := c.Open("/tmp/hello_world.go", os.O_RDWR|os.O_CREATE|os.O_EXCL, 0666)
 			assert.Nil(t, err)
 			assert.NotNil(t, f)
 		}},

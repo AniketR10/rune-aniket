@@ -158,20 +158,20 @@ type Error struct {
 	IsNotExist   bool
 }
 
-func (e Error) Error() string {
-	if e.Err != nil {
-		return e.Err.Error()
-	}
+func (e Error) ToError() error {
 	if e.IsPermission {
-		return "permission denied"
+		return os.ErrPermission
 	}
 	if e.IsNotExist {
-		return "file does not exist or directory structure does not support operation"
+		return os.ErrNotExist
 	}
 	if e.IsExist {
-		return "file exists"
+		return os.ErrExist
 	}
-	return "<osError:nil>"
+	if e.Err != nil {
+		return e.Err
+	}
+	panic("workspace.Error with nil Error")
 }
 
 // NopError returns an Error that simply wraps err.

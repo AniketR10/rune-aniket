@@ -105,8 +105,9 @@ func testSchemeClientServer(
 					return nil, workspace.NopError(errors.New("boom"))
 				})
 			_, err := c.Open("myFile", 1, 1)
-			require.Error(t, err)
-			assert.Contains(t, err.Error(), "boom")
+			require.NotNil(t, err)
+			require.Error(t, err.ToError())
+			assert.Contains(t, err.ToError().Error(), "boom")
 		}},
 		{"Remove happy path", func(t *testing.T, ctrl *gomock.Controller, c workspace.Scheme, s *workspacetest.MockScheme) {
 			var called int

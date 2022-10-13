@@ -95,7 +95,7 @@ func TestManager(t *testing.T) {
 		require.NoError(t, m.Close())
 	})
 
-	t.Run("Workspace returns the FIRST workspace capable "+
+	t.Run("Workspace returns ANY workspace capable "+
 		"of handling a uri, as defined by IsWorkspaceURI", func(*testing.T) {
 		m := NewManager(config.NopConfig())
 		err := m.RegisterScheme("test", NewNopScheme("test"))
@@ -114,7 +114,7 @@ func TestManager(t *testing.T) {
 		w2, ok, err := m.Workspace(parseURI(t, "test:///tmp/blah/hello.txt"))
 		require.NoError(t, err)
 		assert.True(t, ok)
-		assert.Equal(t, w2, w0)
+		assert.True(t, w2 == w0 || w2 == w1)
 
 		require.NoError(t, m.Close())
 	})
