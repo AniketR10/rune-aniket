@@ -325,19 +325,19 @@ func TestClientServer(t *testing.T) {
 		}},
 		{"Open happy path", func(t *testing.T, mock *workspace.MockOsFile, c *Client, s *Server) {
 			s.wp.(*workspacetest.MockWorkspace).EXPECT().
-				Open(gomock.Eq("/tmp/hello_world.go"), gomock.Eq(os.O_RDWR|os.O_CREATE|os.O_EXCL), gomock.Eq(os.FileMode(0666))).
+				Open(gomock.Eq("/tmp/hello_world.go"), gomock.Eq(os.O_RDWR|os.O_CREATE|os.O_EXCL|os.O_APPEND|os.O_SYNC|os.O_TRUNC), gomock.Eq(os.FileMode(0666))).
 				Return(nil, nil)
 
-			f, err := c.Open("/tmp/hello_world.go", os.O_RDWR|os.O_CREATE|os.O_EXCL, 0666)
+			f, err := c.Open("/tmp/hello_world.go", os.O_RDWR|os.O_CREATE|os.O_EXCL|os.O_APPEND|os.O_SYNC|os.O_TRUNC, 0666)
 			assert.Nil(t, err)
 			assert.NotNil(t, f)
 		}},
 		{"Open error", func(t *testing.T, mock *workspace.MockOsFile, c *Client, s *Server) {
 			s.wp.(*workspacetest.MockWorkspace).EXPECT().
-				Open(gomock.Eq("/tmp/hello_world.go"), gomock.Eq(1), gomock.Eq(os.FileMode(2))).
+				Open(gomock.Eq("/tmp/hello_world.go"), gomock.Eq(os.O_RDONLY), gomock.Eq(os.FileMode(2))).
 				Return(nil, &workspace.Error{Err: errors.New("pow")})
 
-			f, err := c.Open("/tmp/hello_world.go", 1, 2)
+			f, err := c.Open("/tmp/hello_world.go", os.O_RDONLY, 2)
 			require.NotNil(t, err)
 			assert.True(t, strings.Contains(err.Err.Error(), "pow"))
 			assert.Nil(t, f)

@@ -8,8 +8,14 @@ import "google/protobuf/timestamp.proto";
 
 message OpenRequest {
 	string filename = 1;
-	int64 flag = 2;
-	int32  mode = 3;
+	int32 mode = 2;
+	bool O_RDONLY = 3;
+	bool O_WRONLY = 4;
+	bool O_APPEND = 6;
+	bool O_CREATE = 7;
+	bool O_EXCL = 8;
+	bool O_SYNC = 9; 
+	bool O_TRUNC = 10;
 }
 
 message OpenResponse {

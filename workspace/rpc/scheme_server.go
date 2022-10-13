@@ -54,11 +54,39 @@ func (s *SchemeServerImpl) Open(ctx context.Context, req *OpenRequest) (
 	return s.sharedRPCImpl.Open(ctx, req)
 }
 
+func getOpenRequestFlag(req *OpenRequest) int {
+	var flag int
+	if req.O_RDONLY {
+		flag = os.O_RDONLY
+	} else if req.O_WRONLY {
+		flag = os.O_WRONLY
+	} else {
+		flag = os.O_RDWR
+	}
+
+	if req.O_APPEND {
+		flag |= os.O_APPEND
+	}
+	if req.O_CREATE {
+		flag |= os.O_CREATE
+	}
+	if req.O_EXCL {
+		flag |= os.O_EXCL
+	}
+	if req.O_SYNC {
+		flag |= os.O_SYNC
+	}
+	if req.O_TRUNC {
+		flag |= os.O_TRUNC
+	}
+	return flag
+}
+
 func (s *sharedRPCImpl) Open(ctx context.Context, req *OpenRequest) (
 	*OpenResponse, error,
 ) {
 	filename := req.GetFilename()
-	f, err := s.scheme.Open(filename, int(req.GetFlag()), os.FileMode(req.GetMode()))
+	f, err := s.scheme.Open(filename, getOpenRequestFlag(req), os.FileMode(req.GetMode()))
 	if err != nil {
 		if err.IsExist || err.IsNotExist || err.IsPermission {
 			resp := new(OpenResponse)

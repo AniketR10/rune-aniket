@@ -109,14 +109,28 @@ func (c *schemeClientImpl) URI(path string) (workspace.URI, error) {
 	return uri, nil
 }
 
+func makeOpenRequest(name string, flag int, perm os.FileMode) *OpenRequest {
+	return &OpenRequest{
+		Filename: name,
+		Mode:     int32(perm),
+		O_RDONLY: flag&^(os.O_APPEND|os.O_CREATE|os.O_EXCL|os.O_SYNC|os.O_TRUNC) == os.O_RDONLY,
+		O_WRONLY: flag&^(os.O_APPEND|os.O_CREATE|os.O_EXCL|os.O_SYNC|os.O_TRUNC) == os.O_WRONLY,
+		O_APPEND: flag&os.O_APPEND != 0,
+		O_CREATE: flag&os.O_CREATE != 0,
+		O_EXCL:   flag&os.O_EXCL != 0,
+		O_SYNC:   flag&os.O_SYNC != 0,
+		O_TRUNC:  flag&os.O_TRUNC != 0,
+	}
+}
+
 func (c *openRemoveClientImpl) Open(name string, flag int, perm os.FileMode) (
 	workspace.File, *workspace.Error,
 ) {
 	ctx, cleanup := ctxWithTimeout()
 	defer cleanup()
 
-	req := OpenRequest{Filename: name, Flag: int64(flag), Mode: int32(perm)}
-	resp, err := c.client.Open(ctx, &req)
+	req := makeOpenRequest(name, flag, perm)
+	resp, err := c.client.Open(ctx, req)
 	if err != nil {
 		return nil, &workspace.Error{Err: err}
 	}
