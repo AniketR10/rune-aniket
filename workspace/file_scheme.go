@@ -47,6 +47,12 @@ type fileScheme struct {
 	nextPid    int32
 }
 
+type execCmd struct {
+	// serialize access to a cmd.Exec
+	mu sync.Mutex
+	*exec.Cmd
+}
+
 // NewFileScheme returns a Scheme that manages resources
 // on the local file system.
 func NewFileScheme(cfg config.Config, workspace URI) (Scheme, error) {
@@ -138,14 +144,14 @@ func (m *fileScheme) Command(name string, arg ...string) (Pid, error) {
 		WithField("URI", m.workspace.String()).
 		Debugf("exec.Command: (%#v, pid=%d)", cmd, nextPid)
 
-	m.cmds.Store(Pid(nextPid), cmd)
+	m.cmds.Store(Pid(nextPid), &execCmd{Cmd: cmd})
 	return Pid(nextPid), nil
 }
 
-func (m *fileScheme) getCmdForPid(pid Pid) (*exec.Cmd, bool) {
+func (m *fileScheme) getCmdForPid(pid Pid) (*execCmd, bool) {
 	c, ok := m.cmds.Load(pid)
 	if ok {
-		return c.(*exec.Cmd), true
+		return c.(*execCmd), true
 	}
 	return nil, false
 }
@@ -155,6 +161,10 @@ func (m *fileScheme) Start(pid Pid) error {
 	if !ok {
 		return errProcNotFound
 	}
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	err := c.Start()
 	if err != nil {
 		return fmt.Errorf("Cmd.Start: %w", err)
@@ -167,6 +177,10 @@ func (m *fileScheme) Signal(pid Pid, signal syscall.Signal) error {
 	if !ok {
 		return errProcNotFound
 	}
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	if c.Process == nil {
 		return errProcNotRunning
 	}
@@ -182,6 +196,10 @@ func (m *fileScheme) StderrPipe(pid Pid) (io.ReadCloser, error) {
 	if !ok {
 		return nil, errProcNotFound
 	}
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	pipe, err := c.StderrPipe()
 	if err != nil {
 		return nil, fmt.Errorf("Cmd.StderrPipe: %w", err)
@@ -194,6 +212,10 @@ func (m *fileScheme) StdinPipe(pid Pid) (io.WriteCloser, error) {
 	if !ok {
 		return nil, errProcNotFound
 	}
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	pipe, err := c.StdinPipe()
 	if err != nil {
 		return nil, fmt.Errorf("Cmd.StdinPipe: %w", err)
@@ -206,6 +228,10 @@ func (m *fileScheme) StdoutPipe(pid Pid) (io.ReadCloser, error) {
 	if !ok {
 		return nil, errProcNotFound
 	}
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	pipe, err := c.StdoutPipe()
 	if err != nil {
 		return nil, fmt.Errorf("Cmd.StdoutPipe: %w", err)
@@ -219,6 +245,10 @@ func (m *fileScheme) Wait(pid Pid) error {
 		return errProcNotFound
 	}
 	defer m.cmds.Delete(pid)
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	err := c.Wait()
 	if err != nil {
 		return fmt.Errorf("Cmd.Wait: %w", err)
@@ -290,23 +320,31 @@ func (m *fileScheme) SetPtySize(p Pty, width, height int) error {
 	return nil
 }
 
+func (m *execCmd) Close() error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if m.Process != nil {
+		err := syscall.Kill(m.Process.Pid, syscall.SIGTERM)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (m *fileScheme) Close() error {
 	var ret error
 
-	var copyCmds []*exec.Cmd
+	var copyCmds []*execCmd
 	var keys []interface{}
 	m.cmds.Range(func(key, cmd interface{}) bool {
-		copyCmds = append(copyCmds, cmd.(*exec.Cmd))
+		copyCmds = append(copyCmds, cmd.(*execCmd))
 		keys = append(keys, key)
 		return true
 	})
 	for _, cmd := range copyCmds {
-		if cmd.Process != nil {
-			err := syscall.Kill(cmd.Process.Pid, syscall.SIGTERM)
-			if err != nil {
-				ret = err
-			}
-		}
+		cmd.Close()
 	}
 
 	for _, key := range keys {
