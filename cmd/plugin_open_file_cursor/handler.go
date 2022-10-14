@@ -167,9 +167,10 @@ func (h *gfEditorHandler) syncBuffers(ev text.Event) error {
 		if !ok {
 			return fmt.Errorf("could not find buffer for file %s", ev.URI.String())
 		}
+		before := f.CursorAtScroll()
 		log.Tracef("MoveToScroll(%#v): %s", ev.From, f.String())
 		_, ok = f.MoveToScroll(ev.From)
-		if !ok {
+		if !ok && ev.From != before {
 			return fmt.Errorf("MoveToScroll(%#v): %v", ev.From, ok)
 		}
 	}
