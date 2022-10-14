@@ -1590,6 +1590,7 @@ func (h *lspEditorHandler) browseLocations(
 			log.Errorf("could not render preview file: Open: %v", oerr)
 			return
 		}
+		defer f.Close()
 		data, err := ioutil.ReadAll(f)
 		if err != nil {
 			log.Errorf("could not render preview file: Read: %v", err)
