@@ -112,13 +112,13 @@ func parseWorkspaceURI(u workspace.URI, getUser func() (*user.User, error)) (
 	return
 }
 
-func (s *scheme) whichCommand(remote remote, uri workspace.URI, cmd string) (bool, error) {
+func runAndWait(remote remote, cmd string) (bool, error) {
 	ses, err := remote.NewSession()
 	if err != nil {
 		return false, err
 	}
 
-	pid, err := ses.Command(fmt.Sprintf("which %s", cmd))
+	pid, err := ses.Command(cmd)
 	if err != nil {
 		return false, err
 	}
@@ -136,6 +136,29 @@ func (s *scheme) whichCommand(remote remote, uri workspace.URI, cmd string) (boo
 	return true, nil
 }
 
+func (s *scheme) whichCommand(remote remote, cmd string) error {
+	avail, err := runAndWait(remote, fmt.Sprintf("which %s", cmd))
+	if err != nil {
+		return fmt.Errorf("could not check if %s executable is in PATH: %w", cmd, err)
+	}
+	if !avail {
+		return fmt.Errorf("%s executable was not found on remote. "+
+			"Make sure it's installed and available via $PATH to a non-interactive shell", cmd)
+	}
+	return nil
+}
+
+func (s *scheme) workspaceExists(remote remote, uri workspace.URI) error {
+	ok, err := runAndWait(remote, fmt.Sprintf("ls %s", uri.Path()))
+	if err != nil {
+		return fmt.Errorf("could not check if workspace path %q exists: %w", uri.Path(), err)
+	}
+	if !ok {
+		return fmt.Errorf("path %q does not exists", uri.Path())
+	}
+	return nil
+}
+
 func (s *scheme) connectScheme(uri workspace.URI, closeHook func(error)) (workspace.Scheme, error) {
 	const six = "six"
 
@@ -149,14 +172,17 @@ func (s *scheme) connectScheme(uri workspace.URI, closeHook func(error)) (worksp
 		return nil, fmt.Errorf("could not initialize remote: %w", err)
 	}
 
-	avail, err := s.whichCommand(remote, uri, six)
+	// NOTE: the next checks are to avoid error messages getting lost when
+	// trying to connect so we can provide a better error messages
+
+	err = s.whichCommand(remote, six)
 	if err != nil {
-		return nil, fmt.Errorf("could not check if %s executable is in PATH: %w", six, err)
+		return nil, err
 	}
 
-	if !avail {
-		return nil, fmt.Errorf("%s executable was not found on remote. "+
-			"Make sure it's installed and available via $PATH to a non-interactive shell", six)
+	err = s.workspaceExists(remote, uri)
+	if err != nil {
+		return nil, err
 	}
 
 	ses, err := remote.NewSession()
