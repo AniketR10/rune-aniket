@@ -112,12 +112,15 @@ func parseWorkspaceURI(u workspace.URI, getUser func() (*user.User, error)) (
 	return
 }
 
-func runAndWait(remote remote, cmd string) (bool, error) {
+func (s *scheme) runAndWait(remote remote, cmd string) (bool, error) {
 	ses, err := remote.NewSession()
 	if err != nil {
 		return false, err
 	}
 
+	if s.cfg.shell != "" {
+		cmd = fmt.Sprintf("%s -c '%s'", s.cfg.shell, cmd)
+	}
 	pid, err := ses.Command(cmd)
 	if err != nil {
 		return false, err
@@ -137,7 +140,7 @@ func runAndWait(remote remote, cmd string) (bool, error) {
 }
 
 func (s *scheme) whichCommand(remote remote, cmd string) error {
-	avail, err := runAndWait(remote, fmt.Sprintf("which %s", cmd))
+	avail, err := s.runAndWait(remote, fmt.Sprintf("which %s", cmd))
 	if err != nil {
 		return fmt.Errorf("could not check if %s executable is in PATH: %w", cmd, err)
 	}
@@ -149,7 +152,7 @@ func (s *scheme) whichCommand(remote remote, cmd string) error {
 }
 
 func (s *scheme) workspaceExists(remote remote, uri workspace.URI) error {
-	ok, err := runAndWait(remote, fmt.Sprintf("ls %s", uri.Path()))
+	ok, err := s.runAndWait(remote, fmt.Sprintf("ls %s", uri.Path()))
 	if err != nil {
 		return fmt.Errorf("could not check if workspace path %q exists: %w", uri.Path(), err)
 	}
@@ -195,7 +198,12 @@ func (s *scheme) connectScheme(uri workspace.URI, closeHook func(error)) (worksp
 		extraArgs = "-o six-workspace-server.log"
 	}
 
-	pid, err := ses.Command(fmt.Sprintf("%s -x %s %s", six, sshPath, extraArgs))
+	cmd := fmt.Sprintf("%s -x %s %s", six, sshPath, extraArgs)
+	if s.cfg.shell != "" {
+		cmd = fmt.Sprintf("%s -c '%s'", s.cfg.shell, cmd)
+	}
+
+	pid, err := ses.Command(cmd)
 	if err != nil {
 		return nil, fmt.Errorf("could not create command: %s", err)
 	}
