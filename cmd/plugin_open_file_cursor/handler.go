@@ -110,6 +110,8 @@ func (h *gfEditorHandler) openFileUnderCursor(uri workspace.URI) error {
 		return err
 	}
 
+	log.Infof("trying to parse word %q under cursor", word)
+
 	uri, err := workspace.ParseURI(word)
 	if err != nil {
 		uri, err = h.cwd.URI(word)
