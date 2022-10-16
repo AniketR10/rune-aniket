@@ -115,7 +115,8 @@ func newWorkspaceManagerHandler(
 ) (*workspaceManagerHandler, error) {
 	ret := new(workspaceManagerHandler)
 
-	err := ret.init(clipboard, initial, manager, cfg, recfilename, filenames, publishEvent)
+	err := ret.init(clipboard, initial, manager,
+		cfg, recfilename, filenames, publishEvent)
 	if err != nil {
 		return nil, err
 	}
@@ -173,7 +174,7 @@ func (h *workspaceManagerHandler) init(
 	h.union.Top = charset.Top
 	h.union.Bottom = charset.Bottom
 
-	err := h.addWorkspace(uri, h.cfg, recfilename, filenames)
+	err := h.addWorkspace(uri, recfilename, filenames)
 	if err != nil {
 		return err
 	}
@@ -320,15 +321,28 @@ func (h *workspaceManagerHandler) textOpts(cfg ideConfig) []text.Option {
 	return ret
 }
 
+func cloneConfig(cfg ideConfig) ideConfig {
+	ret := make(map[string]interface{})
+	config.Clone(config.MapConfig(cfg.cfg)).Iterate(func(k string, v interface{}) {
+		ret[k] = v
+	})
+	return ideConfig{cfg: ret, errors: make(map[string]error)}
+}
+
 func (h *workspaceManagerHandler) addWorkspace(
-	uri workspace.URI, cfg ideConfig, recfilename string, filenames []string,
+	uri workspace.URI, recfilename string, filenames []string,
 ) error {
 	cwd, err := h.workspace.AddWorkspace(uri)
 	if err != nil {
 		return fmt.Errorf("Failed to create new workspace for %q: %s", uri, err)
 	}
 
-	configErr := loadWorkspaceConfig(cwd, uri, &cfg)
+	cfg := cloneConfig(h.cfg)
+
+	isConfigErr, configErr := loadWorkspaceConfig(cwd, uri, &cfg)
+	if configErr != nil && !isConfigErr {
+		return configErr
+	}
 
 	textOpts := h.textOpts(cfg)
 	if recfilename != "" {
@@ -372,7 +386,8 @@ func (h *workspaceManagerHandler) addWorkspace(
 	res = plugin.MergeResourceMap(res, plugin.WorkspaceResources(cwd))
 	// NOTE: plugins that register new schemes will fail for subsequent workspaces
 	res = plugin.MergeResourceMap(res, plugin.SchemeManagerResources(h.workspace))
-	res = plugin.MergeResourceMap(res, plugin.ConfigResources(config.MapConfig(h.cfg.cfg)))
+	res = plugin.MergeResourceMap(res, plugin.ConfigResources(
+		config.MapConfig(cfg.cfg)))
 	res[plugin.PermissionClipboard] = h.clipboard
 
 	pluginOpts := []plugin.Option{
@@ -428,7 +443,7 @@ func (h *workspaceManagerHandler) commandAddWorkspace(args ...string) (bool, err
 	if strings.Contains(path, "://") {
 		uri, err := workspace.ParseURI(path)
 		if err == nil {
-			return false, h.addWorkspace(uri, h.cfg, "", nil)
+			return false, h.addWorkspace(uri, "", nil)
 		}
 		return false, fmt.Errorf("malformed URI: %s", err)
 	}
@@ -441,7 +456,7 @@ func (h *workspaceManagerHandler) commandAddWorkspace(args ...string) (bool, err
 	if err != nil {
 		return false, fmt.Errorf("malformed URI: %s", err)
 	}
-	return false, h.addWorkspace(uri, h.cfg, "", nil)
+	return false, h.addWorkspace(uri, "", nil)
 }
 
 func (h *workspaceManagerHandler) commandCloseWorkspace(args ...string) (

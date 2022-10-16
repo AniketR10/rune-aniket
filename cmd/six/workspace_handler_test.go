@@ -1,11 +1,10 @@
 package main
 
 import (
-	"io/ioutil"
-	"os"
 	"sync"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/config"
@@ -16,17 +15,63 @@ import (
 	"unstable.build/go-tui/workspace"
 )
 
-type clipboardManagerTest struct {
-	text.Clipboard
+func defaultCfg() ideConfig {
+	return ideConfig{cfg: map[string]interface{}{
+		"command": map[string]interface{}{
+			"key":    "<c-\\>", // see testutil.TestHandlerIsolated
+			"width":  10,
+			"height": 5,
+			"key_bindings": map[string]interface{}{
+				"1": "switchToWorkspace 1",
+				"2": "switchToWorkspace 2",
+				"3": "switchToWorkspace 3",
+				"4": "switchToWorkspace 4",
+				"5": "switchToWorkspace 5",
+				"6": "switchToWorkspace 6",
+				"7": "switchToWorkspace 7",
+				"8": "switchToWorkspace 8",
+				"9": "switchToWorkspace 9",
+				"0": "switchToWorkspace 10",
+			},
+		},
+		"workspace": map[string]interface{}{
+			"wallpaper": "workspaceWallpaper",
+		},
+	}}
 }
 
-func (m *clipboardManagerTest) Serve(
-	string, uint32, proto.MuxBroker, sync.Locker,
-) error {
-	return nil
-}
-func (m *clipboardManagerTest) Close() error {
-	return nil
+func TestWorkspaceConfig(t *testing.T) {
+	mockConfig := map[string]interface{}{
+		"1": "2",
+		"2": map[string]interface{}{
+			"dos": "2",
+			"two": "2",
+		},
+	}
+	t.Run("passes default scheme config to SchemeFunc", func(t *testing.T) {
+		cfg := defaultCfg()
+		manager := workspace.NewManager(cfg.workspace())
+		workspaceConfig := cfg.cfg["workspace"].(map[string]interface{})
+		workspaceConfig[workspace.MemoryScheme] = mockConfig
+
+		passed := make(map[string]interface{})
+		manager.RegisterScheme(workspace.MemoryScheme,
+			func(cfg config.Config, uri workspace.URI) (workspace.Scheme, error,
+			) {
+				cfg.Iterate(func(k string, v interface{}) {
+					passed[k] = v
+				})
+				return workspace.NewMemoryScheme(cfg, uri)
+			})
+
+		uri, err := workspace.ParseURI("memory:///tmp")
+		require.NoError(t, err)
+
+		m := newTestWorkspaceManagerHandlerWithManager(t, manager, uri, cfg)
+		defer m.Close()
+
+		assert.EqualValues(t, mockConfig, passed)
+	})
 }
 
 func TestWorkspaceManagerHandlerDraw(t *testing.T) {
@@ -39,53 +84,10 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 	}()
 
 	fn := func(t *testing.T) tui.Handler {
-		cfg := ideConfig{
-			errors: map[string]error{},
-			cfg: map[string]interface{}{
-				"command": map[string]interface{}{
-					"key":    "<c-\\>", // see testutil.TestHandlerIsolated
-					"width":  10,
-					"height": 5,
-					"key_bindings": map[string]interface{}{
-						"1": "switchToWorkspace 1",
-						"2": "switchToWorkspace 2",
-						"3": "switchToWorkspace 3",
-						"4": "switchToWorkspace 4",
-						"5": "switchToWorkspace 5",
-						"6": "switchToWorkspace 6",
-						"7": "switchToWorkspace 7",
-						"8": "switchToWorkspace 8",
-						"9": "switchToWorkspace 9",
-						"0": "switchToWorkspace 10",
-					},
-				},
-				"workspace": map[string]interface{}{
-					"wallpaper": "workspaceWallpaper",
-				},
-			}}
-
-		clip := &clipboardManagerTest{Clipboard: text.NewInMemoryClipboard()}
-
-		dir, err := ioutil.TempDir("", "")
-		require.NoError(t, err)
-
-		uri, err := workspace.CurrentUserHostURI(dir)
-		require.NoError(t, err)
-
-		manager := workspace.NewManager(config.NopConfig())
-		require.NoError(t, manager.RegisterScheme(workspace.FileScheme, workspace.NewFileScheme))
-		m, err := newWorkspaceManagerHandler(clip, uri, manager, cfg, "", []string{},
-			func(term.Event) bool {
-				return true
-			})
-		require.NoError(t, err)
-
+		m := newTestWorkspaceManagerHandler(t, defaultCfg())
 		closeFns = append(closeFns, m.Close)
 		return m
 	}
-
-	// ensure test is bulletproof
-	_ = os.Remove("/tmp/12345aZZ")
 
 	cases := []testutil.HandlerSequenceTestCase{
 		{"",
@@ -222,4 +224,45 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 └──────────────────┘`},
 	}
 	testutil.TestHandlerIsolated(t, fn, 20, 10, cases)
+}
+
+type clipboardManagerTest struct {
+	text.Clipboard
+}
+
+func (m *clipboardManagerTest) Serve(
+	string, uint32, proto.MuxBroker, sync.Locker,
+) error {
+	return nil
+}
+func (m *clipboardManagerTest) Close() error {
+	return nil
+}
+
+func newTestWorkspaceManagerHandlerWithManager(
+	t *testing.T, manager *workspace.Manager,
+	uri workspace.URI, cfg ideConfig,
+) *workspaceManagerHandler {
+	clip := &clipboardManagerTest{Clipboard: text.NewInMemoryClipboard()}
+
+	m := new(workspaceManagerHandler)
+	err := m.init(clip, uri, manager, cfg, "", []string{},
+		func(term.Event) bool {
+			return true
+		})
+	require.NoError(t, err)
+	return m
+}
+
+func newTestWorkspaceManagerHandler(
+	t *testing.T, cc ideConfig,
+) *workspaceManagerHandler {
+	manager := workspace.NewManager(config.NopConfig())
+	require.NoError(t, manager.RegisterScheme(workspace.MemoryScheme,
+		workspace.NewMemoryScheme))
+
+	uri, err := workspace.ParseURI("memory:///tmp")
+	require.NoError(t, err)
+
+	return newTestWorkspaceManagerHandlerWithManager(t, manager, uri, cc)
 }

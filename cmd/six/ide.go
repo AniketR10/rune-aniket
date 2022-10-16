@@ -89,8 +89,18 @@ func (i *ide) init(cwd, cfgfilename, recfilename string,
 
 	// register default schemes
 	workspaceManager := workspace.NewManager(i.ideConfig.workspace())
-	workspaceManager.RegisterScheme(ssh.Scheme, ssh.New)
-	workspaceManager.RegisterScheme(workspace.FileScheme, workspace.NewFileScheme)
+	err = workspaceManager.RegisterScheme(ssh.Scheme, ssh.New)
+	if err != nil {
+		return err
+	}
+	err = workspaceManager.RegisterScheme(workspace.FileScheme, workspace.NewFileScheme)
+	if err != nil {
+		return err
+	}
+	err = workspaceManager.RegisterScheme(workspace.MemoryScheme, workspace.NewMemoryScheme)
+	if err != nil {
+		return err
+	}
 
 	root, err := newWorkspaceManagerHandler(i.clipboard, cwdURI,
 		workspaceManager, i.ideConfig, recfilename, filenames, publishEvent)

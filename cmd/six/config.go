@@ -11,7 +11,6 @@ import (
 	log "github.com/sirupsen/logrus"
 	yaml "gopkg.in/yaml.v3"
 	"unstable.build/go-tui/browser"
-	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/config"
 	"unstable.build/go-tui/handler"
@@ -927,26 +926,26 @@ func decodeConfig(r io.Reader) (cfg map[string]interface{}, err error) {
 	return
 }
 
-func loadWorkspaceConfig(m workspace.Loader, cwd workspace.URI, c *ideConfig) error {
-	localConfigPath := workspace.Join(cwd, ".sixrc")
-	buf := cell.NewBuffer()
-	closer, err := m.Load(localConfigPath, buf, workspace.URI{}, true)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil
+func loadWorkspaceConfig(cwd workspace.Workspace, uri workspace.URI, c *ideConfig) (
+	isConfigErr bool, err error,
+) {
+	localConfigPath := workspace.Join(uri, ".sixrc")
+	f, werr := cwd.Open(localConfigPath.Path(), os.O_RDONLY, 0)
+	if werr != nil {
+		if werr.IsNotExist {
+			return false, nil
 		}
-		return fmt.Errorf("failed to open local config file: %s", err)
+		return false, fmt.Errorf("found local .sixrc but failed to open: %s", werr.ToError())
 	}
-	defer closer.Close()
+	defer f.Close()
 
-	reader := strings.NewReader(buf.String())
-	cfg, err := decodeConfig(reader)
+	cfg, err := decodeConfig(f)
 	if err != nil {
-		return err
+		return true, err
 	}
 
 	overrideConfig(c.cfg, cfg)
-	return nil
+	return false, nil
 }
 
 func loadConfig(c *ideConfig, configpath string) error {
