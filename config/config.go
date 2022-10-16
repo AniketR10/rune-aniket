@@ -62,6 +62,45 @@ func MapConfig(m map[string]interface{}) Config {
 	return mapConfig(m)
 }
 
+func clone(m map[string]interface{}) map[string]interface{} {
+	ret := make(map[string]interface{})
+	for k, v := range m {
+		if ifc, ok := v.(map[string]interface{}); ok {
+			ret[k] = clone(ifc)
+		} else {
+			ret[k] = v
+		}
+	}
+	return ret
+}
+
+func cloneSlice(s []interface{}) []interface{} {
+	ret := make([]interface{}, len(s))
+	for i, v := range s {
+		if vslice, ok := v.([]interface{}); ok {
+			ret[i] = cloneSlice(vslice)
+		} else {
+			ret[i] = v
+		}
+	}
+	return ret
+}
+
+// Clone returns a deep clone of the given config.
+func Clone(cfg Config) Config {
+	ret := make(map[string]interface{})
+	cfg.Iterate(func(k string, v interface{}) {
+		if vmap, ok := v.(map[string]interface{}); ok {
+			ret[k] = clone(vmap)
+		} else if vslice, ok := v.([]interface{}); ok {
+			ret[k] = cloneSlice(vslice)
+		} else {
+			ret[k] = v
+		}
+	})
+	return MapConfig(ret)
+}
+
 // GetAttributes is a helper which extracts and parses a term.Attributes as a map
 // of fg, bg string keys to an attribute. See GetAttribute for more details.
 func GetAttributes(c Config, key string) (term.Attributes, error) {
