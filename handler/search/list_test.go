@@ -191,11 +191,11 @@ func testListAsyncPush(t *testing.T, constructor listConstructor) {
 		height := 100
 		l.Resize(100, height)
 
-		wg.Add(3)
+		wg.Add(6)
 		go func() {
+			defer wg.Done()
 			pushTestData(l, height)
 			close(l.Push())
-			wg.Done()
 		}()
 
 		wg.Wait()
@@ -212,7 +212,7 @@ func testListAsyncPush(t *testing.T, constructor listConstructor) {
 		height := 100
 		l.Resize(100, height)
 
-		wg.Add(1)
+		wg.Add(4)
 		pushTestData(l, height)
 		wg.Wait()
 		wg.Add(2)
@@ -234,7 +234,7 @@ func testListAsyncPush(t *testing.T, constructor listConstructor) {
 		n := 100
 		l.Resize(n, n)
 
-		wg.Add(3)
+		wg.Add(6)
 		buf.WriteString("9")
 		l.Wait() // make next search query doesn't cancel prev
 		buf.WriteString("9")
@@ -257,7 +257,7 @@ func testListAsyncPush(t *testing.T, constructor listConstructor) {
 		n := 100
 		l.Resize(n, n)
 
-		wg.Add(3)
+		wg.Add(6)
 		go pushTestData(l, n)
 
 		buf.WriteString("9")

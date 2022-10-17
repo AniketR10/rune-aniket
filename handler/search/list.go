@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"math"
 	"sync"
-	"time"
 
 	fzf "github.com/junegunn/fzf/src/algo"
 	"github.com/junegunn/fzf/src/util"
@@ -15,9 +14,8 @@ import (
 )
 
 const (
-	numElementsToReDrawAt      = 128
-	maxNumElementsToReDrawAt   = 1024 * 32
-	searchRefreshEveryDuration = 100 * time.Millisecond
+	numElementsToReDrawAt    = 16
+	maxNumElementsToReDrawAt = 1024
 )
 
 // internal representation of ListConfig
