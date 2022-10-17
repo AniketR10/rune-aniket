@@ -49,7 +49,8 @@ type fileScheme struct {
 
 type execCmd struct {
 	// serialize access to a cmd.Exec
-	mu sync.Mutex
+	pid atomic.Int64
+	mu  sync.Mutex
 	*exec.Cmd
 }
 
@@ -169,6 +170,8 @@ func (m *fileScheme) Start(pid Pid) error {
 	if err != nil {
 		return fmt.Errorf("Cmd.Start: %w", err)
 	}
+
+	c.pid.Add(int64(c.Process.Pid))
 	return nil
 }
 
@@ -321,11 +324,12 @@ func (m *fileScheme) SetPtySize(p Pty, width, height int) error {
 }
 
 func (m *execCmd) Close() error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	if m.Process != nil {
-		err := syscall.Kill(m.Process.Pid, syscall.SIGTERM)
+	// NOTE do not lock here or else we risk deadlock
+	// as any client could could call Wait and we would be holding
+	// this execCmd lock undefinetly. Sending a signal will terminate
+	// the process which then will force Wait to return, freeing the lock.
+	if pid := m.pid.Load(); pid != 0 {
+		err := syscall.Kill(int(pid), syscall.SIGKILL)
 		if err != nil {
 			return err
 		}
@@ -343,9 +347,16 @@ func (m *fileScheme) Close() error {
 		keys = append(keys, key)
 		return true
 	})
+
+	var wg sync.WaitGroup
+	wg.Add(len(copyCmds))
 	for _, cmd := range copyCmds {
-		cmd.Close()
+		go func(cmd *execCmd) {
+			defer wg.Done()
+			_ = cmd.Close()
+		}(cmd)
 	}
+	wg.Wait()
 
 	for _, key := range keys {
 		m.cmds.Delete(key)
