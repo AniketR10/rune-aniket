@@ -257,8 +257,8 @@ func (s *remoteScheme) Close() (ret error) {
 	s.scheme = nil
 	s.mu.Unlock()
 	if scheme != nil {
-		scheme.Close()
 		close(s.closeChan)
+		scheme.Close()
 	}
 	return
 }

@@ -253,13 +253,14 @@ func (s *scheme) init(cc sshConfig, uri workspace.URI) (err error) {
 		return fmt.Errorf("could not parse ssh workspace URI: %s", err)
 	}
 
-	s.Scheme = newRemoteScheme(s.connectSchemeFn, uri)
-
-	cwdpath, err := s.expandPath(uri.Path())
+	// expand any relative path or home aliases
+	uri, err = s.URI(uri.Path())
 	if err != nil {
 		return err
 	}
-	fi, err := s.Scheme.Stat(cwdpath)
+
+	s.Scheme = newRemoteScheme(s.connectSchemeFn, uri)
+	fi, err := s.Scheme.Stat(uri.Path())
 	if err != nil {
 		return err
 	}

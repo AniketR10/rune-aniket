@@ -64,7 +64,10 @@ func (n nopRemote) Close() error {
 	return nil
 }
 
-func newTestScheme(cfg config.Config, workspaceURI workspace.URI) (workspace.Scheme, error) {
+func newTestScheme(
+	cfg config.Config, workspaceURI workspace.URI,
+	connectSchemeFn func(uri workspace.URI, closeHook func(error)) (workspace.Scheme, error),
+) (workspace.Scheme, error) {
 	s := new(scheme)
 	s.remoteFn = func(sshConfig, workspace.URI) (remote, error) {
 		return nopRemote{}, nil
@@ -72,9 +75,12 @@ func newTestScheme(cfg config.Config, workspaceURI workspace.URI) (workspace.Sch
 	s.getUser = func() (*user.User, error) {
 		return &user.User{Username: "git", HomeDir: "/home/git"}, nil
 	}
-	s.connectSchemeFn = func(uri workspace.URI, closeHook func(error)) (workspace.Scheme, error) {
-		return workspace.NewNopScheme("test")(config.NopConfig(), workspace.URI{})
+	if connectSchemeFn == nil {
+		connectSchemeFn = func(uri workspace.URI, closeHook func(error)) (workspace.Scheme, error) {
+			return workspace.NewNopScheme("test")(config.NopConfig(), workspace.URI{})
+		}
 	}
+	s.connectSchemeFn = connectSchemeFn
 
 	err := s.init(sshConfig{}, workspaceURI)
 	if err != nil {
@@ -84,7 +90,7 @@ func newTestScheme(cfg config.Config, workspaceURI workspace.URI) (workspace.Sch
 }
 
 func newNopScheme(t *testing.T, workspaceURI workspace.URI) *scheme {
-	s, err := newTestScheme(config.NopConfig(), workspaceURI)
+	s, err := newTestScheme(config.NopConfig(), workspaceURI, nil)
 	require.NoError(t, err)
 	return s.(*scheme)
 }
@@ -93,16 +99,19 @@ func TestNewScheme(t *testing.T) {
 	tsuite := []struct {
 		desc         string
 		workspaceURI string
+		expectedURI  string
 		expectedErr  string
 	}{
-		{"no port no user workspace absolute", "ssh://ernest.photography", ""},
-		{"port no user workspace absolute", "ssh://ernest.photography:4222", ""},
-		{"port user workspace absolute", "ssh://ernie@ernest.photography:4222", ""},
-		{"port user workspace absolute slash", "ssh://ernie@ernest.photography:4222/", ""},
-		{"no port user workspace absolute slash", "ssh://ernie@ernest.photography/", ""},
-		{"no host returns error", "ssh:///tmp", "could not parse ssh workspace URI: ssh scheme with empty host is invalid"},
-		{"different scheme returns error", "file:///tmp", "invalid non-ssh scheme"},
-		{"file URI is ok", "ssh://ernie@ernest.photography/tmp/file.txt", ""},
+		{"no port no user workspace absolute", "ssh://ernest.photography", "", ""},
+		{"port no user workspace absolute", "ssh://ernest.photography:4222", "", ""},
+		{"port user workspace absolute", "ssh://ernie@ernest.photography:4222", "", ""},
+		{"port user workspace absolute slash", "ssh://ernie@ernest.photography:4222/", "", ""},
+		{"no port user workspace absolute slash", "ssh://ernie@ernest.photography/", "", ""},
+		{"no port user workspace relative slash", "ssh://ernie@ernest.photography/~/src",
+			"ssh://ernie@ernest.photography/home/ernie/src", ""},
+		{"no host returns error", "ssh:///tmp", "", "could not parse ssh workspace URI: ssh scheme with empty host is invalid"},
+		{"different scheme returns error", "file:///tmp", "", "invalid non-ssh scheme"},
+		{"file URI is ok", "ssh://ernie@ernest.photography/tmp/file.txt", "", ""},
 	}
 
 	for _, tcase := range tsuite {
@@ -111,13 +120,24 @@ func TestNewScheme(t *testing.T) {
 			require.NoError(t, err)
 
 			// sut
-			_, err = newTestScheme(config.NopConfig(), workspaceURI)
+			ch := make(chan string, 1) // when uri is a file URI it gets called twice
+			s, err := newTestScheme(config.NopConfig(), workspaceURI,
+				func(uri workspace.URI, closeHook func(error)) (workspace.Scheme, error) {
+					go func() { ch <- uri.String() }()
+					return workspace.NewNopScheme("test")(config.NopConfig(), uri)
+				})
 			if tcase.expectedErr != "" {
 				assert.EqualError(t, err, tcase.expectedErr)
 			} else {
 				assert.NoError(t, err)
+				expectedURI := tcase.expectedURI
+				if expectedURI == "" {
+					expectedURI = workspaceURI.String()
+				}
+				actualURI := <-ch
+				assert.Equal(t, expectedURI, actualURI)
+				assert.NoError(t, s.Close())
 			}
-
 		})
 	}
 }
@@ -241,7 +261,9 @@ func TestIntegrationManagerIsWorkspaceFile(t *testing.T) {
 
 	manager := workspace.NewManager(config.NopConfig())
 	require.NoError(t, manager.RegisterScheme(workspace.FileScheme, workspace.NewFileScheme))
-	require.NoError(t, manager.RegisterScheme(Scheme, newTestScheme))
+	require.NoError(t, manager.RegisterScheme(Scheme, func(cfg config.Config, uri workspace.URI) (workspace.Scheme, error) {
+		return newTestScheme(cfg, uri, nil)
+	}))
 
 	fileWorkspace, err := manager.AddWorkspace(fileWorkspaceURI)
 	require.NoError(t, err)
