@@ -948,23 +948,24 @@ func loadWorkspaceConfig(cwd workspace.Workspace, uri workspace.URI, c *ideConfi
 	return false, nil
 }
 
-func loadConfig(c *ideConfig, configpath string) error {
+func loadConfig(c *ideConfig, configpath string) (isConfigErr bool, err error) {
 	f, err := os.Open(configpath)
 	if err != nil {
 		initDefaultConfig(c)
 		if os.IsNotExist(err) {
-			return nil
+			return false, nil
 		}
-		return err
+		return false, err
 	}
+	defer f.Close()
 
 	cfg, err := decodeConfig(f)
 	if err != nil {
 		initDefaultConfig(c)
-		return err
+		return true, err
 	}
 
 	initConfig(c, cfg)
 
-	return nil
+	return false, nil
 }

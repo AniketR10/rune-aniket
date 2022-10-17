@@ -54,7 +54,12 @@ func newIdeRecovery(
 
 func (i *ide) init(cwd, cfgfilename, recfilename string,
 	publishEvent func(term.Event) bool, filenames ...string) error {
-	configErr := loadConfig(&i.ideConfig, cfgfilename)
+	isConfigErr, configErr := loadConfig(&i.ideConfig, cfgfilename)
+	// return errors that are not decoding errors but
+	// let decoding errors be just logged
+	if configErr != nil && !isConfigErr {
+		return configErr
+	}
 
 	cwdURI, err := workspace.ParseURI(cwd)
 	if err != nil {
@@ -109,6 +114,13 @@ func (i *ide) init(cwd, cfgfilename, recfilename string,
 	}
 	i.root = root
 	logNonFatalErrs(configErr, i.ideConfig.errors)
+
+	// we probably couldn't load log path
+	// so report to user via stdout
+	if configErr != nil {
+		// this is best effort. log to stdout is a bulletproof fallback
+		fmt.Printf("Config Decode error: %s\n", configErr)
+	}
 
 	return nil
 }

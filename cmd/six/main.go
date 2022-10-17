@@ -28,7 +28,8 @@ var (
 	Commit  = "HEAD"
 	Version string
 
-	configpath *string
+	defaultConfigPath string
+	flagConfigPath    *string
 
 	flagRecover                = flag.String("r", "", "recover from recovery file")
 	flagPprof                  = flag.Bool("p", false, "start pprof server at :6060")
@@ -43,8 +44,8 @@ func init() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	defaultConfigPath := path.Join(home, ".sixrc")
-	configpath = flag.String("c", defaultConfigPath, "config file path")
+	defaultConfigPath = path.Join(home, ".sixrc")
+	flagConfigPath = flag.String("c", defaultConfigPath, "config file path")
 
 	Version = fmt.Sprintf("%s (HEAD is %s)", Tag, Commit)
 }
@@ -127,14 +128,21 @@ func main() {
 		os.Exit(0)
 	}
 
+	if *flagConfigPath != defaultConfigPath {
+		_, err := os.Stat(*flagConfigPath)
+		if err != nil {
+			log.Fatalf("Stat(%s): %s", *flagConfigPath, err)
+		}
+	}
+
 	var i *ide
 	if *flagRecover != "" && len(filenames) != 0 {
-		i, err = newIdeRecovery(*flagWorkspace, *configpath,
+		i, err = newIdeRecovery(*flagWorkspace, *flagConfigPath,
 			filenames[0], *flagRecover, term.PublishEvent)
 	} else if *flagRecover != "" {
-		log.Fatal("flag -r requires to pass the original filename filename")
+		log.Fatal("flag -r requires to pass the original filename")
 	} else {
-		i, err = newIde(*flagWorkspace, *configpath,
+		i, err = newIde(*flagWorkspace, *flagConfigPath,
 			term.PublishEvent, filenames...)
 	}
 

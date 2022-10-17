@@ -144,7 +144,7 @@ func TestDecodeConfigError(t *testing.T) {
 	require.NoError(t, err)
 
 	var ret ideConfig
-	err = loadConfig(&ret, f.Name())
+	_, err = loadConfig(&ret, f.Name())
 	assert.Error(t, err)
 	assertDefaultConfig(t, &ret)
 }
