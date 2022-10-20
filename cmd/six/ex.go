@@ -61,7 +61,6 @@ var (
 		"focusBelowWindow":       (*ex).focusBelowWindow,
 	}
 	exDefaultBindings = map[term.KeyComb]string{
-		{Key: term.KeyCtrlA}: "bufferCloseAll",
 		{Key: term.KeyCtrlW}: "bufferClose",
 		{Key: term.KeyCtrlL}: "bufferNext",
 		{Key: term.KeyCtrlH}: "bufferPrev",
