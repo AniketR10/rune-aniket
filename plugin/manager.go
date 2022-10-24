@@ -126,6 +126,8 @@ func (m *Manager) runPlugin(pluginID, path string, config config.Config) error {
 		return err
 	}
 
+	m.log(log.InfoLevel, "Running plugin %q at path %q", pluginID, path)
+
 	clientWrap := &granteeClientWrap{
 		id:      pluginID,
 		path:    path,
