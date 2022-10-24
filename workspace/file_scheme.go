@@ -14,6 +14,7 @@ import (
 
 	"github.com/ernestrc/blue/logging"
 	multierr "github.com/ernestrc/go-multierror"
+	"github.com/ernestrc/sensible/find"
 	"unstable.build/go-tui/config"
 	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/term/pty"
@@ -136,7 +137,12 @@ func (p *fileScheme) URI(path string) (URI, error) {
 }
 
 func (m *fileScheme) Command(name string, arg ...string) (Pid, error) {
-	cmd := exec.Command(name, arg...)
+	path, err := find.Executable(name)
+	if err != nil {
+		// let Command fail and return the os error
+		path = name
+	}
+	cmd := exec.Command(path, arg...)
 	cmd.Dir = m.workspace.Path()
 	nextPid := atomic.AddInt32(&m.nextPid, 1)
 
