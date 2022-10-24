@@ -361,7 +361,6 @@ func worker(ctx context.Context, wg *sync.WaitGroup, ch, workerCh chan string) {
 			return
 		case path := <-workerCh:
 			dirTraversal(ctx, path, wg, ch, workerCh)
-			wg.Done()
 		}
 	}
 }
@@ -370,23 +369,16 @@ func dirTraversal(
 	ctx context.Context, path string,
 	wg *sync.WaitGroup, ch, workerCh chan string,
 ) error {
-	f, err := os.Open(path)
-	if err != nil {
-		return err
-	}
-	dirNames, err := f.Readdirnames(-1)
+	defer wg.Done()
+
+	dirNames, err := os.ReadDir(path)
 	if err != nil {
 		return err
 	}
 
 	var ret error
-	for _, deeperPath := range dirNames {
-		p := filepath.Join(path, deeperPath)
-		info, err := os.Lstat(p)
-		if err != nil {
-			return err
-		}
-
+	for _, info := range dirNames {
+		p := filepath.Join(path, info.Name())
 		if !info.IsDir() {
 			// ensure dirTraversal returns
 			select {
@@ -404,7 +396,9 @@ func dirTraversal(
 			wg.Done()
 			return ctx.Err()
 		case workerCh <- p:
-			continue
+		default:
+			// the rest of workers are busy, keep going
+			dirTraversal(ctx, p, wg, ch, workerCh)
 		}
 	}
 	return ret

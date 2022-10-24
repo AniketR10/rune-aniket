@@ -132,27 +132,57 @@ func TestFileSchemeURI(t *testing.T) {
 	}
 }
 
-func TestListFiles(t *testing.T) {
+func setupTestDirectory(totalFiles, nestEvery, emptyDirsPerFile int) (URI, func(), error) {
 	dir, err := ioutil.TempDir("", "list_files_test")
-	require.NoError(t, err)
+	if err != nil {
+		return URI{}, nil, err
+	}
 	workspaceURI, err := ParseURI("file://" + dir)
-	require.NoError(t, err)
+	if err != nil {
+		return URI{}, nil, err
+	}
 
+	var closeFns []func()
 	// write test files
-	for i := 0; i < 1000; i++ {
+	for i := 0; i < totalFiles; i++ {
 		f, err := ioutil.TempFile(dir, strconv.Itoa(i))
-		require.NoError(t, err)
+		if err != nil {
+			return URI{}, nil, err
+		}
 		_, err = f.WriteString(strconv.Itoa(i))
-		require.NoError(t, err)
+		if err != nil {
+			return URI{}, nil, err
+		}
 		err = f.Close()
-		require.NoError(t, err)
-		if i%10 == 0 {
+		if err != nil {
+			return URI{}, nil, err
+		}
+		for i := 0; i < emptyDirsPerFile; i++ {
+			// create more dirs than workers
+			_, err = ioutil.TempDir(dir, "emptydir")
+			if err != nil {
+				return URI{}, nil, err
+			}
+		}
+		if i%nestEvery == 0 {
 			// nest next temp file created
 			dir, err = ioutil.TempDir(dir, "nested")
-			require.NoError(t, err)
+			if err != nil {
+				return URI{}, nil, err
+			}
 		}
-		defer os.Remove(f.Name())
+		closeFns = append(closeFns, func() { os.Remove(f.Name()) })
 	}
+	return workspaceURI, func() {
+		for _, closeFn := range closeFns {
+			closeFn()
+		}
+	}, nil
+}
+
+func TestListFiles(t *testing.T) {
+	workspaceURI, closeFn, err := setupTestDirectory(1000, 10, 10)
+	defer closeFn()
 
 	scheme, err := NewFileScheme(config.NopConfig(), workspaceURI)
 	require.NoError(t, err)
@@ -172,4 +202,65 @@ func TestListFiles(t *testing.T) {
 	assert.False(t, ok)
 	assert.Zero(t, path)
 
+}
+
+func benchListFiles(b *testing.B, totalFiles, nestEvery, emptyDirsPerFile int) {
+	workspaceURI, closeFn, err := setupTestDirectory(totalFiles, nestEvery, emptyDirsPerFile)
+	if err != nil {
+		b.Fatalf("error: %s:", err)
+	}
+
+	scheme, err := NewFileScheme(config.NopConfig(), workspaceURI)
+	if err != nil {
+		b.Fatalf("error: %s", err)
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		it, _ := scheme.ListFiles(context.Background())
+
+		// consume iterator
+		ok := true
+		for ok {
+			_, ok, _ = it.Next()
+		}
+	}
+	b.StopTimer()
+	closeFn()
+}
+
+func BenchmarkListFilesTinyDir(b *testing.B) {
+	benchListFiles(b, 5, 5, 5)
+}
+
+func BenchmarkListFilesSmallDirShallow(b *testing.B) {
+	benchListFiles(b, 50, 5, 1)
+}
+
+func BenchmarkListFilesSmallDirDeep(b *testing.B) {
+	benchListFiles(b, 50, 1, 1)
+}
+
+func BenchmarkListFilesLargeDirDeep(b *testing.B) {
+	benchListFiles(b, 500, 10, 1)
+}
+
+func BenchmarkListFilesLargeDirShallow(b *testing.B) {
+	benchListFiles(b, 500, 100, 1)
+}
+
+func BenchmarkListFilesHugeDirDeep(b *testing.B) {
+	benchListFiles(b, 5000, 100, 1)
+}
+
+func BenchmarkListFilesHugeDirShallow(b *testing.B) {
+	benchListFiles(b, 5000, 1000, 1)
+}
+
+func BenchmarkListFilesUberDir(b *testing.B) {
+	benchListFiles(b, 500000, 10000, 1)
+}
+
+func BenchmarkListFilesLotsEmptyDir(b *testing.B) {
+	benchListFiles(b, 500, 100, 100)
 }
