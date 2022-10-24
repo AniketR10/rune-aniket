@@ -803,6 +803,7 @@ type SchemeClient interface {
 	Rename(ctx context.Context, in *RenameRequest, opts ...grpc.CallOption) (*RenameResponse, error)
 	Stat(ctx context.Context, in *StatRequest, opts ...grpc.CallOption) (*StatResponse, error)
 	ReadLink(ctx context.Context, in *ReadLinkRequest, opts ...grpc.CallOption) (*ReadLinkResponse, error)
+	ListFiles(ctx context.Context, in *ListFilesRequest, opts ...grpc.CallOption) (Scheme_ListFilesClient, error)
 	// Scheme API, handler_id based
 	Sync(ctx context.Context, in *SyncRequest, opts ...grpc.CallOption) (*SyncResponse, error)
 	Truncate(ctx context.Context, in *TruncateRequest, opts ...grpc.CallOption) (*TruncateResponse, error)
@@ -882,6 +883,38 @@ func (c *schemeClient) ReadLink(ctx context.Context, in *ReadLinkRequest, opts .
 		return nil, err
 	}
 	return out, nil
+}
+
+func (c *schemeClient) ListFiles(ctx context.Context, in *ListFilesRequest, opts ...grpc.CallOption) (Scheme_ListFilesClient, error) {
+	stream, err := c.cc.NewStream(ctx, &Scheme_ServiceDesc.Streams[0], "/workspace.Scheme/ListFiles", opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &schemeListFilesClient{stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+type Scheme_ListFilesClient interface {
+	Recv() (*ListFilesResponse, error)
+	grpc.ClientStream
+}
+
+type schemeListFilesClient struct {
+	grpc.ClientStream
+}
+
+func (x *schemeListFilesClient) Recv() (*ListFilesResponse, error) {
+	m := new(ListFilesResponse)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
 }
 
 func (c *schemeClient) Sync(ctx context.Context, in *SyncRequest, opts ...grpc.CallOption) (*SyncResponse, error) {
@@ -1030,6 +1063,7 @@ type SchemeServer interface {
 	Rename(context.Context, *RenameRequest) (*RenameResponse, error)
 	Stat(context.Context, *StatRequest) (*StatResponse, error)
 	ReadLink(context.Context, *ReadLinkRequest) (*ReadLinkResponse, error)
+	ListFiles(*ListFilesRequest, Scheme_ListFilesServer) error
 	// Scheme API, handler_id based
 	Sync(context.Context, *SyncRequest) (*SyncResponse, error)
 	Truncate(context.Context, *TruncateRequest) (*TruncateResponse, error)
@@ -1071,6 +1105,9 @@ func (UnimplementedSchemeServer) Stat(context.Context, *StatRequest) (*StatRespo
 }
 func (UnimplementedSchemeServer) ReadLink(context.Context, *ReadLinkRequest) (*ReadLinkResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ReadLink not implemented")
+}
+func (UnimplementedSchemeServer) ListFiles(*ListFilesRequest, Scheme_ListFilesServer) error {
+	return status.Errorf(codes.Unimplemented, "method ListFiles not implemented")
 }
 func (UnimplementedSchemeServer) Sync(context.Context, *SyncRequest) (*SyncResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Sync not implemented")
@@ -1236,6 +1273,27 @@ func _Scheme_ReadLink_Handler(srv interface{}, ctx context.Context, dec func(int
 		return srv.(SchemeServer).ReadLink(ctx, req.(*ReadLinkRequest))
 	}
 	return interceptor(ctx, in, info, handler)
+}
+
+func _Scheme_ListFiles_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(ListFilesRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(SchemeServer).ListFiles(m, &schemeListFilesServer{stream})
+}
+
+type Scheme_ListFilesServer interface {
+	Send(*ListFilesResponse) error
+	grpc.ServerStream
+}
+
+type schemeListFilesServer struct {
+	grpc.ServerStream
+}
+
+func (x *schemeListFilesServer) Send(m *ListFilesResponse) error {
+	return x.ServerStream.SendMsg(m)
 }
 
 func _Scheme_Sync_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
@@ -1600,7 +1658,13 @@ var Scheme_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _Scheme_SetPtySize_Handler,
 		},
 	},
-	Streams:  []grpc.StreamDesc{},
+	Streams: []grpc.StreamDesc{
+		{
+			StreamName:    "ListFiles",
+			Handler:       _Scheme_ListFiles_Handler,
+			ServerStreams: true,
+		},
+	},
 	Metadata: "rpc/workspace.proto",
 }
 

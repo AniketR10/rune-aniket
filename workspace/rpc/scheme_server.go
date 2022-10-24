@@ -340,6 +340,29 @@ func (s *SchemeServerImpl) Seek(ctx context.Context, req *SeekRequest) (
 	return resp, nil
 }
 
+// ListFiles satisfies SchemeServer.
+func (s *SchemeServerImpl) ListFiles(
+	req *ListFilesRequest, srv Scheme_ListFilesServer,
+) error {
+	it, err := s.scheme.ListFiles(srv.Context())
+	if err != nil {
+		return err
+	}
+	for {
+		path, ok, err := it.Next()
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return nil
+		}
+		err = srv.Send(&ListFilesResponse{Path: path})
+		if err != nil {
+			return err
+		}
+	}
+}
+
 func stdTimeToProto(ts time.Time) timestamppb.Timestamp {
 	seconds := ts.Unix()
 	nanos := ts.Nanosecond()

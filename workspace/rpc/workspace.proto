@@ -200,6 +200,13 @@ message SetPtySizeRequest {
 message SetPtySizeResponse {
 }
 
+message ListFilesRequest {
+}
+
+message ListFilesResponse {
+	string path = 1;
+}
+
 service Workspace {
 	rpc URI(URIRequest) returns (URIResponse);
 	rpc Getwd(GetwdRequest) returns (URIResponse);
@@ -236,6 +243,7 @@ service Scheme {
 	rpc Rename(RenameRequest) returns (RenameResponse);
 	rpc Stat(StatRequest) returns (StatResponse);
 	rpc ReadLink(ReadLinkRequest) returns (ReadLinkResponse);
+	rpc ListFiles(ListFilesRequest) returns (stream ListFilesResponse){}
 
 	// Scheme API, handler_id based
 	rpc Sync(SyncRequest) returns (SyncResponse);

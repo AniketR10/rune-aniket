@@ -1,14 +1,18 @@
 package workspace
 
 import (
+	"context"
 	"fmt"
+	"io/ioutil"
 	"os"
 	"os/user"
+	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"unstable.build/go-tui/config"
 )
 
 func newTestFileScheme(uri URI) (*fileScheme, error) {
@@ -25,7 +29,7 @@ func newTestFileScheme(uri URI) (*fileScheme, error) {
 	ret.lookupUser = func(username string) (*user.User, error) {
 		return &user.User{Username: username, HomeDir: fmt.Sprintf("/home/%s", username)}, nil
 	}
-	err := ret.init(uri)
+	err := ret.init(config.NopConfig(), uri)
 	if err != nil {
 		return nil, err
 	}
@@ -126,4 +130,46 @@ func TestFileSchemeURI(t *testing.T) {
 
 		})
 	}
+}
+
+func TestListFiles(t *testing.T) {
+	dir, err := ioutil.TempDir("", "list_files_test")
+	require.NoError(t, err)
+	workspaceURI, err := ParseURI("file://" + dir)
+	require.NoError(t, err)
+
+	// write test files
+	for i := 0; i < 1000; i++ {
+		f, err := ioutil.TempFile(dir, strconv.Itoa(i))
+		require.NoError(t, err)
+		_, err = f.WriteString(strconv.Itoa(i))
+		require.NoError(t, err)
+		err = f.Close()
+		require.NoError(t, err)
+		if i%10 == 0 {
+			// nest next temp file created
+			dir, err = ioutil.TempDir(dir, "nested")
+			require.NoError(t, err)
+		}
+		defer os.Remove(f.Name())
+	}
+
+	scheme, err := NewFileScheme(config.NopConfig(), workspaceURI)
+	require.NoError(t, err)
+
+	it, err := scheme.ListFiles(context.Background())
+	require.NoError(t, err)
+
+	for i := 0; i < 1000; i++ {
+		path, ok, err := it.Next()
+		require.NoError(t, err)
+		assert.True(t, ok)
+		assert.NotZero(t, path)
+	}
+
+	path, ok, err := it.Next()
+	assert.NoError(t, err)
+	assert.False(t, ok)
+	assert.Zero(t, path)
+
 }

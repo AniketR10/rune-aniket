@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	stdErrors "errors"
 	"fmt"
 	"io"
@@ -9,6 +10,7 @@ import (
 	"os"
 	"syscall"
 
+	"github.com/ernestrc/blue/iterator"
 	blupspin "github.com/ernestrc/blue/upspin"
 	multierr "github.com/ernestrc/go-multierror"
 	"unstable.build/go-tui/config"
@@ -221,6 +223,10 @@ func (s *scheme) ReadLink(path string) (string, error) {
 		return "", err
 	}
 	return string(entry.Link), nil
+}
+
+func (s *scheme) ListFiles(ctx context.Context) (iterator.Iterator[string], error) {
+	panic("unimplemented")
 }
 
 func (s *scheme) Command(name string, arg ...string) (workspace.Pid, error) {

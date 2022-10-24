@@ -2,6 +2,7 @@ package workspace
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -12,6 +13,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/ernestrc/blue/iterator"
 	"unstable.build/go-tui/config"
 )
 
@@ -223,6 +225,16 @@ func (m *memoryScheme) NewPty() (Pty, error) {
 
 func (m *memoryScheme) SetPtySize(p Pty, width, height int) error {
 	return errExecute
+}
+
+func (m *memoryScheme) ListFiles(ctx context.Context) (
+	it iterator.Iterator[string], err error,
+) {
+	var files []string
+	for path := range m.files {
+		files = append(files, path)
+	}
+	return iterator.FromSlice(files), nil
 }
 
 func (m *memoryScheme) Close() error {

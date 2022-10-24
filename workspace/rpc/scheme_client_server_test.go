@@ -1,6 +1,7 @@
 package rpc
 
 import (
+	"context"
 	"errors"
 	"io"
 	"io/ioutil"
@@ -11,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ernestrc/blue/iterator"
 	gomock "github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -511,6 +513,37 @@ func testSchemeClientServer(
 					return "", errors.New("boom")
 				})
 			_, err := c.ReadLink("myFile")
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "boom")
+		}},
+		{"ListFiles happy path", func(t *testing.T, ctrl *gomock.Controller, c workspace.Scheme, s *workspacetest.MockScheme) {
+			s.EXPECT().
+				ListFiles(gomock.Any()).
+				DoAndReturn(func(context.Context) (iterator.Iterator[string], error) {
+					return iterator.FromSlice([]string{"a"}), nil
+				})
+			it, err := c.ListFiles(context.Background())
+			require.NoError(t, err)
+			path, ok, err := it.Next()
+			require.NoError(t, err)
+			require.True(t, ok)
+			assert.Equal(t, "a", path)
+
+			path, ok, err = it.Next()
+			require.NoError(t, err)
+			require.False(t, ok)
+			assert.Zero(t, path)
+		}},
+		{"ListFiles error", func(t *testing.T, ctrl *gomock.Controller, c workspace.Scheme, s *workspacetest.MockScheme) {
+			s.EXPECT().
+				ListFiles(gomock.Any()).
+				DoAndReturn(func(context.Context) (iterator.Iterator[string], error) {
+					return nil, errors.New("boom")
+				})
+			l, err := c.ListFiles(context.Background())
+			require.NoError(t, err)
+			require.NotNil(t, l)
+			_, _, err = l.Next()
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), "boom")
 		}},

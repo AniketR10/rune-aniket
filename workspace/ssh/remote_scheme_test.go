@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ernestrc/blue/iterator"
 	"github.com/ernestrc/blue/retry"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
@@ -68,6 +69,10 @@ func expectSchemeAPISuccess(t *testing.T, mock *workspacetest.MockScheme, scheme
 
 	mock.EXPECT().Command(gomock.Any()).Return(workspace.Pid(0), nil).Times(1)
 	_, err = scheme.Command("blah")
+	require.NoError(t, err)
+
+	mock.EXPECT().ListFiles(gomock.Any()).Return(iterator.FromSlice([]string{}), nil).Times(1)
+	_, err = scheme.ListFiles(context.Background())
 	require.NoError(t, err)
 }
 

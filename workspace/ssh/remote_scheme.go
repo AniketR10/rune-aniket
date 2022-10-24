@@ -9,6 +9,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/ernestrc/blue/iterator"
 	"github.com/ernestrc/blue/logging"
 	"github.com/ernestrc/blue/retry"
 	"unstable.build/go-tui/debug"
@@ -240,6 +241,14 @@ func (s *remoteScheme) NewPty() (workspace.Pty, error) {
 		return workspace.Pty{}, err
 	}
 	return scheme.NewPty()
+}
+
+func (s *remoteScheme) ListFiles(ctx context.Context) (iterator.Iterator[string], error) {
+	err, scheme := s.state()
+	if err != nil {
+		return nil, err
+	}
+	return scheme.ListFiles(ctx)
 }
 
 func (s *remoteScheme) SetPtySize(pty workspace.Pty, width, height int) error {

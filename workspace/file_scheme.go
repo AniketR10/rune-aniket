@@ -1,17 +1,22 @@
 package workspace
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net/url"
 	"os"
 	"os/exec"
 	"os/user"
+	"path/filepath"
+	"runtime"
 	"sync"
 	"sync/atomic"
 	"syscall"
 
+	"github.com/ernestrc/blue/iterator"
 	"github.com/ernestrc/blue/logging"
 	multierr "github.com/ernestrc/go-multierror"
 	"github.com/ernestrc/sensible/find"
@@ -39,11 +44,34 @@ func CurrentUserHostURI(path string) (URI, error) {
 	return makeLocalURI(absPath)
 }
 
+// NewFileScheme returns a Scheme that manages resources
+// on the local file system.
+func NewFileScheme(cfg config.Config, workspace URI) (Scheme, error) {
+	ret := new(fileScheme)
+	ret.getUser = user.Current
+	ret.lookupUser = user.Lookup
+	ret.osStat = os.Stat
+	err := ret.init(cfg, workspace)
+	if err != nil {
+		return nil, err
+	}
+	return ret, nil
+}
+
+var defaultWorkers int
+
+func init() {
+	maxProcs := runtime.GOMAXPROCS(0)
+	numCPU := runtime.NumCPU()
+	defaultWorkers = int(math.Min(float64(maxProcs), float64(numCPU)))
+}
+
 type fileScheme struct {
 	osStat     func(path string) (os.FileInfo, error)
 	getUser    func() (*user.User, error)
 	lookupUser func(string) (*user.User, error)
 	workspace  URI
+	workers    int
 	cmds       sync.Map
 	nextPid    int32
 }
@@ -55,21 +83,7 @@ type execCmd struct {
 	*exec.Cmd
 }
 
-// NewFileScheme returns a Scheme that manages resources
-// on the local file system.
-func NewFileScheme(cfg config.Config, workspace URI) (Scheme, error) {
-	ret := new(fileScheme)
-	ret.getUser = user.Current
-	ret.lookupUser = user.Lookup
-	ret.osStat = os.Stat
-	err := ret.init(workspace)
-	if err != nil {
-		return nil, err
-	}
-	return ret, nil
-}
-
-func (p *fileScheme) init(workspace URI) error {
+func (p *fileScheme) init(cfg config.Config, workspace URI) error {
 	if workspace.Host() != "" || workspace.User() != "" || workspace.Scheme() != FileScheme {
 		return errors.New("invalid file URI")
 	}
@@ -82,6 +96,17 @@ func (p *fileScheme) init(workspace URI) error {
 		workspace = Dir(workspace)
 	}
 	p.workspace = workspace
+	p.workers, err = cfg.GetInt("workers")
+	if err == config.ErrNotFound {
+		p.workers = defaultWorkers
+		err = nil
+	}
+	if err != nil {
+		return err
+	}
+	if p.workers == 0 {
+		return errors.New("invalid configuration: cannot set 'workers' to 0")
+	}
 	return nil
 }
 
@@ -327,6 +352,96 @@ func (m *fileScheme) SetPtySize(p Pty, width, height int) error {
 		return fmt.Errorf("pty.Setsize: %v", err)
 	}
 	return nil
+}
+
+func worker(ctx context.Context, wg *sync.WaitGroup, ch, workerCh chan string) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case path := <-workerCh:
+			dirTraversal(ctx, path, wg, ch, workerCh)
+			wg.Done()
+		}
+	}
+}
+
+func dirTraversal(
+	ctx context.Context, path string,
+	wg *sync.WaitGroup, ch, workerCh chan string,
+) error {
+	f, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	dirNames, err := f.Readdirnames(-1)
+	if err != nil {
+		return err
+	}
+
+	var ret error
+	for _, deeperPath := range dirNames {
+		p := filepath.Join(path, deeperPath)
+		info, err := os.Lstat(p)
+		if err != nil {
+			return err
+		}
+
+		if !info.IsDir() {
+			// ensure dirTraversal returns
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case ch <- p:
+				continue
+			}
+		}
+
+		wg.Add(1)
+		select {
+		// ensure dirTraversal returns
+		case <-ctx.Done():
+			wg.Done()
+			return ctx.Err()
+		case workerCh <- p:
+			continue
+		}
+	}
+	return ret
+}
+
+type listFilesIterator struct {
+	ctx context.Context
+	ch  chan string
+}
+
+func (l listFilesIterator) Next() (string, bool, error) {
+	select {
+	case <-l.ctx.Done():
+		return "", false, l.ctx.Err()
+	case path, ok := <-l.ch:
+		return path, ok, nil
+	}
+}
+
+func (m *fileScheme) ListFiles(ctx context.Context) (iterator.Iterator[string], error) {
+	var wg sync.WaitGroup
+	ch := make(chan string)
+	workerCh := make(chan string)
+
+	for i := 0; i < m.workers; i++ {
+		go worker(ctx, &wg, ch, workerCh)
+	}
+
+	wg.Add(1)
+	workerCh <- m.workspace.Path()
+
+	go func() {
+		wg.Wait()
+		close(ch)
+	}()
+
+	return listFilesIterator{ctx: ctx, ch: ch}, nil
 }
 
 func (m *execCmd) Close() error {

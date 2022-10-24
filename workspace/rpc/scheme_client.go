@@ -3,9 +3,11 @@ package rpc
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"time"
 
+	"github.com/ernestrc/blue/iterator"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"unstable.build/go-tui/workspace"
@@ -204,6 +206,30 @@ func (c *schemeClientImpl) ReadLink(filename string) (string, error) {
 		return "", err
 	}
 	return resp.GetFilename(), nil
+}
+
+type listFilesIterator struct {
+	stream Scheme_ListFilesClient
+}
+
+func (i listFilesIterator) Next() (string, bool, error) {
+	resp, err := i.stream.Recv()
+	if err == nil {
+		return resp.GetPath(), true, nil
+	}
+	if err == io.EOF {
+		return "", false, nil
+	}
+	return "", false, err
+}
+
+func (c *schemeClientImpl) ListFiles(ctx context.Context) (iterator.Iterator[string], error) {
+	req := ListFilesRequest{}
+	stream, err := c.client.ListFiles(ctx, &req)
+	if err != nil {
+		return nil, err
+	}
+	return listFilesIterator{stream: stream}, nil
 }
 
 func (c *fileClient) Name() string {

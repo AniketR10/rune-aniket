@@ -5,11 +5,13 @@
 package test
 
 import (
+	context "context"
 	io "io"
 	os "os"
 	reflect "reflect"
 	syscall "syscall"
 
+	iterator "github.com/ernestrc/blue/iterator"
 	gomock "github.com/golang/mock/gomock"
 	cell "unstable.build/go-tui/cell"
 	workspace "unstable.build/go-tui/workspace"
@@ -1187,6 +1189,21 @@ func (m *MockScheme) Wait(arg0 workspace.Pid) error {
 func (mr *MockSchemeMockRecorder) Wait(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Wait", reflect.TypeOf((*MockScheme)(nil).Wait), arg0)
+}
+
+// ListFiles mocks base method.
+func (m *MockScheme) ListFiles(arg0 context.Context) (iterator.Iterator[string], error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListFiles", arg0)
+	ret0, _ := ret[0].(iterator.Iterator[string])
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Wait indicates an expected call of Wait.
+func (mr *MockSchemeMockRecorder) ListFiles(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListFiles", reflect.TypeOf((*MockScheme)(nil).ListFiles), arg0)
 }
 
 // MockFile is a mock of File interface.

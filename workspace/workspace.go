@@ -1,10 +1,12 @@
 package workspace
 
 import (
+	"context"
 	"io"
 	os "os"
 	"syscall"
 
+	"github.com/ernestrc/blue/iterator"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/config"
 )
@@ -135,6 +137,7 @@ type Scheme interface {
 	Stat(path string) (os.FileInfo, error)
 	Lstat(path string) (os.FileInfo, error)
 	ReadLink(path string) (string, error)
+	ListFiles(context.Context) (iterator.Iterator[string], error)
 }
 
 // File abstracts a subset of os.File
