@@ -26,6 +26,7 @@ type WorkspaceClient interface {
 	Getwd(ctx context.Context, in *GetwdRequest, opts ...grpc.CallOption) (*URIResponse, error)
 	Open(ctx context.Context, in *OpenRequest, opts ...grpc.CallOption) (*OpenResponse, error)
 	Remove(ctx context.Context, in *RemoveRequest, opts ...grpc.CallOption) (*RemoveResponse, error)
+	ListFiles(ctx context.Context, in *ListFilesRequest, opts ...grpc.CallOption) (Workspace_ListFilesClient, error)
 	// Executor Service
 	Command(ctx context.Context, in *CommandRequest, opts ...grpc.CallOption) (*CommandResponse, error)
 	Start(ctx context.Context, in *StartRequest, opts ...grpc.CallOption) (*StartResponse, error)
@@ -88,6 +89,38 @@ func (c *workspaceClient) Remove(ctx context.Context, in *RemoveRequest, opts ..
 		return nil, err
 	}
 	return out, nil
+}
+
+func (c *workspaceClient) ListFiles(ctx context.Context, in *ListFilesRequest, opts ...grpc.CallOption) (Workspace_ListFilesClient, error) {
+	stream, err := c.cc.NewStream(ctx, &Workspace_ServiceDesc.Streams[0], "/workspace.Workspace/ListFiles", opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &workspaceListFilesClient{stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+type Workspace_ListFilesClient interface {
+	Recv() (*ListFilesResponse, error)
+	grpc.ClientStream
+}
+
+type workspaceListFilesClient struct {
+	grpc.ClientStream
+}
+
+func (x *workspaceListFilesClient) Recv() (*ListFilesResponse, error) {
+	m := new(ListFilesResponse)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
 }
 
 func (c *workspaceClient) Command(ctx context.Context, in *CommandRequest, opts ...grpc.CallOption) (*CommandResponse, error) {
@@ -242,6 +275,7 @@ type WorkspaceServer interface {
 	Getwd(context.Context, *GetwdRequest) (*URIResponse, error)
 	Open(context.Context, *OpenRequest) (*OpenResponse, error)
 	Remove(context.Context, *RemoveRequest) (*RemoveResponse, error)
+	ListFiles(*ListFilesRequest, Workspace_ListFilesServer) error
 	// Executor Service
 	Command(context.Context, *CommandRequest) (*CommandResponse, error)
 	Start(context.Context, *StartRequest) (*StartResponse, error)
@@ -278,6 +312,9 @@ func (UnimplementedWorkspaceServer) Open(context.Context, *OpenRequest) (*OpenRe
 }
 func (UnimplementedWorkspaceServer) Remove(context.Context, *RemoveRequest) (*RemoveResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Remove not implemented")
+}
+func (UnimplementedWorkspaceServer) ListFiles(*ListFilesRequest, Workspace_ListFilesServer) error {
+	return status.Errorf(codes.Unimplemented, "method ListFiles not implemented")
 }
 func (UnimplementedWorkspaceServer) Command(context.Context, *CommandRequest) (*CommandResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Command not implemented")
@@ -410,6 +447,27 @@ func _Workspace_Remove_Handler(srv interface{}, ctx context.Context, dec func(in
 		return srv.(WorkspaceServer).Remove(ctx, req.(*RemoveRequest))
 	}
 	return interceptor(ctx, in, info, handler)
+}
+
+func _Workspace_ListFiles_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(ListFilesRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(WorkspaceServer).ListFiles(m, &workspaceListFilesServer{stream})
+}
+
+type Workspace_ListFilesServer interface {
+	Send(*ListFilesResponse) error
+	grpc.ServerStream
+}
+
+type workspaceListFilesServer struct {
+	grpc.ServerStream
+}
+
+func (x *workspaceListFilesServer) Send(m *ListFilesResponse) error {
+	return x.ServerStream.SendMsg(m)
 }
 
 func _Workspace_Command_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
@@ -788,7 +846,13 @@ var Workspace_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _Workspace_Stat_Handler,
 		},
 	},
-	Streams:  []grpc.StreamDesc{},
+	Streams: []grpc.StreamDesc{
+		{
+			StreamName:    "ListFiles",
+			Handler:       _Workspace_ListFiles_Handler,
+			ServerStreams: true,
+		},
+	},
 	Metadata: "rpc/workspace.proto",
 }
 

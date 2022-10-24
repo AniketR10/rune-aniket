@@ -584,6 +584,21 @@ func (m *MockWorkspace) Command(name string, arg ...string) (workspace.Pid, erro
 	return ret0, ret1
 }
 
+// ListFiles mocks base method.
+func (m *MockWorkspace) ListFiles(arg0 context.Context) (iterator.Iterator[string], error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListFiles", arg0)
+	ret0, _ := ret[0].(iterator.Iterator[string])
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListFiles indicates an expected call of Wait.
+func (mr *MockWorkspaceMockRecorder) ListFiles(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListFiles", reflect.TypeOf((*MockWorkspace)(nil).ListFiles), arg0)
+}
+
 // Command indicates an expected call of Command.
 func (mr *MockWorkspaceMockRecorder) Command(name interface{}, arg ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
@@ -1200,7 +1215,7 @@ func (m *MockScheme) ListFiles(arg0 context.Context) (iterator.Iterator[string],
 	return ret0, ret1
 }
 
-// Wait indicates an expected call of Wait.
+// ListFiles indicates an expected call of Wait.
 func (mr *MockSchemeMockRecorder) ListFiles(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListFiles", reflect.TypeOf((*MockScheme)(nil).ListFiles), arg0)

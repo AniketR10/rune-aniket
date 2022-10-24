@@ -139,6 +139,13 @@ func (s *Server) Remove(ctx context.Context, req *RemoveRequest) (
 	return s.sharedRPCImpl.Remove(ctx, req)
 }
 
+// ListFiles satisfies WorkspaceServer.
+func (s *Server) ListFiles(
+	req *ListFilesRequest, srv Workspace_ListFilesServer,
+) error {
+	return s.sharedRPCImpl.ListFiles(req, srv)
+}
+
 // Stop closes all resources associated with this server.
 func (s *Server) Stop() {
 	s.executorServer.stop()

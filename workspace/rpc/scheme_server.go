@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ernestrc/blue/iterator"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"unstable.build/go-tui/workspace"
 )
@@ -25,6 +26,7 @@ type SchemeServerImpl struct {
 type sharedRPCImpl struct {
 	executorServer
 	scheme interface {
+		ListFiles(context.Context) (iterator.Iterator[string], error)
 		Open(path string, flag int, mode os.FileMode) (workspace.File, *workspace.Error)
 		Remove(path string) error
 		NewPty() (workspace.Pty, error)
@@ -52,6 +54,13 @@ func (s *SchemeServerImpl) Open(ctx context.Context, req *OpenRequest) (
 	*OpenResponse, error,
 ) {
 	return s.sharedRPCImpl.Open(ctx, req)
+}
+
+// ListFiles satisfies SchemeServer.
+func (s *SchemeServerImpl) ListFiles(
+	req *ListFilesRequest, srv Scheme_ListFilesServer,
+) error {
+	return s.sharedRPCImpl.ListFiles(req, srv)
 }
 
 func getOpenRequestFlag(req *OpenRequest) int {
@@ -340,8 +349,8 @@ func (s *SchemeServerImpl) Seek(ctx context.Context, req *SeekRequest) (
 	return resp, nil
 }
 
-// ListFiles satisfies SchemeServer.
-func (s *SchemeServerImpl) ListFiles(
+// ListFiles satisfies SchemeServer and WorkspaceServer.
+func (s *sharedRPCImpl) ListFiles(
 	req *ListFilesRequest, srv Scheme_ListFilesServer,
 ) error {
 	it, err := s.scheme.ListFiles(srv.Context())

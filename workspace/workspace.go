@@ -25,6 +25,10 @@ type API interface {
 	// Remove removes the file at path.
 	Remove(path string) error
 
+	// ListFiles walks the workspace directory recursively and returns
+	// an iterator that will return all file paths.
+	ListFiles(ctx context.Context) (iterator.Iterator[string], error)
+
 	Terminal
 
 	Executor

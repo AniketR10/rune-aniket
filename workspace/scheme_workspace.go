@@ -1,12 +1,14 @@
 package workspace
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
 	"os"
 	"syscall"
 
+	"github.com/ernestrc/blue/iterator"
 	"github.com/ernestrc/blue/logging"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/debug"
@@ -125,6 +127,10 @@ func (w *schemeWorkspace) Load(
 		}
 	}
 	return
+}
+
+func (w *schemeWorkspace) ListFiles(ctx context.Context) (iterator.Iterator[string], error) {
+	return w.p.ListFiles(ctx)
 }
 
 func (w *schemeWorkspace) Open(path string, flag int, mode os.FileMode) (File, *Error) {

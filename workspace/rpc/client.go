@@ -7,6 +7,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/ernestrc/blue/iterator"
 	"google.golang.org/grpc"
 	"unstable.build/go-tui/workspace"
 )
@@ -81,6 +82,15 @@ func (c *Client) Getwd() (workspace.URI, error) {
 		return workspace.URI{}, fmt.Errorf("Could not parse URI response from server: %w", err)
 	}
 	return uri, nil
+}
+
+func (c *Client) ListFiles(ctx context.Context) (iterator.Iterator[string], error) {
+	req := ListFilesRequest{}
+	stream, err := c.client.ListFiles(ctx, &req)
+	if err != nil {
+		return nil, err
+	}
+	return listFilesIterator{stream: stream}, nil
 }
 
 // Close closes all resources associated with this client.

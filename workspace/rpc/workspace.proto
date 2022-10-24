@@ -212,6 +212,7 @@ service Workspace {
 	rpc Getwd(GetwdRequest) returns (URIResponse);
 	rpc Open(OpenRequest) returns (OpenResponse);
 	rpc Remove(RemoveRequest) returns (RemoveResponse);
+	rpc ListFiles(ListFilesRequest) returns (stream ListFilesResponse){}
 	
 	// Executor Service
 	rpc Command(CommandRequest) returns (CommandResponse);
