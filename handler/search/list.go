@@ -492,6 +492,17 @@ func (l *List) Wait() {
 	<-ctx.Done()
 }
 
+// Cancel cancels the current search if there's any.
+func (l *List) Cancel() {
+	l.mu.Lock()
+	cancel := l.cancelSearch
+	l.mu.Unlock()
+	if cancel == nil {
+		return
+	}
+	cancel()
+}
+
 func (l *List) drawList(w term.Writer) {
 	l.list.Virtual.Draw(w)
 }

@@ -42,6 +42,8 @@ func (s simpleHandler) Handle(ev term.Event) (exit, handled bool) {
 			exit = true
 			s.fn(string(item.data))
 		}
+	case term.KeyCtrlC:
+		s.Cancel()
 	case term.KeyEsc:
 		handled = true
 		exit = true

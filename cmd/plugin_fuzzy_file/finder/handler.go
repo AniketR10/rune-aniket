@@ -2,6 +2,7 @@ package finder
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -40,24 +41,26 @@ func Permissions() []plugin.Permission {
 }
 
 type fuzzyFinderHandler struct {
-	s            browser.Storage
-	f            browser.ResourceOpener
-	p            browser.EventPublisher
-	m            browser.Messenger
-	ed           text.Editor
-	executor     workspace.API
-	invokeWindow browser.Window
-	historyKey   term.KeyComb
-	mu           sync.Mutex
-	cmdStr       string
-	getResource  func(workspace.API, string) (workspace.URI, term.Coordinates)
-	pid          workspace.Pid
-	quitChan     chan struct{}
-	height       int
-	list         search.List
-	background   tui.Component
-	listHandler  tui.Handler
-	killed       bool
+	s                     browser.Storage
+	f                     browser.ResourceOpener
+	p                     browser.EventPublisher
+	m                     browser.Messenger
+	ed                    text.Editor
+	workspace             workspace.API
+	invokeWindow          browser.Window
+	historyKey            term.KeyComb
+	mu                    sync.Mutex
+	cmdStr                string
+	getResource           func(workspace.API, string) (workspace.URI, term.Coordinates)
+	pid                   workspace.Pid
+	quitChan              chan struct{}
+	height                int
+	list                  search.List
+	background            tui.Component
+	listHandler           tui.Handler
+	killed                bool
+	useWorkspaceListFiles bool
+	cancelScan            func()
 
 	history search.History
 }
@@ -72,7 +75,7 @@ func (h *fuzzyFinderHandler) execCommand(command string) (workspace.Pid, error) 
 
 // ExecCommandWith executes the given command with the specified shell
 func (h *fuzzyFinderHandler) execCommandWith(shell string, command string) (workspace.Pid, error) {
-	cmd, err := h.executor.Command(shell, "-c", command)
+	cmd, err := h.workspace.Command(shell, "-c", command)
 	if err != nil {
 		return 0, fmt.Errorf("failed to create command: %w", err)
 	}
@@ -81,7 +84,7 @@ func (h *fuzzyFinderHandler) execCommandWith(shell string, command string) (work
 
 // KillCommand kills the process for the given command
 func (h *fuzzyFinderHandler) killCommand() error {
-	return h.executor.Signal(h.pid, syscall.SIGKILL)
+	return h.workspace.Signal(h.pid, syscall.SIGKILL)
 }
 
 func (h *fuzzyFinderHandler) readCommand(src io.Reader) {
@@ -102,6 +105,9 @@ func (h *fuzzyFinderHandler) readCommand(src io.Reader) {
 			}
 		}
 		if err != nil {
+			if err != io.EOF {
+				log.Error(err)
+			}
 			break
 		}
 	}
@@ -170,7 +176,7 @@ func (h *fuzzyFinderHandler) setMessage(msg string, args ...interface{}) error {
 }
 
 func (h *fuzzyFinderHandler) openResource(searchQuery, data string) {
-	resource, pos := h.getResource(h.executor, data)
+	resource, pos := h.getResource(h.workspace, data)
 	handler, err := h.open(resource)
 	if err != nil {
 		merr := h.setMessage("Open: %v", err)
@@ -195,22 +201,78 @@ func (h *fuzzyFinderHandler) publishInterrupt() {
 	}
 }
 
-func (h *fuzzyFinderHandler) scanData() {
-	exec, err := h.execCommand(h.cmdStr)
-	h.mu.Lock()
-	h.pid = exec
-	h.mu.Unlock()
+func (h *fuzzyFinderHandler) scanDataViaWorkspaceAPI() {
+	log.Debugf("using workspace API to list files")
+
+	ctx := context.Background()
+	ctx, cancelScan := context.WithCancel(ctx)
+	defer cancelScan()
+
+	it, err := h.workspace.ListFiles(ctx)
 	if err != nil {
 		log.Error(err)
 		return
 	}
 
-	out, err := h.executor.StdoutPipe(h.pid)
+	h.mu.Lock()
+	datachan := h.list.Push()
+	h.cancelScan = cancelScan
+	h.mu.Unlock()
+
+	defer close(datachan)
+
+	for {
+		path, ok, err := it.Next()
+		if err != nil {
+			log.Error(err)
+			return
+		}
+		if !ok {
+			log.Infof("Done listing files: EOF")
+			break
+		}
+		select {
+		case datachan <- []byte(path):
+		case <-ctx.Done():
+			log.Infof("Done listing files: %s", ctx.Err())
+			return
+		case <-h.quitChan:
+			log.Infof("Done listing files: closed")
+			return
+		}
+	}
+}
+
+func (h *fuzzyFinderHandler) scanData() {
+	start := time.Now()
+	defer func() {
+		if log.IsLevelEnabled(log.DebugLevel) {
+			log.Debugf("Done listing files in %s", time.Since(start))
+		}
+	}()
+	if h.useWorkspaceListFiles {
+		h.scanDataViaWorkspaceAPI()
+		return
+	}
+
+	log.Infof("using resource list command: %s", h.cmdStr)
+
+	exec, err := h.execCommand(h.cmdStr)
+	h.mu.Lock()
+	h.pid = exec
+	h.mu.Unlock()
+	if err != nil {
+		log.Debug(err)
+		h.scanDataViaWorkspaceAPI()
+		return
+	}
+
+	out, err := h.workspace.StdoutPipe(h.pid)
 	if err != nil {
 		log.Errorf("command stdout failed; %v", err)
 		return
 	}
-	err = h.executor.Start(h.pid)
+	err = h.workspace.Start(h.pid)
 	if err != nil {
 		log.Errorf("command start failed; %v", err)
 		return
@@ -218,7 +280,7 @@ func (h *fuzzyFinderHandler) scanData() {
 
 	h.readCommand(out)
 
-	err = h.executor.Wait(h.pid)
+	err = h.workspace.Wait(h.pid)
 
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -242,7 +304,7 @@ func (h *fuzzyFinderHandler) initGrants(
 	for _, grant := range grants {
 		switch grant.Permission {
 		case plugin.PermissionWorkspace:
-			h.executor, err = plugin.Workspace(grant.Token, broker)
+			h.workspace, err = plugin.Workspace(grant.Token, broker)
 		case plugin.PermissionEditor:
 			h.ed, err = plugin.Editor(grant.Token, broker)
 		case plugin.PermissionBrowserMessenger:
@@ -295,7 +357,6 @@ func New(
 	h.historyKey = historyKey
 	h.getResource = getResource
 	h.cmdStr = command
-	log.Printf("using resource list command: %s", h.cmdStr)
 
 	h.quitChan = make(chan struct{})
 
@@ -313,6 +374,13 @@ func New(
 		defCell.Fg = listConfig.ElementAttr.Fg
 	}
 	h.background = component.WithBackground(h.listHandler, defCell)
+
+	h.useWorkspaceListFiles, err = cfg.GetBool("use_workspace_list_files")
+	if err != nil && err != config.ErrNotFound {
+		log.Errorf("failed to load 'use_workspace_list_files' from config: %v", err)
+	}
+
+	log.Debugf("'use_workspace_list_files' set to %v", h.useWorkspaceListFiles)
 
 	go h.scanData()
 
@@ -416,6 +484,15 @@ func (h *fuzzyFinderHandler) Handle(ev term.Event) (exit, handled bool) {
 		h.writeLastSearchQuery()
 		handled = true
 		return
+	}
+
+	if ev.KeyComb().Key == term.KeyCtrlC {
+		if h.cancelScan != nil {
+			h.cancelScan()
+		}
+		if h.pid != 0 {
+			_ = h.killCommand()
+		}
 	}
 
 	exit, handled = h.listHandler.Handle(ev)
