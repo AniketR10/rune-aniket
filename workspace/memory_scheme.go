@@ -57,16 +57,16 @@ type memFileInfo struct {
 	modTime  time.Time
 }
 
-func (p *memoryScheme) init(workspace URI) error {
+func (m *memoryScheme) init(workspace URI) error {
 	if workspace.Host() != "" || workspace.User() != "" || workspace.Scheme() != MemoryScheme {
 		return errors.New("invalid file URI")
 	}
-	p.workspace = workspace
-	p.files = make(map[string]*memFile)
+	m.workspace = workspace
+	m.files = make(map[string]*memFile)
 	return nil
 }
 
-func (p *memoryScheme) Open(path string, flag int, _ os.FileMode) (File, *Error) {
+func (m *memoryScheme) Open(path string, flag int, _ os.FileMode) (File, *Error) {
 	path = filepath.Clean(path)
 
 	filename := filepath.Base(path)
@@ -74,16 +74,16 @@ func (p *memoryScheme) Open(path string, flag int, _ os.FileMode) (File, *Error)
 		return nil, NopError(fmt.Errorf("invalid file %q", path))
 	}
 
-	uri, err := p.URI(path)
+	uri, err := m.URI(path)
 	if err != nil {
 		return nil, NopError(err)
 	}
 	uriStr := uri.String()
 
-	p.mu.Lock()
-	defer p.mu.Unlock()
+	m.mu.Lock()
+	defer m.mu.Unlock()
 
-	f, ok := p.files[uriStr]
+	f, ok := m.files[uriStr]
 	if !ok && flag&os.O_CREATE == 0 {
 		return nil, &Error{IsNotExist: true}
 	}
@@ -101,67 +101,67 @@ func (p *memoryScheme) Open(path string, flag int, _ os.FileMode) (File, *Error)
 		f = &memFile{
 			filename: filename,
 		}
-		p.files[uriStr] = f
+		m.files[uriStr] = f
 	}
 
 	return f, nil
 }
 
-func (p *memoryScheme) Remove(path string) error {
-	uri, err := p.URI(path)
+func (m *memoryScheme) Remove(path string) error {
+	uri, err := m.URI(path)
 	if err != nil {
 		return err
 	}
 
-	p.mu.Lock()
-	defer p.mu.Unlock()
+	m.mu.Lock()
+	defer m.mu.Unlock()
 
 	uriStr := uri.String()
-	_, ok := p.files[uriStr]
+	_, ok := m.files[uriStr]
 	if !ok {
 		return Error{IsNotExist: true}.ToError()
 	}
 
-	delete(p.files, uriStr)
+	delete(m.files, uriStr)
 	return nil
 }
 
-func (p *memoryScheme) Rename(old, new string) error {
-	oldURI, err := p.URI(old)
+func (m *memoryScheme) Rename(old, new string) error {
+	oldURI, err := m.URI(old)
 	if err != nil {
 		return err
 	}
-	newURI, err := p.URI(new)
+	newURI, err := m.URI(new)
 	if err != nil {
 		return err
 	}
 	oldURIStr := oldURI.String()
 	newURIStr := newURI.String()
 
-	p.mu.Lock()
-	defer p.mu.Unlock()
+	m.mu.Lock()
+	defer m.mu.Unlock()
 
-	f, ok := p.files[oldURIStr]
+	f, ok := m.files[oldURIStr]
 	if !ok {
 		return Error{IsNotExist: true}.ToError()
 	}
-	delete(p.files, oldURIStr)
+	delete(m.files, oldURIStr)
 	f.filename = filepath.Base(new)
-	p.files[newURIStr] = f
+	m.files[newURIStr] = f
 	return nil
 }
 
-func (p *memoryScheme) Stat(path string) (os.FileInfo, error) {
-	uri, err := p.URI(path)
+func (m *memoryScheme) Stat(path string) (os.FileInfo, error) {
+	uri, err := m.URI(path)
 	if err != nil {
 		return nil, err
 	}
 
-	p.mu.Lock()
-	defer p.mu.Unlock()
+	m.mu.Lock()
+	defer m.mu.Unlock()
 
 	uriStr := uri.String()
-	f, ok := p.files[uriStr]
+	f, ok := m.files[uriStr]
 	if !ok {
 		return nil, Error{IsNotExist: true}.ToError()
 	}
@@ -169,11 +169,11 @@ func (p *memoryScheme) Stat(path string) (os.FileInfo, error) {
 	return f.Stat()
 }
 
-func (p *memoryScheme) Lstat(path string) (os.FileInfo, error) {
-	return p.Stat(path)
+func (m *memoryScheme) Lstat(path string) (os.FileInfo, error) {
+	return m.Stat(path)
 }
 
-func (p *memoryScheme) ReadLink(path string) (string, error) {
+func (m *memoryScheme) ReadLink(path string) (string, error) {
 	return path, nil
 }
 
@@ -181,14 +181,15 @@ func (m *memoryScheme) nopUser() (*user.User, error) {
 	return &user.User{}, nil
 }
 
-func (p *memoryScheme) URI(path string) (URI, error) {
-	absPath, err := ExpandPath(path, p.nopUser, func() (string, error) {
-		return p.workspace.Path(), nil
+func (m *memoryScheme) URI(path string) (URI, error) {
+	absPath, err := ExpandPath(path, m.nopUser, func() (string, error) {
+		return m.workspace.Path(), nil
 	})
 	if err != nil {
 		return URI{}, err
 	}
-	return makeLocalURI(absPath)
+	uriStr := "memory://" + absPath
+	return ParseURI(uriStr)
 }
 
 func (m *memoryScheme) Command(name string, arg ...string) (Pid, error) {
@@ -231,8 +232,9 @@ func (m *memoryScheme) ListFiles(ctx context.Context) (
 	it iterator.Iterator[string], err error,
 ) {
 	var files []string
-	for path := range m.files {
-		files = append(files, path)
+	for uri := range m.files {
+		cwdlen := len(m.workspace.String())
+		files = append(files, uri[cwdlen:])
 	}
 	return iterator.FromSlice(files), nil
 }

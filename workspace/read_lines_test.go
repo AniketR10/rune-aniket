@@ -6,7 +6,6 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/ernestrc/blue/iterator"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"unstable.build/go-tui/config"
@@ -29,6 +28,18 @@ func TestReadLines(t *testing.T) {
 		{"one file returns data", []readLinesTestFile{{"a", "0\n1"}}, "", []string{"a:1:0", "a:2:1"}},
 		{"multiple files returns data", []readLinesTestFile{{"a", "4\n5"}, {"b", "0\n1"}}, "",
 			[]string{"a:1:4", "a:2:5", "b:1:0", "b:2:1"}},
+		{"more files than workers", []readLinesTestFile{
+			{"a", "4\n5"}, {"b", "0\n1"}, {"c", ""}, {"d", ""}, {"e", ""}, {"f", ""}, {"g", ""},
+			{"z", "4\n5"}, {"y", "0\n1"}, {"x", ""}, {"w", ""}, {"s", ""}, {"r", ""}, {"n", ""},
+			{"x1", ""}, {"x2", ""}, {"x3", ""}, {"x4", ""}, {"x5", ""},
+			{"xx1", ""}, {"xx2", ""}, {"xx3", ""}, {"xx4", ""}, {"xx5", ""},
+			{"xxx1", ""}, {"xxx2", ""}, {"xxx3", ""}, {"xxx4", ""}, {"xxx5", ""},
+			{"xxxx1", ""}, {"xxxx2", ""}, {"xxxx3", ""}, {"xxxx4", ""}, {"xxxx5", ""},
+			{"xxxxx1", ""}, {"xxxxx1x2", ""}, {"xxxxx1x3", ""}, {"xxxxx1x4", ""}, {"xxxxx1x5", ""},
+		}, "", []string{
+			"a:1:4", "a:2:5", "b:1:0", "b:2:1",
+			"y:1:0", "y:2:1", "z:1:4", "z:2:5",
+		}},
 	}
 
 	for _, tcase := range tsuite {
@@ -39,7 +50,6 @@ func TestReadLines(t *testing.T) {
 			require.NoError(t, err)
 			workspace := NewSchemeWorkspace(uri, scheme)
 
-			var paths []string
 			for _, file := range tcase.inFiles {
 				f, werr := scheme.Open(file.fullPath, os.O_CREATE, 0)
 				require.Nil(t, werr)
@@ -47,9 +57,9 @@ func TestReadLines(t *testing.T) {
 				require.NoError(t, err)
 				require.NoError(t, f.Sync())
 				require.NoError(t, f.Close())
-				paths = append(paths, file.fullPath)
 			}
-			itIn := iterator.FromSlice(paths)
+			itIn, err := scheme.ListFiles(context.Background())
+			require.NoError(t, err)
 
 			// sut
 			itOut, err := ReadLines(context.Background(), workspace, itIn)
