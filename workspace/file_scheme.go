@@ -107,6 +107,10 @@ func (p *fileScheme) init(cfg config.Config, workspace URI) error {
 	if p.workers == 0 {
 		return errors.New("invalid configuration: cannot set 'workers' to 0")
 	}
+	debug.StandardLogger().
+		WithField(logging.KeyClass, "fileScheme").
+		Debugf("init: initialized with %d ListFiles workers", p.workers)
+
 	return nil
 }
 
@@ -143,12 +147,12 @@ func (p *fileScheme) ReadLink(path string) (string, error) {
 	return os.Readlink(path)
 }
 
-func (m *fileScheme) getUserOrLookup() (*user.User, error) {
-	if m.workspace.parsed.User == nil {
-		return m.getUser()
+func (p *fileScheme) getUserOrLookup() (*user.User, error) {
+	if p.workspace.parsed.User == nil {
+		return p.getUser()
 	}
-	username := m.workspace.parsed.User.Username()
-	return m.lookupUser(username)
+	username := p.workspace.parsed.User.Username()
+	return p.lookupUser(username)
 }
 
 func (p *fileScheme) URI(path string) (URI, error) {
@@ -161,35 +165,35 @@ func (p *fileScheme) URI(path string) (URI, error) {
 	return makeLocalURI(absPath)
 }
 
-func (m *fileScheme) Command(name string, arg ...string) (Pid, error) {
+func (p *fileScheme) Command(name string, arg ...string) (Pid, error) {
 	path, err := find.Executable(name)
 	if err != nil {
 		// let Command fail and return the os error
 		path = name
 	}
 	cmd := exec.Command(path, arg...)
-	cmd.Dir = m.workspace.Path()
-	nextPid := atomic.AddInt32(&m.nextPid, 1)
+	cmd.Dir = p.workspace.Path()
+	nextPid := atomic.AddInt32(&p.nextPid, 1)
 
 	debug.StandardLogger().
 		WithField(logging.KeyClass, "fileScheme").
-		WithField("URI", m.workspace.String()).
+		WithField("URI", p.workspace.String()).
 		Debugf("exec.Command: (%#v, pid=%d)", cmd, nextPid)
 
-	m.cmds.Store(Pid(nextPid), &execCmd{Cmd: cmd})
+	p.cmds.Store(Pid(nextPid), &execCmd{Cmd: cmd})
 	return Pid(nextPid), nil
 }
 
-func (m *fileScheme) getCmdForPid(pid Pid) (*execCmd, bool) {
-	c, ok := m.cmds.Load(pid)
+func (p *fileScheme) getCmdForPid(pid Pid) (*execCmd, bool) {
+	c, ok := p.cmds.Load(pid)
 	if ok {
 		return c.(*execCmd), true
 	}
 	return nil, false
 }
 
-func (m *fileScheme) Start(pid Pid) error {
-	c, ok := m.getCmdForPid(pid)
+func (p *fileScheme) Start(pid Pid) error {
+	c, ok := p.getCmdForPid(pid)
 	if !ok {
 		return errProcNotFound
 	}
@@ -206,8 +210,8 @@ func (m *fileScheme) Start(pid Pid) error {
 	return nil
 }
 
-func (m *fileScheme) Signal(pid Pid, signal syscall.Signal) error {
-	c, ok := m.getCmdForPid(pid)
+func (p *fileScheme) Signal(pid Pid, signal syscall.Signal) error {
+	c, ok := p.getCmdForPid(pid)
 	if !ok {
 		return errProcNotFound
 	}
@@ -225,8 +229,8 @@ func (m *fileScheme) Signal(pid Pid, signal syscall.Signal) error {
 	return nil
 }
 
-func (m *fileScheme) StderrPipe(pid Pid) (io.ReadCloser, error) {
-	c, ok := m.getCmdForPid(pid)
+func (p *fileScheme) StderrPipe(pid Pid) (io.ReadCloser, error) {
+	c, ok := p.getCmdForPid(pid)
 	if !ok {
 		return nil, errProcNotFound
 	}
@@ -241,8 +245,8 @@ func (m *fileScheme) StderrPipe(pid Pid) (io.ReadCloser, error) {
 	return pipe, err
 }
 
-func (m *fileScheme) StdinPipe(pid Pid) (io.WriteCloser, error) {
-	c, ok := m.getCmdForPid(pid)
+func (p *fileScheme) StdinPipe(pid Pid) (io.WriteCloser, error) {
+	c, ok := p.getCmdForPid(pid)
 	if !ok {
 		return nil, errProcNotFound
 	}
@@ -257,8 +261,8 @@ func (m *fileScheme) StdinPipe(pid Pid) (io.WriteCloser, error) {
 	return pipe, err
 }
 
-func (m *fileScheme) StdoutPipe(pid Pid) (io.ReadCloser, error) {
-	c, ok := m.getCmdForPid(pid)
+func (p *fileScheme) StdoutPipe(pid Pid) (io.ReadCloser, error) {
+	c, ok := p.getCmdForPid(pid)
 	if !ok {
 		return nil, errProcNotFound
 	}
@@ -273,12 +277,12 @@ func (m *fileScheme) StdoutPipe(pid Pid) (io.ReadCloser, error) {
 	return pipe, err
 }
 
-func (m *fileScheme) Wait(pid Pid) error {
-	c, ok := m.getCmdForPid(pid)
+func (p *fileScheme) Wait(pid Pid) error {
+	c, ok := p.getCmdForPid(pid)
 	if !ok {
 		return errProcNotFound
 	}
-	defer m.cmds.Delete(pid)
+	defer p.cmds.Delete(pid)
 
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -290,15 +294,15 @@ func (m *fileScheme) Wait(pid Pid) error {
 	return err
 }
 
-func (m *fileScheme) NewPty() (Pty, error) {
+func (p *fileScheme) NewPty() (Pty, error) {
 	shell := os.Getenv("SHELL")
 	if shell == "" {
 		shell = "/bin/sh"
 	}
 
 	// setup command
-	pid, _ := m.Command(shell)
-	cmd, _ := m.getCmdForPid(pid)
+	pid, _ := p.Command(shell)
+	cmd, _ := p.getCmdForPid(pid)
 	if cmd.SysProcAttr == nil {
 		cmd.SysProcAttr = &syscall.SysProcAttr{}
 	}
@@ -338,8 +342,8 @@ func (m *fileScheme) NewPty() (Pty, error) {
 	}, nil
 }
 
-func (m *fileScheme) SetPtySize(p Pty, width, height int) error {
-	ptyFile, ok := p.Master.(*os.File)
+func (p *fileScheme) SetPtySize(pp Pty, width, height int) error {
+	ptyFile, ok := pp.Master.(*os.File)
 	if !ok {
 		return fmt.Errorf("extraneous Pty: %#v", p)
 	}
@@ -448,16 +452,16 @@ func (l *listFilesIterator) Err() error {
 	return multierr.Append(l.err, l.ctx.Err())
 }
 
-func (m *fileScheme) ListFiles(ctx context.Context) (iterator.Iterator[string], error) {
+func (p *fileScheme) ListFiles(ctx context.Context) (iterator.Iterator[string], error) {
 	var wg sync.WaitGroup
 	ch := make(chan string)
 	workerCh := make(chan string)
-	errors := make([]error, m.workers)
+	errors := make([]error, p.workers)
 	iterator := &listFilesIterator{ctx: ctx, ch: ch}
 
-	for i := 0; i < m.workers; i++ {
+	for i := 0; i < p.workers; i++ {
 		go traverseDirWorker(ctx, &wg, ch, workerCh,
-			m.workspace.Path(), &iterator.mu, &errors[i])
+			p.workspace.Path(), &iterator.mu, &errors[i])
 	}
 
 	wg.Add(1)
@@ -492,12 +496,12 @@ func (m *execCmd) Close() error {
 	return nil
 }
 
-func (m *fileScheme) Close() error {
+func (p *fileScheme) Close() error {
 	var ret error
 
 	var copyCmds []*execCmd
 	var keys []interface{}
-	m.cmds.Range(func(key, cmd interface{}) bool {
+	p.cmds.Range(func(key, cmd interface{}) bool {
 		copyCmds = append(copyCmds, cmd.(*execCmd))
 		keys = append(keys, key)
 		return true
@@ -514,7 +518,7 @@ func (m *fileScheme) Close() error {
 	wg.Wait()
 
 	for _, key := range keys {
-		m.cmds.Delete(key)
+		p.cmds.Delete(key)
 	}
 	return ret
 }
