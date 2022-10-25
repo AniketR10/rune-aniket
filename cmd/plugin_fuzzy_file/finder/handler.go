@@ -204,7 +204,7 @@ func (h *fuzzyFinderHandler) publishInterrupt() {
 }
 
 func (h *fuzzyFinderHandler) scanDataViaWorkspaceAPI() {
-	log.Debugf("using workspace API to list files")
+	log.Debugf("using workspace API to get resource iterator")
 
 	ctx := context.Background()
 	ctx, cancelScan := context.WithCancel(ctx)
@@ -229,17 +229,17 @@ func (h *fuzzyFinderHandler) scanDataViaWorkspaceAPI() {
 			if err := it.Err(); err != nil {
 				log.Error(err)
 			} else {
-				log.Infof("Done listing files: EOF")
+				log.Infof("Done iterating over data: EOF")
 			}
 			break
 		}
 		select {
 		case datachan <- []byte(resource):
 		case <-ctx.Done():
-			log.Infof("Done listing files: %s", ctx.Err())
+			log.Infof("Done iterating over data: %s", ctx.Err())
 			return
 		case <-h.quitChan:
-			log.Infof("Done listing files: closed")
+			log.Infof("Done iterating over data: closed")
 			return
 		}
 	}
@@ -249,7 +249,7 @@ func (h *fuzzyFinderHandler) scanData() {
 	start := time.Now()
 	defer func() {
 		if log.IsLevelEnabled(log.DebugLevel) {
-			log.Debugf("Done listing files in %s", time.Since(start))
+			log.Debugf("Done iterating over data in %s", time.Since(start))
 		}
 	}()
 	if h.useWorkspaceListFiles {
@@ -379,12 +379,12 @@ func New(
 	}
 	h.background = component.WithBackground(h.listHandler, defCell)
 
-	h.useWorkspaceListFiles, err = cfg.GetBool("use_workspace_list_files")
+	h.useWorkspaceListFiles, err = cfg.GetBool("use_workspace_fallback")
 	if err != nil && err != config.ErrNotFound {
-		log.Errorf("failed to load 'use_workspace_list_files' from config: %v", err)
+		log.Errorf("failed to load 'use_workspace_fallback' from config: %v", err)
 	}
 
-	log.Debugf("'use_workspace_list_files' set to %v", h.useWorkspaceListFiles)
+	log.Debugf("'use_workspace_fallback' set to %v", h.useWorkspaceListFiles)
 
 	go h.scanData()
 
