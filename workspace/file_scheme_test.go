@@ -192,16 +192,16 @@ func TestListFiles(t *testing.T) {
 	require.NoError(t, err)
 
 	for i := 0; i < 1000; i++ {
-		path, ok, err := it.Next()
-		require.NoError(t, err)
-		assert.True(t, ok)
+		path, ok := it.Next()
+		require.True(t, ok)
+		require.NoError(t, it.Err())
 		assert.NotZero(t, path)
 		assert.False(t, filepath.IsAbs(path))
 	}
 
-	path, ok, err := it.Next()
-	assert.NoError(t, err)
-	assert.False(t, ok)
+	path, ok := it.Next()
+	require.False(t, ok)
+	assert.NoError(t, it.Err())
 	assert.Zero(t, path)
 
 }
@@ -224,7 +224,7 @@ func benchListFiles(b *testing.B, totalFiles, nestEvery, emptyDirsPerFile int) {
 		// consume iterator
 		ok := true
 		for ok {
-			_, ok, _ = it.Next()
+			_, ok = it.Next()
 		}
 	}
 	b.StopTimer()

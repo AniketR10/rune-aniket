@@ -358,12 +358,9 @@ func (s *sharedRPCImpl) ListFiles(
 		return err
 	}
 	for {
-		path, ok, err := it.Next()
-		if err != nil {
-			return err
-		}
+		path, ok := it.Next()
 		if !ok {
-			return nil
+			return it.Err()
 		}
 		err = srv.Send(&ListFilesResponse{Path: path})
 		if err != nil {

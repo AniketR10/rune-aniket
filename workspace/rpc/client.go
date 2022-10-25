@@ -90,7 +90,7 @@ func (c *Client) ListFiles(ctx context.Context) (iterator.Iterator[string], erro
 	if err != nil {
 		return nil, err
 	}
-	return listFilesIterator{stream: stream}, nil
+	return &listFilesIterator{stream: stream}, nil
 }
 
 // Close closes all resources associated with this client.

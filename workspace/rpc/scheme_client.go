@@ -210,17 +210,22 @@ func (c *schemeClientImpl) ReadLink(filename string) (string, error) {
 
 type listFilesIterator struct {
 	stream Scheme_ListFilesClient
+	err    error
 }
 
-func (i listFilesIterator) Next() (string, bool, error) {
+func (i *listFilesIterator) Next() (string, bool) {
 	resp, err := i.stream.Recv()
 	if err == nil {
-		return resp.GetPath(), true, nil
+		return resp.GetPath(), true
 	}
-	if err == io.EOF {
-		return "", false, nil
+	if err != io.EOF {
+		i.err = err
 	}
-	return "", false, err
+	return "", false
+}
+
+func (i *listFilesIterator) Err() error {
+	return i.err
 }
 
 func (c *schemeClientImpl) ListFiles(ctx context.Context) (iterator.Iterator[string], error) {
@@ -229,7 +234,7 @@ func (c *schemeClientImpl) ListFiles(ctx context.Context) (iterator.Iterator[str
 	if err != nil {
 		return nil, err
 	}
-	return listFilesIterator{stream: stream}, nil
+	return &listFilesIterator{stream: stream}, nil
 }
 
 func (c *fileClient) Name() string {

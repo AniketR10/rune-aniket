@@ -354,16 +354,21 @@ func (m *fileScheme) SetPtySize(p Pty, width, height int) error {
 	return nil
 }
 
-func worker(
+func traverseDirWorker(
 	ctx context.Context, wg *sync.WaitGroup,
-	ch, workerCh chan string, cwd string,
+	ch, workerCh chan string, cwd string, mu *sync.Mutex, err *error,
 ) {
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case path := <-workerCh:
-			_ = dirTraversal(ctx, cwd, path, wg, ch, workerCh)
+			dirErr := dirTraversal(ctx, cwd, path, wg, ch, workerCh)
+			if dirErr != nil {
+				mu.Lock()
+				*err = multierr.Append(*err, dirErr)
+				mu.Unlock()
+			}
 		}
 	}
 }
@@ -402,33 +407,57 @@ func dirTraversal(
 		case workerCh <- path:
 		default:
 			// the rest of workers are busy, keep going
-			_ = dirTraversal(ctx, cwd, path, wg, ch, workerCh)
+			err := dirTraversal(ctx, cwd, path, wg, ch, workerCh)
+			if err != nil {
+				ret = multierr.Append(ret, err)
+			}
 		}
 	}
 	return ret
 }
 
 type listFilesIterator struct {
+	mu  sync.Mutex
+	err error
 	ctx context.Context
 	ch  chan string
 }
 
-func (l listFilesIterator) Next() (string, bool, error) {
+func (l *listFilesIterator) Next() (string, bool) {
 	select {
 	case <-l.ctx.Done():
-		return "", false, l.ctx.Err()
+		l.mu.Lock()
+		defer l.mu.Unlock()
+		l.err = multierr.Append(l.err, l.ctx.Err())
+		return "", false
 	case path, ok := <-l.ch:
-		return path, ok, nil
+		return path, ok
 	}
+}
+
+func (l *listFilesIterator) Err() error {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	if l.err == nil {
+		return l.ctx.Err()
+	}
+	if l.ctx.Err() == nil {
+		return l.err
+	}
+	return multierr.Append(l.err, l.ctx.Err())
 }
 
 func (m *fileScheme) ListFiles(ctx context.Context) (iterator.Iterator[string], error) {
 	var wg sync.WaitGroup
 	ch := make(chan string)
 	workerCh := make(chan string)
+	errors := make([]error, m.workers)
+	iterator := &listFilesIterator{ctx: ctx, ch: ch}
 
 	for i := 0; i < m.workers; i++ {
-		go worker(ctx, &wg, ch, workerCh, m.workspace.Path())
+		go traverseDirWorker(ctx, &wg, ch, workerCh,
+			m.workspace.Path(), &iterator.mu, &errors[i])
 	}
 
 	wg.Add(1)
@@ -436,10 +465,17 @@ func (m *fileScheme) ListFiles(ctx context.Context) (iterator.Iterator[string], 
 
 	go func() {
 		wg.Wait()
+		iterator.mu.Lock()
+		defer iterator.mu.Unlock()
+		for _, err := range errors {
+			if err != nil {
+				iterator.err = multierr.Append(iterator.err, err)
+			}
+		}
 		close(ch)
 	}()
 
-	return listFilesIterator{ctx: ctx, ch: ch}, nil
+	return iterator, nil
 }
 
 func (m *execCmd) Close() error {

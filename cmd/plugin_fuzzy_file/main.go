@@ -1,9 +1,11 @@
 package main
 
 import (
+	"context"
 	"net/http"
 	_ "net/http/pprof"
 
+	"github.com/ernestrc/blue/iterator"
 	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/browser"
@@ -22,6 +24,25 @@ var (
 	defaultHistoryDocumentID = "plugin-fuzzy-file-history"
 )
 
+type stringerStr string
+
+func (s stringerStr) String() string {
+	return string(s)
+}
+
+func workspaceListFiles(cwd workspace.API, ctx context.Context) (
+	iterator.Iterator[string], error,
+) {
+	return cwd.ListFiles(ctx)
+}
+
+func getResource(workspace workspace.API, file string) (
+	workspace.URI, term.Coordinates,
+) {
+	uri, _ := workspace.URI(file)
+	return uri, term.Coordinates{}
+}
+
 func newHandler(grants []plugin.Grant, broker proto.MuxBroker,
 	invokeWindow browser.Window, c config.Config) (tui.Handler, error) {
 	cmdStr, err := c.GetString("command")
@@ -39,12 +60,8 @@ func newHandler(grants []plugin.Grant, broker proto.MuxBroker,
 		historyKey = defaultHistoryKey
 	}
 	return finder.New(grants, broker, invokeWindow, c,
-		historyKey, defaultHistoryDocumentID, cmdStr, func(workspace workspace.API, file string) (
-			workspace.URI, term.Coordinates,
-		) {
-			uri, _ := workspace.URI(file)
-			return uri, term.Coordinates{}
-		})
+		historyKey, defaultHistoryDocumentID, cmdStr,
+		workspaceListFiles, getResource)
 }
 
 func main() {

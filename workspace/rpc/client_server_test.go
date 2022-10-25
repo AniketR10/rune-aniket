@@ -431,14 +431,14 @@ func TestClientServer(t *testing.T) {
 				})
 			it, err := c.ListFiles(context.Background())
 			require.NoError(t, err)
-			path, ok, err := it.Next()
-			require.NoError(t, err)
+			path, ok := it.Next()
 			require.True(t, ok)
+			require.NoError(t, it.Err())
 			assert.Equal(t, "a", path)
 
-			path, ok, err = it.Next()
-			require.NoError(t, err)
+			path, ok = it.Next()
 			require.False(t, ok)
+			require.NoError(t, it.Err())
 			assert.Zero(t, path)
 		}},
 		{"ListFiles error", func(t *testing.T, mock *workspace.MockOsFile, c *Client, s *Server) {
@@ -450,9 +450,9 @@ func TestClientServer(t *testing.T) {
 			l, err := c.ListFiles(context.Background())
 			require.NoError(t, err)
 			require.NotNil(t, l)
-			_, _, err = l.Next()
-			require.Error(t, err)
-			assert.Contains(t, err.Error(), "boom")
+			_, _ = l.Next()
+			require.Error(t, l.Err())
+			assert.Contains(t, l.Err().Error(), "boom")
 		}},
 	}
 

@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/ernestrc/blue/iterator"
 	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/browser"
@@ -52,6 +53,7 @@ type fuzzyFinderHandler struct {
 	mu                    sync.Mutex
 	cmdStr                string
 	getResource           func(workspace.API, string) (workspace.URI, term.Coordinates)
+	workspaceFallback     func(workspace.API, context.Context) (iterator.Iterator[string], error)
 	pid                   workspace.Pid
 	quitChan              chan struct{}
 	height                int
@@ -208,7 +210,7 @@ func (h *fuzzyFinderHandler) scanDataViaWorkspaceAPI() {
 	ctx, cancelScan := context.WithCancel(ctx)
 	defer cancelScan()
 
-	it, err := h.workspace.ListFiles(ctx)
+	it, err := h.workspaceFallback(h.workspace, ctx)
 	if err != nil {
 		log.Error(err)
 		return
@@ -222,17 +224,17 @@ func (h *fuzzyFinderHandler) scanDataViaWorkspaceAPI() {
 	defer close(datachan)
 
 	for {
-		path, ok, err := it.Next()
-		if err != nil {
-			log.Error(err)
-			return
-		}
+		resource, ok := it.Next()
 		if !ok {
-			log.Infof("Done listing files: EOF")
+			if err := it.Err(); err != nil {
+				log.Error(err)
+			} else {
+				log.Infof("Done listing files: EOF")
+			}
 			break
 		}
 		select {
-		case datachan <- []byte(path):
+		case datachan <- []byte(resource):
 		case <-ctx.Done():
 			log.Infof("Done listing files: %s", ctx.Err())
 			return
@@ -336,6 +338,7 @@ func New(
 	grants []plugin.Grant, broker proto.MuxBroker,
 	invokeWindow browser.Window, cfg config.Config,
 	historyKey term.KeyComb, historyDocumentID string, command string,
+	fallback func(workspace.API, context.Context) (iterator.Iterator[string], error),
 	getResource func(exec workspace.API, line string) (workspace.URI, term.Coordinates),
 ) (tui.Handler, error) {
 	h := new(fuzzyFinderHandler)
@@ -357,6 +360,7 @@ func New(
 	h.historyKey = historyKey
 	h.getResource = getResource
 	h.cmdStr = command
+	h.workspaceFallback = fallback
 
 	h.quitChan = make(chan struct{})
 

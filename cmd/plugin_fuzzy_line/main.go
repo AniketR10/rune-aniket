@@ -1,11 +1,13 @@
 package main
 
 import (
+	"context"
 	"net/http"
 	_ "net/http/pprof"
 	"strconv"
 	"strings"
 
+	"github.com/ernestrc/blue/iterator"
 	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/browser"
@@ -24,6 +26,17 @@ const (
 )
 
 var defaultHistoryKey = term.KeyComb{Key: term.KeyCtrlBackslash}
+
+func readFiles(cwd workspace.API, ctx context.Context) (
+	iterator.Iterator[string], error,
+) {
+	it, err := cwd.ListFiles(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return workspace.ReadLines(ctx, cwd, it)
+}
 
 func parseLine(workspace workspace.API, data string) (
 	workspace.URI, term.Coordinates,
@@ -54,7 +67,7 @@ func newHandler(grants []plugin.Grant, broker proto.MuxBroker,
 		historyKey = defaultHistoryKey
 	}
 	return finder.New(grants, broker, invokeWindow,
-		c, historyKey, defaultHistoryDocumentID, cmdStr, parseLine)
+		c, historyKey, defaultHistoryDocumentID, cmdStr, readFiles, parseLine)
 }
 
 func main() {
