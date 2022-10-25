@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"os"
 	"os/user"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -195,6 +196,7 @@ func TestListFiles(t *testing.T) {
 		require.NoError(t, err)
 		assert.True(t, ok)
 		assert.NotZero(t, path)
+		assert.False(t, filepath.IsAbs(path))
 	}
 
 	path, ok, err := it.Next()

@@ -354,37 +354,41 @@ func (m *fileScheme) SetPtySize(p Pty, width, height int) error {
 	return nil
 }
 
-func worker(ctx context.Context, wg *sync.WaitGroup, ch, workerCh chan string) {
+func worker(
+	ctx context.Context, wg *sync.WaitGroup,
+	ch, workerCh chan string, cwd string,
+) {
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case path := <-workerCh:
-			dirTraversal(ctx, path, wg, ch, workerCh)
+			_ = dirTraversal(ctx, cwd, path, wg, ch, workerCh)
 		}
 	}
 }
 
 func dirTraversal(
-	ctx context.Context, path string,
+	ctx context.Context, cwd, dirname string,
 	wg *sync.WaitGroup, ch, workerCh chan string,
 ) error {
 	defer wg.Done()
+	absPath := filepath.Join(cwd, dirname)
 
-	dirNames, err := os.ReadDir(path)
+	dirNames, err := os.ReadDir(absPath)
 	if err != nil {
 		return err
 	}
 
 	var ret error
 	for _, info := range dirNames {
-		p := filepath.Join(path, info.Name())
+		path := filepath.Join(dirname, info.Name())
 		if !info.IsDir() {
 			// ensure dirTraversal returns
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
-			case ch <- p:
+			case ch <- path:
 				continue
 			}
 		}
@@ -395,10 +399,10 @@ func dirTraversal(
 		case <-ctx.Done():
 			wg.Done()
 			return ctx.Err()
-		case workerCh <- p:
+		case workerCh <- path:
 		default:
 			// the rest of workers are busy, keep going
-			dirTraversal(ctx, p, wg, ch, workerCh)
+			_ = dirTraversal(ctx, cwd, path, wg, ch, workerCh)
 		}
 	}
 	return ret
@@ -424,11 +428,11 @@ func (m *fileScheme) ListFiles(ctx context.Context) (iterator.Iterator[string], 
 	workerCh := make(chan string)
 
 	for i := 0; i < m.workers; i++ {
-		go worker(ctx, &wg, ch, workerCh)
+		go worker(ctx, &wg, ch, workerCh, m.workspace.Path())
 	}
 
 	wg.Add(1)
-	workerCh <- m.workspace.Path()
+	workerCh <- "."
 
 	go func() {
 		wg.Wait()
