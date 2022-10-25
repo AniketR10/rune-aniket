@@ -1,8 +1,16 @@
 package search
 
 import (
+	"time"
+
 	fzf "github.com/junegunn/fzf/src/algo"
 	"unstable.build/go-tui/term"
+)
+
+const (
+	// interrupt periodically but not on every new chunk
+	defaultInterruptEvery    = 200 * time.Millisecond
+	defaultSetFileCountEvery = 256 // chunks
 )
 
 // AlgoConfig is the algoritum to use to search through the input data.
@@ -43,6 +51,9 @@ type ListConfig struct {
 	// BottomSearchBar determines whether the search bar and therefore
 	// the highest score matches should be at the top or at the bottom.
 	BottomSearchBar bool
+
+	interruptEvery    time.Duration
+	setFileCountEvery int
 }
 
 func (c ListConfig) toInternal() listConfig {
@@ -85,15 +96,25 @@ func (c ListConfig) toInternal() listConfig {
 		algo = fzf.FuzzyMatchV2
 	}
 
+	if c.interruptEvery == 0 {
+		c.interruptEvery = defaultInterruptEvery
+	}
+
+	if c.setFileCountEvery == 0 {
+		c.setFileCountEvery = defaultSetFileCountEvery
+	}
+
 	return listConfig{
-		algo:            algo,
-		matchedTextAttr: matchedTextAttr,
-		matchCountAttr:  matchCountAttr,
-		searchBaseAttr:  searchBaseAttr,
-		textAttr:        textAttr,
-		focusAttr:       focusAttr,
-		interrupt:       interrupt,
-		caseSensitive:   c.CaseSensitive,
-		bottomSearchBar: c.BottomSearchBar,
+		algo:              algo,
+		matchedTextAttr:   matchedTextAttr,
+		matchCountAttr:    matchCountAttr,
+		searchBaseAttr:    searchBaseAttr,
+		textAttr:          textAttr,
+		focusAttr:         focusAttr,
+		interrupt:         interrupt,
+		caseSensitive:     c.CaseSensitive,
+		bottomSearchBar:   c.BottomSearchBar,
+		interruptEvery:    c.interruptEvery,
+		setFileCountEvery: c.setFileCountEvery,
 	}
 }

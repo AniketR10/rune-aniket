@@ -4,7 +4,9 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"strconv"
 	"sync"
+	"time"
 
 	fzf "github.com/junegunn/fzf/src/algo"
 	"github.com/junegunn/fzf/src/util"
@@ -13,22 +15,19 @@ import (
 	"unstable.build/go-tui/term"
 )
 
-const (
-	numElementsToReDrawAt    = 16
-	maxNumElementsToReDrawAt = 1024
-)
-
 // internal representation of ListConfig
 type listConfig struct {
-	matchedTextAttr term.Attributes
-	matchCountAttr  term.Attributes
-	searchBaseAttr  term.Attributes
-	textAttr        term.Attributes
-	focusAttr       term.Attributes
-	algo            fzf.Algo
-	interrupt       func()
-	caseSensitive   bool
-	bottomSearchBar bool
+	matchedTextAttr   term.Attributes
+	matchCountAttr    term.Attributes
+	searchBaseAttr    term.Attributes
+	textAttr          term.Attributes
+	focusAttr         term.Attributes
+	algo              fzf.Algo
+	interrupt         func()
+	caseSensitive     bool
+	bottomSearchBar   bool
+	interruptEvery    time.Duration
+	setFileCountEvery int
 }
 
 type matchCounter struct {
@@ -40,15 +39,14 @@ type matchCounter struct {
 
 // List is a collection of elements that can be interactively searched.
 type List struct {
-	mu             sync.Mutex
-	quitChan       chan struct{}
-	dataChan       chan []byte
-	downstreamChan chan<- []byte
-	input          [][]byte
-	searchCtx      context.Context
-	cancelSearch   func()
-	height         int
-	width          int
+	mu           sync.Mutex
+	quitChan     chan struct{}
+	dataChan     chan []byte
+	input        [][]byte
+	searchCtx    context.Context
+	cancelSearch func()
+	height       int
+	width        int
 
 	cfg listConfig
 
@@ -113,11 +111,8 @@ func (l *List) Init(cfg ListConfig) {
 	l.list.FocusList.Inverted = l.cfg.bottomSearchBar
 	l.list.C = &l.list.FocusList
 
-	l.quitChan = make(chan struct{})
 	l.dataChan = make(chan []byte)
 	l.setFilesCount()
-
-	go l.consumeAsyncElements(l.quitChan)
 }
 
 // ToggleCaseSensitivity toggles whether the search should be case sensitive or not.
@@ -215,8 +210,9 @@ func (l *List) TotalCount() int {
 
 func doSetFilesCount(matchCountBar *matchCounter, matches, total int, attr term.Attributes) {
 	matchCountBar.Reset()
-	str := fmt.Sprintf("%d/%d", matches, total)
-	matchCountBar.InsertStringWithAttr(term.Coordinates{}, str, attr)
+	matchCountBar.WriteStringWithAttr(strconv.Itoa(matches), attr)
+	matchCountBar.WriteStringWithAttr("/", attr)
+	matchCountBar.WriteStringWithAttr(strconv.Itoa(total), attr)
 }
 
 func (l *List) setFilesCount() {
@@ -246,9 +242,12 @@ func (l *List) pushData(data []byte, slab *util.Slab, sortList bool) (matched bo
 		m := Match{data: data, idx: len(l.input) - 1}
 		matched = true
 		addMatch(&l.list.FocusList, m, l.cfg.textAttr, l.cfg.matchedTextAttr)
-		if sortList && l.cfg.bottomSearchBar {
+		if !sortList {
+			return
+		}
+		if l.cfg.bottomSearchBar {
 			l.sortMatchesList()
-		} else if sortList {
+		} else {
 			l.setFilesCount()
 		}
 		return
@@ -270,11 +269,36 @@ func (l *List) pushData(data []byte, slab *util.Slab, sortList bool) (matched bo
 }
 
 func (l *List) consumeAsyncElements(quitChan chan struct{}) {
-	// to handle very large searches, we redraw only every
-	// numElementsToReDrawAt to start with, and we double this
-	// number every time until we earch maxNumElementsToReDrawAt,
-	// at which point we redraw every maxNumElementsToReDrawAt.
-	redrawAt := numElementsToReDrawAt
+	t := time.NewTicker(l.cfg.interruptEvery)
+	tickerCh := make(chan struct{}) // need a way to signal from below
+	var dirty bool
+	go func() {
+		defer t.Stop()
+		for {
+			select {
+			case <-t.C:
+				l.mu.Lock()
+				if !dirty {
+					l.mu.Unlock()
+					continue
+				}
+				interrupt := l.cfg.interrupt
+				if len(l.getSearchQuery()) != 0 || l.cfg.bottomSearchBar {
+					l.sortMatchesList()
+				} else {
+					l.setFilesCount()
+				}
+				dirty = false
+				l.mu.Unlock()
+				interrupt()
+			case <-quitChan:
+				return
+			case <-tickerCh:
+				return
+			}
+		}
+	}()
+
 	slab := makeSlab()
 	for i := 0; ; i++ {
 		select {
@@ -286,31 +310,18 @@ func (l *List) consumeAsyncElements(quitChan chan struct{}) {
 				} else {
 					l.sortMatchesList()
 				}
-				if l.downstreamChan != nil {
-					close(l.downstreamChan)
-					l.downstreamChan = nil
-				}
 				interrupt := l.cfg.interrupt
 				l.mu.Unlock()
+				close(tickerCh)
 				interrupt()
 				return
 			}
-			l.mu.Lock()
-			height := l.height
-			ch := l.downstreamChan
-			interrupt := l.cfg.interrupt
-			l.mu.Unlock()
-			redraw := i == height-1 || (i != 0 && i%redrawAt == 0)
-			matched := l.pushData(data, slab, redraw)
-			if matched && ch != nil {
-				ch <- data
-			}
-			if !redraw {
-				continue
-			}
-			interrupt()
-			if redrawAt < maxNumElementsToReDrawAt {
-				redrawAt *= 2
+			l.pushData(data, slab, false)
+			dirty = true
+			if i%l.cfg.setFileCountEvery == 0 {
+				l.mu.Lock()
+				l.setFilesCount()
+				l.mu.Unlock()
 			}
 		case <-quitChan:
 			l.DataReset()
@@ -330,16 +341,16 @@ func (l *List) handleSearch(
 			case <-ctx.Done():
 				return false
 			default:
-				// NOTE: this creates a lot of contention when performing queries
-				// on very large inputs that are still being collected via Push.
-				// search list should be refactor to use on goroutine which takes
-				// requests of either: new search (with query + all input), new data, or draw
-				// that should be the only goroutine with access to l.list
-				l.mu.Lock()
-				defer l.mu.Unlock()
-				addMatch(&l.list.FocusList, match, l.cfg.textAttr, l.cfg.matchedTextAttr)
-				return true
 			}
+			// NOTE: this creates a lot of contention when performing queries
+			// on very large inputs that are still being collected via Push.
+			// search list should be refactor to use on goroutine which takes
+			// requests of either: new search (with query + all input), new data, or draw
+			// that should be the only goroutine with access to l.list
+			l.mu.Lock()
+			defer l.mu.Unlock()
+			addMatch(&l.list.FocusList, match, l.cfg.textAttr, l.cfg.matchedTextAttr)
+			return true
 		})
 
 	l.mu.Lock()
@@ -354,31 +365,11 @@ func (l *List) handleSearch(
 // Clients can and should call close on the channel, once no more data is expected.
 // See PushSync for more details.
 func (l *List) Push() chan<- []byte {
-	return l.dataChan
-}
-
-// Pull pushes all current matches to the given channel and configures
-// this List to send all future matches to it. This channel will be automatically
-// closed when the channel returned by Push is closed. If this channel blocks,
-// all internal data processing is blocked too. Note that matches pushed
-// via PushSync are not pushed to this channel.
-//
-// This method panics if called more than once.
-func (l *List) Pull(ch chan<- []byte) {
-	// avoid contention with lock + push to chan
-	var i int
-	data := make([][]byte, l.list.FocusList.Len())
-	l.mu.Lock()
-	l.list.FocusList.Iterate(func(c component.WithAttributes) {
-		data[i] = c.(searchResultComponent).Match.data
-		i++
-	})
-	l.downstreamChan = ch
-	l.mu.Unlock()
-
-	for _, b := range data {
-		ch <- b
+	if l.quitChan == nil {
+		l.quitChan = make(chan struct{})
+		go l.consumeAsyncElements(l.quitChan)
 	}
+	return l.dataChan
 }
 
 // Pause hints to this list that no more data is expected, for now.
@@ -655,14 +646,14 @@ func (l *List) Close() error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	if l.quitChan == nil {
-		return nil
-	}
 	if l.cancelSearch != nil {
 		l.cancelSearch()
 	}
+	l.list.Reset()
+	if l.quitChan == nil {
+		return nil
+	}
 	close(l.quitChan)
 	l.quitChan = nil
-	l.list.Reset()
 	return nil
 }

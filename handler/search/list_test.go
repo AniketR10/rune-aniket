@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -50,12 +51,17 @@ func assertFocusEqual(t *testing.T, l listIfc, el []byte) {
 }
 
 func newSimpleList(cfg ListConfig) (listIfc, *cell.Buffer) {
+	// make tests deterministic
+	cfg.interruptEvery = 24 * time.Hour
+	cfg.setFileCountEvery = 1
 	l := NewList(cfg)
 	return l, l.Buffer()
 }
 
 func newSimpleListBottomSearchBar(cfg ListConfig) (listIfc, *cell.Buffer) {
 	cfg.BottomSearchBar = true
+	cfg.interruptEvery = 24 * time.Hour
+	cfg.setFileCountEvery = 1
 	l := NewList(cfg)
 	return l, l.Buffer()
 }
@@ -191,7 +197,7 @@ func testListAsyncPush(t *testing.T, constructor listConstructor) {
 		height := 100
 		l.Resize(100, height)
 
-		wg.Add(6)
+		wg.Add(2)
 		go func() {
 			defer wg.Done()
 			pushTestData(l, height)
@@ -212,11 +218,12 @@ func testListAsyncPush(t *testing.T, constructor listConstructor) {
 		height := 100
 		l.Resize(100, height)
 
-		wg.Add(4)
+		wg.Add(1)
 		pushTestData(l, height)
+		close(l.Push())
 		wg.Wait()
-		wg.Add(2)
 
+		wg.Add(2)
 		buf.WriteString("9")
 		l.Wait()
 		buf.WriteString("9")
@@ -234,12 +241,19 @@ func testListAsyncPush(t *testing.T, constructor listConstructor) {
 		n := 100
 		l.Resize(n, n)
 
-		wg.Add(6)
+		wg.Add(1)
 		buf.WriteString("9")
 		l.Wait() // make next search query doesn't cancel prev
+		wg.Wait()
+
+		wg.Add(1)
 		buf.WriteString("9")
 		l.Wait()
+		wg.Wait()
+
+		wg.Add(1)
 		pushTestData(l, n)
+		close(l.Push())
 		wg.Wait()
 
 		// make sure it doesn't block
@@ -257,8 +271,11 @@ func testListAsyncPush(t *testing.T, constructor listConstructor) {
 		n := 100
 		l.Resize(n, n)
 
-		wg.Add(6)
-		go pushTestData(l, n)
+		wg.Add(3)
+		go func() {
+			pushTestData(l, n)
+			close(l.Push())
+		}()
 
 		buf.WriteString("9")
 		l.Wait()
