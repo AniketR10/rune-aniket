@@ -19,7 +19,8 @@ import (
 )
 
 var (
-	defaultCommand           = `set -o pipefail; command find -L . -mindepth 1 \( -path '*/\.*' -o -fstype 'sysfs' -o -fstype 'devfs' -o -fstype 'devtmpfs' -o -fstype 'proc' \) -prune -o -type f -print -o -type l -print 2> /dev/null | cut -b3-`
+	// defaults now to using native workspace.ListFiles if 'command' not defined in config
+	// defaultCommand           = `set -o pipefail; command find -L . -mindepth 1 \( -path '*/\.*' -o -fstype 'sysfs' -o -fstype 'devfs' -o -fstype 'devtmpfs' -o -fstype 'proc' \) -prune -o -type f -print -o -type l -print 2> /dev/null | cut -b3-`
 	defaultHistoryKey        = term.KeyComb{Key: term.KeyCtrlP}
 	defaultHistoryDocumentID = "plugin-fuzzy-file-history"
 )
@@ -50,7 +51,6 @@ func newHandler(grants []plugin.Grant, broker proto.MuxBroker,
 		if err != config.ErrNotFound {
 			log.Printf("failed to load 'command' config: %v", err)
 		}
-		cmdStr = defaultCommand
 	}
 	historyKey, err := config.GetKey(c, "history_key")
 	if err != nil {

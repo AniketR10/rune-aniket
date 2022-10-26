@@ -21,7 +21,8 @@ import (
 )
 
 const (
-	defaultCommand           = `grep -n -r "" .`
+	// defaults now to using native workspace.ListFiles if 'command' not defined in config
+	// defaultCommand           = `grep -n -r "" .`
 	defaultHistoryDocumentID = "plugin-fuzzy-line-history"
 )
 
@@ -57,7 +58,6 @@ func newHandler(grants []plugin.Grant, broker proto.MuxBroker,
 		if err != config.ErrNotFound {
 			log.Printf("failed to load 'command' config: %v", err)
 		}
-		cmdStr = defaultCommand
 	}
 	historyKey, err := config.GetKey(c, "history_key")
 	if err != nil {

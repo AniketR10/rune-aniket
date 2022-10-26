@@ -42,27 +42,27 @@ func Permissions() []plugin.Permission {
 }
 
 type fuzzyFinderHandler struct {
-	s                     browser.Storage
-	f                     browser.ResourceOpener
-	p                     browser.EventPublisher
-	m                     browser.Messenger
-	ed                    text.Editor
-	workspace             workspace.API
-	invokeWindow          browser.Window
-	historyKey            term.KeyComb
-	mu                    sync.Mutex
-	cmdStr                string
-	getResource           func(workspace.API, string) (workspace.URI, term.Coordinates)
-	workspaceFallback     func(workspace.API, context.Context) (iterator.Iterator[string], error)
-	pid                   workspace.Pid
-	quitChan              chan struct{}
-	height                int
-	list                  search.List
-	background            tui.Component
-	listHandler           tui.Handler
-	killed                bool
-	useWorkspaceListFiles bool
-	cancelScan            func()
+	s                    browser.Storage
+	f                    browser.ResourceOpener
+	p                    browser.EventPublisher
+	m                    browser.Messenger
+	ed                   text.Editor
+	workspace            workspace.API
+	invokeWindow         browser.Window
+	historyKey           term.KeyComb
+	mu                   sync.Mutex
+	cmdStr               string
+	getResource          func(workspace.API, string) (workspace.URI, term.Coordinates)
+	workspaceFallback    func(workspace.API, context.Context) (iterator.Iterator[string], error)
+	pid                  workspace.Pid
+	quitChan             chan struct{}
+	height               int
+	list                 search.List
+	background           tui.Component
+	listHandler          tui.Handler
+	killed               bool
+	useWorkspaceFallback bool
+	cancelScan           func()
 
 	history search.History
 }
@@ -252,7 +252,7 @@ func (h *fuzzyFinderHandler) scanData() {
 			log.Debugf("Done iterating over data in %s", time.Since(start))
 		}
 	}()
-	if h.useWorkspaceListFiles {
+	if h.useWorkspaceFallback {
 		h.scanDataViaWorkspaceAPI()
 		return
 	}
@@ -360,6 +360,7 @@ func New(
 	h.historyKey = historyKey
 	h.getResource = getResource
 	h.cmdStr = command
+	h.useWorkspaceFallback = command == ""
 	h.workspaceFallback = fallback
 
 	h.quitChan = make(chan struct{})
@@ -379,12 +380,7 @@ func New(
 	}
 	h.background = component.WithBackground(h.listHandler, defCell)
 
-	h.useWorkspaceListFiles, err = cfg.GetBool("use_workspace_fallback")
-	if err != nil && err != config.ErrNotFound {
-		log.Errorf("failed to load 'use_workspace_fallback' from config: %v", err)
-	}
-
-	log.Debugf("'use_workspace_fallback' set to %v", h.useWorkspaceListFiles)
+	log.Debugf("useWorkspaceFallback set to %v", h.useWorkspaceFallback)
 
 	go h.scanData()
 
