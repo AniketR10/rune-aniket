@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -31,7 +32,7 @@ const (
 )
 
 var (
-	workspaceCommands = map[string]func(*workspaceManagerHandler, ...string) (bool, error){
+	workspaceCommands = map[string]func(*workspaceManagerHandler, ...string) error{
 		"addWorkspace":       (*workspaceManagerHandler).commandAddWorkspace,
 		cmdCloseWorkspace:    (*workspaceManagerHandler).commandCloseWorkspace,
 		cmdSwitchToWorkspace: (*workspaceManagerHandler).commandSwitchToWorkspace,
@@ -61,21 +62,7 @@ var (
 		{First: term.KeyComb{Key: term.KeyCtrlX},
 			Last: term.KeyComb{Ch: '0'}}: {"switchToWorkspace", "10"},
 	}
-
-	workspaceCommandList []string
-	exCommandList        []string
 )
-
-func init() {
-	for cmd := range workspaceCommands {
-		workspaceCommandList = append(workspaceCommandList, cmd)
-	}
-	for cmd := range exCommands {
-		exCommandList = append(exCommandList, cmd)
-	}
-	exCommandList = append(exCommandList, cmdSwitchToWorkspace)
-	exCommandList = append(exCommandList, cmdCloseWorkspace)
-}
 
 type workspaceHandler struct {
 	tui.Handler
@@ -85,6 +72,7 @@ type workspaceHandler struct {
 
 type workspaceManagerHandler struct {
 	mu           sync.Mutex
+	exit         bool
 	clipboard    clipboardManagerIfc
 	cfg          ideConfig
 	storage      browser.Storage
@@ -147,15 +135,11 @@ func (h *workspaceManagerHandler) init(
 	h.workspace = manager
 
 	globalOpts := h.textOpts(h.cfg)
-	h.empty, _ = newEx(h.newEditor(cfg), nopLoader{}, workspaceCommandList,
-		func(argv []string) (bool, bool, error) {
-			fn, ok := workspaceCommands[argv[0]]
-			if !ok {
-				return false, false, nil
-			}
-			quit, err := fn(h, argv[1:]...)
-			return quit, true, err
-		}, h.publishEvent, globalOpts...)
+	h.empty, _ = newEx(h.newEditor(cfg), nopLoader{}, h.publishEvent, globalOpts...)
+	err := h.subscribeAllWorkspaceCommands(h.empty)
+	if err != nil {
+		return err
+	}
 
 	h.bar.Init()
 	h.bar.OnClick = h.switchToWorkspace
@@ -174,13 +158,45 @@ func (h *workspaceManagerHandler) init(
 	h.union.Top = charset.Top
 	h.union.Bottom = charset.Bottom
 
-	err := h.addWorkspace(uri, recfilename, filenames)
+	err = h.addWorkspace(uri, recfilename, filenames)
 	if err != nil {
 		return err
 	}
 	h.focusProxy.Target = h.focusHandler()
 	h.union.UnionBottom(&h.bar, h.barSize())
 	return nil
+}
+
+func (h *workspaceManagerHandler) subscribeAllWorkspaceCommands(ex *ex) (ret error) {
+	for cmd, _fn := range workspaceCommands {
+		fn := _fn
+		err := ex.comp.SubscribeCommand(cmd,
+			text.FuncCommandHandler(func(ctx context.Context, cmd text.Command) (bool, error) {
+				return false, fn(h, cmd.Args...)
+			}))
+		if err != nil {
+			ret = multierr.Append(ret, err)
+		}
+	}
+	return ret
+}
+
+func (h *workspaceManagerHandler) subscribeActiveWorkspaceCommands(ex *ex) (ret error) {
+	err := ex.comp.SubscribeCommand(cmdSwitchToWorkspace,
+		text.FuncCommandHandler(func(ctx context.Context, cmd text.Command) (bool, error) {
+			return false, h.commandSwitchToWorkspace(cmd.Args...)
+		}))
+	if err != nil {
+		ret = multierr.Append(ret, err)
+	}
+	err = ex.comp.SubscribeCommand(cmdCloseWorkspace,
+		text.FuncCommandHandler(func(ctx context.Context, cmd text.Command) (bool, error) {
+			return false, h.commandCloseWorkspace()
+		}))
+	if err != nil {
+		ret = multierr.Append(ret, err)
+	}
+	return
 }
 
 func (h *workspaceManagerHandler) focusHandler() tui.Handler {
@@ -252,7 +268,8 @@ func (h *workspaceManagerHandler) switchToWorkspace(i int) {
 }
 
 func (h *workspaceManagerHandler) Handle(ev term.Event) (exit, handled bool) {
-	return h.focusHandler().Handle(ev)
+	exit, handled = h.focusHandler().Handle(ev)
+	return exit || h.exit, handled
 }
 
 func (h *workspaceManagerHandler) Cursor() (pos term.Coordinates, show bool) {
@@ -363,20 +380,15 @@ func (h *workspaceManagerHandler) addWorkspace(
 
 	// workspace capable of opening URIs other than the workspace URI
 	multicwd := workspace.Multi(h.workspace, cwd, uri)
-	ex, err := newEx(h.newEditor(cfg), multicwd, exCommandList,
-		func(argv []string) (bool, bool, error) {
-			var err error
-			handled := true
-			switch argv[0] {
-			case cmdSwitchToWorkspace:
-				_, err = h.commandSwitchToWorkspace(argv[1:]...)
-			case cmdCloseWorkspace:
-				_, err = h.commandCloseWorkspace()
-			default:
-				handled = false
-			}
-			return false, handled, err
-		}, h.publishEvent, textOpts...)
+	ex, err := newEx(h.newEditor(cfg), multicwd, h.publishEvent, textOpts...)
+	if err != nil {
+		return err
+	}
+	err = ex.subscribeCommands()
+	if err != nil {
+		return err
+	}
+	err = h.subscribeActiveWorkspaceCommands(ex)
 	if err != nil {
 		return err
 	}
@@ -428,13 +440,13 @@ func logNonFatalErrs(
 	}
 }
 
-func (h *workspaceManagerHandler) commandAddWorkspace(args ...string) (bool, error) {
+func (h *workspaceManagerHandler) commandAddWorkspace(args ...string) error {
 	if len(args) == 0 {
-		return false, errors.New("invalid arguments. " +
+		return errors.New("invalid arguments. " +
 			"Expecting 1 argument with workspace URI")
 	}
 	if h.focusHandler() != h.empty {
-		return false, errors.New("workspace tab is not empty. " +
+		return errors.New("workspace tab is not empty. " +
 			"Switch to an empty workspace tab to add a workspace")
 	}
 	path := args[0]
@@ -443,27 +455,27 @@ func (h *workspaceManagerHandler) commandAddWorkspace(args ...string) (bool, err
 	if strings.Contains(path, "://") {
 		uri, err := workspace.ParseURI(path)
 		if err == nil {
-			return false, h.addWorkspace(uri, "", nil)
+			return h.addWorkspace(uri, "", nil)
 		}
-		return false, fmt.Errorf("malformed URI: %s", err)
+		return fmt.Errorf("malformed URI: %s", err)
 	}
 
 	path, err := workspace.ExpandPath(path, user.Current, os.Getwd)
 	if err != nil {
-		return false, fmt.Errorf("ExpandPath: %s", err)
+		return fmt.Errorf("ExpandPath: %s", err)
 	}
 	uri, err := workspace.ParseURI(path)
 	if err != nil {
-		return false, fmt.Errorf("malformed URI: %s", err)
+		return fmt.Errorf("malformed URI: %s", err)
 	}
-	return false, h.addWorkspace(uri, "", nil)
+	return h.addWorkspace(uri, "", nil)
 }
 
 func (h *workspaceManagerHandler) commandCloseWorkspace(args ...string) (
-	quit bool, ret error,
+	ret error,
 ) {
 	if h.focusHandler() == h.empty {
-		return false, errors.New("workspace tab is empty")
+		return errors.New("workspace tab is empty")
 	}
 
 	hm := h.workspaces[h.focus]
@@ -483,36 +495,37 @@ func (h *workspaceManagerHandler) commandCloseWorkspace(args ...string) (
 	for i := h.focus; i >= 0; i-- {
 		if h.workspaces[i] != nil {
 			h.switchToWorkspace(i)
-			return false, ret
+			return ret
 		}
 	}
 
 	// for resize of current workspace with empty
 	h.switchToWorkspace(h.focus)
 
-	return false, ret
+	return ret
 }
 
-func (h *workspaceManagerHandler) commandQuit(args ...string) (bool, error) {
-	return true, nil
+func (h *workspaceManagerHandler) commandQuit(args ...string) error {
+	h.exit = true
+	return nil
 }
 
-func (h *workspaceManagerHandler) commandSwitchToWorkspace(args ...string) (bool, error) {
+func (h *workspaceManagerHandler) commandSwitchToWorkspace(args ...string) error {
 	if len(args) == 0 {
-		return false, errors.New("invalid arguments. " +
+		return errors.New("invalid arguments. " +
 			"Expecting 1 argument with workspace number")
 	}
 	n, err := strconv.Atoi(args[0])
 	if err != nil {
-		return false, fmt.Errorf("invalid workspace: %s", err)
+		return fmt.Errorf("invalid workspace: %s", err)
 	}
 	n-- // UI does not use 0-based indexing
 	if n < 0 || n >= len(h.workspaces) {
-		return false, fmt.Errorf("invalid workspace: there's only %d workspaces",
+		return fmt.Errorf("invalid workspace: there's only %d workspaces",
 			len(h.workspaces))
 	}
 	h.switchToWorkspace(n)
-	return false, nil
+	return nil
 }
 
 func (h *workspaceManagerHandler) Close() (ret error) {

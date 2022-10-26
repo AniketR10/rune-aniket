@@ -38,7 +38,7 @@ var (
 		"focusBelowWindow":       {},
 		"switchToWorkspace":      {}, // workspace_handler
 	}
-	exCommands = map[string]func(*ex, ...string) (bool, error){
+	exCommands = map[string]func(*ex, ...string) error{
 		"bufferPrev":             (*ex).previousBuffer,
 		"bufferNext":             (*ex).nextBuffer,
 		"bufferClose":            (*ex).closeBuffer,
@@ -103,7 +103,6 @@ type ex struct {
 	workspace            workspace.Loader
 	sequencer            handler.Sequencer
 	publishEvent         func(term.Event) bool
-	cmdOverride          func([]string) (bool, bool, error)
 	cmd                  commandListHandler
 	overlay              component.Overlay
 	mode                 mode
@@ -114,13 +113,12 @@ type ex struct {
 }
 
 func newEx(
-	ed text.Editor, m workspace.Loader, enabledCommands []string,
-	commandOverride func([]string) (bool, bool, error),
+	ed text.Editor, m workspace.Loader,
 	publishEvent func(term.Event) bool,
 	opts ...text.Option,
 ) (e *ex, err error) {
 	e = new(ex)
-	err = e.init(ed, m, enabledCommands, commandOverride, publishEvent, opts...)
+	err = e.init(ed, m, publishEvent, opts...)
 	if err != nil {
 		return
 	}
@@ -140,12 +138,11 @@ func forcePublishEvent(publishEvent func(term.Event) bool) func(ev term.Event) {
 // It returns an error if an initial filepath was given through WithFilePath option
 // and the file failed to be opened.
 func (e *ex) init(
-	ed text.Editor, m workspace.Loader, enabledCommands []string,
-	commandOverride func([]string) (bool, bool, error),
+	ed text.Editor, m workspace.Loader,
 	publishEvent func(term.Event) bool,
 	opts ...text.Option,
 ) (err error) {
-	err = e.doInit(ed, m, commandOverride, publishEvent, opts...)
+	err = e.doInit(ed, m, publishEvent, opts...)
 	if err != nil {
 		return
 	}
@@ -153,22 +150,24 @@ func (e *ex) init(
 	if err != nil {
 		return
 	}
-	for _, cmd := range enabledCommands {
-		serr := e.comp.SubscribeCommand(cmd, text.FuncCommandHandler(
-			func(ctx context.Context, cmd text.Command) (bool, error) {
-				fn, ok := exCommands[cmd.Name]
-				if !ok {
-					return true, nil
-				}
-				return fn(e, cmd.Args...)
-			}))
-		if serr != nil {
-			err = multierr.Append(err, serr)
-		}
-	}
 	e.resetCommandList()
 	e.cmd.loadHistory()
 	return err
+}
+
+func (e *ex) subscribeCommands() error {
+	var ret error
+	for cmd, _fn := range exCommands {
+		fn := _fn
+		err := e.comp.SubscribeCommand(cmd, text.FuncCommandHandler(
+			func(ctx context.Context, cmd text.Command) (bool, error) {
+				return false, fn(e, cmd.Args...)
+			}))
+		if err != nil {
+			ret = multierr.Append(ret, err)
+		}
+	}
+	return ret
 }
 
 func (e *ex) publishInterrupt() {
@@ -177,13 +176,11 @@ func (e *ex) publishInterrupt() {
 
 func (e *ex) doInit(
 	ed text.Editor, m workspace.Loader,
-	commandOverride func([]string) (bool, bool, error),
 	publishEvent func(term.Event) bool,
 	opts ...text.Option,
 ) (err error) {
 	e.mode = modeDefault
 	e.workspace = m
-	e.cmdOverride = commandOverride
 	e.publishEvent = publishEvent
 
 	e.config = text.DefaultConfig()
@@ -276,49 +273,49 @@ func (e *ex) moveFocusCursor(line int) error {
 	return e.comp.SetCursor(h, term.Coordinates{Y: line})
 }
 
-func (e *ex) previousBuffer(args ...string) (bool, error) {
+func (e *ex) previousBuffer(args ...string) error {
 	b := e.comp.Browser()
 	b.PreviousTab(b.Focus())
-	return false, nil
+	return nil
 }
 
-func (e *ex) nextBuffer(args ...string) (bool, error) {
+func (e *ex) nextBuffer(args ...string) error {
 	b := e.comp.Browser()
 	b.NextTab(b.Focus())
-	return false, nil
+	return nil
 }
 
-func (e *ex) closeBuffer(args ...string) (bool, error) {
+func (e *ex) closeBuffer(args ...string) error {
 	b := e.comp.Browser()
 	b.RemoveWindowContent(b.Focus())
-	return false, nil
+	return nil
 }
 
-func (e *ex) closeAllBuffers(args ...string) (bool, error) {
+func (e *ex) closeAllBuffers(args ...string) error {
 	b := e.comp.Browser()
 	b.RemoveAllTabs()
-	return false, nil
+	return nil
 }
 
-func (e *ex) closeFocusWindow(args ...string) (bool, error) {
+func (e *ex) closeFocusWindow(args ...string) error {
 	b := e.comp.Browser()
-	return false, b.Focus().Close()
+	return b.Focus().Close()
 }
 
-func (e *ex) flushCloseIgnoreNonFlushed(args ...string) (bool, error) {
+func (e *ex) flushCloseIgnoreNonFlushed(args ...string) error {
 	b := e.comp.Browser()
 	e.quit = true
-	return true, e.comp.Flush(b.Focus())
+	return e.comp.Flush(b.Focus())
 }
 
-func (e *ex) forceFlush(args ...string) (bool, error) {
+func (e *ex) forceFlush(args ...string) error {
 	b := e.comp.Browser()
-	return false, e.comp.Flush(b.Focus())
+	return e.comp.Flush(b.Focus())
 }
 
-func (e *ex) forceQuit(args ...string) (bool, error) {
+func (e *ex) forceQuit(args ...string) error {
 	e.quit = true
-	return true, nil
+	return nil
 }
 
 func (e *ex) dispatchCommand(cmd string, args ...string) (err error) {
@@ -356,35 +353,35 @@ func (e *ex) editFileURI(uri workspace.URI) error {
 	return err
 }
 
-func (e *ex) editFile(args ...string) (bool, error) {
+func (e *ex) editFile(args ...string) error {
 	if len(args) == 0 {
-		return false, errors.New("expected file name")
+		return errors.New("expected file name")
 	}
 	// attempt to parse URI otherwise expect local file path
 	uri, err := workspace.ParseURI(args[0])
 	if err != nil {
 		uri, err = e.workspace.URI(args[0])
 		if err != nil {
-			return false, err
+			return err
 		}
 	}
-	return false, e.editFileURI(uri)
+	return e.editFileURI(uri)
 }
 
-func (e *ex) reloadFile(args ...string) (bool, error) {
+func (e *ex) reloadFile(args ...string) error {
 	b := e.comp.Browser()
 	focus := b.Focus()
 	uri, _, ok := e.handlerInFocus()
 	if !ok {
-		return false, errors.New("not a file")
+		return errors.New("not a file")
 	}
 	b.RemoveWindowContent(focus)
-	return false, e.editFileURI(uri)
+	return e.editFileURI(uri)
 }
 
-func (e *ex) splitDirectionChange(args ...string) (bool, error) {
+func (e *ex) splitDirectionChange(args ...string) error {
 	if len(args) == 0 {
-		return false, errors.New("expecting argument 'horizontal', 'h', 'vertical', 'v'")
+		return errors.New("expecting argument 'horizontal', 'h', 'vertical', 'v'")
 	}
 
 	b := e.comp.Browser()
@@ -396,7 +393,7 @@ func (e *ex) splitDirectionChange(args ...string) (bool, error) {
 		b.SetDefaultSplit(browser.OrientationRight)
 		b.SetMessage("changed split direction to vertical")
 	}
-	return false, nil
+	return nil
 }
 
 func (e *ex) newWindowHandler(h browser.Handler) {
@@ -404,29 +401,29 @@ func (e *ex) newWindowHandler(h browser.Handler) {
 	eb.Split(browser.OrientationDefault, h)
 }
 
-func (e *ex) focusNextWindow(args ...string) (bool, error) {
+func (e *ex) focusNextWindow(args ...string) error {
 	e.comp.Browser().FocusRight()
-	return false, nil
+	return nil
 }
 
-func (e *ex) focusPrevWindow(args ...string) (bool, error) {
+func (e *ex) focusPrevWindow(args ...string) error {
 	e.comp.Browser().FocusLeft()
-	return false, nil
+	return nil
 }
 
-func (e *ex) focusAboveWindow(args ...string) (bool, error) {
+func (e *ex) focusAboveWindow(args ...string) error {
 	e.comp.Browser().FocusUp()
-	return false, nil
+	return nil
 }
 
-func (e *ex) focusBelowWindow(args ...string) (bool, error) {
+func (e *ex) focusBelowWindow(args ...string) error {
 	e.comp.Browser().FocusDown()
-	return false, nil
+	return nil
 }
 
-func (e *ex) newWindow(args ...string) (bool, error) {
+func (e *ex) newWindow(args ...string) error {
 	e.newWindowHandler(nil)
-	return false, nil
+	return nil
 }
 
 func (e *ex) runCommand(cmd string, parts []string) (quit bool, err error) {
@@ -435,13 +432,6 @@ func (e *ex) runCommand(cmd string, parts []string) (quit bool, err error) {
 	// but default behaviour is to move cursor to line
 	if cmd != "" {
 		parts[0] = cmd // cmdAndArgs contains fuzzy completed command
-	}
-
-	if e.cmdOverride != nil {
-		quit, handled, err := e.cmdOverride(parts)
-		if quit || handled || err != nil {
-			return quit, err
-		}
 	}
 
 	if len(parts) == 1 {

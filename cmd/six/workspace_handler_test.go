@@ -33,6 +33,9 @@ func defaultCfg() ideConfig {
 				"9": "switchToWorkspace 9",
 				"0": "switchToWorkspace 10",
 			},
+			"aliases": map[string]interface{}{
+				"addBlaBla": "addWorkspace memory:///blabla",
+			},
 		},
 		"workspace": map[string]interface{}{
 			"wallpaper": "workspaceWallpaper",
@@ -178,7 +181,7 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 │ there's only 10 w│
 │orkspaces         │
 └──────────────────┘`},
-		{":addWorkspace blabla>",
+		{":addBlaBla>",
 			`┌──────────────────┐
 │                  │
 ├──────────────────┤
@@ -186,8 +189,8 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 │                  │
 │workspaceWallpaper│
 │Unknown command "a│
-│ddWorkspace" or al│
-│ias targets       │
+│ddBlaBla" or alias│
+│ targets          │
 └──────────────────┘`},
 		{"1234567890",
 			`┌──────────────────┐
@@ -221,6 +224,17 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 │ number           │
 ├──────────────────┤
 │1  2              │
+└──────────────────┘`},
+		{":sw 3>:addBlaBla>",
+			`┌──────────────────┐
+│                  │
+├──────────────────┤
+│                  │
+│workspaceWallpaper│
+│                  │
+│                  │
+├──────────────────┤
+│1  3              │
 └──────────────────┘`},
 	}
 	testutil.TestHandlerIsolated(t, fn, 20, 10, cases)

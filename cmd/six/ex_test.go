@@ -881,8 +881,8 @@ func initExForTestingWithWorkspace(
 	t *testing.T, ex *ex, workspace *testLoader,
 	ed text.Editor, opts ...text.Option,
 ) {
-	require.NoError(t, ex.init(ed, workspace, exCommandList,
-		nil, nopPublishEvent, opts...))
+	require.NoError(t, ex.init(ed, workspace, nopPublishEvent, opts...))
+	ex.subscribeCommands()
 }
 
 func initExForTesting(t *testing.T, ex *ex, ed text.Editor, opts ...text.Option) {
