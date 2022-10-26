@@ -238,7 +238,7 @@ func (c *ioClient) Write(p []byte) (n int, err error) {
 	// if data is not available yet.
 	ctx := context.Background()
 
-	req := WriteRequest{HandlerId: c.handlerID, Data: string(p)}
+	req := WriteRequest{HandlerId: c.handlerID, Data: p}
 	resp, err := c.client.Write(ctx, &req)
 	if err != nil {
 		return 0, err

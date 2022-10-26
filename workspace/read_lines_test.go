@@ -40,6 +40,8 @@ func TestReadLines(t *testing.T) {
 			"a:1:4", "a:2:5", "b:1:0", "b:2:1",
 			"y:1:0", "y:2:1", "z:1:4", "z:2:5",
 		}},
+		{"invalid utf-8 character", []readLinesTestFile{{"a", "a\xc5z"}}, "",
+			[]string{"a:1:a\xc5z"}},
 	}
 
 	for _, tcase := range tsuite {

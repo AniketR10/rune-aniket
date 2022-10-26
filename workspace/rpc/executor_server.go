@@ -158,7 +158,7 @@ func (s *executorServer) Read(ctx context.Context, req *ReadRequest) (
 		return nil, fmt.Errorf("read error: %s", err)
 	}
 	resp := new(ReadResponse)
-	resp.Data = string(buf[:n])
+	resp.Data = buf[:n]
 	resp.N = int64(n)
 	resp.IsEof = err == io.EOF
 	return resp, nil

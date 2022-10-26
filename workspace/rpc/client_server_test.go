@@ -187,6 +187,24 @@ func TestClientServer(t *testing.T) {
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), "boom")
 		}},
+		{"Write non-utf8 data", func(t *testing.T, mock *workspace.MockOsFile, c *Client, s *Server) {
+			expectCommand(t, s, 99)
+			pid, err := c.Command("six", "arg1")
+			require.NoError(t, err)
+
+			s.wp.(*workspacetest.MockWorkspace).EXPECT().
+				StdinPipe(gomock.Eq(workspace.Pid(99))).Return(mock, nil)
+
+			pipe, err := c.StdinPipe(pid)
+			require.NoError(t, err)
+
+			mock.EXPECT().
+				Write(gomock.Eq([]byte("a:1:a\xc5z"))).Return(10, nil)
+
+			n, err := pipe.Write([]byte("a:1:a\xc5z"))
+			require.NoError(t, err)
+			assert.Equal(t, 10, n)
+		}},
 		{"StdinPipe error", func(t *testing.T, mock *workspace.MockOsFile, c *Client, s *Server) {
 			expectCommand(t, s, 99)
 			pid, err := c.Command("six", "arg1")
@@ -221,6 +239,27 @@ func TestClientServer(t *testing.T) {
 
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), "boom")
+		}},
+		{"Read non-utf8 data", func(t *testing.T, mock *workspace.MockOsFile, c *Client, s *Server) {
+			expectCommand(t, s, 99)
+			pid, err := c.Command("six", "arg1")
+			require.NoError(t, err)
+
+			s.wp.(*workspacetest.MockWorkspace).EXPECT().
+				StdoutPipe(gomock.Eq(workspace.Pid(99))).Return(mock, nil)
+
+			pipe, err := c.StdoutPipe(pid)
+			require.NoError(t, err)
+
+			mock.EXPECT().Read(gomock.Any()).DoAndReturn(func(buf []byte) (n int, err error) {
+				n = copy(buf, "a:1:a\xc5z")
+				return
+			})
+			buf := make([]byte, 7)
+			n, err := pipe.Read(buf)
+			require.NoError(t, err)
+			assert.Equal(t, 7, n)
+			assert.Equal(t, "a:1:a\xc5z", string(buf))
 		}},
 		{"StdoutPipe error", func(t *testing.T, mock *workspace.MockOsFile, c *Client, s *Server) {
 			expectCommand(t, s, 99)

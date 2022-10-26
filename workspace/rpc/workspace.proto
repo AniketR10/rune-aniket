@@ -91,13 +91,13 @@ message ReadRequest {
 
 message ReadResponse {
 	int64 n = 1;
-	string data = 2;
+	bytes data = 2;
 	bool is_eof = 3;
 }
 
 message WriteRequest {
 	int32 handler_id = 1;
-	string data = 2;
+	bytes data = 2;
 }
 
 message WriteResponse {
