@@ -96,10 +96,7 @@ func makeFileURI(u *url.URL) (URI, error) {
 	path := sanitizeFilePath(u.Path)
 	u.Path = path
 	if u.Scheme == "" {
-		if !filepath.IsAbs(path) {
-			return URI{}, errors.New("cannot parse relative path without current workspace. Use workspace.Manager.URI instead.")
-		}
-		u.Scheme = "file"
+		return URI{}, errors.New("cannot parse path as URI without context of current workspace. Use workspace.API.URI instead.")
 	}
 	return URI{uri: u.String(), parsed: *u, name: filepath.Base(path)}, nil
 }
