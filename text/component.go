@@ -500,18 +500,18 @@ func (c *Component) DispatchCommand(cmd Command) (handled bool, err error) {
 		}
 		return handled, nil
 	}
-	commander, handled := c.cmdSubscribers[cmd.Name]
-	if !handled {
+	commander, ok := c.cmdSubscribers[cmd.Name]
+	if !ok {
+		c.log(log.DebugLevel, "Dispatching command %q: no subscribers", cmd.Name)
 		return false, nil
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
-	defer cancel()
-
-	exit, err := commander.HandleCommand(ctx, cmd)
+	c.log(log.InfoLevel, "Dispatching command %q with args %v", cmd.Name, cmd.Args)
+	exit, err := commander.HandleCommand(context.Background(), cmd)
 	if err != nil {
 		return true, err
 	}
 	if exit {
+		c.log(log.DebugLevel, "Removing command %q: returned exit=true: %#v", cmd.Name, commander)
 		delete(c.cmdSubscribers, cmd.Name)
 	}
 	return true, nil
