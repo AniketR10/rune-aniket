@@ -128,7 +128,7 @@ func ParseSequence(str string) (Sequence, error) {
 		idxGt := strings.IndexRune(str, '>')
 		idxLt := strings.IndexRune(str, '<')
 
-		if idxLt > idxGt {
+		if idxLt < 0 || idxGt < 0 || idxLt > idxGt {
 			return Sequence{}, errors.New("invalid sequence")
 		}
 

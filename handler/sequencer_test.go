@@ -103,6 +103,7 @@ func TestParseSequence(t *testing.T) {
 		{">c-p<f", Sequence{}, true},
 		{"f>c-p<", Sequence{}, true},
 		{"><><", Sequence{}, true},
+		{"                                               ", Sequence{}, true},
 		{"ff", Sequence{
 			First: term.KeyComb{Ch: 'f'},
 			Last:  term.KeyComb{Ch: 'f'},
