@@ -6,8 +6,11 @@ import (
 	stdErrors "errors"
 	"fmt"
 	"io"
+	"math"
 	"net/url"
 	"os"
+	"runtime"
+	"sync"
 	"syscall"
 
 	"github.com/ernestrc/blue/iterator"
@@ -28,7 +31,14 @@ var (
 	errExecute = stdErrors.New("cannot execute commands on upspin server")
 	configKeys = []string{"username", "keyserver",
 		"dirserver", "storeserver", "packing", "secrets", "tlscerts"}
+	defaultWorkers int
 )
+
+func init() {
+	maxProcs := runtime.GOMAXPROCS(0)
+	numCPU := runtime.NumCPU()
+	defaultWorkers = int(math.Max(1, math.Min(float64(maxProcs), float64(numCPU))))
+}
 
 type scheme struct {
 	uri    workspace.URI
@@ -225,8 +235,137 @@ func (s *scheme) ReadLink(path string) (string, error) {
 	return string(entry.Link), nil
 }
 
+type listFilesIterator struct {
+	mu  sync.Mutex
+	err error
+	ctx context.Context
+	ch  chan string
+}
+
+func (l *listFilesIterator) Next() (string, bool) {
+	select {
+	case <-l.ctx.Done():
+		l.mu.Lock()
+		defer l.mu.Unlock()
+		l.err = multierr.Append(l.err, l.ctx.Err())
+		return "", false
+	case path, ok := <-l.ch:
+		return path, ok
+	}
+}
+
+func (l *listFilesIterator) Err() error {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	if l.err == nil {
+		return l.ctx.Err()
+	}
+	if l.ctx.Err() == nil {
+		return l.err
+	}
+	return multierr.Append(l.err, l.ctx.Err())
+}
+
+func traverseDirectory(
+	ctx context.Context, client upspin.Client, path upspin.PathName,
+	wg *sync.WaitGroup, ch chan string, workerCh chan upspin.PathName,
+) error {
+	defer wg.Done()
+
+	entries, err := client.Glob(string(path))
+	if err != nil {
+		return fmt.Errorf("upspin.Client.Glob(%s): %s", string(path), err)
+	}
+
+	var ret error
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			u, err := url.Parse("upspin://" + string(entry.Name))
+			if err != nil {
+				ret = multierr.Append(ret, err)
+				continue
+			}
+
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case ch <- u.Path:
+				continue
+			}
+		}
+
+		uname := upspin.PathName(fmt.Sprintf("%s/*", entry.Name))
+		wg.Add(1)
+		select {
+		case <-ctx.Done():
+			wg.Done()
+			return ctx.Err()
+		case workerCh <- uname:
+		default:
+			// the rest of workers are busy, keep going
+			err := traverseDirectory(ctx, client, uname, wg, ch, workerCh)
+			if err != nil {
+				ret = multierr.Append(ret, err)
+			}
+		}
+	}
+	return ret
+}
+
+func traverseDirWorker(
+	ctx context.Context, client upspin.Client, wg *sync.WaitGroup,
+	ch chan string, workerCh chan upspin.PathName,
+	mu *sync.Mutex, err *error,
+) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case path := <-workerCh:
+			dirErr := traverseDirectory(ctx, client, path, wg, ch, workerCh)
+			if dirErr != nil {
+				mu.Lock()
+				*err = multierr.Append(*err, dirErr)
+				mu.Unlock()
+			}
+		}
+	}
+}
+
 func (s *scheme) ListFiles(ctx context.Context) (iterator.Iterator[string], error) {
-	panic("unimplemented")
+	uname, err := s.makeUpspinPathname("*")
+	if err != nil {
+		return nil, err
+	}
+
+	var wg sync.WaitGroup
+	ch := make(chan string)
+	workerCh := make(chan upspin.PathName)
+	errors := make([]error, defaultWorkers)
+	iterator := &listFilesIterator{ctx: ctx, ch: ch}
+
+	for i := 0; i < defaultWorkers; i++ {
+		go traverseDirWorker(ctx, s.client, &wg, ch, workerCh,
+			&iterator.mu, &errors[i])
+	}
+
+	wg.Add(1)
+	workerCh <- uname
+
+	go func() {
+		wg.Wait()
+		iterator.mu.Lock()
+		defer iterator.mu.Unlock()
+		for _, err := range errors {
+			if err != nil {
+				iterator.err = multierr.Append(iterator.err, err)
+			}
+		}
+		close(ch)
+	}()
+
+	return iterator, nil
 }
 
 func (s *scheme) Command(name string, arg ...string) (workspace.Pid, error) {
