@@ -317,10 +317,10 @@ func (l *List) consumeAsyncElements(quitChan chan struct{}) {
 				return
 			}
 			l.pushData(data, slab, false)
-			dirty = true
 			if i%l.cfg.setFileCountEvery == 0 {
 				l.mu.Lock()
 				l.setFilesCount()
+				dirty = true
 				l.mu.Unlock()
 			}
 		case <-quitChan:
