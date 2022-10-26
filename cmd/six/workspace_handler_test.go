@@ -225,7 +225,7 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 ├──────────────────┤
 │1  2              │
 └──────────────────┘`},
-		{":sw 3>:addBlaBla>",
+		{":sw 3>:addBlaBla>", // test workspace handler aliases
 			`┌──────────────────┐
 │                  │
 ├──────────────────┤
@@ -235,6 +235,17 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 │                  │
 ├──────────────────┤
 │1  3              │
+└──────────────────┘`},
+		{":sw 4>:addWorkspace />", // can give path as arg to addWorkspace
+			`┌──────────────────┐
+│                  │
+├──────────────────┤
+│                  │
+│workspaceWallpaper│
+│                  │
+│                  │
+├──────────────────┤
+│1  4              │
 └──────────────────┘`},
 	}
 	testutil.TestHandlerIsolated(t, fn, 20, 10, cases)
@@ -274,6 +285,8 @@ func newTestWorkspaceManagerHandler(
 	manager := workspace.NewManager(config.NopConfig())
 	require.NoError(t, manager.RegisterScheme(workspace.MemoryScheme,
 		workspace.NewMemoryScheme))
+	require.NoError(t, manager.RegisterScheme(workspace.FileScheme,
+		workspace.NewFileScheme))
 
 	uri, err := workspace.ParseURI("memory:///tmp")
 	require.NoError(t, err)

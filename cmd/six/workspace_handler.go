@@ -5,10 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
-	"os/user"
 	"strconv"
-	"strings"
 	"sync"
 
 	"github.com/ernestrc/blue/document"
@@ -451,22 +448,16 @@ func (h *workspaceManagerHandler) commandAddWorkspace(args ...string) error {
 	}
 	path := args[0]
 
-	// if literal URI use as-is
-	if strings.Contains(path, "://") {
-		uri, err := workspace.ParseURI(path)
-		if err == nil {
-			return h.addWorkspace(uri, "", nil)
-		}
-		return fmt.Errorf("malformed URI: %s", err)
+	// try to use literal URI
+	uri, parseErr := workspace.ParseURI(path)
+	if parseErr == nil {
+		return h.addWorkspace(uri, "", nil)
 	}
 
-	path, err := workspace.ExpandPath(path, user.Current, os.Getwd)
-	if err != nil {
-		return fmt.Errorf("ExpandPath: %s", err)
-	}
-	uri, err := workspace.ParseURI(path)
-	if err != nil {
-		return fmt.Errorf("malformed URI: %s", err)
+	uri, pathErr := workspace.CurrentUserHostURI(path)
+	if pathErr != nil {
+		err := multierr.Append(pathErr, parseErr)
+		return err
 	}
 	return h.addWorkspace(uri, "", nil)
 }

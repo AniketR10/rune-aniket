@@ -61,9 +61,13 @@ func (i *ide) init(cwd, cfgfilename, recfilename string,
 		return configErr
 	}
 
-	cwdURI, err := workspace.ParseURI(cwd)
-	if err != nil {
-		return err
+	cwdURI, parseErr := workspace.ParseURI(cwd)
+	if parseErr != nil {
+		var pathErr error
+		cwdURI, pathErr = workspace.CurrentUserHostURI(cwd)
+		if pathErr != nil {
+			return multierr.Append(pathErr, parseErr)
+		}
 	}
 
 	var l *log.Logger
@@ -94,7 +98,7 @@ func (i *ide) init(cwd, cfgfilename, recfilename string,
 
 	// register default schemes
 	workspaceManager := workspace.NewManager(i.ideConfig.workspace())
-	err = workspaceManager.RegisterScheme(ssh.Scheme, ssh.New)
+	err := workspaceManager.RegisterScheme(ssh.Scheme, ssh.New)
 	if err != nil {
 		return err
 	}

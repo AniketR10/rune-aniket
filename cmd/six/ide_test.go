@@ -65,4 +65,21 @@ func TestIDEInitializationIntegration(t *testing.T) {
 
 		assert.NoError(t, i.closeResources())
 	})
+
+	t.Run("takes a non-URI as a workspace", func(t *testing.T) {
+		configFile, file1 := makeTestFiles(t)
+
+		err := ioutil.WriteFile(configFile.Name(), []byte("{}"), 0666)
+		require.NoError(t, err)
+
+		i := new(ide)
+		err = i.init(".", configFile.Name(), "",
+			nopPublishEvent, file1.Name())
+		require.NoError(t, err)
+
+		require.NotNil(t, i.workspace)
+		require.NotNil(t, i.clipboard)
+
+		assert.NoError(t, i.closeResources())
+	})
 }
