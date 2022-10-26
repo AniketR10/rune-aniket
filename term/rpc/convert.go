@@ -423,7 +423,6 @@ func (c *Cell) ToModel() term.Cell {
 	return term.Cell{
 		Bg: term.Attribute(c.Background),
 		Fg: term.Attribute(c.Foreground),
-		// TODO test full UTF-8
 		Ch: rune(c.Character),
 	}
 }

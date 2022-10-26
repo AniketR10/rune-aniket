@@ -11,6 +11,7 @@ import (
 	"go.uber.org/goleak"
 	"google.golang.org/grpc"
 	"unstable.build/go-tui"
+	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/term"
 	testutil "unstable.build/go-tui/util/test"
@@ -86,10 +87,9 @@ func (h *testResizeHandler) Resize(width, height int) {
 }
 
 func TestClientHandlerDraw(t *testing.T) {
-	stubClient := newStubClient(t)
-	defer stubClient.Close()
-
 	t.Run("draw", func(t *testing.T) {
+		stubClient := newStubClient(t)
+		defer stubClient.Close()
 		cases := []testutil.HandlerSequenceTestCase{
 			{"",
 				`AAAA
@@ -103,6 +103,26 @@ BBBB`},
 		}
 
 		testutil.TestHandlerSequence(t, stubClient, 4, 4, cases)
+	})
+
+	t.Run("draw multi codepoint utf-8", func(t *testing.T) {
+		stubClient := &Client{
+			client: &mockHandlerClient{
+				remote: handler.Nop(component.StringWithConfig(`┏━━━━━┓
+┃  中  ┃
+┃     ┃
+┗━━━━━┛`, component.StringConfig{Alignment: component.SpanAlignmentCentered})),
+			},
+		}
+		cases := []testutil.HandlerSequenceTestCase{
+			{"",
+				`┏━━━━━┓
+┃  中  ┃
+┃     ┃
+┗━━━━━┛`},
+		}
+
+		testutil.TestHandlerSequence(t, stubClient, 7, 4, cases)
 	})
 
 	t.Run("calls resize only when dimensions have changed", func(t *testing.T) {
