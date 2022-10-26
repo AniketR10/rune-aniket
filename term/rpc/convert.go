@@ -180,7 +180,7 @@ func (e *Event) ToModel() (ev term.Event, err error) {
 	ev.Ch = rune(e.Char)
 	ev.MouseX = int(e.GetMouseX())
 	ev.MouseY = int(e.GetMouseY())
-	ev.Raw = []byte(e.GetRaw())
+	ev.Raw = e.GetRaw()
 
 	return ev, nil
 }
@@ -410,7 +410,7 @@ func (e *Event) FromModel(ev term.Event) error {
 	e.Char = uint32(ev.Ch)
 	e.MouseX = int32(ev.MouseX)
 	e.MouseY = int32(ev.MouseY)
-	e.Raw = string(ev.Raw)
+	e.Raw = ev.Raw
 
 	return nil
 }
