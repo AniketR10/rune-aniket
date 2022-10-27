@@ -32,7 +32,6 @@ func (r *handlerClientResource) Close() (ret error) {
 }
 
 type commandClientResource struct {
-	handlerConn   proto.MuxConn
 	client        *commandClient
 	cancelMonitor func()
 }
@@ -40,9 +39,6 @@ type commandClientResource struct {
 func (r *commandClientResource) Close() (ret error) {
 	defer r.cancelMonitor()
 	if err := r.client.Close(); err != nil {
-		ret = multierr.Append(ret, err)
-	}
-	if err := r.handlerConn.Close(); err != nil {
 		ret = multierr.Append(ret, err)
 	}
 	return ret

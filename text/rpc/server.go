@@ -181,7 +181,10 @@ func (s *Server) safeForceCloseHandler(brokerID uint32, reason string) error {
 	res, ok := s.clients[uint64(brokerID)]
 	if ok {
 		// make sure that next Handle unsubscribes
-		res.(*handlerClientResource).client.exitNext = true
+		handlerRes, ok := res.(*handlerClientResource)
+		if ok {
+			handlerRes.client.exitNext = true
+		}
 	}
 	s.editor.Unlock()
 
@@ -271,7 +274,6 @@ func (s *Server) dialCommandHandler(handlerID uint32) (text.CommandHandler, erro
 	defer s.editor.Unlock()
 
 	s.clients[uint64(handlerID)] = &commandClientResource{
-		handlerConn:   handlerConn,
 		client:        client,
 		cancelMonitor: cancelFn,
 	}

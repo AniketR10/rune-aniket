@@ -255,6 +255,71 @@ func assertEqualLocations(t *testing.T, loc, expected text.LocationList) {
 	assert.EqualValues(t, expectedLocations, locations)
 }
 
+func TestServerRegister(t *testing.T) {
+	t.Run("calls underlying editor SubscribeCommand", func(t *testing.T) {
+		ctx := context.Background()
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		broker, mock, s := newTestServer(t, ctrl)
+
+		conn := prototest.ExpectBrokerDial(t, ctrl, broker, 1234)
+		quitCh := prototest.ExpectMonitorConn(conn)
+
+		var wg sync.WaitGroup
+		mock.EXPECT().SubscribeCommand(gomock.Any(), gomock.Any()).
+			DoAndReturn(func(string, text.CommandHandler) error {
+				wg.Done()
+				return nil
+			})
+
+		wg.Add(1)
+		req := RegisterCommandRequest{Command: "bla", HandlerId: 1234}
+		res, err := s.Register(ctx, &req)
+		require.NoError(t, err)
+		require.NotNil(t, res)
+		wg.Wait()
+
+		conn.EXPECT().Close().Times(1).
+			DoAndReturn(prototest.ExpectSignalExit(conn, quitCh, nil))
+
+		assert.NoError(t, s.Close())
+		waitForMonitoringExit(quitCh)
+	})
+
+	t.Run("handles SubscribeCommand errors", func(t *testing.T) {
+		ctx := context.Background()
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		broker, mock, s := newTestServer(t, ctrl)
+
+		conn := prototest.ExpectBrokerDial(t, ctrl, broker, 1234)
+		quitCh := prototest.ExpectMonitorConn(conn)
+
+		var wg sync.WaitGroup
+		mock.EXPECT().SubscribeCommand(gomock.Any(), gomock.Any()).
+			DoAndReturn(func(string, text.CommandHandler) error {
+				wg.Done()
+				return errors.New("boom")
+			})
+
+		conn.EXPECT().Close().Times(1).
+			DoAndReturn(prototest.ExpectSignalExit(conn, quitCh, nil))
+
+		wg.Add(1)
+		req := RegisterCommandRequest{Command: "bla", HandlerId: 1234}
+		res, err := s.Register(ctx, &req)
+		require.Error(t, err)
+		require.Nil(t, res)
+		assert.Contains(t, err.Error(), "boom")
+		wg.Wait()
+
+		assert.NoError(t, s.Close())
+		waitForMonitoringExit(quitCh)
+	})
+}
+
 func TestServerSetLocationList(t *testing.T) {
 	resource, err := workspace.ParseURI("file:///go-tui")
 	require.NoError(t, err)
