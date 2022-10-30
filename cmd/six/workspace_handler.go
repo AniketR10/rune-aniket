@@ -128,7 +128,7 @@ func (h *workspaceManagerHandler) init(
 	h.cfg = cfg
 	h.clipboard = clipboard
 	h.publishEvent = publishEvent
-	h.storage = document.NewInMemoryCache()
+	h.storage = document.NewInMemoryService()
 	h.workspace = manager
 
 	globalOpts := h.textOpts(h.cfg)

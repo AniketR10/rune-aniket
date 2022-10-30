@@ -105,7 +105,7 @@ func (m *Manager) Init(grantor Grantor, opts ...Option) (err error) {
 	}
 	m.rmu = m.config.locker
 
-	cache := document.NewInMemoryCache()
+	cache := document.NewInMemoryService()
 	m.brokerServer = docrpc.NewServer(cache)
 	m.broker, m.brokerAddr, err = initHostBroker(m.config, cache, m.brokerServer)
 	if err != nil {

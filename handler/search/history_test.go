@@ -9,7 +9,7 @@ import (
 )
 
 func TestHistory(t *testing.T) {
-	store := document.NewInMemoryCache()
+	store := document.NewInMemoryService()
 	history := NewHistory(store, "id", 4)
 	err := history.Load()
 	require.NoError(t, err)

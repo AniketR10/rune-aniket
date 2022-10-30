@@ -38,7 +38,7 @@ func TestIntegrationRace(t *testing.T) {
 
 	mockWin := browser.NopWindow()
 	h := browser.NewTestHandler()
-	cache := document.NewInMemoryCache()
+	cache := document.NewInMemoryService()
 	broker := proto.NewDatastoreBroker(cache)
 	defer broker.Close()
 	mock := browser.NewMockBrowser(ctrl)

@@ -64,7 +64,7 @@ func DefaultConfig() Config {
 		CommandEvent:            term.KeyComb{Ch: ':'},
 		CommandMaxHistory:       10,
 		Config:                  browser.DefaultConfig(),
-		Storage:                 document.NewInMemoryCache(),
+		Storage:                 document.NewInMemoryService(),
 		DirtyTabAttr:            term.Attributes{Fg: term.AttrBold},
 		CommandKeyBindings:      make(map[term.KeyComb][]string),
 		CommandSequenceBindings: make(map[handler.Sequence][]string),
