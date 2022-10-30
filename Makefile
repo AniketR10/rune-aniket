@@ -1,5 +1,5 @@
 GO=go
-GOTESTFLAGS=-race -timeout 40s
+GOTESTFLAGS=-race -timeout 60s
 GOFLAGS="-ldflags=-X main.Tag=$$(git describe --tags) -X main.Commit=$$(git rev-parse --short HEAD)"
 
 BIN=bin
