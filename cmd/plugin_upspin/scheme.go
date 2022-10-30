@@ -9,6 +9,7 @@ import (
 	"math"
 	"net/url"
 	"os"
+	"path/filepath"
 	"runtime"
 	"sync"
 	"syscall"
@@ -139,7 +140,7 @@ func (s *scheme) URI(path string) (workspace.URI, error) {
 	return workspace.ParseURI(uriStr)
 }
 
-func (s *scheme) Open(path string, flag int, perm os.FileMode) (workspace.File, *workspace.Error) {
+func (s *scheme) Open(path string, flag int, mode os.FileMode) (workspace.File, *workspace.Error) {
 	uname, err := s.makeUpspinPathname(path)
 	if err != nil {
 		return nil, workspace.NopError(err)
@@ -155,7 +156,8 @@ func (s *scheme) Open(path string, flag int, perm os.FileMode) (workspace.File, 
 			return nil, mapUpspinError(err)
 		}
 	}
-	return fileAdapter{client: s.client, file: f}, nil
+	path, _ = s.expandPath(path)
+	return fileAdapter{client: s.client, file: f, path: path}, nil
 }
 
 func (s *scheme) Remove(path string) error {
@@ -186,7 +188,7 @@ func (s *scheme) Rename(oldpath, newpath string) error {
 	_, err = s.client.Rename(unew, backup)
 	// ignore error if there's already a backup to avoid
 	// always having an extra rountrip to delete first
-	if err != nil && !errors.Is(errors.Exist, err) {
+	if err != nil && !errors.Is(errors.NotExist, err) {
 		return err
 	}
 
@@ -232,6 +234,9 @@ func (s *scheme) ReadLink(path string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	if entry.Link == "" {
+		return "", errors.E("not a link")
+	}
 	return string(entry.Link), nil
 }
 
@@ -268,7 +273,7 @@ func (l *listFilesIterator) Err() error {
 }
 
 func traverseDirectory(
-	ctx context.Context, client upspin.Client, path upspin.PathName,
+	ctx context.Context, cwd workspace.URI, client upspin.Client, path upspin.PathName,
 	wg *sync.WaitGroup, ch chan string, workerCh chan upspin.PathName,
 ) error {
 	defer wg.Done()
@@ -286,11 +291,12 @@ func traverseDirectory(
 				ret = multierr.Append(ret, err)
 				continue
 			}
-
+			filename, _ := filepath.Rel(cwd.Path(),
+				filepath.Join(cwd.Path(), filepath.Base(u.Path)))
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
-			case ch <- u.Path:
+			case ch <- filename:
 				continue
 			}
 		}
@@ -304,7 +310,7 @@ func traverseDirectory(
 		case workerCh <- uname:
 		default:
 			// the rest of workers are busy, keep going
-			err := traverseDirectory(ctx, client, uname, wg, ch, workerCh)
+			err := traverseDirectory(ctx, cwd, client, uname, wg, ch, workerCh)
 			if err != nil {
 				ret = multierr.Append(ret, err)
 			}
@@ -314,7 +320,8 @@ func traverseDirectory(
 }
 
 func traverseDirWorker(
-	ctx context.Context, client upspin.Client, wg *sync.WaitGroup,
+	ctx context.Context, cwd workspace.URI,
+	client upspin.Client, wg *sync.WaitGroup,
 	ch chan string, workerCh chan upspin.PathName,
 	mu *sync.Mutex, err *error,
 ) {
@@ -323,7 +330,7 @@ func traverseDirWorker(
 		case <-ctx.Done():
 			return
 		case path := <-workerCh:
-			dirErr := traverseDirectory(ctx, client, path, wg, ch, workerCh)
+			dirErr := traverseDirectory(ctx, cwd, client, path, wg, ch, workerCh)
 			if dirErr != nil {
 				mu.Lock()
 				*err = multierr.Append(*err, dirErr)
@@ -346,7 +353,7 @@ func (s *scheme) ListFiles(ctx context.Context) (iterator.Iterator[string], erro
 	iterator := &listFilesIterator{ctx: ctx, ch: ch}
 
 	for i := 0; i < defaultWorkers; i++ {
-		go traverseDirWorker(ctx, s.client, &wg, ch, workerCh,
+		go traverseDirWorker(ctx, s.uri, s.client, &wg, ch, workerCh,
 			&iterator.mu, &errors[i])
 	}
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"io/fs"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/ernestrc/blue/retry"
@@ -16,7 +17,7 @@ var (
 	retryTimeout  = 5 * time.Second
 	retryStrategy = retry.CombinedStrategy(
 		retry.LimitStrategy(10),
-		retry.ExponentialStrategy(1*time.Millisecond, 1000*time.Millisecond),
+		retry.ExponentialStrategy(10*time.Millisecond, 1000*time.Millisecond),
 	)
 )
 
@@ -64,9 +65,41 @@ func (c *upspinClient) Rename(oldName, newName upspin.PathName) (
 	*upspin.DirEntry, error,
 ) {
 	entry, err := c.Client.Rename(oldName, newName)
-	if err == nil {
-		c.lastSequenceID[entry.Name] = entry.Sequence
-		delete(c.lastSequenceID, oldName)
+	if err != nil {
+		return nil, err
+	}
+
+	c.lastSequenceID[entry.Name] = entry.Sequence
+	delete(c.lastSequenceID, oldName)
+
+	ctx, cancel := context.WithTimeout(context.Background(), retryTimeout)
+	defer cancel()
+
+	err = retry.Retry(ctx, retryStrategy, func(ctx context.Context) (bool, error) {
+		_, err = c.Client.Lookup(oldName, false)
+		if err == nil {
+			return true, errors.E("stale lookup")
+		}
+		if errors.Is(errors.NotExist, err) {
+			return false, nil
+		}
+		return false, err
+	})
+	if err != nil {
+		return nil, err
+	}
+	err = retry.Retry(ctx, retryStrategy, func(ctx context.Context) (bool, error) {
+		_, err = c.Client.Lookup(newName, false)
+		if err == nil {
+			return false, nil
+		}
+		if errors.Is(errors.NotExist, err) {
+			return true, errors.E("stale lookup")
+		}
+		return false, err
+	})
+	if err != nil {
+		return nil, err
 	}
 	return entry, err
 }
@@ -76,9 +109,11 @@ func (c *upspinClient) Delete(name upspin.PathName) error {
 	defer cancel()
 
 	err := c.Client.Delete(name)
-	if err == nil {
-		delete(c.lastSequenceID, name)
+	if err != nil {
+		return err
 	}
+
+	delete(c.lastSequenceID, name)
 
 	err = retry.Retry(ctx, retryStrategy, func(ctx context.Context) (bool, error) {
 		_, err = c.Client.Lookup(name, false)
@@ -105,6 +140,7 @@ func (c *upspinClient) Put(name upspin.PathName, data []byte) (
 
 // satisfies internal osFile (only diff with upspin.File is Name())
 type fileAdapter struct {
+	path   string
 	client *upspinClient
 	file   *blupspin.File
 }
@@ -115,11 +151,12 @@ type entryAdapter struct {
 }
 
 func (e entryAdapter) Name() string {
-	return string(e.entry.Name)
+	// based on os.FileInfo, Name always returns the base
+	// name of the file.
+	return filepath.Base(string(e.entry.Name))
 }
 
-func (e entryAdapter) Size() int64 {
-	// unused
+func (e entryAdapter) Size() (ret int64) {
 	return 0
 }
 
@@ -135,7 +172,8 @@ func (e entryAdapter) ModTime() time.Time {
 	// allows for same types of checks and we can
 	// take advantage of the eventual-consistency provided
 	// by the backend systems.
-	return time.Unix(int64(e.entry.Sequence), 0)
+	// return time.Unix(int64(e.entry.Sequence), 0)
+	return time.Unix(int64(e.entry.Time), 0)
 }
 
 func (e entryAdapter) IsDir() bool {
@@ -155,9 +193,7 @@ func (f fileAdapter) Read(p []byte) (n int, err error) {
 }
 
 func (f fileAdapter) Close() error {
-	// respect os.File semantics:
-	// do not call Put once more to avoid conflicts with rename
-	return nil
+	return f.file.Close()
 }
 
 func (f fileAdapter) Write(p []byte) (n int, err error) {
@@ -165,7 +201,9 @@ func (f fileAdapter) Write(p []byte) (n int, err error) {
 }
 
 func (f fileAdapter) Name() string {
-	return string(f.file.Name())
+	// Name as defined by os.File is always whatever
+	// path was given to Open
+	return f.path
 }
 
 func (f fileAdapter) Stat() (os.FileInfo, error) {
