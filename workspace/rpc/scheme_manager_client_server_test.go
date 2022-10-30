@@ -15,6 +15,7 @@ import (
 	"unstable.build/go-tui/config"
 	"unstable.build/go-tui/proto"
 	"unstable.build/go-tui/workspace"
+	"unstable.build/go-tui/workspace/test"
 	workspacetest "unstable.build/go-tui/workspace/test"
 )
 
@@ -38,48 +39,72 @@ func doSetupSchemeManagerClientServerTest(
 	}
 	return
 }
+func setupProxyUnitTest(t *testing.T, ctrl *gomock.Controller) (
+	workspace.Scheme, *workspacetest.MockScheme, func(),
+) {
+	mockScheme := workspacetest.NewMockScheme(ctrl)
+	client, closeFn := setupProxyTest(t, mockScheme)
+	return client, mockScheme, closeFn
+}
 
-func TestSchemeManagerClientServerScheme(t *testing.T) {
-	testSchemeClientServer(t, func(t *testing.T, ctrl *gomock.Controller) (
-		workspace.Scheme, *workspacetest.MockScheme, func(),
-	) {
-		uri, err := workspace.ParseURI("test:///tmp")
+func setupProxyTest(t *testing.T, mockScheme workspace.Scheme) (
+	workspace.Scheme, func(),
+) {
+	uri, err := workspace.ParseURI("test:///tmp")
+	require.NoError(t, err)
+	cfg := config.NopConfig()
+	manager := workspace.NewManager(cfg)
+	broker := proto.NewDialBroker()
+
+	// host-side
+	srv := NewSchemeManagerServer(broker, manager, new(sync.Mutex))
+	conn, closeFn := doSetupSchemeManagerClientServerTest(t, srv)
+
+	// plugin-side
+	managerClient := NewSchemeManager(broker, conn)
+	require.NoError(t, managerClient.RegisterScheme("test", func(_cfg config.Config, _uri workspace.URI) (workspace.Scheme, error) {
+		assert.Equal(t, uri, _uri)
+		return mockScheme, nil
+	}))
+
+	// wait for RegisterScheme on host side
+	var schemeFn workspace.SchemeFunc
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	err = retry.Retry(ctx, retry.ExponentialStrategy(10*time.Millisecond, 1*time.Second),
+		func(context.Context) (bool, error) {
+			var err error
+			schemeFn, err = manager.Scheme(uri)
+			return true, err
+		})
+	require.NoError(t, err)
+
+	client, err := schemeFn(cfg, uri)
+	require.NoError(t, err)
+
+	return client, func() {
+		closeFn()
+		conn.Close()
+		manager.Close()
+	}
+}
+
+func TestSchemeManagerClientServerSchemeUnit(t *testing.T) {
+	testSchemeClientServer(t, setupProxyUnitTest)
+}
+
+func TestSchemeManagerClientServerSchemeSuiteIntegration(t *testing.T) {
+	var cleanups []func()
+	test.TestWorkspaceSchemeFiles(t, func(t *testing.T) workspace.Scheme {
+		memURI, err := workspace.ParseURI("memory:///tmp")
 		require.NoError(t, err)
-		cfg := config.NopConfig()
-		manager := workspace.NewManager(cfg)
-		broker := proto.NewDialBroker()
-		mockScheme := workspacetest.NewMockScheme(ctrl)
-
-		// host-side
-		srv := NewSchemeManagerServer(broker, manager, new(sync.Mutex))
-		conn, closeFn := doSetupSchemeManagerClientServerTest(t, srv)
-
-		// plugin-side
-		managerClient := NewSchemeManager(broker, conn)
-		require.NoError(t, managerClient.RegisterScheme("test", func(_cfg config.Config, _uri workspace.URI) (workspace.Scheme, error) {
-			assert.Equal(t, uri, _uri)
-			return mockScheme, nil
-		}))
-
-		// wait for RegisterScheme on host side
-		var schemeFn workspace.SchemeFunc
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		err = retry.Retry(ctx, retry.ExponentialStrategy(10*time.Millisecond, 1*time.Second),
-			func(context.Context) (bool, error) {
-				var err error
-				schemeFn, err = manager.Scheme(uri)
-				return true, err
-			})
+		scheme, err := workspace.NewMemoryScheme(config.NopConfig(), memURI)
 		require.NoError(t, err)
-
-		client, err := schemeFn(cfg, uri)
-		require.NoError(t, err)
-
-		return client, mockScheme, func() {
-			closeFn()
-			conn.Close()
-			manager.Close()
-		}
+		client, closeFn := setupProxyTest(t, scheme)
+		cleanups = append(cleanups, closeFn)
+		return client
 	})
+	for _, cleanup := range cleanups {
+		cleanup()
+	}
 }

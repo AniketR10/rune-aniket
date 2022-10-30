@@ -23,6 +23,7 @@ message OpenResponse {
 	bool is_exist_err = 2;
 	bool is_not_exist_err = 3;
 	bool is_permission_err = 4;
+	string filename = 5;
 }
 
 message RemoveRequest {

@@ -115,6 +115,13 @@ func (p *fileScheme) init(cfg config.Config, workspace URI) error {
 }
 
 func (p *fileScheme) Open(path string, flag int, perm os.FileMode) (File, *Error) {
+	var err error
+	path, err = ExpandPath(path, p.getUserOrLookup, func() (string, error) {
+		return p.workspace.Path(), nil
+	})
+	if err != nil {
+		return nil, NopError(err)
+	}
 	f, err := os.OpenFile(path, flag, perm)
 	if err != nil {
 		return nil, &Error{
@@ -128,22 +135,63 @@ func (p *fileScheme) Open(path string, flag int, perm os.FileMode) (File, *Error
 }
 
 func (p *fileScheme) Remove(path string) error {
+	var err error
+	path, err = ExpandPath(path, p.getUserOrLookup, func() (string, error) {
+		return p.workspace.Path(), nil
+	})
+	if err != nil {
+		return err
+	}
 	return os.Remove(path)
 }
 
 func (p *fileScheme) Rename(old, new string) error {
+	var err error
+	old, err = ExpandPath(old, p.getUserOrLookup, func() (string, error) {
+		return p.workspace.Path(), nil
+	})
+	if err != nil {
+		return err
+	}
+	new, err = ExpandPath(new, p.getUserOrLookup, func() (string, error) {
+		return p.workspace.Path(), nil
+	})
+	if err != nil {
+		return err
+	}
 	return os.Rename(old, new)
 }
 
 func (p *fileScheme) Stat(path string) (os.FileInfo, error) {
+	var err error
+	path, err = ExpandPath(path, p.getUserOrLookup, func() (string, error) {
+		return p.workspace.Path(), nil
+	})
+	if err != nil {
+		return nil, err
+	}
 	return os.Stat(path)
 }
 
 func (p *fileScheme) Lstat(path string) (os.FileInfo, error) {
+	var err error
+	path, err = ExpandPath(path, p.getUserOrLookup, func() (string, error) {
+		return p.workspace.Path(), nil
+	})
+	if err != nil {
+		return nil, err
+	}
 	return os.Lstat(path)
 }
 
 func (p *fileScheme) ReadLink(path string) (string, error) {
+	var err error
+	path, err = ExpandPath(path, p.getUserOrLookup, func() (string, error) {
+		return p.workspace.Path(), nil
+	})
+	if err != nil {
+		return "", err
+	}
 	return os.Readlink(path)
 }
 

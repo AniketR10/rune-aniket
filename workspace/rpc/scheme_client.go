@@ -145,7 +145,7 @@ func (c *openRemoveClientImpl) Open(name string, flag int, perm os.FileMode) (
 	}
 	// workspace.Pid is not necessary (and/or available) for files
 	// because it's only used for Wait cleanup
-	return c.newFileClient(-1, name, resp.GetHandlerId()), nil
+	return c.newFileClient(-1, resp.GetFilename(), resp.GetHandlerId()), nil
 }
 
 func (c *openRemoveClientImpl) Remove(name string) error {

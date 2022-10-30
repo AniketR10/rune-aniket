@@ -181,7 +181,7 @@ func setupTestDirectory(totalFiles, nestEvery, emptyDirsPerFile int) (URI, func(
 	}, nil
 }
 
-func TestListFiles(t *testing.T) {
+func TestFileSchemeListFilesLarge(t *testing.T) {
 	workspaceURI, closeFn, err := setupTestDirectory(1000, 10, 10)
 	defer closeFn()
 
@@ -203,7 +203,6 @@ func TestListFiles(t *testing.T) {
 	require.False(t, ok)
 	assert.NoError(t, it.Err())
 	assert.Zero(t, path)
-
 }
 
 func benchListFiles(b *testing.B, totalFiles, nestEvery, emptyDirsPerFile int) {

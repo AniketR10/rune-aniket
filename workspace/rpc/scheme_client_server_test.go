@@ -17,7 +17,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
+	"unstable.build/go-tui/config"
 	"unstable.build/go-tui/workspace"
+	"unstable.build/go-tui/workspace/test"
 	workspacetest "unstable.build/go-tui/workspace/test"
 )
 
@@ -81,6 +83,7 @@ func testSchemeClientServer(
 		{"Open happy path", func(t *testing.T, ctrl *gomock.Controller, c workspace.Scheme, s *workspacetest.MockScheme) {
 			var called int
 			mock := workspace.NewMockOsFile(ctrl)
+			mock.EXPECT().Name().Return("myFile").Times(1)
 			mock.EXPECT().Close().AnyTimes()
 			s.EXPECT().
 				Open(gomock.Any(), gomock.Any(), gomock.Any()).
@@ -220,6 +223,7 @@ func testSchemeClientServer(
 		}},
 		{"file Name happy path", func(t *testing.T, ctrl *gomock.Controller, c workspace.Scheme, s *workspacetest.MockScheme) {
 			mock := workspace.NewMockOsFile(ctrl)
+			mock.EXPECT().Name().Return("myFile").AnyTimes()
 			mock.EXPECT().Close().AnyTimes()
 			s.EXPECT().
 				Open(gomock.Any(), gomock.Any(), gomock.Any()).
@@ -232,6 +236,7 @@ func testSchemeClientServer(
 		}},
 		{"file Stat happy path", func(t *testing.T, ctrl *gomock.Controller, c workspace.Scheme, s *workspacetest.MockScheme) {
 			mock := workspace.NewMockOsFile(ctrl)
+			mock.EXPECT().Name().Return("myFile").AnyTimes()
 			mock.EXPECT().Close().AnyTimes()
 			s.EXPECT().
 				Open(gomock.Any(), gomock.Any(), gomock.Any()).
@@ -259,6 +264,7 @@ func testSchemeClientServer(
 		}},
 		{"file Stat error", func(t *testing.T, ctrl *gomock.Controller, c workspace.Scheme, s *workspacetest.MockScheme) {
 			mock := workspace.NewMockOsFile(ctrl)
+			mock.EXPECT().Name().Return("myFile").AnyTimes()
 			mock.EXPECT().Close().AnyTimes()
 			s.EXPECT().
 				Open(gomock.Any(), gomock.Any(), gomock.Any()).
@@ -278,6 +284,7 @@ func testSchemeClientServer(
 		}},
 		{"file Sync happy path", func(t *testing.T, ctrl *gomock.Controller, c workspace.Scheme, s *workspacetest.MockScheme) {
 			mock := workspace.NewMockOsFile(ctrl)
+			mock.EXPECT().Name().Return("myFile").AnyTimes()
 			mock.EXPECT().Close().AnyTimes()
 			s.EXPECT().
 				Open(gomock.Any(), gomock.Any(), gomock.Any()).
@@ -291,6 +298,7 @@ func testSchemeClientServer(
 		}},
 		{"file Sync error", func(t *testing.T, ctrl *gomock.Controller, c workspace.Scheme, s *workspacetest.MockScheme) {
 			mock := workspace.NewMockOsFile(ctrl)
+			mock.EXPECT().Name().Return("myFile").AnyTimes()
 			mock.EXPECT().Close().AnyTimes()
 			s.EXPECT().
 				Open(gomock.Any(), gomock.Any(), gomock.Any()).
@@ -305,6 +313,7 @@ func testSchemeClientServer(
 		}},
 		{"file Truncate happy path", func(t *testing.T, ctrl *gomock.Controller, c workspace.Scheme, s *workspacetest.MockScheme) {
 			mock := workspace.NewMockOsFile(ctrl)
+			mock.EXPECT().Name().Return("myFile").AnyTimes()
 			mock.EXPECT().Close().AnyTimes()
 			s.EXPECT().
 				Open(gomock.Any(), gomock.Any(), gomock.Any()).
@@ -318,6 +327,7 @@ func testSchemeClientServer(
 		}},
 		{"file Truncate error", func(t *testing.T, ctrl *gomock.Controller, c workspace.Scheme, s *workspacetest.MockScheme) {
 			mock := workspace.NewMockOsFile(ctrl)
+			mock.EXPECT().Name().Return("myFile").AnyTimes()
 			mock.EXPECT().Close().AnyTimes()
 			s.EXPECT().
 				Open(gomock.Any(), gomock.Any(), gomock.Any()).
@@ -332,6 +342,7 @@ func testSchemeClientServer(
 		}},
 		{"file Seek happy path", func(t *testing.T, ctrl *gomock.Controller, c workspace.Scheme, s *workspacetest.MockScheme) {
 			mock := workspace.NewMockOsFile(ctrl)
+			mock.EXPECT().Name().Return("myFile").AnyTimes()
 			mock.EXPECT().Close().AnyTimes()
 			s.EXPECT().
 				Open(gomock.Any(), gomock.Any(), gomock.Any()).
@@ -346,6 +357,7 @@ func testSchemeClientServer(
 		}},
 		{"file Seek error", func(t *testing.T, ctrl *gomock.Controller, c workspace.Scheme, s *workspacetest.MockScheme) {
 			mock := workspace.NewMockOsFile(ctrl)
+			mock.EXPECT().Name().Return("myFile").AnyTimes()
 			mock.EXPECT().Close().AnyTimes()
 			s.EXPECT().
 				Open(gomock.Any(), gomock.Any(), gomock.Any()).
@@ -368,6 +380,7 @@ func testSchemeClientServer(
 		}},
 		{"file Close happy path", func(t *testing.T, ctrl *gomock.Controller, c workspace.Scheme, s *workspacetest.MockScheme) {
 			mock := workspace.NewMockOsFile(ctrl)
+			mock.EXPECT().Name().AnyTimes().Return("myFile")
 			s.EXPECT().
 				Open(gomock.Any(), gomock.Any(), gomock.Any()).
 				Return(mock, nil)
@@ -380,6 +393,7 @@ func testSchemeClientServer(
 		}},
 		{"file Close error", func(t *testing.T, ctrl *gomock.Controller, c workspace.Scheme, s *workspacetest.MockScheme) {
 			mock := workspace.NewMockOsFile(ctrl)
+			mock.EXPECT().Name().AnyTimes().Return("myFile")
 			s.EXPECT().
 				Open(gomock.Any(), gomock.Any(), gomock.Any()).
 				Return(mock, nil)
@@ -393,6 +407,7 @@ func testSchemeClientServer(
 		}},
 		{"file Read happy path", func(t *testing.T, ctrl *gomock.Controller, c workspace.Scheme, s *workspacetest.MockScheme) {
 			mock := workspace.NewMockOsFile(ctrl)
+			mock.EXPECT().Name().Return("myFile").AnyTimes()
 			mock.EXPECT().Close().AnyTimes()
 			s.EXPECT().
 				Open(gomock.Any(), gomock.Any(), gomock.Any()).
@@ -412,6 +427,7 @@ func testSchemeClientServer(
 		}},
 		{"file Read error", func(t *testing.T, ctrl *gomock.Controller, c workspace.Scheme, s *workspacetest.MockScheme) {
 			mock := workspace.NewMockOsFile(ctrl)
+			mock.EXPECT().Name().Return("myFile").AnyTimes()
 			mock.EXPECT().Close().AnyTimes()
 			s.EXPECT().
 				Open(gomock.Any(), gomock.Any(), gomock.Any()).
@@ -426,6 +442,7 @@ func testSchemeClientServer(
 		}},
 		{"file Read bubbles up io.EOF", func(t *testing.T, ctrl *gomock.Controller, c workspace.Scheme, s *workspacetest.MockScheme) {
 			mock := workspace.NewMockOsFile(ctrl)
+			mock.EXPECT().Name().Return("myFile").AnyTimes()
 			mock.EXPECT().Close().AnyTimes()
 			s.EXPECT().
 				Open(gomock.Any(), gomock.Any(), gomock.Any()).
@@ -440,6 +457,7 @@ func testSchemeClientServer(
 		}},
 		{"file Write happy path", func(t *testing.T, ctrl *gomock.Controller, c workspace.Scheme, s *workspacetest.MockScheme) {
 			mock := workspace.NewMockOsFile(ctrl)
+			mock.EXPECT().Name().Return("myFile").AnyTimes()
 			mock.EXPECT().Close().AnyTimes()
 			s.EXPECT().
 				Open(gomock.Any(), gomock.Any(), gomock.Any()).
@@ -459,6 +477,7 @@ func testSchemeClientServer(
 		}},
 		{"file Write error", func(t *testing.T, ctrl *gomock.Controller, c workspace.Scheme, s *workspacetest.MockScheme) {
 			mock := workspace.NewMockOsFile(ctrl)
+			mock.EXPECT().Name().Return("myFile").AnyTimes()
 			mock.EXPECT().Close().AnyTimes()
 			s.EXPECT().
 				Open(gomock.Any(), gomock.Any(), gomock.Any()).
@@ -591,4 +610,46 @@ func (t testFileInfo) IsDir() bool {
 
 func (t testFileInfo) Sys() interface{} {
 	return nil
+}
+
+func TestClientServerIntegration(t *testing.T) {
+	var cleanups []func()
+	t.Run("with memory scheme", func(t *testing.T) {
+		test.TestWorkspaceSchemeFiles(t, func(t *testing.T) workspace.Scheme {
+			memURI, err := workspace.ParseURI("memory:///")
+			require.NoError(t, err)
+			memScheme, err := workspace.NewMemoryScheme(config.NopConfig(), memURI)
+			require.NoError(t, err)
+			server := NewSchemeServer(memScheme, new(sync.Mutex))
+			client, cleanup := setupSchemeClientServerTest(t, server)
+			cleanups = append(cleanups, func() {
+				server.Stop()
+				cleanup()
+			})
+			return client
+		})
+	})
+	t.Run("with file scheme", func(t *testing.T) {
+		test.TestWorkspaceSchemeFiles(t, func(t *testing.T) workspace.Scheme {
+			dir, err := ioutil.TempDir("", "file_scheme_suite")
+			require.NoError(t, err)
+
+			workspaceURI, err := workspace.ParseURI("file://" + dir)
+			require.NoError(t, err)
+
+			fileScheme, err := workspace.NewFileScheme(config.NopConfig(), workspaceURI)
+			require.NoError(t, err)
+			server := NewSchemeServer(fileScheme, new(sync.Mutex))
+			client, cleanup := setupSchemeClientServerTest(t, server)
+			cleanups = append(cleanups, func() {
+				server.Stop()
+				cleanup()
+				os.RemoveAll(dir)
+			})
+			return client
+		})
+	})
+	for _, cleanup := range cleanups {
+		cleanup()
+	}
 }

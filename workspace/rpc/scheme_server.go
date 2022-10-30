@@ -110,6 +110,7 @@ func (s *sharedRPCImpl) Open(ctx context.Context, req *OpenRequest) (
 	handlerID := s.addHandle(workspace.Pid(-1), &syncFile{file: f})
 	resp := new(OpenResponse)
 	resp.HandlerId = handlerID
+	resp.Filename = f.Name()
 	return resp, nil
 }
 

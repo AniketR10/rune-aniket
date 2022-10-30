@@ -367,7 +367,7 @@ func TestClientServer(t *testing.T) {
 		{"Open happy path", func(t *testing.T, mock *workspace.MockOsFile, c *Client, s *Server) {
 			s.wp.(*workspacetest.MockWorkspace).EXPECT().
 				Open(gomock.Eq("/tmp/hello_world.go"), gomock.Eq(os.O_RDWR|os.O_CREATE|os.O_EXCL|os.O_APPEND|os.O_SYNC|os.O_TRUNC), gomock.Eq(os.FileMode(0666))).
-				Return(nil, nil)
+				Return(testFile{}, nil)
 
 			f, err := c.Open("/tmp/hello_world.go", os.O_RDWR|os.O_CREATE|os.O_EXCL|os.O_APPEND|os.O_SYNC|os.O_TRUNC, 0666)
 			assert.Nil(t, err)
@@ -502,4 +502,38 @@ func TestClientServer(t *testing.T) {
 			tcase.do(t, mock, client, server)
 		})
 	}
+}
+
+type testFile struct {
+}
+
+func (t testFile) Name() string {
+	return ""
+}
+
+func (t testFile) Stat() (os.FileInfo, error) {
+	return testFileInfo{}, nil
+}
+
+func (t testFile) Sync() error {
+	return nil
+}
+func (t testFile) Truncate(size int64) error {
+	return nil
+}
+
+func (t testFile) Seek(x int64, y int) (int64, error) {
+	return 0, nil
+}
+
+func (t testFile) Read(b []byte) (int, error) {
+	return 0, io.EOF
+}
+
+func (t testFile) Write(b []byte) (int, error) {
+	return 0, nil
+}
+
+func (t testFile) Close() error {
+	return nil
 }

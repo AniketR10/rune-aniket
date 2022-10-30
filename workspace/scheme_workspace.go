@@ -56,7 +56,7 @@ func (w *schemeWorkspace) Recover(
 		return
 	}
 	if !is {
-		err = fmt.Errorf("invalid file URI %q for workspace with URI %q", uri, w.w)
+		err = fmt.Errorf("invalid URI %q for workspace with URI %q", uri, w.w)
 		return
 	}
 	is, err = IsWorkspaceURI(w, swapURI)
@@ -65,7 +65,7 @@ func (w *schemeWorkspace) Recover(
 		return
 	}
 	if !is {
-		err = fmt.Errorf("invalid file URI %q for workspace with URI %q", swapURI, w.w)
+		err = fmt.Errorf("invalid URI %q for workspace with URI %q", swapURI, w.w)
 		return
 	}
 	uri, err = w.p.URI(uri.Path())

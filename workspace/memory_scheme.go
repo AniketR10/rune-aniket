@@ -27,7 +27,7 @@ var (
 )
 
 // NewMemoryScheme returns a Scheme that manages resources in a temporary
-// in-memory file system. It ignores O_RDONLY, O_WRONLY, O_RDWR Open flags
+// in-memory file system. It does not enforce O_RDONLY, O_WRONLY, O_RDWR Open flags
 // as well as O_SYNC and O_APPEND. Seek operations on the underlying files
 // only support seeking to the beginning of the file.
 func NewMemoryScheme(cfg config.Config, workspace URI) (Scheme, error) {
@@ -46,31 +46,34 @@ type memoryScheme struct {
 }
 
 type memFile struct {
-	bytes.Buffer
+	reader   *bytes.Reader
+	data     []byte
 	filename string
 	modTime  time.Time
+	mode     os.FileMode
+	flag     int
 }
 
 type memFileInfo struct {
 	bufLen   int64
 	filename string
+	mode     os.FileMode
 	modTime  time.Time
 }
 
 func (m *memoryScheme) init(workspace URI) error {
 	if workspace.Host() != "" || workspace.User() != "" || workspace.Scheme() != MemoryScheme {
-		return errors.New("invalid file URI")
+		return errors.New("invalid memory URI")
 	}
 	m.workspace = workspace
 	m.files = make(map[string]*memFile)
 	return nil
 }
 
-func (m *memoryScheme) Open(path string, flag int, _ os.FileMode) (File, *Error) {
+func (m *memoryScheme) Open(path string, flag int, mode os.FileMode) (File, *Error) {
 	path = filepath.Clean(path)
 
-	filename := filepath.Base(path)
-	if filename == "" {
+	if filepath.Base(path) == "" {
 		return nil, NopError(fmt.Errorf("invalid file %q", path))
 	}
 
@@ -87,7 +90,7 @@ func (m *memoryScheme) Open(path string, flag int, _ os.FileMode) (File, *Error)
 	if !ok && flag&os.O_CREATE == 0 {
 		return nil, &Error{IsNotExist: true}
 	}
-	if ok && flag&os.O_EXCL != 0 {
+	if ok && flag&os.O_CREATE != 0 && flag&os.O_EXCL != 0 {
 		return nil, &Error{IsExist: true}
 	}
 	if ok && flag&os.O_TRUNC != 0 {
@@ -98,10 +101,25 @@ func (m *memoryScheme) Open(path string, flag int, _ os.FileMode) (File, *Error)
 	}
 
 	if !ok {
+		data := make([]byte, 0)
+		var filename string
+		rel, err := filepath.Rel(m.workspace.Path(), path)
+		if err != nil {
+			filename = filepath.Join(m.workspace.Path(), path)
+		} else {
+			filename = filepath.Join(m.workspace.Path(), rel)
+		}
 		f = &memFile{
 			filename: filename,
+			mode:     mode,
+			modTime:  time.Now(),
+			flag:     flag,
+			data:     data,
+			reader:   bytes.NewReader(data),
 		}
 		m.files[uriStr] = f
+	} else {
+		_, _ = f.Seek(0, 0)
 	}
 
 	return f, nil
@@ -174,7 +192,7 @@ func (m *memoryScheme) Lstat(path string) (os.FileInfo, error) {
 }
 
 func (m *memoryScheme) ReadLink(path string) (string, error) {
-	return path, nil
+	return "", errors.New("path is not a link")
 }
 
 func (m *memoryScheme) nopUser() (*user.User, error) {
@@ -233,8 +251,11 @@ func (m *memoryScheme) ListFiles(ctx context.Context) (
 ) {
 	var files []string
 	for uri := range m.files {
+		// strip URI
 		cwdlen := len(m.workspace.String())
-		files = append(files, uri[cwdlen:])
+		// Rel(Join(Base ensures that path is always relative to base workspace path
+		filename, _ := filepath.Rel(m.workspace.Path(), filepath.Join(m.workspace.Path(), filepath.Base(uri[cwdlen:])))
+		files = append(files, filename)
 	}
 	return iterator.FromSlice(files), nil
 }
@@ -245,11 +266,13 @@ func (m *memoryScheme) Close() error {
 }
 
 func (c *memFile) Read(p []byte) (n int, err error) {
-	return c.Buffer.Read(p)
+	return c.reader.Read(p)
 }
 
 func (c *memFile) Write(p []byte) (n int, err error) {
-	n, err = c.Buffer.Write(p)
+	c.data = append(c.data, p...)
+	c.reader.Reset(c.data)
+	n = len(p)
 	return
 }
 
@@ -259,9 +282,10 @@ func (c *memFile) Name() string {
 
 func (c *memFile) Stat() (os.FileInfo, error) {
 	finfo := memFileInfo{
-		bufLen:   int64(c.Len()),
-		filename: c.filename,
+		bufLen:   int64(len(c.data)),
+		filename: filepath.Base(c.filename),
 		modTime:  c.modTime,
+		mode:     c.mode,
 	}
 	return finfo, nil
 }
@@ -272,7 +296,11 @@ func (c *memFile) Sync() error {
 }
 
 func (c *memFile) Truncate(size int64) error {
-	c.Buffer.Truncate(int(size))
+	if size < 0 || size > int64(len(c.data)) {
+		panic("invalid truncate size")
+	}
+	c.data = c.data[:size]
+	c.reader.Reset(c.data)
 	return nil
 }
 
@@ -280,10 +308,8 @@ func (c *memFile) Seek(offset int64, whence int) (int64, error) {
 	if offset != 0 || whence != 0 {
 		return 0, errors.New("unsupported Seek: only seek to beggining of file supported")
 	}
-	content := c.String()
-	c.Buffer = bytes.Buffer{}
-	n, err := c.Buffer.Write([]byte(content))
-	return int64(n), err
+	c.reader = bytes.NewReader(c.data)
+	return int64(len(c.data)), nil
 }
 
 func (c *memFile) Close() error {
@@ -295,7 +321,7 @@ func (t memFileInfo) Size() int64 {
 }
 
 func (t memFileInfo) Mode() os.FileMode {
-	return 0
+	return t.mode
 }
 
 func (t memFileInfo) ModTime() time.Time {

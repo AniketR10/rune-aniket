@@ -67,7 +67,7 @@ func newScheme(ccfg config.Config, uri workspace.URI) (*scheme, error) {
 	}
 
 	ret.connectSchemeFn = ret.connectScheme
-	err = ret.init(cc, uri)
+	err = ret.init(cc, uri, (workspace.Scheme).Stat)
 	if err != nil {
 		return nil, err
 	}
@@ -242,7 +242,8 @@ func (s *scheme) connectScheme(uri workspace.URI, closeHook func(error)) (worksp
 	return workspacepb.NewScheme(conn), nil
 }
 
-func (s *scheme) init(cc sshConfig, uri workspace.URI) (err error) {
+func (s *scheme) init(cc sshConfig, uri workspace.URI,
+	statWorkspaceDir func(workspace.Scheme, string) (os.FileInfo, error)) (err error) {
 	if uri.Scheme() != Scheme {
 		return errors.New("invalid non-ssh scheme")
 	}
@@ -260,7 +261,7 @@ func (s *scheme) init(cc sshConfig, uri workspace.URI) (err error) {
 	}
 
 	s.Scheme = newRemoteScheme(s.connectSchemeFn, uri)
-	fi, err := s.Scheme.Stat(uri.Path())
+	fi, err := statWorkspaceDir(s.Scheme, uri.Path())
 	if err != nil {
 		return err
 	}
@@ -269,7 +270,7 @@ func (s *scheme) init(cc sshConfig, uri workspace.URI) (err error) {
 		uri = workspace.Dir(uri)
 		_ = s.Scheme.Close()
 		// re-initialize with dir uri
-		return s.init(cc, uri)
+		return s.init(cc, uri, statWorkspaceDir)
 	}
 
 	return nil

@@ -5,16 +5,20 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"os"
 	"os/user"
 	"path/filepath"
 	"strings"
 	"syscall"
 	"testing"
+	"time"
 
+	multierr "github.com/ernestrc/go-multierror"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"unstable.build/go-tui/config"
 	"unstable.build/go-tui/workspace"
+	"unstable.build/go-tui/workspace/test"
 )
 
 type nopExecutor struct {
@@ -64,6 +68,33 @@ func (n nopRemote) Close() error {
 	return nil
 }
 
+type testFileInfo struct {
+	name string
+}
+
+func (t testFileInfo) Name() string {
+	return t.name
+}
+func (t testFileInfo) Size() int64 {
+	return 0
+}
+
+func (t testFileInfo) Mode() os.FileMode {
+	return 0
+}
+
+func (t testFileInfo) ModTime() time.Time {
+	return time.Time{}
+}
+
+func (t testFileInfo) IsDir() bool {
+	return !strings.Contains(t.name, ".")
+}
+
+func (t testFileInfo) Sys() interface{} {
+	return nil
+}
+
 func newTestScheme(
 	cfg config.Config, workspaceURI workspace.URI,
 	connectSchemeFn func(uri workspace.URI, closeHook func(error)) (workspace.Scheme, error),
@@ -76,13 +107,18 @@ func newTestScheme(
 		return &user.User{Username: "git", HomeDir: "/home/git"}, nil
 	}
 	if connectSchemeFn == nil {
-		connectSchemeFn = func(uri workspace.URI, closeHook func(error)) (workspace.Scheme, error) {
-			return workspace.NewNopScheme("test")(config.NopConfig(), workspace.URI{})
+		connectSchemeFn = func(uri workspace.URI, closeHook func(error)) (
+			workspace.Scheme, error,
+		) {
+			return workspace.NewNopScheme("test")(config.NopConfig(), uri)
 		}
 	}
 	s.connectSchemeFn = connectSchemeFn
 
-	err := s.init(sshConfig{}, workspaceURI)
+	err := s.init(sshConfig{}, workspaceURI,
+		func(_ workspace.Scheme, name string) (os.FileInfo, error) {
+			return testFileInfo{name: name}, nil
+		})
 	if err != nil {
 		return nil, err
 	}
@@ -293,5 +329,63 @@ func TestIntegrationManagerIsWorkspaceFile(t *testing.T) {
 			assert.Equal(t, ok, tcase.expectedFound)
 			assert.Equal(t, tcase.expectedWorkspace, actual)
 		})
+	}
+}
+
+func TestSSHScheme(t *testing.T) {
+	var cleanup []func() error
+	t.Run("with memory scheme remote", func(t *testing.T) {
+		test.TestWorkspaceSchemeFiles(t, func(t *testing.T) workspace.Scheme {
+			workspaceURI, err := workspace.ParseURI("ssh://test@host.com/")
+			require.NoError(t, err)
+			remoteURI, err := workspace.ParseURI("memory:///")
+			require.NoError(t, err)
+
+			memScheme, err := workspace.NewMemoryScheme(config.NopConfig(), remoteURI)
+			require.NoError(t, err)
+
+			s, err := newTestScheme(config.NopConfig(), workspaceURI,
+				func(uri workspace.URI, closeHook func(error)) (workspace.Scheme, error) {
+					return memScheme, nil
+				})
+			require.NoError(t, err)
+			cleanup = append(cleanup, s.Close)
+			return s
+		})
+	})
+
+	t.Run("with file scheme remote", func(t *testing.T) {
+		test.TestWorkspaceSchemeFiles(t, func(t *testing.T) workspace.Scheme {
+			dir, err := ioutil.TempDir("", "ssh_scheme_suite")
+			require.NoError(t, err)
+
+			fileURI, err := workspace.ParseURI("file://" + dir)
+			require.NoError(t, err)
+
+			workspaceURI, err := workspace.ParseURI("ssh://host.com" + dir)
+			require.NoError(t, err)
+
+			fileScheme, err := workspace.NewFileScheme(config.NopConfig(), fileURI)
+			require.NoError(t, err)
+
+			s, err := newTestScheme(config.NopConfig(), workspaceURI,
+				func(uri workspace.URI, closeHook func(error)) (workspace.Scheme, error) {
+					return fileScheme, nil
+				})
+			require.NoError(t, err)
+			cleanup = append(cleanup, func() (ret error) {
+				if err := s.Close(); err != nil {
+					ret = multierr.Append(ret, err)
+				}
+				if err := os.RemoveAll(dir); err != nil {
+					ret = multierr.Append(ret, err)
+				}
+				return ret
+			})
+			return s
+		})
+	})
+	for _, clean := range cleanup {
+		_ = clean()
 	}
 }
