@@ -159,32 +159,3 @@ type File interface {
 	io.Closer
 	io.Writer
 }
-
-// Error is used to abstract os.Is(.*) functions
-type Error struct {
-	Err          error
-	IsPermission bool
-	IsExist      bool
-	IsNotExist   bool
-}
-
-func (e Error) ToError() error {
-	if e.IsPermission {
-		return os.ErrPermission
-	}
-	if e.IsNotExist {
-		return os.ErrNotExist
-	}
-	if e.IsExist {
-		return os.ErrExist
-	}
-	if e.Err != nil {
-		return e.Err
-	}
-	panic("workspace.Error with nil Error")
-}
-
-// NopError returns an Error that simply wraps err.
-func NopError(err error) *Error {
-	return &Error{Err: err}
-}

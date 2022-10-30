@@ -45,7 +45,7 @@ func TestWorkspaceSchemeFiles(
 
 func createTestFile(t *testing.T, s workspace.Scheme, filename, content string) (workspace.File, func()) {
 	file, werr := s.Open(filename, os.O_CREATE|os.O_EXCL|os.O_RDWR, 0644)
-	require.Nil(t, werr)
+	require.Nil(t, werr, werr.String())
 	_, err := file.Write([]byte(content))
 	require.NoError(t, err)
 	return file, func() {
@@ -73,14 +73,14 @@ func testWorkspaceSchemeOpen(
 		require.NoError(t, err)
 
 		d, werr := scheme.Open("file", os.O_RDONLY, 0)
-		require.Nil(t, werr)
+		require.Nil(t, werr, werr.String())
 
 		data, err := ioutil.ReadAll(d)
 		require.NoError(t, err)
 		assert.Equal(t, "1234", string(data))
 
 		d, werr = scheme.Open(filepath.Join(cwd.Path(), "file"), os.O_RDONLY, 0)
-		require.Nil(t, werr)
+		require.Nil(t, werr, werr.String())
 
 		data, err = ioutil.ReadAll(d)
 		require.NoError(t, err)
@@ -90,7 +90,7 @@ func testWorkspaceSchemeOpen(
 	t.Run("if a relative path is passed then that should be relative to the workspace cwd", func(t *testing.T) {
 		scheme := schemeFn(t)
 		f, werr := scheme.Open("file", os.O_CREATE, 0644)
-		require.Nil(t, werr)
+		require.Nil(t, werr, werr.String())
 
 		cwdURI, err := scheme.URI(".")
 		require.NoError(t, err)
@@ -228,14 +228,14 @@ func testWorkspaceSchemeRename(
 
 		require.NoError(t, scheme.Rename("file", "foile"))
 		f, werr := scheme.Open("foile", 0, 0)
-		require.Nil(t, werr)
+		require.Nil(t, werr, werr.String())
 
 		data, err := ioutil.ReadAll(f)
 		require.NoError(t, err)
 		assert.Equal(t, "bla", string(data))
 
 		_, werr = scheme.Open("file", 0, 0)
-		require.NotNil(t, werr)
+		require.NotNil(t, werr, werr.String())
 		assert.True(t, werr.IsNotExist)
 	})
 
@@ -248,14 +248,14 @@ func testWorkspaceSchemeRename(
 
 		require.NoError(t, scheme.Rename("file", "foile"))
 		f, werr := scheme.Open("foile", 0, 0)
-		require.Nil(t, werr)
+		require.Nil(t, werr, werr.String())
 
 		data, err := ioutil.ReadAll(f)
 		require.NoError(t, err)
 		assert.Equal(t, "bla", string(data))
 
 		_, werr = scheme.Open("file", 0, 0)
-		require.NotNil(t, werr)
+		require.NotNil(t, werr, werr.String())
 		assert.True(t, werr.IsNotExist)
 	})
 
