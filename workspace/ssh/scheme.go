@@ -24,6 +24,9 @@ import (
 const (
 	// Scheme represents the URL scheme that this package implements
 	Scheme = "ssh"
+
+	debugPathError = "You can run %q to debug this. Also, double check your workspace.ssh.command " +
+		"and workspace.ssh.shell configuration, if you have any."
 )
 
 // New returns a workspace.Scheme capable of managing
@@ -112,10 +115,10 @@ func parseWorkspaceURI(u workspace.URI, getUser func() (*user.User, error)) (
 	return
 }
 
-func (s *scheme) runAndWait(remote remote, cmd string, args ...string) (bool, error) {
+func (s *scheme) runAndWait(remote remote, cmd string, args ...string) (string, bool, error) {
 	ses, err := remote.NewSession()
 	if err != nil {
-		return false, err
+		return "", false, err
 	}
 
 	if s.cfg.shell != "" {
@@ -124,41 +127,50 @@ func (s *scheme) runAndWait(remote remote, cmd string, args ...string) (bool, er
 	}
 	pid, err := ses.Command(cmd, args...)
 	if err != nil {
-		return false, err
+		return "", false, err
 	}
 
 	err = ses.Start(pid)
 	if err != nil {
-		return false, err
+		return "", false, err
 	}
 
 	err = ses.Wait(pid)
 	if err != nil {
-		return false, nil
+		if procRemote, ok := remote.(*procRemote); ok {
+			cmd, args := procRemote.CommandString(cmd, args...)
+			return fmt.Sprintf("%s %s", cmd, strings.Join(args, " ")), false, nil
+		}
+		return "", false, nil
 	}
 
-	return true, nil
+	return "", true, nil
 }
 
 func (s *scheme) whichCommand(remote remote, cmd string) error {
-	avail, err := s.runAndWait(remote, "which", cmd)
+	cmdAndArgs, avail, err := s.runAndWait(remote, "which", cmd)
 	if err != nil {
 		return fmt.Errorf("could not check if %s executable is in PATH: %w", cmd, err)
 	}
 	if !avail {
-		return fmt.Errorf("%s executable was not found on remote. "+
-			"Make sure it's installed and available via $PATH to a non-interactive shell", cmd)
+		errStr := "%q executable was not found on remote. " +
+			"Make sure it's installed and available via $PATH to a non-interactive shell. "
+		if cmdAndArgs != "" {
+			return fmt.Errorf(errStr+debugPathError, cmd, cmdAndArgs)
+		}
+		return fmt.Errorf(errStr, cmd)
 	}
 	return nil
 }
 
 func (s *scheme) workspaceExists(remote remote, uri workspace.URI) error {
-	ok, err := s.runAndWait(remote, "ls", uri.Path())
+	cmdAndArgs, ok, err := s.runAndWait(remote, "ls", uri.Path())
 	if err != nil {
 		return fmt.Errorf("could not check if workspace path %q exists: %w", uri.Path(), err)
 	}
 	if !ok {
-		return fmt.Errorf("path %q does not exists", uri.Path())
+		return fmt.Errorf("path %q was not found on remote."+
+			debugPathError, uri.Path(), cmdAndArgs)
 	}
 	return nil
 }

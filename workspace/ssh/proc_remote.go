@@ -90,18 +90,26 @@ func (m *procRemote) Close() (ret error) {
 	return ret
 }
 
+func (m *procRemote) CommandString(name string, arg ...string) (string, []string) {
+	ses := procSession{
+		sshCmd:  m.cmd,
+		sshArgs: m.args,
+	}
+	return ses.CommandString(name, arg...)
+}
+
+func (s *procSession) CommandString(name string, arg ...string) (string, []string) {
+	arg = append(s.sshArgs, append([]string{name}, arg...)...)
+	name = s.sshCmd
+	return name, arg
+}
+
 func (s *procSession) Command(name string, arg ...string) (workspace.Pid, error) {
 	if name == "" {
 		return 0, errors.New("invalid empty command")
 	}
 
-	args := fmt.Sprintf("%s %s %s %s",
-		s.sshCmd, strings.Join(s.sshArgs, " "),
-		name, strings.Join(arg, " "))
-	argv := strings.Split(args, " ")
-	name = argv[0]
-	arg = argv[1:]
-
+	name, arg = s.CommandString(name, arg...)
 	pid, err := s.executor.Command(name, arg...)
 	if err != nil {
 		return workspace.Pid(0), fmt.Errorf("Failed to create ssh command: %s", err)
