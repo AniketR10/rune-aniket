@@ -91,7 +91,7 @@ func main() {
 		l := log.New()
 
 		newScheme := workspace.NewFileScheme
-
+		exit := os.Exit
 		if serverLogs := *flagWorkspaceServerLogFile; serverLogs != "" {
 			f, err := os.OpenFile(serverLogs,
 				os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
@@ -103,6 +103,11 @@ func main() {
 			l.SetFormatter(&logging.LogrusFormatter{})
 
 			newScheme = workspace.LoggingScheme("file", newScheme)
+			exit = func(code int) {
+				_ = f.Sync()
+				_ = f.Close()
+				os.Exit(code)
+			}
 
 		} else {
 			l.SetOutput(ioutil.Discard)
@@ -115,20 +120,23 @@ func main() {
 
 		uri, err := workspace.CurrentUserHostURI(*flagWorkspaceServer)
 		if err != nil {
-			l.Fatal(err)
+			l.Error(err)
+			exit(1)
 		}
 		scheme, err := newScheme(config.NopConfig(), uri)
 		if err != nil {
-			l.Fatal(err)
+			l.Error(err)
+			exit(2)
 		}
 
 		server := workspacepb.NewSchemeServer(scheme, new(sync.Mutex))
 		err = ssh.StartSchemeServer(server)
 		if err != nil {
-			l.Fatal(err)
+			l.Error(err)
+			exit(3)
 		}
 		l.Tracef("StartSchemeServer returned with no error")
-		os.Exit(0)
+		exit(0)
 	}
 
 	if *flagConfigPath != defaultConfigPath {

@@ -190,7 +190,7 @@ func (s *scheme) connectScheme(uri workspace.URI, closeHook func(error)) (worksp
 
 	ses, err := remote.NewSession()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("NewSession: %v", err)
 	}
 
 	var extraArgs string
@@ -257,13 +257,13 @@ func (s *scheme) init(cc sshConfig, uri workspace.URI,
 	// expand any relative path or home aliases
 	uri, err = s.URI(uri.Path())
 	if err != nil {
-		return err
+		return fmt.Errorf("URI from path %s: %v", uri.Path(), err)
 	}
 
 	s.Scheme = newRemoteScheme(s.connectSchemeFn, uri)
 	fi, err := statWorkspaceDir(s.Scheme, uri.Path())
 	if err != nil {
-		return err
+		return fmt.Errorf("Stat workspace: %v", err)
 	}
 
 	if !fi.IsDir() {
