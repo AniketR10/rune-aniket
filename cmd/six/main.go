@@ -109,11 +109,13 @@ func main() {
 			l.SetLevel(log.PanicLevel)
 		}
 
+		l.Tracef("Initialized debug logger")
+
 		debug.InitLogger(l)
 
 		uri, err := workspace.CurrentUserHostURI(*flagWorkspaceServer)
 		if err != nil {
-			log.Fatal(err)
+			l.Fatal(err)
 		}
 		scheme, err := newScheme(config.NopConfig(), uri)
 		if err != nil {
@@ -123,8 +125,9 @@ func main() {
 		server := workspacepb.NewSchemeServer(scheme, new(sync.Mutex))
 		err = ssh.StartSchemeServer(server)
 		if err != nil {
-			log.Fatal(err)
+			l.Fatal(err)
 		}
+		l.Tracef("StartSchemeServer returned with no error")
 		os.Exit(0)
 	}
 

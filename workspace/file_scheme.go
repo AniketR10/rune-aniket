@@ -20,6 +20,7 @@ import (
 	"github.com/ernestrc/blue/logging"
 	multierr "github.com/ernestrc/go-multierror"
 	"github.com/ernestrc/sensible/find"
+	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui/config"
 	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/term/pty"
@@ -213,20 +214,26 @@ func (p *fileScheme) URI(path string) (URI, error) {
 	return makeLocalURI(absPath)
 }
 
+func (p *fileScheme) log(level log.Level, msg string, args ...interface{}) {
+	debug.StandardLogger().
+		WithField(logging.KeyClass, "fileScheme").
+		WithField("URI", p.workspace.String()).
+		Logf(level, msg, args...)
+}
+
 func (p *fileScheme) Command(name string, arg ...string) (Pid, error) {
 	path, err := find.Executable(name)
 	if err != nil {
-		// let Command fail and return the os error
+		p.log(log.WarnLevel,
+			"find.Executable: could not find executable of '%s' in path. Falling back to shell expanding it: %v",
+			name, err)
 		path = name
 	}
 	cmd := exec.Command(path, arg...)
 	cmd.Dir = p.workspace.Path()
 	nextPid := atomic.AddInt32(&p.nextPid, 1)
 
-	debug.StandardLogger().
-		WithField(logging.KeyClass, "fileScheme").
-		WithField("URI", p.workspace.String()).
-		Debugf("exec.Command: (%#v, pid=%d)", cmd, nextPid)
+	p.log(log.DebugLevel, "exec.Command: (%#v, pid=%d)", cmd, nextPid)
 
 	p.cmds.Store(Pid(nextPid), &execCmd{Cmd: cmd})
 	return Pid(nextPid), nil
