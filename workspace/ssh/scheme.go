@@ -112,16 +112,17 @@ func parseWorkspaceURI(u workspace.URI, getUser func() (*user.User, error)) (
 	return
 }
 
-func (s *scheme) runAndWait(remote remote, cmd string) (bool, error) {
+func (s *scheme) runAndWait(remote remote, cmd string, args ...string) (bool, error) {
 	ses, err := remote.NewSession()
 	if err != nil {
 		return false, err
 	}
 
 	if s.cfg.shell != "" {
-		cmd = fmt.Sprintf("%s -c '%s'", s.cfg.shell, cmd)
+		args = append([]string{"-c", cmd}, args...)
+		cmd = s.cfg.shell
 	}
-	pid, err := ses.Command(cmd)
+	pid, err := ses.Command(cmd, args...)
 	if err != nil {
 		return false, err
 	}
@@ -140,7 +141,7 @@ func (s *scheme) runAndWait(remote remote, cmd string) (bool, error) {
 }
 
 func (s *scheme) whichCommand(remote remote, cmd string) error {
-	avail, err := s.runAndWait(remote, fmt.Sprintf("which %s", cmd))
+	avail, err := s.runAndWait(remote, "which", cmd)
 	if err != nil {
 		return fmt.Errorf("could not check if %s executable is in PATH: %w", cmd, err)
 	}
@@ -152,7 +153,7 @@ func (s *scheme) whichCommand(remote remote, cmd string) error {
 }
 
 func (s *scheme) workspaceExists(remote remote, uri workspace.URI) error {
-	ok, err := s.runAndWait(remote, fmt.Sprintf("ls %s", uri.Path()))
+	ok, err := s.runAndWait(remote, "ls", uri.Path())
 	if err != nil {
 		return fmt.Errorf("could not check if workspace path %q exists: %w", uri.Path(), err)
 	}
@@ -193,17 +194,19 @@ func (s *scheme) connectScheme(uri workspace.URI, closeHook func(error)) (worksp
 		return nil, fmt.Errorf("NewSession: %v", err)
 	}
 
-	var extraArgs string
+	var extraArgs []string
 	if debug.StandardLogger().IsLevelEnabled(log.TraceLevel) {
-		extraArgs = "-o six-workspace-server.log"
+		extraArgs = []string{"-o", "six-workspace-server.log"}
 	}
 
-	cmd := fmt.Sprintf("%s -x %s %s", six, sshPath, extraArgs)
+	cmd := six
+	args := append([]string{"-x", sshPath}, extraArgs...)
 	if s.cfg.shell != "" {
-		cmd = fmt.Sprintf("%s -c '%s'", s.cfg.shell, cmd)
+		args = append([]string{"-c", cmd}, args...)
+		cmd = s.cfg.shell
 	}
 
-	pid, err := ses.Command(cmd)
+	pid, err := ses.Command(cmd, args...)
 	if err != nil {
 		return nil, fmt.Errorf("could not create command: %s", err)
 	}
