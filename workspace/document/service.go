@@ -24,37 +24,18 @@ type Marshaler interface {
 
 // NewWorkspaceService returns a document.Service backed by a workspace.Scheme.
 // It its goroutine-safe but only one instance can be operating at a time
-// on a given workspace. A .scheme_service.lock will be created to ensure this
-// so make sure Close is called to cleanup the lock file.
+// on a given workspace.
 func NewWorkspaceService(scheme workspace.Scheme, marshaler Marshaler) (document.Service, error) {
 	svc := service{
 		scheme:    scheme,
 		marshaler: marshaler,
 	}
-
-	lockFile, werr := scheme.Open(svc.getFileName(lockFileName), os.O_CREATE|os.O_EXCL, 0600)
-	if werr != nil {
-		if werr.IsExist {
-			cwd, _ := scheme.URI(".")
-			return nil, fmt.Errorf("there's another scheme-backed document.Service instance running in %q. "+
-				"If you are ABSOLUTELY sure that this is not the case, please cleanup "+
-				"the lock file %q and try again.", cwd.String(), lockFileName)
-		}
-		return nil, werr.ToError()
-	}
-	svc.lockFile = lockFile
-
 	// make it goroutine-safe
 	return document.Sync(svc), nil
 }
 
-const (
-	lockFileName = ".scheme_service.lock"
-)
-
 type service struct {
 	scheme    workspace.Scheme
-	lockFile  workspace.File
 	marshaler Marshaler
 }
 
@@ -150,13 +131,6 @@ func (s service) List(ctx context.Context, filters []document.Filter) (document.
 }
 
 func (s service) Close() (ret error) {
-	name := s.lockFile.Name()
-	if err := s.lockFile.Close(); err != nil {
-		ret = multierr.Append(ret, err)
-	}
-	if err := s.scheme.Remove(s.getFileName(name)); err != nil {
-		ret = multierr.Append(ret, err)
-	}
 	if err := s.scheme.Close(); err != nil {
 		ret = multierr.Append(ret, err)
 	}
@@ -247,14 +221,6 @@ func (d *docIter) HasNext() (ok bool) {
 			}
 			d.doneErr = werr.ToError()
 			return true
-		}
-
-		if f.Name() == d.svc.lockFile.Name() {
-			if cerr := f.Close(); cerr != nil {
-				d.doneErr = cerr
-				return true
-			}
-			continue
 		}
 
 		proto := make(map[string]interface{})
