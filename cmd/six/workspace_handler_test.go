@@ -272,7 +272,7 @@ func newTestWorkspaceManagerHandlerWithManager(
 
 	m := new(workspaceManagerHandler)
 	err := m.init(clip, uri, manager, cfg, "", []string{},
-		func(term.Event) bool {
+		".six", func(term.Event) bool {
 			return true
 		})
 	require.NoError(t, err)

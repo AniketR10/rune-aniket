@@ -27,6 +27,16 @@ github.com/envoyproxy/go-control-plane v0.9.10-0.20210907150352-cf90f659a021/go.
 github.com/envoyproxy/protoc-gen-validate v0.1.0/go.mod h1:iSmxcyjqTsJpI2R4NaDN7+kN2VEUnK/pcBlmesArF7c=
 github.com/ernestrc/blue v1.18.0 h1:FbaaLL+pQ1KiCEdOdtNBkjL4kQUx51w47sDyxX+PJ/s=
 github.com/ernestrc/blue v1.18.0/go.mod h1:30sFYdofME1bnTvSEMIkkVotVgETD0QtZLa7zzntJzk=
+github.com/ernestrc/blue v1.19.0 h1:ZdOV/cFpDDJFqIVzrPrH0SEYnlX5BLCH1XSoFui06+c=
+github.com/ernestrc/blue v1.19.0/go.mod h1:30sFYdofME1bnTvSEMIkkVotVgETD0QtZLa7zzntJzk=
+github.com/ernestrc/blue v1.19.1 h1:GaRcQfF1ZVicTKVig70hKR3G/h3ZNSEcs/oWnFIc0e4=
+github.com/ernestrc/blue v1.19.1/go.mod h1:30sFYdofME1bnTvSEMIkkVotVgETD0QtZLa7zzntJzk=
+github.com/ernestrc/blue v1.19.2 h1:90jSk5MphT+sQT9izR4X4z0ZcUMRYNW32xsIIo3Mp5M=
+github.com/ernestrc/blue v1.19.2/go.mod h1:30sFYdofME1bnTvSEMIkkVotVgETD0QtZLa7zzntJzk=
+github.com/ernestrc/blue v1.19.3 h1:WQYhn11/bOjUTUs02ppyOsp60GU3TKuHrBTOOJZiZfk=
+github.com/ernestrc/blue v1.19.3/go.mod h1:30sFYdofME1bnTvSEMIkkVotVgETD0QtZLa7zzntJzk=
+github.com/ernestrc/blue v1.19.4 h1:glQERzThOtZQ6oyM7FcgBhKuQDrQIazrku45Dp6vzN8=
+github.com/ernestrc/blue v1.19.4/go.mod h1:30sFYdofME1bnTvSEMIkkVotVgETD0QtZLa7zzntJzk=
 github.com/ernestrc/dom v0.2.5-0.20201125033726-789c946aa938 h1:f/aC0hFDoMkao3chzwSlyBnwxcQj77I3i/D6HEbcuTE=
 github.com/ernestrc/dom v0.2.5-0.20201125033726-789c946aa938/go.mod h1:zkvVMhrl7iSWniJU2txvm5E6pF5bkHVK5ALYLlNBcO0=
 github.com/ernestrc/go-multierror v1.1.2 h1:9EYH71nYIsHEC9DSTtsT9GypDxmHAQ2gcOY6BMnXot8=

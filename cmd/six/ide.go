@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"path/filepath"
 
 	"github.com/ernestrc/blue/logging"
 	multierr "github.com/ernestrc/go-multierror"
@@ -86,10 +87,16 @@ func (i *ide) init(cwd, cfgfilename, recfilename string,
 		l.SetOutput(f)
 		l.SetLevel(level)
 		l.SetFormatter(&logging.LogrusFormatter{})
+
+		log.SetOutput(f)
+		log.SetLevel(level)
+		log.SetFormatter(&logging.LogrusFormatter{})
 	} else {
 		l = log.New()
 		l.Out = ioutil.Discard
 		l.Level = log.PanicLevel
+		log.SetOutput(ioutil.Discard)
+		log.SetLevel(log.PanicLevel)
 	}
 
 	debug.InitLogger(l)
@@ -111,8 +118,21 @@ func (i *ide) init(cwd, cfgfilename, recfilename string,
 		return err
 	}
 
+	// NOTE: not configurable yet but once configuration is migrated to .six/config
+	// it will be passed via CLI.
+	var sixDir string
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		sixDir = filepath.Join(os.TempDir(), ".six")
+		l.Warnf("failed to read user home dir: %v. Installing .six in %s", err, sixDir)
+	} else {
+		sixDir = filepath.Join(homeDir, ".six")
+		l.Tracef("using six home folder %q", sixDir)
+	}
+
 	root, err := newWorkspaceManagerHandler(i.clipboard, cwdURI,
-		workspaceManager, i.ideConfig, recfilename, filenames, publishEvent)
+		workspaceManager, i.ideConfig, recfilename, filenames,
+		sixDir, publishEvent)
 	if err != nil {
 		return err
 	}

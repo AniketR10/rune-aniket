@@ -5,11 +5,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 	"strconv"
 	"sync"
 
 	"github.com/ernestrc/blue/document"
-	"github.com/ernestrc/go-multierror"
+	"github.com/ernestrc/blue/document/firstmover"
 	multierr "github.com/ernestrc/go-multierror"
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/browser"
@@ -21,6 +23,7 @@ import (
 	"unstable.build/go-tui/text"
 	"unstable.build/go-tui/text/vi"
 	"unstable.build/go-tui/workspace"
+	workdoc "unstable.build/go-tui/workspace/document"
 )
 
 const (
@@ -96,12 +99,13 @@ func newWorkspaceManagerHandler(
 	clipboard clipboardManagerIfc, initial workspace.URI,
 	manager workspace.WorkspaceManager,
 	cfg ideConfig, recfilename string, filenames []string,
+	sixDir string,
 	publishEvent func(term.Event) bool,
 ) (*workspaceManagerHandler, error) {
 	ret := new(workspaceManagerHandler)
 
 	err := ret.init(clipboard, initial, manager,
-		cfg, recfilename, filenames, publishEvent)
+		cfg, recfilename, filenames, sixDir, publishEvent)
 	if err != nil {
 		return nil, err
 	}
@@ -118,22 +122,54 @@ func (h *workspaceManagerHandler) newEditor(cfg ideConfig) text.Editor {
 	return vi.Editor(viOpts...)
 }
 
+func setupStorage(sixDir string) (browser.Storage, error) {
+	storageDir := filepath.Join(sixDir, ".db")
+	err := os.MkdirAll(storageDir, 0777)
+	if err != nil {
+		return nil, fmt.Errorf("mkdir .six/.db: %v", err)
+	}
+	storageDirURI, err := workspace.CurrentUserHostURI(storageDir)
+	if err != nil {
+		return nil, fmt.Errorf("URI: %v", err)
+	}
+	scheme, err := workspace.NewFileScheme(config.NopConfig(), storageDirURI)
+	if err != nil {
+		return nil, err
+	}
+	storage, err := workdoc.NewWorkspaceService(scheme, workdoc.MarshalerTOML())
+	if err != nil {
+		return nil, err
+	}
+
+	// place lock path at parent dir of .db
+	lockPath := filepath.Join(sixDir, ".dblock")
+
+	storage = firstmover.New(storage, lockPath)
+	return storage, nil
+}
+
 func (h *workspaceManagerHandler) init(
 	clipboard clipboardManagerIfc, uri workspace.URI,
 	manager workspace.WorkspaceManager, cfg ideConfig,
 	recfilename string, filenames []string,
+	sixDir string,
 	publishEvent func(term.Event) bool,
 ) error {
 	h.workspaces = make([]*workspaceHandler, 10)
 	h.cfg = cfg
 	h.clipboard = clipboard
 	h.publishEvent = publishEvent
-	h.storage = document.NewInMemoryService()
 	h.workspace = manager
+	storage, err := setupStorage(sixDir)
+	if err != nil {
+		storage = document.NewInMemoryService()
+		debug.StandardLogger().Warnf("Could not setup fs-backed storage: %v. Using ephemeral.", err)
+	}
+	h.storage = storage
 
 	globalOpts := h.textOpts(h.cfg)
 	h.empty, _ = newEx(h.newEditor(cfg), nopLoader{}, h.publishEvent, globalOpts...)
-	err := h.subscribeAllWorkspaceCommands(h.empty)
+	err = h.subscribeAllWorkspaceCommands(h.empty)
 	if err != nil {
 		return err
 	}
@@ -525,20 +561,23 @@ func (h *workspaceManagerHandler) Close() (ret error) {
 			continue
 		}
 		if err := hm.Handler.(*ex).Close(); err != nil {
-			ret = multierror.Append(ret, err)
+			ret = multierr.Append(ret, err)
 		}
 		if err := hm.workspaceCloser.Close(); err != nil {
-			ret = multierror.Append(ret, err)
+			ret = multierr.Append(ret, err)
 		}
 		if err := hm.Plugins.Close(); err != nil {
-			ret = multierror.Append(ret, err)
+			ret = multierr.Append(ret, err)
 		}
 	}
 	if err := h.empty.Close(); err != nil {
-		ret = multierror.Append(ret, err)
+		ret = multierr.Append(ret, err)
+	}
+	if err := h.storage.Close(); err != nil {
+		ret = multierr.Append(ret, err)
 	}
 	if err := h.clipboard.Close(); err != nil {
-		ret = multierror.Append(ret, err)
+		ret = multierr.Append(ret, err)
 	}
 	return
 }
