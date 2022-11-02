@@ -270,23 +270,16 @@ func (e *logsGrantee) showLogs(args []string) (bool, error) {
 		logFile = args[0]
 	}
 
-	uri, err := workspace.ParseURI(logFile)
+	log.Debugf("Opening log file %q", logFile)
+
+	uri, err := workspace.CurrentUserHostURI(logFile)
 	if err != nil {
-		uri, err = e.w.URI(logFile)
-		if err != nil {
-			return false, err
-		}
+		return false, err
 	}
-
-	if uri.Scheme() != workspace.FileScheme {
-		return false, fmt.Errorf("cannot read non file scheme log file: %s", uri)
-	}
-
-	log.Debugf("Opening log file at %s (raw arg=%s)", uri, logFile)
 
 	// NOTE: log_path is always referencing a local path so until
 	// we containerize plugins, it's safe to call os.Open
-	file, err := os.Open(uri.Path())
+	file, err := os.Open(logFile)
 	if err != nil {
 		return false, fmt.Errorf("could not open logs file: %s", err)
 	}
@@ -297,7 +290,7 @@ func (e *logsGrantee) showLogs(args []string) (bool, error) {
 		return false, fmt.Errorf("notify: %s", err)
 	}
 
-	err = watcher.Add(uri.Path())
+	err = watcher.Add(logFile)
 	if err != nil {
 		_ = watcher.Close()
 		_ = file.Close()
