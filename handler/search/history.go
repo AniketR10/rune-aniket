@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	defaultStoreTimeout = 100 * time.Millisecond
+	defaultStoreTimeout = 5 * time.Second
 )
 
 type historyDocument struct {
