@@ -20,6 +20,7 @@ blue_release_dist() {
 	GIT_LOG=$(git log --pretty=format:"%h: %s" $GIT_LOG_RANGE)
 	printf "\n$GIT_LOG\n";
 
+	echo "uploading $BLUE_RELEASE_TAG"
 	$BLUE_EXEC release upload -d git-remote-url=$GIT_REMOTE_URL -d git-author-email=$GIT_AUTHOR_EMAIL -d git-tag=$GIT_TAG -d git-head=$GIT_HEAD -d git-log="$GIT_LOG" -k $BLUE_PGP_KEY -r $BLUE_PGP_KEYRING six $BLUE_RELEASE_TAG $BLUE_RELEASE_TAR
 }
 
