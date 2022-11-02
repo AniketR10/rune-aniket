@@ -144,7 +144,9 @@ func setupStorage(sixDir string) (browser.Storage, error) {
 	// place lock path at parent dir of .db
 	lockPath := filepath.Join(sixDir, ".dblock")
 
-	storage = firstmover.New(storage, lockPath)
+	cfg := firstmover.DefaultConfig()
+	cfg.CloseError = workdoc.ErrClosing
+	storage = firstmover.New(storage, lockPath, cfg)
 	return storage, nil
 }
 

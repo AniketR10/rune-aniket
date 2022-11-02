@@ -26,23 +26,24 @@ func testMemoryWorkspaceServiceWithMarshaler(t *testing.T, m Marshaler) {
 }
 
 func testFileWorkspaceServiceWithMarshaler(t *testing.T, m Marshaler) {
-	dirs := make(map[string]struct{})
+	dirs := make(map[string]document.Service)
 	test.TestDocumentService(t, func(t *testing.T) document.Service {
 		name, err := ioutil.TempDir("", "workspace_document_service_test")
 		require.NoError(t, err)
 		if _, ok := dirs[name]; ok {
 			panic(fmt.Sprintf("created a duplicate temp dir: %s", name))
 		}
-		dirs[name] = struct{}{}
 		uri, err := workspace.ParseURI("file://" + name)
 		require.NoError(t, err)
 		scheme, err := workspace.NewFileScheme(config.NopConfig(), uri)
 		require.NoError(t, err)
 		svc, err := NewWorkspaceService(scheme, m)
 		require.NoError(t, err)
+		dirs[name] = svc
 		return svc
 	})
-	for dir := range dirs {
+	for dir, svc := range dirs {
+		svc.Close()
 		_ = os.RemoveAll(dir)
 	}
 }

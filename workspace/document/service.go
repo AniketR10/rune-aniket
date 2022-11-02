@@ -14,6 +14,11 @@ import (
 	"unstable.build/go-tui/workspace"
 )
 
+// ErrClosing is returned to inflight write requests
+// before comitting changes to disk if the service
+// is currently closing.
+var ErrClosing = errors.New("Service is closing")
+
 // Marshaler abstracts a text or binary marshaler
 // which can be used with NewSchemeService to decide the encoding
 // of the storage document files.
@@ -31,23 +36,28 @@ func NewWorkspaceService(scheme workspace.Scheme, marshaler Marshaler) (document
 		marshaler: marshaler,
 	}
 	// make it goroutine-safe
-	return document.Sync(svc), nil
+	return document.Sync(&svc), nil
 }
 
 type service struct {
 	scheme    workspace.Scheme
 	marshaler Marshaler
+
+	// Used to wait on all writes before Close returns.
+	// This is to guarantee that once lock is released,
+	// there are no writes to the underlying files.
+	wg closeGroup
 }
 
-func (s service) Create(ctx context.Context, ID string, doc interface{}) error {
+func (s *service) Create(ctx context.Context, ID string, doc interface{}) error {
 	return s.create(ctx, ID, doc, os.O_CREATE|os.O_EXCL|os.O_WRONLY)
 }
 
-func (s service) Set(ctx context.Context, ID string, doc interface{}) error {
+func (s *service) Set(ctx context.Context, ID string, doc interface{}) error {
 	return s.create(ctx, ID, doc, os.O_CREATE|os.O_WRONLY)
 }
 
-func (s service) Update(ctx context.Context, ID string, updates []document.Update) error {
+func (s *service) Update(ctx context.Context, ID string, updates []document.Update) error {
 	if len(updates) == 0 {
 		panic("Update: no paths to update")
 	}
@@ -92,7 +102,7 @@ func (s service) Update(ctx context.Context, ID string, updates []document.Updat
 	return nil
 }
 
-func (s service) Get(ctx context.Context, ID string, doc interface{}) error {
+func (s *service) Get(ctx context.Context, ID string, doc interface{}) error {
 	if !document.IsEncodeable(doc) {
 		return errors.New("invalid document argument")
 	}
@@ -108,11 +118,11 @@ func (s service) Get(ctx context.Context, ID string, doc interface{}) error {
 	return s.read(f, doc)
 }
 
-func (s service) Delete(ctx context.Context, ID string) error {
+func (s *service) Delete(ctx context.Context, ID string) error {
 	return s.scheme.Remove(s.getFileName(ID))
 }
 
-func (s service) List(ctx context.Context, filters []document.Filter) (document.Iterator, error) {
+func (s *service) List(ctx context.Context, filters []document.Filter) (document.Iterator, error) {
 	for _, f := range filters {
 		if len(f.FieldPath) == 0 || f.Op == "" {
 			panic("invalid filter")
@@ -125,14 +135,20 @@ func (s service) List(ctx context.Context, filters []document.Filter) (document.
 	return &docIter{filters: filters, svc: s, it: it}, nil
 }
 
-func (s service) Close() (ret error) {
+func (s *service) Close() (ret error) {
+	// wait on writes to finish and prevent any new
+	// writes from making progress
+	if !s.wg.Close() {
+		// already closed
+		return
+	}
 	if err := s.scheme.Close(); err != nil {
 		ret = multierr.Append(ret, err)
 	}
 	return ret
 }
 
-func (s service) read(f workspace.File, doc interface{}) error {
+func (s *service) read(f workspace.File, doc interface{}) error {
 	data, err := ioutil.ReadAll(f)
 	if err != nil {
 		return fmt.Errorf("Scheme.Read: %v", err)
@@ -145,11 +161,11 @@ func (s service) read(f workspace.File, doc interface{}) error {
 	return nil
 }
 
-func (s service) getFileName(id string) string {
+func (s *service) getFileName(id string) string {
 	return id
 }
 
-func (s service) create(ctx context.Context, ID string, doc interface{}, openFlags int) error {
+func (s *service) create(ctx context.Context, ID string, doc interface{}, openFlags int) error {
 	if doc == nil {
 		panic("invalid nil data argument to Create/Set")
 	}
@@ -177,11 +193,16 @@ func (s service) create(ctx context.Context, ID string, doc interface{}, openFla
 	return ret
 }
 
-func (s service) write(f workspace.File, doc interface{}) error {
+func (s *service) write(f workspace.File, doc interface{}) error {
 	data, err := s.marshaler.Marshal(doc)
 	if err != nil {
 		return fmt.Errorf("Marshal: %v", err)
 	}
+	done, ok := s.wg.AddOne()
+	if !ok {
+		return ErrClosing
+	}
+	defer done()
 	_, err = f.Write(data)
 	if err != nil {
 		return fmt.Errorf("Write: %v", err)
@@ -195,7 +216,7 @@ func (s service) write(f workspace.File, doc interface{}) error {
 
 type docIter struct {
 	filters []document.Filter
-	svc     service
+	svc     *service
 	it      iterator.Iterator[string]
 
 	doneErr       error
