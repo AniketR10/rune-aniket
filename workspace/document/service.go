@@ -54,7 +54,7 @@ func (s *service) Create(ctx context.Context, ID string, doc interface{}) error 
 }
 
 func (s *service) Set(ctx context.Context, ID string, doc interface{}) error {
-	return s.create(ctx, ID, doc, os.O_CREATE|os.O_WRONLY)
+	return s.create(ctx, ID, doc, os.O_CREATE|os.O_WRONLY|os.O_TRUNC)
 }
 
 func (s *service) Update(ctx context.Context, ID string, updates []document.Update) error {
@@ -173,7 +173,7 @@ func (s *service) create(ctx context.Context, ID string, doc interface{}, openFl
 	if err != nil {
 		return err
 	}
-	f, werr := s.scheme.Open(s.getFileName(ID), openFlags, 0644)
+	f, werr := s.scheme.Open(s.getFileName(ID), openFlags, 0666)
 	if werr != nil {
 		if werr.IsExist {
 			return document.ErrAlreadyExists

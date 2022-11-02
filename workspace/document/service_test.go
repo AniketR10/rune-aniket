@@ -1,6 +1,7 @@
 package document
 
 import (
+	"context"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -78,4 +79,29 @@ func TestFileWorkspaceServiceYAML(t *testing.T) {
 	t.Run("backed by MemoryScheme", func(t *testing.T) {
 		testMemoryWorkspaceServiceWithMarshaler(t, MarshalerYAML())
 	})
+}
+
+func TestSetOverrideIssue(t *testing.T) {
+	type testStruct struct {
+		Content []string
+	}
+
+	name, err := ioutil.TempDir("", "workspace_document_service_test")
+	require.NoError(t, err)
+	uri, err := workspace.ParseURI("file://" + name)
+	require.NoError(t, err)
+	scheme, err := workspace.NewFileScheme(config.NopConfig(), uri)
+	require.NoError(t, err)
+	svc, err := NewWorkspaceService(scheme, MarshalerTOML())
+	require.NoError(t, err)
+
+	require.NoError(t, svc.Set(context.Background(), "1234", &testStruct{Content: []string{
+		"111111111111111111111111111111111111111111111111111111111111\n",
+		"111111111111111111111111111111111111111111111111111111111111\n",
+		"22221111111111111111111111111111\n",
+	}}))
+	var temp testStruct
+	require.NoError(t, svc.Get(context.Background(), "1234", &temp))
+	require.NoError(t, svc.Set(context.Background(), "1234", &testStruct{Content: []string{"a"}}))
+	require.NoError(t, svc.Get(context.Background(), "1234", &temp))
 }
