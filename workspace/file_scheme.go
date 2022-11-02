@@ -75,6 +75,7 @@ type fileScheme struct {
 	workers    int
 	cmds       sync.Map
 	nextPid    int32
+	quitCh     chan struct{}
 }
 
 type execCmd struct {
@@ -98,6 +99,7 @@ func (p *fileScheme) init(cfg config.Config, workspace URI) error {
 	}
 	p.workspace = workspace
 	p.workers, err = cfg.GetInt("workers")
+	p.quitCh = make(chan struct{})
 	if err == config.ErrNotFound {
 		p.workers = defaultWorkers
 		err = nil
@@ -416,13 +418,16 @@ func (p *fileScheme) SetPtySize(pp Pty, width, height int) error {
 func traverseDirWorker(
 	ctx context.Context, wg *sync.WaitGroup,
 	ch, workerCh chan string, cwd string, mu *sync.Mutex, err *error,
+	quitCh chan struct{},
 ) {
 	for {
 		select {
+		case <-quitCh:
+			return
 		case <-ctx.Done():
 			return
 		case path := <-workerCh:
-			dirErr := dirTraversal(ctx, cwd, path, wg, ch, workerCh)
+			dirErr := dirTraversal(ctx, cwd, path, wg, ch, workerCh, quitCh)
 			if dirErr != nil {
 				mu.Lock()
 				*err = multierr.Append(*err, dirErr)
@@ -435,6 +440,7 @@ func traverseDirWorker(
 func dirTraversal(
 	ctx context.Context, cwd, dirname string,
 	wg *sync.WaitGroup, ch, workerCh chan string,
+	quitCh chan struct{},
 ) error {
 	defer wg.Done()
 	absPath := filepath.Join(cwd, dirname)
@@ -450,6 +456,8 @@ func dirTraversal(
 		if !info.IsDir() {
 			// ensure dirTraversal returns
 			select {
+			case <-quitCh:
+				return nil
 			case <-ctx.Done():
 				return ctx.Err()
 			case ch <- path:
@@ -466,7 +474,7 @@ func dirTraversal(
 		case workerCh <- path:
 		default:
 			// the rest of workers are busy, keep going
-			err := dirTraversal(ctx, cwd, path, wg, ch, workerCh)
+			err := dirTraversal(ctx, cwd, path, wg, ch, workerCh, quitCh)
 			if err != nil {
 				ret = multierr.Append(ret, err)
 			}
@@ -516,7 +524,7 @@ func (p *fileScheme) ListFiles(ctx context.Context) (iterator.Iterator[string], 
 
 	for i := 0; i < p.workers; i++ {
 		go traverseDirWorker(ctx, &wg, ch, workerCh,
-			p.workspace.Path(), &iterator.mu, &errors[i])
+			p.workspace.Path(), &iterator.mu, &errors[i], p.quitCh)
 	}
 
 	wg.Add(1)
@@ -575,6 +583,7 @@ func (p *fileScheme) Close() error {
 	for _, key := range keys {
 		p.cmds.Delete(key)
 	}
+	close(p.quitCh)
 	return ret
 }
 
