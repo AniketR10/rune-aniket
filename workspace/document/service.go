@@ -51,7 +51,8 @@ func (s service) Update(ctx context.Context, ID string, updates []document.Updat
 	if len(updates) == 0 {
 		panic("Update: no paths to update")
 	}
-	f, werr := s.scheme.Open(s.getFileName(ID), os.O_RDWR, 0)
+	origFileName := s.getFileName(ID)
+	orig, werr := s.scheme.Open(origFileName, os.O_RDONLY, 0)
 	if werr != nil {
 		if werr.IsNotExist {
 			return document.ErrNotFound
@@ -60,41 +61,35 @@ func (s service) Update(ctx context.Context, ID string, updates []document.Updat
 	}
 
 	proto := make(map[string]interface{})
-	err := s.read(f, &proto)
+	err := s.read(orig, &proto)
+	if cerr := orig.Close(); cerr != nil {
+		err = multierr.Append(err, cerr)
+	}
 	if err != nil {
-		if cerr := f.Close(); cerr != nil {
-			return multierr.Append(err, cerr)
-		}
 		return err
 	}
-
 	document.UpdateProto(updates, proto)
-	// FIXME do not lose data if something happens to process
-	// use Scheme.Rename.
-	err = f.Truncate(0)
-	if err != nil {
-		if cerr := f.Close(); cerr != nil {
-			return multierr.Append(err, cerr)
-		}
-		return err
+
+	targetFileName := s.getFileName(ID) + ".swp"
+	target, werr := s.scheme.Open(targetFileName, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0666)
+	if werr != nil {
+		return fmt.Errorf("Scheme.Open: %v", werr.ToError())
 	}
-	_, err = f.Seek(0, 0)
+
+	err = s.write(target, proto)
+	if cerr := target.Close(); cerr != nil {
+		err = multierr.Append(err, cerr)
+	}
 	if err != nil {
-		if cerr := f.Close(); cerr != nil {
-			return multierr.Append(err, cerr)
-		}
 		return err
 	}
 
-	err = s.write(f, proto)
+	err = s.scheme.Rename(targetFileName, origFileName)
 	if err != nil {
-		if cerr := f.Close(); cerr != nil {
-			return multierr.Append(err, cerr)
-		}
-		return err
+		return fmt.Errorf("Scheme.Rename: %v", werr.ToError())
 	}
 
-	return f.Close()
+	return nil
 }
 
 func (s service) Get(ctx context.Context, ID string, doc interface{}) error {
