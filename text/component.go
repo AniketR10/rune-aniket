@@ -815,8 +815,9 @@ func (c *Component) Set(
 // Update satisfies browser.Storage
 func (c *Component) Update(
 	ctx context.Context, ID string, updates []document.Update,
+	preconds ...document.Precondition,
 ) error {
-	return c.config.Storage.Update(ctx, ID, updates)
+	return c.config.Storage.Update(ctx, ID, updates, preconds...)
 }
 
 // Get satisfies browser.Storage

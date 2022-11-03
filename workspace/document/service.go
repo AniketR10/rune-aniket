@@ -57,7 +57,10 @@ func (s *service) Set(ctx context.Context, ID string, doc interface{}) error {
 	return s.create(ctx, ID, doc, os.O_CREATE|os.O_WRONLY|os.O_TRUNC)
 }
 
-func (s *service) Update(ctx context.Context, ID string, updates []document.Update) error {
+func (s *service) Update(
+	ctx context.Context, ID string, updates []document.Update,
+	preconds ...document.Precondition,
+) error {
 	if len(updates) == 0 {
 		panic("Update: no paths to update")
 	}
@@ -78,7 +81,11 @@ func (s *service) Update(ctx context.Context, ID string, updates []document.Upda
 	if err != nil {
 		return err
 	}
-	document.UpdateProto(updates, proto)
+
+	err = document.UpdateProto(updates, proto, preconds...)
+	if err != nil {
+		return err
+	}
 
 	targetFileName := s.getFileName(ID) + ".swp"
 	target, werr := s.scheme.Open(targetFileName, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0666)

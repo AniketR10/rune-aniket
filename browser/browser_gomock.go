@@ -852,15 +852,15 @@ func (mr *MockBrowserMockRecorder) Tab(uri, name, h interface{}) *gomock.Call {
 }
 
 // Update mocks base method.
-func (m *MockBrowser) Update(ctx context.Context, ID string, updates []document.Update) error {
+func (m *MockBrowser) Update(ctx context.Context, ID string, updates []document.Update, preconds ...document.Precondition) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Update", ctx, ID, updates)
+	ret := m.ctrl.Call(m, "Update", ctx, ID, updates, preconds)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // Update indicates an expected call of Update.
-func (mr *MockBrowserMockRecorder) Update(ctx, ID, updates interface{}) *gomock.Call {
+func (mr *MockBrowserMockRecorder) Update(ctx, ID, updates, preconds interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Update", reflect.TypeOf((*MockBrowser)(nil).Update), ctx, ID, updates)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Update", reflect.TypeOf((*MockBrowser)(nil).Update), ctx, ID, updates, preconds)
 }
