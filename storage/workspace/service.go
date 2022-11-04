@@ -9,9 +9,9 @@ import (
 	"reflect"
 
 	"github.com/ernestrc/blue/document"
+	"github.com/ernestrc/blue/encoding"
 	"github.com/ernestrc/blue/iterator"
 	multierr "github.com/ernestrc/go-multierror"
-	"unstable.build/go-tui/storage/encoding"
 	"unstable.build/go-tui/workspace"
 )
 
@@ -75,7 +75,7 @@ func (s *service) Update(
 		return err
 	}
 
-	err = document.UpdateProto(updates, proto, preconds...)
+	err = document.UpdateProto(s.marshaler, updates, proto, preconds...)
 	if err != nil {
 		return err
 	}
@@ -250,7 +250,7 @@ func (d *docIter) HasNext() (ok bool) {
 			return true
 		}
 
-		if matchesAllFilters(proto, d.filters) {
+		if document.MatchesAllFilters(d.svc.marshaler, proto, d.filters) {
 			d.nextMatchFile = f
 			return true
 		}
@@ -285,15 +285,6 @@ func (d *docIter) NextTo(doc interface{}) error {
 		return fmt.Errorf("Seek: %v", err)
 	}
 	return d.svc.read(d.nextMatchFile, doc)
-}
-
-func matchesAllFilters(proto map[string]interface{}, filters []document.Filter) bool {
-	for _, f := range filters {
-		if !document.MatchFilter(proto, f) {
-			return false
-		}
-	}
-	return true
 }
 
 func (d *docIter) Close() error {

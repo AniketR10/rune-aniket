@@ -6,6 +6,7 @@ import (
 	"github.com/ernestrc/blue/document"
 	docrpc "github.com/ernestrc/blue/document/rpc"
 	bproto "github.com/ernestrc/blue/document/rpc/proto"
+	"github.com/ernestrc/blue/encoding/toml"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 	"unstable.build/go-tui/debug"
@@ -49,7 +50,7 @@ func (s *storageResourceServer) Serve(
 				grpc := srv.GRPC()
 				s.srv = srv
 				server := new(docrpc.Server)
-				server.Init(s.svc, grpc)
+				server.Init(s.svc, toml.Marshaler(), grpc)
 				bproto.RegisterDocumentStoreServer(grpc, server)
 			}
 			return s.srv
@@ -76,7 +77,7 @@ func dialStorage(token uint32, broker proto.MuxBroker) (
 		return nil, err
 	}
 	c := new(docrpc.Client)
-	c.Init(conn)
+	c.Init(conn, toml.Marshaler())
 	clients.Store(token, c)
 	return c, nil
 }

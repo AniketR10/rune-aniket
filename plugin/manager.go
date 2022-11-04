@@ -10,6 +10,7 @@ import (
 
 	"github.com/ernestrc/blue/document"
 	docrpc "github.com/ernestrc/blue/document/rpc"
+	"github.com/ernestrc/blue/encoding/bson"
 	"github.com/ernestrc/blue/logging"
 	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui/config"
@@ -106,7 +107,7 @@ func (m *Manager) Init(grantor Grantor, opts ...Option) (err error) {
 	m.rmu = m.config.locker
 
 	cache := document.NewInMemoryService()
-	m.brokerServer = docrpc.NewServer(cache)
+	m.brokerServer = docrpc.NewServer(cache, bson.Marshaler())
 	m.broker, m.brokerAddr, err = initHostBroker(m.config, cache, m.brokerServer)
 	if err != nil {
 		return

@@ -12,13 +12,13 @@ import (
 
 	"github.com/ernestrc/blue/document"
 	"github.com/ernestrc/blue/document/firstmover"
+	"github.com/ernestrc/blue/encoding/toml"
 	multierr "github.com/ernestrc/go-multierror"
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/config"
 	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/plugin"
-	"unstable.build/go-tui/storage/encoding/toml"
 	workdoc "unstable.build/go-tui/storage/workspace"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
@@ -145,6 +145,7 @@ func setupStorage(sixDir string) (document.Service, error) {
 	lockPath := filepath.Join(sixDir, ".dblock")
 
 	cfg := firstmover.DefaultConfig()
+	cfg.Marshaler = toml.Marshaler()
 	cfg.CloseError = workdoc.ErrClosing
 	storage = firstmover.New(storage, lockPath, cfg)
 	return storage, nil

@@ -9,12 +9,13 @@ import (
 
 	"github.com/ernestrc/blue/document"
 	test "github.com/ernestrc/blue/document/test"
+	"github.com/ernestrc/blue/encoding"
+	"github.com/ernestrc/blue/encoding/bson"
+	"github.com/ernestrc/blue/encoding/json"
+	"github.com/ernestrc/blue/encoding/toml"
+	"github.com/ernestrc/blue/encoding/yaml"
 	"github.com/stretchr/testify/require"
 	"unstable.build/go-tui/config"
-	"unstable.build/go-tui/storage/encoding"
-	"unstable.build/go-tui/storage/encoding/json"
-	"unstable.build/go-tui/storage/encoding/toml"
-	"unstable.build/go-tui/storage/encoding/yaml"
 	"unstable.build/go-tui/workspace"
 )
 
@@ -59,6 +60,15 @@ func TestFileWorkspaceServiceJSON(t *testing.T) {
 	})
 	t.Run("backed by MemoryScheme", func(t *testing.T) {
 		testMemoryWorkspaceServiceWithMarshaler(t, json.Marshaler())
+	})
+}
+
+func TestFileWorkspaceServiceBSON(t *testing.T) {
+	t.Run("backed by FileScheme", func(t *testing.T) {
+		testFileWorkspaceServiceWithMarshaler(t, bson.Marshaler())
+	})
+	t.Run("backed by MemoryScheme", func(t *testing.T) {
+		testMemoryWorkspaceServiceWithMarshaler(t, bson.Marshaler())
 	})
 }
 

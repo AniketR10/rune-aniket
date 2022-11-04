@@ -7,6 +7,7 @@ import (
 
 	"github.com/ernestrc/blue/document"
 	docrpc "github.com/ernestrc/blue/document/rpc"
+	"github.com/ernestrc/blue/encoding/bson"
 	"github.com/ernestrc/blue/retry"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
@@ -48,7 +49,7 @@ func initHostBroker(
 
 func initClientBroker(logger *log.Logger) proto.MuxBroker {
 	remoteAddr := getBrokerRemoteAddrEnv()
-	store, err := docrpc.NewClient(remoteAddr, grpc.WithInsecure())
+	store, err := docrpc.NewClient(remoteAddr, bson.Marshaler(), grpc.WithInsecure())
 	if err != nil {
 		panic(err)
 	}
