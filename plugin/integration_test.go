@@ -45,8 +45,9 @@ func TestIntegrationRace(t *testing.T) {
 	edMock := text.NewMockEditor(ctrl)
 	edMock.EXPECT().SubscribeEditorEvents(gomock.Any(), gomock.Any()).Times(1)
 	resources := MergeResourceMap(BrowserResources(mock), EditorResources(edMock))
-	storage := document.NewInMemoryService()
-	resources = MergeResourceMap(resources, StorageResource(storage))
+	dir, err := ioutil.TempDir("", "")
+	require.NoError(t, err)
+	resources = MergeResourceMap(resources, StorageResources(dir))
 	resources[PermissionClipboard] = NewClipboardManager()
 
 	wpMock := workspacetest.NewMockWorkspace(ctrl)
