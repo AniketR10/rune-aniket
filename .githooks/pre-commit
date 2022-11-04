@@ -1,4 +1,26 @@
-#!/bin/sh
+#!/bin/bash
+
+test_build() {
+    FILES=`go list ./...`
+    if test $? -ne 0
+    then
+        exit 1
+    fi
+	echo "testing that all .go files compile..."
+    output=`go build $FILES`
+    if test $? -ne 0
+    then
+        output=`echo "$output"`
+        exit 1
+    fi
+	echo "testing that all test files compile..."
+    output=`for file in $FILES; do go test -c $file; done`
+    if test $? -ne 0
+    then
+        output=`echo "$output"`
+        exit 1
+    fi
+}
 
 test_fmt() {
     hash gofmt 2>&- || { echo >&2 "gofmt not in PATH."; exit 1; }
@@ -37,6 +59,7 @@ case "$1" in
         echo "Check Go code formatting"
         ;;
     * )
+        test_build
         test_fmt
         ;;
 esac
