@@ -6,7 +6,10 @@ import (
 	"time"
 
 	"github.com/ernestrc/blue/document"
+	"github.com/ernestrc/blue/retry"
 )
+
+var retryStrategy = retry.SequentialStrategy(30 * time.Millisecond)
 
 const (
 	defaultStoreTimeout = 5 * time.Second
@@ -14,6 +17,7 @@ const (
 
 type historyDocument struct {
 	Queries []string
+	Version int64
 }
 
 // History acts as a persisted stack of queries. It provides operations
@@ -52,6 +56,7 @@ func (h *History) Init(
 	h.docID = documentID
 	h.timeout = defaultStoreTimeout
 	h.max = maxHistory
+	h.doc.Version = 1
 }
 
 // Load fetches any queries persisted in store and populates
@@ -62,7 +67,7 @@ func (h *History) Load() error {
 
 	err := h.store.Get(ctx, h.docID, &h.doc)
 	if err == document.ErrNotFound {
-		err = nil
+		err = h.store.Create(ctx, h.docID, &h.doc)
 	}
 	if err != nil {
 		return fmt.Errorf("Failed to load search history from store: %s", err)
@@ -80,18 +85,26 @@ func (h *History) Add(query string) error {
 		return nil
 	}
 
-	h.doc.Queries = append(h.doc.Queries, "")
-	copy(h.doc.Queries[1:], h.doc.Queries)
-	h.doc.Queries[0] = query
-
-	if len(h.doc.Queries) > h.max {
-		h.doc.Queries = h.doc.Queries[:h.max]
-	}
-
 	ctx, cancel := context.WithTimeout(context.Background(), defaultStoreTimeout)
 	defer cancel()
 
-	err := h.store.Set(ctx, h.docID, &h.doc)
+	err := document.ConsistentUpdate(ctx, h.store, h.docID, &h.doc, retryStrategy,
+		func() ([]document.Update, []document.Precondition) {
+			h.doc.Queries = append(h.doc.Queries, "")
+			copy(h.doc.Queries[1:], h.doc.Queries)
+			h.doc.Queries[0] = query
+
+			if len(h.doc.Queries) > h.max {
+				h.doc.Queries = h.doc.Queries[:h.max]
+			}
+
+			return []document.Update{
+					{FieldPath: []string{"Queries"}, Value: h.doc.Queries},
+					{FieldPath: []string{"Version"}, Value: h.doc.Version + 1},
+				}, []document.Precondition{
+					{FieldPath: []string{"Version"}, Value: h.doc.Version},
+				}
+		})
 	if err != nil {
 		return fmt.Errorf("could not set command history: %v", err)
 	}
