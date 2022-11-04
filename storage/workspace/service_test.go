@@ -12,6 +12,9 @@ import (
 	"github.com/stretchr/testify/require"
 	"unstable.build/go-tui/config"
 	"unstable.build/go-tui/storage/encoding"
+	"unstable.build/go-tui/storage/encoding/json"
+	"unstable.build/go-tui/storage/encoding/toml"
+	"unstable.build/go-tui/storage/encoding/yaml"
 	"unstable.build/go-tui/workspace"
 )
 
@@ -52,19 +55,19 @@ func testFileWorkspaceServiceWithMarshaler(t *testing.T, m encoding.Marshaler) {
 
 func TestFileWorkspaceServiceJSON(t *testing.T) {
 	t.Run("backed by FileScheme", func(t *testing.T) {
-		testFileWorkspaceServiceWithMarshaler(t, encoding.MarshalerJSON())
+		testFileWorkspaceServiceWithMarshaler(t, json.Marshaler())
 	})
 	t.Run("backed by MemoryScheme", func(t *testing.T) {
-		testMemoryWorkspaceServiceWithMarshaler(t, encoding.MarshalerJSON())
+		testMemoryWorkspaceServiceWithMarshaler(t, json.Marshaler())
 	})
 }
 
 func TestFileWorkspaceServiceTOML(t *testing.T) {
 	t.Run("backed by FileScheme", func(t *testing.T) {
-		testFileWorkspaceServiceWithMarshaler(t, encoding.MarshalerTOML())
+		testFileWorkspaceServiceWithMarshaler(t, toml.Marshaler())
 	})
 	t.Run("backed by MemoryScheme", func(t *testing.T) {
-		testMemoryWorkspaceServiceWithMarshaler(t, encoding.MarshalerTOML())
+		testMemoryWorkspaceServiceWithMarshaler(t, json.Marshaler())
 	})
 }
 
@@ -75,10 +78,10 @@ func TestFileWorkspaceServiceYAML(t *testing.T) {
 	// working as expected, then there should be nothing fundamentally wrong by
 	// using YAML.
 	t.Run("backed by FileScheme", func(t *testing.T) {
-		testFileWorkspaceServiceWithMarshaler(t, encoding.MarshalerYAML())
+		testFileWorkspaceServiceWithMarshaler(t, yaml.Marshaler())
 	})
 	t.Run("backed by MemoryScheme", func(t *testing.T) {
-		testMemoryWorkspaceServiceWithMarshaler(t, encoding.MarshalerYAML())
+		testMemoryWorkspaceServiceWithMarshaler(t, yaml.Marshaler())
 	})
 }
 
@@ -93,7 +96,7 @@ func TestSetOverrideIssue(t *testing.T) {
 	require.NoError(t, err)
 	scheme, err := workspace.NewFileScheme(config.NopConfig(), uri)
 	require.NoError(t, err)
-	svc, err := NewWorkspaceService(scheme, encoding.MarshalerTOML())
+	svc, err := NewWorkspaceService(scheme, toml.Marshaler())
 	require.NoError(t, err)
 
 	require.NoError(t, svc.Set(context.Background(), "1234", &testStruct{Content: []string{

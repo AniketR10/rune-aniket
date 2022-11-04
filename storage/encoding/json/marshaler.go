@@ -1,9 +1,13 @@
-package encoding
+package json
 
-import "encoding/json"
+import (
+	"encoding/json"
 
-// MarshalerJSON returns a JSON Marshaler.
-func MarshalerJSON() Marshaler {
+	"unstable.build/go-tui/storage/encoding"
+)
+
+// Marshaler returns a JSON Marshaler.
+func Marshaler() encoding.Marshaler {
 	return jsonMarshaler{}
 }
 

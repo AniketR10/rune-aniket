@@ -1,9 +1,12 @@
-package encoding
+package yaml
 
-import "gopkg.in/yaml.v3"
+import (
+	"gopkg.in/yaml.v3"
+	"unstable.build/go-tui/storage/encoding"
+)
 
-// MarshalerYAML returns a YAML Marshaler.
-func MarshalerYAML() Marshaler {
+// Marshaler returns a YAML Marshaler.
+func Marshaler() encoding.Marshaler {
 	return yamlMarshaler{}
 }
 

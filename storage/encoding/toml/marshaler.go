@@ -1,13 +1,14 @@
-package encoding
+package toml
 
 import (
 	"bytes"
 
 	"github.com/BurntSushi/toml"
+	"unstable.build/go-tui/storage/encoding"
 )
 
-// MarshalerTOML returns a TOML Marshaler.
-func MarshalerTOML() Marshaler {
+// Marshaler returns a TOML Marshaler.
+func Marshaler() encoding.Marshaler {
 	return tomlMarshaler{}
 }
 

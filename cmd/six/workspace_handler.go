@@ -18,7 +18,7 @@ import (
 	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/plugin"
-	"unstable.build/go-tui/storage/encoding"
+	"unstable.build/go-tui/storage/encoding/toml"
 	workdoc "unstable.build/go-tui/storage/workspace"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
@@ -136,7 +136,7 @@ func setupStorage(sixDir string) (document.Service, error) {
 	if err != nil {
 		return nil, err
 	}
-	storage, err := workdoc.NewWorkspaceService(scheme, encoding.MarshalerTOML())
+	storage, err := workdoc.NewWorkspaceService(scheme, toml.Marshaler())
 	if err != nil {
 		return nil, err
 	}
