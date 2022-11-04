@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/signal"
 	"path"
+	"path/filepath"
 	"runtime"
 	"sync"
 	"syscall"
@@ -178,15 +179,26 @@ func main() {
 		}
 	}
 
+	// NOTE: not configurable yet but once configuration is migrated to .six/config
+	// it will be passed via CLI.
+	var sixDir string
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		sixDir = filepath.Join(os.TempDir(), ".six")
+		log.Warnf("failed to read user home dir: %v. Installing .six in %s", err, sixDir)
+	} else {
+		sixDir = filepath.Join(homeDir, ".six")
+	}
+
 	var i *ide
 	if *flagRecover != "" && len(filenames) != 0 {
 		i, err = newIdeRecovery(*flagWorkspace, *flagConfigPath,
-			filenames[0], *flagRecover, term.PublishEvent)
+			filenames[0], *flagRecover, sixDir, term.PublishEvent)
 	} else if *flagRecover != "" {
 		log.Fatal("flag -r requires to pass the original filename")
 	} else {
 		i, err = newIde(*flagWorkspace, *flagConfigPath,
-			term.PublishEvent, filenames...)
+			sixDir, term.PublishEvent, filenames...)
 	}
 
 	if err != nil {

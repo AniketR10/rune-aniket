@@ -1,4 +1,4 @@
-package document
+package workspace
 
 import (
 	"context"
@@ -11,10 +11,11 @@ import (
 	test "github.com/ernestrc/blue/document/test"
 	"github.com/stretchr/testify/require"
 	"unstable.build/go-tui/config"
+	"unstable.build/go-tui/storage/encoding"
 	"unstable.build/go-tui/workspace"
 )
 
-func testMemoryWorkspaceServiceWithMarshaler(t *testing.T, m Marshaler) {
+func testMemoryWorkspaceServiceWithMarshaler(t *testing.T, m encoding.Marshaler) {
 	test.TestDocumentService(t, func(t *testing.T) document.Service {
 		uri, err := workspace.ParseURI("memory:///")
 		require.NoError(t, err)
@@ -26,7 +27,7 @@ func testMemoryWorkspaceServiceWithMarshaler(t *testing.T, m Marshaler) {
 	})
 }
 
-func testFileWorkspaceServiceWithMarshaler(t *testing.T, m Marshaler) {
+func testFileWorkspaceServiceWithMarshaler(t *testing.T, m encoding.Marshaler) {
 	dirs := make(map[string]document.Service)
 	test.TestDocumentService(t, func(t *testing.T) document.Service {
 		name, err := ioutil.TempDir("", "workspace_document_service_test")
@@ -51,19 +52,19 @@ func testFileWorkspaceServiceWithMarshaler(t *testing.T, m Marshaler) {
 
 func TestFileWorkspaceServiceJSON(t *testing.T) {
 	t.Run("backed by FileScheme", func(t *testing.T) {
-		testFileWorkspaceServiceWithMarshaler(t, MarshalerJSON())
+		testFileWorkspaceServiceWithMarshaler(t, encoding.MarshalerJSON())
 	})
 	t.Run("backed by MemoryScheme", func(t *testing.T) {
-		testMemoryWorkspaceServiceWithMarshaler(t, MarshalerJSON())
+		testMemoryWorkspaceServiceWithMarshaler(t, encoding.MarshalerJSON())
 	})
 }
 
 func TestFileWorkspaceServiceTOML(t *testing.T) {
 	t.Run("backed by FileScheme", func(t *testing.T) {
-		testFileWorkspaceServiceWithMarshaler(t, MarshalerTOML())
+		testFileWorkspaceServiceWithMarshaler(t, encoding.MarshalerTOML())
 	})
 	t.Run("backed by MemoryScheme", func(t *testing.T) {
-		testMemoryWorkspaceServiceWithMarshaler(t, MarshalerTOML())
+		testMemoryWorkspaceServiceWithMarshaler(t, encoding.MarshalerTOML())
 	})
 }
 
@@ -74,10 +75,10 @@ func TestFileWorkspaceServiceYAML(t *testing.T) {
 	// working as expected, then there should be nothing fundamentally wrong by
 	// using YAML.
 	t.Run("backed by FileScheme", func(t *testing.T) {
-		testFileWorkspaceServiceWithMarshaler(t, MarshalerYAML())
+		testFileWorkspaceServiceWithMarshaler(t, encoding.MarshalerYAML())
 	})
 	t.Run("backed by MemoryScheme", func(t *testing.T) {
-		testMemoryWorkspaceServiceWithMarshaler(t, MarshalerYAML())
+		testMemoryWorkspaceServiceWithMarshaler(t, encoding.MarshalerYAML())
 	})
 }
 
@@ -92,7 +93,7 @@ func TestSetOverrideIssue(t *testing.T) {
 	require.NoError(t, err)
 	scheme, err := workspace.NewFileScheme(config.NopConfig(), uri)
 	require.NoError(t, err)
-	svc, err := NewWorkspaceService(scheme, MarshalerTOML())
+	svc, err := NewWorkspaceService(scheme, encoding.MarshalerTOML())
 	require.NoError(t, err)
 
 	require.NoError(t, svc.Set(context.Background(), "1234", &testStruct{Content: []string{

@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ernestrc/blue/document"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/goleak"
 	"google.golang.org/grpc"
@@ -82,7 +83,8 @@ func newTestRPCBrowser(t *testing.T,
 		tui.Handler, browser.Browser, error,
 	) {
 		b := new(ex)
-		err := b.init(ed, &testLoader{}, nopPublishEvent, opts...)
+		err := b.init(ed, &testLoader{},
+			document.NewInMemoryService(), nopPublishEvent, opts...)
 		if err != nil {
 			return nil, nil, err
 		}

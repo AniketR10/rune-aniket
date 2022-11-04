@@ -277,10 +277,12 @@ func newTestWorkspaceManagerHandlerWithManager(
 	uri workspace.URI, cfg ideConfig,
 ) *workspaceManagerHandler {
 	clip := &clipboardManagerTest{Clipboard: text.NewInMemoryClipboard()}
+	dir, err := ioutil.TempDir("", "")
+	require.NoError(t, err)
 
 	m := new(workspaceManagerHandler)
-	err := m.init(clip, uri, manager, cfg, "", []string{},
-		".six", func(term.Event) bool {
+	err = m.init(clip, uri, manager, cfg, "", []string{},
+		dir, func(term.Event) bool {
 			return true
 		})
 	require.NoError(t, err)

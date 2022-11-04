@@ -1,7 +1,8 @@
 package browser
 
 import (
-	"github.com/ernestrc/blue/document"
+	"io"
+
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/workspace"
@@ -97,12 +98,6 @@ type EventPublisher interface {
 	PublishEventNone() error
 }
 
-// Storage is the interface that wraps persistence CRUD methods.
-// See document.Service for more details.
-type Storage interface {
-	document.Service
-}
-
 // Browser is an interface that groups methods to manipulate
 // the user interface of a browser.
 type Browser interface {
@@ -110,8 +105,7 @@ type Browser interface {
 	EventPublisher
 	ResourceOpener
 	Messenger
-	Storage
-	// io.Closer by means of Storage
+	io.Closer
 }
 
 type closeHandler struct {

@@ -8,7 +8,6 @@ import (
 	"sync"
 	"time"
 
-	docrpc "github.com/ernestrc/blue/document/rpc"
 	"github.com/ernestrc/blue/logging"
 	log "github.com/sirupsen/logrus"
 	browserpb "unstable.build/go-tui/browser/rpc"
@@ -26,7 +25,6 @@ type Server struct {
 	browserpb.UnimplementedMessengerServer
 	browserpb.UnimplementedResourceOpenerServer
 	browserpb.UnimplementedWindowManagerServer
-	docrpc.Server
 
 	broker proto.MuxBroker
 
@@ -100,7 +98,6 @@ func (s *Server) Init(
 	s.opened = make(map[uint32]Handler)
 	s.failureTimeout = defaultFailureTimeout
 	s.windowServer = windowServer
-	s.Server.Init(browser, nil)
 }
 
 func (s *Server) log(level log.Level, msg string, args ...interface{}) {

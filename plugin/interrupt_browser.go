@@ -3,7 +3,6 @@ package plugin
 import (
 	"context"
 
-	storepb "github.com/ernestrc/blue/document/rpc/proto"
 	browserpb "unstable.build/go-tui/browser/rpc"
 )
 
@@ -12,13 +11,11 @@ type browserServer interface {
 	browserpb.EventPublisherServer
 	browserpb.MessengerServer
 	browserpb.ResourceOpenerServer
-	storepb.DocumentStoreServer
 }
 
 // this structure wraps a browser.Browser to
 // provide interrupt on write requests coming from the wire
 type interruptBrowser struct {
-	storepb.UnimplementedDocumentStoreServer
 	browserpb.UnimplementedEventPublisherServer
 	browserpb.UnimplementedMessengerServer
 	browserpb.UnimplementedResourceOpenerServer
@@ -99,45 +96,4 @@ func (s *interruptBrowser) Open(
 	res, err := s.browserServer.Open(ctx, req)
 	s.interruptDraw()
 	return res, err
-}
-
-func (s *interruptBrowser) Create(
-	ctx context.Context, req *storepb.CreateDocumentRequest,
-) (*storepb.CreateDocumentResponse, error) {
-	res, err := s.browserServer.Create(ctx, req)
-	return res, err
-}
-
-func (s *interruptBrowser) Set(
-	ctx context.Context, req *storepb.SetDocumentRequest,
-) (*storepb.DocumentResponse, error) {
-	res, err := s.browserServer.Set(ctx, req)
-	return res, err
-}
-
-func (s *interruptBrowser) Update(
-	ctx context.Context, req *storepb.UpdateDocumentRequest,
-) (*storepb.UpdateDocumentResponse, error) {
-	res, err := s.browserServer.Update(ctx, req)
-	return res, err
-}
-
-func (s *interruptBrowser) Get(
-	ctx context.Context, req *storepb.GetDocumentRequest,
-) (*storepb.GetDocumentResponse, error) {
-	res, err := s.browserServer.Get(ctx, req)
-	return res, err
-}
-
-func (s *interruptBrowser) Delete(
-	ctx context.Context, req *storepb.DeleteDocumentRequest,
-) (*storepb.DocumentResponse, error) {
-	res, err := s.browserServer.Delete(ctx, req)
-	return res, err
-}
-
-func (s *interruptBrowser) List(
-	req *storepb.ListDocumentRequest, srv storepb.DocumentStore_ListServer,
-) error {
-	return s.browserServer.List(req, srv)
 }

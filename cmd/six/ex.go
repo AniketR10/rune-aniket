@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ernestrc/blue/document"
 	"github.com/ernestrc/blue/retry"
 	multierr "github.com/ernestrc/go-multierror"
 	"unstable.build/go-tui"
@@ -114,11 +115,12 @@ type ex struct {
 
 func newEx(
 	ed text.Editor, m workspace.Loader,
+	storage document.Service,
 	publishEvent func(term.Event) bool,
 	opts ...text.Option,
 ) (e *ex, err error) {
 	e = new(ex)
-	err = e.init(ed, m, publishEvent, opts...)
+	err = e.init(ed, m, storage, publishEvent, opts...)
 	if err != nil {
 		return
 	}
@@ -139,10 +141,11 @@ func forcePublishEvent(publishEvent func(term.Event) bool) func(ev term.Event) {
 // and the file failed to be opened.
 func (e *ex) init(
 	ed text.Editor, m workspace.Loader,
+	storage document.Service,
 	publishEvent func(term.Event) bool,
 	opts ...text.Option,
 ) (err error) {
-	err = e.doInit(ed, m, publishEvent, opts...)
+	err = e.doInit(ed, m, storage, publishEvent, opts...)
 	if err != nil {
 		return
 	}
@@ -176,6 +179,7 @@ func (e *ex) publishInterrupt() {
 
 func (e *ex) doInit(
 	ed text.Editor, m workspace.Loader,
+	storage document.Service,
 	publishEvent func(term.Event) bool,
 	opts ...text.Option,
 ) (err error) {
@@ -210,7 +214,7 @@ func (e *ex) doInit(
 		panic(msg)
 	}
 
-	e.cmd.init(e.Browser(), e.config.CommandMaxHistory,
+	e.cmd.init(storage, e.config.CommandMaxHistory,
 		e.config.CommandOverlay, e.config.CommandEvent,
 		func(command string, cmdAndArgs string) bool {
 			parts := strings.Split(cmdAndArgs, " ")

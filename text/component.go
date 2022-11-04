@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ernestrc/blue/document"
 	"github.com/ernestrc/blue/logging"
 	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
@@ -798,49 +797,6 @@ func (c *Component) Draw(w term.Writer) {
 	c.comp.Draw(w)
 }
 
-// Create satisfies browser.Storage
-func (c *Component) Create(
-	ctx context.Context, ID string, doc interface{},
-) error {
-	return c.config.Storage.Create(ctx, ID, doc)
-}
-
-// Set satisfies browser.Storage
-func (c *Component) Set(
-	ctx context.Context, ID string, doc interface{},
-) error {
-	return c.config.Storage.Set(ctx, ID, doc)
-}
-
-// Update satisfies browser.Storage
-func (c *Component) Update(
-	ctx context.Context, ID string, updates []document.Update,
-	preconds ...document.Precondition,
-) error {
-	return c.config.Storage.Update(ctx, ID, updates, preconds...)
-}
-
-// Get satisfies browser.Storage
-func (c *Component) Get(
-	ctx context.Context, ID string, doc interface{},
-) error {
-	return c.config.Storage.Get(ctx, ID, doc)
-}
-
-// Delete satisfies browser.Storage
-func (c *Component) Delete(
-	ctx context.Context, ID string,
-) error {
-	return c.config.Storage.Delete(ctx, ID)
-}
-
-// List satisfies browser.Storage
-func (c *Component) List(
-	ctx context.Context, filters []document.Filter,
-) (document.Iterator, error) {
-	return c.config.Storage.List(ctx, filters)
-}
-
 // SetCursor satisfies text.Editor
 func (c *Component) SetCursor(h Handler, pos term.Coordinates) error {
 	return c.ed.SetCursor(h, pos)
@@ -888,14 +844,10 @@ func (c *Component) Close() error {
 	// avoid dispatching close events on flusherCloser callbacks
 	c.edSubscribers = make(map[EventType][]EventHandler)
 
-	err1 := c.comp.Close()
-	err2 := c.config.Storage.Close()
-	if err2 != nil {
-		c.log(log.ErrorLevel, "config.Storage.Close error: %v", err2)
+	err := c.comp.Close()
+	if err != nil {
+		c.log(log.ErrorLevel, "browser.Component.Close error: %v", err)
+		return err
 	}
-	if err1 != nil {
-		c.log(log.ErrorLevel, "browser.Component.Close error: %v", err1)
-		return err1
-	}
-	return err2
+	return nil
 }

@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
-	"path/filepath"
 
 	"github.com/ernestrc/blue/logging"
 	multierr "github.com/ernestrc/go-multierror"
@@ -28,12 +27,12 @@ type ide struct {
 // at cfgfilename and filename. Note that if filename is empty, a default inmutable
 // buffer will be loaded.
 func newIde(
-	cwd, cfgfilename string,
+	cwd, cfgfilename, sixDir string,
 	publishEvent func(term.Event) bool,
 	filenames ...string,
 ) (i *ide, err error) {
 	i = new(ide)
-	err = i.init(cwd, cfgfilename, "", publishEvent, filenames...)
+	err = i.init(cwd, cfgfilename, "", sixDir, publishEvent, filenames...)
 	return
 }
 
@@ -41,7 +40,7 @@ func newIde(
 // The underlying editor will use recfilename to try to recover file at filename.
 // Note that this function panics if either filename or recfilename are empty.
 func newIdeRecovery(
-	cwd, cfgfilename, filename string, recfilename string,
+	cwd, cfgfilename, filename, recfilename, sixDir string,
 	publishEvent func(term.Event) bool,
 ) (i *ide, err error) {
 	if filename == "" || recfilename == "" {
@@ -49,11 +48,12 @@ func newIdeRecovery(
 			filename, recfilename))
 	}
 	i = new(ide)
-	err = i.init(cwd, cfgfilename, recfilename, publishEvent, filename)
+	err = i.init(cwd, cfgfilename, recfilename, sixDir, publishEvent, filename)
 	return
 }
 
 func (i *ide) init(cwd, cfgfilename, recfilename string,
+	sixDir string,
 	publishEvent func(term.Event) bool, filenames ...string) error {
 	isConfigErr, configErr := loadConfig(&i.ideConfig, cfgfilename)
 	// return errors that are not decoding errors but
@@ -116,18 +116,6 @@ func (i *ide) init(cwd, cfgfilename, recfilename string,
 	err = workspaceManager.RegisterScheme(workspace.MemoryScheme, workspace.NewMemoryScheme)
 	if err != nil {
 		return err
-	}
-
-	// NOTE: not configurable yet but once configuration is migrated to .six/config
-	// it will be passed via CLI.
-	var sixDir string
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		sixDir = filepath.Join(os.TempDir(), ".six")
-		l.Warnf("failed to read user home dir: %v. Installing .six in %s", err, sixDir)
-	} else {
-		sixDir = filepath.Join(homeDir, ".six")
-		l.Tracef("using six home folder %q", sixDir)
 	}
 
 	root, err := newWorkspaceManagerHandler(i.clipboard, cwdURI,

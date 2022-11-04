@@ -4,8 +4,8 @@ import (
 	"math"
 	"strings"
 
+	"github.com/ernestrc/blue/document"
 	"unstable.build/go-tui"
-	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/handler/search"
@@ -35,7 +35,7 @@ type commandListHandler struct {
 }
 
 func newCommandListHandler(
-	b browser.Storage, max int, overlayCfg text.CommandOverlayConfig,
+	b document.Service, max int, overlayCfg text.CommandOverlayConfig,
 	commandKey term.KeyComb, callback func(string, string) bool,
 	interrupt func(),
 ) *commandListHandler {
@@ -49,7 +49,7 @@ func (h *commandListHandler) loadHistory() error {
 }
 
 func (h *commandListHandler) init(
-	store browser.Storage, max int, overlayCfg text.CommandOverlayConfig,
+	store document.Service, max int, overlayCfg text.CommandOverlayConfig,
 	commandKey term.KeyComb, callback func(string, string) bool,
 	interrupt func(),
 ) {

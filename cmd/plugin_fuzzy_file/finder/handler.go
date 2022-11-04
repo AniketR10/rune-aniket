@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/ernestrc/blue/document"
 	"github.com/ernestrc/blue/iterator"
 	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui"
@@ -35,14 +36,14 @@ func Permissions() []plugin.Permission {
 		plugin.PermissionBrowserResourceOpener,
 		plugin.PermissionBrowserEventPublisher,
 		plugin.PermissionBrowserMessenger,
-		plugin.PermissionBrowserStorage,
+		plugin.PermissionStorage,
 		plugin.PermissionEditor,
 		plugin.PermissionWorkspace,
 	}
 }
 
 type fuzzyFinderHandler struct {
-	s                    browser.Storage
+	s                    document.Service
 	f                    browser.ResourceOpener
 	p                    browser.EventPublisher
 	m                    browser.Messenger
@@ -315,7 +316,7 @@ func (h *fuzzyFinderHandler) initGrants(
 			h.p, err = plugin.EventPublisher(grant.Token, broker)
 		case plugin.PermissionBrowserResourceOpener:
 			h.f, err = plugin.ResourceOpener(grant.Token, broker)
-		case plugin.PermissionBrowserStorage:
+		case plugin.PermissionStorage:
 			h.s, err = plugin.Storage(grant.Token, broker)
 			if err == nil {
 				h.history.Init(h.s, historyDocumentID, maxHistory)

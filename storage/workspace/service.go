@@ -1,4 +1,4 @@
-package document
+package workspace
 
 import (
 	"context"
@@ -11,6 +11,7 @@ import (
 	"github.com/ernestrc/blue/document"
 	"github.com/ernestrc/blue/iterator"
 	multierr "github.com/ernestrc/go-multierror"
+	"unstable.build/go-tui/storage/encoding"
 	"unstable.build/go-tui/workspace"
 )
 
@@ -19,18 +20,10 @@ import (
 // is currently closing.
 var ErrClosing = errors.New("Service is closing")
 
-// Marshaler abstracts a text or binary marshaler
-// which can be used with NewSchemeService to decide the encoding
-// of the storage document files.
-type Marshaler interface {
-	Marshal(in interface{}) ([]byte, error)
-	Unmarshal(data []byte, to interface{}) error
-}
-
 // NewWorkspaceService returns a document.Service backed by a workspace.Scheme.
 // It its goroutine-safe but only one instance can be operating at a time
 // on a given workspace.
-func NewWorkspaceService(scheme workspace.Scheme, marshaler Marshaler) (document.Service, error) {
+func NewWorkspaceService(scheme workspace.Scheme, marshaler encoding.Marshaler) (document.Service, error) {
 	svc := service{
 		scheme:    scheme,
 		marshaler: marshaler,
@@ -41,7 +34,7 @@ func NewWorkspaceService(scheme workspace.Scheme, marshaler Marshaler) (document
 
 type service struct {
 	scheme    workspace.Scheme
-	marshaler Marshaler
+	marshaler encoding.Marshaler
 
 	// Used to wait on all writes before Close returns.
 	// This is to guarantee that once lock is released,

@@ -7,8 +7,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ernestrc/blue/document"
-	docrpc "github.com/ernestrc/blue/document/rpc"
 	"github.com/ernestrc/blue/logging"
 	"google.golang.org/grpc"
 	"unstable.build/go-tui"
@@ -37,13 +35,12 @@ type Client struct {
 	// to recover before we shutdown connection.
 	failureTimeout time.Duration
 
-	broker  proto.MuxBroker
-	cc      grpc.ClientConnInterface
-	storage docrpc.Client
-	wm      browserpb.WindowManagerClient
-	msg     browserpb.MessengerClient
-	f       browserpb.ResourceOpenerClient
-	p       browserpb.EventPublisherClient
+	broker proto.MuxBroker
+	cc     grpc.ClientConnInterface
+	wm     browserpb.WindowManagerClient
+	msg    browserpb.MessengerClient
+	f      browserpb.ResourceOpenerClient
+	p      browserpb.EventPublisherClient
 
 	// window client resources. windowClients are created on
 	// calls to Split* or Focus. They are destroyed when client
@@ -91,7 +88,6 @@ func (c *Client) tryLog(msg string, args ...interface{}) {
 func (c *Client) Init(
 	broker proto.MuxBroker, cc grpc.ClientConnInterface,
 ) {
-	c.storage.Init(cc)
 	c.wm = browserpb.NewWindowManagerClient(cc)
 	c.msg = browserpb.NewMessengerClient(cc)
 	c.cc = cc
@@ -343,49 +339,6 @@ func (c *Client) Focus() (Window, error) {
 		return nil, err
 	}
 	return c.dialWindow(res.GetWindowId())
-}
-
-// Create satisfies browser.Storage
-func (c *Client) Create(
-	ctx context.Context, ID string, doc interface{},
-) error {
-	return c.storage.Create(ctx, ID, doc)
-}
-
-// Set satisfies browser.Storage
-func (c *Client) Set(
-	ctx context.Context, ID string, doc interface{},
-) error {
-	return c.storage.Set(ctx, ID, doc)
-}
-
-// Update satisfies browser.Storage
-func (c *Client) Update(
-	ctx context.Context, ID string, updates []document.Update,
-	preconds ...document.Precondition,
-) error {
-	return c.storage.Update(ctx, ID, updates, preconds...)
-}
-
-// Get satisfies browser.Storage
-func (c *Client) Get(
-	ctx context.Context, ID string, doc interface{},
-) error {
-	return c.storage.Get(ctx, ID, doc)
-}
-
-// Delete satisfies browser.Storage
-func (c *Client) Delete(
-	ctx context.Context, ID string,
-) error {
-	return c.storage.Delete(ctx, ID)
-}
-
-// List satisfies browser.Storage
-func (c *Client) List(
-	ctx context.Context, filters []document.Filter,
-) (document.Iterator, error) {
-	return c.storage.List(ctx, filters)
 }
 
 // Floating satisfies browser.WindowManager

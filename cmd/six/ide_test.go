@@ -35,9 +35,12 @@ func TestIDEInitializationIntegration(t *testing.T) {
 		cwdURI, err := workspace.CurrentUserHostURI(".")
 		require.NoError(t, err)
 
+		dir, err := ioutil.TempDir("", "")
+		require.NoError(t, err)
+
 		i := new(ide)
 		err = i.init(cwdURI.String(), configFile.Name(), "",
-			nopPublishEvent, file1.Name(), file2.Name())
+			dir, nopPublishEvent, file1.Name(), file2.Name())
 		require.NoError(t, err)
 
 		require.NotNil(t, i.workspace)
@@ -55,9 +58,12 @@ func TestIDEInitializationIntegration(t *testing.T) {
 		cwdURI, err := workspace.CurrentUserHostURI(".")
 		require.NoError(t, err)
 
+		dir, err := ioutil.TempDir("", "")
+		require.NoError(t, err)
+
 		i := new(ide)
 		err = i.init(cwdURI.String(), configFile.Name(), "",
-			nopPublishEvent, file1.Name())
+			dir, nopPublishEvent, file1.Name())
 		require.NoError(t, err)
 
 		require.NotNil(t, i.workspace)
@@ -72,9 +78,12 @@ func TestIDEInitializationIntegration(t *testing.T) {
 		err := ioutil.WriteFile(configFile.Name(), []byte("{}"), 0666)
 		require.NoError(t, err)
 
+		dir, err := ioutil.TempDir("", "")
+		require.NoError(t, err)
+
 		i := new(ide)
 		err = i.init(".", configFile.Name(), "",
-			nopPublishEvent, file1.Name())
+			dir, nopPublishEvent, file1.Name())
 		require.NoError(t, err)
 
 		require.NotNil(t, i.workspace)

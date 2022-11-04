@@ -3,7 +3,6 @@ package plugin
 import (
 	"sync"
 
-	bproto "github.com/ernestrc/blue/document/rpc/proto"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 	"unstable.build/go-tui/browser"
@@ -24,8 +23,6 @@ const (
 	// it enables interrupting the main event loop to redraw components.
 	// TODO rename to Interrupt
 	PermissionBrowserEventPublisher = "_PermBrowserEventPublisher"
-	// PermissionBrowserStorage requests access to storage.
-	PermissionBrowserStorage = "_PermBrowserStorage"
 )
 
 type browserResourceServer struct {
@@ -67,7 +64,6 @@ func (s *browserResourceServer) Serve(
 				browserpb.RegisterResourceOpenerServer(grpc, rpcServer)
 				browserpb.RegisterMessengerServer(grpc, rpcServer)
 				browserpb.RegisterEventPublisherServer(grpc, rpcServer)
-				bproto.RegisterDocumentStoreServer(grpc, rpcServer)
 			}
 			return s.srv
 		})
@@ -82,7 +78,6 @@ func BrowserResources(b browser.Browser) map[Permission]ResourceServer {
 		PermissionBrowserResourceOpener: s,
 		PermissionBrowserMessenger:      s,
 		PermissionBrowserEventPublisher: s,
-		PermissionBrowserStorage:        s,
 	}
 }
 
@@ -129,14 +124,6 @@ func Messenger(token uint32, broker proto.MuxBroker) (
 // resource with the given token.
 func EventPublisher(token uint32, broker proto.MuxBroker) (
 	browser.EventPublisher, error,
-) {
-	return dialBrowser(token, broker)
-}
-
-// Storage acquires the browser's Storage
-// resource with the given token.
-func Storage(token uint32, broker proto.MuxBroker) (
-	browser.Storage, error,
 ) {
 	return dialBrowser(token, broker)
 }

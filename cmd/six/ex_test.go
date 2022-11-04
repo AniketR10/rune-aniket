@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ernestrc/blue/document"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"unstable.build/go-tui"
@@ -881,7 +882,8 @@ func initExForTestingWithWorkspace(
 	t *testing.T, ex *ex, workspace *testLoader,
 	ed text.Editor, opts ...text.Option,
 ) {
-	require.NoError(t, ex.init(ed, workspace, nopPublishEvent, opts...))
+	require.NoError(t, ex.init(ed, workspace, document.NewInMemoryService(),
+		nopPublishEvent, opts...))
 	ex.subscribeCommands()
 }
 

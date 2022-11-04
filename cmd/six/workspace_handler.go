@@ -14,16 +14,16 @@ import (
 	"github.com/ernestrc/blue/document/firstmover"
 	multierr "github.com/ernestrc/go-multierror"
 	"unstable.build/go-tui"
-	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/config"
 	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/plugin"
+	"unstable.build/go-tui/storage/encoding"
+	workdoc "unstable.build/go-tui/storage/workspace"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
 	"unstable.build/go-tui/text/vi"
 	"unstable.build/go-tui/workspace"
-	workdoc "unstable.build/go-tui/workspace/document"
 )
 
 const (
@@ -75,7 +75,7 @@ type workspaceManagerHandler struct {
 	exit         bool
 	clipboard    clipboardManagerIfc
 	cfg          ideConfig
-	storage      browser.Storage
+	storage      document.Service
 	workspace    workspace.WorkspaceManager
 	publishEvent func(term.Event) bool
 
@@ -122,7 +122,7 @@ func (h *workspaceManagerHandler) newEditor(cfg ideConfig) text.Editor {
 	return vi.Editor(viOpts...)
 }
 
-func setupStorage(sixDir string) (browser.Storage, error) {
+func setupStorage(sixDir string) (document.Service, error) {
 	storageDir := filepath.Join(sixDir, ".db")
 	err := os.MkdirAll(storageDir, 0777)
 	if err != nil {
@@ -136,7 +136,7 @@ func setupStorage(sixDir string) (browser.Storage, error) {
 	if err != nil {
 		return nil, err
 	}
-	storage, err := workdoc.NewWorkspaceService(scheme, workdoc.MarshalerTOML())
+	storage, err := workdoc.NewWorkspaceService(scheme, encoding.MarshalerTOML())
 	if err != nil {
 		return nil, err
 	}
@@ -170,7 +170,7 @@ func (h *workspaceManagerHandler) init(
 	h.storage = storage
 
 	globalOpts := h.textOpts(h.cfg)
-	h.empty, _ = newEx(h.newEditor(cfg), nopLoader{}, h.publishEvent, globalOpts...)
+	h.empty, _ = newEx(h.newEditor(cfg), nopLoader{}, h.storage, h.publishEvent, globalOpts...)
 	err = h.subscribeAllWorkspaceCommands(h.empty)
 	if err != nil {
 		return err
@@ -349,7 +349,6 @@ func (h *workspaceManagerHandler) textOpts(cfg ideConfig) []text.Option {
 		text.WithCommandOverlayConfig(cfg.commandOverlayConfig()),
 		text.WithCommandAliases(cfg.commandAliases()),
 		text.WithPromptConfig(cfg.promptConfig()),
-		text.WithStorage(h.storage),
 		text.WithInterrupt(func() {
 			h.publishEvent(term.Event{Type: term.EventInterrupt})
 		}),
@@ -415,7 +414,8 @@ func (h *workspaceManagerHandler) addWorkspace(
 
 	// workspace capable of opening URIs other than the workspace URI
 	multicwd := workspace.Multi(h.workspace, cwd, uri)
-	ex, err := newEx(h.newEditor(cfg), multicwd, h.publishEvent, textOpts...)
+	ex, err := newEx(h.newEditor(cfg), multicwd, h.storage,
+		h.publishEvent, textOpts...)
 	if err != nil {
 		return err
 	}
@@ -433,6 +433,7 @@ func (h *workspaceManagerHandler) addWorkspace(
 	res = plugin.MergeResourceMap(res, plugin.WorkspaceResources(cwd))
 	// NOTE: plugins that register new schemes will fail for subsequent workspaces
 	res = plugin.MergeResourceMap(res, plugin.SchemeManagerResources(h.workspace))
+	res = plugin.MergeResourceMap(res, plugin.StorageResource(h.storage))
 	res = plugin.MergeResourceMap(res, plugin.ConfigResources(
 		config.MapConfig(cfg.cfg)))
 	res[plugin.PermissionClipboard] = h.clipboard

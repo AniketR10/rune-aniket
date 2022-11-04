@@ -5,7 +5,6 @@ import (
 	"sync"
 	"testing"
 
-	storepb "github.com/ernestrc/blue/document/rpc/proto"
 	gomock "github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -28,7 +27,6 @@ func newClientServerIntegration(
 	browserpb.RegisterResourceOpenerServer(grpcServer, rpcServer)
 	browserpb.RegisterMessengerServer(grpcServer, rpcServer)
 	browserpb.RegisterEventPublisherServer(grpcServer, rpcServer)
-	storepb.RegisterDocumentStoreServer(grpcServer, rpcServer)
 
 	go grpcServer.Serve(lis)
 

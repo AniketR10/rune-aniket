@@ -45,6 +45,8 @@ func TestIntegrationRace(t *testing.T) {
 	edMock := text.NewMockEditor(ctrl)
 	edMock.EXPECT().SubscribeEditorEvents(gomock.Any(), gomock.Any()).Times(1)
 	resources := MergeResourceMap(BrowserResources(mock), EditorResources(edMock))
+	storage := document.NewInMemoryService()
+	resources = MergeResourceMap(resources, StorageResource(storage))
 	resources[PermissionClipboard] = NewClipboardManager()
 
 	wpMock := workspacetest.NewMockWorkspace(ctrl)
@@ -64,7 +66,7 @@ func TestIntegrationRace(t *testing.T) {
 		PermissionBrowserMessenger:      broker.NextId(),
 		PermissionBrowserEventPublisher: broker.NextId(),
 		PermissionEditor:                broker.NextId(),
-		PermissionBrowserStorage:        broker.NextId(),
+		PermissionStorage:               broker.NextId(),
 		PermissionClipboard:             broker.NextId(),
 		PermissionWorkspace:             broker.NextId(),
 	}
@@ -191,34 +193,37 @@ func TestIntegrationRace(t *testing.T) {
 			_, err = ifc.(text.Editor).Cursor(h)
 			return err
 		}},
-		{PermissionBrowserStorage, func(token uint32, broker proto.MuxBroker) (interface{}, error) {
+		// for document.Service, just do a race test
+		{PermissionStorage, func(token uint32, broker proto.MuxBroker) (interface{}, error) {
 			return Storage(token, broker)
-		}, func(_ *workspacetest.MockWorkspaceMockRecorder, ed *text.MockEditorMockRecorder, mock *browser.MockBrowserMockRecorder) *gomock.Call {
-			return mock.Create(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
-		}, func(ifc interface{}) error {
-			return ifc.(browser.Storage).Create(context.Background(), "", map[string]interface{}{"a": "b"})
+		}, nil, func(ifc interface{}) error {
+			_ = ifc.(document.Service).Create(context.Background(), "", map[string]interface{}{"a": "b"})
+			return nil
 		}},
-		{PermissionBrowserStorage, func(token uint32, broker proto.MuxBroker) (interface{}, error) {
+		{PermissionStorage, func(token uint32, broker proto.MuxBroker) (interface{}, error) {
 			return Storage(token, broker)
-		}, func(_ *workspacetest.MockWorkspaceMockRecorder, ed *text.MockEditorMockRecorder, mock *browser.MockBrowserMockRecorder) *gomock.Call {
-			return mock.Get(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
-		}, func(ifc interface{}) error {
+		}, nil, func(ifc interface{}) error {
 			var recv map[string]interface{}
-			return ifc.(browser.Storage).Get(context.Background(), "", &recv)
+			_ = ifc.(document.Service).Get(context.Background(), "", &recv)
+			return nil
 		}},
-		{PermissionBrowserStorage, func(token uint32, broker proto.MuxBroker) (interface{}, error) {
+		{PermissionStorage, func(token uint32, broker proto.MuxBroker) (interface{}, error) {
 			return Storage(token, broker)
-		}, func(_ *workspacetest.MockWorkspaceMockRecorder, ed *text.MockEditorMockRecorder, mock *browser.MockBrowserMockRecorder) *gomock.Call {
-			return mock.Update(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
-		}, func(ifc interface{}) error {
-			return ifc.(browser.Storage).Update(context.Background(), "", []document.Update{{FieldPath: []string{"a"}, Value: "b"}})
+		}, nil, func(ifc interface{}) error {
+			_ = ifc.(document.Service).Update(context.Background(), "", []document.Update{{FieldPath: []string{"a"}, Value: "b"}})
+			return nil
 		}},
-		{PermissionBrowserStorage, func(token uint32, broker proto.MuxBroker) (interface{}, error) {
+		{PermissionStorage, func(token uint32, broker proto.MuxBroker) (interface{}, error) {
 			return Storage(token, broker)
-		}, func(_ *workspacetest.MockWorkspaceMockRecorder, ed *text.MockEditorMockRecorder, mock *browser.MockBrowserMockRecorder) *gomock.Call {
-			return mock.Delete(gomock.Any(), gomock.Any()).Return(nil)
-		}, func(ifc interface{}) error {
-			return ifc.(browser.Storage).Delete(context.Background(), "")
+		}, nil, func(ifc interface{}) error {
+			_ = ifc.(document.Service).Delete(context.Background(), "")
+			return nil
+		}},
+		{PermissionStorage, func(token uint32, broker proto.MuxBroker) (interface{}, error) {
+			return Storage(token, broker)
+		}, nil, func(ifc interface{}) error {
+			_, _ = ifc.(document.Service).List(context.Background(), nil)
+			return nil
 		}},
 		{PermissionClipboard, func(token uint32, broker proto.MuxBroker) (interface{}, error) {
 			return GetClipboard(token, broker)
@@ -242,22 +247,6 @@ func TestIntegrationRace(t *testing.T) {
 			_, err := ifc.(workspace.Executor).StdoutPipe(workspace.Pid(0))
 			return err
 		}},
-		/* FIXME: CI tests are failing due to mock.List not being called
-		{PermissionBrowserStorage, func(token uint32, broker proto.MuxBroker) (interface{}, error) {
-			return Storage(token, broker)
-		}, func(ed *text.MockEditorMockRecorder, mock *browser.MockBrowserMockRecorder) *gomock.Call {
-			m1, m2 := make(map[string]interface{}), make(map[string]interface{})
-			return mock.List(gomock.Any(), gomock.Any()).
-				DoAndReturn(func(ctx context.Context, filters []document.Filter) (document.Iterator, error) {
-					// instantiate for every invokation
-					// or else we run into data race. as mock expect data
-					// is shared across different invokations
-					return document.ListIterator(m1, m2), nil
-				})
-		}, func(ifc interface{}) error {
-			_, err := ifc.(browser.Storage).List(context.Background(), nil)
-			return err
-		}},*/
 	}
 	var mu sync.Mutex
 	var wg sync.WaitGroup

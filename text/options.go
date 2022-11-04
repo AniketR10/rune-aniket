@@ -3,7 +3,6 @@ package text
 import (
 	"time"
 
-	"github.com/ernestrc/blue/document"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/handler"
@@ -34,7 +33,6 @@ type Config struct {
 	CommandSequenceBindings map[handler.Sequence][]string
 	CommandAliases          map[string][]string
 	SequencerTimeout        time.Duration
-	Storage                 document.Service
 	DirtyTabAttr            term.Attributes
 
 	SendInterrupt func()
@@ -64,7 +62,6 @@ func DefaultConfig() Config {
 		CommandEvent:            term.KeyComb{Ch: ':'},
 		CommandMaxHistory:       10,
 		Config:                  browser.DefaultConfig(),
-		Storage:                 document.NewInMemoryService(),
 		DirtyTabAttr:            term.Attributes{Fg: term.AttrBold},
 		CommandKeyBindings:      make(map[term.KeyComb][]string),
 		CommandSequenceBindings: make(map[handler.Sequence][]string),
@@ -84,13 +81,6 @@ type Option func(*Config)
 func WithTabspaces(tabspaces int) Option {
 	return func(cfg *Config) {
 		cfg.Tabspaces = tabspaces
-	}
-}
-
-// WithStorage updates the storage of an Editor to use svc.
-func WithStorage(svc document.Service) Option {
-	return func(cfg *Config) {
-		cfg.Storage = svc
 	}
 }
 
