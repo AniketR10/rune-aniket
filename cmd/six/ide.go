@@ -174,6 +174,7 @@ func (i *ide) closeResources() (ret error) {
 // Close satisfies io.Closer by closing this all ide's resources, including
 // the terminal state.
 func (i *ide) Close() error {
+	err := i.closeResources()
 	tui.Close()
-	return i.closeResources()
+	return err
 }

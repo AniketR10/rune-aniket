@@ -269,9 +269,6 @@ func (s *executorServer) getFile(handlerID int32) (workspace.File, bool) {
 }
 
 func (s *executorServer) stop() (ret error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	for _, h := range s.resources {
 		if err := h.closer.Close(); err != nil {
 			ret = multierr.Append(ret, err)

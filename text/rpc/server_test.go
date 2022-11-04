@@ -195,7 +195,9 @@ func TestServerSubscribe(t *testing.T) {
 			gomock.Any(), gomock.Any()).AnyTimes()
 
 		assert.Equal(t, expectedEvTypes, actualEvTypes)
+		s.editor.Lock()
 		assert.NoError(t, s.Close())
+		s.editor.Unlock()
 		waitForMonitoringExit(quitCh)
 	})
 
@@ -283,7 +285,9 @@ func TestServerRegister(t *testing.T) {
 		conn.EXPECT().Close().Times(1).
 			DoAndReturn(prototest.ExpectSignalExit(conn, quitCh, nil))
 
+		s.editor.Lock()
 		assert.NoError(t, s.Close())
+		s.editor.Unlock()
 		waitForMonitoringExit(quitCh)
 	})
 
@@ -315,7 +319,9 @@ func TestServerRegister(t *testing.T) {
 		assert.Contains(t, err.Error(), "boom")
 		wg.Wait()
 
+		s.editor.Lock()
 		assert.NoError(t, s.Close())
+		s.editor.Unlock()
 		waitForMonitoringExit(quitCh)
 	})
 }

@@ -14,6 +14,7 @@ import (
 	"syscall"
 
 	"github.com/ernestrc/blue/logging"
+	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui/config"
 	"unstable.build/go-tui/debug"
@@ -198,9 +199,15 @@ func main() {
 		log.Fatal(err)
 	}
 
-	err = i.run()
-	i.Close()
-	if err != nil {
-		log.Fatal(err)
+	var ret error
+	if err := i.run(); err != nil {
+		ret = multierr.Append(ret, err)
+	}
+	if err := i.Close(); err != nil {
+		ret = multierr.Append(ret, err)
+	}
+	if ret != nil {
+		log.Error(ret)
+		os.Exit(1)
 	}
 }

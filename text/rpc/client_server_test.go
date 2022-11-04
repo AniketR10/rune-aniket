@@ -221,7 +221,9 @@ func TestClientServerIntegration(t *testing.T) {
 				mu.Unlock()
 				wg.Wait()
 
+				mu.Lock()
 				assert.NoError(t, s.Close())
+				mu.Unlock()
 			})
 		}
 	})
@@ -342,7 +344,9 @@ func TestRPCTab(t *testing.T) {
 
 		client, closeFn := setupWmIntTest(t, b, s)
 		closeFns = append(closeFns, func() {
+			mu.Lock()
 			s.Close()
+			mu.Unlock()
 			closeFn()
 		})
 
@@ -371,7 +375,9 @@ func TestRPCRegister(t *testing.T) {
 
 		client, closeFn := setupIntTest(t, b, s)
 		closeFns = append(closeFns, func() {
+			mu.Lock()
 			s.Close()
+			mu.Unlock()
 			closeFn()
 		})
 

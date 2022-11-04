@@ -595,9 +595,6 @@ func (s *Server) RawCells(ctx context.Context, in *RawCellsRequest) (
 
 // Close closes all resources associated with this server.
 func (s *Server) Close() (err error) {
-	s.editor.Lock()
-	defer s.editor.Unlock()
-
 	for _, res := range s.clients {
 		resErr := res.Close()
 		if resErr != nil {

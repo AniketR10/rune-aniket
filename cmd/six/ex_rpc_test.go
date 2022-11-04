@@ -109,6 +109,8 @@ func newTestRPCBrowser(t *testing.T,
 		bc := browser.NewClient(broker, conn)
 		h := &safeHandler{Handler: b, mu: &serverMutex}
 		*destructor = func() {
+			serverMutex.Lock()
+			defer serverMutex.Unlock()
 			bc.Close()
 			server.Close()
 			grpcServer.Stop()

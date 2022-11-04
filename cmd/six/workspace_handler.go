@@ -11,9 +11,9 @@ import (
 	"github.com/ernestrc/blue/document"
 	"github.com/ernestrc/blue/encoding/bson"
 	multierr "github.com/ernestrc/go-multierror"
+	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/config"
-	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/plugin"
 	"unstable.build/go-tui/storage"
@@ -129,7 +129,7 @@ func (h *workspaceManagerHandler) init(
 	storage, err := storage.New(sixDir, bson.Marshaler())
 	if err != nil {
 		storage = document.NewInMemoryService()
-		debug.StandardLogger().Warnf("Could not setup fs-backed storage: %v. Using ephemeral.", err)
+		log.Warnf("Could not setup fs-backed storage: %v. Using ephemeral.", err)
 	}
 	h.storage = storage
 
@@ -291,7 +291,7 @@ func (h *workspaceManagerHandler) initPlugins(manager *plugin.Manager, cfg ideCo
 		}
 		err := manager.Run(id, path, pconfig)
 		if err != nil {
-			debug.StandardLogger().Errorf("failed to run plugin with id %q: %v", id, err)
+			log.Errorf("failed to run plugin with id %q: %v", id, err)
 		}
 	}
 }
@@ -437,7 +437,7 @@ func logNonFatalErrs(
 		all = multierr.Append(all, err)
 	}
 	if all != nil {
-		debug.StandardLogger().Warn(all)
+		log.Warn(all)
 	}
 }
 
@@ -466,16 +466,17 @@ func (h *workspaceManagerHandler) commandAddWorkspace(args ...string) error {
 	return h.addWorkspace(uri, "", nil)
 }
 
-func (h *workspaceManagerHandler) commandCloseWorkspace(args ...string) (
-	ret error,
-) {
+func (h *workspaceManagerHandler) commandCloseWorkspace(args ...string) error {
 	if h.focusHandler() == h.empty {
 		return errors.New("workspace tab is empty")
 	}
 
 	hm := h.workspaces[h.focus]
-	if err := hm.Close(); err != nil {
-		ret = multierr.Append(ret, err)
+	err := hm.Close()
+	if err != nil {
+		log.Error(err)
+	} else {
+		log.Debugf("Closed all workspace resources successfully")
 	}
 
 	h.workspaces[h.focus] = nil
@@ -484,14 +485,14 @@ func (h *workspaceManagerHandler) commandCloseWorkspace(args ...string) (
 	for i := h.focus; i >= 0; i-- {
 		if h.workspaces[i] != nil {
 			h.switchToWorkspace(i)
-			return ret
+			return err
 		}
 	}
 
 	// for resize of current workspace with empty
 	h.switchToWorkspace(h.focus)
 
-	return ret
+	return err
 }
 
 func (h *workspaceManagerHandler) commandQuit(args ...string) error {
@@ -522,13 +523,7 @@ func (h *workspaceManagerHandler) Close() (ret error) {
 		if hm == nil {
 			continue
 		}
-		if err := hm.Handler.(*ex).Close(); err != nil {
-			ret = multierr.Append(ret, err)
-		}
-		if err := hm.workspaceCloser.Close(); err != nil {
-			ret = multierr.Append(ret, err)
-		}
-		if err := hm.Plugins.Close(); err != nil {
+		if err := hm.Close(); err != nil {
 			ret = multierr.Append(ret, err)
 		}
 	}

@@ -88,6 +88,10 @@ func (c *eventHandlerClient) Handle(ctx context.Context, ev text.Event) bool {
 }
 
 func (c *eventHandlerClient) Close() error {
+	if c.conn == nil {
+		return nil
+	}
+	c.conn = nil
 	close(c.quitChan)
 	// if Handle is called after close, then we want to panic
 	// to indicate programmer error.

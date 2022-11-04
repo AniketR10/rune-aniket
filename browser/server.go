@@ -523,9 +523,6 @@ func (s *Server) Tab(
 
 // Close closes all resources associated with this server.
 func (s *Server) Close() (err error) {
-	s.browser.Lock()
-	defer s.browser.Unlock()
-
 	for _, res := range s.clients {
 		resErr := res.Close()
 		if resErr != nil {

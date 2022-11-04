@@ -30,13 +30,13 @@ type pluginResource struct {
 type storageResourceServer struct {
 	mu              sync.Mutex
 	storageDir      string
-	pluginResources map[string]pluginResource
+	pluginResources map[string]*pluginResource
 }
 
 func newStorageResourceServer(storageDir string) *storageResourceServer {
 	ret := new(storageResourceServer)
 	ret.storageDir = storageDir
-	ret.pluginResources = make(map[string]pluginResource)
+	ret.pluginResources = make(map[string]*pluginResource)
 	return ret
 }
 
@@ -72,7 +72,7 @@ func (s *storageResourceServer) Serve(
 			}
 			grpc := srv.GRPC()
 			svc := s.setupStorage(pluginID)
-			res = pluginResource{
+			res = &pluginResource{
 				srv:    srv,
 				server: new(docrpc.Server),
 				svc:    svc,
@@ -88,6 +88,9 @@ func (s *storageResourceServer) Close() (ret error) {
 	for _, res := range s.pluginResources {
 		// docrpc.Server closes grpc.Server
 		if err := res.server.Close(); err != nil {
+			ret = multierr.Append(ret, err)
+		}
+		if err := res.svc.Close(); err != nil {
 			ret = multierr.Append(ret, err)
 		}
 	}

@@ -75,6 +75,7 @@ func (s *browserResourceServer) Close() error {
 	defer s.mu.Unlock()
 	if s.srv != nil {
 		s.srv.Stop()
+		s.srv = nil
 		return s.server.Close()
 	}
 	return nil
