@@ -8,6 +8,7 @@ import (
 	"syscall"
 
 	"github.com/ernestrc/blue/logging"
+	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/workspace"
@@ -267,16 +268,19 @@ func (s *executorServer) getFile(handlerID int32) (workspace.File, bool) {
 	return f, ok
 }
 
-func (s *executorServer) stop() {
+func (s *executorServer) stop() (ret error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	for _, h := range s.resources {
-		_ = h.closer.Close()
+		if err := h.closer.Close(); err != nil {
+			ret = multierr.Append(ret, err)
+		}
 	}
 	s.resources = nil
 
 	s.log(log.TraceLevel, "stop")
+	return
 }
 
 // sync over individual handles over locking entire executorServer

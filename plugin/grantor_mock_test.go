@@ -24,6 +24,10 @@ func (s *mockResourceServer) Serve(
 	return nil
 }
 
+func (s *mockResourceServer) Close() error {
+	return nil
+}
+
 func (s *mockResourceServer) served() []uint32 {
 	s.mu.Lock()
 	defer s.mu.Unlock()

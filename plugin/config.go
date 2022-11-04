@@ -53,6 +53,15 @@ func (s *configResourceServer) Serve(
 		})
 }
 
+func (s *configResourceServer) Close() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.srv != nil {
+		s.srv.Stop()
+	}
+	return nil
+}
+
 // ConfigResources returns a map of Permission to a ResourceServer
 // capable of serving each of the b Config's resources.
 func ConfigResources(b config.Config) map[Permission]ResourceServer {

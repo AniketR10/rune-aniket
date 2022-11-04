@@ -73,6 +73,4 @@ func TestIntegrationSetFocus(t *testing.T) {
 	resPrev, err = client.SetFocus(resWin2)
 	require.NoError(t, err)
 	assert.Equal(t, resWin1, resPrev)
-
-	mock.EXPECT().Close()
 }

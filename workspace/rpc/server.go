@@ -147,6 +147,6 @@ func (s *Server) ListFiles(
 }
 
 // Stop closes all resources associated with this server.
-func (s *Server) Stop() {
-	s.executorServer.stop()
+func (s *Server) Stop() error {
+	return s.executorServer.stop()
 }

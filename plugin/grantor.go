@@ -2,6 +2,7 @@ package plugin
 
 import (
 	"fmt"
+	"io"
 	"sync"
 
 	log "github.com/sirupsen/logrus"
@@ -11,6 +12,7 @@ import (
 // ResourceServer wraps the basic Serve method, to serve resources over a mux broker.
 type ResourceServer interface {
 	Serve(string, uint32, proto.MuxBroker, sync.Locker) error
+	io.Closer
 }
 
 // enables functions matching signature of Serve to

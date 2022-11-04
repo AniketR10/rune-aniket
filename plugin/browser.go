@@ -26,9 +26,10 @@ const (
 )
 
 type browserResourceServer struct {
-	mu  sync.Mutex
-	b   browser.Browser
-	srv proto.MuxServer
+	mu     sync.Mutex
+	b      browser.Browser
+	server *browser.Server
+	srv    proto.MuxServer
 }
 
 func newBrowserResourceServer(b browser.Browser) *browserResourceServer {
@@ -57,9 +58,9 @@ func (s *browserResourceServer) Serve(
 				}
 				grpc := srv.GRPC()
 				s.srv = srv
-				server := new(browser.Server)
-				server.Init(broker, s.b, lock, interruptWindowServer)
-				rpcServer := interruptBrowserServer(server, interrupt)
+				s.server = new(browser.Server)
+				s.server.Init(broker, s.b, lock, interruptWindowServer)
+				rpcServer := interruptBrowserServer(s.server, interrupt)
 				browserpb.RegisterWindowManagerServer(grpc, rpcServer)
 				browserpb.RegisterResourceOpenerServer(grpc, rpcServer)
 				browserpb.RegisterMessengerServer(grpc, rpcServer)
@@ -67,6 +68,16 @@ func (s *browserResourceServer) Serve(
 			}
 			return s.srv
 		})
+}
+
+func (s *browserResourceServer) Close() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.srv != nil {
+		s.srv.Stop()
+		return s.server.Close()
+	}
+	return nil
 }
 
 // BrowserResources returns a map of Permission to a ResourceServer

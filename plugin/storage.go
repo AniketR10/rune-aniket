@@ -19,9 +19,10 @@ const (
 )
 
 type storageResourceServer struct {
-	mu  sync.Mutex
-	svc document.Service
-	srv proto.MuxServer
+	mu     sync.Mutex
+	svc    document.Service
+	srv    proto.MuxServer
+	server *docrpc.Server
 }
 
 func newStorageResourceServer(b document.Service) *storageResourceServer {
@@ -49,12 +50,20 @@ func (s *storageResourceServer) Serve(
 				}
 				grpc := srv.GRPC()
 				s.srv = srv
-				server := new(docrpc.Server)
-				server.Init(s.svc, toml.Marshaler(), grpc)
-				bproto.RegisterDocumentStoreServer(grpc, server)
+				s.server = new(docrpc.Server)
+				s.server.Init(s.svc, toml.Marshaler(), grpc)
+				bproto.RegisterDocumentStoreServer(grpc, s.server)
 			}
 			return s.srv
 		})
+}
+
+func (s *storageResourceServer) Close() error {
+	if s.srv != nil {
+		// docrpc.Server closes grpc.Server
+		return s.server.Close()
+	}
+	return nil
 }
 
 // StorageResource returns a map of Permission to a ResourceServer

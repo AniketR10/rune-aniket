@@ -64,12 +64,6 @@ var (
 	}
 )
 
-type workspaceHandler struct {
-	tui.Handler
-	workspaceCloser io.Closer
-	Plugins         *plugin.Manager
-}
-
 type workspaceManagerHandler struct {
 	mu           sync.Mutex
 	exit         bool
@@ -92,7 +86,6 @@ type workspaceManagerHandler struct {
 type clipboardManagerIfc interface {
 	plugin.ResourceServer
 	text.Clipboard
-	io.Closer
 }
 
 func newWorkspaceManagerHandler(
@@ -454,6 +447,7 @@ func (h *workspaceManagerHandler) addWorkspace(
 		Handler:         ex,
 		workspaceCloser: cwd,
 		Plugins:         pluginManager,
+		pluginResources: res,
 	}
 	h.workspaceCount++
 	h.switchToWorkspace(h.focus)
@@ -510,13 +504,7 @@ func (h *workspaceManagerHandler) commandCloseWorkspace(args ...string) (
 	}
 
 	hm := h.workspaces[h.focus]
-	if err := hm.workspaceCloser.Close(); err != nil {
-		ret = multierr.Append(ret, err)
-	}
-	if err := hm.Handler.(*ex).Close(); err != nil {
-		ret = multierr.Append(ret, err)
-	}
-	if err := hm.Plugins.Close(); err != nil {
+	if err := hm.Close(); err != nil {
 		ret = multierr.Append(ret, err)
 	}
 
@@ -582,6 +570,31 @@ func (h *workspaceManagerHandler) Close() (ret error) {
 	}
 	if err := h.clipboard.Close(); err != nil {
 		ret = multierr.Append(ret, err)
+	}
+	return
+}
+
+type workspaceHandler struct {
+	tui.Handler
+	workspaceCloser io.Closer
+	Plugins         *plugin.Manager
+	pluginResources map[plugin.Permission]plugin.ResourceServer
+}
+
+func (hm *workspaceHandler) Close() (ret error) {
+	if err := hm.workspaceCloser.Close(); err != nil {
+		ret = multierr.Append(ret, err)
+	}
+	if err := hm.Handler.(*ex).Close(); err != nil {
+		ret = multierr.Append(ret, err)
+	}
+	if err := hm.Plugins.Close(); err != nil {
+		ret = multierr.Append(ret, err)
+	}
+	for _, res := range hm.pluginResources {
+		if err := res.Close(); err != nil {
+			ret = multierr.Append(ret, err)
+		}
 	}
 	return
 }

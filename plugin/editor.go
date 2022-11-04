@@ -17,9 +17,10 @@ const (
 )
 
 type editorResourceServer struct {
-	mu  sync.Mutex
-	b   text.Editor
-	srv proto.MuxServer
+	mu     sync.Mutex
+	b      text.Editor
+	srv    proto.MuxServer
+	server *textpb.Server
 }
 
 func newEditorResourceServer(b text.Editor) *editorResourceServer {
@@ -46,14 +47,24 @@ func (s *editorResourceServer) Serve(
 				}
 				grpc := srv.GRPC()
 				s.srv = srv
-				server := textpb.NewServer(broker, s.b, lock)
+				s.server = textpb.NewServer(broker, s.b, lock)
 				lock.Lock()
-				server.Logger = l
+				s.server.Logger = l
 				lock.Unlock()
-				textpb.RegisterEditorServer(grpc, interruptEditorServer(server, interrupt))
+				textpb.RegisterEditorServer(grpc, interruptEditorServer(s.server, interrupt))
 			}
 			return s.srv
 		})
+}
+
+func (s *editorResourceServer) Close() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.srv != nil {
+		s.srv.Stop()
+		return s.server.Close()
+	}
+	return nil
 }
 
 // EditorResources returns a map of Permission to a ResourceServer

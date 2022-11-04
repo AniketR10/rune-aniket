@@ -17,9 +17,10 @@ const (
 )
 
 type workspaceResourceServer struct {
-	mu  sync.Mutex
-	b   workspace.Workspace
-	srv proto.MuxServer
+	mu     sync.Mutex
+	b      workspace.Workspace
+	srv    proto.MuxServer
+	server *workspacepb.Server
 }
 
 func newWorkspaceResourceServer(b workspace.Workspace) *workspaceResourceServer {
@@ -46,11 +47,21 @@ func (s *workspaceResourceServer) Serve(
 				}
 				grpc := srv.GRPC()
 				s.srv = srv
-				server := workspacepb.NewServer(s.b, lock)
-				workspacepb.RegisterWorkspaceServer(grpc, server)
+				s.server = workspacepb.NewServer(s.b, lock)
+				workspacepb.RegisterWorkspaceServer(grpc, s.server)
 			}
 			return s.srv
 		})
+}
+
+func (s *workspaceResourceServer) Close() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.srv != nil {
+		s.srv.Stop()
+		return s.server.Stop()
+	}
+	return nil
 }
 
 // WorkspaceResources returns a map of Permission to a ResourceServer

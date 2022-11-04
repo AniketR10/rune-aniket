@@ -144,3 +144,13 @@ func (s *SchemeManagerServer) RegisterScheme(ctx context.Context, req *RegisterS
 	res = new(RegisterSchemeResponse)
 	return
 }
+
+// Close closes all resources associated with this manager.
+func (s *SchemeManagerServer) Close() (ret error) {
+	for _, client := range s.clients {
+		if err := client.Close(); err != nil {
+			ret = multierr.Append(ret, err)
+		}
+	}
+	return ret
+}

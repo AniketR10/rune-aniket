@@ -17,9 +17,10 @@ const (
 )
 
 type schemeManagerResourceServer struct {
-	mu  sync.Mutex
-	b   workspace.SchemeManager
-	srv proto.MuxServer
+	mu     sync.Mutex
+	b      workspace.SchemeManager
+	srv    proto.MuxServer
+	server *workspacepb.SchemeManagerServer
 }
 
 func newSchemeManagerResourceServer(b workspace.SchemeManager) *schemeManagerResourceServer {
@@ -46,11 +47,21 @@ func (s *schemeManagerResourceServer) Serve(
 				}
 				grpc := srv.GRPC()
 				s.srv = srv
-				server := workspacepb.NewSchemeManagerServer(broker, s.b, lock)
-				workspacepb.RegisterManagerServer(grpc, server)
+				s.server = workspacepb.NewSchemeManagerServer(broker, s.b, lock)
+				workspacepb.RegisterManagerServer(grpc, s.server)
 			}
 			return s.srv
 		})
+}
+
+func (s *schemeManagerResourceServer) Close() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.srv != nil {
+		s.srv.Stop()
+		return s.server.Close()
+	}
+	return nil
 }
 
 // SchemeManagerResources returns a map of Permission to a ResourceServer

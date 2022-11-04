@@ -539,7 +539,6 @@ func (s *Server) Close() (err error) {
 		}
 	}
 
-	s.browser.Close()
 	s.clients = nil
 	s.servers = nil
 	s.opened = nil
