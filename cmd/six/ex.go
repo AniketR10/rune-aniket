@@ -60,6 +60,7 @@ var (
 		"focusPrevWindow":        (*ex).focusPrevWindow,
 		"focusAboveWindow":       (*ex).focusAboveWindow,
 		"focusBelowWindow":       (*ex).focusBelowWindow,
+		"panic":                  (*ex).panic,
 	}
 	exDefaultBindings = map[term.KeyComb]string{
 		{Key: term.KeyCtrlW}: "bufferClose",
@@ -423,6 +424,10 @@ func (e *ex) focusAboveWindow(args ...string) error {
 func (e *ex) focusBelowWindow(args ...string) error {
 	e.comp.Browser().FocusDown()
 	return nil
+}
+
+func (e *ex) panic(args ...string) error {
+	panic("this could be a panic")
 }
 
 func (e *ex) newWindow(args ...string) error {

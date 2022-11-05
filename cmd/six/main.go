@@ -13,9 +13,11 @@ import (
 	"sync"
 	"syscall"
 
+	"github.com/ernestrc/blue/debug"
 	"github.com/ernestrc/blue/logging"
 	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
+	"gopkg.in/yaml.v3"
 	"unstable.build/go-tui/config"
 	"unstable.build/go-tui/proto"
 	"unstable.build/go-tui/term"
@@ -69,11 +71,10 @@ func cwdURI() workspace.URI {
 	return uri
 }
 
-func startWorkspaceServer() {
+func startWorkspaceServer() int {
 	l := log.New()
 
 	newScheme := workspace.NewFileScheme
-	exit := os.Exit
 	if serverLogs := *flagWorkspaceServerLogFile; serverLogs != "" {
 		f, err := os.OpenFile(serverLogs,
 			os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
@@ -83,13 +84,10 @@ func startWorkspaceServer() {
 		l.SetOutput(f)
 		l.SetLevel(log.TraceLevel)
 		l.SetFormatter(&logging.LogrusFormatter{})
+		defer f.Close()
+		defer f.Sync()
 
 		newScheme = workspace.LoggingScheme("file", newScheme)
-		exit = func(code int) {
-			_ = f.Sync()
-			_ = f.Close()
-			os.Exit(code)
-		}
 
 	} else {
 		l.SetOutput(ioutil.Discard)
@@ -111,7 +109,7 @@ func startWorkspaceServer() {
 				switch sig {
 				case syscall.SIGTERM, syscall.SIGKILL:
 					l.Info("Received kill signal: exiting")
-					exit(1)
+					os.Exit(1)
 				case syscall.SIGURG:
 					/* received when socket urgent data is ready to be read */
 				default:
@@ -127,25 +125,49 @@ func startWorkspaceServer() {
 	uri, err := workspace.CurrentUserHostURI(*flagWorkspaceServer)
 	if err != nil {
 		l.Error(err)
-		exit(1)
+		return 2
 	}
 	scheme, err := newScheme(config.NopConfig(), uri)
 	if err != nil {
 		l.Error(err)
-		exit(2)
+		return 3
 	}
 
 	server := workspacepb.NewSchemeServer(scheme, new(sync.Mutex))
 	err = ssh.StartSchemeServer(server)
 	if err != nil {
 		l.Error(err)
-		exit(3)
+		return 4
 	}
 	l.Tracef("StartSchemeServer returned with no error")
-	exit(0)
+	return 0
 }
 
 func main() {
+	var code int
+	ok, report := debug.CapturePanic(log.StandardLogger(), "six", Tag, func() {
+		code = run()
+	})
+	if ok {
+		os.Exit(code)
+	}
+	data, err := yaml.Marshal(report)
+	if err != nil {
+		log.Fatal(err)
+	}
+	f, err := ioutil.TempFile(".", "six_crash_report_")
+	if err != nil {
+		log.Fatal(err)
+	}
+	_, err = f.Write(data)
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Printf("Saved crash report %q\n", f.Name())
+	os.Exit(4)
+}
+
+func run() int {
 	var err error
 	var filenames []string
 
@@ -153,7 +175,7 @@ func main() {
 
 	if *flagVersion {
 		fmt.Printf("Six %s\n", Version)
-		return
+		return 0
 	}
 
 	for _, file := range flag.Args() {
@@ -171,7 +193,8 @@ func main() {
 	proto.DisableGRPCLogging()
 
 	if *flagWorkspaceServer != "" {
-		startWorkspaceServer()
+		code := startWorkspaceServer()
+		return code
 	}
 
 	if *flagConfigPath != defaultConfigPath {
@@ -205,6 +228,8 @@ func main() {
 	}
 	if ret != nil {
 		log.Error(ret)
-		os.Exit(1)
+		return 1
 	}
+
+	return 0
 }
