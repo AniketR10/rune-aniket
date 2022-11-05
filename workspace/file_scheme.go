@@ -22,7 +22,7 @@ import (
 	"github.com/ernestrc/sensible/find"
 	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui/config"
-	"unstable.build/go-tui/debug"
+	
 	"unstable.build/go-tui/term/pty"
 )
 
@@ -110,7 +110,7 @@ func (p *fileScheme) init(cfg config.Config, workspace URI) error {
 	if p.workers == 0 {
 		return errors.New("invalid configuration: cannot set 'workers' to 0")
 	}
-	debug.StandardLogger().
+	log.
 		WithField(logging.KeyClass, "fileScheme").
 		Debugf("init: initialized with %d ListFiles workers", p.workers)
 
@@ -217,7 +217,7 @@ func (p *fileScheme) URI(path string) (URI, error) {
 }
 
 func (p *fileScheme) log(level log.Level, msg string, args ...interface{}) {
-	debug.StandardLogger().
+	log.
 		WithField(logging.KeyClass, "fileScheme").
 		WithField("URI", p.workspace.String()).
 		Logf(level, msg, args...)

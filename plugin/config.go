@@ -7,7 +7,6 @@ import (
 	"google.golang.org/grpc"
 	"unstable.build/go-tui/config"
 	configpb "unstable.build/go-tui/config/rpc"
-	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/proto"
 )
 
@@ -38,9 +37,8 @@ func (s *configResourceServer) Serve(
 			defer s.mu.Unlock()
 			if s.srv == nil {
 				var srv proto.MuxServer
-				l := debug.StandardLogger()
-				if l.IsLevelEnabled(log.TraceLevel) {
-					srv = proto.LoggingGRPCServer(l, opts...)
+				if log.IsLevelEnabled(log.TraceLevel) {
+					srv = proto.LoggingGRPCServer(opts...)
 				} else {
 					srv = proto.GRPCServer(opts...)
 				}

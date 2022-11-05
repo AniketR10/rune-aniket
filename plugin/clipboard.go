@@ -10,7 +10,6 @@ import (
 	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
-	"unstable.build/go-tui/debug"
 	pluginpb "unstable.build/go-tui/plugin/rpc"
 	"unstable.build/go-tui/proto"
 	"unstable.build/go-tui/text"
@@ -82,9 +81,8 @@ func (s *ClipboardManager) Serve(
 		// create a new server every time Serve is called
 		// so ClipboardManager can be shared across workspaces
 		var srv proto.MuxServer
-		l := debug.StandardLogger()
-		if l.IsLevelEnabled(log.TraceLevel) {
-			srv = proto.LoggingGRPCServer(l, opts...)
+		if log.IsLevelEnabled(log.TraceLevel) {
+			srv = proto.LoggingGRPCServer(opts...)
 		} else {
 			srv = proto.GRPCServer(opts...)
 		}
@@ -124,7 +122,7 @@ func (s *clipboardManagerServer) Copy(data string, timestamp time.Time) error {
 }
 
 func (s *ClipboardManager) log(msg string, args ...interface{}) {
-	debug.StandardLogger().
+	log.
 		WithField(logging.KeyClass, "plugin.ClipboardManager").
 		Tracef(msg, args...)
 }

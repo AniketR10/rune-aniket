@@ -9,7 +9,6 @@ import (
 )
 
 type loggingConn struct {
-	logger *log.Logger
 	MuxConn
 }
 
@@ -18,7 +17,7 @@ func (c loggingConn) Invoke(
 	reply interface{}, opts ...grpc.CallOption,
 ) error {
 	err := c.MuxConn.Invoke(ctx, method, args, reply, opts...)
-	c.logger.Tracef("loggingConn: (%p).Invoke(method=%s): (%v)",
+	log.Tracef("loggingConn: (%p).Invoke(method=%s): (%v)",
 		c.MuxConn, method, err)
 	return err
 }
@@ -28,14 +27,14 @@ func (c loggingConn) NewStream(
 	method string, opts ...grpc.CallOption,
 ) (grpc.ClientStream, error) {
 	stream, err := c.MuxConn.NewStream(ctx, desc, method, opts...)
-	c.logger.Tracef("loggingConn: (%p).NewStream(name=%s, method=%s): (%v, %v)",
+	log.Tracef("loggingConn: (%p).NewStream(name=%s, method=%s): (%v, %v)",
 		c.MuxConn, desc.StreamName, method, stream, err)
 	return stream, err
 }
 
 func (c loggingConn) GetState() connectivity.State {
 	state := c.MuxConn.GetState()
-	c.logger.Tracef("loggingConn: (%p).GetState(): %s", c.MuxConn, state)
+	log.Tracef("loggingConn: (%p).GetState(): %s", c.MuxConn, state)
 	return state
 }
 
@@ -43,13 +42,13 @@ func (c loggingConn) WaitForStateChange(
 	ctx context.Context, sourceState connectivity.State,
 ) bool {
 	ok := c.MuxConn.WaitForStateChange(ctx, sourceState)
-	c.logger.Tracef("loggingConn: (%p).WaitForStateChange(source=%s): %v",
+	log.Tracef("loggingConn: (%p).WaitForStateChange(source=%s): %v",
 		c.MuxConn, sourceState, ok)
 	return ok
 }
 
 func (c loggingConn) Close() error {
 	err := c.MuxConn.Close()
-	c.logger.Tracef("loggingConn: (%p).Close(): %v", c.MuxConn, err)
+	log.Tracef("loggingConn: (%p).Close(): %v", c.MuxConn, err)
 	return err
 }

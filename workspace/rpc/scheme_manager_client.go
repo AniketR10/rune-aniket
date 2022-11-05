@@ -8,7 +8,7 @@ import (
 	"github.com/ernestrc/blue/logging"
 	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
-	"unstable.build/go-tui/debug"
+	
 	"unstable.build/go-tui/proto"
 	"unstable.build/go-tui/workspace"
 )
@@ -37,7 +37,7 @@ func (c *schemeManagerClient) init(broker proto.MuxBroker, cc proto.MuxConn) {
 }
 
 func (c *schemeManagerClient) log(level log.Level, msg string, args ...interface{}) {
-	debug.StandardLogger().
+	log.
 		WithField(logging.KeyClass, "schemeManagerClient").Logf(level, msg, args...)
 }
 

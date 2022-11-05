@@ -10,7 +10,6 @@ import (
 	"github.com/ernestrc/blue/logging"
 	"github.com/hashicorp/go-hclog"
 	"github.com/sirupsen/logrus"
-	"unstable.build/go-tui/debug"
 )
 
 var pluginLogger logrus.Logger
@@ -23,7 +22,6 @@ func initPluginLogger() {
 		DisableColors:   true,
 		TimestampFormat: time.StampMilli,
 	})
-	debug.InitLogger(&pluginLogger)
 }
 
 // Logger returns the global plugins logger.

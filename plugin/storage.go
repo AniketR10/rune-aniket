@@ -11,7 +11,7 @@ import (
 	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
-	"unstable.build/go-tui/debug"
+	
 	"unstable.build/go-tui/proto"
 	"unstable.build/go-tui/storage"
 )
@@ -64,9 +64,8 @@ func (s *storageResourceServer) Serve(
 				return res.srv
 			}
 			var srv proto.MuxServer
-			l := debug.StandardLogger()
-			if l.IsLevelEnabled(log.TraceLevel) {
-				srv = proto.LoggingGRPCServer(l, opts...)
+			if log.IsLevelEnabled(log.TraceLevel) {
+				srv = proto.LoggingGRPCServer(opts...)
 			} else {
 				srv = proto.GRPCServer(opts...)
 			}

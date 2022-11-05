@@ -10,8 +10,8 @@ import (
 
 	"github.com/ernestrc/blue/iterator"
 	"github.com/ernestrc/blue/logging"
+	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui/cell"
-	"unstable.build/go-tui/debug"
 )
 
 // simple Scheme-backed Workspace implementation.
@@ -36,8 +36,7 @@ func (w *schemeWorkspace) Init(uri URI, p Scheme) {
 }
 
 func (w *schemeWorkspace) log(msg string, args ...interface{}) {
-	debug.StandardLogger().
-		WithField(logging.KeyClass, "schemeWorkspace").
+	log.WithField(logging.KeyClass, "schemeWorkspace").
 		Tracef(msg, args...)
 }
 

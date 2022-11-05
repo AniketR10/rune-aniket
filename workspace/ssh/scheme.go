@@ -16,7 +16,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 	"unstable.build/go-tui/config"
-	"unstable.build/go-tui/debug"
+	
 	"unstable.build/go-tui/workspace"
 	workspacepb "unstable.build/go-tui/workspace/rpc"
 )
@@ -207,7 +207,7 @@ func (s *scheme) connectScheme(uri workspace.URI, closeHook func(error)) (worksp
 	}
 
 	var extraArgs []string
-	if debug.StandardLogger().IsLevelEnabled(log.TraceLevel) {
+	if log.IsLevelEnabled(log.TraceLevel) {
 		extraArgs = []string{"-o", "six-workspace-server.log"}
 	}
 

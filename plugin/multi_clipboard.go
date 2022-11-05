@@ -9,7 +9,7 @@ import (
 	"github.com/ernestrc/blue/logging"
 	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
-	"unstable.build/go-tui/debug"
+	
 	"unstable.build/go-tui/text"
 )
 
@@ -43,7 +43,7 @@ func (c *multiClipboard) remove(strIdx string) {
 }
 
 func (c *multiClipboard) log(level log.Level, msg string, args ...interface{}) {
-	debug.StandardLogger().
+	log.
 		WithField(logging.KeyClass, "plugin.multiClipboard").
 		Logf(level, msg, args...)
 }

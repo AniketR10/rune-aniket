@@ -4,10 +4,10 @@ import (
 	"fmt"
 
 	"github.com/ernestrc/blue/logging"
+	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
-	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
@@ -249,8 +249,7 @@ func (vi *viHandlerImpl) handleSearch(ev term.Event) (bool, bool) {
 }
 
 func (vi *viHandlerImpl) logError(err error) {
-	debug.StandardLogger().
-		WithField(logging.KeyClass, "vi.handler").Error(err)
+	log.WithField(logging.KeyClass, "vi.handler").Error(err)
 }
 
 func (vi *viHandlerImpl) pasteClipboard(registerID string, after bool) bool {

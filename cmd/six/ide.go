@@ -9,7 +9,6 @@ import (
 	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui"
-	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/plugin"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/workspace"
@@ -98,8 +97,6 @@ func (i *ide) init(cwd, cfgfilename, recfilename string,
 		log.SetOutput(ioutil.Discard)
 		log.SetLevel(log.PanicLevel)
 	}
-
-	debug.InitLogger(l)
 
 	i.clipboard = plugin.NewClipboardManager()
 

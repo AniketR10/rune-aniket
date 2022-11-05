@@ -10,55 +10,54 @@ import (
 
 type loggingServer struct {
 	srv      *grpc.Server
-	logger   *log.Logger
 	quitChan chan struct{}
 }
 
 // LoggingGRPCServer wraps a grpc.Server to provide trace-level logging.
-func LoggingGRPCServer(logger *log.Logger, opts ...grpc.ServerOption) MuxServer {
+func LoggingGRPCServer(opts ...grpc.ServerOption) MuxServer {
 	srv := grpc.NewServer(opts...)
 	ch := make(chan struct{})
-	s := &loggingServer{srv, logger, ch}
+	s := &loggingServer{srv, ch}
 	// NOTE: uncomment to debug leaks
 	// go s.monitorLifecycle()
 	return s
 }
 
 func (s *loggingServer) monitorLifecycle() {
-	s.logger.Tracef("LoggingGRPCServer: Create: %p", s.srv)
+	log.Tracef("LoggingGRPCServer: Create: %p", s.srv)
 
 	t := time.NewTicker(15 * time.Second)
 
 	for {
 		select {
 		case <-s.quitChan:
-			s.logger.Tracef("LoggingGRPCServer: Monitor(quit): %p", s.srv)
+			log.Tracef("LoggingGRPCServer: Monitor(quit): %p", s.srv)
 			return
 		case <-t.C:
-			s.logger.Tracef("LoggingGRPCServer: Monitor(alive): %p", s.srv)
+			log.Tracef("LoggingGRPCServer: Monitor(alive): %p", s.srv)
 		}
 	}
 }
 
 func (s *loggingServer) GracefulStop() {
-	s.logger.Tracef("LoggingGRPCServer: (%p) GracefulStop() ", s.srv)
+	log.Tracef("LoggingGRPCServer: (%p) GracefulStop() ", s.srv)
 	s.srv.GracefulStop()
 }
 
 func (s *loggingServer) Serve(lis net.Listener) error {
-	s.logger.Tracef("LoggingGRPCServer: (%p) Serve(Attempt, addr=%s) ", s.srv, lis.Addr().String())
+	log.Tracef("LoggingGRPCServer: (%p) Serve(Attempt, addr=%s) ", s.srv, lis.Addr().String())
 	err := s.srv.Serve(lis)
-	s.logger.Tracef("LoggingGRPCServer: (%p) Serve(Result, addr=%s): %v", s.srv, lis.Addr().String(), err)
+	log.Tracef("LoggingGRPCServer: (%p) Serve(Result, addr=%s): %v", s.srv, lis.Addr().String(), err)
 	return err
 }
 
 func (s *loggingServer) Stop() {
 	s.srv.Stop()
-	s.logger.Tracef("LoggingGRPCServer: (%p) Stop() ", s.srv)
+	log.Tracef("LoggingGRPCServer: (%p) Stop() ", s.srv)
 	close(s.quitChan)
 }
 
 func (s *loggingServer) GRPC() *grpc.Server {
-	s.logger.Tracef("LoggingGRPCServer: (%p) GRPC() ", s.srv)
+	log.Tracef("LoggingGRPCServer: (%p) GRPC() ", s.srv)
 	return s.srv
 }

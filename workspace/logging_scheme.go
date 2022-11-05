@@ -8,8 +8,8 @@ import (
 
 	"github.com/ernestrc/blue/iterator"
 	"github.com/ernestrc/blue/logging"
+	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui/config"
-	"unstable.build/go-tui/debug"
 )
 
 // LoggingScheme wraps a SchemeFunc with a constructor
@@ -19,7 +19,7 @@ func LoggingScheme(scheme string, fn SchemeFunc) SchemeFunc {
 	return func(cfg config.Config, uri URI) (Scheme, error) {
 		other, err := fn(cfg, uri)
 		if err != nil {
-			debug.StandardLogger().Errorf("SchemeFunc error: %s", err)
+			log.Errorf("SchemeFunc error: %s", err)
 			return nil, err
 		}
 		return loggingScheme{
@@ -37,7 +37,7 @@ type loggingScheme struct {
 }
 
 func (t loggingScheme) trace(msg string, args ...interface{}) {
-	debug.StandardLogger().
+	log.
 		WithField(logging.KeyClass, "LoggingScheme").
 		WithField("URI", t.uri.String()).
 		WithField("scheme", t.scheme).

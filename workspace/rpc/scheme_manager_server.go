@@ -11,7 +11,7 @@ import (
 	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui/config"
-	"unstable.build/go-tui/debug"
+	
 	"unstable.build/go-tui/proto"
 	"unstable.build/go-tui/workspace"
 )
@@ -91,7 +91,7 @@ func (s *SchemeManagerServer) getClients() map[uint64]io.Closer {
 }
 
 func (c *SchemeManagerServer) log(level log.Level, msg string, args ...interface{}) {
-	debug.StandardLogger().
+	log.
 		WithField(logging.KeyClass, "SchemeManagerServer").Logf(level, msg, args...)
 }
 

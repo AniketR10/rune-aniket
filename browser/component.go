@@ -10,7 +10,7 @@ import (
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
-	"unstable.build/go-tui/debug"
+	
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/workspace"
@@ -402,7 +402,7 @@ func (c *Component) NextTab(win Window) bool {
 }
 
 func (c *Component) log(level log.Level, msg string, args ...interface{}) {
-	debug.StandardLogger().
+	log.
 		WithField(logging.KeyClass, "browser.Component").Logf(level, msg, args...)
 }
 

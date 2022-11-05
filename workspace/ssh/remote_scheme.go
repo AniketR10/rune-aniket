@@ -12,7 +12,7 @@ import (
 	"github.com/ernestrc/blue/iterator"
 	"github.com/ernestrc/blue/logging"
 	"github.com/ernestrc/blue/retry"
-	"unstable.build/go-tui/debug"
+	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui/workspace"
 )
 
@@ -34,7 +34,7 @@ func (s *remoteScheme) maintainConnection(
 	connect connectSchemeFn, uri workspace.URI,
 	closeChan chan struct{}, sema *sync.Mutex,
 ) {
-	logger := debug.StandardLogger().WithField(logging.KeyClass, "ssh")
+	logger := log.WithField(logging.KeyClass, "ssh")
 
 	var initSema bool
 	retry.Retry(context.Background(), retryStrategy,

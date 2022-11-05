@@ -10,7 +10,7 @@ import (
 	"github.com/ernestrc/blue/logging"
 	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
-	"unstable.build/go-tui/debug"
+	
 	"unstable.build/go-tui/workspace"
 )
 
@@ -209,7 +209,7 @@ func (s *executorServer) init(e workspace.Executor, locker sync.Locker) {
 func (s *executorServer) log(
 	level log.Level, msg string, args ...interface{},
 ) {
-	debug.StandardLogger().
+	log.
 		WithField(logging.KeyClass, "executorServer").
 		Logf(level, msg, args...)
 }

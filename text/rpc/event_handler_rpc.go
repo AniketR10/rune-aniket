@@ -23,7 +23,6 @@ type eventHandlerClient struct {
 	errChan      chan error
 	quitChan     chan struct{}
 	quitCallback func()
-	logger       *log.Logger
 }
 
 func newEventHandlerClient(
@@ -47,9 +46,7 @@ func (c *eventHandlerClient) errors() <-chan error {
 }
 
 func (c *eventHandlerClient) handleError(err error) {
-	if c.logger != nil {
-		c.logger.Errorf("editor.eventHandlerClient.Handle error: %v", err)
-	}
+	log.Errorf("editor.eventHandlerClient.Handle error: %v", err)
 
 	select {
 	case c.errChan <- err:

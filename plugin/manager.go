@@ -14,7 +14,7 @@ import (
 	"github.com/ernestrc/blue/logging"
 	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui/config"
-	"unstable.build/go-tui/debug"
+	
 	pluginpb "unstable.build/go-tui/plugin/rpc"
 	"unstable.build/go-tui/proto"
 	"unstable.build/go-tui/util"
@@ -117,7 +117,7 @@ func (m *Manager) Init(grantor Grantor, opts ...Option) (err error) {
 }
 
 func (m *Manager) log(level log.Level, msg string, args ...interface{}) {
-	debug.StandardLogger().
+	log.
 		WithField(logging.KeyClass, "plugin.Manager").Logf(level, msg, args...)
 }
 
@@ -197,7 +197,7 @@ func (m *Manager) doGrant(
 		go func() {
 			err := srv.Serve(pluginID, grantID, m.broker, m.rmu)
 			if err != nil {
-				debug.StandardLogger().Errorf("Could not communicate with plugin %q: %v",
+				log.Errorf("Could not communicate with plugin %q: %v",
 					pluginID, err)
 			}
 		}()

@@ -10,7 +10,6 @@ import (
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 	"unstable.build/go-tui/config"
-	"unstable.build/go-tui/debug"
 	pluginpb "unstable.build/go-tui/plugin/rpc"
 	"unstable.build/go-tui/proto"
 )
@@ -62,8 +61,8 @@ type granteePlugin struct {
 // GRPCServer satisfies plugin.GRPCPlugin
 func (p *granteePlugin) GRPCServer(_ *plugin.GRPCBroker, s *grpc.Server) error {
 	server := newGranteeServer(p.broker, p.grantee, p.requested, p.keepAlive)
-	if debug.StandardLogger().IsLevelEnabled(log.TraceLevel) {
-		server = &loggingGranteeServer{Logger: debug.StandardLogger(), GranteeServer: server}
+	if log.IsLevelEnabled(log.TraceLevel) {
+		server = &loggingGranteeServer{GranteeServer: server}
 	}
 	pluginpb.RegisterGranteeServer(s, server)
 	return nil
@@ -74,8 +73,8 @@ func (p *granteePlugin) GRPCClient(
 	ctx context.Context, _ *plugin.GRPCBroker, c *grpc.ClientConn,
 ) (interface{}, error) {
 	pbClient := pluginpb.NewGranteeClient(c)
-	if debug.StandardLogger().IsLevelEnabled(log.TraceLevel) {
-		pbClient = &loggingGranteeClient{Logger: debug.StandardLogger(), GranteeClient: pbClient}
+	if log.IsLevelEnabled(log.TraceLevel) {
+		pbClient = &loggingGranteeClient{GranteeClient: pbClient}
 	}
 	client := newGranteeClient(p.broker, pbClient)
 	return client, nil

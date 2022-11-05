@@ -11,7 +11,7 @@ import (
 	"github.com/ernestrc/blue/logging"
 	log "github.com/sirupsen/logrus"
 	browserpb "unstable.build/go-tui/browser/rpc"
-	"unstable.build/go-tui/debug"
+	
 	handlerpb "unstable.build/go-tui/handler/rpc"
 	"unstable.build/go-tui/proto"
 	"unstable.build/go-tui/term"
@@ -101,7 +101,7 @@ func (s *Server) Init(
 }
 
 func (s *Server) log(level log.Level, msg string, args ...interface{}) {
-	debug.StandardLogger().
+	log.
 		WithField(logging.KeyClass, "browser.Server").Logf(level, msg, args...)
 }
 

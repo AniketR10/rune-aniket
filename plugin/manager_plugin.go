@@ -7,7 +7,6 @@ import (
 	"github.com/ernestrc/blue/logging"
 	"github.com/hashicorp/go-plugin"
 	log "github.com/sirupsen/logrus"
-	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/workspace"
 )
 
@@ -39,17 +38,17 @@ func goPluginGranteeBuilder(m *Manager) pluginBuilder {
 			}
 		}
 
-		debug.StandardLogger().WithField(logging.KeyClass, "plugin.Manager").
+		log.WithField(logging.KeyClass, "plugin.Manager").
 			Debugf("plugin command Cmd=%#v for workspace=%q", cmd, m.config.workspace)
 
 		cmd.Env = append(cmd.Env, makeBrokerRemoteAddrEnv(m.brokerAddr.String()))
-		cmd.Env = append(cmd.Env, makeLogLevelEnv(debug.StandardLogger().GetLevel()))
+		cmd.Env = append(cmd.Env, makeLogLevelEnv(log.GetLevel()))
 
 		config := &plugin.ClientConfig{
 			HandshakeConfig:  handshakeConfig,
 			Plugins:          pluginMap,
 			Cmd:              cmd,
-			Logger:           NewHCLogLogrus(debug.StandardLogger()),
+			Logger:           NewHCLogLogrus(log.StandardLogger()),
 			AllowedProtocols: []plugin.Protocol{plugin.ProtocolGRPC},
 			// TODO we should validate integrity of plugins
 			// SecureConfig:    &secureCfg,

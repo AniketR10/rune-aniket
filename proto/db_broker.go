@@ -13,7 +13,7 @@ import (
 	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
-	"unstable.build/go-tui/debug"
+
 	"unstable.build/go-tui/util"
 )
 
@@ -140,9 +140,8 @@ func (t *dbBroker) Dial(ID uint32) (conn MuxConn, err error) {
 		return
 	}
 
-	logger := debug.StandardLogger()
-	if logger.IsLevelEnabled(log.TraceLevel) {
-		conn = loggingConn{logger, conn}
+	if log.IsLevelEnabled(log.TraceLevel) {
+		conn = loggingConn{conn}
 	}
 	return
 }

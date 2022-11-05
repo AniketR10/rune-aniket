@@ -5,7 +5,6 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
-	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/proto"
 	"unstable.build/go-tui/text"
 	textpb "unstable.build/go-tui/text/rpc"
@@ -39,18 +38,14 @@ func (s *editorResourceServer) Serve(
 			defer s.mu.Unlock()
 			if s.srv == nil {
 				var srv proto.MuxServer
-				l := debug.StandardLogger()
-				if l != nil && l.IsLevelEnabled(log.TraceLevel) {
-					srv = proto.LoggingGRPCServer(l, opts...)
+				if log.IsLevelEnabled(log.TraceLevel) {
+					srv = proto.LoggingGRPCServer(opts...)
 				} else {
 					srv = proto.GRPCServer(opts...)
 				}
 				grpc := srv.GRPC()
 				s.srv = srv
 				s.server = textpb.NewServer(broker, s.b, lock)
-				lock.Lock()
-				s.server.Logger = l
-				lock.Unlock()
 				textpb.RegisterEditorServer(grpc, interruptEditorServer(s.server, interrupt))
 			}
 			return s.srv

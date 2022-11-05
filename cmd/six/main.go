@@ -17,7 +17,6 @@ import (
 	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui/config"
-	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/proto"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/workspace"
@@ -124,8 +123,6 @@ func startWorkspaceServer() {
 			}
 		}
 	}()
-
-	debug.InitLogger(l)
 
 	uri, err := workspace.CurrentUserHostURI(*flagWorkspaceServer)
 	if err != nil {

@@ -11,7 +11,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/component"
-	"unstable.build/go-tui/debug"
+	
 	"unstable.build/go-tui/term"
 	termpb "unstable.build/go-tui/term/rpc"
 )
@@ -90,7 +90,7 @@ func (c *Client) collectError(call string, err error) {
 }
 
 func (c *Client) log(level log.Level, msg string, args ...interface{}) {
-	debug.StandardLogger().
+	log.
 		WithField(logging.KeyClass, "handler.Client").Logf(level, msg, args...)
 }
 
@@ -269,7 +269,7 @@ func (s *Server) draw(ctx context.Context, in *DrawRequest) (
 }
 
 func (s *Server) log(level log.Level, msg string, args ...interface{}) {
-	debug.StandardLogger().
+	log.
 		WithField(logging.KeyClass, "handler.Server").Logf(level, msg, args...)
 }
 

@@ -8,10 +8,10 @@ import (
 	"time"
 
 	"github.com/ernestrc/blue/logging"
+	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 	"unstable.build/go-tui"
 	browserpb "unstable.build/go-tui/browser/rpc"
-	"unstable.build/go-tui/debug"
 	handlerpb "unstable.build/go-tui/handler/rpc"
 	"unstable.build/go-tui/proto"
 	"unstable.build/go-tui/term"
@@ -80,8 +80,7 @@ func NewClient(
 }
 
 func (c *Client) tryLog(msg string, args ...interface{}) {
-	debug.StandardLogger().
-		WithField(logging.KeyClass, "browser.Client").Debugf(msg, args...)
+	log.WithField(logging.KeyClass, "browser.Client").Debugf(msg, args...)
 }
 
 // Init initializes this Client with broker and client.

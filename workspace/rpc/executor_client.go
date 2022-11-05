@@ -12,7 +12,7 @@ import (
 	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
-	"unstable.build/go-tui/debug"
+	
 	"unstable.build/go-tui/workspace"
 )
 
@@ -119,7 +119,7 @@ func (c *executorClientImpl) StdoutPipe(pid workspace.Pid) (io.ReadCloser, error
 }
 
 func (c *executorClientImpl) log(level log.Level, msg string, args ...interface{}) {
-	debug.StandardLogger().
+	log.
 		WithField(logging.KeyClass, "executorClientImpl").
 		Logf(level, msg, args...)
 }
@@ -256,7 +256,7 @@ func (c *ioClient) Close() error {
 		return err
 	}
 
-	debug.StandardLogger().
+	log.
 		WithField(logging.KeyClass, "ioClient").
 		Debugf("close called for handler ID %d", c.handlerID)
 

@@ -12,7 +12,7 @@ import (
 	"google.golang.org/grpc"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/cell"
-	"unstable.build/go-tui/debug"
+	
 	"unstable.build/go-tui/proto"
 	"unstable.build/go-tui/term"
 	termpb "unstable.build/go-tui/term/rpc"
@@ -70,7 +70,7 @@ func (c *Client) Init(
 }
 
 func (c *Client) log(level log.Level, msg string, args ...interface{}) {
-	debug.StandardLogger().
+	log.
 		WithField(logging.KeyClass, "text.Client").Logf(level, msg, args...)
 }
 

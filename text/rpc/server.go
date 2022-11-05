@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ernestrc/blue/logging"
 	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/proto"
@@ -23,7 +24,6 @@ var (
 // Server serves an Editor over GRPC.
 type Server struct {
 	UnimplementedEditorServer
-	Logger *log.Logger
 
 	broker proto.MuxBroker
 
@@ -166,10 +166,7 @@ func (s *Server) Errors() <-chan error {
 }
 
 func (s *Server) tryLog(level log.Level, msg string, args ...interface{}) {
-	if s.Logger == nil {
-		return
-	}
-	s.Logger.Logf(level, msg, args...)
+	log.WithField(logging.KeyClass, "text.Server").Logf(level, msg, args...)
 }
 
 func (s *Server) getClients() map[uint64]io.Closer {
@@ -216,7 +213,6 @@ func (s *Server) dialHandler(handlerID uint32) (text.EventHandler, error) {
 	client := newEventHandlerClient(handlerConn, func() {
 		s.safeForceCloseHandler(handlerID, "editorEventHandlerClient.onExit")
 	})
-	client.logger = s.Logger
 
 	ctx, cancelFn := context.WithCancel(context.Background())
 	go proto.MonitorConnection(ctx, s.failureTimeout, handlerConn,

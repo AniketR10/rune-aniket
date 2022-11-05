@@ -13,7 +13,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc/connectivity"
 	"google.golang.org/grpc/grpclog"
-	"unstable.build/go-tui/debug"
+	
 )
 
 // ForceCloseResource is a helper function to remove a resource
@@ -27,14 +27,14 @@ func ForceCloseResource(
 	resources := getResourcesFn()
 	res, ok := resources[brokerID]
 	if !ok {
-		debug.StandardLogger().Debugf("resource %d already closed", brokerID)
+		log.Debugf("resource %d already closed", brokerID)
 		return nil, nil
 	}
 	delete(resources, brokerID)
 
 	ret := res.Close()
 	if ret != nil {
-		debug.StandardLogger().Errorf("resource.Close %d error: %v", brokerID, ret)
+		log.Errorf("resource.Close %d error: %v", brokerID, ret)
 	}
 
 	if err := broker.Cleanup(uint32(brokerID)); err != nil {
@@ -91,10 +91,9 @@ func AcceptAndServe(
 		return 0, nil, fmt.Errorf("Accept: %w", err)
 	}
 
-	logger := debug.StandardLogger()
 	var srv MuxServer
-	if logger.IsLevelEnabled(log.TraceLevel) {
-		srv = LoggingGRPCServer(logger)
+	if log.IsLevelEnabled(log.TraceLevel) {
+		srv = LoggingGRPCServer()
 	} else {
 		srv = GRPCServer()
 	}

@@ -4,10 +4,10 @@ import (
 	"fmt"
 
 	"github.com/ernestrc/blue/logging"
+	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
-	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
@@ -256,8 +256,7 @@ func (vi *Vi) Resize(width, height int) {
 
 // SetMessage uses vi's configured Messenger to set msg with args.
 func (vi *Vi) SetMessage(msg string, args ...interface{}) {
-	debug.StandardLogger().
-		WithField(logging.KeyClass, "vi.Vi").Debugf(msg, args...)
+	log.WithField(logging.KeyClass, "vi.Vi").Debugf(msg, args...)
 
 	if vi.messenger != nil {
 		vi.messenger.SetMessage(msg, args...)

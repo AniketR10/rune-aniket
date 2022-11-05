@@ -9,7 +9,6 @@ import (
 )
 
 type loggingGranteeServer struct {
-	*log.Logger
 	pluginpb.GranteeServer
 }
 
@@ -17,7 +16,7 @@ func (s *loggingGranteeServer) Permissions(
 	ctx context.Context, in *pluginpb.PermRequest,
 ) (*pluginpb.PermResponse, error) {
 	res, err := s.GranteeServer.Permissions(ctx, in)
-	s.Tracef("GranteeServer.Permissions(%+v): (%+v, %v)", in, res, err)
+	log.Tracef("GranteeServer.Permissions(%+v): (%+v, %v)", in, res, err)
 	return res, err
 }
 
@@ -25,7 +24,7 @@ func (s *loggingGranteeServer) OnGrant(
 	ctx context.Context, in *pluginpb.OnPermGrantRequest,
 ) (*pluginpb.OnPermGrantResponse, error) {
 	res, err := s.GranteeServer.OnGrant(ctx, in)
-	s.Tracef("GranteeServer.OnGrant(%+v): (%+v, %v)", in, res, err)
+	log.Tracef("GranteeServer.OnGrant(%+v): (%+v, %v)", in, res, err)
 	return res, err
 }
 
@@ -33,7 +32,7 @@ func (s *loggingGranteeServer) Shutdown(
 	ctx context.Context, in *pluginpb.ShutdownRequest,
 ) (*pluginpb.ShutdownResponse, error) {
 	res, err := s.GranteeServer.Shutdown(ctx, in)
-	s.Tracef("GranteeServer.Shutdown(%+v): (%+v, %v)", in, res, err)
+	log.Tracef("GranteeServer.Shutdown(%+v): (%+v, %v)", in, res, err)
 	return res, err
 }
 
@@ -41,7 +40,7 @@ func (s *loggingGranteeServer) Health(
 	ctx context.Context, in *pluginpb.HealthRequest,
 ) (*pluginpb.HealthResponse, error) {
 	res, err := s.GranteeServer.Health(ctx, in)
-	s.Tracef("GranteeServer.Health(%+v): (%+v, %v)", in, res, err)
+	log.Tracef("GranteeServer.Health(%+v): (%+v, %v)", in, res, err)
 	return res, err
 }
 

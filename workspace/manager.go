@@ -8,7 +8,7 @@ import (
 	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui/config"
-	"unstable.build/go-tui/debug"
+	
 )
 
 var (
@@ -65,7 +65,7 @@ func (m *Manager) RegisterScheme(scheme string, fn SchemeFunc) error {
 		return fmt.Errorf("scheme %q already registered", scheme)
 	}
 	m.log(log.DebugLevel, "RegisterScheme %q", scheme)
-	if debug.StandardLogger().IsLevelEnabled(log.TraceLevel) {
+	if log.IsLevelEnabled(log.TraceLevel) {
 		fn = LoggingScheme(scheme, fn)
 	}
 	m.schemes[scheme] = fn
@@ -160,6 +160,6 @@ func (m *Manager) Close() error {
 }
 
 func (m *Manager) log(level log.Level, msg string, args ...interface{}) {
-	debug.StandardLogger().
+	log.
 		WithField(logging.KeyClass, "workspace.Manager").Logf(level, msg, args...)
 }
