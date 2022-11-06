@@ -155,6 +155,7 @@ type lspEditorHandler struct {
 	tabspaces            int
 	semanticTypesAttr    map[string]term.Attributes
 	diagnosticAttr       map[protocol.DiagnosticSeverity]term.Attributes
+	enableSemanticTokens bool
 	semanticTokensListID string
 	diagnosticListID     string
 	rpcTimeout           time.Duration
@@ -535,19 +536,31 @@ func newLspHandler(
 		return nil, err
 	}
 
+	var configErr error
 	ret.semanticTokensListID, err = pconfig.GetString("semantic_tokens_list_id")
 	if err != nil {
 		if err != config.ErrNotFound {
-			err = fmt.Errorf("failed to get 'semantic_tokens_list_id' from config: %v", err)
-			return nil, err
+			configErr = multierr.Append(configErr,
+				fmt.Errorf("failed to get 'semantic_tokens_list_id' from config: %v", err))
 		}
 		ret.semanticTokensListID = defaultSemanticTokensListID
+	}
+
+	ret.enableSemanticTokens, err = pconfig.GetBool("enable_semantic_tokens")
+	if err != nil {
+		if err != config.ErrNotFound {
+			configErr = multierr.Append(configErr,
+				fmt.Errorf("failed to get 'enable_semantic_tokens' from config: %v", err))
+			return nil, err
+		}
+		// default should be false
 	}
 
 	ret.diagnosticListID, err = pconfig.GetString("diagnostic_list_id")
 	if err != nil {
 		if err != config.ErrNotFound {
-			err = fmt.Errorf("failed to get 'diagnostic_list_id' from config: %v", err)
+			configErr = multierr.Append(configErr,
+				fmt.Errorf("failed to get 'diagnostic_list_id' from config: %v", err))
 			return nil, err
 		}
 		ret.diagnosticListID = defaultDiagnosticListID
@@ -556,19 +569,28 @@ func newLspHandler(
 	ret.connectTimeout, err = config.GetDuration(pconfig,
 		"connect_timeout", defaultConnectTimeout)
 	if err != nil {
-		return nil, err
+		if err != config.ErrNotFound {
+			configErr = multierr.Append(configErr, err)
+		}
 	}
 
 	ret.disconnectTimeout, err = config.GetDuration(pconfig,
 		"disconnect_timeout", defaultDisconnectTimeout)
 	if err != nil {
-		return nil, err
+		if err != config.ErrNotFound {
+			configErr = multierr.Append(configErr, err)
+		}
 	}
 
 	ret.rpcTimeout, err = config.GetDuration(pconfig,
 		"rpc_timeout", defaultRpcTimeout)
 	if err != nil {
-		return nil, err
+		if err != config.ErrNotFound {
+			configErr = multierr.Append(configErr, err)
+		}
+	}
+	if configErr != nil {
+		log.Warnf("Errors loading config: %v", configErr)
 	}
 
 	err = ret.initLanguageServers(pconfig)
@@ -847,6 +869,9 @@ func (h *lspEditorHandler) semanticTokensFull(
 	ctx context.Context, srv execServer,
 	f *file, cells [][]term.Cell, content string,
 ) error {
+	if !h.enableSemanticTokens {
+		return nil
+	}
 	// NOTE: gopls does not pass semanticTokensProvider
 	if srv.caps.SemanticTokensProvider == nil && srv.langID != ".go" {
 		log.Debugf("lspEditorHandler.Server.SemanticTokensFull(%s): server does not support semantic tokens", f.uri)
