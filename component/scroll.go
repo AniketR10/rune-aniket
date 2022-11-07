@@ -495,6 +495,17 @@ func (s *Scroll) Draw(writer term.Writer) {
 		s.drawFast(writer)
 		return
 	}
+
+	// setcell background
+	for y := 0; y < s.height; y++ {
+		for x := 0; x < s.width; x++ {
+			writer.SetCell(term.Coordinates{X: x, Y: y}, term.Cell{
+				Fg: s.Attributes.Fg,
+				Bg: s.Attributes.Bg,
+			})
+		}
+	}
+
 	if s.Wrap {
 		s.wrapdraw(writer)
 		return
