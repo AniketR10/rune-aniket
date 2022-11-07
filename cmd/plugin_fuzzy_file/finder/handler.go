@@ -28,7 +28,7 @@ import (
 const (
 	readerBufferSize    = 64 * 1024
 	defaultStoreTimeout = 5 * time.Second
-	defaultMaxHistory   = 20
+	defaultMaxHistory   = 2000
 )
 
 func Permissions() []plugin.Permission {

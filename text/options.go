@@ -60,7 +60,7 @@ func DefaultConfig() Config {
 		Filepaths:               nil,
 		RecoveryFilepath:        workspace.URI{},
 		CommandEvent:            term.KeyComb{Ch: ':'},
-		CommandMaxHistory:       10,
+		CommandMaxHistory:       2000,
 		Config:                  browser.DefaultConfig(),
 		DirtyTabAttr:            term.Attributes{Fg: term.AttrBold},
 		CommandKeyBindings:      make(map[term.KeyComb][]string),
