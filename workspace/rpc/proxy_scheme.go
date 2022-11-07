@@ -35,11 +35,11 @@ type proxySchemeResource struct {
 }
 
 func (c proxySchemeResource) Close() (ret error) {
+	c.srv.Stop()
+	c.server.Stop()
 	if err := c.scheme.Close(); err != nil {
 		ret = multierr.Append(ret, err)
 	}
-	c.server.Stop()
-	c.srv.Stop()
 	return ret
 }
 
