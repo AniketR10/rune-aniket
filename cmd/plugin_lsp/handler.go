@@ -41,23 +41,25 @@ import (
 )
 
 const (
-	maxHoverColumns          = 90
-	defaultRpcTimeout        = 10 * time.Second
-	defaultConnectTimeout    = 10 * time.Second
-	defaultDisconnectTimeout = 1 * time.Second
-	firstFileVersion         = 1
-	commandNextDiagnostic    = "lspNextDiagnostic"
-	commandPrevDiagnostic    = "lspPrevDiagnostic"
-	commandHover             = "lspHover"
-	commandGoToDef           = "lspGoToDefinition"
-	commandFormat            = "lspFormat"
-	commandOrganizeImports   = "lspOrganizeImports"
-	commandReferences        = "lspReferences"
-	commandAddWorkspace      = "lspAddWorkspaceFolder"
-	commandRemoveWorkspace   = "lspRemoveWorkspaceFolder"
-	handleBackpressureEvs    = 64
-	referencesWindowWidth    = 50
-	referencesWindowHeight   = 15
+	maxHoverColumns             = 90
+	defaultRpcTimeout           = 10 * time.Second
+	defaultConnectTimeout       = 10 * time.Second
+	defaultDisconnectTimeout    = 1 * time.Second
+	firstFileVersion            = 1
+	commandNextDiagnostic       = "lspNextDiagnostic"
+	commandPrevDiagnostic       = "lspPrevDiagnostic"
+	commandHover                = "lspHover"
+	commandGoToDef              = "lspGoToDefinition"
+	commandFormat               = "lspFormat"
+	commandOrganizeImports      = "lspOrganizeImports"
+	commandReferences           = "lspReferences"
+	commandAddWorkspace         = "lspAddWorkspaceFolder"
+	commandRemoveWorkspace      = "lspRemoveWorkspaceFolder"
+	handleBackpressureEvs       = 64
+	referencesWindowWidth       = 50
+	referencesWindowHeight      = 15
+	defaultSemanticTokensListID = "lsp_syntax_highlighting"
+	defaultDiagnosticListID     = "lsp_diagnostic"
 )
 
 var (
@@ -80,9 +82,7 @@ var (
 		plugin.PermissionWorkspace,
 		plugin.PermissionConfig,
 	}
-	defaultSemanticTokensListID = "lsp_syntax_highlighting"
-	defaultDiagnosticListID     = "lsp_diagnostic"
-	defaultDiagnosticAttr       = map[protocol.DiagnosticSeverity]term.Attributes{
+	defaultDiagnosticAttr = map[protocol.DiagnosticSeverity]term.Attributes{
 		protocol.SeverityError:       {Bg: term.ColorRed, Fg: term.ColorWhite},
 		protocol.SeverityWarning:     {Bg: term.ColorYellow, Fg: term.ColorBlack},
 		protocol.SeverityInformation: {Bg: term.ColorBlue, Fg: term.ColorWhite},

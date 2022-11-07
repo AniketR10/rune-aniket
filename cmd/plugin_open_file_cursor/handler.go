@@ -27,7 +27,6 @@ var (
 		text.EventTypeOpen,
 		text.EventTypeClose,
 		text.EventTypeEdit,
-		text.EventTypeFlush,
 		text.EventTypeCursor,
 	}
 	gfHandlerPermissions = []plugin.Permission{
