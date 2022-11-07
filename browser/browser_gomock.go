@@ -5,7 +5,6 @@
 package browser
 
 import (
-	context "context"
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
@@ -591,20 +590,6 @@ func (m *MockBrowser) PublishInterrupt() error {
 func (mr *MockBrowserMockRecorder) PublishInterrupt() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PublishInterrupt", reflect.TypeOf((*MockBrowser)(nil).PublishInterrupt))
-}
-
-// Set mocks base method.
-func (m *MockBrowser) Set(ctx context.Context, ID string, doc interface{}) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Set", ctx, ID, doc)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// Set indicates an expected call of Set.
-func (mr *MockBrowserMockRecorder) Set(ctx, ID, doc interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Set", reflect.TypeOf((*MockBrowser)(nil).Set), ctx, ID, doc)
 }
 
 // SetFocus mocks base method.

@@ -98,6 +98,10 @@ type Editor interface {
 	// CellEditor returns a CellEditor which allows for direct write access
 	// to the editor's internal buffer.
 	CellEditor(Handler) CellEditor
+
+	// SetDefaultAttributes sets the default attributes of the given Handler
+	// before any LocationList overwrites.
+	SetDefaultAttributes(Handler, term.Attributes) error
 }
 
 type cellEditor struct {

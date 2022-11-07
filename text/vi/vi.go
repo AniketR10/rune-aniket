@@ -312,6 +312,12 @@ func (vi *Vi) Resource() workspace.URI {
 	return vi.resource
 }
 
+// SetDefaultAttributes sets the underlying's Scroll's default Attributes.
+func (e *Vi) SetDefaultAttributes(attrs term.Attributes) error {
+	e.less.Scroll().Attributes = attrs
+	return nil
+}
+
 // Close satisfies editor.Handler.
 func (vi *Vi) Close() error {
 	return nil

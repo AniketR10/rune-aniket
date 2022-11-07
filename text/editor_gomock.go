@@ -388,6 +388,20 @@ func (mr *MockEditorMockRecorder) SetCursor(arg0, arg1 interface{}) *gomock.Call
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetCursor", reflect.TypeOf((*MockEditor)(nil).SetCursor), arg0, arg1)
 }
 
+// SetDefaultAttributes mocks base method.
+func (m *MockEditor) SetDefaultAttributes(arg0 Handler, arg1 term.Attributes) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SetDefaultAttributes", arg0, arg1)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// SetDefaultAttributes indicates an expected call of SetDefaultAttributes.
+func (mr *MockEditorMockRecorder) SetDefaultAttributes(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetDefaultAttributes", reflect.TypeOf((*MockEditor)(nil).SetDefaultAttributes), arg0, arg1)
+}
+
 // SetLocationList mocks base method.
 func (m *MockEditor) SetLocationList(arg0 Handler, arg1 string, arg2 LocationList) error {
 	m.ctrl.T.Helper()

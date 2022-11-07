@@ -62,6 +62,11 @@ func (e *simpleEditor) CellEditor(h Handler) CellEditor {
 	return NewCellEditor(e.pub.Handler(h).(*simpleEditorHandler).buf.Editor())
 }
 
+func (e *simpleEditor) SetDefaultAttributes(h Handler, attr term.Attributes) error {
+	e.pub.Handler(h).(*simpleEditorHandler).less.Scroll().Attributes = attr
+	return nil
+}
+
 func (e *simpleEditor) SetCursor(h Handler, pos term.Coordinates) error {
 	_, ok := e.pub.Handler(h).(*simpleEditorHandler).cursor.MoveToScroll(pos)
 	if !ok {

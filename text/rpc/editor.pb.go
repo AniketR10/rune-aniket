@@ -1229,6 +1229,99 @@ func (x *EditorResponse) GetHandlerId() uint32 {
 	return 0
 }
 
+type SetDefaultAttributesRequest struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	HandlerId  uint32          `protobuf:"varint,1,opt,name=handler_id,json=handlerId,proto3" json:"handler_id,omitempty"`
+	Attributes *rpc.Attributes `protobuf:"bytes,2,opt,name=attributes,proto3" json:"attributes,omitempty"`
+}
+
+func (x *SetDefaultAttributesRequest) Reset() {
+	*x = SetDefaultAttributesRequest{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_rpc_editor_proto_msgTypes[22]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *SetDefaultAttributesRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetDefaultAttributesRequest) ProtoMessage() {}
+
+func (x *SetDefaultAttributesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_rpc_editor_proto_msgTypes[22]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetDefaultAttributesRequest.ProtoReflect.Descriptor instead.
+func (*SetDefaultAttributesRequest) Descriptor() ([]byte, []int) {
+	return file_rpc_editor_proto_rawDescGZIP(), []int{22}
+}
+
+func (x *SetDefaultAttributesRequest) GetHandlerId() uint32 {
+	if x != nil {
+		return x.HandlerId
+	}
+	return 0
+}
+
+func (x *SetDefaultAttributesRequest) GetAttributes() *rpc.Attributes {
+	if x != nil {
+		return x.Attributes
+	}
+	return nil
+}
+
+type SetDefaultAttributesResponse struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+}
+
+func (x *SetDefaultAttributesResponse) Reset() {
+	*x = SetDefaultAttributesResponse{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_rpc_editor_proto_msgTypes[23]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *SetDefaultAttributesResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetDefaultAttributesResponse) ProtoMessage() {}
+
+func (x *SetDefaultAttributesResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_rpc_editor_proto_msgTypes[23]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetDefaultAttributesResponse.ProtoReflect.Descriptor instead.
+func (*SetDefaultAttributesResponse) Descriptor() ([]byte, []int) {
+	return file_rpc_editor_proto_rawDescGZIP(), []int{23}
+}
+
 type EditorEventHandleRequest struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
@@ -1240,7 +1333,7 @@ type EditorEventHandleRequest struct {
 func (x *EditorEventHandleRequest) Reset() {
 	*x = EditorEventHandleRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_rpc_editor_proto_msgTypes[22]
+		mi := &file_rpc_editor_proto_msgTypes[24]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1253,7 +1346,7 @@ func (x *EditorEventHandleRequest) String() string {
 func (*EditorEventHandleRequest) ProtoMessage() {}
 
 func (x *EditorEventHandleRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_rpc_editor_proto_msgTypes[22]
+	mi := &file_rpc_editor_proto_msgTypes[24]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1266,7 +1359,7 @@ func (x *EditorEventHandleRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EditorEventHandleRequest.ProtoReflect.Descriptor instead.
 func (*EditorEventHandleRequest) Descriptor() ([]byte, []int) {
-	return file_rpc_editor_proto_rawDescGZIP(), []int{22}
+	return file_rpc_editor_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *EditorEventHandleRequest) GetEvent() *EditorEvent {
@@ -1288,7 +1381,7 @@ type EditorEventHandleResponse struct {
 func (x *EditorEventHandleResponse) Reset() {
 	*x = EditorEventHandleResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_rpc_editor_proto_msgTypes[23]
+		mi := &file_rpc_editor_proto_msgTypes[25]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1301,7 +1394,7 @@ func (x *EditorEventHandleResponse) String() string {
 func (*EditorEventHandleResponse) ProtoMessage() {}
 
 func (x *EditorEventHandleResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_rpc_editor_proto_msgTypes[23]
+	mi := &file_rpc_editor_proto_msgTypes[25]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1314,7 +1407,7 @@ func (x *EditorEventHandleResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EditorEventHandleResponse.ProtoReflect.Descriptor instead.
 func (*EditorEventHandleResponse) Descriptor() ([]byte, []int) {
-	return file_rpc_editor_proto_rawDescGZIP(), []int{23}
+	return file_rpc_editor_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *EditorEventHandleResponse) GetQuit() bool {
@@ -1347,7 +1440,7 @@ type HandleCommandRequest struct {
 func (x *HandleCommandRequest) Reset() {
 	*x = HandleCommandRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_rpc_editor_proto_msgTypes[24]
+		mi := &file_rpc_editor_proto_msgTypes[26]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1360,7 +1453,7 @@ func (x *HandleCommandRequest) String() string {
 func (*HandleCommandRequest) ProtoMessage() {}
 
 func (x *HandleCommandRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_rpc_editor_proto_msgTypes[24]
+	mi := &file_rpc_editor_proto_msgTypes[26]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1373,7 +1466,7 @@ func (x *HandleCommandRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HandleCommandRequest.ProtoReflect.Descriptor instead.
 func (*HandleCommandRequest) Descriptor() ([]byte, []int) {
-	return file_rpc_editor_proto_rawDescGZIP(), []int{24}
+	return file_rpc_editor_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *HandleCommandRequest) GetName() string {
@@ -1429,7 +1522,7 @@ type HandleCommandResponse struct {
 func (x *HandleCommandResponse) Reset() {
 	*x = HandleCommandResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_rpc_editor_proto_msgTypes[25]
+		mi := &file_rpc_editor_proto_msgTypes[27]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1442,7 +1535,7 @@ func (x *HandleCommandResponse) String() string {
 func (*HandleCommandResponse) ProtoMessage() {}
 
 func (x *HandleCommandResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_rpc_editor_proto_msgTypes[25]
+	mi := &file_rpc_editor_proto_msgTypes[27]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1455,7 +1548,7 @@ func (x *HandleCommandResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HandleCommandResponse.ProtoReflect.Descriptor instead.
 func (*HandleCommandResponse) Descriptor() ([]byte, []int) {
-	return file_rpc_editor_proto_rawDescGZIP(), []int{25}
+	return file_rpc_editor_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *HandleCommandResponse) GetExit() bool {
@@ -1479,7 +1572,7 @@ type SetLocationListRequest_Location struct {
 func (x *SetLocationListRequest_Location) Reset() {
 	*x = SetLocationListRequest_Location{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_rpc_editor_proto_msgTypes[26]
+		mi := &file_rpc_editor_proto_msgTypes[28]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1492,7 +1585,7 @@ func (x *SetLocationListRequest_Location) String() string {
 func (*SetLocationListRequest_Location) ProtoMessage() {}
 
 func (x *SetLocationListRequest_Location) ProtoReflect() protoreflect.Message {
-	mi := &file_rpc_editor_proto_msgTypes[26]
+	mi := &file_rpc_editor_proto_msgTypes[28]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1666,7 +1759,16 @@ var file_rpc_editor_proto_rawDesc = []byte{
 	0x73, 0x6f, 0x75, 0x72, 0x63, 0x65, 0x4e, 0x61, 0x6d, 0x65, 0x22, 0x2f, 0x0a, 0x0e, 0x45, 0x64,
 	0x69, 0x74, 0x6f, 0x72, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x1d, 0x0a, 0x0a,
 	0x68, 0x61, 0x6e, 0x64, 0x6c, 0x65, 0x72, 0x5f, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0d,
-	0x52, 0x09, 0x68, 0x61, 0x6e, 0x64, 0x6c, 0x65, 0x72, 0x49, 0x64, 0x22, 0x43, 0x0a, 0x18, 0x45,
+	0x52, 0x09, 0x68, 0x61, 0x6e, 0x64, 0x6c, 0x65, 0x72, 0x49, 0x64, 0x22, 0x6e, 0x0a, 0x1b, 0x53,
+	0x65, 0x74, 0x44, 0x65, 0x66, 0x61, 0x75, 0x6c, 0x74, 0x41, 0x74, 0x74, 0x72, 0x69, 0x62, 0x75,
+	0x74, 0x65, 0x73, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x1d, 0x0a, 0x0a, 0x68, 0x61,
+	0x6e, 0x64, 0x6c, 0x65, 0x72, 0x5f, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0d, 0x52, 0x09,
+	0x68, 0x61, 0x6e, 0x64, 0x6c, 0x65, 0x72, 0x49, 0x64, 0x12, 0x30, 0x0a, 0x0a, 0x61, 0x74, 0x74,
+	0x72, 0x69, 0x62, 0x75, 0x74, 0x65, 0x73, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x10, 0x2e,
+	0x74, 0x65, 0x72, 0x6d, 0x2e, 0x41, 0x74, 0x74, 0x72, 0x69, 0x62, 0x75, 0x74, 0x65, 0x73, 0x52,
+	0x0a, 0x61, 0x74, 0x74, 0x72, 0x69, 0x62, 0x75, 0x74, 0x65, 0x73, 0x22, 0x1e, 0x0a, 0x1c, 0x53,
+	0x65, 0x74, 0x44, 0x65, 0x66, 0x61, 0x75, 0x6c, 0x74, 0x41, 0x74, 0x74, 0x72, 0x69, 0x62, 0x75,
+	0x74, 0x65, 0x73, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22, 0x43, 0x0a, 0x18, 0x45,
 	0x64, 0x69, 0x74, 0x6f, 0x72, 0x45, 0x76, 0x65, 0x6e, 0x74, 0x48, 0x61, 0x6e, 0x64, 0x6c, 0x65,
 	0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x27, 0x0a, 0x05, 0x65, 0x76, 0x65, 0x6e, 0x74,
 	0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x11, 0x2e, 0x74, 0x65, 0x78, 0x74, 0x2e, 0x45, 0x64,
@@ -1693,7 +1795,7 @@ var file_rpc_editor_proto_rawDesc = []byte{
 	0x69, 0x6e, 0x64, 0x6f, 0x77, 0x22, 0x2b, 0x0a, 0x15, 0x48, 0x61, 0x6e, 0x64, 0x6c, 0x65, 0x43,
 	0x6f, 0x6d, 0x6d, 0x61, 0x6e, 0x64, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x12,
 	0x0a, 0x04, 0x65, 0x78, 0x69, 0x74, 0x18, 0x01, 0x20, 0x01, 0x28, 0x08, 0x52, 0x04, 0x65, 0x78,
-	0x69, 0x74, 0x32, 0xda, 0x05, 0x0a, 0x06, 0x45, 0x64, 0x69, 0x74, 0x6f, 0x72, 0x12, 0x2d, 0x0a,
+	0x69, 0x74, 0x32, 0xb9, 0x06, 0x0a, 0x06, 0x45, 0x64, 0x69, 0x74, 0x6f, 0x72, 0x12, 0x2d, 0x0a,
 	0x04, 0x45, 0x64, 0x69, 0x74, 0x12, 0x11, 0x2e, 0x74, 0x65, 0x78, 0x74, 0x2e, 0x45, 0x64, 0x69,
 	0x74, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x12, 0x2e, 0x74, 0x65, 0x78, 0x74, 0x2e,
 	0x45, 0x64, 0x69, 0x74, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x48, 0x0a, 0x09,
@@ -1738,22 +1840,28 @@ var file_rpc_editor_proto_rawDesc = []byte{
 	0x6f, 0x6e, 0x73, 0x65, 0x12, 0x39, 0x0a, 0x08, 0x52, 0x61, 0x77, 0x43, 0x65, 0x6c, 0x6c, 0x73,
 	0x12, 0x15, 0x2e, 0x74, 0x65, 0x78, 0x74, 0x2e, 0x52, 0x61, 0x77, 0x43, 0x65, 0x6c, 0x6c, 0x73,
 	0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x16, 0x2e, 0x74, 0x65, 0x78, 0x74, 0x2e, 0x52,
-	0x61, 0x77, 0x43, 0x65, 0x6c, 0x6c, 0x73, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x32,
-	0x5f, 0x0a, 0x12, 0x45, 0x64, 0x69, 0x74, 0x6f, 0x72, 0x45, 0x76, 0x65, 0x6e, 0x74, 0x48, 0x61,
-	0x6e, 0x64, 0x6c, 0x65, 0x72, 0x12, 0x49, 0x0a, 0x06, 0x48, 0x61, 0x6e, 0x64, 0x6c, 0x65, 0x12,
-	0x1e, 0x2e, 0x74, 0x65, 0x78, 0x74, 0x2e, 0x45, 0x64, 0x69, 0x74, 0x6f, 0x72, 0x45, 0x76, 0x65,
-	0x6e, 0x74, 0x48, 0x61, 0x6e, 0x64, 0x6c, 0x65, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a,
-	0x1f, 0x2e, 0x74, 0x65, 0x78, 0x74, 0x2e, 0x45, 0x64, 0x69, 0x74, 0x6f, 0x72, 0x45, 0x76, 0x65,
-	0x6e, 0x74, 0x48, 0x61, 0x6e, 0x64, 0x6c, 0x65, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65,
-	0x32, 0x5a, 0x0a, 0x0e, 0x43, 0x6f, 0x6d, 0x6d, 0x61, 0x6e, 0x64, 0x48, 0x61, 0x6e, 0x64, 0x6c,
-	0x65, 0x72, 0x12, 0x48, 0x0a, 0x0d, 0x48, 0x61, 0x6e, 0x64, 0x6c, 0x65, 0x43, 0x6f, 0x6d, 0x6d,
-	0x61, 0x6e, 0x64, 0x12, 0x1a, 0x2e, 0x74, 0x65, 0x78, 0x74, 0x2e, 0x48, 0x61, 0x6e, 0x64, 0x6c,
-	0x65, 0x43, 0x6f, 0x6d, 0x6d, 0x61, 0x6e, 0x64, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a,
-	0x1b, 0x2e, 0x74, 0x65, 0x78, 0x74, 0x2e, 0x48, 0x61, 0x6e, 0x64, 0x6c, 0x65, 0x43, 0x6f, 0x6d,
-	0x6d, 0x61, 0x6e, 0x64, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x42, 0x20, 0x5a, 0x1e,
-	0x75, 0x6e, 0x73, 0x74, 0x61, 0x62, 0x6c, 0x65, 0x2e, 0x62, 0x75, 0x69, 0x6c, 0x64, 0x2f, 0x67,
-	0x6f, 0x2d, 0x74, 0x75, 0x69, 0x2f, 0x74, 0x65, 0x78, 0x74, 0x2f, 0x72, 0x70, 0x63, 0x62, 0x06,
-	0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
+	0x61, 0x77, 0x43, 0x65, 0x6c, 0x6c, 0x73, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12,
+	0x5d, 0x0a, 0x14, 0x53, 0x65, 0x74, 0x44, 0x65, 0x66, 0x61, 0x75, 0x6c, 0x74, 0x41, 0x74, 0x74,
+	0x72, 0x69, 0x62, 0x75, 0x74, 0x65, 0x73, 0x12, 0x21, 0x2e, 0x74, 0x65, 0x78, 0x74, 0x2e, 0x53,
+	0x65, 0x74, 0x44, 0x65, 0x66, 0x61, 0x75, 0x6c, 0x74, 0x41, 0x74, 0x74, 0x72, 0x69, 0x62, 0x75,
+	0x74, 0x65, 0x73, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x22, 0x2e, 0x74, 0x65, 0x78,
+	0x74, 0x2e, 0x53, 0x65, 0x74, 0x44, 0x65, 0x66, 0x61, 0x75, 0x6c, 0x74, 0x41, 0x74, 0x74, 0x72,
+	0x69, 0x62, 0x75, 0x74, 0x65, 0x73, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x32, 0x5f,
+	0x0a, 0x12, 0x45, 0x64, 0x69, 0x74, 0x6f, 0x72, 0x45, 0x76, 0x65, 0x6e, 0x74, 0x48, 0x61, 0x6e,
+	0x64, 0x6c, 0x65, 0x72, 0x12, 0x49, 0x0a, 0x06, 0x48, 0x61, 0x6e, 0x64, 0x6c, 0x65, 0x12, 0x1e,
+	0x2e, 0x74, 0x65, 0x78, 0x74, 0x2e, 0x45, 0x64, 0x69, 0x74, 0x6f, 0x72, 0x45, 0x76, 0x65, 0x6e,
+	0x74, 0x48, 0x61, 0x6e, 0x64, 0x6c, 0x65, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x1f,
+	0x2e, 0x74, 0x65, 0x78, 0x74, 0x2e, 0x45, 0x64, 0x69, 0x74, 0x6f, 0x72, 0x45, 0x76, 0x65, 0x6e,
+	0x74, 0x48, 0x61, 0x6e, 0x64, 0x6c, 0x65, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x32,
+	0x5a, 0x0a, 0x0e, 0x43, 0x6f, 0x6d, 0x6d, 0x61, 0x6e, 0x64, 0x48, 0x61, 0x6e, 0x64, 0x6c, 0x65,
+	0x72, 0x12, 0x48, 0x0a, 0x0d, 0x48, 0x61, 0x6e, 0x64, 0x6c, 0x65, 0x43, 0x6f, 0x6d, 0x6d, 0x61,
+	0x6e, 0x64, 0x12, 0x1a, 0x2e, 0x74, 0x65, 0x78, 0x74, 0x2e, 0x48, 0x61, 0x6e, 0x64, 0x6c, 0x65,
+	0x43, 0x6f, 0x6d, 0x6d, 0x61, 0x6e, 0x64, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x1b,
+	0x2e, 0x74, 0x65, 0x78, 0x74, 0x2e, 0x48, 0x61, 0x6e, 0x64, 0x6c, 0x65, 0x43, 0x6f, 0x6d, 0x6d,
+	0x61, 0x6e, 0x64, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x42, 0x20, 0x5a, 0x1e, 0x75,
+	0x6e, 0x73, 0x74, 0x61, 0x62, 0x6c, 0x65, 0x2e, 0x62, 0x75, 0x69, 0x6c, 0x64, 0x2f, 0x67, 0x6f,
+	0x2d, 0x74, 0x75, 0x69, 0x2f, 0x74, 0x65, 0x78, 0x74, 0x2f, 0x72, 0x70, 0x63, 0x62, 0x06, 0x70,
+	0x72, 0x6f, 0x74, 0x6f, 0x33,
 }
 
 var (
@@ -1769,7 +1877,7 @@ func file_rpc_editor_proto_rawDescGZIP() []byte {
 }
 
 var file_rpc_editor_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_rpc_editor_proto_msgTypes = make([]protoimpl.MessageInfo, 27)
+var file_rpc_editor_proto_msgTypes = make([]protoimpl.MessageInfo, 29)
 var file_rpc_editor_proto_goTypes = []interface{}{
 	(EditorEvent_Type)(0),                   // 0: text.EditorEvent.Type
 	(*URI)(nil),                             // 1: text.URI
@@ -1794,72 +1902,77 @@ var file_rpc_editor_proto_goTypes = []interface{}{
 	(*CursorResponse)(nil),                  // 20: text.CursorResponse
 	(*EditorRequest)(nil),                   // 21: text.EditorRequest
 	(*EditorResponse)(nil),                  // 22: text.EditorResponse
-	(*EditorEventHandleRequest)(nil),        // 23: text.EditorEventHandleRequest
-	(*EditorEventHandleResponse)(nil),       // 24: text.EditorEventHandleResponse
-	(*HandleCommandRequest)(nil),            // 25: text.HandleCommandRequest
-	(*HandleCommandResponse)(nil),           // 26: text.HandleCommandResponse
-	(*SetLocationListRequest_Location)(nil), // 27: text.SetLocationListRequest.Location
-	(*rpc.CellRow)(nil),                     // 28: term.CellRow
-	(*rpc.Coordinates)(nil),                 // 29: term.Coordinates
-	(*rpc.Attributes)(nil),                  // 30: term.Attributes
+	(*SetDefaultAttributesRequest)(nil),     // 23: text.SetDefaultAttributesRequest
+	(*SetDefaultAttributesResponse)(nil),    // 24: text.SetDefaultAttributesResponse
+	(*EditorEventHandleRequest)(nil),        // 25: text.EditorEventHandleRequest
+	(*EditorEventHandleResponse)(nil),       // 26: text.EditorEventHandleResponse
+	(*HandleCommandRequest)(nil),            // 27: text.HandleCommandRequest
+	(*HandleCommandResponse)(nil),           // 28: text.HandleCommandResponse
+	(*SetLocationListRequest_Location)(nil), // 29: text.SetLocationListRequest.Location
+	(*rpc.CellRow)(nil),                     // 30: term.CellRow
+	(*rpc.Coordinates)(nil),                 // 31: term.Coordinates
+	(*rpc.Attributes)(nil),                  // 32: term.Attributes
 }
 var file_rpc_editor_proto_depIdxs = []int32{
 	1,  // 0: text.EditRequest.resource_name:type_name -> text.URI
-	28, // 1: text.EditRequest.buffer:type_name -> term.CellRow
+	30, // 1: text.EditRequest.buffer:type_name -> term.CellRow
 	0,  // 2: text.EditorEvent.type:type_name -> text.EditorEvent.Type
 	1,  // 3: text.EditorEvent.resource_name:type_name -> text.URI
-	29, // 4: text.EditorEvent.start:type_name -> term.Coordinates
-	29, // 5: text.EditorEvent.end:type_name -> term.Coordinates
-	29, // 6: text.EditorEvent.from:type_name -> term.Coordinates
-	29, // 7: text.EditorEvent.to:type_name -> term.Coordinates
+	31, // 4: text.EditorEvent.start:type_name -> term.Coordinates
+	31, // 5: text.EditorEvent.end:type_name -> term.Coordinates
+	31, // 6: text.EditorEvent.from:type_name -> term.Coordinates
+	31, // 7: text.EditorEvent.to:type_name -> term.Coordinates
 	0,  // 8: text.EditorSubscribeRequest.type:type_name -> text.EditorEvent.Type
-	27, // 9: text.SetLocationListRequest.locations:type_name -> text.SetLocationListRequest.Location
-	29, // 10: text.EditCellRequest.start:type_name -> term.Coordinates
-	29, // 11: text.EditCellRequest.end:type_name -> term.Coordinates
-	29, // 12: text.EditCellResponse.from:type_name -> term.Coordinates
-	29, // 13: text.EditCellResponse.to:type_name -> term.Coordinates
-	28, // 14: text.RawCellsResponse.rows:type_name -> term.CellRow
-	29, // 15: text.SetCursorRequest.pos:type_name -> term.Coordinates
-	29, // 16: text.CursorResponse.pos:type_name -> term.Coordinates
+	29, // 9: text.SetLocationListRequest.locations:type_name -> text.SetLocationListRequest.Location
+	31, // 10: text.EditCellRequest.start:type_name -> term.Coordinates
+	31, // 11: text.EditCellRequest.end:type_name -> term.Coordinates
+	31, // 12: text.EditCellResponse.from:type_name -> term.Coordinates
+	31, // 13: text.EditCellResponse.to:type_name -> term.Coordinates
+	30, // 14: text.RawCellsResponse.rows:type_name -> term.CellRow
+	31, // 15: text.SetCursorRequest.pos:type_name -> term.Coordinates
+	31, // 16: text.CursorResponse.pos:type_name -> term.Coordinates
 	1,  // 17: text.EditorRequest.resource_name:type_name -> text.URI
-	4,  // 18: text.EditorEventHandleRequest.event:type_name -> text.EditorEvent
-	1,  // 19: text.HandleCommandRequest.resource_name:type_name -> text.URI
-	29, // 20: text.HandleCommandRequest.content:type_name -> term.Coordinates
-	29, // 21: text.HandleCommandRequest.window:type_name -> term.Coordinates
-	29, // 22: text.SetLocationListRequest.Location.from:type_name -> term.Coordinates
-	29, // 23: text.SetLocationListRequest.Location.to:type_name -> term.Coordinates
-	30, // 24: text.SetLocationListRequest.Location.attr:type_name -> term.Attributes
-	2,  // 25: text.Editor.Edit:input_type -> text.EditRequest
-	5,  // 26: text.Editor.Subscribe:input_type -> text.EditorSubscribeRequest
-	15, // 27: text.Editor.Register:input_type -> text.RegisterCommandRequest
-	17, // 28: text.Editor.SetCursor:input_type -> text.SetCursorRequest
-	19, // 29: text.Editor.Cursor:input_type -> text.CursorRequest
-	21, // 30: text.Editor.Editor:input_type -> text.EditorRequest
-	7,  // 31: text.Editor.SetLocationList:input_type -> text.SetLocationListRequest
-	13, // 32: text.Editor.MoveToNextLocation:input_type -> text.MoveToLocationRequest
-	13, // 33: text.Editor.MoveToPrevLocation:input_type -> text.MoveToLocationRequest
-	9,  // 34: text.Editor.EditCell:input_type -> text.EditCellRequest
-	11, // 35: text.Editor.RawCells:input_type -> text.RawCellsRequest
-	23, // 36: text.EditorEventHandler.Handle:input_type -> text.EditorEventHandleRequest
-	25, // 37: text.CommandHandler.HandleCommand:input_type -> text.HandleCommandRequest
-	3,  // 38: text.Editor.Edit:output_type -> text.EditResponse
-	6,  // 39: text.Editor.Subscribe:output_type -> text.EditorSubscribeResponse
-	16, // 40: text.Editor.Register:output_type -> text.RegisterCommandResponse
-	18, // 41: text.Editor.SetCursor:output_type -> text.SetCursorResponse
-	20, // 42: text.Editor.Cursor:output_type -> text.CursorResponse
-	22, // 43: text.Editor.Editor:output_type -> text.EditorResponse
-	8,  // 44: text.Editor.SetLocationList:output_type -> text.SetLocationListResponse
-	14, // 45: text.Editor.MoveToNextLocation:output_type -> text.MoveToLocationResponse
-	14, // 46: text.Editor.MoveToPrevLocation:output_type -> text.MoveToLocationResponse
-	10, // 47: text.Editor.EditCell:output_type -> text.EditCellResponse
-	12, // 48: text.Editor.RawCells:output_type -> text.RawCellsResponse
-	24, // 49: text.EditorEventHandler.Handle:output_type -> text.EditorEventHandleResponse
-	26, // 50: text.CommandHandler.HandleCommand:output_type -> text.HandleCommandResponse
-	38, // [38:51] is the sub-list for method output_type
-	25, // [25:38] is the sub-list for method input_type
-	25, // [25:25] is the sub-list for extension type_name
-	25, // [25:25] is the sub-list for extension extendee
-	0,  // [0:25] is the sub-list for field type_name
+	32, // 18: text.SetDefaultAttributesRequest.attributes:type_name -> term.Attributes
+	4,  // 19: text.EditorEventHandleRequest.event:type_name -> text.EditorEvent
+	1,  // 20: text.HandleCommandRequest.resource_name:type_name -> text.URI
+	31, // 21: text.HandleCommandRequest.content:type_name -> term.Coordinates
+	31, // 22: text.HandleCommandRequest.window:type_name -> term.Coordinates
+	31, // 23: text.SetLocationListRequest.Location.from:type_name -> term.Coordinates
+	31, // 24: text.SetLocationListRequest.Location.to:type_name -> term.Coordinates
+	32, // 25: text.SetLocationListRequest.Location.attr:type_name -> term.Attributes
+	2,  // 26: text.Editor.Edit:input_type -> text.EditRequest
+	5,  // 27: text.Editor.Subscribe:input_type -> text.EditorSubscribeRequest
+	15, // 28: text.Editor.Register:input_type -> text.RegisterCommandRequest
+	17, // 29: text.Editor.SetCursor:input_type -> text.SetCursorRequest
+	19, // 30: text.Editor.Cursor:input_type -> text.CursorRequest
+	21, // 31: text.Editor.Editor:input_type -> text.EditorRequest
+	7,  // 32: text.Editor.SetLocationList:input_type -> text.SetLocationListRequest
+	13, // 33: text.Editor.MoveToNextLocation:input_type -> text.MoveToLocationRequest
+	13, // 34: text.Editor.MoveToPrevLocation:input_type -> text.MoveToLocationRequest
+	9,  // 35: text.Editor.EditCell:input_type -> text.EditCellRequest
+	11, // 36: text.Editor.RawCells:input_type -> text.RawCellsRequest
+	23, // 37: text.Editor.SetDefaultAttributes:input_type -> text.SetDefaultAttributesRequest
+	25, // 38: text.EditorEventHandler.Handle:input_type -> text.EditorEventHandleRequest
+	27, // 39: text.CommandHandler.HandleCommand:input_type -> text.HandleCommandRequest
+	3,  // 40: text.Editor.Edit:output_type -> text.EditResponse
+	6,  // 41: text.Editor.Subscribe:output_type -> text.EditorSubscribeResponse
+	16, // 42: text.Editor.Register:output_type -> text.RegisterCommandResponse
+	18, // 43: text.Editor.SetCursor:output_type -> text.SetCursorResponse
+	20, // 44: text.Editor.Cursor:output_type -> text.CursorResponse
+	22, // 45: text.Editor.Editor:output_type -> text.EditorResponse
+	8,  // 46: text.Editor.SetLocationList:output_type -> text.SetLocationListResponse
+	14, // 47: text.Editor.MoveToNextLocation:output_type -> text.MoveToLocationResponse
+	14, // 48: text.Editor.MoveToPrevLocation:output_type -> text.MoveToLocationResponse
+	10, // 49: text.Editor.EditCell:output_type -> text.EditCellResponse
+	12, // 50: text.Editor.RawCells:output_type -> text.RawCellsResponse
+	24, // 51: text.Editor.SetDefaultAttributes:output_type -> text.SetDefaultAttributesResponse
+	26, // 52: text.EditorEventHandler.Handle:output_type -> text.EditorEventHandleResponse
+	28, // 53: text.CommandHandler.HandleCommand:output_type -> text.HandleCommandResponse
+	40, // [40:54] is the sub-list for method output_type
+	26, // [26:40] is the sub-list for method input_type
+	26, // [26:26] is the sub-list for extension type_name
+	26, // [26:26] is the sub-list for extension extendee
+	0,  // [0:26] is the sub-list for field type_name
 }
 
 func init() { file_rpc_editor_proto_init() }
@@ -2133,7 +2246,7 @@ func file_rpc_editor_proto_init() {
 			}
 		}
 		file_rpc_editor_proto_msgTypes[22].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*EditorEventHandleRequest); i {
+			switch v := v.(*SetDefaultAttributesRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -2145,7 +2258,7 @@ func file_rpc_editor_proto_init() {
 			}
 		}
 		file_rpc_editor_proto_msgTypes[23].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*EditorEventHandleResponse); i {
+			switch v := v.(*SetDefaultAttributesResponse); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -2157,7 +2270,7 @@ func file_rpc_editor_proto_init() {
 			}
 		}
 		file_rpc_editor_proto_msgTypes[24].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*HandleCommandRequest); i {
+			switch v := v.(*EditorEventHandleRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -2169,7 +2282,7 @@ func file_rpc_editor_proto_init() {
 			}
 		}
 		file_rpc_editor_proto_msgTypes[25].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*HandleCommandResponse); i {
+			switch v := v.(*EditorEventHandleResponse); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -2181,6 +2294,30 @@ func file_rpc_editor_proto_init() {
 			}
 		}
 		file_rpc_editor_proto_msgTypes[26].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*HandleCommandRequest); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_rpc_editor_proto_msgTypes[27].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*HandleCommandResponse); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_rpc_editor_proto_msgTypes[28].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*SetLocationListRequest_Location); i {
 			case 0:
 				return &v.state
@@ -2199,7 +2336,7 @@ func file_rpc_editor_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: file_rpc_editor_proto_rawDesc,
 			NumEnums:      1,
-			NumMessages:   27,
+			NumMessages:   29,
 			NumExtensions: 0,
 			NumServices:   3,
 		},

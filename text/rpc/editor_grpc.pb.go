@@ -36,6 +36,7 @@ type EditorClient interface {
 	EditCell(ctx context.Context, in *EditCellRequest, opts ...grpc.CallOption) (*EditCellResponse, error)
 	// View
 	RawCells(ctx context.Context, in *RawCellsRequest, opts ...grpc.CallOption) (*RawCellsResponse, error)
+	SetDefaultAttributes(ctx context.Context, in *SetDefaultAttributesRequest, opts ...grpc.CallOption) (*SetDefaultAttributesResponse, error)
 }
 
 type editorClient struct {
@@ -145,6 +146,15 @@ func (c *editorClient) RawCells(ctx context.Context, in *RawCellsRequest, opts .
 	return out, nil
 }
 
+func (c *editorClient) SetDefaultAttributes(ctx context.Context, in *SetDefaultAttributesRequest, opts ...grpc.CallOption) (*SetDefaultAttributesResponse, error) {
+	out := new(SetDefaultAttributesResponse)
+	err := c.cc.Invoke(ctx, "/text.Editor/SetDefaultAttributes", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // EditorServer is the server API for Editor service.
 // All implementations must embed UnimplementedEditorServer
 // for forward compatibility
@@ -163,6 +173,7 @@ type EditorServer interface {
 	EditCell(context.Context, *EditCellRequest) (*EditCellResponse, error)
 	// View
 	RawCells(context.Context, *RawCellsRequest) (*RawCellsResponse, error)
+	SetDefaultAttributes(context.Context, *SetDefaultAttributesRequest) (*SetDefaultAttributesResponse, error)
 	mustEmbedUnimplementedEditorServer()
 }
 
@@ -202,6 +213,9 @@ func (UnimplementedEditorServer) EditCell(context.Context, *EditCellRequest) (*E
 }
 func (UnimplementedEditorServer) RawCells(context.Context, *RawCellsRequest) (*RawCellsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RawCells not implemented")
+}
+func (UnimplementedEditorServer) SetDefaultAttributes(context.Context, *SetDefaultAttributesRequest) (*SetDefaultAttributesResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SetDefaultAttributes not implemented")
 }
 func (UnimplementedEditorServer) mustEmbedUnimplementedEditorServer() {}
 
@@ -414,6 +428,24 @@ func _Editor_RawCells_Handler(srv interface{}, ctx context.Context, dec func(int
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Editor_SetDefaultAttributes_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SetDefaultAttributesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(EditorServer).SetDefaultAttributes(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/text.Editor/SetDefaultAttributes",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(EditorServer).SetDefaultAttributes(ctx, req.(*SetDefaultAttributesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // Editor_ServiceDesc is the grpc.ServiceDesc for Editor service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -464,6 +496,10 @@ var Editor_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "RawCells",
 			Handler:    _Editor_RawCells_Handler,
+		},
+		{
+			MethodName: "SetDefaultAttributes",
+			Handler:    _Editor_SetDefaultAttributes_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

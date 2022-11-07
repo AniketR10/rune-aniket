@@ -262,6 +262,41 @@ func TestClientServerIntegration(t *testing.T) {
 		wg.Wait()
 	})
 
+	t.Run("SetDefaultAttributes sets the default attrs of the remote editor", func(t *testing.T) {
+		var wg sync.WaitGroup
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+		b := proto.NewDialBroker()
+		ed := text.NewMockEditor(ctrl)
+		expectInitialServerSubscribe(t, ed)
+		s := NewServer(b, ed, new(sync.Mutex))
+
+		client, closeFn := setupIntTest(t, b, s)
+		defer closeFn()
+
+		expectEdit(t, ed, uri, "")
+		h, err := client.Edit(uri, cell.NewBuffer())
+		require.NoError(t, err)
+
+		expectedAttrs := term.Attributes{
+			Fg: term.ColorWhite | term.AttrUnderline,
+			Bg: term.ColorCyan | term.AttrBold,
+		}
+
+		ed.EXPECT().SetDefaultAttributes(gomock.Any(), gomock.Any()).
+			DoAndReturn(func(h text.Handler, attrs term.Attributes) error {
+				defer wg.Done()
+				assert.Equal(t, expectedAttrs, attrs)
+				return nil
+			}).Times(1)
+
+		wg.Add(1)
+		err = client.SetDefaultAttributes(h, expectedAttrs)
+		require.NoError(t, err)
+
+		wg.Wait()
+	})
+
 	t.Run("Writer returns a Writer that is able to modify underlying buffer", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()

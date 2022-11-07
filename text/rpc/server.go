@@ -457,6 +457,29 @@ func (s *Server) MoveToPrevLocation(ctx context.Context, in *MoveToLocationReque
 	return s.moveToLocation(ctx, in, false)
 }
 
+// SetDefaultAttributes satisfies EditorServer
+func (s *Server) SetDefaultAttributes(ctx context.Context, in *SetDefaultAttributesRequest) (
+	*SetDefaultAttributesResponse, error,
+) {
+	handlerID := in.GetHandlerId()
+	attrs := in.GetAttributes()
+
+	s.editor.Lock()
+	defer s.editor.Unlock()
+
+	h, ok := s.getHandler("SetDefaultAttributes", handlerID)
+	if !ok {
+		return nil, errHandlerNotFound
+	}
+
+	err := s.editor.SetDefaultAttributes(h, attrs.ToModel())
+	if err != nil {
+		return nil, err
+	}
+
+	return new(SetDefaultAttributesResponse), nil
+}
+
 // SetCursor satisfies EditorServer
 func (s *Server) SetCursor(ctx context.Context, in *SetCursorRequest) (
 	*SetCursorResponse, error,

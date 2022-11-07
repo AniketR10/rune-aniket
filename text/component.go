@@ -14,7 +14,6 @@ import (
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/cell"
-	
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/workspace"
@@ -837,6 +836,11 @@ func (c *Component) Tab(resource workspace.URI, name string, h browser.Handler) 
 
 	t = c.newTab(resource, name, h, nil)
 	return t, nil
+}
+
+// SetDefaultAttributes satisfies text.Editor.
+func (c *Component) SetDefaultAttributes(h Handler, attr term.Attributes) error {
+	return c.ed.SetDefaultAttributes(h, attr)
 }
 
 // Close closes all resources associated with this Component.

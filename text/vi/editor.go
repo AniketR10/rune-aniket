@@ -49,6 +49,11 @@ func (e *viEditor) SubscribeEditorEvents(
 	return nil
 }
 
+func (e *viEditor) SetDefaultAttributes(h text.Handler, attrs term.Attributes) error {
+	e.Publisher.Handler(h).(*Vi).SetDefaultAttributes(attrs)
+	return nil
+}
+
 func (e viEditor) SetLocationList(h text.Handler, ID string, loc text.LocationList) error {
 	e.Publisher.Handler(h).(*Vi).SetLocationList(ID, loc)
 	return nil

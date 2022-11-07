@@ -12,7 +12,7 @@ import (
 	"google.golang.org/grpc"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/cell"
-	
+
 	"unstable.build/go-tui/proto"
 	"unstable.build/go-tui/term"
 	termpb "unstable.build/go-tui/term/rpc"
@@ -299,9 +299,26 @@ func (c *Client) CellEditor(h text.Handler) text.CellEditor {
 func (c *Client) CellView(h text.Handler) text.CellView {
 	token, ok := h.(Token)
 	if !ok {
-		panic("SetLocationList: invalid Handler argument")
+		panic("CellView: invalid Handler argument")
 	}
 	return clientView{client: c, handlerID: uint32(token.ID)}
+}
+
+// SetDefaultAttributes satisfies text.Editor.
+func (c *Client) SetDefaultAttributes(h text.Handler, attrs term.Attributes) error {
+	ctx := context.Background()
+	token, ok := h.(Token)
+	if !ok {
+		panic("SetDefaultAttributs: invalid Handler argument")
+	}
+	var rpcAttrs termpb.Attributes
+	rpcAttrs.FromModel(attrs)
+	req := SetDefaultAttributesRequest{
+		HandlerId:  uint32(token.ID),
+		Attributes: &rpcAttrs,
+	}
+	_, err := c.ed.SetDefaultAttributes(ctx, &req)
+	return err
 }
 
 // Close closes all resources associated with this client.

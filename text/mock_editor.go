@@ -122,6 +122,12 @@ func (e *testEditor) SubscribeCommand(cmd string, h CommandHandler) error {
 	return nil
 }
 
+func (e *testEditor) SetDefaultAttributes(h Handler, attr term.Attributes) error {
+	h.(*TestEditorHandler).Attributes.Fg = attr.Fg
+	h.(*TestEditorHandler).Attributes.Bg = attr.Bg
+	return nil
+}
+
 func (e *testEditor) SubscribeEditorEvents(
 	evs []EventType, sub EventHandler,
 ) error {

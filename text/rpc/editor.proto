@@ -125,6 +125,14 @@ message EditorResponse {
 	uint32 handler_id = 1;
 }
 
+message SetDefaultAttributesRequest {
+	uint32 handler_id = 1;
+	term.Attributes attributes = 2;
+}
+
+message SetDefaultAttributesResponse {
+}
+
 service Editor {
 	rpc Edit(EditRequest) returns (EditResponse);
 	rpc Subscribe(EditorSubscribeRequest) returns (EditorSubscribeResponse);
@@ -144,6 +152,8 @@ service Editor {
 
 	// View
 	rpc RawCells(RawCellsRequest) returns (RawCellsResponse);
+
+	rpc SetDefaultAttributes(SetDefaultAttributesRequest) returns (SetDefaultAttributesResponse);
 }
 
 message EditorEventHandleRequest {
