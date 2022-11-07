@@ -208,17 +208,13 @@ func (s *ClipboardManager) SetRegister(registerID string, r ClipboardRegister) e
 
 // Close releases all resources associated with this ClipboardManager.
 func (s *ClipboardManager) Close() (ret error) {
+	if s.s != nil {
+		s.s.Close()
+	}
 	for _, r := range s.registers {
 		if err := r.Close(); err != nil {
 			ret = multierr.Append(ret, err)
 		}
-	}
-
-	if s.s != nil {
-		// avoid deadlock in case this goroutine
-		// is holding the resource mutex passed to the
-		// server
-		go s.s.Close()
 	}
 
 	return

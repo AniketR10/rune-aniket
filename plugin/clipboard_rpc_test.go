@@ -37,7 +37,9 @@ func setupClipboardIntTest(
 	closeFn = func() {
 		client.(*clipboardClient).Close()
 		grpcServer.Stop()
+		srv.locker.Lock()
 		srv.Close()
+		srv.locker.Unlock()
 		lis.Close()
 	}
 	return

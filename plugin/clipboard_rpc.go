@@ -146,9 +146,6 @@ func (s *clipboardServer) SetRegister(ctx context.Context, req *pluginpb.SetRegi
 }
 
 func (s *clipboardServer) Close() (ret error) {
-	s.locker.Lock()
-	defer s.locker.Unlock()
-
 	if s.c == nil {
 		return
 	}
