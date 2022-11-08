@@ -155,7 +155,7 @@ type lspEditorHandler struct {
 	tabspaces            int
 	semanticTypesAttr    map[string]term.Attributes
 	diagnosticAttr       map[protocol.DiagnosticSeverity]term.Attributes
-	enableSemanticTokens bool
+	enableSemanticTokens map[string]bool
 	semanticTokensListID string
 	diagnosticListID     string
 	rpcTimeout           time.Duration
@@ -546,14 +546,28 @@ func newLspHandler(
 		ret.semanticTokensListID = defaultSemanticTokensListID
 	}
 
-	ret.enableSemanticTokens, err = pconfig.GetBool("enable_semantic_tokens")
+	// default is disabled for all
+	ret.enableSemanticTokens = make(map[string]bool)
+
+	var enableSemanticTokensIfc map[string]interface{}
+	enableSemanticTokensIfc, err = pconfig.GetMap("enable_semantic_tokens")
 	if err != nil {
 		if err != config.ErrNotFound {
 			configErr = multierr.Append(configErr,
 				fmt.Errorf("failed to get 'enable_semantic_tokens' from config: %v", err))
 			return nil, err
 		}
-		// default should be false
+	} else {
+		for k, v := range enableSemanticTokensIfc {
+			b, ok := v.(bool)
+			if !ok {
+				configErr = multierr.Append(configErr,
+					fmt.Errorf("failed to get 'enable_semantic_tokens' from config: "+
+						"expected map of string to bool, found %q to be %v", k, v))
+				continue
+			}
+			ret.enableSemanticTokens[k] = b
+		}
 	}
 
 	ret.diagnosticListID, err = pconfig.GetString("diagnostic_list_id")
@@ -869,7 +883,10 @@ func (h *lspEditorHandler) semanticTokensFull(
 	ctx context.Context, srv execServer,
 	f *file, cells [][]term.Cell, content string,
 ) error {
-	if !h.enableSemanticTokens {
+	ext := filepath.Ext(f.uri.Path())
+	if enabled, ok := h.enableSemanticTokens[ext]; !ok || !enabled {
+		log.Debugf("lspEditorHandler.Server.SemanticTokensFull(%s): disabled for file with extension %s",
+			f.uri, ext)
 		return nil
 	}
 	// NOTE: gopls does not pass semanticTokensProvider

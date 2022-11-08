@@ -71,7 +71,9 @@ func newTestLspHandler(
 	ret.files = make(map[string]*file)
 	ret.servers = map[string]execServer{".go": {langID: ".go", srv: server}}
 	ret.semanticTokensListID = defaultSemanticTokensListID
-	ret.enableSemanticTokens = true
+	ret.enableSemanticTokens = map[string]bool{
+		".go": true,
+	}
 	ret.diagnosticListID = defaultDiagnosticListID
 	ret.semanticTypesAttr = defaultSemanticTypeAttr
 	ret.diagnosticAttr = defaultDiagnosticAttr
