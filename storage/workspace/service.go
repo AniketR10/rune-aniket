@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
+	"net/url"
 	"os"
 	"reflect"
 
@@ -162,7 +163,7 @@ func (s *service) read(f workspace.File, doc interface{}) error {
 }
 
 func (s *service) getFileName(id string) string {
-	return id
+	return url.PathEscape(id)
 }
 
 func (s *service) create(ctx context.Context, ID string, doc interface{}, openFlags int) error {

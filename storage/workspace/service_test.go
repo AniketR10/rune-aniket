@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/ernestrc/blue/document"
@@ -14,6 +15,7 @@ import (
 	"github.com/ernestrc/blue/encoding/json"
 	"github.com/ernestrc/blue/encoding/toml"
 	"github.com/ernestrc/blue/encoding/yaml"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"unstable.build/go-tui/config"
 	"unstable.build/go-tui/workspace"
@@ -118,4 +120,48 @@ func TestSetOverrideIssue(t *testing.T) {
 	require.NoError(t, svc.Get(context.Background(), "1234", &temp))
 	require.NoError(t, svc.Set(context.Background(), "1234", &testStruct{Content: []string{"a"}}))
 	require.NoError(t, svc.Get(context.Background(), "1234", &temp))
+}
+
+func TestEscapeBoundaries(t *testing.T) {
+	type testStruct struct {
+		Content []string
+	}
+
+	name, err := ioutil.TempDir("", "workspace_document_service_test")
+	require.NoError(t, err)
+
+	aDir := filepath.Join(name, "a")
+	require.NoError(t, os.MkdirAll(aDir, 0777))
+	uriA, err := workspace.ParseURI(filepath.Join("file://", aDir))
+	require.NoError(t, err)
+	schemeA, err := workspace.NewFileScheme(config.NopConfig(), uriA)
+	require.NoError(t, err)
+	svcA, err := NewWorkspaceService(schemeA, toml.Marshaler())
+	require.NoError(t, err)
+	require.NoError(t, svcA.Set(context.Background(), "1234", &testStruct{Content: []string{
+		"SECRET",
+	}}))
+
+	bDir := filepath.Join(name, "b")
+	require.NoError(t, os.MkdirAll(bDir, 0777))
+	uriB, err := workspace.ParseURI(filepath.Join("file://", bDir))
+	require.NoError(t, err)
+	schemeB, err := workspace.NewFileScheme(config.NopConfig(), uriB)
+	require.NoError(t, err)
+	svcB, err := NewWorkspaceService(schemeB, toml.Marshaler())
+	require.NoError(t, err)
+
+	// its not able to read
+	var temp testStruct
+	require.Error(t, svcB.Get(context.Background(), "../a/1234", &temp))
+
+	// its not able to write
+	require.NoError(t, svcB.Set(context.Background(), "../a/1234", &testStruct{Content: []string{
+		"OH BOY",
+	}}))
+	require.NoError(t, svcA.Get(context.Background(), "1234", &temp))
+	assert.Equal(t, []string{"SECRET"}, temp.Content)
+
+	require.NoError(t, svcB.Get(context.Background(), "../a/1234", &temp))
+	assert.Equal(t, []string{"OH BOY"}, temp.Content)
 }
