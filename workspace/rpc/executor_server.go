@@ -2,6 +2,7 @@ package rpc
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"sync"
@@ -10,7 +11,7 @@ import (
 	"github.com/ernestrc/blue/logging"
 	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
-	
+
 	"unstable.build/go-tui/workspace"
 )
 
@@ -112,7 +113,11 @@ func (s *executorServer) StderrPipe(ctx context.Context, req *StdioPipeRequest) 
 		return nil, err
 	}
 	resp := new(StdioPipeResponse)
-	handlerID := s.addHandle(workspace.Pid(pid), &syncReader{reader: pipe})
+	handlerID, err := s.addHandle(workspace.Pid(pid), &syncReader{reader: pipe})
+	if err != nil {
+		_ = pipe.Close()
+		return nil, err
+	}
 	resp.HandlerId = handlerID
 	return resp, nil
 }
@@ -126,7 +131,11 @@ func (s *executorServer) StdoutPipe(ctx context.Context, req *StdioPipeRequest) 
 		return nil, err
 	}
 	resp := new(StdioPipeResponse)
-	handlerID := s.addHandle(workspace.Pid(pid), &syncReader{reader: pipe})
+	handlerID, err := s.addHandle(workspace.Pid(pid), &syncReader{reader: pipe})
+	if err != nil {
+		_ = pipe.Close()
+		return nil, err
+	}
 	resp.HandlerId = handlerID
 	return resp, nil
 }
@@ -140,7 +149,11 @@ func (s *executorServer) StdinPipe(ctx context.Context, req *StdioPipeRequest) (
 		return nil, err
 	}
 	resp := new(StdioPipeResponse)
-	handlerID := s.addHandle(workspace.Pid(pid), &syncWriter{writer: pipe})
+	handlerID, err := s.addHandle(workspace.Pid(pid), &syncWriter{writer: pipe})
+	if err != nil {
+		_ = pipe.Close()
+		return nil, err
+	}
 	resp.HandlerId = handlerID
 	return resp, nil
 }
@@ -214,16 +227,20 @@ func (s *executorServer) log(
 		Logf(level, msg, args...)
 }
 
-func (s *executorServer) addHandle(pid workspace.Pid, closer io.Closer) int32 {
+func (s *executorServer) addHandle(pid workspace.Pid, closer io.Closer) (int32, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	s.nextHandlerID++
 	res := executorResource{closer: closer, pid: pid}
+	if s.resources == nil {
+		return 0, errors.New("server is closing")
+	}
+
 	s.resources[s.nextHandlerID] = res
 	s.log(log.TraceLevel, "added resource %#v with handlerID %d",
 		res, s.nextHandlerID)
-	return s.nextHandlerID
+	return s.nextHandlerID, nil
 }
 
 func (s *executorServer) removeHandle(handlerID int32) {

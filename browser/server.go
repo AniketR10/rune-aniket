@@ -2,6 +2,7 @@ package browser
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -11,7 +12,7 @@ import (
 	"github.com/ernestrc/blue/logging"
 	log "github.com/sirupsen/logrus"
 	browserpb "unstable.build/go-tui/browser/rpc"
-	
+
 	handlerpb "unstable.build/go-tui/handler/rpc"
 	"unstable.build/go-tui/proto"
 	"unstable.build/go-tui/term"
@@ -148,6 +149,13 @@ func (s *Server) dialHandler(handlerID uint64) (Handler, error) {
 	s.browser.Lock()
 	defer s.browser.Unlock()
 
+	if s.clients == nil {
+		_ = cc.Close()
+		_ = handlerConn.Close()
+		cancelFn()
+		return nil, errors.New("server is closing")
+	}
+
 	s.clients[uint64(handlerID)] = &handlerClientResource{
 		handlerConn:   handlerConn,
 		client:        cc,
@@ -169,6 +177,12 @@ func (s *Server) serveWindow(win Window) (uint64, error) {
 		})
 	if err != nil {
 		return 0, err
+	}
+
+	if s.servers == nil {
+		srv.Stop()
+		_ = win.Close()
+		return 0, errors.New("server is closing")
 	}
 
 	s.servers[win.id()] = &windowServerResource{
@@ -390,6 +404,10 @@ func (s *Server) Open(
 	h, err := s.browser.Open(uri)
 	if err != nil {
 		return nil, err
+	}
+
+	if s.opened == nil {
+		return nil, errors.New("server is closing")
 	}
 
 	handlerID := s.ensureAvailable(h)

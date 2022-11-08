@@ -2,6 +2,7 @@ package plugin
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"sync"
@@ -119,6 +120,10 @@ func (s *clipboardServer) dialRegister(handlerID uint32) (ClipboardRegister, err
 	defer s.locker.Unlock()
 
 	client.cancelMonitor = cancelFn
+	if s.clients == nil {
+		_ = client.Close()
+		return nil, errors.New("server is closing")
+	}
 	s.clients[uint64(handlerID)] = client
 
 	return client, nil
@@ -155,6 +160,7 @@ func (s *clipboardServer) Close() (ret error) {
 			ret = multierr.Append(ret, err)
 		}
 	}
+	s.clients = nil
 
 	err := s.defaultRegisterServer.Close()
 	if err != nil {

@@ -227,6 +227,12 @@ func (s *Server) dialHandler(handlerID uint32) (text.EventHandler, error) {
 
 	h := &serverEventHandler{s: s, eventHandlerClient: client}
 
+	if s.clients == nil {
+		_ = handlerConn.Close()
+		_ = h.Close()
+		cancelFn()
+		return nil, errors.New("server is closing")
+	}
 	s.clients[uint64(handlerID)] = &handlerClientResource{
 		handlerConn:   handlerConn,
 		client:        h,
@@ -268,6 +274,10 @@ func (s *Server) dialCommandHandler(handlerID uint32) (text.CommandHandler, erro
 
 	s.editor.Lock()
 	defer s.editor.Unlock()
+
+	if s.clients == nil {
+		return nil, errors.New("server is closing")
+	}
 
 	s.clients[uint64(handlerID)] = &commandClientResource{
 		client:        client,

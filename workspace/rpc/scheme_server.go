@@ -95,19 +95,23 @@ func (s *sharedRPCImpl) Open(ctx context.Context, req *OpenRequest) (
 	*OpenResponse, error,
 ) {
 	filename := req.GetFilename()
-	f, err := s.scheme.Open(filename, getOpenRequestFlag(req), os.FileMode(req.GetMode()))
-	if err != nil {
-		if err.IsExist || err.IsNotExist || err.IsPermission {
+	f, werr := s.scheme.Open(filename, getOpenRequestFlag(req), os.FileMode(req.GetMode()))
+	if werr != nil {
+		if werr.IsExist || werr.IsNotExist || werr.IsPermission {
 			resp := new(OpenResponse)
-			resp.IsExistErr = err.IsExist
-			resp.IsNotExistErr = err.IsNotExist
-			resp.IsPermissionErr = err.IsPermission
+			resp.IsExistErr = werr.IsExist
+			resp.IsNotExistErr = werr.IsNotExist
+			resp.IsPermissionErr = werr.IsPermission
 			return resp, nil
 		}
-		return nil, err.ToError()
+		return nil, werr.ToError()
 	}
 
-	handlerID := s.addHandle(workspace.Pid(-1), &syncFile{file: f})
+	handlerID, err := s.addHandle(workspace.Pid(-1), &syncFile{file: f})
+	if err != nil {
+		_ = f.Close()
+		return nil, err
+	}
 	resp := new(OpenResponse)
 	resp.HandlerId = handlerID
 	resp.Filename = f.Name()
@@ -146,7 +150,10 @@ func (s *sharedRPCImpl) NewPty(ctx context.Context, req *NewPtyRequest) (
 	if err != nil {
 		return nil, fmt.Errorf("SetPtySize: %s", err)
 	}
-	master := s.addHandle(pty.Pid, pty.Master)
+	master, err := s.addHandle(pty.Pid, pty.Master)
+	if err != nil {
+		return nil, err
+	}
 	ret := &NewPtyResponse{
 		Pid:    int32(pty.Pid),
 		Master: master,

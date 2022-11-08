@@ -106,12 +106,12 @@ func (s *proxySchemeServerImpl) Close() (ret error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	s.srv.Stop()
 	for _, s := range s.servers {
 		if err := s.Close(); err != nil {
 			ret = multierr.Append(ret, err)
 		}
 	}
-	s.srv.Stop()
 	return nil
 }
 
