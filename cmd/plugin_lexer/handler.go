@@ -112,6 +112,9 @@ func newSyntaxHandler(
 		chromaStyles = make(map[string]interface{})
 	}
 	ret.styles = make(map[string]*chroma.Style)
+	ret.styles[".sixrc"] = styles.Get("doom-one")
+	ret.styles[".sixdevrc"] = styles.Get("doom-one")
+
 	for ext, styleIfc := range chromaStyles {
 		styleStr, ok := styleIfc.(string)
 		if !ok {
@@ -147,6 +150,11 @@ func newSyntaxHandler(
 			}
 		}
 	}
+
+	err = setupConfigLexer()
+	if err != nil {
+		log.Warningf("Could not setup .sixrc config lexer")
+	}
 	log.Debugf("Using tabspaces %d:", ret.tabspaces)
 	return ret, nil
 }
@@ -181,6 +189,50 @@ func (h *syntaxHandler) HandleCommand(ctx context.Context, cmd text.Command) (
 	exit bool, err error,
 ) {
 	return
+}
+
+func (h *syntaxHandler) handleOpen(ev text.Event) error {
+	h.files[ev.URI.String()] = h.newFile(ev)
+	ext := filepath.Ext(ev.URI.Path())
+	if _, ok := h.lexers[ext]; !ok {
+		lexer := lexers.Match(ev.URI.Path())
+		if lexer == nil {
+			lexer = lexers.Fallback
+		}
+		h.lexers[ext] = lexer
+		log.Debugf("Loaded lexer %v for extension %s", lexer, ext)
+	}
+	if h.setBackgroundAttr {
+		h.setBackground(ev.URI, ev.Resource)
+	}
+	return h.checkSyntax(ev)
+}
+
+func (h *syntaxHandler) handleEdit(ev text.Event) error {
+	err := h.editFile(ev)
+	if err != nil {
+		return err
+	}
+	return h.checkSyntax(ev)
+}
+
+func (h *syntaxHandler) checkSyntax(ev text.Event) error {
+	f, ok := h.files[ev.URI.String()]
+	if !ok {
+		return fmt.Errorf("could not find buffer for file %s", ev.URI.String())
+	}
+	ext := filepath.Ext(ev.URI.Path())
+	lexer, ok := h.lexers[ext]
+	if !ok {
+		log.Warningf("lexer for %s not found. Using fallback..", ext)
+		lexer = lexers.Fallback
+	}
+	iterator, err := lexer.Tokenise(nil, f.String())
+	if err != nil {
+		log.Errorf("lexer.Tokenise(%s): %v", ev.URI.Path(), err)
+		return err
+	}
+	return h.setTokenPositions(f, iterator)
 }
 
 func (h *syntaxHandler) setTokenPositions(f *file, it chroma.Iterator) error {
@@ -260,50 +312,6 @@ func (h *syntaxHandler) editFile(ev text.Event) error {
 	}
 	f.Edit(ev.Start, ev.End, ev.Content)
 	return nil
-}
-
-func (h *syntaxHandler) handleOpen(ev text.Event) error {
-	h.files[ev.URI.String()] = h.newFile(ev)
-	ext := filepath.Ext(ev.URI.Path())
-	if _, ok := h.lexers[ext]; !ok {
-		lexer := lexers.Match(ev.URI.Path())
-		if lexer == nil {
-			lexer = lexers.Fallback
-		}
-		h.lexers[ext] = lexer
-		log.Debugf("Loaded lexer %v for extension %s", lexer, ext)
-	}
-	if h.setBackgroundAttr {
-		h.setBackground(ev.URI, ev.Resource)
-	}
-	return h.checkSyntax(ev)
-}
-
-func (h *syntaxHandler) handleEdit(ev text.Event) error {
-	err := h.editFile(ev)
-	if err != nil {
-		return err
-	}
-	return h.checkSyntax(ev)
-}
-
-func (h *syntaxHandler) checkSyntax(ev text.Event) error {
-	f, ok := h.files[ev.URI.String()]
-	if !ok {
-		return fmt.Errorf("could not find buffer for file %s", ev.URI.String())
-	}
-	ext := filepath.Ext(ev.URI.Path())
-	lexer, ok := h.lexers[ext]
-	if !ok {
-		log.Warningf("lexer for %s not found. Using fallback..", ext)
-		lexer = lexers.Fallback
-	}
-	iterator, err := lexer.Tokenise(nil, f.String())
-	if err != nil {
-		log.Errorf("lexer.Tokenise(%s): %v", ev.URI.Path(), err)
-		return err
-	}
-	return h.setTokenPositions(f, iterator)
 }
 
 func (h *syntaxHandler) newFile(ev text.Event) *file {
