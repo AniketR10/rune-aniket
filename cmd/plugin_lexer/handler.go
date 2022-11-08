@@ -82,7 +82,6 @@ func newSyntaxHandler(
 			configErrs = multierr.Append(configErrs,
 				fmt.Errorf("failed to get 'set_background_attr' from config: %v", err))
 		}
-		ret.setBackgroundAttr = true
 	}
 	defaultStyle, err := pconfig.GetString("default_style")
 	if err != nil {
