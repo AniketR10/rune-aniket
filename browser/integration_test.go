@@ -37,7 +37,9 @@ func newClientServerIntegration(
 
 	closeFn := func() {
 		client.Close()
+		rpcServer.browser.Lock()
 		rpcServer.Close()
+		rpcServer.browser.Unlock()
 		grpcServer.Stop()
 		conn.Close()
 	}
