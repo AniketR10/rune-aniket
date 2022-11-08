@@ -129,11 +129,9 @@ func (t *Tabs) Draw(w term.Writer) {
 		if tab.focus {
 			focusPos = next
 			focusLen = len(tab.name)
-			attr.Fg |= t.focusAttr.Fg
-			attr.Bg |= t.focusAttr.Bg
+			attr = term.AttributesUnion(attr, t.focusAttr)
 		} else {
-			attr.Fg |= t.nonFocusAttr.Fg
-			attr.Bg |= t.nonFocusAttr.Bg
+			attr = term.AttributesUnion(attr, t.nonFocusAttr)
 		}
 
 		_, next = t.fileListBuf.InsertStringWithAttr(

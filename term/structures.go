@@ -29,6 +29,11 @@ type Cell struct {
 	Bg, Fg Attribute
 }
 
+// Attributes returns this cell's Bg and Fg Attribute as Attributes.
+func (c Cell) Attributes() Attributes {
+	return Attributes{Bg: c.Bg, Fg: c.Fg}
+}
+
 // KeyComb represents is a key combination. See event for more details.
 type KeyComb struct {
 	Mod Modifier

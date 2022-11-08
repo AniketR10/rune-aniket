@@ -74,8 +74,9 @@ func (s *AttrSetter) Draw(w term.Writer) {
 	if !is {
 		for y, row := range cells {
 			for x := range row {
-				cells[y][x].Bg |= s.def.Bg
-				cells[y][x].Fg |= s.def.Fg
+				attrs := term.AttributesUnion(cells[y][x].Attributes(), s.def)
+				cells[y][x].Bg = attrs.Bg
+				cells[y][x].Fg = attrs.Fg
 			}
 		}
 	}
@@ -85,8 +86,10 @@ func (s *AttrSetter) Draw(w term.Writer) {
 			attrAt.X >= s.width || attrAt.X < 0 {
 			continue
 		}
-		cells[attrAt.Y][attrAt.X].Bg |= attrAt.Attributes.Bg
-		cells[attrAt.Y][attrAt.X].Fg |= attrAt.Attributes.Fg
+		attrs := cells[attrAt.Y][attrAt.X].Attributes()
+		attrs = term.AttributesUnion(attrs, attrAt.Attributes)
+		cells[attrAt.Y][attrAt.X].Bg = attrs.Bg
+		cells[attrAt.Y][attrAt.X].Fg = attrs.Fg
 	}
 
 	var buf cell.Buffer
