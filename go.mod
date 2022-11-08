@@ -3,6 +3,7 @@ module unstable.build/go-tui
 go 1.19
 
 require (
+	github.com/alecthomas/chroma v0.10.0
 	github.com/atotto/clipboard v0.1.2
 	github.com/ernestrc/blue v1.24.2
 	github.com/ernestrc/dom v0.2.5-0.20201125033726-789c946aa938
@@ -55,6 +56,7 @@ require (
 
 require (
 	github.com/BurntSushi/toml v1.2.1 // indirect
+	github.com/dlclark/regexp2 v1.4.0 // indirect
 	github.com/fatih/color v1.10.0 // indirect
 	github.com/golang/protobuf v1.5.2 // indirect
 	github.com/mattn/go-colorable v0.1.8 // indirect
