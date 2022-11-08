@@ -2,10 +2,10 @@ package termutil
 
 import (
 	"fmt"
-	"math"
 	"strconv"
 
 	"unstable.build/go-tui/term"
+	"unstable.build/go-tui/term/color"
 )
 
 type Theme struct {
@@ -80,9 +80,7 @@ func (t *Theme) ColourFrom24Bit(r, g, b string) (term.Attribute, error) {
 		return 0, err
 	}
 
-	return term.Attribute((int(math.Floor((float64(ri) / 32))) << 5) +
-		(int(math.Floor((float64(gi) / 32))) << 2) +
-		int(math.Floor((float64(bi) / 64)))), nil
+	return color.RGBToAttribute(uint8(ri), uint8(gi), uint8(bi)), nil
 }
 
 func (t *Theme) ColourFromAnsi(ansi []string, bg bool) (term.Attribute, error) {
