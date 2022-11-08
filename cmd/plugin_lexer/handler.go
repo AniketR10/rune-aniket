@@ -237,7 +237,7 @@ func (h *syntaxHandler) checkSyntax(ev text.Event) error {
 func (h *syntaxHandler) setTokenPositions(f *file, it chroma.Iterator) error {
 	style, ok := h.getStyle(f.uri)
 	if !ok {
-		log.Debugf("Not running lexer for file %s: extension disabled", f.uri)
+		log.Tracef("Not running lexer for file %s: extension disabled", f.uri)
 		return nil
 	}
 
