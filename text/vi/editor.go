@@ -54,8 +54,10 @@ func (e *viEditor) SetDefaultAttributes(h text.Handler, attrs term.Attributes) e
 	return nil
 }
 
-func (e viEditor) SetLocationList(h text.Handler, ID string, loc text.LocationList) error {
-	e.Publisher.Handler(h).(*Vi).SetLocationList(ID, loc)
+func (e viEditor) SetLocationList(
+	h text.Handler, pri text.LocationPriority, ID string, loc text.LocationList,
+) error {
+	e.Publisher.Handler(h).(*Vi).SetLocationList(pri, ID, loc)
 	return nil
 }
 

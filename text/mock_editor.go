@@ -79,7 +79,9 @@ func (e *testEditor) Edit(resource workspace.URI, buf *cell.Buffer) (Handler, er
 	return h, nil
 }
 
-func (e *testEditor) SetLocationList(h Handler, id string, loc LocationList) error {
+func (e *testEditor) SetLocationList(
+	h Handler, pri LocationPriority, id string, loc LocationList,
+) error {
 	h.(*TestEditorHandler).LocationList = loc
 	return nil
 }

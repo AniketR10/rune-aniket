@@ -59,7 +59,7 @@ func (h *mockHandler) moveToNextLocation(ID string) {
 }
 func (h *mockHandler) moveToPrevLocation(ID string) {
 }
-func (h *mockHandler) setLocationList(ID string, l text.LocationList) {
+func (h *mockHandler) setLocationList(pri text.LocationPriority, ID string, l text.LocationList) {
 }
 func (h *mockHandler) moveToBounds() {
 }

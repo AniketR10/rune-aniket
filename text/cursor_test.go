@@ -1500,15 +1500,15 @@ func TestCursorMoveLocationList(t *testing.T) {
 
 	t.Run("MoveToPrevLocation should return false and do nothing if already at start of location list", func(t *testing.T) {
 		c := setupCursorContent(t, 10, 10, "")
-		locations := []Location{Location{}}
-		assert.Nil(t, c.SetLocationList(locID, &testLocationList{locations: locations}))
+		locations := []Location{{}}
+		assert.Nil(t, c.SetLocationList(LocationPriorityInfo, locID, &testLocationList{locations: locations}))
 		assert.False(t, c.MoveToPrevLocation(locID))
 	})
 
 	t.Run("MoveToNextLocation should return false and do nothing if already at end of location list", func(t *testing.T) {
 		c := setupCursorContent(t, 10, 10, "")
-		locations := []Location{Location{}}
-		assert.Nil(t, c.SetLocationList(locID, &testLocationList{locations: locations}))
+		locations := []Location{{}}
+		assert.Nil(t, c.SetLocationList(LocationPriorityInfo, locID, &testLocationList{locations: locations}))
 		assert.False(t, c.MoveToNextLocation(locID))
 	})
 
@@ -1516,8 +1516,8 @@ func TestCursorMoveLocationList(t *testing.T) {
 		c := setupCursorContent(t, 10, 10, " X")
 		require.True(t, c.MoveRight())
 
-		locations := []Location{Location{}}
-		assert.Nil(t, c.SetLocationList(locID, &testLocationList{locations: locations}))
+		locations := []Location{{}}
+		assert.Nil(t, c.SetLocationList(LocationPriorityInfo, locID, &testLocationList{locations: locations}))
 		assert.True(t, c.MoveToNextLocation(locID))
 
 		pos := c.Coordinates()
@@ -1528,7 +1528,7 @@ func TestCursorMoveLocationList(t *testing.T) {
 		c := setupCursorContent(t, 10, 10, "\na\nb\nc \n")
 		require.True(t, c.MoveLastLine())
 
-		assert.Nil(t, c.SetLocationList(locID, &testLocationList{locations: abcLocations}))
+		assert.Nil(t, c.SetLocationList(LocationPriorityInfo, locID, &testLocationList{locations: abcLocations}))
 		assert.True(t, c.MoveToNextLocation(locID))
 
 		pos := c.Coordinates()
@@ -1538,7 +1538,7 @@ func TestCursorMoveLocationList(t *testing.T) {
 	t.Run("MoveToPrevLocation should wrap around to last location", func(t *testing.T) {
 		c := setupCursorContent(t, 10, 10, "\na\nb\nc\n")
 
-		assert.Nil(t, c.SetLocationList(locID, &testLocationList{locations: abcLocations}))
+		assert.Nil(t, c.SetLocationList(LocationPriorityInfo, locID, &testLocationList{locations: abcLocations}))
 		assert.True(t, c.MoveToPrevLocation(locID))
 
 		pos := c.Coordinates()
@@ -1549,8 +1549,8 @@ func TestCursorMoveLocationList(t *testing.T) {
 		c := setupCursorContent(t, 10, 10, " X")
 		require.True(t, c.MoveRight())
 
-		locations := []Location{Location{}, Location{From: term.Coordinates{X: 1}}}
-		assert.Nil(t, c.SetLocationList(locID, &testLocationList{locations: locations}))
+		locations := []Location{{}, {From: term.Coordinates{X: 1}}}
+		assert.Nil(t, c.SetLocationList(LocationPriorityInfo, locID, &testLocationList{locations: locations}))
 		assert.True(t, c.MoveToNextLocation(locID))
 
 		pos := c.Coordinates()
@@ -1560,8 +1560,8 @@ func TestCursorMoveLocationList(t *testing.T) {
 	t.Run("MoveToPrevLocation should wrap around to last location (special case)", func(t *testing.T) {
 		c := setupCursorContent(t, 10, 10, " X")
 
-		locations := []Location{Location{}, Location{From: term.Coordinates{X: 1}}}
-		assert.Nil(t, c.SetLocationList(locID, &testLocationList{locations: locations}))
+		locations := []Location{{}, {From: term.Coordinates{X: 1}}}
+		assert.Nil(t, c.SetLocationList(LocationPriorityInfo, locID, &testLocationList{locations: locations}))
 		assert.True(t, c.MoveToPrevLocation(locID))
 
 		pos := c.Coordinates()
@@ -1573,7 +1573,7 @@ func TestCursorMoveLocationList(t *testing.T) {
 		require.True(t, c.MoveDown())
 		require.True(t, c.MoveDown())
 
-		assert.Nil(t, c.SetLocationList(locID, &testLocationList{locations: abcLocations}))
+		assert.Nil(t, c.SetLocationList(LocationPriorityInfo, locID, &testLocationList{locations: abcLocations}))
 		assert.True(t, c.MoveToNextLocation(locID))
 
 		pos := c.Coordinates()
@@ -1585,7 +1585,7 @@ func TestCursorMoveLocationList(t *testing.T) {
 		require.True(t, c.MoveDown())
 		require.True(t, c.MoveDown())
 
-		assert.Nil(t, c.SetLocationList(locID, &testLocationList{locations: abcLocations}))
+		assert.Nil(t, c.SetLocationList(LocationPriorityInfo, locID, &testLocationList{locations: abcLocations}))
 		assert.True(t, c.MoveToPrevLocation(locID))
 
 		pos := c.Coordinates()
@@ -1594,75 +1594,130 @@ func TestCursorMoveLocationList(t *testing.T) {
 }
 
 func TestCursorSetLocationListAttr(t *testing.T) {
-	c := setupCursorContent(t, 10, 10, "\na\nb\nc\n")
-	buf := c.scroll.Buffer()
+	t.Run("sets and clears location list attrs", func(t *testing.T) {
+		c := setupCursorContent(t, 10, 10, "\na\nb\nc\n")
+		buf := c.scroll.Buffer()
 
-	expected := [][]term.Cell{
-		{},
-		{{Ch: 'a', Bg: abcAttr.Bg, Fg: abcAttr.Fg}},
-		{{Ch: 'b', Bg: abcAttr.Bg, Fg: abcAttr.Fg}},
-		{{Ch: 'c', Bg: abcAttr.Bg, Fg: abcAttr.Fg}},
-		{},
-	}
+		expected := [][]term.Cell{
+			{},
+			{{Ch: 'a', Bg: abcAttr.Bg, Fg: abcAttr.Fg}},
+			{{Ch: 'b', Bg: abcAttr.Bg, Fg: abcAttr.Fg}},
+			{{Ch: 'c', Bg: abcAttr.Bg, Fg: abcAttr.Fg}},
+			{},
+		}
 
-	abcList := &testLocationList{locations: abcLocations}
+		abcList := &testLocationList{locations: abcLocations}
 
-	assert.Nil(t, c.SetLocationList(locID, abcList))
-	assert.Equal(t, expected, buf.RawCells())
+		assert.Nil(t, c.SetLocationList(LocationPriorityInfo, locID, abcList))
+		assert.Equal(t, expected, buf.RawCells())
 
-	buf.RawCells()[2][0].Bg = term.AttrUnderline
-	buf.RawCells()[2][0].Fg = term.AttrBold
+		buf.RawCells()[2][0].Bg = term.AttrUnderline
+		buf.RawCells()[2][0].Fg = term.AttrBold
 
-	newLocations := []Location{
-		{
-			From: term.Coordinates{Y: 2},
-			To:   term.Coordinates{Y: 2, X: 1},
-			Attr: term.Attributes{Bg: term.ColorRed},
-		},
-	}
+		newLocations := []Location{
+			{
+				From: term.Coordinates{Y: 2},
+				To:   term.Coordinates{Y: 2, X: 1},
+				Attr: term.Attributes{Bg: term.ColorRed},
+			},
+		}
 
-	expected = [][]term.Cell{
-		{},
-		{{Ch: 'a'}},
-		{{Ch: 'b',
-			Fg: term.AttrBold, Bg: term.AttrUnderline | term.ColorRed}},
-		{{Ch: 'c'}},
-		{},
-	}
-	oldLocList := c.SetLocationList(locID, &testLocationList{locations: newLocations})
-	assert.Equal(t, abcList, oldLocList)
-	assert.Equal(t, expected, buf.RawCells())
+		expected = [][]term.Cell{
+			{},
+			{{Ch: 'a'}},
+			{{Ch: 'b',
+				Fg: term.AttrBold, Bg: term.AttrUnderline | term.ColorRed}},
+			{{Ch: 'c'}},
+			{},
+		}
+		oldLocList := c.SetLocationList(LocationPriorityInfo, locID, &testLocationList{locations: newLocations})
+		assert.Equal(t, abcList, oldLocList)
+		assert.Equal(t, expected, buf.RawCells())
 
-	require.True(t, buf.DeleteRow(0))
+		require.True(t, buf.DeleteRow(0))
 
-	// make sure it doesn't remove the wrong one
-	buf.RawCells()[0][0].Bg = term.ColorRed
-	newLocations = []Location{
-		{
-			From: term.Coordinates{Y: 2},
-			To:   term.Coordinates{Y: 2, X: 1},
-			Attr: term.Attributes{Bg: term.ColorRed},
-		},
-	}
-	expected = [][]term.Cell{
-		{{Ch: 'a', Bg: term.ColorRed}},
-		{{Ch: 'b', Fg: term.AttrBold, Bg: term.AttrUnderline}},
-		{{Ch: 'c', Bg: term.ColorRed}},
-		{},
-	}
-	newL := c.SetLocationList(locID, &testLocationList{locations: newLocations})
-	assert.Equal(t, expected, buf.RawCells())
-	assert.Nil(t, newL)
+		// make sure it doesn't remove the wrong one
+		buf.RawCells()[0][0].Bg = term.ColorRed
+		newLocations = []Location{
+			{
+				From: term.Coordinates{Y: 2},
+				To:   term.Coordinates{Y: 2, X: 1},
+				Attr: term.Attributes{Bg: term.ColorRed},
+			},
+		}
+		expected = [][]term.Cell{
+			{{Ch: 'a', Bg: term.ColorRed}},
+			{{Ch: 'b', Fg: term.AttrBold, Bg: term.AttrUnderline}},
+			{{Ch: 'c', Bg: term.ColorRed}},
+			{},
+		}
+		newL := c.SetLocationList(LocationPriorityInfo, locID, &testLocationList{locations: newLocations})
+		assert.Equal(t, expected, buf.RawCells())
+		assert.Nil(t, newL)
 
-	// clear location list
-	c.SetLocationList(locID, nil)
-	expected = [][]term.Cell{
-		{{Ch: 'a', Bg: term.ColorRed}},
-		{{Ch: 'b', Fg: term.AttrBold, Bg: term.AttrUnderline}},
-		{{Ch: 'c'}},
-		{},
-	}
-	assert.Equal(t, expected, buf.RawCells())
+		// clear location list
+		c.SetLocationList(LocationPriorityInfo, locID, nil)
+		expected = [][]term.Cell{
+			{{Ch: 'a', Bg: term.ColorRed}},
+			{{Ch: 'b', Fg: term.AttrBold, Bg: term.AttrUnderline}},
+			{{Ch: 'c'}},
+			{},
+		}
+		assert.Equal(t, expected, buf.RawCells())
+	})
+
+	t.Run("lower priority lists do not override higher priority list attrs", func(t *testing.T) {
+		infoLocations := []Location{
+			{
+				From: term.Coordinates{Y: 1},
+				To:   term.Coordinates{Y: 1, X: 1},
+				Attr: term.Attributes{Fg: term.ColorRed, Bg: term.ColorGreen},
+			},
+			{
+				From: term.Coordinates{Y: 2},
+				To:   term.Coordinates{Y: 2, X: 1},
+				Attr: term.Attributes{Fg: term.ColorRed, Bg: term.ColorGreen},
+			},
+			{
+				From: term.Coordinates{Y: 3},
+				To:   term.Coordinates{Y: 3, X: 1},
+				Attr: term.Attributes{Fg: term.ColorRed, Bg: term.ColorGreen},
+			},
+		}
+		criticalLocations := []Location{
+			{
+				From: term.Coordinates{Y: 1},
+				To:   term.Coordinates{Y: 1, X: 1},
+				Attr: term.Attributes{Fg: term.AttrUnderline, Bg: term.ColorBlack},
+			},
+			{
+				From: term.Coordinates{Y: 2},
+				To:   term.Coordinates{Y: 2, X: 1},
+				Attr: term.Attributes{Fg: term.AttrUnderline, Bg: term.ColorBlack},
+			},
+			{
+				From: term.Coordinates{Y: 3},
+				To:   term.Coordinates{Y: 3, X: 1},
+				Attr: term.Attributes{Fg: term.AttrUnderline, Bg: term.ColorBlack},
+			},
+		}
+		c := setupCursorContent(t, 10, 10, "\na\nb\nc\n")
+		buf := c.scroll.Buffer()
+
+		expected := [][]term.Cell{
+			{},
+			{{Ch: 'a', Fg: term.ColorRed | term.AttrUnderline, Bg: term.ColorBlack}},
+			{{Ch: 'b', Fg: term.ColorRed | term.AttrUnderline, Bg: term.ColorBlack}},
+			{{Ch: 'c', Fg: term.ColorRed | term.AttrUnderline, Bg: term.ColorBlack}},
+			{},
+		}
+
+		criticalList := &testLocationList{locations: criticalLocations}
+		infoList := &testLocationList{locations: infoLocations}
+		assert.Nil(t, c.SetLocationList(LocationPriorityCritical, "list1", criticalList))
+		assert.Nil(t, c.SetLocationList(LocationPriorityInfo, "list2", infoList))
+		assert.Equal(t, expected, buf.RawCells())
+	})
 }
 
 func TestCursorSetLocationListMessages(t *testing.T) {
@@ -1701,7 +1756,7 @@ func TestCursorSetLocationListMessages(t *testing.T) {
 	t.Run("returns nil/false if cursor is not in from, to or in between", func(t *testing.T) {
 		c := setupCursorContent(t, 10, 2, content)
 		abcList := &testLocationList{locations: messageLocations}
-		assert.Nil(t, c.SetLocationList(locID, abcList))
+		assert.Nil(t, c.SetLocationList(LocationPriorityInfo, locID, abcList))
 
 		_, ok := c.Locations()
 		assert.False(t, ok)
@@ -1710,7 +1765,7 @@ func TestCursorSetLocationListMessages(t *testing.T) {
 	t.Run("return messages if cursor is at From", func(t *testing.T) {
 		c := setupCursorContent(t, 10, 2, content)
 		abcList := &testLocationList{locations: messageLocations}
-		assert.Nil(t, c.SetLocationList(locID, abcList))
+		assert.Nil(t, c.SetLocationList(LocationPriorityInfo, locID, abcList))
 		require.True(t, c.MoveDown())
 
 		assertMessages(t, c)
@@ -1721,7 +1776,7 @@ func TestCursorSetLocationListMessages(t *testing.T) {
 
 		abcList := &testLocationList{locations: messageLocations}
 
-		assert.Nil(t, c.SetLocationList(locID, abcList))
+		assert.Nil(t, c.SetLocationList(LocationPriorityInfo, locID, abcList))
 		require.True(t, c.MoveDown())
 		require.True(t, c.MoveRight())
 
@@ -1733,7 +1788,7 @@ func TestCursorSetLocationListMessages(t *testing.T) {
 
 		abcList := &testLocationList{locations: messageLocations}
 
-		assert.Nil(t, c.SetLocationList(locID, abcList))
+		assert.Nil(t, c.SetLocationList(LocationPriorityInfo, locID, abcList))
 		require.True(t, c.MoveDown())
 		c.MoveRight()
 		c.MoveRight()

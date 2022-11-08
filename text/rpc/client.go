@@ -193,11 +193,13 @@ func (c *Client) SubscribeCommand(cmd string, h text.CommandHandler) error {
 }
 
 func makeLocationListRequest(
-	handlerID uint32, listID string, l text.LocationList,
+	handlerID uint32, priority text.LocationPriority,
+	listID string, l text.LocationList,
 ) SetLocationListRequest {
 	req := SetLocationListRequest{
 		HandlerId: handlerID,
 		ListId:    listID,
+		Priority:  uint32(priority),
 	}
 
 	for loc, ok := l.Current(); ok; loc, ok = l.Next() {
@@ -219,13 +221,15 @@ func makeLocationListRequest(
 // SetLocationList requests the editor server to set l as the new location list for h.
 // Note that h is expected to be the return valu of Edit or a dispatched event, delivered
 // via an EventHandler.
-func (c *Client) SetLocationList(h text.Handler, ID string, l text.LocationList) error {
+func (c *Client) SetLocationList(
+	h text.Handler, pri text.LocationPriority, ID string, l text.LocationList,
+) error {
 	ctx := context.Background()
 	token, ok := h.(Token)
 	if !ok {
 		panic("SetLocationList: invalid Handler argument")
 	}
-	req := makeLocationListRequest(uint32(token.ID), ID, l)
+	req := makeLocationListRequest(uint32(token.ID), pri, ID, l)
 	_, err := c.ed.SetLocationList(ctx, &req)
 	return err
 }

@@ -51,6 +51,15 @@ type CommandHandler interface {
 	HandleCommand(context.Context, Command) (exit bool, err error)
 }
 
+type LocationPriority uint
+
+const (
+	LocationPriorityInfo LocationPriority = iota
+	LocationPriorityWarning
+	LocationPriorityError
+	LocationPriorityCritical
+)
+
 // Editor is the interface that wraps an API to manage a text editor.
 type Editor interface {
 	// Edit opens a file and returns an editor.Handler to edit it or an error
@@ -77,7 +86,7 @@ type Editor interface {
 	// reponsibility of the caller to recompute the list of locations
 	// and call SetLocationList with the new list of locations after
 	// every update. Check cell.Buffer.Subscribe for more details.
-	SetLocationList(Handler, string, LocationList) error
+	SetLocationList(Handler, LocationPriority, string, LocationList) error
 
 	// Moves cursor to the next location on list with ID.
 	MoveToNextLocation(h Handler, ID string) error

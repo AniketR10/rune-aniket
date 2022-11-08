@@ -257,7 +257,8 @@ func (h *gitEditorHandler) pushNewDiffLocations(
 	locs := h.parseDiff(diff)
 	h.lastLocs[filename] = locs
 
-	return h.ed.SetLocationList(resource, h.gitDiffListID, text.LocationSlice(locs))
+	return h.ed.SetLocationList(resource,
+		text.LocationPriorityInfo, h.gitDiffListID, text.LocationSlice(locs))
 }
 
 func (h *gitEditorHandler) resetScroll() {
@@ -332,7 +333,8 @@ func (h *gitEditorHandler) pushLastDiffLocations(filename string, resource text.
 	}
 
 	log.Tracef("pushLastDiffLocations(%s): locations found: %#v", filename, locs)
-	return h.ed.SetLocationList(resource, h.gitDiffListID, text.LocationSlice(locs))
+	return h.ed.SetLocationList(resource, text.LocationPriorityInfo,
+		h.gitDiffListID, text.LocationSlice(locs))
 }
 
 func (h *gitEditorHandler) handleEvents() {

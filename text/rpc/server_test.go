@@ -343,9 +343,15 @@ func TestServerSetLocationList(t *testing.T) {
 		callServerEdit(t, ctx, broker, s, nextID, resource, content)
 
 		locs := text.LocationSlice([]text.Location{{Message: "wsb: hold AMC", To: term.Coordinates{X: 3}}})
-		mock.EXPECT().SetLocationList(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).Times(1)
+		mock.EXPECT().SetLocationList(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+			Times(1).
+			DoAndReturn(func(h text.Handler, pri text.LocationPriority, ID string, l text.LocationList) error {
+				assert.Equal(t, text.LocationPriorityInfo, pri)
+				assert.Equal(t, locID, ID)
+				return nil
+			})
 
-		req := makeLocationListRequest(nextID, locID, locs)
+		req := makeLocationListRequest(nextID, text.LocationPriorityInfo, locID, locs)
 		res, err := s.SetLocationList(ctx, &req)
 		require.NoError(t, err)
 		require.NotNil(t, res)
@@ -380,7 +386,7 @@ func TestServerSetLocationList(t *testing.T) {
 				defer wg.Done()
 				l := text.LocationSlice(locs)
 
-				req := makeLocationListRequest(nextID, locID, l)
+				req := makeLocationListRequest(nextID, text.LocationPriorityWarning, locID, l)
 				res, err := s.SetLocationList(ctx, &req)
 				if !assert.NoError(t, err) {
 					return

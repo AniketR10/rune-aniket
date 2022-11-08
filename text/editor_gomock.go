@@ -403,17 +403,17 @@ func (mr *MockEditorMockRecorder) SetDefaultAttributes(arg0, arg1 interface{}) *
 }
 
 // SetLocationList mocks base method.
-func (m *MockEditor) SetLocationList(arg0 Handler, arg1 string, arg2 LocationList) error {
+func (m *MockEditor) SetLocationList(arg0 Handler, arg1 LocationPriority, arg2 string, arg3 LocationList) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SetLocationList", arg0, arg1, arg2)
+	ret := m.ctrl.Call(m, "SetLocationList", arg0, arg1, arg2, arg3)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // SetLocationList indicates an expected call of SetLocationList.
-func (mr *MockEditorMockRecorder) SetLocationList(arg0, arg1, arg2 interface{}) *gomock.Call {
+func (mr *MockEditorMockRecorder) SetLocationList(arg0, arg1, arg2, arg3 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetLocationList", reflect.TypeOf((*MockEditor)(nil).SetLocationList), arg0, arg1, arg2)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetLocationList", reflect.TypeOf((*MockEditor)(nil).SetLocationList), arg0, arg1, arg2, arg3)
 }
 
 // SubscribeCommand mocks base method.

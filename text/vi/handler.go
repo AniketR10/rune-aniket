@@ -44,7 +44,7 @@ type viHandler interface {
 	mode() viMode
 	moveToNextLocation(ID string)
 	moveToPrevLocation(ID string)
-	setLocationList(ID string, l text.LocationList)
+	setLocationList(pri text.LocationPriority, ID string, l text.LocationList)
 	setCursorAtScroll(pos term.Coordinates) bool
 	cursorAtScroll() term.Coordinates
 	subscribeScroll(sub component.ScrollSubscriber)
@@ -757,8 +757,10 @@ func (vi *viHandlerImpl) moveToPrevLocation(ID string) {
 }
 
 // SetLocationList sets a location list of this handler. See Cursor.SetLocationList
-func (vi *viHandlerImpl) setLocationList(ID string, l text.LocationList) {
-	_ = vi.cursor.SetLocationList(ID, l)
+func (vi *viHandlerImpl) setLocationList(
+	pri text.LocationPriority, ID string, l text.LocationList,
+) {
+	_ = vi.cursor.SetLocationList(pri, ID, l)
 }
 
 // SetCursorAtScroll sets the cursor of this viHandlerImpl handler at content pos.

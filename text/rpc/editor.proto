@@ -61,6 +61,7 @@ message SetLocationListRequest {
 	uint32 handler_id = 1;
 	string list_id = 2;
 	repeated Location locations = 3;
+	uint32 priority = 4;
 }
 
 message SetLocationListResponse {}

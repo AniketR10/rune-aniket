@@ -163,19 +163,21 @@ func TestSetLocationListRequest(t *testing.T) {
 			HandlerId: handlerID,
 			ListId:    locID,
 			Locations: nil,
+			Priority:  2,
 		}
-		assert.Equal(t, expected, makeLocationListRequest(handlerID, locID, l))
+		assert.Equal(t, expected, makeLocationListRequest(handlerID, text.LocationPriorityError, locID, l))
 	})
 
 	t.Run("nil zero slice", func(t *testing.T) {
 		l := text.LocationSlice(nil)
 		handlerID := uint32(23)
 		expected := SetLocationListRequest{
+			Priority:  2,
 			HandlerId: handlerID,
 			ListId:    locID,
 			Locations: nil,
 		}
-		assert.Equal(t, expected, makeLocationListRequest(handlerID, locID, l))
+		assert.Equal(t, expected, makeLocationListRequest(handlerID, text.LocationPriorityError, locID, l))
 	})
 	t.Run("non-zero slice", func(t *testing.T) {
 		l := text.LocationSlice([]text.Location{
@@ -187,6 +189,7 @@ func TestSetLocationListRequest(t *testing.T) {
 		expected := SetLocationListRequest{
 			HandlerId: handlerID,
 			ListId:    locID,
+			Priority:  2,
 			Locations: []*SetLocationListRequest_Location{
 				{
 					From: &termpb.Coordinates{},
@@ -210,7 +213,7 @@ func TestSetLocationListRequest(t *testing.T) {
 			},
 		}
 
-		assert.Equal(t, expected, makeLocationListRequest(handlerID, locID, l))
+		assert.Equal(t, expected, makeLocationListRequest(handlerID, text.LocationPriorityError, locID, l))
 	})
 	t.Run("with message", func(t *testing.T) {
 		myMsg := "wsb: HOLD GME"
@@ -223,6 +226,7 @@ func TestSetLocationListRequest(t *testing.T) {
 		})
 		handlerID := uint32(23)
 		expected := SetLocationListRequest{
+			Priority:  2,
 			HandlerId: handlerID,
 			ListId:    locID,
 			Locations: []*SetLocationListRequest_Location{
@@ -235,7 +239,7 @@ func TestSetLocationListRequest(t *testing.T) {
 			},
 		}
 
-		assert.Equal(t, expected, makeLocationListRequest(handlerID, locID, l))
+		assert.Equal(t, expected, makeLocationListRequest(handlerID, text.LocationPriorityError, locID, l))
 	})
 }
 
@@ -252,7 +256,7 @@ func benchmarkSetLocationListRequest(b *testing.B, n int) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		ll := text.LocationSlice(l)
-		_ = makeLocationListRequest(45, locID, ll)
+		_ = makeLocationListRequest(45, text.LocationPriorityError, locID, ll)
 	}
 }
 

@@ -54,7 +54,7 @@ type Cursor struct {
 	scroll    *component.Scroll
 	search    string
 	cursor    term.Coordinates
-	locs      map[string]LocationList
+	locs      map[string]*priorityLocationList
 	messages  map[term.Coordinates][]message
 	selection struct {
 		mode       SelectMode
@@ -62,6 +62,11 @@ type Cursor struct {
 		cells      [][]term.Cell
 	}
 	subscriber curSubscriber
+}
+
+type priorityLocationList struct {
+	LocationList
+	priority LocationPriority
 }
 
 // NewCursor allocates storage for a new cursor,
@@ -82,7 +87,7 @@ func (c *Cursor) Init(scroll *component.Scroll) {
 	c.scroll = scroll
 	c.selection.mode = noSelection
 	c.subscriber.c = c
-	c.locs = make(map[string]LocationList)
+	c.locs = make(map[string]*priorityLocationList)
 	c.messages = make(map[term.Coordinates][]message)
 
 	c.scroll.Buffer().Subscribe(&c.subscriber)
@@ -279,7 +284,7 @@ func (c *Cursor) setSearchLocationList(text string) int {
 		}
 	}
 
-	c.SetLocationList(searchLocationListID, LocationSlice(searchLoc))
+	c.SetLocationList(LocationPriorityInfo, searchLocationListID, LocationSlice(searchLoc))
 	return n
 }
 
@@ -1397,15 +1402,17 @@ func (c *Cursor) setLocListAttr(l LocationList, reverse bool) {
 		if ok && reverse {
 			for y, row := range selection {
 				for x := range row {
-					selection[y][x].Fg &^= loc.Attr.Fg
-					selection[y][x].Bg &^= loc.Attr.Bg
+					attrs := term.AttributesDifference(selection[y][x].Attributes(), loc.Attr)
+					selection[y][x].Fg = attrs.Fg
+					selection[y][x].Bg = attrs.Bg
 				}
 			}
 		} else if ok {
 			for y, row := range selection {
 				for x := range row {
-					selection[y][x].Fg |= loc.Attr.Fg
-					selection[y][x].Bg |= loc.Attr.Bg
+					attrs := term.AttributesUnion(selection[y][x].Attributes(), loc.Attr)
+					selection[y][x].Fg = attrs.Fg
+					selection[y][x].Bg = attrs.Bg
 				}
 			}
 		}
@@ -1481,7 +1488,7 @@ func (c *Cursor) Locations() (map[string]Location, bool) {
 // SetLocationList sets a location list on this cursor. It substitutes and returns
 // the previous location list with the same ID, if there was any.
 // Any calls to Insert on the underlying Writer will reset all location lists.
-func (c *Cursor) SetLocationList(ID string, l LocationList) LocationList {
+func (c *Cursor) SetLocationList(pri LocationPriority, ID string, l LocationList) LocationList {
 	prev, ok := c.locs[ID]
 	if ok {
 		c.setLocListAttr(prev, true)
@@ -1491,12 +1498,33 @@ func (c *Cursor) SetLocationList(ID string, l LocationList) LocationList {
 	if l == nil {
 		delete(c.locs, ID)
 	} else {
-		c.locs[ID] = l
+		c.locs[ID] = &priorityLocationList{LocationList: l, priority: pri}
+	}
+
+	// reverse attrs of any higher priority lists
+	var higher []LocationList
+	for _, l := range c.locs {
+		if l.priority > pri {
+			c.setLocListAttr(l, true)
+			higher = append(higher, l)
+		}
+	}
+
+	if l != nil {
 		c.setLocListAttr(l, false)
 		c.setMessages(ID, l)
 	}
 
-	return prev
+	// reapply attrs higher priority lists
+	for _, l := range higher {
+		c.setLocListAttr(l, false)
+	}
+
+	if prev == nil {
+		return nil
+	}
+
+	return prev.LocationList
 }
 
 func (c *Cursor) endOfLocationList(

@@ -265,8 +265,8 @@ func (h *syntaxHandler) setTokenPositions(f *file, it chroma.Iterator) error {
 		x = 0
 	}
 	log.Debugf("Setting location list with %d locations", len(locations))
-	err := h.ed.SetLocationList(f.handler, h.semanticTokensListID,
-		text.LocationSlice(locations))
+	err := h.ed.SetLocationList(f.handler, text.LocationPriorityInfo,
+		h.semanticTokensListID, text.LocationSlice(locations))
 	if err != nil {
 		return fmt.Errorf("SetLocationList(%s): %v", f.uri, err)
 	}

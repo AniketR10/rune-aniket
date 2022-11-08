@@ -140,8 +140,8 @@ func expectLocationList(
 	t *testing.T, ed *text.MockEditor, expectedID string, expectedLocations []text.Location,
 	wg *sync.WaitGroup,
 ) {
-	ed.EXPECT().SetLocationList(gomock.Any(), gomock.Any(), gomock.Any()).
-		DoAndReturn(func(h text.Handler, id string, loc text.LocationList) error {
+	ed.EXPECT().SetLocationList(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		DoAndReturn(func(h text.Handler, pri text.LocationPriority, id string, loc text.LocationList) error {
 			defer wg.Done()
 			assertEqualLocations(t, loc, text.LocationSlice(expectedLocations))
 			assert.Equal(t, expectedID, id)
@@ -152,8 +152,8 @@ func expectLocationList(
 func expectAnyLocationList(
 	t *testing.T, ed *text.MockEditor, expectedID string, wg *sync.WaitGroup,
 ) {
-	ed.EXPECT().SetLocationList(gomock.Any(), gomock.Any(), gomock.Any()).
-		DoAndReturn(func(h text.Handler, id string, loc text.LocationList) error {
+	ed.EXPECT().SetLocationList(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		DoAndReturn(func(h text.Handler, pri text.LocationPriority, id string, loc text.LocationList) error {
 			defer wg.Done()
 			assert.Equal(t, expectedID, id)
 			return nil

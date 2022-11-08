@@ -246,17 +246,18 @@ func TestClientServerIntegration(t *testing.T) {
 
 		l := text.LocationSlice([]text.Location{loc2})
 
-		ed.EXPECT().SetLocationList(gomock.Any(), gomock.Any(), gomock.Any()).
-			DoAndReturn(func(h text.Handler, id string, ll text.LocationList) error {
+		ed.EXPECT().SetLocationList(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+			DoAndReturn(func(h text.Handler, pri text.LocationPriority, id string, ll text.LocationList) error {
 				defer wg.Done()
 				assertLocation(t, ll, 0, loc2)
 				assert.Equal(t, locID, id)
 				assertLocationListLen(t, ll, 1)
+				assert.Equal(t, text.LocationPriorityError, pri)
 				return nil
 			}).Times(1)
 
 		wg.Add(1)
-		err = client.SetLocationList(h, locID, l)
+		err = client.SetLocationList(h, text.LocationPriorityError, locID, l)
 		require.NoError(t, err)
 
 		wg.Wait()

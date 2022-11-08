@@ -916,7 +916,8 @@ func (h *lspEditorHandler) semanticTokensFull(
 		log.Tracef("lspEditorHandler.Server.SemanticTokensFull(%s): OK: %v: locations: %v",
 			f.uri, resp.Data, locations)
 	}
-	err = h.ed.SetLocationList(f.handler, h.semanticTokensListID, text.LocationSlice(locations))
+	err = h.ed.SetLocationList(f.handler, text.LocationPriorityInfo,
+		h.semanticTokensListID, text.LocationSlice(locations))
 	if err != nil {
 		err = fmt.Errorf("SetLocationList(%s): %v", f.uri, err)
 		return err
@@ -1284,7 +1285,10 @@ func (h *lspEditorHandler) setDiagnosticsLocationList(
 	ctx context.Context, f *file, ds []protocol.Diagnostic,
 ) error {
 	locs := h.parseDiagnostics(f, ds)
-	err := h.ed.SetLocationList(f.handler, h.diagnosticListID, text.LocationSlice(locs))
+	// NOTE: should probably break down by location priority rather than
+	// bundling all of them under Error.
+	err := h.ed.SetLocationList(f.handler, text.LocationPriorityError,
+		h.diagnosticListID, text.LocationSlice(locs))
 	if err != nil {
 		err = fmt.Errorf("SetLocationList(%s): %v", f.uri, err)
 		return err
@@ -1654,7 +1658,8 @@ func (h *lspEditorHandler) browseLocations(
 
 		attrs := term.Attributes{Bg: term.AttrReverse, Fg: term.AttrReverse}
 		loc := text.Location{From: from, To: to, Attr: attrs}
-		ed.SetLocationList(edh, locID, text.LocationSlice([]text.Location{loc}))
+		ed.SetLocationList(edh, text.LocationPriorityInfo,
+			locID, text.LocationSlice([]text.Location{loc}))
 		ed.MoveToPrevLocation(edh, locID)
 	}
 

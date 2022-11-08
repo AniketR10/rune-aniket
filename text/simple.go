@@ -39,8 +39,10 @@ func (e *simpleEditor) SubscribeEditorEvents(evs []EventType, sub EventHandler) 
 	return nil
 }
 
-func (e simpleEditor) SetLocationList(h Handler, ID string, loc LocationList) error {
-	e.pub.Handler(h).(*simpleEditorHandler).cursor.SetLocationList(ID, loc)
+func (e simpleEditor) SetLocationList(
+	h Handler, pri LocationPriority, ID string, loc LocationList,
+) error {
+	e.pub.Handler(h).(*simpleEditorHandler).cursor.SetLocationList(pri, ID, loc)
 	return nil
 }
 

@@ -613,8 +613,10 @@ func (c *Component) Edit(file workspace.URI, buf *cell.Buffer) (Handler, error) 
 }
 
 // SetLocationList satisfies text.Editor.
-func (c *Component) SetLocationList(h Handler, ID string, loc LocationList) error {
-	return c.ed.SetLocationList(h, ID, loc)
+func (c *Component) SetLocationList(
+	h Handler, pri LocationPriority, ID string, loc LocationList,
+) error {
+	return c.ed.SetLocationList(h, pri, ID, loc)
 }
 
 // MoveToNextLocation satisfies text.Editor.
