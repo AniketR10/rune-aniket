@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"os/user"
 	"path/filepath"
@@ -39,6 +40,17 @@ func NewMemoryScheme(cfg config.Config, workspace URI) (Scheme, error) {
 	return ret, nil
 }
 
+// NewMemoryFile returns a in-memory File implementation.
+func NewMemoryFile(filename string, mode fs.FileMode, data []byte) File {
+	return &memFile{
+		filename: filename,
+		mode:     mode,
+		modTime:  time.Now(),
+		data:     data,
+		reader:   bytes.NewReader(data),
+	}
+}
+
 type memoryScheme struct {
 	mu        sync.Mutex
 	workspace URI
@@ -51,7 +63,6 @@ type memFile struct {
 	filename string
 	modTime  time.Time
 	mode     os.FileMode
-	flag     int
 }
 
 type memFileInfo struct {
@@ -72,8 +83,7 @@ func (m *memoryScheme) init(workspace URI) error {
 
 func (m *memoryScheme) Open(path string, flag int, mode os.FileMode) (File, *Error) {
 	path = filepath.Clean(path)
-
-	if filepath.Base(path) == "" {
+	if path == "" {
 		return nil, NopError(fmt.Errorf("invalid file %q", path))
 	}
 
@@ -109,14 +119,7 @@ func (m *memoryScheme) Open(path string, flag int, mode os.FileMode) (File, *Err
 		} else {
 			filename = filepath.Join(m.workspace.Path(), rel)
 		}
-		f = &memFile{
-			filename: filename,
-			mode:     mode,
-			modTime:  time.Now(),
-			flag:     flag,
-			data:     data,
-			reader:   bytes.NewReader(data),
-		}
+		f = NewMemoryFile(filename, mode, data).(*memFile)
 		m.files[uriStr] = f
 	} else {
 		_, _ = f.Seek(0, 0)

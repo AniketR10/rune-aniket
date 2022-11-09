@@ -236,6 +236,15 @@ func ExpandPath(
 	return abs, nil
 }
 
+// HasPrefix returns tests whether uri begins with prefix.
+func HasPrefix(uri, prefix URI) bool {
+	return uri.Scheme() == prefix.Scheme() &&
+		uri.Hostname() == prefix.Hostname() &&
+		uri.Port() == prefix.Port() &&
+		uri.User() == prefix.User() &&
+		strings.HasPrefix(uri.Path(), prefix.Path())
+}
+
 // IsWorkspaceURI returns whether this uri can be managed by
 // the given workspace. For Scheme implementations that
 // do not support user and host/port, this method returns
@@ -246,17 +255,8 @@ func IsWorkspaceURI(workspace Workspace, uri URI) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	if uri.Scheme() != uriAtWorkspace.Scheme() {
-		return false, nil
-	}
-	if uri.Hostname() != uriAtWorkspace.Hostname() {
-		return false, nil
-	}
-	if uri.Port() != uriAtWorkspace.Port() {
-		return false, nil
-	}
-	if uri.User() != uriAtWorkspace.User() {
-		return false, nil
-	}
-	return true, nil
+	return uri.Scheme() == uriAtWorkspace.Scheme() &&
+		uri.Hostname() == uriAtWorkspace.Hostname() &&
+		uri.Port() == uriAtWorkspace.Port() &&
+		uri.User() == uriAtWorkspace.User(), nil
 }
