@@ -260,3 +260,24 @@ func IsWorkspaceURI(workspace Workspace, uri URI) (bool, error) {
 		uri.Port() == uriAtWorkspace.Port() &&
 		uri.User() == uriAtWorkspace.User(), nil
 }
+
+// WorkspaceURI expands the given path with the given workspace URI
+// and returns its corresponding URI. See ExpandPathWithURI for more details.
+func WorkspaceURI(workspace URI, path string) (URI, error) {
+	absPath, err := ExpandPathWithURI(path, workspace)
+	if err != nil {
+		return URI{}, err
+	}
+	if err != nil {
+		return URI{}, err
+	}
+
+	var uriStr string
+	if workspace.User() != "" {
+		uriStr = fmt.Sprintf("%s://%s@%s%s", workspace.Scheme(),
+			workspace.User(), workspace.Host(), absPath)
+	} else {
+		uriStr = fmt.Sprintf("%s://%s%s", workspace.Scheme(), workspace.Host(), absPath)
+	}
+	return ParseURI(uriStr)
+}

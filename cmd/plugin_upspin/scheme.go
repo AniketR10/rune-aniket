@@ -129,15 +129,7 @@ func (s *scheme) expandPath(path string) (string, error) {
 }
 
 func (s *scheme) URI(path string) (workspace.URI, error) {
-	absPath, err := s.expandPath(path)
-	if err != nil {
-		return workspace.URI{}, err
-	}
-	if err != nil {
-		return workspace.URI{}, err
-	}
-	uriStr := fmt.Sprintf("upspin://%s@%s%s", s.uri.User(), s.uri.Host(), absPath)
-	return workspace.ParseURI(uriStr)
+	return workspace.WorkspaceURI(s.uri, path)
 }
 
 func (s *scheme) Open(path string, flag int, mode os.FileMode) (workspace.File, *workspace.Error) {

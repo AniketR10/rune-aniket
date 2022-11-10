@@ -8,7 +8,6 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/ernestrc/blue/document"
@@ -28,16 +27,15 @@ import (
 // Also note that it's assumed that no other process is writing to the resources
 // managed by the given document.Service. Failure to provide this guarantee
 // will probably result in corruption of data.
+//
+// Open does not support O_APPEND or O_SYNC flags.
 func WorkspaceScheme(rootURI workspace.URI, svc document.Service) workspace.SchemeFunc {
 	return func(cfg config.Config, uri workspace.URI) (workspace.Scheme, error) {
 		if !workspace.HasPrefix(uri, rootURI) {
 			return nil, fmt.Errorf("invalid uri %q for scheme with root uri %q: root does not match", uri, rootURI)
 		}
 		ret := new(scheme)
-		err := ret.init(svc, uri)
-		if err != nil {
-			return nil, err
-		}
+		ret.init(svc, uri)
 		return ret, nil
 	}
 }
@@ -48,8 +46,6 @@ const (
 	serviceTimeout = 30 * time.Second
 )
 
-var ()
-
 type service struct {
 	svc document.Service
 	// provides transaction-level synchronization
@@ -57,13 +53,15 @@ type service struct {
 }
 
 type scheme struct {
+	unimplementedTerminal
+	unimplementedExecutor
 	workspace          workspace.URI
 	svc                service
 	retryRealFailure   retry.Strategy
 	retryInconsistency retry.Strategy
 }
 
-func (s *scheme) init(svc document.Service, uri workspace.URI) error {
+func (s *scheme) init(svc document.Service, uri workspace.URI) {
 	s.svc.svc = svc
 	s.workspace = uri
 	s.retryRealFailure = retry.CombinedStrategy(
@@ -74,26 +72,10 @@ func (s *scheme) init(svc document.Service, uri workspace.URI) error {
 		retry.ExponentialStrategy(50*time.Millisecond, 250*time.Millisecond),
 		retry.LimitStrategy(100),
 	)
-	return nil
 }
 
 func (s *scheme) URI(path string) (workspace.URI, error) {
-	absPath, err := workspace.ExpandPathWithURI(path, s.workspace)
-	if err != nil {
-		return workspace.URI{}, err
-	}
-	if err != nil {
-		return workspace.URI{}, err
-	}
-
-	var uriStr string
-	if s.workspace.User() != "" {
-		uriStr = fmt.Sprintf("%s://%s@%s%s", s.workspace.Scheme(),
-			s.workspace.User(), s.workspace.Host(), absPath)
-	} else {
-		uriStr = fmt.Sprintf("%s://%s%s", s.workspace.Scheme(), s.workspace.Host(), absPath)
-	}
-	return workspace.ParseURI(uriStr)
+	return workspace.WorkspaceURI(s.workspace, path)
 }
 
 func (s *scheme) docIDFromPath(path string) (string, string, error) {
@@ -323,46 +305,8 @@ func (s *scheme) ReadLink(path string) (string, error) {
 	return "", errors.New("path is not a link")
 }
 
-/* not implemented */
-
-func (s *scheme) NewPty() (workspace.Pty, error) {
-	return workspace.Pty{}, errUnimplemented
-}
-
-func (s *scheme) SetPtySize(p workspace.Pty, width, height int) error {
-	return errUnimplemented
-}
-
-func (s *scheme) Command(name string, arg ...string) (workspace.Pid, error) {
-	return 0, errUnimplemented
-}
-
-func (s *scheme) Start(workspace.Pid) error {
-	return errUnimplemented
-}
-
-func (s *scheme) Signal(workspace.Pid, syscall.Signal) error {
-	return errUnimplemented
-}
-
-func (s *scheme) StderrPipe(workspace.Pid) (io.ReadCloser, error) {
-	return nil, errUnimplemented
-}
-
-func (s *scheme) StdinPipe(workspace.Pid) (io.WriteCloser, error) {
-	return nil, errUnimplemented
-}
-
-func (s *scheme) StdoutPipe(workspace.Pid) (io.ReadCloser, error) {
-	return nil, errUnimplemented
-}
-
-func (s *scheme) Wait(workspace.Pid) error {
-	return errUnimplemented
-}
-
 func (s *scheme) Close() error {
-	return errUnimplemented
+	return nil
 }
 
 func (s *scheme) retriedDelete(ctx context.Context, docID string) error {
