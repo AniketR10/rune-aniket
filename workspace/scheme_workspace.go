@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"syscall"
 
 	"github.com/ernestrc/blue/iterator"
@@ -67,16 +68,19 @@ func (w *schemeWorkspace) Recover(
 		err = fmt.Errorf("invalid URI %q for workspace with URI %q", swapURI, w.w)
 		return
 	}
-	uri, err = w.p.URI(uri.Path())
-	if err != nil {
-		return
+
+	// turn into relative if possible
+	path, swapPath := uri.Path(), swapURI.Path()
+	relPath, err := filepath.Rel(w.w.Path(), path)
+	if err == nil {
+		path = relPath
 	}
-	swapURI, err = w.p.URI(swapURI.Path())
-	if err != nil {
-		return
+	relPath, err = filepath.Rel(w.w.Path(), swapPath)
+	if err == nil {
+		swapPath = relPath
 	}
 
-	ret, err = newFileRecover(w.p, uri.Path(), swapURI.Path(), buf, force)
+	ret, err = newFileRecover(w.p, path, swapPath, buf, force)
 	return
 }
 
@@ -108,16 +112,18 @@ func (w *schemeWorkspace) Load(
 		return
 	}
 
-	uri, err = w.p.URI(uri.Path())
-	if err != nil {
-		return
+	// turn into relative if possible
+	path, swapDirPath := uri.Path(), swapDir.Path()
+	relPath, err := filepath.Rel(w.w.Path(), path)
+	if err == nil {
+		path = relPath
 	}
-	swapDir, err = w.p.URI(swapDir.Path())
-	if err != nil {
-		return
+	relPath, err = filepath.Rel(w.w.Path(), swapDirPath)
+	if err == nil {
+		swapDirPath = relPath
 	}
 
-	ret, err = newFile(w.p, uri.Path(), buf, swapDir.Path(), readOnly)
+	ret, err = newFile(w.p, path, buf, swapDirPath, readOnly)
 	if err == os.ErrNotExist {
 		if readOnly {
 			err = errors.New("cannot open file that doesn't exist in read-only")

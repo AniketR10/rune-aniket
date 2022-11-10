@@ -141,6 +141,12 @@ func (s *scheme) Open(path string, flag int, mode os.FileMode) (workspace.File, 
 	if err != nil {
 		return nil, mapUpspinError(err)
 	}
+	if flag&os.O_TRUNC != 0 {
+		err := f.Truncate(0)
+		if err != nil {
+			return nil, mapUpspinError(err)
+		}
+	}
 	if flag&os.O_CREATE != 0 {
 		// make sure entry is created
 		err := f.Sync()
@@ -173,6 +179,8 @@ func (s *scheme) Rename(oldpath, newpath string) error {
 	if err != nil {
 		return err
 	}
+	// Workaround around Rename failing with 'item already exists'
+	// error if target file is present.
 	// NOTE for now we have no mechanism to recover
 	// or even detect if a backup is present
 	backup := upspin.PathName(fmt.Sprintf("%s.backup", unew))
@@ -186,10 +194,18 @@ func (s *scheme) Rename(oldpath, newpath string) error {
 
 	_, err = s.client.Rename(uold, unew)
 	if err != nil {
+		// restore backup
+		_, rerr := s.client.Rename(backup, unew)
+		if rerr != nil {
+			err = multierr.Append(err,
+				fmt.Errorf("Critical: Rename recover from backup %s "+
+					"failed. Must restore manually: %v",
+					backup, rerr))
+		}
 		return err
 	}
 
-	go s.client.Delete(backup)
+	_ = s.client.Delete(backup)
 	return nil
 }
 

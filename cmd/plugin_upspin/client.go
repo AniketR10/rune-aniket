@@ -169,11 +169,7 @@ func (e entryAdapter) Mode() fs.FileMode {
 }
 
 func (e entryAdapter) ModTime() time.Time {
-	// allows for same types of checks and we can
-	// take advantage of the eventual-consistency provided
-	// by the backend systems.
-	// return time.Unix(int64(e.entry.Sequence), 0)
-	return time.Unix(int64(e.entry.Time), 0)
+    return time.Unix(int64(e.entry.Time), 0)
 }
 
 func (e entryAdapter) IsDir() bool {
