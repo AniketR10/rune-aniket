@@ -265,3 +265,46 @@ func BenchmarkListFilesUberDir(b *testing.B) {
 func BenchmarkListFilesLotsEmptyDir(b *testing.B) {
 	benchListFiles(b, 500, 100, 100)
 }
+
+func TestFileAssumptions(t *testing.T) {
+	t.Run("Write overwrites data", func(t *testing.T) {
+		f, err := ioutil.TempFile("", "")
+		name := f.Name()
+		n, err := f.Write([]byte("12345"))
+		require.NoError(t, err)
+		require.NoError(t, f.Close())
+
+		f, err = os.OpenFile(name, os.O_RDWR, 0)
+		require.NoError(t, err)
+		n, err = f.Write([]byte("ZZ"))
+		require.NoError(t, err)
+		assert.Equal(t, 2, n)
+
+		nn, err := f.Seek(0, 0)
+		require.NoError(t, err)
+		assert.Equal(t, int64(0), nn)
+
+		data, err := ioutil.ReadAll(f)
+		require.NoError(t, err)
+		assert.Equal(t, "ZZ345", string(data))
+	})
+
+	t.Run("Read uses write offset", func(t *testing.T) {
+		f, err := ioutil.TempFile("", "")
+		name := f.Name()
+		n, err := f.Write([]byte("12345"))
+		require.NoError(t, err)
+		require.NoError(t, f.Close())
+
+		f, err = os.OpenFile(name, os.O_RDWR, 0)
+		require.NoError(t, err)
+
+		n, err = f.Write([]byte("ZZ"))
+		require.NoError(t, err)
+		assert.Equal(t, 2, n)
+
+		data, err := ioutil.ReadAll(f)
+		require.NoError(t, err)
+		assert.Equal(t, "345", string(data))
+	})
+}

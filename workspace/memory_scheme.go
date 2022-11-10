@@ -63,6 +63,7 @@ type memFile struct {
 	filename string
 	modTime  time.Time
 	mode     os.FileMode
+	offset   int64
 }
 
 type memFileInfo struct {
@@ -273,9 +274,16 @@ func (c *memFile) Read(p []byte) (n int, err error) {
 }
 
 func (c *memFile) Write(p []byte) (n int, err error) {
-	c.data = append(c.data, p...)
-	c.reader.Reset(c.data)
+	if c.offset+int64(len(p)) > int64(len(c.data)) {
+		diff := c.offset + int64(len(p)) - int64(len(c.data))
+		c.data = append(c.data, make([]byte, diff)...)
+		copy(c.data[diff:], c.data)
+	}
+	copy(c.data[c.offset:], p)
 	n = len(p)
+	c.offset += int64(n)
+	c.reader.Reset(c.data)
+	_, err = c.reader.Seek(c.offset, io.SeekStart)
 	return
 }
 
@@ -303,16 +311,18 @@ func (c *memFile) Truncate(size int64) error {
 		panic("invalid truncate size")
 	}
 	c.data = c.data[:size]
+	c.offset = 0
 	c.reader.Reset(c.data)
 	return nil
 }
 
 func (c *memFile) Seek(offset int64, whence int) (int64, error) {
-	if offset != 0 || whence != 0 {
-		return 0, errors.New("unsupported Seek: only seek to beggining of file supported")
+	var err error
+	c.offset, err = c.reader.Seek(offset, whence)
+	if err != nil {
+		return 0, err
 	}
-	c.reader = bytes.NewReader(c.data)
-	return int64(len(c.data)), nil
+	return c.offset, nil
 }
 
 func (c *memFile) Close() error {
