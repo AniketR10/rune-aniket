@@ -338,7 +338,7 @@ func testWorkspaceSchemeListFiles(
 		require.False(t, ok)
 	})
 
-	t.Run("returns empty iterator with the files in the", func(t *testing.T) {
+	t.Run("returns valid iterator", func(t *testing.T) {
 		scheme := schemeFn(t)
 		totalFiles := 1000
 
