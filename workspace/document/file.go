@@ -3,55 +3,64 @@ package document
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"io/fs"
 	"os"
-	"path/filepath"
 	"time"
 
+	"github.com/ernestrc/blue/document"
+	"github.com/ernestrc/blue/encoding"
 	"github.com/ernestrc/blue/retry"
 	"unstable.build/go-tui/workspace"
 )
 
 type fileInfo struct {
-	Filename  string
-	DataSize  int64
-	FileMode  fs.FileMode
-	UpdatedAt time.Time
+	Filename string
+	DataSize int64
+	FileMode fs.FileMode
+	Modified time.Time
 }
 
-type file struct {
-	DocID     string
-	Data      []byte
-	Filename  string
-	FileMode  fs.FileMode
-	UpdatedAt time.Time
-
-	dirty         bool
+type file[T Document[T]] struct {
+	errMissingID  error
+	marshaler     encoding.Marshaler
 	retryStrategy retry.Strategy
 	svc           *service
-	memFile       workspace.File
+
+	val T
+
+	lastSize int
+	dirty    bool
+	offset   int64
+	memFile  workspace.File
 }
 
 // return not fully initialzed until init is called
-func newFilePrototype(
-	docID, filename string, mode fs.FileMode,
-) (f *file) {
-	ret := new(file)
-	ret.DocID = docID
-	ret.Filename = filename
-	ret.FileMode = mode
-	ret.UpdatedAt = time.Now()
-	return ret
+func newFile[T Document[T]](
+	docID string, m encoding.Marshaler, errMissingID error,
+	svc *service, mode fs.FileMode, retryStrategy retry.Strategy,
+	val T, addTemplate bool,
+) (*file[T], error) {
+	ret := new(file[T])
+	ret.marshaler = m
+	ret.svc = svc
+	ret.val = val
+	if addTemplate {
+		data, err := ret.marshaler.Marshal(ret.val)
+		if err != nil {
+			return nil, fmt.Errorf("Marshal: %v", err)
+		}
+		ret.memFile = workspace.NewMemoryFile(docID, mode, data)
+	} else {
+		data := make([]byte, 0)
+		ret.memFile = workspace.NewMemoryFile(docID, mode, data)
+	}
+	ret.retryStrategy = retryStrategy
+	return ret, nil
 }
 
-func (f *file) init(svc *service, retryStrategy retry.Strategy) {
-	f.svc = svc
-	f.memFile = workspace.NewMemoryFile(f.Filename, f.FileMode, f.Data)
-	f.retryStrategy = retryStrategy
-}
-
-func (f *file) Sync() error {
+func (f *file[T]) Sync() error {
 	f.svc.transaction.Lock()
 	defer f.svc.transaction.Unlock()
 	ctx := context.Background()
@@ -60,7 +69,7 @@ func (f *file) Sync() error {
 	return f.sync(ctx)
 }
 
-func (f *file) sync(ctx context.Context) error {
+func (f *file[T]) sync(ctx context.Context) error {
 	// NOTE: we're potentially losing read/write
 	// offset position by doing this
 	_, err := f.memFile.Seek(0, 0)
@@ -72,25 +81,65 @@ func (f *file) sync(ctx context.Context) error {
 	if err != nil {
 		panic(err)
 	}
-	f.Data = buf.Bytes()
-	f.UpdatedAt = time.Now()
 
+	// return read offset to its current offset
+	_, err = f.memFile.Seek(f.offset, 0)
+	if err != nil {
+		panic(err)
+	}
+
+	var temp T
+	err = f.marshaler.Unmarshal(buf.Bytes(), &temp)
+	if err != nil {
+		return fmt.Errorf("Unmarshal: corrupted document: %v: %s", err, buf.String())
+	}
+
+	f.val = temp
+	f.lastSize = buf.Len()
+	if f.val.ID() == "" {
+		return f.errMissingID
+	}
+
+	// we are holding transaction lock so we should be good to make this check:
+	// make sure that file still exists in the database before syncing.
+	err = retry.Retry(ctx, f.retryStrategy, func(ctx context.Context) (bool, error) {
+		var temp T
+		err = f.svc.svc.Get(ctx, f.memFile.Name(), &temp)
+		return err != document.ErrNotFound, err
+	})
+	if err != nil {
+		return err
+	}
+
+	err = retry.Retry(ctx, f.retryStrategy, func(ctx context.Context) (bool, error) {
+		err = f.svc.svc.Set(ctx, f.memFile.Name(), f.val)
+		return true, err
+	})
+	if err != nil {
+		return err
+	}
+	// get new UpdatedAt
 	return retry.Retry(ctx, f.retryStrategy, func(ctx context.Context) (bool, error) {
-		err = f.svc.svc.Set(context.Background(), f.DocID, f)
+		err = f.svc.svc.Get(ctx, f.memFile.Name(), &f.val)
+		if err == nil {
+			f.dirty = false
+		}
 		return true, err
 	})
 }
 
-func (f *file) Name() string {
-	return f.Filename
+func (f *file[T]) Name() string {
+	return f.memFile.Name()
 }
 
-func (f *file) Stat() (os.FileInfo, error) {
+func (f *file[T]) Stat() (os.FileInfo, error) {
+	mstat, _ := f.memFile.Stat()
 	return fileInfo{
-		DataSize:  int64(len(f.Data)),
-		Filename:  filepath.Base(f.Filename),
-		FileMode:  f.FileMode,
-		UpdatedAt: f.UpdatedAt,
+		DataSize: int64(f.lastSize),
+		// there shouldn't be any directories so it's safe to just return orig name
+		Filename: f.val.ID(),
+		FileMode: mstat.Mode(),
+		Modified: f.val.UpdatedTime(),
 	}, nil
 }
 
@@ -107,7 +156,7 @@ func (f fileInfo) Mode() fs.FileMode {
 }
 
 func (f fileInfo) ModTime() time.Time {
-	return f.UpdatedAt
+	return f.Modified
 }
 
 func (f fileInfo) IsDir() bool {
@@ -118,27 +167,29 @@ func (f fileInfo) Sys() any {
 	return nil
 }
 
-func (f *file) Truncate(size int64) error {
-	f.dirty = true
+func (f *file[T]) Truncate(size int64) error {
+	// do not set to dirty if Truncate only,
+	// as we might try to sync an empty buffer
 	return f.memFile.Truncate(size)
 }
 
-func (f *file) Seek(offset int64, whence int) (int64, error) {
+func (f *file[T]) Seek(offset int64, whence int) (int64, error) {
+	f.offset = offset
 	return f.memFile.Seek(offset, whence)
 }
 
-func (f *file) Read(p []byte) (n int, err error) {
-	return f.memFile.Read(p)
+func (f *file[T]) Read(p []byte) (n int, err error) {
+	n, err = f.memFile.Read(p)
+	f.offset += int64(n)
+	return
 }
 
-func (f *file) Write(p []byte) (n int, err error) {
-	f.dirty = true
-	return f.memFile.Write(p)
+func (f *file[T]) Write(p []byte) (n int, err error) {
+	n, err = f.memFile.Write(p)
+	f.offset += int64(n)
+	return
 }
 
-func (f *file) Close() error {
-	if f.dirty {
-		return f.Sync()
-	}
+func (f *file[T]) Close() (err error) {
 	return nil
 }

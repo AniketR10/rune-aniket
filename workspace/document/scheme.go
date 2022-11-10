@@ -4,13 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"os"
-	"path/filepath"
 	"sync"
 	"time"
 
 	"github.com/ernestrc/blue/document"
+	"github.com/ernestrc/blue/encoding"
 	"github.com/ernestrc/blue/iterator"
 	"github.com/ernestrc/blue/retry"
 	multierr "github.com/ernestrc/go-multierror"
@@ -24,20 +23,39 @@ import (
 // Note that rootURI should uniquely identify svc and it will be used
 // as the root URI for all workspace.Scheme instantiations.
 //
-// Also note that it's assumed that no other process is writing to the resources
-// managed by the given document.Service. Failure to provide this guarantee
-// will probably result in corruption of data.
+// Also note that it's assumed that the underlying documents stored
+// are of type T and that it can be safely encoded/decoded with the given
+// encoding.Marshaler. Failure to provide this guarantee will probably result
+// in corruption of data. The errMissingID argument is used when flushing the
+// unmarshaled document if Document.ID returns an empty string.
+// the unmarshaled Document.ID.
 //
-// Open does not support O_APPEND or O_SYNC flags.
-func WorkspaceScheme(rootURI workspace.URI, svc document.Service) workspace.SchemeFunc {
+// Open does not support O_APPEND or O_SYNC flags. Write or Close after Write
+// do not sync the contents of a file to permanent storage.
+// Sync must be called to send data to permanent storage. This is to allow
+// for documents to become illegal temporarily while editing.
+func WorkspaceScheme[T Document[T]](
+	rootURI workspace.URI, svc document.Service,
+	marshaler encoding.Marshaler, errMissingID error,
+) workspace.SchemeFunc {
 	return func(cfg config.Config, uri workspace.URI) (workspace.Scheme, error) {
 		if !workspace.HasPrefix(uri, rootURI) {
-			return nil, fmt.Errorf("invalid uri %q for scheme with root uri %q: root does not match", uri, rootURI)
+			return nil, fmt.Errorf("invalid uri %q for scheme with root uri %q:"+
+				" root does not match", uri, rootURI)
 		}
-		ret := new(scheme)
-		ret.init(svc, uri)
+		ret := new(scheme[T])
+		ret.init(svc, uri, marshaler)
 		return ret, nil
 	}
+}
+
+// Document abstracts a document that knows about the ID
+// used to index it in the underlying document.Service and
+// about the last time that it was updated.
+type Document[T any] interface {
+	ID() string
+	WithID(string) T
+	UpdatedTime() time.Time
 }
 
 const (
@@ -52,47 +70,42 @@ type service struct {
 	transaction sync.Mutex
 }
 
-type scheme struct {
+type scheme[T Document[T]] struct {
 	unimplementedTerminal
 	unimplementedExecutor
 	workspace          workspace.URI
+	marshaler          encoding.Marshaler
 	svc                service
+	errMissingID       error
 	retryRealFailure   retry.Strategy
 	retryInconsistency retry.Strategy
 }
 
-func (s *scheme) init(svc document.Service, uri workspace.URI) {
+func (s *scheme[T]) init(svc document.Service, uri workspace.URI, m encoding.Marshaler) {
 	s.svc.svc = svc
+	s.marshaler = m
 	s.workspace = uri
 	s.retryRealFailure = retry.CombinedStrategy(
-		retry.ExponentialStrategy(100*time.Millisecond, 500*time.Millisecond),
+		retry.ExponentialStrategy(50*time.Microsecond, 500*time.Millisecond),
 		retry.LimitStrategy(30),
 	)
 	s.retryInconsistency = retry.CombinedStrategy(
-		retry.ExponentialStrategy(50*time.Millisecond, 250*time.Millisecond),
+		retry.ExponentialStrategy(50*time.Microsecond, 250*time.Millisecond),
 		retry.LimitStrategy(100),
 	)
 }
 
-func (s *scheme) URI(path string) (workspace.URI, error) {
+func (s *scheme[T]) URI(path string) (workspace.URI, error) {
 	return workspace.WorkspaceURI(s.workspace, path)
 }
 
-func (s *scheme) docIDFromPath(path string) (string, string, error) {
-	path = filepath.Clean(path)
-	if path == "" {
-		return "", "", fmt.Errorf("invalid file %q", path)
-	}
-	uri, err := s.URI(path)
-	if err != nil {
-		return "", "", err
-	}
+func (s *scheme[T]) docIDFromPath(path string) (string, string, error) {
 	// document ID is just the pathname, to guarantee
 	// compatibility with services that already have data stored
-	return uri.Path(), path, nil
+	return path, path, nil
 }
 
-func (s *scheme) Open(path string, flag int, perm os.FileMode) (
+func (s *scheme[T]) Open(path string, flag int, perm os.FileMode) (
 	workspace.File, *workspace.Error,
 ) {
 	if flag&os.O_APPEND != 0 || flag&os.O_SYNC != 0 {
@@ -122,9 +135,9 @@ func (s *scheme) Open(path string, flag int, perm os.FileMode) (
 	return s.open(ctx, path, flag, perm)
 }
 
-func (s *scheme) open(ctx context.Context, path string, flag int, perm os.FileMode) (
-	workspace.File, *workspace.Error,
-) {
+func (s *scheme[T]) open(
+	ctx context.Context, path string, flag int, perm os.FileMode,
+) (workspace.File, *workspace.Error) {
 	docID, path, err := s.docIDFromPath(path)
 	if err != nil {
 		return nil, workspace.NopError(err)
@@ -134,18 +147,11 @@ func (s *scheme) open(ctx context.Context, path string, flag int, perm os.FileMo
 	excl := flag&os.O_EXCL != 0
 	trunc := flag&os.O_TRUNC != 0
 
-	var filename string
-	rel, err := filepath.Rel(s.workspace.Path(), path)
-	if err != nil {
-		filename = filepath.Join(s.workspace.Path(), path)
-	} else {
-		filename = filepath.Join(s.workspace.Path(), rel)
-	}
-
-	f := newFilePrototype(docID, filename, perm)
+	var template T
+	template = template.WithID(docID)
 	if create && excl {
 		err := retry.Retry(ctx, s.retryRealFailure, func(ctx context.Context) (bool, error) {
-			err = s.svc.svc.Create(ctx, docID, f)
+			err = s.svc.svc.Create(ctx, docID, template)
 			return err != document.ErrAlreadyExists, err
 		})
 		if errors.Is(err, document.ErrAlreadyExists) {
@@ -155,8 +161,13 @@ func (s *scheme) open(ctx context.Context, path string, flag int, perm os.FileMo
 			return nil, workspace.NopError(err)
 		}
 	} else if create || trunc {
+		// invariant: in storage there always needs to be
+		// a valid unmarshable T value, even if O_TRUNC is passed.
+		// In this last case, we leave the inmemory buffer empty for
+		// the client to write to and then sync takes care of ensuring
+		// that we don't store an invalid structure.
 		err := retry.Retry(ctx, s.retryRealFailure, func(ctx context.Context) (bool, error) {
-			err = s.svc.svc.Set(ctx, docID, f)
+			err = s.svc.svc.Set(ctx, docID, template)
 			return true, err
 		})
 		if err != nil {
@@ -168,8 +179,9 @@ func (s *scheme) open(ctx context.Context, path string, flag int, perm os.FileMo
 	// Some document.Service implementations are eventually consistent,
 	// so other than loading any stored data into f, this also exempts the
 	// rest of methods from having to worry about stale reads.
+	var ret T
 	err = retry.Retry(ctx, s.retryInconsistency, func(ctx context.Context) (bool, error) {
-		err = s.svc.svc.Get(ctx, docID, f)
+		err = s.svc.svc.Get(ctx, docID, &ret)
 		return create || err != document.ErrNotFound, err
 	})
 	if err != nil {
@@ -184,13 +196,15 @@ func (s *scheme) open(ctx context.Context, path string, flag int, perm os.FileMo
 		return nil, workspace.NopError(err)
 	}
 
-	// initialize File API now that data has been loaded
-	f.init(&s.svc, s.retryRealFailure)
-
+	f, err := newFile(docID, s.marshaler, s.errMissingID,
+		&s.svc, perm, s.retryRealFailure, ret, !trunc)
+	if err != nil {
+		return nil, workspace.NopError(err)
+	}
 	return f, nil
 }
 
-func (s *scheme) Remove(path string) error {
+func (s *scheme[T]) Remove(path string) error {
 	docID, path, err := s.docIDFromPath(path)
 	if err != nil {
 		return err
@@ -203,7 +217,7 @@ func (s *scheme) Remove(path string) error {
 	ctx, cancel := context.WithTimeout(ctx, serviceTimeout)
 	defer cancel()
 
-	var temp file
+	var temp T
 	err = retry.Retry(ctx, s.retryRealFailure, func(ctx context.Context) (bool, error) {
 		err = s.svc.svc.Get(ctx, docID, &temp)
 		return err != document.ErrNotFound, err
@@ -218,7 +232,7 @@ func (s *scheme) Remove(path string) error {
 	return s.retriedDelete(ctx, docID)
 }
 
-func (s *scheme) Rename(old, new string) error {
+func (s *scheme[T]) Rename(old, new string) error {
 	newDocID, new, err := s.docIDFromPath(new)
 	if err != nil {
 		return err
@@ -235,16 +249,27 @@ func (s *scheme) Rename(old, new string) error {
 	ctx, cancel := context.WithTimeout(ctx, serviceTimeout)
 	defer cancel()
 
-	oldF, werr := s.open(ctx, old, os.O_RDONLY, 0666)
-	if werr != nil {
-		return werr.ToError()
-	}
-	newF, werr := s.open(ctx, new, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0666)
+	oldF, werr := s.open(ctx, old, os.O_RDONLY, 0)
 	if werr != nil {
 		return werr.ToError()
 	}
 
-	cleanup := func(ctx context.Context, err error) error {
+	f := oldF.(*file[T])
+	f.val = f.val.WithID(newDocID)
+
+	err = retry.Retry(ctx, s.retryRealFailure, func(ctx context.Context) (bool, error) {
+		err = s.svc.svc.Set(ctx, newDocID, f.val)
+		return true, err
+	})
+	if err != nil {
+		return err
+	}
+
+	cleanup := func(err error) error {
+		// create a new context in case we failed due to context.Done
+		ctx := context.Background()
+		ctx, cancel := context.WithTimeout(ctx, serviceTimeout)
+		defer cancel()
 		rerr := s.retriedDelete(ctx, newDocID)
 		if rerr != nil {
 			err = multierr.Append(err, rerr)
@@ -252,25 +277,15 @@ func (s *scheme) Rename(old, new string) error {
 		return err
 	}
 
-	_, err = io.Copy(newF, oldF)
-	if err != nil {
-		return cleanup(ctx, fmt.Errorf("Copy: %v", err))
-	}
-
-	err = newF.(*file).sync(ctx)
-	if err != nil {
-		return cleanup(ctx, fmt.Errorf("Sync: %v", err))
-	}
-
 	err = s.retriedDelete(ctx, oldDocID)
 	if err != nil {
-		return cleanup(ctx, fmt.Errorf("Delete: %v", err))
+		return cleanup(fmt.Errorf("Delete: %v", err))
 	}
 
 	return nil
 }
 
-func (s *scheme) Stat(path string) (os.FileInfo, error) {
+func (s *scheme[T]) Stat(path string) (os.FileInfo, error) {
 	f, werr := s.Open(path, 0, 0)
 	if werr != nil {
 		return nil, werr.ToError()
@@ -278,7 +293,7 @@ func (s *scheme) Stat(path string) (os.FileInfo, error) {
 	return f.Stat()
 }
 
-func (s *scheme) ListFiles(ctx context.Context) (iterator.Iterator[string], error) {
+func (s *scheme[T]) ListFiles(ctx context.Context) (iterator.Iterator[string], error) {
 	s.svc.transaction.Lock()
 	defer s.svc.transaction.Unlock()
 
@@ -291,27 +306,26 @@ func (s *scheme) ListFiles(ctx context.Context) (iterator.Iterator[string], erro
 	if err != nil {
 		return nil, err
 	}
-	return iterator.Map(iterator.FromDocumentIterator[*file](it), func(in *file) string {
-		filename, _ := filepath.Rel(s.workspace.Path(), in.Name())
-		return filename
+	return iterator.Map(iterator.FromDocumentIterator[T](it), func(in T) string {
+		return in.ID()
 	}), nil
 }
 
-func (s *scheme) Lstat(path string) (os.FileInfo, error) {
+func (s *scheme[T]) Lstat(path string) (os.FileInfo, error) {
 	return s.Stat(path)
 }
 
-func (s *scheme) ReadLink(path string) (string, error) {
+func (s *scheme[T]) ReadLink(path string) (string, error) {
 	return "", errors.New("path is not a link")
 }
 
-func (s *scheme) Close() error {
+func (s *scheme[T]) Close() error {
 	return nil
 }
 
-func (s *scheme) retriedDelete(ctx context.Context, docID string) error {
-	var temp file
-	return retry.Retry(ctx, s.retryRealFailure, func(ctx context.Context) (bool, error) {
+func (s *scheme[T]) retriedDelete(ctx context.Context, docID string) error {
+	var temp T
+	err := retry.Retry(ctx, s.retryRealFailure, func(ctx context.Context) (bool, error) {
 		err := s.svc.svc.Delete(ctx, docID)
 		if err != nil {
 			gerr := s.svc.svc.Get(ctx, docID, &temp)
@@ -321,5 +335,16 @@ func (s *scheme) retriedDelete(ctx context.Context, docID string) error {
 			return true, err
 		}
 		return false, nil
+	})
+	if err != nil {
+		return err
+	}
+	// wait for eventually consistent backends to propagate changes
+	return retry.Retry(ctx, s.retryRealFailure, func(ctx context.Context) (bool, error) {
+		gerr := s.svc.svc.Get(ctx, docID, &temp)
+		if gerr == document.ErrNotFound {
+			return false, nil
+		}
+		return true, err
 	})
 }

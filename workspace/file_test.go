@@ -752,6 +752,8 @@ func newUninitializedTestFileBuffer(t *testing.T, ctrl *gomock.Controller) (
 	f, mock := newTestFileBuffer(ctrl)
 	f.scheme.(*testScheme).openFunc = func(name string, flag int, perm os.FileMode) (File, *Error) {
 		if flag&os.O_CREATE != 0 {
+			mock.EXPECT().Read(gomock.Any()).Return(0, io.EOF).Times(1)
+			mock.EXPECT().Seek(gomock.Any(), gomock.Any()).Return(int64(0), nil).Times(1)
 			return mock, nil
 		}
 		return nil, &Error{IsNotExist: true}

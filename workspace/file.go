@@ -196,7 +196,7 @@ func (f *file) initBuffer(buf *cell.Buffer, file File) (err error) {
 	buf.Reset()
 	view := newUnixFileReader(buf.View())
 
-	// file could not be created yet, so initialize from the swap
+	// file could be not created yet, so initialize from the swap
 	// in case some scheme implementations initialize files with
 	// a template
 	if file == nil {

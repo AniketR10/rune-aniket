@@ -1,6 +1,7 @@
 package test
 
 import (
+	"bytes"
 	context "context"
 	io "io"
 	"io/ioutil"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	cell "unstable.build/go-tui/cell"
 	workspace "unstable.build/go-tui/workspace"
 )
 
@@ -20,7 +22,8 @@ func TestWorkspaceSchemeFiles(
 	schemeFn func(t *testing.T) workspace.Scheme,
 ) {
 	t.Run("Open", func(t *testing.T) {
-		TestWorkspaceSchemeOpen(t, schemeFn, defaultCreateTestFile, ioutil.ReadAll)
+		TestWorkspaceSchemeOpen(t, schemeFn, defaultCreateTestFile,
+			ioutil.ReadAll, (workspace.File).Write, true)
 	})
 	t.Run("Remove", func(t *testing.T) {
 		TestWorkspaceSchemeRemove(t, schemeFn, defaultCreateTestFile)
@@ -39,6 +42,129 @@ func TestWorkspaceSchemeFiles(
 	})
 	t.Run("ListFiles", func(t *testing.T) {
 		TestWorkspaceSchemeListFiles(t, schemeFn, defaultCreateTestFile)
+	})
+	t.Run("workspace.Load integration", func(t *testing.T) {
+		TestWorkspaceLoadIntegration(t, schemeFn, defaultCreateTestFile,
+			readAllExceptLastEOL, (*cell.Buffer).Write)
+	})
+}
+
+func readAllExceptLastEOL(r io.Reader) (data []byte, err error) {
+	data, err = ioutil.ReadAll(r)
+	if err != nil {
+		return
+	}
+	if bytes.HasSuffix(data, []byte{'\n'}) {
+		data = data[:len(data)-1]
+	}
+	return
+}
+
+func TestWorkspaceLoadIntegration(
+	t *testing.T,
+	schemeFn func(t *testing.T) workspace.Scheme,
+	createTestFile func(*testing.T, workspace.Scheme, string, string) (workspace.File, func()),
+	readAll func(io.Reader) ([]byte, error),
+	write func(*cell.Buffer, []byte) (int, error),
+) {
+	t.Run("loads a NEW file into a buffer and flushes new data to it", func(t *testing.T) {
+		scheme := schemeFn(t)
+		uri, err := scheme.URI(".")
+		require.NoError(t, err)
+		wp := workspace.NewSchemeWorkspace(uri, scheme)
+		fileuri := workspace.Join(uri, "myFile")
+		swapDir := workspace.Join(uri, ".")
+		buf := cell.NewBuffer()
+
+		fc, err := wp.Load(fileuri, buf, swapDir, false)
+		require.NoError(t, err)
+		_, err = write(buf, []byte("newData"))
+		require.NoError(t, err)
+
+		require.NoError(t, fc.Flush())
+
+		f, werr := scheme.Open("myFile", os.O_RDONLY, 0)
+		require.Nil(t, werr)
+		data, err := readAll(f)
+		require.NoError(t, err)
+		require.Equal(t, "newData", string(data))
+	})
+
+	t.Run("loads an existing file into a buffer and flushes new data to it", func(t *testing.T) {
+		scheme := schemeFn(t)
+		_, cleanup := createTestFile(t, scheme, "myExistingFile", "VERY ")
+		defer cleanup()
+
+		uri, err := scheme.URI(".")
+		require.NoError(t, err)
+		wp := workspace.NewSchemeWorkspace(uri, scheme)
+		fileuri := workspace.Join(uri, "myExistingFile")
+		swapDir := workspace.Join(uri, ".")
+		buf := cell.NewBuffer()
+
+		fc, err := wp.Load(fileuri, buf, swapDir, false)
+		require.NoError(t, err)
+		_, err = write(buf, []byte("short"))
+		require.NoError(t, err)
+
+		require.NoError(t, fc.Flush())
+
+		f, werr := scheme.Open("myExistingFile", os.O_RDONLY, 0)
+		require.Nil(t, werr)
+		data, err := readAll(f)
+		require.NoError(t, err)
+		require.Equal(t, "VERY short", string(data))
+	})
+
+	t.Run("recovers an existing file into a buffer", func(t *testing.T) {
+		scheme := schemeFn(t)
+		_, cleanup1 := createTestFile(t, scheme, "file", "")
+		defer cleanup1()
+
+		_, cleanup2 := createTestFile(t, scheme, ".file.swp", "mosca")
+		defer cleanup2()
+
+		uri, err := scheme.URI(".")
+		require.NoError(t, err)
+		wp := workspace.NewSchemeWorkspace(uri, scheme)
+		fileuri := workspace.Join(uri, "file")
+		swapuri := workspace.Join(uri, ".file.swp")
+		buf := cell.NewBuffer()
+
+		fc, err := wp.Recover(fileuri, swapuri, buf, false)
+		require.NoError(t, err)
+
+		require.NoError(t, fc.Close())
+
+		f, werr := scheme.Open("file", os.O_RDONLY, 0)
+		require.Nil(t, werr)
+		data, err := readAll(f)
+		require.NoError(t, err)
+		require.Equal(t, "mosca", string(data))
+	})
+
+	t.Run("recovers a file that doesn't exist yet into a buffer", func(t *testing.T) {
+		scheme := schemeFn(t)
+		_, cleanup2 := createTestFile(t, scheme, ".file.swp", "mosca")
+		defer cleanup2()
+
+		uri, err := scheme.URI(".")
+		require.NoError(t, err)
+		wp := workspace.NewSchemeWorkspace(uri, scheme)
+		fileuri := workspace.Join(uri, "file")
+		swapuri := workspace.Join(uri, ".file.swp")
+		buf := cell.NewBuffer()
+
+		fc, err := wp.Recover(fileuri, swapuri, buf, false)
+		require.NoError(t, err)
+
+		require.NoError(t, fc.Close())
+
+		f, werr := scheme.Open("file", os.O_RDONLY, 0)
+		require.Nil(t, werr)
+		data, err := readAll(f)
+		require.NoError(t, err)
+		require.Equal(t, "mosca", string(data))
 	})
 }
 
@@ -60,6 +186,8 @@ func TestWorkspaceSchemeOpen(
 	schemeFn func(t *testing.T) workspace.Scheme,
 	createTestFile func(*testing.T, workspace.Scheme, string, string) (workspace.File, func()),
 	readAll func(io.Reader) ([]byte, error),
+	writeFile func(workspace.File, []byte) (int, error),
+	testRelativeAbsolutePaths bool,
 ) {
 	t.Run("returns error if O_CREATE flag is not passed and file doesn't exist", func(t *testing.T) {
 		scheme := schemeFn(t)
@@ -68,46 +196,84 @@ func TestWorkspaceSchemeOpen(
 		assert.True(t, err.IsNotExist)
 	})
 
-	t.Run("relative to cwd or absolute to cwd should be the same file", func(t *testing.T) {
+	t.Run("truncates file if O_TRUNC is passed if file stored has data", func(t *testing.T) {
 		scheme := schemeFn(t)
 		_, cleanup := createTestFile(t, scheme, "file", "1234")
 		defer cleanup()
 
-		cwd, err := scheme.URI(".")
+		d, werr := scheme.Open("file", os.O_RDWR|os.O_TRUNC, 0)
+		require.Nil(t, werr, werr.String())
+
+		_, err := writeFile(d, []byte("zz"))
 		require.NoError(t, err)
 
-		d, werr := scheme.Open("file", os.O_RDONLY, 0)
-		require.Nil(t, werr, werr.String())
+		_, err = d.Seek(0, 0)
+		require.NoError(t, err)
 
 		data, err := readAll(d)
 		require.NoError(t, err)
-		assert.Equal(t, "1234", string(data))
+		assert.Equal(t, "zz", string(data))
 
-		d, werr = scheme.Open(filepath.Join(cwd.Path(), "file"), os.O_RDONLY, 0)
+	})
+
+	t.Run("truncates file if O_TRUNC is passed if it's a new file", func(t *testing.T) {
+		scheme := schemeFn(t)
+		d, werr := scheme.Open("file", os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0666)
 		require.Nil(t, werr, werr.String())
 
-		data, err = readAll(d)
-		require.NoError(t, err)
-		assert.Equal(t, "1234", string(data))
-	})
-
-	t.Run("if a relative path is passed then that should be relative to the workspace cwd", func(t *testing.T) {
-		scheme := schemeFn(t)
-		f, werr := scheme.Open("file", os.O_CREATE, 0644)
-		require.Nil(t, werr, werr.String())
-
-		cwdURI, err := scheme.URI(".")
+		_, err := writeFile(d, []byte("zz"))
 		require.NoError(t, err)
 
-		assert.Equal(t, filepath.Join(cwdURI.Path(), "file"), f.Name())
+		_, err = d.Seek(0, 0)
+		require.NoError(t, err)
+
+		data, err := readAll(d)
+		require.NoError(t, err)
+		assert.Equal(t, "zz", string(data))
 	})
 
-	t.Run("if an absolute path is passed then it should access even outside of cwd", func(t *testing.T) {
-		scheme := schemeFn(t)
-		f, err := scheme.Open("/tmp/file", os.O_CREATE, 0644)
-		require.Nil(t, err, err.String())
-		assert.Equal(t, "/tmp/file", f.Name())
-	})
+	if testRelativeAbsolutePaths {
+		t.Run("relative to cwd or absolute to cwd should be the same file", func(t *testing.T) {
+			scheme := schemeFn(t)
+			_, cleanup := createTestFile(t, scheme, "file", "1234")
+			defer cleanup()
+
+			cwd, err := scheme.URI(".")
+			require.NoError(t, err)
+
+			d, werr := scheme.Open("file", os.O_RDONLY, 0)
+			require.Nil(t, werr, werr.String())
+
+			data, err := readAll(d)
+			require.NoError(t, err)
+			assert.Equal(t, "1234", string(data))
+
+			d, werr = scheme.Open(filepath.Join(cwd.Path(), "file"), os.O_RDONLY, 0)
+			require.Nil(t, werr, werr.String())
+
+			data, err = readAll(d)
+			require.NoError(t, err)
+			assert.Equal(t, "1234", string(data))
+		})
+
+		t.Run("if a relative path is passed then that should be relative to the workspace cwd", func(t *testing.T) {
+			scheme := schemeFn(t)
+			f, werr := scheme.Open("file", os.O_CREATE, 0644)
+			require.Nil(t, werr, werr.String())
+
+			cwdURI, err := scheme.URI(".")
+			require.NoError(t, err)
+
+			assert.Equal(t, filepath.Join(cwdURI.Path(), "file"), f.Name())
+		})
+
+		t.Run("if an absolute path is passed then it should access even outside of cwd", func(t *testing.T) {
+			scheme := schemeFn(t)
+			f, err := scheme.Open("/tmp/file", os.O_CREATE, 0644)
+			require.Nil(t, err, err.String())
+			assert.Equal(t, "/tmp/file", f.Name())
+		})
+	}
 
 	t.Run("returns error if O_EXCL|O_CREATE flag is passed and file exist", func(t *testing.T) {
 		scheme := schemeFn(t)
@@ -133,21 +299,14 @@ func TestWorkspaceSchemeOpen(
 		})
 
 		t.Run("Read before write", func(t *testing.T) {
-			var buf [10]byte
-			n, err := f.Read(buf[:])
-			require.Equal(t, io.EOF, err)
-			assert.Equal(t, 0, n)
+			data, err := readAll(f)
+			require.NoError(t, err)
+			assert.Equal(t, "", string(data))
 		})
 
 		t.Run("Write", func(t *testing.T) {
-			f2, cleanup := createTestFile(t, scheme, "fofito", "1234567890")
-			// use test file copy for content
-			data, err := ioutil.ReadAll(f2)
-			cleanup()
+			_, err := writeFile(f, []byte("1234567890"))
 			require.NoError(t, err)
-			n, err := f.Write(data)
-			require.NoError(t, err)
-			assert.Equal(t, len(data), n)
 		})
 
 		t.Run("Read after write before sync", func(t *testing.T) {
@@ -176,14 +335,9 @@ func TestWorkspaceSchemeOpen(
 		})
 
 		t.Run("Read", func(t *testing.T) {
-			var buf [10]byte
-			n, err := f.Read(buf[:])
+			data, err := readAll(f)
 			require.NoError(t, err)
-			assert.Equal(t, 10, n)
-
-			n, err = f.Read(buf[:])
-			require.Equal(t, io.EOF, err)
-			assert.Equal(t, 0, n)
+			assert.Equal(t, "1234567890", string(data))
 		})
 
 		t.Run("Truncate", func(t *testing.T) {
