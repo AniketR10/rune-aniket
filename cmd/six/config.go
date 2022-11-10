@@ -929,8 +929,7 @@ func decodeConfig(r io.Reader) (cfg map[string]interface{}, err error) {
 func loadWorkspaceConfig(cwd workspace.Workspace, uri workspace.URI, c *ideConfig) (
 	isConfigErr bool, err error,
 ) {
-	localConfigPath := workspace.Join(uri, ".sixrc")
-	f, werr := cwd.Open(localConfigPath.Path(), os.O_RDONLY, 0)
+	f, werr := cwd.Open(".sixrc", os.O_RDONLY, 0)
 	if werr != nil {
 		if werr.IsNotExist {
 			return false, nil
