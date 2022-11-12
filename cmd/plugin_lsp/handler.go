@@ -555,7 +555,6 @@ func newLspHandler(
 		if err != config.ErrNotFound {
 			configErr = multierr.Append(configErr,
 				fmt.Errorf("failed to get 'enable_semantic_tokens' from config: %v", err))
-			return nil, err
 		}
 	} else {
 		for k, v := range enableSemanticTokensIfc {
@@ -575,7 +574,6 @@ func newLspHandler(
 		if err != config.ErrNotFound {
 			configErr = multierr.Append(configErr,
 				fmt.Errorf("failed to get 'diagnostic_list_id' from config: %v", err))
-			return nil, err
 		}
 		ret.diagnosticListID = defaultDiagnosticListID
 	}
