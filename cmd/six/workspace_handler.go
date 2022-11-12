@@ -344,6 +344,19 @@ func cloneConfig(cfg ideConfig) ideConfig {
 	return ideConfig{cfg: ret, errors: make(map[string]error)}
 }
 
+// we have no conrol over what plugins are defining in configuration;
+// it could be secret keys or anything worth stealing for a malicious plugin
+// that gets granted plugin.PermissionConfig.
+func cleanedPluginConfig(cfg map[string]interface{}) map[string]interface{} {
+	m := make(map[string]interface{}, len(cfg))
+	for k, v := range cfg {
+		if k != "plugins" {
+			m[k] = v
+		}
+	}
+	return m
+}
+
 func (h *workspaceManagerHandler) addWorkspace(
 	uri workspace.URI, recfilename string, filenames []string,
 ) error {
@@ -399,7 +412,7 @@ func (h *workspaceManagerHandler) addWorkspace(
 	res = plugin.MergeResourceMap(res, plugin.SchemeManagerResources(h.workspace))
 	res = plugin.MergeResourceMap(res, plugin.StorageResources(h.sixDir))
 	res = plugin.MergeResourceMap(res, plugin.ConfigResources(
-		config.MapConfig(cfg.cfg)))
+		config.MapConfig(cleanedPluginConfig(cfg.cfg))))
 	res[plugin.PermissionClipboard] = h.clipboard
 
 	pluginOpts := []plugin.Option{
