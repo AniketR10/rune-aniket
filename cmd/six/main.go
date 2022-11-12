@@ -200,7 +200,9 @@ func run() int {
 	if *flagConfigPath != defaultConfigPath {
 		_, err := os.Stat(*flagConfigPath)
 		if err != nil {
-			log.Fatalf("Stat(%s): %s", *flagConfigPath, err)
+			err = fmt.Errorf("Stat(%s): %s", *flagConfigPath, err)
+			fmt.Printf("%s", err)
+			return 1
 		}
 	}
 
@@ -209,14 +211,15 @@ func run() int {
 		i, err = newIdeRecovery(*flagWorkspace, *flagConfigPath,
 			filenames[0], *flagRecover, *flagDataPath, term.PublishEvent)
 	} else if *flagRecover != "" {
-		log.Fatal("flag -r requires to pass the original filename")
+		err = fmt.Errorf("flag -r requires to pass the original filename")
 	} else {
 		i, err = newIde(*flagWorkspace, *flagConfigPath,
 			*flagDataPath, term.PublishEvent, filenames...)
 	}
 
 	if err != nil {
-		log.Fatal(err)
+		fmt.Printf("%s", err)
+		return 1
 	}
 
 	var ret error
@@ -227,6 +230,7 @@ func run() int {
 		ret = multierr.Append(ret, err)
 	}
 	if ret != nil {
+		fmt.Printf("%s", ret)
 		log.Error(ret)
 		return 1
 	}
