@@ -182,16 +182,16 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 │ there's only 10 w│
 │orkspaces         │
 └──────────────────┘`},
-		{":addBlaBla>",
+		{":addBlaBla>", // addWorkspace should work on a workspace, use next avail
 			`┌──────────────────┐
 │                  │
 ├──────────────────┤
 │                  │
-│                  │
 │workspaceWallpaper│
-│Unknown command "a│
-│ddBlaBla" or alias│
-│ targets          │
+│                  │
+│                  │
+├──────────────────┤
+│1  2              │
 └──────────────────┘`},
 		{"1234567890",
 			`┌──────────────────┐
@@ -226,7 +226,7 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 ├──────────────────┤
 │1  2              │
 └──────────────────┘`},
-		{":sw 3>:addBlaBla>", // test workspace handler aliases
+		{":sw 3>:addBlaBla>",
 			`┌──────────────────┐
 │                  │
 ├──────────────────┤

@@ -26,11 +26,12 @@ import (
 const (
 	cmdSwitchToWorkspace = "switchToWorkspace"
 	cmdCloseWorkspace    = "closeWorkspace"
+	cmdAddWorkspace      = "addWorkspace"
 )
 
 var (
 	workspaceCommands = map[string]func(*workspaceManagerHandler, ...string) error{
-		"addWorkspace":       (*workspaceManagerHandler).commandAddWorkspace,
+		cmdAddWorkspace:      (*workspaceManagerHandler).commandAddWorkspace,
 		cmdCloseWorkspace:    (*workspaceManagerHandler).commandCloseWorkspace,
 		cmdSwitchToWorkspace: (*workspaceManagerHandler).commandSwitchToWorkspace,
 		"quit":               (*workspaceManagerHandler).commandQuit,
@@ -166,8 +167,24 @@ func (h *workspaceManagerHandler) init(
 	return nil
 }
 
-func (h *workspaceManagerHandler) subscribeAllWorkspaceCommands(ex *ex) (ret error) {
-	for cmd, _fn := range workspaceCommands {
+func (h *workspaceManagerHandler) subscribeAllWorkspaceCommands(ex *ex) error {
+	return h.subscribeCommands(ex, workspaceCommands)
+}
+
+func (h *workspaceManagerHandler) subscribeActiveWorkspaceCommands(ex *ex) (ret error) {
+	workspaceActiveCommands := map[string]func(*workspaceManagerHandler, ...string) error{
+		cmdAddWorkspace:      (*workspaceManagerHandler).commandAddWorkspace,
+		cmdCloseWorkspace:    (*workspaceManagerHandler).commandCloseWorkspace,
+		cmdSwitchToWorkspace: (*workspaceManagerHandler).commandSwitchToWorkspace,
+	}
+	return h.subscribeCommands(ex, workspaceActiveCommands)
+}
+
+func (h *workspaceManagerHandler) subscribeCommands(
+	ex *ex,
+	commands map[string]func(*workspaceManagerHandler, ...string) error,
+) (ret error) {
+	for cmd, _fn := range commands {
 		fn := _fn
 		err := ex.comp.SubscribeCommand(cmd,
 			text.FuncCommandHandler(func(ctx context.Context, cmd text.Command) (bool, error) {
@@ -178,24 +195,6 @@ func (h *workspaceManagerHandler) subscribeAllWorkspaceCommands(ex *ex) (ret err
 		}
 	}
 	return ret
-}
-
-func (h *workspaceManagerHandler) subscribeActiveWorkspaceCommands(ex *ex) (ret error) {
-	err := ex.comp.SubscribeCommand(cmdSwitchToWorkspace,
-		text.FuncCommandHandler(func(ctx context.Context, cmd text.Command) (bool, error) {
-			return false, h.commandSwitchToWorkspace(cmd.Args...)
-		}))
-	if err != nil {
-		ret = multierr.Append(ret, err)
-	}
-	err = ex.comp.SubscribeCommand(cmdCloseWorkspace,
-		text.FuncCommandHandler(func(ctx context.Context, cmd text.Command) (bool, error) {
-			return false, h.commandCloseWorkspace()
-		}))
-	if err != nil {
-		ret = multierr.Append(ret, err)
-	}
-	return
 }
 
 func (h *workspaceManagerHandler) focusHandler() tui.Handler {
@@ -426,18 +425,41 @@ func (h *workspaceManagerHandler) addWorkspace(
 
 	go h.initPlugins(pluginManager, cfg)
 
-	h.workspaces[h.focus] = &workspaceHandler{
+	i, ok := h.nextAvailableWorkspace()
+	if !ok {
+		return fmt.Errorf("no available workspaces")
+	}
+
+	h.workspaces[i] = &workspaceHandler{
 		Handler:         ex,
 		workspaceCloser: cwd,
 		Plugins:         pluginManager,
 		pluginResources: res,
 	}
 	h.workspaceCount++
-	h.switchToWorkspace(h.focus)
+	h.switchToWorkspace(i)
 
 	logNonFatalErrs(configErr, cfg.errors)
 
 	return nil
+}
+
+func (h *workspaceManagerHandler) nextAvailableWorkspace() (idx int, ok bool) {
+	for i := h.focus; i >= 0; i++ {
+		if h.workspaces[i] == nil {
+			ok = true
+			idx = i
+			return
+		}
+	}
+	for i := 0; i < h.focus; i++ {
+		if h.workspaces[i] == nil {
+			ok = true
+			idx = i
+			return
+		}
+	}
+	return
 }
 
 func logNonFatalErrs(
@@ -458,10 +480,6 @@ func (h *workspaceManagerHandler) commandAddWorkspace(args ...string) error {
 	if len(args) == 0 {
 		return errors.New("invalid arguments. " +
 			"Expecting 1 argument with workspace URI")
-	}
-	if h.focusHandler() != h.empty {
-		return errors.New("workspace tab is not empty. " +
-			"Switch to an empty workspace tab to add a workspace")
 	}
 	path := args[0]
 
