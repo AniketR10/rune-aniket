@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"strconv"
 	"sync"
 
@@ -359,6 +360,15 @@ func cleanedPluginConfig(cfg map[string]interface{}) map[string]interface{} {
 func (h *workspaceManagerHandler) addWorkspace(
 	uri workspace.URI, recfilename string, filenames []string,
 ) error {
+	for i, w := range h.workspaces {
+		if w == nil {
+			continue
+		}
+		if w.uri.Equal(uri) {
+			h.switchToWorkspace(i)
+			return nil
+		}
+	}
 	cwd, err := h.workspace.AddWorkspace(uri)
 	if err != nil {
 		return fmt.Errorf("Failed to create new workspace for %q: %s", uri, err)
@@ -431,6 +441,7 @@ func (h *workspaceManagerHandler) addWorkspace(
 	}
 
 	h.workspaces[i] = &workspaceHandler{
+		uri:             uri,
 		Handler:         ex,
 		workspaceCloser: cwd,
 		Plugins:         pluginManager,
@@ -478,8 +489,7 @@ func logNonFatalErrs(
 
 func (h *workspaceManagerHandler) commandAddWorkspace(args ...string) error {
 	if len(args) == 0 {
-		return errors.New("invalid arguments. " +
-			"Expecting 1 argument with workspace URI")
+		args = append(args, os.TempDir())
 	}
 	path := args[0]
 
@@ -572,6 +582,7 @@ func (h *workspaceManagerHandler) Close() (ret error) {
 
 type workspaceHandler struct {
 	tui.Handler
+	uri             workspace.URI
 	workspaceCloser io.Closer
 	Plugins         *plugin.Manager
 	pluginResources map[plugin.Permission]plugin.ResourceServer

@@ -76,6 +76,15 @@ func (u URI) Password() (string, bool) {
 	return "", false
 }
 
+// Equal returns true if this uri is equal to other.
+func (u URI) Equal(other URI) bool {
+	return u.Scheme() == other.Scheme() &&
+		u.Hostname() == other.Hostname() &&
+		u.Port() == other.Port() &&
+		u.User() == other.User() &&
+		u.Path() == other.Path()
+}
+
 func sanitizeFilePath(resource string) string {
 	resolvedPath, err := filepath.EvalSymlinks(resource)
 	if err != nil {

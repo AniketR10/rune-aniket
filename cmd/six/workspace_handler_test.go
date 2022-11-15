@@ -204,14 +204,14 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 ├──────────────────┤
 │1  10             │
 └──────────────────┘`},
-		{"2:aw>",
+		{"2:aw>", // uses tmp dir as workspace in the absence of a uri
 			`┌──────────────────┐
 │                  │
 ├──────────────────┤
-│invalid arguments.│
-│ Expecting 1 argum│
-│ent with workspace│
-│ URI              │
+│                  │
+│workspaceWallpaper│
+│                  │
+│                  │
 ├──────────────────┤
 │1  2              │
 └──────────────────┘`},
