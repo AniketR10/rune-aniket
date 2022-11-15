@@ -589,9 +589,6 @@ func expectInitSwap(
 		// assert.EqualValues(t, data, p)
 		return len(p), nil
 	})
-
-	// sync to swap file
-	mock.EXPECT().Sync().Return(nil)
 }
 
 func expectInitBuffer(mock *MockOsFile, data []byte) {
@@ -797,6 +794,7 @@ func newRecoveredTestFileBuffer(t *testing.T, ctrl *gomock.Controller) (
 	expectInitSwap(mock, defaultFileName, testFileInfo{}, defaultFileData)
 	expectInitBuffer(mock, defaultFileData)
 	buf := cell.NewBuffer()
+	mock.EXPECT().Sync().Return(nil)
 	require.NoError(t, f.initRecover(defaultFileName,
 		"."+defaultFileName+".swp", buf, false))
 	return f, mock, buf
@@ -914,6 +912,7 @@ func testFileBufferFlush(t *testing.T, newBuffer newBufferFunc) {
 		mock.EXPECT().Close().Return(nil).Times(2)
 		expectInitSwap(mock, defaultFileName, testFileInfo{}, defaultFileData)
 
+		mock.EXPECT().Sync().Return(nil)
 		assert.NoError(t, f.Flush())
 		assert.True(t, called)
 	})
@@ -922,12 +921,14 @@ func testFileBufferFlush(t *testing.T, newBuffer newBufferFunc) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
-		f, _, _ := newBuffer(t, ctrl)
+		f, mock, _ := newBuffer(t, ctrl)
 		myErr := errors.New("wtf")
 		f.scheme.(*testScheme).renameFunc = func(oldName, newName string) error {
 			return myErr
 		}
 
+		mock.EXPECT().Sync().Return(nil)
+		mock.EXPECT().Close().Return(nil).Times(2)
 		assert.Equal(t, myErr, f.Flush())
 	})
 
@@ -976,9 +977,6 @@ func TestRecoverFileBufferFlush(t *testing.T) {
 func expectCopyToSwapPrepare(f *file, mock *MockOsFile) func() {
 	mock.EXPECT().Truncate(gomock.Eq(int64(0))).Return(nil)
 	mock.EXPECT().Seek(gomock.Eq(int64(0)), gomock.Eq(0)).Return(int64(0), nil)
-	mock.EXPECT().
-		Sync().
-		Return(nil)
 	return f.wg.Wait
 }
 
@@ -988,6 +986,7 @@ func expectCopyToSwap(f *file, mock *MockOsFile, newData string) func() {
 	mock.EXPECT().
 		Write(gomock.Eq([]byte(expectedContent+"\n"))).
 		Return(len(expectedContent)+1, nil)
+	mock.EXPECT().Stat().Return(testFileInfo{}, nil).AnyTimes()
 	return clean
 }
 
@@ -1033,6 +1032,7 @@ func testFileBufferInsert(
 		wait := expectCopyToSwap(f, mock, myString)
 		defer wait()
 
+		mock.EXPECT().Sync().Return(nil)
 		mock.EXPECT().Close().Return(nil).Times(2)
 		expectInitSwap(mock, defaultFileName, testFileInfo{}, defaultFileData)
 		assert.NoError(t, f.Flush())

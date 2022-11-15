@@ -76,7 +76,7 @@ func swapFileName(swapDir, filePath string) (string, string) {
 	return swapDir, path.Join(swapDir, fmt.Sprintf(".%s.swp", filepath.Base(filePath)))
 }
 
-func (f *file) initSwap(swapDir string, orig File, origPerms os.FileMode) (File, error) {
+func (f *file) initSwap(orig File, origPerms os.FileMode) (File, error) {
 	swap, osErr := f.scheme.Open(f.swapFileName, os.O_RDWR|os.O_CREATE|os.O_EXCL, origPerms)
 	if osErr != nil {
 		if osErr.IsExist {
@@ -97,10 +97,6 @@ func (f *file) initSwap(swapDir string, orig File, origPerms os.FileMode) (File,
 
 	_, err = swap.Write(content)
 	if err != nil {
-		return nil, err
-	}
-
-	if err = swap.Sync(); err != nil {
 		return nil, err
 	}
 
@@ -172,12 +168,12 @@ func (f *file) initFiles(filePath, swapDir string, readOnly bool) error {
 		if fileInfo != nil {
 			mode = fileInfo.Mode()
 		}
-		swap, err := f.initSwap(swapDir, file, mode)
+		swap, err := f.initSwap(file, mode)
 		if err != nil {
 			return err
 		}
 		// store swapInfo so we can check update times at Flush
-		swapInfo, err := f.scheme.Stat(swap.Name())
+		swapInfo, err := f.scheme.Stat(f.swapFileName)
 		if err != nil {
 			return err
 		}
@@ -200,7 +196,12 @@ func (f *file) initBuffer(buf *cell.Buffer, file File) (err error) {
 	buf.Reset()
 	view := newUnixFileReader(buf.View())
 
-	// file could be not created yet
+	// file could not be created yet, so initialize from the swap
+	// in case some scheme implementations initialize files with
+	// a template
+	if file == nil {
+		file = f.swap
+	}
 	if file != nil {
 		_, err = buf.ReadFrom(file)
 		if err != nil {
@@ -319,7 +320,7 @@ func (f *file) init(
 }
 
 func (f *file) delayCopySwapError(err error) {
-	f.delayedError = fmt.Errorf("Swap file error %s: %s", f.swap.Name(), err)
+	f.delayedError = fmt.Errorf("Swap file error %s: %s", f.swapFileName, err)
 }
 
 func (f *file) copyFlushSwapFile(str string) (ok bool) {
@@ -349,13 +350,16 @@ func (f *file) copyFlushSwapFile(str string) (ok bool) {
 		return
 	}
 
-	err = f.swap.Sync()
+	finfo, err := f.swap.Stat()
 	if err != nil {
 		f.delayCopySwapError(err)
 		return
 	}
 
-	f.swapInfoModTime = time.Now()
+	// we have to always use what the file is reporting as mod time
+	// because we cannot use the host's clock or a skew on a remote
+	// workspace would introduce all sorts of bugs
+	f.swapInfoModTime = finfo.ModTime()
 	ok = true
 	return
 }
@@ -377,25 +381,18 @@ func (f *file) OnDidEdit(from, to term.Coordinates, old string) {
 	}
 }
 
-func (f *file) moveFile(sourcePath, destPath string) error {
-	err := f.scheme.Rename(sourcePath, destPath)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func (f *file) touchFile() error {
+func (f *file) touchFile() (isExist bool) {
 	var err *Error
 	f.orig, err = f.scheme.Open(f.fileName, os.O_RDWR|os.O_CREATE|os.O_EXCL, defaultFileMode)
 	if err != nil {
 		// file was not created when instantiating this file, but now
 		// file seems to be there so file must be stale.
 		if err.IsExist {
-			return ErrStaleData
+			return true
 		}
+		// ignore other errors
 	}
-	return nil
+	return false
 }
 
 // Flush saves the contents of the buffer to disk. If file was modified by some
@@ -425,12 +422,12 @@ func (f *file) flush(force bool) error {
 
 	// create file if it didn't exist before
 	if f.orig == nil {
-		err := f.touchFile()
-		if err != nil {
-			return err
+		isExist := f.touchFile()
+		if isExist {
+			return ErrStaleData
 		}
 	} else {
-		newFileInfo, err := f.scheme.Stat(f.orig.Name())
+		newFileInfo, err := f.scheme.Stat(f.fileName)
 		if err != nil {
 			return err
 		}
@@ -439,7 +436,7 @@ func (f *file) flush(force bool) error {
 			return ErrStaleData
 		}
 
-		newFileInfo, err = f.scheme.Lstat(f.orig.Name())
+		newFileInfo, err = f.scheme.Lstat(f.fileName)
 		if err != nil {
 			return err
 		}
@@ -451,7 +448,7 @@ func (f *file) flush(force bool) error {
 		}
 	}
 
-	newSwapInfo, err := f.scheme.Stat(f.swap.Name())
+	newSwapInfo, err := f.scheme.Stat(f.swapFileName)
 	if err != nil {
 		return err
 	}
@@ -459,15 +456,20 @@ func (f *file) flush(force bool) error {
 		return ErrStaleData
 	}
 
-	err = f.moveFile(f.swap.Name(), origTarget)
+	err = f.swap.Sync()
 	if err != nil {
 		return err
 	}
 
-	// any fs errors should be picked up or fixed
-	// by opening files again
-	_ = f.orig.Close()
+	if f.orig != nil {
+		_ = f.orig.Close()
+	}
 	_ = f.swap.Close()
+
+	err = f.scheme.Rename(f.swapFileName, origTarget)
+	if err != nil {
+		return err
+	}
 
 	err = f.initFiles(f.fileName, f.swapDir, f.readOnly)
 	if err != nil {
@@ -501,21 +503,22 @@ func (f *file) Close() (ret error) {
 	}
 
 	if f.swap != nil {
-		swapFileName := f.swap.Name()
 		if err := f.swap.Close(); err != nil {
 			ret = multierr.Append(ret, err)
 		}
-		newSwapInfo, err := f.scheme.Stat(f.swap.Name())
+		newSwapInfo, err := f.scheme.Stat(f.swapFileName)
 		if err != nil {
 			ret = multierr.Append(ret, err)
 		} else {
-			// do not remove a swap from another process
+			// do not remove a swap from another process, in case
+			// another process took over ownership after we did
 			if !newSwapInfo.ModTime().After(f.swapInfoModTime) {
-				if err := f.scheme.Remove(swapFileName); err != nil {
+				if err := f.scheme.Remove(f.swapFileName); err != nil {
 					ret = multierr.Append(ret, err)
 				}
 			}
 		}
+
 		f.swap = nil
 	}
 
