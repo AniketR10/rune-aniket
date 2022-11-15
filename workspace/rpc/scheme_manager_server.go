@@ -37,7 +37,6 @@ type SchemeManagerServer struct {
 	// and read/writes clients, at the same time we run a goroutine
 	// to monitor the underlying connection, which also writes
 	// to clients
-	rmu     sync.Mutex
 	clients map[uint64]io.Closer
 }
 
@@ -107,12 +106,11 @@ func (s *SchemeManagerServer) dialScheme(proxyID uint32, cfg config.Config, uri 
 	go proto.MonitorConnection(ctx, s.failureTimeout, conn,
 		func(reason string) {
 			reason = fmt.Sprintf("rpc.SchemeManagerServer(proxyID=%d): %s", proxyID, reason)
-			_, _ = proto.ForceCloseResource(s.broker, uint64(proxyID), s.getClients, &s.rmu)
+			_, _ = proto.ForceCloseResource(s.broker, uint64(proxyID), s.getClients, s.locker)
 		})
 
-	s.rmu.Lock()
-	defer s.rmu.Unlock()
-
+	// no need to synchronize over this because dialScheme is invoked by the manager
+	// and so resource synchronization is already taken care of
 	s.clients[uint64(proxyID)] = &schemeManagerResource{
 		conn:          conn,
 		client:        client,
