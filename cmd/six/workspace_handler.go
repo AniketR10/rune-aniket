@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"strconv"
 	"sync"
@@ -443,7 +442,6 @@ func (h *workspaceManagerHandler) addWorkspace(
 	h.workspaces[i] = &workspaceHandler{
 		uri:             uri,
 		Handler:         ex,
-		workspaceCloser: cwd,
 		Plugins:         pluginManager,
 		pluginResources: res,
 	}
@@ -583,15 +581,11 @@ func (h *workspaceManagerHandler) Close() (ret error) {
 type workspaceHandler struct {
 	tui.Handler
 	uri             workspace.URI
-	workspaceCloser io.Closer
 	Plugins         *plugin.Manager
 	pluginResources map[plugin.Permission]plugin.ResourceServer
 }
 
 func (hm *workspaceHandler) Close() (ret error) {
-	if err := hm.workspaceCloser.Close(); err != nil {
-		ret = multierr.Append(ret, err)
-	}
 	if err := hm.Handler.(*ex).Close(); err != nil {
 		ret = multierr.Append(ret, err)
 	}

@@ -18,8 +18,9 @@ import (
 // ide runs a terminal TUI session with a workspaceManagerHandler
 type ide struct {
 	ideConfig
-	root      *workspaceManagerHandler
-	clipboard *plugin.ClipboardManager
+	workspaceManager *workspace.Manager
+	root             *workspaceManagerHandler
+	clipboard        *plugin.ClipboardManager
 }
 
 // newIde allocates storage for a new ide and initializes it with config
@@ -121,6 +122,7 @@ func (i *ide) init(cwd, cfgfilename, recfilename string,
 	if err != nil {
 		return err
 	}
+	i.workspaceManager = workspaceManager
 	i.root = root
 	logNonFatalErrs(configErr, i.ideConfig.errors)
 
@@ -162,6 +164,10 @@ func (i *ide) closeResources() (ret error) {
 	}
 
 	if err := i.clipboard.Close(); err != nil {
+		ret = multierr.Append(ret, err)
+	}
+
+	if err := i.workspaceManager.Close(); err != nil {
 		ret = multierr.Append(ret, err)
 	}
 
