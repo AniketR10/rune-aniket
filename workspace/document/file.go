@@ -91,7 +91,7 @@ func (f *file[T]) sync(ctx context.Context) error {
 	var temp T
 	err = f.marshaler.Unmarshal(buf.Bytes(), &temp)
 	if err != nil {
-		return fmt.Errorf("Unmarshal: corrupted document: %v: %s", err, buf.String())
+		return fmt.Errorf("Unmarshal: %v", err)
 	}
 
 	f.val = temp
