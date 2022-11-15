@@ -166,6 +166,67 @@ func TestWorkspaceLoadIntegration(
 		require.NoError(t, err)
 		require.Equal(t, "mosca", string(data))
 	})
+
+	t.Run("flush+close should cleanup temp state such that next Load is able to flush", func(t *testing.T) {
+		scheme := schemeFn(t)
+		uri, err := scheme.URI(".")
+		require.NoError(t, err)
+		wp := workspace.NewSchemeWorkspace(uri, scheme)
+		fileuri := workspace.Join(uri, "myCloseTest")
+		swapDir := workspace.Join(uri, ".")
+
+		buf := cell.NewBuffer()
+		fc, err := wp.Load(fileuri, buf, swapDir, false)
+		require.NoError(t, err)
+		_, err = write(buf, []byte("short"))
+		require.NoError(t, err)
+
+		require.NoError(t, fc.Flush())
+		require.NoError(t, fc.Close())
+
+		buf = cell.NewBuffer()
+		fc, err = wp.Load(fileuri, buf, swapDir, false)
+		require.NoError(t, err)
+		_, err = write(buf, []byte("short"))
+		require.NoError(t, err)
+
+		require.NoError(t, fc.Flush())
+
+		f, werr := scheme.Open("myCloseTest", os.O_RDONLY, 0)
+		require.Nil(t, werr)
+		data, err := readAll(f)
+		require.NoError(t, err)
+		require.Equal(t, "shortshort", string(data))
+	})
+
+	t.Run("close should cleanup temp state such that next Load works", func(t *testing.T) {
+		scheme := schemeFn(t)
+		uri, err := scheme.URI(".")
+		require.NoError(t, err)
+		wp := workspace.NewSchemeWorkspace(uri, scheme)
+		fileuri := workspace.Join(uri, "myCloseTest")
+		swapDir := workspace.Join(uri, ".")
+
+		buf := cell.NewBuffer()
+		fc, err := wp.Load(fileuri, buf, swapDir, false)
+		require.NoError(t, err)
+
+		require.NoError(t, fc.Close())
+
+		buf = cell.NewBuffer()
+		fc, err = wp.Load(fileuri, buf, swapDir, false)
+		require.NoError(t, err)
+		_, err = write(buf, []byte("short"))
+		require.NoError(t, err)
+
+		require.NoError(t, fc.Flush())
+
+		f, werr := scheme.Open("myCloseTest", os.O_RDONLY, 0)
+		require.Nil(t, werr)
+		data, err := readAll(f)
+		require.NoError(t, err)
+		require.Equal(t, "short", string(data))
+	})
 }
 
 func defaultCreateTestFile(t *testing.T, s workspace.Scheme, filename, content string) (workspace.File, func()) {

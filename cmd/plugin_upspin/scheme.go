@@ -147,15 +147,25 @@ func (s *scheme) Open(path string, flag int, mode os.FileMode) (workspace.File, 
 			return nil, mapUpspinError(err)
 		}
 	}
+	path, _ = s.expandPath(path)
+	ret := &fileAdapter{
+		client: s.client,
+		file:   f,
+		path:   path,
+	}
 	if flag&os.O_CREATE != 0 {
 		// make sure entry is created
-		err := f.Sync()
+		err := ret.Sync()
+		if err != nil {
+			return nil, mapUpspinError(err)
+		}
+	} else {
+		ret.lastEntry, err = s.client.Lookup(uname, true)
 		if err != nil {
 			return nil, mapUpspinError(err)
 		}
 	}
-	path, _ = s.expandPath(path)
-	return fileAdapter{client: s.client, file: f, path: path}, nil
+	return ret, nil
 }
 
 func (s *scheme) Remove(path string) error {

@@ -140,9 +140,10 @@ func (c *upspinClient) Put(name upspin.PathName, data []byte) (
 
 // satisfies internal osFile (only diff with upspin.File is Name())
 type fileAdapter struct {
-	path   string
-	client *upspinClient
-	file   *blupspin.File
+	path      string
+	lastEntry *upspin.DirEntry
+	client    *upspinClient
+	file      *blupspin.File
 }
 
 // satisfies os.FileInfo
@@ -157,6 +158,8 @@ func (e entryAdapter) Name() string {
 }
 
 func (e entryAdapter) Size() (ret int64) {
+	// unused, but still need to return something
+	// so rpc server does not panic
 	return 0
 }
 
@@ -169,7 +172,7 @@ func (e entryAdapter) Mode() fs.FileMode {
 }
 
 func (e entryAdapter) ModTime() time.Time {
-    return time.Unix(int64(e.entry.Time), 0)
+	return time.Unix(int64(e.entry.Time), 0)
 }
 
 func (e entryAdapter) IsDir() bool {
@@ -180,40 +183,48 @@ func (e entryAdapter) Sys() interface{} {
 	return nil
 }
 
-func (f fileAdapter) Seek(offset int64, whence int) (int64, error) {
+func (f *fileAdapter) Seek(offset int64, whence int) (int64, error) {
 	return f.file.Seek(offset, whence)
 }
 
-func (f fileAdapter) Read(p []byte) (n int, err error) {
+func (f *fileAdapter) Read(p []byte) (n int, err error) {
 	return f.file.Read(p)
 }
 
-func (f fileAdapter) Close() error {
-	return f.file.Close()
+func (f *fileAdapter) Close() error {
+	// do not call upspin.File.Close or we will
+	// issue a new Sync
+	return nil
 }
 
-func (f fileAdapter) Write(p []byte) (n int, err error) {
-	return f.file.Write(p)
+func (f *fileAdapter) Write(p []byte) (n int, err error) {
+	n, err = f.file.Write(p)
+	if err != nil {
+		return
+	}
+	err = f.Sync()
+	return
 }
 
-func (f fileAdapter) Name() string {
+func (f *fileAdapter) Name() string {
 	// Name as defined by os.File is always whatever
 	// path was given to Open
 	return f.path
 }
 
-func (f fileAdapter) Stat() (os.FileInfo, error) {
-	entry, err := f.client.Lookup(f.file.Name(), true)
+func (f *fileAdapter) Stat() (os.FileInfo, error) {
+	return entryAdapter{entry: f.lastEntry}, nil
+}
+
+func (f *fileAdapter) Sync() error {
+	entry, err := f.file.Sync()
 	if err != nil {
-		return nil, err
+		return err
 	}
-	return entryAdapter{entry: entry}, nil
+	f.lastEntry = entry
+	return nil
 }
 
-func (f fileAdapter) Sync() error {
-	return f.file.Sync()
-}
-
-func (f fileAdapter) Truncate(size int64) error {
+func (f *fileAdapter) Truncate(size int64) error {
 	return f.file.Truncate(int(size))
 }
