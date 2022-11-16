@@ -5,11 +5,11 @@ go 1.19
 require (
 	github.com/alecthomas/chroma v0.10.0
 	github.com/atotto/clipboard v0.1.2
-	github.com/ernestrc/blue v1.27.0
+	github.com/ernestrc/blue v1.27.1
 	github.com/ernestrc/dom v0.2.5-0.20201125033726-789c946aa938
 	github.com/ernestrc/go-multierror v1.1.2
 	github.com/ernestrc/golang-internal-tools v0.0.0-20220317145801-f8b5a950857b
-	github.com/ernestrc/sensible v0.2.1
+	github.com/ernestrc/sensible v0.2.2
 	github.com/ernestrc/tcell/v2 v2.5.4-0.20221007185330-3a06e9ace178
 	github.com/fsnotify/fsnotify v1.5.4
 	github.com/golang/mock v1.4.4
