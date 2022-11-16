@@ -1,20 +1,9 @@
 #!/bin/bash
+BRANCH="$(git rev-parse --abbrev-ref HEAD)"
 
-test_build() {
-    FILES=`go list ./...`
-    if test $? -ne 0
-    then
-        exit 1
-    fi
-	echo "testing that all .go files compile..."
-    output=`go build $FILES`
-    if test $? -ne 0
-    then
-        output=`echo "$output"`
-        exit 1
-    fi
-	echo "testing that all test files compile..."
-    output=`for file in $FILES; do go test -c $file; done`
+test_pass() {
+    echo "Running 'make test'... "
+    output=`make test`
     if test $? -ne 0
     then
         output=`echo "$output"`
@@ -59,7 +48,9 @@ case "$1" in
         echo "Check Go code formatting"
         ;;
     * )
-        test_build
+        if [[ "$BRANCH" == "master" ]]; then
+	        test_pass
+        fi
         test_fmt
         ;;
 esac
