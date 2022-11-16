@@ -32,7 +32,7 @@ func newMulti(manager WorkspaceManager, defURI URI, def Workspace) *multi {
 func (m multi) Load(file URI, buf *cell.Buffer, swapDir URI, readOnly bool) (FlusherCloser, error) {
 	is, err := IsWorkspaceURI(m.def, file)
 	if err != nil {
-		return nil, fmt.Errorf("multi.IsWorkspaceURI: %s", err)
+		return nil, fmt.Errorf("workspace URI: %s", err)
 	}
 	if !is {
 		return m.loadExtraneous(file, buf, swapDir, readOnly)
@@ -43,7 +43,7 @@ func (m multi) Load(file URI, buf *cell.Buffer, swapDir URI, readOnly bool) (Flu
 func (m multi) Recover(file, swapFilePath URI, buf *cell.Buffer, force bool) (FlusherCloser, error) {
 	is, err := IsWorkspaceURI(m.def, file)
 	if err != nil {
-		return nil, fmt.Errorf("multi.IsWorkspaceURI: %s", err)
+		return nil, fmt.Errorf("workspace URI: %s", err)
 	}
 	if !is {
 		return m.recoverExtraneous(file, swapFilePath, buf, force)
@@ -114,7 +114,7 @@ func (m multi) Close() error {
 }
 
 func (m multi) loadExtraneous(file URI, buf *cell.Buffer, swapDir URI, readOnly bool) (FlusherCloser, error) {
-	workspace, err := m.manager.AddWorkspace(file)
+	workspace, err := m.manager.AddWorkspace(Dir(file))
 	if err != nil {
 		return nil, err
 	}
@@ -122,7 +122,7 @@ func (m multi) loadExtraneous(file URI, buf *cell.Buffer, swapDir URI, readOnly 
 }
 
 func (m multi) recoverExtraneous(file, swapFilePath URI, buf *cell.Buffer, force bool) (FlusherCloser, error) {
-	workspace, err := m.manager.AddWorkspace(file)
+	workspace, err := m.manager.AddWorkspace(Dir(file))
 	if err != nil {
 		return nil, err
 	}

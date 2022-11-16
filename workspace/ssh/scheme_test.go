@@ -147,7 +147,8 @@ func TestNewScheme(t *testing.T) {
 			"ssh://ernie@ernest.photography/home/ernie/src", ""},
 		{"no host returns error", "ssh:///tmp", "", "could not parse ssh workspace URI: ssh scheme with empty host is invalid"},
 		{"different scheme returns error", "file:///tmp", "", "invalid non-ssh scheme"},
-		{"file URI is ok", "ssh://ernie@ernest.photography/tmp/file.txt", "", ""},
+		{"file URI returns error", "ssh://ernie@ernest.photography/tmp/file.txt", "",
+			"workspace URI does not refer to a directory: ssh://ernie@ernest.photography/tmp/file.txt"},
 	}
 
 	for _, tcase := range tsuite {
@@ -208,8 +209,6 @@ func TestURI(t *testing.T) {
 			"ssh://ernest.photography/home/git", ""},
 		{"relative upwards workspace tree ./ path", "ssh://ernest.photography/home/git/src/blue", "./../../file.txt",
 			"ssh://ernest.photography/home/git/file.txt", ""},
-		{"workspace URI with file uri should exclude the file", "ssh://ernest.photography/home/git/src/blue/file.txt", "hello.txt",
-			"ssh://ernest.photography/home/git/src/blue/hello.txt", ""},
 	}
 
 	for _, tcase := range tsuite {
@@ -262,9 +261,6 @@ func TestIntegrationIsWorkspaceURI(t *testing.T) {
 		{"ssh://ernest.photography/var/", "ssh://ernest.photography/var/file.txt", true},
 		{"ssh://root@ernest.photography/var/", "ssh://root@ernest.photography/var/file.txt", true},
 		{"ssh://root@ernest.photography:1999/var/", "ssh://root@ernest.photography:1999/var/file.txt", true},
-		// test workspace uri with file
-		{"ssh://root@ernest.photography:1999/var/file.txt", "ssh://root@ernest.photography:1999/var/hello.txt", true},
-		{"ssh://ernest.photography/~/hello.txt", "ssh://ernest.photography/~/src/hola.txt", true},
 	}
 
 	for i, tcase := range tsuite {
@@ -292,7 +288,7 @@ func TestIntegrationManagerIsWorkspaceFile(t *testing.T) {
 	fileWorkspaceURI, err := workspace.ParseURI(filepath.Join("file://", fileWorkspacePath))
 	require.NoError(t, err)
 
-	sshWorkspaceURI, err := workspace.ParseURI("ssh://ernest.photography/~/hello.txt")
+	sshWorkspaceURI, err := workspace.ParseURI("ssh://ernest.photography/~/")
 	require.NoError(t, err)
 
 	manager := workspace.NewManager(config.NopConfig())

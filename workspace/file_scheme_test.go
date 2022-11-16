@@ -51,7 +51,8 @@ func TestNewScheme(t *testing.T) {
 		{"different scheme returns error", "ssh:///tmp", "invalid file URI"},
 		{"no host regular folder success", "file:///tmp", ""},
 		{"root", "file:///", ""},
-		{"file uri should use file base dir as workspace", "file:///tmp/file.txt", ""}, // newTestFileScheme sets osStat based on file name
+		{"file uri should return error", "file:///tmp/file.txt",
+			"workspace URI does not refer to a directory: file:///tmp/file.txt"}, // newTestFileScheme sets osStat based on file name
 	}
 
 	for _, tcase := range tsuite {
@@ -103,8 +104,6 @@ func TestFileSchemeURI(t *testing.T) {
 			"file:///home/git/src/blue/../../", ""},
 		{"relative upwards workspace tree ./ path", "file:///home/git/src/blue", "./../../file.txt",
 			"file:///home/git/src/blue/./../../file.txt", ""},
-		{"workspace URI is a file URI should use file dir as workspace base URI", "file:///tmp/file.txt", "file.md",
-			"file:///tmp/file.md", ""},
 	}
 
 	for _, tcase := range tsuite {

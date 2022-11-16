@@ -73,10 +73,14 @@ func (w *schemeWorkspace) Recover(
 	path, swapPath := uri.Path(), swapURI.Path()
 	relPath, err := filepath.Rel(w.w.Path(), path)
 	if err == nil {
+		log.Debugf("workspace %q relative path converted from %q into %q",
+			w.w.Path(), path, relPath)
 		path = relPath
 	}
 	relPath, err = filepath.Rel(w.w.Path(), swapPath)
 	if err == nil {
+		log.Debugf("workspace %q relative path converted from %q into %q",
+			w.w.Path(), swapPath, relPath)
 		swapPath = relPath
 	}
 
@@ -116,10 +120,14 @@ func (w *schemeWorkspace) Load(
 	path, swapDirPath := uri.Path(), swapDir.Path()
 	relPath, err := filepath.Rel(w.w.Path(), path)
 	if err == nil {
+		log.Debugf("workspace %q relative path converted from %q into %q",
+			w.w.Path(), path, relPath)
 		path = relPath
 	}
 	relPath, err = filepath.Rel(w.w.Path(), swapDirPath)
 	if err == nil {
+		log.Debugf("workspace %q relative path converted from %q into %q",
+			w.w.Path(), swapDirPath, relPath)
 		swapDirPath = relPath
 	}
 

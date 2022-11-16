@@ -22,7 +22,6 @@ import (
 	"github.com/ernestrc/sensible/find"
 	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui/config"
-	
 	"unstable.build/go-tui/term/pty"
 )
 
@@ -95,7 +94,7 @@ func (p *fileScheme) init(cfg config.Config, workspace URI) error {
 		return err
 	}
 	if !fs.IsDir() {
-		workspace = Dir(workspace)
+		return fmt.Errorf("workspace URI does not refer to a directory: %s", workspace.String())
 	}
 	p.workspace = workspace
 	p.workers, err = cfg.GetInt("workers")

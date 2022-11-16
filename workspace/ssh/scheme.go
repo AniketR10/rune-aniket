@@ -16,7 +16,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 	"unstable.build/go-tui/config"
-	
+
 	"unstable.build/go-tui/workspace"
 	workspacepb "unstable.build/go-tui/workspace/rpc"
 )
@@ -282,10 +282,7 @@ func (s *scheme) init(cc sshConfig, uri workspace.URI,
 	}
 
 	if !fi.IsDir() {
-		uri = workspace.Dir(uri)
-		_ = s.Scheme.Close()
-		// re-initialize with dir uri
-		return s.init(cc, uri, statWorkspaceDir)
+		return fmt.Errorf("workspace URI does not refer to a directory: %s", uri.String())
 	}
 
 	return nil

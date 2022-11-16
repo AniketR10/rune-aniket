@@ -8,7 +8,6 @@ import (
 	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui/config"
-	
 )
 
 var (
@@ -88,22 +87,13 @@ func (m *Manager) Scheme(uri URI) (SchemeFunc, error) {
 // AddWorkspace returns a Workspace capable of managing resources on
 // the given URI. It returns an error if no Scheme has been registered
 // (previously via RegisterScheme) for the given workspace's scheme. Note that
-// the given URI can be a file URI, in which case the workspace will default
-// to the file's directory as the workspace URI.
+// the given URI should not be a file URI.
 //
 // If a workspace has already been added for the given URI, then this
 // method returns it. This method does not follow the same semantics as
 // Workspace as the latter uses IsWorkspaceURI semantics and this
 // will create a new workspace if the uri strings are different.
 func (m *Manager) AddWorkspace(uri URI) (Workspace, error) {
-	// In theory, we might create more workspaces than needed if one
-	// is open with file URI, and another with its dir, but it's
-	// preferable over returning the same for all local file schemes,
-	// as it breaks plugins that need an executor with a Cmd.Dir set
-	// to the workspace dir.
-	// In practice, this is only worrying for one-off Load of non-workspace
-	// file-scheme files, but these requests are managed by multi_workspace
-	// which uses IsWorkspaceURI semantics and so it returns any file-scheme.
 	if w, ok := m.workspaces[uri.String()]; ok {
 		return w, nil
 	}
@@ -121,7 +111,7 @@ func (m *Manager) AddWorkspace(uri URI) (Workspace, error) {
 	}
 	scheme, err := schemeFn(cfg, uri)
 	if err != nil {
-		return nil, fmt.Errorf("could not add new workspace %q: %w", uri, err)
+		return nil, fmt.Errorf("new workspace %q: %w", uri, err)
 	}
 
 	workspace := NewSchemeWorkspace(uri, scheme)

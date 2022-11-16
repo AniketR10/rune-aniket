@@ -79,14 +79,14 @@ func TestManager(t *testing.T) {
 
 		assert.NotEqual(t, w0, w1)
 
-		w2, err := m.AddWorkspace(parseURI(t, "test:///tmp/blah/hello.txt"))
+		w2, err := m.AddWorkspace(parseURI(t, "test:///tmp/blah/hello"))
 		assert.NotNil(t, w2)
 		require.NoError(t, err)
 
 		assert.NotEqual(t, w1, w2)
 
 		// same as w2
-		w3, err := m.AddWorkspace(parseURI(t, "test:///tmp/blah/hello.txt"))
+		w3, err := m.AddWorkspace(parseURI(t, "test:///tmp/blah/hello"))
 		assert.NotNil(t, w2)
 		require.NoError(t, err)
 
@@ -111,7 +111,7 @@ func TestManager(t *testing.T) {
 
 		assert.NotEqual(t, w0, w1)
 
-		w2, ok, err := m.Workspace(parseURI(t, "test:///tmp/blah/hello.txt"))
+		w2, ok, err := m.Workspace(parseURI(t, "test:///tmp/blah/hello"))
 		require.NoError(t, err)
 		assert.True(t, ok)
 		assert.True(t, w2 == w0 || w2 == w1)
