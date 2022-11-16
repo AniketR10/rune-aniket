@@ -12,7 +12,7 @@ import (
 	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
-	
+
 	"unstable.build/go-tui/workspace"
 )
 
@@ -25,6 +25,8 @@ type executorClientImpl struct {
 }
 
 type ioClient struct {
+	s         *executorClientImpl
+	closed    bool
 	handlerID int32
 	client    interface {
 		Close(ctx context.Context, in *CloseFileRequest, opts ...grpc.CallOption) (*CloseFileResponse, error)
@@ -202,7 +204,7 @@ func (c *executorClientImpl) Close() (ret error) {
 	defer c.mu.Unlock()
 
 	for _, res := range c.resources {
-		if err := res.closer.Close(); err != nil {
+		if err := res.closer.stop(); err != nil {
 			ret = multierr.Append(ret, err)
 		}
 	}
@@ -246,7 +248,19 @@ func (c *ioClient) Write(p []byte) (n int, err error) {
 	return int(resp.GetN()), nil
 }
 
+func (s *ioClient) removeHandle(handlerID int32) {
+	delete(s.s.resources, handlerID)
+	s.s = nil
+}
+
 func (c *ioClient) Close() error {
+	if c.closed {
+		return nil
+	}
+
+	c.closed = true
+	c.removeHandle(c.handlerID)
+
 	ctx, cleanup := ctxWithTimeout()
 	defer cleanup()
 
@@ -263,13 +277,17 @@ func (c *ioClient) Close() error {
 	return nil
 }
 
+func (c *ioClient) stop() error {
+	return c.Close()
+}
+
 type executorResource struct {
 	pid    workspace.Pid
-	closer io.Closer
+	closer executorCloser
 }
 
 func (c *executorClientImpl) addCloser(
-	pid workspace.Pid, handlerID int32, closer io.Closer,
+	pid workspace.Pid, handlerID int32, closer executorCloser,
 ) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -290,6 +308,7 @@ func (c *executorClientImpl) newIOClient(
 	pid workspace.Pid, filename string, handlerID int32,
 ) *ioClient {
 	ret := &ioClient{
+		s:         c,
 		handlerID: handlerID,
 		client:    c.client,
 	}
@@ -308,6 +327,7 @@ func (c *executorClientImpl) newFileClient(
 		filename:  filename,
 		// satisfies Read/Write/Close
 		ioClient: ioClient{
+			s:         c,
 			client:    c.client,
 			handlerID: handlerID,
 		},

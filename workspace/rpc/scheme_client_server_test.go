@@ -46,27 +46,31 @@ func doSetupSchemeClientServerTest(
 
 func setupSchemeClientServerTest(
 	t *testing.T, s *SchemeServerImpl,
-) (workspace.Scheme, func()) {
+) (workspace.Scheme, func(*testing.T)) {
 	conn, closeFn := doSetupSchemeClientServerTest(t, s)
 	client := NewScheme(conn)
-	return client, func() {
-		client.Close()
+	return client, func(t *testing.T) {
+		require.NoError(t, client.Close())
 		closeFn()
 	}
 }
 
 func setupSchemeClientServerUnitTest(t *testing.T, ctrl *gomock.Controller) (
-	workspace.Scheme, *SchemeServerImpl, func(),
+	workspace.Scheme, *SchemeServerImpl, func(*testing.T),
 ) {
 
 	mockScheme := workspacetest.NewMockScheme(ctrl)
 	server := NewSchemeServer(mockScheme, new(sync.Mutex))
-	client, cleanup := setupSchemeClientServerTest(t, server)
+	client, closeFn := setupSchemeClientServerTest(t, server)
+	cleanup := func(t *testing.T) {
+		closeFn(t)
+		server.Stop()
+	}
 	return client, server, cleanup
 }
 
 func TestSchemeClientServer(t *testing.T) {
-	testSchemeClientServer(t, func(t *testing.T, ctrl *gomock.Controller) (workspace.Scheme, *workspacetest.MockScheme, func()) {
+	testSchemeClientServer(t, func(t *testing.T, ctrl *gomock.Controller) (workspace.Scheme, *workspacetest.MockScheme, func(*testing.T)) {
 		client, server, cleanup := setupSchemeClientServerUnitTest(t, ctrl)
 		return client, server.scheme.(*workspacetest.MockScheme), cleanup
 	})
@@ -74,7 +78,7 @@ func TestSchemeClientServer(t *testing.T) {
 
 func testSchemeClientServer(
 	t *testing.T,
-	fn func(*testing.T, *gomock.Controller) (workspace.Scheme, *workspacetest.MockScheme, func()),
+	fn func(*testing.T, *gomock.Controller) (workspace.Scheme, *workspacetest.MockScheme, func(*testing.T)),
 ) {
 	tsuite := []struct {
 		description string
@@ -574,7 +578,7 @@ func testSchemeClientServer(
 			defer ctrl.Finish()
 
 			client, mock, cleanup := fn(t, ctrl)
-			defer cleanup()
+			defer cleanup(t)
 
 			tcase.do(t, ctrl, client, mock)
 		})
@@ -613,7 +617,7 @@ func (t testFileInfo) Sys() interface{} {
 }
 
 func TestClientServerIntegration(t *testing.T) {
-	var cleanups []func()
+	var cleanups []func(*testing.T)
 	t.Run("with memory scheme", func(t *testing.T) {
 		test.TestWorkspaceSchemeFiles(t, func(t *testing.T) workspace.Scheme {
 			memURI, err := workspace.ParseURI("memory:///")
@@ -622,9 +626,9 @@ func TestClientServerIntegration(t *testing.T) {
 			require.NoError(t, err)
 			server := NewSchemeServer(memScheme, new(sync.Mutex))
 			client, cleanup := setupSchemeClientServerTest(t, server)
-			cleanups = append(cleanups, func() {
+			cleanups = append(cleanups, func(t *testing.T) {
+				cleanup(t)
 				server.Stop()
-				cleanup()
 			})
 			return client
 		})
@@ -641,15 +645,15 @@ func TestClientServerIntegration(t *testing.T) {
 			require.NoError(t, err)
 			server := NewSchemeServer(fileScheme, new(sync.Mutex))
 			client, cleanup := setupSchemeClientServerTest(t, server)
-			cleanups = append(cleanups, func() {
+			cleanups = append(cleanups, func(t *testing.T) {
+				cleanup(t)
 				server.Stop()
-				cleanup()
 				os.RemoveAll(dir)
 			})
 			return client
 		})
 	})
 	for _, cleanup := range cleanups {
-		cleanup()
+		cleanup(t)
 	}
 }

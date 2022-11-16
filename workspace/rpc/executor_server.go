@@ -24,6 +24,11 @@ type executorServer struct {
 	nextHandlerID int32
 }
 
+type executorCloser interface {
+	io.Closer    // sync
+	stop() error // no sync, used when we are gracefully exiting from main goroutine
+}
+
 func (s *executorServer) Command(ctx context.Context, req *CommandRequest) (
 	*CommandResponse, error,
 ) {
@@ -60,7 +65,7 @@ func removePidResources(
 	for handlerID, res := range res {
 		if res.pid == pid {
 			ids = append(ids, handlerID)
-			_ = res.closer.Close()
+			_ = res.closer.stop()
 		}
 	}
 
@@ -227,7 +232,7 @@ func (s *executorServer) log(
 		Logf(level, msg, args...)
 }
 
-func (s *executorServer) addHandle(pid workspace.Pid, closer io.Closer) (int32, error) {
+func (s *executorServer) addHandle(pid workspace.Pid, closer executorCloser) (int32, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -287,7 +292,7 @@ func (s *executorServer) getFile(handlerID int32) (workspace.File, bool) {
 
 func (s *executorServer) stop() (ret error) {
 	for _, h := range s.resources {
-		if err := h.closer.Close(); err != nil {
+		if err := h.closer.stop(); err != nil {
 			ret = multierr.Append(ret, err)
 		}
 	}
@@ -329,5 +334,13 @@ func (r *syncReader) Close() error {
 func (w *syncWriter) Close() error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
+	return w.writer.Close()
+}
+
+func (r *syncReader) stop() error {
+	return r.reader.Close()
+}
+
+func (w *syncWriter) stop() error {
 	return w.writer.Close()
 }

@@ -40,7 +40,7 @@ func doSetupSchemeManagerClientServerTest(
 	return
 }
 func setupProxyUnitTest(t *testing.T, ctrl *gomock.Controller) (
-	workspace.Scheme, *workspacetest.MockScheme, func(),
+	workspace.Scheme, *workspacetest.MockScheme, func(*testing.T),
 ) {
 	mockScheme := workspacetest.NewMockScheme(ctrl)
 	client, closeFn := setupProxyTest(t, mockScheme)
@@ -48,7 +48,7 @@ func setupProxyUnitTest(t *testing.T, ctrl *gomock.Controller) (
 }
 
 func setupProxyTest(t *testing.T, mockScheme workspace.Scheme) (
-	workspace.Scheme, func(),
+	workspace.Scheme, func(*testing.T),
 ) {
 	uri, err := workspace.ParseURI("test:///tmp")
 	require.NoError(t, err)
@@ -82,10 +82,10 @@ func setupProxyTest(t *testing.T, mockScheme workspace.Scheme) (
 	client, err := schemeFn(cfg, uri)
 	require.NoError(t, err)
 
-	return client, func() {
+	return client, func(t *testing.T) {
 		closeFn()
-		conn.Close()
-		manager.Close()
+		require.NoError(t, conn.Close())
+		require.NoError(t, manager.Close())
 	}
 }
 
@@ -94,7 +94,7 @@ func TestSchemeManagerClientServerSchemeUnit(t *testing.T) {
 }
 
 func TestSchemeManagerClientServerSchemeSuiteIntegration(t *testing.T) {
-	var cleanups []func()
+	var cleanups []func(*testing.T)
 	test.TestWorkspaceSchemeFiles(t, func(t *testing.T) workspace.Scheme {
 		memURI, err := workspace.ParseURI("memory:///tmp")
 		require.NoError(t, err)
@@ -105,6 +105,6 @@ func TestSchemeManagerClientServerSchemeSuiteIntegration(t *testing.T) {
 		return client
 	})
 	for _, cleanup := range cleanups {
-		cleanup()
+		cleanup(t)
 	}
 }

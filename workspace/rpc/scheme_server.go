@@ -150,7 +150,7 @@ func (s *sharedRPCImpl) NewPty(ctx context.Context, req *NewPtyRequest) (
 	if err != nil {
 		return nil, fmt.Errorf("SetPtySize: %s", err)
 	}
-	master, err := s.addHandle(pty.Pid, pty.Master)
+	master, err := s.addHandle(pty.Pid, executorResourceMaster{File: pty.Master})
 	if err != nil {
 		return nil, err
 	}
@@ -435,4 +435,16 @@ func (r *syncFile) Close() error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.file.Close()
+}
+
+func (r *syncFile) stop() error {
+	return r.file.Close()
+}
+
+type executorResourceMaster struct {
+	workspace.File
+}
+
+func (r executorResourceMaster) stop() error {
+	return r.File.Close()
 }

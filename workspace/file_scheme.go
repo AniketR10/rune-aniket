@@ -401,7 +401,7 @@ func (p *fileScheme) NewPty() (Pty, error) {
 func (p *fileScheme) SetPtySize(pp Pty, width, height int) error {
 	ptyFile, ok := pp.Master.(*os.File)
 	if !ok {
-		return fmt.Errorf("extraneous Pty: %#v", p)
+		return fmt.Errorf("extraneous Pty: %#v", pp)
 	}
 
 	err := pty.Setsize(ptyFile, &pty.Winsize{
