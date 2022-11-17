@@ -238,6 +238,8 @@ func (e *issuesGrantee) PermissionGranted(grants []plugin.Grant) {
 				continue
 			}
 			for cmd, fn := range e.cmds {
+				cmd := cmd
+				fn := fn
 				err = ed.SubscribeCommand(cmd, text.FuncCommandHandler(
 					func(ctx context.Context, cmd text.Command) (bool, error) {
 						return fn(e, ctx, cmd)
