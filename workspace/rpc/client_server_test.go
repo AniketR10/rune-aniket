@@ -431,7 +431,9 @@ func TestClientServer(t *testing.T) {
 					assert.Equal(t, workspace.Pid(1), pty.Pid)
 					assert.Equal(t, 1, width)
 					assert.Equal(t, 1, height)
-					assert.NotNil(t, pty.Master)
+					// must be exact instance returned by underlying Scheme
+					// or else certain implementations might fail
+					assert.Equal(t, mockFile, pty.Master)
 					return nil
 				})
 			err = c.SetPtySize(pty, 1, 1)

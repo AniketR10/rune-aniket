@@ -177,7 +177,7 @@ func (s *sharedRPCImpl) SetPtySize(ctx context.Context, req *SetPtySizeRequest) 
 		return nil, fmt.Errorf("Pty: %s", errFileNotOpen)
 	}
 	pty := workspace.Pty{
-		Master: f,
+		Master: f.(executorResourceMaster).File,
 		Slave:  req.GetSlave(),
 		Pid:    workspace.Pid(req.GetPid()),
 	}
