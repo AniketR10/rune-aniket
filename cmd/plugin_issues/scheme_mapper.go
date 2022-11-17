@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"io/ioutil"
 	"os"
 	"sort"
@@ -45,6 +46,11 @@ func (m mapper) Open(path string, flag int, perm os.FileMode) (
 	workspace.File, *workspace.Error,
 ) {
 	path = parseLabels(path)
+	// do not allow writing of new arbitraryly-named issues
+	if flag&os.O_CREATE != 0 {
+		return nil, workspace.NopError(
+			fmt.Errorf("use '%s' command to create new issues", defaultCommand))
+	}
 	return m.Scheme.Open(path, flag, perm)
 }
 

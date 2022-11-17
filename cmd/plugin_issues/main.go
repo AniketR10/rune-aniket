@@ -30,6 +30,7 @@ import (
 const (
 	issuesScheme         = "bluectl+issues"
 	defaultMaxSubjectLen = 50
+	defaultCommand       = "issueCreate"
 )
 
 var (
@@ -45,7 +46,7 @@ var (
 	}
 	defaultCommands = map[string]func(*issuesGrantee,
 		context.Context, text.Command) (bool, error){
-		"issueCreate": (*issuesGrantee).openEmptyIssueTemplate,
+		defaultCommand: (*issuesGrantee).openEmptyIssueTemplate,
 	}
 	editorEvents = []text.EventType{text.EventTypeFlush, text.EventTypeClose}
 )
