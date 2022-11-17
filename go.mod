@@ -67,11 +67,17 @@ require (
 	github.com/jstemmer/go-junit-report v0.9.1 // indirect
 	github.com/mattn/go-colorable v0.1.8 // indirect
 	go.opencensus.io v0.22.4 // indirect
+	go.uber.org/atomic v1.5.0 // indirect
+	go.uber.org/config v1.4.0 // indirect
+	go.uber.org/multierr v1.4.0 // indirect
+	go.uber.org/tools v0.0.0-20190618225709-2cfd321de3ee // indirect
+	golang.org/x/exp/typeparams v0.0.0-20220722155223-a9213eeb770e // indirect
 	golang.org/x/oauth2 v0.0.0-20200107190931-bf48bf16ab8d // indirect
 	google.golang.org/api v0.30.0 // indirect
 	google.golang.org/appengine v1.6.6 // indirect
 	google.golang.org/genproto v0.0.0-20220314164441-57ef72a4c106 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
+	honnef.co/go/tools v0.3.2 // indirect
 )
 
 replace github.com/hashicorp/go-plugin => github.com/ernestrc/go-plugin v1.4.5
