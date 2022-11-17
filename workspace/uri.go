@@ -1,7 +1,6 @@
 package workspace
 
 import (
-	"errors"
 	"fmt"
 	"net/url"
 	"os/user"
@@ -105,7 +104,7 @@ func makeFileURI(u *url.URL) (URI, error) {
 	path := sanitizeFilePath(u.Path)
 	u.Path = path
 	if u.Scheme == "" {
-		return URI{}, errors.New("cannot parse path as URI without context of current workspace. Use workspace.API.URI instead.")
+		return URI{}, fmt.Errorf("invalid empty scheme %#v", u)
 	}
 	return URI{uri: u.String(), parsed: *u, name: filepath.Base(path)}, nil
 }
@@ -274,9 +273,6 @@ func IsWorkspaceURI(workspace Workspace, uri URI) (bool, error) {
 // and returns its corresponding URI. See ExpandPathWithURI for more details.
 func WorkspaceURI(workspace URI, path string) (URI, error) {
 	absPath, err := ExpandPathWithURI(path, workspace)
-	if err != nil {
-		return URI{}, err
-	}
 	if err != nil {
 		return URI{}, err
 	}
