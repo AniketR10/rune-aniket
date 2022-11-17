@@ -286,7 +286,7 @@ func (e *issuesGrantee) setMessage(msg string, args ...any) {
 }
 
 func (e *issuesGrantee) openEmptyIssueTemplate(ctx context.Context, cmd text.Command) (bool, error) {
-	return e.openIssueTemplate(ctx, e.defTemplate, "new-issue-report")
+	return e.openIssueTemplate(ctx, e.defTemplate, "issue-")
 }
 
 func (e *issuesGrantee) openCustomIssueTemplate(
@@ -298,6 +298,9 @@ func (e *issuesGrantee) openCustomIssueTemplate(
 }
 
 func (e *issuesGrantee) freeIssue(ctx context.Context, ev text.Event) bool {
+	if e.pendingIssueID == "" {
+		e.setMessage("canceled creation of new issue")
+	}
 	_ = os.Remove(e.pendingIssueURI.Path())
 	e.pendingIssueURI = workspace.URI{}
 	e.pendingIssueID = ""
