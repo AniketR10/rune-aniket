@@ -208,7 +208,7 @@ func (s *scheme) connectScheme(uri workspace.URI, closeHook func(error)) (worksp
 
 	var extraArgs []string
 	if log.IsLevelEnabled(log.TraceLevel) {
-		extraArgs = []string{"-o", "six-workspace-server.log"}
+		extraArgs = []string{"-p", "-o", "six-workspace-server.log"}
 	}
 
 	cmd := six
