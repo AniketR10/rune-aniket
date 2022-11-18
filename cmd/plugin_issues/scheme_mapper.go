@@ -11,6 +11,7 @@ import (
 	"github.com/ernestrc/blue/encoding"
 	"github.com/ernestrc/blue/issue"
 	"github.com/ernestrc/blue/iterator"
+	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui/config"
 	"unstable.build/go-tui/workspace"
 )
@@ -48,8 +49,24 @@ func (m mapper) Open(path string, flag int, perm os.FileMode) (
 	path = parseLabels(path)
 	// do not allow writing of new arbitraryly-named issues
 	if flag&os.O_CREATE != 0 {
-		return nil, workspace.NopError(
-			fmt.Errorf("use '%s' command to create new issues", defaultCommand))
+		// if this is an open request with O_CREATE for a non swap
+		// then it return permission error so file logic opens read-only.
+		if !strings.HasPrefix(path, ".") || !strings.HasSuffix(path, ".swp") {
+			return nil, &workspace.Error{IsPermission: true}
+		}
+		if strings.HasSuffix(path, ".swp.swp") {
+			// naughty, naughty boy
+			return nil, &workspace.Error{IsPermission: true}
+		}
+		// if this is an O_CREATE for a swap, only allow if issue already exists
+		// i.e. we're editing the issue
+		pathNoSwap := path[1 : len(path)-4]
+		_, err := m.Stat(pathNoSwap)
+		if err != nil {
+			log.Debugf("Stat(%s): %v", pathNoSwap, err)
+			return nil, workspace.NopError(
+				fmt.Errorf("use '%s' command to create new issues", defaultCommand))
+		}
 	}
 	return m.Scheme.Open(path, flag, perm)
 }
