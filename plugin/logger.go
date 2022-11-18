@@ -67,46 +67,46 @@ func NewHCLogLogrus(logger *logrus.Logger) hclog.Logger {
 // vals can be any type, but display is implementation specific
 // Emit a message and key/value pairs at the TRACE level
 func (l *hcloggerLogrus) Trace(msg string, args ...interface{}) {
-	lf := l.With(args).(*hcloggerLogrus)
+	lf := l.With(args...).(*hcloggerLogrus)
 	l.logger.WithFields(lf.fields).Trace(msg)
 }
 
 func (l *hcloggerLogrus) Log(level hclog.Level, msg string, args ...interface{}) {
 	switch level {
 	case hclog.Trace:
-		l.Trace(msg, args)
+		l.Trace(msg, args...)
 	case hclog.Debug:
-		l.Debug(msg, args)
+		l.Debug(msg, args...)
 	case hclog.Info:
-		l.Info(msg, args)
+		l.Info(msg, args...)
 	case hclog.Warn:
-		l.Warn(msg, args)
+		l.Warn(msg, args...)
 	case hclog.Error:
-		l.Error(msg, args)
+		l.Error(msg, args...)
 	}
 }
 
 // Emit a message and key/value pairs at the DEBUG level
 func (l *hcloggerLogrus) Debug(msg string, args ...interface{}) {
-	lf := l.With(args).(*hcloggerLogrus)
+	lf := l.With(args...).(*hcloggerLogrus)
 	l.logger.WithFields(lf.fields).Debug(msg)
 }
 
 // Emit a message and key/value pairs at the INFO level
 func (l *hcloggerLogrus) Info(msg string, args ...interface{}) {
-	lf := l.With(args).(*hcloggerLogrus)
+	lf := l.With(args...).(*hcloggerLogrus)
 	l.logger.WithFields(lf.fields).Info(msg)
 }
 
 // Emit a message and key/value pairs at the WARN level
 func (l *hcloggerLogrus) Warn(msg string, args ...interface{}) {
-	lf := l.With(args).(*hcloggerLogrus)
+	lf := l.With(args...).(*hcloggerLogrus)
 	l.logger.WithFields(lf.fields).Warn(msg)
 }
 
 // Emit a message and key/value pairs at the ERROR level
 func (l *hcloggerLogrus) Error(msg string, args ...interface{}) {
-	lf := l.With(args).(*hcloggerLogrus)
+	lf := l.With(args...).(*hcloggerLogrus)
 	l.logger.WithFields(lf.fields).Error(msg)
 }
 
@@ -144,23 +144,26 @@ func (l *hcloggerLogrus) With(args ...interface{}) hclog.Logger {
 		retFields[k] = v
 	}
 
-	ret := &hcloggerLogrus{
-		logger: l.logger,
-		fields: retFields,
-	}
-
 	var key string
 	var ok bool
 	for i, arg := range args {
 		if i%2 == 0 {
-			if key, ok = arg.(string); !ok {
-				key = fmt.Sprintf("%+v", key)
+			key, ok = arg.(string)
+			if !ok {
+				key = fmt.Sprintf("%v", arg)
 			}
 		} else {
-			ret.fields[key] = arg
+			if key == logging.KeyTimestamp {
+				continue // let logger set this
+			}
+			retFields[key] = arg
 		}
 	}
-	return ret
+
+	return &hcloggerLogrus{
+		logger: l.logger,
+		fields: retFields,
+	}
 }
 
 // Create a logger that will prepend the name string on the front of all messages.
