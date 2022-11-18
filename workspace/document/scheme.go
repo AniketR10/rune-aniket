@@ -14,6 +14,7 @@ import (
 	"github.com/ernestrc/blue/retry"
 	multierr "github.com/ernestrc/go-multierror"
 	"unstable.build/go-tui/config"
+	"unstable.build/go-tui/storage"
 	"unstable.build/go-tui/workspace"
 )
 
@@ -34,7 +35,7 @@ import (
 // do not sync the contents of a file to permanent storage.
 // Sync must be called to send data to permanent storage. This is to allow
 // for documents to become illegal temporarily while editing.
-func WorkspaceScheme[T Document[T]](
+func WorkspaceScheme[T storage.Document[T]](
 	rootURI workspace.URI, svc document.Service,
 	marshaler encoding.Marshaler, errMissingID error,
 ) workspace.SchemeFunc {
@@ -49,15 +50,6 @@ func WorkspaceScheme[T Document[T]](
 	}
 }
 
-// Document abstracts a document that knows about the ID
-// used to index it in the underlying document.Service and
-// about the last time that it was updated.
-type Document[T any] interface {
-	ID() string
-	WithID(string) T
-	UpdatedTime() time.Time
-}
-
 const (
 	// very long timeout just to make sure we don't hang forever
 	// since workspace.Scheme methods do not take a context (maybe they should!)
@@ -70,7 +62,7 @@ type service struct {
 	transaction sync.Mutex
 }
 
-type scheme[T Document[T]] struct {
+type scheme[T storage.Document[T]] struct {
 	unimplementedTerminal
 	unimplementedExecutor
 	workspace          workspace.URI

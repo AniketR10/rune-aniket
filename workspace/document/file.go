@@ -12,6 +12,7 @@ import (
 	"github.com/ernestrc/blue/document"
 	"github.com/ernestrc/blue/encoding"
 	"github.com/ernestrc/blue/retry"
+	"unstable.build/go-tui/storage"
 	"unstable.build/go-tui/workspace"
 )
 
@@ -22,7 +23,7 @@ type fileInfo struct {
 	Modified time.Time
 }
 
-type file[T Document[T]] struct {
+type file[T storage.Document[T]] struct {
 	errMissingID  error
 	marshaler     encoding.Marshaler
 	retryStrategy retry.Strategy
@@ -37,7 +38,7 @@ type file[T Document[T]] struct {
 }
 
 // return not fully initialzed until init is called
-func newFile[T Document[T]](
+func newFile[T storage.Document[T]](
 	docID string, m encoding.Marshaler, errMissingID error,
 	svc *service, mode fs.FileMode, retryStrategy retry.Strategy,
 	val T, addTemplate bool,
