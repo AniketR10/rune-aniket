@@ -92,24 +92,12 @@ func getLogLevelEnv() log.Level {
 	return l
 }
 
-func jsonFormatter() log.Formatter {
-	return &log.JSONFormatter{
-		// timestamp format expected by hclog
-		TimestampFormat: "2006-01-02T15:04:05.000000Z07:00",
-		FieldMap: log.FieldMap{
-			log.FieldKeyTime:  "@timestamp",
-			log.FieldKeyMsg:   "@message",
-			log.FieldKeyLevel: "@level",
-		},
-	}
-}
-
 // Serve attempts to request the given permissions for Grantee
 // and serves it as a plugin. This function never returns.
 // It also configures logrus.StandardLogger to send logs to host.
 func Serve(grantee Grantee, request ...Permission) {
 	level := getLogLevelEnv()
-	formatter := jsonFormatter()
+	formatter := newJSONFormatter()
 
 	initPluginLogger()
 	SetLoggingOutput(os.Stderr)

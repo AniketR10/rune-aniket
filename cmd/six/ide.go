@@ -71,7 +71,6 @@ func (i *ide) init(cwd, cfgfilename, recfilename string,
 		}
 	}
 
-	var l *log.Logger
 	if i.ideConfig.logOutputPath() != "" {
 		f, err := os.OpenFile(i.ideConfig.logOutputPath(),
 			os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
@@ -83,18 +82,11 @@ func (i *ide) init(cwd, cfgfilename, recfilename string,
 		plugin.SetLoggingOutput(f)
 		plugin.SetLoggingLevel(level)
 
-		l = log.New()
-		l.SetOutput(f)
-		l.SetLevel(level)
-		l.SetFormatter(&logging.LogrusFormatter{})
-
 		log.SetOutput(f)
 		log.SetLevel(level)
-		log.SetFormatter(&logging.LogrusFormatter{})
+		fmt := &logging.LogrusFormatter{}
+		log.SetFormatter(fmt)
 	} else {
-		l = log.New()
-		l.Out = ioutil.Discard
-		l.Level = log.PanicLevel
 		log.SetOutput(ioutil.Discard)
 		log.SetLevel(log.PanicLevel)
 	}
