@@ -230,7 +230,7 @@ type docIter struct {
 }
 
 func (d *docIter) HasNext() (ok bool) {
-	for {
+	for d.nextMatchFile == nil && d.doneErr == nil {
 		nextFile, ok := d.it.Next()
 		if !ok {
 			d.doneErr = d.it.Err()
@@ -268,6 +268,8 @@ func (d *docIter) HasNext() (ok bool) {
 
 		/* continue */
 	}
+
+	return true
 }
 
 func (d *docIter) NextTo(doc interface{}) error {
@@ -285,12 +287,14 @@ func (d *docIter) NextTo(doc interface{}) error {
 			return d.doneErr
 		}
 	}
-	defer d.nextMatchFile.Close()
-	_, err := d.nextMatchFile.Seek(0, 0)
+	f := d.nextMatchFile
+	d.nextMatchFile = nil
+	defer f.Close()
+	_, err := f.Seek(0, 0)
 	if err != nil {
 		return fmt.Errorf("Seek: %v", err)
 	}
-	return d.svc.read(d.nextMatchFile, doc)
+	return d.svc.read(f, doc)
 }
 
 func (d *docIter) Close() error {
