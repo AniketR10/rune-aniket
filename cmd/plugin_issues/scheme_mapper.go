@@ -112,6 +112,11 @@ func (m *mappingIterator) Next() (string, bool) {
 			return "", false
 		}
 
+		// swap file for an open issue
+		if strings.HasSuffix(filename, ".swp") {
+			continue
+		}
+
 		f, werr := m.scheme.Open(filename, os.O_RDONLY, 0)
 		if werr != nil {
 			m.nextErr = werr.ToError()
