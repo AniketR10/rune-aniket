@@ -65,7 +65,7 @@ func (m mapper) Open(path string, flag int, perm os.FileMode) (
 		if err != nil {
 			log.Debugf("Stat(%s): %v", pathNoSwap, err)
 			return nil, workspace.NopError(
-				fmt.Errorf("use '%s' command to create new issues", defaultCommand))
+				fmt.Errorf("use '%s' command to create new issues", defaultCreateIssueCmd))
 		}
 	}
 	return m.Scheme.Open(path, flag, perm)
