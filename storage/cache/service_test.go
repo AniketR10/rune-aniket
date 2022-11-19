@@ -38,9 +38,9 @@ func TestCacheService(t *testing.T) {
 		require.NoError(t, err)
 
 		var temp testStruct
-		err = cache.Get(ctx, id, &temp) // force caching
+		it, err := cache.List(ctx, nil) // force caching
 		require.NoError(t, err)
-		assert.Equal(t, "1234", temp.Content)
+		require.NoError(t, it.Close())
 
 		// override
 		err = svc.Set(ctx, id, &testStruct{Id: id, Content: "AAAA"})
@@ -85,7 +85,7 @@ func TestCacheService(t *testing.T) {
 		err = svc.Set(ctx, id, &testStruct{Id: id, Content: "AAAA"})
 		require.NoError(t, err)
 
-		cache.EvictAll()
+		cache.EvictAll(ctx)
 
 		var temp testStruct
 		err = cache.Get(ctx, "myId", &temp)
@@ -153,7 +153,7 @@ func TestCacheService(t *testing.T) {
 		err = svc.Set(ctx, "otherID", &testStruct{Id: "otherID", Content: "AAAA"})
 		require.NoError(t, err)
 
-		cache.EvictAll()
+		cache.EvictAll(ctx)
 
 		it, err = cache.List(ctx, nil)
 		require.NoError(t, err)
