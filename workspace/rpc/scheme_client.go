@@ -125,6 +125,23 @@ func makeOpenRequest(name string, flag int, perm os.FileMode) *OpenRequest {
 	}
 }
 
+type errResponse interface {
+	GetIsExistErr() bool
+	GetIsNotExistErr() bool
+	GetIsPermissionErr() bool
+}
+
+func isTypedError(resp errResponse) (*workspace.Error, bool) {
+	if resp.GetIsExistErr() || resp.GetIsNotExistErr() || resp.GetIsPermissionErr() {
+		return &workspace.Error{
+			IsExist:      resp.GetIsExistErr(),
+			IsNotExist:   resp.GetIsNotExistErr(),
+			IsPermission: resp.GetIsPermissionErr(),
+		}, true
+	}
+	return nil, false
+}
+
 func (c *openRemoveClientImpl) Open(name string, flag int, perm os.FileMode) (
 	workspace.File, *workspace.Error,
 ) {
@@ -136,12 +153,8 @@ func (c *openRemoveClientImpl) Open(name string, flag int, perm os.FileMode) (
 	if err != nil {
 		return nil, &workspace.Error{Err: err}
 	}
-	if resp.GetIsExistErr() || resp.GetIsNotExistErr() || resp.GetIsPermissionErr() {
-		return nil, &workspace.Error{
-			IsExist:      resp.GetIsExistErr(),
-			IsNotExist:   resp.GetIsNotExistErr(),
-			IsPermission: resp.GetIsPermissionErr(),
-		}
+	if werr, ok := isTypedError(resp); ok {
+		return nil, werr
 	}
 	// workspace.Pid is not necessary (and/or available) for files
 	// because it's only used for Wait cleanup
@@ -153,9 +166,12 @@ func (c *openRemoveClientImpl) Remove(name string) error {
 	defer cleanup()
 
 	req := RemoveRequest{Filename: name}
-	_, err := c.client.Remove(ctx, &req)
+	resp, err := c.client.Remove(ctx, &req)
 	if err != nil {
 		return err
+	}
+	if werr, ok := isTypedError(resp); ok {
+		return werr.ToError()
 	}
 	return nil
 }
@@ -165,9 +181,12 @@ func (c *schemeClientImpl) Rename(oldpath, newpath string) error {
 	defer cleanup()
 
 	req := RenameRequest{Filename: oldpath, Newfilename: newpath}
-	_, err := c.client.Rename(ctx, &req)
+	resp, err := c.client.Rename(ctx, &req)
 	if err != nil {
 		return err
+	}
+	if werr, ok := isTypedError(resp); ok {
+		return werr.ToError()
 	}
 	return nil
 }
@@ -181,6 +200,9 @@ func (c *schemeClientImpl) Stat(name string) (os.FileInfo, error) {
 	if err != nil {
 		return nil, err
 	}
+	if werr, ok := isTypedError(resp); ok {
+		return nil, werr.ToError()
+	}
 	return fileClientInfo{StatResponse: *resp}, nil
 }
 
@@ -192,6 +214,9 @@ func (c *schemeClientImpl) Lstat(name string) (os.FileInfo, error) {
 	resp, err := c.client.Stat(ctx, &req)
 	if err != nil {
 		return nil, err
+	}
+	if werr, ok := isTypedError(resp); ok {
+		return nil, werr.ToError()
 	}
 	return fileClientInfo{StatResponse: *resp}, nil
 }

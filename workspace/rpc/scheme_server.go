@@ -2,7 +2,7 @@ package rpc
 
 import (
 	"context"
-	"fmt"
+	"errors"
 	"os"
 	"sync"
 	"time"
@@ -131,7 +131,18 @@ func (s *sharedRPCImpl) Remove(ctx context.Context, req *RemoveRequest) (
 	filename := req.GetFilename()
 	err := s.scheme.Remove(filename)
 	if err != nil {
-		return nil, fmt.Errorf("remove %s error: %s", filename, err)
+		isExist := errors.Is(err, os.ErrExist)
+		isNotExist := errors.Is(err, os.ErrNotExist)
+		isPermission := errors.Is(err, os.ErrPermission)
+		is := isExist || isNotExist || isPermission
+		if is {
+			resp := new(RemoveResponse)
+			resp.IsExistErr = isExist
+			resp.IsNotExistErr = isNotExist
+			resp.IsPermissionErr = isPermission
+			return resp, nil
+		}
+		return nil, err
 	}
 	return new(RemoveResponse), nil
 }
@@ -148,7 +159,7 @@ func (s *sharedRPCImpl) NewPty(ctx context.Context, req *NewPtyRequest) (
 ) {
 	pty, err := s.scheme.NewPty()
 	if err != nil {
-		return nil, fmt.Errorf("SetPtySize: %s", err)
+		return nil, err
 	}
 	master, err := s.addHandle(pty.Pid, executorResourceMaster{File: pty.Master})
 	if err != nil {
@@ -174,7 +185,7 @@ func (s *sharedRPCImpl) SetPtySize(ctx context.Context, req *SetPtySizeRequest) 
 ) {
 	f, ok := s.getFile(req.GetMaster())
 	if !ok {
-		return nil, fmt.Errorf("Pty: %s", errFileNotOpen)
+		return nil, errFileNotOpen
 	}
 	pty := workspace.Pty{
 		Master: f.(executorResourceMaster).File,
@@ -183,7 +194,7 @@ func (s *sharedRPCImpl) SetPtySize(ctx context.Context, req *SetPtySizeRequest) 
 	}
 	err := s.scheme.SetPtySize(pty, int(req.GetWidth()), int(req.GetHeight()))
 	if err != nil {
-		return nil, fmt.Errorf("SetPtySize: %s", err)
+		return nil, err
 	}
 	return new(SetPtySizeResponse), nil
 }
@@ -195,7 +206,18 @@ func (s *SchemeServerImpl) Rename(ctx context.Context, req *RenameRequest) (
 	filename := req.GetFilename()
 	err := s.scheme.Rename(filename, req.GetNewfilename())
 	if err != nil {
-		return nil, fmt.Errorf("rename %s error: %s", filename, err)
+		isExist := errors.Is(err, os.ErrExist)
+		isNotExist := errors.Is(err, os.ErrNotExist)
+		isPermission := errors.Is(err, os.ErrPermission)
+		is := isExist || isNotExist || isPermission
+		if is {
+			resp := new(RenameResponse)
+			resp.IsExistErr = isExist
+			resp.IsNotExistErr = isNotExist
+			resp.IsPermissionErr = isPermission
+			return resp, nil
+		}
+		return nil, err
 	}
 	return new(RenameResponse), nil
 }
@@ -212,7 +234,18 @@ func (s *SchemeServerImpl) Stat(ctx context.Context, req *StatRequest) (
 		fs, err = s.scheme.Stat(req.GetFilename())
 	}
 	if err != nil {
-		return nil, fmt.Errorf("stat %s error: %s", req.GetFilename(), err)
+		isExist := errors.Is(err, os.ErrExist)
+		isNotExist := errors.Is(err, os.ErrNotExist)
+		isPermission := errors.Is(err, os.ErrPermission)
+		is := isExist || isNotExist || isPermission
+		if is {
+			resp := new(StatResponse)
+			resp.IsExistErr = isExist
+			resp.IsNotExistErr = isNotExist
+			resp.IsPermissionErr = isPermission
+			return resp, nil
+		}
+		return nil, err
 	}
 	resp := new(StatResponse)
 	resp.Name = fs.Name()
@@ -232,7 +265,7 @@ func (s *SchemeServerImpl) ReadLink(ctx context.Context, req *ReadLinkRequest) (
 	filename := req.GetFilename()
 	fil, err := s.scheme.ReadLink(filename)
 	if err != nil {
-		return nil, fmt.Errorf("read link %s error: %s", filename, err)
+		return nil, err
 	}
 	resp := new(ReadLinkResponse)
 	resp.Filename = fil
@@ -246,7 +279,7 @@ func (s *SchemeServerImpl) URI(ctx context.Context, req *URIRequest) (
 	path := req.GetPath()
 	uri, err := s.scheme.URI(path)
 	if err != nil {
-		return nil, fmt.Errorf("URI %s error: %s", path, err)
+		return nil, err
 	}
 	resp := new(URIResponse)
 	resp.Uri = uri.String()
@@ -320,7 +353,7 @@ func (s *SchemeServerImpl) Sync(ctx context.Context, req *SyncRequest) (
 	}
 	err := f.Sync()
 	if err != nil {
-		return nil, fmt.Errorf("sync error: %s", err)
+		return nil, err
 	}
 	return new(SyncResponse), nil
 }
@@ -335,7 +368,7 @@ func (s *SchemeServerImpl) Truncate(ctx context.Context, req *TruncateRequest) (
 	}
 	err := f.Truncate(req.GetSize())
 	if err != nil {
-		return nil, fmt.Errorf("truncate error: %s", err)
+		return nil, err
 	}
 	return new(TruncateResponse), nil
 }
@@ -350,7 +383,7 @@ func (s *SchemeServerImpl) Seek(ctx context.Context, req *SeekRequest) (
 	}
 	newOffset, err := f.Seek(req.GetOffset(), int(req.GetWhence()))
 	if err != nil {
-		return nil, fmt.Errorf("seek error: %s", err)
+		return nil, err
 	}
 	resp := new(SeekResponse)
 	resp.NewOffset = newOffset

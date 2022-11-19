@@ -120,7 +120,12 @@ func (s *service) Get(ctx context.Context, ID string, doc interface{}) error {
 }
 
 func (s *service) Delete(ctx context.Context, ID string) error {
-	return s.scheme.Remove(s.getFileName(ID))
+	err := s.scheme.Remove(s.getFileName(ID))
+	// delete should be idempotent
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	return err
 }
 
 func (s *service) List(ctx context.Context, filters []document.Filter) (document.Iterator, error) {

@@ -47,7 +47,7 @@ func (c *upspinClient) Lookup(
 		var err error
 		ret, err = c.Client.Lookup(name, followFinal)
 		if err != nil {
-			return errors.Is(errors.NotExist, err), err
+			return !errors.Is(errors.NotExist, err), err
 		}
 		lastSeqID, ok := c.lastSequenceID[name]
 		if ok && ret.Sequence < lastSeqID {

@@ -3,6 +3,7 @@ package test
 import (
 	"bytes"
 	context "context"
+	"errors"
 	io "io"
 	"io/ioutil"
 	os "os"
@@ -430,16 +431,20 @@ func TestWorkspaceSchemeRemove(
 		defer cleanup()
 		require.NoError(t, scheme.Remove("file"))
 	})
-	t.Run("returns error if file has already been removed", func(t *testing.T) {
+	t.Run("returns ErrNotExist if file has already been removed", func(t *testing.T) {
 		scheme := schemeFn(t)
 		_, cleanup := createTestFile(t, scheme, "file", "")
 		defer cleanup()
 		require.NoError(t, scheme.Remove("file"))
-		require.Error(t, scheme.Remove("file"))
+		err := scheme.Remove("file")
+		require.Error(t, err)
+		assert.True(t, errors.Is(err, os.ErrNotExist))
 	})
-	t.Run("returns error if file never existed", func(t *testing.T) {
+	t.Run("returns ErrNotExist if file never existed", func(t *testing.T) {
 		scheme := schemeFn(t)
-		require.Error(t, scheme.Remove("file"))
+		err := scheme.Remove("file")
+		require.Error(t, err)
+		assert.True(t, errors.Is(err, os.ErrNotExist))
 	})
 }
 
@@ -489,7 +494,9 @@ func TestWorkspaceSchemeRename(
 
 	t.Run("returns error if original file does not exist", func(t *testing.T) {
 		scheme := schemeFn(t)
-		require.Error(t, scheme.Rename("file", "foile"))
+		err := scheme.Rename("file", "foile")
+		require.Error(t, err)
+		assert.True(t, errors.Is(err, os.ErrNotExist))
 	})
 }
 
@@ -516,10 +523,11 @@ func testWorkspaceSchemeStats(
 		// assert.Equal(t, fs.FileMode(0644), finfo.Mode())
 	})
 
-	t.Run("returns error if file is not found", func(t *testing.T) {
+	t.Run("returns os.ErrNotExist error if file is not found", func(t *testing.T) {
 		scheme := schemeFn(t)
 		_, err := method(scheme, "file")
 		require.Error(t, err)
+		assert.True(t, errors.Is(err, os.ErrNotExist))
 	})
 }
 
