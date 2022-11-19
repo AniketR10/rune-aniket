@@ -15,7 +15,7 @@ import (
 func TestCacheService(t *testing.T) {
 	t.Run("creates hit the underlying service", func(t *testing.T) {
 		svc := document.NewInMemoryService()
-		cache := New[testStruct](svc)
+		cache := New[testStruct](svc, document.NewInMemoryService())
 		ctx := context.Background()
 
 		id := "myId"
@@ -30,7 +30,7 @@ func TestCacheService(t *testing.T) {
 
 	t.Run("get do not hit the underlying service, if already cached", func(t *testing.T) {
 		svc := document.NewInMemoryService()
-		cache := New[testStruct](svc)
+		cache := New[testStruct](svc, document.NewInMemoryService())
 		ctx := context.Background()
 
 		id := "myId"
@@ -54,7 +54,7 @@ func TestCacheService(t *testing.T) {
 
 	t.Run("Set forces next get to hit underlying service", func(t *testing.T) {
 		svc := document.NewInMemoryService()
-		cache := New[testStruct](svc)
+		cache := New[testStruct](svc, document.NewInMemoryService())
 		ctx := context.Background()
 
 		id := "myId"
@@ -75,7 +75,7 @@ func TestCacheService(t *testing.T) {
 
 	t.Run("EvictAll forces next get to hit underlying service", func(t *testing.T) {
 		svc := document.NewInMemoryService()
-		cache := New[testStruct](svc)
+		cache := New[testStruct](svc, document.NewInMemoryService())
 		ctx := context.Background()
 
 		id := "myId"
@@ -95,7 +95,7 @@ func TestCacheService(t *testing.T) {
 
 	t.Run("first List returns all documents from the underlying service", func(t *testing.T) {
 		svc := document.NewInMemoryService()
-		cache := New[testStruct](svc)
+		cache := New[testStruct](svc, document.NewInMemoryService())
 		ctx := context.Background()
 		n := prepareServiceForListTest(t, cache, "first")
 
@@ -106,7 +106,7 @@ func TestCacheService(t *testing.T) {
 
 	t.Run("second call to list List returns all documents cached from the previous list", func(t *testing.T) {
 		svc := document.NewInMemoryService()
-		cache := New[testStruct](svc)
+		cache := New[testStruct](svc, document.NewInMemoryService())
 		ctx := context.Background()
 		n := prepareServiceForListTest(t, cache, "first")
 
@@ -124,7 +124,7 @@ func TestCacheService(t *testing.T) {
 
 	t.Run("writes should force next List to call the underlying service", func(t *testing.T) {
 		svc := document.NewInMemoryService()
-		cache := New[testStruct](svc)
+		cache := New[testStruct](svc, document.NewInMemoryService())
 		ctx := context.Background()
 		n := prepareServiceForListTest(t, cache, "first")
 
@@ -140,9 +140,9 @@ func TestCacheService(t *testing.T) {
 		assertListResults(t, it, n+1)
 	})
 
-	t.Run("List with filters always calls the underlying service", func(t *testing.T) {
+	t.Run("EvictAll should force next List to call the underlying service", func(t *testing.T) {
 		svc := document.NewInMemoryService()
-		cache := New[testStruct](svc)
+		cache := New[testStruct](svc, document.NewInMemoryService())
 		ctx := context.Background()
 		n := prepareServiceForListTest(t, cache, "first")
 
@@ -153,9 +153,29 @@ func TestCacheService(t *testing.T) {
 		err = svc.Set(ctx, "otherID", &testStruct{Id: "otherID", Content: "AAAA"})
 		require.NoError(t, err)
 
-		it, err = cache.List(ctx, []document.Filter{
+		cache.EvictAll()
+
+		it, err = cache.List(ctx, nil)
+		require.NoError(t, err)
+		assertListResults(t, it, n+1)
+	})
+
+	t.Run("List with filters is not cached", func(t *testing.T) {
+		svc := document.NewInMemoryService()
+		cache := New[testStruct](svc, document.NewInMemoryService())
+		ctx := context.Background()
+		n := prepareServiceForListTest(t, cache, "first")
+
+		it, err := cache.List(ctx, []document.Filter{
 			{Field: document.Field{FieldPath: []string{"OtherField"}}, Op: document.OpEqual},
 		})
+		require.NoError(t, err)
+		assertListResults(t, it, n)
+
+		err = svc.Set(ctx, "otherID", &testStruct{Id: "otherID", Content: "AAAA"})
+		require.NoError(t, err)
+
+		it, err = cache.List(ctx, nil)
 		require.NoError(t, err)
 		assertListResults(t, it, n+1)
 	})
