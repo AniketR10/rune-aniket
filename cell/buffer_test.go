@@ -906,7 +906,7 @@ func TestBufferReplaceAll(t *testing.T) {
 		t.Run(tcase.desc, func(t *testing.T) {
 			b := NewBuffer()
 			b.WriteString(tcase.in)
-			b.Edit(term.Coordinates{}, term.Coordinates{Y: b.Rows()}, tcase.out)
+			b.Replace(tcase.out)
 			assert.Equal(t, tcase.out, b.String())
 		})
 	}

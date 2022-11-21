@@ -197,6 +197,13 @@ func (b *Buffer) TruncateFrom(from term.Coordinates) (ok bool) {
 	return
 }
 
+// Replace replaces the content of the buffer with str.
+func (b *Buffer) Replace(str string) {
+	from := term.Coordinates{}
+	to := term.Coordinates{Y: b.view.Rows()}
+	b.editor.Edit(from, to, str)
+}
+
 // ConflateRow will conflate row at index i with the next row
 func (b *Buffer) ConflateRow(y int) (ok bool) {
 	from := term.Coordinates{Y: y}
