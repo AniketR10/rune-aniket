@@ -472,6 +472,10 @@ func (l *List) asyncSearch() {
 func (l *List) DataReset() {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	cancel := l.cancelSearch
+	if cancel != nil {
+		cancel()
+	}
 	l.input = l.input[:0]
 	l.list.Reset()
 	l.setFilesCount()
