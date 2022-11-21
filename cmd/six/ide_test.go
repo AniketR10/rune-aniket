@@ -7,6 +7,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/workspace"
 )
 
@@ -88,6 +89,36 @@ func TestIDEInitializationIntegration(t *testing.T) {
 
 		require.NotNil(t, i.workspace)
 		require.NotNil(t, i.clipboard)
+
+		assert.NoError(t, i.closeResources())
+	})
+
+	t.Run("does not publish an event before run is called", func(t *testing.T) {
+		configFile, file1 := makeTestFiles(t)
+		file2, err := ioutil.TempFile("", "six_ide_test")
+		require.NoError(t, err)
+		require.NoError(t, file2.Close())
+
+		err = ioutil.WriteFile(configFile.Name(), []byte(sampleConfig), 0666)
+		require.NoError(t, err)
+
+		cwdURI, err := workspace.CurrentUserHostURI(".")
+		require.NoError(t, err)
+
+		dir, err := ioutil.TempDir("", "")
+		require.NoError(t, err)
+
+		var published bool
+		i := new(ide)
+		err = i.init(cwdURI.String(), configFile.Name(), "",
+			dir, func(ev term.Event) bool {
+				published = true
+				return false
+			}, file1.Name(), file2.Name())
+		require.NoError(t, err)
+
+		assert.False(t, i.publishEvent(term.Event{}))
+		assert.False(t, published)
 
 		assert.NoError(t, i.closeResources())
 	})

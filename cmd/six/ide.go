@@ -21,6 +21,8 @@ type ide struct {
 	workspaceManager *workspace.Manager
 	root             *workspaceManagerHandler
 	clipboard        *plugin.ClipboardManager
+	running          bool
+	publishEventFn   func(term.Event) bool
 }
 
 // newIde allocates storage for a new ide and initializes it with config
@@ -91,6 +93,7 @@ func (i *ide) init(cwd, cfgfilename, recfilename string,
 		log.SetLevel(log.PanicLevel)
 	}
 
+	i.publishEventFn = publishEvent
 	i.clipboard = plugin.NewClipboardManager()
 
 	// register default schemes
@@ -110,7 +113,7 @@ func (i *ide) init(cwd, cfgfilename, recfilename string,
 
 	root, err := newWorkspaceManagerHandler(i.clipboard, cwdURI,
 		workspaceManager, i.ideConfig, recfilename, filenames,
-		sixDir, publishEvent)
+		sixDir, i.publishEvent)
 	if err != nil {
 		return err
 	}
@@ -128,6 +131,16 @@ func (i *ide) init(cwd, cfgfilename, recfilename string,
 	return nil
 }
 
+func (i *ide) publishEvent(ev term.Event) bool {
+	// avoid termbox' screen panicking because
+	// some component wants to publish interrupt
+	// before we are fully initialized
+	if !i.running {
+		return false
+	}
+	return i.publishEventFn(ev)
+}
+
 // run initialzes the underlying terminal environment and runs
 // it with a workspace handler
 func (i *ide) run() error {
@@ -135,6 +148,7 @@ func (i *ide) run() error {
 	if err != nil {
 		return err
 	}
+	i.running = true
 
 	term.SetOutputMode(i.ideConfig.outputMode())
 	term.SetInputMode(i.ideConfig.inputMode())
