@@ -268,13 +268,14 @@ func (m *clipboardManagerTest) Close() error {
 func newTestWorkspaceManagerHandlerWithManager(
 	t *testing.T, manager *workspace.Manager,
 	uri workspace.URI, cfg ideConfig,
-) *workspaceManagerHandler {
+) *testWorkspaceManagerHandler {
 	clip := &clipboardManagerTest{Clipboard: text.NewInMemoryClipboard()}
 	dir, err := ioutil.TempDir("", "")
 	require.NoError(t, err)
 
-	m := new(workspaceManagerHandler)
-	err = m.init(clip, uri, manager, cfg, "", []string{},
+	m := new(testWorkspaceManagerHandler)
+	m.workspaceManagerHandler = new(workspaceManagerHandler)
+	err = m.workspaceManagerHandler.init(clip, uri, manager, cfg, "", []string{},
 		dir, func(term.Event) bool {
 			return true
 		})
@@ -284,7 +285,7 @@ func newTestWorkspaceManagerHandlerWithManager(
 
 func newTestWorkspaceManagerHandler(
 	t *testing.T, cc ideConfig,
-) *workspaceManagerHandler {
+) *testWorkspaceManagerHandler {
 	manager := workspace.NewManager(config.NopConfig())
 	require.NoError(t, manager.RegisterScheme(workspace.MemoryScheme,
 		workspace.NewMemoryScheme))
@@ -295,4 +296,20 @@ func newTestWorkspaceManagerHandler(
 	require.NoError(t, err)
 
 	return newTestWorkspaceManagerHandlerWithManager(t, manager, uri, cc)
+}
+
+// deterministic usage of search list
+type testWorkspaceManagerHandler struct {
+	*workspaceManagerHandler
+}
+
+func (t *testWorkspaceManagerHandler) Handle(ev term.Event) (bool, bool) {
+	quit, handle := t.workspaceManagerHandler.Handle(ev)
+	handler := t.workspaceManagerHandler.focusHandler()
+	ex, ok := handler.(*ex)
+	if !ok {
+		ex = handler.(*workspaceHandler).ex
+	}
+	ex.cmd.list.Wait()
+	return quit, handle
 }

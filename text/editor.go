@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/ernestrc/blue/iterator"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/term"
@@ -49,6 +50,12 @@ type Command struct {
 type CommandHandler interface {
 	// Handle is called when user issued a command previously registered via SubscribeCommand.
 	HandleCommand(context.Context, Command) (exit bool, err error)
+}
+
+// CommandCompleter abstracts the ability for CommandHandlers to auto-complete
+// the arguments of a command.
+type CommandCompleter interface {
+	Complete(ctx context.Context, args []string) (iterator.Iterator[string], error)
 }
 
 type LocationPriority uint
@@ -148,17 +155,39 @@ func NewCellView(c cell.View) CellView {
 }
 
 type fnCommandHandler struct {
-	cb func(context.Context, Command) (bool, error)
+	cb         func(context.Context, Command) (bool, error)
+	completeFn func(context.Context, []string) (iterator.Iterator[string], error)
 }
 
 func (f fnCommandHandler) HandleCommand(ctx context.Context, c Command) (bool, error) {
 	return f.cb(ctx, c)
 }
 
+func (f fnCommandHandler) Complete(ctx context.Context, args []string) (
+	iterator.Iterator[string], error,
+) {
+	if f.completeFn != nil {
+		return f.completeFn(ctx, args)
+	}
+	return iterator.FromSlice[string](nil), nil
+}
+
 // FuncCommandHandler returns an CommandHandler that calls fn
-// every time Handle is invoked.
+// every time HandleCommand is invoked.
 func FuncCommandHandler(fn func(context.Context, Command) (bool, error)) CommandHandler {
 	return fnCommandHandler{
 		cb: fn,
+	}
+}
+
+// FuncCommandCompleter returns an CommandHandler that calls fn
+// every time HandleCommand is invoked and calls completeFn when Complete is called.
+func FuncCommandCompleter(
+	fn func(context.Context, Command) (bool, error),
+	completeFn func(context.Context, []string) (iterator.Iterator[string], error),
+) CommandHandler {
+	return fnCommandHandler{
+		cb:         fn,
+		completeFn: completeFn,
 	}
 }

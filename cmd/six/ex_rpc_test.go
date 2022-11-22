@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"io"
 	"net"
 	_ "net/http/pprof"
 	"os"
@@ -42,8 +41,8 @@ func (h *groupEventHandler) Handle(ev term.Event) (handled bool) {
 
 // used to emulate term event loop synchronization
 type safeHandler struct {
-	mu *sync.Mutex
-	tui.Handler
+	mu      *sync.Mutex
+	Handler *ex
 }
 
 func (h *safeHandler) Resize(width, height int) {
@@ -59,7 +58,10 @@ func (h *safeHandler) Draw(w term.Writer) {
 func (h *safeHandler) Handle(ev term.Event) (exit, handled bool) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	return h.Handler.Handle(ev)
+	exit, handled = h.Handler.Handle(ev)
+	// workaround search.List non-determinism
+	h.Handler.cmd.list.Wait()
+	return
 }
 func (h *safeHandler) Cursor() (pos term.Coordinates, show bool) {
 	h.mu.Lock()
@@ -73,7 +75,7 @@ func (h *safeHandler) Man() tui.Manual {
 }
 
 func (h *safeHandler) Close() error {
-	return h.Handler.(io.Closer).Close()
+	return h.Handler.Close()
 }
 
 func newTestRPCBrowser(t *testing.T,
@@ -82,13 +84,13 @@ func newTestRPCBrowser(t *testing.T,
 	return func(ed text.Editor, opts ...text.Option) (
 		tui.Handler, browser.Browser, error,
 	) {
-		b := new(ex)
-		err := b.init(ed, &testLoader{},
-			document.NewInMemoryService(), nopPublishEvent, opts...)
+		ex := new(ex)
+		err := ex.init(ed, &testLoader{}, document.NewInMemoryService(),
+			nopPublishEvent, opts...)
 		if err != nil {
 			return nil, nil, err
 		}
-		b.subscribeCommands()
+		ex.subscribeCommands()
 		lis, err := net.Listen("tcp", ":0")
 		require.NoError(t, err)
 
@@ -96,7 +98,7 @@ func newTestRPCBrowser(t *testing.T,
 
 		var serverMutex sync.Mutex
 		grpcServer := grpc.NewServer()
-		server := browser.NewServer(broker, b.Browser(), &serverMutex)
+		server := browser.NewServer(broker, ex.Browser(), &serverMutex)
 		browserpb.RegisterWindowManagerServer(grpcServer, server)
 		browserpb.RegisterMessengerServer(grpcServer, server)
 		browserpb.RegisterResourceOpenerServer(grpcServer, server)
@@ -107,7 +109,7 @@ func newTestRPCBrowser(t *testing.T,
 		require.NoError(t, err)
 
 		bc := browser.NewClient(broker, conn)
-		h := &safeHandler{Handler: b, mu: &serverMutex}
+		h := &safeHandler{Handler: ex, mu: &serverMutex}
 		*destructor = func() {
 			serverMutex.Lock()
 			defer serverMutex.Unlock()
@@ -115,7 +117,7 @@ func newTestRPCBrowser(t *testing.T,
 			server.Close()
 			grpcServer.Stop()
 			broker.Close()
-			b.Close()
+			ex.Close()
 		}
 		return h, bc, nil
 	}

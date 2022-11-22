@@ -8,6 +8,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/ernestrc/blue/iterator"
 	gomock "github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -753,6 +754,60 @@ func TestDispatchCommand(t *testing.T) {
 		_, err := NewComponent(&testEditor{}, &testLoader{}, cfg)
 		require.Error(t, err)
 	})
+}
+func TestCompleteCommand(t *testing.T) {
+	t.Run("returns empty iterator if there's no registered handler", func(t *testing.T) {
+		c := newTestComponent(t, &testEditor{})
+
+		it, err := c.CompleteCommand(context.Background(), "blabla")
+		require.NoError(t, err)
+		assertIteratorLen(t, 0, it)
+	})
+
+	t.Run("returns empty iterator if attempting to complete alias", func(t *testing.T) {
+		c := newTestComponent(t, &testEditor{})
+
+		c.config.CommandAliases = map[string][]string{
+			"workstation_layout": {
+				"newWindow",
+				"edit /tmp/todo.md",
+			},
+		}
+
+		it, err := c.CompleteCommand(context.Background(), "workstation_layout")
+		require.NoError(t, err)
+		assertIteratorLen(t, 0, it)
+	})
+
+	t.Run("calls command handler Complete", func(t *testing.T) {
+		c := newTestComponent(t, &testEditor{})
+
+		c.SubscribeCommand("edit", FuncCommandCompleter(func(ctx context.Context, cmd Command) (bool, error) {
+			return false, nil
+		}, func(ctx context.Context, args []string) (iterator.Iterator[string], error) {
+			assert.Equal(t, []string{"letter", "number"}, args)
+			return iterator.FromSlice([]string{"one", "two"}), nil
+		}))
+
+		it, err := c.CompleteCommand(context.Background(), "edit", "letter", "number")
+		require.NoError(t, err)
+		options := assertIteratorLen(t, 2, it)
+		assert.Equal(t, []string{"one", "two"}, options)
+	})
+}
+
+func assertIteratorLen(t *testing.T, n int, it iterator.Iterator[string]) []string {
+	var ret []string
+	var i int
+	for ; ; i++ {
+		next, ok := it.Next()
+		if !ok {
+			break
+		}
+		ret = append(ret, next)
+	}
+	assert.Equal(t, n, i)
+	return ret
 }
 
 func TestComponentEditor(t *testing.T) {

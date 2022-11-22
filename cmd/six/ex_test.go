@@ -71,8 +71,7 @@ func (w *testLoader) URI(path string) (workspace.URI, error) {
 
 func TestBrowserHandlerDraw(t *testing.T) {
 	testBrowserHandlerDraw(t, func(ed text.Editor, opts ...text.Option) (tui.Handler, browser.Browser, error) {
-		b := new(ex)
-		initExForTesting(t, b, ed, opts...)
+		b := newExForTesting(t, ed, opts...)
 		return b, b.Browser(), nil
 	})
 }
@@ -245,7 +244,7 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 	require.NoError(t, err)
 
 	cases = []testutil.HandlerSequenceTestCase{
-		{"_",
+		{"",
 			`┌──────────────────┐
 │cabin.go  other.go│
 ├────────┐┌────────┤
@@ -256,7 +255,7 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 │ZZZZZZZZ││GGGGGGGG│
 │ZZZZZZZZ││GGGGGGGG│
 └────────┘└────────┘`},
-		{":<111111111_",
+		{":<111111111",
 			`┌──────────────────┐
 │cabin.go  other.go│
 ├────────┐┌────────┤
@@ -278,7 +277,7 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 	require.NoError(t, focus.SetContent(hx))
 
 	cases = []testutil.HandlerSequenceTestCase{
-		{"____",
+		{"",
 			`┌──────────────────┐
 │cabin.go  other.go│
 ├────────┐┌────────┤
@@ -309,7 +308,7 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 │HHHHHHHHHHHHHHHHHH│
 │HHHHHHHHHHHHHHHHHH│
 └──────────────────┘`},
-		{":bcloseAll>:e other.go>bcde####__",
+		{":bcloseAll>:e other.go>bcde####",
 			`┌──────────────────┐
 │other.go          │
 ├──────────────────┤
@@ -357,7 +356,7 @@ IIII`},
 	require.NoError(t, err)
 
 	cases = []testutil.HandlerSequenceTestCase{
-		{"b__",
+		{"b",
 			`┌──────────────────┐
 │other.go  bugz    │
 ├──────────────────┤
@@ -388,7 +387,7 @@ IIII`},
 │BBBBBBBBBBBBBBBBBB│
 │BBBBBBBBBBBBBBBBBB│
 │BBBBBBBBBBBBBBBBBB│
-│BBBBBBBBBBBBBBBBBB│
+│wasup: Z          │
 └──────────────────┘`},
 	}
 	testutil.TestHandlerSequence(t, bh, 20, 10, cases)
@@ -400,7 +399,7 @@ IIII`},
 	_, err = b.Split(browser.OrientationTop, browser.NewTestHandler())
 	require.Error(t, err)
 	cases = []testutil.HandlerSequenceTestCase{
-		{"__",
+		{"",
 			`┌──────────────────┐
 │other.go  bugz    │
 ├──────────────────┤
@@ -411,7 +410,7 @@ IIII`},
 │BBBBBBBBBBBBBBBBBB│
 │BBBBBBBBBBBBBBBBBB│
 └──────────────────┘`},
-		{":reload>___", // test reload non file
+		{":reload>", // test reload non file
 			`┌──────────────────┐
 │other.go  bugz    │
 ├──────────────────┤
@@ -429,7 +428,7 @@ IIII`},
 	require.NoError(t, floating1.Close())
 
 	cases = []testutil.HandlerSequenceTestCase{
-		{"__",
+		{"",
 			`┌──────────────────┐
 │other.go  bugz    │
 ├──────────────────┤
@@ -454,7 +453,7 @@ IIII`},
 
 	// test case for issue #27
 	cases = []testutil.HandlerSequenceTestCase{
-		{":e ait^^^aix^^^^d airsoft.map____>",
+		{":e ait^^^aix^^^^ airsoft.map>",
 			`┌────────────────────────────────────────────────┐
 │other.go  bugz  airsoft.map                     │
 ├────────────────────────────────────────────────┤
@@ -463,22 +462,7 @@ IIII`},
 │2│AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA│3│
 │2│AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA│3│
 ├─┴────────────────────────────────────────────┴─┤
-│111111111111111111111111111111111111111111111111│
-└────────────────────────────────────────────────┘`},
-	}
-	testutil.TestHandlerSequence(t, bh, 50, 10, cases)
-
-	cases = []testutil.HandlerSequenceTestCase{
-		{"____",
-			`┌────────────────────────────────────────────────┐
-│other.go  bugz  airsoft.map                     │
-├────────────────────────────────────────────────┤
-│000000000000000000000000000000000000000000000000│
-├─┬────────────────────────────────────────────┬─┤
-│2│AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA│3│
-│2│AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA│3│
-├─┴────────────────────────────────────────────┴─┤
-│111111111111111111111111111111111111111111111111│
+│not a file                                      │
 └────────────────────────────────────────────────┘`},
 	}
 	testutil.TestHandlerSequence(t, bh, 50, 10, cases)
@@ -501,9 +485,8 @@ func assertHandled(
 func TestBrowserHandlerInterrupts(t *testing.T) {
 	t.Run("Interrupt calls interrupt handle", func(t *testing.T) {
 		var wg sync.WaitGroup
-		browser := new(ex)
 		opts := []text.Option{text.WithInterrupt(wg.Done)}
-		initExForTesting(t, browser, text.NopEditor(), opts...)
+		browser := newExForTesting(t, text.NopEditor(), opts...)
 		defer browser.Close()
 
 		wg.Add(1)
@@ -513,9 +496,8 @@ func TestBrowserHandlerInterrupts(t *testing.T) {
 	})
 	t.Run("SendEventNone calls interrupt handle", func(t *testing.T) {
 		var wg sync.WaitGroup
-		browser := new(ex)
 		opts := []text.Option{text.WithSendNone(wg.Done)}
-		initExForTesting(t, browser, text.NopEditor(), opts...)
+		browser := newExForTesting(t, text.NopEditor(), opts...)
 		defer browser.Close()
 
 		wg.Add(1)
@@ -577,7 +559,6 @@ func TestMultipleFilesStartup(t *testing.T) {
 	require.NoError(t, err)
 	file2, err := workspace.ParseURI("file:///wi.go")
 	require.NoError(t, err)
-	b := new(ex)
 	opts := []text.Option{
 		text.WithFile(file1),
 		text.WithFile(file2),
@@ -585,7 +566,7 @@ func TestMultipleFilesStartup(t *testing.T) {
 	}
 	mockBuf := testFileBuffer{}
 	workspace := testLoader{buf: &mockBuf}
-	initExForTestingWithWorkspace(t, b, &workspace, text.NopEditor(), opts...)
+	b := newExForTestingWithWorkspace(t, &workspace, text.NopEditor(), nopPublishEvent, opts...)
 	defer b.Close()
 
 	testutil.TestHandlerSequence(t, b, 20, 10, cases)
@@ -621,7 +602,7 @@ func TestExCommandResponsive(t *testing.T) {
 			`                    
                     
      ┌────────┐     
-     │e eeeeee│     
+     │edit eee│     
      │eeeeeeee│     
      │eeeeeee▐│     
      └────────┘     
@@ -632,7 +613,6 @@ func TestExCommandResponsive(t *testing.T) {
 
 	var closeFns []func() error
 	fn := func(t *testing.T) tui.Handler {
-		b := new(ex)
 		opts := []text.Option{
 			text.WithCommandKey(testCommandKey),
 			text.WithWindowManagerConfig(handler.WindowManagerConfig{
@@ -644,7 +624,7 @@ func TestExCommandResponsive(t *testing.T) {
 				Frame:        true,
 			}),
 		}
-		initExForTesting(t, b, text.NopEditor(), opts...)
+		b := newExForTesting(t, text.NopEditor(), opts...)
 		closeFns = append(closeFns, b.Close)
 		return b
 	}
@@ -718,7 +698,6 @@ func TestExKeySequence(t *testing.T) {
 	var closeFns []func() error
 	fn := func(t *testing.T) tui.Handler {
 		var mu sync.Mutex
-		b := new(ex)
 		file1, err := workspace.ParseURI("file:///10k.go")
 		require.NoError(t, err)
 		file2, err := workspace.ParseURI("file:///button.go")
@@ -737,13 +716,20 @@ func TestExKeySequence(t *testing.T) {
 			}, []string{"bufferCloseAll"}),
 			text.WithSequencerTimeout(1 * time.Second),
 		}
-		initExForTesting(t, b, text.NopEditor(), opts...)
-		b.publishEvent = func(ev term.Event) bool {
-			mu.Lock()
-			defer mu.Unlock()
-			b.Handle(ev)
-			return true
-		}
+		ex := new(ex)
+		require.NoError(t, ex.init(text.NopEditor(), &testLoader{}, document.NewInMemoryService(),
+			func(ev term.Event) bool {
+				// do not confuse interrupt from list with sequence re-issue commands
+				if ev.Type == term.EventInterrupt {
+					return true
+				}
+				mu.Lock()
+				defer mu.Unlock()
+				ex.Handle(ev)
+				return true
+			}, opts...))
+		ex.subscribeCommands()
+		b := testEx{ex}
 		closeFns = append(closeFns, func() error {
 			mu.Lock()
 			defer mu.Unlock()
@@ -785,11 +771,10 @@ func TestExTabIntegration(t *testing.T) {
 
 	var closeFns []func() error
 	fn := func(t *testing.T) tui.Handler {
-		b := new(ex)
 		opts := []text.Option{
 			text.WithCommandKey(testCommandKey),
 		}
-		initExForTesting(t, b, text.NopEditor(), opts...)
+		b := newExForTesting(t, text.NopEditor(), opts...)
 		uri1, err := workspace.ParseURI("file:///Fieshta")
 		require.NoError(t, err)
 		uri2, err := workspace.ParseURI("file:///Pahty")
@@ -820,8 +805,7 @@ func TestExExit(t *testing.T) {
 
 	for _, cmd := range commands {
 		t.Run(fmt.Sprintf("ex exits %s command is issued", cmd), func(t *testing.T) {
-			b := new(ex)
-			initExForTesting(t, b, text.NopEditor(),
+			b := newExForTesting(t, text.NopEditor(),
 				text.WithCommandKey(testCommandKey),
 			)
 			defer b.Close()
@@ -852,8 +836,7 @@ func TestExExit(t *testing.T) {
 	}
 
 	t.Run("ex does not exit when inner handler returns exit=true", func(t *testing.T) {
-		b := new(ex)
-		initExForTesting(t, b, text.NopEditor())
+		b := newExForTesting(t, text.NopEditor())
 		defer b.Close()
 
 		h := browser.NewTestHandler()
@@ -878,17 +861,32 @@ func TestExExit(t *testing.T) {
 	})
 }
 
-func initExForTestingWithWorkspace(
-	t *testing.T, ex *ex, workspace *testLoader,
-	ed text.Editor, opts ...text.Option,
-) {
-	require.NoError(t, ex.init(ed, workspace, document.NewInMemoryService(),
-		nopPublishEvent, opts...))
-	ex.subscribeCommands()
+// remove non-determinism of search.List async search
+type testEx struct {
+	*ex
 }
 
-func initExForTesting(t *testing.T, ex *ex, ed text.Editor, opts ...text.Option) {
-	initExForTestingWithWorkspace(t, ex, &testLoader{}, ed, opts...)
+func (t testEx) Handle(ev term.Event) (bool, bool) {
+	quit, handle := t.ex.Handle(ev)
+	t.ex.cmd.list.Wait()
+	return quit, handle
+}
+
+func newExForTestingWithWorkspace(
+	t *testing.T, workspace *testLoader,
+	ed text.Editor,
+	publishEvent func(term.Event) bool,
+	opts ...text.Option,
+) testEx {
+	ex := new(ex)
+	require.NoError(t, ex.init(ed, workspace, document.NewInMemoryService(),
+		publishEvent, opts...))
+	ex.subscribeCommands()
+	return testEx{ex}
+}
+
+func newExForTesting(t *testing.T, ed text.Editor, opts ...text.Option) testEx {
+	return newExForTestingWithWorkspace(t, &testLoader{}, ed, nopPublishEvent, opts...)
 }
 
 func TestNewWindow(t *testing.T) {
@@ -917,11 +915,10 @@ func TestNewWindow(t *testing.T) {
 └──────────────────┘`},
 	}
 
-	b := new(ex)
 	opts := []text.Option{
 		text.WithCommandKey(testCommandKey),
 	}
-	initExForTesting(t, b, text.NopEditor(), opts...)
+	b := newExForTesting(t, text.NopEditor(), opts...)
 	defer b.Close()
 
 	testutil.TestHandlerSequence(t, b, 20, 10, cases)
@@ -953,11 +950,10 @@ func TestCommandHistory(t *testing.T) {
 └──────────────────┘`},
 	}
 
-	b := new(ex)
 	opts := []text.Option{
 		text.WithCommandKey(testCommandKey),
 	}
-	initExForTesting(t, b, text.NopEditor(), opts...)
+	b := newExForTesting(t, text.NopEditor(), opts...)
 	defer b.Close()
 
 	testutil.TestHandlerSequence(t, b, 20, 10, cases)
@@ -989,7 +985,6 @@ func TestCommandAliases(t *testing.T) {
 └──────────────────┘`},
 	}
 
-	b := new(ex)
 	opts := []text.Option{
 		text.WithCommandKey(testCommandKey),
 		text.WithCommandAliases(map[string][]string{
@@ -997,7 +992,7 @@ func TestCommandAliases(t *testing.T) {
 			"bp":   []string{"bufferNext"},
 		}),
 	}
-	initExForTesting(t, b, text.NopEditor(), opts...)
+	b := newExForTesting(t, text.NopEditor(), opts...)
 	defer b.Close()
 
 	testutil.TestHandlerSequence(t, b, 20, 10, cases)

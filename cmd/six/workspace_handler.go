@@ -10,6 +10,7 @@ import (
 
 	"github.com/ernestrc/blue/document"
 	"github.com/ernestrc/blue/encoding/bson"
+	"github.com/ernestrc/blue/iterator"
 	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui"
@@ -184,17 +185,34 @@ func (h *workspaceManagerHandler) subscribeCommands(
 	ex *ex,
 	commands map[string]func(*workspaceManagerHandler, ...string) error,
 ) (ret error) {
-	for cmd, _fn := range commands {
-		fn := _fn
+	for cmd, fn := range commands {
+		fn := fn
+		cmd := cmd
 		err := ex.comp.SubscribeCommand(cmd,
-			text.FuncCommandHandler(func(ctx context.Context, cmd text.Command) (bool, error) {
+			text.FuncCommandCompleter(func(ctx context.Context, cmd text.Command) (bool, error) {
 				return false, fn(h, cmd.Args...)
+			}, func(ctx context.Context, args []string) (iterator.Iterator[string], error) {
+				return h.completeCommand(ctx, cmd, args)
 			}))
 		if err != nil {
 			ret = multierr.Append(ret, err)
 		}
 	}
 	return ret
+}
+
+func (h *workspaceManagerHandler) completeCommand(
+	ctx context.Context, cmd string, args []string,
+) (iterator.Iterator[string], error) {
+	switch cmd {
+	case cmdSwitchToWorkspace:
+		if len(args) == 0 {
+			return iterator.FromSlice([]string{"1", "2", "3", "4", "5", "6", "7", "8", "9", "10"}), nil
+		}
+		return iterator.FromSlice[string](nil), nil
+	default:
+		return iterator.FromSlice[string](nil), nil
+	}
 }
 
 func (h *workspaceManagerHandler) focusHandler() tui.Handler {
@@ -441,7 +459,7 @@ func (h *workspaceManagerHandler) addWorkspace(
 
 	h.workspaces[i] = &workspaceHandler{
 		uri:             uri,
-		Handler:         ex,
+		ex:              ex,
 		Plugins:         pluginManager,
 		pluginResources: res,
 	}
@@ -579,14 +597,14 @@ func (h *workspaceManagerHandler) Close() (ret error) {
 }
 
 type workspaceHandler struct {
-	tui.Handler
+	*ex
 	uri             workspace.URI
 	Plugins         *plugin.Manager
 	pluginResources map[plugin.Permission]plugin.ResourceServer
 }
 
 func (hm *workspaceHandler) Close() (ret error) {
-	if err := hm.Handler.(*ex).Close(); err != nil {
+	if err := hm.ex.Close(); err != nil {
 		ret = multierr.Append(ret, err)
 	}
 	if err := hm.Plugins.Close(); err != nil {

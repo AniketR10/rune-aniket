@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"sort"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/ernestrc/blue/document"
+	"github.com/ernestrc/blue/iterator"
 	"github.com/ernestrc/blue/retry"
 	multierr "github.com/ernestrc/go-multierror"
 	"unstable.build/go-tui"
@@ -37,7 +37,7 @@ var (
 		"focusPrevWindow":        {},
 		"focusAboveWindow":       {},
 		"focusBelowWindow":       {},
-		"switchToWorkspace":      {}, // workspace_handler
+		cmdSwitchToWorkspace:     {}, // workspace_handler
 	}
 	exCommands = map[string]func(*ex, ...string) error{
 		"bufferPrev":             (*ex).previousBuffer,
@@ -155,7 +155,6 @@ func (e *ex) init(
 		return
 	}
 	e.resetCommandList()
-	e.cmd.loadHistory()
 	return err
 }
 
@@ -217,9 +216,16 @@ func (e *ex) doInit(
 
 	e.cmd.init(storage, e.config.CommandMaxHistory,
 		e.config.CommandOverlay, e.config.CommandEvent,
-		func(command string, cmdAndArgs string) bool {
-			parts := strings.Split(cmdAndArgs, " ")
-			quit, err := e.runCommand(string(command), parts)
+		func(ctx context.Context, command string, args ...string) iterator.Iterator[string] {
+			it, err := e.comp.CompleteCommand(ctx, command, args...)
+			if err != nil {
+				e.setError(fmt.Errorf("complete command: %v", err))
+				return iterator.FromSlice[string](nil)
+			}
+			return it
+		},
+		func(command string, args ...string) bool {
+			quit, err := e.runCommand(command, args)
 			e.setProxyMode()
 			if err != nil {
 				e.setError(err)
@@ -435,24 +441,17 @@ func (e *ex) newWindow(args ...string) error {
 	return nil
 }
 
-func (e *ex) runCommand(cmd string, parts []string) (quit bool, err error) {
-	// check to workaround default :<number> command to go to line:
-	// cmd is empty because it didn't match any command in the list
-	// but default behaviour is to move cursor to line
-	if cmd != "" {
-		parts[0] = cmd // cmdAndArgs contains fuzzy completed command
-	}
-
-	if len(parts) == 1 {
-		line, cerr := strconv.Atoi(parts[0])
+func (e *ex) runCommand(cmd string, args []string) (quit bool, err error) {
+	if len(args) == 0 {
+		line, cerr := strconv.Atoi(cmd)
 		if cerr == nil {
 			err = e.moveFocusCursor(line - 1)
 			return
 		}
-		return e.quit, e.dispatchCommand(parts[0])
+		return e.quit, e.dispatchCommand(cmd)
 	}
 
-	return e.quit, e.dispatchCommand(parts[0], parts[1:]...)
+	return e.quit, e.dispatchCommand(cmd, args...)
 }
 
 func (e *ex) setError(err error) {
@@ -543,7 +542,7 @@ func (e *ex) handleProxy(ev term.Event) (
 
 	// first dispatch window control commands
 	if len(cmdAndArgs) != 0 && isWindowControlCommand(cmdAndArgs) {
-		quit, err := e.runCommand(cmdAndArgs[0], cmdAndArgs)
+		quit, err := e.runCommand(cmdAndArgs[0], cmdAndArgs[1:])
 		if err != nil {
 			e.setError(err)
 		}
@@ -561,7 +560,7 @@ func (e *ex) handleProxy(ev term.Event) (
 
 	// finally dispatch user event command or sequence command
 	if len(cmdAndArgs) != 0 {
-		quit, err := e.runCommand(cmdAndArgs[0], cmdAndArgs)
+		quit, err := e.runCommand(cmdAndArgs[0], cmdAndArgs[1:])
 		if err != nil {
 			e.setError(err)
 		}
@@ -582,7 +581,6 @@ func (e *ex) handleProxy(ev term.Event) (
 }
 
 func (e *ex) setProxyMode() {
-	e.cmd.reset()
 	e.mode = modeDefault
 }
 
