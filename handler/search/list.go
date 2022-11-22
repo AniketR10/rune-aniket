@@ -337,11 +337,6 @@ func (l *List) handleSearch(
 	slab := makeSlab()
 	search(l.cfg.algo, input, searchInput, slab, l.cfg.caseSensitive,
 		func(match Match) bool {
-			select {
-			case <-ctx.Done():
-				return false
-			default:
-			}
 			// NOTE: this creates a lot of contention when performing queries
 			// on very large inputs that are still being collected via Push.
 			// search list should be refactor to use on goroutine which takes
@@ -349,6 +344,11 @@ func (l *List) handleSearch(
 			// that should be the only goroutine with access to l.list
 			l.mu.Lock()
 			defer l.mu.Unlock()
+			select {
+			case <-ctx.Done():
+				return false
+			default:
+			}
 			addMatch(&l.list.FocusList, match, l.cfg.textAttr, l.cfg.matchedTextAttr)
 			return true
 		})
