@@ -310,6 +310,6 @@ func (t *testWorkspaceManagerHandler) Handle(ev term.Event) (bool, bool) {
 	if !ok {
 		ex = handler.(*workspaceHandler).ex
 	}
-	ex.cmd.list.Wait()
+	ex.cmd.Wait()
 	return quit, handle
 }

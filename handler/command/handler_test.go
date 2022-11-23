@@ -1,4 +1,4 @@
-package main
+package command
 
 import (
 	"context"
@@ -11,15 +11,13 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"unstable.build/go-tui/term"
-	"unstable.build/go-tui/text"
 	testutil "unstable.build/go-tui/util/test"
 )
 
 func TestCommandHandlerDraw(t *testing.T) {
 	storage := document.NewInMemoryService()
-	commandKey := term.KeyComb{Ch: '@'}
-	maxHistory := 100
-	overlayCfg := text.DefaultCommandOverlayConfig()
+	cfg := DefaultConfig()
+	cfg.HistoryKey = term.KeyComb{Ch: '@'}
 
 	tsuite := []struct {
 		desc         string
@@ -600,11 +598,10 @@ rori myArg oregani ▐
 			completeFn, cleanupComplete := tcase.completeCmd()
 			defer cleanupComplete(t)
 
-			b := newCommandListHandler(
-				storage, maxHistory, overlayCfg, commandKey,
-				completeFn, dispatchFn, term.NopInterrupter(),
+			b := NewHandler(
+				storage, FuncCompleter(completeFn), FuncDispatcher(dispatchFn),
+				term.NopInterrupter(), tcase.commands, cfg,
 			)
-			b.dataReset(tcase.commands)
 			defer b.Close()
 			cases := []testutil.HandlerSequenceTestCase{
 				{InputSequence: tcase.sequence, Expected: tcase.expectedDraw[1:]},
@@ -615,12 +612,12 @@ rori myArg oregani ▐
 }
 
 type testCommandHandler struct {
-	*commandListHandler
+	*Handler
 }
 
 func (t testCommandHandler) Handle(ev term.Event) (bool, bool) {
-	quit, handled := t.commandListHandler.Handle(ev)
-	t.list.Wait()
+	quit, handled := t.Handler.Handle(ev)
+	t.Wait()
 	return quit, handled
 }
 

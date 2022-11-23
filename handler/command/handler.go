@@ -1,4 +1,4 @@
-package main
+package command
 
 import (
 	"context"
@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/ernestrc/blue/document"
-	"github.com/ernestrc/blue/iterator"
 	"github.com/ernestrc/blue/logging"
 	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui"
@@ -14,24 +13,26 @@ import (
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/handler/search"
 	"unstable.build/go-tui/term"
-	"unstable.build/go-tui/text"
 )
 
-type commandHandlerMode uint
+// NewHandler allocates storage for a new Handler and initializes it.
+func NewHandler(
+	storage document.Service, completer Completer,
+	dispatcher Dispatcher, interrupter term.Interrupter,
+	commands []string, config Config,
+) *Handler {
+	ret := new(Handler)
+	ret.Init(storage, completer, dispatcher, interrupter, commands, config)
+	return ret
+}
 
-const (
-	modeCommandHandlerCommand commandHandlerMode = iota
-	// modeCommandHandlerArgs1
-	// modeCommandHandlerArgs2
-	// ...
-)
-
-type commandListHandler struct {
-	mode         commandHandlerMode
-	commandKey   term.KeyComb
-	overlayCfg   text.CommandOverlayConfig
-	dispatchFunc func(string, ...string) bool
-	completeFunc func(context.Context, string, ...string) iterator.Iterator[string]
+// Handler is a tui.Handler that presents a command browsing prompt
+// with history scrolling and argument completion.
+type Handler struct {
+	mode       commandHandlerMode
+	config     Config
+	dispatcher Dispatcher
+	completer  Completer
 
 	height, width int
 	// overlay buffer over the search list so we can
@@ -52,89 +53,80 @@ type commandListHandler struct {
 	prevCommandCycle bool
 }
 
-func newCommandListHandler(
-	b document.Service, max int, overlayCfg text.CommandOverlayConfig,
-	commandKey term.KeyComb,
-	completeFunc func(context.Context, string, ...string) iterator.Iterator[string],
-	dispatchFunc func(string, ...string) bool,
-	interrupter term.Interrupter,
-) *commandListHandler {
-	ret := new(commandListHandler)
-	ret.init(b, max, overlayCfg, commandKey,
-		completeFunc, dispatchFunc, interrupter)
-	return ret
-}
+type commandHandlerMode uint
 
-func (h *commandListHandler) init(
-	store document.Service, max int, overlayCfg text.CommandOverlayConfig,
-	commandKey term.KeyComb,
-	completeFunc func(context.Context, string, ...string) iterator.Iterator[string],
-	dispatchFunc func(string, ...string) bool,
-	interrupter term.Interrupter,
+const (
+	modeCommandHandlerCommand commandHandlerMode = iota
+	// modeCommandHandlerArgs1
+	// modeCommandHandlerArgs2
+	// ...
+)
+
+// Init initializes this handler with the given storage, completer,
+// dispatcher, interrupter and config.
+func (h *Handler) Init(
+	storage document.Service, completer Completer,
+	dispatcher Dispatcher, interrupter term.Interrupter,
+	commands []string, config Config,
 ) {
 	h.mode = modeCommandHandlerCommand
-	h.commandKey = commandKey
-	h.overlayCfg = overlayCfg
-	h.dispatchFunc = dispatchFunc
-	h.completeFunc = completeFunc
+	h.config = config
+	h.dispatcher = dispatcher
+	h.completer = completer
 
 	h.buf.Init()
 	h.responsive = component.BufferResponsive(&h.buf,
 		component.StringConfig{
-			Attributes:           overlayCfg.ElementAttr,
-			BackgroundAttributes: overlayCfg.ElementAttr,
+			Attributes:           config.ElementAttr,
+			BackgroundAttributes: config.ElementAttr,
 		})
 
 	cfg := search.ListConfig{
 		Algo:             search.FuzzyMatch,
 		Interrupter:      interrupter,
 		CaseSensitive:    false,
-		MatchedTextAttr:  &overlayCfg.MatchedTextAttr,
-		FocusElementAttr: &overlayCfg.FocusElementAttr,
-		ElementAttr:      &overlayCfg.ElementAttr,
+		MatchedTextAttr:  &config.MatchedTextAttr,
+		FocusElementAttr: &config.FocusElementAttr,
+		ElementAttr:      &config.ElementAttr,
 	}
 
 	h.list.Init(cfg)
 
 	for {
-		h.history.Init(store, commandHistoryDocumentID, max)
+		h.history.Init(storage, config.DocumentID, config.MaxHistory)
 		err := h.history.Load()
 		if err == nil {
 			break
 		}
 		h.log(log.ErrorLevel, "load history: %v", err)
-		store = document.NewInMemoryService()
+		storage = document.NewInMemoryService()
 	}
+	h.Reset(commands)
 }
 
-func (h *commandListHandler) commandOverlayDimensions() (width, height int) {
-	width = int(math.Min(float64(h.width), float64(h.overlayCfg.Width)))
-	height = int(math.Min(float64(h.height), float64(h.overlayCfg.Height)))
-	return
-}
-
-func (h *commandListHandler) resizeCommandOverlay() {
+func (h *Handler) resizeCommandOverlay() {
 	// propagate local cmd+args buffer height to
 	// search list, which only has cmd, in case args alone span
 	// multiple lines
-	cmdWidth, cmdHeight := h.commandOverlayDimensions()
-	height := h.responsive.Height(cmdWidth)
+	height := h.responsive.Height(h.width)
 	// set to min 1, as it's being used as input field
 	// and max to the height of the overlayed component
-	height = int(math.Min(math.Max(1, float64(height)), float64(cmdHeight)))
+	height = int(math.Min(math.Max(1, float64(height)), float64(h.height)))
 	// the list is very short so waiting is not a significant
 	// perf penalty and it makes tests easier to make deterministic
 	h.list.SetMinInputHeight(height)
-	h.responsive.Resize(cmdWidth, height)
+	h.responsive.Resize(h.width, height)
 }
 
-func (h *commandListHandler) Resize(width, height int) {
+// Resize satisfies tui.Handler.
+func (h *Handler) Resize(width, height int) {
 	h.width = width
 	h.height = height
 	h.list.Resize(width, height)
 }
 
-func (h *commandListHandler) Draw(w term.Writer) {
+// Draw satisfies tui.Handler.
+func (h *Handler) Draw(w term.Writer) {
 	// resize on every draw because search.List uses a responsive
 	// input so local buffer changes must consider potential resize
 	// of search.List
@@ -145,7 +137,7 @@ func (h *commandListHandler) Draw(w term.Writer) {
 	h.responsive.Draw(w)
 }
 
-func (h *commandListHandler) handleLastCommand() {
+func (h *Handler) handleLastCommand() {
 	cmd := h.history.Next()
 	if cmd == "" {
 		h.log(log.TraceLevel, "ignoring next command in history: empty")
@@ -157,7 +149,7 @@ func (h *commandListHandler) handleLastCommand() {
 	}
 }
 
-func (h *commandListHandler) dispatchCommand() (
+func (h *Handler) dispatchCommand() (
 	quit, handled bool,
 ) {
 	match, ok := h.list.Focus()
@@ -180,7 +172,7 @@ func (h *commandListHandler) dispatchCommand() (
 		commandString = strings.Join(h.commandAndArgs, " ")
 
 		h.log(log.TraceLevel, "dispatching command and args %#v", h.commandAndArgs)
-		quit = h.dispatchFunc(h.commandAndArgs[0], h.commandAndArgs[1:]...)
+		quit = h.dispatcher.Dispatch(h.commandAndArgs[0], h.commandAndArgs[1:]...)
 	} else {
 		commandString = string(match.Data())
 		// no match, use what's in buffer
@@ -189,7 +181,7 @@ func (h *commandListHandler) dispatchCommand() (
 		}
 
 		h.log(log.TraceLevel, "dispatching command %#v", commandString)
-		quit = h.dispatchFunc(commandString)
+		quit = h.dispatcher.Dispatch(commandString)
 	}
 
 	if commandString != "" {
@@ -208,7 +200,8 @@ func (h *commandListHandler) dispatchCommand() (
 	return true, true
 }
 
-func (h *commandListHandler) Handle(ev term.Event) (quit, handled bool) {
+// Handle satisfies tui.Handler.
+func (h *Handler) Handle(ev term.Event) (quit, handled bool) {
 	switch h.mode {
 	case modeCommandHandlerCommand:
 		return h.handleCommand(ev)
@@ -217,11 +210,11 @@ func (h *commandListHandler) Handle(ev term.Event) (quit, handled bool) {
 	}
 }
 
-func (h *commandListHandler) handleCommon(ev *term.Event) (quit, handled bool) {
+func (h *Handler) handleCommon(ev *term.Event) (quit, handled bool) {
 	key := ev.KeyComb()
-	if (key == h.commandKey && h.commandKey.Ch == 0) ||
-		(key == h.commandKey && h.buf.Columns(0) == 0) ||
-		(key == h.commandKey && h.prevCommandCycle) {
+	if (key == h.config.HistoryKey && h.config.HistoryKey.Ch == 0) ||
+		(key == h.config.HistoryKey && h.buf.Columns(0) == 0) ||
+		(key == h.config.HistoryKey && h.prevCommandCycle) {
 		h.handleLastCommand()
 		h.prevCommandCycle = true
 		return false, true
@@ -257,7 +250,7 @@ func (h *commandListHandler) handleCommon(ev *term.Event) (quit, handled bool) {
 	return
 }
 
-func (h *commandListHandler) handleCommand(ev term.Event) (quit, handled bool) {
+func (h *Handler) handleCommand(ev term.Event) (quit, handled bool) {
 	quit, handled = h.handleCommon(&ev)
 	if handled {
 		return
@@ -291,7 +284,7 @@ func (h *commandListHandler) handleCommand(ev term.Event) (quit, handled bool) {
 	return
 }
 
-func (h *commandListHandler) handleCompleteArgs(ev term.Event) (quit, handled bool) {
+func (h *Handler) handleCompleteArgs(ev term.Event) (quit, handled bool) {
 	quit, handled = h.handleCommon(&ev)
 	if handled {
 		return
@@ -326,7 +319,7 @@ func (h *commandListHandler) handleCompleteArgs(ev term.Event) (quit, handled bo
 	return
 }
 
-func (h *commandListHandler) completeTopList() bool {
+func (h *Handler) completeTopList() bool {
 	command, ok := h.list.Focus()
 	if !ok {
 		h.log(log.TraceLevel, "completeTopList: no matches on search list")
@@ -339,12 +332,12 @@ func (h *commandListHandler) completeTopList() bool {
 	return true
 }
 
-func (h *commandListHandler) log(level log.Level, msg string, args ...interface{}) {
-	log.WithField(logging.KeyClass, "commandListHandler").
+func (h *Handler) log(level log.Level, msg string, args ...interface{}) {
+	log.WithField(logging.KeyClass, "Handler").
 		Logf(level, msg, args...)
 }
 
-func (h *commandListHandler) incArgsCompleteMode() {
+func (h *Handler) incArgsCompleteMode() {
 	h.mode++
 	if !h.completeTopList() {
 		h.commandAndArgs = append(h.commandAndArgs, h.list.Buffer().String())
@@ -353,7 +346,7 @@ func (h *commandListHandler) incArgsCompleteMode() {
 	h.setCompletionList(h.commandAndArgs[0], h.commandAndArgs[1:]...)
 }
 
-func (h *commandListHandler) decArgsCompleteMode() bool {
+func (h *Handler) decArgsCompleteMode() bool {
 	if h.mode == 1 {
 		return false
 	}
@@ -366,18 +359,18 @@ func (h *commandListHandler) decArgsCompleteMode() bool {
 	return true
 }
 
-func (h *commandListHandler) setCommandMode() {
+func (h *Handler) setCommandMode() {
 	h.mode = modeCommandHandlerCommand
 	h.list.Buffer().Replace(h.buf.String())
 	h.commandAndArgs = h.commandAndArgs[:0]
 	h.resetListWith(h.commandsBackup)
 }
 
-func (h *commandListHandler) setCompletionList(cmd string, args ...string) {
+func (h *Handler) setCompletionList(cmd string, args ...string) {
 	h.log(log.TraceLevel, "setCompletionList: %v", h.commandAndArgs)
 
 	ctx := context.Background()
-	it := h.completeFunc(ctx, cmd, args...)
+	it := h.completer.Complete(ctx, cmd, args...)
 
 	var completionItems []string
 	for {
@@ -395,35 +388,38 @@ func (h *commandListHandler) setCompletionList(cmd string, args ...string) {
 	h.resetListWith(completionItems)
 }
 
-func (h *commandListHandler) dataReset(items []string) {
+// Reset resets the commands listed in this Handler.
+// It should be called after initialization and every time
+// new commands are available.
+func (h *Handler) Reset(commands []string) {
 	h.setCommandMode()
 	h.buf.Reset()
 	h.list.Buffer().Reset()
-	h.commandsBackup = items
-	h.resetListWith(items)
+	h.commandsBackup = commands
+	h.resetListWith(commands)
 }
 
-func (h *commandListHandler) resetListWith(items []string) {
+func (h *Handler) resetListWith(items []string) {
 	h.list.DataReset()
 	for _, item := range items {
 		h.list.PushSync([]byte(item))
 	}
 }
 
-func (h *commandListHandler) reset() {
+func (h *Handler) reset() {
 	h.setCommandMode()
 	h.buf.Reset()
 	h.list.Buffer().Reset()
 }
 
-func (h *commandListHandler) Cursor() (term.Coordinates, bool) {
+// Cursor satisfies tui.Handler.
+func (h *Handler) Cursor() (term.Coordinates, bool) {
 	var pos term.Coordinates
-	cmdWidth, cmdHeight := h.commandOverlayDimensions()
-	x := len(h.buf.String()) % cmdWidth
-	y := len(h.buf.String()) / cmdWidth
-	if y >= cmdHeight {
-		pos.X += cmdWidth - 1
-		pos.Y += cmdHeight - 1
+	x := len(h.buf.String()) % h.width
+	y := len(h.buf.String()) / h.width
+	if y >= h.height {
+		pos.X += h.width - 1
+		pos.Y += h.height - 1
 	} else {
 		pos.X += x
 		pos.Y += y
@@ -431,10 +427,18 @@ func (h *commandListHandler) Cursor() (term.Coordinates, bool) {
 	return pos, true
 }
 
-func (h *commandListHandler) Man() tui.Manual {
+// Man satisfies tui.Handler
+func (h *Handler) Man() tui.Manual {
 	panic("TODO")
 }
 
-func (h *commandListHandler) Close() error {
+// Wait waits for the underlying search.List to finish search.
+// See search.List.Wait for more details.
+func (h *Handler) Wait() {
+	h.list.Wait()
+}
+
+// Close closes all resources associated with this Handler.
+func (h *Handler) Close() error {
 	return h.list.Close()
 }

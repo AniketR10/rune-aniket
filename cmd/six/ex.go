@@ -16,6 +16,7 @@ import (
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/handler"
+	"unstable.build/go-tui/handler/command"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
 	"unstable.build/go-tui/workspace"
@@ -112,7 +113,7 @@ type ex struct {
 	workspace            workspaceLoader
 	sequencer            handler.Sequencer
 	publishEvent         func(term.Event) bool
-	cmd                  commandListHandler
+	cmd                  *command.Handler
 	overlay              component.Overlay
 	mode                 mode
 	cancelPartialReissue func()
@@ -248,33 +249,24 @@ func (e *ex) doInit(
 		panic(msg)
 	}
 
-	e.cmd.init(storage, e.config.CommandMaxHistory,
-		e.config.CommandOverlay, e.config.CommandEvent,
-		func(ctx context.Context, command string, args ...string) iterator.Iterator[string] {
-			it, err := e.comp.CompleteCommand(ctx, command, args...)
-			if err != nil {
-				e.setError(fmt.Errorf("complete command: %v", err))
-				return iterator.FromSlice[string](nil)
-			}
-			return it
-		},
-		func(command string, args ...string) bool {
-			quit, err := e.runCommand(command, args)
-			e.setProxyMode()
-			if err != nil {
-				e.setError(err)
-			}
-			return quit
-		}, e)
+	commandCfg := command.Config{
+		MaxHistory:       e.config.CommandMaxHistory,
+		HistoryKey:       e.config.CommandEvent,
+		MatchedTextAttr:  e.config.CommandOverlay.MatchedTextAttr,
+		FocusElementAttr: e.config.CommandOverlay.FocusElementAttr,
+		ElementAttr:      e.config.CommandOverlay.ElementAttr,
+		DocumentID:       commandHistoryDocumentID,
+	}
+	e.cmd = command.NewHandler(storage, e, e, e, []string{}, commandCfg)
 
 	var commandOverlay tui.Component
 	if e.config.CommandOverlay.Frame {
-		frame := component.NewFrame(&e.cmd)
+		frame := component.NewFrame(e.cmd)
 		frame.FrameCharSet = e.config.CommandOverlay.FrameCharSet
 		frame.Attributes = e.config.CommandOverlay.FrameAttributes
 		commandOverlay = frame
 	} else {
-		commandOverlay = &e.cmd
+		commandOverlay = e.cmd
 	}
 
 	e.overlay.Init(&e.comp, commandOverlay,
@@ -288,6 +280,26 @@ func (e *ex) doInit(
 	e.ed = ed
 	e.cleanPartialReissueState()
 	return
+}
+
+// Complete satisfies command.Completer for command.Handler.
+func (e *ex) Complete(ctx context.Context, cmd string, args ...string) iterator.Iterator[string] {
+	it, err := e.comp.CompleteCommand(ctx, cmd, args...)
+	if err != nil {
+		e.setError(fmt.Errorf("complete command: %v", err))
+		return iterator.FromSlice[string](nil)
+	}
+	return it
+}
+
+// Dispatch satisfies command.Dispatcher for command.Handler.
+func (e *ex) Dispatch(command string, args ...string) bool {
+	quit, err := e.runCommand(command, args)
+	e.setProxyMode()
+	if err != nil {
+		e.setError(err)
+	}
+	return quit
 }
 
 func (e *ex) handlerInFocus() (workspace.URI, text.Handler, bool) {
@@ -626,7 +638,7 @@ func (e *ex) resetCommandList() {
 		commands = append(commands, cmd)
 	}
 	sort.Strings(commands)
-	e.cmd.dataReset(commands)
+	e.cmd.Reset(commands)
 }
 
 func (e *ex) setCommandMode() {

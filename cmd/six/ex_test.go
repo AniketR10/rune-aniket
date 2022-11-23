@@ -879,7 +879,7 @@ type testEx struct {
 
 func (t testEx) Handle(ev term.Event) (bool, bool) {
 	quit, handle := t.ex.Handle(ev)
-	t.ex.cmd.list.Wait()
+	t.ex.cmd.Wait()
 	return quit, handle
 }
 
