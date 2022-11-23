@@ -4,8 +4,10 @@ import (
 	"context"
 	"math"
 	"strings"
+	"sync"
 
 	"github.com/ernestrc/blue/document"
+	"github.com/ernestrc/blue/iterator"
 	"github.com/ernestrc/blue/logging"
 	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui"
@@ -51,6 +53,10 @@ type Handler struct {
 	// when command key is a character that could be interpreted
 	// as a character to be inserted in command input buffer
 	prevCommandCycle bool
+
+	mu        sync.Mutex
+	cancelFn  func()
+	cancelCtx context.Context
 }
 
 type commandHandlerMode uint
@@ -228,6 +234,7 @@ func (h *Handler) handleCommon(ev *term.Event) (quit, handled bool) {
 		h.reset()
 	case term.KeyEsc:
 		quit = true
+		h.Cancel()
 	case term.KeyArrowDown, term.KeyCtrlJ:
 		h.list.FocusDown()
 	case term.KeyArrowUp, term.KeyCtrlK:
@@ -262,6 +269,7 @@ func (h *Handler) handleCommand(ev term.Event) (quit, handled bool) {
 		if cols == 0 {
 			handled = true
 			quit = true
+			h.Cancel()
 			return
 		}
 		h.buf.DeleteCell(term.Coordinates{X: cols - 1})
@@ -366,26 +374,67 @@ func (h *Handler) setCommandMode() {
 	h.resetListWith(h.commandsBackup)
 }
 
-func (h *Handler) setCompletionList(cmd string, args ...string) {
-	h.log(log.TraceLevel, "setCompletionList: %v", h.commandAndArgs)
-
-	ctx := context.Background()
-	it := h.completer.Complete(ctx, cmd, args...)
-
-	var completionItems []string
+func (h *Handler) pushIteratorToList(
+	ctx context.Context, ch chan<- []byte, it iterator.Iterator[string],
+) {
 	for {
 		next, ok := it.Next()
 		if !ok {
 			break
 		}
-		completionItems = append(completionItems, next)
+		select {
+		case <-ctx.Done():
+			return
+		default:
+			ch <- []byte(next)
+		}
 	}
-	err := it.Err()
-	if err != nil {
-		h.log(log.ErrorLevel, "completion iterator error: %v", err)
+
+	// if already canceled, then do not cancel again
+	select {
+	case <-ctx.Done():
 		return
+	default:
+		err := it.Err()
+		if err != nil {
+			h.log(log.ErrorLevel, "completion iterator error: %v", err)
+			return
+		}
 	}
-	h.resetListWith(completionItems)
+
+}
+
+func (h *Handler) setCompletionList(cmd string, args ...string) {
+	h.log(log.TraceLevel, "setCompletionList: %v", h.commandAndArgs)
+
+	ctx := context.Background()
+	ctx, cancel := context.WithCancel(ctx)
+
+	// cancel prev if there's any
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	h.cancelCompletionPush()
+	h.cancelFn = cancel
+	h.cancelCtx = ctx
+
+	h.list.DataReset()
+	it := h.completer.Complete(ctx, cmd, args...)
+	ch := h.list.Push()
+
+	go func() {
+		h.pushIteratorToList(ctx, ch, it)
+		// if already canceled, then do not cancel again
+		select {
+		case <-ctx.Done():
+		default:
+			h.mu.Lock()
+			defer h.mu.Unlock()
+
+			cancel()
+			h.cancelFn = nil
+		}
+	}()
 }
 
 // Reset resets the commands listed in this Handler.
@@ -399,7 +448,20 @@ func (h *Handler) Reset(commands []string) {
 	h.resetListWith(commands)
 }
 
+// assumes holding lock
+func (h *Handler) cancelCompletionPush() {
+	if h.cancelFn != nil {
+		h.cancelFn()
+		h.cancelFn = nil
+	}
+}
+
 func (h *Handler) resetListWith(items []string) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	h.cancelCompletionPush()
+
 	h.list.DataReset()
 	for _, item := range items {
 		h.list.PushSync([]byte(item))
@@ -407,6 +469,7 @@ func (h *Handler) resetListWith(items []string) {
 }
 
 func (h *Handler) reset() {
+	h.Cancel()
 	h.setCommandMode()
 	h.buf.Reset()
 	h.list.Buffer().Reset()
@@ -432,13 +495,38 @@ func (h *Handler) Man() tui.Manual {
 	panic("TODO")
 }
 
-// Wait waits for the underlying search.List to finish search.
-// See search.List.Wait for more details.
+// Wait waits for any asynchronous completion
+// or search to finish before it returns.
 func (h *Handler) Wait() {
+	h.mu.Lock()
+	cancelCtx := h.cancelCtx
+	cancelFn := h.cancelFn
+	h.mu.Unlock()
+
+	if cancelFn == nil {
+		h.list.Wait()
+		return
+	}
+
+	<-cancelCtx.Done()
 	h.list.Wait()
+}
+
+// Cancel cancels any asynchronous completion or search currently ongoing
+// or does nothing if there's currently no ongoing completion or search.
+func (h *Handler) Cancel() {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	h.cancelCompletionPush()
+	h.list.Cancel()
 }
 
 // Close closes all resources associated with this Handler.
 func (h *Handler) Close() error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	h.cancelCompletionPush()
 	return h.list.Close()
 }
