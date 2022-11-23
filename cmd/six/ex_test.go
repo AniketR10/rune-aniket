@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"strconv"
@@ -9,6 +10,7 @@ import (
 	"time"
 
 	"github.com/ernestrc/blue/document"
+	"github.com/ernestrc/blue/iterator"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"unstable.build/go-tui"
@@ -63,6 +65,10 @@ func (w *testLoader) Recover(
 	workspace.FlusherCloser, error,
 ) {
 	return w.Load(filePath, buf, swapFilePath, false)
+}
+
+func (w *testLoader) ListFiles(ctx context.Context) (iterator.Iterator[string], error) {
+	return iterator.FromSlice[string](nil), nil
 }
 
 func (w *testLoader) URI(path string) (workspace.URI, error) {
@@ -485,12 +491,17 @@ func assertHandled(
 func TestBrowserHandlerInterrupts(t *testing.T) {
 	t.Run("Interrupt calls interrupt handle", func(t *testing.T) {
 		var wg sync.WaitGroup
-		opts := []text.Option{text.WithInterrupt(wg.Done)}
+		opts := []text.Option{text.WithInterrupter(
+			term.FuncInterrupter(func() error {
+				wg.Done()
+				return nil
+			}),
+		)}
 		browser := newExForTesting(t, text.NopEditor(), opts...)
 		defer browser.Close()
 
 		wg.Add(1)
-		browser.Browser().PublishInterrupt()
+		browser.Browser().Interrupt()
 
 		wg.Wait()
 	})

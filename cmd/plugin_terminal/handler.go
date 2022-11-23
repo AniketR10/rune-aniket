@@ -132,9 +132,9 @@ func (e *emulator) init(
 					return
 				}
 			}
-			err = e.p.PublishInterrupt()
+			err = e.p.Interrupt()
 			if err != nil {
-				log.Errorf("PublishInterrupt: %s", err)
+				log.Errorf("Interrupt: %s", err)
 			}
 		}
 	}()

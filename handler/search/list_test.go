@@ -38,6 +38,13 @@ type listIfc interface {
 	Wait()
 }
 
+func wgInterrupter(wg *sync.WaitGroup) term.Interrupter {
+	return term.FuncInterrupter(func() error {
+		wg.Done()
+		return nil
+	})
+}
+
 func assertNoLeaks(t *testing.T, l listIfc) {
 	assert.NoError(t, l.Close())
 	ignoreOpenCensus := goleak.IgnoreTopFunction("go.opencensus.io/stats/view.(*worker).start")
@@ -72,7 +79,7 @@ func TestListCount(t *testing.T) {
 
 func testListCount(t *testing.T, constructor listConstructor) {
 	var wg sync.WaitGroup
-	l, buf := constructor(ListConfig{Interrupt: wg.Done})
+	l, buf := constructor(ListConfig{Interrupter: wgInterrupter(&wg)})
 
 	l.PushSync([]byte("capitol insurrection"))
 	assert.Equal(t, 1, l.TotalCount())
@@ -193,7 +200,7 @@ func testListAsyncPush(t *testing.T, constructor listConstructor) {
 	t.Run("no search", func(t *testing.T) {
 		var wg sync.WaitGroup
 
-		l, _ := constructor(ListConfig{Interrupt: wg.Done})
+		l, _ := constructor(ListConfig{Interrupter: wgInterrupter(&wg)})
 		height := 100
 		l.Resize(100, height)
 
@@ -214,7 +221,7 @@ func testListAsyncPush(t *testing.T, constructor listConstructor) {
 
 	t.Run("search query after items pushed", func(t *testing.T) {
 		var wg sync.WaitGroup
-		l, buf := constructor(ListConfig{Interrupt: wg.Done})
+		l, buf := constructor(ListConfig{Interrupter: wgInterrupter(&wg)})
 		height := 100
 		l.Resize(100, height)
 
@@ -237,7 +244,7 @@ func testListAsyncPush(t *testing.T, constructor listConstructor) {
 
 	t.Run("search query before items pushed", func(t *testing.T) {
 		var wg sync.WaitGroup
-		l, buf := constructor(ListConfig{Interrupt: wg.Done})
+		l, buf := constructor(ListConfig{Interrupter: wgInterrupter(&wg)})
 		n := 100
 		l.Resize(n, n)
 
@@ -267,7 +274,7 @@ func testListAsyncPush(t *testing.T, constructor listConstructor) {
 
 	t.Run("concurrent search query", func(t *testing.T) {
 		var wg sync.WaitGroup
-		l, buf := constructor(ListConfig{Interrupt: wg.Done})
+		l, buf := constructor(ListConfig{Interrupter: wgInterrupter(&wg)})
 		n := 100
 		l.Resize(n, n)
 

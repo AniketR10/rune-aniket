@@ -602,7 +602,7 @@ rori myArg oregani ▐
 
 			b := newCommandListHandler(
 				storage, maxHistory, overlayCfg, commandKey,
-				completeFn, dispatchFn, func() {},
+				completeFn, dispatchFn, term.NopInterrupter(),
 			)
 			b.dataReset(tcase.commands)
 			defer b.Close()

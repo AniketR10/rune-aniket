@@ -243,7 +243,7 @@ func (h *gitEditorHandler) pushNewDiffLocations(
 			// make sure that an interrupt is called
 			// so the new scroll bar is updated, when
 			// focus switched to a file with no changes.
-			return h.p.PublishInterrupt()
+			return h.p.Interrupt()
 		}
 		return fmt.Errorf("failed to read from stdout: %v", err)
 	}
@@ -361,10 +361,10 @@ func (h *gitEditorHandler) handleEvents() {
 			err = h.pushNewDiffLocations(resourceName, ev.Resource)
 		case text.EventTypeUnfocus:
 			h.resetScroll()
-			err = h.p.PublishInterrupt()
+			err = h.p.Interrupt()
 		case text.EventTypeScroll:
 			h.setScrollOffset(resourceName, ev.Start)
-			err = h.p.PublishInterrupt()
+			err = h.p.Interrupt()
 		}
 		if err != nil {
 			log.Errorf("Handle(%#v): %v", ev.Type, err)

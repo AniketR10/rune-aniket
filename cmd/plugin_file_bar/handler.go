@@ -290,26 +290,26 @@ func (h *fileBarEditorHandler) handleEvents() {
 		case text.EventTypeEdit:
 			h.setFileDirty(resourceName, true)
 			h.refreshBarContent(resourceName)
-			err = h.p.PublishInterrupt()
+			err = h.p.Interrupt()
 		case text.EventTypeOpen:
 			h.setCursorOffset(resourceName, term.Coordinates{})
 			h.setScrollMaxContent(resourceName, ev)
 			h.refreshBarContent(resourceName)
-			err = h.p.PublishInterrupt()
+			err = h.p.Interrupt()
 		case text.EventTypeFlush:
 			h.setFileDirty(resourceName, false)
 			h.setScrollMaxContent(resourceName, ev)
 			fallthrough
 		case text.EventTypeFocus:
 			h.refreshBarContent(resourceName)
-			err = h.p.PublishInterrupt()
+			err = h.p.Interrupt()
 		case text.EventTypeUnfocus:
 			h.refreshBarContent(workspace.URI{})
-			err = h.p.PublishInterrupt()
+			err = h.p.Interrupt()
 		case text.EventTypeCursor:
 			h.setCursorOffset(resourceName, ev.From)
 			h.refreshBarContent(resourceName)
-			err = h.p.PublishInterrupt()
+			err = h.p.Interrupt()
 		}
 		if err != nil {
 			log.Errorf("Handle(%#v): %v", ev.Type, err)

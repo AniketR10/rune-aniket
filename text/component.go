@@ -601,10 +601,9 @@ func (c *Component) Bar(o browser.Orientation, h tui.Handler) error {
 	return nil
 }
 
-// PublishInterrupt interrupts the main event loop to redraw the terminal.
-func (c *Component) PublishInterrupt() error {
-	c.config.SendInterrupt()
-	return nil
+// Interrupt interrupts the main event loop to redraw the terminal.
+func (c *Component) Interrupt() error {
+	return c.config.Interrupter.Interrupt()
 }
 
 // PublishEventNone sends an EventNone to the main event loop which

@@ -197,13 +197,6 @@ func (h *fuzzyFinderHandler) openResource(searchQuery, data string) {
 	}
 }
 
-func (h *fuzzyFinderHandler) publishInterrupt() {
-	err := h.p.PublishInterrupt()
-	if err != nil {
-		log.Printf("failed to publish interrupt: %v", err)
-	}
-}
-
 func (h *fuzzyFinderHandler) scanDataViaWorkspaceAPI() {
 	log.Debugf("using workspace API to get resource iterator")
 
@@ -409,7 +402,7 @@ func (h *fuzzyFinderHandler) getListConfig(c config.Config) search.ListConfig {
 
 	cfg := search.ListConfig{
 		Algo:          algo,
-		Interrupt:     h.publishInterrupt,
+		Interrupter:   h.p,
 		CaseSensitive: caseSensitive,
 	}
 

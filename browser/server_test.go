@@ -187,7 +187,7 @@ func TestServerPublish(t *testing.T) {
 		s, mock, _ := newTestServer(ctrl, &mu)
 		req := browserpb.PublishRequest{Ev: &termpb.Event{Type: termpb.Event_TypeInterrupt}}
 
-		mock.EXPECT().PublishInterrupt().Times(1)
+		mock.EXPECT().Interrupt().Times(1)
 
 		res, err := s.Publish(ctx, &req)
 		require.NoError(t, err)
@@ -227,7 +227,7 @@ func TestServerPublish(t *testing.T) {
 		s, mock, _ := newTestServer(ctrl, &mu)
 		req := browserpb.PublishRequest{Ev: &termpb.Event{Type: termpb.Event_TypeInterrupt}}
 
-		mock.EXPECT().PublishInterrupt().Return(errors.New("uRock"))
+		mock.EXPECT().Interrupt().Return(errors.New("uRock"))
 
 		res, err := s.Publish(ctx, &req)
 		require.Error(t, err)

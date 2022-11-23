@@ -84,11 +84,11 @@ type ResourceOpener interface {
 	Open(resource workspace.URI) (Handler, error)
 }
 
-// EventPublisher is the interface that wraps the method PublishInterrupt.
+// EventPublisher is the interface that wraps the method Interrupt.
 type EventPublisher interface {
-	// PublishInterrupt will publish an interrupt event, which will force
+	// Interrupt will publish an interrupt event, which will force
 	// redrawing all components in the terminal.
-	PublishInterrupt() error
+	Interrupt() error
 
 	// PublishEventNone will publish an EventNone event, which will force
 	// calling Handle on the component currently in focus.

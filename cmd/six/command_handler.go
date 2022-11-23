@@ -57,11 +57,11 @@ func newCommandListHandler(
 	commandKey term.KeyComb,
 	completeFunc func(context.Context, string, ...string) iterator.Iterator[string],
 	dispatchFunc func(string, ...string) bool,
-	interrupt func(),
+	interrupter term.Interrupter,
 ) *commandListHandler {
 	ret := new(commandListHandler)
 	ret.init(b, max, overlayCfg, commandKey,
-		completeFunc, dispatchFunc, interrupt)
+		completeFunc, dispatchFunc, interrupter)
 	return ret
 }
 
@@ -70,7 +70,7 @@ func (h *commandListHandler) init(
 	commandKey term.KeyComb,
 	completeFunc func(context.Context, string, ...string) iterator.Iterator[string],
 	dispatchFunc func(string, ...string) bool,
-	interrupt func(),
+	interrupter term.Interrupter,
 ) {
 	h.mode = modeCommandHandlerCommand
 	h.commandKey = commandKey
@@ -87,7 +87,7 @@ func (h *commandListHandler) init(
 
 	cfg := search.ListConfig{
 		Algo:             search.FuzzyMatch,
-		Interrupt:        interrupt,
+		Interrupter:      interrupter,
 		CaseSensitive:    false,
 		MatchedTextAttr:  &overlayCfg.MatchedTextAttr,
 		FocusElementAttr: &overlayCfg.FocusElementAttr,

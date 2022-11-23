@@ -22,8 +22,10 @@ import (
 )
 
 const (
-	commandHistoryDocumentID = "ex-command-history"
-	reissuePadding           = 10 * time.Millisecond
+	commandHistoryDocumentID  = "ex-command-history"
+	reissuePadding            = 10 * time.Millisecond
+	cmdEdit                   = "edit"
+	cmdChangeSplitOrientation = "changeSplitOrientation"
 )
 
 var (
@@ -40,27 +42,27 @@ var (
 		cmdSwitchToWorkspace:     {}, // workspace_handler
 	}
 	exCommands = map[string]func(*ex, ...string) error{
-		"bufferPrev":             (*ex).previousBuffer,
-		"bufferNext":             (*ex).nextBuffer,
-		"bufferClose":            (*ex).closeBuffer,
-		"bufferCloseAll":         (*ex).closeAllBuffers,
-		"close":                  (*ex).closeFocusWindow,
-		"writeQuit":              (*ex).flushCloseIgnoreNonFlushed,
-		"writeForceQuit!":        (*ex).flushCloseIgnoreNonFlushed,
-		"write":                  (*ex).forceFlush,
-		"forceWrite!":            (*ex).forceFlush,
-		"forceQuit!":             (*ex).forceQuit,
-		"quit":                   (*ex).forceQuit,
-		"edit":                   (*ex).editFile,
-		"reload":                 (*ex).reloadFile,
-		"changeSplitOrientation": (*ex).splitDirectionChange,
-		"splitWindow":            (*ex).newWindow,
-		"newWindow":              (*ex).newWindow,
-		"focusNextWindow":        (*ex).focusNextWindow,
-		"focusPrevWindow":        (*ex).focusPrevWindow,
-		"focusAboveWindow":       (*ex).focusAboveWindow,
-		"focusBelowWindow":       (*ex).focusBelowWindow,
-		"panic":                  (*ex).panic,
+		"bufferPrev":              (*ex).previousBuffer,
+		"bufferNext":              (*ex).nextBuffer,
+		"bufferClose":             (*ex).closeBuffer,
+		"bufferCloseAll":          (*ex).closeAllBuffers,
+		"close":                   (*ex).closeFocusWindow,
+		"writeQuit":               (*ex).flushCloseIgnoreNonFlushed,
+		"writeForceQuit!":         (*ex).flushCloseIgnoreNonFlushed,
+		"write":                   (*ex).forceFlush,
+		"forceWrite!":             (*ex).forceFlush,
+		"forceQuit!":              (*ex).forceQuit,
+		"quit":                    (*ex).forceQuit,
+		cmdEdit:                   (*ex).editFile,
+		"reload":                  (*ex).reloadFile,
+		cmdChangeSplitOrientation: (*ex).splitDirectionChange,
+		"splitWindow":             (*ex).newWindow,
+		"newWindow":               (*ex).newWindow,
+		"focusNextWindow":         (*ex).focusNextWindow,
+		"focusPrevWindow":         (*ex).focusPrevWindow,
+		"focusAboveWindow":        (*ex).focusAboveWindow,
+		"focusBelowWindow":        (*ex).focusBelowWindow,
+		"panic":                   (*ex).panic,
 	}
 	exDefaultBindings = map[term.KeyComb]string{
 		{Key: term.KeyCtrlW}: "bufferClose",
@@ -96,13 +98,18 @@ const (
 	modeCommand
 )
 
+type workspaceLoader interface {
+	workspace.Loader
+	ListFiles(context.Context) (iterator.Iterator[string], error)
+}
+
 // ex implements a tui.Handler by wrapping an editor.Component and
 // providing an ex editor type of interface.
 type ex struct {
 	config               text.Config
 	comp                 text.Component
 	ed                   text.Editor
-	workspace            workspace.Loader
+	workspace            workspaceLoader
 	sequencer            handler.Sequencer
 	publishEvent         func(term.Event) bool
 	cmd                  commandListHandler
@@ -115,7 +122,7 @@ type ex struct {
 }
 
 func newEx(
-	ed text.Editor, m workspace.Loader,
+	ed text.Editor, m workspaceLoader,
 	storage document.Service,
 	publishEvent func(term.Event) bool,
 	opts ...text.Option,
@@ -141,7 +148,7 @@ func forcePublishEvent(publishEvent func(term.Event) bool) func(ev term.Event) {
 // It returns an error if an initial filepath was given through WithFilePath option
 // and the file failed to be opened.
 func (e *ex) init(
-	ed text.Editor, m workspace.Loader,
+	ed text.Editor, m workspaceLoader,
 	storage document.Service,
 	publishEvent func(term.Event) bool,
 	opts ...text.Option,
@@ -173,12 +180,39 @@ func (e *ex) subscribeCommands() error {
 	return ret
 }
 
-func (e *ex) publishInterrupt() {
-	e.publishEvent(term.Event{Type: term.EventInterrupt})
+func (e *ex) completeEdit(
+	ctx context.Context, args []string,
+) (iterator.Iterator[string], error) {
+	// TODO
+	// e.workspace.ListFiles(ctx, args[0])
+	if len(args) == 0 || args[0] == "" {
+		return e.workspace.ListFiles(ctx)
+	}
+	return iterator.FromSlice[string](nil), nil
+}
+
+func (e *ex) completeCommand(
+	ctx context.Context, cmd string, args []string,
+) (iterator.Iterator[string], error) {
+	switch cmd {
+	case cmdEdit:
+		return e.completeEdit(ctx, args)
+	case cmdChangeSplitOrientation:
+		return iterator.FromSlice([]string{"horizontal", "vertical"}), nil
+	default:
+		return iterator.FromSlice[string](nil), nil
+	}
+}
+
+func (e *ex) Interrupt() error {
+	if !e.publishEvent(term.Event{Type: term.EventInterrupt}) {
+		return errors.New("event stream not ready")
+	}
+	return nil
 }
 
 func (e *ex) doInit(
-	ed text.Editor, m workspace.Loader,
+	ed text.Editor, m workspaceLoader,
 	storage document.Service,
 	publishEvent func(term.Event) bool,
 	opts ...text.Option,
@@ -231,7 +265,7 @@ func (e *ex) doInit(
 				e.setError(err)
 			}
 			return quit
-		}, e.publishInterrupt)
+		}, e)
 
 	var commandOverlay tui.Component
 	if e.config.CommandOverlay.Frame {

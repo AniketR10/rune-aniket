@@ -31,7 +31,7 @@ type ListConfig struct {
 	Algo AlgoConfig
 
 	// function to use to force a redraw of the list.
-	Interrupt func()
+	Interrupter term.Interrupter
 
 	// Attributes to use to highlight matched text
 	MatchedTextAttr *term.Attributes
@@ -81,9 +81,9 @@ func (c ListConfig) toInternal() listConfig {
 		textAttr = *c.ElementAttr
 	}
 
-	interrupt := func() {}
-	if c.Interrupt != nil {
-		interrupt = c.Interrupt
+	interrupter := term.NopInterrupter()
+	if c.Interrupter != nil {
+		interrupter = c.Interrupter
 	}
 
 	algo := fzf.FuzzyMatchV2
@@ -111,7 +111,7 @@ func (c ListConfig) toInternal() listConfig {
 		searchBaseAttr:    searchBaseAttr,
 		textAttr:          textAttr,
 		focusAttr:         focusAttr,
-		interrupt:         interrupt,
+		interrupter:       interrupter,
 		caseSensitive:     c.CaseSensitive,
 		bottomSearchBar:   c.BottomSearchBar,
 		interruptEvery:    c.interruptEvery,

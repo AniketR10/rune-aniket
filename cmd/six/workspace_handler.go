@@ -136,7 +136,7 @@ func (h *workspaceManagerHandler) init(
 	h.storage = storage
 
 	globalOpts := h.textOpts(h.cfg)
-	h.empty, _ = newEx(h.newEditor(cfg), nopLoader{}, h.storage, h.publishEvent, globalOpts...)
+	h.empty, _ = newEx(h.newEditor(cfg), nil, h.storage, h.publishEvent, globalOpts...)
 	err = h.subscribeAllWorkspaceCommands(h.empty)
 	if err != nil {
 		return err
@@ -330,9 +330,12 @@ func (h *workspaceManagerHandler) textOpts(cfg ideConfig) []text.Option {
 		text.WithCommandOverlayConfig(cfg.commandOverlayConfig()),
 		text.WithCommandAliases(cfg.commandAliases()),
 		text.WithPromptConfig(cfg.promptConfig()),
-		text.WithInterrupt(func() {
-			h.publishEvent(term.Event{Type: term.EventInterrupt})
-		}),
+		text.WithInterrupter(term.FuncInterrupter(func() error {
+			if !h.publishEvent(term.Event{Type: term.EventInterrupt}) {
+				return errors.New("event stream not ready")
+			}
+			return nil
+		})),
 		text.WithSendNone(func() {
 			forcePublishEvent(h.publishEvent)(term.Event{Type: term.EventNone})
 		}),

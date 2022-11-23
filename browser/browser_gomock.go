@@ -454,18 +454,18 @@ func (mr *MockEventPublisherMockRecorder) PublishEventNone() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PublishEventNone", reflect.TypeOf((*MockEventPublisher)(nil).PublishEventNone))
 }
 
-// PublishInterrupt mocks base method.
-func (m *MockEventPublisher) PublishInterrupt() error {
+// Interrupt mocks base method.
+func (m *MockEventPublisher) Interrupt() error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "PublishInterrupt")
+	ret := m.ctrl.Call(m, "Interrupt")
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-// PublishInterrupt indicates an expected call of PublishInterrupt.
-func (mr *MockEventPublisherMockRecorder) PublishInterrupt() *gomock.Call {
+// Interrupt indicates an expected call of Interrupt.
+func (mr *MockEventPublisherMockRecorder) Interrupt() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PublishInterrupt", reflect.TypeOf((*MockEventPublisher)(nil).PublishInterrupt))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Interrupt", reflect.TypeOf((*MockEventPublisher)(nil).Interrupt))
 }
 
 // MockBrowser is a mock of Browser interface.
@@ -578,18 +578,18 @@ func (mr *MockBrowserMockRecorder) PublishEventNone() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PublishEventNone", reflect.TypeOf((*MockBrowser)(nil).PublishEventNone))
 }
 
-// PublishInterrupt mocks base method.
-func (m *MockBrowser) PublishInterrupt() error {
+// Interrupt mocks base method.
+func (m *MockBrowser) Interrupt() error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "PublishInterrupt")
+	ret := m.ctrl.Call(m, "Interrupt")
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-// PublishInterrupt indicates an expected call of PublishInterrupt.
-func (mr *MockBrowserMockRecorder) PublishInterrupt() *gomock.Call {
+// Interrupt indicates an expected call of Interrupt.
+func (mr *MockBrowserMockRecorder) Interrupt() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PublishInterrupt", reflect.TypeOf((*MockBrowser)(nil).PublishInterrupt))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Interrupt", reflect.TypeOf((*MockBrowser)(nil).Interrupt))
 }
 
 // SetFocus mocks base method.

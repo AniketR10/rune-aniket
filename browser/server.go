@@ -426,7 +426,7 @@ func (s *Server) Publish(
 	var fn func() error
 	switch ev.Type {
 	case term.EventInterrupt:
-		fn = s.browser.PublishInterrupt
+		fn = s.browser.Interrupt
 	case term.EventNone:
 		fn = s.browser.PublishEventNone
 	default:

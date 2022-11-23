@@ -243,7 +243,7 @@ func TestClientPublish(t *testing.T) {
 		fn  func(*Client) error
 		ev  *termpb.Event
 	}{
-		{"PublishInterrupt", (*Client).PublishInterrupt, &termpb.Event{Type: termpb.Event_TypeInterrupt}},
+		{"Interrupt", (*Client).Interrupt, &termpb.Event{Type: termpb.Event_TypeInterrupt}},
 		{"PublishEventNone", (*Client).PublishEventNone, &termpb.Event{Type: termpb.Event_TypeNone}},
 	}
 	for _, tcase := range tsuite {

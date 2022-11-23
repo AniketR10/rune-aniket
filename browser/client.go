@@ -303,8 +303,8 @@ func (c *Client) PublishEventNone() error {
 	return err
 }
 
-// PublishInterrupt satisfies Browser.
-func (c *Client) PublishInterrupt() error {
+// Interrupt satisfies Browser.
+func (c *Client) Interrupt() error {
 	ctx := context.Background()
 	protoEv := new(termpb.Event)
 	err := protoEv.FromModel(term.Event{Type: term.EventInterrupt})

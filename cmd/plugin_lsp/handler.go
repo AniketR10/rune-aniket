@@ -1579,13 +1579,8 @@ func (h *lspEditorHandler) browseLocations(
 		done            bool
 	)
 	cfg := search.ListConfig{
-		Algo: search.FuzzyMatch,
-		Interrupt: func() {
-			err := h.p.PublishInterrupt()
-			if err != nil {
-				log.Errorf("PublishInterrupt: %v", err)
-			}
-		},
+		Algo:          search.FuzzyMatch,
+		Interrupter:   h.p,
 		CaseSensitive: false,
 	}
 	list := search.NewList(cfg)

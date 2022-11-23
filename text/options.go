@@ -35,7 +35,7 @@ type Config struct {
 	SequencerTimeout        time.Duration
 	DirtyTabAttr            term.Attributes
 
-	SendInterrupt func()
+	Interrupter   term.Interrupter
 	SendEventNone func()
 
 	CommandOverlay CommandOverlayConfig
@@ -68,7 +68,7 @@ func DefaultConfig() Config {
 		CommandAliases:          make(map[string][]string),
 		SequencerTimeout:        400 * time.Millisecond,
 		CommandOverlay:          DefaultCommandOverlayConfig(),
-		SendInterrupt:           func() {},
+		Interrupter:             term.NopInterrupter(),
 		SendEventNone:           func() {},
 	}
 	return cfg
@@ -246,10 +246,10 @@ func WithPromptConfig(c browser.PromptConfig) Option {
 	}
 }
 
-// WithInterrupt sets the Component's interrupt function.
-func WithInterrupt(fn func()) Option {
+// WithInterrupter sets the Component's term.Interrupter.
+func WithInterrupter(i term.Interrupter) Option {
 	return func(cfg *Config) {
-		cfg.SendInterrupt = fn
+		cfg.Interrupter = i
 	}
 }
 

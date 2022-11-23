@@ -88,13 +88,8 @@ func (e *logsGrantee) Connected(broker proto.MuxBroker, pconfig config.Config) {
 	}
 
 	e.cfg = search.ListConfig{
-		Algo: algo,
-		Interrupt: func() {
-			err := e.p.PublishInterrupt()
-			if err != nil {
-				log.Errorf("Interrupt: %s", err)
-			}
-		},
+		Algo:            algo,
+		Interrupter:     e.p,
 		CaseSensitive:   caseSensitive,
 		BottomSearchBar: true,
 	}

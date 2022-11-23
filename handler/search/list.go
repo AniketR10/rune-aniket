@@ -23,7 +23,7 @@ type listConfig struct {
 	textAttr          term.Attributes
 	focusAttr         term.Attributes
 	algo              fzf.Algo
-	interrupt         func()
+	interrupter       term.Interrupter
 	caseSensitive     bool
 	bottomSearchBar   bool
 	interruptEvery    time.Duration
@@ -282,7 +282,7 @@ func (l *List) consumeAsyncElements(quitChan chan struct{}) {
 					l.mu.Unlock()
 					continue
 				}
-				interrupt := l.cfg.interrupt
+				interrupter := l.cfg.interrupter
 				if len(l.getSearchQuery()) != 0 || l.cfg.bottomSearchBar {
 					l.sortMatchesList()
 				} else {
@@ -290,7 +290,7 @@ func (l *List) consumeAsyncElements(quitChan chan struct{}) {
 				}
 				dirty = false
 				l.mu.Unlock()
-				interrupt()
+				interrupter.Interrupt()
 			case <-quitChan:
 				return
 			case <-tickerCh:
@@ -310,10 +310,10 @@ func (l *List) consumeAsyncElements(quitChan chan struct{}) {
 				} else {
 					l.sortMatchesList()
 				}
-				interrupt := l.cfg.interrupt
+				interrupter := l.cfg.interrupter
 				l.mu.Unlock()
 				close(tickerCh)
-				interrupt()
+				interrupter.Interrupt()
 				return
 			}
 			l.pushData(data, slab, false)
@@ -356,9 +356,9 @@ func (l *List) handleSearch(
 	l.mu.Lock()
 	l.sortMatchesList()
 	cancelFn()
-	interrupt := l.cfg.interrupt
+	interrupter := l.cfg.interrupter
 	l.mu.Unlock()
-	interrupt()
+	interrupter.Interrupt()
 }
 
 // Push returns a channel that can be used to push data to this list asynchronously.
@@ -386,9 +386,9 @@ func (l *List) Pause() {
 	// to avoid adding extra logic to an already contentious and hot path
 	l.mu.Lock()
 	l.sortMatchesList()
-	interrupt := l.cfg.interrupt
+	interrupter := l.cfg.interrupter
 	l.mu.Unlock()
-	interrupt()
+	interrupter.Interrupt()
 }
 
 // PushSync pushes one element to this list and searches for a match on it.
