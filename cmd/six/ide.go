@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"sync/atomic"
 
 	"github.com/ernestrc/blue/logging"
 	multierr "github.com/ernestrc/go-multierror"
@@ -21,7 +22,7 @@ type ide struct {
 	workspaceManager *workspace.Manager
 	root             *workspaceManagerHandler
 	clipboard        *plugin.ClipboardManager
-	running          bool
+	running          int32
 	publishEventFn   func(term.Event) bool
 }
 
@@ -135,7 +136,8 @@ func (i *ide) publishEvent(ev term.Event) bool {
 	// avoid termbox' screen panicking because
 	// some component wants to publish interrupt
 	// before we are fully initialized
-	if !i.running {
+	running := atomic.LoadInt32(&i.running)
+	if running != 1 {
 		return false
 	}
 	return i.publishEventFn(ev)
@@ -148,7 +150,7 @@ func (i *ide) run() error {
 	if err != nil {
 		return err
 	}
-	i.running = true
+	atomic.StoreInt32(&i.running, 1)
 
 	term.SetOutputMode(i.ideConfig.outputMode())
 	term.SetInputMode(i.ideConfig.inputMode())
@@ -183,6 +185,10 @@ func (i *ide) closeResources() (ret error) {
 // Close satisfies io.Closer by closing this all ide's resources, including
 // the terminal state.
 func (i *ide) Close() error {
+	running := atomic.CompareAndSwapInt32(&i.running, 1, 0)
+	if !running {
+		return nil
+	}
 	err := i.closeResources()
 	tui.Close()
 	return err
