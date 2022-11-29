@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"path/filepath"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -180,13 +179,7 @@ func (h *fileBarEditorHandler) HandleCommand(ctx context.Context, cmd text.Comma
 }
 
 func (h *fileBarEditorHandler) prettyFileName(resource workspace.URI) string {
-	if workspace.HasPrefix(resource, h.cwd) {
-		relpath, err := filepath.Rel(h.cwd.Path(), resource.Path())
-		if err == nil {
-			return relpath
-		}
-	}
-	return resource.Path()
+	return workspace.RelPath(h.cwd, resource)
 }
 
 func (h *fileBarEditorHandler) resetBarContent() {

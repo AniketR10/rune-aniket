@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"syscall"
 
 	"github.com/ernestrc/blue/iterator"
@@ -70,19 +69,8 @@ func (w *schemeWorkspace) Recover(
 	}
 
 	// turn into relative if possible
-	path, swapPath := uri.Path(), swapURI.Path()
-	relPath, err := filepath.Rel(w.w.Path(), path)
-	if err == nil {
-		log.Debugf("workspace %q relative path converted from %q into %q",
-			w.w.Path(), path, relPath)
-		path = relPath
-	}
-	relPath, err = filepath.Rel(w.w.Path(), swapPath)
-	if err == nil {
-		log.Debugf("workspace %q relative path converted from %q into %q",
-			w.w.Path(), swapPath, relPath)
-		swapPath = relPath
-	}
+	path := RelPath(w.w, uri)
+	swapPath := RelPath(w.w, swapURI)
 
 	ret, err = newFileRecover(w.p, path, swapPath, buf, force)
 	return
@@ -117,19 +105,8 @@ func (w *schemeWorkspace) Load(
 	}
 
 	// turn into relative if possible
-	path, swapDirPath := uri.Path(), swapDir.Path()
-	relPath, err := filepath.Rel(w.w.Path(), path)
-	if err == nil {
-		log.Debugf("workspace %q relative path converted from %q into %q",
-			w.w.Path(), path, relPath)
-		path = relPath
-	}
-	relPath, err = filepath.Rel(w.w.Path(), swapDirPath)
-	if err == nil {
-		log.Debugf("workspace %q relative path converted from %q into %q",
-			w.w.Path(), swapDirPath, relPath)
-		swapDirPath = relPath
-	}
+	path := RelPath(w.w, uri)
+	swapDirPath := RelPath(w.w, swapDir)
 
 	ret, err = newFile(w.p, path, buf, swapDirPath, readOnly)
 	if err == os.ErrNotExist {

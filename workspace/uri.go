@@ -253,6 +253,19 @@ func HasPrefix(uri, prefix URI) bool {
 		strings.HasPrefix(uri.Path(), prefix.Path())
 }
 
+// RelPath returns target's path as a relative path of base,
+// or if that's not possible, it will return target's Path
+// without change.
+func RelPath(base, target URI) string {
+	if HasPrefix(target, base) {
+		relpath, err := filepath.Rel(base.Path(), target.Path())
+		if err == nil {
+			return relpath
+		}
+	}
+	return target.Path()
+}
+
 // IsWorkspaceURI returns whether this uri can be managed by
 // the given workspace. For Scheme implementations that
 // do not support user and host/port, this method returns

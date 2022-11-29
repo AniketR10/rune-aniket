@@ -212,7 +212,6 @@ func TestIsWorkspaceURI(t *testing.T) {
 		{"file:///tmp", "file:///tmp", true},
 		{"file:///var", "file:///tmp/file", true}, // different folder but workspace can handle it
 		{"file:///var", "file:///var/file", true},
-		{"file:///var", "file:///var/file", true},
 		{"file:///var", "file:///var/dir/dir/dir/file", true},
 		{"file:///var/", "file:///var/file", true},
 		{"file:///", "ssh:///tmp", false},
@@ -233,6 +232,40 @@ func TestIsWorkspaceURI(t *testing.T) {
 			// sut
 			actualOut, err := IsWorkspaceURI(inWorkspace, inURI)
 			require.NoError(t, err)
+			assert.Equal(t, tcase.expectedOut, actualOut)
+		})
+	}
+}
+
+func TestRelPath(t *testing.T) {
+	tsuite := []struct {
+		workspaceURI string
+		uri          string
+		expectedOut  string
+	}{
+		{"file:///", "file:///tmp", "tmp"},
+		{"file:///tmp", "file:///tmp", "."},
+		{"file:///var", "file:///tmp/file", "/tmp/file"},
+		{"file:///var", "file:///var/file", "file"},
+		{"file:///var", "file:///var/dir/dir/dir/file", "dir/dir/dir/file"},
+		{"file:///var/", "file:///var/file", "file"},
+		{"ssh://user@host:2233/", "ssh://user@host:2234/tmp", "/tmp"},
+		{"ssh://user@host:2233/", "ssh://user@otherhost:2233/tmp", "/tmp"},
+		{"ssh://user@host:2233/", "ssh://otheruser:2233/tmp", "/tmp"},
+		{"ssh://user@host/", "ssh://otheruser/tmp", "/tmp"},
+		{"file:///", "ssh:///tmp", "/tmp"},
+	}
+
+	for i, tcase := range tsuite {
+		t.Run(fmt.Sprintf("test case %d", i), func(t *testing.T) {
+			inURI, err := ParseURI(tcase.uri)
+			require.NoError(t, err)
+
+			inWorkspaceURI, err := ParseURI(tcase.workspaceURI)
+			require.NoError(t, err)
+
+			// sut
+			actualOut := RelPath(inWorkspaceURI, inURI)
 			assert.Equal(t, tcase.expectedOut, actualOut)
 		})
 	}
