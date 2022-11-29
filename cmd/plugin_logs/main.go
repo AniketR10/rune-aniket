@@ -209,17 +209,18 @@ func consumeAvailableData(
 }
 
 func consumeData(
-	file *os.File, l *search.List, quit chan struct{}, watcher *fsnotify.Watcher,
+	ctx context.Context, file *os.File, l *search.List,
+	quit chan struct{}, watcher *fsnotify.Watcher,
 ) {
 	reader := bufio.NewReader(file)
-	ch := l.Push()
 
+	ch := l.Push(ctx)
 	defer close(ch)
+
 	if err := consumeAvailableData(reader, l, ch, quit); err != nil {
 		log.Warnf("error reading initial data on log file: %s", err)
 	}
 
-	ctx := context.Background()
 	for {
 		// retry reads and collect watcher errors
 		err := retry.Retry(ctx, retryStrategy, func(ctx context.Context) (bool, error) {
@@ -292,9 +293,12 @@ func (e *logsGrantee) showLogs(args []string) (bool, error) {
 		return false, fmt.Errorf("notify.Add: %s", err)
 	}
 
+	ctx := context.Background()
+	ctx, cancel := context.WithCancel(ctx)
 	l := search.NewList(e.cfg)
 
 	cleanup := func() (err error) {
+		cancel()
 		if cerr := file.Close(); cerr != nil {
 			err = multierr.Append(err, cerr)
 		}
@@ -313,7 +317,7 @@ func (e *logsGrantee) showLogs(args []string) (bool, error) {
 		cleanup()
 	})
 
-	go consumeData(file, l, e.quitCh, watcher)
+	go consumeData(ctx, file, l, e.quitCh, watcher)
 
 	t, err := e.wm.Tab(uri, "logs:"+uri.Name(), h)
 	if err != nil {

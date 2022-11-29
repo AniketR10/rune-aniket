@@ -90,19 +90,15 @@ func (h *fuzzyFinderHandler) killCommand() error {
 	return h.workspace.Signal(h.pid, syscall.SIGKILL)
 }
 
-func (h *fuzzyFinderHandler) readCommand(src io.Reader) {
-	h.mu.Lock()
-	datachan := h.list.Push()
-	h.mu.Unlock()
-
-	defer close(datachan)
-
+func (h *fuzzyFinderHandler) readCommand(ctx context.Context, datachan chan<- []byte, src io.Reader) {
 	reader := bufio.NewReaderSize(src, readerBufferSize)
 	for {
 		data, err := reader.ReadBytes('\n')
 		if len(data) > 0 {
 			select {
 			case datachan <- data[:len(data)-1]:
+			case <-ctx.Done():
+				return
 			case <-h.quitChan:
 				return
 			}
@@ -197,25 +193,16 @@ func (h *fuzzyFinderHandler) openResource(searchQuery, data string) {
 	}
 }
 
-func (h *fuzzyFinderHandler) scanDataViaWorkspaceAPI() {
+func (h *fuzzyFinderHandler) scanDataViaWorkspaceAPI(
+	ctx context.Context, datachan chan<- []byte,
+) {
 	log.Debugf("using workspace API to get resource iterator")
-
-	ctx := context.Background()
-	ctx, cancelScan := context.WithCancel(ctx)
-	defer cancelScan()
 
 	it, err := h.workspaceFallback(h.workspace, ctx)
 	if err != nil {
 		log.Error(err)
 		return
 	}
-
-	h.mu.Lock()
-	datachan := h.list.Push()
-	h.cancelScan = cancelScan
-	h.mu.Unlock()
-
-	defer close(datachan)
 
 	for {
 		resource, ok := it.Next()
@@ -246,8 +233,19 @@ func (h *fuzzyFinderHandler) scanData() {
 			log.Debugf("Done iterating over data in %s", time.Since(start))
 		}
 	}()
+
+	ctx := context.Background()
+	ctx, cancelScan := context.WithCancel(ctx)
+	defer cancelScan()
+
+	h.mu.Lock()
+	h.cancelScan = cancelScan
+	datachan := h.list.Push(ctx)
+	defer close(datachan)
+	h.mu.Unlock()
+
 	if h.useWorkspaceFallback {
-		h.scanDataViaWorkspaceAPI()
+		h.scanDataViaWorkspaceAPI(ctx, datachan)
 		return
 	}
 
@@ -259,7 +257,7 @@ func (h *fuzzyFinderHandler) scanData() {
 	h.mu.Unlock()
 	if err != nil {
 		log.Debug(err)
-		h.scanDataViaWorkspaceAPI()
+		h.scanDataViaWorkspaceAPI(ctx, datachan)
 		return
 	}
 
@@ -274,7 +272,7 @@ func (h *fuzzyFinderHandler) scanData() {
 		return
 	}
 
-	h.readCommand(out)
+	h.readCommand(ctx, datachan, out)
 
 	err = h.workspace.Wait(h.pid)
 

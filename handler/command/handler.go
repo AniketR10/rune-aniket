@@ -108,6 +108,11 @@ func (h *Handler) Init(
 		storage = document.NewInMemoryService()
 	}
 	h.Reset(commands)
+
+	// add a canceled cancelCtx so Wait never needs to check if cancelFn is nil
+	ctx, cancel := context.WithCancel(context.Background())
+	h.cancelCtx = ctx
+	cancel()
 }
 
 func (h *Handler) resizeCommandOverlay() {
@@ -376,7 +381,7 @@ func (h *Handler) setCommandMode() {
 
 func (h *Handler) pushIteratorToList(
 	ctx context.Context, ch chan<- []byte, it iterator.Iterator[string],
-) {
+) error {
 	for {
 		next, ok := it.Next()
 		if !ok {
@@ -384,24 +389,12 @@ func (h *Handler) pushIteratorToList(
 		}
 		select {
 		case <-ctx.Done():
-			return
-		default:
-			ch <- []byte(next)
+			return nil
+		case ch <- []byte(next):
 		}
 	}
 
-	// if already canceled, then do not cancel again
-	select {
-	case <-ctx.Done():
-		return
-	default:
-		err := it.Err()
-		if err != nil {
-			h.log(log.ErrorLevel, "completion iterator error: %v", err)
-			return
-		}
-	}
-
+	return it.Err()
 }
 
 func (h *Handler) setCompletionList(cmd string, args ...string) {
@@ -420,19 +413,23 @@ func (h *Handler) setCompletionList(cmd string, args ...string) {
 
 	h.list.DataReset()
 	it := h.completer.Complete(ctx, cmd, args...)
-	ch := h.list.Push()
+	ch := h.list.Push(ctx)
 
 	go func() {
-		h.pushIteratorToList(ctx, ch, it)
-		// if already canceled, then do not cancel again
-		select {
-		case <-ctx.Done():
-		default:
-			h.mu.Lock()
-			defer h.mu.Unlock()
+		err := h.pushIteratorToList(ctx, ch, it)
 
-			cancel()
+		// if already canceled, then do not cancel again
+		h.mu.Lock()
+		defer h.mu.Unlock()
+
+		if h.cancelFn != nil {
+			h.cancelFn()
 			h.cancelFn = nil
+			// only log if not canceled already
+			if err != nil {
+				h.log(log.ErrorLevel, "completion iterator error: %v", err)
+				return
+			}
 		}
 	}()
 }
@@ -500,13 +497,7 @@ func (h *Handler) Man() tui.Manual {
 func (h *Handler) Wait() {
 	h.mu.Lock()
 	cancelCtx := h.cancelCtx
-	cancelFn := h.cancelFn
 	h.mu.Unlock()
-
-	if cancelFn == nil {
-		h.list.Wait()
-		return
-	}
 
 	<-cancelCtx.Done()
 	h.list.Wait()

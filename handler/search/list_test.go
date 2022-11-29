@@ -30,7 +30,7 @@ type listIfc interface {
 	FocusUp() bool
 	InputHeight() int
 	MatchCount() int
-	Push() chan<- []byte
+	Push(context.Context) chan<- []byte
 	PushSync(b []byte) (matched bool)
 	Resize(width, height int)
 	SetMinInputHeight(height int)
@@ -179,13 +179,17 @@ func testListFocusBottomSearchBar(t *testing.T, constructor listConstructor) {
 	assertNoLeaks(t, l)
 }
 
-func pushTestData(l listIfc, n int) {
+func pushTestData(l listIfc, n int) chan<- []byte {
 	// push exactly the number of elements equal to
 	// this component's height, so only interrupt should
 	// be called only once while processing data
+	ctx := context.Background()
+
+	ch := l.Push(ctx)
 	for i := 0; i < n; i++ {
-		l.Push() <- []byte(strconv.Itoa(i))
+		ch <- []byte(strconv.Itoa(i))
 	}
+	return ch
 }
 
 func TestListAsyncPush(t *testing.T) {
@@ -207,8 +211,8 @@ func testListAsyncPush(t *testing.T, constructor listConstructor) {
 		wg.Add(2)
 		go func() {
 			defer wg.Done()
-			pushTestData(l, height)
-			close(l.Push())
+			ch := pushTestData(l, height)
+			close(ch)
 		}()
 
 		wg.Wait()
@@ -226,8 +230,8 @@ func testListAsyncPush(t *testing.T, constructor listConstructor) {
 		l.Resize(100, height)
 
 		wg.Add(1)
-		pushTestData(l, height)
-		close(l.Push())
+		ch := pushTestData(l, height)
+		close(ch)
 		wg.Wait()
 
 		wg.Add(2)
@@ -259,8 +263,8 @@ func testListAsyncPush(t *testing.T, constructor listConstructor) {
 		wg.Wait()
 
 		wg.Add(1)
-		pushTestData(l, n)
-		close(l.Push())
+		ch := pushTestData(l, n)
+		close(ch)
 		wg.Wait()
 
 		// make sure it doesn't block
@@ -280,8 +284,8 @@ func testListAsyncPush(t *testing.T, constructor listConstructor) {
 
 		wg.Add(3)
 		go func() {
-			pushTestData(l, n)
-			close(l.Push())
+			ch := pushTestData(l, n)
+			close(ch)
 		}()
 
 		buf.WriteString("9")

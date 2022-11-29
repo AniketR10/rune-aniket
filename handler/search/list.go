@@ -41,7 +41,6 @@ type matchCounter struct {
 type List struct {
 	mu           sync.Mutex
 	quitChan     chan struct{}
-	dataChan     chan []byte
 	input        [][]byte
 	searchCtx    context.Context
 	cancelSearch func()
@@ -111,8 +110,8 @@ func (l *List) Init(cfg ListConfig) {
 	l.list.FocusList.Inverted = l.cfg.bottomSearchBar
 	l.list.C = &l.list.FocusList
 
-	l.dataChan = make(chan []byte)
 	l.setFilesCount()
+	l.quitChan = make(chan struct{})
 }
 
 // ToggleCaseSensitivity toggles whether the search should be case sensitive or not.
@@ -268,9 +267,11 @@ func (l *List) pushData(data []byte, slab *util.Slab, sortList bool) (matched bo
 	return
 }
 
-func (l *List) consumeAsyncElements(quitChan chan struct{}) {
+func (l *List) consumeAsyncElements(ctx context.Context, datachan chan []byte, quitChan chan struct{}) {
 	t := time.NewTicker(l.cfg.interruptEvery)
 	tickerCh := make(chan struct{}) // need a way to signal from below
+	defer close(tickerCh)
+
 	var dirty bool
 	go func() {
 		defer t.Stop()
@@ -291,6 +292,8 @@ func (l *List) consumeAsyncElements(quitChan chan struct{}) {
 				dirty = false
 				l.mu.Unlock()
 				interrupter.Interrupt()
+			case <-ctx.Done():
+				return
 			case <-quitChan:
 				return
 			case <-tickerCh:
@@ -302,7 +305,9 @@ func (l *List) consumeAsyncElements(quitChan chan struct{}) {
 	slab := makeSlab()
 	for i := 0; ; i++ {
 		select {
-		case data, ok := <-l.dataChan:
+		case <-ctx.Done():
+			return
+		case data, ok := <-datachan:
 			if !ok {
 				l.mu.Lock()
 				if len(l.getSearchQuery()) == 0 {
@@ -312,7 +317,6 @@ func (l *List) consumeAsyncElements(quitChan chan struct{}) {
 				}
 				interrupter := l.cfg.interrupter
 				l.mu.Unlock()
-				close(tickerCh)
 				interrupter.Interrupt()
 				return
 			}
@@ -362,14 +366,12 @@ func (l *List) handleSearch(
 }
 
 // Push returns a channel that can be used to push data to this list asynchronously.
-// Clients can and should call close on the channel, once no more data is expected.
+// Clients should call close on the channel if no more data is expected.
 // See PushSync for more details.
-func (l *List) Push() chan<- []byte {
-	if l.quitChan == nil {
-		l.quitChan = make(chan struct{})
-		go l.consumeAsyncElements(l.quitChan)
-	}
-	return l.dataChan
+func (l *List) Push(ctx context.Context) chan<- []byte {
+	datachan := make(chan []byte)
+	go l.consumeAsyncElements(ctx, datachan, l.quitChan)
+	return datachan
 }
 
 // Pause hints to this list that no more data is expected, for now.
