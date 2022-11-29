@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"os"
 	"path/filepath"
 	"sync"
 	"sync/atomic"
@@ -39,6 +38,7 @@ var (
 		plugin.PermissionBrowserEventPublisher,
 		plugin.PermissionEditor,
 		plugin.PermissionConfig,
+		plugin.PermissionWorkspace,
 	}
 
 	defaultScrollAttr     = term.Attributes{Fg: term.ColorDefault}
@@ -55,7 +55,7 @@ type fileInfo struct {
 type fileBarEditorHandler struct {
 	wm   browser.WindowManager
 	p    browser.EventPublisher
-	cwd  string
+	cwd  workspace.URI
 	exit uint32
 	ch   chan text.Event
 
@@ -84,11 +84,6 @@ func newFileBarEditorHandler(
 	ret.ch = make(chan text.Event)
 
 	var err error
-	ret.cwd, err = os.Getwd()
-	if err != nil {
-		return nil, err
-	}
-
 	ret.filenameAttributes, err = config.GetAttributes(pconfig, "filename_attr")
 	if err != nil {
 		if err != config.ErrNotFound {
@@ -146,6 +141,15 @@ func newFileBarEditorHandler(
 			if err != nil {
 				return nil, err
 			}
+		case plugin.PermissionWorkspace:
+			w, err := plugin.Workspace(grant.Token, broker)
+			if err != nil {
+				return nil, err
+			}
+			ret.cwd, err = w.URI(".")
+			if err != nil {
+				return nil, err
+			}
 		case plugin.PermissionConfig:
 			config, err := plugin.FetchConfig(grant.Token, broker)
 			if err != nil {
@@ -161,6 +165,9 @@ func newFileBarEditorHandler(
 		}
 	}
 
+	ret.bar.filename.Init(cell.NewBuffer())
+	ret.bar.coords.Init(cell.NewBuffer())
+
 	go ret.handleEvents()
 
 	return ret, nil
@@ -172,26 +179,39 @@ func (h *fileBarEditorHandler) HandleCommand(ctx context.Context, cmd text.Comma
 	return
 }
 
-func relativizeFilepath(prefixPath, path string) string {
-	if filepath.HasPrefix(path, prefixPath) {
-		return path[len(prefixPath)+1:]
+func (h *fileBarEditorHandler) prettyFileName(resource workspace.URI) string {
+	if workspace.HasPrefix(resource, h.cwd) {
+		relpath, err := filepath.Rel(h.cwd.Path(), resource.Path())
+		if err == nil {
+			return relpath
+		}
 	}
-	return path
+	return resource.Path()
 }
 
-func (h *fileBarEditorHandler) refreshBarContent(name string) {
+func (h *fileBarEditorHandler) resetBarContent() {
 	h.bar.Lock()
 	defer h.bar.Unlock()
 
-	h.bar.filename.Init(cell.NewBuffer())
-	h.bar.coords.Init(cell.NewBuffer())
-	file, ok := h.files[name]
+	h.bar.filename.Buffer().Reset()
+	h.bar.filename.Init(h.bar.filename.Buffer())
+	h.bar.coords.Buffer().Reset()
+	h.bar.coords.Init(h.bar.coords.Buffer())
+}
+
+func (h *fileBarEditorHandler) refreshBarContent(resource workspace.URI) {
+	h.resetBarContent()
+
+	h.bar.Lock()
+	defer h.bar.Unlock()
+
+	file, ok := h.files[resource.String()]
 	if !ok || file == nil {
-		log.Debugf("could not find file info for file %q", name)
+		log.Debugf("could not find file info for file %q", resource.String())
 		return
 	}
 
-	name = relativizeFilepath(h.cwd, name)
+	name := h.prettyFileName(resource)
 	rows := len(file.cells)
 	var cols int
 	if file.offset.Y < len(file.cells) {
@@ -225,30 +245,31 @@ func (h *fileBarEditorHandler) refreshBarContent(name string) {
 	))
 }
 
-func (h *fileBarEditorHandler) getFileInfo(name string) *fileInfo {
-	f, ok := h.files[name]
+func (h *fileBarEditorHandler) getFileInfo(resource workspace.URI) *fileInfo {
+	id := resource.String()
+	f, ok := h.files[id]
 	if ok {
 		return f
 	}
 	ret := new(fileInfo)
-	h.files[name] = ret
+	h.files[id] = ret
 	return ret
 }
 
-func (h *fileBarEditorHandler) setScrollMaxContent(resourceName string, ev text.Event) {
+func (h *fileBarEditorHandler) setScrollMaxContent(resource workspace.URI, ev text.Event) {
 	cells := cell.StringToCells(ev.Content, h.tabspaces)
-	h.getFileInfo(resourceName).cells = cells
-	log.Debugf("setScrollMaxContent(%s): %d", resourceName, len(cells))
+	h.getFileInfo(resource).cells = cells
+	log.Debugf("setScrollMaxContent(%s): %d", resource, len(cells))
 }
 
-func (h *fileBarEditorHandler) setCursorOffset(filename string, pos term.Coordinates) {
-	h.getFileInfo(filename).offset = pos
-	log.Tracef("setScrollOffset(%s): %#v OK", filename, pos)
+func (h *fileBarEditorHandler) setCursorOffset(resource workspace.URI, pos term.Coordinates) {
+	h.getFileInfo(resource).offset = pos
+	log.Tracef("setScrollOffset(%s): %#v OK", resource, pos)
 }
 
-func (h *fileBarEditorHandler) setFileDirty(filename string, dirty bool) {
-	h.getFileInfo(filename).dirty = dirty
-	log.Tracef("setFileDirty(%s): %#v OK", filename, dirty)
+func (h *fileBarEditorHandler) setFileDirty(resource workspace.URI, dirty bool) {
+	h.getFileInfo(resource).dirty = dirty
+	log.Tracef("setFileDirty(%s): %#v OK", resource, dirty)
 }
 
 func (h *fileBarEditorHandler) handleEvents() {
@@ -263,8 +284,7 @@ func (h *fileBarEditorHandler) handleEvents() {
 			log.Tracef("Handle(%#v)", ev.Type)
 		}
 
-		resourceName := ev.URI.Path()
-
+		resourceName := ev.URI
 		var err error
 		switch ev.Type {
 		case text.EventTypeEdit:
@@ -284,7 +304,7 @@ func (h *fileBarEditorHandler) handleEvents() {
 			h.refreshBarContent(resourceName)
 			err = h.p.PublishInterrupt()
 		case text.EventTypeUnfocus:
-			h.refreshBarContent("")
+			h.refreshBarContent(workspace.URI{})
 			err = h.p.PublishInterrupt()
 		case text.EventTypeCursor:
 			h.setCursorOffset(resourceName, ev.From)
