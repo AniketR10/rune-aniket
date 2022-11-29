@@ -440,20 +440,6 @@ func (m *MockEventPublisher) EXPECT() *MockEventPublisherMockRecorder {
 	return m.recorder
 }
 
-// PublishEventNone mocks base method.
-func (m *MockEventPublisher) PublishEventNone() error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "PublishEventNone")
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// PublishEventNone indicates an expected call of PublishEventNone.
-func (mr *MockEventPublisherMockRecorder) PublishEventNone() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PublishEventNone", reflect.TypeOf((*MockEventPublisher)(nil).PublishEventNone))
-}
-
 // Interrupt mocks base method.
 func (m *MockEventPublisher) Interrupt() error {
 	m.ctrl.T.Helper()
@@ -466,6 +452,20 @@ func (m *MockEventPublisher) Interrupt() error {
 func (mr *MockEventPublisherMockRecorder) Interrupt() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Interrupt", reflect.TypeOf((*MockEventPublisher)(nil).Interrupt))
+}
+
+// PublishEventNone mocks base method.
+func (m *MockEventPublisher) PublishEventNone() error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "PublishEventNone")
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// PublishEventNone indicates an expected call of PublishEventNone.
+func (mr *MockEventPublisherMockRecorder) PublishEventNone() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PublishEventNone", reflect.TypeOf((*MockEventPublisher)(nil).PublishEventNone))
 }
 
 // MockBrowser is a mock of Browser interface.
@@ -549,6 +549,20 @@ func (mr *MockBrowserMockRecorder) Focus() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Focus", reflect.TypeOf((*MockBrowser)(nil).Focus))
 }
 
+// Interrupt mocks base method.
+func (m *MockBrowser) Interrupt() error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Interrupt")
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Interrupt indicates an expected call of Interrupt.
+func (mr *MockBrowserMockRecorder) Interrupt() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Interrupt", reflect.TypeOf((*MockBrowser)(nil).Interrupt))
+}
+
 // Open mocks base method.
 func (m *MockBrowser) Open(resource workspace.URI) (Handler, error) {
 	m.ctrl.T.Helper()
@@ -576,20 +590,6 @@ func (m *MockBrowser) PublishEventNone() error {
 func (mr *MockBrowserMockRecorder) PublishEventNone() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PublishEventNone", reflect.TypeOf((*MockBrowser)(nil).PublishEventNone))
-}
-
-// Interrupt mocks base method.
-func (m *MockBrowser) Interrupt() error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Interrupt")
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// Interrupt indicates an expected call of Interrupt.
-func (mr *MockBrowserMockRecorder) Interrupt() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Interrupt", reflect.TypeOf((*MockBrowser)(nil).Interrupt))
 }
 
 // SetFocus mocks base method.
