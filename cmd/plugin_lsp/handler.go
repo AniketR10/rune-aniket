@@ -118,7 +118,8 @@ var (
 		source.SymbolCaseSensitive:   "caseSensitive",
 		source.SymbolCaseInsensitive: "caseInsensitive",
 	}
-	errNoServer = errors.New("no LSP server found for language file language")
+	errNoServer                 = errors.New("no LSP server found for language file language")
+	defaultReferencesWindowAttr = term.Attributes{Bg: term.ColorBlack}
 )
 
 type file struct {
@@ -151,15 +152,17 @@ type lspEditorHandler struct {
 	wp workspace.API
 	p  browser.EventPublisher
 
-	tabspaces            int
-	semanticTypesAttr    map[string]term.Attributes
-	diagnosticAttr       map[protocol.DiagnosticSeverity]term.Attributes
-	enableSemanticTokens map[string]bool
-	semanticTokensListID string
-	diagnosticListID     string
-	rpcTimeout           time.Duration
-	connectTimeout       time.Duration
-	disconnectTimeout    time.Duration
+	tabspaces                  int
+	frame                      bool
+	semanticTypesAttr          map[string]term.Attributes
+	diagnosticAttr             map[protocol.DiagnosticSeverity]term.Attributes
+	enableSemanticTokens       map[string]bool
+	semanticTokensListID       string
+	diagnosticListID           string
+	rpcTimeout                 time.Duration
+	connectTimeout             time.Duration
+	disconnectTimeout          time.Duration
+	referencesWindowAttributes term.Attributes
 
 	cwd               string
 	exit              bool
@@ -592,7 +595,13 @@ func newLspHandler(
 			configErr = multierr.Append(configErr, err)
 		}
 	}
-
+	ret.referencesWindowAttributes, err = config.GetAttributes(pconfig, "references_window_attr")
+	if err != nil {
+		if err != config.ErrNotFound {
+			configErr = multierr.Append(configErr, err)
+		}
+		ret.referencesWindowAttributes = defaultReferencesWindowAttr
+	}
 	ret.rpcTimeout, err = config.GetDuration(pconfig,
 		"rpc_timeout", defaultRpcTimeout)
 	if err != nil {
@@ -647,6 +656,12 @@ func newLspHandler(
 				return nil, err
 			}
 			ret.tabspaces, err = plugutil.Tabspaces(config)
+			if err != nil {
+				ret.tabspaces = cell.DefaultTabspaces
+				log.Warnf("Could not get tabspaces from config: %s.. Using default of %d",
+					err, ret.tabspaces)
+			}
+			ret.frame, err = plugutil.WindowManagerFrame(config)
 			if err != nil {
 				ret.tabspaces = cell.DefaultTabspaces
 				log.Warnf("Could not get tabspaces from config: %s.. Using default of %d",
@@ -1443,14 +1458,14 @@ func (h *lspEditorHandler) handleGoToDefinition(
 	return err
 }
 
-func findBestFloatingWindowPosition(cursorAtWindow term.Coordinates, height int) term.Coordinates {
-	height = height + 3 // frame + less bar
-
+func (h *lspEditorHandler) findBestFloatingWindowPosition(
+	cursorAtWindow term.Coordinates, height int,
+) term.Coordinates {
 	at := cursorAtWindow
-	at.Y -= height - 1
-
+	// first try to set it above cursor, otherwise below if it's too large
+	at.Y -= height
 	if at.Y < 0 {
-		at.Y = cursorAtWindow.Y + 2
+		at.Y = cursorAtWindow.Y + 1
 	}
 
 	return at
@@ -1491,10 +1506,15 @@ func (h *lspEditorHandler) handleHover(
 
 	less := handler.NewLess(handler.DefaultLessConfig())
 	less.Buffer().WriteString(hover.Contents.Value)
+	pady := 1
+	if h.frame {
+		pady += 2
+	}
+	less.Scroll().Attributes = h.referencesWindowAttributes
 	bh := browser.NopFloating(handler.PaddedFloating(
-		handler.FloatingBuffer(less, less.Buffer()), 0, 1))
+		handler.FloatingBuffer(less, less.Buffer()), 0, pady))
 
-	at := findBestFloatingWindowPosition(cursorAtWindow, less.Buffer().Rows())
+	at := h.findBestFloatingWindowPosition(cursorAtWindow, less.Buffer().Rows())
 	_, err = h.wm.Floating(bh, at)
 	if err != nil {
 		err = fmt.Errorf("wm.Floating: %v", err)
