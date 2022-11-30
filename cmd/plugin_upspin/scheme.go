@@ -5,11 +5,8 @@ import (
 	stdErrors "errors"
 	"fmt"
 	"io"
-	"math"
 	"net/url"
 	"os"
-	"path/filepath"
-	"runtime"
 	"syscall"
 
 	blupspin "github.com/ernestrc/blue/upspin"
@@ -29,14 +26,7 @@ var (
 	errExecute = stdErrors.New("cannot execute commands on upspin server")
 	configKeys = []string{"username", "keyserver",
 		"dirserver", "storeserver", "packing", "secrets", "tlscerts"}
-	defaultWorkers int
 )
-
-func init() {
-	maxProcs := runtime.GOMAXPROCS(0)
-	numCPU := runtime.NumCPU()
-	defaultWorkers = int(math.Max(1, math.Min(float64(maxProcs), float64(numCPU))))
-}
 
 type scheme struct {
 	uri    workspace.URI
@@ -279,12 +269,11 @@ func (s *scheme) ReadDir(name string) ([]os.DirEntry, error) {
 
 	ret := make([]os.DirEntry, 0, len(entries))
 	for _, entry := range entries {
-		u, err := url.Parse("upspin://" + string(entry.Name))
+		u, err := workspace.ParseURI("upspin://" + string(entry.Name))
 		if err != nil {
 			return nil, err
 		}
-		name, _ := filepath.Rel(s.uri.Path(),
-			filepath.Join(s.uri.Path(), filepath.Base(u.Path)))
+		name = workspace.RelPath(s.uri, u)
 		ret = append(ret, dirEntryAdapter{name: name, s: s, entry: entry})
 	}
 	return ret, nil
