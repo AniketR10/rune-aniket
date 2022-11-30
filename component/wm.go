@@ -168,12 +168,12 @@ func (wm *WindowManager) SetFrameAttr(attr term.Attributes) {
 
 // FloatingWindow creates a floating window.
 func (wm *WindowManager) FloatingWindow(
-	content tui.Component, at term.Coordinates, width, height int,
+	content Floating, at term.Coordinates,
 ) Window {
 	if wm.config.Frame {
 		content = wm.withFrame(content)
 	}
-	f := newFloatingNode(wm, content, at, width, height, wm.width, wm.height)
+	f := newFloatingNode(wm, content, at, wm.width, wm.height)
 	wm.float = append(wm.float, f)
 	return wm.nodeToWindow(f)
 }

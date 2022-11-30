@@ -24,3 +24,23 @@ func (t *TestHandler) Close() error {
 	}
 	return nil
 }
+
+// TestFloating is a testing Handler.
+type TestFloating struct {
+	TestHandler
+	width, height int
+}
+
+// NewTestHandler allocates storage for a new TestHandler and initializes it.
+func NewTestFloating(width, height int) *TestFloating {
+	ret := new(TestFloating)
+	ret.TestHandler = *NewTestHandler()
+	ret.width = width
+	ret.height = height
+	return ret
+}
+
+// Close calls t.Close.
+func (t *TestFloating) Dimensions() (width, height int) {
+	return t.width, t.height
+}

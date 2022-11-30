@@ -53,8 +53,6 @@ message BarResponse {
 message FloatingWindowRequest {
 	uint64 handler_id = 1;
 	term.Coordinates at = 2;
-	int32 height = 3;
-	int32 width = 4;
 }
 
 message FloatingWindowResponse {
@@ -134,4 +132,14 @@ service Window {
 	rpc SetContent(WindowSetContentRequest) returns (WindowSetContentResponse);
 	rpc Content(WindowContentRequest) returns (WindowContentResponse);
 	rpc Close(WindowCloseRequest) returns (WindowCloseResponse);
+}
+
+message DimensionsRequest {}
+message DimensionsResponse {
+	uint32 width = 1;
+	uint32 height = 2;
+}
+
+service Floating {
+	rpc Dimensions(DimensionsRequest) returns (DimensionsResponse);
 }

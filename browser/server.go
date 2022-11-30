@@ -66,6 +66,11 @@ type browserServerHandler struct {
 	handlerID uint64
 }
 
+func (s browserServerHandler) Dimensions() (width, height int) {
+	// Dimensions couldn't be called if underlying Handler is not Floating
+	return s.Handler.(Floating).Dimensions()
+}
+
 func (s browserServerHandler) gracefulShutdown(reason string) {
 	time.Sleep(gracefulShutdownWait)
 	s.s.safeForceCloseHandler(s.handlerID, reason)
@@ -133,8 +138,10 @@ func (s *Server) dialHandler(handlerID uint64) (Handler, error) {
 	}
 
 	pbClient := handlerpb.NewHandlerClient(handlerConn)
+	fClient := browserpb.NewFloatingClient(handlerConn)
 	pbClient = newIOWaitUnlockHandlerClient(pbClient, s.browser.Locker)
-	cc := handlerpb.NewClient(pbClient)
+	handlercc := handlerpb.NewClient(pbClient)
+	cc := newFloatingClient(handlercc, fClient)
 
 	ctx, cancelFn := context.WithCancel(context.Background())
 
@@ -144,7 +151,8 @@ func (s *Server) dialHandler(handlerID uint64) (Handler, error) {
 				fmt.Sprintf("browser.MonitorConnection(handler): %s", reason))
 		})
 
-	go s.consumeErrors(ctx, handlerID, cc.Errors())
+	go s.consumeErrors(ctx, handlerID, handlercc.Errors())
+	go s.consumeErrors(ctx, handlerID, cc.errorCh)
 
 	s.browser.Lock()
 	defer s.browser.Unlock()
@@ -504,11 +512,9 @@ func (s *Server) Floating(
 	ctx context.Context, req *browserpb.FloatingWindowRequest,
 ) (*browserpb.FloatingWindowResponse, error) {
 	at := req.GetAt().ToModel()
-	height := int(req.GetHeight())
-	width := int(req.GetWidth())
 	windowID, err := s.newRemoteResource(ctx, req.GetHandlerId(),
 		func(wm WindowManager, h Handler) (Window, error) {
-			return wm.Floating(h, at, height, width)
+			return wm.Floating(h.(Floating), at)
 		})
 	if err != nil {
 		return nil, err

@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"math"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -1444,11 +1443,7 @@ func (h *lspEditorHandler) handleGoToDefinition(
 	return err
 }
 
-func findBestFloatingWindowPosition(cursorAtWindow term.Coordinates, width, height int) (
-	term.Coordinates, int, int,
-) {
-	maxColumns := width
-	width = int(math.Min(float64(maxColumns)+3, maxHoverColumns))
+func findBestFloatingWindowPosition(cursorAtWindow term.Coordinates, height int) term.Coordinates {
 	height = height + 3 // frame + less bar
 
 	at := cursorAtWindow
@@ -1458,7 +1453,7 @@ func findBestFloatingWindowPosition(cursorAtWindow term.Coordinates, width, heig
 		at.Y = cursorAtWindow.Y + 2
 	}
 
-	return at, width, height
+	return at
 }
 
 func (h *lspEditorHandler) handleHover(
@@ -1496,11 +1491,11 @@ func (h *lspEditorHandler) handleHover(
 
 	less := handler.NewLess(handler.DefaultLessConfig())
 	less.Buffer().WriteString(hover.Contents.Value)
-	bh := browser.NopHandler(less)
+	bh := browser.NopFloating(handler.PaddedFloating(
+		handler.FloatingBuffer(less, less.Buffer()), 0, 1))
 
-	width, height := less.Buffer().MaxColumns(), less.Buffer().Rows()
-	at, width, height := findBestFloatingWindowPosition(cursorAtWindow, width, height)
-	_, err = h.wm.Floating(bh, at, width, height)
+	at := findBestFloatingWindowPosition(cursorAtWindow, less.Buffer().Rows())
+	_, err = h.wm.Floating(bh, at)
 	if err != nil {
 		err = fmt.Errorf("wm.Floating: %v", err)
 		return err

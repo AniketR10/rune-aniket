@@ -118,6 +118,126 @@ func (mr *MockHandlerMockRecorder) Resize(width, height interface{}) *gomock.Cal
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Resize", reflect.TypeOf((*MockHandler)(nil).Resize), width, height)
 }
 
+// MockFloating is a mock of Floating interface.
+type MockFloating struct {
+	ctrl     *gomock.Controller
+	recorder *MockFloatingMockRecorder
+}
+
+// MockFloatingMockRecorder is the mock recorder for MockFloating.
+type MockFloatingMockRecorder struct {
+	mock *MockFloating
+}
+
+// NewMockFloating creates a new mock instance.
+func NewMockFloating(ctrl *gomock.Controller) *MockFloating {
+	mock := &MockFloating{ctrl: ctrl}
+	mock.recorder = &MockFloatingMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockFloating) EXPECT() *MockFloatingMockRecorder {
+	return m.recorder
+}
+
+// Close mocks base method.
+func (m *MockFloating) Close() error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Close")
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Close indicates an expected call of Close.
+func (mr *MockFloatingMockRecorder) Close() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockFloating)(nil).Close))
+}
+
+// Cursor mocks base method.
+func (m *MockFloating) Cursor() (term.Coordinates, bool) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Cursor")
+	ret0, _ := ret[0].(term.Coordinates)
+	ret1, _ := ret[1].(bool)
+	return ret0, ret1
+}
+
+// Cursor indicates an expected call of Cursor.
+func (mr *MockFloatingMockRecorder) Cursor() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Cursor", reflect.TypeOf((*MockFloating)(nil).Cursor))
+}
+
+// Dimensions mocks base method.
+func (m *MockFloating) Dimensions() (int, int) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Dimensions")
+	ret0, _ := ret[0].(int)
+	ret1, _ := ret[1].(int)
+	return ret0, ret1
+}
+
+// Dimensions indicates an expected call of Dimensions.
+func (mr *MockFloatingMockRecorder) Dimensions() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Dimensions", reflect.TypeOf((*MockFloating)(nil).Dimensions))
+}
+
+// Draw mocks base method.
+func (m *MockFloating) Draw(arg0 term.Writer) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "Draw", arg0)
+}
+
+// Draw indicates an expected call of Draw.
+func (mr *MockFloatingMockRecorder) Draw(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Draw", reflect.TypeOf((*MockFloating)(nil).Draw), arg0)
+}
+
+// Handle mocks base method.
+func (m *MockFloating) Handle(arg0 term.Event) (bool, bool) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Handle", arg0)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(bool)
+	return ret0, ret1
+}
+
+// Handle indicates an expected call of Handle.
+func (mr *MockFloatingMockRecorder) Handle(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Handle", reflect.TypeOf((*MockFloating)(nil).Handle), arg0)
+}
+
+// Man mocks base method.
+func (m *MockFloating) Man() go_tui.Manual {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Man")
+	ret0, _ := ret[0].(go_tui.Manual)
+	return ret0
+}
+
+// Man indicates an expected call of Man.
+func (mr *MockFloatingMockRecorder) Man() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Man", reflect.TypeOf((*MockFloating)(nil).Man))
+}
+
+// Resize mocks base method.
+func (m *MockFloating) Resize(width, height int) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "Resize", width, height)
+}
+
+// Resize indicates an expected call of Resize.
+func (mr *MockFloatingMockRecorder) Resize(width, height interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Resize", reflect.TypeOf((*MockFloating)(nil).Resize), width, height)
+}
+
 // MockWindow is a mock of Window interface.
 type MockWindow struct {
 	ctrl     *gomock.Controller
@@ -263,18 +383,18 @@ func (mr *MockWindowManagerMockRecorder) Bar(arg0, arg1 interface{}) *gomock.Cal
 }
 
 // Floating mocks base method.
-func (m *MockWindowManager) Floating(h Handler, at term.Coordinates, width, height int) (Window, error) {
+func (m *MockWindowManager) Floating(h Floating, at term.Coordinates) (Window, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Floating", h, at, width, height)
+	ret := m.ctrl.Call(m, "Floating", h, at)
 	ret0, _ := ret[0].(Window)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Floating indicates an expected call of Floating.
-func (mr *MockWindowManagerMockRecorder) Floating(h, at, width, height interface{}) *gomock.Call {
+func (mr *MockWindowManagerMockRecorder) Floating(h, at interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Floating", reflect.TypeOf((*MockWindowManager)(nil).Floating), h, at, width, height)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Floating", reflect.TypeOf((*MockWindowManager)(nil).Floating), h, at)
 }
 
 // Focus mocks base method.
@@ -520,18 +640,18 @@ func (mr *MockBrowserMockRecorder) Close() *gomock.Call {
 }
 
 // Floating mocks base method.
-func (m *MockBrowser) Floating(h Handler, at term.Coordinates, width, height int) (Window, error) {
+func (m *MockBrowser) Floating(h Floating, at term.Coordinates) (Window, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Floating", h, at, width, height)
+	ret := m.ctrl.Call(m, "Floating", h, at)
 	ret0, _ := ret[0].(Window)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Floating indicates an expected call of Floating.
-func (mr *MockBrowserMockRecorder) Floating(h, at, width, height interface{}) *gomock.Call {
+func (mr *MockBrowserMockRecorder) Floating(h, at interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Floating", reflect.TypeOf((*MockBrowser)(nil).Floating), h, at, width, height)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Floating", reflect.TypeOf((*MockBrowser)(nil).Floating), h, at)
 }
 
 // Focus mocks base method.

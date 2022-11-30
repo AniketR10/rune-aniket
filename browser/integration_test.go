@@ -11,6 +11,7 @@ import (
 	"google.golang.org/grpc"
 	browserpb "unstable.build/go-tui/browser/rpc"
 	"unstable.build/go-tui/proto"
+	"unstable.build/go-tui/term"
 )
 
 func newClientServerIntegration(
@@ -75,4 +76,27 @@ func TestIntegrationSetFocus(t *testing.T) {
 	resPrev, err = client.SetFocus(resWin2)
 	require.NoError(t, err)
 	assert.Equal(t, resWin1, resPrev)
+}
+
+func TestIntegrationFloating(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mock := NewMockBrowser(ctrl)
+	client, cleanup := newClientServerIntegration(t, mock)
+	defer cleanup()
+
+	win1 := NopWindow()
+
+	mock.EXPECT().Floating(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(h Floating, at term.Coordinates) (Window, error) {
+			actualWidth, actualHeight := h.Dimensions()
+			assert.Equal(t, 2, actualWidth)
+			assert.Equal(t, 2, actualHeight)
+			assert.Equal(t, term.Coordinates{X: 1, Y: 2}, at)
+			return win1, nil
+		})
+	resWin1, err := client.Floating(NewTestFloating(2, 2), term.Coordinates{X: 1, Y: 2})
+	require.NoError(t, err)
+	require.NoError(t, resWin1.Close())
 }

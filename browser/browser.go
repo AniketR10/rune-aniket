@@ -4,6 +4,7 @@ import (
 	"io"
 
 	"unstable.build/go-tui"
+	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/workspace"
 )
@@ -12,6 +13,13 @@ import (
 type Handler interface {
 	tui.Handler
 	Close() error
+}
+
+// Floating is a Handler used for Floating windows.
+// See handler.Floating for more details.
+type Floating interface {
+	Handler
+	handler.Floating
 }
 
 // Window is the interface that represents
@@ -59,7 +67,7 @@ type WindowManager interface {
 
 	// Floating creates a new floating window at coordinates,
 	// with static width and height.
-	Floating(h Handler, at term.Coordinates, width, height int) (Window, error)
+	Floating(h Floating, at term.Coordinates) (Window, error)
 
 	// Bar creates a status bar with Orientation and Handler.
 	// Bars differ from Split and Floating windows in that they can't
@@ -108,16 +116,6 @@ type Browser interface {
 	io.Closer
 }
 
-type closeHandler struct {
-	tui.Handler
-	doClose func()
-}
-
-func (h *closeHandler) Close() error {
-	h.doClose()
-	return nil
-}
-
 // FuncHandler returns a Handler by wrapping a tui.Handler
 // with an Close callback.
 func FuncHandler(h tui.Handler, doClose func()) Handler {
@@ -130,9 +128,48 @@ func NopHandler(h tui.Handler) Handler {
 	return &closeHandler{Handler: h, doClose: func() {}}
 }
 
+// StaticFloating wraps a Handler and returns a Floating that always
+// return the same Dimensions values.
+func StaticFloating(h Handler, width, height int) Floating {
+	return staticFloating{width: width, height: height, Handler: h}
+}
+
+// NopFloating wraps a handler.Floating and returns a Floating that does
+// nothing when Close is called.
+func NopFloating(h handler.Floating) Floating {
+	return nopFloating{Floating: h}
+}
+
+type closeHandler struct {
+	tui.Handler
+	doClose func()
+}
+
+func (h *closeHandler) Close() error {
+	h.doClose()
+	return nil
+}
+
 type fnEventHandler func(term.Event) bool
 
 // Handle satisfies EventHandler
 func (h fnEventHandler) Handle(ev term.Event) bool {
 	return h(ev)
+}
+
+type staticFloating struct {
+	Handler
+	width, height int
+}
+
+func (s staticFloating) Dimensions() (int, int) {
+	return s.width, s.height
+}
+
+type nopFloating struct {
+	handler.Floating
+}
+
+func (n nopFloating) Close() error {
+	return nil
 }

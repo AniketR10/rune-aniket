@@ -10,7 +10,7 @@ import (
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
-	
+
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/workspace"
@@ -56,6 +56,10 @@ type browserContent struct {
 	Handler
 	closed bool
 	c      *Component
+}
+
+func (c *browserContent) Dimensions() (int, int) {
+	return c.Handler.(Floating).Dimensions()
 }
 
 func (c *browserContent) Handle(ev term.Event) (exit, handled bool) {
@@ -625,14 +629,16 @@ func (c *Component) Split(o Orientation, h Handler) (Window, bool) {
 // Floating opens a new floating window at the given coordinates,
 // with the given height and width.
 func (c *Component) Floating(
-	h Handler, at term.Coordinates, width, height int,
+	h Floating, at term.Coordinates,
 ) Window {
-	h, isTab := c.newWindowContent(h)
-	win := c.newWindow(c.wm.FloatingWindow(h, at, width, height))
-	if isTab {
-		h.(*Tab).setWindow(win)
-		h.(*Tab).callOnFocus()
+	if h == nil {
+		panic("nil Floating handler")
 	}
+	h = &browserContent{
+		Handler: h,
+		c:       c,
+	}
+	win := c.newWindow(c.wm.FloatingWindow(h, at))
 	c.wm.SetFocus(win.win)
 	return win
 }

@@ -834,12 +834,12 @@ func (c *Component) Cursor(h Handler) (term.Coordinates, error) {
 
 // Floating satisfies browser.WindowManager.
 func (c *Component) Floating(
-	h browser.Handler, at term.Coordinates, width, height int,
+	h browser.Floating, at term.Coordinates,
 ) (browser.Window, error) {
 	if at.Y < 0 || at.X < 0 {
 		return nil, fmt.Errorf("invalid floating window coordinates: %v", at)
 	}
-	return c.comp.Floating(h, at, width, height), nil
+	return c.comp.Floating(h, at), nil
 }
 
 func (c *Component) newTab(

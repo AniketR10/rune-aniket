@@ -113,7 +113,8 @@ func TestComponentWindowSplit(t *testing.T) {
 └──────────────────┘`,
 		}, {func() {
 			assert.Error(t, w1.Close())
-			w2 = wm.FloatingWindow(&h2, term.Coordinates{}, 4, 4)
+			floating := StaticFloating(&h2, 4, 4)
+			w2 = wm.FloatingWindow(floating, term.Coordinates{})
 		}, `
 ┌──┐───────────────┐
 │BB│CCCCCCCCCCCCCCC│
@@ -124,15 +125,29 @@ func TestComponentWindowSplit(t *testing.T) {
 │CCCCCCCCCCCCCCCCCC│
 └──────────────────┘`,
 		}, {func() {
+			floating := w2.Content().(*staticFloating)
+			floating.width = 5
+			floating.height = 6
+			wm.Resize(20, 8)
+		}, `
+┌───┐──────────────┐
+│BBB│CCCCCCCCCCCCCC│
+│BBB│CCCCCCCCCCCCCC│
+│BBB│CCCCCCCCCCCCCC│
+│BBB│CCCCCCCCCCCCCC│
+└───┘CCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+└──────────────────┘`,
+		}, {func() {
 			wx, ok := wm.WindowAt(term.Coordinates{})
 			assert.True(t, ok)
 			assert.Equal(t, w2, wx)
 
-			wx, ok = wm.WindowAt(term.Coordinates{X: 5})
+			wx, ok = wm.WindowAt(term.Coordinates{X: 6})
 			assert.True(t, ok)
 			assert.Equal(t, w3, wx)
 
-			wx, ok = wm.WindowAt(term.Coordinates{Y: 5})
+			wx, ok = wm.WindowAt(term.Coordinates{Y: 7})
 			assert.True(t, ok)
 			assert.Equal(t, w3, wx)
 

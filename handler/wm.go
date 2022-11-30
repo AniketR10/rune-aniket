@@ -168,9 +168,9 @@ func (wm *WindowManager) SplitHorizontal(h tui.Handler) (Window, bool) {
 
 // FloatingWindow creates a floating window.
 func (wm *WindowManager) FloatingWindow(
-	content tui.Handler, at term.Coordinates, width, height int,
+	content Floating, at term.Coordinates,
 ) Window {
-	ret := wm.newNode(wm.comp.FloatingWindow(content, at, width, height))
+	ret := wm.newNode(wm.comp.FloatingWindow(content, at))
 	wm.setFocusAttr(wm.focus)
 	return ret
 }

@@ -699,3 +699,89 @@ var Window_ServiceDesc = grpc.ServiceDesc{
 	Streams:  []grpc.StreamDesc{},
 	Metadata: "rpc/browser.proto",
 }
+
+// FloatingClient is the client API for Floating service.
+//
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
+type FloatingClient interface {
+	Dimensions(ctx context.Context, in *DimensionsRequest, opts ...grpc.CallOption) (*DimensionsResponse, error)
+}
+
+type floatingClient struct {
+	cc grpc.ClientConnInterface
+}
+
+func NewFloatingClient(cc grpc.ClientConnInterface) FloatingClient {
+	return &floatingClient{cc}
+}
+
+func (c *floatingClient) Dimensions(ctx context.Context, in *DimensionsRequest, opts ...grpc.CallOption) (*DimensionsResponse, error) {
+	out := new(DimensionsResponse)
+	err := c.cc.Invoke(ctx, "/browser.Floating/Dimensions", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// FloatingServer is the server API for Floating service.
+// All implementations must embed UnimplementedFloatingServer
+// for forward compatibility
+type FloatingServer interface {
+	Dimensions(context.Context, *DimensionsRequest) (*DimensionsResponse, error)
+	mustEmbedUnimplementedFloatingServer()
+}
+
+// UnimplementedFloatingServer must be embedded to have forward compatible implementations.
+type UnimplementedFloatingServer struct {
+}
+
+func (UnimplementedFloatingServer) Dimensions(context.Context, *DimensionsRequest) (*DimensionsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Dimensions not implemented")
+}
+func (UnimplementedFloatingServer) mustEmbedUnimplementedFloatingServer() {}
+
+// UnsafeFloatingServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to FloatingServer will
+// result in compilation errors.
+type UnsafeFloatingServer interface {
+	mustEmbedUnimplementedFloatingServer()
+}
+
+func RegisterFloatingServer(s grpc.ServiceRegistrar, srv FloatingServer) {
+	s.RegisterService(&Floating_ServiceDesc, srv)
+}
+
+func _Floating_Dimensions_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DimensionsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(FloatingServer).Dimensions(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/browser.Floating/Dimensions",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(FloatingServer).Dimensions(ctx, req.(*DimensionsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+// Floating_ServiceDesc is the grpc.ServiceDesc for Floating service.
+// It's only intended for direct use with grpc.RegisterService,
+// and not to be introspected or modified (even as a copy)
+var Floating_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "browser.Floating",
+	HandlerType: (*FloatingServer)(nil),
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "Dimensions",
+			Handler:    _Floating_Dimensions_Handler,
+		},
+	},
+	Streams:  []grpc.StreamDesc{},
+	Metadata: "rpc/browser.proto",
+}

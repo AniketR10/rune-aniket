@@ -70,6 +70,10 @@ func (c browserClientHandler) Close() error {
 	return c.Handler.Close()
 }
 
+func (c browserClientHandler) Dimensions() (width, height int) {
+	return c.Handler.(Floating).Dimensions()
+}
+
 // NewClient allocates storage for a new Client and initializes it.
 func NewClient(
 	broker proto.MuxBroker, cc grpc.ClientConnInterface,
@@ -117,6 +121,12 @@ func (c *Client) serveHandler(h Handler) (uint64, bool, error) {
 				}
 				hsrv := handlerpb.NewServer(h)
 				handlerpb.RegisterHandlerServer(srv.GRPC(), hsrv)
+
+				// if it satisfies Floating as well then register it
+				if floating, ok := h.(Floating); ok {
+					fsrv := newFloatingServer(floating)
+					browserpb.RegisterFloatingServer(srv.GRPC(), fsrv)
+				}
 			})
 		brokerID = uint64(brokerID32)
 		if err != nil {
@@ -342,15 +352,13 @@ func (c *Client) Focus() (Window, error) {
 
 // Floating satisfies browser.WindowManager
 func (c *Client) Floating(
-	h Handler, at term.Coordinates, height, width int,
+	h Floating, at term.Coordinates,
 ) (Window, error) {
 	var atProto termpb.Coordinates
 	atProto.FromModel(at)
 
 	freq := browserpb.FloatingWindowRequest{
-		At:     &atProto,
-		Height: int32(height),
-		Width:  int32(width),
+		At: &atProto,
 	}
 
 	return c.split(func(cc browserpb.WindowManagerClient,

@@ -430,7 +430,7 @@ IIII`},
 	}
 	testutil.TestHandlerSequence(t, bh, 20, 10, cases)
 
-	floating1, err := b.Floating(browser.NewTestHandler(), term.Coordinates{X: 1, Y: 1}, 6, 4)
+	floating1, err := b.Floating(browser.NewTestFloating(6, 4), term.Coordinates{X: 1, Y: 1})
 	require.NoError(t, err)
 
 	// should not be able to split over a floating window, which is currently in focus
