@@ -10,7 +10,6 @@ import (
 
 	"github.com/ernestrc/blue/document"
 	"github.com/ernestrc/blue/encoding"
-	"github.com/ernestrc/blue/iterator"
 	"github.com/ernestrc/blue/retry"
 	multierr "github.com/ernestrc/go-multierror"
 	"unstable.build/go-tui/config"
@@ -278,6 +277,25 @@ func (s *scheme[T]) Rename(old, new string) error {
 }
 
 func (s *scheme[T]) Stat(path string) (os.FileInfo, error) {
+	uri, err := s.URI(path)
+	if err != nil {
+		return nil, fmt.Errorf("URI: %w", err)
+	}
+
+	if uri.Path() == "/" {
+		return fileInfo{
+			filename: s.workspace.Path(),
+			isDir:    true,
+		}, nil
+	}
+
+	if uri.Equal(s.workspace) {
+		return fileInfo{
+			filename: s.workspace.Path(),
+			isDir:    true,
+		}, nil
+	}
+
 	f, werr := s.Open(path, 0, 0)
 	if werr != nil {
 		return nil, werr.ToError()
@@ -285,22 +303,51 @@ func (s *scheme[T]) Stat(path string) (os.FileInfo, error) {
 	return f.Stat()
 }
 
-func (s *scheme[T]) ListFiles(ctx context.Context) (iterator.Iterator[string], error) {
+func (s *scheme[T]) ReadDir(name string) (
+	[]os.DirEntry, error,
+) {
+	info, err := s.Stat(name)
+	if err != nil {
+		return nil, err
+	}
+	if !info.IsDir() {
+		return nil, errors.New("not a directory")
+	}
+
+	name = info.Name()
+
 	s.svc.transaction.Lock()
 	defer s.svc.transaction.Unlock()
 
+	ctx := context.Background()
+
 	var it document.Iterator
-	var err error
 	err = retry.Retry(ctx, s.retryRealFailure, func(ctx context.Context) (bool, error) {
+		// name is ignored because even if we knew about the field used
+		// as id, there's no "starts with" operation in document.Service
+		// and more generally, a document.Service backed Scheme doesn't
+		// have any directories.
 		it, err = s.svc.svc.List(ctx, nil)
 		return true, err
 	})
 	if err != nil {
 		return nil, err
 	}
-	return iterator.Map(iterator.FromDocumentIterator[T](it), func(in T) string {
-		return in.ID()
-	}), nil
+
+	defer it.Close()
+
+	var ret []os.DirEntry
+	for it.HasNext() {
+		var t T
+		err := it.NextTo(&t)
+		if err != nil {
+			return nil, err
+		}
+		ret = append(ret, dirEntry{
+			name: t.ID(),
+		})
+	}
+	return ret, nil
 }
 
 func (s *scheme[T]) Lstat(path string) (os.FileInfo, error) {
@@ -339,4 +386,24 @@ func (s *scheme[T]) retriedDelete(ctx context.Context, docID string) error {
 		}
 		return true, err
 	})
+}
+
+type dirEntry struct {
+	name string
+}
+
+func (d dirEntry) Name() string {
+	return d.name
+}
+
+func (d dirEntry) IsDir() bool {
+	return false
+}
+
+func (d dirEntry) Type() os.FileMode {
+	return 0
+}
+
+func (d dirEntry) Info() (os.FileInfo, error) {
+	panic("unimplemented")
 }

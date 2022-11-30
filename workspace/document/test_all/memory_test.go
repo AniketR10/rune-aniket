@@ -85,8 +85,11 @@ func testWorkspaceSchemeSuite(
 	t.Run("Link", func(t *testing.T) {
 		test.TestWorkspaceSchemeReadLink(t, schemeFn, createTestFile)
 	})
-	t.Run("ListFiles", func(t *testing.T) {
-		test.TestWorkspaceSchemeListFiles(t, schemeFn, createTestFile)
+	t.Run("ReadDir", func(t *testing.T) {
+		test.TestWorkspaceSchemeReadDir(t, schemeFn, createTestFile)
+	})
+	t.Run("workspace.ListFiles integration", func(t *testing.T) {
+		test.TestWorkspaceSchemeListFilesIntegration(t, schemeFn, createTestFile)
 	})
 	t.Run("workspace.Load integration", func(t *testing.T) {
 		test.TestWorkspaceLoadIntegration(t, schemeFn,

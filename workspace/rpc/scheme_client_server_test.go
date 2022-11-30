@@ -1,7 +1,6 @@
 package rpc
 
 import (
-	"context"
 	"errors"
 	"io"
 	"io/ioutil"
@@ -12,7 +11,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ernestrc/blue/iterator"
 	gomock "github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -539,36 +537,27 @@ func testSchemeClientServer(
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), "boom")
 		}},
-		{"ListFiles happy path", func(t *testing.T, ctrl *gomock.Controller, c workspace.Scheme, s *workspacetest.MockScheme) {
+		{"ReadDir happy path", func(t *testing.T, ctrl *gomock.Controller, c workspace.Scheme, s *workspacetest.MockScheme) {
 			s.EXPECT().
-				ListFiles(gomock.Any()).
-				DoAndReturn(func(context.Context) (iterator.Iterator[string], error) {
-					return iterator.FromSlice([]string{"a"}), nil
+				ReadDir(gomock.Any()).
+				DoAndReturn(func(root string) ([]os.DirEntry, error) {
+					return []os.DirEntry{dirEntry{name: "a"}}, nil
 				})
-			it, err := c.ListFiles(context.Background())
+			dirs, err := c.ReadDir("")
 			require.NoError(t, err)
-			path, ok := it.Next()
-			require.True(t, ok)
-			require.NoError(t, it.Err())
-			assert.Equal(t, "a", path)
-
-			path, ok = it.Next()
-			require.False(t, ok)
-			require.NoError(t, it.Err())
-			assert.Zero(t, path)
+			require.Len(t, dirs, 1)
+			assert.Equal(t, "a", dirs[0].Name())
 		}},
-		{"ListFiles error", func(t *testing.T, ctrl *gomock.Controller, c workspace.Scheme, s *workspacetest.MockScheme) {
+		{"ReadDir error", func(t *testing.T, ctrl *gomock.Controller, c workspace.Scheme, s *workspacetest.MockScheme) {
 			s.EXPECT().
-				ListFiles(gomock.Any()).
-				DoAndReturn(func(context.Context) (iterator.Iterator[string], error) {
+				ReadDir(gomock.Any()).
+				DoAndReturn(func(string) ([]os.DirEntry, error) {
 					return nil, errors.New("boom")
 				})
-			l, err := c.ListFiles(context.Background())
-			require.NoError(t, err)
-			require.NotNil(t, l)
-			_, _ = l.Next()
-			require.Error(t, l.Err())
-			assert.Contains(t, l.Err().Error(), "boom")
+			l, err := c.ReadDir("")
+			require.Error(t, err)
+			assert.Nil(t, l)
+			assert.Contains(t, err.Error(), "boom")
 		}},
 	}
 

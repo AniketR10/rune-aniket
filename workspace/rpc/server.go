@@ -46,19 +46,6 @@ func (s *Server) URI(ctx context.Context, req *URIRequest) (
 	return resp, nil
 }
 
-// Getwd satisfies WorkspaceServer
-func (s *Server) Getwd(ctx context.Context, req *GetwdRequest) (
-	*URIResponse, error,
-) {
-	uri, err := s.wp.Getwd()
-	if err != nil {
-		return nil, err
-	}
-	resp := new(URIResponse)
-	resp.Uri = uri.String()
-	return resp, nil
-}
-
 // Command satisfies WorkspaceServer
 func (s *Server) Command(
 	ctx context.Context, req *CommandRequest,
@@ -139,11 +126,18 @@ func (s *Server) Remove(ctx context.Context, req *RemoveRequest) (
 	return s.sharedRPCImpl.Remove(ctx, req)
 }
 
-// ListFiles satisfies WorkspaceServer.
-func (s *Server) ListFiles(
-	req *ListFilesRequest, srv Workspace_ListFilesServer,
-) error {
-	return s.sharedRPCImpl.ListFiles(req, srv)
+// Stat satisfies SchemeServer.
+func (s *Server) Stat(ctx context.Context, req *StatRequest) (
+	*StatResponse, error,
+) {
+	return s.sharedRPCImpl.Stat(ctx, req)
+}
+
+// ReadDir satisfies SchemeServer.
+func (s *Server) ReadDir(ctx context.Context, req *ReadDirRequest) (
+	*ReadDirResponse, error,
+) {
+	return s.sharedRPCImpl.ReadDir(ctx, req)
 }
 
 // Stop closes all resources associated with this server.

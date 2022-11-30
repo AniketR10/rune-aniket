@@ -172,9 +172,6 @@ message URIResponse {
 	string uri = 1;
 }
 
-message GetwdRequest {
-}
-
 message RegisterSchemeRequest {
 	uint32 proxy_id = 1;
 	string scheme = 2;
@@ -212,19 +209,28 @@ message SetPtySizeRequest {
 message SetPtySizeResponse {
 }
 
-message ListFilesRequest {
+message ReadDirRequest {
+	string root = 1;
 }
 
-message ListFilesResponse {
-	string path = 1;
+message DirEntry {
+	string name = 1;
+	bool is_dir = 2;
+	int32 mode = 3;
+}
+
+message ReadDirResponse {
+	bool is_exist_err = 2;
+	bool is_not_exist_err = 3;
+	bool is_permission_err = 4;
+	repeated DirEntry path = 1;
 }
 
 service Workspace {
 	rpc URI(URIRequest) returns (URIResponse);
-	rpc Getwd(GetwdRequest) returns (URIResponse);
 	rpc Open(OpenRequest) returns (OpenResponse);
 	rpc Remove(RemoveRequest) returns (RemoveResponse);
-	rpc ListFiles(ListFilesRequest) returns (stream ListFilesResponse){}
+	rpc ReadDir(ReadDirRequest) returns (ReadDirResponse);
 	
 	// Executor Service
 	rpc Command(CommandRequest) returns (CommandResponse);
@@ -256,7 +262,7 @@ service Scheme {
 	rpc Rename(RenameRequest) returns (RenameResponse);
 	rpc Stat(StatRequest) returns (StatResponse);
 	rpc ReadLink(ReadLinkRequest) returns (ReadLinkResponse);
-	rpc ListFiles(ListFilesRequest) returns (stream ListFilesResponse){}
+	rpc ReadDir(ReadDirRequest) returns (ReadDirResponse);
 
 	// Scheme API, handler_id based
 	rpc Sync(SyncRequest) returns (SyncResponse);

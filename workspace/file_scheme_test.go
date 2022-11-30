@@ -187,7 +187,7 @@ func TestFileSchemeListFilesLarge(t *testing.T) {
 	scheme, err := NewFileScheme(config.NopConfig(), workspaceURI)
 	require.NoError(t, err)
 
-	it, err := scheme.ListFiles(context.Background())
+	it, err := ListFiles(context.Background(), scheme, "")
 	require.NoError(t, err)
 
 	for i := 0; i < 1000; i++ {
@@ -217,7 +217,7 @@ func benchListFiles(b *testing.B, totalFiles, nestEvery, emptyDirsPerFile int) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		it, _ := scheme.ListFiles(context.Background())
+		it, _ := ListFiles(context.Background(), scheme, "")
 
 		// consume iterator
 		ok := true

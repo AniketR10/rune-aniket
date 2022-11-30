@@ -2,7 +2,6 @@ package workspace
 
 import (
 	"bytes"
-	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -10,11 +9,11 @@ import (
 	"os"
 	"os/user"
 	"path/filepath"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
 
-	"github.com/ernestrc/blue/iterator"
 	"unstable.build/go-tui/config"
 )
 
@@ -71,6 +70,7 @@ type memFileInfo struct {
 	filename string
 	mode     os.FileMode
 	modTime  time.Time
+	isDir    bool
 }
 
 func (m *memoryScheme) init(workspace URI) error {
@@ -179,6 +179,21 @@ func (m *memoryScheme) Stat(path string) (os.FileInfo, error) {
 		return nil, err
 	}
 
+	// special cases, should always be a dir
+	if uri.Path() == "/" {
+		return memFileInfo{
+			filename: "/",
+			isDir:    true,
+		}, nil
+	}
+
+	if uri.Equal(m.workspace) {
+		return memFileInfo{
+			filename: m.workspace.Path(),
+			isDir:    true,
+		}, nil
+	}
+
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -250,18 +265,36 @@ func (m *memoryScheme) SetPtySize(p Pty, width, height int) error {
 	return errExecute
 }
 
-func (m *memoryScheme) ListFiles(ctx context.Context) (
-	it iterator.Iterator[string], err error,
+func (m *memoryScheme) ReadDir(name string) (
+	[]os.DirEntry, error,
 ) {
-	var files []string
-	for uri := range m.files {
-		// strip URI
-		cwdlen := len(m.workspace.String())
-		// Rel(Join(Base ensures that path is always relative to base workspace path
-		filename, _ := filepath.Rel(m.workspace.Path(), filepath.Join(m.workspace.Path(), filepath.Base(uri[cwdlen:])))
-		files = append(files, filename)
+	info, err := m.Stat(name)
+	if err != nil {
+		return nil, err
 	}
-	return iterator.FromSlice(files), nil
+	if !info.IsDir() {
+		return nil, errors.New("not a directory")
+	}
+
+	name = info.Name()
+
+	var ret []os.DirEntry
+	for uri := range m.files {
+		uri, err := ParseURI(uri)
+		if err != nil {
+			panic("could not parse internal uri")
+		}
+		path := uri.Path()
+		if !strings.HasPrefix(path, name) {
+			continue
+		}
+		// Rel(Join(Base ensures that path is always relative to base workspace path
+		filename, _ := filepath.Rel(m.workspace.Path(), filepath.Join(m.workspace.Path(), filepath.Base(path)))
+		ret = append(ret, memFileInfo{
+			filename: filename,
+		})
+	}
+	return ret, nil
 }
 
 func (m *memoryScheme) Close() error {
@@ -342,7 +375,7 @@ func (t memFileInfo) ModTime() time.Time {
 }
 
 func (t memFileInfo) IsDir() bool {
-	return false
+	return t.isDir
 }
 
 func (t memFileInfo) Sys() interface{} {
@@ -351,4 +384,12 @@ func (t memFileInfo) Sys() interface{} {
 
 func (t memFileInfo) Name() string {
 	return t.filename
+}
+
+func (t memFileInfo) Type() os.FileMode {
+	return 0 // 0 is regular files
+}
+
+func (t memFileInfo) Info() (os.FileInfo, error) {
+	return t, nil
 }

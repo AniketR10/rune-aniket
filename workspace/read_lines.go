@@ -45,6 +45,10 @@ func ReadLines(ctx context.Context, w API, paths iterator.Iterator[string]) (
 		}
 		close(files)
 		wg.Wait()
+
+		it.mu.Lock()
+		defer it.mu.Unlock()
+
 		it.err = itErr
 		for _, err := range errors {
 			if err != nil {

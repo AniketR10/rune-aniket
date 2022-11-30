@@ -5,13 +5,11 @@
 package test
 
 import (
-	context "context"
 	io "io"
 	os "os"
 	reflect "reflect"
 	syscall "syscall"
 
-	iterator "github.com/ernestrc/blue/iterator"
 	gomock "github.com/golang/mock/gomock"
 	cell "unstable.build/go-tui/cell"
 	workspace "unstable.build/go-tui/workspace"
@@ -74,21 +72,6 @@ func (mr *MockAPIMockRecorder) Command(name interface{}, arg ...interface{}) *go
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Command", reflect.TypeOf((*MockAPI)(nil).Command), varargs...)
 }
 
-// Getwd mocks base method.
-func (m *MockAPI) Getwd() (workspace.URI, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Getwd")
-	ret0, _ := ret[0].(workspace.URI)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// Getwd indicates an expected call of Getwd.
-func (mr *MockAPIMockRecorder) Getwd() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Getwd", reflect.TypeOf((*MockAPI)(nil).Getwd))
-}
-
 // NewPty mocks base method.
 func (m *MockAPI) NewPty() (workspace.Pty, error) {
 	m.ctrl.T.Helper()
@@ -117,6 +100,21 @@ func (m *MockAPI) Open(path string, flag int, mode os.FileMode) (workspace.File,
 func (mr *MockAPIMockRecorder) Open(path, flag, mode interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Open", reflect.TypeOf((*MockAPI)(nil).Open), path, flag, mode)
+}
+
+// ReadDir mocks base method.
+func (m *MockAPI) ReadDir(name string) ([]os.DirEntry, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ReadDir", name)
+	ret0, _ := ret[0].([]os.DirEntry)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ReadDir indicates an expected call of ReadDir.
+func (mr *MockAPIMockRecorder) ReadDir(name interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReadDir", reflect.TypeOf((*MockAPI)(nil).ReadDir), name)
 }
 
 // Remove mocks base method.
@@ -173,6 +171,21 @@ func (m *MockAPI) Start(arg0 workspace.Pid) error {
 func (mr *MockAPIMockRecorder) Start(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Start", reflect.TypeOf((*MockAPI)(nil).Start), arg0)
+}
+
+// Stat mocks base method.
+func (m *MockAPI) Stat(path string) (os.FileInfo, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Stat", path)
+	ret0, _ := ret[0].(os.FileInfo)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Stat indicates an expected call of Stat.
+func (mr *MockAPIMockRecorder) Stat(path interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Stat", reflect.TypeOf((*MockAPI)(nil).Stat), path)
 }
 
 // StderrPipe mocks base method.
@@ -247,6 +260,59 @@ func (m *MockAPI) Wait(arg0 workspace.Pid) error {
 func (mr *MockAPIMockRecorder) Wait(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Wait", reflect.TypeOf((*MockAPI)(nil).Wait), arg0)
+}
+
+// MockDirectory is a mock of Directory interface.
+type MockDirectory struct {
+	ctrl     *gomock.Controller
+	recorder *MockDirectoryMockRecorder
+}
+
+// MockDirectoryMockRecorder is the mock recorder for MockDirectory.
+type MockDirectoryMockRecorder struct {
+	mock *MockDirectory
+}
+
+// NewMockDirectory creates a new mock instance.
+func NewMockDirectory(ctrl *gomock.Controller) *MockDirectory {
+	mock := &MockDirectory{ctrl: ctrl}
+	mock.recorder = &MockDirectoryMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockDirectory) EXPECT() *MockDirectoryMockRecorder {
+	return m.recorder
+}
+
+// ReadDir mocks base method.
+func (m *MockDirectory) ReadDir(name string) ([]os.DirEntry, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ReadDir", name)
+	ret0, _ := ret[0].([]os.DirEntry)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ReadDir indicates an expected call of ReadDir.
+func (mr *MockDirectoryMockRecorder) ReadDir(name interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReadDir", reflect.TypeOf((*MockDirectory)(nil).ReadDir), name)
+}
+
+// Stat mocks base method.
+func (m *MockDirectory) Stat(path string) (os.FileInfo, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Stat", path)
+	ret0, _ := ret[0].(os.FileInfo)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Stat indicates an expected call of Stat.
+func (mr *MockDirectoryMockRecorder) Stat(path interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Stat", reflect.TypeOf((*MockDirectory)(nil).Stat), path)
 }
 
 // MockTerminal is a mock of Terminal interface.
@@ -584,41 +650,11 @@ func (m *MockWorkspace) Command(name string, arg ...string) (workspace.Pid, erro
 	return ret0, ret1
 }
 
-// ListFiles mocks base method.
-func (m *MockWorkspace) ListFiles(arg0 context.Context) (iterator.Iterator[string], error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ListFiles", arg0)
-	ret0, _ := ret[0].(iterator.Iterator[string])
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// ListFiles indicates an expected call of Wait.
-func (mr *MockWorkspaceMockRecorder) ListFiles(arg0 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListFiles", reflect.TypeOf((*MockWorkspace)(nil).ListFiles), arg0)
-}
-
 // Command indicates an expected call of Command.
 func (mr *MockWorkspaceMockRecorder) Command(name interface{}, arg ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{name}, arg...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Command", reflect.TypeOf((*MockWorkspace)(nil).Command), varargs...)
-}
-
-// Getwd mocks base method.
-func (m *MockWorkspace) Getwd() (workspace.URI, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Getwd")
-	ret0, _ := ret[0].(workspace.URI)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// Getwd indicates an expected call of Getwd.
-func (mr *MockWorkspaceMockRecorder) Getwd() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Getwd", reflect.TypeOf((*MockWorkspace)(nil).Getwd))
 }
 
 // Load mocks base method.
@@ -664,6 +700,21 @@ func (m *MockWorkspace) Open(path string, flag int, mode os.FileMode) (workspace
 func (mr *MockWorkspaceMockRecorder) Open(path, flag, mode interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Open", reflect.TypeOf((*MockWorkspace)(nil).Open), path, flag, mode)
+}
+
+// ReadDir mocks base method.
+func (m *MockWorkspace) ReadDir(name string) ([]os.DirEntry, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ReadDir", name)
+	ret0, _ := ret[0].([]os.DirEntry)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ReadDir indicates an expected call of ReadDir.
+func (mr *MockWorkspaceMockRecorder) ReadDir(name interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReadDir", reflect.TypeOf((*MockWorkspace)(nil).ReadDir), name)
 }
 
 // Recover mocks base method.
@@ -735,6 +786,21 @@ func (m *MockWorkspace) Start(arg0 workspace.Pid) error {
 func (mr *MockWorkspaceMockRecorder) Start(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Start", reflect.TypeOf((*MockWorkspace)(nil).Start), arg0)
+}
+
+// Stat mocks base method.
+func (m *MockWorkspace) Stat(path string) (os.FileInfo, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Stat", path)
+	ret0, _ := ret[0].(os.FileInfo)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Stat indicates an expected call of Stat.
+func (mr *MockWorkspaceMockRecorder) Stat(path interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Stat", reflect.TypeOf((*MockWorkspace)(nil).Stat), path)
 }
 
 // StderrPipe mocks base method.
@@ -915,21 +981,6 @@ func (mr *MockLoaderMockRecorder) Recover(file, swapFilePath, buf, force interfa
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Recover", reflect.TypeOf((*MockLoader)(nil).Recover), file, swapFilePath, buf, force)
 }
 
-// URI mocks base method.
-func (m *MockLoader) URI(arg0 string) (workspace.URI, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "URI", arg0)
-	ret0, _ := ret[0].(workspace.URI)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// URI indicates an expected call of URI.
-func (mr *MockLoaderMockRecorder) URI(arg0 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "URI", reflect.TypeOf((*MockLoader)(nil).URI), arg0)
-}
-
 // MockScheme is a mock of Scheme interface.
 type MockScheme struct {
 	ctrl     *gomock.Controller
@@ -1030,6 +1081,21 @@ func (m *MockScheme) Open(path string, flag int, perm os.FileMode) (workspace.Fi
 func (mr *MockSchemeMockRecorder) Open(path, flag, perm interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Open", reflect.TypeOf((*MockScheme)(nil).Open), path, flag, perm)
+}
+
+// ReadDir mocks base method.
+func (m *MockScheme) ReadDir(arg0 string) ([]os.DirEntry, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ReadDir", arg0)
+	ret0, _ := ret[0].([]os.DirEntry)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ReadDir indicates an expected call of ReadDir.
+func (mr *MockSchemeMockRecorder) ReadDir(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReadDir", reflect.TypeOf((*MockScheme)(nil).ReadDir), arg0)
 }
 
 // ReadLink mocks base method.
@@ -1204,21 +1270,6 @@ func (m *MockScheme) Wait(arg0 workspace.Pid) error {
 func (mr *MockSchemeMockRecorder) Wait(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Wait", reflect.TypeOf((*MockScheme)(nil).Wait), arg0)
-}
-
-// ListFiles mocks base method.
-func (m *MockScheme) ListFiles(arg0 context.Context) (iterator.Iterator[string], error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ListFiles", arg0)
-	ret0, _ := ret[0].(iterator.Iterator[string])
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// ListFiles indicates an expected call of Wait.
-func (mr *MockSchemeMockRecorder) ListFiles(arg0 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListFiles", reflect.TypeOf((*MockScheme)(nil).ListFiles), arg0)
 }
 
 // MockFile is a mock of File interface.

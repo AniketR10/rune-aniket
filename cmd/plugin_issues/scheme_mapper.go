@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -10,7 +9,6 @@ import (
 
 	"github.com/ernestrc/blue/encoding"
 	"github.com/ernestrc/blue/issue"
-	"github.com/ernestrc/blue/iterator"
 	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui/config"
 	"unstable.build/go-tui/workspace"
@@ -80,73 +78,43 @@ func (m mapper) URI(path string) (workspace.URI, error) {
 	return m.Scheme.URI(path)
 }
 
-func (m mapper) ListFiles(ctx context.Context) (
-	iterator.Iterator[string], error,
+func (m mapper) ReadDir(name string) (
+	[]os.DirEntry, error,
 ) {
-	it, err := m.Scheme.ListFiles(ctx)
+	name = parseLabels(name)
+	entries, err := m.Scheme.ReadDir(name)
 	if err != nil {
 		return nil, err
 	}
 
-	return &mappingIterator{
-		scheme:        m,
-		it:            it,
-		m:             m.m,
-		maxSubjectLen: m.maxSubjectLen,
-	}, nil
-}
-
-type mappingIterator struct {
-	scheme        mapper
-	m             encoding.Marshaler
-	it            iterator.Iterator[string]
-	maxSubjectLen int
-
-	nextErr error
-}
-
-func (m *mappingIterator) Next() (string, bool) {
-	for {
-		filename, ok := m.it.Next()
-		if !ok {
-			return "", false
-		}
-
+	var ret []os.DirEntry
+	for _, entry := range entries {
+		filename := entry.Name()
 		// swap file for an open issue
 		if strings.HasSuffix(filename, ".swp") {
 			continue
 		}
-
-		f, werr := m.scheme.Open(filename, os.O_RDONLY, 0)
+		f, werr := m.Scheme.Open(filename, os.O_RDONLY, 0)
 		if werr != nil {
-			m.nextErr = werr.ToError()
-			return "", false
+			return nil, werr.ToError()
 		}
 		data, err := ioutil.ReadAll(f)
 		if err != nil {
-			m.nextErr = err
-			return "", false
+			return nil, err
 		}
-
 		var temp issue.ReportDocument
 		err = m.m.Unmarshal(data, &temp)
 		if err != nil {
-			return "", false
+			return nil, err
 		}
-
 		if temp.Report.Closed {
 			continue
 		}
-		return makeLabels(temp, m.maxSubjectLen), true
+		nameWithLabels := makeLabels(temp, m.maxSubjectLen)
+		ret = append(ret, mappedEntry{name: nameWithLabels, DirEntry: entry})
 	}
-}
 
-func (m *mappingIterator) Err() error {
-	err := m.it.Err()
-	if err != nil {
-		return err
-	}
-	return m.nextErr
+	return ret, nil
 }
 
 func makeLabels(temp issue.ReportDocument, maxSubjectLen int) string {
@@ -202,4 +170,13 @@ func makeLabels(temp issue.ReportDocument, maxSubjectLen int) string {
 func parseLabels(str string) string {
 	path := strings.Split(str, " ")
 	return path[0]
+}
+
+type mappedEntry struct {
+	name string
+	os.DirEntry
+}
+
+func (m mappedEntry) Name() string {
+	return m.name
 }

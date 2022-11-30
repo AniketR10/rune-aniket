@@ -1,7 +1,6 @@
 package rpc
 
 import (
-	"context"
 	"errors"
 	"io"
 	"io/ioutil"
@@ -12,7 +11,6 @@ import (
 	"syscall"
 	"testing"
 
-	"github.com/ernestrc/blue/iterator"
 	gomock "github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -328,25 +326,6 @@ func TestClientServer(t *testing.T) {
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), "boom")
 		}},
-		{"Getwd happy path", func(t *testing.T, mock *workspace.MockOsFile, c *Client, s *Server) {
-			uri, err := workspace.ParseURI("ssh://user@my_host:8080/tmp/hello/world.go")
-			require.NoError(t, err)
-
-			s.wp.(*workspacetest.MockWorkspace).EXPECT().
-				Getwd().Return(uri, nil)
-
-			actualUri, err := c.Getwd()
-			assert.NoError(t, err)
-			assert.Equal(t, uri.String(), actualUri.String())
-		}},
-		{"Getwd error", func(t *testing.T, mock *workspace.MockOsFile, c *Client, s *Server) {
-			s.wp.(*workspacetest.MockWorkspace).EXPECT().
-				Getwd().Return(workspace.URI{}, errors.New("boom"))
-
-			_, err := c.Getwd()
-			require.Error(t, err)
-			assert.Contains(t, err.Error(), "boom")
-		}},
 		{"Remove happy path", func(t *testing.T, mock *workspace.MockOsFile, c *Client, s *Server) {
 			s.wp.(*workspacetest.MockWorkspace).EXPECT().
 				Remove(gomock.Eq("/tmp/hello_world.go")).
@@ -464,36 +443,27 @@ func TestClientServer(t *testing.T) {
 			require.NotNil(t, err)
 			assert.True(t, strings.Contains(err.Error(), "pow"))
 		}},
-		{"ListFiles happy path", func(t *testing.T, mock *workspace.MockOsFile, c *Client, s *Server) {
+		{"ReadDir happy path", func(t *testing.T, mock *workspace.MockOsFile, c *Client, s *Server) {
 			s.wp.(*workspacetest.MockWorkspace).EXPECT().
-				ListFiles(gomock.Any()).
-				DoAndReturn(func(context.Context) (iterator.Iterator[string], error) {
-					return iterator.FromSlice([]string{"a"}), nil
+				ReadDir(gomock.Any()).
+				DoAndReturn(func(root string) ([]os.DirEntry, error) {
+					return []os.DirEntry{dirEntry{name: "a"}}, nil
 				})
-			it, err := c.ListFiles(context.Background())
+			dirs, err := c.ReadDir("")
 			require.NoError(t, err)
-			path, ok := it.Next()
-			require.True(t, ok)
-			require.NoError(t, it.Err())
-			assert.Equal(t, "a", path)
-
-			path, ok = it.Next()
-			require.False(t, ok)
-			require.NoError(t, it.Err())
-			assert.Zero(t, path)
+			require.Len(t, dirs, 1)
+			assert.Equal(t, "a", dirs[0].Name())
 		}},
-		{"ListFiles error", func(t *testing.T, mock *workspace.MockOsFile, c *Client, s *Server) {
+		{"ReadDir error", func(t *testing.T, mock *workspace.MockOsFile, c *Client, s *Server) {
 			s.wp.(*workspacetest.MockWorkspace).EXPECT().
-				ListFiles(gomock.Any()).
-				DoAndReturn(func(context.Context) (iterator.Iterator[string], error) {
+				ReadDir(gomock.Any()).
+				DoAndReturn(func(string) ([]os.DirEntry, error) {
 					return nil, errors.New("boom")
 				})
-			l, err := c.ListFiles(context.Background())
-			require.NoError(t, err)
-			require.NotNil(t, l)
-			_, _ = l.Next()
-			require.Error(t, l.Err())
-			assert.Contains(t, l.Err().Error(), "boom")
+			l, err := c.ReadDir("")
+			require.Error(t, err)
+			assert.Nil(t, l)
+			assert.Contains(t, err.Error(), "boom")
 		}},
 	}
 

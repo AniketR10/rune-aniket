@@ -10,8 +10,10 @@ import (
 
 	"github.com/ernestrc/blue/document"
 	"github.com/ernestrc/blue/iterator"
+	"github.com/ernestrc/blue/logging"
 	"github.com/ernestrc/blue/retry"
 	multierr "github.com/ernestrc/go-multierror"
+	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/component"
@@ -54,7 +56,7 @@ var (
 		"forceWrite!":             (*ex).forceFlush,
 		"forceQuit!":              (*ex).forceQuit,
 		"quit":                    (*ex).forceQuit,
-		cmdEdit:                   (*ex).editFile,
+		cmdEdit:                   (*ex).editFiles,
 		"reload":                  (*ex).reloadFile,
 		cmdChangeSplitOrientation: (*ex).splitDirectionChange,
 		"splitWindow":             (*ex).newWindow,
@@ -101,7 +103,7 @@ const (
 
 type workspaceLoader interface {
 	workspace.Loader
-	ListFiles(context.Context) (iterator.Iterator[string], error)
+	workspace.WorkspaceDirectory
 }
 
 // ex implements a tui.Handler by wrapping an editor.Component and
@@ -168,11 +170,14 @@ func (e *ex) init(
 
 func (e *ex) subscribeCommands() error {
 	var ret error
-	for cmd, _fn := range exCommands {
-		fn := _fn
-		err := e.comp.SubscribeCommand(cmd, text.FuncCommandHandler(
+	for cmd, fn := range exCommands {
+		cmd := cmd
+		fn := fn
+		err := e.comp.SubscribeCommand(cmd, text.FuncCommandCompleter(
 			func(ctx context.Context, cmd text.Command) (bool, error) {
 				return false, fn(e, cmd.Args...)
+			}, func(ctx context.Context, args []string) (iterator.Iterator[string], error) {
+				return e.completeCommand(ctx, cmd, args)
 			}))
 		if err != nil {
 			ret = multierr.Append(ret, err)
@@ -181,20 +186,36 @@ func (e *ex) subscribeCommands() error {
 	return ret
 }
 
+// FIXME ~/ doesn't really work because command handler doesn't update
+// the path used to fuzzy search so it fuzzy searches ~/ against /home/user
 func (e *ex) completeEdit(
 	ctx context.Context, args []string,
 ) (iterator.Iterator[string], error) {
-	// TODO
-	// e.workspace.ListFiles(ctx, args[0])
-	if len(args) == 0 || args[0] == "" {
-		return e.workspace.ListFiles(ctx)
+	if len(args) == 0 {
+		return workspace.ListFiles(ctx, e.workspace, ".")
 	}
-	return iterator.FromSlice[string](nil), nil
+
+	last := args[len(args)-1]
+	if last == "" {
+		return workspace.ListFiles(ctx, e.workspace, ".")
+	}
+
+	uri, err := e.parseURIOrWorkspaceURI(last)
+	if err != nil {
+		return nil, err
+	}
+
+	return workspace.ListFiles(ctx, e.workspace, uri.Path())
+}
+
+func (e *ex) log(level log.Level, msg string, args ...interface{}) {
+	log.WithField(logging.KeyClass, "ex").Logf(level, msg, args...)
 }
 
 func (e *ex) completeCommand(
 	ctx context.Context, cmd string, args []string,
 ) (iterator.Iterator[string], error) {
+	e.log(log.DebugLevel, "complete command: %s %v", cmd, args)
 	switch cmd {
 	case cmdEdit:
 		return e.completeEdit(ctx, args)
@@ -399,6 +420,8 @@ func (e *ex) dispatchCommand(cmd string, args ...string) (err error) {
 }
 
 func (e *ex) editFileURI(uri workspace.URI) error {
+	e.log(log.DebugLevel, "edit: %s", uri.String())
+
 	h, err := e.comp.Open(uri)
 	if err != nil {
 		return err
@@ -410,19 +433,34 @@ func (e *ex) editFileURI(uri workspace.URI) error {
 	return err
 }
 
-func (e *ex) editFile(args ...string) error {
-	if len(args) == 0 {
-		return errors.New("expected file name")
-	}
-	// attempt to parse URI otherwise expect local file path
-	uri, err := workspace.ParseURI(args[0])
+func (e *ex) parseURIOrWorkspaceURI(path string) (workspace.URI, error) {
+	uri, err := workspace.ParseURI(path)
+	e.log(log.TraceLevel, "parse uri (%s): %s, %v", path, uri.String(), err)
 	if err != nil {
-		uri, err = e.workspace.URI(args[0])
+		uri, err = e.workspace.URI(path)
+		e.log(log.TraceLevel, "URI (%s): %s, %v", path, uri.String(), err)
+	}
+	return uri, err
+}
+
+func (e *ex) editFiles(args ...string) error {
+	if len(args) == 0 {
+		return errors.New("expected at least one file name")
+	}
+
+	for _, arg := range args {
+		// attempt to parse URI otherwise expect local file path
+		uri, err := e.parseURIOrWorkspaceURI(arg)
+		if err != nil {
+			return err
+		}
+		err = e.editFileURI(uri)
 		if err != nil {
 			return err
 		}
 	}
-	return e.editFileURI(uri)
+
+	return nil
 }
 
 func (e *ex) reloadFile(args ...string) error {

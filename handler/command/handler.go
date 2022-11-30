@@ -263,6 +263,8 @@ func (h *Handler) handleCommon(ev *term.Event) (quit, handled bool) {
 		h.list.FocusDown()
 	case term.KeyArrowUp, term.KeyCtrlK:
 		h.list.FocusUp()
+	case term.KeyCtrlC:
+		h.cancelCompletionPush("received ctrl-c")
 	case term.KeyTab:
 		h.incArgsCompleteMode(true)
 	case term.KeySpace:
@@ -494,6 +496,7 @@ func (h *Handler) Reset(commands []string) {
 
 // assumes holding lock
 func (h *Handler) cancelCompletionPush(reason string) {
+	h.log(log.DebugLevel, "completion push to search list: %s", reason)
 	h.cancelFn()
 	h.list.Cancel()
 }

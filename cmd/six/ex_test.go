@@ -1,16 +1,15 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"io"
+	"os"
 	"strconv"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/ernestrc/blue/document"
-	"github.com/ernestrc/blue/iterator"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"unstable.build/go-tui"
@@ -49,7 +48,10 @@ type testLoader struct {
 	buf *testFileBuffer
 }
 
-func (w *testLoader) Load(filePath workspace.URI, buf *cell.Buffer, swapDir workspace.URI, readOnly bool) (
+func (w *testLoader) Load(
+	filePath workspace.URI, buf *cell.Buffer,
+	swapDir workspace.URI, readOnly bool,
+) (
 	workspace.FlusherCloser, error,
 ) {
 	if w.buf != nil {
@@ -61,14 +63,44 @@ func (w *testLoader) Load(filePath workspace.URI, buf *cell.Buffer, swapDir work
 func (w *testLoader) Recover(
 	filePath, swapFilePath workspace.URI,
 	buf *cell.Buffer, force bool,
-) (
-	workspace.FlusherCloser, error,
-) {
+) (workspace.FlusherCloser, error) {
 	return w.Load(filePath, buf, swapFilePath, false)
 }
 
-func (w *testLoader) ListFiles(ctx context.Context) (iterator.Iterator[string], error) {
-	return iterator.FromSlice[string](nil), nil
+func (w *testLoader) ReadDir(name string) ([]os.DirEntry, error) {
+	return nil, nil
+}
+
+func (w *testLoader) Stat(name string) (os.FileInfo, error) {
+	return testFileInfo{name: name}, nil
+}
+
+type testFileInfo struct {
+	name string
+}
+
+func (t testFileInfo) Name() string {
+	return t.name
+}
+
+func (t testFileInfo) IsDir() bool {
+	return t.name == "/" || t.name == "" || t.name == "."
+}
+
+func (t testFileInfo) ModTime() time.Time {
+	return time.Time{}
+}
+
+func (t testFileInfo) Mode() os.FileMode {
+	return 0
+}
+
+func (t testFileInfo) Size() int64 {
+	return 0
+}
+
+func (t testFileInfo) Sys() any {
+	return nil
 }
 
 func (w *testLoader) URI(path string) (workspace.URI, error) {

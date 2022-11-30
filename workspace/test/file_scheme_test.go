@@ -10,7 +10,7 @@ import (
 	"unstable.build/go-tui/workspace"
 )
 
-func TestFileSchemeScheme(t *testing.T) {
+func TestFileScheme(t *testing.T) {
 	var dirs []string
 
 	TestWorkspaceSchemeFiles(t, func(t *testing.T) workspace.Scheme {

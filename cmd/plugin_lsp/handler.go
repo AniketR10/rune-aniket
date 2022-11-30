@@ -617,7 +617,7 @@ func newLspHandler(
 			if err != nil {
 				return nil, err
 			}
-			cwdURI, err := ret.wp.Getwd()
+			cwdURI, err := ret.wp.URI(".")
 			if err != nil {
 				return nil, err
 			}

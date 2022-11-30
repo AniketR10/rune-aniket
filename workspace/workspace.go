@@ -1,22 +1,16 @@
 package workspace
 
 import (
-	"context"
 	"io"
 	os "os"
 	"syscall"
 
-	"github.com/ernestrc/blue/iterator"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/config"
 )
 
 // API abstract the public-facing API of a workspace.
 type API interface {
-	// Getwd gets the current workspace URI.
-	Getwd() (URI, error)
-
-	// URI builds a URI from a path in the current workspace.
 	URI(path string) (URI, error)
 
 	// Open opens a file at path with the given flag and mode.
@@ -25,16 +19,19 @@ type API interface {
 	// Remove removes the file at path.
 	Remove(path string) error
 
-	// ListFiles traverses the workspace directory and returns
-	// an iterator that returns all file paths. If errors
-	// are encountered while reading the contents of directories
-	// those errors will be aggregated and reported by the iterator's
-	// Err method.
-	ListFiles(ctx context.Context) (iterator.Iterator[string], error)
+	Directory
 
 	Terminal
 
 	Executor
+}
+
+// Directory abstracts the ability to read directory contents.
+type Directory interface {
+	Stat(path string) (os.FileInfo, error)
+
+	// ReadDir reads the named directory, returning all its directory entries.
+	ReadDir(name string) ([]os.DirEntry, error)
 }
 
 // Terminal abstracts the ability to manage pseudoterminals.
@@ -125,8 +122,6 @@ type FlusherCloser interface {
 // Loader abstracts the ability to load resource data into a working buffer
 // and provide a FlusherCloser to manage flushing data to storage.
 type Loader interface {
-	URI(string) (URI, error)
-
 	Load(file URI, buf *cell.Buffer, swapDir URI, readOnly bool) (FlusherCloser, error)
 	Recover(file, swapFilePath URI, buf *cell.Buffer, force bool) (FlusherCloser, error)
 }
@@ -144,7 +139,7 @@ type Scheme interface {
 	Stat(path string) (os.FileInfo, error)
 	Lstat(path string) (os.FileInfo, error)
 	ReadLink(path string) (string, error)
-	ListFiles(context.Context) (iterator.Iterator[string], error)
+	ReadDir(string) ([]os.DirEntry, error)
 }
 
 // File abstracts a subset of os.File

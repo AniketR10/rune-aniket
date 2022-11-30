@@ -1,14 +1,12 @@
 package workspace
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"io"
 	"os"
 	"syscall"
 
-	"github.com/ernestrc/blue/iterator"
 	"github.com/ernestrc/blue/logging"
 	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui/cell"
@@ -20,10 +18,8 @@ type schemeWorkspace struct {
 	p Scheme
 }
 
-// NewSchemeWorkspace wraps a workspace.Scheme to return the canonical workspace.Workspace.
-// It adds Getwd, which returns the given URI and adds Recover and Load, which
-// return a FlusherCloser that directly uses the given Scheme to manipulate the underlying
-// resources.
+// NewSchemeWorkspace wraps a workspace.Scheme and implements a workspace.Loader,
+// effectively converting a workspace.Scheme into a workspace.Workspace.
 func NewSchemeWorkspace(w URI, p Scheme) Workspace {
 	ret := new(schemeWorkspace)
 	ret.Init(w, p)
@@ -119,20 +115,22 @@ func (w *schemeWorkspace) Load(
 	return
 }
 
-func (w *schemeWorkspace) ListFiles(ctx context.Context) (iterator.Iterator[string], error) {
-	return w.p.ListFiles(ctx)
+func (w *schemeWorkspace) ReadDir(name string) (
+	[]os.DirEntry, error,
+) {
+	return w.p.ReadDir(name)
 }
 
 func (w *schemeWorkspace) Open(path string, flag int, mode os.FileMode) (File, *Error) {
 	return w.p.Open(path, flag, mode)
 }
 
-func (w *schemeWorkspace) Remove(path string) error {
-	return w.p.Remove(path)
+func (w *schemeWorkspace) Stat(path string) (os.FileInfo, error) {
+	return w.p.Stat(path)
 }
 
-func (w *schemeWorkspace) Getwd() (URI, error) {
-	return w.w, nil
+func (w *schemeWorkspace) Remove(path string) error {
+	return w.p.Remove(path)
 }
 
 func (w *schemeWorkspace) URI(path string) (URI, error) {

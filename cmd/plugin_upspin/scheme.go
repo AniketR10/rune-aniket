@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"context"
 	stdErrors "errors"
 	"fmt"
 	"io"
@@ -11,10 +10,8 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"sync"
 	"syscall"
 
-	"github.com/ernestrc/blue/iterator"
 	blupspin "github.com/ernestrc/blue/upspin"
 	multierr "github.com/ernestrc/go-multierror"
 	"unstable.build/go-tui/config"
@@ -260,139 +257,37 @@ func (s *scheme) ReadLink(path string) (string, error) {
 	return string(entry.Link), nil
 }
 
-type listFilesIterator struct {
-	mu  sync.Mutex
-	err error
-	ctx context.Context
-	ch  chan string
-}
-
-func (l *listFilesIterator) Next() (string, bool) {
-	select {
-	case <-l.ctx.Done():
-		l.mu.Lock()
-		defer l.mu.Unlock()
-		l.err = multierr.Append(l.err, l.ctx.Err())
-		return "", false
-	case path, ok := <-l.ch:
-		return path, ok
-	}
-}
-
-func (l *listFilesIterator) Err() error {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-
-	if l.err == nil {
-		return l.ctx.Err()
-	}
-	if l.ctx.Err() == nil {
-		return l.err
-	}
-	return multierr.Append(l.err, l.ctx.Err())
-}
-
-func traverseDirectory(
-	ctx context.Context, cwd workspace.URI, client upspin.Client, path upspin.PathName,
-	wg *sync.WaitGroup, ch chan string, workerCh chan upspin.PathName,
-) error {
-	defer wg.Done()
-
-	entries, err := client.Glob(string(path))
+func (s *scheme) ReadDir(name string) ([]os.DirEntry, error) {
+	info, err := s.Stat(name)
 	if err != nil {
-		return fmt.Errorf("upspin.Client.Glob(%s): %s", string(path), err)
+		return nil, err
+	}
+	if !info.IsDir() {
+		return nil, stdErrors.New("not a directory")
 	}
 
-	var ret error
-	for _, entry := range entries {
-		if !entry.IsDir() {
-			u, err := url.Parse("upspin://" + string(entry.Name))
-			if err != nil {
-				ret = multierr.Append(ret, err)
-				continue
-			}
-			filename, _ := filepath.Rel(cwd.Path(),
-				filepath.Join(cwd.Path(), filepath.Base(u.Path)))
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case ch <- filename:
-				continue
-			}
-		}
-
-		uname := upspin.PathName(fmt.Sprintf("%s/*", entry.Name))
-		wg.Add(1)
-		select {
-		case <-ctx.Done():
-			wg.Done()
-			return ctx.Err()
-		case workerCh <- uname:
-		default:
-			// the rest of workers are busy, keep going
-			err := traverseDirectory(ctx, cwd, client, uname, wg, ch, workerCh)
-			if err != nil {
-				ret = multierr.Append(ret, err)
-			}
-		}
-	}
-	return ret
-}
-
-func traverseDirWorker(
-	ctx context.Context, cwd workspace.URI,
-	client upspin.Client, wg *sync.WaitGroup,
-	ch chan string, workerCh chan upspin.PathName,
-	mu *sync.Mutex, err *error,
-) {
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case path := <-workerCh:
-			dirErr := traverseDirectory(ctx, cwd, client, path, wg, ch, workerCh)
-			if dirErr != nil {
-				mu.Lock()
-				*err = multierr.Append(*err, dirErr)
-				mu.Unlock()
-			}
-		}
-	}
-}
-
-func (s *scheme) ListFiles(ctx context.Context) (iterator.Iterator[string], error) {
-	uname, err := s.makeUpspinPathname("*")
+	uname, err := s.makeUpspinPathname(name)
 	if err != nil {
 		return nil, err
 	}
 
-	var wg sync.WaitGroup
-	ch := make(chan string)
-	workerCh := make(chan upspin.PathName)
-	errors := make([]error, defaultWorkers)
-	iterator := &listFilesIterator{ctx: ctx, ch: ch}
-
-	for i := 0; i < defaultWorkers; i++ {
-		go traverseDirWorker(ctx, s.uri, s.client, &wg, ch, workerCh,
-			&iterator.mu, &errors[i])
+	pattern := fmt.Sprintf("%s/*", string(uname))
+	entries, err := s.client.Glob(pattern)
+	if err != nil {
+		return nil, mapUpspinError(err).ToError()
 	}
 
-	wg.Add(1)
-	workerCh <- uname
-
-	go func() {
-		wg.Wait()
-		iterator.mu.Lock()
-		defer iterator.mu.Unlock()
-		for _, err := range errors {
-			if err != nil {
-				iterator.err = multierr.Append(iterator.err, err)
-			}
+	ret := make([]os.DirEntry, 0, len(entries))
+	for _, entry := range entries {
+		u, err := url.Parse("upspin://" + string(entry.Name))
+		if err != nil {
+			return nil, err
 		}
-		close(ch)
-	}()
-
-	return iterator, nil
+		name, _ := filepath.Rel(s.uri.Path(),
+			filepath.Join(s.uri.Path(), filepath.Base(u.Path)))
+		ret = append(ret, dirEntryAdapter{name: name, s: s, entry: entry})
+	}
+	return ret, nil
 }
 
 func (s *scheme) Command(name string, arg ...string) (workspace.Pid, error) {
@@ -461,4 +356,36 @@ func mapUpspinError(err error) *workspace.Error {
 		IsExist:      errors.Is(errors.Exist, err),
 		IsNotExist:   errors.Is(errors.NotExist, err),
 	}
+}
+
+type dirEntryAdapter struct {
+	name  string
+	entry *upspin.DirEntry
+	s     *scheme
+}
+
+func (d dirEntryAdapter) Info() (os.FileInfo, error) {
+	entry, err := d.s.client.Lookup(d.entry.Name, true)
+	if err != nil {
+		return nil, mapUpspinError(err).ToError()
+	}
+	return entryAdapter{entry}, nil
+}
+
+func (d dirEntryAdapter) IsDir() bool {
+	return d.entry.IsDir()
+}
+
+func (d dirEntryAdapter) Name() string {
+	return d.name
+}
+
+func (d dirEntryAdapter) Type() os.FileMode {
+	if d.entry.IsDir() {
+		return os.ModeDir
+	}
+	if d.entry.Attr&upspin.AttrLink != 0 {
+		return os.ModeSymlink
+	}
+	return 0
 }

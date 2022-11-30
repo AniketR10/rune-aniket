@@ -1,7 +1,6 @@
 package workspace
 
 import (
-	"context"
 	"fmt"
 	"io"
 	"os"
@@ -10,7 +9,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/ernestrc/blue/iterator"
 	"unstable.build/go-tui/config"
 )
 
@@ -171,7 +169,9 @@ func (t *testScheme) ReadLink(path string) (string, error) {
 	return path, nil
 }
 
-func (t *testScheme) ListFiles(context.Context) (iterator.Iterator[string], error) {
+func (t *testScheme) ReadDir(string) (
+	[]os.DirEntry, error,
+) {
 	panic("unimplemented")
 }
 

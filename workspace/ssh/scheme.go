@@ -25,7 +25,7 @@ const (
 	// Scheme represents the URL scheme that this package implements
 	Scheme = "ssh"
 
-	debugPathError = "You can run %q to debug this. Also, double check your workspace.ssh.command " +
+	debugPathError = "You can run %q to troubleshoot this. Also, double check your workspace.ssh.command " +
 		"and workspace.ssh.shell configuration, if you have any."
 )
 

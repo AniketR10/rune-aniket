@@ -1,22 +1,17 @@
 package workspace
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"io"
-	"math"
 	"net/url"
 	"os"
 	"os/exec"
 	"os/user"
-	"path/filepath"
-	"runtime"
 	"sync"
 	"sync/atomic"
 	"syscall"
 
-	"github.com/ernestrc/blue/iterator"
 	"github.com/ernestrc/blue/logging"
 	multierr "github.com/ernestrc/go-multierror"
 	"github.com/ernestrc/sensible/find"
@@ -58,23 +53,13 @@ func NewFileScheme(cfg config.Config, workspace URI) (Scheme, error) {
 	return ret, nil
 }
 
-var defaultWorkers int
-
-func init() {
-	maxProcs := runtime.GOMAXPROCS(0)
-	numCPU := runtime.NumCPU()
-	defaultWorkers = int(math.Min(float64(maxProcs), float64(numCPU)))
-}
-
 type fileScheme struct {
 	osStat     func(path string) (os.FileInfo, error)
 	getUser    func() (*user.User, error)
 	lookupUser func(string) (*user.User, error)
 	workspace  URI
-	workers    int
 	cmds       sync.Map
 	nextPid    int32
-	quitCh     chan struct{}
 }
 
 type execCmd struct {
@@ -97,22 +82,6 @@ func (p *fileScheme) init(cfg config.Config, workspace URI) error {
 		return fmt.Errorf("workspace URI does not refer to a directory: %s", workspace.String())
 	}
 	p.workspace = workspace
-	p.workers, err = cfg.GetInt("workers")
-	p.quitCh = make(chan struct{})
-	if err == config.ErrNotFound {
-		p.workers = defaultWorkers
-		err = nil
-	}
-	if err != nil {
-		return err
-	}
-	if p.workers == 0 {
-		return errors.New("invalid configuration: cannot set 'workers' to 0")
-	}
-	log.
-		WithField(logging.KeyClass, "fileScheme").
-		Debugf("init: initialized with %d ListFiles workers", p.workers)
-
 	return nil
 }
 
@@ -173,6 +142,17 @@ func (p *fileScheme) Stat(path string) (os.FileInfo, error) {
 		return nil, err
 	}
 	return os.Stat(path)
+}
+
+func (p *fileScheme) ReadDir(name string) ([]os.DirEntry, error) {
+	var err error
+	name, err = ExpandPath(name, p.getUserOrLookup, func() (string, error) {
+		return p.workspace.Path(), nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return os.ReadDir(name)
 }
 
 func (p *fileScheme) Lstat(path string) (os.FileInfo, error) {
@@ -414,136 +394,6 @@ func (p *fileScheme) SetPtySize(pp Pty, width, height int) error {
 	return nil
 }
 
-func traverseDirWorker(
-	ctx context.Context, wg *sync.WaitGroup,
-	ch, workerCh chan string, cwd string, mu *sync.Mutex, err *error,
-	quitCh chan struct{},
-) {
-	for {
-		select {
-		case <-quitCh:
-			return
-		case <-ctx.Done():
-			return
-		case path := <-workerCh:
-			dirErr := dirTraversal(ctx, cwd, path, wg, ch, workerCh, quitCh)
-			if dirErr != nil {
-				mu.Lock()
-				*err = multierr.Append(*err, dirErr)
-				mu.Unlock()
-			}
-		}
-	}
-}
-
-func dirTraversal(
-	ctx context.Context, cwd, dirname string,
-	wg *sync.WaitGroup, ch, workerCh chan string,
-	quitCh chan struct{},
-) error {
-	defer wg.Done()
-	absPath := filepath.Join(cwd, dirname)
-
-	dirNames, err := os.ReadDir(absPath)
-	if err != nil {
-		return err
-	}
-
-	var ret error
-	for _, info := range dirNames {
-		path := filepath.Join(dirname, info.Name())
-		if !info.IsDir() {
-			// ensure dirTraversal returns
-			select {
-			case <-quitCh:
-				return nil
-			case <-ctx.Done():
-				return ctx.Err()
-			case ch <- path:
-				continue
-			}
-		}
-
-		wg.Add(1)
-		select {
-		// ensure dirTraversal returns
-		case <-ctx.Done():
-			wg.Done()
-			return ctx.Err()
-		case workerCh <- path:
-		default:
-			// the rest of workers are busy, keep going
-			err := dirTraversal(ctx, cwd, path, wg, ch, workerCh, quitCh)
-			if err != nil {
-				ret = multierr.Append(ret, err)
-			}
-		}
-	}
-	return ret
-}
-
-type listFilesIterator struct {
-	mu  sync.Mutex
-	err error
-	ctx context.Context
-	ch  chan string
-}
-
-func (l *listFilesIterator) Next() (string, bool) {
-	select {
-	case <-l.ctx.Done():
-		l.mu.Lock()
-		defer l.mu.Unlock()
-		l.err = multierr.Append(l.err, l.ctx.Err())
-		return "", false
-	case path, ok := <-l.ch:
-		return path, ok
-	}
-}
-
-func (l *listFilesIterator) Err() error {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-
-	if l.err == nil {
-		return l.ctx.Err()
-	}
-	if l.ctx.Err() == nil {
-		return l.err
-	}
-	return multierr.Append(l.err, l.ctx.Err())
-}
-
-func (p *fileScheme) ListFiles(ctx context.Context) (iterator.Iterator[string], error) {
-	var wg sync.WaitGroup
-	ch := make(chan string)
-	workerCh := make(chan string)
-	errors := make([]error, p.workers)
-	iterator := &listFilesIterator{ctx: ctx, ch: ch}
-
-	for i := 0; i < p.workers; i++ {
-		go traverseDirWorker(ctx, &wg, ch, workerCh,
-			p.workspace.Path(), &iterator.mu, &errors[i], p.quitCh)
-	}
-
-	wg.Add(1)
-	workerCh <- "."
-
-	go func() {
-		wg.Wait()
-		iterator.mu.Lock()
-		defer iterator.mu.Unlock()
-		for _, err := range errors {
-			if err != nil {
-				iterator.err = multierr.Append(iterator.err, err)
-			}
-		}
-		close(ch)
-	}()
-
-	return iterator, nil
-}
-
 func (m *execCmd) Close() error {
 	// NOTE do not lock here or else we risk deadlock
 	// as any client could could call Wait and we would be holding
@@ -582,7 +432,6 @@ func (p *fileScheme) Close() error {
 	for _, key := range keys {
 		p.cmds.Delete(key)
 	}
-	close(p.quitCh)
 	return ret
 }
 

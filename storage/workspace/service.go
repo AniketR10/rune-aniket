@@ -134,10 +134,13 @@ func (s *service) List(ctx context.Context, filters []document.Filter) (document
 			panic("invalid filter")
 		}
 	}
-	it, err := s.scheme.ListFiles(ctx)
+	entries, err := s.scheme.ReadDir(".")
 	if err != nil {
 		return nil, fmt.Errorf("Scheme.ListFiles: %v", err)
 	}
+	it := iterator.Map(iterator.FromSlice(entries), func(entry os.DirEntry) string {
+		return entry.Name()
+	})
 	return &docIter{filters: filters, svc: s, it: it}, nil
 }
 

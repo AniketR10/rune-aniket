@@ -34,7 +34,7 @@ func (s stringerStr) String() string {
 func workspaceListFiles(cwd workspace.API, ctx context.Context) (
 	iterator.Iterator[string], error,
 ) {
-	return cwd.ListFiles(ctx)
+	return workspace.ListFiles(ctx, cwd, ".")
 }
 
 func getResource(workspace workspace.API, file string) (

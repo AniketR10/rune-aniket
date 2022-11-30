@@ -31,7 +31,7 @@ var defaultHistoryKey = term.KeyComb{Key: term.KeyCtrlBackslash}
 func readFiles(cwd workspace.API, ctx context.Context) (
 	iterator.Iterator[string], error,
 ) {
-	it, err := cwd.ListFiles(ctx)
+	it, err := workspace.ListFiles(ctx, cwd, ".")
 	if err != nil {
 		return nil, err
 	}

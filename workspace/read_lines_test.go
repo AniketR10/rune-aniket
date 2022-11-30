@@ -60,7 +60,7 @@ func TestReadLines(t *testing.T) {
 				require.NoError(t, f.Sync())
 				require.NoError(t, f.Close())
 			}
-			itIn, err := scheme.ListFiles(context.Background())
+			itIn, err := ListFiles(context.Background(), scheme, "")
 			require.NoError(t, err)
 
 			// sut

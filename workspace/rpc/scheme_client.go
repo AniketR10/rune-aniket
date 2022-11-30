@@ -3,11 +3,9 @@ package rpc
 import (
 	"context"
 	"fmt"
-	"io"
 	"os"
 	"time"
 
-	"github.com/ernestrc/blue/iterator"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"unstable.build/go-tui/workspace"
@@ -39,6 +37,7 @@ type openRemoveClientImpl struct {
 		Truncate(ctx context.Context, in *TruncateRequest, opts ...grpc.CallOption) (*TruncateResponse, error)
 		Seek(ctx context.Context, in *SeekRequest, opts ...grpc.CallOption) (*SeekResponse, error)
 		Stat(ctx context.Context, in *StatRequest, opts ...grpc.CallOption) (*StatResponse, error)
+		ReadDir(ctx context.Context, in *ReadDirRequest, opts ...grpc.CallOption) (*ReadDirResponse, error)
 	}
 }
 
@@ -161,6 +160,70 @@ func (c *openRemoveClientImpl) Open(name string, flag int, perm os.FileMode) (
 	return c.newFileClient(-1, resp.GetFilename(), resp.GetHandlerId()), nil
 }
 
+func (c *openRemoveClientImpl) Stat(name string) (os.FileInfo, error) {
+	ctx, cleanup := ctxWithTimeout()
+	defer cleanup()
+
+	req := StatRequest{Filename: name}
+	resp, err := c.client.Stat(ctx, &req)
+	if err != nil {
+		return nil, err
+	}
+	if werr, ok := isTypedError(resp); ok {
+		return nil, werr.ToError()
+	}
+	return fileClientInfo{StatResponse: *resp}, nil
+}
+
+func (c *openRemoveClientImpl) ReadDir(name string) ([]os.DirEntry, error) {
+	ctx, cleanup := ctxWithTimeout()
+	defer cleanup()
+
+	req := ReadDirRequest{Root: name}
+	resp, err := c.client.ReadDir(ctx, &req)
+	if err != nil {
+		return nil, err
+	}
+	if werr, ok := isTypedError(resp); ok {
+		return nil, werr.ToError()
+	}
+	respp := resp.GetPath()
+	ret := make([]os.DirEntry, 0, len(respp))
+	for _, entry := range respp {
+		ret = append(ret, dirEntry{
+			c:        c,
+			name:     entry.Name,
+			isDir:    entry.IsDir,
+			modeType: entry.Mode,
+		})
+	}
+
+	return ret, nil
+}
+
+type dirEntry struct {
+	c        *openRemoveClientImpl
+	name     string
+	isDir    bool
+	modeType int32
+}
+
+func (e dirEntry) Name() string {
+	return e.name
+}
+
+func (e dirEntry) IsDir() bool {
+	return e.isDir
+}
+
+func (e dirEntry) Type() os.FileMode {
+	return os.FileMode(e.modeType)
+}
+
+func (e dirEntry) Info() (os.FileInfo, error) {
+	return e.c.Stat(e.Name())
+}
+
 func (c *openRemoveClientImpl) Remove(name string) error {
 	ctx, cleanup := ctxWithTimeout()
 	defer cleanup()
@@ -191,21 +254,6 @@ func (c *schemeClientImpl) Rename(oldpath, newpath string) error {
 	return nil
 }
 
-func (c *schemeClientImpl) Stat(name string) (os.FileInfo, error) {
-	ctx, cleanup := ctxWithTimeout()
-	defer cleanup()
-
-	req := StatRequest{Filename: name}
-	resp, err := c.client.Stat(ctx, &req)
-	if err != nil {
-		return nil, err
-	}
-	if werr, ok := isTypedError(resp); ok {
-		return nil, werr.ToError()
-	}
-	return fileClientInfo{StatResponse: *resp}, nil
-}
-
 func (c *schemeClientImpl) Lstat(name string) (os.FileInfo, error) {
 	ctx, cleanup := ctxWithTimeout()
 	defer cleanup()
@@ -231,35 +279,6 @@ func (c *schemeClientImpl) ReadLink(filename string) (string, error) {
 		return "", err
 	}
 	return resp.GetFilename(), nil
-}
-
-type listFilesIterator struct {
-	stream Scheme_ListFilesClient
-	err    error
-}
-
-func (i *listFilesIterator) Next() (string, bool) {
-	resp, err := i.stream.Recv()
-	if err == nil {
-		return resp.GetPath(), true
-	}
-	if err != io.EOF {
-		i.err = err
-	}
-	return "", false
-}
-
-func (i *listFilesIterator) Err() error {
-	return i.err
-}
-
-func (c *schemeClientImpl) ListFiles(ctx context.Context) (iterator.Iterator[string], error) {
-	req := ListFilesRequest{}
-	stream, err := c.client.ListFiles(ctx, &req)
-	if err != nil {
-		return nil, err
-	}
-	return &listFilesIterator{stream: stream}, nil
 }
 
 func (c *fileClient) Name() string {

@@ -14,16 +14,20 @@ func TestScheme(t *testing.T) {
 	t.Run("plain packing", func(t *testing.T) {
 		t.Run("root of path", func(t *testing.T) {
 			test.TestWorkspaceSchemeFiles(t, func(t *testing.T) workspace.Scheme {
-				user := "user1@domain.com"
-				uri, err := workspace.ParseURI("upspin://" + user)
-				require.NoError(t, err)
 				setup := &testenv.Setup{
-					OwnerName: upspin.UserName(user),
+					OwnerName: upspin.UserName("user1@domain.com"),
 					Kind:      "inprocess",
 					Packing:   upspin.PlainPack,
 				}
 				env, err := testenv.New(setup)
 				require.NoError(t, err)
+
+				_, err = env.Client.MakeDirectory("user1@domain.com/workspace")
+				require.NoError(t, err)
+
+				uri, err := workspace.ParseURI("upspin://user1@domain.com/workspace")
+				require.NoError(t, err)
+
 				s := new(scheme)
 				s.uri = uri
 				s.client = newUpspinClient(env.Client)

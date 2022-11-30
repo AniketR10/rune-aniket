@@ -8,7 +8,6 @@ import (
 	"github.com/ernestrc/golang-internal-tools/lsp/protocol"
 	"github.com/ernestrc/golang-internal-tools/span"
 	"github.com/golang/mock/gomock"
-	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/config"
@@ -208,8 +207,6 @@ func TestLspHandlerHandleOpen(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
-		log.SetLevel(log.TraceLevel)
-
 		ed := text.NewMockEditor(ctrl)
 		cfg := makePluginConfig()
 		server := NewMockServer(ctrl)
@@ -221,8 +218,6 @@ func TestLspHandlerHandleOpen(t *testing.T) {
 	t.Run("file with missing configuration does not panic", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
-
-		log.SetLevel(log.TraceLevel)
 
 		ed := text.NewMockEditor(ctrl)
 		cfg := makePluginConfig()

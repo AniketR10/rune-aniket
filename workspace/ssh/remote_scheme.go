@@ -9,7 +9,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/ernestrc/blue/iterator"
 	"github.com/ernestrc/blue/logging"
 	"github.com/ernestrc/blue/retry"
 	log "github.com/sirupsen/logrus"
@@ -243,12 +242,12 @@ func (s *remoteScheme) NewPty() (workspace.Pty, error) {
 	return scheme.NewPty()
 }
 
-func (s *remoteScheme) ListFiles(ctx context.Context) (iterator.Iterator[string], error) {
+func (s *remoteScheme) ReadDir(name string) ([]os.DirEntry, error) {
 	err, scheme := s.state()
 	if err != nil {
 		return nil, err
 	}
-	return scheme.ListFiles(ctx)
+	return scheme.ReadDir(name)
 }
 
 func (s *remoteScheme) SetPtySize(pty workspace.Pty, width, height int) error {

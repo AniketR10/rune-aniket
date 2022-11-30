@@ -1,12 +1,10 @@
 package workspace
 
 import (
-	"context"
 	"io"
 	"os"
 	"syscall"
 
-	"github.com/ernestrc/blue/iterator"
 	"github.com/ernestrc/blue/logging"
 	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui/config"
@@ -155,10 +153,12 @@ func (t loggingScheme) SetPtySize(p Pty, width, height int) (err error) {
 	return
 }
 
-func (t loggingScheme) ListFiles(ctx context.Context) (it iterator.Iterator[string], err error) {
-	t.trace("ListFiles(%v)", ctx)
-	it, err = t.other.ListFiles(ctx)
-	t.trace("ListFiles(%v): %v, %v", ctx, it, err)
+func (t loggingScheme) ReadDir(name string) (
+	ret []os.DirEntry, err error,
+) {
+	t.trace("ReadDir(%s)", name)
+	ret, err = t.other.ReadDir(name)
+	t.trace("ReadDir(%s): %v, %v", name, ret, err)
 	return
 }
 

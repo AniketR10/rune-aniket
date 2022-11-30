@@ -23,10 +23,9 @@ const _ = grpc.SupportPackageIsVersion7
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type WorkspaceClient interface {
 	URI(ctx context.Context, in *URIRequest, opts ...grpc.CallOption) (*URIResponse, error)
-	Getwd(ctx context.Context, in *GetwdRequest, opts ...grpc.CallOption) (*URIResponse, error)
 	Open(ctx context.Context, in *OpenRequest, opts ...grpc.CallOption) (*OpenResponse, error)
 	Remove(ctx context.Context, in *RemoveRequest, opts ...grpc.CallOption) (*RemoveResponse, error)
-	ListFiles(ctx context.Context, in *ListFilesRequest, opts ...grpc.CallOption) (Workspace_ListFilesClient, error)
+	ReadDir(ctx context.Context, in *ReadDirRequest, opts ...grpc.CallOption) (*ReadDirResponse, error)
 	// Executor Service
 	Command(ctx context.Context, in *CommandRequest, opts ...grpc.CallOption) (*CommandResponse, error)
 	Start(ctx context.Context, in *StartRequest, opts ...grpc.CallOption) (*StartResponse, error)
@@ -64,15 +63,6 @@ func (c *workspaceClient) URI(ctx context.Context, in *URIRequest, opts ...grpc.
 	return out, nil
 }
 
-func (c *workspaceClient) Getwd(ctx context.Context, in *GetwdRequest, opts ...grpc.CallOption) (*URIResponse, error) {
-	out := new(URIResponse)
-	err := c.cc.Invoke(ctx, "/workspace.Workspace/Getwd", in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
 func (c *workspaceClient) Open(ctx context.Context, in *OpenRequest, opts ...grpc.CallOption) (*OpenResponse, error) {
 	out := new(OpenResponse)
 	err := c.cc.Invoke(ctx, "/workspace.Workspace/Open", in, out, opts...)
@@ -91,36 +81,13 @@ func (c *workspaceClient) Remove(ctx context.Context, in *RemoveRequest, opts ..
 	return out, nil
 }
 
-func (c *workspaceClient) ListFiles(ctx context.Context, in *ListFilesRequest, opts ...grpc.CallOption) (Workspace_ListFilesClient, error) {
-	stream, err := c.cc.NewStream(ctx, &Workspace_ServiceDesc.Streams[0], "/workspace.Workspace/ListFiles", opts...)
+func (c *workspaceClient) ReadDir(ctx context.Context, in *ReadDirRequest, opts ...grpc.CallOption) (*ReadDirResponse, error) {
+	out := new(ReadDirResponse)
+	err := c.cc.Invoke(ctx, "/workspace.Workspace/ReadDir", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
-	x := &workspaceListFilesClient{stream}
-	if err := x.ClientStream.SendMsg(in); err != nil {
-		return nil, err
-	}
-	if err := x.ClientStream.CloseSend(); err != nil {
-		return nil, err
-	}
-	return x, nil
-}
-
-type Workspace_ListFilesClient interface {
-	Recv() (*ListFilesResponse, error)
-	grpc.ClientStream
-}
-
-type workspaceListFilesClient struct {
-	grpc.ClientStream
-}
-
-func (x *workspaceListFilesClient) Recv() (*ListFilesResponse, error) {
-	m := new(ListFilesResponse)
-	if err := x.ClientStream.RecvMsg(m); err != nil {
-		return nil, err
-	}
-	return m, nil
+	return out, nil
 }
 
 func (c *workspaceClient) Command(ctx context.Context, in *CommandRequest, opts ...grpc.CallOption) (*CommandResponse, error) {
@@ -272,10 +239,9 @@ func (c *workspaceClient) Stat(ctx context.Context, in *StatRequest, opts ...grp
 // for forward compatibility
 type WorkspaceServer interface {
 	URI(context.Context, *URIRequest) (*URIResponse, error)
-	Getwd(context.Context, *GetwdRequest) (*URIResponse, error)
 	Open(context.Context, *OpenRequest) (*OpenResponse, error)
 	Remove(context.Context, *RemoveRequest) (*RemoveResponse, error)
-	ListFiles(*ListFilesRequest, Workspace_ListFilesServer) error
+	ReadDir(context.Context, *ReadDirRequest) (*ReadDirResponse, error)
 	// Executor Service
 	Command(context.Context, *CommandRequest) (*CommandResponse, error)
 	Start(context.Context, *StartRequest) (*StartResponse, error)
@@ -304,17 +270,14 @@ type UnimplementedWorkspaceServer struct {
 func (UnimplementedWorkspaceServer) URI(context.Context, *URIRequest) (*URIResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method URI not implemented")
 }
-func (UnimplementedWorkspaceServer) Getwd(context.Context, *GetwdRequest) (*URIResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method Getwd not implemented")
-}
 func (UnimplementedWorkspaceServer) Open(context.Context, *OpenRequest) (*OpenResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Open not implemented")
 }
 func (UnimplementedWorkspaceServer) Remove(context.Context, *RemoveRequest) (*RemoveResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Remove not implemented")
 }
-func (UnimplementedWorkspaceServer) ListFiles(*ListFilesRequest, Workspace_ListFilesServer) error {
-	return status.Errorf(codes.Unimplemented, "method ListFiles not implemented")
+func (UnimplementedWorkspaceServer) ReadDir(context.Context, *ReadDirRequest) (*ReadDirResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ReadDir not implemented")
 }
 func (UnimplementedWorkspaceServer) Command(context.Context, *CommandRequest) (*CommandResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Command not implemented")
@@ -395,24 +358,6 @@ func _Workspace_URI_Handler(srv interface{}, ctx context.Context, dec func(inter
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Workspace_Getwd_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(GetwdRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(WorkspaceServer).Getwd(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/workspace.Workspace/Getwd",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(WorkspaceServer).Getwd(ctx, req.(*GetwdRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
 func _Workspace_Open_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(OpenRequest)
 	if err := dec(in); err != nil {
@@ -449,25 +394,22 @@ func _Workspace_Remove_Handler(srv interface{}, ctx context.Context, dec func(in
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Workspace_ListFiles_Handler(srv interface{}, stream grpc.ServerStream) error {
-	m := new(ListFilesRequest)
-	if err := stream.RecvMsg(m); err != nil {
-		return err
+func _Workspace_ReadDir_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ReadDirRequest)
+	if err := dec(in); err != nil {
+		return nil, err
 	}
-	return srv.(WorkspaceServer).ListFiles(m, &workspaceListFilesServer{stream})
-}
-
-type Workspace_ListFilesServer interface {
-	Send(*ListFilesResponse) error
-	grpc.ServerStream
-}
-
-type workspaceListFilesServer struct {
-	grpc.ServerStream
-}
-
-func (x *workspaceListFilesServer) Send(m *ListFilesResponse) error {
-	return x.ServerStream.SendMsg(m)
+	if interceptor == nil {
+		return srv.(WorkspaceServer).ReadDir(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/workspace.Workspace/ReadDir",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WorkspaceServer).ReadDir(ctx, req.(*ReadDirRequest))
+	}
+	return interceptor(ctx, in, info, handler)
 }
 
 func _Workspace_Command_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
@@ -770,16 +712,16 @@ var Workspace_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _Workspace_URI_Handler,
 		},
 		{
-			MethodName: "Getwd",
-			Handler:    _Workspace_Getwd_Handler,
-		},
-		{
 			MethodName: "Open",
 			Handler:    _Workspace_Open_Handler,
 		},
 		{
 			MethodName: "Remove",
 			Handler:    _Workspace_Remove_Handler,
+		},
+		{
+			MethodName: "ReadDir",
+			Handler:    _Workspace_ReadDir_Handler,
 		},
 		{
 			MethodName: "Command",
@@ -846,13 +788,7 @@ var Workspace_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _Workspace_Stat_Handler,
 		},
 	},
-	Streams: []grpc.StreamDesc{
-		{
-			StreamName:    "ListFiles",
-			Handler:       _Workspace_ListFiles_Handler,
-			ServerStreams: true,
-		},
-	},
+	Streams:  []grpc.StreamDesc{},
 	Metadata: "rpc/workspace.proto",
 }
 
@@ -867,7 +803,7 @@ type SchemeClient interface {
 	Rename(ctx context.Context, in *RenameRequest, opts ...grpc.CallOption) (*RenameResponse, error)
 	Stat(ctx context.Context, in *StatRequest, opts ...grpc.CallOption) (*StatResponse, error)
 	ReadLink(ctx context.Context, in *ReadLinkRequest, opts ...grpc.CallOption) (*ReadLinkResponse, error)
-	ListFiles(ctx context.Context, in *ListFilesRequest, opts ...grpc.CallOption) (Scheme_ListFilesClient, error)
+	ReadDir(ctx context.Context, in *ReadDirRequest, opts ...grpc.CallOption) (*ReadDirResponse, error)
 	// Scheme API, handler_id based
 	Sync(ctx context.Context, in *SyncRequest, opts ...grpc.CallOption) (*SyncResponse, error)
 	Truncate(ctx context.Context, in *TruncateRequest, opts ...grpc.CallOption) (*TruncateResponse, error)
@@ -949,36 +885,13 @@ func (c *schemeClient) ReadLink(ctx context.Context, in *ReadLinkRequest, opts .
 	return out, nil
 }
 
-func (c *schemeClient) ListFiles(ctx context.Context, in *ListFilesRequest, opts ...grpc.CallOption) (Scheme_ListFilesClient, error) {
-	stream, err := c.cc.NewStream(ctx, &Scheme_ServiceDesc.Streams[0], "/workspace.Scheme/ListFiles", opts...)
+func (c *schemeClient) ReadDir(ctx context.Context, in *ReadDirRequest, opts ...grpc.CallOption) (*ReadDirResponse, error) {
+	out := new(ReadDirResponse)
+	err := c.cc.Invoke(ctx, "/workspace.Scheme/ReadDir", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
-	x := &schemeListFilesClient{stream}
-	if err := x.ClientStream.SendMsg(in); err != nil {
-		return nil, err
-	}
-	if err := x.ClientStream.CloseSend(); err != nil {
-		return nil, err
-	}
-	return x, nil
-}
-
-type Scheme_ListFilesClient interface {
-	Recv() (*ListFilesResponse, error)
-	grpc.ClientStream
-}
-
-type schemeListFilesClient struct {
-	grpc.ClientStream
-}
-
-func (x *schemeListFilesClient) Recv() (*ListFilesResponse, error) {
-	m := new(ListFilesResponse)
-	if err := x.ClientStream.RecvMsg(m); err != nil {
-		return nil, err
-	}
-	return m, nil
+	return out, nil
 }
 
 func (c *schemeClient) Sync(ctx context.Context, in *SyncRequest, opts ...grpc.CallOption) (*SyncResponse, error) {
@@ -1127,7 +1040,7 @@ type SchemeServer interface {
 	Rename(context.Context, *RenameRequest) (*RenameResponse, error)
 	Stat(context.Context, *StatRequest) (*StatResponse, error)
 	ReadLink(context.Context, *ReadLinkRequest) (*ReadLinkResponse, error)
-	ListFiles(*ListFilesRequest, Scheme_ListFilesServer) error
+	ReadDir(context.Context, *ReadDirRequest) (*ReadDirResponse, error)
 	// Scheme API, handler_id based
 	Sync(context.Context, *SyncRequest) (*SyncResponse, error)
 	Truncate(context.Context, *TruncateRequest) (*TruncateResponse, error)
@@ -1170,8 +1083,8 @@ func (UnimplementedSchemeServer) Stat(context.Context, *StatRequest) (*StatRespo
 func (UnimplementedSchemeServer) ReadLink(context.Context, *ReadLinkRequest) (*ReadLinkResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ReadLink not implemented")
 }
-func (UnimplementedSchemeServer) ListFiles(*ListFilesRequest, Scheme_ListFilesServer) error {
-	return status.Errorf(codes.Unimplemented, "method ListFiles not implemented")
+func (UnimplementedSchemeServer) ReadDir(context.Context, *ReadDirRequest) (*ReadDirResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ReadDir not implemented")
 }
 func (UnimplementedSchemeServer) Sync(context.Context, *SyncRequest) (*SyncResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Sync not implemented")
@@ -1339,25 +1252,22 @@ func _Scheme_ReadLink_Handler(srv interface{}, ctx context.Context, dec func(int
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Scheme_ListFiles_Handler(srv interface{}, stream grpc.ServerStream) error {
-	m := new(ListFilesRequest)
-	if err := stream.RecvMsg(m); err != nil {
-		return err
+func _Scheme_ReadDir_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ReadDirRequest)
+	if err := dec(in); err != nil {
+		return nil, err
 	}
-	return srv.(SchemeServer).ListFiles(m, &schemeListFilesServer{stream})
-}
-
-type Scheme_ListFilesServer interface {
-	Send(*ListFilesResponse) error
-	grpc.ServerStream
-}
-
-type schemeListFilesServer struct {
-	grpc.ServerStream
-}
-
-func (x *schemeListFilesServer) Send(m *ListFilesResponse) error {
-	return x.ServerStream.SendMsg(m)
+	if interceptor == nil {
+		return srv.(SchemeServer).ReadDir(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/workspace.Scheme/ReadDir",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SchemeServer).ReadDir(ctx, req.(*ReadDirRequest))
+	}
+	return interceptor(ctx, in, info, handler)
 }
 
 func _Scheme_Sync_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
@@ -1662,6 +1572,10 @@ var Scheme_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _Scheme_ReadLink_Handler,
 		},
 		{
+			MethodName: "ReadDir",
+			Handler:    _Scheme_ReadDir_Handler,
+		},
+		{
 			MethodName: "Sync",
 			Handler:    _Scheme_Sync_Handler,
 		},
@@ -1722,13 +1636,7 @@ var Scheme_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _Scheme_SetPtySize_Handler,
 		},
 	},
-	Streams: []grpc.StreamDesc{
-		{
-			StreamName:    "ListFiles",
-			Handler:       _Scheme_ListFiles_Handler,
-			ServerStreams: true,
-		},
-	},
+	Streams:  []grpc.StreamDesc{},
 	Metadata: "rpc/workspace.proto",
 }
 

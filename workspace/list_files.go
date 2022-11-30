@@ -1,0 +1,191 @@
+package workspace
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"math"
+	"os"
+	"path/filepath"
+	"runtime"
+	"sync"
+
+	"github.com/ernestrc/blue/iterator"
+	multierr "github.com/ernestrc/go-multierror"
+)
+
+var defaultWorkers int
+
+func init() {
+	maxProcs := runtime.GOMAXPROCS(0)
+	numCPU := runtime.NumCPU()
+	defaultWorkers = int(math.Min(float64(maxProcs), float64(numCPU))) * 8
+}
+
+// WorkspaceDirectory is a Directory that is also able to convert paths to URIs.
+// API, Workspace and Scheme implementations satisfy this interface.
+type WorkspaceDirectory interface {
+	URI(string) (URI, error)
+	Directory
+}
+
+// ListFiles traverses the workspace directory and returns
+// an iterator that returns all file paths under root. If root is
+// a partial or full file name, it will be ignored and its base
+// directory, will be used. If errors are encountered while reading
+// the contents of directories those errors will be aggregated and
+// reported by the iterator's Err method.
+func ListFiles(
+	ctx context.Context, w WorkspaceDirectory, root string,
+) (iterator.Iterator[string], error) {
+	var wg sync.WaitGroup
+	ch := make(chan string)
+	workerCh := make(chan string)
+	allErrors := make([]error, defaultWorkers)
+	iterator := &listFilesIterator{ctx: ctx, ch: ch}
+
+	workspaceURI, err := w.URI(".")
+	if err != nil {
+		return nil, fmt.Errorf("URI: %v", err)
+	}
+	rootURI, err := w.URI(root)
+	if err != nil {
+		return nil, fmt.Errorf("URI: %v", err)
+	}
+
+	// get root as relative path to workspace
+	root = RelPath(workspaceURI, rootURI)
+
+	for i := 0; i < defaultWorkers; i++ {
+		go traverseDirWorker(ctx, w, &wg, ch, workerCh,
+			workspaceURI.Path(), &iterator.mu, &allErrors[i])
+	}
+
+	for {
+		finfo, err := w.Stat(root)
+		if err == nil && finfo.IsDir() {
+			break
+		}
+		if err != nil && !errors.Is(err, os.ErrNotExist) {
+			return nil, err
+		}
+		root = filepath.Dir(root)
+	}
+
+	wg.Add(1)
+	workerCh <- root
+
+	go func() {
+		wg.Wait()
+		iterator.mu.Lock()
+		defer iterator.mu.Unlock()
+		for _, err := range allErrors {
+			if err != nil {
+				iterator.err = multierr.Append(iterator.err, err)
+			}
+		}
+		close(ch)
+	}()
+
+	return iterator, nil
+}
+
+func traverseDirWorker(
+	ctx context.Context, w WorkspaceDirectory, wg *sync.WaitGroup,
+	ch, workerCh chan string, cwd string, mu *sync.Mutex, err *error,
+) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case path := <-workerCh:
+			dirErr := dirTraversal(ctx, w, cwd, path, wg, ch, workerCh)
+			if dirErr != nil {
+				mu.Lock()
+				*err = multierr.Append(*err, dirErr)
+				mu.Unlock()
+			}
+		}
+	}
+}
+
+func dirTraversal(
+	ctx context.Context, w WorkspaceDirectory, cwd, dirname string,
+	wg *sync.WaitGroup, ch, workerCh chan string,
+) error {
+	defer wg.Done()
+	absPath := dirname
+	if !filepath.IsAbs(dirname) {
+		absPath = filepath.Join(cwd, dirname)
+	}
+
+	dirNames, err := w.ReadDir(absPath)
+	if err != nil {
+		return err
+	}
+
+	var ret error
+	for _, info := range dirNames {
+		path := filepath.Join(dirname, info.Name())
+		if !info.IsDir() {
+			// ensure dirTraversal returns
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case ch <- path:
+				continue
+			}
+		}
+
+		wg.Add(1)
+		select {
+		// ensure dirTraversal returns
+		case <-ctx.Done():
+			wg.Done()
+			return ctx.Err()
+		case workerCh <- path:
+		default:
+			// the rest of workers are busy, keep going
+			err := dirTraversal(ctx, w, cwd, path, wg, ch, workerCh)
+			if err != nil {
+				ret = multierr.Append(ret, err)
+			}
+		}
+	}
+	return ret
+}
+
+type listFilesIterator struct {
+	mu  sync.Mutex
+	err error
+	ctx context.Context
+	ch  chan string
+}
+
+func (l *listFilesIterator) Next() (string, bool) {
+	select {
+	case <-l.ctx.Done():
+		l.mu.Lock()
+		defer l.mu.Unlock()
+		l.err = multierr.Append(l.err, l.ctx.Err())
+		return "", false
+	case path, ok := <-l.ch:
+		return path, ok
+	}
+}
+
+func (l *listFilesIterator) Err() error {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	if l.err == nil {
+		return l.ctx.Err()
+	}
+	// avoid data races onto l.err which is an instance of
+	// *multierr.Error by creating a new multierr.Error
+	err := multierr.Append(nil, l.err)
+	if l.ctx.Err() == nil {
+		return err
+	}
+	return multierr.Append(err, l.ctx.Err())
+}

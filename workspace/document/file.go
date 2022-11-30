@@ -17,10 +17,11 @@ import (
 )
 
 type fileInfo struct {
-	Filename string
-	DataSize int64
-	FileMode fs.FileMode
-	Modified time.Time
+	filename string
+	dataSize int64
+	fileMode fs.FileMode
+	modified time.Time
+	isDir    bool
 }
 
 type file[T storage.Document[T]] struct {
@@ -136,32 +137,32 @@ func (f *file[T]) Name() string {
 func (f *file[T]) Stat() (os.FileInfo, error) {
 	mstat, _ := f.memFile.Stat()
 	return fileInfo{
-		DataSize: int64(f.lastSize),
+		dataSize: int64(f.lastSize),
 		// there shouldn't be any directories so it's safe to just return orig name
-		Filename: f.val.ID(),
-		FileMode: mstat.Mode(),
-		Modified: f.val.UpdatedTime(),
+		filename: f.val.ID(),
+		fileMode: mstat.Mode(),
+		modified: f.val.UpdatedTime(),
 	}, nil
 }
 
 func (f fileInfo) Name() string {
-	return f.Filename
+	return f.filename
 }
 
 func (f fileInfo) Size() int64 {
-	return f.DataSize
+	return f.dataSize
 }
 
 func (f fileInfo) Mode() fs.FileMode {
-	return f.FileMode
+	return f.fileMode
 }
 
 func (f fileInfo) ModTime() time.Time {
-	return f.Modified
+	return f.modified
 }
 
 func (f fileInfo) IsDir() bool {
-	return false
+	return f.isDir
 }
 
 func (f fileInfo) Sys() any {

@@ -7,7 +7,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ernestrc/blue/iterator"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"unstable.build/go-tui/workspace"
 )
@@ -26,11 +25,12 @@ type SchemeServerImpl struct {
 type sharedRPCImpl struct {
 	executorServer
 	scheme interface {
-		ListFiles(context.Context) (iterator.Iterator[string], error)
+		ReadDir(string) ([]os.DirEntry, error)
 		Open(path string, flag int, mode os.FileMode) (workspace.File, *workspace.Error)
 		Remove(path string) error
 		NewPty() (workspace.Pty, error)
 		SetPtySize(p workspace.Pty, width, height int) error
+		Stat(path string) (os.FileInfo, error)
 	}
 }
 
@@ -56,11 +56,43 @@ func (s *SchemeServerImpl) Open(ctx context.Context, req *OpenRequest) (
 	return s.sharedRPCImpl.Open(ctx, req)
 }
 
-// ListFiles satisfies SchemeServer.
-func (s *SchemeServerImpl) ListFiles(
-	req *ListFilesRequest, srv Scheme_ListFilesServer,
-) error {
-	return s.sharedRPCImpl.ListFiles(req, srv)
+// ReadDir satisfies SchemeServer.
+func (s *SchemeServerImpl) ReadDir(ctx context.Context, req *ReadDirRequest) (
+	*ReadDirResponse, error,
+) {
+	return s.sharedRPCImpl.ReadDir(ctx, req)
+}
+
+func (s *sharedRPCImpl) ReadDir(ctx context.Context, req *ReadDirRequest) (
+	*ReadDirResponse, error,
+) {
+	root := req.GetRoot()
+	entries, err := s.scheme.ReadDir(root)
+	if err != nil {
+		isExist := errors.Is(err, os.ErrExist)
+		isNotExist := errors.Is(err, os.ErrNotExist)
+		isPermission := errors.Is(err, os.ErrPermission)
+		is := isExist || isNotExist || isPermission
+		if is {
+			resp := new(ReadDirResponse)
+			resp.IsExistErr = isExist
+			resp.IsNotExistErr = isNotExist
+			resp.IsPermissionErr = isPermission
+			return resp, nil
+		}
+		return nil, err
+	}
+	resp := new(ReadDirResponse)
+	rpcEntries := make([]*DirEntry, len(entries))
+	for i, entry := range entries {
+		rpcEntries[i] = &DirEntry{
+			Name:  entry.Name(),
+			Mode:  int32(entry.Type()),
+			IsDir: entry.IsDir(),
+		}
+	}
+	resp.Path = rpcEntries
+	return resp, nil
 }
 
 func getOpenRequestFlag(req *OpenRequest) int {
@@ -226,10 +258,22 @@ func (s *SchemeServerImpl) Rename(ctx context.Context, req *RenameRequest) (
 func (s *SchemeServerImpl) Stat(ctx context.Context, req *StatRequest) (
 	*StatResponse, error,
 ) {
+	return s.sharedRPCImpl.Stat(ctx, req)
+}
+
+func (s *sharedRPCImpl) Stat(ctx context.Context, req *StatRequest) (
+	*StatResponse, error,
+) {
 	var err error
 	var fs os.FileInfo
 	if req.GetLstat() {
-		fs, err = s.scheme.Lstat(req.GetFilename())
+		if lstater, ok := s.scheme.(interface {
+			Lstat(string) (os.FileInfo, error)
+		}); ok {
+			fs, err = lstater.Lstat(req.GetFilename())
+		} else {
+			err = errors.New("Lstat is not implemented")
+		}
 	} else {
 		fs, err = s.scheme.Stat(req.GetFilename())
 	}
@@ -388,26 +432,6 @@ func (s *SchemeServerImpl) Seek(ctx context.Context, req *SeekRequest) (
 	resp := new(SeekResponse)
 	resp.NewOffset = newOffset
 	return resp, nil
-}
-
-// ListFiles satisfies SchemeServer and WorkspaceServer.
-func (s *sharedRPCImpl) ListFiles(
-	req *ListFilesRequest, srv Scheme_ListFilesServer,
-) error {
-	it, err := s.scheme.ListFiles(srv.Context())
-	if err != nil {
-		return err
-	}
-	for {
-		path, ok := it.Next()
-		if !ok {
-			return it.Err()
-		}
-		err = srv.Send(&ListFilesResponse{Path: path})
-		if err != nil {
-			return err
-		}
-	}
 }
 
 func stdTimeToProto(ts time.Time) timestamppb.Timestamp {

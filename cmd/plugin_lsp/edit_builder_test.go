@@ -5,7 +5,6 @@ import (
 
 	"github.com/ernestrc/golang-internal-tools/lsp/protocol"
 	"github.com/ernestrc/golang-internal-tools/span"
-	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/text"
@@ -87,8 +86,6 @@ func makeFile() *file {
 }
 
 func TestApplyEdits(t *testing.T) {
-	log.SetLevel(log.TraceLevel)
-
 	tsuite := []struct {
 		input  string
 		ed     []protocol.TextEdit

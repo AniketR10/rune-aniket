@@ -4,6 +4,7 @@ import (
 	"bytes"
 	context "context"
 	"errors"
+	"fmt"
 	io "io"
 	"io/ioutil"
 	os "os"
@@ -41,8 +42,11 @@ func TestWorkspaceSchemeFiles(
 	t.Run("Link", func(t *testing.T) {
 		TestWorkspaceSchemeReadLink(t, schemeFn, defaultCreateTestFile)
 	})
-	t.Run("ListFiles", func(t *testing.T) {
-		TestWorkspaceSchemeListFiles(t, schemeFn, defaultCreateTestFile)
+	t.Run("ReadDir", func(t *testing.T) {
+		TestWorkspaceSchemeReadDir(t, schemeFn, defaultCreateTestFile)
+	})
+	t.Run("workspace.ListFiles integration", func(t *testing.T) {
+		TestWorkspaceSchemeListFilesIntegration(t, schemeFn, defaultCreateTestFile)
 	})
 	t.Run("workspace.Load integration", func(t *testing.T) {
 		TestWorkspaceLoadIntegration(t, schemeFn, defaultCreateTestFile,
@@ -565,22 +569,68 @@ func TestWorkspaceSchemeReadLink(
 	})
 }
 
-func TestWorkspaceSchemeListFiles(
+func TestWorkspaceSchemeListFilesIntegration(
 	t *testing.T,
 	schemeFn func(t *testing.T) workspace.Scheme,
 	createTestFile func(*testing.T, workspace.Scheme, string, string) (workspace.File, func()),
 ) {
-	t.Run("returns an empty iterator if there are no files in the workspace", func(t *testing.T) {
+	t.Run("os.FileInfo.IsDir on filesystem root should always return true", func(t *testing.T) {
 		scheme := schemeFn(t)
-		it, err := scheme.ListFiles(context.Background())
+		finfo, err := scheme.Stat("/")
+		require.NoError(t, err)
+		assert.True(t, finfo.IsDir())
+	})
+
+	t.Run("os.FileInfo.IsDir on workspace root should always return true", func(t *testing.T) {
+		scheme := schemeFn(t)
+		finfo, err := scheme.Stat(".")
+		require.NoError(t, err)
+		assert.True(t, finfo.IsDir())
+	})
+
+	t.Run("returns an empty iterator if there are no files anywhere", func(t *testing.T) {
+		scheme := schemeFn(t)
+		it, err := workspace.ListFiles(context.Background(), scheme, "")
 		require.NoError(t, err)
 		_, ok := it.Next()
 		require.False(t, ok)
 	})
 
-	t.Run("returns valid iterator", func(t *testing.T) {
+	for _, path := range []string{".", ""} {
+		t.Run(fmt.Sprintf("returns valid iterator with path %s", path), func(t *testing.T) {
+			scheme := schemeFn(t)
+			totalFiles := 1000
+
+			cwd, err := scheme.URI(".")
+			require.NoError(t, err)
+
+			for i := 0; i < totalFiles; i++ {
+				_, cleanup := createTestFile(t, scheme, "file"+strconv.Itoa(i), strconv.Itoa(i))
+				cleanup()
+			}
+
+			it, err := workspace.ListFiles(context.Background(), scheme, path)
+			require.NoError(t, err)
+
+			for i := 0; i < totalFiles; i++ {
+				path, ok := it.Next()
+				require.True(t, ok, i)
+				require.NoError(t, it.Err())
+				assert.NotZero(t, path)
+				assert.False(t, filepath.IsAbs(path))
+				assert.Equal(t, cwd.Path(), filepath.Dir(filepath.Join(cwd.Path(), path)))
+			}
+
+			path, ok := it.Next()
+			require.False(t, ok)
+			assert.NoError(t, it.Err())
+			assert.Zero(t, path)
+		})
+	}
+
+	t.Run("root does not exist returns no error and scans parent folder", func(t *testing.T) {
 		scheme := schemeFn(t)
-		totalFiles := 1000
+		totalFiles := 10
 
 		cwd, err := scheme.URI(".")
 		require.NoError(t, err)
@@ -590,12 +640,12 @@ func TestWorkspaceSchemeListFiles(
 			cleanup()
 		}
 
-		it, err := scheme.ListFiles(context.Background())
+		it, err := workspace.ListFiles(context.Background(), scheme, "./subfolder")
 		require.NoError(t, err)
 
-		for i := 0; i < 1000; i++ {
+		for i := 0; i < totalFiles; i++ {
 			path, ok := it.Next()
-			require.True(t, ok)
+			require.True(t, ok, i)
 			require.NoError(t, it.Err())
 			assert.NotZero(t, path)
 			assert.False(t, filepath.IsAbs(path))
@@ -606,5 +656,101 @@ func TestWorkspaceSchemeListFiles(
 		require.False(t, ok)
 		assert.NoError(t, it.Err())
 		assert.Zero(t, path)
+	})
+
+	t.Run("root is used up until base directory; full file name is ignored", func(t *testing.T) {
+		scheme := schemeFn(t)
+		totalFiles := 10
+
+		cwd, err := scheme.URI(".")
+		require.NoError(t, err)
+
+		for i := 0; i < totalFiles; i++ {
+			_, cleanup := createTestFile(t, scheme, "file"+strconv.Itoa(i), strconv.Itoa(i))
+			cleanup()
+		}
+
+		it, err := workspace.ListFiles(context.Background(), scheme, "./file1")
+		require.NoError(t, err)
+
+		for i := 0; i < totalFiles; i++ {
+			path, ok := it.Next()
+			require.True(t, ok, i)
+			require.NoError(t, it.Err())
+			assert.NotZero(t, path)
+			assert.False(t, filepath.IsAbs(path))
+			assert.Equal(t, cwd.Path(), filepath.Dir(filepath.Join(cwd.Path(), path)))
+		}
+
+		path, ok := it.Next()
+		require.False(t, ok)
+		assert.NoError(t, it.Err())
+		assert.Zero(t, path)
+	})
+
+	t.Run("does not return error if root's base dir does not exist", func(t *testing.T) {
+		scheme := schemeFn(t)
+		totalFiles := 10
+
+		cwd, err := scheme.URI(".")
+		require.NoError(t, err)
+
+		for i := 0; i < totalFiles; i++ {
+			_, cleanup := createTestFile(t, scheme, "file"+strconv.Itoa(i), strconv.Itoa(i))
+			cleanup()
+		}
+
+		it, err := workspace.ListFiles(context.Background(), scheme, "fi/fi/fi/fi")
+		require.NoError(t, err)
+
+		for i := 0; i < totalFiles; i++ {
+			path, ok := it.Next()
+			require.True(t, ok, i)
+			require.NoError(t, it.Err())
+			assert.NotZero(t, path)
+			assert.False(t, filepath.IsAbs(path))
+			assert.Equal(t, cwd.Path(), filepath.Dir(filepath.Join(cwd.Path(), path)))
+		}
+
+		path, ok := it.Next()
+		require.False(t, ok)
+		assert.NoError(t, it.Err())
+		assert.Zero(t, path)
+	})
+}
+
+func TestWorkspaceSchemeReadDir(
+	t *testing.T,
+	schemeFn func(t *testing.T) workspace.Scheme,
+	createTestFile func(*testing.T, workspace.Scheme, string, string) (workspace.File, func()),
+) {
+	t.Run("a file should return an error", func(t *testing.T) {
+		scheme := schemeFn(t)
+
+		_, cleanup := createTestFile(t, scheme, "file", "")
+		defer cleanup()
+
+		_, err := scheme.ReadDir("file")
+		require.Error(t, err)
+	})
+
+	t.Run("workspace dir should return all files at the workspace root directory", func(t *testing.T) {
+		scheme := schemeFn(t)
+
+		_, cleanup := createTestFile(t, scheme, "file1", "")
+		defer cleanup()
+
+		_, cleanup = createTestFile(t, scheme, "file2", "")
+		defer cleanup()
+
+		entries, err := scheme.ReadDir(".")
+		require.NoError(t, err)
+		require.Len(t, entries, 2)
+		if entries[0].Name() == "file1" {
+			assert.Equal(t, "file2", entries[1].Name())
+		} else {
+			assert.Equal(t, "file2", entries[0].Name())
+			assert.Equal(t, "file1", entries[1].Name())
+		}
 	})
 }

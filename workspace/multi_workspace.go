@@ -1,13 +1,11 @@
 package workspace
 
 import (
-	"context"
 	"fmt"
 	"io"
 	"os"
 	"syscall"
 
-	"github.com/ernestrc/blue/iterator"
 	"unstable.build/go-tui/cell"
 )
 
@@ -53,12 +51,16 @@ func (m multi) Recover(file, swapFilePath URI, buf *cell.Buffer, force bool) (Fl
 
 /* the rest of methods default to using the default workspace */
 
-func (m multi) ListFiles(ctx context.Context) (iterator.Iterator[string], error) {
-	return m.def.ListFiles(ctx)
+func (m multi) ReadDir(name string) ([]os.DirEntry, error) {
+	return m.def.ReadDir(name)
 }
 
 func (m multi) Open(path string, flag int, mode os.FileMode) (File, *Error) {
 	return m.def.Open(path, flag, mode)
+}
+
+func (m multi) Stat(path string) (os.FileInfo, error) {
+	return m.def.Stat(path)
 }
 
 func (m multi) Remove(path string) error {
@@ -67,10 +69,6 @@ func (m multi) Remove(path string) error {
 
 func (m multi) URI(path string) (URI, error) {
 	return m.def.URI(path)
-}
-
-func (m multi) Getwd() (URI, error) {
-	return m.def.Getwd()
 }
 
 func (m multi) Command(name string, arg ...string) (Pid, error) {
