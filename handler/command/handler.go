@@ -54,6 +54,7 @@ type Handler struct {
 	// as a character to be inserted in command input buffer
 	prevCommandCycle bool
 
+	sync      bool
 	mu        sync.Mutex
 	cancelFn  func()
 	cancelCtx context.Context
@@ -75,6 +76,22 @@ func (h *Handler) Init(
 	dispatcher Dispatcher, interrupter term.Interrupter,
 	commands []string, config Config,
 ) {
+	cfg := search.ListConfig{
+		Algo:             search.FuzzyMatch,
+		Interrupter:      interrupter,
+		CaseSensitive:    false,
+		MatchedTextAttr:  &config.MatchedTextAttr,
+		FocusElementAttr: &config.FocusElementAttr,
+		ElementAttr:      &config.ElementAttr,
+	}
+	h.doInit(storage, completer, dispatcher, commands, config, cfg)
+}
+
+func (h *Handler) doInit(
+	storage document.Service, completer Completer,
+	dispatcher Dispatcher, commands []string, config Config,
+	listCfg search.ListConfig,
+) {
 	h.mode = modeCommandHandlerCommand
 	h.config = config
 	h.dispatcher = dispatcher
@@ -87,16 +104,7 @@ func (h *Handler) Init(
 			BackgroundAttributes: config.ElementAttr,
 		})
 
-	cfg := search.ListConfig{
-		Algo:             search.FuzzyMatch,
-		Interrupter:      interrupter,
-		CaseSensitive:    false,
-		MatchedTextAttr:  &config.MatchedTextAttr,
-		FocusElementAttr: &config.FocusElementAttr,
-		ElementAttr:      &config.ElementAttr,
-	}
-
-	h.list.Init(cfg)
+	h.list.Init(listCfg)
 
 	for {
 		h.history.Init(storage, config.DocumentID, config.MaxHistory)
@@ -107,12 +115,15 @@ func (h *Handler) Init(
 		h.log(log.ErrorLevel, "load history: %v", err)
 		storage = document.NewInMemoryService()
 	}
-	h.Reset(commands)
 
 	// add a canceled cancelCtx so Wait never needs to check if cancelFn is nil
 	ctx, cancel := context.WithCancel(context.Background())
-	h.cancelCtx = ctx
 	cancel()
+
+	h.cancelCtx = ctx
+	h.cancelFn = func() {}
+
+	h.Reset(commands)
 }
 
 func (h *Handler) resizeCommandOverlay() {
@@ -158,33 +169,41 @@ func (h *Handler) handleLastCommand() {
 	for _, ch := range cmd {
 		h.Handle(term.Event{Type: term.EventKey, Ch: ch})
 	}
+	h.log(log.TraceLevel, "done pushing history events")
+}
+
+func (h *Handler) trimmedCommandAndArgs(cmd string, args ...string) []string {
+	ret := make([]string, 0, len(args)+1)
+	ret = append(ret, cmd)
+	for _, argi := range args {
+		if argi != "" {
+			ret = append(ret, argi)
+		}
+	}
+	return ret
 }
 
 func (h *Handler) dispatchCommand() (
 	quit, handled bool,
 ) {
-	match, ok := h.list.Focus()
 
 	var commandString string
 	if len(h.commandAndArgs) != 0 {
-		if ok {
-			h.commandAndArgs = append(h.commandAndArgs, string(match.Data()))
-		} else if buf := h.list.Buffer().String(); buf != "" {
+		// add what's currently in the buffer; if user wanted to auto-complete
+		// then Tab should be expected first
+		if buf := h.list.Buffer().String(); buf != "" {
 			h.commandAndArgs = append(h.commandAndArgs, buf)
 		}
 		// trim empty args (i.e. client added more spaces than required between args)
-		trimmedCmdAndArgs := make([]string, 0, len(h.commandAndArgs))
-		for _, argi := range h.commandAndArgs {
-			if argi != "" {
-				trimmedCmdAndArgs = append(trimmedCmdAndArgs, argi)
-			}
-		}
-		h.commandAndArgs = trimmedCmdAndArgs
+		h.commandAndArgs = h.trimmedCommandAndArgs(h.commandAndArgs[0], h.commandAndArgs[1:]...)
 		commandString = strings.Join(h.commandAndArgs, " ")
 
 		h.log(log.TraceLevel, "dispatching command and args %#v", h.commandAndArgs)
 		quit = h.dispatcher.Dispatch(h.commandAndArgs[0], h.commandAndArgs[1:]...)
 	} else {
+		match, _ := h.list.Focus()
+		// if no args, then it means that we are in command mode, in which case
+		// what's in the match list takes preference.
 		commandString = string(match.Data())
 		// no match, use what's in buffer
 		if commandString == "" {
@@ -245,14 +264,7 @@ func (h *Handler) handleCommon(ev *term.Event) (quit, handled bool) {
 	case term.KeyArrowUp, term.KeyCtrlK:
 		h.list.FocusUp()
 	case term.KeyTab:
-		if h.list.MatchCount() > 1 {
-			if !h.list.FocusDown() {
-				h.list.FocusStart()
-			}
-			return
-		}
-		// if only one match, then select that
-		fallthrough
+		h.incArgsCompleteMode(true)
 	case term.KeySpace:
 		ev.Ch = ' '
 		handled = false
@@ -290,7 +302,10 @@ func (h *Handler) handleCommand(ev term.Event) (quit, handled bool) {
 	handled = true
 	h.buf.WriteString(string(ev.Ch))
 	if ev.Ch == ' ' {
-		h.incArgsCompleteMode()
+		// wait as commands are finite and muscle memory could beat
+		// the completing logic
+		h.Wait()
+		h.incArgsCompleteMode(true)
 		return
 	}
 	h.list.Buffer().WriteString(string(ev.Ch))
@@ -310,6 +325,7 @@ func (h *Handler) handleCompleteArgs(ev term.Event) (quit, handled bool) {
 			h.list.Buffer().DeleteCell(
 				term.Coordinates{X: h.list.Buffer().Columns(0) - 1},
 			)
+			h.setCompletionList(h.commandAndArgs[0], h.completionArgs()...)
 			return
 		}
 		if !h.decArgsCompleteMode() {
@@ -325,20 +341,33 @@ func (h *Handler) handleCompleteArgs(ev term.Event) (quit, handled bool) {
 	handled = true
 	h.buf.WriteString(string(ev.Ch))
 	if ev.Ch == ' ' {
-		h.incArgsCompleteMode()
+		// do not wait here, as args are expected to be dynamic
+		// and fuzzy search is a guide for user to complete
+		h.incArgsCompleteMode(false)
 		return
 	}
 	h.list.Buffer().WriteString(string(ev.Ch))
+	h.setCompletionList(h.commandAndArgs[0], h.completionArgs()...)
 	return
 }
 
+func (h *Handler) completionArgs() []string {
+	args := make([]string, 0, len(h.commandAndArgs))
+	args = append(args, h.commandAndArgs[1:]...)
+	return append(args, h.list.Buffer().String())
+}
+
 func (h *Handler) completeTopList() bool {
-	command, ok := h.list.Focus()
+	match, ok := h.list.Focus()
 	if !ok {
-		h.log(log.TraceLevel, "completeTopList: no matches on search list")
+		h.log(log.TraceLevel, "completeTopList: no matches on search list with %q",
+			h.list.Buffer().String())
 		return false
 	}
-	h.commandAndArgs = append(h.commandAndArgs, string(command.Data()))
+	part := string(match.Data())
+	h.log(log.TraceLevel, "completeTopList: matched %q with %q",
+		h.list.Buffer().String(), part)
+	h.commandAndArgs = append(h.commandAndArgs, part)
 	newCmdAndArgs := strings.Join(h.commandAndArgs, " ")
 	h.buf.Replace(newCmdAndArgs + " ")
 
@@ -346,13 +375,13 @@ func (h *Handler) completeTopList() bool {
 }
 
 func (h *Handler) log(level log.Level, msg string, args ...interface{}) {
-	log.WithField(logging.KeyClass, "Handler").
+	log.WithField(logging.KeyClass, "command.Handler").
 		Logf(level, msg, args...)
 }
 
-func (h *Handler) incArgsCompleteMode() {
+func (h *Handler) incArgsCompleteMode(complete bool) {
 	h.mode++
-	if !h.completeTopList() {
+	if !complete || !h.completeTopList() {
 		h.commandAndArgs = append(h.commandAndArgs, h.list.Buffer().String())
 	}
 	h.list.Buffer().Reset()
@@ -379,26 +408,8 @@ func (h *Handler) setCommandMode() {
 	h.resetListWith(h.commandsBackup)
 }
 
-func (h *Handler) pushIteratorToList(
-	ctx context.Context, ch chan<- []byte, it iterator.Iterator[string],
-) error {
-	for {
-		next, ok := it.Next()
-		if !ok {
-			break
-		}
-		select {
-		case <-ctx.Done():
-			return nil
-		case ch <- []byte(next):
-		}
-	}
-
-	return it.Err()
-}
-
 func (h *Handler) setCompletionList(cmd string, args ...string) {
-	h.log(log.TraceLevel, "setCompletionList: %v", h.commandAndArgs)
+	h.log(log.TraceLevel, "setCompletionList: %s %#v", cmd, args)
 
 	ctx := context.Background()
 	ctx, cancel := context.WithCancel(ctx)
@@ -407,31 +418,67 @@ func (h *Handler) setCompletionList(cmd string, args ...string) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
-	h.cancelCompletionPush()
+	h.cancelCompletionPush("re set completion list")
 	h.cancelFn = cancel
 	h.cancelCtx = ctx
 
+	// if user added any extra spaces, do not pass to completer
+	cmdAndArgs := h.trimmedCommandAndArgs(cmd, args...)
+
 	h.list.DataReset()
-	it := h.completer.Complete(ctx, cmd, args...)
-	ch := h.list.Push(ctx)
+	it := h.completer.Complete(ctx, cmdAndArgs[0], cmdAndArgs[1:]...)
 
-	go func() {
-		err := h.pushIteratorToList(ctx, ch, it)
+	if h.sync {
+		pushIteratorSync(ctx, &h.list, cancel, it, h.log)
+	} else {
+		ch := h.list.Push(ctx)
+		go pushIterator(ctx, ch, cancel, it, h.log)
+	}
+}
 
-		// if already canceled, then do not cancel again
-		h.mu.Lock()
-		defer h.mu.Unlock()
-
-		if h.cancelFn != nil {
-			h.cancelFn()
-			h.cancelFn = nil
-			// only log if not canceled already
-			if err != nil {
-				h.log(log.ErrorLevel, "completion iterator error: %v", err)
-				return
-			}
+func pushIteratorSync(
+	ctx context.Context,
+	list *search.List, cancel func(),
+	it iterator.Iterator[string],
+	l func(level log.Level, msg string, args ...interface{}),
+) {
+	defer cancel()
+	for {
+		next, ok := it.Next()
+		if !ok {
+			break
 		}
-	}()
+		list.PushSync([]byte(next))
+	}
+}
+
+func pushIterator(
+	ctx context.Context,
+	ch chan<- []byte, cancel func(),
+	it iterator.Iterator[string],
+	l func(level log.Level, msg string, args ...interface{}),
+) {
+	defer close(ch)
+	defer cancel()
+
+	for {
+		next, ok := it.Next()
+		if !ok {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			l(log.TraceLevel, "context canceled for ch %p before completed push", ch)
+			return
+		case ch <- []byte(next):
+			l(log.TraceLevel, "pushed %q onto search list for ch %p", next, ch)
+		}
+	}
+
+	err := it.Err()
+	if err != nil {
+		l(log.ErrorLevel, "completion iterator error: %v", err)
+	}
 }
 
 // Reset resets the commands listed in this Handler.
@@ -446,18 +493,16 @@ func (h *Handler) Reset(commands []string) {
 }
 
 // assumes holding lock
-func (h *Handler) cancelCompletionPush() {
-	if h.cancelFn != nil {
-		h.cancelFn()
-		h.cancelFn = nil
-	}
+func (h *Handler) cancelCompletionPush(reason string) {
+	h.cancelFn()
+	h.list.Cancel()
 }
 
 func (h *Handler) resetListWith(items []string) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
-	h.cancelCompletionPush()
+	h.cancelCompletionPush("reset list")
 
 	h.list.DataReset()
 	for _, item := range items {
@@ -509,7 +554,7 @@ func (h *Handler) Cancel() {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
-	h.cancelCompletionPush()
+	h.cancelCompletionPush("cancel")
 	h.list.Cancel()
 }
 
@@ -518,6 +563,6 @@ func (h *Handler) Close() error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
-	h.cancelCompletionPush()
+	h.cancelCompletionPush("close")
 	return h.list.Close()
 }
