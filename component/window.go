@@ -67,6 +67,14 @@ func (w Window) Content() (c tui.Component) {
 	return
 }
 
+// Frame returns this window's frame and true or nil and
+// false if this window belongs to a window manager configured
+// without frames.
+func (w Window) Frame() (*Frame, bool) {
+	frame, ok := w.node.Content().(*Frame)
+	return frame, ok
+}
+
 // SetContent sets the content of this Window to content and
 // returns the previous content.
 func (w Window) SetContent(content tui.Component) (
@@ -97,6 +105,10 @@ func (w Window) SetContentResize(content tui.Component, resize bool) (
 		content = w.wm.withFrame(content)
 	}
 	prev = w.node.SetContentResize(content, resize)
+
+	if w.wm.config.Frame {
+		prev = prev.(*Frame).Content()
+	}
 	return
 }
 

@@ -5,6 +5,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"unstable.build/go-tui"
 	"unstable.build/go-tui/term"
 	testutil "unstable.build/go-tui/util/test"
 )
@@ -50,6 +51,7 @@ func TestComponentWindowSplit(t *testing.T) {
 	wm.Resize(20, 8)
 
 	var w2, w3 Window
+	var prevFloating tui.Component
 	var ok bool
 	h2 := TestComponent{Ch: 'B'}
 	h3 := TestComponent{Ch: 'C'}
@@ -128,7 +130,31 @@ func TestComponentWindowSplit(t *testing.T) {
 			floating := w2.Content().(*staticFloating)
 			floating.width = 5
 			floating.height = 6
-			wm.Resize(20, 8)
+		}, `
+┌───┐──────────────┐
+│BBB│CCCCCCCCCCCCCC│
+│BBB│CCCCCCCCCCCCCC│
+│BBB│CCCCCCCCCCCCCC│
+│BBB│CCCCCCCCCCCCCC│
+└───┘CCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+└──────────────────┘`,
+		}, {func() {
+			// test setting non floating component
+			prevFloating = w2.SetContent(&TestComponent{Ch: '5'})
+		}, `
+┌───┐──────────────┐
+│555│CCCCCCCCCCCCCC│
+│555│CCCCCCCCCCCCCC│
+│555│CCCCCCCCCCCCCC│
+│555│CCCCCCCCCCCCCC│
+└───┘CCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+└──────────────────┘`,
+		}, {func() {
+			// test return of SetContent is always what we expect
+			prevFloating = w2.SetContent(prevFloating)
+			assert.Equal(t, '5', prevFloating.(*TestComponent).Ch)
 		}, `
 ┌───┐──────────────┐
 │BBB│CCCCCCCCCCCCCC│
