@@ -25,6 +25,13 @@ func (w Window) Content() tui.Handler {
 	return c.(tui.Handler)
 }
 
+// Frame returns this window's frame component and true or nil and
+// false if this window belongs to a window manager configured
+// without frames.
+func (w Window) Frame() (*component.Frame, bool) {
+	return w.Window.Frame()
+}
+
 // Focus returns true if window is in focus.
 func (w Window) Focus() bool {
 	return w.wm.focus == w

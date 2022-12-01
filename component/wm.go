@@ -36,6 +36,25 @@ func (wm *WindowManager) Draw(w term.Writer) {
 	}
 }
 
+// FloatingWindows return a slice of all the open floating windows.
+func (wm *WindowManager) FloatingWindows() (ret []Window) {
+	for _, w := range wm.float {
+		ret = append(ret, wm.nodeToWindow(w))
+	}
+	return
+}
+
+// TileTree returns a TileTree representing all the open tiles.
+func (wm *WindowManager) TileTree() *TileTree {
+	return &wm.tree
+}
+
+// DrawFloatingWindow can be used to arbitrarily draw floating windows returned
+// by FloatingWindows. If win is not a floating window, this method will panic.
+func (wm *WindowManager) DrawFloatingWindow(win Window, w term.Writer) {
+	win.node.(*floatingNode).Draw(w)
+}
+
 // NewWindowManager allocates storage for a new WindowManager and initializes it.
 func NewWindowManager(
 	content tui.Component, config WindowManagerConfig,

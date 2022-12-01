@@ -301,22 +301,34 @@ func (wm *WindowManager) Draw(w term.Writer) {
 
 	focusWin := wm.focus.Window
 	offset := focusWin.Position()
-	if wm.config.Frame {
-		offset.X++
-		offset.Y++
-	}
 	// Set C to Nop for now so resize does not resize focus window
 	// on every call to Draw
 	v := component.Virtual{C: component.Nop()}
 	v.Resize(focusWin.Width(), focusWin.Height())
 	v.Move(offset)
-	v.C = wm.focus.Content()
 
-	// draw everything, including focus handler with a dim writer
-	wm.comp.Draw(term.DimWriter(w))
+	// draw content with frame if configured with frames
+	if f, ok := wm.focus.Frame(); ok {
+		v.C = f
+	} else {
+		v.C = wm.focus.Content()
+	}
 
-	// then overwrite focus handler with regular writer
+	// draw all tiles, including focus tile, if focus is not a floating window
+	dimWriter := term.DimWriter(w)
+	wm.comp.TileTree().Draw(dimWriter)
+
+	// then overwrite focus tile with regular writer
 	v.Draw(w)
+
+	// if there are any floating windows that are not in focus
+	// make sure they're drawn over the focus window, otherwise
+	// they become hidden and unaccessible
+	for _, w := range wm.comp.FloatingWindows() {
+		if w != focusWin {
+			wm.comp.DrawFloatingWindow(w, dimWriter)
+		}
+	}
 }
 
 // NOTE: this logic introduces a race-condition: If this WindowManager
