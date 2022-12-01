@@ -108,7 +108,7 @@ BBBB`},
 	t.Run("draw multi codepoint utf-8", func(t *testing.T) {
 		stubClient := &Client{
 			client: &mockHandlerClient{
-				remote: handler.Nop(component.StringWithConfig(`┏━━━━━┓
+				remote: handler.Nop(component.NewStringWithConfig(`┏━━━━━┓
 ┃  中  ┃
 ┃     ┃
 ┗━━━━━┛`, component.StringConfig{Alignment: component.SpanAlignmentCentered})),

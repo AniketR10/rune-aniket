@@ -206,3 +206,14 @@ func (s *Span) Height(width int) int {
 	}
 	return r.Height(width-hPadding) + vPadding
 }
+
+// Dimensions satisfies Floating by returning the undelrying component's Dimensions
+// with added padding, or panics if the underlying component does not satisfy
+// Floating.
+func (s *Span) Dimensions() (width, height int) {
+	width, height = s.content.C.(Floating).Dimensions()
+	hPadding, vPadding := s.getPadding(width, s.height)
+	width += hPadding
+	height += vPadding
+	return
+}

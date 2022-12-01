@@ -180,7 +180,7 @@ func (c *Component) wallpaper() Handler {
 		BackgroundAttributes: c.config.WallpaperBackgroundAttr,
 		Alignment:            component.SpanAlignmentCentered,
 	}
-	wallpaper := component.StringWithConfig(c.config.Wallpaper, strcfg)
+	wallpaper := component.NewStringWithConfig(c.config.Wallpaper, strcfg)
 	return &browserContent{
 		Handler: FuncHandler(
 			handler.Nop(wallpaper),

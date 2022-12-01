@@ -662,7 +662,7 @@ func benchmarkListDraw(b *testing.B, n int) {
 	l := NewList(1)
 	l.Resize(1000, 1000)
 	for i := 0; i < n; i++ {
-		l.PushBack(String(strconv.Itoa(i)))
+		l.PushBack(NewString(strconv.Itoa(i)))
 	}
 
 	var w term.NoopWriter
@@ -676,7 +676,7 @@ func benchmarkListSeekEndDraw(b *testing.B, n int) {
 	l := NewList(1)
 	l.Resize(1000, 1000)
 	for i := 0; i < n; i++ {
-		l.PushBack(String(strconv.Itoa(i)))
+		l.PushBack(NewString(strconv.Itoa(i)))
 	}
 
 	l.SeekEnd()

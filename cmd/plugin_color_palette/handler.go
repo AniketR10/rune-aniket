@@ -59,7 +59,7 @@ func makeColorGrid(dim bool) tui.Component {
 				attr = term.DimAttr(attr)
 				name = fmt.Sprintf("D%s", name)
 			}
-			ret[y][x] = component.StringWithConfig(name,
+			ret[y][x] = component.NewStringWithConfig(name,
 				component.StringConfig{
 					Attributes:           term.Attributes{Bg: attr},
 					BackgroundAttributes: term.Attributes{Bg: attr},

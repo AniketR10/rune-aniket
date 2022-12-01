@@ -9,6 +9,61 @@ import (
 	testutil "unstable.build/go-tui/util/test"
 )
 
+func TestSpanDimensions(t *testing.T) {
+	t.Run("panics if underlying component is not Floating", func(t *testing.T) {
+		assert.Panics(t, func() {
+			comp := &TestComponent{}
+			s := NewSpan(comp, SpanConfig{})
+			s.Dimensions()
+		})
+	})
+	t.Run("uses underlying Floating dimensions if padding is 0", func(t *testing.T) {
+		comp := StaticFloating(&TestComponent{}, 10, 20)
+		s := NewSpan(comp, SpanConfig{})
+		width, height := s.Dimensions()
+		assert.Equal(t, 10, width)
+		assert.Equal(t, 20, height)
+	})
+	t.Run("adds absolute vertical padding from underlying component's returned Dimensions", func(t *testing.T) {
+		comp := StaticFloating(&TestComponent{}, 10, 20)
+		s := NewSpan(comp, SpanConfig{PadVertical: 2})
+		width, height := s.Dimensions()
+		assert.Equal(t, 10, width)
+		assert.Equal(t, 22, height)
+	})
+	t.Run("subtracts absolute horizontal padding from underlying component's call to Dimensions", func(t *testing.T) {
+		comp := StaticFloating(&TestComponent{}, 10, 20)
+		s := NewSpan(comp, SpanConfig{PadHorizontal: 2})
+		width, height := s.Dimensions()
+		assert.Equal(t, 12, width)
+		assert.Equal(t, 20, height)
+	})
+	t.Run("adds perc vertical padding from underlying component's returned Dimensions", func(t *testing.T) {
+		comp := StaticFloating(&TestComponent{}, 10, 20)
+		s := NewSpan(comp, SpanConfig{PadVerticalPerc: 0.2})
+		// needs Resize or else it does vertical perc over 0
+		s.Resize(10, 10)
+		width, height := s.Dimensions()
+		assert.Equal(t, 10, width)
+		assert.Equal(t, 22, height)
+	})
+	t.Run("subtracts perc horizontal padding from underlying component's call to Dimensions", func(t *testing.T) {
+		comp := StaticFloating(&TestComponent{}, 10, 20)
+		s := NewSpan(comp, SpanConfig{PadHorizontalPerc: 0.1})
+		width, height := s.Dimensions()
+		assert.Equal(t, 11, width)
+		assert.Equal(t, 20, height)
+	})
+	t.Run("adds relative horizontal padding and passes remaining with to underlying component's Dimensions", func(t *testing.T) {
+		comp := StaticFloating(&TestComponent{}, 10, 20)
+		s := NewSpan(comp, SpanConfig{PadHorizontal: -2})
+		s.Resize(20, 20)
+		width, height := s.Dimensions()
+		assert.Equal(t, 18, width)
+		assert.Equal(t, 20, height)
+	})
+}
+
 func TestSpanHeight(t *testing.T) {
 	t.Run("panics if underlying component is not Responsive", func(t *testing.T) {
 		assert.Panics(t, func() {

@@ -57,7 +57,7 @@ func TestNewDrawResponse(t *testing.T) {
 	}
 
 	for _, tcase := range tcase {
-		comp := component.StringWithConfig(tcase.in,
+		comp := component.NewStringWithConfig(tcase.in,
 			component.StringConfig{Alignment: component.SpanAlignmentCentered})
 		comp.Resize(5, 5)
 		res := NewDrawResponse(comp, 5, 5)
@@ -70,7 +70,7 @@ func benchmarkDrawResponse(b *testing.B, width, height int) {
 	for i := 0; i < width; i++ {
 		str += "fjkelwjflk\njflw\njfklewfkjlkew\n"
 	}
-	comp := component.StringWithConfig(str,
+	comp := component.NewStringWithConfig(str,
 		component.StringConfig{Alignment: component.SpanAlignmentCentered})
 	comp.Resize(width, height)
 

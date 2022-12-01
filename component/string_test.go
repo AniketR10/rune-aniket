@@ -1,6 +1,7 @@
 package component
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -55,7 +56,7 @@ func TestStringCentered(t *testing.T) {
 
 	for _, tcase := range tcases {
 		testString(t, func(str string) tui.Component {
-			return StringWithConfig(str, StringConfig{Alignment: SpanAlignmentCentered})
+			return NewStringWithConfig(str, StringConfig{Alignment: SpanAlignmentCentered})
 		}, 5, 5, tcase.in, tcase.out)
 	}
 }
@@ -90,7 +91,7 @@ func TestString(t *testing.T) {
 	for _, tcase := range tcases {
 		t.Run("String", func(t *testing.T) {
 			testString(t, func(str string) tui.Component {
-				return String(str)
+				return NewString(str)
 			}, 5, 5, tcase.in, tcase.out)
 		})
 		t.Run("LazyBytes", func(t *testing.T) {
@@ -98,6 +99,82 @@ func TestString(t *testing.T) {
 				// add Virtual so it clips oob requests
 				return &Virtual{C: &LazyBytes{Data: []byte(str)}}
 			}, 5, 5, tcase.in, tcase.out)
+		})
+	}
+}
+
+func TestStringWithConfigDimensions(t *testing.T) {
+	tcases := []struct {
+		in             string
+		expectedWidth  int
+		expectedHeight int
+	}{
+		{
+			in:             "XXXXXXXXXX\nBBBBBBBBBB\nCCCCCCCCCCCC\nDDDDDDDDDD\nEEEEEEEEEEE\nFFFFFFFFFF",
+			expectedWidth:  12,
+			expectedHeight: 6,
+		},
+		{
+			in:             "X",
+			expectedWidth:  1,
+			expectedHeight: 1,
+		},
+		{
+			in:             "X\nX\nX\nX\n",
+			expectedWidth:  1,
+			expectedHeight: 5,
+		},
+		{
+			in:             "XXXXXX\nXXXX\nXXX\nXX\n",
+			expectedWidth:  6,
+			expectedHeight: 5,
+		},
+		{
+			in:             "XXXXXXX\nXXXX\nXX\nXXXXXXXXXX",
+			expectedWidth:  10,
+			expectedHeight: 4,
+		},
+	}
+
+	for i, tcase := range tcases {
+		t.Run(fmt.Sprintf("test case %d", i), func(t *testing.T) {
+			s := NewStringWithConfig(tcase.in, StringConfig{})
+			actualWidth, actualHeight := s.Dimensions()
+			assert.Equal(t, tcase.expectedWidth, actualWidth)
+			assert.Equal(t, tcase.expectedHeight, actualHeight)
+		})
+	}
+}
+
+func TestStringDimensions(t *testing.T) {
+	tcases := []struct {
+		in             string
+		expectedWidth  int
+		expectedHeight int
+	}{
+		{
+			in:             "XXXXXXXXXX\nBBBBBBBBBB",
+			expectedWidth:  21,
+			expectedHeight: 1,
+		},
+		{
+			in:             "X",
+			expectedWidth:  1,
+			expectedHeight: 1,
+		},
+		{
+			in:             "X\nX\nX\nX\n",
+			expectedWidth:  8,
+			expectedHeight: 1,
+		},
+	}
+
+	for i, tcase := range tcases {
+		t.Run(fmt.Sprintf("test case %d", i), func(t *testing.T) {
+			s := NewString(tcase.in)
+			actualWidth, actualHeight := s.Dimensions()
+			assert.Equal(t, tcase.expectedWidth, actualWidth)
+			assert.Equal(t, tcase.expectedHeight, actualHeight)
 		})
 	}
 }
@@ -110,7 +187,7 @@ func benchmarkString(b *testing.B, fortunes int) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_ = String(builder.String())
+		_ = NewString(builder.String())
 	}
 }
 

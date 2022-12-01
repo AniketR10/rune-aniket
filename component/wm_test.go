@@ -25,7 +25,7 @@ func TestComponentWindowZeroValue(t *testing.T) {
 	t.Run("SetContent", func(t *testing.T) {
 		var win Window
 		assert.PanicsWithValue(t, errCalledZeroValuedWin, func() {
-			win.SetContent(String("ballz"))
+			win.SetContent(NewString("ballz"))
 		})
 	})
 	t.Run("Size", func(t *testing.T) {

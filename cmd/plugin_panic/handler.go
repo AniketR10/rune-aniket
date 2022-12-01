@@ -12,7 +12,7 @@ type panicHandler struct {
 
 func (h *panicHandler) Resize(width, height int) {
 	if h.comp == nil {
-		h.comp = component.StringWithConfig(`
+		h.comp = component.NewStringWithConfig(`
               . . .                         
               \|/                          
             '--+--'                        

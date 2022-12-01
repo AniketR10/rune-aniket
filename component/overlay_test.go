@@ -14,7 +14,7 @@ func TestDrawOverlay(t *testing.T) {
 		ContentAlignment: SpanAlignmentCentered,
 	}
 	background := &TestComponent{Ch: '*'}
-	cover := NewFrame(StringWithConfig("a", StringConfig{Alignment: SpanAlignmentCentered}))
+	cover := NewFrame(NewStringWithConfig("a", StringConfig{Alignment: SpanAlignmentCentered}))
 
 	o := NewOverlay(background, cover, term.Attributes{}, cfg)
 

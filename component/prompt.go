@@ -44,7 +44,7 @@ func (p *Prompt) init(
 	if cfg.Message == "" {
 		panic("Message cannot be empty")
 	}
-	message := StringWithConfig(cfg.Message, StringConfig{
+	message := NewStringWithConfig(cfg.Message, StringConfig{
 		Alignment: SpanAlignmentCentered,
 	})
 

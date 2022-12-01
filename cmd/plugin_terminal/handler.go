@@ -167,7 +167,7 @@ func (e *emulator) Resize(width, height int) {
 }
 
 func (e *emulator) drawStr(str string, w term.Writer) {
-	c := component.String(str)
+	c := component.NewString(str)
 	c.Resize(e.width, e.height)
 	c.Draw(w)
 }

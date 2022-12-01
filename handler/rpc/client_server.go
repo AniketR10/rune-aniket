@@ -11,7 +11,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/component"
-	
+
 	"unstable.build/go-tui/term"
 	termpb "unstable.build/go-tui/term/rpc"
 )
@@ -136,7 +136,7 @@ func (c *Client) Draw(w term.Writer) {
 func (c *Client) Handle(ev term.Event) (exit, handled bool) {
 	exit, handled, err := c.handle(ev)
 	if err != nil {
-		c.setNewHandleResponse(component.StringWithConfig(smtgWrongCopy,
+		c.setNewHandleResponse(component.NewStringWithConfig(smtgWrongCopy,
 			component.StringConfig{Alignment: component.SpanAlignmentCentered}))
 	}
 	return
