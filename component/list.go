@@ -132,6 +132,12 @@ func (l *List) Offset() int {
 	return l.offset.value
 }
 
+// Head returns the first node of list l, starting at the current seek offset
+// or false if the list is empty.
+func (l *List) Head() (ListNode, bool) {
+	return l.offset.head, l.Len() > 0
+}
+
 // MaxOffset returns this list's max seek offset.
 func (l *List) MaxOffset() int {
 	if l.height == 0 {
@@ -221,7 +227,7 @@ func (l *List) Draw(w term.Writer) {
 	return
 }
 
-// Back returns the last node of list l or nil if the list is empty.
+// Back returns the last node of list l or false if the list is empty.
 func (l *List) Back() (ListNode, bool) {
 	b := l.list.Back()
 	if b == nil {
@@ -230,7 +236,7 @@ func (l *List) Back() (ListNode, bool) {
 	return l.listNode(b), true
 }
 
-// Front returns the first node of list l or nil if the list is empty.
+// Front returns the first node of list l or false if the list is empty.
 func (l *List) Front() (ListNode, bool) {
 	f := l.list.Front()
 	if f == nil {

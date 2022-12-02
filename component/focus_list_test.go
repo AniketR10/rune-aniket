@@ -322,6 +322,40 @@ func TestFocusListSort(t *testing.T) {
 	})
 }
 
+func TestIterateVisible(t *testing.T) {
+	tsuite := []struct {
+		desc     string
+		op       func(*testing.T, *FocusList)
+		expected string
+	}{
+		{"at start", func(*testing.T, *FocusList) {}, "ab"},
+		{"middle", func(t *testing.T, l *FocusList) {
+			assert.True(t, l.FocusDown())
+		}, "bc"},
+		{"end ", func(t *testing.T, l *FocusList) {
+			assert.True(t, l.FocusEnd())
+		}, "cd"},
+	}
+	for _, tcase := range tsuite {
+		t.Run(tcase.desc, func(t *testing.T) {
+			l := NewFocusList()
+			l.PushBack(newCompWithAttr(&TestComponent{Ch: 'a'}))
+			l.PushBack(newCompWithAttr(&TestComponent{Ch: 'b'}))
+			l.PushBack(newCompWithAttr(&TestComponent{Ch: 'c'}))
+			l.PushBack(newCompWithAttr(&TestComponent{Ch: 'd'}))
+			l.Resize(2, 2)
+
+			tcase.op(t, l)
+
+			var actualRunes []rune
+			l.IterateVisible(func(c WithAttributes) {
+				actualRunes = append(actualRunes, c.(*compWithAttr).Component.(*TestComponent).Ch)
+			})
+			assert.Equal(t, tcase.expected, string(actualRunes))
+		})
+	}
+}
+
 func TestFocusListFrontBack(t *testing.T) {
 	testFrontBack(t, newFocusTestList)
 }

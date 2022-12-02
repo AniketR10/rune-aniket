@@ -215,6 +215,17 @@ func (l *FocusList) Iterate(fn func(WithAttributes)) {
 	}
 }
 
+// IterateVisible iterates only the visible elements in l.
+func (l *FocusList) IterateVisible(fn func(WithAttributes)) {
+	offset := l.list.Offset()
+	lastVisible := l.height/l.list.ElementHeight() + offset
+	node, ok := l.list.Head()
+	for i := offset; ok && i < lastVisible; i++ {
+		fn(node.Value().(WithAttributes))
+		node, ok = node.Next()
+	}
+}
+
 // Resize satisfies tui.Compontent
 func (l *FocusList) Resize(width, height int) {
 	l.height, l.width = height, width

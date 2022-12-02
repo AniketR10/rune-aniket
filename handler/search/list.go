@@ -455,6 +455,15 @@ func (l *List) SetFocus(node component.ListNode) {
 	l.list.SetFocus(node)
 }
 
+// IterateVisible iterates only the visible elements in l.
+func (l *List) IterateVisible(fn func(Match)) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.list.IterateVisible(func(c component.WithAttributes) {
+		fn(c.(searchResultComponent).Match)
+	})
+}
+
 func (l *List) asyncSearch() {
 	if l.cancelSearch != nil {
 		l.cancelSearch()
