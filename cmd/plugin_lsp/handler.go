@@ -1511,7 +1511,7 @@ func (h *lspEditorHandler) handleHover(
 		pady += 2
 	}
 	less.Scroll().Attributes = h.referencesWindowAttributes
-	bh := browser.NopFloating(handler.PaddedFloating(
+	bh := browser.NopFloatingHandler(handler.PaddedFloating(
 		handler.FloatingBuffer(less, less.Buffer()), 0, pady))
 
 	at := h.findBestFloatingWindowPosition(cursorAtWindow, less.Buffer().Rows())

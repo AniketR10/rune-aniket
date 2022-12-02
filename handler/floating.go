@@ -3,6 +3,7 @@ package handler
 import (
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/component"
+	"unstable.build/go-tui/term"
 )
 
 // Floating handlers are not in principle confined to a predetermined
@@ -34,6 +35,12 @@ func PaddedFloating(f Floating, padx, pady int) Floating {
 	return paddedFloating{padx: padx, pady: pady, Floating: f}
 }
 
+// NopFloatingHandler wraps a component.Floating and returns a Floating that does
+// nothing when any of the tui.Handler methods are called.
+func NopFloatingHandler(h component.Floating) Floating {
+	return nopFloating{Floating: h}
+}
+
 type paddedFloating struct {
 	Floating
 	padx, pady int
@@ -44,4 +51,20 @@ func (p paddedFloating) Dimensions() (width, height int) {
 	width += p.padx
 	height += p.pady
 	return
+}
+
+type nopFloating struct {
+	component.Floating
+}
+
+func (n nopFloating) Handle(term.Event) (bool, bool) {
+	return false, false
+}
+
+func (n nopFloating) Cursor() (term.Coordinates, bool) {
+	return term.Coordinates{}, false
+}
+
+func (n nopFloating) Man() tui.Manual {
+	return tui.Manual{}
 }

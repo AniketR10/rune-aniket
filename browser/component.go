@@ -191,11 +191,10 @@ func (c *Component) wallpaper() Handler {
 	}
 	wallpaper := component.NewStringWithConfig(c.config.Wallpaper, strcfg)
 	return &browserContent{
-		Handler: FuncHandler(
-			handler.Nop(wallpaper),
-			func() {},
-		),
-		c: c,
+		// make wallpaper satisfy Floating to avoid browserContent panic
+		// if wallpaper is being set as a default on a floating window
+		Handler: NopFloatingHandler(handler.NopFloatingHandler(wallpaper)),
+		c:       c,
 	}
 }
 

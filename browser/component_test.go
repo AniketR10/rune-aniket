@@ -712,6 +712,18 @@ func TestComponentSplitNil(t *testing.T) {
 	})
 }
 
+func TestFloatingPanicWallpaper(t *testing.T) {
+	cfg := DefaultConfig()
+	c := NewComponent(cfg)
+	c.Resize(20, 8)
+
+	fw := c.Floating(StaticFloating(NewTestHandler(), 10, 10), term.Coordinates{})
+	c.SetFocus(fw)
+	assert.NotPanics(t, func() {
+		c.RemoveWindowContent(c.Focus())
+	})
+}
+
 // this happens if content swaps the content of its own
 // window before returning exit=true, in which case the underlying
 // handler.wm closes the window but we miss updating i.e. a Tab

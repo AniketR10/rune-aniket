@@ -134,9 +134,9 @@ func StaticFloating(h Handler, width, height int) Floating {
 	return staticFloating{width: width, height: height, Handler: h}
 }
 
-// NopFloating wraps a handler.Floating and returns a Floating that does
+// NopFloatingHandler wraps a handler.Floating and returns a Floating that does
 // nothing when Close is called.
-func NopFloating(h handler.Floating) Floating {
+func NopFloatingHandler(h handler.Floating) Floating {
 	return nopFloating{Floating: h}
 }
 
