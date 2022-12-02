@@ -119,14 +119,14 @@ type Browser interface {
 
 // FuncHandler returns a Handler by wrapping a tui.Handler
 // with an Close callback.
-func FuncHandler(h tui.Handler, doClose func()) Handler {
+func FuncHandler(h tui.Handler, doClose func() error) Handler {
 	return &closeHandler{Handler: h, doClose: doClose}
 }
 
 // NopHandler returns a Handler by wrapping a tui.Handler
 // with an nop Close callback.
 func NopHandler(h tui.Handler) Handler {
-	return &closeHandler{Handler: h, doClose: func() {}}
+	return &closeHandler{Handler: h, doClose: func() error { return nil }}
 }
 
 // StaticFloating wraps a Handler and returns a Floating that always
@@ -143,12 +143,11 @@ func NopFloatingHandler(h handler.Floating) Floating {
 
 type closeHandler struct {
 	tui.Handler
-	doClose func()
+	doClose func() error
 }
 
 func (h *closeHandler) Close() error {
-	h.doClose()
-	return nil
+	return h.doClose()
 }
 
 type fnEventHandler func(term.Event) bool

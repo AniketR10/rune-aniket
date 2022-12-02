@@ -313,9 +313,7 @@ func (e *logsGrantee) showLogs(args []string) (bool, error) {
 
 	logsHandler := handler.Sync(new(sync.Mutex), newLogsHandler(l, e.cfg.ElementAttr,
 		e.cfg.MatchedTextAttr, e.cfg.FocusElementAttr))
-	h := browser.FuncHandler(logsHandler, func() {
-		cleanup()
-	})
+	h := browser.FuncHandler(logsHandler, cleanup)
 
 	go consumeData(ctx, file, l, e.quitCh, watcher)
 

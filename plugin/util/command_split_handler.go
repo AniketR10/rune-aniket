@@ -85,7 +85,7 @@ func (t *cmdSplitHandler) closeWindow() {
 	}
 }
 
-func (t *cmdSplitHandler) exitClean() {
+func (t *cmdSplitHandler) exitClean() error {
 	log.Info("received exit signal; cleaning resources...")
 	if t.cleanWindow() {
 		log.Debug("cleaned window")
@@ -93,6 +93,7 @@ func (t *cmdSplitHandler) exitClean() {
 	if t.closeHandler() {
 		log.Debug("closed handler")
 	}
+	return nil
 }
 
 func (t *cmdSplitHandler) openSplitWindow() error {

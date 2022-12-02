@@ -1626,15 +1626,16 @@ func (h *lspEditorHandler) browseLocations(
 		}
 	}
 
-	closeWin := func(win browser.Window) func() {
-		return func() {
+	closeWin := func(win browser.Window) func() error {
+		return func() error {
 			h.mu.Lock()
 			shouldClose := done && win != nil
 			closeWin := win
 			h.mu.Unlock()
 			if shouldClose {
-				closeWin.Close()
+				return closeWin.Close()
 			}
+			return nil
 		}
 	}
 
