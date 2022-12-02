@@ -711,3 +711,41 @@ func TestComponentSplitNil(t *testing.T) {
 		testutil.TestComponent(t, c, w, tests)
 	})
 }
+
+// this happens if content swaps the content of its own
+// window before returning exit=true, in which case the underlying
+// handler.wm closes the window but we miss updating i.e. a Tab
+// and the Tab is never again accessible.
+func TestHandleExitAfterContentSetIssue(t *testing.T) {
+	cfg := DefaultConfig()
+	c := NewComponent(cfg)
+	c.Resize(20, 8)
+
+	uri, err := workspace.ParseURI("my:///thing")
+	require.NoError(t, err)
+
+	tab := c.NewTab(uri, "bla", NewTestHandler(), nil)
+
+	mockHandler := contentSwapper{c: c, tab: tab}
+	require.NoError(t, c.Focus().SetContent(&mockHandler))
+
+	c.Handle(term.Event{})
+
+	_, ok := tab.Window()
+	assert.False(t, ok)
+}
+
+type contentSwapper struct {
+	TestHandler
+	tab *Tab
+	c   *Component
+}
+
+func (c *contentSwapper) Handle(ev term.Event) (bool, bool) {
+	c.c.Focus().SetContent(c.tab)
+	return true, true
+}
+
+func (c *contentSwapper) Close() error {
+	return nil
+}

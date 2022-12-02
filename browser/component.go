@@ -63,9 +63,21 @@ func (c *browserContent) Dimensions() (int, int) {
 }
 
 func (c *browserContent) Handle(ev term.Event) (exit, handled bool) {
+	prev := c.c.focusWindow.Content()
+	win := c.c.focusWindow
 	exit, handled = c.Handler.Handle(ev)
 	if exit {
 		c.c.closeHandler(c)
+		content := win.Content()
+		// if previous content is not the same as the new content, then it must
+		// mean that the underlying Handler swapped the content before exiting.
+		// This window is going away (see handler.WindowManager) so make sure that
+		// a non-ephemeral handler (Tab), is set free.
+		if prev != content {
+			if t, ok := content.(*Tab); ok {
+				t.setFree()
+			}
+		}
 	}
 	return
 }
@@ -110,8 +122,6 @@ func (w *browserWindow) SetContent(h Handler) error {
 	return w.parent.tryUpdateWindowContent(w, h)
 }
 
-// browserWindow is passed by value, so we store whether
-// it has been closed or not in Handler.
 func (w *browserWindow) Close() error {
 	if w.parent == nil {
 		return nil
@@ -124,10 +134,9 @@ func (w *browserWindow) Close() error {
 
 	err := parent.closeWindow(w)
 	if err != nil {
-		w.doClose = doClose
-		w.parent = parent
-		w.parent.setError(err)
-	} else if doClose != nil {
+		parent.setError(err)
+	}
+	if doClose != nil {
 		doClose()
 	}
 
@@ -438,7 +447,7 @@ func (c *Component) updateWindowContent(
 		id := c.findTabID(tab)
 		c.tabs.SetFocus(id)
 		tab.setWindow(win)
-	} else {
+	} else if _, ok := content.(*browserContent); !ok {
 		content = &browserContent{
 			Handler: content,
 			c:       c,
