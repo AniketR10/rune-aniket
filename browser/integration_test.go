@@ -1,6 +1,7 @@
 package browser
 
 import (
+	"fmt"
 	"net"
 	"sync"
 	"testing"
@@ -10,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	browserpb "unstable.build/go-tui/browser/rpc"
+	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/proto"
 	"unstable.build/go-tui/term"
 )
@@ -79,24 +81,44 @@ func TestIntegrationSetFocus(t *testing.T) {
 }
 
 func TestIntegrationFloating(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
+	tsuite := []component.FloatingConfig{
+		{Offset: term.Coordinates{X: 1, Y: 1}},
+		{Alignment: component.SpanAlignmentLeft},
+		{Alignment: component.SpanAlignmentRight},
+		{Alignment: component.SpanAlignmentTop},
+		{Alignment: component.SpanAlignmentBottom},
+		{Alignment: component.SpanAlignmentTop | component.SpanAlignmentLeft},
+		{Alignment: component.SpanAlignmentTop | component.SpanAlignmentRight},
+		{Alignment: component.SpanAlignmentBottom | component.SpanAlignmentRight},
+		{Alignment: component.SpanAlignmentBottom | component.SpanAlignmentLeft},
+		{Alignment: component.SpanAlignmentVerticallyCentered},
+		{Alignment: component.SpanAlignmentHorizontallyCentered},
+		{Alignment: component.SpanAlignmentCentered},
+	}
 
-	mock := NewMockBrowser(ctrl)
-	client, cleanup := newClientServerIntegration(t, mock)
-	defer cleanup()
+	for _, tcase := range tsuite {
+		t.Run(fmt.Sprintf("%v", tcase.Alignment), func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
 
-	win1 := NopWindow()
+			mock := NewMockBrowser(ctrl)
+			client, cleanup := newClientServerIntegration(t, mock)
+			defer cleanup()
 
-	mock.EXPECT().Floating(gomock.Any(), gomock.Any()).
-		DoAndReturn(func(h Floating, at term.Coordinates) (Window, error) {
-			actualWidth, actualHeight := h.Dimensions()
-			assert.Equal(t, 2, actualWidth)
-			assert.Equal(t, 2, actualHeight)
-			assert.Equal(t, term.Coordinates{X: 1, Y: 2}, at)
-			return win1, nil
+			win1 := NopWindow()
+
+			mock.EXPECT().Floating(gomock.Any(), gomock.Any()).
+				DoAndReturn(func(h Floating, cfg component.FloatingConfig) (Window, error) {
+					actualWidth, actualHeight := h.Dimensions()
+					assert.Equal(t, 2, actualWidth)
+					assert.Equal(t, 2, actualHeight)
+					assert.Equal(t, tcase.Offset, cfg.Offset)
+					assert.Equal(t, tcase.Alignment, cfg.Alignment)
+					return win1, nil
+				})
+			resWin1, err := client.Floating(NewTestFloating(2, 2), tcase)
+			require.NoError(t, err)
+			require.NoError(t, resWin1.Close())
 		})
-	resWin1, err := client.Floating(NewTestFloating(2, 2), term.Coordinates{X: 1, Y: 2})
-	require.NoError(t, err)
-	require.NoError(t, resWin1.Close())
+	}
 }

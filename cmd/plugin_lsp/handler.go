@@ -27,6 +27,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/cell"
+	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/config"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/handler/search"
@@ -1506,16 +1507,17 @@ func (h *lspEditorHandler) handleHover(
 
 	less := handler.NewLess(handler.DefaultLessConfig())
 	less.Buffer().WriteString(hover.Contents.Value)
-	pady := 1
+	padx, pady := 1, 1
 	if h.frame {
 		pady += 2
+		padx += 2
 	}
 	less.Scroll().Attributes = h.referencesWindowAttributes
 	bh := browser.NopFloatingHandler(handler.PaddedFloating(
-		handler.FloatingBuffer(less, less.Buffer()), 0, pady))
+		handler.FloatingBuffer(less, less.Buffer()), padx, pady))
 
 	at := h.findBestFloatingWindowPosition(cursorAtWindow, less.Buffer().Rows())
-	_, err = h.wm.Floating(bh, at)
+	_, err = h.wm.Floating(bh, component.FloatingConfig{Offset: at})
 	if err != nil {
 		err = fmt.Errorf("wm.Floating: %v", err)
 		return err

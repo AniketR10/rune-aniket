@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/cell"
+	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/proto"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
@@ -118,7 +119,7 @@ func TestIntegrationRace(t *testing.T) {
 		}, func(_ *workspacetest.MockWorkspaceMockRecorder, ed *text.MockEditorMockRecorder, mock *browser.MockBrowserMockRecorder) *gomock.Call {
 			return mock.Floating(gomock.Any(), gomock.Any()).Return(mockWin, nil)
 		}, func(ifc interface{}) error {
-			_, err := ifc.(browser.WindowManager).Floating(browser.StaticFloating(h, 4, 4), term.Coordinates{})
+			_, err := ifc.(browser.WindowManager).Floating(browser.StaticFloating(h, 4, 4), component.FloatingConfig{})
 			return err
 		}},
 		{PermissionBrowserResourceOpener, func(token uint32, broker proto.MuxBroker) (interface{}, error) {

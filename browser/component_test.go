@@ -6,6 +6,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"unstable.build/go-tui"
+	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/term"
 	testutil "unstable.build/go-tui/util/test"
@@ -717,7 +718,7 @@ func TestFloatingPanicWallpaper(t *testing.T) {
 	c := NewComponent(cfg)
 	c.Resize(20, 8)
 
-	fw := c.Floating(StaticFloating(NewTestHandler(), 10, 10), term.Coordinates{})
+	fw := c.Floating(StaticFloating(NewTestHandler(), 10, 10), component.FloatingConfig{})
 	c.SetFocus(fw)
 	assert.NotPanics(t, func() {
 		c.RemoveWindowContent(c.Focus())

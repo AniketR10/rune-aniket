@@ -144,7 +144,7 @@ func (s *Span) getPadding(width, height int) (int, int) {
 	return hPadding, vPadding
 }
 
-// Resize : Component
+// Resize satisfies tui.Component
 func (s *Span) Resize(width, height int) {
 	hPadding, vPadding := s.getPadding(width, height)
 	if width < 3 {
@@ -159,7 +159,7 @@ func (s *Span) Resize(width, height int) {
 	s.width, s.height = width, height
 }
 
-// Draw : Component
+// Draw satisfies tui.Component
 func (s *Span) Draw(w term.Writer) {
 	s.content.Draw(w)
 }

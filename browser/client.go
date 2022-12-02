@@ -12,6 +12,7 @@ import (
 	"google.golang.org/grpc"
 	"unstable.build/go-tui"
 	browserpb "unstable.build/go-tui/browser/rpc"
+	"unstable.build/go-tui/component"
 	handlerpb "unstable.build/go-tui/handler/rpc"
 	"unstable.build/go-tui/proto"
 	"unstable.build/go-tui/term"
@@ -352,13 +353,14 @@ func (c *Client) Focus() (Window, error) {
 
 // Floating satisfies browser.WindowManager
 func (c *Client) Floating(
-	h Floating, at term.Coordinates,
+	h Floating, cfg component.FloatingConfig,
 ) (Window, error) {
 	var atProto termpb.Coordinates
-	atProto.FromModel(at)
+	atProto.FromModel(cfg.Offset)
 
 	freq := browserpb.FloatingWindowRequest{
-		At: &atProto,
+		Offset:    &atProto,
+		Alignment: uint32(cfg.Alignment),
 	}
 
 	return c.split(func(cc browserpb.WindowManagerClient,

@@ -116,7 +116,207 @@ func TestComponentWindowSplit(t *testing.T) {
 		}, {func() {
 			assert.Error(t, w1.Close())
 			floating := StaticFloating(&h2, 4, 4)
-			w2 = wm.FloatingWindow(floating, term.Coordinates{})
+			w2 = wm.FloatingWindow(floating,
+				FloatingConfig{
+					Alignment: SpanAlignmentLeft | SpanAlignmentTop,
+					Offset:    term.Coordinates{X: 1, Y: 1},
+				},
+			)
+		}, `
+┌──────────────────┐
+│┌──┐CCCCCCCCCCCCCC│
+││BB│CCCCCCCCCCCCCC│
+││BB│CCCCCCCCCCCCCC│
+│└──┘CCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+└──────────────────┘`,
+		}, {func() {
+			floating := StaticFloating(&h2, 4, 4)
+			w2.Close()
+			w2 = wm.FloatingWindow(floating,
+				FloatingConfig{
+					Alignment: SpanAlignmentRight | SpanAlignmentTop,
+					Offset:    term.Coordinates{X: 1, Y: 1},
+				},
+			)
+		}, `
+┌──────────────────┐
+│CCCCCCCCCCCCCC┌──┐│
+│CCCCCCCCCCCCCC│BB││
+│CCCCCCCCCCCCCC│BB││
+│CCCCCCCCCCCCCC└──┘│
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+└──────────────────┘`,
+		}, {func() {
+			floating := StaticFloating(&h2, 4, 4)
+			w2.Close()
+			w2 = wm.FloatingWindow(floating,
+				FloatingConfig{
+					Alignment: SpanAlignmentRight | SpanAlignmentBottom,
+					Offset:    term.Coordinates{X: 1, Y: 1},
+				},
+			)
+		}, `
+┌──────────────────┐
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCC┌──┐│
+│CCCCCCCCCCCCCC│BB││
+│CCCCCCCCCCCCCC│BB││
+│CCCCCCCCCCCCCC└──┘│
+└──────────────────┘`,
+		}, {func() {
+			floating := StaticFloating(&h2, 4, 4)
+			w2.Close()
+			w2 = wm.FloatingWindow(floating,
+				FloatingConfig{
+					Alignment: SpanAlignmentLeft | SpanAlignmentBottom,
+					Offset:    term.Coordinates{X: 1, Y: 1},
+				},
+			)
+		}, `
+┌──────────────────┐
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+│┌──┐CCCCCCCCCCCCCC│
+││BB│CCCCCCCCCCCCCC│
+││BB│CCCCCCCCCCCCCC│
+│└──┘CCCCCCCCCCCCCC│
+└──────────────────┘`,
+		}, {func() {
+			floating := StaticFloating(&h2, 4, 4)
+			w2.Close()
+			w2 = wm.FloatingWindow(floating,
+				FloatingConfig{
+					Alignment: SpanAlignmentHorizontallyCentered,
+					Offset:    term.Coordinates{X: 1, Y: 1}, // offset.X is ignored
+				},
+			)
+		}, `
+┌──────────────────┐
+│CCCCCCC┌──┐CCCCCCC│
+│CCCCCCC│BB│CCCCCCC│
+│CCCCCCC│BB│CCCCCCC│
+│CCCCCCC└──┘CCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+└──────────────────┘`,
+		}, {func() {
+			floating := StaticFloating(&h2, 4, 4)
+			w2.Close()
+			w2 = wm.FloatingWindow(floating,
+				FloatingConfig{
+					Alignment: SpanAlignmentVerticallyCentered,
+					Offset:    term.Coordinates{X: 1, Y: 1}, // offset.Y is ignored
+				},
+			)
+		}, `
+┌──────────────────┐
+│CCCCCCCCCCCCCCCCCC│
+│┌──┐CCCCCCCCCCCCCC│
+││BB│CCCCCCCCCCCCCC│
+││BB│CCCCCCCCCCCCCC│
+│└──┘CCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+└──────────────────┘`,
+		}, {func() {
+			floating := StaticFloating(&h2, 4, 4)
+			w2.Close()
+			w2 = wm.FloatingWindow(floating,
+				FloatingConfig{
+					Alignment: SpanAlignmentCentered,
+					Offset:    term.Coordinates{X: 1, Y: 1}, // offset is ignored
+				},
+			)
+		}, `
+┌──────────────────┐
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCC┌──┐CCCCCCC│
+│CCCCCCC│BB│CCCCCCC│
+│CCCCCCC│BB│CCCCCCC│
+│CCCCCCC└──┘CCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+└──────────────────┘`,
+		}, {func() {
+			floating := StaticFloating(&h2, 4, 4)
+			w2.Close()
+			w2 = wm.FloatingWindow(floating,
+				FloatingConfig{
+					Alignment: SpanAlignmentBottom,
+					Offset:    term.Coordinates{X: 400, Y: 500},
+				},
+			)
+		}, `
+┌──────────────────┐
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+└──────────────────┘`,
+		}, {func() {
+			floating := StaticFloating(&h2, 4, 4)
+			w2.Close()
+			w2 = wm.FloatingWindow(floating,
+				FloatingConfig{
+					Alignment: SpanAlignmentTop,
+					Offset:    term.Coordinates{X: 400, Y: 500},
+				},
+			)
+		}, `
+┌──────────────────┐
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+└──────────────────┘`,
+		}, {func() {
+			floating := StaticFloating(&h2, 4, 4)
+			w2.Close()
+			w2 = wm.FloatingWindow(floating,
+				FloatingConfig{
+					Alignment: SpanAlignmentLeft,
+					Offset:    term.Coordinates{X: 400, Y: 500},
+				},
+			)
+		}, `
+┌──────────────────┐
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+└──────────────────┘`,
+		}, {func() {
+			floating := StaticFloating(&h2, 4, 4)
+			w2.Close()
+			w2 = wm.FloatingWindow(floating,
+				FloatingConfig{
+					Alignment: SpanAlignmentRight,
+					Offset:    term.Coordinates{X: 400, Y: 500},
+				},
+			)
+		}, `
+┌──────────────────┐
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+└──────────────────┘`,
+		}, {func() {
+			floating := StaticFloating(&h2, 4, 4)
+			w2.Close()
+			w2 = wm.FloatingWindow(floating,
+				FloatingConfig{},
+			)
 		}, `
 ┌──┐───────────────┐
 │BB│CCCCCCCCCCCCCCC│

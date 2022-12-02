@@ -637,7 +637,7 @@ func (c *Component) Split(o Orientation, h Handler) (Window, bool) {
 // Floating opens a new floating window at the given coordinates,
 // with the given height and width.
 func (c *Component) Floating(
-	h Floating, at term.Coordinates,
+	h Floating, cfg component.FloatingConfig,
 ) Window {
 	if h == nil {
 		panic("nil Floating handler")
@@ -646,7 +646,7 @@ func (c *Component) Floating(
 		Handler: h,
 		c:       c,
 	}
-	win := c.newWindow(c.wm.FloatingWindow(h, at))
+	win := c.newWindow(c.wm.FloatingWindow(h, cfg))
 	c.wm.SetFocus(win.win)
 	return win
 }

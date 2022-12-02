@@ -9,6 +9,7 @@ import (
 
 	gomock "github.com/golang/mock/gomock"
 	go_tui "unstable.build/go-tui"
+	component "unstable.build/go-tui/component"
 	term "unstable.build/go-tui/term"
 	workspace "unstable.build/go-tui/workspace"
 )
@@ -383,18 +384,18 @@ func (mr *MockWindowManagerMockRecorder) Bar(arg0, arg1 interface{}) *gomock.Cal
 }
 
 // Floating mocks base method.
-func (m *MockWindowManager) Floating(h Floating, at term.Coordinates) (Window, error) {
+func (m *MockWindowManager) Floating(h Floating, cfg component.FloatingConfig) (Window, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Floating", h, at)
+	ret := m.ctrl.Call(m, "Floating", h, cfg)
 	ret0, _ := ret[0].(Window)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Floating indicates an expected call of Floating.
-func (mr *MockWindowManagerMockRecorder) Floating(h, at interface{}) *gomock.Call {
+func (mr *MockWindowManagerMockRecorder) Floating(h, cfg interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Floating", reflect.TypeOf((*MockWindowManager)(nil).Floating), h, at)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Floating", reflect.TypeOf((*MockWindowManager)(nil).Floating), h, cfg)
 }
 
 // Focus mocks base method.
@@ -640,18 +641,18 @@ func (mr *MockBrowserMockRecorder) Close() *gomock.Call {
 }
 
 // Floating mocks base method.
-func (m *MockBrowser) Floating(h Floating, at term.Coordinates) (Window, error) {
+func (m *MockBrowser) Floating(h Floating, cfg component.FloatingConfig) (Window, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Floating", h, at)
+	ret := m.ctrl.Call(m, "Floating", h, cfg)
 	ret0, _ := ret[0].(Window)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Floating indicates an expected call of Floating.
-func (mr *MockBrowserMockRecorder) Floating(h, at interface{}) *gomock.Call {
+func (mr *MockBrowserMockRecorder) Floating(h, cfg interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Floating", reflect.TypeOf((*MockBrowser)(nil).Floating), h, at)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Floating", reflect.TypeOf((*MockBrowser)(nil).Floating), h, cfg)
 }
 
 // Focus mocks base method.

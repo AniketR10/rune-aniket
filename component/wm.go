@@ -108,7 +108,7 @@ func (wm *WindowManager) nodeToWindow(node windowNode) Window {
 
 // SplitHorizontal creates a new Window by splitting the height of win in two and
 // initializes it with content. It returns true if it succeeds or false if
-// this window is a floating window created via NewFloatingWindow and so it's not a tile.
+// this window is a floating window created via FloatingWindow and so it's not a tile.
 func (wm *WindowManager) SplitHorizontal(win Window, content tui.Component) (Window, bool) {
 	t, ok := win.node.(*TileNode)
 	if !ok {
@@ -185,14 +185,24 @@ func (wm *WindowManager) SetFrameAttr(attr term.Attributes) {
 	})
 }
 
+// FloatingConfig abstracts configuration for
+// creating floating windows.
+type FloatingConfig struct {
+	// Sets the alignment of the window.
+	Alignment
+	// Offset is to be applied to the position of the window
+	// after alignment has been determined.
+	Offset term.Coordinates
+}
+
 // FloatingWindow creates a floating window.
 func (wm *WindowManager) FloatingWindow(
-	content Floating, at term.Coordinates,
+	content Floating, cfg FloatingConfig,
 ) Window {
 	if wm.config.Frame {
 		content = wm.withFrame(content)
 	}
-	f := newFloatingNode(wm, content, at, wm.width, wm.height)
+	f := newFloatingNode(wm, content, cfg, wm.width, wm.height)
 	wm.float = append(wm.float, f)
 	return wm.nodeToWindow(f)
 }

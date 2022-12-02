@@ -4,6 +4,7 @@ import (
 	"io"
 
 	"unstable.build/go-tui"
+	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/workspace"
@@ -67,7 +68,7 @@ type WindowManager interface {
 
 	// Floating creates a new floating window at coordinates,
 	// with static width and height.
-	Floating(h Floating, at term.Coordinates) (Window, error)
+	Floating(h Floating, cfg component.FloatingConfig) (Window, error)
 
 	// Bar creates a status bar with Orientation and Handler.
 	// Bars differ from Split and Floating windows in that they can't

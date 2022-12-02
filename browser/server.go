@@ -12,6 +12,7 @@ import (
 	"github.com/ernestrc/blue/logging"
 	log "github.com/sirupsen/logrus"
 	browserpb "unstable.build/go-tui/browser/rpc"
+	"unstable.build/go-tui/component"
 
 	handlerpb "unstable.build/go-tui/handler/rpc"
 	"unstable.build/go-tui/proto"
@@ -511,10 +512,12 @@ func (s *Server) SetFocus(
 func (s *Server) Floating(
 	ctx context.Context, req *browserpb.FloatingWindowRequest,
 ) (*browserpb.FloatingWindowResponse, error) {
-	at := req.GetAt().ToModel()
+	at := req.GetOffset().ToModel()
+	alignment := component.Alignment(req.GetAlignment())
+	cfg := component.FloatingConfig{Offset: at, Alignment: alignment}
 	windowID, err := s.newRemoteResource(ctx, req.GetHandlerId(),
 		func(wm WindowManager, h Handler) (Window, error) {
-			return wm.Floating(h.(Floating), at)
+			return wm.Floating(h.(Floating), cfg)
 		})
 	if err != nil {
 		return nil, err

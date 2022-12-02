@@ -52,7 +52,8 @@ message BarResponse {
 
 message FloatingWindowRequest {
 	uint64 handler_id = 1;
-	term.Coordinates at = 2;
+	term.Coordinates offset = 2;
+	uint32 alignment = 3;
 }
 
 message FloatingWindowResponse {

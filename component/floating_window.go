@@ -8,24 +8,29 @@ import (
 )
 
 type floatingNode struct {
-	at                  term.Coordinates
-	fwidth, fheight     int // calculated upon Resize, considering trimming
-	maxWidth, maxHeight int // wm size
-	dimwidth, dimheight int // content desired Dimensions size
-	content             Virtual
-	wm                  *WindowManager
+	desiredOffset               term.Coordinates // desired offset
+	alignment                   Alignment        // desired alignment
+	maxWidth, maxHeight         int              // window space size
+	desiredWidth, desiredHeight int              // content desired Dimensions size
+
+	realWidth, realHeight int              // calculated upon Resize, considering trimming
+	realOffset            term.Coordinates // calculated offset with alignment
+
+	wm      *WindowManager
+	content Virtual
 }
 
 func newFloatingNode(
 	wm *WindowManager, content Floating,
-	at term.Coordinates,
+	cfg FloatingConfig,
 	maxWidth, maxHeight int,
 ) *floatingNode {
-	if at.Y < 0 || at.X < 0 {
+	if cfg.Offset.Y < 0 || cfg.Offset.X < 0 {
 		panic("invalid floating window coordinates")
 	}
 	ret := new(floatingNode)
-	ret.at = at
+	ret.desiredOffset = cfg.Offset
+	ret.alignment = cfg.Alignment
 	ret.maxWidth = maxWidth
 	ret.maxHeight = maxHeight
 	ret.wm = wm
@@ -38,11 +43,11 @@ func (w *floatingNode) ID() uint64 {
 }
 
 func (w *floatingNode) Width() int {
-	return w.fwidth
+	return w.realWidth
 }
 
 func (w *floatingNode) Height() int {
-	return w.fheight
+	return w.realHeight
 }
 
 func (w *floatingNode) Content() tui.Component {
@@ -53,9 +58,9 @@ func (w *floatingNode) Content() tui.Component {
 }
 
 func (w *floatingNode) Draw(wr term.Writer) {
-	dimwidth, dimheight := w.dimwidth, w.dimheight
-	w.updateDimensions()
-	if dimwidth != w.dimwidth || dimheight != w.dimheight {
+	desiredWidth, desiredHeight := w.desiredWidth, w.desiredHeight
+	w.updateDesiredDimensions()
+	if desiredWidth != w.desiredWidth || desiredHeight != w.desiredHeight {
 		w.resize()
 	}
 	w.content.Draw(wr)
@@ -76,7 +81,7 @@ func (w *floatingNode) SetContentResize(c tui.Component, resize bool) (
 		// Window.SetContent could pass a non Floating component
 		// if that's the case, then set it to a static floating element which
 		// uses the last Floating's desired dimensions
-		c = prevNodeFloating{Component: c, width: w.dimwidth, height: w.dimheight}
+		c = prevNodeFloating{Component: c, width: w.desiredWidth, height: w.desiredHeight}
 	}
 
 	prev = w.content.C
@@ -85,7 +90,7 @@ func (w *floatingNode) SetContentResize(c tui.Component, resize bool) (
 	}
 	w.content.C = c
 	if resize {
-		w.updateDimensions()
+		w.updateDesiredDimensions()
 		w.resize()
 	}
 	return
@@ -106,28 +111,72 @@ func (w *floatingNode) Close() {
 }
 
 func (w *floatingNode) Position() term.Coordinates {
-	return w.at
+	return w.realOffset
 }
 
-func (w *floatingNode) updateDimensions() {
-	w.dimwidth, w.dimheight = w.content.C.(Floating).Dimensions()
+func (w *floatingNode) updateDesiredDimensions() {
+	w.desiredWidth, w.desiredHeight = w.content.C.(Floating).Dimensions()
 }
 
 func (w *floatingNode) resize() {
-	pos := w.Position()
-	if pos.Y >= w.maxHeight || pos.X >= w.maxWidth {
-		return
+	verticalDiff := w.maxHeight - w.desiredHeight
+	horizontalDiff := w.maxWidth - w.desiredWidth
+
+	if verticalDiff < 0 {
+		verticalDiff = 0
+	}
+	if horizontalDiff < 0 {
+		horizontalDiff = 0
 	}
 
-	w.fwidth, w.fheight = w.dimwidth, w.dimheight
-	if pos.Y+w.fheight >= w.maxHeight {
-		w.fheight = w.maxHeight - pos.Y
+	var offset term.Coordinates
+	if w.alignment&SpanAlignmentVerticallyCentered != 0 {
+		offset.Y = verticalDiff / 2
+	} else if w.alignment&SpanAlignmentBottom != 0 {
+		offset.Y = verticalDiff
+		offset.Y -= w.desiredOffset.Y
+	} else {
+		offset.Y += w.desiredOffset.Y
 	}
-	if pos.X+w.fwidth >= w.maxWidth {
-		w.fwidth = w.maxWidth - pos.X
+
+	if w.alignment&SpanAlignmentHorizontallyCentered != 0 {
+		offset.X = horizontalDiff / 2
+	} else if w.alignment&SpanAlignmentRight != 0 {
+		offset.X = horizontalDiff
+		offset.X -= w.desiredOffset.X
+	} else {
+		offset.X += w.desiredOffset.X
 	}
-	w.content.Move(w.at)
-	w.content.Resize(w.fwidth, w.fheight)
+
+	w.realOffset = offset
+	if w.realOffset.X < 0 {
+		w.realOffset.X = 0
+	}
+	if w.realOffset.Y < 0 {
+		w.realOffset.Y = 0
+	}
+
+	w.realWidth, w.realHeight = w.desiredWidth, w.desiredHeight
+	if w.realOffset.Y+w.realHeight >= w.maxHeight {
+		w.realHeight = w.maxHeight - w.realOffset.Y
+	}
+	if w.realOffset.X+w.realWidth >= w.maxWidth {
+		w.realWidth = w.maxWidth - w.realOffset.X
+	}
+
+	if w.realWidth < 0 {
+		w.realWidth = 0
+	}
+
+	if w.realHeight < 0 {
+		w.realHeight = 0
+	}
+
+	if w.realOffset.Y >= w.maxHeight || w.realOffset.X >= w.maxWidth {
+		return
+	}
+	w.content.Resize(w.realWidth, w.realHeight)
+	w.content.Move(w.realOffset)
 }
 
 func (w *floatingNode) Resize(width, height int) {
@@ -137,7 +186,7 @@ func (w *floatingNode) Resize(width, height int) {
 func (w *floatingNode) SetMaxSize(width, height int) {
 	w.maxWidth = width
 	w.maxHeight = height
-	w.updateDimensions()
+	w.updateDesiredDimensions()
 	w.resize()
 }
 

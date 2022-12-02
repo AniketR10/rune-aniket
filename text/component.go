@@ -15,6 +15,7 @@ import (
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/cell"
+	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/workspace"
@@ -834,12 +835,9 @@ func (c *Component) Cursor(h Handler) (term.Coordinates, error) {
 
 // Floating satisfies browser.WindowManager.
 func (c *Component) Floating(
-	h browser.Floating, at term.Coordinates,
+	h browser.Floating, cfg component.FloatingConfig,
 ) (browser.Window, error) {
-	if at.Y < 0 || at.X < 0 {
-		return nil, fmt.Errorf("invalid floating window coordinates: %v", at)
-	}
-	return c.comp.Floating(h, at), nil
+	return c.comp.Floating(h, cfg), nil
 }
 
 func (c *Component) newTab(
