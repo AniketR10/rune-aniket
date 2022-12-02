@@ -3,6 +3,7 @@ package component
 import (
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"unstable.build/go-tui/term"
 	testutil "unstable.build/go-tui/util/test"
 )
@@ -74,4 +75,11 @@ TT
 	}
 
 	testutil.TestComponent(t, f, w, tests)
+}
+
+func TestComponentDimensions(t *testing.T) {
+	f := NewFrame(StaticFloating(&TestComponent{}, 2, 2))
+	actualWidth, actualHeight := f.Dimensions()
+	assert.Equal(t, 4, actualWidth)
+	assert.Equal(t, 4, actualHeight)
 }

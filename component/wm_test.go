@@ -115,7 +115,7 @@ func TestComponentWindowSplit(t *testing.T) {
 └──────────────────┘`,
 		}, {func() {
 			assert.Error(t, w1.Close())
-			floating := StaticFloating(&h2, 4, 4)
+			floating := StaticFloating(&h2, 2, 2)
 			w2 = wm.FloatingWindow(floating,
 				FloatingConfig{
 					Alignment: SpanAlignmentLeft | SpanAlignmentTop,
@@ -132,7 +132,7 @@ func TestComponentWindowSplit(t *testing.T) {
 │CCCCCCCCCCCCCCCCCC│
 └──────────────────┘`,
 		}, {func() {
-			floating := StaticFloating(&h2, 4, 4)
+			floating := StaticFloating(&h2, 2, 2)
 			w2.Close()
 			w2 = wm.FloatingWindow(floating,
 				FloatingConfig{
@@ -150,7 +150,7 @@ func TestComponentWindowSplit(t *testing.T) {
 │CCCCCCCCCCCCCCCCCC│
 └──────────────────┘`,
 		}, {func() {
-			floating := StaticFloating(&h2, 4, 4)
+			floating := StaticFloating(&h2, 2, 2)
 			w2.Close()
 			w2 = wm.FloatingWindow(floating,
 				FloatingConfig{
@@ -168,7 +168,7 @@ func TestComponentWindowSplit(t *testing.T) {
 │CCCCCCCCCCCCCC└──┘│
 └──────────────────┘`,
 		}, {func() {
-			floating := StaticFloating(&h2, 4, 4)
+			floating := StaticFloating(&h2, 2, 2)
 			w2.Close()
 			w2 = wm.FloatingWindow(floating,
 				FloatingConfig{
@@ -186,7 +186,7 @@ func TestComponentWindowSplit(t *testing.T) {
 │└──┘CCCCCCCCCCCCCC│
 └──────────────────┘`,
 		}, {func() {
-			floating := StaticFloating(&h2, 4, 4)
+			floating := StaticFloating(&h2, 2, 2)
 			w2.Close()
 			w2 = wm.FloatingWindow(floating,
 				FloatingConfig{
@@ -204,7 +204,7 @@ func TestComponentWindowSplit(t *testing.T) {
 │CCCCCCCCCCCCCCCCCC│
 └──────────────────┘`,
 		}, {func() {
-			floating := StaticFloating(&h2, 4, 4)
+			floating := StaticFloating(&h2, 2, 2)
 			w2.Close()
 			w2 = wm.FloatingWindow(floating,
 				FloatingConfig{
@@ -222,7 +222,7 @@ func TestComponentWindowSplit(t *testing.T) {
 │CCCCCCCCCCCCCCCCCC│
 └──────────────────┘`,
 		}, {func() {
-			floating := StaticFloating(&h2, 4, 4)
+			floating := StaticFloating(&h2, 2, 2)
 			w2.Close()
 			w2 = wm.FloatingWindow(floating,
 				FloatingConfig{
@@ -240,7 +240,7 @@ func TestComponentWindowSplit(t *testing.T) {
 │CCCCCCCCCCCCCCCCCC│
 └──────────────────┘`,
 		}, {func() {
-			floating := StaticFloating(&h2, 4, 4)
+			floating := StaticFloating(&h2, 2, 2)
 			w2.Close()
 			w2 = wm.FloatingWindow(floating,
 				FloatingConfig{
@@ -258,7 +258,7 @@ func TestComponentWindowSplit(t *testing.T) {
 │CCCCCCCCCCCCCCCCCC│
 └──────────────────┘`,
 		}, {func() {
-			floating := StaticFloating(&h2, 4, 4)
+			floating := StaticFloating(&h2, 2, 2)
 			w2.Close()
 			w2 = wm.FloatingWindow(floating,
 				FloatingConfig{
@@ -276,7 +276,7 @@ func TestComponentWindowSplit(t *testing.T) {
 │CCCCCCCCCCCCCCCCCC│
 └──────────────────┘`,
 		}, {func() {
-			floating := StaticFloating(&h2, 4, 4)
+			floating := StaticFloating(&h2, 2, 2)
 			w2.Close()
 			w2 = wm.FloatingWindow(floating,
 				FloatingConfig{
@@ -294,7 +294,7 @@ func TestComponentWindowSplit(t *testing.T) {
 │CCCCCCCCCCCCCCCCCC│
 └──────────────────┘`,
 		}, {func() {
-			floating := StaticFloating(&h2, 4, 4)
+			floating := StaticFloating(&h2, 2, 2)
 			w2.Close()
 			w2 = wm.FloatingWindow(floating,
 				FloatingConfig{
@@ -312,7 +312,7 @@ func TestComponentWindowSplit(t *testing.T) {
 │CCCCCCCCCCCCCCCCCC│
 └──────────────────┘`,
 		}, {func() {
-			floating := StaticFloating(&h2, 4, 4)
+			floating := StaticFloating(&h2, 2, 2)
 			w2.Close()
 			w2 = wm.FloatingWindow(floating,
 				FloatingConfig{},
@@ -328,8 +328,8 @@ func TestComponentWindowSplit(t *testing.T) {
 └──────────────────┘`,
 		}, {func() {
 			floating := w2.Content().(*staticFloating)
-			floating.width = 5
-			floating.height = 6
+			floating.width = 3
+			floating.height = 4
 		}, `
 ┌───┐──────────────┐
 │BBB│CCCCCCCCCCCCCC│

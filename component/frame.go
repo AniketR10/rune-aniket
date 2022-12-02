@@ -222,8 +222,11 @@ func (f *Frame) Content() tui.Component {
 
 // Dimensions satisfies Floating. If the underlying component
 // is not a Floating component this method panics.
-func (f *Frame) Dimensions() (int, int) {
-	return f.content.C.(Floating).Dimensions()
+func (f *Frame) Dimensions() (width, height int) {
+	width, height = f.content.C.(Floating).Dimensions()
+	width += 2
+	height += 2
+	return
 }
 
 // SetContent updates the underlying component and resizes it
