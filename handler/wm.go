@@ -71,7 +71,7 @@ func (wm *WindowManager) SetFrameCharSet(def, focus component.FrameCharSet) {
 
 func (wm *WindowManager) setFocusAttr(win Window) {
 	// only set focus attr+charset if there's more than one window
-	if wm.Size() > 1 {
+	if wm.SizeTiles()+wm.SizeFloating() > 1 {
 		win.SetFrameAttr(wm.config.FocusFrameAttr)
 		win.SetFrameCharSet(wm.config.FocusFrameCharSet)
 	} else {
@@ -125,17 +125,26 @@ func (wm *WindowManager) Handle(ev term.Event) (exit bool, handled bool) {
 
 	var hexit bool
 	focus := wm.focus
-	size := wm.comp.Size()
+	size := wm.comp.SizeTiles()
 	hexit, handled = focus.Content().Handle(ev)
 
 	// if handler in focus wants to exit, close the window,
 	// or signal exit to upstream handler if it was last window
 	if hexit {
+		if focus.IsFloating() {
+			focus.Close()
+			return
+		}
+
 		if exit = size == 1; exit {
 			return
 		}
+
 		curr := wm.focus
-		if curr.ID() == focus.ID() {
+		// make sure that if Handle above closed second to last window
+		// we are not closing last window
+		size := wm.comp.SizeTiles()
+		if curr.ID() == focus.ID() && size != 1 {
 			wm.ShiftFocus()
 			curr.Close()
 		}
@@ -294,7 +303,7 @@ func (wm *WindowManager) Man() tui.Manual {
 
 // Draw : tui.Component
 func (wm *WindowManager) Draw(w term.Writer) {
-	if wm.comp.Size() == 1 || !wm.config.Dim {
+	if wm.comp.SizeTiles()+wm.comp.SizeFloating() == 1 || !wm.config.Dim {
 		wm.comp.Draw(w)
 		return
 	}
@@ -339,7 +348,7 @@ func (wm *WindowManager) Draw(w term.Writer) {
 // I haven't figured out a way to bypass this so drawing the current handler
 // in focus twice seems like a better outcome that this nasty race-condition.
 func (wm *WindowManager) _DrawOptimized(w term.Writer) {
-	if wm.comp.Size() == 1 {
+	if wm.comp.SizeTiles()+wm.comp.SizeFloating() == 1 {
 		wm.comp.Draw(w)
 		return
 	}
@@ -415,9 +424,14 @@ func DefaultWindowManagerConfig() WindowManagerConfig {
 	}
 }
 
-// Size returns the size in windows of this WindowManager.
-func (wm *WindowManager) Size() int {
-	return wm.comp.Size()
+// SizeTiles returns the number of tiled windows in this WindowManager.
+func (wm *WindowManager) SizeTiles() int {
+	return wm.comp.SizeTiles()
+}
+
+// SizeFloating returns the number of floating windows in this WindowManager.
+func (wm *WindowManager) SizeFloating() int {
+	return wm.comp.SizeFloating()
 }
 
 // Iterate applies op to the content of all widnows of this WindowManager.

@@ -705,7 +705,7 @@ func (c *Component) Resize(width, height int) {
 }
 
 func (c *Component) overwriteFocusWindowUnion(w term.Writer) {
-	if !c.config.Frame || c.focusWindow == (handler.Window{}) || c.wm.Size() <= 1 {
+	if !c.config.Frame || c.focusWindow == (handler.Window{}) || c.wm.SizeTiles() == 1 {
 		return
 	}
 	topleft := c.focusWindow.Position()

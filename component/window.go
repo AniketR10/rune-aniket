@@ -265,6 +265,12 @@ func (w Window) ID() uint64 {
 	return w.node.ID()
 }
 
+// IsFloating returns true if this is a floating window.
+func (w Window) IsFloating() bool {
+	_, ok := w.node.(*TileNode)
+	return !ok
+}
+
 // Close removes this Window from the WindowManager
 // It returns an error if window is last window in the WindowManager.
 func (w Window) Close() error {
@@ -273,7 +279,7 @@ func (w Window) Close() error {
 		return nil
 	}
 
-	if w.wm.Size() == 1 {
+	if _, ok := w.node.(*TileNode); ok && w.wm.SizeTiles() == 1 {
 		return errors.New("trying to close last node")
 	}
 

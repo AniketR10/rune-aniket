@@ -504,6 +504,31 @@ C──────────────────D
 │CCCCCCCCCCCCCCCCCC│
 └──────────────────┘`,
 		}, {func() {
+			hf := &TestHandler{TestComponent: component.TestComponent{Ch: 'F'}}
+			wfloat := wm.FloatingWindow(StaticFloating(hf, 2, 2), component.FloatingConfig{})
+			wm.SetFocus(wfloat)
+			hf.HandleOverride = func(ev term.Event) (bool, bool) {
+				// test that tiled window doesn't attempt to close last node
+				// when there's a floating window
+				require.Equal(t, 1, wm.SizeTiles())
+				require.Equal(t, 1, wm.SizeFloating())
+				assert.Error(t, w3.Close())
+				assert.NoError(t, wfloat.Close())
+				return true, true
+			}
+			exit, handled := wm.Handle(term.Event{})
+			assert.False(t, exit)
+			assert.True(t, handled)
+		}, `
+┌──────────────────┐
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+└──────────────────┘`,
+		}, {func() {
 			h3.HandleOverride = func(ev term.Event) (bool, bool) {
 				assert.Error(t, w3.Close())
 				return true, true

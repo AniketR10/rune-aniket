@@ -123,7 +123,10 @@ func (w Window) Close() error {
 		return errors.New("trying to close last window")
 	}
 
-	w.Window.Close()
+	err := w.Window.Close()
+	if err != nil {
+		return err
+	}
 
 	// make sure that focus attrs are "reset" if wm size is 1
 	w.wm.setFocusAttr(w.wm.Focus())

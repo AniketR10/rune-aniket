@@ -97,9 +97,15 @@ func (wm *WindowManager) Resize(width, height int) {
 	}
 }
 
-// Size returns the size in windows of this WindowManager.
-func (wm *WindowManager) Size() int {
-	return wm.tree.Size() + len(wm.float)
+// SizeTiles returns the number of tiled windows of this WindowManager.
+func (wm *WindowManager) SizeTiles() int {
+	return wm.tree.Size()
+}
+
+// SizeFloating returns the number of floating windows of this
+// WindowManager.
+func (wm *WindowManager) SizeFloating() int {
+	return len(wm.float)
 }
 
 func (wm *WindowManager) nodeToWindow(node windowNode) Window {

@@ -59,10 +59,10 @@ func TestComponentCloseWindow(t *testing.T) {
 
 			win, ok := tcase.split(c, h)
 			require.True(t, ok)
-			require.Equal(t, 2, c.wm.Size())
+			require.Equal(t, 2, c.wm.SizeTiles())
 
 			assert.NoError(t, win.Close())
-			require.Equal(t, 1, c.wm.Size())
+			require.Equal(t, 1, c.wm.SizeTiles())
 
 			assert.Len(t, c.freeTabs(), 1)
 		})
@@ -85,16 +85,16 @@ func TestComponentCloseWindow(t *testing.T) {
 			require.True(t, ok)
 
 			assert.Equal(t, 0, c.tabs.Size())
-			assert.Equal(t, 2, c.wm.Size())
+			assert.Equal(t, 2, c.wm.SizeTiles())
 
 			exit, handled := c.Handle(term.Event{})
 			require.True(t, handled)
 			require.False(t, exit)
 
 			assert.Equal(t, 0, c.tabs.Size())
-			assert.Equal(t, 1, c.wm.Size())
-			require.NoError(t, win.Close())
-			assert.Equal(t, 1, c.wm.Size())
+			assert.Equal(t, 1, c.wm.SizeTiles())
+			require.Error(t, win.Close())
+			assert.Equal(t, 1, c.wm.SizeTiles())
 		})
 
 		t.Run(tcase.method+"Close calls onWindowClosed callback", func(t *testing.T) {
