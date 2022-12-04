@@ -545,6 +545,30 @@ C──────────────────D
 │CCCCCCCCCCCCCCCCCC│
 │CCCCCCCCCCCCCCCCCC│
 └──────────────────┘`,
+		}, {func() {
+			hf := &TestHandler{TestComponent: component.TestComponent{Ch: 'F'}}
+			wfloat := wm.FloatingWindow(StaticFloating(hf, 2, 2), component.FloatingConfig{})
+			wm.SetFocus(wfloat)
+			hf.HandleOverride = func(ev term.Event) (bool, bool) {
+				// test close itself and focus left
+				assert.NoError(t, wm.Focus().Close())
+				prevf := wm.SetFocus(w3)
+				assert.Equal(t, w3, prevf)
+				assert.False(t, wm.FocusLeft())
+				return true, true
+			}
+			exit, handled := wm.Handle(term.Event{})
+			assert.False(t, exit)
+			assert.True(t, handled)
+		}, `
+┌──────────────────┐
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+└──────────────────┘`,
 		},
 	}
 

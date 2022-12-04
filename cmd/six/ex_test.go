@@ -262,7 +262,7 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 	}
 	bh, b, err := constructor(text.NopEditor(),
 		text.WithCommandKey(testCommandKey),
-		text.WithCommandKeyBinding(term.KeyComb{Ch: '4'}, []string{"close"}),
+		text.WithCommandKeyBinding(term.KeyComb{Ch: '4'}, []string{"closeWindow"}),
 	)
 	require.NoError(t, err)
 
@@ -623,34 +623,34 @@ func TestExCommandResponsive(t *testing.T) {
 		{":edit",
 			`                    
                     
-     ┌────────┐     
-     │edit▐   │     
-     │edit    │     
-     │        │     
-     └────────┘     
                     
+┌──────────────────┐
+│edit▐             │
+│edit              │
+│                  │
+└──────────────────┘
                     
                     `},
-		{":eeeeeeeeeeeeeeeeeeeeeeeeee",
+		{":eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
 			`                    
                     
-     ┌────────┐     
-     │eeeeeeee│     
-     │eeeeeeee│     
-     │eeeeeee▐│     
-     └────────┘     
                     
+┌──────────────────┐
+│eeeeeeeeeeeeeeeeee│
+│eeeeeeeeeeeeeeeeee│
+│eeeeeeeeeeeeeeeee▐│
+└──────────────────┘
                     
                     `},
 		{":e eeeeeeeeeeeeeeeeeeeeeeeee",
 			`                    
                     
-     ┌────────┐     
-     │edit eee│     
-     │eeeeeeee│     
-     │eeeeeee▐│     
-     └────────┘     
                     
+┌──────────────────┐
+│edit eeeeeeeeeeeee│
+│eeeeeeeeeeee▐     │
+│                  │
+└──────────────────┘
                     
                     `},
 	}
@@ -663,8 +663,6 @@ func TestExCommandResponsive(t *testing.T) {
 				WindowManagerConfig: component.WindowManagerConfig{Frame: false}}),
 			text.WithCommandOverlayConfig(text.CommandOverlayConfig{
 				FrameCharSet: component.FrameCharSetDefault(),
-				Width:        10,
-				Height:       5,
 				Frame:        true,
 			}),
 		}
@@ -912,7 +910,7 @@ type testEx struct {
 
 func (t testEx) Handle(ev term.Event) (bool, bool) {
 	quit, handle := t.ex.Handle(ev)
-	t.ex.cmd.Wait()
+	t.ex.Wait()
 	return quit, handle
 }
 
@@ -985,12 +983,12 @@ func TestCommandHistory(t *testing.T) {
 			`┌──────────────────┐
 │hello.go  wi.go   │
 ├──────────────────┤
-│AAAAAAAAAAAAAAAAAA│
-│AAAAAAAAAAAAAAAAAA│
-│AAAAAAAAAAAAAAAAAA│
-│AAAAAAAAAAAAAAAAAA│
-│AAAAAAAAAAAAAAAAAA│
-│AAAAAAAAAAAAAAAAAA│
+│EEEEEEEEEEEEEEEEEE│
+│EEEEEEEEEEEEEEEEEE│
+│EEEEEEEEEEEEEEEEEE│
+│EEEEEEEEEEEEEEEEEE│
+│EEEEEEEEEEEEEEEEEE│
+│EEEEEEEEEEEEEEEEEE│
 └──────────────────┘`},
 	}
 

@@ -60,7 +60,7 @@ func (h *safeHandler) Handle(ev term.Event) (exit, handled bool) {
 	defer h.mu.Unlock()
 	exit, handled = h.Handler.Handle(ev)
 	// workaround search.List non-determinism
-	h.Handler.cmd.Wait()
+	h.Handler.Wait()
 	return
 }
 func (h *safeHandler) Cursor() (pos term.Coordinates, show bool) {

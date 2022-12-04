@@ -19,9 +19,7 @@ import (
 func defaultCfg() ideConfig {
 	return ideConfig{cfg: map[string]interface{}{
 		"command": map[string]interface{}{
-			"key":    "<c-\\>", // see testutil.TestHandlerIsolated
-			"width":  10,
-			"height": 5,
+			"key": "<c-\\>", // see testutil.TestHandlerIsolated
 			"key_bindings": map[string]interface{}{
 				"1": "switchToWorkspace 1",
 				"2": "switchToWorkspace 2",
@@ -108,13 +106,13 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 		{":edit",
 			`┌──────────────────┐
 │                  │
-├────┌────────┐────┤
-│    │edit▐   │    │
-│    │edit    │    │
-│work│        │aper│
-│    └────────┘    │
+├──────────────────┤
 │                  │
-│                  │
+┌──────────────────┐
+│┌────────────────┐│
+││edit▐           ││
+││                ││
+│└────────────────┘│
 └──────────────────┘`},
 		{":edit /tmp/12345aZZ>ihello<yyp",
 			`┌──────────────────┐
@@ -138,7 +136,7 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 ├──────────────────┤
 │1  3              │
 └──────────────────┘`},
-		{":cw>",
+		{":cwo>",
 			`┌──────────────────┐
 │                  │
 ├──────────────────┤
@@ -160,7 +158,7 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 │                  │
 │                  │
 └──────────────────┘`},
-		{":cw>:cw>",
+		{":cwo>:cwo>",
 			`┌──────────────────┐
 │                  │
 ├──────────────────┤
@@ -310,6 +308,6 @@ func (t *testWorkspaceManagerHandler) Handle(ev term.Event) (bool, bool) {
 	if !ok {
 		ex = handler.(*workspaceHandler).ex
 	}
-	ex.cmd.Wait()
+	ex.Wait()
 	return quit, handle
 }

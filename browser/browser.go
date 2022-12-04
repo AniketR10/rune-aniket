@@ -135,10 +135,40 @@ func StaticFloating(h Handler, width, height int) Floating {
 	return staticFloating{width: width, height: height, Handler: h}
 }
 
-// NopFloatingHandler wraps a handler.Floating and returns a Floating that does
-// nothing when Close is called.
+// NopFloatingHandler wraps a handler.Floating and returns a Floating
+// that does nothing when Close is called.
 func NopFloatingHandler(h handler.Floating) Floating {
 	return nopFloating{Floating: h}
+}
+
+// FuncFloatingHandler wraps a handler.Floating and returns a Floating
+// that calls calls closeFn when Close is called.
+func FuncFloatingHandler(h handler.Floating, closeFn func() error) Floating {
+	return funcFloatingHandler{Floating: h, fn: closeFn}
+}
+
+// FuncFloating wraps a Handler and returns a Floating that
+// calls dimFn when Dimensions is called.
+func FuncFloating(h Handler, dimFn func() (int, int)) Floating {
+	return funcFloating{Handler: h, fn: dimFn}
+}
+
+type funcFloatingHandler struct {
+	handler.Floating
+	fn func() error
+}
+
+func (f funcFloatingHandler) Close() error {
+	return f.fn()
+}
+
+type funcFloating struct {
+	Handler
+	fn func() (int, int)
+}
+
+func (f funcFloating) Dimensions() (width, height int) {
+	return f.fn()
 }
 
 type closeHandler struct {

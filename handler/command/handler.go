@@ -223,10 +223,6 @@ func (h *Handler) dispatchCommand() (
 		}
 	}
 
-	if quit {
-		// hack to signal exit process
-		return true, false
-	}
 	return true, true
 }
 
@@ -522,6 +518,9 @@ func (h *Handler) reset() {
 
 // Cursor satisfies tui.Handler.
 func (h *Handler) Cursor() (term.Coordinates, bool) {
+	if h.width == 0 {
+		return term.Coordinates{}, false
+	}
 	var pos term.Coordinates
 	x := len(h.buf.String()) % h.width
 	y := len(h.buf.String()) / h.width
@@ -559,6 +558,19 @@ func (h *Handler) Cancel() {
 
 	h.cancelCompletionPush("cancel")
 	h.list.Cancel()
+}
+
+func (h *Handler) Dimensions() (width, height int) {
+	maxWidthItems := 20
+	h.list.IterateVisible(func(m search.Match) {
+		if mlen := len(m.Data()); mlen > maxWidthItems {
+			maxWidthItems = mlen
+		}
+	})
+	width = int(math.Max(float64(h.list.Buffer().MaxColumns()), float64(maxWidthItems)))
+	width = int(math.Min(math.Max(float64(width), 50), 100))
+	height = int(math.Min(math.Max(float64(h.list.MatchCount()), 3), 40))
+	return
 }
 
 // Close closes all resources associated with this Handler.

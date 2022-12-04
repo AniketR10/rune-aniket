@@ -199,40 +199,6 @@ func (c ideConfig) commandKey() (ret term.KeyComb) {
 	return
 }
 
-func (c ideConfig) commandOverlayWidth() (ret int) {
-	ret = text.DefaultCommandOverlayConfig().Width
-	cfg, ok := c.command()
-	if !ok {
-		return
-	}
-	width, err := cfg.GetInt("width")
-	if err != nil {
-		if err != config.ErrNotFound {
-			c.errors["command.width"] = err
-		}
-		return
-	}
-	ret = width
-	return
-}
-
-func (c ideConfig) commandOverlayHeight() (ret int) {
-	ret = text.DefaultCommandOverlayConfig().Height
-	cfg, ok := c.command()
-	if !ok {
-		return
-	}
-	height, err := cfg.GetInt("height")
-	if err != nil {
-		if err != config.ErrNotFound {
-			c.errors["command.height"] = err
-		}
-		return
-	}
-	ret = height
-	return
-}
-
 func (c ideConfig) commandMaxHistory() (ret int) {
 	ret = text.DefaultConfig().CommandMaxHistory
 	b, ok := c.command()
@@ -426,8 +392,6 @@ func (c ideConfig) commandOverlayConfig() text.CommandOverlayConfig {
 		Frame:            frame,
 		FrameAttributes:  c.commandOverlayFrameAttr(),
 		FrameCharSet:     c.commandOverlayFrameCharSet(),
-		Width:            c.commandOverlayWidth(),
-		Height:           c.commandOverlayHeight(),
 		MatchedTextAttr:  c.commandOverlayMatchedTextAttr(frame),
 		FocusElementAttr: c.commandOverlayFocusElementAttr(frame),
 		ElementAttr:      c.commandOverlayElementAttr(frame),

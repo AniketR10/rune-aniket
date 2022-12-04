@@ -49,7 +49,7 @@ var (
 		"bufferNext":              (*ex).nextBuffer,
 		"bufferClose":             (*ex).closeBuffer,
 		"bufferCloseAll":          (*ex).closeAllBuffers,
-		"close":                   (*ex).closeFocusWindow,
+		"closeWindow":             (*ex).closeFocusWindow,
 		"writeQuit":               (*ex).flushCloseIgnoreNonFlushed,
 		"writeForceQuit!":         (*ex).flushCloseIgnoreNonFlushed,
 		"write":                   (*ex).forceFlush,
@@ -88,17 +88,10 @@ var (
 		{First: term.KeyComb{Key: term.KeyCtrlX},
 			Last: term.KeyComb{Ch: 'v'}}: {"changeSplitOrientation", "v"},
 		{First: term.KeyComb{Key: term.KeyCtrlX},
-			Last: term.KeyComb{Key: term.KeyCtrlW}}: {"close"},
+			Last: term.KeyComb{Key: term.KeyCtrlW}}: {"closeWindow"},
 	}
 	errEventStreamNotReady = errors.New("event stream not ready to publish")
 	forcePublishRetry      = retry.SequentialStrategy(5 * time.Millisecond)
-)
-
-type mode int8
-
-const (
-	modeDefault mode = iota
-	modeCommand
 )
 
 type workspaceLoader interface {
@@ -112,16 +105,18 @@ type ex struct {
 	config               text.Config
 	comp                 text.Component
 	ed                   text.Editor
+	storage              document.Service
 	workspace            workspaceLoader
 	sequencer            handler.Sequencer
 	publishEvent         func(term.Event) bool
-	cmd                  *command.Handler
-	overlay              component.Overlay
-	mode                 mode
 	cancelPartialReissue func()
 	ctxPartialReissue    context.Context
 	reissueEvent         term.Event
+	cmd                  *command.Handler
+	cmdWin               browser.Window
+	noResetFocus         bool
 	quit                 bool
+	height               int
 }
 
 func newEx(
@@ -138,7 +133,7 @@ func newEx(
 	return
 }
 
-func forcePublishEvent(publishEvent func(term.Event) bool) func(ev term.Event) {
+func forcePublishEvent(publishEvent func(term.Event) bool) func(term.Event) {
 	return func(ev term.Event) {
 		retry.Retry(context.Background(), forcePublishRetry, func(context.Context) (bool, error) {
 			ok := publishEvent(ev)
@@ -164,7 +159,6 @@ func (e *ex) init(
 	if err != nil {
 		return
 	}
-	e.resetCommandList()
 	return err
 }
 
@@ -188,6 +182,7 @@ func (e *ex) subscribeCommands() error {
 
 // FIXME ~/ doesn't really work because command handler doesn't update
 // the path used to fuzzy search so it fuzzy searches ~/ against /home/user
+// TODO update editFiles completer to expand and somehow writeback to command handler
 func (e *ex) completeEdit(
 	ctx context.Context, args []string,
 ) (iterator.Iterator[string], error) {
@@ -239,9 +234,9 @@ func (e *ex) doInit(
 	publishEvent func(term.Event) bool,
 	opts ...text.Option,
 ) (err error) {
-	e.mode = modeDefault
 	e.workspace = m
 	e.publishEvent = publishEvent
+	e.storage = storage
 
 	e.config = text.DefaultConfig()
 
@@ -264,43 +259,15 @@ func (e *ex) doInit(
 	}
 	e.sequencer.Init(seqInterests, e.config.SequencerTimeout)
 
-	if e.config.CommandOverlay.Width <= 0 || e.config.CommandOverlay.Height <= 0 {
-		msg := fmt.Sprintf("invalid CommandOverlay dimensions: %v",
-			e.config.CommandOverlay)
-		panic(msg)
-	}
-
-	commandCfg := command.Config{
-		MaxHistory:       e.config.CommandMaxHistory,
-		HistoryKey:       e.config.CommandEvent,
-		MatchedTextAttr:  e.config.CommandOverlay.MatchedTextAttr,
-		FocusElementAttr: e.config.CommandOverlay.FocusElementAttr,
-		ElementAttr:      e.config.CommandOverlay.ElementAttr,
-		DocumentID:       commandHistoryDocumentID,
-	}
-	e.cmd = command.NewHandler(storage, e, e, e, []string{}, commandCfg)
-
-	var commandOverlay tui.Component
-	if e.config.CommandOverlay.Frame {
-		frame := component.NewFrame(e.cmd)
-		frame.FrameCharSet = e.config.CommandOverlay.FrameCharSet
-		frame.Attributes = e.config.CommandOverlay.FrameAttributes
-		commandOverlay = frame
-	} else {
-		commandOverlay = e.cmd
-	}
-
-	e.overlay.Init(&e.comp, commandOverlay,
-		e.config.CommandOverlay.ElementAttr,
-		component.SpanConfig{
-			PadVertical:      -e.config.CommandOverlay.Height,
-			PadHorizontal:    -e.config.CommandOverlay.Width,
-			ContentAlignment: component.SpanAlignmentCentered,
-		})
-
 	e.ed = ed
 	e.cleanPartialReissueState()
 	return
+}
+
+func (e *ex) Wait() {
+	if e.cmd != nil {
+		e.cmd.Wait()
+	}
 }
 
 // Complete satisfies command.Completer for command.Handler.
@@ -316,16 +283,22 @@ func (e *ex) Complete(ctx context.Context, cmd string, args ...string) iterator.
 // Dispatch satisfies command.Dispatcher for command.Handler.
 func (e *ex) Dispatch(command string, args ...string) bool {
 	quit, err := e.runCommand(command, args)
-	e.setProxyMode()
 	if err != nil {
 		e.setError(err)
 	}
 	return quit
 }
 
+func (e *ex) invokeWindow() browser.Window {
+	if e.cmd != nil {
+		return e.cmdWin
+	}
+	ret, _ := e.comp.Focus()
+	return ret
+}
+
 func (e *ex) handlerInFocus() (workspace.URI, text.Handler, bool) {
-	focus, _ := e.comp.Focus()
-	content, _ := focus.Content()
+	content, _ := e.invokeWindow().Content()
 	t, ok := content.(*browser.Tab)
 	if !ok {
 		return workspace.URI{}, nil, false
@@ -353,19 +326,19 @@ func (e *ex) moveFocusCursor(line int) error {
 
 func (e *ex) previousBuffer(args ...string) error {
 	b := e.comp.Browser()
-	b.PreviousTab(b.Focus())
+	b.PreviousTab(e.invokeWindow())
 	return nil
 }
 
 func (e *ex) nextBuffer(args ...string) error {
 	b := e.comp.Browser()
-	b.NextTab(b.Focus())
+	b.NextTab(e.invokeWindow())
 	return nil
 }
 
 func (e *ex) closeBuffer(args ...string) error {
 	b := e.comp.Browser()
-	b.RemoveWindowContent(b.Focus())
+	b.RemoveWindowContent(e.invokeWindow())
 	return nil
 }
 
@@ -376,19 +349,19 @@ func (e *ex) closeAllBuffers(args ...string) error {
 }
 
 func (e *ex) closeFocusWindow(args ...string) error {
-	b := e.comp.Browser()
-	return b.Focus().Close()
+	if e.cmd != nil {
+		e.noResetFocus = true
+	}
+	return e.invokeWindow().Close()
 }
 
 func (e *ex) flushCloseIgnoreNonFlushed(args ...string) error {
-	b := e.comp.Browser()
 	e.quit = true
-	return e.comp.Flush(b.Focus())
+	return e.comp.Flush(e.invokeWindow())
 }
 
 func (e *ex) forceFlush(args ...string) error {
-	b := e.comp.Browser()
-	return e.comp.Flush(b.Focus())
+	return e.comp.Flush(e.invokeWindow())
 }
 
 func (e *ex) forceQuit(args ...string) error {
@@ -426,7 +399,7 @@ func (e *ex) editFileURI(uri workspace.URI) error {
 	if err != nil {
 		return err
 	}
-	err = e.comp.Browser().Focus().SetContent(h)
+	err = e.invokeWindow().SetContent(h)
 	if err == browser.ErrTabNotFree {
 		err = nil
 	}
@@ -465,7 +438,7 @@ func (e *ex) editFiles(args ...string) error {
 
 func (e *ex) reloadFile(args ...string) error {
 	b := e.comp.Browser()
-	focus := b.Focus()
+	focus := e.invokeWindow()
 	uri, _, ok := e.handlerInFocus()
 	if !ok {
 		return errors.New("not a file")
@@ -493,25 +466,39 @@ func (e *ex) splitDirectionChange(args ...string) error {
 
 func (e *ex) newWindowHandler(h browser.Handler) {
 	eb := e.comp.Browser()
+	eb.SetFocus(e.invokeWindow())
 	eb.Split(browser.OrientationDefault, h)
 }
 
+func (e *ex) prepareFocusShift() {
+	eb := e.comp.Browser()
+	if e.cmd != nil {
+		eb.Focus().Close()
+		e.noResetFocus = true
+	}
+	eb.SetFocus(e.invokeWindow())
+}
+
 func (e *ex) focusNextWindow(args ...string) error {
+	e.prepareFocusShift()
 	e.comp.Browser().FocusRight()
 	return nil
 }
 
 func (e *ex) focusPrevWindow(args ...string) error {
+	e.prepareFocusShift()
 	e.comp.Browser().FocusLeft()
 	return nil
 }
 
 func (e *ex) focusAboveWindow(args ...string) error {
+	e.prepareFocusShift()
 	e.comp.Browser().FocusUp()
 	return nil
 }
 
 func (e *ex) focusBelowWindow(args ...string) error {
+	e.prepareFocusShift()
 	e.comp.Browser().FocusDown()
 	return nil
 }
@@ -522,6 +509,9 @@ func (e *ex) panic(args ...string) error {
 
 func (e *ex) newWindow(args ...string) error {
 	e.newWindowHandler(nil)
+	if e.cmd != nil {
+		e.noResetFocus = true
+	}
 	return nil
 }
 
@@ -544,7 +534,7 @@ func (e *ex) setError(err error) {
 
 func (e *ex) handleCommandEvent(ev term.Event) bool {
 	if ev.KeyComb() == e.config.CommandEvent {
-		e.setCommandMode()
+		e.openCommandPrompt()
 		return true
 	}
 	return false
@@ -556,9 +546,14 @@ func isWindowControlCommand(cmdAndArgs []string) bool {
 	return ok
 }
 
-func (e *ex) handleProxy(ev term.Event) (
+func (e *ex) handleEvent(ev term.Event) (
 	exit, handled bool,
 ) {
+	if ev.Type == term.EventMouse {
+		_, handled = e.comp.Browser().Handle(ev)
+		return
+	}
+
 	// If ex is configured with non character
 	// command mode trigger event, then this takes
 	// precedence over any other event
@@ -604,7 +599,7 @@ func (e *ex) handleProxy(ev term.Event) (
 				if ctx.Err() == context.DeadlineExceeded {
 					// timer expired, reissue event because
 					// user didn't send a matching key combination.
-					forcePublishEvent(e.publishEvent)(ev)
+					forcePublishEvent(e.publishEvent)(e.reissueEvent)
 				}
 			}(e.ctxPartialReissue)
 			return
@@ -621,11 +616,15 @@ func (e *ex) handleProxy(ev term.Event) (
 				_, _ = e.comp.Browser().Handle(e.reissueEvent)
 			}
 		}
-		cmdAndArgs, ok = e.comp.KeyMapping(ev.KeyComb())
+		cmdAndArgs, _ = e.comp.KeyMapping(ev.KeyComb())
 	}
 
 	// first dispatch window control commands
 	if len(cmdAndArgs) != 0 && isWindowControlCommand(cmdAndArgs) {
+		// make sure that the command is applied to the right window
+		// and it needs to be set here to differentiate between
+		// runCommand being called from command prompt
+		// or from a key mapping event
 		quit, err := e.runCommand(cmdAndArgs[0], cmdAndArgs[1:])
 		if err != nil {
 			e.setError(err)
@@ -664,11 +663,7 @@ func (e *ex) handleProxy(ev term.Event) (
 	return
 }
 
-func (e *ex) setProxyMode() {
-	e.mode = modeDefault
-}
-
-func (e *ex) resetCommandList() {
+func (e *ex) resetCommandList(cmd *command.Handler) {
 	// commands can be registered dynamicall via Editor.Register:
 	// compile a new list every time we switch to command mode
 	var commands []string
@@ -676,52 +671,80 @@ func (e *ex) resetCommandList() {
 		commands = append(commands, cmd)
 	}
 	sort.Strings(commands)
-	e.cmd.Reset(commands)
+	cmd.Reset(commands)
 }
 
-func (e *ex) setCommandMode() {
-	e.mode = modeCommand
-	e.resetCommandList()
+func (e *ex) closeCommandPrompt() error {
+	err := e.cmd.Close()
+	// reverse focus to window before prompt, except
+	// if command was a focus shifting command
+	if e.noResetFocus {
+		e.noResetFocus = false
+	} else {
+		e.comp.SetFocus(e.cmdWin)
+	}
+	e.cmd = nil
+	return err
+}
+
+func (e *ex) openCommandPrompt() {
+	commandCfg := command.Config{
+		MaxHistory:       e.config.CommandMaxHistory,
+		HistoryKey:       e.config.CommandEvent,
+		MatchedTextAttr:  e.config.CommandOverlay.MatchedTextAttr,
+		FocusElementAttr: e.config.CommandOverlay.FocusElementAttr,
+		ElementAttr:      e.config.CommandOverlay.ElementAttr,
+		DocumentID:       commandHistoryDocumentID,
+	}
+	cmd := command.NewHandler(e.storage, e, e, e, []string{}, commandCfg)
+
+	var commandHandler browser.Floating
+	if e.config.CommandOverlay.Frame {
+		frame := handler.NewFrame(cmd)
+		frame.FrameCharSet = e.config.CommandOverlay.FrameCharSet
+		frame.Attributes = e.config.CommandOverlay.FrameAttributes
+		commandHandler = browser.FuncFloatingHandler(frame, e.closeCommandPrompt)
+	} else {
+		commandHandler = cmd
+	}
+
+	commandHandler = browser.FuncFloating(
+		browser.FuncHandler(
+			handler.WithComponent(commandHandler,
+				component.WithBackground(
+					commandHandler, term.Cell{Bg: e.config.CommandOverlay.ElementAttr.Bg},
+				),
+			), e.closeCommandPrompt),
+		commandHandler.Dimensions,
+	)
+	e.cmdWin, _ = e.comp.Focus()
+	e.resetCommandList(cmd)
+	_, err := e.comp.Floating(commandHandler,
+		component.FloatingConfig{
+			Offset:    term.Coordinates{Y: e.height / 4},
+			Alignment: component.SpanAlignmentHorizontallyCentered,
+		})
+	if err != nil {
+		e.setError(err)
+		return
+	}
+	e.cmd = cmd
+	// reset in case last command was run via key mapping
+	e.noResetFocus = false
 }
 
 // Handle satisfies tui.Handler.
-func (e *ex) Handle(ev term.Event) (bool, bool) {
-	switch e.mode {
-	case modeDefault:
-		return e.handleProxy(ev)
-	case modeCommand:
-		quit, handled := e.cmd.Handle(ev)
-		if quit {
-			// hack to signal proc exit
-			if !handled {
-				return true, true
-			}
-			e.setProxyMode()
-		}
-		return false, handled
-	default:
-		panic(fmt.Sprintf("unknown mode: %+v", e.mode))
+func (e *ex) Handle(ev term.Event) (exit, handled bool) {
+	if e.cmd != nil {
+		_, handled = e.comp.Browser().Handle(ev)
+	} else {
+		_, handled = e.handleEvent(ev)
 	}
-}
-
-func (e *ex) overlayPosition() (pos term.Coordinates) {
-	pos = e.overlay.ContentOffset()
-	if e.config.CommandOverlay.Frame {
-		pos.Y++
-		pos.X++
-	}
-	return
+	return e.quit, handled
 }
 
 // Cursor satisfies tui.Handler.
 func (e *ex) Cursor() (pos term.Coordinates, show bool) {
-	if e.mode == modeCommand {
-		overlay := e.overlayPosition()
-		pos, show = e.cmd.Cursor()
-		pos.X += overlay.X
-		pos.Y += overlay.Y
-		return
-	}
 	return e.comp.Browser().Cursor()
 }
 
@@ -732,15 +755,12 @@ func (e *ex) Man() tui.Manual {
 
 // Resize satisfies tui.Component
 func (e *ex) Resize(width, height int) {
-	e.overlay.Resize(width, height)
+	e.height = height
+	e.comp.Resize(width, height)
 }
 
 // Draw satisfies tui.Component
 func (e *ex) Draw(w term.Writer) {
-	if e.mode == modeCommand {
-		e.overlay.Draw(w)
-		return
-	}
 	e.comp.Draw(w)
 }
 
@@ -762,9 +782,6 @@ func (e *ex) cleanPartialReissueState() {
 // Close closes the resources associated with this browser.
 func (e *ex) Close() (ret error) {
 	e.sequencer.Reset()
-	if err := e.cmd.Close(); err != nil {
-		ret = multierr.Append(ret, err)
-	}
 	if err := e.comp.Close(); err != nil {
 		ret = multierr.Append(ret, err)
 	}
