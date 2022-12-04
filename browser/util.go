@@ -22,7 +22,7 @@ func (l nopLocker) Unlock() {
 // newMessageSpan returns a virtual message bar suitable for use with
 // ResizeMessageSpan.
 func newMessageSpan(buf *cell.Buffer, bgAttr term.Attributes) handler.Virtual {
-	responsive := component.BufferResponsive(buf, component.StringConfig{
+	responsive := component.Buffer(buf, component.StringConfig{
 		BackgroundAttributes: bgAttr,
 		Attributes:           bgAttr,
 	})

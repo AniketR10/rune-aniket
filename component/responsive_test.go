@@ -42,7 +42,7 @@ func TestResponsiveStringDraw(t *testing.T) {
 				testString(t, func(in string) tui.Component {
 					b := cell.NewBuffer()
 					b.WriteString(in)
-					return BufferResponsive(b, tcase.cfg)
+					return Buffer(b, tcase.cfg)
 				}, 5, 5, tcase.in, tcase.out)
 			})
 		}
@@ -79,7 +79,7 @@ func TestResponsiveStringDraw(t *testing.T) {
 				testString(t, func(in string) tui.Component {
 					b := cell.NewBuffer()
 					b.WriteString(in)
-					return BufferResponsive(b, tcase.cfg)
+					return Buffer(b, tcase.cfg)
 				}, 5, 5, tcase.in, tcase.out)
 			})
 		}
@@ -133,7 +133,7 @@ func TestResponsiveHeight(t *testing.T) {
 		t.Run("BufferResponsive", func(t *testing.T) {
 			b := cell.CellsToBuffer(nil, 4)
 			b.WriteString(tcase.in)
-			s := BufferResponsive(b, StringConfig{})
+			s := Buffer(b, StringConfig{})
 			out := s.Height(tcase.width)
 			assert.Equal(t, tcase.out, out)
 		})
@@ -144,7 +144,7 @@ func TestBufferWithEdits(t *testing.T) {
 	t.Run("Height", func(t *testing.T) {
 		b := cell.CellsToBuffer(nil, 4)
 		b.WriteString("aa")
-		s := BufferResponsive(b, StringConfig{})
+		s := Buffer(b, StringConfig{})
 
 		height := s.Height(1)
 		assert.Equal(t, 2, height)
@@ -159,7 +159,7 @@ func TestBufferWithEdits(t *testing.T) {
 		w := term.NewStringWriter(5, 5)
 		b := cell.CellsToBuffer(nil, 4)
 		b.WriteString("a\nb\nc")
-		s := BufferResponsive(b, StringConfig{})
+		s := Buffer(b, StringConfig{})
 		s.Resize(4, 4)
 
 		s.Draw(w)

@@ -90,7 +90,7 @@ func (l *List) Init(cfg ListConfig) {
 	l.cfg = cfg.toInternal()
 
 	l.searchBar.internalRead = cell.NewBuffer()
-	l.searchBar.Responsive = component.BufferResponsive(
+	l.searchBar.Responsive = component.Buffer(
 		l.searchBar.internalRead, component.StringConfig{
 			Attributes:           l.cfg.textAttr,
 			BackgroundAttributes: l.cfg.textAttr,

@@ -98,7 +98,7 @@ func (h *Handler) doInit(
 	h.completer = completer
 
 	h.buf.Init()
-	h.responsive = component.BufferResponsive(&h.buf,
+	h.responsive = component.Buffer(&h.buf,
 		component.StringConfig{
 			Attributes:           config.ElementAttr,
 			BackgroundAttributes: config.ElementAttr,

@@ -24,21 +24,21 @@ type Responsive interface {
 // StringResponsive returns a Responsive implementation of
 // a string tui.Component.
 func StringResponsive(str string, cfg StringConfig) Responsive {
-	return CellsResponsive(cell.StringToCells(str, cfg.Tabspaces), cfg)
+	return Cells(cell.StringToCells(str, cfg.Tabspaces), cfg)
 }
 
-// CellsResponsive returns a Responsive implementation for a matrix of cells.
-func CellsResponsive(cells [][]term.Cell, cfg StringConfig) Responsive {
+// Cells returns a Responsive implementation for a matrix of cells.
+func Cells(cells [][]term.Cell, cfg StringConfig) Responsive {
 	return &respStr{
 		cfg: cfg,
 		in:  cells,
 	}
 }
 
-// BufferResponsive wraps a cell.Buffer and returns a tui.Component which satisfies
+// Buffer wraps a cell.Buffer and returns a tui.Component which satisfies
 // Responsive. Note that this is not the most efficient implementation of tui.Component
 // for a cell.Buffer. See component.Scroll for more details.
-func BufferResponsive(buf *cell.Buffer, cfg StringConfig) Responsive {
+func Buffer(buf *cell.Buffer, cfg StringConfig) Responsive {
 	return &respBuf{buf: buf, respStr: respStr{cfg: cfg}}
 }
 

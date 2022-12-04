@@ -6,6 +6,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"unstable.build/go-tui"
+	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/term"
 	testutil "unstable.build/go-tui/util/test"
@@ -564,6 +565,23 @@ C──────────────────D
 ┌──────────────────┐
 │CCCCCCCCCCCCCCCCCC│
 │CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+└──────────────────┘`,
+		}, {func() {
+			// test that Dimensions are updated for a floating win
+			buf := cell.NewBuffer()
+			buf.WriteString("1234")
+			hf := Nop(component.Buffer(buf, component.StringConfig{}))
+			wfloat := wm.FloatingWindow(FloatingBuffer(hf, buf), component.FloatingConfig{})
+			wm.SetFocus(wfloat)
+			buf.WriteString("1234")
+		}, `
+A────────B─────────┐
+│12341234│CCCCCCCCC│
+C────────DCCCCCCCCC│
 │CCCCCCCCCCCCCCCCCC│
 │CCCCCCCCCCCCCCCCCC│
 │CCCCCCCCCCCCCCCCCC│

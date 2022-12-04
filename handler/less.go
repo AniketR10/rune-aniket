@@ -190,7 +190,7 @@ func (l *Less) setMessage(msg string) {
 func (l *Less) setMessageAlt(msg string) {
 	b := cell.CellsToBuffer(nil, 4)
 	b.WriteString(msg)
-	l.msgAlt = component.BufferResponsive(b, component.StringConfig{
+	l.msgAlt = component.Buffer(b, component.StringConfig{
 		Alignment: component.SpanAlignmentLeft,
 	})
 	l.msgAltVirt.C = l.msgAlt

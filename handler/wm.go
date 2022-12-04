@@ -323,9 +323,11 @@ func (wm *WindowManager) Draw(w term.Writer) {
 		v.C = wm.focus.Content()
 	}
 
-	// draw all tiles, including focus tile, if focus is not a floating window
+	// draw all tiles, this is important in case focus tile is a floating
+	// window in which case we need to update dimensions before
+	// calling Draw below
 	dimWriter := term.DimWriter(w)
-	wm.comp.TileTree().Draw(dimWriter)
+	wm.comp.Draw(dimWriter)
 
 	// then overwrite focus tile with regular writer
 	v.Draw(w)
