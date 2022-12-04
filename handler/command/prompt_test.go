@@ -102,7 +102,7 @@ func TestCommandHandlerDispatch(t *testing.T) {
 			defer cleanupComplete(t)
 
 			interrupter := term.NopInterrupter()
-			b := NewHandler(
+			b := NewPrompt(
 				storage, FuncCompleter(completeFn), FuncDispatcher(dispatchFn),
 				interrupter, tcase.commands, cfg,
 			)
@@ -477,7 +477,7 @@ rori myArg oregani ▐
 			completeFn, cleanupComplete := tcase.completeCmd()
 			defer cleanupComplete(t)
 
-			b := NewHandler(
+			b := NewPrompt(
 				storage, FuncCompleter(completeFn), FuncDispatcher(dispatchFn),
 				term.NopInterrupter(), tcase.commands, cfg,
 			)
@@ -492,12 +492,12 @@ rori myArg oregani ▐
 }
 
 type testCommandHandler struct {
-	*Handler
+	*Prompt
 }
 
 func (t testCommandHandler) Handle(ev term.Event) (bool, bool) {
 	t.Wait()
-	quit, handled := t.Handler.Handle(ev)
+	quit, handled := t.Prompt.Handle(ev)
 	t.Wait()
 	return quit, handled
 }

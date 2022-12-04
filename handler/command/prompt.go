@@ -17,21 +17,21 @@ import (
 	"unstable.build/go-tui/term"
 )
 
-// NewHandler allocates storage for a new Handler and initializes it.
-func NewHandler(
+// NewPrompt allocates storage for a new Prompt and initializes it.
+func NewPrompt(
 	storage document.Service, completer Completer,
 	dispatcher Dispatcher, interrupter term.Interrupter,
 	commands []string, config Config,
-) *Handler {
-	ret := new(Handler)
+) *Prompt {
+	ret := new(Prompt)
 	ret.Init(storage, completer, dispatcher, interrupter, commands, config)
 	return ret
 }
 
-// Handler is a tui.Handler that presents a command browsing prompt
+// Prompt is a tui.Handler that presents a command browsing prompt
 // with history scrolling and argument completion.
-type Handler struct {
-	mode       commandHandlerMode
+type Prompt struct {
+	mode       commandPromptMode
 	config     Config
 	dispatcher Dispatcher
 	completer  Completer
@@ -60,18 +60,18 @@ type Handler struct {
 	cancelCtx context.Context
 }
 
-type commandHandlerMode uint
+type commandPromptMode uint
 
 const (
-	modeCommandHandlerCommand commandHandlerMode = iota
-	// modeCommandHandlerArgs1
-	// modeCommandHandlerArgs2
+	modeCommandPromptCommand commandPromptMode = iota
+	// modeCommandPromptArgs1
+	// modeCommandPromptArgs2
 	// ...
 )
 
 // Init initializes this handler with the given storage, completer,
 // dispatcher, interrupter and config.
-func (h *Handler) Init(
+func (h *Prompt) Init(
 	storage document.Service, completer Completer,
 	dispatcher Dispatcher, interrupter term.Interrupter,
 	commands []string, config Config,
@@ -87,12 +87,12 @@ func (h *Handler) Init(
 	h.doInit(storage, completer, dispatcher, commands, config, cfg)
 }
 
-func (h *Handler) doInit(
+func (h *Prompt) doInit(
 	storage document.Service, completer Completer,
 	dispatcher Dispatcher, commands []string, config Config,
 	listCfg search.ListConfig,
 ) {
-	h.mode = modeCommandHandlerCommand
+	h.mode = modeCommandPromptCommand
 	h.config = config
 	h.dispatcher = dispatcher
 	h.completer = completer
@@ -126,7 +126,7 @@ func (h *Handler) doInit(
 	h.Reset(commands)
 }
 
-func (h *Handler) resizeCommandOverlay() {
+func (h *Prompt) resizeCommandOverlay() {
 	// propagate local cmd+args buffer height to
 	// search list, which only has cmd, in case args alone span
 	// multiple lines
@@ -140,15 +140,15 @@ func (h *Handler) resizeCommandOverlay() {
 	h.responsive.Resize(h.width, height)
 }
 
-// Resize satisfies tui.Handler.
-func (h *Handler) Resize(width, height int) {
+// Resize satisfies tui.Handler
+func (h *Prompt) Resize(width, height int) {
 	h.width = width
 	h.height = height
 	h.list.Resize(width, height)
 }
 
-// Draw satisfies tui.Handler.
-func (h *Handler) Draw(w term.Writer) {
+// Draw satisfies tui.Handler
+func (h *Prompt) Draw(w term.Writer) {
 	// resize on every draw because search.List uses a responsive
 	// input so local buffer changes must consider potential resize
 	// of search.List
@@ -159,7 +159,7 @@ func (h *Handler) Draw(w term.Writer) {
 	h.responsive.Draw(w)
 }
 
-func (h *Handler) handleLastCommand() {
+func (h *Prompt) handleLastCommand() {
 	cmd := h.history.Next()
 	if cmd == "" {
 		h.log(log.TraceLevel, "ignoring next command in history: empty")
@@ -172,7 +172,7 @@ func (h *Handler) handleLastCommand() {
 	h.log(log.TraceLevel, "done pushing history events")
 }
 
-func (h *Handler) trimmedCommandAndArgs(cmd string, args ...string) []string {
+func (h *Prompt) trimmedCommandAndArgs(cmd string, args ...string) []string {
 	ret := make([]string, 0, len(args)+1)
 	ret = append(ret, cmd)
 	for _, argi := range args {
@@ -183,7 +183,7 @@ func (h *Handler) trimmedCommandAndArgs(cmd string, args ...string) []string {
 	return ret
 }
 
-func (h *Handler) dispatchCommand() (
+func (h *Prompt) dispatchCommand() (
 	quit, handled bool,
 ) {
 
@@ -226,17 +226,17 @@ func (h *Handler) dispatchCommand() (
 	return true, true
 }
 
-// Handle satisfies tui.Handler.
-func (h *Handler) Handle(ev term.Event) (quit, handled bool) {
+// Handle satisfies tui.Handler
+func (h *Prompt) Handle(ev term.Event) (quit, handled bool) {
 	switch h.mode {
-	case modeCommandHandlerCommand:
+	case modeCommandPromptCommand:
 		return h.handleCommand(ev)
 	default:
 		return h.handleCompleteArgs(ev)
 	}
 }
 
-func (h *Handler) handleCommon(ev *term.Event) (quit, handled bool) {
+func (h *Prompt) handleCommon(ev *term.Event) (quit, handled bool) {
 	key := ev.KeyComb()
 	if (key == h.config.HistoryKey && h.config.HistoryKey.Ch == 0) ||
 		(key == h.config.HistoryKey && h.buf.Columns(0) == 0) ||
@@ -272,7 +272,7 @@ func (h *Handler) handleCommon(ev *term.Event) (quit, handled bool) {
 	return
 }
 
-func (h *Handler) handleCommand(ev term.Event) (quit, handled bool) {
+func (h *Prompt) handleCommand(ev term.Event) (quit, handled bool) {
 	quit, handled = h.handleCommon(&ev)
 	if handled {
 		return
@@ -310,7 +310,7 @@ func (h *Handler) handleCommand(ev term.Event) (quit, handled bool) {
 	return
 }
 
-func (h *Handler) handleCompleteArgs(ev term.Event) (quit, handled bool) {
+func (h *Prompt) handleCompleteArgs(ev term.Event) (quit, handled bool) {
 	quit, handled = h.handleCommon(&ev)
 	if handled {
 		return
@@ -349,13 +349,13 @@ func (h *Handler) handleCompleteArgs(ev term.Event) (quit, handled bool) {
 	return
 }
 
-func (h *Handler) completionArgs() []string {
+func (h *Prompt) completionArgs() []string {
 	args := make([]string, 0, len(h.commandAndArgs))
 	args = append(args, h.commandAndArgs[1:]...)
 	return append(args, h.list.Buffer().String())
 }
 
-func (h *Handler) completeTopList() bool {
+func (h *Prompt) completeTopList() bool {
 	match, ok := h.list.Focus()
 	if !ok {
 		h.log(log.TraceLevel, "completeTopList: no matches on search list with %q",
@@ -372,12 +372,12 @@ func (h *Handler) completeTopList() bool {
 	return true
 }
 
-func (h *Handler) log(level log.Level, msg string, args ...interface{}) {
-	log.WithField(logging.KeyClass, "command.Handler").
+func (h *Prompt) log(level log.Level, msg string, args ...interface{}) {
+	log.WithField(logging.KeyClass, "command.Prompt").
 		Logf(level, msg, args...)
 }
 
-func (h *Handler) incArgsCompleteMode(complete bool) {
+func (h *Prompt) incArgsCompleteMode(complete bool) {
 	h.mode++
 	if !complete || !h.completeTopList() {
 		h.commandAndArgs = append(h.commandAndArgs, h.list.Buffer().String())
@@ -386,7 +386,7 @@ func (h *Handler) incArgsCompleteMode(complete bool) {
 	h.setCompletionList(h.commandAndArgs[0], h.commandAndArgs[1:]...)
 }
 
-func (h *Handler) decArgsCompleteMode() bool {
+func (h *Prompt) decArgsCompleteMode() bool {
 	if h.mode == 1 {
 		return false
 	}
@@ -399,14 +399,14 @@ func (h *Handler) decArgsCompleteMode() bool {
 	return true
 }
 
-func (h *Handler) setCommandMode() {
-	h.mode = modeCommandHandlerCommand
+func (h *Prompt) setCommandMode() {
+	h.mode = modeCommandPromptCommand
 	h.list.Buffer().Replace(h.buf.String())
 	h.commandAndArgs = h.commandAndArgs[:0]
 	h.resetListWith(h.commandsBackup)
 }
 
-func (h *Handler) setCompletionList(cmd string, args ...string) {
+func (h *Prompt) setCompletionList(cmd string, args ...string) {
 	h.log(log.TraceLevel, "setCompletionList: %s %#v", cmd, args)
 
 	ctx := context.Background()
@@ -479,10 +479,10 @@ func pushIterator(
 	}
 }
 
-// Reset resets the commands listed in this Handler.
+// Reset resets the commands listed in this Prompt.
 // It should be called after initialization and every time
 // new commands are available.
-func (h *Handler) Reset(commands []string) {
+func (h *Prompt) Reset(commands []string) {
 	h.setCommandMode()
 	h.buf.Reset()
 	h.list.Buffer().Reset()
@@ -491,13 +491,13 @@ func (h *Handler) Reset(commands []string) {
 }
 
 // assumes holding lock
-func (h *Handler) cancelCompletionPush(reason string) {
+func (h *Prompt) cancelCompletionPush(reason string) {
 	h.log(log.DebugLevel, "completion push to search list: %s", reason)
 	h.cancelFn()
 	h.list.Cancel()
 }
 
-func (h *Handler) resetListWith(items []string) {
+func (h *Prompt) resetListWith(items []string) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
@@ -509,15 +509,15 @@ func (h *Handler) resetListWith(items []string) {
 	}
 }
 
-func (h *Handler) reset() {
+func (h *Prompt) reset() {
 	h.Cancel()
 	h.setCommandMode()
 	h.buf.Reset()
 	h.list.Buffer().Reset()
 }
 
-// Cursor satisfies tui.Handler.
-func (h *Handler) Cursor() (term.Coordinates, bool) {
+// Cursor satisfies tui.Handler
+func (h *Prompt) Cursor() (term.Coordinates, bool) {
 	if h.width == 0 {
 		return term.Coordinates{}, false
 	}
@@ -535,13 +535,13 @@ func (h *Handler) Cursor() (term.Coordinates, bool) {
 }
 
 // Man satisfies tui.Handler
-func (h *Handler) Man() tui.Manual {
+func (h *Prompt) Man() tui.Manual {
 	panic("TODO")
 }
 
 // Wait waits for any asynchronous completion
 // or search to finish before it returns.
-func (h *Handler) Wait() {
+func (h *Prompt) Wait() {
 	h.mu.Lock()
 	cancelCtx := h.cancelCtx
 	h.mu.Unlock()
@@ -552,7 +552,7 @@ func (h *Handler) Wait() {
 
 // Cancel cancels any asynchronous completion or search currently ongoing
 // or does nothing if there's currently no ongoing completion or search.
-func (h *Handler) Cancel() {
+func (h *Prompt) Cancel() {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
@@ -560,7 +560,7 @@ func (h *Handler) Cancel() {
 	h.list.Cancel()
 }
 
-func (h *Handler) Dimensions() (width, height int) {
+func (h *Prompt) Dimensions() (width, height int) {
 	maxWidthItems := 20
 	h.list.IterateVisible(func(m search.Match) {
 		if mlen := len(m.Data()); mlen > maxWidthItems {
@@ -573,8 +573,8 @@ func (h *Handler) Dimensions() (width, height int) {
 	return
 }
 
-// Close closes all resources associated with this Handler.
-func (h *Handler) Close() error {
+// Close closes all resources associated with this Prompt.
+func (h *Prompt) Close() error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 

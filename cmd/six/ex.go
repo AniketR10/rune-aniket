@@ -112,7 +112,7 @@ type ex struct {
 	cancelPartialReissue func()
 	ctxPartialReissue    context.Context
 	reissueEvent         term.Event
-	cmd                  *command.Handler
+	cmd                  *command.Prompt
 	cmdWin               browser.Window
 	noResetFocus         bool
 	quit                 bool
@@ -663,7 +663,7 @@ func (e *ex) handleEvent(ev term.Event) (
 	return
 }
 
-func (e *ex) resetCommandList(cmd *command.Handler) {
+func (e *ex) resetCommandList(cmd *command.Prompt) {
 	// commands can be registered dynamicall via Editor.Register:
 	// compile a new list every time we switch to command mode
 	var commands []string
@@ -696,7 +696,7 @@ func (e *ex) openCommandPrompt() {
 		ElementAttr:      e.config.CommandOverlay.ElementAttr,
 		DocumentID:       commandHistoryDocumentID,
 	}
-	cmd := command.NewHandler(e.storage, e, e, e, []string{}, commandCfg)
+	cmd := command.NewPrompt(e.storage, e, e, e, []string{}, commandCfg)
 
 	var commandHandler browser.Floating
 	if e.config.CommandOverlay.Frame {
