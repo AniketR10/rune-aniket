@@ -72,6 +72,7 @@ var (
 		{Key: term.KeyCtrlL}: "bufferNext",
 		{Key: term.KeyCtrlH}: "bufferPrev",
 	}
+	// FIXME should exist in default config, not here
 	exDefaultSequences = map[handler.Sequence][]string{
 		{First: term.KeyComb{Key: term.KeyCtrlX},
 			Last: term.KeyComb{Key: term.KeyEnter}}: {"newWindow"},
@@ -376,6 +377,7 @@ func (e *ex) dispatchCommand(cmd string, args ...string) (err error) {
 		Args:     args,
 		Resource: h,
 		URI:      uri,
+		Window:   e.invokeWindow(),
 	}
 	if ok {
 		scmd.Cursor.Content, _ = e.ed.Cursor(h)

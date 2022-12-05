@@ -175,8 +175,9 @@ message HandleCommandRequest {
 	repeated string args = 2;
 	URI resource_name = 3;
 	uint32 resource_id = 4;
-	term.Coordinates content = 5;
-	term.Coordinates window = 6;
+	term.Coordinates cursor_content = 5;
+	term.Coordinates cursor_window = 6;
+	uint32 window_id = 7;
 }
 
 message HandleCommandResponse {

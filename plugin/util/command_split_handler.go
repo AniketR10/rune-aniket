@@ -96,7 +96,7 @@ func (t *cmdSplitHandler) exitClean() error {
 	return nil
 }
 
-func (t *cmdSplitHandler) openSplitWindow() error {
+func (t *cmdSplitHandler) openSplitWindow(focusWin browser.Window) error {
 	t.mu.Lock()
 	win := t.win
 	wm := t.wm
@@ -110,13 +110,7 @@ func (t *cmdSplitHandler) openSplitWindow() error {
 		return errors.New("insufficient permissions: WindowManager permission was denied")
 	}
 
-	focus, err := wm.Focus()
-	if err != nil {
-		err = fmt.Errorf("wm.Focus: %s", err)
-		return err
-	}
-
-	h, err := t.config.Handler(t.grants, t.broker, focus, t.pconfig)
+	h, err := t.config.Handler(t.grants, t.broker, focusWin, t.pconfig)
 	if err != nil {
 		err = fmt.Errorf("config.Handler: %v", err)
 		return err
@@ -138,7 +132,7 @@ func (t *cmdSplitHandler) openSplitWindow() error {
 
 func (t *cmdSplitHandler) HandleCommand(ctx context.Context, cmd text.Command) (exit bool, err error) {
 	if cmd.Name == t.config.Command {
-		err = t.openSplitWindow()
+		err = t.openSplitWindow(cmd.Window)
 		if err != nil {
 			log.Error(err)
 		}

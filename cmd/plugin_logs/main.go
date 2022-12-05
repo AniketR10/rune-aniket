@@ -251,7 +251,7 @@ func consumeData(
 	}
 }
 
-func (e *logsGrantee) showLogs(args []string) (bool, error) {
+func (e *logsGrantee) showLogs(win browser.Window, args []string) (bool, error) {
 	if log.IsLevelEnabled(log.TraceLevel) && len(args) == 0 {
 		return false, errors.New("Cannot show logs in Trace level to avoid " +
 			"an infinite loop. Check Manually.")
@@ -325,10 +325,7 @@ func (e *logsGrantee) showLogs(args []string) (bool, error) {
 
 	log.Tracef("HandleCommand: created new logs handler: %p", h)
 
-	win, err := e.wm.Focus()
-	if err == nil {
-		err = win.SetContent(t)
-	}
+	err = win.SetContent(t)
 	if err != nil {
 		_ = cleanup()
 		_ = t.Close()
@@ -344,7 +341,7 @@ func (e *logsGrantee) HandleCommand(
 	if cmd.Name != cmdLogs {
 		panic("extraneous command")
 	}
-	return e.showLogs(cmd.Args)
+	return e.showLogs(cmd.Window, cmd.Args)
 }
 
 func main() {

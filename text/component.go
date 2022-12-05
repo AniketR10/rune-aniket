@@ -509,6 +509,9 @@ func (c *Component) CompleteCommand(ctx context.Context, cmd string, args ...str
 // DispatchCommand dispatches a EventTypeCommand with cmd to subscribers
 // subscribed via SubscribeEditorEvents.
 func (c *Component) DispatchCommand(cmd Command) (handled bool, err error) {
+	if cmd.Window == nil {
+		panic("invalid command: missing Window from which command was invoked")
+	}
 	targets, ok := c.config.CommandAliases[cmd.Name]
 	if ok {
 		c.log(log.InfoLevel, "Dispatching alias %s: %#v", cmd.Name, targets)

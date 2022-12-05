@@ -247,7 +247,7 @@ func (c *Client) split(split clientSplit, o Orientation, h Handler) (Window, err
 		}
 		return nil, err
 	}
-	win, err := c.dialWindow(res.GetWindowId())
+	win, err := c.DialWindow(res.GetWindowId())
 	if err != nil {
 		if created {
 			reason := fmt.Sprintf("error dialing to window: %v", err)
@@ -343,7 +343,7 @@ func (c *Client) SetFocus(win Window) (Window, error) {
 	if err != nil {
 		return nil, err
 	}
-	return c.dialWindow(res.GetWindowId())
+	return c.DialWindow(res.GetWindowId())
 }
 
 // Focus satisfies Browser.
@@ -354,7 +354,7 @@ func (c *Client) Focus() (Window, error) {
 	if err != nil {
 		return nil, err
 	}
-	return c.dialWindow(res.GetWindowId())
+	return c.DialWindow(res.GetWindowId())
 }
 
 // Floating satisfies browser.WindowManager

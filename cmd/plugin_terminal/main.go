@@ -197,10 +197,7 @@ func (e *emulatorGrantee) handleCommand(
 	case cmdSplitWindowTerminal:
 		_, err = e.wm.Split(browser.OrientationDefault, t)
 	case cmdTerminalTab:
-		win, err := e.wm.Focus()
-		if err == nil {
-			err = win.SetContent(t)
-		}
+		err = cmd.Window.SetContent(t)
 	}
 	if err != nil {
 		_ = t.Close()

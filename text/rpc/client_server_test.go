@@ -87,7 +87,7 @@ func TestClientServerIntegration(t *testing.T) {
 		b := proto.NewDialBroker()
 		ed := text.NewMockEditor(ctrl)
 		expectInitialServerSubscribe(t, ed)
-		s := NewServer(b, ed, nopLocker{})
+		s := NewServer(b, ed, nopLocker{}, testBrowserServer{})
 
 		client, closeFn := setupIntTest(t, b, s)
 		defer closeFn()
@@ -106,7 +106,7 @@ func TestClientServerIntegration(t *testing.T) {
 		b := proto.NewDialBroker()
 		ed := text.NewMockEditor(ctrl)
 		expectInitialServerSubscribe(t, ed)
-		s := NewServer(b, ed, nopLocker{})
+		s := NewServer(b, ed, nopLocker{}, testBrowserServer{})
 
 		client, closeFn := setupIntTest(t, b, s)
 		defer closeFn()
@@ -126,7 +126,7 @@ func TestClientServerIntegration(t *testing.T) {
 		b := proto.NewDialBroker()
 		ed := text.NewMockEditor(ctrl)
 		expectInitialServerSubscribe(t, ed)
-		s := NewServer(b, ed, nopLocker{})
+		s := NewServer(b, ed, nopLocker{}, testBrowserServer{})
 
 		client, closeFn := setupIntTest(t, b, s)
 		defer closeFn()
@@ -192,7 +192,7 @@ func TestClientServerIntegration(t *testing.T) {
 				var mu sync.Mutex
 				b := proto.NewDialBroker()
 				ed := text.NopEditor()
-				s := NewServer(b, ed, &mu)
+				s := NewServer(b, ed, &mu, testBrowserServer{})
 
 				client, closeFn := setupIntTest(t, b, s)
 				defer closeFn()
@@ -235,7 +235,7 @@ func TestClientServerIntegration(t *testing.T) {
 		b := proto.NewDialBroker()
 		ed := text.NewMockEditor(ctrl)
 		expectInitialServerSubscribe(t, ed)
-		s := NewServer(b, ed, new(sync.Mutex))
+		s := NewServer(b, ed, new(sync.Mutex), testBrowserServer{})
 
 		client, closeFn := setupIntTest(t, b, s)
 		defer closeFn()
@@ -270,7 +270,7 @@ func TestClientServerIntegration(t *testing.T) {
 		b := proto.NewDialBroker()
 		ed := text.NewMockEditor(ctrl)
 		expectInitialServerSubscribe(t, ed)
-		s := NewServer(b, ed, new(sync.Mutex))
+		s := NewServer(b, ed, new(sync.Mutex), testBrowserServer{})
 
 		client, closeFn := setupIntTest(t, b, s)
 		defer closeFn()
@@ -304,7 +304,7 @@ func TestClientServerIntegration(t *testing.T) {
 		b := proto.NewDialBroker()
 		ed := text.NewMockEditor(ctrl)
 		expectInitialServerSubscribe(t, ed)
-		s := NewServer(b, ed, nopLocker{})
+		s := NewServer(b, ed, nopLocker{}, testBrowserServer{})
 
 		client, closeFn := setupIntTest(t, b, s)
 		defer closeFn()
@@ -341,7 +341,7 @@ func TestClientServerIntegration(t *testing.T) {
 		b := proto.NewDialBroker()
 		ed := text.NewMockEditor(ctrl)
 		expectInitialServerSubscribe(t, ed)
-		s := NewServer(b, ed, nopLocker{})
+		s := NewServer(b, ed, nopLocker{}, testBrowserServer{})
 
 		client, closeFn := setupIntTest(t, b, s)
 		defer closeFn()
@@ -407,7 +407,7 @@ func TestRPCRegister(t *testing.T) {
 		}
 
 		b := proto.NewDialBroker()
-		s := NewServer(b, c, mu)
+		s := NewServer(b, c, mu, browser.NewServer(b, c, mu))
 
 		client, closeFn := setupIntTest(t, b, s)
 		closeFns = append(closeFns, func() {
@@ -580,13 +580,16 @@ func testRegister(t *testing.T,
 				defer wg.Done()
 				assert.Equal(t, myCmd, cmd.Name)
 				assert.Equal(t, myArgs, cmd.Args)
+				assert.NotNil(t, cmd.Window)
 				called++
 				return true, nil
 			}))
 
 		wg.Add(1)
 		mu.Lock()
-		cmd := text.Command{Resource: h1, URI: resource1, Name: myCmd, Args: myArgs}
+		win, err := c.Focus()
+		require.NoError(t, err)
+		cmd := text.Command{Resource: h1, URI: resource1, Name: myCmd, Args: myArgs, Window: win}
 		ok, err := c.DispatchCommand(cmd)
 		require.NoError(t, err)
 		assert.True(t, ok)
@@ -602,4 +605,12 @@ func testRegister(t *testing.T,
 
 		assert.Equal(t, 1, called)
 	})
+}
+
+type testBrowserServer struct {
+	windowID uint64
+}
+
+func (t testBrowserServer) ServeWindow(win browser.Window) (uint64, error) {
+	return t.windowID, nil
 }

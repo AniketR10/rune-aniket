@@ -30,7 +30,8 @@ func (s *editorResourceServer) Register(
 	pluginID string, grantor Grantor, registrar grpc.ServiceRegistrar,
 	broker proto.MuxBroker, lock sync.Locker,
 ) (io.Closer, error) {
-	server := textpb.NewServer(broker, s.b, lock)
+	browser := grantorTextBrowser(pluginID, grantor)
+	server := textpb.NewServer(broker, s.b, lock, browser)
 	textpb.RegisterEditorServer(registrar, interruptEditorServer(server, interrupt))
 	return server, nil
 }

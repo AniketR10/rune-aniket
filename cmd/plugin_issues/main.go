@@ -335,14 +335,14 @@ func (e *issuesGrantee) issueRefresh(ctx context.Context, cmd text.Command) (boo
 }
 
 func (e *issuesGrantee) openEmptyIssueTemplate(ctx context.Context, cmd text.Command) (bool, error) {
-	return e.openIssueTemplate(ctx, e.defTemplate, "issue-")
+	return e.openIssueTemplate(ctx, cmd.Window, e.defTemplate, "issue-")
 }
 
 func (e *issuesGrantee) openCustomIssueTemplate(
 	template []byte, templateName string,
 ) func(*issuesGrantee, context.Context, text.Command) (bool, error) {
 	return func(e *issuesGrantee, ctx context.Context, cmd text.Command) (bool, error) {
-		return e.openIssueTemplate(ctx, template, templateName)
+		return e.openIssueTemplate(ctx, cmd.Window, template, templateName)
 	}
 }
 
@@ -408,7 +408,7 @@ func (e *issuesGrantee) createOrUpdateIssue(ctx context.Context, ev text.Event) 
 }
 
 func (e *issuesGrantee) openIssueTemplate(
-	ctx context.Context, template []byte, templateName string,
+	ctx context.Context, win browser.Window, template []byte, templateName string,
 ) (bool, error) {
 	if e.o == nil || e.wm == nil {
 		return false, errors.New("browser permissions necessary to create an issue were not granted")
@@ -416,11 +416,6 @@ func (e *issuesGrantee) openIssueTemplate(
 	if !e.pendingIssueURI.Equal(workspace.URI{}) {
 		return false, errors.New("there's already a pending issue open. " +
 			"You should close it first before attempting to create a new one.")
-	}
-
-	focusWin, err := e.wm.Focus()
-	if err != nil {
-		return false, fmt.Errorf("get window in focus: %v", err)
 	}
 
 	f, err := ioutil.TempFile("", templateName)
@@ -445,7 +440,7 @@ func (e *issuesGrantee) openIssueTemplate(
 		return false, fmt.Errorf("open temp file: %v", err)
 	}
 
-	err = focusWin.SetContent(h)
+	err = win.SetContent(h)
 	if err != nil && !errors.Is(err, browser.ErrTabNotFree) {
 		_ = h.Close()
 		_ = os.Remove(f.Name())

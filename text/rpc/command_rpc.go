@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	log "github.com/sirupsen/logrus"
+	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/proto"
 	termpb "unstable.build/go-tui/term/rpc"
 	"unstable.build/go-tui/text"
@@ -52,13 +53,19 @@ func (c *commandClient) HandleCommand(ctx context.Context, cmd text.Command) (
 	cursorContent.FromModel(cmd.Cursor.Content)
 	cursorWindow.FromModel(cmd.Cursor.Window)
 
+	win, err := c.s.browser.ServeWindow(cmd.Window)
+	if err != nil {
+		return false, err
+	}
+
 	req := HandleCommandRequest{
-		Name:         cmd.Name,
-		Args:         cmd.Args,
-		ResourceName: uri,
-		ResourceId:   resourceID,
-		Content:      &cursorContent,
-		Window:       &cursorWindow,
+		Name:          cmd.Name,
+		Args:          cmd.Args,
+		ResourceName:  uri,
+		ResourceId:    resourceID,
+		CursorContent: &cursorContent,
+		CursorWindow:  &cursorWindow,
+		WindowId:      uint32(win),
 	}
 
 	// do not block waiting for I/O
@@ -78,20 +85,43 @@ func (c *commandClient) Close() error {
 
 type commandServer struct {
 	UnimplementedCommandHandlerServer
-	h text.CommandHandler
+	h       text.CommandHandler
+	browser *browser.Client
 }
 
-func newCommandServer(h text.CommandHandler) *commandServer {
+func newCommandServer(h text.CommandHandler, bc *browser.Client) *commandServer {
 	ret := new(commandServer)
 	ret.h = h
+	ret.browser = bc
 	return ret
+}
+
+func (s *commandServer) commandFromProto(e *text.Command, pe *HandleCommandRequest) (err error) {
+	if pe.GetResourceName().GetUri() != "" {
+		e.URI, err = NewURIFromProto(pe.GetResourceName())
+		if err != nil {
+			return
+		}
+	}
+	if pe.ResourceId != 0 {
+		e.Resource = Token{
+			Token:    browser.Token{ID: uint64(pe.GetResourceId())},
+			resource: e.URI,
+		}
+	}
+	e.Cursor.Window = pe.GetCursorWindow().ToModel()
+	e.Cursor.Content = pe.GetCursorContent().ToModel()
+	e.Args = pe.GetArgs()
+	e.Name = pe.GetName()
+	e.Window, err = s.browser.DialWindow(uint64(pe.GetWindowId()))
+	return err
 }
 
 func (s *commandServer) HandleCommand(
 	ctx context.Context, req *HandleCommandRequest,
 ) (*HandleCommandResponse, error) {
 	var cmd text.Command
-	err := commandFromProto(&cmd, req)
+	err := s.commandFromProto(&cmd, req)
 	if err != nil {
 		return nil, err
 	}

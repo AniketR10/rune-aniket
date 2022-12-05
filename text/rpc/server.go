@@ -21,11 +21,17 @@ var (
 	errHandlerNotFound = errors.New("handler not found")
 )
 
+// BrowserServer abstracts serving windows.
+type BrowserServer interface {
+	ServeWindow(win browser.Window) (uint64, error)
+}
+
 // Server serves an Editor over GRPC.
 type Server struct {
 	UnimplementedEditorServer
 
-	broker proto.MuxBroker
+	broker  proto.MuxBroker
+	browser BrowserServer
 
 	// editor handlers currently open
 	uriToID     map[string]uint32
@@ -82,15 +88,17 @@ func (s *serverEventHandler) Handle(ctx context.Context, ev text.Event) bool {
 // NewServer allocates storage for a new Server and initializes it.
 func NewServer(
 	broker proto.MuxBroker, editor text.Editor, lock sync.Locker,
+	browser BrowserServer,
 ) *Server {
 	ret := new(Server)
-	ret.Init(broker, editor, lock)
+	ret.Init(broker, editor, lock, browser)
 	return ret
 }
 
 // Init initializes this Server with broker and browser.
 func (s *Server) Init(
 	broker proto.MuxBroker, editor text.Editor, lock sync.Locker,
+	browser BrowserServer,
 ) {
 	s.broker = broker
 	s.editor.Editor = editor
@@ -100,6 +108,7 @@ func (s *Server) Init(
 	s.clients = make(map[uint64]io.Closer)
 	s.failureTimeout = defaultFailureTimeout
 	s.errChan = make(chan error)
+	s.browser = browser
 
 	evs := []text.EventType{text.EventTypeClose, text.EventTypeOpen}
 
@@ -280,6 +289,7 @@ func (s *Server) dialCommandHandler(handlerID uint32) (text.CommandHandler, erro
 	defer s.editor.Unlock()
 
 	if s.clients == nil {
+		cancelFn()
 		return nil, errors.New("server is closing")
 	}
 

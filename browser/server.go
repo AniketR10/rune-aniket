@@ -313,7 +313,7 @@ func (s *Server) newRemoteResource(
 			reason := fmt.Sprintf("failed to create resource: %s", err.Error())
 			s.forceCloseHandler(handlerID, reason)
 		}
-		return 0, fmt.Errorf("serveWindow: %w", err)
+		return 0, fmt.Errorf("serve window: %w", err)
 	}
 	return winID, nil
 }
@@ -478,7 +478,7 @@ func (s *Server) Focus(
 
 	windowID, err := s.serveWindow(win)
 	if err != nil {
-		return nil, fmt.Errorf("serveWindow: %w", err)
+		return nil, fmt.Errorf("serve window: %w", err)
 	}
 
 	res := &browserpb.FocusResponse{
@@ -510,7 +510,7 @@ func (s *Server) SetFocus(
 
 	windowID, err := s.serveWindow(prev)
 	if err != nil {
-		return nil, fmt.Errorf("serveWindow: %w", err)
+		return nil, fmt.Errorf("serve window: %w", err)
 	}
 
 	res := &browserpb.FocusResponse{

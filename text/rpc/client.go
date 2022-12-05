@@ -41,9 +41,10 @@ type Client struct {
 	// resources invariant
 	mu sync.Mutex
 
-	broker proto.MuxBroker
-	cc     grpc.ClientConnInterface
-	ed     EditorClient
+	broker  proto.MuxBroker
+	browser *browser.Client
+	cc      grpc.ClientConnInterface
+	ed      EditorClient
 
 	// event handler server resources. event handler servers are created on
 	// calls to Subscribe.
@@ -67,6 +68,7 @@ func (c *Client) Init(
 	c.cc = cc
 	c.broker = broker
 	c.servers = make(map[uint64]io.Closer)
+	c.browser = browser.NewClient(broker, cc)
 }
 
 func (c *Client) log(level log.Level, msg string, args ...interface{}) {
@@ -107,7 +109,7 @@ func (c *Client) serveHandler(h text.EventHandler) (uint32, error) {
 func (c *Client) serveCommandHandler(h text.CommandHandler) (uint32, error) {
 	brokerID, srv, err := proto.AcceptAndServe(c.broker,
 		func(handlerID uint32, srv proto.MuxServer) {
-			s := newCommandServer(h)
+			s := newCommandServer(h, c.browser)
 			RegisterCommandHandlerServer(srv.Registrar(), s)
 		})
 	if err != nil {

@@ -34,7 +34,7 @@ func newTestServer(t *testing.T, ctrl *gomock.Controller) (*proto.MockMuxBroker,
 	broker := proto.NewMockMuxBroker(ctrl)
 	ed := text.NewMockEditor(ctrl)
 	expectInitialServerSubscribe(t, ed)
-	s := NewServer(broker, ed, new(sync.Mutex))
+	s := NewServer(broker, ed, new(sync.Mutex), testBrowserServer{})
 	broker.EXPECT().Cleanup(gomock.Any()).AnyTimes()
 	return broker, ed, s
 }
@@ -366,7 +366,7 @@ func TestServerSetLocationList(t *testing.T) {
 		ed := text.NopEditor()
 		c, err := text.NewComponent(ed, &testLoader{}, text.Config{})
 		require.NoError(t, err)
-		s := NewServer(broker, c, new(sync.Mutex))
+		s := NewServer(broker, c, new(sync.Mutex), testBrowserServer{})
 
 		content := "main"
 		nextID := uint32(232)

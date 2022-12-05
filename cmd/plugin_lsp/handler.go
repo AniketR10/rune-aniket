@@ -1409,6 +1409,7 @@ func (h *lspEditorHandler) getFilePosition(cursor term.Coordinates, uri workspac
 
 func (h *lspEditorHandler) handleGoToDefinition(
 	cursor term.Coordinates, ed text.Handler, uri workspace.URI,
+	win browser.Window,
 ) error {
 	f, pos, ok := h.getFilePosition(cursor, uri)
 	if !ok {
@@ -1442,12 +1443,6 @@ func (h *lspEditorHandler) handleGoToDefinition(
 
 	if len(locs) == 0 {
 		err = errors.New("no definitions found for symbol at position")
-		return err
-	}
-
-	win, err := h.wm.Focus()
-	if err != nil {
-		err = fmt.Errorf("wm.Focus: %v", err)
 		return err
 	}
 
@@ -1738,14 +1733,8 @@ func (h *lspEditorHandler) browseLocations(
 
 func (h *lspEditorHandler) handleReferences(
 	cursorAtScroll, cursorAtWindow term.Coordinates,
-	ed text.Handler, uri workspace.URI,
+	ed text.Handler, uri workspace.URI, win browser.Window,
 ) error {
-	win, err := h.wm.Focus()
-	if err != nil {
-		err = fmt.Errorf("wm.Focus: %v", err)
-		return err
-	}
-
 	f, pos, ok := h.getFilePosition(cursorAtScroll, uri)
 	if !ok {
 		return fmt.Errorf("resource with URI %q not found", uri)
@@ -1903,9 +1892,9 @@ func (h *lspEditorHandler) HandleCommand(
 	case commandHover:
 		err = h.handleHover(cmd.Cursor.Content, cmd.Cursor.Window, cmd.Resource, cmd.URI)
 	case commandGoToDef:
-		err = h.handleGoToDefinition(cmd.Cursor.Content, cmd.Resource, cmd.URI)
+		err = h.handleGoToDefinition(cmd.Cursor.Content, cmd.Resource, cmd.URI, cmd.Window)
 	case commandReferences:
-		err = h.handleReferences(cmd.Cursor.Content, cmd.Cursor.Window, cmd.Resource, cmd.URI)
+		err = h.handleReferences(cmd.Cursor.Content, cmd.Cursor.Window, cmd.Resource, cmd.URI, cmd.Window)
 	case commandAddWorkspace:
 		err = h.handleAddWorkspace(cmd.URI, cmd.Args)
 	case commandRemoveWorkspace:

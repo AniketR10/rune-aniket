@@ -1,6 +1,10 @@
 package plugin
 
-/*
+import (
+	"unstable.build/go-tui/browser"
+	textpb "unstable.build/go-tui/text/rpc"
+)
+
 // lazy textpb.BrowserServer to allow for order of perission grants
 // to not matter when constructing a new textpb.Server
 func grantorTextBrowser(pluginID string, g Grantor) textpb.BrowserServer {
@@ -28,4 +32,3 @@ func (g *grantorBrowser) ServeWindow(win browser.Window) (uint64, error) {
 	}
 	return g.srv.ServeWindow(win)
 }
-*/

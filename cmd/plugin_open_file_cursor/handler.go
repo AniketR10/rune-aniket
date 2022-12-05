@@ -97,7 +97,7 @@ func (f *file) uriAtCursor() string {
 	return uri
 }
 
-func (h *gfEditorHandler) openFileUnderCursor(uri workspace.URI) error {
+func (h *gfEditorHandler) openFileUnderCursor(win browser.Window, uri workspace.URI) error {
 	f, ok := h.files[uri.String()]
 	if !ok {
 		return fmt.Errorf("could not find buffer for file %s", uri.String())
@@ -124,12 +124,7 @@ func (h *gfEditorHandler) openFileUnderCursor(uri workspace.URI) error {
 		return fmt.Errorf("could not Open URI: %v", err)
 	}
 
-	focus, err := h.wm.Focus()
-	if err != nil {
-		err = fmt.Errorf("wm.Focus: %s", err)
-		return err
-	}
-	err = focus.SetContent(opened)
+	err = win.SetContent(opened)
 	if err != nil && err != browser.ErrTabNotFree {
 		return err
 	}
@@ -145,7 +140,7 @@ func (h *gfEditorHandler) HandleCommand(ctx context.Context, cmd text.Command) (
 
 	switch cmd.Name {
 	case commandOpenFileCursor:
-		err = h.openFileUnderCursor(cmd.URI)
+		err = h.openFileUnderCursor(cmd.Window, cmd.URI)
 	}
 
 	return
