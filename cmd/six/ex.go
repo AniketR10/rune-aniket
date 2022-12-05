@@ -698,16 +698,7 @@ func (e *ex) openCommandPrompt() {
 	}
 	cmd := command.NewPrompt(e.storage, e, e, e, []string{}, commandCfg)
 
-	var commandHandler browser.Floating
-	if e.config.CommandOverlay.Frame {
-		frame := handler.NewFrame(cmd)
-		frame.FrameCharSet = e.config.CommandOverlay.FrameCharSet
-		frame.Attributes = e.config.CommandOverlay.FrameAttributes
-		commandHandler = browser.FuncFloatingHandler(frame, e.closeCommandPrompt)
-	} else {
-		commandHandler = cmd
-	}
-
+	var commandHandler browser.Floating = cmd
 	commandHandler = browser.FuncFloating(
 		browser.FuncHandler(
 			handler.WithComponent(commandHandler,

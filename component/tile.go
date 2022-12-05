@@ -59,6 +59,11 @@ func (t *TileTree) Draw(w term.Writer) {
 	t.root.Draw(w)
 }
 
+// DrawTile draws only node on w.
+func (t *TileTree) DrawTile(node *TileNode, w term.Writer) {
+	t.root.drawTile(node, w)
+}
+
 func (t *TileNode) initNode(
 	direction splitdir, content tui.Component, parent *TileNode,
 ) {
@@ -150,6 +155,22 @@ func (t *TileNode) Draw(w term.Writer) {
 	}
 
 	return
+}
+
+func (t *TileNode) drawTile(node *TileNode, w term.Writer) bool {
+	if t == node {
+		t.content.Draw(w)
+		return true
+	}
+	for _, ti := range t.children {
+		// call drawTile and use Virtual's position, width, height
+		// to emulate Virtual.Draw via VirtualWriter
+		vwriter := VirtualWriter(w, ti.Position(), ti.Height(), ti.Width())
+		if ok := ti.C.(*TileNode).drawTile(node, vwriter); ok {
+			return true
+		}
+	}
+	return false
 }
 
 func (t *TileNode) childIdx(child *TileNode) int {

@@ -624,33 +624,33 @@ func TestExCommandResponsive(t *testing.T) {
 			`                    
                     
                     
-┌──────────────────┐
-│edit▐             │
-│edit              │
-│                  │
-└──────────────────┘
+edit▐               
+edit                
+                    
+                    
+                    
                     
                     `},
 		{":eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
 			`                    
                     
                     
-┌──────────────────┐
-│eeeeeeeeeeeeeeeeee│
-│eeeeeeeeeeeeeeeeee│
-│eeeeeeeeeeeeeeeee▐│
-└──────────────────┘
+eeeeeeeeeeeeeeeeeeee
+eeeeeeeeeeeeeeeeeeee
+eeeeeeeeeeeeeeeeeee▐
+                    
+                    
                     
                     `},
 		{":e eeeeeeeeeeeeeeeeeeeeeeeee",
 			`                    
                     
                     
-┌──────────────────┐
-│edit eeeeeeeeeeeee│
-│eeeeeeeeeeee▐     │
-│                  │
-└──────────────────┘
+edit eeeeeeeeeeeeeee
+eeeeeeeeee▐         
+                    
+                    
+                    
                     
                     `},
 	}
@@ -661,10 +661,7 @@ func TestExCommandResponsive(t *testing.T) {
 			text.WithCommandKey(testCommandKey),
 			text.WithWindowManagerConfig(handler.WindowManagerConfig{
 				WindowManagerConfig: component.WindowManagerConfig{Frame: false}}),
-			text.WithCommandOverlayConfig(text.CommandOverlayConfig{
-				FrameCharSet: component.FrameCharSetDefault(),
-				Frame:        true,
-			}),
+			text.WithCommandOverlayConfig(text.CommandOverlayConfig{}),
 		}
 		b := newExForTesting(t, text.NopEditor(), opts...)
 		closeFns = append(closeFns, b.Close)

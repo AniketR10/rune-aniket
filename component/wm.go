@@ -51,8 +51,12 @@ func (wm *WindowManager) TileTree() *TileTree {
 
 // DrawFloatingWindow can be used to arbitrarily draw floating windows returned
 // by FloatingWindows. If win is not a floating window, this method will panic.
-func (wm *WindowManager) DrawFloatingWindow(win Window, w term.Writer) {
-	win.node.(*floatingNode).Draw(w)
+func (wm *WindowManager) DrawWindow(win Window, w term.Writer) {
+	if f, ok := win.node.(*floatingNode); ok {
+		f.Draw(w)
+		return
+	}
+	wm.tree.DrawTile(win.node.(*TileNode), w)
 }
 
 // NewWindowManager allocates storage for a new WindowManager and initializes it.

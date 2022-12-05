@@ -158,23 +158,6 @@ func (c ideConfig) commandKeyMappings() map[handler.Sequence][]string {
 	return ret
 }
 
-func (c ideConfig) commandOverlayFrame() (ret bool) {
-	ret = text.DefaultCommandOverlayConfig().Frame
-	cfg, ok := c.command()
-	if !ok {
-		return
-	}
-	cfgFrame, err := cfg.GetBool("frame")
-	if err != nil {
-		if err != config.ErrNotFound {
-			c.errors["command.frame"] = err
-		}
-		return
-	}
-	ret = cfgFrame
-	return
-}
-
 func (c ideConfig) commandKey() (ret term.KeyComb) {
 	ret = defaultCommandKey
 	cfg, ok := c.command()
@@ -298,52 +281,19 @@ func (c ideConfig) promptHighlightAttr() term.Attributes {
 	)
 }
 
-func (c ideConfig) commandOverlayMatchedTextAttr(frame bool) (ret term.Attributes) {
+func (c ideConfig) commandOverlayMatchedTextAttr() (ret term.Attributes) {
 	def := text.DefaultCommandOverlayConfig().MatchedTextAttr
-	if !frame {
-		def = term.Attributes{Fg: term.ColorRed, Bg: 238}
-	}
 	return c.getCommandAttr("matched_text_attr", def)
 }
 
-func (c ideConfig) commandOverlayFocusElementAttr(frame bool) (ret term.Attributes) {
+func (c ideConfig) commandOverlayFocusElementAttr() (ret term.Attributes) {
 	def := text.DefaultCommandOverlayConfig().FocusElementAttr
-	if !frame {
-		def = term.Attributes{Fg: term.AttrBold | term.ColorRed, Bg: 240}
-	}
 	return c.getCommandAttr("focus_element_attr", def)
 }
 
-func (c ideConfig) commandOverlayElementAttr(frame bool) (ret term.Attributes) {
+func (c ideConfig) commandOverlayElementAttr() (ret term.Attributes) {
 	def := text.DefaultCommandOverlayConfig().ElementAttr
-	if !frame {
-		def = term.Attributes{Fg: term.ColorWhite, Bg: 238}
-	}
 	return c.getCommandAttr("element_attr", def)
-}
-
-func (c ideConfig) commandOverlayFrameAttr() (attr term.Attributes) {
-	return c.getCommandAttr("frame_attr", term.Attributes{})
-}
-
-func (c ideConfig) commandOverlayFrameCharSet() (
-	cs component.FrameCharSet,
-) {
-	key := "frame_charset"
-	cs = component.FrameCharSetDefault()
-	cfg, ok := c.command()
-	if !ok {
-		return
-	}
-	cfgCs, err := config.GetFrameCharset(cfg, key, cs)
-	if err != nil {
-		if err != config.ErrNotFound {
-			c.errors[fmt.Sprintf("command.%s", key)] = err
-		}
-		return
-	}
-	cs = cfgCs
-	return
 }
 
 func (c ideConfig) commandAliases() (ret map[string][]string) {
@@ -387,14 +337,10 @@ func (c ideConfig) commandAliases() (ret map[string][]string) {
 }
 
 func (c ideConfig) commandOverlayConfig() text.CommandOverlayConfig {
-	frame := c.commandOverlayFrame()
 	cfg := text.CommandOverlayConfig{
-		Frame:            frame,
-		FrameAttributes:  c.commandOverlayFrameAttr(),
-		FrameCharSet:     c.commandOverlayFrameCharSet(),
-		MatchedTextAttr:  c.commandOverlayMatchedTextAttr(frame),
-		FocusElementAttr: c.commandOverlayFocusElementAttr(frame),
-		ElementAttr:      c.commandOverlayElementAttr(frame),
+		MatchedTextAttr:  c.commandOverlayMatchedTextAttr(),
+		FocusElementAttr: c.commandOverlayFocusElementAttr(),
+		ElementAttr:      c.commandOverlayElementAttr(),
 	}
 	return cfg
 }

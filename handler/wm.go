@@ -309,81 +309,14 @@ func (wm *WindowManager) Draw(w term.Writer) {
 	}
 
 	focusWin := wm.focus.Window
-	offset := focusWin.Position()
-	// Set C to Nop for now so resize does not resize focus window
-	// on every call to Draw
-	v := component.Virtual{C: component.Nop()}
-	v.Resize(focusWin.Width(), focusWin.Height())
-	v.Move(offset)
-
-	// draw content with frame if configured with frames
-	if f, ok := wm.focus.Frame(); ok {
-		v.C = f
-	} else {
-		v.C = wm.focus.Content()
-	}
-
-	// draw all tiles, this is important in case focus tile is a floating
-	// window in which case we need to update dimensions before
-	// calling Draw below
 	dimWriter := term.DimWriter(w)
-	wm.comp.Draw(dimWriter)
-
-	// then overwrite focus tile with regular writer
-	v.Draw(w)
-
-	// if there are any floating windows that are not in focus
-	// make sure they're drawn over the focus window, otherwise
-	// they become hidden and unaccessible
-	for _, w := range wm.comp.FloatingWindows() {
-		if w != focusWin {
-			wm.comp.DrawFloatingWindow(w, dimWriter)
+	wm.comp.Iterate(func(win component.Window) {
+		if win == focusWin {
+			wm.comp.DrawWindow(win, w)
+		} else {
+			wm.comp.DrawWindow(win, dimWriter)
 		}
-	}
-}
-
-// NOTE: this logic introduces a race-condition: If this WindowManager
-// has any rpc handler's then there's a chance that this WindowManager will
-// not be the first to acquire the lock after the draw request has completed
-// and so it could break invariants accross the codebase (i.e. browser assuming
-// all handlers are browser.Handler, which can cause panics or other issues.
-// I haven't figured out a way to bypass this so drawing the current handler
-// in focus twice seems like a better outcome that this nasty race-condition.
-func (wm *WindowManager) _DrawOptimized(w term.Writer) {
-	if wm.comp.SizeTiles()+wm.comp.SizeFloating() == 1 {
-		wm.comp.Draw(w)
-		return
-	}
-
-	// optimization to not draw focus window content twice
-	// capture the state of the world here before we call Draw
-	// to avoid race conditions, since Draw might call a remote
-	// handler and unlock the event loop mutex.
-	focus := wm.focus
-	focusWin := focus.Window
-	offset := focusWin.Position()
-	if wm.config.Frame {
-		offset.X++
-		offset.Y++
-	}
-	// Set C to Nop for now so resize does not resize focus window
-	// on every call to Draw
-	v := component.Virtual{C: component.Nop()}
-	v.Resize(focusWin.Width(), focusWin.Height())
-	v.Move(offset)
-
-	focusContent := focus.setContentResize(Nop(component.Nop()), false)
-	v.C = focusContent
-
-	// draw all with dimming term.Writer
-	wm.comp.Draw(term.DimWriter(w))
-
-	// reset focus window content
-	focus.setContentResize(focusContent, false)
-
-	// finally draw focus window content with standard term.Writer
-	// over nop component
-	v.Draw(w)
+	})
 }
 
 // Resize : tui.Component

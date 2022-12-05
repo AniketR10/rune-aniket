@@ -13,9 +13,6 @@ import (
 // CommandOverlayConfig holds configuration for the
 // command's interface.
 type CommandOverlayConfig struct {
-	Frame            bool
-	FrameCharSet     component.FrameCharSet
-	FrameAttributes  term.Attributes
 	MatchedTextAttr  term.Attributes
 	FocusElementAttr term.Attributes
 	ElementAttr      term.Attributes
@@ -43,7 +40,6 @@ type Config struct {
 
 // DefaultCommandOverlayConfig returns the default Config's CommandOverlayConfig.
 func DefaultCommandOverlayConfig() (cfg CommandOverlayConfig) {
-	cfg.Frame = true
 	cfg.MatchedTextAttr = term.Attributes{Fg: term.ColorRed}
 	cfg.FocusElementAttr = term.Attributes{Fg: term.AttrBold | term.ColorRed}
 	cfg.ElementAttr = term.Attributes{}

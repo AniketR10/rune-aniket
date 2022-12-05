@@ -38,11 +38,6 @@ input_mode:
 output_mode: color_256
 
 command:
-  frame_charset:
-    horizontalbottom: '━'
-  frame_attr:
-    bg: red
-    fg: 219
   aliases:
     cherry: bomb
     todo:
@@ -186,11 +181,6 @@ func TestConfigSetting(t *testing.T) {
 
 	cmd, err := pluginCfg.GetString("command")
 	require.NoError(t, err)
-	assert.Equal(t, term.Attributes{Bg: term.ColorRed,
-		Fg: term.Attribute(219)}, cfg.commandOverlayFrameAttr())
-	expectedCs := component.FrameCharSetDefault()
-	expectedCs.HorizontalBottom = '━'
-	assert.Equal(t, expectedCs, cfg.commandOverlayFrameCharSet())
 	assert.Equal(t, "ag -g \"\"", cmd)
 
 	expectedCommandAliases := map[string][]string{
