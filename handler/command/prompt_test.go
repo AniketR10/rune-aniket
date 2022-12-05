@@ -441,7 +441,7 @@ oregano
                     
                     
                     `},
-		{"tab completes if there's only one match in the list",
+		{"no completion uses historical args as completion list items",
 			"ro my✌gani✌", []string{"lane", "lorelai", "rori"},
 			expectCompleteWith(
 				[][]string{
@@ -456,7 +456,7 @@ oregano
 				}),
 			nopDispatch, `
 rori myArg oregani ▐
-                    
+myArg               
                     
                     
                     

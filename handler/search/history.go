@@ -126,3 +126,8 @@ func (h *History) Next() string {
 	}
 	return search
 }
+
+// Slice returns all queries as a slice.
+func (h *History) Slice() []string {
+	return h.doc.Queries
+}

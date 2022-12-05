@@ -70,6 +70,10 @@ github.com/envoyproxy/go-control-plane v0.9.10-0.20210907150352-cf90f659a021/go.
 github.com/envoyproxy/protoc-gen-validate v0.1.0/go.mod h1:iSmxcyjqTsJpI2R4NaDN7+kN2VEUnK/pcBlmesArF7c=
 github.com/ernestrc/blue v1.27.5 h1:kT3dvb2BZGHE5EB7z2Cun5uV5CrIDPzCJl81jolW1Og=
 github.com/ernestrc/blue v1.27.5/go.mod h1:PCA9ljor3HEljALh1TcIAL6tmThp+U1sE5n+v+SzmB8=
+github.com/ernestrc/blue v1.27.6 h1:TDZsbLNqCBgl6oCMlo1q5unfLQKF9HcF5zNB0N31uEY=
+github.com/ernestrc/blue v1.27.6/go.mod h1:PCA9ljor3HEljALh1TcIAL6tmThp+U1sE5n+v+SzmB8=
+github.com/ernestrc/blue v1.27.7 h1:hD6OvzQsAt6lcH1+WjeXj6cgkQ1MXgMCOSIM6bJ3ouw=
+github.com/ernestrc/blue v1.27.7/go.mod h1:PCA9ljor3HEljALh1TcIAL6tmThp+U1sE5n+v+SzmB8=
 github.com/ernestrc/dom v0.2.5-0.20201125033726-789c946aa938 h1:f/aC0hFDoMkao3chzwSlyBnwxcQj77I3i/D6HEbcuTE=
 github.com/ernestrc/dom v0.2.5-0.20201125033726-789c946aa938/go.mod h1:zkvVMhrl7iSWniJU2txvm5E6pF5bkHVK5ALYLlNBcO0=
 github.com/ernestrc/go-multierror v1.1.2 h1:9EYH71nYIsHEC9DSTtsT9GypDxmHAQ2gcOY6BMnXot8=

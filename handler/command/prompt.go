@@ -127,17 +127,20 @@ func (h *Prompt) doInit(
 }
 
 func (h *Prompt) resizeCommandOverlay() {
+	height := h.getCommandOverlayHeight(h.width)
 	// propagate local cmd+args buffer height to
 	// search list, which only has cmd, in case args alone span
 	// multiple lines
-	height := h.responsive.Height(h.width)
-	// set to min 1, as it's being used as input field
-	// and max to the height of the overlayed component
-	height = int(math.Min(math.Max(1, float64(height)), float64(h.height)))
-	// the list is very short so waiting is not a significant
-	// perf penalty and it makes tests easier to make deterministic
 	h.list.SetMinInputHeight(height)
 	h.responsive.Resize(h.width, height)
+}
+
+func (h *Prompt) getCommandOverlayHeight(width int) int {
+	height := h.responsive.Height(width)
+	// set to min 1, as it's being used as input field
+	// and max to the height of the overlayed component
+	height = int(math.Max(1, float64(height)))
+	return height
 }
 
 // Resize satisfies tui.Handler
@@ -153,8 +156,6 @@ func (h *Prompt) Draw(w term.Writer) {
 	// input so local buffer changes must consider potential resize
 	// of search.List
 	h.resizeCommandOverlay()
-	// the list is very short so waiting is not a significant
-	// perf penalty and it makes tests easier to make deterministic
 	h.list.Draw(w)
 	h.responsive.Draw(w)
 }
@@ -427,55 +428,96 @@ func (h *Prompt) setCompletionList(cmd string, args ...string) {
 	it := h.completer.Complete(ctx, cmdAndArgs[0], cmdAndArgs[1:]...)
 
 	if h.sync {
-		pushIteratorSync(ctx, &h.list, cancel, it, h.log)
+		h.pushCompletionListSync(ctx, cancel, cmdAndArgs[0], it)
 	} else {
 		ch := h.list.Push(ctx)
-		go pushIterator(ctx, ch, cancel, it, h.log)
+		go h.pushCompletionList(ctx, ch, cancel, cmdAndArgs[0], it)
 	}
 }
 
-func pushIteratorSync(
+func (h *Prompt) pushCompletionListSync(
 	ctx context.Context,
-	list *search.List, cancel func(),
+	cancel func(),
+	cmd string,
 	it iterator.Iterator[string],
-	l func(level log.Level, msg string, args ...interface{}),
 ) {
 	defer cancel()
-	for {
+	var i int
+	for ; ; i++ {
 		next, ok := it.Next()
 		if !ok {
 			break
 		}
-		list.PushSync([]byte(next))
+		h.list.PushSync([]byte(next))
+	}
+
+	if i == 0 {
+		// push args history if default completion iterator is empty
+		it, ok := h.commandArgsHistoryIterator(cmd)
+		if ok {
+			h.pushCompletionListSync(ctx, cancel, cmd, it)
+		}
 	}
 }
 
-func pushIterator(
+func (h *Prompt) commandArgsHistoryIterator(cmd string) (iterator.Iterator[string], bool) {
+
+	history := h.history.Slice()
+	it := iterator.FromSlice(history)
+
+	seen := make(map[string]struct{})
+	filterNoArgs := iterator.Filter(it, func(query string) bool {
+		return strings.Contains(query, cmd) && strings.Count(query, " ") > 0
+	})
+	mapArgs := iterator.Map(filterNoArgs, func(query string) (args string) {
+		cmdAndArgs := strings.Split(query, " ")
+		return strings.Join(cmdAndArgs[1:], " ")
+	})
+	uniqueArgs := iterator.Filter(mapArgs, func(args string) bool {
+		_, is := seen[args]
+		if !is {
+			seen[args] = struct{}{}
+		}
+		return !is
+	})
+	return iterator.IsEmpty(uniqueArgs)
+}
+
+func (h *Prompt) pushCompletionList(
 	ctx context.Context,
 	ch chan<- []byte, cancel func(),
+	cmd string,
 	it iterator.Iterator[string],
-	l func(level log.Level, msg string, args ...interface{}),
 ) {
 	defer close(ch)
 	defer cancel()
 
-	for {
+	var i int
+	for ; ; i++ {
 		next, ok := it.Next()
 		if !ok {
 			break
 		}
 		select {
 		case <-ctx.Done():
-			l(log.TraceLevel, "context canceled for ch %p before completed push", ch)
+			h.log(log.TraceLevel, "context canceled for ch %p before completed push", ch)
 			return
 		case ch <- []byte(next):
-			l(log.TraceLevel, "pushed %q onto search list for ch %p", next, ch)
+			h.log(log.TraceLevel, "pushed %q onto search list for ch %p", next, ch)
 		}
 	}
 
 	err := it.Err()
 	if err != nil {
-		l(log.ErrorLevel, "completion iterator error: %v", err)
+		h.log(log.ErrorLevel, "completion iterator error: %v", err)
+		return
+	}
+
+	if i == 0 {
+		it, ok := h.commandArgsHistoryIterator(cmd)
+		if ok {
+			h.pushCompletionListSync(ctx, cancel, cmd, it)
+		}
 	}
 }
 
@@ -561,15 +603,28 @@ func (h *Prompt) Cancel() {
 }
 
 func (h *Prompt) Dimensions() (width, height int) {
-	maxWidthItems := 20
+	const (
+		matchPadding = 1
+		minWidth     = 50
+		maxWidth     = 100
+		minHeight    = 3
+		maxHeight    = 40
+	)
+
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	maxWidthItems := minWidth
 	h.list.IterateVisible(func(m search.Match) {
-		if mlen := len(m.Data()); mlen > maxWidthItems {
+		if mlen := len(m.Data()) + matchPadding; mlen > maxWidthItems {
 			maxWidthItems = mlen
 		}
 	})
 	width = int(math.Max(float64(h.list.Buffer().MaxColumns()), float64(maxWidthItems)))
-	width = int(math.Min(math.Max(float64(width), 50), 100))
-	height = int(math.Min(math.Max(float64(h.list.MatchCount()), 3), 40))
+	width = int(math.Min(float64(width), maxWidth))
+
+	bufHeight := h.getCommandOverlayHeight(width)
+	height = int(math.Min(math.Max(float64(h.list.MatchCount()+bufHeight), minHeight), maxHeight))
 	return
 }
 
