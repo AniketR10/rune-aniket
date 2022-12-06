@@ -44,11 +44,11 @@ func main() {
 
 	wm = handler.NewWindowManager(&less[0], handler.DefaultWindowManagerConfig())
 
-	wm.SplitHorizontal(&less[1])
+	wm.SplitHorizontal(wm.Focus(), &less[1])
 	wm.FocusUp()
 	wm.FocusLeft()
-	wm.SplitVertical(&less[2])
-	wm.SplitVertical(&less[3])
+	wm.SplitVertical(wm.Focus(), &less[2])
+	wm.SplitVertical(wm.Focus(), &less[3])
 
 	term.SetInputMode(term.InputAlt | term.InputMouse)
 

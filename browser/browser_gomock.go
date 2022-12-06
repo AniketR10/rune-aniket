@@ -429,18 +429,18 @@ func (mr *MockWindowManagerMockRecorder) SetFocus(win interface{}) *gomock.Call 
 }
 
 // Split mocks base method.
-func (m *MockWindowManager) Split(arg0 Orientation, arg1 Handler) (Window, error) {
+func (m *MockWindowManager) Split(arg0 Orientation, arg1 Window, arg2 Handler) (Window, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Split", arg0, arg1)
+	ret := m.ctrl.Call(m, "Split", arg0, arg1, arg2)
 	ret0, _ := ret[0].(Window)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Split indicates an expected call of Split.
-func (mr *MockWindowManagerMockRecorder) Split(arg0, arg1 interface{}) *gomock.Call {
+func (mr *MockWindowManagerMockRecorder) Split(arg0, arg1, arg2 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Split", reflect.TypeOf((*MockWindowManager)(nil).Split), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Split", reflect.TypeOf((*MockWindowManager)(nil).Split), arg0, arg1, arg2)
 }
 
 // Tab mocks base method.
@@ -748,18 +748,18 @@ func (mr *MockBrowserMockRecorder) SetMessage(msg interface{}, args ...interface
 }
 
 // Split mocks base method.
-func (m *MockBrowser) Split(arg0 Orientation, arg1 Handler) (Window, error) {
+func (m *MockBrowser) Split(arg0 Orientation, arg1 Window, arg2 Handler) (Window, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Split", arg0, arg1)
+	ret := m.ctrl.Call(m, "Split", arg0, arg1, arg2)
 	ret0, _ := ret[0].(Window)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Split indicates an expected call of Split.
-func (mr *MockBrowserMockRecorder) Split(arg0, arg1 interface{}) *gomock.Call {
+func (mr *MockBrowserMockRecorder) Split(arg0, arg1, arg2 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Split", reflect.TypeOf((*MockBrowser)(nil).Split), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Split", reflect.TypeOf((*MockBrowser)(nil).Split), arg0, arg1, arg2)
 }
 
 // Tab mocks base method.

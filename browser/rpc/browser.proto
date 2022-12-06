@@ -36,6 +36,7 @@ enum Orientation {
 message SplitRequest {
 	uint64 handler_id = 1;
 	Orientation orientation = 2;
+	uint64 window_id = 3;
 }
 
 message SplitResponse {

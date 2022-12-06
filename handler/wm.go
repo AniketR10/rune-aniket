@@ -20,10 +20,11 @@ type WindowManagerConfig struct {
 
 // WindowManager implements Handler as a tiled window manager.
 type WindowManager struct {
-	comp   component.WindowManager
-	config WindowManagerConfig
-	focus  Window
-	subs   []WindowSubscriber
+	comp      component.WindowManager
+	config    WindowManagerConfig
+	prevFocus Window // best effort to set focus to prev win upon ShiftFocus
+	focus     Window
+	subs      []WindowSubscriber
 }
 
 // WindowSubscriber wraps the OnFocus callback used
@@ -154,8 +155,8 @@ func (wm *WindowManager) Handle(ev term.Event) (exit bool, handled bool) {
 }
 
 // SplitVertical creates a new vertical split over the tile currently in focus.
-func (wm *WindowManager) SplitVertical(h tui.Handler) (Window, bool) {
-	w, ok := wm.comp.SplitVertical(wm.focus.Window, h)
+func (wm *WindowManager) SplitVertical(win Window, h tui.Handler) (Window, bool) {
+	w, ok := wm.comp.SplitVertical(win.Window, h)
 	if !ok {
 		return Window{}, false
 	}
@@ -165,8 +166,8 @@ func (wm *WindowManager) SplitVertical(h tui.Handler) (Window, bool) {
 }
 
 // SplitHorizontal creates a new horizontal split over the tile currently in focus.
-func (wm *WindowManager) SplitHorizontal(h tui.Handler) (Window, bool) {
-	w, ok := wm.comp.SplitHorizontal(wm.focus.Window, h)
+func (wm *WindowManager) SplitHorizontal(win Window, h tui.Handler) (Window, bool) {
+	w, ok := wm.comp.SplitHorizontal(win.Window, h)
 	if !ok {
 		return Window{}, false
 	}
@@ -225,6 +226,14 @@ func (wm *WindowManager) Focus() Window {
 // ShiftFocus attempts to shift to focus to another tile. It returns
 // false if focus did not shift to another tile because there aren't any tiles left.
 func (wm *WindowManager) ShiftFocus() (ok bool) {
+	if wm.prevFocus != (Window{}) {
+		ok = wm.Focus() != wm.prevFocus
+		if ok {
+			wm.SetFocus(wm.prevFocus)
+			return
+		}
+	}
+
 	ok = wm.FocusLeft()
 	if ok {
 		return
@@ -342,6 +351,7 @@ func (wm *WindowManager) SetFocus(tile Window) (
 	wm.focus = tile
 	if prev != tile {
 		wm.dispatchOnFocus(prev, wm.focus)
+		wm.prevFocus = prev
 	}
 	return
 }

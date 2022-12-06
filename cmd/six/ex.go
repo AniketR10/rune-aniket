@@ -115,7 +115,6 @@ type ex struct {
 	reissueEvent         term.Event
 	cmd                  *command.Prompt
 	cmdWin               browser.Window
-	noResetFocus         bool
 	quit                 bool
 	height               int
 }
@@ -350,9 +349,6 @@ func (e *ex) closeAllBuffers(args ...string) error {
 }
 
 func (e *ex) closeFocusWindow(args ...string) error {
-	if e.cmd != nil {
-		e.noResetFocus = true
-	}
 	return e.invokeWindow().Close()
 }
 
@@ -468,15 +464,14 @@ func (e *ex) splitDirectionChange(args ...string) error {
 
 func (e *ex) newWindowHandler(h browser.Handler) {
 	eb := e.comp.Browser()
-	eb.SetFocus(e.invokeWindow())
-	eb.Split(browser.OrientationDefault, h)
+	win := e.invokeWindow()
+	eb.Split(browser.OrientationDefault, win, h)
 }
 
 func (e *ex) prepareFocusShift() {
 	eb := e.comp.Browser()
 	if e.cmd != nil {
 		eb.Focus().Close()
-		e.noResetFocus = true
 	}
 	eb.SetFocus(e.invokeWindow())
 }
@@ -511,9 +506,6 @@ func (e *ex) panic(args ...string) error {
 
 func (e *ex) newWindow(args ...string) error {
 	e.newWindowHandler(nil)
-	if e.cmd != nil {
-		e.noResetFocus = true
-	}
 	return nil
 }
 
@@ -678,13 +670,6 @@ func (e *ex) resetCommandList(cmd *command.Prompt) {
 
 func (e *ex) closeCommandPrompt() error {
 	err := e.cmd.Close()
-	// reverse focus to window before prompt, except
-	// if command was a focus shifting command
-	if e.noResetFocus {
-		e.noResetFocus = false
-	} else {
-		e.comp.SetFocus(e.cmdWin)
-	}
 	e.cmd = nil
 	return err
 }
@@ -722,8 +707,6 @@ func (e *ex) openCommandPrompt() {
 		return
 	}
 	e.cmd = cmd
-	// reset in case last command was run via key mapping
-	e.noResetFocus = false
 }
 
 // Handle satisfies tui.Handler.

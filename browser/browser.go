@@ -64,7 +64,7 @@ type WindowManager interface {
 
 	// Split splits the current window in focus in two, and installs
 	// Handler in the new window.
-	Split(Orientation, Handler) (Window, error)
+	Split(Orientation, Window, Handler) (Window, error)
 
 	// Floating creates a new floating window at coordinates,
 	// with static width and height.

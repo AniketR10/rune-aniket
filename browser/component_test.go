@@ -14,16 +14,16 @@ import (
 )
 
 func splitVerticalLeft(c *Component, h Handler) (Window, bool) {
-	return c.Split(OrientationLeft, h)
+	return c.Split(OrientationLeft, c.Focus(), h)
 }
 func splitVerticalRight(c *Component, h Handler) (Window, bool) {
-	return c.Split(OrientationRight, h)
+	return c.Split(OrientationRight, c.Focus(), h)
 }
 func splitHorizontalAbove(c *Component, h Handler) (Window, bool) {
-	return c.Split(OrientationTop, h)
+	return c.Split(OrientationTop, c.Focus(), h)
 }
 func splitHorizontalBelow(c *Component, h Handler) (Window, bool) {
-	return c.Split(OrientationBottom, h)
+	return c.Split(OrientationBottom, c.Focus(), h)
 }
 
 var splitSuite = []struct {
@@ -115,7 +115,7 @@ func TestComponentCloseWindow(t *testing.T) {
 func TestComponentRemoveAllTabs(t *testing.T) {
 	w1 := NewComponent(Config{})
 	w2 := NewComponent(Config{})
-	w2.Split(OrientationDefault, NewTestHandler())
+	w2.Split(OrientationDefault, w2.Focus(), NewTestHandler())
 
 	tsuite := []struct {
 		description string
@@ -335,7 +335,7 @@ func TestComponentSetContentUnmount(t *testing.T) {
 	// closed and mounted again
 	assert.Equal(t, 2, closed)
 
-	win1, ok := c.Split(OrientationBottom, h2)
+	win1, ok := c.Split(OrientationBottom, c.Focus(), h2)
 	require.True(t, ok)
 	assert.Equal(t, 2, closed)
 
@@ -448,7 +448,7 @@ O──────────────────┐
 │                  │
 └──────────────────┘`,
 		}, {func() {
-			w2, ok = c.Split(OrientationBottom, h2)
+			w2, ok = c.Split(OrientationBottom, c.Focus(), h2)
 			require.True(t, ok)
 		}, `
 O──────────────────┐
@@ -460,7 +460,7 @@ X──────────────────┐
 │AAAAAAAAAAAAAAAAAA│
 └──────────────────┘`,
 		}, {func() {
-			/*w3 =*/ c.Split(OrientationRight, h3)
+			/*w3 =*/ c.Split(OrientationRight, c.Focus(), h3)
 		}, `
 O──────────────────┐
 │                  │
@@ -492,10 +492,10 @@ O────────┐X────────┐
 		}, /* same as case 1, topleft on window X is overriden */ `
 O──────────────────┐
 │                  │
-X──────────────────┐
+├──────────────────┤
 │                  │
 └──────────────────┘
-O──────────────────┐
+X──────────────────┐
 │CCCCCCCCCCCCCCCCCC│
 └──────────────────┘`,
 		},
@@ -673,14 +673,14 @@ func TestComponentSetFocus(t *testing.T) {
 	c := NewComponent(cfg)
 	c.Resize(20, 8)
 	win0 := c.Focus()
-	win1, _ := c.Split(OrientationDefault, nil)
+	win1, _ := c.Split(OrientationDefault, c.Focus(), nil)
 	assert.Equal(t, win1, c.Focus())
 
 	prev := c.SetFocus(win0)
 	assert.Equal(t, win1, prev)
 	assert.Equal(t, win0, c.Focus())
 
-	win2, _ := c.Split(OrientationDefault, nil)
+	win2, _ := c.Split(OrientationDefault, c.Focus(), nil)
 	assert.Equal(t, win2, c.Focus())
 	prev = c.SetFocus(win1)
 	assert.Equal(t, win2, prev)
@@ -695,7 +695,7 @@ func TestComponentSplitNil(t *testing.T) {
 		c := NewComponent(cfg)
 		c.SetDefaultSplit(OrientationLeft)
 		c.Resize(20, 8)
-		c.Split(OrientationDefault, nil)
+		c.Split(OrientationDefault, c.Focus(), nil)
 		tests := []testutil.ComponentTestCase{
 			{
 				nil, `

@@ -164,7 +164,7 @@ func testSplitWindow(
 	mockWm := browser.NewMockWindowManager(ctrl)
 	h := &cmdSplitHandler{config: cfg, wm: mockWm}
 	mockWm.EXPECT().
-		Split(gomock.Eq(cfg.SplitOrientation), gomock.Any()).
+		Split(gomock.Eq(cfg.SplitOrientation), gomock.Any(), gomock.Any()).
 		Return(nil, nil)
 	action(h)
 }

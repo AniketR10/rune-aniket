@@ -1716,14 +1716,14 @@ func (h *lspEditorHandler) browseLocations(
 	})
 
 	bhtop := browser.FuncHandler(eh, closeWin(bottom))
-	top, err = h.wm.Split(browser.OrientationBottom, bhtop)
+	top, err = h.wm.Split(browser.OrientationBottom, win, bhtop)
 	if err != nil {
 		err = fmt.Errorf("wm.split: %v", err)
 		return err
 	}
 
 	bhbottom := browser.FuncHandler(bh, closeWin(top))
-	bottom, err = h.wm.Split(browser.OrientationBottom, bhbottom)
+	bottom, err = h.wm.Split(browser.OrientationBottom, top, bhbottom)
 	if err != nil {
 		err = fmt.Errorf("wm.Split: %v", err)
 		return err

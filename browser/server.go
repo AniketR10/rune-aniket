@@ -340,7 +340,13 @@ func (s *Server) Split(
 ) (*browserpb.SplitResponse, error) {
 	windowID, err := s.newRemoteResource(ctx, req.GetHandlerId(),
 		func(wm WindowManager, h Handler) (Window, error) {
-			return wm.Split(protoToModelOrientation(req.GetOrientation()), h)
+			winID, ok0 := s.brokerIDToWinID[req.GetWindowId()]
+			winIfc, ok1 := s.servers[winID]
+			win, ok2 := winIfc.(*windowServerResource)
+			if !ok0 || !ok1 || !ok2 {
+				return nil, fmt.Errorf("cannot find window with windowID: %d", req.GetWindowId())
+			}
+			return wm.Split(protoToModelOrientation(req.GetOrientation()), win.win, h)
 		})
 	if err != nil {
 		return nil, err
@@ -499,8 +505,7 @@ func (s *Server) SetFocus(
 	winIfc, ok1 := s.servers[winID]
 	win, ok2 := winIfc.(*windowServerResource)
 	if !ok0 || !ok1 || !ok2 {
-		return nil, fmt.Errorf("cannot find window with windowID: %d: FIXME remove: %#v",
-			req.GetWindowId(), s.servers)
+		return nil, fmt.Errorf("cannot find window with windowID: %d", req.GetWindowId())
 	}
 
 	prev, err := s.browser.SetFocus(win.win)

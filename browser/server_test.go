@@ -111,37 +111,6 @@ func TestServerOpen(t *testing.T) {
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "oopsie")
 	})
-
-	t.Run("stores handler for use with Split/SetContent methods", func(t *testing.T) {
-		ctrl := gomock.NewController(t)
-		defer ctrl.Finish()
-		s, mock, broker := newTestServer(ctrl, new(sync.Mutex))
-
-		nextID := uint32(10)
-		h := NewTestHandler()
-		mock.EXPECT().Open(gomock.Any()).Return(h, nil)
-		broker.EXPECT().NextId().Return(nextID)
-
-		req := browserpb.OpenResourceRequest{Resource: "file:///Caliu"}
-		res, err := s.Open(ctx, &req)
-		require.NoError(t, err)
-		require.NotNil(t, res)
-		assertHandlerStored(t, nextID, s, h)
-
-		sreq := browserpb.SplitRequest{
-			HandlerId:   uint64(nextID),
-			Orientation: browserpb.Orientation_Right,
-		}
-		windowID := uint32(999)
-		prototest.ExpectBrokerServe(t, windowID, broker)
-		mockWindow := NewMockWindow(ctrl)
-		mockWindow.EXPECT().onWindowClosed(gomock.Any()).AnyTimes()
-		mockWindow.EXPECT().id().AnyTimes().Return(uint64(0))
-
-		mock.EXPECT().Split(gomock.Eq(OrientationRight), gomock.Any()).Return(mockWindow, nil)
-		_, err = s.Split(ctx, &sreq)
-		require.NoError(t, err)
-	})
 }
 
 func insertDrawResponse(t *testing.T, quit bool) func(ctx context.Context, method string, args interface{}, reply interface{}, opts ...grpc.CallOption) error {
@@ -261,26 +230,6 @@ func assertServerServersEqual(t *testing.T, expected int, s *Server) {
 	assert.Equal(t, expected, len(s.servers))
 }
 
-func TestServerSplitHorizontalAbove(t *testing.T) {
-	testServerSplit(t, OrientationTop, browserpb.Orientation_Top)
-}
-
-func TestServerSplitDefault(t *testing.T) {
-	testServerSplit(t, OrientationDefault, browserpb.Orientation_Default)
-}
-
-func TestServerSplitHorizontalBelow(t *testing.T) {
-	testServerSplit(t, OrientationBottom, browserpb.Orientation_Bottom)
-}
-
-func TestServerSplitVerticalLeft(t *testing.T) {
-	testServerSplit(t, OrientationLeft, browserpb.Orientation_Left)
-}
-
-func TestServerSplitVerticalRight(t *testing.T) {
-	testServerSplit(t, OrientationRight, browserpb.Orientation_Right)
-}
-
 func waitForMonitoringExit(quitCh chan struct{}) {
 	<-quitCh
 	time.Sleep(asyncResultsSleepDuration)
@@ -304,122 +253,6 @@ func assertServerHandlerExitClose(
 	waitForMonitoringExit(quitCh)
 
 	assertServerClientsEqual(t, 0, s)
-}
-
-func testServerSplit(t *testing.T, expectedSplit Orientation, split browserpb.Orientation) {
-	ctx := context.Background()
-	handlerID := uint32(21)
-	windowID := uint32(111111)
-	req := browserpb.SplitRequest{
-		HandlerId:   uint64(handlerID),
-		Orientation: split,
-	}
-	protoEv := termpb.Event{
-		Type:   termpb.Event_TypeMouse,
-		Key:    termpb.Event_MouseMiddle,
-		Mod:    termpb.Event_Motion,
-		MouseX: 10,
-		MouseY: 1393291,
-	}
-	termEv := term.Event{
-		Type:   term.EventMouse,
-		Key:    term.MouseMiddle,
-		Mod:    term.ModMotion,
-		MouseX: 10,
-		MouseY: 1393291,
-	}
-
-	t.Run("dials to remote handler and exposes window server for client to dial into", func(t *testing.T) {
-		ctrl := gomock.NewController(t)
-		defer ctrl.Finish()
-		var mu sync.Mutex
-		s, mock, mockBroker := newTestServer(ctrl, &mu)
-
-		// store onWindowClosed callback
-		var callback func()
-		mockWindow := NewMockWindow(ctrl)
-		mockWindow.EXPECT().id().AnyTimes().Return(uint64(0))
-		mockWindow.EXPECT().onWindowClosed(gomock.Any()).DoAndReturn(func(fn func()) {
-			callback = fn
-		}).Times(1)
-
-		var h Handler
-		handlerConn := prototest.ExpectBrokerDial(t, ctrl, mockBroker, handlerID)
-		quitCh := prototest.ExpectMonitorConn(handlerConn)
-		mock.EXPECT().Split(gomock.Eq(expectedSplit), gomock.Any()).
-			DoAndReturn(func(_ Orientation, _h Handler) (Window, error) {
-				h = _h
-				return mockWindow, nil
-			})
-		prototest.ExpectBrokerServe(t, windowID, mockBroker)
-
-		res, err := s.Split(ctx, &req)
-		require.NoError(t, err)
-		assert.NotNil(t, res)
-
-		// verify that handler works
-		expectHandlerInvoke(t, handlerConn, &protoEv)
-		s.browser.Lock()
-		exit, handled := h.Handle(termEv)
-		s.browser.Unlock()
-		assert.False(t, exit)
-		assert.True(t, handled)
-
-		time.Sleep(asyncResultsSleepDuration)
-
-		// verify that handler is closeable by its handlerId
-		handlerConn.EXPECT().Close().Times(1).
-			DoAndReturn(prototest.ExpectSignalExit(handlerConn, quitCh, nil))
-		require.NoError(t, s.safeForceCloseHandler(uint64(handlerID), ""))
-		assertServerClientsEqual(t, 0, s)
-		waitForMonitoringExit(quitCh)
-
-		assertServerServersEqual(t, 1, s)
-
-		// verify that resources are cleaned upon call to onWindowClosed callback
-		callback()
-		assertServerServersEqual(t, 0, s)
-	})
-
-	t.Run("bubbles up dial error", func(t *testing.T) {
-		ctrl := gomock.NewController(t)
-		defer ctrl.Finish()
-		var mu sync.Mutex
-		s, _, mockBroker := newTestServer(ctrl, &mu)
-
-		prototest.ExpectBrokerDialError(t, ctrl, mockBroker, handlerID)
-
-		res, err := s.Split(ctx, &req)
-		require.Error(t, err)
-		assert.Nil(t, res)
-
-		assertServerClientsEqual(t, 0, s)
-		assertServerServersEqual(t, 0, s)
-	})
-
-	t.Run("bubbles up browser split error and so closes handler connection", func(t *testing.T) {
-		ctrl := gomock.NewController(t)
-		defer ctrl.Finish()
-		var mu sync.Mutex
-		s, mock, mockBroker := newTestServer(ctrl, &mu)
-
-		handlerConn := prototest.ExpectBrokerDial(t, ctrl, mockBroker, handlerID)
-		quitCh := prototest.ExpectMonitorConn(handlerConn)
-		mock.EXPECT().Split(gomock.Eq(expectedSplit), gomock.Any()).
-			Return(nil, errors.New("woopsie"))
-		handlerConn.EXPECT().Close().Times(1).
-			DoAndReturn(prototest.ExpectSignalExit(handlerConn, quitCh, nil))
-
-		res, err := s.Split(ctx, &req)
-		require.Error(t, err)
-		assert.Nil(t, res)
-		waitForMonitoringExit(quitCh)
-
-		assertServerClientsEqual(t, 0, s)
-		assertServerServersEqual(t, 0, s)
-	})
-
-	assertNoLeaks(t)
 }
 
 func TestServerSetContent(t *testing.T) {

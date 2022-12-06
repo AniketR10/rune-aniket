@@ -65,19 +65,19 @@ func TestIntegrationSetFocus(t *testing.T) {
 	resWin1, err := client.Focus()
 	require.NoError(t, err)
 
-	mock.EXPECT().Split(gomock.Any(), gomock.Any()).Return(win2, nil)
-	resWin2, err := client.Split(OrientationDefault, nil)
+	mock.EXPECT().Split(gomock.Any(), gomock.Any(), gomock.Any()).Return(win2, nil)
+	resWin2, err := client.Split(OrientationDefault, resWin1, nil)
 	require.NoError(t, err)
 
 	mock.EXPECT().SetFocus(gomock.Any()).Return(win2, nil)
 	resPrev, err := client.SetFocus(resWin1)
 	require.NoError(t, err)
-	assert.Equal(t, resWin2, resPrev)
+	assert.Equal(t, resWin2.id(), resPrev.id())
 
 	mock.EXPECT().SetFocus(gomock.Any()).Return(win1, nil)
 	resPrev, err = client.SetFocus(resWin2)
 	require.NoError(t, err)
-	assert.Equal(t, resWin1, resPrev)
+	assert.Equal(t, resWin1.id(), resPrev.id())
 }
 
 func TestIntegrationFloating(t *testing.T) {

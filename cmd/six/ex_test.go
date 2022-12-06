@@ -268,17 +268,19 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 
 	testutil.TestHandlerSequence(t, bh, 20, 10, cases)
 
-	win, err := b.Split(browser.OrientationLeft, browser.NewTestHandler())
+	focus, err := b.Focus()
 	require.NoError(t, err)
 
-	// test window ifc
-	focus, err := b.Focus()
+	win, err := b.Split(browser.OrientationLeft, focus, browser.NewTestHandler())
 	require.NoError(t, err)
 
 	h := browser.NewTestHandler()
 	h.Ch = 'Z' // helps identify in tests
 
-	_, err = b.Split(browser.OrientationBottom, h)
+	focus, err = b.Focus()
+	require.NoError(t, err)
+
+	_, err = b.Split(browser.OrientationBottom, win, h)
 	require.NoError(t, err)
 
 	cases = []testutil.HandlerSequenceTestCase{
@@ -434,8 +436,11 @@ IIII`},
 		component.FloatingConfig{Offset: term.Coordinates{X: 1, Y: 1}})
 	require.NoError(t, err)
 
+	focus, err = b.Focus()
+	require.NoError(t, err)
+
 	// should not be able to split over a floating window, which is currently in focus
-	_, err = b.Split(browser.OrientationTop, browser.NewTestHandler())
+	_, err = b.Split(browser.OrientationTop, focus, browser.NewTestHandler())
 	require.Error(t, err)
 	cases = []testutil.HandlerSequenceTestCase{
 		{"",

@@ -232,12 +232,18 @@ func toProtoOrientation(o Orientation) browserpb.Orientation {
 	}
 }
 
-func (c *Client) split(split clientSplit, o Orientation, h Handler) (Window, error) {
+func (c *Client) split(
+	split clientSplit, o Orientation, in Window, h Handler,
+) (Window, error) {
 	handlerID, created, err := c.serveHandler(h)
 	if err != nil {
 		return nil, fmt.Errorf("serveHandler: %w", err)
 	}
-	req := browserpb.SplitRequest{HandlerId: handlerID, Orientation: toProtoOrientation(o)}
+	req := browserpb.SplitRequest{
+		HandlerId:   handlerID,
+		Orientation: toProtoOrientation(o),
+		WindowId:    in.(*windowClient).brokerID,
+	}
 	ctx := context.Background()
 	res, err := split(c.wm, ctx, &req)
 	if err != nil {
@@ -247,7 +253,7 @@ func (c *Client) split(split clientSplit, o Orientation, h Handler) (Window, err
 		}
 		return nil, err
 	}
-	win, err := c.DialWindow(res.GetWindowId())
+	out, err := c.DialWindow(res.GetWindowId())
 	if err != nil {
 		if created {
 			reason := fmt.Sprintf("error dialing to window: %v", err)
@@ -255,12 +261,12 @@ func (c *Client) split(split clientSplit, o Orientation, h Handler) (Window, err
 		}
 		return nil, err
 	}
-	return win, nil
+	return out, nil
 }
 
 // Split satisfies Browser.
-func (c *Client) Split(o Orientation, h Handler) (Window, error) {
-	return c.split((browserpb.WindowManagerClient).Split, o, h)
+func (c *Client) Split(o Orientation, win Window, h Handler) (Window, error) {
+	return c.split((browserpb.WindowManagerClient).Split, o, win, h)
 }
 
 // Bar satisfies Browser.
@@ -369,6 +375,7 @@ func (c *Client) Floating(
 		Alignment: uint32(cfg.Alignment),
 	}
 
+	var fakeWindow windowClient
 	return c.split(func(cc browserpb.WindowManagerClient,
 		ctx context.Context, req *browserpb.SplitRequest,
 		opts ...grpc.CallOption) (*browserpb.SplitResponse, error) {
@@ -380,7 +387,7 @@ func (c *Client) Floating(
 			return nil, err
 		}
 		return &browserpb.SplitResponse{WindowId: fres.GetWindowId()}, nil
-	}, OrientationDefault, h)
+	}, OrientationDefault, &fakeWindow, h)
 }
 
 // Tab satisfies browser.WindowManager

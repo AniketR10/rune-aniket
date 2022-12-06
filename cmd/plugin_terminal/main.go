@@ -195,7 +195,7 @@ func (e *emulatorGrantee) handleCommand(
 
 	switch cmd.Name {
 	case cmdSplitWindowTerminal:
-		_, err = e.wm.Split(browser.OrientationDefault, t)
+		_, err = e.wm.Split(browser.OrientationDefault, cmd.Window, t)
 	case cmdTerminalTab:
 		err = cmd.Window.SetContent(t)
 	}

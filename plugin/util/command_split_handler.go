@@ -116,7 +116,7 @@ func (t *cmdSplitHandler) openSplitWindow(focusWin browser.Window) error {
 		return err
 	}
 
-	win, err = t.wm.Split(t.config.SplitOrientation, browser.FuncHandler(h, t.exitClean))
+	win, err = t.wm.Split(t.config.SplitOrientation, focusWin, browser.FuncHandler(h, t.exitClean))
 	if err != nil {
 		err = fmt.Errorf("wm.Split: %s", err)
 		return err

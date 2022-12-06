@@ -591,8 +591,10 @@ func (c *Component) SetMessage(msg string, args ...interface{}) error {
 }
 
 // Split satisfies browser.WindowManager.
-func (c *Component) Split(o browser.Orientation, h browser.Handler) (browser.Window, error) {
-	w, ok := c.comp.Split(o, h)
+func (c *Component) Split(
+	o browser.Orientation, win browser.Window, h browser.Handler,
+) (browser.Window, error) {
+	w, ok := c.comp.Split(o, win, h)
 	if !ok {
 		return nil, ErrInvalidSplit
 	}

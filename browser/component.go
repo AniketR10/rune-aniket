@@ -523,10 +523,11 @@ func (c *Component) RemoveWindowContent(win Window) bool {
 }
 
 func (c *Component) splitRegular(
-	split func(*handler.WindowManager, tui.Handler) (handler.Window, bool),
+	split func(*handler.WindowManager, handler.Window, tui.Handler) (handler.Window, bool),
+	splitWindow Window,
 	newHandler Handler,
 ) (*browserWindow, bool) {
-	win := c.split(split, newHandler)
+	win := c.split(split, splitWindow, newHandler)
 	if win == nil {
 		return nil, false
 	}
@@ -535,7 +536,8 @@ func (c *Component) splitRegular(
 }
 
 func (c *Component) splitInverted(
-	split func(*handler.WindowManager, tui.Handler) (handler.Window, bool),
+	split func(*handler.WindowManager, handler.Window, tui.Handler) (handler.Window, bool),
+	splitWindow Window,
 	newHandler Handler,
 ) (*browserWindow, bool) {
 	focusBrowserWin := c.focus()
@@ -543,7 +545,7 @@ func (c *Component) splitInverted(
 	focusHandler := focusBrowserWin.win.Content()
 
 	// perform a regular split
-	newBrowserWin := c.split(split, newHandler)
+	newBrowserWin := c.split(split, splitWindow, newHandler)
 	if newBrowserWin == nil {
 		return nil, false
 	}
@@ -584,11 +586,11 @@ func (c *Component) newWindowContent(h Handler) (Handler, bool) {
 }
 
 func (c *Component) split(
-	split func(*handler.WindowManager, tui.Handler) (handler.Window, bool),
-	h Handler,
+	split func(*handler.WindowManager, handler.Window, tui.Handler) (handler.Window, bool),
+	splitWin Window, h Handler,
 ) *browserWindow {
 	h, isTab := c.newWindowContent(h)
-	win, ok := split(&c.wm, h)
+	win, ok := split(&c.wm, splitWin.(*browserWindow).win, h)
 	if !ok {
 		return nil
 	}
@@ -616,19 +618,19 @@ func (c *Component) SetDefaultSplit(o Orientation) Orientation {
 //
 // Note that if h is not a handler created with NewTab
 // the handler is cleaned as soon as the window's content is swapped.
-func (c *Component) Split(o Orientation, h Handler) (Window, bool) {
+func (c *Component) Split(o Orientation, win Window, h Handler) (Window, bool) {
 	if o == OrientationDefault {
 		o = c.nextSplit
 	}
 	switch o {
 	case OrientationRight:
-		return c.splitRegular((*handler.WindowManager).SplitVertical, h)
+		return c.splitRegular((*handler.WindowManager).SplitVertical, win, h)
 	case OrientationLeft:
-		return c.splitInverted((*handler.WindowManager).SplitVertical, h)
+		return c.splitInverted((*handler.WindowManager).SplitVertical, win, h)
 	case OrientationTop:
-		return c.splitInverted((*handler.WindowManager).SplitHorizontal, h)
+		return c.splitInverted((*handler.WindowManager).SplitHorizontal, win, h)
 	case OrientationBottom:
-		return c.splitRegular((*handler.WindowManager).SplitHorizontal, h)
+		return c.splitRegular((*handler.WindowManager).SplitHorizontal, win, h)
 	default:
 		panic("not a valid orientation")
 	}

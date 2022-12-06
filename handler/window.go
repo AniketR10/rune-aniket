@@ -115,9 +115,14 @@ func (w Window) Close() error {
 		return nil
 	}
 
+	if w.wm.prevFocus == w {
+		w.wm.prevFocus = Window{}
+	}
+
 	ok := true
 	if w.wm.focus == w {
 		ok = w.wm.ShiftFocus()
+		w.wm.prevFocus = Window{}
 	}
 	if !ok {
 		return errors.New("trying to close last window")

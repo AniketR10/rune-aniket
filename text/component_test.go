@@ -340,7 +340,9 @@ func TestComponentEditorSubscriber(t *testing.T) {
 				h, err := c.OpenFileTab(resource, false)
 				require.NoError(t, err)
 
-				_, err = c.Split(browser.OrientationBottom, h)
+				focus, err := c.Focus()
+				require.NoError(t, err)
+				_, err = c.Split(browser.OrientationBottom, focus, h)
 				require.NoError(t, err)
 			},
 			func(t *testing.T, c *Component, resource workspace.URI) {
@@ -599,7 +601,9 @@ func TestEventTypeFocusIntegration(t *testing.T) {
 
 	expectEvent(t, mock, uri2, EventTypeUnfocus)
 	expectEvent(t, mock, uri1, EventTypeFocus)
-	w2, err := c.Split(browser.OrientationRight, h1)
+	focus, err := c.Focus()
+	require.NoError(t, err)
+	w2, err := c.Split(browser.OrientationRight, focus, h1)
 	require.NoError(t, err)
 
 	expectEvent(t, mock, uri1, EventTypeUnfocus)
@@ -1026,7 +1030,7 @@ func TestFlush(t *testing.T) {
 		require.NoError(t, err)
 
 		mock.EXPECT().Resize(gomock.Any(), gomock.Any()).AnyTimes()
-		_, err = c.Split(browser.OrientationTop, mock)
+		_, err = c.Split(browser.OrientationTop, win, mock)
 		require.NoError(t, err)
 
 		require.Equal(t, ErrInvalidSave, c.Flush(win))

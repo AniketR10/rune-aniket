@@ -100,9 +100,14 @@ func TestIntegrationRace(t *testing.T) {
 		{PermissionBrowserWindowManager, func(token uint32, broker proto.MuxBroker) (interface{}, error) {
 			return WindowManager(token, broker)
 		}, func(_ *workspacetest.MockWorkspaceMockRecorder, ed *text.MockEditorMockRecorder, mock *browser.MockBrowserMockRecorder) *gomock.Call {
-			return mock.Split(gomock.Any(), gomock.Any()).Return(mockWin, nil)
+			mock.Focus().Return(mockWin, nil).AnyTimes()
+			return mock.Split(gomock.Any(), gomock.Any(), gomock.Any()).Return(mockWin, nil)
 		}, func(ifc interface{}) error {
-			_, err := ifc.(browser.WindowManager).Split(browser.OrientationBottom, h)
+			win, err := ifc.(browser.WindowManager).Focus()
+			if err != nil {
+				return err
+			}
+			_, err = ifc.(browser.WindowManager).Split(browser.OrientationBottom, win, h)
 			return err
 		}},
 		{PermissionBrowserWindowManager, func(token uint32, broker proto.MuxBroker) (interface{}, error) {
