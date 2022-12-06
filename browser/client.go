@@ -84,8 +84,8 @@ func NewClient(
 	return ret
 }
 
-func (c *Client) tryLog(msg string, args ...interface{}) {
-	log.WithField(logging.KeyClass, "browser.Client").Debugf(msg, args...)
+func (c *Client) log(level log.Level, msg string, args ...interface{}) {
+	log.WithField(logging.KeyClass, "browser.Client").Logf(level, msg, args...)
 }
 
 // Init initializes this Client with broker and client.
@@ -121,12 +121,12 @@ func (c *Client) serveHandler(h Handler) (uint64, bool, error) {
 					handlerID: uint64(handlerID),
 				}
 				hsrv := handlerpb.NewServer(h)
-				handlerpb.RegisterHandlerServer(srv.GRPC(), hsrv)
+				handlerpb.RegisterHandlerServer(srv.Registrar(), hsrv)
 
 				// if it satisfies Floating as well then register it
 				if floating, ok := h.(Floating); ok {
 					fsrv := newFloatingServer(floating)
-					browserpb.RegisterFloatingServer(srv.GRPC(), fsrv)
+					browserpb.RegisterFloatingServer(srv.Registrar(), fsrv)
 				}
 			})
 		brokerID = uint64(brokerID32)
@@ -141,6 +141,12 @@ func (c *Client) serveHandler(h Handler) (uint64, bool, error) {
 	return brokerID, !ok, nil
 }
 
+// DialWindow dials the window with the given windowID token.
+func (c *Client) DialWindow(windowID uint64) (Window, error) {
+	ret, err := c.dialWindow(windowID)
+	c.log(log.TraceLevel, "dial window with id %d: %#v, %v", windowID, ret, err)
+	return ret, err
+}
 func (c *Client) dialWindow(windowID uint64) (Window, error) {
 	c.mu.Lock()
 	res, ok := c.clients[windowID]
@@ -186,21 +192,21 @@ func (c *Client) getServers() map[uint64]io.Closer {
 }
 
 func (c *Client) forceCloseHandler(brokerID uint64, reason string) error {
-	c.tryLog("browser.Client.forceCloseHandler(%d, reason=%s)", brokerID, reason)
+	c.log(log.DebugLevel, "browser.Client.forceCloseHandler(%d, reason=%s)", brokerID, reason)
 	_, err := proto.ForceCloseResource(c.broker, brokerID, c.getServers,
 		nopLocker{})
 	return err
 }
 
 func (c *Client) safeForceCloseHandler(brokerID uint64, reason string) error {
-	c.tryLog("browser.Client.safeForceCloseHandler(%d, reason=%s)", brokerID, reason)
+	c.log(log.DebugLevel, "browser.Client.safeForceCloseHandler(%d, reason=%s)", brokerID, reason)
 	_, err := proto.ForceCloseResource(c.broker, brokerID,
 		c.getServers, &c.mu)
 	return err
 }
 
 func (c *Client) safeForceCloseWindow(brokerID uint64, reason string) error {
-	c.tryLog("browser.Client.safeForceCloseWindow(%d, reason=%s)", brokerID, reason)
+	c.log(log.DebugLevel, "browser.Client.safeForceCloseWindow(%d, reason=%s)", brokerID, reason)
 	_, err := proto.ForceCloseResource(c.broker, brokerID, c.getClients, &c.mu)
 	return err
 }

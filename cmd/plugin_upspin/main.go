@@ -9,6 +9,7 @@ import (
 	"unstable.build/go-tui/config"
 	"unstable.build/go-tui/plugin"
 	"unstable.build/go-tui/proto"
+	"unstable.build/go-tui/workspace"
 )
 
 var (
@@ -20,6 +21,7 @@ var (
 type upspinGrantee struct {
 	mu     sync.Mutex
 	broker proto.MuxBroker
+	m      workspace.SchemeManager
 }
 
 func (e *upspinGrantee) Connected(broker proto.MuxBroker, pconfig config.Config) {
@@ -44,6 +46,8 @@ func (e *upspinGrantee) PermissionGranted(grants []plugin.Grant) {
 			if err != nil {
 				log.Fatalf("Could not register scheme:  %s", err)
 			}
+			// store so finalizer doesn't kill the scheme RPC pipeline
+			e.m = m
 		}
 	}
 

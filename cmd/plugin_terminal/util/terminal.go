@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"github.com/ernestrc/blue/logging"
+	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui/workspace"
 )
@@ -272,7 +273,15 @@ func (t *Terminal) Unlock() {
 }
 
 // assumes lock has been acquired by caller
-func (t *Terminal) Close() error {
+// FIXME this doesn't remove any Ptys open
+// so woirkspace server leaks goroutines waiting on Read or Wait.
+func (t *Terminal) Close() (ret error) {
+	if t.closed {
+		return nil
+	}
 	t.closed = true
-	return t.pty.Master.Close()
+	if err := t.pty.Master.Close(); err != nil {
+		ret = multierr.Append(ret, err)
+	}
+	return ret
 }

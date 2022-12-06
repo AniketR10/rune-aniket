@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"strconv"
 	"sync"
@@ -84,8 +85,9 @@ type workspaceManagerHandler struct {
 }
 
 type clipboardManagerIfc interface {
-	plugin.ResourceServer
+	plugin.ResourceRegistrar
 	text.Clipboard
+	io.Closer
 }
 
 func newWorkspaceManagerHandler(
@@ -461,10 +463,9 @@ func (h *workspaceManagerHandler) addWorkspace(
 	}
 
 	h.workspaces[i] = &workspaceHandler{
-		uri:             uri,
-		ex:              ex,
-		Plugins:         pluginManager,
-		pluginResources: res,
+		uri:     uri,
+		ex:      ex,
+		Plugins: pluginManager,
 	}
 	h.workspaceCount++
 	h.switchToWorkspace(i)
@@ -601,9 +602,8 @@ func (h *workspaceManagerHandler) Close() (ret error) {
 
 type workspaceHandler struct {
 	*ex
-	uri             workspace.URI
-	Plugins         *plugin.Manager
-	pluginResources map[plugin.Permission]plugin.ResourceServer
+	uri     workspace.URI
+	Plugins *plugin.Manager
 }
 
 func (hm *workspaceHandler) Close() (ret error) {
@@ -612,11 +612,6 @@ func (hm *workspaceHandler) Close() (ret error) {
 	}
 	if err := hm.Plugins.Close(); err != nil {
 		ret = multierr.Append(ret, err)
-	}
-	for _, res := range hm.pluginResources {
-		if err := res.Close(); err != nil {
-			ret = multierr.Append(ret, err)
-		}
 	}
 	return
 }

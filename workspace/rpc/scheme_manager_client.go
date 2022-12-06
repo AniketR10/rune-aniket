@@ -8,47 +8,53 @@ import (
 	"github.com/ernestrc/blue/logging"
 	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
-	
+
 	"unstable.build/go-tui/proto"
 	"unstable.build/go-tui/workspace"
 )
 
+var _ workspace.SchemeManager = (*SchemeManagerClient)(nil)
+
 // NewSchemeManager returns a workspace.SchemeManager RPC-based client over
 // the given connection.
-func NewSchemeManager(broker proto.MuxBroker, cc proto.MuxConn) workspace.SchemeManager {
-	ret := new(schemeManagerClient)
+func NewSchemeManager(broker proto.MuxBroker, cc proto.MuxConn) *SchemeManagerClient {
+	ret := new(SchemeManagerClient)
 	ret.init(broker, cc)
 	return ret
 }
 
-type schemeManagerClient struct {
+// SchemeManagerClient satisfies workspace.SchemeManager by calling a
+// remote SchemeManager over a proto.MuxConn.
+type SchemeManagerClient struct {
 	broker proto.MuxBroker
 	client ManagerClient
+	cc     proto.MuxConn
 
 	schemes map[string]workspace.SchemeFunc
 	servers map[uint32]io.Closer
 }
 
-func (c *schemeManagerClient) init(broker proto.MuxBroker, cc proto.MuxConn) {
+func (c *SchemeManagerClient) init(broker proto.MuxBroker, cc proto.MuxConn) {
 	c.broker = broker
 	c.client = NewManagerClient(cc)
 	c.schemes = make(map[string]workspace.SchemeFunc)
 	c.servers = make(map[uint32]io.Closer)
+	c.cc = cc
 }
 
-func (c *schemeManagerClient) log(level log.Level, msg string, args ...interface{}) {
+func (c *SchemeManagerClient) log(level log.Level, msg string, args ...interface{}) {
 	log.
-		WithField(logging.KeyClass, "schemeManagerClient").Logf(level, msg, args...)
+		WithField(logging.KeyClass, "SchemeManagerClient").Logf(level, msg, args...)
 }
 
-func (c *schemeManagerClient) serveProxyServer(scheme string, fn workspace.SchemeFunc) (
+func (c *SchemeManagerClient) serveProxyServer(scheme string, fn workspace.SchemeFunc) (
 	*proxySchemeServerImpl, uint32, error,
 ) {
 	var psrv *proxySchemeServerImpl
 	ret, _, err := proto.AcceptAndServe(c.broker,
 		func(proxyID uint32, srv proto.MuxServer) {
 			psrv = newProxySchemeServerImpl(c.broker, srv, scheme, fn)
-			RegisterProxySchemeServer(srv.GRPC(), psrv)
+			RegisterProxySchemeServer(srv.Registrar(), psrv)
 		})
 	if err != nil {
 		return nil, 0, err
@@ -56,7 +62,8 @@ func (c *schemeManagerClient) serveProxyServer(scheme string, fn workspace.Schem
 	return psrv, ret, nil
 }
 
-func (c *schemeManagerClient) RegisterScheme(scheme string, fn workspace.SchemeFunc) (err error) {
+// RegisterScheme satisfies workspace.SchemeManager
+func (c *SchemeManagerClient) RegisterScheme(scheme string, fn workspace.SchemeFunc) (err error) {
 	var proxyID uint32
 
 	c.log(log.TraceLevel, "RegisterScheme(%s)", scheme)
@@ -90,7 +97,13 @@ func (c *schemeManagerClient) RegisterScheme(scheme string, fn workspace.SchemeF
 	return
 }
 
-func (c *schemeManagerClient) Close() (ret error) {
+// Close releases all resources associated with this instance.
+func (c *SchemeManagerClient) Close() (ret error) {
+	if closer, ok := c.cc.(io.Closer); ok {
+		if err := closer.Close(); err != nil {
+			ret = multierr.Append(ret, err)
+		}
+	}
 	for _, s := range c.servers {
 		if err := s.Close(); err != nil {
 			ret = multierr.Append(ret, err)

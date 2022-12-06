@@ -57,7 +57,7 @@ func (s *loggingServer) Stop() {
 	close(s.quitChan)
 }
 
-func (s *loggingServer) GRPC() *grpc.Server {
+func (s *loggingServer) Registrar() grpc.ServiceRegistrar {
 	log.Tracef("LoggingGRPCServer: (%p) GRPC() ", s.srv)
 	return s.srv
 }

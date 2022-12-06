@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"sync"
 	"time"
@@ -12,9 +13,10 @@ import (
 	docrpc "github.com/ernestrc/blue/document/rpc"
 	"github.com/ernestrc/blue/encoding/bson"
 	"github.com/ernestrc/blue/logging"
+	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui/config"
-	
+
 	pluginpb "unstable.build/go-tui/plugin/rpc"
 	"unstable.build/go-tui/proto"
 	"unstable.build/go-tui/util"
@@ -36,13 +38,16 @@ var defaultManagerConfig = managerConfig{
 }
 
 type granteeClientWrap struct {
-	id       string
-	path     string
-	running  bool
-	activeAt time.Time
-	errors   []error
-	doneCh   chan *sync.WaitGroup
-	client   *granteeClient
+	id        string
+	path      string
+	running   bool
+	activeAt  time.Time
+	errors    []error
+	doneCh    chan *sync.WaitGroup
+	client    *granteeClient
+	srv       proto.MuxServer
+	resources []io.Closer
+	lis       net.Listener
 }
 
 // Stat represents the status of a Plugin.
@@ -97,7 +102,10 @@ func NewManager(grantor Grantor, opts ...Option) (*Manager, error) {
 
 // Init initializes this manager with grantor.
 func (m *Manager) Init(grantor Grantor, opts ...Option) (err error) {
-	m.grantor = grantor
+	// enable registrants to inject other registrants as dependencies
+	// where passing same instance is important due to the stateful nature
+	// of some resource servers.
+	m.grantor = cachingGrantor(grantor)
 	m.clients = make(map[string]*granteeClientWrap)
 
 	m.config = defaultManagerConfig
@@ -167,41 +175,58 @@ func (m *Manager) doGrant(
 	client *granteeClientWrap,
 	perms []*pluginpb.Permission,
 ) error {
-	var denied []*pluginpb.Permission
-	granted := make(map[string]*pluginpb.PermissionGrant)
+	grantID := m.broker.NextId()
+	lis, err := m.broker.Accept(grantID)
+	if err != nil {
+		return fmt.Errorf("accept: %v", err)
+	}
+	var srv proto.MuxServer
+	if log.IsLevelEnabled(log.TraceLevel) {
+		srv = proto.LoggingGRPCServer()
+	} else {
+		srv = proto.GRPCServer()
+	}
 
+	// for denied permissions we do not call ResourceRegistrar.Register so
+	// if a malicious or otherwise client attempts to get a resource that was not granted
+	// they'll receive an unimplemented status code.
+	var denied []*pluginpb.Permission
+	var serverResources []io.Closer
+	granted := make(map[string]*pluginpb.PermissionGrant)
 	for _, p := range perms {
 		permissionID := util.SanitizeLine(p.GetId())
 		if _, granted := granted[permissionID]; granted {
 			continue
 		}
 
-		srv, ok := m.grantor.Grant(pluginID, Permission(permissionID))
+		registrar, ok := m.grantor.Grant(pluginID, Permission(permissionID))
 		if !ok {
 			denied = append(denied, p)
 			continue
 		}
 
-		grantID := m.broker.NextId()
+		resource, err := registrar.Register(pluginID, m.grantor,
+			srv.Registrar(), m.broker, m.rmu)
+		if err != nil {
+			log.Errorf("Could not register %s plugin %q: %v", permissionID, pluginID, err)
+			denied = append(denied, p) // at least communicate to plugin
+			continue
+		}
 
 		granted[permissionID] = &pluginpb.PermissionGrant{
 			Id:      permissionID,
 			GrantId: grantID,
 		}
 
-		// for now this is fine, but once we have many more resources, this will
-		// become very inefficient. We should refactor this interface
-		// such that one plugin => one grpc server for all the resources
-		// requested. Right now, each call to serve, spins a new listener
-		// and a new GRPC server.
-		go func() {
-			err := srv.Serve(pluginID, grantID, m.broker, m.rmu)
-			if err != nil {
-				log.Errorf("Could not communicate with plugin %q: %v",
-					pluginID, err)
-			}
-		}()
+		serverResources = append(serverResources, resource)
 	}
+
+	m.mu.Lock()
+	client.resources = serverResources
+	client.srv = srv
+	m.mu.Unlock()
+
+	go srv.Serve(lis)
 
 	return client.client.sendGrants(ctx, denied, granted)
 }
@@ -218,11 +243,28 @@ func (m *Manager) doCloseClient(reason string, client *granteeClientWrap) (
 	client.doneCh = nil
 	m.mu.Unlock()
 
-	err := client.client.shutdown(reason)
-	if err != nil {
-		m.addClientErr(client.id, err)
+	var clientErr error
+	if err := client.client.shutdown(reason); err != nil {
+		clientErr = multierr.Append(clientErr, err)
 	}
-	m.log(log.InfoLevel, "stopped plugin with id '%s': err=%v", client.id, err)
+
+	m.mu.Lock()
+	// partially open oclient
+	if client.srv != nil {
+		client.srv.Stop()
+	}
+	for _, resource := range client.resources {
+		if err := resource.Close(); err != nil {
+			clientErr = multierr.Append(clientErr, err)
+		}
+	}
+	m.mu.Unlock()
+
+	level := log.InfoLevel
+	if clientErr != nil {
+		level = log.ErrorLevel
+	}
+	m.log(level, "stopped plugin with id '%s': err=%v", client.id, clientErr)
 	return
 }
 

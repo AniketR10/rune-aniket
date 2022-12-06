@@ -61,21 +61,27 @@ func TestIntegrationRace(t *testing.T) {
 	uri, err := workspace.ParseURI("file:///tmp/test")
 	require.NoError(t, err)
 
-	// plugin manager serves each permission on a different grantID
+	grantor := cachingGrantor(GrantAll(resources))
+	grantID := broker.NextId()
 	perms := map[Permission]uint32{
-		PermissionBrowserWindowManager:  broker.NextId(),
-		PermissionBrowserResourceOpener: broker.NextId(),
-		PermissionBrowserMessenger:      broker.NextId(),
-		PermissionBrowserEventPublisher: broker.NextId(),
-		PermissionEditor:                broker.NextId(),
-		PermissionStorage:               broker.NextId(),
-		PermissionClipboard:             broker.NextId(),
-		PermissionWorkspace:             broker.NextId(),
+		PermissionBrowserWindowManager:  grantID,
+		PermissionBrowserResourceOpener: grantID,
+		PermissionBrowserMessenger:      grantID,
+		PermissionBrowserEventPublisher: grantID,
+		PermissionEditor:                grantID,
+		PermissionStorage:               grantID,
+		PermissionClipboard:             grantID,
+		PermissionWorkspace:             grantID,
 	}
-	for perm, brokerID := range perms {
-		resources[perm].Serve("caliu-plugins-ltd", brokerID,
-			broker, new(sync.Mutex))
+	lis, err := broker.Accept(grantID)
+	require.NoError(t, err)
+	srv := proto.GRPCServer()
+
+	for perm, _ := range perms {
+		resources[perm].Register("caliu-plugins-ltd", grantor,
+			srv.Registrar(), broker, new(sync.Mutex))
 	}
+	go srv.Serve(lis)
 
 	tsuite := []struct {
 		perm           Permission

@@ -1,11 +1,12 @@
 package plugin
 
 import (
+	"io"
+	"runtime"
 	"sync"
 
-	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
-	
+
 	"unstable.build/go-tui/proto"
 	"unstable.build/go-tui/workspace"
 	workspacepb "unstable.build/go-tui/workspace/rpc"
@@ -17,10 +18,7 @@ const (
 )
 
 type workspaceResourceServer struct {
-	mu     sync.Mutex
-	b      workspace.Workspace
-	srv    proto.MuxServer
-	server *workspacepb.Server
+	b workspace.Workspace
 }
 
 func newWorkspaceResourceServer(b workspace.Workspace) *workspaceResourceServer {
@@ -29,45 +27,20 @@ func newWorkspaceResourceServer(b workspace.Workspace) *workspaceResourceServer 
 	return ret
 }
 
-func (s *workspaceResourceServer) Serve(
-	pluginID string, grantID uint32, broker proto.MuxBroker,
-	lock sync.Locker,
-) error {
-	return acceptAndServe(broker, grantID,
-		func(opts []grpc.ServerOption) proto.MuxServer {
-			s.mu.Lock()
-			defer s.mu.Unlock()
-			if s.srv == nil {
-				var srv proto.MuxServer
-				if log.IsLevelEnabled(log.TraceLevel) {
-					srv = proto.LoggingGRPCServer(opts...)
-				} else {
-					srv = proto.GRPCServer(opts...)
-				}
-				grpc := srv.GRPC()
-				s.srv = srv
-				s.server = workspacepb.NewServer(s.b, lock)
-				workspacepb.RegisterWorkspaceServer(grpc, s.server)
-			}
-			return s.srv
-		})
-}
-
-func (s *workspaceResourceServer) Close() error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.srv != nil {
-		s.srv.Stop()
-		return s.server.Stop()
-	}
-	return nil
+func (s *workspaceResourceServer) Register(
+	pluginID string, grantor Grantor, registrar grpc.ServiceRegistrar,
+	broker proto.MuxBroker, lock sync.Locker,
+) (io.Closer, error) {
+	server := workspacepb.NewServer(s.b, lock)
+	workspacepb.RegisterWorkspaceServer(registrar, server)
+	return nopCloser{}, nil
 }
 
 // WorkspaceResources returns a map of Permission to a ResourceServer
 // capable of serving each of the b Workspace's resources.
-func WorkspaceResources(b workspace.Workspace) map[Permission]ResourceServer {
+func WorkspaceResources(b workspace.Workspace) map[Permission]ResourceRegistrar {
 	s := newWorkspaceResourceServer(b)
-	return map[Permission]ResourceServer{
+	return map[Permission]ResourceRegistrar{
 		PermissionWorkspace: s,
 	}
 }
@@ -75,15 +48,12 @@ func WorkspaceResources(b workspace.Workspace) map[Permission]ResourceServer {
 func dialWorkspace(token uint32, broker proto.MuxBroker) (
 	workspace.API, error,
 ) {
-	if c, ok := clients.Load(token); ok {
-		return c.(workspace.API), nil
-	}
 	conn, err := broker.Dial(token)
 	if err != nil {
 		return nil, err
 	}
 	c := workspacepb.NewClient(conn)
-	clients.Store(token, c)
+	runtime.SetFinalizer(c, func(c *workspacepb.Client) { c.Close() })
 	return c, nil
 }
 

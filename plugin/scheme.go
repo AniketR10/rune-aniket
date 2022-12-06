@@ -1,11 +1,12 @@
 package plugin
 
 import (
+	"io"
+	"runtime"
 	"sync"
 
-	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
-	
+
 	"unstable.build/go-tui/proto"
 	"unstable.build/go-tui/workspace"
 	workspacepb "unstable.build/go-tui/workspace/rpc"
@@ -17,10 +18,7 @@ const (
 )
 
 type schemeManagerResourceServer struct {
-	mu     sync.Mutex
-	b      workspace.SchemeManager
-	srv    proto.MuxServer
-	server *workspacepb.SchemeManagerServer
+	b workspace.SchemeManager
 }
 
 func newSchemeManagerResourceServer(b workspace.SchemeManager) *schemeManagerResourceServer {
@@ -29,44 +27,19 @@ func newSchemeManagerResourceServer(b workspace.SchemeManager) *schemeManagerRes
 	return ret
 }
 
-func (s *schemeManagerResourceServer) Serve(
-	pluginID string, grantID uint32, broker proto.MuxBroker,
-	lock sync.Locker,
-) error {
-	return acceptAndServe(broker, grantID,
-		func(opts []grpc.ServerOption) proto.MuxServer {
-			s.mu.Lock()
-			defer s.mu.Unlock()
-			if s.srv == nil {
-				var srv proto.MuxServer
-				if log.IsLevelEnabled(log.TraceLevel) {
-					srv = proto.LoggingGRPCServer(opts...)
-				} else {
-					srv = proto.GRPCServer(opts...)
-				}
-				grpc := srv.GRPC()
-				s.srv = srv
-				s.server = workspacepb.NewSchemeManagerServer(broker, s.b, lock)
-				workspacepb.RegisterManagerServer(grpc, s.server)
-			}
-			return s.srv
-		})
-}
-
-func (s *schemeManagerResourceServer) Close() error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.srv != nil {
-		s.srv.Stop()
-		return s.server.Close()
-	}
-	return nil
+func (s *schemeManagerResourceServer) Register(
+	pluginID string, grantor Grantor, registrar grpc.ServiceRegistrar,
+	broker proto.MuxBroker, lock sync.Locker,
+) (io.Closer, error) {
+	server := workspacepb.NewSchemeManagerServer(broker, s.b, lock)
+	workspacepb.RegisterManagerServer(registrar, server)
+	return server, nil
 }
 
 // SchemeManagerResources returns a map of Permission to a ResourceServer
 // capable of serving requests to PermissionSchemeManager.
-func SchemeManagerResources(b workspace.SchemeManager) map[Permission]ResourceServer {
-	return map[Permission]ResourceServer{
+func SchemeManagerResources(b workspace.SchemeManager) map[Permission]ResourceRegistrar {
+	return map[Permission]ResourceRegistrar{
 		PermissionSchemeManager: newSchemeManagerResourceServer(b),
 	}
 }
@@ -74,15 +47,12 @@ func SchemeManagerResources(b workspace.SchemeManager) map[Permission]ResourceSe
 func dialSchemeManager(token uint32, broker proto.MuxBroker) (
 	workspace.SchemeManager, error,
 ) {
-	if c, ok := clients.Load(token); ok {
-		return c.(workspace.SchemeManager), nil
-	}
 	conn, err := broker.Dial(token)
 	if err != nil {
 		return nil, err
 	}
 	c := workspacepb.NewSchemeManager(broker, conn)
-	clients.Store(token, c)
+	runtime.SetFinalizer(c, func(c *workspacepb.SchemeManagerClient) { c.Close() })
 	return c, nil
 }
 

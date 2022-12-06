@@ -38,7 +38,7 @@ func (c *commandClient) HandleCommand(ctx context.Context, cmd text.Command) (
 		if !ok {
 			err := fmt.Errorf("could not handle command %v: handler with resource name %q not found",
 				cmd.Name, cmd.URI.String())
-			c.s.tryLog(log.WarnLevel, "%s", err)
+			c.s.log(log.WarnLevel, "%s", err)
 			return false, err
 		}
 		resourceID = brokerID
@@ -48,17 +48,17 @@ func (c *commandClient) HandleCommand(ctx context.Context, cmd text.Command) (
 	ctx, cancelFn := context.WithTimeout(ctx, defaultClientTimeout)
 	defer cancelFn()
 
-	var content, window termpb.Coordinates
-	content.FromModel(cmd.Cursor.Content)
-	window.FromModel(cmd.Cursor.Window)
+	var cursorContent, cursorWindow termpb.Coordinates
+	cursorContent.FromModel(cmd.Cursor.Content)
+	cursorWindow.FromModel(cmd.Cursor.Window)
 
 	req := HandleCommandRequest{
 		Name:         cmd.Name,
 		Args:         cmd.Args,
 		ResourceName: uri,
 		ResourceId:   resourceID,
-		Content:      &content,
-		Window:       &window,
+		Content:      &cursorContent,
+		Window:       &cursorWindow,
 	}
 
 	// do not block waiting for I/O

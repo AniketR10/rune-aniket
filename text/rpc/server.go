@@ -63,7 +63,7 @@ func (s *serverEventHandler) Handle(ctx context.Context, ev text.Event) bool {
 		if !ok {
 			err := fmt.Errorf("could NOT dispatch event %v: handler with resource name %s not found",
 				ev.Type, ev.URI)
-			s.s.tryLog(log.WarnLevel, "%s", err)
+			s.s.log(log.WarnLevel, "%s", err)
 			return true
 		}
 		token := browser.Token{ID: uint64(brokerID)}
@@ -102,6 +102,10 @@ func (s *Server) Init(
 	s.errChan = make(chan error)
 
 	evs := []text.EventType{text.EventTypeClose, text.EventTypeOpen}
+
+	s.editor.Locker.Lock()
+	defer s.editor.Locker.Unlock()
+
 	s.editor.SubscribeEditorEvents(evs, s)
 }
 
@@ -109,13 +113,13 @@ func (s *Server) cleanResource(resource workspace.URI) {
 	name := resource.String()
 	handlerID, ok := s.uriToID[name]
 	if !ok {
-		s.tryLog(log.DebugLevel,
+		s.log(log.DebugLevel,
 			"(%p editor.Server): could not find handler with resource name %s",
 			s, name)
 	} else {
 		delete(s.uriToID, name)
 		delete(s.idToHandler, handlerID)
-		s.tryLog(log.DebugLevel,
+		s.log(log.DebugLevel,
 			"(%p editor.Server): cleaned handler %d with resource name %s",
 			s, handlerID, name)
 	}
@@ -150,7 +154,7 @@ func (s *Server) consumeErrors(ctx context.Context, ch <-chan error) {
 			return
 		case err := <-ch:
 			err = fmt.Errorf("eventHandlerClient error: %v", err)
-			s.tryLog(log.DebugLevel, "editor.Server: consumeErrors: %s", err)
+			s.log(log.DebugLevel, "editor.Server: consumeErrors: %s", err)
 			select {
 			case s.errChan <- err:
 			default:
@@ -165,7 +169,7 @@ func (s *Server) Errors() <-chan error {
 	return s.errChan
 }
 
-func (s *Server) tryLog(level log.Level, msg string, args ...interface{}) {
+func (s *Server) log(level log.Level, msg string, args ...interface{}) {
 	log.WithField(logging.KeyClass, "text.Server").Logf(level, msg, args...)
 }
 
@@ -185,7 +189,7 @@ func (s *Server) safeForceCloseHandler(brokerID uint32, reason string) error {
 	}
 	s.editor.Unlock()
 
-	s.tryLog(log.TraceLevel,
+	s.log(log.TraceLevel,
 		"editor.Server.safeForceCloseHandler(%d, reason=%s)", brokerID, reason)
 	_, err := proto.ForceCloseResource(s.broker, uint64(brokerID), s.getClients,
 		s.editor.Locker)
@@ -197,13 +201,13 @@ func (s *Server) dialHandler(handlerID uint32) (text.EventHandler, error) {
 	res, ok := s.clients[uint64(handlerID)]
 	s.editor.Unlock()
 	if ok {
-		s.tryLog(log.DebugLevel,
+		s.log(log.DebugLevel,
 			"(%p editor.Server): found cached client for handlerID: %d",
 			s, handlerID)
 		return res.(*handlerClientResource).client, nil
 	}
 
-	s.tryLog(log.TraceLevel,
+	s.log(log.TraceLevel,
 		"(%p editor.Server): dialing handlerID: %d", s, handlerID)
 	handlerConn, err := s.broker.Dial(handlerID)
 	if err != nil {
@@ -247,7 +251,7 @@ func (s *Server) dialCommandHandler(handlerID uint32) (text.CommandHandler, erro
 	res, ok := s.clients[uint64(handlerID)]
 	s.editor.Unlock()
 	if ok {
-		s.tryLog(log.DebugLevel,
+		s.log(log.DebugLevel,
 			"(%p editor.Server): found cached command client for handlerID: %d",
 			s, handlerID)
 		// NOTE if this ever panics, it means that something is very wrong with
@@ -255,7 +259,7 @@ func (s *Server) dialCommandHandler(handlerID uint32) (text.CommandHandler, erro
 		return res.(*commandClientResource).client, nil
 	}
 
-	s.tryLog(log.TraceLevel,
+	s.log(log.TraceLevel,
 		"(%p editor.Server): dialing command handler with id: %d", s, handlerID)
 
 	handlerConn, err := s.broker.Dial(handlerID)
@@ -291,7 +295,7 @@ func (s *Server) addNextHandlerResource(resource workspace.URI, h text.Handler) 
 	handlerID := s.broker.NextId()
 	s.uriToID[resource.String()] = handlerID
 	s.idToHandler[handlerID] = h
-	s.tryLog(log.TraceLevel,
+	s.log(log.TraceLevel,
 		"(%p editor.Server): stored handler with name='%s', id=%d",
 		s, resource.String(), handlerID)
 	return handlerID
@@ -640,7 +644,7 @@ func (s *Server) Close() (err error) {
 
 func (s *Server) getHandler(call string, handlerID uint32) (text.Handler, bool) {
 	h, ok := s.idToHandler[handlerID]
-	s.tryLog(log.TraceLevel,
+	s.log(log.TraceLevel,
 		"(%p editor.Server): %s: found handler with id %d: %p",
 		s, call, handlerID, h)
 	return h, ok

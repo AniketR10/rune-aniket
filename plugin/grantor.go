@@ -6,17 +6,20 @@ import (
 	"sync"
 
 	log "github.com/sirupsen/logrus"
+	"google.golang.org/grpc"
 	"unstable.build/go-tui/proto"
 )
 
-// ResourceServer wraps the basic Serve method, to serve resources over a mux broker.
-type ResourceServer interface {
-	Serve(string, uint32, proto.MuxBroker, sync.Locker) error
-	io.Closer
+// ResourceRegistrar wraps the basic Serve method, to serve resources over a mux broker.
+type ResourceRegistrar interface {
+	Register(
+		pluginID string, grantor Grantor,
+		registar grpc.ServiceRegistrar, broker proto.MuxBroker,
+		locker sync.Locker) (io.Closer, error)
 }
 
 // enables functions matching signature of Serve to
-// satisfy ResourceServer
+// satisfy ResourceRegistrar
 type resourceServerFn func(string, uint32,
 	proto.MuxBroker, *log.Logger, sync.Locker)
 
@@ -29,13 +32,13 @@ func (fn resourceServerFn) Serve(
 
 // Grantor encapsulates the ability grant or deny access to resources.
 type Grantor interface {
-	Grant(plugin string, perm Permission) (ResourceServer, bool)
+	Grant(plugin string, perm Permission) (ResourceRegistrar, bool)
 }
 
 type inmemoryGrantor struct {
 	mu     sync.Mutex
 	grants map[string]Permissions
-	res    map[Permission]ResourceServer
+	res    map[Permission]ResourceRegistrar
 }
 
 // NewInmemoryGrantor returns a Grantor that Grants according to the given
@@ -43,7 +46,7 @@ type inmemoryGrantor struct {
 // grants that does not have a ResourceServe in res.
 func NewInmemoryGrantor(
 	grants map[string]Permissions,
-	res map[Permission]ResourceServer,
+	res map[Permission]ResourceRegistrar,
 ) Grantor {
 	ret := new(inmemoryGrantor)
 	ret.init(grants, res)
@@ -52,7 +55,7 @@ func NewInmemoryGrantor(
 
 func (m *inmemoryGrantor) init(
 	grants map[string]Permissions,
-	res map[Permission]ResourceServer,
+	res map[Permission]ResourceRegistrar,
 ) {
 	m.grants = grants
 	m.res = res
@@ -60,13 +63,13 @@ func (m *inmemoryGrantor) init(
 	for _, pluginGrants := range m.grants {
 		for grant := range pluginGrants {
 			if _, ok := m.res[grant]; !ok {
-				panic(fmt.Sprintf("inmemoryGrantor: ResourceServer not found for grant: %s", grant))
+				panic(fmt.Sprintf("grantor: resource registrar not found for grant: %s", grant))
 			}
 		}
 	}
 }
 
-func (m *inmemoryGrantor) Grant(plugin string, perm Permission) (ResourceServer, bool) {
+func (m *inmemoryGrantor) Grant(plugin string, perm Permission) (ResourceRegistrar, bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -84,15 +87,15 @@ func (m *inmemoryGrantor) Grant(plugin string, perm Permission) (ResourceServer,
 }
 
 type grantAll struct {
-	caps map[Permission]ResourceServer
+	caps map[Permission]ResourceRegistrar
 }
 
-func (g *grantAll) Grant(plugin string, perm Permission) (ResourceServer, bool) {
+func (g *grantAll) Grant(plugin string, perm Permission) (ResourceRegistrar, bool) {
 	srv, ok := g.caps[perm]
 	return srv, ok
 }
 
 // GrantAll returns Grantor that Grants permission to all the given capabilities.
-func GrantAll(capabilities map[Permission]ResourceServer) Grantor {
+func GrantAll(capabilities map[Permission]ResourceRegistrar) Grantor {
 	return &grantAll{caps: capabilities}
 }

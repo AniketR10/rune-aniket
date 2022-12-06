@@ -61,7 +61,7 @@ func (s *proxySchemeServerImpl) serveScheme(scheme workspace.Scheme) (uint32, er
 	ret, srv, err := proto.AcceptAndServe(s.broker,
 		func(_ uint32, srv proto.MuxServer) {
 			server = NewSchemeServer(scheme, &s.mu)
-			RegisterSchemeServer(srv.GRPC(), server)
+			RegisterSchemeServer(srv.Registrar(), server)
 		})
 
 	s.mu.Lock()

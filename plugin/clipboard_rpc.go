@@ -15,6 +15,8 @@ import (
 	"google.golang.org/grpc"
 )
 
+var _ Clipboard = (*clipboardClient)(nil)
+
 const (
 	defaultFailureTimeout = 5 * time.Second
 )
@@ -231,7 +233,7 @@ func (c *clipboardRegisterServer) Close() error {
 
 func newClipboardClient(
 	broker proto.MuxBroker, cc proto.MuxConn,
-) Clipboard {
+) *clipboardClient {
 	ret := new(clipboardClient)
 	ret.broker = broker
 	ret.cc = cc
@@ -250,7 +252,7 @@ func (c *clipboardClient) serveClipboardRegister(
 	rs := &clipboardRegisterServer{r: r, locker: &c.mu}
 	brokerID, srv, err := proto.AcceptAndServe(c.broker,
 		func(handlerID uint32, srv proto.MuxServer) {
-			pluginpb.RegisterClipboardRegisterServer(srv.GRPC(), rs)
+			pluginpb.RegisterClipboardRegisterServer(srv.Registrar(), rs)
 		})
 	if err != nil {
 		return nil, 0, err

@@ -92,7 +92,7 @@ func (c *Client) serveHandler(h text.EventHandler) (uint32, error) {
 				time.Sleep(gracefulShutdownWait)
 				c.safeForceCloseHandler(handlerID, "editorEventHandlerServer.onExit")
 			})
-			RegisterEditorEventHandlerServer(srv.GRPC(), s)
+			RegisterEditorEventHandlerServer(srv.Registrar(), s)
 		})
 	if err != nil {
 		return 0, err
@@ -108,7 +108,7 @@ func (c *Client) serveCommandHandler(h text.CommandHandler) (uint32, error) {
 	brokerID, srv, err := proto.AcceptAndServe(c.broker,
 		func(handlerID uint32, srv proto.MuxServer) {
 			s := newCommandServer(h)
-			RegisterCommandHandlerServer(srv.GRPC(), s)
+			RegisterCommandHandlerServer(srv.Registrar(), s)
 		})
 	if err != nil {
 		return 0, err

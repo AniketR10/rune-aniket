@@ -3,9 +3,7 @@ package plugin
 import (
 	"time"
 
-	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/timestamppb"
-	"unstable.build/go-tui/proto"
 	"unstable.build/go-tui/term"
 )
 
@@ -14,9 +12,9 @@ var interrupt = term.Interrupt
 // MergeResourceMap merges m1 with mn.
 // If permissions are overlapping, the last of passed prevails.
 func MergeResourceMap(
-	m1 map[Permission]ResourceServer, mn ...map[Permission]ResourceServer,
-) map[Permission]ResourceServer {
-	ret := make(map[Permission]ResourceServer)
+	m1 map[Permission]ResourceRegistrar, mn ...map[Permission]ResourceRegistrar,
+) map[Permission]ResourceRegistrar {
+	ret := make(map[Permission]ResourceRegistrar)
 	for k, v := range m1 {
 		ret[k] = v
 	}
@@ -26,19 +24,6 @@ func MergeResourceMap(
 		}
 	}
 	return ret
-}
-
-func acceptAndServe(
-	broker proto.MuxBroker, ID uint32,
-	srv func(opts []grpc.ServerOption) proto.MuxServer,
-) error {
-	lis, err := broker.Accept(ID)
-	if err != nil {
-		return err
-	}
-	server := srv([]grpc.ServerOption{})
-	go server.Serve(lis)
-	return nil
 }
 
 func stdTimeToProto(ts time.Time) *timestamppb.Timestamp {

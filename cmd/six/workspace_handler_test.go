@@ -1,14 +1,17 @@
 package main
 
 import (
+	"io"
 	"io/ioutil"
 	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc"
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/config"
+	"unstable.build/go-tui/plugin"
 	"unstable.build/go-tui/proto"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
@@ -254,10 +257,10 @@ type clipboardManagerTest struct {
 	text.Clipboard
 }
 
-func (m *clipboardManagerTest) Serve(
-	string, uint32, proto.MuxBroker, sync.Locker,
-) error {
-	return nil
+func (m *clipboardManagerTest) Register(
+	string, plugin.Grantor, grpc.ServiceRegistrar, proto.MuxBroker, sync.Locker,
+) (io.Closer, error) {
+	return nil, nil
 }
 func (m *clipboardManagerTest) Close() error {
 	return nil

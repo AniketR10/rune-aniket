@@ -174,7 +174,19 @@ func (s *Server) dialHandler(handlerID uint64) (Handler, error) {
 	return cc, nil
 }
 
+// ServeWindow serves window and returns the token that can be used to reference it.
+// Callers are responsible for synchronizing with the locker passed to NewServer.
+func (s *Server) ServeWindow(win Window) (uint64, error) {
+	return s.serveWindow(win)
+}
+
 func (s *Server) serveWindow(win Window) (uint64, error) {
+	ret, err := s.doServeWindow(win)
+	s.log(log.TraceLevel, "%p: serve window %#v: %d, %v", s, win, ret, err)
+	return ret, err
+}
+
+func (s *Server) doServeWindow(win Window) (uint64, error) {
 	if res, ok := s.servers[win.id()]; ok {
 		return res.(*windowServerResource).brokerID, nil
 	}
@@ -182,7 +194,7 @@ func (s *Server) serveWindow(win Window) (uint64, error) {
 	brokerID, srv, err := proto.AcceptAndServe(s.broker,
 		func(windowBrokerID uint32, srv proto.MuxServer) {
 			winSrv := s.windowServer(s, win)
-			browserpb.RegisterWindowServer(srv.GRPC(), winSrv)
+			browserpb.RegisterWindowServer(srv.Registrar(), winSrv)
 		})
 	if err != nil {
 		return 0, err

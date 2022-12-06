@@ -227,6 +227,8 @@ func main() {
 				case syscall.SIGTERM, syscall.SIGKILL:
 					log.Info("Received kill signal: exiting")
 					os.Exit(1)
+				case syscall.SIGWINCH:
+					/* received when window changed in size, don't need to do anything */
 				case syscall.SIGURG:
 					/* received when socket urgent data is ready to be read */
 				default:

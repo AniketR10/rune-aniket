@@ -13,6 +13,6 @@ func GRPCServer(opts ...grpc.ServerOption) MuxServer {
 	return grpcServer{srv}
 }
 
-func (s grpcServer) GRPC() *grpc.Server {
+func (s grpcServer) Registrar() grpc.ServiceRegistrar {
 	return s.Server
 }

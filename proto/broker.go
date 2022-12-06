@@ -18,10 +18,9 @@ type MuxConn interface {
 }
 
 type MuxServer interface {
-	GracefulStop()
 	Serve(lis net.Listener) error
+	Registrar() grpc.ServiceRegistrar
 	Stop()
-	GRPC() *grpc.Server
 }
 
 // MuxBroker allows a client or server to multiplex over connections.

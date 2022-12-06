@@ -63,7 +63,7 @@ func (b *nopBroker) Close() error {
 	return nil
 }
 
-func newTestManager(grantor Grantor, opts ...Option) (*Manager, *testGranteePbClient, *nopBroker) {
+func newTestManager(grantor Grantor, opts ...Option) (*Manager, *testGranteePbClient, proto.MuxBroker) {
 	m := new(Manager)
 
 	opts = append([]Option{
@@ -79,9 +79,9 @@ func newTestManager(grantor Grantor, opts ...Option) (*Manager, *testGranteePbCl
 		return newGranteeClient(m.broker, mockpb), nil
 	}
 	m.Init(grantor, opts...)
-	m.broker = &nopBroker{}
+	m.broker = proto.NewDialBroker()
 
-	return m, mockpb, m.broker.(*nopBroker)
+	return m, mockpb, m.broker
 }
 
 func testRunAndWait(t *testing.T, mgr *Manager, pbClient *testGranteePbClient) {
@@ -93,7 +93,7 @@ func testRunAndWait(t *testing.T, mgr *Manager, pbClient *testGranteePbClient) {
 	close(pbClient.healthChan) // only test once
 }
 
-func assertShutdown(t *testing.T, pbClient *testGranteePbClient, broker *nopBroker) string {
+func assertShutdown(t *testing.T, pbClient *testGranteePbClient) string {
 	<-pbClient.onShutdownChan
 	sht, ok := pbClient.shutdown()
 	assert.True(t, ok)
@@ -119,14 +119,12 @@ func TestManagerRun(t *testing.T) {
 		require.Len(t, grant.Granted, 1)
 
 		expected := []*pluginpb.PermissionGrant{
-			{Id: "read", GrantId: 1},
+			{Id: "read", GrantId: 2},
 		}
 		assert.Equal(t, expected, grant.Granted)
 
 		srvs := grantor.servers()
 		require.Len(t, srvs, 1)
-		require.Len(t, srvs[0].served(), 1)
-		assert.Equal(t, uint32(1), srvs[0].served()[0])
 
 		// verify that shutdown was not called
 		_, ok = pbClient.shutdown()
@@ -145,7 +143,7 @@ func TestManagerRun(t *testing.T) {
 	})
 
 	t.Run("Stop should call a plugin's shutdown", func(t *testing.T) {
-		mgr, pbClient, broker := newTestManager(&mockGrantor{})
+		mgr, pbClient, _ := newTestManager(&mockGrantor{})
 		defer mgr.Close()
 
 		pbClient.onShutdownChan = make(chan struct{})
@@ -153,7 +151,7 @@ func TestManagerRun(t *testing.T) {
 		testRunAndWait(t, mgr, pbClient)
 		require.NoError(t, mgr.Stop("myId"))
 
-		assertShutdown(t, pbClient, broker)
+		assertShutdown(t, pbClient)
 
 		// should return error because it had been already stopped
 		require.Error(t, mgr.Stop("myId"))
@@ -171,7 +169,7 @@ func TestManagerRun(t *testing.T) {
 	})
 
 	t.Run("should shutdown plugin if errors upon call to get permissions", func(t *testing.T) {
-		mgr, pbClient, broker := newTestManager(&mockGrantor{})
+		mgr, pbClient, _ := newTestManager(&mockGrantor{})
 		defer mgr.Close()
 
 		pbClient.fixturePermissions =
@@ -182,12 +180,12 @@ func TestManagerRun(t *testing.T) {
 		err := mgr.Run("blue", "/here/is/my/plugin", nil)
 		require.NoError(t, err)
 
-		reason := assertShutdown(t, pbClient, broker)
+		reason := assertShutdown(t, pbClient)
 		assert.Contains(t, reason, "woopsie")
 	})
 
 	t.Run("should shutdown plugin if fails to respond to handshake in time", func(t *testing.T) {
-		mgr, pbClient, broker := newTestManager(&mockGrantor{})
+		mgr, pbClient, _ := newTestManager(&mockGrantor{})
 		defer mgr.Close()
 
 		pbClient.fixturePermissions =
@@ -198,12 +196,12 @@ func TestManagerRun(t *testing.T) {
 		err := mgr.Run("blue", "/here/is/my/plugin", nil)
 		require.NoError(t, err)
 
-		reason := assertShutdown(t, pbClient, broker)
+		reason := assertShutdown(t, pbClient)
 		assert.Contains(t, reason, "deadline exceeded")
 	})
 
 	t.Run("should shutdown plugin if fails to respond to first health requests in time", func(t *testing.T) {
-		mgr, pbClient, broker := newTestManager(&mockGrantor{})
+		mgr, pbClient, _ := newTestManager(&mockGrantor{})
 		defer mgr.Close()
 
 		pbClient.fixturePermissions =
@@ -215,12 +213,12 @@ func TestManagerRun(t *testing.T) {
 
 		time.Sleep(mgr.config.handshakeTimeout + 50*time.Millisecond)
 
-		reason := assertShutdown(t, pbClient, broker)
+		reason := assertShutdown(t, pbClient)
 		assert.Contains(t, reason, "health check")
 	})
 
 	t.Run("should shutdown plugin if fails to respond to subsequent health checks", func(t *testing.T) {
-		mgr, pbClient, broker := newTestManager(&mockGrantor{},
+		mgr, pbClient, _ := newTestManager(&mockGrantor{},
 			WithHealthTimeout(250*time.Millisecond), WithHealthRetries(3))
 		defer mgr.Close()
 
@@ -240,7 +238,7 @@ func TestManagerRun(t *testing.T) {
 		sleepyTime := 250*3*time.Millisecond + (50 * time.Millisecond)
 		time.Sleep(sleepyTime)
 
-		reason := assertShutdown(t, pbClient, broker)
+		reason := assertShutdown(t, pbClient)
 		assert.Contains(t, reason, "exhausted health check retries")
 
 		// check errors in status
@@ -251,7 +249,7 @@ func TestManagerRun(t *testing.T) {
 	})
 
 	t.Run("should wait for plugin Shutdown before returning from a call to Close", func(t *testing.T) {
-		mgr, pbClient, broker := newTestManager(&mockGrantor{})
+		mgr, pbClient, _ := newTestManager(&mockGrantor{})
 
 		pbClient.fixturePermissions = []*pluginpb.Permission{{Id: "read"}}
 		pbClient.onShutdownChan = make(chan struct{})
@@ -277,6 +275,5 @@ func TestManagerRun(t *testing.T) {
 		wg.Wait()
 
 		require.NoError(t, mgr.Close())
-		assert.True(t, broker.closed())
 	})
 }

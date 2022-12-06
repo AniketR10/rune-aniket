@@ -3,6 +3,7 @@ package plugin
 import (
 	"errors"
 	"io"
+	"runtime"
 	"sync"
 	"time"
 
@@ -42,10 +43,11 @@ type Clipboard interface {
 	ClipboardRegister
 }
 
+var _ ResourceRegistrar = (*ClipboardManager)(nil)
+
 // ClipboardManager satisfies text.Clipboard by means of a plugin.ClipboardSetter
 // which can be used to install arbitrary plugin.ClipboardRegister implementations.
 type ClipboardManager struct {
-	s *clipboardServer
 	// text.Clipboard is re-used but each implementation is only
 	// used for its registered registerID.
 	registers map[string]*pluginRegister
@@ -70,32 +72,16 @@ func (s *ClipboardManager) Init() {
 }
 
 // Serve satisfies ResourceServer.
-func (s *ClipboardManager) Serve(
-	pluginID string, grantID uint32, broker proto.MuxBroker,
-	lock sync.Locker,
-) error {
-	return acceptAndServe(broker, grantID, func(opts []grpc.ServerOption) proto.MuxServer {
-		lock.Lock()
-		defer lock.Unlock()
-
-		// create a new server every time Serve is called
-		// so ClipboardManager can be shared across workspaces
-		var srv proto.MuxServer
-		if log.IsLevelEnabled(log.TraceLevel) {
-			srv = proto.LoggingGRPCServer(opts...)
-		} else {
-			srv = proto.GRPCServer(opts...)
-		}
-		grpc := srv.GRPC()
-
-		// uses this ClipboardManager as the clipboard implementation
-		// for all resource requests.
-		s.s = newClipboardServer(broker, &clipboardManagerServer{ClipboardManager: s}, lock)
-		pluginpb.RegisterClipboardServer(grpc, s.s)
-		pluginpb.RegisterClipboardRegisterServer(grpc, s.s.defaultRegisterServer)
-
-		return srv
-	})
+func (s *ClipboardManager) Register(
+	pluginID string, grantor Grantor, registrar grpc.ServiceRegistrar,
+	broker proto.MuxBroker, lock sync.Locker,
+) (io.Closer, error) {
+	// uses this ClipboardManager as the clipboard implementation
+	// for all resource requests.
+	srv := newClipboardServer(broker, &clipboardManagerServer{ClipboardManager: s}, lock)
+	pluginpb.RegisterClipboardServer(registrar, srv)
+	pluginpb.RegisterClipboardRegisterServer(registrar, srv.defaultRegisterServer)
+	return srv, nil
 }
 
 func (s *clipboardManagerServer) SetRegister(
@@ -208,9 +194,6 @@ func (s *ClipboardManager) SetRegister(registerID string, r ClipboardRegister) e
 
 // Close releases all resources associated with this ClipboardManager.
 func (s *ClipboardManager) Close() (ret error) {
-	if s.s != nil {
-		s.s.Close()
-	}
 	for _, r := range s.registers {
 		if err := r.Close(); err != nil {
 			ret = multierr.Append(ret, err)
@@ -306,6 +289,7 @@ func dialClipboard(token uint32, broker proto.MuxBroker) (
 		return nil, err
 	}
 	c := newClipboardClient(broker, conn)
+	runtime.SetFinalizer(c, func(c *clipboardClient) { c.Close() })
 	return c, nil
 }
 

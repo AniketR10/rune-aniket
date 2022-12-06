@@ -1,17 +1,18 @@
 package plugin
 
 import (
+	"io"
 	"path/filepath"
+	"runtime"
 	"sync"
 
 	"github.com/ernestrc/blue/document"
 	docrpc "github.com/ernestrc/blue/document/rpc"
 	bproto "github.com/ernestrc/blue/document/rpc/proto"
 	"github.com/ernestrc/blue/encoding/toml"
-	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
-	
+
 	"unstable.build/go-tui/proto"
 	"unstable.build/go-tui/storage"
 )
@@ -21,22 +22,13 @@ const (
 	PermissionStorage = "_PermStorage"
 )
 
-type pluginResource struct {
-	svc    document.Service
-	srv    proto.MuxServer
-	server *docrpc.Server
-}
-
 type storageResourceServer struct {
-	mu              sync.Mutex
-	storageDir      string
-	pluginResources map[string]*pluginResource
+	storageDir string
 }
 
 func newStorageResourceServer(storageDir string) *storageResourceServer {
 	ret := new(storageResourceServer)
 	ret.storageDir = storageDir
-	ret.pluginResources = make(map[string]*pluginResource)
 	return ret
 }
 
@@ -51,56 +43,25 @@ func (s *storageResourceServer) setupStorage(pluginID string) document.Service {
 	return svc
 }
 
-func (s *storageResourceServer) Serve(
-	pluginID string, grantID uint32, broker proto.MuxBroker,
-	lock sync.Locker,
-) error {
-	return acceptAndServe(broker, grantID,
-		func(opts []grpc.ServerOption) proto.MuxServer {
-			s.mu.Lock()
-			defer s.mu.Unlock()
-			res, ok := s.pluginResources[pluginID]
-			if ok {
-				return res.srv
-			}
-			var srv proto.MuxServer
-			if log.IsLevelEnabled(log.TraceLevel) {
-				srv = proto.LoggingGRPCServer(opts...)
-			} else {
-				srv = proto.GRPCServer(opts...)
-			}
-			grpc := srv.GRPC()
-			svc := s.setupStorage(pluginID)
-			res = &pluginResource{
-				srv:    srv,
-				server: new(docrpc.Server),
-				svc:    svc,
-			}
-			res.server.Init(svc, toml.Marshaler(), grpc)
-			bproto.RegisterDocumentStoreServer(grpc, res.server)
-			s.pluginResources[pluginID] = res
-			return res.srv
-		})
-}
-
-func (s *storageResourceServer) Close() (ret error) {
-	for _, res := range s.pluginResources {
-		// docrpc.Server closes grpc.Server
-		if err := res.server.Close(); err != nil {
-			ret = multierr.Append(ret, err)
-		}
-		if err := res.svc.Close(); err != nil {
-			ret = multierr.Append(ret, err)
-		}
-	}
-	return ret
+func (s *storageResourceServer) Register(
+	pluginID string, grantor Grantor, registrar grpc.ServiceRegistrar,
+	broker proto.MuxBroker, lock sync.Locker,
+) (io.Closer, error) {
+	svc := s.setupStorage(pluginID)
+	server := new(docrpc.Server)
+	// NOTE: if registrar is not a grpc.Server this will panic
+	// but it's a small price to pay rather than exposing grpc.Server
+	// across all ResourceRegistrar impls.
+	server.Init(svc, toml.Marshaler(), registrar.(*grpc.Server))
+	bproto.RegisterDocumentStoreServer(registrar, server)
+	return server, nil
 }
 
 // StorageResource returns a map of Permission to a ResourceServer
 // capable of serving a document.Service.
-func StorageResources(storageDir string) map[Permission]ResourceServer {
+func StorageResources(storageDir string) map[Permission]ResourceRegistrar {
 	s := newStorageResourceServer(storageDir)
-	return map[Permission]ResourceServer{
+	return map[Permission]ResourceRegistrar{
 		PermissionStorage: s,
 	}
 }
@@ -108,16 +69,13 @@ func StorageResources(storageDir string) map[Permission]ResourceServer {
 func dialStorage(token uint32, broker proto.MuxBroker) (
 	document.Service, error,
 ) {
-	if c, ok := clients.Load(token); ok {
-		return c.(document.Service), nil
-	}
 	conn, err := broker.Dial(token)
 	if err != nil {
 		return nil, err
 	}
 	c := new(docrpc.Client)
 	c.Init(conn, toml.Marshaler())
-	clients.Store(token, c)
+	runtime.SetFinalizer(c, func(c *docrpc.Client) { c.Close() })
 	return c, nil
 }
 

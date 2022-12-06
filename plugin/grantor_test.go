@@ -17,7 +17,7 @@ var (
 		},
 		"pluginC": Permissions{},
 	}
-	res = map[Permission]ResourceServer{
+	res = map[Permission]ResourceRegistrar{
 		Permission("read"):  new(mockResourceServer),
 		Permission("write"): new(mockResourceServer),
 	}
@@ -61,7 +61,7 @@ func TestGrantor(t *testing.T) {
 
 	t.Run("should panic if trying to make a Grantor with mismatch of capabilities/grants", func(t *testing.T) {
 		assert.Panics(t, func() {
-			res := map[Permission]ResourceServer{
+			res := map[Permission]ResourceRegistrar{
 				Permission("read"): new(mockResourceServer),
 			}
 			_ = NewInmemoryGrantor(grants, res)

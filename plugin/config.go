@@ -1,9 +1,9 @@
 package plugin
 
 import (
+	"io"
 	"sync"
 
-	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 	"unstable.build/go-tui/config"
 	configpb "unstable.build/go-tui/config/rpc"
@@ -16,9 +16,7 @@ const (
 )
 
 type configResourceServer struct {
-	mu  sync.Mutex
 	cfg config.Config
-	srv proto.MuxServer
 }
 
 func newConfigResourceServer(cfg config.Config) *configResourceServer {
@@ -27,44 +25,20 @@ func newConfigResourceServer(cfg config.Config) *configResourceServer {
 	return ret
 }
 
-func (s *configResourceServer) Serve(
-	pluginID string, grantID uint32, broker proto.MuxBroker,
-	lock sync.Locker,
-) error {
-	return acceptAndServe(broker, grantID,
-		func(opts []grpc.ServerOption) proto.MuxServer {
-			s.mu.Lock()
-			defer s.mu.Unlock()
-			if s.srv == nil {
-				var srv proto.MuxServer
-				if log.IsLevelEnabled(log.TraceLevel) {
-					srv = proto.LoggingGRPCServer(opts...)
-				} else {
-					srv = proto.GRPCServer(opts...)
-				}
-				grpc := srv.GRPC()
-				s.srv = srv
-				server := configpb.NewServer(s.cfg, lock)
-				configpb.RegisterConfigServer(grpc, server)
-			}
-			return s.srv
-		})
-}
-
-func (s *configResourceServer) Close() error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.srv != nil {
-		s.srv.Stop()
-	}
-	return nil
+func (s *configResourceServer) Register(
+	pluginID string, grantor Grantor, registrar grpc.ServiceRegistrar,
+	broker proto.MuxBroker, lock sync.Locker,
+) (io.Closer, error) {
+	server := configpb.NewServer(s.cfg, lock)
+	configpb.RegisterConfigServer(registrar, server)
+	return nopCloser{}, nil
 }
 
 // ConfigResources returns a map of Permission to a ResourceServer
 // capable of serving each of the b Config's resources.
-func ConfigResources(b config.Config) map[Permission]ResourceServer {
+func ConfigResources(b config.Config) map[Permission]ResourceRegistrar {
 	s := newConfigResourceServer(b)
-	return map[Permission]ResourceServer{
+	return map[Permission]ResourceRegistrar{
 		PermissionConfig: s,
 	}
 }
@@ -72,9 +46,6 @@ func ConfigResources(b config.Config) map[Permission]ResourceServer {
 func dialConfig(token uint32, broker proto.MuxBroker) (
 	config.Config, error,
 ) {
-	if c, ok := clients.Load(token); ok {
-		return c.(config.Config), nil
-	}
 	conn, err := broker.Dial(token)
 	if err != nil {
 		return nil, err
@@ -83,8 +54,7 @@ func dialConfig(token uint32, broker proto.MuxBroker) (
 	if err != nil {
 		return nil, err
 	}
-	clients.Store(token, c)
-	return c, nil
+	return c, conn.Close()
 }
 
 // FetchConfig acquires the loaded config with the given permission token.

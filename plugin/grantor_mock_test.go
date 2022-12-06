@@ -1,38 +1,31 @@
 package plugin
 
 import (
+	"io"
 	"sync"
 
+	"google.golang.org/grpc"
 	"unstable.build/go-tui/proto"
 )
 
 type mockResourceServer struct {
 	mu    sync.Mutex
-	srvd  []uint32
 	muxes []proto.MuxBroker
 }
 
-func (s *mockResourceServer) Serve(
-	pluginID string, uid uint32,
+func (s *mockResourceServer) Register(
+	pluginID string, g Grantor, grantor grpc.ServiceRegistrar,
 	mux proto.MuxBroker, lock sync.Locker,
-) error {
+) (io.Closer, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	s.muxes = append(s.muxes, mux)
-	s.srvd = append(s.srvd, uid)
-	return nil
+	return nopCloser{}, nil
 }
 
 func (s *mockResourceServer) Close() error {
 	return nil
-}
-
-func (s *mockResourceServer) served() []uint32 {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	return s.srvd
 }
 
 type mockGrantor struct {
@@ -47,7 +40,7 @@ func (g *mockGrantor) servers() []*mockResourceServer {
 	return g.srvs
 }
 
-func (g *mockGrantor) Grant(plugin string, perm Permission) (ResourceServer, bool) {
+func (g *mockGrantor) Grant(plugin string, perm Permission) (ResourceRegistrar, bool) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 
