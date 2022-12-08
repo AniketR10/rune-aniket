@@ -4,13 +4,16 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"runtime"
 	"sync"
 	"time"
 
 	"github.com/ernestrc/blue/logging"
+	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 	"unstable.build/go-tui/browser"
+	browserpb "unstable.build/go-tui/browser/rpc"
 	"unstable.build/go-tui/cell"
 
 	"unstable.build/go-tui/proto"
@@ -28,6 +31,7 @@ const (
 // Token wraps a browser.Token to satisfy editor.Handler.
 type Token struct {
 	browser.Token
+	ID       uint64 // NOTE: temporary until text rpc is migrated to finalizers
 	resource workspace.URI
 }
 
@@ -42,7 +46,7 @@ type Client struct {
 	mu sync.Mutex
 
 	broker  proto.MuxBroker
-	browser *browser.Client
+	browser *browserpb.Client
 	cc      grpc.ClientConnInterface
 	ed      EditorClient
 
@@ -57,6 +61,7 @@ func NewClient(
 ) *Client {
 	ret := new(Client)
 	ret.Init(broker, cc)
+	runtime.SetFinalizer(ret, func(c *Client) { c.Close() })
 	return ret
 }
 
@@ -68,7 +73,7 @@ func (c *Client) Init(
 	c.cc = cc
 	c.broker = broker
 	c.servers = make(map[uint64]io.Closer)
-	c.browser = browser.NewClient(broker, cc)
+	c.browser = browserpb.NewClient(broker, cc)
 }
 
 func (c *Client) log(level log.Level, msg string, args ...interface{}) {
@@ -128,12 +133,12 @@ func (c *Client) Edit(file workspace.URI, buf *cell.Buffer) (text.Handler, error
 	req := NewEditRequest(file, buf)
 
 	res, err := c.ed.Edit(ctx, &req)
+	runtime.KeepAlive(c)
 	if err != nil {
 		return nil, err
 	}
 
-	token := browser.Token{ID: uint64(res.GetHandlerId())}
-	return Token{Token: token, resource: file}, nil
+	return Token{ID: uint64(res.GetHandlerId()), resource: file}, nil
 }
 
 // Editor satisfies text.Editor
@@ -142,12 +147,12 @@ func (c *Client) Editor(file workspace.URI) (text.Handler, error) {
 	req := EditorRequest{ResourceName: NewURI(file)}
 
 	res, err := c.ed.Editor(ctx, &req)
+	runtime.KeepAlive(c)
 	if err != nil {
 		return nil, err
 	}
 
-	token := browser.Token{ID: uint64(res.GetHandlerId())}
-	return Token{Token: token, resource: file}, nil
+	return Token{ID: uint64(res.GetHandlerId()), resource: file}, nil
 }
 
 // SubscribeEditorEvents requests the editor server to subscribe sub to ev.
@@ -164,6 +169,7 @@ func (c *Client) SubscribeEditorEvents(evs []text.EventType, h text.EventHandler
 		req.Type = append(req.Type, protoType(text.Event{Type: ev}))
 	}
 	_, err = c.ed.Subscribe(ctx, &req)
+	runtime.KeepAlive(c)
 	if err != nil {
 		reason := fmt.Sprintf("editor.Client.Subscribe: %v", err)
 		c.safeForceCloseHandler(handlerID, reason)
@@ -185,6 +191,7 @@ func (c *Client) SubscribeCommand(cmd string, h text.CommandHandler) error {
 
 	req := RegisterCommandRequest{Command: cmd, HandlerId: handlerID}
 	_, err = c.ed.Register(ctx, &req)
+	runtime.KeepAlive(c)
 	if err != nil {
 		reason := fmt.Sprintf("editor.Client.Register: %v", err)
 		c.safeForceCloseHandler(handlerID, reason)
@@ -233,6 +240,7 @@ func (c *Client) SetLocationList(
 	}
 	req := makeLocationListRequest(uint32(token.ID), pri, ID, l)
 	_, err := c.ed.SetLocationList(ctx, &req)
+	runtime.KeepAlive(c)
 	return err
 }
 
@@ -248,19 +256,24 @@ func (c *Client) moveToLocation(h text.Handler, ID string, next bool) (err error
 	} else {
 		_, err = c.ed.MoveToPrevLocation(ctx, &req)
 	}
+	runtime.KeepAlive(c)
 	return err
 }
 
 // MoveToPrevLocation requests the editor server to move cursor to the previous location
 // in location list identified by ID.
 func (c *Client) MoveToPrevLocation(h text.Handler, ID string) error {
-	return c.moveToLocation(h, ID, false)
+	err := c.moveToLocation(h, ID, false)
+	runtime.KeepAlive(c)
+	return err
 }
 
 // MoveToNextLocation requests the editor server to move cursor to the next location
 // in location list identified by ID.
 func (c *Client) MoveToNextLocation(h text.Handler, ID string) error {
-	return c.moveToLocation(h, ID, true)
+	err := c.moveToLocation(h, ID, true)
+	runtime.KeepAlive(c)
+	return err
 }
 
 // SetCursor requests the editor server to move cursor to pos
@@ -274,6 +287,7 @@ func (c *Client) SetCursor(h text.Handler, pos term.Coordinates) error {
 	protoPos.FromModel(pos)
 	req := SetCursorRequest{Pos: &protoPos, HandlerId: uint32(token.ID)}
 	_, err := c.ed.SetCursor(ctx, &req)
+	runtime.KeepAlive(c)
 	return err
 }
 
@@ -286,6 +300,7 @@ func (c *Client) Cursor(h text.Handler) (term.Coordinates, error) {
 	}
 	req := CursorRequest{HandlerId: uint32(token.ID)}
 	res, err := c.ed.Cursor(ctx, &req)
+	runtime.KeepAlive(c)
 	if err != nil {
 		return term.Coordinates{}, err
 	}
@@ -324,28 +339,26 @@ func (c *Client) SetDefaultAttributes(h text.Handler, attrs term.Attributes) err
 		Attributes: &rpcAttrs,
 	}
 	_, err := c.ed.SetDefaultAttributes(ctx, &req)
+	runtime.KeepAlive(c)
 	return err
 }
 
 // Close closes all resources associated with this client.
-func (c *Client) Close() (err error) {
+func (c *Client) Close() (ret error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	if closer, ok := c.cc.(io.Closer); ok {
-		ccErr := closer.Close()
-		if ccErr != nil {
-			err = ccErr
+		if err := closer.Close(); err != nil {
+			ret = multierr.Append(ret, err)
 		}
 	}
 	for _, res := range c.servers {
-		resErr := res.Close()
-		if resErr != nil {
-			err = resErr
+		if err := res.Close(); err != nil {
+			ret = multierr.Append(ret, err)
 		}
 	}
 
-	c.servers = nil
-
-	return err
+	runtime.SetFinalizer(c, nil)
+	return ret
 }

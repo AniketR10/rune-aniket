@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -13,7 +14,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"unstable.build/go-tui"
+	browserapi "unstable.build/go-tui/api/browser"
 	"unstable.build/go-tui/browser"
+	browsertest "unstable.build/go-tui/browser/test"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/handler"
@@ -271,16 +274,15 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 	focus, err := b.Focus()
 	require.NoError(t, err)
 
-	win, err := b.Split(browser.OrientationLeft, focus, browser.NewTestHandler())
+	win, err := b.Split(browserapi.OrientationLeft, focus, browsertest.NewTestHandler())
 	require.NoError(t, err)
 
-	h := browser.NewTestHandler()
+	focus = win
+
+	h := browsertest.NewTestHandler()
 	h.Ch = 'Z' // helps identify in tests
 
-	focus, err = b.Focus()
-	require.NoError(t, err)
-
-	_, err = b.Split(browser.OrientationBottom, win, h)
+	_, err = b.Split(browserapi.OrientationBottom, focus, h)
 	require.NoError(t, err)
 
 	cases = []testutil.HandlerSequenceTestCase{
@@ -311,7 +313,7 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 	testutil.TestHandlerSequence(t, bh, 20, 10, cases)
 
 	var closed int
-	hx := browser.NewTestHandler()
+	hx := browsertest.NewTestHandler()
 	hx.Ch = '$'
 	hx.CloseCallback = func() error { closed++; return nil }
 	require.NoError(t, focus.SetContent(hx))
@@ -332,8 +334,10 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 
 	testutil.TestHandlerSequence(t, bh, 20, 10, cases)
 
-	require.NoError(t, win.Close())
-	require.NoError(t, focus.Close())
+	ctx, cancel := context.WithCancel(context.Background())
+	require.NoError(t, win.Close(ctx))
+	require.NoError(t, focus.Close(ctx))
+	cancel()
 
 	cases = []testutil.HandlerSequenceTestCase{
 		// test CommandKeyBindings
@@ -432,7 +436,7 @@ IIII`},
 	}
 	testutil.TestHandlerSequence(t, bh, 20, 10, cases)
 
-	floating1, err := b.Floating(browser.NewTestFloating(4, 2),
+	floating1, err := b.Floating(browsertest.NewTestFloating(4, 2),
 		component.FloatingConfig{Offset: term.Coordinates{X: 1, Y: 1}})
 	require.NoError(t, err)
 
@@ -440,7 +444,7 @@ IIII`},
 	require.NoError(t, err)
 
 	// should not be able to split over a floating window, which is currently in focus
-	_, err = b.Split(browser.OrientationTop, focus, browser.NewTestHandler())
+	_, err = b.Split(browserapi.OrientationTop, focus, browsertest.NewTestHandler())
 	require.Error(t, err)
 	cases = []testutil.HandlerSequenceTestCase{
 		{"",
@@ -469,7 +473,7 @@ IIII`},
 
 	testutil.TestHandlerSequence(t, bh, 20, 10, cases)
 
-	require.NoError(t, floating1.Close())
+	require.NoError(t, floating1.Close(ctx))
 
 	cases = []testutil.HandlerSequenceTestCase{
 		{"",
@@ -486,9 +490,9 @@ IIII`},
 	}
 	testutil.TestHandlerSequence(t, bh, 20, 10, cases)
 
-	o := browser.OrientationTop
+	o := browserapi.OrientationTop
 	for i := 0; i < 4; i++ {
-		b1 := browser.NewTestHandler()
+		b1 := browsertest.NewTestHandler()
 		b1.Ch = rune(strconv.Itoa(i)[0])
 		err = b.Bar(o, b1)
 		require.NoError(t, err)
@@ -517,7 +521,7 @@ IIII`},
 }
 
 func assertHandled(
-	t *testing.T, h *browser.TestHandler, startingRune rune, exit, handled bool,
+	t *testing.T, h *browsertest.TestHandler, startingRune rune, exit, handled bool,
 ) {
 	// test handler increments the character that it displays next
 	// upon handling a new event
@@ -823,9 +827,9 @@ func TestExTabIntegration(t *testing.T) {
 		require.NoError(t, err)
 		uri2, err := workspace.ParseURI("file:///Pahty")
 		require.NoError(t, err)
-		tab, err := b.comp.Tab(uri1, "Fieshta", browser.NewTestHandler())
+		tab, err := b.comp.Tab(uri1, "Fieshta", browsertest.NewTestHandler())
 		require.NoError(t, err)
-		_, err = b.comp.Tab(uri2, "Pahty", browser.NewTestHandler())
+		_, err = b.comp.Tab(uri2, "Pahty", browsertest.NewTestHandler())
 		require.NoError(t, err)
 		focus, err := b.comp.Focus()
 		require.NoError(t, err)
@@ -883,7 +887,7 @@ func TestExExit(t *testing.T) {
 		b := newExForTesting(t, text.NopEditor())
 		defer b.Close()
 
-		h := browser.NewTestHandler()
+		h := browsertest.NewTestHandler()
 		h.Exit = true
 		h.Handled = true
 
@@ -981,7 +985,7 @@ func TestCommandHistory(t *testing.T) {
 │EEEEEEEEEEEEEEEEEE│
 │EEEEEEEEEEEEEEEEEE│
 └──────────────────┘`},
-		{":::>",
+		{"::::>",
 			`┌──────────────────┐
 │hello.go  wi.go   │
 ├──────────────────┤
@@ -1039,5 +1043,39 @@ func TestCommandAliases(t *testing.T) {
 	b := newExForTesting(t, text.NopEditor(), opts...)
 	defer b.Close()
 
+	testutil.TestHandlerSequence(t, b, 20, 10, cases)
+}
+
+func TestExposedRootNodeIssue(t *testing.T) {
+	opts := []text.Option{
+		text.WithCommandKey(testCommandKey),
+		text.WithCommandAliases(map[string][]string{
+			"boom": {
+				"newWindow",
+				"changeSplitOrientation h",
+				"newWindow",
+				"changeSplitOrientation v",
+				"newWindow",
+				"focusPrevWindow",
+				"focusPrevWindow",
+			},
+		}),
+	}
+	cases := []testutil.HandlerSequenceTestCase{
+		{":boom>",
+			`┌──────────────────┐
+│                  │
+┌────────┐┌────────┤
+│        ││        │
+│        ││        │
+│        │└────────┘
+│        │┌───┐┌───┐
+│changed split dire│
+│ction to vertical │
+└────────┘└───┘└───┘`},
+	}
+
+	b := newExForTesting(t, text.NopEditor(), opts...)
+	defer b.Close()
 	testutil.TestHandlerSequence(t, b, 20, 10, cases)
 }

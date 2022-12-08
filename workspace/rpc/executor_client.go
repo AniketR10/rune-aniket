@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
+	"runtime"
 	"sync"
 	"syscall"
 
@@ -332,6 +334,67 @@ func (c *executorClientImpl) newFileClient(
 			handlerID: handlerID,
 		},
 	}
+	// TODO use runtime.SetFinalizer
 	c.addCloser(pid, handlerID, ret)
 	return ret
+}
+
+func (c *fileClient) Name() string {
+	return c.filename
+}
+
+func (c *fileClient) Stat() (os.FileInfo, error) {
+	ctx, cleanup := ctxWithTimeout()
+	defer cleanup()
+
+	req := StatRequest{Filename: c.filename}
+	resp, err := c.client.Stat(ctx, &req)
+	runtime.KeepAlive(c)
+	if err != nil {
+		return nil, err
+	}
+	return fileClientInfo{StatResponse: *resp}, nil
+}
+
+func (c *fileClient) Sync() error {
+	ctx, cleanup := ctxWithTimeout()
+	defer cleanup()
+
+	req := SyncRequest{HandlerId: c.handlerID}
+	_, err := c.client.Sync(ctx, &req)
+	runtime.KeepAlive(c)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (c *fileClient) Truncate(size int64) error {
+	ctx, cleanup := ctxWithTimeout()
+	defer cleanup()
+
+	req := TruncateRequest{HandlerId: c.handlerID, Size: size}
+	_, err := c.client.Truncate(ctx, &req)
+	runtime.KeepAlive(c)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (c *fileClient) Seek(offset int64, whence int) (int64, error) {
+	ctx, cleanup := ctxWithTimeout()
+	defer cleanup()
+
+	req := SeekRequest{
+		HandlerId: c.handlerID,
+		Offset:    offset,
+		Whence:    int64(whence),
+	}
+	resp, err := c.client.Seek(ctx, &req)
+	runtime.KeepAlive(c)
+	if err != nil {
+		return 0, err
+	}
+	return resp.GetNewOffset(), nil
 }

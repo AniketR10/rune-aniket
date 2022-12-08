@@ -13,7 +13,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"unstable.build/go-tui"
+	browserapi "unstable.build/go-tui/api/browser"
 	"unstable.build/go-tui/browser"
+	browsertest "unstable.build/go-tui/browser/test"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/term"
@@ -342,7 +344,7 @@ func TestComponentEditorSubscriber(t *testing.T) {
 
 				focus, err := c.Focus()
 				require.NoError(t, err)
-				_, err = c.Split(browser.OrientationBottom, focus, h)
+				_, err = c.Split(browserapi.OrientationBottom, focus, h)
 				require.NoError(t, err)
 			},
 			func(t *testing.T, c *Component, resource workspace.URI) {
@@ -603,7 +605,7 @@ func TestEventTypeFocusIntegration(t *testing.T) {
 	expectEvent(t, mock, uri1, EventTypeFocus)
 	focus, err := c.Focus()
 	require.NoError(t, err)
-	w2, err := c.Split(browser.OrientationRight, focus, h1)
+	w2, err := c.Split(browserapi.OrientationRight, focus, h1)
 	require.NoError(t, err)
 
 	expectEvent(t, mock, uri1, EventTypeUnfocus)
@@ -631,7 +633,7 @@ func TestEventTypeFocusIntegration(t *testing.T) {
 
 	expectEvent(t, mock, uri1, EventTypeUnfocus)
 	expectEvent(t, mock, uri2, EventTypeFocus)
-	require.NoError(t, w2.Close())
+	require.NoError(t, w2.Close(context.Background()))
 
 	ok = c.Browser().NextTab(w2)
 	require.False(t, ok)
@@ -654,7 +656,7 @@ func TestDispatchCommand(t *testing.T) {
 			Resource: NewTestHandler(),
 			URI:      uri,
 			Name:     "SELL",
-			Window:   win,
+			Window:   browser.WindowToAPIWindow{Win: win},
 		}
 		ok, err := c.DispatchCommand(cmd)
 		require.NoError(t, err)
@@ -692,7 +694,7 @@ func TestDispatchCommand(t *testing.T) {
 			Resource: NewTestHandler(),
 			URI:      uri,
 			Name:     "workstation_layout",
-			Window:   win,
+			Window:   browser.WindowToAPIWindow{Win: win},
 		}
 		ok, err := c.DispatchCommand(cmd)
 		assert.True(t, ok)
@@ -712,7 +714,7 @@ func TestDispatchCommand(t *testing.T) {
 			Resource: NewTestHandler(),
 			URI:      uri,
 			Name:     "bla",
-			Window:   win,
+			Window:   browser.WindowToAPIWindow{Win: win},
 		}
 		ok, err := c.DispatchCommand(cmd)
 		assert.True(t, ok)
@@ -735,7 +737,7 @@ func TestDispatchCommand(t *testing.T) {
 				Resource: NewTestHandler(),
 				URI:      uri,
 				Name:     cmd,
-				Window:   win,
+				Window:   browser.WindowToAPIWindow{Win: win},
 			}
 			ok, err := c.DispatchCommand(cmd)
 			assert.False(t, ok)
@@ -752,7 +754,7 @@ func TestDispatchCommand(t *testing.T) {
 			Resource: NewTestHandler(),
 			URI:      uri,
 			Name:     "kaboom",
-			Window:   win,
+			Window:   browser.WindowToAPIWindow{Win: win},
 		}
 		ok, err := c.DispatchCommand(cmd)
 		assert.False(t, ok)
@@ -900,7 +902,8 @@ func testRegister(t *testing.T,
 
 		wg.Add(1)
 		mu.Lock()
-		cmd := Command{Resource: h1, URI: resource1, Name: myCmd, Args: myArgs, Window: win}
+		cmd := Command{Resource: h1, URI: resource1, Name: myCmd, Args: myArgs,
+			Window: browser.WindowToAPIWindow{Win: win}}
 		ok, err := c.DispatchCommand(cmd)
 		assert.True(t, ok)
 		require.NoError(t, err)
@@ -957,12 +960,12 @@ func testTabIntegration(t *testing.T,
 			require.NoError(t, err)
 			resource2, err := workspace.ParseURI("file:///b")
 			require.NoError(t, err)
-			b1 := browser.NewTestHandler()
+			b1 := browsertest.NewTestHandler()
 			b1.Ch = '$'
 			_, err = wm.Tab(resource1, "$$", b1)
 			require.NoError(t, err)
 
-			b2 := browser.NewTestHandler()
+			b2 := browsertest.NewTestHandler()
 			b2.Ch = '#'
 			t2, err := wm.Tab(resource2, "##", b2)
 			require.NoError(t, err)
@@ -1030,7 +1033,7 @@ func TestFlush(t *testing.T) {
 		require.NoError(t, err)
 
 		mock.EXPECT().Resize(gomock.Any(), gomock.Any()).AnyTimes()
-		_, err = c.Split(browser.OrientationTop, win, mock)
+		_, err = c.Split(browserapi.OrientationTop, win, mock)
 		require.NoError(t, err)
 
 		require.Equal(t, ErrInvalidSave, c.Flush(win))

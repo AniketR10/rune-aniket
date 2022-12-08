@@ -9,7 +9,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"unstable.build/go-tui/browser"
+	browserapi "unstable.build/go-tui/api/browser"
+	browserplugin "unstable.build/go-tui/api/browser/plugin"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/config"
 	"unstable.build/go-tui/plugin"
@@ -38,8 +39,7 @@ var (
 
 type sedEditorHandler struct {
 	ed   text.Editor
-	p    browser.EventPublisher
-	m    browser.Messenger
+	m    browserapi.Messenger
 	exec workspace.Executor
 
 	resource     text.Handler
@@ -61,7 +61,7 @@ func newSedHandler(
 		case plugin.PermissionWorkspace:
 			ret.exec, err = plugin.Workspace(grant.Token, broker)
 		case plugin.PermissionBrowserMessenger:
-			ret.m, err = plugin.Messenger(grant.Token, broker)
+			ret.m, err = browserplugin.Messenger(grant.Token, broker)
 		}
 		if err != nil {
 			return nil, err

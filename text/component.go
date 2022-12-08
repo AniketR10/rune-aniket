@@ -13,6 +13,7 @@ import (
 	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui"
+	browserapi "unstable.build/go-tui/api/browser"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
@@ -254,7 +255,7 @@ func (c *windowFocusSubscriber) tryDispatchEvent(win handler.Window, evType Even
 func (c *Component) setFocusToTab(t *browser.Tab) (browser.Handler, error) {
 	err := c.comp.Focus().SetContent(t)
 	if err != nil {
-		if err != browser.ErrTabNotFree {
+		if err != browserapi.ErrTabNotFree {
 			return nil, err
 		}
 	}
@@ -592,7 +593,7 @@ func (c *Component) SetMessage(msg string, args ...interface{}) error {
 
 // Split satisfies browser.WindowManager.
 func (c *Component) Split(
-	o browser.Orientation, win browser.Window, h browser.Handler,
+	o browserapi.Orientation, win browser.Window, h browser.Handler,
 ) (browser.Window, error) {
 	w, ok := c.comp.Split(o, win, h)
 	if !ok {
@@ -602,7 +603,7 @@ func (c *Component) Split(
 }
 
 // Bar creates a new status bar with h's component and delegates handling of mouse events to h.
-func (c *Component) Bar(o browser.Orientation, h tui.Handler) error {
+func (c *Component) Bar(o browserapi.Orientation, h tui.Handler) error {
 	c.comp.Bar(o, h)
 	return nil
 }
@@ -828,6 +829,18 @@ func (c *Component) Draw(w term.Writer) {
 	c.comp.Draw(w)
 }
 
+// SetDim sets whether next call to draw should use
+// non-focus window diming feature.
+func (c *Component) SetDim(to bool) bool {
+	return c.comp.SetDim(to)
+}
+
+// WindowManagerPosition returns the offset from the top left corner
+// where the underlying window manager starts.
+func (c *Component) WindowManagerPosition() term.Coordinates {
+	return c.comp.WindowManagerPosition()
+}
+
 // SetCursor satisfies text.Editor
 func (c *Component) SetCursor(h Handler, pos term.Coordinates) error {
 	return c.ed.SetCursor(h, pos)
@@ -865,6 +878,15 @@ func (c *Component) Tab(resource workspace.URI, name string, h browser.Handler) 
 
 	t = c.newTab(resource, name, h, nil)
 	return t, nil
+}
+
+// Resource returns an open resource or false if resource with uri is not open.
+func (c *Component) Resource(uri workspace.URI) (browser.Handler, bool) {
+	return c.comp.Tab(uri)
+}
+
+func (c *Component) Window(id uint64) (browser.Window, bool) {
+	return c.comp.Window(id)
 }
 
 // SetDefaultAttributes satisfies text.Editor.

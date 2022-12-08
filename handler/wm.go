@@ -328,6 +328,23 @@ func (wm *WindowManager) Draw(w term.Writer) {
 	})
 }
 
+// DrawWindow draws target with the given term.Writer.
+func (wm *WindowManager) DrawWindow(target Window, w term.Writer) {
+	wm.comp.Iterate(func(win component.Window) {
+		if win == target.Window {
+			wm.comp.DrawWindow(win, w)
+		}
+	})
+}
+
+// SetDim sets whether next call to draw should use
+// non-focus window diming feature.
+func (wm *WindowManager) SetDim(to bool) (prev bool) {
+	prev = wm.config.Dim
+	wm.config.Dim = to
+	return
+}
+
 // Resize : tui.Component
 func (wm *WindowManager) Resize(width, height int) {
 	wm.comp.Resize(width, height)

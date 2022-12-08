@@ -1,13 +1,13 @@
 package browser
 
 import (
-	"errors"
 	"fmt"
 	"io"
 
 	"github.com/ernestrc/blue/logging"
 	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui"
+	browserapi "unstable.build/go-tui/api/browser"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
 
@@ -17,12 +17,10 @@ import (
 )
 
 var (
-	// ErrTabNotFree is returned when a tab is being used in call to
-	// SetContent but it's already owned by another Window.
-	ErrTabNotFree = errors.New("Tab already rendered in Window")
-
 	logBufDrawTimes = 4
 )
+
+var _ Handler = (*Component)(nil)
 
 // Component renders a browser-like tui.Compontent and exposes an API
 // to open new windows, add new tabs, and switch between tabs.
@@ -41,7 +39,7 @@ type Component struct {
 	prompts    []tui.Handler
 	width      int
 	height     int
-	nextSplit  Orientation
+	nextSplit  browserapi.Orientation
 
 	focusWindow handler.Window
 	config      Config
@@ -90,82 +88,31 @@ func (c *browserContent) Close() error {
 	return c.Handler.Close()
 }
 
-// needed mutable to inverse a split
-type browserWindow struct {
-	parent  *Component
-	win     handler.Window
-	doClose func()
-}
-
-func (w *browserWindow) Focus() (bool, error) {
-	return w.win.Focus(), nil
-}
-
-func (w *browserWindow) id() uint64 {
-	return w.win.ID()
-}
-
-func (w *browserWindow) onWindowClosed(fn func()) {
-	w.doClose = fn
-}
-
-func (w *browserWindow) Content() (Handler, error) {
-	h := w.win.Content().(Handler)
-	t, ok := h.(*Tab)
-	if !ok {
-		return h.(*browserContent).Handler, nil
-	}
-	return t, nil
-}
-
-func (w *browserWindow) SetContent(h Handler) error {
-	return w.parent.tryUpdateWindowContent(w, h)
-}
-
-func (w *browserWindow) Close() error {
-	if w.parent == nil {
-		return nil
-	}
-
-	parent := w.parent
-	doClose := w.doClose
-	w.doClose = nil
-	w.parent = nil
-
-	err := parent.closeWindow(w)
-	if err != nil {
-		parent.setError(err)
-	}
-	if doClose != nil {
-		doClose()
-	}
-
-	return err
-}
-
 func (c *Component) newWindow(win handler.Window) *browserWindow {
 	browserWin := &browserWindow{
 		parent: c,
 		win:    win,
 	}
-	c.windows[browserWin.id()] = browserWin
+	c.windows[browserWin.ID()] = browserWin
+	c.log(log.TraceLevel, "new window: %d", win.ID())
 	return browserWin
 }
 
 // closeWindow closes win or returns an error if win is the last Window.
 func (c *Component) closeWindow(win *browserWindow) error {
-	_, ok := c.findWindow(win.id())
+	_, ok := c.findWindow(win.ID())
 	if !ok {
-		return nil
+		panic("window not found")
 	}
 
 	content := win.win.Content().(Handler)
 	err := win.win.Close()
+	c.log(log.TraceLevel, "closing window: %d, %v", win.ID(), err)
 	if err != nil {
 		return err
 	}
 
-	delete(c.windows, win.id())
+	delete(c.windows, win.ID())
 
 	c.releaseHandler(content)
 	return nil
@@ -214,7 +161,7 @@ func (c *Component) Init(config Config) {
 
 	c.logBuf.Init()
 	c.logVirt = newMessageSpan(&c.logBuf, config.MessageBarAttr)
-	c.nextSplit = OrientationRight
+	c.nextSplit = browserapi.OrientationRight
 
 	c.tabs.Init()
 	c.tabs.OnClick = func(id int) {
@@ -431,7 +378,7 @@ func (c *Component) tryUpdateWindowContent(
 ) error {
 	if b, ok := content.(*Tab); ok {
 		if !b.free {
-			return ErrTabNotFree
+			return browserapi.ErrTabNotFree
 		}
 	}
 	c.updateWindowContent(win, content)
@@ -486,6 +433,14 @@ func (c *Component) RemoveAllTabs() {
 		for c.RemoveWindowContent(win) {
 		}
 	})
+}
+
+// Window returns the window with the given ID or false if there's
+// no window with the given ID.
+func (c *Component) Window(id uint64) (Window, bool) {
+	ret, ok := c.findWindow(id)
+	c.log(log.TraceLevel, "find window: %d, %v, %v", id, ret, ok)
+	return ret, ok
 }
 
 func (c *Component) freeTabs() []int {
@@ -563,8 +518,8 @@ func (c *Component) splitInverted(
 	focusBrowserWin.win.SetContent(focusHandler)
 
 	// ammend id mapping
-	c.windows[newBrowserWin.id()] = newBrowserWin
-	c.windows[focusBrowserWin.id()] = focusBrowserWin
+	c.windows[newBrowserWin.ID()] = newBrowserWin
+	c.windows[focusBrowserWin.ID()] = focusBrowserWin
 
 	// return new instance of browser window
 	// pointing to old instance of focus window
@@ -604,8 +559,8 @@ func (c *Component) split(
 
 // SetDefaultSplit sets the default split to be used when Split
 // is invoked with OrientationDefault.
-func (c *Component) SetDefaultSplit(o Orientation) Orientation {
-	if o == OrientationDefault {
+func (c *Component) SetDefaultSplit(o browserapi.Orientation) browserapi.Orientation {
+	if o == browserapi.OrientationDefault {
 		panic("cannot set OrientationDefault as default orientation")
 	}
 	ret := c.nextSplit
@@ -618,18 +573,21 @@ func (c *Component) SetDefaultSplit(o Orientation) Orientation {
 //
 // Note that if h is not a handler created with NewTab
 // the handler is cleaned as soon as the window's content is swapped.
-func (c *Component) Split(o Orientation, win Window, h Handler) (Window, bool) {
-	if o == OrientationDefault {
+func (c *Component) Split(o browserapi.Orientation, win Window, h Handler) (Window, bool) {
+	if win.(*browserWindow).parent == nil {
+		panic("trying to split over a closed window")
+	}
+	if o == browserapi.OrientationDefault {
 		o = c.nextSplit
 	}
 	switch o {
-	case OrientationRight:
+	case browserapi.OrientationRight:
 		return c.splitRegular((*handler.WindowManager).SplitVertical, win, h)
-	case OrientationLeft:
+	case browserapi.OrientationLeft:
 		return c.splitInverted((*handler.WindowManager).SplitVertical, win, h)
-	case OrientationTop:
+	case browserapi.OrientationTop:
 		return c.splitInverted((*handler.WindowManager).SplitHorizontal, win, h)
-	case OrientationBottom:
+	case browserapi.OrientationBottom:
 		return c.splitRegular((*handler.WindowManager).SplitHorizontal, win, h)
 	default:
 		panic("not a valid orientation")
@@ -661,7 +619,7 @@ func (c *Component) barSize() int {
 }
 
 // Bar adds a bar to the orientation of the main window.
-func (c *Component) Bar(o Orientation, h tui.Handler) {
+func (c *Component) Bar(o browserapi.Orientation, h tui.Handler) {
 	if c.config.Frame {
 		f := handler.NewFrame(h)
 		f.FrameCharSet = c.config.FrameCharSet
@@ -669,17 +627,17 @@ func (c *Component) Bar(o Orientation, h tui.Handler) {
 		h = f
 	}
 	size := c.barSize()
-	if o == OrientationDefault {
+	if o == browserapi.OrientationDefault {
 		o = c.nextSplit
 	}
 	switch o {
-	case OrientationTop:
+	case browserapi.OrientationTop:
 		c.union.UnionTop(h, size)
-	case OrientationBottom:
+	case browserapi.OrientationBottom:
 		c.union.UnionBottom(h, size)
-	case OrientationLeft:
+	case browserapi.OrientationLeft:
 		c.union.UnionLeft(h, size)
-	case OrientationRight:
+	case browserapi.OrientationRight:
 		c.union.UnionRight(h, size)
 	}
 }
@@ -771,6 +729,23 @@ func (c *Component) Draw(w term.Writer) {
 	c.overwriteFocusWindowUnion(w)
 }
 
+// SetDim sets whether next call to draw should use
+// non-focus window diming feature.
+func (c *Component) SetDim(to bool) bool {
+	return c.wm.SetDim(to)
+}
+
+// WindowManagerPosition returns the offset from the top left corner
+// where the underlying window manager starts.
+func (c *Component) WindowManagerPosition() term.Coordinates {
+	return c.union.FrameUnion.MainPosition()
+}
+
+// DrawWindow draws target with the given term.Writer.
+func (c *Component) DrawWindow(target Window, w term.Writer) {
+	c.wm.DrawWindow(target.(*browserWindow).win, w)
+}
+
 // ShiftFocus calls the underlying WindowManager.ShiftFocus.
 func (c *Component) ShiftFocus() bool {
 	return c.wm.ShiftFocus()
@@ -834,7 +809,11 @@ func (c *Component) FocusUp() bool {
 
 // SetFocus sets the underlying WindowManager's focus to win.
 func (c *Component) SetFocus(win Window) Window {
-	prev := c.wm.SetFocus(win.(*browserWindow).win)
+	bwin := win.(*browserWindow)
+	if bwin.parent == nil {
+		panic("trying to set focus to a closed window")
+	}
+	prev := c.wm.SetFocus(bwin.win)
 	ret, ok := c.findWindow(prev.ID())
 	if !ok {
 		panic("could not find previously set focus")
@@ -908,6 +887,16 @@ func (c *Component) Subscribe(sub handler.WindowSubscriber) {
 	c.wm.Subscribe(sub)
 }
 
+// Tiles returns the number of tiled windows in this Component.
+func (c *Component) Tiles() int {
+	return c.wm.SizeTiles()
+}
+
+// FloatingWindows returns the number of floating windows in this Component.
+func (c *Component) FloatingWindows() int {
+	return c.wm.SizeFloating()
+}
+
 // Close closes the resources associated with this browser.
 func (c *Component) Close() (ret error) {
 	for _, f := range c.buffers {
@@ -919,4 +908,9 @@ func (c *Component) Close() (ret error) {
 	c.buffers = c.buffers[:0]
 	c.wm.UnsubscribeAll()
 	return ret
+}
+
+// Man satisfies tui.Handler
+func (c *Component) Man() tui.Manual {
+	panic("TODO")
 }

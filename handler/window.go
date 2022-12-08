@@ -115,17 +115,17 @@ func (w Window) Close() error {
 		return nil
 	}
 
+	if w.wm.SizeTiles() == 1 && !w.IsFloating() {
+		return errors.New("trying to close last window")
+	}
+
 	if w.wm.prevFocus == w {
 		w.wm.prevFocus = Window{}
 	}
 
-	ok := true
 	if w.wm.focus == w {
-		ok = w.wm.ShiftFocus()
+		w.wm.ShiftFocus()
 		w.wm.prevFocus = Window{}
-	}
-	if !ok {
-		return errors.New("trying to close last window")
 	}
 
 	err := w.Window.Close()

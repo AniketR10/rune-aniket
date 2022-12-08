@@ -6,7 +6,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/term"
@@ -198,7 +197,7 @@ func TestEventProto(t *testing.T) {
 				Type: text.EventTypeFocus,
 				URI:  uri,
 				Resource: Token{
-					Token:    browser.Token{ID: 2},
+					ID:       2,
 					resource: uri,
 				},
 			},
@@ -212,7 +211,7 @@ func TestEventProto(t *testing.T) {
 			in: text.Event{
 				Type: text.EventTypeUnfocus,
 				URI:  uri,
-				Resource: Token{Token: browser.Token{ID: 288},
+				Resource: Token{ID: 288,
 					resource: uri},
 			},
 			out: EditorEvent{

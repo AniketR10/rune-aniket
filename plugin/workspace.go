@@ -2,7 +2,6 @@ package plugin
 
 import (
 	"io"
-	"runtime"
 	"sync"
 
 	"google.golang.org/grpc"
@@ -53,7 +52,6 @@ func dialWorkspace(token uint32, broker proto.MuxBroker) (
 		return nil, err
 	}
 	c := workspacepb.NewClient(conn)
-	runtime.SetFinalizer(c, func(c *workspacepb.Client) { c.Close() })
 	return c, nil
 }
 

@@ -12,7 +12,8 @@ import (
 
 	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
-	"unstable.build/go-tui/browser"
+	browserapi "unstable.build/go-tui/api/browser"
+	browserplugin "unstable.build/go-tui/api/browser/plugin"
 	"unstable.build/go-tui/config"
 	"unstable.build/go-tui/plugin"
 	"unstable.build/go-tui/proto"
@@ -49,10 +50,10 @@ type emulatorGrantee struct {
 	broker proto.MuxBroker
 
 	wp workspace.API
-	wm browser.WindowManager
-	p  browser.EventPublisher
+	wm browserapi.WindowManager
+	p  browserapi.EventPublisher
 	ed text.Editor
-	m  browser.Messenger
+	m  browserapi.Messenger
 	c  plugin.Clipboard
 
 	defAttr       term.Attributes
@@ -107,13 +108,13 @@ func (e *emulatorGrantee) PermissionGranted(grants []plugin.Grant) {
 	for _, g := range grants {
 		switch g.Permission {
 		case plugin.PermissionBrowserEventPublisher:
-			e.p, err = plugin.EventPublisher(g.Token, e.broker)
+			e.p, err = browserplugin.EventPublisher(g.Token, e.broker)
 		case plugin.PermissionBrowserWindowManager:
-			e.wm, err = plugin.WindowManager(g.Token, e.broker)
+			e.wm, err = browserplugin.WindowManager(g.Token, e.broker)
 		case plugin.PermissionWorkspace:
 			e.wp, err = plugin.Workspace(g.Token, e.broker)
 		case plugin.PermissionBrowserMessenger:
-			e.m, err = plugin.Messenger(g.Token, e.broker)
+			e.m, err = browserplugin.Messenger(g.Token, e.broker)
 		case plugin.PermissionEditor:
 			e.ed, err = plugin.Editor(g.Token, e.broker)
 			if err == nil {
@@ -195,7 +196,7 @@ func (e *emulatorGrantee) handleCommand(
 
 	switch cmd.Name {
 	case cmdSplitWindowTerminal:
-		_, err = e.wm.Split(browser.OrientationDefault, cmd.Window, t)
+		_, err = e.wm.Split(browserapi.OrientationDefault, cmd.Window, t)
 	case cmdTerminalTab:
 		err = cmd.Window.SetContent(t)
 	}

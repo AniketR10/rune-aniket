@@ -18,8 +18,9 @@ type MuxConn interface {
 }
 
 type MuxServer interface {
-	Serve(lis net.Listener) error
+	Serve(context.Context, net.Listener) error
 	Registrar() grpc.ServiceRegistrar
+	Addr() net.Addr
 	Stop()
 }
 
@@ -27,9 +28,15 @@ type MuxServer interface {
 type MuxBroker interface {
 	// NextId returns the next id to be used to Serve/Dial.
 	// The returned value must always be > 0.
+	/* deprecated */
 	NextId() uint32
 	Accept(id uint32) (net.Listener, error)
 	Dial(ID uint32) (conn MuxConn, err error)
 	Cleanup(ID uint32) error
+	/* end of deprecated */
+
+	NewChannel(tags ...string) (net.Listener, error)
+	DialChannel(string) (MuxConn, error)
+
 	Close() error
 }

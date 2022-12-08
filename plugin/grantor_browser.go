@@ -17,7 +17,7 @@ type grantorBrowser struct {
 	srv      textpb.BrowserServer
 }
 
-func (g *grantorBrowser) ServeWindow(win browser.Window) (uint64, error) {
+func (g *grantorBrowser) ServeWindow(win browser.Window) (string, error) {
 	if g.srv == nil {
 		// any browser permission will do
 		srv, ok := g.g.Grant(g.pluginID, PermissionBrowserWindowManager)
@@ -26,7 +26,7 @@ func (g *grantorBrowser) ServeWindow(win browser.Window) (uint64, error) {
 			// to bubble it up. This ensures that text.Commands are still
 			// able to be dispatched to command handlers even if browser
 			// permissions are not required nor granted.
-			return 0, nil
+			return "", nil
 		}
 		g.srv = srv.(browserResourcePermissionServer).server
 	}

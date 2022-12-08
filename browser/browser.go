@@ -1,9 +1,11 @@
 package browser
 
 import (
+	"context"
 	"io"
 
 	"unstable.build/go-tui"
+	browserapi "unstable.build/go-tui/api/browser"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/term"
@@ -26,31 +28,27 @@ type Floating interface {
 // Window is the interface that represents
 // a closeable window in a WindowManager.
 type Window interface {
+	// SetContent sets the content of this window to the given handler.
 	SetContent(Handler) error
-	Content() (Handler, error)
+
 	// Focus returns whether this window is in focus.
 	Focus() (bool, error)
 
-	// Close closes the window.
-	Close() error
+	// Close closes the window. This method is idempotent.
+	Close(context.Context) error
 
-	// used to cache windows and so avoid leaks
-	// when same client is requesting via Focus()
-	// the same window over and over.
-	id() uint64
-	onWindowClosed(fn func())
+	// Content returns the content of this window.
+	Content() (Handler, error)
+
+	// OnWindowClosed can be used to install on close callbacks.
+	OnWindowClosed(fn func(context.Context))
+
+	// ID is the window identifier.
+	ID() uint64
+
+	// Closed returns true if this window has already been closed.
+	Closed() bool
 }
-
-// Orientation represents a window orientation.
-type Orientation uint8
-
-const (
-	OrientationDefault Orientation = iota
-	OrientationTop
-	OrientationBottom
-	OrientationLeft
-	OrientationRight
-)
 
 // WindowManager is the interface that groups tile
 // window management methods.
@@ -64,7 +62,7 @@ type WindowManager interface {
 
 	// Split splits the current window in focus in two, and installs
 	// Handler in the new window.
-	Split(Orientation, Window, Handler) (Window, error)
+	Split(browserapi.Orientation, Window, Handler) (Window, error)
 
 	// Floating creates a new floating window at coordinates,
 	// with static width and height.
@@ -73,13 +71,17 @@ type WindowManager interface {
 	// Bar creates a status bar with Orientation and Handler.
 	// Bars differ from Split and Floating windows in that they can't
 	// be in focus and can only receive mouse events.
-	Bar(Orientation, tui.Handler) error
+	Bar(browserapi.Orientation, tui.Handler) error
 
 	// Tab creates a new tab with h and returns a handle that can be
 	// used with the rest of methods that take a browser.Handler.
 	// URI is used to uniquely identify a tab and name is used as a label
 	// to display it in the tab bar.
 	Tab(uri workspace.URI, name string, h Handler) (Handler, error)
+
+	// Window returns a window with the given window ID or returns false
+	// if now window with that ID exists.
+	Window(uint64) (Window, bool)
 }
 
 // Messenger is the interface that wraps methods to display
@@ -91,6 +93,7 @@ type Messenger interface {
 // ResourceOpener is the interface that wraps the method Open.
 type ResourceOpener interface {
 	Open(resource workspace.URI) (Handler, error)
+	Resource(workspace.URI) (Handler, bool)
 }
 
 // EventPublisher is the interface that wraps the method Interrupt.

@@ -12,7 +12,7 @@ const errMsg = "this Handler is a token handler that cannot be used directly"
 // can take the result of an browser.Open type of requests and pass it to Split* or SetContent
 // type of responses.
 type Token struct {
-	ID uint64
+	ID string
 }
 
 // Handle panics if called. This tui.Handler implementation is symbolic.

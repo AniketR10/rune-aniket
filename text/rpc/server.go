@@ -23,7 +23,7 @@ var (
 
 // BrowserServer abstracts serving windows.
 type BrowserServer interface {
-	ServeWindow(win browser.Window) (uint64, error)
+	ServeWindow(win browser.Window) (string, error)
 }
 
 // Server serves an Editor over GRPC.
@@ -72,8 +72,7 @@ func (s *serverEventHandler) Handle(ctx context.Context, ev text.Event) bool {
 			s.s.log(log.WarnLevel, "%s", err)
 			return true
 		}
-		token := browser.Token{ID: uint64(brokerID)}
-		ev.Resource = Token{Token: token, resource: ev.URI}
+		ev.Resource = Token{ID: uint64(brokerID), resource: ev.URI}
 	}
 
 	// do not hold mutex while waiting for I/O

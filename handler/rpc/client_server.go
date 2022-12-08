@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"runtime"
 	"time"
 
 	"github.com/ernestrc/blue/logging"
@@ -159,6 +160,7 @@ func (c *Client) handle(ev term.Event) (exit, handled bool, err error) {
 
 	req := HandleRequest{Event: &protoEv, Draw: &drawReq}
 	resp, err := c.client.Handle(ctx, &req)
+	runtime.KeepAlive(c)
 	if err != nil {
 		c.collectError("Handle", err)
 		return c.resp.GetQuit(), false, err
@@ -198,6 +200,7 @@ func (c *Client) Man() tui.Manual {
 	req := ManRequest{}
 
 	resp, err := c.client.Man(ctx, &req)
+	runtime.KeepAlive(c)
 	if err != nil {
 		c.collectError("Man", err)
 		return tui.Manual{}
@@ -226,6 +229,7 @@ func (c *Client) Close() error {
 
 	req := CloseRequest{}
 	_, err := c.client.Close(ctx, &req)
+	runtime.KeepAlive(c)
 	if err != nil {
 		return fmt.Errorf("proto.HandlerClient.Close: %w", err)
 	}

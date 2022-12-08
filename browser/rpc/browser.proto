@@ -11,7 +11,7 @@ message OpenResourceRequest {
 }
 
 message OpenResourceResponse {
-	uint64 handler_id = 1;
+	string channel_id = 1;
 }
 
 message SetMessageRequest {
@@ -34,17 +34,18 @@ enum Orientation {
 }
 
 message SplitRequest {
-	uint64 handler_id = 1;
+	string channel_id = 1;
 	Orientation orientation = 2;
 	uint64 window_id = 3;
 }
 
 message SplitResponse {
-	uint64 window_id = 1;
+	string window_channel_id = 1;
+	uint64 window_id = 2;
 }
 
 message BarRequest {
-	uint64 handler_id = 1;
+	string channel_id = 1;
 	Orientation orientation = 2;
 }
 
@@ -52,23 +53,24 @@ message BarResponse {
 }
 
 message FloatingWindowRequest {
-	uint64 handler_id = 1;
+	string channel_id = 1;
 	term.Coordinates offset = 2;
 	uint32 alignment = 3;
 }
 
 message FloatingWindowResponse {
-	uint64 window_id = 1;
+	string window_channel_id = 1;
+	uint64 window_id = 2;
 }
 
 message TabRequest {
-	uint64 handler_id = 1;
+	string channel_id = 1;
     string resource_id = 2;
     string resource_name = 3;
 }
 
 message TabResponse {
-	uint64 tab_handler_id = 1;
+	string channel_id = 1;
 }
 
 message FocusRequest {
@@ -79,7 +81,8 @@ message SetFocusRequest {
 }
 
 message FocusResponse {
-	uint64 window_id = 1;
+	string window_channel_id = 1;
+	uint64 window_id = 2;
 }
 
 message PublishRequest {
@@ -117,7 +120,7 @@ message WindowCloseResponse {
 }
 
 message WindowSetContentRequest {
-	uint64 handler_id = 1;
+	string channel_id = 1;
 }
 
 message WindowSetContentResponse {
@@ -127,7 +130,7 @@ message WindowContentRequest {
 }
 
 message WindowContentResponse {
-	uint64 handler_id = 1;
+	string channel_id = 1;
 }
 
 service Window {

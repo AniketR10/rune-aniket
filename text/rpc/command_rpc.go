@@ -6,6 +6,7 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui/browser"
+	browserpb "unstable.build/go-tui/browser/rpc"
 	"unstable.build/go-tui/proto"
 	termpb "unstable.build/go-tui/term/rpc"
 	"unstable.build/go-tui/text"
@@ -53,19 +54,21 @@ func (c *commandClient) HandleCommand(ctx context.Context, cmd text.Command) (
 	cursorContent.FromModel(cmd.Cursor.Content)
 	cursorWindow.FromModel(cmd.Cursor.Window)
 
-	win, err := c.s.browser.ServeWindow(cmd.Window)
+	adapter := cmd.Window.(browser.WindowToAPIWindow)
+	channelID, err := c.s.browser.ServeWindow(adapter.Win)
 	if err != nil {
 		return false, err
 	}
 
 	req := HandleCommandRequest{
-		Name:          cmd.Name,
-		Args:          cmd.Args,
-		ResourceName:  uri,
-		ResourceId:    resourceID,
-		CursorContent: &cursorContent,
-		CursorWindow:  &cursorWindow,
-		WindowId:      uint32(win),
+		Name:            cmd.Name,
+		Args:            cmd.Args,
+		ResourceName:    uri,
+		ResourceId:      resourceID,
+		CursorContent:   &cursorContent,
+		CursorWindow:    &cursorWindow,
+		WindowId:        adapter.Win.ID(),
+		WindowChannelId: channelID,
 	}
 
 	// do not block waiting for I/O
@@ -86,10 +89,10 @@ func (c *commandClient) Close() error {
 type commandServer struct {
 	UnimplementedCommandHandlerServer
 	h       text.CommandHandler
-	browser *browser.Client
+	browser *browserpb.Client
 }
 
-func newCommandServer(h text.CommandHandler, bc *browser.Client) *commandServer {
+func newCommandServer(h text.CommandHandler, bc *browserpb.Client) *commandServer {
 	ret := new(commandServer)
 	ret.h = h
 	ret.browser = bc
@@ -105,7 +108,7 @@ func (s *commandServer) commandFromProto(e *text.Command, pe *HandleCommandReque
 	}
 	if pe.ResourceId != 0 {
 		e.Resource = Token{
-			Token:    browser.Token{ID: uint64(pe.GetResourceId())},
+			ID:       uint64(pe.GetResourceId()),
 			resource: e.URI,
 		}
 	}
@@ -113,7 +116,7 @@ func (s *commandServer) commandFromProto(e *text.Command, pe *HandleCommandReque
 	e.Cursor.Content = pe.GetCursorContent().ToModel()
 	e.Args = pe.GetArgs()
 	e.Name = pe.GetName()
-	e.Window, err = s.browser.DialWindow(uint64(pe.GetWindowId()))
+	e.Window, err = s.browser.DialWindow(pe.GetWindowChannelId(), uint64(pe.GetWindowId()))
 	return err
 }
 

@@ -9,7 +9,8 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui"
-	"unstable.build/go-tui/browser"
+	browserapi "unstable.build/go-tui/api/browser"
+	browserplugin "unstable.build/go-tui/api/browser/plugin"
 	"unstable.build/go-tui/config"
 	"unstable.build/go-tui/plugin"
 	"unstable.build/go-tui/proto"
@@ -21,12 +22,12 @@ type cmdSplitHandler struct {
 	config CommandSplitHandlerConfig
 
 	broker  proto.MuxBroker
-	wm      browser.WindowManager
+	wm      browserapi.WindowManager
 	ed      text.Editor
 	pconfig config.Config
 	grants  []plugin.Grant
 	h       tui.Handler
-	win     browser.Window
+	win     browserapi.Window
 }
 
 func (t *cmdSplitHandler) Connected(broker proto.MuxBroker, config config.Config) {
@@ -96,7 +97,7 @@ func (t *cmdSplitHandler) exitClean() error {
 	return nil
 }
 
-func (t *cmdSplitHandler) openSplitWindow(focusWin browser.Window) error {
+func (t *cmdSplitHandler) openSplitWindow(focusWin browserapi.Window) error {
 	t.mu.Lock()
 	win := t.win
 	wm := t.wm
@@ -116,7 +117,7 @@ func (t *cmdSplitHandler) openSplitWindow(focusWin browser.Window) error {
 		return err
 	}
 
-	win, err = t.wm.Split(t.config.SplitOrientation, focusWin, browser.FuncHandler(h, t.exitClean))
+	win, err = t.wm.Split(t.config.SplitOrientation, focusWin, browserapi.FuncHandler(h, t.exitClean))
 	if err != nil {
 		err = fmt.Errorf("wm.Split: %s", err)
 		return err
@@ -151,7 +152,7 @@ func (t *cmdSplitHandler) PermissionGranted(grants []plugin.Grant) {
 	for _, g := range grants {
 		switch g.Permission {
 		case plugin.PermissionBrowserWindowManager:
-			t.wm, err = plugin.WindowManager(g.Token, t.broker)
+			t.wm, err = browserplugin.WindowManager(g.Token, t.broker)
 		case plugin.PermissionEditor:
 			t.ed, err = plugin.Editor(g.Token, t.broker)
 			if err == nil && t.config.Command != "" {
@@ -189,14 +190,14 @@ type CommandSplitHandlerConfig struct {
 	Command string
 
 	// SplitOrientatio of the new split window.
-	SplitOrientation browser.Orientation
+	SplitOrientation browserapi.Orientation
 
 	// Handler is the constructor used to install a handler
 	// on the split window. The focus argument represents
 	// the window in focus when cmd event was fired.
 	// If returned Handler satisfies io.Closer, then Close will be called
 	// when split window is closed.
-	Handler func([]plugin.Grant, proto.MuxBroker, browser.Window,
+	Handler func([]plugin.Grant, proto.MuxBroker, browserapi.Window,
 		config.Config) (tui.Handler, error)
 
 	// Permissions to be requested for Handler.

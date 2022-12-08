@@ -13,9 +13,9 @@ type interruptWindow struct {
 	interruptDraw func()
 }
 
-func interruptWindowServer(s *browser.Server, win browser.Window) browserpb.WindowServer {
+func interruptWindowServer(s *browserpb.Server, win browser.Window) browserpb.WindowServer {
 	return &interruptWindow{
-		srv:           browser.NewWindowServer(s, win),
+		srv:           browserpb.NewWindowServer(s, win),
 		interruptDraw: interrupt,
 	}
 }

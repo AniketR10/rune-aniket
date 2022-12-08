@@ -8,7 +8,7 @@ import (
 	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui"
-	"unstable.build/go-tui/browser"
+	browserapi "unstable.build/go-tui/api/browser"
 	termutil "unstable.build/go-tui/cmd/plugin_terminal/util"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/plugin"
@@ -18,10 +18,10 @@ import (
 )
 
 type emulator struct {
-	wm browser.WindowManager
+	wm browserapi.WindowManager
 	wp workspace.API
-	p  browser.EventPublisher
-	m  browser.Messenger
+	p  browserapi.EventPublisher
+	m  browserapi.Messenger
 
 	clipboard         plugin.ClipboardRegister
 	mouse             *text.Mouse
@@ -40,8 +40,8 @@ type emulator struct {
 }
 
 func newEmulator(
-	wm browser.WindowManager, wp workspace.API,
-	p browser.EventPublisher, m browser.Messenger,
+	wm browserapi.WindowManager, wp workspace.API,
+	p browserapi.EventPublisher, m browserapi.Messenger,
 	c plugin.ClipboardRegister,
 	shell string, initialCmd string,
 	defAttr, selectionAttr term.Attributes,
@@ -56,8 +56,8 @@ func newEmulator(
 }
 
 func (e *emulator) init(
-	wm browser.WindowManager, wp workspace.API,
-	p browser.EventPublisher, m browser.Messenger,
+	wm browserapi.WindowManager, wp workspace.API,
+	p browserapi.EventPublisher, m browserapi.Messenger,
 	c plugin.ClipboardRegister,
 	shell string, initialCmd string,
 	defAttr, selectionAttr term.Attributes,

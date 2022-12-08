@@ -12,7 +12,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
-	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/text"
 )
 
@@ -57,7 +56,7 @@ func TestEventHandlerRPC(t *testing.T) {
 	ev := text.Event{
 		Type: text.EventTypeFlush,
 		URI:  uri,
-		Resource: Token{Token: browser.Token{ID: 1},
+		Resource: Token{ID: 1,
 			resource: uri},
 		Content: content,
 	}

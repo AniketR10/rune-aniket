@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"runtime"
 	"sync"
 	"time"
 
@@ -169,9 +170,6 @@ func (s *clipboardServer) Close() (ret error) {
 		ret = multierr.Append(ret, err)
 	}
 
-	// reference cycle
-	s.c = nil
-
 	return
 }
 
@@ -243,6 +241,7 @@ func newClipboardClient(
 	c := pluginpb.NewClipboardRegisterClient(cc)
 	ret.remoteRegister = &clipboardRegisterClient{c: c, cc: cc}
 
+	runtime.SetFinalizer(ret, func(c *clipboardClient) { c.Close() })
 	return ret
 }
 
@@ -266,11 +265,15 @@ func (c *clipboardClient) register(registerID string) (ClipboardRegister, error)
 }
 
 func (c *clipboardClient) Paste() (string, time.Time, error) {
-	return c.remoteRegister.Paste()
+	ret, t, err := c.remoteRegister.Paste()
+	runtime.KeepAlive(c)
+	return ret, t, err
 }
 
 func (c *clipboardClient) Copy(data string, ts time.Time) error {
-	return c.remoteRegister.Copy(data, ts)
+	err := c.remoteRegister.Copy(data, ts)
+	runtime.KeepAlive(c)
+	return err
 }
 
 func (c *clipboardClient) SetRegister(registerID string, r ClipboardRegister) error {
@@ -286,6 +289,7 @@ func (c *clipboardClient) SetRegister(registerID string, r ClipboardRegister) er
 	}
 	req := pluginpb.SetRegisterRequest{HandlerId: uint64(handlerID), RegisterId: registerID}
 	_, err = c.c.SetRegister(ctx, &req)
+	runtime.KeepAlive(c)
 	if err != nil {
 		_ = cc.Close()
 		return err
@@ -299,15 +303,20 @@ func (c *clipboardClient) SetRegister(registerID string, r ClipboardRegister) er
 	return nil
 }
 
-func (c *clipboardClient) Close() error {
+func (c *clipboardClient) Close() (ret error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	for _, cc := range c.registers {
-		_ = cc.Close()
+		if err := cc.Close(); err != nil {
+			ret = multierr.Append(ret, err)
+		}
 	}
 	if closer, ok := c.cc.(io.Closer); ok {
-		return closer.Close()
+		if err := closer.Close(); err != nil {
+			ret = multierr.Append(ret, err)
+		}
 	}
-	return nil
+	runtime.SetFinalizer(c, nil)
+	return ret
 }

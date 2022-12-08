@@ -1,7 +1,7 @@
 package main
 
 import (
-	"unstable.build/go-tui/browser"
+	browserapi "unstable.build/go-tui/api/browser"
 	termutil "unstable.build/go-tui/cmd/plugin_terminal/util"
 )
 
@@ -9,13 +9,13 @@ var _ termutil.WindowManipulator = (*windowManipulator)(nil)
 
 type windowManipulator struct {
 	width, height int
-	wm            browser.WindowManager
-	m             browser.Messenger
+	wm            browserapi.WindowManager
+	m             browserapi.Messenger
 	title         string
 }
 
 func newWindowManipulator(
-	wm browser.WindowManager, m browser.Messenger,
+	wm browserapi.WindowManager, m browserapi.Messenger,
 ) *windowManipulator {
 	return &windowManipulator{wm: wm}
 }

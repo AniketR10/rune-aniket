@@ -40,6 +40,18 @@ func (b loggingBroker) Cleanup(ID uint32) (err error) {
 	return err
 }
 
+func (b loggingBroker) NewChannel(tags ...string) (lis net.Listener, err error) {
+	lis, err = b.root.NewChannel(tags...)
+	b.logger.Tracef("loggingBroker: NewChannel(%v): %v %v", tags, lis, err)
+	return
+}
+
+func (b loggingBroker) DialChannel(addr string) (conn MuxConn, err error) {
+	conn, err = b.root.DialChannel(addr)
+	b.logger.Tracef("loggingBroker: DialChannel(%s): %v %v", addr, conn, err)
+	return
+}
+
 func (b loggingBroker) Close() error {
 	err := b.root.Close()
 	b.logger.Tracef("loggingBroker: Close(): %v", err)

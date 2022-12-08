@@ -1,4 +1,4 @@
-package browser
+package test
 
 import (
 	"unstable.build/go-tui/handler"

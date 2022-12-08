@@ -1,0 +1,196 @@
+package rpc
+
+import (
+	"errors"
+	"fmt"
+	"testing"
+
+	gomock "github.com/golang/mock/gomock"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/goleak"
+	"unstable.build/go-tui/proto"
+	"unstable.build/go-tui/term"
+	termpb "unstable.build/go-tui/term/rpc"
+	"unstable.build/go-tui/workspace"
+)
+
+var (
+	key1 = term.Event{Type: term.EventKey, Key: term.KeyCtrlBackslash}
+	key2 = term.Event{Type: term.EventKey,
+		Mod: term.ModAlt, Key: term.KeyBackspace}
+	key3      = term.Event{Type: term.EventMouse, MouseX: 10, MouseY: 11111}
+	protoKey1 = termpb.Event{
+		Type: termpb.Event_TypeKey,
+		Key:  termpb.Event_Ctrl4,
+	}
+	protoKey2 = termpb.Event{
+		Type: termpb.Event_TypeKey,
+		Key:  termpb.Event_CtrlH,
+		Mod:  termpb.Event_Alt,
+	}
+	protoKey3 = termpb.Event{
+		Type:   termpb.Event_TypeMouse,
+		MouseX: 10,
+		MouseY: 11111,
+	}
+)
+
+func assertNoLeaks(t *testing.T) {
+	ignoreOpenCensus := goleak.IgnoreTopFunction("go.opencensus.io/stats/view.(*worker).start")
+	goleak.VerifyNone(t, ignoreOpenCensus)
+}
+
+func newMockedClient(ctrl *gomock.Controller) (
+	client *Client,
+	mockCC *proto.MockClientConnInterface,
+	mockMux *proto.MockMuxBroker,
+) {
+	mockCC = proto.NewMockClientConnInterface(ctrl)
+	mockMux = proto.NewMockMuxBroker(ctrl)
+	client = NewClient(mockMux, mockCC)
+	return
+}
+
+func expectInvokeRPC(mockCC *proto.MockClientConnInterface) {
+	mockCC.EXPECT().
+		Invoke(gomock.Any(), gomock.Any(),
+			gomock.Any(), gomock.Any()).
+		Times(1).
+		Return(nil)
+}
+
+func expectInvokeError(mockCC *proto.MockClientConnInterface) {
+	mockCC.EXPECT().
+		Invoke(gomock.Any(), gomock.Any(),
+			gomock.Any(), gomock.Any()).
+		Times(1).
+		Return(errors.New("woopsie"))
+}
+
+func assertInvokeError(t *testing.T, err error) {
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "woopsie")
+}
+
+func TestClientSetMessage(t *testing.T) {
+	t.Run("invokes the pbclient rpc", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		client, mockCC, _ := newMockedClient(ctrl)
+
+		myMsg, arg1, arg2 := "oh la la: %s %d", "obla di obla da", 5
+		in := &SetMessageRequest{Msg: fmt.Sprintf(myMsg, arg1, arg2)}
+		out := new(SetMessageResponse)
+
+		mockCC.EXPECT().
+			Invoke(gomock.Any(),
+				gomock.Eq("/browser.Messenger/SetMessage"),
+				gomock.Eq(in), gomock.Eq(out)).
+			Times(1)
+
+		err := client.SetMessage(myMsg, arg1, arg2)
+		require.NoError(t, err)
+	})
+	t.Run("bubbles up rpc error", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		client, mockCC, _ := newMockedClient(ctrl)
+
+		expectInvokeError(mockCC)
+
+		err := client.SetMessage("")
+		assertInvokeError(t, err)
+	})
+}
+
+func expectResourceOpen(mockCC *proto.MockClientConnInterface, myResource workspace.URI) {
+	in := &OpenResourceRequest{Resource: myResource.String()}
+	out := new(OpenResourceResponse)
+	mockCC.EXPECT().
+		Invoke(gomock.Any(),
+			gomock.Eq("/browser.ResourceOpener/Open"),
+			gomock.Eq(in), gomock.Eq(out)).
+		Times(1)
+}
+
+func TestClientOpen(t *testing.T) {
+	t.Run("invokes the pbclient rpc", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		client, mockCC, _ := newMockedClient(ctrl)
+
+		myResource, err := workspace.ParseURI("file:///fjkelwjfeklw")
+		require.NoError(t, err)
+
+		expectResourceOpen(mockCC, myResource)
+
+		_, err = client.Open(myResource)
+		require.NoError(t, err)
+	})
+
+	t.Run("bubbles up rpc error", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		client, mockCC, _ := newMockedClient(ctrl)
+
+		expectInvokeError(mockCC)
+
+		_, err := client.Open(workspace.URI{})
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "woopsie")
+	})
+}
+
+func TestClientPublish(t *testing.T) {
+	tsuite := []struct {
+		rpc string
+		fn  func(*Client) error
+		ev  *termpb.Event
+	}{
+		{"Interrupt", (*Client).Interrupt, &termpb.Event{Type: termpb.Event_TypeInterrupt}},
+		{"PublishEventNone", (*Client).PublishEventNone, &termpb.Event{Type: termpb.Event_TypeNone}},
+	}
+	for _, tcase := range tsuite {
+		t.Run(fmt.Sprintf("%s bubbles up rpc error and so stops event handler resources", tcase.rpc),
+			func(t *testing.T) {
+				ctrl := gomock.NewController(t)
+				defer ctrl.Finish()
+
+				client, mockCC, _ := newMockedClient(ctrl)
+				mockCC.EXPECT().
+					Invoke(gomock.Any(),
+						gomock.Eq("/browser.EventPublisher/Publish"),
+						gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(errors.New("uRich"))
+
+				err := tcase.fn(client)
+				require.Error(t, err)
+			})
+
+		t.Run(fmt.Sprintf("%s sends interrupt event publish request to server", tcase.rpc),
+			func(t *testing.T) {
+				ctrl := gomock.NewController(t)
+				defer ctrl.Finish()
+
+				client, mockCC, _ := newMockedClient(ctrl)
+				ev := tcase.ev
+				in := &PublishRequest{Ev: ev}
+				out := new(PublishResponse)
+
+				mockCC.EXPECT().
+					Invoke(gomock.Any(),
+						gomock.Eq("/browser.EventPublisher/Publish"),
+						gomock.Eq(in), gomock.Eq(out)).
+					Times(1)
+
+				err := tcase.fn(client)
+				require.NoError(t, err)
+			})
+	}
+}

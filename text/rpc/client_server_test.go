@@ -14,8 +14,10 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"unstable.build/go-tui"
+	browserapi "unstable.build/go-tui/api/browser"
 	"unstable.build/go-tui/browser"
 	browserpb "unstable.build/go-tui/browser/rpc"
+	browsertest "unstable.build/go-tui/browser/test"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/proto"
@@ -60,12 +62,12 @@ func setupIntTest(
 }
 
 func setupWmIntTest(
-	t *testing.T, broker proto.MuxBroker, s *browser.Server,
-) (*browser.Client, func()) {
+	t *testing.T, broker proto.MuxBroker, s *browserpb.Server,
+) (*browserpb.Client, func()) {
 	conn, closeFn := doSetupIntTest(t, broker, func(grpcServer *grpc.Server) {
 		browserpb.RegisterWindowManagerServer(grpcServer, s)
 	})
-	client := browser.NewClient(broker, conn)
+	client := browserpb.NewClient(broker, conn)
 	return client, func() {
 		client.Close()
 		closeFn()
@@ -369,14 +371,14 @@ func TestClientServerIntegration(t *testing.T) {
 
 func TestRPCTab(t *testing.T) {
 	var closeFns []func()
-	testTabIntegration(t, func(ed text.Editor, mu *sync.Mutex) (*text.Component, browser.WindowManager, error) {
+	testTabIntegration(t, func(ed text.Editor, mu *sync.Mutex) (*text.Component, browserapi.WindowManager, error) {
 		c, err := newTestComponentErr(ed)
 		if err != nil {
 			return nil, nil, err
 		}
 
 		b := proto.NewDialBroker()
-		s := browser.NewServer(b, c, mu)
+		s := browserpb.NewServer(b, c, mu)
 
 		client, closeFn := setupWmIntTest(t, b, s)
 		closeFns = append(closeFns, func() {
@@ -407,7 +409,7 @@ func TestRPCRegister(t *testing.T) {
 		}
 
 		b := proto.NewDialBroker()
-		s := NewServer(b, c, mu, browser.NewServer(b, c, mu))
+		s := NewServer(b, c, mu, browserpb.NewServer(b, c, mu))
 
 		client, closeFn := setupIntTest(t, b, s)
 		closeFns = append(closeFns, func() {
@@ -455,7 +457,7 @@ func resetLocationList(l text.LocationList) {
 }
 
 func testTabIntegration(t *testing.T,
-	constructor func(ed text.Editor, mu *sync.Mutex) (*text.Component, browser.WindowManager, error)) {
+	constructor func(ed text.Editor, mu *sync.Mutex) (*text.Component, browserapi.WindowManager, error)) {
 	t.Run("switches to a tab upon call to SetContent", func(t *testing.T) {
 		cases := []testutil.HandlerSequenceTestCase{
 			{"",
@@ -480,12 +482,12 @@ func testTabIntegration(t *testing.T,
 			require.NoError(t, err)
 			resource2, err := workspace.ParseURI("file:///b")
 			require.NoError(t, err)
-			b1 := browser.NewTestHandler()
+			b1 := browsertest.NewTestHandler()
 			b1.Ch = '$'
 			_, err = wm.Tab(resource1, "$$", b1)
 			require.NoError(t, err)
 
-			b2 := browser.NewTestHandler()
+			b2 := browsertest.NewTestHandler()
 			b2.Ch = '#'
 			t2, err := wm.Tab(resource2, "##", b2)
 			require.NoError(t, err)
@@ -589,7 +591,13 @@ func testRegister(t *testing.T,
 		mu.Lock()
 		win, err := c.Focus()
 		require.NoError(t, err)
-		cmd := text.Command{Resource: h1, URI: resource1, Name: myCmd, Args: myArgs, Window: win}
+		cmd := text.Command{
+			Resource: h1,
+			URI:      resource1,
+			Name:     myCmd,
+			Args:     myArgs,
+			Window:   browser.WindowToAPIWindow{Win: win},
+		}
 		ok, err := c.DispatchCommand(cmd)
 		require.NoError(t, err)
 		assert.True(t, ok)
@@ -608,9 +616,9 @@ func testRegister(t *testing.T,
 }
 
 type testBrowserServer struct {
-	windowID uint64
+	windowChannelID string
 }
 
-func (t testBrowserServer) ServeWindow(win browser.Window) (uint64, error) {
-	return t.windowID, nil
+func (t testBrowserServer) ServeWindow(win browser.Window) (string, error) {
+	return t.windowChannelID, nil
 }

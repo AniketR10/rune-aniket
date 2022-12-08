@@ -9,7 +9,8 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui"
-	"unstable.build/go-tui/browser"
+	browserapi "unstable.build/go-tui/api/browser"
+	browserplugin "unstable.build/go-tui/api/browser/plugin"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/config"
@@ -52,8 +53,8 @@ type fileInfo struct {
 }
 
 type fileBarEditorHandler struct {
-	wm   browser.WindowManager
-	p    browser.EventPublisher
+	wm   browserapi.WindowManager
+	p    browserapi.EventPublisher
 	cwd  workspace.URI
 	exit uint32
 	ch   chan text.Event
@@ -126,17 +127,17 @@ func newFileBarEditorHandler(
 	for _, grant := range grants {
 		switch grant.Permission {
 		case plugin.PermissionBrowserEventPublisher:
-			ret.p, err = plugin.EventPublisher(grant.Token, broker)
+			ret.p, err = browserplugin.EventPublisher(grant.Token, broker)
 			if err != nil {
 				return nil, err
 			}
 		case plugin.PermissionBrowserWindowManager:
-			ret.wm, err = plugin.WindowManager(grant.Token, broker)
+			ret.wm, err = browserplugin.WindowManager(grant.Token, broker)
 			if err != nil {
 				return nil, err
 			}
 			comp := component.Sync(&ret.bar, &ret.bar.comp)
-			err = ret.wm.Bar(browser.OrientationBottom, handler.Nop(comp))
+			err = ret.wm.Bar(browserapi.OrientationBottom, handler.Nop(comp))
 			if err != nil {
 				return nil, err
 			}

@@ -20,7 +20,8 @@ import (
 	"github.com/ernestrc/blue/encoding/yaml"
 	"github.com/ernestrc/blue/issue"
 	log "github.com/sirupsen/logrus"
-	"unstable.build/go-tui/browser"
+	browserapi "unstable.build/go-tui/api/browser"
+	browserplugin "unstable.build/go-tui/api/browser/plugin"
 	"unstable.build/go-tui/config"
 	"unstable.build/go-tui/plugin"
 	"unstable.build/go-tui/proto"
@@ -63,9 +64,9 @@ type issuesGrantee struct {
 	svc       *cache.Service[issue.ReportDocument]
 	tracker   issue.Tracker
 	marshaler encoding.Marshaler
-	m         browser.Messenger
-	o         browser.ResourceOpener
-	wm        browser.WindowManager
+	m         browserapi.Messenger
+	o         browserapi.ResourceOpener
+	wm        browserapi.WindowManager
 	sm        workspace.SchemeManager
 	s         document.Service
 
@@ -194,7 +195,7 @@ func (e *issuesGrantee) PermissionGranted(grants []plugin.Grant) {
 	for _, g := range grants {
 		switch g.Permission {
 		case plugin.PermissionBrowserWindowManager:
-			wm, err := plugin.WindowManager(g.Token, e.broker)
+			wm, err := browserplugin.WindowManager(g.Token, e.broker)
 			if err != nil {
 				log.Warnf("Could not acquire browser window manager: %v. "+
 					"Will not be able to create reports.", err)
@@ -202,7 +203,7 @@ func (e *issuesGrantee) PermissionGranted(grants []plugin.Grant) {
 			}
 			e.wm = wm
 		case plugin.PermissionBrowserResourceOpener:
-			o, err := plugin.ResourceOpener(g.Token, e.broker)
+			o, err := browserplugin.ResourceOpener(g.Token, e.broker)
 			if err != nil {
 				log.Warnf("Could not acquire browser resource opener: %v. "+
 					"Will not be able to create reports.", err)
@@ -210,7 +211,7 @@ func (e *issuesGrantee) PermissionGranted(grants []plugin.Grant) {
 			}
 			e.o = o
 		case plugin.PermissionBrowserMessenger:
-			m, err := plugin.Messenger(g.Token, e.broker)
+			m, err := browserplugin.Messenger(g.Token, e.broker)
 			if err != nil {
 				log.Warnf("Could not acquire browser messenger: %v. "+
 					"Will not be able to report errors to user.", err)
@@ -408,7 +409,7 @@ func (e *issuesGrantee) createOrUpdateIssue(ctx context.Context, ev text.Event) 
 }
 
 func (e *issuesGrantee) openIssueTemplate(
-	ctx context.Context, win browser.Window, template []byte, templateName string,
+	ctx context.Context, win browserapi.Window, template []byte, templateName string,
 ) (bool, error) {
 	if e.o == nil || e.wm == nil {
 		return false, errors.New("browser permissions necessary to create an issue were not granted")
@@ -441,7 +442,7 @@ func (e *issuesGrantee) openIssueTemplate(
 	}
 
 	err = win.SetContent(h)
-	if err != nil && !errors.Is(err, browser.ErrTabNotFree) {
+	if err != nil && !errors.Is(err, browserapi.ErrTabNotFree) {
 		_ = h.Close()
 		_ = os.Remove(f.Name())
 		return false, fmt.Errorf("set focus window content: %v", err)

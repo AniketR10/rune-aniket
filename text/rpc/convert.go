@@ -3,7 +3,6 @@ package rpc
 import (
 	"fmt"
 
-	"unstable.build/go-tui/browser"
 	termpb "unstable.build/go-tui/term/rpc"
 	"unstable.build/go-tui/text"
 )
@@ -49,7 +48,7 @@ func fromProto(e *text.Event, pe *EditorEvent) (err error) {
 	}
 	if pe.ResourceId != 0 {
 		e.Resource = Token{
-			Token:    browser.Token{ID: uint64(pe.GetResourceId())},
+			ID:       uint64(pe.GetResourceId()),
 			resource: e.URI,
 		}
 	}

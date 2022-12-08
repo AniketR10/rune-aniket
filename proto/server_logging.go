@@ -1,6 +1,7 @@
 package proto
 
 import (
+	context "context"
 	"net"
 	"time"
 
@@ -9,15 +10,14 @@ import (
 )
 
 type loggingServer struct {
-	srv      *grpc.Server
+	srv      MuxServer
 	quitChan chan struct{}
 }
 
 // LoggingGRPCServer wraps a grpc.Server to provide trace-level logging.
-func LoggingGRPCServer(opts ...grpc.ServerOption) MuxServer {
-	srv := grpc.NewServer(opts...)
+func LoggingGRPCServer(srv MuxServer) MuxServer {
 	ch := make(chan struct{})
-	s := &loggingServer{srv, ch}
+	s := &loggingServer{srv: srv, quitChan: ch}
 	// NOTE: uncomment to debug leaks
 	// go s.monitorLifecycle()
 	return s
@@ -39,14 +39,9 @@ func (s *loggingServer) monitorLifecycle() {
 	}
 }
 
-func (s *loggingServer) GracefulStop() {
-	log.Tracef("LoggingGRPCServer: (%p) GracefulStop() ", s.srv)
-	s.srv.GracefulStop()
-}
-
-func (s *loggingServer) Serve(lis net.Listener) error {
+func (s *loggingServer) Serve(ctx context.Context, lis net.Listener) error {
 	log.Tracef("LoggingGRPCServer: (%p) Serve(Attempt, addr=%s) ", s.srv, lis.Addr().String())
-	err := s.srv.Serve(lis)
+	err := s.srv.Serve(ctx, lis)
 	log.Tracef("LoggingGRPCServer: (%p) Serve(Result, addr=%s): %v", s.srv, lis.Addr().String(), err)
 	return err
 }
@@ -58,6 +53,12 @@ func (s *loggingServer) Stop() {
 }
 
 func (s *loggingServer) Registrar() grpc.ServiceRegistrar {
-	log.Tracef("LoggingGRPCServer: (%p) GRPC() ", s.srv)
-	return s.srv
+	log.Tracef("LoggingGRPCServer: (%p) Registrar() ", s.srv)
+	return s.srv.Registrar()
+}
+
+func (s *loggingServer) Addr() net.Addr {
+	ret := s.srv.Addr()
+	log.Tracef("LoggingGRPCServer: (%p) Addr(): %v ", s.srv, ret)
+	return ret
 }

@@ -1,0 +1,103 @@
+package test
+
+import (
+	"unstable.build/go-tui"
+	browserapi "unstable.build/go-tui/api/browser"
+	"unstable.build/go-tui/browser"
+	"unstable.build/go-tui/component"
+	"unstable.build/go-tui/workspace"
+)
+
+// BrowserFromAPIBrowser wraps a browserapi.Browser and returns
+// a browser.Browser.
+func BrowserFromAPIBrowser(b browserapi.Browser) browser.Browser {
+	return toBrowser{b: b}
+}
+
+type toBrowser struct {
+	b browserapi.Browser
+}
+
+func (b toBrowser) Focus() (browser.Window, error) {
+	win, err := b.b.Focus()
+	if err != nil {
+		return nil, err
+	}
+	return browser.WindowFromAPIWindow{Win: win}, nil
+}
+
+func (b toBrowser) SetFocus(win browser.Window) (browser.Window, error) {
+	var inWin browserapi.Window
+	if a, ok := win.(browser.WindowFromAPIWindow); ok {
+		inWin = a.Win
+	} else {
+		inWin = browser.WindowToAPIWindow{Win: win}
+	}
+	retWin, err := b.b.SetFocus(inWin)
+	if err != nil {
+		return nil, err
+	}
+	return browser.WindowFromAPIWindow{Win: retWin}, nil
+}
+
+func (b toBrowser) Split(
+	o browserapi.Orientation, win browser.Window, h browser.Handler,
+) (browser.Window, error) {
+	var inWin browserapi.Window
+	if a, ok := win.(browser.WindowFromAPIWindow); ok {
+		inWin = a.Win
+	} else {
+		inWin = browser.WindowToAPIWindow{Win: win}
+	}
+	retWin, err := b.b.Split(o, inWin, h)
+	if err != nil {
+		return nil, err
+	}
+	return browser.WindowFromAPIWindow{Win: retWin}, nil
+}
+
+func (b toBrowser) Floating(
+	h browser.Floating, cfg component.FloatingConfig,
+) (browser.Window, error) {
+	retWin, err := b.b.Floating(h, cfg)
+	if err != nil {
+		return nil, err
+	}
+	return browser.WindowFromAPIWindow{Win: retWin}, nil
+}
+
+func (b toBrowser) Bar(o browserapi.Orientation, h tui.Handler) error {
+	return b.b.Bar(o, h)
+}
+
+func (b toBrowser) Tab(uri workspace.URI, name string, h browser.Handler) (browser.Handler, error) {
+	return b.b.Tab(uri, name, h)
+}
+
+func (b toBrowser) Window(id uint64) (browser.Window, bool) {
+	return NopWindow(), true
+}
+
+func (b toBrowser) SetMessage(msg string, args ...interface{}) error {
+	return b.b.SetMessage(msg, args...)
+}
+
+func (b toBrowser) Open(resource workspace.URI) (browser.Handler, error) {
+	return b.b.Open(resource)
+}
+
+func (b toBrowser) Resource(u workspace.URI) (browser.Handler, bool) {
+	return NewTestHandler(), true
+}
+
+func (b toBrowser) Interrupt() error {
+	return b.b.Interrupt()
+}
+
+func (b toBrowser) PublishEventNone() error {
+	return b.b.PublishEventNone()
+}
+
+func (b toBrowser) Close() error {
+	return b.b.Close()
+}

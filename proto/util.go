@@ -13,7 +13,6 @@ import (
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc/connectivity"
 	"google.golang.org/grpc/grpclog"
-	
 )
 
 // ForceCloseResource is a helper function to remove a resource
@@ -78,6 +77,7 @@ func MonitorConnection(
 	}
 }
 
+// DEPRECATED this leaks resources since the addition of Context to Serve.
 // AcceptAndServe calls the underlying broker's AcceptAndServe
 // with a new brokerID, and potentially an instrumented grpc.Server,
 // if and only if the level enabled at logger is Trace.
@@ -91,18 +91,44 @@ func AcceptAndServe(
 		return 0, nil, fmt.Errorf("Accept: %w", err)
 	}
 
-	var srv MuxServer
+	srv := GRPCServer()
 	if log.IsLevelEnabled(log.TraceLevel) {
-		srv = LoggingGRPCServer()
-	} else {
-		srv = GRPCServer()
+		srv = LoggingGRPCServer(srv)
 	}
 
 	register(brokerID, srv)
 
-	go srv.Serve(lis)
+	go srv.Serve(context.Background(), lis)
 
 	return brokerID, srv, nil
+}
+
+// AcceptAndServeChannel calls the underlying broker's NewChannel
+// and calls register before serving new connections. Use context
+// to automatically stop underlying MuxServer when it's no longer needed.
+func AcceptAndServeChannel(
+	ctx context.Context,
+	broker MuxBroker,
+	register func(string, MuxServer),
+	tags ...string,
+) (string, error) {
+	lis, err := broker.NewChannel(tags...)
+	if err != nil {
+		return "", fmt.Errorf("new channel: %w", err)
+	}
+
+	srv := GRPCServer()
+	if log.IsLevelEnabled(log.TraceLevel) {
+		srv = LoggingGRPCServer(srv)
+	}
+
+	channelID := lis.Addr().String()
+
+	register(channelID, srv)
+
+	go srv.Serve(ctx, lis)
+
+	return channelID, nil
 }
 
 // DisableGRPCLogging disables grpc stderr loggers.

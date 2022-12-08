@@ -10,7 +10,7 @@ import (
 	"github.com/ernestrc/blue/iterator"
 	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui"
-	"unstable.build/go-tui/browser"
+	browserapi "unstable.build/go-tui/api/browser"
 	"unstable.build/go-tui/cmd/plugin_fuzzy_file/finder"
 	"unstable.build/go-tui/config"
 	"unstable.build/go-tui/plugin"
@@ -52,7 +52,7 @@ func parseLine(workspace workspace.API, data string) (
 }
 
 func newHandler(grants []plugin.Grant, broker proto.MuxBroker,
-	invokeWindow browser.Window, c config.Config) (tui.Handler, error) {
+	invokeWindow browserapi.Window, c config.Config) (tui.Handler, error) {
 	cmdStr, err := c.GetString("command")
 	if err != nil {
 		if err != config.ErrNotFound {
@@ -76,7 +76,7 @@ func main() {
 	}()
 
 	plugutil.ServeCommandSplitHandler(plugutil.CommandSplitHandlerConfig{
-		SplitOrientation: browser.OrientationBottom,
+		SplitOrientation: browserapi.OrientationBottom,
 		Handler:          newHandler,
 		Permissions:      finder.Permissions(),
 		Command:          "searchLine",

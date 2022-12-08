@@ -141,44 +141,46 @@ func (m *MockMuxServer) EXPECT() *MockMuxServerMockRecorder {
 	return m.recorder
 }
 
-// GRPC mocks base method.
-func (m *MockMuxServer) GRPC() *grpc.Server {
+// Addr mocks base method.
+func (m *MockMuxServer) Addr() net.Addr {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GRPC")
-	ret0, _ := ret[0].(*grpc.Server)
+	ret := m.ctrl.Call(m, "Addr")
+	ret0, _ := ret[0].(net.Addr)
 	return ret0
 }
 
-// GRPC indicates an expected call of GRPC.
-func (mr *MockMuxServerMockRecorder) GRPC() *gomock.Call {
+// Addr indicates an expected call of Addr.
+func (mr *MockMuxServerMockRecorder) Addr() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GRPC", reflect.TypeOf((*MockMuxServer)(nil).GRPC))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Addr", reflect.TypeOf((*MockMuxServer)(nil).Addr))
 }
 
-// GracefulStop mocks base method.
-func (m *MockMuxServer) GracefulStop() {
+// Registrar mocks base method.
+func (m *MockMuxServer) Registrar() grpc.ServiceRegistrar {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "GracefulStop")
+	ret := m.ctrl.Call(m, "Registrar")
+	ret0, _ := ret[0].(grpc.ServiceRegistrar)
+	return ret0
 }
 
-// GracefulStop indicates an expected call of GracefulStop.
-func (mr *MockMuxServerMockRecorder) GracefulStop() *gomock.Call {
+// Registrar indicates an expected call of Registrar.
+func (mr *MockMuxServerMockRecorder) Registrar() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GracefulStop", reflect.TypeOf((*MockMuxServer)(nil).GracefulStop))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Registrar", reflect.TypeOf((*MockMuxServer)(nil).Registrar))
 }
 
 // Serve mocks base method.
-func (m *MockMuxServer) Serve(lis net.Listener) error {
+func (m *MockMuxServer) Serve(arg0 context.Context, arg1 net.Listener) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Serve", lis)
+	ret := m.ctrl.Call(m, "Serve", arg0, arg1)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // Serve indicates an expected call of Serve.
-func (mr *MockMuxServerMockRecorder) Serve(lis interface{}) *gomock.Call {
+func (mr *MockMuxServerMockRecorder) Serve(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Serve", reflect.TypeOf((*MockMuxServer)(nil).Serve), lis)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Serve", reflect.TypeOf((*MockMuxServer)(nil).Serve), arg0, arg1)
 }
 
 // Stop mocks base method.
@@ -272,6 +274,40 @@ func (m *MockMuxBroker) Dial(ID uint32) (MuxConn, error) {
 func (mr *MockMuxBrokerMockRecorder) Dial(ID interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Dial", reflect.TypeOf((*MockMuxBroker)(nil).Dial), ID)
+}
+
+// DialChannel mocks base method.
+func (m *MockMuxBroker) DialChannel(arg0 string) (MuxConn, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DialChannel", arg0)
+	ret0, _ := ret[0].(MuxConn)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// DialChannel indicates an expected call of DialChannel.
+func (mr *MockMuxBrokerMockRecorder) DialChannel(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DialChannel", reflect.TypeOf((*MockMuxBroker)(nil).DialChannel), arg0)
+}
+
+// NewChannel mocks base method.
+func (m *MockMuxBroker) NewChannel(tags ...string) (net.Listener, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{}
+	for _, a := range tags {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "NewChannel", varargs...)
+	ret0, _ := ret[0].(net.Listener)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// NewChannel indicates an expected call of NewChannel.
+func (mr *MockMuxBrokerMockRecorder) NewChannel(tags ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewChannel", reflect.TypeOf((*MockMuxBroker)(nil).NewChannel), tags...)
 }
 
 // NextId mocks base method.

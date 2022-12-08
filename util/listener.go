@@ -4,12 +4,19 @@ import (
 	"io/ioutil"
 	"net"
 	"os"
+	"strings"
 )
 
 // TempUnixListener creates a temp file and exposes it
 // as a unix domain sockets net.Listener.
 func TempUnixListener() (net.Listener, error) {
-	tf, err := ioutil.TempFile("", "plugin")
+	return TempUnixListenerTags("plugin")
+}
+
+// TempUnixListenerTags creates a temp file with the given tags
+// and exposes it as a unix dmain socket net.Listener.
+func TempUnixListenerTags(tags ...string) (net.Listener, error) {
+	tf, err := ioutil.TempFile("", strings.Join(tags, "_"))
 	if err != nil {
 		return nil, err
 	}

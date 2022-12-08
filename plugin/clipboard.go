@@ -3,7 +3,6 @@ package plugin
 import (
 	"errors"
 	"io"
-	"runtime"
 	"sync"
 	"time"
 
@@ -289,7 +288,6 @@ func dialClipboard(token uint32, broker proto.MuxBroker) (
 		return nil, err
 	}
 	c := newClipboardClient(broker, conn)
-	runtime.SetFinalizer(c, func(c *clipboardClient) { c.Close() })
 	return c, nil
 }
 

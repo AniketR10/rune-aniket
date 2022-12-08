@@ -84,7 +84,7 @@ func setupProxyTest(t *testing.T, mockScheme workspace.Scheme) (
 
 	return client, func(t *testing.T) {
 		closeFn()
-		require.NoError(t, conn.Close())
+		require.NoError(t, managerClient.Close())
 		require.NoError(t, manager.Close())
 	}
 }

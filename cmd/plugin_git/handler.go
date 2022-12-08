@@ -11,7 +11,8 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	"github.com/sourcegraph/go-diff/diff"
-	"unstable.build/go-tui/browser"
+	browserapi "unstable.build/go-tui/api/browser"
+	browserplugin "unstable.build/go-tui/api/browser/plugin"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/config"
@@ -55,8 +56,8 @@ var (
 
 type gitEditorHandler struct {
 	ed     text.Editor
-	wm     browser.WindowManager
-	p      browser.EventPublisher
+	wm     browserapi.WindowManager
+	p      browserapi.EventPublisher
 	exec   workspace.API
 	exit   uint32
 	ch     chan text.Event
@@ -103,17 +104,17 @@ func newGitHandler(
 				return nil, err
 			}
 		case plugin.PermissionBrowserEventPublisher:
-			ret.p, err = plugin.EventPublisher(grant.Token, broker)
+			ret.p, err = browserplugin.EventPublisher(grant.Token, broker)
 			if err != nil {
 				return nil, err
 			}
 		case plugin.PermissionBrowserWindowManager:
-			ret.wm, err = plugin.WindowManager(grant.Token, broker)
+			ret.wm, err = browserplugin.WindowManager(grant.Token, broker)
 			if err != nil {
 				return nil, err
 			}
 			syncComp := component.Sync(&ret.scroll, &ret.scroll.scroll)
-			err = ret.wm.Bar(browser.OrientationLeft, handler.Nop(syncComp))
+			err = ret.wm.Bar(browserapi.OrientationLeft, handler.Nop(syncComp))
 			if err != nil {
 				return nil, err
 			}

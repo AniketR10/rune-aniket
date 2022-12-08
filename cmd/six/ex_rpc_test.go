@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"net"
 	_ "net/http/pprof"
@@ -14,8 +15,10 @@ import (
 	"go.uber.org/goleak"
 	"google.golang.org/grpc"
 	"unstable.build/go-tui"
+	browserapi "unstable.build/go-tui/api/browser"
 	"unstable.build/go-tui/browser"
 	browserpb "unstable.build/go-tui/browser/rpc"
+	browsertest "unstable.build/go-tui/browser/test"
 	"unstable.build/go-tui/proto"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
@@ -29,7 +32,7 @@ func nopPublishEvent(term.Event) bool {
 }
 
 type groupEventHandler struct {
-	h  *browser.TestHandler
+	h  *browsertest.TestHandler
 	wg *sync.WaitGroup
 }
 
@@ -98,7 +101,7 @@ func newTestRPCBrowser(t *testing.T,
 
 		var serverMutex sync.Mutex
 		grpcServer := grpc.NewServer()
-		server := browser.NewServer(broker, ex.Browser(), &serverMutex)
+		server := browserpb.NewServer(broker, ex.Browser(), &serverMutex)
 		browserpb.RegisterWindowManagerServer(grpcServer, server)
 		browserpb.RegisterMessengerServer(grpcServer, server)
 		browserpb.RegisterResourceOpenerServer(grpcServer, server)
@@ -108,7 +111,7 @@ func newTestRPCBrowser(t *testing.T,
 		conn, err := grpc.Dial(lis.Addr().String(), grpc.WithInsecure())
 		require.NoError(t, err)
 
-		bc := browser.NewClient(broker, conn)
+		bc := browserpb.NewClient(broker, conn)
 		h := &safeHandler{Handler: ex, mu: &serverMutex}
 		*destructor = func() {
 			serverMutex.Lock()
@@ -119,7 +122,7 @@ func newTestRPCBrowser(t *testing.T,
 			broker.Close()
 			ex.Close()
 		}
-		return h, bc, nil
+		return h, browsertest.BrowserFromAPIBrowser(bc), nil
 	}
 }
 
@@ -141,10 +144,12 @@ func TestRPCBrowserCloseLeak(t *testing.T) {
 	focus, err := b.Focus()
 	require.NoError(t, err)
 
-	win, err := b.Split(browser.OrientationLeft, focus, browser.NewTestHandler())
+	win, err := b.Split(browserapi.OrientationLeft, focus, browsertest.NewTestHandler())
 	require.NoError(t, err)
 
-	require.NoError(t, win.Close())
+	ctx, cancel := context.WithCancel(context.Background())
+	require.NoError(t, win.Close(ctx))
+	cancel()
 
 	// NOTE: to reason about window/handler resource leaks
 	// uncomment next line and analyze running goroutines

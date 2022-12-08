@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"runtime"
 
 	"github.com/ernestrc/blue/logging"
 	multierr "github.com/ernestrc/go-multierror"
@@ -20,6 +21,7 @@ var _ workspace.SchemeManager = (*SchemeManagerClient)(nil)
 func NewSchemeManager(broker proto.MuxBroker, cc proto.MuxConn) *SchemeManagerClient {
 	ret := new(SchemeManagerClient)
 	ret.init(broker, cc)
+	runtime.SetFinalizer(ret, func(c *SchemeManagerClient) { c.Close() })
 	return ret
 }
 
@@ -87,6 +89,7 @@ func (c *SchemeManagerClient) RegisterScheme(scheme string, fn workspace.SchemeF
 
 	req := RegisterSchemeRequest{ProxyId: proxyID, Scheme: scheme}
 	_, err = c.client.RegisterScheme(ctx, &req)
+	runtime.KeepAlive(c)
 	if err != nil {
 		_ = server.Close()
 		return
@@ -99,16 +102,16 @@ func (c *SchemeManagerClient) RegisterScheme(scheme string, fn workspace.SchemeF
 
 // Close releases all resources associated with this instance.
 func (c *SchemeManagerClient) Close() (ret error) {
-	if closer, ok := c.cc.(io.Closer); ok {
-		if err := closer.Close(); err != nil {
-			ret = multierr.Append(ret, err)
-		}
-	}
 	for _, s := range c.servers {
 		if err := s.Close(); err != nil {
 			ret = multierr.Append(ret, err)
 		}
 	}
-	c.servers = nil
+	if closer, ok := c.cc.(io.Closer); ok {
+		if err := closer.Close(); err != nil {
+			ret = multierr.Append(ret, err)
+		}
+	}
+	runtime.SetFinalizer(c, nil)
 	return
 }

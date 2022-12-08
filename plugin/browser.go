@@ -2,7 +2,6 @@ package plugin
 
 import (
 	"io"
-	"runtime"
 	"sync"
 
 	"google.golang.org/grpc"
@@ -29,7 +28,7 @@ const (
 type browserResourceServer struct {
 	mu     sync.Mutex
 	b      browser.Browser
-	server *browser.Server
+	server *browserpb.Server
 }
 
 type browserResourcePermissionServer struct {
@@ -56,7 +55,7 @@ func (s browserResourcePermissionServer) Register(
 	// all permissions within a grantee must share the same browser.Server
 	// it's stateful and it's internal cannot be shared.
 	if s.server == nil {
-		s.server = new(browser.Server)
+		s.server = new(browserpb.Server)
 		s.server.Init(broker, s.b, lock, interruptWindowServer)
 	}
 	rpcServer := interruptBrowserServer(s.server, interrupt)
@@ -84,48 +83,4 @@ func BrowserResources(b browser.Browser) map[Permission]ResourceRegistrar {
 		PermissionBrowserMessenger:      s.forPermission(PermissionBrowserMessenger),
 		PermissionBrowserEventPublisher: s.forPermission(PermissionBrowserEventPublisher),
 	}
-}
-
-func dialBrowser(token uint32, broker proto.MuxBroker) (
-	browser.Browser, error,
-) {
-	conn, err := broker.Dial(token)
-	if err != nil {
-		return nil, err
-	}
-	c := browser.NewClient(broker, conn)
-	runtime.SetFinalizer(c, func(c *browser.Client) { c.Close() })
-	return c, nil
-}
-
-// WindowManager acquires the browser's WindowManager
-// resource with the given token.
-func WindowManager(token uint32, broker proto.MuxBroker) (
-	browser.WindowManager, error,
-) {
-	return dialBrowser(token, broker)
-}
-
-// ResourceOpener acquires the browser's ResourceOpener
-// resource with the given token.
-func ResourceOpener(token uint32, broker proto.MuxBroker) (
-	browser.ResourceOpener, error,
-) {
-	return dialBrowser(token, broker)
-}
-
-// Messenger acquires the browser's Messenger
-// resource with the given token.
-func Messenger(token uint32, broker proto.MuxBroker) (
-	browser.Messenger, error,
-) {
-	return dialBrowser(token, broker)
-}
-
-// EventPublisher acquires the browser's EventPublisher
-// resource with the given token.
-func EventPublisher(token uint32, broker proto.MuxBroker) (
-	browser.EventPublisher, error,
-) {
-	return dialBrowser(token, broker)
 }

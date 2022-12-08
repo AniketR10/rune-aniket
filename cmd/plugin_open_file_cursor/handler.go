@@ -6,7 +6,8 @@ import (
 	"time"
 
 	log "github.com/sirupsen/logrus"
-	"unstable.build/go-tui/browser"
+	browserapi "unstable.build/go-tui/api/browser"
+	browserplugin "unstable.build/go-tui/api/browser/plugin"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/config"
@@ -44,8 +45,8 @@ type file struct {
 
 type gfEditorHandler struct {
 	ed  text.Editor
-	o   browser.ResourceOpener
-	wm  browser.WindowManager
+	o   browserapi.ResourceOpener
+	wm  browserapi.WindowManager
 	cwd workspace.API
 
 	files map[string]*file
@@ -75,9 +76,9 @@ func newGFHandler(
 		case plugin.PermissionWorkspace:
 			ret.cwd, err = plugin.Workspace(grant.Token, broker)
 		case plugin.PermissionBrowserWindowManager:
-			ret.wm, err = plugin.WindowManager(grant.Token, broker)
+			ret.wm, err = browserplugin.WindowManager(grant.Token, broker)
 		case plugin.PermissionBrowserResourceOpener:
-			ret.o, err = plugin.ResourceOpener(grant.Token, broker)
+			ret.o, err = browserplugin.ResourceOpener(grant.Token, broker)
 		}
 		if err != nil {
 			return nil, err
@@ -97,7 +98,7 @@ func (f *file) uriAtCursor() string {
 	return uri
 }
 
-func (h *gfEditorHandler) openFileUnderCursor(win browser.Window, uri workspace.URI) error {
+func (h *gfEditorHandler) openFileUnderCursor(win browserapi.Window, uri workspace.URI) error {
 	f, ok := h.files[uri.String()]
 	if !ok {
 		return fmt.Errorf("could not find buffer for file %s", uri.String())
@@ -125,7 +126,7 @@ func (h *gfEditorHandler) openFileUnderCursor(win browser.Window, uri workspace.
 	}
 
 	err = win.SetContent(opened)
-	if err != nil && err != browser.ErrTabNotFree {
+	if err != nil && err != browserapi.ErrTabNotFree {
 		return err
 	}
 	return nil

@@ -28,6 +28,7 @@ type API interface {
 
 // Directory abstracts the ability to read directory contents.
 type Directory interface {
+	// Stat returns a FileInfo describing the named file.
 	Stat(path string) (os.FileInfo, error)
 
 	// ReadDir reads the named directory, returning all its directory entries.

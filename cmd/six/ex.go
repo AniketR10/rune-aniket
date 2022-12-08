@@ -15,6 +15,7 @@ import (
 	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui"
+	browserapi "unstable.build/go-tui/api/browser"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/handler"
@@ -114,9 +115,13 @@ type ex struct {
 	ctxPartialReissue    context.Context
 	reissueEvent         term.Event
 	cmd                  *command.Prompt
-	cmdWin               browser.Window
-	quit                 bool
-	height               int
+	// use floating windows functionality without having to work around focus commands
+	// and how to se cmd.Window correctly.
+	cmdBrowser browser.Component
+	cmdV       handler.Virtual
+	cmdWin     browser.Window
+	quit       bool
+	height     int
 }
 
 func newEx(
@@ -261,6 +266,8 @@ func (e *ex) doInit(
 
 	e.ed = ed
 	e.cleanPartialReissueState()
+	e.cmdBrowser.Init(e.config.Config)
+	e.cmdV.C = &e.cmdBrowser
 	return
 }
 
@@ -287,14 +294,6 @@ func (e *ex) Dispatch(command string, args ...string) bool {
 		e.setError(err)
 	}
 	return quit
-}
-
-func (e *ex) invokeWindow() browser.Window {
-	if e.cmd != nil {
-		return e.cmdWin
-	}
-	ret, _ := e.comp.Focus()
-	return ret
 }
 
 func (e *ex) handlerInFocus() (workspace.URI, text.Handler, bool) {
@@ -349,7 +348,10 @@ func (e *ex) closeAllBuffers(args ...string) error {
 }
 
 func (e *ex) closeFocusWindow(args ...string) error {
-	return e.invokeWindow().Close()
+	// pass a context that eventually cancels to avoid window server leaks
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	return e.invokeWindow().Close(ctx)
 }
 
 func (e *ex) flushCloseIgnoreNonFlushed(args ...string) error {
@@ -373,7 +375,7 @@ func (e *ex) dispatchCommand(cmd string, args ...string) (err error) {
 		Args:     args,
 		Resource: h,
 		URI:      uri,
-		Window:   e.invokeWindow(),
+		Window:   browser.WindowToAPIWindow{Win: e.invokeWindow()},
 	}
 	if ok {
 		scmd.Cursor.Content, _ = e.ed.Cursor(h)
@@ -398,7 +400,7 @@ func (e *ex) editFileURI(uri workspace.URI) error {
 		return err
 	}
 	err = e.invokeWindow().SetContent(h)
-	if err == browser.ErrTabNotFree {
+	if err == browserapi.ErrTabNotFree {
 		err = nil
 	}
 	return err
@@ -453,10 +455,10 @@ func (e *ex) splitDirectionChange(args ...string) error {
 	b := e.comp.Browser()
 	switch args[0] {
 	case "horizontal", "h":
-		b.SetDefaultSplit(browser.OrientationBottom)
+		b.SetDefaultSplit(browserapi.OrientationBottom)
 		b.SetMessage("changed split direction to horizontal")
 	case "vertical", "v":
-		b.SetDefaultSplit(browser.OrientationRight)
+		b.SetDefaultSplit(browserapi.OrientationRight)
 		b.SetMessage("changed split direction to vertical")
 	}
 	return nil
@@ -465,37 +467,36 @@ func (e *ex) splitDirectionChange(args ...string) error {
 func (e *ex) newWindowHandler(h browser.Handler) {
 	eb := e.comp.Browser()
 	win := e.invokeWindow()
-	eb.Split(browser.OrientationDefault, win, h)
+	eb.Split(browserapi.OrientationDefault, win, h)
 }
 
-func (e *ex) prepareFocusShift() {
-	eb := e.comp.Browser()
-	if e.cmd != nil {
-		eb.Focus().Close()
-	}
-	eb.SetFocus(e.invokeWindow())
+func (e *ex) onCloseCommandPrompt() error {
+	err := e.cmd.Close()
+	e.cmd = nil
+	return err
+}
+
+func (e *ex) invokeWindow() browser.Window {
+	ret, _ := e.comp.Focus()
+	return ret
 }
 
 func (e *ex) focusNextWindow(args ...string) error {
-	e.prepareFocusShift()
 	e.comp.Browser().FocusRight()
 	return nil
 }
 
 func (e *ex) focusPrevWindow(args ...string) error {
-	e.prepareFocusShift()
 	e.comp.Browser().FocusLeft()
 	return nil
 }
 
 func (e *ex) focusAboveWindow(args ...string) error {
-	e.prepareFocusShift()
 	e.comp.Browser().FocusUp()
 	return nil
 }
 
 func (e *ex) focusBelowWindow(args ...string) error {
-	e.prepareFocusShift()
 	e.comp.Browser().FocusDown()
 	return nil
 }
@@ -668,12 +669,6 @@ func (e *ex) resetCommandList(cmd *command.Prompt) {
 	cmd.Reset(commands)
 }
 
-func (e *ex) closeCommandPrompt() error {
-	err := e.cmd.Close()
-	e.cmd = nil
-	return err
-}
-
 func (e *ex) openCommandPrompt() {
 	commandCfg := command.Config{
 		MaxHistory:       e.config.CommandMaxHistory,
@@ -692,27 +687,23 @@ func (e *ex) openCommandPrompt() {
 				component.WithBackground(
 					commandHandler, term.Cell{Bg: e.config.CommandOverlay.ElementAttr.Bg},
 				),
-			), e.closeCommandPrompt),
+			), e.onCloseCommandPrompt),
 		commandHandler.Dimensions,
 	)
-	e.cmdWin, _ = e.comp.Focus()
 	e.resetCommandList(cmd)
-	_, err := e.comp.Floating(commandHandler,
+
+	e.cmdWin = e.cmdBrowser.Floating(commandHandler,
 		component.FloatingConfig{
 			Offset:    term.Coordinates{Y: e.height / 4},
 			Alignment: component.SpanAlignmentHorizontallyCentered,
 		})
-	if err != nil {
-		e.setError(err)
-		return
-	}
 	e.cmd = cmd
 }
 
 // Handle satisfies tui.Handler.
 func (e *ex) Handle(ev term.Event) (exit, handled bool) {
 	if e.cmd != nil {
-		_, handled = e.comp.Browser().Handle(ev)
+		_, handled = e.cmdBrowser.Handle(ev)
 	} else {
 		_, handled = e.handleEvent(ev)
 	}
@@ -721,6 +712,9 @@ func (e *ex) Handle(ev term.Event) (exit, handled bool) {
 
 // Cursor satisfies tui.Handler.
 func (e *ex) Cursor() (pos term.Coordinates, show bool) {
+	if e.cmd != nil {
+		return e.cmdBrowser.Cursor()
+	}
 	return e.comp.Browser().Cursor()
 }
 
@@ -733,11 +727,26 @@ func (e *ex) Man() tui.Manual {
 func (e *ex) Resize(width, height int) {
 	e.height = height
 	e.comp.Resize(width, height)
+	// if a top bar is added we don't reposition
+	// command window until the next resize, but that's
+	// acceptable because bars are added once
+	offset := e.comp.WindowManagerPosition()
+	e.cmdV.Move(offset)
+	e.cmdV.Resize(width, height)
 }
 
 // Draw satisfies tui.Component
 func (e *ex) Draw(w term.Writer) {
-	e.comp.Draw(w)
+	if e.cmd != nil {
+		e.comp.Draw(term.DimWriter(w))
+		prev := e.comp.SetDim(false)
+		e.comp.SetDim(prev)
+		// use virtual writer so we can take advantage of the DrawWindow method
+		w = component.VirtualWriter(w, e.cmdV.Position(), e.cmdV.Height(), e.cmdV.Width())
+		e.cmdBrowser.DrawWindow(e.cmdWin, w)
+	} else {
+		e.comp.Draw(w)
+	}
 }
 
 // Editor returns the underlying Editor implementation.

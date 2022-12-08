@@ -3,6 +3,7 @@ package finder
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -14,6 +15,8 @@ import (
 	"github.com/ernestrc/blue/iterator"
 	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui"
+	browserapi "unstable.build/go-tui/api/browser"
+	browserplugin "unstable.build/go-tui/api/browser/plugin"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/config"
@@ -44,12 +47,12 @@ func Permissions() []plugin.Permission {
 
 type fuzzyFinderHandler struct {
 	s                    document.Service
-	f                    browser.ResourceOpener
-	p                    browser.EventPublisher
-	m                    browser.Messenger
+	f                    browserapi.ResourceOpener
+	p                    browserapi.EventPublisher
+	m                    browserapi.Messenger
 	ed                   text.Editor
 	workspace            workspace.API
-	invokeWindow         browser.Window
+	invokeWindow         browserapi.Window
 	historyKey           term.KeyComb
 	mu                   sync.Mutex
 	cmdStr               string
@@ -146,7 +149,7 @@ func (h *fuzzyFinderHandler) setContent(
 	h.mu.Unlock()
 	defer h.mu.Lock()
 	err := h.invokeWindow.SetContent(b)
-	if err != nil && err != browser.ErrTabNotFree {
+	if err != nil && !errors.Is(err, browserapi.ErrTabNotFree) {
 		return err
 	}
 	if h.ed == nil {
@@ -302,11 +305,11 @@ func (h *fuzzyFinderHandler) initGrants(
 		case plugin.PermissionEditor:
 			h.ed, err = plugin.Editor(grant.Token, broker)
 		case plugin.PermissionBrowserMessenger:
-			h.m, err = plugin.Messenger(grant.Token, broker)
+			h.m, err = browserplugin.Messenger(grant.Token, broker)
 		case plugin.PermissionBrowserEventPublisher:
-			h.p, err = plugin.EventPublisher(grant.Token, broker)
+			h.p, err = browserplugin.EventPublisher(grant.Token, broker)
 		case plugin.PermissionBrowserResourceOpener:
-			h.f, err = plugin.ResourceOpener(grant.Token, broker)
+			h.f, err = browserplugin.ResourceOpener(grant.Token, broker)
 		case plugin.PermissionStorage:
 			h.s, err = plugin.Storage(grant.Token, broker)
 			if err == nil {
@@ -328,7 +331,7 @@ func (h *fuzzyFinderHandler) initGrants(
 // to interactively search the command's stdout lines.
 func New(
 	grants []plugin.Grant, broker proto.MuxBroker,
-	invokeWindow browser.Window, cfg config.Config,
+	invokeWindow browserapi.Window, cfg config.Config,
 	historyKey term.KeyComb, historyDocumentID string, command string,
 	fallback func(workspace.API, context.Context) (iterator.Iterator[string], error),
 	getResource func(exec workspace.API, line string) (workspace.URI, term.Coordinates),

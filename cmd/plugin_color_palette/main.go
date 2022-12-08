@@ -6,7 +6,7 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui"
-	"unstable.build/go-tui/browser"
+	browserapi "unstable.build/go-tui/api/browser"
 	"unstable.build/go-tui/config"
 	"unstable.build/go-tui/plugin"
 	plugutil "unstable.build/go-tui/plugin/util"
@@ -19,9 +19,9 @@ func main() {
 	}()
 
 	plugutil.ServeCommandSplitHandler(plugutil.CommandSplitHandlerConfig{
-		SplitOrientation: browser.OrientationRight,
+		SplitOrientation: browserapi.OrientationRight,
 		Handler: func(grants []plugin.Grant, broker proto.MuxBroker,
-			invokeWindow browser.Window, config config.Config) (tui.Handler, error) {
+			invokeWindow browserapi.Window, config config.Config) (tui.Handler, error) {
 			return new(colorPaletteHandler), nil
 		},
 		Command: "colorPalette",

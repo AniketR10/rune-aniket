@@ -2,7 +2,6 @@ package plugin
 
 import (
 	"io"
-	"runtime"
 	"sync"
 
 	"google.golang.org/grpc"
@@ -53,7 +52,6 @@ func dialEditor(token uint32, broker proto.MuxBroker) (
 		return nil, err
 	}
 	c := textpb.NewClient(broker, conn)
-	runtime.SetFinalizer(c, func(c *textpb.Client) { c.Close() })
 	return c, nil
 }
 

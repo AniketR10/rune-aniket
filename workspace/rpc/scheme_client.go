@@ -1,97 +1,65 @@
 package rpc
 
 import (
-	"context"
 	"fmt"
+	"io"
 	"os"
-	"time"
+	"runtime"
+	"syscall"
 
-	"google.golang.org/grpc"
-	"google.golang.org/protobuf/types/known/timestamppb"
+	multierr "github.com/ernestrc/go-multierror"
+	"unstable.build/go-tui/proto"
 	"unstable.build/go-tui/workspace"
 )
 
 // NewScheme returns a workspace.Scheme RPC-based client over
 // the given connection. It expects a SchemeServer to be listening
 // on the other side of the connection.
-func NewScheme(cc grpc.ClientConnInterface) workspace.Scheme {
+func NewScheme(cc proto.MuxConn) workspace.Scheme {
 	ret := new(schemeClientImpl)
-	ret.Init(cc)
+	ret.init(cc)
+	runtime.SetFinalizer(ret, func(c *schemeClientImpl) { c.Close() })
 	return ret
 }
 
 type schemeClientImpl struct {
 	client SchemeClient
-	openRemoveClientImpl
+	impl   openRemoveClientImpl
+	cc     proto.MuxConn
 }
 
-type openRemoveClientImpl struct {
-	executorClientImpl
-	client interface {
-		Open(ctx context.Context, in *OpenRequest, opts ...grpc.CallOption) (*OpenResponse, error)
-		Remove(ctx context.Context, in *RemoveRequest, opts ...grpc.CallOption) (*RemoveResponse, error)
-		Close(ctx context.Context, in *CloseFileRequest, opts ...grpc.CallOption) (*CloseFileResponse, error)
-		Read(ctx context.Context, in *ReadRequest, opts ...grpc.CallOption) (*ReadResponse, error)
-		Write(ctx context.Context, in *WriteRequest, opts ...grpc.CallOption) (*WriteResponse, error)
-		Sync(ctx context.Context, in *SyncRequest, opts ...grpc.CallOption) (*SyncResponse, error)
-		Truncate(ctx context.Context, in *TruncateRequest, opts ...grpc.CallOption) (*TruncateResponse, error)
-		Seek(ctx context.Context, in *SeekRequest, opts ...grpc.CallOption) (*SeekResponse, error)
-		Stat(ctx context.Context, in *StatRequest, opts ...grpc.CallOption) (*StatResponse, error)
-		ReadDir(ctx context.Context, in *ReadDirRequest, opts ...grpc.CallOption) (*ReadDirResponse, error)
-	}
-}
-
-type fileClient struct {
-	client interface {
-		Sync(ctx context.Context, in *SyncRequest, opts ...grpc.CallOption) (*SyncResponse, error)
-		Truncate(ctx context.Context, in *TruncateRequest, opts ...grpc.CallOption) (*TruncateResponse, error)
-		Seek(ctx context.Context, in *SeekRequest, opts ...grpc.CallOption) (*SeekResponse, error)
-		Close(ctx context.Context, in *CloseFileRequest, opts ...grpc.CallOption) (*CloseFileResponse, error)
-		Read(ctx context.Context, in *ReadRequest, opts ...grpc.CallOption) (*ReadResponse, error)
-		Write(ctx context.Context, in *WriteRequest, opts ...grpc.CallOption) (*WriteResponse, error)
-		Stat(ctx context.Context, in *StatRequest, opts ...grpc.CallOption) (*StatResponse, error)
-	}
-	handlerID int32
-	filename  string
-	ioClient
-}
-
-type fileClientInfo struct {
-	StatResponse
-}
-
-func (f fileClientInfo) Name() string {
-	return f.StatResponse.GetName()
-}
-
-func (f fileClientInfo) Size() int64 {
-	return f.StatResponse.GetSize()
-}
-
-func (f fileClientInfo) Mode() os.FileMode {
-	return os.FileMode(f.StatResponse.GetMode())
-}
-
-func (f fileClientInfo) ModTime() time.Time {
-	return protoTimeToStd(f.StatResponse.GetModTime())
-}
-
-func (f fileClientInfo) IsDir() bool {
-	return f.StatResponse.GetIsDir()
-}
-func (f fileClientInfo) Sys() interface{} {
-	return nil
-}
-
-func (c *schemeClientImpl) Init(cc grpc.ClientConnInterface) {
+func (c *schemeClientImpl) init(cc proto.MuxConn) {
 	client := NewSchemeClient(cc)
 	c.client = client
-	c.openRemoveClientImpl.executorClientImpl.init(c.client)
-	c.openRemoveClientImpl.client = client
+	c.impl.executorClientImpl.init(c.client)
+	c.impl.client = client
+	c.cc = cc
 }
 
-func (c *schemeClientImpl) Stop() {
-	c.executorClientImpl.Close()
+func (c *schemeClientImpl) Open(name string, flag int, perm os.FileMode) (
+	workspace.File, *workspace.Error,
+) {
+	ret, err := c.impl.Open(name, flag, perm)
+	runtime.KeepAlive(c)
+	return ret, err
+}
+
+func (c *schemeClientImpl) Remove(name string) error {
+	err := c.impl.Remove(name)
+	runtime.KeepAlive(c)
+	return err
+}
+
+func (c *schemeClientImpl) ReadDir(name string) ([]os.DirEntry, error) {
+	ret, err := c.impl.ReadDir(name)
+	runtime.KeepAlive(c)
+	return ret, err
+}
+
+func (c *schemeClientImpl) Stat(name string) (os.FileInfo, error) {
+	ret, err := c.impl.Stat(name)
+	runtime.KeepAlive(c)
+	return ret, err
 }
 
 func (c *schemeClientImpl) URI(path string) (workspace.URI, error) {
@@ -100,6 +68,7 @@ func (c *schemeClientImpl) URI(path string) (workspace.URI, error) {
 
 	req := URIRequest{Path: path}
 	resp, err := c.client.URI(ctx, &req)
+	runtime.KeepAlive(c)
 	if err != nil {
 		return workspace.URI{}, err
 	}
@@ -110,141 +79,13 @@ func (c *schemeClientImpl) URI(path string) (workspace.URI, error) {
 	return uri, nil
 }
 
-func makeOpenRequest(name string, flag int, perm os.FileMode) *OpenRequest {
-	return &OpenRequest{
-		Filename: name,
-		Mode:     int32(perm),
-		O_RDONLY: flag&^(os.O_APPEND|os.O_CREATE|os.O_EXCL|os.O_SYNC|os.O_TRUNC) == os.O_RDONLY,
-		O_WRONLY: flag&^(os.O_APPEND|os.O_CREATE|os.O_EXCL|os.O_SYNC|os.O_TRUNC) == os.O_WRONLY,
-		O_APPEND: flag&os.O_APPEND != 0,
-		O_CREATE: flag&os.O_CREATE != 0,
-		O_EXCL:   flag&os.O_EXCL != 0,
-		O_SYNC:   flag&os.O_SYNC != 0,
-		O_TRUNC:  flag&os.O_TRUNC != 0,
-	}
-}
-
-type errResponse interface {
-	GetIsExistErr() bool
-	GetIsNotExistErr() bool
-	GetIsPermissionErr() bool
-}
-
-func isTypedError(resp errResponse) (*workspace.Error, bool) {
-	if resp.GetIsExistErr() || resp.GetIsNotExistErr() || resp.GetIsPermissionErr() {
-		return &workspace.Error{
-			IsExist:      resp.GetIsExistErr(),
-			IsNotExist:   resp.GetIsNotExistErr(),
-			IsPermission: resp.GetIsPermissionErr(),
-		}, true
-	}
-	return nil, false
-}
-
-func (c *openRemoveClientImpl) Open(name string, flag int, perm os.FileMode) (
-	workspace.File, *workspace.Error,
-) {
-	ctx, cleanup := ctxWithTimeout()
-	defer cleanup()
-
-	req := makeOpenRequest(name, flag, perm)
-	resp, err := c.client.Open(ctx, req)
-	if err != nil {
-		return nil, &workspace.Error{Err: err}
-	}
-	if werr, ok := isTypedError(resp); ok {
-		return nil, werr
-	}
-	// workspace.Pid is not necessary (and/or available) for files
-	// because it's only used for Wait cleanup
-	return c.newFileClient(-1, resp.GetFilename(), resp.GetHandlerId()), nil
-}
-
-func (c *openRemoveClientImpl) Stat(name string) (os.FileInfo, error) {
-	ctx, cleanup := ctxWithTimeout()
-	defer cleanup()
-
-	req := StatRequest{Filename: name}
-	resp, err := c.client.Stat(ctx, &req)
-	if err != nil {
-		return nil, err
-	}
-	if werr, ok := isTypedError(resp); ok {
-		return nil, werr.ToError()
-	}
-	return fileClientInfo{StatResponse: *resp}, nil
-}
-
-func (c *openRemoveClientImpl) ReadDir(name string) ([]os.DirEntry, error) {
-	ctx, cleanup := ctxWithTimeout()
-	defer cleanup()
-
-	req := ReadDirRequest{Root: name}
-	resp, err := c.client.ReadDir(ctx, &req)
-	if err != nil {
-		return nil, err
-	}
-	if werr, ok := isTypedError(resp); ok {
-		return nil, werr.ToError()
-	}
-	respp := resp.GetPath()
-	ret := make([]os.DirEntry, 0, len(respp))
-	for _, entry := range respp {
-		ret = append(ret, dirEntry{
-			c:        c,
-			name:     entry.Name,
-			isDir:    entry.IsDir,
-			modeType: entry.Mode,
-		})
-	}
-
-	return ret, nil
-}
-
-type dirEntry struct {
-	c        *openRemoveClientImpl
-	name     string
-	isDir    bool
-	modeType int32
-}
-
-func (e dirEntry) Name() string {
-	return e.name
-}
-
-func (e dirEntry) IsDir() bool {
-	return e.isDir
-}
-
-func (e dirEntry) Type() os.FileMode {
-	return os.FileMode(e.modeType)
-}
-
-func (e dirEntry) Info() (os.FileInfo, error) {
-	return e.c.Stat(e.Name())
-}
-
-func (c *openRemoveClientImpl) Remove(name string) error {
-	ctx, cleanup := ctxWithTimeout()
-	defer cleanup()
-
-	req := RemoveRequest{Filename: name}
-	resp, err := c.client.Remove(ctx, &req)
-	if err != nil {
-		return err
-	}
-	if werr, ok := isTypedError(resp); ok {
-		return werr.ToError()
-	}
-	return nil
-}
-
 func (c *schemeClientImpl) Rename(oldpath, newpath string) error {
 	ctx, cleanup := ctxWithTimeout()
 	defer cleanup()
 
 	req := RenameRequest{Filename: oldpath, Newfilename: newpath}
 	resp, err := c.client.Rename(ctx, &req)
+	runtime.KeepAlive(c)
 	if err != nil {
 		return err
 	}
@@ -260,6 +101,7 @@ func (c *schemeClientImpl) Lstat(name string) (os.FileInfo, error) {
 
 	req := StatRequest{Filename: name, Lstat: true}
 	resp, err := c.client.Stat(ctx, &req)
+	runtime.KeepAlive(c)
 	if err != nil {
 		return nil, err
 	}
@@ -275,68 +117,76 @@ func (c *schemeClientImpl) ReadLink(filename string) (string, error) {
 
 	req := ReadLinkRequest{Filename: filename}
 	resp, err := c.client.ReadLink(ctx, &req)
+	runtime.KeepAlive(c)
 	if err != nil {
 		return "", err
 	}
 	return resp.GetFilename(), nil
 }
 
-func (c *fileClient) Name() string {
-	return c.filename
+func (c *schemeClientImpl) NewPty() (workspace.Pty, error) {
+	ret, err := c.impl.NewPty()
+	runtime.KeepAlive(c)
+	return ret, err
 }
 
-func (c *fileClient) Stat() (os.FileInfo, error) {
-	ctx, cleanup := ctxWithTimeout()
-	defer cleanup()
-
-	req := StatRequest{Filename: c.filename}
-	resp, err := c.client.Stat(ctx, &req)
-	if err != nil {
-		return nil, err
-	}
-	return fileClientInfo{StatResponse: *resp}, nil
+func (c *schemeClientImpl) SetPtySize(p workspace.Pty, width, height int) error {
+	err := c.impl.SetPtySize(p, width, height)
+	runtime.KeepAlive(c)
+	return err
 }
 
-func (c *fileClient) Sync() error {
-	ctx, cleanup := ctxWithTimeout()
-	defer cleanup()
-
-	req := SyncRequest{HandlerId: c.handlerID}
-	_, err := c.client.Sync(ctx, &req)
-	if err != nil {
-		return err
-	}
-	return nil
+func (c *schemeClientImpl) Command(name string, arg ...string) (workspace.Pid, error) {
+	ret, err := c.impl.Command(name, arg...)
+	runtime.KeepAlive(c)
+	return ret, err
 }
 
-func (c *fileClient) Truncate(size int64) error {
-	ctx, cleanup := ctxWithTimeout()
-	defer cleanup()
-
-	req := TruncateRequest{HandlerId: c.handlerID, Size: size}
-	_, err := c.client.Truncate(ctx, &req)
-	if err != nil {
-		return err
-	}
-	return nil
+func (c *schemeClientImpl) Start(p workspace.Pid) error {
+	err := c.impl.Start(p)
+	runtime.KeepAlive(c)
+	return err
 }
 
-func (c *fileClient) Seek(offset int64, whence int) (int64, error) {
-	ctx, cleanup := ctxWithTimeout()
-	defer cleanup()
-
-	req := SeekRequest{
-		HandlerId: c.handlerID,
-		Offset:    offset,
-		Whence:    int64(whence),
-	}
-	resp, err := c.client.Seek(ctx, &req)
-	if err != nil {
-		return 0, err
-	}
-	return resp.GetNewOffset(), nil
+func (c *schemeClientImpl) Signal(p workspace.Pid, s syscall.Signal) error {
+	err := c.impl.Signal(p, s)
+	runtime.KeepAlive(c)
+	return err
 }
 
-func protoTimeToStd(ts *timestamppb.Timestamp) time.Time {
-	return time.Unix(ts.GetSeconds(), int64(ts.GetNanos()))
+func (c *schemeClientImpl) StderrPipe(p workspace.Pid) (io.ReadCloser, error) {
+	ret, err := c.impl.StderrPipe(p)
+	runtime.KeepAlive(c)
+	return ret, err
+}
+
+func (c *schemeClientImpl) StdinPipe(p workspace.Pid) (io.WriteCloser, error) {
+	ret, err := c.impl.StdinPipe(p)
+	runtime.KeepAlive(c)
+	return ret, err
+}
+
+func (c *schemeClientImpl) StdoutPipe(p workspace.Pid) (io.ReadCloser, error) {
+	ret, err := c.impl.StdoutPipe(p)
+	runtime.KeepAlive(c)
+	return ret, err
+}
+
+func (c *schemeClientImpl) Wait(p workspace.Pid) error {
+	ret := c.impl.Wait(p)
+	runtime.KeepAlive(c)
+	return ret
+}
+
+func (c *schemeClientImpl) Close() (ret error) {
+	if err := c.impl.Close(); err != nil {
+		ret = multierr.Append(ret, err)
+	}
+	if closer, ok := c.cc.(io.Closer); ok {
+		if err := closer.Close(); err != nil {
+			ret = multierr.Append(ret, err)
+		}
+	}
+	runtime.SetFinalizer(c, nil)
+	return
 }

@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/ernestrc/blue/iterator"
-	"unstable.build/go-tui/browser"
+	browserapi "unstable.build/go-tui/api/browser"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/workspace"
 )
@@ -18,7 +18,7 @@ type Command struct {
 	// then these fields will be zero-valued.
 	URI      workspace.URI
 	Resource Handler
-	Window   browser.Window
+	Window   browserapi.Window
 	Cursor   struct {
 		Content term.Coordinates
 		Window  term.Coordinates

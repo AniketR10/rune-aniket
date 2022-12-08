@@ -48,7 +48,7 @@ func setupSchemeClientServerTest(
 	conn, closeFn := doSetupSchemeClientServerTest(t, s)
 	client := NewScheme(conn)
 	return client, func(t *testing.T) {
-		require.NoError(t, client.Close())
+		assert.NoError(t, client.Close())
 		closeFn()
 	}
 }
@@ -567,9 +567,10 @@ func testSchemeClientServer(
 			defer ctrl.Finish()
 
 			client, mock, cleanup := fn(t, ctrl)
-			defer cleanup(t)
-
 			tcase.do(t, ctrl, client, mock)
+
+			mock.EXPECT().Close().AnyTimes()
+			cleanup(t)
 		})
 	}
 }
@@ -614,9 +615,8 @@ func TestClientServerIntegration(t *testing.T) {
 			memScheme, err := workspace.NewMemoryScheme(config.NopConfig(), memURI)
 			require.NoError(t, err)
 			server := NewSchemeServer(memScheme, new(sync.Mutex))
-			client, cleanup := setupSchemeClientServerTest(t, server)
+			client, _ := setupSchemeClientServerTest(t, server)
 			cleanups = append(cleanups, func(t *testing.T) {
-				cleanup(t)
 				server.Stop()
 			})
 			return client
@@ -633,9 +633,8 @@ func TestClientServerIntegration(t *testing.T) {
 			fileScheme, err := workspace.NewFileScheme(config.NopConfig(), workspaceURI)
 			require.NoError(t, err)
 			server := NewSchemeServer(fileScheme, new(sync.Mutex))
-			client, cleanup := setupSchemeClientServerTest(t, server)
+			client, _ := setupSchemeClientServerTest(t, server)
 			cleanups = append(cleanups, func(t *testing.T) {
-				cleanup(t)
 				server.Stop()
 				os.RemoveAll(dir)
 			})

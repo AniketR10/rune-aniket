@@ -15,6 +15,7 @@ import (
 	"github.com/ernestrc/blue/logging"
 	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
+	"google.golang.org/grpc"
 	"unstable.build/go-tui/config"
 	pluginpb "unstable.build/go-tui/plugin/rpc"
 	"unstable.build/go-tui/proto"
@@ -44,9 +45,10 @@ type granteeClientWrap struct {
 	errors    []error
 	doneCh    chan *sync.WaitGroup
 	client    *granteeClient
-	srv       proto.MuxServer
 	resources []io.Closer
 	lis       net.Listener
+	ctx       context.Context
+	cancelCtx func()
 }
 
 // Stat represents the status of a Plugin.
@@ -179,11 +181,11 @@ func (m *Manager) doGrant(
 	if err != nil {
 		return fmt.Errorf("accept: %v", err)
 	}
-	var srv proto.MuxServer
+	opts := []grpc.ServerOption{}
+
+	srv := proto.GRPCServer(opts...)
 	if log.IsLevelEnabled(log.TraceLevel) {
-		srv = proto.LoggingGRPCServer()
-	} else {
-		srv = proto.GRPCServer()
+		srv = proto.LoggingGRPCServer(srv)
 	}
 
 	// for denied permissions we do not call ResourceRegistrar.Register so
@@ -222,10 +224,11 @@ func (m *Manager) doGrant(
 
 	m.mu.Lock()
 	client.resources = serverResources
-	client.srv = srv
+	client.ctx, client.cancelCtx = context.WithCancel(context.Background())
+	ctx = client.ctx
 	m.mu.Unlock()
 
-	go srv.Serve(lis)
+	go srv.Serve(ctx, lis)
 
 	return client.client.sendGrants(ctx, denied, granted)
 }
@@ -248,9 +251,9 @@ func (m *Manager) doCloseClient(reason string, client *granteeClientWrap) (
 	}
 
 	m.mu.Lock()
-	// partially open oclient
-	if client.srv != nil {
-		client.srv.Stop()
+	if client.cancelCtx != nil {
+		client.cancelCtx()
+		client.cancelCtx = nil
 	}
 	for _, resource := range client.resources {
 		if err := resource.Close(); err != nil {

@@ -2,7 +2,6 @@ package plugin
 
 import (
 	"io"
-	"runtime"
 	"sync"
 
 	"google.golang.org/grpc"
@@ -52,7 +51,6 @@ func dialSchemeManager(token uint32, broker proto.MuxBroker) (
 		return nil, err
 	}
 	c := workspacepb.NewSchemeManager(broker, conn)
-	runtime.SetFinalizer(c, func(c *workspacepb.SchemeManagerClient) { c.Close() })
 	return c, nil
 }
 

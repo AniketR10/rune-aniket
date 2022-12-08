@@ -25,7 +25,8 @@ import (
 	"github.com/ernestrc/golang-internal-tools/lsp/source"
 	"github.com/ernestrc/golang-internal-tools/span"
 	log "github.com/sirupsen/logrus"
-	"unstable.build/go-tui/browser"
+	browserapi "unstable.build/go-tui/api/browser"
+	browserplugin "unstable.build/go-tui/api/browser/plugin"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/config"
@@ -147,11 +148,11 @@ type lspEditorHandler struct {
 	evChan chan text.Event
 
 	ed text.Editor
-	wm browser.WindowManager
-	m  browser.Messenger
-	o  browser.ResourceOpener
+	wm browserapi.WindowManager
+	m  browserapi.Messenger
+	o  browserapi.ResourceOpener
 	wp workspace.API
-	p  browser.EventPublisher
+	p  browserapi.EventPublisher
 
 	tabspaces                  int
 	frame                      bool
@@ -632,22 +633,22 @@ func newLspHandler(
 			}
 			ret.cwd = cwdURI.Path()
 		case plugin.PermissionBrowserEventPublisher:
-			ret.p, err = plugin.EventPublisher(g.Token, broker)
+			ret.p, err = browserplugin.EventPublisher(g.Token, broker)
 			if err != nil {
 				return nil, err
 			}
 		case plugin.PermissionBrowserResourceOpener:
-			ret.o, err = plugin.ResourceOpener(g.Token, broker)
+			ret.o, err = browserplugin.ResourceOpener(g.Token, broker)
 			if err != nil {
 				return nil, err
 			}
 		case plugin.PermissionBrowserWindowManager:
-			ret.wm, err = plugin.WindowManager(g.Token, broker)
+			ret.wm, err = browserplugin.WindowManager(g.Token, broker)
 			if err != nil {
 				return nil, err
 			}
 		case plugin.PermissionBrowserMessenger:
-			ret.m, err = plugin.Messenger(g.Token, broker)
+			ret.m, err = browserplugin.Messenger(g.Token, broker)
 			if err != nil {
 				return nil, err
 			}
@@ -1353,7 +1354,7 @@ func (h *lspEditorHandler) HandleDiagnostics(
 	return err
 }
 
-func (h *lspEditorHandler) goToLocation(win browser.Window, l protocol.Location) error {
+func (h *lspEditorHandler) goToLocation(win browserapi.Window, l protocol.Location) error {
 	uri, err := h.spanURIToWorkspace(l.URI.SpanURI())
 	if err != nil {
 		return err
@@ -1378,7 +1379,7 @@ func (h *lspEditorHandler) goToLocation(win browser.Window, l protocol.Location)
 	}
 
 	err = win.SetContent(buf)
-	if err != nil && err != browser.ErrTabNotFree {
+	if err != nil && err != browserapi.ErrTabNotFree {
 		err = fmt.Errorf("win.SetContent: %v", err)
 		return err
 	}
@@ -1409,7 +1410,7 @@ func (h *lspEditorHandler) getFilePosition(cursor term.Coordinates, uri workspac
 
 func (h *lspEditorHandler) handleGoToDefinition(
 	cursor term.Coordinates, ed text.Handler, uri workspace.URI,
-	win browser.Window,
+	win browserapi.Window,
 ) error {
 	f, pos, ok := h.getFilePosition(cursor, uri)
 	if !ok {
@@ -1508,7 +1509,7 @@ func (h *lspEditorHandler) handleHover(
 		padx += 2
 	}
 	less.Scroll().Attributes = h.referencesWindowAttributes
-	bh := browser.NopFloatingHandler(handler.PaddedFloating(
+	bh := browserapi.NopFloatingHandler(handler.PaddedFloating(
 		handler.FloatingBuffer(less, less.Buffer()), padx, pady))
 
 	at := h.findBestFloatingWindowPosition(cursorAtWindow, less.Buffer().Rows())
@@ -1582,12 +1583,12 @@ func (h *lspEditorHandler) handleRemoveWorkspace(uri workspace.URI, args []strin
 }
 
 func (h *lspEditorHandler) browseLocations(
-	win browser.Window, locs []protocol.Location,
+	win browserapi.Window, locs []protocol.Location,
 ) error {
 	const locID = "highlight_loc"
 	var (
 		longestLocation int
-		bottom, top     browser.Window
+		bottom, top     browserapi.Window
 		done            bool
 	)
 	cfg := search.ListConfig{
@@ -1621,7 +1622,7 @@ func (h *lspEditorHandler) browseLocations(
 		}
 	}
 
-	closeWin := func(win browser.Window) func() error {
+	closeWin := func(win browserapi.Window) func() error {
 		return func() error {
 			h.mu.Lock()
 			shouldClose := done && win != nil
@@ -1715,15 +1716,15 @@ func (h *lspEditorHandler) browseLocations(
 		return edh.Handle(ev)
 	})
 
-	bhtop := browser.FuncHandler(eh, closeWin(bottom))
-	top, err = h.wm.Split(browser.OrientationBottom, win, bhtop)
+	bhtop := browserapi.FuncHandler(eh, closeWin(bottom))
+	top, err = h.wm.Split(browserapi.OrientationBottom, win, bhtop)
 	if err != nil {
 		err = fmt.Errorf("wm.split: %v", err)
 		return err
 	}
 
-	bhbottom := browser.FuncHandler(bh, closeWin(top))
-	bottom, err = h.wm.Split(browser.OrientationBottom, top, bhbottom)
+	bhbottom := browserapi.FuncHandler(bh, closeWin(top))
+	bottom, err = h.wm.Split(browserapi.OrientationBottom, top, bhbottom)
 	if err != nil {
 		err = fmt.Errorf("wm.Split: %v", err)
 		return err
@@ -1733,7 +1734,7 @@ func (h *lspEditorHandler) browseLocations(
 
 func (h *lspEditorHandler) handleReferences(
 	cursorAtScroll, cursorAtWindow term.Coordinates,
-	ed text.Handler, uri workspace.URI, win browser.Window,
+	ed text.Handler, uri workspace.URI, win browserapi.Window,
 ) error {
 	f, pos, ok := h.getFilePosition(cursorAtScroll, uri)
 	if !ok {

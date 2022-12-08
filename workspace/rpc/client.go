@@ -5,8 +5,11 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"runtime"
+	"syscall"
 	"time"
 
+	multierr "github.com/ernestrc/go-multierror"
 	"google.golang.org/grpc"
 	"unstable.build/go-tui/workspace"
 )
@@ -18,7 +21,7 @@ var _ workspace.API = (*Client)(nil)
 type Client struct {
 	cc     grpc.ClientConnInterface
 	client WorkspaceClient
-	openRemoveClientImpl
+	impl   openRemoveClientImpl
 }
 
 // NewClient allocates storage for a new workspace.Client and
@@ -27,6 +30,7 @@ type Client struct {
 func NewClient(cc grpc.ClientConnInterface) *Client {
 	ret := new(Client)
 	ret.Init(cc)
+	runtime.SetFinalizer(ret, func(c *Client) { c.Close() })
 	return ret
 }
 
@@ -35,18 +39,36 @@ func (c *Client) Init(cc grpc.ClientConnInterface) {
 	client := NewWorkspaceClient(cc)
 	c.cc = cc
 	c.client = client
-	c.openRemoveClientImpl.executorClientImpl.init(c.client)
-	c.openRemoveClientImpl.client = client
+	c.impl.executorClientImpl.init(c.client)
+	c.impl.client = client
 }
 
 // Open satisfies workspace.API.
 func (c *Client) Open(path string, flag int, mode os.FileMode) (workspace.File, *workspace.Error) {
-	return c.openRemoveClientImpl.Open(path, flag, mode)
+	f, err := c.impl.Open(path, flag, mode)
+	runtime.KeepAlive(c)
+	return f, err
 }
 
 // Remove satisfies workspace.API.
 func (c *Client) Remove(path string) error {
-	return c.openRemoveClientImpl.Remove(path)
+	err := c.impl.Remove(path)
+	runtime.KeepAlive(c)
+	return err
+}
+
+// ReadDir reads the named directory, returning all its directory entries.
+func (c *Client) ReadDir(name string) ([]os.DirEntry, error) {
+	ret, err := c.impl.ReadDir(name)
+	runtime.KeepAlive(c)
+	return ret, err
+}
+
+// Stat returns a FileInfo describing the named file.
+func (c *Client) Stat(name string) (os.FileInfo, error) {
+	ret, err := c.impl.Stat(name)
+	runtime.KeepAlive(c)
+	return ret, err
 }
 
 // URI satisfies workspace.API.
@@ -56,6 +78,7 @@ func (c *Client) URI(path string) (workspace.URI, error) {
 
 	req := URIRequest{Path: path}
 	resp, err := c.client.URI(ctx, &req)
+	runtime.KeepAlive(c)
 	if err != nil {
 		return workspace.URI{}, err
 	}
@@ -66,17 +89,94 @@ func (c *Client) URI(path string) (workspace.URI, error) {
 	return uri, nil
 }
 
+// NewPty creates a new pseudoterminal.
+func (c *Client) NewPty() (workspace.Pty, error) {
+	ret, err := c.impl.NewPty()
+	runtime.KeepAlive(c)
+	return ret, err
+}
+
+// SetPtySize sets the width and height in columns and rows of
+// a pseudoterminal.
+func (c *Client) SetPtySize(p workspace.Pty, width, height int) error {
+	err := c.impl.SetPtySize(p, width, height)
+	runtime.KeepAlive(c)
+	return err
+}
+
+// Command returns the Pid to execute the named program with the given
+// arguments. For more details see exec.Command.
+func (c *Client) Command(name string, arg ...string) (workspace.Pid, error) {
+	ret, err := c.impl.Command(name, arg...)
+	runtime.KeepAlive(c)
+	return ret, err
+}
+
+// Start starts the specified command but does not wait for it to complete.
+// The Wait method will return an error if there's any while running command
+// and release associated resources.
+func (c *Client) Start(p workspace.Pid) error {
+	err := c.impl.Start(p)
+	runtime.KeepAlive(c)
+	return err
+}
+
+// Signal sends a signal to the running process.
+func (c *Client) Signal(p workspace.Pid, s syscall.Signal) error {
+	err := c.impl.Signal(p, s)
+	runtime.KeepAlive(c)
+	return err
+}
+
+// StderrPipe returns a pipe that will be connected to the command's standard
+// error when the command starts. See exec.Cmd.StderrPipe for more details.
+func (c *Client) StderrPipe(p workspace.Pid) (io.ReadCloser, error) {
+	ret, err := c.impl.StderrPipe(p)
+	runtime.KeepAlive(c)
+	return ret, err
+}
+
+// StdinPipe returns a pipe that will be connected to the command's standard
+// input when the command starts. See exec.Cmd.StdinPipe for more details.
+func (c *Client) StdinPipe(p workspace.Pid) (io.WriteCloser, error) {
+	ret, err := c.impl.StdinPipe(p)
+	runtime.KeepAlive(c)
+	return ret, err
+}
+
+// StdoutPipe returns a pipe that will be connected to the command's standard
+// output when the command starts. See exec.Cmd.StdoutPipe for more details.
+func (c *Client) StdoutPipe(p workspace.Pid) (io.ReadCloser, error) {
+	ret, err := c.impl.StdoutPipe(p)
+	runtime.KeepAlive(c)
+	return ret, err
+}
+
+// Wait waits for the command to exit and waits for any copying to stdin or
+// opying from stdout or stderr to complete.
+// The command must have been started by Start.
+// The returned error is nil if the command runs, has no problems copying
+// stdin, stdout, and stderr, and exits with a zero exit status.
+func (c *Client) Wait(p workspace.Pid) error {
+	err := c.impl.Wait(p)
+	runtime.KeepAlive(c)
+	return err
+}
+
 // Close closes all resources associated with this client.
-func (c *Client) Close() (err error) {
+func (c *Client) Close() (ret error) {
 	if closer, ok := c.cc.(io.Closer); ok {
-		ccErr := closer.Close()
-		if ccErr != nil {
-			err = ccErr
+		if err := closer.Close(); err != nil {
+			ret = multierr.Append(ret, err)
 		}
 	}
-	c.executorClientImpl.Close()
+	if err := c.impl.Close(); err != nil {
+		ret = multierr.Append(ret, err)
+	}
 
-	return err
+	runtime.SetFinalizer(c, nil)
+
+	return
 }
 
 func ctxWithTimeout() (context.Context, func()) {

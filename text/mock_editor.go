@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 
-	"unstable.build/go-tui/browser"
+	browsertest "unstable.build/go-tui/browser/test"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/workspace"
@@ -48,7 +48,7 @@ func (e *testEditor) dispatchEvent(ctx context.Context, ev Event) {
 }
 
 type TestEditorHandler struct {
-	browser.TestHandler
+	browsertest.TestHandler
 	LocationList LocationList
 	parent       *testEditor
 	uri          workspace.URI
@@ -65,7 +65,7 @@ func (e *testEditor) Edit(resource workspace.URI, buf *cell.Buffer) (Handler, er
 	h := &TestEditorHandler{
 		uri:         resource,
 		parent:      e,
-		TestHandler: *browser.NewTestHandler(),
+		TestHandler: *browsertest.NewTestHandler(),
 	}
 	e.dispatchEvent(context.Background(), Event{
 		Type:     EventTypeOpen,

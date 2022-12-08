@@ -16,7 +16,8 @@ import (
 	multierr "github.com/ernestrc/go-multierror"
 	"github.com/fsnotify/fsnotify"
 	log "github.com/sirupsen/logrus"
-	"unstable.build/go-tui/browser"
+	browserapi "unstable.build/go-tui/api/browser"
+	browserplugin "unstable.build/go-tui/api/browser/plugin"
 	"unstable.build/go-tui/config"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/handler/search"
@@ -51,9 +52,9 @@ type logsGrantee struct {
 	broker proto.MuxBroker
 	quitCh chan struct{}
 
-	wm browser.WindowManager
-	m  browser.Messenger
-	p  browser.EventPublisher
+	wm browserapi.WindowManager
+	m  browserapi.Messenger
+	p  browserapi.EventPublisher
 	c  config.Config
 	w  workspace.API
 
@@ -139,11 +140,11 @@ func (e *logsGrantee) PermissionGranted(grants []plugin.Grant) {
 		case plugin.PermissionWorkspace:
 			e.w, err = plugin.Workspace(g.Token, e.broker)
 		case plugin.PermissionBrowserMessenger:
-			e.m, err = plugin.Messenger(g.Token, e.broker)
+			e.m, err = browserplugin.Messenger(g.Token, e.broker)
 		case plugin.PermissionBrowserEventPublisher:
-			e.p, err = plugin.EventPublisher(g.Token, e.broker)
+			e.p, err = browserplugin.EventPublisher(g.Token, e.broker)
 		case plugin.PermissionBrowserWindowManager:
-			e.wm, err = plugin.WindowManager(g.Token, e.broker)
+			e.wm, err = browserplugin.WindowManager(g.Token, e.broker)
 		case plugin.PermissionConfig:
 			e.c, err = plugin.FetchConfig(g.Token, e.broker)
 		case plugin.PermissionEditor:
@@ -251,7 +252,7 @@ func consumeData(
 	}
 }
 
-func (e *logsGrantee) showLogs(win browser.Window, args []string) (bool, error) {
+func (e *logsGrantee) showLogs(win browserapi.Window, args []string) (bool, error) {
 	if log.IsLevelEnabled(log.TraceLevel) && len(args) == 0 {
 		return false, errors.New("Cannot show logs in Trace level to avoid " +
 			"an infinite loop. Check Manually.")
@@ -313,7 +314,7 @@ func (e *logsGrantee) showLogs(win browser.Window, args []string) (bool, error) 
 
 	logsHandler := handler.Sync(new(sync.Mutex), newLogsHandler(l, e.cfg.ElementAttr,
 		e.cfg.MatchedTextAttr, e.cfg.FocusElementAttr))
-	h := browser.FuncHandler(logsHandler, cleanup)
+	h := browserapi.FuncHandler(logsHandler, cleanup)
 
 	go consumeData(ctx, file, l, e.quitCh, watcher)
 

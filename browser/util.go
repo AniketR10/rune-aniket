@@ -1,15 +1,11 @@
 package browser
 
 import (
-	"time"
-
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/term"
 )
-
-const defaultFailureTimeout = 5 * time.Second
 
 // satisfies sync.Locker
 type nopLocker struct{}

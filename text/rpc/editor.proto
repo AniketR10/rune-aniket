@@ -177,7 +177,8 @@ message HandleCommandRequest {
 	uint32 resource_id = 4;
 	term.Coordinates cursor_content = 5;
 	term.Coordinates cursor_window = 6;
-	uint32 window_id = 7;
+	uint64 window_id = 7;
+	string window_channel_id = 8;
 }
 
 message HandleCommandResponse {

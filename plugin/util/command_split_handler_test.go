@@ -10,7 +10,8 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/connectivity"
 	"unstable.build/go-tui"
-	"unstable.build/go-tui/browser"
+	browserapi "unstable.build/go-tui/api/browser"
+	browserapitest "unstable.build/go-tui/api/browser/test"
 	"unstable.build/go-tui/config"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/plugin"
@@ -136,7 +137,7 @@ func TestCommandSplitHandlerOpenWindow(t *testing.T) {
 		cmdName := "blah"
 		config := CommandSplitHandlerConfig{
 			Command:          cmdName,
-			SplitOrientation: browser.OrientationLeft,
+			SplitOrientation: browserapi.OrientationLeft,
 		}
 		grants := plugin.Grant{
 			Token:      1555,
@@ -158,10 +159,10 @@ func testSplitWindow(
 	defer ctrl.Finish()
 
 	cfg.Handler = func(grants []plugin.Grant, broker proto.MuxBroker,
-		focus browser.Window, c config.Config) (tui.Handler, error) {
+		focus browserapi.Window, c config.Config) (tui.Handler, error) {
 		return handler.NewTestHandler(), nil
 	}
-	mockWm := browser.NewMockWindowManager(ctrl)
+	mockWm := browserapitest.NewMockWindowManager(ctrl)
 	h := &cmdSplitHandler{config: cfg, wm: mockWm}
 	mockWm.EXPECT().
 		Split(gomock.Eq(cfg.SplitOrientation), gomock.Any(), gomock.Any()).

@@ -1,7 +1,8 @@
-package browser
+package rpc
 
 import (
 	"fmt"
+	"log"
 	"net"
 	"sync"
 	"testing"
@@ -9,15 +10,18 @@ import (
 	gomock "github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/goleak"
 	"google.golang.org/grpc"
-	browserpb "unstable.build/go-tui/browser/rpc"
+	browserapi "unstable.build/go-tui/api/browser"
+	"unstable.build/go-tui/browser"
+	browsertest "unstable.build/go-tui/browser/test"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/proto"
 	"unstable.build/go-tui/term"
 )
 
 func newClientServerIntegration(
-	t *testing.T, h Browser,
+	t *testing.T, h browser.Browser,
 ) (*Client, func()) {
 	lis, err := net.Listen("tcp", ":0")
 	require.NoError(t, err)
@@ -26,10 +30,10 @@ func newClientServerIntegration(
 
 	grpcServer := grpc.NewServer()
 	rpcServer := NewServer(broker, h, mutex)
-	browserpb.RegisterWindowManagerServer(grpcServer, rpcServer)
-	browserpb.RegisterResourceOpenerServer(grpcServer, rpcServer)
-	browserpb.RegisterMessengerServer(grpcServer, rpcServer)
-	browserpb.RegisterEventPublisherServer(grpcServer, rpcServer)
+	RegisterWindowManagerServer(grpcServer, rpcServer)
+	RegisterResourceOpenerServer(grpcServer, rpcServer)
+	RegisterMessengerServer(grpcServer, rpcServer)
+	RegisterEventPublisherServer(grpcServer, rpcServer)
 
 	go grpcServer.Serve(lis)
 
@@ -51,33 +55,41 @@ func newClientServerIntegration(
 }
 
 func TestIntegrationSetFocus(t *testing.T) {
+	defer goleak.VerifyNone(t)
+
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mock := NewMockBrowser(ctrl)
+	win1 := browsertest.NopWindow()
+	win2 := browsertest.NopWindow()
+
+	mock := browsertest.NewMockBrowser(ctrl)
+	mock.EXPECT().Window(gomock.Any()).DoAndReturn(func(id uint64) (browser.Window, bool) {
+		if id == 1 {
+			return win1, true
+		}
+		return win2, true
+	}).AnyTimes()
 	client, cleanup := newClientServerIntegration(t, mock)
 	defer cleanup()
-
-	win1 := NopWindow()
-	win2 := NopWindow()
 
 	mock.EXPECT().Focus().Return(win1, nil)
 	resWin1, err := client.Focus()
 	require.NoError(t, err)
 
 	mock.EXPECT().Split(gomock.Any(), gomock.Any(), gomock.Any()).Return(win2, nil)
-	resWin2, err := client.Split(OrientationDefault, resWin1, nil)
+	resWin2, err := client.Split(browserapi.OrientationDefault, resWin1, nil)
 	require.NoError(t, err)
 
 	mock.EXPECT().SetFocus(gomock.Any()).Return(win2, nil)
 	resPrev, err := client.SetFocus(resWin1)
 	require.NoError(t, err)
-	assert.Equal(t, resWin2.id(), resPrev.id())
+	assert.Equal(t, resWin2.(interface{ ID() uint64 }).ID(), resPrev.(interface{ ID() uint64 }).ID())
 
 	mock.EXPECT().SetFocus(gomock.Any()).Return(win1, nil)
 	resPrev, err = client.SetFocus(resWin2)
 	require.NoError(t, err)
-	assert.Equal(t, resWin1.id(), resPrev.id())
+	assert.Equal(t, resWin1.(interface{ ID() uint64 }).ID(), resPrev.(interface{ ID() uint64 }).ID())
 }
 
 func TestIntegrationFloating(t *testing.T) {
@@ -96,19 +108,24 @@ func TestIntegrationFloating(t *testing.T) {
 		{Alignment: component.SpanAlignmentCentered},
 	}
 
-	for _, tcase := range tsuite {
+	var wins []browserapi.Window
+	for _, _tcase := range tsuite {
+		tcase := _tcase
 		t.Run(fmt.Sprintf("%v", tcase.Alignment), func(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			defer ctrl.Finish()
 
-			mock := NewMockBrowser(ctrl)
+			mock := browsertest.NewMockBrowser(ctrl)
 			client, cleanup := newClientServerIntegration(t, mock)
 			defer cleanup()
 
-			win1 := NopWindow()
+			win1 := browsertest.NopWindow()
 
+			var wg sync.WaitGroup
+			wg.Add(1)
 			mock.EXPECT().Floating(gomock.Any(), gomock.Any()).
-				DoAndReturn(func(h Floating, cfg component.FloatingConfig) (Window, error) {
+				DoAndReturn(func(h browser.Floating, cfg component.FloatingConfig) (browser.Window, error) {
+					defer wg.Done()
 					actualWidth, actualHeight := h.Dimensions()
 					assert.Equal(t, 2, actualWidth)
 					assert.Equal(t, 2, actualHeight)
@@ -116,9 +133,17 @@ func TestIntegrationFloating(t *testing.T) {
 					assert.Equal(t, tcase.Alignment, cfg.Alignment)
 					return win1, nil
 				})
-			resWin1, err := client.Floating(NewTestFloating(2, 2), tcase)
+			resWin1, err := client.Floating(browsertest.NewTestFloating(2, 2), tcase)
 			require.NoError(t, err)
+
+			wg.Wait()
+			mock.EXPECT().Window(gomock.Any()).Return(win1, true).AnyTimes()
 			require.NoError(t, resWin1.Close())
+			wins = append(wins, resWin1)
 		})
 	}
+	for _, win := range wins {
+		log.Println(win)
+	}
+	goleak.VerifyNone(t)
 }

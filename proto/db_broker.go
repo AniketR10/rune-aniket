@@ -17,6 +17,7 @@ import (
 	"unstable.build/go-tui/util"
 )
 
+// DEPRECATED: remove once migration to channel API is done
 // satisfies to MuxBroker
 type dbBroker struct {
 	mu        sync.Mutex
@@ -129,6 +130,31 @@ func (t *dbBroker) Dial(ID uint32) (conn MuxConn, err error) {
 	opts := []grpc.DialOption{grpc.WithInsecure(), grpc.WithDialer(
 		func(_ string, _ time.Duration) (net.Conn, error) {
 			addr, err := net.ResolveUnixAddr("unix", lis.Address)
+			if err != nil {
+				return nil, err
+			}
+			return net.Dial(addr.Network(), addr.String())
+		},
+	)}
+	conn, err = grpc.Dial("", opts...)
+	if err != nil {
+		return
+	}
+
+	if log.IsLevelEnabled(log.TraceLevel) {
+		conn = loggingConn{conn}
+	}
+	return
+}
+
+func (t *dbBroker) NewChannel(tags ...string) (net.Listener, error) {
+	return util.TempUnixListenerTags(tags...)
+}
+
+func (t *dbBroker) DialChannel(address string) (conn MuxConn, err error) {
+	opts := []grpc.DialOption{grpc.WithInsecure(), grpc.WithDialer(
+		func(_ string, _ time.Duration) (net.Conn, error) {
+			addr, err := net.ResolveUnixAddr("unix", address)
 			if err != nil {
 				return nil, err
 			}
