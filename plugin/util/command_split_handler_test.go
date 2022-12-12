@@ -12,12 +12,13 @@ import (
 	"unstable.build/go-tui"
 	browserapi "unstable.build/go-tui/api/browser"
 	browserapitest "unstable.build/go-tui/api/browser/test"
+	textapi "unstable.build/go-tui/api/text"
+	textplugin "unstable.build/go-tui/api/text/plugin"
 	"unstable.build/go-tui/config"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/plugin"
 	"unstable.build/go-tui/proto"
 	prototest "unstable.build/go-tui/proto/test"
-	"unstable.build/go-tui/text"
 	textpb "unstable.build/go-tui/text/rpc"
 )
 
@@ -116,7 +117,7 @@ func TestCommandSplitHandlerEmpty(t *testing.T) {
 		grants := []plugin.Grant{
 			{
 				Token:      token,
-				Permission: plugin.PermissionEditor,
+				Permission: plugin.Permission(textplugin.PermissionEditor),
 			},
 		}
 		h.PermissionGranted(grants)
@@ -141,10 +142,10 @@ func TestCommandSplitHandlerOpenWindow(t *testing.T) {
 		}
 		grants := plugin.Grant{
 			Token:      1555,
-			Permission: plugin.PermissionEditor,
+			Permission: plugin.Permission(textplugin.PermissionEditor),
 		}
 		testSplitWindow(t, config, grants, func(h *cmdSplitHandler) {
-			ok, err := h.HandleCommand(context.Background(), text.Command{Name: cmdName})
+			ok, err := h.HandleCommand(context.Background(), textapi.Command{Name: cmdName})
 			require.NoError(t, err)
 			assert.False(t, ok)
 		})

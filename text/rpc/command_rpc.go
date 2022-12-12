@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	log "github.com/sirupsen/logrus"
+	textapi "unstable.build/go-tui/api/text"
 	"unstable.build/go-tui/browser"
 	browserpb "unstable.build/go-tui/browser/rpc"
 	"unstable.build/go-tui/proto"
@@ -29,7 +30,7 @@ func newCommandClient(conn proto.MuxConn, s *Server) *commandClient {
 	return ret
 }
 
-func (c *commandClient) HandleCommand(ctx context.Context, cmd text.Command) (
+func (c *commandClient) HandleCommand(ctx context.Context, cmd textapi.Command) (
 	bool, error,
 ) {
 	var resourceID uint32
@@ -88,18 +89,18 @@ func (c *commandClient) Close() error {
 
 type commandServer struct {
 	UnimplementedCommandHandlerServer
-	h       text.CommandHandler
+	h       textapi.CommandHandler
 	browser *browserpb.Client
 }
 
-func newCommandServer(h text.CommandHandler, bc *browserpb.Client) *commandServer {
+func newCommandServer(h textapi.CommandHandler, bc *browserpb.Client) *commandServer {
 	ret := new(commandServer)
 	ret.h = h
 	ret.browser = bc
 	return ret
 }
 
-func (s *commandServer) commandFromProto(e *text.Command, pe *HandleCommandRequest) (err error) {
+func (s *commandServer) commandFromProto(e *textapi.Command, pe *HandleCommandRequest) (err error) {
 	if pe.GetResourceName().GetUri() != "" {
 		e.URI, err = NewURIFromProto(pe.GetResourceName())
 		if err != nil {
@@ -123,7 +124,7 @@ func (s *commandServer) commandFromProto(e *text.Command, pe *HandleCommandReque
 func (s *commandServer) HandleCommand(
 	ctx context.Context, req *HandleCommandRequest,
 ) (*HandleCommandResponse, error) {
-	var cmd text.Command
+	var cmd textapi.Command
 	err := s.commandFromProto(&cmd, req)
 	if err != nil {
 		return nil, err

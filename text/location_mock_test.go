@@ -1,28 +1,30 @@
 package text
 
+import textapi "unstable.build/go-tui/api/text"
+
 type testLocationList struct {
 	curr      int
-	locations []Location
+	locations []textapi.Location
 }
 
-func (t *testLocationList) Current() (Location, bool) {
+func (t *testLocationList) Current() (textapi.Location, bool) {
 	if len(t.locations) == 0 {
-		return Location{}, false
+		return textapi.Location{}, false
 	}
 	return t.locations[t.curr], true
 }
 
-func (t *testLocationList) Prev() (Location, bool) {
+func (t *testLocationList) Prev() (textapi.Location, bool) {
 	if t.curr == 0 {
-		return Location{}, false
+		return textapi.Location{}, false
 	}
 	t.curr--
 	return t.locations[t.curr], true
 }
 
-func (t *testLocationList) Next() (Location, bool) {
+func (t *testLocationList) Next() (textapi.Location, bool) {
 	if t.curr == len(t.locations)-1 {
-		return Location{}, false
+		return textapi.Location{}, false
 	}
 	t.curr++
 	return t.locations[t.curr], true

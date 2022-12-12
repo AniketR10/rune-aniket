@@ -4,20 +4,21 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	textapi "unstable.build/go-tui/api/text"
 	"unstable.build/go-tui/term"
 )
 
 var (
-	loc1 = Location{
+	loc1 = textapi.Location{
 		To:   term.Coordinates{X: 1, Y: 3},
 		Attr: term.Attributes{Fg: term.AttrBold},
 	}
-	loc2 = Location{
+	loc2 = textapi.Location{
 		From:    term.Coordinates{X: 1, Y: 3},
 		Attr:    term.Attributes{Fg: term.ColorBlack, Bg: term.ColorGreen},
 		Message: "wsb: hold BBBY",
 	}
-	loc3 = Location{}
+	loc3 = textapi.Location{}
 )
 
 func resetLocationList(l LocationList) {
@@ -29,7 +30,7 @@ func resetLocationList(l LocationList) {
 	}
 }
 
-func assertLocation(t *testing.T, l LocationList, idx int, loca Location) {
+func assertLocation(t *testing.T, l LocationList, idx int, loca textapi.Location) {
 	resetLocationList(l)
 	var i int
 	for loc, ok := l.Current(); ok; loc, ok = l.Next() {
@@ -50,14 +51,14 @@ func assertLocationListLen(t *testing.T, l LocationList, length int) {
 }
 
 func TestLocationSlice(t *testing.T) {
-	l := LocationSlice([]Location{
+	l := LocationSlice([]textapi.Location{
 		loc2,
 	})
 
 	assertLocation(t, l, 0, loc2)
 	assertLocationListLen(t, l, 1)
 
-	l = LocationSlice([]Location{
+	l = LocationSlice([]textapi.Location{
 		loc1,
 		loc2,
 		loc3,
@@ -68,7 +69,7 @@ func TestLocationSlice(t *testing.T) {
 	assertLocation(t, l, 2, loc3)
 	assertLocationListLen(t, l, 3)
 
-	l = LocationSlice([]Location{})
+	l = LocationSlice([]textapi.Location{})
 	assertLocationListLen(t, l, 0)
 
 	l = LocationSlice(nil)

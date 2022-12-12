@@ -10,6 +10,7 @@ import (
 
 	"github.com/ernestrc/blue/logging"
 	log "github.com/sirupsen/logrus"
+	textapi "unstable.build/go-tui/api/text"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/proto"
 	termpb "unstable.build/go-tui/term/rpc"
@@ -58,7 +59,7 @@ type serverEventHandler struct {
 	exitNext bool
 }
 
-func (s *serverEventHandler) Handle(ctx context.Context, ev text.Event) bool {
+func (s *serverEventHandler) Handle(ctx context.Context, ev textapi.Event) bool {
 	if s.exitNext {
 		return true
 	}
@@ -109,7 +110,7 @@ func (s *Server) Init(
 	s.errChan = make(chan error)
 	s.browser = browser
 
-	evs := []text.EventType{text.EventTypeClose, text.EventTypeOpen}
+	evs := []textapi.EventType{textapi.EventTypeClose, textapi.EventTypeOpen}
 
 	s.editor.Locker.Lock()
 	defer s.editor.Locker.Unlock()
@@ -134,14 +135,14 @@ func (s *Server) cleanResource(resource workspace.URI) {
 }
 
 // Handle satisfies editor.Editor so server can consume EventypeClose and Open events.
-func (s *Server) Handle(ctx context.Context, ev text.Event) bool {
+func (s *Server) Handle(ctx context.Context, ev textapi.Event) bool {
 	switch ev.Type {
-	case text.EventTypeOpen:
+	case textapi.EventTypeOpen:
 		_, ok := s.uriToID[ev.URI.String()]
 		if !ok {
 			s.addNextHandlerResource(ev.URI, ev.Resource)
 		}
-	case text.EventTypeClose:
+	case textapi.EventTypeClose:
 		go func() {
 			// wait for other events to be dispatched before cleaning resources
 			<-ctx.Done()
@@ -204,7 +205,7 @@ func (s *Server) safeForceCloseHandler(brokerID uint32, reason string) error {
 	return err
 }
 
-func (s *Server) dialHandler(handlerID uint32) (text.EventHandler, error) {
+func (s *Server) dialHandler(handlerID uint32) (textapi.EventHandler, error) {
 	s.editor.Lock()
 	res, ok := s.clients[uint64(handlerID)]
 	s.editor.Unlock()
@@ -385,7 +386,7 @@ func (s *Server) Subscribe(ctx context.Context, in *EditorSubscribeRequest) (
 		return nil, err
 	}
 
-	var evTypes []text.EventType
+	var evTypes []textapi.EventType
 	for _, ev := range in.GetType() {
 		evType, err := protoTypeToModel(ev)
 		if err != nil {
@@ -430,9 +431,9 @@ func (s *Server) Register(ctx context.Context, in *RegisterCommandRequest) (
 	return new(RegisterCommandResponse), nil
 }
 
-func getLocations(locs []*SetLocationListRequest_Location) (ret []text.Location) {
+func getLocations(locs []*SetLocationListRequest_Location) (ret []textapi.Location) {
 	for _, loc := range locs {
-		ret = append(ret, text.Location{
+		ret = append(ret, textapi.Location{
 			Attr:    loc.GetAttr().ToModel(),
 			From:    loc.GetFrom().ToModel(),
 			To:      loc.GetTo().ToModel(),
@@ -459,7 +460,7 @@ func (s *Server) SetLocationList(ctx context.Context, in *SetLocationListRequest
 		return nil, errHandlerNotFound
 	}
 
-	err := s.editor.SetLocationList(h, text.LocationPriority(pri),
+	err := s.editor.SetLocationList(h, textapi.LocationPriority(pri),
 		id, text.LocationSlice(getLocations(locs)))
 	if err != nil {
 		return nil, err

@@ -1,4 +1,4 @@
-package text
+package test
 
 import (
 	"context"
@@ -7,17 +7,19 @@ import (
 	gomock "github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	textapi "unstable.build/go-tui/api/text"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/term"
+	"unstable.build/go-tui/text"
 	"unstable.build/go-tui/workspace"
 )
 
-func newEdit(content string) (*cell.Buffer, *component.Scroll, *Cursor) {
+func newEdit(content string) (*cell.Buffer, *component.Scroll, *text.Cursor) {
 	buf := cell.NewBuffer()
 	buf.WriteString(content)
 	scroll := component.NewScroll(buf)
-	cursor := NewCursor(scroll)
+	cursor := text.NewCursor(scroll)
 	return buf, scroll, cursor
 }
 
@@ -33,13 +35,13 @@ func TestPublisher(t *testing.T) {
 	t.Run("publishes EventTypeOpen when PublishEdit is called", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 
-		pub := NewPublisher()
+		pub := text.NewPublisher()
 		content := "1. She interviews"
 
-		var eventHandler Handler
-		pub.SubscribeEditorEvents([]EventType{EventTypeOpen},
-			FuncEventHandler(func(ctx context.Context, ev Event) bool {
-				assert.Equal(t, EventTypeOpen, ev.Type)
+		var eventHandler text.Handler
+		pub.SubscribeEditorEvents([]textapi.EventType{textapi.EventTypeOpen},
+			text.FuncEventHandler(func(ctx context.Context, ev textapi.Event) bool {
+				assert.Equal(t, textapi.EventTypeOpen, ev.Type)
 				assert.Equal(t, content, ev.Content)
 				assert.Equal(t, uri, ev.URI)
 				eventHandler = ev.Resource
@@ -54,13 +56,13 @@ func TestPublisher(t *testing.T) {
 	t.Run("publishes EventTypeFocus when PublishEdit is called", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 
-		pub := NewPublisher()
+		pub := text.NewPublisher()
 		content := "2. She gets hired"
 
-		var eventHandler Handler
-		pub.SubscribeEditorEvents([]EventType{EventTypeFocus},
-			FuncEventHandler(func(ctx context.Context, ev Event) bool {
-				assert.Equal(t, EventTypeFocus, ev.Type)
+		var eventHandler text.Handler
+		pub.SubscribeEditorEvents([]textapi.EventType{textapi.EventTypeFocus},
+			text.FuncEventHandler(func(ctx context.Context, ev textapi.Event) bool {
+				assert.Equal(t, textapi.EventTypeFocus, ev.Type)
 				assert.Equal(t, uri, ev.URI)
 				eventHandler = ev.Resource
 				return false
@@ -74,13 +76,13 @@ func TestPublisher(t *testing.T) {
 	t.Run("subscribes to multiple events", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 
-		pub := NewPublisher()
+		pub := text.NewPublisher()
 		content := "3. SHE GOT HIRED, I KNEW IT!!!"
 
-		var eventHandler Handler
+		var eventHandler text.Handler
 		var fired int
-		pub.SubscribeEditorEvents([]EventType{EventTypeOpen, EventTypeFocus},
-			FuncEventHandler(func(ctx context.Context, ev Event) bool {
+		pub.SubscribeEditorEvents([]textapi.EventType{textapi.EventTypeOpen, textapi.EventTypeFocus},
+			text.FuncEventHandler(func(ctx context.Context, ev textapi.Event) bool {
 				fired++
 				assert.Equal(t, uri, ev.URI)
 				eventHandler = ev.Resource
@@ -97,7 +99,7 @@ func TestPublisher(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
-		pub := NewPublisher()
+		pub := text.NewPublisher()
 		mock := newMock(ctrl)
 		buf, _, cursor := newEdit("\n\n")
 
@@ -105,9 +107,9 @@ func TestPublisher(t *testing.T) {
 		h.Resize(2, 2)
 
 		var called bool
-		pub.SubscribeEditorEvents([]EventType{EventTypeCursor},
-			FuncEventHandler(func(ctx context.Context, ev Event) bool {
-				require.Equal(t, EventTypeCursor, ev.Type)
+		pub.SubscribeEditorEvents([]textapi.EventType{textapi.EventTypeCursor},
+			text.FuncEventHandler(func(ctx context.Context, ev textapi.Event) bool {
+				require.Equal(t, textapi.EventTypeCursor, ev.Type)
 				assert.Equal(t, uri, ev.URI)
 				assert.Equal(t, h, ev.Resource)
 				assert.Equal(t, term.Coordinates{Y: 2}, ev.Start)
@@ -140,7 +142,7 @@ func TestPublisher(t *testing.T) {
 
 	t.Run("dispatches EventTypeScroll when scroll seeks", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
-		pub := NewPublisher()
+		pub := text.NewPublisher()
 		buf, scroll, cursor := newEdit("\n\n")
 
 		h := pub.PublishEdit(uri, buf, newMock(ctrl), cursor)
@@ -148,9 +150,9 @@ func TestPublisher(t *testing.T) {
 		require.True(t, scroll.SeekDown())
 
 		at := term.Coordinates{X: -1}
-		pub.SubscribeEditorEvents([]EventType{EventTypeScroll},
-			FuncEventHandler(func(ctx context.Context, ev Event) bool {
-				require.Equal(t, EventTypeScroll, ev.Type)
+		pub.SubscribeEditorEvents([]textapi.EventType{textapi.EventTypeScroll},
+			text.FuncEventHandler(func(ctx context.Context, ev textapi.Event) bool {
+				require.Equal(t, textapi.EventTypeScroll, ev.Type)
 				assert.Equal(t, uri, ev.URI)
 				assert.Equal(t, h, ev.Resource)
 				at = ev.Start
@@ -167,17 +169,17 @@ func TestPublisher(t *testing.T) {
 
 	t.Run("dispatches EventTypeEdit when buffer content is inserted", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
-		pub := NewPublisher()
+		pub := text.NewPublisher()
 		buf, _, cursor := newEdit("\n\n")
 
 		h := pub.PublishEdit(uri, buf, newMock(ctrl), cursor)
 		h.Resize(2, 2)
 
 		var called bool
-		pub.SubscribeEditorEvents([]EventType{EventTypeEdit},
-			FuncEventHandler(func(ctx context.Context, ev Event) bool {
+		pub.SubscribeEditorEvents([]textapi.EventType{textapi.EventTypeEdit},
+			text.FuncEventHandler(func(ctx context.Context, ev textapi.Event) bool {
 				called = true
-				require.Equal(t, EventTypeEdit, ev.Type)
+				require.Equal(t, textapi.EventTypeEdit, ev.Type)
 				assert.Equal(t, term.Coordinates{Y: 2}, ev.Start, "Start")
 				assert.Equal(t, term.Coordinates{Y: 2}, ev.End, "End")
 				assert.Equal(t, term.Coordinates{Y: 2}, ev.From, "From")
@@ -194,17 +196,17 @@ func TestPublisher(t *testing.T) {
 
 	t.Run("dispatches EventTypeEdit when buffer content is deleted", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
-		pub := NewPublisher()
+		pub := text.NewPublisher()
 		buf, _, cursor := newEdit("aaa\nbbb")
 
 		h := pub.PublishEdit(uri, buf, newMock(ctrl), cursor)
 		h.Resize(2, 2)
 
 		var called bool
-		pub.SubscribeEditorEvents([]EventType{EventTypeEdit},
-			FuncEventHandler(func(ctx context.Context, ev Event) bool {
+		pub.SubscribeEditorEvents([]textapi.EventType{textapi.EventTypeEdit},
+			text.FuncEventHandler(func(ctx context.Context, ev textapi.Event) bool {
 				called = true
-				require.Equal(t, EventTypeEdit, ev.Type)
+				require.Equal(t, textapi.EventTypeEdit, ev.Type)
 				assert.Equal(t, term.Coordinates{}, ev.Start, "Start")
 				assert.Equal(t, term.Coordinates{Y: 1}, ev.End, "End")
 				assert.Equal(t, term.Coordinates{}, ev.From, "From")

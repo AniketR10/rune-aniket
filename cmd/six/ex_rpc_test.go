@@ -22,6 +22,7 @@ import (
 	"unstable.build/go-tui/proto"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
+	texttest "unstable.build/go-tui/text/test"
 	"unstable.build/go-tui/workspace"
 )
 
@@ -137,7 +138,7 @@ func TestRPCBrowserCloseLeak(t *testing.T) {
 	uri, err := workspace.ParseURI("file:///a")
 	require.NoError(t, err)
 	var destructor func()
-	_, b, err := newTestRPCBrowser(t, &destructor)(text.NopEditor(), text.WithFile(uri))
+	_, b, err := newTestRPCBrowser(t, &destructor)(texttest.NopEditor(), text.WithFile(uri))
 	require.NoError(t, err)
 	defer destructor()
 

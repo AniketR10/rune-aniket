@@ -14,21 +14,13 @@ import (
 	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui"
 	browserapi "unstable.build/go-tui/api/browser"
+	textapi "unstable.build/go-tui/api/text"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/workspace"
-)
-
-var (
-	// ErrInvalidSave is returned when trying to save a buffer that it's not a file
-	// in the file system.
-	ErrInvalidSave = errors.New("Cannot save this buffer")
-
-	// ErrInvalidSplit is returned when attempting to split over a floating window.
-	ErrInvalidSplit = errors.New("Cannot split this window")
 )
 
 // used for command and event handlers
@@ -45,7 +37,7 @@ type Component struct {
 	workspace      workspace.Loader
 	ed             Editor
 	config         Config
-	edSubscribers  map[EventType][]EventHandler
+	edSubscribers  map[textapi.EventType][]EventHandler
 	cmdSubscribers map[string]CommandHandler
 }
 
@@ -77,8 +69,8 @@ func (e *editorFlusherCloser) Flush() error {
 }
 
 func (e *editorFlusherCloser) Close() error {
-	ev := Event{
-		Type:     EventTypeClose,
+	ev := textapi.Event{
+		Type:     textapi.EventTypeClose,
 		URI:      e.uri,
 		Resource: e.h,
 	}
@@ -177,7 +169,7 @@ func (c *Component) Init(ed Editor, w workspace.Loader, config Config) error {
 
 	c.ed = ed
 	c.workspace = w
-	c.edSubscribers = make(map[EventType][]EventHandler)
+	c.edSubscribers = make(map[textapi.EventType][]EventHandler)
 	c.cmdSubscribers = make(map[string]CommandHandler)
 
 	var first browser.Handler
@@ -231,11 +223,11 @@ func (c *Component) Init(ed Editor, w workspace.Loader, config Config) error {
 type windowFocusSubscriber Component
 
 func (c *windowFocusSubscriber) OnFocus(old, focus handler.Window) {
-	c.tryDispatchEvent(old, EventTypeUnfocus)
-	c.tryDispatchEvent(focus, EventTypeFocus)
+	c.tryDispatchEvent(old, textapi.EventTypeUnfocus)
+	c.tryDispatchEvent(focus, textapi.EventTypeFocus)
 }
 
-func (c *windowFocusSubscriber) tryDispatchEvent(win handler.Window, evType EventType) {
+func (c *windowFocusSubscriber) tryDispatchEvent(win handler.Window, evType textapi.EventType) {
 	content := win.Content()
 	t, ok := content.(*browser.Tab)
 	if !ok {
@@ -245,7 +237,7 @@ func (c *windowFocusSubscriber) tryDispatchEvent(win handler.Window, evType Even
 	if !ok {
 		return
 	}
-	(*Component)(c).dispatchEvent(Event{
+	(*Component)(c).dispatchEvent(textapi.Event{
 		Type:     evType,
 		URI:      t.URI(),
 		Resource: res,
@@ -283,8 +275,8 @@ func (s *compTabSubscriber) OnFocus(t *browser.Tab) {
 		// is not main window
 		return
 	}
-	s.parent.dispatchEvent(Event{
-		Type:     EventTypeFocus,
+	s.parent.dispatchEvent(textapi.Event{
+		Type:     textapi.EventTypeFocus,
 		URI:      t.URI(),
 		Resource: res,
 	})
@@ -303,8 +295,8 @@ func (s *compTabSubscriber) OnFree(t *browser.Tab) {
 	if ok, err := s.window.Focus(); err != nil || !ok {
 		return
 	}
-	s.parent.dispatchEvent(Event{
-		Type:     EventTypeUnfocus,
+	s.parent.dispatchEvent(textapi.Event{
+		Type:     textapi.EventTypeUnfocus,
 		URI:      t.URI(),
 		Resource: res,
 	})
@@ -509,7 +501,7 @@ func (c *Component) CompleteCommand(ctx context.Context, cmd string, args ...str
 
 // DispatchCommand dispatches a EventTypeCommand with cmd to subscribers
 // subscribed via SubscribeEditorEvents.
-func (c *Component) DispatchCommand(cmd Command) (handled bool, err error) {
+func (c *Component) DispatchCommand(cmd textapi.Command) (handled bool, err error) {
 	if cmd.Window == nil {
 		panic("invalid command: missing Window from which command was invoked")
 	}
@@ -551,8 +543,8 @@ func (c *Component) dispatchFlush(file workspace.URI, h Handler) (string, error)
 		return "", err
 	}
 
-	ev := Event{
-		Type:     EventTypeFlush,
+	ev := textapi.Event{
+		Type:     textapi.EventTypeFlush,
 		URI:      file,
 		Resource: h,
 		Content:  content,
@@ -564,7 +556,7 @@ func (c *Component) dispatchFlush(file workspace.URI, h Handler) (string, error)
 }
 
 // dispatchEvent either flush or close events
-func (c *Component) dispatchEvent(ev Event) (handled bool) {
+func (c *Component) dispatchEvent(ev textapi.Event) (handled bool) {
 	subs, ok := c.edSubscribers[ev.Type]
 	if !ok {
 		return
@@ -597,7 +589,7 @@ func (c *Component) Split(
 ) (browser.Window, error) {
 	w, ok := c.comp.Split(o, win, h)
 	if !ok {
-		return nil, ErrInvalidSplit
+		return nil, textapi.ErrInvalidSplit
 	}
 	return w, nil
 }
@@ -645,7 +637,7 @@ func (c *Component) Edit(file workspace.URI, buf *cell.Buffer) (Handler, error) 
 
 // SetLocationList satisfies text.Editor.
 func (c *Component) SetLocationList(
-	h Handler, pri LocationPriority, ID string, loc LocationList,
+	h Handler, pri textapi.LocationPriority, ID string, loc LocationList,
 ) error {
 	return c.ed.SetLocationList(h, pri, ID, loc)
 }
@@ -679,7 +671,7 @@ func (c *Component) Flush(win browser.Window) error {
 	}
 	t, ok := content.(*browser.Tab)
 	if !ok || t.Closer() == nil {
-		return ErrInvalidSave
+		return textapi.ErrInvalidSave
 	}
 
 	fc := t.Closer().(workspace.FlusherCloser)
@@ -714,8 +706,8 @@ func (c *Component) dispatchOpenTabs(h EventHandler) (error, bool) {
 			ret = multierr.Append(ret, err)
 			continue
 		}
-		exit := h.Handle(ctx, Event{
-			Type:     EventTypeOpen,
+		exit := h.Handle(ctx, textapi.Event{
+			Type:     textapi.EventTypeOpen,
 			URI:      tab.URI(),
 			Resource: resHandler,
 			Content:  str,
@@ -735,8 +727,8 @@ func (c *Component) dispatchFocusTab(h EventHandler) bool {
 	if ok {
 		resHandler, ok := t.Handler().(Handler)
 		if ok {
-			ev := Event{
-				Type:     EventTypeFocus,
+			ev := textapi.Event{
+				Type:     textapi.EventTypeFocus,
 				URI:      t.URI(),
 				Resource: resHandler,
 			}
@@ -749,11 +741,11 @@ func (c *Component) dispatchFocusTab(h EventHandler) bool {
 // SubscribeEditorEvents subscribes h to editor events of type ev.
 // If ev is of type EventTypeOpen, an event will be dispatched for
 // every Tab currently open.
-func (c *Component) SubscribeEditorEvents(evs []EventType, h EventHandler) error {
+func (c *Component) SubscribeEditorEvents(evs []textapi.EventType, h EventHandler) error {
 	// iterate to dispatch immediate events
 	for _, ev := range evs {
 		switch ev {
-		case EventTypeOpen:
+		case textapi.EventTypeOpen:
 			err, exit := c.dispatchOpenTabs(h)
 			if err != nil {
 				return err
@@ -761,7 +753,7 @@ func (c *Component) SubscribeEditorEvents(evs []EventType, h EventHandler) error
 			if exit {
 				return nil
 			}
-		case EventTypeFocus:
+		case textapi.EventTypeFocus:
 			exit := c.dispatchFocusTab(h)
 			if exit {
 				return nil
@@ -771,11 +763,12 @@ func (c *Component) SubscribeEditorEvents(evs []EventType, h EventHandler) error
 
 	// iterate again so if handler exited for any event, we have returned
 	// and we do not subscribe it
-	var delegated []EventType
+	var delegated []textapi.EventType
 	for _, ev := range evs {
 		switch ev {
 		// delegate certain event dispatching to underlying editor.
-		case EventTypeOpen, EventTypeEdit, EventTypeScroll, EventTypeCursor:
+		case textapi.EventTypeOpen, textapi.EventTypeEdit,
+			textapi.EventTypeScroll, textapi.EventTypeCursor:
 			delegated = append(delegated, ev)
 		default:
 			if _, ok := c.edSubscribers[ev]; !ok {
@@ -897,7 +890,7 @@ func (c *Component) SetDefaultAttributes(h Handler, attr term.Attributes) error 
 // Close closes all resources associated with this Component.
 func (c *Component) Close() error {
 	// avoid dispatching close events on flusherCloser callbacks
-	c.edSubscribers = make(map[EventType][]EventHandler)
+	c.edSubscribers = make(map[textapi.EventType][]EventHandler)
 
 	err := c.comp.Close()
 	if err != nil {

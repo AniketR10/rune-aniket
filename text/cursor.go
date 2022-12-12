@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	textapi "unstable.build/go-tui/api/text"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/term"
@@ -46,7 +47,7 @@ type curSubscriber struct {
 
 type message struct {
 	listID   string
-	location Location
+	location textapi.Location
 }
 
 // Cursor is a helper structure which manages a cursor over a Scroll.
@@ -66,7 +67,7 @@ type Cursor struct {
 
 type priorityLocationList struct {
 	LocationList
-	priority LocationPriority
+	priority textapi.LocationPriority
 }
 
 // NewCursor allocates storage for a new cursor,
@@ -272,19 +273,19 @@ func (c *Cursor) setSearchLocationList(text string) int {
 	c.search = text
 	n := c.scroll.Search(text)
 
-	searchLoc := make([]Location, n)
+	searchLoc := make([]textapi.Location, n)
 	for i := 0; i < n; i++ {
 		res, ok := c.scroll.NextResult()
 		if !ok {
 			panic("invalid scroll search results")
 		}
-		searchLoc[i] = Location{
+		searchLoc[i] = textapi.Location{
 			From: res,
 			// To: is not necessary for MoveToNextLocation
 		}
 	}
 
-	c.SetLocationList(LocationPriorityInfo, searchLocationListID, LocationSlice(searchLoc))
+	c.SetLocationList(textapi.LocationPriorityInfo, searchLocationListID, LocationSlice(searchLoc))
 	return n
 }
 
@@ -1470,7 +1471,7 @@ func (c *Cursor) clearMessages(ID string) {
 
 // Locations returns the set of locations by location list ID set by SetLocationList,
 // at the current cursor position, if there's any.
-func (c *Cursor) Locations() (map[string]Location, bool) {
+func (c *Cursor) Locations() (map[string]textapi.Location, bool) {
 	msgs, ok := c.messages[c.cursorAtScroll()]
 	if !ok {
 		return nil, false
@@ -1478,7 +1479,7 @@ func (c *Cursor) Locations() (map[string]Location, bool) {
 	if len(msgs) == 0 {
 		return nil, false
 	}
-	ret := make(map[string]Location, len(msgs))
+	ret := make(map[string]textapi.Location, len(msgs))
 	for _, msg := range msgs {
 		ret[msg.listID] = msg.location
 	}
@@ -1488,7 +1489,9 @@ func (c *Cursor) Locations() (map[string]Location, bool) {
 // SetLocationList sets a location list on this cursor. It substitutes and returns
 // the previous location list with the same ID, if there was any.
 // Any calls to Insert on the underlying Writer will reset all location lists.
-func (c *Cursor) SetLocationList(pri LocationPriority, ID string, l LocationList) LocationList {
+func (c *Cursor) SetLocationList(
+	pri textapi.LocationPriority, ID string, l LocationList,
+) LocationList {
 	prev, ok := c.locs[ID]
 	if ok {
 		c.setLocListAttr(prev, true)
@@ -1528,7 +1531,7 @@ func (c *Cursor) SetLocationList(pri LocationPriority, ID string, l LocationList
 }
 
 func (c *Cursor) endOfLocationList(
-	l LocationList, op func(LocationList) (Location, bool),
+	l LocationList, op func(LocationList) (textapi.Location, bool),
 ) (term.Coordinates, bool) {
 	prev, ok := l.Current()
 	if !ok {
@@ -1544,7 +1547,7 @@ func (c *Cursor) endOfLocationList(
 }
 
 func (c *Cursor) movePastCursor(
-	l LocationList, op, reverse func(LocationList) (Location, bool),
+	l LocationList, op, reverse func(LocationList) (textapi.Location, bool),
 	continueIf func(term.Coordinates, term.Coordinates) bool,
 ) bool {
 	c.scroll.DisablePublishing()

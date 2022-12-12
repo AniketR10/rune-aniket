@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"unstable.build/go-tui"
+	textapi "unstable.build/go-tui/api/text"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/proto"
@@ -19,6 +20,7 @@ import (
 	"unstable.build/go-tui/term"
 	termpb "unstable.build/go-tui/term/rpc"
 	"unstable.build/go-tui/text"
+	texttest "unstable.build/go-tui/text/test"
 	"unstable.build/go-tui/workspace"
 )
 
@@ -30,16 +32,16 @@ type nopLocker struct{}
 func (l nopLocker) Lock()   {}
 func (l nopLocker) Unlock() {}
 
-func newTestServer(t *testing.T, ctrl *gomock.Controller) (*proto.MockMuxBroker, *text.MockEditor, *Server) {
+func newTestServer(t *testing.T, ctrl *gomock.Controller) (*proto.MockMuxBroker, *texttest.MockEditor, *Server) {
 	broker := proto.NewMockMuxBroker(ctrl)
-	ed := text.NewMockEditor(ctrl)
+	ed := texttest.NewMockEditor(ctrl)
 	expectInitialServerSubscribe(t, ed)
 	s := NewServer(broker, ed, new(sync.Mutex), testBrowserServer{})
 	broker.EXPECT().Cleanup(gomock.Any()).AnyTimes()
 	return broker, ed, s
 }
 
-func expectEdit(t *testing.T, mock *text.MockEditor, resource workspace.URI, content string) {
+func expectEdit(t *testing.T, mock *texttest.MockEditor, resource workspace.URI, content string) {
 	mock.EXPECT().Edit(gomock.Any(), gomock.Any()).Times(1).
 		DoAndReturn(func(_uri workspace.URI, buf *cell.Buffer) (tui.Handler, error) {
 			assert.Equal(t, resource, _uri)
@@ -127,10 +129,10 @@ func expectHandlerInvokeExit(t *testing.T, handlerConn *proto.MockMuxConn) {
 
 func assertServerHandlerExitClose(
 	t *testing.T, handlerConn *proto.MockMuxConn,
-	h text.EventHandler, s *Server, quitCh chan struct{},
+	h textapi.EventHandler, s *Server, quitCh chan struct{},
 	broker *proto.MockMuxBroker,
 ) {
-	resource := &text.TestHandler{}
+	resource := &texttest.TestHandler{}
 	expectHandlerInvokeExit(t, handlerConn)
 
 	handlerConn.EXPECT().Close().Times(1).
@@ -141,10 +143,10 @@ func assertServerHandlerExitClose(
 	cancel()
 
 	// force server to store resource name and make an ID
-	s.Handle(ctx, text.Event{Type: text.EventTypeOpen, URI: uri, Resource: resource})
+	s.Handle(ctx, textapi.Event{Type: textapi.EventTypeOpen, URI: uri, Resource: resource})
 
 	s.editor.Lock()
-	h.Handle(ctx, text.Event{Type: text.EventTypeClose, URI: uri, Resource: resource})
+	h.Handle(ctx, textapi.Event{Type: textapi.EventTypeClose, URI: uri, Resource: resource})
 	s.editor.Unlock()
 
 	waitForMonitoringExit(quitCh)
@@ -162,12 +164,12 @@ func TestServerSubscribe(t *testing.T) {
 		defer ctrl.Finish()
 
 		broker, mock, s := newTestServer(t, ctrl)
-		expectedEvTypes := []text.EventType{text.EventTypeFlush, text.EventTypeFocus}
+		expectedEvTypes := []textapi.EventType{textapi.EventTypeFlush, textapi.EventTypeFocus}
 
-		var actualEvTypes []text.EventType
+		var actualEvTypes []textapi.EventType
 		var wg sync.WaitGroup
 		mock.EXPECT().SubscribeEditorEvents(gomock.Any(), gomock.Any()).
-			DoAndReturn(func(evs []text.EventType, _h text.EventHandler) error {
+			DoAndReturn(func(evs []textapi.EventType, _h textapi.EventHandler) error {
 				defer wg.Done()
 				actualEvTypes = evs
 				return nil
@@ -207,13 +209,13 @@ func TestServerSubscribe(t *testing.T) {
 		defer ctrl.Finish()
 
 		broker, mock, s := newTestServer(t, ctrl)
-		expectedEvTypes := []text.EventType{text.EventTypeFlush}
+		expectedEvTypes := []textapi.EventType{textapi.EventTypeFlush}
 
-		var actualEvTypes []text.EventType
-		var h text.EventHandler
+		var actualEvTypes []textapi.EventType
+		var h textapi.EventHandler
 		var wg sync.WaitGroup
 		mock.EXPECT().SubscribeEditorEvents(gomock.Any(), gomock.Any()).
-			DoAndReturn(func(evs []text.EventType, _h text.EventHandler) error {
+			DoAndReturn(func(evs []textapi.EventType, _h textapi.EventHandler) error {
 				defer wg.Done()
 				actualEvTypes = evs
 				h = _h
@@ -241,7 +243,7 @@ func TestServerSubscribe(t *testing.T) {
 }
 
 func assertEqualLocations(t *testing.T, loc, expected text.LocationList) {
-	var locations, expectedLocations []text.Location
+	var locations, expectedLocations []textapi.Location
 	for ok := true; ok; _, ok = loc.Prev() {
 
 	}
@@ -342,16 +344,16 @@ func TestServerSetLocationList(t *testing.T) {
 		expectEdit(t, mock, resource, content)
 		callServerEdit(t, ctx, broker, s, nextID, resource, content)
 
-		locs := text.LocationSlice([]text.Location{{Message: "wsb: hold AMC", To: term.Coordinates{X: 3}}})
+		locs := text.LocationSlice([]textapi.Location{{Message: "wsb: hold AMC", To: term.Coordinates{X: 3}}})
 		mock.EXPECT().SetLocationList(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 			Times(1).
-			DoAndReturn(func(h text.Handler, pri text.LocationPriority, ID string, l text.LocationList) error {
-				assert.Equal(t, text.LocationPriorityInfo, pri)
+			DoAndReturn(func(h text.Handler, pri textapi.LocationPriority, ID string, l text.LocationList) error {
+				assert.Equal(t, textapi.LocationPriorityInfo, pri)
 				assert.Equal(t, locID, ID)
 				return nil
 			})
 
-		req := makeLocationListRequest(nextID, text.LocationPriorityInfo, locID, locs)
+		req := makeLocationListRequest(nextID, textapi.LocationPriorityInfo, locID, locs)
 		res, err := s.SetLocationList(ctx, &req)
 		require.NoError(t, err)
 		require.NotNil(t, res)
@@ -363,7 +365,7 @@ func TestServerSetLocationList(t *testing.T) {
 		defer ctrl.Finish()
 
 		broker := proto.NewMockMuxBroker(ctrl)
-		ed := text.NopEditor()
+		ed := texttest.NopEditor()
 		c, err := text.NewComponent(ed, &testLoader{}, text.Config{})
 		require.NoError(t, err)
 		s := NewServer(broker, c, new(sync.Mutex), testBrowserServer{})
@@ -372,7 +374,7 @@ func TestServerSetLocationList(t *testing.T) {
 		nextID := uint32(232)
 		callServerEdit(t, ctx, broker, s, nextID, resource, content)
 
-		locs := []text.Location{
+		locs := []textapi.Location{
 			{From: term.Coordinates{X: 0, Y: 0}, To: term.Coordinates{X: 3, Y: 0}},
 			{From: term.Coordinates{X: 1, Y: 4}, To: term.Coordinates{X: 2, Y: 4}},
 			{From: term.Coordinates{X: 0, Y: 5}, To: term.Coordinates{X: 0, Y: 6}},
@@ -386,7 +388,7 @@ func TestServerSetLocationList(t *testing.T) {
 				defer wg.Done()
 				l := text.LocationSlice(locs)
 
-				req := makeLocationListRequest(nextID, text.LocationPriorityWarning, locID, l)
+				req := makeLocationListRequest(nextID, textapi.LocationPriorityWarning, locID, l)
 				res, err := s.SetLocationList(ctx, &req)
 				if !assert.NoError(t, err) {
 					return
@@ -404,7 +406,7 @@ func TestServerSetLocationList(t *testing.T) {
 			return
 		}
 
-		l, ok := h.(*text.TestEditorHandler)
+		l, ok := h.(*texttest.TestEditorHandler)
 		if !assert.True(t, ok) {
 			return
 		}

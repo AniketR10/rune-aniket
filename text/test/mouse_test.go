@@ -1,4 +1,4 @@
-package text
+package test
 
 import (
 	"testing"
@@ -6,6 +6,7 @@ import (
 	gomock "github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"unstable.build/go-tui/term"
+	"unstable.build/go-tui/text"
 )
 
 func evMouseKey(x, y int, key term.Key) term.Event {
@@ -80,10 +81,10 @@ func expectIgnoreMouseAction() expect {
 	}
 }
 
-func expectMouseAction(t *testing.T, x, y int, action MouseAction, handled, moved bool) expect {
+func expectMouseAction(t *testing.T, x, y int, action text.MouseAction, handled, moved bool) expect {
 	return func(m *MockMouseDelegate) {
 		m.EXPECT().OnAction(gomock.Any(), gomock.Any()).
-			DoAndReturn(func(pos term.Coordinates, _action MouseAction) bool {
+			DoAndReturn(func(pos term.Coordinates, _action text.MouseAction) bool {
 				assert.Equal(t, term.Coordinates{X: x, Y: y}, pos)
 				assert.Equal(t, action, _action)
 				return handled
@@ -111,8 +112,8 @@ func TestMouseHandle(t *testing.T) {
 			nil, []term.Event{{Type: term.EventKey}}},
 		{"delegates mouse release",
 			[]expect{
-				expectMouseAction(t, 4, 8, MouseLeftClick, true, false),
-				expectMouseAction(t, 4, 8, MouseRelease, true, false),
+				expectMouseAction(t, 4, 8, text.MouseLeftClick, true, false),
+				expectMouseAction(t, 4, 8, text.MouseRelease, true, false),
 			},
 			[]term.Event{
 				evMouseKey(4, 8, term.MouseLeft),
@@ -121,17 +122,17 @@ func TestMouseHandle(t *testing.T) {
 		},
 		{"delegates mouse left click",
 			[]expect{
-				expectMouseAction(t, 4, 8, MouseLeftClick, true, false),
+				expectMouseAction(t, 4, 8, text.MouseLeftClick, true, false),
 			},
 			[]term.Event{evMouseKey(4, 8, term.MouseLeft)}},
 		{"delegates mouse right click",
 			[]expect{
-				expectMouseAction(t, 4, 8, MouseRightClick, true, false),
+				expectMouseAction(t, 4, 8, text.MouseRightClick, true, false),
 			},
 			[]term.Event{evMouseKey(4, 8, term.MouseRight)}},
 		{"delegates mouse middle click",
 			[]expect{
-				expectMouseAction(t, 4, 8, MouseMiddleClick, true, false),
+				expectMouseAction(t, 4, 8, text.MouseMiddleClick, true, false),
 			},
 			[]term.Event{evMouseKey(4, 8, term.MouseMiddle)}},
 		{"scrolls up",
@@ -153,7 +154,7 @@ func TestMouseHandle(t *testing.T) {
 		{"click drag sets selection",
 			[]expect{
 				multiExpect(
-					expectMouseAction(t, 1, 2, MouseLeftClick, false, true),
+					expectMouseAction(t, 1, 2, text.MouseLeftClick, false, true),
 					expectClearSelection(t),
 					expectSetSelectionStart(t, 1, 2),
 				),
@@ -237,7 +238,7 @@ func TestMouseHandle(t *testing.T) {
 			defer ctrl.Finish()
 
 			mock := NewMockMouseDelegate(ctrl)
-			m := NewMouse(mock)
+			m := text.NewMouse(mock)
 			mock.EXPECT().Width().Return(10).AnyTimes()
 			mock.EXPECT().Height().Return(10).AnyTimes()
 

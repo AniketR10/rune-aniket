@@ -11,13 +11,14 @@ import (
 
 	browserapi "unstable.build/go-tui/api/browser"
 	browserplugin "unstable.build/go-tui/api/browser/plugin"
+	textapi "unstable.build/go-tui/api/text"
+	textplugin "unstable.build/go-tui/api/text/plugin"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/config"
 	"unstable.build/go-tui/plugin"
 	plugutil "unstable.build/go-tui/plugin/util"
 	"unstable.build/go-tui/proto"
 	"unstable.build/go-tui/term"
-	"unstable.build/go-tui/text"
 	"unstable.build/go-tui/workspace"
 
 	log "github.com/sirupsen/logrus"
@@ -29,27 +30,27 @@ const (
 
 var (
 	sedHandlerCommands    = []string{commandSed}
-	sedHandlerEvents      = []text.EventType{}
+	sedHandlerEvents      = []textapi.EventType{}
 	sedHandlerPermissions = []plugin.Permission{
-		plugin.PermissionEditor,
+		plugin.Permission(textplugin.PermissionEditor),
 		plugin.Permission(browserplugin.PermissionBrowserMessenger),
 		plugin.PermissionWorkspace,
 	}
 )
 
 type sedEditorHandler struct {
-	ed   text.Editor
+	ed   textapi.Editor
 	m    browserapi.Messenger
 	exec workspace.Executor
 
-	resource     text.Handler
+	resource     textapi.Handler
 	resourceName string
 
 	exit uint32
 }
 
 func newSedHandler(
-	ed text.Editor, grants []plugin.Grant,
+	ed textapi.Editor, grants []plugin.Grant,
 	broker proto.MuxBroker, pconfig config.Config,
 ) (plugutil.CommandEventHandler, error) {
 	ret := new(sedEditorHandler)
@@ -131,7 +132,7 @@ func (h *sedEditorHandler) setMessage(msg string, args ...interface{}) {
 	}
 }
 
-func (h *sedEditorHandler) readHandlerContent(hed text.Handler) (int, string, error) {
+func (h *sedEditorHandler) readHandlerContent(hed textapi.Handler) (int, string, error) {
 	view := h.ed.CellView(hed)
 	cells, err := view.RawCells()
 	if err != nil {
@@ -141,7 +142,7 @@ func (h *sedEditorHandler) readHandlerContent(hed text.Handler) (int, string, er
 }
 
 func (h *sedEditorHandler) writeHandlerContent(
-	hed text.Handler, rows int, content string,
+	hed textapi.Handler, rows int, content string,
 ) error {
 	editor := h.ed.CellEditor(hed)
 	_, _, _, err := editor.Edit(term.Coordinates{}, term.Coordinates{Y: rows}, content)
@@ -152,7 +153,7 @@ func (h *sedEditorHandler) writeHandlerContent(
 }
 
 func (h *sedEditorHandler) HandleCommand(
-	ctx context.Context, cmd text.Command,
+	ctx context.Context, cmd textapi.Command,
 ) (bool, error) {
 	var start time.Time
 	if log.IsLevelEnabled(log.TraceLevel) {
@@ -187,7 +188,7 @@ func (h *sedEditorHandler) HandleCommand(
 }
 
 func (h *sedEditorHandler) Handle(
-	ctx context.Context, ev text.Event,
+	ctx context.Context, ev textapi.Event,
 ) (exit bool) {
 	uexit := atomic.LoadUint32(&h.exit)
 	exit = uexit != 0

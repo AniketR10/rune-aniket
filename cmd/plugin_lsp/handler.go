@@ -27,6 +27,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	browserapi "unstable.build/go-tui/api/browser"
 	browserplugin "unstable.build/go-tui/api/browser/plugin"
+	textapi "unstable.build/go-tui/api/text"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/config"
@@ -36,7 +37,6 @@ import (
 	plugutil "unstable.build/go-tui/plugin/util"
 	"unstable.build/go-tui/proto"
 	"unstable.build/go-tui/term"
-	"unstable.build/go-tui/text"
 	"unstable.build/go-tui/text/vi"
 	"unstable.build/go-tui/workspace"
 )
@@ -69,11 +69,11 @@ var (
 		commandHover, commandGoToDef, commandFormat, commandReferences,
 		commandAddWorkspace, commandRemoveWorkspace, commandOrganizeImports,
 	}
-	lspHandlerEvents = []text.EventType{
-		text.EventTypeClose,
-		text.EventTypeFlush,
-		text.EventTypeOpen,
-		text.EventTypeEdit,
+	lspHandlerEvents = []textapi.EventType{
+		textapi.EventTypeClose,
+		textapi.EventTypeFlush,
+		textapi.EventTypeOpen,
+		textapi.EventTypeEdit,
 	}
 	lspHandlerPermissions = []plugin.Permission{
 		plugin.Permission(browserplugin.PermissionBrowserWindowManager),
@@ -127,7 +127,7 @@ var (
 type file struct {
 	uri        workspace.URI
 	languageID string
-	handler    text.Handler
+	handler    textapi.Handler
 	docID      protocol.TextDocumentIdentifier
 
 	// handler use getters
@@ -145,9 +145,9 @@ type execServer struct {
 
 type lspEditorHandler struct {
 	mu     sync.Mutex
-	evChan chan text.Event
+	evChan chan textapi.Event
 
-	ed text.Editor
+	ed textapi.Editor
 	wm browserapi.WindowManager
 	m  browserapi.Messenger
 	o  browserapi.ResourceOpener
@@ -519,7 +519,7 @@ func convertRange(
 }
 
 func newLspHandler(
-	ed text.Editor, grants []plugin.Grant,
+	ed textapi.Editor, grants []plugin.Grant,
 	broker proto.MuxBroker, pconfig config.Config,
 ) (plugutil.CommandEventHandler, error) {
 	ret := new(lspEditorHandler)
@@ -527,7 +527,7 @@ func newLspHandler(
 	ret.files = make(map[string]*file)
 	ret.pendingDiagnostic = make(map[string][]protocol.Diagnostic)
 	ret.pendingGoTo = make(map[string]protocol.Range)
-	ret.evChan = make(chan text.Event, handleBackpressureEvs)
+	ret.evChan = make(chan textapi.Event, handleBackpressureEvs)
 
 	var err error
 	ret.semanticTypesAttr, err = getSemanticTypesAttr(pconfig)
@@ -712,7 +712,7 @@ func (h *lspEditorHandler) getServer(languageID string) (
 }
 
 func (h *lspEditorHandler) newFile(
-	handler text.Handler, uri workspace.URI, content string,
+	handler textapi.Handler, uri workspace.URI, content string,
 ) *file {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -828,7 +828,7 @@ func (h *lspEditorHandler) getFile(uri workspace.URI) (*file, bool) {
 func parseLocationData(
 	uri span.URI, cells [][]term.Cell, content []byte, d []uint32,
 	semanticTypes map[string]term.Attributes,
-) (ret []text.Location) {
+) (ret []textapi.Location) {
 	tc := span.NewContentConverter(uri.Filename(), content)
 	colmap := protocol.ColumnMapper{
 		URI:       uri,
@@ -874,7 +874,7 @@ func parseLocationData(
 			continue
 		}
 
-		loc := text.Location{From: from, To: to, Attr: attr}
+		loc := textapi.Location{From: from, To: to, Attr: attr}
 		ret = append(ret, loc)
 	}
 	return ret
@@ -930,8 +930,8 @@ func (h *lspEditorHandler) semanticTokensFull(
 		log.Tracef("lspEditorHandler.Server.SemanticTokensFull(%s): OK: %v: locations: %v",
 			f.uri, resp.Data, locations)
 	}
-	err = h.ed.SetLocationList(f.handler, text.LocationPriorityInfo,
-		h.semanticTokensListID, text.LocationSlice(locations))
+	err = h.ed.SetLocationList(f.handler, textapi.LocationPriorityInfo,
+		h.semanticTokensListID, textapi.LocationSlice(locations))
 	if err != nil {
 		err = fmt.Errorf("SetLocationList(%s): %v", f.uri, err)
 		return err
@@ -1052,7 +1052,7 @@ func (h *lspEditorHandler) getCells(f *file) (cells [][]term.Cell) {
 	return f._cells
 }
 
-func (h *lspEditorHandler) handleFileFlush(ev text.Event) error {
+func (h *lspEditorHandler) handleFileFlush(ev textapi.Event) error {
 	ctx := context.Background()
 	ctx, cancelFn := context.WithTimeout(ctx, h.rpcTimeout)
 	defer cancelFn()
@@ -1080,7 +1080,7 @@ func (h *lspEditorHandler) handleFileFlush(ev text.Event) error {
 	return h.semanticTokensFull(ctx, srv, f, h.getCells(f), ev.Content)
 }
 
-func (h *lspEditorHandler) handleFileEdit(ev text.Event) error {
+func (h *lspEditorHandler) handleFileEdit(ev textapi.Event) error {
 	ctx := context.Background()
 	ctx, cancelFn := context.WithTimeout(ctx, h.rpcTimeout)
 	defer cancelFn()
@@ -1129,7 +1129,7 @@ func (h *lspEditorHandler) handleFileEdit(ev text.Event) error {
 	return ret
 }
 
-func (h *lspEditorHandler) handleFileOpen(ev text.Event) error {
+func (h *lspEditorHandler) handleFileOpen(ev textapi.Event) error {
 	ctx := context.Background()
 	ctx, cancelFn := context.WithTimeout(ctx, h.rpcTimeout)
 	defer cancelFn()
@@ -1207,7 +1207,7 @@ func (h *lspEditorHandler) sendDidClose(
 	return nil
 }
 
-func (h *lspEditorHandler) handleFileClose(ev text.Event) error {
+func (h *lspEditorHandler) handleFileClose(ev textapi.Event) error {
 	ctx := context.Background()
 	ctx, cancelFn := context.WithTimeout(ctx, h.rpcTimeout)
 	defer cancelFn()
@@ -1231,13 +1231,13 @@ func (h *lspEditorHandler) handleFileClose(ev text.Event) error {
 
 func (h *lspEditorHandler) parseDiagnostics(
 	f *file, d []protocol.Diagnostic,
-) []text.Location {
+) []textapi.Location {
 	cells := h.getCells(f)
 	buf := cell.CellsToBuffer(cells, h.tabspaces)
 	spanURI := workspaceURIToSpan(f.uri)
 	colmap := getColumnMapper(spanURI, buf)
 
-	locs := make([]text.Location, 0, len(d))
+	locs := make([]textapi.Location, 0, len(d))
 	for _, d := range d {
 		from, to, ok := convertRange(d.Range, cells, colmap)
 		if !ok {
@@ -1251,7 +1251,7 @@ func (h *lspEditorHandler) parseDiagnostics(
 			continue
 		}
 
-		loc := text.Location{Message: msg, From: from, To: to, Attr: attr}
+		loc := textapi.Location{Message: msg, From: from, To: to, Attr: attr}
 		locs = append(locs, loc)
 	}
 
@@ -1301,8 +1301,8 @@ func (h *lspEditorHandler) setDiagnosticsLocationList(
 	locs := h.parseDiagnostics(f, ds)
 	// NOTE: should probably break down by location priority rather than
 	// bundling all of them under Error.
-	err := h.ed.SetLocationList(f.handler, text.LocationPriorityError,
-		h.diagnosticListID, text.LocationSlice(locs))
+	err := h.ed.SetLocationList(f.handler, textapi.LocationPriorityError,
+		h.diagnosticListID, textapi.LocationSlice(locs))
 	if err != nil {
 		err = fmt.Errorf("SetLocationList(%s): %v", f.uri, err)
 		return err
@@ -1409,7 +1409,7 @@ func (h *lspEditorHandler) getFilePosition(cursor term.Coordinates, uri workspac
 }
 
 func (h *lspEditorHandler) handleGoToDefinition(
-	cursor term.Coordinates, ed text.Handler, uri workspace.URI,
+	cursor term.Coordinates, ed textapi.Handler, uri workspace.URI,
 	win browserapi.Window,
 ) error {
 	f, pos, ok := h.getFilePosition(cursor, uri)
@@ -1470,7 +1470,7 @@ func (h *lspEditorHandler) findBestFloatingWindowPosition(
 
 func (h *lspEditorHandler) handleHover(
 	cursorAtScroll, cursorAtWindow term.Coordinates,
-	ed text.Handler, uri workspace.URI,
+	ed textapi.Handler, uri workspace.URI,
 ) error {
 	f, pos, ok := h.getFilePosition(cursorAtScroll, uri)
 	if !ok {
@@ -1664,9 +1664,9 @@ func (h *lspEditorHandler) browseLocations(
 		}
 
 		attrs := term.Attributes{Bg: term.AttrReverse, Fg: term.AttrReverse}
-		loc := text.Location{From: from, To: to, Attr: attrs}
-		ed.SetLocationList(edh, text.LocationPriorityInfo,
-			locID, text.LocationSlice([]text.Location{loc}))
+		loc := textapi.Location{From: from, To: to, Attr: attrs}
+		ed.SetLocationList(edh, textapi.LocationPriorityInfo,
+			locID, textapi.LocationSlice([]textapi.Location{loc}))
 		ed.MoveToPrevLocation(edh, locID)
 	}
 
@@ -1734,7 +1734,7 @@ func (h *lspEditorHandler) browseLocations(
 
 func (h *lspEditorHandler) handleReferences(
 	cursorAtScroll, cursorAtWindow term.Coordinates,
-	ed text.Handler, uri workspace.URI, win browserapi.Window,
+	ed textapi.Handler, uri workspace.URI, win browserapi.Window,
 ) error {
 	f, pos, ok := h.getFilePosition(cursorAtScroll, uri)
 	if !ok {
@@ -1838,7 +1838,7 @@ func (h *lspEditorHandler) organizeImports(
 	return ret
 }
 
-func (h *lspEditorHandler) handleFormat(ed text.Handler, uri workspace.URI, imports bool) error {
+func (h *lspEditorHandler) handleFormat(ed textapi.Handler, uri workspace.URI, imports bool) error {
 	ctx := context.Background()
 	ctx, cancelFn := context.WithTimeout(ctx, h.rpcTimeout)
 	defer cancelFn()
@@ -1873,7 +1873,7 @@ func (h *lspEditorHandler) handleFormat(ed text.Handler, uri workspace.URI, impo
 }
 
 func (h *lspEditorHandler) HandleCommand(
-	ctx context.Context, cmd text.Command,
+	ctx context.Context, cmd textapi.Command,
 ) (exit bool, err error) {
 	if cmd.Resource == nil {
 		return
@@ -1909,7 +1909,7 @@ func (h *lspEditorHandler) HandleCommand(
 	return
 }
 
-func (h *lspEditorHandler) handleEvents(ch chan text.Event) {
+func (h *lspEditorHandler) handleEvents(ch chan textapi.Event) {
 	for ev := range ch {
 		var start time.Time
 		if log.IsLevelEnabled(log.TraceLevel) {
@@ -1919,13 +1919,13 @@ func (h *lspEditorHandler) handleEvents(ch chan text.Event) {
 
 		var err error
 		switch ev.Type {
-		case text.EventTypeOpen:
+		case textapi.EventTypeOpen:
 			err = h.handleFileOpen(ev)
-		case text.EventTypeClose:
+		case textapi.EventTypeClose:
 			err = h.handleFileClose(ev)
-		case text.EventTypeFlush:
+		case textapi.EventTypeFlush:
 			err = h.handleFileFlush(ev)
-		case text.EventTypeEdit:
+		case textapi.EventTypeEdit:
 			err = h.handleFileEdit(ev)
 		}
 
@@ -1939,7 +1939,7 @@ func (h *lspEditorHandler) handleEvents(ch chan text.Event) {
 }
 
 func (h *lspEditorHandler) Handle(
-	ctx context.Context, ev text.Event,
+	ctx context.Context, ev textapi.Event,
 ) (exit bool) {
 	h.mu.Lock()
 	exit = h.exit

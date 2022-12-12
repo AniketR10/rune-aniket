@@ -11,10 +11,11 @@ import (
 	"unstable.build/go-tui"
 	browserapi "unstable.build/go-tui/api/browser"
 	browserplugin "unstable.build/go-tui/api/browser/plugin"
+	textapi "unstable.build/go-tui/api/text"
+	textplugin "unstable.build/go-tui/api/text/plugin"
 	"unstable.build/go-tui/config"
 	"unstable.build/go-tui/plugin"
 	"unstable.build/go-tui/proto"
-	"unstable.build/go-tui/text"
 )
 
 type cmdSplitHandler struct {
@@ -23,7 +24,7 @@ type cmdSplitHandler struct {
 
 	broker  proto.MuxBroker
 	wm      browserapi.WindowManager
-	ed      text.Editor
+	ed      textapi.Editor
 	pconfig config.Config
 	grants  []plugin.Grant
 	h       tui.Handler
@@ -131,7 +132,7 @@ func (t *cmdSplitHandler) openSplitWindow(focusWin browserapi.Window) error {
 	return nil
 }
 
-func (t *cmdSplitHandler) HandleCommand(ctx context.Context, cmd text.Command) (exit bool, err error) {
+func (t *cmdSplitHandler) HandleCommand(ctx context.Context, cmd textapi.Command) (exit bool, err error) {
 	if cmd.Name == t.config.Command {
 		err = t.openSplitWindow(cmd.Window)
 		if err != nil {
@@ -150,11 +151,11 @@ func (t *cmdSplitHandler) PermissionGranted(grants []plugin.Grant) {
 	log.Infof("permissions granted: %+v", grants)
 
 	for _, g := range grants {
-		switch g.Permission {
-		case plugin.Permission(browserplugin.PermissionBrowserWindowManager):
+		switch string(g.Permission) {
+		case browserplugin.PermissionBrowserWindowManager:
 			t.wm, err = browserplugin.WindowManager(g.Token, t.broker)
-		case plugin.PermissionEditor:
-			t.ed, err = plugin.Editor(g.Token, t.broker)
+		case textplugin.PermissionEditor:
+			t.ed, err = textplugin.Editor(g.Token, t.broker)
 			if err == nil && t.config.Command != "" {
 				err = t.ed.SubscribeCommand(t.config.Command, t)
 			}
@@ -215,7 +216,7 @@ func ServeCommandSplitHandler(config CommandSplitHandlerConfig) {
 
 	perms := []plugin.Permission{
 		plugin.Permission(browserplugin.PermissionBrowserWindowManager),
-		plugin.PermissionEditor,
+		plugin.Permission(textplugin.PermissionEditor),
 	}
 	perms = append(perms, config.Permissions...)
 	plugin.Serve(&cmdSplitHandler{config: config}, perms...)

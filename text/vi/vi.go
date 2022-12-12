@@ -6,6 +6,7 @@ import (
 	"github.com/ernestrc/blue/logging"
 	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui"
+	textapi "unstable.build/go-tui/api/text"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/handler"
@@ -279,7 +280,7 @@ func (vi *Vi) MoveToPrevLocation(ID string) {
 
 // SetLocationList sets a location list of this handler. See Cursor.SetLocationList
 func (vi *Vi) SetLocationList(
-	pri text.LocationPriority, ID string, l text.LocationList,
+	pri textapi.LocationPriority, ID string, l text.LocationList,
 ) {
 	vi.handler.setLocationList(pri, ID, l)
 }

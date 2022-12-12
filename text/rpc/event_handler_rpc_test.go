@@ -12,11 +12,12 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
-	"unstable.build/go-tui/text"
+	textapi "unstable.build/go-tui/api/text"
+	texttest "unstable.build/go-tui/text/test"
 )
 
 func newClientServerIntegration(
-	t *testing.T, h *text.MockEventHandler,
+	t *testing.T, h *texttest.MockEventHandler,
 	serverQuitCallback, clientQuitCallback func(),
 ) (*eventHandlerClient, func()) {
 	lis, err := net.Listen("tcp", ":0")
@@ -53,8 +54,8 @@ func consumeError(t *testing.T, wg *sync.WaitGroup, client *eventHandlerClient) 
 
 func TestEventHandlerRPC(t *testing.T) {
 	content := "myContent"
-	ev := text.Event{
-		Type: text.EventTypeFlush,
+	ev := textapi.Event{
+		Type: textapi.EventTypeFlush,
 		URI:  uri,
 		Resource: Token{ID: 1,
 			resource: uri},
@@ -65,7 +66,7 @@ func TestEventHandlerRPC(t *testing.T) {
 		var wg sync.WaitGroup
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
-		h := text.NewMockEventHandler(ctrl)
+		h := texttest.NewMockEventHandler(ctrl)
 
 		client, closeFn := newClientServerIntegration(t, h, func() {}, func() {})
 		defer closeFn()
@@ -73,7 +74,7 @@ func TestEventHandlerRPC(t *testing.T) {
 		go consumeError(t, &wg, client)
 
 		h.EXPECT().Handle(gomock.Any(), gomock.Any()).
-			DoAndReturn(func(ctx context.Context, _ev text.Event) bool {
+			DoAndReturn(func(ctx context.Context, _ev textapi.Event) bool {
 				assert.Equal(t, ev, _ev)
 				wg.Done()
 				return false
@@ -91,7 +92,7 @@ func TestEventHandlerRPC(t *testing.T) {
 
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
-		h := text.NewMockEventHandler(ctrl)
+		h := texttest.NewMockEventHandler(ctrl)
 
 		client, closeFn := newClientServerIntegration(t, h, wg.Done, wg.Done)
 		defer closeFn()
@@ -111,7 +112,7 @@ func TestEventHandlerRPC(t *testing.T) {
 		var wg sync.WaitGroup
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
-		h := text.NewMockEventHandler(ctrl)
+		h := texttest.NewMockEventHandler(ctrl)
 
 		client, closeFn := newClientServerIntegration(t, h, func() {}, func() {})
 		defer closeFn()

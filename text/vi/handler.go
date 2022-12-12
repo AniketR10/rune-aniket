@@ -6,6 +6,7 @@ import (
 	"github.com/ernestrc/blue/logging"
 	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui"
+	textapi "unstable.build/go-tui/api/text"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/handler"
@@ -44,7 +45,7 @@ type viHandler interface {
 	mode() viMode
 	moveToNextLocation(ID string)
 	moveToPrevLocation(ID string)
-	setLocationList(pri text.LocationPriority, ID string, l text.LocationList)
+	setLocationList(pri textapi.LocationPriority, ID string, l text.LocationList)
 	setCursorAtScroll(pos term.Coordinates) bool
 	cursorAtScroll() term.Coordinates
 	subscribeScroll(sub component.ScrollSubscriber)
@@ -104,7 +105,7 @@ func (vi *viHandlerImpl) Resize(width, height int) {
 	vi.less.Resize(width, height)
 }
 
-func (vi *viHandlerImpl) setActiveLocationListMessage(locs map[string]text.Location) {
+func (vi *viHandlerImpl) setActiveLocationListMessage(locs map[string]textapi.Location) {
 	// NOTE: if therea re multiple location lists with a message
 	// in current cursor position, then there's no guarantee of which one
 	// is going to be rendered.
@@ -758,7 +759,7 @@ func (vi *viHandlerImpl) moveToPrevLocation(ID string) {
 
 // SetLocationList sets a location list of this handler. See Cursor.SetLocationList
 func (vi *viHandlerImpl) setLocationList(
-	pri text.LocationPriority, ID string, l text.LocationList,
+	pri textapi.LocationPriority, ID string, l text.LocationList,
 ) {
 	_ = vi.cursor.SetLocationList(pri, ID, l)
 }

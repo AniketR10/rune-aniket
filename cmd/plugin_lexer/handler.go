@@ -11,6 +11,7 @@ import (
 	"github.com/alecthomas/chroma/styles"
 	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
+	textapi "unstable.build/go-tui/api/text"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/config"
@@ -19,7 +20,6 @@ import (
 	"unstable.build/go-tui/proto"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/term/color"
-	"unstable.build/go-tui/text"
 	"unstable.build/go-tui/workspace"
 )
 
@@ -29,10 +29,10 @@ const (
 
 var (
 	syntaxHandlerCommands = []string{}
-	syntaxHandlerEvents   = []text.EventType{
-		text.EventTypeOpen,
-		text.EventTypeClose,
-		text.EventTypeEdit,
+	syntaxHandlerEvents   = []textapi.EventType{
+		textapi.EventTypeOpen,
+		textapi.EventTypeClose,
+		textapi.EventTypeEdit,
 	}
 	syntaxHandlerPermissions = []plugin.Permission{
 		/* Editor perms already included */
@@ -44,11 +44,11 @@ type file struct {
 	cell.Buffer
 	component.Scroll
 	uri     workspace.URI
-	handler text.Handler
+	handler textapi.Handler
 }
 
 type syntaxHandler struct {
-	ed                   text.Editor
+	ed                   textapi.Editor
 	semanticTokensListID string
 	setBackgroundAttr    bool
 	tabspaces            int
@@ -59,7 +59,7 @@ type syntaxHandler struct {
 }
 
 func newSyntaxHandler(
-	ed text.Editor, grants []plugin.Grant,
+	ed textapi.Editor, grants []plugin.Grant,
 	broker proto.MuxBroker, pconfig config.Config,
 
 ) (plugutil.CommandEventHandler, error) {
@@ -159,7 +159,7 @@ func newSyntaxHandler(
 }
 
 func (h *syntaxHandler) Handle(
-	ctx context.Context, ev text.Event,
+	ctx context.Context, ev textapi.Event,
 ) (exit bool) {
 	var start time.Time
 	if log.IsLevelEnabled(log.TraceLevel) {
@@ -168,11 +168,11 @@ func (h *syntaxHandler) Handle(
 	}
 	var err error
 	switch ev.Type {
-	case text.EventTypeClose:
+	case textapi.EventTypeClose:
 		delete(h.files, ev.URI.String())
-	case text.EventTypeOpen:
+	case textapi.EventTypeOpen:
 		err = h.handleOpen(ev)
-	case text.EventTypeEdit:
+	case textapi.EventTypeEdit:
 		err = h.handleEdit(ev)
 	}
 	if err != nil {
@@ -184,13 +184,13 @@ func (h *syntaxHandler) Handle(
 	return
 }
 
-func (h *syntaxHandler) HandleCommand(ctx context.Context, cmd text.Command) (
+func (h *syntaxHandler) HandleCommand(ctx context.Context, cmd textapi.Command) (
 	exit bool, err error,
 ) {
 	return
 }
 
-func (h *syntaxHandler) handleOpen(ev text.Event) error {
+func (h *syntaxHandler) handleOpen(ev textapi.Event) error {
 	h.files[ev.URI.String()] = h.newFile(ev)
 	ext := filepath.Ext(ev.URI.Path())
 	if _, ok := h.lexers[ext]; !ok {
@@ -207,7 +207,7 @@ func (h *syntaxHandler) handleOpen(ev text.Event) error {
 	return h.checkSyntax(ev)
 }
 
-func (h *syntaxHandler) handleEdit(ev text.Event) error {
+func (h *syntaxHandler) handleEdit(ev textapi.Event) error {
 	err := h.editFile(ev)
 	if err != nil {
 		return err
@@ -215,7 +215,7 @@ func (h *syntaxHandler) handleEdit(ev text.Event) error {
 	return h.checkSyntax(ev)
 }
 
-func (h *syntaxHandler) checkSyntax(ev text.Event) error {
+func (h *syntaxHandler) checkSyntax(ev textapi.Event) error {
 	f, ok := h.files[ev.URI.String()]
 	if !ok {
 		return fmt.Errorf("could not find buffer for file %s", ev.URI.String())
@@ -246,7 +246,7 @@ func (h *syntaxHandler) setTokenPositions(f *file, it chroma.Iterator) error {
 	lines := chroma.SplitTokensIntoLines(it.Tokens())
 
 	var x int
-	var locations []text.Location
+	var locations []textapi.Location
 	for y, row := range lines {
 		for _, token := range row {
 			str := token.Value
@@ -259,14 +259,14 @@ func (h *syntaxHandler) setTokenPositions(f *file, it chroma.Iterator) error {
 				continue
 			}
 			attr := attrForToken(attrMap, token.Type)
-			location := text.Location{Attr: attr, From: from, To: to}
+			location := textapi.Location{Attr: attr, From: from, To: to}
 			locations = append(locations, location)
 		}
 		x = 0
 	}
 	log.Debugf("Setting location list with %d locations", len(locations))
-	err := h.ed.SetLocationList(f.handler, text.LocationPriorityInfo,
-		h.semanticTokensListID, text.LocationSlice(locations))
+	err := h.ed.SetLocationList(f.handler, textapi.LocationPriorityInfo,
+		h.semanticTokensListID, textapi.LocationSlice(locations))
 	if err != nil {
 		return fmt.Errorf("SetLocationList(%s): %v", f.uri, err)
 	}
@@ -286,7 +286,7 @@ func (h *syntaxHandler) getStyle(file workspace.URI) (*chroma.Style, bool) {
 	return style, true
 }
 
-func (h *syntaxHandler) setBackground(file workspace.URI, ed text.Handler) {
+func (h *syntaxHandler) setBackground(file workspace.URI, ed textapi.Handler) {
 	style, ok := h.getStyle(file)
 	if !ok {
 		log.Debugf("Not running lexer for file %s: extension disabled", file)
@@ -304,7 +304,7 @@ func (h *syntaxHandler) setBackground(file workspace.URI, ed text.Handler) {
 	}
 }
 
-func (h *syntaxHandler) editFile(ev text.Event) error {
+func (h *syntaxHandler) editFile(ev textapi.Event) error {
 	f, ok := h.files[ev.URI.String()]
 	if !ok {
 		return fmt.Errorf("could not find buffer for file %s", ev.URI.String())
@@ -313,7 +313,7 @@ func (h *syntaxHandler) editFile(ev text.Event) error {
 	return nil
 }
 
-func (h *syntaxHandler) newFile(ev text.Event) *file {
+func (h *syntaxHandler) newFile(ev textapi.Event) *file {
 	f := new(file)
 	f.Buffer.InitWithTabspaces(h.tabspaces)
 	f.Scroll.Init(&f.Buffer)

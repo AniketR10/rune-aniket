@@ -17,6 +17,8 @@ import (
 	"unstable.build/go-tui"
 	browserapi "unstable.build/go-tui/api/browser"
 	browserplugin "unstable.build/go-tui/api/browser/plugin"
+	textapi "unstable.build/go-tui/api/text"
+	textplugin "unstable.build/go-tui/api/text/plugin"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/config"
@@ -24,7 +26,6 @@ import (
 	"unstable.build/go-tui/plugin"
 	"unstable.build/go-tui/proto"
 	"unstable.build/go-tui/term"
-	"unstable.build/go-tui/text"
 	"unstable.build/go-tui/workspace"
 )
 
@@ -40,7 +41,7 @@ func Permissions() []plugin.Permission {
 		plugin.Permission(browserplugin.PermissionBrowserEventPublisher),
 		plugin.Permission(browserplugin.PermissionBrowserMessenger),
 		plugin.PermissionStorage,
-		plugin.PermissionEditor,
+		plugin.Permission(textplugin.PermissionEditor),
 		plugin.PermissionWorkspace,
 	}
 }
@@ -50,7 +51,7 @@ type fuzzyFinderHandler struct {
 	f                    browserapi.ResourceOpener
 	p                    browserapi.EventPublisher
 	m                    browserapi.Messenger
-	ed                   text.Editor
+	ed                   textapi.Editor
 	workspace            workspace.API
 	invokeWindow         browserapi.Window
 	historyKey           term.KeyComb
@@ -153,7 +154,7 @@ func (h *fuzzyFinderHandler) setContent(
 		return err
 	}
 	if h.ed == nil {
-		log.Info("could not set cursor position because host did not grant plugin.PermissionEditor")
+		log.Info("could not set cursor position because host did not grant textplugin.PermissionEditor")
 		return nil
 	}
 
@@ -302,8 +303,8 @@ func (h *fuzzyFinderHandler) initGrants(
 		switch grant.Permission {
 		case plugin.PermissionWorkspace:
 			h.workspace, err = plugin.Workspace(grant.Token, broker)
-		case plugin.PermissionEditor:
-			h.ed, err = plugin.Editor(grant.Token, broker)
+		case plugin.Permission(textplugin.PermissionEditor):
+			h.ed, err = textplugin.Editor(grant.Token, broker)
 		case plugin.Permission(browserplugin.PermissionBrowserMessenger):
 			h.m, err = browserplugin.Messenger(grant.Token, broker)
 		case plugin.Permission(browserplugin.PermissionBrowserEventPublisher):

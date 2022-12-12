@@ -11,6 +11,8 @@ import (
 	"unstable.build/go-tui"
 	browserapi "unstable.build/go-tui/api/browser"
 	browserplugin "unstable.build/go-tui/api/browser/plugin"
+	textapi "unstable.build/go-tui/api/text"
+	textplugin "unstable.build/go-tui/api/text/plugin"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/config"
@@ -19,24 +21,23 @@ import (
 	plugutil "unstable.build/go-tui/plugin/util"
 	"unstable.build/go-tui/proto"
 	"unstable.build/go-tui/term"
-	"unstable.build/go-tui/text"
 	"unstable.build/go-tui/workspace"
 )
 
 var (
 	fileBarHandlerCommands = []string{}
-	fileBarHandlerEvents   = []text.EventType{
-		text.EventTypeOpen,
-		text.EventTypeEdit,
-		text.EventTypeFlush,
-		text.EventTypeCursor,
-		text.EventTypeFocus,
-		text.EventTypeUnfocus,
+	fileBarHandlerEvents   = []textapi.EventType{
+		textapi.EventTypeOpen,
+		textapi.EventTypeEdit,
+		textapi.EventTypeFlush,
+		textapi.EventTypeCursor,
+		textapi.EventTypeFocus,
+		textapi.EventTypeUnfocus,
 	}
 	fileBarHandlerPermissions = []plugin.Permission{
 		plugin.Permission(browserplugin.PermissionBrowserWindowManager),
 		plugin.Permission(browserplugin.PermissionBrowserEventPublisher),
-		plugin.PermissionEditor,
+		plugin.Permission(textplugin.PermissionEditor),
 		plugin.PermissionConfig,
 		plugin.PermissionWorkspace,
 	}
@@ -57,7 +58,7 @@ type fileBarEditorHandler struct {
 	p    browserapi.EventPublisher
 	cwd  workspace.URI
 	exit uint32
-	ch   chan text.Event
+	ch   chan textapi.Event
 
 	filenameAttributes      term.Attributes
 	filenameDirtyAttributes term.Attributes
@@ -75,13 +76,13 @@ type fileBarEditorHandler struct {
 }
 
 func newFileBarEditorHandler(
-	ed text.Editor, grants []plugin.Grant,
+	ed textapi.Editor, grants []plugin.Grant,
 	broker proto.MuxBroker, pconfig config.Config,
 
 ) (plugutil.CommandEventHandler, error) {
 	ret := new(fileBarEditorHandler)
 	ret.files = make(map[string]*fileInfo)
-	ret.ch = make(chan text.Event)
+	ret.ch = make(chan textapi.Event)
 
 	var err error
 	ret.filenameAttributes, err = config.GetAttributes(pconfig, "filename_attr")
@@ -173,7 +174,7 @@ func newFileBarEditorHandler(
 	return ret, nil
 }
 
-func (h *fileBarEditorHandler) HandleCommand(ctx context.Context, cmd text.Command) (
+func (h *fileBarEditorHandler) HandleCommand(ctx context.Context, cmd textapi.Command) (
 	exit bool, err error,
 ) {
 	return
@@ -250,7 +251,7 @@ func (h *fileBarEditorHandler) getFileInfo(resource workspace.URI) *fileInfo {
 	return ret
 }
 
-func (h *fileBarEditorHandler) setScrollMaxContent(resource workspace.URI, ev text.Event) {
+func (h *fileBarEditorHandler) setScrollMaxContent(resource workspace.URI, ev textapi.Event) {
 	cells := cell.StringToCells(ev.Content, h.tabspaces)
 	h.getFileInfo(resource).cells = cells
 	log.Debugf("setScrollMaxContent(%s): %d", resource, len(cells))
@@ -281,26 +282,26 @@ func (h *fileBarEditorHandler) handleEvents() {
 		resourceName := ev.URI
 		var err error
 		switch ev.Type {
-		case text.EventTypeEdit:
+		case textapi.EventTypeEdit:
 			h.setFileDirty(resourceName, true)
 			h.refreshBarContent(resourceName)
 			err = h.p.Interrupt()
-		case text.EventTypeOpen:
+		case textapi.EventTypeOpen:
 			h.setCursorOffset(resourceName, term.Coordinates{})
 			h.setScrollMaxContent(resourceName, ev)
 			h.refreshBarContent(resourceName)
 			err = h.p.Interrupt()
-		case text.EventTypeFlush:
+		case textapi.EventTypeFlush:
 			h.setFileDirty(resourceName, false)
 			h.setScrollMaxContent(resourceName, ev)
 			fallthrough
-		case text.EventTypeFocus:
+		case textapi.EventTypeFocus:
 			h.refreshBarContent(resourceName)
 			err = h.p.Interrupt()
-		case text.EventTypeUnfocus:
+		case textapi.EventTypeUnfocus:
 			h.refreshBarContent(workspace.URI{})
 			err = h.p.Interrupt()
-		case text.EventTypeCursor:
+		case textapi.EventTypeCursor:
 			h.setCursorOffset(resourceName, ev.From)
 			h.refreshBarContent(resourceName)
 			err = h.p.Interrupt()
@@ -315,7 +316,7 @@ func (h *fileBarEditorHandler) handleEvents() {
 }
 
 func (h *fileBarEditorHandler) Handle(
-	ctx context.Context, ev text.Event,
+	ctx context.Context, ev textapi.Event,
 ) (exit bool) {
 	uexit := atomic.LoadUint32(&h.exit)
 	exit = uexit != 0

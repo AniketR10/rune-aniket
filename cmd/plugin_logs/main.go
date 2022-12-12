@@ -18,12 +18,13 @@ import (
 	log "github.com/sirupsen/logrus"
 	browserapi "unstable.build/go-tui/api/browser"
 	browserplugin "unstable.build/go-tui/api/browser/plugin"
+	textapi "unstable.build/go-tui/api/text"
+	textplugin "unstable.build/go-tui/api/text/plugin"
 	"unstable.build/go-tui/config"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/handler/search"
 	"unstable.build/go-tui/plugin"
 	"unstable.build/go-tui/proto"
-	"unstable.build/go-tui/text"
 	"unstable.build/go-tui/workspace"
 )
 
@@ -38,7 +39,7 @@ var (
 		plugin.Permission(browserplugin.PermissionBrowserMessenger),
 		plugin.PermissionConfig,
 		plugin.PermissionWorkspace,
-		plugin.PermissionEditor,
+		plugin.Permission(textplugin.PermissionEditor),
 	}
 	commands = []string{
 		cmdLogs,
@@ -147,9 +148,9 @@ func (e *logsGrantee) PermissionGranted(grants []plugin.Grant) {
 			e.wm, err = browserplugin.WindowManager(g.Token, e.broker)
 		case plugin.PermissionConfig:
 			e.c, err = plugin.FetchConfig(g.Token, e.broker)
-		case plugin.PermissionEditor:
-			var ed text.Editor
-			ed, err = plugin.Editor(g.Token, e.broker)
+		case plugin.Permission(textplugin.PermissionEditor):
+			var ed textapi.Editor
+			ed, err = textplugin.Editor(g.Token, e.broker)
 			if err == nil {
 				for _, cmd := range commands {
 					subsErr := ed.SubscribeCommand(cmd, e)
@@ -337,7 +338,7 @@ func (e *logsGrantee) showLogs(win browserapi.Window, args []string) (bool, erro
 }
 
 func (e *logsGrantee) HandleCommand(
-	ctx context.Context, cmd text.Command,
+	ctx context.Context, cmd textapi.Command,
 ) (bool, error) {
 	if cmd.Name != cmdLogs {
 		panic("extraneous command")

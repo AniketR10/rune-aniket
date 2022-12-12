@@ -3,6 +3,7 @@ package text
 import (
 	"errors"
 
+	textapi "unstable.build/go-tui/api/text"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/workspace"
@@ -34,13 +35,13 @@ func (e *simpleEditor) Editor(file workspace.URI) (Handler, error) {
 	return nil, errors.New("not supported")
 }
 
-func (e *simpleEditor) SubscribeEditorEvents(evs []EventType, sub EventHandler) error {
+func (e *simpleEditor) SubscribeEditorEvents(evs []textapi.EventType, sub EventHandler) error {
 	e.pub.SubscribeEditorEvents(evs, sub)
 	return nil
 }
 
 func (e simpleEditor) SetLocationList(
-	h Handler, pri LocationPriority, ID string, loc LocationList,
+	h Handler, pri textapi.LocationPriority, ID string, loc LocationList,
 ) error {
 	e.pub.Handler(h).(*simpleEditorHandler).cursor.SetLocationList(pri, ID, loc)
 	return nil

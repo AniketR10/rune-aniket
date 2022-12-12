@@ -16,10 +16,10 @@ import (
 	browserpb "unstable.build/go-tui/browser/rpc"
 	"unstable.build/go-tui/cell"
 
+	textapi "unstable.build/go-tui/api/text"
 	"unstable.build/go-tui/proto"
 	"unstable.build/go-tui/term"
 	termpb "unstable.build/go-tui/term/rpc"
-	"unstable.build/go-tui/text"
 	"unstable.build/go-tui/workspace"
 )
 
@@ -39,6 +39,8 @@ type Token struct {
 func (t Token) Resource() workspace.URI {
 	return t.resource
 }
+
+var _ textapi.Editor = (*Client)(nil)
 
 // Client satisfies text.Editor by calling a remote editor over grpc.
 type Client struct {
@@ -92,7 +94,7 @@ func (c *Client) safeForceCloseHandler(brokerID uint32, reason string) error {
 	return err
 }
 
-func (c *Client) serveHandler(h text.EventHandler) (uint32, error) {
+func (c *Client) serveHandler(h textapi.EventHandler) (uint32, error) {
 	brokerID, srv, err := proto.AcceptAndServe(c.broker,
 		func(handlerID uint32, srv proto.MuxServer) {
 			s := newEventHandlerServer(h, func() {
@@ -111,7 +113,7 @@ func (c *Client) serveHandler(h text.EventHandler) (uint32, error) {
 	return brokerID, nil
 }
 
-func (c *Client) serveCommandHandler(h text.CommandHandler) (uint32, error) {
+func (c *Client) serveCommandHandler(h textapi.CommandHandler) (uint32, error) {
 	brokerID, srv, err := proto.AcceptAndServe(c.broker,
 		func(handlerID uint32, srv proto.MuxServer) {
 			s := newCommandServer(h, c.browser)
@@ -128,7 +130,7 @@ func (c *Client) serveCommandHandler(h text.CommandHandler) (uint32, error) {
 }
 
 // Edit requests editor server to edit buf.
-func (c *Client) Edit(file workspace.URI, buf *cell.Buffer) (text.Handler, error) {
+func (c *Client) Edit(file workspace.URI, buf *cell.Buffer) (textapi.Handler, error) {
 	ctx := context.Background()
 	req := NewEditRequest(file, buf)
 
@@ -142,7 +144,7 @@ func (c *Client) Edit(file workspace.URI, buf *cell.Buffer) (text.Handler, error
 }
 
 // Editor satisfies text.Editor
-func (c *Client) Editor(file workspace.URI) (text.Handler, error) {
+func (c *Client) Editor(file workspace.URI) (textapi.Handler, error) {
 	ctx := context.Background()
 	req := EditorRequest{ResourceName: NewURI(file)}
 
@@ -156,7 +158,7 @@ func (c *Client) Editor(file workspace.URI) (text.Handler, error) {
 }
 
 // SubscribeEditorEvents requests the editor server to subscribe sub to ev.
-func (c *Client) SubscribeEditorEvents(evs []text.EventType, h text.EventHandler) error {
+func (c *Client) SubscribeEditorEvents(evs []textapi.EventType, h textapi.EventHandler) error {
 	ctx := context.Background()
 
 	handlerID, err := c.serveHandler(h)
@@ -166,7 +168,7 @@ func (c *Client) SubscribeEditorEvents(evs []text.EventType, h text.EventHandler
 
 	req := EditorSubscribeRequest{HandlerId: handlerID}
 	for _, ev := range evs {
-		req.Type = append(req.Type, protoType(text.Event{Type: ev}))
+		req.Type = append(req.Type, protoType(textapi.Event{Type: ev}))
 	}
 	_, err = c.ed.Subscribe(ctx, &req)
 	runtime.KeepAlive(c)
@@ -180,7 +182,7 @@ func (c *Client) SubscribeEditorEvents(evs []text.EventType, h text.EventHandler
 }
 
 // SubscribeCommandrequests the editor server to register cmd with h.
-func (c *Client) SubscribeCommand(cmd string, h text.CommandHandler) error {
+func (c *Client) SubscribeCommand(cmd string, h textapi.CommandHandler) error {
 	ctx := context.Background()
 
 	// re-use EventHandler logic
@@ -202,8 +204,8 @@ func (c *Client) SubscribeCommand(cmd string, h text.CommandHandler) error {
 }
 
 func makeLocationListRequest(
-	handlerID uint32, priority text.LocationPriority,
-	listID string, l text.LocationList,
+	handlerID uint32, priority textapi.LocationPriority,
+	listID string, l textapi.LocationList,
 ) SetLocationListRequest {
 	req := SetLocationListRequest{
 		HandlerId: handlerID,
@@ -231,7 +233,7 @@ func makeLocationListRequest(
 // Note that h is expected to be the return valu of Edit or a dispatched event, delivered
 // via an EventHandler.
 func (c *Client) SetLocationList(
-	h text.Handler, pri text.LocationPriority, ID string, l text.LocationList,
+	h textapi.Handler, pri textapi.LocationPriority, ID string, l textapi.LocationList,
 ) error {
 	ctx := context.Background()
 	token, ok := h.(Token)
@@ -244,7 +246,7 @@ func (c *Client) SetLocationList(
 	return err
 }
 
-func (c *Client) moveToLocation(h text.Handler, ID string, next bool) (err error) {
+func (c *Client) moveToLocation(h textapi.Handler, ID string, next bool) (err error) {
 	ctx := context.Background()
 	token, ok := h.(Token)
 	if !ok {
@@ -262,7 +264,7 @@ func (c *Client) moveToLocation(h text.Handler, ID string, next bool) (err error
 
 // MoveToPrevLocation requests the editor server to move cursor to the previous location
 // in location list identified by ID.
-func (c *Client) MoveToPrevLocation(h text.Handler, ID string) error {
+func (c *Client) MoveToPrevLocation(h textapi.Handler, ID string) error {
 	err := c.moveToLocation(h, ID, false)
 	runtime.KeepAlive(c)
 	return err
@@ -270,14 +272,14 @@ func (c *Client) MoveToPrevLocation(h text.Handler, ID string) error {
 
 // MoveToNextLocation requests the editor server to move cursor to the next location
 // in location list identified by ID.
-func (c *Client) MoveToNextLocation(h text.Handler, ID string) error {
+func (c *Client) MoveToNextLocation(h textapi.Handler, ID string) error {
 	err := c.moveToLocation(h, ID, true)
 	runtime.KeepAlive(c)
 	return err
 }
 
 // SetCursor requests the editor server to move cursor to pos
-func (c *Client) SetCursor(h text.Handler, pos term.Coordinates) error {
+func (c *Client) SetCursor(h textapi.Handler, pos term.Coordinates) error {
 	ctx := context.Background()
 	token, ok := h.(Token)
 	if !ok {
@@ -292,7 +294,7 @@ func (c *Client) SetCursor(h text.Handler, pos term.Coordinates) error {
 }
 
 // Cursor requests the editor server to move cursor to pos
-func (c *Client) Cursor(h text.Handler) (term.Coordinates, error) {
+func (c *Client) Cursor(h textapi.Handler) (term.Coordinates, error) {
 	ctx := context.Background()
 	token, ok := h.(Token)
 	if !ok {
@@ -308,7 +310,7 @@ func (c *Client) Cursor(h text.Handler) (term.Coordinates, error) {
 }
 
 // CellEditor satisfies text.Editor.
-func (c *Client) CellEditor(h text.Handler) text.CellEditor {
+func (c *Client) CellEditor(h textapi.Handler) textapi.CellEditor {
 	token, ok := h.(Token)
 	if !ok {
 		panic("SetLocationList: invalid Handler argument")
@@ -317,7 +319,7 @@ func (c *Client) CellEditor(h text.Handler) text.CellEditor {
 }
 
 // CellView satisfies text.Editor.
-func (c *Client) CellView(h text.Handler) text.CellView {
+func (c *Client) CellView(h textapi.Handler) textapi.CellView {
 	token, ok := h.(Token)
 	if !ok {
 		panic("CellView: invalid Handler argument")
@@ -326,7 +328,7 @@ func (c *Client) CellView(h text.Handler) text.CellView {
 }
 
 // SetDefaultAttributes satisfies text.Editor.
-func (c *Client) SetDefaultAttributes(h text.Handler, attrs term.Attributes) error {
+func (c *Client) SetDefaultAttributes(h textapi.Handler, attrs term.Attributes) error {
 	ctx := context.Background()
 	token, ok := h.(Token)
 	if !ok {

@@ -9,10 +9,13 @@ import (
 	"github.com/ernestrc/golang-internal-tools/span"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
+	textapi "unstable.build/go-tui/api/text"
+	textapitest "unstable.build/go-tui/api/text/test"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/config"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
+	texttest "unstable.build/go-tui/text/test"
 	"unstable.build/go-tui/workspace"
 )
 
@@ -28,7 +31,7 @@ public class	Rotor {
 
 `
 	tokenData1         = []uint32{2, 5, 3, 0, 3, 0, 5, 4, 1, 0, 3, 2, 7, 2, 0}
-	expectedLocations1 = []text.Location{
+	expectedLocations1 = []textapi.Location{
 		{
 			From: term.Coordinates{Y: 2, X: 5},
 			To:   term.Coordinates{Y: 2, X: 8},
@@ -62,7 +65,7 @@ func makePluginConfig() config.Config {
 }
 
 func newTestLspHandler(
-	ctrl *gomock.Controller, ed text.Editor,
+	ctrl *gomock.Controller, ed textapi.Editor,
 	cfg config.Config, server protocol.Server,
 ) *lspEditorHandler {
 	ret := new(lspEditorHandler)
@@ -76,7 +79,7 @@ func newTestLspHandler(
 	ret.diagnosticListID = defaultDiagnosticListID
 	ret.semanticTypesAttr = defaultSemanticTypeAttr
 	ret.diagnosticAttr = defaultDiagnosticAttr
-	ret.evChan = make(chan text.Event)
+	ret.evChan = make(chan textapi.Event)
 	ret.tabspaces = 4
 	go ret.handleEvents(ret.evChan)
 	return ret
@@ -125,7 +128,7 @@ func expectSemanticTokens(t *testing.T, server *MockServer, returnData []uint32)
 }
 
 func assertEqualLocations(t *testing.T, loc, expected text.LocationList) {
-	var locations, expectedLocations []text.Location
+	var locations, expectedLocations []textapi.Location
 	for n, ok := loc.Current(); ok; n, ok = loc.Next() {
 		locations = append(locations, n)
 	}
@@ -136,11 +139,11 @@ func assertEqualLocations(t *testing.T, loc, expected text.LocationList) {
 }
 
 func expectLocationList(
-	t *testing.T, ed *text.MockEditor, expectedID string, expectedLocations []text.Location,
+	t *testing.T, ed *textapitest.MockEditor, expectedID string, expectedLocations []textapi.Location,
 	wg *sync.WaitGroup,
 ) {
 	ed.EXPECT().SetLocationList(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
-		DoAndReturn(func(h text.Handler, pri text.LocationPriority, id string, loc text.LocationList) error {
+		DoAndReturn(func(h text.Handler, pri textapi.LocationPriority, id string, loc text.LocationList) error {
 			defer wg.Done()
 			assertEqualLocations(t, loc, text.LocationSlice(expectedLocations))
 			assert.Equal(t, expectedID, id)
@@ -149,10 +152,10 @@ func expectLocationList(
 }
 
 func expectAnyLocationList(
-	t *testing.T, ed *text.MockEditor, expectedID string, wg *sync.WaitGroup,
+	t *testing.T, ed *textapitest.MockEditor, expectedID string, wg *sync.WaitGroup,
 ) {
 	ed.EXPECT().SetLocationList(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
-		DoAndReturn(func(h text.Handler, pri text.LocationPriority, id string, loc text.LocationList) error {
+		DoAndReturn(func(h text.Handler, pri textapi.LocationPriority, id string, loc text.LocationList) error {
 			defer wg.Done()
 			assert.Equal(t, expectedID, id)
 			return nil
@@ -160,16 +163,16 @@ func expectAnyLocationList(
 }
 
 func dispatchOpen(
-	t *testing.T, h *lspEditorHandler, server *MockServer, ed *text.MockEditor,
+	t *testing.T, h *lspEditorHandler, server *MockServer, ed *textapitest.MockEditor,
 	uri workspace.URI, content string, tokenData []uint32, expectedListID string,
-	expectedLocations []text.Location,
+	expectedLocations []textapi.Location,
 ) {
 	var wg sync.WaitGroup
-	evOpen := text.Event{
-		Type:     text.EventTypeOpen,
+	evOpen := textapi.Event{
+		Type:     textapi.EventTypeOpen,
 		URI:      uri,
 		Content:  content,
-		Resource: text.NewTestHandler(),
+		Resource: texttest.NewTestHandler(),
 	}
 
 	expectDidOpen(t, server, uri, content+"\n")
@@ -181,16 +184,16 @@ func dispatchOpen(
 }
 
 func dispatchFlush(
-	t *testing.T, h *lspEditorHandler, server *MockServer, ed *text.MockEditor,
+	t *testing.T, h *lspEditorHandler, server *MockServer, ed *textapitest.MockEditor,
 	uri workspace.URI, content string, version int32, tokenData []uint32,
-	expectedListID string, expectedLocations []text.Location,
+	expectedListID string, expectedLocations []textapi.Location,
 ) {
 	var wg sync.WaitGroup
-	ev := text.Event{
-		Type:     text.EventTypeFlush,
+	ev := textapi.Event{
+		Type:     textapi.EventTypeFlush,
 		URI:      uri,
 		Content:  content,
-		Resource: text.NewTestHandler(),
+		Resource: texttest.NewTestHandler(),
 	}
 	changes := []protocol.TextDocumentContentChangeEvent{{Text: content + "\n"}}
 
@@ -207,7 +210,7 @@ func TestLspHandlerHandleOpen(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
-		ed := text.NewMockEditor(ctrl)
+		ed := textapitest.NewMockEditor(ctrl)
 		cfg := makePluginConfig()
 		server := NewMockServer(ctrl)
 
@@ -219,16 +222,16 @@ func TestLspHandlerHandleOpen(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
-		ed := text.NewMockEditor(ctrl)
+		ed := textapitest.NewMockEditor(ctrl)
 		cfg := makePluginConfig()
 		server := NewMockServer(ctrl)
 
 		h := newTestLspHandler(ctrl, ed, cfg, server)
-		evOpen := text.Event{
-			Type:     text.EventTypeOpen,
+		evOpen := textapi.Event{
+			Type:     textapi.EventTypeOpen,
 			URI:      nonConfiguredFile,
 			Content:  "",
-			Resource: text.NewTestHandler(),
+			Resource: texttest.NewTestHandler(),
 		}
 		assert.False(t, h.Handle(context.Background(), evOpen))
 	})
@@ -238,7 +241,7 @@ func TestLspHandlerHandleFlush(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	ed := text.NewMockEditor(ctrl)
+	ed := textapitest.NewMockEditor(ctrl)
 	cfg := makePluginConfig()
 	server := NewMockServer(ctrl)
 
@@ -255,7 +258,7 @@ func TestLspHandlerHandleInsertDelete(t *testing.T) {
 	defer ctrl.Finish()
 
 	var wg sync.WaitGroup
-	ed := text.NewMockEditor(ctrl)
+	ed := textapitest.NewMockEditor(ctrl)
 	cfg := makePluginConfig()
 	server := NewMockServer(ctrl)
 
@@ -266,8 +269,8 @@ func TestLspHandlerHandleInsertDelete(t *testing.T) {
 
 	buf := cell.NewBuffer()
 	buf.WriteString(filecontent1)
-	buf.Subscribe(text.CellSubscriber(filename1, text.NewTestHandler(),
-		text.FuncEventHandler(func(ctx context.Context, ev text.Event) bool {
+	buf.Subscribe(text.CellSubscriber(filename1, texttest.NewTestHandler(),
+		text.FuncEventHandler(func(ctx context.Context, ev textapi.Event) bool {
 			assert.False(t, h.Handle(ctx, ev))
 			return false
 		})))
@@ -285,7 +288,7 @@ func TestLspHandlerHandleInsertDelete(t *testing.T) {
 	returnData := []uint32{2, 5, 3, 0, 3, 0, 5, 4, 1, 0, 3, 2, 7, 2, 0, 0, 8, 10, 2, 0}
 	expectSemanticTokens(t, server, returnData)
 
-	newLocations := append(expectedLocations1, text.Location{
+	newLocations := append(expectedLocations1, textapi.Location{
 		From: term.Coordinates{Y: 5, X: 13},
 		To:   term.Coordinates{Y: 5, X: 23},
 	})

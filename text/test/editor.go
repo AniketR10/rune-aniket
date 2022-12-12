@@ -1,0 +1,61 @@
+package test
+
+import (
+	textapi "unstable.build/go-tui/api/text"
+	cell "unstable.build/go-tui/cell"
+	term "unstable.build/go-tui/term"
+	"unstable.build/go-tui/text"
+	workspace "unstable.build/go-tui/workspace"
+)
+
+// EditorFromAPIEditor wraps a textapi.Editor to satisfy text.Editor.
+type EditorFromAPIEditor struct {
+	Ed textapi.Editor
+}
+
+func (e EditorFromAPIEditor) CellView(h text.Handler) text.CellView {
+	return e.Ed.CellView(h)
+}
+
+func (e EditorFromAPIEditor) CellEditor(h text.Handler) text.CellEditor {
+	return e.Ed.CellEditor(h)
+}
+func (e EditorFromAPIEditor) Edit(file workspace.URI, buf *cell.Buffer) (text.Handler, error) {
+	return e.Ed.Edit(file, buf)
+}
+
+func (e EditorFromAPIEditor) SubscribeEditorEvents(t []textapi.EventType, h text.EventHandler) error {
+	return e.Ed.SubscribeEditorEvents(t, h)
+}
+
+func (e EditorFromAPIEditor) Editor(file workspace.URI) (text.Handler, error) {
+	return e.Ed.Editor(file)
+}
+
+func (e EditorFromAPIEditor) SubscribeCommand(cmd string, h text.CommandHandler) error {
+	return e.Ed.SubscribeCommand(cmd, h)
+}
+
+func (e EditorFromAPIEditor) SetLocationList(h text.Handler, p textapi.LocationPriority, arg string, l text.LocationList) error {
+	return e.Ed.SetLocationList(h, p, arg, l)
+}
+
+func (e EditorFromAPIEditor) MoveToNextLocation(h text.Handler, ID string) error {
+	return e.Ed.MoveToNextLocation(h, ID)
+}
+
+func (e EditorFromAPIEditor) MoveToPrevLocation(h text.Handler, ID string) error {
+	return e.Ed.MoveToPrevLocation(h, ID)
+}
+
+func (e EditorFromAPIEditor) Cursor(h text.Handler) (term.Coordinates, error) {
+	return e.Ed.Cursor(h)
+}
+
+func (e EditorFromAPIEditor) SetCursor(h text.Handler, pos term.Coordinates) error {
+	return e.Ed.SetCursor(h, pos)
+}
+
+func (e EditorFromAPIEditor) SetDefaultAttributes(h text.Handler, attr term.Attributes) error {
+	return e.Ed.SetDefaultAttributes(h, attr)
+}

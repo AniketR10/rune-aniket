@@ -6,6 +6,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	textapi "unstable.build/go-tui/api/text"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
@@ -19,9 +20,9 @@ func TestEditorDispatchFocus(t *testing.T) {
 	require.NoError(t, err)
 
 	var h text.Handler
-	ed.SubscribeEditorEvents([]text.EventType{text.EventTypeOpen},
-		text.FuncEventHandler(func(ctx context.Context, ev text.Event) bool {
-			assert.Equal(t, text.EventTypeOpen, ev.Type)
+	ed.SubscribeEditorEvents([]textapi.EventType{textapi.EventTypeOpen},
+		text.FuncEventHandler(func(ctx context.Context, ev textapi.Event) bool {
+			assert.Equal(t, textapi.EventTypeOpen, ev.Type)
 			assert.Equal(t, content, ev.Content)
 			assert.Equal(t, uri, ev.URI)
 			h = ev.Resource
@@ -29,10 +30,10 @@ func TestEditorDispatchFocus(t *testing.T) {
 		}))
 
 	var focusCalled int
-	ed.SubscribeEditorEvents([]text.EventType{text.EventTypeFocus},
-		text.FuncEventHandler(func(ctx context.Context, ev text.Event) bool {
+	ed.SubscribeEditorEvents([]textapi.EventType{textapi.EventTypeFocus},
+		text.FuncEventHandler(func(ctx context.Context, ev textapi.Event) bool {
 			focusCalled++
-			assert.Equal(t, text.EventTypeFocus, ev.Type)
+			assert.Equal(t, textapi.EventTypeFocus, ev.Type)
 			assert.Equal(t, uri, ev.URI)
 			assert.Equal(t, h, ev.Resource)
 			return false
@@ -57,8 +58,8 @@ func TestEditorDispatchScroll(t *testing.T) {
 	h.Handle(term.Event{Type: term.EventKey, Ch: 'j'})
 
 	at := term.Coordinates{X: -1}
-	ed.SubscribeEditorEvents([]text.EventType{text.EventTypeScroll},
-		text.FuncEventHandler(func(ctx context.Context, ev text.Event) bool {
+	ed.SubscribeEditorEvents([]textapi.EventType{textapi.EventTypeScroll},
+		text.FuncEventHandler(func(ctx context.Context, ev textapi.Event) bool {
 			at = ev.Start
 			return false
 		}))
@@ -89,8 +90,8 @@ func TestEditorDispatchCursor(t *testing.T) {
 
 	windowCursor := term.Coordinates{X: -1}
 	scrollCursor := term.Coordinates{X: -1}
-	ed.SubscribeEditorEvents([]text.EventType{text.EventTypeCursor},
-		text.FuncEventHandler(func(ctx context.Context, ev text.Event) bool {
+	ed.SubscribeEditorEvents([]textapi.EventType{textapi.EventTypeCursor},
+		text.FuncEventHandler(func(ctx context.Context, ev textapi.Event) bool {
 			windowCursor = ev.Start
 			scrollCursor = ev.From
 			assert.Equal(t, ev.URI.String(), "file:///tmp/zsh.sh")

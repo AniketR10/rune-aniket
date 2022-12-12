@@ -22,6 +22,8 @@ import (
 	log "github.com/sirupsen/logrus"
 	browserapi "unstable.build/go-tui/api/browser"
 	browserplugin "unstable.build/go-tui/api/browser/plugin"
+	textapi "unstable.build/go-tui/api/text"
+	textplugin "unstable.build/go-tui/api/text/plugin"
 	"unstable.build/go-tui/config"
 	"unstable.build/go-tui/plugin"
 	"unstable.build/go-tui/proto"
@@ -48,14 +50,14 @@ var (
 		plugin.Permission(browserplugin.PermissionBrowserResourceOpener),
 		plugin.PermissionSchemeManager,
 		plugin.PermissionStorage,
-		plugin.PermissionEditor,
+		plugin.Permission(textplugin.PermissionEditor),
 	}
 	defaultCommands = map[string]func(*issuesGrantee,
-		context.Context, text.Command) (bool, error){
+		context.Context, textapi.Command) (bool, error){
 		defaultCreateIssueCmd: (*issuesGrantee).openEmptyIssueTemplate,
 		"issueRefresh":        (*issuesGrantee).issueRefresh,
 	}
-	editorEvents = []text.EventType{text.EventTypeFlush, text.EventTypeClose}
+	editorEvents = []textapi.EventType{textapi.EventTypeFlush, textapi.EventTypeClose}
 )
 
 type issuesGrantee struct {
@@ -70,7 +72,7 @@ type issuesGrantee struct {
 	sm        workspace.SchemeManager
 	s         document.Service
 
-	cmds              map[string]func(*issuesGrantee, context.Context, text.Command) (bool, error)
+	cmds              map[string]func(*issuesGrantee, context.Context, textapi.Command) (bool, error)
 	bluectlConfigFile string
 	maxSubjectLen     int
 	defTemplate       []byte
@@ -172,7 +174,7 @@ func (e *issuesGrantee) initScheme(m workspace.SchemeManager) error {
 	return err
 }
 
-func (e *issuesGrantee) Handle(ctx context.Context, ev text.Event) bool {
+func (e *issuesGrantee) Handle(ctx context.Context, ev textapi.Event) bool {
 	if !ev.URI.Equal(e.pendingIssueURI) {
 		log.Tracef("ignoring event for file with URI %q: not an issue URI", ev.URI)
 		return false
@@ -181,9 +183,9 @@ func (e *issuesGrantee) Handle(ctx context.Context, ev text.Event) bool {
 	log.Debugf("handling event %v for issue with URI %q", ev.Type, ev.URI)
 
 	switch ev.Type {
-	case text.EventTypeFlush:
+	case textapi.EventTypeFlush:
 		e.createOrUpdateIssue(ctx, ev)
-	case text.EventTypeClose:
+	case textapi.EventTypeClose:
 		e.freeIssue(ctx, ev)
 	}
 	return false
@@ -218,8 +220,8 @@ func (e *issuesGrantee) PermissionGranted(grants []plugin.Grant) {
 				continue
 			}
 			e.m = m
-		case plugin.PermissionEditor:
-			ed, err := plugin.Editor(g.Token, e.broker)
+		case plugin.Permission(textplugin.PermissionEditor):
+			ed, err := textplugin.Editor(g.Token, e.broker)
 			if err != nil {
 				log.Warnf("Could not acquire editor to subscribe command: %v."+
 					" Will not be able to create reports", err)
@@ -235,7 +237,7 @@ func (e *issuesGrantee) PermissionGranted(grants []plugin.Grant) {
 				cmd := cmd
 				fn := fn
 				err = ed.SubscribeCommand(cmd, text.FuncCommandHandler(
-					func(ctx context.Context, cmd text.Command) (bool, error) {
+					func(ctx context.Context, cmd textapi.Command) (bool, error) {
 						return fn(e, ctx, cmd)
 					}))
 				if err != nil {
@@ -328,26 +330,26 @@ func (e *issuesGrantee) setMessage(msg string, args ...any) {
 	}
 }
 
-func (e *issuesGrantee) issueRefresh(ctx context.Context, cmd text.Command) (bool, error) {
+func (e *issuesGrantee) issueRefresh(ctx context.Context, cmd textapi.Command) (bool, error) {
 	if e.svc == nil {
 		return false, errors.New("cannot refresh issues if permissions were not granted")
 	}
 	return false, e.svc.EvictAll(ctx)
 }
 
-func (e *issuesGrantee) openEmptyIssueTemplate(ctx context.Context, cmd text.Command) (bool, error) {
+func (e *issuesGrantee) openEmptyIssueTemplate(ctx context.Context, cmd textapi.Command) (bool, error) {
 	return e.openIssueTemplate(ctx, cmd.Window, e.defTemplate, "issue-")
 }
 
 func (e *issuesGrantee) openCustomIssueTemplate(
 	template []byte, templateName string,
-) func(*issuesGrantee, context.Context, text.Command) (bool, error) {
-	return func(e *issuesGrantee, ctx context.Context, cmd text.Command) (bool, error) {
+) func(*issuesGrantee, context.Context, textapi.Command) (bool, error) {
+	return func(e *issuesGrantee, ctx context.Context, cmd textapi.Command) (bool, error) {
 		return e.openIssueTemplate(ctx, cmd.Window, template, templateName)
 	}
 }
 
-func (e *issuesGrantee) freeIssue(ctx context.Context, ev text.Event) bool {
+func (e *issuesGrantee) freeIssue(ctx context.Context, ev textapi.Event) bool {
 	if e.pendingIssueID == "" {
 		e.setMessage("canceled creation of new issue")
 	}
@@ -385,7 +387,7 @@ func (e *issuesGrantee) updateReport(ctx context.Context, id string, temp issue.
 	log.Info(msg)
 }
 
-func (e *issuesGrantee) createOrUpdateIssue(ctx context.Context, ev text.Event) bool {
+func (e *issuesGrantee) createOrUpdateIssue(ctx context.Context, ev textapi.Event) bool {
 	if e.tracker == nil {
 		log.Debugf("Cannot create or update issue if permissions were not granted")
 		return false

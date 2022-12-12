@@ -6,10 +6,12 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	textapi "unstable.build/go-tui/api/text"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
+	texttest "unstable.build/go-tui/text/test"
 	"unstable.build/go-tui/workspace"
 )
 
@@ -24,7 +26,7 @@ func init() {
 }
 
 type mockHandler struct {
-	text.MockHandler
+	texttest.MockHandler
 	h viHandlerImpl // used for mode parsing only
 
 	received []term.Event
@@ -59,7 +61,7 @@ func (h *mockHandler) moveToNextLocation(ID string) {
 }
 func (h *mockHandler) moveToPrevLocation(ID string) {
 }
-func (h *mockHandler) setLocationList(pri text.LocationPriority, ID string, l text.LocationList) {
+func (h *mockHandler) setLocationList(pri textapi.LocationPriority, ID string, l text.LocationList) {
 }
 func (h *mockHandler) moveToBounds() {
 }

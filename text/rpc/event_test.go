@@ -6,11 +6,13 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	textapi "unstable.build/go-tui/api/text"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/term"
 	termpb "unstable.build/go-tui/term/rpc"
 	"unstable.build/go-tui/text"
+	texttest "unstable.build/go-tui/text/test"
 	"unstable.build/go-tui/workspace"
 )
 
@@ -41,8 +43,8 @@ func makeEventIntegrationCase(content string) (in, out *cell.Buffer, cursor *tex
 
 func TestIntegrationInsert(t *testing.T) {
 	in, out, cursor := makeEventIntegrationCase("")
-	in.Subscribe(text.CellSubscriber(uri, text.NewTestHandler(),
-		text.FuncEventHandler(func(ctx context.Context, ev text.Event) bool {
+	in.Subscribe(text.CellSubscriber(uri, texttest.NewTestHandler(),
+		text.FuncEventHandler(func(ctx context.Context, ev textapi.Event) bool {
 			out.InsertString(ev.Start, ev.Content)
 			return false
 		})))
@@ -116,8 +118,8 @@ func main() {
 }`
 	in, out, cursor := makeEventIntegrationCase(content)
 
-	in.Subscribe(text.CellSubscriber(uri, text.NewTestHandler(),
-		text.FuncEventHandler(func(ctx context.Context, ev text.Event) bool {
+	in.Subscribe(text.CellSubscriber(uri, texttest.NewTestHandler(),
+		text.FuncEventHandler(func(ctx context.Context, ev textapi.Event) bool {
 			out.Delete(ev.Start, ev.End)
 			return false
 		})))
@@ -143,10 +145,10 @@ func main() {
 }`
 	in, out, cursor := makeEventIntegrationCase(content)
 
-	in.Subscribe(text.CellSubscriber(uri, text.NewTestHandler(),
-		text.FuncEventHandler(func(ctx context.Context, ev text.Event) bool {
+	in.Subscribe(text.CellSubscriber(uri, texttest.NewTestHandler(),
+		text.FuncEventHandler(func(ctx context.Context, ev textapi.Event) bool {
 			switch ev.Type {
-			case text.EventTypeEdit:
+			case textapi.EventTypeEdit:
 				out.Edit(ev.Start, ev.End, ev.Content)
 			}
 			return false
@@ -175,12 +177,12 @@ func main() {
 
 func TestEventProto(t *testing.T) {
 	tsuite := []struct {
-		in  text.Event
+		in  textapi.Event
 		out EditorEvent
 	}{
 		{
-			in: text.Event{
-				Type:     text.EventTypeOpen,
+			in: textapi.Event{
+				Type:     textapi.EventTypeOpen,
 				URI:      uri,
 				Resource: nil,
 				Content:  "Ageispolis",
@@ -193,8 +195,8 @@ func TestEventProto(t *testing.T) {
 			},
 		},
 		{
-			in: text.Event{
-				Type: text.EventTypeFocus,
+			in: textapi.Event{
+				Type: textapi.EventTypeFocus,
 				URI:  uri,
 				Resource: Token{
 					ID:       2,
@@ -208,8 +210,8 @@ func TestEventProto(t *testing.T) {
 			},
 		},
 		{
-			in: text.Event{
-				Type: text.EventTypeUnfocus,
+			in: textapi.Event{
+				Type: textapi.EventTypeUnfocus,
 				URI:  uri,
 				Resource: Token{ID: 288,
 					resource: uri},
@@ -221,8 +223,8 @@ func TestEventProto(t *testing.T) {
 			},
 		},
 		{
-			in: text.Event{
-				Type:  text.EventTypeScroll,
+			in: textapi.Event{
+				Type:  textapi.EventTypeScroll,
 				Start: term.Coordinates{X: 1, Y: 2},
 				End:   term.Coordinates{X: 3, Y: 4},
 				From:  term.Coordinates{X: 5, Y: 6},
@@ -247,7 +249,7 @@ func TestEventProto(t *testing.T) {
 
 	t.Run("EditorEvent -> editor.Event ", func(t *testing.T) {
 		for _, tcase := range tsuite {
-			actual := text.Event{}
+			actual := textapi.Event{}
 			fromProto(&actual, &tcase.out)
 			assertEqualEvent(t, tcase.in, actual)
 		}
@@ -269,7 +271,7 @@ func assertEqualProto(t *testing.T, expected, actual EditorEvent) {
 	assert.Equal(t, expected.Content, actual.Content)
 }
 
-func assertEqualEvent(t *testing.T, expected, actual text.Event) {
+func assertEqualEvent(t *testing.T, expected, actual textapi.Event) {
 	assert.Equal(t, expected.Type, actual.Type)
 	assert.Equal(t, expected.URI.String(), actual.URI.String())
 	assert.Equal(t, expected.Resource, actual.Resource)

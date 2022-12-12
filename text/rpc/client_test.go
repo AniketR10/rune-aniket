@@ -9,26 +9,28 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
+	textapi "unstable.build/go-tui/api/text"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/proto"
 	prototest "unstable.build/go-tui/proto/test"
 	"unstable.build/go-tui/term"
 	termpb "unstable.build/go-tui/term/rpc"
 	"unstable.build/go-tui/text"
+	texttest "unstable.build/go-tui/text/test"
 	"unstable.build/go-tui/workspace"
 )
 
 var (
-	loc1 = text.Location{
+	loc1 = textapi.Location{
 		To:   term.Coordinates{X: 1, Y: 3},
 		Attr: term.Attributes{Fg: term.AttrBold},
 	}
-	loc2 = text.Location{
+	loc2 = textapi.Location{
 		From:    term.Coordinates{X: 1, Y: 3},
 		Attr:    term.Attributes{Fg: term.ColorBlack, Bg: term.ColorGreen},
 		Message: "wsb: hold BBBY",
 	}
-	loc3 = text.Location{}
+	loc3 = textapi.Location{}
 )
 
 func newTestClient(ctrl *gomock.Controller) (
@@ -106,7 +108,7 @@ func TestClientEdit(t *testing.T) {
 func expectClientSubscribe(
 	t *testing.T, mockCC *proto.MockClientConnInterface,
 	expectedHandlerID uint32,
-	expectedEventTypes []text.EventType,
+	expectedEventTypes []textapi.EventType,
 ) {
 	mockCC.EXPECT().
 		Invoke(gomock.Any(),
@@ -123,7 +125,7 @@ func expectClientSubscribe(
 
 			var expectedProtoTypes []EditorEvent_Type
 			for _, ev := range expectedEventTypes {
-				expectedProtoTypes = append(expectedProtoTypes, protoType(text.Event{Type: ev}))
+				expectedProtoTypes = append(expectedProtoTypes, protoType(textapi.Event{Type: ev}))
 			}
 			assert.Equal(t, expectedProtoTypes, req.GetType())
 
@@ -140,10 +142,10 @@ func TestClientSubscribe(t *testing.T) {
 		defer ctrl.Finish()
 
 		broker, cc, c := newTestClient(ctrl)
-		handler := text.NewMockEventHandler(ctrl)
+		handler := texttest.NewMockEventHandler(ctrl)
 
 		brokerID := uint32(22)
-		evTypes := []text.EventType{text.EventTypeFlush, text.EventTypeClose, text.EventTypeOpen}
+		evTypes := []textapi.EventType{textapi.EventTypeFlush, textapi.EventTypeClose, textapi.EventTypeOpen}
 		expectClientSubscribe(t, cc, brokerID, evTypes)
 
 		prototest.ExpectBrokerServe(t, brokerID, broker)
@@ -157,7 +159,7 @@ func TestClientSubscribe(t *testing.T) {
 
 func TestSetLocationListRequest(t *testing.T) {
 	t.Run("non-nil zero slice", func(t *testing.T) {
-		l := text.LocationSlice([]text.Location{})
+		l := text.LocationSlice([]textapi.Location{})
 		handlerID := uint32(23)
 		expected := SetLocationListRequest{
 			HandlerId: handlerID,
@@ -165,7 +167,7 @@ func TestSetLocationListRequest(t *testing.T) {
 			Locations: nil,
 			Priority:  2,
 		}
-		assert.Equal(t, expected, makeLocationListRequest(handlerID, text.LocationPriorityError, locID, l))
+		assert.Equal(t, expected, makeLocationListRequest(handlerID, textapi.LocationPriorityError, locID, l))
 	})
 
 	t.Run("nil zero slice", func(t *testing.T) {
@@ -177,10 +179,10 @@ func TestSetLocationListRequest(t *testing.T) {
 			ListId:    locID,
 			Locations: nil,
 		}
-		assert.Equal(t, expected, makeLocationListRequest(handlerID, text.LocationPriorityError, locID, l))
+		assert.Equal(t, expected, makeLocationListRequest(handlerID, textapi.LocationPriorityError, locID, l))
 	})
 	t.Run("non-zero slice", func(t *testing.T) {
-		l := text.LocationSlice([]text.Location{
+		l := text.LocationSlice([]textapi.Location{
 			loc1,
 			loc2,
 			loc3,
@@ -213,11 +215,11 @@ func TestSetLocationListRequest(t *testing.T) {
 			},
 		}
 
-		assert.Equal(t, expected, makeLocationListRequest(handlerID, text.LocationPriorityError, locID, l))
+		assert.Equal(t, expected, makeLocationListRequest(handlerID, textapi.LocationPriorityError, locID, l))
 	})
 	t.Run("with message", func(t *testing.T) {
 		myMsg := "wsb: HOLD GME"
-		l := text.LocationSlice([]text.Location{
+		l := text.LocationSlice([]textapi.Location{
 			{
 				To:      term.Coordinates{X: 1, Y: 3},
 				Attr:    term.Attributes{Fg: term.AttrBold},
@@ -239,14 +241,14 @@ func TestSetLocationListRequest(t *testing.T) {
 			},
 		}
 
-		assert.Equal(t, expected, makeLocationListRequest(handlerID, text.LocationPriorityError, locID, l))
+		assert.Equal(t, expected, makeLocationListRequest(handlerID, textapi.LocationPriorityError, locID, l))
 	})
 }
 
 func benchmarkSetLocationListRequest(b *testing.B, n int) {
-	l := make([]text.Location, n)
+	l := make([]textapi.Location, n)
 	for i := 0; i < n; i++ {
-		l[i] = text.Location{
+		l[i] = textapi.Location{
 			From: term.Coordinates{X: i, Y: n},
 			To:   term.Coordinates{X: n, Y: n},
 			Attr: term.Attributes{Fg: term.AttrBold},
@@ -256,7 +258,7 @@ func benchmarkSetLocationListRequest(b *testing.B, n int) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		ll := text.LocationSlice(l)
-		_ = makeLocationListRequest(45, text.LocationPriorityError, locID, ll)
+		_ = makeLocationListRequest(45, textapi.LocationPriorityError, locID, ll)
 	}
 }
 

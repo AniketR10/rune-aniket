@@ -15,6 +15,7 @@ import (
 	"google.golang.org/grpc"
 	"unstable.build/go-tui"
 	browserapi "unstable.build/go-tui/api/browser"
+	textapi "unstable.build/go-tui/api/text"
 	"unstable.build/go-tui/browser"
 	browserpb "unstable.build/go-tui/browser/rpc"
 	browsertest "unstable.build/go-tui/browser/test"
@@ -23,6 +24,7 @@ import (
 	"unstable.build/go-tui/proto"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
+	texttest "unstable.build/go-tui/text/test"
 	testutil "unstable.build/go-tui/util/test"
 	"unstable.build/go-tui/workspace"
 )
@@ -74,7 +76,7 @@ func setupWmIntTest(
 	}
 }
 
-func expectInitialServerSubscribe(t *testing.T, mock *text.MockEditor) {
+func expectInitialServerSubscribe(t *testing.T, mock *texttest.MockEditor) {
 	mock.EXPECT().SubscribeEditorEvents(gomock.Any(), gomock.Any()).
 		Return(nil).
 		Times(1)
@@ -87,7 +89,7 @@ func TestClientServerIntegration(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 		b := proto.NewDialBroker()
-		ed := text.NewMockEditor(ctrl)
+		ed := texttest.NewMockEditor(ctrl)
 		expectInitialServerSubscribe(t, ed)
 		s := NewServer(b, ed, nopLocker{}, testBrowserServer{})
 
@@ -106,7 +108,7 @@ func TestClientServerIntegration(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 		b := proto.NewDialBroker()
-		ed := text.NewMockEditor(ctrl)
+		ed := texttest.NewMockEditor(ctrl)
 		expectInitialServerSubscribe(t, ed)
 		s := NewServer(b, ed, nopLocker{}, testBrowserServer{})
 
@@ -126,7 +128,7 @@ func TestClientServerIntegration(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 		b := proto.NewDialBroker()
-		ed := text.NewMockEditor(ctrl)
+		ed := texttest.NewMockEditor(ctrl)
 		expectInitialServerSubscribe(t, ed)
 		s := NewServer(b, ed, nopLocker{}, testBrowserServer{})
 
@@ -146,21 +148,21 @@ func TestClientServerIntegration(t *testing.T) {
 		str1 := "Granola Lola"
 		tsuite := []struct {
 			name       string
-			evType     text.EventType
+			evType     textapi.EventType
 			trigger    func(t *testing.T, resourceName string, ed text.Editor, buf *cell.Buffer)
 			start, end *term.Coordinates
 			content    *string
 		}{
 			{
 				"Edit->EventTypeOpen",
-				text.EventTypeOpen,
+				textapi.EventTypeOpen,
 				func(t *testing.T, resourceName string, ed text.Editor, buf *cell.Buffer) {
 					ed.Edit(uri, buf)
 				}, nil, nil, nil,
 			},
 			{
 				"Edit->EventTypeEdit",
-				text.EventTypeEdit,
+				textapi.EventTypeEdit,
 				func(t *testing.T, resourceName string, ed text.Editor, buf *cell.Buffer) {
 					ed.Edit(uri, buf)
 					buf.WriteString(str1)
@@ -168,7 +170,7 @@ func TestClientServerIntegration(t *testing.T) {
 			},
 			{
 				"Edit->EventTypeEdit",
-				text.EventTypeEdit,
+				textapi.EventTypeEdit,
 				func(t *testing.T, resourceName string, ed text.Editor, buf *cell.Buffer) {
 					buf.WriteString(str1)
 					ed.Edit(uri, buf)
@@ -177,7 +179,7 @@ func TestClientServerIntegration(t *testing.T) {
 			},
 			{
 				"Handle->EventTypeCursor",
-				text.EventTypeCursor,
+				textapi.EventTypeCursor,
 				func(t *testing.T, resourceName string, ed text.Editor, buf *cell.Buffer) {
 					buf.WriteString(str1)
 					h, err := ed.Edit(uri, buf)
@@ -193,15 +195,15 @@ func TestClientServerIntegration(t *testing.T) {
 				var wg sync.WaitGroup
 				var mu sync.Mutex
 				b := proto.NewDialBroker()
-				ed := text.NopEditor()
+				ed := texttest.NopEditor()
 				s := NewServer(b, ed, &mu, testBrowserServer{})
 
 				client, closeFn := setupIntTest(t, b, s)
 				defer closeFn()
 
 				wg.Add(1)
-				err := client.SubscribeEditorEvents([]text.EventType{tcase.evType},
-					text.FuncEventHandler(func(ctx context.Context, ev text.Event) bool {
+				err := client.SubscribeEditorEvents([]textapi.EventType{tcase.evType},
+					text.FuncEventHandler(func(ctx context.Context, ev textapi.Event) bool {
 						defer wg.Done()
 						if tcase.start != nil {
 							assert.Equal(t, *tcase.start, ev.Start)
@@ -235,7 +237,7 @@ func TestClientServerIntegration(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 		b := proto.NewDialBroker()
-		ed := text.NewMockEditor(ctrl)
+		ed := texttest.NewMockEditor(ctrl)
 		expectInitialServerSubscribe(t, ed)
 		s := NewServer(b, ed, new(sync.Mutex), testBrowserServer{})
 
@@ -246,20 +248,20 @@ func TestClientServerIntegration(t *testing.T) {
 		h, err := client.Edit(uri, cell.NewBuffer())
 		require.NoError(t, err)
 
-		l := text.LocationSlice([]text.Location{loc2})
+		l := text.LocationSlice([]textapi.Location{loc2})
 
 		ed.EXPECT().SetLocationList(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
-			DoAndReturn(func(h text.Handler, pri text.LocationPriority, id string, ll text.LocationList) error {
+			DoAndReturn(func(h text.Handler, pri textapi.LocationPriority, id string, ll text.LocationList) error {
 				defer wg.Done()
 				assertLocation(t, ll, 0, loc2)
 				assert.Equal(t, locID, id)
 				assertLocationListLen(t, ll, 1)
-				assert.Equal(t, text.LocationPriorityError, pri)
+				assert.Equal(t, textapi.LocationPriorityError, pri)
 				return nil
 			}).Times(1)
 
 		wg.Add(1)
-		err = client.SetLocationList(h, text.LocationPriorityError, locID, l)
+		err = client.SetLocationList(h, textapi.LocationPriorityError, locID, l)
 		require.NoError(t, err)
 
 		wg.Wait()
@@ -270,7 +272,7 @@ func TestClientServerIntegration(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 		b := proto.NewDialBroker()
-		ed := text.NewMockEditor(ctrl)
+		ed := texttest.NewMockEditor(ctrl)
 		expectInitialServerSubscribe(t, ed)
 		s := NewServer(b, ed, new(sync.Mutex), testBrowserServer{})
 
@@ -304,7 +306,7 @@ func TestClientServerIntegration(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 		b := proto.NewDialBroker()
-		ed := text.NewMockEditor(ctrl)
+		ed := texttest.NewMockEditor(ctrl)
 		expectInitialServerSubscribe(t, ed)
 		s := NewServer(b, ed, nopLocker{}, testBrowserServer{})
 
@@ -341,7 +343,7 @@ func TestClientServerIntegration(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 		b := proto.NewDialBroker()
-		ed := text.NewMockEditor(ctrl)
+		ed := texttest.NewMockEditor(ctrl)
 		expectInitialServerSubscribe(t, ed)
 		s := NewServer(b, ed, nopLocker{}, testBrowserServer{})
 
@@ -404,7 +406,7 @@ func TestRPCRegister(t *testing.T) {
 			return nil, nil, err
 		}
 
-		if m, ok := ed.(*text.MockEditor); ok {
+		if m, ok := ed.(*texttest.MockEditor); ok {
 			expectInitialServerSubscribe(t, m)
 		}
 
@@ -419,7 +421,7 @@ func TestRPCRegister(t *testing.T) {
 			closeFn()
 		})
 
-		return c, client, err
+		return c, texttest.EditorFromAPIEditor{Ed: client}, err
 	})
 
 	for _, closeFn := range closeFns {
@@ -427,7 +429,7 @@ func TestRPCRegister(t *testing.T) {
 	}
 }
 
-func assertLocation(t *testing.T, l text.LocationList, idx int, loca text.Location) {
+func assertLocation(t *testing.T, l text.LocationList, idx int, loca textapi.Location) {
 	resetLocationList(l)
 	var i int
 	for loc, ok := l.Current(); ok; loc, ok = l.Next() {
@@ -475,7 +477,7 @@ func testTabIntegration(t *testing.T,
 
 		fn := func(t *testing.T) tui.Handler {
 			var mu sync.Mutex
-			c, wm, err := constructor(text.NopEditor(), &mu)
+			c, wm, err := constructor(texttest.NopEditor(), &mu)
 			require.NoError(t, err)
 
 			resource1, err := workspace.ParseURI("file:///a")
@@ -567,7 +569,7 @@ func testRegister(t *testing.T,
 		require.NoError(t, err)
 		myArgs := []string{"a", "bbbbbbbbbbbbbbbbbbbbb"}
 		myCmd := "BUY"
-		c, sut, err := constructor(text.NopEditor(), &mu, resource1)
+		c, sut, err := constructor(texttest.NopEditor(), &mu, resource1)
 		require.NoError(t, err)
 
 		mu.Lock()
@@ -578,7 +580,7 @@ func testRegister(t *testing.T,
 		var called int
 		var wg sync.WaitGroup
 		sut.SubscribeCommand(myCmd,
-			text.FuncCommandHandler(func(ctx context.Context, cmd text.Command) (bool, error) {
+			text.FuncCommandHandler(func(ctx context.Context, cmd textapi.Command) (bool, error) {
 				defer wg.Done()
 				assert.Equal(t, myCmd, cmd.Name)
 				assert.Equal(t, myArgs, cmd.Args)
@@ -591,7 +593,7 @@ func testRegister(t *testing.T,
 		mu.Lock()
 		win, err := c.Focus()
 		require.NoError(t, err)
-		cmd := text.Command{
+		cmd := textapi.Command{
 			Resource: h1,
 			URI:      resource1,
 			Name:     myCmd,

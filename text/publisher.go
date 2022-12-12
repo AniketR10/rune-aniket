@@ -3,6 +3,7 @@ package text
 import (
 	"context"
 
+	textapi "unstable.build/go-tui/api/text"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/workspace"
@@ -10,7 +11,7 @@ import (
 
 // Publisher implements pub/sub functionality for Editor implementations.
 type Publisher struct {
-	subs map[EventType][]EventHandler
+	subs map[textapi.EventType][]EventHandler
 }
 
 type cursorPublisher struct {
@@ -30,7 +31,7 @@ func NewPublisher() *Publisher {
 
 // Init initializes this Publisher.
 func (p *Publisher) Init() {
-	p.subs = make(map[EventType][]EventHandler)
+	p.subs = make(map[textapi.EventType][]EventHandler)
 }
 
 // PublishEdit publishes EventTypeOpen and EventTypeFocus events to subscribers
@@ -51,8 +52,8 @@ func (p *Publisher) PublishEdit(
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	p.dispatchEvent(ctx, Event{
-		Type:     EventTypeOpen,
+	p.dispatchEvent(ctx, textapi.Event{
+		Type:     textapi.EventTypeOpen,
 		URI:      resource,
 		Resource: h,
 		Content:  buf.String(),
@@ -62,8 +63,8 @@ func (p *Publisher) PublishEdit(
 	// is always in focus. Consumers of this Editor should not
 	// delegate SubscribeEditor to this handler if there's some other
 	// focus mechanism in place.
-	p.dispatchEvent(ctx, Event{
-		Type:     EventTypeFocus,
+	p.dispatchEvent(ctx, textapi.Event{
+		Type:     textapi.EventTypeFocus,
 		URI:      resource,
 		Resource: h,
 	})
@@ -86,7 +87,7 @@ func (p *Publisher) Handler(h Handler) Handler {
 }
 
 // SubscribeEditorEvents subsribes sub to ev.
-func (p *Publisher) SubscribeEditorEvents(evs []EventType, sub EventHandler) {
+func (p *Publisher) SubscribeEditorEvents(evs []textapi.EventType, sub EventHandler) {
 	for _, ev := range evs {
 		if _, ok := p.subs[ev]; !ok {
 			p.subs[ev] = []EventHandler{sub}
@@ -96,7 +97,7 @@ func (p *Publisher) SubscribeEditorEvents(evs []EventType, sub EventHandler) {
 	}
 }
 
-func (p *Publisher) dispatchEvent(ctx context.Context, ev Event) {
+func (p *Publisher) dispatchEvent(ctx context.Context, ev textapi.Event) {
 	subs, ok := p.subs[ev.Type]
 	if !ok {
 		return
@@ -113,7 +114,7 @@ func (p *Publisher) dispatchEvent(ctx context.Context, ev Event) {
 }
 
 // Handle handles ev by dispatching to subscribers.
-func (p *Publisher) Handle(ctx context.Context, ev Event) bool {
+func (p *Publisher) Handle(ctx context.Context, ev textapi.Event) bool {
 	p.dispatchEvent(ctx, ev)
 	return false
 }
@@ -131,8 +132,8 @@ func (p *cursorPublisher) Handle(ev term.Event) (bool, bool) {
 	if cursor0 != cursor1 || cursorAtScroll0 != cursorAtScroll1 {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
-		p.parent.dispatchEvent(ctx, Event{
-			Type:     EventTypeCursor,
+		p.parent.dispatchEvent(ctx, textapi.Event{
+			Type:     textapi.EventTypeCursor,
 			URI:      p.uri,
 			Resource: p,
 			Start:    cursor1,

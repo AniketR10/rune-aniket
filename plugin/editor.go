@@ -5,14 +5,10 @@ import (
 	"sync"
 
 	"google.golang.org/grpc"
+	textplugin "unstable.build/go-tui/api/text/plugin"
 	"unstable.build/go-tui/proto"
 	"unstable.build/go-tui/text"
 	textpb "unstable.build/go-tui/text/rpc"
-)
-
-const (
-	// PermissionEditor requests access to the editor.
-	PermissionEditor Permission = "_PermEditor"
 )
 
 type editorResourceServer struct {
@@ -40,24 +36,6 @@ func (s *editorResourceServer) Register(
 func EditorResources(b text.Editor) map[Permission]ResourceRegistrar {
 	s := newEditorResourceServer(b)
 	return map[Permission]ResourceRegistrar{
-		PermissionEditor: s,
+		Permission(textplugin.PermissionEditor): s,
 	}
-}
-
-func dialEditor(token uint32, broker proto.MuxBroker) (
-	text.Editor, error,
-) {
-	conn, err := broker.Dial(token)
-	if err != nil {
-		return nil, err
-	}
-	c := textpb.NewClient(broker, conn)
-	return c, nil
-}
-
-// Editor acquires the remote Editor with the given token.
-func Editor(token uint32, broker proto.MuxBroker) (
-	text.Editor, error,
-) {
-	return dialEditor(token, broker)
 }

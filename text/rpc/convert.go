@@ -3,28 +3,29 @@ package rpc
 import (
 	"fmt"
 
+	textapi "unstable.build/go-tui/api/text"
 	termpb "unstable.build/go-tui/term/rpc"
 	"unstable.build/go-tui/text"
 )
 
-func protoTypeToModel(protoType EditorEvent_Type) (ev text.EventType, err error) {
+func protoTypeToModel(protoType EditorEvent_Type) (ev textapi.EventType, err error) {
 	switch protoType {
 	case EditorEvent_TypeClose:
-		ev = text.EventTypeClose
+		ev = textapi.EventTypeClose
 	case EditorEvent_TypeFlush:
-		ev = text.EventTypeFlush
+		ev = textapi.EventTypeFlush
 	case EditorEvent_TypeOpen:
-		ev = text.EventTypeOpen
+		ev = textapi.EventTypeOpen
 	case EditorEvent_TypeEdit:
-		ev = text.EventTypeEdit
+		ev = textapi.EventTypeEdit
 	case EditorEvent_TypeScroll:
-		ev = text.EventTypeScroll
+		ev = textapi.EventTypeScroll
 	case EditorEvent_TypeCursor:
-		ev = text.EventTypeCursor
+		ev = textapi.EventTypeCursor
 	case EditorEvent_TypeFocus:
-		ev = text.EventTypeFocus
+		ev = textapi.EventTypeFocus
 	case EditorEvent_TypeUnfocus:
-		ev = text.EventTypeUnfocus
+		ev = textapi.EventTypeUnfocus
 	case EditorEvent_TypeCommand:
 		ev = text.EventTypeCommand
 	default:
@@ -35,7 +36,7 @@ func protoTypeToModel(protoType EditorEvent_Type) (ev text.EventType, err error)
 	return
 }
 
-func fromProto(e *text.Event, pe *EditorEvent) (err error) {
+func fromProto(e *textapi.Event, pe *EditorEvent) (err error) {
 	e.Type, err = protoTypeToModel(pe.GetType())
 	if err != nil {
 		return
@@ -60,23 +61,23 @@ func fromProto(e *text.Event, pe *EditorEvent) (err error) {
 	return nil
 }
 
-func protoType(e text.Event) EditorEvent_Type {
+func protoType(e textapi.Event) EditorEvent_Type {
 	switch e.Type {
-	case text.EventTypeClose:
+	case textapi.EventTypeClose:
 		return EditorEvent_TypeClose
-	case text.EventTypeFlush:
+	case textapi.EventTypeFlush:
 		return EditorEvent_TypeFlush
-	case text.EventTypeOpen:
+	case textapi.EventTypeOpen:
 		return EditorEvent_TypeOpen
-	case text.EventTypeEdit:
+	case textapi.EventTypeEdit:
 		return EditorEvent_TypeEdit
-	case text.EventTypeScroll:
+	case textapi.EventTypeScroll:
 		return EditorEvent_TypeScroll
-	case text.EventTypeCursor:
+	case textapi.EventTypeCursor:
 		return EditorEvent_TypeCursor
-	case text.EventTypeFocus:
+	case textapi.EventTypeFocus:
 		return EditorEvent_TypeFocus
-	case text.EventTypeUnfocus:
+	case textapi.EventTypeUnfocus:
 		return EditorEvent_TypeUnfocus
 	case text.EventTypeCommand:
 		return EditorEvent_TypeCommand
@@ -86,7 +87,7 @@ func protoType(e text.Event) EditorEvent_Type {
 }
 
 // expects ev Resource to be a browser.Token
-func toProto(e text.Event) EditorEvent {
+func toProto(e textapi.Event) EditorEvent {
 	var ret EditorEvent
 	ret.Type = protoType(e)
 

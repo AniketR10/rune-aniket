@@ -1,6 +1,6 @@
-package text
+package api
 
-import textapi "unstable.build/go-tui/api/text"
+import "unstable.build/go-tui/term"
 
 // LocationList is the interface that groups Prev and Next
 // location methods to fetch the previous and next item respectively.
@@ -10,41 +10,48 @@ import textapi "unstable.build/go-tui/api/text"
 // Current returns the current result. If there are no results in the list
 // then Current returns false.
 type LocationList interface {
-	Current() (textapi.Location, bool)
-	Prev() (textapi.Location, bool)
-	Next() (textapi.Location, bool)
+	Current() (Location, bool)
+	Prev() (Location, bool)
+	Next() (Location, bool)
+}
+
+// Location represents a content location in a Editor's buffer.
+type Location struct {
+	From, To term.Coordinates
+	Attr     term.Attributes
+	Message  string
 }
 
 type sliceLocations struct {
 	curr int
-	in   []textapi.Location
+	in   []Location
 }
 
-func (s *sliceLocations) Current() (textapi.Location, bool) {
+func (s *sliceLocations) Current() (Location, bool) {
 	if s.curr >= len(s.in) || s.curr < 0 {
-		return textapi.Location{}, false
+		return Location{}, false
 	}
 
 	return s.in[s.curr], true
 }
 
-func (s *sliceLocations) Prev() (textapi.Location, bool) {
+func (s *sliceLocations) Prev() (Location, bool) {
 	if s.curr-1 < 0 {
-		return textapi.Location{}, false
+		return Location{}, false
 	}
 	s.curr--
 	return s.in[s.curr], true
 }
 
-func (s *sliceLocations) Next() (textapi.Location, bool) {
+func (s *sliceLocations) Next() (Location, bool) {
 	if s.curr+1 >= len(s.in) {
-		return textapi.Location{}, false
+		return Location{}, false
 	}
 	s.curr++
 	return s.in[s.curr], true
 }
 
 // LocationSlice returns a LocationList based on in
-func LocationSlice(in []textapi.Location) LocationList {
+func LocationSlice(in []Location) LocationList {
 	return &sliceLocations{in: in}
 }

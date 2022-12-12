@@ -16,6 +16,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui"
 	browserapi "unstable.build/go-tui/api/browser"
+	textapi "unstable.build/go-tui/api/text"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/handler"
@@ -173,7 +174,7 @@ func (e *ex) subscribeCommands() error {
 		cmd := cmd
 		fn := fn
 		err := e.comp.SubscribeCommand(cmd, text.FuncCommandCompleter(
-			func(ctx context.Context, cmd text.Command) (bool, error) {
+			func(ctx context.Context, cmd textapi.Command) (bool, error) {
 				return false, fn(e, cmd.Args...)
 			}, func(ctx context.Context, args []string) (iterator.Iterator[string], error) {
 				return e.completeCommand(ctx, cmd, args)
@@ -370,7 +371,7 @@ func (e *ex) forceQuit(args ...string) error {
 
 func (e *ex) dispatchCommand(cmd string, args ...string) (err error) {
 	uri, h, ok := e.handlerInFocus()
-	scmd := text.Command{
+	scmd := textapi.Command{
 		Name:     cmd,
 		Args:     args,
 		Resource: h,

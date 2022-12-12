@@ -8,7 +8,7 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
-	"unstable.build/go-tui/text"
+	textapi "unstable.build/go-tui/api/text"
 )
 
 const (
@@ -77,7 +77,7 @@ func (c *eventHandlerClient) pipelineEvents() {
 	}
 }
 
-func (c *eventHandlerClient) Handle(ctx context.Context, ev text.Event) bool {
+func (c *eventHandlerClient) Handle(ctx context.Context, ev textapi.Event) bool {
 	protoEv := toProto(ev)
 	c.evChan <- protoEv
 
@@ -98,12 +98,12 @@ func (c *eventHandlerClient) Close() error {
 
 type eventHandlerServer struct {
 	UnimplementedEditorEventHandlerServer
-	handler text.EventHandler
+	handler textapi.EventHandler
 	onExit  func()
 }
 
 func newEventHandlerServer(
-	handler text.EventHandler, onExit func(),
+	handler textapi.EventHandler, onExit func(),
 ) *eventHandlerServer {
 	ret := new(eventHandlerServer)
 	ret.handler = handler
@@ -119,7 +119,7 @@ func (s *eventHandlerServer) Handle(
 		return nil, errors.New("invalid handle request: missing event property")
 	}
 
-	var ev text.Event
+	var ev textapi.Event
 	err := fromProto(&ev, protoEv)
 	if err != nil {
 		err = fmt.Errorf("failed to decode proto event: %s", err)

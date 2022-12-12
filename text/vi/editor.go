@@ -3,6 +3,7 @@ package vi
 import (
 	"errors"
 
+	textapi "unstable.build/go-tui/api/text"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
@@ -43,7 +44,7 @@ func (e *viEditor) Editor(file workspace.URI) (text.Handler, error) {
 // of dispatching EventTypeOpen, EventTypeInsert and EventTypeDelete
 // EventType events.
 func (e *viEditor) SubscribeEditorEvents(
-	evs []text.EventType, sub text.EventHandler,
+	evs []textapi.EventType, sub text.EventHandler,
 ) error {
 	e.Publisher.SubscribeEditorEvents(evs, sub)
 	return nil
@@ -55,7 +56,7 @@ func (e *viEditor) SetDefaultAttributes(h text.Handler, attrs term.Attributes) e
 }
 
 func (e viEditor) SetLocationList(
-	h text.Handler, pri text.LocationPriority, ID string, loc text.LocationList,
+	h text.Handler, pri textapi.LocationPriority, ID string, loc text.LocationList,
 ) error {
 	e.Publisher.Handler(h).(*Vi).SetLocationList(pri, ID, loc)
 	return nil

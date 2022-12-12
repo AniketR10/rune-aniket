@@ -14,11 +14,12 @@ import (
 	log "github.com/sirupsen/logrus"
 	browserapi "unstable.build/go-tui/api/browser"
 	browserplugin "unstable.build/go-tui/api/browser/plugin"
+	textapi "unstable.build/go-tui/api/text"
+	textplugin "unstable.build/go-tui/api/text/plugin"
 	"unstable.build/go-tui/config"
 	"unstable.build/go-tui/plugin"
 	"unstable.build/go-tui/proto"
 	"unstable.build/go-tui/term"
-	"unstable.build/go-tui/text"
 	"unstable.build/go-tui/workspace"
 )
 
@@ -30,7 +31,7 @@ const (
 var (
 	requiredPermissions = []plugin.Permission{
 		plugin.Permission(browserplugin.PermissionBrowserWindowManager),
-		plugin.PermissionEditor,
+		plugin.Permission(textplugin.PermissionEditor),
 		plugin.PermissionWorkspace,
 		plugin.Permission(browserplugin.PermissionBrowserEventPublisher),
 		plugin.Permission(browserplugin.PermissionBrowserMessenger),
@@ -52,7 +53,7 @@ type emulatorGrantee struct {
 	wp workspace.API
 	wm browserapi.WindowManager
 	p  browserapi.EventPublisher
-	ed text.Editor
+	ed textapi.Editor
 	m  browserapi.Messenger
 	c  plugin.Clipboard
 
@@ -115,8 +116,8 @@ func (e *emulatorGrantee) PermissionGranted(grants []plugin.Grant) {
 			e.wp, err = plugin.Workspace(g.Token, e.broker)
 		case plugin.Permission(browserplugin.PermissionBrowserMessenger):
 			e.m, err = browserplugin.Messenger(g.Token, e.broker)
-		case plugin.PermissionEditor:
-			e.ed, err = plugin.Editor(g.Token, e.broker)
+		case plugin.Permission(textplugin.PermissionEditor):
+			e.ed, err = textplugin.Editor(g.Token, e.broker)
 			if err == nil {
 				for _, cmd := range commands {
 					subsErr := e.ed.SubscribeCommand(cmd, e)
@@ -135,7 +136,7 @@ func (e *emulatorGrantee) PermissionGranted(grants []plugin.Grant) {
 }
 
 func (e *emulatorGrantee) PermissionDenied(perms []plugin.Permission) {
-	if len(perms) == 1 && perms[0] == plugin.PermissionEditor {
+	if len(perms) == 1 && string(perms[0]) == textplugin.PermissionEditor {
 		// continue without clibboard
 		_ = e.m.SetMessage("plugin_terminal: clipboard permission should be granted for an optimal experience")
 		return
@@ -155,7 +156,7 @@ func (e *emulatorGrantee) Health() error {
 }
 
 func (e *emulatorGrantee) HandleCommand(
-	ctx context.Context, cmd text.Command,
+	ctx context.Context, cmd textapi.Command,
 ) (bool, error) {
 	exit, err := e.handleCommand(ctx, cmd)
 	if err != nil {
@@ -165,7 +166,7 @@ func (e *emulatorGrantee) HandleCommand(
 }
 
 func (e *emulatorGrantee) handleCommand(
-	ctx context.Context, cmd text.Command,
+	ctx context.Context, cmd textapi.Command,
 ) (bool, error) {
 	switch cmd.Name {
 	case cmdSplitWindowTerminal, cmdTerminalTab:

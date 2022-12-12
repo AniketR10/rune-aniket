@@ -1,4 +1,4 @@
-package text
+package test
 
 import (
 	"unstable.build/go-tui/handler"

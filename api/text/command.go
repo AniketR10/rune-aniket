@@ -1,19 +1,34 @@
-package text
+package api
 
 import (
 	"context"
 
 	"github.com/ernestrc/blue/iterator"
-	textapi "unstable.build/go-tui/api/text"
+	browserapi "unstable.build/go-tui/api/browser"
+	"unstable.build/go-tui/term"
+	"unstable.build/go-tui/workspace"
 )
 
-// EventTypeCommand extends textapi.EventType to re-use functionality.
-const EventTypeCommand textapi.EventType = textapi.EventType(uint8(99))
+// Command represents a command issued by the user.
+type Command struct {
+	Name string
+	Args []string
+
+	// optional. If command is dispatched while non-tab is in focus,
+	// then these fields will be zero-valued.
+	URI      workspace.URI
+	Resource Handler
+	Window   browserapi.Window
+	Cursor   struct {
+		Content term.Coordinates
+		Window  term.Coordinates
+	}
+}
 
 // CommandHandler is a callback interface that wraps the basic method Command.
 type CommandHandler interface {
 	// Handle is called when user issued a command previously registered via SubscribeCommand.
-	HandleCommand(context.Context, textapi.Command) (exit bool, err error)
+	HandleCommand(context.Context, Command) (exit bool, err error)
 }
 
 // CommandCompleter abstracts the ability for CommandHandlers to auto-complete
@@ -24,11 +39,11 @@ type CommandCompleter interface {
 }
 
 type fnCommandHandler struct {
-	cb         func(context.Context, textapi.Command) (bool, error)
+	cb         func(context.Context, Command) (bool, error)
 	completeFn func(context.Context, []string) (iterator.Iterator[string], error)
 }
 
-func (f fnCommandHandler) HandleCommand(ctx context.Context, c textapi.Command) (bool, error) {
+func (f fnCommandHandler) HandleCommand(ctx context.Context, c Command) (bool, error) {
 	return f.cb(ctx, c)
 }
 
@@ -43,7 +58,7 @@ func (f fnCommandHandler) Complete(ctx context.Context, args []string) (
 
 // FuncCommandHandler returns an CommandHandler that calls fn
 // every time HandleCommand is invoked.
-func FuncCommandHandler(fn func(context.Context, textapi.Command) (bool, error)) CommandHandler {
+func FuncCommandHandler(fn func(context.Context, Command) (bool, error)) CommandHandler {
 	return fnCommandHandler{
 		cb: fn,
 	}
@@ -53,7 +68,7 @@ func FuncCommandHandler(fn func(context.Context, textapi.Command) (bool, error))
 // every time HandleCommand is invoked but also satisfies CommandCompleter,
 // and so calls completeFn when Complete is called.
 func FuncCommandCompleter(
-	fn func(context.Context, textapi.Command) (bool, error),
+	fn func(context.Context, Command) (bool, error),
 	completeFn func(context.Context, []string) (iterator.Iterator[string], error),
 ) CommandHandler {
 	return fnCommandHandler{

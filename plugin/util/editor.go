@@ -5,29 +5,30 @@ import (
 	"sync"
 
 	log "github.com/sirupsen/logrus"
+	textapi "unstable.build/go-tui/api/text"
+	textplugin "unstable.build/go-tui/api/text/plugin"
 	"unstable.build/go-tui/config"
 	"unstable.build/go-tui/plugin"
 	"unstable.build/go-tui/proto"
-	"unstable.build/go-tui/text"
 )
 
 // CommandEventHandler combines EventHandler with CommandHandler.
 type CommandEventHandler interface {
-	text.EventHandler
-	text.CommandHandler
+	textapi.EventHandler
+	textapi.CommandHandler
 	io.Closer
 }
 
 type editorGrantee struct {
 	mu         sync.Mutex
 	broker     proto.MuxBroker
-	ed         text.Editor
+	ed         textapi.Editor
 	handler    CommandEventHandler
-	newHandler func(text.Editor, []plugin.Grant, proto.MuxBroker, config.Config) (CommandEventHandler, error)
+	newHandler func(textapi.Editor, []plugin.Grant, proto.MuxBroker, config.Config) (CommandEventHandler, error)
 	cmds       []string
 	pconfig    config.Config
 	err        error
-	evs        []text.EventType
+	evs        []textapi.EventType
 }
 
 func (t *editorGrantee) Connected(broker proto.MuxBroker, config config.Config) {
@@ -75,9 +76,9 @@ func (t *editorGrantee) PermissionGranted(grants []plugin.Grant) {
 
 	for _, grant := range grants {
 		var err error
-		switch grant.Permission {
-		case plugin.PermissionEditor:
-			t.ed, err = plugin.Editor(grant.Token, t.broker)
+		switch string(grant.Permission) {
+		case textplugin.PermissionEditor:
+			t.ed, err = textplugin.Editor(grant.Token, t.broker)
 			if err == nil {
 				err = t.subscribeToEvents(grants)
 			}
@@ -117,12 +118,12 @@ func (t *editorGrantee) Health() error {
 // permissions is denied, the plugin will exit with an error.
 func ServeEditorEventHandler(
 	cmds []string,
-	fn func(text.Editor, []plugin.Grant, proto.MuxBroker, config.Config) (CommandEventHandler, error),
-	events []text.EventType,
+	fn func(textapi.Editor, []plugin.Grant, proto.MuxBroker, config.Config) (CommandEventHandler, error),
+	events []textapi.EventType,
 	extraPerms ...plugin.Permission,
 ) {
 	perms := []plugin.Permission{
-		plugin.PermissionEditor,
+		plugin.Permission(textplugin.PermissionEditor),
 	}
 	perms = append(perms, extraPerms...)
 	s := &editorGrantee{evs: events, cmds: cmds, newHandler: fn}

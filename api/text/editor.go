@@ -1,9 +1,6 @@
-package text
+package api
 
 import (
-	"fmt"
-
-	textapi "unstable.build/go-tui/api/text"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/term"
@@ -30,6 +27,15 @@ type CellView interface {
 	RawCells() ([][]term.Cell, error)
 }
 
+type LocationPriority uint
+
+const (
+	LocationPriorityInfo LocationPriority = iota
+	LocationPriorityWarning
+	LocationPriorityError
+	LocationPriorityCritical
+)
+
 // Editor is the interface that wraps an API to manage a text editor.
 type Editor interface {
 	// Edit opens a file and returns an editor.Handler to edit it or an error
@@ -39,7 +45,7 @@ type Editor interface {
 	// SubscribeEditorEvents subscribes EventHandler to events of type EventType.
 	// Note that it's suffixed with Editor so implementors
 	// can also implement browser.Subscriber.
-	SubscribeEditorEvents([]textapi.EventType, EventHandler) error
+	SubscribeEditorEvents([]EventType, EventHandler) error
 
 	// Editor returns the editor.Handler with name or returns
 	// an error if no editor with name is open via Edit.
@@ -56,7 +62,7 @@ type Editor interface {
 	// reponsibility of the caller to recompute the list of locations
 	// and call SetLocationList with the new list of locations after
 	// every update. Check cell.Buffer.Subscribe for more details.
-	SetLocationList(Handler, textapi.LocationPriority, string, LocationList) error
+	SetLocationList(Handler, LocationPriority, string, LocationList) error
 
 	// Moves cursor to the next location on list with ID.
 	MoveToNextLocation(h Handler, ID string) error
@@ -81,38 +87,4 @@ type Editor interface {
 	// SetDefaultAttributes sets the default attributes of the given Handler
 	// before any LocationList overwrites.
 	SetDefaultAttributes(Handler, term.Attributes) error
-}
-
-type cellEditor struct {
-	c cell.Editor
-}
-
-type cellView struct {
-	c cell.View
-}
-
-func (w cellEditor) Edit(
-	start, end term.Coordinates, str string,
-) (from, to term.Coordinates, old string, err error) {
-	if start.Y < 0 || end.Y < 0 || start.X < 0 || end.X < 0 {
-		err = fmt.Errorf("invalid coordinates: start=%v; end=%v", start, end)
-		return
-	}
-	from, to, old = w.c.Edit(start, end, str)
-	return
-}
-
-func (r cellView) RawCells() ([][]term.Cell, error) {
-	return r.c.RawCells(), nil
-}
-
-// NewCellEditor wraps a cell.Editor with a CellEditor that detects invalid input calls
-// and returns the corresponding errors.
-func NewCellEditor(c cell.Editor) CellEditor {
-	return cellEditor{c}
-}
-
-// NewCellView wraps a cell.Reder with a Reader that returns no errors.
-func NewCellView(c cell.View) CellView {
-	return cellView{c}
 }

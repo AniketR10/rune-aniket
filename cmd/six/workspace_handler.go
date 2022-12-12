@@ -15,6 +15,7 @@ import (
 	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui"
+	textapi "unstable.build/go-tui/api/text"
 	"unstable.build/go-tui/config"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/plugin"
@@ -191,7 +192,7 @@ func (h *workspaceManagerHandler) subscribeCommands(
 		fn := fn
 		cmd := cmd
 		err := ex.comp.SubscribeCommand(cmd,
-			text.FuncCommandCompleter(func(ctx context.Context, cmd text.Command) (bool, error) {
+			text.FuncCommandCompleter(func(ctx context.Context, cmd textapi.Command) (bool, error) {
 				return false, fn(h, cmd.Args...)
 			}, func(ctx context.Context, args []string) (iterator.Iterator[string], error) {
 				return h.completeCommand(ctx, cmd, args)
