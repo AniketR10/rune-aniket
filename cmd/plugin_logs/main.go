@@ -33,12 +33,12 @@ const (
 
 var (
 	requiredPermissions = []plugin.Permission{
-		plugin.PermissionBrowserWindowManager,
-		plugin.PermissionBrowserEventPublisher,
+		plugin.Permission(browserplugin.PermissionBrowserWindowManager),
+		plugin.Permission(browserplugin.PermissionBrowserEventPublisher),
+		plugin.Permission(browserplugin.PermissionBrowserMessenger),
 		plugin.PermissionConfig,
 		plugin.PermissionWorkspace,
 		plugin.PermissionEditor,
-		plugin.PermissionBrowserMessenger,
 	}
 	commands = []string{
 		cmdLogs,
@@ -139,11 +139,11 @@ func (e *logsGrantee) PermissionGranted(grants []plugin.Grant) {
 		switch g.Permission {
 		case plugin.PermissionWorkspace:
 			e.w, err = plugin.Workspace(g.Token, e.broker)
-		case plugin.PermissionBrowserMessenger:
+		case plugin.Permission(browserplugin.PermissionBrowserMessenger):
 			e.m, err = browserplugin.Messenger(g.Token, e.broker)
-		case plugin.PermissionBrowserEventPublisher:
+		case plugin.Permission(browserplugin.PermissionBrowserEventPublisher):
 			e.p, err = browserplugin.EventPublisher(g.Token, e.broker)
-		case plugin.PermissionBrowserWindowManager:
+		case plugin.Permission(browserplugin.PermissionBrowserWindowManager):
 			e.wm, err = browserplugin.WindowManager(g.Token, e.broker)
 		case plugin.PermissionConfig:
 			e.c, err = plugin.FetchConfig(g.Token, e.broker)

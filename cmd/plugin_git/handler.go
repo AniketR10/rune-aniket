@@ -42,8 +42,8 @@ var (
 		text.EventTypeUnfocus,
 	}
 	gitHandlerPermissions = []plugin.Permission{
-		plugin.PermissionBrowserWindowManager,
-		plugin.PermissionBrowserEventPublisher,
+		plugin.Permission(browserplugin.PermissionBrowserWindowManager),
+		plugin.Permission(browserplugin.PermissionBrowserEventPublisher),
 		plugin.PermissionEditor,
 		plugin.PermissionWorkspace,
 		plugin.PermissionConfig,
@@ -103,12 +103,12 @@ func newGitHandler(
 			if err != nil {
 				return nil, err
 			}
-		case plugin.PermissionBrowserEventPublisher:
+		case plugin.Permission(browserplugin.PermissionBrowserEventPublisher):
 			ret.p, err = browserplugin.EventPublisher(grant.Token, broker)
 			if err != nil {
 				return nil, err
 			}
-		case plugin.PermissionBrowserWindowManager:
+		case plugin.Permission(browserplugin.PermissionBrowserWindowManager):
 			ret.wm, err = browserplugin.WindowManager(grant.Token, broker)
 			if err != nil {
 				return nil, err

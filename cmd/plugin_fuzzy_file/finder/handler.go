@@ -36,9 +36,9 @@ const (
 
 func Permissions() []plugin.Permission {
 	return []plugin.Permission{
-		plugin.PermissionBrowserResourceOpener,
-		plugin.PermissionBrowserEventPublisher,
-		plugin.PermissionBrowserMessenger,
+		plugin.Permission(browserplugin.PermissionBrowserResourceOpener),
+		plugin.Permission(browserplugin.PermissionBrowserEventPublisher),
+		plugin.Permission(browserplugin.PermissionBrowserMessenger),
 		plugin.PermissionStorage,
 		plugin.PermissionEditor,
 		plugin.PermissionWorkspace,
@@ -304,11 +304,11 @@ func (h *fuzzyFinderHandler) initGrants(
 			h.workspace, err = plugin.Workspace(grant.Token, broker)
 		case plugin.PermissionEditor:
 			h.ed, err = plugin.Editor(grant.Token, broker)
-		case plugin.PermissionBrowserMessenger:
+		case plugin.Permission(browserplugin.PermissionBrowserMessenger):
 			h.m, err = browserplugin.Messenger(grant.Token, broker)
-		case plugin.PermissionBrowserEventPublisher:
+		case plugin.Permission(browserplugin.PermissionBrowserEventPublisher):
 			h.p, err = browserplugin.EventPublisher(grant.Token, broker)
-		case plugin.PermissionBrowserResourceOpener:
+		case plugin.Permission(browserplugin.PermissionBrowserResourceOpener):
 			h.f, err = browserplugin.ResourceOpener(grant.Token, broker)
 		case plugin.PermissionStorage:
 			h.s, err = plugin.Storage(grant.Token, broker)

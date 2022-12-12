@@ -29,11 +29,11 @@ const (
 
 var (
 	requiredPermissions = []plugin.Permission{
-		plugin.PermissionBrowserWindowManager,
+		plugin.Permission(browserplugin.PermissionBrowserWindowManager),
 		plugin.PermissionEditor,
 		plugin.PermissionWorkspace,
-		plugin.PermissionBrowserEventPublisher,
-		plugin.PermissionBrowserMessenger,
+		plugin.Permission(browserplugin.PermissionBrowserEventPublisher),
+		plugin.Permission(browserplugin.PermissionBrowserMessenger),
 		plugin.PermissionClipboard,
 	}
 	commands = []string{
@@ -107,13 +107,13 @@ func (e *emulatorGrantee) PermissionGranted(grants []plugin.Grant) {
 	var err error
 	for _, g := range grants {
 		switch g.Permission {
-		case plugin.PermissionBrowserEventPublisher:
+		case plugin.Permission(browserplugin.PermissionBrowserEventPublisher):
 			e.p, err = browserplugin.EventPublisher(g.Token, e.broker)
-		case plugin.PermissionBrowserWindowManager:
+		case plugin.Permission(browserplugin.PermissionBrowserWindowManager):
 			e.wm, err = browserplugin.WindowManager(g.Token, e.broker)
 		case plugin.PermissionWorkspace:
 			e.wp, err = plugin.Workspace(g.Token, e.broker)
-		case plugin.PermissionBrowserMessenger:
+		case plugin.Permission(browserplugin.PermissionBrowserMessenger):
 			e.m, err = browserplugin.Messenger(g.Token, e.broker)
 		case plugin.PermissionEditor:
 			e.ed, err = plugin.Editor(g.Token, e.broker)

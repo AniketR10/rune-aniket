@@ -32,7 +32,7 @@ var (
 	sedHandlerEvents      = []text.EventType{}
 	sedHandlerPermissions = []plugin.Permission{
 		plugin.PermissionEditor,
-		plugin.PermissionBrowserMessenger,
+		plugin.Permission(browserplugin.PermissionBrowserMessenger),
 		plugin.PermissionWorkspace,
 	}
 )
@@ -60,7 +60,7 @@ func newSedHandler(
 		switch grant.Permission {
 		case plugin.PermissionWorkspace:
 			ret.exec, err = plugin.Workspace(grant.Token, broker)
-		case plugin.PermissionBrowserMessenger:
+		case plugin.Permission(browserplugin.PermissionBrowserMessenger):
 			ret.m, err = browserplugin.Messenger(grant.Token, broker)
 		}
 		if err != nil {

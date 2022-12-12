@@ -32,8 +32,8 @@ var (
 	}
 	gfHandlerPermissions = []plugin.Permission{
 		plugin.PermissionWorkspace,
-		plugin.PermissionBrowserResourceOpener,
-		plugin.PermissionBrowserWindowManager,
+		plugin.Permission(browserplugin.PermissionBrowserResourceOpener),
+		plugin.Permission(browserplugin.PermissionBrowserWindowManager),
 	}
 )
 
@@ -75,9 +75,9 @@ func newGFHandler(
 		switch grant.Permission {
 		case plugin.PermissionWorkspace:
 			ret.cwd, err = plugin.Workspace(grant.Token, broker)
-		case plugin.PermissionBrowserWindowManager:
+		case plugin.Permission(browserplugin.PermissionBrowserWindowManager):
 			ret.wm, err = browserplugin.WindowManager(grant.Token, broker)
-		case plugin.PermissionBrowserResourceOpener:
+		case plugin.Permission(browserplugin.PermissionBrowserResourceOpener):
 			ret.o, err = browserplugin.ResourceOpener(grant.Token, broker)
 		}
 		if err != nil {

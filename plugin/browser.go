@@ -5,24 +5,10 @@ import (
 	"sync"
 
 	"google.golang.org/grpc"
+	browserplugin "unstable.build/go-tui/api/browser/plugin"
 	"unstable.build/go-tui/browser"
 	browserpb "unstable.build/go-tui/browser/rpc"
-
 	"unstable.build/go-tui/proto"
-)
-
-const (
-	// PermissionBrowserWindowManager requests access to a browser's window manager.
-	PermissionBrowserWindowManager Permission = "_PermBrowserWindowManager"
-	// PermissionBrowserResourceOpener requests access to open new files.
-	PermissionBrowserResourceOpener = "_PermBrowserResourceOpener"
-	// PermissionBrowserMessenger requests access to send messages to the UI.
-	PermissionBrowserMessenger = "_PermBrowserMessenger"
-	// PermissionBrowserEventPublisher requests access to publish term events.
-	// This is useful if your plugin handler does async updates to its state, as
-	// it enables interrupting the main event loop to redraw components.
-	// TODO rename to Interrupt
-	PermissionBrowserEventPublisher = "_PermBrowserEventPublisher"
 )
 
 type browserResourceServer struct {
@@ -42,8 +28,8 @@ func newBrowserResourceServer(b browser.Browser) *browserResourceServer {
 	return ret
 }
 
-func (s *browserResourceServer) forPermission(p Permission) ResourceRegistrar {
-	return browserResourcePermissionServer{p: p, browserResourceServer: s}
+func (s *browserResourceServer) forPermission(p string) ResourceRegistrar {
+	return browserResourcePermissionServer{p: Permission(p), browserResourceServer: s}
 }
 
 func (s browserResourcePermissionServer) Register(
@@ -59,14 +45,14 @@ func (s browserResourcePermissionServer) Register(
 		s.server.Init(broker, s.b, lock, interruptWindowServer)
 	}
 	rpcServer := interruptBrowserServer(s.server, interrupt)
-	switch s.p {
-	case PermissionBrowserWindowManager:
+	switch string(s.p) {
+	case browserplugin.PermissionBrowserWindowManager:
 		browserpb.RegisterWindowManagerServer(registrar, rpcServer)
-	case PermissionBrowserResourceOpener:
+	case browserplugin.PermissionBrowserResourceOpener:
 		browserpb.RegisterResourceOpenerServer(registrar, rpcServer)
-	case PermissionBrowserMessenger:
+	case browserplugin.PermissionBrowserMessenger:
 		browserpb.RegisterMessengerServer(registrar, rpcServer)
-	case PermissionBrowserEventPublisher:
+	case browserplugin.PermissionBrowserEventPublisher:
 		browserpb.RegisterEventPublisherServer(registrar, rpcServer)
 	}
 	// browser.Server handles multiple call to Close gracefully
@@ -78,9 +64,13 @@ func (s browserResourcePermissionServer) Register(
 func BrowserResources(b browser.Browser) map[Permission]ResourceRegistrar {
 	s := newBrowserResourceServer(b)
 	return map[Permission]ResourceRegistrar{
-		PermissionBrowserWindowManager:  s.forPermission(PermissionBrowserWindowManager),
-		PermissionBrowserResourceOpener: s.forPermission(PermissionBrowserResourceOpener),
-		PermissionBrowserMessenger:      s.forPermission(PermissionBrowserMessenger),
-		PermissionBrowserEventPublisher: s.forPermission(PermissionBrowserEventPublisher),
+		Permission(browserplugin.PermissionBrowserWindowManager): s.forPermission(
+			browserplugin.PermissionBrowserWindowManager),
+		Permission(browserplugin.PermissionBrowserResourceOpener): s.forPermission(
+			browserplugin.PermissionBrowserResourceOpener),
+		Permission(browserplugin.PermissionBrowserMessenger): s.forPermission(
+			browserplugin.PermissionBrowserMessenger),
+		Permission(browserplugin.PermissionBrowserEventPublisher): s.forPermission(
+			browserplugin.PermissionBrowserEventPublisher),
 	}
 }

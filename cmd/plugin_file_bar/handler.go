@@ -34,8 +34,8 @@ var (
 		text.EventTypeUnfocus,
 	}
 	fileBarHandlerPermissions = []plugin.Permission{
-		plugin.PermissionBrowserWindowManager,
-		plugin.PermissionBrowserEventPublisher,
+		plugin.Permission(browserplugin.PermissionBrowserWindowManager),
+		plugin.Permission(browserplugin.PermissionBrowserEventPublisher),
 		plugin.PermissionEditor,
 		plugin.PermissionConfig,
 		plugin.PermissionWorkspace,
@@ -126,12 +126,12 @@ func newFileBarEditorHandler(
 
 	for _, grant := range grants {
 		switch grant.Permission {
-		case plugin.PermissionBrowserEventPublisher:
+		case plugin.Permission(browserplugin.PermissionBrowserEventPublisher):
 			ret.p, err = browserplugin.EventPublisher(grant.Token, broker)
 			if err != nil {
 				return nil, err
 			}
-		case plugin.PermissionBrowserWindowManager:
+		case plugin.Permission(browserplugin.PermissionBrowserWindowManager):
 			ret.wm, err = browserplugin.WindowManager(grant.Token, broker)
 			if err != nil {
 				return nil, err

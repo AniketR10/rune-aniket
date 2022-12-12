@@ -43,9 +43,9 @@ var (
 	Tag = "development"
 
 	requiredPermissions = []plugin.Permission{
-		plugin.PermissionBrowserWindowManager,
-		plugin.PermissionBrowserMessenger,
-		plugin.PermissionBrowserResourceOpener,
+		plugin.Permission(browserplugin.PermissionBrowserWindowManager),
+		plugin.Permission(browserplugin.PermissionBrowserMessenger),
+		plugin.Permission(browserplugin.PermissionBrowserResourceOpener),
 		plugin.PermissionSchemeManager,
 		plugin.PermissionStorage,
 		plugin.PermissionEditor,
@@ -194,7 +194,7 @@ func (e *issuesGrantee) PermissionGranted(grants []plugin.Grant) {
 
 	for _, g := range grants {
 		switch g.Permission {
-		case plugin.PermissionBrowserWindowManager:
+		case plugin.Permission(browserplugin.PermissionBrowserWindowManager):
 			wm, err := browserplugin.WindowManager(g.Token, e.broker)
 			if err != nil {
 				log.Warnf("Could not acquire browser window manager: %v. "+
@@ -202,7 +202,7 @@ func (e *issuesGrantee) PermissionGranted(grants []plugin.Grant) {
 				continue
 			}
 			e.wm = wm
-		case plugin.PermissionBrowserResourceOpener:
+		case plugin.Permission(browserplugin.PermissionBrowserResourceOpener):
 			o, err := browserplugin.ResourceOpener(g.Token, e.broker)
 			if err != nil {
 				log.Warnf("Could not acquire browser resource opener: %v. "+
@@ -210,7 +210,7 @@ func (e *issuesGrantee) PermissionGranted(grants []plugin.Grant) {
 				continue
 			}
 			e.o = o
-		case plugin.PermissionBrowserMessenger:
+		case plugin.Permission(browserplugin.PermissionBrowserMessenger):
 			m, err := browserplugin.Messenger(g.Token, e.broker)
 			if err != nil {
 				log.Warnf("Could not acquire browser messenger: %v. "+

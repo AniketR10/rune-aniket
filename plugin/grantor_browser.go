@@ -1,6 +1,7 @@
 package plugin
 
 import (
+	browserplugin "unstable.build/go-tui/api/browser/plugin"
 	"unstable.build/go-tui/browser"
 	textpb "unstable.build/go-tui/text/rpc"
 )
@@ -20,7 +21,7 @@ type grantorBrowser struct {
 func (g *grantorBrowser) ServeWindow(win browser.Window) (string, error) {
 	if g.srv == nil {
 		// any browser permission will do
-		srv, ok := g.g.Grant(g.pluginID, PermissionBrowserWindowManager)
+		srv, ok := g.g.Grant(g.pluginID, Permission(browserplugin.PermissionBrowserWindowManager))
 		if !ok {
 			// if browser perm is not granted, allow for the browser API
 			// to bubble it up. This ensures that text.Commands are still

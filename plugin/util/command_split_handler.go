@@ -151,7 +151,7 @@ func (t *cmdSplitHandler) PermissionGranted(grants []plugin.Grant) {
 
 	for _, g := range grants {
 		switch g.Permission {
-		case plugin.PermissionBrowserWindowManager:
+		case plugin.Permission(browserplugin.PermissionBrowserWindowManager):
 			t.wm, err = browserplugin.WindowManager(g.Token, t.broker)
 		case plugin.PermissionEditor:
 			t.ed, err = plugin.Editor(g.Token, t.broker)
@@ -214,7 +214,7 @@ func ServeCommandSplitHandler(config CommandSplitHandlerConfig) {
 	}
 
 	perms := []plugin.Permission{
-		plugin.PermissionBrowserWindowManager,
+		plugin.Permission(browserplugin.PermissionBrowserWindowManager),
 		plugin.PermissionEditor,
 	}
 	perms = append(perms, config.Permissions...)

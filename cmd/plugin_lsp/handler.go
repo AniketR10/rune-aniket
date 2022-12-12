@@ -76,10 +76,10 @@ var (
 		text.EventTypeEdit,
 	}
 	lspHandlerPermissions = []plugin.Permission{
-		plugin.PermissionBrowserWindowManager,
-		plugin.PermissionBrowserResourceOpener,
-		plugin.PermissionBrowserEventPublisher,
-		plugin.PermissionBrowserMessenger,
+		plugin.Permission(browserplugin.PermissionBrowserWindowManager),
+		plugin.Permission(browserplugin.PermissionBrowserResourceOpener),
+		plugin.Permission(browserplugin.PermissionBrowserEventPublisher),
+		plugin.Permission(browserplugin.PermissionBrowserMessenger),
 		plugin.PermissionWorkspace,
 		plugin.PermissionConfig,
 	}
@@ -632,22 +632,22 @@ func newLspHandler(
 				return nil, err
 			}
 			ret.cwd = cwdURI.Path()
-		case plugin.PermissionBrowserEventPublisher:
+		case plugin.Permission(browserplugin.PermissionBrowserEventPublisher):
 			ret.p, err = browserplugin.EventPublisher(g.Token, broker)
 			if err != nil {
 				return nil, err
 			}
-		case plugin.PermissionBrowserResourceOpener:
+		case plugin.Permission(browserplugin.PermissionBrowserResourceOpener):
 			ret.o, err = browserplugin.ResourceOpener(g.Token, broker)
 			if err != nil {
 				return nil, err
 			}
-		case plugin.PermissionBrowserWindowManager:
+		case plugin.Permission(browserplugin.PermissionBrowserWindowManager):
 			ret.wm, err = browserplugin.WindowManager(g.Token, broker)
 			if err != nil {
 				return nil, err
 			}
-		case plugin.PermissionBrowserMessenger:
+		case plugin.Permission(browserplugin.PermissionBrowserMessenger):
 			ret.m, err = browserplugin.Messenger(g.Token, broker)
 			if err != nil {
 				return nil, err
