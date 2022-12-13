@@ -5,13 +5,10 @@ import (
 	"fmt"
 	"io"
 	"runtime"
-	"sync"
 	"time"
 
 	"github.com/ernestrc/blue/logging"
-	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
-	"google.golang.org/grpc"
 	"unstable.build/go-tui/browser"
 	browserpb "unstable.build/go-tui/browser/rpc"
 	"unstable.build/go-tui/cell"
@@ -31,35 +28,29 @@ const (
 // Token wraps a browser.Token to satisfy editor.Handler.
 type Token struct {
 	browser.Token
-	ID       uint64 // NOTE: temporary until text rpc is migrated to finalizers
-	resource workspace.URI
+	workspace.URI
 }
 
 // Resource satisfies Handler
 func (t Token) Resource() workspace.URI {
-	return t.resource
+	return t.URI
 }
 
 var _ textapi.Editor = (*Client)(nil)
 
 // Client satisfies text.Editor by calling a remote editor over grpc.
 type Client struct {
-	// resources invariant
-	mu sync.Mutex
-
-	broker  proto.MuxBroker
-	browser *browserpb.Client
-	cc      grpc.ClientConnInterface
-	ed      EditorClient
-
-	// event handler server resources. event handler servers are created on
-	// calls to Subscribe.
-	servers map[uint64]io.Closer
+	broker          proto.MuxBroker
+	browser         *browserpb.Client
+	cc              proto.MuxConn
+	ed              EditorClient
+	clientCtx       context.Context
+	clientCancelCtx func()
 }
 
 // NewClient allocates storage for a new Client and initializes it.
 func NewClient(
-	broker proto.MuxBroker, cc grpc.ClientConnInterface,
+	broker proto.MuxBroker, cc proto.MuxConn,
 ) *Client {
 	ret := new(Client)
 	ret.Init(broker, cc)
@@ -69,13 +60,13 @@ func NewClient(
 
 // Init initializes this Client with broker and client.
 func (c *Client) Init(
-	broker proto.MuxBroker, cc grpc.ClientConnInterface,
+	broker proto.MuxBroker, cc proto.MuxConn,
 ) {
 	c.ed = NewEditorClient(cc)
 	c.cc = cc
 	c.broker = broker
-	c.servers = make(map[uint64]io.Closer)
 	c.browser = browserpb.NewClient(broker, cc)
+	c.clientCtx, c.clientCancelCtx = context.WithCancel(context.Background())
 }
 
 func (c *Client) log(level log.Level, msg string, args ...interface{}) {
@@ -83,50 +74,33 @@ func (c *Client) log(level log.Level, msg string, args ...interface{}) {
 		WithField(logging.KeyClass, "text.Client").Logf(level, msg, args...)
 }
 
-func (c *Client) getServers() map[uint64]io.Closer {
-	return c.servers
-}
-
-func (c *Client) safeForceCloseHandler(brokerID uint32, reason string) error {
-	c.log(log.DebugLevel, "editor.Client.safeForceCloseHandler(%d, reason=%s)", brokerID, reason)
-	_, err := proto.ForceCloseResource(c.broker, uint64(brokerID),
-		c.getServers, &c.mu)
-	return err
-}
-
-func (c *Client) serveHandler(h textapi.EventHandler) (uint32, error) {
-	brokerID, srv, err := proto.AcceptAndServe(c.broker,
-		func(handlerID uint32, srv proto.MuxServer) {
-			s := newEventHandlerServer(h, func() {
-				time.Sleep(gracefulShutdownWait)
-				c.safeForceCloseHandler(handlerID, "editorEventHandlerServer.onExit")
+func (c *Client) serveHandler(h textapi.EventHandler) (
+	ret string, srv proto.MuxServer, err error,
+) {
+	ret, err = proto.AcceptAndServeChannel(c.clientCtx, c.broker,
+		func(channelID string, _srv proto.MuxServer) {
+			srv = _srv
+			s := newEventHandlerServer(h, func(ctx context.Context) {
+				go func() {
+					<-ctx.Done()
+					srv.Stop()
+				}()
 			})
 			RegisterEditorEventHandlerServer(srv.Registrar(), s)
-		})
-	if err != nil {
-		return 0, err
-	}
-
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.servers[uint64(brokerID)] = &handlerServerResource{srv: srv}
-	return brokerID, nil
+		}, "text", "client", "handler")
+	return
 }
 
-func (c *Client) serveCommandHandler(h textapi.CommandHandler) (uint32, error) {
-	brokerID, srv, err := proto.AcceptAndServe(c.broker,
-		func(handlerID uint32, srv proto.MuxServer) {
+func (c *Client) serveCommandHandler(h textapi.CommandHandler) (
+	ret string, srv proto.MuxServer, err error,
+) {
+	ret, err = proto.AcceptAndServeChannel(c.clientCtx, c.broker,
+		func(channelID string, _srv proto.MuxServer) {
+			srv = _srv
 			s := newCommandServer(h, c.browser)
 			RegisterCommandHandlerServer(srv.Registrar(), s)
-		})
-	if err != nil {
-		return 0, err
-	}
-
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.servers[uint64(brokerID)] = &handlerServerResource{srv: srv}
-	return brokerID, nil
+		}, "text", "client", "command")
+	return
 }
 
 // Edit requests editor server to edit buf.
@@ -134,13 +108,13 @@ func (c *Client) Edit(file workspace.URI, buf *cell.Buffer) (textapi.Handler, er
 	ctx := context.Background()
 	req := NewEditRequest(file, buf)
 
-	res, err := c.ed.Edit(ctx, &req)
+	_, err := c.ed.Edit(ctx, &req)
 	runtime.KeepAlive(c)
 	if err != nil {
 		return nil, err
 	}
 
-	return Token{ID: uint64(res.GetHandlerId()), resource: file}, nil
+	return Token{URI: file}, nil
 }
 
 // Editor satisfies text.Editor
@@ -148,33 +122,34 @@ func (c *Client) Editor(file workspace.URI) (textapi.Handler, error) {
 	ctx := context.Background()
 	req := EditorRequest{ResourceName: NewURI(file)}
 
-	res, err := c.ed.Editor(ctx, &req)
+	_, err := c.ed.Editor(ctx, &req)
 	runtime.KeepAlive(c)
 	if err != nil {
 		return nil, err
 	}
 
-	return Token{ID: uint64(res.GetHandlerId()), resource: file}, nil
+	return Token{URI: file}, nil
 }
 
 // SubscribeEditorEvents requests the editor server to subscribe sub to ev.
 func (c *Client) SubscribeEditorEvents(evs []textapi.EventType, h textapi.EventHandler) error {
 	ctx := context.Background()
 
-	handlerID, err := c.serveHandler(h)
+	channelID, srv, err := c.serveHandler(h)
 	if err != nil {
-		return fmt.Errorf("serveHandler: %w", err)
+		return fmt.Errorf("serve event handler: %w", err)
 	}
 
-	req := EditorSubscribeRequest{HandlerId: handlerID}
+	req := EditorSubscribeRequest{ChannelId: channelID}
 	for _, ev := range evs {
 		req.Type = append(req.Type, protoType(textapi.Event{Type: ev}))
 	}
 	_, err = c.ed.Subscribe(ctx, &req)
 	runtime.KeepAlive(c)
 	if err != nil {
-		reason := fmt.Sprintf("editor.Client.Subscribe: %v", err)
-		c.safeForceCloseHandler(handlerID, reason)
+		if srv != nil {
+			srv.Stop()
+		}
 		return err
 	}
 
@@ -185,18 +160,18 @@ func (c *Client) SubscribeEditorEvents(evs []textapi.EventType, h textapi.EventH
 func (c *Client) SubscribeCommand(cmd string, h textapi.CommandHandler) error {
 	ctx := context.Background()
 
-	// re-use EventHandler logic
-	handlerID, err := c.serveCommandHandler(h)
+	channelID, srv, err := c.serveCommandHandler(h)
 	if err != nil {
-		return fmt.Errorf("serveHandler: %w", err)
+		return fmt.Errorf("serve command handler: %w", err)
 	}
 
-	req := RegisterCommandRequest{Command: cmd, HandlerId: handlerID}
+	req := RegisterCommandRequest{Command: cmd, ChannelId: channelID}
 	_, err = c.ed.Register(ctx, &req)
 	runtime.KeepAlive(c)
 	if err != nil {
-		reason := fmt.Sprintf("editor.Client.Register: %v", err)
-		c.safeForceCloseHandler(handlerID, reason)
+		if srv != nil {
+			srv.Stop()
+		}
 		return err
 	}
 
@@ -204,13 +179,13 @@ func (c *Client) SubscribeCommand(cmd string, h textapi.CommandHandler) error {
 }
 
 func makeLocationListRequest(
-	handlerID uint32, priority textapi.LocationPriority,
+	uri workspace.URI, priority textapi.LocationPriority,
 	listID string, l textapi.LocationList,
 ) SetLocationListRequest {
 	req := SetLocationListRequest{
-		HandlerId: handlerID,
-		ListId:    listID,
-		Priority:  uint32(priority),
+		ResourceName: NewURI(uri),
+		ListId:       listID,
+		Priority:     uint32(priority),
 	}
 
 	for loc, ok := l.Current(); ok; loc, ok = l.Next() {
@@ -240,7 +215,7 @@ func (c *Client) SetLocationList(
 	if !ok {
 		panic("SetLocationList: invalid Handler argument")
 	}
-	req := makeLocationListRequest(uint32(token.ID), pri, ID, l)
+	req := makeLocationListRequest(token.URI, pri, ID, l)
 	_, err := c.ed.SetLocationList(ctx, &req)
 	runtime.KeepAlive(c)
 	return err
@@ -252,7 +227,7 @@ func (c *Client) moveToLocation(h textapi.Handler, ID string, next bool) (err er
 	if !ok {
 		panic("MoveToNextLocation: invalid Handler argument")
 	}
-	req := MoveToLocationRequest{HandlerId: uint32(token.ID), ListId: ID}
+	req := MoveToLocationRequest{ResourceName: NewURI(token.URI), ListId: ID}
 	if next {
 		_, err = c.ed.MoveToNextLocation(ctx, &req)
 	} else {
@@ -287,7 +262,7 @@ func (c *Client) SetCursor(h textapi.Handler, pos term.Coordinates) error {
 	}
 	var protoPos termpb.Coordinates
 	protoPos.FromModel(pos)
-	req := SetCursorRequest{Pos: &protoPos, HandlerId: uint32(token.ID)}
+	req := SetCursorRequest{Pos: &protoPos, ResourceName: NewURI(token.URI)}
 	_, err := c.ed.SetCursor(ctx, &req)
 	runtime.KeepAlive(c)
 	return err
@@ -300,7 +275,7 @@ func (c *Client) Cursor(h textapi.Handler) (term.Coordinates, error) {
 	if !ok {
 		panic("Cursor: invalid Handler argument")
 	}
-	req := CursorRequest{HandlerId: uint32(token.ID)}
+	req := CursorRequest{ResourceName: NewURI(token.URI)}
 	res, err := c.ed.Cursor(ctx, &req)
 	runtime.KeepAlive(c)
 	if err != nil {
@@ -315,7 +290,7 @@ func (c *Client) CellEditor(h textapi.Handler) textapi.CellEditor {
 	if !ok {
 		panic("SetLocationList: invalid Handler argument")
 	}
-	return clientWriter{client: c, handlerID: uint32(token.ID)}
+	return clientWriter{client: c, uri: token.URI}
 }
 
 // CellView satisfies text.Editor.
@@ -324,7 +299,7 @@ func (c *Client) CellView(h textapi.Handler) textapi.CellView {
 	if !ok {
 		panic("CellView: invalid Handler argument")
 	}
-	return clientView{client: c, handlerID: uint32(token.ID)}
+	return clientView{client: c, uri: token.URI}
 }
 
 // SetDefaultAttributes satisfies text.Editor.
@@ -337,8 +312,8 @@ func (c *Client) SetDefaultAttributes(h textapi.Handler, attrs term.Attributes) 
 	var rpcAttrs termpb.Attributes
 	rpcAttrs.FromModel(attrs)
 	req := SetDefaultAttributesRequest{
-		HandlerId:  uint32(token.ID),
-		Attributes: &rpcAttrs,
+		ResourceName: NewURI(token.URI),
+		Attributes:   &rpcAttrs,
 	}
 	_, err := c.ed.SetDefaultAttributes(ctx, &req)
 	runtime.KeepAlive(c)
@@ -347,20 +322,14 @@ func (c *Client) SetDefaultAttributes(h textapi.Handler, attrs term.Attributes) 
 
 // Close closes all resources associated with this client.
 func (c *Client) Close() (ret error) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
 	if closer, ok := c.cc.(io.Closer); ok {
-		if err := closer.Close(); err != nil {
-			ret = multierr.Append(ret, err)
-		}
+		ret = closer.Close()
 	}
-	for _, res := range c.servers {
-		if err := res.Close(); err != nil {
-			ret = multierr.Append(ret, err)
-		}
+	c.cc = nil
+	if c.clientCancelCtx != nil {
+		c.clientCancelCtx()
+		c.clientCancelCtx = nil
 	}
-
 	runtime.SetFinalizer(c, nil)
 	return ret
 }

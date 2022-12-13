@@ -47,10 +47,13 @@ func fromProto(e *textapi.Event, pe *EditorEvent) (err error) {
 			return
 		}
 	}
-	if pe.ResourceId != 0 {
+	if pe.ResourceName != nil {
+		uri, err := NewURIFromProto(pe.GetResourceName())
+		if err != nil {
+			return err
+		}
 		e.Resource = Token{
-			ID:       uint64(pe.GetResourceId()),
-			resource: e.URI,
+			URI: uri,
 		}
 	}
 	e.Start = pe.GetStart().ToModel()
@@ -92,9 +95,6 @@ func toProto(e textapi.Event) EditorEvent {
 	ret.Type = protoType(e)
 
 	ret.ResourceName = NewURI(e.URI)
-	if e.Resource != nil {
-		ret.ResourceId = uint32(e.Resource.(Token).ID)
-	}
 
 	var start, end, from, to termpb.Coordinates
 	start.FromModel(e.Start)

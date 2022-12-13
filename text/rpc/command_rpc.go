@@ -2,9 +2,8 @@ package rpc
 
 import (
 	"context"
-	"fmt"
+	"runtime"
 
-	log "github.com/sirupsen/logrus"
 	textapi "unstable.build/go-tui/api/text"
 	"unstable.build/go-tui/browser"
 	browserpb "unstable.build/go-tui/browser/rpc"
@@ -27,26 +26,13 @@ func newCommandClient(conn proto.MuxConn, s *Server) *commandClient {
 	ret.conn = conn
 	ret.pb = NewCommandHandlerClient(conn)
 	ret.s = s
+	runtime.SetFinalizer(ret, func(c *commandClient) { c.Close() })
 	return ret
 }
 
 func (c *commandClient) HandleCommand(ctx context.Context, cmd textapi.Command) (
 	bool, error,
 ) {
-	var resourceID uint32
-	var uri *URI
-	// only overwrite resource if this event is for a particular resource
-	if cmd.URI != (workspace.URI{}) {
-		brokerID, ok := c.s.uriToID[cmd.URI.String()]
-		if !ok {
-			err := fmt.Errorf("could not handle command %v: handler with resource name %q not found",
-				cmd.Name, cmd.URI.String())
-			c.s.log(log.WarnLevel, "%s", err)
-			return false, err
-		}
-		resourceID = brokerID
-		uri = NewURI(cmd.URI)
-	}
 
 	ctx, cancelFn := context.WithTimeout(ctx, defaultClientTimeout)
 	defer cancelFn()
@@ -54,6 +40,11 @@ func (c *commandClient) HandleCommand(ctx context.Context, cmd textapi.Command) 
 	var cursorContent, cursorWindow termpb.Coordinates
 	cursorContent.FromModel(cmd.Cursor.Content)
 	cursorWindow.FromModel(cmd.Cursor.Window)
+
+	var uri *URI
+	if cmd.URI != (workspace.URI{}) {
+		uri = NewURI(cmd.URI)
+	}
 
 	adapter := cmd.Window.(browser.WindowToAPIWindow)
 	channelID, err := c.s.browser.ServeWindow(adapter.Win)
@@ -65,7 +56,6 @@ func (c *commandClient) HandleCommand(ctx context.Context, cmd textapi.Command) 
 		Name:            cmd.Name,
 		Args:            cmd.Args,
 		ResourceName:    uri,
-		ResourceId:      resourceID,
 		CursorContent:   &cursorContent,
 		CursorWindow:    &cursorWindow,
 		WindowId:        adapter.Win.ID(),
@@ -77,6 +67,7 @@ func (c *commandClient) HandleCommand(ctx context.Context, cmd textapi.Command) 
 	defer c.s.editor.Lock()
 
 	resp, err := c.pb.HandleCommand(ctx, &req)
+	runtime.KeepAlive(c)
 	if err != nil {
 		return false, err
 	}
@@ -84,7 +75,9 @@ func (c *commandClient) HandleCommand(ctx context.Context, cmd textapi.Command) 
 }
 
 func (c *commandClient) Close() error {
-	return c.conn.Close()
+	err := c.conn.Close()
+	runtime.SetFinalizer(c, nil)
+	return err
 }
 
 type commandServer struct {
@@ -100,17 +93,16 @@ func newCommandServer(h textapi.CommandHandler, bc *browserpb.Client) *commandSe
 	return ret
 }
 
-func (s *commandServer) commandFromProto(e *textapi.Command, pe *HandleCommandRequest) (err error) {
-	if pe.GetResourceName().GetUri() != "" {
+func (s *commandServer) commandFromProto(
+	e *textapi.Command, pe *HandleCommandRequest,
+) (err error) {
+	if pe.ResourceName != nil {
 		e.URI, err = NewURIFromProto(pe.GetResourceName())
 		if err != nil {
 			return
 		}
-	}
-	if pe.ResourceId != 0 {
 		e.Resource = Token{
-			ID:       uint64(pe.GetResourceId()),
-			resource: e.URI,
+			URI: e.URI,
 		}
 	}
 	e.Cursor.Window = pe.GetCursorWindow().ToModel()

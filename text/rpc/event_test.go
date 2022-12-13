@@ -182,16 +182,12 @@ func TestEventProto(t *testing.T) {
 	}{
 		{
 			in: textapi.Event{
-				Type:     textapi.EventTypeOpen,
-				URI:      uri,
-				Resource: nil,
-				Content:  "Ageispolis",
+				Type:    textapi.EventTypeOpen,
+				Content: "Ageispolis",
 			},
 			out: EditorEvent{
-				Type:         EditorEvent_TypeOpen,
-				ResourceName: &protoURI,
-				ResourceId:   0,
-				Content:      "Ageispolis",
+				Type:    EditorEvent_TypeOpen,
+				Content: "Ageispolis",
 			},
 		},
 		{
@@ -199,27 +195,23 @@ func TestEventProto(t *testing.T) {
 				Type: textapi.EventTypeFocus,
 				URI:  uri,
 				Resource: Token{
-					ID:       2,
-					resource: uri,
+					URI: uri,
 				},
 			},
 			out: EditorEvent{
 				Type:         EditorEvent_TypeFocus,
 				ResourceName: &protoURI,
-				ResourceId:   2,
 			},
 		},
 		{
 			in: textapi.Event{
-				Type: textapi.EventTypeUnfocus,
-				URI:  uri,
-				Resource: Token{ID: 288,
-					resource: uri},
+				Type:     textapi.EventTypeUnfocus,
+				URI:      uri,
+				Resource: Token{URI: uri},
 			},
 			out: EditorEvent{
 				Type:         EditorEvent_TypeUnfocus,
 				ResourceName: &protoURI,
-				ResourceId:   288,
 			},
 		},
 		{
@@ -259,7 +251,6 @@ func TestEventProto(t *testing.T) {
 func assertEqualProto(t *testing.T, expected, actual EditorEvent) {
 	assert.Equal(t, expected.Type, actual.Type)
 	assert.Equal(t, expected.ResourceName.GetUri(), actual.ResourceName.GetUri())
-	assert.Equal(t, expected.ResourceId, actual.ResourceId)
 	assert.Equal(t, expected.Start.GetX(), actual.Start.GetX())
 	assert.Equal(t, expected.Start.GetY(), actual.Start.GetY())
 	assert.Equal(t, expected.End.GetX(), actual.End.GetX())

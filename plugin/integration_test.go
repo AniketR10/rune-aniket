@@ -22,6 +22,7 @@ import (
 	"unstable.build/go-tui/proto"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
+	textpb "unstable.build/go-tui/text/rpc"
 	texttest "unstable.build/go-tui/text/test"
 	"unstable.build/go-tui/workspace"
 	workspacetest "unstable.build/go-tui/workspace/test"
@@ -50,7 +51,6 @@ func TestIntegrationRace(t *testing.T) {
 	defer broker.Close()
 	mock := browserapitest.NewMockBrowser(ctrl)
 	edMock := texttest.NewMockEditor(ctrl)
-	edMock.EXPECT().SubscribeEditorEvents(gomock.Any(), gomock.Any()).Times(1)
 	resources := MergeResourceMap(
 		BrowserResources(browsertest.BrowserFromAPIBrowser(mock)),
 		EditorResources(edMock),
@@ -69,6 +69,8 @@ func TestIntegrationRace(t *testing.T) {
 
 	uri, err := workspace.ParseURI("file:///tmp/test")
 	require.NoError(t, err)
+
+	th := textpb.Token{URI: uri}
 
 	grantor := cachingGrantor(GrantAll(resources))
 	grantID := broker.NextId()
@@ -191,28 +193,18 @@ func TestIntegrationRace(t *testing.T) {
 		{Permission(textplugin.PermissionEditor), func(token uint32, broker proto.MuxBroker) (interface{}, error) {
 			return textplugin.Editor(token, broker)
 		}, func(_ *workspacetest.MockWorkspaceMockRecorder, ed *texttest.MockEditorMockRecorder, mock *browserapitest.MockBrowserMockRecorder) *gomock.Call {
-			ed.Edit(gomock.Any(), gomock.Any()).Return(nil, nil).AnyTimes()
+			ed.Editor(gomock.Any()).Return(th, nil).AnyTimes()
 			return ed.SetCursor(gomock.Any(), gomock.Any()).Return(nil)
 		}, func(ifc interface{}) error {
-			// force cache token
-			h, err := ifc.(textapi.Editor).Edit(uri, cell.NewBuffer())
-			if err != nil {
-				return err
-			}
-			return ifc.(textapi.Editor).SetCursor(h, term.Coordinates{})
+			return ifc.(textapi.Editor).SetCursor(th, term.Coordinates{})
 		}},
 		{Permission(textplugin.PermissionEditor), func(token uint32, broker proto.MuxBroker) (interface{}, error) {
 			return textplugin.Editor(token, broker)
 		}, func(_ *workspacetest.MockWorkspaceMockRecorder, ed *texttest.MockEditorMockRecorder, mock *browserapitest.MockBrowserMockRecorder) *gomock.Call {
-			ed.Edit(gomock.Any(), gomock.Any()).Return(nil, nil).AnyTimes()
+			ed.Editor(gomock.Any()).Return(th, nil).AnyTimes()
 			return ed.Cursor(gomock.Any()).Return(term.Coordinates{}, nil)
 		}, func(ifc interface{}) error {
-			// force cache token
-			h, err := ifc.(textapi.Editor).Edit(uri, cell.NewBuffer())
-			if err != nil {
-				return err
-			}
-			_, err = ifc.(textapi.Editor).Cursor(h)
+			_, err = ifc.(textapi.Editor).Cursor(th)
 			return err
 		}},
 		// for document.Service, just do a race test

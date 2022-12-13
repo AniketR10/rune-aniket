@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"runtime"
-	"sync"
 	"time"
 
 	"github.com/ernestrc/blue/logging"
@@ -33,9 +32,6 @@ var _ browserapi.Browser = (*Client)(nil)
 
 // Client satisfies Browser by talking to a browser server over RPC.
 type Client struct {
-	// resources invariant
-	mu sync.Mutex
-
 	broker proto.MuxBroker
 	cc     grpc.ClientConnInterface
 	wm     WindowManagerClient
@@ -99,7 +95,8 @@ func (c *Client) serveHandler(h browserapi.Handler) (channelID string, srv proto
 		channelID = tokenHandler.ID
 	} else {
 		channelID, err = proto.AcceptAndServeChannel(c.clientCtx, c.broker,
-			func(channelID string, srv proto.MuxServer) {
+			func(channelID string, msrv proto.MuxServer) {
+				srv = msrv
 				h = browserClientHandler{
 					Handler: h,
 					srv:     srv,
@@ -369,15 +366,10 @@ func (c *Client) Tab(uri workspace.URI, name string, h browserapi.Handler) (brow
 // Close closes all resources associated with this Client.
 // This client should not be used after this method is called.
 func (c *Client) Close() (err error) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
 	if closer, ok := c.cc.(io.Closer); ok {
-		ccErr := closer.Close()
-		if ccErr != nil {
-			err = ccErr
-		}
+		err = closer.Close()
 	}
+	c.cc = nil
 	if c.clientCancelCtx != nil {
 		c.clientCancelCtx()
 		c.clientCancelCtx = nil

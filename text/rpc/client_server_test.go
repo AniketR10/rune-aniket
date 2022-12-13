@@ -76,12 +76,6 @@ func setupWmIntTest(
 	}
 }
 
-func expectInitialServerSubscribe(t *testing.T, mock *texttest.MockEditor) {
-	mock.EXPECT().SubscribeEditorEvents(gomock.Any(), gomock.Any()).
-		Return(nil).
-		Times(1)
-}
-
 func TestClientServerIntegration(t *testing.T) {
 	uri, err := workspace.ParseURI("file:///test")
 	require.NoError(t, err)
@@ -90,7 +84,6 @@ func TestClientServerIntegration(t *testing.T) {
 		defer ctrl.Finish()
 		b := proto.NewDialBroker()
 		ed := texttest.NewMockEditor(ctrl)
-		expectInitialServerSubscribe(t, ed)
 		s := NewServer(b, ed, nopLocker{}, testBrowserServer{})
 
 		client, closeFn := setupIntTest(t, b, s)
@@ -109,7 +102,6 @@ func TestClientServerIntegration(t *testing.T) {
 		defer ctrl.Finish()
 		b := proto.NewDialBroker()
 		ed := texttest.NewMockEditor(ctrl)
-		expectInitialServerSubscribe(t, ed)
 		s := NewServer(b, ed, nopLocker{}, testBrowserServer{})
 
 		client, closeFn := setupIntTest(t, b, s)
@@ -129,7 +121,6 @@ func TestClientServerIntegration(t *testing.T) {
 		defer ctrl.Finish()
 		b := proto.NewDialBroker()
 		ed := texttest.NewMockEditor(ctrl)
-		expectInitialServerSubscribe(t, ed)
 		s := NewServer(b, ed, nopLocker{}, testBrowserServer{})
 
 		client, closeFn := setupIntTest(t, b, s)
@@ -238,7 +229,6 @@ func TestClientServerIntegration(t *testing.T) {
 		defer ctrl.Finish()
 		b := proto.NewDialBroker()
 		ed := texttest.NewMockEditor(ctrl)
-		expectInitialServerSubscribe(t, ed)
 		s := NewServer(b, ed, new(sync.Mutex), testBrowserServer{})
 
 		client, closeFn := setupIntTest(t, b, s)
@@ -250,6 +240,7 @@ func TestClientServerIntegration(t *testing.T) {
 
 		l := text.LocationSlice([]textapi.Location{loc2})
 
+		expectEditor(t, ed, uri)
 		ed.EXPECT().SetLocationList(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 			DoAndReturn(func(h text.Handler, pri textapi.LocationPriority, id string, ll text.LocationList) error {
 				defer wg.Done()
@@ -273,7 +264,6 @@ func TestClientServerIntegration(t *testing.T) {
 		defer ctrl.Finish()
 		b := proto.NewDialBroker()
 		ed := texttest.NewMockEditor(ctrl)
-		expectInitialServerSubscribe(t, ed)
 		s := NewServer(b, ed, new(sync.Mutex), testBrowserServer{})
 
 		client, closeFn := setupIntTest(t, b, s)
@@ -288,6 +278,7 @@ func TestClientServerIntegration(t *testing.T) {
 			Bg: term.ColorCyan | term.AttrBold,
 		}
 
+		expectEditor(t, ed, uri)
 		ed.EXPECT().SetDefaultAttributes(gomock.Any(), gomock.Any()).
 			DoAndReturn(func(h text.Handler, attrs term.Attributes) error {
 				defer wg.Done()
@@ -307,7 +298,6 @@ func TestClientServerIntegration(t *testing.T) {
 		defer ctrl.Finish()
 		b := proto.NewDialBroker()
 		ed := texttest.NewMockEditor(ctrl)
-		expectInitialServerSubscribe(t, ed)
 		s := NewServer(b, ed, nopLocker{}, testBrowserServer{})
 
 		client, closeFn := setupIntTest(t, b, s)
@@ -321,6 +311,7 @@ func TestClientServerIntegration(t *testing.T) {
 		w := client.CellEditor(h)
 		at := term.Coordinates{X: 1}
 
+		expectEditor(t, ed, uri)
 		ed.EXPECT().CellEditor(gomock.Any()).Return(text.NewCellEditor(buf.Editor())).Times(1)
 		from, to, _, err := w.Edit(at, at, "el\nAridio")
 
@@ -329,6 +320,7 @@ func TestClientServerIntegration(t *testing.T) {
 		require.Equal(t, term.Coordinates{X: 6, Y: 1}, to)
 		require.Equal(t, " el\nAridio", buf.String())
 
+		expectEditor(t, ed, uri)
 		ed.EXPECT().CellEditor(gomock.Any()).Return(text.NewCellEditor(buf.Editor())).Times(1)
 		start, end, str, err := w.Edit(term.Coordinates{}, term.Coordinates{Y: 1}, "")
 
@@ -344,7 +336,6 @@ func TestClientServerIntegration(t *testing.T) {
 		defer ctrl.Finish()
 		b := proto.NewDialBroker()
 		ed := texttest.NewMockEditor(ctrl)
-		expectInitialServerSubscribe(t, ed)
 		s := NewServer(b, ed, nopLocker{}, testBrowserServer{})
 
 		client, closeFn := setupIntTest(t, b, s)
@@ -356,6 +347,7 @@ func TestClientServerIntegration(t *testing.T) {
 		h, err := client.Edit(uri, buf)
 		require.NoError(t, err)
 
+		expectEditor(t, ed, uri)
 		ed.EXPECT().CellView(gomock.Any()).Return(text.NewCellView(buf.View())).Times(2)
 
 		r := client.CellView(h)
@@ -404,10 +396,6 @@ func TestRPCRegister(t *testing.T) {
 		c, err := newTestComponentErr(ed)
 		if err != nil {
 			return nil, nil, err
-		}
-
-		if m, ok := ed.(*texttest.MockEditor); ok {
-			expectInitialServerSubscribe(t, m)
 		}
 
 		b := proto.NewDialBroker()

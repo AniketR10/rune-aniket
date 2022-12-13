@@ -25,7 +25,7 @@ func NewURIFromProto(u *URI) (workspace.URI, error) {
 	return workspace.ParseURI(u.GetUri())
 }
 
-// NewProtoURI maps a workspace.URI into a proto.URI.
+// NewURI maps a workspace.URI into a proto.URI.
 func NewURI(u workspace.URI) *URI {
 	return &URI{Uri: u.String()}
 }

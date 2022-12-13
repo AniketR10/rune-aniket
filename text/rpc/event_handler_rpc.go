@@ -4,11 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"runtime"
 	"time"
 
 	log "github.com/sirupsen/logrus"
-	"google.golang.org/grpc"
 	textapi "unstable.build/go-tui/api/text"
+	"unstable.build/go-tui/proto"
 )
 
 const (
@@ -17,7 +18,7 @@ const (
 )
 
 type eventHandlerClient struct {
-	conn         grpc.ClientConnInterface
+	conn         proto.MuxConn
 	pb           EditorEventHandlerClient
 	evChan       chan EditorEvent
 	errChan      chan error
@@ -26,7 +27,7 @@ type eventHandlerClient struct {
 }
 
 func newEventHandlerClient(
-	cc grpc.ClientConnInterface, quitCallback func(),
+	cc proto.MuxConn, quitCallback func(),
 ) *eventHandlerClient {
 	ret := new(eventHandlerClient)
 	ret.pb = NewEditorEventHandlerClient(cc)
@@ -36,74 +37,93 @@ func newEventHandlerClient(
 	ret.quitCallback = quitCallback
 	ret.conn = cc
 
-	go ret.pipelineEvents()
+	go pipelineEvents(ret.quitChan, ret.evChan, ret.errChan,
+		ret.pb, &ret.conn, ret.quitCallback)
 
+	runtime.SetFinalizer(ret, func(c *eventHandlerClient) {
+		c.Close()
+	})
 	return ret
+}
+
+// make sure closeFn is not preventing client for being garbage collected
+func closeFn(
+	conn *proto.MuxConn, quitCallback func(),
+	quitChan chan struct{}, evChan chan EditorEvent,
+) {
+	if *conn == nil {
+		return
+	}
+	*conn = nil
+	quitCallback()
+	close(quitChan)
+	close(evChan)
 }
 
 func (c *eventHandlerClient) errors() <-chan error {
 	return c.errChan
 }
 
-func (c *eventHandlerClient) handleError(err error) {
-	log.Errorf("editor.eventHandlerClient.Handle error: %v", err)
-
-	select {
-	case c.errChan <- err:
-	default:
-	}
-}
-
-func (c *eventHandlerClient) pipelineEvents() {
+func pipelineEvents(
+	quitChan chan struct{}, evChan chan EditorEvent,
+	errChan chan error,
+	pb EditorEventHandlerClient,
+	conn *proto.MuxConn, quitCallback func(),
+) {
 	var protoEv EditorEvent
 	for {
 		select {
-		case <-c.quitChan:
+		case <-quitChan:
 			return
-		case protoEv = <-c.evChan:
+		case protoEv = <-evChan:
 		}
 
 		ctx := context.Background()
 		ctx, cancelFn := context.WithTimeout(ctx, defaultClientTimeout)
 		req := EditorEventHandleRequest{Event: &protoEv}
-		resp, err := c.pb.Handle(ctx, &req)
+		resp, err := pb.Handle(ctx, &req)
 		cancelFn()
 		if err != nil {
-			c.handleError(err)
+			log.Errorf("editor.eventHandlerClient.Handle error: %v", err)
+
+			select {
+			case errChan <- err:
+			default:
+			}
 		} else if resp.GetQuit() {
-			c.quitCallback()
+			closeFn(conn, quitCallback, quitChan, evChan)
 			return
 		}
 	}
 }
 
 func (c *eventHandlerClient) Handle(ctx context.Context, ev textapi.Event) bool {
+	if c.conn == nil {
+		// unsubscribe if already closed
+		return true
+	}
+
 	protoEv := toProto(ev)
 	c.evChan <- protoEv
+	runtime.KeepAlive(c)
 
 	return false
 }
 
 func (c *eventHandlerClient) Close() error {
-	if c.conn == nil {
-		return nil
-	}
-	c.conn = nil
-	close(c.quitChan)
-	// if Handle is called after close, then we want to panic
-	// to indicate programmer error.
-	close(c.evChan)
+	closeFn(&c.conn, c.quitCallback, c.quitChan, c.evChan)
+	runtime.SetFinalizer(c, nil)
 	return nil
 }
 
 type eventHandlerServer struct {
 	UnimplementedEditorEventHandlerServer
 	handler textapi.EventHandler
-	onExit  func()
+	onExit  func(context.Context)
 }
 
 func newEventHandlerServer(
-	handler textapi.EventHandler, onExit func(),
+	handler textapi.EventHandler, onExit func(context.Context),
 ) *eventHandlerServer {
 	ret := new(eventHandlerServer)
 	ret.handler = handler
@@ -126,15 +146,11 @@ func (s *eventHandlerServer) Handle(
 		return nil, err
 	}
 
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-
 	quit := s.handler.Handle(ctx, ev)
-
 	resp := &EditorEventHandleResponse{Quit: quit}
 
 	if quit {
-		s.onExit()
+		s.onExit(ctx)
 	}
 	return resp, nil
 }

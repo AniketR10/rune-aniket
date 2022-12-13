@@ -11,10 +11,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
-	"unstable.build/go-tui"
 	textapi "unstable.build/go-tui/api/text"
 	"unstable.build/go-tui/cell"
-	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/proto"
 	prototest "unstable.build/go-tui/proto/test"
 	"unstable.build/go-tui/term"
@@ -35,27 +33,31 @@ func (l nopLocker) Unlock() {}
 func newTestServer(t *testing.T, ctrl *gomock.Controller) (*proto.MockMuxBroker, *texttest.MockEditor, *Server) {
 	broker := proto.NewMockMuxBroker(ctrl)
 	ed := texttest.NewMockEditor(ctrl)
-	expectInitialServerSubscribe(t, ed)
 	s := NewServer(broker, ed, new(sync.Mutex), testBrowserServer{})
-	broker.EXPECT().Cleanup(gomock.Any()).AnyTimes()
 	return broker, ed, s
 }
 
 func expectEdit(t *testing.T, mock *texttest.MockEditor, resource workspace.URI, content string) {
 	mock.EXPECT().Edit(gomock.Any(), gomock.Any()).Times(1).
-		DoAndReturn(func(_uri workspace.URI, buf *cell.Buffer) (tui.Handler, error) {
+		DoAndReturn(func(_uri workspace.URI, buf *cell.Buffer) (text.Handler, error) {
 			assert.Equal(t, resource, _uri)
 			assert.Equal(t, content, buf.String())
-			return handler.NewTestHandler(), nil
+			return texttest.NewTestHandler(), nil
+		})
+}
+
+func expectEditor(t *testing.T, mock *texttest.MockEditor, resource workspace.URI) {
+	mock.EXPECT().Editor(gomock.Any()).AnyTimes().
+		DoAndReturn(func(_uri workspace.URI) (text.Handler, error) {
+			assert.Equal(t, resource, _uri)
+			return texttest.NewTestHandler(), nil
 		})
 }
 
 func callServerEdit(
 	t *testing.T, ctx context.Context, broker *proto.MockMuxBroker,
-	s *Server, nextID uint32, uri workspace.URI, content string,
+	s *Server, uri workspace.URI, content string,
 ) {
-	broker.EXPECT().NextId().Return(nextID).Times(1)
-
 	buf := cell.NewBuffer()
 	buf.WriteString(content)
 	req := NewEditRequest(uri, buf)
@@ -63,12 +65,9 @@ func callServerEdit(
 	res, err := s.Edit(ctx, &req)
 	require.NoError(t, err)
 	require.NotNil(t, res)
-
-	assert.Equal(t, nextID, res.GetHandlerId())
 }
 
 func TestServerEdit(t *testing.T) {
-	nextID := uint32(99)
 	ctx := context.Background()
 	resource, err := workspace.ParseURI("file:///ULaptopNotLinux:@")
 	require.NoError(t, err)
@@ -78,7 +77,7 @@ func TestServerEdit(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		broker, mock, s := newTestServer(t, ctrl)
 		expectEdit(t, mock, resource, bufContent1)
-		callServerEdit(t, ctx, broker, s, nextID, resource, bufContent1)
+		callServerEdit(t, ctx, broker, s, resource, bufContent1)
 	})
 
 	t.Run("relative path is converted to absolute", func(t *testing.T) {
@@ -86,7 +85,7 @@ func TestServerEdit(t *testing.T) {
 		broker, mock, s := newTestServer(t, ctrl)
 		require.NoError(t, err)
 		expectEdit(t, mock, resource, bufContent1)
-		callServerEdit(t, ctx, broker, s, nextID, resource, bufContent1)
+		callServerEdit(t, ctx, broker, s, resource, bufContent1)
 	})
 
 	t.Run("bubbles up underlying's Editor Edit errors", func(t *testing.T) {
@@ -103,11 +102,6 @@ func TestServerEdit(t *testing.T) {
 		require.Error(t, err)
 		require.Nil(t, res)
 	})
-}
-
-func waitForMonitoringExit(quitCh chan struct{}) {
-	<-quitCh
-	time.Sleep(asyncResultsSleepDuration)
 }
 
 func expectHandlerInvokeExit(t *testing.T, handlerConn *proto.MockMuxConn) {
@@ -129,37 +123,25 @@ func expectHandlerInvokeExit(t *testing.T, handlerConn *proto.MockMuxConn) {
 
 func assertServerHandlerExitClose(
 	t *testing.T, handlerConn *proto.MockMuxConn,
-	h textapi.EventHandler, s *Server, quitCh chan struct{},
+	h textapi.EventHandler, s *Server,
 	broker *proto.MockMuxBroker,
 ) {
 	resource := &texttest.TestHandler{}
 	expectHandlerInvokeExit(t, handlerConn)
 
-	handlerConn.EXPECT().Close().Times(1).
-		DoAndReturn(prototest.ExpectSignalExit(handlerConn, quitCh, nil))
-
-	broker.EXPECT().NextId().Return(uint32(88)).Times(1)
+	handlerConn.EXPECT().Close().AnyTimes()
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-
-	// force server to store resource name and make an ID
-	s.Handle(ctx, textapi.Event{Type: textapi.EventTypeOpen, URI: uri, Resource: resource})
 
 	s.editor.Lock()
 	h.Handle(ctx, textapi.Event{Type: textapi.EventTypeClose, URI: uri, Resource: resource})
 	s.editor.Unlock()
-
-	waitForMonitoringExit(quitCh)
-
-	s.editor.Lock()
-	defer s.editor.Unlock()
-	assert.Equal(t, 0, len(s.clients))
 }
 
 func TestServerSubscribe(t *testing.T) {
 	ctx := context.Background()
 	t.Run("propagates subscribe with multiple event types", func(t *testing.T) {
-		nextID := uint32(12)
+		channelID := "12"
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
@@ -175,15 +157,13 @@ func TestServerSubscribe(t *testing.T) {
 				return nil
 			})
 		req := EditorSubscribeRequest{
-			HandlerId: nextID,
+			ChannelId: channelID,
 			Type: []EditorEvent_Type{
 				EditorEvent_TypeFlush,
 				EditorEvent_TypeFocus,
 			},
 		}
-		conn := prototest.ExpectBrokerDial(t, ctrl, broker, nextID)
-		quitCh := prototest.ExpectMonitorConn(conn)
-
+		conn := prototest.ExpectBrokerDialChannel(t, ctrl, broker, channelID)
 		wg.Add(1)
 		res, err := s.Subscribe(ctx, &req)
 		require.NoError(t, err)
@@ -191,8 +171,8 @@ func TestServerSubscribe(t *testing.T) {
 
 		wg.Wait()
 
-		conn.EXPECT().Close().Times(1).
-			DoAndReturn(prototest.ExpectSignalExit(conn, quitCh, nil))
+		// set to anytimes so finalizers can run after test is done
+		conn.EXPECT().Close().AnyTimes()
 		conn.EXPECT().Invoke(gomock.Any(), gomock.Any(),
 			gomock.Any(), gomock.Any()).AnyTimes()
 
@@ -200,45 +180,6 @@ func TestServerSubscribe(t *testing.T) {
 		s.editor.Lock()
 		assert.NoError(t, s.Close())
 		s.editor.Unlock()
-		waitForMonitoringExit(quitCh)
-	})
-
-	t.Run("cleans resources when handler subscriber returns exit=true", func(t *testing.T) {
-		nextID := uint32(12222)
-		ctrl := gomock.NewController(t)
-		defer ctrl.Finish()
-
-		broker, mock, s := newTestServer(t, ctrl)
-		expectedEvTypes := []textapi.EventType{textapi.EventTypeFlush}
-
-		var actualEvTypes []textapi.EventType
-		var h textapi.EventHandler
-		var wg sync.WaitGroup
-		mock.EXPECT().SubscribeEditorEvents(gomock.Any(), gomock.Any()).
-			DoAndReturn(func(evs []textapi.EventType, _h textapi.EventHandler) error {
-				defer wg.Done()
-				actualEvTypes = evs
-				h = _h
-				return nil
-			})
-		conn := prototest.ExpectBrokerDial(t, ctrl, broker, nextID)
-		quitCh := prototest.ExpectMonitorConn(conn)
-
-		req := EditorSubscribeRequest{
-			HandlerId: nextID,
-			Type:      []EditorEvent_Type{EditorEvent_TypeFlush},
-		}
-
-		wg.Add(1)
-		res, err := s.Subscribe(ctx, &req)
-		require.NoError(t, err)
-		require.NotNil(t, res)
-
-		wg.Wait()
-
-		require.NotNil(t, h)
-		assert.Equal(t, expectedEvTypes, actualEvTypes)
-		assertServerHandlerExitClose(t, conn, h, s, quitCh, broker)
 	})
 }
 
@@ -267,8 +208,8 @@ func TestServerRegister(t *testing.T) {
 
 		broker, mock, s := newTestServer(t, ctrl)
 
-		conn := prototest.ExpectBrokerDial(t, ctrl, broker, 1234)
-		quitCh := prototest.ExpectMonitorConn(conn)
+		channelID := "1234"
+		conn := prototest.ExpectBrokerDialChannel(t, ctrl, broker, channelID)
 
 		var wg sync.WaitGroup
 		mock.EXPECT().SubscribeCommand(gomock.Any(), gomock.Any()).
@@ -278,19 +219,17 @@ func TestServerRegister(t *testing.T) {
 			})
 
 		wg.Add(1)
-		req := RegisterCommandRequest{Command: "bla", HandlerId: 1234}
+		req := RegisterCommandRequest{Command: "bla", ChannelId: channelID}
 		res, err := s.Register(ctx, &req)
 		require.NoError(t, err)
 		require.NotNil(t, res)
 		wg.Wait()
 
-		conn.EXPECT().Close().Times(1).
-			DoAndReturn(prototest.ExpectSignalExit(conn, quitCh, nil))
+		conn.EXPECT().Close().AnyTimes()
 
 		s.editor.Lock()
 		assert.NoError(t, s.Close())
 		s.editor.Unlock()
-		waitForMonitoringExit(quitCh)
 	})
 
 	t.Run("handles SubscribeCommand errors", func(t *testing.T) {
@@ -300,8 +239,8 @@ func TestServerRegister(t *testing.T) {
 
 		broker, mock, s := newTestServer(t, ctrl)
 
-		conn := prototest.ExpectBrokerDial(t, ctrl, broker, 1234)
-		quitCh := prototest.ExpectMonitorConn(conn)
+		channelID := "1234"
+		conn := prototest.ExpectBrokerDialChannel(t, ctrl, broker, channelID)
 
 		var wg sync.WaitGroup
 		mock.EXPECT().SubscribeCommand(gomock.Any(), gomock.Any()).
@@ -310,11 +249,10 @@ func TestServerRegister(t *testing.T) {
 				return errors.New("boom")
 			})
 
-		conn.EXPECT().Close().Times(1).
-			DoAndReturn(prototest.ExpectSignalExit(conn, quitCh, nil))
+		conn.EXPECT().Close().AnyTimes()
 
 		wg.Add(1)
-		req := RegisterCommandRequest{Command: "bla", HandlerId: 1234}
+		req := RegisterCommandRequest{Command: "bla", ChannelId: channelID}
 		res, err := s.Register(ctx, &req)
 		require.Error(t, err)
 		require.Nil(t, res)
@@ -324,7 +262,6 @@ func TestServerRegister(t *testing.T) {
 		s.editor.Lock()
 		assert.NoError(t, s.Close())
 		s.editor.Unlock()
-		waitForMonitoringExit(quitCh)
 	})
 }
 
@@ -340,11 +277,11 @@ func TestServerSetLocationList(t *testing.T) {
 		broker, mock, s := newTestServer(t, ctrl)
 
 		content := "main"
-		nextID := uint32(232)
 		expectEdit(t, mock, resource, content)
-		callServerEdit(t, ctx, broker, s, nextID, resource, content)
+		callServerEdit(t, ctx, broker, s, resource, content)
 
 		locs := text.LocationSlice([]textapi.Location{{Message: "wsb: hold AMC", To: term.Coordinates{X: 3}}})
+		expectEditor(t, mock, resource)
 		mock.EXPECT().SetLocationList(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 			Times(1).
 			DoAndReturn(func(h text.Handler, pri textapi.LocationPriority, ID string, l text.LocationList) error {
@@ -353,7 +290,7 @@ func TestServerSetLocationList(t *testing.T) {
 				return nil
 			})
 
-		req := makeLocationListRequest(nextID, textapi.LocationPriorityInfo, locID, locs)
+		req := makeLocationListRequest(resource, textapi.LocationPriorityInfo, locID, locs)
 		res, err := s.SetLocationList(ctx, &req)
 		require.NoError(t, err)
 		require.NotNil(t, res)
@@ -371,8 +308,7 @@ func TestServerSetLocationList(t *testing.T) {
 		s := NewServer(broker, c, new(sync.Mutex), testBrowserServer{})
 
 		content := "main"
-		nextID := uint32(232)
-		callServerEdit(t, ctx, broker, s, nextID, resource, content)
+		callServerEdit(t, ctx, broker, s, resource, content)
 
 		locs := []textapi.Location{
 			{From: term.Coordinates{X: 0, Y: 0}, To: term.Coordinates{X: 3, Y: 0}},
@@ -388,7 +324,7 @@ func TestServerSetLocationList(t *testing.T) {
 				defer wg.Done()
 				l := text.LocationSlice(locs)
 
-				req := makeLocationListRequest(nextID, textapi.LocationPriorityWarning, locID, l)
+				req := makeLocationListRequest(resource, textapi.LocationPriorityWarning, locID, l)
 				res, err := s.SetLocationList(ctx, &req)
 				if !assert.NoError(t, err) {
 					return
@@ -400,17 +336,6 @@ func TestServerSetLocationList(t *testing.T) {
 		}
 
 		wg.Wait()
-
-		h, ok := s.idToHandler[nextID]
-		if !assert.True(t, ok) {
-			return
-		}
-
-		l, ok := h.(*texttest.TestEditorHandler)
-		if !assert.True(t, ok) {
-			return
-		}
-		assertEqualLocations(t, text.LocationSlice(locs), l.LocationList)
 	})
 }
 
@@ -425,17 +350,17 @@ func TestServerSetCursor(t *testing.T) {
 		resource, err := workspace.ParseURI("file:///SetCursorer")
 		require.NoError(t, err)
 		content := "Oh my"
-		nextID := uint32(12888)
 		expectEdit(t, mock, resource, content)
-		callServerEdit(t, ctx, broker, s, nextID, resource, content)
+		callServerEdit(t, ctx, broker, s, resource, content)
 
 		pos := term.Coordinates{X: 4, Y: 5}
+		expectEditor(t, mock, resource)
 		mock.EXPECT().SetCursor(gomock.Any(), gomock.Eq(pos)).Return(nil).Times(1)
 
 		var protoPos termpb.Coordinates
 		protoPos.FromModel(pos)
 
-		req := SetCursorRequest{HandlerId: nextID, Pos: &protoPos}
+		req := SetCursorRequest{ResourceName: NewURI(resource), Pos: &protoPos}
 		res, err := s.SetCursor(ctx, &req)
 		require.NoError(t, err)
 		require.NotNil(t, res)
@@ -452,14 +377,14 @@ func TestServerCursor(t *testing.T) {
 
 		resource, err := workspace.ParseURI("file:///Cursorer")
 		require.NoError(t, err)
-		nextID := uint32(12888)
 		expectEdit(t, mock, resource, "")
-		callServerEdit(t, ctx, broker, s, nextID, resource, "")
+		callServerEdit(t, ctx, broker, s, resource, "")
 
 		pos := term.Coordinates{X: 4, Y: 5}
+		expectEditor(t, mock, resource)
 		mock.EXPECT().Cursor(gomock.Any()).Return(pos, nil).Times(1)
 
-		req := CursorRequest{HandlerId: nextID}
+		req := CursorRequest{ResourceName: NewURI(resource)}
 		res, err := s.Cursor(ctx, &req)
 		require.NoError(t, err)
 		require.NotNil(t, res)

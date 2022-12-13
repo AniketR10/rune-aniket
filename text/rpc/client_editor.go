@@ -2,14 +2,16 @@ package rpc
 
 import (
 	"context"
+	"runtime"
 
 	"unstable.build/go-tui/term"
 	termpb "unstable.build/go-tui/term/rpc"
+	"unstable.build/go-tui/workspace"
 )
 
 type clientWriter struct {
-	handlerID uint32
-	client    *Client
+	uri    workspace.URI
+	client *Client
 }
 
 func (w clientWriter) Edit(
@@ -21,12 +23,13 @@ func (w clientWriter) Edit(
 	protoStart.FromModel(start)
 	protoEnd.FromModel(end)
 	req := EditCellRequest{
-		HandlerId: w.handlerID,
-		Start:     &protoStart,
-		End:       &protoEnd,
-		Str:       str,
+		ResourceName: NewURI(w.uri),
+		Start:        &protoStart,
+		End:          &protoEnd,
+		Str:          str,
 	}
 	res, err := w.client.ed.EditCell(ctx, &req)
+	runtime.KeepAlive(w.client)
 	if err != nil {
 		return from, to, "", err
 	}

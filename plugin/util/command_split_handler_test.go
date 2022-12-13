@@ -47,11 +47,9 @@ func expectSubscribe(
 	t *testing.T, ctrl *gomock.Controller,
 	broker *proto.MockMuxBroker, cmd string, token uint32,
 ) *proto.MockMuxConn {
-	subscribedHandlerToken := uint32(124)
-
 	conn := prototest.ExpectBrokerDial(t, ctrl, broker, token)
-	prototest.ExpectBrokerServe(t, subscribedHandlerToken, broker)
-	expected := textpb.RegisterCommandRequest{HandlerId: subscribedHandlerToken, Command: cmd}
+	prototest.ExpectBrokerNewChannel(t, "1234", broker)
+	expected := textpb.RegisterCommandRequest{ChannelId: "1234", Command: cmd}
 
 	conn.EXPECT().
 		Invoke(gomock.Any(),

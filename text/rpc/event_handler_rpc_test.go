@@ -18,7 +18,8 @@ import (
 
 func newClientServerIntegration(
 	t *testing.T, h *texttest.MockEventHandler,
-	serverQuitCallback, clientQuitCallback func(),
+	serverQuitCallback func(context.Context),
+	clientQuitCallback func(),
 ) (*eventHandlerClient, func()) {
 	lis, err := net.Listen("tcp", ":0")
 	require.NoError(t, err)
@@ -55,11 +56,10 @@ func consumeError(t *testing.T, wg *sync.WaitGroup, client *eventHandlerClient) 
 func TestEventHandlerRPC(t *testing.T) {
 	content := "myContent"
 	ev := textapi.Event{
-		Type: textapi.EventTypeFlush,
-		URI:  uri,
-		Resource: Token{ID: 1,
-			resource: uri},
-		Content: content,
+		Type:     textapi.EventTypeFlush,
+		URI:      uri,
+		Resource: Token{URI: uri},
+		Content:  content,
 	}
 
 	t.Run("asynchronously dispatches events to remote event handler", func(t *testing.T) {
@@ -68,7 +68,8 @@ func TestEventHandlerRPC(t *testing.T) {
 		defer ctrl.Finish()
 		h := texttest.NewMockEventHandler(ctrl)
 
-		client, closeFn := newClientServerIntegration(t, h, func() {}, func() {})
+		client, closeFn := newClientServerIntegration(t, h,
+			func(context.Context) {}, func() {})
 		defer closeFn()
 
 		go consumeError(t, &wg, client)
@@ -94,7 +95,8 @@ func TestEventHandlerRPC(t *testing.T) {
 		defer ctrl.Finish()
 		h := texttest.NewMockEventHandler(ctrl)
 
-		client, closeFn := newClientServerIntegration(t, h, wg.Done, wg.Done)
+		client, closeFn := newClientServerIntegration(t, h,
+			func(context.Context) { wg.Done() }, wg.Done)
 		defer closeFn()
 
 		go consumeError(t, &wg, client)
@@ -114,7 +116,8 @@ func TestEventHandlerRPC(t *testing.T) {
 		defer ctrl.Finish()
 		h := texttest.NewMockEventHandler(ctrl)
 
-		client, closeFn := newClientServerIntegration(t, h, func() {}, func() {})
+		client, closeFn := newClientServerIntegration(t, h,
+			func(context.Context) {}, func() {})
 		defer closeFn()
 
 		go func() {

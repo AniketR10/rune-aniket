@@ -43,7 +43,7 @@ type Editor interface {
 
 	// Editor returns the editor.Handler with name or returns
 	// an error if no editor with name is open via Edit.
-	Editor(file workspace.URI) (Handler, error)
+	Editor(workspace.URI) (Handler, error)
 
 	// SubscribeCommand registers command to be dispatched to CommandHandler.
 	SubscribeCommand(string, CommandHandler) error

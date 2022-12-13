@@ -295,18 +295,18 @@ func (mr *MockEditorMockRecorder) Edit(file, buf interface{}) *gomock.Call {
 }
 
 // Editor mocks base method.
-func (m *MockEditor) Editor(file workspace.URI) (text.Handler, error) {
+func (m *MockEditor) Editor(arg0 workspace.URI) (text.Handler, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Editor", file)
+	ret := m.ctrl.Call(m, "Editor", arg0)
 	ret0, _ := ret[0].(text.Handler)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Editor indicates an expected call of Editor.
-func (mr *MockEditorMockRecorder) Editor(file interface{}) *gomock.Call {
+func (mr *MockEditorMockRecorder) Editor(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Editor", reflect.TypeOf((*MockEditor)(nil).Editor), file)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Editor", reflect.TypeOf((*MockEditor)(nil).Editor), arg0)
 }
 
 // MoveToNextLocation mocks base method.
