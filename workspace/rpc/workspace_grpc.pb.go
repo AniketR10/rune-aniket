@@ -36,7 +36,7 @@ type WorkspaceClient interface {
 	StdinPipe(ctx context.Context, in *StdioPipeRequest, opts ...grpc.CallOption) (*StdioPipeResponse, error)
 	NewPty(ctx context.Context, in *NewPtyRequest, opts ...grpc.CallOption) (*NewPtyResponse, error)
 	SetPtySize(ctx context.Context, in *SetPtySizeRequest, opts ...grpc.CallOption) (*SetPtySizeResponse, error)
-	// operate workspace.File
+	// operate workspaceapi.File
 	Sync(ctx context.Context, in *SyncRequest, opts ...grpc.CallOption) (*SyncResponse, error)
 	Truncate(ctx context.Context, in *TruncateRequest, opts ...grpc.CallOption) (*TruncateResponse, error)
 	Seek(ctx context.Context, in *SeekRequest, opts ...grpc.CallOption) (*SeekResponse, error)
@@ -252,7 +252,7 @@ type WorkspaceServer interface {
 	StdinPipe(context.Context, *StdioPipeRequest) (*StdioPipeResponse, error)
 	NewPty(context.Context, *NewPtyRequest) (*NewPtyResponse, error)
 	SetPtySize(context.Context, *SetPtySizeRequest) (*SetPtySizeResponse, error)
-	// operate workspace.File
+	// operate workspaceapi.File
 	Sync(context.Context, *SyncRequest) (*SyncResponse, error)
 	Truncate(context.Context, *TruncateRequest) (*TruncateResponse, error)
 	Seek(context.Context, *SeekRequest) (*SeekResponse, error)

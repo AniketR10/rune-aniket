@@ -100,7 +100,7 @@ var (
 
 type workspaceLoader interface {
 	workspace.Loader
-	workspace.WorkspaceDirectory
+	workspace.Directory
 }
 
 // ex implements a tui.Handler by wrapping an editor.Component and

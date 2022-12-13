@@ -189,7 +189,7 @@ func (c *Component) Init(ed Editor, w workspace.Loader, config Config) error {
 
 	for _, filename := range c.config.Filepaths {
 		h, err := c.Open(filename)
-		if err == workspace.ErrFileAlreadyOpen {
+		if err == workspaceapi.ErrFileAlreadyOpen {
 			// handled via user Prompt
 			err = nil
 		}
@@ -421,7 +421,7 @@ an edit session for this file crashed.`, file)
 					swapFile, err = workspace.DefaultSwapFile(swapDir, file)
 					if err == nil {
 						h, err = c.RecoverFileTab(file, swapFile, false)
-						if err == workspace.ErrStaleData {
+						if err == workspaceapi.ErrStaleData {
 							c.openAreYouSurePrompt(file)
 							return
 						}
@@ -447,7 +447,7 @@ an edit session for this file crashed.`, file)
 // will create a prompt for the user to decide what to do.
 func (c *Component) Open(file workspaceapi.URI) (browser.Handler, error) {
 	h, err := c.OpenFileTab(file, false)
-	if err != nil && err == workspace.ErrFileAlreadyOpen {
+	if err != nil && err == workspaceapi.ErrFileAlreadyOpen {
 		c.openRecoveryPrompt(file)
 	}
 	return h, err

@@ -2927,8 +2927,8 @@ var file_rpc_workspace_proto_goTypes = []interface{}{
 	(*SignalResponse)(nil),          // 29: workspace.SignalResponse
 	(*StdioPipeRequest)(nil),        // 30: workspace.StdioPipeRequest
 	(*StdioPipeResponse)(nil),       // 31: workspace.StdioPipeResponse
-	(*URIRequest)(nil),              // 32: workspaceapi.URIRequest
-	(*URIResponse)(nil),             // 33: workspaceapi.URIResponse
+	(*URIRequest)(nil),              // 32: workspace.URIRequest
+	(*URIResponse)(nil),             // 33: workspace.URIResponse
 	(*RegisterSchemeRequest)(nil),   // 34: workspace.RegisterSchemeRequest
 	(*RegisterSchemeResponse)(nil),  // 35: workspace.RegisterSchemeResponse
 	(*InitializeProxyRequest)(nil),  // 36: workspace.InitializeProxyRequest
@@ -2945,7 +2945,7 @@ var file_rpc_workspace_proto_goTypes = []interface{}{
 var file_rpc_workspace_proto_depIdxs = []int32{
 	45, // 0: workspace.StatResponse.mod_time:type_name -> google.protobuf.Timestamp
 	43, // 1: workspace.ReadDirResponse.path:type_name -> workspace.DirEntry
-	32, // 2: workspace.Workspace.URI:input_type -> workspaceapi.URIRequest
+	32, // 2: workspace.Workspace.URI:input_type -> workspace.URIRequest
 	0,  // 3: workspace.Workspace.Open:input_type -> workspace.OpenRequest
 	2,  // 4: workspace.Workspace.Remove:input_type -> workspace.RemoveRequest
 	42, // 5: workspace.Workspace.ReadDir:input_type -> workspace.ReadDirRequest
@@ -2965,7 +2965,7 @@ var file_rpc_workspace_proto_depIdxs = []int32{
 	16, // 19: workspace.Workspace.Read:input_type -> workspace.ReadRequest
 	18, // 20: workspace.Workspace.Write:input_type -> workspace.WriteRequest
 	6,  // 21: workspace.Workspace.Stat:input_type -> workspace.StatRequest
-	32, // 22: workspace.Scheme.URI:input_type -> workspaceapi.URIRequest
+	32, // 22: workspace.Scheme.URI:input_type -> workspace.URIRequest
 	0,  // 23: workspace.Scheme.Open:input_type -> workspace.OpenRequest
 	2,  // 24: workspace.Scheme.Remove:input_type -> workspace.RemoveRequest
 	4,  // 25: workspace.Scheme.Rename:input_type -> workspace.RenameRequest
@@ -3005,7 +3005,7 @@ var file_rpc_workspace_proto_depIdxs = []int32{
 	6,  // 59: workspace.Executor.Stat:input_type -> workspace.StatRequest
 	36, // 60: workspace.ProxyScheme.InitializeProxy:input_type -> workspace.InitializeProxyRequest
 	34, // 61: workspace.Manager.RegisterScheme:input_type -> workspace.RegisterSchemeRequest
-	33, // 62: workspace.Workspace.URI:output_type -> workspaceapi.URIResponse
+	33, // 62: workspace.Workspace.URI:output_type -> workspace.URIResponse
 	1,  // 63: workspace.Workspace.Open:output_type -> workspace.OpenResponse
 	3,  // 64: workspace.Workspace.Remove:output_type -> workspace.RemoveResponse
 	44, // 65: workspace.Workspace.ReadDir:output_type -> workspace.ReadDirResponse
@@ -3025,7 +3025,7 @@ var file_rpc_workspace_proto_depIdxs = []int32{
 	17, // 79: workspace.Workspace.Read:output_type -> workspace.ReadResponse
 	19, // 80: workspace.Workspace.Write:output_type -> workspace.WriteResponse
 	7,  // 81: workspace.Workspace.Stat:output_type -> workspace.StatResponse
-	33, // 82: workspace.Scheme.URI:output_type -> workspaceapi.URIResponse
+	33, // 82: workspace.Scheme.URI:output_type -> workspace.URIResponse
 	1,  // 83: workspace.Scheme.Open:output_type -> workspace.OpenResponse
 	3,  // 84: workspace.Scheme.Remove:output_type -> workspace.RemoveResponse
 	5,  // 85: workspace.Scheme.Rename:output_type -> workspace.RenameResponse

@@ -17,6 +17,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	workspaceapi "unstable.build/go-tui/api/workspace"
+	workspaceapitest "unstable.build/go-tui/api/workspace/test"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/term"
 )
@@ -399,7 +400,7 @@ func testFileBufferIntegration(t *testing.T, endsInEOL bool) {
 		defer f.Close()
 
 		_, err = openFile(file.Name(), b, swapDir, false)
-		assert.Equal(t, ErrFileAlreadyOpen, err)
+		assert.Equal(t, workspaceapi.ErrFileAlreadyOpen, err)
 	})
 }
 
@@ -476,7 +477,7 @@ func TestFileBufferRecover(t *testing.T) {
 		require.NoError(t, file.Sync())
 
 		_, err = recoverFile(filepath, swapFilepath, b, false)
-		assert.Equal(t, ErrStaleData, err)
+		assert.Equal(t, workspaceapi.ErrStaleData, err)
 
 		_, err = os.Stat(swapFilepath)
 		require.NoError(t, err)
@@ -541,7 +542,7 @@ func TestFileBufferRecover(t *testing.T) {
 
 		time.Sleep(10 * time.Millisecond)
 
-		require.Equal(t, ErrStaleData, f1.Flush())
+		require.Equal(t, workspaceapi.ErrStaleData, f1.Flush())
 
 		_, err = openFile(file.Name(), b, swapDir, false)
 		require.Error(t, err)
@@ -551,11 +552,11 @@ func TestFileBufferRecover(t *testing.T) {
 // UNIT TESTS
 
 // returns an un-initialized (but dep injected) FileBuffer along with the mocked OsFile
-func newTestFileBuffer(ctrl *gomock.Controller) (*file, *MockOsFile) {
-	schemeIfc, _ := NewNopScheme("test")(nil, workspaceapi.URI{})
+func newTestFileBuffer(ctrl *gomock.Controller) (*file, *workspaceapitest.MockFile) {
+	schemeIfc, _ := newTestScheme("test")(nil, workspaceapi.URI{})
 	scheme := schemeIfc.(*testScheme)
-	mock := NewMockOsFile(ctrl)
-	scheme.openFunc = func(name string, flag int, perm os.FileMode) (File, *Error) {
+	mock := workspaceapitest.NewMockFile(ctrl)
+	scheme.openFunc = func(name string, flag int, perm os.FileMode) (workspaceapi.File, *workspaceapi.Error) {
 		return mock, nil
 	}
 	f := new(file)
@@ -563,7 +564,7 @@ func newTestFileBuffer(ctrl *gomock.Controller) (*file, *MockOsFile) {
 	return f, mock
 }
 
-func expectRead(mock *MockOsFile, data []byte) {
+func expectRead(mock *workspaceapitest.MockFile, data []byte) {
 	mock.EXPECT().Read(gomock.Any()).DoAndReturn(func(buf []byte) (int, error) {
 		if len(buf) < len(data) {
 			panic("seriously?")
@@ -574,7 +575,7 @@ func expectRead(mock *MockOsFile, data []byte) {
 }
 
 func expectInitSwap(
-	mock *MockOsFile, fileName string, fileInfo os.FileInfo, data []byte,
+	mock *workspaceapitest.MockFile, fileName string, fileInfo os.FileInfo, data []byte,
 ) {
 	// stat original file
 	mock.EXPECT().Stat().Return(fileInfo, nil).AnyTimes()
@@ -592,7 +593,7 @@ func expectInitSwap(
 	})
 }
 
-func expectInitBuffer(mock *MockOsFile, data []byte) {
+func expectInitBuffer(mock *workspaceapitest.MockFile, data []byte) {
 	expectRead(mock, data)
 
 	// seek original file back to 0
@@ -667,7 +668,7 @@ func TestFileBufferInit(t *testing.T) {
 		f, mock := newTestFileBuffer(ctrl)
 		mock.EXPECT().Stat().Return(testFileInfo{mode: os.ModeSocket}, nil)
 
-		assert.Equal(t, ErrFileIsNotRegular, f.init("fjkelw", cell.NewBuffer(), "", false))
+		assert.Equal(t, workspaceapi.ErrFileIsNotRegular, f.init("fjkelw", cell.NewBuffer(), "", false))
 	})
 
 	t.Run("returns error if original file is directory", func(t *testing.T) {
@@ -677,15 +678,15 @@ func TestFileBufferInit(t *testing.T) {
 		f, mock := newTestFileBuffer(ctrl)
 		mock.EXPECT().Stat().Return(testFileInfo{isDir: true}, nil)
 
-		assert.Equal(t, ErrFileIsNotRegular, f.init("fjkelw", cell.NewBuffer(), "", false))
+		assert.Equal(t, workspaceapi.ErrFileIsNotRegular, f.init("fjkelw", cell.NewBuffer(), "", false))
 	})
 
 	t.Run("bubble up original file open error", func(t *testing.T) {
 		accessDeniedErr := errors.New("access denied")
 		f := new(file)
 		f.scheme = &testScheme{}
-		f.scheme.(*testScheme).openFunc = func(name string, flag int, perm os.FileMode) (File, *Error) {
-			return nil, NopError(accessDeniedErr)
+		f.scheme.(*testScheme).openFunc = func(name string, flag int, perm os.FileMode) (workspaceapi.File, *workspaceapi.Error) {
+			return nil, workspaceapi.NopError(accessDeniedErr)
 		}
 		assert.Equal(t, accessDeniedErr, f.init("fjkelw", cell.NewBuffer(), "", false))
 	})
@@ -695,16 +696,16 @@ func TestFileBufferInit(t *testing.T) {
 		defer ctrl.Finish()
 
 		accessDeniedErr := errors.New("access denied")
-		origFileMock := NewMockOsFile(ctrl)
+		origFileMock := workspaceapitest.NewMockFile(ctrl)
 		f := new(file)
 		f.scheme = &testScheme{}
 		i := 0
-		f.scheme.(*testScheme).openFunc = func(name string, flag int, perm os.FileMode) (File, *Error) {
+		f.scheme.(*testScheme).openFunc = func(name string, flag int, perm os.FileMode) (workspaceapi.File, *workspaceapi.Error) {
 			i++
 			if i == 1 {
 				return origFileMock, nil
 			}
-			return nil, NopError(accessDeniedErr)
+			return nil, workspaceapi.NopError(accessDeniedErr)
 		}
 
 		fileName := "fjklewjflk"
@@ -721,7 +722,7 @@ const defaultFileName = "myOhDear.go"
 var defaultFileData = []byte("oh, dear")
 
 func newInitializedTestFileBuffer(t *testing.T, ctrl *gomock.Controller) (
-	*file, *MockOsFile, *cell.Buffer,
+	*file, *workspaceapitest.MockFile, *cell.Buffer,
 ) {
 	f, mock := newTestFileBuffer(ctrl)
 	expectInitSwap(mock, defaultFileName, testFileInfo{}, defaultFileData)
@@ -748,16 +749,16 @@ func (t testOsError) isNotExist() bool {
 }
 
 func newUninitializedTestFileBuffer(t *testing.T, ctrl *gomock.Controller) (
-	*file, *MockOsFile, *cell.Buffer,
+	*file, *workspaceapitest.MockFile, *cell.Buffer,
 ) {
 	f, mock := newTestFileBuffer(ctrl)
-	f.scheme.(*testScheme).openFunc = func(name string, flag int, perm os.FileMode) (File, *Error) {
+	f.scheme.(*testScheme).openFunc = func(name string, flag int, perm os.FileMode) (workspaceapi.File, *workspaceapi.Error) {
 		if flag&os.O_CREATE != 0 {
 			mock.EXPECT().Read(gomock.Any()).Return(0, io.EOF).Times(1)
 			mock.EXPECT().Seek(gomock.Any(), gomock.Any()).Return(int64(0), nil).Times(1)
 			return mock, nil
 		}
-		return nil, &Error{IsNotExist: true}
+		return nil, &workspaceapi.Error{IsNotExist: true}
 	}
 
 	mock.EXPECT().Name().Return(defaultFileName).AnyTimes()
@@ -768,12 +769,12 @@ func newUninitializedTestFileBuffer(t *testing.T, ctrl *gomock.Controller) (
 }
 
 func newReadOnlyTestFileBuffer(t *testing.T, ctrl *gomock.Controller) (
-	*file, *MockOsFile, *cell.Buffer,
+	*file, *workspaceapitest.MockFile, *cell.Buffer,
 ) {
 	f, mock := newTestFileBuffer(ctrl)
-	f.scheme.(*testScheme).openFunc = func(name string, flag int, perm os.FileMode) (File, *Error) {
+	f.scheme.(*testScheme).openFunc = func(name string, flag int, perm os.FileMode) (workspaceapi.File, *workspaceapi.Error) {
 		if flag&os.O_RDWR != 0 || flag&os.O_CREATE != 0 {
-			return nil, &Error{IsPermission: true}
+			return nil, &workspaceapi.Error{IsPermission: true}
 		}
 		return mock, nil
 	}
@@ -789,7 +790,7 @@ func newReadOnlyTestFileBuffer(t *testing.T, ctrl *gomock.Controller) (
 }
 
 func newRecoveredTestFileBuffer(t *testing.T, ctrl *gomock.Controller) (
-	*file, *MockOsFile, *cell.Buffer,
+	*file, *workspaceapitest.MockFile, *cell.Buffer,
 ) {
 	f, mock := newTestFileBuffer(ctrl)
 	mock.EXPECT().Stat().Return(testFileInfo{}, nil).AnyTimes()
@@ -943,7 +944,7 @@ func testFileBufferFlush(t *testing.T, newBuffer newBufferFunc) {
 		f.scheme.(*testScheme).statFunc = func(name string) (os.FileInfo, error) {
 			return testFileInfo{modTime: time.Now()}, nil
 		}
-		assert.Error(t, ErrStaleData, f.Flush())
+		assert.Error(t, workspaceapi.ErrStaleData, f.Flush())
 	})
 }
 
@@ -955,7 +956,7 @@ func TestNewFileBufferFlush(t *testing.T) {
 		defer ctrl.Finish()
 
 		f, _, _ := newReadOnlyTestFileBuffer(t, ctrl)
-		assert.Equal(t, ErrFileIsNotWritable, f.Flush())
+		assert.Equal(t, workspaceapi.ErrFileIsNotWritable, f.Flush())
 	})
 
 	t.Run("if file is created after NewFileBuffer is called returns error", func(t *testing.T) {
@@ -965,11 +966,11 @@ func TestNewFileBufferFlush(t *testing.T) {
 		f, _, _ := newUninitializedTestFileBuffer(t, ctrl)
 		require.Nil(t, f.orig)
 
-		f.scheme.(*testScheme).openFunc = func(name string, flag int, perm os.FileMode) (File, *Error) {
+		f.scheme.(*testScheme).openFunc = func(name string, flag int, perm os.FileMode) (workspaceapi.File, *workspaceapi.Error) {
 			assert.NotZero(t, flag&os.O_CREATE)
-			return nil, &Error{IsExist: true}
+			return nil, &workspaceapi.Error{IsExist: true}
 		}
-		assert.Equal(t, ErrStaleData, f.Flush())
+		assert.Equal(t, workspaceapi.ErrStaleData, f.Flush())
 	})
 }
 
@@ -977,13 +978,13 @@ func TestRecoverFileBufferFlush(t *testing.T) {
 	testFileBufferFlush(t, newRecoveredTestFileBuffer)
 }
 
-func expectCopyToSwapPrepare(f *file, mock *MockOsFile) func() {
+func expectCopyToSwapPrepare(f *file, mock *workspaceapitest.MockFile) func() {
 	mock.EXPECT().Truncate(gomock.Eq(int64(0))).Return(nil)
 	mock.EXPECT().Seek(gomock.Eq(int64(0)), gomock.Eq(0)).Return(int64(0), nil)
 	return f.wg.Wait
 }
 
-func expectCopyToSwap(f *file, mock *MockOsFile, newData string) func() {
+func expectCopyToSwap(f *file, mock *workspaceapitest.MockFile, newData string) func() {
 	expectedContent := newData + string(defaultFileData)
 	clean := expectCopyToSwapPrepare(f, mock)
 	mock.EXPECT().
@@ -993,7 +994,7 @@ func expectCopyToSwap(f *file, mock *MockOsFile, newData string) func() {
 	return clean
 }
 
-type newBufferFunc func(*testing.T, *gomock.Controller) (*file, *MockOsFile, *cell.Buffer)
+type newBufferFunc func(*testing.T, *gomock.Controller) (*file, *workspaceapitest.MockFile, *cell.Buffer)
 
 // TODO debug why it's failing sometimes
 func testFileBufferInsert(

@@ -23,11 +23,12 @@ func init() {
 	defaultWorkers = int(math.Min(float64(maxProcs), float64(numCPU))) * 8
 }
 
-// WorkspaceDirectory is a Directory that is also able to convert paths to URIs.
-// API, Workspace and Scheme implementations satisfy this interface.
-type WorkspaceDirectory interface {
+// Directory abstracts the ability to read directory contents.
+type Directory interface {
 	URI(string) (workspaceapi.URI, error)
-	Directory
+	Open(path string, flag int, perm os.FileMode) (workspaceapi.File, *workspaceapi.Error)
+	Stat(path string) (os.FileInfo, error)
+	ReadDir(name string) ([]os.DirEntry, error)
 }
 
 // ListFiles traverses the workspace directory and returns
@@ -37,7 +38,7 @@ type WorkspaceDirectory interface {
 // the contents of directories those errors will be aggregated and
 // reported by the iterator's Err method.
 func ListFiles(
-	ctx context.Context, w WorkspaceDirectory, root string,
+	ctx context.Context, w Directory, root string,
 ) (iterator.Iterator[string], error) {
 	var wg sync.WaitGroup
 	ch := make(chan string)
@@ -92,7 +93,7 @@ func ListFiles(
 }
 
 func traverseDirWorker(
-	ctx context.Context, w WorkspaceDirectory, wg *sync.WaitGroup,
+	ctx context.Context, w Directory, wg *sync.WaitGroup,
 	ch, workerCh chan string, cwd string, mu *sync.Mutex, err *error,
 ) {
 	for {
@@ -111,7 +112,7 @@ func traverseDirWorker(
 }
 
 func dirTraversal(
-	ctx context.Context, w WorkspaceDirectory, cwd, dirname string,
+	ctx context.Context, w Directory, cwd, dirname string,
 	wg *sync.WaitGroup, ch, workerCh chan string,
 ) error {
 	defer wg.Done()

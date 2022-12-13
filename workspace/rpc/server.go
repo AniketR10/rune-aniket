@@ -16,7 +16,7 @@ type Server struct {
 	UnimplementedWorkspaceServer
 	sharedRPCImpl
 
-	wp workspace.API
+	wp workspace.Workspace
 }
 
 // NewServer allocates storage for a new server and initializes it with wp.

@@ -13,13 +13,14 @@ import (
 	browserplugin "unstable.build/go-tui/api/browser/plugin"
 	textapi "unstable.build/go-tui/api/text"
 	textplugin "unstable.build/go-tui/api/text/plugin"
+	workspaceapi "unstable.build/go-tui/api/workspace"
+	workspaceplugin "unstable.build/go-tui/api/workspace/plugin"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/config"
 	"unstable.build/go-tui/plugin"
 	plugutil "unstable.build/go-tui/plugin/util"
 	"unstable.build/go-tui/proto"
 	"unstable.build/go-tui/term"
-	"unstable.build/go-tui/workspace"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -34,14 +35,14 @@ var (
 	sedHandlerPermissions = []plugin.Permission{
 		plugin.Permission(textplugin.PermissionEditor),
 		plugin.Permission(browserplugin.PermissionBrowserMessenger),
-		plugin.PermissionWorkspace,
+		plugin.Permission(workspaceplugin.PermissionWorkspace),
 	}
 )
 
 type sedEditorHandler struct {
 	ed   textapi.Editor
 	m    browserapi.Messenger
-	exec workspace.Executor
+	exec workspaceapi.Executor
 
 	resource     textapi.Handler
 	resourceName string
@@ -59,8 +60,8 @@ func newSedHandler(
 	var err error
 	for _, grant := range grants {
 		switch grant.Permission {
-		case plugin.PermissionWorkspace:
-			ret.exec, err = plugin.Workspace(grant.Token, broker)
+		case plugin.Permission(workspaceplugin.PermissionWorkspace):
+			ret.exec, err = workspaceplugin.Workspace(grant.Token, broker)
 		case plugin.Permission(browserplugin.PermissionBrowserMessenger):
 			ret.m, err = browserplugin.Messenger(grant.Token, broker)
 		}

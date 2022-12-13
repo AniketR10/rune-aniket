@@ -12,12 +12,11 @@ import (
 	multierr "github.com/ernestrc/go-multierror"
 	"google.golang.org/grpc"
 	workspaceapi "unstable.build/go-tui/api/workspace"
-	"unstable.build/go-tui/workspace"
 )
 
 const defaultTimeout = 10 * time.Second
 
-var _ workspace.API = (*Client)(nil)
+var _ workspaceapi.Workspace = (*Client)(nil)
 
 type Client struct {
 	cc     grpc.ClientConnInterface
@@ -45,7 +44,7 @@ func (c *Client) Init(cc grpc.ClientConnInterface) {
 }
 
 // Open satisfies workspace.API.
-func (c *Client) Open(path string, flag int, mode os.FileMode) (workspace.File, *workspace.Error) {
+func (c *Client) Open(path string, flag int, mode os.FileMode) (workspaceapi.File, *workspaceapi.Error) {
 	f, err := c.impl.Open(path, flag, mode)
 	runtime.KeepAlive(c)
 	return f, err
@@ -91,7 +90,7 @@ func (c *Client) URI(path string) (workspaceapi.URI, error) {
 }
 
 // NewPty creates a new pseudoterminal.
-func (c *Client) NewPty() (workspace.Pty, error) {
+func (c *Client) NewPty() (workspaceapi.Pty, error) {
 	ret, err := c.impl.NewPty()
 	runtime.KeepAlive(c)
 	return ret, err
@@ -99,7 +98,7 @@ func (c *Client) NewPty() (workspace.Pty, error) {
 
 // SetPtySize sets the width and height in columns and rows of
 // a pseudoterminal.
-func (c *Client) SetPtySize(p workspace.Pty, width, height int) error {
+func (c *Client) SetPtySize(p workspaceapi.Pty, width, height int) error {
 	err := c.impl.SetPtySize(p, width, height)
 	runtime.KeepAlive(c)
 	return err
@@ -107,7 +106,7 @@ func (c *Client) SetPtySize(p workspace.Pty, width, height int) error {
 
 // Command returns the Pid to execute the named program with the given
 // arguments. For more details see exec.Command.
-func (c *Client) Command(name string, arg ...string) (workspace.Pid, error) {
+func (c *Client) Command(name string, arg ...string) (workspaceapi.Pid, error) {
 	ret, err := c.impl.Command(name, arg...)
 	runtime.KeepAlive(c)
 	return ret, err
@@ -116,14 +115,14 @@ func (c *Client) Command(name string, arg ...string) (workspace.Pid, error) {
 // Start starts the specified command but does not wait for it to complete.
 // The Wait method will return an error if there's any while running command
 // and release associated resources.
-func (c *Client) Start(p workspace.Pid) error {
+func (c *Client) Start(p workspaceapi.Pid) error {
 	err := c.impl.Start(p)
 	runtime.KeepAlive(c)
 	return err
 }
 
 // Signal sends a signal to the running process.
-func (c *Client) Signal(p workspace.Pid, s syscall.Signal) error {
+func (c *Client) Signal(p workspaceapi.Pid, s syscall.Signal) error {
 	err := c.impl.Signal(p, s)
 	runtime.KeepAlive(c)
 	return err
@@ -131,7 +130,7 @@ func (c *Client) Signal(p workspace.Pid, s syscall.Signal) error {
 
 // StderrPipe returns a pipe that will be connected to the command's standard
 // error when the command starts. See exec.Cmd.StderrPipe for more details.
-func (c *Client) StderrPipe(p workspace.Pid) (io.ReadCloser, error) {
+func (c *Client) StderrPipe(p workspaceapi.Pid) (io.ReadCloser, error) {
 	ret, err := c.impl.StderrPipe(p)
 	runtime.KeepAlive(c)
 	return ret, err
@@ -139,7 +138,7 @@ func (c *Client) StderrPipe(p workspace.Pid) (io.ReadCloser, error) {
 
 // StdinPipe returns a pipe that will be connected to the command's standard
 // input when the command starts. See exec.Cmd.StdinPipe for more details.
-func (c *Client) StdinPipe(p workspace.Pid) (io.WriteCloser, error) {
+func (c *Client) StdinPipe(p workspaceapi.Pid) (io.WriteCloser, error) {
 	ret, err := c.impl.StdinPipe(p)
 	runtime.KeepAlive(c)
 	return ret, err
@@ -147,7 +146,7 @@ func (c *Client) StdinPipe(p workspace.Pid) (io.WriteCloser, error) {
 
 // StdoutPipe returns a pipe that will be connected to the command's standard
 // output when the command starts. See exec.Cmd.StdoutPipe for more details.
-func (c *Client) StdoutPipe(p workspace.Pid) (io.ReadCloser, error) {
+func (c *Client) StdoutPipe(p workspaceapi.Pid) (io.ReadCloser, error) {
 	ret, err := c.impl.StdoutPipe(p)
 	runtime.KeepAlive(c)
 	return ret, err
@@ -158,7 +157,7 @@ func (c *Client) StdoutPipe(p workspace.Pid) (io.ReadCloser, error) {
 // The command must have been started by Start.
 // The returned error is nil if the command runs, has no problems copying
 // stdin, stdout, and stderr, and exits with a zero exit status.
-func (c *Client) Wait(p workspace.Pid) error {
+func (c *Client) Wait(p workspaceapi.Pid) error {
 	err := c.impl.Wait(p)
 	runtime.KeepAlive(c)
 	return err

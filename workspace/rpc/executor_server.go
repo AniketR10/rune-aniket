@@ -12,11 +12,12 @@ import (
 	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
 
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/workspace"
 )
 
 type executorServer struct {
-	wp workspace.API
+	wp workspace.Workspace
 	e  workspace.Executor
 
 	mu            sync.Locker
@@ -47,7 +48,7 @@ func (s *executorServer) Start(ctx context.Context, req *StartRequest) (
 	*StartResponse, error,
 ) {
 	pid := req.GetPid()
-	err := s.e.Start(workspace.Pid(pid))
+	err := s.e.Start(workspaceapi.Pid(pid))
 	if err != nil {
 		return nil, err
 	}
@@ -56,7 +57,7 @@ func (s *executorServer) Start(ctx context.Context, req *StartRequest) (
 }
 
 func removePidResources(
-	mu sync.Locker, res map[int32]executorResource, pid workspace.Pid,
+	mu sync.Locker, res map[int32]executorResource, pid workspaceapi.Pid,
 ) []executorResource {
 	mu.Lock()
 	defer mu.Unlock()
@@ -77,7 +78,7 @@ func removePidResources(
 	return ret
 }
 
-func (s *executorServer) removePidResources(pid workspace.Pid) {
+func (s *executorServer) removePidResources(pid workspaceapi.Pid) {
 	res := removePidResources(s.mu, s.resources, pid)
 	s.log(log.TraceLevel, "cleaned all resources of pid %d: %#v", pid, res)
 }
@@ -87,8 +88,8 @@ func (s *executorServer) Wait(ctx context.Context, req *WaitRequest) (
 ) {
 	pid := req.GetPid()
 	s.log(log.TraceLevel, "Wait(pid=%d)", pid)
-	defer s.removePidResources(workspace.Pid(pid))
-	err := s.e.Wait(workspace.Pid(pid))
+	defer s.removePidResources(workspaceapi.Pid(pid))
+	err := s.e.Wait(workspaceapi.Pid(pid))
 	if err != nil {
 		return nil, err
 	}
@@ -101,7 +102,7 @@ func (s *executorServer) Signal(ctx context.Context, req *SignalRequest) (
 ) {
 	pid := req.GetPid()
 	signal := req.GetSig()
-	err := s.e.Signal(workspace.Pid(pid), syscall.Signal(signal))
+	err := s.e.Signal(workspaceapi.Pid(pid), syscall.Signal(signal))
 	if err != nil {
 		return nil, err
 	}
@@ -113,12 +114,12 @@ func (s *executorServer) StderrPipe(ctx context.Context, req *StdioPipeRequest) 
 	*StdioPipeResponse, error,
 ) {
 	pid := req.GetPid()
-	pipe, err := s.e.StderrPipe(workspace.Pid(pid))
+	pipe, err := s.e.StderrPipe(workspaceapi.Pid(pid))
 	if err != nil {
 		return nil, err
 	}
 	resp := new(StdioPipeResponse)
-	handlerID, err := s.addHandle(workspace.Pid(pid), &syncReader{reader: pipe})
+	handlerID, err := s.addHandle(workspaceapi.Pid(pid), &syncReader{reader: pipe})
 	if err != nil {
 		_ = pipe.Close()
 		return nil, err
@@ -131,12 +132,12 @@ func (s *executorServer) StdoutPipe(ctx context.Context, req *StdioPipeRequest) 
 	*StdioPipeResponse, error,
 ) {
 	pid := req.GetPid()
-	pipe, err := s.e.StdoutPipe(workspace.Pid(pid))
+	pipe, err := s.e.StdoutPipe(workspaceapi.Pid(pid))
 	if err != nil {
 		return nil, err
 	}
 	resp := new(StdioPipeResponse)
-	handlerID, err := s.addHandle(workspace.Pid(pid), &syncReader{reader: pipe})
+	handlerID, err := s.addHandle(workspaceapi.Pid(pid), &syncReader{reader: pipe})
 	if err != nil {
 		_ = pipe.Close()
 		return nil, err
@@ -149,12 +150,12 @@ func (s *executorServer) StdinPipe(ctx context.Context, req *StdioPipeRequest) (
 	*StdioPipeResponse, error,
 ) {
 	pid := req.GetPid()
-	pipe, err := s.e.StdinPipe(workspace.Pid(pid))
+	pipe, err := s.e.StdinPipe(workspaceapi.Pid(pid))
 	if err != nil {
 		return nil, err
 	}
 	resp := new(StdioPipeResponse)
-	handlerID, err := s.addHandle(workspace.Pid(pid), &syncWriter{writer: pipe})
+	handlerID, err := s.addHandle(workspaceapi.Pid(pid), &syncWriter{writer: pipe})
 	if err != nil {
 		_ = pipe.Close()
 		return nil, err
@@ -232,7 +233,7 @@ func (s *executorServer) log(
 		Logf(level, msg, args...)
 }
 
-func (s *executorServer) addHandle(pid workspace.Pid, closer executorCloser) (int32, error) {
+func (s *executorServer) addHandle(pid workspaceapi.Pid, closer executorCloser) (int32, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -279,14 +280,14 @@ func (s *executorServer) getReader(handlerID int32) (io.ReadCloser, bool) {
 	return p, ok
 }
 
-func (s *executorServer) getFile(handlerID int32) (workspace.File, bool) {
+func (s *executorServer) getFile(handlerID int32) (workspaceapi.File, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	h, ok := s.resources[handlerID]
 	if !ok {
 		return nil, false
 	}
-	f, ok := h.closer.(workspace.File)
+	f, ok := h.closer.(workspaceapi.File)
 	return f, ok
 }
 

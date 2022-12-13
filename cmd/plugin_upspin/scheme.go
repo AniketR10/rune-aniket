@@ -120,10 +120,10 @@ func (s *scheme) URI(path string) (workspaceapi.URI, error) {
 	return workspace.WorkspaceURI(s.uri, path)
 }
 
-func (s *scheme) Open(path string, flag int, mode os.FileMode) (workspace.File, *workspace.Error) {
+func (s *scheme) Open(path string, flag int, mode os.FileMode) (workspaceapi.File, *workspaceapi.Error) {
 	uname, err := s.makeUpspinPathname(path)
 	if err != nil {
-		return nil, workspace.NopError(err)
+		return nil, workspaceapi.NopError(err)
 	}
 	f, err := blupspin.Open(s.client, uname, flag)
 	if err != nil {
@@ -280,39 +280,39 @@ func (s *scheme) ReadDir(name string) ([]os.DirEntry, error) {
 	return ret, nil
 }
 
-func (s *scheme) Command(name string, arg ...string) (workspace.Pid, error) {
+func (s *scheme) Command(name string, arg ...string) (workspaceapi.Pid, error) {
 	return 0, errExecute
 }
 
-func (s *scheme) Start(workspace.Pid) error {
+func (s *scheme) Start(workspaceapi.Pid) error {
 	return errExecute
 }
 
-func (s *scheme) Signal(workspace.Pid, syscall.Signal) error {
+func (s *scheme) Signal(workspaceapi.Pid, syscall.Signal) error {
 	return errExecute
 }
 
-func (s *scheme) StderrPipe(workspace.Pid) (io.ReadCloser, error) {
+func (s *scheme) StderrPipe(workspaceapi.Pid) (io.ReadCloser, error) {
 	return nil, errExecute
 }
 
-func (s *scheme) StdinPipe(workspace.Pid) (io.WriteCloser, error) {
+func (s *scheme) StdinPipe(workspaceapi.Pid) (io.WriteCloser, error) {
 	return nil, errExecute
 }
 
-func (s *scheme) StdoutPipe(workspace.Pid) (io.ReadCloser, error) {
+func (s *scheme) StdoutPipe(workspaceapi.Pid) (io.ReadCloser, error) {
 	return nil, errExecute
 }
 
-func (s *scheme) Wait(workspace.Pid) error {
+func (s *scheme) Wait(workspaceapi.Pid) error {
 	return errExecute
 }
 
-func (s *scheme) NewPty() (workspace.Pty, error) {
-	return workspace.Pty{}, errExecute
+func (s *scheme) NewPty() (workspaceapi.Pty, error) {
+	return workspaceapi.Pty{}, errExecute
 }
 
-func (s *scheme) SetPtySize(workspace.Pty, int, int) error {
+func (s *scheme) SetPtySize(workspaceapi.Pty, int, int) error {
 	return errExecute
 }
 
@@ -339,8 +339,8 @@ func (s *scheme) makeUpspinPathname(path string) (upspin.PathName, error) {
 	return upspin.PathName(uriStr), nil
 }
 
-func mapUpspinError(err error) *workspace.Error {
-	return &workspace.Error{
+func mapUpspinError(err error) *workspaceapi.Error {
+	return &workspaceapi.Error{
 		Err:          err,
 		IsPermission: errors.Is(errors.Permission, err),
 		IsExist:      errors.Is(errors.Exist, err),

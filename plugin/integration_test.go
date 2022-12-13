@@ -17,6 +17,7 @@ import (
 	textapi "unstable.build/go-tui/api/text"
 	textplugin "unstable.build/go-tui/api/text/plugin"
 	workspaceapi "unstable.build/go-tui/api/workspace"
+	workspaceplugin "unstable.build/go-tui/api/workspace/plugin"
 	browsertest "unstable.build/go-tui/browser/test"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
@@ -83,7 +84,7 @@ func TestIntegrationRace(t *testing.T) {
 		Permission(textplugin.PermissionEditor):                   grantID,
 		PermissionStorage:                                         grantID,
 		PermissionClipboard:                                       grantID,
-		PermissionWorkspace:                                       grantID,
+		Permission(workspaceplugin.PermissionWorkspace):           grantID,
 	}
 	lis, err := broker.Accept(grantID)
 	require.NoError(t, err)
@@ -246,20 +247,20 @@ func TestIntegrationRace(t *testing.T) {
 		}, nil, func(ifc interface{}) error {
 			return ifc.(ClipboardSetter).SetRegister(text.DefaultRegisterID, nil)
 		}},
-		{PermissionWorkspace, func(token uint32, broker proto.MuxBroker) (interface{}, error) {
-			return Workspace(token, broker)
+		{Permission(workspaceplugin.PermissionWorkspace), func(token uint32, broker proto.MuxBroker) (interface{}, error) {
+			return workspaceplugin.Workspace(token, broker)
 		}, func(exec *workspacetest.MockWorkspaceMockRecorder, ed *texttest.MockEditorMockRecorder, mock *browserapitest.MockBrowserMockRecorder) *gomock.Call {
-			return exec.Command(gomock.Any(), gomock.Any()).Return(workspace.Pid(1), nil)
+			return exec.Command(gomock.Any(), gomock.Any()).Return(workspaceapi.Pid(1), nil)
 		}, func(ifc interface{}) error {
 			_, err := ifc.(workspace.Executor).Command("", "")
 			return err
 		}},
-		{PermissionWorkspace, func(token uint32, broker proto.MuxBroker) (interface{}, error) {
-			return Workspace(token, broker)
+		{Permission(workspaceplugin.PermissionWorkspace), func(token uint32, broker proto.MuxBroker) (interface{}, error) {
+			return workspaceplugin.Workspace(token, broker)
 		}, func(exec *workspacetest.MockWorkspaceMockRecorder, ed *texttest.MockEditorMockRecorder, mock *browserapitest.MockBrowserMockRecorder) *gomock.Call {
 			return exec.StdoutPipe(gomock.Any()).Return(ioutil.NopCloser(strings.NewReader(":")), nil)
 		}, func(ifc interface{}) error {
-			_, err := ifc.(workspace.Executor).StdoutPipe(workspace.Pid(0))
+			_, err := ifc.(workspace.Executor).StdoutPipe(workspaceapi.Pid(0))
 			return err
 		}},
 	}

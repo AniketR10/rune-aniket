@@ -243,7 +243,7 @@ service Workspace {
 	rpc NewPty(NewPtyRequest) returns (NewPtyResponse);
 	rpc SetPtySize(SetPtySizeRequest) returns (SetPtySizeResponse);
 
-	// operate workspace.File
+	// operate workspaceapi.File
 	rpc Sync(SyncRequest) returns (SyncResponse);
 	rpc Truncate(TruncateRequest) returns (TruncateResponse);
 	rpc Seek(SeekRequest) returns (SeekResponse);

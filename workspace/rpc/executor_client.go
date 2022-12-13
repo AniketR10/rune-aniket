@@ -14,8 +14,7 @@ import (
 	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
-
-	"unstable.build/go-tui/workspace"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 )
 
 type executorClientImpl struct {
@@ -23,7 +22,7 @@ type executorClientImpl struct {
 	mu        sync.Mutex
 	client    ExecutorClient
 	resources map[int32]executorResource
-	ptys      map[workspace.Pid]int32
+	ptys      map[workspaceapi.Pid]int32
 }
 
 type ioClient struct {
@@ -47,10 +46,10 @@ func (l nopLocker) Unlock() {
 func (c *executorClientImpl) init(client ExecutorClient) {
 	c.client = client
 	c.resources = make(map[int32]executorResource)
-	c.ptys = make(map[workspace.Pid]int32)
+	c.ptys = make(map[workspaceapi.Pid]int32)
 }
 
-func (c *executorClientImpl) Command(name string, arg ...string) (workspace.Pid, error) {
+func (c *executorClientImpl) Command(name string, arg ...string) (workspaceapi.Pid, error) {
 	ctx, cleanup := ctxWithTimeout()
 	defer cleanup()
 
@@ -59,10 +58,10 @@ func (c *executorClientImpl) Command(name string, arg ...string) (workspace.Pid,
 	if err != nil {
 		return 0, err
 	}
-	return workspace.Pid(resp.GetPid()), nil
+	return workspaceapi.Pid(resp.GetPid()), nil
 }
 
-func (c *executorClientImpl) Start(pid workspace.Pid) error {
+func (c *executorClientImpl) Start(pid workspaceapi.Pid) error {
 	ctx, cleanup := ctxWithTimeout()
 	defer cleanup()
 
@@ -74,7 +73,7 @@ func (c *executorClientImpl) Start(pid workspace.Pid) error {
 	return nil
 }
 
-func (c *executorClientImpl) Signal(pid workspace.Pid, sig syscall.Signal) error {
+func (c *executorClientImpl) Signal(pid workspaceapi.Pid, sig syscall.Signal) error {
 	ctx, cleanup := ctxWithTimeout()
 	defer cleanup()
 
@@ -86,7 +85,7 @@ func (c *executorClientImpl) Signal(pid workspace.Pid, sig syscall.Signal) error
 	return nil
 }
 
-func (c *executorClientImpl) StderrPipe(pid workspace.Pid) (io.ReadCloser, error) {
+func (c *executorClientImpl) StderrPipe(pid workspaceapi.Pid) (io.ReadCloser, error) {
 	ctx, cleanup := ctxWithTimeout()
 	defer cleanup()
 
@@ -98,7 +97,7 @@ func (c *executorClientImpl) StderrPipe(pid workspace.Pid) (io.ReadCloser, error
 	return c.newIOClient(pid, "/dev/stderr", int32(resp.GetHandlerId())), nil
 }
 
-func (c *executorClientImpl) StdinPipe(pid workspace.Pid) (io.WriteCloser, error) {
+func (c *executorClientImpl) StdinPipe(pid workspaceapi.Pid) (io.WriteCloser, error) {
 	ctx, cleanup := ctxWithTimeout()
 	defer cleanup()
 
@@ -110,7 +109,7 @@ func (c *executorClientImpl) StdinPipe(pid workspace.Pid) (io.WriteCloser, error
 	return c.newIOClient(pid, "/dev/stdin", int32(resp.GetHandlerId())), nil
 }
 
-func (c *executorClientImpl) StdoutPipe(pid workspace.Pid) (io.ReadCloser, error) {
+func (c *executorClientImpl) StdoutPipe(pid workspaceapi.Pid) (io.ReadCloser, error) {
 	ctx, cleanup := ctxWithTimeout()
 	defer cleanup()
 
@@ -128,7 +127,7 @@ func (c *executorClientImpl) log(level log.Level, msg string, args ...interface{
 		Logf(level, msg, args...)
 }
 
-func (c *executorClientImpl) removePidResources(pid workspace.Pid) {
+func (c *executorClientImpl) removePidResources(pid workspaceapi.Pid) {
 	res := removePidResources(&c.mu, c.resources, pid)
 	c.mu.Lock()
 	delete(c.ptys, pid)
@@ -136,7 +135,7 @@ func (c *executorClientImpl) removePidResources(pid workspace.Pid) {
 	c.log(log.TraceLevel, "cleaned all resources of pid %d: %#v", pid, res)
 }
 
-func (c *executorClientImpl) Wait(pid workspace.Pid) error {
+func (c *executorClientImpl) Wait(pid workspaceapi.Pid) error {
 	// do not set timeout for Wait, as there's no guarantee it should ever return,
 	// for instance when plugins run servers that last the entire tui session.
 	ctx := context.Background()
@@ -154,19 +153,19 @@ func (c *executorClientImpl) Wait(pid workspace.Pid) error {
 	return nil
 }
 
-func (c *executorClientImpl) NewPty() (workspace.Pty, error) {
+func (c *executorClientImpl) NewPty() (workspaceapi.Pty, error) {
 	ctx, cleanup := ctxWithTimeout()
 	defer cleanup()
 
 	req := NewPtyRequest{}
 	resp, err := c.client.NewPty(ctx, &req)
 	if err != nil {
-		return workspace.Pty{}, err
+		return workspaceapi.Pty{}, err
 	}
 	// allow cleanup of master File upon return of Wait
-	pid := workspace.Pid(resp.GetPid())
+	pid := workspaceapi.Pid(resp.GetPid())
 	file := c.newFileClient(pid, "/dev/ptmx", resp.GetMaster())
-	ret := workspace.Pty{
+	ret := workspaceapi.Pty{
 		Pid:    pid,
 		Master: file,
 		Slave:  resp.GetSlave(),
@@ -179,7 +178,7 @@ func (c *executorClientImpl) NewPty() (workspace.Pty, error) {
 	return ret, nil
 }
 
-func (c *executorClientImpl) SetPtySize(p workspace.Pty, width, height int) error {
+func (c *executorClientImpl) SetPtySize(p workspaceapi.Pty, width, height int) error {
 	ctx, cleanup := ctxWithTimeout()
 	defer cleanup()
 
@@ -284,12 +283,12 @@ func (c *ioClient) stop() error {
 }
 
 type executorResource struct {
-	pid    workspace.Pid
+	pid    workspaceapi.Pid
 	closer executorCloser
 }
 
 func (c *executorClientImpl) addCloser(
-	pid workspace.Pid, handlerID int32, closer executorCloser,
+	pid workspaceapi.Pid, handlerID int32, closer executorCloser,
 ) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -307,7 +306,7 @@ func (c *executorClientImpl) addCloser(
 }
 
 func (c *executorClientImpl) newIOClient(
-	pid workspace.Pid, filename string, handlerID int32,
+	pid workspaceapi.Pid, filename string, handlerID int32,
 ) *ioClient {
 	ret := &ioClient{
 		s:         c,
@@ -321,7 +320,7 @@ func (c *executorClientImpl) newIOClient(
 }
 
 func (c *executorClientImpl) newFileClient(
-	pid workspace.Pid, filename string, handlerID int32,
+	pid workspaceapi.Pid, filename string, handlerID int32,
 ) *fileClient {
 	ret := &fileClient{
 		handlerID: handlerID,

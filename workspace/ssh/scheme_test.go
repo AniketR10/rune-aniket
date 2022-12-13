@@ -20,37 +20,38 @@ import (
 	"unstable.build/go-tui/config"
 	"unstable.build/go-tui/workspace"
 	"unstable.build/go-tui/workspace/test"
+	workspacetest "unstable.build/go-tui/workspace/test"
 )
 
 type nopExecutor struct {
 }
 
-func (n nopExecutor) Command(name string, arg ...string) (workspace.Pid, error) {
+func (n nopExecutor) Command(name string, arg ...string) (workspaceapi.Pid, error) {
 	return 0, nil
 }
 
-func (n nopExecutor) Start(workspace.Pid) error {
+func (n nopExecutor) Start(workspaceapi.Pid) error {
 	return nil
 }
 
-func (n nopExecutor) Signal(workspace.Pid, syscall.Signal) error {
+func (n nopExecutor) Signal(workspaceapi.Pid, syscall.Signal) error {
 	return nil
 }
 
-func (n nopExecutor) StderrPipe(workspace.Pid) (io.ReadCloser, error) {
+func (n nopExecutor) StderrPipe(workspaceapi.Pid) (io.ReadCloser, error) {
 	return io.NopCloser(strings.NewReader("")), nil
 }
 
-func (n nopExecutor) StdinPipe(workspace.Pid) (io.WriteCloser, error) {
+func (n nopExecutor) StdinPipe(workspaceapi.Pid) (io.WriteCloser, error) {
 	var b bytes.Buffer
 	return nopWriteCloser{Writer: &b}, nil
 }
 
-func (n nopExecutor) StdoutPipe(workspace.Pid) (io.ReadCloser, error) {
+func (n nopExecutor) StdoutPipe(workspaceapi.Pid) (io.ReadCloser, error) {
 	return n.StderrPipe(0)
 }
 
-func (n nopExecutor) Wait(workspace.Pid) error {
+func (n nopExecutor) Wait(workspaceapi.Pid) error {
 	return nil
 }
 
@@ -111,7 +112,7 @@ func newTestScheme(
 		connectSchemeFn = func(uri workspaceapi.URI, closeHook func(error)) (
 			workspace.Scheme, error,
 		) {
-			return workspace.NewNopScheme("test")(config.NopConfig(), uri)
+			return workspacetest.NewNopScheme("test")(config.NopConfig(), uri)
 		}
 	}
 	s.connectSchemeFn = connectSchemeFn
@@ -162,7 +163,7 @@ func TestNewScheme(t *testing.T) {
 			s, err := newTestScheme(config.NopConfig(), workspaceURI,
 				func(uri workspaceapi.URI, closeHook func(error)) (workspace.Scheme, error) {
 					go func() { ch <- uri.String() }()
-					return workspace.NewNopScheme("test")(config.NopConfig(), uri)
+					return workspacetest.NewNopScheme("test")(config.NopConfig(), uri)
 				})
 			if tcase.expectedErr != "" {
 				assert.EqualError(t, err, tcase.expectedErr)

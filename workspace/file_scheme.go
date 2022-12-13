@@ -71,17 +71,17 @@ func (p *fileScheme) init(cfg config.Config, workspace workspaceapi.URI) error {
 	return nil
 }
 
-func (p *fileScheme) Open(path string, flag int, perm os.FileMode) (File, *Error) {
+func (p *fileScheme) Open(path string, flag int, perm os.FileMode) (workspaceapi.File, *workspaceapi.Error) {
 	var err error
 	path, err = workspaceapi.ExpandPath(path, p.getUserOrLookup, func() (string, error) {
 		return p.workspace.Path(), nil
 	})
 	if err != nil {
-		return nil, NopError(err)
+		return nil, workspaceapi.NopError(err)
 	}
 	f, err := os.OpenFile(path, flag, perm)
 	if err != nil {
-		return nil, &Error{
+		return nil, &workspaceapi.Error{
 			Err:          err,
 			IsPermission: os.IsPermission(err),
 			IsExist:      os.IsExist(err),
@@ -188,7 +188,7 @@ func (p *fileScheme) log(level log.Level, msg string, args ...interface{}) {
 		Logf(level, msg, args...)
 }
 
-func (p *fileScheme) Command(name string, arg ...string) (Pid, error) {
+func (p *fileScheme) Command(name string, arg ...string) (workspaceapi.Pid, error) {
 	path, err := find.Executable(name)
 	if err != nil {
 		p.log(log.WarnLevel,
@@ -202,11 +202,11 @@ func (p *fileScheme) Command(name string, arg ...string) (Pid, error) {
 
 	p.log(log.DebugLevel, "exec.Command: (%#v, pid=%d)", cmd, nextPid)
 
-	p.cmds.Store(Pid(nextPid), &execCmd{Cmd: cmd})
-	return Pid(nextPid), nil
+	p.cmds.Store(workspaceapi.Pid(nextPid), &execCmd{Cmd: cmd})
+	return workspaceapi.Pid(nextPid), nil
 }
 
-func (p *fileScheme) getCmdForPid(pid Pid) (*execCmd, bool) {
+func (p *fileScheme) getCmdForPid(pid workspaceapi.Pid) (*execCmd, bool) {
 	c, ok := p.cmds.Load(pid)
 	if ok {
 		return c.(*execCmd), true
@@ -214,7 +214,7 @@ func (p *fileScheme) getCmdForPid(pid Pid) (*execCmd, bool) {
 	return nil, false
 }
 
-func (p *fileScheme) Start(pid Pid) error {
+func (p *fileScheme) Start(pid workspaceapi.Pid) error {
 	c, ok := p.getCmdForPid(pid)
 	if !ok {
 		return errProcNotFound
@@ -232,7 +232,7 @@ func (p *fileScheme) Start(pid Pid) error {
 	return nil
 }
 
-func (p *fileScheme) Signal(pid Pid, signal syscall.Signal) error {
+func (p *fileScheme) Signal(pid workspaceapi.Pid, signal syscall.Signal) error {
 	c, ok := p.getCmdForPid(pid)
 	if !ok {
 		return errProcNotFound
@@ -251,7 +251,7 @@ func (p *fileScheme) Signal(pid Pid, signal syscall.Signal) error {
 	return nil
 }
 
-func (p *fileScheme) StderrPipe(pid Pid) (io.ReadCloser, error) {
+func (p *fileScheme) StderrPipe(pid workspaceapi.Pid) (io.ReadCloser, error) {
 	c, ok := p.getCmdForPid(pid)
 	if !ok {
 		return nil, errProcNotFound
@@ -267,7 +267,7 @@ func (p *fileScheme) StderrPipe(pid Pid) (io.ReadCloser, error) {
 	return pipe, err
 }
 
-func (p *fileScheme) StdinPipe(pid Pid) (io.WriteCloser, error) {
+func (p *fileScheme) StdinPipe(pid workspaceapi.Pid) (io.WriteCloser, error) {
 	c, ok := p.getCmdForPid(pid)
 	if !ok {
 		return nil, errProcNotFound
@@ -283,7 +283,7 @@ func (p *fileScheme) StdinPipe(pid Pid) (io.WriteCloser, error) {
 	return pipe, err
 }
 
-func (p *fileScheme) StdoutPipe(pid Pid) (io.ReadCloser, error) {
+func (p *fileScheme) StdoutPipe(pid workspaceapi.Pid) (io.ReadCloser, error) {
 	c, ok := p.getCmdForPid(pid)
 	if !ok {
 		return nil, errProcNotFound
@@ -299,7 +299,7 @@ func (p *fileScheme) StdoutPipe(pid Pid) (io.ReadCloser, error) {
 	return pipe, err
 }
 
-func (p *fileScheme) Wait(pid Pid) error {
+func (p *fileScheme) Wait(pid workspaceapi.Pid) error {
 	c, ok := p.getCmdForPid(pid)
 	if !ok {
 		return errProcNotFound
@@ -316,7 +316,7 @@ func (p *fileScheme) Wait(pid Pid) error {
 	return err
 }
 
-func (p *fileScheme) NewPty() (Pty, error) {
+func (p *fileScheme) NewPty() (workspaceapi.Pty, error) {
 	shell := os.Getenv("SHELL")
 	if shell == "" {
 		shell = "/bin/sh"
@@ -336,7 +336,7 @@ func (p *fileScheme) NewPty() (Pty, error) {
 	// open master/slave files
 	pty, tty, err := pty.Open()
 	if err != nil {
-		return Pty{}, fmt.Errorf("pty.Open: %v", err)
+		return workspaceapi.Pty{}, fmt.Errorf("pty.Open: %v", err)
 	}
 	cmd.Stdout = tty
 	cmd.Stderr = tty
@@ -354,17 +354,17 @@ func (p *fileScheme) NewPty() (Pty, error) {
 		startErr = multierr.Append(startErr, err)
 	}
 	if startErr != nil {
-		return Pty{}, startErr
+		return workspaceapi.Pty{}, startErr
 	}
 
-	return Pty{
+	return workspaceapi.Pty{
 		Pid:    pid,
 		Master: pty,
 		Slave:  tty.Name(),
 	}, nil
 }
 
-func (p *fileScheme) SetPtySize(pp Pty, width, height int) error {
+func (p *fileScheme) SetPtySize(pp workspaceapi.Pty, width, height int) error {
 	ptyFile, ok := pp.Master.(*os.File)
 	if !ok {
 		return fmt.Errorf("extraneous Pty: %#v", pp)

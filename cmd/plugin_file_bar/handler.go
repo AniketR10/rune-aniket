@@ -14,6 +14,7 @@ import (
 	textapi "unstable.build/go-tui/api/text"
 	textplugin "unstable.build/go-tui/api/text/plugin"
 	workspaceapi "unstable.build/go-tui/api/workspace"
+	workspaceplugin "unstable.build/go-tui/api/workspace/plugin"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/config"
@@ -39,7 +40,7 @@ var (
 		plugin.Permission(browserplugin.PermissionBrowserEventPublisher),
 		plugin.Permission(textplugin.PermissionEditor),
 		plugin.PermissionConfig,
-		plugin.PermissionWorkspace,
+		plugin.Permission(workspaceplugin.PermissionWorkspace),
 	}
 
 	defaultScrollAttr     = term.Attributes{Fg: term.ColorDefault}
@@ -142,8 +143,8 @@ func newFileBarEditorHandler(
 			if err != nil {
 				return nil, err
 			}
-		case plugin.PermissionWorkspace:
-			w, err := plugin.Workspace(grant.Token, broker)
+		case plugin.Permission(workspaceplugin.PermissionWorkspace):
+			w, err := workspaceplugin.Workspace(grant.Token, broker)
 			if err != nil {
 				return nil, err
 			}

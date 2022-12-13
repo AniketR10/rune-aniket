@@ -21,12 +21,12 @@ import (
 	textapi "unstable.build/go-tui/api/text"
 	textplugin "unstable.build/go-tui/api/text/plugin"
 	workspaceapi "unstable.build/go-tui/api/workspace"
+	workspaceplugin "unstable.build/go-tui/api/workspace/plugin"
 	"unstable.build/go-tui/config"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/handler/search"
 	"unstable.build/go-tui/plugin"
 	"unstable.build/go-tui/proto"
-	"unstable.build/go-tui/workspace"
 )
 
 const (
@@ -39,7 +39,7 @@ var (
 		plugin.Permission(browserplugin.PermissionBrowserEventPublisher),
 		plugin.Permission(browserplugin.PermissionBrowserMessenger),
 		plugin.PermissionConfig,
-		plugin.PermissionWorkspace,
+		plugin.Permission(workspaceplugin.PermissionWorkspace),
 		plugin.Permission(textplugin.PermissionEditor),
 	}
 	commands = []string{
@@ -58,7 +58,7 @@ type logsGrantee struct {
 	m  browserapi.Messenger
 	p  browserapi.EventPublisher
 	c  config.Config
-	w  workspace.API
+	w  workspaceapi.Workspace
 
 	logFile string
 	cfg     search.ListConfig
@@ -139,8 +139,8 @@ func (e *logsGrantee) PermissionGranted(grants []plugin.Grant) {
 	var err error
 	for _, g := range grants {
 		switch g.Permission {
-		case plugin.PermissionWorkspace:
-			e.w, err = plugin.Workspace(g.Token, e.broker)
+		case plugin.Permission(workspaceplugin.PermissionWorkspace):
+			e.w, err = workspaceplugin.Workspace(g.Token, e.broker)
 		case plugin.Permission(browserplugin.PermissionBrowserMessenger):
 			e.m, err = browserplugin.Messenger(g.Token, e.broker)
 		case plugin.Permission(browserplugin.PermissionBrowserEventPublisher):

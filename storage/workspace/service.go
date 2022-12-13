@@ -13,6 +13,7 @@ import (
 	"github.com/ernestrc/blue/encoding"
 	"github.com/ernestrc/blue/iterator"
 	multierr "github.com/ernestrc/go-multierror"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/workspace"
 )
 
@@ -24,7 +25,9 @@ var ErrClosing = errors.New("Service is closing")
 // NewWorkspaceService returns a document.Service backed by a workspace.Scheme.
 // It its goroutine-safe but only one instance can be operating at a time
 // on a given workspace.
-func NewWorkspaceService(scheme workspace.Scheme, marshaler encoding.Marshaler) (document.Service, error) {
+func NewWorkspaceService(scheme workspace.Scheme, marshaler encoding.Marshaler) (
+	document.Service, error,
+) {
 	svc := service{
 		scheme:    scheme,
 		marshaler: marshaler,
@@ -157,7 +160,7 @@ func (s *service) Close() (ret error) {
 	return ret
 }
 
-func (s *service) read(f workspace.File, doc interface{}) error {
+func (s *service) read(f workspaceapi.File, doc interface{}) error {
 	data, err := ioutil.ReadAll(f)
 	if err != nil {
 		return fmt.Errorf("Scheme.Read: %v", err)
@@ -202,7 +205,7 @@ func (s *service) create(ctx context.Context, ID string, doc interface{}, openFl
 	return ret
 }
 
-func (s *service) write(f workspace.File, doc interface{}) error {
+func (s *service) write(f workspaceapi.File, doc interface{}) error {
 	data, err := s.marshaler.Marshal(doc)
 	if err != nil {
 		return fmt.Errorf("Marshal: %v", err)
@@ -229,7 +232,7 @@ type docIter struct {
 	it      iterator.Iterator[string]
 
 	doneErr       error
-	nextMatchFile workspace.File
+	nextMatchFile workspaceapi.File
 }
 
 func (d *docIter) HasNext() (ok bool) {

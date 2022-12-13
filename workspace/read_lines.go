@@ -13,7 +13,7 @@ import (
 
 // ReadLines takes an iterator of file paths, i.e. return of ListFiles
 // and returns an iterator of file lines, encoded
-func ReadLines(ctx context.Context, w API, paths iterator.Iterator[string]) (
+func ReadLines(ctx context.Context, w Directory, paths iterator.Iterator[string]) (
 	iterator.Iterator[string], error,
 ) {
 	files := make(chan string)
@@ -60,7 +60,7 @@ func ReadLines(ctx context.Context, w API, paths iterator.Iterator[string]) (
 	return it, nil
 }
 
-func readFile(w API, buffer []byte, file string, lines chan string) error {
+func readFile(w Directory, buffer []byte, file string, lines chan string) error {
 	f, werr := w.Open(file, os.O_RDONLY, 0)
 	if werr != nil {
 		return werr.ToError()
@@ -76,7 +76,7 @@ func readFile(w API, buffer []byte, file string, lines chan string) error {
 }
 
 func readFileWorker(
-	ctx context.Context, w API,
+	ctx context.Context, w Directory,
 	lines chan string, files chan string,
 	err *error,
 ) {

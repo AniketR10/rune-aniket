@@ -16,11 +16,12 @@ import (
 	browserplugin "unstable.build/go-tui/api/browser/plugin"
 	textapi "unstable.build/go-tui/api/text"
 	textplugin "unstable.build/go-tui/api/text/plugin"
+	workspaceapi "unstable.build/go-tui/api/workspace"
+	workspaceplugin "unstable.build/go-tui/api/workspace/plugin"
 	"unstable.build/go-tui/config"
 	"unstable.build/go-tui/plugin"
 	"unstable.build/go-tui/proto"
 	"unstable.build/go-tui/term"
-	"unstable.build/go-tui/workspace"
 )
 
 const (
@@ -32,7 +33,7 @@ var (
 	requiredPermissions = []plugin.Permission{
 		plugin.Permission(browserplugin.PermissionBrowserWindowManager),
 		plugin.Permission(textplugin.PermissionEditor),
-		plugin.PermissionWorkspace,
+		plugin.Permission(workspaceplugin.PermissionWorkspace),
 		plugin.Permission(browserplugin.PermissionBrowserEventPublisher),
 		plugin.Permission(browserplugin.PermissionBrowserMessenger),
 		plugin.PermissionClipboard,
@@ -50,7 +51,7 @@ type emulatorGrantee struct {
 	mu     sync.Mutex
 	broker proto.MuxBroker
 
-	wp workspace.API
+	wp workspaceapi.Workspace
 	wm browserapi.WindowManager
 	p  browserapi.EventPublisher
 	ed textapi.Editor
@@ -112,8 +113,8 @@ func (e *emulatorGrantee) PermissionGranted(grants []plugin.Grant) {
 			e.p, err = browserplugin.EventPublisher(g.Token, e.broker)
 		case plugin.Permission(browserplugin.PermissionBrowserWindowManager):
 			e.wm, err = browserplugin.WindowManager(g.Token, e.broker)
-		case plugin.PermissionWorkspace:
-			e.wp, err = plugin.Workspace(g.Token, e.broker)
+		case plugin.Permission(workspaceplugin.PermissionWorkspace):
+			e.wp, err = workspaceplugin.Workspace(g.Token, e.broker)
 		case plugin.Permission(browserplugin.PermissionBrowserMessenger):
 			e.m, err = browserplugin.Messenger(g.Token, e.broker)
 		case plugin.Permission(textplugin.PermissionEditor):

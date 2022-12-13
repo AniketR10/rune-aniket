@@ -80,6 +80,12 @@ func (w *testLoader) Stat(name string) (os.FileInfo, error) {
 	return testFileInfo{name: name}, nil
 }
 
+func (w *testLoader) Open(
+	path string, flag int, perm os.FileMode,
+) (workspaceapi.File, *workspaceapi.Error) {
+	panic("unimplemented")
+}
+
 type testFileInfo struct {
 	name string
 }

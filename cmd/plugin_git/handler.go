@@ -15,6 +15,8 @@ import (
 	browserplugin "unstable.build/go-tui/api/browser/plugin"
 	textapi "unstable.build/go-tui/api/text"
 	textplugin "unstable.build/go-tui/api/text/plugin"
+	workspaceapi "unstable.build/go-tui/api/workspace"
+	workspaceplugin "unstable.build/go-tui/api/workspace/plugin"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/config"
@@ -23,7 +25,6 @@ import (
 	plugutil "unstable.build/go-tui/plugin/util"
 	"unstable.build/go-tui/proto"
 	"unstable.build/go-tui/term"
-	"unstable.build/go-tui/workspace"
 )
 
 const (
@@ -46,7 +47,7 @@ var (
 		plugin.Permission(browserplugin.PermissionBrowserWindowManager),
 		plugin.Permission(browserplugin.PermissionBrowserEventPublisher),
 		plugin.Permission(textplugin.PermissionEditor),
-		plugin.PermissionWorkspace,
+		plugin.Permission(workspaceplugin.PermissionWorkspace),
 		plugin.PermissionConfig,
 	}
 
@@ -59,7 +60,7 @@ type gitEditorHandler struct {
 	ed     textapi.Editor
 	wm     browserapi.WindowManager
 	p      browserapi.EventPublisher
-	exec   workspace.API
+	exec   workspaceapi.Workspace
 	exit   uint32
 	ch     chan textapi.Event
 	scroll struct {
@@ -99,8 +100,8 @@ func newGitHandler(
 
 	for _, grant := range grants {
 		switch grant.Permission {
-		case plugin.PermissionWorkspace:
-			ret.exec, err = plugin.Workspace(grant.Token, broker)
+		case plugin.Permission(workspaceplugin.PermissionWorkspace):
+			ret.exec, err = workspaceplugin.Workspace(grant.Token, broker)
 			if err != nil {
 				return nil, err
 			}

@@ -15,12 +15,11 @@ import (
 	"unstable.build/go-tui/plugin"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
-	"unstable.build/go-tui/workspace"
 )
 
 type emulator struct {
 	wm browserapi.WindowManager
-	wp workspace.API
+	wp workspaceapi.Workspace
 	p  browserapi.EventPublisher
 	m  browserapi.Messenger
 
@@ -41,7 +40,7 @@ type emulator struct {
 }
 
 func newEmulator(
-	wm browserapi.WindowManager, wp workspace.API,
+	wm browserapi.WindowManager, wp workspaceapi.Workspace,
 	p browserapi.EventPublisher, m browserapi.Messenger,
 	c plugin.ClipboardRegister,
 	shell string, initialCmd string,
@@ -57,7 +56,7 @@ func newEmulator(
 }
 
 func (e *emulator) init(
-	wm browserapi.WindowManager, wp workspace.API,
+	wm browserapi.WindowManager, wp workspaceapi.Workspace,
 	p browserapi.EventPublisher, m browserapi.Messenger,
 	c plugin.ClipboardRegister,
 	shell string, initialCmd string,

@@ -43,7 +43,7 @@ type mapper struct {
 }
 
 func (m mapper) Open(path string, flag int, perm os.FileMode) (
-	workspace.File, *workspace.Error,
+	workspaceapi.File, *workspaceapi.Error,
 ) {
 	path = parseLabels(path)
 	// do not allow writing of new arbitraryly-named issues
@@ -51,11 +51,11 @@ func (m mapper) Open(path string, flag int, perm os.FileMode) (
 		// if this is an open request with O_CREATE for a non swap
 		// then it return permission error so file logic opens read-only.
 		if !strings.HasPrefix(path, ".") || !strings.HasSuffix(path, ".swp") {
-			return nil, &workspace.Error{IsPermission: true}
+			return nil, &workspaceapi.Error{IsPermission: true}
 		}
 		if strings.HasSuffix(path, ".swp.swp") {
 			// naughty, naughty boy
-			return nil, &workspace.Error{IsPermission: true}
+			return nil, &workspaceapi.Error{IsPermission: true}
 		}
 		// if this is an O_CREATE for a swap, only allow if issue already exists
 		// i.e. we're editing the issue
@@ -63,7 +63,7 @@ func (m mapper) Open(path string, flag int, perm os.FileMode) (
 		_, err := m.Stat(pathNoSwap)
 		if err != nil {
 			log.Debugf("Stat(%s): %v", pathNoSwap, err)
-			return nil, workspace.NopError(
+			return nil, workspaceapi.NopError(
 				fmt.Errorf("use '%s' command to create new issues", defaultCreateIssueCmd))
 		}
 	}

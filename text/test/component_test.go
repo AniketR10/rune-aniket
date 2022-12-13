@@ -176,7 +176,7 @@ func TestComponentOpen(t *testing.T) {
 		_, ok := c.Browser().Tab(uri)
 		assert.True(t, ok)
 
-		loader.expectError = workspace.ErrFileAlreadyOpen
+		loader.expectError = workspaceapi.ErrFileAlreadyOpen
 
 		h2, err := c.Open(uri)
 		require.NoError(t, err)

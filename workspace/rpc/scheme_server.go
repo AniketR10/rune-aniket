@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"google.golang.org/protobuf/types/known/timestamppb"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/workspace"
 )
 
@@ -26,10 +27,10 @@ type sharedRPCImpl struct {
 	executorServer
 	scheme interface {
 		ReadDir(string) ([]os.DirEntry, error)
-		Open(path string, flag int, mode os.FileMode) (workspace.File, *workspace.Error)
+		Open(path string, flag int, mode os.FileMode) (workspaceapi.File, *workspaceapi.Error)
 		Remove(path string) error
-		NewPty() (workspace.Pty, error)
-		SetPtySize(p workspace.Pty, width, height int) error
+		NewPty() (workspaceapi.Pty, error)
+		SetPtySize(p workspaceapi.Pty, width, height int) error
 		Stat(path string) (os.FileInfo, error)
 	}
 }
@@ -139,7 +140,7 @@ func (s *sharedRPCImpl) Open(ctx context.Context, req *OpenRequest) (
 		return nil, werr.ToError()
 	}
 
-	handlerID, err := s.addHandle(workspace.Pid(-1), &syncFile{file: f})
+	handlerID, err := s.addHandle(workspaceapi.Pid(-1), &syncFile{file: f})
 	if err != nil {
 		_ = f.Close()
 		return nil, err
@@ -219,10 +220,10 @@ func (s *sharedRPCImpl) SetPtySize(ctx context.Context, req *SetPtySizeRequest) 
 	if !ok {
 		return nil, errFileNotOpen
 	}
-	pty := workspace.Pty{
+	pty := workspaceapi.Pty{
 		Master: f.(executorResourceMaster).File,
 		Slave:  req.GetSlave(),
-		Pid:    workspace.Pid(req.GetPid()),
+		Pid:    workspaceapi.Pid(req.GetPid()),
 	}
 	err := s.scheme.SetPtySize(pty, int(req.GetWidth()), int(req.GetHeight()))
 	if err != nil {
@@ -440,10 +441,10 @@ func stdTimeToProto(ts time.Time) timestamppb.Timestamp {
 	return timestamppb.Timestamp{Seconds: seconds, Nanos: int32(nanos)}
 }
 
-// sync workspace.File
+// sync workspaceapi.File
 type syncFile struct {
 	mu   sync.Mutex
-	file workspace.File
+	file workspaceapi.File
 }
 
 func (r *syncFile) Name() string {
@@ -499,7 +500,7 @@ func (r *syncFile) stop() error {
 }
 
 type executorResourceMaster struct {
-	workspace.File
+	workspaceapi.File
 }
 
 func (r executorResourceMaster) stop() error {

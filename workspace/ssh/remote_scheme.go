@@ -122,10 +122,10 @@ func (s *remoteScheme) state() (err error, scheme workspace.Scheme) {
 	return
 }
 
-func (s *remoteScheme) Open(path string, flag int, perm os.FileMode) (workspace.File, *workspace.Error) {
+func (s *remoteScheme) Open(path string, flag int, perm os.FileMode) (workspaceapi.File, *workspaceapi.Error) {
 	err, scheme := s.state()
 	if err != nil {
-		werr := workspace.NopError(err)
+		werr := workspaceapi.NopError(err)
 		return nil, werr
 	}
 	f, werr := scheme.Open(path, flag, perm)
@@ -179,7 +179,7 @@ func (s *remoteScheme) URI(path string) (workspaceapi.URI, error) {
 	panic("unused")
 }
 
-func (s *remoteScheme) Command(name string, arg ...string) (workspace.Pid, error) {
+func (s *remoteScheme) Command(name string, arg ...string) (workspaceapi.Pid, error) {
 	err, scheme := s.state()
 	if err != nil {
 		return 0, err
@@ -187,7 +187,7 @@ func (s *remoteScheme) Command(name string, arg ...string) (workspace.Pid, error
 	return scheme.Command(name, arg...)
 }
 
-func (s *remoteScheme) Start(p workspace.Pid) error {
+func (s *remoteScheme) Start(p workspaceapi.Pid) error {
 	err, scheme := s.state()
 	if err != nil {
 		return err
@@ -195,7 +195,7 @@ func (s *remoteScheme) Start(p workspace.Pid) error {
 	return scheme.Start(p)
 }
 
-func (s *remoteScheme) Signal(p workspace.Pid, signal syscall.Signal) error {
+func (s *remoteScheme) Signal(p workspaceapi.Pid, signal syscall.Signal) error {
 	err, scheme := s.state()
 	if err != nil {
 		return err
@@ -203,7 +203,7 @@ func (s *remoteScheme) Signal(p workspace.Pid, signal syscall.Signal) error {
 	return scheme.Signal(p, signal)
 }
 
-func (s *remoteScheme) StderrPipe(p workspace.Pid) (io.ReadCloser, error) {
+func (s *remoteScheme) StderrPipe(p workspaceapi.Pid) (io.ReadCloser, error) {
 	err, scheme := s.state()
 	if err != nil {
 		return nil, err
@@ -211,7 +211,7 @@ func (s *remoteScheme) StderrPipe(p workspace.Pid) (io.ReadCloser, error) {
 	return scheme.StderrPipe(p)
 }
 
-func (s *remoteScheme) StdinPipe(p workspace.Pid) (io.WriteCloser, error) {
+func (s *remoteScheme) StdinPipe(p workspaceapi.Pid) (io.WriteCloser, error) {
 	err, scheme := s.state()
 	if err != nil {
 		return nil, err
@@ -219,7 +219,7 @@ func (s *remoteScheme) StdinPipe(p workspace.Pid) (io.WriteCloser, error) {
 	return scheme.StdinPipe(p)
 }
 
-func (s *remoteScheme) StdoutPipe(p workspace.Pid) (io.ReadCloser, error) {
+func (s *remoteScheme) StdoutPipe(p workspaceapi.Pid) (io.ReadCloser, error) {
 	err, scheme := s.state()
 	if err != nil {
 		return nil, err
@@ -227,7 +227,7 @@ func (s *remoteScheme) StdoutPipe(p workspace.Pid) (io.ReadCloser, error) {
 	return scheme.StdoutPipe(p)
 }
 
-func (s *remoteScheme) Wait(p workspace.Pid) error {
+func (s *remoteScheme) Wait(p workspaceapi.Pid) error {
 	err, scheme := s.state()
 	if err != nil {
 		return err
@@ -235,10 +235,10 @@ func (s *remoteScheme) Wait(p workspace.Pid) error {
 	return scheme.Wait(p)
 }
 
-func (s *remoteScheme) NewPty() (workspace.Pty, error) {
+func (s *remoteScheme) NewPty() (workspaceapi.Pty, error) {
 	err, scheme := s.state()
 	if err != nil {
-		return workspace.Pty{}, err
+		return workspaceapi.Pty{}, err
 	}
 	return scheme.NewPty()
 }
@@ -251,7 +251,7 @@ func (s *remoteScheme) ReadDir(name string) ([]os.DirEntry, error) {
 	return scheme.ReadDir(name)
 }
 
-func (s *remoteScheme) SetPtySize(pty workspace.Pty, width, height int) error {
+func (s *remoteScheme) SetPtySize(pty workspaceapi.Pty, width, height int) error {
 	err, scheme := s.state()
 	if err != nil {
 		return err

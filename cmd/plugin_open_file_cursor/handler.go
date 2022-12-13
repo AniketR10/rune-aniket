@@ -10,6 +10,7 @@ import (
 	browserplugin "unstable.build/go-tui/api/browser/plugin"
 	textapi "unstable.build/go-tui/api/text"
 	workspaceapi "unstable.build/go-tui/api/workspace"
+	workspaceplugin "unstable.build/go-tui/api/workspace/plugin"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/config"
@@ -17,7 +18,6 @@ import (
 	plugutil "unstable.build/go-tui/plugin/util"
 	"unstable.build/go-tui/proto"
 	"unstable.build/go-tui/text"
-	"unstable.build/go-tui/workspace"
 )
 
 const (
@@ -33,7 +33,7 @@ var (
 		textapi.EventTypeCursor,
 	}
 	gfHandlerPermissions = []plugin.Permission{
-		plugin.PermissionWorkspace,
+		plugin.Permission(workspaceplugin.PermissionWorkspace),
 		plugin.Permission(browserplugin.PermissionBrowserResourceOpener),
 		plugin.Permission(browserplugin.PermissionBrowserWindowManager),
 	}
@@ -49,7 +49,7 @@ type gfEditorHandler struct {
 	ed  textapi.Editor
 	o   browserapi.ResourceOpener
 	wm  browserapi.WindowManager
-	cwd workspace.API
+	cwd workspaceapi.Workspace
 
 	files map[string]*file
 }
@@ -75,8 +75,8 @@ func newGFHandler(
 	var err error
 	for _, grant := range grants {
 		switch grant.Permission {
-		case plugin.PermissionWorkspace:
-			ret.cwd, err = plugin.Workspace(grant.Token, broker)
+		case plugin.Permission(workspaceplugin.PermissionWorkspace):
+			ret.cwd, err = workspaceplugin.Workspace(grant.Token, broker)
 		case plugin.Permission(browserplugin.PermissionBrowserWindowManager):
 			ret.wm, err = browserplugin.WindowManager(grant.Token, broker)
 		case plugin.Permission(browserplugin.PermissionBrowserResourceOpener):

@@ -98,10 +98,10 @@ func (s *scheme[T]) docIDFromPath(path string) (string, string, error) {
 }
 
 func (s *scheme[T]) Open(path string, flag int, perm os.FileMode) (
-	workspace.File, *workspace.Error,
+	workspaceapi.File, *workspaceapi.Error,
 ) {
 	if flag&os.O_APPEND != 0 || flag&os.O_SYNC != 0 {
-		return nil, workspace.NopError(errors.New("unsupported Open flag"))
+		return nil, workspaceapi.NopError(errors.New("unsupported Open flag"))
 	}
 
 	rdonly := flag&os.O_RDONLY != 0
@@ -109,11 +109,11 @@ func (s *scheme[T]) Open(path string, flag int, perm os.FileMode) (
 	rdwr := flag&os.O_RDWR != 0
 
 	if rdonly && wronly {
-		return nil, workspace.NopError(
+		return nil, workspaceapi.NopError(
 			errors.New("cannot pass O_RDONLY and O_WRONLY at the same time"))
 	}
 	if rdonly && rdwr || wronly && rdwr {
-		return nil, workspace.NopError(
+		return nil, workspaceapi.NopError(
 			errors.New("cannot pass O_RDONLY or O_WRONLY with O_RDWR"))
 	}
 
@@ -129,10 +129,10 @@ func (s *scheme[T]) Open(path string, flag int, perm os.FileMode) (
 
 func (s *scheme[T]) open(
 	ctx context.Context, path string, flag int, perm os.FileMode,
-) (workspace.File, *workspace.Error) {
+) (workspaceapi.File, *workspaceapi.Error) {
 	docID, path, err := s.docIDFromPath(path)
 	if err != nil {
-		return nil, workspace.NopError(err)
+		return nil, workspaceapi.NopError(err)
 	}
 
 	create := flag&os.O_CREATE != 0
@@ -147,10 +147,10 @@ func (s *scheme[T]) open(
 			return err != document.ErrAlreadyExists, err
 		})
 		if errors.Is(err, document.ErrAlreadyExists) {
-			return nil, &workspace.Error{IsExist: true}
+			return nil, &workspaceapi.Error{IsExist: true}
 		}
 		if err != nil {
-			return nil, workspace.NopError(err)
+			return nil, workspaceapi.NopError(err)
 		}
 	} else if create || trunc {
 		// invariant: in storage there always needs to be
@@ -163,7 +163,7 @@ func (s *scheme[T]) open(
 			return true, err
 		})
 		if err != nil {
-			return nil, workspace.NopError(err)
+			return nil, workspaceapi.NopError(err)
 		}
 	}
 
@@ -183,15 +183,15 @@ func (s *scheme[T]) open(
 			_ = s.retriedDelete(ctx, docID)
 		}
 		if errors.Is(err, document.ErrNotFound) {
-			return nil, &workspace.Error{IsNotExist: true}
+			return nil, &workspaceapi.Error{IsNotExist: true}
 		}
-		return nil, workspace.NopError(err)
+		return nil, workspaceapi.NopError(err)
 	}
 
 	f, err := newFile(docID, s.marshaler, s.errMissingID,
 		&s.svc, perm, s.retryRealFailure, ret, !trunc)
 	if err != nil {
-		return nil, workspace.NopError(err)
+		return nil, workspaceapi.NopError(err)
 	}
 	return f, nil
 }
@@ -215,7 +215,7 @@ func (s *scheme[T]) Remove(path string) error {
 		return err != document.ErrNotFound, err
 	})
 	if errors.Is(err, document.ErrNotFound) {
-		return workspace.Error{IsNotExist: true}.ToError()
+		return workspaceapi.Error{IsNotExist: true}.ToError()
 	}
 	if err != nil {
 		return err

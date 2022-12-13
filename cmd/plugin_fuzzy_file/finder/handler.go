@@ -20,6 +20,7 @@ import (
 	textapi "unstable.build/go-tui/api/text"
 	textplugin "unstable.build/go-tui/api/text/plugin"
 	workspaceapi "unstable.build/go-tui/api/workspace"
+	workspaceplugin "unstable.build/go-tui/api/workspace/plugin"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/config"
@@ -27,7 +28,6 @@ import (
 	"unstable.build/go-tui/plugin"
 	"unstable.build/go-tui/proto"
 	"unstable.build/go-tui/term"
-	"unstable.build/go-tui/workspace"
 )
 
 const (
@@ -43,7 +43,7 @@ func Permissions() []plugin.Permission {
 		plugin.Permission(browserplugin.PermissionBrowserMessenger),
 		plugin.PermissionStorage,
 		plugin.Permission(textplugin.PermissionEditor),
-		plugin.PermissionWorkspace,
+		plugin.Permission(workspaceplugin.PermissionWorkspace),
 	}
 }
 
@@ -53,14 +53,14 @@ type fuzzyFinderHandler struct {
 	p                    browserapi.EventPublisher
 	m                    browserapi.Messenger
 	ed                   textapi.Editor
-	workspace            workspace.API
+	workspace            workspaceapi.Workspace
 	invokeWindow         browserapi.Window
 	historyKey           term.KeyComb
 	mu                   sync.Mutex
 	cmdStr               string
-	getResource          func(workspace.API, string) (workspaceapi.URI, term.Coordinates)
-	workspaceFallback    func(workspace.API, context.Context) (iterator.Iterator[string], error)
-	pid                  workspace.Pid
+	getResource          func(workspaceapi.Workspace, string) (workspaceapi.URI, term.Coordinates)
+	workspaceFallback    func(workspaceapi.Workspace, context.Context) (iterator.Iterator[string], error)
+	pid                  workspaceapi.Pid
 	quitChan             chan struct{}
 	height               int
 	list                 search.List
@@ -73,7 +73,7 @@ type fuzzyFinderHandler struct {
 	history search.History
 }
 
-func (h *fuzzyFinderHandler) execCommand(command string) (workspace.Pid, error) {
+func (h *fuzzyFinderHandler) execCommand(command string) (workspaceapi.Pid, error) {
 	shell := os.Getenv("SHELL")
 	if len(shell) == 0 {
 		shell = "sh"
@@ -82,7 +82,7 @@ func (h *fuzzyFinderHandler) execCommand(command string) (workspace.Pid, error) 
 }
 
 // ExecCommandWith executes the given command with the specified shell
-func (h *fuzzyFinderHandler) execCommandWith(shell string, command string) (workspace.Pid, error) {
+func (h *fuzzyFinderHandler) execCommandWith(shell string, command string) (workspaceapi.Pid, error) {
 	cmd, err := h.workspace.Command(shell, "-c", command)
 	if err != nil {
 		return 0, fmt.Errorf("failed to create command: %w", err)
@@ -302,8 +302,8 @@ func (h *fuzzyFinderHandler) initGrants(
 ) (err error) {
 	for _, grant := range grants {
 		switch grant.Permission {
-		case plugin.PermissionWorkspace:
-			h.workspace, err = plugin.Workspace(grant.Token, broker)
+		case plugin.Permission(workspaceplugin.PermissionWorkspace):
+			h.workspace, err = workspaceplugin.Workspace(grant.Token, broker)
 		case plugin.Permission(textplugin.PermissionEditor):
 			h.ed, err = textplugin.Editor(grant.Token, broker)
 		case plugin.Permission(browserplugin.PermissionBrowserMessenger):
@@ -335,8 +335,8 @@ func New(
 	grants []plugin.Grant, broker proto.MuxBroker,
 	invokeWindow browserapi.Window, cfg config.Config,
 	historyKey term.KeyComb, historyDocumentID string, command string,
-	fallback func(workspace.API, context.Context) (iterator.Iterator[string], error),
-	getResource func(exec workspace.API, line string) (workspaceapi.URI, term.Coordinates),
+	fallback func(workspaceapi.Workspace, context.Context) (iterator.Iterator[string], error),
+	getResource func(exec workspaceapi.Workspace, line string) (workspaceapi.URI, term.Coordinates),
 ) (tui.Handler, error) {
 	h := new(fuzzyFinderHandler)
 	maxHistory, err := cfg.GetInt("history")

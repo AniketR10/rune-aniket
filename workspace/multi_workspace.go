@@ -14,8 +14,8 @@ var _ Workspace = (multi)(multi{})
 
 // Multi wraps a Workspace to provide oob Recover and Load requests to other workspaces/schemes
 // whether initialized or not.
-func Multi(m WorkspaceManager, workspace Workspace, uri workspaceapi.URI) Workspace {
-	return newMulti(m, uri, workspace)
+func Multi(m WorkspaceManager, def Workspace, uri workspaceapi.URI) Workspace {
+	return newMulti(m, uri, def)
 }
 
 type multi struct {
@@ -60,7 +60,9 @@ func (m multi) ReadDir(name string) ([]os.DirEntry, error) {
 	return m.def.ReadDir(name)
 }
 
-func (m multi) Open(path string, flag int, mode os.FileMode) (File, *Error) {
+func (m multi) Open(path string, flag int, mode os.FileMode) (
+	workspaceapi.File, *workspaceapi.Error,
+) {
 	return m.def.Open(path, flag, mode)
 }
 
@@ -68,47 +70,59 @@ func (m multi) Stat(path string) (os.FileInfo, error) {
 	return m.def.Stat(path)
 }
 
+func (m multi) Lstat(path string) (os.FileInfo, error) {
+	return m.def.Lstat(path)
+}
+
+func (m multi) ReadLink(path string) (string, error) {
+	return m.def.ReadLink(path)
+}
+
 func (m multi) Remove(path string) error {
 	return m.def.Remove(path)
+}
+
+func (m multi) Rename(old, new string) error {
+	return m.def.Rename(old, new)
 }
 
 func (m multi) URI(path string) (workspaceapi.URI, error) {
 	return m.def.URI(path)
 }
 
-func (m multi) Command(name string, arg ...string) (Pid, error) {
+func (m multi) Command(name string, arg ...string) (workspaceapi.Pid, error) {
 	return m.def.Command(name, arg...)
 }
 
-func (m multi) Start(p Pid) error {
+func (m multi) Start(p workspaceapi.Pid) error {
 	return m.def.Start(p)
 }
 
-func (m multi) Signal(p Pid, s syscall.Signal) error {
+func (m multi) Signal(p workspaceapi.Pid, s syscall.Signal) error {
 	return m.def.Signal(p, s)
 }
 
-func (m multi) StderrPipe(p Pid) (io.ReadCloser, error) {
+func (m multi) StderrPipe(p workspaceapi.Pid) (io.ReadCloser, error) {
 	return m.def.StderrPipe(p)
 }
 
-func (m multi) StdinPipe(p Pid) (io.WriteCloser, error) {
+func (m multi) StdinPipe(p workspaceapi.Pid) (io.WriteCloser, error) {
 	return m.def.StdinPipe(p)
 }
 
-func (m multi) StdoutPipe(p Pid) (io.ReadCloser, error) {
+func (m multi) StdoutPipe(p workspaceapi.Pid) (io.ReadCloser, error) {
 	return m.def.StdoutPipe(p)
 }
 
-func (m multi) Wait(p Pid) error {
+func (m multi) Wait(p workspaceapi.Pid) error {
 	return m.def.Wait(p)
 }
 
-func (m multi) NewPty() (Pty, error) {
+func (m multi) NewPty() (workspaceapi.Pty, error) {
 	return m.def.NewPty()
 }
 
-func (m multi) SetPtySize(p Pty, width, height int) error {
+func (m multi) SetPtySize(p workspaceapi.Pty, width, height int) error {
 	return m.def.SetPtySize(p, width, height)
 }
 

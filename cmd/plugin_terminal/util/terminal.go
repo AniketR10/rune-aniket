@@ -10,7 +10,7 @@ import (
 	"github.com/ernestrc/blue/logging"
 	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
-	"unstable.build/go-tui/workspace"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 )
 
 const (
@@ -21,9 +21,9 @@ const (
 
 // Terminal communicates with the underlying terminal
 type Terminal struct {
-	workspace         workspace.API
+	workspace         workspaceapi.Workspace
 	mu                sync.Mutex
-	pty               workspace.Pty
+	pty               workspaceapi.Pty
 	windowManipulator WindowManipulator
 	reader            *bufio.Reader
 	updateChan        chan struct{}
@@ -40,7 +40,7 @@ type Terminal struct {
 }
 
 // NewTerminal creates a new terminal instance
-func New(w workspace.API, options ...Option) *Terminal {
+func New(w workspaceapi.Workspace, options ...Option) *Terminal {
 	term := &Terminal{
 		closeChan: make(chan struct{}),
 		theme:     &Theme{},
@@ -60,7 +60,7 @@ func New(w workspace.API, options ...Option) *Terminal {
 	return term
 }
 
-func (t *Terminal) CreatePty() (workspace.Pty, error) {
+func (t *Terminal) CreatePty() (workspaceapi.Pty, error) {
 	pty, err := t.workspace.NewPty()
 	if err != nil {
 		return pty, err
@@ -94,7 +94,7 @@ func (t *Terminal) reset() {
 }
 
 // Pty exposes the underlying terminal pty, if it exists
-func (t *Terminal) Pty() workspace.Pty {
+func (t *Terminal) Pty() workspaceapi.Pty {
 	return t.pty
 }
 

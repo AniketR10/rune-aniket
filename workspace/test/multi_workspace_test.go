@@ -1,4 +1,4 @@
-package workspace
+package test
 
 import (
 	"errors"
@@ -11,6 +11,7 @@ import (
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/config"
+	"unstable.build/go-tui/workspace"
 )
 
 func TestMultiWorkspace(t *testing.T) {
@@ -38,11 +39,11 @@ func TestMultiWorkspace(t *testing.T) {
 
 	for _, tcase := range tsuite {
 		t.Run(tcase.desc, func(t *testing.T) {
-			memScheme, err := NewMemoryScheme(config.NopConfig(), tcase.defURI)
+			memScheme, err := workspace.NewMemoryScheme(config.NopConfig(), tcase.defURI)
 			require.NoError(t, err)
-			cwd := NewSchemeWorkspace(tcase.defURI, memScheme)
+			cwd := workspace.NewSchemeWorkspace(tcase.defURI, memScheme)
 			mockManager := &mockManager{}
-			cwd = Multi(mockManager, cwd, tcase.defURI)
+			cwd = workspace.Multi(mockManager, cwd, tcase.defURI)
 
 			if tcase.recover {
 				swapFile := fmt.Sprintf("%s.swp", tcase.fileURI.Path())
@@ -71,10 +72,10 @@ type mockManager struct {
 	addWorkspace []workspaceapi.URI
 }
 
-func (m *mockManager) RegisterScheme(string, SchemeFunc) error {
+func (m *mockManager) RegisterScheme(string, workspace.SchemeFunc) error {
 	panic("should not be called")
 }
-func (m *mockManager) AddWorkspace(uri workspaceapi.URI) (Workspace, error) {
+func (m *mockManager) AddWorkspace(uri workspaceapi.URI) (workspace.Workspace, error) {
 	if uri.Scheme() != "test" {
 		return nil, errors.New("not registered")
 	}
@@ -83,5 +84,5 @@ func (m *mockManager) AddWorkspace(uri workspaceapi.URI) (Workspace, error) {
 	if err != nil {
 		return nil, err
 	}
-	return NewSchemeWorkspace(uri, scheme), nil
+	return workspace.NewSchemeWorkspace(uri, scheme), nil
 }

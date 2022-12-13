@@ -290,7 +290,7 @@ func (s *scheme) init(cc sshConfig, uri workspaceapi.URI,
 }
 
 // override to provide user with an error message that guides to a solution
-func (s *scheme) Start(pid workspace.Pid) error {
+func (s *scheme) Start(pid workspaceapi.Pid) error {
 	err := s.Scheme.Start(pid)
 	if err != nil && strings.Contains(err.Error(), "executable file not found in $PATH") {
 		return fmt.Errorf("%w. Make sure that $PATH is configured "+
@@ -299,7 +299,7 @@ func (s *scheme) Start(pid workspace.Pid) error {
 	return err
 }
 
-func (s *scheme) Open(path string, flag int, perm os.FileMode) (workspace.File, *workspace.Error) {
+func (s *scheme) Open(path string, flag int, perm os.FileMode) (workspaceapi.File, *workspaceapi.Error) {
 	return s.Scheme.Open(path, flag, perm)
 }
 
@@ -323,11 +323,11 @@ func (s *scheme) ReadLink(path string) (string, error) {
 	return s.Scheme.ReadLink(path)
 }
 
-func (s *scheme) NewPty() (workspace.Pty, error) {
+func (s *scheme) NewPty() (workspaceapi.Pty, error) {
 	return s.Scheme.NewPty()
 }
 
-func (s *scheme) SetPtySize(pty workspace.Pty, width, height int) error {
+func (s *scheme) SetPtySize(pty workspaceapi.Pty, width, height int) error {
 	return s.Scheme.SetPtySize(pty, width, height)
 }
 
@@ -362,7 +362,7 @@ func (s *scheme) expandPath(path string) (string, error) {
 	})
 }
 
-func startProc(exec workspace.Executor, pid workspace.Pid) (
+func startProc(exec workspace.Executor, pid workspaceapi.Pid) (
 	stdout io.ReadCloser, stderr io.ReadCloser, stdin io.WriteCloser, err error,
 ) {
 	stdout, err = exec.StdoutPipe(pid)

@@ -29,7 +29,7 @@ type procSession struct {
 	sshCmd   string
 	sshArgs  []string
 	executor workspace.Executor
-	pids     map[workspace.Pid]struct{}
+	pids     map[workspaceapi.Pid]struct{}
 }
 
 func newProcRemote(cfg sshConfig, uri workspaceapi.URI) (
@@ -69,7 +69,7 @@ func (m *procRemote) NewSession() (workspace.Executor, error) {
 		sshCmd:   m.cmd,
 		sshArgs:  m.args,
 		executor: m.executor,
-		pids:     make(map[workspace.Pid]struct{}),
+		pids:     make(map[workspaceapi.Pid]struct{}),
 	}
 
 	m.sessions = append(m.sessions, ses)
@@ -105,7 +105,7 @@ func (s *procSession) CommandString(name string, arg ...string) (string, []strin
 	return name, arg
 }
 
-func (s *procSession) Command(name string, arg ...string) (workspace.Pid, error) {
+func (s *procSession) Command(name string, arg ...string) (workspaceapi.Pid, error) {
 	if name == "" {
 		return 0, errors.New("invalid empty command")
 	}
@@ -113,33 +113,33 @@ func (s *procSession) Command(name string, arg ...string) (workspace.Pid, error)
 	name, arg = s.CommandString(name, arg...)
 	pid, err := s.executor.Command(name, arg...)
 	if err != nil {
-		return workspace.Pid(0), fmt.Errorf("Failed to create ssh command: %s", err)
+		return workspaceapi.Pid(0), fmt.Errorf("Failed to create ssh command: %s", err)
 	}
 	s.pids[pid] = struct{}{}
 	return pid, nil
 }
 
-func (s *procSession) Start(pid workspace.Pid) error {
+func (s *procSession) Start(pid workspaceapi.Pid) error {
 	return s.executor.Start(pid)
 }
 
-func (s *procSession) Signal(pid workspace.Pid, sig syscall.Signal) error {
+func (s *procSession) Signal(pid workspaceapi.Pid, sig syscall.Signal) error {
 	return s.executor.Signal(pid, sig)
 }
 
-func (s *procSession) StderrPipe(pid workspace.Pid) (io.ReadCloser, error) {
+func (s *procSession) StderrPipe(pid workspaceapi.Pid) (io.ReadCloser, error) {
 	return s.executor.StderrPipe(pid)
 }
 
-func (s *procSession) StdinPipe(pid workspace.Pid) (io.WriteCloser, error) {
+func (s *procSession) StdinPipe(pid workspaceapi.Pid) (io.WriteCloser, error) {
 	return s.executor.StdinPipe(pid)
 }
 
-func (s *procSession) StdoutPipe(pid workspace.Pid) (io.ReadCloser, error) {
+func (s *procSession) StdoutPipe(pid workspaceapi.Pid) (io.ReadCloser, error) {
 	return s.executor.StdoutPipe(pid)
 }
 
-func (s *procSession) Wait(pid workspace.Pid) error {
+func (s *procSession) Wait(pid workspaceapi.Pid) error {
 	err := s.executor.Wait(pid)
 	delete(s.pids, pid)
 	return err

@@ -12,6 +12,7 @@ import (
 	"github.com/ernestrc/blue/document"
 	"github.com/ernestrc/blue/encoding"
 	"github.com/ernestrc/blue/retry"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/storage"
 	"unstable.build/go-tui/workspace"
 )
@@ -35,7 +36,7 @@ type file[T storage.Document[T]] struct {
 	lastSize int
 	dirty    bool
 	offset   int64
-	memFile  workspace.File
+	memFile  workspaceapi.File
 }
 
 // return not fully initialzed until init is called

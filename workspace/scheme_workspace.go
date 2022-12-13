@@ -122,7 +122,9 @@ func (w *schemeWorkspace) ReadDir(name string) (
 	return w.p.ReadDir(name)
 }
 
-func (w *schemeWorkspace) Open(path string, flag int, mode os.FileMode) (File, *Error) {
+func (w *schemeWorkspace) Open(path string, flag int, mode os.FileMode) (
+	workspaceapi.File, *workspaceapi.Error,
+) {
 	return w.p.Open(path, flag, mode)
 }
 
@@ -130,47 +132,59 @@ func (w *schemeWorkspace) Stat(path string) (os.FileInfo, error) {
 	return w.p.Stat(path)
 }
 
+func (w *schemeWorkspace) Lstat(path string) (os.FileInfo, error) {
+	return w.p.Lstat(path)
+}
+
+func (w *schemeWorkspace) ReadLink(path string) (string, error) {
+	return w.p.ReadLink(path)
+}
+
 func (w *schemeWorkspace) Remove(path string) error {
 	return w.p.Remove(path)
+}
+
+func (w *schemeWorkspace) Rename(old, new string) error {
+	return w.p.Rename(old, new)
 }
 
 func (w *schemeWorkspace) URI(path string) (workspaceapi.URI, error) {
 	return w.p.URI(path)
 }
 
-func (w *schemeWorkspace) Command(name string, arg ...string) (pid Pid, err error) {
+func (w *schemeWorkspace) Command(name string, arg ...string) (pid workspaceapi.Pid, err error) {
 	return w.p.Command(name, arg...)
 }
 
-func (m *schemeWorkspace) Start(pid Pid) (err error) {
+func (m *schemeWorkspace) Start(pid workspaceapi.Pid) (err error) {
 	return m.p.Start(pid)
 }
 
-func (m *schemeWorkspace) Signal(pid Pid, sig syscall.Signal) (err error) {
+func (m *schemeWorkspace) Signal(pid workspaceapi.Pid, sig syscall.Signal) (err error) {
 	return m.p.Signal(pid, sig)
 }
 
-func (m *schemeWorkspace) StderrPipe(pid Pid) (ret io.ReadCloser, err error) {
+func (m *schemeWorkspace) StderrPipe(pid workspaceapi.Pid) (ret io.ReadCloser, err error) {
 	return m.p.StderrPipe(pid)
 }
 
-func (m *schemeWorkspace) StdinPipe(pid Pid) (ret io.WriteCloser, err error) {
+func (m *schemeWorkspace) StdinPipe(pid workspaceapi.Pid) (ret io.WriteCloser, err error) {
 	return m.p.StdinPipe(pid)
 }
 
-func (m *schemeWorkspace) StdoutPipe(pid Pid) (ret io.ReadCloser, err error) {
+func (m *schemeWorkspace) StdoutPipe(pid workspaceapi.Pid) (ret io.ReadCloser, err error) {
 	return m.p.StdoutPipe(pid)
 }
 
-func (m *schemeWorkspace) NewPty() (Pty, error) {
+func (m *schemeWorkspace) NewPty() (workspaceapi.Pty, error) {
 	return m.p.NewPty()
 }
 
-func (m *schemeWorkspace) SetPtySize(p Pty, width, height int) error {
+func (m *schemeWorkspace) SetPtySize(p workspaceapi.Pty, width, height int) error {
 	return m.p.SetPtySize(p, width, height)
 }
 
-func (m *schemeWorkspace) Wait(pid Pid) (err error) {
+func (m *schemeWorkspace) Wait(pid workspaceapi.Pid) (err error) {
 	return m.p.Wait(pid)
 }
 

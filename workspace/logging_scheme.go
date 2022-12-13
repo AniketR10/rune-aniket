@@ -43,49 +43,49 @@ func (t loggingScheme) trace(msg string, args ...interface{}) {
 		Tracef(msg, args...)
 }
 
-func (t loggingScheme) Command(name string, arg ...string) (p Pid, err error) {
+func (t loggingScheme) Command(name string, arg ...string) (p workspaceapi.Pid, err error) {
 	t.trace("Command(%q, %v)", name, arg)
 	p, err = t.other.Command(name, arg...)
 	t.trace("Command(%q, %v): %d, %v", name, arg, p, err)
 	return
 }
 
-func (t loggingScheme) Start(p Pid) (err error) {
+func (t loggingScheme) Start(p workspaceapi.Pid) (err error) {
 	t.trace("Start(%d)", p)
 	err = t.other.Start(p)
 	t.trace("Start(%d): %v", p, err)
 	return
 }
 
-func (t loggingScheme) Signal(p Pid, s syscall.Signal) (err error) {
+func (t loggingScheme) Signal(p workspaceapi.Pid, s syscall.Signal) (err error) {
 	t.trace("Signal(%d, %d)", p, s)
 	err = t.other.Signal(p, s)
 	t.trace("Signal(%d, %d): %v", p, s, err)
 	return
 }
 
-func (t loggingScheme) StderrPipe(p Pid) (ret io.ReadCloser, err error) {
+func (t loggingScheme) StderrPipe(p workspaceapi.Pid) (ret io.ReadCloser, err error) {
 	t.trace("StderrPipe(%d)", p)
 	ret, err = t.other.StderrPipe(p)
 	t.trace("StderrPipe(%d): %v", p, err)
 	return
 }
 
-func (t loggingScheme) StdinPipe(p Pid) (ret io.WriteCloser, err error) {
+func (t loggingScheme) StdinPipe(p workspaceapi.Pid) (ret io.WriteCloser, err error) {
 	t.trace("StdinPipe(%d)", p)
 	ret, err = t.other.StdinPipe(p)
 	t.trace("StdinPipe(%d): %v", p, err)
 	return
 }
 
-func (t loggingScheme) StdoutPipe(p Pid) (ret io.ReadCloser, err error) {
+func (t loggingScheme) StdoutPipe(p workspaceapi.Pid) (ret io.ReadCloser, err error) {
 	t.trace("StdoutPipe(%d)", p)
 	ret, err = t.other.StdoutPipe(p)
 	t.trace("StdoutPipe(%d): %v", p, err)
 	return
 }
 
-func (t loggingScheme) Wait(p Pid) (err error) {
+func (t loggingScheme) Wait(p workspaceapi.Pid) (err error) {
 	t.trace("Wait(%d)", p)
 	err = t.other.Wait(p)
 	t.trace("Wait(%d): %v", p, err)
@@ -99,7 +99,9 @@ func (t loggingScheme) URI(path string) (ret workspaceapi.URI, err error) {
 	return
 }
 
-func (t loggingScheme) Open(path string, flag int, perm os.FileMode) (ret File, err *Error) {
+func (t loggingScheme) Open(path string, flag int, perm os.FileMode) (
+	ret workspaceapi.File, err *workspaceapi.Error,
+) {
 	t.trace("Open(%q, %d, %d)", path, flag, perm)
 	ret, err = t.other.Open(path, flag, perm)
 	t.trace("Open(%q, %d, %d): %#v, %#v", path, flag, perm, ret, err)
@@ -140,14 +142,14 @@ func (t loggingScheme) ReadLink(path string) (ret string, err error) {
 	t.trace("ReadLink(%q): %q, %v", path, ret, err)
 	return
 }
-func (t loggingScheme) NewPty() (ret Pty, err error) {
+func (t loggingScheme) NewPty() (ret workspaceapi.Pty, err error) {
 	t.trace("NewPty()")
 	ret, err = t.other.NewPty()
 	t.trace("NewPty(): %q, %v", ret, err)
 	return
 }
 
-func (t loggingScheme) SetPtySize(p Pty, width, height int) (err error) {
+func (t loggingScheme) SetPtySize(p workspaceapi.Pty, width, height int) (err error) {
 	t.trace("SetPtySize(%v, %d, %d)", p, width, height)
 	err = t.other.SetPtySize(p, width, height)
 	t.trace("SetPtySize(%v, %d, %d): %v", p, width, height, err)

@@ -68,7 +68,7 @@ func expectSchemeAPISuccess(t *testing.T, mock *workspacetest.MockScheme, scheme
 	_, err = scheme.ReadLink("")
 	require.NoError(t, err)
 
-	mock.EXPECT().Command(gomock.Any()).Return(workspace.Pid(0), nil).Times(1)
+	mock.EXPECT().Command(gomock.Any()).Return(workspaceapi.Pid(0), nil).Times(1)
 	_, err = scheme.Command("blah")
 	require.NoError(t, err)
 
@@ -114,7 +114,7 @@ func TestRemoteScheme(t *testing.T) {
 			return mock, nil
 		}, uri)
 
-		mock.EXPECT().Command(gomock.Any()).Return(workspace.Pid(0), nil).Times(1)
+		mock.EXPECT().Command(gomock.Any()).Return(workspaceapi.Pid(0), nil).Times(1)
 		retry.Retry(context.Background(), retry.ExponentialStrategy(1*time.Millisecond, 10*time.Millisecond), func(context.Context) (bool, error) {
 			_, err = scheme.Command("blah")
 			return true, err

@@ -77,7 +77,7 @@ func newStdRemote(cfg sshConfig, uri workspaceapi.URI) (
 	return stdRemote{conn}, nil
 }
 
-func (s *goSshSession) Command(name string, arg ...string) (workspace.Pid, error) {
+func (s *goSshSession) Command(name string, arg ...string) (workspaceapi.Pid, error) {
 	if name == "" {
 		return 0, errors.New("invalid empty command")
 	}
@@ -85,17 +85,17 @@ func (s *goSshSession) Command(name string, arg ...string) (workspace.Pid, error
 		panic("Command called more than once on an ssh session")
 	}
 	s.cmd, s.args = name, arg
-	return workspace.Pid(0), nil
+	return workspaceapi.Pid(0), nil
 }
 
-func (s *goSshSession) Start(workspace.Pid) error {
+func (s *goSshSession) Start(workspaceapi.Pid) error {
 	if s.cmd == "" {
 		return errors.New("invalid ssh.Session Executor state: must call Command first")
 	}
 	return s.ses.Start(fmt.Sprintf("%s %s", s.cmd, strings.Join(s.args, " ")))
 }
 
-func (s *goSshSession) Signal(_ workspace.Pid, sig syscall.Signal) error {
+func (s *goSshSession) Signal(_ workspaceapi.Pid, sig syscall.Signal) error {
 	signal, ok := sigMap[sig]
 	if !ok {
 		return errors.New("unknown signal")
@@ -103,7 +103,7 @@ func (s *goSshSession) Signal(_ workspace.Pid, sig syscall.Signal) error {
 	return s.ses.Signal(signal)
 }
 
-func (s *goSshSession) StderrPipe(workspace.Pid) (io.ReadCloser, error) {
+func (s *goSshSession) StderrPipe(workspaceapi.Pid) (io.ReadCloser, error) {
 	r, err := s.ses.StderrPipe()
 	return io.NopCloser(r), err
 }
@@ -116,17 +116,17 @@ func (n nopWriteCloser) Close() error {
 	return nil
 }
 
-func (s *goSshSession) StdinPipe(workspace.Pid) (io.WriteCloser, error) {
+func (s *goSshSession) StdinPipe(workspaceapi.Pid) (io.WriteCloser, error) {
 	r, err := s.ses.StdinPipe()
 	return nopWriteCloser{r}, err
 }
 
-func (s *goSshSession) StdoutPipe(workspace.Pid) (io.ReadCloser, error) {
+func (s *goSshSession) StdoutPipe(workspaceapi.Pid) (io.ReadCloser, error) {
 	r, err := s.ses.StdoutPipe()
 	return io.NopCloser(r), err
 }
 
-func (s *goSshSession) Wait(workspace.Pid) error {
+func (s *goSshSession) Wait(workspaceapi.Pid) error {
 	return s.ses.Wait()
 }
 

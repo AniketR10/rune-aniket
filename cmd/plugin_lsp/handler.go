@@ -29,6 +29,7 @@ import (
 	browserplugin "unstable.build/go-tui/api/browser/plugin"
 	textapi "unstable.build/go-tui/api/text"
 	workspaceapi "unstable.build/go-tui/api/workspace"
+	workspaceplugin "unstable.build/go-tui/api/workspace/plugin"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/config"
@@ -39,7 +40,6 @@ import (
 	"unstable.build/go-tui/proto"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text/vi"
-	"unstable.build/go-tui/workspace"
 )
 
 const (
@@ -81,7 +81,7 @@ var (
 		plugin.Permission(browserplugin.PermissionBrowserResourceOpener),
 		plugin.Permission(browserplugin.PermissionBrowserEventPublisher),
 		plugin.Permission(browserplugin.PermissionBrowserMessenger),
-		plugin.PermissionWorkspace,
+		plugin.Permission(workspaceplugin.PermissionWorkspace),
 		plugin.PermissionConfig,
 	}
 	defaultDiagnosticAttr = map[protocol.DiagnosticSeverity]term.Attributes{
@@ -139,7 +139,7 @@ type file struct {
 
 type execServer struct {
 	langID string
-	cmd    workspace.Pid
+	cmd    workspaceapi.Pid
 	srv    protocol.Server
 	caps   protocol.ServerCapabilities
 }
@@ -152,7 +152,7 @@ type lspEditorHandler struct {
 	wm browserapi.WindowManager
 	m  browserapi.Messenger
 	o  browserapi.ResourceOpener
-	wp workspace.API
+	wp workspaceapi.Workspace
 	p  browserapi.EventPublisher
 
 	tabspaces                  int
@@ -274,7 +274,7 @@ func initializeConnection(
 	return server
 }
 
-func (h *lspEditorHandler) getPipes(pid workspace.Pid) (
+func (h *lspEditorHandler) getPipes(pid workspaceapi.Pid) (
 	io.WriteCloser, io.ReadCloser, io.ReadCloser, error,
 ) {
 	stdin, err := h.wp.StdinPipe(pid)
@@ -294,7 +294,7 @@ func (h *lspEditorHandler) getPipes(pid workspace.Pid) (
 	return stdin, stdout, stderr, nil
 }
 
-func (h *lspEditorHandler) parseCmd(arg interface{}) (workspace.Pid, error) {
+func (h *lspEditorHandler) parseCmd(arg interface{}) (workspaceapi.Pid, error) {
 	str, ok := arg.(string)
 	cmd := strings.Split(str, " ")
 	if !ok || len(cmd) == 0 {
@@ -623,8 +623,8 @@ func newLspHandler(
 
 	for _, g := range grants {
 		switch g.Permission {
-		case plugin.PermissionWorkspace:
-			ret.wp, err = plugin.Workspace(g.Token, broker)
+		case plugin.Permission(workspaceplugin.PermissionWorkspace):
+			ret.wp, err = workspaceplugin.Workspace(g.Token, broker)
 			if err != nil {
 				return nil, err
 			}

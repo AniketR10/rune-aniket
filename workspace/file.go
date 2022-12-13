@@ -12,6 +12,7 @@ import (
 	"time"
 
 	multierr "github.com/ernestrc/go-multierror"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/term"
 )
@@ -38,7 +39,7 @@ type file struct {
 	readOnly        bool
 	infoModTime     time.Time
 	swapInfoModTime time.Time
-	orig, swap      File
+	orig, swap      workspaceapi.File
 	delayedError    error
 	unflushed       bool
 }
@@ -76,11 +77,11 @@ func swapFileName(swapDir, filePath string) (string, string) {
 	return swapDir, path.Join(swapDir, fmt.Sprintf(".%s.swp", filepath.Base(filePath)))
 }
 
-func (f *file) initSwap(orig File, origPerms os.FileMode) (File, error) {
+func (f *file) initSwap(orig workspaceapi.File, origPerms os.FileMode) (workspaceapi.File, error) {
 	swap, osErr := f.scheme.Open(f.swapFileName, os.O_RDWR|os.O_CREATE|os.O_EXCL, origPerms)
 	if osErr != nil {
 		if osErr.IsExist {
-			return nil, ErrFileAlreadyOpen
+			return nil, workspaceapi.ErrFileAlreadyOpen
 		}
 		return nil, osErr.ToError()
 	}
@@ -103,14 +104,14 @@ func (f *file) initSwap(orig File, origPerms os.FileMode) (File, error) {
 	return swap, nil
 }
 
-func validateFileType(file File) (os.FileInfo, error) {
+func validateFileType(file workspaceapi.File) (os.FileInfo, error) {
 	fileInfo, err := file.Stat()
 	if err != nil {
 		return nil, err
 	}
 
 	if fileInfo.IsDir() {
-		return nil, ErrFileIsNotRegular
+		return nil, workspaceapi.ErrFileIsNotRegular
 	}
 
 	mode := fileInfo.Mode()
@@ -118,11 +119,11 @@ func validateFileType(file File) (os.FileInfo, error) {
 		return fileInfo, nil
 	}
 
-	return nil, ErrFileIsNotRegular
+	return nil, workspaceapi.ErrFileIsNotRegular
 }
 
 func (f *file) openFile(filePath string, flag int) (
-	File, os.FileInfo, error,
+	workspaceapi.File, os.FileInfo, error,
 ) {
 	file, err := f.scheme.Open(filePath, flag, 0000)
 	if err != nil {
@@ -192,7 +193,7 @@ func (f *file) initFiles(filePath, swapDir string, readOnly bool) error {
 	return nil
 }
 
-func (f *file) initBuffer(buf *cell.Buffer, file File) (err error) {
+func (f *file) initBuffer(buf *cell.Buffer, file workspaceapi.File) (err error) {
 	buf.Reset()
 	view := newUnixFileReader(buf.View())
 
@@ -382,7 +383,7 @@ func (f *file) OnDidEdit(from, to term.Coordinates, old string) {
 }
 
 func (f *file) touchFile() (isExist bool) {
-	var err *Error
+	var err *workspaceapi.Error
 	f.orig, err = f.scheme.Open(f.fileName, os.O_RDWR|os.O_CREATE|os.O_EXCL, defaultFileMode)
 	if err != nil {
 		// file was not created when instantiating this file, but now
@@ -406,7 +407,7 @@ func (f *file) flush(force bool) error {
 	f.wg.Wait()
 
 	if f.swap == nil {
-		return ErrFileIsNotWritable
+		return workspaceapi.ErrFileIsNotWritable
 	}
 
 	err := f.delayedError
@@ -424,7 +425,7 @@ func (f *file) flush(force bool) error {
 	if f.orig == nil {
 		isExist := f.touchFile()
 		if isExist {
-			return ErrStaleData
+			return workspaceapi.ErrStaleData
 		}
 	} else {
 		newFileInfo, err := f.scheme.Stat(f.fileName)
@@ -433,7 +434,7 @@ func (f *file) flush(force bool) error {
 		}
 		if !force && (newFileInfo.ModTime().After(f.swapInfoModTime) ||
 			newFileInfo.ModTime().After(f.infoModTime)) {
-			return ErrStaleData
+			return workspaceapi.ErrStaleData
 		}
 
 		newFileInfo, err = f.scheme.Lstat(f.fileName)
@@ -453,7 +454,7 @@ func (f *file) flush(force bool) error {
 		return err
 	}
 	if !force && newSwapInfo.ModTime().After(f.swapInfoModTime) {
-		return ErrStaleData
+		return workspaceapi.ErrStaleData
 	}
 
 	err = f.swap.Sync()

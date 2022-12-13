@@ -38,7 +38,7 @@ func (c *schemeClientImpl) init(cc proto.MuxConn) {
 }
 
 func (c *schemeClientImpl) Open(name string, flag int, perm os.FileMode) (
-	workspace.File, *workspace.Error,
+	workspaceapi.File, *workspaceapi.Error,
 ) {
 	ret, err := c.impl.Open(name, flag, perm)
 	runtime.KeepAlive(c)
@@ -125,55 +125,55 @@ func (c *schemeClientImpl) ReadLink(filename string) (string, error) {
 	return resp.GetFilename(), nil
 }
 
-func (c *schemeClientImpl) NewPty() (workspace.Pty, error) {
+func (c *schemeClientImpl) NewPty() (workspaceapi.Pty, error) {
 	ret, err := c.impl.NewPty()
 	runtime.KeepAlive(c)
 	return ret, err
 }
 
-func (c *schemeClientImpl) SetPtySize(p workspace.Pty, width, height int) error {
+func (c *schemeClientImpl) SetPtySize(p workspaceapi.Pty, width, height int) error {
 	err := c.impl.SetPtySize(p, width, height)
 	runtime.KeepAlive(c)
 	return err
 }
 
-func (c *schemeClientImpl) Command(name string, arg ...string) (workspace.Pid, error) {
+func (c *schemeClientImpl) Command(name string, arg ...string) (workspaceapi.Pid, error) {
 	ret, err := c.impl.Command(name, arg...)
 	runtime.KeepAlive(c)
 	return ret, err
 }
 
-func (c *schemeClientImpl) Start(p workspace.Pid) error {
+func (c *schemeClientImpl) Start(p workspaceapi.Pid) error {
 	err := c.impl.Start(p)
 	runtime.KeepAlive(c)
 	return err
 }
 
-func (c *schemeClientImpl) Signal(p workspace.Pid, s syscall.Signal) error {
+func (c *schemeClientImpl) Signal(p workspaceapi.Pid, s syscall.Signal) error {
 	err := c.impl.Signal(p, s)
 	runtime.KeepAlive(c)
 	return err
 }
 
-func (c *schemeClientImpl) StderrPipe(p workspace.Pid) (io.ReadCloser, error) {
+func (c *schemeClientImpl) StderrPipe(p workspaceapi.Pid) (io.ReadCloser, error) {
 	ret, err := c.impl.StderrPipe(p)
 	runtime.KeepAlive(c)
 	return ret, err
 }
 
-func (c *schemeClientImpl) StdinPipe(p workspace.Pid) (io.WriteCloser, error) {
+func (c *schemeClientImpl) StdinPipe(p workspaceapi.Pid) (io.WriteCloser, error) {
 	ret, err := c.impl.StdinPipe(p)
 	runtime.KeepAlive(c)
 	return ret, err
 }
 
-func (c *schemeClientImpl) StdoutPipe(p workspace.Pid) (io.ReadCloser, error) {
+func (c *schemeClientImpl) StdoutPipe(p workspaceapi.Pid) (io.ReadCloser, error) {
 	ret, err := c.impl.StdoutPipe(p)
 	runtime.KeepAlive(c)
 	return ret, err
 }
 
-func (c *schemeClientImpl) Wait(p workspace.Pid) error {
+func (c *schemeClientImpl) Wait(p workspaceapi.Pid) error {
 	ret := c.impl.Wait(p)
 	runtime.KeepAlive(c)
 	return ret

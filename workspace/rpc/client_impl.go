@@ -7,7 +7,7 @@ import (
 
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/timestamppb"
-	"unstable.build/go-tui/workspace"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 )
 
 type openRemoveClientImpl struct {
@@ -42,7 +42,7 @@ type fileClient struct {
 }
 
 func (c *openRemoveClientImpl) Open(name string, flag int, perm os.FileMode) (
-	workspace.File, *workspace.Error,
+	workspaceapi.File, *workspaceapi.Error,
 ) {
 	ctx, cleanup := ctxWithTimeout()
 	defer cleanup()
@@ -50,12 +50,12 @@ func (c *openRemoveClientImpl) Open(name string, flag int, perm os.FileMode) (
 	req := makeOpenRequest(name, flag, perm)
 	resp, err := c.client.Open(ctx, req)
 	if err != nil {
-		return nil, &workspace.Error{Err: err}
+		return nil, &workspaceapi.Error{Err: err}
 	}
 	if werr, ok := isTypedError(resp); ok {
 		return nil, werr
 	}
-	// workspace.Pid is not necessary (and/or available) for files
+	// workspaceapi.Pid is not necessary (and/or available) for files
 	// because it's only used for Wait cleanup
 	return c.newFileClient(-1, resp.GetFilename(), resp.GetHandlerId()), nil
 }
@@ -191,9 +191,9 @@ type errResponse interface {
 	GetIsPermissionErr() bool
 }
 
-func isTypedError(resp errResponse) (*workspace.Error, bool) {
+func isTypedError(resp errResponse) (*workspaceapi.Error, bool) {
 	if resp.GetIsExistErr() || resp.GetIsNotExistErr() || resp.GetIsPermissionErr() {
-		return &workspace.Error{
+		return &workspaceapi.Error{
 			IsExist:      resp.GetIsExistErr(),
 			IsNotExist:   resp.GetIsNotExistErr(),
 			IsPermission: resp.GetIsPermissionErr(),

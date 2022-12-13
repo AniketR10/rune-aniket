@@ -41,7 +41,7 @@ func NewMemoryScheme(cfg config.Config, workspace workspaceapi.URI) (Scheme, err
 }
 
 // NewMemoryFile returns a in-memory File implementation.
-func NewMemoryFile(filename string, mode fs.FileMode, data []byte) File {
+func NewMemoryFile(filename string, mode fs.FileMode, data []byte) workspaceapi.File {
 	return &memFile{
 		filename: filename,
 		mode:     mode,
@@ -83,15 +83,17 @@ func (m *memoryScheme) init(workspace workspaceapi.URI) error {
 	return nil
 }
 
-func (m *memoryScheme) Open(path string, flag int, mode os.FileMode) (File, *Error) {
+func (m *memoryScheme) Open(path string, flag int, mode os.FileMode) (
+	workspaceapi.File, *workspaceapi.Error,
+) {
 	path = filepath.Clean(path)
 	if path == "" {
-		return nil, NopError(fmt.Errorf("invalid file %q", path))
+		return nil, workspaceapi.NopError(fmt.Errorf("invalid file %q", path))
 	}
 
 	uri, err := m.URI(path)
 	if err != nil {
-		return nil, NopError(err)
+		return nil, workspaceapi.NopError(err)
 	}
 	uriStr := uri.String()
 
@@ -100,16 +102,16 @@ func (m *memoryScheme) Open(path string, flag int, mode os.FileMode) (File, *Err
 
 	f, ok := m.files[uriStr]
 	if !ok && flag&os.O_CREATE == 0 {
-		return nil, &Error{IsNotExist: true}
+		return nil, &workspaceapi.Error{IsNotExist: true}
 	}
 	if ok && flag&os.O_CREATE != 0 && flag&os.O_EXCL != 0 {
-		return nil, &Error{IsExist: true}
+		return nil, &workspaceapi.Error{IsExist: true}
 	}
 	if ok && flag&os.O_TRUNC != 0 {
 		ok = false // force re-create
 	}
 	if flag&os.O_APPEND != 0 || flag&os.O_SYNC != 0 {
-		return nil, NopError(errors.New("unsupported Open flag"))
+		return nil, workspaceapi.NopError(errors.New("unsupported Open flag"))
 	}
 
 	if !ok {
@@ -142,7 +144,7 @@ func (m *memoryScheme) Remove(path string) error {
 	uriStr := uri.String()
 	_, ok := m.files[uriStr]
 	if !ok {
-		return Error{IsNotExist: true}.ToError()
+		return workspaceapi.Error{IsNotExist: true}.ToError()
 	}
 
 	delete(m.files, uriStr)
@@ -166,7 +168,7 @@ func (m *memoryScheme) Rename(old, new string) error {
 
 	f, ok := m.files[oldURIStr]
 	if !ok {
-		return Error{IsNotExist: true}.ToError()
+		return workspaceapi.Error{IsNotExist: true}.ToError()
 	}
 	delete(m.files, oldURIStr)
 	f.filename = filepath.Base(new)
@@ -201,7 +203,7 @@ func (m *memoryScheme) Stat(path string) (os.FileInfo, error) {
 	uriStr := uri.String()
 	f, ok := m.files[uriStr]
 	if !ok {
-		return nil, Error{IsNotExist: true}.ToError()
+		return nil, workspaceapi.Error{IsNotExist: true}.ToError()
 	}
 
 	return f.Stat()
@@ -230,39 +232,39 @@ func (m *memoryScheme) URI(path string) (workspaceapi.URI, error) {
 	return workspaceapi.ParseURI(uriStr)
 }
 
-func (m *memoryScheme) Command(name string, arg ...string) (Pid, error) {
+func (m *memoryScheme) Command(name string, arg ...string) (workspaceapi.Pid, error) {
 	return 0, errExecute
 }
 
-func (m *memoryScheme) Start(pid Pid) error {
+func (m *memoryScheme) Start(pid workspaceapi.Pid) error {
 	return errExecute
 }
 
-func (m *memoryScheme) Signal(pid Pid, signal syscall.Signal) error {
+func (m *memoryScheme) Signal(pid workspaceapi.Pid, signal syscall.Signal) error {
 	return errExecute
 }
 
-func (m *memoryScheme) StderrPipe(pid Pid) (io.ReadCloser, error) {
+func (m *memoryScheme) StderrPipe(pid workspaceapi.Pid) (io.ReadCloser, error) {
 	return nil, errExecute
 }
 
-func (m *memoryScheme) StdinPipe(pid Pid) (io.WriteCloser, error) {
+func (m *memoryScheme) StdinPipe(pid workspaceapi.Pid) (io.WriteCloser, error) {
 	return nil, errExecute
 }
 
-func (m *memoryScheme) StdoutPipe(pid Pid) (io.ReadCloser, error) {
+func (m *memoryScheme) StdoutPipe(pid workspaceapi.Pid) (io.ReadCloser, error) {
 	return nil, errExecute
 }
 
-func (m *memoryScheme) Wait(pid Pid) error {
+func (m *memoryScheme) Wait(pid workspaceapi.Pid) error {
 	return errExecute
 }
 
-func (m *memoryScheme) NewPty() (Pty, error) {
-	return Pty{}, errExecute
+func (m *memoryScheme) NewPty() (workspaceapi.Pty, error) {
+	return workspaceapi.Pty{}, errExecute
 }
 
-func (m *memoryScheme) SetPtySize(p Pty, width, height int) error {
+func (m *memoryScheme) SetPtySize(p workspaceapi.Pty, width, height int) error {
 	return errExecute
 }
 

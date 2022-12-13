@@ -1,4 +1,4 @@
-package workspace
+package api
 
 import (
 	"errors"
@@ -48,7 +48,7 @@ func (e Error) ToError() error {
 	if e.Err != nil {
 		return e.Err
 	}
-	panic("workspace.Error with nil Error")
+	panic("workspaceapi.Error with nil Error")
 }
 
 // NopError returns an Error that simply wraps err.

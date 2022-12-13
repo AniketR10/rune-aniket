@@ -16,7 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	workspaceapi "unstable.build/go-tui/api/workspace"
-	"unstable.build/go-tui/workspace"
+	workspaceapitest "unstable.build/go-tui/api/workspace/test"
 	workspacetest "unstable.build/go-tui/workspace/test"
 )
 
@@ -52,11 +52,11 @@ func setupClientServerTest(
 	}
 }
 
-func setupClientServerUnitTest(t *testing.T) (*Client, *Server, *workspace.MockOsFile, func()) {
+func setupClientServerUnitTest(t *testing.T) (*Client, *Server, *workspaceapitest.MockFile, func()) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mock := workspace.NewMockOsFile(ctrl)
+	mock := workspaceapitest.NewMockFile(ctrl)
 	mockExecutor := workspacetest.NewMockWorkspace(ctrl)
 	server := NewServer(mockExecutor, new(sync.Mutex))
 	client, cleanup := setupClientServerTest(t, server)
@@ -66,42 +66,42 @@ func setupClientServerUnitTest(t *testing.T) (*Client, *Server, *workspace.MockO
 func expectCommand(t *testing.T, s *Server, pid int) {
 	s.wp.(*workspacetest.MockWorkspace).EXPECT().
 		Command(gomock.Any(), gomock.Any()).
-		Return(workspace.Pid(pid), nil)
+		Return(workspaceapi.Pid(pid), nil)
 }
 
 func TestClientServer(t *testing.T) {
 	tsuite := []struct {
 		description string
-		do          func(*testing.T, *workspace.MockOsFile, *Client, *Server)
+		do          func(*testing.T, *workspaceapitest.MockFile, *Client, *Server)
 	}{
-		{"Command happy path", func(t *testing.T, mock *workspace.MockOsFile, c *Client, s *Server) {
+		{"Command happy path", func(t *testing.T, mock *workspaceapitest.MockFile, c *Client, s *Server) {
 			s.wp.(*workspacetest.MockWorkspace).EXPECT().
-				Command(gomock.Eq("six"), gomock.Eq("arg1")).Return(workspace.Pid(1), nil)
+				Command(gomock.Eq("six"), gomock.Eq("arg1")).Return(workspaceapi.Pid(1), nil)
 			pid, err := c.Command("six", "arg1")
 			require.NoError(t, err)
-			assert.Equal(t, workspace.Pid(1), pid)
+			assert.Equal(t, workspaceapi.Pid(1), pid)
 		}},
-		{"Command error", func(t *testing.T, mock *workspace.MockOsFile, c *Client, s *Server) {
+		{"Command error", func(t *testing.T, mock *workspaceapitest.MockFile, c *Client, s *Server) {
 			s.wp.(*workspacetest.MockWorkspace).EXPECT().
 				Command(gomock.Any(), gomock.Any()).
-				Return(workspace.Pid(0), errors.New("boom"))
+				Return(workspaceapi.Pid(0), errors.New("boom"))
 
 			_, err := c.Command("six", "arg1")
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), "boom")
 		}},
-		{"Start happy path", func(t *testing.T, mock *workspace.MockOsFile, c *Client, s *Server) {
+		{"Start happy path", func(t *testing.T, mock *workspaceapitest.MockFile, c *Client, s *Server) {
 			expectCommand(t, s, 99)
 			pid, err := c.Command("six", "arg1")
 			require.NoError(t, err)
 
 			s.wp.(*workspacetest.MockWorkspace).EXPECT().
-				Start(gomock.Eq(workspace.Pid(99))).Return(nil)
+				Start(gomock.Eq(workspaceapi.Pid(99))).Return(nil)
 
 			err = c.Start(pid)
 			assert.NoError(t, err)
 		}},
-		{"Start error", func(t *testing.T, mock *workspace.MockOsFile, c *Client, s *Server) {
+		{"Start error", func(t *testing.T, mock *workspaceapitest.MockFile, c *Client, s *Server) {
 			expectCommand(t, s, 99)
 			pid, err := c.Command("six", "arg1")
 			require.NoError(t, err)
@@ -113,18 +113,18 @@ func TestClientServer(t *testing.T) {
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), "boom")
 		}},
-		{"Wait happy path", func(t *testing.T, mock *workspace.MockOsFile, c *Client, s *Server) {
+		{"Wait happy path", func(t *testing.T, mock *workspaceapitest.MockFile, c *Client, s *Server) {
 			expectCommand(t, s, 99)
 			pid, err := c.Command("six", "arg1")
 			require.NoError(t, err)
 
 			s.wp.(*workspacetest.MockWorkspace).EXPECT().
-				Wait(gomock.Eq(workspace.Pid(99))).Return(nil)
+				Wait(gomock.Eq(workspaceapi.Pid(99))).Return(nil)
 
 			err = c.Wait(pid)
 			assert.NoError(t, err)
 		}},
-		{"Wait error", func(t *testing.T, mock *workspace.MockOsFile, c *Client, s *Server) {
+		{"Wait error", func(t *testing.T, mock *workspaceapitest.MockFile, c *Client, s *Server) {
 			expectCommand(t, s, 99)
 			pid, err := c.Command("six", "arg1")
 			require.NoError(t, err)
@@ -136,19 +136,19 @@ func TestClientServer(t *testing.T) {
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), "boom")
 		}},
-		{"Signal happy path", func(t *testing.T, mock *workspace.MockOsFile, c *Client, s *Server) {
+		{"Signal happy path", func(t *testing.T, mock *workspaceapitest.MockFile, c *Client, s *Server) {
 			expectCommand(t, s, 99)
 			pid, err := c.Command("six", "arg1")
 			require.NoError(t, err)
 
 			s.wp.(*workspacetest.MockWorkspace).EXPECT().
-				Signal(gomock.Eq(workspace.Pid(99)), gomock.Eq(syscall.SIGTERM)).
+				Signal(gomock.Eq(workspaceapi.Pid(99)), gomock.Eq(syscall.SIGTERM)).
 				Return(nil)
 
 			err = c.Signal(pid, syscall.SIGTERM)
 			assert.NoError(t, err)
 		}},
-		{"Signal error", func(t *testing.T, mock *workspace.MockOsFile, c *Client, s *Server) {
+		{"Signal error", func(t *testing.T, mock *workspaceapitest.MockFile, c *Client, s *Server) {
 			expectCommand(t, s, 99)
 			pid, err := c.Command("six", "arg1")
 			require.NoError(t, err)
@@ -161,13 +161,13 @@ func TestClientServer(t *testing.T) {
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), "boom")
 		}},
-		{"StdinPipe happy path", func(t *testing.T, mock *workspace.MockOsFile, c *Client, s *Server) {
+		{"StdinPipe happy path", func(t *testing.T, mock *workspaceapitest.MockFile, c *Client, s *Server) {
 			expectCommand(t, s, 99)
 			pid, err := c.Command("six", "arg1")
 			require.NoError(t, err)
 
 			s.wp.(*workspacetest.MockWorkspace).EXPECT().
-				StdinPipe(gomock.Eq(workspace.Pid(99))).Return(mock, nil)
+				StdinPipe(gomock.Eq(workspaceapi.Pid(99))).Return(mock, nil)
 
 			pipe, err := c.StdinPipe(pid)
 			require.NoError(t, err)
@@ -186,13 +186,13 @@ func TestClientServer(t *testing.T) {
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), "boom")
 		}},
-		{"Write non-utf8 data", func(t *testing.T, mock *workspace.MockOsFile, c *Client, s *Server) {
+		{"Write non-utf8 data", func(t *testing.T, mock *workspaceapitest.MockFile, c *Client, s *Server) {
 			expectCommand(t, s, 99)
 			pid, err := c.Command("six", "arg1")
 			require.NoError(t, err)
 
 			s.wp.(*workspacetest.MockWorkspace).EXPECT().
-				StdinPipe(gomock.Eq(workspace.Pid(99))).Return(mock, nil)
+				StdinPipe(gomock.Eq(workspaceapi.Pid(99))).Return(mock, nil)
 
 			pipe, err := c.StdinPipe(pid)
 			require.NoError(t, err)
@@ -204,7 +204,7 @@ func TestClientServer(t *testing.T) {
 			require.NoError(t, err)
 			assert.Equal(t, 10, n)
 		}},
-		{"StdinPipe error", func(t *testing.T, mock *workspace.MockOsFile, c *Client, s *Server) {
+		{"StdinPipe error", func(t *testing.T, mock *workspaceapitest.MockFile, c *Client, s *Server) {
 			expectCommand(t, s, 99)
 			pid, err := c.Command("six", "arg1")
 			require.NoError(t, err)
@@ -216,13 +216,13 @@ func TestClientServer(t *testing.T) {
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), "boom")
 		}},
-		{"StdoutPipe happy path", func(t *testing.T, mock *workspace.MockOsFile, c *Client, s *Server) {
+		{"StdoutPipe happy path", func(t *testing.T, mock *workspaceapitest.MockFile, c *Client, s *Server) {
 			expectCommand(t, s, 99)
 			pid, err := c.Command("six", "arg1")
 			require.NoError(t, err)
 
 			s.wp.(*workspacetest.MockWorkspace).EXPECT().
-				StdoutPipe(gomock.Eq(workspace.Pid(99))).Return(mock, nil)
+				StdoutPipe(gomock.Eq(workspaceapi.Pid(99))).Return(mock, nil)
 
 			pipe, err := c.StdoutPipe(pid)
 			require.NoError(t, err)
@@ -239,13 +239,13 @@ func TestClientServer(t *testing.T) {
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), "boom")
 		}},
-		{"Read non-utf8 data", func(t *testing.T, mock *workspace.MockOsFile, c *Client, s *Server) {
+		{"Read non-utf8 data", func(t *testing.T, mock *workspaceapitest.MockFile, c *Client, s *Server) {
 			expectCommand(t, s, 99)
 			pid, err := c.Command("six", "arg1")
 			require.NoError(t, err)
 
 			s.wp.(*workspacetest.MockWorkspace).EXPECT().
-				StdoutPipe(gomock.Eq(workspace.Pid(99))).Return(mock, nil)
+				StdoutPipe(gomock.Eq(workspaceapi.Pid(99))).Return(mock, nil)
 
 			pipe, err := c.StdoutPipe(pid)
 			require.NoError(t, err)
@@ -260,7 +260,7 @@ func TestClientServer(t *testing.T) {
 			assert.Equal(t, 7, n)
 			assert.Equal(t, "a:1:a\xc5z", string(buf))
 		}},
-		{"StdoutPipe error", func(t *testing.T, mock *workspace.MockOsFile, c *Client, s *Server) {
+		{"StdoutPipe error", func(t *testing.T, mock *workspaceapitest.MockFile, c *Client, s *Server) {
 			expectCommand(t, s, 99)
 			pid, err := c.Command("six", "arg1")
 			require.NoError(t, err)
@@ -272,13 +272,13 @@ func TestClientServer(t *testing.T) {
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), "boom")
 		}},
-		{"StderrPipe happy path", func(t *testing.T, mock *workspace.MockOsFile, c *Client, s *Server) {
+		{"StderrPipe happy path", func(t *testing.T, mock *workspaceapitest.MockFile, c *Client, s *Server) {
 			expectCommand(t, s, 99)
 			pid, err := c.Command("six", "arg1")
 			require.NoError(t, err)
 
 			s.wp.(*workspacetest.MockWorkspace).EXPECT().
-				StderrPipe(gomock.Eq(workspace.Pid(99))).Return(mock, nil)
+				StderrPipe(gomock.Eq(workspaceapi.Pid(99))).Return(mock, nil)
 
 			pipe, err := c.StderrPipe(pid)
 			require.NoError(t, err)
@@ -296,7 +296,7 @@ func TestClientServer(t *testing.T) {
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), "boom")
 		}},
-		{"StderrPipe error", func(t *testing.T, mock *workspace.MockOsFile, c *Client, s *Server) {
+		{"StderrPipe error", func(t *testing.T, mock *workspaceapitest.MockFile, c *Client, s *Server) {
 			expectCommand(t, s, 99)
 			pid, err := c.Command("six", "arg1")
 			require.NoError(t, err)
@@ -308,7 +308,7 @@ func TestClientServer(t *testing.T) {
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), "boom")
 		}},
-		{"URI happy path", func(t *testing.T, mock *workspace.MockOsFile, c *Client, s *Server) {
+		{"URI happy path", func(t *testing.T, mock *workspaceapitest.MockFile, c *Client, s *Server) {
 			uri, err := workspaceapi.ParseURI("ssh://user@my_host:8080/tmp/hello/world.go")
 			require.NoError(t, err)
 
@@ -319,7 +319,7 @@ func TestClientServer(t *testing.T) {
 			assert.NoError(t, err)
 			assert.Equal(t, uri.String(), actualUri.String())
 		}},
-		{"URI error", func(t *testing.T, mock *workspace.MockOsFile, c *Client, s *Server) {
+		{"URI error", func(t *testing.T, mock *workspaceapitest.MockFile, c *Client, s *Server) {
 			s.wp.(*workspacetest.MockWorkspace).EXPECT().
 				URI(gomock.Any()).Return(workspaceapi.URI{}, errors.New("boom"))
 
@@ -327,7 +327,7 @@ func TestClientServer(t *testing.T) {
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), "boom")
 		}},
-		{"Remove happy path", func(t *testing.T, mock *workspace.MockOsFile, c *Client, s *Server) {
+		{"Remove happy path", func(t *testing.T, mock *workspaceapitest.MockFile, c *Client, s *Server) {
 			s.wp.(*workspacetest.MockWorkspace).EXPECT().
 				Remove(gomock.Eq("/tmp/hello_world.go")).
 				Return(nil)
@@ -335,7 +335,7 @@ func TestClientServer(t *testing.T) {
 			err := c.Remove("/tmp/hello_world.go")
 			assert.NoError(t, err)
 		}},
-		{"Remove error", func(t *testing.T, mock *workspace.MockOsFile, c *Client, s *Server) {
+		{"Remove error", func(t *testing.T, mock *workspaceapitest.MockFile, c *Client, s *Server) {
 			s.wp.(*workspacetest.MockWorkspace).EXPECT().
 				Remove(gomock.Eq("/tmp/hello_world.go")).
 				Return(errors.New("pow"))
@@ -344,7 +344,7 @@ func TestClientServer(t *testing.T) {
 			require.NotNil(t, err)
 			assert.True(t, strings.Contains(err.Error(), "pow"))
 		}},
-		{"Open happy path", func(t *testing.T, mock *workspace.MockOsFile, c *Client, s *Server) {
+		{"Open happy path", func(t *testing.T, mock *workspaceapitest.MockFile, c *Client, s *Server) {
 			s.wp.(*workspacetest.MockWorkspace).EXPECT().
 				Open(gomock.Eq("/tmp/hello_world.go"), gomock.Eq(os.O_RDWR|os.O_CREATE|os.O_EXCL|os.O_APPEND|os.O_SYNC|os.O_TRUNC), gomock.Eq(os.FileMode(0666))).
 				Return(testFile{}, nil)
@@ -353,26 +353,26 @@ func TestClientServer(t *testing.T) {
 			assert.Nil(t, err)
 			assert.NotNil(t, f)
 		}},
-		{"Open error", func(t *testing.T, mock *workspace.MockOsFile, c *Client, s *Server) {
+		{"Open error", func(t *testing.T, mock *workspaceapitest.MockFile, c *Client, s *Server) {
 			s.wp.(*workspacetest.MockWorkspace).EXPECT().
 				Open(gomock.Eq("/tmp/hello_world.go"), gomock.Eq(os.O_RDONLY), gomock.Eq(os.FileMode(2))).
-				Return(nil, &workspace.Error{Err: errors.New("pow")})
+				Return(nil, &workspaceapi.Error{Err: errors.New("pow")})
 
 			f, err := c.Open("/tmp/hello_world.go", os.O_RDONLY, 2)
 			require.NotNil(t, err)
 			assert.True(t, strings.Contains(err.Err.Error(), "pow"))
 			assert.Nil(t, f)
 		}},
-		{"NewPty happy path", func(t *testing.T, mock *workspace.MockOsFile, c *Client, s *Server) {
+		{"NewPty happy path", func(t *testing.T, mock *workspaceapitest.MockFile, c *Client, s *Server) {
 			ctrl := gomock.NewController(t)
-			mockFile := workspacetest.NewMockFile(ctrl)
+			mockFile := workspaceapitest.NewMockFile(ctrl)
 			s.wp.(*workspacetest.MockWorkspace).EXPECT().
 				NewPty().
-				Return(workspace.Pty{Pid: 1, Master: mockFile, Slave: "follower"}, nil)
+				Return(workspaceapi.Pty{Pid: 1, Master: mockFile, Slave: "follower"}, nil)
 
 			pty, err := c.NewPty()
 			require.NoError(t, err)
-			assert.Equal(t, workspace.Pid(1), pty.Pid)
+			assert.Equal(t, workspaceapi.Pid(1), pty.Pid)
 			assert.Equal(t, "follower", pty.Slave)
 
 			mockFile.EXPECT().Read(gomock.Any()).DoAndReturn(func(b []byte) (n int, err error) {
@@ -386,29 +386,29 @@ func TestClientServer(t *testing.T) {
 			mockFile.EXPECT().Close().Return(nil)
 			assert.NoError(t, pty.Master.Close())
 		}},
-		{"NewPty error", func(t *testing.T, mock *workspace.MockOsFile, c *Client, s *Server) {
+		{"NewPty error", func(t *testing.T, mock *workspaceapitest.MockFile, c *Client, s *Server) {
 			s.wp.(*workspacetest.MockWorkspace).EXPECT().
 				NewPty().
-				Return(workspace.Pty{}, errors.New("bummer"))
+				Return(workspaceapi.Pty{}, errors.New("bummer"))
 
 			_, err := c.NewPty()
 			assert.Error(t, err)
 			assert.Contains(t, err.Error(), "bummer")
 		}},
-		{"SetPtySize happy path", func(t *testing.T, mock *workspace.MockOsFile, c *Client, s *Server) {
+		{"SetPtySize happy path", func(t *testing.T, mock *workspaceapitest.MockFile, c *Client, s *Server) {
 			ctrl := gomock.NewController(t)
-			mockFile := workspacetest.NewMockFile(ctrl)
+			mockFile := workspaceapitest.NewMockFile(ctrl)
 			s.wp.(*workspacetest.MockWorkspace).EXPECT().
 				NewPty().
-				Return(workspace.Pty{Pid: 1, Slave: "one", Master: mockFile}, nil)
+				Return(workspaceapi.Pty{Pid: 1, Slave: "one", Master: mockFile}, nil)
 			pty, err := c.NewPty()
 			require.NoError(t, err)
 
 			s.wp.(*workspacetest.MockWorkspace).EXPECT().
 				SetPtySize(gomock.Any(), gomock.Eq(1), gomock.Eq(1)).
-				DoAndReturn(func(pty workspace.Pty, width, height int) error {
+				DoAndReturn(func(pty workspaceapi.Pty, width, height int) error {
 					assert.Equal(t, "one", pty.Slave)
-					assert.Equal(t, workspace.Pid(1), pty.Pid)
+					assert.Equal(t, workspaceapi.Pid(1), pty.Pid)
 					assert.Equal(t, 1, width)
 					assert.Equal(t, 1, height)
 					// must be exact instance returned by underlying Scheme
@@ -419,12 +419,12 @@ func TestClientServer(t *testing.T) {
 			err = c.SetPtySize(pty, 1, 1)
 			assert.NoError(t, err)
 		}},
-		{"SetPtySize error", func(t *testing.T, mock *workspace.MockOsFile, c *Client, s *Server) {
+		{"SetPtySize error", func(t *testing.T, mock *workspaceapitest.MockFile, c *Client, s *Server) {
 			ctrl := gomock.NewController(t)
-			mockFile := workspacetest.NewMockFile(ctrl)
+			mockFile := workspaceapitest.NewMockFile(ctrl)
 			s.wp.(*workspacetest.MockWorkspace).EXPECT().
 				NewPty().
-				Return(workspace.Pty{Master: mockFile}, nil)
+				Return(workspaceapi.Pty{Master: mockFile}, nil)
 			pty, err := c.NewPty()
 			require.NoError(t, err)
 
@@ -435,7 +435,7 @@ func TestClientServer(t *testing.T) {
 			assert.Error(t, err)
 			assert.Contains(t, err.Error(), "bummer")
 		}},
-		{"Remove error", func(t *testing.T, mock *workspace.MockOsFile, c *Client, s *Server) {
+		{"Remove error", func(t *testing.T, mock *workspaceapitest.MockFile, c *Client, s *Server) {
 			s.wp.(*workspacetest.MockWorkspace).EXPECT().
 				Remove(gomock.Eq("/tmp/hello_world.go")).
 				Return(errors.New("pow"))
@@ -444,7 +444,7 @@ func TestClientServer(t *testing.T) {
 			require.NotNil(t, err)
 			assert.True(t, strings.Contains(err.Error(), "pow"))
 		}},
-		{"ReadDir happy path", func(t *testing.T, mock *workspace.MockOsFile, c *Client, s *Server) {
+		{"ReadDir happy path", func(t *testing.T, mock *workspaceapitest.MockFile, c *Client, s *Server) {
 			s.wp.(*workspacetest.MockWorkspace).EXPECT().
 				ReadDir(gomock.Any()).
 				DoAndReturn(func(root string) ([]os.DirEntry, error) {
@@ -455,7 +455,7 @@ func TestClientServer(t *testing.T) {
 			require.Len(t, dirs, 1)
 			assert.Equal(t, "a", dirs[0].Name())
 		}},
-		{"ReadDir error", func(t *testing.T, mock *workspace.MockOsFile, c *Client, s *Server) {
+		{"ReadDir error", func(t *testing.T, mock *workspaceapitest.MockFile, c *Client, s *Server) {
 			s.wp.(*workspacetest.MockWorkspace).EXPECT().
 				ReadDir(gomock.Any()).
 				DoAndReturn(func(string) ([]os.DirEntry, error) {

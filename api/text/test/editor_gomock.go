@@ -10,7 +10,7 @@ import (
 	gomock "github.com/golang/mock/gomock"
 	tui "unstable.build/go-tui"
 	api "unstable.build/go-tui/api/text"
-	workspaceapi "unstable.build/go-tui/api/workspace"
+	api0 "unstable.build/go-tui/api/workspace"
 	cell "unstable.build/go-tui/cell"
 	term "unstable.build/go-tui/term"
 )
@@ -121,10 +121,10 @@ func (mr *MockHandlerMockRecorder) Resize(width, height interface{}) *gomock.Cal
 }
 
 // Resource mocks base method.
-func (m *MockHandler) Resource() workspaceapi.URI {
+func (m *MockHandler) Resource() api0.URI {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Resource")
-	ret0, _ := ret[0].(workspaceapi.URI)
+	ret0, _ := ret[0].(api0.URI)
 	return ret0
 }
 
@@ -279,7 +279,7 @@ func (mr *MockEditorMockRecorder) Cursor(arg0 interface{}) *gomock.Call {
 }
 
 // Edit mocks base method.
-func (m *MockEditor) Edit(file workspaceapi.URI, buf *cell.Buffer) (api.Handler, error) {
+func (m *MockEditor) Edit(file api0.URI, buf *cell.Buffer) (api.Handler, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Edit", file, buf)
 	ret0, _ := ret[0].(api.Handler)
@@ -294,7 +294,7 @@ func (mr *MockEditorMockRecorder) Edit(file, buf interface{}) *gomock.Call {
 }
 
 // Editor mocks base method.
-func (m *MockEditor) Editor(file workspaceapi.URI) (api.Handler, error) {
+func (m *MockEditor) Editor(file api0.URI) (api.Handler, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Editor", file)
 	ret0, _ := ret[0].(api.Handler)

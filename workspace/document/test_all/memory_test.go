@@ -98,7 +98,7 @@ func testWorkspaceSchemeSuite(
 	})
 }
 
-func createTestFile(t *testing.T, s workspace.Scheme, filename, content string) (workspace.File, func()) {
+func createTestFile(t *testing.T, s workspace.Scheme, filename, content string) (workspaceapi.File, func()) {
 	file, werr := s.Open(filename, os.O_CREATE|os.O_EXCL|os.O_RDWR, 0666)
 	require.Nil(t, werr, werr.String())
 
@@ -155,7 +155,7 @@ func readContent(r io.Reader) ([]byte, error) {
 	return []byte(temp.Content), nil
 }
 
-func writeContent(f workspace.File, data []byte) (int, error) {
+func writeContent(f workspaceapi.File, data []byte) (int, error) {
 	allData, err := ioutil.ReadAll(f)
 	if err != nil {
 		return 0, err
