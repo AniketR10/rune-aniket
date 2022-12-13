@@ -3,8 +3,8 @@ package api
 import (
 	"context"
 
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/term"
-	"unstable.build/go-tui/workspace"
 )
 
 // EventType is a type of editor event.
@@ -49,7 +49,7 @@ const (
 // Event encapsulates eventual information about a particular editor resource.
 type Event struct {
 	Type     EventType
-	URI      workspace.URI
+	URI      workspaceapi.URI
 	Resource Handler
 
 	Start, End term.Coordinates

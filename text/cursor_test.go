@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	textapi "unstable.build/go-tui/api/text"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/config"
@@ -1890,12 +1891,12 @@ func TestCursorReplaceAllWithNewline(t *testing.T) {
 	assert.Equal(t, "hello\nworld", e.buffer().String())
 }
 
-func cwdURI(t *testing.T) workspace.URI {
+func cwdURI(t *testing.T) workspaceapi.URI {
 	wd, err := os.Getwd()
 	if err != nil {
 		t.Fatalf("Failed to get working directory: %s", err)
 	}
-	uri, err := workspace.CurrentUserHostURI(wd)
+	uri, err := workspaceapi.CurrentUserHostURI(wd)
 	if err != nil {
 		t.Fatalf("Failed to parse working directory as URI %s: %s", wd, err)
 	}
@@ -1951,10 +1952,10 @@ func TestFileCursorIntegration(t *testing.T) {
 			scroll.Resize(10, 10)
 			cursor := NewCursor(scroll)
 
-			uri, err := workspace.CurrentUserHostURI(file.Name())
+			uri, err := workspaceapi.CurrentUserHostURI(file.Name())
 			require.NoError(t, err)
 
-			swapDir, err := workspace.CurrentUserHostURI("/tmp")
+			swapDir, err := workspaceapi.CurrentUserHostURI("/tmp")
 			require.NoError(t, err)
 
 			// installs unix reader

@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"unstable.build/go-tui"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/config"
 	"unstable.build/go-tui/term"
@@ -17,12 +18,12 @@ import (
 )
 
 func newIntegrationTestCase(t *testing.T, content string) (
-	*cell.Buffer, workspace.FlusherCloser, workspace.URI, func(),
+	*cell.Buffer, workspace.FlusherCloser, workspaceapi.URI, func(),
 ) {
 	tempDir, err := ioutil.TempDir("", "")
 	require.NoError(t, err)
 
-	workspaceURI, err := workspace.CurrentUserHostURI(tempDir)
+	workspaceURI, err := workspaceapi.CurrentUserHostURI(tempDir)
 	require.NoError(t, err)
 
 	manager := workspace.NewManager(config.NopConfig())
@@ -36,10 +37,10 @@ func newIntegrationTestCase(t *testing.T, content string) (
 	_, err = file.Write([]byte(content))
 	require.NoError(t, err)
 
-	uri, err := workspace.CurrentUserHostURI(file.Name())
+	uri, err := workspaceapi.CurrentUserHostURI(file.Name())
 	require.NoError(t, err)
 
-	swapURI, err := workspace.CurrentUserHostURI(tempDir)
+	swapURI, err := workspaceapi.CurrentUserHostURI(tempDir)
 	require.NoError(t, err)
 
 	buffer := cell.NewBuffer()

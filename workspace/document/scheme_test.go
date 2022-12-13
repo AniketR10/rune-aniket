@@ -11,8 +11,8 @@ import (
 	"github.com/ernestrc/blue/encoding/yaml"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/config"
-	"unstable.build/go-tui/workspace"
 )
 
 type testStruct struct {
@@ -36,7 +36,7 @@ func (t testStruct) UpdatedTime() time.Time {
 
 func TestDocumentOpen(t *testing.T) {
 	t.Run("file should have a default template after Open", func(t *testing.T) {
-		workspaceURI, err := workspace.ParseURI("inmemory:///tmp")
+		workspaceURI, err := workspaceapi.ParseURI("inmemory:///tmp")
 		require.NoError(t, err)
 		marshaler := yaml.Marshaler()
 		svc := document.NewInMemoryServiceWithMarshaler(marshaler)

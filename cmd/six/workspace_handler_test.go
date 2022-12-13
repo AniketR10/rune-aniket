@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"unstable.build/go-tui"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/config"
 	"unstable.build/go-tui/plugin"
 	"unstable.build/go-tui/proto"
@@ -61,7 +62,7 @@ func TestWorkspaceConfig(t *testing.T) {
 
 		passed := make(map[string]interface{})
 		manager.RegisterScheme(workspace.MemoryScheme,
-			func(cfg config.Config, uri workspace.URI) (workspace.Scheme, error,
+			func(cfg config.Config, uri workspaceapi.URI) (workspace.Scheme, error,
 			) {
 				cfg.Iterate(func(k string, v interface{}) {
 					passed[k] = v
@@ -69,7 +70,7 @@ func TestWorkspaceConfig(t *testing.T) {
 				return workspace.NewMemoryScheme(cfg, uri)
 			})
 
-		uri, err := workspace.ParseURI("memory:///tmp")
+		uri, err := workspaceapi.ParseURI("memory:///tmp")
 		require.NoError(t, err)
 
 		m := newTestWorkspaceManagerHandlerWithManager(t, manager, uri, cfg)
@@ -268,7 +269,7 @@ func (m *clipboardManagerTest) Close() error {
 
 func newTestWorkspaceManagerHandlerWithManager(
 	t *testing.T, manager *workspace.Manager,
-	uri workspace.URI, cfg ideConfig,
+	uri workspaceapi.URI, cfg ideConfig,
 ) *testWorkspaceManagerHandler {
 	clip := &clipboardManagerTest{Clipboard: text.NewInMemoryClipboard()}
 	dir, err := ioutil.TempDir("", "")
@@ -293,7 +294,7 @@ func newTestWorkspaceManagerHandler(
 	require.NoError(t, manager.RegisterScheme(workspace.FileScheme,
 		workspace.NewFileScheme))
 
-	uri, err := workspace.ParseURI("memory:///tmp")
+	uri, err := workspaceapi.ParseURI("memory:///tmp")
 	require.NoError(t, err)
 
 	return newTestWorkspaceManagerHandlerWithManager(t, manager, uri, cc)

@@ -8,12 +8,12 @@ import (
 	"github.com/stretchr/testify/require"
 	"unstable.build/go-tui"
 	browserapi "unstable.build/go-tui/api/browser"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	browser "unstable.build/go-tui/browser"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/term"
 	testutil "unstable.build/go-tui/util/test"
-	"unstable.build/go-tui/workspace"
 )
 
 func splitVerticalLeft(c *browser.Component, h browser.Handler) (browser.Window, bool) {
@@ -63,7 +63,7 @@ func TestComponentCloseWindow(t *testing.T) {
 		tcase := _tcase
 		t.Run(tcase.method+"closes window correctly", func(t *testing.T) {
 			c := browser.NewComponent(browser.Config{})
-			uri, err := workspace.ParseURI("file:///OAK")
+			uri, err := workspaceapi.ParseURI("file:///OAK")
 			require.NoError(t, err)
 
 			var h browser.Handler
@@ -161,11 +161,11 @@ func TestComponentRemoveAllTabs(t *testing.T) {
 		before := tcase.before
 		after := tcase.after
 		t.Run(tcase.description, func(t *testing.T) {
-			uri1, err := workspace.ParseURI("file:///a")
+			uri1, err := workspaceapi.ParseURI("file:///a")
 			require.NoError(t, err)
-			uri2, err := workspace.ParseURI("file:///b")
+			uri2, err := workspaceapi.ParseURI("file:///b")
 			require.NoError(t, err)
-			uri3, err := workspace.ParseURI("file:///c")
+			uri3, err := workspaceapi.ParseURI("file:///c")
 			require.NoError(t, err)
 
 			handlers := [3]testCloser{}
@@ -220,7 +220,7 @@ func TestComponentSetContent(t *testing.T) {
 		t.Run(tcase.method, func(t *testing.T) {
 			c := browser.NewComponent(browser.Config{})
 			win0 := c.Focus()
-			uri, err := workspace.ParseURI("file:///Merry_Christmas")
+			uri, err := workspaceapi.ParseURI("file:///Merry_Christmas")
 			require.NoError(t, err)
 
 			christmasTab := c.NewTab(uri, "Merry Christmas", NewTestHandler(), nil)
@@ -270,11 +270,11 @@ func TestComponentEditWindowTab(t *testing.T) {
 		t.Run(tcase.method, func(t *testing.T) {
 			c := browser.NewComponent(browser.Config{})
 			win0 := c.Focus()
-			uri1, err := workspace.ParseURI("file:///AMZN")
+			uri1, err := workspaceapi.ParseURI("file:///AMZN")
 			require.NoError(t, err)
-			uri2, err := workspace.ParseURI("file:///TSLA")
+			uri2, err := workspaceapi.ParseURI("file:///TSLA")
 			require.NoError(t, err)
-			uri3, err := workspace.ParseURI("file:///GOOG")
+			uri3, err := workspaceapi.ParseURI("file:///GOOG")
 			require.NoError(t, err)
 
 			amzn := c.NewTab(uri1, "AMZN", NewTestHandler(), nil)
@@ -431,9 +431,9 @@ func TestComponentHandlerClose(t *testing.T) {
 				t.Run(tcase.name, func(t *testing.T) {
 					mock := &testCloser{}
 					c := browser.NewComponent(cfg)
-					uri1, err := workspace.ParseURI("file:///Robinhood")
+					uri1, err := workspaceapi.ParseURI("file:///Robinhood")
 					require.NoError(t, err)
-					uri2, err := workspace.ParseURI("file:///Stash")
+					uri2, err := workspaceapi.ParseURI("file:///Stash")
 					require.NoError(t, err)
 
 					c.NewTab(uri1, "Robinhood", NewTestHandler(), nil)
@@ -568,7 +568,7 @@ func TestComponentPrompt(t *testing.T) {
 	cfg.PromptConfig.Height = 7
 	c := browser.NewComponent(cfg)
 	c.Resize(20, 8)
-	uri, err := workspace.ParseURI("file:///Music")
+	uri, err := workspaceapi.ParseURI("file:///Music")
 	require.NoError(t, err)
 
 	h := NewTestHandler()
@@ -761,7 +761,7 @@ func TestHandleExitAfterContentSetIssue(t *testing.T) {
 	c := browser.NewComponent(cfg)
 	c.Resize(20, 8)
 
-	uri, err := workspace.ParseURI("my:///thing")
+	uri, err := workspaceapi.ParseURI("my:///thing")
 	require.NoError(t, err)
 
 	tab := c.NewTab(uri, "bla", NewTestHandler(), nil)

@@ -4,10 +4,10 @@ import (
 	"fmt"
 
 	textapi "unstable.build/go-tui/api/text"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/term"
-	"unstable.build/go-tui/workspace"
 )
 
 // Handler just wraps a tui.Handler to indicate that this API's handlers might
@@ -17,7 +17,7 @@ type Handler interface {
 
 	// This is only used to differentiate editor.Handler from the rest
 	// of tui.Handler in a browser.Component.
-	Resource() workspace.URI
+	Resource() workspaceapi.URI
 }
 
 // CellEditor is a cell.Editor that can fail.
@@ -34,7 +34,7 @@ type CellView interface {
 type Editor interface {
 	// Edit opens a file and returns an editor.Handler to edit it or an error
 	// if there was an error opening it.
-	Edit(file workspace.URI, buf *cell.Buffer) (Handler, error)
+	Edit(file workspaceapi.URI, buf *cell.Buffer) (Handler, error)
 
 	// SubscribeEditorEvents subscribes EventHandler to events of type EventType.
 	// Note that it's suffixed with Editor so implementors
@@ -43,7 +43,7 @@ type Editor interface {
 
 	// Editor returns the editor.Handler with name or returns
 	// an error if no editor with name is open via Edit.
-	Editor(workspace.URI) (Handler, error)
+	Editor(workspaceapi.URI) (Handler, error)
 
 	// SubscribeCommand registers command to be dispatched to CommandHandler.
 	SubscribeCommand(string, CommandHandler) error

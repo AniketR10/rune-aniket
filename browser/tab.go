@@ -4,8 +4,8 @@ import (
 	"io"
 
 	"unstable.build/go-tui"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/term"
-	"unstable.build/go-tui/workspace"
 )
 
 // Tab is a structure that represents a tab in a Browser.Component.
@@ -13,7 +13,7 @@ import (
 // with browser.Browser API. See browser.Component.NewTab for more details.
 type Tab struct {
 	parent      *Component
-	uri         workspace.URI
+	uri         workspaceapi.URI
 	closer      io.Closer
 	handler     Handler
 	free        bool
@@ -22,7 +22,7 @@ type Tab struct {
 }
 
 // newTab allocates storage for a new tab and initializes it.
-func newTab(c *Component, uri workspace.URI, h Handler, f io.Closer) *Tab {
+func newTab(c *Component, uri workspaceapi.URI, h Handler, f io.Closer) *Tab {
 	ret := new(Tab)
 	ret.init(c, uri, h, f)
 	return ret
@@ -30,7 +30,7 @@ func newTab(c *Component, uri workspace.URI, h Handler, f io.Closer) *Tab {
 
 // Init initializes this tab with id, h as the Handler, and f as the
 // io.Closer handle.
-func (b *Tab) init(c *Component, uri workspace.URI, h Handler, f io.Closer) {
+func (b *Tab) init(c *Component, uri workspaceapi.URI, h Handler, f io.Closer) {
 	b.parent = c
 	b.uri = uri
 	b.closer = f
@@ -98,7 +98,7 @@ func (b *Tab) Close() error {
 }
 
 // URI returns the identifier of this tab.
-func (b *Tab) URI() workspace.URI {
+func (b *Tab) URI() workspaceapi.URI {
 	return b.uri
 }
 

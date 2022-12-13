@@ -11,6 +11,7 @@ import (
 	syscall "syscall"
 
 	gomock "github.com/golang/mock/gomock"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	cell "unstable.build/go-tui/cell"
 	workspace "unstable.build/go-tui/workspace"
 )
@@ -234,10 +235,10 @@ func (mr *MockAPIMockRecorder) StdoutPipe(arg0 interface{}) *gomock.Call {
 }
 
 // URI mocks base method.
-func (m *MockAPI) URI(path string) (workspace.URI, error) {
+func (m *MockAPI) URI(path string) (workspaceapi.URI, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "URI", path)
-	ret0, _ := ret[0].(workspace.URI)
+	ret0, _ := ret[0].(workspaceapi.URI)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -428,7 +429,7 @@ func (m *MockWorkspaceManager) EXPECT() *MockWorkspaceManagerMockRecorder {
 }
 
 // AddWorkspace mocks base method.
-func (m *MockWorkspaceManager) AddWorkspace(arg0 workspace.URI) (workspace.Workspace, error) {
+func (m *MockWorkspaceManager) AddWorkspace(arg0 workspaceapi.URI) (workspace.Workspace, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "AddWorkspace", arg0)
 	ret0, _ := ret[0].(workspace.Workspace)
@@ -658,7 +659,7 @@ func (mr *MockWorkspaceMockRecorder) Command(name interface{}, arg ...interface{
 }
 
 // Load mocks base method.
-func (m *MockWorkspace) Load(file workspace.URI, buf *cell.Buffer, swapDir workspace.URI, readOnly bool) (workspace.FlusherCloser, error) {
+func (m *MockWorkspace) Load(file workspaceapi.URI, buf *cell.Buffer, swapDir workspaceapi.URI, readOnly bool) (workspace.FlusherCloser, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Load", file, buf, swapDir, readOnly)
 	ret0, _ := ret[0].(workspace.FlusherCloser)
@@ -718,7 +719,7 @@ func (mr *MockWorkspaceMockRecorder) ReadDir(name interface{}) *gomock.Call {
 }
 
 // Recover mocks base method.
-func (m *MockWorkspace) Recover(file, swapFilePath workspace.URI, buf *cell.Buffer, force bool) (workspace.FlusherCloser, error) {
+func (m *MockWorkspace) Recover(file, swapFilePath workspaceapi.URI, buf *cell.Buffer, force bool) (workspace.FlusherCloser, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Recover", file, swapFilePath, buf, force)
 	ret0, _ := ret[0].(workspace.FlusherCloser)
@@ -849,10 +850,10 @@ func (mr *MockWorkspaceMockRecorder) StdoutPipe(arg0 interface{}) *gomock.Call {
 }
 
 // URI mocks base method.
-func (m *MockWorkspace) URI(path string) (workspace.URI, error) {
+func (m *MockWorkspace) URI(path string) (workspaceapi.URI, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "URI", path)
-	ret0, _ := ret[0].(workspace.URI)
+	ret0, _ := ret[0].(workspaceapi.URI)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -952,7 +953,7 @@ func (m *MockLoader) EXPECT() *MockLoaderMockRecorder {
 }
 
 // Load mocks base method.
-func (m *MockLoader) Load(file workspace.URI, buf *cell.Buffer, swapDir workspace.URI, readOnly bool) (workspace.FlusherCloser, error) {
+func (m *MockLoader) Load(file workspaceapi.URI, buf *cell.Buffer, swapDir workspaceapi.URI, readOnly bool) (workspace.FlusherCloser, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Load", file, buf, swapDir, readOnly)
 	ret0, _ := ret[0].(workspace.FlusherCloser)
@@ -967,7 +968,7 @@ func (mr *MockLoaderMockRecorder) Load(file, buf, swapDir, readOnly interface{})
 }
 
 // Recover mocks base method.
-func (m *MockLoader) Recover(file, swapFilePath workspace.URI, buf *cell.Buffer, force bool) (workspace.FlusherCloser, error) {
+func (m *MockLoader) Recover(file, swapFilePath workspaceapi.URI, buf *cell.Buffer, force bool) (workspace.FlusherCloser, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Recover", file, swapFilePath, buf, force)
 	ret0, _ := ret[0].(workspace.FlusherCloser)
@@ -1244,10 +1245,10 @@ func (mr *MockSchemeMockRecorder) StdoutPipe(arg0 interface{}) *gomock.Call {
 }
 
 // URI mocks base method.
-func (m *MockScheme) URI(path string) (workspace.URI, error) {
+func (m *MockScheme) URI(path string) (workspaceapi.URI, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "URI", path)
-	ret0, _ := ret[0].(workspace.URI)
+	ret0, _ := ret[0].(workspaceapi.URI)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

@@ -8,6 +8,7 @@ import (
 	"syscall"
 
 	"github.com/ernestrc/go-multierror"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/config"
 	"unstable.build/go-tui/workspace"
 )
@@ -31,7 +32,7 @@ type procSession struct {
 	pids     map[workspace.Pid]struct{}
 }
 
-func newProcRemote(cfg sshConfig, uri workspace.URI) (
+func newProcRemote(cfg sshConfig, uri workspaceapi.URI) (
 	remote, error,
 ) {
 	port := uri.Port()
@@ -49,7 +50,7 @@ func newProcRemote(cfg sshConfig, uri workspace.URI) (
 	args := strings.Split(cmd, " ")
 
 	// make sure NewFileScheme will not return an error
-	uri, err := workspace.CurrentUserHostURI(".")
+	uri, err := workspaceapi.CurrentUserHostURI(".")
 	if err != nil {
 		return nil, fmt.Errorf("could not get current user host URI: %s", err)
 	}

@@ -5,12 +5,12 @@ import (
 	"runtime"
 
 	textapi "unstable.build/go-tui/api/text"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/browser"
 	browserpb "unstable.build/go-tui/browser/rpc"
 	"unstable.build/go-tui/proto"
 	termpb "unstable.build/go-tui/term/rpc"
 	"unstable.build/go-tui/text"
-	"unstable.build/go-tui/workspace"
 )
 
 var _ text.CommandHandler = (*commandClient)(nil)
@@ -42,7 +42,7 @@ func (c *commandClient) HandleCommand(ctx context.Context, cmd textapi.Command) 
 	cursorWindow.FromModel(cmd.Cursor.Window)
 
 	var uri *URI
-	if cmd.URI != (workspace.URI{}) {
+	if cmd.URI != (workspaceapi.URI{}) {
 		uri = NewURI(cmd.URI)
 	}
 

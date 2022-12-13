@@ -24,6 +24,7 @@ import (
 	browserplugin "unstable.build/go-tui/api/browser/plugin"
 	textapi "unstable.build/go-tui/api/text"
 	textplugin "unstable.build/go-tui/api/text/plugin"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/config"
 	"unstable.build/go-tui/plugin"
 	"unstable.build/go-tui/proto"
@@ -77,7 +78,7 @@ type issuesGrantee struct {
 	maxSubjectLen     int
 	defTemplate       []byte
 
-	pendingIssueURI workspace.URI
+	pendingIssueURI workspaceapi.URI
 	pendingIssueID  string
 }
 
@@ -161,7 +162,7 @@ func (e *issuesGrantee) Connected(broker proto.MuxBroker, pconfig config.Config)
 
 func (e *issuesGrantee) initScheme(m workspace.SchemeManager) error {
 	marshaler := yaml.Marshaler()
-	rootURI, err := workspace.ParseURI("bluectl+issues:///")
+	rootURI, err := workspaceapi.ParseURI("bluectl+issues:///")
 	if err != nil {
 		panic(err)
 	}
@@ -354,7 +355,7 @@ func (e *issuesGrantee) freeIssue(ctx context.Context, ev textapi.Event) bool {
 		e.setMessage("canceled creation of new issue")
 	}
 	_ = os.Remove(e.pendingIssueURI.Path())
-	e.pendingIssueURI = workspace.URI{}
+	e.pendingIssueURI = workspaceapi.URI{}
 	e.pendingIssueID = ""
 	return false
 }
@@ -416,7 +417,7 @@ func (e *issuesGrantee) openIssueTemplate(
 	if e.o == nil || e.wm == nil {
 		return false, errors.New("browser permissions necessary to create an issue were not granted")
 	}
-	if !e.pendingIssueURI.Equal(workspace.URI{}) {
+	if !e.pendingIssueURI.Equal(workspaceapi.URI{}) {
 		return false, errors.New("there's already a pending issue open. " +
 			"You should close it first before attempting to create a new one.")
 	}
@@ -432,7 +433,7 @@ func (e *issuesGrantee) openIssueTemplate(
 	}
 
 	_ = f.Close()
-	uri, err := workspace.CurrentUserHostURI(f.Name())
+	uri, err := workspaceapi.CurrentUserHostURI(f.Name())
 	if err != nil {
 		return false, fmt.Errorf("URI: %v", err)
 	}

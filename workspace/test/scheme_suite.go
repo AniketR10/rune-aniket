@@ -2,12 +2,12 @@ package test
 
 import (
 	"bytes"
-	context "context"
+	"context"
 	"errors"
 	"fmt"
-	io "io"
+	"io"
 	"io/ioutil"
-	os "os"
+	"os"
 	"path/filepath"
 	"strconv"
 	"testing"
@@ -15,8 +15,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	cell "unstable.build/go-tui/cell"
-	workspace "unstable.build/go-tui/workspace"
+	workspaceapi "unstable.build/go-tui/api/workspace"
+	"unstable.build/go-tui/cell"
+	"unstable.build/go-tui/workspace"
 )
 
 func TestWorkspaceSchemeFiles(
@@ -78,8 +79,8 @@ func TestWorkspaceLoadIntegration(
 		uri, err := scheme.URI(".")
 		require.NoError(t, err)
 		wp := workspace.NewSchemeWorkspace(uri, scheme)
-		fileuri := workspace.Join(uri, "myFile")
-		swapDir := workspace.Join(uri, ".")
+		fileuri := workspaceapi.Join(uri, "myFile")
+		swapDir := workspaceapi.Join(uri, ".")
 		buf := cell.NewBuffer()
 
 		fc, err := wp.Load(fileuri, buf, swapDir, false)
@@ -105,8 +106,8 @@ func TestWorkspaceLoadIntegration(
 		uri, err := scheme.URI(".")
 		require.NoError(t, err)
 		wp := workspace.NewSchemeWorkspace(uri, scheme)
-		fileuri := workspace.Join(uri, "myExistingFile")
-		swapDir := workspace.Join(uri, ".")
+		fileuri := workspaceapi.Join(uri, "myExistingFile")
+		swapDir := workspaceapi.Join(uri, ".")
 		buf := cell.NewBuffer()
 
 		fc, err := wp.Load(fileuri, buf, swapDir, false)
@@ -135,8 +136,8 @@ func TestWorkspaceLoadIntegration(
 		uri, err := scheme.URI(".")
 		require.NoError(t, err)
 		wp := workspace.NewSchemeWorkspace(uri, scheme)
-		fileuri := workspace.Join(uri, "file")
-		swapuri := workspace.Join(uri, ".file.swp")
+		fileuri := workspaceapi.Join(uri, "file")
+		swapuri := workspaceapi.Join(uri, ".file.swp")
 		buf := cell.NewBuffer()
 
 		fc, err := wp.Recover(fileuri, swapuri, buf, false)
@@ -160,8 +161,8 @@ func TestWorkspaceLoadIntegration(
 		uri, err := scheme.URI(".")
 		require.NoError(t, err)
 		wp := workspace.NewSchemeWorkspace(uri, scheme)
-		fileuri := workspace.Join(uri, "file")
-		swapuri := workspace.Join(uri, ".file.swp")
+		fileuri := workspaceapi.Join(uri, "file")
+		swapuri := workspaceapi.Join(uri, ".file.swp")
 		buf := cell.NewBuffer()
 
 		fc, err := wp.Recover(fileuri, swapuri, buf, false)
@@ -182,8 +183,8 @@ func TestWorkspaceLoadIntegration(
 		uri, err := scheme.URI(".")
 		require.NoError(t, err)
 		wp := workspace.NewSchemeWorkspace(uri, scheme)
-		fileuri := workspace.Join(uri, "myCloseTest")
-		swapDir := workspace.Join(uri, ".")
+		fileuri := workspaceapi.Join(uri, "myCloseTest")
+		swapDir := workspaceapi.Join(uri, ".")
 
 		buf := cell.NewBuffer()
 		fc, err := wp.Load(fileuri, buf, swapDir, false)
@@ -215,8 +216,8 @@ func TestWorkspaceLoadIntegration(
 		uri, err := scheme.URI(".")
 		require.NoError(t, err)
 		wp := workspace.NewSchemeWorkspace(uri, scheme)
-		fileuri := workspace.Join(uri, "myCloseTest")
-		swapDir := workspace.Join(uri, ".")
+		fileuri := workspaceapi.Join(uri, "myCloseTest")
+		swapDir := workspaceapi.Join(uri, ".")
 
 		buf := cell.NewBuffer()
 		fc, err := wp.Load(fileuri, buf, swapDir, false)

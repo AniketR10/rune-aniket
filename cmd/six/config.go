@@ -10,6 +10,7 @@ import (
 	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
 	yaml "gopkg.in/yaml.v3"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/config"
@@ -836,7 +837,7 @@ func decodeConfig(r io.Reader) (cfg map[string]interface{}, err error) {
 	return
 }
 
-func loadWorkspaceConfig(cwd workspace.Workspace, uri workspace.URI, c *ideConfig) (
+func loadWorkspaceConfig(cwd workspace.Workspace, uri workspaceapi.URI, c *ideConfig) (
 	isConfigErr bool, err error,
 ) {
 	f, werr := cwd.Open(".sixrc", os.O_RDONLY, 0)

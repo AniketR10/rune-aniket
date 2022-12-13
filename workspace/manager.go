@@ -7,6 +7,7 @@ import (
 	"github.com/ernestrc/blue/logging"
 	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/config"
 )
 
@@ -22,14 +23,14 @@ var _ SchemeManager = (*Manager)(nil)
 type Manager struct {
 	cfg config.Config
 
-	schemes    map[string]func(config.Config, URI) (Scheme, error)
+	schemes    map[string]func(config.Config, workspaceapi.URI) (Scheme, error)
 	workspaces map[string]managerWorkspace
 }
 
 // adds remove on Close
 type managerWorkspace struct {
 	m   *Manager
-	uri URI
+	uri workspaceapi.URI
 	Workspace
 }
 
@@ -51,7 +52,7 @@ func NewManager(cfg config.Config) *Manager {
 // under the file:// scheme.
 func (m *Manager) Init(cfg config.Config) {
 	m.cfg = cfg
-	m.schemes = make(map[string]func(config.Config, URI) (Scheme, error))
+	m.schemes = make(map[string]func(config.Config, workspaceapi.URI) (Scheme, error))
 	m.workspaces = make(map[string]managerWorkspace)
 }
 
@@ -71,15 +72,15 @@ func (m *Manager) RegisterScheme(scheme string, fn SchemeFunc) error {
 	return nil
 }
 
-func (m *Manager) removeWorkspace(uri URI) {
+func (m *Manager) removeWorkspace(uri workspaceapi.URI) {
 	delete(m.workspaces, uri.String())
 }
 
 // Scheme returns a SchemeFunc for the given URI.
-func (m *Manager) Scheme(uri URI) (SchemeFunc, error) {
-	schemeFn, ok := m.schemes[uri.parsed.Scheme]
+func (m *Manager) Scheme(uri workspaceapi.URI) (SchemeFunc, error) {
+	schemeFn, ok := m.schemes[uri.Scheme()]
 	if !ok {
-		return nil, fmt.Errorf("scheme not registered %q", uri.parsed.Scheme)
+		return nil, fmt.Errorf("scheme not registered %q", uri.Scheme())
 	}
 	return schemeFn, nil
 }
@@ -93,16 +94,16 @@ func (m *Manager) Scheme(uri URI) (SchemeFunc, error) {
 // method returns it. This method does not follow the same semantics as
 // Workspace as the latter uses IsWorkspaceURI semantics and this
 // will create a new workspace if the uri strings are different.
-func (m *Manager) AddWorkspace(uri URI) (Workspace, error) {
+func (m *Manager) AddWorkspace(uri workspaceapi.URI) (Workspace, error) {
 	if w, ok := m.workspaces[uri.String()]; ok {
 		return w, nil
 	}
 
-	schemeFn, ok := m.schemes[uri.parsed.Scheme]
+	schemeFn, ok := m.schemes[uri.Scheme()]
 	if !ok {
-		return nil, fmt.Errorf("scheme not registered %q", uri.parsed.Scheme)
+		return nil, fmt.Errorf("scheme not registered %q", uri.Scheme())
 	}
-	cfg, err := m.cfg.GetConfig(uri.parsed.Scheme)
+	cfg, err := m.cfg.GetConfig(uri.Scheme())
 	if err != nil && err != config.ErrNotFound {
 		return nil, fmt.Errorf("unable to load scheme config: %s", err)
 	}
@@ -125,7 +126,7 @@ func (m *Manager) AddWorkspace(uri URI) (Workspace, error) {
 
 // Workspace returns a Workspace suitable for the given file
 // or false if there's currently no Workspace initialized.
-func (m *Manager) Workspace(file URI) (Workspace, bool, error) {
+func (m *Manager) Workspace(file workspaceapi.URI) (Workspace, bool, error) {
 	for _, workspace := range m.workspaces {
 		is, err := IsWorkspaceURI(workspace, file)
 		if err != nil {
@@ -150,6 +151,6 @@ func (m *Manager) Close() error {
 }
 
 func (m *Manager) log(level log.Level, msg string, args ...interface{}) {
-	log.
-		WithField(logging.KeyClass, "workspace.Manager").Logf(level, msg, args...)
+	log.WithField(logging.KeyClass, "workspace.Manager").
+		Logf(level, msg, args...)
 }

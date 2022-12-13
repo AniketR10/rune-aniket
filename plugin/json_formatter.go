@@ -14,8 +14,8 @@ func newJSONFormatter() log.Formatter {
 			// timestamp format expected by hclog
 			TimestampFormat: "2006-01-02T15:04:05.000000Z07:00",
 			FieldMap: log.FieldMap{
-				log.FieldKeyTime:  "@timestamp",
-				log.FieldKeyMsg:   "@message",
+				log.FieldKeyTime: "@timestamp",
+				log.FieldKeyMsg:  "@message",
 				// log.FieldKeyLevel: "@level",
 			},
 		},

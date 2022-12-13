@@ -6,6 +6,7 @@ import (
 	"os"
 	"syscall"
 
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/cell"
 )
 
@@ -13,24 +14,26 @@ var _ Workspace = (multi)(multi{})
 
 // Multi wraps a Workspace to provide oob Recover and Load requests to other workspaces/schemes
 // whether initialized or not.
-func Multi(m WorkspaceManager, workspace Workspace, uri URI) Workspace {
+func Multi(m WorkspaceManager, workspace Workspace, uri workspaceapi.URI) Workspace {
 	return newMulti(m, uri, workspace)
 }
 
 type multi struct {
-	defURI  URI
+	defURI  workspaceapi.URI
 	def     Workspace
 	manager WorkspaceManager
 }
 
-func newMulti(manager WorkspaceManager, defURI URI, def Workspace) *multi {
+func newMulti(manager WorkspaceManager, defURI workspaceapi.URI, def Workspace) *multi {
 	return &multi{def: def, defURI: defURI, manager: manager}
 }
 
-func (m multi) Load(file URI, buf *cell.Buffer, swapDir URI, readOnly bool) (FlusherCloser, error) {
+func (m multi) Load(
+	file workspaceapi.URI, buf *cell.Buffer, swapDir workspaceapi.URI, readOnly bool,
+) (FlusherCloser, error) {
 	is, err := IsWorkspaceURI(m.def, file)
 	if err != nil {
-		return nil, fmt.Errorf("workspace URI: %s", err)
+		return nil, fmt.Errorf("workspaceapi.URI: %s", err)
 	}
 	if !is {
 		return m.loadExtraneous(file, buf, swapDir, readOnly)
@@ -38,10 +41,12 @@ func (m multi) Load(file URI, buf *cell.Buffer, swapDir URI, readOnly bool) (Flu
 	return m.def.Load(file, buf, swapDir, readOnly)
 }
 
-func (m multi) Recover(file, swapFilePath URI, buf *cell.Buffer, force bool) (FlusherCloser, error) {
+func (m multi) Recover(
+	file, swapFilePath workspaceapi.URI, buf *cell.Buffer, force bool,
+) (FlusherCloser, error) {
 	is, err := IsWorkspaceURI(m.def, file)
 	if err != nil {
-		return nil, fmt.Errorf("workspace URI: %s", err)
+		return nil, fmt.Errorf("workspaceapi.URI: %s", err)
 	}
 	if !is {
 		return m.recoverExtraneous(file, swapFilePath, buf, force)
@@ -67,7 +72,7 @@ func (m multi) Remove(path string) error {
 	return m.def.Remove(path)
 }
 
-func (m multi) URI(path string) (URI, error) {
+func (m multi) URI(path string) (workspaceapi.URI, error) {
 	return m.def.URI(path)
 }
 
@@ -111,16 +116,20 @@ func (m multi) Close() error {
 	return m.def.Close()
 }
 
-func (m multi) loadExtraneous(file URI, buf *cell.Buffer, swapDir URI, readOnly bool) (FlusherCloser, error) {
-	workspace, err := m.manager.AddWorkspace(Dir(file))
+func (m multi) loadExtraneous(
+	file workspaceapi.URI, buf *cell.Buffer, swapDir workspaceapi.URI, readOnly bool,
+) (FlusherCloser, error) {
+	workspace, err := m.manager.AddWorkspace(workspaceapi.Dir(file))
 	if err != nil {
 		return nil, err
 	}
 	return workspace.Load(file, buf, swapDir, readOnly)
 }
 
-func (m multi) recoverExtraneous(file, swapFilePath URI, buf *cell.Buffer, force bool) (FlusherCloser, error) {
-	workspace, err := m.manager.AddWorkspace(Dir(file))
+func (m multi) recoverExtraneous(
+	file, swapFilePath workspaceapi.URI, buf *cell.Buffer, force bool,
+) (FlusherCloser, error) {
+	workspace, err := m.manager.AddWorkspace(workspaceapi.Dir(file))
 	if err != nil {
 		return nil, err
 	}

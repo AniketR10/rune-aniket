@@ -10,6 +10,7 @@ import (
 	"github.com/ernestrc/blue/logging"
 	log "github.com/sirupsen/logrus"
 	browserapi "unstable.build/go-tui/api/browser"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/component"
 
@@ -17,7 +18,6 @@ import (
 	"unstable.build/go-tui/proto"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/util"
-	"unstable.build/go-tui/workspace"
 )
 
 // Server serves a Browser over GRPC.
@@ -150,7 +150,7 @@ func (s *Server) doServeWindow(win browser.Window) (string, error) {
 
 func (s *Server) getContentHandler(channelID string) (browser.Handler, error) {
 	// if it's not a URI, then it must be a remote handler
-	uri, err := workspace.ParseURI(channelID)
+	uri, err := workspaceapi.ParseURI(channelID)
 	if err != nil {
 		return s.dialHandler(channelID)
 	}
@@ -274,7 +274,7 @@ func (s *Server) SetMessage(
 func (s *Server) Open(
 	ctx context.Context, req *OpenResourceRequest,
 ) (*OpenResourceResponse, error) {
-	uri, err := workspace.ParseURI(req.GetResource())
+	uri, err := workspaceapi.ParseURI(req.GetResource())
 	if err != nil {
 		return nil, err
 	}
@@ -404,7 +404,7 @@ func (s *Server) Tab(
 ) (*TabResponse, error) {
 	name := req.GetResourceName()
 	id := req.GetResourceId()
-	uri, err := workspace.ParseURI(id)
+	uri, err := workspaceapi.ParseURI(id)
 	if err != nil {
 		return nil, err
 	}

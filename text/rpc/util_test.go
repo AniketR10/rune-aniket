@@ -4,9 +4,9 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/cell"
 	termpb "unstable.build/go-tui/term/rpc"
-	"unstable.build/go-tui/workspace"
 )
 
 func TestBufferEditRequest(t *testing.T) {
@@ -39,7 +39,7 @@ func TestBufferEditRequest(t *testing.T) {
 	for _, tcase := range tsuite {
 		buf := cell.NewBuffer()
 		buf.WriteString(tcase.in)
-		out := NewEditRequest(workspace.URI{}, buf)
+		out := NewEditRequest(workspaceapi.URI{}, buf)
 		assert.Equal(t, tcase.out, out)
 
 		outbuf := EditRequestToBuffer(&out)
@@ -58,7 +58,7 @@ func benchmarkEditRequest(b *testing.B, width, height int) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_ = NewEditRequest(workspace.URI{}, buf)
+		_ = NewEditRequest(workspaceapi.URI{}, buf)
 	}
 }
 

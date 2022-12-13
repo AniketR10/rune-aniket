@@ -17,13 +17,14 @@ import (
 	"github.com/ernestrc/blue/encoding/yaml"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/config"
 	"unstable.build/go-tui/workspace"
 )
 
 func testMemoryWorkspaceServiceWithMarshaler(t *testing.T, m encoding.Marshaler) {
 	test.TestDocumentService(t, func(t *testing.T) document.Service {
-		uri, err := workspace.ParseURI("memory:///")
+		uri, err := workspaceapi.ParseURI("memory:///")
 		require.NoError(t, err)
 		scheme, err := workspace.NewMemoryScheme(config.NopConfig(), uri)
 		require.NoError(t, err)
@@ -41,7 +42,7 @@ func testFileWorkspaceServiceWithMarshaler(t *testing.T, m encoding.Marshaler) {
 		if _, ok := dirs[name]; ok {
 			panic(fmt.Sprintf("created a duplicate temp dir: %s", name))
 		}
-		uri, err := workspace.ParseURI("file://" + name)
+		uri, err := workspaceapi.ParseURI("file://" + name)
 		require.NoError(t, err)
 		scheme, err := workspace.NewFileScheme(config.NopConfig(), uri)
 		require.NoError(t, err)
@@ -104,7 +105,7 @@ func TestSetOverrideIssue(t *testing.T) {
 
 	name, err := ioutil.TempDir("", "workspace_document_service_test")
 	require.NoError(t, err)
-	uri, err := workspace.ParseURI("file://" + name)
+	uri, err := workspaceapi.ParseURI("file://" + name)
 	require.NoError(t, err)
 	scheme, err := workspace.NewFileScheme(config.NopConfig(), uri)
 	require.NoError(t, err)
@@ -132,7 +133,7 @@ func TestEscapeBoundaries(t *testing.T) {
 
 	aDir := filepath.Join(name, "a")
 	require.NoError(t, os.MkdirAll(aDir, 0777))
-	uriA, err := workspace.ParseURI(filepath.Join("file://", aDir))
+	uriA, err := workspaceapi.ParseURI(filepath.Join("file://", aDir))
 	require.NoError(t, err)
 	schemeA, err := workspace.NewFileScheme(config.NopConfig(), uriA)
 	require.NoError(t, err)
@@ -144,7 +145,7 @@ func TestEscapeBoundaries(t *testing.T) {
 
 	bDir := filepath.Join(name, "b")
 	require.NoError(t, os.MkdirAll(bDir, 0777))
-	uriB, err := workspace.ParseURI(filepath.Join("file://", bDir))
+	uriB, err := workspaceapi.ParseURI(filepath.Join("file://", bDir))
 	require.NoError(t, err)
 	schemeB, err := workspace.NewFileScheme(config.NopConfig(), uriB)
 	require.NoError(t, err)

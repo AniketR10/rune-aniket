@@ -4,9 +4,9 @@ import (
 	"context"
 
 	textapi "unstable.build/go-tui/api/text"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/term"
-	"unstable.build/go-tui/workspace"
 )
 
 // Publisher implements pub/sub functionality for Editor implementations.
@@ -16,7 +16,7 @@ type Publisher struct {
 
 type cursorPublisher struct {
 	parent *Publisher
-	uri    workspace.URI
+	uri    workspaceapi.URI
 	buf    *cell.Buffer
 	cursor *Cursor
 	Handler
@@ -39,7 +39,7 @@ func (p *Publisher) Init() {
 // It also subscribes to scroll changes to dispatch EventTypeScroll, and
 // subscribes to buffer updates to dispatch EventTypeDelete and EventTypeInsert.
 func (p *Publisher) PublishEdit(
-	resource workspace.URI, buf *cell.Buffer, root Handler, cursor *Cursor,
+	resource workspaceapi.URI, buf *cell.Buffer, root Handler, cursor *Cursor,
 ) Handler {
 	h := &cursorPublisher{
 		buf:     buf,

@@ -5,8 +5,8 @@ import (
 
 	"github.com/ernestrc/blue/iterator"
 	browserapi "unstable.build/go-tui/api/browser"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/term"
-	"unstable.build/go-tui/workspace"
 )
 
 // Command represents a command issued by the user.
@@ -16,7 +16,7 @@ type Command struct {
 
 	// optional. If command is dispatched while non-tab is in focus,
 	// then these fields will be zero-valued.
-	URI      workspace.URI
+	URI      workspaceapi.URI
 	Resource Handler
 	Window   browserapi.Window
 	Cursor   struct {

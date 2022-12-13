@@ -4,10 +4,10 @@ import (
 	"errors"
 
 	textapi "unstable.build/go-tui/api/text"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
-	"unstable.build/go-tui/workspace"
 )
 
 type viEditor struct {
@@ -22,7 +22,7 @@ func Editor(opts ...Option) text.Editor {
 	return ret
 }
 
-func (e *viEditor) Edit(file workspace.URI, buf *cell.Buffer) (text.Handler, error) {
+func (e *viEditor) Edit(file workspaceapi.URI, buf *cell.Buffer) (text.Handler, error) {
 	root := New(buf, file, e.opts...)
 	// publisher does not mutate cursor and it should never do so
 	cursor := root.cursor
@@ -35,7 +35,7 @@ func (e *viEditor) SubscribeCommand(cmd string, h text.CommandHandler) error {
 }
 
 // Editor is not supported
-func (e *viEditor) Editor(file workspace.URI) (text.Handler, error) {
+func (e *viEditor) Editor(file workspaceapi.URI) (text.Handler, error) {
 	// NOTE: it would be dead code
 	return nil, errors.New("not supported")
 }

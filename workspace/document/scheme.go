@@ -12,6 +12,7 @@ import (
 	"github.com/ernestrc/blue/encoding"
 	"github.com/ernestrc/blue/retry"
 	multierr "github.com/ernestrc/go-multierror"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/config"
 	"unstable.build/go-tui/storage"
 	"unstable.build/go-tui/workspace"
@@ -35,11 +36,11 @@ import (
 // Sync must be called to send data to permanent storage. This is to allow
 // for documents to become illegal temporarily while editing.
 func WorkspaceScheme[T storage.Document[T]](
-	rootURI workspace.URI, svc document.Service,
+	rootURI workspaceapi.URI, svc document.Service,
 	marshaler encoding.Marshaler, errMissingID error,
 ) workspace.SchemeFunc {
-	return func(cfg config.Config, uri workspace.URI) (workspace.Scheme, error) {
-		if !workspace.HasPrefix(uri, rootURI) {
+	return func(cfg config.Config, uri workspaceapi.URI) (workspace.Scheme, error) {
+		if !workspaceapi.HasPrefix(uri, rootURI) {
 			return nil, fmt.Errorf("invalid uri %q for scheme with root uri %q:"+
 				" root does not match", uri, rootURI)
 		}
@@ -64,7 +65,7 @@ type service struct {
 type scheme[T storage.Document[T]] struct {
 	unimplementedTerminal
 	unimplementedExecutor
-	workspace          workspace.URI
+	workspace          workspaceapi.URI
 	marshaler          encoding.Marshaler
 	svc                service
 	errMissingID       error
@@ -72,7 +73,7 @@ type scheme[T storage.Document[T]] struct {
 	retryInconsistency retry.Strategy
 }
 
-func (s *scheme[T]) init(svc document.Service, uri workspace.URI, m encoding.Marshaler) {
+func (s *scheme[T]) init(svc document.Service, uri workspaceapi.URI, m encoding.Marshaler) {
 	s.svc.svc = svc
 	s.marshaler = m
 	s.workspace = uri
@@ -86,7 +87,7 @@ func (s *scheme[T]) init(svc document.Service, uri workspace.URI, m encoding.Mar
 	)
 }
 
-func (s *scheme[T]) URI(path string) (workspace.URI, error) {
+func (s *scheme[T]) URI(path string) (workspaceapi.URI, error) {
 	return workspace.WorkspaceURI(s.workspace, path)
 }
 

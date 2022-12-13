@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/config"
 	"unstable.build/go-tui/workspace"
 	"unstable.build/go-tui/workspace/test"
@@ -495,9 +496,9 @@ func testSchemeClientServer(
 		{"URI happy path", func(t *testing.T, ctrl *gomock.Controller, c workspace.Scheme, s *workspacetest.MockScheme) {
 			s.EXPECT().
 				URI(gomock.Any()).
-				DoAndReturn(func(name string) (workspace.URI, error) {
+				DoAndReturn(func(name string) (workspaceapi.URI, error) {
 					assert.Equal(t, "myFile", name)
-					return workspace.ParseURI("test:///myFile")
+					return workspaceapi.ParseURI("test:///myFile")
 				})
 			fil, err := c.URI("myFile")
 			require.NoError(t, err)
@@ -610,7 +611,7 @@ func TestClientServerIntegration(t *testing.T) {
 	var cleanups []func(*testing.T)
 	t.Run("with memory scheme", func(t *testing.T) {
 		test.TestWorkspaceSchemeFiles(t, func(t *testing.T) workspace.Scheme {
-			memURI, err := workspace.ParseURI("memory:///")
+			memURI, err := workspaceapi.ParseURI("memory:///")
 			require.NoError(t, err)
 			memScheme, err := workspace.NewMemoryScheme(config.NopConfig(), memURI)
 			require.NoError(t, err)
@@ -627,7 +628,7 @@ func TestClientServerIntegration(t *testing.T) {
 			dir, err := ioutil.TempDir("", "file_scheme_suite")
 			require.NoError(t, err)
 
-			workspaceURI, err := workspace.ParseURI("file://" + dir)
+			workspaceURI, err := workspaceapi.ParseURI("file://" + dir)
 			require.NoError(t, err)
 
 			fileScheme, err := workspace.NewFileScheme(config.NopConfig(), workspaceURI)

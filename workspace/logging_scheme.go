@@ -7,6 +7,7 @@ import (
 
 	"github.com/ernestrc/blue/logging"
 	log "github.com/sirupsen/logrus"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/config"
 )
 
@@ -14,7 +15,7 @@ import (
 // that wraps the underlying scheme with a scheme that
 // logs every method call.
 func LoggingScheme(scheme string, fn SchemeFunc) SchemeFunc {
-	return func(cfg config.Config, uri URI) (Scheme, error) {
+	return func(cfg config.Config, uri workspaceapi.URI) (Scheme, error) {
 		other, err := fn(cfg, uri)
 		if err != nil {
 			log.Errorf("SchemeFunc error: %s", err)
@@ -30,7 +31,7 @@ func LoggingScheme(scheme string, fn SchemeFunc) SchemeFunc {
 
 type loggingScheme struct {
 	scheme string
-	uri    URI
+	uri    workspaceapi.URI
 	other  Scheme
 }
 
@@ -91,7 +92,7 @@ func (t loggingScheme) Wait(p Pid) (err error) {
 	return
 }
 
-func (t loggingScheme) URI(path string) (ret URI, err error) {
+func (t loggingScheme) URI(path string) (ret workspaceapi.URI, err error) {
 	t.trace("URI(%q)", path)
 	ret, err = t.other.URI(path)
 	t.trace("URI(%q): %q %v", path, ret.String(), err)

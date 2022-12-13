@@ -11,12 +11,12 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	browsertest "unstable.build/go-tui/browser/test"
 	"unstable.build/go-tui/component"
 	handlerpb "unstable.build/go-tui/handler/rpc"
 	"unstable.build/go-tui/proto"
 	termpb "unstable.build/go-tui/term/rpc"
-	"unstable.build/go-tui/workspace"
 )
 
 const asyncResultsSleepDuration = 300 * time.Millisecond
@@ -77,7 +77,7 @@ func TestServerOpen(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 		s, mock, _ := newTestServer(ctrl, new(sync.Mutex))
-		uri, err := workspace.ParseURI("file:///tmp/coronavirus.sql")
+		uri, err := workspaceapi.ParseURI("file:///tmp/coronavirus.sql")
 		require.NoError(t, err)
 
 		h := browsertest.NewTestHandler()

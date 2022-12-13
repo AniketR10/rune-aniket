@@ -8,6 +8,7 @@ import (
 	"github.com/ernestrc/blue/document"
 	"github.com/ernestrc/blue/document/firstmover"
 	"github.com/ernestrc/blue/encoding"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/config"
 	workdoc "unstable.build/go-tui/storage/workspace"
 	"unstable.build/go-tui/workspace"
@@ -22,7 +23,7 @@ func New(dir string, marshaler encoding.Marshaler) (document.Service, error) {
 	if err != nil {
 		return nil, fmt.Errorf("mkdir: %v", err)
 	}
-	storageDirURI, err := workspace.CurrentUserHostURI(storageDir)
+	storageDirURI, err := workspaceapi.CurrentUserHostURI(storageDir)
 	if err != nil {
 		return nil, fmt.Errorf("URI: %v", err)
 	}

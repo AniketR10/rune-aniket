@@ -13,6 +13,7 @@ import (
 	browserplugin "unstable.build/go-tui/api/browser/plugin"
 	textapi "unstable.build/go-tui/api/text"
 	textplugin "unstable.build/go-tui/api/text/plugin"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/config"
@@ -21,7 +22,6 @@ import (
 	plugutil "unstable.build/go-tui/plugin/util"
 	"unstable.build/go-tui/proto"
 	"unstable.build/go-tui/term"
-	"unstable.build/go-tui/workspace"
 )
 
 var (
@@ -56,7 +56,7 @@ type fileInfo struct {
 type fileBarEditorHandler struct {
 	wm   browserapi.WindowManager
 	p    browserapi.EventPublisher
-	cwd  workspace.URI
+	cwd  workspaceapi.URI
 	exit uint32
 	ch   chan textapi.Event
 
@@ -180,8 +180,8 @@ func (h *fileBarEditorHandler) HandleCommand(ctx context.Context, cmd textapi.Co
 	return
 }
 
-func (h *fileBarEditorHandler) prettyFileName(resource workspace.URI) string {
-	return workspace.RelPath(h.cwd, resource)
+func (h *fileBarEditorHandler) prettyFileName(resource workspaceapi.URI) string {
+	return workspaceapi.RelPath(h.cwd, resource)
 }
 
 func (h *fileBarEditorHandler) resetBarContent() {
@@ -194,7 +194,7 @@ func (h *fileBarEditorHandler) resetBarContent() {
 	h.bar.coords.Init(h.bar.coords.Buffer())
 }
 
-func (h *fileBarEditorHandler) refreshBarContent(resource workspace.URI) {
+func (h *fileBarEditorHandler) refreshBarContent(resource workspaceapi.URI) {
 	h.resetBarContent()
 
 	h.bar.Lock()
@@ -240,7 +240,7 @@ func (h *fileBarEditorHandler) refreshBarContent(resource workspace.URI) {
 	))
 }
 
-func (h *fileBarEditorHandler) getFileInfo(resource workspace.URI) *fileInfo {
+func (h *fileBarEditorHandler) getFileInfo(resource workspaceapi.URI) *fileInfo {
 	id := resource.String()
 	f, ok := h.files[id]
 	if ok {
@@ -251,25 +251,25 @@ func (h *fileBarEditorHandler) getFileInfo(resource workspace.URI) *fileInfo {
 	return ret
 }
 
-func (h *fileBarEditorHandler) setScrollMaxContent(resource workspace.URI, ev textapi.Event) {
+func (h *fileBarEditorHandler) setScrollMaxContent(resource workspaceapi.URI, ev textapi.Event) {
 	cells := cell.StringToCells(ev.Content, h.tabspaces)
 	h.getFileInfo(resource).cells = cells
 	log.Debugf("setScrollMaxContent(%s): %d", resource, len(cells))
 }
 
-func (h *fileBarEditorHandler) setCursorOffset(resource workspace.URI, pos term.Coordinates) {
+func (h *fileBarEditorHandler) setCursorOffset(resource workspaceapi.URI, pos term.Coordinates) {
 	h.getFileInfo(resource).offset = pos
 	log.Tracef("setScrollOffset(%s): %#v OK", resource, pos)
 }
 
-func (h *fileBarEditorHandler) setFileDirty(resource workspace.URI, dirty bool) {
+func (h *fileBarEditorHandler) setFileDirty(resource workspaceapi.URI, dirty bool) {
 	h.getFileInfo(resource).dirty = dirty
 	log.Tracef("setFileDirty(%s): %#v OK", resource, dirty)
 }
 
 func (h *fileBarEditorHandler) handleEvents() {
 	for ev := range h.ch {
-		if ev.URI == (workspace.URI{}) {
+		if ev.URI == (workspaceapi.URI{}) {
 			continue
 		}
 
@@ -299,7 +299,7 @@ func (h *fileBarEditorHandler) handleEvents() {
 			h.refreshBarContent(resourceName)
 			err = h.p.Interrupt()
 		case textapi.EventTypeUnfocus:
-			h.refreshBarContent(workspace.URI{})
+			h.refreshBarContent(workspaceapi.URI{})
 			err = h.p.Interrupt()
 		case textapi.EventTypeCursor:
 			h.setCursorOffset(resourceName, ev.From)

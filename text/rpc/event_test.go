@@ -7,23 +7,23 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	textapi "unstable.build/go-tui/api/text"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/term"
 	termpb "unstable.build/go-tui/term/rpc"
 	"unstable.build/go-tui/text"
 	texttest "unstable.build/go-tui/text/test"
-	"unstable.build/go-tui/workspace"
 )
 
 var (
-	uri      workspace.URI
+	uri      workspaceapi.URI
 	protoURI URI
 )
 
 func init() {
 	var err error
-	uri, err = workspace.ParseURI("file:///test")
+	uri, err = workspaceapi.ParseURI("file:///test")
 	if err != nil {
 		panic(err)
 	}

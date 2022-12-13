@@ -5,13 +5,14 @@ import (
 	os "os"
 	"syscall"
 
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/config"
 )
 
 // API abstract the public-facing API of a workspace.
 type API interface {
-	URI(path string) (URI, error)
+	URI(path string) (workspaceapi.URI, error)
 
 	// Open opens a file at path with the given flag and mode.
 	Open(path string, flag int, mode os.FileMode) (File, *Error)
@@ -56,7 +57,7 @@ type Pty struct {
 }
 
 // SchemeFunc represents a Scheme constructor.
-type SchemeFunc func(config.Config, URI) (Scheme, error)
+type SchemeFunc func(config.Config, workspaceapi.URI) (Scheme, error)
 
 // SchemeManager abstracts the ability to register new URI schemes.
 type SchemeManager interface {
@@ -66,7 +67,7 @@ type SchemeManager interface {
 // WorkspaceManager abstracts the ability to register schemes and workspaces.
 type WorkspaceManager interface {
 	SchemeManager
-	AddWorkspace(URI) (Workspace, error)
+	AddWorkspace(workspaceapi.URI) (Workspace, error)
 }
 
 // Pid is an Executor's command identifier. It doesn't necessarily translate
@@ -123,8 +124,8 @@ type FlusherCloser interface {
 // Loader abstracts the ability to load resource data into a working buffer
 // and provide a FlusherCloser to manage flushing data to storage.
 type Loader interface {
-	Load(file URI, buf *cell.Buffer, swapDir URI, readOnly bool) (FlusherCloser, error)
-	Recover(file, swapFilePath URI, buf *cell.Buffer, force bool) (FlusherCloser, error)
+	Load(file workspaceapi.URI, buf *cell.Buffer, swapDir workspaceapi.URI, readOnly bool) (FlusherCloser, error)
+	Recover(file, swapFilePath workspaceapi.URI, buf *cell.Buffer, force bool) (FlusherCloser, error)
 }
 
 // Scheme abstracts internal workspace scheme-based gouroutine-safe implementations.
@@ -132,7 +133,7 @@ type Scheme interface {
 	Executor
 	Terminal
 
-	URI(path string) (URI, error)
+	URI(path string) (workspaceapi.URI, error)
 
 	Open(path string, flag int, perm os.FileMode) (File, *Error)
 	Remove(path string) error

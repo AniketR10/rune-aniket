@@ -18,6 +18,7 @@ import (
 	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
 	"gopkg.in/yaml.v3"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/config"
 	"unstable.build/go-tui/proto"
 	"unstable.build/go-tui/term"
@@ -40,7 +41,7 @@ var (
 	flagRecover                = flag.String("r", "", "recover from recovery file")
 	flagPprof                  = flag.Bool("p", false, "start pprof server at :6060")
 	flagVersion                = flag.Bool("v", false, "print version information")
-	flagWorkspace              = flag.String("w", cwdURI().String(), "workspace URI")
+	flagWorkspace              = flag.String("w", cwdURI().String(), "workspaceapi.URI")
 	flagWorkspaceServer        = flag.String("x", "", "runs workspace server from standard input and output")
 	flagWorkspaceServerLogFile = flag.String("o", "", "log workspace server TRACE level logs to given file")
 )
@@ -59,12 +60,12 @@ func init() {
 	Version = fmt.Sprintf("%s (HEAD is %s)", Tag, Commit)
 }
 
-func cwdURI() workspace.URI {
+func cwdURI() workspaceapi.URI {
 	wd, err := os.Getwd()
 	if err != nil {
 		log.Fatalf("Failed to get working directory: %s", err)
 	}
-	uri, err := workspace.CurrentUserHostURI(wd)
+	uri, err := workspaceapi.CurrentUserHostURI(wd)
 	if err != nil {
 		log.Fatalf("Failed to parse working directory as URI %s: %s", wd, err)
 	}
@@ -122,7 +123,7 @@ func startWorkspaceServer() int {
 		}
 	}()
 
-	uri, err := workspace.CurrentUserHostURI(*flagWorkspaceServer)
+	uri, err := workspaceapi.CurrentUserHostURI(*flagWorkspaceServer)
 	if err != nil {
 		l.Error(err)
 		return 2

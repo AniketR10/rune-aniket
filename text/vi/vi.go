@@ -7,12 +7,12 @@ import (
 	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui"
 	textapi "unstable.build/go-tui/api/text"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
-	"unstable.build/go-tui/workspace"
 )
 
 var _ tui.Handler = (*Vi)(nil)
@@ -28,7 +28,7 @@ func (s snapshot) String() string {
 
 // Vi implements a basic vi-like text editor which satisfies tui.Handler
 type Vi struct {
-	resource  workspace.URI
+	resource  workspaceapi.URI
 	handler   viHandler
 	buf       *cell.Buffer
 	cursor    *text.Cursor
@@ -53,14 +53,14 @@ type Vi struct {
 type viSubscriber Vi
 
 // New allocates storage for a new Vi handler, initializes it and returns it.
-func New(buf *cell.Buffer, resource workspace.URI, opts ...Option) *Vi {
+func New(buf *cell.Buffer, resource workspaceapi.URI, opts ...Option) *Vi {
 	vi := new(Vi)
 	vi.Init(buf, resource, opts...)
 	return vi
 }
 
 // Init initialies this vi handle with a new Buffer.
-func (vi *Vi) Init(buf *cell.Buffer, resource workspace.URI, opts ...Option) {
+func (vi *Vi) Init(buf *cell.Buffer, resource workspaceapi.URI, opts ...Option) {
 	vi.resource = resource
 
 	viHandler := new(viHandlerImpl)
@@ -311,7 +311,7 @@ func (vi *Vi) CellEditor() cell.Editor {
 }
 
 // Resource satisfies editor.Handler.
-func (vi *Vi) Resource() workspace.URI {
+func (vi *Vi) Resource() workspaceapi.URI {
 	return vi.resource
 }
 

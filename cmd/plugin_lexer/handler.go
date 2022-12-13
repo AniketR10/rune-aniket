@@ -12,6 +12,7 @@ import (
 	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
 	textapi "unstable.build/go-tui/api/text"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/config"
@@ -20,7 +21,6 @@ import (
 	"unstable.build/go-tui/proto"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/term/color"
-	"unstable.build/go-tui/workspace"
 )
 
 const (
@@ -43,7 +43,7 @@ var (
 type file struct {
 	cell.Buffer
 	component.Scroll
-	uri     workspace.URI
+	uri     workspaceapi.URI
 	handler textapi.Handler
 }
 
@@ -273,7 +273,7 @@ func (h *syntaxHandler) setTokenPositions(f *file, it chroma.Iterator) error {
 	return nil
 }
 
-func (h *syntaxHandler) getStyle(file workspace.URI) (*chroma.Style, bool) {
+func (h *syntaxHandler) getStyle(file workspaceapi.URI) (*chroma.Style, bool) {
 	ext := filepath.Ext(file.Path())
 	style, ok := h.styles[ext]
 	if !ok {
@@ -286,7 +286,7 @@ func (h *syntaxHandler) getStyle(file workspace.URI) (*chroma.Style, bool) {
 	return style, true
 }
 
-func (h *syntaxHandler) setBackground(file workspace.URI, ed textapi.Handler) {
+func (h *syntaxHandler) setBackground(file workspaceapi.URI, ed textapi.Handler) {
 	style, ok := h.getStyle(file)
 	if !ok {
 		log.Debugf("Not running lexer for file %s: extension disabled", file)

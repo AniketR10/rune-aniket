@@ -4,7 +4,7 @@ import (
 	"sync"
 	"time"
 
-	"unstable.build/go-tui/workspace"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 )
 
 // WithHandshakeTimeout returns an Option which
@@ -45,7 +45,7 @@ func WithLocker(locker sync.Locker) Option {
 
 // WithWorkspace returns an option that configures the
 // workspace directory.
-func WithWorkspace(uri workspace.URI) Option {
+func WithWorkspace(uri workspaceapi.URI) Option {
 	return func(cfg *managerConfig) {
 		cfg.workspace = uri
 	}

@@ -9,15 +9,14 @@ import (
 
 	"github.com/ernestrc/blue/logging"
 	log "github.com/sirupsen/logrus"
+	textapi "unstable.build/go-tui/api/text"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/browser"
 	browserpb "unstable.build/go-tui/browser/rpc"
 	"unstable.build/go-tui/cell"
-
-	textapi "unstable.build/go-tui/api/text"
 	"unstable.build/go-tui/proto"
 	"unstable.build/go-tui/term"
 	termpb "unstable.build/go-tui/term/rpc"
-	"unstable.build/go-tui/workspace"
 )
 
 const (
@@ -28,11 +27,11 @@ const (
 // Token wraps a browser.Token to satisfy editor.Handler.
 type Token struct {
 	browser.Token
-	workspace.URI
+	workspaceapi.URI
 }
 
 // Resource satisfies Handler
-func (t Token) Resource() workspace.URI {
+func (t Token) Resource() workspaceapi.URI {
 	return t.URI
 }
 
@@ -104,7 +103,7 @@ func (c *Client) serveCommandHandler(h textapi.CommandHandler) (
 }
 
 // Edit requests editor server to edit buf.
-func (c *Client) Edit(file workspace.URI, buf *cell.Buffer) (textapi.Handler, error) {
+func (c *Client) Edit(file workspaceapi.URI, buf *cell.Buffer) (textapi.Handler, error) {
 	ctx := context.Background()
 	req := NewEditRequest(file, buf)
 
@@ -118,7 +117,7 @@ func (c *Client) Edit(file workspace.URI, buf *cell.Buffer) (textapi.Handler, er
 }
 
 // Editor satisfies text.Editor
-func (c *Client) Editor(file workspace.URI) (textapi.Handler, error) {
+func (c *Client) Editor(file workspaceapi.URI) (textapi.Handler, error) {
 	ctx := context.Background()
 	req := EditorRequest{ResourceName: NewURI(file)}
 
@@ -179,7 +178,7 @@ func (c *Client) SubscribeCommand(cmd string, h textapi.CommandHandler) error {
 }
 
 func makeLocationListRequest(
-	uri workspace.URI, priority textapi.LocationPriority,
+	uri workspaceapi.URI, priority textapi.LocationPriority,
 	listID string, l textapi.LocationList,
 ) SetLocationListRequest {
 	req := SetLocationListRequest{

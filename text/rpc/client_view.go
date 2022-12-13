@@ -4,12 +4,12 @@ import (
 	"context"
 	"runtime"
 
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/term"
-	"unstable.build/go-tui/workspace"
 )
 
 type clientView struct {
-	uri    workspace.URI
+	uri    workspaceapi.URI
 	client *Client
 }
 

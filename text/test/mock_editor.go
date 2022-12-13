@@ -5,15 +5,15 @@ import (
 	"errors"
 
 	textapi "unstable.build/go-tui/api/text"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	browsertest "unstable.build/go-tui/browser/test"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
-	"unstable.build/go-tui/workspace"
 )
 
 type testEditor struct {
-	uri  workspace.URI
+	uri  workspaceapi.URI
 	buf  *cell.Buffer
 	subs map[textapi.EventType][]text.EventHandler
 }
@@ -53,14 +53,14 @@ type TestEditorHandler struct {
 	browsertest.TestHandler
 	LocationList text.LocationList
 	parent       *testEditor
-	uri          workspace.URI
+	uri          workspaceapi.URI
 }
 
-func (e *TestEditorHandler) Resource() workspace.URI {
+func (e *TestEditorHandler) Resource() workspaceapi.URI {
 	return e.uri
 }
 
-func (e *testEditor) Edit(resource workspace.URI, buf *cell.Buffer) (text.Handler, error) {
+func (e *testEditor) Edit(resource workspaceapi.URI, buf *cell.Buffer) (text.Handler, error) {
 	e.uri = resource
 	e.buf = buf
 
@@ -148,6 +148,6 @@ func (e *testEditor) SubscribeEditorEvents(
 	return nil
 }
 
-func (e *testEditor) Editor(file workspace.URI) (text.Handler, error) {
+func (e *testEditor) Editor(file workspaceapi.URI) (text.Handler, error) {
 	return nil, errors.New("nope")
 }

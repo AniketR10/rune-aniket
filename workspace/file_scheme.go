@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net/url"
 	"os"
 	"os/exec"
 	"os/user"
@@ -16,6 +15,7 @@ import (
 	multierr "github.com/ernestrc/go-multierror"
 	"github.com/ernestrc/sensible/find"
 	log "github.com/sirupsen/logrus"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/config"
 	"unstable.build/go-tui/term/pty"
 )
@@ -25,23 +25,9 @@ const (
 	FileScheme = "file"
 )
 
-// CurrentUserHostURI builds a URI from a path. If path is relative
-// it uses the current working directory as the base of the path and
-// if ~ is used to identify the home directory, the current user's home
-// directory is used as the base.
-// This should only used instead of Manager.URI before a workspace.Manager is
-// constructed or for other advanced uses cases.
-func CurrentUserHostURI(path string) (URI, error) {
-	absPath, err := ExpandPath(path, user.Current, os.Getwd)
-	if err != nil {
-		return URI{}, err
-	}
-	return makeLocalURI(absPath)
-}
-
 // NewFileScheme returns a Scheme that manages resources
 // on the local file system.
-func NewFileScheme(cfg config.Config, workspace URI) (Scheme, error) {
+func NewFileScheme(cfg config.Config, workspace workspaceapi.URI) (Scheme, error) {
 	ret := new(fileScheme)
 	ret.getUser = user.Current
 	ret.lookupUser = user.Lookup
@@ -57,7 +43,7 @@ type fileScheme struct {
 	osStat     func(path string) (os.FileInfo, error)
 	getUser    func() (*user.User, error)
 	lookupUser func(string) (*user.User, error)
-	workspace  URI
+	workspace  workspaceapi.URI
 	cmds       sync.Map
 	nextPid    int32
 }
@@ -69,7 +55,7 @@ type execCmd struct {
 	*exec.Cmd
 }
 
-func (p *fileScheme) init(cfg config.Config, workspace URI) error {
+func (p *fileScheme) init(cfg config.Config, workspace workspaceapi.URI) error {
 	if workspace.Host() != "" || workspace.User() != "" || workspace.Scheme() != FileScheme {
 		return errors.New("invalid file URI")
 	}
@@ -79,7 +65,7 @@ func (p *fileScheme) init(cfg config.Config, workspace URI) error {
 		return err
 	}
 	if !fs.IsDir() {
-		return fmt.Errorf("workspace URI does not refer to a directory: %s", workspace.String())
+		return fmt.Errorf("workspaceapi.URI does not refer to a directory: %s", workspace.String())
 	}
 	p.workspace = workspace
 	return nil
@@ -87,7 +73,7 @@ func (p *fileScheme) init(cfg config.Config, workspace URI) error {
 
 func (p *fileScheme) Open(path string, flag int, perm os.FileMode) (File, *Error) {
 	var err error
-	path, err = ExpandPath(path, p.getUserOrLookup, func() (string, error) {
+	path, err = workspaceapi.ExpandPath(path, p.getUserOrLookup, func() (string, error) {
 		return p.workspace.Path(), nil
 	})
 	if err != nil {
@@ -107,7 +93,7 @@ func (p *fileScheme) Open(path string, flag int, perm os.FileMode) (File, *Error
 
 func (p *fileScheme) Remove(path string) error {
 	var err error
-	path, err = ExpandPath(path, p.getUserOrLookup, func() (string, error) {
+	path, err = workspaceapi.ExpandPath(path, p.getUserOrLookup, func() (string, error) {
 		return p.workspace.Path(), nil
 	})
 	if err != nil {
@@ -118,13 +104,13 @@ func (p *fileScheme) Remove(path string) error {
 
 func (p *fileScheme) Rename(old, new string) error {
 	var err error
-	old, err = ExpandPath(old, p.getUserOrLookup, func() (string, error) {
+	old, err = workspaceapi.ExpandPath(old, p.getUserOrLookup, func() (string, error) {
 		return p.workspace.Path(), nil
 	})
 	if err != nil {
 		return err
 	}
-	new, err = ExpandPath(new, p.getUserOrLookup, func() (string, error) {
+	new, err = workspaceapi.ExpandPath(new, p.getUserOrLookup, func() (string, error) {
 		return p.workspace.Path(), nil
 	})
 	if err != nil {
@@ -135,7 +121,7 @@ func (p *fileScheme) Rename(old, new string) error {
 
 func (p *fileScheme) Stat(path string) (os.FileInfo, error) {
 	var err error
-	path, err = ExpandPath(path, p.getUserOrLookup, func() (string, error) {
+	path, err = workspaceapi.ExpandPath(path, p.getUserOrLookup, func() (string, error) {
 		return p.workspace.Path(), nil
 	})
 	if err != nil {
@@ -146,7 +132,7 @@ func (p *fileScheme) Stat(path string) (os.FileInfo, error) {
 
 func (p *fileScheme) ReadDir(name string) ([]os.DirEntry, error) {
 	var err error
-	name, err = ExpandPath(name, p.getUserOrLookup, func() (string, error) {
+	name, err = workspaceapi.ExpandPath(name, p.getUserOrLookup, func() (string, error) {
 		return p.workspace.Path(), nil
 	})
 	if err != nil {
@@ -157,7 +143,7 @@ func (p *fileScheme) ReadDir(name string) ([]os.DirEntry, error) {
 
 func (p *fileScheme) Lstat(path string) (os.FileInfo, error) {
 	var err error
-	path, err = ExpandPath(path, p.getUserOrLookup, func() (string, error) {
+	path, err = workspaceapi.ExpandPath(path, p.getUserOrLookup, func() (string, error) {
 		return p.workspace.Path(), nil
 	})
 	if err != nil {
@@ -168,7 +154,7 @@ func (p *fileScheme) Lstat(path string) (os.FileInfo, error) {
 
 func (p *fileScheme) ReadLink(path string) (string, error) {
 	var err error
-	path, err = ExpandPath(path, p.getUserOrLookup, func() (string, error) {
+	path, err = workspaceapi.ExpandPath(path, p.getUserOrLookup, func() (string, error) {
 		return p.workspace.Path(), nil
 	})
 	if err != nil {
@@ -178,19 +164,19 @@ func (p *fileScheme) ReadLink(path string) (string, error) {
 }
 
 func (p *fileScheme) getUserOrLookup() (*user.User, error) {
-	if p.workspace.parsed.User == nil {
+	if p.workspace.User() == "" {
 		return p.getUser()
 	}
-	username := p.workspace.parsed.User.Username()
+	username := p.workspace.User()
 	return p.lookupUser(username)
 }
 
-func (p *fileScheme) URI(path string) (URI, error) {
-	absPath, err := ExpandPath(path, p.getUserOrLookup, func() (string, error) {
+func (p *fileScheme) URI(path string) (workspaceapi.URI, error) {
+	absPath, err := workspaceapi.ExpandPath(path, p.getUserOrLookup, func() (string, error) {
 		return p.workspace.Path(), nil
 	})
 	if err != nil {
-		return URI{}, err
+		return workspaceapi.URI{}, err
 	}
 	return makeLocalURI(absPath)
 }
@@ -435,12 +421,7 @@ func (p *fileScheme) Close() error {
 	return ret
 }
 
-func makeLocalURI(path string) (URI, error) {
+func makeLocalURI(path string) (workspaceapi.URI, error) {
 	uriStr := "file://" + path
-	u, err := url.Parse(uriStr)
-	if err != nil {
-		return URI{}, err
-	}
-
-	return makeFileURI(u)
+	return workspaceapi.ParseURI(uriStr)
 }

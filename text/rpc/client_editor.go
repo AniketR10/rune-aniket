@@ -4,13 +4,13 @@ import (
 	"context"
 	"runtime"
 
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/term"
 	termpb "unstable.build/go-tui/term/rpc"
-	"unstable.build/go-tui/workspace"
 )
 
 type clientWriter struct {
-	uri    workspace.URI
+	uri    workspaceapi.URI
 	client *Client
 }
 

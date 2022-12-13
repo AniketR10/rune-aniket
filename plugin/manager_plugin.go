@@ -7,6 +7,7 @@ import (
 	"github.com/ernestrc/blue/logging"
 	"github.com/hashicorp/go-plugin"
 	log "github.com/sirupsen/logrus"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/workspace"
 )
 
@@ -32,7 +33,7 @@ func goPluginGranteeBuilder(m *Manager) pluginBuilder {
 			// which fits the default in exec.Cmd.Dir which is to not
 			// set the command's dir.
 			var err error
-			cmd.Dir, err = workspace.ExpandPathWithURI(m.config.workspace.Path(), m.config.workspace)
+			cmd.Dir, err = workspaceapi.ExpandPathWithURI(m.config.workspace.Path(), m.config.workspace)
 			if err != nil {
 				return nil, fmt.Errorf("could not expand workspace path: %q", m.config.workspace.Path())
 			}

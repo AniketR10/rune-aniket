@@ -11,7 +11,7 @@ type closeGroup struct {
 	waitClosed bool
 }
 
-func (wg *closeGroup ) AddOne() (func(), bool) {
+func (wg *closeGroup) AddOne() (func(), bool) {
 	wg.mu.Lock()
 	if wg.waitClosed {
 		wg.mu.Unlock()
@@ -22,7 +22,7 @@ func (wg *closeGroup ) AddOne() (func(), bool) {
 	return wg.wg.Done, true
 }
 
-func (wg *closeGroup ) Close() bool {
+func (wg *closeGroup) Close() bool {
 	wg.mu.Lock()
 	if wg.waitClosed {
 		wg.mu.Unlock()

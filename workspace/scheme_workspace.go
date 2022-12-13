@@ -9,24 +9,25 @@ import (
 
 	"github.com/ernestrc/blue/logging"
 	log "github.com/sirupsen/logrus"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/cell"
 )
 
 // simple Scheme-backed Workspace implementation.
 type schemeWorkspace struct {
-	w URI
+	w workspaceapi.URI
 	p Scheme
 }
 
 // NewSchemeWorkspace wraps a workspace.Scheme and implements a workspace.Loader,
 // effectively converting a workspace.Scheme into a workspace.Workspace.
-func NewSchemeWorkspace(w URI, p Scheme) Workspace {
+func NewSchemeWorkspace(w workspaceapi.URI, p Scheme) Workspace {
 	ret := new(schemeWorkspace)
 	ret.Init(w, p)
 	return ret
 }
 
-func (w *schemeWorkspace) Init(uri URI, p Scheme) {
+func (w *schemeWorkspace) Init(uri workspaceapi.URI, p Scheme) {
 	w.w = uri
 	w.p = p
 }
@@ -37,7 +38,7 @@ func (w *schemeWorkspace) log(msg string, args ...interface{}) {
 }
 
 func (w *schemeWorkspace) Recover(
-	uri, swapURI URI, buf *cell.Buffer, force bool,
+	uri, swapURI workspaceapi.URI, buf *cell.Buffer, force bool,
 ) (ret FlusherCloser, err error) {
 	w.log("Recover(%s, %s, %p, force=%v)", uri, swapURI, buf, force)
 	defer w.log("Recover(%s, %s, %p, force=%v): %p %v",
@@ -65,15 +66,15 @@ func (w *schemeWorkspace) Recover(
 	}
 
 	// turn into relative if possible
-	path := RelPath(w.w, uri)
-	swapPath := RelPath(w.w, swapURI)
+	path := workspaceapi.RelPath(w.w, uri)
+	swapPath := workspaceapi.RelPath(w.w, swapURI)
 
 	ret, err = newFileRecover(w.p, path, swapPath, buf, force)
 	return
 }
 
 func (w *schemeWorkspace) Load(
-	uri URI, buf *cell.Buffer, swapDir URI, readOnly bool,
+	uri workspaceapi.URI, buf *cell.Buffer, swapDir workspaceapi.URI, readOnly bool,
 ) (ret FlusherCloser, err error) {
 	w.log("Load(%s, %s, %p, read=%v)", uri, swapDir, buf, readOnly)
 	defer w.log("Load(%s, %s, %p, read=%v): %p %v",
@@ -101,8 +102,8 @@ func (w *schemeWorkspace) Load(
 	}
 
 	// turn into relative if possible
-	path := RelPath(w.w, uri)
-	swapDirPath := RelPath(w.w, swapDir)
+	path := workspaceapi.RelPath(w.w, uri)
+	swapDirPath := workspaceapi.RelPath(w.w, swapDir)
 
 	ret, err = newFile(w.p, path, buf, swapDirPath, readOnly)
 	if err == os.ErrNotExist {
@@ -133,7 +134,7 @@ func (w *schemeWorkspace) Remove(path string) error {
 	return w.p.Remove(path)
 }
 
-func (w *schemeWorkspace) URI(path string) (URI, error) {
+func (w *schemeWorkspace) URI(path string) (workspaceapi.URI, error) {
 	return w.p.URI(path)
 }
 

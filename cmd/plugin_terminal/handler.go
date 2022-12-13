@@ -9,6 +9,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui"
 	browserapi "unstable.build/go-tui/api/browser"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	termutil "unstable.build/go-tui/cmd/plugin_terminal/util"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/plugin"
@@ -334,7 +335,7 @@ func (e *emulator) Man() tui.Manual {
 	panic("TODO")
 }
 
-func (e *emulator) URI() (workspace.URI, error) {
+func (e *emulator) URI() (workspaceapi.URI, error) {
 	var name string
 	func() {
 		e.terminal.Lock()

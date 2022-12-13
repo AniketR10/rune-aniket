@@ -15,6 +15,7 @@ import (
 	"unstable.build/go-tui"
 	browserapi "unstable.build/go-tui/api/browser"
 	textapi "unstable.build/go-tui/api/text"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/browser"
 	browsertest "unstable.build/go-tui/browser/test"
 	"unstable.build/go-tui/cell"
@@ -56,7 +57,7 @@ type testLoader struct {
 }
 
 func (t *testLoader) Load(
-	file workspace.URI, buf *cell.Buffer, swapDir workspace.URI, readOnly bool,
+	file workspaceapi.URI, buf *cell.Buffer, swapDir workspaceapi.URI, readOnly bool,
 ) (workspace.FlusherCloser, error) {
 	if t.expectError != nil {
 		return nil, t.expectError
@@ -71,12 +72,12 @@ func (t *testLoader) Load(
 }
 
 func (t *testLoader) Recover(
-	file, swapFilePath workspace.URI, buf *cell.Buffer, force bool,
+	file, swapFilePath workspaceapi.URI, buf *cell.Buffer, force bool,
 ) (workspace.FlusherCloser, error) {
-	return t.Load(file, buf, workspace.URI{}, false)
+	return t.Load(file, buf, workspaceapi.URI{}, false)
 }
 
-func (t *testLoader) URI(path string) (workspace.URI, error) {
+func (t *testLoader) URI(path string) (workspaceapi.URI, error) {
 	panic("unused")
 }
 
@@ -116,7 +117,7 @@ func TestComponentInterfaces(t *testing.T) {
 	comp = c
 
 	// use so compiler does not complain
-	ed.Edit(workspace.URI{}, cell.NewBuffer())
+	ed.Edit(workspaceapi.URI{}, cell.NewBuffer())
 	_, _ = b.Focus()
 	comp.Resize(0, 0)
 }
@@ -149,8 +150,8 @@ func TestComponentKeyMapper(t *testing.T) {
 
 func newTestComponentWithFile(
 	t *testing.T, filename string,
-) (*text.Component, *testLoader, browser.Handler, workspace.URI) {
-	uri, err := workspace.ParseURI(filename)
+) (*text.Component, *testLoader, browser.Handler, workspaceapi.URI) {
+	uri, err := workspaceapi.ParseURI(filename)
 	require.NoError(t, err)
 	c, loader := newTestComponent(t, NopEditor())
 	h, err := c.Open(uri)
@@ -199,7 +200,7 @@ func TestComponentOpen(t *testing.T) {
 		myErr := errors.New("oopsie daisy")
 		loader.expectError = myErr
 
-		uri, err := workspace.ParseURI("file:///Holmes.xd")
+		uri, err := workspaceapi.ParseURI("file:///Holmes.xd")
 		require.NoError(t, err)
 		_, err = c.Open(uri)
 		require.Error(t, err)
@@ -220,13 +221,13 @@ func TestComponentEditorSubscriber(t *testing.T) {
 	tsuite := []struct {
 		name       string
 		evType     textapi.EventType
-		trigger    func(*testing.T, *text.Component, workspace.URI)
-		preTrigger func(*testing.T, *text.Component, workspace.URI)
+		trigger    func(*testing.T, *text.Component, workspaceapi.URI)
+		preTrigger func(*testing.T, *text.Component, workspaceapi.URI)
 	}{
 		{
 			"Edit->EventTypeOpen",
 			textapi.EventTypeOpen,
-			func(t *testing.T, c *text.Component, resource workspace.URI) {
+			func(t *testing.T, c *text.Component, resource workspaceapi.URI) {
 				buf := cell.NewBuffer()
 				buf.WriteString(content)
 				_, err := c.Edit(resource, buf)
@@ -237,7 +238,7 @@ func TestComponentEditorSubscriber(t *testing.T) {
 		{
 			"OpenFileTab->EventTypeOpen",
 			textapi.EventTypeOpen,
-			func(t *testing.T, c *text.Component, resource workspace.URI) {
+			func(t *testing.T, c *text.Component, resource workspaceapi.URI) {
 				_, err := c.OpenFileTab(resource, false)
 				assert.NoError(t, err)
 			},
@@ -246,7 +247,7 @@ func TestComponentEditorSubscriber(t *testing.T) {
 		{
 			"Open->EventTypeOpen",
 			textapi.EventTypeOpen,
-			func(t *testing.T, c *text.Component, resource workspace.URI) {
+			func(t *testing.T, c *text.Component, resource workspaceapi.URI) {
 				_, err := c.Open(resource)
 				assert.NoError(t, err)
 			},
@@ -255,7 +256,7 @@ func TestComponentEditorSubscriber(t *testing.T) {
 		{
 			"Flush->EventTypeFlush",
 			textapi.EventTypeFlush,
-			func(t *testing.T, c *text.Component, resource workspace.URI) {
+			func(t *testing.T, c *text.Component, resource workspaceapi.URI) {
 				h, err := c.OpenFileTab(resource, false)
 				require.NoError(t, err)
 
@@ -271,7 +272,7 @@ func TestComponentEditorSubscriber(t *testing.T) {
 		{
 			"Browser.RemoveWindowContent->EventTypeClose",
 			textapi.EventTypeClose,
-			func(t *testing.T, c *text.Component, resource workspace.URI) {
+			func(t *testing.T, c *text.Component, resource workspaceapi.URI) {
 				h, err := c.OpenFileTab(resource, false)
 				require.NoError(t, err)
 
@@ -287,7 +288,7 @@ func TestComponentEditorSubscriber(t *testing.T) {
 		{
 			"buf.WriteString->EventTypeEdit",
 			textapi.EventTypeEdit,
-			func(t *testing.T, c *text.Component, resource workspace.URI) {
+			func(t *testing.T, c *text.Component, resource workspaceapi.URI) {
 				buf := cell.NewBuffer()
 				_, err := c.Edit(resource, buf)
 				assert.NoError(t, err)
@@ -299,7 +300,7 @@ func TestComponentEditorSubscriber(t *testing.T) {
 		{
 			"buf.DeleteRow->EventTypeEdit",
 			textapi.EventTypeEdit,
-			func(t *testing.T, c *text.Component, resource workspace.URI) {
+			func(t *testing.T, c *text.Component, resource workspaceapi.URI) {
 				buf := cell.NewBuffer()
 				buf.WriteString("wasup")
 				_, err := c.Edit(resource, buf)
@@ -312,8 +313,8 @@ func TestComponentEditorSubscriber(t *testing.T) {
 		{
 			"Window.SetContent->EventTypeUnfocus",
 			textapi.EventTypeUnfocus,
-			func(t *testing.T, c *text.Component, resource workspace.URI) {
-				uri2, err := workspace.ParseURI("file:///tmp/bleh")
+			func(t *testing.T, c *text.Component, resource workspaceapi.URI) {
+				uri2, err := workspaceapi.ParseURI("file:///tmp/bleh")
 				require.NoError(t, err)
 
 				win, err := c.Focus()
@@ -323,7 +324,7 @@ func TestComponentEditorSubscriber(t *testing.T) {
 				require.NoError(t, err)
 				require.NoError(t, win.SetContent(h))
 			},
-			func(t *testing.T, c *text.Component, resource workspace.URI) {
+			func(t *testing.T, c *text.Component, resource workspaceapi.URI) {
 				h, err := c.Open(resource)
 				require.NoError(t, err)
 
@@ -335,7 +336,7 @@ func TestComponentEditorSubscriber(t *testing.T) {
 		{
 			"Window.SetContent->EventTypeFocus",
 			textapi.EventTypeFocus,
-			func(t *testing.T, c *text.Component, resource workspace.URI) {
+			func(t *testing.T, c *text.Component, resource workspaceapi.URI) {
 				h, err := c.Open(resource)
 				require.NoError(t, err)
 
@@ -348,7 +349,7 @@ func TestComponentEditorSubscriber(t *testing.T) {
 		{
 			"Split->EventTypeFocus",
 			textapi.EventTypeFocus,
-			func(t *testing.T, c *text.Component, resource workspace.URI) {
+			func(t *testing.T, c *text.Component, resource workspaceapi.URI) {
 				h, err := c.OpenFileTab(resource, false)
 				require.NoError(t, err)
 
@@ -357,8 +358,8 @@ func TestComponentEditorSubscriber(t *testing.T) {
 				_, err = c.Split(browserapi.OrientationBottom, focus, h)
 				require.NoError(t, err)
 			},
-			func(t *testing.T, c *text.Component, resource workspace.URI) {
-				uri2, err := workspace.ParseURI("file:///tmp/blah")
+			func(t *testing.T, c *text.Component, resource workspaceapi.URI) {
+				uri2, err := workspaceapi.ParseURI("file:///tmp/blah")
 				require.NoError(t, err)
 				_, err = c.Open(uri2)
 				require.NoError(t, err)
@@ -367,10 +368,10 @@ func TestComponentEditorSubscriber(t *testing.T) {
 		{
 			"SetContent->EventTypeFocus",
 			textapi.EventTypeFocus,
-			func(t *testing.T, c *text.Component, resource workspace.URI) {
+			func(t *testing.T, c *text.Component, resource workspaceapi.URI) {
 				// SubscribeEditor should trigger it
 			},
-			func(t *testing.T, c *text.Component, resource workspace.URI) {
+			func(t *testing.T, c *text.Component, resource workspaceapi.URI) {
 				h, err := c.Open(resource)
 				require.NoError(t, err)
 
@@ -383,10 +384,10 @@ func TestComponentEditorSubscriber(t *testing.T) {
 		{
 			"SubscribeOpen->EventTypeOpen",
 			textapi.EventTypeOpen,
-			func(t *testing.T, c *text.Component, resource workspace.URI) {
+			func(t *testing.T, c *text.Component, resource workspaceapi.URI) {
 				// SubscribeEditor should trigger it
 			},
-			func(t *testing.T, c *text.Component, resource workspace.URI) {
+			func(t *testing.T, c *text.Component, resource workspaceapi.URI) {
 				_, err := c.Open(resource)
 				require.NoError(t, err)
 			},
@@ -394,7 +395,7 @@ func TestComponentEditorSubscriber(t *testing.T) {
 		{
 			"Handle>EventTypeCursor",
 			textapi.EventTypeCursor,
-			func(t *testing.T, c *text.Component, resource workspace.URI) {
+			func(t *testing.T, c *text.Component, resource workspaceapi.URI) {
 				buf := cell.NewBuffer()
 				buf.WriteString(content)
 				h, err := c.Edit(resource, buf)
@@ -411,7 +412,7 @@ func TestComponentEditorSubscriber(t *testing.T) {
 			c, _ := newTestComponent(t, NopEditor())
 
 			filename := "~/Joe_Biden.txt"
-			uri, err := workspace.CurrentUserHostURI(filename)
+			uri, err := workspaceapi.CurrentUserHostURI(filename)
 			require.NoError(t, err)
 			if tcase.preTrigger != nil {
 				tcase.preTrigger(t, c, uri)
@@ -445,7 +446,7 @@ func TestComponentEditorSubscriber(t *testing.T) {
 			c, _ := newTestComponent(t, NopEditor())
 
 			filename := "file:///Jill_Biden.txt"
-			uri, err := workspace.ParseURI(filename)
+			uri, err := workspaceapi.ParseURI(filename)
 			require.NoError(t, err)
 			if tcase.preTrigger != nil {
 				tcase.preTrigger(t, c, uri)
@@ -476,7 +477,7 @@ func TestComponentEditorSubscriber(t *testing.T) {
 		c, loader := newTestComponent(t, NopEditor())
 
 		filename := "file:///Jill_Biden.txt"
-		uri, err := workspace.ParseURI(filename)
+		uri, err := workspaceapi.ParseURI(filename)
 		require.NoError(t, err)
 		fc := testFlusherCloser{closeFn: func() error {
 			return nil
@@ -501,9 +502,9 @@ func TestComponentEditorSubscriber(t *testing.T) {
 
 	t.Run("one open event is dispatched per open tab upon subscribe to open", func(t *testing.T) {
 		c, loader := newTestComponent(t, NopEditor())
-		uri1, err := workspace.ParseURI("file:///Jill_Biden.txt")
+		uri1, err := workspaceapi.ParseURI("file:///Jill_Biden.txt")
 		require.NoError(t, err)
-		uri2, err := workspace.ParseURI("file:///Joe_Biden.txt")
+		uri2, err := workspaceapi.ParseURI("file:///Joe_Biden.txt")
 		require.NoError(t, err)
 
 		content := "how bout that"
@@ -528,9 +529,9 @@ func TestComponentEditorSubscriber(t *testing.T) {
 
 	t.Run("EventTypeUnfocus is dispatched before EventTypeFocus on content update", func(t *testing.T) {
 		c, _ := newTestComponent(t, NopEditor())
-		uri1, err := workspace.ParseURI("file:///Jill_Biden.txt")
+		uri1, err := workspaceapi.ParseURI("file:///Jill_Biden.txt")
 		require.NoError(t, err)
-		uri2, err := workspace.ParseURI("file:///Joe_Biden.txt")
+		uri2, err := workspaceapi.ParseURI("file:///Joe_Biden.txt")
 		require.NoError(t, err)
 
 		a, err := c.Open(uri1)
@@ -565,7 +566,7 @@ func TestComponentEditorSubscriber(t *testing.T) {
 }
 
 func expectEvent(
-	t *testing.T, mock *MockEventHandler, uri workspace.URI, tpe textapi.EventType,
+	t *testing.T, mock *MockEventHandler, uri workspaceapi.URI, tpe textapi.EventType,
 ) {
 	mock.EXPECT().Handle(gomock.Any(), gomock.Any()).
 		DoAndReturn(func(_ context.Context, ev textapi.Event) bool {
@@ -582,10 +583,10 @@ func TestEventTypeFocusIntegration(t *testing.T) {
 	mock := NewMockEventHandler(ctrl)
 	c.SubscribeEditorEvents([]textapi.EventType{textapi.EventTypeFocus, textapi.EventTypeUnfocus}, mock)
 
-	uri1, err := workspace.ParseURI("file:///Elon.txt")
+	uri1, err := workspaceapi.ParseURI("file:///Elon.txt")
 	require.NoError(t, err)
 
-	uri2, err := workspace.ParseURI("file:///Jeffrey.txt")
+	uri2, err := workspaceapi.ParseURI("file:///Jeffrey.txt")
 	require.NoError(t, err)
 
 	h1, err := c.OpenFileTab(uri1, false)
@@ -650,7 +651,7 @@ func TestEventTypeFocusIntegration(t *testing.T) {
 }
 
 func TestDispatchCommand(t *testing.T) {
-	uri, err := workspace.ParseURI("file:///MacMecMic")
+	uri, err := workspaceapi.ParseURI("file:///MacMecMic")
 	require.NoError(t, err)
 
 	t.Run("returns false if there's no registered handler", func(t *testing.T) {
@@ -845,7 +846,7 @@ func TestComponentEditor(t *testing.T) {
 	t.Run("returns error if no handler is found with name", func(t *testing.T) {
 		c, _ := newTestComponent(t, NopEditor())
 
-		h, err := c.Editor(workspace.URI{})
+		h, err := c.Editor(workspaceapi.URI{})
 		assert.Error(t, err)
 		assert.Nil(t, h)
 	})
@@ -880,10 +881,10 @@ func TestComponentCommands(t *testing.T) {
 }
 
 func testRegister(t *testing.T,
-	constructor func(ed text.Editor, mu *sync.Mutex, resource workspace.URI) (*text.Component, text.Editor, error)) {
+	constructor func(ed text.Editor, mu *sync.Mutex, resource workspaceapi.URI) (*text.Component, text.Editor, error)) {
 	t.Run("Registered handler is unsubscribed upon returning exit=true", func(t *testing.T) {
 		var mu sync.Mutex
-		resource1, err := workspace.ParseURI("file:///HERS")
+		resource1, err := workspaceapi.ParseURI("file:///HERS")
 		require.NoError(t, err)
 		myArgs := []string{"a", "bbbbbbbbbbbbbbbbbbbbb"}
 		myCmd := "BUY"
@@ -928,7 +929,7 @@ func testRegister(t *testing.T,
 }
 
 func TestComponentRegister(t *testing.T) {
-	testRegister(t, func(ed text.Editor, mu *sync.Mutex, res workspace.URI) (*text.Component, text.Editor, error) {
+	testRegister(t, func(ed text.Editor, mu *sync.Mutex, res workspaceapi.URI) (*text.Component, text.Editor, error) {
 		c, _, err := newTestComponentErr(ed, text.DefaultConfig())
 		return c, c, err
 	})
@@ -962,9 +963,9 @@ func testTabIntegration(t *testing.T,
 			c, wm, err := constructor(NopEditor(), &mu)
 			require.NoError(t, err)
 
-			resource1, err := workspace.ParseURI("file:///a")
+			resource1, err := workspaceapi.ParseURI("file:///a")
 			require.NoError(t, err)
-			resource2, err := workspace.ParseURI("file:///b")
+			resource2, err := workspaceapi.ParseURI("file:///b")
 			require.NoError(t, err)
 			b1 := browsertest.NewTestHandler()
 			b1.Ch = '$'
@@ -987,7 +988,7 @@ func testTabIntegration(t *testing.T,
 }
 
 func TestFlush(t *testing.T) {
-	resource1, err := workspace.ParseURI("file:///a")
+	resource1, err := workspaceapi.ParseURI("file:///a")
 	require.NoError(t, err)
 
 	t.Run("calls underlying closer Flush", func(t *testing.T) {

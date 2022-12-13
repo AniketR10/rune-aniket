@@ -2,6 +2,7 @@ package text
 
 import (
 	"context"
+
 	textapi "unstable.build/go-tui/api/text"
 )
 

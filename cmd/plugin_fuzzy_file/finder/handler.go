@@ -19,6 +19,7 @@ import (
 	browserplugin "unstable.build/go-tui/api/browser/plugin"
 	textapi "unstable.build/go-tui/api/text"
 	textplugin "unstable.build/go-tui/api/text/plugin"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/config"
@@ -57,7 +58,7 @@ type fuzzyFinderHandler struct {
 	historyKey           term.KeyComb
 	mu                   sync.Mutex
 	cmdStr               string
-	getResource          func(workspace.API, string) (workspace.URI, term.Coordinates)
+	getResource          func(workspace.API, string) (workspaceapi.URI, term.Coordinates)
 	workspaceFallback    func(workspace.API, context.Context) (iterator.Iterator[string], error)
 	pid                  workspace.Pid
 	quitChan             chan struct{}
@@ -138,14 +139,14 @@ func (h *fuzzyFinderHandler) addSearchHistory(searchQuery string) {
 	}
 }
 
-func (h *fuzzyFinderHandler) open(resource workspace.URI) (browser.Handler, error) {
+func (h *fuzzyFinderHandler) open(resource workspaceapi.URI) (browser.Handler, error) {
 	h.mu.Unlock()
 	defer h.mu.Lock()
 	return h.f.Open(resource)
 }
 
 func (h *fuzzyFinderHandler) setContent(
-	resource workspace.URI, b browser.Handler, pos term.Coordinates,
+	resource workspaceapi.URI, b browser.Handler, pos term.Coordinates,
 ) error {
 	h.mu.Unlock()
 	defer h.mu.Lock()
@@ -335,7 +336,7 @@ func New(
 	invokeWindow browserapi.Window, cfg config.Config,
 	historyKey term.KeyComb, historyDocumentID string, command string,
 	fallback func(workspace.API, context.Context) (iterator.Iterator[string], error),
-	getResource func(exec workspace.API, line string) (workspace.URI, term.Coordinates),
+	getResource func(exec workspace.API, line string) (workspaceapi.URI, term.Coordinates),
 ) (tui.Handler, error) {
 	h := new(fuzzyFinderHandler)
 	maxHistory, err := cfg.GetInt("history")

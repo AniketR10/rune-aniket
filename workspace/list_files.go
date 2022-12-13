@@ -12,6 +12,7 @@ import (
 
 	"github.com/ernestrc/blue/iterator"
 	multierr "github.com/ernestrc/go-multierror"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 )
 
 var defaultWorkers int
@@ -25,7 +26,7 @@ func init() {
 // WorkspaceDirectory is a Directory that is also able to convert paths to URIs.
 // API, Workspace and Scheme implementations satisfy this interface.
 type WorkspaceDirectory interface {
-	URI(string) (URI, error)
+	URI(string) (workspaceapi.URI, error)
 	Directory
 }
 
@@ -54,7 +55,7 @@ func ListFiles(
 	}
 
 	// get root as relative path to workspace
-	root = RelPath(workspaceURI, rootURI)
+	root = workspaceapi.RelPath(workspaceURI, rootURI)
 
 	for i := 0; i < defaultWorkers; i++ {
 		go traverseDirWorker(ctx, w, &wg, ch, workerCh,

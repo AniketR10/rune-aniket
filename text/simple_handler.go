@@ -2,21 +2,21 @@ package text
 
 import (
 	"unstable.build/go-tui"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/term"
-	"unstable.build/go-tui/workspace"
 )
 
 type simpleEditorHandler struct {
 	buf      *cell.Buffer
 	less     handler.Less
-	resource workspace.URI
+	resource workspaceapi.URI
 	cursor   Cursor
 }
 
 func newSimpleEditor(
-	buf *cell.Buffer, resource workspace.URI, wrap bool,
+	buf *cell.Buffer, resource workspaceapi.URI, wrap bool,
 ) *simpleEditorHandler {
 	ret := new(simpleEditorHandler)
 	ret.init(buf, resource, wrap)
@@ -24,7 +24,7 @@ func newSimpleEditor(
 }
 
 func (h *simpleEditorHandler) init(
-	buf *cell.Buffer, resource workspace.URI, wrap bool,
+	buf *cell.Buffer, resource workspaceapi.URI, wrap bool,
 ) {
 	h.buf = buf
 	h.resource = resource
@@ -127,6 +127,6 @@ func (h *simpleEditorHandler) Close() error {
 }
 
 // Resource satisfies editor.Handler.
-func (h *simpleEditorHandler) Resource() workspace.URI {
+func (h *simpleEditorHandler) Resource() workspaceapi.URI {
 	return h.resource
 }

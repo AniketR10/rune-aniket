@@ -11,6 +11,7 @@ import (
 	"github.com/ernestrc/blue/iterator"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/config"
 )
 
@@ -38,7 +39,7 @@ func TestListFiles(t *testing.T) {
 		require.NoError(t, err)
 		for _, path := range []string{".", dir} {
 			t.Run(path, func(t *testing.T) {
-				uri, err := CurrentUserHostURI(dir)
+				uri, err := workspaceapi.CurrentUserHostURI(dir)
 				require.NoError(t, err)
 
 				_, err = os.OpenFile(filepath.Join(dir, "a"), os.O_CREATE, 0666)
@@ -63,7 +64,7 @@ func TestListFiles(t *testing.T) {
 		dir, err := ioutil.TempDir("", "")
 		require.NoError(t, err)
 
-		uri, err := CurrentUserHostURI(workspaceDir)
+		uri, err := workspaceapi.CurrentUserHostURI(workspaceDir)
 		require.NoError(t, err)
 
 		f1, err := os.OpenFile(filepath.Join(dir, "a"), os.O_CREATE, 0666)

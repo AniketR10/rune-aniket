@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/workspace"
 	workspacetest "unstable.build/go-tui/workspace/test"
 )
@@ -308,7 +309,7 @@ func TestClientServer(t *testing.T) {
 			assert.Contains(t, err.Error(), "boom")
 		}},
 		{"URI happy path", func(t *testing.T, mock *workspace.MockOsFile, c *Client, s *Server) {
-			uri, err := workspace.ParseURI("ssh://user@my_host:8080/tmp/hello/world.go")
+			uri, err := workspaceapi.ParseURI("ssh://user@my_host:8080/tmp/hello/world.go")
 			require.NoError(t, err)
 
 			s.wp.(*workspacetest.MockWorkspace).EXPECT().
@@ -320,7 +321,7 @@ func TestClientServer(t *testing.T) {
 		}},
 		{"URI error", func(t *testing.T, mock *workspace.MockOsFile, c *Client, s *Server) {
 			s.wp.(*workspacetest.MockWorkspace).EXPECT().
-				URI(gomock.Any()).Return(workspace.URI{}, errors.New("boom"))
+				URI(gomock.Any()).Return(workspaceapi.URI{}, errors.New("boom"))
 
 			_, err := c.URI("/tmp/hello_world.go")
 			require.Error(t, err)

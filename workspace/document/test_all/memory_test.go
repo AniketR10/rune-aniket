@@ -14,6 +14,7 @@ import (
 	"github.com/ernestrc/blue/document"
 	"github.com/ernestrc/blue/encoding/json"
 	"github.com/stretchr/testify/require"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/config"
 	"unstable.build/go-tui/term"
@@ -25,7 +26,7 @@ import (
 func TestMemoryWorkspaceScheme(t *testing.T) {
 	t.Run("with folder", func(t *testing.T) {
 		testWorkspaceSchemeSuite(t, func(t *testing.T) workspace.Scheme {
-			workspaceURI, err := workspace.ParseURI("inmemory:///tmp")
+			workspaceURI, err := workspaceapi.ParseURI("inmemory:///tmp")
 			require.NoError(t, err)
 			svc := document.NewInMemoryService()
 			scheme, err := workdoc.WorkspaceScheme[testStruct](workspaceURI, svc,
@@ -36,7 +37,7 @@ func TestMemoryWorkspaceScheme(t *testing.T) {
 	})
 	t.Run("at root", func(t *testing.T) {
 		testWorkspaceSchemeSuite(t, func(t *testing.T) workspace.Scheme {
-			workspaceURI, err := workspace.ParseURI("inmemory:///")
+			workspaceURI, err := workspaceapi.ParseURI("inmemory:///")
 			require.NoError(t, err)
 			svc := document.NewInMemoryService()
 			scheme, err := workdoc.WorkspaceScheme[testStruct](workspaceURI, svc,
@@ -49,7 +50,7 @@ func TestMemoryWorkspaceScheme(t *testing.T) {
 
 func TestMemoryWorkspaceSchemeTransientFailures(t *testing.T) {
 	testWorkspaceSchemeSuite(t, func(t *testing.T) workspace.Scheme {
-		workspaceURI, err := workspace.ParseURI("inmemory:///")
+		workspaceURI, err := workspaceapi.ParseURI("inmemory:///")
 		require.NoError(t, err)
 		svc := &errService{root: document.NewInMemoryService()}
 		s, err := workdoc.WorkspaceScheme[testStruct](workspaceURI, svc, json.Marshaler(),

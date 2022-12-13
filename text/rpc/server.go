@@ -9,11 +9,11 @@ import (
 	"github.com/ernestrc/blue/logging"
 	log "github.com/sirupsen/logrus"
 	textapi "unstable.build/go-tui/api/text"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/proto"
 	termpb "unstable.build/go-tui/term/rpc"
 	"unstable.build/go-tui/text"
-	"unstable.build/go-tui/workspace"
 )
 
 var (
@@ -104,7 +104,7 @@ func (s *Server) dialCommandHandler(channelID string) (text.CommandHandler, erro
 }
 
 func (s *Server) editHandler(
-	resource workspace.URI, get func(workspace.URI) (text.Handler, error),
+	resource workspaceapi.URI, get func(workspaceapi.URI) (text.Handler, error),
 ) error {
 	s.editor.Lock()
 	defer s.editor.Unlock()
@@ -127,7 +127,7 @@ func (s *Server) Edit(ctx context.Context, in *EditRequest) (
 	}
 
 	err = s.editHandler(uri,
-		func(resource workspace.URI) (text.Handler, error) {
+		func(resource workspaceapi.URI) (text.Handler, error) {
 			buf := EditRequestToBuffer(in)
 			return s.editor.Edit(uri, buf)
 		})
@@ -148,7 +148,7 @@ func (s *Server) Editor(ctx context.Context, in *EditorRequest) (
 	}
 
 	err = s.editHandler(uri,
-		func(resource workspace.URI) (text.Handler, error) {
+		func(resource workspaceapi.URI) (text.Handler, error) {
 			return s.editor.Editor.Editor(uri)
 		})
 	if err != nil {

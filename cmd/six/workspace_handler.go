@@ -16,6 +16,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui"
 	textapi "unstable.build/go-tui/api/text"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/config"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/plugin"
@@ -92,7 +93,7 @@ type clipboardManagerIfc interface {
 }
 
 func newWorkspaceManagerHandler(
-	clipboard clipboardManagerIfc, initial workspace.URI,
+	clipboard clipboardManagerIfc, initial workspaceapi.URI,
 	manager workspace.WorkspaceManager,
 	cfg ideConfig, recfilename string, filenames []string,
 	sixDir string,
@@ -119,7 +120,7 @@ func (h *workspaceManagerHandler) newEditor(cfg ideConfig) text.Editor {
 }
 
 func (h *workspaceManagerHandler) init(
-	clipboard clipboardManagerIfc, uri workspace.URI,
+	clipboard clipboardManagerIfc, uri workspaceapi.URI,
 	manager workspace.WorkspaceManager, cfg ideConfig,
 	recfilename string, filenames []string,
 	sixDir string,
@@ -381,7 +382,7 @@ func cleanedPluginConfig(cfg map[string]interface{}) map[string]interface{} {
 }
 
 func (h *workspaceManagerHandler) addWorkspace(
-	uri workspace.URI, recfilename string, filenames []string,
+	uri workspaceapi.URI, recfilename string, filenames []string,
 ) error {
 	for i, w := range h.workspaces {
 		if w == nil {
@@ -421,7 +422,7 @@ func (h *workspaceManagerHandler) addWorkspace(
 		textOpts = append(textOpts, text.WithFile(file))
 	}
 
-	// workspace capable of opening URIs other than the workspace URI
+	// workspace capable of opening URIs other than the workspaceapi.URI
 	multicwd := workspace.Multi(h.workspace, cwd, uri)
 	ex, err := newEx(h.newEditor(cfg), multicwd, h.storage,
 		h.publishEvent, textOpts...)
@@ -515,12 +516,12 @@ func (h *workspaceManagerHandler) commandAddWorkspace(args ...string) error {
 	path := args[0]
 
 	// try to use literal URI
-	uri, parseErr := workspace.ParseURI(path)
+	uri, parseErr := workspaceapi.ParseURI(path)
 	if parseErr == nil {
 		return h.addWorkspace(uri, "", nil)
 	}
 
-	uri, pathErr := workspace.CurrentUserHostURI(path)
+	uri, pathErr := workspaceapi.CurrentUserHostURI(path)
 	if pathErr != nil {
 		err := multierr.Append(pathErr, parseErr)
 		return err
@@ -603,7 +604,7 @@ func (h *workspaceManagerHandler) Close() (ret error) {
 
 type workspaceHandler struct {
 	*ex
-	uri     workspace.URI
+	uri     workspaceapi.URI
 	Plugins *plugin.Manager
 }
 

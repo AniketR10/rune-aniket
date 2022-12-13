@@ -9,6 +9,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui"
 	browserapi "unstable.build/go-tui/api/browser"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/cmd/plugin_fuzzy_file/finder"
 	"unstable.build/go-tui/config"
 	"unstable.build/go-tui/plugin"
@@ -38,7 +39,7 @@ func workspaceListFiles(cwd workspace.API, ctx context.Context) (
 }
 
 func getResource(workspace workspace.API, file string) (
-	workspace.URI, term.Coordinates,
+	workspaceapi.URI, term.Coordinates,
 ) {
 	uri, _ := workspace.URI(file)
 	return uri, term.Coordinates{}

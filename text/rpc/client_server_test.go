@@ -16,6 +16,7 @@ import (
 	"unstable.build/go-tui"
 	browserapi "unstable.build/go-tui/api/browser"
 	textapi "unstable.build/go-tui/api/text"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/browser"
 	browserpb "unstable.build/go-tui/browser/rpc"
 	browsertest "unstable.build/go-tui/browser/test"
@@ -77,7 +78,7 @@ func setupWmIntTest(
 }
 
 func TestClientServerIntegration(t *testing.T) {
-	uri, err := workspace.ParseURI("file:///test")
+	uri, err := workspaceapi.ParseURI("file:///test")
 	require.NoError(t, err)
 	t.Run("client through server calls underlying editor Edit", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
@@ -108,7 +109,7 @@ func TestClientServerIntegration(t *testing.T) {
 		defer closeFn()
 
 		ed.EXPECT().Editor(gomock.Any()).Times(1).
-			DoAndReturn(func(_uri workspace.URI) (tui.Handler, error) {
+			DoAndReturn(func(_uri workspaceapi.URI) (tui.Handler, error) {
 				assert.Equal(t, _uri, uri)
 				return handler.NewTestHandler(), nil
 			})
@@ -392,7 +393,7 @@ func TestRPCTab(t *testing.T) {
 func TestRPCRegister(t *testing.T) {
 	var closeFns []func()
 
-	testRegister(t, func(ed text.Editor, mu *sync.Mutex, res workspace.URI) (*text.Component, text.Editor, error) {
+	testRegister(t, func(ed text.Editor, mu *sync.Mutex, res workspaceapi.URI) (*text.Component, text.Editor, error) {
 		c, err := newTestComponentErr(ed)
 		if err != nil {
 			return nil, nil, err
@@ -468,9 +469,9 @@ func testTabIntegration(t *testing.T,
 			c, wm, err := constructor(texttest.NopEditor(), &mu)
 			require.NoError(t, err)
 
-			resource1, err := workspace.ParseURI("file:///a")
+			resource1, err := workspaceapi.ParseURI("file:///a")
 			require.NoError(t, err)
-			resource2, err := workspace.ParseURI("file:///b")
+			resource2, err := workspaceapi.ParseURI("file:///b")
 			require.NoError(t, err)
 			b1 := browsertest.NewTestHandler()
 			b1.Ch = '$'
@@ -517,7 +518,7 @@ func (t *testFlusherCloser) Flush() error {
 }
 
 func (t *testLoader) Load(
-	file workspace.URI, buf *cell.Buffer, swapDir workspace.URI, readOnly bool,
+	file workspaceapi.URI, buf *cell.Buffer, swapDir workspaceapi.URI, readOnly bool,
 ) (workspace.FlusherCloser, error) {
 	if t.expectError != nil {
 		return nil, t.expectError
@@ -532,11 +533,11 @@ func (t *testLoader) Load(
 }
 
 func (t *testLoader) Recover(
-	file, swapFilePath workspace.URI, buf *cell.Buffer, force bool,
+	file, swapFilePath workspaceapi.URI, buf *cell.Buffer, force bool,
 ) (workspace.FlusherCloser, error) {
-	return t.Load(file, buf, workspace.URI{}, false)
+	return t.Load(file, buf, workspaceapi.URI{}, false)
 }
-func (t *testLoader) URI(path string) (workspace.URI, error) {
+func (t *testLoader) URI(path string) (workspaceapi.URI, error) {
 	panic("unused")
 }
 
@@ -550,10 +551,10 @@ func newTestComponentErr(ed text.Editor) (*text.Component, error) {
 }
 
 func testRegister(t *testing.T,
-	constructor func(ed text.Editor, mu *sync.Mutex, resource workspace.URI) (*text.Component, text.Editor, error)) {
+	constructor func(ed text.Editor, mu *sync.Mutex, resource workspaceapi.URI) (*text.Component, text.Editor, error)) {
 	t.Run("Registered handler is unsubscribed upon returning exit=true", func(t *testing.T) {
 		var mu sync.Mutex
-		resource1, err := workspace.ParseURI("file:///HERS")
+		resource1, err := workspaceapi.ParseURI("file:///HERS")
 		require.NoError(t, err)
 		myArgs := []string{"a", "bbbbbbbbbbbbbbbbbbbbb"}
 		myCmd := "BUY"

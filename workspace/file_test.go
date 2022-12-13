@@ -16,6 +16,7 @@ import (
 	gomock "github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/term"
 )
@@ -551,7 +552,7 @@ func TestFileBufferRecover(t *testing.T) {
 
 // returns an un-initialized (but dep injected) FileBuffer along with the mocked OsFile
 func newTestFileBuffer(ctrl *gomock.Controller) (*file, *MockOsFile) {
-	schemeIfc, _ := NewNopScheme("test")(nil, URI{})
+	schemeIfc, _ := NewNopScheme("test")(nil, workspaceapi.URI{})
 	scheme := schemeIfc.(*testScheme)
 	mock := NewMockOsFile(ctrl)
 	scheme.openFunc = func(name string, flag int, perm os.FileMode) (File, *Error) {

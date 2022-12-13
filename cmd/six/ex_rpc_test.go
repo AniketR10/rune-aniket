@@ -16,6 +16,7 @@ import (
 	"google.golang.org/grpc"
 	"unstable.build/go-tui"
 	browserapi "unstable.build/go-tui/api/browser"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/browser"
 	browserpb "unstable.build/go-tui/browser/rpc"
 	browsertest "unstable.build/go-tui/browser/test"
@@ -23,7 +24,6 @@ import (
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
 	texttest "unstable.build/go-tui/text/test"
-	"unstable.build/go-tui/workspace"
 )
 
 const testingShutdownWait = 500 * time.Millisecond
@@ -135,7 +135,7 @@ func TestIntegrationRPCBrowserDraw(t *testing.T) {
 }
 
 func TestRPCBrowserCloseLeak(t *testing.T) {
-	uri, err := workspace.ParseURI("file:///a")
+	uri, err := workspaceapi.ParseURI("file:///a")
 	require.NoError(t, err)
 	var destructor func()
 	_, b, err := newTestRPCBrowser(t, &destructor)(texttest.NopEditor(), text.WithFile(uri))

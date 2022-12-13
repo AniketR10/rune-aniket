@@ -1,15 +1,15 @@
 package test
 
 import (
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/handler"
-	"unstable.build/go-tui/workspace"
 )
 
 // TestHandler is a handler used to test composite handlers. See
 // handler.TestHandler for more details.
 type TestHandler struct {
 	handler.TestHandler
-	URI workspace.URI
+	URI workspaceapi.URI
 }
 
 // NewTestHandler allocates storage for a new TestHandler and initializes it.
@@ -19,7 +19,7 @@ func NewTestHandler() (t *TestHandler) {
 	return t
 }
 
-func (t *TestHandler) Resource() workspace.URI {
+func (t *TestHandler) Resource() workspaceapi.URI {
 	return t.URI
 }
 

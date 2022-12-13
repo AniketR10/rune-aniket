@@ -14,6 +14,7 @@ import (
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/knownhosts"
 	"golang.org/x/term"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/workspace"
 )
 
@@ -45,7 +46,7 @@ type goSshSession struct {
 	ses  *ssh.Session
 }
 
-func newStdRemote(cfg sshConfig, uri workspace.URI) (
+func newStdRemote(cfg sshConfig, uri workspaceapi.URI) (
 	remote, error,
 ) {
 	username, err := usernameOrCurrent(uri)
@@ -142,7 +143,7 @@ func (r stdRemote) Close() error {
 	return r.client.Close()
 }
 
-func authMethodsFromURI(config sshConfig, uri workspace.URI) ([]ssh.AuthMethod, error) {
+func authMethodsFromURI(config sshConfig, uri workspaceapi.URI) ([]ssh.AuthMethod, error) {
 	var auths []ssh.AuthMethod
 	for _, key := range config.privateKeys {
 		signer, err := privateKeySigner(key)
@@ -179,14 +180,14 @@ func getCurrentUser() (string, error) {
 	return u.Username, nil
 }
 
-func usernameOrCurrent(uri workspace.URI) (string, error) {
+func usernameOrCurrent(uri workspaceapi.URI) (string, error) {
 	if uri.User() != "" {
 		return uri.User(), nil
 	}
 	return getCurrentUser()
 }
 
-func hostPortFromURI(uri workspace.URI) string {
+func hostPortFromURI(uri workspaceapi.URI) string {
 	hostname, port := uri.Hostname(), uri.Port()
 	if port == "" {
 		port = "22"

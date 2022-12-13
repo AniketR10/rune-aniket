@@ -11,6 +11,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui"
 	browserapi "unstable.build/go-tui/api/browser"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/cmd/plugin_fuzzy_file/finder"
 	"unstable.build/go-tui/config"
 	"unstable.build/go-tui/plugin"
@@ -40,7 +41,7 @@ func readFiles(cwd workspace.API, ctx context.Context) (
 }
 
 func parseLine(workspace workspace.API, data string) (
-	workspace.URI, term.Coordinates,
+	workspaceapi.URI, term.Coordinates,
 ) {
 	// NOTE: if ag breaks this or there's an edge case that it's not covered
 	// let it panic so we catch it early and fix it

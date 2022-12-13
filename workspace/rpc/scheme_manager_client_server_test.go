@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/config"
 	"unstable.build/go-tui/proto"
 	"unstable.build/go-tui/workspace"
@@ -50,7 +51,7 @@ func setupProxyUnitTest(t *testing.T, ctrl *gomock.Controller) (
 func setupProxyTest(t *testing.T, mockScheme workspace.Scheme) (
 	workspace.Scheme, func(*testing.T),
 ) {
-	uri, err := workspace.ParseURI("test:///tmp")
+	uri, err := workspaceapi.ParseURI("test:///tmp")
 	require.NoError(t, err)
 	cfg := config.NopConfig()
 	manager := workspace.NewManager(cfg)
@@ -62,7 +63,7 @@ func setupProxyTest(t *testing.T, mockScheme workspace.Scheme) (
 
 	// plugin-side
 	managerClient := NewSchemeManager(broker, conn)
-	require.NoError(t, managerClient.RegisterScheme("test", func(_cfg config.Config, _uri workspace.URI) (workspace.Scheme, error) {
+	require.NoError(t, managerClient.RegisterScheme("test", func(_cfg config.Config, _uri workspaceapi.URI) (workspace.Scheme, error) {
 		assert.Equal(t, uri, _uri)
 		return mockScheme, nil
 	}))
@@ -96,7 +97,7 @@ func TestSchemeManagerClientServerSchemeUnit(t *testing.T) {
 func TestSchemeManagerClientServerSchemeSuiteIntegration(t *testing.T) {
 	var cleanups []func(*testing.T)
 	test.TestWorkspaceSchemeFiles(t, func(t *testing.T) workspace.Scheme {
-		memURI, err := workspace.ParseURI("memory:///tmp")
+		memURI, err := workspaceapi.ParseURI("memory:///tmp")
 		require.NoError(t, err)
 		scheme, err := workspace.NewMemoryScheme(config.NopConfig(), memURI)
 		require.NoError(t, err)

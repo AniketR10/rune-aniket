@@ -2,7 +2,6 @@ package rpc
 
 import (
 	"fmt"
-	"log"
 	"net"
 	"sync"
 	"testing"
@@ -108,7 +107,6 @@ func TestIntegrationFloating(t *testing.T) {
 		{Alignment: component.SpanAlignmentCentered},
 	}
 
-	var wins []browserapi.Window
 	for _, _tcase := range tsuite {
 		tcase := _tcase
 		t.Run(fmt.Sprintf("%v", tcase.Alignment), func(t *testing.T) {
@@ -139,11 +137,7 @@ func TestIntegrationFloating(t *testing.T) {
 			wg.Wait()
 			mock.EXPECT().Window(gomock.Any()).Return(win1, true).AnyTimes()
 			require.NoError(t, resWin1.Close())
-			wins = append(wins, resWin1)
 		})
-	}
-	for _, win := range wins {
-		log.Println(win)
 	}
 	goleak.VerifyNone(t)
 }

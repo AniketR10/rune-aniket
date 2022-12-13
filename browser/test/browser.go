@@ -3,9 +3,9 @@ package test
 import (
 	"unstable.build/go-tui"
 	browserapi "unstable.build/go-tui/api/browser"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/component"
-	"unstable.build/go-tui/workspace"
 )
 
 // BrowserFromAPIBrowser wraps a browserapi.Browser and returns
@@ -70,7 +70,7 @@ func (b toBrowser) Bar(o browserapi.Orientation, h tui.Handler) error {
 	return b.b.Bar(o, h)
 }
 
-func (b toBrowser) Tab(uri workspace.URI, name string, h browser.Handler) (browser.Handler, error) {
+func (b toBrowser) Tab(uri workspaceapi.URI, name string, h browser.Handler) (browser.Handler, error) {
 	return b.b.Tab(uri, name, h)
 }
 
@@ -82,11 +82,11 @@ func (b toBrowser) SetMessage(msg string, args ...interface{}) error {
 	return b.b.SetMessage(msg, args...)
 }
 
-func (b toBrowser) Open(resource workspace.URI) (browser.Handler, error) {
+func (b toBrowser) Open(resource workspaceapi.URI) (browser.Handler, error) {
 	return b.b.Open(resource)
 }
 
-func (b toBrowser) Resource(u workspace.URI) (browser.Handler, bool) {
+func (b toBrowser) Resource(u workspaceapi.URI) (browser.Handler, bool) {
 	return NewTestHandler(), true
 }
 

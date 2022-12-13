@@ -20,6 +20,7 @@ import (
 	browserplugin "unstable.build/go-tui/api/browser/plugin"
 	textapi "unstable.build/go-tui/api/text"
 	textplugin "unstable.build/go-tui/api/text/plugin"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/config"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/handler/search"
@@ -270,7 +271,7 @@ func (e *logsGrantee) showLogs(win browserapi.Window, args []string) (bool, erro
 
 	log.Debugf("Opening log file %q", logFile)
 
-	uri, err := workspace.CurrentUserHostURI(logFile)
+	uri, err := workspaceapi.CurrentUserHostURI(logFile)
 	if err != nil {
 		return false, err
 	}

@@ -4,9 +4,9 @@ import (
 	"errors"
 
 	textapi "unstable.build/go-tui/api/text"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/term"
-	"unstable.build/go-tui/workspace"
 )
 
 type simpleEditor struct {
@@ -22,7 +22,7 @@ func SimpleEditor(wrap bool) Editor {
 	return ret
 }
 
-func (e *simpleEditor) Edit(file workspace.URI, buf *cell.Buffer) (Handler, error) {
+func (e *simpleEditor) Edit(file workspaceapi.URI, buf *cell.Buffer) (Handler, error) {
 	root := newSimpleEditor(buf, file, e.wrap)
 	return e.pub.PublishEdit(file, buf, root, &root.cursor), nil
 }
@@ -31,7 +31,7 @@ func (e *simpleEditor) SubscribeCommand(cmd string, h CommandHandler) error {
 	return errors.New("not supported")
 }
 
-func (e *simpleEditor) Editor(file workspace.URI) (Handler, error) {
+func (e *simpleEditor) Editor(file workspaceapi.URI) (Handler, error) {
 	return nil, errors.New("not supported")
 }
 

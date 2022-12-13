@@ -8,11 +8,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	textapi "unstable.build/go-tui/api/text"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
-	"unstable.build/go-tui/workspace"
 )
 
 func newEdit(content string) (*cell.Buffer, *component.Scroll, *text.Cursor) {
@@ -30,7 +30,7 @@ func newMock(ctrl *gomock.Controller) *MockHandler {
 }
 
 func TestPublisher(t *testing.T) {
-	uri, err := workspace.ParseURI("file:///Teamshares")
+	uri, err := workspaceapi.ParseURI("file:///Teamshares")
 	require.NoError(t, err)
 	t.Run("publishes EventTypeOpen when PublishEdit is called", func(t *testing.T) {
 		ctrl := gomock.NewController(t)

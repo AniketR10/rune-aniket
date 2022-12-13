@@ -7,8 +7,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/term"
-	"unstable.build/go-tui/workspace"
 )
 
 func makeTestFiles(t *testing.T) (*os.File, *os.File) {
@@ -33,7 +33,7 @@ func TestIDEInitializationIntegration(t *testing.T) {
 		err = ioutil.WriteFile(configFile.Name(), []byte(sampleConfig), 0666)
 		require.NoError(t, err)
 
-		cwdURI, err := workspace.CurrentUserHostURI(".")
+		cwdURI, err := workspaceapi.CurrentUserHostURI(".")
 		require.NoError(t, err)
 
 		dir, err := ioutil.TempDir("", "")
@@ -56,7 +56,7 @@ func TestIDEInitializationIntegration(t *testing.T) {
 		err := ioutil.WriteFile(configFile.Name(), []byte("{}"), 0666)
 		require.NoError(t, err)
 
-		cwdURI, err := workspace.CurrentUserHostURI(".")
+		cwdURI, err := workspaceapi.CurrentUserHostURI(".")
 		require.NoError(t, err)
 
 		dir, err := ioutil.TempDir("", "")
@@ -102,7 +102,7 @@ func TestIDEInitializationIntegration(t *testing.T) {
 		err = ioutil.WriteFile(configFile.Name(), []byte(sampleConfig), 0666)
 		require.NoError(t, err)
 
-		cwdURI, err := workspace.CurrentUserHostURI(".")
+		cwdURI, err := workspaceapi.CurrentUserHostURI(".")
 		require.NoError(t, err)
 
 		dir, err := ioutil.TempDir("", "")

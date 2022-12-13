@@ -12,13 +12,13 @@ import (
 	"google.golang.org/grpc"
 	"unstable.build/go-tui"
 	browserapi "unstable.build/go-tui/api/browser"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/component"
 	handlerpb "unstable.build/go-tui/handler/rpc"
 	"unstable.build/go-tui/proto"
 	"unstable.build/go-tui/term"
 	termpb "unstable.build/go-tui/term/rpc"
-	"unstable.build/go-tui/workspace"
 )
 
 // without access to underlying stream (i.e. SendClose),
@@ -199,7 +199,7 @@ func (c *Client) Split(o browserapi.Orientation, win browserapi.Window, h browse
 }
 
 // Resource satisfies Browser.
-func (c *Client) Resource(workspace.URI) (browserapi.Handler, bool) {
+func (c *Client) Resource(workspaceapi.URI) (browserapi.Handler, bool) {
 	panic("Resource unimplemented in browser client")
 }
 
@@ -240,7 +240,7 @@ func (c *Client) SetMessage(msg string, args ...interface{}) error {
 }
 
 // Open satisfies Browser.
-func (c *Client) Open(resource workspace.URI) (browserapi.Handler, error) {
+func (c *Client) Open(resource workspaceapi.URI) (browserapi.Handler, error) {
 	ctx := context.Background()
 	req := OpenResourceRequest{Resource: resource.String()}
 
@@ -341,7 +341,7 @@ func (c *Client) Floating(
 }
 
 // Tab satisfies browser.WindowManager
-func (c *Client) Tab(uri workspace.URI, name string, h browserapi.Handler) (browserapi.Handler, error) {
+func (c *Client) Tab(uri workspaceapi.URI, name string, h browserapi.Handler) (browserapi.Handler, error) {
 	channelID, srv, err := c.serveHandler(h)
 	if err != nil {
 		return nil, fmt.Errorf("serve handler: %w", err)

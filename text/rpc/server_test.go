@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	textapi "unstable.build/go-tui/api/text"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/proto"
 	prototest "unstable.build/go-tui/proto/test"
@@ -19,7 +20,6 @@ import (
 	termpb "unstable.build/go-tui/term/rpc"
 	"unstable.build/go-tui/text"
 	texttest "unstable.build/go-tui/text/test"
-	"unstable.build/go-tui/workspace"
 )
 
 const asyncResultsSleepDuration = 300 * time.Millisecond
@@ -37,18 +37,18 @@ func newTestServer(t *testing.T, ctrl *gomock.Controller) (*proto.MockMuxBroker,
 	return broker, ed, s
 }
 
-func expectEdit(t *testing.T, mock *texttest.MockEditor, resource workspace.URI, content string) {
+func expectEdit(t *testing.T, mock *texttest.MockEditor, resource workspaceapi.URI, content string) {
 	mock.EXPECT().Edit(gomock.Any(), gomock.Any()).Times(1).
-		DoAndReturn(func(_uri workspace.URI, buf *cell.Buffer) (text.Handler, error) {
+		DoAndReturn(func(_uri workspaceapi.URI, buf *cell.Buffer) (text.Handler, error) {
 			assert.Equal(t, resource, _uri)
 			assert.Equal(t, content, buf.String())
 			return texttest.NewTestHandler(), nil
 		})
 }
 
-func expectEditor(t *testing.T, mock *texttest.MockEditor, resource workspace.URI) {
+func expectEditor(t *testing.T, mock *texttest.MockEditor, resource workspaceapi.URI) {
 	mock.EXPECT().Editor(gomock.Any()).AnyTimes().
-		DoAndReturn(func(_uri workspace.URI) (text.Handler, error) {
+		DoAndReturn(func(_uri workspaceapi.URI) (text.Handler, error) {
 			assert.Equal(t, resource, _uri)
 			return texttest.NewTestHandler(), nil
 		})
@@ -56,7 +56,7 @@ func expectEditor(t *testing.T, mock *texttest.MockEditor, resource workspace.UR
 
 func callServerEdit(
 	t *testing.T, ctx context.Context, broker *proto.MockMuxBroker,
-	s *Server, uri workspace.URI, content string,
+	s *Server, uri workspaceapi.URI, content string,
 ) {
 	buf := cell.NewBuffer()
 	buf.WriteString(content)
@@ -69,7 +69,7 @@ func callServerEdit(
 
 func TestServerEdit(t *testing.T) {
 	ctx := context.Background()
-	resource, err := workspace.ParseURI("file:///ULaptopNotLinux:@")
+	resource, err := workspaceapi.ParseURI("file:///ULaptopNotLinux:@")
 	require.NoError(t, err)
 	bufContent1 := "ULaptopWillLinux:)"
 
@@ -266,7 +266,7 @@ func TestServerRegister(t *testing.T) {
 }
 
 func TestServerSetLocationList(t *testing.T) {
-	resource, err := workspace.ParseURI("file:///go-tui")
+	resource, err := workspaceapi.ParseURI("file:///go-tui")
 	require.NoError(t, err)
 
 	t.Run("calls underlying editor SetLocationList", func(t *testing.T) {
@@ -347,7 +347,7 @@ func TestServerSetCursor(t *testing.T) {
 
 		broker, mock, s := newTestServer(t, ctrl)
 
-		resource, err := workspace.ParseURI("file:///SetCursorer")
+		resource, err := workspaceapi.ParseURI("file:///SetCursorer")
 		require.NoError(t, err)
 		content := "Oh my"
 		expectEdit(t, mock, resource, content)
@@ -375,7 +375,7 @@ func TestServerCursor(t *testing.T) {
 
 		broker, mock, s := newTestServer(t, ctrl)
 
-		resource, err := workspace.ParseURI("file:///Cursorer")
+		resource, err := workspaceapi.ParseURI("file:///Cursorer")
 		require.NoError(t, err)
 		expectEdit(t, mock, resource, "")
 		callServerEdit(t, ctx, broker, s, resource, "")

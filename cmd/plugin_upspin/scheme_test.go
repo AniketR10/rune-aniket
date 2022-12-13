@@ -5,6 +5,7 @@ import (
 
 	multierr "github.com/ernestrc/go-multierror"
 	"github.com/stretchr/testify/require"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/workspace"
 	"unstable.build/go-tui/workspace/test"
 	"upspin.io/test/testenv"
@@ -41,7 +42,7 @@ func TestScheme(t *testing.T) {
 				_, err = env.Client.MakeDirectory("user1@domain.com/workspace")
 				require.NoError(t, err)
 
-				uri, err := workspace.ParseURI("upspin://user1@domain.com/workspace")
+				uri, err := workspaceapi.ParseURI("upspin://user1@domain.com/workspace")
 				require.NoError(t, err)
 
 				s := new(scheme)
@@ -56,7 +57,7 @@ func TestScheme(t *testing.T) {
 	})
 	/*t.Run("ee packing", func(t *testing.T) {
 		test.TestWorkspaceSchemeFiles(t, func(t *testing.T) workspace.Scheme {
-			uri, err := workspace.ParseURI("upspin://ernest@unstable.build/public")
+			uri, err := workspaceapi.ParseURI("upspin://ernest@unstable.build/public")
 			require.NoError(t, err)
 			s, err := newScheme(cfg("ee"), uri)
 			require.NoError(t, err)

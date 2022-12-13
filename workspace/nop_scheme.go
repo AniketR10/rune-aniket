@@ -9,12 +9,13 @@ import (
 	"syscall"
 	"time"
 
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/config"
 )
 
 // NewNopScheme returns a scheme that does nothing and workspace.Executor API panics.
 func NewNopScheme(scheme string) SchemeFunc {
-	return func(cfg config.Config, uri URI) (Scheme, error) {
+	return func(cfg config.Config, uri workspaceapi.URI) (Scheme, error) {
 		scheme := &testScheme{scheme: scheme}
 		scheme.openFunc = func(name string, flag int, perm os.FileMode) (File, *Error) {
 			return testFile{}, nil
@@ -133,8 +134,8 @@ func (t *testScheme) Wait(Pid) error {
 	panic("unimplemented")
 }
 
-func (t *testScheme) URI(path string) (URI, error) {
-	return ParseURI(fmt.Sprintf("%s://%s", t.scheme, filepath.Join("/", path)))
+func (t *testScheme) URI(path string) (workspaceapi.URI, error) {
+	return workspaceapi.ParseURI(fmt.Sprintf("%s://%s", t.scheme, filepath.Join("/", path)))
 }
 
 func (t *testScheme) Open(path string, flag int, perm os.FileMode) (File, *Error) {

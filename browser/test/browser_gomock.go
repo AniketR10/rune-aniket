@@ -11,10 +11,10 @@ import (
 	gomock "github.com/golang/mock/gomock"
 	tui "unstable.build/go-tui"
 	api "unstable.build/go-tui/api/browser"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	browser "unstable.build/go-tui/browser"
 	component "unstable.build/go-tui/component"
 	term "unstable.build/go-tui/term"
-	workspace "unstable.build/go-tui/workspace"
 )
 
 // MockHandler is a mock of Handler interface.
@@ -461,7 +461,7 @@ func (mr *MockWindowManagerMockRecorder) Split(arg0, arg1, arg2 interface{}) *go
 }
 
 // Tab mocks base method.
-func (m *MockWindowManager) Tab(uri workspace.URI, name string, h browser.Handler) (browser.Handler, error) {
+func (m *MockWindowManager) Tab(uri workspaceapi.URI, name string, h browser.Handler) (browser.Handler, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Tab", uri, name, h)
 	ret0, _ := ret[0].(browser.Handler)
@@ -556,7 +556,7 @@ func (m *MockResourceOpener) EXPECT() *MockResourceOpenerMockRecorder {
 }
 
 // Open mocks base method.
-func (m *MockResourceOpener) Open(resource workspace.URI) (browser.Handler, error) {
+func (m *MockResourceOpener) Open(resource workspaceapi.URI) (browser.Handler, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Open", resource)
 	ret0, _ := ret[0].(browser.Handler)
@@ -571,7 +571,7 @@ func (mr *MockResourceOpenerMockRecorder) Open(resource interface{}) *gomock.Cal
 }
 
 // Resource mocks base method.
-func (m *MockResourceOpener) Resource(arg0 workspace.URI) (browser.Handler, bool) {
+func (m *MockResourceOpener) Resource(arg0 workspaceapi.URI) (browser.Handler, bool) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Resource", arg0)
 	ret0, _ := ret[0].(browser.Handler)
@@ -732,7 +732,7 @@ func (mr *MockBrowserMockRecorder) Interrupt() *gomock.Call {
 }
 
 // Open mocks base method.
-func (m *MockBrowser) Open(resource workspace.URI) (browser.Handler, error) {
+func (m *MockBrowser) Open(resource workspaceapi.URI) (browser.Handler, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Open", resource)
 	ret0, _ := ret[0].(browser.Handler)
@@ -761,7 +761,7 @@ func (mr *MockBrowserMockRecorder) PublishEventNone() *gomock.Call {
 }
 
 // Resource mocks base method.
-func (m *MockBrowser) Resource(arg0 workspace.URI) (browser.Handler, bool) {
+func (m *MockBrowser) Resource(arg0 workspaceapi.URI) (browser.Handler, bool) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Resource", arg0)
 	ret0, _ := ret[0].(browser.Handler)
@@ -825,7 +825,7 @@ func (mr *MockBrowserMockRecorder) Split(arg0, arg1, arg2 interface{}) *gomock.C
 }
 
 // Tab mocks base method.
-func (m *MockBrowser) Tab(uri workspace.URI, name string, h browser.Handler) (browser.Handler, error) {
+func (m *MockBrowser) Tab(uri workspaceapi.URI, name string, h browser.Handler) (browser.Handler, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Tab", uri, name, h)
 	ret0, _ := ret[0].(browser.Handler)

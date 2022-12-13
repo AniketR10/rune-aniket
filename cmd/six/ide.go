@@ -10,6 +10,7 @@ import (
 	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/plugin"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/workspace"
@@ -65,10 +66,10 @@ func (i *ide) init(cwd, cfgfilename, recfilename string,
 		return configErr
 	}
 
-	cwdURI, parseErr := workspace.ParseURI(cwd)
+	cwdURI, parseErr := workspaceapi.ParseURI(cwd)
 	if parseErr != nil {
 		var pathErr error
-		cwdURI, pathErr = workspace.CurrentUserHostURI(cwd)
+		cwdURI, pathErr = workspaceapi.CurrentUserHostURI(cwd)
 		if pathErr != nil {
 			return multierr.Append(pathErr, parseErr)
 		}

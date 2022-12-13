@@ -6,9 +6,9 @@ import (
 	"github.com/ernestrc/golang-internal-tools/lsp/protocol"
 	"github.com/ernestrc/golang-internal-tools/span"
 	"github.com/stretchr/testify/assert"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/text"
-	"unstable.build/go-tui/workspace"
 )
 
 const (
@@ -78,7 +78,7 @@ func makeFile() *file {
 	docID := protocol.TextDocumentIdentifier{
 		URI: protocol.URIFromSpanURI(uri),
 	}
-	u, err := workspace.ParseURI(string(uri))
+	u, err := workspaceapi.ParseURI(string(uri))
 	if err != nil {
 		panic(err)
 	}

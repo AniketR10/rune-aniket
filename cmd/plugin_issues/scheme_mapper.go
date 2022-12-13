@@ -10,6 +10,7 @@ import (
 	"github.com/ernestrc/blue/encoding"
 	"github.com/ernestrc/blue/issue"
 	log "github.com/sirupsen/logrus"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/config"
 	"unstable.build/go-tui/workspace"
 )
@@ -26,7 +27,7 @@ func issueMapperScheme(
 	marshaler encoding.Marshaler,
 	maxSubjectLen int,
 ) workspace.SchemeFunc {
-	return func(cfg config.Config, uri workspace.URI) (workspace.Scheme, error) {
+	return func(cfg config.Config, uri workspaceapi.URI) (workspace.Scheme, error) {
 		s, err := schemeFunc(cfg, uri)
 		if err != nil {
 			return nil, err
@@ -73,7 +74,7 @@ func (m mapper) Stat(path string) (os.FileInfo, error) {
 	path = parseLabels(path)
 	return m.Scheme.Stat(path)
 }
-func (m mapper) URI(path string) (workspace.URI, error) {
+func (m mapper) URI(path string) (workspaceapi.URI, error) {
 	path = parseLabels(path)
 	return m.Scheme.URI(path)
 }

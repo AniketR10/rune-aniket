@@ -17,6 +17,7 @@ import (
 	"unstable.build/go-tui"
 	browserapi "unstable.build/go-tui/api/browser"
 	textapi "unstable.build/go-tui/api/text"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/handler"
@@ -297,15 +298,15 @@ func (e *ex) Dispatch(command string, args ...string) bool {
 	return quit
 }
 
-func (e *ex) handlerInFocus() (workspace.URI, text.Handler, bool) {
+func (e *ex) handlerInFocus() (workspaceapi.URI, text.Handler, bool) {
 	content, _ := e.invokeWindow().Content()
 	t, ok := content.(*browser.Tab)
 	if !ok {
-		return workspace.URI{}, nil, false
+		return workspaceapi.URI{}, nil, false
 	}
 	ret, ok := t.Handler().(text.Handler)
 	if !ok {
-		return workspace.URI{}, nil, false
+		return workspaceapi.URI{}, nil, false
 	}
 	return t.URI(), ret, true
 }
@@ -393,7 +394,7 @@ func (e *ex) dispatchCommand(cmd string, args ...string) (err error) {
 	return
 }
 
-func (e *ex) editFileURI(uri workspace.URI) error {
+func (e *ex) editFileURI(uri workspaceapi.URI) error {
 	e.log(log.DebugLevel, "edit: %s", uri.String())
 
 	h, err := e.comp.Open(uri)
@@ -407,8 +408,8 @@ func (e *ex) editFileURI(uri workspace.URI) error {
 	return err
 }
 
-func (e *ex) parseURIOrWorkspaceURI(path string) (workspace.URI, error) {
-	uri, err := workspace.ParseURI(path)
+func (e *ex) parseURIOrWorkspaceURI(path string) (workspaceapi.URI, error) {
+	uri, err := workspaceapi.ParseURI(path)
 	e.log(log.TraceLevel, "parse uri (%s): %s, %v", path, uri.String(), err)
 	if err != nil {
 		uri, err = e.workspace.URI(path)

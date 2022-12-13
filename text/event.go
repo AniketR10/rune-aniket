@@ -4,14 +4,14 @@ import (
 	"context"
 
 	textapi "unstable.build/go-tui/api/text"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/term"
-	"unstable.build/go-tui/workspace"
 )
 
 type cellSubscriber struct {
-	uri workspace.URI
+	uri workspaceapi.URI
 	h   Handler
 	eh  EventHandler
 
@@ -40,12 +40,12 @@ func (s *cellSubscriber) OnDidEdit(from, to term.Coordinates, old string) {
 }
 
 // CellSubscriber returns a cell.Subscriber which forwards Insert/Delete events to evHandler
-func CellSubscriber(uri workspace.URI, h Handler, evHandler EventHandler) cell.Subscriber {
+func CellSubscriber(uri workspaceapi.URI, h Handler, evHandler EventHandler) cell.Subscriber {
 	return &cellSubscriber{uri: uri, h: h, eh: evHandler}
 }
 
 type scrollSubscriber struct {
-	uri workspace.URI
+	uri workspaceapi.URI
 	h   Handler
 	eh  EventHandler
 }
@@ -60,6 +60,6 @@ func (s scrollSubscriber) OnSeek(at term.Coordinates) {
 }
 
 // ScrollSubscriber returns a component.ScrollSubscriber which forwarsd Scroll events to evHandler
-func ScrollSubscriber(resource workspace.URI, h Handler, evHandler EventHandler) component.ScrollSubscriber {
+func ScrollSubscriber(resource workspaceapi.URI, h Handler, evHandler EventHandler) component.ScrollSubscriber {
 	return scrollSubscriber{uri: resource, h: h, eh: evHandler}
 }

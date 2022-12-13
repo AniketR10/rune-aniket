@@ -6,10 +6,10 @@ import (
 
 	"unstable.build/go-tui"
 	browserapi "unstable.build/go-tui/api/browser"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/term"
-	"unstable.build/go-tui/workspace"
 )
 
 // Handler adds Close to a tui.Handler.
@@ -77,7 +77,7 @@ type WindowManager interface {
 	// used with the rest of methods that take a browser.Handler.
 	// URI is used to uniquely identify a tab and name is used as a label
 	// to display it in the tab bar.
-	Tab(uri workspace.URI, name string, h Handler) (Handler, error)
+	Tab(uri workspaceapi.URI, name string, h Handler) (Handler, error)
 
 	// Window returns a window with the given window ID or returns false
 	// if now window with that ID exists.
@@ -92,8 +92,8 @@ type Messenger interface {
 
 // ResourceOpener is the interface that wraps the method Open.
 type ResourceOpener interface {
-	Open(resource workspace.URI) (Handler, error)
-	Resource(workspace.URI) (Handler, bool)
+	Open(resource workspaceapi.URI) (Handler, error)
+	Resource(workspaceapi.URI) (Handler, bool)
 }
 
 // EventPublisher is the interface that wraps the method Interrupt.

@@ -16,6 +16,7 @@ import (
 	browserapitest "unstable.build/go-tui/api/browser/test"
 	textapi "unstable.build/go-tui/api/text"
 	textplugin "unstable.build/go-tui/api/text/plugin"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	browsertest "unstable.build/go-tui/browser/test"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
@@ -67,7 +68,7 @@ func TestIntegrationRace(t *testing.T) {
 		interrupt = term.Interrupt
 	}()
 
-	uri, err := workspace.ParseURI("file:///tmp/test")
+	uri, err := workspaceapi.ParseURI("file:///tmp/test")
 	require.NoError(t, err)
 
 	th := textpb.Token{URI: uri}

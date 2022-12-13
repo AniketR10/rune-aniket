@@ -8,6 +8,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/config"
 )
 
@@ -46,7 +47,7 @@ func TestReadLines(t *testing.T) {
 
 	for _, tcase := range tsuite {
 		t.Run(tcase.desc, func(t *testing.T) {
-			uri, err := ParseURI("memory:///")
+			uri, err := workspaceapi.ParseURI("memory:///")
 			require.NoError(t, err)
 			scheme, err := NewMemoryScheme(config.NopConfig(), uri)
 			require.NoError(t, err)

@@ -2,10 +2,10 @@ package test
 
 import (
 	textapi "unstable.build/go-tui/api/text"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	cell "unstable.build/go-tui/cell"
 	term "unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
-	workspace "unstable.build/go-tui/workspace"
 )
 
 // EditorFromAPIEditor wraps a textapi.Editor to satisfy text.Editor.
@@ -20,7 +20,7 @@ func (e EditorFromAPIEditor) CellView(h text.Handler) text.CellView {
 func (e EditorFromAPIEditor) CellEditor(h text.Handler) text.CellEditor {
 	return e.Ed.CellEditor(h)
 }
-func (e EditorFromAPIEditor) Edit(file workspace.URI, buf *cell.Buffer) (text.Handler, error) {
+func (e EditorFromAPIEditor) Edit(file workspaceapi.URI, buf *cell.Buffer) (text.Handler, error) {
 	return e.Ed.Edit(file, buf)
 }
 
@@ -28,7 +28,7 @@ func (e EditorFromAPIEditor) SubscribeEditorEvents(t []textapi.EventType, h text
 	return e.Ed.SubscribeEditorEvents(t, h)
 }
 
-func (e EditorFromAPIEditor) Editor(file workspace.URI) (text.Handler, error) {
+func (e EditorFromAPIEditor) Editor(file workspaceapi.URI) (text.Handler, error) {
 	return e.Ed.Editor(file)
 }
 

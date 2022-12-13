@@ -11,6 +11,7 @@ import (
 
 	multierr "github.com/ernestrc/go-multierror"
 	"google.golang.org/grpc"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/workspace"
 )
 
@@ -72,7 +73,7 @@ func (c *Client) Stat(name string) (os.FileInfo, error) {
 }
 
 // URI satisfies workspace.API.
-func (c *Client) URI(path string) (workspace.URI, error) {
+func (c *Client) URI(path string) (workspaceapi.URI, error) {
 	ctx, cleanup := ctxWithTimeout()
 	defer cleanup()
 
@@ -80,11 +81,11 @@ func (c *Client) URI(path string) (workspace.URI, error) {
 	resp, err := c.client.URI(ctx, &req)
 	runtime.KeepAlive(c)
 	if err != nil {
-		return workspace.URI{}, err
+		return workspaceapi.URI{}, err
 	}
-	uri, err := workspace.ParseURI(resp.GetUri())
+	uri, err := workspaceapi.ParseURI(resp.GetUri())
 	if err != nil {
-		return workspace.URI{}, fmt.Errorf("Could not parse URI response from server: %w", err)
+		return workspaceapi.URI{}, fmt.Errorf("Could not parse URI response from server: %w", err)
 	}
 	return uri, nil
 }

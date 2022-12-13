@@ -9,6 +9,7 @@ import (
 	browserapi "unstable.build/go-tui/api/browser"
 	browserplugin "unstable.build/go-tui/api/browser/plugin"
 	textapi "unstable.build/go-tui/api/text"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/config"
@@ -99,7 +100,7 @@ func (f *file) uriAtCursor() string {
 	return uri
 }
 
-func (h *gfEditorHandler) openFileUnderCursor(win browserapi.Window, uri workspace.URI) error {
+func (h *gfEditorHandler) openFileUnderCursor(win browserapi.Window, uri workspaceapi.URI) error {
 	f, ok := h.files[uri.String()]
 	if !ok {
 		return fmt.Errorf("could not find buffer for file %s", uri.String())
@@ -113,7 +114,7 @@ func (h *gfEditorHandler) openFileUnderCursor(win browserapi.Window, uri workspa
 
 	log.Infof("trying to parse word %q under cursor", word)
 
-	uri, err := workspace.ParseURI(word)
+	uri, err := workspaceapi.ParseURI(word)
 	if err != nil {
 		uri, err = h.cwd.URI(word)
 	}

@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/config"
 	"unstable.build/go-tui/workspace"
 )
@@ -19,7 +20,7 @@ func TestFileScheme(t *testing.T) {
 
 		dirs = append(dirs, dir)
 
-		workspaceURI, err := workspace.ParseURI("file://" + dir)
+		workspaceURI, err := workspaceapi.ParseURI("file://" + dir)
 		require.NoError(t, err)
 
 		fileScheme, err := workspace.NewFileScheme(config.NopConfig(), workspaceURI)

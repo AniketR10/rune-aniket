@@ -7,16 +7,16 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	textapi "unstable.build/go-tui/api/text"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
-	"unstable.build/go-tui/workspace"
 )
 
 func TestEditorDispatchFocus(t *testing.T) {
 	ed := Editor()
 	content := "Clement"
-	uri, err := workspace.ParseURI("file:///Jolie")
+	uri, err := workspaceapi.ParseURI("file:///Jolie")
 	require.NoError(t, err)
 
 	var h text.Handler
@@ -51,7 +51,7 @@ func TestEditorDispatchScroll(t *testing.T) {
 	ed := Editor()
 	buf := cell.NewBuffer()
 	buf.WriteString("Daworg\nSurinach")
-	h, err := ed.Edit(workspace.URI{}, buf)
+	h, err := ed.Edit(workspaceapi.URI{}, buf)
 	require.NoError(t, err)
 
 	h.Resize(2, 2)
@@ -77,7 +77,7 @@ func TestEditorDispatchScroll(t *testing.T) {
 }
 
 func TestEditorDispatchCursor(t *testing.T) {
-	uri, err := workspace.ParseURI("file:///tmp/zsh.sh")
+	uri, err := workspaceapi.ParseURI("file:///tmp/zsh.sh")
 	require.NoError(t, err)
 	ed := Editor()
 	buf := cell.NewBuffer()
@@ -115,7 +115,7 @@ func TestEditorDispatchCursor(t *testing.T) {
 }
 
 func TestEditorSetCursor(t *testing.T) {
-	uri, err := workspace.ParseURI("file:///tmp/zsh.sh")
+	uri, err := workspaceapi.ParseURI("file:///tmp/zsh.sh")
 	require.NoError(t, err)
 
 	t.Run("does not return error if cursor already at position", func(t *testing.T) {

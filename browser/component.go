@@ -8,12 +8,12 @@ import (
 	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui"
 	browserapi "unstable.build/go-tui/api/browser"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
 
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/term"
-	"unstable.build/go-tui/workspace"
 )
 
 var (
@@ -199,7 +199,7 @@ func (c *Component) Init(config Config) {
 }
 
 // NewTab adds a new tab to the list of tabs on this Component.
-func (c *Component) NewTab(resource workspace.URI, name string, h Handler, f io.Closer) *Tab {
+func (c *Component) NewTab(resource workspaceapi.URI, name string, h Handler, f io.Closer) *Tab {
 	t := newTab(c, resource, h, f)
 	c.buffers = append(c.buffers, t)
 	c.tabs.Add(name)
@@ -208,7 +208,7 @@ func (c *Component) NewTab(resource workspace.URI, name string, h Handler, f io.
 
 // Tab returns the tab with name and true if there's a tab with such name
 // or nil and false otherwise.
-func (c *Component) Tab(uri workspace.URI) (*Tab, bool) {
+func (c *Component) Tab(uri workspaceapi.URI) (*Tab, bool) {
 	for _, t := range c.buffers {
 		if t.uri.String() == uri.String() {
 			return t, true
@@ -219,7 +219,7 @@ func (c *Component) Tab(uri workspace.URI) (*Tab, bool) {
 
 // SetTabAttr sets the attributes of the tab with ID id. It returns false
 // if there's no tab with id.
-func (c *Component) SetTabAttr(uri workspace.URI, attr term.Attributes) bool {
+func (c *Component) SetTabAttr(uri workspaceapi.URI, attr term.Attributes) bool {
 	for i, t := range c.buffers {
 		if t.uri.String() == uri.String() {
 			c.tabs.SetTabAttr(i, attr)
@@ -231,7 +231,7 @@ func (c *Component) SetTabAttr(uri workspace.URI, attr term.Attributes) bool {
 
 // SetTabName sets the tab name of the tab with ID id. It returns false
 // if there's no tab with id.
-func (c *Component) SetTabName(uri workspace.URI, name string) bool {
+func (c *Component) SetTabName(uri workspaceapi.URI, name string) bool {
 	for i, t := range c.buffers {
 		if t.uri.String() == uri.String() {
 			c.tabs.SetTabName(i, name)

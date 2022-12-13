@@ -17,6 +17,7 @@ import (
 	"google.golang.org/grpc"
 	"unstable.build/go-tui/config"
 
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/workspace"
 	workspacepb "unstable.build/go-tui/workspace/rpc"
 )
@@ -31,7 +32,7 @@ const (
 
 // New returns a workspace.Scheme capable of managing
 // files over an ssh connection.
-func New(cfg config.Config, uri workspace.URI) (workspace.Scheme, error) {
+func New(cfg config.Config, uri workspaceapi.URI) (workspace.Scheme, error) {
 	return newScheme(cfg, uri)
 }
 
@@ -48,13 +49,13 @@ type scheme struct {
 	basePath string
 
 	getUser         func() (*user.User, error)
-	remoteFn        func(sshConfig, workspace.URI) (remote, error)
+	remoteFn        func(sshConfig, workspaceapi.URI) (remote, error)
 	connectSchemeFn connectSchemeFn
 
 	workspace.Scheme
 }
 
-func newScheme(ccfg config.Config, uri workspace.URI) (*scheme, error) {
+func newScheme(ccfg config.Config, uri workspaceapi.URI) (*scheme, error) {
 	ret := new(scheme)
 
 	cc, err := fromConfig(ccfg)
@@ -77,7 +78,7 @@ func newScheme(ccfg config.Config, uri workspace.URI) (*scheme, error) {
 	return ret, nil
 }
 
-func parseWorkspaceURI(u workspace.URI, getUser func() (*user.User, error)) (
+func parseWorkspaceURI(u workspaceapi.URI, getUser func() (*user.User, error)) (
 	username, homedir, hostPort, basePath string, err error,
 ) {
 	username = u.User()
@@ -96,7 +97,7 @@ func parseWorkspaceURI(u workspace.URI, getUser func() (*user.User, error)) (
 	// I doubt we'll ever ssh into a non-linux host
 	homedir = filepath.Join("/", "home", usernameForHomeDir)
 
-	basePath, err = workspace.ExpandPath(u.Path(), func() (*user.User, error) {
+	basePath, err = workspaceapi.ExpandPath(u.Path(), func() (*user.User, error) {
 		return &user.User{Username: username, HomeDir: homedir}, nil
 	}, func() (string, error) {
 		// return host's base path, but this should never happen
@@ -163,7 +164,7 @@ func (s *scheme) whichCommand(remote remote, cmd string) error {
 	return nil
 }
 
-func (s *scheme) workspaceExists(remote remote, uri workspace.URI) error {
+func (s *scheme) workspaceExists(remote remote, uri workspaceapi.URI) error {
 	cmdAndArgs, ok, err := s.runAndWait(remote, "ls", uri.Path())
 	if err != nil {
 		return fmt.Errorf("could not check if workspace path %q exists: %w", uri.Path(), err)
@@ -175,7 +176,7 @@ func (s *scheme) workspaceExists(remote remote, uri workspace.URI) error {
 	return nil
 }
 
-func (s *scheme) connectScheme(uri workspace.URI, closeHook func(error)) (workspace.Scheme, error) {
+func (s *scheme) connectScheme(uri workspaceapi.URI, closeHook func(error)) (workspace.Scheme, error) {
 	const six = "six"
 
 	sshPath := s.basePath
@@ -257,7 +258,7 @@ func (s *scheme) connectScheme(uri workspace.URI, closeHook func(error)) (worksp
 	return workspacepb.NewScheme(conn), nil
 }
 
-func (s *scheme) init(cc sshConfig, uri workspace.URI,
+func (s *scheme) init(cc sshConfig, uri workspaceapi.URI,
 	statWorkspaceDir func(workspace.Scheme, string) (os.FileInfo, error)) (err error) {
 	if uri.Scheme() != Scheme {
 		return errors.New("invalid non-ssh scheme")
@@ -266,7 +267,7 @@ func (s *scheme) init(cc sshConfig, uri workspace.URI,
 	s.cfg = cc
 	s.user, s.homedir, s.hostPort, s.basePath, err = parseWorkspaceURI(uri, s.getUser)
 	if err != nil {
-		return fmt.Errorf("could not parse ssh workspace URI: %s", err)
+		return fmt.Errorf("could not parse ssh workspaceapi.URI: %s", err)
 	}
 
 	// expand any relative path or home aliases
@@ -282,7 +283,7 @@ func (s *scheme) init(cc sshConfig, uri workspace.URI,
 	}
 
 	if !fi.IsDir() {
-		return fmt.Errorf("workspace URI does not refer to a directory: %s", uri.String())
+		return fmt.Errorf("workspaceapi.URI does not refer to a directory: %s", uri.String())
 	}
 
 	return nil
@@ -330,10 +331,10 @@ func (s *scheme) SetPtySize(pty workspace.Pty, width, height int) error {
 	return s.Scheme.SetPtySize(pty, width, height)
 }
 
-func (s *scheme) URI(path string) (workspace.URI, error) {
+func (s *scheme) URI(path string) (workspaceapi.URI, error) {
 	absPath, err := s.expandPath(path)
 	if err != nil {
-		return workspace.URI{}, err
+		return workspaceapi.URI{}, err
 	}
 
 	var uriStr string
@@ -343,7 +344,7 @@ func (s *scheme) URI(path string) (workspace.URI, error) {
 		uriStr = fmt.Sprintf("ssh://%s%s", s.hostPort, absPath)
 	}
 
-	return workspace.ParseURI(uriStr)
+	return workspaceapi.ParseURI(uriStr)
 }
 
 func (s *scheme) Close() (ret error) {
@@ -354,7 +355,7 @@ func (s *scheme) Close() (ret error) {
 }
 
 func (s *scheme) expandPath(path string) (string, error) {
-	return workspace.ExpandPath(path, func() (*user.User, error) {
+	return workspaceapi.ExpandPath(path, func() (*user.User, error) {
 		return &user.User{Username: s.user, HomeDir: s.homedir}, nil
 	}, func() (string, error) {
 		return s.basePath, nil

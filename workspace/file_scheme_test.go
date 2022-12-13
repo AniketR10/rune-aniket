@@ -13,10 +13,11 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/config"
 )
 
-func newTestFileScheme(uri URI) (*fileScheme, error) {
+func newTestFileScheme(uri workspaceapi.URI) (*fileScheme, error) {
 	ret := new(fileScheme)
 	ret.osStat = func(path string) (os.FileInfo, error) {
 		if strings.Contains(path, ".txt") || strings.Contains(path, ".md") {
@@ -52,12 +53,12 @@ func TestNewScheme(t *testing.T) {
 		{"no host regular folder success", "file:///tmp", ""},
 		{"root", "file:///", ""},
 		{"file uri should return error", "file:///tmp/file.txt",
-			"workspace URI does not refer to a directory: file:///tmp/file.txt"}, // newTestFileScheme sets osStat based on file name
+			"workspaceapi.URI does not refer to a directory: file:///tmp/file.txt"}, // newTestFileScheme sets osStat based on file name
 	}
 
 	for _, tcase := range tsuite {
 		t.Run(tcase.desc, func(t *testing.T) {
-			workspaceURI, err := ParseURI(tcase.workspaceURI)
+			workspaceURI, err := workspaceapi.ParseURI(tcase.workspaceURI)
 			require.NoError(t, err)
 
 			// sut
@@ -108,7 +109,7 @@ func TestFileSchemeURI(t *testing.T) {
 
 	for _, tcase := range tsuite {
 		t.Run(tcase.desc, func(t *testing.T) {
-			workspaceURI, err := ParseURI(tcase.workspaceURI)
+			workspaceURI, err := workspaceapi.ParseURI(tcase.workspaceURI)
 			require.NoError(t, err)
 
 			s, err := newTestFileScheme(workspaceURI)
@@ -123,7 +124,7 @@ func TestFileSchemeURI(t *testing.T) {
 			} else {
 				assert.NoError(t, actualErr)
 
-				expectedURI, err := ParseURI(tcase.expectedOut)
+				expectedURI, err := workspaceapi.ParseURI(tcase.expectedOut)
 				require.NoError(t, err)
 				assert.Equal(t, expectedURI.String(), actualOut.String())
 			}
@@ -132,14 +133,14 @@ func TestFileSchemeURI(t *testing.T) {
 	}
 }
 
-func setupTestDirectory(totalFiles, nestEvery, emptyDirsPerFile int) (URI, func(), error) {
+func setupTestDirectory(totalFiles, nestEvery, emptyDirsPerFile int) (workspaceapi.URI, func(), error) {
 	dir, err := ioutil.TempDir("", "list_files_test")
 	if err != nil {
-		return URI{}, nil, err
+		return workspaceapi.URI{}, nil, err
 	}
-	workspaceURI, err := ParseURI("file://" + dir)
+	workspaceURI, err := workspaceapi.ParseURI("file://" + dir)
 	if err != nil {
-		return URI{}, nil, err
+		return workspaceapi.URI{}, nil, err
 	}
 
 	var closeFns []func()
@@ -147,28 +148,28 @@ func setupTestDirectory(totalFiles, nestEvery, emptyDirsPerFile int) (URI, func(
 	for i := 0; i < totalFiles; i++ {
 		f, err := ioutil.TempFile(dir, strconv.Itoa(i))
 		if err != nil {
-			return URI{}, nil, err
+			return workspaceapi.URI{}, nil, err
 		}
 		_, err = f.WriteString(strconv.Itoa(i))
 		if err != nil {
-			return URI{}, nil, err
+			return workspaceapi.URI{}, nil, err
 		}
 		err = f.Close()
 		if err != nil {
-			return URI{}, nil, err
+			return workspaceapi.URI{}, nil, err
 		}
 		for i := 0; i < emptyDirsPerFile; i++ {
 			// create more dirs than workers
 			_, err = ioutil.TempDir(dir, "emptydir")
 			if err != nil {
-				return URI{}, nil, err
+				return workspaceapi.URI{}, nil, err
 			}
 		}
 		if i%nestEvery == 0 {
 			// nest next temp file created
 			dir, err = ioutil.TempDir(dir, "nested")
 			if err != nil {
-				return URI{}, nil, err
+				return workspaceapi.URI{}, nil, err
 			}
 		}
 		closeFns = append(closeFns, func() { os.Remove(f.Name()) })

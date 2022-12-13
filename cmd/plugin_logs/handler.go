@@ -4,12 +4,12 @@ import (
 	"strconv"
 
 	"unstable.build/go-tui"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/handler/search"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
-	"unstable.build/go-tui/workspace"
 )
 
 type mode uint8
@@ -67,7 +67,7 @@ func newLogsHandler(
 	ret.textAttr = *textAttr
 
 	buf := l.Buffer()
-	ret.ed, _ = text.SimpleEditor(true).Edit(workspace.URI{}, buf)
+	ret.ed, _ = text.SimpleEditor(true).Edit(workspaceapi.URI{}, buf)
 
 	ret.l.C = ret.withBackground(ret.l.C)
 

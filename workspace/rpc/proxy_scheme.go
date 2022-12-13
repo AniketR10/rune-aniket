@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	multierr "github.com/ernestrc/go-multierror"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/config"
 	"unstable.build/go-tui/proto"
 	"unstable.build/go-tui/workspace"
@@ -84,7 +85,7 @@ func (s *proxySchemeServerImpl) InitializeProxy(
 	}
 
 	uriStr := req.GetUri()
-	uri, err := workspace.ParseURI(uriStr)
+	uri, err := workspaceapi.ParseURI(uriStr)
 	if err != nil {
 		return nil, err
 	}
@@ -118,7 +119,7 @@ func (s *proxySchemeServerImpl) Close() (ret error) {
 /* client-side */
 
 func initializeSchemeThroughProxy(
-	cfg config.Config, uri workspace.URI,
+	cfg config.Config, uri workspaceapi.URI,
 	broker proto.MuxBroker, proxyID uint32,
 ) (workspace.Scheme, proto.MuxConn, error) {
 	// once uri, and config is sent disconnect proxy client

@@ -15,6 +15,7 @@ import (
 	"unstable.build/go-tui"
 	browserapi "unstable.build/go-tui/api/browser"
 	textapi "unstable.build/go-tui/api/text"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
@@ -47,7 +48,7 @@ type editorFlusherCloser struct {
 	parent    *Component
 	fc        workspace.FlusherCloser
 	h         Handler
-	uri       workspace.URI
+	uri       workspaceapi.URI
 	buf       *cell.Buffer
 	lastFlush string
 }
@@ -101,7 +102,7 @@ func (c *Component) newCellBuffer() *cell.Buffer {
 	return buf
 }
 
-func (c *Component) resetTabProperties(file workspace.URI) {
+func (c *Component) resetTabProperties(file workspaceapi.URI) {
 	c.comp.SetTabAttr(file, term.Attributes{})
 	c.comp.SetTabName(file, file.Name())
 }
@@ -109,7 +110,7 @@ func (c *Component) resetTabProperties(file workspace.URI) {
 // TODO this is a very inefficient way of checking if a file was changed.
 // We should instead collect edits and check for undos by comparing arguments
 // and return values.
-func (c *Component) setTabAttr(file workspace.URI, buf *cell.Buffer, lastFlush string) {
+func (c *Component) setTabAttr(file workspaceapi.URI, buf *cell.Buffer, lastFlush string) {
 	content := buf.String()
 	if content == lastFlush {
 		c.resetTabProperties(file)
@@ -120,19 +121,19 @@ func (c *Component) setTabAttr(file workspace.URI, buf *cell.Buffer, lastFlush s
 	c.comp.SetTabName(file, tabname)
 }
 
-func (c *Component) getSwapDir(file workspace.URI) (workspace.URI, error) {
+func (c *Component) getSwapDir(file workspaceapi.URI) (workspaceapi.URI, error) {
 	return workspace.DefaultSwapDirectory(file)
 }
 
 func (c *Component) newFileBuffer(
-	file, recSwapFile workspace.URI, buf *cell.Buffer,
+	file, recSwapFile workspaceapi.URI, buf *cell.Buffer,
 	readOnly, forceRecover bool,
 ) (ret *editorFlusherCloser, err error) {
 	var fc workspace.FlusherCloser
-	if recSwapFile != (workspace.URI{}) {
+	if recSwapFile != (workspaceapi.URI{}) {
 		fc, err = c.workspace.Recover(file, recSwapFile, buf, forceRecover)
 	} else {
-		var swapDir workspace.URI
+		var swapDir workspaceapi.URI
 		swapDir, err = c.getSwapDir(file)
 		if err == nil {
 			fc, err = c.workspace.Load(file, buf, swapDir, readOnly)
@@ -174,7 +175,7 @@ func (c *Component) Init(ed Editor, w workspace.Loader, config Config) error {
 
 	var first browser.Handler
 
-	if c.config.RecoveryFilepath != (workspace.URI{}) {
+	if c.config.RecoveryFilepath != (workspaceapi.URI{}) {
 		if len(c.config.Filepaths) != 1 {
 			return errors.New("only one file expected if recovery file is passed")
 		}
@@ -308,28 +309,28 @@ func (s *compTabSubscriber) OnFree(t *browser.Tab) {
 //
 // If recoveryFilename is not empty, then the file will be recovered from the
 // contents of recoveryFilename.
-func (c *Component) OpenFileTab(file workspace.URI, readOnly bool) (
+func (c *Component) OpenFileTab(file workspaceapi.URI, readOnly bool) (
 	browser.Handler, error,
 ) {
-	if file == (workspace.URI{}) {
+	if file == (workspaceapi.URI{}) {
 		return nil, errors.New("empty URI")
 	}
-	return c.openFileTab(file, workspace.URI{}, readOnly, false)
+	return c.openFileTab(file, workspaceapi.URI{}, readOnly, false)
 }
 
 // RecoverFileTab recovers the file at filename by using the file at recoverFilename
 // and opens a tab it like OpenFileTab. See OpenFileTab for more details.
 func (c *Component) RecoverFileTab(
-	file workspace.URI, recoveryFilename workspace.URI, readOnly bool,
+	file workspaceapi.URI, recoveryFilename workspaceapi.URI, readOnly bool,
 ) (browser.Handler, error) {
-	if file == (workspace.URI{}) || recoveryFilename == (workspace.URI{}) {
+	if file == (workspaceapi.URI{}) || recoveryFilename == (workspaceapi.URI{}) {
 		return nil, errors.New("empty URI")
 	}
 	return c.openFileTab(file, recoveryFilename, readOnly, false)
 }
 
 func (c *Component) openFileTab(
-	file workspace.URI, recoveryFilename workspace.URI,
+	file workspaceapi.URI, recoveryFilename workspaceapi.URI,
 	readOnly, forceRecover bool,
 ) (browser.Handler, error) {
 	t, ok := c.comp.Tab(file)
@@ -353,7 +354,7 @@ func (c *Component) openFileTab(
 	return t, nil
 }
 
-func (c *Component) openAreYouSurePrompt(file workspace.URI) {
+func (c *Component) openAreYouSurePrompt(file workspaceapi.URI) {
 	const (
 		yesOpt = "Yes"
 		noOpt  = "No"
@@ -373,7 +374,7 @@ and lose all the new updates?`, file)
 
 			switch opt {
 			case yesOpt:
-				var swapDir, swapFile workspace.URI
+				var swapDir, swapFile workspaceapi.URI
 				swapDir, err = c.getSwapDir(file)
 				if err == nil {
 					swapFile, err = workspace.DefaultSwapFile(swapDir, file)
@@ -394,7 +395,7 @@ and lose all the new updates?`, file)
 		})
 }
 
-func (c *Component) openRecoveryPrompt(file workspace.URI) {
+func (c *Component) openRecoveryPrompt(file workspaceapi.URI) {
 	const (
 		recoverOpt  = "Recover"
 		readOnlyOpt = "Open Read-Only"
@@ -414,7 +415,7 @@ an edit session for this file crashed.`, file)
 
 			switch opt {
 			case recoverOpt:
-				var swapDir, swapFile workspace.URI
+				var swapDir, swapFile workspaceapi.URI
 				swapDir, err = c.getSwapDir(file)
 				if err == nil {
 					swapFile, err = workspace.DefaultSwapFile(swapDir, file)
@@ -444,7 +445,7 @@ an edit session for this file crashed.`, file)
 // Open opens the given file in a new browser tab. If file is already
 // open by another session or the last edit session crashed, it
 // will create a prompt for the user to decide what to do.
-func (c *Component) Open(file workspace.URI) (browser.Handler, error) {
+func (c *Component) Open(file workspaceapi.URI) (browser.Handler, error) {
 	h, err := c.OpenFileTab(file, false)
 	if err != nil && err == workspace.ErrFileAlreadyOpen {
 		c.openRecoveryPrompt(file)
@@ -453,7 +454,7 @@ func (c *Component) Open(file workspace.URI) (browser.Handler, error) {
 }
 
 // Editor satisfies Editor interface.
-func (c *Component) Editor(file workspace.URI) (Handler, error) {
+func (c *Component) Editor(file workspaceapi.URI) (Handler, error) {
 	for _, tab := range c.comp.Tabs() {
 		if tab.URI().String() == file.String() {
 			h, ok := tab.Handler().(Handler)
@@ -537,7 +538,7 @@ func (c *Component) DispatchCommand(cmd textapi.Command) (handled bool, err erro
 	return true, nil
 }
 
-func (c *Component) dispatchFlush(file workspace.URI, h Handler) (string, error) {
+func (c *Component) dispatchFlush(file workspaceapi.URI, h Handler) (string, error) {
 	content, err := c.getContent(h)
 	if err != nil {
 		return "", err
@@ -625,7 +626,7 @@ func (c *Component) SetFocus(win browser.Window) (browser.Window, error) {
 
 // Edit edits the resource with name and buffer with the underlying Editor
 // in a new browser buffer.
-func (c *Component) Edit(file workspace.URI, buf *cell.Buffer) (Handler, error) {
+func (c *Component) Edit(file workspaceapi.URI, buf *cell.Buffer) (Handler, error) {
 	editor, err := c.ed.Edit(file, buf)
 	if err != nil {
 		return nil, err
@@ -852,7 +853,7 @@ func (c *Component) Floating(
 }
 
 func (c *Component) newTab(
-	resource workspace.URI, name string, h browser.Handler, closer io.Closer,
+	resource workspaceapi.URI, name string, h browser.Handler, closer io.Closer,
 ) *browser.Tab {
 	t := c.comp.NewTab(resource, name, h, closer)
 	t.Subscribe(&compTabSubscriber{parent: c})
@@ -860,7 +861,7 @@ func (c *Component) newTab(
 }
 
 // Tab satisfies browser.WindowManager.
-func (c *Component) Tab(resource workspace.URI, name string, h browser.Handler) (
+func (c *Component) Tab(resource workspaceapi.URI, name string, h browser.Handler) (
 	browser.Handler, error,
 ) {
 	t, ok := c.comp.Tab(resource)
@@ -874,7 +875,7 @@ func (c *Component) Tab(resource workspace.URI, name string, h browser.Handler) 
 }
 
 // Resource returns an open resource or false if resource with uri is not open.
-func (c *Component) Resource(uri workspace.URI) (browser.Handler, bool) {
+func (c *Component) Resource(uri workspaceapi.URI) (browser.Handler, bool) {
 	return c.comp.Tab(uri)
 }
 

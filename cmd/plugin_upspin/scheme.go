@@ -11,6 +11,7 @@ import (
 
 	blupspin "github.com/ernestrc/blue/upspin"
 	multierr "github.com/ernestrc/go-multierror"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/config"
 	"unstable.build/go-tui/workspace"
 	upclient "upspin.io/client"
@@ -29,11 +30,11 @@ var (
 )
 
 type scheme struct {
-	uri    workspace.URI
+	uri    workspaceapi.URI
 	client *upspinClient
 }
 
-func newScheme(config config.Config, uri workspace.URI) (workspace.Scheme, error) {
+func newScheme(config config.Config, uri workspaceapi.URI) (workspace.Scheme, error) {
 	if uri.Scheme() != upspinScheme {
 		return nil, stdErrors.New("invalid scheme")
 	}
@@ -97,7 +98,7 @@ func initUpspinConfig(c config.Config) (ret upspin.Config, retErr error) {
 	return
 }
 
-func (s *scheme) init(config config.Config, uri workspace.URI) error {
+func (s *scheme) init(config config.Config, uri workspaceapi.URI) error {
 	cfg, err := initUpspinConfig(config)
 	if err != nil {
 		return err
@@ -112,10 +113,10 @@ func (s *scheme) init(config config.Config, uri workspace.URI) error {
 }
 
 func (s *scheme) expandPath(path string) (string, error) {
-	return workspace.ExpandPathWithURI(path, s.uri)
+	return workspaceapi.ExpandPathWithURI(path, s.uri)
 }
 
-func (s *scheme) URI(path string) (workspace.URI, error) {
+func (s *scheme) URI(path string) (workspaceapi.URI, error) {
 	return workspace.WorkspaceURI(s.uri, path)
 }
 
@@ -269,11 +270,11 @@ func (s *scheme) ReadDir(name string) ([]os.DirEntry, error) {
 
 	ret := make([]os.DirEntry, 0, len(entries))
 	for _, entry := range entries {
-		u, err := workspace.ParseURI("upspin://" + string(entry.Name))
+		u, err := workspaceapi.ParseURI("upspin://" + string(entry.Name))
 		if err != nil {
 			return nil, err
 		}
-		name = workspace.RelPath(s.uri, u)
+		name = workspaceapi.RelPath(s.uri, u)
 		ret = append(ret, dirEntryAdapter{name: name, s: s, entry: entry})
 	}
 	return ret, nil

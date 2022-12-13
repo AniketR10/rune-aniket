@@ -7,6 +7,7 @@ import (
 	"github.com/ernestrc/blue/encoding/json"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/config"
 	"unstable.build/go-tui/workspace"
 	workdoc "unstable.build/go-tui/workspace/document"
@@ -35,7 +36,7 @@ func TestFirestoreWorkspaceScheme(t *testing.T) {
 		teardown := runFirestoreOrSkip(t)
 		defer teardown()
 
-		workspaceURI, err := workspace.ParseURI("inmemory:///tmp")
+		workspaceURI, err := workspaceapi.ParseURI("inmemory:///tmp")
 		require.NoError(t, err)
 		svc, err := firestore.New(testProjectID, collection, "")
 		require.NoError(t, err)

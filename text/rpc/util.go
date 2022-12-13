@@ -1,14 +1,14 @@
 package rpc
 
 import (
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/term"
 	termpb "unstable.build/go-tui/term/rpc"
-	"unstable.build/go-tui/workspace"
 )
 
 // NewEditRequests converts a buf into an EditRequest.
-func NewEditRequest(file workspace.URI, buf *cell.Buffer) EditRequest {
+func NewEditRequest(file workspaceapi.URI, buf *cell.Buffer) EditRequest {
 	return EditRequest{
 		Buffer:       rawCellsToProtoCells(buf.RawCells()),
 		ResourceName: NewURI(file),
@@ -20,13 +20,13 @@ func EditRequestToBuffer(in *EditRequest) *cell.Buffer {
 	return rowsToBuffer(in.GetBuffer())
 }
 
-// NewURIFromProto maps proto.URI into a workspace.URI.
-func NewURIFromProto(u *URI) (workspace.URI, error) {
-	return workspace.ParseURI(u.GetUri())
+// NewURIFromProto maps proto.URI into a workspaceapi.URI.
+func NewURIFromProto(u *URI) (workspaceapi.URI, error) {
+	return workspaceapi.ParseURI(u.GetUri())
 }
 
-// NewURI maps a workspace.URI into a proto.URI.
-func NewURI(u workspace.URI) *URI {
+// NewURI maps a workspaceapi.URI into a proto.URI.
+func NewURI(u workspaceapi.URI) *URI {
 	return &URI{Uri: u.String()}
 }
 

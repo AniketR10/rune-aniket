@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	textapi "unstable.build/go-tui/api/text"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/proto"
 	prototest "unstable.build/go-tui/proto/test"
@@ -17,7 +18,6 @@ import (
 	termpb "unstable.build/go-tui/term/rpc"
 	"unstable.build/go-tui/text"
 	texttest "unstable.build/go-tui/text/test"
-	"unstable.build/go-tui/workspace"
 )
 
 var (
@@ -46,7 +46,7 @@ func newTestClient(ctrl *gomock.Controller) (
 
 func expectClientEdit(
 	t *testing.T, mockCC *proto.MockMuxConn,
-	expectedContent string, uri workspace.URI,
+	expectedContent string, uri workspaceapi.URI,
 ) {
 	mockCC.EXPECT().
 		Invoke(gomock.Any(),
@@ -76,7 +76,7 @@ func TestClientEdit(t *testing.T) {
 	t.Run("happy path", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		_, cc, c := newTestClient(ctrl)
-		uri, err := workspace.ParseURI("file:///tmp/hello")
+		uri, err := workspaceapi.ParseURI("file:///tmp/hello")
 		require.NoError(t, err)
 
 		buf := cell.NewBuffer()
@@ -101,7 +101,7 @@ func TestClientEdit(t *testing.T) {
 			Times(1).
 			Return(errors.New("Would be a change of plan"))
 
-		h, err := c.Edit(workspace.URI{}, cell.NewBuffer())
+		h, err := c.Edit(workspaceapi.URI{}, cell.NewBuffer())
 		require.Error(t, err)
 		require.Nil(t, h)
 	})
@@ -160,7 +160,7 @@ func TestClientSubscribe(t *testing.T) {
 }
 
 func TestSetLocationListRequest(t *testing.T) {
-	uri, err := workspace.ParseURI("test:///")
+	uri, err := workspaceapi.ParseURI("test:///")
 	require.NoError(t, err)
 	t.Run("non-nil zero slice", func(t *testing.T) {
 		l := text.LocationSlice([]textapi.Location{})

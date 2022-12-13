@@ -11,17 +11,17 @@ import (
 	"github.com/stretchr/testify/assert"
 	textapi "unstable.build/go-tui/api/text"
 	textapitest "unstable.build/go-tui/api/text/test"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/config"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
 	texttest "unstable.build/go-tui/text/test"
-	"unstable.build/go-tui/workspace"
 )
 
 var (
-	filename1         workspace.URI
-	nonConfiguredFile workspace.URI
+	filename1         workspaceapi.URI
+	nonConfiguredFile workspaceapi.URI
 	filecontent1      = `package me.drton.jmavsim;
 public class	Rotor {
      sta  mtyp;
@@ -49,11 +49,11 @@ public class	Rotor {
 
 func init() {
 	var err error
-	filename1, err = workspace.ParseURI("file:///wa_tup.go")
+	filename1, err = workspaceapi.ParseURI("file:///wa_tup.go")
 	if err != nil {
 		panic(err)
 	}
-	nonConfiguredFile, err = workspace.ParseURI("file:///server.MISSING")
+	nonConfiguredFile, err = workspaceapi.ParseURI("file:///server.MISSING")
 	if err != nil {
 		panic(err)
 	}
@@ -85,7 +85,7 @@ func newTestLspHandler(
 	return ret
 }
 
-func expectDidOpen(t *testing.T, mock *MockServer, file workspace.URI, content string) {
+func expectDidOpen(t *testing.T, mock *MockServer, file workspaceapi.URI, content string) {
 	expected := &protocol.DidOpenTextDocumentParams{
 		TextDocument: protocol.TextDocumentItem{
 			URI:        protocol.URIFromSpanURI(span.URIFromURI(file.String())),
@@ -102,7 +102,7 @@ func expectDidOpen(t *testing.T, mock *MockServer, file workspace.URI, content s
 }
 
 func expectDidChange(
-	t *testing.T, mock *MockServer, file workspace.URI, version int32,
+	t *testing.T, mock *MockServer, file workspaceapi.URI, version int32,
 	expectedEvents []protocol.TextDocumentContentChangeEvent,
 ) {
 	expected := &protocol.DidChangeTextDocumentParams{
@@ -164,7 +164,7 @@ func expectAnyLocationList(
 
 func dispatchOpen(
 	t *testing.T, h *lspEditorHandler, server *MockServer, ed *textapitest.MockEditor,
-	uri workspace.URI, content string, tokenData []uint32, expectedListID string,
+	uri workspaceapi.URI, content string, tokenData []uint32, expectedListID string,
 	expectedLocations []textapi.Location,
 ) {
 	var wg sync.WaitGroup
@@ -185,7 +185,7 @@ func dispatchOpen(
 
 func dispatchFlush(
 	t *testing.T, h *lspEditorHandler, server *MockServer, ed *textapitest.MockEditor,
-	uri workspace.URI, content string, version int32, tokenData []uint32,
+	uri workspaceapi.URI, content string, version int32, tokenData []uint32,
 	expectedListID string, expectedLocations []textapi.Location,
 ) {
 	var wg sync.WaitGroup

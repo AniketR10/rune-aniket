@@ -28,6 +28,7 @@ import (
 	browserapi "unstable.build/go-tui/api/browser"
 	browserplugin "unstable.build/go-tui/api/browser/plugin"
 	textapi "unstable.build/go-tui/api/text"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/config"
@@ -125,7 +126,7 @@ var (
 )
 
 type file struct {
-	uri        workspace.URI
+	uri        workspaceapi.URI
 	languageID string
 	handler    textapi.Handler
 	docID      protocol.TextDocumentIdentifier
@@ -712,7 +713,7 @@ func (h *lspEditorHandler) getServer(languageID string) (
 }
 
 func (h *lspEditorHandler) newFile(
-	handler textapi.Handler, uri workspace.URI, content string,
+	handler textapi.Handler, uri workspaceapi.URI, content string,
 ) *file {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -735,14 +736,14 @@ func (h *lspEditorHandler) newFile(
 	return f
 }
 
-func (h *lspEditorHandler) removePendingGoTo(uri workspace.URI) {
+func (h *lspEditorHandler) removePendingGoTo(uri workspaceapi.URI) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	delete(h.pendingGoTo, uri.String())
 }
 
 func (h *lspEditorHandler) addPendingGoTo(
-	uri workspace.URI, rs protocol.Range,
+	uri workspaceapi.URI, rs protocol.Range,
 ) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -751,7 +752,7 @@ func (h *lspEditorHandler) addPendingGoTo(
 }
 
 func (h *lspEditorHandler) addPendingDiagnostics(
-	uri workspace.URI, ds []protocol.Diagnostic,
+	uri workspaceapi.URI, ds []protocol.Diagnostic,
 ) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -760,7 +761,7 @@ func (h *lspEditorHandler) addPendingDiagnostics(
 }
 
 func (h *lspEditorHandler) dispatchPendingDiagnostics(
-	ctx context.Context, uri workspace.URI,
+	ctx context.Context, uri workspaceapi.URI,
 ) error {
 	h.mu.Lock()
 	ds, ok := h.pendingDiagnostic[uri.String()]
@@ -817,7 +818,7 @@ func (h *lspEditorHandler) dispatchPendingGoTo(
 	return h.handleGoTo(f, rs)
 }
 
-func (h *lspEditorHandler) getFile(uri workspace.URI) (*file, bool) {
+func (h *lspEditorHandler) getFile(uri workspaceapi.URI) (*file, bool) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
@@ -1175,7 +1176,7 @@ func (h *lspEditorHandler) handleFileOpen(ev textapi.Event) error {
 	return ret
 }
 
-func (h *lspEditorHandler) removeFile(resource workspace.URI) (*file, bool) {
+func (h *lspEditorHandler) removeFile(resource workspaceapi.URI) (*file, bool) {
 	f, ok := h.getFile(resource)
 	if !ok {
 		return nil, false
@@ -1190,7 +1191,7 @@ func (h *lspEditorHandler) removeFile(resource workspace.URI) (*file, bool) {
 }
 
 func (h *lspEditorHandler) sendDidClose(
-	ctx context.Context, srv execServer, uri workspace.URI,
+	ctx context.Context, srv execServer, uri workspaceapi.URI,
 ) error {
 	spanURI := workspaceURIToSpan(uri)
 	p := protocol.DidCloseTextDocumentParams{
@@ -1273,7 +1274,7 @@ func (h *lspEditorHandler) getDiagnostics(f *file) (ds []protocol.Diagnostic) {
 }
 
 func (h *lspEditorHandler) handleDiagnostics(
-	ctx context.Context, file workspace.URI,
+	ctx context.Context, file workspaceapi.URI,
 	ds []protocol.Diagnostic, version int32,
 ) error {
 	f, ok := h.getFile(file)
@@ -1310,22 +1311,22 @@ func (h *lspEditorHandler) setDiagnosticsLocationList(
 	return err
 }
 
-func (h *lspEditorHandler) spanURIToWorkspace(u span.URI) (workspace.URI, error) {
-	localFile, err := workspace.ParseURI(string(u))
+func (h *lspEditorHandler) spanURIToWorkspace(u span.URI) (workspaceapi.URI, error) {
+	localFile, err := workspaceapi.ParseURI(string(u))
 	if err != nil {
-		err = fmt.Errorf("ParseURI: convert LSP URI to workspace URI %s: %s", u, err)
-		return workspace.URI{}, err
+		err = fmt.Errorf("ParseURI: convert LSP URI to workspaceapi.URI %s: %s", u, err)
+		return workspaceapi.URI{}, err
 	}
 	// convert local LSP file URI to the current workspace's URI scheme
 	// which could be remote or something else.
 	workspaceFile, err := h.wp.URI(localFile.Path())
 	if err != nil {
-		return workspace.URI{}, fmt.Errorf("workspace.URI: %s", err)
+		return workspaceapi.URI{}, fmt.Errorf("workspaceapi.URI: %s", err)
 	}
 	return workspaceFile, err
 }
 
-func workspaceURIToSpan(u workspace.URI) span.URI {
+func workspaceURIToSpan(u workspaceapi.URI) span.URI {
 	// the workspace is always local for the language server
 	// if URI is a remote uri, then the language server is executed
 	// in the remote host as well.
@@ -1386,7 +1387,7 @@ func (h *lspEditorHandler) goToLocation(win browserapi.Window, l protocol.Locati
 	return nil
 }
 
-func (h *lspEditorHandler) getFilePosition(cursor term.Coordinates, uri workspace.URI) (
+func (h *lspEditorHandler) getFilePosition(cursor term.Coordinates, uri workspaceapi.URI) (
 	f *file, pos protocol.Position, ok bool,
 ) {
 	f, ok = h.getFile(uri)
@@ -1409,7 +1410,7 @@ func (h *lspEditorHandler) getFilePosition(cursor term.Coordinates, uri workspac
 }
 
 func (h *lspEditorHandler) handleGoToDefinition(
-	cursor term.Coordinates, ed textapi.Handler, uri workspace.URI,
+	cursor term.Coordinates, ed textapi.Handler, uri workspaceapi.URI,
 	win browserapi.Window,
 ) error {
 	f, pos, ok := h.getFilePosition(cursor, uri)
@@ -1470,7 +1471,7 @@ func (h *lspEditorHandler) findBestFloatingWindowPosition(
 
 func (h *lspEditorHandler) handleHover(
 	cursorAtScroll, cursorAtWindow term.Coordinates,
-	ed textapi.Handler, uri workspace.URI,
+	ed textapi.Handler, uri workspaceapi.URI,
 ) error {
 	f, pos, ok := h.getFilePosition(cursorAtScroll, uri)
 	if !ok {
@@ -1529,7 +1530,7 @@ func makeWorkspaceFolder(in string) protocol.WorkspaceFolder {
 }
 
 func (h *lspEditorHandler) handleChangedWorkspace(
-	uri workspace.URI, added []string, removed []string,
+	uri workspaceapi.URI, added []string, removed []string,
 ) error {
 	languageID := filepath.Ext(uri.Path())
 	srv, ok := h.getServer(languageID)
@@ -1572,12 +1573,12 @@ func (h *lspEditorHandler) handleChangedWorkspace(
 	return nil
 }
 
-func (h *lspEditorHandler) handleAddWorkspace(uri workspace.URI, args []string) error {
+func (h *lspEditorHandler) handleAddWorkspace(uri workspaceapi.URI, args []string) error {
 	log.Tracef("lspEditorHandler.handleAddWorkspace(%v)", args)
 	return h.handleChangedWorkspace(uri, args, nil)
 }
 
-func (h *lspEditorHandler) handleRemoveWorkspace(uri workspace.URI, args []string) error {
+func (h *lspEditorHandler) handleRemoveWorkspace(uri workspaceapi.URI, args []string) error {
 	log.Tracef("lspEditorHandler.handleRemoveWorkspace(%v)", args)
 	return h.handleChangedWorkspace(uri, nil, args)
 }
@@ -1600,7 +1601,7 @@ func (h *lspEditorHandler) browseLocations(
 	textToLocation := make(map[string]protocol.Location)
 	buf := cell.NewBuffer()
 	ed := vi.Editor()
-	edh, err := ed.Edit(workspace.URI{}, buf)
+	edh, err := ed.Edit(workspaceapi.URI{}, buf)
 	if err != nil {
 		err = fmt.Errorf("ed.Edit: %s", err)
 		return err
@@ -1734,7 +1735,7 @@ func (h *lspEditorHandler) browseLocations(
 
 func (h *lspEditorHandler) handleReferences(
 	cursorAtScroll, cursorAtWindow term.Coordinates,
-	ed textapi.Handler, uri workspace.URI, win browserapi.Window,
+	ed textapi.Handler, uri workspaceapi.URI, win browserapi.Window,
 ) error {
 	f, pos, ok := h.getFilePosition(cursorAtScroll, uri)
 	if !ok {
@@ -1838,7 +1839,7 @@ func (h *lspEditorHandler) organizeImports(
 	return ret
 }
 
-func (h *lspEditorHandler) handleFormat(ed textapi.Handler, uri workspace.URI, imports bool) error {
+func (h *lspEditorHandler) handleFormat(ed textapi.Handler, uri workspaceapi.URI, imports bool) error {
 	ctx := context.Background()
 	ctx, cancelFn := context.WithTimeout(ctx, h.rpcTimeout)
 	defer cancelFn()

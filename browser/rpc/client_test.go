@@ -9,10 +9,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/goleak"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/proto"
 	"unstable.build/go-tui/term"
 	termpb "unstable.build/go-tui/term/rpc"
-	"unstable.build/go-tui/workspace"
 )
 
 var (
@@ -106,7 +106,7 @@ func TestClientSetMessage(t *testing.T) {
 	})
 }
 
-func expectResourceOpen(mockCC *proto.MockClientConnInterface, myResource workspace.URI) {
+func expectResourceOpen(mockCC *proto.MockClientConnInterface, myResource workspaceapi.URI) {
 	in := &OpenResourceRequest{Resource: myResource.String()}
 	out := new(OpenResourceResponse)
 	mockCC.EXPECT().
@@ -123,7 +123,7 @@ func TestClientOpen(t *testing.T) {
 
 		client, mockCC, _ := newMockedClient(ctrl)
 
-		myResource, err := workspace.ParseURI("file:///fjkelwjfeklw")
+		myResource, err := workspaceapi.ParseURI("file:///fjkelwjfeklw")
 		require.NoError(t, err)
 
 		expectResourceOpen(mockCC, myResource)
@@ -140,7 +140,7 @@ func TestClientOpen(t *testing.T) {
 
 		expectInvokeError(mockCC)
 
-		_, err := client.Open(workspace.URI{})
+		_, err := client.Open(workspaceapi.URI{})
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "woopsie")
 	})

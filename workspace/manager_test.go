@@ -6,12 +6,13 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/config"
 )
 
-func parseURI(t *testing.T, uriStr string) URI {
-	u, err := ParseURI(uriStr)
+func parseURI(t *testing.T, uriStr string) workspaceapi.URI {
+	u, err := workspaceapi.ParseURI(uriStr)
 	require.NoError(t, err)
 	return u
 }
@@ -129,7 +130,7 @@ func TestManager(t *testing.T) {
 
 	t.Run("buubles up scheme constructor errors", func(t *testing.T) {
 		m := NewManager(config.NopConfig())
-		err := m.RegisterScheme("test", func(cfg config.Config, uri URI) (Scheme, error) {
+		err := m.RegisterScheme("test", func(cfg config.Config, uri workspaceapi.URI) (Scheme, error) {
 			return nil, errors.New("boom")
 		})
 		require.NoError(t, err)
@@ -152,7 +153,7 @@ func TestManager(t *testing.T) {
 		}))
 
 		var called bool
-		err := m.RegisterScheme("test", func(cfg config.Config, uri URI) (Scheme, error) {
+		err := m.RegisterScheme("test", func(cfg config.Config, uri workspaceapi.URI) (Scheme, error) {
 
 			value, err := cfg.GetString("key")
 			assert.NoError(t, err)
@@ -177,13 +178,13 @@ func TestManager(t *testing.T) {
 }
 
 func TestIntegrationManagerWithWorkspaceLoad(t *testing.T) {
-	finnWorkspaceURI, err := ParseURI("finn:///tmp/hello")
+	finnWorkspaceURI, err := workspaceapi.ParseURI("finn:///tmp/hello")
 	require.NoError(t, err)
 
-	jakeFileURI, err := ParseURI("jake:///tmp/hello")
+	jakeFileURI, err := workspaceapi.ParseURI("jake:///tmp/hello")
 	require.NoError(t, err)
 
-	jakeSwapDirURI, err := ParseURI("jake:///tmp/hello/.hallo.txt.swp")
+	jakeSwapDirURI, err := workspaceapi.ParseURI("jake:///tmp/hello/.hallo.txt.swp")
 	require.NoError(t, err)
 
 	t.Run("default workspace is NOT able to load files from other schemes", func(t *testing.T) {

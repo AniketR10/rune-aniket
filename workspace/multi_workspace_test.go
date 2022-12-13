@@ -8,6 +8,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/config"
 )
@@ -15,24 +16,24 @@ import (
 func TestMultiWorkspace(t *testing.T) {
 	tsuite := []struct {
 		desc               string
-		defURI             URI
-		fileURI            URI
+		defURI             workspaceapi.URI
+		fileURI            workspaceapi.URI
 		recover            bool
 		wantError          bool
-		expectAddWorkspace URI
+		expectAddWorkspace workspaceapi.URI
 	}{
 		{"should load files in the default workspace",
-			parseURI(t, "memory:///"), parseURI(t, "memory:///file.txt"), false, false, URI{}},
+			parseURI(t, "memory:///"), parseURI(t, "memory:///file.txt"), false, false, workspaceapi.URI{}},
 		{"should recover files in the default workspace",
-			parseURI(t, "memory:///"), parseURI(t, "memory:///file.txt"), true, false, URI{}},
+			parseURI(t, "memory:///"), parseURI(t, "memory:///file.txt"), true, false, workspaceapi.URI{}},
 		{"should load files in a registered non-default workspace and should call AddWorkspace with dir URI",
 			parseURI(t, "memory:///"), parseURI(t, "test:///file.txt"), false, false, parseURI(t, "test:///")},
 		{"should recover files in a registered non-default workspace and should call AddWorkspace with dir URI",
 			parseURI(t, "memory:///"), parseURI(t, "test:///file.txt"), true, false, parseURI(t, "test:///")},
 		{"should not load files in a non-registered non-default workspace",
-			parseURI(t, "memory:///"), parseURI(t, "nagging:///file.txt"), false, true, URI{}},
+			parseURI(t, "memory:///"), parseURI(t, "nagging:///file.txt"), false, true, workspaceapi.URI{}},
 		{"should not recover files in a non-registered non-default workspace",
-			parseURI(t, "memory:///"), parseURI(t, "nagging:///file.txt"), true, true, URI{}},
+			parseURI(t, "memory:///"), parseURI(t, "nagging:///file.txt"), true, true, workspaceapi.URI{}},
 	}
 
 	for _, tcase := range tsuite {
@@ -50,7 +51,7 @@ func TestMultiWorkspace(t *testing.T) {
 				swapFileURI := parseURI(t, fmt.Sprintf("%s.swp", tcase.fileURI.String()))
 				_, err = cwd.Recover(tcase.fileURI, swapFileURI, cell.NewBuffer(), false)
 			} else {
-				_, err = cwd.Load(tcase.fileURI, cell.NewBuffer(), Dir(tcase.fileURI), false)
+				_, err = cwd.Load(tcase.fileURI, cell.NewBuffer(), workspaceapi.Dir(tcase.fileURI), false)
 			}
 			if tcase.wantError {
 				assert.Error(t, err)
@@ -58,7 +59,7 @@ func TestMultiWorkspace(t *testing.T) {
 				assert.NoError(t, err)
 			}
 
-			if tcase.expectAddWorkspace != (URI{}) {
+			if tcase.expectAddWorkspace != (workspaceapi.URI{}) {
 				require.Len(t, mockManager.addWorkspace, 1)
 				assert.Equal(t, mockManager.addWorkspace[0], tcase.expectAddWorkspace)
 			}
@@ -67,13 +68,13 @@ func TestMultiWorkspace(t *testing.T) {
 }
 
 type mockManager struct {
-	addWorkspace []URI
+	addWorkspace []workspaceapi.URI
 }
 
 func (m *mockManager) RegisterScheme(string, SchemeFunc) error {
 	panic("should not be called")
 }
-func (m *mockManager) AddWorkspace(uri URI) (Workspace, error) {
+func (m *mockManager) AddWorkspace(uri workspaceapi.URI) (Workspace, error) {
 	if uri.Scheme() != "test" {
 		return nil, errors.New("not registered")
 	}

@@ -4,10 +4,10 @@ import (
 	"log"
 
 	"unstable.build/go-tui"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/text/vi"
-	"unstable.build/go-tui/workspace"
 )
 
 const text = `
@@ -33,7 +33,7 @@ func main() {
 	b := cell.NewBuffer()
 	b.WriteString(text)
 
-	uri, err := workspace.ParseURI("vi:///test")
+	uri, err := workspaceapi.ParseURI("vi:///test")
 	if err != nil {
 		log.Fatal(err)
 	}

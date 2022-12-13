@@ -14,6 +14,7 @@ import (
 	"github.com/ernestrc/blue/retry"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/workspace"
 	workspacetest "unstable.build/go-tui/workspace/test"
 )
@@ -83,7 +84,7 @@ func expectSchemeClose(t *testing.T, mock *workspacetest.MockScheme, scheme work
 }
 
 func TestRemoteScheme(t *testing.T) {
-	uri, err := workspace.ParseURI("ssh://unsable.build/home/ernie")
+	uri, err := workspaceapi.ParseURI("ssh://unsable.build/home/ernie")
 	require.NoError(t, err)
 
 	t.Run("establish initial connection", func(t *testing.T) {
@@ -91,7 +92,7 @@ func TestRemoteScheme(t *testing.T) {
 		defer ctrl.Finish()
 
 		mock := workspacetest.NewMockScheme(ctrl)
-		scheme := newRemoteScheme(func(uri workspace.URI, closehook func(error)) (workspace.Scheme, error) {
+		scheme := newRemoteScheme(func(uri workspaceapi.URI, closehook func(error)) (workspace.Scheme, error) {
 			return mock, nil
 		}, uri)
 
@@ -105,7 +106,7 @@ func TestRemoteScheme(t *testing.T) {
 
 		mock := workspacetest.NewMockScheme(ctrl)
 		var i int
-		scheme := newRemoteScheme(func(uri workspace.URI, closehook func(error)) (workspace.Scheme, error) {
+		scheme := newRemoteScheme(func(uri workspaceapi.URI, closehook func(error)) (workspace.Scheme, error) {
 			i++
 			if i <= 5 {
 				return nil, errors.New("unable to connect")
@@ -130,7 +131,7 @@ func TestRemoteScheme(t *testing.T) {
 		var closeHook func(error)
 		var wg sync.WaitGroup
 		var reconnect bool
-		scheme := newRemoteScheme(func(uri workspace.URI, _closehook func(error)) (workspace.Scheme, error) {
+		scheme := newRemoteScheme(func(uri workspaceapi.URI, _closehook func(error)) (workspace.Scheme, error) {
 			closeHook = _closehook
 			if reconnect {
 				wg.Done()

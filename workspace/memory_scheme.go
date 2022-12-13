@@ -14,6 +14,7 @@ import (
 	"syscall"
 	"time"
 
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/config"
 )
 
@@ -30,7 +31,7 @@ var (
 // in-memory file system. It does not enforce O_RDONLY, O_WRONLY, O_RDWR Open flags
 // as well as O_SYNC and O_APPEND. Seek operations on the underlying files
 // only support seeking to the beginning of the file.
-func NewMemoryScheme(cfg config.Config, workspace URI) (Scheme, error) {
+func NewMemoryScheme(cfg config.Config, workspace workspaceapi.URI) (Scheme, error) {
 	ret := new(memoryScheme)
 	err := ret.init(workspace)
 	if err != nil {
@@ -52,7 +53,7 @@ func NewMemoryFile(filename string, mode fs.FileMode, data []byte) File {
 
 type memoryScheme struct {
 	mu        sync.Mutex
-	workspace URI
+	workspace workspaceapi.URI
 	files     map[string]*memFile
 }
 
@@ -73,7 +74,7 @@ type memFileInfo struct {
 	isDir    bool
 }
 
-func (m *memoryScheme) init(workspace URI) error {
+func (m *memoryScheme) init(workspace workspaceapi.URI) error {
 	if workspace.Host() != "" || workspace.User() != "" || workspace.Scheme() != MemoryScheme {
 		return errors.New("invalid memory URI")
 	}
@@ -218,15 +219,15 @@ func (m *memoryScheme) nopUser() (*user.User, error) {
 	return &user.User{}, nil
 }
 
-func (m *memoryScheme) URI(path string) (URI, error) {
-	absPath, err := ExpandPath(path, m.nopUser, func() (string, error) {
+func (m *memoryScheme) URI(path string) (workspaceapi.URI, error) {
+	absPath, err := workspaceapi.ExpandPath(path, m.nopUser, func() (string, error) {
 		return m.workspace.Path(), nil
 	})
 	if err != nil {
-		return URI{}, err
+		return workspaceapi.URI{}, err
 	}
 	uriStr := "memory://" + absPath
-	return ParseURI(uriStr)
+	return workspaceapi.ParseURI(uriStr)
 }
 
 func (m *memoryScheme) Command(name string, arg ...string) (Pid, error) {
@@ -280,7 +281,7 @@ func (m *memoryScheme) ReadDir(name string) (
 
 	var ret []os.DirEntry
 	for uri := range m.files {
-		uri, err := ParseURI(uri)
+		uri, err := workspaceapi.ParseURI(uri)
 		if err != nil {
 			panic("could not parse internal uri")
 		}

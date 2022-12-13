@@ -12,6 +12,7 @@ import (
 	"github.com/ernestrc/blue/logging"
 	"github.com/ernestrc/blue/retry"
 	log "github.com/sirupsen/logrus"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/workspace"
 )
 
@@ -19,7 +20,7 @@ var (
 	retryStrategy = retry.ExponentialStrategy(100*time.Millisecond, 5*time.Second)
 )
 
-type connectSchemeFn func(uri workspace.URI, closeHook func(error)) (workspace.Scheme, error)
+type connectSchemeFn func(uri workspaceapi.URI, closeHook func(error)) (workspace.Scheme, error)
 
 // wraps another workspace.Scheme to be resilient against intermitent connection failures
 type remoteScheme struct {
@@ -30,7 +31,7 @@ type remoteScheme struct {
 }
 
 func (s *remoteScheme) maintainConnection(
-	connect connectSchemeFn, uri workspace.URI,
+	connect connectSchemeFn, uri workspaceapi.URI,
 	closeChan chan struct{}, sema *sync.Mutex,
 ) {
 	logger := log.WithField(logging.KeyClass, "ssh")
@@ -100,7 +101,7 @@ func (s *remoteScheme) maintainConnection(
 	logger.Debugf("stopped trying to re-connect to remote %s", uri)
 }
 
-func newRemoteScheme(connect connectSchemeFn, uri workspace.URI) workspace.Scheme {
+func newRemoteScheme(connect connectSchemeFn, uri workspaceapi.URI) workspace.Scheme {
 	ret := &remoteScheme{
 		closeChan:        make(chan struct{}),
 		lastSessionError: errors.New("not connected yet"),
@@ -174,7 +175,7 @@ func (s *remoteScheme) ReadLink(path string) (string, error) {
 	return scheme.ReadLink(path)
 }
 
-func (s *remoteScheme) URI(path string) (workspace.URI, error) {
+func (s *remoteScheme) URI(path string) (workspaceapi.URI, error) {
 	panic("unused")
 }
 

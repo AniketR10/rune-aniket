@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"unstable.build/go-tui"
 	browserapi "unstable.build/go-tui/api/browser"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/browser"
 	browsertest "unstable.build/go-tui/browser/test"
 	"unstable.build/go-tui/cell"
@@ -53,8 +54,8 @@ type testLoader struct {
 }
 
 func (w *testLoader) Load(
-	filePath workspace.URI, buf *cell.Buffer,
-	swapDir workspace.URI, readOnly bool,
+	filePath workspaceapi.URI, buf *cell.Buffer,
+	swapDir workspaceapi.URI, readOnly bool,
 ) (
 	workspace.FlusherCloser, error,
 ) {
@@ -65,7 +66,7 @@ func (w *testLoader) Load(
 }
 
 func (w *testLoader) Recover(
-	filePath, swapFilePath workspace.URI,
+	filePath, swapFilePath workspaceapi.URI,
 	buf *cell.Buffer, force bool,
 ) (workspace.FlusherCloser, error) {
 	return w.Load(filePath, buf, swapFilePath, false)
@@ -107,8 +108,8 @@ func (t testFileInfo) Sys() any {
 	return nil
 }
 
-func (w *testLoader) URI(path string) (workspace.URI, error) {
-	return workspace.CurrentUserHostURI(path)
+func (w *testLoader) URI(path string) (workspaceapi.URI, error) {
+	return workspaceapi.CurrentUserHostURI(path)
 }
 
 func TestBrowserHandlerDraw(t *testing.T) {
@@ -391,7 +392,7 @@ IIII`},
 	}
 	testutil.TestHandlerSequence(t, bh, 20, 10, cases)
 
-	uri, err := workspace.ParseURI("file:///bugz")
+	uri, err := workspaceapi.ParseURI("file:///bugz")
 	require.NoError(t, err)
 	nh, err := b.Open(uri)
 	require.NoError(t, err)
@@ -609,9 +610,9 @@ func TestMultipleFilesStartup(t *testing.T) {
 └──────────────────┘`},
 	}
 
-	file1, err := workspace.ParseURI("file:///cabin.go")
+	file1, err := workspaceapi.ParseURI("file:///cabin.go")
 	require.NoError(t, err)
-	file2, err := workspace.ParseURI("file:///wi.go")
+	file2, err := workspaceapi.ParseURI("file:///wi.go")
 	require.NoError(t, err)
 	opts := []text.Option{
 		text.WithFile(file1),
@@ -747,9 +748,9 @@ func TestExKeySequence(t *testing.T) {
 	var closeFns []func() error
 	fn := func(t *testing.T) tui.Handler {
 		var mu sync.Mutex
-		file1, err := workspace.ParseURI("file:///10k.go")
+		file1, err := workspaceapi.ParseURI("file:///10k.go")
 		require.NoError(t, err)
-		file2, err := workspace.ParseURI("file:///button.go")
+		file2, err := workspaceapi.ParseURI("file:///button.go")
 		require.NoError(t, err)
 		opts := []text.Option{
 			text.WithFile(file1),
@@ -824,9 +825,9 @@ func TestExTabIntegration(t *testing.T) {
 			text.WithCommandKey(testCommandKey),
 		}
 		b := newExForTesting(t, texttest.NopEditor(), opts...)
-		uri1, err := workspace.ParseURI("file:///Fieshta")
+		uri1, err := workspaceapi.ParseURI("file:///Fieshta")
 		require.NoError(t, err)
-		uri2, err := workspace.ParseURI("file:///Pahty")
+		uri2, err := workspaceapi.ParseURI("file:///Pahty")
 		require.NoError(t, err)
 		tab, err := b.comp.Tab(uri1, "Fieshta", browsertest.NewTestHandler())
 		require.NoError(t, err)
@@ -892,7 +893,7 @@ func TestExExit(t *testing.T) {
 		h.Exit = true
 		h.Handled = true
 
-		uri, err := workspace.ParseURI("file:///bols")
+		uri, err := workspaceapi.ParseURI("file:///bols")
 		require.NoError(t, err)
 
 		tab, err := b.comp.Tab(uri, "bleh", h)

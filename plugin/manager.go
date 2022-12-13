@@ -16,11 +16,11 @@ import (
 	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/config"
 	pluginpb "unstable.build/go-tui/plugin/rpc"
 	"unstable.build/go-tui/proto"
 	"unstable.build/go-tui/util"
-	"unstable.build/go-tui/workspace"
 )
 
 const (
@@ -62,7 +62,7 @@ type managerConfig struct {
 	healthCheckTicker time.Duration
 	healthRetries     int
 	locker            sync.Locker
-	workspace         workspace.URI
+	workspace         workspaceapi.URI
 }
 
 // Option is a configuration option for a manager.
