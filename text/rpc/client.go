@@ -210,10 +210,7 @@ func (c *Client) SetLocationList(
 	h textapi.Handler, pri textapi.LocationPriority, ID string, l textapi.LocationList,
 ) error {
 	ctx := context.Background()
-	token, ok := h.(Token)
-	if !ok {
-		panic("SetLocationList: invalid Handler argument")
-	}
+	token := h.(Token)
 	req := makeLocationListRequest(token.URI, pri, ID, l)
 	_, err := c.ed.SetLocationList(ctx, &req)
 	runtime.KeepAlive(c)
@@ -222,10 +219,7 @@ func (c *Client) SetLocationList(
 
 func (c *Client) moveToLocation(h textapi.Handler, ID string, next bool) (err error) {
 	ctx := context.Background()
-	token, ok := h.(Token)
-	if !ok {
-		panic("MoveToNextLocation: invalid Handler argument")
-	}
+	token := h.(Token)
 	req := MoveToLocationRequest{ResourceName: NewURI(token.URI), ListId: ID}
 	if next {
 		_, err = c.ed.MoveToNextLocation(ctx, &req)
@@ -255,10 +249,7 @@ func (c *Client) MoveToNextLocation(h textapi.Handler, ID string) error {
 // SetCursor requests the editor server to move cursor to pos
 func (c *Client) SetCursor(h textapi.Handler, pos term.Coordinates) error {
 	ctx := context.Background()
-	token, ok := h.(Token)
-	if !ok {
-		panic("SetCursor: invalid Handler argument")
-	}
+	token := h.(Token)
 	var protoPos termpb.Coordinates
 	protoPos.FromModel(pos)
 	req := SetCursorRequest{Pos: &protoPos, ResourceName: NewURI(token.URI)}
@@ -270,10 +261,7 @@ func (c *Client) SetCursor(h textapi.Handler, pos term.Coordinates) error {
 // Cursor requests the editor server to move cursor to pos
 func (c *Client) Cursor(h textapi.Handler) (term.Coordinates, error) {
 	ctx := context.Background()
-	token, ok := h.(Token)
-	if !ok {
-		panic("Cursor: invalid Handler argument")
-	}
+	token := h.(Token)
 	req := CursorRequest{ResourceName: NewURI(token.URI)}
 	res, err := c.ed.Cursor(ctx, &req)
 	runtime.KeepAlive(c)
@@ -285,29 +273,20 @@ func (c *Client) Cursor(h textapi.Handler) (term.Coordinates, error) {
 
 // CellEditor satisfies text.Editor.
 func (c *Client) CellEditor(h textapi.Handler) textapi.CellEditor {
-	token, ok := h.(Token)
-	if !ok {
-		panic("SetLocationList: invalid Handler argument")
-	}
+	token := h.(Token)
 	return clientWriter{client: c, uri: token.URI}
 }
 
 // CellView satisfies text.Editor.
 func (c *Client) CellView(h textapi.Handler) textapi.CellView {
-	token, ok := h.(Token)
-	if !ok {
-		panic("CellView: invalid Handler argument")
-	}
+	token := h.(Token)
 	return clientView{client: c, uri: token.URI}
 }
 
 // SetDefaultAttributes satisfies text.Editor.
 func (c *Client) SetDefaultAttributes(h textapi.Handler, attrs term.Attributes) error {
 	ctx := context.Background()
-	token, ok := h.(Token)
-	if !ok {
-		panic("SetDefaultAttributs: invalid Handler argument")
-	}
+	token := h.(Token)
 	var rpcAttrs termpb.Attributes
 	rpcAttrs.FromModel(attrs)
 	req := SetDefaultAttributesRequest{
