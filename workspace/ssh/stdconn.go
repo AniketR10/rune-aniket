@@ -64,9 +64,13 @@ func (s *stdConn) closed() bool {
 
 func (s *stdConn) Read(b []byte) (n int, err error) {
 	if s.closed() {
-		return 0, errStreamClosed
+		return 0, io.EOF
 	}
-	return s.in.Read(b)
+	n, err = s.in.Read(b)
+	if err == io.EOF {
+		s.callCloseHook()
+	}
+	return
 }
 
 func (s *stdConn) Write(b []byte) (n int, err error) {
@@ -76,17 +80,22 @@ func (s *stdConn) Write(b []byte) (n int, err error) {
 	return s.out.Write(b)
 }
 
-func (s *stdConn) Close() error {
+func (s *stdConn) callCloseHook() {
 	s.mu.Lock()
-	if s.close {
-		s.mu.Unlock()
-		return nil
-	}
 	s.close = true
 	closeHook := s.closeHook
 	s.closeHook = nil
 	s.mu.Unlock()
-	closeHook()
+	if closeHook != nil {
+		closeHook()
+	}
+}
+
+func (s *stdConn) Close() error {
+	if s.closed() {
+		return nil
+	}
+	s.callCloseHook()
 	return nil
 }
 

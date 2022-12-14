@@ -17,38 +17,35 @@ import (
 type readerWriterListener struct {
 	mu     sync.Mutex
 	closed bool
-	wg     sync.WaitGroup
 	writer io.Writer
 	reader io.Reader
+	onEOF  func()
 
 	onlyConn *stdConn
 }
 
 func newReaderWriterListener(
-	reader io.Reader, writer io.Writer,
+	reader io.Reader, writer io.Writer, onEOF func(),
 ) *readerWriterListener {
 	ret := new(readerWriterListener)
 	ret.reader = reader
 	ret.writer = writer
+	ret.onEOF = onEOF
 	return ret
 }
 
 func (lis *readerWriterListener) Accept() (net.Conn, error) {
 	lis.mu.Lock()
+	defer lis.mu.Unlock()
 
 	if lis.closed {
-		lis.mu.Unlock()
 		return nil, errors.New("closed listener")
 	}
 
-	// wait for previous conn, if any
-	lis.mu.Unlock()
-	lis.wg.Wait()
-	lis.mu.Lock()
-	defer lis.mu.Unlock()
-
-	lis.onlyConn = newStdConn(lis.reader, lis.writer, lis.wg.Done)
-	lis.wg.Add(1)
+	lis.onlyConn = newStdConn(lis.reader, lis.writer, func() {
+		lis.Close()
+		lis.onEOF()
+	})
 	return lis.onlyConn, nil
 }
 
@@ -67,8 +64,12 @@ func (lis *readerWriterListener) Addr() net.Addr {
 // StartSchemeServer installs server to handle incoming workspacepb requests
 // over the calling process' os.Stdin and sends responses over os.Stdout.
 func StartSchemeServer(server workspacepb.SchemeServer) error {
-	lis := newReaderWriterListener(os.Stdin, os.Stdout)
 	grpcServer := grpc.NewServer()
+	lis := newReaderWriterListener(os.Stdin, os.Stdout, func() {
+		// this is called within a grpc goroutine so running
+		// in a separate goroutine avoids deadlock
+		go grpcServer.Stop()
+	})
 	workspacepb.RegisterSchemeServer(grpcServer, server)
 	if err := grpcServer.Serve(lis); err != nil {
 		return fmt.Errorf("Server: %s", err)
