@@ -9,6 +9,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	multierr "github.com/ernestrc/go-multierror"
+	log "github.com/sirupsen/logrus"
 	browserapi "unstable.build/go-tui/api/browser"
 	browserplugin "unstable.build/go-tui/api/browser/plugin"
 	textapi "unstable.build/go-tui/api/text"
@@ -21,8 +23,6 @@ import (
 	plugutil "unstable.build/go-tui/plugin/util"
 	"unstable.build/go-tui/proto"
 	"unstable.build/go-tui/term"
-
-	log "github.com/sirupsen/logrus"
 )
 
 const (
@@ -101,29 +101,23 @@ func (h *sedEditorHandler) execSed(
 		return "", fmt.Errorf("failed to start executable: %v", err)
 	}
 
-	_, err = io.WriteString(stdin, content)
-	if err != nil {
-		return "", fmt.Errorf("failed to write content to sed stdin %v", err)
-	}
-
-	err = stdin.Close()
-	if err != nil {
-		return "", fmt.Errorf("failed to close sed stdin: %v", err)
+	_, ret := io.WriteString(stdin, content)
+	if ret != nil {
+		ret = fmt.Errorf("failed to write to sed stdin: %v", ret)
 	}
 
 	resultBytes, err := ioutil.ReadAll(stdout)
 	if err != nil {
-		return "", fmt.Errorf("failed to read from sed stdout: %v", err)
+		ret = multierr.Append(ret, fmt.Errorf("failed to read from sed stdout: %v", err))
 	}
 
 	stderrContent, _ := ioutil.ReadAll(stderr)
-
 	err = h.exec.Wait(c)
 	if err != nil {
-		return "", fmt.Errorf("%v: %s", err, stderrContent)
+		ret = multierr.Append(ret, fmt.Errorf("Wait: %v: %s", err, stderrContent))
 	}
 
-	return string(resultBytes), nil
+	return string(resultBytes), ret
 }
 
 func (h *sedEditorHandler) setMessage(msg string, args ...interface{}) {
@@ -166,6 +160,9 @@ func (h *sedEditorHandler) HandleCommand(
 		if len(cmd.Args) != 1 {
 			err := errors.New("Usage: sed <script>")
 			return false, err
+		}
+		if cmd.Resource == nil {
+			return false, errors.New("cannot run sed here")
 		}
 		rows, content, err := h.readHandlerContent(cmd.Resource)
 		if err != nil {
