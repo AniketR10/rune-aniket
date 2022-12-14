@@ -9,6 +9,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
 	"github.com/sourcegraph/go-diff/diff"
 	browserapi "unstable.build/go-tui/api/browser"
@@ -240,28 +241,35 @@ func (h *gitEditorHandler) pushNewDiffLocations(
 	h.initScroll(filename)
 
 	r := diff.NewFileDiffReader(stdout)
-	diff, err := r.Read()
-	if err != nil {
-		if strings.Contains(err.Error(), io.EOF.Error()) {
+	diff, ret := r.Read()
+	if ret != nil {
+		if strings.Contains(ret.Error(), io.EOF.Error()) {
 			// make sure that an interrupt is called
 			// so the new scroll bar is updated, when
 			// focus switched to a file with no changes.
-			return h.p.Interrupt()
+			ret = h.p.Interrupt()
 		}
-		return fmt.Errorf("failed to read from stdout: %v", err)
+		ret = fmt.Errorf("failed to read from stdout: %w", err)
 	}
 
-	// releases associated resources; error is ignored because
-	err = h.exec.Wait(pid)
-	if err != nil {
-		return fmt.Errorf("git process error: %v", err)
+	// releases associated resources, and then and only then return
+	if err := h.exec.Wait(pid); err != nil {
+		ret = multierr.Append(ret, fmt.Errorf("git process error: %w", err))
+	}
+
+	if diff == nil {
+		return ret
 	}
 
 	locs := h.parseDiff(diff)
 	h.lastLocs[filename] = locs
 
-	return h.ed.SetLocationList(resource,
+	err = h.ed.SetLocationList(resource,
 		textapi.LocationPriorityInfo, h.gitDiffListID, textapi.LocationSlice(locs))
+	if err != nil {
+		ret = multierr.Append(ret, fmt.Errorf("set locations: %w", err))
+	}
+	return ret
 }
 
 func (h *gitEditorHandler) resetScroll() {
