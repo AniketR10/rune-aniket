@@ -60,7 +60,6 @@ func TestIntegrationRace(t *testing.T) {
 	dir, err := ioutil.TempDir("", "")
 	require.NoError(t, err)
 	resources = MergeResourceMap(resources, StorageResources(dir))
-	resources[PermissionClipboard] = NewClipboardManager()
 
 	wpMock := workspacetest.NewMockWorkspace(ctrl)
 	resources = MergeResourceMap(resources, WorkspaceResources(wpMock))
@@ -83,7 +82,6 @@ func TestIntegrationRace(t *testing.T) {
 		Permission(browserplugin.PermissionBrowserEventPublisher): grantID,
 		Permission(textplugin.PermissionEditor):                   grantID,
 		PermissionStorage:                                         grantID,
-		PermissionClipboard:                                       grantID,
 		Permission(workspaceplugin.PermissionWorkspace):           grantID,
 	}
 	lis, err := broker.Accept(grantID)
@@ -240,12 +238,6 @@ func TestIntegrationRace(t *testing.T) {
 		}, nil, func(ifc interface{}) error {
 			_, _ = ifc.(document.Service).List(context.Background(), nil)
 			return nil
-		}},
-		{PermissionClipboard, func(token uint32, broker proto.MuxBroker) (interface{}, error) {
-			return GetClipboard(token, broker)
-			// we test ClipboardManager directly
-		}, nil, func(ifc interface{}) error {
-			return ifc.(ClipboardSetter).SetRegister(text.DefaultRegisterID, nil)
 		}},
 		{Permission(workspaceplugin.PermissionWorkspace), func(token uint32, broker proto.MuxBroker) (interface{}, error) {
 			return workspaceplugin.Workspace(token, broker)

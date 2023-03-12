@@ -1,27 +1,22 @@
 package main
 
 import (
-	"io"
 	"io/ioutil"
-	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/grpc"
 	"unstable.build/go-tui"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/config"
-	"unstable.build/go-tui/plugin"
-	"unstable.build/go-tui/proto"
 	"unstable.build/go-tui/term"
-	"unstable.build/go-tui/text"
 	testutil "unstable.build/go-tui/util/test"
 	"unstable.build/go-tui/workspace"
 )
 
 func defaultCfg() ideConfig {
 	return ideConfig{cfg: map[string]interface{}{
+		"clipboard": "memory",
 		"command": map[string]interface{}{
 			"key": "<c-\\>", // see testutil.TestHandlerIsolated
 			"key_bindings": map[string]interface{}{
@@ -254,30 +249,16 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 	testutil.TestHandlerIsolated(t, fn, 20, 10, cases)
 }
 
-type clipboardManagerTest struct {
-	text.Clipboard
-}
-
-func (m *clipboardManagerTest) Register(
-	string, plugin.Grantor, grpc.ServiceRegistrar, proto.MuxBroker, sync.Locker,
-) (io.Closer, error) {
-	return nil, nil
-}
-func (m *clipboardManagerTest) Close() error {
-	return nil
-}
-
 func newTestWorkspaceManagerHandlerWithManager(
 	t *testing.T, manager *workspace.Manager,
 	uri workspaceapi.URI, cfg ideConfig,
 ) *testWorkspaceManagerHandler {
-	clip := &clipboardManagerTest{Clipboard: text.NewInMemoryClipboard()}
 	dir, err := ioutil.TempDir("", "")
 	require.NoError(t, err)
 
 	m := new(testWorkspaceManagerHandler)
 	m.workspaceManagerHandler = new(workspaceManagerHandler)
-	err = m.workspaceManagerHandler.init(clip, uri, manager, cfg, "", []string{},
+	err = m.workspaceManagerHandler.init(uri, manager, cfg, "", []string{},
 		dir, func(term.Event) bool {
 			return true
 		})

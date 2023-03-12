@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"strconv"
 	"sync"
@@ -69,7 +68,6 @@ var (
 type workspaceManagerHandler struct {
 	mu           sync.Mutex
 	exit         bool
-	clipboard    clipboardManagerIfc
 	cfg          ideConfig
 	storage      document.Service
 	workspace    workspace.WorkspaceManager
@@ -86,14 +84,8 @@ type workspaceManagerHandler struct {
 	empty          *ex
 }
 
-type clipboardManagerIfc interface {
-	plugin.ResourceRegistrar
-	text.Clipboard
-	io.Closer
-}
-
 func newWorkspaceManagerHandler(
-	clipboard clipboardManagerIfc, initial workspaceapi.URI,
+	initial workspaceapi.URI,
 	manager workspace.WorkspaceManager,
 	cfg ideConfig, recfilename string, filenames []string,
 	sixDir string,
@@ -101,7 +93,7 @@ func newWorkspaceManagerHandler(
 ) (*workspaceManagerHandler, error) {
 	ret := new(workspaceManagerHandler)
 
-	err := ret.init(clipboard, initial, manager,
+	err := ret.init(initial, manager,
 		cfg, recfilename, filenames, sixDir, publishEvent)
 	if err != nil {
 		return nil, err
@@ -114,13 +106,13 @@ func (h *workspaceManagerHandler) newEditor(cfg ideConfig) text.Editor {
 		vi.WithResAttr(cfg.viResultAttr()),
 		vi.WithDebug(cfg.viDebug()),
 		vi.WithWrap(cfg.viWrap()),
-		vi.WithClipboard(h.clipboard),
+		vi.WithClipboard(cfg.clipboard()),
 	)
 	return vi.Editor(viOpts...)
 }
 
 func (h *workspaceManagerHandler) init(
-	clipboard clipboardManagerIfc, uri workspaceapi.URI,
+	uri workspaceapi.URI,
 	manager workspace.WorkspaceManager, cfg ideConfig,
 	recfilename string, filenames []string,
 	sixDir string,
@@ -128,7 +120,6 @@ func (h *workspaceManagerHandler) init(
 ) error {
 	h.workspaces = make([]*workspaceHandler, 10)
 	h.cfg = cfg
-	h.clipboard = clipboard
 	h.publishEvent = publishEvent
 	h.workspace = manager
 	h.sixDir = sixDir
@@ -446,7 +437,6 @@ func (h *workspaceManagerHandler) addWorkspace(
 	res = plugin.MergeResourceMap(res, plugin.StorageResources(h.sixDir))
 	res = plugin.MergeResourceMap(res, plugin.ConfigResources(
 		config.MapConfig(cleanedPluginConfig(cfg.cfg))))
-	res[plugin.PermissionClipboard] = h.clipboard
 
 	pluginOpts := []plugin.Option{
 		plugin.WithLocker(&h.mu),
@@ -594,9 +584,6 @@ func (h *workspaceManagerHandler) Close() (ret error) {
 		ret = multierr.Append(ret, err)
 	}
 	if err := h.storage.Close(); err != nil {
-		ret = multierr.Append(ret, err)
-	}
-	if err := h.clipboard.Close(); err != nil {
 		ret = multierr.Append(ret, err)
 	}
 	return

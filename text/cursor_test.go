@@ -16,6 +16,7 @@ import (
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/config"
 	"unstable.build/go-tui/term"
+	"unstable.build/go-tui/text/clipboard"
 	"unstable.build/go-tui/workspace"
 )
 
@@ -970,40 +971,40 @@ func testCursorSelect(t *testing.T, width, height int) {
 
 	t.Run("Select/CopySelection copies from start to end", func(t *testing.T) {
 		e := makeSelect(t)
-		clipboard := NewInMemoryClipboard()
-		ok, err := e.CopySelection(DefaultRegisterID, clipboard)
+		c := clipboard.NewInMemory()
+		ok, err := e.CopySelection(clipboard.DefaultRegisterID, c)
 		require.True(t, ok)
 		require.NoError(t, err)
 		assert.Equal(t, "", e.Selection())
 		assertBufferAttributes(t, e.buffer(), term.Attributes{})
 
-		data, err := clipboard.Paste(DefaultRegisterID)
+		data, err := c.Paste(clipboard.DefaultRegisterID)
 		require.NoError(t, err)
 		assert.Equal(t, e.scroll.Buffer().String(), data.Text)
 	})
 
 	t.Run("SelectLine/CopySelection copies from start line to end line", func(t *testing.T) {
 		e := makeSelectLine(t)
-		clipboard := NewInMemoryClipboard()
-		ok, err := e.CopySelection(DefaultRegisterID, clipboard)
+		c := clipboard.NewInMemory()
+		ok, err := e.CopySelection(clipboard.DefaultRegisterID, c)
 		require.True(t, ok)
 		require.NoError(t, err)
 		assertBufferAttributes(t, e.buffer(), term.Attributes{})
 
-		data, err := clipboard.Paste(DefaultRegisterID)
+		data, err := c.Paste(clipboard.DefaultRegisterID)
 		require.NoError(t, err)
 		assert.Equal(t, fmt.Sprintf("%s\n", e.scroll.Buffer().String()), data.Text)
 	})
 
 	t.Run("SelectBlock/CopySelection copies from start to end in block", func(t *testing.T) {
 		e := makeSelectBlock(t)
-		clipboard := NewInMemoryClipboard()
-		ok, err := e.CopySelection(DefaultRegisterID, clipboard)
+		c := clipboard.NewInMemory()
+		ok, err := e.CopySelection(clipboard.DefaultRegisterID, c)
 		require.True(t, ok)
 		require.NoError(t, err)
 		assertBufferAttributes(t, e.buffer(), term.Attributes{})
 
-		data, err := clipboard.Paste(DefaultRegisterID)
+		data, err := c.Paste(clipboard.DefaultRegisterID)
 		require.NoError(t, err)
 		assert.NotZero(t, data.Text)
 	})

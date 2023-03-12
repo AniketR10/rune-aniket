@@ -22,7 +22,6 @@ type ide struct {
 	ideConfig
 	workspaceManager *workspace.Manager
 	root             *workspaceManagerHandler
-	clipboard        *plugin.ClipboardManager
 	running          int32
 	publishEventFn   func(term.Event) bool
 }
@@ -96,7 +95,6 @@ func (i *ide) init(cwd, cfgfilename, recfilename string,
 	}
 
 	i.publishEventFn = publishEvent
-	i.clipboard = plugin.NewClipboardManager()
 
 	// register default schemes
 	workspaceManager := workspace.NewManager(i.ideConfig.workspace())
@@ -113,7 +111,7 @@ func (i *ide) init(cwd, cfgfilename, recfilename string,
 		return err
 	}
 
-	root, err := newWorkspaceManagerHandler(i.clipboard, cwdURI,
+	root, err := newWorkspaceManagerHandler(cwdURI,
 		workspaceManager, i.ideConfig, recfilename, filenames,
 		sixDir, i.publishEvent)
 	if err != nil {
@@ -169,10 +167,6 @@ func (i *ide) closeResources() (ret error) {
 	defer i.root.mu.Unlock()
 
 	if err := i.root.Close(); err != nil {
-		ret = multierr.Append(ret, err)
-	}
-
-	if err := i.clipboard.Close(); err != nil {
 		ret = multierr.Append(ret, err)
 	}
 

@@ -12,6 +12,7 @@ import (
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
+	"unstable.build/go-tui/text/clipboard"
 	texttest "unstable.build/go-tui/text/test"
 )
 
@@ -400,14 +401,14 @@ Love isn't love 'til you give it away.
 }
 
 type mockClip struct {
-	data text.ClipboardData
+	data clipboard.Data
 }
 
-func (m *mockClip) Paste(registerID string) (text.ClipboardData, error) {
+func (m *mockClip) Paste(registerID string) (clipboard.Data, error) {
 	return m.data, nil
 }
 
-func (m *mockClip) Copy(registerID string, data text.ClipboardData) error {
+func (m *mockClip) Copy(registerID string, data clipboard.Data) error {
 	m.data = data
 	return nil
 }

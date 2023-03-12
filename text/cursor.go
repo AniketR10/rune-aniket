@@ -9,6 +9,7 @@ import (
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/term"
+	"unstable.build/go-tui/text/clipboard"
 )
 
 // SelectMode represents a select mode.
@@ -1199,7 +1200,7 @@ func (c *Cursor) DeleteSelection() (ok bool) {
 
 // CopySelection copies the current text under selection and returns true
 // or does nothing and returns false.
-func (c *Cursor) CopySelection(registerID string, clip Clipboard) (ok bool, err error) {
+func (c *Cursor) CopySelection(registerID string, clip clipboard.Register) (ok bool, err error) {
 	if c.selection.mode == noSelection {
 		return
 	}
@@ -1210,7 +1211,7 @@ func (c *Cursor) CopySelection(registerID string, clip Clipboard) (ok bool, err 
 	c.setCursor(c.scrollToWindowCoordinates(c.selection.scrollFrom), true)
 
 	ok = true
-	clip.Copy(registerID, ClipboardData{Text: selection, Metadata: mode})
+	clip.Copy(registerID, clipboard.Data{Text: selection, Metadata: mode})
 	return
 }
 

@@ -36,7 +36,6 @@ var (
 		plugin.Permission(workspaceplugin.PermissionWorkspace),
 		plugin.Permission(browserplugin.PermissionBrowserEventPublisher),
 		plugin.Permission(browserplugin.PermissionBrowserMessenger),
-		plugin.PermissionClipboard,
 	}
 	commands = []string{
 		cmdSplitWindowTerminal,
@@ -56,7 +55,6 @@ type emulatorGrantee struct {
 	p  browserapi.EventPublisher
 	ed textapi.Editor
 	m  browserapi.Messenger
-	c  plugin.Clipboard
 
 	defAttr       term.Attributes
 	selectionAttr term.Attributes
@@ -127,8 +125,6 @@ func (e *emulatorGrantee) PermissionGranted(grants []plugin.Grant) {
 					}
 				}
 			}
-		case plugin.PermissionClipboard:
-			e.c, err = plugin.GetClipboard(g.Token, e.broker)
 		}
 		if err != nil {
 			log.Errorf("PermissionGranted: %+v: %s", g.Permission, err)
@@ -176,7 +172,7 @@ func (e *emulatorGrantee) handleCommand(
 	}
 
 	log.Tracef("HandleCommand: creating new emulator handler")
-	h, err := newEmulator(e.wm, e.wp, e.p, e.m, e.c, e.shell,
+	h, err := newEmulator(e.wm, e.wp, e.p, e.m, e.shell,
 		e.initialCmd, e.defAttr, e.selectionAttr)
 	if err != nil {
 		err = fmt.Errorf("newEmulator: %s", err)

@@ -8,11 +8,12 @@ import (
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/term"
+	"unstable.build/go-tui/text/clipboard"
 )
 
 func TestDeleteClipboard(t *testing.T) {
 	buf := cell.NewBuffer()
-	clip := NewInMemoryClipboard()
+	clip := clipboard.NewInMemory()
 	var scroll component.Scroll
 	scroll.Init(buf)
 	c := NewCursor(&scroll)
@@ -25,7 +26,7 @@ func TestDeleteClipboard(t *testing.T) {
 
 	data, err := clip.Paste("")
 	require.NoError(t, err)
-	assert.Equal(t, ClipboardData{Text: content, Metadata: LineSelection}, data)
+	assert.Equal(t, clipboard.Data{Text: content, Metadata: LineSelection}, data)
 
 	// test that undo inserts do not get copied to clipboard
 	buf.Undo()
@@ -33,5 +34,5 @@ func TestDeleteClipboard(t *testing.T) {
 
 	data, err = clip.Paste("")
 	require.NoError(t, err)
-	assert.Equal(t, ClipboardData{Text: content, Metadata: LineSelection}, data)
+	assert.Equal(t, clipboard.Data{Text: content, Metadata: LineSelection}, data)
 }

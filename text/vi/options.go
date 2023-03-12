@@ -3,12 +3,13 @@ package vi
 import (
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
+	"unstable.build/go-tui/text/clipboard"
 )
 
 // viConfig holds configuration for Vi.
 type viConfig struct {
 	resAttr         term.Attributes
-	clipboard       text.Clipboard
+	clipboard       clipboard.Register
 	defaultRegister string
 	messenger       text.Messenger
 	debug           bool
@@ -26,7 +27,7 @@ func WithResAttr(attr term.Attributes) Option {
 }
 
 // WithClipboard sets the editor.Clipboard implementation to use.
-func WithClipboard(clip text.Clipboard) Option {
+func WithClipboard(clip clipboard.Register) Option {
 	return func(cfg *viConfig) {
 		cfg.clipboard = clip
 	}

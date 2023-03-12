@@ -3,10 +3,11 @@ package text
 import (
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/term"
+	"unstable.build/go-tui/text/clipboard"
 )
 
 type delClip struct {
-	clipboard  Clipboard
+	clipboard  clipboard.Register
 	registerID string
 	pub        cell.Publisher
 	cur        *Cursor
@@ -16,7 +17,7 @@ type delClip struct {
 // WithCopyDelete installs a cell.Subscriber to a cell.Buffer
 // which persists all the deleted content to a Clipboard.
 func WithCopyDelete(
-	registerID string, clipboard Clipboard,
+	registerID string, clipboard clipboard.Register,
 	cur *Cursor, buf *cell.Buffer,
 ) {
 	c := new(delClip)
@@ -41,7 +42,7 @@ func (c *delClip) OnWillEdit(start, end term.Coordinates, str string) {
 
 func (c *delClip) OnDidEdit(from, to term.Coordinates, old string) {
 	if old != "" {
-		c.clipboard.Copy(c.registerID, ClipboardData{Text: old, Metadata: c.mode})
+		c.clipboard.Copy(c.registerID, clipboard.Data{Text: old, Metadata: c.mode})
 	}
 	return
 }

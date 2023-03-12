@@ -15,8 +15,10 @@ import (
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/config"
 	"unstable.build/go-tui/handler"
+	plugutil "unstable.build/go-tui/plugin/util"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
+	"unstable.build/go-tui/text/clipboard"
 	"unstable.build/go-tui/workspace"
 )
 
@@ -605,6 +607,18 @@ func (c ideConfig) viDebug() (ret bool) {
 
 func (c ideConfig) viWrap() (ret bool) {
 	return c.viBool("wrap")
+}
+
+func (c ideConfig) clipboard() clipboard.Register {
+	cfg := config.MapConfig(c.cfg)
+	ret, err := plugutil.Clipboard(cfg)
+	if err != nil {
+		if err != config.ErrNotFound {
+			c.errors["clipboard"] = err
+		}
+		ret = clipboard.NewInMemory()
+	}
+	return ret
 }
 
 func (c ideConfig) viBool(name string) (ret bool) {

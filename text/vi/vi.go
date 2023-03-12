@@ -13,6 +13,7 @@ import (
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
+	"unstable.build/go-tui/text/clipboard"
 )
 
 var _ tui.Handler = (*Vi)(nil)
@@ -35,7 +36,7 @@ type Vi struct {
 	mouse     *text.Mouse
 	messenger text.Messenger
 	less      *handler.Less
-	clipboard text.Clipboard
+	clipboard clipboard.Register
 
 	currEdited   bool
 	evEdited     bool
@@ -151,13 +152,13 @@ func (vi *viSubscriber) OnDidEdit(start, end term.Coordinates, old string) {
 }
 
 // Paste satisfies text.Clipboard. See Copy.
-func (vi *Vi) Paste(registerID string) (text.ClipboardData, error) {
+func (vi *Vi) Paste(registerID string) (clipboard.Data, error) {
 	return vi.clipboard.Paste(registerID)
 }
 
 // Copy satisfies text.Clipboard to make sure undo/redo deletes
 // are not being copied to the clipboard or backspace deletes within insert.
-func (vi *Vi) Copy(registerID string, data text.ClipboardData) error {
+func (vi *Vi) Copy(registerID string, data clipboard.Data) error {
 	if vi.resetting || vi.handler.mode() == insertMode {
 		return nil
 	}

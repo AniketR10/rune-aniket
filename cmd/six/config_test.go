@@ -23,6 +23,7 @@ plugins:
 
 log_path: "/tmp/debug.log"
 log_level: "trace"
+clipboard: memory
 
 vi:
     search_attr:

@@ -6,6 +6,8 @@ import (
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/config"
+	"unstable.build/go-tui/text/clipboard"
+	sysclip "unstable.build/go-tui/text/clipboard/system"
 )
 
 // Tabspaces extract browser.tabspaces from the given cfg.
@@ -59,4 +61,23 @@ func WindowManagerFrame(cfg config.Config) (bool, error) {
 		ret = browser.DefaultConfig().Frame
 	}
 	return ret, nil
+}
+
+// Clipboard returns the configured clipboard.
+func Clipboard(cfg config.Config) (clipboard.Register, error) {
+	sys, err := cfg.GetString("clipboard")
+	if err != nil && err != config.ErrNotFound {
+		err = fmt.Errorf("failed to get 'tabspaces' from config: %v", err)
+		return nil, err
+	}
+	switch sys {
+	case "memory":
+		return clipboard.NewInMemory(), nil
+	default:
+		clip, err := sysclip.NewRegister()
+		if err != nil {
+			return clipboard.NewInMemory(), nil
+		}
+		return clip, nil
+	}
 }

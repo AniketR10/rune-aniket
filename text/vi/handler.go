@@ -12,6 +12,7 @@ import (
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
+	"unstable.build/go-tui/text/clipboard"
 )
 
 type viMode uint8
@@ -77,8 +78,8 @@ var defaultviHandlerImplConfig = viConfig{
 		Fg: term.AttrReverse,
 		Bg: term.ColorDefault,
 	},
-	clipboard:       text.NewInMemoryClipboard(),
-	defaultRegister: text.DefaultRegisterID,
+	clipboard:       clipboard.NewInMemory(),
+	defaultRegister: clipboard.DefaultRegisterID,
 }
 
 func (vi *viHandlerImpl) init(buf *cell.Buffer, opts ...Option) {

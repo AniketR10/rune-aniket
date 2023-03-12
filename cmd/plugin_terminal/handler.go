@@ -12,9 +12,10 @@ import (
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	termutil "unstable.build/go-tui/cmd/plugin_terminal/util"
 	"unstable.build/go-tui/component"
-	"unstable.build/go-tui/plugin"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
+	"unstable.build/go-tui/text/clipboard"
+	sysclip "unstable.build/go-tui/text/clipboard/system"
 )
 
 type emulator struct {
@@ -23,7 +24,6 @@ type emulator struct {
 	p  browserapi.EventPublisher
 	m  browserapi.Messenger
 
-	clipboard         plugin.ClipboardRegister
 	mouse             *text.Mouse
 	mouseDriver       *mouseDriver
 	windowManipulator *windowManipulator
@@ -42,12 +42,11 @@ type emulator struct {
 func newEmulator(
 	wm browserapi.WindowManager, wp workspaceapi.Workspace,
 	p browserapi.EventPublisher, m browserapi.Messenger,
-	c plugin.ClipboardRegister,
 	shell string, initialCmd string,
 	defAttr, selectionAttr term.Attributes,
 ) (*emulator, error) {
 	ret := new(emulator)
-	err := ret.init(wm, wp, p, m, c, shell, initialCmd,
+	err := ret.init(wm, wp, p, m, shell, initialCmd,
 		defAttr, selectionAttr)
 	if err != nil {
 		return nil, err
@@ -58,7 +57,6 @@ func newEmulator(
 func (e *emulator) init(
 	wm browserapi.WindowManager, wp workspaceapi.Workspace,
 	p browserapi.EventPublisher, m browserapi.Messenger,
-	c plugin.ClipboardRegister,
 	shell string, initialCmd string,
 	defAttr, selectionAttr term.Attributes,
 ) error {
@@ -68,7 +66,6 @@ func (e *emulator) init(
 	e.defAttr = defAttr
 	e.selectAttr = selectionAttr
 	e.m = m
-	e.clipboard = c
 
 	e.theme = &termutil.Theme{Default: defAttr}
 	e.windowManipulator = newWindowManipulator(e.wm, e.m)
@@ -88,7 +85,12 @@ func (e *emulator) init(
 		return err
 	}
 	e.windowManipulator.SetTitle(e.terminal.Pty().Slave)
-	e.mouseDriver = &mouseDriver{t: e.terminal, clipboard: c}
+	clip, err := sysclip.NewRegister()
+	if err != nil {
+		log.Warnf("system clipboard unsupported: %v", err)
+		clip = clipboard.NewInMemory()
+	}
+	e.mouseDriver = &mouseDriver{t: e.terminal, clipboard: clip}
 	e.mouse = text.NewMouse(e.mouseDriver)
 
 	e.updateCh = make(chan struct{}, 1)
@@ -140,14 +142,6 @@ func (e *emulator) init(
 	}()
 
 	return nil
-}
-
-func (e *emulator) Paste() (string, time.Time, error) {
-	return e.clipboard.Paste()
-}
-
-func (e *emulator) Copy(data string, ts time.Time) error {
-	return e.clipboard.Copy(data, ts)
 }
 
 func (e *emulator) Resize(width, height int) {
