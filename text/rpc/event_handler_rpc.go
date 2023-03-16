@@ -19,22 +19,23 @@ const (
 )
 
 type eventHandlerClient struct {
-	conn     proto.MuxConn
-	pb       EditorEventHandlerClient
-	evChan   chan EditorEvent
-	errChan  chan error
-	quitChan chan struct{}
+	channelID string
+	conn      proto.MuxConn
+	pb        EditorEventHandlerClient
+	evChan    chan EditorEvent
+	errChan   chan error
+	quitChan  chan struct{}
 }
 
 func newEventHandlerClient(
-	parentCtx context.Context, channelID string,
-	cc proto.MuxConn,
+	parentCtx context.Context, channelID string, cc proto.MuxConn,
 ) *eventHandlerClient {
 	ret := new(eventHandlerClient)
 	ret.pb = NewEditorEventHandlerClient(cc)
 	ret.quitChan = make(chan struct{})
 	ret.evChan = make(chan EditorEvent, handleBackpressureThres)
 	ret.conn = cc
+	ret.channelID = channelID
 
 	go pipelineEvents(parentCtx, channelID,
 		ret.quitChan, ret.evChan, ret.pb, &ret.conn)
@@ -105,8 +106,13 @@ func (c *eventHandlerClient) Handle(ctx context.Context, ev textapi.Event) bool 
 	}
 
 	protoEv := toProto(ev)
-	c.evChan <- protoEv
-	runtime.KeepAlive(c)
+	select {
+	case c.evChan <- protoEv:
+	default:
+		log.Warnf("event handler with channel id %q is falling behind processing",
+			c.channelID)
+		c.evChan <- protoEv
+	}
 
 	return false
 }

@@ -30,7 +30,7 @@ func newClientServerIntegration(
 	conn, err := grpc.Dial(lis.Addr().String(), grpc.WithInsecure())
 	require.NoError(t, err)
 
-	client := newEventHandlerClient(context.Background(), "", conn)
+	client := newEventHandlerClient(context.Background(), "channelID", conn)
 
 	closeFn := func() {
 		client.Close()
