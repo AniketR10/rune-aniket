@@ -5,7 +5,7 @@ go 1.19
 require (
 	github.com/alecthomas/chroma v0.10.0
 	github.com/atotto/clipboard v0.1.2
-	github.com/ernestrc/blue v1.27.10
+	github.com/ernestrc/blue v1.28.7
 	github.com/ernestrc/dom v0.2.5-0.20201125033726-789c946aa938
 	github.com/ernestrc/go-multierror v1.1.2
 	github.com/ernestrc/golang-internal-tools v0.0.0-20220317145801-f8b5a950857b
@@ -19,8 +19,8 @@ require (
 	github.com/mattn/go-runewidth v0.0.14
 	github.com/sirupsen/logrus v1.6.0
 	github.com/sourcegraph/go-diff v0.6.1
-	github.com/stretchr/testify v1.7.0
-	go.uber.org/goleak v1.0.0
+	github.com/stretchr/testify v1.8.0
+	go.uber.org/goleak v1.2.0
 	golang.org/x/crypto v0.0.0-20220321153916-2c7772ba3064
 	golang.org/x/term v0.0.0-20220919170432-7a66f970e087
 	google.golang.org/grpc v1.45.0
