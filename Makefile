@@ -30,10 +30,10 @@ debug: $(EXAMPLES) $(EXECS)
 
 example_wasm: $(EXAMPLE_WASM_BLOB)
 
-test:
+test: debug
 	@ go test ./.../... $(GOTESTFLAGS)
 
-test-no-race:
+test-no-race: debug
 	@ go test ./.../... $(GOTESTFLAGSNORACE)
 
 coverage: $(BIN)
