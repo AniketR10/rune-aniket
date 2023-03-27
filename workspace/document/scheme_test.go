@@ -1,6 +1,7 @@
 package document
 
 import (
+	"context"
 	"errors"
 	"io/ioutil"
 	"os"
@@ -36,12 +37,14 @@ func (t testStruct) UpdatedTime() time.Time {
 
 func TestDocumentOpen(t *testing.T) {
 	t.Run("file should have a default template after Open", func(t *testing.T) {
+		ctx := context.Background()
+
 		workspaceURI, err := workspaceapi.ParseURI("inmemory:///tmp")
 		require.NoError(t, err)
 		marshaler := yaml.Marshaler()
 		svc := document.NewInMemoryServiceWithMarshaler(marshaler)
 		scheme, err := WorkspaceScheme[testStruct](workspaceURI, svc,
-			marshaler, errors.New("missing id"))(config.NopConfig(), workspaceURI)
+			marshaler, errors.New("missing id"))(ctx, config.NopConfig(), workspaceURI)
 		require.NoError(t, err)
 
 		f, werr := scheme.Open("a", os.O_CREATE|os.O_RDWR, 0)

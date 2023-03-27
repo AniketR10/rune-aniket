@@ -48,6 +48,7 @@ func TestScheme(t *testing.T) {
 				s := new(scheme)
 				s.uri = uri
 				s.client = newUpspinClient(env.Client)
+				s.files = make(map[uintptr]workspaceapi.File)
 				// some tests expect /tmp/ to be created and available for write
 				_, err = env.Client.MakeDirectory("user1@domain.com/tmp")
 				require.NoError(t, err)

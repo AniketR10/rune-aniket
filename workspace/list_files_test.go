@@ -48,7 +48,7 @@ func TestListFiles(t *testing.T) {
 				_, err = os.OpenFile(filepath.Join(dir, "b"), os.O_CREATE, 0666)
 				require.NoError(t, err)
 
-				scheme, err := NewFileScheme(config.NopConfig(), uri)
+				scheme, err := NewFileScheme(context.Background(), config.NopConfig(), uri)
 				require.NoError(t, err)
 
 				it, err := ListFiles(context.Background(), scheme, path)
@@ -73,7 +73,7 @@ func TestListFiles(t *testing.T) {
 		f2, err := os.OpenFile(filepath.Join(dir, "b"), os.O_CREATE, 0666)
 		require.NoError(t, err)
 
-		scheme, err := NewFileScheme(config.NopConfig(), uri)
+		scheme, err := NewFileScheme(context.Background(), config.NopConfig(), uri)
 		require.NoError(t, err)
 
 		it, err := ListFiles(context.Background(), scheme, dir)

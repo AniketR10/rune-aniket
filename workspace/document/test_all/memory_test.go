@@ -24,13 +24,15 @@ import (
 )
 
 func TestMemoryWorkspaceScheme(t *testing.T) {
+	ctx := context.Background()
+
 	t.Run("with folder", func(t *testing.T) {
 		testWorkspaceSchemeSuite(t, func(t *testing.T) workspace.Scheme {
 			workspaceURI, err := workspaceapi.ParseURI("inmemory:///tmp")
 			require.NoError(t, err)
 			svc := document.NewInMemoryService()
 			scheme, err := workdoc.WorkspaceScheme[testStruct](workspaceURI, svc,
-				json.Marshaler(), errMissingID)(config.NopConfig(), workspaceURI)
+				json.Marshaler(), errMissingID)(ctx, config.NopConfig(), workspaceURI)
 			require.NoError(t, err)
 			return scheme
 		})
@@ -41,7 +43,7 @@ func TestMemoryWorkspaceScheme(t *testing.T) {
 			require.NoError(t, err)
 			svc := document.NewInMemoryService()
 			scheme, err := workdoc.WorkspaceScheme[testStruct](workspaceURI, svc,
-				json.Marshaler(), errMissingID)(config.NopConfig(), workspaceURI)
+				json.Marshaler(), errMissingID)(ctx, config.NopConfig(), workspaceURI)
 			require.NoError(t, err)
 			return scheme
 		})
@@ -53,8 +55,9 @@ func TestMemoryWorkspaceSchemeTransientFailures(t *testing.T) {
 		workspaceURI, err := workspaceapi.ParseURI("inmemory:///")
 		require.NoError(t, err)
 		svc := &errService{root: document.NewInMemoryService()}
+		ctx := context.Background()
 		s, err := workdoc.WorkspaceScheme[testStruct](workspaceURI, svc, json.Marshaler(),
-			errMissingID)(config.NopConfig(), workspaceURI)
+			errMissingID)(ctx, config.NopConfig(), workspaceURI)
 		require.NoError(t, err)
 		return s
 	})

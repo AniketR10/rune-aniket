@@ -29,7 +29,7 @@ const (
 
 var defaultHistoryKey = term.KeyComb{Key: term.KeyCtrlBackslash}
 
-func readFiles(cwd workspaceapi.Workspace, ctx context.Context) (
+func readFiles(cwd workspaceapi.FileSystem, ctx context.Context) (
 	iterator.Iterator[string], error,
 ) {
 	it, err := workspace.ListFiles(ctx, cwd, ".")
@@ -40,7 +40,7 @@ func readFiles(cwd workspaceapi.Workspace, ctx context.Context) (
 	return workspace.ReadLines(ctx, cwd, it)
 }
 
-func parseLine(workspace workspaceapi.Workspace, data string) (
+func parseLine(workspace workspaceapi.FileSystem, data string) (
 	workspaceapi.URI, term.Coordinates,
 ) {
 	// NOTE: if ag breaks this or there's an edge case that it's not covered

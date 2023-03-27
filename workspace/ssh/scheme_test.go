@@ -1,9 +1,8 @@
 package ssh
 
 import (
-	"bytes"
+	"context"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"os"
 	"os/user"
@@ -26,35 +25,15 @@ import (
 type nopExecutor struct {
 }
 
-func (n nopExecutor) Command(name string, arg ...string) (workspaceapi.Pid, error) {
+func (n nopExecutor) StartCommand(
+	ctx context.Context, cmd workspaceapi.Cmd,
+) (workspaceapi.Pid, error) {
 	return 0, nil
-}
-
-func (n nopExecutor) Start(workspaceapi.Pid) error {
-	return nil
 }
 
 func (n nopExecutor) Signal(workspaceapi.Pid, syscall.Signal) error {
 	return nil
 }
-
-func (n nopExecutor) StderrPipe(workspaceapi.Pid) (io.ReadCloser, error) {
-	return io.NopCloser(strings.NewReader("")), nil
-}
-
-func (n nopExecutor) StdinPipe(workspaceapi.Pid) (io.WriteCloser, error) {
-	var b bytes.Buffer
-	return nopWriteCloser{Writer: &b}, nil
-}
-
-func (n nopExecutor) StdoutPipe(workspaceapi.Pid) (io.ReadCloser, error) {
-	return n.StderrPipe(0)
-}
-
-func (n nopExecutor) Wait(workspaceapi.Pid) error {
-	return nil
-}
-
 func (n nopExecutor) Close() error {
 	return nil
 }
@@ -99,9 +78,11 @@ func (t testFileInfo) Sys() interface{} {
 
 func newTestScheme(
 	cfg config.Config, workspaceURI workspaceapi.URI,
-	connectSchemeFn func(uri workspaceapi.URI, closeHook func(error)) (workspace.Scheme, error),
+	connectSchemeFn func(ctx context.Context,
+		uri workspaceapi.URI, closeHook func(error)) (workspace.Scheme, error),
 ) (workspace.Scheme, error) {
 	s := new(scheme)
+	s.ctx, s.cancelCtx = context.WithCancel(context.Background())
 	s.remoteFn = func(sshConfig, workspaceapi.URI) (remote, error) {
 		return nopRemote{}, nil
 	}
@@ -109,15 +90,15 @@ func newTestScheme(
 		return &user.User{Username: "git", HomeDir: "/home/git"}, nil
 	}
 	if connectSchemeFn == nil {
-		connectSchemeFn = func(uri workspaceapi.URI, closeHook func(error)) (
+		connectSchemeFn = func(ctx context.Context, uri workspaceapi.URI, closeHook func(error)) (
 			workspace.Scheme, error,
 		) {
-			return workspacetest.NewNopScheme("test")(config.NopConfig(), uri)
+			return workspacetest.NewNopScheme("test")(ctx, config.NopConfig(), uri)
 		}
 	}
 	s.connectSchemeFn = connectSchemeFn
 
-	err := s.init(sshConfig{}, workspaceURI,
+	err := s.init(context.Background(), sshConfig{}, workspaceURI,
 		func(_ workspace.Scheme, name string) (os.FileInfo, error) {
 			return testFileInfo{name: name}, nil
 		})
@@ -161,9 +142,10 @@ func TestNewScheme(t *testing.T) {
 			// sut
 			ch := make(chan string, 1) // when uri is a file URI it gets called twice
 			s, err := newTestScheme(config.NopConfig(), workspaceURI,
-				func(uri workspaceapi.URI, closeHook func(error)) (workspace.Scheme, error) {
+				func(ctx context.Context, uri workspaceapi.URI, closeHook func(error)) (workspace.Scheme, error) {
 					go func() { ch <- uri.String() }()
-					return workspacetest.NewNopScheme("test")(config.NopConfig(), uri)
+					return workspacetest.NewNopScheme("test")(
+						ctx, config.NopConfig(), uri)
 				})
 			if tcase.expectedErr != "" {
 				assert.EqualError(t, err, tcase.expectedErr)
@@ -295,14 +277,17 @@ func TestIntegrationManagerIsWorkspaceFile(t *testing.T) {
 
 	manager := workspace.NewManager(config.NopConfig())
 	require.NoError(t, manager.RegisterScheme(workspace.FileScheme, workspace.NewFileScheme))
-	require.NoError(t, manager.RegisterScheme(Scheme, func(cfg config.Config, uri workspaceapi.URI) (workspace.Scheme, error) {
-		return newTestScheme(cfg, uri, nil)
-	}))
+	require.NoError(t, manager.RegisterScheme(Scheme,
+		func(ctx context.Context, cfg config.Config, uri workspaceapi.URI) (workspace.Scheme, error) {
+			return newTestScheme(cfg, uri, nil)
+		}))
 
-	fileWorkspace, err := manager.AddWorkspace(fileWorkspaceURI)
+	ctx := context.Background()
+
+	fileWorkspace, err := manager.AddWorkspace(ctx, fileWorkspaceURI)
 	require.NoError(t, err)
 
-	sshWorkspace, err := manager.AddWorkspace(sshWorkspaceURI)
+	sshWorkspace, err := manager.AddWorkspace(ctx, sshWorkspaceURI)
 	require.NoError(t, err)
 
 	tsuite := []struct {
@@ -339,11 +324,13 @@ func TestSSHScheme(t *testing.T) {
 			remoteURI, err := workspaceapi.ParseURI("memory:///")
 			require.NoError(t, err)
 
-			memScheme, err := workspace.NewMemoryScheme(config.NopConfig(), remoteURI)
+			memScheme, err := workspace.NewMemoryScheme(
+				context.Background(), config.NopConfig(), remoteURI)
 			require.NoError(t, err)
 
 			s, err := newTestScheme(config.NopConfig(), workspaceURI,
-				func(uri workspaceapi.URI, closeHook func(error)) (workspace.Scheme, error) {
+				func(ctx context.Context, uri workspaceapi.URI,
+					closeHook func(error)) (workspace.Scheme, error) {
 					return memScheme, nil
 				})
 			require.NoError(t, err)
@@ -363,11 +350,13 @@ func TestSSHScheme(t *testing.T) {
 			workspaceURI, err := workspaceapi.ParseURI("ssh://host.com" + dir)
 			require.NoError(t, err)
 
-			fileScheme, err := workspace.NewFileScheme(config.NopConfig(), fileURI)
+			fileScheme, err := workspace.NewFileScheme(
+				context.Background(), config.NopConfig(), fileURI)
 			require.NoError(t, err)
 
 			s, err := newTestScheme(config.NopConfig(), workspaceURI,
-				func(uri workspaceapi.URI, closeHook func(error)) (workspace.Scheme, error) {
+				func(ctx context.Context, uri workspaceapi.URI,
+					closeHook func(error)) (workspace.Scheme, error) {
 					return fileScheme, nil
 				})
 			require.NoError(t, err)

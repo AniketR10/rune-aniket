@@ -1,12 +1,9 @@
 package ssh
 
 import (
-	"bytes"
 	"context"
 	"errors"
-	"io"
 	"os"
-	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -19,29 +16,16 @@ import (
 	workspacetest "unstable.build/go-tui/workspace/test"
 )
 
-func expectSchemeAPISuccess(t *testing.T, mock *workspacetest.MockScheme, scheme workspace.Scheme) {
-	mock.EXPECT().Start(gomock.Any()).Return(nil).Times(1)
-	err := scheme.Start(0)
+func expectSchemeAPISuccess(t *testing.T, mu *sync.Mutex, mock *workspacetest.MockScheme, scheme workspace.Scheme) {
+	mu.Lock()
+	defer mu.Unlock()
+
+	mock.EXPECT().StartCommand(gomock.Any(), gomock.Any()).Return(workspaceapi.Pid(0), nil).Times(1)
+	_, err := scheme.StartCommand(context.Background(), workspaceapi.Cmd{})
 	require.NoError(t, err)
 
 	mock.EXPECT().Signal(gomock.Any(), gomock.Any()).Return(nil).Times(1)
 	err = scheme.Signal(0, 0)
-	require.NoError(t, err)
-
-	mock.EXPECT().StderrPipe(gomock.Any()).Return(io.NopCloser(strings.NewReader("")), nil).Times(1)
-	_, err = scheme.StderrPipe(0)
-	require.NoError(t, err)
-
-	mock.EXPECT().StdinPipe(gomock.Any()).Return(nopWriteCloser{Writer: new(bytes.Buffer)}, nil).Times(1)
-	_, err = scheme.StdinPipe(0)
-	require.NoError(t, err)
-
-	mock.EXPECT().StdoutPipe(gomock.Any()).Return(io.NopCloser(strings.NewReader("")), nil).Times(1)
-	_, err = scheme.StdoutPipe(0)
-	require.NoError(t, err)
-
-	mock.EXPECT().Wait(gomock.Any()).Return(nil).Times(1)
-	err = scheme.Wait(0)
 	require.NoError(t, err)
 
 	mock.EXPECT().Open(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil).Times(1)
@@ -68,8 +52,10 @@ func expectSchemeAPISuccess(t *testing.T, mock *workspacetest.MockScheme, scheme
 	_, err = scheme.ReadLink("")
 	require.NoError(t, err)
 
-	mock.EXPECT().Command(gomock.Any()).Return(workspaceapi.Pid(0), nil).Times(1)
-	_, err = scheme.Command("blah")
+	mock.EXPECT().StartCommand(gomock.Any(), gomock.Any()).
+		Return(workspaceapi.Pid(0), nil).Times(1)
+	_, err = scheme.StartCommand(context.Background(),
+		workspaceapi.Cmd{Path: "blah"})
 	require.NoError(t, err)
 
 	mock.EXPECT().ReadDir(gomock.Any()).Return([]os.DirEntry{}, nil).Times(1)
@@ -91,12 +77,19 @@ func TestRemoteScheme(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
-		mock := workspacetest.NewMockScheme(ctrl)
-		scheme := newRemoteScheme(func(uri workspaceapi.URI, closehook func(error)) (workspace.Scheme, error) {
-			return mock, nil
-		}, uri)
+		// emulate event loop synchronization
+		var mu sync.Mutex
+		ctx := workspace.ContextWithLocker(context.Background(), &mu)
 
-		expectSchemeAPISuccess(t, mock, scheme)
+		mock := workspacetest.NewMockScheme(ctrl)
+		mu.Lock()
+		scheme := newRemoteScheme(ctx,
+			func(_ context.Context, uri workspaceapi.URI, closehook func(error)) (workspace.Scheme, error) {
+				return mock, nil
+			}, uri)
+		mu.Unlock()
+
+		expectSchemeAPISuccess(t, &mu, mock, scheme)
 		expectSchemeClose(t, mock, scheme)
 	})
 
@@ -104,19 +97,32 @@ func TestRemoteScheme(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
+		// emulate event loop synchronization
+		var mu sync.Mutex
+		ctx := workspace.ContextWithLocker(context.Background(), &mu)
+
 		mock := workspacetest.NewMockScheme(ctrl)
 		var i int
-		scheme := newRemoteScheme(func(uri workspaceapi.URI, closehook func(error)) (workspace.Scheme, error) {
+
+		mu.Lock()
+		scheme := newRemoteScheme(ctx, func(
+			_ context.Context, uri workspaceapi.URI, closehook func(error),
+		) (workspace.Scheme, error) {
 			i++
 			if i <= 5 {
 				return nil, errors.New("unable to connect")
 			}
 			return mock, nil
 		}, uri)
+		mu.Unlock()
 
-		mock.EXPECT().Command(gomock.Any()).Return(workspaceapi.Pid(0), nil).Times(1)
+		mock.EXPECT().StartCommand(gomock.Any(), gomock.Any()).Return(workspaceapi.Pid(0), nil).Times(1)
 		retry.Retry(context.Background(), retry.ExponentialStrategy(1*time.Millisecond, 10*time.Millisecond), func(context.Context) (bool, error) {
-			_, err = scheme.Command("blah")
+			mu.Lock()
+			defer mu.Unlock()
+
+			_, err = scheme.StartCommand(context.Background(),
+				workspaceapi.Cmd{Path: "blah"})
 			return true, err
 		})
 		require.NoError(t, err)
@@ -127,25 +133,33 @@ func TestRemoteScheme(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
+		// emulate event loop synchronization
+		var mu sync.Mutex
+		ctx := workspace.ContextWithLocker(context.Background(), &mu)
+
 		mock := workspacetest.NewMockScheme(ctrl)
 		var closeHook func(error)
 		var wg sync.WaitGroup
 		var reconnect bool
-		scheme := newRemoteScheme(func(uri workspaceapi.URI, _closehook func(error)) (workspace.Scheme, error) {
+		mu.Lock()
+		scheme := newRemoteScheme(ctx, func(
+			_ context.Context, uri workspaceapi.URI, _closehook func(error),
+		) (workspace.Scheme, error) {
 			closeHook = _closehook
 			if reconnect {
 				wg.Done()
 			}
 			return mock, nil
 		}, uri)
-		expectSchemeAPISuccess(t, mock, scheme)
+		mu.Unlock()
+		expectSchemeAPISuccess(t, &mu, mock, scheme)
 
 		wg.Add(1)
 		reconnect = true
 		mock.EXPECT().Close().Return(errors.New("already closed but should be fine"))
 		closeHook(errors.New("kaboom"))
 		wg.Wait()
-		expectSchemeAPISuccess(t, mock, scheme)
+		expectSchemeAPISuccess(t, &mu, mock, scheme)
 
 		expectSchemeClose(t, mock, scheme)
 	})

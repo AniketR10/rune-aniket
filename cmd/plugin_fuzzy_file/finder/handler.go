@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"os"
 	"sync"
 	"syscall"
@@ -43,7 +44,8 @@ func Permissions() []plugin.Permission {
 		plugin.Permission(browserplugin.PermissionBrowserMessenger),
 		plugin.PermissionStorage,
 		plugin.Permission(textplugin.PermissionEditor),
-		plugin.Permission(workspaceplugin.PermissionWorkspace),
+		plugin.Permission(workspaceplugin.PermissionFileSystem),
+		plugin.Permission(workspaceplugin.PermissionExecute),
 	}
 }
 
@@ -53,15 +55,17 @@ type fuzzyFinderHandler struct {
 	p                    browserapi.EventPublisher
 	m                    browserapi.Messenger
 	ed                   textapi.Editor
-	workspace            workspaceapi.Workspace
+	fs                   workspaceapi.FileSystem
+	executor             workspaceapi.Executor
 	invokeWindow         browserapi.Window
 	historyKey           term.KeyComb
 	mu                   sync.Mutex
 	cmdStr               string
-	getResource          func(workspaceapi.Workspace, string) (workspaceapi.URI, term.Coordinates)
-	workspaceFallback    func(workspaceapi.Workspace, context.Context) (iterator.Iterator[string], error)
+	getResource          func(workspaceapi.FileSystem, string) (workspaceapi.URI, term.Coordinates)
+	workspaceFallback    func(workspaceapi.FileSystem, context.Context) (iterator.Iterator[string], error)
 	pid                  workspaceapi.Pid
 	quitChan             chan struct{}
+	waitChan             chan error
 	height               int
 	list                 search.List
 	background           tui.Component
@@ -73,7 +77,9 @@ type fuzzyFinderHandler struct {
 	history search.History
 }
 
-func (h *fuzzyFinderHandler) execCommand(command string) (workspaceapi.Pid, error) {
+func (h *fuzzyFinderHandler) execCommand(command string) (
+	*os.File, *os.File, workspaceapi.Pid, error,
+) {
 	shell := os.Getenv("SHELL")
 	if len(shell) == 0 {
 		shell = "sh"
@@ -81,21 +87,54 @@ func (h *fuzzyFinderHandler) execCommand(command string) (workspaceapi.Pid, erro
 	return h.execCommandWith(shell, command)
 }
 
-// ExecCommandWith executes the given command with the specified shell
-func (h *fuzzyFinderHandler) execCommandWith(shell string, command string) (workspaceapi.Pid, error) {
-	cmd, err := h.workspace.Command(shell, "-c", command)
-	if err != nil {
-		return 0, fmt.Errorf("failed to create command: %w", err)
+// Watch satisfies workspaceapi.Watcher which is employed
+// to wait for the underlying command to execute.
+func (h *fuzzyFinderHandler) Watch() chan error {
+	return h.waitChan
+}
+
+func (h *fuzzyFinderHandler) execCommandWith(shell string, commandStr string) (
+	*os.File, *os.File, workspaceapi.Pid, error,
+) {
+	cmd := workspaceapi.Cmd{
+		Path:    shell,
+		Args:    []string{"-c", commandStr},
+		Watcher: h,
 	}
-	return cmd, nil
+	stderr, stdout, err := h.setPipes(&cmd)
+	if err != nil {
+		return nil, nil, 0, err
+	}
+	pid, err := h.executor.Start(cmd)
+	if err != nil {
+		return nil, nil, 0, fmt.Errorf("failed to create command: %w", err)
+	}
+	return stderr, stdout, pid, nil
+}
+
+func (h *fuzzyFinderHandler) setPipes(
+	cmd *workspaceapi.Cmd,
+) (stderr, stdout *os.File, err error) {
+	stdout, stdoutWrite, err := os.Pipe()
+	if err != nil {
+		return nil, nil, err
+	}
+	stderr, stderrWrite, err := os.Pipe()
+	if err != nil {
+		return nil, nil, err
+	}
+	cmd.Stdout = stdoutWrite
+	cmd.Stderr = stderrWrite
+	return stderr, stdout, nil
 }
 
 // KillCommand kills the process for the given command
 func (h *fuzzyFinderHandler) killCommand() error {
-	return h.workspace.Signal(h.pid, syscall.SIGKILL)
+	return h.executor.Signal(h.pid, syscall.SIGKILL)
 }
 
 func (h *fuzzyFinderHandler) readCommand(ctx context.Context, datachan chan<- []byte, src io.Reader) {
+	defer close(datachan)
 	reader := bufio.NewReaderSize(src, readerBufferSize)
 	for {
 		data, err := reader.ReadBytes('\n')
@@ -180,7 +219,7 @@ func (h *fuzzyFinderHandler) setMessage(msg string, args ...interface{}) error {
 }
 
 func (h *fuzzyFinderHandler) openResource(searchQuery, data string) {
-	resource, pos := h.getResource(h.workspace, data)
+	resource, pos := h.getResource(h.fs, data)
 	handler, err := h.open(resource)
 	if err != nil {
 		merr := h.setMessage("Open: %v", err)
@@ -201,9 +240,10 @@ func (h *fuzzyFinderHandler) openResource(searchQuery, data string) {
 func (h *fuzzyFinderHandler) scanDataViaWorkspaceAPI(
 	ctx context.Context, datachan chan<- []byte,
 ) {
+	defer close(datachan)
 	log.Debugf("using workspace API to get resource iterator")
 
-	it, err := h.workspaceFallback(h.workspace, ctx)
+	it, err := h.workspaceFallback(h.fs, ctx)
 	if err != nil {
 		log.Error(err)
 		return
@@ -246,7 +286,6 @@ func (h *fuzzyFinderHandler) scanData() {
 	h.mu.Lock()
 	h.cancelScan = cancelScan
 	datachan := h.list.Push(ctx)
-	defer close(datachan)
 	h.mu.Unlock()
 
 	if h.useWorkspaceFallback {
@@ -256,30 +295,29 @@ func (h *fuzzyFinderHandler) scanData() {
 
 	log.Infof("using resource list command: %s", h.cmdStr)
 
-	exec, err := h.execCommand(h.cmdStr)
-	h.mu.Lock()
-	h.pid = exec
-	h.mu.Unlock()
+	stderr, stdout, exec, err := h.execCommand(h.cmdStr)
 	if err != nil {
-		log.Debug(err)
+		log.Debugf("fallback to scan data via workspace API: %v", err)
 		h.scanDataViaWorkspaceAPI(ctx, datachan)
 		return
 	}
 
-	out, err := h.workspace.StdoutPipe(h.pid)
-	if err != nil {
-		log.Errorf("command stdout failed; %v", err)
-		return
-	}
-	err = h.workspace.Start(h.pid)
-	if err != nil {
-		log.Errorf("command start failed; %v", err)
-		return
-	}
+	h.mu.Lock()
+	h.pid = exec
+	h.mu.Unlock()
 
-	h.readCommand(ctx, datachan, out)
+	go h.readCommand(ctx, datachan, stdout)
+	go func() {
+		data, err := ioutil.ReadAll(stderr)
+		if err != nil {
+			log.Errorf("failed to read from stderr: %v", err)
+		}
+		log.Debugf("stderr: %s", string(data))
+	}()
 
-	err = h.workspace.Wait(h.pid)
+	log.Debugf("waiting for command to be done")
+	err = <-h.waitChan
+	log.Debugf("command is done: %v", err)
 
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -302,8 +340,10 @@ func (h *fuzzyFinderHandler) initGrants(
 ) (err error) {
 	for _, grant := range grants {
 		switch grant.Permission {
-		case plugin.Permission(workspaceplugin.PermissionWorkspace):
-			h.workspace, err = workspaceplugin.Workspace(grant.Token, broker)
+		case plugin.Permission(workspaceplugin.PermissionFileSystem):
+			h.fs, err = workspaceplugin.FileSystem(grant.Token, broker)
+		case plugin.Permission(workspaceplugin.PermissionExecute):
+			h.executor, err = workspaceplugin.Executor(grant.Token, broker)
 		case plugin.Permission(textplugin.PermissionEditor):
 			h.ed, err = textplugin.Editor(grant.Token, broker)
 		case plugin.Permission(browserplugin.PermissionBrowserMessenger):
@@ -335,8 +375,8 @@ func New(
 	grants []plugin.Grant, broker proto.MuxBroker,
 	invokeWindow browserapi.Window, cfg config.Config,
 	historyKey term.KeyComb, historyDocumentID string, command string,
-	fallback func(workspaceapi.Workspace, context.Context) (iterator.Iterator[string], error),
-	getResource func(exec workspaceapi.Workspace, line string) (workspaceapi.URI, term.Coordinates),
+	fallback func(workspaceapi.FileSystem, context.Context) (iterator.Iterator[string], error),
+	getResource func(exec workspaceapi.FileSystem, line string) (workspaceapi.URI, term.Coordinates),
 ) (tui.Handler, error) {
 	h := new(fuzzyFinderHandler)
 	maxHistory, err := cfg.GetInt("history")
@@ -361,6 +401,7 @@ func New(
 	h.workspaceFallback = fallback
 
 	h.quitChan = make(chan struct{})
+	h.waitChan = make(chan error)
 
 	listConfig := h.getListConfig(cfg)
 	h.list.Init(listConfig)

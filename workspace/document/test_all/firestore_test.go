@@ -1,6 +1,7 @@
 package test_all
 
 import (
+	"context"
 	"testing"
 
 	"github.com/ernestrc/blue/document/firestore"
@@ -36,12 +37,14 @@ func TestFirestoreWorkspaceScheme(t *testing.T) {
 		teardown := runFirestoreOrSkip(t)
 		defer teardown()
 
+		ctx := context.Background()
+
 		workspaceURI, err := workspaceapi.ParseURI("inmemory:///tmp")
 		require.NoError(t, err)
 		svc, err := firestore.New(testProjectID, collection, "")
 		require.NoError(t, err)
 		scheme, err := workdoc.WorkspaceScheme[testStruct](workspaceURI, svc,
-			json.Marshaler(), errMissingID)(config.NopConfig(), workspaceURI)
+			json.Marshaler(), errMissingID)(ctx, config.NopConfig(), workspaceURI)
 		require.NoError(t, err)
 		return scheme
 	})

@@ -13,7 +13,7 @@ import (
 	"unstable.build/go-tui/workspace"
 )
 
-/* server side */
+/* plugin side */
 
 // if we ever implement a keep alive mechanism for servers it should not
 // be added to this server, as clients are completely ephemeral and
@@ -32,12 +32,14 @@ type proxySchemeServerImpl struct {
 type proxySchemeResource struct {
 	srv    proto.MuxServer
 	scheme workspace.Scheme
-	server *SchemeServerImpl
+	server *Server
 }
 
 func (c proxySchemeResource) Close() (ret error) {
 	c.srv.Stop()
-	c.server.Stop()
+	if err := c.server.Stop(); err != nil {
+		ret = multierr.Append(ret, err)
+	}
 	if err := c.scheme.Close(); err != nil {
 		ret = multierr.Append(ret, err)
 	}
@@ -58,11 +60,14 @@ func newProxySchemeServerImpl(
 }
 
 func (s *proxySchemeServerImpl) serveScheme(scheme workspace.Scheme) (uint32, error) {
-	var server *SchemeServerImpl
+	var server *Server
 	ret, srv, err := proto.AcceptAndServe(s.broker,
 		func(_ uint32, srv proto.MuxServer) {
-			server = NewSchemeServer(scheme, &s.mu)
+			// this is client-side, so no need to pass a locker
+			// since it will only be accesed through this server
+			server = NewServer(scheme, new(sync.Mutex))
 			RegisterSchemeServer(srv.Registrar(), server)
+			RegisterFilesServer(srv.Registrar(), server)
 		})
 
 	s.mu.Lock()
@@ -90,7 +95,7 @@ func (s *proxySchemeServerImpl) InitializeProxy(
 		return nil, err
 	}
 
-	scheme, err := s.fn(cfg, uri)
+	scheme, err := s.fn(ctx, cfg, uri)
 	if err != nil {
 		return nil, err
 	}
@@ -116,23 +121,23 @@ func (s *proxySchemeServerImpl) Close() (ret error) {
 	return nil
 }
 
-/* client-side */
+/* host-side */
 
 func initializeSchemeThroughProxy(
 	cfg config.Config, uri workspaceapi.URI,
 	broker proto.MuxBroker, proxyID uint32,
-) (workspace.Scheme, proto.MuxConn, error) {
+) (workspace.Scheme, error) {
 	// once uri, and config is sent disconnect proxy client
 	proxyConn, err := broker.Dial(proxyID)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	defer proxyConn.Close()
 
 	cfgJson := config.JSONFromConfig(cfg)
 	data, err := cfgJson.MarshalText()
 	if err != nil {
-		return nil, nil, fmt.Errorf("could not marshal proxy config: %s", err)
+		return nil, fmt.Errorf("could not marshal proxy config: %s", err)
 	}
 	proxyClient := NewProxySchemeClient(proxyConn)
 	resp, err := proxyClient.InitializeProxy(context.Background(), &InitializeProxyRequest{
@@ -140,12 +145,12 @@ func initializeSchemeThroughProxy(
 		Uri:        uri.String(),
 	})
 	if err != nil {
-		return nil, nil, fmt.Errorf("could not initialize proxy: %s", err)
+		return nil, fmt.Errorf("could not initialize proxy: %s", err)
 	}
 
 	conn, err := broker.Dial(resp.GetTokenId())
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-	return NewScheme(conn), conn, nil
+	return NewClient(conn), nil
 }

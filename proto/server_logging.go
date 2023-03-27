@@ -6,7 +6,6 @@ import (
 	"time"
 
 	log "github.com/sirupsen/logrus"
-	grpc "google.golang.org/grpc"
 )
 
 type loggingServer struct {
@@ -52,7 +51,7 @@ func (s *loggingServer) Stop() {
 	close(s.quitChan)
 }
 
-func (s *loggingServer) Registrar() grpc.ServiceRegistrar {
+func (s *loggingServer) Registrar() ServiceRegistrar {
 	log.Tracef("LoggingGRPCServer: (%p) Registrar() ", s.srv)
 	return s.srv.Registrar()
 }

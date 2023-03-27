@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	stdErrors "errors"
 	"fmt"
 	"io"
@@ -32,9 +33,13 @@ var (
 type scheme struct {
 	uri    workspaceapi.URI
 	client *upspinClient
+	files  map[uintptr]workspaceapi.File
+	fd     uintptr // next fd
 }
 
-func newScheme(config config.Config, uri workspaceapi.URI) (workspace.Scheme, error) {
+func newScheme(ctx context.Context, config config.Config, uri workspaceapi.URI) (
+	workspace.Scheme, error,
+) {
 	if uri.Scheme() != upspinScheme {
 		return nil, stdErrors.New("invalid scheme")
 	}
@@ -109,6 +114,7 @@ func (s *scheme) init(config config.Config, uri workspaceapi.URI) error {
 	s.uri = uri
 
 	s.client = newUpspinClient(upclient.New(cfg))
+	s.files = make(map[uintptr]workspaceapi.File)
 	return nil
 }
 
@@ -118,6 +124,12 @@ func (s *scheme) expandPath(path string) (string, error) {
 
 func (s *scheme) URI(path string) (workspaceapi.URI, error) {
 	return workspace.WorkspaceURI(s.uri, path)
+}
+
+// NewFile simply calls Open under the hood as upspin files are generally not cached in memory.
+func (s *scheme) NewFile(fd uintptr, path string) workspaceapi.File {
+	f, _ := s.files[fd]
+	return f
 }
 
 func (s *scheme) Open(path string, flag int, mode os.FileMode) (workspaceapi.File, *workspaceapi.Error) {
@@ -136,10 +148,13 @@ func (s *scheme) Open(path string, flag int, mode os.FileMode) (workspaceapi.Fil
 		}
 	}
 	path, _ = s.expandPath(path)
+	s.fd++
 	ret := &fileAdapter{
+		s:      s,
 		client: s.client,
 		file:   f,
 		path:   path,
+		fd:     s.fd,
 	}
 	if flag&os.O_CREATE != 0 {
 		// make sure entry is created
@@ -153,6 +168,7 @@ func (s *scheme) Open(path string, flag int, mode os.FileMode) (workspaceapi.Fil
 			return nil, mapUpspinError(err)
 		}
 	}
+	s.files[ret.Fd()] = ret
 	return ret, nil
 }
 
@@ -280,35 +296,15 @@ func (s *scheme) ReadDir(name string) ([]os.DirEntry, error) {
 	return ret, nil
 }
 
-func (s *scheme) Command(name string, arg ...string) (workspaceapi.Pid, error) {
+func (s *scheme) StartCommand(ctx context.Context, cmd workspaceapi.Cmd) (workspaceapi.Pid, error) {
 	return 0, errExecute
-}
-
-func (s *scheme) Start(workspaceapi.Pid) error {
-	return errExecute
 }
 
 func (s *scheme) Signal(workspaceapi.Pid, syscall.Signal) error {
 	return errExecute
 }
 
-func (s *scheme) StderrPipe(workspaceapi.Pid) (io.ReadCloser, error) {
-	return nil, errExecute
-}
-
-func (s *scheme) StdinPipe(workspaceapi.Pid) (io.WriteCloser, error) {
-	return nil, errExecute
-}
-
-func (s *scheme) StdoutPipe(workspaceapi.Pid) (io.ReadCloser, error) {
-	return nil, errExecute
-}
-
-func (s *scheme) Wait(workspaceapi.Pid) error {
-	return errExecute
-}
-
-func (s *scheme) NewPty() (workspaceapi.Pty, error) {
+func (s *scheme) NewPty(context.Context) (workspaceapi.Pty, error) {
 	return workspaceapi.Pty{}, errExecute
 }
 

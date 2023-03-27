@@ -19,7 +19,7 @@ type MuxConn interface {
 
 type MuxServer interface {
 	Serve(context.Context, net.Listener) error
-	Registrar() grpc.ServiceRegistrar
+	Registrar() ServiceRegistrar
 	Addr() net.Addr
 	Stop()
 }
@@ -39,4 +39,15 @@ type MuxBroker interface {
 	DialChannel(string) (MuxConn, error)
 
 	Close() error
+}
+
+// ServiceRegistrar adds GetServiceInfo to grpc.ServiceRegistrar.
+type ServiceRegistrar interface {
+	GetServiceInfo() map[string]grpc.ServiceInfo
+	grpc.ServiceRegistrar
+}
+
+func IsRegistered(srv ServiceRegistrar, desc grpc.ServiceDesc) bool {
+	_, ok := srv.GetServiceInfo()[desc.ServiceName]
+	return ok
 }

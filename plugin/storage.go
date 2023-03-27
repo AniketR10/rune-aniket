@@ -1,6 +1,7 @@
 package plugin
 
 import (
+	"context"
 	"io"
 	"path/filepath"
 	"runtime"
@@ -15,6 +16,7 @@ import (
 
 	"unstable.build/go-tui/proto"
 	"unstable.build/go-tui/storage"
+	"unstable.build/go-tui/workspace"
 )
 
 const (
@@ -32,9 +34,12 @@ func newStorageResourceServer(storageDir string) *storageResourceServer {
 	return ret
 }
 
-func (s *storageResourceServer) setupStorage(pluginID string) document.Service {
+func (s *storageResourceServer) setupStorage(lock sync.Locker, pluginID string) document.Service {
 	path := filepath.Join(s.storageDir, ".dbplugin", filepath.Clean(pluginID))
-	svc, err := storage.New(path, toml.Marshaler())
+	// pass locker to underlying file scheme, so we can synchronize
+	// network storage requests against event loop access.
+	ctx := workspace.ContextWithLocker(context.Background(), lock)
+	svc, err := storage.New(ctx, path, toml.Marshaler())
 	if err != nil {
 		log.Warnf("Failed to setup storage for plugin %q: %v."+
 			"Fallback to in-memory", pluginID, err)
@@ -44,17 +49,19 @@ func (s *storageResourceServer) setupStorage(pluginID string) document.Service {
 }
 
 func (s *storageResourceServer) Register(
-	pluginID string, grantor Grantor, registrar grpc.ServiceRegistrar,
+	pluginID string, grantor Grantor, registrar proto.ServiceRegistrar,
 	broker proto.MuxBroker, lock sync.Locker,
 ) (io.Closer, error) {
-	svc := s.setupStorage(pluginID)
+	svc := s.setupStorage(lock, pluginID)
 	server := new(docrpc.Server)
 	// NOTE: if registrar is not a grpc.Server this will panic
 	// but it's a small price to pay rather than exposing grpc.Server
 	// across all ResourceRegistrar impls.
 	server.Init(svc, toml.Marshaler(), registrar.(*grpc.Server))
 	bproto.RegisterDocumentStoreServer(registrar, server)
-	return server, nil
+	// doc server stops grpc.Server, which is not something storageResourceserver
+	// should be concerned about
+	return nopCloser{}, nil
 }
 
 // StorageResource returns a map of Permission to a ResourceServer
@@ -66,6 +73,7 @@ func StorageResources(storageDir string) map[Permission]ResourceRegistrar {
 	}
 }
 
+// TODO move to api package
 func dialStorage(token uint32, broker proto.MuxBroker) (
 	document.Service, error,
 ) {

@@ -28,6 +28,10 @@ func TestWorkspaceSchemeFiles(
 		TestWorkspaceSchemeOpen(t, schemeFn, defaultCreateTestFile,
 			ioutil.ReadAll, (workspaceapi.File).Write, true)
 	})
+	t.Run("NewFile", func(t *testing.T) {
+		TestWorkspaceSchemeNewFile(t, schemeFn, defaultCreateTestFile,
+			ioutil.ReadAll, (workspaceapi.File).Write)
+	})
 	t.Run("Remove", func(t *testing.T) {
 		TestWorkspaceSchemeRemove(t, schemeFn, defaultCreateTestFile)
 	})
@@ -250,9 +254,129 @@ func defaultCreateTestFile(t *testing.T, s workspace.Scheme, filename, content s
 	_, err = file.Seek(0, 0)
 	require.NoError(t, err)
 	return file, func() {
-		require.NoError(t, file.Close())
+		file.Close()
 		s.Remove(file.Name()) // best effort
 	}
+}
+
+func testFile(
+	t *testing.T, f workspaceapi.File,
+	readAll func(io.Reader) ([]byte, error),
+	writeFile func(workspaceapi.File, []byte) (int, error),
+) {
+	t.Run("Name returns the file name", func(t *testing.T) {
+		// implementations may or may not return the full path name
+		// in the case of a file scheme, absolute is returned because
+		// a workspace.Scheme is localized to the current working directory
+		// so if the path passed to Open is relative, then we need to
+		// prepend the cwd.
+		assert.Contains(t, f.Name(), "file")
+	})
+
+	t.Run("Read before write", func(t *testing.T) {
+		data, err := readAll(f)
+		require.NoError(t, err)
+		assert.Equal(t, "", string(data))
+	})
+
+	t.Run("Write", func(t *testing.T) {
+		_, err := writeFile(f, []byte("1234567890"))
+		require.NoError(t, err)
+	})
+
+	t.Run("Read after write before sync", func(t *testing.T) {
+		/* this is undefined for now */
+	})
+
+	t.Run("Sync", func(t *testing.T) {
+		err := f.Sync()
+		require.NoError(t, err)
+	})
+
+	t.Run("Stat", func(t *testing.T) {
+		finfo, err := f.Stat()
+		require.NoError(t, err)
+		assert.Equal(t, "file", finfo.Name())
+		assert.WithinDuration(t, finfo.ModTime(), time.Now(), 1*time.Minute)
+		assert.Equal(t, false, finfo.IsDir())
+		// the following are unused atm, so we don't test for them.
+		// assert.Equal(t, int64(10), finfo.Size())
+		// assert.Equal(t, fs.FileMode(0644), finfo.Mode())
+	})
+
+	t.Run("Seek", func(t *testing.T) {
+		_, err := f.Seek(0, 0)
+		require.NoError(t, err)
+	})
+
+	t.Run("Read", func(t *testing.T) {
+		data, err := readAll(f)
+		require.NoError(t, err)
+		assert.Equal(t, "1234567890", string(data))
+	})
+
+	t.Run("Truncate", func(t *testing.T) {
+		err := f.Truncate(0)
+		require.NoError(t, err)
+	})
+
+	t.Run("Read after truncate", func(t *testing.T) {
+		var buf [10]byte
+		n, err := f.Read(buf[:])
+		require.Equal(t, io.EOF, err)
+		assert.Equal(t, 0, n)
+	})
+
+	t.Run("Close", func(t *testing.T) {
+		require.NoError(t, f.Close())
+	})
+}
+
+func TestWorkspaceSchemeNewFile(
+	t *testing.T,
+	schemeFn func(t *testing.T) workspace.Scheme,
+	createTestFile func(*testing.T, workspace.Scheme, string, string) (workspaceapi.File, func()),
+	readAll func(io.Reader) ([]byte, error),
+	writeFile func(workspaceapi.File, []byte) (int, error),
+) {
+	t.Run("returns a working File if Open succeeds", func(t *testing.T) {
+		scheme := schemeFn(t)
+		defer scheme.Close()
+		f, err := scheme.Open("file", os.O_CREATE|os.O_RDWR, 0644)
+		require.Nil(t, err, err.String())
+		f = scheme.NewFile(f.Fd(), f.Name())
+		testFile(t, f, readAll, writeFile)
+	})
+
+	t.Run("file offsets are kept across instances of NewFile", func(t *testing.T) {
+		scheme := schemeFn(t)
+		defer scheme.Close()
+		f, werr := scheme.Open("file", os.O_CREATE|os.O_RDWR, 0644)
+		require.Nil(t, werr, werr.String())
+		f = scheme.NewFile(f.Fd(), f.Name())
+
+		_, err := writeFile(f, []byte("1234567890"))
+		require.NoError(t, err)
+
+		require.NoError(t, f.Sync())
+		_, err = f.Seek(0, 0)
+		require.NoError(t, err)
+
+		var buf [8]byte
+		n, err := f.Read(buf[:])
+		require.NoError(t, err)
+		assert.Equal(t, 8, n)
+		assert.Equal(t, "12345678", string(buf[:]))
+
+		f = scheme.NewFile(f.Fd(), f.Name())
+		n, err = f.Read(buf[:])
+		assert.Equal(t, 2, n)
+		assert.Equal(t, "90", string(buf[:n]))
+
+		f = scheme.NewFile(f.Fd(), f.Name())
+		n, err = f.Read(buf[:])
+		require.Equal(t, io.EOF, err)
+	})
 }
 
 func TestWorkspaceSchemeOpen(
@@ -371,72 +495,7 @@ func TestWorkspaceSchemeOpen(
 		f, err := scheme.Open("file", os.O_CREATE|os.O_RDWR, 0644)
 		require.Nil(t, err, err.String())
 
-		t.Run("Name returns the file name", func(t *testing.T) {
-			// implementations may or may not return the full path name
-			// in the case of a file scheme, absolute is returned because
-			// a workspace.Scheme is localized to the current working directory
-			// so if the path passed to Open is relative, then we need to
-			// prepend the cwd.
-			assert.Contains(t, f.Name(), "file")
-		})
-
-		t.Run("Read before write", func(t *testing.T) {
-			data, err := readAll(f)
-			require.NoError(t, err)
-			assert.Equal(t, "", string(data))
-		})
-
-		t.Run("Write", func(t *testing.T) {
-			_, err := writeFile(f, []byte("1234567890"))
-			require.NoError(t, err)
-		})
-
-		t.Run("Read after write before sync", func(t *testing.T) {
-			/* this is undefined for now */
-		})
-
-		t.Run("Sync", func(t *testing.T) {
-			err := f.Sync()
-			require.NoError(t, err)
-		})
-
-		t.Run("Stat", func(t *testing.T) {
-			finfo, err := f.Stat()
-			require.NoError(t, err)
-			assert.Equal(t, "file", finfo.Name())
-			assert.WithinDuration(t, finfo.ModTime(), time.Now(), 1*time.Minute)
-			assert.Equal(t, false, finfo.IsDir())
-			// the following are unused atm, so we don't test for them.
-			// assert.Equal(t, int64(10), finfo.Size())
-			// assert.Equal(t, fs.FileMode(0644), finfo.Mode())
-		})
-
-		t.Run("Seek", func(t *testing.T) {
-			_, err := f.Seek(0, 0)
-			require.NoError(t, err)
-		})
-
-		t.Run("Read", func(t *testing.T) {
-			data, err := readAll(f)
-			require.NoError(t, err)
-			assert.Equal(t, "1234567890", string(data))
-		})
-
-		t.Run("Truncate", func(t *testing.T) {
-			err := f.Truncate(0)
-			require.NoError(t, err)
-		})
-
-		t.Run("Read after truncate", func(t *testing.T) {
-			var buf [10]byte
-			n, err := f.Read(buf[:])
-			require.Equal(t, io.EOF, err)
-			assert.Equal(t, 0, n)
-		})
-
-		t.Run("Close", func(t *testing.T) {
-			require.NoError(t, f.Close())
-		})
+		testFile(t, f, readAll, writeFile)
 	})
 }
 

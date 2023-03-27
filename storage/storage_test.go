@@ -31,7 +31,7 @@ func TestStorageConcurrentInstances(t *testing.T) {
 		instances := make([]document.Service, 0, n)
 
 		for i := 0; i < n-1; i++ {
-			instance, err := New(name, bson.Marshaler())
+			instance, err := New(context.Background(), name, bson.Marshaler())
 			require.NoError(t, err)
 			_ = instance.Get(context.Background(), "a", nil)
 			instances = append(instances, instance)

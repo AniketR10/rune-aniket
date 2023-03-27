@@ -10,7 +10,6 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"sync"
 	"syscall"
@@ -46,7 +45,7 @@ const (
 	maxHoverColumns             = 90
 	defaultRpcTimeout           = 10 * time.Second
 	defaultConnectTimeout       = 10 * time.Second
-	defaultDisconnectTimeout    = 1 * time.Second
+	defaultDisconnectTimeout    = 300 * time.Millisecond
 	firstFileVersion            = 1
 	commandNextDiagnostic       = "lspNextDiagnostic"
 	commandPrevDiagnostic       = "lspPrevDiagnostic"
@@ -81,7 +80,8 @@ var (
 		plugin.Permission(browserplugin.PermissionBrowserResourceOpener),
 		plugin.Permission(browserplugin.PermissionBrowserEventPublisher),
 		plugin.Permission(browserplugin.PermissionBrowserMessenger),
-		plugin.Permission(workspaceplugin.PermissionWorkspace),
+		plugin.Permission(workspaceplugin.PermissionFileSystem),
+		plugin.Permission(workspaceplugin.PermissionExecute),
 		plugin.PermissionConfig,
 	}
 	defaultDiagnosticAttr = map[protocol.DiagnosticSeverity]term.Attributes{
@@ -138,22 +138,24 @@ type file struct {
 }
 
 type execServer struct {
-	langID string
-	cmd    workspaceapi.Pid
-	srv    protocol.Server
-	caps   protocol.ServerCapabilities
+	langID  string
+	pid     workspaceapi.Pid
+	srv     protocol.Server
+	caps    protocol.ServerCapabilities
+	closers []io.Closer
 }
 
 type lspEditorHandler struct {
 	mu     sync.Mutex
 	evChan chan textapi.Event
 
-	ed textapi.Editor
-	wm browserapi.WindowManager
-	m  browserapi.Messenger
-	o  browserapi.ResourceOpener
-	wp workspaceapi.Workspace
-	p  browserapi.EventPublisher
+	ed   textapi.Editor
+	wm   browserapi.WindowManager
+	m    browserapi.Messenger
+	o    browserapi.ResourceOpener
+	exec workspaceapi.Executor
+	fs   workspaceapi.FileSystem
+	p    browserapi.EventPublisher
 
 	tabspaces                  int
 	frame                      bool
@@ -257,7 +259,11 @@ func streamRPC(cc jsonrpc2.Conn, h *lspEditorHandler) {
 		protocol.Handlers(protocol.ClientHandler(&ch, jsonrpc2.MethodNotFound)))
 	<-cc.Done()
 	err := cc.Err()
-	if err != nil {
+
+	h.mu.Lock()
+	exit := h.exit
+	h.mu.Unlock()
+	if err != nil && !exit {
 		log.Errorf("jsonrpc2 processing goroutine error: %v", err)
 	}
 }
@@ -274,34 +280,17 @@ func initializeConnection(
 	return server
 }
 
-func (h *lspEditorHandler) getPipes(pid workspaceapi.Pid) (
-	io.WriteCloser, io.ReadCloser, io.ReadCloser, error,
-) {
-	stdin, err := h.wp.StdinPipe(pid)
-	if err != nil {
-		return nil, nil, nil, fmt.Errorf("failed to create stdin pipe: %v", err)
-	}
-	stdout, err := h.wp.StdoutPipe(pid)
-	if err != nil {
-		return nil, nil, nil, fmt.Errorf("failed to create stdout pipe: %v", err)
-	}
-
-	stderr, err := h.wp.StderrPipe(pid)
-	if err != nil {
-		return nil, nil, nil, fmt.Errorf("failed to create stderr pipe: %v", err)
-	}
-
-	return stdin, stdout, stderr, nil
-}
-
-func (h *lspEditorHandler) parseCmd(arg interface{}) (workspaceapi.Pid, error) {
+func (h *lspEditorHandler) parseCmd(arg interface{}) (workspaceapi.Cmd, error) {
 	str, ok := arg.(string)
 	cmd := strings.Split(str, " ")
 	if !ok || len(cmd) == 0 {
-		return 0, fmt.Errorf("invalid command: %v", arg)
+		return workspaceapi.Cmd{}, fmt.Errorf("invalid command: %v", arg)
 	}
 
-	return h.wp.Command(cmd[0], cmd[1:]...)
+	return workspaceapi.Cmd{
+		Path: cmd[0],
+		Args: cmd[1:],
+	}, nil
 }
 
 func logStderr(langID string, stderr io.ReadCloser) {
@@ -324,7 +313,8 @@ type nop struct {
 }
 
 func (w nop) Close() error {
-	if log.IsLevelEnabled(log.DebugLevel) {
+	/* enable for debugging
+	if log.IsLevelEnabled(log.TraceLevel) {
 		buf := make([]byte, 1<<16)
 		n := runtime.Stack(buf, true)
 		var pipe string
@@ -334,29 +324,58 @@ func (w nop) Close() error {
 			pipe = "stdout"
 		}
 		log.Warningf("Close called on lsp server's %s pipe: \n%s", pipe, buf[:n])
-	}
+	}*/
 	return nil
 }
 
+func (h *lspEditorHandler) setPipes(
+	cmd *workspaceapi.Cmd, srv *execServer,
+) (stdout, stderr io.ReadCloser, stdin io.WriteCloser, err error) {
+	var stdoutWrite, stderrWrite io.WriteCloser
+	var stdinRead io.ReadCloser
+	stdout, stdoutWrite, err = os.Pipe()
+	if err != nil {
+		return
+	}
+	stderr, stderrWrite, err = os.Pipe()
+	if err != nil {
+		return
+	}
+	stdinRead, stdin, err = os.Pipe()
+	if err != nil {
+		return
+	}
+	cmd.Stdout = stdoutWrite
+	cmd.Stderr = stderrWrite
+	cmd.Stdin = stdinRead
+	srv.closers = []io.Closer{
+		stdoutWrite, stderrWrite, stdinRead, stdout, stderr, stdin,
+	}
+	return
+}
+
 func (h *lspEditorHandler) startLanguageServer(
-	langID string, cmd interface{},
+	langID string, cmdAndArgs interface{},
 ) (execServer, error) {
 	ctx := context.Background()
 	ctx, cancelFn := context.WithTimeout(ctx, h.connectTimeout)
 	defer cancelFn()
 
-	pid, err := h.parseCmd(cmd)
+	cmd, err := h.parseCmd(cmdAndArgs)
 	if err != nil {
 		return execServer{}, err
 	}
 
-	stdin, stdout, stderr, err := h.getPipes(pid)
+	srv := execServer{langID: langID}
+
+	stdout, stderr, stdin, err := h.setPipes(&cmd, &srv)
 	if err != nil {
 		return execServer{}, err
 	}
 
-	log.Debugf("Starting lsp server '%s' with cmd: %#v", langID, pid)
-	err = h.wp.Start(pid)
+	log.Debugf("starting %q LSP server with cmd %#v", langID, cmd)
+	pid, err := h.exec.Start(cmd)
+	log.Tracef("started %q LSP server with pid=%d: err=%v", langID, pid, err)
 	if err != nil {
 		err = fmt.Errorf("workspace.Start: %v", err)
 		return execServer{}, err
@@ -371,7 +390,8 @@ func (h *lspEditorHandler) startLanguageServer(
 	stdin = nop{Writer: stdin}
 	server := initializeConnection(h, stdout, stdin)
 
-	srv := execServer{langID: langID, cmd: pid, srv: server}
+	srv.srv = server
+	srv.pid = pid
 	initRes, err := sendInitializeRequest(ctx, h.cwd, srv)
 	if err != nil {
 		return execServer{}, err
@@ -623,16 +643,21 @@ func newLspHandler(
 
 	for _, g := range grants {
 		switch g.Permission {
-		case plugin.Permission(workspaceplugin.PermissionWorkspace):
-			ret.wp, err = workspaceplugin.Workspace(g.Token, broker)
+		case plugin.Permission(workspaceplugin.PermissionFileSystem):
+			ret.fs, err = workspaceplugin.FileSystem(g.Token, broker)
 			if err != nil {
 				return nil, err
 			}
-			cwdURI, err := ret.wp.URI(".")
+			cwdURI, err := ret.fs.URI(".")
 			if err != nil {
 				return nil, err
 			}
 			ret.cwd = cwdURI.Path()
+		case plugin.Permission(workspaceplugin.PermissionExecute):
+			ret.exec, err = workspaceplugin.Executor(g.Token, broker)
+			if err != nil {
+				return nil, err
+			}
 		case plugin.Permission(browserplugin.PermissionBrowserEventPublisher):
 			ret.p, err = browserplugin.EventPublisher(g.Token, broker)
 			if err != nil {
@@ -700,7 +725,7 @@ func (h *lspEditorHandler) getServer(languageID string) (
 
 	srv, err := h.startLanguageServer(languageID, cmd)
 	if err != nil {
-		log.Errorf("Failed to start language server for %q: %s", languageID, err)
+		log.Errorf("failed to start language server for %q: %s", languageID, err)
 		return execServer{}, false
 	}
 
@@ -1319,7 +1344,7 @@ func (h *lspEditorHandler) spanURIToWorkspace(u span.URI) (workspaceapi.URI, err
 	}
 	// convert local LSP file URI to the current workspace's URI scheme
 	// which could be remote or something else.
-	workspaceFile, err := h.wp.URI(localFile.Path())
+	workspaceFile, err := h.fs.URI(localFile.Path())
 	if err != nil {
 		return workspaceapi.URI{}, fmt.Errorf("workspaceapi.URI: %s", err)
 	}
@@ -1639,7 +1664,7 @@ func (h *lspEditorHandler) browseLocations(
 	renderFile := func(l protocol.Location) {
 		uri := l.URI.SpanURI()
 		// Open assumes path in current workspace
-		f, oerr := h.wp.Open(uri.Filename(), os.O_RDONLY, 0)
+		f, oerr := h.fs.Open(uri.Filename(), os.O_RDONLY, 0)
 		if oerr != nil {
 			log.Errorf("could not render preview file: Open: %v", oerr)
 			return
@@ -1956,31 +1981,51 @@ func (h *lspEditorHandler) Handle(
 
 func (h *lspEditorHandler) Close() error {
 	h.mu.Lock()
-	defer h.mu.Unlock()
-	defer close(h.evChan)
 	h.exit = true
+	close(h.evChan)
+	h.mu.Unlock()
 
-	var errs []string
+	log.Debugf("shutting down %d servers", len(h.servers))
+
+	var wg sync.WaitGroup
+	var i int
+	errors := make([]error, len(h.servers))
+	wg.Add(len(h.servers))
 	for _, server := range h.servers {
-		ctx, cancel := context.WithTimeout(context.Background(), h.disconnectTimeout)
+		go func(ret *error, server execServer) {
+			defer wg.Done()
+			ctx, cancel := context.WithTimeout(context.Background(), h.disconnectTimeout)
+			defer cancel()
+			err := server.srv.Shutdown(ctx)
+			if err != nil {
+				*ret = multierr.Append(*ret, fmt.Errorf("shutdown: %v", err))
+			}
+			if err := h.exec.Signal(server.pid, syscall.SIGKILL); err != nil {
+				*ret = multierr.Append(*ret, fmt.Errorf("signal: %v", err))
+			}
+			for _, closer := range server.closers {
+				if err := closer.Close(); err != nil {
+					*ret = multierr.Append(*ret, fmt.Errorf("pipe close: %v", err))
+				}
+			}
+		}(&errors[i], server)
+		i++
+	}
+	wg.Wait()
 
-		h.mu.Unlock()
-		err := server.srv.Shutdown(ctx)
-		h.mu.Lock()
-
-		cancel()
+	var ret error
+	for _, err := range errors {
 		if err != nil {
-			errs = append(errs, err.Error())
-		}
-		err = h.wp.Signal(server.cmd, syscall.SIGTERM)
-		if err != nil {
-			errs = append(errs, err.Error())
+			ret = multierr.Append(ret, err)
 		}
 	}
-
-	if len(errs) != 0 {
-		return errors.New(strings.Join(errs, "; "))
+	level := log.InfoLevel
+	if ret != nil {
+		level = log.ErrorLevel
 	}
 
-	return nil
+	log.WithFields(log.Fields{}).
+		Logf(level, "shut down servers: %d: %v", len(h.servers), ret)
+
+	return ret
 }

@@ -1,9 +1,9 @@
 package ssh
 
 import (
+	"context"
 	"errors"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"os"
 	"os/user"
@@ -37,13 +37,14 @@ var sigMap = map[syscall.Signal]ssh.Signal{
 // used to adapt ssh.Client to sshClient
 type stdRemote struct {
 	client *ssh.Client
+	quitCh chan struct{}
 }
 
 // used to adapt ssh.Session to Executor
 type goSshSession struct {
-	cmd  string
-	args []string
-	ses  *ssh.Session
+	ses    *ssh.Session
+	quitCh chan struct{}
+	pid    int
 }
 
 func newStdRemote(cfg sshConfig, uri workspaceapi.URI) (
@@ -58,9 +59,14 @@ func newStdRemote(cfg sshConfig, uri workspaceapi.URI) (
 		return nil, err
 	}
 
-	hostkeyCallback, err := defaultHostkeyCallback()
-	if err != nil {
-		return nil, err
+	var hostkeyCallback ssh.HostKeyCallback
+	if cfg.insecure {
+		hostkeyCallback = ssh.InsecureIgnoreHostKey()
+	} else {
+		hostkeyCallback, err = defaultHostkeyCallback()
+		if err != nil {
+			return nil, err
+		}
 	}
 	conf := &ssh.ClientConfig{
 		User:            username,
@@ -74,25 +80,44 @@ func newStdRemote(cfg sshConfig, uri workspaceapi.URI) (
 	if err != nil {
 		return nil, fmt.Errorf("failed to ssh dial: %s", err)
 	}
-	return stdRemote{conn}, nil
+	ret := &stdRemote{client: conn, quitCh: make(chan struct{})}
+	return ret, nil
 }
 
-func (s *goSshSession) Command(name string, arg ...string) (workspaceapi.Pid, error) {
-	if name == "" {
-		return 0, errors.New("invalid empty command")
-	}
-	if s.cmd != "" {
+func (s *goSshSession) StartCommand(ctx context.Context, cmd workspaceapi.Cmd) (
+	workspaceapi.Pid, error,
+) {
+	if s.pid != 0 {
 		panic("Command called more than once on an ssh session")
 	}
-	s.cmd, s.args = name, arg
-	return workspaceapi.Pid(0), nil
-}
-
-func (s *goSshSession) Start(workspaceapi.Pid) error {
-	if s.cmd == "" {
-		return errors.New("invalid ssh.Session Executor state: must call Command first")
+	if cmd.Path == "" {
+		return 0, errors.New("invalid empty command")
 	}
-	return s.ses.Start(fmt.Sprintf("%s %s", s.cmd, strings.Join(s.args, " ")))
+
+	s.pid++
+
+	s.ses.Stdout = cmd.Stdout
+	s.ses.Stderr = cmd.Stderr
+	s.ses.Stdin = cmd.Stdin
+
+	err := s.ses.Start(
+		fmt.Sprintf("%s %s", cmd.Path, strings.Join(cmd.Args, " ")))
+	if err != nil {
+		return 0, err
+	}
+
+	go func() {
+		err := s.ses.Wait()
+		if cmd.Watcher != nil && cmd.Watcher.Watch() != nil {
+			select {
+			case <-ctx.Done():
+			case <-s.quitCh:
+			case cmd.Watcher.Watch() <- err:
+			}
+		}
+	}()
+
+	return workspaceapi.Pid(s.pid), nil
 }
 
 func (s *goSshSession) Signal(_ workspaceapi.Pid, sig syscall.Signal) error {
@@ -103,43 +128,21 @@ func (s *goSshSession) Signal(_ workspaceapi.Pid, sig syscall.Signal) error {
 	return s.ses.Signal(signal)
 }
 
-func (s *goSshSession) StderrPipe(workspaceapi.Pid) (io.ReadCloser, error) {
-	r, err := s.ses.StderrPipe()
-	return io.NopCloser(r), err
-}
-
-type nopWriteCloser struct {
-	io.Writer
-}
-
-func (n nopWriteCloser) Close() error {
-	return nil
-}
-
-func (s *goSshSession) StdinPipe(workspaceapi.Pid) (io.WriteCloser, error) {
-	r, err := s.ses.StdinPipe()
-	return nopWriteCloser{r}, err
-}
-
-func (s *goSshSession) StdoutPipe(workspaceapi.Pid) (io.ReadCloser, error) {
-	r, err := s.ses.StdoutPipe()
-	return io.NopCloser(r), err
-}
-
-func (s *goSshSession) Wait(workspaceapi.Pid) error {
-	return s.ses.Wait()
-}
-
 func (r *goSshSession) Close() error {
 	return r.ses.Close()
 }
 
-func (r stdRemote) NewSession() (workspace.Executor, error) {
+func (r *stdRemote) NewSession() (workspace.Executor, error) {
 	ses, err := r.client.NewSession()
-	return &goSshSession{ses: ses}, err
+	if err != nil {
+		return nil, err
+	}
+	ret := &goSshSession{ses: ses, quitCh: r.quitCh}
+	return ret, nil
 }
 
-func (r stdRemote) Close() error {
+func (r *stdRemote) Close() error {
+	close(r.quitCh)
 	return r.client.Close()
 }
 

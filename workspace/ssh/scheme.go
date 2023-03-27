@@ -1,23 +1,25 @@
 package ssh
 
 import (
+	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"net"
-	os "os"
+	"os"
 	"os/user"
 	"path/filepath"
 	"strings"
 	"time"
 
+	bluectx "github.com/ernestrc/blue/context"
 	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
-	"unstable.build/go-tui/config"
-
 	workspaceapi "unstable.build/go-tui/api/workspace"
+	"unstable.build/go-tui/config"
 	"unstable.build/go-tui/workspace"
 	workspacepb "unstable.build/go-tui/workspace/rpc"
 )
@@ -32,8 +34,10 @@ const (
 
 // New returns a workspace.Scheme capable of managing
 // files over an ssh connection.
-func New(cfg config.Config, uri workspaceapi.URI) (workspace.Scheme, error) {
-	return newScheme(cfg, uri)
+func New(
+	ctx context.Context, cfg config.Config, uri workspaceapi.URI,
+) (workspace.Scheme, error) {
+	return newScheme(ctx, cfg, uri)
 }
 
 type remote interface {
@@ -51,12 +55,17 @@ type scheme struct {
 	getUser         func() (*user.User, error)
 	remoteFn        func(sshConfig, workspaceapi.URI) (remote, error)
 	connectSchemeFn connectSchemeFn
+	ctx             context.Context
+	cancelCtx       func()
 
 	workspace.Scheme
 }
 
-func newScheme(ccfg config.Config, uri workspaceapi.URI) (*scheme, error) {
+func newScheme(
+	ctx context.Context, ccfg config.Config, uri workspaceapi.URI,
+) (*scheme, error) {
 	ret := new(scheme)
+	ret.ctx, ret.cancelCtx = context.WithCancel(context.Background())
 
 	cc, err := fromConfig(ccfg)
 	if err != nil {
@@ -67,14 +76,17 @@ func newScheme(ccfg config.Config, uri workspaceapi.URI) (*scheme, error) {
 	if cc.command == "" {
 		ret.remoteFn = newStdRemote
 	} else {
-		ret.remoteFn = newProcRemote
+		ret.remoteFn = func(cfg sshConfig, uri workspaceapi.URI) (remote, error) {
+			return newProcRemote(ctx, cfg, uri)
+		}
 	}
 
 	ret.connectSchemeFn = ret.connectScheme
-	err = ret.init(cc, uri, (workspace.Scheme).Stat)
+	err = ret.init(ctx, cc, uri, (workspace.Scheme).Stat)
 	if err != nil {
 		return nil, err
 	}
+
 	return ret, nil
 }
 
@@ -116,46 +128,67 @@ func parseWorkspaceURI(u workspaceapi.URI, getUser func() (*user.User, error)) (
 	return
 }
 
-func (s *scheme) runAndWait(remote remote, cmd string, args ...string) (string, bool, error) {
+func (s *scheme) runAndWait(
+	ctx context.Context,
+	remote remote, cmdStr string, args ...string,
+) (string, bool, error) {
 	ses, err := remote.NewSession()
 	if err != nil {
-		return "", false, err
+		return "", false, fmt.Errorf("new session: %v", err)
 	}
 
 	if s.cfg.shell != "" {
-		args = append([]string{"-c", cmd}, args...)
-		cmd = s.cfg.shell
+		args = append([]string{"-c", cmdStr}, args...)
+		cmdStr = s.cfg.shell
 	}
-	pid, err := ses.Command(cmd, args...)
+	var stderr, stdout bytes.Buffer
+	ch := make(chan error)
+	cmd := workspaceapi.Cmd{
+		Path:    cmdStr,
+		Args:    args,
+		Stderr:  &stderr,
+		Stdout:  &stdout,
+		Watcher: workspaceapi.ChanWatcher(ch),
+	}
+	_, err = ses.StartCommand(s.ctx, cmd)
 	if err != nil {
-		return "", false, err
+		return "", false, fmt.Errorf("start command: %v", err)
 	}
 
-	err = ses.Start(pid)
+	err = <-ch
 	if err != nil {
-		return "", false, err
-	}
-
-	err = ses.Wait(pid)
-	if err != nil {
-		if procRemote, ok := remote.(*procRemote); ok {
-			cmd, args := procRemote.CommandString(cmd, args...)
-			return fmt.Sprintf("%s %s", cmd, strings.Join(args, " ")), false, nil
+		if stdout.Len() != 0 {
+			err = fmt.Errorf("stdout: %v: %s", err, stdout.String())
 		}
-		return "", false, nil
+		if stderr.Len() != 0 {
+			err = fmt.Errorf("stderr: %v: %s", err, stderr.String())
+		}
+		if procRemote, ok := remote.(*procRemote); ok {
+			cmd, args := procRemote.CommandString(cmdStr, args...)
+			return fmt.Sprintf("%s %s", cmd, strings.Join(args, " ")), false, err
+		}
+		return "", false, err
 	}
 
+	err = ses.Close()
+	// stdlib ssh session returns io.EOF if closing after command returned
+	if err != nil && err != io.EOF {
+		err = fmt.Errorf("close session: %v", err)
+	}
 	return "", true, nil
 }
 
-func (s *scheme) whichCommand(remote remote, cmd string) error {
-	cmdAndArgs, avail, err := s.runAndWait(remote, "which", cmd)
+func (s *scheme) whichCommand(ctx context.Context, remote remote, cmd string) error {
+	cmdAndArgs, avail, err := s.runAndWait(ctx, remote, "which", cmd)
 	if err != nil {
-		return fmt.Errorf("could not check if %s executable is in PATH: %w", cmd, err)
+		err = fmt.Errorf("could not check if %s executable is in PATH: %w", cmd, err)
 	}
 	if !avail {
 		errStr := "%q executable was not found on remote. " +
 			"Make sure it's installed and available via $PATH to a non-interactive shell. "
+		if err != nil {
+			errStr = fmt.Sprintf("%s %v. ", errStr, err)
+		}
 		if cmdAndArgs != "" {
 			return fmt.Errorf(errStr+debugPathError, cmd, cmdAndArgs)
 		}
@@ -164,8 +197,10 @@ func (s *scheme) whichCommand(remote remote, cmd string) error {
 	return nil
 }
 
-func (s *scheme) workspaceExists(remote remote, uri workspaceapi.URI) error {
-	cmdAndArgs, ok, err := s.runAndWait(remote, "ls", uri.Path())
+func (s *scheme) workspaceExists(
+	ctx context.Context, remote remote, uri workspaceapi.URI,
+) error {
+	cmdAndArgs, ok, err := s.runAndWait(ctx, remote, "ls", uri.Path())
 	if err != nil {
 		return fmt.Errorf("could not check if workspace path %q exists: %w", uri.Path(), err)
 	}
@@ -176,7 +211,9 @@ func (s *scheme) workspaceExists(remote remote, uri workspaceapi.URI) error {
 	return nil
 }
 
-func (s *scheme) connectScheme(uri workspaceapi.URI, closeHook func(error)) (workspace.Scheme, error) {
+func (s *scheme) connectScheme(
+	ctx context.Context, uri workspaceapi.URI, closeHook func(error),
+) (workspace.Scheme, error) {
 	const six = "six"
 
 	sshPath := s.basePath
@@ -190,14 +227,14 @@ func (s *scheme) connectScheme(uri workspaceapi.URI, closeHook func(error)) (wor
 	}
 
 	// NOTE: the next checks are to avoid error messages getting lost when
-	// trying to connect so we can provide a better error messages
+	// trying to connect so we can provide better error messages
 
-	err = s.whichCommand(remote, six)
+	err = s.whichCommand(ctx, remote, six)
 	if err != nil {
 		return nil, err
 	}
 
-	err = s.workspaceExists(remote, uri)
+	err = s.workspaceExists(ctx, remote, uri)
 	if err != nil {
 		return nil, err
 	}
@@ -212,39 +249,49 @@ func (s *scheme) connectScheme(uri workspaceapi.URI, closeHook func(error)) (wor
 		extraArgs = []string{"-p", "-o", "six-workspace-server.log"}
 	}
 
-	cmd := six
+	cmdStr := six
 	args := append([]string{"-x", sshPath}, extraArgs...)
 	if s.cfg.shell != "" {
-		args = append([]string{"-c", cmd}, args...)
-		cmd = s.cfg.shell
+		args = append([]string{"-c", cmdStr}, args...)
+		cmdStr = s.cfg.shell
+	}
+	ch := make(chan error)
+	cmd := workspaceapi.Cmd{
+		Path:    cmdStr,
+		Args:    args,
+		Watcher: workspaceapi.ChanWatcher(ch),
 	}
 
-	pid, err := ses.Command(cmd, args...)
+	stdoutRead, stderrRead, stdinWrite, closers, err := s.setPipes(&cmd)
+	if err != nil {
+		return nil, fmt.Errorf("could not create pipes: %s", err)
+	}
+
+	// context of command should mirror the lifcycle of this scheme
+	// not the ctx passed to this constructor, which could have
+	// a connection timeout (i.e. retry ctx)
+	_, err = ses.StartCommand(s.ctx, cmd)
 	if err != nil {
 		return nil, fmt.Errorf("could not create command: %s", err)
 	}
 
-	stdout, stderr, stdin, err := startProc(ses, pid)
-	if err != nil {
-		return nil, err
-	}
-
 	conn, err := grpc.Dial("", grpc.WithInsecure(),
 		grpc.WithDialer(func(addr string, timeout time.Duration) (net.Conn, error) {
-			return newStdConn(stdout, stdin, func() {
-				closeHook(errors.New("ssh connection closed unexpectedly"))
-			}), nil
+			return newStdConn(
+				log.StandardLogger(), stdoutRead, stdinWrite, false, /* stdio */
+				func() {
+					closeHook(errors.New("ssh connection closed unexpectedly"))
+				})
 		}))
 	if err != nil {
 		return nil, err
 	}
 
 	go func() {
-		err := ses.Wait(pid)
 		defer remote.Close()
-		defer ses.Close()
+		err := <-ch
 		if err != nil {
-			stderrStr, rerr := ioutil.ReadAll(stderr)
+			stderrStr, rerr := ioutil.ReadAll(stderrRead)
 			if rerr != nil {
 				err = fmt.Errorf("could not read error from stderr but there was"+
 					"an error executing remote six server over SSH: %s", err)
@@ -253,13 +300,43 @@ func (s *scheme) connectScheme(uri workspaceapi.URI, closeHook func(error)) (wor
 			}
 		}
 		closeHook(err)
+		for _, closer := range closers {
+			_ = closer.Close()
+		}
 	}()
 
-	return workspacepb.NewScheme(conn), nil
+	return workspacepb.NewClient(conn), nil
 }
 
-func (s *scheme) init(cc sshConfig, uri workspaceapi.URI,
-	statWorkspaceDir func(workspace.Scheme, string) (os.FileInfo, error)) (err error) {
+func (s *scheme) setPipes(
+	cmd *workspaceapi.Cmd,
+) (stdout, stderr, stdin *os.File, closers []io.Closer, err error) {
+	stdoutRead, stdoutWrite, err := os.Pipe()
+	if err != nil {
+		return nil, nil, nil, nil, fmt.Errorf("pipe: %v", err)
+	}
+	stderrRead, stderrWrite, err := os.Pipe()
+	if err != nil {
+		return nil, nil, nil, nil, fmt.Errorf("pipe: %v", err)
+	}
+	stdinRead, stdinWrite, err := os.Pipe()
+	if err != nil {
+		return nil, nil, nil, nil, fmt.Errorf("pipe: %v", err)
+	}
+	cmd.Stdout = stdoutWrite
+	cmd.Stderr = stderrWrite
+	cmd.Stdin = stdinRead
+	closers = []io.Closer{
+		stdoutWrite, stderrWrite, stdinWrite,
+		stdoutRead, stderrRead, stdinRead,
+	}
+	return stdoutRead, stderrRead, stdinWrite, closers, nil
+}
+
+func (s *scheme) init(
+	ctx context.Context, cc sshConfig, uri workspaceapi.URI,
+	statWorkspaceDir func(workspace.Scheme, string) (os.FileInfo, error),
+) (err error) {
 	if uri.Scheme() != Scheme {
 		return errors.New("invalid non-ssh scheme")
 	}
@@ -276,7 +353,7 @@ func (s *scheme) init(cc sshConfig, uri workspaceapi.URI,
 		return fmt.Errorf("URI from path %s: %v", uri.Path(), err)
 	}
 
-	s.Scheme = newRemoteScheme(s.connectSchemeFn, uri)
+	s.Scheme = newRemoteScheme(ctx, s.connectSchemeFn, uri)
 	fi, err := statWorkspaceDir(s.Scheme, uri.Path())
 	if err != nil {
 		return fmt.Errorf("Stat workspace: %v", err)
@@ -290,13 +367,13 @@ func (s *scheme) init(cc sshConfig, uri workspaceapi.URI,
 }
 
 // override to provide user with an error message that guides to a solution
-func (s *scheme) Start(pid workspaceapi.Pid) error {
-	err := s.Scheme.Start(pid)
+func (s *scheme) StartCommand(ctx context.Context, cmd workspaceapi.Cmd) (workspaceapi.Pid, error) {
+	pid, err := s.Scheme.StartCommand(ctx, cmd)
 	if err != nil && strings.Contains(err.Error(), "executable file not found in $PATH") {
-		return fmt.Errorf("%w. Make sure that $PATH is configured "+
-			"even for non-interactive shells (i.e. .bashrc, .profile, etc.)", err)
+		return 0, fmt.Errorf("%w. Make sure that $PATH is configured "+
+			"even for non-interactive shells", err)
 	}
-	return err
+	return pid, err
 }
 
 func (s *scheme) Open(path string, flag int, perm os.FileMode) (workspaceapi.File, *workspaceapi.Error) {
@@ -323,8 +400,8 @@ func (s *scheme) ReadLink(path string) (string, error) {
 	return s.Scheme.ReadLink(path)
 }
 
-func (s *scheme) NewPty() (workspaceapi.Pty, error) {
-	return s.Scheme.NewPty()
+func (s *scheme) NewPty(ctx context.Context) (workspaceapi.Pty, error) {
+	return s.Scheme.NewPty(bluectx.First(s.ctx, ctx))
 }
 
 func (s *scheme) SetPtySize(pty workspaceapi.Pty, width, height int) error {
@@ -351,6 +428,7 @@ func (s *scheme) Close() (ret error) {
 	if err := s.Scheme.Close(); err != nil {
 		ret = multierr.Append(ret, err)
 	}
+	s.cancelCtx()
 	return ret
 }
 
@@ -360,33 +438,4 @@ func (s *scheme) expandPath(path string) (string, error) {
 	}, func() (string, error) {
 		return s.basePath, nil
 	})
-}
-
-func startProc(exec workspace.Executor, pid workspaceapi.Pid) (
-	stdout io.ReadCloser, stderr io.ReadCloser, stdin io.WriteCloser, err error,
-) {
-	stdout, err = exec.StdoutPipe(pid)
-	if err != nil {
-		err = fmt.Errorf("could not get stdout pipe: %s", err)
-		return
-	}
-
-	stdin, err = exec.StdinPipe(pid)
-	if err != nil {
-		err = fmt.Errorf("could not get stdin pipe: %s", err)
-		return
-	}
-
-	stderr, err = exec.StderrPipe(pid)
-	if err != nil {
-		err = fmt.Errorf("could not get stderr pipe: %s", err)
-		return
-	}
-
-	err = exec.Start(pid)
-	if err != nil {
-		err = fmt.Errorf("could not start remote command: %s", err)
-		return
-	}
-	return
 }

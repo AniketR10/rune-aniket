@@ -4,7 +4,6 @@ import (
 	"io"
 	"sync"
 
-	"google.golang.org/grpc"
 	"unstable.build/go-tui/config"
 	configpb "unstable.build/go-tui/config/rpc"
 	"unstable.build/go-tui/proto"
@@ -26,7 +25,7 @@ func newConfigResourceServer(cfg config.Config) *configResourceServer {
 }
 
 func (s *configResourceServer) Register(
-	pluginID string, grantor Grantor, registrar grpc.ServiceRegistrar,
+	pluginID string, grantor Grantor, registrar proto.ServiceRegistrar,
 	broker proto.MuxBroker, lock sync.Locker,
 ) (io.Closer, error) {
 	server := configpb.NewServer(s.cfg, lock)

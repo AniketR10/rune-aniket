@@ -8,10 +8,10 @@ import (
 
 // Pid is an Executor's command identifier. It doesn't necessarily translate
 // to an os.Process.Pid.
-type Pid int32
+type Pid int
 
-// Workspace abstracts the public-facing API of a workspace.
-type Workspace interface {
+// FileSystem abstracts the public facing API of a workspace file system.
+type FileSystem interface {
 	URI(path string) (URI, error)
 
 	// Open opens a file at path with the given flag and mode.
@@ -25,46 +25,51 @@ type Workspace interface {
 
 	// ReadDir reads the named directory, returning all its directory entries.
 	ReadDir(name string) ([]os.DirEntry, error)
+}
 
-	Terminal
+// Cmd represents an external command being prepared to run. See exec.Cmd for
+// more details. Stdin, Stderr and Stdout, if set, will have their corresponding
+type Cmd struct {
+	Path    string
+	Args    []string
+	Env     []string
+	Stdin   io.Reader
+	Stdout  io.Writer
+	Stderr  io.Writer
+	Watcher Watcher
 
-	Executor
+	// SysProcAttr is ignored if passed from a plugin.
+	SysProcAttr *syscall.SysProcAttr
+}
+
+// Watcher adds the ability for wait a processes started by Cmd
+// and collect any I/O errors or non-zero exit code.
+type Watcher interface {
+	// Watch returns a channel that can be used to
+	// wait for the command to exit and waits for any copying to stdin or
+	// copying from stdout or stderr to complete.
+
+	// The returned error is nil if the command runs, has no problems copying
+	// stdin, stdout, and stderr, and exits with a zero exit status.
+	Watch() chan error
 }
 
 // Executor is the public facing API of a workspace's command execution.
 type Executor interface {
-	// Command returns the Pid to execute the named program with the given
-	// arguments. For more details see exec.Command.
-	Command(name string, arg ...string) (Pid, error)
-	// Start starts the specified command but does not wait for it to complete.
-	// The Wait method will return an error if there's any while running command
-	// and release associated resources.
-	Start(Pid) error
+	// Start starts the given cmd and returns the Pid of the underlying
+	// process.
+	Start(Cmd) (Pid, error)
+
 	// Signal sends a signal to the running process.
 	Signal(Pid, syscall.Signal) error
-	// StderrPipe returns a pipe that will be connected to the command's standard
-	// error when the command starts. See exec.Cmd.StderrPipe for more details.
-	StderrPipe(Pid) (io.ReadCloser, error)
-	// StdinPipe returns a pipe that will be connected to the command's standard
-	// input when the command starts. See exec.Cmd.StdinPipe for more details.
-	StdinPipe(Pid) (io.WriteCloser, error)
-	// StdoutPipe returns a pipe that will be connected to the command's standard
-	// output when the command starts. See exec.Cmd.StdoutPipe for more details.
-	StdoutPipe(Pid) (io.ReadCloser, error)
-	// Wait waits for the command to exit and waits for any copying to stdin or
-	// opying from stdout or stderr to complete.
-	// The command must have been started by Start.
-	// The returned error is nil if the command runs, has no problems copying
-	// stdin, stdout, and stderr, and exits with a zero exit status.
-	Wait(Pid) error
 
 	io.Closer
 }
 
 // Terminal abstracts the ability to manage pseudoterminals.
 type Terminal interface {
-	// NewPty creates a new pseudoterminal.
-	NewPty() (Pty, error)
+	// StartPty creates a new pseudoterminal.
+	StartPty() (Pty, error)
 
 	// SetPtySize sets the width and height in columns and rows of
 	// a pseudoterminal.
@@ -87,6 +92,7 @@ type File interface {
 	Stat() (os.FileInfo, error)
 	Sync() error
 	Truncate(size int64) error
+	Fd() uintptr
 
 	io.Seeker
 	io.Reader

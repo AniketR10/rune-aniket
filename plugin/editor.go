@@ -4,7 +4,6 @@ import (
 	"io"
 	"sync"
 
-	"google.golang.org/grpc"
 	textplugin "unstable.build/go-tui/api/text/plugin"
 	"unstable.build/go-tui/proto"
 	"unstable.build/go-tui/text"
@@ -22,10 +21,10 @@ func newEditorResourceServer(b text.Editor) *editorResourceServer {
 }
 
 func (s *editorResourceServer) Register(
-	pluginID string, grantor Grantor, registrar grpc.ServiceRegistrar,
+	pluginID string, grantor Grantor, registrar proto.ServiceRegistrar,
 	broker proto.MuxBroker, lock sync.Locker,
 ) (io.Closer, error) {
-	browser := grantorTextBrowser(pluginID, grantor)
+	browser := grantorTextBrowser(pluginID, grantor, registrar, broker, lock)
 	server := textpb.NewServer(broker, s.b, lock, browser)
 	textpb.RegisterEditorServer(registrar, interruptEditorServer(server, interrupt))
 	return server, nil

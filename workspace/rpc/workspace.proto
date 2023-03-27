@@ -19,11 +19,11 @@ message OpenRequest {
 }
 
 message OpenResponse {
-	int32 handler_id = 1;
 	bool is_exist_err = 2;
 	bool is_not_exist_err = 3;
 	bool is_permission_err = 4;
 	string filename = 5;
+	uint32 fd = 6;
 }
 
 message RemoveRequest {
@@ -65,31 +65,35 @@ message StatResponse {
 
 
 message SyncRequest {
-	int32 handler_id = 1;
+	string filename = 1;
+	uint32 fd = 2;
 }
 
 message SyncResponse {
 }
 
 message TruncateRequest {
-	int32 handler_id = 1;
-	int64 size = 2;
+	string filename = 1;
+	uint32 fd = 2;
+	int64 size = 3;
 }
 
 message TruncateResponse {
 }
 
 message CloseFileRequest {
-	int32 handler_id = 1;
+	string filename = 1;
+	uint32 fd = 2;
 }
 
 message CloseFileResponse {
 }
 
 message SeekRequest {
-	int32 handler_id = 1;
-	int64 offset = 2;
-	int64 whence = 3;
+	string filename = 1;
+	uint32 fd = 2;
+	int64 offset = 3;
+	int64 whence = 4;
 }
 
 message SeekResponse {
@@ -97,8 +101,9 @@ message SeekResponse {
 }
 
 message ReadRequest {
-	int32 handler_id = 1;
-	int64 n = 2;
+	string filename = 1;
+	uint32 fd = 2;
+	int64 n = 3;
 }
 
 message ReadResponse {
@@ -108,8 +113,9 @@ message ReadResponse {
 }
 
 message WriteRequest {
-	int32 handler_id = 1;
-	bytes data = 2;
+	string filename = 1;
+	uint32 fd = 2;
+	bytes data = 3;
 }
 
 message WriteResponse {
@@ -125,43 +131,21 @@ message ReadLinkResponse {
 	string filename = 1;
 }
 
-message CommandRequest {
+message StartCommandRequest {
 	string name = 1;
 	repeated string args = 2;
-}
-
-message CommandResponse {
-	int32 pid = 1;
-}
-
-message StartRequest {
-	int32 pid = 1;
-}
-
-message StartResponse {
-}
-
-message WaitRequest {
-	int32 pid = 1;
-}
-
-message WaitResponse {
+	repeated string env = 3;
+	bool stdin = 4;
+	bool stdout = 5;
+	bool stderr = 6;
 }
 
 message SignalRequest {
-	int32 pid = 1;
+	int64 pid = 1;
 	int32 sig = 2;
 }
 
 message SignalResponse {
-}
-
-message StdioPipeRequest {
-	int32 pid = 1;
-}
-
-message StdioPipeResponse {
-	int32 handler_id = 1;
 }
 
 message URIRequest {
@@ -193,17 +177,19 @@ message NewPtyRequest {
 }
 
 message NewPtyResponse {
-	int32 pid = 1;
-	int32 master = 2;
-	string slave = 3;
+	int64 pid = 1;
+	string master = 2;
+	uint32 master_fd = 3;
+	string slave = 4;
 }
 
 message SetPtySizeRequest {
-	int32 pid = 1;
-	int32 master = 2;
-	string slave = 3;
-	int32 height = 4;
-	int32 width = 5;
+	int64 pid = 1;
+	string master = 2;
+	uint32 master_fd = 3;
+	string slave = 4;
+	int32 height = 5;
+	int32 width = 6;
 }
 
 message SetPtySizeResponse {
@@ -226,81 +212,58 @@ message ReadDirResponse {
 	repeated DirEntry path = 1;
 }
 
-service Workspace {
-	rpc URI(URIRequest) returns (URIResponse);
-	rpc Open(OpenRequest) returns (OpenResponse);
-	rpc Remove(RemoveRequest) returns (RemoveResponse);
-	rpc ReadDir(ReadDirRequest) returns (ReadDirResponse);
-	
-	// Executor Service
-	rpc Command(CommandRequest) returns (CommandResponse);
-	rpc Start(StartRequest) returns (StartResponse);
-	rpc Wait(WaitRequest) returns (WaitResponse);
-	rpc Signal(SignalRequest) returns (SignalResponse);
-	rpc StderrPipe(StdioPipeRequest) returns (StdioPipeResponse);
-	rpc StdoutPipe(StdioPipeRequest) returns (StdioPipeResponse);
-	rpc StdinPipe(StdioPipeRequest) returns (StdioPipeResponse);
+message CommandPayload {
+	message Done {
+		string exit_error = 1;
+	}
+	message Started {
+		int64 pid = 1;
+	}
+	message IO {
+		enum Type {
+			TypeStdin = 0;
+			TypeStdout = 1;
+			TypeStderr = 2;
+		}
+		bytes data = 1;
+		Type type = 2;
+	}
+	enum Type {
+		TypeStart = 0;
+		TypeDone = 1;
+		TypeStarted = 2;
+		TypeIO = 3;
+		TypeError = 4;
+	}
+	Type type = 1;
+	StartCommandRequest start = 2;
+	Done done = 3;
+	Started started = 4;
+	IO io = 5;
+	string error = 6;
+}
+
+service Terminal {
 	rpc NewPty(NewPtyRequest) returns (NewPtyResponse);
 	rpc SetPtySize(SetPtySizeRequest) returns (SetPtySizeResponse);
-
-	// operate workspaceapi.File
-	rpc Sync(SyncRequest) returns (SyncResponse);
-	rpc Truncate(TruncateRequest) returns (TruncateResponse);
-	rpc Seek(SeekRequest) returns (SeekResponse);
-	rpc Close(CloseFileRequest) returns (CloseFileResponse);
-	rpc Read(ReadRequest) returns (ReadResponse);
-	rpc Write(WriteRequest) returns (WriteResponse);
-	rpc Stat(StatRequest) returns (StatResponse);
 }
 
 service Scheme {
 	rpc URI(URIRequest) returns (URIResponse);
-
-	// Scheme API
 	rpc Open(OpenRequest) returns (OpenResponse);
 	rpc Remove(RemoveRequest) returns (RemoveResponse);
 	rpc Rename(RenameRequest) returns (RenameResponse);
 	rpc Stat(StatRequest) returns (StatResponse);
 	rpc ReadLink(ReadLinkRequest) returns (ReadLinkResponse);
 	rpc ReadDir(ReadDirRequest) returns (ReadDirResponse);
-
-	// Scheme API, handler_id based
-	rpc Sync(SyncRequest) returns (SyncResponse);
-	rpc Truncate(TruncateRequest) returns (TruncateResponse);
-	rpc Seek(SeekRequest) returns (SeekResponse);
-	rpc Close(CloseFileRequest) returns (CloseFileResponse);
-	rpc Read(ReadRequest) returns (ReadResponse);
-	rpc Write(WriteRequest) returns (WriteResponse);
-	
-	// Executor Service
-	rpc Command(CommandRequest) returns (CommandResponse);
-	rpc Start(StartRequest) returns (StartResponse);
-	rpc Wait(WaitRequest) returns (WaitResponse);
-	rpc Signal(SignalRequest) returns (SignalResponse);
-	rpc StderrPipe(StdioPipeRequest) returns (StdioPipeResponse);
-	rpc StdoutPipe(StdioPipeRequest) returns (StdioPipeResponse);
-	rpc StdinPipe(StdioPipeRequest) returns (StdioPipeResponse);
-
-	rpc NewPty(NewPtyRequest) returns (NewPtyResponse);
-	rpc SetPtySize(SetPtySizeRequest) returns (SetPtySizeResponse);
 }
 
-// cannot fully embed and so we duplicate to make
-// sure we can implement an executor client that
-// shares a common client interface
 service Executor {
-	rpc Command(CommandRequest) returns (CommandResponse);
-	rpc Start(StartRequest) returns (StartResponse);
-	rpc Wait(WaitRequest) returns (WaitResponse);
+	rpc StartCommand(stream CommandPayload) returns (stream CommandPayload) {};
 	rpc Signal(SignalRequest) returns (SignalResponse);
-	rpc StderrPipe(StdioPipeRequest) returns (StdioPipeResponse);
-	rpc StdoutPipe(StdioPipeRequest) returns (StdioPipeResponse);
-	rpc StdinPipe(StdioPipeRequest) returns (StdioPipeResponse);
+}
 
-	rpc NewPty(NewPtyRequest) returns (NewPtyResponse);
-	rpc SetPtySize(SetPtySizeRequest) returns (SetPtySizeResponse);
-
-	// to operate on master file
+service Files {
 	rpc Sync(SyncRequest) returns (SyncResponse);
 	rpc Truncate(TruncateRequest) returns (TruncateResponse);
 	rpc Seek(SeekRequest) returns (SeekResponse);

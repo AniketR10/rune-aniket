@@ -49,7 +49,7 @@ func TestReadLines(t *testing.T) {
 		t.Run(tcase.desc, func(t *testing.T) {
 			uri, err := workspaceapi.ParseURI("memory:///")
 			require.NoError(t, err)
-			scheme, err := NewMemoryScheme(config.NopConfig(), uri)
+			scheme, err := NewMemoryScheme(context.Background(), config.NopConfig(), uri)
 			require.NoError(t, err)
 			workspace := NewSchemeWorkspace(uri, scheme)
 

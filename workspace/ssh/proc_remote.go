@@ -1,12 +1,13 @@
 package ssh
 
 import (
+	"context"
 	"errors"
 	"fmt"
-	"io"
 	"strings"
 	"syscall"
 
+	bluectx "github.com/ernestrc/blue/context"
 	"github.com/ernestrc/go-multierror"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/config"
@@ -21,31 +22,38 @@ type procRemote struct {
 	cmd  string
 	args []string
 
-	executor workspace.Executor
-	sessions []*procSession
+	executor  workspace.Executor
+	sessions  []*procSession
+	ctx       context.Context
+	cancelCtx func()
 }
 
 type procSession struct {
 	sshCmd   string
 	sshArgs  []string
 	executor workspace.Executor
-	pids     map[workspaceapi.Pid]struct{}
+	ctx      context.Context
 }
 
-func newProcRemote(cfg sshConfig, uri workspaceapi.URI) (
+func newProcRemote(ctx context.Context, cfg sshConfig, uri workspaceapi.URI) (
 	remote, error,
 ) {
 	port := uri.Port()
+	cmd := cfg.command
 	if port == "" {
 		port = "22"
+	} else {
+		if !strings.Contains(cfg.command, "%p") {
+			return nil, fmt.Errorf("unable to set custom port: 'command' value is missing %%p")
+		}
+		cmd = strings.ReplaceAll(cfg.command, "%p", port)
 	}
-	cmd := strings.ReplaceAll(cfg.command, "%p", port)
 
-	userHost := uri.Host()
+	host := uri.Hostname()
 	if uri.User() != "" {
-		userHost = fmt.Sprintf("%s@%s", uri.User(), userHost)
+		host = fmt.Sprintf("%s@%s", uri.User(), host)
 	}
-	cmd = strings.ReplaceAll(cmd, "%h", userHost)
+	cmd = strings.ReplaceAll(cmd, "%h", host)
 
 	args := strings.Split(cmd, " ")
 
@@ -56,12 +64,14 @@ func newProcRemote(cfg sshConfig, uri workspaceapi.URI) (
 	}
 
 	// local because we are going to execute commands locally with command ssh sessions
-	localExecutor, err := workspace.NewFileScheme(config.NopConfig(), uri)
+	localExecutor, err := workspace.NewFileScheme(ctx, config.NopConfig(), uri)
 	if err != nil {
 		return nil, fmt.Errorf("could initialize local executor on URI %q: %s", uri.String(), err)
 	}
 
-	return &procRemote{executor: localExecutor, cmd: args[0], args: args[1:]}, nil
+	ret := &procRemote{executor: localExecutor, cmd: args[0], args: args[1:]}
+	ret.ctx, ret.cancelCtx = context.WithCancel(context.Background())
+	return ret, nil
 }
 
 func (m *procRemote) NewSession() (workspace.Executor, error) {
@@ -69,7 +79,7 @@ func (m *procRemote) NewSession() (workspace.Executor, error) {
 		sshCmd:   m.cmd,
 		sshArgs:  m.args,
 		executor: m.executor,
-		pids:     make(map[workspaceapi.Pid]struct{}),
+		ctx:      m.ctx,
 	}
 
 	m.sessions = append(m.sessions, ses)
@@ -77,6 +87,7 @@ func (m *procRemote) NewSession() (workspace.Executor, error) {
 }
 
 func (m *procRemote) Close() (ret error) {
+	m.cancelCtx()
 	for _, ses := range m.sessions {
 		if err := ses.Close(); err != nil {
 			ret = multierror.Append(ret, err)
@@ -105,52 +116,25 @@ func (s *procSession) CommandString(name string, arg ...string) (string, []strin
 	return name, arg
 }
 
-func (s *procSession) Command(name string, arg ...string) (workspaceapi.Pid, error) {
-	if name == "" {
+func (s *procSession) StartCommand(ctx context.Context, cmd workspaceapi.Cmd) (
+	workspaceapi.Pid, error,
+) {
+	if cmd.Path == "" {
 		return 0, errors.New("invalid empty command")
 	}
 
-	name, arg = s.CommandString(name, arg...)
-	pid, err := s.executor.Command(name, arg...)
+	cmd.Path, cmd.Args = s.CommandString(cmd.Path, cmd.Args...)
+	pid, err := s.executor.StartCommand(bluectx.First(s.ctx, ctx), cmd)
 	if err != nil {
 		return workspaceapi.Pid(0), fmt.Errorf("Failed to create ssh command: %s", err)
 	}
-	s.pids[pid] = struct{}{}
 	return pid, nil
-}
-
-func (s *procSession) Start(pid workspaceapi.Pid) error {
-	return s.executor.Start(pid)
 }
 
 func (s *procSession) Signal(pid workspaceapi.Pid, sig syscall.Signal) error {
 	return s.executor.Signal(pid, sig)
 }
 
-func (s *procSession) StderrPipe(pid workspaceapi.Pid) (io.ReadCloser, error) {
-	return s.executor.StderrPipe(pid)
-}
-
-func (s *procSession) StdinPipe(pid workspaceapi.Pid) (io.WriteCloser, error) {
-	return s.executor.StdinPipe(pid)
-}
-
-func (s *procSession) StdoutPipe(pid workspaceapi.Pid) (io.ReadCloser, error) {
-	return s.executor.StdoutPipe(pid)
-}
-
-func (s *procSession) Wait(pid workspaceapi.Pid) error {
-	err := s.executor.Wait(pid)
-	delete(s.pids, pid)
-	return err
-}
-
 func (s *procSession) Close() (ret error) {
-	for pid := range s.pids {
-		if err := s.executor.Signal(pid, syscall.SIGTERM); err != nil {
-			ret = multierror.Append(ret, err)
-		}
-	}
-	s.pids = nil
 	return ret
 }

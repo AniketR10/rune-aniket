@@ -1,15 +1,14 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
-	"io"
-	"io/ioutil"
+	"strings"
 	"sync/atomic"
 	"time"
 
-	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
 	browserapi "unstable.build/go-tui/api/browser"
 	browserplugin "unstable.build/go-tui/api/browser/plugin"
@@ -35,7 +34,7 @@ var (
 	sedHandlerPermissions = []plugin.Permission{
 		plugin.Permission(textplugin.PermissionEditor),
 		plugin.Permission(browserplugin.PermissionBrowserMessenger),
-		plugin.Permission(workspaceplugin.PermissionWorkspace),
+		plugin.Permission(workspaceplugin.PermissionExecute),
 	}
 )
 
@@ -60,8 +59,8 @@ func newSedHandler(
 	var err error
 	for _, grant := range grants {
 		switch grant.Permission {
-		case plugin.Permission(workspaceplugin.PermissionWorkspace):
-			ret.exec, err = workspaceplugin.Workspace(grant.Token, broker)
+		case plugin.Permission(workspaceplugin.PermissionExecute):
+			ret.exec, err = workspaceplugin.Executor(grant.Token, broker)
 		case plugin.Permission(browserplugin.PermissionBrowserMessenger):
 			ret.m, err = browserplugin.Messenger(grant.Token, broker)
 		}
@@ -75,49 +74,29 @@ func newSedHandler(
 
 func (h *sedEditorHandler) execSed(
 	command, content string,
-) (result string, err error) {
-	c, err := h.exec.Command("sed", command)
+) (result string, ret error) {
+	waitch := make(chan error)
+	var stdout, stderr bytes.Buffer
+	cmd := workspaceapi.Cmd{
+		Path:    "sed",
+		Args:    []string{command},
+		Stdin:   strings.NewReader(content),
+		Watcher: workspaceapi.ChanWatcher(waitch),
+		Stdout:  &stdout,
+		Stderr:  &stderr,
+	}
+	_, err := h.exec.Start(cmd)
 	if err != nil {
-		return "", fmt.Errorf("failed to create command: %v", err)
+		return "", fmt.Errorf("failed to start command: %v", err)
 	}
 
-	stdout, err := h.exec.StdoutPipe(c)
-	if err != nil {
-		return "", fmt.Errorf("failed to create stdout pipe: %v", err)
-	}
-
-	stdin, err := h.exec.StdinPipe(c)
-	if err != nil {
-		return "", fmt.Errorf("failed to create stdin pipe: %v", err)
-	}
-
-	stderr, err := h.exec.StderrPipe(c)
-	if err != nil {
-		return "", fmt.Errorf("failed to create stderr pipe: %v", err)
-	}
-
-	err = h.exec.Start(c)
-	if err != nil {
-		return "", fmt.Errorf("failed to start executable: %v", err)
-	}
-
-	_, ret := io.WriteString(stdin, content)
+	ret = <-waitch
+	result = stdout.String()
+	stderrContent := stderr.String()
 	if ret != nil {
-		ret = fmt.Errorf("failed to write to sed stdin: %v", ret)
+		ret = fmt.Errorf("sed: %v: stderr: %s", ret, stderrContent)
 	}
-
-	resultBytes, err := ioutil.ReadAll(stdout)
-	if err != nil {
-		ret = multierr.Append(ret, fmt.Errorf("failed to read from sed stdout: %v", err))
-	}
-
-	stderrContent, _ := ioutil.ReadAll(stderr)
-	err = h.exec.Wait(c)
-	if err != nil {
-		ret = multierr.Append(ret, fmt.Errorf("Wait: %v: %s", err, stderrContent))
-	}
-
-	return string(resultBytes), ret
+	return
 }
 
 func (h *sedEditorHandler) setMessage(msg string, args ...interface{}) {

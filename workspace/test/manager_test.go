@@ -1,6 +1,7 @@
 package test
 
 import (
+	"context"
 	"errors"
 	"testing"
 
@@ -19,6 +20,7 @@ func parseURI(t *testing.T, uriStr string) workspaceapi.URI {
 }
 
 func TestManager(t *testing.T) {
+	ctx := context.Background()
 
 	t.Run("registers scheme to be used by AddWorkspace", func(*testing.T) {
 		m := workspace.NewManager(config.NopConfig())
@@ -30,7 +32,7 @@ func TestManager(t *testing.T) {
 		assert.Nil(t, w)
 		require.False(t, ok)
 
-		w, err = m.AddWorkspace(parseURI(t, "test:///tmp/"))
+		w, err = m.AddWorkspace(ctx, parseURI(t, "test:///tmp/"))
 		assert.NotNil(t, w)
 		require.NoError(t, err)
 
@@ -47,7 +49,7 @@ func TestManager(t *testing.T) {
 		err := m.RegisterScheme("test", NewNopScheme("test"))
 		require.NoError(t, err)
 
-		w, err := m.AddWorkspace(parseURI(t, "test:///tmp/"))
+		w, err := m.AddWorkspace(ctx, parseURI(t, "test:///tmp/"))
 		assert.NotNil(t, w)
 		require.NoError(t, err)
 
@@ -71,24 +73,24 @@ func TestManager(t *testing.T) {
 		err := m.RegisterScheme("test", NewNopScheme("test"))
 		require.NoError(t, err)
 
-		w0, err := m.AddWorkspace(parseURI(t, "test:///tmp/"))
+		w0, err := m.AddWorkspace(ctx, parseURI(t, "test:///tmp/"))
 		assert.NotNil(t, w0)
 		require.NoError(t, err)
 
-		w1, err := m.AddWorkspace(parseURI(t, "test:///tmp/blah"))
+		w1, err := m.AddWorkspace(ctx, parseURI(t, "test:///tmp/blah"))
 		assert.NotNil(t, w1)
 		require.NoError(t, err)
 
 		assert.NotEqual(t, w0, w1)
 
-		w2, err := m.AddWorkspace(parseURI(t, "test:///tmp/blah/hello"))
+		w2, err := m.AddWorkspace(ctx, parseURI(t, "test:///tmp/blah/hello"))
 		assert.NotNil(t, w2)
 		require.NoError(t, err)
 
 		assert.NotEqual(t, w1, w2)
 
 		// same as w2
-		w3, err := m.AddWorkspace(parseURI(t, "test:///tmp/blah/hello"))
+		w3, err := m.AddWorkspace(ctx, parseURI(t, "test:///tmp/blah/hello"))
 		assert.NotNil(t, w2)
 		require.NoError(t, err)
 
@@ -103,11 +105,11 @@ func TestManager(t *testing.T) {
 		err := m.RegisterScheme("test", NewNopScheme("test"))
 		require.NoError(t, err)
 
-		w0, err := m.AddWorkspace(parseURI(t, "test:///var/"))
+		w0, err := m.AddWorkspace(ctx, parseURI(t, "test:///var/"))
 		assert.NotNil(t, w0)
 		require.NoError(t, err)
 
-		w1, err := m.AddWorkspace(parseURI(t, "test:///tmp/blah"))
+		w1, err := m.AddWorkspace(ctx, parseURI(t, "test:///tmp/blah"))
 		assert.NotNil(t, w1)
 		require.NoError(t, err)
 
@@ -131,12 +133,13 @@ func TestManager(t *testing.T) {
 
 	t.Run("buubles up scheme constructor errors", func(t *testing.T) {
 		m := workspace.NewManager(config.NopConfig())
-		err := m.RegisterScheme("test", func(cfg config.Config, uri workspaceapi.URI) (workspace.Scheme, error) {
-			return nil, errors.New("boom")
-		})
+		err := m.RegisterScheme("test",
+			func(ctx context.Context, cfg config.Config, uri workspaceapi.URI) (workspace.Scheme, error) {
+				return nil, errors.New("boom")
+			})
 		require.NoError(t, err)
 
-		w, err := m.AddWorkspace(parseURI(t, "test:///tmp/"))
+		w, err := m.AddWorkspace(ctx, parseURI(t, "test:///tmp/"))
 		assert.Nil(t, w)
 		require.Error(t, err)
 
@@ -154,7 +157,7 @@ func TestManager(t *testing.T) {
 		}))
 
 		var called bool
-		err := m.RegisterScheme("test", func(cfg config.Config, uri workspaceapi.URI) (workspace.Scheme, error) {
+		err := m.RegisterScheme("test", func(ctx context.Context, cfg config.Config, uri workspaceapi.URI) (workspace.Scheme, error) {
 
 			value, err := cfg.GetString("key")
 			assert.NoError(t, err)
@@ -169,7 +172,7 @@ func TestManager(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		w, err := m.AddWorkspace(parseURI(t, "test:///tmp/"))
+		w, err := m.AddWorkspace(ctx, parseURI(t, "test:///tmp/"))
 		require.NoError(t, err)
 		assert.NotNil(t, w)
 		assert.True(t, called)
@@ -188,12 +191,14 @@ func TestIntegrationManagerWithWorkspaceLoad(t *testing.T) {
 	jakeSwapDirURI, err := workspaceapi.ParseURI("jake:///tmp/hello/.hallo.txt.swp")
 	require.NoError(t, err)
 
+	ctx := context.Background()
+
 	t.Run("default workspace is NOT able to load files from other schemes", func(t *testing.T) {
 		manager := workspace.NewManager(config.NopConfig())
 		require.NoError(t, manager.RegisterScheme("finn", NewNopScheme("finn")))
 		require.NoError(t, manager.RegisterScheme("jake", NewNopScheme("jake")))
 
-		finnWorkspace, err := manager.AddWorkspace(finnWorkspaceURI)
+		finnWorkspace, err := manager.AddWorkspace(ctx, finnWorkspaceURI)
 		require.NoError(t, err)
 
 		_, err = finnWorkspace.Load(jakeFileURI, cell.NewBuffer(), jakeSwapDirURI, false)
@@ -208,10 +213,10 @@ func TestIntegrationManagerWithWorkspaceLoad(t *testing.T) {
 		require.NoError(t, manager.RegisterScheme("finn", workspace.LoggingScheme("finn", NewNopScheme("finn"))))
 		require.NoError(t, manager.RegisterScheme("jake", workspace.LoggingScheme("jake", NewNopScheme("jake"))))
 
-		finnWorkspace, err := manager.AddWorkspace(finnWorkspaceURI)
+		finnWorkspace, err := manager.AddWorkspace(ctx, finnWorkspaceURI)
 		require.NoError(t, err)
 
-		finnWorkspace = workspace.Multi(manager, finnWorkspace, finnWorkspaceURI)
+		finnWorkspace = workspace.Multi(ctx, manager, finnWorkspace, finnWorkspaceURI)
 
 		ret, err := finnWorkspace.Load(jakeFileURI, cell.NewBuffer(), jakeSwapDirURI, false)
 		require.NoError(t, err)

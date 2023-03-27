@@ -73,6 +73,7 @@ func newTestManager(grantor Grantor, opts ...Option) (*Manager, *testGranteePbCl
 	}, opts...)
 	mockpb := &testGranteePbClient{
 		healthChan: make(chan struct{}),
+		locker:     new(sync.Mutex),
 	}
 
 	m.builder = func(pluginID, path string, grantor Grantor) (*granteeClient, error) {
@@ -253,6 +254,37 @@ func TestManagerRun(t *testing.T) {
 
 		pbClient.fixturePermissions = []*pluginpb.Permission{{Id: "read"}}
 		pbClient.onShutdownChan = make(chan struct{})
+
+		pluginIDs := []string{"green", "blue"}
+		for _, id := range pluginIDs {
+			err := mgr.Run(id, "/here/is/my/plugin", nil)
+			require.NoError(t, err)
+		}
+
+		time.Sleep(mgr.config.handshakeTimeout + 50*time.Millisecond)
+
+		var wg sync.WaitGroup
+		wg.Add(len(pluginIDs))
+		go func() {
+			for range pluginIDs {
+				<-pbClient.onShutdownChan
+				_, ok := pbClient.shutdown()
+				assert.True(t, ok)
+				wg.Done()
+			}
+		}()
+		wg.Wait()
+
+		require.NoError(t, mgr.Close())
+	})
+
+	t.Run("Close should not hold resource mutex while waiting for plugin shutdown", func(t *testing.T) {
+		var rmu sync.Mutex
+		mgr, pbClient, _ := newTestManager(&mockGrantor{}, WithLocker(&rmu))
+
+		pbClient.fixturePermissions = []*pluginpb.Permission{{Id: "read"}}
+		pbClient.onShutdownChan = make(chan struct{})
+		pbClient.locker = &rmu
 
 		pluginIDs := []string{"green", "blue"}
 		for _, id := range pluginIDs {

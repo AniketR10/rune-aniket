@@ -39,7 +39,9 @@ func WorkspaceScheme[T storage.Document[T]](
 	rootURI workspaceapi.URI, svc document.Service,
 	marshaler encoding.Marshaler, errMissingID error,
 ) workspace.SchemeFunc {
-	return func(cfg config.Config, uri workspaceapi.URI) (workspace.Scheme, error) {
+	return func(_ context.Context, cfg config.Config, uri workspaceapi.URI) (
+		workspace.Scheme, error,
+	) {
 		if !workspaceapi.HasPrefix(uri, rootURI) {
 			return nil, fmt.Errorf("invalid uri %q for scheme with root uri %q:"+
 				" root does not match", uri, rootURI)
@@ -71,6 +73,8 @@ type scheme[T storage.Document[T]] struct {
 	errMissingID       error
 	retryRealFailure   retry.Strategy
 	retryInconsistency retry.Strategy
+	files              map[uintptr]workspaceapi.File
+	fd                 uintptr // next fd
 }
 
 func (s *scheme[T]) init(svc document.Service, uri workspaceapi.URI, m encoding.Marshaler) {
@@ -85,6 +89,7 @@ func (s *scheme[T]) init(svc document.Service, uri workspaceapi.URI, m encoding.
 		retry.ExponentialStrategy(50*time.Microsecond, 250*time.Millisecond),
 		retry.LimitStrategy(100),
 	)
+	s.files = make(map[uintptr]workspaceapi.File)
 }
 
 func (s *scheme[T]) URI(path string) (workspaceapi.URI, error) {
@@ -124,7 +129,11 @@ func (s *scheme[T]) Open(path string, flag int, perm os.FileMode) (
 	ctx, cancel := context.WithTimeout(ctx, serviceTimeout)
 	defer cancel()
 
-	return s.open(ctx, path, flag, perm)
+	file, err := s.open(ctx, path, flag, perm)
+	if err == nil {
+		s.files[file.Fd()] = file
+	}
+	return file, err
 }
 
 func (s *scheme[T]) open(
@@ -188,12 +197,18 @@ func (s *scheme[T]) open(
 		return nil, workspaceapi.NopError(err)
 	}
 
+	s.fd++
 	f, err := newFile(docID, s.marshaler, s.errMissingID,
-		&s.svc, perm, s.retryRealFailure, ret, !trunc)
+		s.fd, &s.svc, perm, s.retryRealFailure, ret, !trunc, s)
 	if err != nil {
 		return nil, workspaceapi.NopError(err)
 	}
 	return f, nil
+}
+
+func (s *scheme[T]) NewFile(fd uintptr, path string) workspaceapi.File {
+	f, _ := s.files[fd]
+	return f
 }
 
 func (s *scheme[T]) Remove(path string) error {

@@ -2,6 +2,7 @@ package workspace
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -10,7 +11,6 @@ import (
 	"os/user"
 	"path/filepath"
 	"strings"
-	"sync"
 	"syscall"
 	"time"
 
@@ -31,7 +31,9 @@ var (
 // in-memory file system. It does not enforce O_RDONLY, O_WRONLY, O_RDWR Open flags
 // as well as O_SYNC and O_APPEND. Seek operations on the underlying files
 // only support seeking to the beginning of the file.
-func NewMemoryScheme(cfg config.Config, workspace workspaceapi.URI) (Scheme, error) {
+func NewMemoryScheme(
+	ctx context.Context, cfg config.Config, workspace workspaceapi.URI,
+) (Scheme, error) {
 	ret := new(memoryScheme)
 	err := ret.init(workspace)
 	if err != nil {
@@ -41,9 +43,12 @@ func NewMemoryScheme(cfg config.Config, workspace workspaceapi.URI) (Scheme, err
 }
 
 // NewMemoryFile returns a in-memory File implementation.
-func NewMemoryFile(filename string, mode fs.FileMode, data []byte) workspaceapi.File {
+func NewMemoryFile(
+	filename string, fd uintptr, mode fs.FileMode, data []byte,
+) workspaceapi.File {
 	return &memFile{
 		filename: filename,
+		fd:       fd,
 		mode:     mode,
 		modTime:  time.Now(),
 		data:     data,
@@ -52,15 +57,16 @@ func NewMemoryFile(filename string, mode fs.FileMode, data []byte) workspaceapi.
 }
 
 type memoryScheme struct {
-	mu        sync.Mutex
 	workspace workspaceapi.URI
 	files     map[string]*memFile
+	fd        uintptr // next fd
 }
 
 type memFile struct {
 	reader   *bytes.Reader
 	data     []byte
 	filename string
+	fd       uintptr
 	modTime  time.Time
 	mode     os.FileMode
 	offset   int64
@@ -83,6 +89,16 @@ func (m *memoryScheme) init(workspace workspaceapi.URI) error {
 	return nil
 }
 
+func (m *memoryScheme) NewFile(fd uintptr, filename string) workspaceapi.File {
+	for _, f := range m.files {
+		if f.fd == fd {
+			return f
+		}
+	}
+
+	return InvalidFile(fd, filename, errors.New("invalid file descriptor"))
+}
+
 func (m *memoryScheme) Open(path string, flag int, mode os.FileMode) (
 	workspaceapi.File, *workspaceapi.Error,
 ) {
@@ -96,9 +112,6 @@ func (m *memoryScheme) Open(path string, flag int, mode os.FileMode) (
 		return nil, workspaceapi.NopError(err)
 	}
 	uriStr := uri.String()
-
-	m.mu.Lock()
-	defer m.mu.Unlock()
 
 	f, ok := m.files[uriStr]
 	if !ok && flag&os.O_CREATE == 0 {
@@ -123,7 +136,8 @@ func (m *memoryScheme) Open(path string, flag int, mode os.FileMode) (
 		} else {
 			filename = filepath.Join(m.workspace.Path(), rel)
 		}
-		f = NewMemoryFile(filename, mode, data).(*memFile)
+		m.fd++
+		f = NewMemoryFile(filename, m.fd, mode, data).(*memFile)
 		m.files[uriStr] = f
 	} else {
 		_, _ = f.Seek(0, 0)
@@ -137,9 +151,6 @@ func (m *memoryScheme) Remove(path string) error {
 	if err != nil {
 		return err
 	}
-
-	m.mu.Lock()
-	defer m.mu.Unlock()
 
 	uriStr := uri.String()
 	_, ok := m.files[uriStr]
@@ -162,9 +173,6 @@ func (m *memoryScheme) Rename(old, new string) error {
 	}
 	oldURIStr := oldURI.String()
 	newURIStr := newURI.String()
-
-	m.mu.Lock()
-	defer m.mu.Unlock()
 
 	f, ok := m.files[oldURIStr]
 	if !ok {
@@ -196,9 +204,6 @@ func (m *memoryScheme) Stat(path string) (os.FileInfo, error) {
 			isDir:    true,
 		}, nil
 	}
-
-	m.mu.Lock()
-	defer m.mu.Unlock()
 
 	uriStr := uri.String()
 	f, ok := m.files[uriStr]
@@ -232,35 +237,17 @@ func (m *memoryScheme) URI(path string) (workspaceapi.URI, error) {
 	return workspaceapi.ParseURI(uriStr)
 }
 
-func (m *memoryScheme) Command(name string, arg ...string) (workspaceapi.Pid, error) {
+func (m *memoryScheme) StartCommand(ctx context.Context, cmd workspaceapi.Cmd) (
+	workspaceapi.Pid, error,
+) {
 	return 0, errExecute
-}
-
-func (m *memoryScheme) Start(pid workspaceapi.Pid) error {
-	return errExecute
 }
 
 func (m *memoryScheme) Signal(pid workspaceapi.Pid, signal syscall.Signal) error {
 	return errExecute
 }
 
-func (m *memoryScheme) StderrPipe(pid workspaceapi.Pid) (io.ReadCloser, error) {
-	return nil, errExecute
-}
-
-func (m *memoryScheme) StdinPipe(pid workspaceapi.Pid) (io.WriteCloser, error) {
-	return nil, errExecute
-}
-
-func (m *memoryScheme) StdoutPipe(pid workspaceapi.Pid) (io.ReadCloser, error) {
-	return nil, errExecute
-}
-
-func (m *memoryScheme) Wait(pid workspaceapi.Pid) error {
-	return errExecute
-}
-
-func (m *memoryScheme) NewPty() (workspaceapi.Pty, error) {
+func (m *memoryScheme) NewPty(ctx context.Context) (workspaceapi.Pty, error) {
 	return workspaceapi.Pty{}, errExecute
 }
 
@@ -350,6 +337,10 @@ func (c *memFile) Truncate(size int64) error {
 	c.offset = 0
 	c.reader.Reset(c.data)
 	return nil
+}
+
+func (c *memFile) Fd() uintptr {
+	return c.fd
 }
 
 func (c *memFile) Seek(offset int64, whence int) (int64, error) {

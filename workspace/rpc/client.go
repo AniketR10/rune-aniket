@@ -9,25 +9,40 @@ import (
 	"syscall"
 	"time"
 
+	bluectx "github.com/ernestrc/blue/context"
+	"github.com/ernestrc/blue/logging"
 	multierr "github.com/ernestrc/go-multierror"
-	"google.golang.org/grpc"
+	log "github.com/sirupsen/logrus"
+	"google.golang.org/protobuf/types/known/timestamppb"
 	workspaceapi "unstable.build/go-tui/api/workspace"
+	"unstable.build/go-tui/proto"
+	"unstable.build/go-tui/workspace"
 )
 
-const defaultTimeout = 10 * time.Second
+const defaultTimeout = 5 * time.Second
 
-var _ workspaceapi.Workspace = (*Client)(nil)
+// for plugin-side
+var _ workspaceapi.FileSystem = (*Client)(nil)
+var _ workspaceapi.Executor = (*Client)(nil)
+var _ workspaceapi.Terminal = (*Client)(nil)
+
+// for scheme registry-side
+var _ workspace.Scheme = (*Client)(nil)
 
 type Client struct {
-	cc     grpc.ClientConnInterface
-	client WorkspaceClient
-	impl   openRemoveClientImpl
+	cc        proto.MuxConn
+	exec      ExecutorClient
+	scheme    SchemeClient
+	files     FilesClient
+	term      TerminalClient
+	ctx       context.Context
+	cancelCtx func()
 }
 
 // NewClient allocates storage for a new workspace.Client and
-// initializes it with cc. Client satisfies workspace.API
-// by connecting to a Server via the given grpc connection.
-func NewClient(cc grpc.ClientConnInterface) *Client {
+// initializes it with cc. Client satisfies workspaceapi.Workspace
+// by connecting to a Server via the given rpc connection.
+func NewClient(cc proto.MuxConn) *Client {
 	ret := new(Client)
 	ret.Init(cc)
 	runtime.SetFinalizer(ret, func(c *Client) { c.Close() })
@@ -35,49 +50,22 @@ func NewClient(cc grpc.ClientConnInterface) *Client {
 }
 
 // Init initializes this client with cc.
-func (c *Client) Init(cc grpc.ClientConnInterface) {
-	client := NewWorkspaceClient(cc)
+func (c *Client) Init(cc proto.MuxConn) {
 	c.cc = cc
-	c.client = client
-	c.impl.executorClientImpl.init(c.client)
-	c.impl.client = client
+	c.scheme = NewSchemeClient(cc)
+	c.files = NewFilesClient(cc)
+	c.term = NewTerminalClient(cc)
+	c.exec = NewExecutorClient(cc)
+	c.ctx, c.cancelCtx = context.WithCancel(context.Background())
 }
 
-// Open satisfies workspace.API.
-func (c *Client) Open(path string, flag int, mode os.FileMode) (workspaceapi.File, *workspaceapi.Error) {
-	f, err := c.impl.Open(path, flag, mode)
-	runtime.KeepAlive(c)
-	return f, err
-}
-
-// Remove satisfies workspace.API.
-func (c *Client) Remove(path string) error {
-	err := c.impl.Remove(path)
-	runtime.KeepAlive(c)
-	return err
-}
-
-// ReadDir reads the named directory, returning all its directory entries.
-func (c *Client) ReadDir(name string) ([]os.DirEntry, error) {
-	ret, err := c.impl.ReadDir(name)
-	runtime.KeepAlive(c)
-	return ret, err
-}
-
-// Stat returns a FileInfo describing the named file.
-func (c *Client) Stat(name string) (os.FileInfo, error) {
-	ret, err := c.impl.Stat(name)
-	runtime.KeepAlive(c)
-	return ret, err
-}
-
-// URI satisfies workspace.API.
+// URI satisfies workspaceapi.Workspace.
 func (c *Client) URI(path string) (workspaceapi.URI, error) {
-	ctx, cleanup := ctxWithTimeout()
+	ctx, cleanup := ctxWithTimeout(c.ctx)
 	defer cleanup()
 
 	req := URIRequest{Path: path}
-	resp, err := c.client.URI(ctx, &req)
+	resp, err := c.scheme.URI(ctx, &req)
 	runtime.KeepAlive(c)
 	if err != nil {
 		return workspaceapi.URI{}, err
@@ -89,89 +77,266 @@ func (c *Client) URI(path string) (workspaceapi.URI, error) {
 	return uri, nil
 }
 
-// NewPty creates a new pseudoterminal.
-func (c *Client) NewPty() (workspaceapi.Pty, error) {
-	ret, err := c.impl.NewPty()
+// Open satisfies workspace.Workspace.
+func (c *Client) Open(path string, flag int, mode os.FileMode) (
+	workspaceapi.File, *workspaceapi.Error,
+) {
+	return c.OpenFile(path, flag, mode)
+}
+
+// OpenFile satisfies workspaceapi.Workspace.
+func (c *Client) OpenFile(path string, flag int, mode os.FileMode) (
+	workspaceapi.File, *workspaceapi.Error,
+) {
+	ctx, cleanup := ctxWithTimeout(c.ctx)
+	defer cleanup()
+
+	req := makeOpenRequest(path, flag, mode)
+	resp, err := c.scheme.Open(ctx, req)
 	runtime.KeepAlive(c)
-	return ret, err
+	if err != nil {
+		return nil, &workspaceapi.Error{Err: err}
+	}
+	if werr, ok := isTypedError(resp); ok {
+		return nil, werr
+	}
+	ret := newFileClient(c.ctx, c, c.cc,
+		resp.GetFilename(), uintptr(resp.GetFd()))
+	return ret, nil
+}
+
+// Stat returns a FileInfo describing the named file.
+func (c *Client) Stat(name string) (os.FileInfo, error) {
+	ctx, cleanup := ctxWithTimeout(c.ctx)
+	defer cleanup()
+
+	req := StatRequest{Filename: name}
+	resp, err := c.scheme.Stat(ctx, &req)
+	runtime.KeepAlive(c)
+	if err != nil {
+		return nil, err
+	}
+	if werr, ok := isTypedError(resp); ok {
+		return nil, werr.ToError()
+	}
+	return fileClientInfo{StatResponse: *resp}, nil
+}
+
+// ReadDir reads the named directory, returning all its directory entries.
+func (c *Client) ReadDir(name string) ([]os.DirEntry, error) {
+	ctx, cleanup := ctxWithTimeout(c.ctx)
+	defer cleanup()
+
+	req := ReadDirRequest{Root: name}
+	resp, err := c.scheme.ReadDir(ctx, &req)
+	runtime.KeepAlive(c)
+	if err != nil {
+		return nil, err
+	}
+	if werr, ok := isTypedError(resp); ok {
+		return nil, werr.ToError()
+	}
+	respp := resp.GetPath()
+	ret := make([]os.DirEntry, 0, len(respp))
+	for _, entry := range respp {
+		ret = append(ret, dirEntry{
+			c:        c,
+			name:     entry.Name,
+			isDir:    entry.IsDir,
+			modeType: entry.Mode,
+		})
+	}
+
+	return ret, nil
+}
+
+// Remove satisfies workspaceapi.Workspace.
+func (c *Client) Remove(path string) error {
+	ctx, cleanup := ctxWithTimeout(c.ctx)
+	defer cleanup()
+
+	req := RemoveRequest{Filename: path}
+	resp, err := c.scheme.Remove(ctx, &req)
+	runtime.KeepAlive(c)
+	if err != nil {
+		return err
+	}
+	if werr, ok := isTypedError(resp); ok {
+		return werr.ToError()
+	}
+	return nil
+}
+
+// Rename satisfies workspaceapi.Workspace.
+func (c *Client) Rename(oldpath, newpath string) error {
+	ctx, cleanup := ctxWithTimeout(c.ctx)
+	defer cleanup()
+
+	req := RenameRequest{Filename: oldpath, Newfilename: newpath}
+	resp, err := c.scheme.Rename(ctx, &req)
+	runtime.KeepAlive(c)
+	if err != nil {
+		return err
+	}
+	if werr, ok := isTypedError(resp); ok {
+		return werr.ToError()
+	}
+	return nil
+}
+
+// Lstat satisfies workspaceapi.Workspace.
+func (c *Client) Lstat(name string) (os.FileInfo, error) {
+	ctx, cleanup := ctxWithTimeout(c.ctx)
+	defer cleanup()
+
+	req := StatRequest{Filename: name, Lstat: true}
+	resp, err := c.scheme.Stat(ctx, &req)
+	runtime.KeepAlive(c)
+	if err != nil {
+		return nil, err
+	}
+	if werr, ok := isTypedError(resp); ok {
+		return nil, werr.ToError()
+	}
+	return fileClientInfo{StatResponse: *resp}, nil
+}
+
+// ReadLink satisfies workspaceapi.Workspace.
+func (c *Client) ReadLink(filename string) (string, error) {
+	ctx, cleanup := ctxWithTimeout(c.ctx)
+	defer cleanup()
+
+	req := ReadLinkRequest{Filename: filename}
+	resp, err := c.scheme.ReadLink(ctx, &req)
+	runtime.KeepAlive(c)
+	if err != nil {
+		return "", err
+	}
+	return resp.GetFilename(), nil
+}
+
+// Start satisfies workspaceapi.Workspace
+func (c *Client) Start(cmd workspaceapi.Cmd) (workspaceapi.Pid, error) {
+	return c.StartCommand(context.Background(), cmd)
+}
+
+// StartCommand returns the Pid to execute the named program with the given
+// arguments. For more details see exec.Command.
+func (c *Client) StartCommand(ctx context.Context, cmd workspaceapi.Cmd) (
+	workspaceapi.Pid, error,
+) {
+	ctx = bluectx.First(ctx, c.ctx)
+
+	stream, err := c.exec.StartCommand(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("new stream: %v", err)
+	}
+	req := CommandPayload{
+		Type: CommandPayload_TypeStart,
+		Start: &StartCommandRequest{
+			Name:   cmd.Path,
+			Args:   cmd.Args,
+			Env:    cmd.Env,
+			Stdin:  cmd.Stdin != nil,
+			Stdout: cmd.Stdout != nil,
+			Stderr: cmd.Stderr != nil,
+		},
+	}
+	if err := stream.Send(&req); err != nil {
+		return 0, fmt.Errorf("send start command request: %v", err)
+	}
+	streamer := newClientCommandStreamer(c.ctx, cmd, stream)
+	pid, err := streamer.waitForPid()
+	c.log(log.DebugLevel, "wait for pid: %d err=%v", pid, err)
+	if err != nil {
+		return 0, fmt.Errorf("error waiting for pid: %v", err)
+	}
+	go streamer.streamCommandData(c)
+	return pid, nil
+}
+
+// Signal sends a signal to the running process.
+func (c *Client) Signal(p workspaceapi.Pid, s syscall.Signal) error {
+	ctx, cleanup := ctxWithTimeout(c.ctx)
+	defer cleanup()
+
+	req := SignalRequest{Pid: int64(p), Sig: int32(s)}
+	_, err := c.exec.Signal(ctx, &req)
+	runtime.KeepAlive(c)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// StartPty satisfies workspaceapi.Workspace
+func (c *Client) StartPty() (workspaceapi.Pty, error) {
+	return c.NewPty(context.Background())
+}
+
+// NewPty creates a new pseudoterminal.
+func (c *Client) NewPty(ctx context.Context) (workspaceapi.Pty, error) {
+	ctx, cancel := context.WithTimeout(ctx, defaultTimeout)
+	ctx = bluectx.First(ctx, c.ctx)
+	defer cancel()
+
+	var req NewPtyRequest
+	resp, err := c.term.NewPty(ctx, &req)
+	runtime.KeepAlive(c)
+	if err != nil {
+		return workspaceapi.Pty{}, err
+	}
+	pid := workspaceapi.Pid(resp.GetPid())
+	file := newFileClient(c.ctx, c, c.cc,
+		resp.GetMaster(), uintptr(resp.GetMasterFd()))
+	ret := workspaceapi.Pty{
+		Pid:    pid,
+		Master: file,
+		Slave:  resp.GetSlave(),
+	}
+
+	return ret, nil
 }
 
 // SetPtySize sets the width and height in columns and rows of
 // a pseudoterminal.
 func (c *Client) SetPtySize(p workspaceapi.Pty, width, height int) error {
-	err := c.impl.SetPtySize(p, width, height)
+	ctx, cleanup := ctxWithTimeout(c.ctx)
+	defer cleanup()
+
+	fc, ok := p.Master.(*fileClient)
+	if !ok {
+		panic("extraneous Pty argument")
+	}
+
+	req := SetPtySizeRequest{
+		Pid:      int64(p.Pid),
+		Master:   fc.filename,
+		MasterFd: uint32(fc.fd),
+		Slave:    p.Slave,
+		Width:    int32(width),
+		Height:   int32(height),
+	}
+	_, err := c.term.SetPtySize(ctx, &req)
 	runtime.KeepAlive(c)
 	return err
 }
 
-// Command returns the Pid to execute the named program with the given
-// arguments. For more details see exec.Command.
-func (c *Client) Command(name string, arg ...string) (workspaceapi.Pid, error) {
-	ret, err := c.impl.Command(name, arg...)
-	runtime.KeepAlive(c)
-	return ret, err
-}
-
-// Start starts the specified command but does not wait for it to complete.
-// The Wait method will return an error if there's any while running command
-// and release associated resources.
-func (c *Client) Start(p workspaceapi.Pid) error {
-	err := c.impl.Start(p)
-	runtime.KeepAlive(c)
-	return err
-}
-
-// Signal sends a signal to the running process.
-func (c *Client) Signal(p workspaceapi.Pid, s syscall.Signal) error {
-	err := c.impl.Signal(p, s)
-	runtime.KeepAlive(c)
-	return err
-}
-
-// StderrPipe returns a pipe that will be connected to the command's standard
-// error when the command starts. See exec.Cmd.StderrPipe for more details.
-func (c *Client) StderrPipe(p workspaceapi.Pid) (io.ReadCloser, error) {
-	ret, err := c.impl.StderrPipe(p)
-	runtime.KeepAlive(c)
-	return ret, err
-}
-
-// StdinPipe returns a pipe that will be connected to the command's standard
-// input when the command starts. See exec.Cmd.StdinPipe for more details.
-func (c *Client) StdinPipe(p workspaceapi.Pid) (io.WriteCloser, error) {
-	ret, err := c.impl.StdinPipe(p)
-	runtime.KeepAlive(c)
-	return ret, err
-}
-
-// StdoutPipe returns a pipe that will be connected to the command's standard
-// output when the command starts. See exec.Cmd.StdoutPipe for more details.
-func (c *Client) StdoutPipe(p workspaceapi.Pid) (io.ReadCloser, error) {
-	ret, err := c.impl.StdoutPipe(p)
-	runtime.KeepAlive(c)
-	return ret, err
-}
-
-// Wait waits for the command to exit and waits for any copying to stdin or
-// opying from stdout or stderr to complete.
-// The command must have been started by Start.
-// The returned error is nil if the command runs, has no problems copying
-// stdin, stdout, and stderr, and exits with a zero exit status.
-func (c *Client) Wait(p workspaceapi.Pid) error {
-	err := c.impl.Wait(p)
-	runtime.KeepAlive(c)
-	return err
+func (c *Client) NewFile(fd uintptr, filename string) workspaceapi.File {
+	return newFileClient(c.ctx, c, c.cc, filename, fd)
 }
 
 // Close closes all resources associated with this client.
 func (c *Client) Close() (ret error) {
+	if c.cancelCtx != nil {
+		c.cancelCtx()
+		c.cancelCtx = nil
+	}
+
 	if closer, ok := c.cc.(io.Closer); ok {
 		if err := closer.Close(); err != nil {
 			ret = multierr.Append(ret, err)
 		}
-	}
-	if err := c.impl.Close(); err != nil {
-		ret = multierr.Append(ret, err)
 	}
 
 	runtime.SetFinalizer(c, nil)
@@ -179,6 +344,99 @@ func (c *Client) Close() (ret error) {
 	return
 }
 
-func ctxWithTimeout() (context.Context, func()) {
-	return context.WithTimeout(context.Background(), defaultTimeout)
+func (c *Client) log(level log.Level, msg string, args ...interface{}) {
+	log.WithField(logging.KeyClass, "workspacepb.Client").
+		Logf(level, msg, args...)
+}
+
+type fileClientInfo struct {
+	StatResponse
+}
+
+func (f fileClientInfo) Name() string {
+	return f.StatResponse.GetName()
+}
+
+func (f fileClientInfo) Size() int64 {
+	return f.StatResponse.GetSize()
+}
+
+func (f fileClientInfo) Mode() os.FileMode {
+	return os.FileMode(f.StatResponse.GetMode())
+}
+
+func (f fileClientInfo) ModTime() time.Time {
+	return protoTimeToStd(f.StatResponse.GetModTime())
+}
+
+func (f fileClientInfo) IsDir() bool {
+	return f.StatResponse.GetIsDir()
+}
+
+func (f fileClientInfo) Sys() interface{} {
+	return nil
+}
+
+type dirEntry struct {
+	c        *Client
+	name     string
+	isDir    bool
+	modeType int32
+}
+
+func (e dirEntry) Name() string {
+	return e.name
+}
+
+func (e dirEntry) IsDir() bool {
+	return e.isDir
+}
+
+func (e dirEntry) Type() os.FileMode {
+	return os.FileMode(e.modeType)
+}
+
+func (e dirEntry) Info() (os.FileInfo, error) {
+	return e.c.Stat(e.Name())
+}
+
+func protoTimeToStd(ts *timestamppb.Timestamp) time.Time {
+	return time.Unix(ts.GetSeconds(), int64(ts.GetNanos()))
+}
+
+func makeOpenRequest(name string, flag int, perm os.FileMode) *OpenRequest {
+	return &OpenRequest{
+		Filename: name,
+		Mode:     int32(perm),
+		O_RDONLY: flag&^(os.O_APPEND|os.O_CREATE|os.O_EXCL|os.O_SYNC|os.O_TRUNC) == os.O_RDONLY,
+		O_WRONLY: flag&^(os.O_APPEND|os.O_CREATE|os.O_EXCL|os.O_SYNC|os.O_TRUNC) == os.O_WRONLY,
+		O_APPEND: flag&os.O_APPEND != 0,
+		O_CREATE: flag&os.O_CREATE != 0,
+		O_EXCL:   flag&os.O_EXCL != 0,
+		O_SYNC:   flag&os.O_SYNC != 0,
+		O_TRUNC:  flag&os.O_TRUNC != 0,
+	}
+}
+
+type errResponse interface {
+	GetIsExistErr() bool
+	GetIsNotExistErr() bool
+	GetIsPermissionErr() bool
+}
+
+func isTypedError(resp errResponse) (*workspaceapi.Error, bool) {
+	if resp.GetIsExistErr() || resp.GetIsNotExistErr() || resp.GetIsPermissionErr() {
+		return &workspaceapi.Error{
+			IsExist:      resp.GetIsExistErr(),
+			IsNotExist:   resp.GetIsNotExistErr(),
+			IsPermission: resp.GetIsPermissionErr(),
+		}, true
+	}
+	return nil, false
+}
+
+func ctxWithTimeout(resourceCtx context.Context) (context.Context, func()) {
+	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
+	ctx = bluectx.First(ctx, resourceCtx)
+	return ctx, cancel
 }

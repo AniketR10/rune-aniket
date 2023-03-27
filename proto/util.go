@@ -138,3 +138,11 @@ func DisableGRPCLogging() {
 	discard := grpclog.NewLoggerV2WithVerbosity(ioutil.Discard, ioutil.Discard, ioutil.Discard, 0)
 	grpclog.SetLoggerV2(discard)
 }
+
+// EnableGRPCLogging disables grpc stderr loggers.
+func EnableGRPCLogging(info, warn, err io.Writer) {
+	os.Setenv("GRPC_GO_LOG_SEVERITY_LEVEL", "INFO")
+	os.Setenv("GRPC_GO_LOG_VERBOSITY_LEVEL", "99")
+	logger := grpclog.NewLoggerV2WithVerbosity(info, warn, err, 99)
+	grpclog.SetLoggerV2(logger)
+}

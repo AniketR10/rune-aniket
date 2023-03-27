@@ -140,10 +140,12 @@ func (c *upspinClient) Put(name upspin.PathName, data []byte) (
 
 // satisfies internal osFile (only diff with upspin.File is Name())
 type fileAdapter struct {
+	s         *scheme
 	path      string
 	lastEntry *upspin.DirEntry
 	client    *upspinClient
 	file      *blupspin.File
+	fd        uintptr
 }
 
 // satisfies os.FileInfo
@@ -155,6 +157,10 @@ func (e entryAdapter) Name() string {
 	// based on os.FileInfo, Name always returns the base
 	// name of the file.
 	return filepath.Base(string(e.entry.Name))
+}
+
+func (f fileAdapter) Fd() uintptr {
+	return f.fd
 }
 
 func (e entryAdapter) Size() (ret int64) {
@@ -192,8 +198,10 @@ func (f *fileAdapter) Read(p []byte) (n int, err error) {
 }
 
 func (f *fileAdapter) Close() error {
-	// do not call upspin.File.Close or we will
-	// issue a new Sync
+	// do not call upspin file.Close or
+	// we will issue a Sync, which breaks
+	// workspaceapi.File semantics.
+	delete(f.s.files, f.Fd())
 	return nil
 }
 

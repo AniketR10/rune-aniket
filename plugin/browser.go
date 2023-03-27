@@ -4,7 +4,6 @@ import (
 	"io"
 	"sync"
 
-	"google.golang.org/grpc"
 	browserplugin "unstable.build/go-tui/api/browser/plugin"
 	"unstable.build/go-tui/browser"
 	browserpb "unstable.build/go-tui/browser/rpc"
@@ -33,7 +32,7 @@ func (s *browserResourceServer) forPermission(p string) ResourceRegistrar {
 }
 
 func (s browserResourcePermissionServer) Register(
-	pluginID string, grantor Grantor, registrar grpc.ServiceRegistrar,
+	pluginID string, grantor Grantor, registrar proto.ServiceRegistrar,
 	broker proto.MuxBroker, lock sync.Locker,
 ) (io.Closer, error) {
 	s.mu.Lock()

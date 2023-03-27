@@ -1,6 +1,7 @@
 package workspace
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -14,7 +15,7 @@ import (
 )
 
 func newTestScheme(scheme string) SchemeFunc {
-	return func(cfg config.Config, uri workspaceapi.URI) (Scheme, error) {
+	return func(_ context.Context, cfg config.Config, uri workspaceapi.URI) (Scheme, error) {
 		scheme := &testScheme{scheme: scheme}
 		scheme.openFunc = func(name string, flag int, perm os.FileMode) (workspaceapi.File, *workspaceapi.Error) {
 			return testFile{}, nil
@@ -50,6 +51,11 @@ func (t testFile) Stat() (os.FileInfo, error) {
 func (t testFile) Sync() error {
 	return nil
 }
+
+func (t testFile) Fd() uintptr {
+	return 0
+}
+
 func (t testFile) Truncate(size int64) error {
 	return nil
 }
@@ -111,25 +117,16 @@ type testScheme struct {
 	lstatFunc  func(name string) (os.FileInfo, error)
 }
 
-func (t *testScheme) Command(name string, arg ...string) (workspaceapi.Pid, error) {
-	panic("unimplemented")
-}
-func (t *testScheme) Start(workspaceapi.Pid) error {
+func (t *testScheme) StartCommand(ctx context.Context, cmd workspaceapi.Cmd) (
+	workspaceapi.Pid, error,
+) {
 	panic("unimplemented")
 }
 func (t *testScheme) Signal(workspaceapi.Pid, syscall.Signal) error {
 	panic("unimplemented")
 }
-func (t *testScheme) StderrPipe(workspaceapi.Pid) (io.ReadCloser, error) {
-	panic("unimplemented")
-}
-func (t *testScheme) StdinPipe(workspaceapi.Pid) (io.WriteCloser, error) {
-	panic("unimplemented")
-}
-func (t *testScheme) StdoutPipe(workspaceapi.Pid) (io.ReadCloser, error) {
-	panic("unimplemented")
-}
-func (t *testScheme) Wait(workspaceapi.Pid) error {
+
+func (t *testScheme) NewFile(fd uintptr, name string) workspaceapi.File {
 	panic("unimplemented")
 }
 
@@ -153,7 +150,7 @@ func (t *testScheme) Stat(path string) (os.FileInfo, error) {
 	return t.statFunc(path)
 }
 
-func (t *testScheme) NewPty() (ret workspaceapi.Pty, err error) {
+func (t *testScheme) NewPty(ctx context.Context) (ret workspaceapi.Pty, err error) {
 	panic("unimplemented")
 }
 

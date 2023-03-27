@@ -4,8 +4,6 @@ import (
 	"io"
 	"sync"
 
-	"google.golang.org/grpc"
-
 	"unstable.build/go-tui/proto"
 	"unstable.build/go-tui/workspace"
 	workspacepb "unstable.build/go-tui/workspace/rpc"
@@ -27,7 +25,7 @@ func newSchemeManagerResourceServer(b workspace.SchemeManager) *schemeManagerRes
 }
 
 func (s *schemeManagerResourceServer) Register(
-	pluginID string, grantor Grantor, registrar grpc.ServiceRegistrar,
+	pluginID string, grantor Grantor, registrar proto.ServiceRegistrar,
 	broker proto.MuxBroker, lock sync.Locker,
 ) (io.Closer, error) {
 	server := workspacepb.NewSchemeManagerServer(broker, s.b, lock)
@@ -43,6 +41,7 @@ func SchemeManagerResources(b workspace.SchemeManager) map[Permission]ResourceRe
 	}
 }
 
+// TODO move to api package
 func dialSchemeManager(token uint32, broker proto.MuxBroker) (
 	workspace.SchemeManager, error,
 ) {

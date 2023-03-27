@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -48,7 +49,7 @@ var (
 		plugin.Permission(browserplugin.PermissionBrowserWindowManager),
 		plugin.Permission(browserplugin.PermissionBrowserEventPublisher),
 		plugin.Permission(textplugin.PermissionEditor),
-		plugin.Permission(workspaceplugin.PermissionWorkspace),
+		plugin.Permission(workspaceplugin.PermissionExecute),
 		plugin.PermissionConfig,
 	}
 
@@ -61,7 +62,7 @@ type gitEditorHandler struct {
 	ed     textapi.Editor
 	wm     browserapi.WindowManager
 	p      browserapi.EventPublisher
-	exec   workspaceapi.Workspace
+	exec   workspaceapi.Executor
 	exit   uint32
 	ch     chan textapi.Event
 	scroll struct {
@@ -101,8 +102,8 @@ func newGitHandler(
 
 	for _, grant := range grants {
 		switch grant.Permission {
-		case plugin.Permission(workspaceplugin.PermissionWorkspace):
-			ret.exec, err = workspaceplugin.Workspace(grant.Token, broker)
+		case plugin.Permission(workspaceplugin.PermissionExecute):
+			ret.exec, err = workspaceplugin.Executor(grant.Token, broker)
 			if err != nil {
 				return nil, err
 			}
@@ -223,24 +224,26 @@ func (h *gitEditorHandler) parseDiff(diff *diff.FileDiff) []textapi.Location {
 func (h *gitEditorHandler) pushNewDiffLocations(
 	filename string, resource textapi.Handler,
 ) error {
-	pid, err := h.exec.Command("git", "diff", "-U0", filename)
-	if err != nil {
-		return fmt.Errorf("failed to create command: %v", err)
+	var out bytes.Buffer
+	ch := make(chan error)
+	cmd := workspaceapi.Cmd{
+		Path:    "git",
+		Args:    []string{"diff", "-U0", filename},
+		Watcher: workspaceapi.ChanWatcher(ch),
 	}
-
-	stdout, err := h.exec.StdoutPipe(pid)
+	_, err := h.exec.Start(cmd)
 	if err != nil {
-		return fmt.Errorf("failed to create stdout pipe: %v", err)
-	}
-
-	err = h.exec.Start(pid)
-	if err != nil {
-		return fmt.Errorf("failed to start executable: %v", err)
+		return fmt.Errorf("failed to start process: %v", err)
 	}
 
 	h.initScroll(filename)
 
-	r := diff.NewFileDiffReader(stdout)
+	err = <-ch
+	if err != nil {
+		return fmt.Errorf("process exit with non-zero status: %v", err)
+	}
+
+	r := diff.NewFileDiffReader(&out)
 	diff, ret := r.Read()
 	if ret != nil {
 		if strings.Contains(ret.Error(), io.EOF.Error()) {
@@ -250,11 +253,6 @@ func (h *gitEditorHandler) pushNewDiffLocations(
 			ret = h.p.Interrupt()
 		}
 		ret = fmt.Errorf("failed to read from stdout: %w", err)
-	}
-
-	// releases associated resources, and then and only then return
-	if err := h.exec.Wait(pid); err != nil {
-		ret = multierr.Append(ret, fmt.Errorf("git process error: %w", err))
 	}
 
 	if diff == nil {

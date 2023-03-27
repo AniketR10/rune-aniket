@@ -2,13 +2,10 @@ package rpc
 
 import (
 	"context"
-	"fmt"
-	"io"
 	"sync"
 	"time"
 
 	"github.com/ernestrc/blue/logging"
-	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/config"
@@ -32,35 +29,7 @@ type SchemeManagerServer struct {
 	// manager locker
 	locker  sync.Locker
 	manager workspace.SchemeManager
-
-	// resources locker; needed because we AddWorkspace
-	// is called from the main goroutine, which calls dialScheme
-	// and read/writes clients, at the same time we run a goroutine
-	// to monitor the underlying connection, which also writes
-	// to clients
-	clients map[uint64]io.Closer
-}
-
-// ties together all resources into an io.Closer
-type schemeManagerResource struct {
-	conn          proto.MuxConn
-	client        workspace.Scheme
-	cancelMonitor func()
-}
-
-func (s *schemeManagerResource) Close() (ret error) {
-	if s.cancelMonitor == nil {
-		return nil
-	}
-	s.cancelMonitor()
-	s.cancelMonitor = nil
-	if err := s.client.Close(); err != nil {
-		ret = multierr.Append(ret, err)
-	}
-	if err := s.conn.Close(); err != nil {
-		ret = multierr.Append(ret, err)
-	}
-	return ret
+	schemes []string
 }
 
 // NewSchemeManagerServer allocates storage for a new SchemeManagerServer and initializes it
@@ -83,11 +52,6 @@ func (s *SchemeManagerServer) Init(
 	s.manager = manager
 	s.broker = broker
 	s.locker = locker
-	s.clients = make(map[uint64]io.Closer)
-}
-
-func (s *SchemeManagerServer) getClients() map[uint64]io.Closer {
-	return s.clients
 }
 
 func (c *SchemeManagerServer) log(level log.Level, msg string, args ...interface{}) {
@@ -98,24 +62,9 @@ func (c *SchemeManagerServer) log(level log.Level, msg string, args ...interface
 func (s *SchemeManagerServer) dialScheme(proxyID uint32, cfg config.Config, uri workspaceapi.URI) (
 	workspace.Scheme, error,
 ) {
-	client, conn, err := initializeSchemeThroughProxy(cfg, uri, s.broker, proxyID)
+	client, err := initializeSchemeThroughProxy(cfg, uri, s.broker, proxyID)
 	if err != nil {
 		return nil, err
-	}
-
-	ctx, cancelFn := context.WithCancel(context.Background())
-	go proto.MonitorConnection(ctx, s.failureTimeout, conn,
-		func(reason string) {
-			reason = fmt.Sprintf("rpc.SchemeManagerServer(proxyID=%d): %s", proxyID, reason)
-			_, _ = proto.ForceCloseResource(s.broker, uint64(proxyID), s.getClients, s.locker)
-		})
-
-	// no need to synchronize over this because dialScheme is invoked by the manager
-	// and so resource synchronization is already taken care of
-	s.clients[uint64(proxyID)] = &schemeManagerResource{
-		conn:          conn,
-		client:        client,
-		cancelMonitor: cancelFn,
 	}
 
 	return client, nil
@@ -133,12 +82,15 @@ func (s *SchemeManagerServer) RegisterScheme(ctx context.Context, req *RegisterS
 
 	proxyID := req.GetProxyId()
 	err = s.manager.RegisterScheme(req.GetScheme(),
-		func(cfg config.Config, uri workspaceapi.URI) (workspace.Scheme, error) {
+		func(_ context.Context, cfg config.Config, uri workspaceapi.URI) (
+			workspace.Scheme, error,
+		) {
 			return s.dialScheme(proxyID, cfg, uri)
 		})
 	if err != nil {
 		return
 	}
+	s.schemes = append(s.schemes, req.GetScheme())
 
 	res = new(RegisterSchemeResponse)
 	return
@@ -146,10 +98,11 @@ func (s *SchemeManagerServer) RegisterScheme(ctx context.Context, req *RegisterS
 
 // Close closes all resources associated with this manager.
 func (s *SchemeManagerServer) Close() (ret error) {
-	for _, client := range s.clients {
-		if err := client.Close(); err != nil {
+	/* TODO once plugin scheme is moved to api
+	for _, scheme := range s.schemes {
+		if err := s.manager.UnregisterScheme(scheme); err != nil {
 			ret = multierr.Append(ret, err)
 		}
-	}
+	}*/
 	return ret
 }

@@ -1,6 +1,7 @@
 package test
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -14,7 +15,7 @@ func TestLoggingScheme(t *testing.T) {
 		uri, err := workspaceapi.ParseURI("memory:///")
 		require.NoError(t, err)
 		log := workspace.LoggingScheme("memory", workspace.NewMemoryScheme)
-		scheme, err := log(config.NopConfig(), uri)
+		scheme, err := log(context.Background(), config.NopConfig(), uri)
 		require.NoError(t, err)
 		return scheme
 	})

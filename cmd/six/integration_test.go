@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -28,7 +29,7 @@ func newIntegrationTestCase(t *testing.T, content string) (
 
 	manager := workspace.NewManager(config.NopConfig())
 	require.NoError(t, manager.RegisterScheme(workspace.FileScheme, workspace.NewFileScheme))
-	w, err := manager.AddWorkspace(workspaceURI)
+	w, err := manager.AddWorkspace(context.Background(), workspaceURI)
 	require.NoError(t, err)
 
 	file, err := ioutil.TempFile(tempDir, "workspace_int_test")

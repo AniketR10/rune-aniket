@@ -3,74 +3,83 @@ package ssh
 import (
 	"errors"
 	"fmt"
-	"io"
 	"net"
 	"os"
-	"sync"
 
+	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 	workspacepb "unstable.build/go-tui/workspace/rpc"
 )
 
-// readerWriterListener satisfies net.Listener by accepting
-// one connection at a time over a io.Reader/io.Writer.
-type readerWriterListener struct {
-	mu     sync.Mutex
-	closed bool
-	writer io.Writer
-	reader io.Reader
-	onEOF  func()
-
-	onlyConn *stdConn
+type stdioListener struct {
+	writer   *os.File
+	reader   *os.File
+	acceptCh chan struct{}
+	onlyConn net.Conn
+	onClose  func()
+	stdio    bool
+	logger   *log.Logger
 }
 
 func newReaderWriterListener(
-	reader io.Reader, writer io.Writer, onEOF func(),
-) *readerWriterListener {
-	ret := new(readerWriterListener)
+	logger *log.Logger,
+	reader, writer *os.File,
+	stdio bool,
+	onClose func(),
+) *stdioListener {
+	ret := new(stdioListener)
 	ret.reader = reader
+	ret.logger = logger
 	ret.writer = writer
-	ret.onEOF = onEOF
+	ret.stdio = stdio
+	ret.acceptCh = make(chan struct{}, 1)
+	ret.acceptCh <- struct{}{}
+	ret.onClose = onClose
 	return ret
 }
 
-func (lis *readerWriterListener) Accept() (net.Conn, error) {
-	lis.mu.Lock()
-	defer lis.mu.Unlock()
-
-	if lis.closed {
+func (lis *stdioListener) Accept() (net.Conn, error) {
+	_, ok := <-lis.acceptCh
+	if !ok {
 		return nil, errors.New("closed listener")
 	}
 
-	lis.onlyConn = newStdConn(lis.reader, lis.writer, func() {
-		lis.Close()
-		lis.onEOF()
-	})
+	conn, err := newStdConn(lis.logger, lis.reader, lis.writer,
+		lis.stdio, lis.onClose)
+	if err != nil {
+		return nil, err
+	}
+	lis.onlyConn = conn
+
 	return lis.onlyConn, nil
 }
 
-func (lis *readerWriterListener) Close() error {
-	lis.mu.Lock()
-	defer lis.mu.Unlock()
-
-	lis.closed = true
+func (lis *stdioListener) Close() error {
+	close(lis.acceptCh)
 	return nil
 }
 
-func (lis *readerWriterListener) Addr() net.Addr {
-	return newStdinAddr("listener")
+func (lis *stdioListener) Addr() net.Addr {
+	return lis.onlyConn.LocalAddr()
 }
 
 // StartSchemeServer installs server to handle incoming workspacepb requests
 // over the calling process' os.Stdin and sends responses over os.Stdout.
-func StartSchemeServer(server workspacepb.SchemeServer) error {
+func StartSchemeServer(
+	logger *log.Logger, server *workspacepb.Server,
+) error {
 	grpcServer := grpc.NewServer()
-	lis := newReaderWriterListener(os.Stdin, os.Stdout, func() {
-		// this is called within a grpc goroutine so running
-		// in a separate goroutine avoids deadlock
-		go grpcServer.Stop()
-	})
+	lis := newReaderWriterListener(
+		logger, nil /*reader*/, nil, /*writer*/
+		true, /* use stdio instead of reader and writer */
+		func() {
+			logger.Debugf("connection closed unexpectedly")
+			go grpcServer.Stop()
+		})
 	workspacepb.RegisterSchemeServer(grpcServer, server)
+	workspacepb.RegisterFilesServer(grpcServer, server)
+	workspacepb.RegisterExecutorServer(grpcServer, server)
+	workspacepb.RegisterTerminalServer(grpcServer, server)
 	if err := grpcServer.Serve(lis); err != nil {
 		return fmt.Errorf("Server: %s", err)
 	}

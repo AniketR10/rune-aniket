@@ -40,7 +40,7 @@ var (
 		plugin.Permission(browserplugin.PermissionBrowserEventPublisher),
 		plugin.Permission(textplugin.PermissionEditor),
 		plugin.PermissionConfig,
-		plugin.Permission(workspaceplugin.PermissionWorkspace),
+		plugin.Permission(workspaceplugin.PermissionFileSystem),
 	}
 
 	defaultScrollAttr     = term.Attributes{Fg: term.ColorDefault}
@@ -143,8 +143,8 @@ func newFileBarEditorHandler(
 			if err != nil {
 				return nil, err
 			}
-		case plugin.Permission(workspaceplugin.PermissionWorkspace):
-			w, err := workspaceplugin.Workspace(grant.Token, broker)
+		case plugin.Permission(workspaceplugin.PermissionFileSystem):
+			w, err := workspaceplugin.FileSystem(grant.Token, broker)
 			if err != nil {
 				return nil, err
 			}

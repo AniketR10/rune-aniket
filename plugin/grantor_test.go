@@ -8,14 +8,14 @@ import (
 
 var (
 	grants = map[string]Permissions{
-		"pluginA": Permissions{
+		"pluginA": {
 			Permission("read"):  struct{}{},
 			Permission("write"): struct{}{},
 		},
-		"pluginB": Permissions{
+		"pluginB": {
 			Permission("read"): struct{}{},
 		},
-		"pluginC": Permissions{},
+		"pluginC": {},
 	}
 	res = map[Permission]ResourceRegistrar{
 		Permission("read"):  new(mockResourceServer),

@@ -4,7 +4,6 @@ import (
 	"io"
 	"sync"
 
-	"google.golang.org/grpc"
 	"unstable.build/go-tui/proto"
 )
 
@@ -14,7 +13,7 @@ type mockResourceServer struct {
 }
 
 func (s *mockResourceServer) Register(
-	pluginID string, g Grantor, grantor grpc.ServiceRegistrar,
+	pluginID string, g Grantor, grantor proto.ServiceRegistrar,
 	mux proto.MuxBroker, lock sync.Locker,
 ) (io.Closer, error) {
 	s.mu.Lock()

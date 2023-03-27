@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -17,7 +18,9 @@ import (
 // New returns a document.Service storage service that
 // uses the local directory dir to setup a local filesystem-based
 // multi-process safe, goroutine-safe document.Service.
-func New(dir string, marshaler encoding.Marshaler) (document.Service, error) {
+func New(ctx context.Context, dir string, marshaler encoding.Marshaler) (
+	document.Service, error,
+) {
 	storageDir := filepath.Join(dir, ".db")
 	err := os.MkdirAll(storageDir, 0777)
 	if err != nil {
@@ -27,7 +30,7 @@ func New(dir string, marshaler encoding.Marshaler) (document.Service, error) {
 	if err != nil {
 		return nil, fmt.Errorf("URI: %v", err)
 	}
-	scheme, err := workspace.NewFileScheme(config.NopConfig(), storageDirURI)
+	scheme, err := workspace.NewFileScheme(ctx, config.NopConfig(), storageDirURI)
 	if err != nil {
 		return nil, err
 	}

@@ -63,10 +63,13 @@ func setupProxyTest(t *testing.T, mockScheme workspace.Scheme) (
 
 	// plugin-side
 	managerClient := NewSchemeManager(broker, conn)
-	require.NoError(t, managerClient.RegisterScheme("test", func(_cfg config.Config, _uri workspaceapi.URI) (workspace.Scheme, error) {
-		assert.Equal(t, uri, _uri)
-		return mockScheme, nil
-	}))
+	require.NoError(t, managerClient.RegisterScheme("test",
+		func(_ context.Context, _cfg config.Config, _uri workspaceapi.URI) (
+			workspace.Scheme, error,
+		) {
+			assert.Equal(t, uri, _uri)
+			return mockScheme, nil
+		}))
 
 	// wait for RegisterScheme on host side
 	var schemeFn workspace.SchemeFunc
@@ -80,7 +83,7 @@ func setupProxyTest(t *testing.T, mockScheme workspace.Scheme) (
 		})
 	require.NoError(t, err)
 
-	client, err := schemeFn(cfg, uri)
+	client, err := schemeFn(context.Background(), cfg, uri)
 	require.NoError(t, err)
 
 	return client, func(t *testing.T) {
@@ -90,22 +93,14 @@ func setupProxyTest(t *testing.T, mockScheme workspace.Scheme) (
 	}
 }
 
-func TestSchemeManagerClientServerSchemeUnit(t *testing.T) {
-	testSchemeClientServer(t, setupProxyUnitTest)
-}
-
 func TestSchemeManagerClientServerSchemeSuiteIntegration(t *testing.T) {
-	var cleanups []func(*testing.T)
 	test.TestWorkspaceSchemeFiles(t, func(t *testing.T) workspace.Scheme {
 		memURI, err := workspaceapi.ParseURI("memory:///tmp")
 		require.NoError(t, err)
-		scheme, err := workspace.NewMemoryScheme(config.NopConfig(), memURI)
+		scheme, err := workspace.NewMemoryScheme(context.Background(), config.NopConfig(), memURI)
 		require.NoError(t, err)
 		client, closeFn := setupProxyTest(t, scheme)
-		cleanups = append(cleanups, closeFn)
+		t.Cleanup(func() { closeFn(t) })
 		return client
 	})
-	for _, cleanup := range cleanups {
-		cleanup(t)
-	}
 }

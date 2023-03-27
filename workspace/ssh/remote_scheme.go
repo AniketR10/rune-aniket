@@ -3,12 +3,12 @@ package ssh
 import (
 	"context"
 	"errors"
-	"io"
 	"os"
 	"sync"
 	"syscall"
 	"time"
 
+	bluectx "github.com/ernestrc/blue/context"
 	"github.com/ernestrc/blue/logging"
 	"github.com/ernestrc/blue/retry"
 	log "github.com/sirupsen/logrus"
@@ -20,14 +20,17 @@ var (
 	retryStrategy = retry.ExponentialStrategy(100*time.Millisecond, 5*time.Second)
 )
 
-type connectSchemeFn func(uri workspaceapi.URI, closeHook func(error)) (workspace.Scheme, error)
+type connectSchemeFn func(ctx context.Context,
+	uri workspaceapi.URI, closeHook func(error)) (workspace.Scheme, error)
 
 // wraps another workspace.Scheme to be resilient against intermitent connection failures
 type remoteScheme struct {
-	mu               sync.Mutex
+	locker           sync.Locker
 	closeChan        chan struct{}
 	lastSessionError error
 	scheme           workspace.Scheme
+	ctx              context.Context
+	cancelCtx        func()
 }
 
 func (s *remoteScheme) maintainConnection(
@@ -37,14 +40,17 @@ func (s *remoteScheme) maintainConnection(
 	logger := log.WithField(logging.KeyClass, "ssh")
 
 	var initSema bool
-	retry.Retry(context.Background(), retryStrategy,
+	retry.Retry(s.ctx, retryStrategy,
 		func(ctx context.Context) (bool, error) {
-			ctx, cancel := context.WithCancel(context.Background())
+
+			// cancel if connection is closed for some reason
+			// so we can retry below
+			ctx, cancel := context.WithCancel(ctx)
 
 			logger.Debugf("attempting to connect to %s", uri)
 
 			// block Scheme API until we're connected
-			s.mu.Lock()
+			s.locker.Lock()
 			if !initSema {
 				// unlock initialization semaphore
 				// so next call to Scheme API blocks until
@@ -53,41 +59,42 @@ func (s *remoteScheme) maintainConnection(
 				initSema = true
 			}
 			if s.scheme != nil {
-				_ = s.scheme.Close()
+				err := s.scheme.Close()
+				logger.Tracef("closed previous remote scheme: %v", err)
 			}
 
 			// close hook could be called multiple times
-			var canceled bool
-			s.scheme, s.lastSessionError = connect(uri, func(err error) {
-				logger.Warnf("lost connectivity to %s: %s", uri, err)
-				s.mu.Lock()
-				defer s.mu.Unlock()
-				if !canceled {
-					s.lastSessionError = err
-					canceled = true
-					cancel()
+			s.scheme, s.lastSessionError = connect(ctx, uri, func(err error) {
+				defer cancel()
+
+				select {
+				case <-ctx.Done():
+					return
+				default:
 				}
+				logger.Warnf("lost connectivity to %s: %s", uri, err)
+				s.locker.Lock()
+				defer s.locker.Unlock()
+				s.lastSessionError = err
 				return
 			})
 
 			if s.lastSessionError != nil {
+				cancel()
 				logger.Warnf("failed to connect to %s: %s", uri, s.lastSessionError)
-				if !canceled {
-					canceled = true // do not trust connect code
-					cancel()
-				}
-				s.mu.Unlock()
+				s.locker.Unlock()
 				return true, s.lastSessionError
 			}
 
 			logger.Infof("connected to %s", uri)
 
-			s.mu.Unlock()
+			s.locker.Unlock()
 
 			select {
 			case <-ctx.Done():
-				s.mu.Lock()
-				defer s.mu.Unlock()
+				logger.Debugf("connection context to %s is done", uri)
+				s.locker.Lock()
+				defer s.locker.Unlock()
 				if s.lastSessionError == nil {
 					s.lastSessionError = errors.New("lost connection to remote")
 					logger.Warn(s.lastSessionError)
@@ -101,11 +108,27 @@ func (s *remoteScheme) maintainConnection(
 	logger.Debugf("stopped trying to re-connect to remote %s", uri)
 }
 
-func newRemoteScheme(connect connectSchemeFn, uri workspaceapi.URI) workspace.Scheme {
+func newRemoteScheme(
+	ctx context.Context, connect connectSchemeFn, uri workspaceapi.URI,
+) workspace.Scheme {
 	ret := &remoteScheme{
 		closeChan:        make(chan struct{}),
 		lastSessionError: errors.New("not connected yet"),
 	}
+	var ok bool
+	ret.locker, ok = workspace.LockerFromContext(ctx)
+	if !ok {
+		ret.locker = new(sync.Mutex)
+		ret.locker.Lock() // make compatible with passing locker in ctx
+		defer ret.locker.Unlock()
+	}
+	ret.ctx, ret.cancelCtx = context.WithCancel(ctx)
+
+	ret.locker.Unlock()
+	defer ret.locker.Lock()
+
+	// ensure that we return once we have attempted
+	// to connect at least once.
 	var sema sync.Mutex
 	sema.Lock()
 	go ret.maintainConnection(connect, uri, ret.closeChan, &sema)
@@ -114,15 +137,17 @@ func newRemoteScheme(connect connectSchemeFn, uri workspaceapi.URI) workspace.Sc
 	return ret
 }
 
+// this should only be called from within event loop,
+// otherwhise need to sync first with locker.
 func (s *remoteScheme) state() (err error, scheme workspace.Scheme) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
 	err = s.lastSessionError
 	scheme = s.scheme
 	return
 }
 
-func (s *remoteScheme) Open(path string, flag int, perm os.FileMode) (workspaceapi.File, *workspaceapi.Error) {
+func (s *remoteScheme) Open(path string, flag int, perm os.FileMode) (
+	workspaceapi.File, *workspaceapi.Error,
+) {
 	err, scheme := s.state()
 	if err != nil {
 		werr := workspaceapi.NopError(err)
@@ -133,6 +158,14 @@ func (s *remoteScheme) Open(path string, flag int, perm os.FileMode) (workspacea
 		return nil, werr
 	}
 	return f, nil
+}
+
+func (s *remoteScheme) NewFile(fd uintptr, filename string) workspaceapi.File {
+	err, scheme := s.state()
+	if err != nil {
+		return workspace.InvalidFile(fd, filename, err)
+	}
+	return scheme.NewFile(fd, filename)
 }
 
 func (s *remoteScheme) Remove(path string) error {
@@ -179,20 +212,14 @@ func (s *remoteScheme) URI(path string) (workspaceapi.URI, error) {
 	panic("unused")
 }
 
-func (s *remoteScheme) Command(name string, arg ...string) (workspaceapi.Pid, error) {
+func (s *remoteScheme) StartCommand(ctx context.Context, cmd workspaceapi.Cmd) (
+	workspaceapi.Pid, error,
+) {
 	err, scheme := s.state()
 	if err != nil {
 		return 0, err
 	}
-	return scheme.Command(name, arg...)
-}
-
-func (s *remoteScheme) Start(p workspaceapi.Pid) error {
-	err, scheme := s.state()
-	if err != nil {
-		return err
-	}
-	return scheme.Start(p)
+	return scheme.StartCommand(bluectx.First(s.ctx, ctx), cmd)
 }
 
 func (s *remoteScheme) Signal(p workspaceapi.Pid, signal syscall.Signal) error {
@@ -203,44 +230,12 @@ func (s *remoteScheme) Signal(p workspaceapi.Pid, signal syscall.Signal) error {
 	return scheme.Signal(p, signal)
 }
 
-func (s *remoteScheme) StderrPipe(p workspaceapi.Pid) (io.ReadCloser, error) {
-	err, scheme := s.state()
-	if err != nil {
-		return nil, err
-	}
-	return scheme.StderrPipe(p)
-}
-
-func (s *remoteScheme) StdinPipe(p workspaceapi.Pid) (io.WriteCloser, error) {
-	err, scheme := s.state()
-	if err != nil {
-		return nil, err
-	}
-	return scheme.StdinPipe(p)
-}
-
-func (s *remoteScheme) StdoutPipe(p workspaceapi.Pid) (io.ReadCloser, error) {
-	err, scheme := s.state()
-	if err != nil {
-		return nil, err
-	}
-	return scheme.StdoutPipe(p)
-}
-
-func (s *remoteScheme) Wait(p workspaceapi.Pid) error {
-	err, scheme := s.state()
-	if err != nil {
-		return err
-	}
-	return scheme.Wait(p)
-}
-
-func (s *remoteScheme) NewPty() (workspaceapi.Pty, error) {
+func (s *remoteScheme) NewPty(ctx context.Context) (workspaceapi.Pty, error) {
 	err, scheme := s.state()
 	if err != nil {
 		return workspaceapi.Pty{}, err
 	}
-	return scheme.NewPty()
+	return scheme.NewPty(bluectx.First(s.ctx, ctx))
 }
 
 func (s *remoteScheme) ReadDir(name string) ([]os.DirEntry, error) {
@@ -260,14 +255,13 @@ func (s *remoteScheme) SetPtySize(pty workspaceapi.Pty, width, height int) error
 }
 
 func (s *remoteScheme) Close() (ret error) {
-	s.mu.Lock()
 	s.lastSessionError = errors.New("remote closed")
 	scheme := s.scheme
 	s.scheme = nil
-	s.mu.Unlock()
 	if scheme != nil {
 		close(s.closeChan)
 		scheme.Close()
 	}
+	s.cancelCtx()
 	return
 }

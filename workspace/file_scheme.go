@@ -1,16 +1,18 @@
 package workspace
 
 import (
+	"context"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
 	"os/user"
+	"path/filepath"
 	"sync"
-	"sync/atomic"
 	"syscall"
+	"time"
 
+	bluectx "github.com/ernestrc/blue/context"
 	"github.com/ernestrc/blue/logging"
 	multierr "github.com/ernestrc/go-multierror"
 	"github.com/ernestrc/sensible/find"
@@ -22,16 +24,25 @@ import (
 
 const (
 	// FileScheme represents the local file URL scheme.
-	FileScheme = "file"
+	FileScheme         = "file"
+	watcherWaitTimeout = 2 * time.Minute
 )
 
 // NewFileScheme returns a Scheme that manages resources
 // on the local file system.
-func NewFileScheme(cfg config.Config, workspace workspaceapi.URI) (Scheme, error) {
+func NewFileScheme(
+	ctx context.Context, cfg config.Config, workspace workspaceapi.URI,
+) (Scheme, error) {
 	ret := new(fileScheme)
 	ret.getUser = user.Current
 	ret.lookupUser = user.Lookup
 	ret.osStat = os.Stat
+	ret.cmds = make(map[workspaceapi.Pid]struct{})
+	var ok bool
+	ret.locker, ok = LockerFromContext(ctx)
+	if !ok {
+		ret.locker = new(sync.Mutex)
+	}
 	err := ret.init(cfg, workspace)
 	if err != nil {
 		return nil, err
@@ -44,15 +55,19 @@ type fileScheme struct {
 	getUser    func() (*user.User, error)
 	lookupUser func(string) (*user.User, error)
 	workspace  workspaceapi.URI
-	cmds       sync.Map
-	nextPid    int32
-}
+	ctx        context.Context
+	cancelCtx  func()
+	locker     sync.Locker
+	cmds       map[workspaceapi.Pid]struct{}
 
-type execCmd struct {
-	// serialize access to a cmd.Exec
-	pid atomic.Int64
-	mu  sync.Mutex
-	*exec.Cmd
+	// This is important to prevent runtime finalizers
+	// running on files that are garbage collected on host
+	// but that clients hold references to.
+	//
+	// Technically we could leak files if clients
+	// never close files, but once Server is garbage
+	// collected, all files that are orhpaned will be closed.
+	files map[uintptr]workspaceapi.File
 }
 
 func (p *fileScheme) init(cfg config.Config, workspace workspaceapi.URI) error {
@@ -68,6 +83,8 @@ func (p *fileScheme) init(cfg config.Config, workspace workspaceapi.URI) error {
 		return fmt.Errorf("workspaceapi.URI does not refer to a directory: %s", workspace.String())
 	}
 	p.workspace = workspace
+	p.ctx, p.cancelCtx = context.WithCancel(context.Background())
+	p.files = make(map[uintptr]workspaceapi.File)
 	return nil
 }
 
@@ -88,7 +105,19 @@ func (p *fileScheme) Open(path string, flag int, perm os.FileMode) (workspaceapi
 			IsNotExist:   os.IsNotExist(err),
 		}
 	}
-	return f, nil
+
+	ret := fileSchemeFile{File: f, p: p}
+	p.files[f.Fd()] = ret
+
+	return ret, nil
+}
+
+func (p *fileScheme) NewFile(fd uintptr, filename string) workspaceapi.File {
+	f, ok := p.files[fd]
+	if !ok {
+		return nil
+	}
+	return f
 }
 
 func (p *fileScheme) Remove(path string) error {
@@ -188,189 +217,147 @@ func (p *fileScheme) log(level log.Level, msg string, args ...interface{}) {
 		Logf(level, msg, args...)
 }
 
-func (p *fileScheme) Command(name string, arg ...string) (workspaceapi.Pid, error) {
-	path, err := find.Executable(name)
+func (p *fileScheme) StartCommand(ctx context.Context, cmd workspaceapi.Cmd) (
+	workspaceapi.Pid, error,
+) {
+	var err error
+	path := cmd.Path
+	if filepath.Base(cmd.Path) == cmd.Path {
+		path, err = find.Executable(cmd.Path)
+		if err != nil {
+			p.log(log.WarnLevel,
+				"find.Executable: could not find executable of '%s' in path. "+
+					"Falling back to shell expanding it: %v", cmd.Path, err)
+		}
+	}
+	// ensure that if file scheme is closed, all commands are cleaned up
+	ctx = bluectx.First(p.ctx, ctx)
+	stdcmd := exec.CommandContext(ctx, path, cmd.Args...)
+	stdcmd.Dir = p.workspace.Path()
+	stdcmd.Env = cmd.Env
+	stdcmd.Stdout = cmd.Stdout
+	stdcmd.Stderr = cmd.Stderr
+	stdcmd.Stdin = cmd.Stdin
+	stdcmd.SysProcAttr = cmd.SysProcAttr
+
+	err = stdcmd.Start()
 	if err != nil {
-		p.log(log.WarnLevel,
-			"find.Executable: could not find executable of '%s' in path. Falling back to shell expanding it: %v",
-			name, err)
-		path = name
-	}
-	cmd := exec.Command(path, arg...)
-	cmd.Dir = p.workspace.Path()
-	nextPid := atomic.AddInt32(&p.nextPid, 1)
-
-	p.log(log.DebugLevel, "exec.Command: (%#v, pid=%d)", cmd, nextPid)
-
-	p.cmds.Store(workspaceapi.Pid(nextPid), &execCmd{Cmd: cmd})
-	return workspaceapi.Pid(nextPid), nil
-}
-
-func (p *fileScheme) getCmdForPid(pid workspaceapi.Pid) (*execCmd, bool) {
-	c, ok := p.cmds.Load(pid)
-	if ok {
-		return c.(*execCmd), true
-	}
-	return nil, false
-}
-
-func (p *fileScheme) Start(pid workspaceapi.Pid) error {
-	c, ok := p.getCmdForPid(pid)
-	if !ok {
-		return errProcNotFound
+		return 0, fmt.Errorf("start: %w", err)
 	}
 
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	pid := workspaceapi.Pid(stdcmd.Process.Pid)
+	go func() {
+		defer func() {
+			p.locker.Lock()
+			defer p.locker.Unlock()
+			delete(p.cmds, pid)
+		}()
 
-	err := c.Start()
-	if err != nil {
-		return fmt.Errorf("Cmd.Start: %w", err)
-	}
+		start := time.Now()
+		p.log(log.TraceLevel, "exec.Command: Wait: pid=%d", stdcmd.Process.Pid)
+		err := stdcmd.Wait()
+		p.log(log.DebugLevel, "exec.Command: Wait returned: pid=%d, err=%v"+
+			", duration=%s",
+			stdcmd.Process.Pid, err, time.Since(start).String())
 
-	c.pid.Add(int64(c.Process.Pid))
-	return nil
+		// set a timeout to how long we wait for a watcher
+		// to drain the error. This is just to avoid
+		// buggy watchers to cause this goroutine to block forever,
+		// so the timeout should be in the order of minutes.
+		ctx, cancel := context.WithTimeout(ctx, watcherWaitTimeout)
+		defer cancel()
+
+		if cmd.Watcher != nil && cmd.Watcher.Watch() != nil {
+			select {
+			case cmd.Watcher.Watch() <- err:
+			case <-ctx.Done():
+			}
+		}
+	}()
+
+	p.log(log.DebugLevel, "exec.Command: (%#v, pid=%d)", cmd, stdcmd.Process.Pid)
+
+	p.cmds[pid] = struct{}{}
+
+	return pid, nil
 }
 
 func (p *fileScheme) Signal(pid workspaceapi.Pid, signal syscall.Signal) error {
-	c, ok := p.getCmdForPid(pid)
+	_, ok := p.cmds[pid]
 	if !ok {
 		return errProcNotFound
 	}
 
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	if c.Process == nil {
-		return errProcNotRunning
-	}
-	err := syscall.Kill(int(c.Process.Pid), signal)
+	err := syscall.Kill(int(pid), signal)
 	if err != nil {
 		return fmt.Errorf("syscall.Kill: %w", err)
 	}
 	return nil
 }
 
-func (p *fileScheme) StderrPipe(pid workspaceapi.Pid) (io.ReadCloser, error) {
-	c, ok := p.getCmdForPid(pid)
-	if !ok {
-		return nil, errProcNotFound
-	}
-
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	pipe, err := c.StderrPipe()
-	if err != nil {
-		return nil, fmt.Errorf("Cmd.StderrPipe: %w", err)
-	}
-	return pipe, err
-}
-
-func (p *fileScheme) StdinPipe(pid workspaceapi.Pid) (io.WriteCloser, error) {
-	c, ok := p.getCmdForPid(pid)
-	if !ok {
-		return nil, errProcNotFound
-	}
-
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	pipe, err := c.StdinPipe()
-	if err != nil {
-		return nil, fmt.Errorf("Cmd.StdinPipe: %w", err)
-	}
-	return pipe, err
-}
-
-func (p *fileScheme) StdoutPipe(pid workspaceapi.Pid) (io.ReadCloser, error) {
-	c, ok := p.getCmdForPid(pid)
-	if !ok {
-		return nil, errProcNotFound
-	}
-
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	pipe, err := c.StdoutPipe()
-	if err != nil {
-		return nil, fmt.Errorf("Cmd.StdoutPipe: %w", err)
-	}
-	return pipe, err
-}
-
-func (p *fileScheme) Wait(pid workspaceapi.Pid) error {
-	c, ok := p.getCmdForPid(pid)
-	if !ok {
-		return errProcNotFound
-	}
-	defer p.cmds.Delete(pid)
-
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	err := c.Wait()
-	if err != nil {
-		return fmt.Errorf("Cmd.Wait: %w", err)
-	}
-	return err
-}
-
-func (p *fileScheme) NewPty() (workspaceapi.Pty, error) {
+func (p *fileScheme) NewPty(ctx context.Context) (workspaceapi.Pty, error) {
 	shell := os.Getenv("SHELL")
 	if shell == "" {
 		shell = "/bin/sh"
 	}
 
 	// setup command
-	pid, _ := p.Command(shell)
-	cmd, _ := p.getCmdForPid(pid)
-	if cmd.SysProcAttr == nil {
-		cmd.SysProcAttr = &syscall.SysProcAttr{}
+	cmd := workspaceapi.Cmd{
+		Path: shell,
+		// NOTE: this should probably be an option
+		Env: append(os.Environ(), "TERM=xterm-256color"),
+		SysProcAttr: &syscall.SysProcAttr{
+			Setsid:  true,
+			Setctty: true,
+		},
 	}
-	cmd.SysProcAttr.Setsid = true
-	cmd.SysProcAttr.Setctty = true
-	// NOTE: this should probably be an option
-	cmd.Env = append(os.Environ(), "TERM=xterm-256color")
 
 	// open master/slave files
 	pty, tty, err := pty.Open()
 	if err != nil {
 		return workspaceapi.Pty{}, fmt.Errorf("pty.Open: %v", err)
 	}
+
+	// NOTE: consider setting a better default pty size
+	// so when we open a terminal there's no race between the plugin
+	// setting the size and the tui component drawing to the screen.
 	cmd.Stdout = tty
 	cmd.Stderr = tty
 	cmd.Stdin = tty
 
 	// start process
-	var startErr error
-	if err := cmd.Start(); err != nil {
-		startErr = multierr.Append(startErr, err)
+	var retErr error
+	pid, err := p.StartCommand(ctx, cmd)
+	if err != nil {
+		retErr = multierr.Append(retErr, err)
 		if err := pty.Close(); err != nil {
-			startErr = multierr.Append(startErr, err)
+			retErr = multierr.Append(retErr, err)
 		}
 	}
 	if err := tty.Close(); err != nil {
-		startErr = multierr.Append(startErr, err)
+		retErr = multierr.Append(retErr, err)
 	}
-	if startErr != nil {
-		return workspaceapi.Pty{}, startErr
+	if retErr != nil {
+		return workspaceapi.Pty{}, retErr
 	}
+
+	ret := fileSchemeFile{File: pty, p: p}
+	p.files[pty.Fd()] = ret
 
 	return workspaceapi.Pty{
 		Pid:    pid,
-		Master: pty,
+		Master: ret,
 		Slave:  tty.Name(),
 	}, nil
 }
 
 func (p *fileScheme) SetPtySize(pp workspaceapi.Pty, width, height int) error {
-	ptyFile, ok := pp.Master.(*os.File)
+	ptyFile, ok := pp.Master.(fileSchemeFile)
 	if !ok {
 		return fmt.Errorf("extraneous Pty: %#v", pp)
 	}
 
-	err := pty.Setsize(ptyFile, &pty.Winsize{
+	err := pty.Setsize(ptyFile.File, &pty.Winsize{
 		Rows: uint16(height),
 		Cols: uint16(width),
 	})
@@ -380,45 +367,20 @@ func (p *fileScheme) SetPtySize(pp workspaceapi.Pty, width, height int) error {
 	return nil
 }
 
-func (m *execCmd) Close() error {
-	// NOTE do not lock here or else we risk deadlock
-	// as any client could could call Wait and we would be holding
-	// this execCmd lock undefinetly. Sending a signal will terminate
-	// the process which then will force Wait to return, freeing the lock.
-	if pid := m.pid.Load(); pid != 0 {
-		err := syscall.Kill(int(pid), syscall.SIGKILL)
-		if err != nil {
-			return err
-		}
-	}
+func (p *fileScheme) Close() error {
+	p.cancelCtx()
 	return nil
 }
 
-func (p *fileScheme) Close() error {
-	var ret error
+// enables overriding Close to delete from map.
+type fileSchemeFile struct {
+	*os.File
+	p *fileScheme
+}
 
-	var copyCmds []*execCmd
-	var keys []interface{}
-	p.cmds.Range(func(key, cmd interface{}) bool {
-		copyCmds = append(copyCmds, cmd.(*execCmd))
-		keys = append(keys, key)
-		return true
-	})
-
-	var wg sync.WaitGroup
-	wg.Add(len(copyCmds))
-	for _, cmd := range copyCmds {
-		go func(cmd *execCmd) {
-			defer wg.Done()
-			_ = cmd.Close()
-		}(cmd)
-	}
-	wg.Wait()
-
-	for _, key := range keys {
-		p.cmds.Delete(key)
-	}
-	return ret
+func (f fileSchemeFile) Close() error {
+	delete(f.p.files, f.Fd())
+	return f.File.Close()
 }
 
 func makeLocalURI(path string) (workspaceapi.URI, error) {

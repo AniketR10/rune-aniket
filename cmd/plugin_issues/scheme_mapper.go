@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -27,8 +28,10 @@ func issueMapperScheme(
 	marshaler encoding.Marshaler,
 	maxSubjectLen int,
 ) workspace.SchemeFunc {
-	return func(cfg config.Config, uri workspaceapi.URI) (workspace.Scheme, error) {
-		s, err := schemeFunc(cfg, uri)
+	return func(ctx context.Context, cfg config.Config, uri workspaceapi.URI) (
+		workspace.Scheme, error,
+	) {
+		s, err := schemeFunc(ctx, cfg, uri)
 		if err != nil {
 			return nil, err
 		}

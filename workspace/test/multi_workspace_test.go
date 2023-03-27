@@ -1,6 +1,7 @@
 package test
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -15,6 +16,8 @@ import (
 )
 
 func TestMultiWorkspace(t *testing.T) {
+	ctx := context.Background()
+
 	tsuite := []struct {
 		desc               string
 		defURI             workspaceapi.URI
@@ -39,11 +42,11 @@ func TestMultiWorkspace(t *testing.T) {
 
 	for _, tcase := range tsuite {
 		t.Run(tcase.desc, func(t *testing.T) {
-			memScheme, err := workspace.NewMemoryScheme(config.NopConfig(), tcase.defURI)
+			memScheme, err := workspace.NewMemoryScheme(ctx, config.NopConfig(), tcase.defURI)
 			require.NoError(t, err)
 			cwd := workspace.NewSchemeWorkspace(tcase.defURI, memScheme)
 			mockManager := &mockManager{}
-			cwd = workspace.Multi(mockManager, cwd, tcase.defURI)
+			cwd = workspace.Multi(ctx, mockManager, cwd, tcase.defURI)
 
 			if tcase.recover {
 				swapFile := fmt.Sprintf("%s.swp", tcase.fileURI.Path())
@@ -75,12 +78,14 @@ type mockManager struct {
 func (m *mockManager) RegisterScheme(string, workspace.SchemeFunc) error {
 	panic("should not be called")
 }
-func (m *mockManager) AddWorkspace(uri workspaceapi.URI) (workspace.Workspace, error) {
+func (m *mockManager) AddWorkspace(ctx context.Context, uri workspaceapi.URI) (
+	workspace.Workspace, error,
+) {
 	if uri.Scheme() != "test" {
 		return nil, errors.New("not registered")
 	}
 	m.addWorkspace = append(m.addWorkspace, uri)
-	scheme, err := NewNopScheme(uri.Scheme())(config.NopConfig(), uri)
+	scheme, err := NewNopScheme(uri.Scheme())(ctx, config.NopConfig(), uri)
 	if err != nil {
 		return nil, err
 	}

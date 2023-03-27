@@ -1,7 +1,7 @@
 package rpc
 
 import (
-	"errors"
+	"context"
 	"fmt"
 	"io"
 	"runtime"
@@ -28,19 +28,17 @@ func NewSchemeManager(broker proto.MuxBroker, cc proto.MuxConn) *SchemeManagerCl
 // SchemeManagerClient satisfies workspace.SchemeManager by calling a
 // remote SchemeManager over a proto.MuxConn.
 type SchemeManagerClient struct {
-	broker proto.MuxBroker
-	client ManagerClient
-	cc     proto.MuxConn
-
-	schemes map[string]workspace.SchemeFunc
-	servers map[uint32]io.Closer
+	broker    proto.MuxBroker
+	client    ManagerClient
+	cc        proto.MuxConn
+	ctx       context.Context
+	cancelCtx func()
 }
 
 func (c *SchemeManagerClient) init(broker proto.MuxBroker, cc proto.MuxConn) {
 	c.broker = broker
 	c.client = NewManagerClient(cc)
-	c.schemes = make(map[string]workspace.SchemeFunc)
-	c.servers = make(map[uint32]io.Closer)
+	c.ctx, c.cancelCtx = context.WithCancel(context.Background())
 	c.cc = cc
 }
 
@@ -65,20 +63,16 @@ func (c *SchemeManagerClient) serveProxyServer(scheme string, fn workspace.Schem
 }
 
 // RegisterScheme satisfies workspace.SchemeManager
-func (c *SchemeManagerClient) RegisterScheme(scheme string, fn workspace.SchemeFunc) (err error) {
+func (c *SchemeManagerClient) RegisterScheme(
+	scheme string, fn workspace.SchemeFunc,
+) (err error) {
 	var proxyID uint32
 
 	c.log(log.TraceLevel, "RegisterScheme(%s)", scheme)
 	defer c.log(log.TraceLevel, "RegisterScheme(%d, %s): %s", proxyID, scheme, err)
 
-	ctx, cleanup := ctxWithTimeout()
+	ctx, cleanup := ctxWithTimeout(c.ctx)
 	defer cleanup()
-
-	_, ok := c.schemes[scheme]
-	if ok {
-		err = errors.New("scheme already registered")
-		return
-	}
 
 	var server *proxySchemeServerImpl
 	server, proxyID, err = c.serveProxyServer(scheme, fn)
@@ -95,18 +89,16 @@ func (c *SchemeManagerClient) RegisterScheme(scheme string, fn workspace.SchemeF
 		return
 	}
 
-	c.servers[proxyID] = server
-	c.schemes[scheme] = fn
 	return
 }
 
 // Close releases all resources associated with this instance.
 func (c *SchemeManagerClient) Close() (ret error) {
-	for _, s := range c.servers {
-		if err := s.Close(); err != nil {
-			ret = multierr.Append(ret, err)
-		}
+	if c.cancelCtx == nil {
+		return
 	}
+	c.cancelCtx()
+	c.cancelCtx = nil
 	if closer, ok := c.cc.(io.Closer); ok {
 		if err := closer.Close(); err != nil {
 			ret = multierr.Append(ret, err)

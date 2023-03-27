@@ -1,6 +1,7 @@
 package test
 
 import (
+	"context"
 	"io/ioutil"
 	os "os"
 	"testing"
@@ -12,23 +13,20 @@ import (
 )
 
 func TestFileScheme(t *testing.T) {
-	var dirs []string
-
 	TestWorkspaceSchemeFiles(t, func(t *testing.T) workspace.Scheme {
 		dir, err := ioutil.TempDir("", "file_scheme_suite")
 		require.NoError(t, err)
 
-		dirs = append(dirs, dir)
-
 		workspaceURI, err := workspaceapi.ParseURI("file://" + dir)
 		require.NoError(t, err)
 
-		fileScheme, err := workspace.NewFileScheme(config.NopConfig(), workspaceURI)
+		fileScheme, err := workspace.NewFileScheme(
+			context.Background(), config.NopConfig(), workspaceURI)
 		require.NoError(t, err)
+
+		t.Cleanup(func() {
+			_ = os.RemoveAll(dir)
+		})
 		return fileScheme
 	})
-
-	for _, dir := range dirs {
-		_ = os.RemoveAll(dir)
-	}
 }

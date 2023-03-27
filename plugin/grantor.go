@@ -6,7 +6,6 @@ import (
 	"sync"
 
 	log "github.com/sirupsen/logrus"
-	"google.golang.org/grpc"
 	"unstable.build/go-tui/proto"
 )
 
@@ -14,7 +13,7 @@ import (
 type ResourceRegistrar interface {
 	Register(
 		pluginID string, grantor Grantor,
-		registar grpc.ServiceRegistrar, broker proto.MuxBroker,
+		registar proto.ServiceRegistrar, broker proto.MuxBroker,
 		locker sync.Locker) (io.Closer, error)
 }
 

@@ -1,6 +1,7 @@
 package test_all
 
 import (
+	"context"
 	"testing"
 
 	"github.com/ernestrc/blue/encoding/json"
@@ -17,14 +18,16 @@ func TestMemoryWorkspaceSchemeBackedByWorkspaceSchemeService(t *testing.T) {
 		workspaceURI, err := workspaceapi.ParseURI("memory:///")
 		require.NoError(t, err)
 
-		scheme, err := workspace.NewMemoryScheme(config.NopConfig(), workspaceURI)
+		ctx := context.Background()
+		scheme, err := workspace.NewMemoryScheme(
+			ctx, config.NopConfig(), workspaceURI)
 		require.NoError(t, err)
 
 		svc, err := storework.NewWorkspaceService(scheme, json.Marshaler())
 		require.NoError(t, err)
 
 		s, err := workdoc.WorkspaceScheme[testStruct](workspaceURI, svc, json.Marshaler(),
-			errMissingID)(config.NopConfig(), workspaceURI)
+			errMissingID)(ctx, config.NopConfig(), workspaceURI)
 		require.NoError(t, err)
 		return s
 	})

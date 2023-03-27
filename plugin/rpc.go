@@ -15,7 +15,7 @@ import (
 
 const (
 	defDurationGracefulShutServer = 5 * time.Second
-	defDurationGracefulShutClient = 300 * time.Millisecond
+	defDurationGracefulShutClient = 1 * time.Second
 )
 
 type granteeServer struct {

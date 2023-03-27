@@ -2,111 +2,98 @@ package ssh
 
 import (
 	"errors"
-	"io"
+	"fmt"
 	"net"
-	"sync"
+	"os"
 	"time"
+
+	"github.com/ernestrc/blue/logging"
+	bluenet "github.com/ernestrc/blue/net"
+	log "github.com/sirupsen/logrus"
 )
 
 var errStreamClosed = errors.New("stream closed")
 
 var _ net.Conn = (*stdConn)(nil)
 
-// stdConn is used to satisfy net.Conn by combining a io.Reader and a io.Writer.
 type stdConn struct {
-	mu        sync.Mutex
+	logger    *log.Logger
 	closeHook func()
-	in        io.Reader
-	out       io.Writer
-	close     bool
-	local     *stdinAddr
-	remote    *stdinAddr
+	conn      net.Conn
 }
 
-func newStdConn(in io.Reader, out io.Writer, closeHook func()) *stdConn {
-	return &stdConn{
-		local:     newStdinAddr("local"),
-		remote:    newStdinAddr("remote"),
-		in:        in,
-		out:       out,
-		closeHook: closeHook,
+func newStdConn(
+	logger *log.Logger,
+	in *os.File, out *os.File, stdio bool,
+	closeHook func(),
+) (*stdConn, error) {
+	var conn net.Conn
+	var err error
+	// PipeConn returns error if in, out are not pipes
+	// but os.Stdin and os.Stdout are not, so we need to call
+	// special constructor StdioConn to avoid assertion.
+	if stdio {
+		conn = bluenet.StdioConn()
+	} else {
+		conn, err = bluenet.PipeConn(in, out)
 	}
-}
-
-type stdinAddr struct {
-	s string
-}
-
-func newStdinAddr(s string) *stdinAddr {
-	return &stdinAddr{s}
-}
-func (a *stdinAddr) Network() string {
-	return "stdio"
-}
-
-func (a *stdinAddr) String() string {
-	return a.s
+	if err != nil {
+		return nil, fmt.Errorf("pipe conn: %v", err)
+	}
+	return &stdConn{
+		logger:    logger,
+		conn:      conn,
+		closeHook: closeHook,
+	}, nil
 }
 
 func (s *stdConn) LocalAddr() net.Addr {
-	return s.local
+	return s.conn.LocalAddr()
 }
 
 func (s *stdConn) RemoteAddr() net.Addr {
-	return s.remote
+	return s.conn.RemoteAddr()
 }
 
-func (s *stdConn) closed() bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.close
+func (s *stdConn) log(level log.Level, msg string, args ...interface{}) {
+	s.logger.
+		WithFields(log.Fields{logging.KeyClass: "stdConn"}).
+		Logf(level, msg, args...)
 }
 
 func (s *stdConn) Read(b []byte) (n int, err error) {
-	if s.closed() {
-		return 0, io.EOF
-	}
-	n, err = s.in.Read(b)
-	if err == io.EOF {
-		s.callCloseHook()
-	}
+	n, err = s.conn.Read(b)
 	return
 }
 
 func (s *stdConn) Write(b []byte) (n int, err error) {
-	if s.closed() {
-		return 0, errStreamClosed
-	}
-	return s.out.Write(b)
+	n, err = s.conn.Write(b)
+	return
 }
 
-func (s *stdConn) callCloseHook() {
-	s.mu.Lock()
-	s.close = true
-	closeHook := s.closeHook
-	s.closeHook = nil
-	s.mu.Unlock()
-	if closeHook != nil {
-		closeHook()
+func (s *stdConn) callHook(hook *func()) {
+	hookFn := *hook
+	*hook = nil
+	if hookFn == nil {
+		return
 	}
+	hookFn()
 }
 
 func (s *stdConn) Close() error {
-	if s.closed() {
-		return nil
-	}
-	s.callCloseHook()
-	return nil
+	s.log(log.TraceLevel, "close called, invoking hooks now")
+	s.callHook(&s.closeHook)
+	return s.conn.Close()
 }
 
 func (s *stdConn) SetDeadline(t time.Time) error {
-	return nil
+	return s.conn.SetDeadline(t)
 }
 
 func (s *stdConn) SetReadDeadline(t time.Time) error {
-	return nil
+	return s.conn.SetReadDeadline(t)
 }
 
 func (s *stdConn) SetWriteDeadline(t time.Time) error {
-	return nil
+	return s.conn.SetWriteDeadline(t)
 }

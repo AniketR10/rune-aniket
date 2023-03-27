@@ -230,7 +230,7 @@ func (e *ex) completeCommand(
 
 func (e *ex) Interrupt() error {
 	if !e.publishEvent(term.Event{Type: term.EventInterrupt}) {
-		return errors.New("event stream not ready")
+		return errEventStreamNotReady
 	}
 	return nil
 }

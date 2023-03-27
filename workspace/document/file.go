@@ -26,6 +26,7 @@ type fileInfo struct {
 }
 
 type file[T storage.Document[T]] struct {
+	s             *scheme[T]
 	errMissingID  error
 	marshaler     encoding.Marshaler
 	retryStrategy retry.Strategy
@@ -42,22 +43,24 @@ type file[T storage.Document[T]] struct {
 // return not fully initialzed until init is called
 func newFile[T storage.Document[T]](
 	docID string, m encoding.Marshaler, errMissingID error,
-	svc *service, mode fs.FileMode, retryStrategy retry.Strategy,
-	val T, addTemplate bool,
+	fd uintptr, svc *service, mode fs.FileMode,
+	retryStrategy retry.Strategy,
+	val T, addTemplate bool, s *scheme[T],
 ) (*file[T], error) {
 	ret := new(file[T])
 	ret.marshaler = m
 	ret.svc = svc
 	ret.val = val
+	ret.s = s
 	if addTemplate {
 		data, err := ret.marshaler.Marshal(ret.val)
 		if err != nil {
 			return nil, fmt.Errorf("Marshal: %v", err)
 		}
-		ret.memFile = workspace.NewMemoryFile(docID, mode, data)
+		ret.memFile = workspace.NewMemoryFile(docID, fd, mode, data)
 	} else {
 		data := make([]byte, 0)
-		ret.memFile = workspace.NewMemoryFile(docID, mode, data)
+		ret.memFile = workspace.NewMemoryFile(docID, fd, mode, data)
 	}
 	ret.retryStrategy = retryStrategy
 	return ret, nil
@@ -135,6 +138,10 @@ func (f *file[T]) Name() string {
 	return f.memFile.Name()
 }
 
+func (f *file[T]) Fd() uintptr {
+	return f.memFile.Fd()
+}
+
 func (f *file[T]) Stat() (os.FileInfo, error) {
 	mstat, _ := f.memFile.Stat()
 	return fileInfo{
@@ -194,5 +201,6 @@ func (f *file[T]) Write(p []byte) (n int, err error) {
 }
 
 func (f *file[T]) Close() (err error) {
+	delete(f.s.files, f.Fd())
 	return nil
 }

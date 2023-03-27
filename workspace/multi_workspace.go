@@ -1,8 +1,8 @@
 package workspace
 
 import (
+	"context"
 	"fmt"
-	"io"
 	"os"
 	"syscall"
 
@@ -14,18 +14,24 @@ var _ Workspace = (multi)(multi{})
 
 // Multi wraps a Workspace to provide oob Recover and Load requests to other workspaces/schemes
 // whether initialized or not.
-func Multi(m WorkspaceManager, def Workspace, uri workspaceapi.URI) Workspace {
-	return newMulti(m, uri, def)
+func Multi(
+	ctx context.Context, m WorkspaceManager, def Workspace, uri workspaceapi.URI,
+) Workspace {
+	return newMulti(ctx, m, uri, def)
 }
 
 type multi struct {
-	defURI  workspaceapi.URI
-	def     Workspace
-	manager WorkspaceManager
+	parentCtx context.Context
+	defURI    workspaceapi.URI
+	def       Workspace
+	manager   WorkspaceManager
 }
 
-func newMulti(manager WorkspaceManager, defURI workspaceapi.URI, def Workspace) *multi {
-	return &multi{def: def, defURI: defURI, manager: manager}
+func newMulti(
+	ctx context.Context, manager WorkspaceManager,
+	defURI workspaceapi.URI, def Workspace,
+) *multi {
+	return &multi{parentCtx: ctx, def: def, defURI: defURI, manager: manager}
 }
 
 func (m multi) Load(
@@ -66,6 +72,10 @@ func (m multi) Open(path string, flag int, mode os.FileMode) (
 	return m.def.Open(path, flag, mode)
 }
 
+func (m multi) NewFile(fd uintptr, name string) workspaceapi.File {
+	return m.def.NewFile(fd, name)
+}
+
 func (m multi) Stat(path string) (os.FileInfo, error) {
 	return m.def.Stat(path)
 }
@@ -90,36 +100,18 @@ func (m multi) URI(path string) (workspaceapi.URI, error) {
 	return m.def.URI(path)
 }
 
-func (m multi) Command(name string, arg ...string) (workspaceapi.Pid, error) {
-	return m.def.Command(name, arg...)
-}
-
-func (m multi) Start(p workspaceapi.Pid) error {
-	return m.def.Start(p)
+func (m multi) StartCommand(ctx context.Context, cmd workspaceapi.Cmd) (
+	workspaceapi.Pid, error,
+) {
+	return m.def.StartCommand(ctx, cmd)
 }
 
 func (m multi) Signal(p workspaceapi.Pid, s syscall.Signal) error {
 	return m.def.Signal(p, s)
 }
 
-func (m multi) StderrPipe(p workspaceapi.Pid) (io.ReadCloser, error) {
-	return m.def.StderrPipe(p)
-}
-
-func (m multi) StdinPipe(p workspaceapi.Pid) (io.WriteCloser, error) {
-	return m.def.StdinPipe(p)
-}
-
-func (m multi) StdoutPipe(p workspaceapi.Pid) (io.ReadCloser, error) {
-	return m.def.StdoutPipe(p)
-}
-
-func (m multi) Wait(p workspaceapi.Pid) error {
-	return m.def.Wait(p)
-}
-
-func (m multi) NewPty() (workspaceapi.Pty, error) {
-	return m.def.NewPty()
+func (m multi) NewPty(ctx context.Context) (workspaceapi.Pty, error) {
+	return m.def.NewPty(ctx)
 }
 
 func (m multi) SetPtySize(p workspaceapi.Pty, width, height int) error {
@@ -133,7 +125,7 @@ func (m multi) Close() error {
 func (m multi) loadExtraneous(
 	file workspaceapi.URI, buf *cell.Buffer, swapDir workspaceapi.URI, readOnly bool,
 ) (FlusherCloser, error) {
-	workspace, err := m.manager.AddWorkspace(workspaceapi.Dir(file))
+	workspace, err := m.manager.AddWorkspace(m.parentCtx, workspaceapi.Dir(file))
 	if err != nil {
 		return nil, err
 	}
@@ -143,7 +135,7 @@ func (m multi) loadExtraneous(
 func (m multi) recoverExtraneous(
 	file, swapFilePath workspaceapi.URI, buf *cell.Buffer, force bool,
 ) (FlusherCloser, error) {
-	workspace, err := m.manager.AddWorkspace(workspaceapi.Dir(file))
+	workspace, err := m.manager.AddWorkspace(m.parentCtx, workspaceapi.Dir(file))
 	if err != nil {
 		return nil, err
 	}

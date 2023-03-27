@@ -66,13 +66,14 @@ var (
 )
 
 type workspaceManagerHandler struct {
-	mu           sync.Mutex
-	exit         bool
-	cfg          ideConfig
-	storage      document.Service
-	workspace    workspace.WorkspaceManager
-	publishEvent func(term.Event) bool
-	sixDir       string
+	mu            sync.Mutex
+	exit          bool
+	cfg           ideConfig
+	ctxWithLocker context.Context
+	storage       document.Service
+	workspace     workspace.WorkspaceManager
+	publishEvent  func(term.Event) bool
+	sixDir        string
 
 	union          handler.FrameUnion
 	bar            handler.Tabs
@@ -123,7 +124,8 @@ func (h *workspaceManagerHandler) init(
 	h.publishEvent = publishEvent
 	h.workspace = manager
 	h.sixDir = sixDir
-	storage, err := storage.New(sixDir, bson.Marshaler())
+	h.ctxWithLocker = workspace.ContextWithLocker(context.Background(), &h.mu)
+	storage, err := storage.New(h.ctxWithLocker, sixDir, bson.Marshaler())
 	if err != nil {
 		storage = document.NewInMemoryService()
 		log.Warnf("Could not setup fs-backed storage: %v. Using ephemeral.", err)
@@ -153,6 +155,9 @@ func (h *workspaceManagerHandler) init(
 	h.union.Left = charset.Left
 	h.union.Top = charset.Top
 	h.union.Bottom = charset.Bottom
+
+	h.mu.Lock()
+	defer h.mu.Unlock()
 
 	err = h.addWorkspace(uri, recfilename, filenames)
 	if err != nil {
@@ -327,7 +332,7 @@ func (h *workspaceManagerHandler) textOpts(cfg ideConfig) []text.Option {
 		text.WithPromptConfig(cfg.promptConfig()),
 		text.WithInterrupter(term.FuncInterrupter(func() error {
 			if !h.publishEvent(term.Event{Type: term.EventInterrupt}) {
-				return errors.New("event stream not ready")
+				return errEventStreamNotReady
 			}
 			return nil
 		})),
@@ -384,7 +389,7 @@ func (h *workspaceManagerHandler) addWorkspace(
 			return nil
 		}
 	}
-	cwd, err := h.workspace.AddWorkspace(uri)
+	cwd, err := h.workspace.AddWorkspace(h.ctxWithLocker, uri)
 	if err != nil {
 		return fmt.Errorf("Failed to create new workspace for %q: %s", uri, err)
 	}
@@ -414,7 +419,7 @@ func (h *workspaceManagerHandler) addWorkspace(
 	}
 
 	// workspace capable of opening URIs other than the workspaceapi.URI
-	multicwd := workspace.Multi(h.workspace, cwd, uri)
+	multicwd := workspace.Multi(h.ctxWithLocker, h.workspace, cwd, uri)
 	ex, err := newEx(h.newEditor(cfg), multicwd, h.storage,
 		h.publishEvent, textOpts...)
 	if err != nil {

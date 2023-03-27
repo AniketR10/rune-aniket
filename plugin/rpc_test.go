@@ -18,7 +18,7 @@ import (
 )
 
 type testGranteePbClient struct {
-	mu                 sync.Mutex
+	locker             sync.Locker
 	err                error
 	fixturePermissions []*pluginpb.Permission
 	sleepPermissions   time.Duration
@@ -32,24 +32,24 @@ type testGranteePbClient struct {
 }
 
 func (c *testGranteePbClient) permissions() (pluginpb.PermRequest, bool) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	c.locker.Lock()
+	defer c.locker.Unlock()
 	if c._permissions == nil {
 		return pluginpb.PermRequest{}, false
 	}
 	return *c._permissions, true
 }
 func (c *testGranteePbClient) onGrant() (pluginpb.OnPermGrantRequest, bool) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	c.locker.Lock()
+	defer c.locker.Unlock()
 	if c._onGrant == nil {
 		return pluginpb.OnPermGrantRequest{}, false
 	}
 	return *c._onGrant, true
 }
 func (c *testGranteePbClient) shutdown() (pluginpb.ShutdownRequest, bool) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	c.locker.Lock()
+	defer c.locker.Unlock()
 	if c._shutdown == nil {
 		return pluginpb.ShutdownRequest{}, false
 
@@ -57,8 +57,8 @@ func (c *testGranteePbClient) shutdown() (pluginpb.ShutdownRequest, bool) {
 	return *c._shutdown, true
 }
 func (c *testGranteePbClient) health() (pluginpb.HealthRequest, bool) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	c.locker.Lock()
+	defer c.locker.Unlock()
 	if c._health == nil {
 		return pluginpb.HealthRequest{}, false
 
@@ -69,9 +69,9 @@ func (c *testGranteePbClient) health() (pluginpb.HealthRequest, bool) {
 func (c *testGranteePbClient) Permissions(
 	ctx context.Context, in *pluginpb.PermRequest, opts ...grpc.CallOption,
 ) (*pluginpb.PermResponse, error) {
-	c.mu.Lock()
+	c.locker.Lock()
 	c._permissions = in
-	c.mu.Unlock()
+	c.locker.Unlock()
 	permissions := new(pluginpb.PermResponse)
 	if c.err != nil {
 		return nil, c.err
@@ -84,9 +84,9 @@ func (c *testGranteePbClient) Permissions(
 func (c *testGranteePbClient) OnGrant(
 	ctx context.Context, in *pluginpb.OnPermGrantRequest, opts ...grpc.CallOption,
 ) (*pluginpb.OnPermGrantResponse, error) {
-	c.mu.Lock()
+	c.locker.Lock()
 	c._onGrant = in
-	c.mu.Unlock()
+	c.locker.Unlock()
 	if c.err != nil {
 		return nil, c.err
 	}
@@ -96,11 +96,11 @@ func (c *testGranteePbClient) OnGrant(
 func (c *testGranteePbClient) Shutdown(
 	ctx context.Context, in *pluginpb.ShutdownRequest, opts ...grpc.CallOption,
 ) (*pluginpb.ShutdownResponse, error) {
-	c.mu.Lock()
-	c._shutdown = in
-	c.mu.Unlock()
 	if c.onShutdownChan != nil {
 		go func(ch chan struct{}) {
+			c.locker.Lock()
+			c._shutdown = in
+			c.locker.Unlock()
 			ch <- struct{}{}
 		}(c.onShutdownChan)
 	}
@@ -129,7 +129,7 @@ func (c *testGranteePbClient) Health(
 
 func TestUnitClient(t *testing.T) {
 	t.Run("permissions sends permissions", func(t *testing.T) {
-		mockpbClient := &testGranteePbClient{}
+		mockpbClient := &testGranteePbClient{locker: new(sync.Mutex)}
 		mockpbClient.fixturePermissions =
 			[]*pluginpb.Permission{&pluginpb.Permission{Id: "ballz"}}
 
@@ -142,7 +142,7 @@ func TestUnitClient(t *testing.T) {
 
 	t.Run("permissions bubbles up error", func(t *testing.T) {
 		myErr := errors.New("Hubble was perfect")
-		mockpbClient := &testGranteePbClient{err: myErr}
+		mockpbClient := &testGranteePbClient{err: myErr, locker: new(sync.Mutex)}
 		client := newGranteeClient(nil, mockpbClient)
 
 		_, err := client.permissions(context.Background(), nil)
@@ -150,7 +150,7 @@ func TestUnitClient(t *testing.T) {
 	})
 
 	t.Run("sendGrants sends grants", func(t *testing.T) {
-		mockpbClient := &testGranteePbClient{}
+		mockpbClient := &testGranteePbClient{locker: new(sync.Mutex)}
 		client := newGranteeClient(nil, mockpbClient)
 
 		grant := &pluginpb.PermissionGrant{Id: "shits", GrantId: uint32(1234)}
@@ -168,7 +168,7 @@ func TestUnitClient(t *testing.T) {
 
 	t.Run("sendGrants bubbles up error", func(t *testing.T) {
 		myErr := errors.New("Hubble was perfect")
-		mockpbClient := &testGranteePbClient{err: myErr}
+		mockpbClient := &testGranteePbClient{err: myErr, locker: new(sync.Mutex)}
 		client := newGranteeClient(nil, mockpbClient)
 
 		err := client.sendGrants(context.Background(), nil, nil)
@@ -176,7 +176,7 @@ func TestUnitClient(t *testing.T) {
 	})
 
 	t.Run("health send a health request", func(t *testing.T) {
-		mockpbClient := &testGranteePbClient{}
+		mockpbClient := &testGranteePbClient{locker: new(sync.Mutex)}
 		client := newGranteeClient(nil, mockpbClient)
 
 		err := client.health(context.Background())
@@ -186,7 +186,7 @@ func TestUnitClient(t *testing.T) {
 
 	t.Run("health bubbles up error", func(t *testing.T) {
 		myErr := errors.New("Atza is perfect")
-		mockpbClient := &testGranteePbClient{err: myErr}
+		mockpbClient := &testGranteePbClient{err: myErr, locker: new(sync.Mutex)}
 		client := newGranteeClient(nil, mockpbClient)
 
 		err := client.health(context.Background())
@@ -194,7 +194,7 @@ func TestUnitClient(t *testing.T) {
 	})
 
 	t.Run("Close send a shutdown request", func(t *testing.T) {
-		mockpbClient := &testGranteePbClient{}
+		mockpbClient := &testGranteePbClient{locker: new(sync.Mutex)}
 		client := newGranteeClient(nil, mockpbClient)
 
 		err := client.shutdown("")
@@ -204,7 +204,7 @@ func TestUnitClient(t *testing.T) {
 
 	t.Run("Close bubbles up shutdown error", func(t *testing.T) {
 		myErr := errors.New("Atza is perfect")
-		mockpbClient := &testGranteePbClient{err: myErr}
+		mockpbClient := &testGranteePbClient{err: myErr, locker: new(sync.Mutex)}
 		client := newGranteeClient(nil, mockpbClient)
 
 		err := client.shutdown("")

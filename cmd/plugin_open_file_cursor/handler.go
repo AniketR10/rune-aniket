@@ -33,7 +33,7 @@ var (
 		textapi.EventTypeCursor,
 	}
 	gfHandlerPermissions = []plugin.Permission{
-		plugin.Permission(workspaceplugin.PermissionWorkspace),
+		plugin.Permission(workspaceplugin.PermissionFileSystem),
 		plugin.Permission(browserplugin.PermissionBrowserResourceOpener),
 		plugin.Permission(browserplugin.PermissionBrowserWindowManager),
 	}
@@ -46,10 +46,10 @@ type file struct {
 }
 
 type gfEditorHandler struct {
-	ed  textapi.Editor
-	o   browserapi.ResourceOpener
-	wm  browserapi.WindowManager
-	cwd workspaceapi.Workspace
+	ed textapi.Editor
+	o  browserapi.ResourceOpener
+	wm browserapi.WindowManager
+	fs workspaceapi.FileSystem
 
 	files map[string]*file
 }
@@ -75,8 +75,8 @@ func newGFHandler(
 	var err error
 	for _, grant := range grants {
 		switch grant.Permission {
-		case plugin.Permission(workspaceplugin.PermissionWorkspace):
-			ret.cwd, err = workspaceplugin.Workspace(grant.Token, broker)
+		case plugin.Permission(workspaceplugin.PermissionFileSystem):
+			ret.fs, err = workspaceplugin.FileSystem(grant.Token, broker)
 		case plugin.Permission(browserplugin.PermissionBrowserWindowManager):
 			ret.wm, err = browserplugin.WindowManager(grant.Token, broker)
 		case plugin.Permission(browserplugin.PermissionBrowserResourceOpener):
@@ -116,7 +116,7 @@ func (h *gfEditorHandler) openFileUnderCursor(win browserapi.Window, uri workspa
 
 	uri, err := workspaceapi.ParseURI(word)
 	if err != nil {
-		uri, err = h.cwd.URI(word)
+		uri, err = h.fs.URI(word)
 	}
 	if err != nil {
 		return fmt.Errorf("could not build a URI from word under cursor: %v", err)

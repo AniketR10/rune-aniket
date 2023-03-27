@@ -1,6 +1,7 @@
 package workspace
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -553,7 +554,7 @@ func TestFileBufferRecover(t *testing.T) {
 
 // returns an un-initialized (but dep injected) FileBuffer along with the mocked OsFile
 func newTestFileBuffer(ctrl *gomock.Controller) (*file, *workspaceapitest.MockFile) {
-	schemeIfc, _ := newTestScheme("test")(nil, workspaceapi.URI{})
+	schemeIfc, _ := newTestScheme("test")(context.Background(), nil, workspaceapi.URI{})
 	scheme := schemeIfc.(*testScheme)
 	mock := workspaceapitest.NewMockFile(ctrl)
 	scheme.openFunc = func(name string, flag int, perm os.FileMode) (workspaceapi.File, *workspaceapi.Error) {

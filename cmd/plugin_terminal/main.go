@@ -33,7 +33,8 @@ var (
 	requiredPermissions = []plugin.Permission{
 		plugin.Permission(browserplugin.PermissionBrowserWindowManager),
 		plugin.Permission(textplugin.PermissionEditor),
-		plugin.Permission(workspaceplugin.PermissionWorkspace),
+		plugin.Permission(workspaceplugin.PermissionFileSystem),
+		plugin.Permission(workspaceplugin.PermissionTerminal),
 		plugin.Permission(browserplugin.PermissionBrowserEventPublisher),
 		plugin.Permission(browserplugin.PermissionBrowserMessenger),
 	}
@@ -50,11 +51,12 @@ type emulatorGrantee struct {
 	mu     sync.Mutex
 	broker proto.MuxBroker
 
-	wp workspaceapi.Workspace
-	wm browserapi.WindowManager
-	p  browserapi.EventPublisher
-	ed textapi.Editor
-	m  browserapi.Messenger
+	fs  workspaceapi.FileSystem
+	tty workspaceapi.Terminal
+	wm  browserapi.WindowManager
+	p   browserapi.EventPublisher
+	ed  textapi.Editor
+	m   browserapi.Messenger
 
 	defAttr       term.Attributes
 	selectionAttr term.Attributes
@@ -111,8 +113,10 @@ func (e *emulatorGrantee) PermissionGranted(grants []plugin.Grant) {
 			e.p, err = browserplugin.EventPublisher(g.Token, e.broker)
 		case plugin.Permission(browserplugin.PermissionBrowserWindowManager):
 			e.wm, err = browserplugin.WindowManager(g.Token, e.broker)
-		case plugin.Permission(workspaceplugin.PermissionWorkspace):
-			e.wp, err = workspaceplugin.Workspace(g.Token, e.broker)
+		case plugin.Permission(workspaceplugin.PermissionTerminal):
+			e.tty, err = workspaceplugin.Terminal(g.Token, e.broker)
+		case plugin.Permission(workspaceplugin.PermissionFileSystem):
+			e.fs, err = workspaceplugin.FileSystem(g.Token, e.broker)
 		case plugin.Permission(browserplugin.PermissionBrowserMessenger):
 			e.m, err = browserplugin.Messenger(g.Token, e.broker)
 		case plugin.Permission(textplugin.PermissionEditor):
@@ -172,7 +176,7 @@ func (e *emulatorGrantee) handleCommand(
 	}
 
 	log.Tracef("HandleCommand: creating new emulator handler")
-	h, err := newEmulator(e.wm, e.wp, e.p, e.m, e.shell,
+	h, err := newEmulator(e.wm, e.tty, e.fs, e.p, e.m, e.shell,
 		e.initialCmd, e.defAttr, e.selectionAttr)
 	if err != nil {
 		err = fmt.Errorf("newEmulator: %s", err)

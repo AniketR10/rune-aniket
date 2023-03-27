@@ -32,13 +32,13 @@ func (s stringerStr) String() string {
 	return string(s)
 }
 
-func workspaceListFiles(cwd workspaceapi.Workspace, ctx context.Context) (
+func workspaceListFiles(cwd workspaceapi.FileSystem, ctx context.Context) (
 	iterator.Iterator[string], error,
 ) {
 	return workspace.ListFiles(ctx, cwd, ".")
 }
 
-func getResource(workspace workspaceapi.Workspace, file string) (
+func getResource(workspace workspaceapi.FileSystem, file string) (
 	workspaceapi.URI, term.Coordinates,
 ) {
 	uri, _ := workspace.URI(file)

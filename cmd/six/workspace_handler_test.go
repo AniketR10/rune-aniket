@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"io/ioutil"
 	"testing"
 
@@ -57,12 +58,13 @@ func TestWorkspaceConfig(t *testing.T) {
 
 		passed := make(map[string]interface{})
 		manager.RegisterScheme(workspace.MemoryScheme,
-			func(cfg config.Config, uri workspaceapi.URI) (workspace.Scheme, error,
+			func(ctx context.Context, cfg config.Config, uri workspaceapi.URI) (
+				workspace.Scheme, error,
 			) {
 				cfg.Iterate(func(k string, v interface{}) {
 					passed[k] = v
 				})
-				return workspace.NewMemoryScheme(cfg, uri)
+				return workspace.NewMemoryScheme(ctx, cfg, uri)
 			})
 
 		uri, err := workspaceapi.ParseURI("memory:///tmp")

@@ -17,6 +17,7 @@ type sshConfig struct {
 	timeout     time.Duration
 	command     string
 	shell       string
+	insecure    bool
 }
 
 func fromConfig(cfg config.Config) (ret sshConfig, retErr error) {
@@ -36,6 +37,10 @@ func fromConfig(cfg config.Config) (ret sshConfig, retErr error) {
 	if err != nil && err != config.ErrNotFound {
 		retErr = multierr.Append(retErr, err)
 	}
+	insecure, err := getInsecure(cfg)
+	if err != nil && err != config.ErrNotFound {
+		retErr = multierr.Append(retErr, err)
+	}
 	if retErr != nil {
 		retErr = fmt.Errorf("could not load ssh config: %s", retErr)
 		return
@@ -45,6 +50,7 @@ func fromConfig(cfg config.Config) (ret sshConfig, retErr error) {
 	ret.command = command
 	ret.privateKeys = privateKeys
 	ret.shell = shell
+	ret.insecure = insecure
 	return
 }
 
@@ -57,6 +63,11 @@ func getTimeout(cfg config.Config) (ret time.Duration, err error) {
 	}
 
 	ret = sshTimeout
+	return
+}
+
+func getInsecure(cfg config.Config) (ret bool, err error) {
+	ret, err = cfg.GetBool("insecure")
 	return
 }
 

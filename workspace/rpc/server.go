@@ -3,41 +3,107 @@ package rpc
 import (
 	"context"
 	"errors"
+	"fmt"
+	"io"
+	"os"
 	"sync"
+	"syscall"
+	"time"
 
+	"github.com/ernestrc/blue/logging"
+	log "github.com/sirupsen/logrus"
+	"google.golang.org/protobuf/types/known/timestamppb"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/workspace"
 )
 
-var errFileNotOpen = errors.New("file is not open")
-var _ WorkspaceServer = (*Server)(nil)
+var (
+	errFileNotOpen = errors.New("file is not open")
+	errInvalidFd   = errors.New("invalid file descriptor")
+)
 
 // Server is a workspace server implementation which processes one request at a time.
 type Server struct {
-	UnimplementedWorkspaceServer
-	sharedRPCImpl
+	UnimplementedSchemeServer
+	UnimplementedExecutorServer
+	UnimplementedTerminalServer
+	UnimplementedFilesServer
+	ctx       context.Context
+	cancelCtx func()
 
-	wp workspace.Workspace
+	locker sync.Locker
+	s      workspace.Scheme
 }
 
 // NewServer allocates storage for a new server and initializes it with wp.
-func NewServer(wp workspace.Workspace, locker sync.Locker) *Server {
+func NewServer(wp workspace.Scheme, locker sync.Locker) *Server {
 	ret := new(Server)
 	ret.Init(wp, locker)
 	return ret
 }
 
 // Init initializes this Server with the given workspace
-func (s *Server) Init(wp workspace.Workspace, locker sync.Locker) {
-	s.sharedRPCImpl.executorServer.init(wp, locker)
-	s.sharedRPCImpl.scheme = wp
-	s.wp = wp
+func (s *Server) Init(scheme workspace.Scheme, locker sync.Locker) {
+	s.s = scheme
+	s.locker = locker
+	s.ctx, s.cancelCtx = context.WithCancel(context.Background())
+	s.s = scheme
+	s.locker = locker
 }
 
-// URI satisfies WorkspaceServer
+// StartCommand satisfies ExecutorServer
+func (s *Server) StartCommand(stream Executor_StartCommandServer) error {
+	var req CommandPayload
+	err := stream.RecvMsg(&req)
+	if err != nil {
+		return fmt.Errorf("recv start command msg: %v", err)
+	}
+	if req.Type != CommandPayload_TypeStart || req.Start == nil {
+		return fmt.Errorf("unexpected first stream message: %v", req.Type)
+	}
+	start := req.Start
+	streamer := newServerCommandStreamer(
+		s.ctx, stream, start.GetName(), start.GetArgs(), start.GetEnv(),
+		start.GetStdin(), start.GetStdout(), start.GetStderr(),
+	)
+	defer streamer.Close()
+
+	s.locker.Lock()
+	pid, err := s.s.StartCommand(s.ctx, streamer.command())
+	s.locker.Unlock()
+	if err != nil {
+		s.log(log.WarnLevel, "start command error: %v", err)
+		return fmt.Errorf("start command: %v", err)
+	}
+	go streamer.receiveCommandData()
+	err = streamer.sendCommandData(pid)
+	s.log(log.DebugLevel, "send command data: err=%v", err)
+	return err
+}
+
+// Signal satisfies ExecutorServer
+func (s *Server) Signal(ctx context.Context, req *SignalRequest) (*SignalResponse, error) {
+	pid := req.GetPid()
+	signal := req.GetSig()
+	s.locker.Lock()
+	defer s.locker.Unlock()
+
+	err := s.s.Signal(workspaceapi.Pid(pid), syscall.Signal(signal))
+	if err != nil {
+		return nil, err
+	}
+	resp := new(SignalResponse)
+	return resp, nil
+}
+
+// URI satisfies SchemeServer
 func (s *Server) URI(ctx context.Context, req *URIRequest) (
 	*URIResponse, error,
 ) {
-	uri, err := s.wp.URI(req.GetPath())
+	s.locker.Lock()
+	defer s.locker.Unlock()
+
+	uri, err := s.s.URI(req.GetPath())
 	if err != nil {
 		return nil, err
 	}
@@ -46,101 +112,381 @@ func (s *Server) URI(ctx context.Context, req *URIRequest) (
 	return resp, nil
 }
 
-// Command satisfies WorkspaceServer
-func (s *Server) Command(
-	ctx context.Context, req *CommandRequest,
-) (*CommandResponse, error) {
-	return s.executorServer.Command(ctx, req)
-}
-
-// Start satisfies WorkspaceServer
-func (s *Server) Start(ctx context.Context, req *StartRequest) (*StartResponse, error) {
-	return s.executorServer.Start(ctx, req)
-}
-
-// Wait satisfies WorkspaceServer
-func (s *Server) Wait(ctx context.Context, req *WaitRequest) (*WaitResponse, error) {
-	return s.executorServer.Wait(ctx, req)
-}
-
-// Signal satisfies WorkspaceServer
-func (s *Server) Signal(ctx context.Context, req *SignalRequest) (*SignalResponse, error) {
-	return s.executorServer.Signal(ctx, req)
-}
-
-// StderrPipe satisfies WorkspaceServer
-func (s *Server) StderrPipe(ctx context.Context, req *StdioPipeRequest) (*StdioPipeResponse, error) {
-	return s.executorServer.StderrPipe(ctx, req)
-}
-
-// StdoutPipe satisfies WorkspaceServer
-func (s *Server) StdoutPipe(ctx context.Context, req *StdioPipeRequest) (*StdioPipeResponse, error) {
-	return s.executorServer.StdoutPipe(ctx, req)
-}
-
-// StdinPipe satisfies WorkspaceServer
-func (s *Server) StdinPipe(ctx context.Context, req *StdioPipeRequest) (*StdioPipeResponse, error) {
-	return s.executorServer.StdinPipe(ctx, req)
-}
-
-// Close satisfies WorkspaceServer
-func (s *Server) Close(ctx context.Context, req *CloseFileRequest) (*CloseFileResponse, error) {
-	return s.executorServer.Close(ctx, req)
-}
-
-// Read satisfies WorkspaceServer
-func (s *Server) Read(ctx context.Context, req *ReadRequest) (*ReadResponse, error) {
-	return s.executorServer.Read(ctx, req)
-}
-
-// Write satisfies WorkspaceServer
-func (s *Server) Write(ctx context.Context, req *WriteRequest) (*WriteResponse, error) {
-	return s.executorServer.Write(ctx, req)
-}
-
-// NewPty satisfies WorkspaceServer.
-func (s *Server) NewPty(ctx context.Context, req *NewPtyRequest) (
-	*NewPtyResponse, error,
-) {
-	return s.sharedRPCImpl.NewPty(ctx, req)
-}
-
-// SetPtySize satisfies WorkspaceServer.
-func (s *Server) SetPtySize(ctx context.Context, req *SetPtySizeRequest) (
-	*SetPtySizeResponse, error,
-) {
-	return s.sharedRPCImpl.SetPtySize(ctx, req)
-}
-
-// Open satisfies WorkspaceServer.
-func (s *Server) Open(ctx context.Context, req *OpenRequest) (
-	*OpenResponse, error,
-) {
-	return s.sharedRPCImpl.Open(ctx, req)
-}
-
-// Remove satisfies WorkspaceServer.
-func (s *Server) Remove(ctx context.Context, req *RemoveRequest) (
-	*RemoveResponse, error,
-) {
-	return s.sharedRPCImpl.Remove(ctx, req)
-}
-
-// Stat satisfies SchemeServer.
-func (s *Server) Stat(ctx context.Context, req *StatRequest) (
-	*StatResponse, error,
-) {
-	return s.sharedRPCImpl.Stat(ctx, req)
-}
-
 // ReadDir satisfies SchemeServer.
 func (s *Server) ReadDir(ctx context.Context, req *ReadDirRequest) (
 	*ReadDirResponse, error,
 ) {
-	return s.sharedRPCImpl.ReadDir(ctx, req)
+	root := req.GetRoot()
+	s.locker.Lock()
+	defer s.locker.Unlock()
+
+	entries, err := s.s.ReadDir(root)
+	if err != nil {
+		isExist := errors.Is(err, os.ErrExist)
+		isNotExist := errors.Is(err, os.ErrNotExist)
+		isPermission := errors.Is(err, os.ErrPermission)
+		is := isExist || isNotExist || isPermission
+		if is {
+			resp := new(ReadDirResponse)
+			resp.IsExistErr = isExist
+			resp.IsNotExistErr = isNotExist
+			resp.IsPermissionErr = isPermission
+			return resp, nil
+		}
+		return nil, err
+	}
+	resp := new(ReadDirResponse)
+	rpcEntries := make([]*DirEntry, len(entries))
+	for i, entry := range entries {
+		rpcEntries[i] = &DirEntry{
+			Name:  entry.Name(),
+			Mode:  int32(entry.Type()),
+			IsDir: entry.IsDir(),
+		}
+	}
+	resp.Path = rpcEntries
+	return resp, nil
+}
+
+// Open satisfies SchemeServer.
+func (s *Server) Open(ctx context.Context, req *OpenRequest) (
+	*OpenResponse, error,
+) {
+	filename := req.GetFilename()
+
+	s.locker.Lock()
+	defer s.locker.Unlock()
+
+	f, werr := s.s.Open(filename, getOpenRequestFlag(req), os.FileMode(req.GetMode()))
+	if werr != nil {
+		if werr.IsExist || werr.IsNotExist || werr.IsPermission {
+			resp := new(OpenResponse)
+			resp.IsExistErr = werr.IsExist
+			resp.IsNotExistErr = werr.IsNotExist
+			resp.IsPermissionErr = werr.IsPermission
+			return resp, nil
+		}
+		return nil, werr.ToError()
+	}
+
+	resp := new(OpenResponse)
+	resp.Fd = uint32(f.Fd())
+	resp.Filename = f.Name()
+	return resp, nil
+}
+
+// Remove satisfies SchemeServer.
+func (s *Server) Remove(ctx context.Context, req *RemoveRequest) (
+	*RemoveResponse, error,
+) {
+	filename := req.GetFilename()
+	s.locker.Lock()
+	defer s.locker.Unlock()
+
+	err := s.s.Remove(filename)
+	if err != nil {
+		isExist := errors.Is(err, os.ErrExist)
+		isNotExist := errors.Is(err, os.ErrNotExist)
+		isPermission := errors.Is(err, os.ErrPermission)
+		is := isExist || isNotExist || isPermission
+		if is {
+			resp := new(RemoveResponse)
+			resp.IsExistErr = isExist
+			resp.IsNotExistErr = isNotExist
+			resp.IsPermissionErr = isPermission
+			return resp, nil
+		}
+		return nil, err
+	}
+	return new(RemoveResponse), nil
+}
+
+// Rename satisfies SchemeServer.
+func (s *Server) Rename(ctx context.Context, req *RenameRequest) (
+	*RenameResponse, error,
+) {
+	filename := req.GetFilename()
+	s.locker.Lock()
+	defer s.locker.Unlock()
+
+	err := s.s.Rename(filename, req.GetNewfilename())
+	if err != nil {
+		isExist := errors.Is(err, os.ErrExist)
+		isNotExist := errors.Is(err, os.ErrNotExist)
+		isPermission := errors.Is(err, os.ErrPermission)
+		is := isExist || isNotExist || isPermission
+		if is {
+			resp := new(RenameResponse)
+			resp.IsExistErr = isExist
+			resp.IsNotExistErr = isNotExist
+			resp.IsPermissionErr = isPermission
+			return resp, nil
+		}
+		return nil, err
+	}
+	return new(RenameResponse), nil
+}
+
+// ReadLink satisfies SchemeServer.
+func (s *Server) ReadLink(ctx context.Context, req *ReadLinkRequest) (
+	*ReadLinkResponse, error,
+) {
+	filename := req.GetFilename()
+	s.locker.Lock()
+	defer s.locker.Unlock()
+
+	fil, err := s.s.ReadLink(filename)
+	if err != nil {
+		return nil, err
+	}
+	resp := new(ReadLinkResponse)
+	resp.Filename = fil
+	return resp, nil
+}
+
+// NewPty satisfies SchemeServer.
+func (s *Server) NewPty(ctx context.Context, req *NewPtyRequest) (
+	*NewPtyResponse, error,
+) {
+	s.locker.Lock()
+	defer s.locker.Unlock()
+
+	pty, err := s.s.NewPty(s.ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	ret := &NewPtyResponse{
+		Pid:      int64(pty.Pid),
+		Master:   pty.Master.Name(),
+		MasterFd: uint32(pty.Master.Fd()),
+		Slave:    pty.Slave,
+	}
+	return ret, nil
+}
+
+// SetPtySize satisfies SchemeServer.
+func (s *Server) SetPtySize(ctx context.Context, req *SetPtySizeRequest) (
+	*SetPtySizeResponse, error,
+) {
+	s.locker.Lock()
+	defer s.locker.Unlock()
+
+	f := s.s.NewFile(uintptr(req.GetMasterFd()), req.GetMaster())
+	if f == nil {
+		return nil, errors.New("invalid master pty fd")
+	}
+	pty := workspaceapi.Pty{
+		Master: f,
+		Slave:  req.GetSlave(),
+		Pid:    workspaceapi.Pid(req.GetPid()),
+	}
+	err := s.s.SetPtySize(pty, int(req.GetWidth()), int(req.GetHeight()))
+	if err != nil {
+		return nil, err
+	}
+	return new(SetPtySizeResponse), nil
 }
 
 // Stop closes all resources associated with this server.
 func (s *Server) Stop() error {
-	return s.executorServer.stop()
+	s.cancelCtx()
+	return nil
+}
+
+// Read satisfies FilesServer
+func (s *Server) Read(ctx context.Context, req *ReadRequest) (*ReadResponse, error) {
+	s.locker.Lock()
+	f := s.s.NewFile(uintptr(req.GetFd()), req.GetFilename())
+	s.locker.Unlock()
+	if f == nil {
+		return nil, errInvalidFd
+	}
+	buf := make([]byte, req.GetN())
+	n, err := f.Read(buf)
+	if err != nil && err != io.EOF {
+		return nil, fmt.Errorf("read error: %s", err)
+	}
+	resp := new(ReadResponse)
+	resp.Data = buf[:n]
+	resp.N = int64(n)
+	resp.IsEof = err == io.EOF
+	s.log(log.TraceLevel, "file server read: req=%#v, resp: %#v", req, resp)
+	return resp, nil
+}
+
+// Write satisfies FilesServer
+func (s *Server) Write(ctx context.Context, req *WriteRequest) (*WriteResponse, error) {
+	s.locker.Lock()
+	f := s.s.NewFile(uintptr(req.GetFd()), req.GetFilename())
+	s.locker.Unlock()
+	if f == nil {
+		return nil, errInvalidFd
+	}
+	n, err := f.Write([]byte(req.GetData()))
+	if err != nil {
+		return nil, fmt.Errorf("write error: %s", err)
+	}
+	resp := new(WriteResponse)
+	resp.N = int64(n)
+	return resp, nil
+}
+
+// Close satisfies FilesServer
+func (s *Server) Close(ctx context.Context, req *CloseFileRequest) (*CloseFileResponse, error) {
+	s.locker.Lock()
+	fd := uintptr(req.GetFd())
+	f := s.s.NewFile(fd, req.GetFilename())
+	if f == nil {
+		// idempotent close
+		s.locker.Unlock()
+		return new(CloseFileResponse), nil
+	}
+	// unlock after close, which in some cases
+	// might do some cleanups that require synchronization
+	err := f.Close()
+	s.locker.Unlock()
+	if err != nil {
+		return nil, fmt.Errorf("close error: %s", err)
+	}
+	return new(CloseFileResponse), nil
+}
+
+// Sync satisfies FilesServer.
+func (s *Server) Sync(ctx context.Context, req *SyncRequest) (
+	*SyncResponse, error,
+) {
+	s.locker.Lock()
+	f := s.s.NewFile(uintptr(req.GetFd()), req.GetFilename())
+	s.locker.Unlock()
+	if f == nil {
+		return nil, errInvalidFd
+	}
+	err := f.Sync()
+	if err != nil {
+		return nil, err
+	}
+	return new(SyncResponse), nil
+}
+
+// Truncate satisfies FilesServer.
+func (s *Server) Truncate(ctx context.Context, req *TruncateRequest) (
+	*TruncateResponse, error,
+) {
+	s.locker.Lock()
+	f := s.s.NewFile(uintptr(req.GetFd()), req.GetFilename())
+	s.locker.Unlock()
+	if f == nil {
+		return nil, errInvalidFd
+	}
+	err := f.Truncate(req.GetSize())
+	if err != nil {
+		return nil, err
+	}
+	return new(TruncateResponse), nil
+}
+
+// Seek satisfies FilesServer.
+func (s *Server) Seek(ctx context.Context, req *SeekRequest) (
+	*SeekResponse, error,
+) {
+	s.locker.Lock()
+	f := s.s.NewFile(uintptr(req.GetFd()), req.GetFilename())
+	s.locker.Unlock()
+	if f == nil {
+		return nil, errInvalidFd
+	}
+	newOffset, err := f.Seek(req.GetOffset(), int(req.GetWhence()))
+	if err != nil {
+		return nil, err
+	}
+	resp := new(SeekResponse)
+	resp.NewOffset = newOffset
+	return resp, nil
+}
+
+// Stat satisfies FilesServer.
+func (s *Server) Stat(ctx context.Context, req *StatRequest) (
+	*StatResponse, error,
+) {
+	var err error
+	var fs os.FileInfo
+	s.locker.Lock()
+	if req.GetLstat() {
+		if lstater, ok := s.s.(interface {
+			Lstat(string) (os.FileInfo, error)
+		}); ok {
+			fs, err = lstater.Lstat(req.GetFilename())
+		} else {
+			err = errors.New("Lstat is not implemented")
+		}
+	} else {
+		fs, err = s.s.Stat(req.GetFilename())
+	}
+	s.locker.Unlock()
+	if err != nil {
+		isExist := errors.Is(err, os.ErrExist)
+		isNotExist := errors.Is(err, os.ErrNotExist)
+		isPermission := errors.Is(err, os.ErrPermission)
+		is := isExist || isNotExist || isPermission
+		if is {
+			resp := new(StatResponse)
+			resp.IsExistErr = isExist
+			resp.IsNotExistErr = isNotExist
+			resp.IsPermissionErr = isPermission
+			return resp, nil
+		}
+		return nil, err
+	}
+	resp := new(StatResponse)
+	resp.Name = fs.Name()
+	resp.Size = fs.Size()
+	resp.Mode = int32(fs.Mode())
+	resp.ModTime = new(timestamppb.Timestamp)
+	*resp.ModTime = stdTimeToProto(fs.ModTime())
+	resp.IsDir = fs.IsDir()
+
+	return resp, nil
+}
+
+func (s *Server) log(
+	level log.Level, msg string, args ...interface{},
+) {
+	log.
+		WithField(logging.KeyClass, "workspacepb.Server").
+		Logf(level, msg, args...)
+}
+
+func stdTimeToProto(ts time.Time) timestamppb.Timestamp {
+	seconds := ts.Unix()
+	nanos := ts.Nanosecond()
+	return timestamppb.Timestamp{Seconds: seconds, Nanos: int32(nanos)}
+}
+
+func getOpenRequestFlag(req *OpenRequest) int {
+	var flag int
+	if req.O_RDONLY {
+		flag = os.O_RDONLY
+	} else if req.O_WRONLY {
+		flag = os.O_WRONLY
+	} else {
+		flag = os.O_RDWR
+	}
+
+	if req.O_APPEND {
+		flag |= os.O_APPEND
+	}
+	if req.O_CREATE {
+		flag |= os.O_CREATE
+	}
+	if req.O_EXCL {
+		flag |= os.O_EXCL
+	}
+	if req.O_SYNC {
+		flag |= os.O_SYNC
+	}
+	if req.O_TRUNC {
+		flag |= os.O_TRUNC
+	}
+	return flag
 }

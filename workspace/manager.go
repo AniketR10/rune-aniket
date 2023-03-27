@@ -1,6 +1,7 @@
 package workspace
 
 import (
+	"context"
 	"errors"
 	"fmt"
 
@@ -23,7 +24,7 @@ var _ SchemeManager = (*Manager)(nil)
 type Manager struct {
 	cfg config.Config
 
-	schemes    map[string]func(config.Config, workspaceapi.URI) (Scheme, error)
+	schemes    map[string]SchemeFunc
 	workspaces map[string]managerWorkspace
 }
 
@@ -52,7 +53,7 @@ func NewManager(cfg config.Config) *Manager {
 // under the file:// scheme.
 func (m *Manager) Init(cfg config.Config) {
 	m.cfg = cfg
-	m.schemes = make(map[string]func(config.Config, workspaceapi.URI) (Scheme, error))
+	m.schemes = make(map[string]SchemeFunc)
 	m.workspaces = make(map[string]managerWorkspace)
 }
 
@@ -69,6 +70,17 @@ func (m *Manager) RegisterScheme(scheme string, fn SchemeFunc) error {
 		fn = LoggingScheme(scheme, fn)
 	}
 	m.schemes[scheme] = fn
+	return nil
+}
+
+// UnregisterScheme unregisters the given scheme.
+func (m *Manager) UnregisterScheme(scheme string) error {
+	_, ok := m.schemes[scheme]
+	if !ok {
+		return fmt.Errorf("scheme %q not registered", scheme)
+	}
+	m.log(log.DebugLevel, "UnregisterScheme %q", scheme)
+	delete(m.schemes, scheme)
 	return nil
 }
 
@@ -94,7 +106,9 @@ func (m *Manager) Scheme(uri workspaceapi.URI) (SchemeFunc, error) {
 // method returns it. This method does not follow the same semantics as
 // Workspace as the latter uses IsWorkspaceURI semantics and this
 // will create a new workspace if the uri strings are different.
-func (m *Manager) AddWorkspace(uri workspaceapi.URI) (Workspace, error) {
+func (m *Manager) AddWorkspace(
+	ctx context.Context, uri workspaceapi.URI,
+) (Workspace, error) {
 	if w, ok := m.workspaces[uri.String()]; ok {
 		return w, nil
 	}
@@ -110,7 +124,7 @@ func (m *Manager) AddWorkspace(uri workspaceapi.URI) (Workspace, error) {
 	if cfg == nil {
 		cfg = config.NopConfig()
 	}
-	scheme, err := schemeFn(cfg, uri)
+	scheme, err := schemeFn(ctx, cfg, uri)
 	if err != nil {
 		return nil, fmt.Errorf("new workspace %q: %w", uri, err)
 	}

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"io/ioutil"
@@ -85,6 +86,8 @@ func startWorkspaceServer() int {
 		l.SetOutput(f)
 		l.SetLevel(log.TraceLevel)
 		l.SetFormatter(&logging.LogrusFormatter{})
+		proto.EnableGRPCLogging(f, f, f)
+
 		defer f.Close()
 		defer f.Sync()
 
@@ -93,6 +96,7 @@ func startWorkspaceServer() int {
 	} else {
 		l.SetOutput(ioutil.Discard)
 		l.SetLevel(log.PanicLevel)
+		proto.DisableGRPCLogging()
 	}
 
 	l.Tracef("Initialized debug logger")
@@ -128,14 +132,14 @@ func startWorkspaceServer() int {
 		l.Error(err)
 		return 2
 	}
-	scheme, err := newScheme(config.NopConfig(), uri)
+	scheme, err := newScheme(context.Background(), config.NopConfig(), uri)
 	if err != nil {
 		l.Error(err)
 		return 3
 	}
 
-	server := workspacepb.NewSchemeServer(scheme, new(sync.Mutex))
-	err = ssh.StartSchemeServer(server)
+	server := workspacepb.NewServer(scheme, new(sync.Mutex))
+	err = ssh.StartSchemeServer(l, server)
 	if err != nil {
 		l.Error(err)
 		return 4

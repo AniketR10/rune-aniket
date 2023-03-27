@@ -185,7 +185,8 @@ func TestFileSchemeListFilesLarge(t *testing.T) {
 	workspaceURI, closeFn, err := setupTestDirectory(1000, 10, 10)
 	defer closeFn()
 
-	scheme, err := NewFileScheme(config.NopConfig(), workspaceURI)
+	scheme, err := NewFileScheme(context.Background(),
+		config.NopConfig(), workspaceURI)
 	require.NoError(t, err)
 
 	it, err := ListFiles(context.Background(), scheme, "")
@@ -211,7 +212,7 @@ func benchListFiles(b *testing.B, totalFiles, nestEvery, emptyDirsPerFile int) {
 		b.Fatalf("error: %s:", err)
 	}
 
-	scheme, err := NewFileScheme(config.NopConfig(), workspaceURI)
+	scheme, err := NewFileScheme(context.Background(), config.NopConfig(), workspaceURI)
 	if err != nil {
 		b.Fatalf("error: %s", err)
 	}

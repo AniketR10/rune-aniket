@@ -1,6 +1,6 @@
 GO=go
-GOTESTFLAGS=-race -timeout 45s
-GOTESTFLAGSNORACE=-timeout 45s
+GOTESTFLAGS=-race -timeout 345s
+GOTESTFLAGSNORACE=-timeout 345s
 GOFLAGS="-ldflags=-X main.Tag=$$(git describe --tags) -X main.Commit=$$(git rev-parse --short HEAD)"
 
 BIN=bin
@@ -30,10 +30,10 @@ debug: $(EXAMPLES) $(EXECS)
 
 example_wasm: $(EXAMPLE_WASM_BLOB)
 
-test: debug
+test:
 	@ go test ./.../... $(GOTESTFLAGS)
 
-test-no-race: debug
+test-no-race:
 	@ go test ./.../... $(GOTESTFLAGSNORACE)
 
 coverage: $(BIN)

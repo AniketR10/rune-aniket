@@ -14,6 +14,10 @@ func (t File) Name() string {
 	return ""
 }
 
+func (t File) Fd() uintptr {
+	return 0
+}
+
 func (t File) Stat() (os.FileInfo, error) {
 	return FileInfo{}, nil
 }

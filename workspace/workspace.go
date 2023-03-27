@@ -1,8 +1,9 @@
 package workspace
 
 import (
+	"context"
 	"io"
-	os "os"
+	"os"
 	"syscall"
 
 	workspaceapi "unstable.build/go-tui/api/workspace"
@@ -25,13 +26,11 @@ type Loader interface {
 	Recover(file, swapFilePath workspaceapi.URI, buf *cell.Buffer, force bool) (FlusherCloser, error)
 }
 
-// Scheme abstracts internal workspace scheme-based gouroutine-safe implementations.
+// Scheme abstracts internal workspace scheme implementations.
 type Scheme interface {
-	Executor
-	Terminal
-
 	URI(path string) (workspaceapi.URI, error)
 
+	NewFile(fd uintptr, name string) workspaceapi.File
 	Open(path string, flag int, perm os.FileMode) (workspaceapi.File, *workspaceapi.Error)
 	Remove(path string) error
 	Rename(old, new string) error
@@ -39,26 +38,35 @@ type Scheme interface {
 	Lstat(path string) (os.FileInfo, error)
 	ReadLink(path string) (string, error)
 	ReadDir(string) ([]os.DirEntry, error)
+
+	Executor
+
+	Terminal
 }
 
 // SchemeFunc represents a Scheme constructor.
-type SchemeFunc func(config.Config, workspaceapi.URI) (Scheme, error)
+type SchemeFunc func(context.Context, config.Config, workspaceapi.URI) (Scheme, error)
 
 // SchemeManager abstracts the ability to register new URI schemes.
 type SchemeManager interface {
 	RegisterScheme(string, SchemeFunc) error
+	// TODO once scheme plugin is moved to api
+	// UnregisterScheme(string) error
 }
 
 // WorkspaceManager abstracts the ability to register schemes and workspaces.
 type WorkspaceManager interface {
 	SchemeManager
-	AddWorkspace(workspaceapi.URI) (Workspace, error)
+	AddWorkspace(context.Context, workspaceapi.URI) (Workspace, error)
 }
 
 // Terminal abstracts the ability to manage pseudoterminals.
 type Terminal interface {
 	// NewPty creates a new pseudoterminal.
-	NewPty() (workspaceapi.Pty, error)
+	// The provided context is used to kill the process (by calling
+	// os.Process.Kill) if the context becomes done before the command completes on
+	// its own.
+	NewPty(context.Context) (workspaceapi.Pty, error)
 
 	// SetPtySize sets the width and height in columns and rows of
 	// a pseudoterminal.
@@ -67,30 +75,16 @@ type Terminal interface {
 
 // Executor is the public facing API of a workspace's command execution.
 type Executor interface {
-	// Command returns the Pid to execute the named program with the given
-	// arguments. For more details see exec.Command.
-	Command(name string, arg ...string) (workspaceapi.Pid, error)
-	// Start starts the specified command but does not wait for it to complete.
-	// The Wait method will return an error if there's any while running command
-	// and release associated resources.
-	Start(workspaceapi.Pid) error
+	// StartCommand starts the given cmd and returns the Pid of the underlying
+	// process. The provided context is used to kill the process (by calling
+	// os.Process.Kill) if the context.Done channel is closed  before the command
+	// completes on its own.
+	// Implementations must clean all resources associated with a command
+	// once the process exits.
+	StartCommand(ctx context.Context, cmd workspaceapi.Cmd) (workspaceapi.Pid, error)
+
 	// Signal sends a signal to the running process.
 	Signal(workspaceapi.Pid, syscall.Signal) error
-	// StderrPipe returns a pipe that will be connected to the command's standard
-	// error when the command starts. See exec.Cmd.StderrPipe for more details.
-	StderrPipe(workspaceapi.Pid) (io.ReadCloser, error)
-	// StdinPipe returns a pipe that will be connected to the command's standard
-	// input when the command starts. See exec.Cmd.StdinPipe for more details.
-	StdinPipe(workspaceapi.Pid) (io.WriteCloser, error)
-	// StdoutPipe returns a pipe that will be connected to the command's standard
-	// output when the command starts. See exec.Cmd.StdoutPipe for more details.
-	StdoutPipe(workspaceapi.Pid) (io.ReadCloser, error)
-	// Wait waits for the command to exit and waits for any copying to stdin or
-	// opying from stdout or stderr to complete.
-	// The command must have been started by Start.
-	// The returned error is nil if the command runs, has no problems copying
-	// stdin, stdout, and stderr, and exits with a zero exit status.
-	Wait(workspaceapi.Pid) error
 
 	io.Closer
 }

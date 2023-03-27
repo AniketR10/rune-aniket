@@ -20,7 +20,7 @@ import (
 
 type emulator struct {
 	wm browserapi.WindowManager
-	wp workspaceapi.Workspace
+	fs workspaceapi.FileSystem
 	p  browserapi.EventPublisher
 	m  browserapi.Messenger
 
@@ -40,13 +40,14 @@ type emulator struct {
 }
 
 func newEmulator(
-	wm browserapi.WindowManager, wp workspaceapi.Workspace,
-	p browserapi.EventPublisher, m browserapi.Messenger,
+	wm browserapi.WindowManager, tty workspaceapi.Terminal,
+	fs workspaceapi.FileSystem, p browserapi.EventPublisher,
+	m browserapi.Messenger,
 	shell string, initialCmd string,
 	defAttr, selectionAttr term.Attributes,
 ) (*emulator, error) {
 	ret := new(emulator)
-	err := ret.init(wm, wp, p, m, shell, initialCmd,
+	err := ret.init(wm, tty, fs, p, m, shell, initialCmd,
 		defAttr, selectionAttr)
 	if err != nil {
 		return nil, err
@@ -55,13 +56,13 @@ func newEmulator(
 }
 
 func (e *emulator) init(
-	wm browserapi.WindowManager, wp workspaceapi.Workspace,
-	p browserapi.EventPublisher, m browserapi.Messenger,
-	shell string, initialCmd string,
+	wm browserapi.WindowManager, tty workspaceapi.Terminal,
+	fs workspaceapi.FileSystem, p browserapi.EventPublisher,
+	m browserapi.Messenger, shell string, initialCmd string,
 	defAttr, selectionAttr term.Attributes,
 ) error {
 	e.wm = wm
-	e.wp = wp
+	e.fs = fs
 	e.p = p
 	e.defAttr = defAttr
 	e.selectAttr = selectionAttr
@@ -79,8 +80,8 @@ func (e *emulator) init(
 	if initialCmd != "" {
 		opts = append(opts, termutil.WithInitialCommand(initialCmd))
 	}
-	e.terminal = termutil.New(wp, opts...)
-	pty, err := e.terminal.CreatePty()
+	e.terminal = termutil.New(tty, opts...)
+	_, err := e.terminal.CreatePty()
 	if err != nil {
 		return err
 	}
@@ -95,26 +96,13 @@ func (e *emulator) init(
 
 	e.updateCh = make(chan struct{}, 1)
 	e.sema = make(chan struct{})
-	// set initial width/height to avoid panics
-	// we control drawing outside of bounds in Draw
 	go func() {
-		err := e.terminal.Run(e.updateCh)
-		if err != nil {
-			log.Errorf("terminal.Run: %s", err)
-		}
-	}()
-
-	go func() {
-		var logErr error
-		if err := wp.Wait(pty.Pid); err != nil {
-			err = fmt.Errorf("terminal.Cmd.Wait: %s", err)
-			logErr = multierr.Append(logErr, err)
-		}
+		logErr := e.terminal.Run(e.updateCh)
 		if err := e.Close(); err != nil {
 			logErr = multierr.Append(logErr, err)
 		}
 		if err := e.p.PublishEventNone(); err != nil {
-			err = fmt.Errorf("terminal.Cmd.Wait: %s", err)
+			err = fmt.Errorf("publish event: %s", err)
 			logErr = multierr.Append(logErr, err)
 		}
 		if logErr != nil {
@@ -336,7 +324,7 @@ func (e *emulator) URI() (workspaceapi.URI, error) {
 		name = e.terminal.GetTitle()
 	}()
 
-	return e.wp.URI(name)
+	return e.fs.URI(name)
 }
 
 func (e *emulator) Title() string {

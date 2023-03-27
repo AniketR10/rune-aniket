@@ -95,7 +95,7 @@ func (t *editorGrantee) PermissionDenied(perms []plugin.Permission) {
 }
 
 func (t *editorGrantee) Shutdown(reason string) error {
-	log.Warningf("plugin being shutdown: %s", reason)
+	log.Infof("plugin being shutdown: reason: %s", reason)
 
 	t.mu.Lock()
 	handler := t.handler

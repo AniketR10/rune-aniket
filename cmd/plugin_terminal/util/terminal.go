@@ -21,7 +21,7 @@ const (
 
 // Terminal communicates with the underlying terminal
 type Terminal struct {
-	workspace         workspaceapi.Workspace
+	workspace         workspaceapi.Terminal
 	mu                sync.Mutex
 	pty               workspaceapi.Pty
 	windowManipulator WindowManipulator
@@ -40,7 +40,7 @@ type Terminal struct {
 }
 
 // NewTerminal creates a new terminal instance
-func New(w workspaceapi.Workspace, options ...Option) *Terminal {
+func New(w workspaceapi.Terminal, options ...Option) *Terminal {
 	term := &Terminal{
 		closeChan: make(chan struct{}),
 		theme:     &Theme{},
@@ -61,7 +61,7 @@ func New(w workspaceapi.Workspace, options ...Option) *Terminal {
 }
 
 func (t *Terminal) CreatePty() (workspaceapi.Pty, error) {
-	pty, err := t.workspace.NewPty()
+	pty, err := t.workspace.StartPty()
 	if err != nil {
 		return pty, err
 	}
@@ -143,6 +143,15 @@ func (t *Terminal) Run(updateChan chan struct{}) error {
 		render, exit := t.processSequence(MeasuredRune{Rune: r, Width: size})
 		if exit {
 			break
+		}
+		if err != nil {
+			t.mu.Lock()
+			closed := t.closed
+			t.mu.Unlock()
+			if closed {
+				return nil
+			}
+			return err
 		}
 		if render {
 			t.requestRender()
