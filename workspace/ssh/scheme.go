@@ -408,6 +408,10 @@ func (s *scheme) SetPtySize(pty workspaceapi.Pty, width, height int) error {
 	return s.Scheme.SetPtySize(pty, width, height)
 }
 
+func (s *scheme) NewFile(fd uintptr, name string) workspaceapi.File {
+	return s.Scheme.NewFile(fd, name)
+}
+
 func (s *scheme) URI(path string) (workspaceapi.URI, error) {
 	absPath, err := s.expandPath(path)
 	if err != nil {

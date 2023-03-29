@@ -106,7 +106,7 @@ func (p *fileScheme) Open(path string, flag int, perm os.FileMode) (workspaceapi
 		}
 	}
 
-	ret := fileSchemeFile{File: f, p: p}
+	ret := &fileSchemeFile{File: f, p: p}
 	p.files[f.Fd()] = ret
 
 	return ret, nil
@@ -341,7 +341,7 @@ func (p *fileScheme) NewPty(ctx context.Context) (workspaceapi.Pty, error) {
 		return workspaceapi.Pty{}, retErr
 	}
 
-	ret := fileSchemeFile{File: pty, p: p}
+	ret := &fileSchemeFile{File: pty, p: p}
 	p.files[pty.Fd()] = ret
 
 	return workspaceapi.Pty{
@@ -352,7 +352,7 @@ func (p *fileScheme) NewPty(ctx context.Context) (workspaceapi.Pty, error) {
 }
 
 func (p *fileScheme) SetPtySize(pp workspaceapi.Pty, width, height int) error {
-	ptyFile, ok := pp.Master.(fileSchemeFile)
+	ptyFile, ok := pp.Master.(*fileSchemeFile)
 	if !ok {
 		return fmt.Errorf("extraneous Pty: %#v", pp)
 	}
@@ -378,7 +378,7 @@ type fileSchemeFile struct {
 	p *fileScheme
 }
 
-func (f fileSchemeFile) Close() error {
+func (f *fileSchemeFile) Close() error {
 	delete(f.p.files, f.Fd())
 	return f.File.Close()
 }

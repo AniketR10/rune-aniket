@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"runtime"
 	"sync"
 	"syscall"
 	"time"
@@ -31,6 +32,11 @@ type remoteScheme struct {
 	scheme           workspace.Scheme
 	ctx              context.Context
 	cancelCtx        func()
+
+	// NOTE this is not a regular map because
+	// otherwise we need to worry about synchronizing deletes
+	// on runtime finalizer's
+	files sync.Map
 }
 
 func (s *remoteScheme) maintainConnection(
@@ -157,15 +163,19 @@ func (s *remoteScheme) Open(path string, flag int, perm os.FileMode) (
 	if werr != nil {
 		return nil, werr
 	}
-	return f, nil
+	// clear workspace client finalizer
+	// so we can manage lifecycle manually,
+	// accross clients of the remote workspace,
+	// as we potentially recycle through reconnections
+	runtime.SetFinalizer(f, nil)
+	rf := newRemoteFile(s, f.Fd(), f.Name())
+	s.files.Store(rf.Fd(), rf)
+	return rf, nil
 }
 
 func (s *remoteScheme) NewFile(fd uintptr, filename string) workspaceapi.File {
-	err, scheme := s.state()
-	if err != nil {
-		return workspace.InvalidFile(fd, filename, err)
-	}
-	return scheme.NewFile(fd, filename)
+	f, _ := s.files.Load(fd)
+	return f.(workspaceapi.File)
 }
 
 func (s *remoteScheme) Remove(path string) error {
@@ -235,7 +245,14 @@ func (s *remoteScheme) NewPty(ctx context.Context) (workspaceapi.Pty, error) {
 	if err != nil {
 		return workspaceapi.Pty{}, err
 	}
-	return scheme.NewPty(bluectx.First(s.ctx, ctx))
+	pty, err := scheme.NewPty(bluectx.First(s.ctx, ctx))
+	if err == nil {
+		runtime.SetFinalizer(pty.Master, nil)
+		f := newRemoteFile(s, pty.Master.Fd(), pty.Master.Name())
+		s.files.Store(f.Fd(), f)
+		pty.Master = f
+	}
+	return pty, err
 }
 
 func (s *remoteScheme) ReadDir(name string) ([]os.DirEntry, error) {
@@ -251,6 +268,10 @@ func (s *remoteScheme) SetPtySize(pty workspaceapi.Pty, width, height int) error
 	if err != nil {
 		return err
 	}
+	// unwrap for underlying scheme to avoid unexpected type assertions panics
+	pty.Master = scheme.NewFile(pty.Master.Fd(), pty.Master.Name())
+	// file is transient, do not Close on GC
+	runtime.SetFinalizer(pty.Master, nil)
 	return scheme.SetPtySize(pty, width, height)
 }
 
@@ -258,6 +279,10 @@ func (s *remoteScheme) Close() (ret error) {
 	s.lastSessionError = errors.New("remote closed")
 	scheme := s.scheme
 	s.scheme = nil
+	// no need to close files before closing scheme to avoid
+	// closing connection before telling the remote workspace to close
+	// files: remote workspace process is going to do that anyway
+	// as the process will be shutdown.
 	if scheme != nil {
 		close(s.closeChan)
 		scheme.Close()

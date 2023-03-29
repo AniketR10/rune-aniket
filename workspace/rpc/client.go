@@ -304,15 +304,10 @@ func (c *Client) SetPtySize(p workspaceapi.Pty, width, height int) error {
 	ctx, cleanup := ctxWithTimeout(c.ctx)
 	defer cleanup()
 
-	fc, ok := p.Master.(*fileClient)
-	if !ok {
-		panic("extraneous Pty argument")
-	}
-
 	req := SetPtySizeRequest{
 		Pid:      int64(p.Pid),
-		Master:   fc.filename,
-		MasterFd: uint32(fc.fd),
+		Master:   p.Master.Name(),
+		MasterFd: uint32(p.Master.Fd()),
 		Slave:    p.Slave,
 		Width:    int32(width),
 		Height:   int32(height),
@@ -322,6 +317,7 @@ func (c *Client) SetPtySize(p workspaceapi.Pty, width, height int) error {
 	return err
 }
 
+// NewFile satisfies workspace.Scheme.
 func (c *Client) NewFile(fd uintptr, filename string) workspaceapi.File {
 	return newFileClient(c.ctx, c, c.cc, filename, fd)
 }

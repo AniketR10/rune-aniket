@@ -12,11 +12,15 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	workspaceapi "unstable.build/go-tui/api/workspace"
+	workspaceapitest "unstable.build/go-tui/api/workspace/test"
 	"unstable.build/go-tui/workspace"
 	workspacetest "unstable.build/go-tui/workspace/test"
 )
 
-func expectSchemeAPISuccess(t *testing.T, mu *sync.Mutex, mock *workspacetest.MockScheme, scheme workspace.Scheme) {
+func expectSchemeAPISuccess(
+	t *testing.T, ctrl *gomock.Controller, mu *sync.Mutex,
+	mock *workspacetest.MockScheme, scheme workspace.Scheme,
+) {
 	mu.Lock()
 	defer mu.Unlock()
 
@@ -28,7 +32,10 @@ func expectSchemeAPISuccess(t *testing.T, mu *sync.Mutex, mock *workspacetest.Mo
 	err = scheme.Signal(0, 0)
 	require.NoError(t, err)
 
-	mock.EXPECT().Open(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil).Times(1)
+	f := workspaceapitest.NewMockFile(ctrl)
+	f.EXPECT().Fd().AnyTimes()
+	f.EXPECT().Name().AnyTimes()
+	mock.EXPECT().Open(gomock.Any(), gomock.Any(), gomock.Any()).Return(f, nil).Times(1)
 	_, osErr := scheme.Open("", 0, 0)
 	require.Nil(t, osErr)
 
@@ -89,7 +96,7 @@ func TestRemoteScheme(t *testing.T) {
 			}, uri)
 		mu.Unlock()
 
-		expectSchemeAPISuccess(t, &mu, mock, scheme)
+		expectSchemeAPISuccess(t, ctrl, &mu, mock, scheme)
 		expectSchemeClose(t, mock, scheme)
 	})
 
@@ -152,14 +159,14 @@ func TestRemoteScheme(t *testing.T) {
 			return mock, nil
 		}, uri)
 		mu.Unlock()
-		expectSchemeAPISuccess(t, &mu, mock, scheme)
+		expectSchemeAPISuccess(t, ctrl, &mu, mock, scheme)
 
 		wg.Add(1)
 		reconnect = true
 		mock.EXPECT().Close().Return(errors.New("already closed but should be fine"))
 		closeHook(errors.New("kaboom"))
 		wg.Wait()
-		expectSchemeAPISuccess(t, &mu, mock, scheme)
+		expectSchemeAPISuccess(t, ctrl, &mu, mock, scheme)
 
 		expectSchemeClose(t, mock, scheme)
 	})

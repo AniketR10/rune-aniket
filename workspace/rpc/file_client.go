@@ -13,13 +13,14 @@ import (
 	"unstable.build/go-tui/proto"
 )
 
-var _ workspaceapi.File = (*fileClient)(nil)
-var _ io.ReadCloser = (*fileClient)(nil)
-var _ io.WriteCloser = (*fileClient)(nil)
+var _ workspaceapi.File = (*FileClient)(nil)
+var _ io.ReadCloser = (*FileClient)(nil)
+var _ io.WriteCloser = (*FileClient)(nil)
 
-type fileClient struct {
+// FileClient is a client to a remote file.
+type FileClient struct {
 	closed bool
-	// used to ensure that as long as there's a fileClient
+	// used to ensure that as long as there's a FileClient
 	// Client's finalizer doesnot run.
 	c      *Client
 	client FilesClient
@@ -29,7 +30,26 @@ type fileClient struct {
 	filename string
 }
 
-func (c *fileClient) Read(p []byte) (n int, err error) {
+func newFileClient(
+	ctx context.Context, c *Client,
+	conn proto.MuxConn, filename string, fd uintptr,
+) workspaceapi.File {
+	ret := &FileClient{
+		c:        c,
+		client:   NewFilesClient(conn),
+		filename: filename,
+		fd:       fd,
+		ctx:      ctx,
+	}
+	c.log(log.TraceLevel, "new file client: name=%s, fd=%d", filename, fd)
+	runtime.SetFinalizer(ret, func(f *FileClient) {
+		f.Close()
+	})
+	return ret
+}
+
+// Read satisfies io.Reader.
+func (c *FileClient) Read(p []byte) (n int, err error) {
 	// Read should not ever timeout as it is expected to block
 	// if data is not available yet.
 	ctx := c.ctx
@@ -55,7 +75,8 @@ func (c *fileClient) Read(p []byte) (n int, err error) {
 	return int(resp.GetN()), err
 }
 
-func (c *fileClient) Write(p []byte) (n int, err error) {
+// Write satisfies io.Writer.
+func (c *FileClient) Write(p []byte) (n int, err error) {
 	// Write should not ever timeout as it is expected to block
 	// until deadline is met or we are able to write.
 	ctx := c.ctx
@@ -69,7 +90,8 @@ func (c *fileClient) Write(p []byte) (n int, err error) {
 	return int(resp.GetN()), nil
 }
 
-func (c *fileClient) Close() error {
+// Close satisfies io.Closer.
+func (c *FileClient) Close() error {
 	if c.closed {
 		return nil
 	}
@@ -90,34 +112,18 @@ func (c *fileClient) Close() error {
 	return nil
 }
 
-func newFileClient(
-	ctx context.Context, c *Client,
-	conn proto.MuxConn, filename string, fd uintptr,
-) workspaceapi.File {
-	ret := &fileClient{
-		c:        c,
-		client:   NewFilesClient(conn),
-		filename: filename,
-		fd:       fd,
-		ctx:      ctx,
-	}
-	c.log(log.TraceLevel, "new file client: name=%s, fd=%d", filename, fd)
-	runtime.SetFinalizer(ret, func(f *fileClient) {
-		f.Close()
-	})
-	return ret
-}
-
-func (c *fileClient) log(level log.Level, msg string, args ...interface{}) {
-	log.WithField(logging.KeyClass, "workspace.fileClient").
+func (c *FileClient) log(level log.Level, msg string, args ...interface{}) {
+	log.WithField(logging.KeyClass, "workspace.FileClient").
 		Logf(level, msg, args...)
 }
 
-func (c *fileClient) Name() string {
+// Name satisfies workspaceapi.File.
+func (c *FileClient) Name() string {
 	return c.filename
 }
 
-func (c *fileClient) Stat() (os.FileInfo, error) {
+// Stat satisfies workspaceapi.File.
+func (c *FileClient) Stat() (os.FileInfo, error) {
 	ctx, cleanup := ctxWithTimeout(c.ctx)
 	defer cleanup()
 
@@ -130,7 +136,8 @@ func (c *fileClient) Stat() (os.FileInfo, error) {
 	return fileClientInfo{StatResponse: *resp}, nil
 }
 
-func (c *fileClient) Sync() error {
+// Sync satisfies workspaceapi.File.
+func (c *FileClient) Sync() error {
 	ctx, cleanup := ctxWithTimeout(c.ctx)
 	defer cleanup()
 
@@ -143,7 +150,8 @@ func (c *fileClient) Sync() error {
 	return nil
 }
 
-func (c *fileClient) Truncate(size int64) error {
+// Truncate satisfies workspaceapi.File.
+func (c *FileClient) Truncate(size int64) error {
 	ctx, cleanup := ctxWithTimeout(c.ctx)
 	defer cleanup()
 
@@ -156,7 +164,8 @@ func (c *fileClient) Truncate(size int64) error {
 	return nil
 }
 
-func (c *fileClient) Seek(offset int64, whence int) (int64, error) {
+// Seek satisfies workspaceapi.File.
+func (c *FileClient) Seek(offset int64, whence int) (int64, error) {
 	ctx, cleanup := ctxWithTimeout(c.ctx)
 	defer cleanup()
 
@@ -174,6 +183,7 @@ func (c *fileClient) Seek(offset int64, whence int) (int64, error) {
 	return resp.GetNewOffset(), nil
 }
 
-func (c *fileClient) Fd() uintptr {
+// Fd satisfies workspaceapi.File.
+func (c *FileClient) Fd() uintptr {
 	return c.fd
 }
