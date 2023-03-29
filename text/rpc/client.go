@@ -69,8 +69,7 @@ func (c *Client) Init(
 }
 
 func (c *Client) log(level log.Level, msg string, args ...interface{}) {
-	log.
-		WithField(logging.KeyClass, "text.Client").Logf(level, msg, args...)
+	log.WithField(logging.KeyClass, "text.Client").Logf(level, msg, args...)
 }
 
 func (c *Client) serveHandler(h textapi.EventHandler) (

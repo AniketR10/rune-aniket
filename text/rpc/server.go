@@ -3,7 +3,6 @@ package rpc
 import (
 	"context"
 	"errors"
-	"fmt"
 	"sync"
 
 	"github.com/ernestrc/blue/logging"
@@ -63,18 +62,6 @@ func (s *Server) Init(
 	s.serverCtx, s.serverCancelCtx = context.WithCancel(context.Background())
 }
 
-func (s *Server) consumeErrors(ctx context.Context, ch <-chan error) {
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case err := <-ch:
-			err = fmt.Errorf("eventHandlerClient error: %v", err)
-			s.log(log.DebugLevel, "editor.Server: consumeErrors: %s", err)
-		}
-	}
-}
-
 func (s *Server) log(level log.Level, msg string, args ...interface{}) {
 	log.WithField(logging.KeyClass, "text.Server").Logf(level, msg, args...)
 }
@@ -87,9 +74,7 @@ func (s *Server) dialHandler(channelID string) (textapi.EventHandler, error) {
 		return nil, err
 	}
 
-	ctx, cancelFn := context.WithCancel(s.serverCtx)
-	client := newEventHandlerClient(handlerConn, cancelFn)
-	go s.consumeErrors(ctx, client.errors())
+	client := newEventHandlerClient(s.serverCtx, channelID, handlerConn)
 	return client, nil
 }
 

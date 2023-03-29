@@ -7,6 +7,7 @@ import (
 	"runtime"
 	"time"
 
+	"github.com/ernestrc/blue/logging"
 	log "github.com/sirupsen/logrus"
 	textapi "unstable.build/go-tui/api/text"
 	"unstable.build/go-tui/proto"
@@ -18,27 +19,25 @@ const (
 )
 
 type eventHandlerClient struct {
-	conn         proto.MuxConn
-	pb           EditorEventHandlerClient
-	evChan       chan EditorEvent
-	errChan      chan error
-	quitChan     chan struct{}
-	quitCallback func()
+	conn     proto.MuxConn
+	pb       EditorEventHandlerClient
+	evChan   chan EditorEvent
+	errChan  chan error
+	quitChan chan struct{}
 }
 
 func newEventHandlerClient(
-	cc proto.MuxConn, quitCallback func(),
+	parentCtx context.Context, channelID string,
+	cc proto.MuxConn,
 ) *eventHandlerClient {
 	ret := new(eventHandlerClient)
 	ret.pb = NewEditorEventHandlerClient(cc)
-	ret.errChan = make(chan error)
 	ret.quitChan = make(chan struct{})
 	ret.evChan = make(chan EditorEvent, handleBackpressureThres)
-	ret.quitCallback = quitCallback
 	ret.conn = cc
 
-	go pipelineEvents(ret.quitChan, ret.evChan, ret.errChan,
-		ret.pb, &ret.conn, ret.quitCallback)
+	go pipelineEvents(parentCtx, channelID,
+		ret.quitChan, ret.evChan, ret.pb, &ret.conn)
 
 	runtime.SetFinalizer(ret, func(c *eventHandlerClient) {
 		c.Close()
@@ -48,14 +47,13 @@ func newEventHandlerClient(
 
 // make sure closeFn is not preventing client for being garbage collected
 func closeFn(
-	conn *proto.MuxConn, quitCallback func(),
+	conn *proto.MuxConn,
 	quitChan chan struct{}, evChan chan EditorEvent,
 ) {
 	if *conn == nil {
 		return
 	}
 	*conn = nil
-	quitCallback()
 	close(quitChan)
 	close(evChan)
 }
@@ -65,15 +63,17 @@ func (c *eventHandlerClient) errors() <-chan error {
 }
 
 func pipelineEvents(
+	ctx context.Context, channelID string,
 	quitChan chan struct{}, evChan chan EditorEvent,
-	errChan chan error,
 	pb EditorEventHandlerClient,
-	conn *proto.MuxConn, quitCallback func(),
+	conn *proto.MuxConn,
 ) {
 	var protoEv EditorEvent
 	for {
 		select {
 		case <-quitChan:
+			return
+		case <-ctx.Done():
 			return
 		case protoEv = <-evChan:
 		}
@@ -84,14 +84,15 @@ func pipelineEvents(
 		resp, err := pb.Handle(ctx, &req)
 		cancelFn()
 		if err != nil {
-			log.Errorf("editor.eventHandlerClient.Handle error: %v", err)
+			log.WithFields(log.Fields{
+				logging.KeyClass: "textpb.eventHandlerClient",
+				"channelID":      channelID,
+			}).Errorf("handle: %v", err)
+			continue
+		}
 
-			select {
-			case errChan <- err:
-			default:
-			}
-		} else if resp.GetQuit() {
-			closeFn(conn, quitCallback, quitChan, evChan)
+		if resp.GetQuit() {
+			closeFn(conn, quitChan, evChan)
 			return
 		}
 	}
@@ -111,7 +112,7 @@ func (c *eventHandlerClient) Handle(ctx context.Context, ev textapi.Event) bool 
 }
 
 func (c *eventHandlerClient) Close() error {
-	closeFn(&c.conn, c.quitCallback, c.quitChan, c.evChan)
+	closeFn(&c.conn, c.quitChan, c.evChan)
 	runtime.SetFinalizer(c, nil)
 	return nil
 }

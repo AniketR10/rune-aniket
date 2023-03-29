@@ -122,7 +122,7 @@ func ExpectBrokerDialChannelError(
 }
 
 func ExpectBrokerNewChannel(t *testing.T, channelID string, mockBroker *proto.MockMuxBroker) {
-	mockBroker.EXPECT().NewChannel(gomock.Any(), gomock.Any(), gomock.Any()).
+	mockBroker.EXPECT().NewChannel(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		DoAndReturn(func(tags ...string) (net.Listener, error) {
 			return testListener{addr: channelID}, nil
 		}).

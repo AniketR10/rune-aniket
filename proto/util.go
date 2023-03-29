@@ -6,6 +6,7 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -112,6 +113,9 @@ func AcceptAndServeChannel(
 	register func(string, MuxServer),
 	tags ...string,
 ) (string, error) {
+	// add running program as tag
+	tags = append(tags, filepath.Base(os.Args[0]))
+
 	lis, err := broker.NewChannel(tags...)
 	if err != nil {
 		return "", fmt.Errorf("new channel: %w", err)
