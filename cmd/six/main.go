@@ -19,10 +19,10 @@ import (
 	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
 	"gopkg.in/yaml.v3"
+	"unstable.build/go-tui"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/config"
 	"unstable.build/go-tui/proto"
-	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/workspace"
 	workspacepb "unstable.build/go-tui/workspace/rpc"
 	"unstable.build/go-tui/workspace/ssh"
@@ -214,12 +214,12 @@ func run() int {
 	var i *ide
 	if *flagRecover != "" && len(filenames) != 0 {
 		i, err = newIdeRecovery(*flagWorkspace, *flagConfigPath,
-			filenames[0], *flagRecover, *flagDataPath, term.PublishEvent)
+			filenames[0], *flagRecover, *flagDataPath, tui.PublishEvent)
 	} else if *flagRecover != "" {
 		err = fmt.Errorf("flag -r requires to pass the original filename")
 	} else {
 		i, err = newIde(*flagWorkspace, *flagConfigPath,
-			*flagDataPath, term.PublishEvent, filenames...)
+			*flagDataPath, tui.PublishEvent, filenames...)
 	}
 
 	if err != nil {

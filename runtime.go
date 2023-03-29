@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/signal"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/ernestrc/tcell/v2"
@@ -47,6 +48,21 @@ func drain(evs <-chan tcell.Event) {
 	}
 }
 
+// batch interrupt events such that we deliver exactly one more
+// after every call to publish interrupt.
+// This serves as a pressure valve when something is abusing
+// the interrupt mechanism.
+var interruptPending atomic.Bool
+
+// PublishEvent publishes the given event to the event loop.
+func PublishEvent(ev term.Event) bool {
+	if ev.Type == term.EventInterrupt &&
+		!interruptPending.CompareAndSwap(false, true) {
+		return true
+	}
+	return term.PublishEvent(ev)
+}
+
 func handleInterruptSignal(
 	lastSignalAt *time.Time, exit *bool,
 ) {
@@ -83,6 +99,7 @@ func run(root Handler, lock sync.Locker, termw term.Writer) (err error) {
 				ev := term.FromTcellEvent(tev)
 				switch ev.Type {
 				case term.EventInterrupt:
+					interruptPending.Store(false)
 				case term.EventError:
 					err = ev.Err
 				case term.EventResize:
