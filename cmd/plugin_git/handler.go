@@ -230,44 +230,45 @@ func (h *gitEditorHandler) pushNewDiffLocations(
 		Path:    "git",
 		Args:    []string{"diff", "-U0", filename},
 		Watcher: workspaceapi.ChanWatcher(ch),
+		Stdout:  &out,
 	}
-	_, err := h.exec.Start(cmd)
-	if err != nil {
+	if _, err := h.exec.Start(cmd); err != nil {
 		return fmt.Errorf("failed to start process: %v", err)
 	}
 
 	h.initScroll(filename)
 
-	err = <-ch
-	if err != nil {
+	if err := <-ch; err != nil {
 		return fmt.Errorf("process exit with non-zero status: %v", err)
 	}
 
 	r := diff.NewFileDiffReader(&out)
-	diff, ret := r.Read()
-	if ret != nil {
-		if strings.Contains(ret.Error(), io.EOF.Error()) {
+	diff, err := r.Read()
+	if err != nil {
+		// unfortunately diff lib doesn't chain errors properly
+		if strings.Contains(err.Error(), io.EOF.Error()) {
 			// make sure that an interrupt is called
 			// so the new scroll bar is updated, when
 			// focus switched to a file with no changes.
-			ret = h.p.Interrupt()
+			err = h.p.Interrupt()
+		} else {
+			err = fmt.Errorf("failed to read from stdout: %w", err)
 		}
-		ret = fmt.Errorf("failed to read from stdout: %w", err)
 	}
 
 	if diff == nil {
-		return ret
+		return err
 	}
 
 	locs := h.parseDiff(diff)
 	h.lastLocs[filename] = locs
 
-	err = h.ed.SetLocationList(resource,
+	serr := h.ed.SetLocationList(resource,
 		textapi.LocationPriorityInfo, h.gitDiffListID, textapi.LocationSlice(locs))
 	if err != nil {
-		ret = multierr.Append(ret, fmt.Errorf("set locations: %w", err))
+		err = multierr.Append(err, fmt.Errorf("set locations: %w", serr))
 	}
-	return ret
+	return err
 }
 
 func (h *gitEditorHandler) resetScroll() {
