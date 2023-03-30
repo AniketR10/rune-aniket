@@ -237,36 +237,50 @@ func (h *fuzzyFinderHandler) openResource(searchQuery, data string) {
 	}
 }
 
-func (h *fuzzyFinderHandler) scanDataViaWorkspaceAPI(
+func (h *fuzzyFinderHandler) doScanDataViaWorkspaceAPI(
 	ctx context.Context, datachan chan<- []byte,
-) {
+) error {
 	defer close(datachan)
 	log.Debugf("using workspace API to get resource iterator")
 
 	it, err := h.workspaceFallback(h.fs, ctx)
 	if err != nil {
-		log.Error(err)
-		return
+		return fmt.Errorf("workspace API fallback: %v", err)
 	}
 
 	for {
 		resource, ok := it.Next()
 		if !ok {
-			if err := it.Err(); err != nil {
-				log.Error(err)
-			} else {
-				log.Infof("Done iterating over data: EOF")
-			}
 			break
 		}
 		select {
 		case datachan <- []byte(resource):
 		case <-ctx.Done():
-			log.Infof("Done iterating over data: %s", ctx.Err())
-			return
+			return ctx.Err()
 		case <-h.quitChan:
-			log.Infof("Done iterating over data: closed")
-			return
+			return nil
+		}
+	}
+	if err := it.Err(); err != nil {
+		return fmt.Errorf("iterator err: %v", err)
+	}
+	return nil
+}
+
+func (h *fuzzyFinderHandler) scanDataViaWorkspaceAPI(
+	ctx context.Context, datachan chan<- []byte,
+) {
+	err := h.doScanDataViaWorkspaceAPI(ctx, datachan)
+	if err != nil {
+		log.Errorf("scan data: %v", err)
+
+		// setMessage unlocks locker to prevent deadlock by I/O wait
+		h.mu.Lock()
+		defer h.mu.Unlock()
+
+		merr := h.setMessage("failed to scan: %v", err)
+		if merr != nil {
+			log.Errorf("error setting message: %v", merr)
 		}
 	}
 }
