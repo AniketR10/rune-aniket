@@ -18,6 +18,9 @@ import (
 	"google.golang.org/grpc"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	workspaceapitest "unstable.build/go-tui/api/workspace/test"
+	"unstable.build/go-tui/config"
+	"unstable.build/go-tui/workspace"
+	"unstable.build/go-tui/workspace/test"
 	workspacetest "unstable.build/go-tui/workspace/test"
 )
 
@@ -320,6 +323,44 @@ func TestClientServer(t *testing.T) {
 			tcase.do(t, mock, client, server)
 		})
 	}
+}
+
+func setupClientServerIntegrationTest(
+	t *testing.T, scheme workspace.Scheme,
+) (*Client, func()) {
+	server := NewServer(scheme, new(sync.Mutex))
+	return setupClientServerTest(t, server)
+}
+
+func TestSchemeIntegration(t *testing.T) {
+	test.TestWorkspaceSchemeFiles(t, func(t *testing.T) workspace.Scheme {
+		memURI, err := workspaceapi.ParseURI("memory:///tmp")
+		require.NoError(t, err)
+		scheme, err := workspace.NewMemoryScheme(context.Background(), config.NopConfig(), memURI)
+		require.NoError(t, err)
+		client, cleanup := setupClientServerIntegrationTest(t, scheme)
+		t.Cleanup(cleanup)
+		return client
+	})
+
+	test.TestWorkspaceSchemeExecutor(t, func(t *testing.T) workspace.Scheme {
+		dir, err := ioutil.TempDir("", "workspacepb_suite")
+		require.NoError(t, err)
+
+		workspaceURI, err := workspaceapi.ParseURI("file://" + dir)
+		require.NoError(t, err)
+
+		fileScheme, err := workspace.NewFileScheme(
+			context.Background(), config.NopConfig(), workspaceURI)
+		require.NoError(t, err)
+
+		client, cleanup := setupClientServerIntegrationTest(t, fileScheme)
+		t.Cleanup(func() {
+			_ = os.RemoveAll(dir)
+			cleanup()
+		})
+		return client
+	})
 }
 
 type testFile struct {

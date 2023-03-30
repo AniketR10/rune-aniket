@@ -29,4 +29,21 @@ func TestFileScheme(t *testing.T) {
 		})
 		return fileScheme
 	})
+
+	TestWorkspaceSchemeExecutor(t, func(t *testing.T) workspace.Scheme {
+		dir, err := ioutil.TempDir("", "file_scheme_suite")
+		require.NoError(t, err)
+
+		workspaceURI, err := workspaceapi.ParseURI("file://" + dir)
+		require.NoError(t, err)
+
+		fileScheme, err := workspace.NewFileScheme(
+			context.Background(), config.NopConfig(), workspaceURI)
+		require.NoError(t, err)
+
+		t.Cleanup(func() {
+			_ = os.RemoveAll(dir)
+		})
+		return fileScheme
+	})
 }

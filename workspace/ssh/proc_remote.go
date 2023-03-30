@@ -120,7 +120,7 @@ func (s *procSession) StartCommand(ctx context.Context, cmd workspaceapi.Cmd) (
 	workspaceapi.Pid, error,
 ) {
 	if cmd.Path == "" {
-		return 0, errors.New("invalid empty command")
+		return 0, errors.New("no command")
 	}
 
 	cmd.Path, cmd.Args = s.CommandString(cmd.Path, cmd.Args...)

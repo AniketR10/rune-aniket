@@ -53,7 +53,7 @@ type scheme struct {
 	basePath string
 
 	getUser         func() (*user.User, error)
-	remoteFn        func(sshConfig, workspaceapi.URI) (remote, error)
+	remoteFn        func(context.Context, sshConfig, workspaceapi.URI) (remote, error)
 	connectSchemeFn connectSchemeFn
 	ctx             context.Context
 	cancelCtx       func()
@@ -76,9 +76,7 @@ func newScheme(
 	if cc.command == "" {
 		ret.remoteFn = newStdRemote
 	} else {
-		ret.remoteFn = func(cfg sshConfig, uri workspaceapi.URI) (remote, error) {
-			return newProcRemote(ctx, cfg, uri)
-		}
+		ret.remoteFn = newProcRemote
 	}
 
 	ret.connectSchemeFn = ret.connectScheme
@@ -221,7 +219,7 @@ func (s *scheme) connectScheme(
 		sshPath = "."
 	}
 
-	remote, err := s.remoteFn(s.cfg, uri)
+	remote, err := s.remoteFn(ctx, s.cfg, uri)
 	if err != nil {
 		return nil, fmt.Errorf("could not initialize remote: %w", err)
 	}

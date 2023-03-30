@@ -220,6 +220,7 @@ func (p *fileScheme) StartCommand(ctx context.Context, cmd workspaceapi.Cmd) (
 			p.log(log.WarnLevel,
 				"find.Executable: could not find executable of '%s' in path. "+
 					"Falling back to shell expanding it: %v", cmd.Path, err)
+			path = cmd.Path
 		}
 	}
 	// ensure that if file scheme is closed, all commands are cleaned up

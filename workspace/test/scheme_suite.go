@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -19,6 +20,164 @@ import (
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/workspace"
 )
+
+func TestWorkspaceSchemeExecutor(
+	t *testing.T,
+	schemeFn func(t *testing.T) workspace.Scheme,
+) {
+	t.Run("command should run command and collect stdout", func(t *testing.T) {
+		scheme := schemeFn(t)
+		defer scheme.Close()
+
+		var out bytes.Buffer
+		ch := make(chan error)
+		cmd := workspaceapi.Cmd{
+			Path:    "echo",
+			Args:    []string{"blablabla\nblebleble"},
+			Stdout:  &out,
+			Watcher: workspaceapi.ChanWatcher(ch),
+		}
+
+		pid, err := scheme.StartCommand(context.Background(), cmd)
+		require.NoError(t, err)
+		require.NotZero(t, pid)
+
+		require.NoError(t, <-ch)
+		assert.Equal(t, "blablabla\nblebleble\n", out.String())
+	})
+
+	t.Run("command should run command and collect stderr", func(t *testing.T) {
+		scheme := schemeFn(t)
+		defer scheme.Close()
+
+		var out bytes.Buffer
+		ch := make(chan error)
+		cmd := workspaceapi.Cmd{
+			Path:    "sh",
+			Args:    []string{"-c", "echo blabla 1>&2"},
+			Stderr:  &out,
+			Watcher: workspaceapi.ChanWatcher(ch),
+		}
+
+		pid, err := scheme.StartCommand(context.Background(), cmd)
+		require.NoError(t, err)
+		require.NotZero(t, pid)
+
+		require.NoError(t, <-ch)
+		assert.Equal(t, "blabla\n", out.String())
+	})
+
+	t.Run("command should run command and feed stdin data", func(t *testing.T) {
+		scheme := schemeFn(t)
+		defer scheme.Close()
+
+		var out bytes.Buffer
+		ch := make(chan error)
+		cmd := workspaceapi.Cmd{
+			Path:    "cat",
+			Stdin:   strings.NewReader("blabla"),
+			Stdout:  &out,
+			Watcher: workspaceapi.ChanWatcher(ch),
+		}
+
+		pid, err := scheme.StartCommand(context.Background(), cmd)
+		require.NoError(t, err)
+		require.NotZero(t, pid)
+
+		require.NoError(t, <-ch)
+		assert.Equal(t, "blabla", out.String())
+	})
+
+	t.Run("should return error if command doesn't exist", func(t *testing.T) {
+		scheme := schemeFn(t)
+		defer scheme.Close()
+
+		ch := make(chan error)
+		cmd := workspaceapi.Cmd{
+			Path:    "aCommandThatShoulndtReallyExist55",
+			Watcher: workspaceapi.ChanWatcher(ch),
+		}
+
+		pid, err := scheme.StartCommand(context.Background(), cmd)
+		require.Zero(t, pid)
+		require.Error(t, err)
+		assert.True(t, strings.Contains(err.Error(), "not found"), err.Error())
+	})
+
+	t.Run("should return error if command errors ", func(t *testing.T) {
+		scheme := schemeFn(t)
+		defer scheme.Close()
+
+		var out bytes.Buffer
+		ch := make(chan error)
+		cmd := workspaceapi.Cmd{
+			Path:    "cat",
+			Args:    []string{"-X"},
+			Stderr:  &out,
+			Watcher: workspaceapi.ChanWatcher(ch),
+		}
+
+		pid, err := scheme.StartCommand(context.Background(), cmd)
+		require.NoError(t, err)
+		require.NotZero(t, pid)
+
+		require.Error(t, <-ch)
+		assert.True(t, strings.Contains(out.String(), "invalid option"), out.String())
+	})
+
+	t.Run("pass env variables", func(t *testing.T) {
+		scheme := schemeFn(t)
+		defer scheme.Close()
+
+		var out bytes.Buffer
+		ch := make(chan error)
+		cmd := workspaceapi.Cmd{
+			Path:    "sh",
+			Args:    []string{"-c", "echo $XENV"},
+			Stdout:  &out,
+			Env:     []string{"XENV=myEnvVar"},
+			Watcher: workspaceapi.ChanWatcher(ch),
+		}
+
+		pid, err := scheme.StartCommand(context.Background(), cmd)
+		require.NoError(t, err)
+		require.NotZero(t, pid)
+
+		require.NoError(t, <-ch)
+		assert.Equal(t, "myEnvVar\n", out.String())
+	})
+
+	t.Run("should cancel command if context cancels", func(t *testing.T) {
+		scheme := schemeFn(t)
+		defer scheme.Close()
+
+		ch := make(chan error)
+		cmd := workspaceapi.Cmd{
+			Path:    "sleep",
+			Args:    []string{"10"},
+			Watcher: workspaceapi.ChanWatcher(ch),
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(),
+			100*time.Millisecond)
+		defer cancel()
+
+		pid, err := scheme.StartCommand(ctx, cmd)
+		require.NoError(t, err)
+		require.NotZero(t, pid)
+
+		waitCtx, cancelWait := context.WithTimeout(
+			context.Background(), 5*time.Second)
+		defer cancelWait()
+		select {
+		case <-waitCtx.Done():
+			t.Logf("failed to kill process in time")
+			t.Fail()
+		case err = <-ch:
+			require.Error(t, err)
+		}
+	})
+}
 
 func TestWorkspaceSchemeFiles(
 	t *testing.T,

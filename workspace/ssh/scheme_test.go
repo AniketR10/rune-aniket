@@ -83,7 +83,7 @@ func newTestScheme(
 ) (workspace.Scheme, error) {
 	s := new(scheme)
 	s.ctx, s.cancelCtx = context.WithCancel(context.Background())
-	s.remoteFn = func(sshConfig, workspaceapi.URI) (remote, error) {
+	s.remoteFn = func(context.Context, sshConfig, workspaceapi.URI) (remote, error) {
 		return nopRemote{}, nil
 	}
 	s.getUser = func() (*user.User, error) {

@@ -10,13 +10,17 @@ import (
 	"path"
 	"strings"
 	"syscall"
+	"time"
 
+	bluectx "github.com/ernestrc/blue/context"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/knownhosts"
 	"golang.org/x/term"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/workspace"
 )
+
+const watcherWaitTimeout = 2 * time.Minute
 
 var sigMap = map[syscall.Signal]ssh.Signal{
 	syscall.SIGABRT: "ABRT",
@@ -36,18 +40,20 @@ var sigMap = map[syscall.Signal]ssh.Signal{
 
 // used to adapt ssh.Client to sshClient
 type stdRemote struct {
-	client *ssh.Client
-	quitCh chan struct{}
+	parentCtx context.Context
+	client    *ssh.Client
+	quitCh    chan struct{}
 }
 
 // used to adapt ssh.Session to Executor
 type goSshSession struct {
-	ses    *ssh.Session
-	quitCh chan struct{}
-	pid    int
+	parentCtx context.Context
+	ses       *ssh.Session
+	quitCh    chan struct{}
+	pid       int
 }
 
-func newStdRemote(cfg sshConfig, uri workspaceapi.URI) (
+func newStdRemote(ctx context.Context, cfg sshConfig, uri workspaceapi.URI) (
 	remote, error,
 ) {
 	username, err := usernameOrCurrent(uri)
@@ -80,7 +86,7 @@ func newStdRemote(cfg sshConfig, uri workspaceapi.URI) (
 	if err != nil {
 		return nil, fmt.Errorf("failed to ssh dial: %s", err)
 	}
-	ret := &stdRemote{client: conn, quitCh: make(chan struct{})}
+	ret := &stdRemote{parentCtx: ctx, client: conn, quitCh: make(chan struct{})}
 	return ret, nil
 }
 
@@ -91,7 +97,7 @@ func (s *goSshSession) StartCommand(ctx context.Context, cmd workspaceapi.Cmd) (
 		panic("Command called more than once on an ssh session")
 	}
 	if cmd.Path == "" {
-		return 0, errors.New("invalid empty command")
+		return 0, errors.New("no command")
 	}
 
 	s.pid++
@@ -106,7 +112,15 @@ func (s *goSshSession) StartCommand(ctx context.Context, cmd workspaceapi.Cmd) (
 		return 0, err
 	}
 
+	ctx = bluectx.First(s.parentCtx, ctx)
+
+	// wait and dispatch error to watcher
 	go func() {
+		// avoid buggy watchers to cause this goroutine to block forever,
+		// so the timeout should be in the order of minutes.
+		ctx, cancel := context.WithTimeout(ctx, watcherWaitTimeout)
+		defer cancel()
+
 		err := s.ses.Wait()
 		if cmd.Watcher != nil && cmd.Watcher.Watch() != nil {
 			select {
@@ -114,6 +128,15 @@ func (s *goSshSession) StartCommand(ctx context.Context, cmd workspaceapi.Cmd) (
 			case <-s.quitCh:
 			case cmd.Watcher.Watch() <- err:
 			}
+		}
+	}()
+
+	// kill command if context is done
+	go func() {
+		select {
+		case <-ctx.Done():
+			s.ses.Close()
+		case <-s.quitCh:
 		}
 	}()
 
@@ -137,7 +160,7 @@ func (r *stdRemote) NewSession() (workspace.Executor, error) {
 	if err != nil {
 		return nil, err
 	}
-	ret := &goSshSession{ses: ses, quitCh: r.quitCh}
+	ret := &goSshSession{parentCtx: r.parentCtx, ses: ses, quitCh: r.quitCh}
 	return ret, nil
 }
 

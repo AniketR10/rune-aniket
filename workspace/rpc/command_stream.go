@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"runtime"
+	"time"
 
 	"github.com/ernestrc/blue/logging"
 	bluenet "github.com/ernestrc/blue/net"
@@ -16,6 +17,8 @@ import (
 )
 
 var readBufferSize = 1024 * 64
+
+const watcherWaitTimeout = 2 * time.Minute
 
 type serverCommandStreamer struct {
 	cmd       workspaceapi.Cmd
@@ -94,8 +97,7 @@ func newServerCommandStreamer(
 }
 
 func (s *serverCommandStreamer) log(level log.Level, msg string, args ...interface{}) {
-	log.
-		WithFields(log.Fields{logging.KeyClass: "serverCommandStreamer"}).
+	log.WithFields(log.Fields{logging.KeyClass: "serverCommandStreamer"}).
 		Logf(level, msg, args...)
 }
 
@@ -423,10 +425,15 @@ func (s *clientCommandStreamer) streamCommandData(client interface{}) {
 		break
 	}
 
-	if s.cmd.Watcher != nil {
+	// avoid buggy watchers to cause this goroutine to block forever,
+	// so the timeout should be in the order of minutes.
+	ctx, cancel := context.WithTimeout(s.parentCtx, watcherWaitTimeout)
+	defer cancel()
+
+	if s.cmd.Watcher != nil && s.cmd.Watcher.Watch() != nil {
 		select {
 		case s.cmd.Watcher.Watch() <- err:
-		case <-s.parentCtx.Done():
+		case <-ctx.Done():
 		}
 	}
 	// emulate exec code; pipes should be closed to force EOF

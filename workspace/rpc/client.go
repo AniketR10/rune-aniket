@@ -19,7 +19,7 @@ import (
 	"unstable.build/go-tui/workspace"
 )
 
-const defaultTimeout = 5 * time.Second
+const defaultTimeout = 2 * time.Second
 
 // for plugin-side
 var _ workspaceapi.FileSystem = (*Client)(nil)
@@ -222,12 +222,12 @@ func (c *Client) Start(cmd workspaceapi.Cmd) (workspaceapi.Pid, error) {
 
 // StartCommand returns the Pid to execute the named program with the given
 // arguments. For more details see exec.Command.
-func (c *Client) StartCommand(ctx context.Context, cmd workspaceapi.Cmd) (
-	workspaceapi.Pid, error,
-) {
-	ctx = bluectx.First(ctx, c.ctx)
+func (c *Client) StartCommand(
+	commandCtx context.Context, cmd workspaceapi.Cmd,
+) (workspaceapi.Pid, error) {
+	commandCtx = bluectx.First(commandCtx, c.ctx)
 
-	stream, err := c.exec.StartCommand(ctx)
+	stream, err := c.exec.StartCommand(commandCtx)
 	if err != nil {
 		return 0, fmt.Errorf("new stream: %v", err)
 	}
@@ -242,17 +242,55 @@ func (c *Client) StartCommand(ctx context.Context, cmd workspaceapi.Cmd) (
 			Stderr: cmd.Stderr != nil,
 		},
 	}
-	if err := stream.Send(&req); err != nil {
-		return 0, fmt.Errorf("send start command request: %v", err)
+	streamer := newClientCommandStreamer(commandCtx, cmd, stream)
+
+	type result struct {
+		pid workspaceapi.Pid
+		err error
 	}
-	streamer := newClientCommandStreamer(c.ctx, cmd, stream)
-	pid, err := streamer.waitForPid()
-	c.log(log.DebugLevel, "wait for pid: %d err=%v", pid, err)
-	if err != nil {
-		return 0, fmt.Errorf("error waiting for pid: %v", err)
+
+	// implement rpc timeout
+	handshakeCtx, cancel := context.WithTimeout(commandCtx, defaultTimeout)
+	defer cancel()
+
+	ch := make(chan result)
+	go func() {
+		// do not worry about closing stream here something else
+		// should take care of closing the connection if deemed appropiate.
+		if err := stream.Send(&req); err != nil {
+			res := result{err: fmt.Errorf("send start command request: %v", err)}
+			select {
+			case ch <- res:
+			case <-handshakeCtx.Done():
+			}
+			return
+		}
+		pid, err := streamer.waitForPid()
+		c.log(log.DebugLevel, "wait for pid: %d err=%v", pid, err)
+		if err != nil {
+			res := result{err: fmt.Errorf("error waiting for pid: %v", err)}
+			select {
+			case ch <- res:
+			case <-handshakeCtx.Done():
+			}
+			return
+		}
+		select {
+		case ch <- result{pid: pid}:
+		case <-handshakeCtx.Done():
+		}
+	}()
+
+	select {
+	case res := <-ch:
+		if res.err != nil {
+			return 0, res.err
+		}
+		go streamer.streamCommandData(c)
+		return res.pid, nil
+	case <-handshakeCtx.Done():
+		return 0, handshakeCtx.Err()
 	}
-	go streamer.streamCommandData(c)
-	return pid, nil
 }
 
 // Signal sends a signal to the running process.
