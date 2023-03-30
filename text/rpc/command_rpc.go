@@ -5,6 +5,8 @@ import (
 	"runtime"
 	"time"
 
+	"github.com/ernestrc/blue/logging"
+	log "github.com/sirupsen/logrus"
 	textapi "unstable.build/go-tui/api/text"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/browser"
@@ -36,6 +38,7 @@ func newCommandClient(conn proto.MuxConn, s *Server) *commandClient {
 func (c *commandClient) HandleCommand(ctx context.Context, cmd textapi.Command) (
 	bool, error,
 ) {
+	c.log(log.TraceLevel, "handle command: %s", cmd.Name)
 
 	ctx, cancelFn := context.WithTimeout(ctx, defaultClientTimeout)
 	defer cancelFn()
@@ -72,13 +75,19 @@ func (c *commandClient) HandleCommand(ctx context.Context, cmd textapi.Command) 
 	resp, err := c.pb.HandleCommand(ctx, &req)
 	runtime.KeepAlive(c)
 	if err != nil {
+		c.log(log.TraceLevel, "handle command %s error: %v", cmd.Name, err)
 		return false, err
 	}
 	return resp.GetExit(), nil
 }
+func (c *commandClient) log(level log.Level, msg string, args ...interface{}) {
+	log.WithFields(log.Fields{logging.KeyClass: "textpb.commandClient"}).
+		Logf(level, msg, args...)
+}
 
 func (c *commandClient) Close() error {
 	err := c.conn.Close()
+	c.log(log.TraceLevel, "close called: err=%v", err)
 	runtime.SetFinalizer(c, nil)
 	return err
 }
@@ -87,12 +96,15 @@ type commandServer struct {
 	UnimplementedCommandHandlerServer
 	h       textapi.CommandHandler
 	browser *browserpb.Client
+	// delay client finalizer until commandServer is GC'd
+	c *Client
 }
 
-func newCommandServer(h textapi.CommandHandler, bc *browserpb.Client) *commandServer {
+func newCommandServer(h textapi.CommandHandler, bc *browserpb.Client, c *Client) *commandServer {
 	ret := new(commandServer)
 	ret.h = h
 	ret.browser = bc
+	ret.c = c
 	return ret
 }
 

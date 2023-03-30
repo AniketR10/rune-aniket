@@ -77,7 +77,7 @@ func (c *Client) serveCommandHandler(h textapi.CommandHandler) (
 	ret, err = proto.AcceptAndServeChannel(c.clientCtx, c.broker,
 		func(channelID string, _srv proto.MuxServer) {
 			srv = _srv
-			s := newCommandServer(h, c.browser)
+			s := newCommandServer(h, c.browser, c)
 			RegisterCommandHandlerServer(srv.Registrar(), s)
 		}, "text", "client", "command")
 	return
