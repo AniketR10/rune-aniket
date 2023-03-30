@@ -37,12 +37,6 @@ func NewFileScheme(
 	ret.getUser = user.Current
 	ret.lookupUser = user.Lookup
 	ret.osStat = os.Stat
-	ret.cmds = make(map[workspaceapi.Pid]struct{})
-	var ok bool
-	ret.locker, ok = LockerFromContext(ctx)
-	if !ok {
-		ret.locker = new(sync.Mutex)
-	}
 	err := ret.init(cfg, workspace)
 	if err != nil {
 		return nil, err
@@ -57,8 +51,7 @@ type fileScheme struct {
 	workspace  workspaceapi.URI
 	ctx        context.Context
 	cancelCtx  func()
-	locker     sync.Locker
-	cmds       map[workspaceapi.Pid]struct{}
+	cmds       sync.Map // map[workspaceapi.Pid]struct{}
 
 	// This is important to prevent runtime finalizers
 	// running on files that are garbage collected on host
@@ -67,7 +60,7 @@ type fileScheme struct {
 	// Technically we could leak files if clients
 	// never close files, but once Server is garbage
 	// collected, all files that are orhpaned will be closed.
-	files map[uintptr]workspaceapi.File
+	files sync.Map // map[uintptr]workspaceapi.File
 }
 
 func (p *fileScheme) init(cfg config.Config, workspace workspaceapi.URI) error {
@@ -84,7 +77,6 @@ func (p *fileScheme) init(cfg config.Config, workspace workspaceapi.URI) error {
 	}
 	p.workspace = workspace
 	p.ctx, p.cancelCtx = context.WithCancel(context.Background())
-	p.files = make(map[uintptr]workspaceapi.File)
 	return nil
 }
 
@@ -107,17 +99,17 @@ func (p *fileScheme) Open(path string, flag int, perm os.FileMode) (workspaceapi
 	}
 
 	ret := &fileSchemeFile{File: f, p: p}
-	p.files[f.Fd()] = ret
+	p.files.Store(f.Fd(), ret)
 
 	return ret, nil
 }
 
 func (p *fileScheme) NewFile(fd uintptr, filename string) workspaceapi.File {
-	f, ok := p.files[fd]
+	f, ok := p.files.Load(fd)
 	if !ok {
 		return nil
 	}
-	return f
+	return f.(workspaceapi.File)
 }
 
 func (p *fileScheme) Remove(path string) error {
@@ -248,9 +240,7 @@ func (p *fileScheme) StartCommand(ctx context.Context, cmd workspaceapi.Cmd) (
 	pid := workspaceapi.Pid(stdcmd.Process.Pid)
 	go func() {
 		defer func() {
-			p.locker.Lock()
-			defer p.locker.Unlock()
-			delete(p.cmds, pid)
+			p.cmds.Delete(pid)
 		}()
 
 		start := time.Now()
@@ -277,13 +267,13 @@ func (p *fileScheme) StartCommand(ctx context.Context, cmd workspaceapi.Cmd) (
 
 	p.log(log.DebugLevel, "exec.Command: (%#v, pid=%d)", cmd, stdcmd.Process.Pid)
 
-	p.cmds[pid] = struct{}{}
+	p.cmds.Store(pid, struct{}{})
 
 	return pid, nil
 }
 
 func (p *fileScheme) Signal(pid workspaceapi.Pid, signal syscall.Signal) error {
-	_, ok := p.cmds[pid]
+	_, ok := p.cmds.Load(pid)
 	if !ok {
 		return errProcNotFound
 	}
@@ -342,7 +332,7 @@ func (p *fileScheme) NewPty(ctx context.Context) (workspaceapi.Pty, error) {
 	}
 
 	ret := &fileSchemeFile{File: pty, p: p}
-	p.files[pty.Fd()] = ret
+	p.files.Store(pty.Fd(), ret)
 
 	return workspaceapi.Pty{
 		Pid:    pid,
@@ -379,7 +369,7 @@ type fileSchemeFile struct {
 }
 
 func (f *fileSchemeFile) Close() error {
-	delete(f.p.files, f.Fd())
+	f.p.files.Delete(f.Fd())
 	return f.File.Close()
 }
 
