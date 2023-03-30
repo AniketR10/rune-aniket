@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	defSSHTimeout = 10 * time.Second
+	defSSHTimeout = 5 * time.Second
 )
 
 type sshConfig struct {
