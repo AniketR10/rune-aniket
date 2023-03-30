@@ -6,6 +6,7 @@ import (
 	"os"
 	"runtime"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -24,14 +25,18 @@ var (
 type connectSchemeFn func(ctx context.Context,
 	uri workspaceapi.URI, closeHook func(error)) (workspace.Scheme, error)
 
-// wraps another workspace.Scheme to be resilient against intermitent connection failures
-type remoteScheme struct {
-	locker           sync.Locker
-	closeChan        chan struct{}
+type state struct {
 	lastSessionError error
 	scheme           workspace.Scheme
-	ctx              context.Context
-	cancelCtx        func()
+}
+
+// wraps another workspace.Scheme to be resilient against
+// intermitent connection failures
+type remoteScheme struct {
+	closeChan chan struct{}
+	ctx       context.Context
+	cancelCtx func()
+	currState atomic.Value
 
 	// NOTE this is not a regular map because
 	// otherwise we need to worry about synchronizing deletes
@@ -55,22 +60,8 @@ func (s *remoteScheme) maintainConnection(
 
 			logger.Debugf("attempting to connect to %s", uri)
 
-			// block Scheme API until we're connected
-			s.locker.Lock()
-			if !initSema {
-				// unlock initialization semaphore
-				// so next call to Scheme API blocks until
-				// we're connected
-				sema.Unlock()
-				initSema = true
-			}
-			if s.scheme != nil {
-				err := s.scheme.Close()
-				logger.Tracef("closed previous remote scheme: %v", err)
-			}
-
 			// close hook could be called multiple times
-			s.scheme, s.lastSessionError = connect(ctx, uri, func(err error) {
+			scheme, err := connect(ctx, uri, func(err error) {
 				defer cancel()
 
 				select {
@@ -79,33 +70,48 @@ func (s *remoteScheme) maintainConnection(
 				default:
 				}
 				logger.Warnf("lost connectivity to %s: %s", uri, err)
-				s.locker.Lock()
-				defer s.locker.Unlock()
-				s.lastSessionError = err
+				s.setError(logger, err)
 				return
 			})
 
-			if s.lastSessionError != nil {
+			prevState := s.currState.Swap(state{scheme: scheme,
+				lastSessionError: err})
+			if prevState != nil && prevState.(state).scheme != nil {
+				err := prevState.(state).scheme.Close()
+				logger.Tracef("closed previous remote scheme: %v", err)
+			}
+
+			if !initSema {
+				// unlock initialization semaphore
+				// so constructor returns after first attempt to connect
+				sema.Unlock()
+				initSema = true
+			}
+
+			if err != nil {
 				cancel()
-				logger.Warnf("failed to connect to %s: %s", uri, s.lastSessionError)
-				s.locker.Unlock()
-				return true, s.lastSessionError
+				logger.Warnf("failed to connect to %s: %s", uri, err)
+				return true, err
 			}
 
 			logger.Infof("connected to %s", uri)
 
-			s.locker.Unlock()
-
 			select {
 			case <-ctx.Done():
 				logger.Debugf("connection context to %s is done", uri)
-				s.locker.Lock()
-				defer s.locker.Unlock()
-				if s.lastSessionError == nil {
-					s.lastSessionError = errors.New("lost connection to remote")
-					logger.Warn(s.lastSessionError)
+				currState := s.currState.Load()
+				var err error
+				if currState != nil {
+					st := currState.(state)
+					if st.lastSessionError == nil {
+						err = errors.New("lost connection to remote")
+						logger.Warn(err)
+						s.setError(logger, err)
+					} else {
+						err = st.lastSessionError
+					}
 				}
-				return true, s.lastSessionError
+				return true, err
 			case <-closeChan:
 				return false, nil
 			}
@@ -114,24 +120,22 @@ func (s *remoteScheme) maintainConnection(
 	logger.Debugf("stopped trying to re-connect to remote %s", uri)
 }
 
+func (s *remoteScheme) setError(logger *log.Entry, err error) {
+	prevState := s.currState.Swap(state{lastSessionError: err})
+	if prevState != nil && prevState.(state).scheme != nil {
+		err := prevState.(state).scheme.Close()
+		logger.Tracef("closed previous remote scheme: %v", err)
+	}
+}
+
 func newRemoteScheme(
 	ctx context.Context, connect connectSchemeFn, uri workspaceapi.URI,
 ) workspace.Scheme {
 	ret := &remoteScheme{
-		closeChan:        make(chan struct{}),
-		lastSessionError: errors.New("not connected yet"),
+		closeChan: make(chan struct{}),
 	}
-	var ok bool
-	ret.locker, ok = workspace.LockerFromContext(ctx)
-	if !ok {
-		ret.locker = new(sync.Mutex)
-		ret.locker.Lock() // make compatible with passing locker in ctx
-		defer ret.locker.Unlock()
-	}
+	ret.currState.Store(state{lastSessionError: errors.New("not connected yet")})
 	ret.ctx, ret.cancelCtx = context.WithCancel(ctx)
-
-	ret.locker.Unlock()
-	defer ret.locker.Lock()
 
 	// ensure that we return once we have attempted
 	// to connect at least once.
@@ -146,8 +150,9 @@ func newRemoteScheme(
 // this should only be called from within event loop,
 // otherwhise need to sync first with locker.
 func (s *remoteScheme) state() (err error, scheme workspace.Scheme) {
-	err = s.lastSessionError
-	scheme = s.scheme
+	currState := s.currState.Load().(state)
+	err = currState.lastSessionError
+	scheme = currState.scheme
 	return
 }
 
@@ -276,16 +281,14 @@ func (s *remoteScheme) SetPtySize(pty workspaceapi.Pty, width, height int) error
 }
 
 func (s *remoteScheme) Close() (ret error) {
-	s.lastSessionError = errors.New("remote closed")
-	scheme := s.scheme
-	s.scheme = nil
-	// no need to close files before closing scheme to avoid
-	// closing connection before telling the remote workspace to close
-	// files: remote workspace process is going to do that anyway
-	// as the process will be shutdown.
-	if scheme != nil {
+	prevState := s.currState.Swap(state{lastSessionError: errors.New("remote closed")})
+	if prevState != nil && prevState.(state).scheme != nil {
+		// no need to close files before closing scheme to avoid
+		// closing connection before telling the remote workspace to close
+		// files: remote workspace process is going to do that anyway
+		// as the process will be shutdown.
 		close(s.closeChan)
-		scheme.Close()
+		prevState.(state).scheme.Close()
 	}
 	s.cancelCtx()
 	return
