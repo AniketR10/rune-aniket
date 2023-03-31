@@ -25,20 +25,14 @@ func (e *interruptEditor) Edit(ctx context.Context, req *textpb.EditRequest) (
 	return res, err
 }
 
-func (e *interruptEditor) Subscribe(ctx context.Context, req *textpb.EditorSubscribeRequest) (
-	*textpb.EditorSubscribeResponse, error,
-) {
-	res, err := e.EditorServer.Subscribe(ctx, req)
-	e.interruptDraw()
-	return res, err
-
+func (e *interruptEditor) Subscribe(stream textpb.Editor_SubscribeServer) error {
+	return e.EditorServer.Subscribe(stream)
 }
 
 func (e *interruptEditor) Register(ctx context.Context, req *textpb.RegisterCommandRequest) (
 	*textpb.RegisterCommandResponse, error,
 ) {
 	res, err := e.EditorServer.Register(ctx, req)
-	e.interruptDraw()
 	return res, err
 
 }

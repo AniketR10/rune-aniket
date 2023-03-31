@@ -10,7 +10,6 @@ import (
 	gomock "github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/grpc"
 	textapi "unstable.build/go-tui/api/text"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/cell"
@@ -101,85 +100,6 @@ func TestServerEdit(t *testing.T) {
 		res, err := s.Edit(ctx, &req)
 		require.Error(t, err)
 		require.Nil(t, res)
-	})
-}
-
-func expectHandlerInvokeExit(t *testing.T, handlerConn *proto.MockMuxConn) {
-	handlerConn.EXPECT().
-		Invoke(gomock.Any(), gomock.Eq("/text.EditorEventHandler/Handle"),
-			gomock.Any(),
-			gomock.Any()).
-		DoAndReturn(func(ctx context.Context,
-			method string, args interface{},
-			reply interface{}, opts ...grpc.CallOption) error {
-			res, ok := reply.(*EditorEventHandleResponse)
-			require.True(t, ok)
-
-			res.Quit = true
-			return nil
-		}).
-		Times(1)
-}
-
-func assertServerHandlerExitClose(
-	t *testing.T, handlerConn *proto.MockMuxConn,
-	h textapi.EventHandler, s *Server,
-	broker *proto.MockMuxBroker,
-) {
-	resource := &texttest.TestHandler{}
-	expectHandlerInvokeExit(t, handlerConn)
-
-	handlerConn.EXPECT().Close().AnyTimes()
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-
-	s.editor.Lock()
-	h.Handle(ctx, textapi.Event{Type: textapi.EventTypeClose, URI: uri, Resource: resource})
-	s.editor.Unlock()
-}
-
-func TestServerSubscribe(t *testing.T) {
-	ctx := context.Background()
-	t.Run("propagates subscribe with multiple event types", func(t *testing.T) {
-		channelID := "12"
-		ctrl := gomock.NewController(t)
-		defer ctrl.Finish()
-
-		broker, mock, s := newTestServer(t, ctrl)
-		expectedEvTypes := []textapi.EventType{textapi.EventTypeFlush, textapi.EventTypeFocus}
-
-		var actualEvTypes []textapi.EventType
-		var wg sync.WaitGroup
-		mock.EXPECT().SubscribeEditorEvents(gomock.Any(), gomock.Any()).
-			DoAndReturn(func(evs []textapi.EventType, _h textapi.EventHandler) error {
-				defer wg.Done()
-				actualEvTypes = evs
-				return nil
-			})
-		req := EditorSubscribeRequest{
-			ChannelId: channelID,
-			Type: []EditorEvent_Type{
-				EditorEvent_TypeFlush,
-				EditorEvent_TypeFocus,
-			},
-		}
-		conn := prototest.ExpectBrokerDialChannel(t, ctrl, broker, channelID)
-		wg.Add(1)
-		res, err := s.Subscribe(ctx, &req)
-		require.NoError(t, err)
-		require.NotNil(t, res)
-
-		wg.Wait()
-
-		// set to anytimes so finalizers can run after test is done
-		conn.EXPECT().Close().AnyTimes()
-		conn.EXPECT().Invoke(gomock.Any(), gomock.Any(),
-			gomock.Any(), gomock.Any()).AnyTimes()
-
-		assert.Equal(t, expectedEvTypes, actualEvTypes)
-		s.editor.Lock()
-		assert.NoError(t, s.Close())
-		s.editor.Unlock()
 	})
 }
 

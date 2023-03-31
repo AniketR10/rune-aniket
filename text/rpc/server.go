@@ -3,6 +3,7 @@ package rpc
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 
 	"github.com/ernestrc/blue/logging"
@@ -64,18 +65,6 @@ func (s *Server) Init(
 
 func (s *Server) log(level log.Level, msg string, args ...interface{}) {
 	log.WithField(logging.KeyClass, "text.Server").Logf(level, msg, args...)
-}
-
-func (s *Server) dialHandler(channelID string) (textapi.EventHandler, error) {
-	s.log(log.TraceLevel,
-		"(%p editor.Server): dialing channel: %s", s, channelID)
-	handlerConn, err := s.broker.DialChannel(channelID)
-	if err != nil {
-		return nil, err
-	}
-
-	client := newEventHandlerClient(s.serverCtx, channelID, handlerConn)
-	return client, nil
 }
 
 func (s *Server) dialCommandHandler(channelID string) (text.CommandHandler, error) {
@@ -144,32 +133,33 @@ func (s *Server) Editor(ctx context.Context, in *EditorRequest) (
 }
 
 // Subscribe satisfies EditorServer
-func (s *Server) Subscribe(ctx context.Context, in *EditorSubscribeRequest) (
-	*EditorSubscribeResponse, error,
-) {
-	channelID := in.GetChannelId()
-	handler, err := s.dialHandler(channelID)
+func (s *Server) Subscribe(stream Editor_SubscribeServer) error {
+	req, err := stream.Recv()
+	s.log(log.TraceLevel, "Subscribe: received request: %v: %v", req.GetType(), err)
 	if err != nil {
-		return nil, err
+		return fmt.Errorf("receive stream request: %v", err)
 	}
 
 	var evTypes []textapi.EventType
-	for _, ev := range in.GetType() {
+	for _, ev := range req.GetType() {
 		evType, err := protoTypeToModel(ev)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		evTypes = append(evTypes, evType)
 	}
+
+	handler := newEventStreamClient(stream)
 
 	s.editor.Lock()
 	err = s.editor.SubscribeEditorEvents(evTypes, handler)
 	s.editor.Unlock()
 	if err != nil {
-		return nil, err
+		return fmt.Errorf("subscribe editor events: %v", err)
 	}
 
-	return new(EditorSubscribeResponse), nil
+	s.log(log.TraceLevel, "waiting for unsubscribe")
+	return handler.waitForUnsubscribe()
 }
 
 // Register satisfies EditorServer

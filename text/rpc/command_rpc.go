@@ -3,6 +3,7 @@ package rpc
 import (
 	"context"
 	"runtime"
+	"time"
 
 	textapi "unstable.build/go-tui/api/text"
 	workspaceapi "unstable.build/go-tui/api/workspace"
@@ -14,6 +15,8 @@ import (
 )
 
 var _ text.CommandHandler = (*commandClient)(nil)
+
+const defaultClientTimeout = 2 * time.Second
 
 type commandClient struct {
 	conn proto.MuxConn

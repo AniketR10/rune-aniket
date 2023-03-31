@@ -20,8 +20,7 @@ import (
 )
 
 const (
-	gracefulShutdownWait  = 400 * time.Millisecond
-	defaultFailureTimeout = 5 * time.Second
+	defaultTimeout = 2 * time.Second
 )
 
 // Token wraps a browser.Token to satisfy editor.Handler.
@@ -72,23 +71,6 @@ func (c *Client) log(level log.Level, msg string, args ...interface{}) {
 	log.WithField(logging.KeyClass, "text.Client").Logf(level, msg, args...)
 }
 
-func (c *Client) serveHandler(h textapi.EventHandler) (
-	ret string, srv proto.MuxServer, err error,
-) {
-	ret, err = proto.AcceptAndServeChannel(c.clientCtx, c.broker,
-		func(channelID string, _srv proto.MuxServer) {
-			srv = _srv
-			s := newEventHandlerServer(h, func(ctx context.Context) {
-				go func() {
-					<-ctx.Done()
-					srv.Stop()
-				}()
-			})
-			RegisterEditorEventHandlerServer(srv.Registrar(), s)
-		}, "text", "client", "handler")
-	return
-}
-
 func (c *Client) serveCommandHandler(h textapi.CommandHandler) (
 	ret string, srv proto.MuxServer, err error,
 ) {
@@ -103,7 +85,9 @@ func (c *Client) serveCommandHandler(h textapi.CommandHandler) (
 
 // Edit requests editor server to edit buf.
 func (c *Client) Edit(file workspaceapi.URI, buf *cell.Buffer) (textapi.Handler, error) {
-	ctx := context.Background()
+	ctx, cancel := c.ctxWithTimeout()
+	defer cancel()
+
 	req := NewEditRequest(file, buf)
 
 	_, err := c.ed.Edit(ctx, &req)
@@ -117,7 +101,9 @@ func (c *Client) Edit(file workspaceapi.URI, buf *cell.Buffer) (textapi.Handler,
 
 // Editor satisfies text.Editor
 func (c *Client) Editor(file workspaceapi.URI) (textapi.Handler, error) {
-	ctx := context.Background()
+	ctx, cancel := c.ctxWithTimeout()
+	defer cancel()
+
 	req := EditorRequest{ResourceName: NewURI(file)}
 
 	_, err := c.ed.Editor(ctx, &req)
@@ -130,33 +116,37 @@ func (c *Client) Editor(file workspaceapi.URI) (textapi.Handler, error) {
 }
 
 // SubscribeEditorEvents requests the editor server to subscribe sub to ev.
-func (c *Client) SubscribeEditorEvents(evs []textapi.EventType, h textapi.EventHandler) error {
-	ctx := context.Background()
-
-	channelID, srv, err := c.serveHandler(h)
+func (c *Client) SubscribeEditorEvents(
+	evs []textapi.EventType, h textapi.EventHandler,
+) error {
+	c.log(log.TraceLevel, "SubscribeEditorEvents: %v", evs)
+	stream, err := c.ed.Subscribe(c.clientCtx)
+	c.log(log.TraceLevel, "SubscribeEditorEvents: %v: %v", evs, err)
 	if err != nil {
-		return fmt.Errorf("serve event handler: %w", err)
+		return err
 	}
 
-	req := EditorSubscribeRequest{ChannelId: channelID}
+	var req EditorSubscribeRequest
 	for _, ev := range evs {
 		req.Type = append(req.Type, protoType(textapi.Event{Type: ev}))
 	}
-	_, err = c.ed.Subscribe(ctx, &req)
-	runtime.KeepAlive(c)
+
+	err = stream.Send(&req)
+	c.log(log.TraceLevel, "sent initial request: %v", err)
 	if err != nil {
-		if srv != nil {
-			srv.Stop()
-		}
-		return err
+		return fmt.Errorf("stream send request: %v", err)
 	}
+
+	handler := newEventStreamServer(c.clientCtx, stream, h)
+	go handler.receiveEvents(c)
 
 	return nil
 }
 
 // SubscribeCommandrequests the editor server to register cmd with h.
 func (c *Client) SubscribeCommand(cmd string, h textapi.CommandHandler) error {
-	ctx := context.Background()
+	ctx, cancel := c.ctxWithTimeout()
+	defer cancel()
 
 	channelID, srv, err := c.serveCommandHandler(h)
 	if err != nil {
@@ -208,7 +198,9 @@ func makeLocationListRequest(
 func (c *Client) SetLocationList(
 	h textapi.Handler, pri textapi.LocationPriority, ID string, l textapi.LocationList,
 ) error {
-	ctx := context.Background()
+	ctx, cancel := c.ctxWithTimeout()
+	defer cancel()
+
 	token := h.(Token)
 	req := makeLocationListRequest(token.URI, pri, ID, l)
 	_, err := c.ed.SetLocationList(ctx, &req)
@@ -217,7 +209,9 @@ func (c *Client) SetLocationList(
 }
 
 func (c *Client) moveToLocation(h textapi.Handler, ID string, next bool) (err error) {
-	ctx := context.Background()
+	ctx, cancel := c.ctxWithTimeout()
+	defer cancel()
+
 	token := h.(Token)
 	req := MoveToLocationRequest{ResourceName: NewURI(token.URI), ListId: ID}
 	if next {
@@ -247,7 +241,9 @@ func (c *Client) MoveToNextLocation(h textapi.Handler, ID string) error {
 
 // SetCursor requests the editor server to move cursor to pos
 func (c *Client) SetCursor(h textapi.Handler, pos term.Coordinates) error {
-	ctx := context.Background()
+	ctx, cancel := c.ctxWithTimeout()
+	defer cancel()
+
 	token := h.(Token)
 	var protoPos termpb.Coordinates
 	protoPos.FromModel(pos)
@@ -259,7 +255,9 @@ func (c *Client) SetCursor(h textapi.Handler, pos term.Coordinates) error {
 
 // Cursor requests the editor server to move cursor to pos
 func (c *Client) Cursor(h textapi.Handler) (term.Coordinates, error) {
-	ctx := context.Background()
+	ctx, cancel := c.ctxWithTimeout()
+	defer cancel()
+
 	token := h.(Token)
 	req := CursorRequest{ResourceName: NewURI(token.URI)}
 	res, err := c.ed.Cursor(ctx, &req)
@@ -284,7 +282,9 @@ func (c *Client) CellView(h textapi.Handler) textapi.CellView {
 
 // SetDefaultAttributes satisfies text.Editor.
 func (c *Client) SetDefaultAttributes(h textapi.Handler, attrs term.Attributes) error {
-	ctx := context.Background()
+	ctx, cancel := c.ctxWithTimeout()
+	defer cancel()
+
 	token := h.(Token)
 	var rpcAttrs termpb.Attributes
 	rpcAttrs.FromModel(attrs)
@@ -309,4 +309,9 @@ func (c *Client) Close() (ret error) {
 	}
 	runtime.SetFinalizer(c, nil)
 	return ret
+}
+
+func (c *Client) ctxWithTimeout() (context.Context, func()) {
+	ctx, cancel := context.WithTimeout(c.clientCtx, defaultTimeout)
+	return ctx, cancel
 }

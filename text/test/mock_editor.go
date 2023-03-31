@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	"github.com/sirupsen/logrus"
 	textapi "unstable.build/go-tui/api/text"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	browsertest "unstable.build/go-tui/browser/test"
@@ -16,6 +17,7 @@ type testEditor struct {
 	uri  workspaceapi.URI
 	buf  *cell.Buffer
 	subs map[textapi.EventType][]text.EventHandler
+	cb   func()
 }
 
 // NopEditor returns a editor suitable for testing.
@@ -25,12 +27,19 @@ func NopEditor() text.Editor {
 	return &testEditor{}
 }
 
+// NopEditorWithCallback returns a text.Editor that calls cb when
+// SubscribeEditorEvents is called.
+func NopEditorWithCallback(cb func()) text.Editor {
+	return &testEditor{cb: cb}
+}
+
 func (e *testEditor) Handle(ctx context.Context, ev textapi.Event) bool {
 	e.dispatchEvent(ctx, ev)
 	return false
 }
 
 func (e *testEditor) dispatchEvent(ctx context.Context, ev textapi.Event) {
+	logrus.Infof("dispathing event %#v: subs=%v", ev, e.subs)
 	if len(e.subs) == 0 {
 		return
 	}
@@ -144,6 +153,9 @@ func (e *testEditor) SubscribeEditorEvents(
 		} else {
 			e.subs[ev] = append(e.subs[ev], sub)
 		}
+	}
+	if e.cb != nil {
+		e.cb()
 	}
 	return nil
 }

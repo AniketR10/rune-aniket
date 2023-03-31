@@ -156,10 +156,10 @@ func (mr *MockMuxServerMockRecorder) Addr() *gomock.Call {
 }
 
 // Registrar mocks base method.
-func (m *MockMuxServer) Registrar() grpc.ServiceRegistrar {
+func (m *MockMuxServer) Registrar() ServiceRegistrar {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Registrar")
-	ret0, _ := ret[0].(grpc.ServiceRegistrar)
+	ret0, _ := ret[0].(ServiceRegistrar)
 	return ret0
 }
 
@@ -322,4 +322,53 @@ func (m *MockMuxBroker) NextId() uint32 {
 func (mr *MockMuxBrokerMockRecorder) NextId() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NextId", reflect.TypeOf((*MockMuxBroker)(nil).NextId))
+}
+
+// MockServiceRegistrar is a mock of ServiceRegistrar interface.
+type MockServiceRegistrar struct {
+	ctrl     *gomock.Controller
+	recorder *MockServiceRegistrarMockRecorder
+}
+
+// MockServiceRegistrarMockRecorder is the mock recorder for MockServiceRegistrar.
+type MockServiceRegistrarMockRecorder struct {
+	mock *MockServiceRegistrar
+}
+
+// NewMockServiceRegistrar creates a new mock instance.
+func NewMockServiceRegistrar(ctrl *gomock.Controller) *MockServiceRegistrar {
+	mock := &MockServiceRegistrar{ctrl: ctrl}
+	mock.recorder = &MockServiceRegistrarMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockServiceRegistrar) EXPECT() *MockServiceRegistrarMockRecorder {
+	return m.recorder
+}
+
+// GetServiceInfo mocks base method.
+func (m *MockServiceRegistrar) GetServiceInfo() map[string]grpc.ServiceInfo {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetServiceInfo")
+	ret0, _ := ret[0].(map[string]grpc.ServiceInfo)
+	return ret0
+}
+
+// GetServiceInfo indicates an expected call of GetServiceInfo.
+func (mr *MockServiceRegistrarMockRecorder) GetServiceInfo() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetServiceInfo", reflect.TypeOf((*MockServiceRegistrar)(nil).GetServiceInfo))
+}
+
+// RegisterService mocks base method.
+func (m *MockServiceRegistrar) RegisterService(desc *grpc.ServiceDesc, impl interface{}) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "RegisterService", desc, impl)
+}
+
+// RegisterService indicates an expected call of RegisterService.
+func (mr *MockServiceRegistrarMockRecorder) RegisterService(desc, impl interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RegisterService", reflect.TypeOf((*MockServiceRegistrar)(nil).RegisterService), desc, impl)
 }

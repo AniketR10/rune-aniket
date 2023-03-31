@@ -187,7 +187,7 @@ func TestClientServerIntegration(t *testing.T) {
 				var wg sync.WaitGroup
 				var mu sync.Mutex
 				b := proto.NewDialBroker()
-				ed := texttest.NopEditor()
+				ed := texttest.NopEditorWithCallback(wg.Done)
 				s := NewServer(b, ed, &mu, testBrowserServer{})
 
 				client, closeFn := setupIntTest(t, b, s)
@@ -209,6 +209,12 @@ func TestClientServerIntegration(t *testing.T) {
 						return false
 					}))
 				require.NoError(t, err)
+
+				// wait for subscribe callback
+				wg.Wait()
+
+				// proceed to trigger
+				wg.Add(1)
 
 				buf := cell.NewBuffer()
 				// simulate runtime mutex

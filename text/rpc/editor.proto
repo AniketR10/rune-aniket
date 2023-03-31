@@ -43,10 +43,7 @@ message EditorEvent {
 
 message EditorSubscribeRequest {
 	repeated EditorEvent.Type type = 1;
-    string channel_id = 2;
-}
-
-message EditorSubscribeResponse {
+	bool unsubscribe = 3;
 }
 
 message SetLocationListRequest {
@@ -133,7 +130,6 @@ message SetDefaultAttributesResponse {
 
 service Editor {
 	rpc Edit(EditRequest) returns (EditResponse);
-	rpc Subscribe(EditorSubscribeRequest) returns (EditorSubscribeResponse);
 	rpc Register(RegisterCommandRequest) returns (RegisterCommandResponse);
 	rpc SetCursor(SetCursorRequest) returns (SetCursorResponse);
 	rpc Cursor(CursorRequest) returns (CursorResponse);
@@ -152,19 +148,9 @@ service Editor {
 	rpc RawCells(RawCellsRequest) returns (RawCellsResponse);
 
 	rpc SetDefaultAttributes(SetDefaultAttributesRequest) returns (SetDefaultAttributesResponse);
-}
 
-message EditorEventHandleRequest {
-	EditorEvent event = 1;
-}
-
-message EditorEventHandleResponse {
-	bool quit = 1;
-	bool handled = 2;
-}
-
-service EditorEventHandler {
-	rpc Handle(EditorEventHandleRequest) returns (EditorEventHandleResponse);
+	// streams
+	rpc Subscribe(stream EditorSubscribeRequest) returns (stream EditorEvent);
 }
 
 message HandleCommandRequest {

@@ -13,11 +13,9 @@ import (
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/proto"
-	prototest "unstable.build/go-tui/proto/test"
 	"unstable.build/go-tui/term"
 	termpb "unstable.build/go-tui/term/rpc"
 	"unstable.build/go-tui/text"
-	texttest "unstable.build/go-tui/text/test"
 )
 
 var (
@@ -104,58 +102,6 @@ func TestClientEdit(t *testing.T) {
 		h, err := c.Edit(workspaceapi.URI{}, cell.NewBuffer())
 		require.Error(t, err)
 		require.Nil(t, h)
-	})
-}
-
-func expectClientSubscribe(
-	t *testing.T, mockCC *proto.MockMuxConn,
-	expectedHandlerID string,
-	expectedEventTypes []textapi.EventType,
-) {
-	mockCC.EXPECT().
-		Invoke(gomock.Any(),
-			gomock.Eq("/text.Editor/Subscribe"),
-			gomock.Any(),
-			gomock.Any()).
-		DoAndReturn(func(
-			ctx context.Context, method string, args interface{},
-			reply interface{}, opts ...grpc.CallOption) error {
-			req, ok := args.(*EditorSubscribeRequest)
-			require.True(t, ok)
-
-			assert.Equal(t, expectedHandlerID, req.GetChannelId())
-
-			var expectedProtoTypes []EditorEvent_Type
-			for _, ev := range expectedEventTypes {
-				expectedProtoTypes = append(expectedProtoTypes, protoType(textapi.Event{Type: ev}))
-			}
-			assert.Equal(t, expectedProtoTypes, req.GetType())
-
-			_, ok = reply.(*EditorSubscribeResponse)
-			assert.True(t, ok)
-			return nil
-		}).
-		Times(1)
-}
-
-func TestClientSubscribe(t *testing.T) {
-	t.Run("happy path", func(t *testing.T) {
-		ctrl := gomock.NewController(t)
-		defer ctrl.Finish()
-
-		broker, cc, c := newTestClient(ctrl)
-		handler := texttest.NewMockEventHandler(ctrl)
-
-		channelID := "22"
-		evTypes := []textapi.EventType{textapi.EventTypeFlush, textapi.EventTypeClose, textapi.EventTypeOpen}
-		expectClientSubscribe(t, cc, channelID, evTypes)
-
-		prototest.ExpectBrokerNewChannel(t, channelID, broker)
-
-		err := c.SubscribeEditorEvents(evTypes, handler)
-		require.NoError(t, err)
-
-		assert.NoError(t, c.Close())
 	})
 }
 
