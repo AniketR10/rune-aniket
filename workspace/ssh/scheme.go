@@ -273,7 +273,9 @@ func (s *scheme) connectScheme(
 		return nil, fmt.Errorf("could not create command: %s", err)
 	}
 
-	conn, err := grpc.Dial("", grpc.WithInsecure(),
+	conn, err := grpc.Dial("",
+		grpc.WithStatsHandler(nil),
+		grpc.WithInsecure(),
 		grpc.WithDialer(func(addr string, timeout time.Duration) (net.Conn, error) {
 			return newStdConn(
 				log.StandardLogger(), stdoutRead, stdinWrite, false, /* stdio */

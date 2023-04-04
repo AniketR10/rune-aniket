@@ -6,7 +6,6 @@ import (
 	"sync"
 	"time"
 
-	log "github.com/sirupsen/logrus"
 	grpc "google.golang.org/grpc"
 	"unstable.build/go-tui/util"
 )
@@ -100,9 +99,6 @@ func (t *dialBroker) DialChannel(address string) (conn MuxConn, err error) {
 		return
 	}
 
-	if log.IsLevelEnabled(log.TraceLevel) {
-		conn = loggingConn{conn}
-	}
 	return
 }
 

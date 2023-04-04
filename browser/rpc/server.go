@@ -86,7 +86,7 @@ func (s *Server) consumeErrors(
 }
 
 func (s *Server) dialHandler(channelID string) (browserapi.Handler, error) {
-	s.log(log.DebugLevel, "(%p browser.Server): dialing handlerID: %s", s, channelID)
+	s.log(log.DebugLevel, "dialing handler at %q", channelID)
 	handlerConn, err := s.broker.DialChannel(channelID)
 	if err != nil {
 		return nil, err
@@ -106,6 +106,7 @@ func (s *Server) dialHandler(channelID string) (browserapi.Handler, error) {
 	runtime.SetFinalizer(cc, func(*floatingClientImpl) {
 		cancelFn()
 		handlerConn.Close()
+		s.log(log.DebugLevel, "closed handler connection for channel %q", channelID)
 	})
 	return cc, nil
 }

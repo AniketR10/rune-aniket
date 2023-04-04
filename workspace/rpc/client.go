@@ -3,7 +3,6 @@ package rpc
 import (
 	"context"
 	"fmt"
-	"io"
 	"os"
 	"runtime"
 	"syscall"
@@ -367,10 +366,8 @@ func (c *Client) Close() (ret error) {
 		c.cancelCtx = nil
 	}
 
-	if closer, ok := c.cc.(io.Closer); ok {
-		if err := closer.Close(); err != nil {
-			ret = multierr.Append(ret, err)
-		}
+	if err := c.cc.Close(); err != nil {
+		ret = multierr.Append(ret, err)
 	}
 
 	runtime.SetFinalizer(c, nil)

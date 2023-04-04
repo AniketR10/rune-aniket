@@ -2,14 +2,37 @@ package proto
 
 import (
 	context "context"
+	fmt "fmt"
 
+	"github.com/ernestrc/blue/logging"
 	log "github.com/sirupsen/logrus"
 	grpc "google.golang.org/grpc"
 	"google.golang.org/grpc/connectivity"
 )
 
 type loggingConn struct {
+	id interface{}
 	MuxConn
+}
+
+func newLoggingConn(id interface{}, c MuxConn) MuxConn {
+	ret := loggingConn{id: id, MuxConn: c}
+	ret.log(log.Fields{
+		logging.KeyCallType: "Dial",
+	})
+	return ret
+}
+
+func (c loggingConn) log(extraFields log.Fields) {
+	fields := log.Fields{
+		logging.KeyClass: "proto.MuxConn",
+		"ID":             fmt.Sprintf("%v", c.id),
+		"Address":        fmt.Sprintf("%p", c.MuxConn),
+	}
+	for k, v := range extraFields {
+		fields[k] = v
+	}
+	log.WithFields(fields).Trace()
 }
 
 func (c loggingConn) Invoke(
@@ -17,8 +40,11 @@ func (c loggingConn) Invoke(
 	reply interface{}, opts ...grpc.CallOption,
 ) error {
 	err := c.MuxConn.Invoke(ctx, method, args, reply, opts...)
-	log.Tracef("loggingConn: (%p).Invoke(method=%s): (%v)",
-		c.MuxConn, method, err)
+	c.log(log.Fields{
+		logging.KeyCallType: "Invoke",
+		"method":            method,
+		logging.KeyError:    fmt.Sprintf("%v", err),
+	})
 	return err
 }
 
@@ -27,14 +53,21 @@ func (c loggingConn) NewStream(
 	method string, opts ...grpc.CallOption,
 ) (grpc.ClientStream, error) {
 	stream, err := c.MuxConn.NewStream(ctx, desc, method, opts...)
-	log.Tracef("loggingConn: (%p).NewStream(name=%s, method=%s): (%v, %v)",
-		c.MuxConn, desc.StreamName, method, stream, err)
+	c.log(log.Fields{
+		logging.KeyCallType: "NewStream",
+		"method":            method,
+		"name":              desc.StreamName,
+		logging.KeyError:    fmt.Sprintf("%v", err),
+	})
 	return stream, err
 }
 
 func (c loggingConn) GetState() connectivity.State {
 	state := c.MuxConn.GetState()
-	log.Tracef("loggingConn: (%p).GetState(): %s", c.MuxConn, state)
+	c.log(log.Fields{
+		logging.KeyCallType: "GetState",
+		"state":             state,
+	})
 	return state
 }
 
@@ -42,13 +75,19 @@ func (c loggingConn) WaitForStateChange(
 	ctx context.Context, sourceState connectivity.State,
 ) bool {
 	ok := c.MuxConn.WaitForStateChange(ctx, sourceState)
-	log.Tracef("loggingConn: (%p).WaitForStateChange(source=%s): %v",
-		c.MuxConn, sourceState, ok)
+	c.log(log.Fields{
+		logging.KeyCallType: "WaitForStateChange",
+		"source":            sourceState,
+		"ok":                ok,
+	})
 	return ok
 }
 
 func (c loggingConn) Close() error {
 	err := c.MuxConn.Close()
-	log.Tracef("loggingConn: (%p).Close(): %v", c.MuxConn, err)
+	c.log(log.Fields{
+		logging.KeyCallType: "Close",
+		logging.KeyError:    fmt.Sprintf("%v", err),
+	})
 	return err
 }
