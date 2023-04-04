@@ -1,7 +1,6 @@
 package test
 
 import (
-	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -16,22 +15,22 @@ import (
 	testutil "unstable.build/go-tui/util/test"
 )
 
-func splitVerticalLeft(c *browser.Component, h browser.Handler) (browser.Window, bool) {
+func splitVerticalLeft(c *browser.Component, h browserapi.Handler) (browser.Window, bool) {
 	return c.Split(browserapi.OrientationLeft, c.Focus(), h)
 }
-func splitVerticalRight(c *browser.Component, h browser.Handler) (browser.Window, bool) {
+func splitVerticalRight(c *browser.Component, h browserapi.Handler) (browser.Window, bool) {
 	return c.Split(browserapi.OrientationRight, c.Focus(), h)
 }
-func splitHorizontalAbove(c *browser.Component, h browser.Handler) (browser.Window, bool) {
+func splitHorizontalAbove(c *browser.Component, h browserapi.Handler) (browser.Window, bool) {
 	return c.Split(browserapi.OrientationTop, c.Focus(), h)
 }
-func splitHorizontalBelow(c *browser.Component, h browser.Handler) (browser.Window, bool) {
+func splitHorizontalBelow(c *browser.Component, h browserapi.Handler) (browser.Window, bool) {
 	return c.Split(browserapi.OrientationBottom, c.Focus(), h)
 }
 
 var splitSuite = []struct {
 	method string
-	split  func(c *browser.Component, h browser.Handler) (browser.Window, bool)
+	split  func(c *browser.Component, h browserapi.Handler) (browser.Window, bool)
 }{
 	{"SplitVerticalLeft:", splitVerticalLeft},
 	{"SplitVerticalRight:", splitVerticalRight},
@@ -53,7 +52,7 @@ func TestComponentCloseWindow(t *testing.T) {
 
 	t.Run("closing the last window returns error", func(t *testing.T) {
 		c := browser.NewComponent(browser.Config{})
-		assert.Error(t, c.Focus().Close(context.Background()))
+		assert.Error(t, c.Focus().Close())
 
 		// makes sure that window list is not corrupted
 		c.RemoveAllTabs()
@@ -66,7 +65,7 @@ func TestComponentCloseWindow(t *testing.T) {
 			uri, err := workspaceapi.ParseURI("file:///OAK")
 			require.NoError(t, err)
 
-			var h browser.Handler
+			var h browserapi.Handler
 			h = NewTestHandler()
 			h = c.NewTab(uri, "OAK", h, nil)
 
@@ -74,7 +73,7 @@ func TestComponentCloseWindow(t *testing.T) {
 			require.True(t, ok)
 			require.Equal(t, 2, c.Tiles())
 
-			assert.NoError(t, win.Close(context.Background()))
+			assert.NoError(t, win.Close())
 			require.Equal(t, 1, c.Tiles())
 
 			assert.Equal(t, 1, freeTabs(c))
@@ -84,13 +83,13 @@ func TestComponentCloseWindow(t *testing.T) {
 			c := browser.NewComponent(browser.Config{})
 			win, ok := tcase.split(c, NewTestHandler())
 			require.True(t, ok)
-			require.NoError(t, win.Close(context.Background()))
-			assert.NoError(t, win.Close(context.Background()))
+			require.NoError(t, win.Close())
+			assert.NoError(t, win.Close())
 		})
 
 		t.Run(tcase.method+"close window on handler exit", func(t *testing.T) {
 			c := browser.NewComponent(browser.Config{})
-			var h browser.Handler
+			var h browserapi.Handler
 			h = NewTestHandler()
 			h.(*TestHandler).Exit = true
 			h.(*TestHandler).Handled = true
@@ -106,33 +105,20 @@ func TestComponentCloseWindow(t *testing.T) {
 
 			assert.Equal(t, 0, len(c.Tabs()))
 			assert.Equal(t, 1, c.Tiles())
-			require.Error(t, win.Close(context.Background()))
+			require.Error(t, win.Close())
 			assert.Equal(t, 1, c.Tiles())
-		})
-
-		t.Run(tcase.method+"Close calls onWindowClosed callback", func(t *testing.T) {
-			var i int
-			c := browser.NewComponent(browser.Config{})
-			win, ok := tcase.split(c, NewTestHandler())
-			require.True(t, ok)
-			win.OnWindowClosed(func(context.Context) {
-				i++
-			})
-
-			require.NoError(t, win.Close(context.Background()))
-			assert.Equal(t, 1, i)
 		})
 
 		t.Run(tcase.method+"trying to close last window does not corrupt state", func(t *testing.T) {
 			c := browser.NewComponent(browser.Config{})
 
-			require.Error(t, c.Focus().Close(context.Background()))
+			require.Error(t, c.Focus().Close())
 
 			win, ok := tcase.split(c, NewTestHandler())
 			require.True(t, ok)
 
-			require.NoError(t, win.Close(context.Background()))
-			require.Error(t, c.Focus().Close(context.Background()))
+			require.NoError(t, win.Close())
+			require.Error(t, c.Focus().Close())
 		})
 	}
 }
@@ -208,7 +194,7 @@ func assertFreeTab(t *testing.T, h tui.Handler, free bool) {
 	assert.Equal(t, free, !ok)
 }
 
-func assertWindowContent(t *testing.T, win browser.Window, expected browser.Handler) {
+func assertWindowContent(t *testing.T, win browser.Window, expected browserapi.Handler) {
 	content, err := win.Content()
 	require.NoError(t, err)
 	assert.Equal(t, expected, content)
@@ -369,7 +355,7 @@ func TestComponentSetContentUnmount(t *testing.T) {
 	require.True(t, ok)
 	assert.Equal(t, 2, closed)
 
-	assert.NoError(t, win0.Close(context.Background()))
+	assert.NoError(t, win0.Close())
 	assert.Equal(t, 3, closed)
 
 	assert.Equal(t, c.Focus(), win1)
@@ -408,7 +394,7 @@ func TestComponentHandlerClose(t *testing.T) {
 				}, {
 					"Window.Close",
 					func(t *testing.T, c *browser.Component, win browser.Window, h *testCloser) {
-						assert.NoError(t, win.Close(context.Background()))
+						assert.NoError(t, win.Close())
 					},
 				}, {
 					"RemoveWindowContent",
@@ -504,13 +490,9 @@ O────────┐X────────┐
 			assert.True(t, c.FocusLeft())
 
 			var closeCallbacked int
-			var closed int
 			h2.Exit = true
-			w2.OnWindowClosed(func(context.Context) {
-				closed++
-			})
 			h2.CloseCallback = func() error {
-				assert.NoError(t, w2.Close(context.Background()))
+				assert.NoError(t, w2.Close())
 				closeCallbacked++
 				return nil
 			}
@@ -518,7 +500,6 @@ O────────┐X────────┐
 			_, handled := c.Handle(term.Event{})
 			assert.True(t, handled)
 			assert.Equal(t, 1, closeCallbacked)
-			assert.Equal(t, 1, closed)
 		}, /* same as case 1, topleft on window X is overriden */ `
 O──────────────────┐
 │                  │
@@ -777,7 +758,7 @@ func TestHandleExitAfterContentSetIssue(t *testing.T) {
 
 func prepareFocusShift(c *browser.Component, cmdWin browser.Window) {
 	//if cmd {
-	c.Focus().Close(context.Background())
+	c.Focus().Close()
 	//}
 	c.SetFocus(invokeWindow(c, cmdWin))
 }

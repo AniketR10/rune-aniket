@@ -350,10 +350,7 @@ func (e *ex) closeAllBuffers(args ...string) error {
 }
 
 func (e *ex) closeFocusWindow(args ...string) error {
-	// pass a context that eventually cancels to avoid window server leaks
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	return e.invokeWindow().Close(ctx)
+	return e.invokeWindow().Close()
 }
 
 func (e *ex) flushCloseIgnoreNonFlushed(args ...string) error {
@@ -377,7 +374,7 @@ func (e *ex) dispatchCommand(cmd string, args ...string) (err error) {
 		Args:     args,
 		Resource: h,
 		URI:      uri,
-		Window:   browser.WindowToAPIWindow{Win: e.invokeWindow()},
+		Window:   e.invokeWindow(),
 	}
 	if ok {
 		scmd.Cursor.Content, _ = e.ed.Cursor(h)
@@ -466,7 +463,7 @@ func (e *ex) splitDirectionChange(args ...string) error {
 	return nil
 }
 
-func (e *ex) newWindowHandler(h browser.Handler) {
+func (e *ex) newWindowHandler(h browserapi.Handler) {
 	eb := e.comp.Browser()
 	win := e.invokeWindow()
 	eb.Split(browserapi.OrientationDefault, win, h)

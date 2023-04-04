@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"io"
 	"os"
@@ -342,10 +341,8 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 
 	testutil.TestHandlerSequence(t, bh, 20, 10, cases)
 
-	ctx, cancel := context.WithCancel(context.Background())
-	require.NoError(t, win.Close(ctx))
-	require.NoError(t, focus.Close(ctx))
-	cancel()
+	require.NoError(t, win.Close())
+	require.NoError(t, focus.Close())
 
 	cases = []testutil.HandlerSequenceTestCase{
 		// test CommandKeyBindings
@@ -481,7 +478,7 @@ IIII`},
 
 	testutil.TestHandlerSequence(t, bh, 20, 10, cases)
 
-	require.NoError(t, floating1.Close(ctx))
+	require.NoError(t, floating1.Close())
 
 	cases = []testutil.HandlerSequenceTestCase{
 		{"",

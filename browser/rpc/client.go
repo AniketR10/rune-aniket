@@ -119,24 +119,14 @@ func (c *Client) serveHandler(h browserapi.Handler) (channelID string, srv proto
 }
 
 // DialWindow dials the window with the given windowID token.
-func (c *Client) DialWindow(channelID string, windowID uint64) (browserapi.Window, error) {
-	ret, err := c.dialWindow(channelID, windowID)
-	c.log(log.TraceLevel, "dial window with id %d: %#v, %v", windowID, ret, err)
-	runtime.KeepAlive(c)
+func (c *Client) DialWindow(windowID uint64) (browserapi.Window, error) {
+	ret, err := c.getWindow(windowID)
+	c.log(log.TraceLevel, "get window with id %d: %#v, %v", windowID, ret, err)
 	return ret, err
 }
 
-func (c *Client) dialWindow(channelID string, windowID uint64) (browserapi.Window, error) {
-	winConn, err := c.broker.DialChannel(channelID)
-	if err != nil {
-		return nil, err
-	}
-
-	cc := NewWindowClient(winConn)
-	client := newWindowClient(channelID, windowID, c, cc)
-	runtime.SetFinalizer(client, func(*windowClientImpl) {
-		winConn.Close()
-	})
+func (c *Client) getWindow(windowID uint64) (browserapi.Window, error) {
+	client := newWindowClient(windowID, c, c.wm)
 	return client, nil
 }
 
@@ -181,7 +171,7 @@ func (c *Client) split(
 		}
 		return nil, err
 	}
-	out, err := c.DialWindow(res.GetWindowChannelId(), res.GetWindowId())
+	out, err := c.DialWindow(res.GetWindowId())
 	if err != nil {
 		if srv != nil {
 			srv.Stop()
@@ -293,7 +283,7 @@ func (c *Client) SetFocus(win browserapi.Window) (browserapi.Window, error) {
 	if err != nil {
 		return nil, err
 	}
-	return c.DialWindow(res.GetWindowChannelId(), res.GetWindowId())
+	return c.DialWindow(res.GetWindowId())
 }
 
 // Focus satisfies Browser.
@@ -305,7 +295,7 @@ func (c *Client) Focus() (browserapi.Window, error) {
 	if err != nil {
 		return nil, err
 	}
-	return c.DialWindow(res.GetWindowChannelId(), res.GetWindowId())
+	return c.DialWindow(res.GetWindowId())
 }
 
 // Floating satisfies browser.WindowManager
@@ -332,8 +322,7 @@ func (c *Client) Floating(
 			return nil, err
 		}
 		return &SplitResponse{
-			WindowChannelId: fres.GetWindowChannelId(),
-			WindowId:        fres.GetWindowId(),
+			WindowId: fres.GetWindowId(),
 		}, nil
 	}, browserapi.OrientationDefault, &fakeWindow, h)
 	runtime.KeepAlive(c)
@@ -346,13 +335,14 @@ func (c *Client) Tab(uri workspaceapi.URI, name string, h browserapi.Handler) (b
 	if err != nil {
 		return nil, fmt.Errorf("serve handler: %w", err)
 	}
+	uriStr := uri.String()
 	req := TabRequest{
 		ChannelId:    channelID,
-		ResourceId:   uri.String(),
+		ResourceId:   uriStr,
 		ResourceName: name,
 	}
 	ctx := context.Background()
-	res, err := c.wm.Tab(ctx, &req)
+	_, err = c.wm.Tab(ctx, &req)
 	runtime.KeepAlive(c)
 	if err != nil {
 		if srv != nil {
@@ -360,7 +350,7 @@ func (c *Client) Tab(uri workspaceapi.URI, name string, h browserapi.Handler) (b
 		}
 		return nil, err
 	}
-	return browser.Token{ID: res.GetChannelId()}, err
+	return browser.Token{ID: uriStr}, err
 }
 
 // Close closes all resources associated with this Client.

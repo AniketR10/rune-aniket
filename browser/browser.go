@@ -1,7 +1,6 @@
 package browser
 
 import (
-	"context"
 	"io"
 
 	"unstable.build/go-tui"
@@ -12,16 +11,10 @@ import (
 	"unstable.build/go-tui/term"
 )
 
-// Handler adds Close to a tui.Handler.
-type Handler interface {
-	tui.Handler
-	Close() error
-}
-
 // Floating is a Handler used for Floating windows.
 // See handler.Floating for more details.
 type Floating interface {
-	Handler
+	browserapi.Handler
 	handler.Floating
 }
 
@@ -29,19 +22,16 @@ type Floating interface {
 // a closeable window in a WindowManager.
 type Window interface {
 	// SetContent sets the content of this window to the given handler.
-	SetContent(Handler) error
+	SetContent(browserapi.Handler) error
 
 	// Focus returns whether this window is in focus.
 	Focus() (bool, error)
 
 	// Close closes the window. This method is idempotent.
-	Close(context.Context) error
+	Close() error
 
 	// Content returns the content of this window.
-	Content() (Handler, error)
-
-	// OnWindowClosed can be used to install on close callbacks.
-	OnWindowClosed(fn func(context.Context))
+	Content() (browserapi.Handler, error)
 
 	// ID is the window identifier.
 	ID() uint64
@@ -62,7 +52,7 @@ type WindowManager interface {
 
 	// Split splits the current window in focus in two, and installs
 	// Handler in the new window.
-	Split(browserapi.Orientation, Window, Handler) (Window, error)
+	Split(browserapi.Orientation, Window, browserapi.Handler) (Window, error)
 
 	// Floating creates a new floating window at coordinates,
 	// with static width and height.
@@ -77,7 +67,7 @@ type WindowManager interface {
 	// used with the rest of methods that take a browser.Handler.
 	// URI is used to uniquely identify a tab and name is used as a label
 	// to display it in the tab bar.
-	Tab(uri workspaceapi.URI, name string, h Handler) (Handler, error)
+	Tab(uri workspaceapi.URI, name string, h browserapi.Handler) (browserapi.Handler, error)
 
 	// Window returns a window with the given window ID or returns false
 	// if now window with that ID exists.
@@ -92,8 +82,8 @@ type Messenger interface {
 
 // ResourceOpener is the interface that wraps the method Open.
 type ResourceOpener interface {
-	Open(resource workspaceapi.URI) (Handler, error)
-	Resource(workspaceapi.URI) (Handler, bool)
+	Open(resource workspaceapi.URI) (browserapi.Handler, error)
+	Resource(workspaceapi.URI) (browserapi.Handler, bool)
 }
 
 // EventPublisher is the interface that wraps the method Interrupt.
@@ -122,19 +112,19 @@ type Browser interface {
 
 // FuncHandler returns a Handler by wrapping a tui.Handler
 // with an Close callback.
-func FuncHandler(h tui.Handler, doClose func() error) Handler {
+func FuncHandler(h tui.Handler, doClose func() error) browserapi.Handler {
 	return &closeHandler{Handler: h, doClose: doClose}
 }
 
 // NopHandler returns a Handler by wrapping a tui.Handler
 // with an nop Close callback.
-func NopHandler(h tui.Handler) Handler {
+func NopHandler(h tui.Handler) browserapi.Handler {
 	return &closeHandler{Handler: h, doClose: func() error { return nil }}
 }
 
 // StaticFloating wraps a Handler and returns a Floating that always
 // return the same Dimensions values.
-func StaticFloating(h Handler, width, height int) Floating {
+func StaticFloating(h browserapi.Handler, width, height int) Floating {
 	return staticFloating{width: width, height: height, Handler: h}
 }
 
@@ -152,7 +142,7 @@ func FuncFloatingHandler(h handler.Floating, closeFn func() error) Floating {
 
 // FuncFloating wraps a Handler and returns a Floating that
 // calls dimFn when Dimensions is called.
-func FuncFloating(h Handler, dimFn func() (int, int)) Floating {
+func FuncFloating(h browserapi.Handler, dimFn func() (int, int)) Floating {
 	return funcFloating{Handler: h, fn: dimFn}
 }
 
@@ -166,7 +156,7 @@ func (f funcFloatingHandler) Close() error {
 }
 
 type funcFloating struct {
-	Handler
+	browserapi.Handler
 	fn func() (int, int)
 }
 
@@ -191,7 +181,7 @@ func (h fnEventHandler) Handle(ev term.Event) bool {
 }
 
 type staticFloating struct {
-	Handler
+	browserapi.Handler
 	width, height int
 }
 

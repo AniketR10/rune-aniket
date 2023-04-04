@@ -3,9 +3,9 @@ package text
 import (
 	"fmt"
 
+	browserapi "unstable.build/go-tui/api/browser"
 	textapi "unstable.build/go-tui/api/text"
 	workspaceapi "unstable.build/go-tui/api/workspace"
-	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/term"
 )
@@ -13,7 +13,7 @@ import (
 // Handler just wraps a tui.Handler to indicate that this API's handlers might
 // not be compatible with other APIs.
 type Handler interface {
-	browser.Handler
+	browserapi.Handler
 
 	// This is only used to differentiate editor.Handler from the rest
 	// of tui.Handler in a browser.Component.

@@ -32,7 +32,7 @@ func (l nopLocker) Unlock() {}
 func newTestServer(t *testing.T, ctrl *gomock.Controller) (*proto.MockMuxBroker, *texttest.MockEditor, *Server) {
 	broker := proto.NewMockMuxBroker(ctrl)
 	ed := texttest.NewMockEditor(ctrl)
-	s := NewServer(broker, ed, new(sync.Mutex), testBrowserServer{})
+	s := NewServer(broker, ed, new(sync.Mutex))
 	return broker, ed, s
 }
 
@@ -225,7 +225,7 @@ func TestServerSetLocationList(t *testing.T) {
 		ed := texttest.NopEditor()
 		c, err := text.NewComponent(ed, &testLoader{}, text.Config{})
 		require.NoError(t, err)
-		s := NewServer(broker, c, new(sync.Mutex), testBrowserServer{})
+		s := NewServer(broker, c, new(sync.Mutex))
 
 		content := "main"
 		callServerEdit(t, ctx, broker, s, resource, content)

@@ -23,37 +23,37 @@ func (b toBrowser) Focus() (browser.Window, error) {
 	if err != nil {
 		return nil, err
 	}
-	return browser.WindowFromAPIWindow{Win: win}, nil
+	return WindowFromAPIWindow{Win: win}, nil
 }
 
 func (b toBrowser) SetFocus(win browser.Window) (browser.Window, error) {
 	var inWin browserapi.Window
-	if a, ok := win.(browser.WindowFromAPIWindow); ok {
+	if a, ok := win.(WindowFromAPIWindow); ok {
 		inWin = a.Win
 	} else {
-		inWin = browser.WindowToAPIWindow{Win: win}
+		inWin = WindowToAPIWindow{Win: win}
 	}
 	retWin, err := b.b.SetFocus(inWin)
 	if err != nil {
 		return nil, err
 	}
-	return browser.WindowFromAPIWindow{Win: retWin}, nil
+	return WindowFromAPIWindow{Win: retWin}, nil
 }
 
 func (b toBrowser) Split(
-	o browserapi.Orientation, win browser.Window, h browser.Handler,
+	o browserapi.Orientation, win browser.Window, h browserapi.Handler,
 ) (browser.Window, error) {
 	var inWin browserapi.Window
-	if a, ok := win.(browser.WindowFromAPIWindow); ok {
+	if a, ok := win.(WindowFromAPIWindow); ok {
 		inWin = a.Win
 	} else {
-		inWin = browser.WindowToAPIWindow{Win: win}
+		inWin = WindowToAPIWindow{Win: win}
 	}
 	retWin, err := b.b.Split(o, inWin, h)
 	if err != nil {
 		return nil, err
 	}
-	return browser.WindowFromAPIWindow{Win: retWin}, nil
+	return WindowFromAPIWindow{Win: retWin}, nil
 }
 
 func (b toBrowser) Floating(
@@ -63,14 +63,14 @@ func (b toBrowser) Floating(
 	if err != nil {
 		return nil, err
 	}
-	return browser.WindowFromAPIWindow{Win: retWin}, nil
+	return WindowFromAPIWindow{Win: retWin}, nil
 }
 
 func (b toBrowser) Bar(o browserapi.Orientation, h tui.Handler) error {
 	return b.b.Bar(o, h)
 }
 
-func (b toBrowser) Tab(uri workspaceapi.URI, name string, h browser.Handler) (browser.Handler, error) {
+func (b toBrowser) Tab(uri workspaceapi.URI, name string, h browserapi.Handler) (browserapi.Handler, error) {
 	return b.b.Tab(uri, name, h)
 }
 
@@ -82,11 +82,11 @@ func (b toBrowser) SetMessage(msg string, args ...interface{}) error {
 	return b.b.SetMessage(msg, args...)
 }
 
-func (b toBrowser) Open(resource workspaceapi.URI) (browser.Handler, error) {
+func (b toBrowser) Open(resource workspaceapi.URI) (browserapi.Handler, error) {
 	return b.b.Open(resource)
 }
 
-func (b toBrowser) Resource(u workspaceapi.URI) (browser.Handler, bool) {
+func (b toBrowser) Resource(u workspaceapi.URI) (browserapi.Handler, bool) {
 	return NewTestHandler(), true
 }
 

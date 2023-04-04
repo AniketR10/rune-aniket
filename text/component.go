@@ -173,7 +173,7 @@ func (c *Component) Init(ed Editor, w workspace.Loader, config Config) error {
 	c.edSubscribers = make(map[textapi.EventType][]EventHandler)
 	c.cmdSubscribers = make(map[string]CommandHandler)
 
-	var first browser.Handler
+	var first browserapi.Handler
 
 	if c.config.RecoveryFilepath != (workspaceapi.URI{}) {
 		if len(c.config.Filepaths) != 1 {
@@ -245,7 +245,7 @@ func (c *windowFocusSubscriber) tryDispatchEvent(win handler.Window, evType text
 	})
 }
 
-func (c *Component) setFocusToTab(t *browser.Tab) (browser.Handler, error) {
+func (c *Component) setFocusToTab(t *browser.Tab) (browserapi.Handler, error) {
 	err := c.comp.Focus().SetContent(t)
 	if err != nil {
 		if err != browserapi.ErrTabNotFree {
@@ -304,13 +304,13 @@ func (s *compTabSubscriber) OnFree(t *browser.Tab) {
 }
 
 // OpenFileTab opens the file at filename path, as a new browser tab.
-// It's up to the caller to use the returned browser.Handler and switch
+// It's up to the caller to use the returned browserapi.Handler and switch
 // any of the active windows to use it.
 //
 // If recoveryFilename is not empty, then the file will be recovered from the
 // contents of recoveryFilename.
 func (c *Component) OpenFileTab(file workspaceapi.URI, readOnly bool) (
-	browser.Handler, error,
+	browserapi.Handler, error,
 ) {
 	if file == (workspaceapi.URI{}) {
 		return nil, errors.New("empty URI")
@@ -322,7 +322,7 @@ func (c *Component) OpenFileTab(file workspaceapi.URI, readOnly bool) (
 // and opens a tab it like OpenFileTab. See OpenFileTab for more details.
 func (c *Component) RecoverFileTab(
 	file workspaceapi.URI, recoveryFilename workspaceapi.URI, readOnly bool,
-) (browser.Handler, error) {
+) (browserapi.Handler, error) {
 	if file == (workspaceapi.URI{}) || recoveryFilename == (workspaceapi.URI{}) {
 		return nil, errors.New("empty URI")
 	}
@@ -332,7 +332,7 @@ func (c *Component) RecoverFileTab(
 func (c *Component) openFileTab(
 	file workspaceapi.URI, recoveryFilename workspaceapi.URI,
 	readOnly, forceRecover bool,
-) (browser.Handler, error) {
+) (browserapi.Handler, error) {
 	t, ok := c.comp.Tab(file)
 	if ok {
 		return c.setFocusToTab(t)
@@ -369,7 +369,7 @@ and lose all the new updates?`, file)
 		[]term.KeyComb{{Ch: 'Y'}, {Ch: 'N'}},
 		func(i int, opt string) {
 
-			var h browser.Handler
+			var h browserapi.Handler
 			var err error
 
 			switch opt {
@@ -410,7 +410,7 @@ an edit session for this file crashed.`, file)
 		[]term.KeyComb{{Ch: 'R'}, {Ch: 'O'}, {Ch: 'S'}},
 		func(i int, opt string) {
 
-			var h browser.Handler
+			var h browserapi.Handler
 			var err error
 
 			switch opt {
@@ -445,7 +445,7 @@ an edit session for this file crashed.`, file)
 // Open opens the given file in a new browser tab. If file is already
 // open by another session or the last edit session crashed, it
 // will create a prompt for the user to decide what to do.
-func (c *Component) Open(file workspaceapi.URI) (browser.Handler, error) {
+func (c *Component) Open(file workspaceapi.URI) (browserapi.Handler, error) {
 	h, err := c.OpenFileTab(file, false)
 	if err != nil && err == workspaceapi.ErrFileAlreadyOpen {
 		c.openRecoveryPrompt(file)
@@ -586,7 +586,7 @@ func (c *Component) SetMessage(msg string, args ...interface{}) error {
 
 // Split satisfies browser.WindowManager.
 func (c *Component) Split(
-	o browserapi.Orientation, win browser.Window, h browser.Handler,
+	o browserapi.Orientation, win browser.Window, h browserapi.Handler,
 ) (browser.Window, error) {
 	w, ok := c.comp.Split(o, win, h)
 	if !ok {
@@ -853,7 +853,7 @@ func (c *Component) Floating(
 }
 
 func (c *Component) newTab(
-	resource workspaceapi.URI, name string, h browser.Handler, closer io.Closer,
+	resource workspaceapi.URI, name string, h browserapi.Handler, closer io.Closer,
 ) *browser.Tab {
 	t := c.comp.NewTab(resource, name, h, closer)
 	t.Subscribe(&compTabSubscriber{parent: c})
@@ -861,8 +861,8 @@ func (c *Component) newTab(
 }
 
 // Tab satisfies browser.WindowManager.
-func (c *Component) Tab(resource workspaceapi.URI, name string, h browser.Handler) (
-	browser.Handler, error,
+func (c *Component) Tab(resource workspaceapi.URI, name string, h browserapi.Handler) (
+	browserapi.Handler, error,
 ) {
 	t, ok := c.comp.Tab(resource)
 	if ok {
@@ -875,7 +875,7 @@ func (c *Component) Tab(resource workspaceapi.URI, name string, h browser.Handle
 }
 
 // Resource returns an open resource or false if resource with uri is not open.
-func (c *Component) Resource(uri workspaceapi.URI) (browser.Handler, bool) {
+func (c *Component) Resource(uri workspaceapi.URI) (browserapi.Handler, bool) {
 	return c.comp.Tab(uri)
 }
 

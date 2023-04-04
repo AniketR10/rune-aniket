@@ -40,8 +40,7 @@ message SplitRequest {
 }
 
 message SplitResponse {
-	string window_channel_id = 1;
-	uint64 window_id = 2;
+	uint64 window_id = 1;
 }
 
 message BarRequest {
@@ -59,8 +58,7 @@ message FloatingWindowRequest {
 }
 
 message FloatingWindowResponse {
-	string window_channel_id = 1;
-	uint64 window_id = 2;
+	uint64 window_id = 1;
 }
 
 message TabRequest {
@@ -70,7 +68,6 @@ message TabRequest {
 }
 
 message TabResponse {
-	string channel_id = 1;
 }
 
 message FocusRequest {
@@ -81,8 +78,7 @@ message SetFocusRequest {
 }
 
 message FocusResponse {
-	string window_channel_id = 1;
-	uint64 window_id = 2;
+	uint64 window_id = 1;
 }
 
 message PublishRequest {
@@ -111,32 +107,34 @@ service WindowManager {
 	rpc Bar(BarRequest) returns (BarResponse);
 	rpc Floating(FloatingWindowRequest) returns (FloatingWindowResponse);
 	rpc Tab(TabRequest) returns (TabResponse);
+
+	// window
+	rpc SetContent(WindowSetContentRequest) returns (WindowSetContentResponse);
+	rpc Content(WindowContentRequest) returns (WindowContentResponse);
+	rpc Close(WindowCloseRequest) returns (WindowCloseResponse);
 }
 
 message WindowCloseRequest {
+	uint64 window_id = 1;
 }
 
 message WindowCloseResponse {
 }
 
 message WindowSetContentRequest {
-	string channel_id = 1;
+	uint64 window_id = 1;
+	string channel_id = 2;
 }
 
 message WindowSetContentResponse {
 }
 
 message WindowContentRequest {
+	uint64 window_id = 1;
 }
 
 message WindowContentResponse {
 	string channel_id = 1;
-}
-
-service Window {
-	rpc SetContent(WindowSetContentRequest) returns (WindowSetContentResponse);
-	rpc Content(WindowContentRequest) returns (WindowContentResponse);
-	rpc Close(WindowCloseRequest) returns (WindowCloseResponse);
 }
 
 message DimensionsRequest {}

@@ -160,7 +160,6 @@ message HandleCommandRequest {
 	term.Coordinates cursor_content = 4;
 	term.Coordinates cursor_window = 5;
 	uint64 window_id = 6;
-	string window_channel_id = 7;
 }
 
 message HandleCommandResponse {

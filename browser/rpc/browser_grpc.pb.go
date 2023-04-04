@@ -286,6 +286,10 @@ type WindowManagerClient interface {
 	Bar(ctx context.Context, in *BarRequest, opts ...grpc.CallOption) (*BarResponse, error)
 	Floating(ctx context.Context, in *FloatingWindowRequest, opts ...grpc.CallOption) (*FloatingWindowResponse, error)
 	Tab(ctx context.Context, in *TabRequest, opts ...grpc.CallOption) (*TabResponse, error)
+	// window
+	SetContent(ctx context.Context, in *WindowSetContentRequest, opts ...grpc.CallOption) (*WindowSetContentResponse, error)
+	Content(ctx context.Context, in *WindowContentRequest, opts ...grpc.CallOption) (*WindowContentResponse, error)
+	Close(ctx context.Context, in *WindowCloseRequest, opts ...grpc.CallOption) (*WindowCloseResponse, error)
 }
 
 type windowManagerClient struct {
@@ -350,6 +354,33 @@ func (c *windowManagerClient) Tab(ctx context.Context, in *TabRequest, opts ...g
 	return out, nil
 }
 
+func (c *windowManagerClient) SetContent(ctx context.Context, in *WindowSetContentRequest, opts ...grpc.CallOption) (*WindowSetContentResponse, error) {
+	out := new(WindowSetContentResponse)
+	err := c.cc.Invoke(ctx, "/browser.WindowManager/SetContent", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *windowManagerClient) Content(ctx context.Context, in *WindowContentRequest, opts ...grpc.CallOption) (*WindowContentResponse, error) {
+	out := new(WindowContentResponse)
+	err := c.cc.Invoke(ctx, "/browser.WindowManager/Content", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *windowManagerClient) Close(ctx context.Context, in *WindowCloseRequest, opts ...grpc.CallOption) (*WindowCloseResponse, error) {
+	out := new(WindowCloseResponse)
+	err := c.cc.Invoke(ctx, "/browser.WindowManager/Close", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // WindowManagerServer is the server API for WindowManager service.
 // All implementations must embed UnimplementedWindowManagerServer
 // for forward compatibility
@@ -360,6 +391,10 @@ type WindowManagerServer interface {
 	Bar(context.Context, *BarRequest) (*BarResponse, error)
 	Floating(context.Context, *FloatingWindowRequest) (*FloatingWindowResponse, error)
 	Tab(context.Context, *TabRequest) (*TabResponse, error)
+	// window
+	SetContent(context.Context, *WindowSetContentRequest) (*WindowSetContentResponse, error)
+	Content(context.Context, *WindowContentRequest) (*WindowContentResponse, error)
+	Close(context.Context, *WindowCloseRequest) (*WindowCloseResponse, error)
 	mustEmbedUnimplementedWindowManagerServer()
 }
 
@@ -384,6 +419,15 @@ func (UnimplementedWindowManagerServer) Floating(context.Context, *FloatingWindo
 }
 func (UnimplementedWindowManagerServer) Tab(context.Context, *TabRequest) (*TabResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Tab not implemented")
+}
+func (UnimplementedWindowManagerServer) SetContent(context.Context, *WindowSetContentRequest) (*WindowSetContentResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SetContent not implemented")
+}
+func (UnimplementedWindowManagerServer) Content(context.Context, *WindowContentRequest) (*WindowContentResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Content not implemented")
+}
+func (UnimplementedWindowManagerServer) Close(context.Context, *WindowCloseRequest) (*WindowCloseResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Close not implemented")
 }
 func (UnimplementedWindowManagerServer) mustEmbedUnimplementedWindowManagerServer() {}
 
@@ -506,6 +550,60 @@ func _WindowManager_Tab_Handler(srv interface{}, ctx context.Context, dec func(i
 	return interceptor(ctx, in, info, handler)
 }
 
+func _WindowManager_SetContent_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WindowSetContentRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WindowManagerServer).SetContent(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/browser.WindowManager/SetContent",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WindowManagerServer).SetContent(ctx, req.(*WindowSetContentRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _WindowManager_Content_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WindowContentRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WindowManagerServer).Content(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/browser.WindowManager/Content",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WindowManagerServer).Content(ctx, req.(*WindowContentRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _WindowManager_Close_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WindowCloseRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WindowManagerServer).Close(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/browser.WindowManager/Close",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WindowManagerServer).Close(ctx, req.(*WindowCloseRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // WindowManager_ServiceDesc is the grpc.ServiceDesc for WindowManager service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -537,163 +635,17 @@ var WindowManager_ServiceDesc = grpc.ServiceDesc{
 			MethodName: "Tab",
 			Handler:    _WindowManager_Tab_Handler,
 		},
-	},
-	Streams:  []grpc.StreamDesc{},
-	Metadata: "rpc/browser.proto",
-}
-
-// WindowClient is the client API for Window service.
-//
-// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
-type WindowClient interface {
-	SetContent(ctx context.Context, in *WindowSetContentRequest, opts ...grpc.CallOption) (*WindowSetContentResponse, error)
-	Content(ctx context.Context, in *WindowContentRequest, opts ...grpc.CallOption) (*WindowContentResponse, error)
-	Close(ctx context.Context, in *WindowCloseRequest, opts ...grpc.CallOption) (*WindowCloseResponse, error)
-}
-
-type windowClient struct {
-	cc grpc.ClientConnInterface
-}
-
-func NewWindowClient(cc grpc.ClientConnInterface) WindowClient {
-	return &windowClient{cc}
-}
-
-func (c *windowClient) SetContent(ctx context.Context, in *WindowSetContentRequest, opts ...grpc.CallOption) (*WindowSetContentResponse, error) {
-	out := new(WindowSetContentResponse)
-	err := c.cc.Invoke(ctx, "/browser.Window/SetContent", in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *windowClient) Content(ctx context.Context, in *WindowContentRequest, opts ...grpc.CallOption) (*WindowContentResponse, error) {
-	out := new(WindowContentResponse)
-	err := c.cc.Invoke(ctx, "/browser.Window/Content", in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *windowClient) Close(ctx context.Context, in *WindowCloseRequest, opts ...grpc.CallOption) (*WindowCloseResponse, error) {
-	out := new(WindowCloseResponse)
-	err := c.cc.Invoke(ctx, "/browser.Window/Close", in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-// WindowServer is the server API for Window service.
-// All implementations must embed UnimplementedWindowServer
-// for forward compatibility
-type WindowServer interface {
-	SetContent(context.Context, *WindowSetContentRequest) (*WindowSetContentResponse, error)
-	Content(context.Context, *WindowContentRequest) (*WindowContentResponse, error)
-	Close(context.Context, *WindowCloseRequest) (*WindowCloseResponse, error)
-	mustEmbedUnimplementedWindowServer()
-}
-
-// UnimplementedWindowServer must be embedded to have forward compatible implementations.
-type UnimplementedWindowServer struct {
-}
-
-func (UnimplementedWindowServer) SetContent(context.Context, *WindowSetContentRequest) (*WindowSetContentResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method SetContent not implemented")
-}
-func (UnimplementedWindowServer) Content(context.Context, *WindowContentRequest) (*WindowContentResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method Content not implemented")
-}
-func (UnimplementedWindowServer) Close(context.Context, *WindowCloseRequest) (*WindowCloseResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method Close not implemented")
-}
-func (UnimplementedWindowServer) mustEmbedUnimplementedWindowServer() {}
-
-// UnsafeWindowServer may be embedded to opt out of forward compatibility for this service.
-// Use of this interface is not recommended, as added methods to WindowServer will
-// result in compilation errors.
-type UnsafeWindowServer interface {
-	mustEmbedUnimplementedWindowServer()
-}
-
-func RegisterWindowServer(s grpc.ServiceRegistrar, srv WindowServer) {
-	s.RegisterService(&Window_ServiceDesc, srv)
-}
-
-func _Window_SetContent_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(WindowSetContentRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(WindowServer).SetContent(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/browser.Window/SetContent",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(WindowServer).SetContent(ctx, req.(*WindowSetContentRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _Window_Content_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(WindowContentRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(WindowServer).Content(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/browser.Window/Content",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(WindowServer).Content(ctx, req.(*WindowContentRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _Window_Close_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(WindowCloseRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(WindowServer).Close(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/browser.Window/Close",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(WindowServer).Close(ctx, req.(*WindowCloseRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-// Window_ServiceDesc is the grpc.ServiceDesc for Window service.
-// It's only intended for direct use with grpc.RegisterService,
-// and not to be introspected or modified (even as a copy)
-var Window_ServiceDesc = grpc.ServiceDesc{
-	ServiceName: "browser.Window",
-	HandlerType: (*WindowServer)(nil),
-	Methods: []grpc.MethodDesc{
 		{
 			MethodName: "SetContent",
-			Handler:    _Window_SetContent_Handler,
+			Handler:    _WindowManager_SetContent_Handler,
 		},
 		{
 			MethodName: "Content",
-			Handler:    _Window_Content_Handler,
+			Handler:    _WindowManager_Content_Handler,
 		},
 		{
 			MethodName: "Close",
-			Handler:    _Window_Close_Handler,
+			Handler:    _WindowManager_Close_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

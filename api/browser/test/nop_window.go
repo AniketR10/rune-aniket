@@ -7,7 +7,6 @@ type noopWindow struct{}
 func (w noopWindow) Content() (api.Handler, error)  { return nil, nil }
 func (w noopWindow) SetContent(h api.Handler) error { return nil }
 func (w noopWindow) Close() error                   { return nil }
-func (w noopWindow) OnWindowClosed(fn func())       {}
 func (w noopWindow) ID() uint64                     { return 0 }
 func (w noopWindow) Focus() (bool, error)           { return false, nil }
 

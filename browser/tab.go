@@ -4,6 +4,7 @@ import (
 	"io"
 
 	"unstable.build/go-tui"
+	browserapi "unstable.build/go-tui/api/browser"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/term"
 )
@@ -15,14 +16,14 @@ type Tab struct {
 	parent      *Component
 	uri         workspaceapi.URI
 	closer      io.Closer
-	handler     Handler
+	handler     browserapi.Handler
 	free        bool
 	win         Window
 	subscribers []TabSubscriber
 }
 
 // newTab allocates storage for a new tab and initializes it.
-func newTab(c *Component, uri workspaceapi.URI, h Handler, f io.Closer) *Tab {
+func newTab(c *Component, uri workspaceapi.URI, h browserapi.Handler, f io.Closer) *Tab {
 	ret := new(Tab)
 	ret.init(c, uri, h, f)
 	return ret
@@ -30,7 +31,7 @@ func newTab(c *Component, uri workspaceapi.URI, h Handler, f io.Closer) *Tab {
 
 // Init initializes this tab with id, h as the Handler, and f as the
 // io.Closer handle.
-func (b *Tab) init(c *Component, uri workspaceapi.URI, h Handler, f io.Closer) {
+func (b *Tab) init(c *Component, uri workspaceapi.URI, h browserapi.Handler, f io.Closer) {
 	b.parent = c
 	b.uri = uri
 	b.closer = f
@@ -110,7 +111,7 @@ func (b *Tab) Window() (Window, bool) {
 
 // Handler returns the Handler responsible for drawing
 // the contents of this tab.
-func (b *Tab) Handler() Handler {
+func (b *Tab) Handler() browserapi.Handler {
 	return b.handler
 }
 

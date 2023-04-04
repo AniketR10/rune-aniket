@@ -10,7 +10,6 @@ import (
 	log "github.com/sirupsen/logrus"
 	textapi "unstable.build/go-tui/api/text"
 	workspaceapi "unstable.build/go-tui/api/workspace"
-	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/proto"
 	termpb "unstable.build/go-tui/term/rpc"
 	"unstable.build/go-tui/text"
@@ -20,17 +19,11 @@ var (
 	errHandlerNotFound = errors.New("handler not found")
 )
 
-// BrowserServer abstracts serving windows.
-type BrowserServer interface {
-	ServeWindow(win browser.Window) (string, error)
-}
-
 // Server serves an Editor over GRPC.
 type Server struct {
 	UnimplementedEditorServer
 
-	broker  proto.MuxBroker
-	browser BrowserServer
+	broker proto.MuxBroker
 
 	editor struct {
 		text.Editor
@@ -44,22 +37,19 @@ type Server struct {
 // NewServer allocates storage for a new Server and initializes it.
 func NewServer(
 	broker proto.MuxBroker, editor text.Editor, lock sync.Locker,
-	browser BrowserServer,
 ) *Server {
 	ret := new(Server)
-	ret.Init(broker, editor, lock, browser)
+	ret.Init(broker, editor, lock)
 	return ret
 }
 
 // Init initializes this Server with broker and browser.
 func (s *Server) Init(
 	broker proto.MuxBroker, editor text.Editor, lock sync.Locker,
-	browser BrowserServer,
 ) {
 	s.broker = broker
 	s.editor.Editor = editor
 	s.editor.Locker = lock
-	s.browser = browser
 	s.serverCtx, s.serverCancelCtx = context.WithCancel(context.Background())
 }
 

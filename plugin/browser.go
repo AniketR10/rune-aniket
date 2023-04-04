@@ -11,9 +11,7 @@ import (
 )
 
 type browserResourceServer struct {
-	mu     sync.Mutex
-	b      browser.Browser
-	server *browserpb.Server
+	b browser.Browser
 }
 
 type browserResourcePermissionServer struct {
@@ -35,15 +33,8 @@ func (s browserResourcePermissionServer) Register(
 	pluginID string, grantor Grantor, registrar proto.ServiceRegistrar,
 	broker proto.MuxBroker, lock sync.Locker,
 ) (io.Closer, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	// all permissions within a grantee must share the same browser.Server
-	// it's stateful and it's internal cannot be shared.
-	if s.server == nil {
-		s.server = new(browserpb.Server)
-		s.server.Init(broker, s.b, lock, interruptWindowServer)
-	}
-	rpcServer := interruptBrowserServer(s.server, interrupt)
+	server := browserpb.NewServer(broker, s.b, lock)
+	rpcServer := interruptBrowserServer(server, interrupt)
 	switch string(s.p) {
 	case browserplugin.PermissionBrowserWindowManager:
 		browserpb.RegisterWindowManagerServer(registrar, rpcServer)
@@ -54,8 +45,15 @@ func (s browserResourcePermissionServer) Register(
 	case browserplugin.PermissionBrowserEventPublisher:
 		browserpb.RegisterEventPublisherServer(registrar, rpcServer)
 	}
-	// browser.Server handles multiple call to Close gracefully
-	return s.server, nil
+	return browserCloser{server}, nil
+}
+
+type browserCloser struct {
+	server *browserpb.Server
+}
+
+func (b browserCloser) Close() error {
+	return b.server.Stop()
 }
 
 // BrowserResources returns a map of Permission to a ResourceServer

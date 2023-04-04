@@ -24,8 +24,7 @@ func (s *editorResourceServer) Register(
 	pluginID string, grantor Grantor, registrar proto.ServiceRegistrar,
 	broker proto.MuxBroker, lock sync.Locker,
 ) (io.Closer, error) {
-	browser := grantorTextBrowser(pluginID, grantor, registrar, broker, lock)
-	server := textpb.NewServer(broker, s.b, lock, browser)
+	server := textpb.NewServer(broker, s.b, lock)
 	textpb.RegisterEditorServer(registrar, interruptEditorServer(server, interrupt))
 	return server, nil
 }

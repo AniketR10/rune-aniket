@@ -17,7 +17,6 @@ import (
 	browserapi "unstable.build/go-tui/api/browser"
 	textapi "unstable.build/go-tui/api/text"
 	workspaceapi "unstable.build/go-tui/api/workspace"
-	"unstable.build/go-tui/browser"
 	browserpb "unstable.build/go-tui/browser/rpc"
 	browsertest "unstable.build/go-tui/browser/test"
 	"unstable.build/go-tui/cell"
@@ -85,7 +84,7 @@ func TestClientServerIntegration(t *testing.T) {
 		defer ctrl.Finish()
 		b := proto.NewDialBroker()
 		ed := texttest.NewMockEditor(ctrl)
-		s := NewServer(b, ed, nopLocker{}, testBrowserServer{})
+		s := NewServer(b, ed, nopLocker{})
 
 		client, closeFn := setupIntTest(t, b, s)
 		defer closeFn()
@@ -103,7 +102,7 @@ func TestClientServerIntegration(t *testing.T) {
 		defer ctrl.Finish()
 		b := proto.NewDialBroker()
 		ed := texttest.NewMockEditor(ctrl)
-		s := NewServer(b, ed, nopLocker{}, testBrowserServer{})
+		s := NewServer(b, ed, nopLocker{})
 
 		client, closeFn := setupIntTest(t, b, s)
 		defer closeFn()
@@ -122,7 +121,7 @@ func TestClientServerIntegration(t *testing.T) {
 		defer ctrl.Finish()
 		b := proto.NewDialBroker()
 		ed := texttest.NewMockEditor(ctrl)
-		s := NewServer(b, ed, nopLocker{}, testBrowserServer{})
+		s := NewServer(b, ed, nopLocker{})
 
 		client, closeFn := setupIntTest(t, b, s)
 		defer closeFn()
@@ -188,7 +187,7 @@ func TestClientServerIntegration(t *testing.T) {
 				var mu sync.Mutex
 				b := proto.NewDialBroker()
 				ed := texttest.NopEditorWithCallback(wg.Done)
-				s := NewServer(b, ed, &mu, testBrowserServer{})
+				s := NewServer(b, ed, &mu)
 
 				client, closeFn := setupIntTest(t, b, s)
 				defer closeFn()
@@ -236,7 +235,7 @@ func TestClientServerIntegration(t *testing.T) {
 		defer ctrl.Finish()
 		b := proto.NewDialBroker()
 		ed := texttest.NewMockEditor(ctrl)
-		s := NewServer(b, ed, new(sync.Mutex), testBrowserServer{})
+		s := NewServer(b, ed, new(sync.Mutex))
 
 		client, closeFn := setupIntTest(t, b, s)
 		defer closeFn()
@@ -271,7 +270,7 @@ func TestClientServerIntegration(t *testing.T) {
 		defer ctrl.Finish()
 		b := proto.NewDialBroker()
 		ed := texttest.NewMockEditor(ctrl)
-		s := NewServer(b, ed, new(sync.Mutex), testBrowserServer{})
+		s := NewServer(b, ed, new(sync.Mutex))
 
 		client, closeFn := setupIntTest(t, b, s)
 		defer closeFn()
@@ -305,7 +304,7 @@ func TestClientServerIntegration(t *testing.T) {
 		defer ctrl.Finish()
 		b := proto.NewDialBroker()
 		ed := texttest.NewMockEditor(ctrl)
-		s := NewServer(b, ed, nopLocker{}, testBrowserServer{})
+		s := NewServer(b, ed, nopLocker{})
 
 		client, closeFn := setupIntTest(t, b, s)
 		defer closeFn()
@@ -343,7 +342,7 @@ func TestClientServerIntegration(t *testing.T) {
 		defer ctrl.Finish()
 		b := proto.NewDialBroker()
 		ed := texttest.NewMockEditor(ctrl)
-		s := NewServer(b, ed, nopLocker{}, testBrowserServer{})
+		s := NewServer(b, ed, nopLocker{})
 
 		client, closeFn := setupIntTest(t, b, s)
 		defer closeFn()
@@ -384,7 +383,7 @@ func TestRPCTab(t *testing.T) {
 		client, closeFn := setupWmIntTest(t, b, s)
 		closeFns = append(closeFns, func() {
 			mu.Lock()
-			s.Close()
+			s.Stop()
 			mu.Unlock()
 			closeFn()
 		})
@@ -406,7 +405,7 @@ func TestRPCRegister(t *testing.T) {
 		}
 
 		b := proto.NewDialBroker()
-		s := NewServer(b, c, mu, browserpb.NewServer(b, c, mu))
+		s := NewServer(b, c, mu)
 
 		client, closeFn := setupIntTest(t, b, s)
 		closeFns = append(closeFns, func() {
@@ -593,7 +592,7 @@ func testRegister(t *testing.T,
 			URI:      resource1,
 			Name:     myCmd,
 			Args:     myArgs,
-			Window:   browser.WindowToAPIWindow{Win: win},
+			Window:   win,
 		}
 		ok, err := c.DispatchCommand(cmd)
 		require.NoError(t, err)
@@ -610,12 +609,4 @@ func testRegister(t *testing.T,
 
 		assert.Equal(t, 1, called)
 	})
-}
-
-type testBrowserServer struct {
-	windowChannelID string
-}
-
-func (t testBrowserServer) ServeWindow(win browser.Window) (string, error) {
-	return t.windowChannelID, nil
 }

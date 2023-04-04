@@ -97,3 +97,21 @@ func (s *interruptBrowser) Open(
 	s.interruptDraw()
 	return res, err
 }
+
+// SetContent satisfies browserpb.BrowserServer
+func (s *interruptBrowser) SetContent(
+	ctx context.Context, req *browserpb.WindowSetContentRequest,
+) (*browserpb.WindowSetContentResponse, error) {
+	res, err := s.browserServer.SetContent(ctx, req)
+	s.interruptDraw()
+	return res, err
+}
+
+// Close satisfies browserpb.BrowserServer
+func (s *interruptBrowser) Close(
+	ctx context.Context, req *browserpb.WindowCloseRequest,
+) (*browserpb.WindowCloseResponse, error) {
+	res, err := s.browserServer.Close(ctx, req)
+	s.interruptDraw()
+	return res, err
+}

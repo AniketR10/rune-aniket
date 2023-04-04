@@ -22,7 +22,6 @@ import (
 	textplugin "unstable.build/go-tui/api/text/plugin"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	workspaceplugin "unstable.build/go-tui/api/workspace/plugin"
-	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/config"
 	"unstable.build/go-tui/handler/search"
@@ -178,14 +177,14 @@ func (h *fuzzyFinderHandler) addSearchHistory(searchQuery string) {
 	}
 }
 
-func (h *fuzzyFinderHandler) open(resource workspaceapi.URI) (browser.Handler, error) {
+func (h *fuzzyFinderHandler) open(resource workspaceapi.URI) (browserapi.Handler, error) {
 	h.mu.Unlock()
 	defer h.mu.Lock()
 	return h.f.Open(resource)
 }
 
 func (h *fuzzyFinderHandler) setContent(
-	resource workspaceapi.URI, b browser.Handler, pos term.Coordinates,
+	resource workspaceapi.URI, b browserapi.Handler, pos term.Coordinates,
 ) error {
 	h.mu.Unlock()
 	defer h.mu.Lock()

@@ -150,7 +150,7 @@ func TestComponentKeyMapper(t *testing.T) {
 
 func newTestComponentWithFile(
 	t *testing.T, filename string,
-) (*text.Component, *testLoader, browser.Handler, workspaceapi.URI) {
+) (*text.Component, *testLoader, browserapi.Handler, workspaceapi.URI) {
 	uri, err := workspaceapi.ParseURI(filename)
 	require.NoError(t, err)
 	c, loader := newTestComponent(t, NopEditor())
@@ -639,7 +639,7 @@ func TestEventTypeFocusIntegration(t *testing.T) {
 
 	expectEvent(t, mock, uri1, textapi.EventTypeUnfocus)
 	expectEvent(t, mock, uri2, textapi.EventTypeFocus)
-	require.NoError(t, w2.Close(context.Background()))
+	require.NoError(t, w2.Close())
 
 	ok = c.Browser().NextTab(w2)
 	require.False(t, ok)
@@ -662,7 +662,7 @@ func TestDispatchCommand(t *testing.T) {
 			Resource: NewTestHandler(),
 			URI:      uri,
 			Name:     "SELL",
-			Window:   browser.WindowToAPIWindow{Win: win},
+			Window:   win,
 		}
 		ok, err := c.DispatchCommand(cmd)
 		require.NoError(t, err)
@@ -700,7 +700,7 @@ func TestDispatchCommand(t *testing.T) {
 			Resource: NewTestHandler(),
 			URI:      uri,
 			Name:     "workstation_layout",
-			Window:   browser.WindowToAPIWindow{Win: win},
+			Window:   win,
 		}
 		ok, err := c.DispatchCommand(cmd)
 		assert.True(t, ok)
@@ -720,7 +720,7 @@ func TestDispatchCommand(t *testing.T) {
 			Resource: NewTestHandler(),
 			URI:      uri,
 			Name:     "bla",
-			Window:   browser.WindowToAPIWindow{Win: win},
+			Window:   win,
 		}
 		ok, err := c.DispatchCommand(cmd)
 		assert.True(t, ok)
@@ -743,7 +743,7 @@ func TestDispatchCommand(t *testing.T) {
 				Resource: NewTestHandler(),
 				URI:      uri,
 				Name:     cmd,
-				Window:   browser.WindowToAPIWindow{Win: win},
+				Window:   win,
 			}
 			ok, err := c.DispatchCommand(cmd)
 			assert.False(t, ok)
@@ -761,7 +761,7 @@ func TestDispatchCommand(t *testing.T) {
 			Resource: NewTestHandler(),
 			URI:      uri,
 			Name:     "kaboom",
-			Window:   browser.WindowToAPIWindow{Win: win},
+			Window:   win,
 		}
 		ok, err := c.DispatchCommand(cmd)
 		assert.False(t, ok)
@@ -910,7 +910,7 @@ func testRegister(t *testing.T,
 		wg.Add(1)
 		mu.Lock()
 		cmd := textapi.Command{Resource: h1, URI: resource1, Name: myCmd, Args: myArgs,
-			Window: browser.WindowToAPIWindow{Win: win}}
+			Window: win}
 		ok, err := c.DispatchCommand(cmd)
 		assert.True(t, ok)
 		require.NoError(t, err)

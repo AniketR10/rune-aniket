@@ -44,7 +44,7 @@ func newClientServerIntegration(
 	closeFn := func() {
 		client.Close()
 		rpcServer.browser.Lock()
-		rpcServer.Close()
+		rpcServer.Stop()
 		rpcServer.browser.Unlock()
 		grpcServer.Stop()
 		conn.Close()
@@ -110,6 +110,7 @@ func TestIntegrationFloating(t *testing.T) {
 	for _, _tcase := range tsuite {
 		tcase := _tcase
 		t.Run(fmt.Sprintf("%v", tcase.Alignment), func(t *testing.T) {
+			defer goleak.VerifyNone(t)
 			ctrl := gomock.NewController(t)
 			defer ctrl.Finish()
 
@@ -139,5 +140,4 @@ func TestIntegrationFloating(t *testing.T) {
 			require.NoError(t, resWin1.Close())
 		})
 	}
-	goleak.VerifyNone(t)
 }

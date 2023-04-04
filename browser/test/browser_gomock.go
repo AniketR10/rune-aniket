@@ -5,7 +5,6 @@
 package test
 
 import (
-	context "context"
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
@@ -16,111 +15,6 @@ import (
 	component "unstable.build/go-tui/component"
 	term "unstable.build/go-tui/term"
 )
-
-// MockHandler is a mock of Handler interface.
-type MockHandler struct {
-	ctrl     *gomock.Controller
-	recorder *MockHandlerMockRecorder
-}
-
-// MockHandlerMockRecorder is the mock recorder for MockHandler.
-type MockHandlerMockRecorder struct {
-	mock *MockHandler
-}
-
-// NewMockHandler creates a new mock instance.
-func NewMockHandler(ctrl *gomock.Controller) *MockHandler {
-	mock := &MockHandler{ctrl: ctrl}
-	mock.recorder = &MockHandlerMockRecorder{mock}
-	return mock
-}
-
-// EXPECT returns an object that allows the caller to indicate expected use.
-func (m *MockHandler) EXPECT() *MockHandlerMockRecorder {
-	return m.recorder
-}
-
-// Close mocks base method.
-func (m *MockHandler) Close() error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Close")
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// Close indicates an expected call of Close.
-func (mr *MockHandlerMockRecorder) Close() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockHandler)(nil).Close))
-}
-
-// Cursor mocks base method.
-func (m *MockHandler) Cursor() (term.Coordinates, bool) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Cursor")
-	ret0, _ := ret[0].(term.Coordinates)
-	ret1, _ := ret[1].(bool)
-	return ret0, ret1
-}
-
-// Cursor indicates an expected call of Cursor.
-func (mr *MockHandlerMockRecorder) Cursor() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Cursor", reflect.TypeOf((*MockHandler)(nil).Cursor))
-}
-
-// Draw mocks base method.
-func (m *MockHandler) Draw(arg0 term.Writer) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "Draw", arg0)
-}
-
-// Draw indicates an expected call of Draw.
-func (mr *MockHandlerMockRecorder) Draw(arg0 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Draw", reflect.TypeOf((*MockHandler)(nil).Draw), arg0)
-}
-
-// Handle mocks base method.
-func (m *MockHandler) Handle(arg0 term.Event) (bool, bool) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Handle", arg0)
-	ret0, _ := ret[0].(bool)
-	ret1, _ := ret[1].(bool)
-	return ret0, ret1
-}
-
-// Handle indicates an expected call of Handle.
-func (mr *MockHandlerMockRecorder) Handle(arg0 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Handle", reflect.TypeOf((*MockHandler)(nil).Handle), arg0)
-}
-
-// Man mocks base method.
-func (m *MockHandler) Man() tui.Manual {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Man")
-	ret0, _ := ret[0].(tui.Manual)
-	return ret0
-}
-
-// Man indicates an expected call of Man.
-func (mr *MockHandlerMockRecorder) Man() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Man", reflect.TypeOf((*MockHandler)(nil).Man))
-}
-
-// Resize mocks base method.
-func (m *MockHandler) Resize(width, height int) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "Resize", width, height)
-}
-
-// Resize indicates an expected call of Resize.
-func (mr *MockHandlerMockRecorder) Resize(width, height interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Resize", reflect.TypeOf((*MockHandler)(nil).Resize), width, height)
-}
 
 // MockFloating is a mock of Floating interface.
 type MockFloating struct {
@@ -266,17 +160,17 @@ func (m *MockWindow) EXPECT() *MockWindowMockRecorder {
 }
 
 // Close mocks base method.
-func (m *MockWindow) Close(arg0 context.Context) error {
+func (m *MockWindow) Close() error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Close", arg0)
+	ret := m.ctrl.Call(m, "Close")
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // Close indicates an expected call of Close.
-func (mr *MockWindowMockRecorder) Close(arg0 interface{}) *gomock.Call {
+func (mr *MockWindowMockRecorder) Close() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockWindow)(nil).Close), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockWindow)(nil).Close))
 }
 
 // Closed mocks base method.
@@ -294,10 +188,10 @@ func (mr *MockWindowMockRecorder) Closed() *gomock.Call {
 }
 
 // Content mocks base method.
-func (m *MockWindow) Content() (browser.Handler, error) {
+func (m *MockWindow) Content() (api.Handler, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Content")
-	ret0, _ := ret[0].(browser.Handler)
+	ret0, _ := ret[0].(api.Handler)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -337,20 +231,8 @@ func (mr *MockWindowMockRecorder) ID() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ID", reflect.TypeOf((*MockWindow)(nil).ID))
 }
 
-// OnWindowClosed mocks base method.
-func (m *MockWindow) OnWindowClosed(fn func(context.Context)) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "OnWindowClosed", fn)
-}
-
-// OnWindowClosed indicates an expected call of OnWindowClosed.
-func (mr *MockWindowMockRecorder) OnWindowClosed(fn interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OnWindowClosed", reflect.TypeOf((*MockWindow)(nil).OnWindowClosed), fn)
-}
-
 // SetContent mocks base method.
-func (m *MockWindow) SetContent(arg0 browser.Handler) error {
+func (m *MockWindow) SetContent(arg0 api.Handler) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SetContent", arg0)
 	ret0, _ := ret[0].(error)
@@ -446,7 +328,7 @@ func (mr *MockWindowManagerMockRecorder) SetFocus(win interface{}) *gomock.Call 
 }
 
 // Split mocks base method.
-func (m *MockWindowManager) Split(arg0 api.Orientation, arg1 browser.Window, arg2 browser.Handler) (browser.Window, error) {
+func (m *MockWindowManager) Split(arg0 api.Orientation, arg1 browser.Window, arg2 api.Handler) (browser.Window, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Split", arg0, arg1, arg2)
 	ret0, _ := ret[0].(browser.Window)
@@ -461,10 +343,10 @@ func (mr *MockWindowManagerMockRecorder) Split(arg0, arg1, arg2 interface{}) *go
 }
 
 // Tab mocks base method.
-func (m *MockWindowManager) Tab(uri api0.URI, name string, h browser.Handler) (browser.Handler, error) {
+func (m *MockWindowManager) Tab(uri api0.URI, name string, h api.Handler) (api.Handler, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Tab", uri, name, h)
-	ret0, _ := ret[0].(browser.Handler)
+	ret0, _ := ret[0].(api.Handler)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -556,10 +438,10 @@ func (m *MockResourceOpener) EXPECT() *MockResourceOpenerMockRecorder {
 }
 
 // Open mocks base method.
-func (m *MockResourceOpener) Open(resource api0.URI) (browser.Handler, error) {
+func (m *MockResourceOpener) Open(resource api0.URI) (api.Handler, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Open", resource)
-	ret0, _ := ret[0].(browser.Handler)
+	ret0, _ := ret[0].(api.Handler)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -571,10 +453,10 @@ func (mr *MockResourceOpenerMockRecorder) Open(resource interface{}) *gomock.Cal
 }
 
 // Resource mocks base method.
-func (m *MockResourceOpener) Resource(arg0 api0.URI) (browser.Handler, bool) {
+func (m *MockResourceOpener) Resource(arg0 api0.URI) (api.Handler, bool) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Resource", arg0)
-	ret0, _ := ret[0].(browser.Handler)
+	ret0, _ := ret[0].(api.Handler)
 	ret1, _ := ret[1].(bool)
 	return ret0, ret1
 }
@@ -732,10 +614,10 @@ func (mr *MockBrowserMockRecorder) Interrupt() *gomock.Call {
 }
 
 // Open mocks base method.
-func (m *MockBrowser) Open(resource api0.URI) (browser.Handler, error) {
+func (m *MockBrowser) Open(resource api0.URI) (api.Handler, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Open", resource)
-	ret0, _ := ret[0].(browser.Handler)
+	ret0, _ := ret[0].(api.Handler)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -761,10 +643,10 @@ func (mr *MockBrowserMockRecorder) PublishEventNone() *gomock.Call {
 }
 
 // Resource mocks base method.
-func (m *MockBrowser) Resource(arg0 api0.URI) (browser.Handler, bool) {
+func (m *MockBrowser) Resource(arg0 api0.URI) (api.Handler, bool) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Resource", arg0)
-	ret0, _ := ret[0].(browser.Handler)
+	ret0, _ := ret[0].(api.Handler)
 	ret1, _ := ret[1].(bool)
 	return ret0, ret1
 }
@@ -810,7 +692,7 @@ func (mr *MockBrowserMockRecorder) SetMessage(msg interface{}, args ...interface
 }
 
 // Split mocks base method.
-func (m *MockBrowser) Split(arg0 api.Orientation, arg1 browser.Window, arg2 browser.Handler) (browser.Window, error) {
+func (m *MockBrowser) Split(arg0 api.Orientation, arg1 browser.Window, arg2 api.Handler) (browser.Window, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Split", arg0, arg1, arg2)
 	ret0, _ := ret[0].(browser.Window)
@@ -825,10 +707,10 @@ func (mr *MockBrowserMockRecorder) Split(arg0, arg1, arg2 interface{}) *gomock.C
 }
 
 // Tab mocks base method.
-func (m *MockBrowser) Tab(uri api0.URI, name string, h browser.Handler) (browser.Handler, error) {
+func (m *MockBrowser) Tab(uri api0.URI, name string, h api.Handler) (api.Handler, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Tab", uri, name, h)
-	ret0, _ := ret[0].(browser.Handler)
+	ret0, _ := ret[0].(api.Handler)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

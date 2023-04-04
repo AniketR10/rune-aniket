@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"net"
 	_ "net/http/pprof"
@@ -118,7 +117,7 @@ func newTestRPCBrowser(t *testing.T,
 			serverMutex.Lock()
 			defer serverMutex.Unlock()
 			bc.Close()
-			server.Close()
+			server.Stop()
 			grpcServer.Stop()
 			broker.Close()
 			ex.Close()
@@ -148,9 +147,7 @@ func TestRPCBrowserCloseLeak(t *testing.T) {
 	win, err := b.Split(browserapi.OrientationLeft, focus, browsertest.NewTestHandler())
 	require.NoError(t, err)
 
-	ctx, cancel := context.WithCancel(context.Background())
-	require.NoError(t, win.Close(ctx))
-	cancel()
+	require.NoError(t, win.Close())
 
 	// NOTE: to reason about window/handler resource leaks
 	// uncomment next line and analyze running goroutines
