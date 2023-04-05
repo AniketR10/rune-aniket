@@ -6,12 +6,10 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"os"
 	"sync"
 	"time"
 
-	"github.com/ernestrc/blue/document"
-	docrpc "github.com/ernestrc/blue/document/rpc"
-	"github.com/ernestrc/blue/encoding/bson"
 	"github.com/ernestrc/blue/logging"
 	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
@@ -35,6 +33,7 @@ var defaultManagerConfig = managerConfig{
 	healthCheckTicker: defaultHealthCheckTicker,
 	healthRetries:     defaultHealthRetries,
 	locker:            new(sync.Mutex),
+	dataDir:           os.TempDir(),
 }
 
 type granteeClientWrap struct {
@@ -63,6 +62,7 @@ type managerConfig struct {
 	healthRetries     int
 	locker            sync.Locker
 	workspace         workspaceapi.URI
+	dataDir           string
 }
 
 // Option is a configuration option for a manager.
@@ -84,17 +84,15 @@ type Manager struct {
 	// used to abstract out go-plugin specific functionality
 	builder pluginBuilder
 
-	brokerServer *docrpc.Server
 	broker       proto.MuxBroker
-	brokerAddr   net.Addr
 	config       managerConfig
 }
 
 // NewManager allocates storage for a new Manager and initializes it.
 func NewManager(grantor Grantor, opts ...Option) (*Manager, error) {
 	ret := new(Manager)
-	ret.builder = goPluginGranteeBuilder(ret)
 	err := ret.Init(grantor, opts...)
+	ret.builder = goPluginGranteeBuilder(ret, ret.config.dataDir)
 	if err != nil {
 		return nil, err
 	}
@@ -115,13 +113,7 @@ func (m *Manager) Init(grantor Grantor, opts ...Option) (err error) {
 	}
 	m.rmu = m.config.locker
 
-	cache := document.NewInMemoryService()
-	m.brokerServer = docrpc.NewServer(cache, bson.Marshaler())
-	m.broker, m.brokerAddr, err = initHostBroker(m.config, cache, m.brokerServer)
-	if err != nil {
-		return
-	}
-
+	m.broker, err = initHostBroker(m.config, m.config.dataDir)
 	return
 }
 
@@ -176,8 +168,7 @@ func (m *Manager) doGrant(
 	client *granteeClientWrap,
 	perms []*pluginpb.Permission,
 ) error {
-	grantID := m.broker.NextId()
-	lis, err := m.broker.Accept(grantID)
+	lis, err := m.broker.NewChannel(pluginID)
 	if err != nil {
 		return fmt.Errorf("accept: %v", err)
 	}
@@ -215,8 +206,10 @@ func (m *Manager) doGrant(
 		}
 
 		granted[permissionID] = &pluginpb.PermissionGrant{
-			Id:      permissionID,
-			GrantId: grantID,
+			Id: permissionID,
+			// TODO pass temporary token that can be used
+			// by client and server auth middleware
+			Address: lis.Addr().String(),
 		}
 
 		serverResources = append(serverResources, resource)
@@ -487,11 +480,5 @@ func (m *Manager) Close() error {
 
 	wg.Wait()
 
-	err1 := m.brokerServer.Close()
-	err2 := m.broker.Close()
-
-	if err1 != nil {
-		return err1
-	}
-	return err2
+	return m.broker.Close()
 }

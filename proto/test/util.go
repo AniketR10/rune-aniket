@@ -35,12 +35,10 @@ func (t testListener) String() string {
 	return t.addr
 }
 
-func ExpectBrokerServe(t *testing.T, brokerID uint32, mockBroker *proto.MockMuxBroker) {
-	mockBroker.EXPECT().NextId().Return(uint32(brokerID))
-	mockBroker.EXPECT().Accept(gomock.Any()).
-		DoAndReturn(func(brokerId uint32) (net.Listener, error) {
-			assert.Equal(t, uint32(brokerID), brokerId)
-			return testListener{}, nil
+func ExpectBrokerServe(t *testing.T, brokerID string, mockBroker *proto.MockMuxBroker) {
+	mockBroker.EXPECT().NewChannel(gomock.Any()).
+		DoAndReturn(func() (net.Listener, error) {
+			return testListener{addr: brokerID}, nil
 		}).
 		Times(1)
 }
@@ -63,12 +61,12 @@ func ExpectMonitorConn(ret *proto.MockMuxConn) chan struct{} {
 
 func ExpectBrokerDial(
 	t *testing.T, ctrl *gomock.Controller,
-	mockBroker *proto.MockMuxBroker, expectedBrokerID uint32,
+	mockBroker *proto.MockMuxBroker, expectedBrokerID string,
 ) *proto.MockMuxConn {
 	ret := proto.NewMockMuxConn(ctrl)
 
-	mockBroker.EXPECT().Dial(gomock.Any()).
-		DoAndReturn(func(brokerId uint32) (proto.MuxConn, error) {
+	mockBroker.EXPECT().DialChannel(gomock.Any()).
+		DoAndReturn(func(brokerId string) (proto.MuxConn, error) {
 			assert.Equal(t, expectedBrokerID, brokerId)
 			return ret, nil
 		}).
@@ -79,9 +77,9 @@ func ExpectBrokerDial(
 
 func ExpectBrokerDialError(
 	t *testing.T, ctrl *gomock.Controller,
-	mockBroker *proto.MockMuxBroker, expectedBrokerID uint32,
+	mockBroker *proto.MockMuxBroker, expectedBrokerID string,
 ) {
-	mockBroker.EXPECT().Dial(gomock.Any()).
+	mockBroker.EXPECT().DialChannel(gomock.Any()).
 		Return(nil, errors.New("whoopsie")).
 		Times(1)
 }
@@ -114,7 +112,7 @@ func ExpectBrokerDialChannel(
 
 func ExpectBrokerDialChannelError(
 	t *testing.T, ctrl *gomock.Controller,
-	mockBroker *proto.MockMuxBroker, expectedBrokerID uint32,
+	mockBroker *proto.MockMuxBroker, expectedBrokerID string,
 ) {
 	mockBroker.EXPECT().DialChannel(gomock.Any()).
 		Return(nil, errors.New("whoopsie")).

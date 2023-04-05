@@ -55,7 +55,7 @@ func setupProxyTest(t *testing.T, mockScheme workspace.Scheme) (
 	require.NoError(t, err)
 	cfg := config.NopConfig()
 	manager := workspace.NewManager(cfg)
-	broker := proto.NewDialBroker()
+	broker := proto.NewUnixGRPCBroker("")
 
 	// host-side
 	srv := NewSchemeManagerServer(broker, manager, new(sync.Mutex))

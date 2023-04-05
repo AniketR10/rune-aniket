@@ -157,7 +157,7 @@ message URIResponse {
 }
 
 message RegisterSchemeRequest {
-	uint32 proxy_id = 1;
+	string proxy_id = 1;
 	string scheme = 2;
 }
 
@@ -170,7 +170,7 @@ message InitializeProxyRequest {
 }
 
 message InitializeProxyResponse {
-	uint32 token_id = 1;
+	string token_id = 1;
 }
 
 message NewPtyRequest {

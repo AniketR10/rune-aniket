@@ -13,13 +13,18 @@ import (
 
 const (
 	envLogLevel = "go_tui_log_level"
+	envDataDir  = "go_tui_data_dir"
 )
 
 func makeLogLevelEnv(l log.Level) string {
 	return fmt.Sprintf("%s=%s", envLogLevel, l)
 }
 
-func goPluginGranteeBuilder(m *Manager) pluginBuilder {
+func makeDataDirEnv(dataDir string) string {
+	return fmt.Sprintf("%s=%s", envDataDir, dataDir)
+}
+
+func goPluginGranteeBuilder(m *Manager, dataDir string) pluginBuilder {
 	return func(pluginID, path string, grantor Grantor) (*granteeClient, error) {
 		pluginMap := map[string]plugin.Plugin{
 			typeGranteePlugin: &granteePlugin{broker: m.broker, grantor: grantor},
@@ -42,7 +47,7 @@ func goPluginGranteeBuilder(m *Manager) pluginBuilder {
 		log.WithField(logging.KeyClass, "plugin.Manager").
 			Debugf("plugin command Cmd=%#v for workspace=%q", cmd, m.config.workspace)
 
-		cmd.Env = append(cmd.Env, makeBrokerRemoteAddrEnv(m.brokerAddr.String()))
+		cmd.Env = append(cmd.Env, makeDataDirEnv(dataDir))
 		cmd.Env = append(cmd.Env, makeLogLevelEnv(log.GetLevel()))
 
 		config := &plugin.ClientConfig{

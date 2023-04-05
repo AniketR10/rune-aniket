@@ -7,16 +7,10 @@ import (
 	"strings"
 )
 
-// TempUnixListener creates a temp file and exposes it
-// as a unix domain sockets net.Listener.
-func TempUnixListener() (net.Listener, error) {
-	return TempUnixListenerTags("plugin")
-}
-
 // TempUnixListenerTags creates a temp file with the given tags
 // and exposes it as a unix dmain socket net.Listener.
-func TempUnixListenerTags(tags ...string) (net.Listener, error) {
-	tf, err := ioutil.TempFile("", strings.Join(tags, "_"))
+func TempUnixListenerTags(dir string, tags ...string) (net.Listener, error) {
+	tf, err := ioutil.TempFile(dir, strings.Join(tags, "_"))
 	if err != nil {
 		return nil, err
 	}

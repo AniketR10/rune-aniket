@@ -26,15 +26,6 @@ type MuxServer interface {
 
 // MuxBroker allows a client or server to multiplex over connections.
 type MuxBroker interface {
-	// NextId returns the next id to be used to Serve/Dial.
-	// The returned value must always be > 0.
-	/* deprecated */
-	NextId() uint32
-	Accept(id uint32) (net.Listener, error)
-	Dial(ID uint32) (conn MuxConn, err error)
-	Cleanup(ID uint32) error
-	/* end of deprecated */
-
 	NewChannel(tags ...string) (net.Listener, error)
 	DialChannel(string) (MuxConn, error)
 
@@ -47,6 +38,8 @@ type ServiceRegistrar interface {
 	grpc.ServiceRegistrar
 }
 
+// IsRegistered returns whether the given service is registered already
+// with the given ServiceRegistrar. This is to avoid RegisterService panicking.
 func IsRegistered(srv ServiceRegistrar, desc grpc.ServiceDesc) bool {
 	_, ok := srv.GetServiceInfo()[desc.ServiceName]
 	return ok

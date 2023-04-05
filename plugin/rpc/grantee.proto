@@ -9,7 +9,7 @@ message Permission {
 }
 message PermissionGrant {
 	string id = 1;
-	uint32 grant_id = 2;
+	string address = 2;
 }
 
 message PermRequest {

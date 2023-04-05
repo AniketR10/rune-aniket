@@ -50,3 +50,11 @@ func WithWorkspace(uri workspaceapi.URI) Option {
 		cfg.workspace = uri
 	}
 }
+
+// WithDataDir returns an option that configures the
+// storage directory.
+func WithDataDir(dataDir string) Option {
+	return func(cfg *managerConfig) {
+		cfg.dataDir = dataDir
+	}
+}

@@ -7,46 +7,12 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
-	"sync"
 	"time"
 
-	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc/connectivity"
 	"google.golang.org/grpc/grpclog"
 )
-
-// ForceCloseResource is a helper function to remove a resource
-// from a resource server or client and close it, safely.
-func ForceCloseResource(
-	broker MuxBroker, brokerID uint64, getResourcesFn func() map[uint64]io.Closer,
-	locker sync.Locker,
-) (io.Closer, error) {
-	locker.Lock()
-	defer locker.Unlock()
-	resources := getResourcesFn()
-	res, ok := resources[brokerID]
-	if !ok {
-		log.Debugf("resource %d already closed", brokerID)
-		return nil, nil
-	}
-	delete(resources, brokerID)
-
-	ret := res.Close()
-	if ret != nil {
-		log.Errorf("resource.Close %d error: %v", brokerID, ret)
-	}
-
-	if err := broker.Cleanup(uint32(brokerID)); err != nil {
-		// add to Close error or ignore, if io.Closer
-		// already cleans up underlying resources
-		if ret != nil {
-			ret = multierr.Append(ret, err)
-		}
-	}
-
-	return res, ret
-}
 
 // MonitorConnection blocks the calling goroutine and calls doClosed callback
 // and returns only when connection state is shutdown, or it has been in a transient
@@ -76,32 +42,6 @@ func MonitorConnection(
 			panic(fmt.Sprintf("unknown connection state: %v", state))
 		}
 	}
-}
-
-// DEPRECATED this leaks resources since the addition of Context to Serve.
-// AcceptAndServe calls the underlying broker's AcceptAndServe
-// with a new brokerID, and potentially an instrumented grpc.Server,
-// if and only if the level enabled at logger is Trace.
-func AcceptAndServe(
-	broker MuxBroker,
-	register func(uint32, MuxServer),
-) (uint32, MuxServer, error) {
-	brokerID := broker.NextId()
-	lis, err := broker.Accept(brokerID)
-	if err != nil {
-		return 0, nil, fmt.Errorf("Accept: %w", err)
-	}
-
-	srv := GRPCServer()
-	if log.IsLevelEnabled(log.TraceLevel) {
-		srv = LoggingGRPCServer(srv)
-	}
-
-	register(brokerID, srv)
-
-	go srv.Serve(context.Background(), lis)
-
-	return brokerID, srv, nil
 }
 
 // AcceptAndServeChannel calls the underlying broker's NewChannel

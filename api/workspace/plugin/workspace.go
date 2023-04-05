@@ -6,10 +6,10 @@ import (
 	workspacepb "unstable.build/go-tui/workspace/rpc"
 )
 
-func dial(token uint32, broker proto.MuxBroker) (
+func dial(token string, broker proto.MuxBroker) (
 	*workspacepb.Client, error,
 ) {
-	conn, err := broker.Dial(token)
+	conn, err := broker.DialChannel(token)
 	if err != nil {
 		return nil, err
 	}
@@ -18,21 +18,21 @@ func dial(token uint32, broker proto.MuxBroker) (
 }
 
 // FileSystem acquires the workspace's file-system with the given token.
-func FileSystem(token uint32, broker proto.MuxBroker) (
+func FileSystem(token string, broker proto.MuxBroker) (
 	workspaceapi.FileSystem, error,
 ) {
 	return dial(token, broker)
 }
 
 // Executor acquires the workspace's processes executor with the given token.
-func Executor(token uint32, broker proto.MuxBroker) (
+func Executor(token string, broker proto.MuxBroker) (
 	workspaceapi.Executor, error,
 ) {
 	return dial(token, broker)
 }
 
 // Terminal acquires the workspace's pseudo-terminal with the given token.
-func Terminal(token uint32, broker proto.MuxBroker) (
+func Terminal(token string, broker proto.MuxBroker) (
 	workspaceapi.Terminal, error,
 ) {
 	return dial(token, broker)

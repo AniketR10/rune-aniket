@@ -59,7 +59,7 @@ func (c *SchemeManagerServer) log(level log.Level, msg string, args ...interface
 		WithField(logging.KeyClass, "SchemeManagerServer").Logf(level, msg, args...)
 }
 
-func (s *SchemeManagerServer) dialScheme(proxyID uint32, cfg config.Config, uri workspaceapi.URI) (
+func (s *SchemeManagerServer) dialScheme(proxyID string, cfg config.Config, uri workspaceapi.URI) (
 	workspace.Scheme, error,
 ) {
 	client, err := initializeSchemeThroughProxy(cfg, uri, s.broker, proxyID)
@@ -74,8 +74,8 @@ func (s *SchemeManagerServer) dialScheme(proxyID uint32, cfg config.Config, uri 
 func (s *SchemeManagerServer) RegisterScheme(ctx context.Context, req *RegisterSchemeRequest) (
 	res *RegisterSchemeResponse, err error,
 ) {
-	s.log(log.TraceLevel, "RegisterScheme: %d %s", req.GetProxyId(), req.GetScheme())
-	defer s.log(log.TraceLevel, "RegisterScheme: %d %s: err=%s", req.GetProxyId(), req.GetScheme(), err)
+	s.log(log.TraceLevel, "RegisterScheme: %s %s", req.GetProxyId(), req.GetScheme())
+	defer s.log(log.TraceLevel, "RegisterScheme: %s %s: err=%s", req.GetProxyId(), req.GetScheme(), err)
 
 	s.locker.Lock()
 	defer s.locker.Unlock()

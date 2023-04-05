@@ -23,7 +23,7 @@ type Permissions map[Permission]struct{}
 // Grant binds a granted Permission with a Token that
 // can be used with the plugin API.
 type Grant struct {
-	Token uint32
+	Token string
 	Permission
 }
 
@@ -92,6 +92,14 @@ func getLogLevelEnv() log.Level {
 	return l
 }
 
+func getDataDirEnv() string {
+	dataDir := os.Getenv(envDataDir)
+	if dataDir == "" {
+		return os.TempDir()
+	}
+	return dataDir
+}
+
 // Serve attempts to request the given permissions for Grantee
 // and serves it as a plugin. This function never returns.
 // It also configures logrus.StandardLogger to send logs to host.
@@ -115,7 +123,7 @@ func Serve(grantee Grantee, request ...Permission) {
 			requested: request,
 			grantee:   grantee,
 			keepAlive: defaultHealthCheckTicker,
-			broker:    initClientBroker(&pluginLogger),
+			broker:    initClientBroker(&pluginLogger, getDataDirEnv()),
 		},
 	}
 

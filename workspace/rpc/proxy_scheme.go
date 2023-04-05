@@ -3,7 +3,6 @@ package rpc
 import (
 	"context"
 	"fmt"
-	"io"
 	"sync"
 
 	multierr "github.com/ernestrc/go-multierror"
@@ -24,19 +23,17 @@ type proxySchemeServerImpl struct {
 	fn     workspace.SchemeFunc
 	srv    proto.MuxServer
 	broker proto.MuxBroker
-	mu     sync.Mutex
 
-	servers map[uint32]io.Closer
+	ctx       context.Context
+	cancelCtx func()
 }
 
 type proxySchemeResource struct {
-	srv    proto.MuxServer
-	scheme workspace.Scheme
 	server *Server
+	scheme workspace.Scheme
 }
 
 func (c proxySchemeResource) Close() (ret error) {
-	c.srv.Stop()
 	if err := c.server.Stop(); err != nil {
 		ret = multierr.Append(ret, err)
 	}
@@ -55,25 +52,19 @@ func newProxySchemeServerImpl(
 	ret.srv = srv
 	ret.scheme = scheme
 	ret.fn = fn
-	ret.servers = make(map[uint32]io.Closer)
+	ret.ctx, ret.cancelCtx = context.WithCancel(context.Background())
 	return ret
 }
 
-func (s *proxySchemeServerImpl) serveScheme(scheme workspace.Scheme) (uint32, error) {
-	var server *Server
-	ret, srv, err := proto.AcceptAndServe(s.broker,
-		func(_ uint32, srv proto.MuxServer) {
+func (s *proxySchemeServerImpl) serveScheme(scheme workspace.Scheme) (string, error) {
+	ret, err := proto.AcceptAndServeChannel(s.ctx, s.broker,
+		func(_ string, srv proto.MuxServer) {
 			// this is client-side, so no need to pass a locker
 			// since it will only be accesed through this server
-			server = NewServer(scheme, new(sync.Mutex))
+			server := NewServer(scheme, new(sync.Mutex))
 			RegisterSchemeServer(srv.Registrar(), server)
 			RegisterFilesServer(srv.Registrar(), server)
 		})
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	s.servers[ret] = proxySchemeResource{srv: srv, scheme: scheme, server: server}
 	return ret, err
 }
 
@@ -109,15 +100,13 @@ func (s *proxySchemeServerImpl) InitializeProxy(
 }
 
 func (s *proxySchemeServerImpl) Close() (ret error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	s.srv.Stop()
-	for _, s := range s.servers {
-		if err := s.Close(); err != nil {
-			ret = multierr.Append(ret, err)
-		}
+	if s.cancelCtx == nil {
+		return
 	}
+
+	s.cancelCtx()
+	s.cancelCtx = nil
+	s.srv.Stop()
 	return nil
 }
 
@@ -125,10 +114,10 @@ func (s *proxySchemeServerImpl) Close() (ret error) {
 
 func initializeSchemeThroughProxy(
 	cfg config.Config, uri workspaceapi.URI,
-	broker proto.MuxBroker, proxyID uint32,
+	broker proto.MuxBroker, proxyID string,
 ) (workspace.Scheme, error) {
 	// once uri, and config is sent disconnect proxy client
-	proxyConn, err := broker.Dial(proxyID)
+	proxyConn, err := broker.DialChannel(proxyID)
 	if err != nil {
 		return nil, err
 	}
@@ -148,7 +137,7 @@ func initializeSchemeThroughProxy(
 		return nil, fmt.Errorf("could not initialize proxy: %s", err)
 	}
 
-	conn, err := broker.Dial(resp.GetTokenId())
+	conn, err := broker.DialChannel(resp.GetTokenId())
 	if err != nil {
 		return nil, err
 	}

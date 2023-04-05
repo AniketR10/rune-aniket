@@ -6,10 +6,10 @@ import (
 	textpb "unstable.build/go-tui/text/rpc"
 )
 
-func dialEditor(token uint32, broker proto.MuxBroker) (
+func dialEditor(token string, broker proto.MuxBroker) (
 	textapi.Editor, error,
 ) {
-	conn, err := broker.Dial(token)
+	conn, err := broker.DialChannel(token)
 	if err != nil {
 		return nil, err
 	}
@@ -18,7 +18,7 @@ func dialEditor(token uint32, broker proto.MuxBroker) (
 }
 
 // Editor acquires the remote Editor with the given token.
-func Editor(token uint32, broker proto.MuxBroker) (
+func Editor(token string, broker proto.MuxBroker) (
 	textapi.Editor, error,
 ) {
 	return dialEditor(token, broker)

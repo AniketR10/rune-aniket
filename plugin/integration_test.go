@@ -47,8 +47,7 @@ func TestIntegrationRace(t *testing.T) {
 
 	mockWin := browserapitest.NopWindow()
 	h := browsertest.NewTestHandler()
-	cache := document.NewInMemoryService()
-	broker := proto.NewDatastoreBroker(cache)
+	broker := proto.NewUnixGRPCBroker("")
 	defer broker.Close()
 	mock := browserapitest.NewMockBrowser(ctrl)
 	edMock := texttest.NewMockEditor(ctrl)
@@ -80,8 +79,9 @@ func TestIntegrationRace(t *testing.T) {
 	th := textpb.Token{URI: uri}
 
 	grantor := cachingGrantor(GrantAll(resources))
-	grantID := broker.NextId()
-	perms := map[Permission]uint32{
+	lis, err := broker.NewChannel()
+	grantID := lis.Addr().String()
+	perms := map[Permission]string{
 		Permission(browserplugin.PermissionBrowserWindowManager):  grantID,
 		Permission(browserplugin.PermissionBrowserResourceOpener): grantID,
 		Permission(browserplugin.PermissionBrowserMessenger):      grantID,
@@ -92,7 +92,6 @@ func TestIntegrationRace(t *testing.T) {
 		Permission(workspaceplugin.PermissionTerminal):            grantID,
 		Permission(workspaceplugin.PermissionExecute):             grantID,
 	}
-	lis, err := broker.Accept(grantID)
 	require.NoError(t, err)
 	srv := proto.GRPCServer()
 
@@ -104,7 +103,7 @@ func TestIntegrationRace(t *testing.T) {
 
 	tsuite := []struct {
 		perm           Permission
-		createResource func(uint32, proto.MuxBroker) (interface{}, error)
+		createResource func(string, proto.MuxBroker) (interface{}, error)
 		expect         func(
 			*workspaceapitest.MockFileSystemMockRecorder,
 			*workspaceapitest.MockTerminalMockRecorder,
@@ -113,7 +112,7 @@ func TestIntegrationRace(t *testing.T) {
 			*browserapitest.MockBrowserMockRecorder) *gomock.Call
 		method func(ifc interface{}) error
 	}{
-		{Permission(browserplugin.PermissionBrowserWindowManager), func(token uint32, broker proto.MuxBroker) (interface{}, error) {
+		{Permission(browserplugin.PermissionBrowserWindowManager), func(token string, broker proto.MuxBroker) (interface{}, error) {
 			return browserplugin.WindowManager(token, broker)
 		}, func(
 			fs *workspaceapitest.MockFileSystemMockRecorder,
@@ -126,7 +125,7 @@ func TestIntegrationRace(t *testing.T) {
 			_, err := ifc.(browserapi.WindowManager).Focus()
 			return err
 		}},
-		{Permission(browserplugin.PermissionBrowserWindowManager), func(token uint32, broker proto.MuxBroker) (interface{}, error) {
+		{Permission(browserplugin.PermissionBrowserWindowManager), func(token string, broker proto.MuxBroker) (interface{}, error) {
 			return browserplugin.WindowManager(token, broker)
 		}, func(
 			fs *workspaceapitest.MockFileSystemMockRecorder,
@@ -144,7 +143,7 @@ func TestIntegrationRace(t *testing.T) {
 			_, err = ifc.(browserapi.WindowManager).Split(browserapi.OrientationBottom, win, h)
 			return err
 		}},
-		{Permission(browserplugin.PermissionBrowserWindowManager), func(token uint32, broker proto.MuxBroker) (interface{}, error) {
+		{Permission(browserplugin.PermissionBrowserWindowManager), func(token string, broker proto.MuxBroker) (interface{}, error) {
 			return browserplugin.WindowManager(token, broker)
 		}, func(
 			fs *workspaceapitest.MockFileSystemMockRecorder,
@@ -156,7 +155,7 @@ func TestIntegrationRace(t *testing.T) {
 		}, func(ifc interface{}) error {
 			return ifc.(browserapi.WindowManager).Bar(browserapi.OrientationBottom, h)
 		}},
-		{Permission(browserplugin.PermissionBrowserWindowManager), func(token uint32, broker proto.MuxBroker) (interface{}, error) {
+		{Permission(browserplugin.PermissionBrowserWindowManager), func(token string, broker proto.MuxBroker) (interface{}, error) {
 			return browserplugin.WindowManager(token, broker)
 		}, func(
 			fs *workspaceapitest.MockFileSystemMockRecorder,
@@ -169,7 +168,7 @@ func TestIntegrationRace(t *testing.T) {
 			_, err := ifc.(browserapi.WindowManager).Tab(uri, "", h)
 			return err
 		}},
-		{Permission(browserplugin.PermissionBrowserWindowManager), func(token uint32, broker proto.MuxBroker) (interface{}, error) {
+		{Permission(browserplugin.PermissionBrowserWindowManager), func(token string, broker proto.MuxBroker) (interface{}, error) {
 			return browserplugin.WindowManager(token, broker)
 		}, func(
 			fs *workspaceapitest.MockFileSystemMockRecorder,
@@ -182,7 +181,7 @@ func TestIntegrationRace(t *testing.T) {
 			_, err := ifc.(browserapi.WindowManager).Floating(browserapi.StaticFloating(h, 4, 4), component.FloatingConfig{})
 			return err
 		}},
-		{Permission(browserplugin.PermissionBrowserResourceOpener), func(token uint32, broker proto.MuxBroker) (interface{}, error) {
+		{Permission(browserplugin.PermissionBrowserResourceOpener), func(token string, broker proto.MuxBroker) (interface{}, error) {
 			return browserplugin.ResourceOpener(token, broker)
 		}, func(
 			fs *workspaceapitest.MockFileSystemMockRecorder,
@@ -195,7 +194,7 @@ func TestIntegrationRace(t *testing.T) {
 			_, err := ifc.(browserapi.ResourceOpener).Open(uri)
 			return err
 		}},
-		{Permission(browserplugin.PermissionBrowserMessenger), func(token uint32, broker proto.MuxBroker) (interface{}, error) {
+		{Permission(browserplugin.PermissionBrowserMessenger), func(token string, broker proto.MuxBroker) (interface{}, error) {
 			return browserplugin.Messenger(token, broker)
 		}, func(
 			fs *workspaceapitest.MockFileSystemMockRecorder,
@@ -207,7 +206,7 @@ func TestIntegrationRace(t *testing.T) {
 		}, func(ifc interface{}) error {
 			return ifc.(browserapi.Messenger).SetMessage("")
 		}},
-		{Permission(browserplugin.PermissionBrowserEventPublisher), func(token uint32, broker proto.MuxBroker) (interface{}, error) {
+		{Permission(browserplugin.PermissionBrowserEventPublisher), func(token string, broker proto.MuxBroker) (interface{}, error) {
 			return browserplugin.EventPublisher(token, broker)
 		}, func(
 			fs *workspaceapitest.MockFileSystemMockRecorder,
@@ -219,7 +218,7 @@ func TestIntegrationRace(t *testing.T) {
 		}, func(ifc interface{}) error {
 			return ifc.(browserapi.EventPublisher).Interrupt()
 		}},
-		{Permission(browserplugin.PermissionBrowserEventPublisher), func(token uint32, broker proto.MuxBroker) (interface{}, error) {
+		{Permission(browserplugin.PermissionBrowserEventPublisher), func(token string, broker proto.MuxBroker) (interface{}, error) {
 			return browserplugin.EventPublisher(token, broker)
 		}, func(
 			fs *workspaceapitest.MockFileSystemMockRecorder,
@@ -231,7 +230,7 @@ func TestIntegrationRace(t *testing.T) {
 		}, func(ifc interface{}) error {
 			return ifc.(browserapi.EventPublisher).PublishEventNone()
 		}},
-		{Permission(textplugin.PermissionEditor), func(token uint32, broker proto.MuxBroker) (interface{}, error) {
+		{Permission(textplugin.PermissionEditor), func(token string, broker proto.MuxBroker) (interface{}, error) {
 			return textplugin.Editor(token, broker)
 		}, func(
 			fs *workspaceapitest.MockFileSystemMockRecorder,
@@ -244,7 +243,7 @@ func TestIntegrationRace(t *testing.T) {
 			_, err := ifc.(textapi.Editor).Edit(uri, cell.NewBuffer())
 			return err
 		}},
-		{Permission(textplugin.PermissionEditor), func(token uint32, broker proto.MuxBroker) (interface{}, error) {
+		{Permission(textplugin.PermissionEditor), func(token string, broker proto.MuxBroker) (interface{}, error) {
 			return textplugin.Editor(token, broker)
 		}, func(
 			fs *workspaceapitest.MockFileSystemMockRecorder,
@@ -258,7 +257,7 @@ func TestIntegrationRace(t *testing.T) {
 			ev := []textapi.EventType{textapi.EventTypeFlush}
 			return ifc.(textapi.Editor).SubscribeEditorEvents(ev, h)
 		}},
-		{Permission(textplugin.PermissionEditor), func(token uint32, broker proto.MuxBroker) (interface{}, error) {
+		{Permission(textplugin.PermissionEditor), func(token string, broker proto.MuxBroker) (interface{}, error) {
 			return textplugin.Editor(token, broker)
 		}, func(
 			fs *workspaceapitest.MockFileSystemMockRecorder,
@@ -271,7 +270,7 @@ func TestIntegrationRace(t *testing.T) {
 		}, func(ifc interface{}) error {
 			return ifc.(textapi.Editor).SetCursor(th, term.Coordinates{})
 		}},
-		{Permission(textplugin.PermissionEditor), func(token uint32, broker proto.MuxBroker) (interface{}, error) {
+		{Permission(textplugin.PermissionEditor), func(token string, broker proto.MuxBroker) (interface{}, error) {
 			return textplugin.Editor(token, broker)
 		}, func(
 			fs *workspaceapitest.MockFileSystemMockRecorder,
@@ -286,38 +285,38 @@ func TestIntegrationRace(t *testing.T) {
 			return err
 		}},
 		// for document.Service, just do a race test
-		{PermissionStorage, func(token uint32, broker proto.MuxBroker) (interface{}, error) {
+		{PermissionStorage, func(token string, broker proto.MuxBroker) (interface{}, error) {
 			return Storage(token, broker)
 		}, nil, func(ifc interface{}) error {
 			_ = ifc.(document.Service).Create(context.Background(), "", map[string]interface{}{"a": "b"})
 			return nil
 		}},
-		{PermissionStorage, func(token uint32, broker proto.MuxBroker) (interface{}, error) {
+		{PermissionStorage, func(token string, broker proto.MuxBroker) (interface{}, error) {
 			return Storage(token, broker)
 		}, nil, func(ifc interface{}) error {
 			var recv map[string]interface{}
 			_ = ifc.(document.Service).Get(context.Background(), "", &recv)
 			return nil
 		}},
-		{PermissionStorage, func(token uint32, broker proto.MuxBroker) (interface{}, error) {
+		{PermissionStorage, func(token string, broker proto.MuxBroker) (interface{}, error) {
 			return Storage(token, broker)
 		}, nil, func(ifc interface{}) error {
 			_ = ifc.(document.Service).Update(context.Background(), "", []document.Update{{FieldPath: []string{"a"}, Value: "b"}})
 			return nil
 		}},
-		{PermissionStorage, func(token uint32, broker proto.MuxBroker) (interface{}, error) {
+		{PermissionStorage, func(token string, broker proto.MuxBroker) (interface{}, error) {
 			return Storage(token, broker)
 		}, nil, func(ifc interface{}) error {
 			_ = ifc.(document.Service).Delete(context.Background(), "")
 			return nil
 		}},
-		{PermissionStorage, func(token uint32, broker proto.MuxBroker) (interface{}, error) {
+		{PermissionStorage, func(token string, broker proto.MuxBroker) (interface{}, error) {
 			return Storage(token, broker)
 		}, nil, func(ifc interface{}) error {
 			_, _ = ifc.(document.Service).List(context.Background(), nil)
 			return nil
 		}},
-		{Permission(workspaceplugin.PermissionExecute), func(token uint32, broker proto.MuxBroker) (interface{}, error) {
+		{Permission(workspaceplugin.PermissionExecute), func(token string, broker proto.MuxBroker) (interface{}, error) {
 			return workspaceplugin.Executor(token, broker)
 		}, func(
 			fs *workspaceapitest.MockFileSystemMockRecorder,
@@ -332,7 +331,7 @@ func TestIntegrationRace(t *testing.T) {
 			})
 			return err
 		}},
-		{Permission(workspaceplugin.PermissionFileSystem), func(token uint32, broker proto.MuxBroker) (interface{}, error) {
+		{Permission(workspaceplugin.PermissionFileSystem), func(token string, broker proto.MuxBroker) (interface{}, error) {
 			return workspaceplugin.FileSystem(token, broker)
 		}, func(
 			fs *workspaceapitest.MockFileSystemMockRecorder,
@@ -348,7 +347,7 @@ func TestIntegrationRace(t *testing.T) {
 			}
 			return err.ToError()
 		}},
-		{Permission(workspaceplugin.PermissionTerminal), func(token uint32, broker proto.MuxBroker) (interface{}, error) {
+		{Permission(workspaceplugin.PermissionTerminal), func(token string, broker proto.MuxBroker) (interface{}, error) {
 			return workspaceplugin.Terminal(token, broker)
 		}, func(
 			fs *workspaceapitest.MockFileSystemMockRecorder,

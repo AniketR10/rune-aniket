@@ -80,7 +80,7 @@ func newTestManager(grantor Grantor, opts ...Option) (*Manager, *testGranteePbCl
 		return newGranteeClient(m.broker, mockpb), nil
 	}
 	m.Init(grantor, opts...)
-	m.broker = proto.NewDialBroker()
+	m.broker = proto.NewUnixGRPCBroker("")
 
 	return m, mockpb, m.broker
 }
@@ -119,10 +119,9 @@ func TestManagerRun(t *testing.T) {
 		assert.Len(t, grant.Denied, 0)
 		require.Len(t, grant.Granted, 1)
 
-		expected := []*pluginpb.PermissionGrant{
-			{Id: "read", GrantId: 2},
-		}
-		assert.Equal(t, expected, grant.Granted)
+		require.Len(t, grant.Granted, 1)
+		require.Equal(t, "read", grant.Granted[0].Id)
+		require.NotZero(t, grant.Granted[0].Address)
 
 		srvs := grantor.servers()
 		require.Len(t, srvs, 1)

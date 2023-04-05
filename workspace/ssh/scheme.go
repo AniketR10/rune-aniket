@@ -12,12 +12,12 @@ import (
 	"os/user"
 	"path/filepath"
 	"strings"
-	"time"
 
 	bluectx "github.com/ernestrc/blue/context"
 	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/config"
 	"unstable.build/go-tui/workspace"
@@ -275,8 +275,8 @@ func (s *scheme) connectScheme(
 
 	conn, err := grpc.Dial("",
 		grpc.WithStatsHandler(nil),
-		grpc.WithInsecure(),
-		grpc.WithDialer(func(addr string, timeout time.Duration) (net.Conn, error) {
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithContextDialer(func(_ context.Context, addr string) (net.Conn, error) {
 			return newStdConn(
 				log.StandardLogger(), stdoutRead, stdinWrite, false, /* stdio */
 				func() {

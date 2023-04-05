@@ -135,7 +135,7 @@ func (s *granteeServer) OnGrant(ctx context.Context, req *pluginpb.OnPermGrantRe
 		for _, requested := range s.req {
 			if string(requested) == gr.Id {
 				granted = append(granted, Grant{
-					Token: gr.GrantId, Permission: Permission(gr.Id),
+					Token: gr.Address, Permission: Permission(gr.Id),
 				})
 				break
 			}

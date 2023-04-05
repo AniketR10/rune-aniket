@@ -153,7 +153,7 @@ func TestUnitClient(t *testing.T) {
 		mockpbClient := &testGranteePbClient{locker: new(sync.Mutex)}
 		client := newGranteeClient(nil, mockpbClient)
 
-		grant := &pluginpb.PermissionGrant{Id: "shits", GrantId: uint32(1234)}
+		grant := &pluginpb.PermissionGrant{Id: "shits", Address: "1234"}
 		granted := map[string]*pluginpb.PermissionGrant{"poopers": grant}
 		denied := []*pluginpb.Permission{{Id: "poops"}}
 
@@ -350,7 +350,7 @@ func TestIntegrationPluginClientServer(t *testing.T) {
 		defer closeFn()
 
 		denied := []*pluginpb.Permission{&pluginpb.Permission{Id: "append"}}
-		granted := map[string]*pluginpb.PermissionGrant{"read": &pluginpb.PermissionGrant{Id: "read", GrantId: 1}}
+		granted := map[string]*pluginpb.PermissionGrant{"read": &pluginpb.PermissionGrant{Id: "read", Address: "1"}}
 		err := client.sendGrants(context.Background(), denied, granted)
 		require.NoError(t, err)
 
@@ -366,8 +366,8 @@ func TestIntegrationPluginClientServer(t *testing.T) {
 
 		denied := []*pluginpb.Permission{&pluginpb.Permission{Id: "garbage"}}
 		granted := map[string]*pluginpb.PermissionGrant{
-			"write": &pluginpb.PermissionGrant{Id: "write", GrantId: 1},
-			"trash": &pluginpb.PermissionGrant{Id: "trash", GrantId: 2},
+			"write": &pluginpb.PermissionGrant{Id: "write", Address: "1"},
+			"trash": &pluginpb.PermissionGrant{Id: "trash", Address: "2"},
 		}
 		err := client.sendGrants(context.Background(), denied, granted)
 		require.NoError(t, err)
@@ -384,7 +384,7 @@ func TestIntegrationPluginClientServer(t *testing.T) {
 
 		denied := []*pluginpb.Permission{&pluginpb.Permission{Id: "garbage"}}
 		granted := map[string]*pluginpb.PermissionGrant{
-			"write": &pluginpb.PermissionGrant{Id: "write", GrantId: 1},
+			"write": &pluginpb.PermissionGrant{Id: "write", Address: "1"},
 		}
 		err := client.sendGrants(context.Background(), denied, granted)
 		require.NoError(t, err)

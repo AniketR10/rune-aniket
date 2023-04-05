@@ -1,10 +1,8 @@
 package main
 
 import (
-	"fmt"
 	"net"
 	_ "net/http/pprof"
-	"os"
 	"sync"
 	"testing"
 	"time"
@@ -97,7 +95,7 @@ func newTestRPCBrowser(t *testing.T,
 		lis, err := net.Listen("tcp", ":0")
 		require.NoError(t, err)
 
-		broker := proto.NewDialBroker()
+		broker := proto.NewUnixGRPCBroker("")
 
 		var serverMutex sync.Mutex
 		grpcServer := grpc.NewServer()
@@ -148,24 +146,8 @@ func TestRPCBrowserCloseLeak(t *testing.T) {
 	require.NoError(t, err)
 
 	require.NoError(t, win.Close())
-
-	// NOTE: to reason about window/handler resource leaks
-	// uncomment next line and analyze running goroutines
-	// goleak.VerifyNone(t)
 }
 
 func TestMain(m *testing.M) {
-	exitCode := m.Run()
-	if exitCode == 0 {
-		ignoreOpenCensus := goleak.IgnoreTopFunction("go.opencensus.io/stats/view.(*worker).start")
-		// this is to give time to server to close resources
-		time.Sleep(testingShutdownWait)
-		err := goleak.Find(ignoreOpenCensus)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "goleak: Leaks on successful test run: %v\n", err)
-			exitCode = 1
-		}
-	}
-
-	os.Exit(exitCode)
+	goleak.VerifyTestMain(m)
 }

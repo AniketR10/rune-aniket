@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
 	"sync"
 
@@ -443,9 +444,14 @@ func (h *workspaceManagerHandler) addWorkspace(
 	res = plugin.MergeResourceMap(res, plugin.ConfigResources(
 		config.MapConfig(cleanedPluginConfig(cfg.cfg))))
 
+	dataDir := filepath.Join(h.sixDir, ".plugin")
+	if err := os.MkdirAll(dataDir, 0777); err != nil {
+		return fmt.Errorf("mkdir .plugin: %v", err)
+	}
 	pluginOpts := []plugin.Option{
 		plugin.WithLocker(&h.mu),
 		plugin.WithWorkspace(uri),
+		plugin.WithDataDir(dataDir),
 	}
 	pluginManager, err := plugin.NewManager(plugin.GrantAll(res), pluginOpts...)
 	if err != nil {

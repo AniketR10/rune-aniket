@@ -6,10 +6,10 @@ import (
 	"unstable.build/go-tui/proto"
 )
 
-func dialBrowser(token uint32, broker proto.MuxBroker) (
+func dialBrowser(channelID string, broker proto.MuxBroker) (
 	browserapi.Browser, error,
 ) {
-	conn, err := broker.Dial(token)
+	conn, err := broker.DialChannel(channelID)
 	if err != nil {
 		return nil, err
 	}
@@ -19,32 +19,32 @@ func dialBrowser(token uint32, broker proto.MuxBroker) (
 
 // WindowManager acquires the browser's WindowManager
 // resource with the given token.
-func WindowManager(token uint32, broker proto.MuxBroker) (
+func WindowManager(channelID string, broker proto.MuxBroker) (
 	browserapi.WindowManager, error,
 ) {
-	return dialBrowser(token, broker)
+	return dialBrowser(channelID, broker)
 }
 
 // ResourceOpener acquires the browser's ResourceOpener
 // resource with the given token.
-func ResourceOpener(token uint32, broker proto.MuxBroker) (
+func ResourceOpener(channelID string, broker proto.MuxBroker) (
 	browserapi.ResourceOpener, error,
 ) {
-	return dialBrowser(token, broker)
+	return dialBrowser(channelID, broker)
 }
 
 // Messenger acquires the browser's Messenger
 // resource with the given token.
-func Messenger(token uint32, broker proto.MuxBroker) (
+func Messenger(channelID string, broker proto.MuxBroker) (
 	browserapi.Messenger, error,
 ) {
-	return dialBrowser(token, broker)
+	return dialBrowser(channelID, broker)
 }
 
 // EventPublisher acquires the browser's EventPublisher
 // resource with the given token.
-func EventPublisher(token uint32, broker proto.MuxBroker) (
+func EventPublisher(channelID string, broker proto.MuxBroker) (
 	browserapi.EventPublisher, error,
 ) {
-	return dialBrowser(token, broker)
+	return dialBrowser(channelID, broker)
 }

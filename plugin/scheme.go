@@ -42,10 +42,10 @@ func SchemeManagerResources(b workspace.SchemeManager) map[Permission]ResourceRe
 }
 
 // TODO move to api package
-func dialSchemeManager(token uint32, broker proto.MuxBroker) (
+func dialSchemeManager(token string, broker proto.MuxBroker) (
 	workspace.SchemeManager, error,
 ) {
-	conn, err := broker.Dial(token)
+	conn, err := broker.DialChannel(token)
 	if err != nil {
 		return nil, err
 	}
@@ -54,7 +54,7 @@ func dialSchemeManager(token uint32, broker proto.MuxBroker) (
 }
 
 // SchemeManager acquires the workspace's URI scheme manager with the given token.
-func SchemeManager(token uint32, broker proto.MuxBroker) (
+func SchemeManager(token string, broker proto.MuxBroker) (
 	workspace.SchemeManager, error,
 ) {
 	return dialSchemeManager(token, broker)

@@ -45,7 +45,7 @@ func expectInitialization(
 
 func expectSubscribe(
 	t *testing.T, ctrl *gomock.Controller,
-	broker *proto.MockMuxBroker, cmd string, token uint32,
+	broker *proto.MockMuxBroker, cmd string, token string,
 ) *proto.MockMuxConn {
 	conn := prototest.ExpectBrokerDial(t, ctrl, broker, token)
 	prototest.ExpectBrokerNewChannel(t, "1234", broker)
@@ -109,7 +109,7 @@ func TestCommandSplitHandlerEmpty(t *testing.T) {
 		h := &cmdSplitHandler{config: config}
 		broker := expectInitialization(t, ctrl, h)
 
-		token := uint32(123)
+		token := "123"
 		expectSubscribe(t, ctrl, broker, "blah", token)
 
 		grants := []plugin.Grant{
@@ -139,7 +139,7 @@ func TestCommandSplitHandlerOpenWindow(t *testing.T) {
 			SplitOrientation: browserapi.OrientationLeft,
 		}
 		grants := plugin.Grant{
-			Token:      1555,
+			Token:      "1555",
 			Permission: plugin.Permission(textplugin.PermissionEditor),
 		}
 		testSplitWindow(t, config, grants, func(h *cmdSplitHandler) {

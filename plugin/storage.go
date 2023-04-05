@@ -74,10 +74,10 @@ func StorageResources(storageDir string) map[Permission]ResourceRegistrar {
 }
 
 // TODO move to api package
-func dialStorage(token uint32, broker proto.MuxBroker) (
+func dialStorage(token string, broker proto.MuxBroker) (
 	document.Service, error,
 ) {
-	conn, err := broker.Dial(token)
+	conn, err := broker.DialChannel(token)
 	if err != nil {
 		return nil, err
 	}
@@ -89,7 +89,7 @@ func dialStorage(token uint32, broker proto.MuxBroker) (
 
 // Storage acquires a client to persistent storage with
 // the given token.
-func Storage(token uint32, broker proto.MuxBroker) (
+func Storage(token string, broker proto.MuxBroker) (
 	document.Service, error,
 ) {
 	return dialStorage(token, broker)

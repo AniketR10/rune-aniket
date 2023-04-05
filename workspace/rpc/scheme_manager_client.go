@@ -48,16 +48,16 @@ func (c *SchemeManagerClient) log(level log.Level, msg string, args ...interface
 }
 
 func (c *SchemeManagerClient) serveProxyServer(scheme string, fn workspace.SchemeFunc) (
-	*proxySchemeServerImpl, uint32, error,
+	*proxySchemeServerImpl, string, error,
 ) {
 	var psrv *proxySchemeServerImpl
-	ret, _, err := proto.AcceptAndServe(c.broker,
-		func(proxyID uint32, srv proto.MuxServer) {
+	ret, err := proto.AcceptAndServeChannel(c.ctx, c.broker,
+		func(_ string, srv proto.MuxServer) {
 			psrv = newProxySchemeServerImpl(c.broker, srv, scheme, fn)
 			RegisterProxySchemeServer(srv.Registrar(), psrv)
 		})
 	if err != nil {
-		return nil, 0, err
+		return nil, "", err
 	}
 	return psrv, ret, nil
 }
@@ -66,10 +66,10 @@ func (c *SchemeManagerClient) serveProxyServer(scheme string, fn workspace.Schem
 func (c *SchemeManagerClient) RegisterScheme(
 	scheme string, fn workspace.SchemeFunc,
 ) (err error) {
-	var proxyID uint32
+	var proxyID string
 
 	c.log(log.TraceLevel, "RegisterScheme(%s)", scheme)
-	defer c.log(log.TraceLevel, "RegisterScheme(%d, %s): %s", proxyID, scheme, err)
+	defer c.log(log.TraceLevel, "RegisterScheme(%s, %s): %s", proxyID, scheme, err)
 
 	ctx, cleanup := ctxWithTimeout(c.ctx)
 	defer cleanup()
