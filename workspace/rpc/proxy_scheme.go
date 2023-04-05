@@ -64,7 +64,7 @@ func (s *proxySchemeServerImpl) serveScheme(scheme workspace.Scheme) (string, er
 			server := NewServer(scheme, new(sync.Mutex))
 			RegisterSchemeServer(srv.Registrar(), server)
 			RegisterFilesServer(srv.Registrar(), server)
-		})
+		}, "scheme")
 	return ret, err
 }
 

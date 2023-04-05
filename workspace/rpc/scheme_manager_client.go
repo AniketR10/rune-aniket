@@ -43,8 +43,7 @@ func (c *SchemeManagerClient) init(broker proto.MuxBroker, cc proto.MuxConn) {
 }
 
 func (c *SchemeManagerClient) log(level log.Level, msg string, args ...interface{}) {
-	log.
-		WithField(logging.KeyClass, "SchemeManagerClient").Logf(level, msg, args...)
+	log.WithField(logging.KeyClass, "SchemeManagerClient").Logf(level, msg, args...)
 }
 
 func (c *SchemeManagerClient) serveProxyServer(scheme string, fn workspace.SchemeFunc) (
@@ -55,7 +54,7 @@ func (c *SchemeManagerClient) serveProxyServer(scheme string, fn workspace.Schem
 		func(_ string, srv proto.MuxServer) {
 			psrv = newProxySchemeServerImpl(c.broker, srv, scheme, fn)
 			RegisterProxySchemeServer(srv.Registrar(), psrv)
-		})
+		}, "proxy_scheme")
 	if err != nil {
 		return nil, "", err
 	}
