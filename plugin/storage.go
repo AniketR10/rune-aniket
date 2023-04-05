@@ -60,8 +60,9 @@ func (s *storageResourceServer) Register(
 	server.Init(svc, toml.Marshaler(), registrar.(*grpc.Server))
 	bproto.RegisterDocumentStoreServer(registrar, server)
 	// doc server stops grpc.Server, which is not something storageResourceserver
-	// should be concerned about
-	return nopCloser{}, nil
+	// should be concerned about. Close storage resources created
+	// within this call to register.
+	return svc, nil
 }
 
 // StorageResource returns a map of Permission to a ResourceServer
