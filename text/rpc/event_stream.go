@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"io"
 	"runtime"
+	"sync/atomic"
 
 	"github.com/ernestrc/blue/logging"
 	log "github.com/sirupsen/logrus"
-	"go.uber.org/atomic"
 	textapi "unstable.build/go-tui/api/text"
 )
 
