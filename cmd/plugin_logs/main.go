@@ -34,11 +34,11 @@ const (
 
 var (
 	requiredPermissions = []plugin.Permission{
-		plugin.Permission(browserplugin.PermissionBrowserWindowManager),
-		plugin.Permission(browserplugin.PermissionBrowserEventPublisher),
-		plugin.Permission(browserplugin.PermissionBrowserMessenger),
+		plugin.Permission(plugin.PermissionBrowserWindowManager),
+		plugin.Permission(plugin.PermissionBrowserEventPublisher),
+		plugin.Permission(plugin.PermissionBrowserMessenger),
 		plugin.PermissionConfig,
-		plugin.Permission(textplugin.PermissionEditor),
+		plugin.Permission(plugin.PermissionEditor),
 	}
 	commands = []string{
 		cmdLogs,
@@ -136,17 +136,17 @@ func (e *logsGrantee) PermissionGranted(grants []plugin.Grant) {
 	var err error
 	for _, g := range grants {
 		switch g.Permission {
-		case plugin.Permission(browserplugin.PermissionBrowserMessenger):
-			e.m, err = browserplugin.Messenger(g.Token, e.broker)
-		case plugin.Permission(browserplugin.PermissionBrowserEventPublisher):
-			e.p, err = browserplugin.EventPublisher(g.Token, e.broker)
-		case plugin.Permission(browserplugin.PermissionBrowserWindowManager):
-			e.wm, err = browserplugin.WindowManager(g.Token, e.broker)
+		case plugin.Permission(plugin.PermissionBrowserMessenger):
+			e.m, err = browserplugin.Messenger(g, e.broker)
+		case plugin.Permission(plugin.PermissionBrowserEventPublisher):
+			e.p, err = browserplugin.EventPublisher(g, e.broker)
+		case plugin.Permission(plugin.PermissionBrowserWindowManager):
+			e.wm, err = browserplugin.WindowManager(g, e.broker)
 		case plugin.PermissionConfig:
-			e.c, err = plugin.FetchConfig(g.Token, e.broker)
-		case plugin.Permission(textplugin.PermissionEditor):
+			e.c, err = plugin.FetchConfig(g, e.broker)
+		case plugin.Permission(plugin.PermissionEditor):
 			var ed textapi.Editor
-			ed, err = textplugin.Editor(g.Token, e.broker)
+			ed, err = textplugin.Editor(g, e.broker)
 			if err == nil {
 				for _, cmd := range commands {
 					subsErr := ed.SubscribeCommand(cmd, e)

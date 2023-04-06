@@ -31,14 +31,11 @@ func (s *grpcServer) Registrar() ServiceRegistrar {
 func (s *grpcServer) Serve(ctx context.Context, lis net.Listener) error {
 	s.addr = lis.Addr()
 	s.wg.Done()
-	// TODO remove once AcceptAndServe is removed
-	if ctx != context.Background() {
-		go func() {
-			<-ctx.Done()
-			log.Debugf("serve context is done: stopping grpc server %v", lis.Addr())
-			s.Server.Stop()
-		}()
-	}
+	go func() {
+		<-ctx.Done()
+		log.Debugf("serve context is done: stopping grpc server %v", lis.Addr())
+		s.Server.Stop()
+	}()
 	return s.Server.Serve(lis)
 }
 

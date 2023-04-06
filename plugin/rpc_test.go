@@ -257,8 +257,8 @@ func setupIntTest(
 	require.NoError(t, err)
 
 	grpcServer := grpc.NewServer()
-	server := newGranteeServer(nil, granteeMock, perms, time.Duration(0))
-	server.(*granteeServer).osExit = nil
+	server := newGranteeServer(grpcServer, proto.NewUnixGRPCBroker(""),
+		granteeMock, perms, time.Duration(0))
 	pluginpb.RegisterGranteeServer(grpcServer, server)
 
 	go grpcServer.Serve(lis)

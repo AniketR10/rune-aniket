@@ -38,13 +38,13 @@ const (
 
 func Permissions() []plugin.Permission {
 	return []plugin.Permission{
-		plugin.Permission(browserplugin.PermissionBrowserResourceOpener),
-		plugin.Permission(browserplugin.PermissionBrowserEventPublisher),
-		plugin.Permission(browserplugin.PermissionBrowserMessenger),
+		plugin.Permission(plugin.PermissionBrowserResourceOpener),
+		plugin.Permission(plugin.PermissionBrowserEventPublisher),
+		plugin.Permission(plugin.PermissionBrowserMessenger),
 		plugin.PermissionStorage,
-		plugin.Permission(textplugin.PermissionEditor),
-		plugin.Permission(workspaceplugin.PermissionFileSystem),
-		plugin.Permission(workspaceplugin.PermissionExecute),
+		plugin.Permission(plugin.PermissionEditor),
+		plugin.Permission(plugin.PermissionFileSystem),
+		plugin.Permission(plugin.PermissionExecute),
 	}
 }
 
@@ -193,7 +193,7 @@ func (h *fuzzyFinderHandler) setContent(
 		return err
 	}
 	if h.ed == nil {
-		log.Info("could not set cursor position because host did not grant textplugin.PermissionEditor")
+		log.Info("could not set cursor position because host did not grant plugin.PermissionEditor")
 		return nil
 	}
 
@@ -353,20 +353,20 @@ func (h *fuzzyFinderHandler) initGrants(
 ) (err error) {
 	for _, grant := range grants {
 		switch grant.Permission {
-		case plugin.Permission(workspaceplugin.PermissionFileSystem):
-			h.fs, err = workspaceplugin.FileSystem(grant.Token, broker)
-		case plugin.Permission(workspaceplugin.PermissionExecute):
-			h.executor, err = workspaceplugin.Executor(grant.Token, broker)
-		case plugin.Permission(textplugin.PermissionEditor):
-			h.ed, err = textplugin.Editor(grant.Token, broker)
-		case plugin.Permission(browserplugin.PermissionBrowserMessenger):
-			h.m, err = browserplugin.Messenger(grant.Token, broker)
-		case plugin.Permission(browserplugin.PermissionBrowserEventPublisher):
-			h.p, err = browserplugin.EventPublisher(grant.Token, broker)
-		case plugin.Permission(browserplugin.PermissionBrowserResourceOpener):
-			h.f, err = browserplugin.ResourceOpener(grant.Token, broker)
+		case plugin.Permission(plugin.PermissionFileSystem):
+			h.fs, err = workspaceplugin.FileSystem(grant, broker)
+		case plugin.Permission(plugin.PermissionExecute):
+			h.executor, err = workspaceplugin.Executor(grant, broker)
+		case plugin.Permission(plugin.PermissionEditor):
+			h.ed, err = textplugin.Editor(grant, broker)
+		case plugin.Permission(plugin.PermissionBrowserMessenger):
+			h.m, err = browserplugin.Messenger(grant, broker)
+		case plugin.Permission(plugin.PermissionBrowserEventPublisher):
+			h.p, err = browserplugin.EventPublisher(grant, broker)
+		case plugin.Permission(plugin.PermissionBrowserResourceOpener):
+			h.f, err = browserplugin.ResourceOpener(grant, broker)
 		case plugin.PermissionStorage:
-			h.s, err = plugin.Storage(grant.Token, broker)
+			h.s, err = plugin.Storage(grant, broker)
 			if err == nil {
 				h.history.Init(h.s, historyDocumentID, maxHistory)
 				err = h.history.Load()

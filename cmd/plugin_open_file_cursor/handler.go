@@ -33,9 +33,9 @@ var (
 		textapi.EventTypeCursor,
 	}
 	gfHandlerPermissions = []plugin.Permission{
-		plugin.Permission(workspaceplugin.PermissionFileSystem),
-		plugin.Permission(browserplugin.PermissionBrowserResourceOpener),
-		plugin.Permission(browserplugin.PermissionBrowserWindowManager),
+		plugin.Permission(plugin.PermissionFileSystem),
+		plugin.Permission(plugin.PermissionBrowserResourceOpener),
+		plugin.Permission(plugin.PermissionBrowserWindowManager),
 	}
 )
 
@@ -75,12 +75,12 @@ func newGFHandler(
 	var err error
 	for _, grant := range grants {
 		switch grant.Permission {
-		case plugin.Permission(workspaceplugin.PermissionFileSystem):
-			ret.fs, err = workspaceplugin.FileSystem(grant.Token, broker)
-		case plugin.Permission(browserplugin.PermissionBrowserWindowManager):
-			ret.wm, err = browserplugin.WindowManager(grant.Token, broker)
-		case plugin.Permission(browserplugin.PermissionBrowserResourceOpener):
-			ret.o, err = browserplugin.ResourceOpener(grant.Token, broker)
+		case plugin.Permission(plugin.PermissionFileSystem):
+			ret.fs, err = workspaceplugin.FileSystem(grant, broker)
+		case plugin.Permission(plugin.PermissionBrowserWindowManager):
+			ret.wm, err = browserplugin.WindowManager(grant, broker)
+		case plugin.Permission(plugin.PermissionBrowserResourceOpener):
+			ret.o, err = browserplugin.ResourceOpener(grant, broker)
 		}
 		if err != nil {
 			return nil, err

@@ -13,7 +13,6 @@ import (
 	browserapi "unstable.build/go-tui/api/browser"
 	browserplugin "unstable.build/go-tui/api/browser/plugin"
 	textapi "unstable.build/go-tui/api/text"
-	textplugin "unstable.build/go-tui/api/text/plugin"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	workspaceplugin "unstable.build/go-tui/api/workspace/plugin"
 	"unstable.build/go-tui/cell"
@@ -32,9 +31,9 @@ var (
 	sedHandlerCommands    = []string{commandSed}
 	sedHandlerEvents      = []textapi.EventType{}
 	sedHandlerPermissions = []plugin.Permission{
-		plugin.Permission(textplugin.PermissionEditor),
-		plugin.Permission(browserplugin.PermissionBrowserMessenger),
-		plugin.Permission(workspaceplugin.PermissionExecute),
+		plugin.Permission(plugin.PermissionEditor),
+		plugin.Permission(plugin.PermissionBrowserMessenger),
+		plugin.Permission(plugin.PermissionExecute),
 	}
 )
 
@@ -59,10 +58,10 @@ func newSedHandler(
 	var err error
 	for _, grant := range grants {
 		switch grant.Permission {
-		case plugin.Permission(workspaceplugin.PermissionExecute):
-			ret.exec, err = workspaceplugin.Executor(grant.Token, broker)
-		case plugin.Permission(browserplugin.PermissionBrowserMessenger):
-			ret.m, err = browserplugin.Messenger(grant.Token, broker)
+		case plugin.Permission(plugin.PermissionExecute):
+			ret.exec, err = workspaceplugin.Executor(grant, broker)
+		case plugin.Permission(plugin.PermissionBrowserMessenger):
+			ret.m, err = browserplugin.Messenger(grant, broker)
 		}
 		if err != nil {
 			return nil, err

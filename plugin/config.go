@@ -42,10 +42,10 @@ func ConfigResources(b config.Config) map[Permission]ResourceRegistrar {
 	}
 }
 
-func dialConfig(token string, broker proto.MuxBroker) (
+func dialConfig(grant Grant, broker proto.MuxBroker) (
 	config.Config, error,
 ) {
-	conn, err := broker.DialChannel(token)
+	conn, err := broker.DialChannel(grant.Token)
 	if err != nil {
 		return nil, err
 	}
@@ -57,8 +57,8 @@ func dialConfig(token string, broker proto.MuxBroker) (
 }
 
 // FetchConfig acquires the loaded config with the given permission token.
-func FetchConfig(token string, broker proto.MuxBroker) (
+func FetchConfig(grant Grant, broker proto.MuxBroker) (
 	config.Config, error,
 ) {
-	return dialConfig(token, broker)
+	return dialConfig(grant, broker)
 }

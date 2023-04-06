@@ -4,8 +4,8 @@ import (
 	"io"
 	"sync"
 
-	textplugin "unstable.build/go-tui/api/text/plugin"
 	"unstable.build/go-tui/proto"
+	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
 	textpb "unstable.build/go-tui/text/rpc"
 )
@@ -25,7 +25,8 @@ func (s *editorResourceServer) Register(
 	broker proto.MuxBroker, lock sync.Locker,
 ) (io.Closer, error) {
 	server := textpb.NewServer(broker, s.b, lock)
-	textpb.RegisterEditorServer(registrar, interruptEditorServer(server, interrupt))
+	textpb.RegisterEditorServer(registrar,
+		interruptEditorServer(server, term.Interrupt))
 	return server, nil
 }
 
@@ -34,6 +35,6 @@ func (s *editorResourceServer) Register(
 func EditorResources(b text.Editor) map[Permission]ResourceRegistrar {
 	s := newEditorResourceServer(b)
 	return map[Permission]ResourceRegistrar{
-		Permission(textplugin.PermissionEditor): s,
+		PermissionEditor: s,
 	}
 }

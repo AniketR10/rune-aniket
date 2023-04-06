@@ -46,12 +46,12 @@ var (
 	Tag = "development"
 
 	requiredPermissions = []plugin.Permission{
-		plugin.Permission(browserplugin.PermissionBrowserWindowManager),
-		plugin.Permission(browserplugin.PermissionBrowserMessenger),
-		plugin.Permission(browserplugin.PermissionBrowserResourceOpener),
+		plugin.Permission(plugin.PermissionBrowserWindowManager),
+		plugin.Permission(plugin.PermissionBrowserMessenger),
+		plugin.Permission(plugin.PermissionBrowserResourceOpener),
 		plugin.PermissionSchemeManager,
 		plugin.PermissionStorage,
-		plugin.Permission(textplugin.PermissionEditor),
+		plugin.Permission(plugin.PermissionEditor),
 	}
 	defaultCommands = map[string]func(*issuesGrantee,
 		context.Context, textapi.Command) (bool, error){
@@ -197,32 +197,32 @@ func (e *issuesGrantee) PermissionGranted(grants []plugin.Grant) {
 
 	for _, g := range grants {
 		switch g.Permission {
-		case plugin.Permission(browserplugin.PermissionBrowserWindowManager):
-			wm, err := browserplugin.WindowManager(g.Token, e.broker)
+		case plugin.Permission(plugin.PermissionBrowserWindowManager):
+			wm, err := browserplugin.WindowManager(g, e.broker)
 			if err != nil {
 				log.Warnf("Could not acquire browser window manager: %v. "+
 					"Will not be able to create reports.", err)
 				continue
 			}
 			e.wm = wm
-		case plugin.Permission(browserplugin.PermissionBrowserResourceOpener):
-			o, err := browserplugin.ResourceOpener(g.Token, e.broker)
+		case plugin.Permission(plugin.PermissionBrowserResourceOpener):
+			o, err := browserplugin.ResourceOpener(g, e.broker)
 			if err != nil {
 				log.Warnf("Could not acquire browser resource opener: %v. "+
 					"Will not be able to create reports.", err)
 				continue
 			}
 			e.o = o
-		case plugin.Permission(browserplugin.PermissionBrowserMessenger):
-			m, err := browserplugin.Messenger(g.Token, e.broker)
+		case plugin.Permission(plugin.PermissionBrowserMessenger):
+			m, err := browserplugin.Messenger(g, e.broker)
 			if err != nil {
 				log.Warnf("Could not acquire browser messenger: %v. "+
 					"Will not be able to report errors to user.", err)
 				continue
 			}
 			e.m = m
-		case plugin.Permission(textplugin.PermissionEditor):
-			ed, err := textplugin.Editor(g.Token, e.broker)
+		case plugin.Permission(plugin.PermissionEditor):
+			ed, err := textplugin.Editor(g, e.broker)
 			if err != nil {
 				log.Warnf("Could not acquire editor to subscribe command: %v."+
 					" Will not be able to create reports", err)
@@ -248,7 +248,7 @@ func (e *issuesGrantee) PermissionGranted(grants []plugin.Grant) {
 				log.Infof("Subscribed to create issue command %q", cmd)
 			}
 		case plugin.PermissionSchemeManager:
-			m, err := plugin.SchemeManager(g.Token, e.broker)
+			m, err := plugin.SchemeManager(g, e.broker)
 			if err != nil {
 				log.Warnf("Could not acquire scheme manager: %v. "+
 					"Will not be able to create or see reports", err)
@@ -256,7 +256,7 @@ func (e *issuesGrantee) PermissionGranted(grants []plugin.Grant) {
 			}
 			e.sm = m
 		case plugin.PermissionStorage:
-			s, err := plugin.Storage(g.Token, e.broker)
+			s, err := plugin.Storage(g, e.broker)
 			if err != nil {
 				log.Warnf("Could not acquire storage: %v. "+
 					"Will not be able to create or see reports", err)

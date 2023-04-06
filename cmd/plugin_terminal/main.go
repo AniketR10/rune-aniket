@@ -31,12 +31,12 @@ const (
 
 var (
 	requiredPermissions = []plugin.Permission{
-		plugin.Permission(browserplugin.PermissionBrowserWindowManager),
-		plugin.Permission(textplugin.PermissionEditor),
-		plugin.Permission(workspaceplugin.PermissionFileSystem),
-		plugin.Permission(workspaceplugin.PermissionTerminal),
-		plugin.Permission(browserplugin.PermissionBrowserEventPublisher),
-		plugin.Permission(browserplugin.PermissionBrowserMessenger),
+		plugin.Permission(plugin.PermissionBrowserWindowManager),
+		plugin.Permission(plugin.PermissionEditor),
+		plugin.Permission(plugin.PermissionFileSystem),
+		plugin.Permission(plugin.PermissionTerminal),
+		plugin.Permission(plugin.PermissionBrowserEventPublisher),
+		plugin.Permission(plugin.PermissionBrowserMessenger),
 	}
 	commands = []string{
 		cmdSplitWindowTerminal,
@@ -109,18 +109,18 @@ func (e *emulatorGrantee) PermissionGranted(grants []plugin.Grant) {
 	var err error
 	for _, g := range grants {
 		switch g.Permission {
-		case plugin.Permission(browserplugin.PermissionBrowserEventPublisher):
-			e.p, err = browserplugin.EventPublisher(g.Token, e.broker)
-		case plugin.Permission(browserplugin.PermissionBrowserWindowManager):
-			e.wm, err = browserplugin.WindowManager(g.Token, e.broker)
-		case plugin.Permission(workspaceplugin.PermissionTerminal):
-			e.tty, err = workspaceplugin.Terminal(g.Token, e.broker)
-		case plugin.Permission(workspaceplugin.PermissionFileSystem):
-			e.fs, err = workspaceplugin.FileSystem(g.Token, e.broker)
-		case plugin.Permission(browserplugin.PermissionBrowserMessenger):
-			e.m, err = browserplugin.Messenger(g.Token, e.broker)
-		case plugin.Permission(textplugin.PermissionEditor):
-			e.ed, err = textplugin.Editor(g.Token, e.broker)
+		case plugin.Permission(plugin.PermissionBrowserEventPublisher):
+			e.p, err = browserplugin.EventPublisher(g, e.broker)
+		case plugin.Permission(plugin.PermissionBrowserWindowManager):
+			e.wm, err = browserplugin.WindowManager(g, e.broker)
+		case plugin.Permission(plugin.PermissionTerminal):
+			e.tty, err = workspaceplugin.Terminal(g, e.broker)
+		case plugin.Permission(plugin.PermissionFileSystem):
+			e.fs, err = workspaceplugin.FileSystem(g, e.broker)
+		case plugin.Permission(plugin.PermissionBrowserMessenger):
+			e.m, err = browserplugin.Messenger(g, e.broker)
+		case plugin.Permission(plugin.PermissionEditor):
+			e.ed, err = textplugin.Editor(g, e.broker)
 			if err == nil {
 				for _, cmd := range commands {
 					subsErr := e.ed.SubscribeCommand(cmd, e)
@@ -137,7 +137,7 @@ func (e *emulatorGrantee) PermissionGranted(grants []plugin.Grant) {
 }
 
 func (e *emulatorGrantee) PermissionDenied(perms []plugin.Permission) {
-	if len(perms) == 1 && string(perms[0]) == textplugin.PermissionEditor {
+	if len(perms) == 1 && perms[0] == plugin.PermissionEditor {
 		// continue without clibboard
 		_ = e.m.SetMessage("plugin_terminal: clipboard permission should be granted for an optimal experience")
 		return

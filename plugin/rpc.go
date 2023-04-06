@@ -3,18 +3,18 @@ package plugin
 import (
 	"context"
 	"fmt"
-	"os"
 	"sync"
 	"time"
 
+	multierr "github.com/ernestrc/go-multierror"
 	"github.com/hashicorp/go-plugin"
+	"google.golang.org/grpc"
 	"unstable.build/go-tui/config"
 	pluginpb "unstable.build/go-tui/plugin/rpc"
 	"unstable.build/go-tui/proto"
 )
 
 const (
-	defDurationGracefulShutServer = 5 * time.Second
 	defDurationGracefulShutClient = 1 * time.Second
 )
 
@@ -26,22 +26,25 @@ type granteeServer struct {
 	grantee   Grantee
 	connected bool
 	keepAlive chan struct{}
-	osExit    func(int)
+	srv       *grpc.Server
+	ctx       context.Context
+	cancelCtx func()
 
 	durationGracefulShut time.Duration
 	keepAliveTimeout     time.Duration
 }
 
 func newGranteeServer(
-	broker proto.MuxBroker, grantee Grantee, req []Permission,
+	s *grpc.Server, broker proto.MuxBroker,
+	grantee Grantee, req []Permission,
 	keepAlive time.Duration,
 ) pluginpb.GranteeServer {
 	ret := new(granteeServer)
 	ret.broker = broker
 	ret.grantee = grantee
 	ret.req = req
-	ret.durationGracefulShut = defDurationGracefulShutServer
-	ret.osExit = os.Exit
+	ret.srv = s
+	ret.ctx, ret.cancelCtx = context.WithCancel(context.Background())
 	if keepAlive != time.Duration(0) {
 		ret.keepAlive = make(chan struct{})
 		ret.keepAliveTimeout = keepAlive * 2
@@ -70,7 +73,9 @@ func (s *granteeServer) monitorKeepAlive() {
 	for {
 		select {
 		case <-t.C:
-			s.doShutdown("lost connectivity to host: failed to send a health check in time")
+			ctx, cancel := context.WithCancel(context.Background())
+			s.doShutdown(ctx, "lost connectivity to host: failed to send a health check in time")
+			cancel()
 		case <-ch:
 			forceStopTimer(t)
 			t.Reset(s.keepAliveTimeout)
@@ -135,7 +140,9 @@ func (s *granteeServer) OnGrant(ctx context.Context, req *pluginpb.OnPermGrantRe
 		for _, requested := range s.req {
 			if string(requested) == gr.Id {
 				granted = append(granted, Grant{
-					Token: gr.Address, Permission: Permission(gr.Id),
+					Token:      gr.Address,
+					Permission: Permission(gr.Id),
+					Context:    s.ctx,
 				})
 				break
 			}
@@ -152,31 +159,39 @@ func (s *granteeServer) OnGrant(ctx context.Context, req *pluginpb.OnPermGrantRe
 	return new(pluginpb.OnPermGrantResponse), nil
 }
 
-func (s *granteeServer) doShutdown(reason string) error {
-	if err := s.grantee.Shutdown(reason); err != nil {
-		return err
-	}
-
+func (s *granteeServer) doShutdown(ctx context.Context, reason string) (ret error) {
+	// idempotent
 	s.mu.Lock()
-	defer s.mu.Unlock()
+	keepAlive := s.keepAlive
+	s.keepAlive = nil
+	s.mu.Unlock()
 
-	if s.keepAlive != nil {
-		close(s.keepAlive)
-		s.keepAlive = nil
+	if keepAlive != nil {
+		close(keepAlive)
 	}
-	if s.osExit != nil {
-		go func() {
-			time.Sleep(s.durationGracefulShut)
-			s.osExit(0)
-		}()
+
+	defer s.cancelCtx()
+
+	if err := s.grantee.Shutdown(reason); err != nil {
+		ret = multierr.Append(ret, err)
 	}
-	return nil
+
+	// if this request to shutdown is coming from the wire
+	// then cleanup server resources only when ctx is done
+	go func() {
+		<-ctx.Done()
+		s.srv.GracefulStop()
+		if err := s.broker.Close(); err != nil {
+			ret = multierr.Append(ret, err)
+		}
+	}()
+	return ret
 }
 
 func (s *granteeServer) Shutdown(ctx context.Context, in *pluginpb.ShutdownRequest) (
 	*pluginpb.ShutdownResponse, error,
 ) {
-	err := s.doShutdown(in.GetReason())
+	err := s.doShutdown(ctx, in.GetReason())
 	if err != nil {
 		return nil, err
 	}

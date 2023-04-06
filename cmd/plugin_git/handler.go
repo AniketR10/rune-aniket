@@ -16,7 +16,6 @@ import (
 	browserapi "unstable.build/go-tui/api/browser"
 	browserplugin "unstable.build/go-tui/api/browser/plugin"
 	textapi "unstable.build/go-tui/api/text"
-	textplugin "unstable.build/go-tui/api/text/plugin"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	workspaceplugin "unstable.build/go-tui/api/workspace/plugin"
 	"unstable.build/go-tui/cell"
@@ -46,10 +45,10 @@ var (
 		textapi.EventTypeUnfocus,
 	}
 	gitHandlerPermissions = []plugin.Permission{
-		plugin.Permission(browserplugin.PermissionBrowserWindowManager),
-		plugin.Permission(browserplugin.PermissionBrowserEventPublisher),
-		plugin.Permission(textplugin.PermissionEditor),
-		plugin.Permission(workspaceplugin.PermissionExecute),
+		plugin.Permission(plugin.PermissionBrowserWindowManager),
+		plugin.Permission(plugin.PermissionBrowserEventPublisher),
+		plugin.Permission(plugin.PermissionEditor),
+		plugin.Permission(plugin.PermissionExecute),
 		plugin.PermissionConfig,
 	}
 
@@ -102,18 +101,18 @@ func newGitHandler(
 
 	for _, grant := range grants {
 		switch grant.Permission {
-		case plugin.Permission(workspaceplugin.PermissionExecute):
-			ret.exec, err = workspaceplugin.Executor(grant.Token, broker)
+		case plugin.Permission(plugin.PermissionExecute):
+			ret.exec, err = workspaceplugin.Executor(grant, broker)
 			if err != nil {
 				return nil, err
 			}
-		case plugin.Permission(browserplugin.PermissionBrowserEventPublisher):
-			ret.p, err = browserplugin.EventPublisher(grant.Token, broker)
+		case plugin.Permission(plugin.PermissionBrowserEventPublisher):
+			ret.p, err = browserplugin.EventPublisher(grant, broker)
 			if err != nil {
 				return nil, err
 			}
-		case plugin.Permission(browserplugin.PermissionBrowserWindowManager):
-			ret.wm, err = browserplugin.WindowManager(grant.Token, broker)
+		case plugin.Permission(plugin.PermissionBrowserWindowManager):
+			ret.wm, err = browserplugin.WindowManager(grant, broker)
 			if err != nil {
 				return nil, err
 			}
@@ -123,7 +122,7 @@ func newGitHandler(
 				return nil, err
 			}
 		case plugin.PermissionConfig:
-			config, err := plugin.FetchConfig(grant.Token, broker)
+			config, err := plugin.FetchConfig(grant, broker)
 			if err != nil {
 				return nil, err
 			}

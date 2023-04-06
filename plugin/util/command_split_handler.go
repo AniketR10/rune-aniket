@@ -151,11 +151,11 @@ func (t *cmdSplitHandler) PermissionGranted(grants []plugin.Grant) {
 	log.Infof("permissions granted: %+v", grants)
 
 	for _, g := range grants {
-		switch string(g.Permission) {
-		case browserplugin.PermissionBrowserWindowManager:
-			t.wm, err = browserplugin.WindowManager(g.Token, t.broker)
-		case textplugin.PermissionEditor:
-			t.ed, err = textplugin.Editor(g.Token, t.broker)
+		switch g.Permission {
+		case plugin.PermissionBrowserWindowManager:
+			t.wm, err = browserplugin.WindowManager(g, t.broker)
+		case plugin.PermissionEditor:
+			t.ed, err = textplugin.Editor(g, t.broker)
 			if err == nil && t.config.Command != "" {
 				err = t.ed.SubscribeCommand(t.config.Command, t)
 			}
@@ -215,8 +215,8 @@ func ServeCommandSplitHandler(config CommandSplitHandlerConfig) {
 	}
 
 	perms := []plugin.Permission{
-		plugin.Permission(browserplugin.PermissionBrowserWindowManager),
-		plugin.Permission(textplugin.PermissionEditor),
+		plugin.Permission(plugin.PermissionBrowserWindowManager),
+		plugin.Permission(plugin.PermissionEditor),
 	}
 	perms = append(perms, config.Permissions...)
 	plugin.Serve(&cmdSplitHandler{config: config}, perms...)

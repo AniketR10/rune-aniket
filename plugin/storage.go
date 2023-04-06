@@ -4,7 +4,6 @@ import (
 	"context"
 	"io"
 	"path/filepath"
-	"runtime"
 	"sync"
 
 	"github.com/ernestrc/blue/document"
@@ -17,11 +16,6 @@ import (
 	"unstable.build/go-tui/proto"
 	"unstable.build/go-tui/storage"
 	"unstable.build/go-tui/workspace"
-)
-
-const (
-	// PermissionStorage requests access to persistent storage.
-	PermissionStorage = "_PermStorage"
 )
 
 type storageResourceServer struct {
@@ -75,23 +69,27 @@ func StorageResources(storageDir string) map[Permission]ResourceRegistrar {
 }
 
 // TODO move to api package
-func dialStorage(token string, broker proto.MuxBroker) (
+func dialStorage(grant Grant, broker proto.MuxBroker) (
 	document.Service, error,
 ) {
-	conn, err := broker.DialChannel(token)
+	conn, err := broker.DialChannel(grant.Token)
 	if err != nil {
 		return nil, err
 	}
 	c := new(docrpc.Client)
 	c.Init(conn, toml.Marshaler())
-	runtime.SetFinalizer(c, func(c *docrpc.Client) { c.Close() })
+
+	go func() {
+		<-grant.Context.Done()
+		_ = c.Close()
+	}()
 	return c, nil
 }
 
 // Storage acquires a client to persistent storage with
 // the given token.
-func Storage(token string, broker proto.MuxBroker) (
+func Storage(grant Grant, broker proto.MuxBroker) (
 	document.Service, error,
 ) {
-	return dialStorage(token, broker)
+	return dialStorage(grant, broker)
 }

@@ -38,7 +38,7 @@ func (e *upspinGrantee) PermissionGranted(grants []plugin.Grant) {
 	for _, g := range grants {
 		switch g.Permission {
 		case plugin.PermissionSchemeManager:
-			m, err := plugin.SchemeManager(g.Token, e.broker)
+			m, err := plugin.SchemeManager(g, e.broker)
 			if err != nil {
 				log.Fatalf("PermissionGranted: %+v: %s", g.Permission, err)
 			}

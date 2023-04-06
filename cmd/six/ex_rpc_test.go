@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/ernestrc/blue/document"
+	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/goleak"
 	"google.golang.org/grpc"
@@ -149,5 +150,6 @@ func TestRPCBrowserCloseLeak(t *testing.T) {
 }
 
 func TestMain(m *testing.M) {
+	log.SetLevel(log.ErrorLevel)
 	goleak.VerifyTestMain(m)
 }

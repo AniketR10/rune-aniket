@@ -22,9 +22,13 @@ type Permissions map[Permission]struct{}
 
 // Grant binds a granted Permission with a Token that
 // can be used with the plugin API.
+//
+// The Context of this grant can be used to close
+// associated resources when the grant is no longer valid.
 type Grant struct {
 	Token string
 	Permission
+	context.Context
 }
 
 // Grantee needs to be implemented by plugins that want
@@ -60,7 +64,7 @@ type granteePlugin struct {
 
 // GRPCServer satisfies plugin.GRPCPlugin
 func (p *granteePlugin) GRPCServer(_ *plugin.GRPCBroker, s *grpc.Server) error {
-	server := newGranteeServer(p.broker, p.grantee, p.requested, p.keepAlive)
+	server := newGranteeServer(s, p.broker, p.grantee, p.requested, p.keepAlive)
 	if log.IsLevelEnabled(log.TraceLevel) {
 		server = &loggingGranteeServer{GranteeServer: server}
 	}

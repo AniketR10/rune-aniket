@@ -76,9 +76,9 @@ func (t *editorGrantee) PermissionGranted(grants []plugin.Grant) {
 
 	for _, grant := range grants {
 		var err error
-		switch string(grant.Permission) {
-		case textplugin.PermissionEditor:
-			t.ed, err = textplugin.Editor(grant.Token, t.broker)
+		switch grant.Permission {
+		case plugin.PermissionEditor:
+			t.ed, err = textplugin.Editor(grant, t.broker)
 			if err == nil {
 				err = t.subscribeToEvents(grants)
 			}
@@ -123,7 +123,7 @@ func ServeEditorEventHandler(
 	extraPerms ...plugin.Permission,
 ) {
 	perms := []plugin.Permission{
-		plugin.Permission(textplugin.PermissionEditor),
+		plugin.Permission(plugin.PermissionEditor),
 	}
 	perms = append(perms, extraPerms...)
 	s := &editorGrantee{evs: events, cmds: cmds, newHandler: fn}

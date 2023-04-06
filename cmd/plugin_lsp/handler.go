@@ -76,12 +76,12 @@ var (
 		textapi.EventTypeEdit,
 	}
 	lspHandlerPermissions = []plugin.Permission{
-		plugin.Permission(browserplugin.PermissionBrowserWindowManager),
-		plugin.Permission(browserplugin.PermissionBrowserResourceOpener),
-		plugin.Permission(browserplugin.PermissionBrowserEventPublisher),
-		plugin.Permission(browserplugin.PermissionBrowserMessenger),
-		plugin.Permission(workspaceplugin.PermissionFileSystem),
-		plugin.Permission(workspaceplugin.PermissionExecute),
+		plugin.Permission(plugin.PermissionBrowserWindowManager),
+		plugin.Permission(plugin.PermissionBrowserResourceOpener),
+		plugin.Permission(plugin.PermissionBrowserEventPublisher),
+		plugin.Permission(plugin.PermissionBrowserMessenger),
+		plugin.Permission(plugin.PermissionFileSystem),
+		plugin.Permission(plugin.PermissionExecute),
 		plugin.PermissionConfig,
 	}
 	defaultDiagnosticAttr = map[protocol.DiagnosticSeverity]term.Attributes{
@@ -643,8 +643,8 @@ func newLspHandler(
 
 	for _, g := range grants {
 		switch g.Permission {
-		case plugin.Permission(workspaceplugin.PermissionFileSystem):
-			ret.fs, err = workspaceplugin.FileSystem(g.Token, broker)
+		case plugin.Permission(plugin.PermissionFileSystem):
+			ret.fs, err = workspaceplugin.FileSystem(g, broker)
 			if err != nil {
 				return nil, err
 			}
@@ -653,33 +653,33 @@ func newLspHandler(
 				return nil, err
 			}
 			ret.cwd = cwdURI.Path()
-		case plugin.Permission(workspaceplugin.PermissionExecute):
-			ret.exec, err = workspaceplugin.Executor(g.Token, broker)
+		case plugin.Permission(plugin.PermissionExecute):
+			ret.exec, err = workspaceplugin.Executor(g, broker)
 			if err != nil {
 				return nil, err
 			}
-		case plugin.Permission(browserplugin.PermissionBrowserEventPublisher):
-			ret.p, err = browserplugin.EventPublisher(g.Token, broker)
+		case plugin.Permission(plugin.PermissionBrowserEventPublisher):
+			ret.p, err = browserplugin.EventPublisher(g, broker)
 			if err != nil {
 				return nil, err
 			}
-		case plugin.Permission(browserplugin.PermissionBrowserResourceOpener):
-			ret.o, err = browserplugin.ResourceOpener(g.Token, broker)
+		case plugin.Permission(plugin.PermissionBrowserResourceOpener):
+			ret.o, err = browserplugin.ResourceOpener(g, broker)
 			if err != nil {
 				return nil, err
 			}
-		case plugin.Permission(browserplugin.PermissionBrowserWindowManager):
-			ret.wm, err = browserplugin.WindowManager(g.Token, broker)
+		case plugin.Permission(plugin.PermissionBrowserWindowManager):
+			ret.wm, err = browserplugin.WindowManager(g, broker)
 			if err != nil {
 				return nil, err
 			}
-		case plugin.Permission(browserplugin.PermissionBrowserMessenger):
-			ret.m, err = browserplugin.Messenger(g.Token, broker)
+		case plugin.Permission(plugin.PermissionBrowserMessenger):
+			ret.m, err = browserplugin.Messenger(g, broker)
 			if err != nil {
 				return nil, err
 			}
 		case plugin.PermissionConfig:
-			config, err := plugin.FetchConfig(g.Token, broker)
+			config, err := plugin.FetchConfig(g, broker)
 			if err != nil {
 				return nil, err
 			}

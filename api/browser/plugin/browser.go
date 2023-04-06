@@ -3,48 +3,53 @@ package plugin
 import (
 	browserapi "unstable.build/go-tui/api/browser"
 	browserpb "unstable.build/go-tui/browser/rpc"
+	"unstable.build/go-tui/plugin"
 	"unstable.build/go-tui/proto"
 )
 
-func dialBrowser(channelID string, broker proto.MuxBroker) (
+func dialBrowser(grant plugin.Grant, broker proto.MuxBroker) (
 	browserapi.Browser, error,
 ) {
-	conn, err := broker.DialChannel(channelID)
+	conn, err := broker.DialChannel(grant.Token)
 	if err != nil {
 		return nil, err
 	}
 	c := browserpb.NewClient(broker, conn)
+	go func() {
+		<-grant.Context.Done()
+		_ = c.Close()
+	}()
 	return c, nil
 }
 
 // WindowManager acquires the browser's WindowManager
 // resource with the given token.
-func WindowManager(channelID string, broker proto.MuxBroker) (
+func WindowManager(grant plugin.Grant, broker proto.MuxBroker) (
 	browserapi.WindowManager, error,
 ) {
-	return dialBrowser(channelID, broker)
+	return dialBrowser(grant, broker)
 }
 
 // ResourceOpener acquires the browser's ResourceOpener
 // resource with the given token.
-func ResourceOpener(channelID string, broker proto.MuxBroker) (
+func ResourceOpener(grant plugin.Grant, broker proto.MuxBroker) (
 	browserapi.ResourceOpener, error,
 ) {
-	return dialBrowser(channelID, broker)
+	return dialBrowser(grant, broker)
 }
 
 // Messenger acquires the browser's Messenger
 // resource with the given token.
-func Messenger(channelID string, broker proto.MuxBroker) (
+func Messenger(grant plugin.Grant, broker proto.MuxBroker) (
 	browserapi.Messenger, error,
 ) {
-	return dialBrowser(channelID, broker)
+	return dialBrowser(grant, broker)
 }
 
 // EventPublisher acquires the browser's EventPublisher
 // resource with the given token.
-func EventPublisher(channelID string, broker proto.MuxBroker) (
+func EventPublisher(grant plugin.Grant, broker proto.MuxBroker) (
 	browserapi.EventPublisher, error,
 ) {
-	return dialBrowser(channelID, broker)
+	return dialBrowser(grant, broker)
 }

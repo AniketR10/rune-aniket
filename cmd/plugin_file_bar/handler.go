@@ -12,7 +12,6 @@ import (
 	browserapi "unstable.build/go-tui/api/browser"
 	browserplugin "unstable.build/go-tui/api/browser/plugin"
 	textapi "unstable.build/go-tui/api/text"
-	textplugin "unstable.build/go-tui/api/text/plugin"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	workspaceplugin "unstable.build/go-tui/api/workspace/plugin"
 	"unstable.build/go-tui/cell"
@@ -36,11 +35,11 @@ var (
 		textapi.EventTypeUnfocus,
 	}
 	fileBarHandlerPermissions = []plugin.Permission{
-		plugin.Permission(browserplugin.PermissionBrowserWindowManager),
-		plugin.Permission(browserplugin.PermissionBrowserEventPublisher),
-		plugin.Permission(textplugin.PermissionEditor),
+		plugin.Permission(plugin.PermissionBrowserWindowManager),
+		plugin.Permission(plugin.PermissionBrowserEventPublisher),
+		plugin.Permission(plugin.PermissionEditor),
 		plugin.PermissionConfig,
-		plugin.Permission(workspaceplugin.PermissionFileSystem),
+		plugin.Permission(plugin.PermissionFileSystem),
 	}
 
 	defaultScrollAttr     = term.Attributes{Fg: term.ColorDefault}
@@ -128,13 +127,13 @@ func newFileBarEditorHandler(
 
 	for _, grant := range grants {
 		switch grant.Permission {
-		case plugin.Permission(browserplugin.PermissionBrowserEventPublisher):
-			ret.p, err = browserplugin.EventPublisher(grant.Token, broker)
+		case plugin.Permission(plugin.PermissionBrowserEventPublisher):
+			ret.p, err = browserplugin.EventPublisher(grant, broker)
 			if err != nil {
 				return nil, err
 			}
-		case plugin.Permission(browserplugin.PermissionBrowserWindowManager):
-			ret.wm, err = browserplugin.WindowManager(grant.Token, broker)
+		case plugin.Permission(plugin.PermissionBrowserWindowManager):
+			ret.wm, err = browserplugin.WindowManager(grant, broker)
 			if err != nil {
 				return nil, err
 			}
@@ -143,8 +142,8 @@ func newFileBarEditorHandler(
 			if err != nil {
 				return nil, err
 			}
-		case plugin.Permission(workspaceplugin.PermissionFileSystem):
-			w, err := workspaceplugin.FileSystem(grant.Token, broker)
+		case plugin.Permission(plugin.PermissionFileSystem):
+			w, err := workspaceplugin.FileSystem(grant, broker)
 			if err != nil {
 				return nil, err
 			}
@@ -153,7 +152,7 @@ func newFileBarEditorHandler(
 				return nil, err
 			}
 		case plugin.PermissionConfig:
-			config, err := plugin.FetchConfig(grant.Token, broker)
+			config, err := plugin.FetchConfig(grant, broker)
 			if err != nil {
 				return nil, err
 			}

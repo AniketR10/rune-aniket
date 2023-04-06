@@ -4,10 +4,10 @@ import (
 	"io"
 	"sync"
 
-	browserplugin "unstable.build/go-tui/api/browser/plugin"
 	"unstable.build/go-tui/browser"
 	browserpb "unstable.build/go-tui/browser/rpc"
 	"unstable.build/go-tui/proto"
+	"unstable.build/go-tui/term"
 )
 
 type browserResourceServer struct {
@@ -25,8 +25,8 @@ func newBrowserResourceServer(b browser.Browser) *browserResourceServer {
 	return ret
 }
 
-func (s *browserResourceServer) forPermission(p string) ResourceRegistrar {
-	return browserResourcePermissionServer{p: Permission(p), browserResourceServer: s}
+func (s *browserResourceServer) forPermission(p Permission) ResourceRegistrar {
+	return browserResourcePermissionServer{p: p, browserResourceServer: s}
 }
 
 func (s browserResourcePermissionServer) Register(
@@ -34,15 +34,15 @@ func (s browserResourcePermissionServer) Register(
 	broker proto.MuxBroker, lock sync.Locker,
 ) (io.Closer, error) {
 	server := browserpb.NewServer(broker, s.b, lock)
-	rpcServer := interruptBrowserServer(server, interrupt)
-	switch string(s.p) {
-	case browserplugin.PermissionBrowserWindowManager:
+	rpcServer := interruptBrowserServer(server, term.Interrupt)
+	switch s.p {
+	case PermissionBrowserWindowManager:
 		browserpb.RegisterWindowManagerServer(registrar, rpcServer)
-	case browserplugin.PermissionBrowserResourceOpener:
+	case PermissionBrowserResourceOpener:
 		browserpb.RegisterResourceOpenerServer(registrar, rpcServer)
-	case browserplugin.PermissionBrowserMessenger:
+	case PermissionBrowserMessenger:
 		browserpb.RegisterMessengerServer(registrar, rpcServer)
-	case browserplugin.PermissionBrowserEventPublisher:
+	case PermissionBrowserEventPublisher:
 		browserpb.RegisterEventPublisherServer(registrar, rpcServer)
 	}
 	return browserCloser{server}, nil
@@ -61,13 +61,13 @@ func (b browserCloser) Close() error {
 func BrowserResources(b browser.Browser) map[Permission]ResourceRegistrar {
 	s := newBrowserResourceServer(b)
 	return map[Permission]ResourceRegistrar{
-		Permission(browserplugin.PermissionBrowserWindowManager): s.forPermission(
-			browserplugin.PermissionBrowserWindowManager),
-		Permission(browserplugin.PermissionBrowserResourceOpener): s.forPermission(
-			browserplugin.PermissionBrowserResourceOpener),
-		Permission(browserplugin.PermissionBrowserMessenger): s.forPermission(
-			browserplugin.PermissionBrowserMessenger),
-		Permission(browserplugin.PermissionBrowserEventPublisher): s.forPermission(
-			browserplugin.PermissionBrowserEventPublisher),
+		PermissionBrowserWindowManager: s.forPermission(
+			PermissionBrowserWindowManager),
+		PermissionBrowserResourceOpener: s.forPermission(
+			PermissionBrowserResourceOpener),
+		PermissionBrowserMessenger: s.forPermission(
+			PermissionBrowserMessenger),
+		PermissionBrowserEventPublisher: s.forPermission(
+			PermissionBrowserEventPublisher),
 	}
 }

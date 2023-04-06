@@ -13,7 +13,6 @@ import (
 	browserapi "unstable.build/go-tui/api/browser"
 	browserapitest "unstable.build/go-tui/api/browser/test"
 	textapi "unstable.build/go-tui/api/text"
-	textplugin "unstable.build/go-tui/api/text/plugin"
 	"unstable.build/go-tui/config"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/plugin"
@@ -110,12 +109,19 @@ func TestCommandSplitHandlerEmpty(t *testing.T) {
 		broker := expectInitialization(t, ctrl, h)
 
 		token := "123"
-		expectSubscribe(t, ctrl, broker, "blah", token)
+		conn := expectSubscribe(t, ctrl, broker, "blah", token)
+
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		// called async waiting for ctx to be done
+		conn.EXPECT().Close().AnyTimes()
 
 		grants := []plugin.Grant{
 			{
 				Token:      token,
-				Permission: plugin.Permission(textplugin.PermissionEditor),
+				Permission: plugin.Permission(plugin.PermissionEditor),
+				Context:    ctx,
 			},
 		}
 		h.PermissionGranted(grants)
@@ -138,9 +144,14 @@ func TestCommandSplitHandlerOpenWindow(t *testing.T) {
 			Command:          cmdName,
 			SplitOrientation: browserapi.OrientationLeft,
 		}
+
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
 		grants := plugin.Grant{
 			Token:      "1555",
-			Permission: plugin.Permission(textplugin.PermissionEditor),
+			Permission: plugin.Permission(plugin.PermissionEditor),
+			Context:    ctx,
 		}
 		testSplitWindow(t, config, grants, func(h *cmdSplitHandler) {
 			ok, err := h.HandleCommand(context.Background(), textapi.Command{Name: cmdName})

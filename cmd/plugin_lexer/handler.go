@@ -137,7 +137,7 @@ func newSyntaxHandler(
 	for _, g := range grants {
 		switch g.Permission {
 		case plugin.PermissionConfig:
-			config, err := plugin.FetchConfig(g.Token, broker)
+			config, err := plugin.FetchConfig(g, broker)
 			if err != nil {
 				return nil, err
 			}

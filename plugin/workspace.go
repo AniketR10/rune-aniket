@@ -7,7 +7,6 @@ import (
 
 	bluectx "github.com/ernestrc/blue/context"
 	workspaceapi "unstable.build/go-tui/api/workspace"
-	workspaceplugin "unstable.build/go-tui/api/workspace/plugin"
 	"unstable.build/go-tui/proto"
 	"unstable.build/go-tui/workspace"
 	workspacepb "unstable.build/go-tui/workspace/rpc"
@@ -37,18 +36,18 @@ func (s *workspaceResourceServer) Register(
 	}
 	w.ctx, w.cancelCtx = context.WithCancel(context.Background())
 	server := workspacepb.NewServer(w, lock)
-	switch string(s.p) {
-	case workspaceplugin.PermissionFileSystem:
+	switch s.p {
+	case PermissionFileSystem:
 		if !proto.IsRegistered(registrar, workspacepb.Files_ServiceDesc) {
 			workspacepb.RegisterFilesServer(registrar, server)
 		}
 		workspacepb.RegisterSchemeServer(registrar, server)
-	case workspaceplugin.PermissionTerminal:
+	case PermissionTerminal:
 		if !proto.IsRegistered(registrar, workspacepb.Files_ServiceDesc) {
 			workspacepb.RegisterFilesServer(registrar, server)
 		}
 		workspacepb.RegisterTerminalServer(registrar, server)
-	case workspaceplugin.PermissionExecute:
+	case PermissionExecute:
 		workspacepb.RegisterExecutorServer(registrar, server)
 	}
 	w.server = server
@@ -59,12 +58,12 @@ func (s *workspaceResourceServer) Register(
 // capable of serving each of the b Workspace's resources.
 func WorkspaceResources(b workspace.Workspace) map[Permission]ResourceRegistrar {
 	return map[Permission]ResourceRegistrar{
-		Permission(workspaceplugin.PermissionFileSystem): newWorkspaceResourceServer(
-			b, Permission(workspaceplugin.PermissionFileSystem)),
-		Permission(workspaceplugin.PermissionTerminal): newWorkspaceResourceServer(
-			b, Permission(workspaceplugin.PermissionTerminal)),
-		Permission(workspaceplugin.PermissionExecute): newWorkspaceResourceServer(
-			b, Permission(workspaceplugin.PermissionExecute)),
+		PermissionFileSystem: newWorkspaceResourceServer(
+			b, PermissionFileSystem),
+		PermissionTerminal: newWorkspaceResourceServer(
+			b, PermissionTerminal),
+		PermissionExecute: newWorkspaceResourceServer(
+			b, PermissionExecute),
 	}
 }
 
