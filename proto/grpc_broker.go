@@ -33,7 +33,9 @@ func (t *grpcBroker) NewChannel(tags ...string) (net.Listener, error) {
 	return ret, nil
 }
 
-func (t *grpcBroker) DialChannel(address string) (conn MuxConn, err error) {
+func (t *grpcBroker) DialChannel(address string, tags ...string) (
+	conn MuxConn, err error,
+) {
 	opts := []grpc.DialOption{
 		grpc.WithStatsHandler(nil),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
@@ -54,7 +56,7 @@ func (t *grpcBroker) DialChannel(address string) (conn MuxConn, err error) {
 	}
 
 	if log.IsLevelEnabled(log.TraceLevel) {
-		conn = newLoggingConn(address, conn)
+		conn = newLoggingConn(address, conn, tags...)
 	}
 	return
 }

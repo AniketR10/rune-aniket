@@ -3,6 +3,7 @@ package rpc
 import (
 	"context"
 	"fmt"
+	"os"
 	"sync"
 
 	multierr "github.com/ernestrc/go-multierror"
@@ -117,7 +118,7 @@ func initializeSchemeThroughProxy(
 	broker proto.MuxBroker, proxyID string,
 ) (workspace.Scheme, error) {
 	// once uri, and config is sent disconnect proxy client
-	proxyConn, err := broker.DialChannel(proxyID)
+	proxyConn, err := broker.DialChannel(proxyID, os.Args[0], "proxyScheme")
 	if err != nil {
 		return nil, err
 	}

@@ -27,7 +27,7 @@ type MuxServer interface {
 // MuxBroker allows a client or server to multiplex over connections.
 type MuxBroker interface {
 	NewChannel(tags ...string) (net.Listener, error)
-	DialChannel(string) (MuxConn, error)
+	DialChannel(string, ...string) (MuxConn, error)
 
 	Close() error
 }

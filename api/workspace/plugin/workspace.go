@@ -1,6 +1,8 @@
 package plugin
 
 import (
+	"os"
+
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/plugin"
 	"unstable.build/go-tui/proto"
@@ -10,7 +12,8 @@ import (
 func dial(grant plugin.Grant, broker proto.MuxBroker) (
 	*workspacepb.Client, error,
 ) {
-	conn, err := broker.DialChannel(grant.Token)
+	conn, err := broker.DialChannel(grant.Token,
+		os.Args[0], "workspace", string(grant.Permission))
 	if err != nil {
 		return nil, err
 	}

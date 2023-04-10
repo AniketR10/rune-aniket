@@ -2,7 +2,7 @@ package proto
 
 import (
 	context "context"
-	fmt "fmt"
+	"fmt"
 
 	"github.com/ernestrc/blue/logging"
 	log "github.com/sirupsen/logrus"
@@ -13,13 +13,24 @@ import (
 type loggingConn struct {
 	id interface{}
 	MuxConn
+	tags []string
 }
 
-func newLoggingConn(id interface{}, c MuxConn) MuxConn {
-	ret := loggingConn{id: id, MuxConn: c}
+func newLoggingConn(id string, c MuxConn, tags ...string) MuxConn {
+	ret := loggingConn{id: id, MuxConn: c, tags: tags}
 	ret.log(log.Fields{
 		logging.KeyCallType: "Dial",
 	})
+	/* uncomment to debug leaks
+	dir := os.TempDir()
+	filename := "DEBUGMUXCONN" + strings.Join(append(tags, strconv.Itoa(rand.Int())), "_")
+	filename = strings.ReplaceAll(filename, "/", "_")
+	ret.tempfile = filepath.Join(dir, filename)
+	err := os.WriteFile(ret.tempfile, []byte(filename), 0777)
+	if err != nil {
+		panic(err)
+	}
+	*/
 	return ret
 }
 
@@ -28,6 +39,7 @@ func (c loggingConn) log(extraFields log.Fields) {
 		logging.KeyClass: "proto.MuxConn",
 		"ID":             fmt.Sprintf("%v", c.id),
 		"Address":        fmt.Sprintf("%p", c.MuxConn),
+		"Tags":           fmt.Sprintf("%v", c.tags),
 	}
 	for k, v := range extraFields {
 		fields[k] = v
@@ -89,5 +101,8 @@ func (c loggingConn) Close() error {
 		logging.KeyCallType: "Close",
 		logging.KeyError:    fmt.Sprintf("%v", err),
 	})
+	/* uncomment to debug leaks
+	os.Remove(c.tempfile)
+	*/
 	return err
 }

@@ -3,6 +3,7 @@ package plugin
 import (
 	"context"
 	"io"
+	"os"
 	"path/filepath"
 	"sync"
 
@@ -72,7 +73,8 @@ func StorageResources(storageDir string) map[Permission]ResourceRegistrar {
 func dialStorage(grant Grant, broker proto.MuxBroker) (
 	document.Service, error,
 ) {
-	conn, err := broker.DialChannel(grant.Token)
+	conn, err := broker.DialChannel(grant.Token,
+		os.Args[0], "storage", string(grant.Permission))
 	if err != nil {
 		return nil, err
 	}

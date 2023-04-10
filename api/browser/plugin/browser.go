@@ -1,6 +1,8 @@
 package plugin
 
 import (
+	"os"
+
 	browserapi "unstable.build/go-tui/api/browser"
 	browserpb "unstable.build/go-tui/browser/rpc"
 	"unstable.build/go-tui/plugin"
@@ -10,7 +12,8 @@ import (
 func dialBrowser(grant plugin.Grant, broker proto.MuxBroker) (
 	browserapi.Browser, error,
 ) {
-	conn, err := broker.DialChannel(grant.Token)
+	conn, err := broker.DialChannel(grant.Token,
+		os.Args[0], "browser", string(grant.Permission))
 	if err != nil {
 		return nil, err
 	}

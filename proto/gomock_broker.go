@@ -218,35 +218,6 @@ func (m *MockMuxBroker) EXPECT() *MockMuxBrokerMockRecorder {
 	return m.recorder
 }
 
-// Accept mocks base method.
-func (m *MockMuxBroker) Accept(id uint32) (net.Listener, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Accept", id)
-	ret0, _ := ret[0].(net.Listener)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// Accept indicates an expected call of Accept.
-func (mr *MockMuxBrokerMockRecorder) Accept(id interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Accept", reflect.TypeOf((*MockMuxBroker)(nil).Accept), id)
-}
-
-// Cleanup mocks base method.
-func (m *MockMuxBroker) Cleanup(ID uint32) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Cleanup", ID)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// Cleanup indicates an expected call of Cleanup.
-func (mr *MockMuxBrokerMockRecorder) Cleanup(ID interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Cleanup", reflect.TypeOf((*MockMuxBroker)(nil).Cleanup), ID)
-}
-
 // Close mocks base method.
 func (m *MockMuxBroker) Close() error {
 	m.ctrl.T.Helper()
@@ -261,34 +232,24 @@ func (mr *MockMuxBrokerMockRecorder) Close() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockMuxBroker)(nil).Close))
 }
 
-// Dial mocks base method.
-func (m *MockMuxBroker) Dial(ID uint32) (MuxConn, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Dial", ID)
-	ret0, _ := ret[0].(MuxConn)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// Dial indicates an expected call of Dial.
-func (mr *MockMuxBrokerMockRecorder) Dial(ID interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Dial", reflect.TypeOf((*MockMuxBroker)(nil).Dial), ID)
-}
-
 // DialChannel mocks base method.
-func (m *MockMuxBroker) DialChannel(arg0 string) (MuxConn, error) {
+func (m *MockMuxBroker) DialChannel(arg0 string, arg1 ...string) (MuxConn, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DialChannel", arg0)
+	varargs := []interface{}{arg0}
+	for _, a := range arg1 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "DialChannel", varargs...)
 	ret0, _ := ret[0].(MuxConn)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // DialChannel indicates an expected call of DialChannel.
-func (mr *MockMuxBrokerMockRecorder) DialChannel(arg0 interface{}) *gomock.Call {
+func (mr *MockMuxBrokerMockRecorder) DialChannel(arg0 interface{}, arg1 ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DialChannel", reflect.TypeOf((*MockMuxBroker)(nil).DialChannel), arg0)
+	varargs := append([]interface{}{arg0}, arg1...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DialChannel", reflect.TypeOf((*MockMuxBroker)(nil).DialChannel), varargs...)
 }
 
 // NewChannel mocks base method.
@@ -308,20 +269,6 @@ func (m *MockMuxBroker) NewChannel(tags ...string) (net.Listener, error) {
 func (mr *MockMuxBrokerMockRecorder) NewChannel(tags ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewChannel", reflect.TypeOf((*MockMuxBroker)(nil).NewChannel), tags...)
-}
-
-// NextId mocks base method.
-func (m *MockMuxBroker) NextId() uint32 {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "NextId")
-	ret0, _ := ret[0].(uint32)
-	return ret0
-}
-
-// NextId indicates an expected call of NextId.
-func (mr *MockMuxBrokerMockRecorder) NextId() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NextId", reflect.TypeOf((*MockMuxBroker)(nil).NextId))
 }
 
 // MockServiceRegistrar is a mock of ServiceRegistrar interface.

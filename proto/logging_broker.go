@@ -22,9 +22,10 @@ func (b loggingBroker) NewChannel(tags ...string) (lis net.Listener, err error) 
 	return
 }
 
-func (b loggingBroker) DialChannel(addr string) (conn MuxConn, err error) {
-	conn, err = b.root.DialChannel(addr)
-	b.logger.Tracef("loggingBroker: DialChannel(%s): %v %v", addr, conn, err)
+func (b loggingBroker) DialChannel(addr string, tags ...string) (conn MuxConn, err error) {
+	conn, err = b.root.DialChannel(addr, tags...)
+	b.logger.Tracef("loggingBroker: DialChannel(%s, %v): %v %v",
+		addr, tags, conn, err)
 	return
 }
 

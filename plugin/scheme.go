@@ -2,6 +2,7 @@ package plugin
 
 import (
 	"io"
+	"os"
 	"sync"
 
 	"unstable.build/go-tui/proto"
@@ -45,7 +46,8 @@ func SchemeManagerResources(b workspace.SchemeManager) map[Permission]ResourceRe
 func dialSchemeManager(grant Grant, broker proto.MuxBroker) (
 	workspace.SchemeManager, error,
 ) {
-	conn, err := broker.DialChannel(grant.Token)
+	conn, err := broker.DialChannel(grant.Token,
+		os.Args[0], "scheme", string(grant.Permission))
 	if err != nil {
 		return nil, err
 	}

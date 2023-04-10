@@ -42,12 +42,14 @@ func (b retryBroker) NewChannel(tags ...string) (lis net.Listener, err error) {
 	return
 }
 
-func (b retryBroker) DialChannel(addr string) (conn MuxConn, err error) {
+func (b retryBroker) DialChannel(addr string, tags ...string) (
+	conn MuxConn, err error,
+) {
 	ctx := context.Background()
 	var attempt int
 	retry.Retry(ctx, b.s, func(ctx context.Context) (bool, error) {
 		attempt++
-		conn, err = b.b.DialChannel(addr)
+		conn, err = b.b.DialChannel(addr, tags...)
 		b.log("DialChannel", attempt, err)
 		return true, err
 	})

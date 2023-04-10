@@ -1,6 +1,8 @@
 package plugin
 
 import (
+	"os"
+
 	textapi "unstable.build/go-tui/api/text"
 	"unstable.build/go-tui/plugin"
 	"unstable.build/go-tui/proto"
@@ -10,7 +12,8 @@ import (
 func dialEditor(grant plugin.Grant, broker proto.MuxBroker) (
 	textapi.Editor, error,
 ) {
-	conn, err := broker.DialChannel(grant.Token)
+	conn, err := broker.DialChannel(grant.Token,
+		os.Args[0], "editor", string(grant.Permission))
 	if err != nil {
 		return nil, err
 	}

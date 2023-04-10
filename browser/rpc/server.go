@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"runtime"
 	"sync"
 
@@ -87,7 +88,7 @@ func (s *Server) consumeErrors(
 
 func (s *Server) dialHandler(channelID string) (browserapi.Handler, error) {
 	s.log(log.DebugLevel, "dialing handler at %q", channelID)
-	handlerConn, err := s.broker.DialChannel(channelID)
+	handlerConn, err := s.broker.DialChannel(channelID, os.Args[0], "browserpb.Server")
 	if err != nil {
 		return nil, err
 	}

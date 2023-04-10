@@ -2,6 +2,7 @@ package plugin
 
 import (
 	"io"
+	"os"
 	"sync"
 
 	"unstable.build/go-tui/config"
@@ -45,7 +46,8 @@ func ConfigResources(b config.Config) map[Permission]ResourceRegistrar {
 func dialConfig(grant Grant, broker proto.MuxBroker) (
 	config.Config, error,
 ) {
-	conn, err := broker.DialChannel(grant.Token)
+	conn, err := broker.DialChannel(grant.Token,
+		os.Args[0], "config", string(grant.Permission))
 	if err != nil {
 		return nil, err
 	}
