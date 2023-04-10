@@ -49,6 +49,7 @@ func TestIntegrationRace(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
+	ctx = plugin.ContextWithWaitGroup(ctx, new(sync.WaitGroup))
 
 	grantor := plugin.GrantAll(resources)
 	lis, err := broker.NewChannel()

@@ -79,7 +79,10 @@ func dialStorage(grant Grant, broker proto.MuxBroker) (
 	c := new(docrpc.Client)
 	c.Init(conn, toml.Marshaler())
 
+	wg := WaitGroupFromContext(grant.Context)
+	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		<-grant.Context.Done()
 		_ = c.Close()
 	}()

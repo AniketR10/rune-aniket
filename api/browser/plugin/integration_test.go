@@ -44,6 +44,7 @@ func TestIntegrationRace(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
+	ctx = plugin.ContextWithWaitGroup(ctx, new(sync.WaitGroup))
 
 	uri, err := workspaceapi.ParseURI("file:///tmp/test")
 	require.NoError(t, err)

@@ -2,6 +2,7 @@ package util
 
 import (
 	"context"
+	"sync"
 	"testing"
 
 	"github.com/golang/mock/gomock"
@@ -113,6 +114,7 @@ func TestCommandSplitHandlerEmpty(t *testing.T) {
 
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
+		ctx = plugin.ContextWithWaitGroup(ctx, new(sync.WaitGroup))
 
 		// called async waiting for ctx to be done
 		conn.EXPECT().Close().AnyTimes()

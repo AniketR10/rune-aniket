@@ -74,8 +74,8 @@ github.com/ernestrc/dom v0.2.5-0.20201125033726-789c946aa938 h1:f/aC0hFDoMkao3ch
 github.com/ernestrc/dom v0.2.5-0.20201125033726-789c946aa938/go.mod h1:zkvVMhrl7iSWniJU2txvm5E6pF5bkHVK5ALYLlNBcO0=
 github.com/ernestrc/go-multierror v1.1.2 h1:9EYH71nYIsHEC9DSTtsT9GypDxmHAQ2gcOY6BMnXot8=
 github.com/ernestrc/go-multierror v1.1.2/go.mod h1:DUlo5/81Y4/bn7/eCKZJaVXlDRc+RQmJnLw3tjg95Do=
-github.com/ernestrc/go-plugin v1.4.5 h1:PqhtfUNTfFnOglHPo5RBaG1gEHBcHpBmPX5MKQnEYeU=
-github.com/ernestrc/go-plugin v1.4.5/go.mod h1:viDMjcLJuDui6pXb8U4HVfb8AamCWhHGUjr2IrTF67s=
+github.com/ernestrc/go-plugin v1.5.0 h1:d78DpwRJu/gUIgADAdNWIW+TS+ZTnGV2ga/plm6S39E=
+github.com/ernestrc/go-plugin v1.5.0/go.mod h1:viDMjcLJuDui6pXb8U4HVfb8AamCWhHGUjr2IrTF67s=
 github.com/ernestrc/golang-internal-tools v0.0.0-20220317145801-f8b5a950857b h1:RbqZaQ3JIvTkY89eYRlmW7ltIQqMZjkelnJQJN/wzAA=
 github.com/ernestrc/golang-internal-tools v0.0.0-20220317145801-f8b5a950857b/go.mod h1:UpiAb0rlHx9+ssJP0Y1WjRS2G5khIWsgOhz+BRUY6gU=
 github.com/ernestrc/logd-go v0.0.0-20180509171507-65871c1d5504 h1:+v3dfsJghDlJelEJwUE3LeUKkw/EosxDwZ7AT0yNDLI=

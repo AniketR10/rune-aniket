@@ -29,6 +29,7 @@ type granteeServer struct {
 	srv       *grpc.Server
 	ctx       context.Context
 	cancelCtx func()
+	closeWg   sync.WaitGroup
 
 	durationGracefulShut time.Duration
 	keepAliveTimeout     time.Duration
@@ -45,6 +46,7 @@ func newGranteeServer(
 	ret.req = req
 	ret.srv = s
 	ret.ctx, ret.cancelCtx = context.WithCancel(context.Background())
+	ret.ctx = ContextWithWaitGroup(ret.ctx, &ret.closeWg)
 	if keepAlive != time.Duration(0) {
 		ret.keepAlive = make(chan struct{})
 		ret.keepAliveTimeout = keepAlive * 2
@@ -73,9 +75,7 @@ func (s *granteeServer) monitorKeepAlive() {
 	for {
 		select {
 		case <-t.C:
-			ctx, cancel := context.WithCancel(context.Background())
-			s.doShutdown(ctx, "lost connectivity to host: failed to send a health check in time")
-			cancel()
+			s.doShutdown("lost connectivity to host: failed to send a health check in time")
 		case <-ch:
 			forceStopTimer(t)
 			t.Reset(s.keepAliveTimeout)
@@ -159,7 +159,7 @@ func (s *granteeServer) OnGrant(ctx context.Context, req *pluginpb.OnPermGrantRe
 	return new(pluginpb.OnPermGrantResponse), nil
 }
 
-func (s *granteeServer) doShutdown(ctx context.Context, reason string) (ret error) {
+func (s *granteeServer) doShutdown(reason string) (ret error) {
 	// idempotent
 	s.mu.Lock()
 	keepAlive := s.keepAlive
@@ -170,28 +170,41 @@ func (s *granteeServer) doShutdown(ctx context.Context, reason string) (ret erro
 		close(keepAlive)
 	}
 
-	defer s.cancelCtx()
+	// NOTE: protect against plugins with poor synchronization which could block
+	// indefinetely, then grantee server would timeout and send a kill signal.
+	// This would be fine, except that we use unix sockets that need to be
+	// cleaned up.
+	t := time.After(defDurationGracefulShutClient / 2)
+	done := make(chan struct{})
+	go func() {
+		if err := s.grantee.Shutdown(reason); err != nil {
+			ret = multierr.Append(ret, err)
+		}
+		done <- struct{}{}
+	}()
 
-	if err := s.grantee.Shutdown(reason); err != nil {
+	select {
+	case <-t:
+	case <-done:
+	}
+	// wait for all resources to close
+	s.cancelCtx()
+	s.closeWg.Wait()
+
+	if err := s.broker.Close(); err != nil {
 		ret = multierr.Append(ret, err)
 	}
 
-	// if this request to shutdown is coming from the wire
-	// then cleanup server resources only when ctx is done
-	go func() {
-		<-ctx.Done()
-		s.srv.GracefulStop()
-		if err := s.broker.Close(); err != nil {
-			ret = multierr.Append(ret, err)
-		}
-	}()
+	// complete rpc without blocking
+	go s.srv.GracefulStop()
+
 	return ret
 }
 
 func (s *granteeServer) Shutdown(ctx context.Context, in *pluginpb.ShutdownRequest) (
 	*pluginpb.ShutdownResponse, error,
 ) {
-	err := s.doShutdown(ctx, in.GetReason())
+	err := s.doShutdown(in.GetReason())
 	if err != nil {
 		return nil, err
 	}
@@ -292,12 +305,16 @@ func (c *granteeClient) bindPluginClient(pc *plugin.Client) {
 
 func (c *granteeClient) shutdown(reason string) error {
 	if c.pClient != nil {
+		// shutdown is handled by grantee server by closing all resources
+		// gracefully and waiting for all to complete before exiting.
+		// This is to ensure that the process exits, whether gracefully or not
 		defer func() {
 			c.pClient.Kill()
 			c.pClient = nil
 		}()
 	}
-	ctx, cancelFn := context.WithTimeout(context.Background(), defDurationGracefulShutClient)
+	ctx, cancelFn := context.WithTimeout(context.Background(),
+		defDurationGracefulShutClient)
 	defer cancelFn()
 
 	req := pluginpb.ShutdownRequest{Reason: reason}

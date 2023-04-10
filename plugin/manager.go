@@ -84,8 +84,8 @@ type Manager struct {
 	// used to abstract out go-plugin specific functionality
 	builder pluginBuilder
 
-	broker       proto.MuxBroker
-	config       managerConfig
+	broker proto.MuxBroker
+	config managerConfig
 }
 
 // NewManager allocates storage for a new Manager and initializes it.
@@ -248,12 +248,15 @@ func (m *Manager) doCloseClient(reason string, client *granteeClientWrap) (
 		client.cancelCtx()
 		client.cancelCtx = nil
 	}
-	for _, resource := range client.resources {
+	resources := client.resources
+	client.resources = nil
+	m.mu.Unlock()
+
+	for _, resource := range resources {
 		if err := resource.Close(); err != nil {
 			clientErr = multierr.Append(clientErr, err)
 		}
 	}
-	m.mu.Unlock()
 
 	level := log.InfoLevel
 	if clientErr != nil {
@@ -309,17 +312,19 @@ func (m *Manager) monitor(client *granteeClientWrap) {
 			}
 			if triesLeft == 0 {
 				doneCh := m.doCloseClient("exhausted health check retries", client)
-				// if someone grabs doneCh while we're doing a health check
-				// make sure we notify receiver
-				select {
-				case wg := <-doneCh:
-					wg.Done()
-				default:
+				if doneCh != nil {
+					// if someone grabs doneCh while we're doing a health check
+					// make sure we notify receiver
+					select {
+					case wg := <-doneCh:
+						wg.Done()
+					default:
+					}
 				}
 			}
 		case wg := <-client.doneCh:
 			defer wg.Done()
-			m.doCloseClient("Stop was called on plugin Manager", client)
+			m.doCloseClient("Stop/Close was called on plugin Manager", client)
 			return
 		}
 	}

@@ -218,6 +218,7 @@ type granteeMock struct {
 	cfgs                 []config.Config
 	onGrant, onDenied    []Permission
 	onHealth, onShutdown bool
+	onShutdownFn         func()
 }
 
 func (g *granteeMock) Connected(b proto.MuxBroker, cfg config.Config) {
@@ -240,6 +241,9 @@ func (g *granteeMock) Shutdown(reason string) error {
 		return errors.New("called shutdown twice")
 	}
 	g.onShutdown = true
+	if g.onShutdownFn != nil {
+		g.onShutdownFn()
+	}
 	return nil
 }
 func (g *granteeMock) Health() error {
@@ -418,14 +422,17 @@ func TestIntegrationPluginClientServer(t *testing.T) {
 	})
 
 	t.Run("Close request triggers Grantee OnShutdown", func(t *testing.T) {
-		grantee := granteeMock{}
+		var wg sync.WaitGroup
+		grantee := granteeMock{onShutdownFn: wg.Done}
 		perms := []Permission{Permission("append")}
 		client, closeFn := setupIntTest(t, &grantee, perms)
 		defer closeFn()
 
+		wg.Add(1)
 		err := client.shutdown("sut")
 		require.NoError(t, err)
 
+		wg.Wait()
 		assert.True(t, grantee.onShutdown)
 	})
 
