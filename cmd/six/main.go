@@ -18,6 +18,7 @@ import (
 	"github.com/ernestrc/blue/logging"
 	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
+	"google.golang.org/grpc"
 	"gopkg.in/yaml.v3"
 	"unstable.build/go-tui"
 	workspaceapi "unstable.build/go-tui/api/workspace"
@@ -104,16 +105,23 @@ func startWorkspaceServer() int {
 	// log unhandled signals for debugging
 	ch := make(chan os.Signal, 1)
 	quitch := make(chan struct{})
+	grpcServer := grpc.NewServer()
+	signal.Notify(ch)
 
 	defer close(quitch)
-	signal.Notify(ch)
+	defer signal.Reset()
+
 	go func() {
+		defer grpcServer.Stop()
 		for {
 			select {
 			case sig := <-ch:
 				switch sig {
-				case syscall.SIGTERM, syscall.SIGKILL:
-					l.Info("Received kill signal: exiting")
+				case syscall.SIGTERM, syscall.SIGINT:
+					l.Infof("Received %v signal: cleaning up...", sig)
+					return
+				case syscall.SIGKILL:
+					l.Info("Received SIGKILL signal: exiting")
 					os.Exit(1)
 				case syscall.SIGURG:
 					/* received when socket urgent data is ready to be read */
@@ -121,7 +129,6 @@ func startWorkspaceServer() int {
 					l.Debugf("Received unhandled signal: %#v", sig)
 				}
 			case <-quitch:
-				signal.Reset()
 				return
 			}
 		}
@@ -137,9 +144,12 @@ func startWorkspaceServer() int {
 		l.Error(err)
 		return 3
 	}
+	defer scheme.Close()
 
 	server := workspacepb.NewServer(scheme, new(sync.Mutex))
-	err = ssh.StartSchemeServer(l, server)
+	defer server.Stop()
+
+	err = ssh.StartSchemeServer(l, server, grpcServer)
 	if err != nil {
 		l.Error(err)
 		return 4

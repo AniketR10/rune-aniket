@@ -67,8 +67,8 @@ func (lis *stdioListener) Addr() net.Addr {
 // over the calling process' os.Stdin and sends responses over os.Stdout.
 func StartSchemeServer(
 	logger *log.Logger, server *workspacepb.Server,
+	grpcServer *grpc.Server,
 ) error {
-	grpcServer := grpc.NewServer()
 	lis := newReaderWriterListener(
 		logger, nil /*reader*/, nil, /*writer*/
 		true, /* use stdio instead of reader and writer */
