@@ -934,6 +934,46 @@ func TestComponentRegister(t *testing.T) {
 		return c, c, err
 	})
 }
+func TestUnregisterCommand(t *testing.T) {
+	resource1, err := workspaceapi.ParseURI("file:///HERS")
+	require.NoError(t, err)
+	myArgs := []string{"a", "bbbbbbbbbbbbbbbbbbbbb"}
+	myCmd := "BUY"
+	c, err := text.NewComponent(NopEditor(), &testLoader{}, text.DefaultConfig())
+	require.NoError(t, err)
+
+	win, _ := c.Focus()
+	h1, err := c.Edit(resource1, cell.NewBuffer())
+	require.NoError(t, err)
+
+	var called int
+	c.SubscribeCommand(myCmd, text.FuncCommandHandler(func(ctx context.Context, cmd textapi.Command) (bool, error) {
+		called++
+		return false, nil
+	}))
+
+	cmd := textapi.Command{
+		Resource: h1,
+		URI:      resource1,
+		Name:     myCmd,
+		Args:     myArgs,
+		Window:   win,
+	}
+	ok, err := c.DispatchCommand(cmd)
+	assert.True(t, ok)
+	require.NoError(t, err)
+
+	assert.Equal(t, 1, called)
+
+	err = c.UnsubscribeCommand(myCmd)
+	require.NoError(t, err)
+
+	ok, err = c.DispatchCommand(cmd)
+	assert.False(t, ok)
+	require.NoError(t, err)
+	assert.Equal(t, 1, called)
+}
+
 func TestTabIntegration(t *testing.T) {
 	testTabIntegration(t, func(ed text.Editor, mu *sync.Mutex) (*text.Component, browser.WindowManager, error) {
 		c, _, err := newTestComponentErr(ed, text.DefaultConfig())

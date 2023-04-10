@@ -169,10 +169,12 @@ func (s *Server) Register(ctx context.Context, in *RegisterCommandRequest) (
 
 	s.editor.Lock()
 	err = s.editor.SubscribeCommand(cmd, commander)
-	s.editor.Unlock()
 	if err != nil {
+		s.editor.Unlock()
 		return nil, err
 	}
+	s.cmdSub = append(s.cmdSub, cmd)
+	s.editor.Unlock()
 
 	return new(RegisterCommandResponse), nil
 }
@@ -377,11 +379,14 @@ func (s *Server) RawCells(ctx context.Context, in *RawCellsRequest) (
 
 // Close closes all resources associated with this server.
 func (s *Server) Close() (err error) {
-	//for _, sub := range s.cmdSub {
-	//	s.editor.UnsubscribeCommand(sub)
-	//}
+	// ensure that we unsubscribe all subscribers created
+	// by this server. Some of these might already been unsubscribed,
+	// so this completes the cleanup for the ones that haven't.
+	for _, sub := range s.cmdSub {
+		_ = s.editor.UnsubscribeCommand(sub)
+	}
 	for _, sub := range s.eventSub {
-		s.editor.UnsubscribeEvents(sub)
+		_, _ = s.editor.UnsubscribeEvents(sub)
 	}
 	s.eventSub = nil
 	return nil

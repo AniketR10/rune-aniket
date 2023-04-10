@@ -31,6 +31,10 @@ func (e *simpleEditor) SubscribeCommand(cmd string, h CommandHandler) error {
 	return errors.New("not supported")
 }
 
+func (c *simpleEditor) UnsubscribeCommand(cmd string) error {
+	return errors.New("not supported")
+}
+
 func (e *simpleEditor) Editor(file workspaceapi.URI) (Handler, error) {
 	return nil, errors.New("not supported")
 }

@@ -825,6 +825,15 @@ func (c *Component) SubscribeCommand(cmd string, cm CommandHandler) error {
 	return nil
 }
 
+// UnsubscribeCommand un-registers command.
+func (c *Component) UnsubscribeCommand(cmd string) error {
+	if _, ok := c.cmdSubscribers[cmd]; !ok {
+		return errors.New("command not registered")
+	}
+	delete(c.cmdSubscribers, cmd)
+	return nil
+}
+
 // Browser returns this Component's underlying browser.Component.
 func (c *Component) Browser() *browser.Component {
 	return &c.comp

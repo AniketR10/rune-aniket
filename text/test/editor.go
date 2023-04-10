@@ -42,6 +42,12 @@ func (e EditorFromAPIEditor) SubscribeCommand(cmd string, h text.CommandHandler)
 	return e.Ed.SubscribeCommand(cmd, h)
 }
 
+func (e EditorFromAPIEditor) UnsubscribeCommand(cmd string) error {
+	return e.Ed.(interface {
+		UnsubscribeCommand(string) error
+	}).UnsubscribeCommand(cmd)
+}
+
 func (e EditorFromAPIEditor) SetLocationList(h text.Handler, p textapi.LocationPriority, arg string, l text.LocationList) error {
 	return e.Ed.SetLocationList(h, p, arg, l)
 }

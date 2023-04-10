@@ -50,6 +50,9 @@ type Editor interface {
 	// SubscribeCommand registers command to be dispatched to CommandHandler.
 	SubscribeCommand(string, CommandHandler) error
 
+	// UnsubscribeCommand un-registers command.
+	UnsubscribeCommand(string) error
+
 	// SetLocationList sets the Handler's location list for users to
 	// navigate the code. See LocationList for more details.
 	// In order to remove a location list, SetLocationList must be called

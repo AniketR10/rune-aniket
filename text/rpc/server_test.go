@@ -146,6 +146,7 @@ func TestServerRegister(t *testing.T) {
 		wg.Wait()
 
 		conn.EXPECT().Close().AnyTimes()
+		mock.EXPECT().UnsubscribeCommand(gomock.Eq("bla"))
 
 		s.editor.Lock()
 		assert.NoError(t, s.Close())
