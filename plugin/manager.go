@@ -250,13 +250,15 @@ func (m *Manager) doCloseClient(reason string, client *granteeClientWrap) (
 	}
 	resources := client.resources
 	client.resources = nil
-	m.mu.Unlock()
 
 	for _, resource := range resources {
 		if err := resource.Close(); err != nil {
 			clientErr = multierr.Append(clientErr, err)
 		}
 	}
+	// Close might actually call to workspace/browser/editor/etc resources
+	// so unfortunately we cannot parallelize it amongst different clients
+	m.mu.Unlock()
 
 	level := log.InfoLevel
 	if clientErr != nil {
