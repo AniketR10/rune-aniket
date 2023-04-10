@@ -26,7 +26,10 @@ func MonitorConnection(
 		state := conn.GetState()
 		switch state {
 		case connectivity.Idle, connectivity.Connecting, connectivity.Ready:
-			conn.WaitForStateChange(ctx, state)
+			if !conn.WaitForStateChange(ctx, state) {
+				doClosed("context canceled")
+				return
+			}
 		case connectivity.TransientFailure:
 			failureCtx, cancelFn := context.WithTimeout(ctx, failureTimeout)
 			didChange := conn.WaitForStateChange(failureCtx, connectivity.TransientFailure)

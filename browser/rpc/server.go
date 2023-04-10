@@ -4,9 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"runtime"
 	"sync"
+	"time"
 
 	"github.com/ernestrc/blue/logging"
 	log "github.com/sirupsen/logrus"
@@ -23,6 +23,10 @@ import (
 
 var (
 	errWindowNotFound = errors.New("window with id not found or already closed")
+)
+
+const (
+	defaultFailureTimeout = 5 * time.Second
 )
 
 // Server serves a Browser over GRPC.
@@ -86,9 +90,11 @@ func (s *Server) consumeErrors(
 	}
 }
 
-func (s *Server) dialHandler(channelID string) (browserapi.Handler, error) {
+func (s *Server) dialHandler(channelID string, tags ...string) (
+	browserapi.Handler, error,
+) {
 	s.log(log.DebugLevel, "dialing handler at %q", channelID)
-	handlerConn, err := s.broker.DialChannel(channelID, os.Args[0], "browserpb.Server")
+	handlerConn, err := s.broker.DialChannel(channelID, tags...)
 	if err != nil {
 		return nil, err
 	}
@@ -103,26 +109,37 @@ func (s *Server) dialHandler(channelID string) (browserapi.Handler, error) {
 
 	go s.consumeErrors(ctx, channelID, handlercc.Errors())
 	go s.consumeErrors(ctx, channelID, cc.errorCh)
+	// finalizers might not run depending on how handler is used (bar, tabs, etc.)
+	// monitor connection and make sure it's closed in any case if remote handler
+	// becomes unresponsive for more than a timeout.
+	go proto.MonitorConnection(ctx, defaultFailureTimeout, handlerConn,
+		func(reason string) {
+			cancelFn()
+			handlerConn.Close()
+			s.log(log.DebugLevel, "connection monitor closed connection: %s", reason)
+			runtime.SetFinalizer(cc, nil)
+		})
 
 	runtime.SetFinalizer(cc, func(*floatingClientImpl) {
 		cancelFn()
 		handlerConn.Close()
 		s.log(log.DebugLevel, "closed handler connection for channel %q", channelID)
+		runtime.SetFinalizer(cc, nil)
 	})
 	return cc, nil
 }
 
-func (s *Server) getContentHandler(channelID string) (browserapi.Handler, error) {
+func (s *Server) getContentHandler(channelID string, tags ...string) (browserapi.Handler, error) {
 	// if it's not a URI, then it must be a remote handler
 	uri, err := workspaceapi.ParseURI(channelID)
 	if err != nil {
-		return s.dialHandler(channelID)
+		return s.dialHandler(channelID, tags...)
 	}
 	s.browser.Lock()
 	h, ok := s.browser.Resource(uri)
 	s.browser.Unlock()
 	if !ok {
-		return s.dialHandler(channelID)
+		return s.dialHandler(channelID, tags...)
 	}
 
 	s.log(log.DebugLevel, "(%p browser.Server): using return of Open/Content handler for channelID: %s",
@@ -133,8 +150,9 @@ func (s *Server) getContentHandler(channelID string) (browserapi.Handler, error)
 func (s *Server) newRemoteResource(
 	ctx context.Context, channelID string,
 	action func(browser.WindowManager, browserapi.Handler) (browser.Window, error),
+	tags ...string,
 ) (uint64, error) {
-	handler, err := s.getContentHandler(channelID)
+	handler, err := s.getContentHandler(channelID, tags...)
 	if err != nil {
 		return 0, err
 	}
@@ -182,7 +200,7 @@ func (s *Server) Split(
 				return nil, fmt.Errorf("cannot split over a closed window: %d", req.GetWindowId())
 			}
 			return wm.Split(protoToModelOrientation(req.GetOrientation()), win, h)
-		})
+		}, "browserpb.Server", "split")
 	if err != nil {
 		return nil, err
 	}
@@ -196,7 +214,7 @@ func (s *Server) Bar(
 	ctx context.Context, req *BarRequest,
 ) (*BarResponse, error) {
 	handlerID := req.GetChannelId()
-	handler, err := s.getContentHandler(handlerID)
+	handler, err := s.getContentHandler(handlerID, "browserpb.Server", "bar")
 	if err != nil {
 		return nil, err
 	}
@@ -335,7 +353,7 @@ func (s *Server) Floating(
 	windowID, err := s.newRemoteResource(ctx, req.GetChannelId(),
 		func(wm browser.WindowManager, h browserapi.Handler) (browser.Window, error) {
 			return wm.Floating(h.(browser.Floating), cfg)
-		})
+		}, "browserpb.Server", "floating")
 	if err != nil {
 		return nil, err
 	}
@@ -354,7 +372,8 @@ func (s *Server) Tab(ctx context.Context, req *TabRequest,
 		return nil, err
 	}
 
-	handler, err := s.getContentHandler(req.GetChannelId())
+	handler, err := s.getContentHandler(req.GetChannelId(),
+		"browserpb.Server", "tab")
 	if err != nil {
 		return nil, err
 	}
@@ -369,7 +388,8 @@ func (s *Server) Tab(ctx context.Context, req *TabRequest,
 func (s *Server) SetContent(
 	ctx context.Context, req *WindowSetContentRequest,
 ) (*WindowSetContentResponse, error) {
-	client, err := s.getContentHandler(req.GetChannelId())
+	client, err := s.getContentHandler(req.GetChannelId(),
+		"browserpb.Server", "setContent")
 	if err != nil {
 		return nil, fmt.Errorf("failed to dial to remote handler: %v", err)
 	}
@@ -382,7 +402,8 @@ func (s *Server) SetContent(
 		return nil, errWindowNotFound
 	}
 	if win.Closed() {
-		return nil, fmt.Errorf("cannot split over a closed window: %d", req.GetWindowId())
+		return nil, fmt.Errorf("cannot split over a closed window: %d",
+			req.GetWindowId())
 	}
 	err = win.SetContent(client)
 	if err != nil {
