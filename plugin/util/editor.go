@@ -57,7 +57,7 @@ func (t *editorGrantee) subscribeToEvents(grants []plugin.Grant) error {
 		return err
 	}
 
-	err = t.ed.SubscribeEditorEvents(t.evs, h)
+	err = t.ed.SubscribeEvents(t.evs, h)
 	if err != nil {
 		return err
 	}

@@ -24,8 +24,14 @@ func (e EditorFromAPIEditor) Edit(file workspaceapi.URI, buf *cell.Buffer) (text
 	return e.Ed.Edit(file, buf)
 }
 
-func (e EditorFromAPIEditor) SubscribeEditorEvents(t []textapi.EventType, h text.EventHandler) error {
-	return e.Ed.SubscribeEditorEvents(t, h)
+func (e EditorFromAPIEditor) SubscribeEvents(t []textapi.EventType, h text.EventHandler) error {
+	return e.Ed.SubscribeEvents(t, h)
+}
+
+func (e EditorFromAPIEditor) UnsubscribeEvents(h text.EventHandler) (bool, error) {
+	return e.Ed.(interface {
+		UnsubscribeEvents(text.EventHandler) (bool, error)
+	}).UnsubscribeEvents(h)
 }
 
 func (e EditorFromAPIEditor) Editor(file workspaceapi.URI) (text.Handler, error) {

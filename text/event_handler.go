@@ -17,14 +17,14 @@ type fnEventHandler struct {
 	cb func(context.Context, textapi.Event) bool
 }
 
-func (f fnEventHandler) Handle(ctx context.Context, ev textapi.Event) bool {
+func (f *fnEventHandler) Handle(ctx context.Context, ev textapi.Event) bool {
 	return f.cb(ctx, ev)
 }
 
 // FuncEventHandler returns an EventHandler that calls fn
 // every time Handle is invoked.
 func FuncEventHandler(fn func(context.Context, textapi.Event) bool) EventHandler {
-	return fnEventHandler{
+	return &fnEventHandler{
 		cb: fn,
 	}
 }

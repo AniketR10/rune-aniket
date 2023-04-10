@@ -40,14 +40,19 @@ func (e *viEditor) Editor(file workspaceapi.URI) (text.Handler, error) {
 	return nil, errors.New("not supported")
 }
 
-// SubscribeEditorEvents subsribes sub to ev. Note that this Editor is only capable
+// SubscribeEvents subsribes sub to ev. Note that this Editor is only capable
 // of dispatching EventTypeOpen, EventTypeInsert and EventTypeDelete
 // EventType events.
-func (e *viEditor) SubscribeEditorEvents(
+func (e *viEditor) SubscribeEvents(
 	evs []textapi.EventType, sub text.EventHandler,
 ) error {
-	e.Publisher.SubscribeEditorEvents(evs, sub)
+	e.Publisher.SubscribeEvents(evs, sub)
 	return nil
+}
+
+func (e *viEditor) UnsubscribeEvents(sub text.EventHandler) (bool, error) {
+	ok := e.Publisher.UnsubscribeEvents(sub)
+	return ok, nil
 }
 
 func (e *viEditor) SetDefaultAttributes(h text.Handler, attrs term.Attributes) error {

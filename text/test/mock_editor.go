@@ -28,7 +28,7 @@ func NopEditor() text.Editor {
 }
 
 // NopEditorWithCallback returns a text.Editor that calls cb when
-// SubscribeEditorEvents is called.
+// SubscribeEvents is called.
 func NopEditorWithCallback(cb func()) text.Editor {
 	return &testEditor{cb: cb}
 }
@@ -141,7 +141,25 @@ func (e *testEditor) SetDefaultAttributes(h text.Handler, attr term.Attributes) 
 	return nil
 }
 
-func (e *testEditor) SubscribeEditorEvents(
+func (e *testEditor) UnsubscribeEvents(
+	sub text.EventHandler,
+) (ret bool, err error) {
+	final := make(map[textapi.EventType][]text.EventHandler)
+	for ev, subs := range e.subs {
+		final[ev] = make([]text.EventHandler, 0, len(subs))
+		for _, s := range subs {
+			if s != sub {
+				final[ev] = append(final[ev], s)
+			} else {
+				ret = true
+			}
+		}
+	}
+	e.subs = final
+	return
+}
+
+func (e *testEditor) SubscribeEvents(
 	evs []textapi.EventType, sub text.EventHandler,
 ) error {
 	for _, ev := range evs {

@@ -86,8 +86,8 @@ func (p *Publisher) Handler(h Handler) Handler {
 	return h.(*cursorPublisher).Handler
 }
 
-// SubscribeEditorEvents subsribes sub to ev.
-func (p *Publisher) SubscribeEditorEvents(evs []textapi.EventType, sub EventHandler) {
+// SubscribeEvents subsribes sub to ev.
+func (p *Publisher) SubscribeEvents(evs []textapi.EventType, sub EventHandler) {
 	for _, ev := range evs {
 		if _, ok := p.subs[ev]; !ok {
 			p.subs[ev] = []EventHandler{sub}
@@ -95,6 +95,23 @@ func (p *Publisher) SubscribeEditorEvents(evs []textapi.EventType, sub EventHand
 			p.subs[ev] = append(p.subs[ev], sub)
 		}
 	}
+}
+
+// UnsubscribeEvents unsubscribes sub from all events.
+func (p *Publisher) UnsubscribeEvents(sub EventHandler) (ret bool) {
+	final := make(map[textapi.EventType][]EventHandler)
+	for ev, subs := range p.subs {
+		final[ev] = make([]EventHandler, 0, len(subs))
+		for _, s := range subs {
+			if s != sub {
+				final[ev] = append(final[ev], s)
+			} else {
+				ret = true
+			}
+		}
+	}
+	p.subs = final
+	return
 }
 
 func (p *Publisher) dispatchEvent(ctx context.Context, ev textapi.Event) {

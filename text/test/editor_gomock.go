@@ -393,16 +393,31 @@ func (mr *MockEditorMockRecorder) SubscribeCommand(arg0, arg1 interface{}) *gomo
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubscribeCommand", reflect.TypeOf((*MockEditor)(nil).SubscribeCommand), arg0, arg1)
 }
 
-// SubscribeEditorEvents mocks base method.
-func (m *MockEditor) SubscribeEditorEvents(arg0 []api.EventType, arg1 text.EventHandler) error {
+// SubscribeEvents mocks base method.
+func (m *MockEditor) SubscribeEvents(arg0 []api.EventType, arg1 text.EventHandler) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SubscribeEditorEvents", arg0, arg1)
+	ret := m.ctrl.Call(m, "SubscribeEvents", arg0, arg1)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-// SubscribeEditorEvents indicates an expected call of SubscribeEditorEvents.
-func (mr *MockEditorMockRecorder) SubscribeEditorEvents(arg0, arg1 interface{}) *gomock.Call {
+// SubscribeEvents indicates an expected call of SubscribeEvents.
+func (mr *MockEditorMockRecorder) SubscribeEvents(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubscribeEditorEvents", reflect.TypeOf((*MockEditor)(nil).SubscribeEditorEvents), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubscribeEvents", reflect.TypeOf((*MockEditor)(nil).SubscribeEvents), arg0, arg1)
+}
+
+// UnsubscribeEvents mocks base method.
+func (m *MockEditor) UnsubscribeEvents(arg0 text.EventHandler) (bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UnsubscribeEvents", arg0)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UnsubscribeEvents indicates an expected call of UnsubscribeEvents.
+func (mr *MockEditorMockRecorder) UnsubscribeEvents(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UnsubscribeEvents", reflect.TypeOf((*MockEditor)(nil).UnsubscribeEvents), arg0)
 }

@@ -501,7 +501,7 @@ func (c *Component) CompleteCommand(ctx context.Context, cmd string, args ...str
 }
 
 // DispatchCommand dispatches a EventTypeCommand with cmd to subscribers
-// subscribed via SubscribeEditorEvents.
+// subscribed via SubscribeEvents.
 func (c *Component) DispatchCommand(cmd textapi.Command) (handled bool, err error) {
 	if cmd.Window == nil {
 		panic("invalid command: missing Window from which command was invoked")
@@ -739,10 +739,10 @@ func (c *Component) dispatchFocusTab(h EventHandler) bool {
 	return false
 }
 
-// SubscribeEditorEvents subscribes h to editor events of type ev.
+// SubscribeEvents subscribes h to editor events of type ev.
 // If ev is of type EventTypeOpen, an event will be dispatched for
 // every Tab currently open.
-func (c *Component) SubscribeEditorEvents(evs []textapi.EventType, h EventHandler) error {
+func (c *Component) SubscribeEvents(evs []textapi.EventType, h EventHandler) error {
 	// iterate to dispatch immediate events
 	for _, ev := range evs {
 		switch ev {
@@ -779,7 +779,24 @@ func (c *Component) SubscribeEditorEvents(evs []textapi.EventType, h EventHandle
 		}
 	}
 
-	return c.ed.SubscribeEditorEvents(delegated, h)
+	return c.ed.SubscribeEvents(delegated, h)
+}
+
+// UnsubscribeEvents unsubscribes sub from all events.
+func (p *Component) UnsubscribeEvents(sub EventHandler) (ret bool, err error) {
+	final := make(map[textapi.EventType][]EventHandler)
+	for ev, subs := range p.edSubscribers {
+		final[ev] = make([]EventHandler, 0, len(subs))
+		for _, s := range subs {
+			if s != sub {
+				final[ev] = append(final[ev], s)
+			} else {
+				ret = true
+			}
+		}
+	}
+	p.edSubscribers = final
+	return
 }
 
 // Commands returns a list of commands registered via SubscribeCommand

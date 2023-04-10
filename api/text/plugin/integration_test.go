@@ -83,11 +83,11 @@ func TestIntegrationRace(t *testing.T) {
 		{plugin.PermissionEditor, func(token plugin.Grant, broker proto.MuxBroker) (interface{}, error) {
 			return Editor(token, broker)
 		}, func(ed *texttest.MockEditorMockRecorder) *gomock.Call {
-			return ed.SubscribeEditorEvents(gomock.Any(), gomock.Any()).Return(nil)
+			return ed.SubscribeEvents(gomock.Any(), gomock.Any()).Return(nil)
 		}, func(ifc interface{}) error {
 			h := text.FuncEventHandler(func(context.Context, textapi.Event) bool { return false })
 			ev := []textapi.EventType{textapi.EventTypeFlush}
-			return ifc.(textapi.Editor).SubscribeEditorEvents(ev, h)
+			return ifc.(textapi.Editor).SubscribeEvents(ev, h)
 		}},
 		{plugin.PermissionEditor, func(token plugin.Grant, broker proto.MuxBroker) (interface{}, error) {
 			return Editor(token, broker)

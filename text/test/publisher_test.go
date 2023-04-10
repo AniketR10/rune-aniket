@@ -39,7 +39,7 @@ func TestPublisher(t *testing.T) {
 		content := "1. She interviews"
 
 		var eventHandler text.Handler
-		pub.SubscribeEditorEvents([]textapi.EventType{textapi.EventTypeOpen},
+		pub.SubscribeEvents([]textapi.EventType{textapi.EventTypeOpen},
 			text.FuncEventHandler(func(ctx context.Context, ev textapi.Event) bool {
 				assert.Equal(t, textapi.EventTypeOpen, ev.Type)
 				assert.Equal(t, content, ev.Content)
@@ -60,7 +60,7 @@ func TestPublisher(t *testing.T) {
 		content := "2. She gets hired"
 
 		var eventHandler text.Handler
-		pub.SubscribeEditorEvents([]textapi.EventType{textapi.EventTypeFocus},
+		pub.SubscribeEvents([]textapi.EventType{textapi.EventTypeFocus},
 			text.FuncEventHandler(func(ctx context.Context, ev textapi.Event) bool {
 				assert.Equal(t, textapi.EventTypeFocus, ev.Type)
 				assert.Equal(t, uri, ev.URI)
@@ -81,7 +81,7 @@ func TestPublisher(t *testing.T) {
 
 		var eventHandler text.Handler
 		var fired int
-		pub.SubscribeEditorEvents([]textapi.EventType{textapi.EventTypeOpen, textapi.EventTypeFocus},
+		pub.SubscribeEvents([]textapi.EventType{textapi.EventTypeOpen, textapi.EventTypeFocus},
 			text.FuncEventHandler(func(ctx context.Context, ev textapi.Event) bool {
 				fired++
 				assert.Equal(t, uri, ev.URI)
@@ -107,7 +107,7 @@ func TestPublisher(t *testing.T) {
 		h.Resize(2, 2)
 
 		var called bool
-		pub.SubscribeEditorEvents([]textapi.EventType{textapi.EventTypeCursor},
+		pub.SubscribeEvents([]textapi.EventType{textapi.EventTypeCursor},
 			text.FuncEventHandler(func(ctx context.Context, ev textapi.Event) bool {
 				require.Equal(t, textapi.EventTypeCursor, ev.Type)
 				assert.Equal(t, uri, ev.URI)
@@ -150,7 +150,7 @@ func TestPublisher(t *testing.T) {
 		require.True(t, scroll.SeekDown())
 
 		at := term.Coordinates{X: -1}
-		pub.SubscribeEditorEvents([]textapi.EventType{textapi.EventTypeScroll},
+		pub.SubscribeEvents([]textapi.EventType{textapi.EventTypeScroll},
 			text.FuncEventHandler(func(ctx context.Context, ev textapi.Event) bool {
 				require.Equal(t, textapi.EventTypeScroll, ev.Type)
 				assert.Equal(t, uri, ev.URI)
@@ -176,7 +176,7 @@ func TestPublisher(t *testing.T) {
 		h.Resize(2, 2)
 
 		var called bool
-		pub.SubscribeEditorEvents([]textapi.EventType{textapi.EventTypeEdit},
+		pub.SubscribeEvents([]textapi.EventType{textapi.EventTypeEdit},
 			text.FuncEventHandler(func(ctx context.Context, ev textapi.Event) bool {
 				called = true
 				require.Equal(t, textapi.EventTypeEdit, ev.Type)
@@ -203,7 +203,7 @@ func TestPublisher(t *testing.T) {
 		h.Resize(2, 2)
 
 		var called bool
-		pub.SubscribeEditorEvents([]textapi.EventType{textapi.EventTypeEdit},
+		pub.SubscribeEvents([]textapi.EventType{textapi.EventTypeEdit},
 			text.FuncEventHandler(func(ctx context.Context, ev textapi.Event) bool {
 				called = true
 				require.Equal(t, textapi.EventTypeEdit, ev.Type)
@@ -219,5 +219,50 @@ func TestPublisher(t *testing.T) {
 
 		buf.DeleteLine(term.Coordinates{}, term.Coordinates{})
 		require.True(t, called)
+	})
+
+	t.Run("unsubscribes one handler", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+
+		pub := text.NewPublisher()
+		content := "1. She interviews"
+
+		var one, two, three int
+		handler1 := text.FuncEventHandler(func(ctx context.Context, ev textapi.Event) bool {
+			one++
+			return false
+		})
+		handler2 := text.FuncEventHandler(func(ctx context.Context, ev textapi.Event) bool {
+			two++
+			return false
+		})
+		handler3 := text.FuncEventHandler(func(ctx context.Context, ev textapi.Event) bool {
+			three++
+			return false
+		})
+		evs := []textapi.EventType{textapi.EventTypeOpen, textapi.EventTypeEdit}
+		pub.SubscribeEvents(evs, handler1)
+		pub.SubscribeEvents(evs, handler2)
+		pub.SubscribeEvents(evs, handler3)
+
+		buf, _, cursor := newEdit(content)
+		pub.PublishEdit(uri, buf, newMock(ctrl), cursor)
+		buf.DeleteLine(term.Coordinates{}, term.Coordinates{})
+		buf.DeleteLine(term.Coordinates{}, term.Coordinates{})
+		assert.Equal(t, 3, one)
+		assert.Equal(t, 3, two)
+		assert.Equal(t, 3, three)
+
+		assert.True(t, pub.UnsubscribeEvents(handler1))
+		buf.DeleteLine(term.Coordinates{}, term.Coordinates{})
+		assert.Equal(t, 3, one)
+		assert.Equal(t, 4, two)
+		assert.Equal(t, 4, three)
+
+		// make sure that two remains subscribed to other events
+		buf.DeleteLine(term.Coordinates{}, term.Coordinates{})
+		assert.Equal(t, 3, one)
+		assert.Equal(t, 5, two)
+		assert.Equal(t, 5, three)
 	})
 }

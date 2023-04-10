@@ -36,10 +36,12 @@ type Editor interface {
 	// if there was an error opening it.
 	Edit(file workspaceapi.URI, buf *cell.Buffer) (Handler, error)
 
-	// SubscribeEditorEvents subscribes EventHandler to events of type EventType.
-	// Note that it's suffixed with Editor so implementors
-	// can also implement browser.Subscriber.
-	SubscribeEditorEvents([]textapi.EventType, EventHandler) error
+	// SubscribeEvents subscribes EventHandler to events of type EventType.
+	SubscribeEvents([]textapi.EventType, EventHandler) error
+
+	// UnsubscribeEvents unsubscribes the given event handler from
+	// all events.
+	UnsubscribeEvents(EventHandler) (bool, error)
 
 	// Editor returns the editor.Handler with name or returns
 	// an error if no editor with name is open via Edit.

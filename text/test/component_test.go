@@ -436,7 +436,7 @@ func TestComponentEditorSubscriber(t *testing.T) {
 				}
 				return false
 			})
-			c.SubscribeEditorEvents(evs, h)
+			c.SubscribeEvents(evs, h)
 
 			tcase.trigger(t, c, uri)
 			assert.Equal(t, 1, fired)
@@ -466,7 +466,7 @@ func TestComponentEditorSubscriber(t *testing.T) {
 				}
 				return false
 			})
-			c.SubscribeEditorEvents(evs, h)
+			c.SubscribeEvents(evs, h)
 
 			tcase.trigger(t, c, uri)
 			assert.Equal(t, 1, fired)
@@ -491,7 +491,7 @@ func TestComponentEditorSubscriber(t *testing.T) {
 			fired++
 			return false
 		})
-		c.SubscribeEditorEvents(evs, h)
+		c.SubscribeEvents(evs, h)
 
 		_, err = c.Open(uri)
 		require.NoError(t, err)
@@ -522,7 +522,7 @@ func TestComponentEditorSubscriber(t *testing.T) {
 			assert.Equal(t, content, ev.Content)
 			return false
 		})
-		c.SubscribeEditorEvents(ev, h)
+		c.SubscribeEvents(ev, h)
 
 		assert.Equal(t, 2, fired)
 	})
@@ -556,9 +556,9 @@ func TestComponentEditorSubscriber(t *testing.T) {
 			i++
 			return false
 		})
-		c.SubscribeEditorEvents(evs, h)
+		c.SubscribeEvents(evs, h)
 
-		// upon SubscribeEditorEvents, we dispatch first Focus
+		// upon SubscribeEvents, we dispatch first Focus
 		assert.Equal(t, 1, i)
 		require.NoError(t, win.SetContent(b))
 		assert.Equal(t, 3, i)
@@ -581,7 +581,7 @@ func TestEventTypeFocusIntegration(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	c, _ := newTestComponent(t, NopEditor())
 	mock := NewMockEventHandler(ctrl)
-	c.SubscribeEditorEvents([]textapi.EventType{textapi.EventTypeFocus, textapi.EventTypeUnfocus}, mock)
+	c.SubscribeEvents([]textapi.EventType{textapi.EventTypeFocus, textapi.EventTypeUnfocus}, mock)
 
 	uri1, err := workspaceapi.ParseURI("file:///Elon.txt")
 	require.NoError(t, err)

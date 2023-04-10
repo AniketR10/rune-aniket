@@ -228,7 +228,7 @@ func (e *issuesGrantee) PermissionGranted(grants []plugin.Grant) {
 					" Will not be able to create reports", err)
 				continue
 			}
-			err = ed.SubscribeEditorEvents(editorEvents, e)
+			err = ed.SubscribeEvents(editorEvents, e)
 			if err != nil {
 				log.Warnf("Could not subscribe to editor events: %v. "+
 					"Will not be able to create reports", err)

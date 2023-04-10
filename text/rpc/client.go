@@ -115,13 +115,13 @@ func (c *Client) Editor(file workspaceapi.URI) (textapi.Handler, error) {
 	return Token{URI: file}, nil
 }
 
-// SubscribeEditorEvents requests the editor server to subscribe sub to ev.
-func (c *Client) SubscribeEditorEvents(
+// SubscribeEvents requests the editor server to subscribe sub to ev.
+func (c *Client) SubscribeEvents(
 	evs []textapi.EventType, h textapi.EventHandler,
 ) error {
-	c.log(log.TraceLevel, "SubscribeEditorEvents: %v", evs)
+	c.log(log.TraceLevel, "SubscribeEvents: %v", evs)
 	stream, err := c.ed.Subscribe(c.clientCtx)
-	c.log(log.TraceLevel, "SubscribeEditorEvents: %v: %v", evs, err)
+	c.log(log.TraceLevel, "SubscribeEvents: %v: %v", evs, err)
 	if err != nil {
 		return err
 	}

@@ -20,7 +20,7 @@ func TestEditorDispatchFocus(t *testing.T) {
 	require.NoError(t, err)
 
 	var h text.Handler
-	ed.SubscribeEditorEvents([]textapi.EventType{textapi.EventTypeOpen},
+	ed.SubscribeEvents([]textapi.EventType{textapi.EventTypeOpen},
 		text.FuncEventHandler(func(ctx context.Context, ev textapi.Event) bool {
 			assert.Equal(t, textapi.EventTypeOpen, ev.Type)
 			assert.Equal(t, content, ev.Content)
@@ -30,7 +30,7 @@ func TestEditorDispatchFocus(t *testing.T) {
 		}))
 
 	var focusCalled int
-	ed.SubscribeEditorEvents([]textapi.EventType{textapi.EventTypeFocus},
+	ed.SubscribeEvents([]textapi.EventType{textapi.EventTypeFocus},
 		text.FuncEventHandler(func(ctx context.Context, ev textapi.Event) bool {
 			focusCalled++
 			assert.Equal(t, textapi.EventTypeFocus, ev.Type)
@@ -58,7 +58,7 @@ func TestEditorDispatchScroll(t *testing.T) {
 	h.Handle(term.Event{Type: term.EventKey, Ch: 'j'})
 
 	at := term.Coordinates{X: -1}
-	ed.SubscribeEditorEvents([]textapi.EventType{textapi.EventTypeScroll},
+	ed.SubscribeEvents([]textapi.EventType{textapi.EventTypeScroll},
 		text.FuncEventHandler(func(ctx context.Context, ev textapi.Event) bool {
 			at = ev.Start
 			return false
@@ -90,7 +90,7 @@ func TestEditorDispatchCursor(t *testing.T) {
 
 	windowCursor := term.Coordinates{X: -1}
 	scrollCursor := term.Coordinates{X: -1}
-	ed.SubscribeEditorEvents([]textapi.EventType{textapi.EventTypeCursor},
+	ed.SubscribeEvents([]textapi.EventType{textapi.EventTypeCursor},
 		text.FuncEventHandler(func(ctx context.Context, ev textapi.Event) bool {
 			windowCursor = ev.Start
 			scrollCursor = ev.From

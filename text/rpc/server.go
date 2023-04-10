@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"sync"
 
 	"github.com/ernestrc/blue/logging"
@@ -30,8 +31,9 @@ type Server struct {
 		sync.Locker
 	}
 
-	serverCtx       context.Context
-	serverCancelCtx func()
+	// subscriptions, just to unsubscribe upon close
+	eventSub []text.EventHandler
+	cmdSub   []string
 }
 
 // NewServer allocates storage for a new Server and initializes it.
@@ -50,7 +52,6 @@ func (s *Server) Init(
 	s.broker = broker
 	s.editor.Editor = editor
 	s.editor.Locker = lock
-	s.serverCtx, s.serverCancelCtx = context.WithCancel(context.Background())
 }
 
 func (s *Server) log(level log.Level, msg string, args ...interface{}) {
@@ -60,7 +61,7 @@ func (s *Server) log(level log.Level, msg string, args ...interface{}) {
 func (s *Server) dialCommandHandler(channelID string) (text.CommandHandler, error) {
 	s.log(log.TraceLevel,
 		"(%p editor.Server): dialing command handler with id: %s", s, channelID)
-	handlerConn, err := s.broker.DialChannel(channelID)
+	handlerConn, err := s.broker.DialChannel(channelID, os.Args[0], "textpb.Server")
 	if err != nil {
 		return nil, err
 	}
@@ -142,11 +143,13 @@ func (s *Server) Subscribe(stream Editor_SubscribeServer) error {
 	handler := newEventStreamClient(stream)
 
 	s.editor.Lock()
-	err = s.editor.SubscribeEditorEvents(evTypes, handler)
-	s.editor.Unlock()
+	err = s.editor.SubscribeEvents(evTypes, handler)
 	if err != nil {
+		s.editor.Unlock()
 		return fmt.Errorf("subscribe editor events: %v", err)
 	}
+	s.eventSub = append(s.eventSub, handler)
+	s.editor.Unlock()
 
 	s.log(log.TraceLevel, "waiting for unsubscribe")
 	return handler.waitForUnsubscribe()
@@ -374,10 +377,13 @@ func (s *Server) RawCells(ctx context.Context, in *RawCellsRequest) (
 
 // Close closes all resources associated with this server.
 func (s *Server) Close() (err error) {
-	if s.serverCancelCtx != nil {
-		s.serverCancelCtx()
-		s.serverCancelCtx = nil
+	//for _, sub := range s.cmdSub {
+	//	s.editor.UnsubscribeCommand(sub)
+	//}
+	for _, sub := range s.eventSub {
+		s.editor.UnsubscribeEvents(sub)
 	}
+	s.eventSub = nil
 	return nil
 }
 

@@ -35,9 +35,14 @@ func (e *simpleEditor) Editor(file workspaceapi.URI) (Handler, error) {
 	return nil, errors.New("not supported")
 }
 
-func (e *simpleEditor) SubscribeEditorEvents(evs []textapi.EventType, sub EventHandler) error {
-	e.pub.SubscribeEditorEvents(evs, sub)
+func (e *simpleEditor) SubscribeEvents(evs []textapi.EventType, sub EventHandler) error {
+	e.pub.SubscribeEvents(evs, sub)
 	return nil
+}
+
+func (e *simpleEditor) UnsubscribeEvents(sub EventHandler) (bool, error) {
+	ok := e.pub.UnsubscribeEvents(sub)
+	return ok, nil
 }
 
 func (e simpleEditor) SetLocationList(

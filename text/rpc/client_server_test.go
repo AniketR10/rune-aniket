@@ -193,7 +193,7 @@ func TestClientServerIntegration(t *testing.T) {
 				defer closeFn()
 
 				wg.Add(1)
-				err := client.SubscribeEditorEvents([]textapi.EventType{tcase.evType},
+				err := client.SubscribeEvents([]textapi.EventType{tcase.evType},
 					text.FuncEventHandler(func(ctx context.Context, ev textapi.Event) bool {
 						defer wg.Done()
 						if tcase.start != nil {
