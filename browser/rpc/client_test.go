@@ -1,6 +1,7 @@
 package rpc
 
 import (
+	context "context"
 	"errors"
 	"fmt"
 	"testing"
@@ -48,7 +49,7 @@ func newMockedClient(ctrl *gomock.Controller) (
 ) {
 	mockCC = proto.NewMockClientConnInterface(ctrl)
 	mockMux = proto.NewMockMuxBroker(ctrl)
-	client = NewClient(mockMux, mockCC)
+	client = NewClient(context.Background(), mockMux, mockCC)
 	return
 }
 

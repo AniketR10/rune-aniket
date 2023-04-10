@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"runtime"
+	"sync"
 
 	"github.com/ernestrc/blue/logging"
 	multierr "github.com/ernestrc/go-multierror"
@@ -18,9 +19,11 @@ var _ workspace.SchemeManager = (*SchemeManagerClient)(nil)
 
 // NewSchemeManager returns a workspace.SchemeManager RPC-based client over
 // the given connection.
-func NewSchemeManager(broker proto.MuxBroker, cc proto.MuxConn) *SchemeManagerClient {
+func NewSchemeManager(
+	ctx context.Context, broker proto.MuxBroker, cc proto.MuxConn,
+) *SchemeManagerClient {
 	ret := new(SchemeManagerClient)
-	ret.init(broker, cc)
+	ret.init(ctx, broker, cc)
 	runtime.SetFinalizer(ret, func(c *SchemeManagerClient) { c.Close() })
 	return ret
 }
@@ -35,10 +38,16 @@ type SchemeManagerClient struct {
 	cancelCtx func()
 }
 
-func (c *SchemeManagerClient) init(broker proto.MuxBroker, cc proto.MuxConn) {
+func (c *SchemeManagerClient) init(
+	ctx context.Context, broker proto.MuxBroker, cc proto.MuxConn,
+) {
 	c.broker = broker
 	c.client = NewManagerClient(cc)
-	c.ctx, c.cancelCtx = context.WithCancel(context.Background())
+	ok := proto.IsContextWithWaitGroup(ctx)
+	if !ok {
+		ctx = proto.ContextWithWaitGroup(ctx, new(sync.WaitGroup))
+	}
+	c.ctx, c.cancelCtx = context.WithCancel(ctx)
 	c.cc = cc
 }
 
@@ -49,15 +58,24 @@ func (c *SchemeManagerClient) log(level log.Level, msg string, args ...interface
 func (c *SchemeManagerClient) serveProxyServer(scheme string, fn workspace.SchemeFunc) (
 	*proxySchemeServerImpl, string, error,
 ) {
+	var srv proto.MuxServer
 	var psrv *proxySchemeServerImpl
+	ctxWg := proto.WaitGroupFromContext(c.ctx)
 	ret, err := proto.AcceptAndServeChannel(c.ctx, c.broker,
-		func(_ string, srv proto.MuxServer) {
-			psrv = newProxySchemeServerImpl(c.broker, srv, scheme, fn)
+		func(_ string, _srv proto.MuxServer) {
+			ctxWg.Add(1)
+			srv = _srv
+			psrv = newProxySchemeServerImpl(c.ctx, c.broker, srv, scheme, fn)
 			RegisterProxySchemeServer(srv.Registrar(), psrv)
 		}, "proxy_scheme")
 	if err != nil {
 		return nil, "", err
 	}
+	go func() {
+		defer ctxWg.Done()
+		<-c.ctx.Done()
+		srv.Stop()
+	}()
 	return psrv, ret, nil
 }
 

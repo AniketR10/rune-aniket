@@ -36,7 +36,7 @@ func newTestClient(ctrl *gomock.Controller) (
 ) {
 	broker := proto.NewMockMuxBroker(ctrl)
 	cc := proto.NewMockMuxConn(ctrl)
-	c := NewClient(broker, cc)
+	c := NewClient(context.Background(), broker, cc)
 	// runtime finalizer calls close after test is done
 	cc.EXPECT().Close().AnyTimes()
 	return broker, cc, c

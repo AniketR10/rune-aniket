@@ -45,27 +45,42 @@ func (c proxySchemeResource) Close() (ret error) {
 }
 
 func newProxySchemeServerImpl(
-	broker proto.MuxBroker, srv proto.MuxServer,
-	scheme string, fn workspace.SchemeFunc,
+	ctx context.Context, broker proto.MuxBroker,
+	srv proto.MuxServer, scheme string, fn workspace.SchemeFunc,
 ) *proxySchemeServerImpl {
 	ret := new(proxySchemeServerImpl)
 	ret.broker = broker
 	ret.srv = srv
 	ret.scheme = scheme
 	ret.fn = fn
-	ret.ctx, ret.cancelCtx = context.WithCancel(context.Background())
+	ok := proto.IsContextWithWaitGroup(ctx)
+	if !ok {
+		ctx = proto.ContextWithWaitGroup(ctx, new(sync.WaitGroup))
+	}
+	ret.ctx, ret.cancelCtx = context.WithCancel(ctx)
 	return ret
 }
 
 func (s *proxySchemeServerImpl) serveScheme(scheme workspace.Scheme) (string, error) {
+	var srv proto.MuxServer
+	ctxWg := proto.WaitGroupFromContext(s.ctx)
 	ret, err := proto.AcceptAndServeChannel(s.ctx, s.broker,
-		func(_ string, srv proto.MuxServer) {
+		func(_ string, _srv proto.MuxServer) {
+			ctxWg.Add(1)
+			srv = _srv
 			// this is client-side, so no need to pass a locker
 			// since it will only be accesed through this server
 			server := NewServer(scheme, new(sync.Mutex))
 			RegisterSchemeServer(srv.Registrar(), server)
 			RegisterFilesServer(srv.Registrar(), server)
 		}, "scheme")
+	if err == nil {
+		go func() {
+			defer ctxWg.Done()
+			<-s.ctx.Done()
+			srv.Stop()
+		}()
+	}
 	return ret, err
 }
 
@@ -138,7 +153,7 @@ func initializeSchemeThroughProxy(
 		return nil, fmt.Errorf("could not initialize proxy: %s", err)
 	}
 
-	conn, err := broker.DialChannel(resp.GetTokenId())
+	conn, err := broker.DialChannel(resp.GetTokenId(), os.Args[0], "proxyScheme")
 	if err != nil {
 		return nil, err
 	}

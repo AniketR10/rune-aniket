@@ -46,7 +46,7 @@ func newGranteeServer(
 	ret.req = req
 	ret.srv = s
 	ret.ctx, ret.cancelCtx = context.WithCancel(context.Background())
-	ret.ctx = ContextWithWaitGroup(ret.ctx, &ret.closeWg)
+	ret.ctx = proto.ContextWithWaitGroup(ret.ctx, &ret.closeWg)
 	if keepAlive != time.Duration(0) {
 		ret.keepAlive = make(chan struct{})
 		ret.keepAliveTimeout = keepAlive * 2

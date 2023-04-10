@@ -1,4 +1,4 @@
-package plugin
+package proto
 
 import (
 	"context"
@@ -15,6 +15,12 @@ var wgKey ctxKey
 // ContextWithWaitGroup returns a new Context that stores wg.
 func ContextWithWaitGroup(ctx context.Context, wg *sync.WaitGroup) context.Context {
 	return context.WithValue(ctx, wgKey, wg)
+}
+
+// IsContextWithWaitGroup returns whether the given context has a sync.WaitGroup set.
+func IsContextWithWaitGroup(ctx context.Context) bool {
+	wg := ctx.Value(wgKey)
+	return wg != nil
 }
 
 // WaitGroupFromContext returns this context's wait group or panics

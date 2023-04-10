@@ -1,6 +1,7 @@
 package rpc
 
 import (
+	context "context"
 	"fmt"
 	"net"
 	"sync"
@@ -39,7 +40,7 @@ func newClientServerIntegration(
 	conn, err := grpc.Dial(lis.Addr().String(), grpc.WithInsecure())
 	require.NoError(t, err)
 
-	client := NewClient(broker, conn)
+	client := NewClient(context.Background(), broker, conn)
 
 	closeFn := func() {
 		client.Close()

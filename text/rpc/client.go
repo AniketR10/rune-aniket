@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"runtime"
+	"sync"
 	"time"
 
 	"github.com/ernestrc/blue/logging"
@@ -48,23 +49,27 @@ type Client struct {
 
 // NewClient allocates storage for a new Client and initializes it.
 func NewClient(
-	broker proto.MuxBroker, cc proto.MuxConn,
+	ctx context.Context, broker proto.MuxBroker, cc proto.MuxConn,
 ) *Client {
 	ret := new(Client)
-	ret.Init(broker, cc)
+	ret.Init(ctx, broker, cc)
 	runtime.SetFinalizer(ret, func(c *Client) { c.Close() })
 	return ret
 }
 
 // Init initializes this Client with broker and client.
 func (c *Client) Init(
-	broker proto.MuxBroker, cc proto.MuxConn,
+	ctx context.Context, broker proto.MuxBroker, cc proto.MuxConn,
 ) {
 	c.ed = NewEditorClient(cc)
 	c.cc = cc
 	c.broker = broker
-	c.browser = browserpb.NewClient(broker, cc)
-	c.clientCtx, c.clientCancelCtx = context.WithCancel(context.Background())
+	ok := proto.IsContextWithWaitGroup(ctx)
+	if !ok {
+		ctx = proto.ContextWithWaitGroup(ctx, new(sync.WaitGroup))
+	}
+	c.browser = browserpb.NewClient(ctx, broker, cc)
+	c.clientCtx, c.clientCancelCtx = context.WithCancel(ctx)
 }
 
 func (c *Client) log(level log.Level, msg string, args ...interface{}) {
@@ -74,12 +79,21 @@ func (c *Client) log(level log.Level, msg string, args ...interface{}) {
 func (c *Client) serveCommandHandler(h textapi.CommandHandler) (
 	ret string, srv proto.MuxServer, err error,
 ) {
+	ctxWg := proto.WaitGroupFromContext(c.clientCtx)
 	ret, err = proto.AcceptAndServeChannel(c.clientCtx, c.broker,
 		func(channelID string, _srv proto.MuxServer) {
+			ctxWg.Add(1)
 			srv = _srv
 			s := newCommandServer(h, c.browser, c)
 			RegisterCommandHandlerServer(srv.Registrar(), s)
 		}, "text", "client", "command")
+	if err == nil {
+		go func() {
+			defer ctxWg.Done()
+			<-c.clientCtx.Done()
+			srv.Stop()
+		}()
+	}
 	return
 }
 

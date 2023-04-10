@@ -5,7 +5,6 @@ import (
 	"net"
 	"sync"
 
-	log "github.com/sirupsen/logrus"
 	grpc "google.golang.org/grpc"
 )
 
@@ -31,11 +30,6 @@ func (s *grpcServer) Registrar() ServiceRegistrar {
 func (s *grpcServer) Serve(ctx context.Context, lis net.Listener) error {
 	s.addr = lis.Addr()
 	s.wg.Done()
-	go func() {
-		<-ctx.Done()
-		log.Debugf("serve context is done: stopping grpc server %v", lis.Addr())
-		s.Server.Stop()
-	}()
 	return s.Server.Serve(lis)
 }
 

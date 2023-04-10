@@ -62,7 +62,7 @@ func setupProxyTest(t *testing.T, mockScheme workspace.Scheme) (
 	conn, closeFn := doSetupSchemeManagerClientServerTest(t, srv)
 
 	// plugin-side
-	managerClient := NewSchemeManager(broker, conn)
+	managerClient := NewSchemeManager(context.Background(), broker, conn)
 	require.NoError(t, managerClient.RegisterScheme("test",
 		func(_ context.Context, _cfg config.Config, _uri workspaceapi.URI) (
 			workspace.Scheme, error,

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"runtime"
+	"sync"
 	"time"
 
 	"github.com/ernestrc/blue/logging"
@@ -64,10 +65,10 @@ func (c browserClientHandler) Dimensions() (width, height int) {
 
 // NewClient allocates storage for a new Client and initializes it.
 func NewClient(
-	broker proto.MuxBroker, cc grpc.ClientConnInterface,
+	ctx context.Context, broker proto.MuxBroker, cc grpc.ClientConnInterface,
 ) *Client {
 	ret := new(Client)
-	ret.Init(broker, cc)
+	ret.Init(ctx, broker, cc)
 	runtime.SetFinalizer(ret, func(c *Client) { c.Close() })
 	return ret
 }
@@ -78,7 +79,7 @@ func (c *Client) log(level log.Level, msg string, args ...interface{}) {
 
 // Init initializes this Client with broker and client.
 func (c *Client) Init(
-	broker proto.MuxBroker, cc grpc.ClientConnInterface,
+	ctx context.Context, broker proto.MuxBroker, cc grpc.ClientConnInterface,
 ) {
 	c.wm = NewWindowManagerClient(cc)
 	c.msg = NewMessengerClient(cc)
@@ -86,7 +87,11 @@ func (c *Client) Init(
 	c.f = NewResourceOpenerClient(cc)
 	c.p = NewEventPublisherClient(cc)
 	c.broker = broker
-	c.clientCtx, c.clientCancelCtx = context.WithCancel(context.Background())
+	ok := proto.IsContextWithWaitGroup(ctx)
+	if !ok {
+		ctx = proto.ContextWithWaitGroup(ctx, new(sync.WaitGroup))
+	}
+	c.clientCtx, c.clientCancelCtx = context.WithCancel(ctx)
 }
 
 func (c *Client) serveHandler(h browserapi.Handler) (channelID string, srv proto.MuxServer, err error) {
@@ -94,8 +99,10 @@ func (c *Client) serveHandler(h browserapi.Handler) (channelID string, srv proto
 	if ok {
 		channelID = tokenHandler.ID
 	} else {
+		ctxWg := proto.WaitGroupFromContext(c.clientCtx)
 		channelID, err = proto.AcceptAndServeChannel(c.clientCtx, c.broker,
 			func(channelID string, msrv proto.MuxServer) {
+				ctxWg.Add(1)
 				srv = msrv
 				h = browserClientHandler{
 					Handler: h,
@@ -113,6 +120,11 @@ func (c *Client) serveHandler(h browserapi.Handler) (channelID string, srv proto
 		if err != nil {
 			return
 		}
+		go func() {
+			defer ctxWg.Done()
+			<-c.clientCtx.Done()
+			srv.Stop()
+		}()
 	}
 
 	return

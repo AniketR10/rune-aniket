@@ -56,7 +56,7 @@ func setupIntTest(
 	conn, closeFn := doSetupIntTest(t, broker, func(grpcServer *grpc.Server) {
 		RegisterEditorServer(grpcServer, s)
 	})
-	client := NewClient(broker, conn)
+	client := NewClient(context.Background(), broker, conn)
 	return client, func() {
 		client.Close()
 		closeFn()
@@ -69,7 +69,7 @@ func setupWmIntTest(
 	conn, closeFn := doSetupIntTest(t, broker, func(grpcServer *grpc.Server) {
 		browserpb.RegisterWindowManagerServer(grpcServer, s)
 	})
-	client := browserpb.NewClient(broker, conn)
+	client := browserpb.NewClient(context.Background(), broker, conn)
 	return client, func() {
 		client.Close()
 		closeFn()

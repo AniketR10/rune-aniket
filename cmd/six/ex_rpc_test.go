@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"net"
 	_ "net/http/pprof"
 	"sync"
@@ -110,7 +111,7 @@ func newTestRPCBrowser(t *testing.T,
 		conn, err := grpc.Dial(lis.Addr().String(), grpc.WithInsecure())
 		require.NoError(t, err)
 
-		bc := browserpb.NewClient(broker, conn)
+		bc := browserpb.NewClient(context.Background(), broker, conn)
 		h := &safeHandler{Handler: ex, mu: &serverMutex}
 		*destructor = func() {
 			serverMutex.Lock()

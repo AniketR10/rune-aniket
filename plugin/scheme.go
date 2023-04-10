@@ -51,14 +51,7 @@ func dialSchemeManager(grant Grant, broker proto.MuxBroker) (
 	if err != nil {
 		return nil, err
 	}
-	c := workspacepb.NewSchemeManager(broker, conn)
-	wg := WaitGroupFromContext(grant.Context)
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		<-grant.Context.Done()
-		_ = c.Close()
-	}()
+	c := workspacepb.NewSchemeManager(grant.Context, broker, conn)
 	return c, nil
 }
 

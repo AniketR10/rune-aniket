@@ -86,6 +86,11 @@ type Manager struct {
 
 	broker proto.MuxBroker
 	config managerConfig
+
+	// srvs lifecycle ctx
+	ctx       context.Context
+	cancelCtx func()
+	ctxWg     sync.WaitGroup
 }
 
 // NewManager allocates storage for a new Manager and initializes it.
@@ -114,6 +119,7 @@ func (m *Manager) Init(grantor Grantor, opts ...Option) (err error) {
 	m.rmu = m.config.locker
 
 	m.broker, err = initHostBroker(m.config, m.config.dataDir)
+	m.ctx, m.cancelCtx = context.WithCancel(context.Background())
 	return
 }
 
@@ -222,6 +228,14 @@ func (m *Manager) doGrant(
 	m.mu.Unlock()
 
 	go srv.Serve(ctx, lis)
+
+	m.ctxWg.Add(1)
+	go func() {
+		defer m.ctxWg.Done()
+		<-ctx.Done()
+		log.Debugf("serve context is done: stopping grpc server %v", lis.Addr())
+		srv.Stop()
+	}()
 
 	return client.client.sendGrants(ctx, denied, granted)
 }
@@ -486,6 +500,9 @@ func (m *Manager) Close() error {
 	}
 
 	wg.Wait()
+
+	m.cancelCtx()
+	m.ctxWg.Wait()
 
 	return m.broker.Close()
 }

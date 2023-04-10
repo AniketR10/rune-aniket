@@ -17,14 +17,7 @@ func dialBrowser(grant plugin.Grant, broker proto.MuxBroker) (
 	if err != nil {
 		return nil, err
 	}
-	c := browserpb.NewClient(broker, conn)
-	wg := plugin.WaitGroupFromContext(grant.Context)
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		<-grant.Context.Done()
-		_ = c.Close()
-	}()
+	c := browserpb.NewClient(grant.Context, broker, conn)
 	return c, nil
 }
 

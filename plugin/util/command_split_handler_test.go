@@ -114,7 +114,7 @@ func TestCommandSplitHandlerEmpty(t *testing.T) {
 
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
-		ctx = plugin.ContextWithWaitGroup(ctx, new(sync.WaitGroup))
+		ctx = proto.ContextWithWaitGroup(ctx, new(sync.WaitGroup))
 
 		// called async waiting for ctx to be done
 		conn.EXPECT().Close().AnyTimes()
