@@ -4,6 +4,8 @@ import (
 	context "context"
 	fmt "fmt"
 	"net"
+	"os"
+	"sync"
 
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
@@ -14,7 +16,8 @@ import (
 
 // implements MuxBroker
 type grpcBroker struct {
-	dataDir string
+	dataDir     string
+	unixSockets sync.Map
 }
 
 // NewUnixGRPCBroker provides brokerage by using unix socket listeners
@@ -30,6 +33,7 @@ func (t *grpcBroker) NewChannel(tags ...string) (net.Listener, error) {
 	if err != nil {
 		return nil, fmt.Errorf("temp unix listener")
 	}
+	t.unixSockets.Store(ret.Addr().String(), struct{}{})
 	return ret, nil
 }
 
@@ -61,6 +65,11 @@ func (t *grpcBroker) DialChannel(address string, tags ...string) (
 	return
 }
 
-func (t *grpcBroker) Close() error {
+func (t *grpcBroker) Close() (ret error) {
+	t.unixSockets.Range(func(key, value any) bool {
+		// might be redundant if clients clean up correctly
+		_ = os.Remove(key.(string))
+		return true
+	})
 	return nil
 }

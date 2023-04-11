@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	defDurationGracefulShutClient = 1 * time.Second
+	defDurationGracefulShutClient = 5 * time.Second
 )
 
 type granteeServer struct {
@@ -160,21 +160,27 @@ func (s *granteeServer) OnGrant(ctx context.Context, req *pluginpb.OnPermGrantRe
 }
 
 func (s *granteeServer) doShutdown(reason string) (ret error) {
-	// idempotent
 	s.mu.Lock()
 	keepAlive := s.keepAlive
 	s.keepAlive = nil
+	cancelCtx := s.cancelCtx
+	s.cancelCtx = nil
 	s.mu.Unlock()
 
+	// idempotent
 	if keepAlive != nil {
 		close(keepAlive)
+	}
+
+	if err := s.broker.Close(); err != nil {
+		ret = multierr.Append(ret, err)
 	}
 
 	// NOTE: protect against plugins with poor synchronization which could block
 	// indefinetely, then grantee server would timeout and send a kill signal.
 	// This would be fine, except that we use unix sockets that need to be
 	// cleaned up.
-	t := time.After(defDurationGracefulShutClient / 2)
+	t := time.After(defDurationGracefulShutClient / 3)
 	done := make(chan struct{})
 	go func() {
 		if err := s.grantee.Shutdown(reason); err != nil {
@@ -188,12 +194,8 @@ func (s *granteeServer) doShutdown(reason string) (ret error) {
 	case <-done:
 	}
 	// wait for all resources to close
-	s.cancelCtx()
+	cancelCtx()
 	s.closeWg.Wait()
-
-	if err := s.broker.Close(); err != nil {
-		ret = multierr.Append(ret, err)
-	}
 
 	// complete rpc without blocking
 	go s.srv.GracefulStop()
