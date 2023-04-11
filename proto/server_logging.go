@@ -15,8 +15,8 @@ type loggingServer struct {
 
 // LoggingGRPCServer wraps a grpc.Server to provide trace-level logging.
 func LoggingGRPCServer(srv MuxServer) MuxServer {
-	ch := make(chan struct{})
-	s := &loggingServer{srv: srv, quitChan: ch}
+	// ch := make(chan struct{})
+	s := &loggingServer{srv: srv /*, quitChan: ch*/}
 	// NOTE: uncomment to debug leaks
 	// go s.monitorLifecycle()
 	return s
@@ -48,7 +48,8 @@ func (s *loggingServer) Serve(ctx context.Context, lis net.Listener) error {
 func (s *loggingServer) Stop() {
 	s.srv.Stop()
 	log.Tracef("LoggingGRPCServer: (%p) Stop() ", s.srv)
-	close(s.quitChan)
+	// NOTE: we should protect against double closing before enabling
+	// close(s.quitChan)
 }
 
 func (s *loggingServer) Registrar() ServiceRegistrar {
