@@ -7,20 +7,38 @@ import (
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/browser"
 	handlerpb "unstable.build/go-tui/handler/rpc"
+	"unstable.build/go-tui/proto"
 	"unstable.build/go-tui/term"
 )
 
 var _ browser.Floating = (*floatingClientImpl)(nil)
 
 type floatingClientImpl struct {
+	conn          proto.MuxConn
+	cancelFn      func()
 	client        *handlerpb.Client
 	fc            FloatingClient
 	errorCh       chan error
 	width, height int
 }
 
-func newFloatingClient(handler *handlerpb.Client, fc FloatingClient) *floatingClientImpl {
-	return &floatingClientImpl{client: handler, fc: fc, errorCh: make(chan error)}
+func newFloatingClient(
+	handler *handlerpb.Client, fc FloatingClient,
+	cancelFn func(), conn proto.MuxConn,
+) *floatingClientImpl {
+	ret := &floatingClientImpl{
+		client:   handler,
+		fc:       fc,
+		errorCh:  make(chan error),
+		cancelFn: cancelFn,
+		conn:     conn,
+	}
+	runtime.SetFinalizer(ret, func(*floatingClientImpl) {
+		cancelFn()
+		conn.Close()
+		runtime.SetFinalizer(ret, nil)
+	})
+	return ret
 }
 
 func (f *floatingClientImpl) Resize(width, height int) {
@@ -69,5 +87,10 @@ func (f *floatingClientImpl) Dimensions() (width, height int) {
 }
 
 func (f *floatingClientImpl) Close() error {
-	return f.client.Close()
+	err := f.client.Close()
+	f.cancelFn()
+	// it might already be closed by conn monitoring
+	_ = f.conn.Close()
+	runtime.SetFinalizer(f, nil)
+	return err
 }

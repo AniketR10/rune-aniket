@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"runtime"
 	"sync"
 	"time"
 
@@ -103,29 +102,18 @@ func (s *Server) dialHandler(channelID string, tags ...string) (
 	fClient := NewFloatingClient(handlerConn)
 	pbClient = newIOWaitUnlockHandlerClient(pbClient, s.browser.Locker)
 	handlercc := handlerpb.NewClient(pbClient)
-	cc := newFloatingClient(handlercc, fClient)
 
 	ctx, cancelFn := context.WithCancel(s.serverCtx)
+	cc := newFloatingClient(handlercc, fClient, cancelFn, handlerConn)
 
 	go s.consumeErrors(ctx, channelID, handlercc.Errors())
 	go s.consumeErrors(ctx, channelID, cc.errorCh)
-	// finalizers might not run depending on how handler is used (bar, tabs, etc.)
-	// monitor connection and make sure it's closed in any case if remote handler
-	// becomes unresponsive for more than a timeout.
 	go proto.MonitorConnection(ctx, defaultFailureTimeout, handlerConn,
 		func(reason string) {
 			cancelFn()
 			handlerConn.Close()
-			s.log(log.DebugLevel, "connection monitor closed connection: %s", reason)
-			runtime.SetFinalizer(cc, nil)
 		})
 
-	runtime.SetFinalizer(cc, func(*floatingClientImpl) {
-		cancelFn()
-		handlerConn.Close()
-		s.log(log.DebugLevel, "closed handler connection for channel %q", channelID)
-		runtime.SetFinalizer(cc, nil)
-	})
 	return cc, nil
 }
 
