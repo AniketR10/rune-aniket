@@ -234,6 +234,9 @@ func (s *remoteScheme) StartCommand(ctx context.Context, cmd workspaceapi.Cmd) (
 	if err != nil {
 		return 0, err
 	}
+	var cancelFn func()
+	ctx, cancelFn = context.WithCancel(ctx)
+	cmd.Watcher = newWrapWatcher(cmd.Watcher, cancelFn)
 	return scheme.StartCommand(bluectx.First(s.ctx, ctx), cmd)
 }
 
@@ -250,6 +253,11 @@ func (s *remoteScheme) NewPty(ctx context.Context) (workspaceapi.Pty, error) {
 	if err != nil {
 		return workspaceapi.Pty{}, err
 	}
+	// FIXME this temporarily leaks a goroutine, once session is closed
+	// but ctx or s.ctx have not been canceled yet.
+	// Since pty capability might be removed from a scheme, once sysprocattr
+	// is enabled or if we decide to just remove it, it's ok to leave it
+	// like this for now.
 	pty, err := scheme.NewPty(bluectx.First(s.ctx, ctx))
 	if err == nil {
 		runtime.SetFinalizer(pty.Master, nil)
@@ -292,4 +300,33 @@ func (s *remoteScheme) Close() (ret error) {
 	}
 	s.cancelCtx()
 	return
+}
+
+// wrap watcher to ensure that one of bluectx.First ctxs gets canceled
+type wrapWatcher struct {
+	watcher workspaceapi.Watcher
+	ch      chan error
+}
+
+func newWrapWatcher(watcher workspaceapi.Watcher, cancelFn func()) wrapWatcher {
+	ret := wrapWatcher{
+		watcher: watcher,
+		ch:      make(chan error),
+	}
+	go func() {
+		err := <-ret.ch
+		cancelFn()
+		if ret.watcher != nil && ret.watcher.Watch() != nil {
+			t := time.After(2 * time.Minute) // in case watcher is unresponsive
+			select {
+			case ret.watcher.Watch() <- err:
+			case <-t:
+			}
+		}
+	}()
+	return ret
+}
+
+func (w wrapWatcher) Watch() chan error {
+	return w.ch
 }

@@ -348,9 +348,10 @@ func (s *clientCommandStreamer) log(level log.Level, msg string, args ...interfa
 	log.WithFields(log.Fields{logging.KeyClass: "clientCommandStreamer"}).Logf(level, msg, args...)
 }
 
-func (s *clientCommandStreamer) streamCommandData(client interface{}) {
+func (s *clientCommandStreamer) streamCommandData(client interface{}, cancelFn func()) {
 	s.log(log.TraceLevel, "streaming command data")
 	defer close(s.quitCh)
+	defer cancelFn()
 
 	go s.streamStdin()
 

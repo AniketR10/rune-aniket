@@ -224,10 +224,13 @@ func (c *Client) Start(cmd workspaceapi.Cmd) (workspaceapi.Pid, error) {
 func (c *Client) StartCommand(
 	commandCtx context.Context, cmd workspaceapi.Cmd,
 ) (workspaceapi.Pid, error) {
+	var cancelFn func()
+	commandCtx, cancelFn = context.WithCancel(commandCtx)
 	commandCtx = bluectx.First(commandCtx, c.ctx)
 
 	stream, err := c.exec.StartCommand(commandCtx)
 	if err != nil {
+		cancelFn()
 		return 0, fmt.Errorf("new stream: %v", err)
 	}
 	req := CommandPayload{
@@ -283,11 +286,13 @@ func (c *Client) StartCommand(
 	select {
 	case res := <-ch:
 		if res.err != nil {
+			cancelFn()
 			return 0, res.err
 		}
-		go streamer.streamCommandData(c)
+		go streamer.streamCommandData(c, cancelFn)
 		return res.pid, nil
 	case <-handshakeCtx.Done():
+		cancelFn()
 		return 0, handshakeCtx.Err()
 	}
 }

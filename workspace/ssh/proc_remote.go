@@ -124,6 +124,9 @@ func (s *procSession) StartCommand(ctx context.Context, cmd workspaceapi.Cmd) (
 	}
 
 	cmd.Path, cmd.Args = s.CommandString(cmd.Path, cmd.Args...)
+	var cancelFn func()
+	ctx, cancelFn = context.WithCancel(ctx)
+	cmd.Watcher = newWrapWatcher(cmd.Watcher, cancelFn)
 	pid, err := s.executor.StartCommand(bluectx.First(s.ctx, ctx), cmd)
 	if err != nil {
 		return workspaceapi.Pid(0), fmt.Errorf("Failed to create ssh command: %s", err)

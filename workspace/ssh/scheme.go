@@ -13,7 +13,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	bluectx "github.com/ernestrc/blue/context"
 	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
@@ -401,7 +400,7 @@ func (s *scheme) ReadLink(path string) (string, error) {
 }
 
 func (s *scheme) NewPty(ctx context.Context) (workspaceapi.Pty, error) {
-	return s.Scheme.NewPty(bluectx.First(s.ctx, ctx))
+	return s.Scheme.NewPty(ctx)
 }
 
 func (s *scheme) SetPtySize(pty workspaceapi.Pty, width, height int) error {

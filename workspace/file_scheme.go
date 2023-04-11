@@ -224,6 +224,8 @@ func (p *fileScheme) StartCommand(ctx context.Context, cmd workspaceapi.Cmd) (
 		}
 	}
 	// ensure that if file scheme is closed, all commands are cleaned up
+	var cancelFn func()
+	ctx, cancelFn = context.WithCancel(ctx)
 	ctx = bluectx.First(p.ctx, ctx)
 	stdcmd := exec.CommandContext(ctx, path, cmd.Args...)
 	stdcmd.Dir = p.workspace.Path()
@@ -235,11 +237,13 @@ func (p *fileScheme) StartCommand(ctx context.Context, cmd workspaceapi.Cmd) (
 
 	err = stdcmd.Start()
 	if err != nil {
+		cancelFn()
 		return 0, fmt.Errorf("start: %w", err)
 	}
 
 	pid := workspaceapi.Pid(stdcmd.Process.Pid)
 	go func() {
+		defer cancelFn()
 		defer func() {
 			p.cmds.Delete(pid)
 		}()
