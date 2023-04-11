@@ -54,7 +54,7 @@ func (t *cmdSplitHandler) closeHandler() bool {
 		defer t.mu.Lock()
 		err := closer.Close()
 		if err != nil {
-			log.Errorf("error closing plugin: %v", err)
+			log.Errorf("command split handler close: %v", err)
 		}
 	}
 	return true
@@ -83,7 +83,7 @@ func (t *cmdSplitHandler) cleanWindow() bool {
 func (t *cmdSplitHandler) closeWindow() {
 	err := t.win.Close()
 	if err != nil {
-		log.Errorf("error closing plugin window: %s", err)
+		log.Errorf("closing plugin window: %s", err)
 	}
 }
 

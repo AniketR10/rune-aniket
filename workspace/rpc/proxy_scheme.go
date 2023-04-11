@@ -75,11 +75,11 @@ func (s *proxySchemeServerImpl) serveScheme(scheme workspace.Scheme) (string, er
 			RegisterFilesServer(srv.Registrar(), server)
 		}, "scheme")
 	if err == nil {
-		go func() {
+		go func(ctx context.Context) {
 			defer ctxWg.Done()
-			<-s.ctx.Done()
+			<-ctx.Done()
 			srv.Stop()
-		}()
+		}(s.ctx)
 	}
 	return ret, err
 }

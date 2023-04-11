@@ -71,11 +71,11 @@ func (c *SchemeManagerClient) serveProxyServer(scheme string, fn workspace.Schem
 	if err != nil {
 		return nil, "", err
 	}
-	go func() {
+	go func(ctx context.Context) {
 		defer ctxWg.Done()
-		<-c.ctx.Done()
+		<-ctx.Done()
 		srv.Stop()
-	}()
+	}(c.ctx)
 	return psrv, ret, nil
 }
 

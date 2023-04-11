@@ -88,11 +88,11 @@ func (c *Client) serveCommandHandler(h textapi.CommandHandler) (
 			RegisterCommandHandlerServer(srv.Registrar(), s)
 		}, "text", "client", "command")
 	if err == nil {
-		go func() {
+		go func(ctx context.Context) {
 			defer ctxWg.Done()
-			<-c.clientCtx.Done()
+			<-ctx.Done()
 			srv.Stop()
-		}()
+		}(c.clientCtx)
 	}
 	return
 }

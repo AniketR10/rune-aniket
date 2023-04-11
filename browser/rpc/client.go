@@ -120,11 +120,12 @@ func (c *Client) serveHandler(h browserapi.Handler) (channelID string, srv proto
 		if err != nil {
 			return
 		}
-		go func() {
+		go func(ctx context.Context) {
 			defer ctxWg.Done()
-			<-c.clientCtx.Done()
+			// do not reference Client so finalizer can still run
+			<-ctx.Done()
 			srv.Stop()
-		}()
+		}(c.clientCtx)
 	}
 
 	return
