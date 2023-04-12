@@ -4,6 +4,7 @@ import (
 	"io"
 	"sync"
 
+	"unstable.build/go-tui"
 	"unstable.build/go-tui/browser"
 	browserpb "unstable.build/go-tui/browser/rpc"
 	"unstable.build/go-tui/proto"
@@ -34,7 +35,9 @@ func (s browserResourcePermissionServer) Register(
 	broker proto.MuxBroker, lock sync.Locker,
 ) (io.Closer, error) {
 	server := browserpb.NewServer(broker, s.b, lock)
-	rpcServer := interruptBrowserServer(server, term.Interrupt)
+	rpcServer := interruptBrowserServer(server, func() {
+		tui.PublishEvent(term.Event{Type: term.EventInterrupt})
+	})
 	switch s.p {
 	case PermissionBrowserWindowManager:
 		browserpb.RegisterWindowManagerServer(registrar, rpcServer)

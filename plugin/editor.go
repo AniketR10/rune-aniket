@@ -4,6 +4,7 @@ import (
 	"io"
 	"sync"
 
+	"unstable.build/go-tui"
 	"unstable.build/go-tui/proto"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
@@ -26,7 +27,9 @@ func (s *editorResourceServer) Register(
 ) (io.Closer, error) {
 	server := textpb.NewServer(broker, s.b, lock)
 	textpb.RegisterEditorServer(registrar,
-		interruptEditorServer(server, term.Interrupt))
+		interruptEditorServer(server, func() {
+			tui.PublishEvent(term.Event{Type: term.EventInterrupt})
+		}))
 	return server, nil
 }
 

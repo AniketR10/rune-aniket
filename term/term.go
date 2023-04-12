@@ -126,19 +126,14 @@ func Close() {
 	termbox.Close()
 }
 
-var interrupt = termbox.Interrupt
-
-// Interrupt an in-progress call to the event poller and forces redraw.
-// This is useful when the root handler's has been updated by another goroutine,
-// other than the main event loop goroutine.
-func Interrupt() {
-	interrupt()
-}
+var publishEvent = termbox.PublishEvent
 
 // DisableInterruptForTesting disables interrupts. It should only be
 // used for testing purposes.
 func DisableInterruptForTesting() {
-	interrupt = func() {}
+	publishEvent = func(termbox.Event) bool {
+		return false
+	}
 }
 
 // PublishEvent sends a synthetic event to the event poller.
@@ -156,7 +151,7 @@ func PublishEvent(ev Event) bool {
 	tev.MouseX = ev.MouseX
 	tev.MouseY = ev.MouseY
 	tev.Raw = ev.Raw
-	return termbox.PublishEvent(tev)
+	return publishEvent(tev)
 }
 
 // HasPendingEvent returns true if PollEvent would return an event
