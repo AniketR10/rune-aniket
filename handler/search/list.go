@@ -271,6 +271,17 @@ func (l *List) consumeAsyncElements(ctx context.Context, datachan chan []byte, q
 	t := time.NewTicker(l.cfg.interruptEvery)
 	tickerCh := make(chan struct{}) // need a way to signal from below
 	defer close(tickerCh)
+	defer func() {
+		l.mu.Lock()
+		if len(l.getSearchQuery()) == 0 {
+			l.setFilesCount()
+		} else {
+			l.sortMatchesList()
+		}
+		interrupter := l.cfg.interrupter
+		l.mu.Unlock()
+		interrupter.Interrupt()
+	}()
 
 	var dirty bool
 	go func() {
@@ -309,15 +320,6 @@ func (l *List) consumeAsyncElements(ctx context.Context, datachan chan []byte, q
 			return
 		case data, ok := <-datachan:
 			if !ok {
-				l.mu.Lock()
-				if len(l.getSearchQuery()) == 0 {
-					l.setFilesCount()
-				} else {
-					l.sortMatchesList()
-				}
-				interrupter := l.cfg.interrupter
-				l.mu.Unlock()
-				interrupter.Interrupt()
 				return
 			}
 			l.pushData(data, slab, false)
