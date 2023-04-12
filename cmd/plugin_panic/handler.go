@@ -58,3 +58,7 @@ func (h *panicHandler) Cursor() (pos term.Coordinates, show bool) {
 func (h *panicHandler) Man() tui.Manual {
 	return tui.Manual{}
 }
+
+func (h *panicHandler) Close() error {
+	return nil
+}

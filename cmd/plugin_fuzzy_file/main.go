@@ -7,7 +7,6 @@ import (
 
 	"github.com/ernestrc/blue/iterator"
 	log "github.com/sirupsen/logrus"
-	"unstable.build/go-tui"
 	browserapi "unstable.build/go-tui/api/browser"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/cmd/plugin_fuzzy_file/finder"
@@ -46,7 +45,7 @@ func getResource(workspace workspaceapi.FileSystem, file string) (
 }
 
 func newHandler(grants []plugin.Grant, broker proto.MuxBroker,
-	invokeWindow browserapi.Window, c config.Config) (tui.Handler, error) {
+	invokeWindow browserapi.Window, c config.Config) (browserapi.Handler, error) {
 	cmdStr, err := c.GetString("command")
 	if err != nil {
 		if err != config.ErrNotFound {

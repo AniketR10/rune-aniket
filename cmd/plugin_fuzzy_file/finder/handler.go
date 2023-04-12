@@ -390,7 +390,7 @@ func New(
 	historyKey term.KeyComb, historyDocumentID string, command string,
 	fallback func(workspaceapi.FileSystem, context.Context) (iterator.Iterator[string], error),
 	getResource func(exec workspaceapi.FileSystem, line string) (workspaceapi.URI, term.Coordinates),
-) (tui.Handler, error) {
+) (browserapi.Handler, error) {
 	h := new(fuzzyFinderHandler)
 	maxHistory, err := cfg.GetInt("history")
 	if err != nil {

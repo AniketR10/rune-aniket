@@ -99,3 +99,7 @@ func (h *colorPaletteHandler) Cursor() (pos term.Coordinates, show bool) {
 func (h *colorPaletteHandler) Man() tui.Manual {
 	return tui.Manual{}
 }
+
+func (h *colorPaletteHandler) Close() error {
+	return nil
+}

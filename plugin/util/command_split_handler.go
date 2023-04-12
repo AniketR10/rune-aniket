@@ -4,11 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"sync"
 
 	log "github.com/sirupsen/logrus"
-	"unstable.build/go-tui"
 	browserapi "unstable.build/go-tui/api/browser"
 	browserplugin "unstable.build/go-tui/api/browser/plugin"
 	textapi "unstable.build/go-tui/api/text"
@@ -27,7 +25,7 @@ type cmdSplitHandler struct {
 	ed      textapi.Editor
 	pconfig config.Config
 	grants  []plugin.Grant
-	h       tui.Handler
+	h       browserapi.Handler
 	win     browserapi.Window
 }
 
@@ -39,24 +37,19 @@ func (t *cmdSplitHandler) Connected(broker proto.MuxBroker, config config.Config
 
 func (t *cmdSplitHandler) closeHandler() bool {
 	t.mu.Lock()
-	defer t.mu.Unlock()
+	h := t.h
+	t.h = nil
+	t.mu.Unlock()
 
-	if t.h == nil {
+	if h == nil {
 		return false
 	}
 
-	defer func() {
-		t.h = nil
-	}()
-
-	if closer, ok := t.h.(io.Closer); ok {
-		t.mu.Unlock()
-		defer t.mu.Lock()
-		err := closer.Close()
-		if err != nil {
-			log.Errorf("command split handler close: %v", err)
-		}
+	err := h.Close()
+	if err != nil {
+		log.Errorf("command split handler close: %v", err)
 	}
+
 	return true
 }
 
@@ -199,7 +192,7 @@ type CommandSplitHandlerConfig struct {
 	// If returned Handler satisfies io.Closer, then Close will be called
 	// when split window is closed.
 	Handler func([]plugin.Grant, proto.MuxBroker, browserapi.Window,
-		config.Config) (tui.Handler, error)
+		config.Config) (browserapi.Handler, error)
 
 	// Permissions to be requested for Handler.
 	Permissions []plugin.Permission

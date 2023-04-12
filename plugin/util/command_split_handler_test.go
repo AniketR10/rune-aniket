@@ -14,8 +14,8 @@ import (
 	browserapi "unstable.build/go-tui/api/browser"
 	browserapitest "unstable.build/go-tui/api/browser/test"
 	textapi "unstable.build/go-tui/api/text"
+	browsertest "unstable.build/go-tui/browser/test"
 	"unstable.build/go-tui/config"
-	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/plugin"
 	"unstable.build/go-tui/proto"
 	prototest "unstable.build/go-tui/proto/test"
@@ -171,8 +171,8 @@ func testSplitWindow(
 	defer ctrl.Finish()
 
 	cfg.Handler = func(grants []plugin.Grant, broker proto.MuxBroker,
-		focus browserapi.Window, c config.Config) (tui.Handler, error) {
-		return handler.NewTestHandler(), nil
+		focus browserapi.Window, c config.Config) (browserapi.Handler, error) {
+		return browsertest.NewTestHandler(), nil
 	}
 	mockWm := browserapitest.NewMockWindowManager(ctrl)
 	h := &cmdSplitHandler{config: cfg, wm: mockWm}
