@@ -22,10 +22,11 @@ import (
 	log "github.com/sirupsen/logrus"
 	browserapi "unstable.build/go-tui/api/browser"
 	browserplugin "unstable.build/go-tui/api/browser/plugin"
+	"unstable.build/go-tui/api/config"
+	storageplugin "unstable.build/go-tui/api/storage/plugin"
 	textapi "unstable.build/go-tui/api/text"
 	textplugin "unstable.build/go-tui/api/text/plugin"
 	workspaceapi "unstable.build/go-tui/api/workspace"
-	"unstable.build/go-tui/api/config"
 	"unstable.build/go-tui/plugin"
 	"unstable.build/go-tui/proto"
 	"unstable.build/go-tui/storage/cache"
@@ -256,7 +257,7 @@ func (e *issuesGrantee) PermissionGranted(grants []plugin.Grant) {
 			}
 			e.sm = m
 		case plugin.PermissionStorage:
-			s, err := plugin.Storage(g, e.broker)
+			s, err := storageplugin.Storage(g, e.broker)
 			if err != nil {
 				log.Warnf("Could not acquire storage: %v. "+
 					"Will not be able to create or see reports", err)

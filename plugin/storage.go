@@ -3,9 +3,7 @@ package plugin
 import (
 	"context"
 	"io"
-	"os"
 	"path/filepath"
-	"runtime"
 	"sync"
 
 	"github.com/ernestrc/blue/document"
@@ -68,27 +66,4 @@ func StorageResources(storageDir string) map[Permission]ResourceRegistrar {
 	return map[Permission]ResourceRegistrar{
 		PermissionStorage: s,
 	}
-}
-
-// TODO move to api package
-func dialStorage(grant Grant, broker proto.MuxBroker) (
-	document.Service, error,
-) {
-	conn, err := broker.DialChannel(grant.Token,
-		os.Args[0], "storage", string(grant.Permission))
-	if err != nil {
-		return nil, err
-	}
-	c := new(docrpc.Client)
-	c.Init(conn, toml.Marshaler())
-	runtime.SetFinalizer(c, func(c *docrpc.Client) { c.Close() })
-	return c, nil
-}
-
-// Storage acquires a client to persistent storage with
-// the given token.
-func Storage(grant Grant, broker proto.MuxBroker) (
-	document.Service, error,
-) {
-	return dialStorage(grant, broker)
 }

@@ -18,12 +18,13 @@ import (
 	"unstable.build/go-tui"
 	browserapi "unstable.build/go-tui/api/browser"
 	browserplugin "unstable.build/go-tui/api/browser/plugin"
+	"unstable.build/go-tui/api/config"
+	storageplugin "unstable.build/go-tui/api/storage/plugin"
 	textapi "unstable.build/go-tui/api/text"
 	textplugin "unstable.build/go-tui/api/text/plugin"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	workspaceplugin "unstable.build/go-tui/api/workspace/plugin"
 	"unstable.build/go-tui/component"
-	"unstable.build/go-tui/api/config"
 	"unstable.build/go-tui/handler/search"
 	"unstable.build/go-tui/plugin"
 	"unstable.build/go-tui/proto"
@@ -366,7 +367,7 @@ func (h *fuzzyFinderHandler) initGrants(
 		case plugin.Permission(plugin.PermissionBrowserResourceOpener):
 			h.f, err = browserplugin.ResourceOpener(grant, broker)
 		case plugin.PermissionStorage:
-			h.s, err = plugin.Storage(grant, broker)
+			h.s, err = storageplugin.Storage(grant, broker)
 			if err == nil {
 				h.history.Init(h.s, historyDocumentID, maxHistory)
 				err = h.history.Load()
