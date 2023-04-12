@@ -112,9 +112,9 @@ func (s *goSshSession) StartCommand(ctx context.Context, cmd workspaceapi.Cmd) (
 		return 0, err
 	}
 
-	// avoid buggy watchers to cause this goroutine to block forever,
-	// so the timeout should be in the order of minutes.
-	ctx, cancel := context.WithTimeout(ctx, watcherWaitTimeout)
+	// ensure that at least one of the ctxs passed to First
+	// is canceled after the command is done.
+	ctx, cancel := context.WithCancel(ctx)
 	ctx = bluectx.First(s.parentCtx, ctx)
 
 	// wait and dispatch error to watcher
@@ -123,6 +123,10 @@ func (s *goSshSession) StartCommand(ctx context.Context, cmd workspaceapi.Cmd) (
 
 		err := s.ses.Wait()
 		if cmd.Watcher != nil && cmd.Watcher.Watch() != nil {
+			// avoid buggy watchers to cause this goroutine to block forever,
+			// so the timeout should be in the order of minutes.
+			ctx, cancelTimeout := context.WithTimeout(ctx, watcherWaitTimeout)
+			defer cancelTimeout()
 			select {
 			case <-ctx.Done():
 			case <-s.quitCh:
