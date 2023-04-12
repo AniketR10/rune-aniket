@@ -55,11 +55,16 @@ type Client struct {
 
 type browserClientHandler struct {
 	browserapi.Handler
-	srv proto.MuxServer
+	srv    proto.MuxServer
+	cancel func()
 }
 
 func (c *browserClientHandler) Close() error {
-	go c.srv.GracefulStop()
+	go func() {
+		// cancel calls Stop, so wait until we are done
+		defer c.cancel()
+		c.srv.GracefulStop()
+	}()
 	err := c.Handler.Close()
 	// avoid cyclical references preventing
 	// runtime finalizers from running
@@ -110,6 +115,8 @@ func serveHandler(
 	if ok {
 		channelID = tokenHandler.ID
 	} else {
+		// cancel if close is called before client context is done
+		ctx, cancel := context.WithCancel(ctx)
 		ctxWg := proto.WaitGroupFromContext(ctx)
 		channelID, err = proto.AcceptAndServeChannel(ctx, broker,
 			func(channelID string, msrv proto.MuxServer) {
@@ -118,6 +125,7 @@ func serveHandler(
 				h = &browserClientHandler{
 					Handler: h,
 					srv:     srv,
+					cancel:  cancel,
 				}
 				hsrv := handlerpb.NewServer(h)
 				handlerpb.RegisterHandlerServer(srv.Registrar(), hsrv)
