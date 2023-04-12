@@ -170,4 +170,26 @@ func TestRemoteScheme(t *testing.T) {
 
 		expectSchemeClose(t, mock, scheme)
 	})
+
+	t.Run("NewFile on un-opened file returns nil", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		// emulate event loop synchronization
+		var mu sync.Mutex
+		ctx := workspace.ContextWithLocker(context.Background(), &mu)
+
+		mock := workspacetest.NewMockScheme(ctrl)
+		mu.Lock()
+		scheme := newRemoteScheme(ctx,
+			func(_ context.Context, uri workspaceapi.URI, closehook func(error)) (workspace.Scheme, error) {
+				return mock, nil
+			}, uri)
+		mu.Unlock()
+
+		expectSchemeAPISuccess(t, ctrl, &mu, mock, scheme)
+		expectSchemeClose(t, mock, scheme)
+		f := scheme.NewFile(1299, "blabla")
+		require.Nil(t, f)
+	})
 }

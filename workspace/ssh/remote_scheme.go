@@ -180,6 +180,9 @@ func (s *remoteScheme) Open(path string, flag int, perm os.FileMode) (
 
 func (s *remoteScheme) NewFile(fd uintptr, filename string) workspaceapi.File {
 	f, _ := s.files.Load(fd)
+	if f == nil {
+		return nil
+	}
 	return f.(workspaceapi.File)
 }
 
