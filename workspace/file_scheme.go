@@ -260,13 +260,18 @@ func (p *fileScheme) StartCommand(ctx context.Context, cmd workspaceapi.Cmd) (
 		// to drain the error. This is just to avoid
 		// buggy watchers to cause this goroutine to block forever,
 		// so the timeout should be in the order of minutes.
-		ctx, cancel := context.WithTimeout(ctx, watcherWaitTimeout)
+		// use a new context so the cancelation of the command doesn't
+		// prevent watcher from being called.
+		ctx, cancel := context.WithTimeout(context.Background(),
+			watcherWaitTimeout)
 		defer cancel()
 
 		if cmd.Watcher != nil && cmd.Watcher.Watch() != nil {
 			select {
 			case cmd.Watcher.Watch() <- err:
 			case <-ctx.Done():
+				p.log(log.WarnLevel, "could not deliver error to watcher chan: "+
+					"watcher not ready for too long")
 			}
 		}
 	}()

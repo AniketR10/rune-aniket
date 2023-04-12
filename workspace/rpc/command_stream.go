@@ -357,14 +357,6 @@ func (s *clientCommandStreamer) streamCommandData(client interface{}, cancelFn f
 
 	var err error
 	for {
-		select {
-		case <-s.parentCtx.Done():
-			s.log(log.TraceLevel,
-				"parent context is done, canceling streaming cmd data")
-			return
-		default:
-		}
-
 		var msg CommandPayload
 		err = s.stream.RecvMsg(&msg)
 		s.log(log.TraceLevel, "receive msg: err=%v", err)
@@ -428,13 +420,16 @@ func (s *clientCommandStreamer) streamCommandData(client interface{}, cancelFn f
 
 	// avoid buggy watchers to cause this goroutine to block forever,
 	// so the timeout should be in the order of minutes.
-	ctx, cancel := context.WithTimeout(s.parentCtx, watcherWaitTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(),
+		watcherWaitTimeout)
 	defer cancel()
 
 	if s.cmd.Watcher != nil && s.cmd.Watcher.Watch() != nil {
 		select {
 		case s.cmd.Watcher.Watch() <- err:
 		case <-ctx.Done():
+			s.log(log.WarnLevel, "could not deliver error to watcher chan: "+
+				"watcher not ready for too long")
 		}
 	}
 	// emulate exec code; pipes should be closed to force EOF
