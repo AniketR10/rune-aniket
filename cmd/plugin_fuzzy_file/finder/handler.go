@@ -132,7 +132,8 @@ func (h *fuzzyFinderHandler) killCommand() error {
 	return h.executor.Signal(h.pid, syscall.SIGKILL)
 }
 
-func (h *fuzzyFinderHandler) readCommand(ctx context.Context, datachan chan<- []byte, src io.Reader) {
+func (h *fuzzyFinderHandler) readCommand(ctx context.Context, datachan chan<- []byte, src io.Reader, cancelScan func()) {
+	defer cancelScan()
 	defer close(datachan)
 	reader := bufio.NewReaderSize(src, readerBufferSize)
 	for {
@@ -294,7 +295,6 @@ func (h *fuzzyFinderHandler) scanData() {
 
 	ctx := context.Background()
 	ctx, cancelScan := context.WithCancel(ctx)
-	defer cancelScan()
 
 	h.mu.Lock()
 	h.cancelScan = cancelScan
@@ -319,7 +319,7 @@ func (h *fuzzyFinderHandler) scanData() {
 	h.pid = exec
 	h.mu.Unlock()
 
-	go h.readCommand(ctx, datachan, stdout)
+	go h.readCommand(ctx, datachan, stdout, cancelScan)
 	go func() {
 		data, err := ioutil.ReadAll(stderr)
 		if err != nil {
