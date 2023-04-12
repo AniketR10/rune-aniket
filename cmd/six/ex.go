@@ -682,12 +682,12 @@ func (e *ex) openCommandPrompt() {
 	var commandHandler browser.Floating = cmd
 	commandHandler = browser.FuncFloating(
 		browser.FuncHandler(
-			handler.WithComponent(commandHandler,
+			handler.WithComponent(cmd,
 				component.WithBackground(
-					commandHandler, term.Cell{Bg: e.config.CommandOverlay.ElementAttr.Bg},
+					cmd, term.Cell{Bg: e.config.CommandOverlay.ElementAttr.Bg},
 				),
 			), e.onCloseCommandPrompt),
-		commandHandler.Dimensions,
+		cmd.Dimensions,
 	)
 	e.resetCommandList(cmd)
 
