@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sync"
 
 	"github.com/ernestrc/blue/document"
@@ -80,6 +81,7 @@ func dialStorage(grant Grant, broker proto.MuxBroker) (
 	}
 	c := new(docrpc.Client)
 	c.Init(conn, toml.Marshaler())
+	runtime.SetFinalizer(c, func(c *docrpc.Client) { c.Close() })
 	return c, nil
 }
 
