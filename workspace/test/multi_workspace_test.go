@@ -9,9 +9,10 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"unstable.build/go-tui/api/config"
+	schemeapi "unstable.build/go-tui/api/scheme"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/cell"
-	"unstable.build/go-tui/api/config"
 	"unstable.build/go-tui/workspace"
 )
 
@@ -75,7 +76,7 @@ type mockManager struct {
 	addWorkspace []workspaceapi.URI
 }
 
-func (m *mockManager) RegisterScheme(string, workspace.SchemeFunc) error {
+func (m *mockManager) RegisterScheme(string, schemeapi.SchemeFunc) error {
 	panic("should not be called")
 }
 func (m *mockManager) AddWorkspace(ctx context.Context, uri workspaceapi.URI) (

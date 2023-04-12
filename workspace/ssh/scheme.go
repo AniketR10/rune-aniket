@@ -17,9 +17,9 @@ import (
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
-	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/api/config"
-	"unstable.build/go-tui/workspace"
+	schemeapi "unstable.build/go-tui/api/scheme"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	workspacepb "unstable.build/go-tui/workspace/rpc"
 )
 
@@ -31,16 +31,16 @@ const (
 		"and workspace.ssh.shell configuration, if you have any."
 )
 
-// New returns a workspace.Scheme capable of managing
+// New returns a schemeapi.Scheme capable of managing
 // files over an ssh connection.
 func New(
 	ctx context.Context, cfg config.Config, uri workspaceapi.URI,
-) (workspace.Scheme, error) {
+) (schemeapi.Scheme, error) {
 	return newScheme(ctx, cfg, uri)
 }
 
 type remote interface {
-	NewSession() (workspace.Executor, error)
+	NewSession() (schemeapi.Executor, error)
 	Close() error
 }
 
@@ -57,7 +57,7 @@ type scheme struct {
 	ctx             context.Context
 	cancelCtx       func()
 
-	workspace.Scheme
+	schemeapi.Scheme
 }
 
 func newScheme(
@@ -79,7 +79,7 @@ func newScheme(
 	}
 
 	ret.connectSchemeFn = ret.connectScheme
-	err = ret.init(ctx, cc, uri, (workspace.Scheme).Stat)
+	err = ret.init(ctx, cc, uri, (schemeapi.Scheme).Stat)
 	if err != nil {
 		return nil, err
 	}
@@ -210,7 +210,7 @@ func (s *scheme) workspaceExists(
 
 func (s *scheme) connectScheme(
 	ctx context.Context, uri workspaceapi.URI, closeHook func(error),
-) (workspace.Scheme, error) {
+) (schemeapi.Scheme, error) {
 	const six = "six"
 
 	sshPath := s.basePath
@@ -334,7 +334,7 @@ func (s *scheme) setPipes(
 
 func (s *scheme) init(
 	ctx context.Context, cc sshConfig, uri workspaceapi.URI,
-	statWorkspaceDir func(workspace.Scheme, string) (os.FileInfo, error),
+	statWorkspaceDir func(schemeapi.Scheme, string) (os.FileInfo, error),
 ) (err error) {
 	if uri.Scheme() != Scheme {
 		return errors.New("invalid non-ssh scheme")

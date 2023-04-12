@@ -5,15 +5,15 @@ import (
 
 	multierr "github.com/ernestrc/go-multierror"
 	"github.com/stretchr/testify/require"
+	schemeapi "unstable.build/go-tui/api/scheme"
 	workspaceapi "unstable.build/go-tui/api/workspace"
-	"unstable.build/go-tui/workspace"
 	"unstable.build/go-tui/workspace/test"
 	"upspin.io/test/testenv"
 	"upspin.io/upspin"
 )
 
 type bindClose struct {
-	workspace.Scheme
+	schemeapi.Scheme
 	*testenv.Env
 }
 
@@ -30,7 +30,7 @@ func (s bindClose) Close() (ret error) {
 func TestScheme(t *testing.T) {
 	t.Run("plain packing", func(t *testing.T) {
 		t.Run("root of path", func(t *testing.T) {
-			test.TestWorkspaceSchemeFiles(t, func(t *testing.T) workspace.Scheme {
+			test.TestWorkspaceSchemeFiles(t, func(t *testing.T) schemeapi.Scheme {
 				setup := &testenv.Setup{
 					OwnerName: upspin.UserName("user1@domain.com"),
 					Kind:      "inprocess",
@@ -57,7 +57,7 @@ func TestScheme(t *testing.T) {
 		})
 	})
 	/*t.Run("ee packing", func(t *testing.T) {
-		test.TestWorkspaceSchemeFiles(t, func(t *testing.T) workspace.Scheme {
+		test.TestWorkspaceSchemeFiles(t, func(t *testing.T) schemeapi.Scheme {
 			uri, err := workspaceapi.ParseURI("upspin://ernest@unstable.build/public")
 			require.NoError(t, err)
 			s, err := newScheme(cfg("ee"), uri)

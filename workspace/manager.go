@@ -8,8 +8,9 @@ import (
 	"github.com/ernestrc/blue/logging"
 	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
-	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/api/config"
+	schemeapi "unstable.build/go-tui/api/scheme"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 )
 
 var (
@@ -24,7 +25,7 @@ var _ SchemeManager = (*Manager)(nil)
 type Manager struct {
 	cfg config.Config
 
-	schemes    map[string]SchemeFunc
+	schemes    map[string]schemeapi.SchemeFunc
 	workspaces map[string]managerWorkspace
 }
 
@@ -53,14 +54,14 @@ func NewManager(cfg config.Config) *Manager {
 // under the file:// scheme.
 func (m *Manager) Init(cfg config.Config) {
 	m.cfg = cfg
-	m.schemes = make(map[string]SchemeFunc)
+	m.schemes = make(map[string]schemeapi.SchemeFunc)
 	m.workspaces = make(map[string]managerWorkspace)
 }
 
 // RegisterScheme registers a new scheme for the given scheme and uses fn
 // to allocate it for new workspaces. It returns an error if there's already
 // a scheme registered for the given scheme.
-func (m *Manager) RegisterScheme(scheme string, fn SchemeFunc) error {
+func (m *Manager) RegisterScheme(scheme string, fn schemeapi.SchemeFunc) error {
 	_, ok := m.schemes[scheme]
 	if ok {
 		return fmt.Errorf("scheme %q already registered", scheme)
@@ -89,7 +90,7 @@ func (m *Manager) removeWorkspace(uri workspaceapi.URI) {
 }
 
 // Scheme returns a SchemeFunc for the given URI.
-func (m *Manager) Scheme(uri workspaceapi.URI) (SchemeFunc, error) {
+func (m *Manager) Scheme(uri workspaceapi.URI) (schemeapi.SchemeFunc, error) {
 	schemeFn, ok := m.schemes[uri.Scheme()]
 	if !ok {
 		return nil, fmt.Errorf("scheme not registered %q", uri.Scheme())

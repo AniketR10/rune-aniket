@@ -12,12 +12,13 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
-	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/api/config"
+	schemeapi "unstable.build/go-tui/api/scheme"
+	schemetest "unstable.build/go-tui/api/scheme/test"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/proto"
 	"unstable.build/go-tui/workspace"
 	"unstable.build/go-tui/workspace/test"
-	workspacetest "unstable.build/go-tui/workspace/test"
 )
 
 func doSetupSchemeManagerClientServerTest(
@@ -41,15 +42,15 @@ func doSetupSchemeManagerClientServerTest(
 	return
 }
 func setupProxyUnitTest(t *testing.T, ctrl *gomock.Controller) (
-	workspace.Scheme, *workspacetest.MockScheme, func(*testing.T),
+	schemeapi.Scheme, *schemetest.MockScheme, func(*testing.T),
 ) {
-	mockScheme := workspacetest.NewMockScheme(ctrl)
+	mockScheme := schemetest.NewMockScheme(ctrl)
 	client, closeFn := setupProxyTest(t, mockScheme)
 	return client, mockScheme, closeFn
 }
 
-func setupProxyTest(t *testing.T, mockScheme workspace.Scheme) (
-	workspace.Scheme, func(*testing.T),
+func setupProxyTest(t *testing.T, mockScheme schemeapi.Scheme) (
+	schemeapi.Scheme, func(*testing.T),
 ) {
 	uri, err := workspaceapi.ParseURI("test:///tmp")
 	require.NoError(t, err)
@@ -65,14 +66,14 @@ func setupProxyTest(t *testing.T, mockScheme workspace.Scheme) (
 	managerClient := NewSchemeManager(context.Background(), broker, conn)
 	require.NoError(t, managerClient.RegisterScheme("test",
 		func(_ context.Context, _cfg config.Config, _uri workspaceapi.URI) (
-			workspace.Scheme, error,
+			schemeapi.Scheme, error,
 		) {
 			assert.Equal(t, uri, _uri)
 			return mockScheme, nil
 		}))
 
 	// wait for RegisterScheme on host side
-	var schemeFn workspace.SchemeFunc
+	var schemeFn schemeapi.SchemeFunc
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	err = retry.Retry(ctx, retry.ExponentialStrategy(10*time.Millisecond, 1*time.Second),
@@ -94,7 +95,7 @@ func setupProxyTest(t *testing.T, mockScheme workspace.Scheme) (
 }
 
 func TestSchemeManagerClientServerSchemeSuiteIntegration(t *testing.T) {
-	test.TestWorkspaceSchemeFiles(t, func(t *testing.T) workspace.Scheme {
+	test.TestWorkspaceSchemeFiles(t, func(t *testing.T) schemeapi.Scheme {
 		memURI, err := workspaceapi.ParseURI("memory:///tmp")
 		require.NoError(t, err)
 		scheme, err := workspace.NewMemoryScheme(context.Background(), config.NopConfig(), memURI)

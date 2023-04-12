@@ -14,8 +14,9 @@ import (
 	"syscall"
 	"time"
 
-	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/api/config"
+	schemeapi "unstable.build/go-tui/api/scheme"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 )
 
 const (
@@ -33,7 +34,7 @@ var (
 // only support seeking to the beginning of the file.
 func NewMemoryScheme(
 	ctx context.Context, cfg config.Config, workspace workspaceapi.URI,
-) (Scheme, error) {
+) (schemeapi.Scheme, error) {
 	ret := new(memoryScheme)
 	err := ret.init(workspace)
 	if err != nil {

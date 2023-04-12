@@ -15,8 +15,9 @@ import (
 	multierr "github.com/ernestrc/go-multierror"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/api/config"
+	schemeapi "unstable.build/go-tui/api/scheme"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/workspace"
 	"unstable.build/go-tui/workspace/test"
 	workspacetest "unstable.build/go-tui/workspace/test"
@@ -41,7 +42,7 @@ func (n nopExecutor) Close() error {
 type nopRemote struct {
 }
 
-func (n nopRemote) NewSession() (workspace.Executor, error) {
+func (n nopRemote) NewSession() (schemeapi.Executor, error) {
 	return nopExecutor{}, nil
 }
 
@@ -79,8 +80,8 @@ func (t testFileInfo) Sys() interface{} {
 func newTestScheme(
 	cfg config.Config, workspaceURI workspaceapi.URI,
 	connectSchemeFn func(ctx context.Context,
-		uri workspaceapi.URI, closeHook func(error)) (workspace.Scheme, error),
-) (workspace.Scheme, error) {
+		uri workspaceapi.URI, closeHook func(error)) (schemeapi.Scheme, error),
+) (schemeapi.Scheme, error) {
 	s := new(scheme)
 	s.ctx, s.cancelCtx = context.WithCancel(context.Background())
 	s.remoteFn = func(context.Context, sshConfig, workspaceapi.URI) (remote, error) {
@@ -91,7 +92,7 @@ func newTestScheme(
 	}
 	if connectSchemeFn == nil {
 		connectSchemeFn = func(ctx context.Context, uri workspaceapi.URI, closeHook func(error)) (
-			workspace.Scheme, error,
+			schemeapi.Scheme, error,
 		) {
 			return workspacetest.NewNopScheme("test")(ctx, config.NopConfig(), uri)
 		}
@@ -99,7 +100,7 @@ func newTestScheme(
 	s.connectSchemeFn = connectSchemeFn
 
 	err := s.init(context.Background(), sshConfig{}, workspaceURI,
-		func(_ workspace.Scheme, name string) (os.FileInfo, error) {
+		func(_ schemeapi.Scheme, name string) (os.FileInfo, error) {
 			return testFileInfo{name: name}, nil
 		})
 	if err != nil {
@@ -142,7 +143,7 @@ func TestNewScheme(t *testing.T) {
 			// sut
 			ch := make(chan string, 1) // when uri is a file URI it gets called twice
 			s, err := newTestScheme(config.NopConfig(), workspaceURI,
-				func(ctx context.Context, uri workspaceapi.URI, closeHook func(error)) (workspace.Scheme, error) {
+				func(ctx context.Context, uri workspaceapi.URI, closeHook func(error)) (schemeapi.Scheme, error) {
 					go func() { ch <- uri.String() }()
 					return workspacetest.NewNopScheme("test")(
 						ctx, config.NopConfig(), uri)
@@ -278,7 +279,7 @@ func TestIntegrationManagerIsWorkspaceFile(t *testing.T) {
 	manager := workspace.NewManager(config.NopConfig())
 	require.NoError(t, manager.RegisterScheme(workspace.FileScheme, workspace.NewFileScheme))
 	require.NoError(t, manager.RegisterScheme(Scheme,
-		func(ctx context.Context, cfg config.Config, uri workspaceapi.URI) (workspace.Scheme, error) {
+		func(ctx context.Context, cfg config.Config, uri workspaceapi.URI) (schemeapi.Scheme, error) {
 			return newTestScheme(cfg, uri, nil)
 		}))
 
@@ -318,7 +319,7 @@ func TestIntegrationManagerIsWorkspaceFile(t *testing.T) {
 func TestSSHScheme(t *testing.T) {
 	var cleanup []func() error
 	t.Run("with memory scheme remote", func(t *testing.T) {
-		test.TestWorkspaceSchemeFiles(t, func(t *testing.T) workspace.Scheme {
+		test.TestWorkspaceSchemeFiles(t, func(t *testing.T) schemeapi.Scheme {
 			workspaceURI, err := workspaceapi.ParseURI("ssh://test@host.com/")
 			require.NoError(t, err)
 			remoteURI, err := workspaceapi.ParseURI("memory:///")
@@ -330,7 +331,7 @@ func TestSSHScheme(t *testing.T) {
 
 			s, err := newTestScheme(config.NopConfig(), workspaceURI,
 				func(ctx context.Context, uri workspaceapi.URI,
-					closeHook func(error)) (workspace.Scheme, error) {
+					closeHook func(error)) (schemeapi.Scheme, error) {
 					return memScheme, nil
 				})
 			require.NoError(t, err)
@@ -340,7 +341,7 @@ func TestSSHScheme(t *testing.T) {
 	})
 
 	t.Run("with file scheme remote", func(t *testing.T) {
-		test.TestWorkspaceSchemeFiles(t, func(t *testing.T) workspace.Scheme {
+		test.TestWorkspaceSchemeFiles(t, func(t *testing.T) schemeapi.Scheme {
 			dir, err := ioutil.TempDir("", "ssh_scheme_suite")
 			require.NoError(t, err)
 
@@ -356,7 +357,7 @@ func TestSSHScheme(t *testing.T) {
 
 			s, err := newTestScheme(config.NopConfig(), workspaceURI,
 				func(ctx context.Context, uri workspaceapi.URI,
-					closeHook func(error)) (workspace.Scheme, error) {
+					closeHook func(error)) (schemeapi.Scheme, error) {
 					return fileScheme, nil
 				})
 			require.NoError(t, err)

@@ -8,9 +8,9 @@ import (
 	"github.com/ernestrc/blue/encoding/json"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
-	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/api/config"
-	"unstable.build/go-tui/workspace"
+	schemeapi "unstable.build/go-tui/api/scheme"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	workdoc "unstable.build/go-tui/workspace/document"
 )
 
@@ -30,7 +30,7 @@ func runFirestoreOrSkip(t *testing.T) func() {
 }
 
 func TestFirestoreWorkspaceScheme(t *testing.T) {
-	testWorkspaceSchemeSuite(t, func(t *testing.T) workspace.Scheme {
+	testWorkspaceSchemeSuite(t, func(t *testing.T) schemeapi.Scheme {
 		testProjectID := uuid.New().String()
 		collection := uuid.New().String()
 

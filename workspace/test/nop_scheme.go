@@ -8,14 +8,14 @@ import (
 	"strings"
 	"syscall"
 
-	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/api/config"
-	"unstable.build/go-tui/workspace"
+	schemeapi "unstable.build/go-tui/api/scheme"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 )
 
 // NewNopScheme returns a scheme that does nothing and workspace.Executor API panics.
-func NewNopScheme(scheme string) workspace.SchemeFunc {
-	return func(ctx context.Context, cfg config.Config, uri workspaceapi.URI) (workspace.Scheme, error) {
+func NewNopScheme(scheme string) schemeapi.SchemeFunc {
+	return func(ctx context.Context, cfg config.Config, uri workspaceapi.URI) (schemeapi.Scheme, error) {
 		scheme := &testScheme{scheme: scheme}
 		scheme.openFunc = func(name string, flag int, perm os.FileMode) (
 			workspaceapi.File, *workspaceapi.Error,

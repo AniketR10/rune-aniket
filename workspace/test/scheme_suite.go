@@ -16,6 +16,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	schemeapi "unstable.build/go-tui/api/scheme"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/workspace"
@@ -23,7 +24,7 @@ import (
 
 func TestWorkspaceSchemeExecutor(
 	t *testing.T,
-	schemeFn func(t *testing.T) workspace.Scheme,
+	schemeFn func(t *testing.T) schemeapi.Scheme,
 ) {
 	t.Run("command should run command and collect stdout", func(t *testing.T) {
 		scheme := schemeFn(t)
@@ -160,11 +161,12 @@ func TestWorkspaceSchemeExecutor(
 
 		ctx, cancel := context.WithTimeout(context.Background(),
 			100*time.Millisecond)
-		defer cancel()
 
 		pid, err := scheme.StartCommand(ctx, cmd)
 		require.NoError(t, err)
 		require.NotZero(t, pid)
+
+		cancel()
 
 		waitCtx, cancelWait := context.WithTimeout(
 			context.Background(), 20*time.Second)
@@ -181,7 +183,7 @@ func TestWorkspaceSchemeExecutor(
 
 func TestWorkspaceSchemeFiles(
 	t *testing.T,
-	schemeFn func(t *testing.T) workspace.Scheme,
+	schemeFn func(t *testing.T) schemeapi.Scheme,
 ) {
 	t.Run("Open", func(t *testing.T) {
 		TestWorkspaceSchemeOpen(t, schemeFn, defaultCreateTestFile,
@@ -231,8 +233,8 @@ func readAllExceptLastEOL(r io.Reader) (data []byte, err error) {
 
 func TestWorkspaceLoadIntegration(
 	t *testing.T,
-	schemeFn func(t *testing.T) workspace.Scheme,
-	createTestFile func(*testing.T, workspace.Scheme, string, string) (workspaceapi.File, func()),
+	schemeFn func(t *testing.T) schemeapi.Scheme,
+	createTestFile func(*testing.T, schemeapi.Scheme, string, string) (workspaceapi.File, func()),
 	readAll func(io.Reader) ([]byte, error),
 	write func(*cell.Buffer, []byte) (int, error),
 ) {
@@ -404,7 +406,7 @@ func TestWorkspaceLoadIntegration(
 	})
 }
 
-func defaultCreateTestFile(t *testing.T, s workspace.Scheme, filename, content string) (workspaceapi.File, func()) {
+func defaultCreateTestFile(t *testing.T, s schemeapi.Scheme, filename, content string) (workspaceapi.File, func()) {
 	file, werr := s.Open(filename, os.O_CREATE|os.O_EXCL|os.O_RDWR, 0644)
 	require.Nil(t, werr, werr.String())
 	_, err := file.Write([]byte(content))
@@ -426,7 +428,7 @@ func testFile(
 	t.Run("Name returns the file name", func(t *testing.T) {
 		// implementations may or may not return the full path name
 		// in the case of a file scheme, absolute is returned because
-		// a workspace.Scheme is localized to the current working directory
+		// a schemeapi.Scheme is localized to the current working directory
 		// so if the path passed to Open is relative, then we need to
 		// prepend the cwd.
 		assert.Contains(t, f.Name(), "file")
@@ -493,8 +495,8 @@ func testFile(
 
 func TestWorkspaceSchemeNewFile(
 	t *testing.T,
-	schemeFn func(t *testing.T) workspace.Scheme,
-	createTestFile func(*testing.T, workspace.Scheme, string, string) (workspaceapi.File, func()),
+	schemeFn func(t *testing.T) schemeapi.Scheme,
+	createTestFile func(*testing.T, schemeapi.Scheme, string, string) (workspaceapi.File, func()),
 	readAll func(io.Reader) ([]byte, error),
 	writeFile func(workspaceapi.File, []byte) (int, error),
 ) {
@@ -540,8 +542,8 @@ func TestWorkspaceSchemeNewFile(
 
 func TestWorkspaceSchemeOpen(
 	t *testing.T,
-	schemeFn func(t *testing.T) workspace.Scheme,
-	createTestFile func(*testing.T, workspace.Scheme, string, string) (workspaceapi.File, func()),
+	schemeFn func(t *testing.T) schemeapi.Scheme,
+	createTestFile func(*testing.T, schemeapi.Scheme, string, string) (workspaceapi.File, func()),
 	readAll func(io.Reader) ([]byte, error),
 	writeFile func(workspaceapi.File, []byte) (int, error),
 	testRelativeAbsolutePaths bool,
@@ -660,8 +662,8 @@ func TestWorkspaceSchemeOpen(
 
 func TestWorkspaceSchemeRemove(
 	t *testing.T,
-	schemeFn func(t *testing.T) workspace.Scheme,
-	createTestFile func(*testing.T, workspace.Scheme, string, string) (workspaceapi.File, func()),
+	schemeFn func(t *testing.T) schemeapi.Scheme,
+	createTestFile func(*testing.T, schemeapi.Scheme, string, string) (workspaceapi.File, func()),
 ) {
 	t.Run("removes file", func(t *testing.T) {
 		scheme := schemeFn(t)
@@ -691,8 +693,8 @@ func TestWorkspaceSchemeRemove(
 
 func TestWorkspaceSchemeRename(
 	t *testing.T,
-	schemeFn func(t *testing.T) workspace.Scheme,
-	createTestFile func(*testing.T, workspace.Scheme, string, string) (workspaceapi.File, func()),
+	schemeFn func(t *testing.T) schemeapi.Scheme,
+	createTestFile func(*testing.T, schemeapi.Scheme, string, string) (workspaceapi.File, func()),
 	readAll func(io.Reader) ([]byte, error),
 ) {
 	t.Run("renames a file if target name doesn't exist", func(t *testing.T) {
@@ -746,9 +748,9 @@ func TestWorkspaceSchemeRename(
 
 func testWorkspaceSchemeStats(
 	t *testing.T,
-	schemeFn func(t *testing.T) workspace.Scheme,
-	method func(workspace.Scheme, string) (os.FileInfo, error),
-	createTestFile func(*testing.T, workspace.Scheme, string, string) (workspaceapi.File, func()),
+	schemeFn func(t *testing.T) schemeapi.Scheme,
+	method func(schemeapi.Scheme, string) (os.FileInfo, error),
+	createTestFile func(*testing.T, schemeapi.Scheme, string, string) (workspaceapi.File, func()),
 ) {
 	t.Run("returns a valid os.FileInfo of a regular file", func(t *testing.T) {
 		scheme := schemeFn(t)
@@ -779,26 +781,26 @@ func testWorkspaceSchemeStats(
 
 func TestWorkspaceSchemeStat(
 	t *testing.T,
-	schemeFn func(t *testing.T) workspace.Scheme,
-	createTestFile func(*testing.T, workspace.Scheme, string, string) (workspaceapi.File, func()),
+	schemeFn func(t *testing.T) schemeapi.Scheme,
+	createTestFile func(*testing.T, schemeapi.Scheme, string, string) (workspaceapi.File, func()),
 ) {
-	testWorkspaceSchemeStats(t, schemeFn, (workspace.Scheme).Stat, createTestFile)
+	testWorkspaceSchemeStats(t, schemeFn, (schemeapi.Scheme).Stat, createTestFile)
 }
 
 func TestWorkspaceSchemeLstat(
 	t *testing.T,
-	schemeFn func(t *testing.T) workspace.Scheme,
-	createTestFile func(*testing.T, workspace.Scheme, string, string) (workspaceapi.File, func()),
+	schemeFn func(t *testing.T) schemeapi.Scheme,
+	createTestFile func(*testing.T, schemeapi.Scheme, string, string) (workspaceapi.File, func()),
 ) {
 	// clients do not use or need symlinks atm, so implementations
 	// that do not support creating symlinks should not care about this.
-	testWorkspaceSchemeStats(t, schemeFn, (workspace.Scheme).Lstat, createTestFile)
+	testWorkspaceSchemeStats(t, schemeFn, (schemeapi.Scheme).Lstat, createTestFile)
 }
 
 func TestWorkspaceSchemeReadLink(
 	t *testing.T,
-	schemeFn func(t *testing.T) workspace.Scheme,
-	createTestFile func(*testing.T, workspace.Scheme, string, string) (workspaceapi.File, func()),
+	schemeFn func(t *testing.T) schemeapi.Scheme,
+	createTestFile func(*testing.T, schemeapi.Scheme, string, string) (workspaceapi.File, func()),
 ) {
 	t.Run("should return error if underlying file is not a symlink", func(t *testing.T) {
 		scheme := schemeFn(t)
@@ -814,8 +816,8 @@ func TestWorkspaceSchemeReadLink(
 
 func TestWorkspaceSchemeListFilesIntegration(
 	t *testing.T,
-	schemeFn func(t *testing.T) workspace.Scheme,
-	createTestFile func(*testing.T, workspace.Scheme, string, string) (workspaceapi.File, func()),
+	schemeFn func(t *testing.T) schemeapi.Scheme,
+	createTestFile func(*testing.T, schemeapi.Scheme, string, string) (workspaceapi.File, func()),
 ) {
 	t.Run("os.FileInfo.IsDir on filesystem root should always return true", func(t *testing.T) {
 		scheme := schemeFn(t)
@@ -971,8 +973,8 @@ func TestWorkspaceSchemeListFilesIntegration(
 
 func TestWorkspaceSchemeReadDir(
 	t *testing.T,
-	schemeFn func(t *testing.T) workspace.Scheme,
-	createTestFile func(*testing.T, workspace.Scheme, string, string) (workspaceapi.File, func()),
+	schemeFn func(t *testing.T) schemeapi.Scheme,
+	createTestFile func(*testing.T, schemeapi.Scheme, string, string) (workspaceapi.File, func()),
 ) {
 	t.Run("a file should return an error", func(t *testing.T) {
 		scheme := schemeFn(t)

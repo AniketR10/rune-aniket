@@ -16,9 +16,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
+	"unstable.build/go-tui/api/config"
+	schemeapi "unstable.build/go-tui/api/scheme"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	workspaceapitest "unstable.build/go-tui/api/workspace/test"
-	"unstable.build/go-tui/api/config"
 	"unstable.build/go-tui/workspace"
 	"unstable.build/go-tui/workspace/test"
 	workspacetest "unstable.build/go-tui/workspace/test"
@@ -326,14 +327,14 @@ func TestClientServer(t *testing.T) {
 }
 
 func setupClientServerIntegrationTest(
-	t *testing.T, scheme workspace.Scheme,
+	t *testing.T, scheme schemeapi.Scheme,
 ) (*Client, func()) {
 	server := NewServer(scheme, new(sync.Mutex))
 	return setupClientServerTest(t, server)
 }
 
 func TestSchemeIntegration(t *testing.T) {
-	test.TestWorkspaceSchemeFiles(t, func(t *testing.T) workspace.Scheme {
+	test.TestWorkspaceSchemeFiles(t, func(t *testing.T) schemeapi.Scheme {
 		memURI, err := workspaceapi.ParseURI("memory:///tmp")
 		require.NoError(t, err)
 		scheme, err := workspace.NewMemoryScheme(context.Background(), config.NopConfig(), memURI)
@@ -343,7 +344,7 @@ func TestSchemeIntegration(t *testing.T) {
 		return client
 	})
 
-	test.TestWorkspaceSchemeExecutor(t, func(t *testing.T) workspace.Scheme {
+	test.TestWorkspaceSchemeExecutor(t, func(t *testing.T) schemeapi.Scheme {
 		dir, err := ioutil.TempDir("", "workspacepb_suite")
 		require.NoError(t, err)
 

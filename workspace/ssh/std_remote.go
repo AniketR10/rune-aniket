@@ -16,8 +16,8 @@ import (
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/knownhosts"
 	"golang.org/x/term"
+	schemeapi "unstable.build/go-tui/api/scheme"
 	workspaceapi "unstable.build/go-tui/api/workspace"
-	"unstable.build/go-tui/workspace"
 )
 
 const watcherWaitTimeout = 2 * time.Minute
@@ -159,7 +159,7 @@ func (r *goSshSession) Close() error {
 	return r.ses.Close()
 }
 
-func (r *stdRemote) NewSession() (workspace.Executor, error) {
+func (r *stdRemote) NewSession() (schemeapi.Executor, error) {
 	ses, err := r.client.NewSession()
 	if err != nil {
 		return nil, err

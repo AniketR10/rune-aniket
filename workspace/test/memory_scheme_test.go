@@ -7,8 +7,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/api/config"
+	schemeapi "unstable.build/go-tui/api/scheme"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/workspace"
 )
 
@@ -16,7 +17,7 @@ func TestMemoryScheme(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("at root path", func(t *testing.T) {
-		TestWorkspaceSchemeFiles(t, func(t *testing.T) workspace.Scheme {
+		TestWorkspaceSchemeFiles(t, func(t *testing.T) schemeapi.Scheme {
 			uri, err := workspaceapi.ParseURI("memory:///")
 			require.NoError(t, err)
 			mem, err := workspace.NewMemoryScheme(ctx, config.NopConfig(), uri)
@@ -25,7 +26,7 @@ func TestMemoryScheme(t *testing.T) {
 		})
 	})
 	t.Run("at nested path", func(t *testing.T) {
-		TestWorkspaceSchemeFiles(t, func(t *testing.T) workspace.Scheme {
+		TestWorkspaceSchemeFiles(t, func(t *testing.T) schemeapi.Scheme {
 			uri, err := workspaceapi.ParseURI("memory:///var/log")
 			require.NoError(t, err)
 			mem, err := workspace.NewMemoryScheme(ctx, config.NopConfig(), uri)
@@ -34,7 +35,7 @@ func TestMemoryScheme(t *testing.T) {
 		})
 	})
 	t.Run("at nested path with end-slash", func(t *testing.T) {
-		TestWorkspaceSchemeFiles(t, func(t *testing.T) workspace.Scheme {
+		TestWorkspaceSchemeFiles(t, func(t *testing.T) schemeapi.Scheme {
 			uri, err := workspaceapi.ParseURI("memory:///var/log/")
 			require.NoError(t, err)
 			mem, err := workspace.NewMemoryScheme(ctx, config.NopConfig(), uri)

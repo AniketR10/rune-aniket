@@ -49,7 +49,7 @@ generate:
 	@ mv workspace/unstable.build/go-tui/workspace/rpc/* workspace/rpc
 	@ mv term/unstable.build/go-tui/term/rpc/* term/rpc
 	@ mv handler/unstable.build/go-tui/handler/rpc/* handler/rpc
-	@ mv config/unstable.build/go-tui/api/config/rpc/* config/rpc
+	@ mv api/config/unstable.build/go-tui/api/config/rpc/* api/config/rpc
 	@ rm -rf **/unstable.build **/github.com
 
 install:

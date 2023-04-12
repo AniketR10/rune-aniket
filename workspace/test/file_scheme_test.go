@@ -7,13 +7,14 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/api/config"
+	schemeapi "unstable.build/go-tui/api/scheme"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/workspace"
 )
 
 func TestFileScheme(t *testing.T) {
-	TestWorkspaceSchemeFiles(t, func(t *testing.T) workspace.Scheme {
+	TestWorkspaceSchemeFiles(t, func(t *testing.T) schemeapi.Scheme {
 		dir, err := ioutil.TempDir("", "file_scheme_suite")
 		require.NoError(t, err)
 
@@ -30,7 +31,7 @@ func TestFileScheme(t *testing.T) {
 		return fileScheme
 	})
 
-	TestWorkspaceSchemeExecutor(t, func(t *testing.T) workspace.Scheme {
+	TestWorkspaceSchemeExecutor(t, func(t *testing.T) schemeapi.Scheme {
 		dir, err := ioutil.TempDir("", "file_scheme_suite")
 		require.NoError(t, err)
 

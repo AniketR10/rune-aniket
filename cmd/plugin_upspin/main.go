@@ -7,9 +7,10 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui/api/config"
+	schemeapi "unstable.build/go-tui/api/scheme"
+	schemeplugin "unstable.build/go-tui/api/scheme/plugin"
 	"unstable.build/go-tui/plugin"
 	"unstable.build/go-tui/proto"
-	"unstable.build/go-tui/workspace"
 )
 
 var (
@@ -21,7 +22,7 @@ var (
 type upspinGrantee struct {
 	mu     sync.Mutex
 	broker proto.MuxBroker
-	m      workspace.SchemeManager
+	m      schemeapi.SchemeManager
 }
 
 func (e *upspinGrantee) Connected(broker proto.MuxBroker, pconfig config.Config) {
@@ -38,7 +39,7 @@ func (e *upspinGrantee) PermissionGranted(grants []plugin.Grant) {
 	for _, g := range grants {
 		switch g.Permission {
 		case plugin.PermissionSchemeManager:
-			m, err := plugin.SchemeManager(g, e.broker)
+			m, err := schemeplugin.SchemeManager(g, e.broker)
 			if err != nil {
 				log.Fatalf("PermissionGranted: %+v: %s", g.Permission, err)
 			}

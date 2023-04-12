@@ -7,18 +7,18 @@ import (
 
 	"github.com/ernestrc/blue/logging"
 	log "github.com/sirupsen/logrus"
-	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/api/config"
+	schemeapi "unstable.build/go-tui/api/scheme"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 
 	"unstable.build/go-tui/proto"
-	"unstable.build/go-tui/workspace"
 )
 
 var (
 	_ ManagerServer = (*SchemeManagerServer)(nil)
 )
 
-// SchemeManagerServer exposes a workspace.SchemeManager over the wire and
+// SchemeManagerServer exposes a schemeapi.SchemeManager over the wire and
 // satisfies SchemeServer grpc interface.
 type SchemeManagerServer struct {
 	UnimplementedManagerServer
@@ -28,14 +28,14 @@ type SchemeManagerServer struct {
 
 	// manager locker
 	locker  sync.Locker
-	manager workspace.SchemeManager
+	manager schemeapi.SchemeManager
 	schemes []string
 }
 
 // NewSchemeManagerServer allocates storage for a new SchemeManagerServer and initializes it
 // with the given SchemeManager.
 func NewSchemeManagerServer(
-	broker proto.MuxBroker, manager workspace.SchemeManager,
+	broker proto.MuxBroker, manager schemeapi.SchemeManager,
 	locker sync.Locker,
 ) *SchemeManagerServer {
 	ret := new(SchemeManagerServer)
@@ -46,7 +46,7 @@ func NewSchemeManagerServer(
 
 // Init initializes this SchemeServerImpl with the given scheme.
 func (s *SchemeManagerServer) Init(
-	broker proto.MuxBroker, manager workspace.SchemeManager,
+	broker proto.MuxBroker, manager schemeapi.SchemeManager,
 	locker sync.Locker,
 ) {
 	s.manager = manager
@@ -60,7 +60,7 @@ func (c *SchemeManagerServer) log(level log.Level, msg string, args ...interface
 }
 
 func (s *SchemeManagerServer) dialScheme(proxyID string, cfg config.Config, uri workspaceapi.URI) (
-	workspace.Scheme, error,
+	schemeapi.Scheme, error,
 ) {
 	client, err := initializeSchemeThroughProxy(cfg, uri, s.broker, proxyID)
 	if err != nil {
@@ -83,7 +83,7 @@ func (s *SchemeManagerServer) RegisterScheme(ctx context.Context, req *RegisterS
 	proxyID := req.GetProxyId()
 	err = s.manager.RegisterScheme(req.GetScheme(),
 		func(_ context.Context, cfg config.Config, uri workspaceapi.URI) (
-			workspace.Scheme, error,
+			schemeapi.Scheme, error,
 		) {
 			return s.dialScheme(proxyID, cfg, uri)
 		})

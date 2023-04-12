@@ -17,8 +17,9 @@ import (
 	multierr "github.com/ernestrc/go-multierror"
 	"github.com/ernestrc/sensible/find"
 	log "github.com/sirupsen/logrus"
-	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/api/config"
+	schemeapi "unstable.build/go-tui/api/scheme"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/term/pty"
 )
 
@@ -32,7 +33,7 @@ const (
 // on the local file system.
 func NewFileScheme(
 	ctx context.Context, cfg config.Config, workspace workspaceapi.URI,
-) (Scheme, error) {
+) (schemeapi.Scheme, error) {
 	ret := new(fileScheme)
 	ret.getUser = user.Current
 	ret.lookupUser = user.Lookup

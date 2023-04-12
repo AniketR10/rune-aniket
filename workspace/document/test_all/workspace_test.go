@@ -6,15 +6,16 @@ import (
 
 	"github.com/ernestrc/blue/encoding/json"
 	"github.com/stretchr/testify/require"
-	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/api/config"
+	schemeapi "unstable.build/go-tui/api/scheme"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	storework "unstable.build/go-tui/storage/workspace"
 	"unstable.build/go-tui/workspace"
 	workdoc "unstable.build/go-tui/workspace/document"
 )
 
 func TestMemoryWorkspaceSchemeBackedByWorkspaceSchemeService(t *testing.T) {
-	testWorkspaceSchemeSuite(t, func(t *testing.T) workspace.Scheme {
+	testWorkspaceSchemeSuite(t, func(t *testing.T) schemeapi.Scheme {
 		workspaceURI, err := workspaceapi.ParseURI("memory:///")
 		require.NoError(t, err)
 

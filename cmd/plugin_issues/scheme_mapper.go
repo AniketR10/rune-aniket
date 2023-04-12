@@ -11,25 +11,25 @@ import (
 	"github.com/ernestrc/blue/encoding"
 	"github.com/ernestrc/blue/issue"
 	log "github.com/sirupsen/logrus"
-	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/api/config"
-	"unstable.build/go-tui/workspace"
+	schemeapi "unstable.build/go-tui/api/scheme"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 )
 
 const (
 	defaultMaxID = 9
 )
 
-// issueMapperScheme returns a workspace.SchemeFunc that wraps the given
+// issueMapperScheme returns a schemeapi.SchemeFunc that wraps the given
 // schemeFunc to apply mappingFunc to the iterator of file names returned
 // by ListFiles.
 func issueMapperScheme(
-	schemeFunc workspace.SchemeFunc,
+	schemeFunc schemeapi.SchemeFunc,
 	marshaler encoding.Marshaler,
 	maxSubjectLen int,
-) workspace.SchemeFunc {
+) schemeapi.SchemeFunc {
 	return func(ctx context.Context, cfg config.Config, uri workspaceapi.URI) (
-		workspace.Scheme, error,
+		schemeapi.Scheme, error,
 	) {
 		s, err := schemeFunc(ctx, cfg, uri)
 		if err != nil {
@@ -40,7 +40,7 @@ func issueMapperScheme(
 }
 
 type mapper struct {
-	workspace.Scheme // of T
+	schemeapi.Scheme // of T
 	m                encoding.Marshaler
 	maxSubjectLen    int
 }

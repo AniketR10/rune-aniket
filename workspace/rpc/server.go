@@ -13,8 +13,8 @@ import (
 	"github.com/ernestrc/blue/logging"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/protobuf/types/known/timestamppb"
+	schemeapi "unstable.build/go-tui/api/scheme"
 	workspaceapi "unstable.build/go-tui/api/workspace"
-	"unstable.build/go-tui/workspace"
 )
 
 var (
@@ -32,18 +32,18 @@ type Server struct {
 	cancelCtx func()
 
 	locker sync.Locker
-	s      workspace.Scheme
+	s      schemeapi.Scheme
 }
 
 // NewServer allocates storage for a new server and initializes it with wp.
-func NewServer(wp workspace.Scheme, locker sync.Locker) *Server {
+func NewServer(wp schemeapi.Scheme, locker sync.Locker) *Server {
 	ret := new(Server)
 	ret.Init(wp, locker)
 	return ret
 }
 
 // Init initializes this Server with the given workspace
-func (s *Server) Init(scheme workspace.Scheme, locker sync.Locker) {
+func (s *Server) Init(scheme schemeapi.Scheme, locker sync.Locker) {
 	s.s = scheme
 	s.locker = locker
 	s.ctx, s.cancelCtx = context.WithCancel(context.Background())

@@ -7,16 +7,17 @@ import (
 
 	"github.com/ernestrc/blue/logging"
 	log "github.com/sirupsen/logrus"
-	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/api/config"
+	schemeapi "unstable.build/go-tui/api/scheme"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 )
 
 // LoggingScheme wraps a SchemeFunc with a constructor
 // that wraps the underlying scheme with a scheme that
 // logs every method call.
-func LoggingScheme(scheme string, fn SchemeFunc) SchemeFunc {
+func LoggingScheme(scheme string, fn schemeapi.SchemeFunc) schemeapi.SchemeFunc {
 	return func(ctx context.Context, cfg config.Config, uri workspaceapi.URI) (
-		Scheme, error,
+		schemeapi.Scheme, error,
 	) {
 		other, err := fn(ctx, cfg, uri)
 		if err != nil {
@@ -34,7 +35,7 @@ func LoggingScheme(scheme string, fn SchemeFunc) SchemeFunc {
 type loggingScheme struct {
 	scheme string
 	uri    workspaceapi.URI
-	other  Scheme
+	other  schemeapi.Scheme
 }
 
 func (t loggingScheme) trace(msg string, args ...interface{}) {

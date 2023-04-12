@@ -13,9 +13,9 @@ import (
 	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/protobuf/types/known/timestamppb"
+	schemeapi "unstable.build/go-tui/api/scheme"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/proto"
-	"unstable.build/go-tui/workspace"
 )
 
 const defaultTimeout = 2 * time.Second
@@ -26,7 +26,7 @@ var _ workspaceapi.Executor = (*Client)(nil)
 var _ workspaceapi.Terminal = (*Client)(nil)
 
 // for scheme registry-side
-var _ workspace.Scheme = (*Client)(nil)
+var _ schemeapi.Scheme = (*Client)(nil)
 
 type Client struct {
 	cc        proto.MuxConn
@@ -359,7 +359,7 @@ func (c *Client) SetPtySize(p workspaceapi.Pty, width, height int) error {
 	return err
 }
 
-// NewFile satisfies workspace.Scheme.
+// NewFile satisfies schemeapi.Scheme.
 func (c *Client) NewFile(fd uintptr, filename string) workspaceapi.File {
 	return newFileClient(c.ctx, c, c.cc, filename, fd)
 }

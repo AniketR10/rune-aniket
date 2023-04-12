@@ -12,8 +12,9 @@ import (
 
 	blupspin "github.com/ernestrc/blue/upspin"
 	multierr "github.com/ernestrc/go-multierror"
-	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/api/config"
+	schemeapi "unstable.build/go-tui/api/scheme"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/workspace"
 	upclient "upspin.io/client"
 	upcfg "upspin.io/config"
@@ -38,7 +39,7 @@ type scheme struct {
 }
 
 func newScheme(ctx context.Context, config config.Config, uri workspaceapi.URI) (
-	workspace.Scheme, error,
+	schemeapi.Scheme, error,
 ) {
 	if uri.Scheme() != upspinScheme {
 		return nil, stdErrors.New("invalid scheme")

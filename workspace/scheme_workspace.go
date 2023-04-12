@@ -9,6 +9,7 @@ import (
 
 	"github.com/ernestrc/blue/logging"
 	log "github.com/sirupsen/logrus"
+	schemeapi "unstable.build/go-tui/api/scheme"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/cell"
 )
@@ -16,18 +17,18 @@ import (
 // simple Scheme-backed Workspace implementation.
 type schemeWorkspace struct {
 	w workspaceapi.URI
-	p Scheme
+	p schemeapi.Scheme
 }
 
-// NewSchemeWorkspace wraps a workspace.Scheme and implements a workspace.Loader,
-// effectively converting a workspace.Scheme into a workspace.Workspace.
-func NewSchemeWorkspace(w workspaceapi.URI, p Scheme) Workspace {
+// NewSchemeWorkspace wraps a schemeapi.Scheme and implements a workspace.Loader,
+// effectively converting a schemeapi.Scheme into a workspace.Workspace.
+func NewSchemeWorkspace(w workspaceapi.URI, p schemeapi.Scheme) Workspace {
 	ret := new(schemeWorkspace)
 	ret.Init(w, p)
 	return ret
 }
 
-func (w *schemeWorkspace) Init(uri workspaceapi.URI, p Scheme) {
+func (w *schemeWorkspace) Init(uri workspaceapi.URI, p schemeapi.Scheme) {
 	w.w = uri
 	w.p = p
 }

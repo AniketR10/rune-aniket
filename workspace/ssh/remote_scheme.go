@@ -14,8 +14,8 @@ import (
 	"github.com/ernestrc/blue/logging"
 	"github.com/ernestrc/blue/retry"
 	log "github.com/sirupsen/logrus"
+	schemeapi "unstable.build/go-tui/api/scheme"
 	workspaceapi "unstable.build/go-tui/api/workspace"
-	"unstable.build/go-tui/workspace"
 )
 
 var (
@@ -23,14 +23,14 @@ var (
 )
 
 type connectSchemeFn func(ctx context.Context,
-	uri workspaceapi.URI, closeHook func(error)) (workspace.Scheme, error)
+	uri workspaceapi.URI, closeHook func(error)) (schemeapi.Scheme, error)
 
 type state struct {
 	lastSessionError error
-	scheme           workspace.Scheme
+	scheme           schemeapi.Scheme
 }
 
-// wraps another workspace.Scheme to be resilient against
+// wraps another schemeapi.Scheme to be resilient against
 // intermitent connection failures
 type remoteScheme struct {
 	closeChan chan struct{}
@@ -130,7 +130,7 @@ func (s *remoteScheme) setError(logger *log.Entry, err error) {
 
 func newRemoteScheme(
 	ctx context.Context, connect connectSchemeFn, uri workspaceapi.URI,
-) workspace.Scheme {
+) schemeapi.Scheme {
 	ret := &remoteScheme{
 		closeChan: make(chan struct{}),
 	}
@@ -149,7 +149,7 @@ func newRemoteScheme(
 
 // this should only be called from within event loop,
 // otherwhise need to sync first with locker.
-func (s *remoteScheme) state() (err error, scheme workspace.Scheme) {
+func (s *remoteScheme) state() (err error, scheme schemeapi.Scheme) {
 	currState := s.currState.Load().(state)
 	err = currState.lastSessionError
 	scheme = currState.scheme

@@ -12,17 +12,18 @@ import (
 	"github.com/ernestrc/blue/encoding"
 	"github.com/ernestrc/blue/retry"
 	multierr "github.com/ernestrc/go-multierror"
-	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/api/config"
+	schemeapi "unstable.build/go-tui/api/scheme"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/storage"
 	"unstable.build/go-tui/workspace"
 )
 
-// WorkspaceScheme returns a workspace.SchemeFunc that returns workspace.Scheme
+// WorkspaceScheme returns a schemeapi.SchemeFunc that returns schemeapi.Scheme
 // implementations backed by the given document.Service at the given root URI.
 //
 // Note that rootURI should uniquely identify svc and it will be used
-// as the root URI for all workspace.Scheme instantiations.
+// as the root URI for all schemeapi.Scheme instantiations.
 //
 // Also note that it's assumed that the underlying documents stored
 // are of type T and that it can be safely encoded/decoded with the given
@@ -38,9 +39,9 @@ import (
 func WorkspaceScheme[T storage.Document[T]](
 	rootURI workspaceapi.URI, svc document.Service,
 	marshaler encoding.Marshaler, errMissingID error,
-) workspace.SchemeFunc {
+) schemeapi.SchemeFunc {
 	return func(_ context.Context, cfg config.Config, uri workspaceapi.URI) (
-		workspace.Scheme, error,
+		schemeapi.Scheme, error,
 	) {
 		if !workspaceapi.HasPrefix(uri, rootURI) {
 			return nil, fmt.Errorf("invalid uri %q for scheme with root uri %q:"+
@@ -54,7 +55,7 @@ func WorkspaceScheme[T storage.Document[T]](
 
 const (
 	// very long timeout just to make sure we don't hang forever
-	// since workspace.Scheme methods do not take a context (maybe they should!)
+	// since schemeapi.Scheme methods do not take a context (maybe they should!)
 	serviceTimeout = 30 * time.Second
 )
 

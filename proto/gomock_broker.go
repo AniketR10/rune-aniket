@@ -155,6 +155,18 @@ func (mr *MockMuxServerMockRecorder) Addr() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Addr", reflect.TypeOf((*MockMuxServer)(nil).Addr))
 }
 
+// GracefulStop mocks base method.
+func (m *MockMuxServer) GracefulStop() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "GracefulStop")
+}
+
+// GracefulStop indicates an expected call of GracefulStop.
+func (mr *MockMuxServerMockRecorder) GracefulStop() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GracefulStop", reflect.TypeOf((*MockMuxServer)(nil).GracefulStop))
+}
+
 // Registrar mocks base method.
 func (m *MockMuxServer) Registrar() ServiceRegistrar {
 	m.ctrl.T.Helper()

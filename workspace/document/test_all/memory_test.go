@@ -14,11 +14,11 @@ import (
 	"github.com/ernestrc/blue/document"
 	"github.com/ernestrc/blue/encoding/json"
 	"github.com/stretchr/testify/require"
+	"unstable.build/go-tui/api/config"
+	schemeapi "unstable.build/go-tui/api/scheme"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/cell"
-	"unstable.build/go-tui/api/config"
 	"unstable.build/go-tui/term"
-	"unstable.build/go-tui/workspace"
 	workdoc "unstable.build/go-tui/workspace/document"
 	"unstable.build/go-tui/workspace/test"
 )
@@ -27,7 +27,7 @@ func TestMemoryWorkspaceScheme(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("with folder", func(t *testing.T) {
-		testWorkspaceSchemeSuite(t, func(t *testing.T) workspace.Scheme {
+		testWorkspaceSchemeSuite(t, func(t *testing.T) schemeapi.Scheme {
 			workspaceURI, err := workspaceapi.ParseURI("inmemory:///tmp")
 			require.NoError(t, err)
 			svc := document.NewInMemoryService()
@@ -38,7 +38,7 @@ func TestMemoryWorkspaceScheme(t *testing.T) {
 		})
 	})
 	t.Run("at root", func(t *testing.T) {
-		testWorkspaceSchemeSuite(t, func(t *testing.T) workspace.Scheme {
+		testWorkspaceSchemeSuite(t, func(t *testing.T) schemeapi.Scheme {
 			workspaceURI, err := workspaceapi.ParseURI("inmemory:///")
 			require.NoError(t, err)
 			svc := document.NewInMemoryService()
@@ -51,7 +51,7 @@ func TestMemoryWorkspaceScheme(t *testing.T) {
 }
 
 func TestMemoryWorkspaceSchemeTransientFailures(t *testing.T) {
-	testWorkspaceSchemeSuite(t, func(t *testing.T) workspace.Scheme {
+	testWorkspaceSchemeSuite(t, func(t *testing.T) schemeapi.Scheme {
 		workspaceURI, err := workspaceapi.ParseURI("inmemory:///")
 		require.NoError(t, err)
 		svc := &errService{root: document.NewInMemoryService()}
@@ -65,11 +65,11 @@ func TestMemoryWorkspaceSchemeTransientFailures(t *testing.T) {
 
 func testWorkspaceSchemeSuite(
 	t *testing.T,
-	schemeFn func(t *testing.T) workspace.Scheme,
+	schemeFn func(t *testing.T) schemeapi.Scheme,
 ) {
 	t.Run("Open", func(t *testing.T) {
 		// there should not be any path manipulation with a document.Service
-		// backed workspace.Scheme.
+		// backed schemeapi.Scheme.
 		const testPaths = false
 		test.TestWorkspaceSchemeOpen(t, schemeFn,
 			createTestFile, readContent, writeContent, testPaths)
@@ -101,7 +101,7 @@ func testWorkspaceSchemeSuite(
 	})
 }
 
-func createTestFile(t *testing.T, s workspace.Scheme, filename, content string) (workspaceapi.File, func()) {
+func createTestFile(t *testing.T, s schemeapi.Scheme, filename, content string) (workspaceapi.File, func()) {
 	file, werr := s.Open(filename, os.O_CREATE|os.O_EXCL|os.O_RDWR, 0666)
 	require.Nil(t, werr, werr.String())
 

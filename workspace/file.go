@@ -12,6 +12,7 @@ import (
 	"time"
 
 	multierr "github.com/ernestrc/go-multierror"
+	schemeapi "unstable.build/go-tui/api/scheme"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/term"
@@ -30,7 +31,7 @@ type file struct {
 	ch      chan struct{}
 	mu      sync.Mutex
 	content string
-	scheme  Scheme
+	scheme  schemeapi.Scheme
 
 	buf             *cell.Buffer
 	swapDir         string
@@ -44,7 +45,7 @@ type file struct {
 	unflushed       bool
 }
 
-func newFile(p Scheme, path string, buf *cell.Buffer, swapDir string, readOnly bool) (
+func newFile(p schemeapi.Scheme, path string, buf *cell.Buffer, swapDir string, readOnly bool) (
 	*file, error,
 ) {
 	ret := new(file)
@@ -57,7 +58,7 @@ func newFile(p Scheme, path string, buf *cell.Buffer, swapDir string, readOnly b
 	return ret, nil
 }
 
-func newFileRecover(p Scheme, path, swapFilePath string, buf *cell.Buffer, force bool) (
+func newFileRecover(p schemeapi.Scheme, path, swapFilePath string, buf *cell.Buffer, force bool) (
 	*file, error,
 ) {
 	ret := new(file)

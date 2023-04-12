@@ -13,8 +13,8 @@ import (
 	"github.com/ernestrc/blue/encoding"
 	"github.com/ernestrc/blue/iterator"
 	multierr "github.com/ernestrc/go-multierror"
+	schemeapi "unstable.build/go-tui/api/scheme"
 	workspaceapi "unstable.build/go-tui/api/workspace"
-	"unstable.build/go-tui/workspace"
 )
 
 // ErrClosing is returned to inflight write requests
@@ -22,10 +22,10 @@ import (
 // is currently closing.
 var ErrClosing = errors.New("Service is closing")
 
-// NewWorkspaceService returns a document.Service backed by a workspace.Scheme.
+// NewWorkspaceService returns a document.Service backed by a schemeapi.Scheme.
 // It its goroutine-safe but only one instance can be operating at a time
 // on a given workspace.
-func NewWorkspaceService(scheme workspace.Scheme, marshaler encoding.Marshaler) (
+func NewWorkspaceService(scheme schemeapi.Scheme, marshaler encoding.Marshaler) (
 	document.Service, error,
 ) {
 	svc := service{
@@ -37,7 +37,7 @@ func NewWorkspaceService(scheme workspace.Scheme, marshaler encoding.Marshaler) 
 }
 
 type service struct {
-	scheme    workspace.Scheme
+	scheme    schemeapi.Scheme
 	marshaler encoding.Marshaler
 
 	// Used to wait on all writes before Close returns.

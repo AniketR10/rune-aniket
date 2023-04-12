@@ -23,6 +23,8 @@ import (
 	browserapi "unstable.build/go-tui/api/browser"
 	browserplugin "unstable.build/go-tui/api/browser/plugin"
 	"unstable.build/go-tui/api/config"
+	schemeapi "unstable.build/go-tui/api/scheme"
+	schemeplugin "unstable.build/go-tui/api/scheme/plugin"
 	storageplugin "unstable.build/go-tui/api/storage/plugin"
 	textapi "unstable.build/go-tui/api/text"
 	textplugin "unstable.build/go-tui/api/text/plugin"
@@ -31,7 +33,6 @@ import (
 	"unstable.build/go-tui/proto"
 	"unstable.build/go-tui/storage/cache"
 	"unstable.build/go-tui/text"
-	"unstable.build/go-tui/workspace"
 	workspacedoc "unstable.build/go-tui/workspace/document"
 )
 
@@ -71,7 +72,7 @@ type issuesGrantee struct {
 	m         browserapi.Messenger
 	o         browserapi.ResourceOpener
 	wm        browserapi.WindowManager
-	sm        workspace.SchemeManager
+	sm        schemeapi.SchemeManager
 	s         document.Service
 
 	cmds              map[string]func(*issuesGrantee, context.Context, textapi.Command) (bool, error)
@@ -161,7 +162,7 @@ func (e *issuesGrantee) Connected(broker proto.MuxBroker, pconfig config.Config)
 	log.Debugf("plugin connected and loaded config without any major issues")
 }
 
-func (e *issuesGrantee) initScheme(m workspace.SchemeManager) error {
+func (e *issuesGrantee) initScheme(m schemeapi.SchemeManager) error {
 	marshaler := yaml.Marshaler()
 	rootURI, err := workspaceapi.ParseURI("bluectl+issues:///")
 	if err != nil {
@@ -249,7 +250,7 @@ func (e *issuesGrantee) PermissionGranted(grants []plugin.Grant) {
 				log.Infof("Subscribed to create issue command %q", cmd)
 			}
 		case plugin.PermissionSchemeManager:
-			m, err := plugin.SchemeManager(g, e.broker)
+			m, err := schemeplugin.SchemeManager(g, e.broker)
 			if err != nil {
 				log.Warnf("Could not acquire scheme manager: %v. "+
 					"Will not be able to create or see reports", err)

@@ -10,8 +10,9 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/api/config"
+	schemeapi "unstable.build/go-tui/api/scheme"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/workspace"
 	"unstable.build/go-tui/workspace/ssh"
 	"unstable.build/go-tui/workspace/test"
@@ -37,11 +38,11 @@ func TestIntegrationScheme(t *testing.T) {
 	for desc, cfg := range cfgs {
 		cfg := cfg
 		t.Run(desc, func(t *testing.T) {
-			test.TestWorkspaceSchemeFiles(t, func(t *testing.T) workspace.Scheme {
+			test.TestWorkspaceSchemeFiles(t, func(t *testing.T) schemeapi.Scheme {
 				return newSchemeIntegration(t, hostname, cfg)
 			})
 
-			test.TestWorkspaceSchemeExecutor(t, func(t *testing.T) workspace.Scheme {
+			test.TestWorkspaceSchemeExecutor(t, func(t *testing.T) schemeapi.Scheme {
 				return newSchemeIntegration(t, hostname, cfg)
 			})
 		})
@@ -129,7 +130,7 @@ func runDockerOrSkip(t *testing.T) (string, func()) {
 
 func newSchemeIntegration(
 	t *testing.T, hostname string, cfg config.Config,
-) workspace.Scheme {
+) schemeapi.Scheme {
 	workspaceURI, err := workspaceapi.ParseURI("ssh://test@" + hostname + "/tmp")
 	require.NoError(t, err)
 

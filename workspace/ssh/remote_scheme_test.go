@@ -11,15 +11,16 @@ import (
 	"github.com/ernestrc/blue/retry"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
+	schemeapi "unstable.build/go-tui/api/scheme"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	workspaceapitest "unstable.build/go-tui/api/workspace/test"
 	"unstable.build/go-tui/workspace"
-	workspacetest "unstable.build/go-tui/workspace/test"
+	schemetest "unstable.build/go-tui/api/scheme/test"
 )
 
 func expectSchemeAPISuccess(
 	t *testing.T, ctrl *gomock.Controller, mu *sync.Mutex,
-	mock *workspacetest.MockScheme, scheme workspace.Scheme,
+	mock *schemetest.MockScheme, scheme schemeapi.Scheme,
 ) {
 	mu.Lock()
 	defer mu.Unlock()
@@ -70,7 +71,7 @@ func expectSchemeAPISuccess(
 	require.NoError(t, err)
 }
 
-func expectSchemeClose(t *testing.T, mock *workspacetest.MockScheme, scheme workspace.Scheme) {
+func expectSchemeClose(t *testing.T, mock *schemetest.MockScheme, scheme schemeapi.Scheme) {
 	mock.EXPECT().Close().Return(nil)
 	err := scheme.Close()
 	require.NoError(t, err)
@@ -88,10 +89,10 @@ func TestRemoteScheme(t *testing.T) {
 		var mu sync.Mutex
 		ctx := workspace.ContextWithLocker(context.Background(), &mu)
 
-		mock := workspacetest.NewMockScheme(ctrl)
+		mock := schemetest.NewMockScheme(ctrl)
 		mu.Lock()
 		scheme := newRemoteScheme(ctx,
-			func(_ context.Context, uri workspaceapi.URI, closehook func(error)) (workspace.Scheme, error) {
+			func(_ context.Context, uri workspaceapi.URI, closehook func(error)) (schemeapi.Scheme, error) {
 				return mock, nil
 			}, uri)
 		mu.Unlock()
@@ -108,13 +109,13 @@ func TestRemoteScheme(t *testing.T) {
 		var mu sync.Mutex
 		ctx := workspace.ContextWithLocker(context.Background(), &mu)
 
-		mock := workspacetest.NewMockScheme(ctrl)
+		mock := schemetest.NewMockScheme(ctrl)
 		var i int
 
 		mu.Lock()
 		scheme := newRemoteScheme(ctx, func(
 			_ context.Context, uri workspaceapi.URI, closehook func(error),
-		) (workspace.Scheme, error) {
+		) (schemeapi.Scheme, error) {
 			i++
 			if i <= 5 {
 				return nil, errors.New("unable to connect")
@@ -144,14 +145,14 @@ func TestRemoteScheme(t *testing.T) {
 		var mu sync.Mutex
 		ctx := workspace.ContextWithLocker(context.Background(), &mu)
 
-		mock := workspacetest.NewMockScheme(ctrl)
+		mock := schemetest.NewMockScheme(ctrl)
 		var closeHook func(error)
 		var wg sync.WaitGroup
 		var reconnect bool
 		mu.Lock()
 		scheme := newRemoteScheme(ctx, func(
 			_ context.Context, uri workspaceapi.URI, _closehook func(error),
-		) (workspace.Scheme, error) {
+		) (schemeapi.Scheme, error) {
 			closeHook = _closehook
 			if reconnect {
 				wg.Done()
@@ -179,10 +180,10 @@ func TestRemoteScheme(t *testing.T) {
 		var mu sync.Mutex
 		ctx := workspace.ContextWithLocker(context.Background(), &mu)
 
-		mock := workspacetest.NewMockScheme(ctrl)
+		mock := schemetest.NewMockScheme(ctrl)
 		mu.Lock()
 		scheme := newRemoteScheme(ctx,
-			func(_ context.Context, uri workspaceapi.URI, closehook func(error)) (workspace.Scheme, error) {
+			func(_ context.Context, uri workspaceapi.URI, closehook func(error)) (schemeapi.Scheme, error) {
 				return mock, nil
 			}, uri)
 		mu.Unlock()

@@ -9,8 +9,9 @@ import (
 
 	bluectx "github.com/ernestrc/blue/context"
 	"github.com/ernestrc/go-multierror"
-	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/api/config"
+	schemeapi "unstable.build/go-tui/api/scheme"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/workspace"
 )
 
@@ -22,7 +23,7 @@ type procRemote struct {
 	cmd  string
 	args []string
 
-	executor  workspace.Executor
+	executor  schemeapi.Executor
 	sessions  []*procSession
 	ctx       context.Context
 	cancelCtx func()
@@ -31,7 +32,7 @@ type procRemote struct {
 type procSession struct {
 	sshCmd   string
 	sshArgs  []string
-	executor workspace.Executor
+	executor schemeapi.Executor
 	ctx      context.Context
 }
 
@@ -74,7 +75,7 @@ func newProcRemote(ctx context.Context, cfg sshConfig, uri workspaceapi.URI) (
 	return ret, nil
 }
 
-func (m *procRemote) NewSession() (workspace.Executor, error) {
+func (m *procRemote) NewSession() (schemeapi.Executor, error) {
 	ses := &procSession{
 		sshCmd:   m.cmd,
 		sshArgs:  m.args,

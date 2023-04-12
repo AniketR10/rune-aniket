@@ -7,10 +7,10 @@ import (
 	"sync"
 
 	multierr "github.com/ernestrc/go-multierror"
-	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/api/config"
+	schemeapi "unstable.build/go-tui/api/scheme"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/proto"
-	"unstable.build/go-tui/workspace"
 )
 
 /* plugin side */
@@ -21,7 +21,7 @@ import (
 type proxySchemeServerImpl struct {
 	UnimplementedProxySchemeServer
 	scheme string
-	fn     workspace.SchemeFunc
+	fn     schemeapi.SchemeFunc
 	srv    proto.MuxServer
 	broker proto.MuxBroker
 
@@ -31,7 +31,7 @@ type proxySchemeServerImpl struct {
 
 type proxySchemeResource struct {
 	server *Server
-	scheme workspace.Scheme
+	scheme schemeapi.Scheme
 }
 
 func (c proxySchemeResource) Close() (ret error) {
@@ -46,7 +46,7 @@ func (c proxySchemeResource) Close() (ret error) {
 
 func newProxySchemeServerImpl(
 	ctx context.Context, broker proto.MuxBroker,
-	srv proto.MuxServer, scheme string, fn workspace.SchemeFunc,
+	srv proto.MuxServer, scheme string, fn schemeapi.SchemeFunc,
 ) *proxySchemeServerImpl {
 	ret := new(proxySchemeServerImpl)
 	ret.broker = broker
@@ -61,7 +61,7 @@ func newProxySchemeServerImpl(
 	return ret
 }
 
-func (s *proxySchemeServerImpl) serveScheme(scheme workspace.Scheme) (string, error) {
+func (s *proxySchemeServerImpl) serveScheme(scheme schemeapi.Scheme) (string, error) {
 	var srv proto.MuxServer
 	ctxWg := proto.WaitGroupFromContext(s.ctx)
 	// NOTE: scheme are usually served once for the lifecycle of the plugin.
@@ -135,7 +135,7 @@ func (s *proxySchemeServerImpl) Close() (ret error) {
 func initializeSchemeThroughProxy(
 	cfg config.Config, uri workspaceapi.URI,
 	broker proto.MuxBroker, proxyID string,
-) (workspace.Scheme, error) {
+) (schemeapi.Scheme, error) {
 	// once uri, and config is sent disconnect proxy client
 	proxyConn, err := broker.DialChannel(proxyID, os.Args[0], "proxyScheme")
 	if err != nil {

@@ -2,11 +2,10 @@ package plugin
 
 import (
 	"io"
-	"os"
 	"sync"
 
+	schemeapi "unstable.build/go-tui/api/scheme"
 	"unstable.build/go-tui/proto"
-	"unstable.build/go-tui/workspace"
 	workspacepb "unstable.build/go-tui/workspace/rpc"
 )
 
@@ -16,10 +15,10 @@ const (
 )
 
 type schemeManagerResourceServer struct {
-	b workspace.SchemeManager
+	b schemeapi.SchemeManager
 }
 
-func newSchemeManagerResourceServer(b workspace.SchemeManager) *schemeManagerResourceServer {
+func newSchemeManagerResourceServer(b schemeapi.SchemeManager) *schemeManagerResourceServer {
 	ret := new(schemeManagerResourceServer)
 	ret.b = b
 	return ret
@@ -36,28 +35,8 @@ func (s *schemeManagerResourceServer) Register(
 
 // SchemeManagerResources returns a map of Permission to a ResourceServer
 // capable of serving requests to PermissionSchemeManager.
-func SchemeManagerResources(b workspace.SchemeManager) map[Permission]ResourceRegistrar {
+func SchemeManagerResources(b schemeapi.SchemeManager) map[Permission]ResourceRegistrar {
 	return map[Permission]ResourceRegistrar{
 		PermissionSchemeManager: newSchemeManagerResourceServer(b),
 	}
-}
-
-// TODO move to api package
-func dialSchemeManager(grant Grant, broker proto.MuxBroker) (
-	workspace.SchemeManager, error,
-) {
-	conn, err := broker.DialChannel(grant.Token,
-		os.Args[0], "scheme", string(grant.Permission))
-	if err != nil {
-		return nil, err
-	}
-	c := workspacepb.NewSchemeManager(grant.Context, broker, conn)
-	return c, nil
-}
-
-// SchemeManager acquires the workspace's URI scheme manager with the given token.
-func SchemeManager(grant Grant, broker proto.MuxBroker) (
-	workspace.SchemeManager, error,
-) {
-	return dialSchemeManager(grant, broker)
 }

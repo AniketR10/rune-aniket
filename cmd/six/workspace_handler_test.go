@@ -8,8 +8,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"unstable.build/go-tui"
-	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/api/config"
+	schemeapi "unstable.build/go-tui/api/scheme"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/term"
 	testutil "unstable.build/go-tui/util/test"
 	"unstable.build/go-tui/workspace"
@@ -59,7 +60,7 @@ func TestWorkspaceConfig(t *testing.T) {
 		passed := make(map[string]interface{})
 		manager.RegisterScheme(workspace.MemoryScheme,
 			func(ctx context.Context, cfg config.Config, uri workspaceapi.URI) (
-				workspace.Scheme, error,
+				schemeapi.Scheme, error,
 			) {
 				cfg.Iterate(func(k string, v interface{}) {
 					passed[k] = v

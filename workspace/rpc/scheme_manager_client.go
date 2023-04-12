@@ -11,13 +11,13 @@ import (
 	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
 
+	schemeapi "unstable.build/go-tui/api/scheme"
 	"unstable.build/go-tui/proto"
-	"unstable.build/go-tui/workspace"
 )
 
-var _ workspace.SchemeManager = (*SchemeManagerClient)(nil)
+var _ schemeapi.SchemeManager = (*SchemeManagerClient)(nil)
 
-// NewSchemeManager returns a workspace.SchemeManager RPC-based client over
+// NewSchemeManager returns a schemeapi.SchemeManager RPC-based client over
 // the given connection.
 func NewSchemeManager(
 	ctx context.Context, broker proto.MuxBroker, cc proto.MuxConn,
@@ -28,7 +28,7 @@ func NewSchemeManager(
 	return ret
 }
 
-// SchemeManagerClient satisfies workspace.SchemeManager by calling a
+// SchemeManagerClient satisfies schemeapi.SchemeManager by calling a
 // remote SchemeManager over a proto.MuxConn.
 type SchemeManagerClient struct {
 	broker    proto.MuxBroker
@@ -55,7 +55,7 @@ func (c *SchemeManagerClient) log(level log.Level, msg string, args ...interface
 	log.WithField(logging.KeyClass, "SchemeManagerClient").Logf(level, msg, args...)
 }
 
-func (c *SchemeManagerClient) serveProxyServer(scheme string, fn workspace.SchemeFunc) (
+func (c *SchemeManagerClient) serveProxyServer(scheme string, fn schemeapi.SchemeFunc) (
 	*proxySchemeServerImpl, string, error,
 ) {
 	var srv proto.MuxServer
@@ -79,9 +79,9 @@ func (c *SchemeManagerClient) serveProxyServer(scheme string, fn workspace.Schem
 	return psrv, ret, nil
 }
 
-// RegisterScheme satisfies workspace.SchemeManager
+// RegisterScheme satisfies schemeapi.SchemeManager
 func (c *SchemeManagerClient) RegisterScheme(
-	scheme string, fn workspace.SchemeFunc,
+	scheme string, fn schemeapi.SchemeFunc,
 ) (err error) {
 	var proxyID string
 

@@ -7,9 +7,10 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"unstable.build/go-tui/api/config"
+	schemeapi "unstable.build/go-tui/api/scheme"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/cell"
-	"unstable.build/go-tui/api/config"
 	"unstable.build/go-tui/workspace"
 )
 
@@ -134,7 +135,7 @@ func TestManager(t *testing.T) {
 	t.Run("buubles up scheme constructor errors", func(t *testing.T) {
 		m := workspace.NewManager(config.NopConfig())
 		err := m.RegisterScheme("test",
-			func(ctx context.Context, cfg config.Config, uri workspaceapi.URI) (workspace.Scheme, error) {
+			func(ctx context.Context, cfg config.Config, uri workspaceapi.URI) (schemeapi.Scheme, error) {
 				return nil, errors.New("boom")
 			})
 		require.NoError(t, err)
@@ -157,7 +158,7 @@ func TestManager(t *testing.T) {
 		}))
 
 		var called bool
-		err := m.RegisterScheme("test", func(ctx context.Context, cfg config.Config, uri workspaceapi.URI) (workspace.Scheme, error) {
+		err := m.RegisterScheme("test", func(ctx context.Context, cfg config.Config, uri workspaceapi.URI) (schemeapi.Scheme, error) {
 
 			value, err := cfg.GetString("key")
 			assert.NoError(t, err)

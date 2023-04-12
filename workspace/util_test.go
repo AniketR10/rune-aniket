@@ -10,12 +10,13 @@ import (
 	"syscall"
 	"time"
 
-	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/api/config"
+	schemeapi "unstable.build/go-tui/api/scheme"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 )
 
-func newTestScheme(scheme string) SchemeFunc {
-	return func(_ context.Context, cfg config.Config, uri workspaceapi.URI) (Scheme, error) {
+func newTestScheme(scheme string) schemeapi.SchemeFunc {
+	return func(_ context.Context, cfg config.Config, uri workspaceapi.URI) (schemeapi.Scheme, error) {
 		scheme := &testScheme{scheme: scheme}
 		scheme.openFunc = func(name string, flag int, perm os.FileMode) (workspaceapi.File, *workspaceapi.Error) {
 			return testFile{}, nil
