@@ -6,7 +6,6 @@ import (
 	"io"
 	"runtime"
 	"sync"
-	"time"
 
 	"github.com/ernestrc/blue/logging"
 	log "github.com/sirupsen/logrus"
@@ -16,20 +15,30 @@ import (
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/component"
+	"unstable.build/go-tui/handler"
 	handlerpb "unstable.build/go-tui/handler/rpc"
 	"unstable.build/go-tui/proto"
 	"unstable.build/go-tui/term"
 	termpb "unstable.build/go-tui/term/rpc"
 )
 
-// without access to underlying stream (i.e. SendClose),
-// waiting a prudent amount of time for all rpcs to finish
-// is the best we can do. See https://github.com/grpc/grpc-go/issues/1714
-const (
-	gracefulShutdownWait = 100 * time.Millisecond
-)
-
 var _ browserapi.Browser = (*Client)(nil)
+
+const closedCopy = `
+          ___
+         /___/\_               
+        _\   \/_/\__           
+      __\       \/_/\          
+      \   __    __ \ \         
+     __\  \_\   \_\ \ \   __   
+    /_/\\   __   __  \ \_/_/\  
+    \_\/_\__\/\__\/\__\/_\_\/  
+       \_\/_/\       /_\_\/    
+          \_\/       \_\/      
+    
+
+Oops! This should not be here.
+`
 
 // Client satisfies Browser by talking to a browser server over RPC.
 type Client struct {
@@ -49,17 +58,17 @@ type browserClientHandler struct {
 	srv proto.MuxServer
 }
 
-func (c browserClientHandler) gracefulShutdown(reason string) {
-	time.Sleep(gracefulShutdownWait)
-	c.srv.Stop()
+func (c *browserClientHandler) Close() error {
+	go c.srv.GracefulStop()
+	err := c.Handler.Close()
+	// avoid cyclical references preventing
+	// runtime finalizers from running
+	c.Handler = browserapi.NopFloatingHandler(
+		handler.NopFloatingHandler(component.NewString(closedCopy)))
+	return err
 }
 
-func (c browserClientHandler) Close() error {
-	go c.gracefulShutdown("Close")
-	return c.Handler.Close()
-}
-
-func (c browserClientHandler) Dimensions() (width, height int) {
+func (c *browserClientHandler) Dimensions() (width, height int) {
 	return c.Handler.(browserapi.Floating).Dimensions()
 }
 
@@ -94,17 +103,19 @@ func (c *Client) Init(
 	c.clientCtx, c.clientCancelCtx = context.WithCancel(ctx)
 }
 
-func (c *Client) serveHandler(h browserapi.Handler) (channelID string, srv proto.MuxServer, err error) {
+func serveHandler(
+	ctx context.Context, broker proto.MuxBroker, h browserapi.Handler,
+) (channelID string, srv proto.MuxServer, err error) {
 	tokenHandler, ok := h.(browser.Token)
 	if ok {
 		channelID = tokenHandler.ID
 	} else {
-		ctxWg := proto.WaitGroupFromContext(c.clientCtx)
-		channelID, err = proto.AcceptAndServeChannel(c.clientCtx, c.broker,
+		ctxWg := proto.WaitGroupFromContext(ctx)
+		channelID, err = proto.AcceptAndServeChannel(ctx, broker,
 			func(channelID string, msrv proto.MuxServer) {
 				ctxWg.Add(1)
 				srv = msrv
-				h = browserClientHandler{
+				h = &browserClientHandler{
 					Handler: h,
 					srv:     srv,
 				}
@@ -125,7 +136,7 @@ func (c *Client) serveHandler(h browserapi.Handler) (channelID string, srv proto
 			// do not reference Client so finalizer can still run
 			<-ctx.Done()
 			srv.Stop()
-		}(c.clientCtx)
+		}(ctx)
 	}
 
 	return
@@ -133,13 +144,8 @@ func (c *Client) serveHandler(h browserapi.Handler) (channelID string, srv proto
 
 // DialWindow dials the window with the given windowID token.
 func (c *Client) DialWindow(windowID uint64) (browserapi.Window, error) {
-	ret, err := c.getWindow(windowID)
-	c.log(log.TraceLevel, "get window with id %d: %#v, %v", windowID, ret, err)
-	return ret, err
-}
-
-func (c *Client) getWindow(windowID uint64) (browserapi.Window, error) {
-	client := newWindowClient(windowID, c, c.wm)
+	client := newWindowClient(c.clientCtx, windowID, c.wm, c.broker)
+	c.log(log.TraceLevel, "get window with id %d: %#v", windowID, client)
 	return client, nil
 }
 
@@ -167,7 +173,7 @@ func toProtoOrientation(o browserapi.Orientation) Orientation {
 func (c *Client) split(
 	split clientSplit, o browserapi.Orientation, in browserapi.Window, h browserapi.Handler,
 ) (browserapi.Window, error) {
-	channelID, srv, err := c.serveHandler(h)
+	channelID, srv, err := serveHandler(c.clientCtx, c.broker, h)
 	if err != nil {
 		return nil, fmt.Errorf("serve handler: %w", err)
 	}
@@ -213,7 +219,7 @@ func (c *Client) Window(uint64) (browserapi.Window, bool) {
 
 // Bar satisfies Browser.
 func (c *Client) Bar(o browserapi.Orientation, h tui.Handler) error {
-	channelID, srv, err := c.serveHandler(browser.NopHandler(h))
+	channelID, srv, err := serveHandler(c.clientCtx, c.broker, browser.NopHandler(h))
 	if err != nil {
 		return fmt.Errorf("serve handler: %w", err)
 	}
@@ -301,14 +307,21 @@ func (c *Client) SetFocus(win browserapi.Window) (browserapi.Window, error) {
 
 // Focus satisfies Browser.
 func (c *Client) Focus() (browserapi.Window, error) {
-	ctx := context.Background()
-	req := FocusRequest{}
-	res, err := c.wm.Focus(ctx, &req)
+	win, err := focus(c.clientCtx, c.wm, c.broker)
 	runtime.KeepAlive(c)
+	return win, err
+}
+
+func focus(
+	clientCtx context.Context, wm WindowManagerClient, broker proto.MuxBroker,
+) (browserapi.Window, error) {
+	req := FocusRequest{}
+	res, err := wm.Focus(clientCtx, &req)
 	if err != nil {
 		return nil, err
 	}
-	return c.DialWindow(res.GetWindowId())
+	client := newWindowClient(clientCtx, res.GetWindowId(), wm, broker)
+	return client, nil
 }
 
 // Floating satisfies browser.WindowManager
@@ -344,7 +357,7 @@ func (c *Client) Floating(
 
 // Tab satisfies browser.WindowManager
 func (c *Client) Tab(uri workspaceapi.URI, name string, h browserapi.Handler) (browserapi.Handler, error) {
-	channelID, srv, err := c.serveHandler(h)
+	channelID, srv, err := serveHandler(c.clientCtx, c.broker, h)
 	if err != nil {
 		return nil, fmt.Errorf("serve handler: %w", err)
 	}

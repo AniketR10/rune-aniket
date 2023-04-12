@@ -22,6 +22,7 @@ type MuxServer interface {
 	Registrar() ServiceRegistrar
 	Addr() net.Addr
 	Stop()
+	GracefulStop()
 }
 
 // MuxBroker allows a client or server to multiplex over connections.

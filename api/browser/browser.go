@@ -9,7 +9,7 @@ import (
 	"unstable.build/go-tui/handler"
 )
 
-// Handler adds Close to a tui.Handler.
+// Handler adds Close to a tui.Handler. Close must be idempotent.
 type Handler interface {
 	tui.Handler
 	Close() error

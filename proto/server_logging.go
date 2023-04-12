@@ -52,6 +52,13 @@ func (s *loggingServer) Stop() {
 	// close(s.quitChan)
 }
 
+func (s *loggingServer) GracefulStop() {
+	s.srv.GracefulStop()
+	log.Tracef("LoggingGRPCServer: (%p) GracefulStop() ", s.srv)
+	// NOTE: we should protect against double closing before enabling
+	// close(s.quitChan)
+}
+
 func (s *loggingServer) Registrar() ServiceRegistrar {
 	log.Tracef("LoggingGRPCServer: (%p) Registrar() ", s.srv)
 	return s.srv.Registrar()

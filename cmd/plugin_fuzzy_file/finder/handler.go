@@ -565,6 +565,10 @@ func (h *fuzzyFinderHandler) Close() error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
+	if h.quitChan == nil {
+		return nil
+	}
+
 	log.Tracef("fuzzyFinderHandler.Close(): %#v", h.pid)
 
 	if h.pid != 0 {
@@ -573,5 +577,6 @@ func (h *fuzzyFinderHandler) Close() error {
 	}
 	close(h.quitChan)
 	h.list.Close()
+	h.quitChan = nil
 	return nil
 }

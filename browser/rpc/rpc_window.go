@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	browserapi "unstable.build/go-tui/api/browser"
+	"unstable.build/go-tui/proto"
 )
 
 var _ browserapi.Window = (*windowClientImpl)(nil)
@@ -14,26 +15,29 @@ var _ browserapi.Window = (*windowClientImpl)(nil)
 // WindowClient satisfies Window by talking to a
 // remote window over GRPC.
 type windowClientImpl struct {
-	windowID      uint64
-	browserClient *Client
-	pbClient      WindowManagerClient
-	doClose       func()
+	windowID  uint64
+	pbClient  WindowManagerClient
+	doClose   func()
+	broker    proto.MuxBroker
+	clientCtx context.Context
 }
 
 func newWindowClient(
+	ctx context.Context,
 	windowID uint64,
-	browserClient *Client,
 	pbClient WindowManagerClient,
+	broker proto.MuxBroker,
 ) *windowClientImpl {
 	ret := new(windowClientImpl)
-	ret.browserClient = browserClient
+	ret.clientCtx = ctx
 	ret.windowID = windowID
 	ret.pbClient = pbClient
+	ret.broker = broker
 	return ret
 }
 
 func (w *windowClientImpl) Focus() (bool, error) {
-	fw, err := w.browserClient.Focus()
+	fw, err := focus(w.clientCtx, w.pbClient, w.broker)
 	runtime.KeepAlive(w)
 	if err != nil {
 		return false, err
@@ -44,7 +48,7 @@ func (w *windowClientImpl) Focus() (bool, error) {
 func (w *windowClientImpl) SetContent(h browserapi.Handler) error {
 	ctx := context.Background()
 
-	brokerID, srv, err := w.browserClient.serveHandler(h)
+	brokerID, srv, err := serveHandler(w.clientCtx, w.broker, h)
 	if err != nil {
 		return fmt.Errorf("serveHandler: %w", err)
 	}

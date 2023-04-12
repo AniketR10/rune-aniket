@@ -66,7 +66,7 @@ func newHandler(grants []plugin.Grant, broker proto.MuxBroker,
 
 func main() {
 	go func() {
-		log.Println(http.ListenAndServe("localhost:6061", nil))
+		log.Println(http.ListenAndServe(":6061", nil))
 	}()
 
 	plugutil.ServeCommandSplitHandler(plugutil.CommandSplitHandlerConfig{
