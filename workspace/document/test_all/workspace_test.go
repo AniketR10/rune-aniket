@@ -7,7 +7,7 @@ import (
 	"github.com/ernestrc/blue/encoding/json"
 	"github.com/stretchr/testify/require"
 	workspaceapi "unstable.build/go-tui/api/workspace"
-	"unstable.build/go-tui/config"
+	"unstable.build/go-tui/api/config"
 	storework "unstable.build/go-tui/storage/workspace"
 	"unstable.build/go-tui/workspace"
 	workdoc "unstable.build/go-tui/workspace/document"

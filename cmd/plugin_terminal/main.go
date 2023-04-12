@@ -18,7 +18,7 @@ import (
 	textplugin "unstable.build/go-tui/api/text/plugin"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	workspaceplugin "unstable.build/go-tui/api/workspace/plugin"
-	"unstable.build/go-tui/config"
+	"unstable.build/go-tui/api/config"
 	"unstable.build/go-tui/plugin"
 	"unstable.build/go-tui/proto"
 	"unstable.build/go-tui/term"

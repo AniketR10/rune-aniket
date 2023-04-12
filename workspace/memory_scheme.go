@@ -15,7 +15,7 @@ import (
 	"time"
 
 	workspaceapi "unstable.build/go-tui/api/workspace"
-	"unstable.build/go-tui/config"
+	"unstable.build/go-tui/api/config"
 )
 
 const (

@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"unstable.build/go-tui"
 	workspaceapi "unstable.build/go-tui/api/workspace"
-	"unstable.build/go-tui/config"
+	"unstable.build/go-tui/api/config"
 	"unstable.build/go-tui/term"
 	testutil "unstable.build/go-tui/util/test"
 	"unstable.build/go-tui/workspace"

@@ -13,7 +13,7 @@ import (
 	workspaceplugin "unstable.build/go-tui/api/workspace/plugin"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
-	"unstable.build/go-tui/config"
+	"unstable.build/go-tui/api/config"
 	"unstable.build/go-tui/plugin"
 	plugutil "unstable.build/go-tui/plugin/util"
 	"unstable.build/go-tui/proto"

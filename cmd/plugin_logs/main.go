@@ -18,10 +18,11 @@ import (
 	log "github.com/sirupsen/logrus"
 	browserapi "unstable.build/go-tui/api/browser"
 	browserplugin "unstable.build/go-tui/api/browser/plugin"
+	"unstable.build/go-tui/api/config"
+	configplugin "unstable.build/go-tui/api/config/plugin"
 	textapi "unstable.build/go-tui/api/text"
 	textplugin "unstable.build/go-tui/api/text/plugin"
 	workspaceapi "unstable.build/go-tui/api/workspace"
-	"unstable.build/go-tui/config"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/handler/search"
 	"unstable.build/go-tui/plugin"
@@ -143,7 +144,7 @@ func (e *logsGrantee) PermissionGranted(grants []plugin.Grant) {
 		case plugin.Permission(plugin.PermissionBrowserWindowManager):
 			e.wm, err = browserplugin.WindowManager(g, e.broker)
 		case plugin.PermissionConfig:
-			e.c, err = plugin.FetchConfig(g, e.broker)
+			e.c, err = configplugin.FetchConfig(g, e.broker)
 		case plugin.Permission(plugin.PermissionEditor):
 			var ed textapi.Editor
 			ed, err = textplugin.Editor(g, e.broker)

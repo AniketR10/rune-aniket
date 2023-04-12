@@ -13,7 +13,7 @@ import (
 	blupspin "github.com/ernestrc/blue/upspin"
 	multierr "github.com/ernestrc/go-multierror"
 	workspaceapi "unstable.build/go-tui/api/workspace"
-	"unstable.build/go-tui/config"
+	"unstable.build/go-tui/api/config"
 	"unstable.build/go-tui/workspace"
 	upclient "upspin.io/client"
 	upcfg "upspin.io/config"

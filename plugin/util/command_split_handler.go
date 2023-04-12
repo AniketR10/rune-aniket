@@ -11,7 +11,7 @@ import (
 	browserplugin "unstable.build/go-tui/api/browser/plugin"
 	textapi "unstable.build/go-tui/api/text"
 	textplugin "unstable.build/go-tui/api/text/plugin"
-	"unstable.build/go-tui/config"
+	"unstable.build/go-tui/api/config"
 	"unstable.build/go-tui/plugin"
 	"unstable.build/go-tui/proto"
 )

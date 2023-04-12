@@ -15,12 +15,13 @@ import (
 	"github.com/sourcegraph/go-diff/diff"
 	browserapi "unstable.build/go-tui/api/browser"
 	browserplugin "unstable.build/go-tui/api/browser/plugin"
+	"unstable.build/go-tui/api/config"
+	configplugin "unstable.build/go-tui/api/config/plugin"
 	textapi "unstable.build/go-tui/api/text"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	workspaceplugin "unstable.build/go-tui/api/workspace/plugin"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
-	"unstable.build/go-tui/config"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/plugin"
 	plugutil "unstable.build/go-tui/plugin/util"
@@ -122,7 +123,7 @@ func newGitHandler(
 				return nil, err
 			}
 		case plugin.PermissionConfig:
-			config, err := plugin.FetchConfig(grant, broker)
+			config, err := configplugin.FetchConfig(grant, broker)
 			if err != nil {
 				return nil, err
 			}

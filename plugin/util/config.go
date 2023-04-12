@@ -5,7 +5,7 @@ import (
 
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/cell"
-	"unstable.build/go-tui/config"
+	"unstable.build/go-tui/api/config"
 	"unstable.build/go-tui/text/clipboard"
 	sysclip "unstable.build/go-tui/text/clipboard/system"
 )

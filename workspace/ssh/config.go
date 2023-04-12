@@ -5,7 +5,7 @@ import (
 	"time"
 
 	multierr "github.com/ernestrc/go-multierror"
-	"unstable.build/go-tui/config"
+	"unstable.build/go-tui/api/config"
 )
 
 const (

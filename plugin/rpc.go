@@ -9,7 +9,7 @@ import (
 	multierr "github.com/ernestrc/go-multierror"
 	"github.com/hashicorp/go-plugin"
 	"google.golang.org/grpc"
-	"unstable.build/go-tui/config"
+	"unstable.build/go-tui/api/config"
 	pluginpb "unstable.build/go-tui/plugin/rpc"
 	"unstable.build/go-tui/proto"
 )

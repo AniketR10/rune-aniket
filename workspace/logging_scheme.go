@@ -8,7 +8,7 @@ import (
 	"github.com/ernestrc/blue/logging"
 	log "github.com/sirupsen/logrus"
 	workspaceapi "unstable.build/go-tui/api/workspace"
-	"unstable.build/go-tui/config"
+	"unstable.build/go-tui/api/config"
 )
 
 // LoggingScheme wraps a SchemeFunc with a constructor

@@ -8,7 +8,7 @@ import (
 
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/cell"
-	"unstable.build/go-tui/config"
+	"unstable.build/go-tui/api/config"
 )
 
 // Workspace binds a Loader and a Scheme together for use in internal

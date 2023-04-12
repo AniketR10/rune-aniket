@@ -6,7 +6,7 @@ import (
 	sync "sync"
 
 	"google.golang.org/grpc"
-	"unstable.build/go-tui/config"
+	"unstable.build/go-tui/api/config"
 )
 
 type configServer struct {

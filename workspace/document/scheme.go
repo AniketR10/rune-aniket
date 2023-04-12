@@ -13,7 +13,7 @@ import (
 	"github.com/ernestrc/blue/retry"
 	multierr "github.com/ernestrc/go-multierror"
 	workspaceapi "unstable.build/go-tui/api/workspace"
-	"unstable.build/go-tui/config"
+	"unstable.build/go-tui/api/config"
 	"unstable.build/go-tui/storage"
 	"unstable.build/go-tui/workspace"
 )

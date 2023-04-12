@@ -6,7 +6,7 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	browserapi "unstable.build/go-tui/api/browser"
-	"unstable.build/go-tui/config"
+	"unstable.build/go-tui/api/config"
 	"unstable.build/go-tui/plugin"
 	plugutil "unstable.build/go-tui/plugin/util"
 	"unstable.build/go-tui/proto"

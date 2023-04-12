@@ -26,12 +26,13 @@ import (
 	log "github.com/sirupsen/logrus"
 	browserapi "unstable.build/go-tui/api/browser"
 	browserplugin "unstable.build/go-tui/api/browser/plugin"
+	"unstable.build/go-tui/api/config"
+	configplugin "unstable.build/go-tui/api/config/plugin"
 	textapi "unstable.build/go-tui/api/text"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	workspaceplugin "unstable.build/go-tui/api/workspace/plugin"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
-	"unstable.build/go-tui/config"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/handler/search"
 	"unstable.build/go-tui/plugin"
@@ -679,7 +680,7 @@ func newLspHandler(
 				return nil, err
 			}
 		case plugin.PermissionConfig:
-			config, err := plugin.FetchConfig(g, broker)
+			config, err := configplugin.FetchConfig(g, broker)
 			if err != nil {
 				return nil, err
 			}

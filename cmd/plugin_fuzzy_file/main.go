@@ -10,7 +10,7 @@ import (
 	browserapi "unstable.build/go-tui/api/browser"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/cmd/plugin_fuzzy_file/finder"
-	"unstable.build/go-tui/config"
+	"unstable.build/go-tui/api/config"
 	"unstable.build/go-tui/plugin"
 	plugutil "unstable.build/go-tui/plugin/util"
 	"unstable.build/go-tui/proto"

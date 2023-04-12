@@ -15,7 +15,7 @@ import (
 	browserapitest "unstable.build/go-tui/api/browser/test"
 	textapi "unstable.build/go-tui/api/text"
 	browsertest "unstable.build/go-tui/browser/test"
-	"unstable.build/go-tui/config"
+	"unstable.build/go-tui/api/config"
 	"unstable.build/go-tui/plugin"
 	"unstable.build/go-tui/proto"
 	prototest "unstable.build/go-tui/proto/test"

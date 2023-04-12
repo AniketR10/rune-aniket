@@ -11,11 +11,12 @@ import (
 	"github.com/alecthomas/chroma/styles"
 	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
+	"unstable.build/go-tui/api/config"
+	configplugin "unstable.build/go-tui/api/config/plugin"
 	textapi "unstable.build/go-tui/api/text"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
-	"unstable.build/go-tui/config"
 	"unstable.build/go-tui/plugin"
 	plugutil "unstable.build/go-tui/plugin/util"
 	"unstable.build/go-tui/proto"
@@ -137,7 +138,7 @@ func newSyntaxHandler(
 	for _, g := range grants {
 		switch g.Permission {
 		case plugin.PermissionConfig:
-			config, err := plugin.FetchConfig(g, broker)
+			config, err := configplugin.FetchConfig(g, broker)
 			if err != nil {
 				return nil, err
 			}

@@ -15,7 +15,7 @@ import (
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
-	"unstable.build/go-tui/config"
+	"unstable.build/go-tui/api/config"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text/clipboard"
 	"unstable.build/go-tui/workspace"
