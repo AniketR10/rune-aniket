@@ -159,8 +159,7 @@ func TestWorkspaceSchemeExecutor(
 			Watcher: workspaceapi.ChanWatcher(ch),
 		}
 
-		ctx, cancel := context.WithTimeout(context.Background(),
-			100*time.Millisecond)
+		ctx, cancel := context.WithCancel(context.Background())
 
 		pid, err := scheme.StartCommand(ctx, cmd)
 		require.NoError(t, err)
@@ -169,7 +168,7 @@ func TestWorkspaceSchemeExecutor(
 		cancel()
 
 		waitCtx, cancelWait := context.WithTimeout(
-			context.Background(), 20*time.Second)
+			context.Background(), 2*time.Second)
 		defer cancelWait()
 		select {
 		case <-waitCtx.Done():

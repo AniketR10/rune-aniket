@@ -4,8 +4,8 @@ import (
 	"io"
 	"sync"
 
-	schemeapi "unstable.build/go-tui/api/scheme"
 	"unstable.build/go-tui/proto"
+	"unstable.build/go-tui/workspace"
 	workspacepb "unstable.build/go-tui/workspace/rpc"
 )
 
@@ -15,10 +15,10 @@ const (
 )
 
 type schemeManagerResourceServer struct {
-	b schemeapi.SchemeManager
+	b workspace.SchemeManager
 }
 
-func newSchemeManagerResourceServer(b schemeapi.SchemeManager) *schemeManagerResourceServer {
+func newSchemeManagerResourceServer(b workspace.SchemeManager) *schemeManagerResourceServer {
 	ret := new(schemeManagerResourceServer)
 	ret.b = b
 	return ret
@@ -35,7 +35,7 @@ func (s *schemeManagerResourceServer) Register(
 
 // SchemeManagerResources returns a map of Permission to a ResourceServer
 // capable of serving requests to PermissionSchemeManager.
-func SchemeManagerResources(b schemeapi.SchemeManager) map[Permission]ResourceRegistrar {
+func SchemeManagerResources(b workspace.SchemeManager) map[Permission]ResourceRegistrar {
 	return map[Permission]ResourceRegistrar{
 		PermissionSchemeManager: newSchemeManagerResourceServer(b),
 	}

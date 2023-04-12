@@ -27,8 +27,7 @@ type Loader interface {
 // SchemeManager abstracts the ability to register new URI schemes.
 type SchemeManager interface {
 	RegisterScheme(string, schemeapi.SchemeFunc) error
-	// TODO once scheme plugin is moved to api
-	// UnregisterScheme(string) error
+	UnregisterScheme(string) error
 }
 
 // WorkspaceManager abstracts the ability to register schemes and workspaces.

@@ -6,10 +6,12 @@ import (
 	"time"
 
 	"github.com/ernestrc/blue/logging"
+	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui/api/config"
 	schemeapi "unstable.build/go-tui/api/scheme"
 	workspaceapi "unstable.build/go-tui/api/workspace"
+	"unstable.build/go-tui/workspace"
 
 	"unstable.build/go-tui/proto"
 )
@@ -28,14 +30,14 @@ type SchemeManagerServer struct {
 
 	// manager locker
 	locker  sync.Locker
-	manager schemeapi.SchemeManager
+	manager workspace.SchemeManager
 	schemes []string
 }
 
 // NewSchemeManagerServer allocates storage for a new SchemeManagerServer and initializes it
 // with the given SchemeManager.
 func NewSchemeManagerServer(
-	broker proto.MuxBroker, manager schemeapi.SchemeManager,
+	broker proto.MuxBroker, manager workspace.SchemeManager,
 	locker sync.Locker,
 ) *SchemeManagerServer {
 	ret := new(SchemeManagerServer)
@@ -46,7 +48,7 @@ func NewSchemeManagerServer(
 
 // Init initializes this SchemeServerImpl with the given scheme.
 func (s *SchemeManagerServer) Init(
-	broker proto.MuxBroker, manager schemeapi.SchemeManager,
+	broker proto.MuxBroker, manager workspace.SchemeManager,
 	locker sync.Locker,
 ) {
 	s.manager = manager
@@ -98,11 +100,10 @@ func (s *SchemeManagerServer) RegisterScheme(ctx context.Context, req *RegisterS
 
 // Close closes all resources associated with this manager.
 func (s *SchemeManagerServer) Close() (ret error) {
-	/* TODO once plugin scheme is moved to api
 	for _, scheme := range s.schemes {
 		if err := s.manager.UnregisterScheme(scheme); err != nil {
 			ret = multierr.Append(ret, err)
 		}
-	}*/
+	}
 	return ret
 }

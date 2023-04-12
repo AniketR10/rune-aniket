@@ -79,6 +79,9 @@ type mockManager struct {
 func (m *mockManager) RegisterScheme(string, schemeapi.SchemeFunc) error {
 	panic("should not be called")
 }
+func (m *mockManager) UnregisterScheme(string) error {
+	panic("should not be called")
+}
 func (m *mockManager) AddWorkspace(ctx context.Context, uri workspaceapi.URI) (
 	workspace.Workspace, error,
 ) {

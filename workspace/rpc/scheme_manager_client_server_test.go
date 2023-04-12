@@ -104,4 +104,45 @@ func TestSchemeManagerClientServerSchemeSuiteIntegration(t *testing.T) {
 		t.Cleanup(func() { closeFn(t) })
 		return client
 	})
+
+	t.Run("unregisters created schemes upon Close", func(t *testing.T) {
+		uri, err := workspaceapi.ParseURI("test:///tmp")
+		require.NoError(t, err)
+		cfg := config.NopConfig()
+		manager := workspace.NewManager(cfg)
+		broker := proto.NewUnixGRPCBroker("")
+
+		srv := NewSchemeManagerServer(broker, manager, new(sync.Mutex))
+		conn, closeFn := doSetupSchemeManagerClientServerTest(t, srv)
+		defer closeFn()
+		managerClient := NewSchemeManager(context.Background(), broker, conn)
+		require.NoError(t, managerClient.RegisterScheme("test",
+			func(ctx context.Context, cfg config.Config, _uri workspaceapi.URI) (
+				schemeapi.Scheme, error,
+			) {
+				memURI, err := workspaceapi.ParseURI("memory:///tmp")
+				if err != nil {
+					return nil, err
+				}
+				return workspace.NewMemoryScheme(ctx, cfg, memURI)
+			}))
+
+		// wait for RegisterScheme on host side
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		err = retry.Retry(ctx, retry.ExponentialStrategy(10*time.Millisecond, 1*time.Second),
+			func(context.Context) (bool, error) {
+				var err error
+				_, err = manager.Scheme(uri)
+				return true, err
+			})
+		require.NoError(t, err)
+
+		require.NoError(t, srv.Close())
+		_, err = manager.Scheme(uri)
+		require.Error(t, err)
+
+		require.NoError(t, managerClient.Close())
+		require.NoError(t, manager.Close())
+	})
 }
