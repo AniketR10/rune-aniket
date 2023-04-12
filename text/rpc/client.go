@@ -80,6 +80,12 @@ func (c *Client) serveCommandHandler(h textapi.CommandHandler) (
 	ret string, srv proto.MuxServer, err error,
 ) {
 	ctxWg := proto.WaitGroupFromContext(c.clientCtx)
+	// NOTE: there's no way to unregister from the public API, so plugins
+	// cannot create more than one command handler per command.
+	// If we ever add unregister to the API, we should cleanup
+	// cyclical references here so the Client's runtime finalizer can
+	// run correctly, in the case where clients use multiple
+	// clients to register and unregister new commands.
 	ret, err = proto.AcceptAndServeChannel(c.clientCtx, c.broker,
 		func(channelID string, _srv proto.MuxServer) {
 			ctxWg.Add(1)

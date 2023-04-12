@@ -64,6 +64,10 @@ func newProxySchemeServerImpl(
 func (s *proxySchemeServerImpl) serveScheme(scheme workspace.Scheme) (string, error) {
 	var srv proto.MuxServer
 	ctxWg := proto.WaitGroupFromContext(s.ctx)
+	// NOTE: scheme are usually served once for the lifecycle of the plugin.
+	// If this ever changes, we should ensure that when scheme is closed,
+	// we stop the grpc server AND manage any cyclical references such that
+	// the runtime finalizer of the client can run.
 	ret, err := proto.AcceptAndServeChannel(s.ctx, s.broker,
 		func(_ string, _srv proto.MuxServer) {
 			ctxWg.Add(1)
