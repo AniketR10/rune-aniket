@@ -4,10 +4,16 @@ TARGET=/usr/local/bin/
 EXECS=$(wildcard darwin_amd64/*)
 EXECS_LINUX=$(wildcard linux_amd64/*)
 CONFIG=${HOME}/.sixrc
+BLUE_CONFIG=${HOME}/.bluectl/config
+GOOGLE_CONFIG=${HOME}/.bluectl/adc.json
 
 config:
+	@ mkdir -p ${HOME}/.six
 	@ cp sixrc $(CONFIG)
-	@ echo "copied config to $(CONFIG)"
+	@ mkdir -p ${HOME}/.bluectl && cp bluerc $(BLUE_CONFIG)
+	@ cp adc.json ${HOME}/.bluectl/adc.json
+	@ echo "copied config to $(CONFIG) and $(BLUE_CONFIG)"
+	@ echo "You might want to modify this files for your user!"
 
 install: config
 	@ sudo cp $(EXECS) $(TARGET)

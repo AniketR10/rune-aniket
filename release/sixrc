@@ -1,110 +1,238 @@
+# These are variables referenced thorought this file.
+# Colors can be changed and range from 1 to 256.
+# To see the full list of colors and its values, use
+# the colorPalette command, provided by the 'colors'
+# plugin below, plugin_color_palette.
 color_theme_1: &color1 194
 color_theme_2: &color2 240
-# color_theme_1: &color1 200
-# color_theme_2: &color2 92
 
-log_path: /home/ernestrc/.six/debug.log
-log_level: info
+# log_path: /Users/user/six.log
+log_level: info # error, debug, trace
 input_mode:
   - esc
   - mouse
 vi:
-  wrap: false
-  debug: false
+  wrap: false # true for wrapping lines
+# the following keys are arbitrary, and for
+# identification purposes only. They contain the
+# path and configuration for each of the plugins
+# that are to be run alongside the editor.
 plugins:
+  # This plugin is used for navigating the editor's issue
+  # tracker and creating new issues.
   plugin_issues:
     path: /usr/local/bin/plugin_issues
     config:
+      # bluectl_config: /Users/user/.bluectl/config
       templates:
+        # you can add more templates here. The key of the object
+        # i.e. reportBug, is the name of the command to invoke this
+        # issue create template.
         reportBug:
-          package: six
-          author: ernestrc@macbook
+          package: six # should always be 'six'
+          author: user@template
           metadata:
             bug: ""
             milestones: v0.1.0
+  # This plugin is used as a general purpose syntax highlighter.
+  # It's based off https://github.com/alecthomas/chroma.
   lexer:
     path: /usr/local/bin/plugin_lexer
     config:
       set_background_attr: false
-      # styles:
-        # .go: disabled
+      # See https://github.com/alecthomas/chroma/tree/master/styles
+      # for a full list of styles.
+      default_style: six
+      # override default style by file extension. 'disabled' disables
+      # this plugin for a file extension.
+      styles:
+        .go: disabled
+        .rb: tango
+  # This plugin is for simulating a plugin panic for debugging.
   panic:
     path: /usr/local/bin/plugin_panic
+  # This plugin adds a new scheme "upspin" which implements
+  # e2e encrypted workspaces. If you're interested in this feature
+  # please follow instructions here: https://upspin.io/doc/signup.md.
   upspin:
     path: /usr/local/bin/plugin_upspin
+  # This plugin adds a command colorPalette which opens a new window
+  # and shows all the colors available to configure in the various
+  # styles thorought this configuration.
   colors:
     path: /usr/local/bin/plugin_color_palette
+  # This plugin adds a command openFileUnderCursor, which does just that.
   gf:
     path: /usr/local/bin/plugin_open_file_cursor
+  # This plugin adds a sed command to run sed scripts against the current file.
   sed:
     path: /usr/local/bin/plugin_sed
+  # This plugin enables visualizing log files with the log command. If command
+  # is passed without any arguments, the editor's log file is opened.
   logs:
     path: /usr/local/bin/plugin_logs
+  # This plugin adds a terminal UI component to the editor. Open with newTerminal
+  # or splitWindowTerminal commands.
   terminal:
     path: /usr/local/bin/plugin_terminal
+    config:
+      # Default shell to use rather than what's provided by the OS via $SHELL.
+      #shell: bash
+      ## Initial command to run. This is for advanced use cases only.
+      #cmd: echo "blabla"
+      # Colors
+      attr:
+        bg: default
+        fg: default
+      selection_attr:
+        bg: reverse
+        fg: reverse
+  # This plugin adds a file information bar at the bottom.
   file_bar:
     path: /usr/local/bin/plugin_file_bar
+    config:
+      # Whether to show if a file has been modified.
+      show_dirty: true
+      # Colors
+      filename_attr:
+        fg: default
+        bg: default
+      background_attr:
+        bg: default
+        fg: default
+      filename_dirty_attr:
+        fg: yellow
+      coordinates_attr:
+        bg: default
+        fg: default
+  # This plugin adds a git changes bar to the left of the open file.
   git:
     path: /usr/local/bin/plugin_git
+    config:
+      # Colors
+      bar_attr:
+        fg: black
+        bg: default
+      add_attr:
+        bg: green
+      del_attr:
+        bg: red
+  # This plugin adds a fuzzy file search component to the editor. Open
+  # via searchFile command.
   fuzzy_file:
     path: /usr/local/bin/plugin_fuzzy_file
-    # path: /home/ernestrc/src/go-tui/bin/plugin_fuzzy_file
     config:
+      ## Command to use instead of native list files implementation.
+      ## The recommended commands are the silver searcher and ripgrep.
+      #command: rg -l ""
+      # Whether search is case sensitive
+      case_sensitive: true
+      # Search algorithm. Options are fuzzy, contains and equal.
+      algo: fuzzy
+      # Key binding used to cycle through history.
       history_key: <c-p>
-      command: rg -l ""
+      # Max history stored
+      history: 2000
+      # Colors
+      element_attr:
+        fg: default
+        bg: default
       matched_text_attr:
         fg: *color2
       count_attr:
         fg: *color1
       focus_element_attr:
         fg: *color1
+  # This plugin adds a fuzzy file line search component to the editor. Open
+  # via searchLine command.
   fuzzy_line:
     path: /usr/local/bin/plugin_fuzzy_line
     config:
-      command: rg --color never -n --no-heading --max-columns 500 ""
+      ## Command to use instead of native list files implementation.
+      ## The recommended commands are the silver searcher and ripgrep.
+      #command: rg --color never -n --no-heading --max-columns 500 ""
+      # Whether search is case sensitive
+      case_sensitive: true
+      # Search algorithm. Options are fuzzy, contains and equal.
+      algo: fuzzy
+      # Key binding used to cycle through history.
       history_key: <c-\>
+      # Max history stored
+      history: 2000
+      # Colors
+      element_attr:
+        fg: default
+        bg: default
       matched_text_attr:
         fg: *color2
       count_attr:
         fg: *color1
       focus_element_attr:
         fg: *color1
-  ai:
-    path: /home/ernestrc/src/go-tui/bin/plugin_ai
-    config:
-      api_key: "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"
+  # This plugin adds LSP functionality (Language Server Protocol).
+  # This adds formatting, go to definition, search references, get
+  # symbol documentation, and diagnostics in the form of errors and warnings.
+  # Only go and C/C++ is supported for now, but you're welcome to try
+  # LSP servers by adding new rows below in `exec`.
   lsp:
     path: /usr/local/bin/plugin_lsp
-    # path: /home/ernestrc/src/go-tui/bin/plugin_lsp
     config:
+      # References searching window colors
+      references_window_attr:
+        fg: default
+        Tg: black
+      # timeout to connect to LSP server.
+      connect_timeout: 10s
+      # Timeout to run individual RPCs against LSP server.
+      # This should be large for large workspaces.
+      rpc_timeout: 30s
+      disconnect_timeout: 300ms
+      # configure syntax highlighting colors
+      syntax_highlighting:
+        interface: yellow
+        struct: default
+        typeParameter: default
+        parameter: default
+        variable:  default
+        property: default
+        enumMember: default
+        event: default
+        method: default
+        function: default
+        member: default
+        macro: default
+        keyword: yellow
+        modifier: yellow
+        comment: blue
+        string: magenta
+        number: red
+      # Enable/disable syntax highlighting by file extension.
       enable_semantic_tokens:
         .go: true
+      # Enable a LSP server for a file extension. The format is
+      # <.extension>: <path to lsp executable> <args>
       exec:
         .go: gopls -mode stdio
         .c: clangd
+
+# Configuration for the command prompt.
 command:
-  frame: true
-  frame_attr:
-    fg: *color1
-#    bg: *color2
-  frame_charset:
-    horizontalbottom: '═'
-    horizontaltop: '═'
-    verticalleft: '║'
-    verticalright: '║'
-    topleft: '╔'
-    topright: '╗'
-    bottomleft: '╚'
-    bottomright: '╝'
+  # Key to open the command prompt.
+  key: ":"
+  # Max number of commands stored in history.
+  max_history: 2000
+  # Configure arbitrary command alises.
   aliases:
     ref: lspReferences
-    sshrazer: addWorkspace ssh://192.168.86.40/~/src/go-tui
     issues: addWorkspace bluectl+issues:///
-    config: edit file:///home/ernestrc/.sixrc
+    # config: edit file:///Users/user/.sixrc
+    # You can also add combinations of commands to be run
+    # as a single command.
     layout:
       - splitWindowTerminal
       - focusPrevWindow
       - searchFile
+  # Configure bindings from key combinations to commands.
   key_bindings:
     <c-j>: lspNextDiagnostic
     <c-k>: lspPrevDiagnostic
@@ -114,6 +242,23 @@ command:
     <c-p>: searchFile
     <c-\>: searchLine
     gf: openFileUnderCursor
+  # Whether to draw a frame around the command prompt.
+  frame: true
+  # Frame character set used to draw command prompt frame. Only
+  # applies if frame is set to true.
+  frame_charset:
+    horizontalbottom: '═'
+    horizontaltop: '═'
+    verticalleft: '║'
+    verticalright: '║'
+    topleft: '╔'
+    topright: '╗'
+    bottomleft: '╚'
+    bottomright: '╝'
+  # Colors
+  element_attr:
+    fg: default
+    bg: default
   matched_text_attr:
     fg: *color2
   focus_element_attr:
@@ -133,56 +278,29 @@ browser:
     fg: red
   non_focus_tab_attr:
     fg: *color2
+  # Prompt configuration. This prompted is used by the editor
+  # to ask questions to the user.
+  prompt:
+    # Dimensions
+    height: 14
+    width: 50
+    # Colors
+    text_attr:
+      fg: default
+      bg: default
+    highlight_attr:
+      fg: white
+      bg: red
 
+# Workspaces configuration.
 workspace:
   ssh:
     # shell: bash
     private_keys:
-      - /home/ernestrc/.ssh/id_rsa
-  wallpaper: "
-\                     ..                     \n
-\              .-=#@@@@##+=--.               \n
-\          .=+@@@@@@@@@@@@@@@@@#+-           \n
-\       -#@@@@@@@@@@@@@@@@@@@@@@@@@=         \n
-\      +@@@@@@@@@@@@@@@@@@@@@@@@@@@@@-       \n
-\    -@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@.      \n
-\   =@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@#.     \n
-\  +@@@@@#+==---==+##@@@@###+++##@@@@@@@.    \n
-\ =@@@+-              ..           .-+#@@.   \n
-\ @@@=                                 =@#   \n
-=@@+                                   +@-  \n
-#@@                                     @#  \n
-@@=                                     =@. \n
-@@.                                     .@. \n
-@#                                       @. \n
-@+    ........              ...----..    #. \n
-#= .=+++++##@@@@@=        =@@@@@@####+=. +  \n
-+=             ..          .          .-.=  \n
-=.                                       -  \n
-\                                            \n
-\                                            \n
-\                                            \n
-\ +                                      .=  \n
-\ +-                                     ==  \n
-\ .#                                     #.  \n
-\  #-                                   .#   \n
-\  .#           .-==+=-=+++=-           ==   \n
-\   +-       .+#@@@@@@@@@@@@@@#=.       #    \n
-\    #-    =#@@@@@@@@@@@@@@@@@@@@+.    #=    \n
-\    .@+.=@@@@@+=-.        .-=#@@@@#-.##     \n
-\     .@@@@@@@@                @@@@@@@@      \n
-\      .@@@@@@@@#+==-------=+#@@@@@@@#       \n
-\       .#@@@@@@@@@@@@@@@@@@@@@@@@@@+        \n
-\         +@@@@@@@@@@@@@@@@@@@@@@@@-         \n
-\          .+@@@@@@@@@@@@@@@@@@@#-           \n
-\            .=#@@@@@@@@@@@@@#+.             \n
-\               .-+##@@##+=-.                \n"
-
-
+      - /Users/user/.ssh/id_rsa
+  ## Wallpaper. Override default six wallpaper with your ASCII art.
+  #wallpaper: myAsciiArt
   wallpaper_attr:
     fg: *color2
-  wallpaper_background_attr:
-#    bg: *color2
-
-prompt:
-  frame: true
+  #wallpaper_background_attr:
+    #bg: *color2

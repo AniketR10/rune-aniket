@@ -1,0 +1,5 @@
+auth:
+  project-id: unstable-build-blue-dev
+  credentials-file: /Users/user/.bluectl/adc.json
+issue:
+  collection: blue-issues-beta
