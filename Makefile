@@ -18,6 +18,7 @@ EXECSRC=$(wildcard cmd/**/*.go) $(wildcard cmd/**/**/*.go)
 EXECDIRS=$(sort $(dir $(EXECSRC)))
 EXECS=$(patsubst cmd/%/,$(BIN)/%,$(EXECDIRS))
 GOMOCKS=$(wildcard **/**/*_gomock.go) $(wildcard **/*_gomock.go)
+RELEASE_FILES=$(wildcard release/*)
 
 .PHONY: debug clean test coverage example_wasm generate
 
@@ -78,10 +79,11 @@ $(EXECS): $(EXECSRC) $(LIBSRC) $(BIN)
 
 make_release:
 	@ mkdir -p $(TARGET)/$(TARGET_OS)_$(TARGET_ARCH)
+	@ cp $(RELEASE_FILES) $(TARGET)
 	@ CGO_ENABLED=0 GOARCH=$(TARGET_ARCH) $(TARGET_ARCH_FLAGS) GOOS=$(TARGET_OS) $(GO) build $(GOFLAGS) -o `pwd`/$(TARGET)/$(TARGET_OS)_$(TARGET_ARCH) ./cmd/...
 
-release_arm:
-	@ rm -rf $(TARGET)
+release_arm: clean
+	@ cp $(RELEASE_FILES) $(TARGET)
 	@ TARGET_OS=linux TARGET_ARCH=arm TARGET_ARCH_FLAGS=GOARM=7 $(MAKE) make_release
 	@ cd $(TARGET) && tar -czvf six-release-`git describe --tags --dirty`.tar.gz *
 

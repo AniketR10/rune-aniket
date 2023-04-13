@@ -1,0 +1,188 @@
+color_theme_1: &color1 194
+color_theme_2: &color2 240
+# color_theme_1: &color1 200
+# color_theme_2: &color2 92
+
+log_path: /home/ernestrc/.six/debug.log
+log_level: info
+input_mode:
+  - esc
+  - mouse
+vi:
+  wrap: false
+  debug: false
+plugins:
+  plugin_issues:
+    path: /usr/local/bin/plugin_issues
+    config:
+      templates:
+        reportBug:
+          package: six
+          author: ernestrc@macbook
+          metadata:
+            bug: ""
+            milestones: v0.1.0
+  lexer:
+    path: /usr/local/bin/plugin_lexer
+    config:
+      set_background_attr: false
+      # styles:
+        # .go: disabled
+  panic:
+    path: /usr/local/bin/plugin_panic
+  upspin:
+    path: /usr/local/bin/plugin_upspin
+  colors:
+    path: /usr/local/bin/plugin_color_palette
+  gf:
+    path: /usr/local/bin/plugin_open_file_cursor
+  sed:
+    path: /usr/local/bin/plugin_sed
+  logs:
+    path: /usr/local/bin/plugin_logs
+  terminal:
+    path: /usr/local/bin/plugin_terminal
+  file_bar:
+    path: /usr/local/bin/plugin_file_bar
+  git:
+    path: /usr/local/bin/plugin_git
+  fuzzy_file:
+    path: /usr/local/bin/plugin_fuzzy_file
+    # path: /home/ernestrc/src/go-tui/bin/plugin_fuzzy_file
+    config:
+      history_key: <c-p>
+      command: rg -l ""
+      matched_text_attr:
+        fg: *color2
+      count_attr:
+        fg: *color1
+      focus_element_attr:
+        fg: *color1
+  fuzzy_line:
+    path: /usr/local/bin/plugin_fuzzy_line
+    config:
+      command: rg --color never -n --no-heading --max-columns 500 ""
+      history_key: <c-\>
+      matched_text_attr:
+        fg: *color2
+      count_attr:
+        fg: *color1
+      focus_element_attr:
+        fg: *color1
+  ai:
+    path: /home/ernestrc/src/go-tui/bin/plugin_ai
+    config:
+      api_key: "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"
+  lsp:
+    path: /usr/local/bin/plugin_lsp
+    # path: /home/ernestrc/src/go-tui/bin/plugin_lsp
+    config:
+      enable_semantic_tokens:
+        .go: true
+      exec:
+        .go: gopls -mode stdio
+        .c: clangd
+command:
+  frame: true
+  frame_attr:
+    fg: *color1
+#    bg: *color2
+  frame_charset:
+    horizontalbottom: '═'
+    horizontaltop: '═'
+    verticalleft: '║'
+    verticalright: '║'
+    topleft: '╔'
+    topright: '╗'
+    bottomleft: '╚'
+    bottomright: '╝'
+  aliases:
+    ref: lspReferences
+    sshrazer: addWorkspace ssh://192.168.86.40/~/src/go-tui
+    issues: addWorkspace bluectl+issues:///
+    config: edit file:///home/ernestrc/.sixrc
+    layout:
+      - splitWindowTerminal
+      - focusPrevWindow
+      - searchFile
+  key_bindings:
+    <c-j>: lspNextDiagnostic
+    <c-k>: lspPrevDiagnostic
+    <c-t>: lspHover
+    <c-g>: lspGoToDefinition
+    <c-b>: lspFormat
+    <c-p>: searchFile
+    <c-\>: searchLine
+    gf: openFileUnderCursor
+  matched_text_attr:
+    fg: *color2
+  focus_element_attr:
+    fg: *color1
+
+browser:
+  window_manager:
+    frame: true
+    dim: true
+    frame_attr:
+      fg: *color2
+    focus_frame_attr:
+      fg: *color1
+  focus_tab_attr:
+    fg: *color1
+  dirty_tab_attr:
+    fg: red
+  non_focus_tab_attr:
+    fg: *color2
+
+workspace:
+  ssh:
+    # shell: bash
+    private_keys:
+      - /home/ernestrc/.ssh/id_rsa
+  wallpaper: "
+\                     ..                     \n
+\              .-=#@@@@##+=--.               \n
+\          .=+@@@@@@@@@@@@@@@@@#+-           \n
+\       -#@@@@@@@@@@@@@@@@@@@@@@@@@=         \n
+\      +@@@@@@@@@@@@@@@@@@@@@@@@@@@@@-       \n
+\    -@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@.      \n
+\   =@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@#.     \n
+\  +@@@@@#+==---==+##@@@@###+++##@@@@@@@.    \n
+\ =@@@+-              ..           .-+#@@.   \n
+\ @@@=                                 =@#   \n
+=@@+                                   +@-  \n
+#@@                                     @#  \n
+@@=                                     =@. \n
+@@.                                     .@. \n
+@#                                       @. \n
+@+    ........              ...----..    #. \n
+#= .=+++++##@@@@@=        =@@@@@@####+=. +  \n
++=             ..          .          .-.=  \n
+=.                                       -  \n
+\                                            \n
+\                                            \n
+\                                            \n
+\ +                                      .=  \n
+\ +-                                     ==  \n
+\ .#                                     #.  \n
+\  #-                                   .#   \n
+\  .#           .-==+=-=+++=-           ==   \n
+\   +-       .+#@@@@@@@@@@@@@@#=.       #    \n
+\    #-    =#@@@@@@@@@@@@@@@@@@@@+.    #=    \n
+\    .@+.=@@@@@+=-.        .-=#@@@@#-.##     \n
+\     .@@@@@@@@                @@@@@@@@      \n
+\      .@@@@@@@@#+==-------=+#@@@@@@@#       \n
+\       .#@@@@@@@@@@@@@@@@@@@@@@@@@@+        \n
+\         +@@@@@@@@@@@@@@@@@@@@@@@@-         \n
+\          .+@@@@@@@@@@@@@@@@@@@#-           \n
+\            .=#@@@@@@@@@@@@@#+.             \n
+\               .-+##@@##+=-.                \n"
+
+
+  wallpaper_attr:
+    fg: *color2
+  wallpaper_background_attr:
+#    bg: *color2
+
+prompt:
+  frame: true
