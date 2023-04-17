@@ -223,9 +223,11 @@ command:
   max_history: 2000
   # Configure arbitrary command alises.
   aliases:
+    # aliases can be used to disambiguate commands from others,
+    # creating shortcuts.
     ref: lspReferences
     issues: addWorkspace bluectl+issues:///
-    # config: edit file:///Users/user/.sixrc
+    config: edit ~/.sixrc
     # You can also add combinations of commands to be run
     # as a single command.
     layout:
@@ -294,11 +296,28 @@ browser:
 
 # Workspaces configuration.
 workspace:
+  # Configuration for upspin client to connect to workspaces.
+  upspin:
+    username: ernest@unstable.build
+    dirserver: remote,upspin.unstable.build:443
+    storeserver: remote,upspin.unstable.build:443
+    packing: ee
+  # Configuration for remote workspaces to connect over SSH.
   ssh:
-    # shell: bash
-    private_keys:
-      - /Users/user/.ssh/id_rsa
-  ## Wallpaper. Override default six wallpaper with your ASCII art.
+    # Use a shell different than the one configured by the remote system.
+    # shell: ""
+    # Maximum amount of time for the TCP connection to establish.
+    # timeout: 5s
+    # private_keys:
+    #  - /Users/user/.ssh/id_rsa
+    # Instead of using private_keys and a go native implementation
+    # of ssh, use the given command to start an ssh session. This could be
+    # useful for environments which deploy a highly customized ~/.ssh/config.
+    # The command should contain '%h' to subsitute for the workspace's host
+    # and '%p' if custom ports are needed. If this option is set, private_keys,
+    # insecure, and timeout are ignored.
+    # command: ssh -q %h
+  ## Workspace wallpaper. Override default six wallpaper with your ASCII art.
   #wallpaper: myAsciiArt
   wallpaper_attr:
     fg: *color2
