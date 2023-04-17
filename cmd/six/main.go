@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"io/ioutil"
@@ -21,8 +22,8 @@ import (
 	"google.golang.org/grpc"
 	"gopkg.in/yaml.v3"
 	"unstable.build/go-tui"
-	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/api/config"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/proto"
 	"unstable.build/go-tui/workspace"
 	workspacepb "unstable.build/go-tui/workspace/rpc"
@@ -213,9 +214,22 @@ func run() int {
 	}
 
 	if *flagConfigPath != defaultConfigPath {
-		_, err := os.Stat(*flagConfigPath)
-		if err != nil {
-			err = fmt.Errorf("Stat(%s): %s", *flagConfigPath, err)
+		if _, err := os.Stat(*flagConfigPath); err != nil {
+			err = fmt.Errorf("stat %q: %s", *flagConfigPath, err)
+			fmt.Printf("%s", err)
+			return 1
+		}
+	}
+
+	// ensure that data path exists
+	if _, err := os.Stat(*flagDataPath); err != nil {
+		if !errors.Is(err, os.ErrNotExist) {
+			err = fmt.Errorf("stat %q: %s", *flagDataPath, err)
+			fmt.Printf("%s", err)
+			return 1
+		}
+		if err := os.Mkdir(*flagDataPath, 0777); err != nil {
+			err = fmt.Errorf("mkdir %q: %s", *flagDataPath, err)
 			fmt.Printf("%s", err)
 			return 1
 		}
