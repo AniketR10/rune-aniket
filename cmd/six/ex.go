@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os/user"
 	"sort"
 	"strconv"
 	"time"
@@ -177,7 +178,9 @@ func (e *ex) subscribeCommands() error {
 		err := e.comp.SubscribeCommand(cmd, text.FuncCommandCompleter(
 			func(ctx context.Context, cmd textapi.Command) (bool, error) {
 				return false, fn(e, cmd.Args...)
-			}, func(ctx context.Context, args []string) (iterator.Iterator[string], error) {
+			}, func(ctx context.Context, args []string) (
+				iterator.Iterator[string], string, error,
+			) {
 				return e.completeCommand(ctx, cmd, args)
 			}))
 		if err != nil {
@@ -187,27 +190,42 @@ func (e *ex) subscribeCommands() error {
 	return ret
 }
 
-// FIXME ~/ doesn't really work because command handler doesn't update
-// the path used to fuzzy search so it fuzzy searches ~/ against /home/user
-// TODO update editFiles completer to expand and somehow writeback to command handler
 func (e *ex) completeEdit(
 	ctx context.Context, args []string,
-) (iterator.Iterator[string], error) {
-	if len(args) == 0 {
-		return workspace.ListFiles(ctx, e.workspace, ".")
+) (iterator.Iterator[string], string, error) {
+	if len(args) == 0 || args[len(args)-1] == "" {
+		it, err := workspace.ListFiles(ctx, e.workspace, ".")
+		if err != nil {
+			return nil, "", err
+		}
+		return it, "", nil
 	}
 
 	last := args[len(args)-1]
-	if last == "" {
-		return workspace.ListFiles(ctx, e.workspace, ".")
+
+	// take ~ as the home of the user using the editor.
+	// rather than the home directory of the user at the workspace.
+	var err error
+	last, err = workspaceapi.ExpandPath(last, user.Current,
+		func() (string, error) {
+			// do not really expand to cwd,
+			// let parseURIOrWorkspaceURI take care of that
+			return ".", nil
+		})
+	if err != nil {
+		return nil, "", fmt.Errorf("expand path: %v", err)
 	}
 
 	uri, err := e.parseURIOrWorkspaceURI(last)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
-	return workspace.ListFiles(ctx, e.workspace, uri.Path())
+	it, err := workspace.ListFiles(ctx, e.workspace, uri.Path())
+	if err != nil {
+		return nil, "", err
+	}
+	return it, last, nil
 }
 
 func (e *ex) log(level log.Level, msg string, args ...interface{}) {
@@ -216,15 +234,15 @@ func (e *ex) log(level log.Level, msg string, args ...interface{}) {
 
 func (e *ex) completeCommand(
 	ctx context.Context, cmd string, args []string,
-) (iterator.Iterator[string], error) {
+) (iterator.Iterator[string], string, error) {
 	e.log(log.DebugLevel, "complete command: %s %v", cmd, args)
 	switch cmd {
 	case cmdEdit:
 		return e.completeEdit(ctx, args)
 	case cmdChangeSplitOrientation:
-		return iterator.FromSlice([]string{"horizontal", "vertical"}), nil
+		return iterator.FromSlice([]string{"horizontal", "vertical"}), "", nil
 	default:
-		return iterator.FromSlice[string](nil), nil
+		return iterator.FromSlice[string](nil), "", nil
 	}
 }
 
@@ -280,13 +298,15 @@ func (e *ex) Wait() {
 }
 
 // Complete satisfies command.Completer for command.Handler.
-func (e *ex) Complete(ctx context.Context, cmd string, args ...string) iterator.Iterator[string] {
-	it, err := e.comp.CompleteCommand(ctx, cmd, args...)
+func (e *ex) Complete(ctx context.Context, cmd string, args ...string) (
+	iterator.Iterator[string], string,
+) {
+	it, newArg, err := e.comp.CompleteCommand(ctx, cmd, args...)
 	if err != nil {
 		e.setError(fmt.Errorf("complete command: %v", err))
-		return iterator.FromSlice[string](nil)
+		return iterator.FromSlice[string](nil), ""
 	}
-	return it
+	return it, newArg
 }
 
 // Dispatch satisfies command.Dispatcher for command.Handler.

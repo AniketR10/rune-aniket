@@ -15,9 +15,9 @@ import (
 	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui"
+	"unstable.build/go-tui/api/config"
 	textapi "unstable.build/go-tui/api/text"
 	workspaceapi "unstable.build/go-tui/api/workspace"
-	"unstable.build/go-tui/api/config"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/plugin"
 	"unstable.build/go-tui/storage"
@@ -192,7 +192,9 @@ func (h *workspaceManagerHandler) subscribeCommands(
 		err := ex.comp.SubscribeCommand(cmd,
 			text.FuncCommandCompleter(func(ctx context.Context, cmd textapi.Command) (bool, error) {
 				return false, fn(h, cmd.Args...)
-			}, func(ctx context.Context, args []string) (iterator.Iterator[string], error) {
+			}, func(ctx context.Context, args []string) (
+				iterator.Iterator[string], string, error,
+			) {
 				return h.completeCommand(ctx, cmd, args)
 			}))
 		if err != nil {
@@ -204,15 +206,16 @@ func (h *workspaceManagerHandler) subscribeCommands(
 
 func (h *workspaceManagerHandler) completeCommand(
 	ctx context.Context, cmd string, args []string,
-) (iterator.Iterator[string], error) {
+) (iterator.Iterator[string], string, error) {
 	switch cmd {
 	case cmdSwitchToWorkspace:
 		if len(args) == 0 {
-			return iterator.FromSlice([]string{"1", "2", "3", "4", "5", "6", "7", "8", "9", "10"}), nil
+			nums := [10]string{"1", "2", "3", "4", "5", "6", "7", "8", "9", "10"}
+			return iterator.FromSlice(nums[:]), "", nil
 		}
-		return iterator.FromSlice[string](nil), nil
+		return iterator.FromSlice[string](nil), "", nil
 	default:
-		return iterator.FromSlice[string](nil), nil
+		return iterator.FromSlice[string](nil), "", nil
 	}
 }
 

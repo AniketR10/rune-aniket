@@ -188,7 +188,7 @@ func (h *Prompt) dispatchCommand() (
 	quit, handled bool,
 ) {
 
-	var commandString string
+	var commandAndArgsString string
 	if len(h.commandAndArgs) != 0 {
 		// add what's currently in the buffer; if user wanted to auto-complete
 		// then Tab should be expected first
@@ -197,7 +197,7 @@ func (h *Prompt) dispatchCommand() (
 		}
 		// trim empty args (i.e. client added more spaces than required between args)
 		h.commandAndArgs = h.trimmedCommandAndArgs(h.commandAndArgs[0], h.commandAndArgs[1:]...)
-		commandString = strings.Join(h.commandAndArgs, " ")
+		commandAndArgsString = strings.Join(h.commandAndArgs, " ")
 
 		h.log(log.TraceLevel, "dispatching command and args %#v", h.commandAndArgs)
 		quit = h.dispatcher.Dispatch(h.commandAndArgs[0], h.commandAndArgs[1:]...)
@@ -205,22 +205,22 @@ func (h *Prompt) dispatchCommand() (
 		match, _ := h.list.Focus()
 		// if no args, then it means that we are in command mode, in which case
 		// what's in the match list takes preference.
-		commandString = string(match.Data())
+		commandAndArgsString = string(match.Data())
 		// no match, use what's in buffer
-		if commandString == "" {
-			commandString = h.buf.String()
+		if commandAndArgsString == "" {
+			commandAndArgsString = h.buf.String()
 		}
 
-		h.log(log.TraceLevel, "dispatching command %#v", commandString)
-		quit = h.dispatcher.Dispatch(commandString)
+		h.log(log.TraceLevel, "dispatching command %#v", commandAndArgsString)
+		quit = h.dispatcher.Dispatch(commandAndArgsString)
 	}
 
-	if commandString != "" {
-		err := h.history.Add(commandString)
+	if commandAndArgsString != "" {
+		err := h.history.Add(commandAndArgsString)
 		if err != nil {
-			h.log(log.ErrorLevel, "add history %q: %v", commandString, err)
+			h.log(log.ErrorLevel, "add history %q: %v", commandAndArgsString, err)
 		} else {
-			h.log(log.TraceLevel, "add history %q: ok", commandString)
+			h.log(log.TraceLevel, "add history %q: ok", commandAndArgsString)
 		}
 	}
 
@@ -324,7 +324,7 @@ func (h *Prompt) handleCompleteArgs(ev term.Event) (quit, handled bool) {
 			h.list.Buffer().DeleteCell(
 				term.Coordinates{X: h.list.Buffer().Columns(0) - 1},
 			)
-			h.setCompletionList(h.commandAndArgs[0], h.completionArgs()...)
+			h.setCompletionList(false, h.commandAndArgs[0], h.completionArgs()...)
 			return
 		}
 		if !h.decArgsCompleteMode() {
@@ -346,7 +346,7 @@ func (h *Prompt) handleCompleteArgs(ev term.Event) (quit, handled bool) {
 		return
 	}
 	h.list.Buffer().WriteString(string(ev.Ch))
-	h.setCompletionList(h.commandAndArgs[0], h.completionArgs()...)
+	h.setCompletionList(false, h.commandAndArgs[0], h.completionArgs()...)
 	return
 }
 
@@ -384,7 +384,7 @@ func (h *Prompt) incArgsCompleteMode(complete bool) {
 		h.commandAndArgs = append(h.commandAndArgs, h.list.Buffer().String())
 	}
 	h.list.Buffer().Reset()
-	h.setCompletionList(h.commandAndArgs[0], h.commandAndArgs[1:]...)
+	h.setCompletionList(true, h.commandAndArgs[0], h.commandAndArgs[1:]...)
 }
 
 func (h *Prompt) decArgsCompleteMode() bool {
@@ -396,7 +396,7 @@ func (h *Prompt) decArgsCompleteMode() bool {
 	last := h.commandAndArgs[lastIdx]
 	h.commandAndArgs = h.commandAndArgs[:lastIdx]
 	h.list.Buffer().Replace(last)
-	h.setCompletionList(h.commandAndArgs[0], h.commandAndArgs[1:]...)
+	h.setCompletionList(true, h.commandAndArgs[0], h.commandAndArgs[1:]...)
 	return true
 }
 
@@ -407,7 +407,9 @@ func (h *Prompt) setCommandMode() {
 	h.resetListWith(h.commandsBackup)
 }
 
-func (h *Prompt) setCompletionList(cmd string, args ...string) {
+func (h *Prompt) setCompletionList(
+	persistLastArgUpdates bool, cmd string, args ...string,
+) {
 	h.log(log.TraceLevel, "setCompletionList: %s %#v", cmd, args)
 
 	ctx := context.Background()
@@ -425,7 +427,20 @@ func (h *Prompt) setCompletionList(cmd string, args ...string) {
 	cmdAndArgs := h.trimmedCommandAndArgs(cmd, args...)
 
 	h.list.DataReset()
-	it := h.completer.Complete(ctx, cmdAndArgs[0], cmdAndArgs[1:]...)
+	it, newLastArg := h.completer.Complete(ctx, cmdAndArgs[0], cmdAndArgs[1:]...)
+	if newLastArg != "" {
+		newCmdAndArgs := make([]string, len(cmdAndArgs))
+		copy(newCmdAndArgs, cmdAndArgs)
+		h.log(log.TraceLevel, "completer returned updated last arg %v: %q -> %q",
+			cmdAndArgs, newCmdAndArgs[len(newCmdAndArgs)-1], newLastArg)
+		newCmdAndArgs[len(newCmdAndArgs)-1] = newLastArg
+		h.buf.Replace(strings.Join(newCmdAndArgs, " "))
+		if persistLastArgUpdates {
+			h.commandAndArgs[len(h.commandAndArgs)-1] = newLastArg
+		} else {
+			h.list.Buffer().Replace(newLastArg)
+		}
+	}
 
 	if h.sync {
 		h.pushCompletionListSync(ctx, cancel, cmdAndArgs[0], it)

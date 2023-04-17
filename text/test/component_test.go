@@ -782,7 +782,7 @@ func TestCompleteCommand(t *testing.T) {
 	t.Run("returns empty iterator if there's no registered handler", func(t *testing.T) {
 		c, _ := newTestComponent(t, NopEditor())
 
-		it, err := c.CompleteCommand(context.Background(), "blabla")
+		it, _, err := c.CompleteCommand(context.Background(), "blabla")
 		require.NoError(t, err)
 		assertIteratorLen(t, 0, it)
 	})
@@ -797,7 +797,7 @@ func TestCompleteCommand(t *testing.T) {
 		}
 		c, _ := newTestComponentConfig(t, NopEditor(), cfg)
 
-		it, err := c.CompleteCommand(context.Background(), "workstation_layout")
+		it, _, err := c.CompleteCommand(context.Background(), "workstation_layout")
 		require.NoError(t, err)
 		assertIteratorLen(t, 0, it)
 	})
@@ -807,15 +807,16 @@ func TestCompleteCommand(t *testing.T) {
 
 		c.SubscribeCommand("edit", text.FuncCommandCompleter(func(ctx context.Context, cmd textapi.Command) (bool, error) {
 			return false, nil
-		}, func(ctx context.Context, args []string) (iterator.Iterator[string], error) {
+		}, func(ctx context.Context, args []string) (iterator.Iterator[string], string, error) {
 			assert.Equal(t, []string{"letter", "number"}, args)
-			return iterator.FromSlice([]string{"one", "two"}), nil
+			return iterator.FromSlice([]string{"one", "two"}), "2", nil
 		}))
 
-		it, err := c.CompleteCommand(context.Background(), "edit", "letter", "number")
+		it, newLastArg, err := c.CompleteCommand(context.Background(), "edit", "letter", "number")
 		require.NoError(t, err)
 		options := assertIteratorLen(t, 2, it)
 		assert.Equal(t, []string{"one", "two"}, options)
+		assert.Equal(t, "2", newLastArg)
 	})
 }
 

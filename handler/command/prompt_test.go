@@ -23,7 +23,7 @@ func TestCommandHandlerDispatch(t *testing.T) {
 		desc        string
 		sequence    string
 		commands    []string
-		completeCmd func() (func(ctx context.Context, command string, args ...string) iterator.Iterator[string], func(*testing.T))
+		completeCmd func() (func(ctx context.Context, command string, args ...string) (iterator.Iterator[string], string), func(*testing.T))
 		dispatchCmd func() (func(command string, args ...string) bool, func(*testing.T))
 	}{
 		{"dispatches command NOT in list with no args",
@@ -126,7 +126,6 @@ func TestCommandHandlerDispatch(t *testing.T) {
 }
 
 func TestCommandHandlerDraw(t *testing.T) {
-	storage := document.NewInMemoryService()
 	cfg := DefaultConfig()
 	cfg.HistoryKey = term.KeyComb{Ch: '@'}
 
@@ -134,7 +133,7 @@ func TestCommandHandlerDraw(t *testing.T) {
 		desc         string
 		sequence     string
 		commands     []string
-		completeCmd  func() (func(ctx context.Context, command string, args ...string) iterator.Iterator[string], func(*testing.T))
+		completeCmd  func() (func(ctx context.Context, command string, args ...string) (iterator.Iterator[string], string), func(*testing.T))
 		dispatchCmd  func() (func(command string, args ...string) bool, func(*testing.T))
 		expectedDraw string
 	}{
@@ -263,8 +262,34 @@ myArg
                     
                     
                     `},
+		{"draw command with args with auto-complete, expand last arg",
+			"rori ~my", []string{"lane", "lorelai", "rori"},
+			completeWith("expanded/myArg"), nopDispatch, `
+rori expanded/my▐   
+expanded/myArg      
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    `},
 		{"draw fully typed command with args with auto-complete",
 			"rori my", []string{"lane", "lorelai", "rori"},
+			completeWith("myArg"), nopDispatch, `
+rori my▐            
+myArg               
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    `},
+		{"draw fully typed command with args with auto-complete with expanded last arg and delete in the middle",
+			"rori ~^^^^^^^^^my", []string{"lane", "lorelai", "rori"},
 			completeWith("myArg"), nopDispatch, `
 rori my▐            
 myArg               
@@ -328,6 +353,19 @@ rori my a▐
                     
                     
                     `},
+		{"draw command with args with auto-complete delete and re-typed all with expanded last arg",
+			"ro ~my ^^^^^^^^^^^^^^^^^^^^ro my", []string{"lane", "lorelai", "rori"},
+			completeWith("myArg"), nopDispatch, `
+rori my▐            
+myArg               
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    `},
 		{"draw delete and re-type all with no autocomplete",
 			"rori myArg ^^^^^^^^^^^rori myArg a", []string{"lane", "lorelai", "rori"},
 			nopComplete, nopDispatch, `
@@ -359,6 +397,19 @@ lorelai myArg oArg▐
 			completeWith("myArg"), expectDispatch("rori", "myArg"), `
 rori myArg▐         
 myArg               
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    `},
+		{"draw from history with autocomplete with expanded last arg",
+			"lo my✌>ro ~my✌>@", []string{"lane", "lorelai", "rori"},
+			completeWith("expanded/myArg"), expectDispatch("rori", "expanded/myArg"), `
+rori expanded/myArg▐
+expanded/myArg      
                     
                     
                     
@@ -442,19 +493,21 @@ oregano
                     
                     `},
 		{"no completion uses historical args as completion list items",
-			"ro my✌gani✌", []string{"lane", "lorelai", "rori"},
+			"ro my✌>ro my✌gani✌", []string{"lane", "lorelai", "rori"},
 			expectCompleteWith(
 				[][]string{
+					{}, {"m"}, {"my"}, {"myArg"},
 					{}, {"m"}, {"my"}, {"myArg"},
 					{"myArg", "g"}, {"myArg", "ga"}, {"myArg", "gan"}, {"myArg", "gani"},
 					{"myArg", "oregani"},
 				},
 				[][]string{
 					{"myArg"}, {"myArg"}, {"myArg"}, {"myArg"},
+					{"myArg"}, {"myArg"}, {"myArg"}, {"myArg"},
 					{"oregano", "oregani"}, {"oregano", "oregani"}, {"oregano", "oregani"}, {"oregani"},
 					{},
 				}),
-			nopDispatch, `
+			expectDispatch("rori", "myArg"), `
 rori myArg oregani ▐
 myArg               
                     
@@ -467,8 +520,8 @@ myArg
                     `},
 	}
 
+	log.SetLevel(log.TraceLevel)
 	for _, tcase := range tsuite {
-		log.SetLevel(log.TraceLevel)
 		tcase := tcase
 		t.Run(tcase.desc, func(t *testing.T) {
 			dispatchFn, cleanup := tcase.dispatchCmd()
@@ -477,6 +530,7 @@ myArg
 			completeFn, cleanupComplete := tcase.completeCmd()
 			defer cleanupComplete(t)
 
+			storage := document.NewInMemoryService()
 			b := NewPrompt(
 				storage, FuncCompleter(completeFn), FuncDispatcher(dispatchFn),
 				term.NopInterrupter(), tcase.commands, cfg,
@@ -512,48 +566,52 @@ func init() {
 	}
 }
 
-func nopComplete() (func(context.Context, string, ...string) iterator.Iterator[string], func(*testing.T)) {
-	return func(ctx context.Context, command string, args ...string) iterator.Iterator[string] {
-		return iterator.FromSlice[string](nil)
+func nopComplete() (func(context.Context, string, ...string) (iterator.Iterator[string], string), func(*testing.T)) {
+	return func(ctx context.Context, command string, args ...string) (iterator.Iterator[string], string) {
+		return iterator.FromSlice[string](nil), ""
 	}, func(*testing.T) {}
 }
 
-func completeWith(data ...string) func() (func(context.Context, string, ...string) iterator.Iterator[string], func(*testing.T)) {
-	return func() (func(ctx context.Context, command string, args ...string) iterator.Iterator[string], func(*testing.T)) {
-		return func(ctx context.Context, command string, args ...string) iterator.Iterator[string] {
-			return iterator.FromSlice(data)
+func completeWith(data ...string) func() (func(context.Context, string, ...string) (iterator.Iterator[string], string), func(*testing.T)) {
+	return func() (func(ctx context.Context, command string, args ...string) (iterator.Iterator[string], string), func(*testing.T)) {
+		return func(ctx context.Context, command string, args ...string) (iterator.Iterator[string], string) {
+			if len(args) != 0 && args[len(args)-1] == "~" {
+				return iterator.FromSlice(data), "expanded/"
+			}
+			return iterator.FromSlice(data), ""
 		}, func(*testing.T) {}
 	}
 }
 
-func completeRespectively(data []string) func() (func(context.Context, string, ...string) iterator.Iterator[string], func(*testing.T)) {
-	return func() (func(context.Context, string, ...string) iterator.Iterator[string], func(*testing.T)) {
-		return func(ctx context.Context, command string, args ...string) iterator.Iterator[string] {
+func completeRespectively(data []string) func() (func(context.Context, string, ...string) (iterator.Iterator[string], string), func(*testing.T)) {
+	return func() (func(context.Context, string, ...string) (iterator.Iterator[string], string), func(*testing.T)) {
+		return func(ctx context.Context, command string, args ...string) (iterator.Iterator[string], string) {
 			if len(args) >= len(data) {
-				return iterator.FromSlice[string](nil)
+				return iterator.FromSlice[string](nil), ""
 			}
 			completing := []string{data[len(args)]}
-			return iterator.FromSlice(completing)
+			return iterator.FromSlice(completing), ""
 		}, func(*testing.T) {}
 	}
 }
 
-func expectCompleteWith(expectedArgs [][]string, data [][]string) func() (func(ctx context.Context, command string, args ...string) iterator.Iterator[string], func(*testing.T)) {
+func expectCompleteWith(expectedArgs [][]string, data [][]string) func() (func(ctx context.Context, command string, args ...string) (iterator.Iterator[string], string), func(*testing.T)) {
 	var actualArgsSlice [][]string
 	var called int
-	return func() (func(context.Context, string, ...string) iterator.Iterator[string], func(*testing.T)) {
-		return func(ctx context.Context, command string, args ...string) iterator.Iterator[string] {
+	return func() (func(context.Context, string, ...string) (iterator.Iterator[string], string), func(*testing.T)) {
+		return func(ctx context.Context, command string, args ...string) (iterator.Iterator[string], string) {
 				if called >= len(data) {
 					called++ // cleanup will catch it
 					actualArgsSlice = append(actualArgsSlice, args)
-					return iterator.FromSlice[string](nil)
+					return iterator.FromSlice[string](nil), ""
 				}
 				actualArgsSlice = append(actualArgsSlice, args)
 				ret := iterator.FromSlice(data[called])
 				called++
-				return ret
+				return ret, ""
 			}, func(t *testing.T) {
-				require.Equal(t, len(expectedArgs), called, "actual => %v", actualArgsSlice)
+				require.Equal(t, len(expectedArgs), called,
+					"actual => %v", actualArgsSlice)
 				for i, actualArgs := range actualArgsSlice {
 					assert.Equal(t, expectedArgs[i], actualArgs, i)
 				}

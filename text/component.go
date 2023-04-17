@@ -477,24 +477,24 @@ func (c *Component) KeyMapping(key term.KeyComb) ([]string, bool) {
 }
 
 func (c *Component) CompleteCommand(ctx context.Context, cmd string, args ...string) (
-	iterator.Iterator[string], error,
+	iterator.Iterator[string], string, error,
 ) {
 	// aliases cannot be auto-completed
 	if _, ok := c.config.CommandAliases[cmd]; ok {
 		c.log(log.DebugLevel, "complete command %q: aliases cannot get completed", cmd)
-		return iterator.FromSlice[string](nil), nil
+		return iterator.FromSlice[string](nil), "", nil
 	}
 
 	commander, ok := c.cmdSubscribers[cmd]
 	if !ok {
 		c.log(log.DebugLevel, "complete command %q: no subscribers", cmd)
-		return iterator.FromSlice[string](nil), nil
+		return iterator.FromSlice[string](nil), "", nil
 	}
 
 	completer, ok := commander.(CommandCompleter)
 	if !ok {
 		c.log(log.DebugLevel, "complete command %q: completion not implemented", cmd)
-		return iterator.FromSlice[string](nil), nil
+		return iterator.FromSlice[string](nil), "", nil
 	}
 
 	return completer.Complete(ctx, args)
