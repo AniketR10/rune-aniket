@@ -10,10 +10,10 @@ import (
 	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
 	yaml "gopkg.in/yaml.v3"
+	"unstable.build/go-tui/api/config"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/component"
-	"unstable.build/go-tui/api/config"
 	"unstable.build/go-tui/handler"
 	plugutil "unstable.build/go-tui/plugin/util"
 	"unstable.build/go-tui/term"
@@ -501,7 +501,7 @@ func (c ideConfig) frame() (frame bool) {
 	return c.windowManagerBool("frame", defaultWindowManagerConfig.Frame)
 }
 
-func (c ideConfig) dim() (frame bool) {
+func (c ideConfig) dim() (dim bool) {
 	return c.windowManagerBool("dim", defaultWindowManagerConfig.Dim)
 }
 

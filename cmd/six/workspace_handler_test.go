@@ -110,11 +110,11 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 │                  │
 ├──────────────────┤
 │                  │
+│                  │
+│workspaceWallpaper│
 ┌──────────────────┐
 │edit▐             │
-│edit              │
 │                  │
-└──────────────────┘
 └──────────────────┘`},
 		{":edit /tmp/12345aZZ>ihello<yyp",
 			`┌──────────────────┐

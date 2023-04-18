@@ -861,6 +861,11 @@ func (c *Component) WindowManagerPosition() term.Coordinates {
 	return c.comp.WindowManagerPosition()
 }
 
+// WindowManagerSize returns the size of the window manager.
+func (c *Component) WindowManagerSize() (width, height int) {
+	return c.comp.WindowManagerSize()
+}
+
 // SetCursor satisfies text.Editor
 func (c *Component) SetCursor(h Handler, pos term.Coordinates) error {
 	return c.ed.SetCursor(h, pos)

@@ -638,9 +638,9 @@ func TestExCommandResponsive(t *testing.T) {
 			`                    
                     
                     
+                    
 edit▐               
 edit                
-                    
                     
                     
                     
@@ -649,10 +649,10 @@ edit
 			`                    
                     
                     
+                    
 eeeeeeeeeeeeeeeeeeee
 eeeeeeeeeeeeeeeeeeee
 eeeeeeeeeeeeeeeeeee▐
-                    
                     
                     
                     `},
@@ -660,9 +660,9 @@ eeeeeeeeeeeeeeeeeee▐
 			`                    
                     
                     
+                    
 edit eeeeeeeeeeeeeee
 eeeeeeeeee▐         
-                    
                     
                     
                     

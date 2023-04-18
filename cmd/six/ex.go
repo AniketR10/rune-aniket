@@ -722,7 +722,7 @@ func (e *ex) openCommandPrompt() {
 // Handle satisfies tui.Handler.
 func (e *ex) Handle(ev term.Event) (exit, handled bool) {
 	if e.cmd != nil {
-		_, handled = e.cmdBrowser.Handle(ev)
+		_, handled = e.cmdV.Handle(ev)
 	} else {
 		_, handled = e.handleEvent(ev)
 	}
@@ -732,7 +732,7 @@ func (e *ex) Handle(ev term.Event) (exit, handled bool) {
 // Cursor satisfies tui.Handler.
 func (e *ex) Cursor() (pos term.Coordinates, show bool) {
 	if e.cmd != nil {
-		return e.cmdBrowser.Cursor()
+		return e.cmdV.Cursor()
 	}
 	return e.comp.Browser().Cursor()
 }
@@ -751,17 +751,29 @@ func (e *ex) Resize(width, height int) {
 	// acceptable because bars are added once
 	offset := e.comp.WindowManagerPosition()
 	e.cmdV.Move(offset)
+
+	// set correct width and height for dynamically resized
+	// components
+	width -= offset.X
+	height -= offset.Y
 	e.cmdV.Resize(width, height)
 }
 
 // Draw satisfies tui.Component
 func (e *ex) Draw(w term.Writer) {
 	if e.cmd != nil {
-		e.comp.Draw(term.DimWriter(w))
+		// temporarily disable auto-dimming based on focus so we
+		// can pass a DimWriter below and dim everything.
 		prev := e.comp.SetDim(false)
-		e.comp.SetDim(prev)
-		// use virtual writer so we can take advantage of the DrawWindow method
-		w = component.VirtualWriter(w, e.cmdV.Position(), e.cmdV.Height(), e.cmdV.Width())
+		defer e.comp.SetDim(prev)
+
+		if e.config.Config.Dim {
+			e.comp.Draw(term.DimWriter(w))
+		} else {
+			e.comp.Draw(w)
+		}
+		w = component.VirtualWriter(w,
+			e.cmdV.Position(), e.cmdV.Height(), e.cmdV.Width())
 		e.cmdBrowser.DrawWindow(e.cmdWin, w)
 	} else {
 		e.comp.Draw(w)

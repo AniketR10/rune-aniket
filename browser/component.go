@@ -741,8 +741,17 @@ func (c *Component) WindowManagerPosition() term.Coordinates {
 	return c.union.FrameUnion.MainPosition()
 }
 
+// WindowManagerSize returns the size of the window manager.
+func (c *Component) WindowManagerSize() (width, height int) {
+	return c.union.FrameUnion.MainWidth(), c.union.FrameUnion.MainHeight()
+}
+
 // DrawWindow draws target with the given term.Writer.
 func (c *Component) DrawWindow(target Window, w term.Writer) {
+	// emulate union draw
+	pos := c.WindowManagerPosition()
+	width, height := c.WindowManagerSize()
+	w = component.VirtualWriter(w, pos, height, width)
 	c.wm.DrawWindow(target.(*browserWindow).win, w)
 }
 
