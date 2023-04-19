@@ -21,7 +21,7 @@ CONTAINER=$(docker run -d \
 
 PORT=$(docker inspect -f '{{ (index (index .NetworkSettings.Ports "2222/tcp") 0).HostPort }}' $CONTAINER)
 
-while ! ssh -q -o StrictHostKeyChecking=no -i $DIR/id_ed25519 test@127.0.0.1 -p $PORT which six > /dev/null
+while ! ssh -o "UserKnownHostsFile=/dev/null" -o "StrictHostKeyChecking=no" -i $DIR/id_ed25519 test@127.0.0.1 -p $PORT which six
 do
     sleep 1
 done
