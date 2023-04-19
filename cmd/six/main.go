@@ -80,7 +80,7 @@ func startWorkspaceServer() int {
 
 	newScheme := workspace.NewFileScheme
 	if serverLogs := *flagWorkspaceServerLogFile; serverLogs != "" {
-		f, err := os.OpenFile(serverLogs,
+		f, err := workspace.OpenFile(serverLogs,
 			os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
 		if err != nil {
 			log.Fatal(err)

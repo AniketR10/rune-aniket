@@ -873,7 +873,7 @@ func loadWorkspaceConfig(cwd workspace.Workspace, uri workspaceapi.URI, c *ideCo
 }
 
 func loadConfig(c *ideConfig, configpath string) (isConfigErr bool, err error) {
-	f, err := os.Open(configpath)
+	f, err := workspace.OpenFile(configpath, os.O_RDONLY, 0)
 	if err != nil {
 		initDefaultConfig(c)
 		if os.IsNotExist(err) {

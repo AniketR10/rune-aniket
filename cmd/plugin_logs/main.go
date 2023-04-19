@@ -27,6 +27,7 @@ import (
 	"unstable.build/go-tui/handler/search"
 	"unstable.build/go-tui/plugin"
 	"unstable.build/go-tui/proto"
+	"unstable.build/go-tui/workspace"
 )
 
 const (
@@ -222,7 +223,7 @@ func consumeAvailableData(
 }
 
 func consumeData(
-	ctx context.Context, file *os.File, l *search.List,
+	ctx context.Context, file workspaceapi.File, l *search.List,
 	quit chan struct{}, watcher *fsnotify.Watcher,
 ) {
 	reader := bufio.NewReader(file)
@@ -293,7 +294,7 @@ func (e *logsGrantee) showLogs(win browserapi.Window, args []string) (bool, erro
 
 	// NOTE: log_path is always referencing a local path so until
 	// we containerize plugins, it's safe to call os.Open
-	file, err := os.Open(logFile)
+	file, err := workspace.OpenFile(logFile, os.O_RDONLY, 0)
 	if err != nil {
 		return false, fmt.Errorf("could not open logs file: %s", err)
 	}
@@ -304,7 +305,7 @@ func (e *logsGrantee) showLogs(win browserapi.Window, args []string) (bool, erro
 		return false, fmt.Errorf("notify: %s", err)
 	}
 
-	err = watcher.Add(logFile)
+	err = watcher.Add(file.Name())
 	if err != nil {
 		_ = watcher.Close()
 		_ = file.Close()

@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"os/user"
 	"path"
@@ -18,6 +17,7 @@ import (
 	"golang.org/x/term"
 	schemeapi "unstable.build/go-tui/api/scheme"
 	workspaceapi "unstable.build/go-tui/api/workspace"
+	"unstable.build/go-tui/workspace"
 )
 
 const watcherWaitTimeout = 2 * time.Minute
@@ -245,7 +245,7 @@ func readPassphrase(key string) (string, error) {
 }
 
 func privateKeySigner(privateKeyPath string) (ssh.Signer, error) {
-	privateKey, err := ioutil.ReadFile(privateKeyPath)
+	privateKey, err := workspace.ReadFile(privateKeyPath)
 	if err != nil {
 		return nil, fmt.Errorf("could not read private key file %s: %s",
 			privateKeyPath, err)

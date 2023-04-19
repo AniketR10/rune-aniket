@@ -95,7 +95,7 @@ func (f *file) uriAtCursor() string {
 		return (r >= 'A' && r <= 'Z') ||
 			(r >= 'a' && r <= 'z') || r == '_' ||
 			(r >= '0' && r <= '9') || r == ':' || r == '@' ||
-			r == '+' || r == '/' || r == '.' || r == '-'
+			r == '+' || r == '/' || r == '.' || r == '-' || r == '~'
 	})
 	return uri
 }
@@ -167,10 +167,10 @@ func (h *gfEditorHandler) syncBuffers(ev textapi.Event) error {
 			return fmt.Errorf("could not find buffer for file %s", ev.URI.String())
 		}
 		before := f.CursorAtScroll()
-		log.Tracef("MoveToScroll(%#v): %s", ev.From, f.String())
+		log.Tracef("MoveToScroll(%#v)", ev.From)
 		_, ok = f.MoveToScroll(ev.From)
 		if !ok && ev.From != before {
-			return fmt.Errorf("MoveToScroll(%#v): %v", ev.From, ok)
+			return fmt.Errorf("move to scroll coordinates %#v: %v", ev.From, ok)
 		}
 	}
 	return nil

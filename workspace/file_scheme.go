@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/ioutil"
 	"os"
 	"os/exec"
 	"os/user"
@@ -43,6 +44,32 @@ func NewFileScheme(
 		return nil, err
 	}
 	return ret, nil
+}
+
+// OpenFile opens the given filename using the default current working
+// directory's file scheme. This is preferrable over os.OpenFile, because
+// it does expansion of paths (i.e. ~ is expanded to the current user's home directory).
+func OpenFile(filename string, flag int, perm os.FileMode) (workspaceapi.File, error) {
+	cwdURI, _ := workspaceapi.CurrentUserHostURI(".")
+	fs, err := NewFileScheme(context.Background(), config.NopConfig(), cwdURI)
+	if err != nil {
+		return nil, fmt.Errorf("file scheme: %v", err)
+	}
+	f, werr := fs.Open(filename, flag, perm)
+	if werr != nil {
+		return nil, werr.ToError()
+	}
+	return f, nil
+}
+
+// ReeadFile reads the file named by filename and returns the contents.
+// See os.ReadFile for more details.
+func ReadFile(filename string) ([]byte, error) {
+	f, err := OpenFile(filename, os.O_RDONLY, 0)
+	if err != nil {
+		return nil, fmt.Errorf("read: %w", err)
+	}
+	return ioutil.ReadAll(f)
 }
 
 type fileScheme struct {

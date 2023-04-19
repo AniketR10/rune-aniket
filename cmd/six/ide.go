@@ -75,7 +75,7 @@ func (i *ide) init(cwd, cfgfilename, recfilename string,
 	}
 
 	if i.ideConfig.logOutputPath() != "" {
-		f, err := os.OpenFile(i.ideConfig.logOutputPath(),
+		f, err := workspace.OpenFile(i.ideConfig.logOutputPath(),
 			os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
 		if err != nil {
 			return err

@@ -1,7 +1,12 @@
 package main
 
 import (
+	"os"
+	"strings"
+
 	"github.com/ernestrc/blue/config"
+	uconfig "go.uber.org/config"
+	"unstable.build/go-tui/workspace"
 )
 
 const defaultReferenceConfig = `
@@ -26,10 +31,25 @@ type cliConfig struct {
 	Issue collectionConfig `yaml:"issue"`
 }
 
+// rewrite config.NewProvider to use workspace.OpenFile
+func newProvider(overridesConfigPath, fallbackConfigLiteral string) (
+	config.Provider, error,
+) {
+	configDef := strings.NewReader(fallbackConfigLiteral)
+	if overridesConfigPath == "" {
+		return uconfig.NewYAMLProviderFromReader(configDef)
+	}
+	configFile, err := workspace.OpenFile(overridesConfigPath, os.O_RDONLY, 0)
+	if err != nil {
+		return nil, err
+	}
+	return uconfig.NewYAMLProviderFromReader(configDef, configFile)
+}
+
 func sourceConfig(overridesConfigPath string) (
 	*cliConfig, error,
 ) {
-	provider, err := config.NewProvider(
+	provider, err := newProvider(
 		overridesConfigPath, defaultReferenceConfig)
 	if err != nil {
 		return nil, err
