@@ -6,7 +6,7 @@
 color_theme_1: &color1 194
 color_theme_2: &color2 240
 
-# log_path: /Users/user/six.log
+log_path: ~/.six/debug.log
 log_level: info # error, debug, trace
 input_mode:
   - esc
@@ -23,7 +23,7 @@ plugins:
   plugin_issues:
     path: /usr/local/bin/plugin_issues
     config:
-      # bluectl_config: /Users/user/.bluectl/config
+      bluectl_config: ~/.bluectl/config
       templates:
         # you can add more templates here. The key of the object
         # i.e. reportBug, is the name of the command to invoke this
@@ -309,7 +309,7 @@ workspace:
     # Maximum amount of time for the TCP connection to establish.
     # timeout: 5s
     # private_keys:
-    #  - /Users/user/.ssh/id_rsa
+    #  - ~/.ssh/id_rsa
     # Instead of using private_keys and a go native implementation
     # of ssh, use the given command to start an ssh session. This could be
     # useful for environments which deploy a highly customized ~/.ssh/config.
