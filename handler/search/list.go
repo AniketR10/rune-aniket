@@ -644,22 +644,30 @@ func (l *List) Buffer() *cell.Buffer {
 
 // Offset returns this list's current seek offset.
 func (l *List) Offset() int {
+	l.mu.Lock()
+	defer l.mu.Unlock()
 	return l.list.Offset()
 }
 
 // FocusOffset returns this list's focus index in the underlying list.
 func (l *List) FocusOffset() int {
+	l.mu.Lock()
+	defer l.mu.Unlock()
 	return l.list.FocusOffset()
 }
 
 // ElementHeight returns the height for each element of this list.
 func (l *List) ElementHeight() int {
+	l.mu.Lock()
+	defer l.mu.Unlock()
 	return l.list.ElementHeight()
 }
 
 // ElementAt returns the Match at the given position and true, if there's any
 // or a zero-valued Match and false if there's none.
 func (l *List) ElementAt(pos term.Coordinates) (Match, component.ListNode, bool) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
 	// NOTE returning a ListNode solely exist to enable usage of SetFocus. If SetFocus
 	// ever uses a Match, this method should be removed.
 	node, ok := l.list.ElementAt(pos)
