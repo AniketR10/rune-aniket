@@ -10,7 +10,7 @@ require (
 	github.com/ernestrc/go-multierror v1.1.2
 	github.com/ernestrc/golang-internal-tools v0.0.0-20220317145801-f8b5a950857b
 	github.com/ernestrc/sensible v0.2.2
-	github.com/ernestrc/tcell/v2 v2.5.4-0.20221007185330-3a06e9ace178
+	github.com/ernestrc/tcell/v2 v2.5.6
 	github.com/fsnotify/fsnotify v1.5.4
 	github.com/golang/mock v1.4.4
 	github.com/hashicorp/go-hclog v0.14.1

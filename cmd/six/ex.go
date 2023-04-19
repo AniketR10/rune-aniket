@@ -608,14 +608,14 @@ func (e *ex) handleEvent(ev term.Event) (
 			e.ctxPartialReissue, e.cancelPartialReissue = context.WithTimeout(ctx,
 				e.config.SequencerTimeout+reissuePadding)
 			e.reissueEvent = ev
-			go func(ctx context.Context) {
+			go func(ctx context.Context, ev term.Event) {
 				<-ctx.Done()
 				if ctx.Err() == context.DeadlineExceeded {
 					// timer expired, reissue event because
 					// user didn't send a matching key combination.
-					forcePublishEvent(e.publishEvent)(e.reissueEvent)
+					forcePublishEvent(e.publishEvent)(ev)
 				}
-			}(e.ctxPartialReissue)
+			}(e.ctxPartialReissue, e.reissueEvent)
 			return
 		}
 		// this is a re-issue so continue processing

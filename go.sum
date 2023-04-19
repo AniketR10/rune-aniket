@@ -84,6 +84,8 @@ github.com/ernestrc/sensible v0.2.2 h1:izEpqb/3u1jSmXWU0fP7ipopRK4n2DVehv8j8uJsS
 github.com/ernestrc/sensible v0.2.2/go.mod h1:DMXklvqxnduBxPT1DWryJe9lHUDWV/Nd7ZcrqAlTw4Q=
 github.com/ernestrc/tcell/v2 v2.5.4-0.20221007185330-3a06e9ace178 h1:X+plsmtGqm1SstbAS0hfVvYbvY2gdg6q2rdU+cMyOZs=
 github.com/ernestrc/tcell/v2 v2.5.4-0.20221007185330-3a06e9ace178/go.mod h1:Gce2y7w3FUaA02fWLMqAywHOzyUN5bgw9gZSECwWl1s=
+github.com/ernestrc/tcell/v2 v2.5.6 h1:6Vc1WU0j8q4D54cBbEHcI7z/8+/7OIeYE5quECd0OIU=
+github.com/ernestrc/tcell/v2 v2.5.6/go.mod h1:Gce2y7w3FUaA02fWLMqAywHOzyUN5bgw9gZSECwWl1s=
 github.com/fatih/color v1.7.0/go.mod h1:Zm6kSWBoL9eyXnKyktHP6abPY2pDugNf5KwzbycvMj4=
 github.com/fatih/color v1.10.0 h1:s36xzo75JdqLaaWoiEHk767eHiwo0598uUxyfiPkDsg=
 github.com/fatih/color v1.10.0/go.mod h1:ELkj/draVOlAH/xkhN6mQ50Qd0MPOk5AAr3maGEBuJM=
