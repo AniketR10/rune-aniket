@@ -60,6 +60,8 @@ type logsGrantee struct {
 
 	logFile string
 	cfg     search.ListConfig
+
+	discardedLogs bool
 }
 
 func (e *logsGrantee) Connected(broker proto.MuxBroker, pconfig config.Config) {
@@ -76,6 +78,18 @@ func (e *logsGrantee) Connected(broker proto.MuxBroker, pconfig config.Config) {
 		}
 		caseSensitive = true
 	}
+
+	debug, err := pconfig.GetBool("debug")
+	if err != nil {
+		if err != config.ErrNotFound {
+			log.Errorf("failed to load 'case_sensitive' from config: %v", err)
+		}
+	} else {
+		log.Debugf("set debug to %v", debug)
+	}
+
+	// set to true to avoid discarding all logs
+	e.discardedLogs = debug
 
 	algoStr, err := pconfig.GetString("algo")
 	if err != nil && err != config.ErrNotFound {
@@ -232,7 +246,10 @@ func consumeData(
 					}
 				}
 				return false, nil
-			case err := <-watcher.Errors:
+			case err, ok := <-watcher.Errors:
+				if !ok {
+					return false, nil
+				}
 				return true, fmt.Errorf("notify error: %s", err)
 			case <-quit:
 				return false, nil
@@ -241,6 +258,8 @@ func consumeData(
 
 		select {
 		case <-quit:
+			return
+		case <-ctx.Done():
 			return
 		default:
 			if err != nil {
@@ -252,7 +271,7 @@ func consumeData(
 
 func (e *logsGrantee) showLogs(win browserapi.Window, args []string) (bool, error) {
 	if log.IsLevelEnabled(log.TraceLevel) && len(args) == 0 {
-		return false, errors.New("Cannot show logs in Trace level to avoid " +
+		return false, errors.New("Cannot show own logs in Trace level to avoid " +
 			"an infinite loop. Check Manually.")
 	}
 	if e.logFile == "" && len(args) == 0 {
@@ -340,6 +359,16 @@ func (e *logsGrantee) HandleCommand(
 	if cmd.Name != cmdLogs {
 		panic("extraneous command")
 	}
+
+	if !e.discardedLogs {
+		// disable all logs to avoid creating infinite I/O loops
+		log.SetOutput(io.Discard)
+		log.SetLevel(log.FatalLevel)
+		plugin.SetLoggingOutput(io.Discard)
+		plugin.SetLoggingLevel(log.FatalLevel)
+		e.discardedLogs = true
+	}
+
 	return e.showLogs(cmd.Window, cmd.Args)
 }
 
