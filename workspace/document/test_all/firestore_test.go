@@ -30,12 +30,12 @@ func runFirestoreOrSkip(t *testing.T) func() {
 }
 
 func TestFirestoreWorkspaceScheme(t *testing.T) {
+	teardown := runFirestoreOrSkip(t)
+	defer teardown()
+
 	testWorkspaceSchemeSuite(t, func(t *testing.T) schemeapi.Scheme {
 		testProjectID := uuid.New().String()
 		collection := uuid.New().String()
-
-		teardown := runFirestoreOrSkip(t)
-		defer teardown()
 
 		ctx := context.Background()
 
