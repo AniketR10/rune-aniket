@@ -7,6 +7,7 @@ import (
 	"os/user"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/ernestrc/blue/document"
@@ -205,15 +206,20 @@ func (e *ex) completeEdit(
 
 	// take ~ as the home of the user using the editor.
 	// rather than the home directory of the user at the workspace.
+	// do not always expand without making sure that we are not
+	// erasing trailing /, which prevents user from editing files
+	// in folders.
 	var err error
-	last, err = workspaceapi.ExpandPath(last, user.Current,
-		func() (string, error) {
-			// do not really expand to cwd,
-			// let parseURIOrWorkspaceURI take care of that
-			return ".", nil
-		})
-	if err != nil {
-		return nil, "", fmt.Errorf("expand path: %v", err)
+	if strings.Contains(last, "~") {
+		last, err = workspaceapi.ExpandPath(last, user.Current,
+			func() (string, error) {
+				// do not really expand to cwd,
+				// let parseURIOrWorkspaceURI take care of that
+				return ".", nil
+			})
+		if err != nil {
+			return nil, "", fmt.Errorf("expand path: %v", err)
+		}
 	}
 
 	uri, err := e.parseURIOrWorkspaceURI(last)
