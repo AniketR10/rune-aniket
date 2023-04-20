@@ -261,6 +261,7 @@ func (s *Server) Publish(
 ) (*PublishResponse, error) {
 	ev, err := req.GetEv().ToModel()
 	if err != nil {
+		s.log(log.WarnLevel, "debug interrupt: error converting to model: %v", err)
 		return nil, err
 	}
 
@@ -271,12 +272,14 @@ func (s *Server) Publish(
 	case term.EventNone:
 		fn = s.browser.PublishEventNone
 	default:
+		s.log(log.WarnLevel, "debug interrupt: invalid event type: %v", ev.Type)
 		return nil, fmt.Errorf("invalid event type: %v", ev.Type)
 	}
 
 	s.browser.Lock()
 	defer s.browser.Unlock()
 	err = fn()
+	s.log(log.TraceLevel, "debug interrupt: called interrupt fn: %v", err)
 	if err != nil {
 		return nil, err
 	}

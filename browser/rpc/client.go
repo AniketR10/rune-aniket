@@ -291,11 +291,13 @@ func (c *Client) Interrupt() error {
 	protoEv := new(termpb.Event)
 	err := protoEv.FromModel(term.Event{Type: term.EventInterrupt})
 	if err != nil {
+		c.log(log.WarnLevel, "debug interrupt: called interrupt: event from model: %v", err)
 		return err
 	}
 	req := PublishRequest{Ev: protoEv}
 
 	_, err = c.p.Publish(ctx, &req)
+	c.log(log.TraceLevel, "debug interrupt: called interrupt: publish: %v", err)
 	runtime.KeepAlive(c)
 	return err
 }
