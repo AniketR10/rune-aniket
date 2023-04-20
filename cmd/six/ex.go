@@ -77,25 +77,6 @@ var (
 		{Key: term.KeyCtrlL}: "bufferNext",
 		{Key: term.KeyCtrlH}: "bufferPrev",
 	}
-	// FIXME should exist in default config, not here
-	exDefaultSequences = map[handler.Sequence][]string{
-		{First: term.KeyComb{Key: term.KeyCtrlX},
-			Last: term.KeyComb{Key: term.KeyEnter}}: {"newWindow"},
-		{First: term.KeyComb{Key: term.KeyCtrlX},
-			Last: term.KeyComb{Key: term.KeyCtrlH}}: {"focusPrevWindow"},
-		{First: term.KeyComb{Key: term.KeyCtrlX},
-			Last: term.KeyComb{Key: term.KeyCtrlL}}: {"focusNextWindow"},
-		{First: term.KeyComb{Key: term.KeyCtrlX},
-			Last: term.KeyComb{Key: term.KeyCtrlJ}}: {"focusBelowWindow"},
-		{First: term.KeyComb{Key: term.KeyCtrlX},
-			Last: term.KeyComb{Key: term.KeyCtrlK}}: {"focusAboveWindow"},
-		{First: term.KeyComb{Key: term.KeyCtrlX},
-			Last: term.KeyComb{Ch: 'h'}}: {"changeSplitOrientation", "h"},
-		{First: term.KeyComb{Key: term.KeyCtrlX},
-			Last: term.KeyComb{Ch: 'v'}}: {"changeSplitOrientation", "v"},
-		{First: term.KeyComb{Key: term.KeyCtrlX},
-			Last: term.KeyComb{Key: term.KeyCtrlW}}: {"closeWindow"},
-	}
 	errEventStreamNotReady = errors.New("event stream not ready to publish")
 	forcePublishRetry      = retry.SequentialStrategy(5 * time.Millisecond)
 )
@@ -273,10 +254,6 @@ func (e *ex) doInit(
 
 	for ev, cmd := range exDefaultBindings {
 		opts = append(opts, text.WithCommandKeyBinding(ev, []string{cmd}))
-	}
-	// write default sequences
-	for seq, cmdAndArgs := range exDefaultSequences {
-		e.config.CommandSequenceBindings[seq] = cmdAndArgs
 	}
 
 	for _, o := range opts {

@@ -236,6 +236,13 @@ command:
       - searchFile
   # Configure bindings from key combinations to commands.
   key_bindings:
+    <c-x><c-h>: focusPrevWindow
+    <c-x><c-l>: focusNextWindow
+    <c-x><c-j>: focusBelowWindow
+    <c-x><c-k>: focusAboveWindow
+    <c-x><c-w>: closeWindow
+    <c-x>h: changeSplitOrientation h
+    <c-x>v: changeSplitOrientation v
     <c-j>: lspNextDiagnostic
     <c-k>: lspPrevDiagnostic
     <c-t>: lspHover
@@ -243,6 +250,8 @@ command:
     <c-b>: lspFormat
     <c-p>: searchFile
     <c-\>: searchLine
+    # <c-x><enter>: newWindow
+    <c-x><enter>: splitWindowTerminal
     gf: openFileUnderCursor
   # Whether to draw a frame around the command prompt.
   frame: true
