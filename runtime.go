@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/ernestrc/tcell/v2"
-	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui/term"
 )
 
@@ -40,8 +39,6 @@ func redraw(root Handler, lock sync.Locker, termw term.Writer) (err error) {
 }
 
 func drain(evs <-chan tcell.Event) {
-	// reset interrupts so we don't stay forever in pending mode
-	interruptPending.Store(false)
 	for {
 		select {
 		case <-evs:
@@ -61,12 +58,9 @@ var interruptPending atomic.Bool
 func PublishEvent(ev term.Event) bool {
 	if ev.Type == term.EventInterrupt &&
 		!interruptPending.CompareAndSwap(false, true) {
-		log.Tracef("debug interrupt: publish event %#v: interrupt pending", ev)
 		return true
 	}
-	ret := term.PublishEvent(ev)
-	log.Tracef("debug interrupt: publish event %#v: ok: %v", ev, ret)
-	return ret
+	return term.PublishEvent(ev)
 }
 
 func handleInterruptSignal(
@@ -92,7 +86,8 @@ func run(root Handler, lock sync.Locker, termw term.Writer) (err error) {
 	var handled, exit bool
 	var lastSignalAt time.Time
 	for !exit && err == nil {
-		log.Tracef("debug interrupt: redraw")
+		// reset interrupts so we don't stay forever in pending mode
+		interruptPending.Store(false)
 		if err = redraw(root, lock, termw); err != nil {
 			return
 		}
@@ -106,8 +101,6 @@ func run(root Handler, lock sync.Locker, termw term.Writer) (err error) {
 				ev := term.FromTcellEvent(tev)
 				switch ev.Type {
 				case term.EventInterrupt:
-					log.Tracef("debug interrupt: set interrupt pending to false")
-					interruptPending.Store(false)
 				case term.EventError:
 					err = ev.Err
 				case term.EventResize:
