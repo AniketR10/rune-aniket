@@ -40,6 +40,8 @@ func redraw(root Handler, lock sync.Locker, termw term.Writer) (err error) {
 }
 
 func drain(evs <-chan tcell.Event) {
+	// reset interrupts so we don't stay forever in pending mode
+	interruptPending.Store(false)
 	for {
 		select {
 		case <-evs:
