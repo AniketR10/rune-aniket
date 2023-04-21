@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"runtime"
+	"sync"
 	"sync/atomic"
 
 	"github.com/ernestrc/blue/logging"
@@ -15,12 +16,15 @@ import (
 var _ textapi.EventHandler = (*eventStreamClient)(nil)
 
 type eventStreamClient struct {
+	locker sync.Locker
 	stream Editor_SubscribeServer
 	quit   atomic.Bool
 }
 
-func newEventStreamClient(stream Editor_SubscribeServer) *eventStreamClient {
-	ret := &eventStreamClient{stream: stream}
+func newEventStreamClient(
+	stream Editor_SubscribeServer, locker sync.Locker,
+) *eventStreamClient {
+	ret := &eventStreamClient{stream: stream, locker: locker}
 	return ret
 }
 
@@ -31,6 +35,11 @@ func (e *eventStreamClient) Handle(ctx context.Context, ev textapi.Event) bool {
 		return true
 	}
 	protoEv := toProto(ev)
+
+	// do not hold mutex while waiting on I/O
+	e.locker.Unlock()
+	defer e.locker.Lock()
+
 	err := e.stream.Send(&protoEv)
 	if err != nil {
 		e.log(log.ErrorLevel, "stream send: %v", err)
@@ -42,6 +51,7 @@ func (e *eventStreamClient) Handle(ctx context.Context, ev textapi.Event) bool {
 func (e *eventStreamClient) waitForUnsubscribe() error {
 	defer e.quit.Store(true)
 
+	// do not unlock here, Server should already have unlocked
 	req, err := e.stream.Recv()
 	if err != nil {
 		return fmt.Errorf("stream receive: %v", err)

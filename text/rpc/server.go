@@ -140,7 +140,7 @@ func (s *Server) Subscribe(stream Editor_SubscribeServer) error {
 		evTypes = append(evTypes, evType)
 	}
 
-	handler := newEventStreamClient(stream)
+	handler := newEventStreamClient(stream, s.editor)
 
 	s.editor.Lock()
 	err = s.editor.SubscribeEvents(evTypes, handler)
