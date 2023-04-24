@@ -14,10 +14,10 @@ config:
 	@ echo "copied config to $(CONFIG) and $(BLUE_CONFIG)"
 	@ echo "You might want to modify this files for your user!"
 
-install: config
+install:
 	@ sudo cp $(EXECS) $(TARGET)
 	@ echo "copied executables to $(TARGET)"
 
-install-linux: config
+install-linux:
 	@ sudo cp $(EXECS_LINUX) $(TARGET)
 	@ echo "copied executables to $(TARGET)"

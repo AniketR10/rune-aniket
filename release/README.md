@@ -16,7 +16,7 @@ to send us an email at hopper@unstable.build.
 Best regards,
 
 ## Install
-Run `make install`. This will copy the default configuration to $HOME/.sixrc,
+Run `make config && make install`. This will copy the default configuration to $HOME/.sixrc,
 and a copy of `six`, the editor, and all its plugins to `/usr/local/bin`. If
 you prefer a different directory, you can do so with `make install TARGET=/other`.
 
