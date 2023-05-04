@@ -8,37 +8,55 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/connectivity"
 	"unstable.build/go-tui/proto"
 )
 
-type testListener struct {
+type testMuxServer struct {
 	addr string
 }
 
-func (t testListener) Accept() (net.Conn, error) {
-	return nil, errors.New("nope")
+func (t testMuxServer) Stop() {
 }
 
-func (t testListener) Close() error {
-	return nil
+func (t testMuxServer) GracefulStop() {
 }
 
-func (t testListener) Addr() net.Addr {
+func (t testMuxServer) Serve(context.Context) error {
+	return errors.New("nope")
+}
+
+func (t testMuxServer) Registrar() proto.ServiceRegistrar {
+	return testRegistrar{}
+}
+
+func (t testMuxServer) Addr() net.Addr {
 	return t
 }
 
-func (t testListener) Network() string {
+func (t testMuxServer) Network() string {
 	return "test"
 }
-func (t testListener) String() string {
+
+func (t testMuxServer) String() string {
 	return t.addr
+}
+
+type testRegistrar struct {
+}
+
+func (r testRegistrar) GetServiceInfo() map[string]grpc.ServiceInfo {
+	return nil
+}
+
+func (r testRegistrar) RegisterService(desc *grpc.ServiceDesc, impl interface{}) {
 }
 
 func ExpectBrokerServe(t *testing.T, brokerID string, mockBroker *proto.MockMuxBroker) {
 	mockBroker.EXPECT().NewChannel(gomock.Any()).
-		DoAndReturn(func() (net.Listener, error) {
-			return testListener{addr: brokerID}, nil
+		DoAndReturn(func() (proto.MuxServer, error) {
+			return testMuxServer{addr: brokerID}, nil
 		}).
 		Times(1)
 }
@@ -121,8 +139,8 @@ func ExpectBrokerDialChannelError(
 
 func ExpectBrokerNewChannel(t *testing.T, channelID string, mockBroker *proto.MockMuxBroker) {
 	mockBroker.EXPECT().NewChannel(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
-		DoAndReturn(func(tags ...string) (net.Listener, error) {
-			return testListener{addr: channelID}, nil
+		DoAndReturn(func(tags ...string) (proto.MuxServer, error) {
+			return testMuxServer{addr: channelID}, nil
 		}).
 		Times(1)
 }

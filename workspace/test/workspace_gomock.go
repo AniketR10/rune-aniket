@@ -364,6 +364,20 @@ func (mr *MockSchemeManagerMockRecorder) RegisterScheme(arg0, arg1 interface{}) 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RegisterScheme", reflect.TypeOf((*MockSchemeManager)(nil).RegisterScheme), arg0, arg1)
 }
 
+// UnregisterScheme mocks base method.
+func (m *MockSchemeManager) UnregisterScheme(arg0 string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UnregisterScheme", arg0)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// UnregisterScheme indicates an expected call of UnregisterScheme.
+func (mr *MockSchemeManagerMockRecorder) UnregisterScheme(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UnregisterScheme", reflect.TypeOf((*MockSchemeManager)(nil).UnregisterScheme), arg0)
+}
+
 // MockWorkspaceManager is a mock of WorkspaceManager interface.
 type MockWorkspaceManager struct {
 	ctrl     *gomock.Controller
@@ -414,6 +428,20 @@ func (m *MockWorkspaceManager) RegisterScheme(arg0 string, arg1 scheme.SchemeFun
 func (mr *MockWorkspaceManagerMockRecorder) RegisterScheme(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RegisterScheme", reflect.TypeOf((*MockWorkspaceManager)(nil).RegisterScheme), arg0, arg1)
+}
+
+// UnregisterScheme mocks base method.
+func (m *MockWorkspaceManager) UnregisterScheme(arg0 string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UnregisterScheme", arg0)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// UnregisterScheme indicates an expected call of UnregisterScheme.
+func (mr *MockWorkspaceManagerMockRecorder) UnregisterScheme(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UnregisterScheme", reflect.TypeOf((*MockWorkspaceManager)(nil).UnregisterScheme), arg0)
 }
 
 // MockFlusherCloser is a mock of FlusherCloser interface.

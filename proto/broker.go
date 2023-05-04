@@ -17,8 +17,9 @@ type MuxConn interface {
 	io.Closer
 }
 
+// MuxServer abstracts the ability to serve services over a listening channel.
 type MuxServer interface {
-	Serve(context.Context, net.Listener) error
+	Serve(context.Context) error
 	Registrar() ServiceRegistrar
 	Addr() net.Addr
 	Stop()
@@ -27,7 +28,7 @@ type MuxServer interface {
 
 // MuxBroker allows a client or server to multiplex over connections.
 type MuxBroker interface {
-	NewChannel(tags ...string) (net.Listener, error)
+	NewChannel(tags ...string) (MuxServer, error)
 	DialChannel(string, ...string) (MuxConn, error)
 
 	Close() error

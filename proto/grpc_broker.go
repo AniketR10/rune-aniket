@@ -28,13 +28,13 @@ func NewUnixGRPCBroker(dataDir string) MuxBroker {
 	return ret
 }
 
-func (t *grpcBroker) NewChannel(tags ...string) (net.Listener, error) {
+func (t *grpcBroker) NewChannel(tags ...string) (MuxServer, error) {
 	ret, err := util.TempUnixListenerTags(t.dataDir, tags...)
 	if err != nil {
 		return nil, fmt.Errorf("temp unix listener")
 	}
 	t.unixSockets.Store(ret.Addr().String(), struct{}{})
-	return ret, nil
+	return GRPCServer(ret), nil
 }
 
 func (t *grpcBroker) DialChannel(address string, tags ...string) (

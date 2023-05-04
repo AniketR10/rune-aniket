@@ -51,20 +51,19 @@ func TestIntegrationRace(t *testing.T) {
 	ctx = proto.ContextWithWaitGroup(ctx, new(sync.WaitGroup))
 
 	grantor := plugin.GrantAll(resources)
-	lis, err := broker.NewChannel()
-	grantID := plugin.Grant{Token: lis.Addr().String(), Context: ctx}
+	srv, err := broker.NewChannel()
+	require.NoError(t, err)
+	grantID := plugin.Grant{Token: srv.Addr().String(), Context: ctx}
 	perms := map[plugin.Permission]plugin.Grant{
 		plugin.PermissionEditor: grantID,
 	}
-	require.NoError(t, err)
-	srv := proto.GRPCServer()
 
 	for perm := range perms {
 		resources[perm].Register("caliu-plugins-ltd", grantor,
 			srv.Registrar(), broker, new(sync.Mutex))
 	}
 
-	go srv.Serve(ctx, lis)
+	go srv.Serve(ctx)
 
 	tsuite := []struct {
 		perm           plugin.Permission

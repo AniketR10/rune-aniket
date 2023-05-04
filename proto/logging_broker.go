@@ -1,8 +1,6 @@
 package proto
 
 import (
-	"net"
-
 	log "github.com/sirupsen/logrus"
 )
 
@@ -16,9 +14,9 @@ func LoggingBroker(other MuxBroker, logger *log.Logger) MuxBroker {
 	return loggingBroker{root: other, logger: logger}
 }
 
-func (b loggingBroker) NewChannel(tags ...string) (lis net.Listener, err error) {
-	lis, err = b.root.NewChannel(tags...)
-	b.logger.Tracef("loggingBroker: NewChannel(%v): %v %v", tags, lis, err)
+func (b loggingBroker) NewChannel(tags ...string) (srv MuxServer, err error) {
+	srv, err = b.root.NewChannel(tags...)
+	b.logger.Tracef("loggingBroker: NewChannel(%v): %v %v", tags, srv, err)
 	return
 }
 

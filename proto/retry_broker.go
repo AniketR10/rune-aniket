@@ -1,9 +1,8 @@
 package proto
 
 import (
-	context "context"
-	fmt "fmt"
-	"net"
+	"context"
+	"fmt"
 	"strconv"
 
 	"github.com/ernestrc/blue/logging"
@@ -30,12 +29,12 @@ func (b retryBroker) log(method string, attempt int, err error) {
 	}).Trace()
 }
 
-func (b retryBroker) NewChannel(tags ...string) (lis net.Listener, err error) {
+func (b retryBroker) NewChannel(tags ...string) (srv MuxServer, err error) {
 	ctx := context.Background()
 	var attempt int
 	retry.Retry(ctx, b.s, func(ctx context.Context) (bool, error) {
 		attempt++
-		lis, err = b.b.NewChannel(tags...)
+		srv, err = b.b.NewChannel(tags...)
 		b.log("NewChannel", attempt, err)
 		return true, err
 	})

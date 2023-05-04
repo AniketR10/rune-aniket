@@ -38,10 +38,10 @@ func (s *loggingServer) monitorLifecycle() {
 	}
 }
 
-func (s *loggingServer) Serve(ctx context.Context, lis net.Listener) error {
-	log.Tracef("LoggingGRPCServer: (%p) Serve(Attempt, addr=%s) ", s.srv, lis.Addr().String())
-	err := s.srv.Serve(ctx, lis)
-	log.Tracef("LoggingGRPCServer: (%p) Serve(Result, addr=%s): %v", s.srv, lis.Addr().String(), err)
+func (s *loggingServer) Serve(ctx context.Context) error {
+	log.Tracef("LoggingGRPCServer: (%p) Serve(Attempt, addr=%s) ", s.srv, s.Addr().String())
+	err := s.srv.Serve(ctx)
+	log.Tracef("LoggingGRPCServer: (%p) Serve(Result, addr=%s): %v", s.srv, s.Addr().String(), err)
 	return err
 }
 

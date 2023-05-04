@@ -13,7 +13,6 @@ import (
 	"github.com/ernestrc/blue/logging"
 	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
-	"google.golang.org/grpc"
 	"unstable.build/go-tui/api/config"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/plugin"
@@ -175,13 +174,10 @@ func (m *Manager) doGrant(
 	client *granteeClientWrap,
 	perms []*pluginpb.Permission,
 ) error {
-	lis, err := m.broker.NewChannel(pluginID)
+	srv, err := m.broker.NewChannel(pluginID)
 	if err != nil {
 		return fmt.Errorf("accept: %v", err)
 	}
-	opts := []grpc.ServerOption{}
-
-	srv := proto.GRPCServer(opts...)
 	if log.IsLevelEnabled(log.TraceLevel) {
 		srv = proto.LoggingGRPCServer(srv)
 	}
@@ -216,7 +212,7 @@ func (m *Manager) doGrant(
 			Id: permissionID,
 			// TODO pass temporary token that can be used
 			// by client and server auth middleware
-			Address: lis.Addr().String(),
+			Address: srv.Addr().String(),
 		}
 
 		serverResources = append(serverResources, resource)
@@ -228,13 +224,13 @@ func (m *Manager) doGrant(
 	ctx = client.ctx
 	m.mu.Unlock()
 
-	go srv.Serve(ctx, lis)
+	go srv.Serve(ctx)
 
 	m.ctxWg.Add(1)
 	go func() {
 		defer m.ctxWg.Done()
 		<-ctx.Done()
-		log.Debugf("serve context is done: stopping grpc server %v", lis.Addr())
+		log.Debugf("serve context is done: stopping mux server %v", srv.Addr())
 		srv.Stop()
 	}()
 

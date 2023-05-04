@@ -182,17 +182,17 @@ func (mr *MockMuxServerMockRecorder) Registrar() *gomock.Call {
 }
 
 // Serve mocks base method.
-func (m *MockMuxServer) Serve(arg0 context.Context, arg1 net.Listener) error {
+func (m *MockMuxServer) Serve(arg0 context.Context) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Serve", arg0, arg1)
+	ret := m.ctrl.Call(m, "Serve", arg0)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // Serve indicates an expected call of Serve.
-func (mr *MockMuxServerMockRecorder) Serve(arg0, arg1 interface{}) *gomock.Call {
+func (mr *MockMuxServerMockRecorder) Serve(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Serve", reflect.TypeOf((*MockMuxServer)(nil).Serve), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Serve", reflect.TypeOf((*MockMuxServer)(nil).Serve), arg0)
 }
 
 // Stop mocks base method.
@@ -265,14 +265,14 @@ func (mr *MockMuxBrokerMockRecorder) DialChannel(arg0 interface{}, arg1 ...inter
 }
 
 // NewChannel mocks base method.
-func (m *MockMuxBroker) NewChannel(tags ...string) (net.Listener, error) {
+func (m *MockMuxBroker) NewChannel(tags ...string) (MuxServer, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{}
 	for _, a := range tags {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "NewChannel", varargs...)
-	ret0, _ := ret[0].(net.Listener)
+	ret0, _ := ret[0].(MuxServer)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

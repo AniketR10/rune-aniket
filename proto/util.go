@@ -59,21 +59,20 @@ func AcceptAndServeChannel(
 	// add running program as tag
 	tags = append(tags, filepath.Base(os.Args[0]))
 
-	lis, err := broker.NewChannel(tags...)
+	srv, err := broker.NewChannel(tags...)
 	if err != nil {
 		return "", fmt.Errorf("new channel: %w", err)
 	}
 
-	srv := GRPCServer()
 	if log.IsLevelEnabled(log.TraceLevel) {
 		srv = LoggingGRPCServer(srv)
 	}
 
-	channelID := lis.Addr().String()
+	channelID := srv.Addr().String()
 
 	register(channelID, srv)
 
-	go srv.Serve(ctx, lis)
+	go srv.Serve(ctx)
 
 	return channelID, nil
 }

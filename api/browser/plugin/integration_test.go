@@ -50,23 +50,22 @@ func TestIntegrationRace(t *testing.T) {
 	require.NoError(t, err)
 
 	grantor := plugin.GrantAll(resources)
-	lis, err := broker.NewChannel()
-	grantID := plugin.Grant{Token: lis.Addr().String(), Context: ctx}
+	srv, err := broker.NewChannel()
+	require.NoError(t, err)
+	grantID := plugin.Grant{Token: srv.Addr().String(), Context: ctx}
 	perms := map[plugin.Permission]plugin.Grant{
 		plugin.PermissionBrowserWindowManager:  grantID,
 		plugin.PermissionBrowserResourceOpener: grantID,
 		plugin.PermissionBrowserMessenger:      grantID,
 		plugin.PermissionBrowserEventPublisher: grantID,
 	}
-	require.NoError(t, err)
-	srv := proto.GRPCServer()
 
 	for perm := range perms {
 		resources[perm].Register("caliu-plugins-ltd", grantor,
 			srv.Registrar(), broker, new(sync.Mutex))
 	}
 
-	go srv.Serve(ctx, lis)
+	go srv.Serve(ctx)
 
 	tsuite := []struct {
 		perm           plugin.Permission
