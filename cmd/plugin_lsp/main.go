@@ -1,12 +1,12 @@
 package main
 
 import (
-	"log"
 	"net/http"
 	_ "net/http/pprof"
 
+	log "github.com/sirupsen/logrus"
+	"unstable.build/go-tui/cmd/plugin_lsp/plugin"
 	"unstable.build/go-tui/plugin/process"
-	plugutil "unstable.build/go-tui/plugin/util"
 )
 
 func main() {
@@ -14,7 +14,6 @@ func main() {
 		log.Println(http.ListenAndServe("localhost:6033", nil))
 	}()
 
-	grantee, perms := plugutil.NewEditorEventHandler(lspHandlerCommands, newLspHandler,
-		lspHandlerEvents, lspHandlerPermissions...)
+	grantee, perms := plugin.Grantee()
 	process.Serve(grantee, perms...)
 }

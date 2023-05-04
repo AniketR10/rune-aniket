@@ -16,6 +16,45 @@ import (
 	"unstable.build/go-tui/proto"
 )
 
+// CommandSplitHandlerConfig provides the configuration required to
+// use CommandSplitHandler plugin.Grantee helper. See CommandSplitHandler
+// for more details.
+type CommandSplitHandlerConfig struct {
+	// Command that triggers Split
+	Command string
+
+	// SplitOrientatio of the new split window.
+	SplitOrientation browserapi.Orientation
+
+	// Handler is the constructor used to install a handler
+	// on the split window. The focus argument represents
+	// the window in focus when cmd event was fired.
+	// If returned Handler satisfies io.Closer, then Close will be called
+	// when split window is closed.
+	Handler func([]plugin.Grant, proto.MuxBroker, browserapi.Window,
+		config.Config) (browserapi.Handler, error)
+
+	// Permissions to be requested for Handler.
+	Permissions []plugin.Permission
+}
+
+// NewCommandSplitHandler returns a plugin.Grantee that opens a split window
+// with a new handler when cmd event is fired or command called.
+// This function never returns.
+func NewCommandSplitHandler(config CommandSplitHandlerConfig) (plugin.Grantee, []plugin.Permission) {
+	if config.Handler == nil || config.Command == "" {
+		panic(fmt.Sprintf("invalid cmd split handler configuration: "+
+			"Handler and Command must be set: %#v", config))
+	}
+
+	perms := []plugin.Permission{
+		plugin.Permission(plugin.PermissionBrowserWindowManager),
+		plugin.Permission(plugin.PermissionEditor),
+	}
+	perms = append(perms, config.Permissions...)
+	return &cmdSplitHandler{config: config}, perms
+}
+
 type cmdSplitHandler struct {
 	mu     sync.Mutex
 	config CommandSplitHandlerConfig
@@ -174,43 +213,4 @@ func (t *cmdSplitHandler) Shutdown(reason string) error {
 
 func (t *cmdSplitHandler) Health() error {
 	return nil
-}
-
-// CommandSplitHandlerConfig provides the configuration required to
-// use CommandSplitHandler plugin.Grantee helper. See CommandSplitHandler
-// for more details.
-type CommandSplitHandlerConfig struct {
-	// Command that triggers Split
-	Command string
-
-	// SplitOrientatio of the new split window.
-	SplitOrientation browserapi.Orientation
-
-	// Handler is the constructor used to install a handler
-	// on the split window. The focus argument represents
-	// the window in focus when cmd event was fired.
-	// If returned Handler satisfies io.Closer, then Close will be called
-	// when split window is closed.
-	Handler func([]plugin.Grant, proto.MuxBroker, browserapi.Window,
-		config.Config) (browserapi.Handler, error)
-
-	// Permissions to be requested for Handler.
-	Permissions []plugin.Permission
-}
-
-// NewCommandSplitHandler returns a plugin.Grantee that opens a split window
-// with a new handler when cmd event is fired or command called.
-// This function never returns.
-func NewCommandSplitHandler(config CommandSplitHandlerConfig) (plugin.Grantee, []plugin.Permission) {
-	if config.Handler == nil || config.Command == "" {
-		panic(fmt.Sprintf("invalid cmd split handler configuration: "+
-			"Handler and Command must be set: %#v", config))
-	}
-
-	perms := []plugin.Permission{
-		plugin.Permission(plugin.PermissionBrowserWindowManager),
-		plugin.Permission(plugin.PermissionEditor),
-	}
-	perms = append(perms, config.Permissions...)
-	return &cmdSplitHandler{config: config}, perms
 }

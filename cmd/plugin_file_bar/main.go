@@ -1,12 +1,11 @@
 package main
 
 import (
+	"unstable.build/go-tui/cmd/plugin_file_bar/plugin"
 	"unstable.build/go-tui/plugin/process"
-	plugutil "unstable.build/go-tui/plugin/util"
 )
 
 func main() {
-	grantee, perms := plugutil.NewEditorEventHandler(fileBarHandlerCommands, newFileBarEditorHandler,
-		fileBarHandlerEvents, fileBarHandlerPermissions...)
+	grantee, perms := plugin.Grantee()
 	process.Serve(grantee, perms...)
 }

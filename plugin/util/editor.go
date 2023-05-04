@@ -19,6 +19,30 @@ type CommandEventHandler interface {
 	io.Closer
 }
 
+// CommandEventHandlerFacility abstracts the ability to create new CommandEventHandler.
+type CommandEventHandlerFacility func(textapi.Editor, []plugin.Grant,
+	proto.MuxBroker, config.Config) (CommandEventHandler, error)
+
+// NewEditorEventHandler returns a plugin.Grantee that simply responds to commands.
+// It calls fn to build a CommandEventHandler, subsribes it to events
+// editor.Event and registers it as the CommandHandler of cmds.
+// It also requests extraPerms, in addition to plugin.PermissionEditor.
+// All granted permissions are returned in the fn callback. If one of the
+// permissions is denied, the plugin will exit with an error.
+func NewEditorEventHandler(
+	cmds []string,
+	fn CommandEventHandlerFacility,
+	events []textapi.EventType,
+	extraPerms ...plugin.Permission,
+) (plugin.Grantee, []plugin.Permission) {
+	perms := []plugin.Permission{
+		plugin.Permission(plugin.PermissionEditor),
+	}
+	perms = append(perms, extraPerms...)
+	s := &editorGrantee{evs: events, cmds: cmds, newHandler: fn}
+	return s, perms
+}
+
 type editorGrantee struct {
 	mu         sync.Mutex
 	broker     proto.MuxBroker
@@ -109,24 +133,4 @@ func (t *editorGrantee) Shutdown(reason string) error {
 
 func (t *editorGrantee) Health() error {
 	return nil
-}
-
-// NewEditorEventHandler returns a plugin.Grantee that simply responds to commands.
-// It calls fn to build a CommandEventHandler, subsribes it to events
-// editor.Event and registers it as the CommandHandler of cmds.
-// It also requests extraPerms, in addition to plugin.PermissionEditor.
-// All granted permissions are returned in the fn callback. If one of the
-// permissions is denied, the plugin will exit with an error.
-func NewEditorEventHandler(
-	cmds []string,
-	fn func(textapi.Editor, []plugin.Grant, proto.MuxBroker, config.Config) (CommandEventHandler, error),
-	events []textapi.EventType,
-	extraPerms ...plugin.Permission,
-) (plugin.Grantee, []plugin.Permission) {
-	perms := []plugin.Permission{
-		plugin.Permission(plugin.PermissionEditor),
-	}
-	perms = append(perms, extraPerms...)
-	s := &editorGrantee{evs: events, cmds: cmds, newHandler: fn}
-	return s, perms
 }

@@ -20,6 +20,7 @@ require (
 	github.com/sirupsen/logrus v1.6.0
 	github.com/sourcegraph/go-diff v0.6.1
 	github.com/stretchr/testify v1.8.0
+	go.uber.org/config v1.4.0
 	go.uber.org/goleak v1.2.0
 	golang.org/x/crypto v0.0.0-20220321153916-2c7772ba3064
 	golang.org/x/term v0.0.0-20220919170432-7a66f970e087
@@ -68,7 +69,6 @@ require (
 	github.com/mattn/go-colorable v0.1.8 // indirect
 	go.opencensus.io v0.22.4 // indirect
 	go.uber.org/atomic v1.5.0 // indirect
-	go.uber.org/config v1.4.0 // indirect
 	go.uber.org/multierr v1.4.0 // indirect
 	go.uber.org/tools v0.0.0-20190618225709-2cfd321de3ee // indirect
 	golang.org/x/exp/typeparams v0.0.0-20220722155223-a9213eeb770e // indirect
