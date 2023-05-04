@@ -1,10 +1,9 @@
-package main
+package ide
 
 import (
 	"fmt"
 	"io/ioutil"
 	"os"
-	"sync"
 	"sync/atomic"
 
 	"github.com/ernestrc/blue/logging"
@@ -12,64 +11,61 @@ import (
 	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui"
 	workspaceapi "unstable.build/go-tui/api/workspace"
-	"unstable.build/go-tui/plugin"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/workspace"
 	"unstable.build/go-tui/workspace/ssh"
 )
 
-// ide runs a terminal TUI session with a workspaceManagerHandler
-type ide struct {
+// IDE encapsulates the ability to run an IDE within a TUI session.
+type IDE struct {
 	ideConfig
 	workspaceManager *workspace.Manager
 	root             *workspaceManagerHandler
 	running          int32
-	publishEventFn   func(term.Event) bool
+	publishEventFn   EventPublisher
 }
 
-type pluginRunnerFn func(
-	locker sync.Locker,
-	uri workspaceapi.URI,
-	res map[plugin.Permission]plugin.ResourceRegistrar,
-	dataDir string) (plugin.Runner, error)
+// EventPublisher is a function that publishes the given event back
+// into the event loop.
+type EventPublisher func(term.Event) bool
 
-// newIde allocates storage for a new ide and initializes it with config
+// New allocates storage for a new IDE and initializes it with config
 // at cfgfilename and filename. Note that if filename is empty, a default inmutable
 // buffer will be loaded.
-func newIde(
+func New(
 	cwd, cfgfilename, sixDir string,
-	publishEvent func(term.Event) bool,
-	pluginRunner pluginRunnerFn,
+	publishEvent EventPublisher,
+	pluginRunner Plugins,
 	filenames ...string,
-) (i *ide, err error) {
-	i = new(ide)
+) (i *IDE, err error) {
+	i = new(IDE)
 	err = i.init(cwd, cfgfilename, "", sixDir,
 		publishEvent, pluginRunner, filenames...)
 	return
 }
 
-// newIdeRecovery allocates storage for a new ide and initializes in recovery mode.
+// NewRecovery allocates storage for a new IDE and initializes in recovery mode.
 // The underlying editor will use recfilename to try to recover file at filename.
 // Note that this function panics if either filename or recfilename are empty.
-func newIdeRecovery(
+func NewRecovery(
 	cwd, cfgfilename, filename, recfilename, sixDir string,
-	publishEvent func(term.Event) bool,
-	pluginRunner pluginRunnerFn,
-) (i *ide, err error) {
+	publishEvent EventPublisher,
+	pluginRunner Plugins,
+) (i *IDE, err error) {
 	if filename == "" || recfilename == "" {
 		panic(fmt.Sprintf("invalid input: filename='%s', recfilename='%s'",
 			filename, recfilename))
 	}
-	i = new(ide)
+	i = new(IDE)
 	err = i.init(cwd, cfgfilename, recfilename, sixDir,
 		publishEvent, pluginRunner, filename)
 	return
 }
 
-func (i *ide) init(cwd, cfgfilename, recfilename string,
+func (i *IDE) init(cwd, cfgfilename, recfilename string,
 	sixDir string,
 	publishEvent func(term.Event) bool,
-	pluginRunner pluginRunnerFn,
+	pluginRunner Plugins,
 	filenames ...string,
 ) error {
 	isConfigErr, configErr := loadConfig(&i.ideConfig, cfgfilename)
@@ -143,7 +139,7 @@ func (i *ide) init(cwd, cfgfilename, recfilename string,
 	return nil
 }
 
-func (i *ide) publishEvent(ev term.Event) bool {
+func (i *IDE) publishEvent(ev term.Event) bool {
 	// avoid termbox' screen panicking because
 	// some component wants to publish interrupt
 	// before we are fully initialized
@@ -154,9 +150,9 @@ func (i *ide) publishEvent(ev term.Event) bool {
 	return i.publishEventFn(ev)
 }
 
-// run initialzes the underlying terminal environment and runs
+// Run initialzes the underlying terminal environment and runs
 // it with a workspace handler
-func (i *ide) run() error {
+func (i *IDE) Run() error {
 	err := tui.Init()
 	if err != nil {
 		return err
@@ -174,7 +170,7 @@ func (i *ide) run() error {
 	return nil
 }
 
-func (i *ide) closeResources() (ret error) {
+func (i *IDE) closeResources() (ret error) {
 	i.root.mu.Lock()
 	defer i.root.mu.Unlock()
 
@@ -191,7 +187,7 @@ func (i *ide) closeResources() (ret error) {
 
 // Close satisfies io.Closer by closing this all ide's resources, including
 // the terminal state.
-func (i *ide) Close() error {
+func (i *IDE) Close() error {
 	running := atomic.CompareAndSwapInt32(&i.running, 1, 0)
 	if !running {
 		return nil

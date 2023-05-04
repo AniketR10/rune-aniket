@@ -1,4 +1,4 @@
-package main
+package ide
 
 import (
 	"context"
@@ -264,7 +264,7 @@ func newTestWorkspaceManagerHandlerWithManager(
 	err = m.workspaceManagerHandler.init(uri, manager, cfg, "", []string{},
 		dir, func(term.Event) bool {
 			return true
-		}, testRunnerFn)
+		}, FuncPlugins(testRunnerFn))
 	require.NoError(t, err)
 	return m
 }

@@ -1,4 +1,4 @@
-package main
+package ide
 
 import (
 	"context"
@@ -74,7 +74,7 @@ type workspaceManagerHandler struct {
 	storage       document.Service
 	workspace     workspace.WorkspaceManager
 	publishEvent  func(term.Event) bool
-	pluginRunner  pluginRunnerFn
+	pluginRunner  Plugins
 	sixDir        string
 
 	union          handler.FrameUnion
@@ -93,7 +93,7 @@ func newWorkspaceManagerHandler(
 	cfg ideConfig, recfilename string, filenames []string,
 	sixDir string,
 	publishEvent func(term.Event) bool,
-	pluginRunner pluginRunnerFn,
+	pluginRunner Plugins,
 ) (*workspaceManagerHandler, error) {
 	ret := new(workspaceManagerHandler)
 
@@ -121,7 +121,7 @@ func (h *workspaceManagerHandler) init(
 	recfilename string, filenames []string,
 	sixDir string,
 	publishEvent func(term.Event) bool,
-	pluginRunner pluginRunnerFn,
+	pluginRunner Plugins,
 ) error {
 	h.workspaces = make([]*workspaceHandler, 10)
 	h.cfg = cfg
@@ -455,12 +455,12 @@ func (h *workspaceManagerHandler) addWorkspace(
 	if err := os.MkdirAll(dataDir, 0777); err != nil {
 		return fmt.Errorf("mkdir .plugin: %v", err)
 	}
-	pluginManager, err := h.pluginRunner(&h.mu, uri, res, dataDir)
+	runner, err := h.pluginRunner.Runner(&h.mu, uri, res, dataDir)
 	if err != nil {
 		return fmt.Errorf("error initializing plugin manager: %v", err)
 	}
 
-	go h.initPlugins(pluginManager, cfg)
+	go h.initPlugins(runner, cfg)
 
 	i, ok := h.nextAvailableWorkspace()
 	if !ok {
@@ -470,7 +470,7 @@ func (h *workspaceManagerHandler) addWorkspace(
 	h.workspaces[i] = &workspaceHandler{
 		uri:     uri,
 		ex:      ex,
-		Plugins: pluginManager,
+		Plugins: runner,
 	}
 	h.workspaceCount++
 	h.switchToWorkspace(i)

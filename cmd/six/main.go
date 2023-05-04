@@ -24,6 +24,7 @@ import (
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/api/config"
 	workspaceapi "unstable.build/go-tui/api/workspace"
+	"unstable.build/go-tui/ide"
 	"unstable.build/go-tui/plugin"
 	"unstable.build/go-tui/plugin/process"
 	"unstable.build/go-tui/proto"
@@ -251,15 +252,15 @@ func run() int {
 		}
 	}
 
-	var i *ide
+	var i *ide.IDE
 	if *flagRecover != "" && len(filenames) != 0 {
-		i, err = newIdeRecovery(*flagWorkspace, *flagConfigPath,
-			filenames[0], *flagRecover, *flagDataPath, tui.PublishEvent, pluginRunner)
+		i, err = ide.NewRecovery(*flagWorkspace, *flagConfigPath,
+			filenames[0], *flagRecover, *flagDataPath, tui.PublishEvent, ide.FuncPlugins(pluginRunner))
 	} else if *flagRecover != "" {
 		err = fmt.Errorf("flag -r requires to pass the original filename")
 	} else {
-		i, err = newIde(*flagWorkspace, *flagConfigPath,
-			*flagDataPath, tui.PublishEvent, pluginRunner, filenames...)
+		i, err = ide.New(*flagWorkspace, *flagConfigPath,
+			*flagDataPath, tui.PublishEvent, ide.FuncPlugins(pluginRunner), filenames...)
 	}
 
 	if err != nil {
@@ -268,7 +269,7 @@ func run() int {
 	}
 
 	var ret error
-	if err := i.run(); err != nil {
+	if err := i.Run(); err != nil {
 		ret = multierr.Append(ret, err)
 	}
 	if err := i.Close(); err != nil {
