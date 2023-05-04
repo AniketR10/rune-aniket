@@ -1,4 +1,4 @@
-package plugin
+package process
 
 import (
 	"context"
@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"unstable.build/go-tui/api/config"
+	"unstable.build/go-tui/plugin"
 	pluginpb "unstable.build/go-tui/plugin/rpc"
 	"unstable.build/go-tui/proto"
 )
@@ -216,7 +217,7 @@ type granteeMock struct {
 	err                  error
 	onConnected          int
 	cfgs                 []config.Config
-	onGrant, onDenied    []Permission
+	onGrant, onDenied    []plugin.Permission
 	onHealth, onShutdown bool
 	onShutdownFn         func()
 }
@@ -225,12 +226,12 @@ func (g *granteeMock) Connected(b proto.MuxBroker, cfg config.Config) {
 	g.cfgs = append(g.cfgs, cfg)
 	g.onConnected++
 }
-func (g *granteeMock) PermissionGranted(grants []Grant) {
+func (g *granteeMock) PermissionGranted(grants []plugin.Grant) {
 	for _, grant := range grants {
 		g.onGrant = append(g.onGrant, grant.Permission)
 	}
 }
-func (g *granteeMock) PermissionDenied(perms []Permission) {
+func (g *granteeMock) PermissionDenied(perms []plugin.Permission) {
 	g.onDenied = append(g.onDenied, perms...)
 }
 func (g *granteeMock) Shutdown(reason string) error {
@@ -255,7 +256,7 @@ func (g *granteeMock) Health() error {
 }
 
 func setupIntTest(
-	t *testing.T, granteeMock Grantee, perms []Permission,
+	t *testing.T, granteeMock plugin.Grantee, perms []plugin.Permission,
 ) (client *granteeClient, closeFn func()) {
 	lis, err := net.Listen("tcp", ":0")
 	require.NoError(t, err)
@@ -281,7 +282,7 @@ func setupIntTest(
 func TestIntegrationPluginClientServer(t *testing.T) {
 	t.Run("permissions request triggers Grantee OnConnected", func(t *testing.T) {
 		grantee := granteeMock{}
-		perms := []Permission{Permission("write"), Permission("read")}
+		perms := []plugin.Permission{plugin.Permission("write"), plugin.Permission("read")}
 		client, closeFn := setupIntTest(t, &grantee, perms)
 		defer closeFn()
 
@@ -296,7 +297,7 @@ func TestIntegrationPluginClientServer(t *testing.T) {
 
 	t.Run("permissions request plugin config passes onto grantee", func(t *testing.T) {
 		grantee := granteeMock{}
-		perms := []Permission{Permission("wasup")}
+		perms := []plugin.Permission{plugin.Permission("wasup")}
 		client, closeFn := setupIntTest(t, &grantee, perms)
 		defer closeFn()
 
@@ -336,7 +337,7 @@ func TestIntegrationPluginClientServer(t *testing.T) {
 
 	t.Run("permissions request twice does not trigger Grantee OnConnected twice", func(t *testing.T) {
 		grantee := granteeMock{}
-		perms := []Permission{Permission("append")}
+		perms := []plugin.Permission{plugin.Permission("append")}
 		client, closeFn := setupIntTest(t, &grantee, perms)
 		defer closeFn()
 
@@ -349,7 +350,7 @@ func TestIntegrationPluginClientServer(t *testing.T) {
 
 	t.Run("sendGrants request triggers Grantee OnPermissionGranted/Denied", func(t *testing.T) {
 		grantee := granteeMock{}
-		perms := []Permission{Permission("append"), Permission("read")}
+		perms := []plugin.Permission{plugin.Permission("append"), plugin.Permission("read")}
 		client, closeFn := setupIntTest(t, &grantee, perms)
 		defer closeFn()
 
@@ -358,13 +359,13 @@ func TestIntegrationPluginClientServer(t *testing.T) {
 		err := client.sendGrants(context.Background(), denied, granted)
 		require.NoError(t, err)
 
-		assert.Equal(t, []Permission{Permission("read")}, grantee.onGrant)
-		assert.Equal(t, []Permission{Permission("append")}, grantee.onDenied)
+		assert.Equal(t, []plugin.Permission{plugin.Permission("read")}, grantee.onGrant)
+		assert.Equal(t, []plugin.Permission{plugin.Permission("append")}, grantee.onDenied)
 	})
 
 	t.Run("sendGrants request DOES NOT trigger Grantee OnPermissionGranted/Denied for permissions that were not requested", func(t *testing.T) {
 		grantee := granteeMock{}
-		perms := []Permission{Permission("write")}
+		perms := []plugin.Permission{plugin.Permission("write")}
 		client, closeFn := setupIntTest(t, &grantee, perms)
 		defer closeFn()
 
@@ -376,13 +377,13 @@ func TestIntegrationPluginClientServer(t *testing.T) {
 		err := client.sendGrants(context.Background(), denied, granted)
 		require.NoError(t, err)
 
-		assert.Equal(t, []Permission{Permission("write")}, grantee.onGrant)
-		assert.Equal(t, []Permission(nil), grantee.onDenied)
+		assert.Equal(t, []plugin.Permission{plugin.Permission("write")}, grantee.onGrant)
+		assert.Equal(t, []plugin.Permission(nil), grantee.onDenied)
 	})
 
 	t.Run("sendGrants request DOES NOT pass multiple grants of the same permission", func(t *testing.T) {
 		grantee := granteeMock{}
-		perms := []Permission{Permission("write"), Permission("write")}
+		perms := []plugin.Permission{plugin.Permission("write"), plugin.Permission("write")}
 		client, closeFn := setupIntTest(t, &grantee, perms)
 		defer closeFn()
 
@@ -393,13 +394,13 @@ func TestIntegrationPluginClientServer(t *testing.T) {
 		err := client.sendGrants(context.Background(), denied, granted)
 		require.NoError(t, err)
 
-		assert.Equal(t, []Permission{Permission("write")}, grantee.onGrant)
-		assert.Equal(t, []Permission(nil), grantee.onDenied)
+		assert.Equal(t, []plugin.Permission{plugin.Permission("write")}, grantee.onGrant)
+		assert.Equal(t, []plugin.Permission(nil), grantee.onDenied)
 	})
 
 	t.Run("health request triggers Grantee Health", func(t *testing.T) {
 		grantee := granteeMock{}
-		perms := []Permission{Permission("append")}
+		perms := []plugin.Permission{plugin.Permission("append")}
 		client, closeFn := setupIntTest(t, &grantee, perms)
 		defer closeFn()
 
@@ -412,7 +413,7 @@ func TestIntegrationPluginClientServer(t *testing.T) {
 	t.Run("health path bubbles up error returned by Grantee", func(t *testing.T) {
 		myErr := errors.New("oopsie daisy")
 		grantee := granteeMock{err: myErr}
-		perms := []Permission{Permission("append")}
+		perms := []plugin.Permission{plugin.Permission("append")}
 		client, closeFn := setupIntTest(t, &grantee, perms)
 		defer closeFn()
 
@@ -424,7 +425,7 @@ func TestIntegrationPluginClientServer(t *testing.T) {
 	t.Run("Close request triggers Grantee OnShutdown", func(t *testing.T) {
 		var wg sync.WaitGroup
 		grantee := granteeMock{onShutdownFn: wg.Done}
-		perms := []Permission{Permission("append")}
+		perms := []plugin.Permission{plugin.Permission("append")}
 		client, closeFn := setupIntTest(t, &grantee, perms)
 		defer closeFn()
 
@@ -439,7 +440,7 @@ func TestIntegrationPluginClientServer(t *testing.T) {
 	t.Run("Close path bubbles up error returned by Grantee", func(t *testing.T) {
 		myErr := errors.New("oh bollocks")
 		grantee := granteeMock{err: myErr}
-		perms := []Permission{Permission("append")}
+		perms := []plugin.Permission{plugin.Permission("append")}
 		client, closeFn := setupIntTest(t, &grantee, perms)
 		defer closeFn()
 

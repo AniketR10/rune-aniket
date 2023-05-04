@@ -1,4 +1,4 @@
-package plugin
+package process
 
 import (
 	"context"
@@ -7,9 +7,10 @@ import (
 	"time"
 
 	multierr "github.com/ernestrc/go-multierror"
-	"github.com/hashicorp/go-plugin"
+	goplugin "github.com/hashicorp/go-plugin"
 	"google.golang.org/grpc"
 	"unstable.build/go-tui/api/config"
+	"unstable.build/go-tui/plugin"
 	pluginpb "unstable.build/go-tui/plugin/rpc"
 	"unstable.build/go-tui/proto"
 )
@@ -21,9 +22,9 @@ const (
 type granteeServer struct {
 	pluginpb.UnimplementedGranteeServer
 	mu        sync.Mutex
-	req       []Permission
+	req       []plugin.Permission
 	broker    proto.MuxBroker
-	grantee   Grantee
+	grantee   plugin.Grantee
 	connected bool
 	keepAlive chan struct{}
 	srv       *grpc.Server
@@ -37,7 +38,7 @@ type granteeServer struct {
 
 func newGranteeServer(
 	s *grpc.Server, broker proto.MuxBroker,
-	grantee Grantee, req []Permission,
+	grantee plugin.Grantee, req []plugin.Permission,
 	keepAlive time.Duration,
 ) pluginpb.GranteeServer {
 	ret := new(granteeServer)
@@ -126,12 +127,12 @@ func (s *granteeServer) OnGrant(ctx context.Context, req *pluginpb.OnPermGrantRe
 ) {
 	/* only trigger OnPermission* for permissions that were actually requested */
 
-	var denied []Permission
-	var granted []Grant
+	var denied []plugin.Permission
+	var granted []plugin.Grant
 	for _, den := range req.Denied {
 		for _, requested := range s.req {
 			if string(requested) == den.Id {
-				denied = append(denied, Permission(den.Id))
+				denied = append(denied, plugin.Permission(den.Id))
 				break
 			}
 		}
@@ -139,9 +140,9 @@ func (s *granteeServer) OnGrant(ctx context.Context, req *pluginpb.OnPermGrantRe
 	for _, gr := range req.Granted {
 		for _, requested := range s.req {
 			if string(requested) == gr.Id {
-				granted = append(granted, Grant{
+				granted = append(granted, plugin.Grant{
 					Token:      gr.Address,
-					Permission: Permission(gr.Id),
+					Permission: plugin.Permission(gr.Id),
 					Context:    s.ctx,
 				})
 				break
@@ -235,7 +236,7 @@ type granteeClient struct {
 	mBroker proto.MuxBroker
 	client  pluginpb.GranteeClient
 
-	pClient *plugin.Client
+	pClient *goplugin.Client
 }
 
 func newGranteeClient(
@@ -298,7 +299,7 @@ func (c *granteeClient) health(ctx context.Context) error {
 	return err
 }
 
-func (c *granteeClient) bindPluginClient(pc *plugin.Client) {
+func (c *granteeClient) bindPluginClient(pc *goplugin.Client) {
 	if c.pClient != nil {
 		panic("trying to bind to two clients")
 	}

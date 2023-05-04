@@ -9,9 +9,9 @@ import (
 	log "github.com/sirupsen/logrus"
 	browserapi "unstable.build/go-tui/api/browser"
 	browserplugin "unstable.build/go-tui/api/browser/plugin"
+	"unstable.build/go-tui/api/config"
 	textapi "unstable.build/go-tui/api/text"
 	textplugin "unstable.build/go-tui/api/text/plugin"
-	"unstable.build/go-tui/api/config"
 	"unstable.build/go-tui/plugin"
 	"unstable.build/go-tui/proto"
 )
@@ -198,10 +198,10 @@ type CommandSplitHandlerConfig struct {
 	Permissions []plugin.Permission
 }
 
-// ServeCommandSplitHandler serves a plugin.Grantee that opens a split window
+// NewCommandSplitHandler returns a plugin.Grantee that opens a split window
 // with a new handler when cmd event is fired or command called.
 // This function never returns.
-func ServeCommandSplitHandler(config CommandSplitHandlerConfig) {
+func NewCommandSplitHandler(config CommandSplitHandlerConfig) (plugin.Grantee, []plugin.Permission) {
 	if config.Handler == nil || config.Command == "" {
 		panic(fmt.Sprintf("invalid cmd split handler configuration: "+
 			"Handler and Command must be set: %#v", config))
@@ -212,5 +212,5 @@ func ServeCommandSplitHandler(config CommandSplitHandlerConfig) {
 		plugin.Permission(plugin.PermissionEditor),
 	}
 	perms = append(perms, config.Permissions...)
-	plugin.Serve(&cmdSplitHandler{config: config}, perms...)
+	return &cmdSplitHandler{config: config}, perms
 }

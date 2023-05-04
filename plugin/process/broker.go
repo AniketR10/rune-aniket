@@ -1,4 +1,4 @@
-package plugin
+package process
 
 import (
 	"github.com/ernestrc/blue/retry"

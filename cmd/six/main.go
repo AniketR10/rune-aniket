@@ -24,6 +24,8 @@ import (
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/api/config"
 	workspaceapi "unstable.build/go-tui/api/workspace"
+	"unstable.build/go-tui/plugin"
+	"unstable.build/go-tui/plugin/process"
 	"unstable.build/go-tui/proto"
 	"unstable.build/go-tui/workspace"
 	workspacepb "unstable.build/go-tui/workspace/rpc"
@@ -183,6 +185,20 @@ func main() {
 	os.Exit(4)
 }
 
+func pluginRunner(
+	locker sync.Locker,
+	uri workspaceapi.URI,
+	res map[plugin.Permission]plugin.ResourceRegistrar,
+	dataDir string,
+) (plugin.Runner, error) {
+	pluginOpts := []process.Option{
+		process.WithLocker(locker),
+		process.WithWorkspace(uri),
+		process.WithDataDir(dataDir),
+	}
+	return process.NewManager(plugin.GrantAll(res), pluginOpts...)
+}
+
 func run() int {
 	var err error
 	var filenames []string
@@ -238,12 +254,12 @@ func run() int {
 	var i *ide
 	if *flagRecover != "" && len(filenames) != 0 {
 		i, err = newIdeRecovery(*flagWorkspace, *flagConfigPath,
-			filenames[0], *flagRecover, *flagDataPath, tui.PublishEvent)
+			filenames[0], *flagRecover, *flagDataPath, tui.PublishEvent, pluginRunner)
 	} else if *flagRecover != "" {
 		err = fmt.Errorf("flag -r requires to pass the original filename")
 	} else {
 		i, err = newIde(*flagWorkspace, *flagConfigPath,
-			*flagDataPath, tui.PublishEvent, filenames...)
+			*flagDataPath, tui.PublishEvent, pluginRunner, filenames...)
 	}
 
 	if err != nil {

@@ -10,6 +10,7 @@ import (
 	schemeapi "unstable.build/go-tui/api/scheme"
 	schemeplugin "unstable.build/go-tui/api/scheme/plugin"
 	"unstable.build/go-tui/plugin"
+	"unstable.build/go-tui/plugin/process"
 	"unstable.build/go-tui/proto"
 )
 
@@ -74,5 +75,5 @@ func main() {
 	}()
 
 	s := upspinGrantee{}
-	plugin.Serve(&s, requiredPermissions...)
+	process.Serve(&s, requiredPermissions...)
 }

@@ -74,6 +74,7 @@ type workspaceManagerHandler struct {
 	storage       document.Service
 	workspace     workspace.WorkspaceManager
 	publishEvent  func(term.Event) bool
+	pluginRunner  pluginRunnerFn
 	sixDir        string
 
 	union          handler.FrameUnion
@@ -92,11 +93,12 @@ func newWorkspaceManagerHandler(
 	cfg ideConfig, recfilename string, filenames []string,
 	sixDir string,
 	publishEvent func(term.Event) bool,
+	pluginRunner pluginRunnerFn,
 ) (*workspaceManagerHandler, error) {
 	ret := new(workspaceManagerHandler)
 
 	err := ret.init(initial, manager,
-		cfg, recfilename, filenames, sixDir, publishEvent)
+		cfg, recfilename, filenames, sixDir, publishEvent, pluginRunner)
 	if err != nil {
 		return nil, err
 	}
@@ -119,12 +121,14 @@ func (h *workspaceManagerHandler) init(
 	recfilename string, filenames []string,
 	sixDir string,
 	publishEvent func(term.Event) bool,
+	pluginRunner pluginRunnerFn,
 ) error {
 	h.workspaces = make([]*workspaceHandler, 10)
 	h.cfg = cfg
 	h.publishEvent = publishEvent
 	h.workspace = manager
 	h.sixDir = sixDir
+	h.pluginRunner = pluginRunner
 	h.ctxWithLocker = workspace.ContextWithLocker(context.Background(), &h.mu)
 	storage, err := storage.New(h.ctxWithLocker, sixDir, bson.Marshaler())
 	if err != nil {
@@ -300,7 +304,7 @@ func (h *workspaceManagerHandler) Man() tui.Manual {
 	return h.focusHandler().Man()
 }
 
-func (h *workspaceManagerHandler) initPlugins(manager *plugin.Manager, cfg ideConfig) {
+func (h *workspaceManagerHandler) initPlugins(manager plugin.Runner, cfg ideConfig) {
 	for id, p := range cfg.plugins() {
 		path, ok := p.path()
 		if !ok {
@@ -451,12 +455,7 @@ func (h *workspaceManagerHandler) addWorkspace(
 	if err := os.MkdirAll(dataDir, 0777); err != nil {
 		return fmt.Errorf("mkdir .plugin: %v", err)
 	}
-	pluginOpts := []plugin.Option{
-		plugin.WithLocker(&h.mu),
-		plugin.WithWorkspace(uri),
-		plugin.WithDataDir(dataDir),
-	}
-	pluginManager, err := plugin.NewManager(plugin.GrantAll(res), pluginOpts...)
+	pluginManager, err := h.pluginRunner(&h.mu, uri, res, dataDir)
 	if err != nil {
 		return fmt.Errorf("error initializing plugin manager: %v", err)
 	}
@@ -606,7 +605,7 @@ func (h *workspaceManagerHandler) Close() (ret error) {
 type workspaceHandler struct {
 	*ex
 	uri     workspaceapi.URI
-	Plugins *plugin.Manager
+	Plugins plugin.Runner
 }
 
 func (hm *workspaceHandler) Close() (ret error) {

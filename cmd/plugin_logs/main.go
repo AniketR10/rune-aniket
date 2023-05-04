@@ -26,6 +26,7 @@ import (
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/handler/search"
 	"unstable.build/go-tui/plugin"
+	"unstable.build/go-tui/plugin/process"
 	"unstable.build/go-tui/proto"
 	"unstable.build/go-tui/workspace"
 )
@@ -365,8 +366,8 @@ func (e *logsGrantee) HandleCommand(
 		// disable all logs to avoid creating infinite I/O loops
 		log.SetOutput(io.Discard)
 		log.SetLevel(log.FatalLevel)
-		plugin.SetLoggingOutput(io.Discard)
-		plugin.SetLoggingLevel(log.FatalLevel)
+		process.SetLoggingOutput(io.Discard)
+		process.SetLoggingLevel(log.FatalLevel)
 		e.discardedLogs = true
 	}
 
@@ -379,5 +380,5 @@ func main() {
 	}()
 
 	s := logsGrantee{quitCh: make(chan struct{})}
-	plugin.Serve(&s, requiredPermissions...)
+	process.Serve(&s, requiredPermissions...)
 }

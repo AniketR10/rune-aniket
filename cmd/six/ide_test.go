@@ -3,25 +3,16 @@ package main
 import (
 	"io/ioutil"
 	"os"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"unstable.build/go-tui/api/config"
 	workspaceapi "unstable.build/go-tui/api/workspace"
+	"unstable.build/go-tui/plugin"
 	"unstable.build/go-tui/term"
 )
-
-func makeTestFiles(t *testing.T) (*os.File, *os.File) {
-	configFile, err := ioutil.TempFile("", "six_ide_test")
-	require.NoError(t, err)
-	require.NoError(t, configFile.Close())
-
-	file, err := ioutil.TempFile("", "six_ide_test")
-	require.NoError(t, err)
-	require.NoError(t, file.Close())
-
-	return configFile, file
-}
 
 func TestIDEInitializationIntegration(t *testing.T) {
 	t.Run("does not panic with sample config", func(t *testing.T) {
@@ -41,7 +32,7 @@ func TestIDEInitializationIntegration(t *testing.T) {
 
 		i := new(ide)
 		err = i.init(cwdURI.String(), configFile.Name(), "",
-			dir, nopPublishEvent, file1.Name(), file2.Name())
+			dir, nopPublishEvent, testRunnerFn, file1.Name(), file2.Name())
 		require.NoError(t, err)
 
 		require.NotNil(t, i.workspace)
@@ -64,7 +55,7 @@ func TestIDEInitializationIntegration(t *testing.T) {
 
 		i := new(ide)
 		err = i.init(cwdURI.String(), configFile.Name(), "",
-			dir, nopPublishEvent, file1.Name())
+			dir, nopPublishEvent, testRunnerFn, file1.Name())
 		require.NoError(t, err)
 
 		require.NotNil(t, i.workspace)
@@ -84,7 +75,7 @@ func TestIDEInitializationIntegration(t *testing.T) {
 
 		i := new(ide)
 		err = i.init(".", configFile.Name(), "",
-			dir, nopPublishEvent, file1.Name())
+			dir, nopPublishEvent, testRunnerFn, file1.Name())
 		require.NoError(t, err)
 
 		require.NotNil(t, i.workspace)
@@ -114,7 +105,7 @@ func TestIDEInitializationIntegration(t *testing.T) {
 			dir, func(ev term.Event) bool {
 				published = true
 				return false
-			}, file1.Name(), file2.Name())
+			}, testRunnerFn, file1.Name(), file2.Name())
 		require.NoError(t, err)
 
 		assert.False(t, i.publishEvent(term.Event{}))
@@ -122,4 +113,35 @@ func TestIDEInitializationIntegration(t *testing.T) {
 
 		assert.NoError(t, i.closeResources())
 	})
+}
+
+func makeTestFiles(t *testing.T) (*os.File, *os.File) {
+	configFile, err := ioutil.TempFile("", "six_ide_test")
+	require.NoError(t, err)
+	require.NoError(t, configFile.Close())
+
+	file, err := ioutil.TempFile("", "six_ide_test")
+	require.NoError(t, err)
+	require.NoError(t, file.Close())
+
+	return configFile, file
+}
+
+func testRunnerFn(
+	locker sync.Locker,
+	uri workspaceapi.URI,
+	res map[plugin.Permission]plugin.ResourceRegistrar,
+	dataDir string) (plugin.Runner, error) {
+	return testRunner{}, nil
+}
+
+type testRunner struct {
+}
+
+func (r testRunner) Run(pluginID, path string, config config.Config) error {
+	return nil
+}
+
+func (r testRunner) Close() error {
+	return nil
 }

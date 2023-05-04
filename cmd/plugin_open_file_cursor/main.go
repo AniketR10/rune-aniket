@@ -1,6 +1,7 @@
 package main
 
 import (
+	"unstable.build/go-tui/plugin/process"
 	plugutil "unstable.build/go-tui/plugin/util"
 )
 
@@ -9,6 +10,7 @@ func main() {
 		log.Println(http.ListenAndServe("localhost:6063", nil))
 	}()*/
 
-	plugutil.ServeEditorEventHandler(gfHandlerCommands, newGFHandler,
+	grantee, perms := plugutil.NewEditorEventHandler(gfHandlerCommands, newGFHandler,
 		gfHandlerEvents, gfHandlerPermissions...)
+	process.Serve(grantee, perms...)
 }

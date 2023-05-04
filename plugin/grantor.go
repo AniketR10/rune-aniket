@@ -29,6 +29,23 @@ func (fn resourceServerFn) Serve(
 	fn(pluginID, grantID, broker, l, mu)
 }
 
+// MergeResourceMap merges m1 with mn.
+// If permissions are overlapping, the last of passed prevails.
+func MergeResourceMap(
+	m1 map[Permission]ResourceRegistrar, mn ...map[Permission]ResourceRegistrar,
+) map[Permission]ResourceRegistrar {
+	ret := make(map[Permission]ResourceRegistrar)
+	for k, v := range m1 {
+		ret[k] = v
+	}
+	for _, m := range mn {
+		for k, v := range m {
+			ret[k] = v
+		}
+	}
+	return ret
+}
+
 // Grantor encapsulates the ability grant or deny access to resources.
 type Grantor interface {
 	Grant(plugin string, perm Permission) (ResourceRegistrar, bool)

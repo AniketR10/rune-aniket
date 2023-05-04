@@ -1,13 +1,14 @@
-package plugin
+package process
 
 import (
 	"fmt"
 	"os/exec"
 
 	"github.com/ernestrc/blue/logging"
-	"github.com/hashicorp/go-plugin"
+	goplugin "github.com/hashicorp/go-plugin"
 	log "github.com/sirupsen/logrus"
 	workspaceapi "unstable.build/go-tui/api/workspace"
+	"unstable.build/go-tui/plugin"
 	"unstable.build/go-tui/workspace"
 )
 
@@ -25,8 +26,8 @@ func makeDataDirEnv(dataDir string) string {
 }
 
 func goPluginGranteeBuilder(m *Manager, dataDir string) pluginBuilder {
-	return func(pluginID, path string, grantor Grantor) (*granteeClient, error) {
-		pluginMap := map[string]plugin.Plugin{
+	return func(pluginID, path string, grantor plugin.Grantor) (*granteeClient, error) {
+		pluginMap := map[string]goplugin.Plugin{
 			typeGranteePlugin: &granteePlugin{broker: m.broker, grantor: grantor},
 		}
 
@@ -50,16 +51,16 @@ func goPluginGranteeBuilder(m *Manager, dataDir string) pluginBuilder {
 		cmd.Env = append(cmd.Env, makeDataDirEnv(dataDir))
 		cmd.Env = append(cmd.Env, makeLogLevelEnv(log.GetLevel()))
 
-		config := &plugin.ClientConfig{
+		config := &goplugin.ClientConfig{
 			HandshakeConfig:  handshakeConfig,
 			Plugins:          pluginMap,
 			Cmd:              cmd,
 			Logger:           NewHCLogLogrus(log.StandardLogger()),
-			AllowedProtocols: []plugin.Protocol{plugin.ProtocolGRPC},
+			AllowedProtocols: []goplugin.Protocol{goplugin.ProtocolGRPC},
 			// TODO we should validate integrity of plugins
 			// SecureConfig:    &secureCfg,
 		}
-		client := plugin.NewClient(config)
+		client := goplugin.NewClient(config)
 
 		rpcClient, err := client.Client()
 		if err != nil {

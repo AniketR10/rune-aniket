@@ -1,4 +1,4 @@
-package plugin
+package process
 
 type nopCloser struct {
 }

@@ -1,4 +1,4 @@
-package plugin
+package process
 
 import (
 	"context"
@@ -14,8 +14,9 @@ import (
 	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
-	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/api/config"
+	workspaceapi "unstable.build/go-tui/api/workspace"
+	"unstable.build/go-tui/plugin"
 	pluginpb "unstable.build/go-tui/plugin/rpc"
 	"unstable.build/go-tui/proto"
 	"unstable.build/go-tui/util"
@@ -69,12 +70,12 @@ type managerConfig struct {
 type Option func(cfg *managerConfig)
 
 type pluginBuilder func(pluginID, path string,
-	grantor Grantor) (*granteeClient, error)
+	grantor plugin.Grantor) (*granteeClient, error)
 
 // Manager manages the lifecycle of plugins.
 type Manager struct {
 	mu      sync.Mutex
-	grantor Grantor
+	grantor plugin.Grantor
 	clients map[string]*granteeClientWrap
 
 	// resource mutex used to synchronize term event loop with
@@ -94,7 +95,7 @@ type Manager struct {
 }
 
 // NewManager allocates storage for a new Manager and initializes it.
-func NewManager(grantor Grantor, opts ...Option) (*Manager, error) {
+func NewManager(grantor plugin.Grantor, opts ...Option) (*Manager, error) {
 	ret := new(Manager)
 	err := ret.Init(grantor, opts...)
 	ret.builder = goPluginGranteeBuilder(ret, ret.config.dataDir)
@@ -105,11 +106,11 @@ func NewManager(grantor Grantor, opts ...Option) (*Manager, error) {
 }
 
 // Init initializes this manager with grantor.
-func (m *Manager) Init(grantor Grantor, opts ...Option) (err error) {
+func (m *Manager) Init(grantor plugin.Grantor, opts ...Option) (err error) {
 	// enable registrants to inject other registrants as dependencies
 	// where passing same instance is important due to the stateful nature
 	// of some resource servers.
-	m.grantor = cachingGrantor(grantor)
+	m.grantor = plugin.CachingGrantor(grantor)
 	m.clients = make(map[string]*granteeClientWrap)
 
 	m.config = defaultManagerConfig
@@ -197,7 +198,7 @@ func (m *Manager) doGrant(
 			continue
 		}
 
-		registrar, ok := m.grantor.Grant(pluginID, Permission(permissionID))
+		registrar, ok := m.grantor.Grant(pluginID, plugin.Permission(permissionID))
 		if !ok {
 			denied = append(denied, p)
 			continue

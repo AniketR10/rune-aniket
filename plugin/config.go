@@ -9,11 +9,6 @@ import (
 	"unstable.build/go-tui/proto"
 )
 
-const (
-	// PermissionConfig requests access to read the loaded configuration.
-	PermissionConfig Permission = "_PermConfig"
-)
-
 type configResourceServer struct {
 	cfg config.Config
 }
@@ -40,4 +35,11 @@ func ConfigResources(b config.Config) map[Permission]ResourceRegistrar {
 	return map[Permission]ResourceRegistrar{
 		PermissionConfig: s,
 	}
+}
+
+type nopCloser struct {
+}
+
+func (c nopCloser) Close() error {
+	return nil
 }

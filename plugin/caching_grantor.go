@@ -5,9 +5,9 @@ import (
 	"sync"
 )
 
-// wraps g and returns a Grantor that returns the same ResourceRegistrant
-// for a given pluginID and permission.
-func cachingGrantor(g Grantor) Grantor {
+// CachingGrantor wraps g and returns a Grantor that returns the same ResourceRegistrar
+// for a given pluginID and permission combination.
+func CachingGrantor(g Grantor) Grantor {
 	return &cacheGrantor{g: g, grants: make(map[string]ResourceRegistrar)}
 }
 

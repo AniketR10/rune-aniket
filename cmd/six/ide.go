@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"sync"
 	"sync/atomic"
 
 	"github.com/ernestrc/blue/logging"
@@ -26,16 +27,24 @@ type ide struct {
 	publishEventFn   func(term.Event) bool
 }
 
+type pluginRunnerFn func(
+	locker sync.Locker,
+	uri workspaceapi.URI,
+	res map[plugin.Permission]plugin.ResourceRegistrar,
+	dataDir string) (plugin.Runner, error)
+
 // newIde allocates storage for a new ide and initializes it with config
 // at cfgfilename and filename. Note that if filename is empty, a default inmutable
 // buffer will be loaded.
 func newIde(
 	cwd, cfgfilename, sixDir string,
 	publishEvent func(term.Event) bool,
+	pluginRunner pluginRunnerFn,
 	filenames ...string,
 ) (i *ide, err error) {
 	i = new(ide)
-	err = i.init(cwd, cfgfilename, "", sixDir, publishEvent, filenames...)
+	err = i.init(cwd, cfgfilename, "", sixDir,
+		publishEvent, pluginRunner, filenames...)
 	return
 }
 
@@ -45,19 +54,24 @@ func newIde(
 func newIdeRecovery(
 	cwd, cfgfilename, filename, recfilename, sixDir string,
 	publishEvent func(term.Event) bool,
+	pluginRunner pluginRunnerFn,
 ) (i *ide, err error) {
 	if filename == "" || recfilename == "" {
 		panic(fmt.Sprintf("invalid input: filename='%s', recfilename='%s'",
 			filename, recfilename))
 	}
 	i = new(ide)
-	err = i.init(cwd, cfgfilename, recfilename, sixDir, publishEvent, filename)
+	err = i.init(cwd, cfgfilename, recfilename, sixDir,
+		publishEvent, pluginRunner, filename)
 	return
 }
 
 func (i *ide) init(cwd, cfgfilename, recfilename string,
 	sixDir string,
-	publishEvent func(term.Event) bool, filenames ...string) error {
+	publishEvent func(term.Event) bool,
+	pluginRunner pluginRunnerFn,
+	filenames ...string,
+) error {
 	isConfigErr, configErr := loadConfig(&i.ideConfig, cfgfilename)
 	// return errors that are not decoding errors but
 	// let decoding errors be just logged
@@ -82,8 +96,6 @@ func (i *ide) init(cwd, cfgfilename, recfilename string,
 		}
 
 		level := i.ideConfig.logLevel()
-		plugin.SetLoggingOutput(f)
-		plugin.SetLoggingLevel(level)
 
 		log.SetOutput(f)
 		log.SetLevel(level)
@@ -113,7 +125,7 @@ func (i *ide) init(cwd, cfgfilename, recfilename string,
 
 	root, err := newWorkspaceManagerHandler(cwdURI,
 		workspaceManager, i.ideConfig, recfilename, filenames,
-		sixDir, i.publishEvent)
+		sixDir, i.publishEvent, pluginRunner)
 	if err != nil {
 		return err
 	}

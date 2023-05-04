@@ -9,11 +9,6 @@ import (
 	workspacepb "unstable.build/go-tui/workspace/rpc"
 )
 
-const (
-	// PermissionSchemeManager requests access to the workspace's URI scheme manager.
-	PermissionSchemeManager Permission = "_PermSchemeManager"
-)
-
 type schemeManagerResourceServer struct {
 	b workspace.SchemeManager
 }

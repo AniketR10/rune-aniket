@@ -30,6 +30,7 @@ import (
 	textplugin "unstable.build/go-tui/api/text/plugin"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/plugin"
+	"unstable.build/go-tui/plugin/process"
 	"unstable.build/go-tui/proto"
 	"unstable.build/go-tui/storage/cache"
 	"unstable.build/go-tui/text"
@@ -488,5 +489,5 @@ func main() {
 		marshaler:   m,
 		defTemplate: data,
 	}
-	plugin.Serve(&s, requiredPermissions...)
+	process.Serve(&s, requiredPermissions...)
 }

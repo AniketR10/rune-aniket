@@ -10,10 +10,11 @@ import (
 	"github.com/ernestrc/blue/iterator"
 	log "github.com/sirupsen/logrus"
 	browserapi "unstable.build/go-tui/api/browser"
+	"unstable.build/go-tui/api/config"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/cmd/plugin_fuzzy_file/finder"
-	"unstable.build/go-tui/api/config"
 	"unstable.build/go-tui/plugin"
+	"unstable.build/go-tui/plugin/process"
 	plugutil "unstable.build/go-tui/plugin/util"
 	"unstable.build/go-tui/proto"
 	"unstable.build/go-tui/term"
@@ -75,10 +76,11 @@ func main() {
 		log.Println(http.ListenAndServe("localhost:6064", nil))
 	}()
 
-	plugutil.ServeCommandSplitHandler(plugutil.CommandSplitHandlerConfig{
+	grantee, perms := plugutil.NewCommandSplitHandler(plugutil.CommandSplitHandlerConfig{
 		SplitOrientation: browserapi.OrientationBottom,
 		Handler:          newHandler,
 		Permissions:      finder.Permissions(),
 		Command:          "searchLine",
 	})
+	process.Serve(grantee, perms...)
 }

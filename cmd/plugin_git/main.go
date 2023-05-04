@@ -5,6 +5,7 @@ import (
 	"net/http"
 	_ "net/http/pprof"
 
+	"unstable.build/go-tui/plugin/process"
 	plugutil "unstable.build/go-tui/plugin/util"
 )
 
@@ -13,6 +14,7 @@ func main() {
 		log.Println(http.ListenAndServe("localhost:3863", nil))
 	}()
 
-	plugutil.ServeEditorEventHandler(gitHandlerCommands, newGitHandler,
+	grantee, perms := plugutil.NewEditorEventHandler(gitHandlerCommands, newGitHandler,
 		gitHandlerEvents, gitHandlerPermissions...)
+	process.Serve(grantee, perms...)
 }

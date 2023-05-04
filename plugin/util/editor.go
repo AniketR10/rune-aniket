@@ -5,9 +5,9 @@ import (
 	"sync"
 
 	log "github.com/sirupsen/logrus"
+	"unstable.build/go-tui/api/config"
 	textapi "unstable.build/go-tui/api/text"
 	textplugin "unstable.build/go-tui/api/text/plugin"
-	"unstable.build/go-tui/api/config"
 	"unstable.build/go-tui/plugin"
 	"unstable.build/go-tui/proto"
 )
@@ -111,21 +111,22 @@ func (t *editorGrantee) Health() error {
 	return nil
 }
 
-// ServeEditorEventHandler calls fn to build a CommandEventHandler,
-// subsribes it to events editor.Event and registers it as the CommandHandler
-// of cmds. It also requests extraPerms, in addition to plugin.PermissionEditor.
+// NewEditorEventHandler returns a plugin.Grantee that simply responds to commands.
+// It calls fn to build a CommandEventHandler, subsribes it to events
+// editor.Event and registers it as the CommandHandler of cmds.
+// It also requests extraPerms, in addition to plugin.PermissionEditor.
 // All granted permissions are returned in the fn callback. If one of the
 // permissions is denied, the plugin will exit with an error.
-func ServeEditorEventHandler(
+func NewEditorEventHandler(
 	cmds []string,
 	fn func(textapi.Editor, []plugin.Grant, proto.MuxBroker, config.Config) (CommandEventHandler, error),
 	events []textapi.EventType,
 	extraPerms ...plugin.Permission,
-) {
+) (plugin.Grantee, []plugin.Permission) {
 	perms := []plugin.Permission{
 		plugin.Permission(plugin.PermissionEditor),
 	}
 	perms = append(perms, extraPerms...)
 	s := &editorGrantee{evs: events, cmds: cmds, newHandler: fn}
-	plugin.Serve(s, perms...)
+	return s, perms
 }

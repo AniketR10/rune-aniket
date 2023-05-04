@@ -1,4 +1,4 @@
-package plugin
+package process
 
 import (
 	"errors"
@@ -11,7 +11,9 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"unstable.build/go-tui/api/config"
+	"unstable.build/go-tui/plugin"
 	pluginpb "unstable.build/go-tui/plugin/rpc"
+	plugintest "unstable.build/go-tui/plugin/test"
 	"unstable.build/go-tui/proto"
 )
 
@@ -63,7 +65,7 @@ func (b *nopBroker) Close() error {
 	return nil
 }
 
-func newTestManager(grantor Grantor, opts ...Option) (*Manager, *testGranteePbClient, proto.MuxBroker) {
+func newTestManager(grantor plugin.Grantor, opts ...Option) (*Manager, *testGranteePbClient, proto.MuxBroker) {
 	m := new(Manager)
 
 	opts = append([]Option{
@@ -76,7 +78,7 @@ func newTestManager(grantor Grantor, opts ...Option) (*Manager, *testGranteePbCl
 		locker:     new(sync.Mutex),
 	}
 
-	m.builder = func(pluginID, path string, grantor Grantor) (*granteeClient, error) {
+	m.builder = func(pluginID, path string, grantor plugin.Grantor) (*granteeClient, error) {
 		return newGranteeClient(m.broker, mockpb), nil
 	}
 	m.Init(grantor, opts...)
@@ -103,7 +105,7 @@ func assertShutdown(t *testing.T, pbClient *testGranteePbClient) string {
 
 func TestManagerRun(t *testing.T) {
 	t.Run("should start plugin and proceed to handshake", func(t *testing.T) {
-		grantor := mockGrantor{}
+		grantor := plugintest.MockGrantor{}
 		mgr, pbClient, _ := newTestManager(&grantor)
 		defer mgr.Close()
 
@@ -123,7 +125,7 @@ func TestManagerRun(t *testing.T) {
 		require.Equal(t, "read", grant.Granted[0].Id)
 		require.NotZero(t, grant.Granted[0].Address)
 
-		srvs := grantor.servers()
+		srvs := grantor.Servers()
 		require.Len(t, srvs, 1)
 
 		// verify that shutdown was not called
@@ -143,7 +145,7 @@ func TestManagerRun(t *testing.T) {
 	})
 
 	t.Run("Stop should call a plugin's shutdown", func(t *testing.T) {
-		mgr, pbClient, _ := newTestManager(&mockGrantor{})
+		mgr, pbClient, _ := newTestManager(&plugintest.MockGrantor{})
 		defer mgr.Close()
 
 		pbClient.onShutdownChan = make(chan struct{})
@@ -158,7 +160,7 @@ func TestManagerRun(t *testing.T) {
 	})
 
 	t.Run("double start plugin with same ID should error", func(t *testing.T) {
-		mgr, _, _ := newTestManager(&mockGrantor{})
+		mgr, _, _ := newTestManager(&plugintest.MockGrantor{})
 		defer mgr.Close()
 
 		err := mgr.Run("red", "", nil)
@@ -169,7 +171,7 @@ func TestManagerRun(t *testing.T) {
 	})
 
 	t.Run("should shutdown plugin if errors upon call to get permissions", func(t *testing.T) {
-		mgr, pbClient, _ := newTestManager(&mockGrantor{})
+		mgr, pbClient, _ := newTestManager(&plugintest.MockGrantor{})
 		defer mgr.Close()
 
 		pbClient.fixturePermissions =
@@ -185,7 +187,7 @@ func TestManagerRun(t *testing.T) {
 	})
 
 	t.Run("should shutdown plugin if fails to respond to handshake in time", func(t *testing.T) {
-		mgr, pbClient, _ := newTestManager(&mockGrantor{})
+		mgr, pbClient, _ := newTestManager(&plugintest.MockGrantor{})
 		defer mgr.Close()
 
 		pbClient.fixturePermissions =
@@ -201,7 +203,7 @@ func TestManagerRun(t *testing.T) {
 	})
 
 	t.Run("should shutdown plugin if fails to respond to first health requests in time", func(t *testing.T) {
-		mgr, pbClient, _ := newTestManager(&mockGrantor{})
+		mgr, pbClient, _ := newTestManager(&plugintest.MockGrantor{})
 		defer mgr.Close()
 
 		pbClient.fixturePermissions =
@@ -218,7 +220,7 @@ func TestManagerRun(t *testing.T) {
 	})
 
 	t.Run("should shutdown plugin if fails to respond to subsequent health checks", func(t *testing.T) {
-		mgr, pbClient, _ := newTestManager(&mockGrantor{},
+		mgr, pbClient, _ := newTestManager(&plugintest.MockGrantor{},
 			WithHealthTimeout(250*time.Millisecond), WithHealthRetries(3))
 		defer mgr.Close()
 
@@ -249,7 +251,7 @@ func TestManagerRun(t *testing.T) {
 	})
 
 	t.Run("should wait for plugin Shutdown before returning from a call to Close", func(t *testing.T) {
-		mgr, pbClient, _ := newTestManager(&mockGrantor{})
+		mgr, pbClient, _ := newTestManager(&plugintest.MockGrantor{})
 
 		pbClient.fixturePermissions = []*pluginpb.Permission{{Id: "read"}}
 		pbClient.onShutdownChan = make(chan struct{})
@@ -279,7 +281,7 @@ func TestManagerRun(t *testing.T) {
 
 	t.Run("Close should not hold resource mutex while waiting for plugin shutdown", func(t *testing.T) {
 		var rmu sync.Mutex
-		mgr, pbClient, _ := newTestManager(&mockGrantor{}, WithLocker(&rmu))
+		mgr, pbClient, _ := newTestManager(&plugintest.MockGrantor{}, WithLocker(&rmu))
 
 		pbClient.fixturePermissions = []*pluginpb.Permission{{Id: "read"}}
 		pbClient.onShutdownChan = make(chan struct{})

@@ -264,7 +264,7 @@ func newTestWorkspaceManagerHandlerWithManager(
 	err = m.workspaceManagerHandler.init(uri, manager, cfg, "", []string{},
 		dir, func(term.Event) bool {
 			return true
-		})
+		}, testRunnerFn)
 	require.NoError(t, err)
 	return m
 }

@@ -13,9 +13,9 @@ import (
 	"unstable.build/go-tui"
 	browserapi "unstable.build/go-tui/api/browser"
 	browserapitest "unstable.build/go-tui/api/browser/test"
+	"unstable.build/go-tui/api/config"
 	textapi "unstable.build/go-tui/api/text"
 	browsertest "unstable.build/go-tui/browser/test"
-	"unstable.build/go-tui/api/config"
 	"unstable.build/go-tui/plugin"
 	"unstable.build/go-tui/proto"
 	prototest "unstable.build/go-tui/proto/test"
@@ -88,7 +88,7 @@ func TestCommandSplitHandlerEmpty(t *testing.T) {
 
 	t.Run("panics if cmd configuration is missing", func(t *testing.T) {
 		assert.Panics(t, func() {
-			ServeCommandSplitHandler(CommandSplitHandlerConfig{})
+			NewCommandSplitHandler(CommandSplitHandlerConfig{})
 		})
 	})
 

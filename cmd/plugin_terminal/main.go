@@ -14,12 +14,13 @@ import (
 	log "github.com/sirupsen/logrus"
 	browserapi "unstable.build/go-tui/api/browser"
 	browserplugin "unstable.build/go-tui/api/browser/plugin"
+	"unstable.build/go-tui/api/config"
 	textapi "unstable.build/go-tui/api/text"
 	textplugin "unstable.build/go-tui/api/text/plugin"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	workspaceplugin "unstable.build/go-tui/api/workspace/plugin"
-	"unstable.build/go-tui/api/config"
 	"unstable.build/go-tui/plugin"
+	"unstable.build/go-tui/plugin/process"
 	"unstable.build/go-tui/proto"
 	"unstable.build/go-tui/term"
 )
@@ -242,5 +243,5 @@ func main() {
 	}()
 
 	s := emulatorGrantee{ch: quitch}
-	plugin.Serve(&s, requiredPermissions...)
+	process.Serve(&s, requiredPermissions...)
 }
