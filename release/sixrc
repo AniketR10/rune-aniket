@@ -20,7 +20,7 @@ vi:
 plugins:
   # This plugin is used for navigating the editor's issue
   # tracker and creating new issues.
-  plugin_issues:
+  issues:
     path: /usr/local/bin/plugin_issues
     config:
       bluectl_config: ~/.bluectl/config
@@ -59,10 +59,10 @@ plugins:
   # This plugin adds a command colorPalette which opens a new window
   # and shows all the colors available to configure in the various
   # styles thorought this configuration.
-  colors:
+  color_palette:
     path: /usr/local/bin/plugin_color_palette
   # This plugin adds a command openFileUnderCursor, which does just that.
-  gf:
+  open_file_cursor:
     path: /usr/local/bin/plugin_open_file_cursor
   # This plugin adds a sed command to run sed scripts against the current file.
   sed:
