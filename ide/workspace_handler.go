@@ -460,7 +460,7 @@ func (h *workspaceManagerHandler) addWorkspace(
 		return fmt.Errorf("error initializing plugin manager: %v", err)
 	}
 
-	go h.initPlugins(runner, cfg)
+	h.initPlugins(runner, cfg)
 
 	i, ok := h.nextAvailableWorkspace()
 	if !ok {

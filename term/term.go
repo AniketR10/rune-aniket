@@ -91,6 +91,7 @@ func Init() error {
 	if err != nil {
 		return err
 	}
+	publishEvent = termbox.PublishEvent
 	return nil
 }
 
@@ -126,7 +127,7 @@ func Close() {
 	termbox.Close()
 }
 
-var publishEvent = termbox.PublishEvent
+var publishEvent = func(termbox.Event) bool { return false }
 
 // DisableInterruptForTesting disables interrupts. It should only be
 // used for testing purposes.
