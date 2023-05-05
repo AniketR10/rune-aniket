@@ -72,7 +72,7 @@ func (e *logsGrantee) Connected(broker proto.MuxBroker, pconfig config.Config) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
-	log.Infof("plugin connected; config: %#v", pconfig)
+	log.Debugf("plugin connected; config: %#v", pconfig)
 	e.broker = broker
 
 	caseSensitive, err := pconfig.GetBool("case_sensitive")
@@ -150,7 +150,7 @@ func (e *logsGrantee) Connected(broker proto.MuxBroker, pconfig config.Config) {
 }
 
 func (e *logsGrantee) PermissionGranted(grants []plugin.Grant) {
-	log.Infof("permissions granted: %v", grants)
+	log.Debugf("permissions granted: %v", grants)
 
 	var err error
 	for _, g := range grants {

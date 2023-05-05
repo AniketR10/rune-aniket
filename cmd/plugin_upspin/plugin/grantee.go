@@ -32,12 +32,12 @@ func (e *upspinGrantee) Connected(broker proto.MuxBroker, pconfig config.Config)
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
-	log.Infof("plugin connected; config: %#v", pconfig)
+	log.Debugf("plugin connected; config: %#v", pconfig)
 	e.broker = broker
 }
 
 func (e *upspinGrantee) PermissionGranted(grants []plugin.Grant) {
-	log.Infof("permissions granted: %v", grants)
+	log.Debugf("permissions granted: %v", grants)
 
 	for _, g := range grants {
 		switch g.Permission {

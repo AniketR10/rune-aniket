@@ -69,7 +69,7 @@ type cmdSplitHandler struct {
 }
 
 func (t *cmdSplitHandler) Connected(broker proto.MuxBroker, config config.Config) {
-	log.Infof("plugin connected; config: %v", config)
+	log.Debugf("plugin connected; config: %v", config)
 	t.broker = broker
 	t.pconfig = config
 }
@@ -180,7 +180,7 @@ func (t *cmdSplitHandler) PermissionGranted(grants []plugin.Grant) {
 	defer t.mu.Unlock()
 
 	var err error
-	log.Infof("permissions granted: %+v", grants)
+	log.Debugf("permissions granted: %+v", grants)
 
 	for _, g := range grants {
 		switch g.Permission {

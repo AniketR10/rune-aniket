@@ -211,7 +211,7 @@ func (e *issuesGrantee) Handle(ctx context.Context, ev textapi.Event) bool {
 }
 
 func (e *issuesGrantee) PermissionGranted(grants []plugin.Grant) {
-	log.Infof("permissions granted: %v", grants)
+	log.Debugf("permissions granted: %v", grants)
 
 	for _, g := range grants {
 		switch g.Permission {
@@ -263,7 +263,7 @@ func (e *issuesGrantee) PermissionGranted(grants []plugin.Grant) {
 					log.Warnf("Could not subscribe command %q: %v", cmd, err)
 					continue
 				}
-				log.Infof("Subscribed to create issue command %q", cmd)
+				log.Debugf("Subscribed to create issue command %q", cmd)
 			}
 		case plugin.PermissionSchemeManager:
 			m, err := schemeplugin.SchemeManager(g, e.broker)

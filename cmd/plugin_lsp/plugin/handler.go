@@ -715,7 +715,7 @@ func newLspHandler(
 		}
 	}
 
-	log.Infof("Initialized LSP handler with cwd %q", ret.cwd)
+	log.Debugf("Initialized LSP handler with cwd %q", ret.cwd)
 
 	go ret.handleEvents(ret.evChan)
 
@@ -2036,7 +2036,7 @@ func (h *lspEditorHandler) Close() error {
 			ret = multierr.Append(ret, err)
 		}
 	}
-	level := log.InfoLevel
+	level := log.DebugLevel
 	if ret != nil {
 		level = log.ErrorLevel
 	}

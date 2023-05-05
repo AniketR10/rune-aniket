@@ -100,7 +100,7 @@ func (e *emulatorGrantee) Connected(broker proto.MuxBroker, pconfig config.Confi
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
-	log.Infof("plugin connected; config: %#v", pconfig)
+	log.Debugf("plugin connected; config: %#v", pconfig)
 	e.broker = broker
 
 	attr, err := config.GetAttributes(pconfig, "attr")
@@ -136,7 +136,7 @@ func (e *emulatorGrantee) Connected(broker proto.MuxBroker, pconfig config.Confi
 }
 
 func (e *emulatorGrantee) PermissionGranted(grants []plugin.Grant) {
-	log.Infof("permissions granted: %v", grants)
+	log.Debugf("permissions granted: %v", grants)
 
 	var err error
 	for _, g := range grants {

@@ -59,7 +59,7 @@ func (t *editorGrantee) Connected(broker proto.MuxBroker, config config.Config) 
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	log.Infof("plugin connected; config: %#v", config)
+	log.Debugf("plugin connected; config: %#v", config)
 	t.broker = broker
 	t.pconfig = config
 }
@@ -96,7 +96,7 @@ func (t *editorGrantee) subscribeToEvents(grants []plugin.Grant) error {
 }
 
 func (t *editorGrantee) PermissionGranted(grants []plugin.Grant) {
-	log.Infof("permissions granted: %v", grants)
+	log.Debugf("permissions granted: %v", grants)
 
 	for _, grant := range grants {
 		var err error
