@@ -802,9 +802,6 @@ func (c ideConfig) plugins() map[string]pluginConfig {
 func (c pluginConfig) path() (string, bool) {
 	path, err := c.cfg.GetString("path")
 	if err != nil {
-		// path is non-optional
-		errorID := fmt.Sprintf("plugin.%s.path", c.id)
-		c.parent.errors[errorID] = err
 		return "", false
 	}
 	return path, true

@@ -165,6 +165,9 @@ func (m *Manager) Run(pluginID, path string, config config.Config) error {
 	if ok {
 		return fmt.Errorf("Manager: already connected plugin with id: '%s'", pluginID)
 	}
+	if path == "" {
+		return fmt.Errorf("Manager: cannot run plugin %s: missing executable path", pluginID)
+	}
 	return m.runPlugin(pluginID, path, config)
 }
 

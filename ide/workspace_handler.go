@@ -306,10 +306,7 @@ func (h *workspaceManagerHandler) Man() tui.Manual {
 
 func (h *workspaceManagerHandler) initPlugins(manager plugin.Runner, cfg ideConfig) {
 	for id, p := range cfg.plugins() {
-		path, ok := p.path()
-		if !ok {
-			continue
-		}
+		path, _ := p.path()
 		pconfig, ok := p.config()
 		if !ok {
 			pconfig = config.MapConfig(make(map[string]interface{}))

@@ -163,10 +163,10 @@ func TestManagerRun(t *testing.T) {
 		mgr, _, _ := newTestManager(&plugintest.MockGrantor{})
 		defer mgr.Close()
 
-		err := mgr.Run("red", "", nil)
+		err := mgr.Run("red", "myPath", nil)
 		require.NoError(t, err)
 
-		err = mgr.Run("red", "", nil)
+		err = mgr.Run("red", "myPath", nil)
 		require.Error(t, err)
 	})
 
