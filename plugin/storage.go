@@ -11,7 +11,6 @@ import (
 	bproto "github.com/ernestrc/blue/document/rpc/proto"
 	"github.com/ernestrc/blue/encoding/toml"
 	log "github.com/sirupsen/logrus"
-	"google.golang.org/grpc"
 
 	"unstable.build/go-tui/proto"
 	"unstable.build/go-tui/storage"
@@ -51,7 +50,7 @@ func (s *storageResourceServer) Register(
 	// NOTE: if registrar is not a grpc.Server this will panic
 	// but it's a small price to pay rather than exposing grpc.Server
 	// across all ResourceRegistrar impls.
-	server.Init(svc, toml.Marshaler(), registrar.(*grpc.Server))
+	server.Init(svc, toml.Marshaler())
 	bproto.RegisterDocumentStoreServer(registrar, server)
 	// doc server stops grpc.Server, which is not something storageResourceserver
 	// should be concerned about. Close storage resources created
