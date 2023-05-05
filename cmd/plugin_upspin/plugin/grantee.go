@@ -44,11 +44,13 @@ func (e *upspinGrantee) PermissionGranted(grants []plugin.Grant) {
 		case plugin.PermissionSchemeManager:
 			m, err := schemeplugin.SchemeManager(g, e.broker)
 			if err != nil {
-				log.Fatalf("PermissionGranted: %+v: %s", g.Permission, err)
+				log.Errorf("PermissionGranted: %+v: %s", g.Permission, err)
+				continue
 			}
 			err = m.RegisterScheme(upspinScheme, newScheme)
 			if err != nil {
-				log.Fatalf("Could not register scheme:  %s", err)
+				log.Errorf("Could not register scheme:  %s", err)
+				continue
 			}
 			// store so finalizer doesn't kill the scheme RPC pipeline
 			e.m = m
@@ -58,7 +60,7 @@ func (e *upspinGrantee) PermissionGranted(grants []plugin.Grant) {
 }
 
 func (e *upspinGrantee) PermissionDenied(perms []plugin.Permission) {
-	log.Fatalf("Could not start plugin due to missing permissions: "+
+	log.Warningf("missing critical permissions: "+
 		"denied: %v; required: %v", perms, requiredPermissions)
 }
 

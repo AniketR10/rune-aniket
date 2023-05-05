@@ -59,7 +59,6 @@ type logsGrantee struct {
 	quitCh chan struct{}
 
 	wm browserapi.WindowManager
-	m  browserapi.Messenger
 	p  browserapi.EventPublisher
 	c  config.Config
 
@@ -156,8 +155,6 @@ func (e *logsGrantee) PermissionGranted(grants []plugin.Grant) {
 	var err error
 	for _, g := range grants {
 		switch g.Permission {
-		case plugin.Permission(plugin.PermissionBrowserMessenger):
-			e.m, err = browserplugin.Messenger(g, e.broker)
 		case plugin.Permission(plugin.PermissionBrowserEventPublisher):
 			e.p, err = browserplugin.EventPublisher(g, e.broker)
 		case plugin.Permission(plugin.PermissionBrowserWindowManager):
@@ -177,18 +174,21 @@ func (e *logsGrantee) PermissionGranted(grants []plugin.Grant) {
 			}
 		}
 		if err != nil {
-			log.Fatalf("PermissionGranted: %+v: %s", g.Permission, err)
+			log.Errorf("permission granted: %+v: %s", g.Permission, err)
+			return
 		}
 	}
 
-	e.logFile, err = e.c.GetString("log_path")
-	if err != nil {
-		log.Fatalf("Could not get 'log_path' from config: %s", err)
+	if e.c != nil {
+		e.logFile, err = e.c.GetString("log_path")
+		if err != nil {
+			log.Errorf("Could not get 'log_path' from config: %s", err)
+		}
 	}
 }
 
 func (e *logsGrantee) PermissionDenied(perms []plugin.Permission) {
-	log.Fatalf("Could not start plugin due to missing permissions: "+
+	log.Warningf("plugin is missing critical permissions: "+
 		"denied: %v; required: %v", perms, requiredPermissions)
 }
 
@@ -282,6 +282,10 @@ func (e *logsGrantee) showLogs(win browserapi.Window, args []string) (bool, erro
 	if e.logFile == "" && len(args) == 0 {
 		return false, errors.New("Cannot show logs if 'log_path' in config is empty " +
 			"and no arguments were supplied to 'logs' command.")
+	}
+
+	if e.wm == nil || e.p == nil {
+		return false, errors.New("missing critical permissions")
 	}
 
 	logFile := e.logFile

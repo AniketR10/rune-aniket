@@ -66,7 +66,7 @@ func Grantee(versionTag string) (plugin.Grantee, []plugin.Permission) {
 	defTemplate := issue.Report{Author: defaultAuthor}
 	data, err := m.Marshal(defTemplate)
 	if err != nil {
-		log.Fatalf("Marshal %v", err)
+		panic(fmt.Errorf("marshal default issue template: %v", err))
 	}
 	s := &issuesGrantee{
 		cmds:        defaultCommands,
@@ -112,8 +112,9 @@ func (e *issuesGrantee) Connected(broker proto.MuxBroker, pconfig config.Config)
 		}
 		homeDir, err := os.UserHomeDir()
 		if err != nil {
-			log.Fatalf("no 'bluectl_config' provided and failed "+
+			log.Errorf("no 'bluectl_config' provided and failed "+
 				"to get user home dir: %v", err)
+			return
 		}
 		e.bluectlConfigFile = path.Join(homeDir, ".bluectl", "config")
 	}
@@ -284,17 +285,20 @@ func (e *issuesGrantee) PermissionGranted(grants []plugin.Grant) {
 	}
 
 	if e.sm == nil || e.s == nil {
-		log.Fatalf("Shutting down: Could not acquire storage or scheme manager")
+		log.Errorf("missing critical resources, cannot continue.")
+		return
 	}
 
 	cfg, err := sourceConfig(e.bluectlConfigFile)
 	if err != nil {
-		log.Fatal(err)
+		log.Errorf("source bluectl configuration: %v", err)
+		return
 	}
 	svc, err := firestore.New(cfg.Auth.ProjectID,
 		cfg.Issue.Collection, cfg.Auth.CredentialsFile)
 	if err != nil {
-		log.Fatalf("firestore: %v", err)
+		log.Errorf("initialize firestore: %v", err)
+		return
 	}
 
 	svc = logging.WithLogging(svc)
@@ -324,8 +328,7 @@ func (e *issuesGrantee) PermissionGranted(grants []plugin.Grant) {
 }
 
 func (e *issuesGrantee) PermissionDenied(perms []plugin.Permission) {
-	log.Fatalf("Could not start plugin due to missing permissions: "+
-		"denied: %v; required: %v", perms, requiredPermissions)
+	log.Warningf("missing critical permissions: denied: %v; required: %v", perms, requiredPermissions)
 }
 
 func (e *issuesGrantee) Health() error {

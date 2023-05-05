@@ -114,8 +114,7 @@ func (t *editorGrantee) PermissionGranted(grants []plugin.Grant) {
 }
 
 func (t *editorGrantee) PermissionDenied(perms []plugin.Permission) {
-	log.Fatalf("Could not start plugin due to missing permissions: "+
-		"denied: %v", perms)
+	log.Warningf("missing permissions: permissions denied: %v", perms)
 }
 
 func (t *editorGrantee) Shutdown(reason string) error {

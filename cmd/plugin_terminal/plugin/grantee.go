@@ -2,6 +2,7 @@ package plugin
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	_ "net/http/pprof"
 	"os"
@@ -168,12 +169,7 @@ func (e *emulatorGrantee) PermissionGranted(grants []plugin.Grant) {
 }
 
 func (e *emulatorGrantee) PermissionDenied(perms []plugin.Permission) {
-	if len(perms) == 1 && perms[0] == plugin.PermissionEditor {
-		// continue without clibboard
-		_ = e.m.SetMessage("plugin_terminal: clipboard permission should be granted for an optimal experience")
-		return
-	}
-	log.Fatalf("Could not start plugin due to missing permissions: "+
+	log.Warningf("missing critical permissions: "+
 		"denied: %v; required: %v", perms, requiredPermissions)
 }
 
@@ -200,6 +196,9 @@ func (e *emulatorGrantee) HandleCommand(
 func (e *emulatorGrantee) handleCommand(
 	ctx context.Context, cmd textapi.Command,
 ) (bool, error) {
+	if e.wm == nil || e.fs == nil || e.tty == nil || e.p == nil || e.ed == nil {
+		return false, errors.New("missing critical permissions")
+	}
 	switch cmd.Name {
 	case cmdSplitWindowTerminal, cmdTerminalTab:
 	default:

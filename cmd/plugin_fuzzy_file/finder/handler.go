@@ -378,7 +378,7 @@ func (h *fuzzyFinderHandler) initGrants(
 		}
 	}
 	if h.f == nil || h.p == nil {
-		log.Fatalf("This plugin cannot function with granted permissions. Exiting now.")
+		return errors.New("plugin is missing critical permissions")
 	}
 	return
 }

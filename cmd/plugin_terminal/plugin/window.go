@@ -15,7 +15,7 @@ type windowManipulator struct {
 }
 
 func newWindowManipulator(
-	wm browserapi.WindowManager, m browserapi.Messenger,
+	wm browserapi.WindowManager,
 ) *windowManipulator {
 	return &windowManipulator{wm: wm}
 }

@@ -69,7 +69,7 @@ func (e *emulator) init(
 	e.m = m
 
 	e.theme = &termutil.Theme{Default: defAttr}
-	e.windowManipulator = newWindowManipulator(e.wm, e.m)
+	e.windowManipulator = newWindowManipulator(e.wm)
 	opts := []termutil.Option{
 		termutil.WithTheme(e.theme),
 		termutil.WithWindowManipulator(e.windowManipulator),
