@@ -205,7 +205,7 @@ func (t *cmdSplitHandler) PermissionDenied(perms []plugin.Permission) {
 }
 
 func (t *cmdSplitHandler) Shutdown(reason string) error {
-	log.Warningf("plugin being shutdown: %s", reason)
+	log.Debugf("plugin being shutdown: %s", reason)
 	t.closeHandler()
 	t.cleanWindow()
 	return nil
