@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"sync"
 	"sync/atomic"
 
 	"github.com/ernestrc/blue/logging"
@@ -19,6 +20,7 @@ import (
 // IDE encapsulates the ability to run an IDE within a TUI session.
 type IDE struct {
 	ideConfig
+	locker           sync.Locker
 	workspaceManager *workspace.Manager
 	root             *workspaceManagerHandler
 	running          int32
@@ -36,11 +38,12 @@ func New(
 	cwd, cfgfilename, sixDir string,
 	publishEvent EventPublisher,
 	pluginRunner Plugins,
+	locker sync.Locker,
 	filenames ...string,
 ) (i *IDE, err error) {
 	i = new(IDE)
 	err = i.init(cwd, cfgfilename, "", sixDir,
-		publishEvent, pluginRunner, filenames...)
+		publishEvent, pluginRunner, locker, filenames...)
 	return
 }
 
@@ -51,6 +54,7 @@ func NewRecovery(
 	cwd, cfgfilename, filename, recfilename, sixDir string,
 	publishEvent EventPublisher,
 	pluginRunner Plugins,
+	locker sync.Locker,
 ) (i *IDE, err error) {
 	if filename == "" || recfilename == "" {
 		panic(fmt.Sprintf("invalid input: filename='%s', recfilename='%s'",
@@ -58,7 +62,7 @@ func NewRecovery(
 	}
 	i = new(IDE)
 	err = i.init(cwd, cfgfilename, recfilename, sixDir,
-		publishEvent, pluginRunner, filename)
+		publishEvent, pluginRunner, locker, filename)
 	return
 }
 
@@ -66,6 +70,7 @@ func (i *IDE) init(cwd, cfgfilename, recfilename string,
 	sixDir string,
 	publishEvent func(term.Event) bool,
 	pluginRunner Plugins,
+	locker sync.Locker,
 	filenames ...string,
 ) error {
 	isConfigErr, configErr := loadConfig(&i.ideConfig, cfgfilename)
@@ -103,6 +108,7 @@ func (i *IDE) init(cwd, cfgfilename, recfilename string,
 	}
 
 	i.publishEventFn = publishEvent
+	i.locker = locker
 
 	// register default schemes
 	workspaceManager := workspace.NewManager(i.ideConfig.workspace())
@@ -121,7 +127,7 @@ func (i *IDE) init(cwd, cfgfilename, recfilename string,
 
 	root, err := newWorkspaceManagerHandler(cwdURI,
 		workspaceManager, i.ideConfig, recfilename, filenames,
-		sixDir, i.publishEvent, pluginRunner)
+		sixDir, i.publishEvent, pluginRunner, i.locker)
 	if err != nil {
 		return err
 	}
@@ -162,7 +168,7 @@ func (i *IDE) Run() error {
 	term.SetOutputMode(i.ideConfig.outputMode())
 	term.SetInputMode(i.ideConfig.inputMode())
 
-	err = tui.RunWithLocker(i.root, &i.root.mu)
+	err = tui.RunWithLocker(i.root, i.locker)
 	if err != nil {
 		return err
 	}

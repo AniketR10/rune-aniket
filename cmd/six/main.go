@@ -252,15 +252,18 @@ func run() int {
 		}
 	}
 
+	var eventLoopMutex sync.Mutex
 	var i *ide.IDE
 	if *flagRecover != "" && len(filenames) != 0 {
 		i, err = ide.NewRecovery(*flagWorkspace, *flagConfigPath,
-			filenames[0], *flagRecover, *flagDataPath, tui.PublishEvent, ide.FuncPlugins(pluginRunner))
+			filenames[0], *flagRecover, *flagDataPath,
+			tui.PublishEvent, ide.FuncPlugins(pluginRunner), &eventLoopMutex)
 	} else if *flagRecover != "" {
 		err = fmt.Errorf("flag -r requires to pass the original filename")
 	} else {
 		i, err = ide.New(*flagWorkspace, *flagConfigPath,
-			*flagDataPath, tui.PublishEvent, ide.FuncPlugins(pluginRunner), filenames...)
+			*flagDataPath, tui.PublishEvent,
+			ide.FuncPlugins(pluginRunner), &eventLoopMutex, filenames...)
 	}
 
 	if err != nil {

@@ -3,6 +3,7 @@ package ide
 import (
 	"context"
 	"io/ioutil"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -264,7 +265,7 @@ func newTestWorkspaceManagerHandlerWithManager(
 	err = m.workspaceManagerHandler.init(uri, manager, cfg, "", []string{},
 		dir, func(term.Event) bool {
 			return true
-		}, FuncPlugins(testRunnerFn))
+		}, FuncPlugins(testRunnerFn), new(sync.Mutex))
 	require.NoError(t, err)
 	return m
 }

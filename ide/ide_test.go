@@ -32,7 +32,8 @@ func TestIDEInitializationIntegration(t *testing.T) {
 
 		i := new(IDE)
 		err = i.init(cwdURI.String(), configFile.Name(), "",
-			dir, nopPublishEvent, FuncPlugins(testRunnerFn), file1.Name(), file2.Name())
+			dir, nopPublishEvent, FuncPlugins(testRunnerFn),
+			new(sync.Mutex), file1.Name(), file2.Name())
 		require.NoError(t, err)
 
 		require.NotNil(t, i.workspace)
@@ -55,7 +56,8 @@ func TestIDEInitializationIntegration(t *testing.T) {
 
 		i := new(IDE)
 		err = i.init(cwdURI.String(), configFile.Name(), "",
-			dir, nopPublishEvent, FuncPlugins(testRunnerFn), file1.Name())
+			dir, nopPublishEvent, FuncPlugins(testRunnerFn),
+			new(sync.Mutex), file1.Name())
 		require.NoError(t, err)
 
 		require.NotNil(t, i.workspace)
@@ -75,7 +77,7 @@ func TestIDEInitializationIntegration(t *testing.T) {
 
 		i := new(IDE)
 		err = i.init(".", configFile.Name(), "",
-			dir, nopPublishEvent, FuncPlugins(testRunnerFn), file1.Name())
+			dir, nopPublishEvent, FuncPlugins(testRunnerFn), new(sync.Mutex), file1.Name())
 		require.NoError(t, err)
 
 		require.NotNil(t, i.workspace)
@@ -105,7 +107,7 @@ func TestIDEInitializationIntegration(t *testing.T) {
 			dir, func(ev term.Event) bool {
 				published = true
 				return false
-			}, FuncPlugins(testRunnerFn), file1.Name(), file2.Name())
+			}, FuncPlugins(testRunnerFn), new(sync.Mutex), file1.Name(), file2.Name())
 		require.NoError(t, err)
 
 		assert.False(t, i.publishEvent(term.Event{}))

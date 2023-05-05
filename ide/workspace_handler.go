@@ -67,7 +67,7 @@ var (
 )
 
 type workspaceManagerHandler struct {
-	mu            sync.Mutex
+	mu            sync.Locker
 	exit          bool
 	cfg           ideConfig
 	ctxWithLocker context.Context
@@ -94,11 +94,13 @@ func newWorkspaceManagerHandler(
 	sixDir string,
 	publishEvent func(term.Event) bool,
 	pluginRunner Plugins,
+	locker sync.Locker,
 ) (*workspaceManagerHandler, error) {
 	ret := new(workspaceManagerHandler)
 
 	err := ret.init(initial, manager,
-		cfg, recfilename, filenames, sixDir, publishEvent, pluginRunner)
+		cfg, recfilename, filenames, sixDir,
+		publishEvent, pluginRunner, locker)
 	if err != nil {
 		return nil, err
 	}
@@ -122,14 +124,16 @@ func (h *workspaceManagerHandler) init(
 	sixDir string,
 	publishEvent func(term.Event) bool,
 	pluginRunner Plugins,
+	locker sync.Locker,
 ) error {
+	h.mu = locker
 	h.workspaces = make([]*workspaceHandler, 10)
 	h.cfg = cfg
 	h.publishEvent = publishEvent
 	h.workspace = manager
 	h.sixDir = sixDir
 	h.pluginRunner = pluginRunner
-	h.ctxWithLocker = workspace.ContextWithLocker(context.Background(), &h.mu)
+	h.ctxWithLocker = workspace.ContextWithLocker(context.Background(), h.mu)
 	storage, err := storage.New(h.ctxWithLocker, sixDir, bson.Marshaler())
 	if err != nil {
 		storage = document.NewInMemoryService()
@@ -452,7 +456,7 @@ func (h *workspaceManagerHandler) addWorkspace(
 	if err := os.MkdirAll(dataDir, 0777); err != nil {
 		return fmt.Errorf("mkdir .plugin: %v", err)
 	}
-	runner, err := h.pluginRunner.Runner(&h.mu, uri, res, dataDir)
+	runner, err := h.pluginRunner.Runner(h.mu, uri, res, dataDir)
 	if err != nil {
 		return fmt.Errorf("error initializing plugin manager: %v", err)
 	}
