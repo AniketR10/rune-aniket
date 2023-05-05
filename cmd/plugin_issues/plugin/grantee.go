@@ -315,16 +315,21 @@ func (e *issuesGrantee) PermissionGranted(grants []plugin.Grant) {
 		log.Warnf("Could not initialize scheme: %v. "+
 			"Will not be able to list reports", err)
 	}
-	ctx := context.Background()
-	ctx, cancel := context.WithTimeout(ctx, initialEvictAllTimeout)
-	defer cancel()
 
-	err = e.svc.EvictAll(ctx)
-	if err != nil {
-		log.Warnf("Could not initialize issue cache: %v", err)
-		return
-	}
-	log.Debugf("initialized plugin_issues successfully")
+	// this is just massaging the cache so evict async
+	// to shorten time to initialize plugin
+	go func() {
+		ctx := context.Background()
+		ctx, cancel := context.WithTimeout(ctx, initialEvictAllTimeout)
+		defer cancel()
+
+		err = e.svc.EvictAll(ctx)
+		if err != nil {
+			log.Warnf("Could not initialize issue cache: %v", err)
+			return
+		}
+		log.Debugf("initialized plugin_issues successfully")
+	}()
 }
 
 func (e *issuesGrantee) PermissionDenied(perms []plugin.Permission) {
