@@ -309,17 +309,24 @@ func (h *workspaceManagerHandler) Man() tui.Manual {
 }
 
 func (h *workspaceManagerHandler) initPlugins(manager plugin.Runner, cfg ideConfig) {
-	for id, p := range cfg.plugins() {
+	var wg sync.WaitGroup
+	plugins := cfg.plugins()
+	wg.Add(len(plugins))
+	for id, p := range plugins {
 		path, _ := p.path()
 		pconfig, ok := p.config()
 		if !ok {
 			pconfig = config.MapConfig(make(map[string]interface{}))
 		}
-		err := manager.Run(id, path, pconfig)
-		if err != nil {
-			log.Errorf("failed to run plugin with id %q: %v", id, err)
-		}
+		go func(id, path string, config config.Config) {
+			defer wg.Done()
+			err := manager.Run(id, path, pconfig)
+			if err != nil {
+				log.Errorf("failed to run plugin with id %q: %v", id, err)
+			}
+		}(id, path, pconfig)
 	}
+	wg.Wait()
 }
 
 func (h *workspaceManagerHandler) textOpts(cfg ideConfig) []text.Option {
