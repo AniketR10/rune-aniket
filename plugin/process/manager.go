@@ -118,7 +118,7 @@ func (m *Manager) Init(grantor plugin.Grantor, opts ...Option) (err error) {
 	}
 	m.rmu = m.config.locker
 
-	m.broker, err = initHostBroker(m.config, m.config.dataDir)
+	m.broker, err = initHostBroker(m.config, m.config.dataDir, m.rmu)
 	m.ctx, m.cancelCtx = context.WithCancel(context.Background())
 	return
 }

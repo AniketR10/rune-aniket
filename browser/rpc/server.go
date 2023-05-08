@@ -100,7 +100,6 @@ func (s *Server) dialHandler(channelID string, tags ...string) (
 
 	pbClient := handlerpb.NewHandlerClient(handlerConn)
 	fClient := NewFloatingClient(handlerConn)
-	pbClient = newIOWaitUnlockHandlerClient(pbClient, s.browser.Locker)
 	handlercc := handlerpb.NewClient(pbClient)
 
 	ctx, cancelFn := context.WithCancel(s.serverCtx)

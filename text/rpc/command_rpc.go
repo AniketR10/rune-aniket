@@ -63,10 +63,6 @@ func (c *commandClient) HandleCommand(ctx context.Context, cmd textapi.Command) 
 		WindowId:      adapter.ID(),
 	}
 
-	// do not block waiting for I/O
-	c.s.editor.Unlock()
-	defer c.s.editor.Lock()
-
 	resp, err := c.pb.HandleCommand(ctx, &req)
 	runtime.KeepAlive(c)
 	if err != nil {
