@@ -3,6 +3,7 @@ package process
 import (
 	"fmt"
 	"os/exec"
+	"strings"
 
 	"github.com/ernestrc/blue/logging"
 	goplugin "github.com/hashicorp/go-plugin"
@@ -31,7 +32,9 @@ func goPluginGranteeBuilder(m *Manager, dataDir string) pluginBuilder {
 			typeGranteePlugin: &granteePlugin{broker: m.broker, grantor: grantor},
 		}
 
-		cmd := exec.Command(path)
+		// allow args to be passed to plugins
+		argv := strings.Split(path, " ")
+		cmd := exec.Command(argv[0], argv[1:]...)
 		// if local workspace, then do set dir in a best effort for
 		// plugins that do not use APIs and call os functions directly.
 		if m.config.workspace.Scheme() == workspace.FileScheme {
