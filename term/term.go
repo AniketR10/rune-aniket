@@ -3,6 +3,8 @@
 package term
 
 import (
+	"sync/atomic"
+
 	"github.com/ernestrc/tcell/v2"
 	"github.com/ernestrc/tcell/v2/termbox"
 )
@@ -12,7 +14,13 @@ var (
 
 	// DefaultWriter returns the global terminal Writer.
 	DefaultWriter = new(termboxWriter)
+
+	publishEvent atomic.Value
 )
+
+func init() {
+	publishEvent.Store(func(termbox.Event) bool { return false })
+}
 
 // SetInputMode sets termbox input mode. Termbox has two input modes:
 //
@@ -91,7 +99,7 @@ func Init() error {
 	if err != nil {
 		return err
 	}
-	publishEvent = termbox.PublishEvent
+	publishEvent.Store(termbox.PublishEvent)
 	return nil
 }
 
@@ -127,14 +135,12 @@ func Close() {
 	termbox.Close()
 }
 
-var publishEvent = func(termbox.Event) bool { return false }
-
 // DisableInterruptForTesting disables interrupts. It should only be
 // used for testing purposes.
 func DisableInterruptForTesting() {
-	publishEvent = func(termbox.Event) bool {
+	publishEvent.Store(func(termbox.Event) bool {
 		return false
-	}
+	})
 }
 
 // PublishEvent sends a synthetic event to the event poller.
@@ -152,7 +158,7 @@ func PublishEvent(ev Event) bool {
 	tev.MouseX = ev.MouseX
 	tev.MouseY = ev.MouseY
 	tev.Raw = ev.Raw
-	return publishEvent(tev)
+	return publishEvent.Load().(func(termbox.Event) bool)(tev)
 }
 
 // HasPendingEvent returns true if PollEvent would return an event
