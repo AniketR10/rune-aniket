@@ -36,14 +36,11 @@ type EventPublisher func(term.Event) bool
 // buffer will be loaded.
 func New(
 	cwd, cfgfilename, sixDir string,
-	publishEvent EventPublisher,
-	pluginRunner Plugins,
-	locker sync.Locker,
-	filenames ...string,
+	filenames []string,
+	opts ...Option,
 ) (i *IDE, err error) {
 	i = new(IDE)
-	err = i.init(cwd, cfgfilename, "", sixDir,
-		publishEvent, pluginRunner, locker, filenames...)
+	err = i.init(cwd, cfgfilename, "", sixDir, filenames, opts...)
 	return
 }
 
@@ -52,9 +49,7 @@ func New(
 // Note that this function panics if either filename or recfilename are empty.
 func NewRecovery(
 	cwd, cfgfilename, filename, recfilename, sixDir string,
-	publishEvent EventPublisher,
-	pluginRunner Plugins,
-	locker sync.Locker,
+	opts ...Option,
 ) (i *IDE, err error) {
 	if filename == "" || recfilename == "" {
 		panic(fmt.Sprintf("invalid input: filename='%s', recfilename='%s'",
@@ -62,17 +57,19 @@ func NewRecovery(
 	}
 	i = new(IDE)
 	err = i.init(cwd, cfgfilename, recfilename, sixDir,
-		publishEvent, pluginRunner, locker, filename)
+		[]string{filename}, opts...)
 	return
 }
 
-func (i *IDE) init(cwd, cfgfilename, recfilename string,
-	sixDir string,
-	publishEvent func(term.Event) bool,
-	pluginRunner Plugins,
-	locker sync.Locker,
-	filenames ...string,
+func (i *IDE) init(
+	cwd, cfgfilename, recfilename string, sixDir string,
+	filenames []string,
+	opts ...Option,
 ) error {
+	var op options
+	for _, o := range opts {
+		o(&op)
+	}
 	isConfigErr, configErr := loadConfig(&i.ideConfig, cfgfilename)
 	// return errors that are not decoding errors but
 	// let decoding errors be just logged
@@ -107,8 +104,8 @@ func (i *IDE) init(cwd, cfgfilename, recfilename string,
 		log.SetLevel(log.PanicLevel)
 	}
 
-	i.publishEventFn = publishEvent
-	i.locker = locker
+	i.publishEventFn = op.publishEvent
+	i.locker = op.locker
 
 	// register default schemes
 	workspaceManager := workspace.NewManager(i.ideConfig.workspace())
@@ -127,7 +124,7 @@ func (i *IDE) init(cwd, cfgfilename, recfilename string,
 
 	root, err := newWorkspaceManagerHandler(cwdURI,
 		workspaceManager, i.ideConfig, recfilename, filenames,
-		sixDir, i.publishEvent, pluginRunner, i.locker)
+		sixDir, i.publishEvent, op.pluginRunner, i.locker)
 	if err != nil {
 		return err
 	}

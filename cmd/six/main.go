@@ -21,7 +21,6 @@ import (
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 	"gopkg.in/yaml.v3"
-	"unstable.build/go-tui"
 	"unstable.build/go-tui/api/config"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/ide"
@@ -257,13 +256,15 @@ func run() int {
 	if *flagRecover != "" && len(filenames) != 0 {
 		i, err = ide.NewRecovery(*flagWorkspace, *flagConfigPath,
 			filenames[0], *flagRecover, *flagDataPath,
-			tui.PublishEvent, ide.FuncPlugins(pluginRunner), &eventLoopMutex)
+			ide.WithPlugins(ide.FuncPlugins(pluginRunner)),
+			ide.WithLocker(&eventLoopMutex))
 	} else if *flagRecover != "" {
 		err = fmt.Errorf("flag -r requires to pass the original filename")
 	} else {
 		i, err = ide.New(*flagWorkspace, *flagConfigPath,
-			*flagDataPath, tui.PublishEvent,
-			ide.FuncPlugins(pluginRunner), &eventLoopMutex, filenames...)
+			*flagDataPath, filenames,
+			ide.WithPlugins(ide.FuncPlugins(pluginRunner)),
+			ide.WithLocker(&eventLoopMutex))
 	}
 
 	if err != nil {
