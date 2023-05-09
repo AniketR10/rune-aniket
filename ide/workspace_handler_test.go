@@ -12,37 +12,11 @@ import (
 	"unstable.build/go-tui/api/config"
 	schemeapi "unstable.build/go-tui/api/scheme"
 	workspaceapi "unstable.build/go-tui/api/workspace"
+	"unstable.build/go-tui/plugin"
 	"unstable.build/go-tui/term"
 	testutil "unstable.build/go-tui/util/test"
 	"unstable.build/go-tui/workspace"
 )
-
-func defaultCfg() ideConfig {
-	return ideConfig{cfg: map[string]interface{}{
-		"clipboard": "memory",
-		"command": map[string]interface{}{
-			"key": "<c-\\>", // see testutil.TestHandlerIsolated
-			"key_bindings": map[string]interface{}{
-				"1": "switchToWorkspace 1",
-				"2": "switchToWorkspace 2",
-				"3": "switchToWorkspace 3",
-				"4": "switchToWorkspace 4",
-				"5": "switchToWorkspace 5",
-				"6": "switchToWorkspace 6",
-				"7": "switchToWorkspace 7",
-				"8": "switchToWorkspace 8",
-				"9": "switchToWorkspace 9",
-				"0": "switchToWorkspace 10",
-			},
-			"aliases": map[string]interface{}{
-				"addBlaBla": "addWorkspace memory:///blabla",
-			},
-		},
-		"workspace": map[string]interface{}{
-			"wallpaper": "workspaceWallpaper",
-		},
-	}}
-}
 
 func TestWorkspaceConfig(t *testing.T) {
 	mockConfig := map[string]interface{}{
@@ -76,6 +50,85 @@ func TestWorkspaceConfig(t *testing.T) {
 		defer m.Close()
 
 		assert.EqualValues(t, mockConfig, passed)
+	})
+}
+
+func TestWorkspacePlugins(t *testing.T) {
+	t.Run("calls plugin runner with user plugins", func(t *testing.T) {
+		cfg := ideConfig{cfg: map[string]interface{}{
+			"plugins": map[string]interface{}{
+				"git": map[string]interface{}{
+					"path": "myPath",
+					"config": map[string]interface{}{
+						"a": "b",
+					},
+				},
+			},
+		}}
+		manager := workspace.NewManager(cfg.workspace())
+
+		manager.RegisterScheme(workspace.MemoryScheme, workspace.NewMemoryScheme)
+
+		uri, err := workspaceapi.ParseURI("memory:///tmp")
+		require.NoError(t, err)
+
+		// plugin.Runner.Run is called asynchronously
+		var called string
+
+		runner := FuncPluginsRunner(
+			func(locker sync.Locker, _uri workspaceapi.URI,
+				res map[plugin.Permission]plugin.ResourceRegistrar, s string) (plugin.Runner, error) {
+				assert.Equal(t, uri, _uri)
+				return fnRunner{fn: func(pluginID, path string, cfg config.Config) error {
+					called = pluginID
+					assert.Equal(t, "myPath", path)
+					assert.Equal(t, config.MapConfig(map[string]interface{}{"a": "b"}), cfg)
+					return nil
+				},
+				}, nil
+			})
+		m := newTestWorkspaceManagerHandlerWithManagerAndPlugins(t, manager, uri, cfg, runner, nil)
+		defer m.Close()
+
+		assert.Equal(t, "git", called)
+	})
+
+	t.Run("calls plugin runner with built-in plugins", func(t *testing.T) {
+		cfg := ideConfig{cfg: map[string]interface{}{}}
+		manager := workspace.NewManager(cfg.workspace())
+
+		manager.RegisterScheme(workspace.MemoryScheme, workspace.NewMemoryScheme)
+
+		uri, err := workspaceapi.ParseURI("memory:///tmp")
+		require.NoError(t, err)
+
+		plugins := map[string]Plugin{
+			"myID": Plugin{
+				ID:     "myID",
+				Path:   "myPath2",
+				Config: config.MapConfig(map[string]interface{}{"a": "b"}),
+			},
+		}
+
+		// plugin.Runner.Run is called asynchronously
+		var called string
+
+		runner := FuncPluginsRunner(
+			func(locker sync.Locker, _uri workspaceapi.URI,
+				res map[plugin.Permission]plugin.ResourceRegistrar, s string) (plugin.Runner, error) {
+				assert.Equal(t, uri, _uri)
+				return fnRunner{fn: func(pluginID, path string, cfg config.Config) error {
+					called = pluginID
+					assert.Equal(t, "myPath2", path)
+					assert.Equal(t, config.MapConfig(map[string]interface{}{"a": "b"}), cfg)
+					return nil
+				},
+				}, nil
+			})
+		m := newTestWorkspaceManagerHandlerWithManagerAndPlugins(t, manager, uri, cfg, runner, plugins)
+		defer m.Close()
+
+		assert.Equal(t, "myID", called)
 	})
 }
 
@@ -257,6 +310,15 @@ func newTestWorkspaceManagerHandlerWithManager(
 	t *testing.T, manager *workspace.Manager,
 	uri workspaceapi.URI, cfg ideConfig,
 ) *testWorkspaceManagerHandler {
+	return newTestWorkspaceManagerHandlerWithManagerAndPlugins(t, manager,
+		uri, cfg, FuncPluginsRunner(testRunnerFn), nil)
+}
+
+func newTestWorkspaceManagerHandlerWithManagerAndPlugins(
+	t *testing.T, manager *workspace.Manager,
+	uri workspaceapi.URI, cfg ideConfig, runner PluginsRunner,
+	plugins map[string]Plugin,
+) *testWorkspaceManagerHandler {
 	dir, err := ioutil.TempDir("", "")
 	require.NoError(t, err)
 
@@ -265,7 +327,7 @@ func newTestWorkspaceManagerHandlerWithManager(
 	err = m.workspaceManagerHandler.init(uri, manager, cfg, "", []string{},
 		dir, func(term.Event) bool {
 			return true
-		}, FuncPlugins(testRunnerFn), new(sync.Mutex))
+		}, runner, new(sync.Mutex), plugins)
 	require.NoError(t, err)
 	return m
 }
@@ -299,4 +361,43 @@ func (t *testWorkspaceManagerHandler) Handle(ev term.Event) (bool, bool) {
 	}
 	ex.Wait()
 	return quit, handle
+}
+
+func defaultCfg() ideConfig {
+	return ideConfig{cfg: map[string]interface{}{
+		"clipboard": "memory",
+		"command": map[string]interface{}{
+			"key": "<c-\\>", // see testutil.TestHandlerIsolated
+			"key_bindings": map[string]interface{}{
+				"1": "switchToWorkspace 1",
+				"2": "switchToWorkspace 2",
+				"3": "switchToWorkspace 3",
+				"4": "switchToWorkspace 4",
+				"5": "switchToWorkspace 5",
+				"6": "switchToWorkspace 6",
+				"7": "switchToWorkspace 7",
+				"8": "switchToWorkspace 8",
+				"9": "switchToWorkspace 9",
+				"0": "switchToWorkspace 10",
+			},
+			"aliases": map[string]interface{}{
+				"addBlaBla": "addWorkspace memory:///blabla",
+			},
+		},
+		"workspace": map[string]interface{}{
+			"wallpaper": "workspaceWallpaper",
+		},
+	}}
+}
+
+type fnRunner struct {
+	fn func(pluginID, path string, config config.Config) error
+}
+
+func (f fnRunner) Run(pluginID, path string, config config.Config) error {
+	return f.fn(pluginID, path, config)
+}
+
+func (f fnRunner) Close() error {
+	return nil
 }

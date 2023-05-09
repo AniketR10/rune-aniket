@@ -66,7 +66,7 @@ func (i *IDE) init(
 	filenames []string,
 	opts ...Option,
 ) error {
-	var op options
+	op := defaultOptions()
 	for _, o := range opts {
 		o(&op)
 	}
@@ -124,7 +124,7 @@ func (i *IDE) init(
 
 	root, err := newWorkspaceManagerHandler(cwdURI,
 		workspaceManager, i.ideConfig, recfilename, filenames,
-		sixDir, i.publishEvent, op.pluginRunner, i.locker)
+		sixDir, i.publishEvent, op.pluginRunner, i.locker, op.plugins)
 	if err != nil {
 		return err
 	}

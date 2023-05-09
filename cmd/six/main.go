@@ -256,14 +256,14 @@ func run() int {
 	if *flagRecover != "" && len(filenames) != 0 {
 		i, err = ide.NewRecovery(*flagWorkspace, *flagConfigPath,
 			filenames[0], *flagRecover, *flagDataPath,
-			ide.WithPlugins(ide.FuncPlugins(pluginRunner)),
+			ide.WithPluginsRunner(ide.FuncPluginsRunner(pluginRunner)),
 			ide.WithLocker(&eventLoopMutex))
 	} else if *flagRecover != "" {
 		err = fmt.Errorf("flag -r requires to pass the original filename")
 	} else {
 		i, err = ide.New(*flagWorkspace, *flagConfigPath,
 			*flagDataPath, filenames,
-			ide.WithPlugins(ide.FuncPlugins(pluginRunner)),
+			ide.WithPluginsRunner(ide.FuncPluginsRunner(pluginRunner)),
 			ide.WithLocker(&eventLoopMutex))
 	}
 

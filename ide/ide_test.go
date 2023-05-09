@@ -34,7 +34,7 @@ func TestIDEInitializationIntegration(t *testing.T) {
 		err = i.init(cwdURI.String(), configFile.Name(), "",
 			dir, []string{file1.Name(), file2.Name()},
 			WithPublishEvent(nopPublishEvent),
-			WithPlugins(FuncPlugins(testRunnerFn)),
+			WithPluginsRunner(FuncPluginsRunner(testRunnerFn)),
 			WithLocker(new(sync.Mutex)))
 		require.NoError(t, err)
 
@@ -60,7 +60,7 @@ func TestIDEInitializationIntegration(t *testing.T) {
 		err = i.init(cwdURI.String(), configFile.Name(), "",
 			dir, []string{file1.Name()},
 			WithPublishEvent(nopPublishEvent),
-			WithPlugins(FuncPlugins(testRunnerFn)),
+			WithPluginsRunner(FuncPluginsRunner(testRunnerFn)),
 			WithLocker(new(sync.Mutex)))
 		require.NoError(t, err)
 
@@ -83,7 +83,7 @@ func TestIDEInitializationIntegration(t *testing.T) {
 		err = i.init(".", configFile.Name(), "",
 			dir, []string{file1.Name()},
 			WithPublishEvent(nopPublishEvent),
-			WithPlugins(FuncPlugins(testRunnerFn)),
+			WithPluginsRunner(FuncPluginsRunner(testRunnerFn)),
 			WithLocker(new(sync.Mutex)))
 		require.NoError(t, err)
 
@@ -116,7 +116,7 @@ func TestIDEInitializationIntegration(t *testing.T) {
 				published = true
 				return false
 			}),
-			WithPlugins(FuncPlugins(testRunnerFn)),
+			WithPluginsRunner(FuncPluginsRunner(testRunnerFn)),
 			WithLocker(new(sync.Mutex)))
 		require.NoError(t, err)
 

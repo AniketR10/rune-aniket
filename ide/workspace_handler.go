@@ -67,15 +67,16 @@ var (
 )
 
 type workspaceManagerHandler struct {
-	mu            sync.Locker
-	exit          bool
-	cfg           ideConfig
-	ctxWithLocker context.Context
-	storage       document.Service
-	workspace     workspace.WorkspaceManager
-	publishEvent  func(term.Event) bool
-	pluginRunner  Plugins
-	sixDir        string
+	mu             sync.Locker
+	exit           bool
+	cfg            ideConfig
+	ctxWithLocker  context.Context
+	storage        document.Service
+	workspace      workspace.WorkspaceManager
+	publishEvent   func(term.Event) bool
+	pluginRunner   PluginsRunner
+	sixDir         string
+	builtinPlugins map[string]Plugin
 
 	union          handler.FrameUnion
 	bar            handler.Tabs
@@ -93,14 +94,15 @@ func newWorkspaceManagerHandler(
 	cfg ideConfig, recfilename string, filenames []string,
 	sixDir string,
 	publishEvent func(term.Event) bool,
-	pluginRunner Plugins,
+	pluginRunner PluginsRunner,
 	locker sync.Locker,
+	builtinPlugins map[string]Plugin,
 ) (*workspaceManagerHandler, error) {
 	ret := new(workspaceManagerHandler)
 
 	err := ret.init(initial, manager,
 		cfg, recfilename, filenames, sixDir,
-		publishEvent, pluginRunner, locker)
+		publishEvent, pluginRunner, locker, builtinPlugins)
 	if err != nil {
 		return nil, err
 	}
@@ -123,8 +125,9 @@ func (h *workspaceManagerHandler) init(
 	recfilename string, filenames []string,
 	sixDir string,
 	publishEvent func(term.Event) bool,
-	pluginRunner Plugins,
+	pluginRunner PluginsRunner,
 	locker sync.Locker,
+	builtinPlugins map[string]Plugin,
 ) error {
 	h.mu = locker
 	h.workspaces = make([]*workspaceHandler, 10)
@@ -133,6 +136,7 @@ func (h *workspaceManagerHandler) init(
 	h.workspace = manager
 	h.sixDir = sixDir
 	h.pluginRunner = pluginRunner
+	h.builtinPlugins = builtinPlugins
 	h.ctxWithLocker = workspace.ContextWithLocker(context.Background(), h.mu)
 	storage, err := storage.New(h.ctxWithLocker, sixDir, bson.Marshaler())
 	if err != nil {
@@ -310,9 +314,25 @@ func (h *workspaceManagerHandler) Man() tui.Manual {
 
 func (h *workspaceManagerHandler) initPlugins(manager plugin.Runner, cfg ideConfig) {
 	var wg sync.WaitGroup
-	plugins := cfg.plugins()
-	wg.Add(len(plugins))
-	for id, p := range plugins {
+	userPlugins := cfg.plugins()
+
+	wg.Add(len(userPlugins) + len(h.builtinPlugins))
+
+	for id, p := range h.builtinPlugins {
+		pconfig := p.Config
+		if pconfig == nil {
+			pconfig = config.MapConfig(make(map[string]interface{}))
+		}
+		go func(id, path string, config config.Config) {
+			defer wg.Done()
+			err := manager.Run(id, path, pconfig)
+			if err != nil {
+				log.Errorf("failed to run built-in plugin with id %q: %v", id, err)
+			}
+		}(id, p.Path, pconfig)
+	}
+
+	for id, p := range userPlugins {
 		path, _ := p.path()
 		pconfig, ok := p.config()
 		if !ok {
@@ -326,6 +346,7 @@ func (h *workspaceManagerHandler) initPlugins(manager plugin.Runner, cfg ideConf
 			}
 		}(id, path, pconfig)
 	}
+
 	wg.Wait()
 }
 
@@ -463,7 +484,7 @@ func (h *workspaceManagerHandler) addWorkspace(
 	if err := os.MkdirAll(dataDir, 0777); err != nil {
 		return fmt.Errorf("mkdir .plugin: %v", err)
 	}
-	runner, err := h.pluginRunner.Runner(h.mu, uri, res, dataDir)
+	runner, err := h.pluginRunner.WorkspacePluginsRunner(h.mu, uri, res, dataDir)
 	if err != nil {
 		return fmt.Errorf("error initializing plugin manager: %v", err)
 	}

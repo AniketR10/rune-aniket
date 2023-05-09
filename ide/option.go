@@ -13,6 +13,19 @@ import (
 // Option is a configuration option for an IDE.
 type Option func(*options)
 
+// Plugin represents a built-in plugin executable.
+type Plugin struct {
+	// ID should be a unique representation of the logical
+	// plugin.
+	ID string
+
+	// Path is the path to the executable.
+	Path string
+
+	// Config is the configuration for the plugin.
+	Config config.Config
+}
+
 // WithLocker returns an option that sets locker
 // as the event loop locker to synchronize access
 // to resources against plugin goroutines.
@@ -32,18 +45,29 @@ func WithPublishEvent(p EventPublisher) Option {
 	}
 }
 
-// WithPlugins sets the Plugins facility of this IDE.
+// WithPluginsRunner sets the Plugins facility of this IDE.
 // The default is no plugin runner.
-func WithPlugins(p Plugins) Option {
+func WithPluginsRunner(p PluginsRunner) Option {
 	return func(opts *options) {
 		opts.pluginRunner = p
 	}
 }
 
+// WithPlugin adds Plugin to the IDE's built-in plugins.
+func WithPlugin(p Plugin) Option {
+	return func(opts *options) {
+		if _, ok := opts.plugins[p.ID]; ok {
+			panic("built-in plugin with same ID already registered")
+		}
+		opts.plugins[p.ID] = p
+	}
+}
+
 type options struct {
 	publishEvent EventPublisher
-	pluginRunner Plugins
+	pluginRunner PluginsRunner
 	locker       sync.Locker
+	plugins      map[string]Plugin
 }
 
 func defaultOptions() options {
@@ -51,13 +75,14 @@ func defaultOptions() options {
 		publishEvent: tui.PublishEvent,
 		pluginRunner: nopPlugins{},
 		locker:       nopLocker{},
+		plugins:      make(map[string]Plugin),
 	}
 }
 
 type nopPlugins struct {
 }
 
-func (n nopPlugins) Runner(locker sync.Locker,
+func (n nopPlugins) WorkspacePluginsRunner(locker sync.Locker,
 	uri workspaceapi.URI,
 	res map[plugin.Permission]plugin.ResourceRegistrar,
 	dataDir string) (plugin.Runner, error) {
