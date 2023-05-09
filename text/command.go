@@ -10,16 +10,11 @@ import (
 // EventTypeCommand extends textapi.EventType to re-use functionality.
 const EventTypeCommand textapi.EventType = textapi.EventType(uint8(99))
 
-// CommandHandler is a callback interface that wraps the basic method Command.
+// CommandHandler wraps the basic methods HandleCommand and Complete.
 type CommandHandler interface {
-	// Handle is called when user issued a command previously registered via SubscribeCommand.
+	// HandleCommand is called when user issued a command previously registered via SubscribeCommand.
 	HandleCommand(context.Context, textapi.Command) (exit bool, err error)
-}
 
-// CommandCompleter abstracts the ability for CommandHandlers to auto-complete
-// the arguments of a command. A CommandHandler should also satisfy this interface
-// if it's able to auto-complete arguments.
-type CommandCompleter interface {
 	// Complete takes command args and returns a list of expanded options for them.
 	// It also returns a expanded version of the last arg, or an empty string
 	// if the last arg could/should not be automatically expanded.

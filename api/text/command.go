@@ -31,13 +31,6 @@ type CommandHandler interface {
 	HandleCommand(context.Context, Command) (exit bool, err error)
 }
 
-// CommandCompleter abstracts the ability for CommandHandlers to auto-complete
-// the arguments of a command. A CommandHandler should also satisfy this interface
-// if it's able to auto-complete arguments.
-type CommandCompleter interface {
-	Complete(ctx context.Context, args []string) (iterator.Iterator[string], error)
-}
-
 type fnCommandHandler struct {
 	cb         func(context.Context, Command) (bool, error)
 	completeFn func(context.Context, []string) (iterator.Iterator[string], error)
@@ -61,18 +54,5 @@ func (f fnCommandHandler) Complete(ctx context.Context, args []string) (
 func FuncCommandHandler(fn func(context.Context, Command) (bool, error)) CommandHandler {
 	return fnCommandHandler{
 		cb: fn,
-	}
-}
-
-// FuncCommandCompleter returns an CommandHandler that calls fn
-// every time HandleCommand is invoked but also satisfies CommandCompleter,
-// and so calls completeFn when Complete is called.
-func FuncCommandCompleter(
-	fn func(context.Context, Command) (bool, error),
-	completeFn func(context.Context, []string) (iterator.Iterator[string], error),
-) CommandHandler {
-	return fnCommandHandler{
-		cb:         fn,
-		completeFn: completeFn,
 	}
 }

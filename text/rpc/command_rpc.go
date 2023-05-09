@@ -5,6 +5,7 @@ import (
 	"runtime"
 	"time"
 
+	"github.com/ernestrc/blue/iterator"
 	"github.com/ernestrc/blue/logging"
 	log "github.com/sirupsen/logrus"
 	textapi "unstable.build/go-tui/api/text"
@@ -33,6 +34,13 @@ func newCommandClient(conn proto.MuxConn, s *Server) *commandClient {
 	ret.s = s
 	runtime.SetFinalizer(ret, func(c *commandClient) { c.Close() })
 	return ret
+}
+
+// for now we don't support remote completion.
+func (c *commandClient) Complete(ctx context.Context, args []string) (
+	iterator.Iterator[string], string, error,
+) {
+	return iterator.FromSlice[string](nil), "", nil
 }
 
 func (c *commandClient) HandleCommand(ctx context.Context, cmd textapi.Command) (

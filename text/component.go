@@ -476,6 +476,8 @@ func (c *Component) KeyMapping(key term.KeyComb) ([]string, bool) {
 	return cmd, ok
 }
 
+// ComplateCommand calls command's cmd completer with the given args and returns
+// an interator with the possible argument completions.
 func (c *Component) CompleteCommand(ctx context.Context, cmd string, args ...string) (
 	iterator.Iterator[string], string, error,
 ) {
@@ -491,13 +493,7 @@ func (c *Component) CompleteCommand(ctx context.Context, cmd string, args ...str
 		return iterator.FromSlice[string](nil), "", nil
 	}
 
-	completer, ok := commander.(CommandCompleter)
-	if !ok {
-		c.log(log.DebugLevel, "complete command %q: completion not implemented", cmd)
-		return iterator.FromSlice[string](nil), "", nil
-	}
-
-	return completer.Complete(ctx, args)
+	return commander.Complete(ctx, args)
 }
 
 // DispatchCommand dispatches a EventTypeCommand with cmd to subscribers
