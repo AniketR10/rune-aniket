@@ -5,7 +5,7 @@ import (
 	_ "net/http/pprof"
 
 	log "github.com/sirupsen/logrus"
-	"unstable.build/go-tui/cmd/plugin_issues/plugin"
+	"unstable.build/go-tui/cmd/plugin_issues/firestore"
 	"unstable.build/go-tui/plugin/process"
 )
 
@@ -19,6 +19,6 @@ func main() {
 		log.Println(http.ListenAndServe("localhost:4568", nil))
 	}()
 
-	grantee, perms := plugin.Grantee(Tag)
+	grantee, perms := firestore.Grantee(Tag)
 	process.Serve(grantee, perms...)
 }

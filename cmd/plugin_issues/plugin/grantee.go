@@ -8,12 +8,10 @@ import (
 	_ "net/http/pprof"
 	"os"
 	"os/user"
-	"path"
 	"sync"
 	"time"
 
 	"github.com/ernestrc/blue/document"
-	"github.com/ernestrc/blue/document/firestore"
 	"github.com/ernestrc/blue/document/logging"
 	"github.com/ernestrc/blue/encoding"
 	"github.com/ernestrc/blue/encoding/yaml"
@@ -36,7 +34,6 @@ import (
 )
 
 const (
-	issuesScheme           = "bluectl+issues"
 	defaultMaxSubjectLen   = 50
 	defaultCreateIssueCmd  = "issueCreate"
 	initialEvictAllTimeout = 1 * time.Minute
@@ -60,7 +57,11 @@ var (
 )
 
 // Grantee returns this plugin's grantee and the permissions required to run it.
-func Grantee(versionTag string) (plugin.Grantee, []plugin.Permission) {
+// It uses the local bluectl configuration to load the issue tracker's credentials.
+func GranteeWithService(
+	versionTag, scheme string,
+	svcFn func(config.Config) (document.Service, error),
+) (plugin.Grantee, []plugin.Permission) {
 	m := yaml.Marshaler()
 	defaultAuthor := getDefaultAuthor()
 	defTemplate := issue.Report{Author: defaultAuthor}
@@ -73,12 +74,15 @@ func Grantee(versionTag string) (plugin.Grantee, []plugin.Permission) {
 		marshaler:   m,
 		defTemplate: data,
 		versionTag:  versionTag,
+		scheme:      scheme,
+		svcFn:       svcFn,
 	}
 	return s, requiredPermissions
 }
 
 type issuesGrantee struct {
 	mu         sync.Mutex
+	config     config.Config
 	broker     proto.MuxBroker
 	svc        *cache.Service[issue.ReportDocument]
 	tracker    issue.Tracker
@@ -89,11 +93,12 @@ type issuesGrantee struct {
 	sm         schemeapi.SchemeManager
 	s          document.Service
 	versionTag string
+	svcFn      func(config.Config) (document.Service, error)
+	scheme     string
 
-	cmds              map[string]func(*issuesGrantee, context.Context, textapi.Command) (bool, error)
-	bluectlConfigFile string
-	maxSubjectLen     int
-	defTemplate       []byte
+	cmds          map[string]func(*issuesGrantee, context.Context, textapi.Command) (bool, error)
+	maxSubjectLen int
+	defTemplate   []byte
 
 	pendingIssueURI workspaceapi.URI
 	pendingIssueID  string
@@ -103,21 +108,9 @@ func (e *issuesGrantee) Connected(broker proto.MuxBroker, pconfig config.Config)
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
+	e.config = pconfig
 	e.broker = broker
 	var err error
-	e.bluectlConfigFile, err = pconfig.GetString("bluectl_config")
-	if err != nil {
-		if err != config.ErrNotFound {
-			log.Warnf("could not read property 'bluectl_config': %v", err)
-		}
-		homeDir, err := os.UserHomeDir()
-		if err != nil {
-			log.Errorf("no 'bluectl_config' provided and failed "+
-				"to get user home dir: %v", err)
-			return
-		}
-		e.bluectlConfigFile = path.Join(homeDir, ".bluectl", "config")
-	}
 
 	e.maxSubjectLen, err = pconfig.GetInt("max_list_files_subject_len")
 	if err != nil {
@@ -180,7 +173,7 @@ func (e *issuesGrantee) Connected(broker proto.MuxBroker, pconfig config.Config)
 
 func (e *issuesGrantee) initScheme(m schemeapi.SchemeManager) error {
 	marshaler := yaml.Marshaler()
-	rootURI, err := workspaceapi.ParseURI("bluectl+issues:///")
+	rootURI, err := workspaceapi.ParseURI(fmt.Sprintf("%s:///", e.scheme))
 	if err != nil {
 		panic(err)
 	}
@@ -189,7 +182,7 @@ func (e *issuesGrantee) initScheme(m schemeapi.SchemeManager) error {
 		marshaler, fmt.Errorf("missing %q sub-field in Metadata field",
 			issue.ReportMetadataIDField))
 	schemeFn = issueMapperScheme(schemeFn, marshaler, e.maxSubjectLen)
-	err = m.RegisterScheme(issuesScheme, schemeFn)
+	err = m.RegisterScheme(e.scheme, schemeFn)
 	return err
 }
 
@@ -289,21 +282,14 @@ func (e *issuesGrantee) PermissionGranted(grants []plugin.Grant) {
 		return
 	}
 
-	cfg, err := sourceConfig(e.bluectlConfigFile)
+	svc, err := e.svcFn(e.config)
 	if err != nil {
-		log.Errorf("source bluectl configuration: %v", err)
+		log.Error(err)
 		return
 	}
-	svc, err := firestore.New(cfg.Auth.ProjectID,
-		cfg.Issue.Collection, cfg.Auth.CredentialsFile)
-	if err != nil {
-		log.Errorf("initialize firestore: %v", err)
-		return
-	}
-
 	svc = logging.WithLogging(svc)
 
-	// avoid too many reads to firestore, which is pretty slow.
+	// avoid too many reads to service (i.e. firestore), which is pretty slow.
 	// As long as there aren't many oob (outside of six) requests this should be
 	// able to cache expensive list + get all operations pretty well
 	// because it's using the host's global storage as the cache
