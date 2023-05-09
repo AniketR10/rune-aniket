@@ -36,11 +36,7 @@ func (e *eventStreamClient) Handle(ctx context.Context, ev textapi.Event) bool {
 	}
 	protoEv := toProto(ev)
 
-	// do not hold mutex while waiting on I/O:
-	// unary RPCs unlocking is done at the broker level,
-	// but for stream RPCs, there's no guarantee of what
-	// goroutine is calling Send/Recv so we must unlock manually
-	// on a per-implementation basis.
+	// do not hold mutex while waiting on I/O
 	e.locker.Unlock()
 	defer e.locker.Lock()
 

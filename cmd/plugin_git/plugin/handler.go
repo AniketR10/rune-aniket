@@ -114,17 +114,17 @@ func newGitHandler(
 
 	for _, grant := range grants {
 		switch grant.Permission {
-		case plugin.PermissionExecute:
+		case plugin.Permission(plugin.PermissionExecute):
 			ret.exec, err = workspaceplugin.Executor(grant, broker)
 			if err != nil {
 				return nil, err
 			}
-		case plugin.PermissionBrowserEventPublisher:
+		case plugin.Permission(plugin.PermissionBrowserEventPublisher):
 			ret.p, err = browserplugin.EventPublisher(grant, broker)
 			if err != nil {
 				return nil, err
 			}
-		case plugin.PermissionBrowserWindowManager:
+		case plugin.Permission(plugin.PermissionBrowserWindowManager):
 			ret.wm, err = browserplugin.WindowManager(grant, broker)
 			if err != nil {
 				return nil, err

@@ -73,7 +73,6 @@ type fuzzyFinderHandler struct {
 	killed               bool
 	useWorkspaceFallback bool
 	cancelScan           func()
-	closed               bool
 
 	history search.History
 }
@@ -567,10 +566,9 @@ func (h *fuzzyFinderHandler) Close() error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
-	if h.closed {
+	if h.quitChan == nil {
 		return nil
 	}
-	h.closed = true
 
 	log.Tracef("fuzzyFinderHandler.Close(): %#v", h.pid)
 
@@ -580,5 +578,6 @@ func (h *fuzzyFinderHandler) Close() error {
 	}
 	close(h.quitChan)
 	h.list.Close()
+	h.quitChan = nil
 	return nil
 }
