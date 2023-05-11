@@ -49,9 +49,6 @@ func (s *storageResourceServer) Register(
 	svc := s.setupStorage(lock, pluginID)
 	svc = doclog.WithLogging(svc)
 	server := new(docrpc.Server)
-	// NOTE: if registrar is not a grpc.Server this will panic
-	// but it's a small price to pay rather than exposing grpc.Server
-	// across all ResourceRegistrar impls.
 	server.Init(svc, toml.Marshaler())
 	bproto.RegisterDocumentStoreServer(registrar, server)
 	// doc server stops grpc.Server, which is not something storageResourceserver

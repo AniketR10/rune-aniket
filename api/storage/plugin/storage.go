@@ -2,7 +2,6 @@ package plugin
 
 import (
 	"os"
-	"runtime"
 
 	"github.com/ernestrc/blue/document"
 	docrpc "github.com/ernestrc/blue/document/rpc"
@@ -24,8 +23,11 @@ func dialStorage(grant plugin.Grant, broker proto.MuxBroker) (
 	}
 	c := new(docrpc.Client)
 	c.Init(conn, toml.Marshaler())
-	runtime.SetFinalizer(c, func(c *docrpc.Client) { c.Close() })
-	return c, nil
+	partition, ok := partitionFromContext(grant.Context)
+	if !ok {
+		partition = "default"
+	}
+	return document.WithPartition(c, partition), nil
 }
 
 // Storage acquires a client to persistent storage with
