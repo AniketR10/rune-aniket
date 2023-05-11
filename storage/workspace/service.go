@@ -61,6 +61,9 @@ func (s *service) Update(
 	if len(updates) == 0 {
 		panic("Update: no paths to update")
 	}
+	if ID == "" {
+		return errors.New("invalid ID: empty")
+	}
 	origFileName := s.getFileName(ID)
 	orig, werr := s.scheme.Open(origFileName, os.O_RDONLY, 0)
 	if werr != nil {
@@ -107,6 +110,9 @@ func (s *service) Update(
 }
 
 func (s *service) Get(ctx context.Context, ID string, doc interface{}) error {
+	if ID == "" {
+		return errors.New("invalid ID: empty")
+	}
 	if !document.IsEncodeable(doc) {
 		return errors.New("invalid document argument")
 	}
@@ -123,6 +129,9 @@ func (s *service) Get(ctx context.Context, ID string, doc interface{}) error {
 }
 
 func (s *service) Delete(ctx context.Context, ID string) error {
+	if ID == "" {
+		return errors.New("invalid ID: empty")
+	}
 	err := s.scheme.Remove(s.getFileName(ID))
 	// delete should be idempotent
 	if errors.Is(err, os.ErrNotExist) {
@@ -180,6 +189,9 @@ func (s *service) getFileName(id string) string {
 func (s *service) create(ctx context.Context, ID string, doc interface{}, openFlags int) error {
 	if doc == nil {
 		panic("invalid nil data argument to Create/Set")
+	}
+	if ID == "" {
+		return errors.New("invalid ID: empty")
 	}
 	doc, err := document.DerefCreateValue(reflect.ValueOf(doc))
 	if err != nil {

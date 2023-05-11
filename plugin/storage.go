@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"github.com/ernestrc/blue/document"
+	doclog "github.com/ernestrc/blue/document/logging"
 	docrpc "github.com/ernestrc/blue/document/rpc"
 	bproto "github.com/ernestrc/blue/document/rpc/proto"
 	"github.com/ernestrc/blue/encoding/toml"
@@ -46,6 +47,7 @@ func (s *storageResourceServer) Register(
 	broker proto.MuxBroker, lock sync.Locker,
 ) (io.Closer, error) {
 	svc := s.setupStorage(lock, pluginID)
+	svc = doclog.WithLogging(svc)
 	server := new(docrpc.Server)
 	// NOTE: if registrar is not a grpc.Server this will panic
 	// but it's a small price to pay rather than exposing grpc.Server

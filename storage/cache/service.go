@@ -39,11 +39,11 @@ func (s *Service[T]) Init(svc, cache document.Service) {
 }
 
 func (s *Service[T]) EvictAll(ctx context.Context) error {
-	err := s.evictAll(ctx, s.cache)
+	err := s.evictAll(ctx, s.cache, "cache")
 	if err != nil {
 		// if we fail to remove evict records from cache
 		// try to list using the underlying service
-		if serr := s.evictAll(ctx, s.svc); serr != nil {
+		if serr := s.evictAll(ctx, s.svc, "service"); serr != nil {
 			err = multierr.Append(err, serr)
 		}
 		return err
@@ -51,7 +51,9 @@ func (s *Service[T]) EvictAll(ctx context.Context) error {
 	return nil
 }
 
-func (s *Service[T]) evictAll(ctx context.Context, listSvc document.Service) error {
+func (s *Service[T]) evictAll(
+	ctx context.Context, listSvc document.Service, listSvcName string,
+) error {
 	it, err := listSvc.List(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("List: %v", err)
@@ -62,6 +64,10 @@ func (s *Service[T]) evictAll(ctx context.Context, listSvc document.Service) err
 		err := it.NextTo(&temp)
 		if err != nil {
 			ret = multierr.Append(ret, fmt.Errorf("NextTo: %v", err))
+			continue
+		}
+		if temp.ID() == "" {
+			ret = multierr.Append(ret, fmt.Errorf("empty document ID: evict using '%s'", listSvcName))
 			continue
 		}
 		err = s.cache.Delete(ctx, temp.ID())
