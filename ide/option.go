@@ -63,19 +63,28 @@ func WithPlugin(p Plugin) Option {
 	}
 }
 
+// WithConfigFilename defines the base filename of the IDE configuration.
+func WithConfigFilename(filename string) Option {
+	return func(opts *options) {
+		opts.configFilename = filename
+	}
+}
+
 type options struct {
-	publishEvent EventPublisher
-	pluginRunner PluginsRunner
-	locker       sync.Locker
-	plugins      map[string]Plugin
+	publishEvent   EventPublisher
+	pluginRunner   PluginsRunner
+	locker         sync.Locker
+	plugins        map[string]Plugin
+	configFilename string
 }
 
 func defaultOptions() options {
 	return options{
-		publishEvent: tui.PublishEvent,
-		pluginRunner: nopPlugins{},
-		locker:       nopLocker{},
-		plugins:      make(map[string]Plugin),
+		publishEvent:   tui.PublishEvent,
+		pluginRunner:   nopPlugins{},
+		locker:         nopLocker{},
+		plugins:        make(map[string]Plugin),
+		configFilename: ".iderc",
 	}
 }
 

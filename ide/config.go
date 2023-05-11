@@ -848,15 +848,15 @@ func decodeConfig(r io.Reader) (cfg map[string]interface{}, err error) {
 	return
 }
 
-func loadWorkspaceConfig(cwd workspace.Workspace, uri workspaceapi.URI, c *ideConfig) (
+func loadWorkspaceConfig(filename string, cwd workspace.Workspace, uri workspaceapi.URI, c *ideConfig) (
 	isConfigErr bool, err error,
 ) {
-	f, werr := cwd.Open(".sixrc", os.O_RDONLY, 0)
+	f, werr := cwd.Open(filename, os.O_RDONLY, 0)
 	if werr != nil {
 		if werr.IsNotExist {
 			return false, nil
 		}
-		return false, fmt.Errorf("found local .sixrc but failed to open: %s", werr.ToError())
+		return false, fmt.Errorf("found local %s but failed to open: %s", filename, werr.ToError())
 	}
 	defer f.Close()
 

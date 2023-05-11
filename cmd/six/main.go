@@ -32,6 +32,10 @@ import (
 	"unstable.build/go-tui/workspace/ssh"
 )
 
+const (
+	configFilename = ".sixrc"
+)
+
 var (
 	// compile-time variables
 	Tag     = "development"
@@ -57,7 +61,7 @@ func init() {
 		log.Error(err)
 		home = "."
 	}
-	defaultConfigPath = path.Join(home, ".sixrc")
+	defaultConfigPath = path.Join(home, configFilename)
 	flagConfigPath = flag.String("c", defaultConfigPath, "config file path")
 	defaultDataPath = path.Join(home, ".six")
 	flagDataPath = flag.String("d", defaultDataPath, "data directory path")
@@ -252,19 +256,21 @@ func run() int {
 	}
 
 	var eventLoopMutex sync.Mutex
+	opts := []ide.Option{
+		ide.WithPluginsRunner(ide.FuncPluginsRunner(pluginRunner)),
+		ide.WithLocker(&eventLoopMutex),
+		ide.WithConfigFilename(configFilename),
+	}
+
 	var i *ide.IDE
 	if *flagRecover != "" && len(filenames) != 0 {
 		i, err = ide.NewRecovery(*flagWorkspace, *flagConfigPath,
-			filenames[0], *flagRecover, *flagDataPath,
-			ide.WithPluginsRunner(ide.FuncPluginsRunner(pluginRunner)),
-			ide.WithLocker(&eventLoopMutex))
+			filenames[0], *flagRecover, *flagDataPath, opts...)
 	} else if *flagRecover != "" {
 		err = fmt.Errorf("flag -r requires to pass the original filename")
 	} else {
 		i, err = ide.New(*flagWorkspace, *flagConfigPath,
-			*flagDataPath, filenames,
-			ide.WithPluginsRunner(ide.FuncPluginsRunner(pluginRunner)),
-			ide.WithLocker(&eventLoopMutex))
+			*flagDataPath, filenames, opts...)
 	}
 
 	if err != nil {

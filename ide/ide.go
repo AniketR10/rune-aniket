@@ -124,7 +124,8 @@ func (i *IDE) init(
 
 	root, err := newWorkspaceManagerHandler(cwdURI,
 		workspaceManager, i.ideConfig, recfilename, filenames,
-		sixDir, i.publishEvent, op.pluginRunner, i.locker, op.plugins)
+		sixDir, i.publishEvent, op.pluginRunner, i.locker, op.plugins,
+		op.configFilename)
 	if err != nil {
 		return err
 	}

@@ -327,7 +327,7 @@ func newTestWorkspaceManagerHandlerWithManagerAndPlugins(
 	err = m.workspaceManagerHandler.init(uri, manager, cfg, "", []string{},
 		dir, func(term.Event) bool {
 			return true
-		}, runner, new(sync.Mutex), plugins)
+		}, runner, new(sync.Mutex), plugins, ".sixrc")
 	require.NoError(t, err)
 	return m
 }

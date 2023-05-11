@@ -77,6 +77,7 @@ type workspaceManagerHandler struct {
 	pluginRunner   PluginsRunner
 	sixDir         string
 	builtinPlugins map[string]Plugin
+	configFilename string
 
 	union          handler.FrameUnion
 	bar            handler.Tabs
@@ -89,20 +90,18 @@ type workspaceManagerHandler struct {
 }
 
 func newWorkspaceManagerHandler(
-	initial workspaceapi.URI,
-	manager workspace.WorkspaceManager,
+	initial workspaceapi.URI, manager workspace.WorkspaceManager,
 	cfg ideConfig, recfilename string, filenames []string,
-	sixDir string,
-	publishEvent func(term.Event) bool,
-	pluginRunner PluginsRunner,
-	locker sync.Locker,
-	builtinPlugins map[string]Plugin,
+	sixDir string, publishEvent func(term.Event) bool,
+	pluginRunner PluginsRunner, locker sync.Locker,
+	builtinPlugins map[string]Plugin, configFilename string,
 ) (*workspaceManagerHandler, error) {
 	ret := new(workspaceManagerHandler)
 
 	err := ret.init(initial, manager,
 		cfg, recfilename, filenames, sixDir,
-		publishEvent, pluginRunner, locker, builtinPlugins)
+		publishEvent, pluginRunner, locker, builtinPlugins,
+		configFilename)
 	if err != nil {
 		return nil, err
 	}
@@ -120,18 +119,16 @@ func (h *workspaceManagerHandler) newEditor(cfg ideConfig) text.Editor {
 }
 
 func (h *workspaceManagerHandler) init(
-	uri workspaceapi.URI,
-	manager workspace.WorkspaceManager, cfg ideConfig,
-	recfilename string, filenames []string,
-	sixDir string,
-	publishEvent func(term.Event) bool,
-	pluginRunner PluginsRunner,
-	locker sync.Locker,
-	builtinPlugins map[string]Plugin,
+	uri workspaceapi.URI, manager workspace.WorkspaceManager,
+	cfg ideConfig, recfilename string, filenames []string,
+	sixDir string, publishEvent func(term.Event) bool,
+	pluginRunner PluginsRunner, locker sync.Locker,
+	builtinPlugins map[string]Plugin, configFilename string,
 ) error {
 	h.mu = locker
 	h.workspaces = make([]*workspaceHandler, 10)
 	h.cfg = cfg
+	h.configFilename = configFilename
 	h.publishEvent = publishEvent
 	h.workspace = manager
 	h.sixDir = sixDir
@@ -433,7 +430,7 @@ func (h *workspaceManagerHandler) addWorkspace(
 
 	cfg := cloneConfig(h.cfg)
 
-	isConfigErr, configErr := loadWorkspaceConfig(cwd, uri, &cfg)
+	isConfigErr, configErr := loadWorkspaceConfig(h.configFilename, cwd, uri, &cfg)
 	if configErr != nil && !isConfigErr {
 		return configErr
 	}
