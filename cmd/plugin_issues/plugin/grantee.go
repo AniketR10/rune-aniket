@@ -82,19 +82,20 @@ func GranteeWithService(
 }
 
 type issuesGrantee struct {
-	config     config.Config
-	broker     proto.MuxBroker
-	svc        *cache.Service[issue.ReportDocument]
-	tracker    issue.Tracker
-	marshaler  encoding.Marshaler
-	m          browserapi.Messenger
-	o          browserapi.ResourceOpener
-	wm         browserapi.WindowManager
-	sm         schemeapi.SchemeManager
-	s          document.Service
-	versionTag string
-	svcFn      func(config.Config) (document.Service, error)
-	scheme     string
+	config       config.Config
+	broker       proto.MuxBroker
+	svc          *cache.Service[issue.ReportDocument]
+	tracker      issue.Tracker
+	trackerError error
+	marshaler    encoding.Marshaler
+	m            browserapi.Messenger
+	o            browserapi.ResourceOpener
+	wm           browserapi.WindowManager
+	sm           schemeapi.SchemeManager
+	s            document.Service
+	versionTag   string
+	svcFn        func(config.Config) (document.Service, error)
+	scheme       string
 
 	cmds          map[string]func(*issuesGrantee, context.Context, textapi.Command) (bool, error)
 	maxSubjectLen int
@@ -282,7 +283,8 @@ func (e *issuesGrantee) PermissionGranted(grants []plugin.Grant) {
 
 	svc, err := e.svcFn(e.config)
 	if err != nil {
-		log.Error(err)
+		log.Warn(err)
+		e.trackerError = err
 		return
 	}
 	svc = logging.WithLogging(svc)
@@ -341,6 +343,9 @@ func (e *issuesGrantee) setMessage(msg string, args ...any) {
 }
 
 func (e *issuesGrantee) issueRefresh(ctx context.Context, cmd textapi.Command) (bool, error) {
+	if e.trackerError != nil {
+		return false, fmt.Errorf("initialize issue tracker: %v", e.trackerError)
+	}
 	if e.svc == nil {
 		return false, errors.New("cannot refresh issues if permissions were not granted")
 	}
@@ -399,7 +404,9 @@ func (e *issuesGrantee) updateReport(ctx context.Context, id string, temp issue.
 
 func (e *issuesGrantee) createOrUpdateIssue(ctx context.Context, ev textapi.Event) bool {
 	if e.tracker == nil {
-		log.Debugf("Cannot create or update issue if permissions were not granted")
+		msg := "Cannot create or update issue if permissions were denied " +
+			"or there was an error initializing issue tracker client."
+		log.Error(msg)
 		return false
 	}
 	var temp issue.Report
@@ -425,6 +432,9 @@ func (e *issuesGrantee) openIssueTemplate(
 ) (bool, error) {
 	if e.o == nil || e.wm == nil {
 		return false, errors.New("browser permissions necessary to create an issue were not granted")
+	}
+	if e.trackerError != nil {
+		return false, fmt.Errorf("initialize issue tracker: %v", e.trackerError)
 	}
 	oldURI := e.pendingIssueURI.Load().(workspaceapi.URI)
 	if !oldURI.Equal(workspaceapi.URI{}) {
