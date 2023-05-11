@@ -8,7 +8,7 @@ import (
 	_ "net/http/pprof"
 	"os"
 	"os/user"
-	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/ernestrc/blue/document"
@@ -77,11 +77,11 @@ func GranteeWithService(
 		scheme:      scheme,
 		svcFn:       svcFn,
 	}
+	s.pendingIssueURI.Store(workspaceapi.URI{})
 	return s, requiredPermissions
 }
 
 type issuesGrantee struct {
-	mu         sync.Mutex
 	config     config.Config
 	broker     proto.MuxBroker
 	svc        *cache.Service[issue.ReportDocument]
@@ -100,14 +100,11 @@ type issuesGrantee struct {
 	maxSubjectLen int
 	defTemplate   []byte
 
-	pendingIssueURI workspaceapi.URI
-	pendingIssueID  string
+	pendingIssueID  string       // accessed by Handle only, no need to synchronize
+	pendingIssueURI atomic.Value // workspaceapi.URI, accessed by Handle and HandleCommand
 }
 
 func (e *issuesGrantee) Connected(broker proto.MuxBroker, pconfig config.Config) {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-
 	e.config = pconfig
 	e.broker = broker
 	var err error
@@ -187,7 +184,8 @@ func (e *issuesGrantee) initScheme(m schemeapi.SchemeManager) error {
 }
 
 func (e *issuesGrantee) Handle(ctx context.Context, ev textapi.Event) bool {
-	if !ev.URI.Equal(e.pendingIssueURI) {
+	pendingIssueURI := e.pendingIssueURI.Load().(workspaceapi.URI)
+	if !ev.URI.Equal(pendingIssueURI) {
 		log.Tracef("ignoring event for file with URI %q: not an issue URI", ev.URI)
 		return false
 	}
@@ -198,7 +196,7 @@ func (e *issuesGrantee) Handle(ctx context.Context, ev textapi.Event) bool {
 	case textapi.EventTypeFlush:
 		e.createOrUpdateIssue(ctx, ev)
 	case textapi.EventTypeClose:
-		e.freeIssue(ctx, ev)
+		e.freeIssue(ctx, ev, pendingIssueURI)
 	}
 	return false
 }
@@ -361,12 +359,12 @@ func (e *issuesGrantee) openCustomIssueTemplate(
 	}
 }
 
-func (e *issuesGrantee) freeIssue(ctx context.Context, ev textapi.Event) bool {
+func (e *issuesGrantee) freeIssue(ctx context.Context, ev textapi.Event, uri workspaceapi.URI) bool {
 	if e.pendingIssueID == "" {
 		e.setMessage("canceled creation of new issue")
 	}
-	_ = os.Remove(e.pendingIssueURI.Path())
-	e.pendingIssueURI = workspaceapi.URI{}
+	e.pendingIssueURI.CompareAndSwap(uri, workspaceapi.URI{})
+	_ = os.Remove(uri.Path())
 	e.pendingIssueID = ""
 	return false
 }
@@ -428,7 +426,8 @@ func (e *issuesGrantee) openIssueTemplate(
 	if e.o == nil || e.wm == nil {
 		return false, errors.New("browser permissions necessary to create an issue were not granted")
 	}
-	if !e.pendingIssueURI.Equal(workspaceapi.URI{}) {
+	oldURI := e.pendingIssueURI.Load().(workspaceapi.URI)
+	if !oldURI.Equal(workspaceapi.URI{}) {
 		return false, errors.New("there's already a pending issue open. " +
 			"You should close it first before attempting to create a new one.")
 	}
@@ -444,12 +443,12 @@ func (e *issuesGrantee) openIssueTemplate(
 	}
 
 	_ = f.Close()
-	uri, err := workspaceapi.CurrentUserHostURI(f.Name())
+	newURI, err := workspaceapi.CurrentUserHostURI(f.Name())
 	if err != nil {
 		return false, fmt.Errorf("URI: %v", err)
 	}
 
-	h, err := e.o.Open(uri)
+	h, err := e.o.Open(newURI)
 	if err != nil {
 		_ = os.Remove(f.Name())
 		return false, fmt.Errorf("open temp file: %v", err)
@@ -462,7 +461,7 @@ func (e *issuesGrantee) openIssueTemplate(
 		return false, fmt.Errorf("set focus window content: %v", err)
 	}
 
-	e.pendingIssueURI = uri
+	e.pendingIssueURI.Store(newURI)
 
 	return false, nil
 }
