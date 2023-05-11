@@ -58,7 +58,7 @@ func goPluginGranteeBuilder(m *Manager, dataDir string) pluginBuilder {
 			HandshakeConfig:  handshakeConfig,
 			Plugins:          pluginMap,
 			Cmd:              cmd,
-			Logger:           NewHCLogLogrus(log.StandardLogger()),
+			Logger:           newHCLogLogrus(pluginID, log.StandardLogger()),
 			AllowedProtocols: []goplugin.Protocol{goplugin.ProtocolGRPC},
 			// TODO we should validate integrity of plugins
 			// SecureConfig:    &secureCfg,

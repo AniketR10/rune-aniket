@@ -107,7 +107,7 @@ func Serve(grantee plugin.Grantee, request ...plugin.Permission) {
 	goplugin.Serve(&goplugin.ServeConfig{
 		HandshakeConfig: handshakeConfig,
 		Plugins:         pluginMap,
-		Logger:          NewHCLogLogrus(&pluginLogger),
+		Logger:          newHCLogLogrus(os.Args[0], &pluginLogger),
 		GRPCServer:      goplugin.DefaultGRPCServer,
 	})
 }

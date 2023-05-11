@@ -49,16 +49,18 @@ func SetLoggingLevel(level logrus.Level) {
 
 // satisfies hclog.Logger by using a logrus.Logger
 type hcloggerLogrus struct {
-	logger *logrus.Logger
-	fields logrus.Fields
+	pluginID string
+	logger   *logrus.Logger
+	fields   logrus.Fields
 }
 
-// NewHCLogLogrus returns an instance of a struct that satisfies hclog.Logger by means
+// newHCLogLogrus returns an instance of a struct that satisfies hclog.Logger by means
 // of using a logrus.Logger.
-func NewHCLogLogrus(logger *logrus.Logger) hclog.Logger {
+func newHCLogLogrus(pluginID string, logger *logrus.Logger) hclog.Logger {
 	return &hcloggerLogrus{
-		logger: logger,
-		fields: logrus.Fields{},
+		pluginID: pluginID,
+		logger:   logger,
+		fields:   logrus.Fields{},
 	}
 }
 
@@ -171,7 +173,11 @@ func (l *hcloggerLogrus) With(args ...interface{}) hclog.Logger {
 // name, instead it will substitue it. This does not conform to the original hclog.Logger
 // interface requirements.
 func (l *hcloggerLogrus) Named(name string) hclog.Logger {
-	return l.With(logging.KeyThread, name)
+	// ignore name, as it's the executable file name
+	// and it's not helpful to distinguish different plugins
+	// running in the same process.
+	// l.With(logging.KeyThread, name)
+	return l.With(logging.KeyThread, l.pluginID)
 }
 
 func (l *hcloggerLogrus) Name() string {
