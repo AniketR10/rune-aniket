@@ -856,7 +856,7 @@ func loadWorkspaceConfig(filename string, cwd workspace.Workspace, uri workspace
 		if werr.IsNotExist {
 			return false, nil
 		}
-		return false, fmt.Errorf("found local %s but failed to open: %s", filename, werr.ToError())
+		return false, fmt.Errorf("failed to open local '%s': %v", filename, werr.ToError())
 	}
 	defer f.Close()
 
