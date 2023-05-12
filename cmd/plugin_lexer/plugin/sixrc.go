@@ -13,7 +13,7 @@ func setupConfigLexer() error {
 	}
 	cfg := lexer.Config()
 	cfg.Name = "sixrc"
-	cfg.Filenames = []string{".sixrc", ".sixdevrc"}
+	cfg.Filenames = []string{".sixrc", ".sixdevrc", ".hoprc", ".hopdevrc"}
 	lexers.Register(lexer)
 	return nil
 }
