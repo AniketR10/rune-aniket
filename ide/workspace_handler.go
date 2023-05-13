@@ -390,14 +390,6 @@ func (h *workspaceManagerHandler) textOpts(cfg ideConfig) []text.Option {
 	return ret
 }
 
-func cloneConfig(cfg ideConfig) ideConfig {
-	ret := make(map[string]interface{})
-	config.Clone(config.MapConfig(cfg.cfg)).Iterate(func(k string, v interface{}) {
-		ret[k] = v
-	})
-	return ideConfig{cfg: ret, errors: make(map[string]error)}
-}
-
 // we have no conrol over what plugins are defining in configuration;
 // it could be secret keys or anything worth stealing for a malicious plugin
 // that gets granted plugin.PermissionConfig.

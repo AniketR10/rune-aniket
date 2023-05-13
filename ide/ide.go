@@ -70,7 +70,7 @@ func (i *IDE) init(
 	for _, o := range opts {
 		o(&op)
 	}
-	isConfigErr, configErr := loadConfig(&i.ideConfig, cfgfilename)
+	isConfigErr, configErr := loadConfig(&i.ideConfig, cfgfilename, op.defaultWallpaper)
 	// return errors that are not decoding errors but
 	// let decoding errors be just logged
 	if configErr != nil && !isConfigErr {

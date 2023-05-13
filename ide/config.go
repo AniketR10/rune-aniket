@@ -43,13 +43,6 @@ const (
  / / /__\ \ \     
 / / /____\ \ \    
 \/__________\/    `
-	defaultWallpaper = `
-███████╗██╗██╗ ██╗
-██╔════╝██║██████║
-███████╗██║╚═██╔═╝
-╚════██║██║██████╗
-███████║██║██╔═██║
-╚══════╝╚═╝╚═╝ ╚═╝`
 )
 
 var (
@@ -63,6 +56,8 @@ type pluginConfig struct {
 }
 
 type ideConfig struct {
+	defaultWallpaper string
+
 	cfg    map[string]interface{}
 	errors map[string]error
 }
@@ -88,14 +83,15 @@ func overrideConfig(ideConfig, cfg map[string]interface{}) {
 	}
 }
 
-func initConfig(c *ideConfig, cfg map[string]interface{}) {
+func initConfig(c *ideConfig, cfg map[string]interface{}, defaultWallpaper string) {
 	c.cfg = cfg
+	c.defaultWallpaper = defaultWallpaper
 	c.errors = make(map[string]error)
 }
 
-func initDefaultConfig(c *ideConfig) {
+func initDefaultConfig(c *ideConfig, defaultWallpaper string) {
 	cfg := make(map[string]interface{})
-	initConfig(c, cfg)
+	initConfig(c, cfg, defaultWallpaper)
 }
 
 func (c ideConfig) command() (config.Config, bool) {
@@ -653,7 +649,7 @@ func (c ideConfig) browserTabspaces() (tabs int) {
 }
 
 func (c ideConfig) wallpaper() (text string) {
-	text = defaultWallpaper
+	text = c.defaultWallpaper
 	if c.cfg == nil {
 		return
 	}
@@ -848,6 +844,18 @@ func decodeConfig(r io.Reader) (cfg map[string]interface{}, err error) {
 	return
 }
 
+func cloneConfig(cfg ideConfig) ideConfig {
+	ret := make(map[string]interface{})
+	config.Clone(config.MapConfig(cfg.cfg)).Iterate(func(k string, v interface{}) {
+		ret[k] = v
+	})
+	return ideConfig{
+		defaultWallpaper: cfg.defaultWallpaper,
+		cfg:              ret,
+		errors:           make(map[string]error),
+	}
+}
+
 func loadWorkspaceConfig(filename string, cwd workspace.Workspace, uri workspaceapi.URI, c *ideConfig) (
 	isConfigErr bool, err error,
 ) {
@@ -869,10 +877,10 @@ func loadWorkspaceConfig(filename string, cwd workspace.Workspace, uri workspace
 	return false, nil
 }
 
-func loadConfig(c *ideConfig, configpath string) (isConfigErr bool, err error) {
+func loadConfig(c *ideConfig, configpath, defaultWallpaper string) (isConfigErr bool, err error) {
 	f, err := workspace.OpenFile(configpath, os.O_RDONLY, 0)
 	if err != nil {
-		initDefaultConfig(c)
+		initDefaultConfig(c, defaultWallpaper)
 		if os.IsNotExist(err) {
 			return false, nil
 		}
@@ -882,11 +890,11 @@ func loadConfig(c *ideConfig, configpath string) (isConfigErr bool, err error) {
 
 	cfg, err := decodeConfig(f)
 	if err != nil {
-		initDefaultConfig(c)
+		initDefaultConfig(c, defaultWallpaper)
 		return true, err
 	}
 
-	initConfig(c, cfg)
+	initConfig(c, cfg, defaultWallpaper)
 
 	return false, nil
 }

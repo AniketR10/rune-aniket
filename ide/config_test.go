@@ -129,7 +129,7 @@ func assertDefaultConfig(t *testing.T, cfg *ideConfig) {
 
 func TestDefaultConfig(t *testing.T) {
 	ret := new(ideConfig)
-	initDefaultConfig(ret)
+	initDefaultConfig(ret, "myWallpaper")
 	assertDefaultConfig(t, ret)
 }
 
@@ -140,7 +140,7 @@ func TestDecodeConfigError(t *testing.T) {
 	require.NoError(t, err)
 
 	var ret ideConfig
-	_, err = loadConfig(&ret, f.Name())
+	_, err = loadConfig(&ret, f.Name(), "myWallpaper")
 	assert.Error(t, err)
 	assertDefaultConfig(t, &ret)
 }
@@ -150,7 +150,7 @@ func TestConfigSetting(t *testing.T) {
 	require.NoError(t, err)
 
 	var cfg ideConfig
-	initConfig(&cfg, m)
+	initConfig(&cfg, m, "myWallpaper")
 
 	assert.Equal(t, 4, cfg.browserTabspaces())
 	assert.Equal(t, "abc", cfg.wallpaper())

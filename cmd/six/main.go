@@ -33,7 +33,14 @@ import (
 )
 
 const (
-	configFilename = ".sixrc"
+	configFilename      = ".sixrc"
+	sixDefaultWallpaper = `
+███████╗██╗██╗ ██╗
+██╔════╝██║██████║
+███████╗██║╚═██╔═╝
+╚════██║██║██████╗
+███████║██║██╔═██║
+╚══════╝╚═╝╚═╝ ╚═╝`
 )
 
 var (
@@ -260,6 +267,7 @@ func run() int {
 		ide.WithPluginsRunner(ide.FuncPluginsRunner(pluginRunner)),
 		ide.WithLocker(&eventLoopMutex),
 		ide.WithConfigFilename(configFilename),
+		ide.WithDefaultWallpaper(sixDefaultWallpaper),
 	}
 
 	var i *ide.IDE

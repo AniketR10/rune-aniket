@@ -70,21 +70,31 @@ func WithConfigFilename(filename string) Option {
 	}
 }
 
+// WithDefaultWallpaper sets the default wallpaper if the
+// user doesn't provide one via rc configuration.
+func WithDefaultWallpaper(wallpaper string) Option {
+	return func(opts *options) {
+		opts.defaultWallpaper = wallpaper
+	}
+}
+
 type options struct {
-	publishEvent   EventPublisher
-	pluginRunner   PluginsRunner
-	locker         sync.Locker
-	plugins        map[string]Plugin
-	configFilename string
+	publishEvent     EventPublisher
+	pluginRunner     PluginsRunner
+	locker           sync.Locker
+	plugins          map[string]Plugin
+	configFilename   string
+	defaultWallpaper string
 }
 
 func defaultOptions() options {
 	return options{
-		publishEvent:   tui.PublishEvent,
-		pluginRunner:   nopPlugins{},
-		locker:         nopLocker{},
-		plugins:        make(map[string]Plugin),
-		configFilename: ".iderc",
+		publishEvent:     tui.PublishEvent,
+		pluginRunner:     nopPlugins{},
+		locker:           nopLocker{},
+		plugins:          make(map[string]Plugin),
+		configFilename:   ".iderc",
+		defaultWallpaper: legacyDefaultWallpaper,
 	}
 }
 
