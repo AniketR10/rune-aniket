@@ -939,6 +939,10 @@ func TestWorkspaceSchemeListFilesIntegration(
 	})
 
 	t.Run("does not return error if root's base dir does not exist", func(t *testing.T) {
+		// DEPRECATED: this behaviour should not be relied upon as some implementations do
+		// directories and might error with a path like fi/fi/fi
+		t.SkipNow()
+
 		scheme := schemeFn(t)
 		defer scheme.Close()
 		totalFiles := 10

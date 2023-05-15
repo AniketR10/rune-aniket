@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -97,6 +98,16 @@ func (s *scheme[T]) URI(path string) (workspaceapi.URI, error) {
 }
 
 func (s *scheme[T]) docIDFromPath(path string) (string, string, error) {
+	// document must not start with absolute path as that has implications
+	// for some document stores
+	path = filepath.Clean(path)
+	if filepath.HasPrefix(path, "/") {
+		relPath, err := filepath.Rel("/", path)
+		if err != nil {
+			return "", "", err
+		}
+		path = relPath
+	}
 	// document ID is just the pathname, to guarantee
 	// compatibility with services that already have data stored
 	return path, path, nil

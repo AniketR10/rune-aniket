@@ -2,6 +2,7 @@ package test_all
 
 import (
 	"context"
+	"os"
 	"testing"
 
 	"github.com/ernestrc/blue/document/firestore"
@@ -39,7 +40,7 @@ func TestFirestoreWorkspaceScheme(t *testing.T) {
 
 		ctx := context.Background()
 
-		workspaceURI, err := workspaceapi.ParseURI("inmemory:///tmp")
+		workspaceURI, err := workspaceapi.ParseURI("firestore:///tmp")
 		require.NoError(t, err)
 		svc, err := firestore.New(testProjectID, collection, "")
 		require.NoError(t, err)
@@ -47,5 +48,24 @@ func TestFirestoreWorkspaceScheme(t *testing.T) {
 			json.Marshaler(), errMissingID)(ctx, config.NopConfig(), workspaceURI)
 		require.NoError(t, err)
 		return scheme
+	})
+
+	t.Run("cleans absolute paths", func(t *testing.T) {
+		testProjectID := uuid.New().String()
+		collection := uuid.New().String()
+
+		ctx := context.Background()
+
+		workspaceURI, err := workspaceapi.ParseURI("firestore:///tmp")
+		require.NoError(t, err)
+		svc, err := firestore.New(testProjectID, collection, "")
+		require.NoError(t, err)
+		scheme, err := workdoc.WorkspaceScheme[testStruct](workspaceURI, svc,
+			json.Marshaler(), errMissingID)(ctx, config.NopConfig(), workspaceURI)
+		require.NoError(t, err)
+
+		f, werr := scheme.Open("/.something.swp", os.O_CREATE, 0)
+		require.Nil(t, werr)
+		require.NoError(t, f.Close())
 	})
 }
