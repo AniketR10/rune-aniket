@@ -716,6 +716,93 @@ func TestFileBufferInit(t *testing.T) {
 
 		assert.Equal(t, accessDeniedErr, f.init(fileName, cell.NewBuffer(), "", false))
 	})
+
+	t.Run("bubble up swap file write error, and remove empty file swap", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		accessDeniedErr := errors.New("access denied")
+		fileName := "myName"
+		data := []byte("good morning sir")
+		fileInfo := testFileInfo{}
+
+		f, mock := newTestFileBuffer(ctrl)
+		var i int
+		f.scheme.(*testScheme).removeFunc = func(name string) error {
+			i++
+			return nil
+		}
+		mock.EXPECT().Stat().Return(fileInfo, nil).AnyTimes()
+		expectRead(mock, data)
+
+		mock.EXPECT().Name().Return(fileName).AnyTimes()
+		mock.EXPECT().Seek(gomock.Eq(int64(0)), gomock.Eq(0)).Return(int64(0), nil)
+
+		mock.EXPECT().Write(gomock.Any()).DoAndReturn(func(p []byte) (n int, err error) {
+			return 0, accessDeniedErr
+		})
+
+		assert.Error(t, f.init(fileName, cell.NewBuffer(), "", false))
+		assert.Equal(t, 1, i)
+	})
+
+	t.Run("bubble up swap file read error, and remove empty file swap", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		accessDeniedErr := errors.New("access denied")
+		fileName := "myName"
+		fileInfo := testFileInfo{}
+
+		f, mock := newTestFileBuffer(ctrl)
+		var i int
+		f.scheme.(*testScheme).removeFunc = func(name string) error {
+			i++
+			return nil
+		}
+		mock.EXPECT().Stat().Return(fileInfo, nil).AnyTimes()
+		mock.EXPECT().Read(gomock.Any()).DoAndReturn(func(buf []byte) (int, error) {
+			return 0, accessDeniedErr
+		})
+
+		assert.Error(t, f.init(fileName, cell.NewBuffer(), "", false))
+		assert.Equal(t, 1, i)
+	})
+
+	t.Run("bubble up swap file stat error, and remove empty file swap", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		accessDeniedErr := errors.New("access denied")
+		fileName := "myName"
+		fileInfo := testFileInfo{}
+
+		f, mock := newTestFileBuffer(ctrl)
+		var i int
+		f.scheme.(*testScheme).removeFunc = func(name string) error {
+			i++
+			return nil
+		}
+		var j int
+		mock.EXPECT().Stat().Return(fileInfo, nil).DoAndReturn(func() (os.FileInfo, error) {
+			j++
+			if j == 1 {
+				return fileInfo, nil
+			}
+			return nil, accessDeniedErr
+		})
+		expectRead(mock, []byte("1234"))
+
+		mock.EXPECT().Name().Return(fileName).AnyTimes()
+		mock.EXPECT().Seek(gomock.Eq(int64(0)), gomock.Eq(0)).Return(int64(0), nil)
+
+		mock.EXPECT().Write(gomock.Any()).DoAndReturn(func(p []byte) (n int, err error) {
+			return 0, accessDeniedErr
+		})
+
+		assert.Error(t, f.init(fileName, cell.NewBuffer(), "", false))
+		assert.Equal(t, 1, i)
+	})
 }
 
 const defaultFileName = "myOhDear.go"

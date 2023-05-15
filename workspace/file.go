@@ -93,12 +93,14 @@ func (f *file) initSwap(orig workspaceapi.File, origPerms os.FileMode) (workspac
 
 	content, err := ioutil.ReadAll(orig)
 	if err != nil {
+		_ = f.scheme.Remove(f.swapFileName)
 		return nil, err
 	}
 	defer orig.Seek(0, 0)
 
 	_, err = swap.Write(content)
 	if err != nil {
+		_ = f.scheme.Remove(f.swapFileName)
 		return nil, err
 	}
 
@@ -177,6 +179,7 @@ func (f *file) initFiles(filePath, swapDir string, readOnly bool) error {
 		// store swapInfo so we can check update times at Flush
 		swapInfo, err := f.scheme.Stat(f.swapFileName)
 		if err != nil {
+			_ = f.scheme.Remove(f.swapFileName)
 			return err
 		}
 		f.swap = swap
