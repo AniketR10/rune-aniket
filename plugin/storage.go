@@ -2,6 +2,7 @@ package plugin
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"path/filepath"
 	"sync"
@@ -47,7 +48,7 @@ func (s *storageResourceServer) Register(
 	broker proto.MuxBroker, lock sync.Locker,
 ) (io.Closer, error) {
 	svc := s.setupStorage(lock, pluginID)
-	svc = doclog.WithLogging(svc)
+	svc = doclog.WithLogging(svc, fmt.Sprintf("/PluginStorage/%s", pluginID))
 	server := new(docrpc.Server)
 	server.Init(svc, toml.Marshaler())
 	bproto.RegisterDocumentStoreServer(registrar, server)

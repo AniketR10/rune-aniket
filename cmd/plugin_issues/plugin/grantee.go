@@ -287,7 +287,7 @@ func (e *issuesGrantee) PermissionGranted(grants []plugin.Grant) {
 		e.trackerError = err
 		return
 	}
-	svc = logging.WithLogging(svc)
+	svc = logging.WithLogging(svc, "IssuesStorage")
 
 	// avoid too many reads to service (i.e. firestore), which is pretty slow.
 	// As long as there aren't many oob (outside of six) requests this should be
