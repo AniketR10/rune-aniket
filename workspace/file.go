@@ -96,10 +96,13 @@ func (f *file) initSwap(orig workspaceapi.File, origPerms os.FileMode) (workspac
 		_ = f.scheme.Remove(f.swapFileName)
 		return nil, err
 	}
-	defer orig.Seek(0, 0)
 
-	_, err = swap.Write(content)
-	if err != nil {
+	if _, err := swap.Write(content); err != nil {
+		_ = f.scheme.Remove(f.swapFileName)
+		return nil, err
+	}
+
+	if _, err := orig.Seek(0, 0); err != nil {
 		_ = f.scheme.Remove(f.swapFileName)
 		return nil, err
 	}

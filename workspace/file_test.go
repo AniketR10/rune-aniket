@@ -736,7 +736,6 @@ func TestFileBufferInit(t *testing.T) {
 		expectRead(mock, data)
 
 		mock.EXPECT().Name().Return(fileName).AnyTimes()
-		mock.EXPECT().Seek(gomock.Eq(int64(0)), gomock.Eq(0)).Return(int64(0), nil)
 
 		mock.EXPECT().Write(gomock.Any()).DoAndReturn(func(p []byte) (n int, err error) {
 			return 0, accessDeniedErr
@@ -794,7 +793,6 @@ func TestFileBufferInit(t *testing.T) {
 		expectRead(mock, []byte("1234"))
 
 		mock.EXPECT().Name().Return(fileName).AnyTimes()
-		mock.EXPECT().Seek(gomock.Eq(int64(0)), gomock.Eq(0)).Return(int64(0), nil)
 
 		mock.EXPECT().Write(gomock.Any()).DoAndReturn(func(p []byte) (n int, err error) {
 			return 0, accessDeniedErr
