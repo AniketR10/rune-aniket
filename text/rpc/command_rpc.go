@@ -19,7 +19,7 @@ import (
 
 var _ text.CommandHandler = (*commandClient)(nil)
 
-const defaultClientTimeout = 2 * time.Second
+const defaultClientTimeout = 5 * time.Second
 
 type commandClient struct {
 	conn proto.MuxConn
