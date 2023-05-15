@@ -174,17 +174,17 @@ func (mr *MockWorkspaceMockRecorder) Recover(file, swapFilePath, buf, force inte
 }
 
 // Remove mocks base method.
-func (m *MockWorkspace) Remove(path string) error {
+func (m *MockWorkspace) Remove(file string) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Remove", path)
+	ret := m.ctrl.Call(m, "Remove", file)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // Remove indicates an expected call of Remove.
-func (mr *MockWorkspaceMockRecorder) Remove(path interface{}) *gomock.Call {
+func (mr *MockWorkspaceMockRecorder) Remove(file interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Remove", reflect.TypeOf((*MockWorkspace)(nil).Remove), path)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Remove", reflect.TypeOf((*MockWorkspace)(nil).Remove), file)
 }
 
 // Rename mocks base method.
@@ -325,6 +325,20 @@ func (m *MockLoader) Recover(file, swapFilePath api.URI, buf *cell.Buffer, force
 func (mr *MockLoaderMockRecorder) Recover(file, swapFilePath, buf, force interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Recover", reflect.TypeOf((*MockLoader)(nil).Recover), file, swapFilePath, buf, force)
+}
+
+// Remove mocks base method.
+func (m *MockLoader) Remove(file string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Remove", file)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Remove indicates an expected call of Remove.
+func (mr *MockLoaderMockRecorder) Remove(file interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Remove", reflect.TypeOf((*MockLoader)(nil).Remove), file)
 }
 
 // MockSchemeManager is a mock of SchemeManager interface.

@@ -522,6 +522,10 @@ func (t *testFlusherCloser) Flush() error {
 	return nil
 }
 
+func (t *testLoader) Remove(string) error {
+	return nil
+}
+
 func (t *testLoader) Load(
 	file workspaceapi.URI, buf *cell.Buffer, swapDir workspaceapi.URI, readOnly bool,
 ) (workspace.FlusherCloser, error) {

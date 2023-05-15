@@ -22,6 +22,7 @@ type Workspace interface {
 type Loader interface {
 	Load(file workspaceapi.URI, buf *cell.Buffer, swapDir workspaceapi.URI, readOnly bool) (FlusherCloser, error)
 	Recover(file, swapFilePath workspaceapi.URI, buf *cell.Buffer, force bool) (FlusherCloser, error)
+	Remove(file string) error
 }
 
 // SchemeManager abstracts the ability to register new URI schemes.

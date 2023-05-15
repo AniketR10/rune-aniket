@@ -52,6 +52,10 @@ type testLoader struct {
 	buf *testFileBuffer
 }
 
+func (w *testLoader) Remove(string) error {
+	return nil
+}
+
 func (w *testLoader) Load(
 	filePath workspaceapi.URI, buf *cell.Buffer,
 	swapDir workspaceapi.URI, readOnly bool,

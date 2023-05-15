@@ -399,6 +399,7 @@ func (c *Component) openRecoveryPrompt(file workspaceapi.URI) {
 	const (
 		recoverOpt  = "Recover"
 		readOnlyOpt = "Open Read-Only"
+		editOpt     = "Force Edit"
 		skipOpt     = "Skip"
 	)
 
@@ -406,8 +407,8 @@ func (c *Component) openRecoveryPrompt(file workspaceapi.URI) {
 open by another process or
 an edit session for this file crashed.`, file)
 
-	c.comp.Prompt(msg, []string{recoverOpt, readOnlyOpt, skipOpt},
-		[]term.KeyComb{{Ch: 'R'}, {Ch: 'O'}, {Ch: 'S'}},
+	c.comp.Prompt(msg, []string{recoverOpt, readOnlyOpt, editOpt, skipOpt},
+		[]term.KeyComb{{Ch: 'R'}, {Ch: 'O'}, {Ch: 'E'}, {Ch: 'S'}},
 		func(i int, opt string) {
 
 			var h browserapi.Handler
@@ -429,6 +430,18 @@ an edit session for this file crashed.`, file)
 				}
 			case readOnlyOpt:
 				h, err = c.OpenFileTab(file, true)
+			case editOpt:
+				var swapDir, swapFile workspaceapi.URI
+				swapDir, err = c.getSwapDir(file)
+				if err == nil {
+					swapFile, err = workspace.DefaultSwapFile(swapDir, file)
+					if err == nil {
+						err = c.workspace.Remove(swapFile.Path())
+						if err == nil {
+							h, err = c.OpenFileTab(file, false)
+						}
+					}
+				}
 			case skipOpt:
 			}
 			if h != nil {
