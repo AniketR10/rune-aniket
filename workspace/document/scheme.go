@@ -11,7 +11,6 @@ import (
 	"github.com/ernestrc/blue/document"
 	"github.com/ernestrc/blue/encoding"
 	"github.com/ernestrc/blue/retry"
-	multierr "github.com/ernestrc/go-multierror"
 	"unstable.build/go-tui/api/config"
 	schemeapi "unstable.build/go-tui/api/scheme"
 	workspaceapi "unstable.build/go-tui/api/workspace"
@@ -154,12 +153,15 @@ func (s *scheme[T]) open(
 	if create && excl {
 		err := retry.Retry(ctx, s.retryRealFailure, func(ctx context.Context) (bool, error) {
 			err = s.svc.svc.Create(ctx, docID, template)
-			return err != document.ErrAlreadyExists, err
+			return err != document.ErrAlreadyExists && err != document.ErrPermissionDenied, err
 		})
-		if errors.Is(err, document.ErrAlreadyExists) {
-			return nil, &workspaceapi.Error{IsExist: true}
-		}
 		if err != nil {
+			if errors.Is(err, document.ErrAlreadyExists) {
+				return nil, &workspaceapi.Error{IsExist: true}
+			}
+			if errors.Is(err, document.ErrPermissionDenied) {
+				return nil, &workspaceapi.Error{IsPermission: true}
+			}
 			return nil, workspaceapi.NopError(err)
 		}
 	} else if create || trunc {
@@ -170,9 +172,12 @@ func (s *scheme[T]) open(
 		// that we don't store an invalid structure.
 		err := retry.Retry(ctx, s.retryRealFailure, func(ctx context.Context) (bool, error) {
 			err = s.svc.svc.Set(ctx, docID, template)
-			return true, err
+			return err != document.ErrPermissionDenied, err
 		})
 		if err != nil {
+			if errors.Is(err, document.ErrPermissionDenied) {
+				return nil, &workspaceapi.Error{IsPermission: true}
+			}
 			return nil, workspaceapi.NopError(err)
 		}
 	}
@@ -184,7 +189,8 @@ func (s *scheme[T]) open(
 	var ret T
 	err = retry.Retry(ctx, s.retryInconsistency, func(ctx context.Context) (bool, error) {
 		err = s.svc.svc.Get(ctx, docID, &ret)
-		return create || err != document.ErrNotFound, err
+		return err != document.ErrPermissionDenied &&
+			(create || err != document.ErrNotFound), err
 	})
 	if err != nil {
 		if create {
@@ -194,6 +200,9 @@ func (s *scheme[T]) open(
 		}
 		if errors.Is(err, document.ErrNotFound) {
 			return nil, &workspaceapi.Error{IsNotExist: true}
+		}
+		if errors.Is(err, document.ErrPermissionDenied) {
+			return nil, &workspaceapi.Error{IsPermission: true}
 		}
 		return nil, workspaceapi.NopError(err)
 	}
@@ -228,12 +237,15 @@ func (s *scheme[T]) Remove(path string) error {
 	var temp T
 	err = retry.Retry(ctx, s.retryRealFailure, func(ctx context.Context) (bool, error) {
 		err = s.svc.svc.Get(ctx, docID, &temp)
-		return err != document.ErrNotFound, err
+		return err != document.ErrNotFound && err != document.ErrPermissionDenied, err
 	})
-	if errors.Is(err, document.ErrNotFound) {
-		return workspaceapi.Error{IsNotExist: true}.ToError()
-	}
 	if err != nil {
+		if errors.Is(err, document.ErrNotFound) {
+			return workspaceapi.Error{IsNotExist: true}.ToError()
+		}
+		if errors.Is(err, document.ErrPermissionDenied) {
+			return workspaceapi.Error{IsPermission: true}.ToError()
+		}
 		return err
 	}
 
@@ -267,27 +279,30 @@ func (s *scheme[T]) Rename(old, new string) error {
 
 	err = retry.Retry(ctx, s.retryRealFailure, func(ctx context.Context) (bool, error) {
 		err = s.svc.svc.Set(ctx, newDocID, f.val)
-		return true, err
+		return err != document.ErrPermissionDenied, err
 	})
 	if err != nil {
-		return err
-	}
-
-	cleanup := func(err error) error {
-		// create a new context in case we failed due to context.Done
-		ctx := context.Background()
-		ctx, cancel := context.WithTimeout(ctx, serviceTimeout)
-		defer cancel()
-		rerr := s.retriedDelete(ctx, newDocID)
-		if rerr != nil {
-			err = multierr.Append(err, rerr)
+		if errors.Is(err, document.ErrPermissionDenied) {
+			return workspaceapi.Error{IsPermission: true}.ToError()
 		}
 		return err
 	}
 
+	cleanup := func() {
+		// create a new context in case we failed due to context.Done
+		ctx := context.Background()
+		ctx, cancel := context.WithTimeout(ctx, serviceTimeout)
+		defer cancel()
+		_ = s.retriedDelete(ctx, newDocID)
+	}
+
 	err = s.retriedDelete(ctx, oldDocID)
 	if err != nil {
-		return cleanup(fmt.Errorf("Delete: %v", err))
+		cleanup()
+		if errors.Is(err, document.ErrPermissionDenied) {
+			return workspaceapi.Error{IsPermission: true}.ToError()
+		}
+		return err
 	}
 
 	return nil
@@ -345,9 +360,12 @@ func (s *scheme[T]) ReadDir(name string) (
 		// and more generally, a document.Service backed Scheme doesn't
 		// have any directories.
 		it, err = s.svc.svc.List(ctx, nil)
-		return true, err
+		return err != document.ErrPermissionDenied, err
 	})
 	if err != nil {
+		if errors.Is(err, document.ErrPermissionDenied) {
+			return nil, workspaceapi.Error{IsPermission: true}.ToError()
+		}
 		return nil, err
 	}
 
@@ -384,6 +402,9 @@ func (s *scheme[T]) retriedDelete(ctx context.Context, docID string) error {
 	err := retry.Retry(ctx, s.retryRealFailure, func(ctx context.Context) (bool, error) {
 		err := s.svc.svc.Delete(ctx, docID)
 		if err != nil {
+			if err == document.ErrPermissionDenied {
+				return false, workspaceapi.Error{IsPermission: true}.ToError()
+			}
 			gerr := s.svc.svc.Get(ctx, docID, &temp)
 			if gerr == document.ErrNotFound {
 				return false, nil
@@ -401,7 +422,7 @@ func (s *scheme[T]) retriedDelete(ctx context.Context, docID string) error {
 		if gerr == document.ErrNotFound {
 			return false, nil
 		}
-		return true, err
+		return gerr != document.ErrPermissionDenied, gerr
 	})
 }
 

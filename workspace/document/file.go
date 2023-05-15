@@ -3,6 +3,7 @@ package document
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -111,27 +112,43 @@ func (f *file[T]) sync(ctx context.Context) error {
 	err = retry.Retry(ctx, f.retryStrategy, func(ctx context.Context) (bool, error) {
 		var temp T
 		err = f.svc.svc.Get(ctx, f.memFile.Name(), &temp)
-		return err != document.ErrNotFound, err
+		return err != document.ErrNotFound && err != document.ErrPermissionDenied, err
 	})
 	if err != nil {
+		if errors.Is(err, document.ErrNotFound) {
+			return workspaceapi.Error{IsNotExist: true}.ToError()
+		}
+		if errors.Is(err, document.ErrPermissionDenied) {
+			return workspaceapi.Error{IsPermission: true}.ToError()
+		}
 		return err
 	}
 
 	err = retry.Retry(ctx, f.retryStrategy, func(ctx context.Context) (bool, error) {
 		err = f.svc.svc.Set(ctx, f.memFile.Name(), f.val)
-		return true, err
+		return err != document.ErrPermissionDenied, err
 	})
 	if err != nil {
+		if errors.Is(err, document.ErrPermissionDenied) {
+			return workspaceapi.Error{IsPermission: true}.ToError()
+		}
 		return err
 	}
 	// get new UpdatedAt
-	return retry.Retry(ctx, f.retryStrategy, func(ctx context.Context) (bool, error) {
+	err = retry.Retry(ctx, f.retryStrategy, func(ctx context.Context) (bool, error) {
 		err = f.svc.svc.Get(ctx, f.memFile.Name(), &f.val)
 		if err == nil {
 			f.dirty = false
 		}
-		return true, err
+		return err != document.ErrPermissionDenied, err
 	})
+	if err != nil {
+		if errors.Is(err, document.ErrPermissionDenied) {
+			return workspaceapi.Error{IsPermission: true}.ToError()
+		}
+		return err
+	}
+	return nil
 }
 
 func (f *file[T]) Name() string {

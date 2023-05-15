@@ -70,6 +70,9 @@ func (s *service) Update(
 		if werr.IsNotExist {
 			return document.ErrNotFound
 		}
+		if werr.IsPermission {
+			return document.ErrPermissionDenied
+		}
 		return fmt.Errorf("Scheme.Open: %v", werr.ToError())
 	}
 
@@ -90,6 +93,9 @@ func (s *service) Update(
 	targetFileName := s.getFileName(ID) + ".swp"
 	target, werr := s.scheme.Open(targetFileName, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0666)
 	if werr != nil {
+		if werr.IsPermission {
+			return document.ErrPermissionDenied
+		}
 		return fmt.Errorf("Scheme.Open: %v", werr.ToError())
 	}
 
@@ -103,6 +109,9 @@ func (s *service) Update(
 
 	err = s.scheme.Rename(targetFileName, origFileName)
 	if err != nil {
+		if errors.Is(err, os.ErrPermission) {
+			return document.ErrPermissionDenied
+		}
 		return fmt.Errorf("Scheme.Rename: %v", werr.ToError())
 	}
 
@@ -121,6 +130,9 @@ func (s *service) Get(ctx context.Context, ID string, doc interface{}) error {
 		if werr.IsNotExist {
 			return document.ErrNotFound
 		}
+		if werr.IsPermission {
+			return document.ErrPermissionDenied
+		}
 		return fmt.Errorf("Scheme.Open: %v", werr.ToError())
 	}
 	defer f.Close()
@@ -137,6 +149,9 @@ func (s *service) Delete(ctx context.Context, ID string) error {
 	if errors.Is(err, os.ErrNotExist) {
 		return nil
 	}
+	if errors.Is(err, os.ErrPermission) {
+		return document.ErrPermissionDenied
+	}
 	return err
 }
 
@@ -148,6 +163,9 @@ func (s *service) List(ctx context.Context, filters []document.Filter) (document
 	}
 	entries, err := s.scheme.ReadDir(".")
 	if err != nil {
+		if errors.Is(err, os.ErrPermission) {
+			return nil, document.ErrPermissionDenied
+		}
 		return nil, fmt.Errorf("Scheme.ListFiles: %v", err)
 	}
 	it := iterator.Map(iterator.FromSlice(entries), func(entry os.DirEntry) string {
@@ -201,6 +219,9 @@ func (s *service) create(ctx context.Context, ID string, doc interface{}, openFl
 	if werr != nil {
 		if werr.IsExist {
 			return document.ErrAlreadyExists
+		}
+		if werr.IsPermission {
+			return document.ErrPermissionDenied
 		}
 		return fmt.Errorf("Scheme.Open: %v", werr.ToError())
 	}
@@ -258,6 +279,10 @@ func (d *docIter) HasNext() (ok bool) {
 		if werr != nil {
 			if werr.IsNotExist {
 				continue // should not happend but let's be resilient
+			}
+			if werr.IsPermission {
+				d.doneErr = document.ErrPermissionDenied
+				return true
 			}
 			d.doneErr = werr.ToError()
 			return true
