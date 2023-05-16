@@ -1,13 +1,16 @@
 package ide
 
 import (
+	"context"
 	"fmt"
 	"io/ioutil"
 	"os"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/ernestrc/blue/logging"
+	"github.com/ernestrc/blue/retry"
 	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui"
@@ -151,7 +154,17 @@ func (i *IDE) publishEvent(ev term.Event) bool {
 	if running != 1 {
 		return false
 	}
-	return i.publishEventFn(ev)
+
+	ctx := context.Background()
+	forcePublishRetry := retry.CombinedStrategy(
+		retry.ExponentialStrategy(5*time.Millisecond, 100*time.Millisecond),
+		retry.LimitStrategy(10),
+	)
+	retry.Retry(ctx, forcePublishRetry, func(context.Context) (bool, error) {
+		ok := i.publishEventFn(ev)
+		return !ok, errEventStreamNotReady
+	})
+	return true
 }
 
 // Run initialzes the underlying terminal environment and runs

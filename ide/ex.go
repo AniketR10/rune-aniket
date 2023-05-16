@@ -13,7 +13,6 @@ import (
 	"github.com/ernestrc/blue/document"
 	"github.com/ernestrc/blue/iterator"
 	"github.com/ernestrc/blue/logging"
-	"github.com/ernestrc/blue/retry"
 	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui"
@@ -78,7 +77,6 @@ var (
 		{Key: term.KeyCtrlH}: "bufferPrev",
 	}
 	errEventStreamNotReady = errors.New("event stream not ready to publish")
-	forcePublishRetry      = retry.SequentialStrategy(5 * time.Millisecond)
 )
 
 type workspaceLoader interface {
@@ -121,15 +119,6 @@ func newEx(
 		return
 	}
 	return
-}
-
-func forcePublishEvent(publishEvent func(term.Event) bool) func(term.Event) {
-	return func(ev term.Event) {
-		retry.Retry(context.Background(), forcePublishRetry, func(context.Context) (bool, error) {
-			ok := publishEvent(ev)
-			return !ok, errEventStreamNotReady
-		})
-	}
 }
 
 // init initializes this ex with the given editor and Options.
@@ -596,7 +585,7 @@ func (e *ex) handleEvent(ev term.Event) (
 				if ctx.Err() == context.DeadlineExceeded {
 					// timer expired, reissue event because
 					// user didn't send a matching key combination.
-					forcePublishEvent(e.publishEvent)(ev)
+					e.publishEvent(ev)
 				}
 			}(e.ctxPartialReissue, e.reissueEvent)
 			return

@@ -371,7 +371,7 @@ func (h *workspaceManagerHandler) textOpts(cfg ideConfig) []text.Option {
 			return nil
 		})),
 		text.WithSendNone(func() {
-			forcePublishEvent(h.publishEvent)(term.Event{Type: term.EventNone})
+			h.publishEvent(term.Event{Type: term.EventNone})
 		}),
 	}
 
