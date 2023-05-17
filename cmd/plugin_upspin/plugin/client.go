@@ -5,6 +5,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"github.com/ernestrc/blue/retry"
@@ -26,13 +27,12 @@ var (
 // until last sequence ID matches.
 type upspinClient struct {
 	upspin.Client
-	lastSequenceID map[upspin.PathName]int64
+	lastSequenceID sync.Map // map[upspin.PathName]int64
 }
 
 func newUpspinClient(client upspin.Client) *upspinClient {
 	return &upspinClient{
-		Client:         client,
-		lastSequenceID: make(map[upspin.PathName]int64),
+		Client: client,
 	}
 }
 
@@ -49,8 +49,8 @@ func (c *upspinClient) Lookup(
 		if err != nil {
 			return !errors.Is(errors.NotExist, err), err
 		}
-		lastSeqID, ok := c.lastSequenceID[name]
-		if ok && ret.Sequence < lastSeqID {
+		lastSeqID, ok := c.lastSequenceID.Load(name)
+		if ok && ret.Sequence < lastSeqID.(int64) {
 			return true, errors.E("stale Lookup")
 		}
 		return false, nil
@@ -69,8 +69,8 @@ func (c *upspinClient) Rename(oldName, newName upspin.PathName) (
 		return nil, err
 	}
 
-	c.lastSequenceID[entry.Name] = entry.Sequence
-	delete(c.lastSequenceID, oldName)
+	c.lastSequenceID.Store(entry.Name, entry.Sequence)
+	c.lastSequenceID.Delete(oldName)
 
 	ctx, cancel := context.WithTimeout(context.Background(), retryTimeout)
 	defer cancel()
@@ -113,7 +113,7 @@ func (c *upspinClient) Delete(name upspin.PathName) error {
 		return err
 	}
 
-	delete(c.lastSequenceID, name)
+	c.lastSequenceID.Delete(name)
 
 	err = retry.Retry(ctx, retryStrategy, func(ctx context.Context) (bool, error) {
 		_, err = c.Client.Lookup(name, false)
@@ -133,7 +133,7 @@ func (c *upspinClient) Put(name upspin.PathName, data []byte) (
 ) {
 	entry, err := c.Client.Put(name, data)
 	if err == nil {
-		c.lastSequenceID[entry.Name] = entry.Sequence
+		c.lastSequenceID.Store(entry.Name, entry.Sequence)
 	}
 	return entry, err
 }
@@ -210,7 +210,6 @@ func (f *fileAdapter) Write(p []byte) (n int, err error) {
 	if err != nil {
 		return
 	}
-	err = f.Sync()
 	return
 }
 

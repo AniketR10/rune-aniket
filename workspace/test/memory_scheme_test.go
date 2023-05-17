@@ -3,6 +3,7 @@ package test
 import (
 	"context"
 	"io/ioutil"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -48,7 +49,7 @@ func TestMemoryScheme(t *testing.T) {
 // TODO add to scheme suite
 func TestMemoryFile(t *testing.T) {
 	t.Run("Write overwrites data", func(t *testing.T) {
-		f := workspace.NewMemoryFile("bla", 1, 0, []byte("12345"))
+		f := workspace.NewMemoryFile("bla", 1, 0, []byte("12345"), new(sync.Mutex))
 		n, err := f.Write([]byte("ZZ"))
 		require.NoError(t, err)
 		assert.Equal(t, 2, n)
@@ -63,7 +64,7 @@ func TestMemoryFile(t *testing.T) {
 	})
 
 	t.Run("Read uses write offset", func(t *testing.T) {
-		f := workspace.NewMemoryFile("bla", 2, 0, []byte("12345"))
+		f := workspace.NewMemoryFile("bla", 2, 0, []byte("12345"), new(sync.Mutex))
 		n, err := f.Write([]byte("ZZ"))
 		require.NoError(t, err)
 		assert.Equal(t, 2, n)

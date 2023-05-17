@@ -74,6 +74,7 @@ type scheme[T storage.Document[T]] struct {
 	errMissingID       error
 	retryRealFailure   retry.Strategy
 	retryInconsistency retry.Strategy
+	mu                 sync.Mutex
 	files              map[uintptr]workspaceapi.File
 	fd                 uintptr // next fd
 }
@@ -142,7 +143,10 @@ func (s *scheme[T]) Open(path string, flag int, perm os.FileMode) (
 
 	file, err := s.open(ctx, path, flag, perm)
 	if err == nil {
-		s.files[file.Fd()] = file
+		fd := file.Fd()
+		s.mu.Lock()
+		s.files[fd] = file
+		s.mu.Unlock()
 	}
 	return file, err
 }
@@ -219,8 +223,9 @@ func (s *scheme[T]) open(
 	}
 
 	s.fd++
+	addTemplate := !trunc
 	f, err := newFile(docID, s.marshaler, s.errMissingID,
-		s.fd, &s.svc, perm, s.retryRealFailure, ret, !trunc, s)
+		s.fd, &s.svc, perm, s.retryRealFailure, ret, addTemplate, s)
 	if err != nil {
 		return nil, workspaceapi.NopError(err)
 	}
@@ -228,7 +233,9 @@ func (s *scheme[T]) open(
 }
 
 func (s *scheme[T]) NewFile(fd uintptr, path string) workspaceapi.File {
+	s.mu.Lock()
 	f, _ := s.files[fd]
+	s.mu.Unlock()
 	return f
 }
 

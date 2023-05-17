@@ -200,6 +200,11 @@ func (t testStruct) UpdatedTime() time.Time {
 	return t.UpdatedAt
 }
 
+func (t testStruct) WithUpdatedTime(tt time.Time) testStruct {
+	t.UpdatedAt = tt
+	return t
+}
+
 func prepareServiceForListTest(
 	t *testing.T, s *Service[testStruct],
 	name string,

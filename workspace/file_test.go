@@ -587,11 +587,14 @@ func expectInitSwap(
 	// seek original file back to 0
 	mock.EXPECT().Seek(gomock.Eq(int64(0)), gomock.Eq(0)).Return(int64(0), nil)
 
+	mock.EXPECT().Truncate(gomock.Any()).Return(nil)
+
 	// write to swap file
 	mock.EXPECT().Write(gomock.Any()).DoAndReturn(func(p []byte) (n int, err error) {
 		// assert.EqualValues(t, data, p)
 		return len(p), nil
 	})
+	mock.EXPECT().Sync().Return(nil)
 }
 
 func expectInitBuffer(mock *workspaceapitest.MockFile, data []byte) {
@@ -655,6 +658,7 @@ func TestFileBufferInit(t *testing.T) {
 			mock.EXPECT().
 				Write(gomock.Any()).
 				Return(1, nil)
+			mock.EXPECT().Sync().Return(nil)
 			buf.WriteString("\n")
 			assert.Equal(t, "Oakland\n", buf.String(), fmt.Sprintf("%q", string(data)))
 			assert.Equal(t, 2, buf.Rows(), fmt.Sprintf("%q", string(data)))
@@ -737,6 +741,8 @@ func TestFileBufferInit(t *testing.T) {
 
 		mock.EXPECT().Name().Return(fileName).AnyTimes()
 
+		mock.EXPECT().Truncate(gomock.Any()).Return(nil)
+
 		mock.EXPECT().Write(gomock.Any()).DoAndReturn(func(p []byte) (n int, err error) {
 			return 0, accessDeniedErr
 		})
@@ -793,6 +799,7 @@ func TestFileBufferInit(t *testing.T) {
 		expectRead(mock, []byte("1234"))
 
 		mock.EXPECT().Name().Return(fileName).AnyTimes()
+		mock.EXPECT().Truncate(gomock.Any()).Return(nil)
 
 		mock.EXPECT().Write(gomock.Any()).DoAndReturn(func(p []byte) (n int, err error) {
 			return 0, accessDeniedErr
@@ -884,7 +891,6 @@ func newRecoveredTestFileBuffer(t *testing.T, ctrl *gomock.Controller) (
 	expectInitSwap(mock, defaultFileName, testFileInfo{}, defaultFileData)
 	expectInitBuffer(mock, defaultFileData)
 	buf := cell.NewBuffer()
-	mock.EXPECT().Sync().Return(nil)
 	require.NoError(t, f.initRecover(defaultFileName,
 		"."+defaultFileName+".swp", buf, false))
 	return f, mock, buf
@@ -1002,7 +1008,6 @@ func testFileBufferFlush(t *testing.T, newBuffer newBufferFunc) {
 		mock.EXPECT().Close().Return(nil).Times(2)
 		expectInitSwap(mock, defaultFileName, testFileInfo{}, defaultFileData)
 
-		mock.EXPECT().Sync().Return(nil)
 		assert.NoError(t, f.Flush())
 		assert.True(t, called)
 	})
@@ -1017,7 +1022,6 @@ func testFileBufferFlush(t *testing.T, newBuffer newBufferFunc) {
 			return myErr
 		}
 
-		mock.EXPECT().Sync().Return(nil)
 		mock.EXPECT().Close().Return(nil).Times(2)
 		assert.Equal(t, myErr, f.Flush())
 	})
@@ -1076,6 +1080,7 @@ func expectCopyToSwap(f *file, mock *workspaceapitest.MockFile, newData string) 
 	mock.EXPECT().
 		Write(gomock.Eq([]byte(expectedContent+"\n"))).
 		Return(len(expectedContent)+1, nil)
+	mock.EXPECT().Sync().Return(nil)
 	mock.EXPECT().Stat().Return(testFileInfo{}, nil).AnyTimes()
 	return clean
 }
@@ -1122,7 +1127,6 @@ func testFileBufferInsert(
 		wait := expectCopyToSwap(f, mock, myString)
 		defer wait()
 
-		mock.EXPECT().Sync().Return(nil)
 		mock.EXPECT().Close().Return(nil).Times(2)
 		expectInitSwap(mock, defaultFileName, testFileInfo{}, defaultFileData)
 		assert.NoError(t, f.Flush())
@@ -1220,6 +1224,7 @@ func testFileBufferDelete(t *testing.T, newBuffer newBufferFunc) {
 		mock.EXPECT().
 			Write(gomock.Eq([]byte("\n"))).
 			Return(1, nil)
+		mock.EXPECT().Sync().Return(nil)
 		buf.DeleteRow(0)
 	})
 

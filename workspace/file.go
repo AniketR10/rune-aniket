@@ -97,7 +97,19 @@ func (f *file) initSwap(orig workspaceapi.File, origPerms os.FileMode) (workspac
 		return nil, err
 	}
 
+	// not necessary for good scheme implementations, but we should
+	// not trust that flags are interpreted correctly
+	if err := swap.Truncate(0); err != nil {
+		_ = f.scheme.Remove(f.swapFileName)
+		return nil, err
+	}
+
 	if _, err := swap.Write(content); err != nil {
+		_ = f.scheme.Remove(f.swapFileName)
+		return nil, err
+	}
+
+	if err := swap.Sync(); err != nil {
 		_ = f.scheme.Remove(f.swapFileName)
 		return nil, err
 	}
@@ -352,8 +364,13 @@ func (f *file) copyFlushSwapFile(str string) (ok bool) {
 	if !strings.HasSuffix(str, "\n") {
 		str += "\n"
 	}
-	_, err = f.swap.Write([]byte(str))
-	if err != nil {
+
+	if _, err = f.swap.Write([]byte(str)); err != nil {
+		f.delayCopySwapError(err)
+		return
+	}
+
+	if err := f.swap.Sync(); err != nil {
 		f.delayCopySwapError(err)
 		return
 	}
@@ -462,11 +479,6 @@ func (f *file) flush(force bool) error {
 	}
 	if !force && newSwapInfo.ModTime().After(f.swapInfoModTime) {
 		return workspaceapi.ErrStaleData
-	}
-
-	err = f.swap.Sync()
-	if err != nil {
-		return err
 	}
 
 	if f.orig != nil {

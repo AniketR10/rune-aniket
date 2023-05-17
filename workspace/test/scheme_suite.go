@@ -374,6 +374,40 @@ func TestWorkspaceLoadIntegration(
 		require.Equal(t, "shortshort", string(data))
 	})
 
+	t.Run("force recover an open, flushed file should work", func(t *testing.T) {
+		scheme := schemeFn(t)
+		defer scheme.Close()
+
+		uri, err := scheme.URI(".")
+		require.NoError(t, err)
+		wp := workspace.NewSchemeWorkspace(uri, scheme)
+		fileuri := workspaceapi.Join(uri, "dataAtRestTest")
+		swapfileuri := workspaceapi.Join(uri, ".dataAtRestTest.swp")
+		swapDir := workspaceapi.Join(uri, ".")
+
+		buf := cell.NewBuffer()
+		_, err = wp.Load(fileuri, buf, swapDir, false)
+		require.NoError(t, err)
+		_, err = write(buf, []byte("short"))
+		require.NoError(t, err)
+
+		time.Sleep(2 * time.Second)
+
+		buf = cell.NewBuffer()
+		fc2, err := wp.Recover(fileuri, swapfileuri, buf, true)
+		require.NoError(t, err)
+		require.NoError(t, fc2.Flush())
+
+		f, werr := scheme.Open("dataAtRestTest", os.O_RDONLY, 0)
+		require.Nil(t, werr)
+		data, err := readAll(f)
+		require.NoError(t, err)
+		require.Equal(t, "short", string(data))
+
+		require.NoError(t, fc2.Close())
+		require.NoError(t, f.Close())
+	})
+
 	t.Run("close should cleanup temp state such that next Load works", func(t *testing.T) {
 		scheme := schemeFn(t)
 		defer scheme.Close()

@@ -1,18 +1,15 @@
 package workspace
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
-	"io"
-	"io/fs"
 	"os"
 	"os/user"
 	"path/filepath"
 	"strings"
+	"sync"
 	"syscall"
-	"time"
 
 	"unstable.build/go-tui/api/config"
 	schemeapi "unstable.build/go-tui/api/scheme"
@@ -43,42 +40,11 @@ func NewMemoryScheme(
 	return ret, nil
 }
 
-// NewMemoryFile returns a in-memory File implementation.
-func NewMemoryFile(
-	filename string, fd uintptr, mode fs.FileMode, data []byte,
-) workspaceapi.File {
-	return &memFile{
-		filename: filename,
-		fd:       fd,
-		mode:     mode,
-		modTime:  time.Now(),
-		data:     data,
-		reader:   bytes.NewReader(data),
-	}
-}
-
 type memoryScheme struct {
 	workspace workspaceapi.URI
+	mu        sync.Mutex
 	files     map[string]*memFile
 	fd        uintptr // next fd
-}
-
-type memFile struct {
-	reader   *bytes.Reader
-	data     []byte
-	filename string
-	fd       uintptr
-	modTime  time.Time
-	mode     os.FileMode
-	offset   int64
-}
-
-type memFileInfo struct {
-	bufLen   int64
-	filename string
-	mode     os.FileMode
-	modTime  time.Time
-	isDir    bool
 }
 
 func (m *memoryScheme) init(workspace workspaceapi.URI) error {
@@ -91,6 +57,9 @@ func (m *memoryScheme) init(workspace workspaceapi.URI) error {
 }
 
 func (m *memoryScheme) NewFile(fd uintptr, filename string) workspaceapi.File {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
 	for _, f := range m.files {
 		if f.fd == fd {
 			return f
@@ -114,7 +83,9 @@ func (m *memoryScheme) Open(path string, flag int, mode os.FileMode) (
 	}
 	uriStr := uri.String()
 
+	m.mu.Lock()
 	f, ok := m.files[uriStr]
+	m.mu.Unlock()
 	if !ok && flag&os.O_CREATE == 0 {
 		return nil, &workspaceapi.Error{IsNotExist: true}
 	}
@@ -138,8 +109,10 @@ func (m *memoryScheme) Open(path string, flag int, mode os.FileMode) (
 			filename = filepath.Join(m.workspace.Path(), rel)
 		}
 		m.fd++
-		f = NewMemoryFile(filename, m.fd, mode, data).(*memFile)
+		f = NewMemoryFile(filename, m.fd, mode, data, &m.mu).(*memFile)
+		m.mu.Lock()
 		m.files[uriStr] = f
+		m.mu.Unlock()
 	} else {
 		_, _ = f.Seek(0, 0)
 	}
@@ -152,6 +125,9 @@ func (m *memoryScheme) Remove(path string) error {
 	if err != nil {
 		return err
 	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
 
 	uriStr := uri.String()
 	_, ok := m.files[uriStr]
@@ -174,6 +150,9 @@ func (m *memoryScheme) Rename(old, new string) error {
 	}
 	oldURIStr := oldURI.String()
 	newURIStr := newURI.String()
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
 
 	f, ok := m.files[oldURIStr]
 	if !ok {
@@ -207,7 +186,9 @@ func (m *memoryScheme) Stat(path string) (os.FileInfo, error) {
 	}
 
 	uriStr := uri.String()
+	m.mu.Lock()
 	f, ok := m.files[uriStr]
+	m.mu.Unlock()
 	if !ok {
 		return nil, workspaceapi.Error{IsNotExist: true}.ToError()
 	}
@@ -269,6 +250,9 @@ func (m *memoryScheme) ReadDir(name string) (
 
 	name = info.Name()
 
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
 	var ret []os.DirEntry
 	for uri := range m.files {
 		uri, err := workspaceapi.ParseURI(uri)
@@ -289,102 +273,9 @@ func (m *memoryScheme) ReadDir(name string) (
 }
 
 func (m *memoryScheme) Close() error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
 	m.files = nil
 	return nil
-}
-
-func (c *memFile) Read(p []byte) (n int, err error) {
-	return c.reader.Read(p)
-}
-
-func (c *memFile) Write(p []byte) (n int, err error) {
-	if c.offset+int64(len(p)) > int64(len(c.data)) {
-		diff := c.offset + int64(len(p)) - int64(len(c.data))
-		c.data = append(c.data, make([]byte, diff)...)
-		copy(c.data[diff:], c.data)
-	}
-	copy(c.data[c.offset:], p)
-	n = len(p)
-	c.offset += int64(n)
-	c.reader.Reset(c.data)
-	_, err = c.reader.Seek(c.offset, io.SeekStart)
-	return
-}
-
-func (c *memFile) Name() string {
-	return c.filename
-}
-
-func (c *memFile) Stat() (os.FileInfo, error) {
-	finfo := memFileInfo{
-		bufLen:   int64(len(c.data)),
-		filename: filepath.Base(c.filename),
-		modTime:  c.modTime,
-		mode:     c.mode,
-	}
-	return finfo, nil
-}
-
-func (c *memFile) Sync() error {
-	c.modTime = time.Now()
-	return nil
-}
-
-func (c *memFile) Truncate(size int64) error {
-	if size < 0 || size > int64(len(c.data)) {
-		panic("invalid truncate size")
-	}
-	c.data = c.data[:size]
-	c.offset = 0
-	c.reader.Reset(c.data)
-	return nil
-}
-
-func (c *memFile) Fd() uintptr {
-	return c.fd
-}
-
-func (c *memFile) Seek(offset int64, whence int) (int64, error) {
-	var err error
-	c.offset, err = c.reader.Seek(offset, whence)
-	if err != nil {
-		return 0, err
-	}
-	return c.offset, nil
-}
-
-func (c *memFile) Close() error {
-	return nil
-}
-
-func (t memFileInfo) Size() int64 {
-	return t.bufLen
-}
-
-func (t memFileInfo) Mode() os.FileMode {
-	return t.mode
-}
-
-func (t memFileInfo) ModTime() time.Time {
-	return t.modTime
-}
-
-func (t memFileInfo) IsDir() bool {
-	return t.isDir
-}
-
-func (t memFileInfo) Sys() interface{} {
-	return nil
-}
-
-func (t memFileInfo) Name() string {
-	return t.filename
-}
-
-func (t memFileInfo) Type() os.FileMode {
-	return 0 // 0 is regular files
-}
-
-func (t memFileInfo) Info() (os.FileInfo, error) {
-	return t, nil
 }

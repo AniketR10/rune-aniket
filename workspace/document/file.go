@@ -36,8 +36,6 @@ type file[T storage.Document[T]] struct {
 	val T
 
 	lastSize int
-	dirty    bool
-	offset   int64
 	memFile  workspaceapi.File
 }
 
@@ -58,10 +56,10 @@ func newFile[T storage.Document[T]](
 		if err != nil {
 			return nil, fmt.Errorf("Marshal: %v", err)
 		}
-		ret.memFile = workspace.NewMemoryFile(docID, fd, mode, data)
+		ret.memFile = workspace.NewMemoryFile(docID, fd, mode, data, &s.mu)
 	} else {
 		data := make([]byte, 0)
-		ret.memFile = workspace.NewMemoryFile(docID, fd, mode, data)
+		ret.memFile = workspace.NewMemoryFile(docID, fd, mode, data, &s.mu)
 	}
 	ret.retryStrategy = retryStrategy
 	return ret, nil
@@ -79,18 +77,12 @@ func (f *file[T]) Sync() error {
 func (f *file[T]) sync(ctx context.Context) error {
 	// NOTE: we're potentially losing read/write
 	// offset position by doing this
-	_, err := f.memFile.Seek(0, 0)
-	if err != nil {
-		panic(err)
-	}
-	var buf bytes.Buffer
-	_, err = io.Copy(&buf, f.memFile)
-	if err != nil {
+	if _, err := f.memFile.Seek(0, 0); err != nil {
 		panic(err)
 	}
 
-	// return read offset to its current offset
-	_, err = f.memFile.Seek(f.offset, 0)
+	var buf bytes.Buffer
+	_, err := io.Copy(&buf, f.memFile)
 	if err != nil {
 		panic(err)
 	}
@@ -102,7 +94,7 @@ func (f *file[T]) sync(ctx context.Context) error {
 	}
 
 	f.val = temp
-	f.lastSize = buf.Len()
+	f.val = f.val.WithUpdatedTime(time.Now())
 	if f.val.ID() == "" {
 		return f.errMissingID
 	}
@@ -134,12 +126,12 @@ func (f *file[T]) sync(ctx context.Context) error {
 		}
 		return err
 	}
-	// get new UpdatedAt
+
+	// ensure what's in the database is exaclty what we have loaded in f.val and
+	// stored in memFile as data (some document.Service impls automatically updtate
+	// created at, updated at fields, auto-incremented IDs, etc.
 	err = retry.Retry(ctx, f.retryStrategy, func(ctx context.Context) (bool, error) {
 		err = f.svc.svc.Get(ctx, f.memFile.Name(), &f.val)
-		if err == nil {
-			f.dirty = false
-		}
 		return err != document.ErrPermissionDenied, err
 	})
 	if err != nil {
@@ -148,6 +140,23 @@ func (f *file[T]) sync(ctx context.Context) error {
 		}
 		return err
 	}
+
+	// write updated time back into memory file
+	data, err := f.marshaler.Marshal(f.val)
+	if err != nil {
+		return fmt.Errorf("Unmarshal: %v", err)
+	}
+
+	if err := f.memFile.Truncate(0); err != nil {
+		panic(err)
+	}
+
+	if _, err := f.memFile.Write(data); err != nil {
+		panic(err)
+	}
+
+	f.lastSize = len(data)
+
 	return nil
 }
 
@@ -195,26 +204,19 @@ func (f fileInfo) Sys() any {
 }
 
 func (f *file[T]) Truncate(size int64) error {
-	// do not set to dirty if Truncate only,
-	// as we might try to sync an empty buffer
 	return f.memFile.Truncate(size)
 }
 
 func (f *file[T]) Seek(offset int64, whence int) (int64, error) {
-	f.offset = offset
 	return f.memFile.Seek(offset, whence)
 }
 
 func (f *file[T]) Read(p []byte) (n int, err error) {
-	n, err = f.memFile.Read(p)
-	f.offset += int64(n)
-	return
+	return f.memFile.Read(p)
 }
 
 func (f *file[T]) Write(p []byte) (n int, err error) {
-	n, err = f.memFile.Write(p)
-	f.offset += int64(n)
-	return
+	return f.memFile.Write(p)
 }
 
 func (f *file[T]) Close() (err error) {

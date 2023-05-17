@@ -188,7 +188,7 @@ var errMissingID = errors.New("missing id")
 
 type testStruct struct {
 	Id        string
-	UpdatedAt time.Time `firestore:"UpdatedAt,serverTimestamp"`
+	UpdatedAt time.Time
 	Content   string
 }
 
@@ -203,6 +203,11 @@ func (t testStruct) WithID(id string) testStruct {
 
 func (t testStruct) UpdatedTime() time.Time {
 	return t.UpdatedAt
+}
+
+func (t testStruct) WithUpdatedTime(now time.Time) testStruct {
+	t.UpdatedAt = now
+	return t
 }
 
 type errService struct {
