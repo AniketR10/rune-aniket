@@ -289,7 +289,7 @@ func (p *fileScheme) StartCommand(ctx context.Context, cmd workspaceapi.Cmd) (
 		// so the timeout should be in the order of minutes.
 		// use a new context so the cancelation of the command doesn't
 		// prevent watcher from being called.
-		ctx, cancel := context.WithTimeout(context.Background(),
+		ctx, cancel := context.WithTimeout(p.ctx,
 			watcherWaitTimeout)
 		defer cancel()
 
