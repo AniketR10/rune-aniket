@@ -53,11 +53,8 @@ func (m mapper) Open(path string, flag int, perm os.FileMode) (
 	if flag&os.O_CREATE != 0 {
 		// if this is an open request with O_CREATE for a non swap
 		// then it return permission error so file logic opens read-only.
-		if !strings.HasPrefix(path, ".") || !strings.HasSuffix(path, ".swp") {
-			return nil, &workspaceapi.Error{IsPermission: true}
-		}
-		if strings.HasSuffix(path, ".swp.swp") {
-			// naughty, naughty boy
+		if !strings.HasPrefix(path, ".") || !strings.HasSuffix(path, ".swp") ||
+			strings.HasSuffix(path, ".swp.swp") { // naugthy boy
 			return nil, &workspaceapi.Error{IsPermission: true}
 		}
 		// if this is an O_CREATE for a swap, only allow if issue already exists
