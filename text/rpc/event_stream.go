@@ -2,6 +2,7 @@ package rpc
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"runtime"
@@ -99,7 +100,7 @@ func (s eventStreamServer) receiveEvents(c *Client) {
 	for {
 		protoEv, err := s.stream.Recv()
 		if err != nil {
-			if err != io.EOF {
+			if !errors.Is(err, io.EOF) && !errors.Is(err, context.Canceled) {
 				s.log(log.ErrorLevel, "stream recv error: %v", err)
 			}
 			break
@@ -116,6 +117,13 @@ func (s eventStreamServer) receiveEvents(c *Client) {
 		if exit {
 			break
 		}
+	}
+
+	// do not attempt to send unsubscribe if client is closing
+	select {
+	case <-s.parentCtx.Done():
+		return
+	default:
 	}
 
 	req := EditorSubscribeRequest{Unsubscribe: true}

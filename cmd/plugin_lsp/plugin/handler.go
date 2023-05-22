@@ -12,7 +12,6 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	multierr "github.com/ernestrc/go-multierror"
@@ -2013,18 +2012,18 @@ func (h *lspEditorHandler) Close() error {
 			defer wg.Done()
 			ctx, cancel := context.WithTimeout(context.Background(), h.disconnectTimeout)
 			defer cancel()
+			log.Debugf("shutting down server %v for %s", server.pid, server.langID)
 			err := server.srv.Shutdown(ctx)
 			if err != nil {
 				*ret = multierr.Append(*ret, fmt.Errorf("shutdown: %v", err))
 			}
-			if err := h.exec.Signal(server.pid, syscall.SIGKILL); err != nil {
-				*ret = multierr.Append(*ret, fmt.Errorf("signal: %v", err))
-			}
+			log.Debugf("closing server pipes for process %v for %s", server.pid, server.langID)
 			for _, closer := range server.closers {
 				if err := closer.Close(); err != nil {
 					*ret = multierr.Append(*ret, fmt.Errorf("pipe close: %v", err))
 				}
 			}
+			log.Debugf("done cleaning resources for %v for %s", server.pid, server.langID)
 		}(&errors[i], server)
 		i++
 	}

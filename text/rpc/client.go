@@ -3,7 +3,6 @@ package rpc
 import (
 	"context"
 	"fmt"
-	"io"
 	"runtime"
 	"sync"
 	"time"
@@ -319,14 +318,12 @@ func (c *Client) SetDefaultAttributes(h textapi.Handler, attrs term.Attributes) 
 
 // Close closes all resources associated with this client.
 func (c *Client) Close() (ret error) {
-	if closer, ok := c.cc.(io.Closer); ok {
-		ret = closer.Close()
-	}
-	c.cc = nil
 	if c.clientCancelCtx != nil {
 		c.clientCancelCtx()
 		c.clientCancelCtx = nil
 	}
+	ret = c.cc.Close()
+	c.cc = nil
 	runtime.SetFinalizer(c, nil)
 	return ret
 }
