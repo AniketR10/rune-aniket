@@ -2,8 +2,12 @@ package plugin
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io/ioutil"
+	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/alecthomas/chroma"
@@ -11,21 +15,33 @@ import (
 	"github.com/alecthomas/chroma/styles"
 	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
+	sitter "github.com/smacker/go-tree-sitter"
+	browserapi "unstable.build/go-tui/api/browser"
+	browserplugin "unstable.build/go-tui/api/browser/plugin"
 	"unstable.build/go-tui/api/config"
 	configplugin "unstable.build/go-tui/api/config/plugin"
 	textapi "unstable.build/go-tui/api/text"
 	workspaceapi "unstable.build/go-tui/api/workspace"
+	workspaceplugin "unstable.build/go-tui/api/workspace/plugin"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
+	"unstable.build/go-tui/handler"
+	"unstable.build/go-tui/handler/search"
 	"unstable.build/go-tui/plugin"
 	plugutil "unstable.build/go-tui/plugin/util"
 	"unstable.build/go-tui/proto"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/term/color"
+	"unstable.build/go-tui/text/vi"
 )
 
 const (
 	defaultSemanticTokensListID = "chroma_syntax_highlighting"
+	cmdSyntaxQuery              = "syntaxQuery"
+)
+
+var (
+	errNotAvailable = errors.New("syntax tree parser not yet available for this language")
 )
 
 // Grantee returns this plugin's Grantee and the permissions required to run it.
@@ -38,7 +54,7 @@ func Grantee() (plugin.Grantee, []plugin.Permission) {
 var (
 	// SyntaxHandlerCommands returns the commands that this plugin is
 	// interested in registering.
-	SyntaxHandlerCommands = []string{}
+	SyntaxHandlerCommands = []string{cmdSyntaxQuery}
 
 	// SyntaxHandlerEvents returns the events that this plugin is
 	// interested in subscribing to.
@@ -51,23 +67,38 @@ var (
 	// SyntaxHandlerPermissions are the required permissions for this
 	// plugin to run.
 	SyntaxHandlerPermissions = []plugin.Permission{
-		/* Editor perms already included */
+		plugin.PermissionBrowserWindowManager,
+		plugin.PermissionBrowserResourceOpener,
+		plugin.PermissionBrowserEventPublisher,
+		plugin.PermissionBrowserMessenger,
 		plugin.PermissionConfig,
+		plugin.PermissionFileSystem,
+		plugin.PermissionEditor,
 	}
 )
 
 type file struct {
 	cell.Buffer
 	component.Scroll
-	uri     workspaceapi.URI
-	handler textapi.Handler
+	uri      workspaceapi.URI
+	handler  textapi.Handler
+	parser   *sitter.Parser
+	tree     *sitter.Tree
+	language *sitter.Language
 }
 
 type syntaxHandler struct {
 	ed                   textapi.Editor
+	wm                   browserapi.WindowManager
+	m                    browserapi.Messenger
+	o                    browserapi.ResourceOpener
+	p                    browserapi.EventPublisher
+	fs                   workspaceapi.FileSystem
 	semanticTokensListID string
 	setBackgroundAttr    bool
 	tabspaces            int
+	frame                bool
+	cwd                  string
 
 	styles map[string]*chroma.Style
 	files  map[string]*file
@@ -154,12 +185,48 @@ func newSyntaxHandler(
 	}
 	for _, g := range grants {
 		switch g.Permission {
+		case plugin.PermissionBrowserEventPublisher:
+			ret.p, err = browserplugin.EventPublisher(g, broker)
+			if err != nil {
+				return nil, err
+			}
+		case plugin.PermissionBrowserResourceOpener:
+			ret.o, err = browserplugin.ResourceOpener(g, broker)
+			if err != nil {
+				return nil, err
+			}
+		case plugin.PermissionBrowserWindowManager:
+			ret.wm, err = browserplugin.WindowManager(g, broker)
+			if err != nil {
+				return nil, err
+			}
+		case plugin.PermissionBrowserMessenger:
+			ret.m, err = browserplugin.Messenger(g, broker)
+			if err != nil {
+				return nil, err
+			}
+		case plugin.PermissionFileSystem:
+			ret.fs, err = workspaceplugin.FileSystem(g, broker)
+			if err != nil {
+				return nil, err
+			}
+			cwdURI, err := ret.fs.URI(".")
+			if err != nil {
+				return nil, err
+			}
+			ret.cwd = cwdURI.Path()
 		case plugin.PermissionConfig:
 			config, err := configplugin.FetchConfig(g, broker)
 			if err != nil {
 				return nil, err
 			}
 			ret.tabspaces, err = plugutil.Tabspaces(config)
+			if err != nil {
+				ret.tabspaces = cell.DefaultTabspaces
+				log.Warnf("Could not get tabspaces from config: %s.. Using default of %d",
+					err, ret.tabspaces)
+			}
+			ret.frame, err = plugutil.WindowManagerFrame(config)
 			if err != nil {
 				ret.tabspaces = cell.DefaultTabspaces
 				log.Warnf("Could not get tabspaces from config: %s.. Using default of %d",
@@ -205,14 +272,286 @@ func (h *syntaxHandler) Handle(
 func (h *syntaxHandler) HandleCommand(ctx context.Context, cmd textapi.Command) (
 	exit bool, err error,
 ) {
+	switch cmd.Name {
+	case cmdSyntaxQuery:
+		return h.handleQuerySyntax(ctx, cmd)
+	}
 	return
 }
 
+func (h *syntaxHandler) convertStartEndPoints(
+	n *sitter.Node, buf *cell.Buffer,
+) (from, to term.Coordinates, err error) {
+	c := buf.RawCells()
+	start, end := n.StartPoint(), n.EndPoint()
+	from, ok := cell.ConvertRuneCoordinates(c, int(start.Row), int(start.Column))
+	if !ok {
+		err = fmt.Errorf("convert points: failed to convert sitter 'start point "+
+			" to term 'from' coordinates: point: %v", start)
+		return
+	}
+	log.Tracef("convert points: converted sitter 'start' point "+
+		" to term 'from' coordinates: point: %v, result: %v", start, from)
+
+	to, ok = cell.ConvertRuneCoordinates(c, int(end.Row), int(end.Column))
+	if !ok {
+		err = fmt.Errorf("convert points: failed to convert sitter 'end' point "+
+			" to term 'to' coordinates: point: %v", end)
+		return
+	}
+	log.Tracef("convert points: converted sitter 'end' point "+
+		" to term 'to' coordinates: point: %v, result: %v", end, to)
+	return
+}
+
+func (h *syntaxHandler) handleGoTo(f *file, n *sitter.Node) error {
+	pos, _, err := h.convertStartEndPoints(n, &f.Buffer)
+	if err != nil {
+		return err
+	}
+
+	if err := h.ed.SetCursor(f.handler, pos); err != nil {
+		err = fmt.Errorf("set cursor %v: %v", f.uri, err)
+		return err
+	}
+	return nil
+}
+
+func (h *syntaxHandler) goToLocation(
+	win browserapi.Window, uri workspaceapi.URI, n *sitter.Node,
+) error {
+	f, ok := h.files[uri.String()]
+	if !ok {
+		return errors.New("file is not open")
+	}
+
+	buf, err := h.o.Open(uri)
+	if err != nil {
+		err = fmt.Errorf("browser open %v: %v", uri, err)
+		return err
+	}
+
+	if err := h.handleGoTo(f, n); err != nil {
+		return err
+	}
+
+	err = win.SetContent(buf)
+	if err != nil && err != browserapi.ErrTabNotFree {
+		err = fmt.Errorf("win.SetContent: %v", err)
+		return err
+	}
+	return nil
+}
+
+func (h *syntaxHandler) browseNodes(
+	uri workspaceapi.URI, win browserapi.Window,
+	language *sitter.Language, nodes []*sitter.Node,
+	buf *cell.Buffer,
+) error {
+	const locID = "sitter_highlight_loc"
+	var (
+		longestLocation int
+		bottom, top     browserapi.Window
+		done            bool
+	)
+	cfg := search.ListConfig{
+		Algo:          search.FuzzyMatch,
+		Interrupter:   h.p,
+		CaseSensitive: false,
+	}
+	list := search.NewList(cfg)
+	textToLocation := make(map[string]*sitter.Node)
+	viewBuffer := cell.NewBuffer()
+	ed := vi.Editor()
+	edh, err := ed.Edit(workspaceapi.URI{}, viewBuffer)
+	if err != nil {
+		err = fmt.Errorf("edit temporary buffer: %s", err)
+		return err
+	}
+
+	filename := uri.Path()
+	relative, err := filepath.Rel(h.cwd, filename)
+	if err == nil && len(relative) < len(filename) {
+		filename = relative
+	}
+
+	for _, n := range nodes {
+		from, to, err := h.convertStartEndPoints(n, buf)
+		if err != nil {
+			return err
+		}
+
+		// use firts line as helper text to display
+		// along coordinates
+		to.Y = from.Y
+		to.X = buf.Columns(from.Y)
+		cells, ok := buf.Select(from, to)
+
+		// best effort
+		var textToDisplay string
+		if ok {
+			textToDisplay = cell.CellsToString(cells)
+		}
+		text := fmt.Sprintf("%s:%d:%d-%d:%d: %s", filename,
+			n.StartPoint().Row, n.StartPoint().Column,
+			n.EndPoint().Row, n.EndPoint().Column, textToDisplay)
+		list.PushSync([]byte(text))
+		textToLocation[text] = n
+		if len(text) > longestLocation {
+			longestLocation = len(text)
+		}
+	}
+
+	closeWin := func(win browserapi.Window) func() error {
+		return func() error {
+			shouldClose := done && win != nil
+			closeWin := win
+			if shouldClose {
+				return closeWin.Close()
+			}
+			return nil
+		}
+	}
+
+	renderFile := func(n *sitter.Node) {
+		// Open assumes path in current workspace
+		f, oerr := h.fs.Open(filename, os.O_RDONLY, 0)
+		if oerr != nil {
+			log.Errorf("could not render preview file: Open: %v", oerr)
+			return
+		}
+		defer f.Close()
+		data, err := ioutil.ReadAll(f)
+		if err != nil {
+			log.Errorf("could not render preview file: Read: %v", err)
+			return
+		}
+		content := string(data)
+
+		_ = ed.SetCursor(edh, term.Coordinates{})
+		viewBuffer.Reset()
+		viewBuffer.WriteString(content)
+
+		from, to, err := h.convertStartEndPoints(n, viewBuffer)
+		if err != nil {
+			log.Error(err)
+			return
+		}
+
+		attrs := term.Attributes{Bg: term.AttrReverse, Fg: term.AttrReverse}
+		loc := textapi.Location{From: from, To: to, Attr: attrs}
+		ed.SetLocationList(edh, textapi.LocationPriorityInfo,
+			locID, textapi.LocationSlice([]textapi.Location{loc}))
+		ed.MoveToPrevLocation(edh, locID)
+	}
+
+	sh := search.Handler(list, func(text string) {
+		done = true
+
+		// liberate all tabs
+		closeWin(top)()
+		closeWin(bottom)()
+
+		err := h.goToLocation(win, uri, textToLocation[text])
+		if err != nil {
+			h.m.SetMessage("search.Handler: %s", err)
+		}
+	})
+
+	// wrap to detect when focus has changed
+	// and re-render window.
+	bh := handler.Wrap(sh, func(ev term.Event) (bool, bool) {
+		before, _ := list.Focus()
+		exit, handle := sh.Handle(ev)
+		list.Wait()
+		after, _ := list.Focus()
+		afterStr := string(after.Data())
+		if exit {
+			done = true
+		}
+		if string(before.Data()) != afterStr {
+			node, ok := textToLocation[afterStr]
+			if ok {
+				renderFile(node)
+			}
+		}
+		return exit, handle
+	})
+
+	eh := handler.Wrap(edh, func(ev term.Event) (bool, bool) {
+		if ev.Type == term.EventResize {
+			list.Wait()
+			focus, _ := list.Focus()
+			node, ok := textToLocation[string(focus.Data())]
+			if ok {
+				renderFile(node)
+			}
+			return false, true
+		}
+
+		return edh.Handle(ev)
+	})
+
+	bhtop := browserapi.FuncHandler(eh, closeWin(bottom))
+	top, err = h.wm.Split(browserapi.OrientationBottom, win, bhtop)
+	if err != nil {
+		err = fmt.Errorf("wm.split: %v", err)
+		return err
+	}
+
+	bhbottom := browserapi.FuncHandler(bh, closeWin(top))
+	bottom, err = h.wm.Split(browserapi.OrientationBottom, top, bhbottom)
+	if err != nil {
+		err = fmt.Errorf("wm.Split: %v", err)
+		return err
+	}
+	return nil
+}
+
+func (h *syntaxHandler) handleQuerySyntax(ctx context.Context, cmd textapi.Command) (
+	exit bool, err error,
+) {
+	query := strings.Join(cmd.Args, " ")
+	if query == "" {
+		return false, errors.New("empty query")
+	}
+	uri := cmd.URI.String()
+
+	f, ok := h.files[uri]
+	if !ok {
+		return false, fmt.Errorf("could not find buffer for file %s", uri)
+	}
+
+	if f.tree == nil {
+		return false, errNotAvailable
+	}
+
+	q, err := sitter.NewQuery([]byte(query), f.language)
+	if err != nil {
+		return false, fmt.Errorf("new query: %v", err)
+	}
+	qc := sitter.NewQueryCursor()
+	qc.Exec(q, f.tree.RootNode())
+
+	var nodes []*sitter.Node
+	for {
+		m, ok := qc.NextMatch()
+		if !ok {
+			break
+		}
+		for _, c := range m.Captures {
+			nodes = append(nodes, c.Node)
+		}
+	}
+	return false, h.browseNodes(cmd.URI, cmd.Window, f.language, nodes, &f.Buffer)
+}
+
 func (h *syntaxHandler) handleOpen(ev textapi.Event) error {
-	h.files[ev.URI.String()] = h.newFile(ev)
-	ext := filepath.Ext(ev.URI.Path())
+	filename := ev.URI.String()
+	ext := filepath.Ext(filename)
+	h.files[filename] = h.newFile(ev)
 	if _, ok := h.lexers[ext]; !ok {
-		lexer := lexers.Match(ev.URI.Path())
+		lexer := lexers.Match(filename)
 		if lexer == nil {
 			lexer = lexers.Fallback
 		}
@@ -222,7 +561,7 @@ func (h *syntaxHandler) handleOpen(ev textapi.Event) error {
 	if h.setBackgroundAttr {
 		h.setBackground(ev.URI, ev.Resource)
 	}
-	return h.checkSyntax(ev)
+	return h.checkSyntaxWithLexer(ev)
 }
 
 func (h *syntaxHandler) handleEdit(ev textapi.Event) error {
@@ -230,15 +569,16 @@ func (h *syntaxHandler) handleEdit(ev textapi.Event) error {
 	if err != nil {
 		return err
 	}
-	return h.checkSyntax(ev)
+	return h.checkSyntaxWithLexer(ev)
 }
 
-func (h *syntaxHandler) checkSyntax(ev textapi.Event) error {
+func (h *syntaxHandler) checkSyntaxWithLexer(ev textapi.Event) error {
 	f, ok := h.files[ev.URI.String()]
 	if !ok {
 		return fmt.Errorf("could not find buffer for file %s", ev.URI.String())
 	}
-	ext := filepath.Ext(ev.URI.Path())
+	filename := ev.URI.Path()
+	ext := filepath.Ext(filename)
 	lexer, ok := h.lexers[ext]
 	if !ok {
 		log.Warningf("lexer for %s not found. Using fallback..", ext)
@@ -246,14 +586,14 @@ func (h *syntaxHandler) checkSyntax(ev textapi.Event) error {
 	}
 	iterator, err := lexer.Tokenise(nil, f.String())
 	if err != nil {
-		log.Errorf("lexer.Tokenise(%s): %v", ev.URI.Path(), err)
+		log.Errorf("lexer tokenize %v: %v", ev.URI.Path(), err)
 		return err
 	}
-	return h.setTokenPositions(f, iterator)
+	return h.setChromaTokenPositions(f, iterator)
 }
 
-func (h *syntaxHandler) setTokenPositions(f *file, it chroma.Iterator) error {
-	style, ok := h.getStyle(f.uri)
+func (h *syntaxHandler) setChromaTokenPositions(f *file, it chroma.Iterator) error {
+	style, ok := h.getChromaStyle(f.uri)
 	if !ok {
 		log.Tracef("Not running lexer for file %s: extension disabled", f.uri)
 		return nil
@@ -286,12 +626,12 @@ func (h *syntaxHandler) setTokenPositions(f *file, it chroma.Iterator) error {
 	err := h.ed.SetLocationList(f.handler, textapi.LocationPriorityInfo,
 		h.semanticTokensListID, textapi.LocationSlice(locations))
 	if err != nil {
-		return fmt.Errorf("SetLocationList(%s): %v", f.uri, err)
+		return fmt.Errorf("set location list %v: %v", f.uri, err)
 	}
 	return nil
 }
 
-func (h *syntaxHandler) getStyle(file workspaceapi.URI) (*chroma.Style, bool) {
+func (h *syntaxHandler) getChromaStyle(file workspaceapi.URI) (*chroma.Style, bool) {
 	ext := filepath.Ext(file.Path())
 	style, ok := h.styles[ext]
 	if !ok {
@@ -305,7 +645,7 @@ func (h *syntaxHandler) getStyle(file workspaceapi.URI) (*chroma.Style, bool) {
 }
 
 func (h *syntaxHandler) setBackground(file workspaceapi.URI, ed textapi.Handler) {
-	style, ok := h.getStyle(file)
+	style, ok := h.getChromaStyle(file)
 	if !ok {
 		log.Debugf("Not running lexer for file %s: extension disabled", file)
 		return
@@ -328,6 +668,10 @@ func (h *syntaxHandler) editFile(ev textapi.Event) error {
 		return fmt.Errorf("could not find buffer for file %s", ev.URI.String())
 	}
 	f.Edit(ev.Start, ev.End, ev.Content)
+	if f.parser != nil {
+		// TODO edit tree rather than re-parsing everything every time
+		f.tree = f.parser.Parse(nil /*f.tree*/, []byte(f.Buffer.String()))
+	}
 	return nil
 }
 
@@ -338,6 +682,15 @@ func (h *syntaxHandler) newFile(ev textapi.Event) *file {
 	f.Buffer.WriteString(ev.Content)
 	f.uri = ev.URI
 	f.handler = ev.Resource
+
+	filename := ev.URI.Path()
+	parser, language, ok := newParser(filename)
+	if ok {
+		f.language = language
+		f.parser = parser
+		f.tree = f.parser.Parse(nil, []byte(ev.Content))
+	}
+	log.Debugf("found parser for file '%s': %v", filename, ok)
 
 	return f
 }

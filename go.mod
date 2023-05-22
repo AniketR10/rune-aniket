@@ -18,6 +18,7 @@ require (
 	github.com/junegunn/fzf v0.0.0-20201216124428-ab3937ee5a62
 	github.com/mattn/go-runewidth v0.0.14
 	github.com/sirupsen/logrus v1.6.0
+	github.com/smacker/go-tree-sitter v0.0.0-20230501083651-a7d92773b3aa
 	github.com/sourcegraph/go-diff v0.6.1
 	github.com/stretchr/testify v1.8.1
 	go.uber.org/config v1.4.0
