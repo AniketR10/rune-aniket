@@ -378,7 +378,17 @@ func (e *ex) dispatchCommand(cmd string, args ...string) (err error) {
 		return
 	}
 	if !handled {
-		err = fmt.Errorf("Unknown command %q or alias targets", cmd)
+		target, ok := e.config.CommandAliases[cmd]
+		if !ok && e.workspace == nil {
+			err = fmt.Errorf("Unknown command or alias %q or cannot run on an empty workspace", cmd)
+		} else if !ok {
+			err = fmt.Errorf("Unknown command or command alias %q", cmd)
+		} else if e.workspace == nil {
+			err = fmt.Errorf("Cannot run %q (alias of %v) on an empty workspace",
+				cmd, target)
+		} else {
+			err = fmt.Errorf("%s is aliased to an unknown command %v", cmd, target)
+		}
 	}
 	return
 }
