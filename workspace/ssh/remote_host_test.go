@@ -34,7 +34,7 @@ func TestReaderWriterListener(t *testing.T) {
 		outRead, outWrite, err := os.Pipe()
 		require.NoError(t, err)
 
-		l := newReaderWriterListener(logger, inRead, outWrite, false, func() {})
+		l := newStdioListener(logger, inRead, outWrite, false, func() {})
 
 		_, err = inWrite.WriteString("JJ")
 		require.NoError(t, err)
@@ -81,7 +81,7 @@ func TestReaderWriterListener(t *testing.T) {
 		outRead, outWrite, err := os.Pipe()
 		require.NoError(t, err)
 
-		lis := newReaderWriterListener(logger, inRead, outWrite, false, func() {
+		lis := newStdioListener(logger, inRead, outWrite, false, func() {
 			go grpcServer.Stop()
 		})
 		uri, err := workspaceapi.ParseURI("memory:///")

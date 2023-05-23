@@ -11,6 +11,29 @@ import (
 	workspacepb "unstable.build/go-tui/workspace/rpc"
 )
 
+// StartSchemeServer installs server to handle incoming workspacepb requests
+// over the calling process' os.Stdin and sends responses over os.Stdout.
+func StartSchemeServer(
+	logger *log.Logger, server *workspacepb.Server,
+	grpcServer *grpc.Server,
+) error {
+	lis := newStdioListener(
+		logger, nil /*reader*/, nil, /*writer*/
+		true, /* use stdio instead of reader and writer */
+		func() {
+			logger.Debugf("connection closed unexpectedly")
+			go grpcServer.Stop()
+		})
+	workspacepb.RegisterSchemeServer(grpcServer, server)
+	workspacepb.RegisterFilesServer(grpcServer, server)
+	workspacepb.RegisterExecutorServer(grpcServer, server)
+	workspacepb.RegisterTerminalServer(grpcServer, server)
+	if err := grpcServer.Serve(lis); err != nil {
+		return fmt.Errorf("Server: %s", err)
+	}
+	return nil
+}
+
 type stdioListener struct {
 	writer   *os.File
 	reader   *os.File
@@ -18,10 +41,11 @@ type stdioListener struct {
 	onlyConn net.Conn
 	onClose  func()
 	stdio    bool
+	addr     net.Addr
 	logger   *log.Logger
 }
 
-func newReaderWriterListener(
+func newStdioListener(
 	logger *log.Logger,
 	reader, writer *os.File,
 	stdio bool,
@@ -32,6 +56,7 @@ func newReaderWriterListener(
 	ret.logger = logger
 	ret.writer = writer
 	ret.stdio = stdio
+	ret.addr = newStdioAddr("localaddr")
 	ret.acceptCh = make(chan struct{}, 1)
 	ret.acceptCh <- struct{}{}
 	ret.onClose = onClose
@@ -60,28 +85,21 @@ func (lis *stdioListener) Close() error {
 }
 
 func (lis *stdioListener) Addr() net.Addr {
-	return lis.onlyConn.LocalAddr()
+	return lis.addr
 }
 
-// StartSchemeServer installs server to handle incoming workspacepb requests
-// over the calling process' os.Stdin and sends responses over os.Stdout.
-func StartSchemeServer(
-	logger *log.Logger, server *workspacepb.Server,
-	grpcServer *grpc.Server,
-) error {
-	lis := newReaderWriterListener(
-		logger, nil /*reader*/, nil, /*writer*/
-		true, /* use stdio instead of reader and writer */
-		func() {
-			logger.Debugf("connection closed unexpectedly")
-			go grpcServer.Stop()
-		})
-	workspacepb.RegisterSchemeServer(grpcServer, server)
-	workspacepb.RegisterFilesServer(grpcServer, server)
-	workspacepb.RegisterExecutorServer(grpcServer, server)
-	workspacepb.RegisterTerminalServer(grpcServer, server)
-	if err := grpcServer.Serve(lis); err != nil {
-		return fmt.Errorf("Server: %s", err)
-	}
-	return nil
+type stdioAddr struct {
+	s string
+}
+
+func newStdioAddr(s string) *stdioAddr {
+	return &stdioAddr{s}
+}
+
+func (a *stdioAddr) Network() string {
+	return "stdio"
+}
+
+func (a *stdioAddr) String() string {
+	return a.s
 }
