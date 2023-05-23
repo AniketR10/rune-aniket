@@ -5,8 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/user"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 
 	"github.com/ernestrc/blue/document"
@@ -67,17 +69,19 @@ var (
 )
 
 type workspaceManagerHandler struct {
-	mu             sync.Locker
-	exit           bool
-	cfg            ideConfig
-	ctxWithLocker  context.Context
-	storage        document.Service
-	workspace      workspace.WorkspaceManager
-	publishEvent   func(term.Event) bool
-	pluginRunner   PluginsRunner
-	sixDir         string
-	builtinPlugins map[string]Plugin
-	configFilename string
+	mu               sync.Locker
+	exit             bool
+	cfg              ideConfig
+	ctxWithLocker    context.Context
+	storage          document.Service
+	workspace        workspace.WorkspaceManager
+	publishEvent     func(term.Event) bool
+	pluginRunner     PluginsRunner
+	sixDir           string
+	builtinPlugins   map[string]Plugin
+	configFilename   string
+	addWorkspacePath bool
+	userHome         string
 
 	union          handler.FrameUnion
 	bar            handler.Tabs
@@ -165,6 +169,13 @@ func (h *workspaceManagerHandler) init(
 	h.union.Left = charset.Left
 	h.union.Top = charset.Top
 	h.union.Bottom = charset.Bottom
+	h.addWorkspacePath = cfg.workspacePath()
+
+	// best effort
+	user, err := user.Current()
+	if err == nil {
+		h.userHome = user.HomeDir
+	}
 
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -249,6 +260,20 @@ func (h *workspaceManagerHandler) barSize() int {
 	return ret
 }
 
+func (h *workspaceManagerHandler) makeWorkspaceTabName(
+	i int, w *workspaceHandler,
+) string {
+	if w == nil || !h.addWorkspacePath {
+		return strconv.Itoa(i + 1)
+	}
+	if w.uri.Scheme() == workspace.FileScheme && h.userHome != "" {
+		path := w.uri.Path()
+		path = strings.ReplaceAll(path, h.userHome, "~")
+		return path
+	}
+	return w.uri.String()
+}
+
 func (h *workspaceManagerHandler) Resize(width, height int) {
 	h.width, h.height = width, height
 	h.bar.RemoveAll()
@@ -261,12 +286,12 @@ func (h *workspaceManagerHandler) Resize(width, height int) {
 	for i, w := range h.workspaces {
 		if w != nil {
 			w.Resize(width, height)
-			idx := h.bar.Add(strconv.Itoa(i + 1))
+			idx := h.bar.Add(h.makeWorkspaceTabName(i, w))
 			if i == h.focus {
 				barFocusIdx = idx
 			}
 		} else if i == h.focus {
-			idx := h.bar.Add(strconv.Itoa(i + 1))
+			idx := h.bar.Add(h.makeWorkspaceTabName(i, w))
 			barFocusIdx = idx
 		}
 	}
@@ -297,7 +322,11 @@ func (h *workspaceManagerHandler) switchToWorkspace(i int) {
 }
 
 func (h *workspaceManagerHandler) Handle(ev term.Event) (exit, handled bool) {
-	exit, handled = h.focusHandler().Handle(ev)
+	if ev.Type == term.EventMouse && h.drawBar() && ev.MouseY >= h.height-h.barSize() {
+		exit, handled = h.union.Handle(ev)
+	} else {
+		exit, handled = h.focusHandler().Handle(ev)
+	}
 	return exit || h.exit, handled
 }
 

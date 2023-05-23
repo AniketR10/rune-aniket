@@ -376,6 +376,25 @@ func (c ideConfig) windowFrameAttr() (attr term.Attributes) {
 	return c.windowAttr("frame_attr", defaultWindowManagerConfig.FrameAttr)
 }
 
+func (c ideConfig) workspacePath() (ret bool) {
+	if c.cfg == nil {
+		return
+	}
+	cfg, ok := c.browser()
+	if !ok {
+		return
+	}
+	cfgBarUri, err := cfg.GetBool("workspace_bar_uri")
+	if err != nil {
+		if err != config.ErrNotFound {
+			c.errors["browser.workspace_bar_uri"] = err
+		}
+		return
+	}
+	ret = cfgBarUri
+	return
+}
+
 func (c ideConfig) windowFocusFrameAttr() (attr term.Attributes) {
 	return c.windowAttr("focus_frame_attr",
 		defaultWindowManagerConfig.FrameAttr)

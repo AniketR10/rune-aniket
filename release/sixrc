@@ -276,6 +276,8 @@ command:
     fg: *color1
 
 browser:
+  # Whether to add the URI of the workspace to the workspace bar
+  workspace_bar_uri: false
   window_manager:
     frame: true
     dim: true
