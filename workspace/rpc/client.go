@@ -18,7 +18,7 @@ import (
 	"unstable.build/go-tui/proto"
 )
 
-const defaultTimeout = 2 * time.Second
+const defaultTimeout = 5 * time.Second
 
 // for plugin-side
 var _ workspaceapi.FileSystem = (*Client)(nil)

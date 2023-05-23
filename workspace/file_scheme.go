@@ -279,9 +279,9 @@ func (p *fileScheme) StartCommand(ctx context.Context, cmd workspaceapi.Cmd) (
 		start := time.Now()
 		p.log(log.TraceLevel, "exec.Command: Wait: pid=%d", stdcmd.Process.Pid)
 		err := stdcmd.Wait()
-		p.log(log.DebugLevel, "exec.Command: Wait returned: pid=%d, err=%v"+
+		p.log(log.DebugLevel, "exec.Command: Wait returned: cmd=%v pid=%d, err=%v"+
 			", duration=%s",
-			stdcmd.Process.Pid, err, time.Since(start).String())
+			stdcmd.Args, stdcmd.Process.Pid, err, time.Since(start).String())
 
 		// set a timeout to how long we wait for a watcher
 		// to drain the error. This is just to avoid
