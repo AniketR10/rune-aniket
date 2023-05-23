@@ -4,7 +4,35 @@
 # the colorPalette command, provided by the 'colors'
 # plugin below, plugin_color_palette.
 color_theme_1: &color1 194
-color_theme_2: &color2 240
+color_theme_2: &color2 default
+frame_theme: &frame true
+focus_frame_charset_theme: &focus_frame_charset
+  horizontaltop: '─'
+  horizontalbottom: '─'
+  verticalright: '│'
+  verticalleft: '│'
+  topleft: '┌'
+  topright: '┐'
+  bottomleft: '└'
+  bottomright: '┘'
+frame_charset_theme: &frame_charset
+  horizontaltop: '─'
+  horizontalbottom: '─'
+  verticalright: '│'
+  verticalleft: '│'
+  topleft: '┌'
+  topright: '┐'
+  bottomleft: '└'
+  bottomright: '┘'
+frameunion_charset_theme: &frameunion_charset
+  left: '├'
+  right: '┤'
+  top: '┬'
+  bottom: '┴'
+frame_attr_theme: &frame_attr
+  fg: *color2
+focus_frame_attr_theme: &focus_frame_attr
+  fg: *color1
 
 log_path: ~/.six/debug.log
 log_level: info # error, debug, trace
@@ -253,19 +281,6 @@ command:
     # <c-x><enter>: newWindow
     <c-x><enter>: splitWindowTerminal
     gf: openFileUnderCursor
-  # Whether to draw a frame around the command prompt.
-  frame: true
-  # Frame character set used to draw command prompt frame. Only
-  # applies if frame is set to true.
-  frame_charset:
-    horizontalbottom: '═'
-    horizontaltop: '═'
-    verticalleft: '║'
-    verticalright: '║'
-    topleft: '╔'
-    topright: '╗'
-    bottomleft: '╚'
-    bottomright: '╝'
   # Colors
   element_attr:
     fg: default
@@ -279,12 +294,13 @@ browser:
   # Whether to add the URI of the workspace to the workspace bar
   workspace_bar_uri: false
   window_manager:
-    frame: true
     dim: true
-    frame_attr:
-      fg: *color2
-    focus_frame_attr:
-      fg: *color1
+    frame: *frame
+    frame_attr: *frame_attr
+    focus_frame_attr: *focus_frame_attr
+    frame_charset: *frame_charset
+    focus_frame_charset: *focus_frame_charset
+    frameunion_charset: *frameunion_charset
   focus_tab_attr:
     fg: *color1
   dirty_tab_attr:
