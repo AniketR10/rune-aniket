@@ -22,7 +22,7 @@ RELEASE_FILES=$(wildcard release/*)
 
 .PHONY: debug clean test coverage example_wasm generate
 
-default: CGO_ENABLED=CGO_ENABLED=0
+default: CGO_ENABLED=CGO_ENABLED=1
 default: $(EXAMPLES) $(EXECS)
 
 debug: GOFLAGS=-race
@@ -77,10 +77,11 @@ $(EXAMPLES_NON_WASM): $(EXAMPLESRC) $(LIBSRC) $(BIN)
 $(EXECS): $(EXECSRC) $(LIBSRC) $(BIN)
 	@cd $(patsubst bin/%,cmd/%,$@) && $(CGO_ENABLED) $(GO) build $(GOFLAGS) -o ../../$@
 
+make_release: CGO_ENABLED=CGO_ENABLED=1
 make_release:
 	@ mkdir -p $(TARGET)/$(TARGET_OS)_$(TARGET_ARCH)
 	@ cp $(RELEASE_FILES) $(TARGET)
-	@ CGO_ENABLED=0 GOARCH=$(TARGET_ARCH) $(TARGET_ARCH_FLAGS) GOOS=$(TARGET_OS) $(GO) build $(GOFLAGS) -o `pwd`/$(TARGET)/$(TARGET_OS)_$(TARGET_ARCH) ./cmd/...
+	@ $(CGO_ENABLED) GOARCH=$(TARGET_ARCH) $(TARGET_ARCH_FLAGS) GOOS=$(TARGET_OS) $(GO) build $(GOFLAGS) -o `pwd`/$(TARGET)/$(TARGET_OS)_$(TARGET_ARCH) ./cmd/...
 
 release_arm: clean
 	@ cp $(RELEASE_FILES) $(TARGET)
