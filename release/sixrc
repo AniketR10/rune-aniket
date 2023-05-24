@@ -322,8 +322,6 @@ browser:
       - bold
   dirty_tab_attr:
     fg:
-      - underline
-      - bold
       - *color1
     bg: default
   non_focus_tab_attr:
