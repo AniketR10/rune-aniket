@@ -129,8 +129,8 @@ func newSyntaxHandler(
 	ret.styles = make(map[string]*chroma.Style)
 	ret.styles[".sixrc"] = styles.Get("doom-one")
 	ret.styles[".sixdevrc"] = styles.Get("doom-one")
-	ret.styles[".hoprc"] = styles.Get("doom-one")
-	ret.styles[".hopdevrc"] = styles.Get("doom-one")
+	ret.styles[".oxrc"] = styles.Get("doom-one")
+	ret.styles[".oxdevrc"] = styles.Get("doom-one")
 
 	for ext, styleIfc := range chromaStyles {
 		styleStr, ok := styleIfc.(string)
