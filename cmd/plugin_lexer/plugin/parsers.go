@@ -79,7 +79,10 @@ var extensionToLanguage = map[string]*sitter.Language{
 	".yml":          yaml.GetLanguage(),
 }
 
-func newParser(file string) (*sitter.Parser, *sitter.Language, bool) {
+// NewParser returns a new sitter.Parser and sitter.Language suitable
+// for the given file or false if the language of this file is not supported
+// or extension is not recognized.
+func NewParser(file string) (*sitter.Parser, *sitter.Language, bool) {
 	ext := filepath.Ext(file)
 	lang, ok := extensionToLanguage[ext]
 	if !ok {

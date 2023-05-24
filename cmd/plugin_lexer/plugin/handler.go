@@ -684,7 +684,7 @@ func (h *syntaxHandler) newFile(ev textapi.Event) *file {
 	f.handler = ev.Resource
 
 	filename := ev.URI.Path()
-	parser, language, ok := newParser(filename)
+	parser, language, ok := NewParser(filename)
 	if ok {
 		f.language = language
 		f.parser = parser
