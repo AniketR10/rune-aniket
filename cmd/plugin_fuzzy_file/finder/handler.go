@@ -64,7 +64,8 @@ type fuzzyFinderHandler struct {
 	getResource          func(workspaceapi.FileSystem, string) (workspaceapi.URI, term.Coordinates)
 	workspaceFallback    func(workspaceapi.FileSystem, context.Context) (iterator.Iterator[string], error)
 	pid                  workspaceapi.Pid
-	quitChan             chan struct{}
+	ctx                  context.Context
+	cancelCtx            func()
 	waitChan             chan error
 	height               int
 	list                 search.List
@@ -130,6 +131,9 @@ func (h *fuzzyFinderHandler) setPipes(
 
 // KillCommand kills the process for the given command
 func (h *fuzzyFinderHandler) killCommand() error {
+	h.mu.Unlock()
+	defer h.mu.Lock()
+
 	return h.executor.Signal(h.pid, syscall.SIGKILL)
 }
 
@@ -143,8 +147,6 @@ func (h *fuzzyFinderHandler) readCommand(ctx context.Context, datachan chan<- []
 			select {
 			case datachan <- data[:len(data)-1]:
 			case <-ctx.Done():
-				return
-			case <-h.quitChan:
 				return
 			}
 		}
@@ -258,12 +260,10 @@ func (h *fuzzyFinderHandler) doScanDataViaWorkspaceAPI(
 		case datachan <- []byte(resource):
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-h.quitChan:
-			return nil
 		}
 	}
 	if err := it.Err(); err != nil {
-		return fmt.Errorf("iterator err: %v", err)
+		return err
 	}
 	return nil
 }
@@ -272,7 +272,7 @@ func (h *fuzzyFinderHandler) scanDataViaWorkspaceAPI(
 	ctx context.Context, datachan chan<- []byte,
 ) {
 	err := h.doScanDataViaWorkspaceAPI(ctx, datachan)
-	if err != nil {
+	if err != nil && !errors.Is(err, context.Canceled) {
 		log.Errorf("scan data: %v", err)
 
 		// setMessage unlocks locker to prevent deadlock by I/O wait
@@ -294,7 +294,7 @@ func (h *fuzzyFinderHandler) scanData() {
 		}
 	}()
 
-	ctx := context.Background()
+	ctx := h.ctx
 	ctx, cancelScan := context.WithCancel(ctx)
 
 	h.mu.Lock()
@@ -414,7 +414,7 @@ func New(
 	h.useWorkspaceFallback = command == ""
 	h.workspaceFallback = fallback
 
-	h.quitChan = make(chan struct{})
+	h.ctx, h.cancelCtx = context.WithCancel(context.Background())
 	h.waitChan = make(chan error)
 
 	listConfig := h.getListConfig(cfg)
@@ -563,21 +563,17 @@ func (h *fuzzyFinderHandler) Man() tui.Manual {
 }
 
 func (h *fuzzyFinderHandler) Close() error {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-
-	if h.quitChan == nil {
-		return nil
-	}
+	h.cancelCtx()
 
 	log.Tracef("fuzzyFinderHandler.Close(): %#v", h.pid)
+
+	h.mu.Lock()
+	defer h.mu.Unlock()
 
 	if h.pid != 0 {
 		h.killed = true
 		_ = h.killCommand()
+		h.pid = 0
 	}
-	close(h.quitChan)
-	h.list.Close()
-	h.quitChan = nil
-	return nil
+	return h.list.Close()
 }
