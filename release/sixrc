@@ -3,8 +3,13 @@
 # To see the full list of colors and its values, use
 # the colorPalette command, provided by the 'colors'
 # plugin below, plugin_color_palette.
-color_theme_1: &color1 194
-color_theme_2: &color2 default
+color_theme_1: &color1 29
+color_theme_2: &color2 95
+
+# Alternative theme, gray tones.
+#color_theme_1: &color1 246
+#color_theme_2: &color2 239
+
 frame_theme: &frame true
 focus_frame_charset_theme: &focus_frame_charset
   horizontaltop: '─'
@@ -129,7 +134,7 @@ plugins:
         bg: default
         fg: default
       filename_dirty_attr:
-        fg: yellow
+        fg: *color1
       coordinates_attr:
         bg: default
         fg: default
@@ -192,11 +197,15 @@ plugins:
         fg: default
         bg: default
       matched_text_attr:
-        fg: *color2
+        fg: *color1
       count_attr:
-        fg: *color1
+        fg:
+          - *color1
+          - bold
       focus_element_attr:
-        fg: *color1
+        fg:
+          - *color1
+          - bold
   # This plugin adds LSP functionality (Language Server Protocol).
   # This adds formatting, go to definition, search references, get
   # symbol documentation, and diagnostics in the form of errors and warnings.
@@ -286,9 +295,12 @@ command:
     fg: default
     bg: default
   matched_text_attr:
-    fg: *color2
-  focus_element_attr:
     fg: *color1
+    bg: default
+  focus_element_attr:
+    fg:
+      - *color2
+      - bold
 
 browser:
   # Whether to add the URI of the workspace to the workspace bar
@@ -301,10 +313,19 @@ browser:
     frame_charset: *frame_charset
     focus_frame_charset: *focus_frame_charset
     frameunion_charset: *frameunion_charset
-  focus_tab_attr:
+  message_bar_attr:
     fg: *color1
+    bg: default
+  focus_tab_attr:
+    fg:
+      - default
+      - bold
   dirty_tab_attr:
-    fg: red
+    fg:
+      - underline
+      - bold
+      - *color1
+    bg: default
   non_focus_tab_attr:
     fg: *color2
   # Prompt configuration. This prompted is used by the editor
@@ -319,7 +340,7 @@ browser:
       bg: default
     highlight_attr:
       fg: white
-      bg: red
+      bg: *color1
 
 # Workspaces configuration.
 workspace:
@@ -349,4 +370,4 @@ workspace:
   wallpaper_attr:
     fg: *color2
   #wallpaper_background_attr:
-    #bg: *color2
+    #bg: default
