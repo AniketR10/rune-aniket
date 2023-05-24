@@ -177,7 +177,7 @@ plugins:
       focus_element_attr:
         fg: *color1
   # This plugin adds a fuzzy file line search component to the editor. Open
-  # via searchLine command.
+  # via searchText command.
   fuzzy_line:
     path: /usr/local/bin/plugin_fuzzy_line
     config:
@@ -286,7 +286,7 @@ command:
     <c-g>: lspGoToDefinition
     <c-b>: lspFormat
     <c-p>: searchFile
-    <c-\>: searchLine
+    <c-\>: searchText
     # <c-x><enter>: newWindow
     <c-x><enter>: splitWindowTerminal
     gf: openFileUnderCursor

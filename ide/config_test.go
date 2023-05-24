@@ -47,7 +47,7 @@ command:
     error: 1
   key_bindings:
     f: searchFile
-    l: searchLine
+    l: searchText
     <c-x>: closeDoors
     <c-x><c-p>: openAllDoors
     f<c-p>: openDoors small
@@ -213,7 +213,7 @@ func TestConfigSetting(t *testing.T) {
 	assert.True(t, cfg.viWrap())
 	wantMappings := map[handler.Sequence][]string{
 		{First: term.KeyComb{Ch: 'f'}}:            {"searchFile"},
-		{First: term.KeyComb{Ch: 'l'}}:            {"searchLine"},
+		{First: term.KeyComb{Ch: 'l'}}:            {"searchText"},
 		{First: term.KeyComb{Key: term.KeyCtrlX}}: {"closeDoors"},
 		{
 			First: term.KeyComb{Key: term.KeyCtrlX},

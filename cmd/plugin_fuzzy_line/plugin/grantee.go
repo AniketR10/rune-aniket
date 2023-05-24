@@ -32,7 +32,7 @@ func Grantee() (plugin.Grantee, []plugin.Permission) {
 		SplitOrientation: browserapi.OrientationBottom,
 		Handler:          newHandler,
 		Permissions:      finder.Permissions(),
-		Command:          "searchLine",
+		Command:          "searchText",
 	})
 }
 
