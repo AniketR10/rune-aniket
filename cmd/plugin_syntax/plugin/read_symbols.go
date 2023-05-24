@@ -13,17 +13,13 @@ import (
 	"sync"
 
 	"github.com/ernestrc/blue/iterator"
+	"github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
 	sitter "github.com/smacker/go-tree-sitter"
-	"go.uber.org/multierr"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/cmd/plugin_lexer/plugin"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/workspace"
-)
-
-const (
-	queryListFunctions = "(function_declaration) @func"
 )
 
 var (
@@ -84,7 +80,7 @@ func readSymbols(
 		it.err = itErr
 		for _, err := range errors {
 			if err != nil {
-				it.err = multierr.Append(it.err, err)
+				it.err = multierror.Append(it.err, err)
 			}
 		}
 		missingLanguage, invalidQuery := mergeValidErrorsMap(validErrors)
@@ -176,7 +172,7 @@ func readFileSymbols(
 		for _, c := range m.Captures {
 			result, err := makeSymbolItem(filename, buf, c.Node)
 			if err != nil {
-				retErr = multierr.Append(retErr, err)
+				retErr = multierror.Append(retErr, err)
 				continue
 			}
 			select {
@@ -249,7 +245,7 @@ func readSymbolsWorker(
 					}
 					missingLanguage[ext].invalidQuery++
 				} else {
-					*err = multierr.Append(*err, readErr)
+					*err = multierror.Append(*err, readErr)
 				}
 			}
 		}
@@ -268,7 +264,7 @@ func (l *listSymbolsIterator) Next() (string, bool) {
 	case <-l.ctx.Done():
 		l.mu.Lock()
 		defer l.mu.Unlock()
-		l.err = multierr.Append(l.err, l.ctx.Err())
+		l.err = multierror.Append(l.err, l.ctx.Err())
 		return "", false
 	case path, ok := <-l.ch:
 		return path, ok
@@ -284,11 +280,11 @@ func (l *listSymbolsIterator) Err() error {
 	}
 	// avoid data races onto l.err which is an instance of
 	// *multierr.Error by creating a new multierr.Error
-	err := multierr.Append(nil, l.err)
+	err := multierror.Append(nil, l.err)
 	if l.ctx.Err() == nil {
 		return err
 	}
-	return multierr.Append(err, l.ctx.Err())
+	return multierror.Append(err, l.ctx.Err())
 }
 
 type commonErrors struct {
