@@ -18,7 +18,7 @@ import (
 )
 
 const (
-	// TODO refine queries so they work for all languages
+	// TODO use embedded queries
 	// TODO add ability to pass argument in finder.Handler to the command
 	// which then gets passed to readSymbolsFunction
 	queryListFunctions = "(function_declaration) @func"
