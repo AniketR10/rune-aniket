@@ -37,7 +37,7 @@ func init() {
 func readSymbols(
 	ctx context.Context, w workspace.Directory,
 	paths iterator.Iterator[string], query queryType,
-	queryFn func(string) (string, error),
+	tabspaces int, queryFn func(string) (string, error),
 ) (iterator.Iterator[string], error) {
 	files := make(chan string)
 	results := make(chan string)
@@ -50,7 +50,8 @@ func readSymbols(
 		validErrors[i] = make(map[string]*commonErrors)
 		go func(err *error, missingLanguage map[string]*commonErrors) {
 			defer wg.Done()
-			readSymbolsWorker(ctx, w, query, results, files, err, missingLanguage, queryFn)
+			readSymbolsWorker(ctx, w, query, results, files, err,
+				missingLanguage, tabspaces, queryFn)
 		}(&errors[i], validErrors[i])
 	}
 
@@ -127,6 +128,7 @@ func readFileSymbols(
 	ctx context.Context,
 	w workspace.Directory, queryType queryType,
 	filename string, results chan string,
+	tabspaces int,
 	queryFn func(string) (string, error),
 ) error {
 	parser, lang, ok := plugin.NewParser(filename)
@@ -152,8 +154,7 @@ func readFileSymbols(
 	}
 
 	buf := new(cell.Buffer)
-	// FIXME pass tabspaces
-	buf.InitWithTabspaces(cell.DefaultTabspaces)
+	buf.InitWithTabspaces(tabspaces)
 	buf.Write(data)
 
 	tree, err := parser.ParseCtx(ctx, nil, data)
@@ -248,7 +249,7 @@ func readSymbolsWorker(
 	ctx context.Context, w workspace.Directory,
 	query queryType, functions chan string, files chan string,
 	err *error, missingLanguage map[string]*commonErrors,
-	queryFn func(string) (string, error),
+	tabspaces int, queryFn func(string) (string, error),
 ) {
 	for {
 		select {
@@ -258,7 +259,7 @@ func readSymbolsWorker(
 			if !ok {
 				return
 			}
-			readErr := readFileSymbols(ctx, w, query, path, functions, queryFn)
+			readErr := readFileSymbols(ctx, w, query, path, functions, tabspaces, queryFn)
 			if readErr != nil {
 				if readErr == errUnknownLanguage {
 					ext := filepath.Ext(path)
