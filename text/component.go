@@ -535,7 +535,7 @@ func (c *Component) DispatchCommand(cmd textapi.Command) (handled bool, err erro
 		c.log(log.DebugLevel, "Dispatching command %q: no subscribers", cmd.Name)
 		return false, nil
 	}
-	c.log(log.InfoLevel, "Dispatching command %q with args %v", cmd.Name, cmd.Args)
+	c.log(log.DebugLevel, "Dispatching command %q with args %v", cmd.Name, cmd.Args)
 	exit, err := commander.HandleCommand(context.Background(), cmd)
 	if err != nil {
 		return true, err
