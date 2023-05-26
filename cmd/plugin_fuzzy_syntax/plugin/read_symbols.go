@@ -17,7 +17,6 @@ import (
 	log "github.com/sirupsen/logrus"
 	sitter "github.com/smacker/go-tree-sitter"
 	"unstable.build/go-tui/cell"
-	"unstable.build/go-tui/cmd/plugin_lexer/plugin"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/workspace"
 )
@@ -131,7 +130,7 @@ func readFileSymbols(
 	tabspaces int,
 	queryFn func(string) (string, error),
 ) error {
-	parser, lang, ok := plugin.NewParser(filename)
+	parser, lang, ok := NewParser(filename)
 	if !ok {
 		return errUnknownLanguage
 	}

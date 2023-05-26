@@ -24,6 +24,7 @@ import (
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	workspaceplugin "unstable.build/go-tui/api/workspace/plugin"
 	"unstable.build/go-tui/cell"
+	syntaxPlugin "unstable.build/go-tui/cmd/plugin_fuzzy_syntax/plugin"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/handler/search"
@@ -684,7 +685,7 @@ func (h *syntaxHandler) newFile(ev textapi.Event) *file {
 	f.handler = ev.Resource
 
 	filename := ev.URI.Path()
-	parser, language, ok := NewParser(filename)
+	parser, language, ok := syntaxPlugin.NewParser(filename)
 	if ok {
 		f.language = language
 		f.parser = parser

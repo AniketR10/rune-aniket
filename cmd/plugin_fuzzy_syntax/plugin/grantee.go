@@ -14,7 +14,6 @@ import (
 	textapi "unstable.build/go-tui/api/text"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/cmd/plugin_fuzzy_file/finder"
-	lexerPlugin "unstable.build/go-tui/cmd/plugin_lexer/plugin"
 	"unstable.build/go-tui/plugin"
 	plugutil "unstable.build/go-tui/plugin/util"
 	"unstable.build/go-tui/proto"
@@ -82,7 +81,7 @@ const (
 )
 
 func defaultQueryForFilename(filename string) (string, error) {
-	langID, ok := lexerPlugin.LanguageID(filename)
+	langID, ok := LanguageID(filename)
 	if !ok {
 		return "", errUnknownLanguage
 	}
