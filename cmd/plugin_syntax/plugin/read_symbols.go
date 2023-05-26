@@ -36,7 +36,8 @@ func init() {
 
 func readSymbols(
 	ctx context.Context, w workspace.Directory,
-	paths iterator.Iterator[string], query string,
+	paths iterator.Iterator[string], query queryType,
+	queryFn func(string) (string, error),
 ) (iterator.Iterator[string], error) {
 	files := make(chan string)
 	results := make(chan string)
@@ -49,7 +50,7 @@ func readSymbols(
 		validErrors[i] = make(map[string]*commonErrors)
 		go func(err *error, missingLanguage map[string]*commonErrors) {
 			defer wg.Done()
-			readSymbolsWorker(ctx, w, query, results, files, err, missingLanguage)
+			readSymbolsWorker(ctx, w, query, results, files, err, missingLanguage, queryFn)
 		}(&errors[i], validErrors[i])
 	}
 
@@ -124,15 +125,20 @@ func mergeValidErrorsMap(m []map[string]*commonErrors) (
 
 func readFileSymbols(
 	ctx context.Context,
-	w workspace.Directory, query string,
+	w workspace.Directory, queryType queryType,
 	filename string, results chan string,
+	queryFn func(string) (string, error),
 ) error {
 	parser, lang, ok := plugin.NewParser(filename)
 	if !ok {
 		return errUnknownLanguage
 	}
-
 	defer parser.Close()
+
+	query, err := queryFn(filename)
+	if err != nil {
+		return err
+	}
 
 	file, werr := w.Open(filename, os.O_RDONLY, 0)
 	if werr != nil {
@@ -159,8 +165,21 @@ func readFileSymbols(
 	if err != nil {
 		return errInvalidQuery
 	}
+	defer q.Close()
+
 	qc := sitter.NewQueryCursor()
 	qc.Exec(q, tree.RootNode())
+
+	// use FilterPredicates if there are any
+	var filterPredicates bool
+	for i := uint32(0); i < q.PatternCount(); i++ {
+		steps := q.PredicatesForPattern(i)
+		if len(steps) == 0 {
+			continue
+		}
+		filterPredicates = true
+		break
+	}
 
 	var retErr error
 	for {
@@ -169,7 +188,15 @@ func readFileSymbols(
 			break
 		}
 
+		if filterPredicates {
+			m = qc.FilterPredicates(m, data)
+		}
+
 		for _, c := range m.Captures {
+			if queryType != queryTypeCustom && q.CaptureNameForId(c.Index) != string(queryType) {
+				continue
+			}
+
 			result, err := makeSymbolItem(filename, buf, c.Node)
 			if err != nil {
 				retErr = multierror.Append(retErr, err)
@@ -219,8 +246,9 @@ func makeSymbolItem(filename string, buf *cell.Buffer, n *sitter.Node) (string, 
 
 func readSymbolsWorker(
 	ctx context.Context, w workspace.Directory,
-	query string, functions chan string, files chan string,
+	query queryType, functions chan string, files chan string,
 	err *error, missingLanguage map[string]*commonErrors,
+	queryFn func(string) (string, error),
 ) {
 	for {
 		select {
@@ -230,7 +258,7 @@ func readSymbolsWorker(
 			if !ok {
 				return
 			}
-			readErr := readFileSymbols(ctx, w, query, path, functions)
+			readErr := readFileSymbols(ctx, w, query, path, functions, queryFn)
 			if readErr != nil {
 				if readErr == errUnknownLanguage {
 					ext := filepath.Ext(path)

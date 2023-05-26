@@ -9,6 +9,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	browserapi "unstable.build/go-tui/api/browser"
 	"unstable.build/go-tui/api/config"
+	textapi "unstable.build/go-tui/api/text"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/cmd/plugin_fuzzy_file/finder"
 	"unstable.build/go-tui/plugin"
@@ -59,7 +60,7 @@ func parseLine(workspace workspaceapi.FileSystem, data string) (
 	return uri, term.Coordinates{Y: y - 1}
 }
 
-func newHandler(grants []plugin.Grant, broker proto.MuxBroker,
+func newHandler(cmd textapi.Command, grants []plugin.Grant, broker proto.MuxBroker,
 	invokeWindow browserapi.Window, c config.Config) (browserapi.Handler, error) {
 	cmdStr, err := c.GetString("command")
 	if err != nil {
@@ -74,6 +75,6 @@ func newHandler(grants []plugin.Grant, broker proto.MuxBroker,
 		}
 		historyKey = defaultHistoryKey
 	}
-	return finder.New(grants, broker, invokeWindow,
+	return finder.New(context.Background(), grants, broker, invokeWindow,
 		c, historyKey, defaultHistoryDocumentID, cmdStr, readFiles, parseLine)
 }

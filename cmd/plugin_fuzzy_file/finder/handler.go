@@ -385,8 +385,11 @@ func (h *fuzzyFinderHandler) initGrants(
 
 // New returns a tui.Handler that employs a search.List
 // to interactively search the command's stdout lines.
+//
+// The given context is passed back to the fallback
+// function along with any values stored with it.
 func New(
-	grants []plugin.Grant, broker proto.MuxBroker,
+	ctx context.Context, grants []plugin.Grant, broker proto.MuxBroker,
 	invokeWindow browserapi.Window, cfg config.Config,
 	historyKey term.KeyComb, historyDocumentID string, command string,
 	fallback func(workspaceapi.FileSystem, context.Context) (iterator.Iterator[string], error),
@@ -414,7 +417,7 @@ func New(
 	h.useWorkspaceFallback = command == ""
 	h.workspaceFallback = fallback
 
-	h.ctx, h.cancelCtx = context.WithCancel(context.Background())
+	h.ctx, h.cancelCtx = context.WithCancel(ctx)
 	h.waitChan = make(chan error)
 
 	listConfig := h.getListConfig(cfg)

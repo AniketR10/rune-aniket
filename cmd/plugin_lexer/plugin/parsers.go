@@ -79,6 +79,56 @@ var extensionToLanguage = map[string]*sitter.Language{
 	".yml":          yaml.GetLanguage(),
 }
 
+var extensionToLanguageID = map[string]string{
+	".sh":           "bash",
+	".bash":         "bash",
+	".zsh":          "bash",
+	".bashrc":       "bash",
+	".profile":      "bash",
+	".localrc":      "bash",
+	".bash_profile": "bash",
+	".c":            "c",
+	".h":            "c",
+	".cpp":          "cpp",
+	".cc":           "cpp",
+	".cs":           "c_sharp",
+	".hh":           "cpp",
+	".css":          "css",
+	".cue":          "cue",
+	".dockerfile":   "dockerfile",
+	".ex":           "elixir",
+	".exs":          "elixir",
+	".elm":          "elm",
+	".go":           "go",
+	".hcl":          "hcl",
+	".html":         "html",
+	".htm":          "html",
+	".java":         "java",
+	".js":           "javascript",
+	".kt":           "kotlin",
+	".kts":          "kotlin",
+	".lua":          "lua",
+	".ml":           "ocaml",
+	".php":          "php",
+	".proto":        "proto",
+	".py":           "python",
+	".rb":           "ruby",
+	".rs":           "rust",
+	".scala":        "scala",
+	".svelte":       "svelte",
+	".toml":         "toml",
+	".ts":           "typescript",
+	".yaml":         "yaml",
+	".yml":          "yaml",
+}
+
+// LanguageID returns the language identifier for the given file's extension.
+func LanguageID(file string) (string, bool) {
+	ext := filepath.Ext(file)
+	id, ok := extensionToLanguageID[ext]
+	return id, ok
+}
+
 // NewParser returns a new sitter.Parser and sitter.Language suitable
 // for the given file or false if the language of this file is not supported
 // or extension is not recognized.

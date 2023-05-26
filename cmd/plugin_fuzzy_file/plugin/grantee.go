@@ -8,6 +8,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	browserapi "unstable.build/go-tui/api/browser"
 	"unstable.build/go-tui/api/config"
+	textapi "unstable.build/go-tui/api/text"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/cmd/plugin_fuzzy_file/finder"
 	"unstable.build/go-tui/plugin"
@@ -53,7 +54,7 @@ func getResource(workspace workspaceapi.FileSystem, file string) (
 	return uri, term.Coordinates{}
 }
 
-func newHandler(grants []plugin.Grant, broker proto.MuxBroker,
+func newHandler(cmd textapi.Command, grants []plugin.Grant, broker proto.MuxBroker,
 	invokeWindow browserapi.Window, c config.Config) (browserapi.Handler, error) {
 	cmdStr, err := c.GetString("command")
 	if err != nil {
@@ -68,7 +69,7 @@ func newHandler(grants []plugin.Grant, broker proto.MuxBroker,
 		}
 		historyKey = defaultHistoryKey
 	}
-	return finder.New(grants, broker, invokeWindow, c,
+	return finder.New(context.Background(), grants, broker, invokeWindow, c,
 		historyKey, defaultHistoryDocumentID, cmdStr,
 		workspaceListFiles, getResource)
 }

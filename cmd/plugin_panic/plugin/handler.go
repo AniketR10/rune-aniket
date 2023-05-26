@@ -4,6 +4,7 @@ import (
 	"unstable.build/go-tui"
 	browserapi "unstable.build/go-tui/api/browser"
 	"unstable.build/go-tui/api/config"
+	textapi "unstable.build/go-tui/api/text"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/plugin"
 	plugutil "unstable.build/go-tui/plugin/util"
@@ -15,7 +16,7 @@ import (
 func Grantee() (plugin.Grantee, []plugin.Permission) {
 	return plugutil.NewCommandSplitHandler(plugutil.CommandSplitHandlerConfig{
 		SplitOrientation: browserapi.OrientationRight,
-		Handler: func(grants []plugin.Grant, broker proto.MuxBroker,
+		Handler: func(cmd textapi.Command, grants []plugin.Grant, broker proto.MuxBroker,
 			invokeWindow browserapi.Window, config config.Config) (browserapi.Handler, error) {
 			return new(panicHandler), nil
 		},

@@ -31,7 +31,7 @@ type CommandSplitHandlerConfig struct {
 	// the window in focus when cmd event was fired.
 	// If returned Handler satisfies io.Closer, then Close will be called
 	// when split window is closed.
-	Handler func([]plugin.Grant, proto.MuxBroker, browserapi.Window,
+	Handler func(textapi.Command, []plugin.Grant, proto.MuxBroker, browserapi.Window,
 		config.Config) (browserapi.Handler, error)
 
 	// Permissions to be requested for Handler.
@@ -130,7 +130,8 @@ func (t *cmdSplitHandler) exitClean() error {
 	return nil
 }
 
-func (t *cmdSplitHandler) openSplitWindow(focusWin browserapi.Window) error {
+func (t *cmdSplitHandler) openSplitWindow(cmd textapi.Command) error {
+	focusWin := cmd.Window
 	t.mu.Lock()
 	win := t.win
 	wm := t.wm
@@ -144,7 +145,7 @@ func (t *cmdSplitHandler) openSplitWindow(focusWin browserapi.Window) error {
 		return errors.New("insufficient permissions: WindowManager permission was denied")
 	}
 
-	h, err := t.config.Handler(t.grants, t.broker, focusWin, t.pconfig)
+	h, err := t.config.Handler(cmd, t.grants, t.broker, focusWin, t.pconfig)
 	if err != nil {
 		err = fmt.Errorf("config.Handler: %v", err)
 		return err
@@ -166,7 +167,7 @@ func (t *cmdSplitHandler) openSplitWindow(focusWin browserapi.Window) error {
 
 func (t *cmdSplitHandler) HandleCommand(ctx context.Context, cmd textapi.Command) (exit bool, err error) {
 	if cmd.Name == t.config.Command {
-		err = t.openSplitWindow(cmd.Window)
+		err = t.openSplitWindow(cmd)
 		if err != nil {
 			log.Error(err)
 		}
