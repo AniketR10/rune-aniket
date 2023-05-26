@@ -104,7 +104,8 @@ func (f *file[T]) sync(ctx context.Context) error {
 	err = retry.Retry(ctx, f.retryStrategy, func(ctx context.Context) (bool, error) {
 		var temp T
 		err = f.svc.svc.Get(ctx, f.memFile.Name(), &temp)
-		return err != document.ErrNotFound && err != document.ErrPermissionDenied, err
+		return !errors.Is(err, document.ErrNotFound) &&
+			!errors.Is(err, document.ErrPermissionDenied), err
 	})
 	if err != nil {
 		if errors.Is(err, document.ErrNotFound) {
@@ -118,7 +119,7 @@ func (f *file[T]) sync(ctx context.Context) error {
 
 	err = retry.Retry(ctx, f.retryStrategy, func(ctx context.Context) (bool, error) {
 		err = f.svc.svc.Set(ctx, f.memFile.Name(), f.val)
-		return err != document.ErrPermissionDenied, err
+		return !errors.Is(err, document.ErrPermissionDenied), err
 	})
 	if err != nil {
 		if errors.Is(err, document.ErrPermissionDenied) {
@@ -132,7 +133,7 @@ func (f *file[T]) sync(ctx context.Context) error {
 	// created at, updated at fields, auto-incremented IDs, etc.
 	err = retry.Retry(ctx, f.retryStrategy, func(ctx context.Context) (bool, error) {
 		err = f.svc.svc.Get(ctx, f.memFile.Name(), &f.val)
-		return err != document.ErrPermissionDenied, err
+		return !errors.Is(err, document.ErrPermissionDenied), err
 	})
 	if err != nil {
 		if errors.Is(err, document.ErrPermissionDenied) {

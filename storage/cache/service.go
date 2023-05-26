@@ -2,6 +2,7 @@ package cache
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/ernestrc/blue/document"
@@ -56,14 +57,14 @@ func (s *Service[T]) evictAll(
 ) error {
 	it, err := listSvc.List(ctx, nil)
 	if err != nil {
-		return fmt.Errorf("List: %v", err)
+		return fmt.Errorf("List: %w", err)
 	}
 	var ret error
 	for it.HasNext() {
 		var temp T
 		err := it.NextTo(&temp)
 		if err != nil {
-			ret = multierr.Append(ret, fmt.Errorf("NextTo: %v", err))
+			ret = multierr.Append(ret, fmt.Errorf("NextTo: %w", err))
 			continue
 		}
 		if temp.ID() == "" {
@@ -72,7 +73,7 @@ func (s *Service[T]) evictAll(
 		}
 		err = s.cache.Delete(ctx, temp.ID())
 		if err != nil {
-			ret = multierr.Append(ret, fmt.Errorf("Delete: %v", err))
+			ret = multierr.Append(ret, fmt.Errorf("Delete: %w", err))
 			continue
 		}
 	}
@@ -126,7 +127,7 @@ func (s *Service[T]) Get(ctx context.Context, ID string, doc interface{}) error 
 	if err == nil {
 		return nil
 	}
-	if err == document.ErrNotFound {
+	if errors.Is(err, document.ErrNotFound) {
 		err = nil
 	}
 	if err != nil {
@@ -170,7 +171,7 @@ func (s *Service[T]) List(ctx context.Context, filters []document.Filter) (
 
 	err = s.EvictAll(ctx)
 	if err != nil {
-		err = fmt.Errorf("EvictAll: %v", err)
+		err = fmt.Errorf("EvictAll: %w", err)
 		log.Error(err)
 		return nil, err
 	}

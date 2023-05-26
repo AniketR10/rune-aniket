@@ -2,6 +2,7 @@ package search
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -66,7 +67,7 @@ func (h *History) Load() error {
 	defer cancel()
 
 	err := h.store.Get(ctx, h.docID, &h.doc)
-	if err == document.ErrNotFound {
+	if errors.Is(err, document.ErrNotFound) {
 		err = h.store.Create(ctx, h.docID, &h.doc)
 	}
 	if err != nil {

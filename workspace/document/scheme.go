@@ -168,7 +168,8 @@ func (s *scheme[T]) open(
 	if create && excl {
 		err := retry.Retry(ctx, s.retryRealFailure, func(ctx context.Context) (bool, error) {
 			err = s.svc.svc.Create(ctx, docID, template)
-			return err != document.ErrAlreadyExists && err != document.ErrPermissionDenied, err
+			return !errors.Is(err, document.ErrAlreadyExists) &&
+				!errors.Is(err, document.ErrPermissionDenied), err
 		})
 		if err != nil {
 			if errors.Is(err, document.ErrAlreadyExists) {
@@ -187,7 +188,7 @@ func (s *scheme[T]) open(
 		// that we don't store an invalid structure.
 		err := retry.Retry(ctx, s.retryRealFailure, func(ctx context.Context) (bool, error) {
 			err = s.svc.svc.Set(ctx, docID, template)
-			return err != document.ErrPermissionDenied, err
+			return !errors.Is(err, document.ErrPermissionDenied), err
 		})
 		if err != nil {
 			if errors.Is(err, document.ErrPermissionDenied) {
@@ -204,8 +205,8 @@ func (s *scheme[T]) open(
 	var ret T
 	err = retry.Retry(ctx, s.retryInconsistency, func(ctx context.Context) (bool, error) {
 		err = s.svc.svc.Get(ctx, docID, &ret)
-		return err != document.ErrPermissionDenied &&
-			(create || err != document.ErrNotFound), err
+		return !errors.Is(err, document.ErrPermissionDenied) &&
+			(create || !errors.Is(err, document.ErrNotFound)), err
 	})
 	if err != nil {
 		if create {
@@ -255,7 +256,8 @@ func (s *scheme[T]) Remove(path string) error {
 	var temp T
 	err = retry.Retry(ctx, s.retryRealFailure, func(ctx context.Context) (bool, error) {
 		err = s.svc.svc.Get(ctx, docID, &temp)
-		return err != document.ErrNotFound && err != document.ErrPermissionDenied, err
+		return !errors.Is(err, document.ErrNotFound) &&
+			!errors.Is(err, document.ErrPermissionDenied), err
 	})
 	if err != nil {
 		if errors.Is(err, document.ErrNotFound) {
@@ -297,7 +299,7 @@ func (s *scheme[T]) Rename(old, new string) error {
 
 	err = retry.Retry(ctx, s.retryRealFailure, func(ctx context.Context) (bool, error) {
 		err = s.svc.svc.Set(ctx, newDocID, f.val)
-		return err != document.ErrPermissionDenied, err
+		return !errors.Is(err, document.ErrPermissionDenied), err
 	})
 	if err != nil {
 		if errors.Is(err, document.ErrPermissionDenied) {
@@ -378,7 +380,7 @@ func (s *scheme[T]) ReadDir(name string) (
 		// and more generally, a document.Service backed Scheme doesn't
 		// have any directories.
 		it, err = s.svc.svc.List(ctx, nil)
-		return err != document.ErrPermissionDenied, err
+		return !errors.Is(err, document.ErrPermissionDenied), err
 	})
 	if err != nil {
 		if errors.Is(err, document.ErrPermissionDenied) {
@@ -420,11 +422,11 @@ func (s *scheme[T]) retriedDelete(ctx context.Context, docID string) error {
 	err := retry.Retry(ctx, s.retryRealFailure, func(ctx context.Context) (bool, error) {
 		err := s.svc.svc.Delete(ctx, docID)
 		if err != nil {
-			if err == document.ErrPermissionDenied {
+			if errors.Is(err, document.ErrPermissionDenied) {
 				return false, workspaceapi.Error{IsPermission: true}.ToError()
 			}
 			gerr := s.svc.svc.Get(ctx, docID, &temp)
-			if gerr == document.ErrNotFound {
+			if errors.Is(gerr, document.ErrNotFound) {
 				return false, nil
 			}
 			return true, err
@@ -437,10 +439,10 @@ func (s *scheme[T]) retriedDelete(ctx context.Context, docID string) error {
 	// wait for eventually consistent backends to propagate changes
 	return retry.Retry(ctx, s.retryRealFailure, func(ctx context.Context) (bool, error) {
 		gerr := s.svc.svc.Get(ctx, docID, &temp)
-		if gerr == document.ErrNotFound {
+		if errors.Is(gerr, document.ErrNotFound) {
 			return false, nil
 		}
-		return gerr != document.ErrPermissionDenied, gerr
+		return !errors.Is(gerr, document.ErrPermissionDenied), gerr
 	})
 }
 
