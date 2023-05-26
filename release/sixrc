@@ -150,6 +150,16 @@ plugins:
         bg: green
       del_attr:
         bg: red
+  # This plugin adds a fuzzy AST search component to the editor.
+  # It adds searchSyntaxFunctions, searchSyntaxTypes and searchSyntaxTypes
+  # commands, which use an abstraction layer to effectively query each file in the
+  # workspace based on each of the programming languages supported.
+  # It also adds searchSyntax command which allows passing an arbitrary query.
+  # See https://tree-sitter.github.io/tree-sitter/using-parsers#query-syntax
+  # for a tutorial on how to craft queries.
+  fuzzy_syntax:
+    path: /usr/local/bin/plugin_fuzzy_syntax
+    config: {}
   # This plugin adds a fuzzy file search component to the editor. Open
   # via searchFile command.
   fuzzy_file:

@@ -5,7 +5,7 @@ import (
 	_ "net/http/pprof"
 
 	log "github.com/sirupsen/logrus"
-	"unstable.build/go-tui/cmd/plugin_syntax/plugin"
+	"unstable.build/go-tui/cmd/plugin_fuzzy_syntax/plugin"
 	"unstable.build/go-tui/plugin/process"
 )
 
