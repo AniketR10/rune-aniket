@@ -170,7 +170,7 @@ func testSplitWindow(
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	cfg.Handler = func(grants []plugin.Grant, broker proto.MuxBroker,
+	cfg.Handler = func(_ textapi.Command, grants []plugin.Grant, broker proto.MuxBroker,
 		focus browserapi.Window, c config.Config) (browserapi.Handler, error) {
 		return browsertest.NewTestHandler(), nil
 	}
