@@ -9,6 +9,12 @@ Install and update this go package with `go get -u unstable.build/go-tui`.
 For examples of how to use some of the provided building blocks, see the [./examples](./examples) folder. You can compile them by running `make`, which will compile each of the examples into a running executable in the [./bin](./bin) folder.
 
 # Develop
+Initialize submodules:
+```
+git submodule update --init
+```
+Then compile with `make` or `make debug` for a debug build (race detection on).
+
 ### Pre-commit hook
 Git hooks are installed at [.githooks](.githooks) directory. Run the following to configure git:
 ```
