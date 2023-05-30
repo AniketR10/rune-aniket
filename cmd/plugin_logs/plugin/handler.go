@@ -66,8 +66,7 @@ func newLogsHandler(
 	}
 	ret.textAttr = *textAttr
 
-	buf := l.Buffer()
-	ret.ed, _ = text.SimpleEditor(true).Edit(workspaceapi.URI{}, buf)
+	ret.resetEd()
 
 	ret.l.C = ret.withBackground(ret.l.C)
 
@@ -329,6 +328,10 @@ func (s *logsHandler) toggleCaseSensitivity() {
 	s.resetPinned()
 }
 
+func (s *logsHandler) resetEd() {
+	s.ed, _ = text.SimpleEditor(true).Edit(workspaceapi.URI{}, s.l.Buffer())
+}
+
 func (s *logsHandler) handleFilter(ev term.Event) (exit, handled bool) {
 	_, handled = s.mouse.Handle(ev)
 	if handled {
@@ -360,6 +363,7 @@ func (s *logsHandler) handleFilter(ev term.Event) (exit, handled bool) {
 		handled = true
 		s.mode = normalMode
 		s.l.Buffer().Reset()
+		s.resetEd()
 	default:
 		_, handled = s.currentEd().Handle(ev)
 		s.resetPinned()
