@@ -261,10 +261,10 @@ func (vi *viHandlerImpl) pasteClipboard(registerID string, after bool) bool {
 		return false
 	}
 	str := paste.Text
-	mode, ok := paste.Metadata.(text.SelectMode)
-	if !ok {
-		mode = text.StandardSelection
-	}
+
+	// if not ok, zero value of mode is accepted
+	// and interpreted by cursor.
+	mode, _ := paste.Metadata.(text.SelectMode)
 
 	vi.cursor.Paste(str, mode, after)
 	return true

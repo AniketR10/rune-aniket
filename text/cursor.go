@@ -856,8 +856,17 @@ func (c *Cursor) InsertBlock(str string) {
 // Paste pastes the given string on the underlying scroll at the current
 // cursor position.
 func (c *Cursor) Paste(str string, mode SelectMode, after bool) {
+	if mode == noSelection {
+		// this is how vim behaves when using a system clipboard
+		if strings.HasSuffix(str, "\n") {
+			mode = LineSelection
+		} else {
+			mode = StandardSelection
+		}
+	}
+
 	switch mode {
-	case StandardSelection, noSelection:
+	case StandardSelection:
 		if after {
 			c.MoveRight()
 			cur := c.Mark()

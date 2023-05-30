@@ -11,11 +11,11 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"unstable.build/go-tui/api/config"
 	textapi "unstable.build/go-tui/api/text"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
-	"unstable.build/go-tui/api/config"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text/clipboard"
 	"unstable.build/go-tui/workspace"
@@ -1978,15 +1978,23 @@ func TestFileCursorIntegration(t *testing.T) {
 func TestCursorPaste(t *testing.T) {
 	const initialContent = "a\nb\nc\nd"
 	tsuite := []struct {
-		initialPosition term.Coordinates
-		endPosition     term.Coordinates
-		txt             string
-		mode            SelectMode
-		after           bool
-		expected        string
+		initialPosition     term.Coordinates
+		expectedEndPosition term.Coordinates
+		txt                 string
+		mode                SelectMode
+		after               bool
+		expectedBuffer      string
 	}{
 		{term.Coordinates{}, term.Coordinates{},
 			"z", noSelection, false, "za\nb\nc\nd"},
+		{term.Coordinates{}, term.Coordinates{},
+			"z\n", noSelection, false, "z\na\nb\nc\nd"},
+		{term.Coordinates{}, term.Coordinates{Y: 1},
+			"z\n", noSelection, true, "a\nz\nb\nc\nd"},
+		{term.Coordinates{X: 1, Y: 3}, term.Coordinates{Y: 3},
+			"z\n", noSelection, false, "a\nb\nc\nz\nd"},
+		{term.Coordinates{X: 1, Y: 3}, term.Coordinates{Y: 4},
+			"z\n", noSelection, true, "a\nb\nc\nd\nz\n"},
 		{term.Coordinates{}, term.Coordinates{},
 			"z", StandardSelection, false, "za\nb\nc\nd"},
 		{term.Coordinates{}, term.Coordinates{X: 1},
@@ -2027,8 +2035,8 @@ func TestCursorPaste(t *testing.T) {
 			c := setupCursorContent(t, 5, 5, initialContent)
 			c.MoveToScroll(tcase.initialPosition)
 			c.Paste(tcase.txt, tcase.mode, tcase.after)
-			assert.Equal(t, tcase.expected, c.buffer().String())
-			assert.Equal(t, tcase.endPosition, c.Coordinates())
+			assert.Equal(t, tcase.expectedBuffer, c.buffer().String())
+			assert.Equal(t, tcase.expectedEndPosition, c.Coordinates())
 		})
 	}
 }
