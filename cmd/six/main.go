@@ -33,6 +33,7 @@ import (
 )
 
 const (
+	pprofAddr           = ":2860"
 	configFilename      = ".sixrc"
 	sixDefaultWallpaper = `
 ███████╗██╗██╗ ██╗
@@ -55,7 +56,7 @@ var (
 	flagDataPath      *string
 
 	flagRecover                = flag.String("r", "", "recover from recovery file")
-	flagPprof                  = flag.Bool("p", false, "start pprof server at :6060")
+	flagPprof                  = flag.Bool("p", false, fmt.Sprintf("start pprof server at %s", pprofAddr))
 	flagVersion                = flag.Bool("v", false, "print version information")
 	flagWorkspace              = flag.String("w", cwdURI().String(), "workspaceapi.URI")
 	flagWorkspaceServer        = flag.String("x", "", "runs workspace server from standard input and output")
@@ -229,7 +230,7 @@ func run() int {
 		runtime.SetBlockProfileRate(1)
 		runtime.SetMutexProfileFraction(1)
 		go func() {
-			log.Println(http.ListenAndServe(":6060", nil))
+			log.Println(http.ListenAndServe(pprofAddr, nil))
 		}()
 	}
 
