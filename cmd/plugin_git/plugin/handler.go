@@ -58,10 +58,11 @@ var (
 	// GitHandlerPermissions are the required permissions for this
 	// plugin to run.
 	GitHandlerPermissions = []plugin.Permission{
-		plugin.Permission(plugin.PermissionBrowserWindowManager),
-		plugin.Permission(plugin.PermissionBrowserEventPublisher),
-		plugin.Permission(plugin.PermissionEditor),
-		plugin.Permission(plugin.PermissionExecute),
+		plugin.PermissionBrowserWindowManager,
+		plugin.PermissionBrowserEventPublisher,
+		plugin.PermissionEditor,
+		plugin.PermissionExecute,
+		plugin.PermissionFileSystem,
 		plugin.PermissionConfig,
 	}
 
@@ -112,19 +113,30 @@ func newGitHandler(
 		ret.scroll.scroll.Attributes = defaultScrollAttr
 	}
 
+	var cwd workspaceapi.URI
 	for _, grant := range grants {
 		switch grant.Permission {
-		case plugin.Permission(plugin.PermissionExecute):
+		case plugin.PermissionFileSystem:
+			fs, err := workspaceplugin.FileSystem(grant, broker)
+			if err != nil {
+				return nil, err
+			}
+			cwdURI, err := fs.URI(".")
+			if err != nil {
+				return nil, err
+			}
+			cwd = cwdURI
+		case plugin.PermissionExecute:
 			ret.exec, err = workspaceplugin.Executor(grant, broker)
 			if err != nil {
 				return nil, err
 			}
-		case plugin.Permission(plugin.PermissionBrowserEventPublisher):
+		case plugin.PermissionBrowserEventPublisher:
 			ret.p, err = browserplugin.EventPublisher(grant, broker)
 			if err != nil {
 				return nil, err
 			}
-		case plugin.Permission(plugin.PermissionBrowserWindowManager):
+		case plugin.PermissionBrowserWindowManager:
 			ret.wm, err = browserplugin.WindowManager(grant, broker)
 			if err != nil {
 				return nil, err
@@ -172,7 +184,7 @@ func newGitHandler(
 		ret.delAttr = defaultDelAttr
 	}
 
-	go ret.handleEvents()
+	go ret.handleEvents(cwd)
 
 	return ret, nil
 }
@@ -359,7 +371,7 @@ func (h *gitEditorHandler) pushLastDiffLocations(filename string, resource texta
 		h.gitDiffListID, textapi.LocationSlice(locs))
 }
 
-func (h *gitEditorHandler) handleEvents() {
+func (h *gitEditorHandler) handleEvents(cwd workspaceapi.URI) {
 	for ev := range h.ch {
 		var start time.Time
 		if log.IsLevelEnabled(log.TraceLevel) {
@@ -368,6 +380,11 @@ func (h *gitEditorHandler) handleEvents() {
 		}
 
 		resourceName := ev.URI.Path()
+
+		if cwd != (workspaceapi.URI{}) && !workspaceapi.HasPrefix(ev.URI, cwd) {
+			log.Debugf("ignoring file that's not in active workspace %v", resourceName)
+			return
+		}
 
 		var err error
 		switch ev.Type {
