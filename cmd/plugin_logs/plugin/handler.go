@@ -470,7 +470,6 @@ func (s *logsHandler) Resize(width, height int) {
 	s.l.Virtual.Resize(width, height)
 	inputHeight := s.l.InputHeight()
 	s.ed.Resize(width, inputHeight)
-	s.pinFocus()
 }
 
 // Draw satisfies tui.Component

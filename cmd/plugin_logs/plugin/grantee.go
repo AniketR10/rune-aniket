@@ -59,7 +59,6 @@ type logsGrantee struct {
 	quitCh chan struct{}
 
 	wm browserapi.WindowManager
-	p  browserapi.EventPublisher
 	c  config.Config
 
 	logFile string
@@ -108,7 +107,6 @@ func (e *logsGrantee) Connected(broker proto.MuxBroker, pconfig config.Config) {
 
 	e.cfg = search.ListConfig{
 		Algo:            algo,
-		Interrupter:     e.p,
 		CaseSensitive:   caseSensitive,
 		BottomSearchBar: true,
 	}
@@ -156,7 +154,7 @@ func (e *logsGrantee) PermissionGranted(grants []plugin.Grant) {
 	for _, g := range grants {
 		switch g.Permission {
 		case plugin.Permission(plugin.PermissionBrowserEventPublisher):
-			e.p, err = browserplugin.EventPublisher(g, e.broker)
+			e.cfg.Interrupter, err = browserplugin.EventPublisher(g, e.broker)
 		case plugin.Permission(plugin.PermissionBrowserWindowManager):
 			e.wm, err = browserplugin.WindowManager(g, e.broker)
 		case plugin.PermissionConfig:
@@ -284,7 +282,7 @@ func (e *logsGrantee) showLogs(win browserapi.Window, args []string) (bool, erro
 			"and no arguments were supplied to 'logs' command.")
 	}
 
-	if e.wm == nil || e.p == nil {
+	if e.wm == nil {
 		return false, errors.New("missing critical permissions")
 	}
 
