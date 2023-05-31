@@ -383,7 +383,11 @@ func (h *gitEditorHandler) handleEvents(cwd workspaceapi.URI) {
 
 		if cwd != (workspaceapi.URI{}) && !workspaceapi.HasPrefix(ev.URI, cwd) {
 			log.Debugf("ignoring file that's not in active workspace %v", resourceName)
-			return
+			h.resetScroll()
+			if err := h.p.Interrupt(); err != nil {
+				log.Errorf("interrupt: %v", err)
+			}
+			continue
 		}
 
 		var err error
