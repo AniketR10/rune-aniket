@@ -76,7 +76,7 @@ type gitEditorHandler struct {
 	wm     browserapi.WindowManager
 	p      browserapi.EventPublisher
 	exec   workspaceapi.Executor
-	exit   uint32
+	exit   atomic.Uint32
 	ch     chan textapi.Event
 	scroll struct {
 		sync.Mutex
@@ -421,7 +421,7 @@ func (h *gitEditorHandler) handleEvents(cwd workspaceapi.URI) {
 func (h *gitEditorHandler) Handle(
 	ctx context.Context, ev textapi.Event,
 ) (exit bool) {
-	uexit := atomic.LoadUint32(&h.exit)
+	uexit := h.exit.Load()
 	exit = uexit != 0
 	if exit {
 		return
@@ -432,7 +432,7 @@ func (h *gitEditorHandler) Handle(
 }
 
 func (h *gitEditorHandler) Close() error {
-	closing := atomic.CompareAndSwapUint32(&h.exit, 0, 1)
+	closing := h.exit.CompareAndSwap(0, 1)
 	if !closing {
 		return nil // already closed
 	}
