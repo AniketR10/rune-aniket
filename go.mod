@@ -24,6 +24,7 @@ require (
 	go.uber.org/config v1.4.0
 	go.uber.org/goleak v1.2.0
 	golang.org/x/crypto v0.0.0-20220321153916-2c7772ba3064
+	golang.org/x/image v0.7.0
 	golang.org/x/term v0.7.0
 	google.golang.org/grpc v1.54.0
 	google.golang.org/protobuf v1.30.0
