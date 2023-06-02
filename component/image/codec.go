@@ -7,6 +7,7 @@ import (
 
 	"golang.org/x/image/draw"
 
+	"github.com/disintegration/imaging"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/term"
 	tcolor "unstable.build/go-tui/term/color"
@@ -30,6 +31,7 @@ func DefaultConfig() Config {
 		Scaler:            draw.NearestNeighbor,
 		DensityCharacters: DefaultDensityCharacters,
 		Color:             false,
+		AdjustContrast:    0,
 	}
 }
 
@@ -41,6 +43,11 @@ type Config struct {
 	// Whether the final ASCII image should be encoded in color or not.
 	Color  bool
 	Scaler draw.Scaler
+
+	// AdjustContrast adjusts the contrast of the image.
+	// It ranges from -100 (decrease contrst by 100% to
+	// 100 (increase contrast by 100%).
+	AdjustContrast float64
 }
 
 // Encode takes an image.Image and encodes it in ASCII representation
@@ -55,14 +62,18 @@ func Encode(
 ) {
 	density := []rune(config.DensityCharacters)
 	rect := image.Rect(0, 0, outputWidth, outputHeight)
-	dst := image.NewRGBA(rect)
+	dst := image.NewNRGBA(rect)
 	config.Scaler.Scale(dst, rect, src, src.Bounds(), draw.Over, nil)
+
+	if config.AdjustContrast != 0 {
+		dst = imaging.AdjustContrast(dst, config.AdjustContrast)
+	}
 
 	output.Reset()
 	for y := 0; y < outputHeight; y++ {
 		for x := 0; x < outputWidth; x++ {
 			c := dst.At(x, y)
-			rgba := c.(color.RGBA)
+			rgba := c.(color.NRGBA)
 			r, g, b := rgba.R, rgba.G, rgba.B
 			avg := (float64(r) + float64(g) + float64(b)) / 3.0
 			idx := int(math.Floor(mapValue(avg, 0, 255, 0, float64(len(density)-1))))

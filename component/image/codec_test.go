@@ -8,7 +8,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/image/draw"
 	"unstable.build/go-tui/cell"
 )
 
@@ -17,13 +16,11 @@ func TestCodec(t *testing.T) {
 		description               string
 		outputWidth, outputHeight int
 		src                       image.Image
-		scaler                    draw.Scaler
-		characters                string
-		colorize                  bool
+		config                    Config
 		expectedOutput            string
 	}{
 		{"encode a non-colorized image, with default scaler and density characters",
-			40, 20, loadImage("testdata/image_1.png"), DefaultScaler(), DefaultDensityCharacters, false,
+			40, 20, loadImage("testdata/image_1.png"), DefaultConfig(),
 			`
                                         
                                         
@@ -47,7 +44,7 @@ func TestCodec(t *testing.T) {
                                         `,
 		},
 		{"encode a non-colorized image with transparent background, with default scaler and density characters",
-			40, 20, loadImage("testdata/image_2.png"), DefaultScaler(), DefaultDensityCharacters, false,
+			40, 20, loadImage("testdata/image_2.png"), DefaultConfig(),
 			`
 @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
 @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
@@ -71,7 +68,7 @@ func TestCodec(t *testing.T) {
 @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@`,
 		},
 		{"does not panic on a colorized image", // no easy way to test colors here
-			40, 20, loadImage("testdata/image_2.png"), DefaultScaler(), DefaultDensityCharacters, true,
+			40, 20, loadImage("testdata/image_2.png"), defaultConfigColor(),
 			`
 @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
 @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
@@ -94,6 +91,30 @@ func TestCodec(t *testing.T) {
 @##@########@###@##@#########@####@#@@@@
 @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@`,
 		},
+		{"encode a non-colorized image with transparent background, add contrast with default scaler and density characters",
+			40, 20, loadImage("testdata/image_1.png"), defaultConfigContrast(),
+			`
+                                        
+                                        
+                                        
+                                        
+              @@@@@@@@@@@@@@@           
+             @@@@     @@@@              
+            @@@@       @@@@             
+            @@@@@     @@@@@             
+              @@@@@@@@@@@@              
+             @@@@@@@@@@                 
+            @@@@                        
+             @@@@@@@@@@@@@              
+             @@@@@@@@@@@@@@@            
+           @@@@@        @@@@@           
+            @@@@@     @@@@@@            
+              @@@@@@@@@@@               
+                                        
+                                        
+                                        
+                                        `,
+		},
 	}
 
 	for _, test := range suite {
@@ -104,14 +125,9 @@ func TestCodec(t *testing.T) {
 			// trim first line so its easier to describe tests
 			expectedOutput := test.expectedOutput[1:]
 
-			config := Config{
-				Scaler:            test.scaler,
-				Color:             test.colorize,
-				DensityCharacters: test.characters,
-			}
-
 			// sut
-			Encode(output, test.outputWidth, test.outputHeight, test.src, config)
+			Encode(output, test.outputWidth,
+				test.outputHeight, test.src, test.config)
 			assert.Equal(t, expectedOutput, output.String())
 		})
 	}
@@ -129,4 +145,16 @@ func loadImage(filename string) image.Image {
 	}
 
 	return img
+}
+
+func defaultConfigColor() Config {
+	ret := DefaultConfig()
+	ret.Color = true
+	return ret
+}
+
+func defaultConfigContrast() Config {
+	ret := DefaultConfig()
+	ret.AdjustContrast = 100
+	return ret
 }
