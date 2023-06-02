@@ -53,6 +53,16 @@ vi:
 plugins:
   # This plugin is used for navigating the editor's issue
   # tracker and creating new issues.
+  rtc:
+    path: /usr/local/bin/plugin_rtc
+    config:
+      # Whether to capture and send ascii images in color
+      color: true
+      # Frames per second for capture
+      fps: 30
+      # Ranges from -100 to 100, it indicates whether
+      # contrast should be increased to provide clearer frames.
+      contrast: 0
   issues:
     path: /usr/local/bin/plugin_issues
     config:
