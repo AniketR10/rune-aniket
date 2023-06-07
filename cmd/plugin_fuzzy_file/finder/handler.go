@@ -307,7 +307,7 @@ func (h *fuzzyFinderHandler) scanData() {
 		return
 	}
 
-	log.Infof("using resource list command: %s", h.cmdStr)
+	log.Debugf("using resource list command: %s", h.cmdStr)
 
 	stderr, stdout, exec, err := h.execCommand(h.cmdStr)
 	if err != nil {

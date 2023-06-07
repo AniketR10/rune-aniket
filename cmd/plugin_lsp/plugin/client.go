@@ -28,7 +28,7 @@ func (h *lspClientHandler) LogMessage(
 	case protocol.Warning:
 		log.Warn("protocol.Client: ", p.Message)
 	case protocol.Info:
-		log.Info("protocol.Client: ", p.Message)
+		log.Debug("protocol.Client: ", p.Message)
 	case protocol.Log:
 		log.Trace("protocol.Client: ", p.Message)
 	default:

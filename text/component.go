@@ -517,7 +517,7 @@ func (c *Component) DispatchCommand(cmd textapi.Command) (handled bool, err erro
 	}
 	targets, ok := c.config.CommandAliases[cmd.Name]
 	if ok {
-		c.log(log.InfoLevel, "Dispatching alias %s: %#v", cmd.Name, targets)
+		c.log(log.DebugLevel, "Dispatching alias %s: %#v", cmd.Name, targets)
 		for _, target := range targets {
 			argv := strings.Split(target, " ")
 			cmd.Name = argv[0]

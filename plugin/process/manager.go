@@ -274,7 +274,7 @@ func (m *Manager) doCloseClient(reason string, client *granteeClientWrap) (
 	// so unfortunately we cannot parallelize it amongst different clients
 	m.mu.Unlock()
 
-	level := log.InfoLevel
+	level := log.DebugLevel
 	if clientErr != nil {
 		level = log.ErrorLevel
 	}
@@ -482,7 +482,7 @@ func (m *Manager) Stats() map[string]Stat {
 
 // Close closes all plugins and resources associated with this Manager.
 func (m *Manager) Close() error {
-	m.log(log.InfoLevel, "Close: stopping all plugins")
+	m.log(log.DebugLevel, "Close: stopping all plugins")
 
 	m.mu.Lock()
 	clients := m.clients

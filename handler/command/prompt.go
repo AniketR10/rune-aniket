@@ -2,6 +2,7 @@ package command
 
 import (
 	"context"
+	"errors"
 	"math"
 	"strings"
 	"sync"
@@ -524,7 +525,9 @@ func (h *Prompt) pushCompletionList(
 
 	err := it.Err()
 	if err != nil {
-		h.log(log.ErrorLevel, "completion iterator error: %v", err)
+		if !errors.Is(err, context.Canceled) {
+			h.log(log.ErrorLevel, "completion iterator error: %v", err)
+		}
 		return
 	}
 
