@@ -110,6 +110,14 @@ func (e *issuesGrantee) Connected(broker proto.MuxBroker, pconfig config.Config)
 	e.broker = broker
 	var err error
 
+	disableDefaultCommands, err := pconfig.GetBool("disable_default_commands")
+	if err != nil {
+		if err != config.ErrNotFound {
+			log.Warnf("could not read property "+
+				"'disable_default_commands': %v", err)
+		}
+	}
+
 	e.maxSubjectLen, err = pconfig.GetInt("max_list_files_subject_len")
 	if err != nil {
 		if err != config.ErrNotFound {
@@ -162,11 +170,15 @@ func (e *issuesGrantee) Connected(broker proto.MuxBroker, pconfig config.Config)
 		cmdToTemplates[cmd] = data
 	}
 
+	if disableDefaultCommands {
+		e.cmds = make(map[string]func(*issuesGrantee, context.Context, textapi.Command) (bool, error))
+	}
+
 	for cmd, template := range cmdToTemplates {
 		e.cmds[cmd] = e.openCustomIssueTemplate(template, cmd)
 	}
 
-	log.Debugf("plugin connected and loaded config without any major issues")
+	log.Debugf("plugin connected and loaded config without any critical issues")
 }
 
 func (e *issuesGrantee) initScheme(m schemeapi.SchemeManager) error {
