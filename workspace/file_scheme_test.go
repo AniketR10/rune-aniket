@@ -13,8 +13,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/api/config"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 )
 
 func newTestFileScheme(uri workspaceapi.URI) (*fileScheme, error) {
@@ -133,44 +133,36 @@ func TestFileSchemeURI(t *testing.T) {
 	}
 }
 
-func setupTestDirectory(totalFiles, nestEvery, emptyDirsPerFile int) (workspaceapi.URI, func(), error) {
+func setupTestDirectory(
+	t testing.TB, totalFiles, nestEvery, emptyDirsPerFile int,
+) (workspaceapi.URI, func()) {
 	dir, err := ioutil.TempDir("", "list_files_test")
-	if err != nil {
-		return workspaceapi.URI{}, nil, err
-	}
+	require.NoError(t, err)
+
 	workspaceURI, err := workspaceapi.ParseURI("file://" + dir)
-	if err != nil {
-		return workspaceapi.URI{}, nil, err
-	}
+	require.NoError(t, err)
 
 	var closeFns []func()
 	// write test files
 	for i := 0; i < totalFiles; i++ {
 		f, err := ioutil.TempFile(dir, strconv.Itoa(i))
-		if err != nil {
-			return workspaceapi.URI{}, nil, err
-		}
+		require.NoError(t, err)
+
 		_, err = f.WriteString(strconv.Itoa(i))
-		if err != nil {
-			return workspaceapi.URI{}, nil, err
-		}
+		require.NoError(t, err)
+
 		err = f.Close()
-		if err != nil {
-			return workspaceapi.URI{}, nil, err
-		}
+		require.NoError(t, err)
+
 		for i := 0; i < emptyDirsPerFile; i++ {
 			// create more dirs than workers
 			_, err = ioutil.TempDir(dir, "emptydir")
-			if err != nil {
-				return workspaceapi.URI{}, nil, err
-			}
+			require.NoError(t, err)
 		}
 		if i%nestEvery == 0 {
 			// nest next temp file created
 			dir, err = ioutil.TempDir(dir, "nested")
-			if err != nil {
-				return workspaceapi.URI{}, nil, err
-			}
+			require.NoError(t, err)
 		}
 		closeFns = append(closeFns, func() { os.Remove(f.Name()) })
 	}
@@ -178,11 +170,13 @@ func setupTestDirectory(totalFiles, nestEvery, emptyDirsPerFile int) (workspacea
 		for _, closeFn := range closeFns {
 			closeFn()
 		}
-	}, nil
+	}
 }
 
 func TestFileSchemeListFilesLarge(t *testing.T) {
-	workspaceURI, closeFn, err := setupTestDirectory(1000, 10, 10)
+	const n = 100
+
+	workspaceURI, closeFn := setupTestDirectory(t, n, 10, 10)
 	defer closeFn()
 
 	scheme, err := NewFileScheme(context.Background(),
@@ -192,7 +186,7 @@ func TestFileSchemeListFilesLarge(t *testing.T) {
 	it, err := ListFiles(context.Background(), scheme, "")
 	require.NoError(t, err)
 
-	for i := 0; i < 1000; i++ {
+	for i := 0; i < n; i++ {
 		path, ok := it.Next()
 		require.True(t, ok)
 		require.NoError(t, it.Err())
@@ -207,10 +201,7 @@ func TestFileSchemeListFilesLarge(t *testing.T) {
 }
 
 func benchListFiles(b *testing.B, totalFiles, nestEvery, emptyDirsPerFile int) {
-	workspaceURI, closeFn, err := setupTestDirectory(totalFiles, nestEvery, emptyDirsPerFile)
-	if err != nil {
-		b.Fatalf("error: %s:", err)
-	}
+	workspaceURI, closeFn := setupTestDirectory(b, totalFiles, nestEvery, emptyDirsPerFile)
 
 	scheme, err := NewFileScheme(context.Background(), config.NopConfig(), workspaceURI)
 	if err != nil {

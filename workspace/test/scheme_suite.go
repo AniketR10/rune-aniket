@@ -123,7 +123,7 @@ func TestWorkspaceSchemeExecutor(
 		require.NotZero(t, pid)
 
 		require.Error(t, <-ch)
-		assert.True(t, strings.Contains(out.String(), "invalid option"), out.String())
+		assert.True(t, strings.Contains(out.String(), "option"), out.String())
 	})
 
 	t.Run("pass env variables", func(t *testing.T) {

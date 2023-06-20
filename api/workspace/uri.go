@@ -252,9 +252,6 @@ func makeLocalURI(path string) (URI, error) {
 }
 
 func sanitizeFilePath(resource string) string {
-	resolvedPath, err := filepath.EvalSymlinks(resource)
-	if err != nil {
-		resolvedPath = filepath.Clean(resource)
-	}
-	return util.SanitizeLine(resolvedPath)
+	resource = filepath.Clean(resource)
+	return util.SanitizeLine(resource)
 }
