@@ -6,8 +6,6 @@ import (
 	"github.com/ernestrc/go-multierror"
 	"github.com/pion/mediadevices"
 	"github.com/pion/mediadevices/pkg/codec/opus"
-	"github.com/pion/mediadevices/pkg/codec/vpx"
-	"github.com/pion/mediadevices/pkg/codec/x264"
 	_ "github.com/pion/mediadevices/pkg/driver/camera"
 	_ "github.com/pion/mediadevices/pkg/driver/microphone"
 	"github.com/pion/mediadevices/pkg/frame"
@@ -39,34 +37,36 @@ type Device struct {
 func NewDevice(interrupter term.Interrupter, fps int, cfg timage.Config) (
 	*Device, error,
 ) {
-	const lowBitRate = 32000
-	x264Params, err := x264.NewParams()
-	if err != nil {
-		panic(err)
-	}
-	x264Params.BitRate = lowBitRate
-	x264Params.Preset = x264.PresetUltrafast
+	/*
+		const lowBitRate = 32000
+		x264Params, err := x264.NewParams()
+		if err != nil {
+			panic(err)
+		}
+		x264Params.BitRate = lowBitRate
+		x264Params.Preset = x264.PresetUltrafast
 
-	vp8Params, err := vpx.NewVP8Params()
-	if err != nil {
-		panic(err)
-	}
-	vp8Params.BitRate = lowBitRate
+		vp8Params, err := vpx.NewVP8Params()
+		if err != nil {
+			panic(err)
+		}
+		vp8Params.BitRate = lowBitRate
 
-	vp9Params, err := vpx.NewVP9Params()
-	if err != nil {
-		panic(err)
-	}
-	vp9Params.BitRate = lowBitRate
+		vp9Params, err := vpx.NewVP9Params()
+		if err != nil {
+			panic(err)
+		}
+		vp9Params.BitRate = lowBitRate
+	*/
 
 	opusParams, err := opus.NewParams()
 	if err != nil {
 		panic(err)
 	}
 	codecSelector := mediadevices.NewCodecSelector(
-		mediadevices.WithVideoEncoders(&vp8Params),
-		mediadevices.WithVideoEncoders(&vp9Params),
-		mediadevices.WithVideoEncoders(&x264Params),
+		// mediadevices.WithVideoEncoders(&vp8Params),
+		//mediadevices.WithVideoEncoders(&vp9Params),
+		//mediadevices.WithVideoEncoders(&x264Params),
 		mediadevices.WithAudioEncoders(&opusParams),
 	)
 	s, err := mediadevices.GetUserMedia(mediadevices.MediaStreamConstraints{
