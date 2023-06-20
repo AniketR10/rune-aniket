@@ -7,14 +7,14 @@ BLUE_EXEC=bluectl
 OS=$(uname | awk '{print tolower($0)}')
 BLUE_RELEASE_TAG="$OS-$GIT_TAG"
 
-echo "Pushing tarball for OS '$OS'"
+echo "Pushing tarball for OS '$OS'";
 
-if [[ ! -v BLUE_PGP_KEY ]]; then
+if [[ -z "${BLUE_PGP_KEY}" ]]; then
     echo "BLUE_PGP_KEY is not set. See bluectl release upload -h for help."
 	exit 1;
 fi
 
-if [[ ! -v BLUE_PGP_KEYRING ]]; then
+if [[ -z "${BLUE_PGP_KEYRING}" ]]; then
     echo "BLUE_PGP_KEYRING is not set. See bluectl release upload -h for help."
 	exit 1;
 fi
