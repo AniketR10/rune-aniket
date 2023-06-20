@@ -20,7 +20,7 @@ const defaultFPS = 30
 var _ (tui.Component) = (*Component)(nil)
 
 // Component is a tui.Component that draws a video source
-// upon calls to Draw. I
+// upon calls to Draw.
 type Component struct {
 	trackID, streamID  string
 	cfg                timage.Config
