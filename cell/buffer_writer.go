@@ -54,6 +54,7 @@ func (w *BufferWriter) SetCursor(pos term.Coordinates) {
 	w.Cursor = pos
 }
 
+// ToBuffer copies the underlying cells to b.
 func (w *BufferWriter) ToBuffer(b *Buffer) {
 	cells := new(rawCells)
 	cells.cells = w.cells
@@ -61,6 +62,7 @@ func (w *BufferWriter) ToBuffer(b *Buffer) {
 	b.initWithCells(cells)
 }
 
+// RawCells returns the raw cells written so far to this BufferWritter.
 func (w *BufferWriter) RawCells() [][]term.Cell {
 	return w.cells
 }
