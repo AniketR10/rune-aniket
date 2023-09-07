@@ -226,7 +226,7 @@ func (s *service) create(ctx context.Context, ID string, doc interface{}, openFl
 		return fmt.Errorf("Scheme.Open: %v", werr.ToError())
 	}
 
-	doc = document.UpdateCreatedAtField(doc)
+	doc = document.UpdateCreatedAtField(s.marshaler, doc)
 
 	var ret error
 	if err := s.write(f, doc); err != nil {
