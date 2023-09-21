@@ -106,4 +106,4 @@ require (
 	honnef.co/go/tools v0.3.2 // indirect
 )
 
-replace github.com/hashicorp/go-plugin => github.com/ernestrc/go-plugin v1.5.0
+replace github.com/hashicorp/go-plugin => github.com/ernestrc/go-plugin v1.5.4

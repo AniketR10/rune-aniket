@@ -20,6 +20,7 @@ github.com/atotto/clipboard v0.1.2/go.mod h1:ZY9tmq7sm5xIbd9bOK4onWV4S6X0u6GY7Vn
 github.com/blackjack/webcam v0.0.0-20220329180758-ba064708e165/go.mod h1:G0X+rEqYPWSq0dG8OMf8M446MtKytzpPjgS3HbdOJZ4=
 github.com/blackjack/webcam v0.0.0-20230502173554-3b52e93e8607 h1:KG44gkEm6X8qGbJnv9Ef02OSWYtP0pGnu5Pw8QiWxys=
 github.com/blackjack/webcam v0.0.0-20230502173554-3b52e93e8607/go.mod h1:G0X+rEqYPWSq0dG8OMf8M446MtKytzpPjgS3HbdOJZ4=
+github.com/bufbuild/protocompile v0.4.0 h1:LbFKd2XowZvQ/kajzguUp2DC9UEIQhIq77fZZlaQsNA=
 github.com/census-instrumentation/opencensus-proto v0.2.1/go.mod h1:f6KPmirojxKA12rnyqOA5BBL4O983OfeGPqjHWSTneU=
 github.com/client9/misspell v0.3.4/go.mod h1:qj6jICC3Q7zFZvVWo7KLAzC3yx5G7kyvSDkc90ppPyw=
 github.com/cncf/udpa/go v0.0.0-20191209042840-269d4d468f6f/go.mod h1:M8M6+tZqaGXZJjfX53e64911xZQV5JYwmTeXPW+k8Sc=
@@ -40,8 +41,8 @@ github.com/ernestrc/dom v0.2.5-0.20201125033726-789c946aa938 h1:f/aC0hFDoMkao3ch
 github.com/ernestrc/dom v0.2.5-0.20201125033726-789c946aa938/go.mod h1:zkvVMhrl7iSWniJU2txvm5E6pF5bkHVK5ALYLlNBcO0=
 github.com/ernestrc/go-multierror v1.1.2 h1:9EYH71nYIsHEC9DSTtsT9GypDxmHAQ2gcOY6BMnXot8=
 github.com/ernestrc/go-multierror v1.1.2/go.mod h1:DUlo5/81Y4/bn7/eCKZJaVXlDRc+RQmJnLw3tjg95Do=
-github.com/ernestrc/go-plugin v1.5.0 h1:d78DpwRJu/gUIgADAdNWIW+TS+ZTnGV2ga/plm6S39E=
-github.com/ernestrc/go-plugin v1.5.0/go.mod h1:viDMjcLJuDui6pXb8U4HVfb8AamCWhHGUjr2IrTF67s=
+github.com/ernestrc/go-plugin v1.5.4 h1:tK/+WBH+aWU0n1ORJrnE7RZ7RT7jQxnFbVYR48e7aBw=
+github.com/ernestrc/go-plugin v1.5.4/go.mod h1:w1sAEES3g3PuV/RzUrgow20W2uErMly84hhD3um1WL4=
 github.com/ernestrc/golang-internal-tools v0.0.0-20220317145801-f8b5a950857b h1:RbqZaQ3JIvTkY89eYRlmW7ltIQqMZjkelnJQJN/wzAA=
 github.com/ernestrc/golang-internal-tools v0.0.0-20220317145801-f8b5a950857b/go.mod h1:UpiAb0rlHx9+ssJP0Y1WjRS2G5khIWsgOhz+BRUY6gU=
 github.com/ernestrc/logd-go v0.0.0-20180509171507-65871c1d5504 h1:+v3dfsJghDlJelEJwUE3LeUKkw/EosxDwZ7AT0yNDLI=
@@ -113,7 +114,7 @@ github.com/hashicorp/yamux v0.0.0-20180604194846-3520598351bb h1:b5rjCoWHc7eqmAS
 github.com/hashicorp/yamux v0.0.0-20180604194846-3520598351bb/go.mod h1:+NfK9FKeTrX5uv1uIXGdwYDTeHna2qgaIlx54MXqjAM=
 github.com/hpcloud/tail v1.0.0/go.mod h1:ab1qPbhIpdTxEkNHXyeSf5vhxWSCs/tWer42PpOxQnU=
 github.com/jezek/xgb v0.0.0-20210312150743-0e0f116e1240/go.mod h1:3P4UH/k22rXyHIJD2w4h2XMqPX4Of/eySEZq9L6wqc4=
-github.com/jhump/protoreflect v1.6.0 h1:h5jfMVslIg6l29nsMs0D8Wj17RDVdNYti0vDN/PZZoE=
+github.com/jhump/protoreflect v1.15.1 h1:HUMERORf3I3ZdX05WaQ6MIpd/NJ434hTp5YiKgfCL6c=
 github.com/junegunn/fzf v0.0.0-20201216124428-ab3937ee5a62 h1:6zc/t439xONeSlX0N4GF2UO2tUQYRBajMUixQM7rHB0=
 github.com/junegunn/fzf v0.0.0-20201216124428-ab3937ee5a62/go.mod h1:ll79UTTxfoFrxzsOoQiz3cetZQPOsbXOqo2nxIfmkjA=
 github.com/kbinani/screenshot v0.0.0-20210720154843-7d3a670d8329/go.mod h1:2VPVQDR4wO7KXHwP+DAypEy67rXf+okUx2zjgpCxZw4=
