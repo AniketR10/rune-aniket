@@ -32,6 +32,7 @@ import (
 const (
 	cmdSwitchToWorkspace = "switchToWorkspace"
 	cmdCloseWorkspace    = "closeWorkspace"
+	cmdReloadWorkspace   = "reloadWorkspace"
 	cmdAddWorkspace      = "addWorkspace"
 )
 
@@ -39,6 +40,7 @@ var (
 	workspaceCommands = map[string]func(*workspaceManagerHandler, ...string) error{
 		cmdAddWorkspace:      (*workspaceManagerHandler).commandAddWorkspace,
 		cmdCloseWorkspace:    (*workspaceManagerHandler).commandCloseWorkspace,
+		cmdReloadWorkspace:   (*workspaceManagerHandler).commandReloadWorkspace,
 		cmdSwitchToWorkspace: (*workspaceManagerHandler).commandSwitchToWorkspace,
 		"quit":               (*workspaceManagerHandler).commandQuit,
 		"forceQuit!":         (*workspaceManagerHandler).commandQuit,
@@ -175,6 +177,7 @@ func (h *workspaceManagerHandler) subscribeActiveWorkspaceCommands(ex *ex) (ret 
 	workspaceActiveCommands := map[string]func(*workspaceManagerHandler, ...string) error{
 		cmdAddWorkspace:      (*workspaceManagerHandler).commandAddWorkspace,
 		cmdCloseWorkspace:    (*workspaceManagerHandler).commandCloseWorkspace,
+		cmdReloadWorkspace:   (*workspaceManagerHandler).commandReloadWorkspace,
 		cmdSwitchToWorkspace: (*workspaceManagerHandler).commandSwitchToWorkspace,
 	}
 	return h.subscribeCommands(ex, workspaceActiveCommands)
@@ -533,6 +536,14 @@ func logNonFatalErrs(
 	}
 }
 
+func (h *workspaceManagerHandler) commandReloadWorkspace(args ...string) error {
+	uri, err := h.closeWorkspace()
+	if err != nil {
+		return err
+	}
+	return h.addWorkspace(uri, "", nil)
+}
+
 func (h *workspaceManagerHandler) commandAddWorkspace(args ...string) error {
 	if len(args) == 0 {
 		args = append(args, os.TempDir())
@@ -553,12 +564,13 @@ func (h *workspaceManagerHandler) commandAddWorkspace(args ...string) error {
 	return h.addWorkspace(uri, "", nil)
 }
 
-func (h *workspaceManagerHandler) commandCloseWorkspace(args ...string) error {
+func (h *workspaceManagerHandler) closeWorkspace() (workspaceapi.URI, error) {
 	if h.focusHandler() == h.empty {
-		return errors.New("workspace tab is empty")
+		return workspaceapi.URI{}, errors.New("workspace tab is empty")
 	}
 
 	hm := h.workspaces[h.focus]
+	uri := hm.uri
 	err := hm.Close()
 	if err != nil {
 		log.Error(err)
@@ -572,13 +584,18 @@ func (h *workspaceManagerHandler) commandCloseWorkspace(args ...string) error {
 	for i := h.focus; i >= 0; i-- {
 		if h.workspaces[i] != nil {
 			h.switchToWorkspace(i)
-			return err
+			return workspaceapi.URI{}, err
 		}
 	}
 
 	// for resize of current workspace with empty
 	h.switchToWorkspace(h.focus)
 
+	return uri, nil
+}
+
+func (h *workspaceManagerHandler) commandCloseWorkspace(args ...string) error {
+	_, err := h.closeWorkspace()
 	return err
 }
 

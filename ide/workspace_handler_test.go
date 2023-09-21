@@ -181,6 +181,17 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 │                  │
 │:           NORMAL│
 └──────────────────┘`},
+		{":reloadWorkspace>",
+			`┌──────────────────┐
+│                  │
+├──────────────────┤
+│                  │
+│                  │
+│workspaceWallpaper│
+│                  │
+│                  │
+│                  │
+└──────────────────┘`},
 		{":sw 3>",
 			`┌──────────────────┐
 │                  │

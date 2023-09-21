@@ -61,7 +61,7 @@ var (
 		"forceQuit!":              (*ex).forceQuit,
 		"quit":                    (*ex).forceQuit,
 		cmdEdit:                   (*ex).editFiles,
-		"reload":                  (*ex).reloadFile,
+		"reloadFile":              (*ex).reloadFile,
 		cmdChangeSplitOrientation: (*ex).splitDirectionChange,
 		"splitWindow":             (*ex).newWindow,
 		"newWindow":               (*ex).newWindow,

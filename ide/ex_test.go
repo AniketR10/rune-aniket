@@ -467,7 +467,7 @@ IIII`},
 │BBBBBBBBBBBBBBBBBB│
 │BBBBBBBBBBBBBBBBBB│
 └──────────────────┘`},
-		{":reload>", // test reload non file
+		{":reloadFile>", // test reload non file
 			`┌──────────────────┐
 │other.go  bugz    │
 ├──────────────────┤
@@ -604,7 +604,7 @@ func TestMultipleFilesStartup(t *testing.T) {
 │AAAAAAAAAAAAAAAAAA│
 │AAAAAAAAAAAAAAAAAA│
 └──────────────────┘`},
-		{"#:reload>",
+		{"#:reloadFile>",
 			`┌──────────────────┐
 │wi.go  cabin.go   │
 ├──────────────────┤
