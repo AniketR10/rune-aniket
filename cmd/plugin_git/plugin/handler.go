@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"math"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -218,9 +219,10 @@ func (h *gitEditorHandler) parseDiff(diff *diff.FileDiff) []textapi.Location {
 	var locs []textapi.Location
 	for _, hunk := range diff.Hunks {
 		log.Tracef("Read file diff hunk: %#v", hunk)
+		y := int(math.Max(0, float64(hunk.NewStartLine-1)))
 		if hunk.NewLines == 0 {
-			// FIXME https://unstable.build/go-tui/issues/59
-			at := term.Coordinates{Y: int(hunk.NewStartLine - 1)}
+			// FIXME https://github.com/ernestrc/go-tui/issues/59
+			at := term.Coordinates{Y: y}
 			locs = append(locs, textapi.Location{
 				From: at,
 				To:   term.Coordinates{Y: at.Y, X: 1},
@@ -231,7 +233,7 @@ func (h *gitEditorHandler) parseDiff(diff *diff.FileDiff) []textapi.Location {
 			continue
 		}
 
-		from := term.Coordinates{Y: int(hunk.NewStartLine - 1)}
+		from := term.Coordinates{Y: y}
 		to := term.Coordinates{Y: int(hunk.NewStartLine - 1 + hunk.NewLines)}
 		locs = append(locs, textapi.Location{From: from, To: to})
 
