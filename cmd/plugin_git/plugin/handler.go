@@ -343,22 +343,22 @@ func (h *gitEditorHandler) setScrollMaxContent(resourceName string, ev textapi.E
 func (h *gitEditorHandler) setScrollOffset(filename string, pos term.Coordinates) {
 	h.scroll.Lock()
 	defer h.scroll.Unlock()
+	defer log.Tracef("setScrollOffset(%s): %#v OK", filename, pos)
 
+	// we're only interested in the vertical scroll
+	pos.X = 0
+	h.offsets[filename] = pos
+
+	// TODO should set h.offsets anyway
 	if h.scroll.scroll.Offset().Y == pos.Y {
 		return
 	}
 
-	// we're only interested in the vertical scroll
-	pos.X = 0
-
 	ok := h.scroll.scroll.SetOffset(pos)
-	h.offsets[filename] = pos
-
 	if !ok {
 		log.Errorf("setScrollOffset(%s): %#v: could not set offset", filename, pos)
 		return
 	}
-	log.Tracef("setScrollOffset(%s): %#v OK", filename, pos)
 }
 
 func (h *gitEditorHandler) pushLastDiffLocations(filename string, resource textapi.Handler) error {
