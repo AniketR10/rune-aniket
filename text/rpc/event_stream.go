@@ -11,6 +11,8 @@ import (
 
 	"github.com/ernestrc/blue/logging"
 	log "github.com/sirupsen/logrus"
+	codes "google.golang.org/grpc/codes"
+	status "google.golang.org/grpc/status"
 	textapi "unstable.build/go-tui/api/text"
 )
 
@@ -100,7 +102,7 @@ func (s eventStreamServer) receiveEvents(c *Client) {
 	for {
 		protoEv, err := s.stream.Recv()
 		if err != nil {
-			if !errors.Is(err, io.EOF) && !errors.Is(err, context.Canceled) {
+			if !errors.Is(err, io.EOF) && status.Code(err) != codes.Canceled {
 				s.log(log.ErrorLevel, "stream recv error: %v", err)
 			}
 			break
