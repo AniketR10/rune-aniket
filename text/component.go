@@ -928,6 +928,11 @@ func (c *Component) SetDefaultAttributes(h Handler, attr term.Attributes) error 
 	return c.ed.SetDefaultAttributes(h, attr)
 }
 
+// Tabs returns the tabs open in this browser.Component.
+func (c *Component) Tabs() []*browser.Tab {
+	return c.comp.Tabs()
+}
+
 // Close closes all resources associated with this Component.
 func (c *Component) Close() error {
 	// avoid dispatching close events on flusherCloser callbacks

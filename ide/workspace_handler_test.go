@@ -181,16 +181,38 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 │                  │
 │:           NORMAL│
 └──────────────────┘`},
-		{":reloadWorkspace>",
+		{":edit /tmp/12345aZZ>ihello<yyp:reloadWorkspace>", // un-saved
 			`┌──────────────────┐
-│                  │
+│12345aZZ          │
 ├──────────────────┤
+│▐                 │
 │                  │
 │                  │
-│workspaceWallpaper│
+│                  │
+│                  │
+│:           NORMAL│
+└──────────────────┘`},
+		{":edit /tmp/12345aZZ>ihello<yyp:w>:reloadWorkspace>", // saved
+			`┌──────────────────┐
+│12345aZZ          │
+├──────────────────┤
+│▐ello             │
+│hello             │
 │                  │
 │                  │
 │                  │
+│:           NORMAL│
+└──────────────────┘`},
+		{":edit memory:///12345aZZ>ihello<yyp:w>:reloadWorkspace>", // full uri
+			`┌──────────────────┐
+│12345aZZ          │
+├──────────────────┤
+│▐ello             │
+│hello             │
+│                  │
+│                  │
+│                  │
+│:           NORMAL│
 └──────────────────┘`},
 		{":sw 3>",
 			`┌──────────────────┐

@@ -160,7 +160,22 @@ func (h *workspaceManagerHandler) init(
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
-	err = h.addWorkspace(uri, recfilename, filenames)
+	// AddWorkspace is idempotent, so it should be fine to here and later when
+	// actually creating the workspace handler.
+	tempcwd, err := h.workspace.AddWorkspace(h.ctxWithLocker, uri)
+	if err != nil {
+		return fmt.Errorf("Failed to create new workspace for %q: %s", uri, err)
+	}
+	var uris []workspaceapi.URI
+	for _, filename := range filenames {
+		uri, err := tempcwd.URI(filename)
+		if err != nil {
+			return err
+		}
+		uris = append(uris, uri)
+	}
+
+	err = h.addWorkspace(uri, recfilename, uris)
 	if err != nil {
 		return err
 	}
@@ -410,7 +425,7 @@ func cleanedPluginConfig(cfg map[string]interface{}) map[string]interface{} {
 }
 
 func (h *workspaceManagerHandler) addWorkspace(
-	uri workspaceapi.URI, recfilename string, filenames []string,
+	uri workspaceapi.URI, recfilename string, filenames []workspaceapi.URI,
 ) error {
 	for i, w := range h.workspaces {
 		if w == nil {
@@ -442,12 +457,8 @@ func (h *workspaceManagerHandler) addWorkspace(
 		textOpts = append(textOpts, text.WithRecoveryFile(recFile))
 	}
 
-	for _, filename := range filenames {
-		file, err := cwd.URI(filename)
-		if err != nil {
-			return err
-		}
-		textOpts = append(textOpts, text.WithFile(file))
+	for _, uri := range filenames {
+		textOpts = append(textOpts, text.WithFile(uri))
 	}
 
 	// workspace capable of opening URIs other than the workspaceapi.URI
@@ -537,11 +548,11 @@ func logNonFatalErrs(
 }
 
 func (h *workspaceManagerHandler) commandReloadWorkspace(args ...string) error {
-	uri, err := h.closeWorkspace()
+	workspaceURI, openFiles, err := h.closeWorkspace()
 	if err != nil {
 		return err
 	}
-	return h.addWorkspace(uri, "", nil)
+	return h.addWorkspace(workspaceURI, "", openFiles)
 }
 
 func (h *workspaceManagerHandler) commandAddWorkspace(args ...string) error {
@@ -564,13 +575,24 @@ func (h *workspaceManagerHandler) commandAddWorkspace(args ...string) error {
 	return h.addWorkspace(uri, "", nil)
 }
 
-func (h *workspaceManagerHandler) closeWorkspace() (workspaceapi.URI, error) {
+func (h *workspaceManagerHandler) closeWorkspace() (workspaceapi.URI, []workspaceapi.URI, error) {
 	if h.focusHandler() == h.empty {
-		return workspaceapi.URI{}, errors.New("workspace tab is empty")
+		return workspaceapi.URI{}, nil, errors.New("workspace tab is empty")
 	}
 
 	hm := h.workspaces[h.focus]
 	uri := hm.uri
+	tabs := hm.ex.comp.Tabs()
+	var files []workspaceapi.URI
+	for _, tab := range tabs {
+		// only reload with tabs that were created by workspace
+		_, ok := tab.Closer().(workspace.FlusherCloser)
+		uri := tab.URI()
+		if ok && uri != (workspaceapi.URI{}) && uri.Scheme() != "" {
+			files = append(files, uri)
+		}
+	}
+
 	err := hm.Close()
 	if err != nil {
 		log.Error(err)
@@ -584,18 +606,18 @@ func (h *workspaceManagerHandler) closeWorkspace() (workspaceapi.URI, error) {
 	for i := h.focus; i >= 0; i-- {
 		if h.workspaces[i] != nil {
 			h.switchToWorkspace(i)
-			return workspaceapi.URI{}, err
+			return workspaceapi.URI{}, nil, err
 		}
 	}
 
 	// for resize of current workspace with empty
 	h.switchToWorkspace(h.focus)
 
-	return uri, nil
+	return uri, files, nil
 }
 
 func (h *workspaceManagerHandler) commandCloseWorkspace(args ...string) error {
-	_, err := h.closeWorkspace()
+	_, _, err := h.closeWorkspace()
 	return err
 }
 
