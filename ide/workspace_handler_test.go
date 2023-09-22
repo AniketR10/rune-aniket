@@ -46,7 +46,7 @@ func TestWorkspaceConfig(t *testing.T) {
 		uri, err := workspaceapi.ParseURI("memory:///tmp")
 		require.NoError(t, err)
 
-		m := newTestWorkspaceManagerHandlerWithManager(t, manager, uri, cfg)
+		m := newTestWorkspaceManagerHandlerWithManager(t, manager, uri, cfg, nil)
 		defer m.Close()
 
 		assert.EqualValues(t, mockConfig, passed)
@@ -87,13 +87,18 @@ func TestWorkspacePlugins(t *testing.T) {
 				},
 				}, nil
 			})
-		m := newTestWorkspaceManagerHandlerWithManagerAndPlugins(t, manager, uri, cfg, runner, nil)
+		dir, err := ioutil.TempDir("", "")
+		require.NoError(t, err)
+		m := newTestWorkspaceManagerHandlerWithManagerAndPlugins(t, manager,
+			uri, cfg, runner, nil, nil, dir)
 		defer m.Close()
 
 		assert.Equal(t, "git", called)
 	})
 
 	t.Run("calls plugin runner with built-in plugins", func(t *testing.T) {
+		dir, err := ioutil.TempDir("", "")
+		require.NoError(t, err)
 		cfg := ideConfig{cfg: map[string]interface{}{}}
 		manager := workspace.NewManager(cfg.workspace())
 
@@ -125,7 +130,8 @@ func TestWorkspacePlugins(t *testing.T) {
 				},
 				}, nil
 			})
-		m := newTestWorkspaceManagerHandlerWithManagerAndPlugins(t, manager, uri, cfg, runner, plugins)
+		m := newTestWorkspaceManagerHandlerWithManagerAndPlugins(t, manager,
+			uri, cfg, runner, plugins, nil, dir)
 		defer m.Close()
 
 		assert.Equal(t, "myID", called)
@@ -142,7 +148,7 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 	}()
 
 	fn := func(t *testing.T) tui.Handler {
-		m := newTestWorkspaceManagerHandler(t, defaultCfg())
+		m := newTestWorkspaceManagerHandler(t, defaultCfg(), nil)
 		closeFns = append(closeFns, m.Close)
 		return m
 	}
@@ -213,6 +219,41 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 │                  │
 │                  │
 │:           NORMAL│
+└──────────────────┘`},
+		{":cwo>:aw /tmp>:edit 12345aZZ>:w>:cwo>:aw  /tmp>", // prompt
+			`┌──────────────────┐
+│                  │
+│Do you want to res│
+│                  │
+│                  │
+│ ┌─────┐  ┌────┐  │
+│ │ Yes │  │ No │  │
+│ └─────┘  └────┘  │
+│                  │
+└──────────────────┘`},
+		// prompt resets cache (use file scheme to avoid needing
+		// to use ':' to indicate memory scheme)
+		{":cwo>:aw /tmp>:edit 12345aZZ>:w>:cwo>:aw  /tmp>y",
+			`┌──────────────────┐
+│12345aZZ          │
+├──────────────────┤
+│▐                 │
+│                  │
+│                  │
+│                  │
+│                  │
+│:           NORMAL│
+└──────────────────┘`},
+		{":cwo>:aw /tmp>edit 12345aZZ>:w>:cwo>:aw  /tmp>n:cwo>:aw  /tmp>", // prompt no: resets cache
+			`┌──────────────────┐
+│                  │
+├──────────────────┤
+│                  │
+│                  │
+│workspaceWallpaper│
+│                  │
+│                  │
+│                  │
 └──────────────────┘`},
 		{":sw 3>",
 			`┌──────────────────┐
@@ -339,25 +380,77 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 	testutil.TestHandlerIsolated(t, fn, 20, 10, cases)
 }
 
+func TestWorkspaceManagerHandlerDrawWithInitialFiles(t *testing.T) {
+	filenames := []string{"1234", "4567"}
+	// re-use storage
+	dir, err := ioutil.TempDir("", "")
+	require.NoError(t, err)
+	m := newTestWorkspaceManagerHandlerWithDir(t, defaultCfg(), filenames, dir)
+
+	cases := []testutil.HandlerSequenceTestCase{
+		{"",
+			`┌──────────────────┐
+│1234  4567        │
+├──────────────────┤
+│▐                 │
+│                  │
+│                  │
+│                  │
+│                  │
+│:           NORMAL│
+└──────────────────┘`},
+	}
+	testutil.TestHandlerSequence(t, m, 20, 10, cases)
+
+	require.NoError(t, m.Close())
+	m = newTestWorkspaceManagerHandlerWithDir(t, defaultCfg(), nil /* no filenames this time */, dir)
+
+	cases = []testutil.HandlerSequenceTestCase{
+		{"",
+			`┌──────────────────┐
+│                  │
+│Do you want to res│
+│                  │
+│                  │
+│ ┌─────┐  ┌────┐  │
+│ │ Yes │  │ No │  │
+│ └─────┘  └────┘  │
+│                  │
+└──────────────────┘`},
+		{"y",
+			`┌──────────────────┐
+│1234  4567        │
+├──────────────────┤
+│▐                 │
+│                  │
+│                  │
+│                  │
+│                  │
+│:           NORMAL│
+└──────────────────┘`},
+	}
+	testutil.TestHandlerSequence(t, m, 20, 10, cases)
+	require.NoError(t, m.Close())
+}
+
 func newTestWorkspaceManagerHandlerWithManager(
 	t *testing.T, manager *workspace.Manager,
-	uri workspaceapi.URI, cfg ideConfig,
+	uri workspaceapi.URI, cfg ideConfig, filenames []string,
 ) *testWorkspaceManagerHandler {
+	dir, err := ioutil.TempDir("", "")
+	require.NoError(t, err)
 	return newTestWorkspaceManagerHandlerWithManagerAndPlugins(t, manager,
-		uri, cfg, FuncPluginsRunner(testRunnerFn), nil)
+		uri, cfg, FuncPluginsRunner(testRunnerFn), nil, filenames, dir)
 }
 
 func newTestWorkspaceManagerHandlerWithManagerAndPlugins(
 	t *testing.T, manager *workspace.Manager,
 	uri workspaceapi.URI, cfg ideConfig, runner PluginsRunner,
-	plugins map[string]Plugin,
+	plugins map[string]Plugin, files []string, dir string,
 ) *testWorkspaceManagerHandler {
-	dir, err := ioutil.TempDir("", "")
-	require.NoError(t, err)
-
 	m := new(testWorkspaceManagerHandler)
 	m.workspaceManagerHandler = new(workspaceManagerHandler)
-	err = m.workspaceManagerHandler.init(uri, manager, cfg, "", []string{},
+	err := m.workspaceManagerHandler.init(uri, manager, cfg, "", files,
 		dir, func(term.Event) bool {
 			return true
 		}, runner, new(sync.Mutex), plugins, ".sixrc")
@@ -365,8 +458,8 @@ func newTestWorkspaceManagerHandlerWithManagerAndPlugins(
 	return m
 }
 
-func newTestWorkspaceManagerHandler(
-	t *testing.T, cc ideConfig,
+func newTestWorkspaceManagerHandlerWithDir(
+	t *testing.T, cc ideConfig, filenames []string, dir string,
 ) *testWorkspaceManagerHandler {
 	manager := workspace.NewManager(config.NopConfig())
 	require.NoError(t, manager.RegisterScheme(workspace.MemoryScheme,
@@ -376,8 +469,17 @@ func newTestWorkspaceManagerHandler(
 
 	uri, err := workspaceapi.ParseURI("memory:///tmp")
 	require.NoError(t, err)
+	runner := FuncPluginsRunner(testRunnerFn)
+	return newTestWorkspaceManagerHandlerWithManagerAndPlugins(t, manager,
+		uri, cc, runner, nil, filenames, dir)
+}
 
-	return newTestWorkspaceManagerHandlerWithManager(t, manager, uri, cc)
+func newTestWorkspaceManagerHandler(
+	t *testing.T, cc ideConfig, filenames []string,
+) *testWorkspaceManagerHandler {
+	dir, err := ioutil.TempDir("", "")
+	require.NoError(t, err)
+	return newTestWorkspaceManagerHandlerWithDir(t, cc, filenames, dir)
 }
 
 // deterministic usage of search list

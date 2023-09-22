@@ -12,8 +12,9 @@ import (
 	"sync"
 
 	"github.com/ernestrc/blue/document"
-	"github.com/ernestrc/blue/encoding/bson"
+	"github.com/ernestrc/blue/encoding/toml"
 	"github.com/ernestrc/blue/iterator"
+	"github.com/ernestrc/go-multierror"
 	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui"
@@ -62,6 +63,7 @@ type workspaceManagerHandler struct {
 	configFilename   string
 	addWorkspacePath bool
 	userHome         string
+	history          *history
 
 	union          handler.FrameUnion
 	bar            handler.Tabs
@@ -103,7 +105,7 @@ func (h *workspaceManagerHandler) newEditor(cfg ideConfig) text.Editor {
 }
 
 func (h *workspaceManagerHandler) init(
-	uri workspaceapi.URI, manager workspace.WorkspaceManager,
+	cwd workspaceapi.URI, manager workspace.WorkspaceManager,
 	cfg ideConfig, recfilename string, filenames []string,
 	sixDir string, publishEvent func(term.Event) bool,
 	pluginRunner PluginsRunner, locker sync.Locker,
@@ -119,7 +121,7 @@ func (h *workspaceManagerHandler) init(
 	h.pluginRunner = pluginRunner
 	h.builtinPlugins = builtinPlugins
 	h.ctxWithLocker = workspace.ContextWithLocker(context.Background(), h.mu)
-	storage, err := storage.New(h.ctxWithLocker, sixDir, bson.Marshaler())
+	storage, err := storage.New(h.ctxWithLocker, sixDir, toml.Marshaler())
 	if err != nil {
 		storage = document.NewInMemoryService()
 		log.Warnf("Could not setup fs-backed storage: %v. Using ephemeral.", err)
@@ -150,6 +152,7 @@ func (h *workspaceManagerHandler) init(
 	h.union.Top = charset.Top
 	h.union.Bottom = charset.Bottom
 	h.addWorkspacePath = cfg.workspacePath()
+	h.history = newHistory(h.storage)
 
 	// best effort
 	user, err := user.Current()
@@ -162,9 +165,9 @@ func (h *workspaceManagerHandler) init(
 
 	// AddWorkspace is idempotent, so it should be fine to here and later when
 	// actually creating the workspace handler.
-	tempcwd, err := h.workspace.AddWorkspace(h.ctxWithLocker, uri)
+	tempcwd, err := h.workspace.AddWorkspace(h.ctxWithLocker, cwd)
 	if err != nil {
-		return fmt.Errorf("Failed to create new workspace for %q: %s", uri, err)
+		return fmt.Errorf("Failed to create new workspace for %q: %s", cwd, err)
 	}
 	var uris []workspaceapi.URI
 	for _, filename := range filenames {
@@ -175,12 +178,56 @@ func (h *workspaceManagerHandler) init(
 		uris = append(uris, uri)
 	}
 
-	err = h.addWorkspace(uri, recfilename, uris)
+	shouldRestore := len(uris) == 0
+	// TODO err = h.addWorkspace(cwd, recfilename, uris, shouldRestore, h.cfg.autoRestore())
+	err = h.addWorkspace(cwd, recfilename, uris, shouldRestore, shouldRestore)
 	if err != nil {
 		return err
 	}
 	h.focusProxy.Target = h.focusHandler()
 	h.union.UnionBottom(&h.bar, h.barSize())
+
+	return nil
+}
+
+func (h *workspaceManagerHandler) initWithRestorePrompt(
+	ex *ex,
+	workspaceURI workspaceapi.URI,
+	cache map[string]file,
+) error {
+	const (
+		restoreCwd = "Yes"
+		noRestore  = "No"
+	)
+
+	ex.comp.Prompt(
+		"Do you want to restore the previous session?",
+		[]string{restoreCwd, noRestore},
+		[]term.KeyComb{{Ch: 'y'}, {Ch: 'n'}},
+		func(i int, option string) {
+			var err error
+
+			switch option {
+			case restoreCwd:
+				for uriStr := range cache {
+					uri, uerr := workspaceapi.ParseURI(uriStr)
+					if uerr != nil {
+						err = multierror.Append(err, uerr)
+						continue
+					}
+					ferr := ex.editFileURI(uri)
+					if ferr != nil {
+						err = multierror.Append(err, ferr)
+					}
+				}
+			case noRestore:
+				h.history.resetWorkspaceCache(workspaceURI)
+			}
+			if err != nil {
+				h.empty.Browser().SetMessage(err.Error())
+			}
+		},
+	)
 	return nil
 }
 
@@ -426,6 +473,7 @@ func cleanedPluginConfig(cfg map[string]interface{}) map[string]interface{} {
 
 func (h *workspaceManagerHandler) addWorkspace(
 	uri workspaceapi.URI, recfilename string, filenames []workspaceapi.URI,
+	shouldRestore, shouldPromptRestore bool,
 ) error {
 	for i, w := range h.workspaces {
 		if w == nil {
@@ -512,7 +560,29 @@ func (h *workspaceManagerHandler) addWorkspace(
 
 	logNonFatalErrs(configErr, cfg.errors)
 
-	return nil
+	prevSessionFiles := h.history.recordAddWorkspace(uri, ex.Editor(), shouldRestore)
+	if !shouldRestore || len(prevSessionFiles) == 0 {
+		return nil
+	}
+
+	if shouldPromptRestore {
+		h.initWithRestorePrompt(ex, uri, prevSessionFiles)
+		return nil
+	}
+
+	for uri := range prevSessionFiles {
+		uri, uerr := workspaceapi.ParseURI(uri)
+		if uerr != nil {
+			err = multierror.Append(err, uerr)
+			continue
+		}
+		ferr := ex.editFileURI(uri)
+		if ferr != nil {
+			err = multierror.Append(err, ferr)
+		}
+	}
+
+	return err
 }
 
 func (h *workspaceManagerHandler) nextAvailableWorkspace() (idx int, ok bool) {
@@ -548,11 +618,11 @@ func logNonFatalErrs(
 }
 
 func (h *workspaceManagerHandler) commandReloadWorkspace(args ...string) error {
-	workspaceURI, openFiles, err := h.closeWorkspace()
+	workspaceURI, _, err := h.closeWorkspace()
 	if err != nil {
 		return err
 	}
-	return h.addWorkspace(workspaceURI, "", openFiles)
+	return h.addWorkspace(workspaceURI, "", nil, true, false)
 }
 
 func (h *workspaceManagerHandler) commandAddWorkspace(args ...string) error {
@@ -564,7 +634,7 @@ func (h *workspaceManagerHandler) commandAddWorkspace(args ...string) error {
 	// try to use literal URI
 	uri, parseErr := workspaceapi.ParseURI(path)
 	if parseErr == nil {
-		return h.addWorkspace(uri, "", nil)
+		return h.addWorkspace(uri, "", nil, true, true)
 	}
 
 	uri, pathErr := workspaceapi.CurrentUserHostURI(path)
@@ -572,7 +642,7 @@ func (h *workspaceManagerHandler) commandAddWorkspace(args ...string) error {
 		err := multierr.Append(pathErr, parseErr)
 		return err
 	}
-	return h.addWorkspace(uri, "", nil)
+	return h.addWorkspace(uri, "", nil, true, true)
 }
 
 func (h *workspaceManagerHandler) closeWorkspace() (workspaceapi.URI, []workspaceapi.URI, error) {
@@ -593,6 +663,7 @@ func (h *workspaceManagerHandler) closeWorkspace() (workspaceapi.URI, []workspac
 		}
 	}
 
+	h.history.recordCloseWorkspace(uri)
 	err := hm.Close()
 	if err != nil {
 		log.Error(err)
@@ -645,6 +716,10 @@ func (h *workspaceManagerHandler) commandSwitchToWorkspace(args ...string) error
 }
 
 func (h *workspaceManagerHandler) Close() (ret error) {
+	// TODO
+	//if h.history.dirtyFilesOpen() {
+	//}
+
 	for _, hm := range h.workspaces {
 		if hm == nil {
 			continue

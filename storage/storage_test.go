@@ -12,7 +12,7 @@ import (
 	"github.com/ernestrc/blue/document"
 	"github.com/ernestrc/blue/document/firstmover"
 	"github.com/ernestrc/blue/document/test"
-	"github.com/ernestrc/blue/encoding/bson"
+	"github.com/ernestrc/blue/encoding/toml"
 	"github.com/stretchr/testify/require"
 )
 
@@ -31,7 +31,7 @@ func TestStorageConcurrentInstances(t *testing.T) {
 		instances := make([]document.Service, 0, n)
 
 		for i := 0; i < n-1; i++ {
-			instance, err := New(context.Background(), name, bson.Marshaler())
+			instance, err := New(context.Background(), name, toml.Marshaler())
 			require.NoError(t, err)
 			_ = instance.Get(context.Background(), "a", nil)
 			instances = append(instances, instance)

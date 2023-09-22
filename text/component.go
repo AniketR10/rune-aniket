@@ -933,6 +933,17 @@ func (c *Component) Tabs() []*browser.Tab {
 	return c.comp.Tabs()
 }
 
+// Prompt creates a new prompt to be drawn as an overlay on the next call to Draw
+// and it also takes over event control until user either exits prompt or selects
+// an option.
+func (c *Component) Prompt(
+	message string, options []string,
+	bindings []term.KeyComb,
+	cb func(int, string),
+) {
+	c.comp.Prompt(message, options, bindings, cb)
+}
+
 // Close closes all resources associated with this Component.
 func (c *Component) Close() error {
 	// avoid dispatching close events on flusherCloser callbacks

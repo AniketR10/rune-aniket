@@ -80,7 +80,7 @@ func TestFileWorkspaceServiceTOML(t *testing.T) {
 		testFileWorkspaceServiceWithMarshaler(t, toml.Marshaler())
 	})
 	t.Run("backed by MemoryScheme", func(t *testing.T) {
-		testMemoryWorkspaceServiceWithMarshaler(t, json.Marshaler())
+		testMemoryWorkspaceServiceWithMarshaler(t, toml.Marshaler())
 	})
 }
 
