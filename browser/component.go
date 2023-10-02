@@ -5,19 +5,16 @@ import (
 	"io"
 
 	"github.com/ernestrc/blue/logging"
+	"github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui"
 	browserapi "unstable.build/go-tui/api/browser"
 	workspaceapi "unstable.build/go-tui/api/workspace"
-	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
+	"unstable.build/go-tui/component/notifications"
 
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/term"
-)
-
-var (
-	logBufDrawTimes = 4
 )
 
 var _ browserapi.Handler = (*Component)(nil)
@@ -30,16 +27,14 @@ var _ browserapi.Handler = (*Component)(nil)
 // to a call to Handle. Conversely, tui.Handlers installed via NewTab
 // will remain as a tab and can be managed independently from windows.
 type Component struct {
-	logBuf     cell.Buffer
-	logBufDraw int
-	logVirt    handler.Virtual
-	tabs       handler.Tabs
-	wm         handler.WindowManager
-	union      handler.FrameUnion
-	prompts    []tui.Handler
-	width      int
-	height     int
-	nextSplit  browserapi.Orientation
+	tabs      handler.Tabs
+	wm        handler.WindowManager
+	union     handler.FrameUnion
+	prompts   []tui.Handler
+	width     int
+	height    int
+	nextSplit browserapi.Orientation
+	container notifications.Container
 
 	focusWindow handler.Window
 	config      Config
@@ -159,8 +154,6 @@ func (c *Component) Init(config Config) {
 	c.config = config
 	c.windows = make(map[uint64]*browserWindow)
 
-	c.logBuf.Init()
-	c.logVirt = newMessageSpan(&c.logBuf, config.MessageBarAttr)
 	c.nextSplit = browserapi.OrientationRight
 
 	c.tabs.Init()
@@ -194,6 +187,8 @@ func (c *Component) Init(config Config) {
 
 	// use UnionTop instead of Bar because tabs already have their own frame
 	c.union.UnionTop(&c.tabs, c.barSize())
+
+	c.container.Init(&c.union, config.Notifications)
 
 	return
 }
@@ -648,17 +643,13 @@ func (c *Component) setError(err error) {
 
 // SetMessage formats the given msg and args and displays it on next Draw.
 func (c *Component) SetMessage(msg string, args ...interface{}) {
-	msg = fmt.Sprintf(msg, args...)
-	c.log(log.InfoLevel, "Message: %s", msg)
-	c.logBuf.Reset()
-	c.logBuf.WriteString(msg)
-	c.logBufDraw = logBufDrawTimes
+	c.container.Notify(notifications.LevelInfo, fmt.Sprintf(msg, args...))
 }
 
 // Resize satisfies tui.Component
 func (c *Component) Resize(width, height int) {
 	c.width, c.height = width, height
-	c.union.Resize(width, height)
+	c.container.Resize(width, height)
 	for _, prompt := range c.prompts {
 		prompt.Resize(width, height)
 	}
@@ -711,18 +702,9 @@ func (c *Component) Draw(w term.Writer) {
 		}
 	}
 
-	c.union.Draw(w)
+	c.container.Draw(w)
 	if len(c.prompts) != 0 {
 		c.prompts[0].Draw(w)
-	}
-
-	// only draw logBufDraw times
-	if c.logBufDraw > 0 {
-		resizeMessageSpan(&c.logVirt, c.width, c.height, c.config.Frame)
-		c.logVirt.Draw(w)
-		c.logBufDraw--
-	} else {
-		c.logBuf.Reset()
 	}
 
 	// set correct attributes for focus window union charset
@@ -913,6 +895,9 @@ func (c *Component) Close() (ret error) {
 		if err != nil {
 			ret = err
 		}
+	}
+	if err := c.container.Close(); err != nil {
+		ret = multierror.Append(ret, err)
 	}
 	c.buffers = c.buffers[:0]
 	c.wm.UnsubscribeAll()

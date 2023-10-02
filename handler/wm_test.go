@@ -576,7 +576,7 @@ C──────────────────D
 			// test that Dimensions are updated for a floating win
 			buf := cell.NewBuffer()
 			buf.WriteString("1234")
-			hf := Nop(component.Buffer(buf, component.StringConfig{}))
+			hf := Nop(component.Buffer(buf, component.StringResponsiveConfig{}))
 			wfloat := wm.FloatingWindow(FloatingBuffer(hf, buf), component.FloatingConfig{})
 			wm.SetFocus(wfloat)
 			buf.WriteString("1234")

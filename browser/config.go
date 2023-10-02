@@ -1,7 +1,10 @@
 package browser
 
 import (
+	"time"
+
 	"unstable.build/go-tui/component"
+	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/term"
 )
@@ -9,7 +12,6 @@ import (
 // DefaultConfig returns the default Config.
 func DefaultConfig() Config {
 	return Config{
-		MessageBarAttr:      term.Attributes{Bg: term.ColorRed, Fg: term.ColorWhite},
 		FocusTabAttr:        term.Attributes{Fg: term.ColorWhite},
 		NonFocusTabAttr:     term.Attributes{Fg: term.ColorRed},
 		WallpaperAttr:       term.Attributes{Fg: term.ColorRed | term.AttrBold},
@@ -20,6 +22,15 @@ func DefaultConfig() Config {
 			Height:        14,
 			TextAttr:      term.Attributes{},
 			HighlightAttr: term.Attributes{Bg: term.ColorRed, Fg: term.ColorWhite},
+		},
+		Notifications: notifications.Config{
+			AutoClose:            5 * time.Second,
+			ProgressBar:          true,
+			Width:                50,
+			Attributes:           term.Attributes{},
+			BackgroundAttributes: term.Attributes{},
+			FrameCharSet:         component.FrameCharSetDefault(),
+			Interrupter:          term.NopInterrupter(),
 		},
 	}
 }
@@ -37,8 +48,6 @@ type Config struct {
 	WallpaperAttr           term.Attributes
 	WallpaperBackgroundAttr term.Attributes
 
-	MessageBarAttr term.Attributes
-
 	FocusTabAttr    term.Attributes
 	NonFocusTabAttr term.Attributes
 
@@ -46,4 +55,5 @@ type Config struct {
 
 	component.FrameUnionCharSet
 	handler.WindowManagerConfig
+	Notifications notifications.Config
 }

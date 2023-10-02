@@ -420,13 +420,22 @@ func (h *workspaceManagerHandler) initPlugins(manager plugin.Runner, cfg ideConf
 }
 
 func (h *workspaceManagerHandler) textOpts(cfg ideConfig) []text.Option {
+	notificationsCfg := cfg.notificationsConfig()
+	interrupter := term.FuncInterrupter(func() error {
+		if !h.publishEvent(term.Event{Type: term.EventInterrupt}) {
+			return errEventStreamNotReady
+		}
+		return nil
+	})
+	notificationsCfg.Interrupter = interrupter
+
 	ret := []text.Option{
 		text.WithTabspaces(cfg.browserTabspaces()),
 		text.WithWindowManagerConfig(cfg.windowManagerConfig()),
 		text.WithFrameUnionCharSet(cfg.frameUnionCharset()),
 		text.WithCommandKey(cfg.commandKey()),
 		text.WithCommandMaxHistory(cfg.commandMaxHistory()),
-		text.WithMessageBarAttr(cfg.messageBarAttr()),
+		text.WithNotificationsConfig(notificationsCfg),
 		text.WithFocusTabAttr(cfg.focusTabAttr()),
 		text.WithNonFocusTabAttr(cfg.nonFocusTabAttr()),
 		text.WithWallpaperAttr(cfg.workspaceWallpaperAttr()),
@@ -436,12 +445,7 @@ func (h *workspaceManagerHandler) textOpts(cfg ideConfig) []text.Option {
 		text.WithCommandOverlayConfig(cfg.commandOverlayConfig()),
 		text.WithCommandAliases(cfg.commandAliases()),
 		text.WithPromptConfig(cfg.promptConfig()),
-		text.WithInterrupter(term.FuncInterrupter(func() error {
-			if !h.publishEvent(term.Event{Type: term.EventInterrupt}) {
-				return errEventStreamNotReady
-			}
-			return nil
-		})),
+		text.WithInterrupter(interrupter),
 		text.WithSendNone(func() {
 			h.publishEvent(term.Event{Type: term.EventNone})
 		}),

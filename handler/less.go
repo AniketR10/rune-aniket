@@ -181,8 +181,10 @@ func (l *Less) normalHandleEvent(ev term.Event) (exit, handled bool) {
 }
 
 func (l *Less) setMessage(msg string) {
-	l.msg = component.StringResponsive(msg, component.StringConfig{
-		Alignment: component.SpanAlignmentRight,
+	l.msg = component.StringResponsive(msg, component.StringResponsiveConfig{
+		StringConfig: component.StringConfig{
+			Alignment: component.SpanAlignmentRight,
+		},
 	})
 	l.msgVirt.C = l.msg
 }
@@ -190,8 +192,10 @@ func (l *Less) setMessage(msg string) {
 func (l *Less) setMessageAlt(msg string) {
 	b := cell.CellsToBuffer(nil, 4)
 	b.WriteString(msg)
-	l.msgAlt = component.Buffer(b, component.StringConfig{
-		Alignment: component.SpanAlignmentLeft,
+	l.msgAlt = component.Buffer(b, component.StringResponsiveConfig{
+		StringConfig: component.StringConfig{
+			Alignment: component.SpanAlignmentLeft,
+		},
 	})
 	l.msgAltVirt.C = l.msgAlt
 	l.msgAltWidth = b.MaxColumns()

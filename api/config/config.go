@@ -17,7 +17,7 @@ var (
 	ErrInvalidAttributeValue = errors.New("attribute value is invalid")
 )
 
-// Config is the interface implemented by a plugin configuration provider.
+// Config is the interface implemented by a configuration provider.
 type Config interface {
 	GetInt(string) (int, error)
 	GetFloat(string) (float64, error)
@@ -123,7 +123,7 @@ func GetDuration(
 	durStr, err := pconfig.GetString(key)
 	if err != nil {
 		if err != ErrNotFound {
-			err = fmt.Errorf("Error getting '%s' from plugin config: %v", key, err)
+			err = fmt.Errorf("Error getting '%s' from config: %v", key, err)
 			return 0, err
 		}
 		return def, nil
@@ -131,7 +131,7 @@ func GetDuration(
 
 	duration, err := time.ParseDuration(durStr)
 	if err != nil {
-		err = fmt.Errorf("Error parsing duration '%s' from plugin config: %v", key, err)
+		err = fmt.Errorf("Error parsing duration '%s' from config: %v", key, err)
 		return 0, err
 	}
 

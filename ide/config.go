@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"strings"
+	"time"
 
 	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
@@ -14,6 +15,7 @@ import (
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/component"
+	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/handler"
 	plugutil "unstable.build/go-tui/plugin/util"
 	"unstable.build/go-tui/term"
@@ -447,9 +449,74 @@ func (c ideConfig) getBrowserAttr(
 	return c.getConfigAttr("browser", key, def)
 }
 
-func (c ideConfig) messageBarAttr() term.Attributes {
-	return c.getBrowserAttr("message_bar_attr",
-		browser.DefaultConfig().MessageBarAttr)
+func (c ideConfig) notifications() (config.Config, bool) {
+	if c.cfg == nil {
+		return nil, false
+	}
+	return c.getConfig(config.MapConfig(c.cfg), "notifications")
+}
+
+func (c ideConfig) notificationsCharset(def component.FrameCharSet) (
+	cs component.FrameCharSet,
+) {
+	cs = def
+	cfg, ok := c.notifications()
+	if !ok {
+		return
+	}
+	cfgCs, err := config.GetFrameCharset(cfg, "frame_charset", cs)
+	if err != nil {
+		if err != config.ErrNotFound {
+			c.errors[fmt.Sprintf("notifications.%s", "frame_charset")] = err
+		}
+		return
+	}
+	cs = cfgCs
+	return
+}
+
+func (c ideConfig) notificationsBool(key string, def bool) (ret bool) {
+	ret = def
+	cfg, ok := c.notifications()
+	if !ok {
+		return
+	}
+	cfgFrame, err := cfg.GetBool(key)
+	if err != nil {
+		if err != config.ErrNotFound {
+			c.errors[fmt.Sprintf("notifications.%s", key)] = err
+		}
+		return
+	}
+	ret = cfgFrame
+	return
+}
+
+func (c ideConfig) notificationsDuration(key string, def time.Duration) (ret time.Duration) {
+	ret = def
+	cfg, ok := c.notifications()
+	if !ok {
+		return
+	}
+	cfgDur, err := config.GetDuration(cfg, key, def)
+	if err != nil {
+		if err != config.ErrNotFound {
+			c.errors[fmt.Sprintf("notifications.%s", key)] = err
+		}
+		return
+	}
+	ret = cfgDur
+	return
+}
+
+func (c ideConfig) notificationsConfig() notifications.Config {
+	ret := browser.DefaultConfig().Notifications
+	ret.Attributes = c.getConfigAttr("notifications", "attr", ret.Attributes)
+	ret.BackgroundAttributes = c.getConfigAttr("notifications", "background_attr", ret.BackgroundAttributes)
+	ret.FrameCharSet = c.notificationsCharset(ret.FrameCharSet)
+	ret.ProgressBar = c.notificationsBool("progress_bar", ret.ProgressBar)
+	ret.AutoClose = c.notificationsDuration("auto_close", ret.AutoClose)
+	return ret
 }
 
 func (c ideConfig) focusTabAttr() term.Attributes {

@@ -399,3 +399,14 @@ workspace:
     fg: *color2
   #wallpaper_background_attr:
     #bg: default
+
+notifications:
+  auto_close: 5s
+  progress_bar: true
+  attr:
+    fg: *color1
+    bg: default
+  background_attr:
+    fg: default
+    bg: default
+  frame_charset: *frame_charset

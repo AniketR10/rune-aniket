@@ -91,9 +91,11 @@ func (l *List) Init(cfg ListConfig) {
 
 	l.searchBar.internalRead = cell.NewBuffer()
 	l.searchBar.Responsive = component.Buffer(
-		l.searchBar.internalRead, component.StringConfig{
-			Attributes:           l.cfg.textAttr,
-			BackgroundAttributes: l.cfg.textAttr,
+		l.searchBar.internalRead, component.StringResponsiveConfig{
+			StringConfig: component.StringConfig{
+				Attributes:           l.cfg.textAttr,
+				BackgroundAttributes: l.cfg.textAttr,
+			},
 		})
 	l.searchBar.C = l.searchBar.Responsive
 	l.searchBar.dirty = true

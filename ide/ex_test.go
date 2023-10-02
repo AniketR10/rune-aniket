@@ -19,6 +19,7 @@ import (
 	browsertest "unstable.build/go-tui/browser/test"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
+	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
@@ -277,6 +278,7 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 	bh, b, err := constructor(texttest.NopEditor(),
 		text.WithCommandKey(testCommandKey),
 		text.WithCommandKeyBinding(term.KeyComb{Ch: '4'}, []string{"closeWindow"}),
+		text.WithNotificationsConfig(notificationsConfig()),
 	)
 	require.NoError(t, err)
 
@@ -386,15 +388,15 @@ IIII`},
 	require.NoError(t, b.SetMessage("wasup: %s", "Z"))
 	cases = []testutil.HandlerSequenceTestCase{
 		{"",
-			`┌──────────────────┐
-│other.go          │
-├──────────────────┤
+			`┌──── ┌──────────┐  
+│othe │ wasup: Z │  
+├──── └──────────┘  
 │IIIIIIIIIIIIIIIIII│
 │IIIIIIIIIIIIIIIIII│
 │IIIIIIIIIIIIIIIIII│
 │IIIIIIIIIIIIIIIIII│
 │IIIIIIIIIIIIIIIIII│
-│wasup: Z          │
+│IIIIIIIIIIIIIIIIII│
 └──────────────────┘`},
 	}
 	testutil.TestHandlerSequence(t, bh, 20, 10, cases)
@@ -410,37 +412,37 @@ IIII`},
 
 	cases = []testutil.HandlerSequenceTestCase{
 		{"b",
-			`┌──────────────────┐
-│other.go  bugz    │
-├──────────────────┤
+			`┌──── ┌──────────┐  
+│othe │ wasup: Z │  
+├──── └──────────┘  
 │BBBBBBBBBBBBBBBBBB│
 │BBBBBBBBBBBBBBBBBB│
 │BBBBBBBBBBBBBBBBBB│
 │BBBBBBBBBBBBBBBBBB│
 │BBBBBBBBBBBBBBBBBB│
-│wasup: Z          │
+│BBBBBBBBBBBBBBBBBB│
 └──────────────────┘`},
 		{":3>",
-			`┌──────────────────┐
-│other.go  bugz    │
-├──────────────────┤
+			`┌──── ┌──────────┐  
+│othe │ wasup: Z │  
+├──── └──────────┘  
 │BBBBBBBBBBBBBBBBBB│
 │BBBBBBBBBBBBBBBBBB│
 │▐BBBBBBBBBBBBBBBBB│
 │BBBBBBBBBBBBBBBBBB│
 │BBBBBBBBBBBBBBBBBB│
-│wasup: Z          │
+│BBBBBBBBBBBBBBBBBB│
 └──────────────────┘`},
 		{":0>",
-			`┌──────────────────┐
-│other.go  bugz    │
-├──────────────────┤
+			`┌──── ┌──────────┐  
+│othe │ wasup: Z │  
+├──── └──────────┘  
 │BBBBBBBBBBBBBBBBBB│
 │BBBBBBBBBBBBBBBBBB│
 │BBBBBBBBBBBBBBBBBB│
 │BBBBBBBBBBBBBBBBBB│
 │BBBBBBBBBBBBBBBBBB│
-│wasup: Z          │
+│BBBBBBBBBBBBBBBBBB│
 └──────────────────┘`},
 	}
 	testutil.TestHandlerSequence(t, bh, 20, 10, cases)
@@ -457,9 +459,9 @@ IIII`},
 	require.Error(t, err)
 	cases = []testutil.HandlerSequenceTestCase{
 		{"",
-			`┌──────────────────┐
-│other.go  bugz    │
-├──────────────────┤
+			`┌──── ┌──────────┐  
+│othe │ wasup: Z │  
+├──── └──────────┘  
 │┌────┐BBBBBBBBBBBB│
 ││AAAA│BBBBBBBBBBBB│
 ││AAAA│BBBBBBBBBBBB│
@@ -468,15 +470,15 @@ IIII`},
 │BBBBBBBBBBBBBBBBBB│
 └──────────────────┘`},
 		{":reloadFile>", // test reload non file
-			`┌──────────────────┐
-│other.go  bugz    │
-├──────────────────┤
-│┌────┐BBBBBBBBBBBB│
-││AAAA│BBBBBBBBBBBB│
-││AAAA│BBBBBBBBBBBB│
+			`┌────┌────────────┐ 
+│othe│ not a file │ 
+├────└────────────┘ 
+│┌─── ┌──────────┐  
+││AAA │ wasup: Z │  
+││AAA └──────────┘  
 │└────┘BBBBBBBBBBBB│
 │BBBBBBBBBBBBBBBBBB│
-│not a file        │
+│BBBBBBBBBBBBBBBBBB│
 └──────────────────┘`},
 	}
 
@@ -486,15 +488,15 @@ IIII`},
 
 	cases = []testutil.HandlerSequenceTestCase{
 		{"",
-			`┌──────────────────┐
-│other.go  bugz    │
-├──────────────────┤
+			`┌────┌────────────┐ 
+│othe│ not a file │ 
+├────└────────────┘ 
+│BBBB ┌──────────┐  
+│BBBB │ wasup: Z │  
+│BBBB └──────────┘  
 │BBBBBBBBBBBBBBBBBB│
 │BBBBBBBBBBBBBBBBBB│
 │BBBBBBBBBBBBBBBBBB│
-│BBBBBBBBBBBBBBBBBB│
-│BBBBBBBBBBBBBBBBBB│
-│not a file        │
 └──────────────────┘`},
 	}
 	testutil.TestHandlerSequence(t, bh, 20, 10, cases)
@@ -511,15 +513,15 @@ IIII`},
 	// test case for issue #27
 	cases = []testutil.HandlerSequenceTestCase{
 		{":e ait^^^aix^^^^ airsoft.map>",
-			`┌────────────────────────────────────────────────┐
-│other.go  bugz  airsoft.map                     │
-├────────────────────────────────────────────────┤
-│000000000000000000000000000000000000000000000000│
-├─┬────────────────────────────────────────────┬─┤
-│2│AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA│3│
+			`┌──────────────────────────────────┌────────────┐ 
+│other.go  bugz  airsoft.map       │ not a file │ 
+├──────────────────────────────────└────────────┘ 
+│0000000000000000000000000000000000 ┌──────────┐  
+├─┬──────────────────────────────── │ wasup: Z │  
+│2│AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA └──────────┘  
 │2│AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA│3│
 ├─┴────────────────────────────────────────────┴─┤
-│not a file                                      │
+│111111111111111111111111111111111111111111111111│
 └────────────────────────────────────────────────┘`},
 	}
 	testutil.TestHandlerSequence(t, bh, 50, 10, cases)
@@ -949,26 +951,26 @@ func newExForTesting(t *testing.T, ed text.Editor, opts ...text.Option) testEx {
 func TestNewWindow(t *testing.T) {
 	cases := []testutil.HandlerSequenceTestCase{
 		{":newWindow>:changeSplitOrientation h>:newWindow>",
-			`┌──────────────────┐
-│                  │
-├────────┐┌────────┤
-│        ││        │
-│        ││        │
+			` ┌────────────────┐ 
+ │ changed split  │ 
+ │ direction to   │ 
+ │ horizontal     │ 
+ └────────────────┘ 
 │        │└────────┘
-│changed split dire┐
-│ction to horizonta│
-│l                 │
+│        │┌────────┐
+│        ││        │
+│        ││        │
 └────────┘└────────┘`},
 		{":close>:close>aaaaaaa",
-			`┌──────────────────┐
+			` ┌────────────────┐ 
+ │ changed split  │ 
+ │ direction to   │ 
+ │ horizontal     │ 
+ └────────────────┘ 
 │                  │
-├──────────────────┤
 │                  │
 │                  │
 │                  │
-│changed split dire│
-│ction to horizonta│
-│l                 │
 └──────────────────┘`},
 	}
 
@@ -1072,19 +1074,25 @@ func TestExposedRootNodeIssue(t *testing.T) {
 	}
 	cases := []testutil.HandlerSequenceTestCase{
 		{":boom>",
-			`┌──────────────────┐
-│                  │
-┌────────┐┌────────┤
-│        ││        │
-│        ││        │
-│        │└────────┘
-│        │┌───┐┌───┐
-│changed split dire│
-│ction to vertical │
+			` ┌────────────────┐ 
+ │ changed split  │ 
+┌│ direction to   │ 
+ └────────────────┘ 
+ ┌────────────────┐ 
+ │ changed split  │ 
+ │ direction to   │ 
+ │ horizontal     │ 
+ └────────────────┘ 
 └────────┘└───┘└───┘`},
 	}
 
 	b := newExForTesting(t, texttest.NopEditor(), opts...)
 	defer b.Close()
 	testutil.TestHandlerSequence(t, b, 20, 10, cases)
+}
+
+func notificationsConfig() notifications.Config {
+	ret := browser.DefaultConfig().Notifications
+	ret.Width = 15
+	return ret
 }

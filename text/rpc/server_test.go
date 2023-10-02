@@ -12,7 +12,9 @@ import (
 	"github.com/stretchr/testify/require"
 	textapi "unstable.build/go-tui/api/text"
 	workspaceapi "unstable.build/go-tui/api/workspace"
+	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/cell"
+	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/proto"
 	prototest "unstable.build/go-tui/proto/test"
 	"unstable.build/go-tui/term"
@@ -224,7 +226,14 @@ func TestServerSetLocationList(t *testing.T) {
 
 		broker := proto.NewMockMuxBroker(ctrl)
 		ed := texttest.NopEditor()
-		c, err := text.NewComponent(ed, &testLoader{}, text.Config{})
+		c, err := text.NewComponent(ed, &testLoader{}, text.Config{
+			Config: browser.Config{
+				Notifications: notifications.Config{
+					Width:     10,
+					AutoClose: 30 * time.Minute,
+				},
+			},
+		})
 		require.NoError(t, err)
 		s := NewServer(broker, c, new(sync.Mutex))
 

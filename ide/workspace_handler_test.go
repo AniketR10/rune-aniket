@@ -290,25 +290,25 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 └──────────────────┘`},
 		{":cwo>:cwo>",
 			`┌──────────────────┐
-│                  │
-├──────────────────┤
-│                  │
+│workspace tab is  │
+│empty             │
+└──────────────────┘
 │workspaceWallpaper│
-│workspace tab is e│
-│mpty              │
+│                  │
+│                  │
 ├──────────────────┤
 │1                 │
 └──────────────────┘`},
 		{":sw 100>",
 			`┌──────────────────┐
-│                  │
-├──────────────────┤
-│                  │
-│                  │
+│ invalid          │
+│ workspace:       │
+│ there's only 10  │
+└──────────────────┘
 │workspaceWallpaper│
-│invalid workspace:│
-│ there's only 10 w│
-│orkspaces         │
+│                  │
+│                  │
+│                  │
 └──────────────────┘`},
 		{":addBlaBla>", // addWorkspace should work on a workspace, use next avail
 			`┌──────────────────┐
@@ -345,12 +345,12 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 └──────────────────┘`},
 		{"2:sw>",
 			`┌──────────────────┐
+│ invalid          │
+│ arguments.       │
+│ Expecting 1      │
+│ argument with    │
+└──────────────────┘
 │                  │
-├──────────────────┤
-│invalid arguments.│
-│ Expecting 1 argum│
-│ent with workspace│
-│ number           │
 ├──────────────────┤
 │1  2              │
 └──────────────────┘`},

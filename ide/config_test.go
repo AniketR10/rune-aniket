@@ -4,6 +4,7 @@ import (
 	"io/ioutil"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
@@ -60,6 +61,24 @@ command:
         - else
     <-x>f: invalidMapping
 
+notifications:
+    auto_close: 1s
+    progress_bar: false
+    attr:
+        bg: red
+        fg: 219
+    background_attr:
+        bg: red
+        fg: 219
+    frame_charset:
+        horizontalbottom: '━'
+        horizontaltop: '━'
+        verticalleft: '┃'
+        verticalright: '┃'
+        topleft: '┏'
+        topright: '┓'
+        bottomleft: '┗'
+        bottomright: '┛'
 browser:
     tabspaces: 4
     prompt:
@@ -120,20 +139,27 @@ func assertDefaultConfig(t *testing.T, cfg *ideConfig) {
 	assert.Equal(t, term.Output256, cfg.outputMode())
 	assert.Equal(t, term.InputCurrent, cfg.inputMode())
 	assert.Equal(t, component.DefaultFrameUnionCharSet(), cfg.frameUnionCharset())
-	assert.Equal(t, browser.DefaultConfig().MessageBarAttr, cfg.messageBarAttr())
+
+	actualNotifications := cfg.notificationsConfig()
+	expectedNotifications := browser.DefaultConfig().Notifications
+	assert.NotNil(t, actualNotifications.Interrupter)
+	actualNotifications.Interrupter = nil
+	expectedNotifications.Interrupter = nil
+	assert.Equal(t, expectedNotifications, actualNotifications)
+
 	assert.Equal(t, browser.DefaultConfig().FocusTabAttr, cfg.focusTabAttr())
 	assert.Equal(t, browser.DefaultConfig().NonFocusTabAttr, cfg.nonFocusTabAttr())
 	assert.Equal(t, browser.DefaultConfig().WallpaperAttr, cfg.workspaceWallpaperAttr())
 	assert.Equal(t, browser.DefaultConfig().WallpaperBackgroundAttr, cfg.workspaceWallpaperBackgroundAttr())
 }
 
-func TestDefaultConfig(t *testing.T) {
+func TestConfigDefault(t *testing.T) {
 	ret := new(ideConfig)
 	initDefaultConfig(ret, "myWallpaper")
 	assertDefaultConfig(t, ret)
 }
 
-func TestDecodeConfigError(t *testing.T) {
+func TestConfigDecodeError(t *testing.T) {
 	f, err := ioutil.TempFile("", "")
 	require.NoError(t, err)
 	_, err = f.WriteString("||\\n\x00{'BABY':'$$'}")
@@ -193,7 +219,15 @@ func TestConfigSetting(t *testing.T) {
 	expectedFUCs := component.FrameUnionCharSet{Left: '┣', Right: '┫', Top: '┫', Bottom: '┫'}
 	assert.Equal(t, expectedFUCs, cfg.frameUnionCharset())
 
-	assert.Equal(t, term.Attributes{Fg: term.ColorWhite, Bg: term.ColorCyan}, cfg.messageBarAttr())
+	notifications := cfg.notificationsConfig()
+	assert.False(t, notifications.ProgressBar)
+	assert.Equal(t, 1*time.Second, notifications.AutoClose)
+	assert.Equal(t, component.FrameCharSetHighlight(), notifications.FrameCharSet)
+	assert.Equal(t, term.Attributes{Fg: term.Attribute(219), Bg: term.ColorRed},
+		notifications.Attributes)
+	assert.Equal(t, term.Attributes{Fg: term.Attribute(219), Bg: term.ColorRed},
+		notifications.BackgroundAttributes)
+
 	assert.Equal(t, term.Attributes{Fg: term.Attribute(219)}, cfg.focusTabAttr())
 	assert.Equal(t, term.Attributes{Fg: term.ColorWhite}, cfg.nonFocusTabAttr())
 	assert.Equal(t, term.Attributes{Fg: term.ColorYellow, Bg: term.ColorWhite}, cfg.workspaceWallpaperAttr())

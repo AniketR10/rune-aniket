@@ -15,6 +15,8 @@ type StringConfig struct {
 	BackgroundAttributes term.Attributes
 	BackgroundRune       rune
 	Tabspaces            int
+	PaddingVertical      int
+	PaddingHorizontal    int
 }
 
 // String is a tui.Component that draws a string with or without
@@ -31,7 +33,8 @@ type String struct {
 func NewStringWithConfig(str string, cfg StringConfig) String {
 	cells := cell.StringToCells(str, cfg.Tabspaces)
 	return String{newStringComp(cells, cfg.Attributes, cfg.BackgroundRune,
-		cfg.BackgroundAttributes, cfg.FrameCharSet, 0, 0, cfg.Alignment)}
+		cfg.BackgroundAttributes, cfg.FrameCharSet,
+		cfg.PaddingHorizontal, cfg.PaddingVertical, cfg.Alignment)}
 }
 
 // NewString converts a string into a very efficient top left centered one line tui.Component

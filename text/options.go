@@ -6,6 +6,7 @@ import (
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/component"
+	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/term"
 )
@@ -127,11 +128,11 @@ func WithWindowManagerConfig(config handler.WindowManagerConfig) Option {
 	}
 }
 
-// WithMessageBarAttr returns an Option that configures
-// a Component's message bar attr.
-func WithMessageBarAttr(attr term.Attributes) Option {
+// WithNotificationsConfig returns an Option that configures
+// a Component's notifications.
+func WithNotificationsConfig(c notifications.Config) Option {
 	return func(cfg *Config) {
-		cfg.MessageBarAttr = attr
+		cfg.Notifications = c
 	}
 }
 

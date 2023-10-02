@@ -2,6 +2,7 @@ package test
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -10,6 +11,7 @@ import (
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	browser "unstable.build/go-tui/browser"
 	"unstable.build/go-tui/component"
+	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/term"
 	testutil "unstable.build/go-tui/util/test"
@@ -51,7 +53,7 @@ func freeTabs(c *browser.Component) (ret int) {
 func TestComponentCloseWindow(t *testing.T) {
 
 	t.Run("closing the last window returns error", func(t *testing.T) {
-		c := browser.NewComponent(browser.Config{})
+		c := browser.NewComponent(browserConfig())
 		assert.Error(t, c.Focus().Close())
 
 		// makes sure that window list is not corrupted
@@ -61,7 +63,7 @@ func TestComponentCloseWindow(t *testing.T) {
 	for _, _tcase := range splitSuite {
 		tcase := _tcase
 		t.Run(tcase.method+"closes window correctly", func(t *testing.T) {
-			c := browser.NewComponent(browser.Config{})
+			c := browser.NewComponent(browserConfig())
 			uri, err := workspaceapi.ParseURI("file:///OAK")
 			require.NoError(t, err)
 
@@ -80,7 +82,7 @@ func TestComponentCloseWindow(t *testing.T) {
 		})
 
 		t.Run(tcase.method+"Close is idempotent", func(t *testing.T) {
-			c := browser.NewComponent(browser.Config{})
+			c := browser.NewComponent(browserConfig())
 			win, ok := tcase.split(c, NewTestHandler())
 			require.True(t, ok)
 			require.NoError(t, win.Close())
@@ -88,7 +90,7 @@ func TestComponentCloseWindow(t *testing.T) {
 		})
 
 		t.Run(tcase.method+"close window on handler exit", func(t *testing.T) {
-			c := browser.NewComponent(browser.Config{})
+			c := browser.NewComponent(browserConfig())
 			var h browserapi.Handler
 			h = NewTestHandler()
 			h.(*TestHandler).Exit = true
@@ -110,7 +112,7 @@ func TestComponentCloseWindow(t *testing.T) {
 		})
 
 		t.Run(tcase.method+"trying to close last window does not corrupt state", func(t *testing.T) {
-			c := browser.NewComponent(browser.Config{})
+			c := browser.NewComponent(browserConfig())
 
 			require.Error(t, c.Focus().Close())
 
@@ -128,8 +130,8 @@ func updateWithNextFreeTab(c *browser.Component, win browser.Window) bool {
 }
 
 func TestComponentRemoveAllTabs(t *testing.T) {
-	w1 := browser.NewComponent(browser.Config{})
-	w2 := browser.NewComponent(browser.Config{})
+	w1 := browser.NewComponent(browserConfig())
+	w2 := browser.NewComponent(browserConfig())
 	w2.Split(browserapi.OrientationDefault, w2.Focus(), NewTestHandler())
 
 	tsuite := []struct {
@@ -204,7 +206,7 @@ func TestComponentSetContent(t *testing.T) {
 	for _, _tcase := range splitSuite {
 		tcase := _tcase
 		t.Run(tcase.method, func(t *testing.T) {
-			c := browser.NewComponent(browser.Config{})
+			c := browser.NewComponent(browserConfig())
 			win0 := c.Focus()
 			uri, err := workspaceapi.ParseURI("file:///Merry_Christmas")
 			require.NoError(t, err)
@@ -254,7 +256,7 @@ func TestComponentEditWindowTab(t *testing.T) {
 	for _, _tcase := range splitSuite {
 		tcase := _tcase
 		t.Run(tcase.method, func(t *testing.T) {
-			c := browser.NewComponent(browser.Config{})
+			c := browser.NewComponent(browserConfig())
 			win0 := c.Focus()
 			uri1, err := workspaceapi.ParseURI("file:///AMZN")
 			require.NoError(t, err)
@@ -325,7 +327,7 @@ func TestComponentEditWindowTab(t *testing.T) {
 }
 
 func TestComponentSetContentUnmount(t *testing.T) {
-	c := browser.NewComponent(browser.Config{})
+	c := browser.NewComponent(browserConfig())
 	win0 := c.Focus()
 	h1 := NewTestHandler()
 	h2 := NewTestHandler()
@@ -518,23 +520,25 @@ X──────────────────┐
 func TestComponentSetMessage(t *testing.T) {
 	w := term.NewStringWriter(24, 8)
 	cfg := browser.DefaultConfig()
+	cfg.Notifications.AutoClose = 1 * time.Minute
+	cfg.Notifications.Width = 15
 	c := browser.NewComponent(cfg)
 	c.Resize(20, 8)
 
-	c.SetMessage("wasup: %s", "hola")
 	c.SetMessage("wasup: %s", "holaaaaaaaaaaaaaaaaaaaaaaaaa")
+	c.SetMessage("wasup: %s", "hola")
 
 	tests := []testutil.ComponentTestCase{
 		{
 			nil, `
-┌──────────────────┐    
-│                  │    
-├──────────────────┤    
-│                  │    
-│                  │    
-│wasup: holaaaaaaaa│    
-│aaaaaaaaaaaaaaaaa │    
-└──────────────────┘    `,
+┌────┌─────────────┐    
+│    │ wasup: hola │    
+├────└─────────────┘    
+│    ┌─────────────┐    
+│    │wasup:       │    
+│    │holaaaaaaaaaa│    
+│    │aaaaaaaaaaaaa│    
+└────└─────────────┘    `,
 		},
 	}
 
@@ -825,4 +829,13 @@ func (c *contentSwapper) Handle(ev term.Event) (bool, bool) {
 
 func (c *contentSwapper) Close() error {
 	return nil
+}
+
+func browserConfig() browser.Config {
+	return browser.Config{
+		Notifications: notifications.Config{
+			AutoClose: 1 * time.Minute,
+			Width:     1,
+		},
+	}
 }

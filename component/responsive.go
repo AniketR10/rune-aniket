@@ -21,14 +21,21 @@ type Responsive interface {
 	Height(width int) int
 }
 
+type StringResponsiveConfig struct {
+	// NoSplitWords instructs the underlying string responsive component
+	// to attempt to not split words in half when possible.
+	NoSplitWords bool
+	StringConfig
+}
+
 // StringResponsive returns a Responsive implementation of
 // a string tui.Component.
-func StringResponsive(str string, cfg StringConfig) Responsive {
+func StringResponsive(str string, cfg StringResponsiveConfig) Responsive {
 	return Cells(cell.StringToCells(str, cfg.Tabspaces), cfg)
 }
 
 // Cells returns a Responsive implementation for a matrix of cells.
-func Cells(cells [][]term.Cell, cfg StringConfig) Responsive {
+func Cells(cells [][]term.Cell, cfg StringResponsiveConfig) Responsive {
 	return &respStr{
 		cfg: cfg,
 		in:  cells,
@@ -38,12 +45,12 @@ func Cells(cells [][]term.Cell, cfg StringConfig) Responsive {
 // Buffer wraps a cell.Buffer and returns a tui.Component which satisfies
 // Responsive. Note that this is not the most efficient implementation of tui.Component
 // for a cell.Buffer. See component.Scroll for more details.
-func Buffer(buf *cell.Buffer, cfg StringConfig) Responsive {
+func Buffer(buf *cell.Buffer, cfg StringResponsiveConfig) Responsive {
 	return &respBuf{buf: buf, respStr: respStr{cfg: cfg}}
 }
 
 type respStr struct {
-	cfg StringConfig
+	cfg StringResponsiveConfig
 	in  [][]term.Cell
 	out tui.Component
 }
@@ -75,23 +82,42 @@ func (s *respStr) Height(width int) int {
 		return 0
 	}
 	height := len(s.in)
+	if width > 2 && s.cfg.FrameCharSet != (FrameCharSet{}) {
+		height += 2
+		width -= 2
+	}
 	for _, col := range s.in {
 		height += (len(col) - 1) / width
-	}
-	if s.cfg.FrameCharSet != (FrameCharSet{}) {
-		height += 2
 	}
 	return height
 }
 
 // Resize satisfies tui.Component.
 func (s *respStr) Resize(width, height int) {
+	effectiveWidth := width
+	if width > 2 && s.cfg.FrameCharSet != (FrameCharSet{}) {
+		effectiveWidth -= 2
+	}
+
 	var outRaw [][]term.Cell
 	for _, col := range s.in {
+		if len(col) == 0 {
+			outRaw = append(outRaw, col[:])
+			continue
+		}
 		for len(col) > 0 {
-			chunkLen := int(math.Min(float64(len(col)), float64(width)))
+			chunkLen := int(math.Min(float64(len(col)), float64(effectiveWidth)))
 			if chunkLen == 0 {
 				break
+			}
+			origChunkLen := chunkLen
+			// do not split word in half
+			for s.cfg.NoSplitWords && origChunkLen != len(col) && chunkLen > 1 && col[chunkLen-1].Ch != ' ' {
+				chunkLen--
+			}
+			// word doesn't fit, split word
+			if chunkLen == 1 {
+				chunkLen = origChunkLen
 			}
 			outRaw = append(outRaw, col[:chunkLen])
 			col = col[chunkLen:]
@@ -99,7 +125,7 @@ func (s *respStr) Resize(width, height int) {
 	}
 	s.out = newStringComp(outRaw, s.cfg.Attributes, 0,
 		s.cfg.BackgroundAttributes, s.cfg.FrameCharSet,
-		0, 0, s.cfg.Alignment)
+		s.cfg.PaddingHorizontal, s.cfg.PaddingVertical, s.cfg.Alignment)
 	s.out.Resize(width, height)
 }
 

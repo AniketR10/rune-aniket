@@ -100,9 +100,11 @@ func (h *Prompt) doInit(
 
 	h.buf.Init()
 	h.responsive = component.Buffer(&h.buf,
-		component.StringConfig{
-			Attributes:           config.ElementAttr,
-			BackgroundAttributes: config.ElementAttr,
+		component.StringResponsiveConfig{
+			StringConfig: component.StringConfig{
+				Attributes:           config.ElementAttr,
+				BackgroundAttributes: config.ElementAttr,
+			},
 		})
 
 	h.list.Init(listCfg)

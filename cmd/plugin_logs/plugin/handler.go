@@ -141,11 +141,13 @@ func (s *logsHandler) setPinned(matches []search.Match) {
 	}
 }
 
-func (s *logsHandler) defaultStringConfig() component.StringConfig {
-	return component.StringConfig{
-		Alignment:      component.SpanAlignmentLeft,
-		BackgroundRune: ' ',
-		Attributes:     s.pinAttr,
+func (s *logsHandler) defaultStringConfig() component.StringResponsiveConfig {
+	return component.StringResponsiveConfig{
+		StringConfig: component.StringConfig{
+			Alignment:      component.SpanAlignmentLeft,
+			BackgroundRune: ' ',
+			Attributes:     s.pinAttr,
+		},
 	}
 }
 

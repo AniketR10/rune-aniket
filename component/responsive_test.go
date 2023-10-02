@@ -15,7 +15,7 @@ func TestResponsiveStringDraw(t *testing.T) {
 		tcases := []struct {
 			in  string
 			out string
-			cfg StringConfig
+			cfg StringResponsiveConfig
 		}{
 			{
 				in:  "aaaa",
@@ -52,7 +52,7 @@ func TestResponsiveStringDraw(t *testing.T) {
 		tcases := []struct {
 			in  string
 			out string
-			cfg StringConfig
+			cfg StringResponsiveConfig
 		}{
 			{
 				in:  "XXXXXXXXXX\nBBBBBBBBBB\nCCCCCCCCCCCC\nDDDDDDDDDD\nEEEEEEEEEEE\nFFFFFFFFFF\n",
@@ -65,6 +65,54 @@ func TestResponsiveStringDraw(t *testing.T) {
 			{
 				in:  "X\n1111 \n222222222222222222222222222222222",
 				out: "X    \n1111 \n22222\n22222\n22222",
+			},
+			{
+				in: "X\n111\n222222222222222222222222222222222",
+				out: `┌───┐
+│X  │
+│111│
+│222│
+└───┘`,
+				cfg: StringResponsiveConfig{StringConfig: StringConfig{FrameCharSet: FrameCharSetDefault()}},
+			},
+			{
+				in: "XXXX\n111\n22",
+				out: `┌───┐
+│XXX│
+│X  │
+│111│
+└───┘`,
+				cfg: StringResponsiveConfig{StringConfig: StringConfig{FrameCharSet: FrameCharSetDefault()}},
+			},
+		}
+
+		for _, tcase := range tcases {
+			t.Run("StringResponsive", func(t *testing.T) {
+				testString(t, func(in string) tui.Component {
+					return StringResponsive(in, tcase.cfg)
+				}, 5, 5, tcase.in, tcase.out)
+			})
+
+			t.Run("BufferResponsive", func(t *testing.T) {
+				testString(t, func(in string) tui.Component {
+					b := cell.NewBuffer()
+					b.WriteString(in)
+					return Buffer(b, tcase.cfg)
+				}, 5, 5, tcase.in, tcase.out)
+			})
+		}
+	})
+
+	t.Run("should not split words in half", func(t *testing.T) {
+		tcases := []struct {
+			in  string
+			out string
+			cfg StringResponsiveConfig
+		}{
+			{
+				in:  "XX XX XX\nYYYYY YYYY\nZZZZZZZZZZZZ ZZZZZZZZZZZZ ZZZZZZZZZZZZ",
+				out: "XX   \nXX XX\nYYYYY\n YYYY\nZZZZZ",
+				cfg: StringResponsiveConfig{NoSplitWords: true},
 			},
 		}
 
@@ -91,6 +139,7 @@ func TestResponsiveHeight(t *testing.T) {
 		in    string
 		width int
 		out   int
+		cfg   StringResponsiveConfig
 	}{
 		{
 			in:    "XXXXXXXXXX\nBBBBBBBBBB\nCCCCCCCCCCCC\nDDDDDDDDDD\nEEEEEEEEEEE\nFFFFFFFFFF\n",
@@ -122,18 +171,42 @@ func TestResponsiveHeight(t *testing.T) {
 			width: 0, // could trigger division by zero
 			out:   0,
 		},
+		{
+			in:    "X\nX\nX\nX\n",
+			width: 10,
+			out:   7,
+			cfg:   StringResponsiveConfig{StringConfig: StringConfig{FrameCharSet: FrameCharSetDefault()}},
+		},
+		{
+			in:    "X",
+			width: 5,
+			out:   3,
+			cfg:   StringResponsiveConfig{StringConfig: StringConfig{FrameCharSet: FrameCharSetDefault()}},
+		},
+		{
+			in:    "XXXXXXXXXX",
+			width: 10,
+			out:   4,
+			cfg:   StringResponsiveConfig{StringConfig: StringConfig{FrameCharSet: FrameCharSetDefault()}},
+		},
+		{
+			in:    "XXXXXXXXXX\nBBBBBBBBBB\nCCCCCCCCCCCC\nDDDDDDDDDD\nEEEEEEEEEEE\nFFFFFFFFFF\n",
+			width: 5,
+			out:   27,
+			cfg:   StringResponsiveConfig{StringConfig: StringConfig{FrameCharSet: FrameCharSetDefault()}},
+		},
 	}
 
 	for _, tcase := range tcases {
 		t.Run("StringResponsive", func(t *testing.T) {
-			s := StringResponsive(tcase.in, StringConfig{})
+			s := StringResponsive(tcase.in, tcase.cfg)
 			out := s.Height(tcase.width)
 			assert.Equal(t, tcase.out, out)
 		})
 		t.Run("BufferResponsive", func(t *testing.T) {
 			b := cell.CellsToBuffer(nil, 4)
 			b.WriteString(tcase.in)
-			s := Buffer(b, StringConfig{})
+			s := Buffer(b, tcase.cfg)
 			out := s.Height(tcase.width)
 			assert.Equal(t, tcase.out, out)
 		})
@@ -144,7 +217,7 @@ func TestBufferWithEdits(t *testing.T) {
 	t.Run("Height", func(t *testing.T) {
 		b := cell.CellsToBuffer(nil, 4)
 		b.WriteString("aa")
-		s := Buffer(b, StringConfig{})
+		s := Buffer(b, StringResponsiveConfig{})
 
 		height := s.Height(1)
 		assert.Equal(t, 2, height)
@@ -159,7 +232,7 @@ func TestBufferWithEdits(t *testing.T) {
 		w := term.NewStringWriter(5, 5)
 		b := cell.CellsToBuffer(nil, 4)
 		b.WriteString("a\nb\nc")
-		s := Buffer(b, StringConfig{})
+		s := Buffer(b, StringResponsiveConfig{})
 		s.Resize(4, 4)
 
 		s.Draw(w)
