@@ -21,7 +21,7 @@ EXECS=$(patsubst cmd/%/,$(BIN)/%,$(EXECDIRS))
 GOMOCKS=$(wildcard **/**/*_gomock.go) $(wildcard **/*_gomock.go)
 RELEASE_FILES=$(wildcard release/*)
 
-.PHONY: debug clean test coverage example_wasm generate
+.PHONY: debug clean test coverage example_wasm generate sixdev
 
 default: CGO_ENABLED=CGO_ENABLED=1
 default: $(EXAMPLES) $(EXECS)
@@ -29,6 +29,10 @@ default: $(EXAMPLES) $(EXECS)
 debug: GOFLAGS=-race
 debug: CGO_ENABLED=CGO_ENABLED=1
 debug: $(EXAMPLES) $(EXECS)
+
+sixdev: GOFLAGS=-race
+sixdev: CGO_ENABLED=CGO_ENABLED=1
+sixdev: $(EXAMPLES) bin/six
 
 example_wasm: $(EXAMPLE_WASM_BLOB)
 
