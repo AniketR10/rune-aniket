@@ -590,7 +590,7 @@ func (c *Component) dispatchEvent(ev textapi.Event) (handled bool) {
 
 // Notify formats the given msg and args and displays it on next Draw.
 func (c *Component) Notify(level notifications.Level, msg string, args ...interface{}) error {
-	c.comp.Notify(level, fmt.Sprintf(msg, args...))
+	c.comp.Notify(level, msg, args...)
 	return nil
 }
 

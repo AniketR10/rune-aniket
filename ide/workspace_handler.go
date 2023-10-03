@@ -543,7 +543,7 @@ func (h *workspaceManagerHandler) addWorkspace(
 	if err := os.MkdirAll(dataDir, 0777); err != nil {
 		return fmt.Errorf("mkdir .plugin: %v", err)
 	}
-	runner, err := h.pluginRunner.WorkspacePluginsRunner(h.mu, uri, res, dataDir)
+	runner, err := h.pluginRunner.WorkspacePluginsRunner(h.mu, uri, res, dataDir, ex.Browser())
 	if err != nil {
 		return fmt.Errorf("error initializing plugin manager: %v", err)
 	}

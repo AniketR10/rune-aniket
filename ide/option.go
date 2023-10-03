@@ -7,6 +7,7 @@ import (
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/api/config"
 	workspaceapi "unstable.build/go-tui/api/workspace"
+	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/plugin"
 )
 
@@ -104,7 +105,7 @@ type nopPlugins struct {
 func (n nopPlugins) WorkspacePluginsRunner(locker sync.Locker,
 	uri workspaceapi.URI,
 	res map[plugin.Permission]plugin.ResourceRegistrar,
-	dataDir string) (plugin.Runner, error) {
+	dataDir string, notifications browser.Notifications) (plugin.Runner, error) {
 	return nopPluginsRunner{}, nil
 }
 

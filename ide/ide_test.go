@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"unstable.build/go-tui/api/config"
 	workspaceapi "unstable.build/go-tui/api/workspace"
+	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/plugin"
 	"unstable.build/go-tui/term"
 )
@@ -143,7 +144,7 @@ func testRunnerFn(
 	locker sync.Locker,
 	uri workspaceapi.URI,
 	res map[plugin.Permission]plugin.ResourceRegistrar,
-	dataDir string) (plugin.Runner, error) {
+	dataDir string, n browser.Notifications) (plugin.Runner, error) {
 	return testRunner{}, nil
 }
 

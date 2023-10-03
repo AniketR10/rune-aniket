@@ -12,6 +12,7 @@ import (
 	"unstable.build/go-tui/api/config"
 	schemeapi "unstable.build/go-tui/api/scheme"
 	workspaceapi "unstable.build/go-tui/api/workspace"
+	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/plugin"
 	"unstable.build/go-tui/term"
 	testutil "unstable.build/go-tui/util/test"
@@ -77,7 +78,8 @@ func TestWorkspacePlugins(t *testing.T) {
 
 		runner := FuncPluginsRunner(
 			func(locker sync.Locker, _uri workspaceapi.URI,
-				res map[plugin.Permission]plugin.ResourceRegistrar, s string) (plugin.Runner, error) {
+				res map[plugin.Permission]plugin.ResourceRegistrar, s string, n browser.Notifications,
+			) (plugin.Runner, error) {
 				assert.Equal(t, uri, _uri)
 				return fnRunner{fn: func(pluginID, path string, cfg config.Config) error {
 					called = pluginID
@@ -120,7 +122,7 @@ func TestWorkspacePlugins(t *testing.T) {
 
 		runner := FuncPluginsRunner(
 			func(locker sync.Locker, _uri workspaceapi.URI,
-				res map[plugin.Permission]plugin.ResourceRegistrar, s string) (plugin.Runner, error) {
+				res map[plugin.Permission]plugin.ResourceRegistrar, s string, n browser.Notifications) (plugin.Runner, error) {
 				assert.Equal(t, uri, _uri)
 				return fnRunner{fn: func(pluginID, path string, cfg config.Config) error {
 					called = pluginID

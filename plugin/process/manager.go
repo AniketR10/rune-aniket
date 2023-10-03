@@ -15,6 +15,8 @@ import (
 	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui/api/config"
 	workspaceapi "unstable.build/go-tui/api/workspace"
+	"unstable.build/go-tui/browser"
+	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/plugin"
 	pluginpb "unstable.build/go-tui/plugin/rpc"
 	"unstable.build/go-tui/proto"
@@ -63,6 +65,7 @@ type managerConfig struct {
 	locker            sync.Locker
 	workspace         workspaceapi.URI
 	dataDir           string
+	notifications     browser.Notifications
 }
 
 // Option is a configuration option for a manager.
@@ -93,8 +96,6 @@ type Manager struct {
 	ctxWg     sync.WaitGroup
 }
 
-// TODO post notification when a plugin dies. Take browser.Notifications.
-// Update browser.Notifications with level.
 // NewManager allocates storage for a new Manager and initializes it.
 func NewManager(grantor plugin.Grantor, opts ...Option) (*Manager, error) {
 	ret := new(Manager)
@@ -126,8 +127,22 @@ func (m *Manager) Init(grantor plugin.Grantor, opts ...Option) (err error) {
 }
 
 func (m *Manager) log(level log.Level, msg string, args ...interface{}) {
-	log.
-		WithField(logging.KeyClass, "plugin.Manager").Logf(level, msg, args...)
+	if level <= log.WarnLevel && m.config.notifications != nil {
+		// notifications runs async, consume args now since it's an error anyway
+		var notiLevel notifications.Level
+		switch level {
+		case log.WarnLevel:
+			notiLevel = notifications.LevelWarn
+		default:
+			notiLevel = notifications.LevelError
+		}
+		// we might or might not be calling this from a goroutine that's
+		// already locked by the main mutex. Run in a separate goroutine
+		// to avoid deadlocks. This should not be too numerous so it should be ok
+		// to do this.
+		go m.config.notifications.Notify(notiLevel, msg, args...)
+	}
+	log.WithField(logging.KeyClass, "plugin.Manager").Logf(level, msg, args...)
 }
 
 func (m *Manager) runPlugin(pluginID, path string, config config.Config) error {
@@ -246,6 +261,7 @@ func (m *Manager) doCloseClient(reason string, client *granteeClientWrap) (
 	ret chan *sync.WaitGroup,
 ) {
 	m.mu.Lock()
+	pluginID := client.id
 	if client.doneCh == nil {
 		m.mu.Unlock()
 		return nil
@@ -276,11 +292,12 @@ func (m *Manager) doCloseClient(reason string, client *granteeClientWrap) (
 	// so unfortunately we cannot parallelize it amongst different clients
 	m.mu.Unlock()
 
-	level := log.DebugLevel
+	m.log(log.WarnLevel, "Stopping plugin '%s' due to %s. Reload workspace to restart it.",
+		pluginID, reason)
+
 	if clientErr != nil {
-		level = log.ErrorLevel
+		m.log(log.DebugLevel, "error stopping plugin '%s': %v", pluginID, clientErr)
 	}
-	m.log(level, "stopped plugin with id '%s': err=%v", client.id, clientErr)
 	return
 }
 
@@ -324,7 +341,7 @@ func (m *Manager) monitor(client *granteeClientWrap) {
 			err := m.checkHealth(ctx, client)
 			if err != nil {
 				triesLeft--
-				m.addClientErr(client.id, err)
+				m.addClientErr(client.id, fmt.Errorf("health check: %v", err))
 			} else {
 				triesLeft = 1 + m.config.healthRetries
 			}
@@ -339,6 +356,7 @@ func (m *Manager) monitor(client *granteeClientWrap) {
 					default:
 					}
 				}
+				return
 			}
 		case wg := <-client.doneCh:
 			defer wg.Done()
@@ -355,7 +373,7 @@ func (m *Manager) addClientErr(pluginID string, err error) {
 	clientWrap := m.clients[pluginID]
 	clientWrap.errors = append(clientWrap.errors, err)
 
-	m.log(log.ErrorLevel, "plugin '%s' error: %s", pluginID, err)
+	m.log(log.ErrorLevel, "plugin '%s' error: %v", pluginID, err)
 }
 
 func (m *Manager) setRunning(pluginID string) {
@@ -409,6 +427,7 @@ func (m *Manager) handshake(
 	}
 
 	if err != nil {
+		err = fmt.Errorf("handshake: %v", err)
 		m.addClientErr(pluginID, err)
 		m.doCloseClient(err.Error(), client)
 		return

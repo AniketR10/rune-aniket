@@ -23,6 +23,7 @@ import (
 	"gopkg.in/yaml.v3"
 	"unstable.build/go-tui/api/config"
 	workspaceapi "unstable.build/go-tui/api/workspace"
+	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/ide"
 	"unstable.build/go-tui/plugin"
 	"unstable.build/go-tui/plugin/process"
@@ -202,11 +203,14 @@ func pluginRunner(
 	uri workspaceapi.URI,
 	res map[plugin.Permission]plugin.ResourceRegistrar,
 	dataDir string,
+	notifications browser.Notifications,
 ) (plugin.Runner, error) {
+	notifications = &protectedNotifications{notifications: notifications, locker: locker}
 	pluginOpts := []process.Option{
 		process.WithLocker(locker),
 		process.WithWorkspace(uri),
 		process.WithDataDir(dataDir),
+		process.WithNotifications(notifications),
 	}
 	return process.NewManager(plugin.GrantAll(res), pluginOpts...)
 }

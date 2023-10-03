@@ -122,6 +122,29 @@ func (n *Container) Notify(level Level, msg string) {
 
 	ctx, cancel := context.WithTimeout(n.ctx, n.cfg.AutoClose)
 
+	n.mu.Lock()
+	el := n.list.PushFront(comp)
+	n.mu.Unlock()
+
+	go func() {
+		defer cancel()
+
+		<-ctx.Done()
+
+		n.mu.Lock()
+		defer n.mu.Unlock()
+
+		n.list.Remove(el)
+
+		if n.cfg.Interrupter != nil {
+			_ = n.cfg.Interrupter.Interrupt()
+		}
+	}()
+
+	if !n.cfg.ProgressBar {
+		return
+	}
+
 	go func() {
 		const fps = 10
 		cadence := time.Duration(int(time.Second) / fps)
@@ -137,26 +160,6 @@ func (n *Container) Notify(level Level, msg string) {
 			}
 		}
 
-	}()
-
-	n.mu.Lock()
-	defer n.mu.Unlock()
-
-	el := n.list.PushFront(comp)
-
-	go func() {
-		defer cancel()
-
-		<-ctx.Done()
-
-		n.mu.Lock()
-		defer n.mu.Unlock()
-
-		n.list.Remove(el)
-
-		if n.cfg.Interrupter != nil {
-			_ = n.cfg.Interrupter.Interrupt()
-		}
 	}()
 }
 

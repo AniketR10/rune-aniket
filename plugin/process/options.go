@@ -5,6 +5,7 @@ import (
 	"time"
 
 	workspaceapi "unstable.build/go-tui/api/workspace"
+	"unstable.build/go-tui/browser"
 )
 
 // WithHandshakeTimeout returns an Option which
@@ -56,5 +57,13 @@ func WithWorkspace(uri workspaceapi.URI) Option {
 func WithDataDir(dataDir string) Option {
 	return func(cfg *managerConfig) {
 		cfg.dataDir = dataDir
+	}
+}
+
+// WithNotifications returns an option that configures
+// a plugin.Manager's notifications.
+func WithNotifications(n browser.Notifications) Option {
+	return func(cfg *managerConfig) {
+		cfg.notifications = n
 	}
 }

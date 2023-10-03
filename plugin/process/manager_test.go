@@ -2,6 +2,7 @@ package process
 
 import (
 	"errors"
+	"fmt"
 	"net"
 	"sync"
 	"testing"
@@ -11,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"unstable.build/go-tui/api/config"
+	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/plugin"
 	pluginpb "unstable.build/go-tui/plugin/rpc"
 	plugintest "unstable.build/go-tui/plugin/test"
@@ -220,8 +222,10 @@ func TestManagerRun(t *testing.T) {
 	})
 
 	t.Run("should shutdown plugin if fails to respond to subsequent health checks", func(t *testing.T) {
+		notifications := testNotifications{}
 		mgr, pbClient, _ := newTestManager(&plugintest.MockGrantor{},
-			WithHealthTimeout(250*time.Millisecond), WithHealthRetries(3))
+			WithHealthTimeout(250*time.Millisecond), WithHealthRetries(3),
+			WithNotifications(&notifications))
 		defer mgr.Close()
 
 		pbClient.fixturePermissions =
@@ -248,6 +252,12 @@ func TestManagerRun(t *testing.T) {
 		assert.True(t, ok)
 		require.Len(t, stat.Errors, mgr.config.healthRetries+1, mgr.clients)
 		assert.Contains(t, stat.Errors[0].Error(), "deadline")
+
+		notifications.mu.Lock()
+		defer notifications.mu.Unlock()
+
+		require.NotZero(t, notifications.msg)
+		assert.Equal(t, "plugin 'yellow' error: health check: context deadline exceeded", notifications.msg[0])
 	})
 
 	t.Run("should wait for plugin Shutdown before returning from a call to Close", func(t *testing.T) {
@@ -309,4 +319,17 @@ func TestManagerRun(t *testing.T) {
 
 		require.NoError(t, mgr.Close())
 	})
+}
+
+type testNotifications struct {
+	mu  sync.Mutex
+	msg []string
+}
+
+func (n *testNotifications) Notify(level notifications.Level, msg string, args ...interface{}) error {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+
+	n.msg = append(n.msg, fmt.Sprintf(msg, args...))
+	return nil
 }

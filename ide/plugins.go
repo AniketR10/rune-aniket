@@ -4,6 +4,7 @@ import (
 	"sync"
 
 	workspaceapi "unstable.build/go-tui/api/workspace"
+	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/plugin"
 )
 
@@ -12,25 +13,28 @@ type PluginsRunner interface {
 	WorkspacePluginsRunner(locker sync.Locker,
 		uri workspaceapi.URI,
 		res map[plugin.Permission]plugin.ResourceRegistrar,
-		dataDir string) (plugin.Runner, error)
+		dataDir string, notifications browser.Notifications) (plugin.Runner, error)
 }
 
 // FuncPluginsRunner wraps fn to satisfy Plugins by invoking in calls to Runner.
 func FuncPluginsRunner(
 	fn func(sync.Locker, workspaceapi.URI,
-		map[plugin.Permission]plugin.ResourceRegistrar, string) (plugin.Runner, error),
+		map[plugin.Permission]plugin.ResourceRegistrar, string,
+		browser.Notifications) (plugin.Runner, error),
 ) PluginsRunner {
 	return fnPlugins{fn: fn}
 }
 
 type fnPlugins struct {
 	fn func(sync.Locker, workspaceapi.URI,
-		map[plugin.Permission]plugin.ResourceRegistrar, string) (plugin.Runner, error)
+		map[plugin.Permission]plugin.ResourceRegistrar, string,
+		browser.Notifications) (plugin.Runner, error)
 }
 
-func (f fnPlugins) WorkspacePluginsRunner(locker sync.Locker,
-	uri workspaceapi.URI,
+func (f fnPlugins) WorkspacePluginsRunner(
+	locker sync.Locker, uri workspaceapi.URI,
 	res map[plugin.Permission]plugin.ResourceRegistrar,
-	dataDir string) (plugin.Runner, error) {
-	return f.fn(locker, uri, res, dataDir)
+	dataDir string, n browser.Notifications,
+) (plugin.Runner, error) {
+	return f.fn(locker, uri, res, dataDir, n)
 }
