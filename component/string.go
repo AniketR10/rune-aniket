@@ -17,6 +17,7 @@ type StringConfig struct {
 	Tabspaces            int
 	PaddingVertical      int
 	PaddingHorizontal    int
+	MinWidth             int
 }
 
 // String is a tui.Component that draws a string with or without
@@ -34,7 +35,7 @@ func NewStringWithConfig(str string, cfg StringConfig) String {
 	cells := cell.StringToCells(str, cfg.Tabspaces)
 	return String{newStringComp(cells, cfg.Attributes, cfg.BackgroundRune,
 		cfg.BackgroundAttributes, cfg.FrameCharSet,
-		cfg.PaddingHorizontal, cfg.PaddingVertical, cfg.Alignment)}
+		cfg.PaddingHorizontal, cfg.PaddingVertical, cfg.Alignment, cfg.MinWidth)}
 }
 
 // NewString converts a string into a very efficient top left centered one line tui.Component
@@ -204,12 +205,18 @@ func withBackgroundWrapper(
 func newStringComp(
 	cells [][]term.Cell, attr term.Attributes, c rune, battr term.Attributes,
 	frameCharSet FrameCharSet, padWidth, padHeight int, alg Alignment,
+	minWidth int,
 ) floatingWithAttributes {
 	var comp floatingWithAttributes
 
 	comp = &stringComp{cells: cells, attr: attr}
+	shouldFrame := frameCharSet != (FrameCharSet{})
 
-	var width, height int
+	var height int
+	width := minWidth
+	if shouldFrame {
+		width -= (2 + padWidth)
+	}
 	for _, row := range cells {
 		if len(row) > width {
 			width = len(row)
@@ -218,7 +225,6 @@ func newStringComp(
 
 	background := term.Cell{Ch: c, Fg: battr.Fg, Bg: battr.Bg}
 	height = len(cells)
-	shouldFrame := frameCharSet != (FrameCharSet{})
 	shouldPad := padWidth != 0 || padHeight != 0
 
 	if shouldFrame {

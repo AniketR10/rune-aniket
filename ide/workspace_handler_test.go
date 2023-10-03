@@ -301,9 +301,9 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 └──────────────────┘`},
 		{":sw 100>",
 			`┌──────────────────┐
-│ invalid          │
-│ workspace:       │
-│ there's only 10  │
+│invalid           │
+│workspace:        │
+│there's only 10   │
 └──────────────────┘
 │workspaceWallpaper│
 │                  │
@@ -345,10 +345,10 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 └──────────────────┘`},
 		{"2:sw>",
 			`┌──────────────────┐
-│ invalid          │
-│ arguments.       │
-│ Expecting 1      │
-│ argument with    │
+│invalid           │
+│arguments.        │
+│Expecting 1       │
+│argument with     │
 └──────────────────┘
 │                  │
 ├──────────────────┤

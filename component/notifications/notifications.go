@@ -29,6 +29,7 @@ func newString(cfg Config, msg string) component.Responsive {
 			PaddingHorizontal:    2,
 			PaddingVertical:      2,
 			FrameCharSet:         cfg.FrameCharSet,
+			MinWidth:             cfg.Width,
 		},
 	}
 	return component.StringResponsive(msg, strConfig)

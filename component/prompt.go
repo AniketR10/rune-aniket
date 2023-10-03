@@ -68,7 +68,7 @@ func (p *Prompt) Init(cfg PromptConfig) {
 	p.init(func(msg string, cfg PromptConfig) WithAttributes {
 		cells := cell.StringToCells(msg, cell.DefaultTabspaces)
 		return newStringComp(cells, term.Attributes{},
-			0, term.Attributes{}, cfg.Frame, 2, 0, SpanAlignmentCentered)
+			0, term.Attributes{}, cfg.Frame, 2, 0, SpanAlignmentCentered, 0)
 	}, cfg)
 }
 

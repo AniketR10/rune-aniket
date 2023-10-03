@@ -388,9 +388,9 @@ IIII`},
 	require.NoError(t, b.SetMessage("wasup: %s", "Z"))
 	cases = []testutil.HandlerSequenceTestCase{
 		{"",
-			`┌──── ┌──────────┐  
-│othe │ wasup: Z │  
-├──── └──────────┘  
+			`┌────┌─────────────┐
+│othe│ wasup: Z    │
+├────└─────────────┘
 │IIIIIIIIIIIIIIIIII│
 │IIIIIIIIIIIIIIIIII│
 │IIIIIIIIIIIIIIIIII│
@@ -412,9 +412,9 @@ IIII`},
 
 	cases = []testutil.HandlerSequenceTestCase{
 		{"b",
-			`┌──── ┌──────────┐  
-│othe │ wasup: Z │  
-├──── └──────────┘  
+			`┌────┌─────────────┐
+│othe│ wasup: Z    │
+├────└─────────────┘
 │BBBBBBBBBBBBBBBBBB│
 │BBBBBBBBBBBBBBBBBB│
 │BBBBBBBBBBBBBBBBBB│
@@ -423,9 +423,9 @@ IIII`},
 │BBBBBBBBBBBBBBBBBB│
 └──────────────────┘`},
 		{":3>",
-			`┌──── ┌──────────┐  
-│othe │ wasup: Z │  
-├──── └──────────┘  
+			`┌────┌─────────────┐
+│othe│ wasup: Z    │
+├────└─────────────┘
 │BBBBBBBBBBBBBBBBBB│
 │BBBBBBBBBBBBBBBBBB│
 │▐BBBBBBBBBBBBBBBBB│
@@ -434,9 +434,9 @@ IIII`},
 │BBBBBBBBBBBBBBBBBB│
 └──────────────────┘`},
 		{":0>",
-			`┌──── ┌──────────┐  
-│othe │ wasup: Z │  
-├──── └──────────┘  
+			`┌────┌─────────────┐
+│othe│ wasup: Z    │
+├────└─────────────┘
 │BBBBBBBBBBBBBBBBBB│
 │BBBBBBBBBBBBBBBBBB│
 │BBBBBBBBBBBBBBBBBB│
@@ -459,9 +459,9 @@ IIII`},
 	require.Error(t, err)
 	cases = []testutil.HandlerSequenceTestCase{
 		{"",
-			`┌──── ┌──────────┐  
-│othe │ wasup: Z │  
-├──── └──────────┘  
+			`┌────┌─────────────┐
+│othe│ wasup: Z    │
+├────└─────────────┘
 │┌────┐BBBBBBBBBBBB│
 ││AAAA│BBBBBBBBBBBB│
 ││AAAA│BBBBBBBBBBBB│
@@ -470,12 +470,12 @@ IIII`},
 │BBBBBBBBBBBBBBBBBB│
 └──────────────────┘`},
 		{":reloadFile>", // test reload non file
-			`┌────┌────────────┐ 
-│othe│ not a file │ 
-├────└────────────┘ 
-│┌─── ┌──────────┐  
-││AAA │ wasup: Z │  
-││AAA └──────────┘  
+			`┌────┌─────────────┐
+│othe│ not a file  │
+├────└─────────────┘
+│┌───┌─────────────┐
+││AAA│ wasup: Z    │
+││AAA└─────────────┘
 │└────┘BBBBBBBBBBBB│
 │BBBBBBBBBBBBBBBBBB│
 │BBBBBBBBBBBBBBBBBB│
@@ -488,12 +488,12 @@ IIII`},
 
 	cases = []testutil.HandlerSequenceTestCase{
 		{"",
-			`┌────┌────────────┐ 
-│othe│ not a file │ 
-├────└────────────┘ 
-│BBBB ┌──────────┐  
-│BBBB │ wasup: Z │  
-│BBBB └──────────┘  
+			`┌────┌─────────────┐
+│othe│ not a file  │
+├────└─────────────┘
+│BBBB┌─────────────┐
+│BBBB│ wasup: Z    │
+│BBBB└─────────────┘
 │BBBBBBBBBBBBBBBBBB│
 │BBBBBBBBBBBBBBBBBB│
 │BBBBBBBBBBBBBBBBBB│
@@ -513,12 +513,12 @@ IIII`},
 	// test case for issue #27
 	cases = []testutil.HandlerSequenceTestCase{
 		{":e ait^^^aix^^^^ airsoft.map>",
-			`┌──────────────────────────────────┌────────────┐ 
-│other.go  bugz  airsoft.map       │ not a file │ 
-├──────────────────────────────────└────────────┘ 
-│0000000000000000000000000000000000 ┌──────────┐  
-├─┬──────────────────────────────── │ wasup: Z │  
-│2│AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA └──────────┘  
+			`┌──────────────────────────────────┌─────────────┐
+│other.go  bugz  airsoft.map       │ not a file  │
+├──────────────────────────────────└─────────────┘
+│0000000000000000000000000000000000┌─────────────┐
+├─┬────────────────────────────────│ wasup: Z    │
+│2│AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA└─────────────┘
 │2│AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA│3│
 ├─┴────────────────────────────────────────────┴─┤
 │111111111111111111111111111111111111111111111111│
@@ -951,22 +951,22 @@ func newExForTesting(t *testing.T, ed text.Editor, opts ...text.Option) testEx {
 func TestNewWindow(t *testing.T) {
 	cases := []testutil.HandlerSequenceTestCase{
 		{":newWindow>:changeSplitOrientation h>:newWindow>",
-			` ┌────────────────┐ 
- │ changed split  │ 
- │ direction to   │ 
- │ horizontal     │ 
- └────────────────┘ 
+			`┌──────────────────┐
+│ changed split    │
+│ direction to     │
+│ horizontal       │
+└──────────────────┘
 │        │└────────┘
 │        │┌────────┐
 │        ││        │
 │        ││        │
 └────────┘└────────┘`},
 		{":close>:close>aaaaaaa",
-			` ┌────────────────┐ 
- │ changed split  │ 
- │ direction to   │ 
- │ horizontal     │ 
- └────────────────┘ 
+			`┌──────────────────┐
+│ changed split    │
+│ direction to     │
+│ horizontal       │
+└──────────────────┘
 │                  │
 │                  │
 │                  │
@@ -976,6 +976,7 @@ func TestNewWindow(t *testing.T) {
 
 	notifications := browser.DefaultConfig().Notifications
 	notifications.ProgressBar = false // deterministic tests
+	notifications.Width = 20
 	opts := []text.Option{
 		text.WithCommandKey(testCommandKey),
 		text.WithNotificationsConfig(notifications),
@@ -1063,6 +1064,7 @@ func TestCommandAliases(t *testing.T) {
 func TestExposedRootNodeIssue(t *testing.T) {
 	notifications := browser.DefaultConfig().Notifications
 	notifications.ProgressBar = false // deterministic tests
+	notifications.Width = 20
 	opts := []text.Option{
 		text.WithCommandKey(testCommandKey),
 		text.WithNotificationsConfig(notifications),
@@ -1080,15 +1082,15 @@ func TestExposedRootNodeIssue(t *testing.T) {
 	}
 	cases := []testutil.HandlerSequenceTestCase{
 		{":boom>",
-			` ┌────────────────┐ 
- │ changed split  │ 
-┌│ direction to   │ 
- └────────────────┘ 
- ┌────────────────┐ 
- │ changed split  │ 
- │ direction to   │ 
- │ horizontal     │ 
- └────────────────┘ 
+			`┌──────────────────┐
+│ changed split    │
+┌ direction to     │
+└──────────────────┘
+┌──────────────────┐
+│ changed split    │
+│ direction to     │
+│ horizontal       │
+└──────────────────┘
 └────────┘└───┘└───┘`},
 	}
 

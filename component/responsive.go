@@ -125,7 +125,7 @@ func (s *respStr) Resize(width, height int) {
 	}
 	s.out = newStringComp(outRaw, s.cfg.Attributes, 0,
 		s.cfg.BackgroundAttributes, s.cfg.FrameCharSet,
-		s.cfg.PaddingHorizontal, s.cfg.PaddingVertical, s.cfg.Alignment)
+		s.cfg.PaddingHorizontal, s.cfg.PaddingVertical, s.cfg.Alignment, s.cfg.MinWidth)
 	s.out.Resize(width, height)
 }
 
