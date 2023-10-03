@@ -27,7 +27,6 @@ func newString(cfg Config, msg string) component.Responsive {
 			Attributes:           cfg.Attributes,
 			BackgroundAttributes: cfg.BackgroundAttributes,
 			PaddingHorizontal:    2,
-			PaddingVertical:      2,
 			FrameCharSet:         cfg.FrameCharSet,
 			MinWidth:             cfg.Width,
 		},

@@ -2,6 +2,7 @@ package notifications
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
 	"sync"
@@ -52,12 +53,14 @@ type Container struct {
 	cfg   Config
 	inner tui.Component
 
+	ctx       context.Context
+	cancelCtx func()
+
 	mu    sync.RWMutex
 	list  component.ResponsiveList
 	vlist component.Virtual
 
-	ctx       context.Context
-	cancelCtx func()
+	notifications map[string]notificationTicket
 }
 
 // New allocates storage for a new instance of Container and initializes it with
@@ -84,6 +87,7 @@ func (n *Container) Init(inner tui.Component, cfg Config) {
 	n.list.Init()
 	n.vlist.C = &n.list
 	n.ctx, n.cancelCtx = context.WithCancel(context.Background())
+	n.notifications = make(map[string]notificationTicket)
 }
 
 // Draw satisfies tui.Component.
@@ -133,18 +137,31 @@ func (n *Container) Notify(level Level, msg string) {
 	ctx, cancel := context.WithTimeout(n.ctx, duration)
 
 	n.mu.Lock()
+	defer n.mu.Unlock()
+
+	// clear out current notification, based on message equality, if it exists
+	if ticket, exists := n.notifications[msg]; exists {
+		ticket.cancelCtx()
+		n.list.Remove(ticket.el)
+		delete(n.notifications, msg)
+	}
+
+	// add a new notification
 	el := n.list.PushFront(comp)
-	n.mu.Unlock()
+	n.notifications[msg] = notificationTicket{el: el, cancelCtx: cancel}
 
 	go func() {
 		defer cancel()
 
 		<-ctx.Done()
+		if errors.Is(ctx.Err(), context.Canceled) {
+			return
+		}
 
 		n.mu.Lock()
-		defer n.mu.Unlock()
-
 		n.list.Remove(el)
+		delete(n.notifications, msg)
+		n.mu.Unlock()
 
 		if n.cfg.Interrupter != nil {
 			_ = n.cfg.Interrupter.Interrupt()
@@ -177,4 +194,9 @@ func (n *Container) Notify(level Level, msg string) {
 func (n *Container) Close() error {
 	n.cancelCtx()
 	return nil
+}
+
+type notificationTicket struct {
+	cancelCtx func()
+	el        component.ListNode
 }
