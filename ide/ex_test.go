@@ -385,7 +385,7 @@ IIII`},
 	}
 	testutil.TestHandlerSequence(t, bh, 4, 4, cases)
 
-	require.NoError(t, b.SetMessage("wasup: %s", "Z"))
+	require.NoError(t, b.Notify(notifications.LevelInfo, "wasup: %s", "Z"))
 	cases = []testutil.HandlerSequenceTestCase{
 		{"",
 			`┌────┌─────────────┐

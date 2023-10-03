@@ -15,6 +15,7 @@ import (
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/component"
+	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/handler"
 	handlerpb "unstable.build/go-tui/handler/rpc"
 	"unstable.build/go-tui/proto"
@@ -45,7 +46,7 @@ type Client struct {
 	broker proto.MuxBroker
 	cc     grpc.ClientConnInterface
 	wm     WindowManagerClient
-	msg    MessengerClient
+	msg    NotificationsClient
 	f      ResourceOpenerClient
 	p      EventPublisherClient
 
@@ -96,7 +97,7 @@ func (c *Client) Init(
 	ctx context.Context, broker proto.MuxBroker, cc grpc.ClientConnInterface,
 ) {
 	c.wm = NewWindowManagerClient(cc)
-	c.msg = NewMessengerClient(cc)
+	c.msg = NewNotificationsClient(cc)
 	c.cc = cc
 	c.f = NewResourceOpenerClient(cc)
 	c.p = NewEventPublisherClient(cc)
@@ -244,14 +245,14 @@ func (c *Client) Bar(o browserapi.Orientation, h tui.Handler) error {
 	return nil
 }
 
-// SetMessage satisfies Browser.
-func (c *Client) SetMessage(msg string, args ...interface{}) error {
+// Notify satisfies Browser.
+func (c *Client) Notify(level notifications.Level, msg string, args ...interface{}) error {
 	msg = fmt.Sprintf(msg, args...)
 
 	ctx := context.Background()
-	req := SetMessageRequest{Msg: msg}
+	req := NotifyRequest{Level: uint32(level), Msg: msg}
 
-	_, err := c.msg.SetMessage(ctx, &req)
+	_, err := c.msg.Notify(ctx, &req)
 	runtime.KeepAlive(c)
 	return err
 }

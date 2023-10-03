@@ -36,7 +36,7 @@ var (
 		plugin.Permission(plugin.PermissionFileSystem),
 		plugin.Permission(plugin.PermissionTerminal),
 		plugin.Permission(plugin.PermissionBrowserEventPublisher),
-		plugin.Permission(plugin.PermissionBrowserMessenger),
+		plugin.Permission(plugin.PermissionBrowserNotifications),
 	}
 	commands = []string{
 		cmdSplitWindowTerminal,
@@ -88,7 +88,7 @@ type emulatorGrantee struct {
 	wm  browserapi.WindowManager
 	p   browserapi.EventPublisher
 	ed  textapi.Editor
-	m   browserapi.Messenger
+	m   browserapi.Notifications
 
 	defAttr       term.Attributes
 	selectionAttr term.Attributes
@@ -149,8 +149,8 @@ func (e *emulatorGrantee) PermissionGranted(grants []plugin.Grant) {
 			e.tty, err = workspaceplugin.Terminal(g, e.broker)
 		case plugin.Permission(plugin.PermissionFileSystem):
 			e.fs, err = workspaceplugin.FileSystem(g, e.broker)
-		case plugin.Permission(plugin.PermissionBrowserMessenger):
-			e.m, err = browserplugin.Messenger(g, e.broker)
+		case plugin.Permission(plugin.PermissionBrowserNotifications):
+			e.m, err = browserplugin.Notifications(g, e.broker)
 		case plugin.Permission(plugin.PermissionEditor):
 			e.ed, err = textplugin.Editor(g, e.broker)
 			if err == nil {

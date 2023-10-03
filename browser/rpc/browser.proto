@@ -14,11 +14,12 @@ message OpenResourceResponse {
 	string channel_id = 1;
 }
 
-message SetMessageRequest {
+message NotifyRequest {
 	string msg = 1;
+	uint32 level = 2;
 }
 
-message SetMessageResponse {}
+message NotifyResponse {}
 
 message Mapping {
 	term.Event from = 1;
@@ -92,8 +93,8 @@ service ResourceOpener {
 	rpc Open(OpenResourceRequest) returns (OpenResourceResponse);
 }
 
-service Messenger {
-	rpc SetMessage(SetMessageRequest) returns (SetMessageResponse);
+service Notifications {
+	rpc Notify(NotifyRequest) returns (NotifyResponse);
 }
 
 service EventPublisher {

@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/goleak"
 	workspaceapi "unstable.build/go-tui/api/workspace"
+	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/proto"
 	"unstable.build/go-tui/term"
 	termpb "unstable.build/go-tui/term/rpc"
@@ -74,7 +75,7 @@ func assertInvokeError(t *testing.T, err error) {
 	assert.Contains(t, err.Error(), "woopsie")
 }
 
-func TestClientSetMessage(t *testing.T) {
+func TestClientNotify(t *testing.T) {
 	t.Run("invokes the pbclient rpc", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
@@ -82,16 +83,16 @@ func TestClientSetMessage(t *testing.T) {
 		client, mockCC, _ := newMockedClient(ctrl)
 
 		myMsg, arg1, arg2 := "oh la la: %s %d", "obla di obla da", 5
-		in := &SetMessageRequest{Msg: fmt.Sprintf(myMsg, arg1, arg2)}
-		out := new(SetMessageResponse)
+		in := &NotifyRequest{Level: uint32(notifications.LevelWarn), Msg: fmt.Sprintf(myMsg, arg1, arg2)}
+		out := new(NotifyResponse)
 
 		mockCC.EXPECT().
 			Invoke(gomock.Any(),
-				gomock.Eq("/browser.Messenger/SetMessage"),
+				gomock.Eq("/browser.Notifications/Notify"),
 				gomock.Eq(in), gomock.Eq(out)).
 			Times(1)
 
-		err := client.SetMessage(myMsg, arg1, arg2)
+		err := client.Notify(notifications.LevelWarn, myMsg, arg1, arg2)
 		require.NoError(t, err)
 	})
 	t.Run("bubbles up rpc error", func(t *testing.T) {
@@ -102,7 +103,7 @@ func TestClientSetMessage(t *testing.T) {
 
 		expectInvokeError(mockCC)
 
-		err := client.SetMessage("")
+		err := client.Notify(notifications.LevelSuccess, "")
 		assertInvokeError(t, err)
 	})
 }

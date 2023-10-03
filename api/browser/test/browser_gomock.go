@@ -12,6 +12,7 @@ import (
 	api "unstable.build/go-tui/api/browser"
 	api0 "unstable.build/go-tui/api/workspace"
 	component "unstable.build/go-tui/component"
+	notifications "unstable.build/go-tui/component/notifications"
 	term "unstable.build/go-tui/term"
 )
 
@@ -418,46 +419,46 @@ func (mr *MockWindowManagerMockRecorder) Tab(uri, name, h interface{}) *gomock.C
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Tab", reflect.TypeOf((*MockWindowManager)(nil).Tab), uri, name, h)
 }
 
-// MockMessenger is a mock of Messenger interface.
-type MockMessenger struct {
+// MockNotifications is a mock of Notifications interface.
+type MockNotifications struct {
 	ctrl     *gomock.Controller
-	recorder *MockMessengerMockRecorder
+	recorder *MockNotificationsMockRecorder
 }
 
-// MockMessengerMockRecorder is the mock recorder for MockMessenger.
-type MockMessengerMockRecorder struct {
-	mock *MockMessenger
+// MockNotificationsMockRecorder is the mock recorder for MockNotifications.
+type MockNotificationsMockRecorder struct {
+	mock *MockNotifications
 }
 
-// NewMockMessenger creates a new mock instance.
-func NewMockMessenger(ctrl *gomock.Controller) *MockMessenger {
-	mock := &MockMessenger{ctrl: ctrl}
-	mock.recorder = &MockMessengerMockRecorder{mock}
+// NewMockNotifications creates a new mock instance.
+func NewMockNotifications(ctrl *gomock.Controller) *MockNotifications {
+	mock := &MockNotifications{ctrl: ctrl}
+	mock.recorder = &MockNotificationsMockRecorder{mock}
 	return mock
 }
 
 // EXPECT returns an object that allows the caller to indicate expected use.
-func (m *MockMessenger) EXPECT() *MockMessengerMockRecorder {
+func (m *MockNotifications) EXPECT() *MockNotificationsMockRecorder {
 	return m.recorder
 }
 
-// SetMessage mocks base method.
-func (m *MockMessenger) SetMessage(msg string, args ...interface{}) error {
+// Notify mocks base method.
+func (m *MockNotifications) Notify(level notifications.Level, msg string, args ...interface{}) error {
 	m.ctrl.T.Helper()
-	varargs := []interface{}{msg}
+	varargs := []interface{}{level, msg}
 	for _, a := range args {
 		varargs = append(varargs, a)
 	}
-	ret := m.ctrl.Call(m, "SetMessage", varargs...)
+	ret := m.ctrl.Call(m, "Notify", varargs...)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-// SetMessage indicates an expected call of SetMessage.
-func (mr *MockMessengerMockRecorder) SetMessage(msg interface{}, args ...interface{}) *gomock.Call {
+// Notify indicates an expected call of Notify.
+func (mr *MockNotificationsMockRecorder) Notify(level, msg interface{}, args ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	varargs := append([]interface{}{msg}, args...)
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetMessage", reflect.TypeOf((*MockMessenger)(nil).SetMessage), varargs...)
+	varargs := append([]interface{}{level, msg}, args...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Notify", reflect.TypeOf((*MockNotifications)(nil).Notify), varargs...)
 }
 
 // MockResourceOpener is a mock of ResourceOpener interface.
@@ -644,6 +645,25 @@ func (mr *MockBrowserMockRecorder) Interrupt() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Interrupt", reflect.TypeOf((*MockBrowser)(nil).Interrupt))
 }
 
+// Notify mocks base method.
+func (m *MockBrowser) Notify(level notifications.Level, msg string, args ...interface{}) error {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{level, msg}
+	for _, a := range args {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "Notify", varargs...)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Notify indicates an expected call of Notify.
+func (mr *MockBrowserMockRecorder) Notify(level, msg interface{}, args ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{level, msg}, args...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Notify", reflect.TypeOf((*MockBrowser)(nil).Notify), varargs...)
+}
+
 // Open mocks base method.
 func (m *MockBrowser) Open(resource api0.URI) (api.Handler, error) {
 	m.ctrl.T.Helper()
@@ -686,25 +706,6 @@ func (m *MockBrowser) SetFocus(win api.Window) (api.Window, error) {
 func (mr *MockBrowserMockRecorder) SetFocus(win interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetFocus", reflect.TypeOf((*MockBrowser)(nil).SetFocus), win)
-}
-
-// SetMessage mocks base method.
-func (m *MockBrowser) SetMessage(msg string, args ...interface{}) error {
-	m.ctrl.T.Helper()
-	varargs := []interface{}{msg}
-	for _, a := range args {
-		varargs = append(varargs, a)
-	}
-	ret := m.ctrl.Call(m, "SetMessage", varargs...)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// SetMessage indicates an expected call of SetMessage.
-func (mr *MockBrowserMockRecorder) SetMessage(msg interface{}, args ...interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	varargs := append([]interface{}{msg}, args...)
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetMessage", reflect.TypeOf((*MockBrowser)(nil).SetMessage), varargs...)
 }
 
 // Split mocks base method.

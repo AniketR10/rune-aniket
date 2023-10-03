@@ -14,6 +14,7 @@ import (
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	browsertest "unstable.build/go-tui/browser/test"
 	"unstable.build/go-tui/component"
+	"unstable.build/go-tui/component/notifications"
 	handlerpb "unstable.build/go-tui/handler/rpc"
 	"unstable.build/go-tui/proto"
 	termpb "unstable.build/go-tui/term/rpc"
@@ -39,30 +40,30 @@ func newTestServer(ctrl *gomock.Controller, mu *sync.Mutex) (
 	return s, mockBrowser, mockBroker
 }
 
-func TestServerSetMessage(t *testing.T) {
+func TestServerNotify(t *testing.T) {
 	ctx := context.Background()
 
-	t.Run("delegates SetMessage to underlying Browser", func(t *testing.T) {
+	t.Run("delegates Notify to underlying Browser", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 		s, mock := newServerWithNoBroker(ctrl)
 
-		mock.EXPECT().SetMessage(gomock.Eq("blah")).Return(nil)
+		mock.EXPECT().Notify(gomock.Eq(notifications.LevelSuccess), gomock.Eq("blah")).Return(nil)
 
-		req := SetMessageRequest{Msg: "blah"}
-		res, err := s.SetMessage(ctx, &req)
+		req := NotifyRequest{Level: uint32(notifications.LevelSuccess), Msg: "blah"}
+		res, err := s.Notify(ctx, &req)
 		require.NoError(t, err)
 		assert.NotNil(t, res)
 	})
 
-	t.Run("bubbles up SetMessage Browser error", func(t *testing.T) {
+	t.Run("bubbles up Notify Browser error", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 		s, mock := newServerWithNoBroker(ctrl)
 
-		mock.EXPECT().SetMessage(gomock.Any()).Return(errors.New("oopsie daisy"))
+		mock.EXPECT().Notify(gomock.Any(), gomock.Any()).Return(errors.New("oopsie daisy"))
 
-		_, err := s.SetMessage(ctx, new(SetMessageRequest))
+		_, err := s.Notify(ctx, new(NotifyRequest))
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "oopsie")
 	})

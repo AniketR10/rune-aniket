@@ -9,10 +9,13 @@ import (
 
 	"github.com/ernestrc/blue/logging"
 	log "github.com/sirupsen/logrus"
+	codes "google.golang.org/grpc/codes"
+	status "google.golang.org/grpc/status"
 	browserapi "unstable.build/go-tui/api/browser"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/component"
+	"unstable.build/go-tui/component/notifications"
 
 	handlerpb "unstable.build/go-tui/handler/rpc"
 	"unstable.build/go-tui/proto"
@@ -31,7 +34,7 @@ const (
 // Server serves a Browser over GRPC.
 type Server struct {
 	UnimplementedEventPublisherServer
-	UnimplementedMessengerServer
+	UnimplementedNotificationsServer
 	UnimplementedResourceOpenerServer
 	UnimplementedWindowManagerServer
 
@@ -80,9 +83,9 @@ func (s *Server) consumeErrors(
 		case err := <-ch:
 			err = fmt.Errorf("handler.Client %s error: %v", channelID, err)
 			s.log(log.WarnLevel, "%v", err)
-			msgErr := s.setBrowserMessage(err.Error())
+			msgErr := s.setBrowserMessage(notifications.LevelError, err.Error())
 			if msgErr != nil {
-				s.log(log.WarnLevel, "error calling browser.SetMessage upon handler.Client"+
+				s.log(log.WarnLevel, "error calling browser.Notify upon handler.Client"+
 					" error: %v: %v", msgErr, err)
 			}
 		}
@@ -216,23 +219,32 @@ func (s *Server) Bar(
 	return new(BarResponse), nil
 }
 
-func (s *Server) setBrowserMessage(msg string) error {
+func (s *Server) setBrowserMessage(level notifications.Level, msg string) error {
 	s.browser.Lock()
 	defer s.browser.Unlock()
 
-	return s.browser.SetMessage(msg)
+	return s.browser.Notify(level, msg)
 }
 
-// SetMessage satisfies BrowserServer
-func (s *Server) SetMessage(
-	ctx context.Context, req *SetMessageRequest,
-) (*SetMessageResponse, error) {
+// Notify satisfies BrowserServer
+func (s *Server) Notify(
+	ctx context.Context, req *NotifyRequest,
+) (*NotifyResponse, error) {
 	msg := util.SanitizeLine(req.GetMsg())
-	err := s.setBrowserMessage(msg)
+	level := notifications.Level(req.GetLevel())
+	switch level {
+	case notifications.LevelInfo,
+		notifications.LevelSuccess,
+		notifications.LevelWarn,
+		notifications.LevelError:
+	default:
+		return nil, status.Error(codes.InvalidArgument, "invalid level")
+	}
+	err := s.setBrowserMessage(level, msg)
 	if err != nil {
 		return nil, err
 	}
-	return new(SetMessageResponse), nil
+	return new(NotifyResponse), nil
 }
 
 // Open satisfies BrowserServer

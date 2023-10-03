@@ -32,7 +32,7 @@ func newClientServerIntegration(
 	rpcServer := NewServer(broker, h, mutex)
 	RegisterWindowManagerServer(grpcServer, rpcServer)
 	RegisterResourceOpenerServer(grpcServer, rpcServer)
-	RegisterMessengerServer(grpcServer, rpcServer)
+	RegisterNotificationsServer(grpcServer, rpcServer)
 	RegisterEventPublisherServer(grpcServer, rpcServer)
 
 	go grpcServer.Serve(lis)

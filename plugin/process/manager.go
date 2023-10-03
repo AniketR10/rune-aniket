@@ -93,6 +93,8 @@ type Manager struct {
 	ctxWg     sync.WaitGroup
 }
 
+// TODO post notification when a plugin dies. Take browser.Notifications.
+// Update browser.Notifications with level.
 // NewManager allocates storage for a new Manager and initializes it.
 func NewManager(grantor plugin.Grantor, opts ...Option) (*Manager, error) {
 	ret := new(Manager)

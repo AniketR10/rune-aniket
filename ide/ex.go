@@ -21,6 +21,7 @@ import (
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/component"
+	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/handler/command"
 	"unstable.build/go-tui/term"
@@ -457,10 +458,10 @@ func (e *ex) splitDirectionChange(args ...string) error {
 	switch args[0] {
 	case "horizontal", "h":
 		b.SetDefaultSplit(browserapi.OrientationBottom)
-		b.SetMessage("changed split direction to horizontal")
+		b.Notify(notifications.LevelInfo, "changed split direction to horizontal")
 	case "vertical", "v":
 		b.SetDefaultSplit(browserapi.OrientationRight)
-		b.SetMessage("changed split direction to vertical")
+		b.Notify(notifications.LevelInfo, "changed split direction to vertical")
 	}
 	return nil
 }
@@ -525,7 +526,7 @@ func (e *ex) runCommand(cmd string, args []string) (quit bool, err error) {
 }
 
 func (e *ex) setError(err error) {
-	e.comp.Browser().SetMessage("%s", err)
+	e.comp.Browser().Notify(notifications.LevelError, "%s", err)
 }
 
 func (e *ex) handleCommandEvent(ev term.Event) bool {

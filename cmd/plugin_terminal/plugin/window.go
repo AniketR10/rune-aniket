@@ -3,6 +3,7 @@ package plugin
 import (
 	browserapi "unstable.build/go-tui/api/browser"
 	termutil "unstable.build/go-tui/cmd/plugin_terminal/util"
+	"unstable.build/go-tui/component/notifications"
 )
 
 var _ termutil.WindowManipulator = (*windowManipulator)(nil)
@@ -10,7 +11,7 @@ var _ termutil.WindowManipulator = (*windowManipulator)(nil)
 type windowManipulator struct {
 	width, height int
 	wm            browserapi.WindowManager
-	m             browserapi.Messenger
+	m             browserapi.Notifications
 	title         string
 }
 
@@ -92,5 +93,5 @@ func (w *windowManipulator) RestoreTitleFromStack() {
 }
 
 func (w *windowManipulator) ReportError(err error) {
-	w.m.SetMessage("terminal: %s", err)
+	w.m.Notify(notifications.LevelError, "terminal: %s", err)
 }

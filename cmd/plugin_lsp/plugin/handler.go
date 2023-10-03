@@ -32,6 +32,7 @@ import (
 	workspaceplugin "unstable.build/go-tui/api/workspace/plugin"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
+	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/handler/search"
 	"unstable.build/go-tui/plugin"
@@ -94,7 +95,7 @@ var (
 		plugin.Permission(plugin.PermissionBrowserWindowManager),
 		plugin.Permission(plugin.PermissionBrowserResourceOpener),
 		plugin.Permission(plugin.PermissionBrowserEventPublisher),
-		plugin.Permission(plugin.PermissionBrowserMessenger),
+		plugin.Permission(plugin.PermissionBrowserNotifications),
 		plugin.Permission(plugin.PermissionFileSystem),
 		plugin.Permission(plugin.PermissionExecute),
 		plugin.PermissionConfig,
@@ -167,7 +168,7 @@ type lspEditorHandler struct {
 
 	ed   textapi.Editor
 	wm   browserapi.WindowManager
-	m    browserapi.Messenger
+	m    browserapi.Notifications
 	o    browserapi.ResourceOpener
 	exec workspaceapi.Executor
 	fs   workspaceapi.FileSystem
@@ -689,8 +690,8 @@ func newLspHandler(
 			if err != nil {
 				return nil, err
 			}
-		case plugin.Permission(plugin.PermissionBrowserMessenger):
-			ret.m, err = browserplugin.Messenger(g, broker)
+		case plugin.Permission(plugin.PermissionBrowserNotifications):
+			ret.m, err = browserplugin.Notifications(g, broker)
 			if err != nil {
 				return nil, err
 			}
@@ -1581,7 +1582,7 @@ func (h *lspEditorHandler) handleChangedWorkspace(
 
 	/*cfg := caps.InnerServerCapabilities.Workspace.WorkspaceFolders
 	if !cfg.Supported {
-		h.m.SetMessage("LSP server does not support changing workspaces")
+		h.m.Notify("LSP server does not support changing workspaces")
 		log.Tracef("lspEditorHandler.Server.DidChangeWorkspaceFolders(%#v): not supported", caps)
 		return
 	}*/
@@ -1723,7 +1724,7 @@ func (h *lspEditorHandler) browseLocations(
 
 		err := h.goToLocation(win, textToLocation[text])
 		if err != nil {
-			h.m.SetMessage("search.Handler: %s", err)
+			h.m.Notify(notifications.LevelError, "go to location: %s", err)
 		}
 	})
 
@@ -1975,7 +1976,7 @@ func (h *lspEditorHandler) handleEvents(ch chan textapi.Event) {
 			log.Tracef("lspEditorHandler.Handle(%#v) in %s: %s", ev, time.Since(start), err)
 		}
 		if err != nil && err != errNoServer {
-			h.m.SetMessage("%s", err)
+			log.Errorf("failed to process file event %+v: %v", ev, err)
 		}
 	}
 }

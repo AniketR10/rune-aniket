@@ -43,8 +43,8 @@ func (s browserResourcePermissionServer) Register(
 		browserpb.RegisterWindowManagerServer(registrar, rpcServer)
 	case PermissionBrowserResourceOpener:
 		browserpb.RegisterResourceOpenerServer(registrar, rpcServer)
-	case PermissionBrowserMessenger:
-		browserpb.RegisterMessengerServer(registrar, rpcServer)
+	case PermissionBrowserNotifications:
+		browserpb.RegisterNotificationsServer(registrar, rpcServer)
 	case PermissionBrowserEventPublisher:
 		browserpb.RegisterEventPublisherServer(registrar, rpcServer)
 	}
@@ -68,8 +68,8 @@ func BrowserResources(b browser.Browser) map[Permission]ResourceRegistrar {
 			PermissionBrowserWindowManager),
 		PermissionBrowserResourceOpener: s.forPermission(
 			PermissionBrowserResourceOpener),
-		PermissionBrowserMessenger: s.forPermission(
-			PermissionBrowserMessenger),
+		PermissionBrowserNotifications: s.forPermission(
+			PermissionBrowserNotifications),
 		PermissionBrowserEventPublisher: s.forPermission(
 			PermissionBrowserEventPublisher),
 	}

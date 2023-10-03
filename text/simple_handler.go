@@ -47,7 +47,7 @@ func (h *simpleEditorHandler) Draw(w term.Writer) {
 	h.less.Draw(w)
 	locs, _ := h.cursor.Locations()
 	for _, loc := range locs {
-		h.less.SetMessage(loc.Message)
+		h.less.Notify(loc.Message)
 		return
 	}
 }

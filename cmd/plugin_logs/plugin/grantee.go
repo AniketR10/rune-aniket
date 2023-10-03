@@ -37,7 +37,7 @@ var (
 	requiredPermissions = []plugin.Permission{
 		plugin.Permission(plugin.PermissionBrowserWindowManager),
 		plugin.Permission(plugin.PermissionBrowserEventPublisher),
-		plugin.Permission(plugin.PermissionBrowserMessenger),
+		plugin.Permission(plugin.PermissionBrowserNotifications),
 		plugin.PermissionConfig,
 		plugin.Permission(plugin.PermissionEditor),
 	}

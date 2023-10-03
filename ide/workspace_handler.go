@@ -21,6 +21,7 @@ import (
 	"unstable.build/go-tui/api/config"
 	textapi "unstable.build/go-tui/api/text"
 	workspaceapi "unstable.build/go-tui/api/workspace"
+	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/plugin"
 	"unstable.build/go-tui/storage"
@@ -224,7 +225,7 @@ func (h *workspaceManagerHandler) initWithRestorePrompt(
 				h.history.resetWorkspaceCache(workspaceURI)
 			}
 			if err != nil {
-				h.empty.Browser().SetMessage(err.Error())
+				h.empty.Browser().Notify(notifications.LevelError, err.Error())
 			}
 		},
 	)

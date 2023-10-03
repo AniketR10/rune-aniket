@@ -19,6 +19,7 @@ import (
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
+	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/workspace"
@@ -389,7 +390,7 @@ and lose all the new updates?`, file)
 			}
 			if err != nil {
 				c.log(log.ErrorLevel, "recovery prompt: %v", err)
-				c.SetMessage("%v", err)
+				c.Notify(notifications.LevelError, "%v", err)
 				return
 			}
 		})
@@ -449,7 +450,7 @@ an edit session for this file crashed.`, file)
 			}
 			if err != nil {
 				c.log(log.ErrorLevel, "recovery prompt: %v", err)
-				c.SetMessage("%v", err)
+				c.Notify(notifications.LevelError, "%v", err)
 				return
 			}
 		})
@@ -587,9 +588,9 @@ func (c *Component) dispatchEvent(ev textapi.Event) (handled bool) {
 	return
 }
 
-// SetMessage formats the given msg and args and displays it on next Draw.
-func (c *Component) SetMessage(msg string, args ...interface{}) error {
-	c.comp.SetMessage(msg, args...)
+// Notify formats the given msg and args and displays it on next Draw.
+func (c *Component) Notify(level notifications.Level, msg string, args ...interface{}) error {
+	c.comp.Notify(level, fmt.Sprintf(msg, args...))
 	return nil
 }
 

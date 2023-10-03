@@ -6,6 +6,7 @@ import (
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/component"
+	notifications "unstable.build/go-tui/component/notifications"
 )
 
 // BrowserFromAPIBrowser wraps a browserapi.Browser and returns
@@ -78,8 +79,8 @@ func (b toBrowser) Window(id uint64) (browser.Window, bool) {
 	return NopWindow(), true
 }
 
-func (b toBrowser) SetMessage(msg string, args ...interface{}) error {
-	return b.b.SetMessage(msg, args...)
+func (b toBrowser) Notify(level notifications.Level, msg string, args ...interface{}) error {
+	return b.b.Notify(level, msg, args...)
 }
 
 func (b toBrowser) Open(resource workspaceapi.URI) (browserapi.Handler, error) {

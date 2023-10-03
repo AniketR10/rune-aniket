@@ -25,6 +25,7 @@ import (
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	workspaceplugin "unstable.build/go-tui/api/workspace/plugin"
 	"unstable.build/go-tui/component"
+	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/handler/search"
 	"unstable.build/go-tui/plugin"
 	"unstable.build/go-tui/proto"
@@ -41,7 +42,7 @@ func Permissions() []plugin.Permission {
 	return []plugin.Permission{
 		plugin.Permission(plugin.PermissionBrowserResourceOpener),
 		plugin.Permission(plugin.PermissionBrowserEventPublisher),
-		plugin.Permission(plugin.PermissionBrowserMessenger),
+		plugin.Permission(plugin.PermissionBrowserNotifications),
 		plugin.PermissionStorage,
 		plugin.Permission(plugin.PermissionEditor),
 		plugin.Permission(plugin.PermissionFileSystem),
@@ -53,7 +54,7 @@ type fuzzyFinderHandler struct {
 	s                    document.Service
 	f                    browserapi.ResourceOpener
 	p                    browserapi.EventPublisher
-	m                    browserapi.Messenger
+	m                    browserapi.Notifications
 	ed                   textapi.Editor
 	fs                   workspaceapi.FileSystem
 	executor             workspaceapi.Executor
@@ -209,7 +210,7 @@ func (h *fuzzyFinderHandler) setContent(
 	return h.ed.SetCursor(hed, pos)
 }
 
-func (h *fuzzyFinderHandler) setMessage(msg string, args ...interface{}) error {
+func (h *fuzzyFinderHandler) notifyError(msg string, args ...interface{}) error {
 	// allow browser messenger permission to be denied
 	if h.m == nil {
 		return nil
@@ -218,14 +219,14 @@ func (h *fuzzyFinderHandler) setMessage(msg string, args ...interface{}) error {
 	h.mu.Unlock()
 	defer h.mu.Lock()
 
-	return h.m.SetMessage(msg, args...)
+	return h.m.Notify(notifications.LevelError, msg, args...)
 }
 
 func (h *fuzzyFinderHandler) openResource(searchQuery, data string) {
 	resource, pos := h.getResource(h.fs, data)
 	handler, err := h.open(resource)
 	if err != nil {
-		merr := h.setMessage("Open: %v", err)
+		merr := h.notifyError("Open: %v", err)
 		if merr != nil {
 			log.Errorf("error setting message: %v", merr)
 		}
@@ -279,7 +280,7 @@ func (h *fuzzyFinderHandler) scanDataViaWorkspaceAPI(
 		h.mu.Lock()
 		defer h.mu.Unlock()
 
-		merr := h.setMessage("failed to scan: %v", err)
+		merr := h.notifyError("failed to scan: %v", err)
 		if merr != nil {
 			log.Errorf("error setting message: %v", merr)
 		}
@@ -340,7 +341,7 @@ func (h *fuzzyFinderHandler) scanData() {
 	h.pid = 0
 
 	if !killed && err != nil {
-		merr := h.setMessage("failed to execute '%s': %v", h.cmdStr, err)
+		merr := h.notifyError("failed to execute '%s': %v", h.cmdStr, err)
 		if merr != nil {
 			log.Errorf("error setting message: %v", merr)
 		}
@@ -360,8 +361,8 @@ func (h *fuzzyFinderHandler) initGrants(
 			h.executor, err = workspaceplugin.Executor(grant, broker)
 		case plugin.Permission(plugin.PermissionEditor):
 			h.ed, err = textplugin.Editor(grant, broker)
-		case plugin.Permission(plugin.PermissionBrowserMessenger):
-			h.m, err = browserplugin.Messenger(grant, broker)
+		case plugin.Permission(plugin.PermissionBrowserNotifications):
+			h.m, err = browserplugin.Notifications(grant, broker)
 		case plugin.Permission(plugin.PermissionBrowserEventPublisher):
 			h.p, err = browserplugin.EventPublisher(grant, broker)
 		case plugin.Permission(plugin.PermissionBrowserResourceOpener):

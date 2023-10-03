@@ -26,6 +26,7 @@ import (
 	"unstable.build/go-tui/cell"
 	syntaxPlugin "unstable.build/go-tui/cmd/plugin_fuzzy_syntax/plugin"
 	"unstable.build/go-tui/component"
+	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/handler/search"
 	"unstable.build/go-tui/plugin"
@@ -71,7 +72,7 @@ var (
 		plugin.PermissionBrowserWindowManager,
 		plugin.PermissionBrowserResourceOpener,
 		plugin.PermissionBrowserEventPublisher,
-		plugin.PermissionBrowserMessenger,
+		plugin.PermissionBrowserNotifications,
 		plugin.PermissionConfig,
 		plugin.PermissionFileSystem,
 		plugin.PermissionEditor,
@@ -91,7 +92,7 @@ type file struct {
 type syntaxHandler struct {
 	ed                   textapi.Editor
 	wm                   browserapi.WindowManager
-	m                    browserapi.Messenger
+	m                    browserapi.Notifications
 	o                    browserapi.ResourceOpener
 	p                    browserapi.EventPublisher
 	fs                   workspaceapi.FileSystem
@@ -201,8 +202,8 @@ func newSyntaxHandler(
 			if err != nil {
 				return nil, err
 			}
-		case plugin.PermissionBrowserMessenger:
-			ret.m, err = browserplugin.Messenger(g, broker)
+		case plugin.PermissionBrowserNotifications:
+			ret.m, err = browserplugin.Notifications(g, broker)
 			if err != nil {
 				return nil, err
 			}
@@ -455,7 +456,7 @@ func (h *syntaxHandler) browseNodes(
 
 		err := h.goToLocation(win, uri, textToLocation[text])
 		if err != nil {
-			h.m.SetMessage("search.Handler: %s", err)
+			h.m.Notify(notifications.LevelError, "go to location: %v", err)
 		}
 	})
 

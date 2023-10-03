@@ -22,7 +22,7 @@ type emulator struct {
 	wm browserapi.WindowManager
 	fs workspaceapi.FileSystem
 	p  browserapi.EventPublisher
-	m  browserapi.Messenger
+	m  browserapi.Notifications
 
 	mouse             *text.Mouse
 	mouseDriver       *mouseDriver
@@ -42,7 +42,7 @@ type emulator struct {
 func newEmulator(
 	wm browserapi.WindowManager, tty workspaceapi.Terminal,
 	fs workspaceapi.FileSystem, p browserapi.EventPublisher,
-	m browserapi.Messenger,
+	m browserapi.Notifications,
 	shell string, initialCmd string,
 	defAttr, selectionAttr term.Attributes,
 ) (*emulator, error) {
@@ -58,7 +58,7 @@ func newEmulator(
 func (e *emulator) init(
 	wm browserapi.WindowManager, tty workspaceapi.Terminal,
 	fs workspaceapi.FileSystem, p browserapi.EventPublisher,
-	m browserapi.Messenger, shell string, initialCmd string,
+	m browserapi.Notifications, shell string, initialCmd string,
 	defAttr, selectionAttr term.Attributes,
 ) error {
 	e.wm = wm

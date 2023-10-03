@@ -638,12 +638,12 @@ func (c *Component) Bar(o browserapi.Orientation, h tui.Handler) {
 }
 
 func (c *Component) setError(err error) {
-	c.SetMessage("Error: %s", err)
+	c.Notify(notifications.LevelError, "Error: %s", err)
 }
 
-// SetMessage formats the given msg and args and displays it on next Draw.
-func (c *Component) SetMessage(msg string, args ...interface{}) {
-	c.container.Notify(notifications.LevelInfo, fmt.Sprintf(msg, args...))
+// Notify formats the given msg and args and displays it on next Draw.
+func (c *Component) Notify(level notifications.Level, msg string, args ...interface{}) {
+	c.container.Notify(level, fmt.Sprintf(msg, args...))
 }
 
 // Resize satisfies tui.Component

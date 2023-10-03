@@ -37,10 +37,10 @@ func ResourceOpener(grant plugin.Grant, broker proto.MuxBroker) (
 	return dialBrowser(grant, broker)
 }
 
-// Messenger acquires the browser's Messenger
+// Notifications acquires the browser's Notifications
 // resource with the given token.
-func Messenger(grant plugin.Grant, broker proto.MuxBroker) (
-	browserapi.Messenger, error,
+func Notifications(grant plugin.Grant, broker proto.MuxBroker) (
+	browserapi.Notifications, error,
 ) {
 	return dialBrowser(grant, broker)
 }

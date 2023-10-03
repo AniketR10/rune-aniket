@@ -26,6 +26,7 @@ import (
 	textapi "unstable.build/go-tui/api/text"
 	textplugin "unstable.build/go-tui/api/text/plugin"
 	workspaceapi "unstable.build/go-tui/api/workspace"
+	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/plugin"
 	"unstable.build/go-tui/proto"
 	"unstable.build/go-tui/storage/cache"
@@ -41,12 +42,12 @@ const (
 
 var (
 	requiredPermissions = []plugin.Permission{
-		plugin.Permission(plugin.PermissionBrowserWindowManager),
-		plugin.Permission(plugin.PermissionBrowserMessenger),
-		plugin.Permission(plugin.PermissionBrowserResourceOpener),
+		plugin.PermissionBrowserWindowManager,
+		plugin.PermissionBrowserNotifications,
+		plugin.PermissionBrowserResourceOpener,
 		plugin.PermissionSchemeManager,
 		plugin.PermissionStorage,
-		plugin.Permission(plugin.PermissionEditor),
+		plugin.PermissionEditor,
 	}
 	defaultCommands = map[string]func(*issuesGrantee,
 		context.Context, textapi.Command) (bool, error){
@@ -88,7 +89,7 @@ type issuesGrantee struct {
 	tracker      issue.Tracker
 	trackerError error
 	marshaler    encoding.Marshaler
-	m            browserapi.Messenger
+	m            browserapi.Notifications
 	o            browserapi.ResourceOpener
 	wm           browserapi.WindowManager
 	sm           schemeapi.SchemeManager
@@ -235,8 +236,8 @@ func (e *issuesGrantee) PermissionGranted(grants []plugin.Grant) {
 				continue
 			}
 			e.o = o
-		case plugin.Permission(plugin.PermissionBrowserMessenger):
-			m, err := browserplugin.Messenger(g, e.broker)
+		case plugin.Permission(plugin.PermissionBrowserNotifications):
+			m, err := browserplugin.Notifications(g, e.broker)
 			if err != nil {
 				log.Warnf("Could not acquire browser messenger: %v. "+
 					"Will not be able to report errors to user.", err)
@@ -343,11 +344,11 @@ func (e *issuesGrantee) Shutdown(reason string) error {
 	return nil
 }
 
-func (e *issuesGrantee) setMessage(msg string, args ...any) {
+func (e *issuesGrantee) notify(level notifications.Level, msg string, args ...any) {
 	if e.m == nil {
 		return
 	}
-	err := e.m.SetMessage(msg, args...)
+	err := e.m.Notify(level, msg, args...)
 	if err != nil {
 		err = fmt.Errorf("set message: %v", err)
 		log.Error(err)
@@ -378,7 +379,7 @@ func (e *issuesGrantee) openCustomIssueTemplate(
 
 func (e *issuesGrantee) freeIssue(ctx context.Context, ev textapi.Event, uri workspaceapi.URI) bool {
 	if e.pendingIssueID == "" {
-		e.setMessage("canceled creation of new issue")
+		e.notify(notifications.LevelInfo, "canceled creation of new issue")
 	}
 	e.pendingIssueURI.CompareAndSwap(uri, workspaceapi.URI{})
 	_ = os.Remove(uri.Path())
@@ -390,12 +391,12 @@ func (e *issuesGrantee) createReport(ctx context.Context, temp issue.Report) str
 	id, err := e.tracker.CreateReport(ctx, temp)
 	if err != nil {
 		err = fmt.Errorf("create report: %v", err)
-		e.setMessage(err.Error())
+		e.notify(notifications.LevelError, err.Error())
 		log.Error(err)
 		return ""
 	}
 	msg := fmt.Sprintf("created issue report %s", id)
-	e.setMessage(msg)
+	e.notify(notifications.LevelSuccess, msg)
 	log.Info(msg)
 	return id
 }
@@ -404,13 +405,13 @@ func (e *issuesGrantee) updateReport(ctx context.Context, id string, temp issue.
 	err := e.tracker.UpdateReport(ctx, id, temp)
 	if err != nil {
 		err = fmt.Errorf("update report: %v", err)
-		e.setMessage(err.Error())
+		e.notify(notifications.LevelError, err.Error())
 		log.Error(err)
 		return
 	}
 
 	msg := fmt.Sprintf("updated issue report %s", id)
-	e.setMessage(msg)
+	e.notify(notifications.LevelSuccess, msg)
 	log.Info(msg)
 }
 
@@ -425,7 +426,7 @@ func (e *issuesGrantee) createOrUpdateIssue(ctx context.Context, ev textapi.Even
 	err := e.marshaler.Unmarshal([]byte(ev.Content), &temp)
 	if err != nil {
 		err = fmt.Errorf("unmarshal: %v", err)
-		e.setMessage(err.Error())
+		e.notify(notifications.LevelError, err.Error())
 		log.Warn(err)
 		return false
 	}

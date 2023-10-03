@@ -32,7 +32,7 @@ var (
 	sedHandlerEvents      = []textapi.EventType{}
 	sedHandlerPermissions = []plugin.Permission{
 		plugin.Permission(plugin.PermissionEditor),
-		plugin.Permission(plugin.PermissionBrowserMessenger),
+		plugin.Permission(plugin.PermissionBrowserNotifications),
 		plugin.Permission(plugin.PermissionExecute),
 	}
 )
@@ -45,7 +45,7 @@ func Grantee() (plugin.Grantee, []plugin.Permission) {
 
 type sedEditorHandler struct {
 	ed   textapi.Editor
-	m    browserapi.Messenger
+	m    browserapi.Notifications
 	exec workspaceapi.Executor
 
 	resource     textapi.Handler
@@ -66,8 +66,8 @@ func newSedHandler(
 		switch grant.Permission {
 		case plugin.Permission(plugin.PermissionExecute):
 			ret.exec, err = workspaceplugin.Executor(grant, broker)
-		case plugin.Permission(plugin.PermissionBrowserMessenger):
-			ret.m, err = browserplugin.Messenger(grant, broker)
+		case plugin.Permission(plugin.PermissionBrowserNotifications):
+			ret.m, err = browserplugin.Notifications(grant, broker)
 		}
 		if err != nil {
 			return nil, err
@@ -102,13 +102,6 @@ func (h *sedEditorHandler) execSed(
 		ret = fmt.Errorf("sed: %v: stderr: %s", ret, stderrContent)
 	}
 	return
-}
-
-func (h *sedEditorHandler) setMessage(msg string, args ...interface{}) {
-	err := h.m.SetMessage(msg, args...)
-	if err != nil {
-		log.Errorf("failed to SetMessage: %v", err)
-	}
 }
 
 func (h *sedEditorHandler) readHandlerContent(hed textapi.Handler) (int, string, error) {

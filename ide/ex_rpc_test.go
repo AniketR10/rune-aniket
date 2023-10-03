@@ -103,7 +103,7 @@ func newTestRPCBrowser(t *testing.T,
 		grpcServer := grpc.NewServer()
 		server := browserpb.NewServer(broker, ex.Browser(), &serverMutex)
 		browserpb.RegisterWindowManagerServer(grpcServer, server)
-		browserpb.RegisterMessengerServer(grpcServer, server)
+		browserpb.RegisterNotificationsServer(grpcServer, server)
 		browserpb.RegisterResourceOpenerServer(grpcServer, server)
 
 		go grpcServer.Serve(lis)

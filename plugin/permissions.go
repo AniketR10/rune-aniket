@@ -15,8 +15,8 @@ const (
 	PermissionBrowserWindowManager Permission = "_PermBrowserWindowManager"
 	// PermissionBrowserResourceOpener requests access to open new files.
 	PermissionBrowserResourceOpener Permission = "_PermBrowserResourceOpener"
-	// PermissionBrowserMessenger requests access to send messages to the UI.
-	PermissionBrowserMessenger Permission = "_PermBrowserMessenger"
+	// PermissionBrowserNotifications requests access to send messages to the UI.
+	PermissionBrowserNotifications Permission = "_PermBrowserNotifications"
 	// PermissionBrowserEventPublisher requests access to publish term events.
 	// This is useful if your plugin handler does async updates to its state, as
 	// it enables interrupting the main event loop to redraw components.

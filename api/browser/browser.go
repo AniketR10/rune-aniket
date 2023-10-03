@@ -6,6 +6,7 @@ import (
 	"unstable.build/go-tui"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/component"
+	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/handler"
 )
 
@@ -74,10 +75,10 @@ type WindowManager interface {
 	Tab(uri workspaceapi.URI, name string, h Handler) (Handler, error)
 }
 
-// Messenger is the interface that wraps methods to display
+// Notifications is the interface that wraps methods to display
 // messages to the user.
-type Messenger interface {
-	SetMessage(msg string, args ...interface{}) error
+type Notifications interface {
+	Notify(level notifications.Level, msg string, args ...interface{}) error
 }
 
 // ResourceOpener is the interface that wraps the method Open.
@@ -105,6 +106,6 @@ type Browser interface {
 	WindowManager
 	EventPublisher
 	ResourceOpener
-	Messenger
+	Notifications
 	io.Closer
 }

@@ -9,7 +9,7 @@ import (
 type browserServer interface {
 	browserpb.WindowManagerServer
 	browserpb.EventPublisherServer
-	browserpb.MessengerServer
+	browserpb.NotificationsServer
 	browserpb.ResourceOpenerServer
 }
 
@@ -17,7 +17,7 @@ type browserServer interface {
 // provide interrupt on write requests coming from the wire
 type interruptBrowser struct {
 	browserpb.UnimplementedEventPublisherServer
-	browserpb.UnimplementedMessengerServer
+	browserpb.UnimplementedNotificationsServer
 	browserpb.UnimplementedResourceOpenerServer
 	browserpb.UnimplementedWindowManagerServer
 	browserServer browserServer
@@ -80,11 +80,11 @@ func (s *interruptBrowser) Bar(
 	return res, err
 }
 
-// SetMessage satisfies browserpb.BrowserServer
-func (s *interruptBrowser) SetMessage(
-	ctx context.Context, req *browserpb.SetMessageRequest,
-) (*browserpb.SetMessageResponse, error) {
-	res, err := s.browserServer.SetMessage(ctx, req)
+// Notify satisfies browserpb.BrowserServer
+func (s *interruptBrowser) Notify(
+	ctx context.Context, req *browserpb.NotifyRequest,
+) (*browserpb.NotifyResponse, error) {
+	res, err := s.browserServer.Notify(ctx, req)
 	s.interruptDraw()
 	return res, err
 }

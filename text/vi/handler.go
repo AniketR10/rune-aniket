@@ -111,7 +111,7 @@ func (vi *viHandlerImpl) setActiveLocationListMessage(locs map[string]textapi.Lo
 	// in current cursor position, then there's no guarantee of which one
 	// is going to be rendered.
 	for _, loc := range locs {
-		vi.less.SetMessage(loc.Message)
+		vi.less.Notify(loc.Message)
 		return
 	}
 }
@@ -169,8 +169,8 @@ func (vi *viHandlerImpl) setMode(mode viMode) {
 	default:
 		panic(fmt.Sprintf("unknown mode: %v", mode))
 	}
-	vi.less.SetMessageAlt(":")
-	vi.less.SetMessage(text)
+	vi.less.NotifyAlt(":")
+	vi.less.Notify(text)
 	vi.currMode = mode
 }
 
@@ -242,7 +242,7 @@ func (vi *viHandlerImpl) handleSearch(ev term.Event) (bool, bool) {
 		text := vi.less.SearchText()
 		vi.less.SetNormalMode()
 		vi.searchMode = moveToNext
-		vi.less.SetMessage("searching '%s'", text)
+		vi.less.Notify("searching '%s'", text)
 		vi.search(text)
 		return false, true
 	default:

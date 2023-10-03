@@ -11,7 +11,7 @@ type viConfig struct {
 	resAttr         term.Attributes
 	clipboard       clipboard.Register
 	defaultRegister string
-	messenger       text.Messenger
+	messenger       text.Notifications
 	debug           bool
 	wrap            bool
 }
@@ -33,8 +33,8 @@ func WithClipboard(clip clipboard.Register) Option {
 	}
 }
 
-// WithMessenger sets the editor.Messenger to use.
-func WithMessenger(m text.Messenger) Option {
+// WithNotifications sets the editor.Notifications to use.
+func WithNotifications(m text.Notifications) Option {
 	return func(cfg *viConfig) {
 		cfg.messenger = m
 	}

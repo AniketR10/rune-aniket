@@ -34,7 +34,7 @@ type Vi struct {
 	buf       *cell.Buffer
 	cursor    *text.Cursor
 	mouse     *text.Mouse
-	messenger text.Messenger
+	messenger text.Notifications
 	less      *handler.Less
 	clipboard clipboard.Register
 
@@ -256,15 +256,15 @@ func (vi *Vi) Resize(width, height int) {
 	vi.handler.Resize(width, height)
 }
 
-// SetMessage uses vi's configured Messenger to set msg with args.
-func (vi *Vi) SetMessage(msg string, args ...interface{}) {
+// Notify uses vi's configured Notifications to set msg with args.
+func (vi *Vi) Notify(msg string, args ...interface{}) {
 	log.WithField(logging.KeyClass, "vi.Vi").Debugf(msg, args...)
 
 	if vi.messenger != nil {
-		vi.messenger.SetMessage(msg, args...)
+		vi.messenger.Notify(msg, args...)
 		return
 	}
-	vi.less.SetMessage(msg, args...)
+	vi.less.Notify(msg, args...)
 }
 
 // MoveToNextLocation moves the cursor to the next location

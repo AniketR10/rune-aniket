@@ -517,7 +517,7 @@ X──────────────────┐
 	testutil.TestComponent(t, c, w, tests)
 }
 
-func TestComponentSetMessage(t *testing.T) {
+func TestComponentNotify(t *testing.T) {
 	w := term.NewStringWriter(24, 8)
 	cfg := browser.DefaultConfig()
 	cfg.Notifications.AutoClose = 1 * time.Minute
@@ -526,8 +526,8 @@ func TestComponentSetMessage(t *testing.T) {
 	c := browser.NewComponent(cfg)
 	c.Resize(20, 8)
 
-	c.SetMessage("wasup: %s", "holaaaaaaaaaaaaaaaaaaaaaaaaa")
-	c.SetMessage("wasup: %s", "hola")
+	c.Notify(notifications.LevelInfo, "wasup: %s", "holaaaaaaaaaaaaaaaaaaaaaaaaa")
+	c.Notify(notifications.LevelSuccess, "wasup: %s", "hola")
 
 	tests := []testutil.ComponentTestCase{
 		{

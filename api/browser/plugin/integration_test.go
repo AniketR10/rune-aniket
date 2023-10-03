@@ -13,6 +13,7 @@ import (
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	browsertest "unstable.build/go-tui/browser/test"
 	"unstable.build/go-tui/component"
+	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/plugin"
 	"unstable.build/go-tui/proto"
 	"unstable.build/go-tui/term"
@@ -56,7 +57,7 @@ func TestIntegrationRace(t *testing.T) {
 	perms := map[plugin.Permission]plugin.Grant{
 		plugin.PermissionBrowserWindowManager:  grantID,
 		plugin.PermissionBrowserResourceOpener: grantID,
-		plugin.PermissionBrowserMessenger:      grantID,
+		plugin.PermissionBrowserNotifications:      grantID,
 		plugin.PermissionBrowserEventPublisher: grantID,
 	}
 
@@ -138,14 +139,14 @@ func TestIntegrationRace(t *testing.T) {
 			_, err := ifc.(browserapi.ResourceOpener).Open(uri)
 			return err
 		}},
-		{plugin.PermissionBrowserMessenger, func(token plugin.Grant, broker proto.MuxBroker) (interface{}, error) {
-			return Messenger(token, broker)
+		{plugin.PermissionBrowserNotifications, func(token plugin.Grant, broker proto.MuxBroker) (interface{}, error) {
+			return Notifications(token, broker)
 		}, func(
 			mock *browserapitest.MockBrowserMockRecorder,
 		) *gomock.Call {
-			return mock.SetMessage(gomock.Any()).Return(nil)
+			return mock.Notify(gomock.Any(), gomock.Any()).Return(nil)
 		}, func(ifc interface{}) error {
-			return ifc.(browserapi.Messenger).SetMessage("")
+			return ifc.(browserapi.Notifications).Notify(notifications.LevelSuccess, "")
 		}},
 		{plugin.PermissionBrowserEventPublisher, func(token plugin.Grant, broker proto.MuxBroker) (interface{}, error) {
 			return EventPublisher(token, broker)
