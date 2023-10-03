@@ -3,6 +3,7 @@ package notifications
 import (
 	"context"
 	"fmt"
+	"math"
 	"sync"
 	"time"
 
@@ -27,7 +28,8 @@ const (
 
 // Config configures Container.
 type Config struct {
-	// AutoClose determines how long it takes for a given notification to auto-close.
+	// AutoClose the minimum time to automatically close a notification.
+	// If the message is longer than usual, the time will be increased proportionately.
 	AutoClose time.Duration
 	// ProgressBar switches an auto-close progress bar on or off.
 	ProgressBar bool
@@ -113,14 +115,22 @@ func (n *Container) Resize(width, height int) {
 }
 
 func (n *Container) Notify(level Level, msg string) {
+	const baselineChars = len("this is a simple notification.")
+	duration := n.cfg.AutoClose
+	if len(msg) > baselineChars {
+		duration *= time.Duration(float64(len(msg)) / float64(baselineChars))
+		duration = time.Duration(math.Min(float64(2*n.cfg.AutoClose), float64(duration)))
+		duration = time.Duration(math.Max(float64(n.cfg.AutoClose), float64(duration)))
+	}
+
 	var comp component.Responsive
 	if n.cfg.ProgressBar {
-		comp = newNotification(level, msg, n.cfg)
+		comp = newNotification(level, msg, n.cfg, duration)
 	} else {
 		comp = newString(n.cfg, msg)
 	}
 
-	ctx, cancel := context.WithTimeout(n.ctx, n.cfg.AutoClose)
+	ctx, cancel := context.WithTimeout(n.ctx, duration)
 
 	n.mu.Lock()
 	el := n.list.PushFront(comp)

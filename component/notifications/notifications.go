@@ -13,7 +13,7 @@ type notification struct {
 	component.Responsive
 	width        int
 	height       int
-	cfg          Config
+	duration     time.Duration
 	end          time.Time
 	progressCell term.Cell
 }
@@ -35,7 +35,9 @@ func newString(cfg Config, msg string) component.Responsive {
 	return component.StringResponsive(msg, strConfig)
 }
 
-func newNotification(level Level, msg string, cfg Config) *notification {
+func newNotification(
+	level Level, msg string, cfg Config, duration time.Duration,
+) *notification {
 
 	var progressCell term.Cell
 
@@ -53,10 +55,10 @@ func newNotification(level Level, msg string, cfg Config) *notification {
 	}
 
 	start := time.Now()
-	end := start.Add(cfg.AutoClose)
+	end := start.Add(duration)
 	return &notification{
 		Responsive:   newString(cfg, msg),
-		cfg:          cfg,
+		duration:     duration,
 		end:          end,
 		progressCell: progressCell,
 	}
@@ -76,7 +78,7 @@ func (n *notification) Draw(w term.Writer) {
 	}
 
 	remaining := time.Until(n.end)
-	remainingRatio := float64(remaining) / float64(n.cfg.AutoClose)
+	remainingRatio := float64(remaining) / float64(n.duration)
 
 	progressWidth := int(float64(n.width) * remainingRatio)
 	progressOffset := n.width - progressWidth
