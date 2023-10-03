@@ -50,9 +50,10 @@ func TestResponsiveStringDraw(t *testing.T) {
 
 	t.Run("should wrap lines around", func(t *testing.T) {
 		tcases := []struct {
-			in  string
-			out string
-			cfg StringResponsiveConfig
+			in     string
+			out    string
+			cfg    StringResponsiveConfig
+			height int
 		}{
 			{
 				in:  "XXXXXXXXXX\nBBBBBBBBBB\nCCCCCCCCCCCC\nDDDDDDDDDD\nEEEEEEEEEEE\nFFFFFFFFFF\n",
@@ -84,21 +85,108 @@ func TestResponsiveStringDraw(t *testing.T) {
 └───┘`,
 				cfg: StringResponsiveConfig{StringConfig: StringConfig{FrameCharSet: FrameCharSetDefault()}},
 			},
+			{
+				in: "XXXXXXXXXX\nBBBBBBBBBB\nCCCCCCCCCCCC\nDDDDDDDDDD\nEEEEEEEEEEE\nFFFFFFFFFF",
+				cfg: StringResponsiveConfig{
+					StringConfig: StringConfig{
+						Alignment:         SpanAlignmentCentered,
+						FrameCharSet:      FrameCharSetDefault(),
+						PaddingVertical:   2,
+						PaddingHorizontal: 2,
+					},
+				},
+				height: 67,
+				out: `┌───┐
+│   │
+│ X │
+│ X │
+│ X │
+│ X │
+│ X │
+│ X │
+│ X │
+│ X │
+│ X │
+│ X │
+│ B │
+│ B │
+│ B │
+│ B │
+│ B │
+│ B │
+│ B │
+│ B │
+│ B │
+│ B │
+│ C │
+│ C │
+│ C │
+│ C │
+│ C │
+│ C │
+│ C │
+│ C │
+│ C │
+│ C │
+│ C │
+│ C │
+│ D │
+│ D │
+│ D │
+│ D │
+│ D │
+│ D │
+│ D │
+│ D │
+│ D │
+│ D │
+│ E │
+│ E │
+│ E │
+│ E │
+│ E │
+│ E │
+│ E │
+│ E │
+│ E │
+│ E │
+│ E │
+│ F │
+│ F │
+│ F │
+│ F │
+│ F │
+│ F │
+│ F │
+│ F │
+│ F │
+│ F │
+│   │
+└───┘`,
+			},
 		}
 
 		for _, tcase := range tcases {
 			t.Run("StringResponsive", func(t *testing.T) {
+				height := 5
+				if tcase.height != 0 {
+					height = tcase.height
+				}
 				testString(t, func(in string) tui.Component {
 					return StringResponsive(in, tcase.cfg)
-				}, 5, 5, tcase.in, tcase.out)
+				}, 5, height, tcase.in, tcase.out)
 			})
 
 			t.Run("BufferResponsive", func(t *testing.T) {
+				height := 5
+				if tcase.height != 0 {
+					height = tcase.height
+				}
 				testString(t, func(in string) tui.Component {
 					b := cell.NewBuffer()
 					b.WriteString(in)
 					return Buffer(b, tcase.cfg)
-				}, 5, 5, tcase.in, tcase.out)
+				}, 5, height, tcase.in, tcase.out)
 			})
 		}
 	})
@@ -194,6 +282,19 @@ func TestResponsiveHeight(t *testing.T) {
 			width: 5,
 			out:   27,
 			cfg:   StringResponsiveConfig{StringConfig: StringConfig{FrameCharSet: FrameCharSetDefault()}},
+		},
+		{
+			in:    "XXXXXXXXXX\nBBBBBBBBBB\nCCCCCCCCCCCC\nDDDDDDDDDD\nEEEEEEEEEEE\nFFFFFFFFFF\n",
+			width: 5,
+			out:   68,
+			cfg: StringResponsiveConfig{
+				StringConfig: StringConfig{
+					Alignment:         SpanAlignmentCentered,
+					FrameCharSet:      FrameCharSetDefault(),
+					PaddingVertical:   2,
+					PaddingHorizontal: 2,
+				},
+			},
 		},
 	}
 

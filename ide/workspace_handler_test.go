@@ -292,8 +292,8 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 └──────────────────┘`},
 		{":cwo>:cwo>",
 			`┌──────────────────┐
-│workspace tab is  │
-│empty             │
+│workspace tab     │
+│is empty          │
 └──────────────────┘
 │workspaceWallpaper│
 │                  │
@@ -306,8 +306,8 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 │invalid           │
 │workspace:        │
 │there's only 10   │
+│workspaces        │
 └──────────────────┘
-│workspaceWallpaper│
 │                  │
 │                  │
 │                  │
@@ -351,8 +351,8 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 │arguments.        │
 │Expecting 1       │
 │argument with     │
+│workspace number  │
 └──────────────────┘
-│                  │
 ├──────────────────┤
 │1  2              │
 └──────────────────┘`},

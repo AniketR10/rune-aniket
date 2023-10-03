@@ -1085,13 +1085,14 @@ func TestExposedRootNodeIssue(t *testing.T) {
 			`┌──────────────────┐
 │ changed split    │
 ┌ direction to     │
+│ vertical         │
 └──────────────────┘
 ┌──────────────────┐
 │ changed split    │
 │ direction to     │
 │ horizontal       │
-└──────────────────┘
-└────────┘└───┘└───┘`},
+└──────────────────┘`,
+		},
 	}
 
 	b := newExForTesting(t, texttest.NopEditor(), opts...)

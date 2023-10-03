@@ -81,24 +81,36 @@ func (s *respStr) Height(width int) int {
 	if width <= 0 {
 		return 0
 	}
-	height := len(s.in)
-	if width > 2 && s.cfg.FrameCharSet != (FrameCharSet{}) {
+	height := len(s.massageInput(width))
+	height += s.cfg.PaddingVertical
+	if s.cfg.FrameCharSet != (FrameCharSet{}) {
 		height += 2
-		width -= 2
-	}
-	for _, col := range s.in {
-		height += (len(col) - 1) / width
 	}
 	return height
 }
 
 // Resize satisfies tui.Component.
 func (s *respStr) Resize(width, height int) {
+	outRaw := s.massageInput(width)
+	s.out = newStringComp(outRaw, s.cfg.Attributes, 0,
+		s.cfg.BackgroundAttributes, s.cfg.FrameCharSet,
+		s.cfg.PaddingHorizontal, s.cfg.PaddingVertical, s.cfg.Alignment, s.cfg.MinWidth)
+	s.out.Resize(width, height)
+}
+
+// Draw satisfies tui.Component.
+func (s *respStr) Draw(w term.Writer) {
+	s.out.Draw(w)
+}
+
+func (s *respStr) massageInput(width int) [][]term.Cell {
 	effectiveWidth := width
-	if width > 2 && s.cfg.FrameCharSet != (FrameCharSet{}) {
+	if effectiveWidth > 2 && s.cfg.FrameCharSet != (FrameCharSet{}) {
 		effectiveWidth -= 2
 	}
-
+	if effectiveWidth > s.cfg.PaddingHorizontal {
+		effectiveWidth -= s.cfg.PaddingHorizontal
+	}
 	var outRaw [][]term.Cell
 	for _, col := range s.in {
 		if len(col) == 0 {
@@ -123,13 +135,5 @@ func (s *respStr) Resize(width, height int) {
 			col = col[chunkLen:]
 		}
 	}
-	s.out = newStringComp(outRaw, s.cfg.Attributes, 0,
-		s.cfg.BackgroundAttributes, s.cfg.FrameCharSet,
-		s.cfg.PaddingHorizontal, s.cfg.PaddingVertical, s.cfg.Alignment, s.cfg.MinWidth)
-	s.out.Resize(width, height)
-}
-
-// Draw satisfies tui.Component.
-func (s *respStr) Draw(w term.Writer) {
-	s.out.Draw(w)
+	return outRaw
 }
