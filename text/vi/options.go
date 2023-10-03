@@ -2,7 +2,6 @@ package vi
 
 import (
 	"unstable.build/go-tui/term"
-	"unstable.build/go-tui/text"
 	"unstable.build/go-tui/text/clipboard"
 )
 
@@ -11,7 +10,6 @@ type viConfig struct {
 	resAttr         term.Attributes
 	clipboard       clipboard.Register
 	defaultRegister string
-	messenger       text.Notifications
 	debug           bool
 	wrap            bool
 }
@@ -30,13 +28,6 @@ func WithResAttr(attr term.Attributes) Option {
 func WithClipboard(clip clipboard.Register) Option {
 	return func(cfg *viConfig) {
 		cfg.clipboard = clip
-	}
-}
-
-// WithNotifications sets the editor.Notifications to use.
-func WithNotifications(m text.Notifications) Option {
-	return func(cfg *viConfig) {
-		cfg.messenger = m
 	}
 }
 

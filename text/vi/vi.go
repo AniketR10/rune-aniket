@@ -3,8 +3,6 @@ package vi
 import (
 	"fmt"
 
-	"github.com/ernestrc/blue/logging"
-	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui"
 	textapi "unstable.build/go-tui/api/text"
 	workspaceapi "unstable.build/go-tui/api/workspace"
@@ -34,7 +32,6 @@ type Vi struct {
 	buf       *cell.Buffer
 	cursor    *text.Cursor
 	mouse     *text.Mouse
-	messenger text.Notifications
 	less      *handler.Less
 	clipboard clipboard.Register
 
@@ -68,7 +65,6 @@ func (vi *Vi) Init(buf *cell.Buffer, resource workspaceapi.URI, opts ...Option) 
 	viHandler.init(buf, opts...)
 	vi.handler = viHandler
 	vi.buf = buf
-	vi.messenger = viHandler.config.messenger
 	vi.less = &viHandler.less
 	vi.cursor = &viHandler.cursor
 	vi.mouse = text.NewMouse(newMouseDelegate(viHandler))
@@ -254,17 +250,6 @@ func (vi *Vi) Man() tui.Manual {
 // Resize satisfies tui.Component
 func (vi *Vi) Resize(width, height int) {
 	vi.handler.Resize(width, height)
-}
-
-// Notify uses vi's configured Notifications to set msg with args.
-func (vi *Vi) Notify(msg string, args ...interface{}) {
-	log.WithField(logging.KeyClass, "vi.Vi").Debugf(msg, args...)
-
-	if vi.messenger != nil {
-		vi.messenger.Notify(msg, args...)
-		return
-	}
-	vi.less.Notify(msg, args...)
 }
 
 // MoveToNextLocation moves the cursor to the next location
