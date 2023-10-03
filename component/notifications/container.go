@@ -159,6 +159,8 @@ func (n *Container) Notify(level Level, msg string) {
 		}
 
 		n.mu.Lock()
+		// no need to ensure that while we were trying to acquire a lock, no one
+		// removed it already as Remove is itempotent. See Go std's list.List.
 		n.list.Remove(el)
 		delete(n.notifications, msg)
 		n.mu.Unlock()
@@ -188,6 +190,18 @@ func (n *Container) Notify(level Level, msg string) {
 		}
 
 	}()
+}
+
+// CloseAll closes all open notifications.
+func (n *Container) CloseAll() {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	// clear out current notification, based on message equality, if it exists
+	for _, ticket := range n.notifications {
+		ticket.cancelCtx()
+		n.list.Remove(ticket.el)
+	}
+	n.notifications = make(map[string]notificationTicket)
 }
 
 // Close cancells all pending notifications.

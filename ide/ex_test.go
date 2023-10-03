@@ -972,6 +972,17 @@ func TestNewWindow(t *testing.T) {
 │                  │
 │                  │
 └──────────────────┘`},
+		{":notificationsCloseAll>",
+			`┌──────────────────┐
+│                  │
+├──────────────────┤
+│                  │
+│                  │
+│                  │
+│                  │
+│                  │
+│                  │
+└──────────────────┘`},
 	}
 
 	notifications := browser.DefaultConfig().Notifications

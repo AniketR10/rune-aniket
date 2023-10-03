@@ -594,6 +594,11 @@ func (c *Component) Notify(level notifications.Level, msg string, args ...interf
 	return nil
 }
 
+// CloseNotifications closes all open notifications.
+func (c *Component) CloseNotifications() {
+	c.comp.CloseNotifications()
+}
+
 // Split satisfies browser.WindowManager.
 func (c *Component) Split(
 	o browserapi.Orientation, win browser.Window, h browserapi.Handler,

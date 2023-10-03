@@ -908,3 +908,8 @@ func (c *Component) Close() (ret error) {
 func (c *Component) Man() tui.Manual {
 	panic("TODO")
 }
+
+// CloseNotifications closes all open notifications.
+func (c *Component) CloseNotifications() {
+	c.container.CloseAll()
+}
