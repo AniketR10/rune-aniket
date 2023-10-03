@@ -113,12 +113,17 @@ func (n *Container) Resize(width, height int) {
 }
 
 func (n *Container) Notify(level Level, msg string) {
-	// FIXME ignore levels and progress bar
-	str := component.StringResponsive(msg, n.stringConfig())
+	var comp component.Responsive
+	if n.cfg.ProgressBar {
+		comp = newNotification(level, msg, n.cfg)
+	} else {
+		comp = newString(n.cfg, msg)
+	}
 
 	ctx, cancel := context.WithTimeout(n.ctx, n.cfg.AutoClose)
-	/* TODO progress bar and levels go func() {
-		const fps = 30
+
+	go func() {
+		const fps = 10
 		cadence := time.Duration(int(time.Second) / fps)
 		ticker := time.NewTicker(cadence)
 		defer ticker.Stop()
@@ -132,12 +137,12 @@ func (n *Container) Notify(level Level, msg string) {
 			}
 		}
 
-	}() */
+	}()
 
 	n.mu.Lock()
 	defer n.mu.Unlock()
 
-	el := n.list.PushFront(str)
+	el := n.list.PushFront(comp)
 
 	go func() {
 		defer cancel()
@@ -153,22 +158,6 @@ func (n *Container) Notify(level Level, msg string) {
 			_ = n.cfg.Interrupter.Interrupt()
 		}
 	}()
-}
-
-func (n *Container) stringConfig() (ret component.StringResponsiveConfig) {
-	ret = component.StringResponsiveConfig{
-		NoSplitWords: true,
-		StringConfig: component.StringConfig{
-			Alignment:            component.SpanAlignmentCentered,
-			BackgroundRune:       ' ',
-			Attributes:           n.cfg.Attributes,
-			BackgroundAttributes: n.cfg.BackgroundAttributes,
-			PaddingHorizontal:    2,
-			PaddingVertical:      2,
-			FrameCharSet:         n.cfg.FrameCharSet,
-		},
-	}
-	return ret
 }
 
 // Close cancells all pending notifications.

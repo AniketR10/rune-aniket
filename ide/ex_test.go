@@ -974,8 +974,11 @@ func TestNewWindow(t *testing.T) {
 └──────────────────┘`},
 	}
 
+	notifications := browser.DefaultConfig().Notifications
+	notifications.ProgressBar = false // deterministic tests
 	opts := []text.Option{
 		text.WithCommandKey(testCommandKey),
+		text.WithNotificationsConfig(notifications),
 	}
 	b := newExForTesting(t, texttest.NopEditor(), opts...)
 	defer b.Close()
@@ -1058,8 +1061,11 @@ func TestCommandAliases(t *testing.T) {
 }
 
 func TestExposedRootNodeIssue(t *testing.T) {
+	notifications := browser.DefaultConfig().Notifications
+	notifications.ProgressBar = false // deterministic tests
 	opts := []text.Option{
 		text.WithCommandKey(testCommandKey),
+		text.WithNotificationsConfig(notifications),
 		text.WithCommandAliases(map[string][]string{
 			"boom": {
 				"newWindow",
@@ -1094,5 +1100,6 @@ func TestExposedRootNodeIssue(t *testing.T) {
 func notificationsConfig() notifications.Config {
 	ret := browser.DefaultConfig().Notifications
 	ret.Width = 15
+	ret.ProgressBar = false // deterministic tests
 	return ret
 }

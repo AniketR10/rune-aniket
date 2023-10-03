@@ -522,6 +522,7 @@ func TestComponentSetMessage(t *testing.T) {
 	cfg := browser.DefaultConfig()
 	cfg.Notifications.AutoClose = 1 * time.Minute
 	cfg.Notifications.Width = 15
+	cfg.Notifications.ProgressBar = false
 	c := browser.NewComponent(cfg)
 	c.Resize(20, 8)
 
@@ -834,8 +835,9 @@ func (c *contentSwapper) Close() error {
 func browserConfig() browser.Config {
 	return browser.Config{
 		Notifications: notifications.Config{
-			AutoClose: 1 * time.Minute,
-			Width:     1,
+			AutoClose:   1 * time.Minute,
+			Width:       1,
+			ProgressBar: false, // determiistic tests
 		},
 	}
 }

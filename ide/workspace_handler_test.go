@@ -522,6 +522,9 @@ func defaultCfg() ideConfig {
 		"workspace": map[string]interface{}{
 			"wallpaper": "workspaceWallpaper",
 		},
+		"notifications": map[string]interface{}{
+			"progress_bar": false,
+		},
 	}}
 }
 
