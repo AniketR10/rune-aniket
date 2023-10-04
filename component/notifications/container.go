@@ -60,7 +60,7 @@ type Container struct {
 	list  component.ResponsiveList
 	vlist component.Virtual
 
-	notifications map[string]notificationTicket
+	notifications map[string]*notificationTicket
 }
 
 // New allocates storage for a new instance of Container and initializes it with
@@ -87,7 +87,7 @@ func (n *Container) Init(inner tui.Component, cfg Config) {
 	n.list.Init()
 	n.vlist.C = &n.list
 	n.ctx, n.cancelCtx = context.WithCancel(context.Background())
-	n.notifications = make(map[string]notificationTicket)
+	n.notifications = make(map[string]*notificationTicket)
 }
 
 // Draw satisfies tui.Component.
@@ -148,8 +148,83 @@ func (n *Container) Notify(level Level, msg string) {
 
 	// add a new notification
 	el := n.list.PushFront(comp)
-	n.notifications[msg] = notificationTicket{el: el, cancelCtx: cancel}
+	n.notifications[msg] = &notificationTicket{el: el, cancelCtx: cancel}
 
+	n.startAutoClose(ctx, cancel, el, msg)
+}
+
+// CloseAll closes all open notifications.
+func (n *Container) CloseAll() {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+
+	// clear out current notification, based on message equality, if it exists
+	for _, ticket := range n.notifications {
+		ticket.cancelCtx()
+		n.list.Remove(ticket.el)
+	}
+	n.notifications = make(map[string]*notificationTicket)
+}
+
+// PauseAll pauses auto-close progress on all open notifications.
+func (n *Container) PauseAll() {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	// clear out current notification, based on message equality, if it exists
+	for _, ticket := range n.notifications {
+		n.pauseNotification(ticket)
+	}
+}
+
+// ResumeAll resumes auto-close progress on all open notifications.
+func (n *Container) ResumeAll() {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+
+	for msg, ticket := range n.notifications {
+		n.resumeNotification(ticket, msg)
+	}
+}
+
+// Close cancels all pending notifications and closes this
+// notification container for good. Future calls to Notify will
+// not produce new notifications.
+func (n *Container) Close() error {
+	n.cancelCtx()
+	return nil
+}
+
+func (n *Container) pauseNotification(t *notificationTicket) {
+	comp := t.el.Value().(*notificationComp)
+	if !comp.pausedAt.IsZero() {
+		return // resume is idempotent
+	}
+	// this prevents element from being removed
+	// and cancels fps interrupt goroutine.
+	t.cancelCtx()
+	t.el.Value().(*notificationComp).pausedAt = time.Now()
+}
+
+func (n *Container) resumeNotification(t *notificationTicket, msg string) {
+	comp := t.el.Value().(*notificationComp)
+	if comp.pausedAt.IsZero() {
+		return // resume is idempotent
+	}
+	remaining := comp.end.Sub(comp.pausedAt)
+	newEnd := time.Now().Add(remaining)
+
+	ctx, cancelCtx := context.WithTimeout(n.ctx, remaining)
+
+	comp.end = newEnd
+	comp.pausedAt = time.Time{}
+
+	n.startAutoClose(ctx, cancelCtx, t.el, msg)
+}
+
+func (n *Container) startAutoClose(
+	ctx context.Context, cancel func(),
+	el component.ListNode, msg string,
+) {
 	go func() {
 		defer cancel()
 
@@ -190,24 +265,6 @@ func (n *Container) Notify(level Level, msg string) {
 		}
 
 	}()
-}
-
-// CloseAll closes all open notifications.
-func (n *Container) CloseAll() {
-	n.mu.Lock()
-	defer n.mu.Unlock()
-	// clear out current notification, based on message equality, if it exists
-	for _, ticket := range n.notifications {
-		ticket.cancelCtx()
-		n.list.Remove(ticket.el)
-	}
-	n.notifications = make(map[string]notificationTicket)
-}
-
-// Close cancells all pending notifications.
-func (n *Container) Close() error {
-	n.cancelCtx()
-	return nil
 }
 
 type notificationTicket struct {

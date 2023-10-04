@@ -599,6 +599,16 @@ func (c *Component) CloseNotifications() {
 	c.comp.CloseNotifications()
 }
 
+// PauseNotifications pauses auto-close on all open notifications.
+func (c *Component) PauseNotifications() {
+	c.comp.PauseNotifications()
+}
+
+// ResumeNotifications resumes auto-close on all open notifications.
+func (c *Component) ResumeNotifications() {
+	c.comp.ResumeNotifications()
+}
+
 // Split satisfies browser.WindowManager.
 func (c *Component) Split(
 	o browserapi.Orientation, win browser.Window, h browserapi.Handler,

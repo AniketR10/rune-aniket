@@ -913,3 +913,13 @@ func (c *Component) Man() tui.Manual {
 func (c *Component) CloseNotifications() {
 	c.container.CloseAll()
 }
+
+// PauseNotifications pauses auto-close on all open notifications.
+func (c *Component) PauseNotifications() {
+	c.container.PauseAll()
+}
+
+// ResumeNotifications resumes auto-close on all open notifications.
+func (c *Component) ResumeNotifications() {
+	c.container.ResumeAll()
+}

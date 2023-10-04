@@ -72,6 +72,8 @@ var (
 		"focusAboveWindow":        (*ex).focusAboveWindow,
 		"focusBelowWindow":        (*ex).focusBelowWindow,
 		"notificationsCloseAll":   (*ex).closeNotifications,
+		"notificationsPauseAll":   (*ex).pauseNotifications,
+		"notificationsResumeAll":  (*ex).resumeNotifications,
 		"panic":                   (*ex).panic,
 	}
 	exDefaultBindings = map[term.KeyComb]string{
@@ -507,6 +509,16 @@ func (e *ex) focusBelowWindow(args ...string) error {
 
 func (e *ex) closeNotifications(args ...string) error {
 	e.comp.CloseNotifications()
+	return nil
+}
+
+func (e *ex) pauseNotifications(args ...string) error {
+	e.comp.PauseNotifications()
+	return nil
+}
+
+func (e *ex) resumeNotifications(args ...string) error {
+	e.comp.ResumeNotifications()
 	return nil
 }
 

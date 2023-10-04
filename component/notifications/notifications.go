@@ -7,14 +7,15 @@ import (
 	"unstable.build/go-tui/term"
 )
 
-var _ component.Responsive = (*notification)(nil)
+var _ component.Responsive = (*notificationComp)(nil)
 
-type notification struct {
+type notificationComp struct {
 	component.Responsive
 	width        int
 	height       int
 	duration     time.Duration
 	end          time.Time
+	pausedAt     time.Time
 	progressCell term.Cell
 }
 
@@ -36,7 +37,7 @@ func newString(cfg Config, msg string) component.Responsive {
 
 func newNotification(
 	level Level, msg string, cfg Config, duration time.Duration,
-) *notification {
+) *notificationComp {
 
 	var progressCell term.Cell
 
@@ -55,7 +56,7 @@ func newNotification(
 
 	start := time.Now()
 	end := start.Add(duration)
-	return &notification{
+	return &notificationComp{
 		Responsive:   newString(cfg, msg),
 		duration:     duration,
 		end:          end,
@@ -63,13 +64,13 @@ func newNotification(
 	}
 }
 
-func (n *notification) Resize(width, height int) {
+func (n *notificationComp) Resize(width, height int) {
 	n.width = width
 	n.height = height
 	n.Responsive.Resize(width, height)
 }
 
-func (n *notification) Draw(w term.Writer) {
+func (n *notificationComp) Draw(w term.Writer) {
 	n.Responsive.Draw(w)
 
 	if n.width < 4 {
@@ -77,6 +78,10 @@ func (n *notification) Draw(w term.Writer) {
 	}
 
 	remaining := time.Until(n.end)
+	if !n.pausedAt.IsZero() {
+		remaining = n.end.Sub(n.pausedAt)
+	}
+
 	remainingRatio := float64(remaining) / float64(n.duration)
 
 	progressWidth := int(float64(n.width) * remainingRatio)
