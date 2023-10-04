@@ -130,7 +130,9 @@ func (h *workspaceManagerHandler) init(
 	h.storage = storage
 
 	globalOpts := h.textOpts(h.cfg)
-	h.empty, _ = newEx(h.newEditor(cfg), nil, h.storage, h.publishEvent, globalOpts...)
+	// TODO could add workspace to open terminals on empty workspace
+	h.empty, _ = newEx(h.newEditor(cfg), nil, h.storage,
+		cfg.terminalConfig(), h.publishEvent, globalOpts...)
 	err = h.subscribeAllWorkspaceCommands(h.empty)
 	if err != nil {
 		return err
@@ -516,7 +518,7 @@ func (h *workspaceManagerHandler) addWorkspace(
 
 	// workspace capable of opening URIs other than the workspaceapi.URI
 	multicwd := workspace.Multi(h.ctxWithLocker, h.workspace, cwd, uri)
-	ex, err := newEx(h.newEditor(cfg), multicwd, h.storage,
+	ex, err := newEx(h.newEditor(cfg), multicwd, h.storage, cfg.terminalConfig(),
 		h.publishEvent, textOpts...)
 	if err != nil {
 		return err

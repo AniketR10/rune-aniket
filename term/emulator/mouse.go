@@ -1,10 +1,10 @@
-package extension
+package emulator
 
 import (
 	"fmt"
 
-	termutil "unstable.build/go-tui/cmd/extension_terminal/util"
 	"unstable.build/go-tui/term"
+	termutil "unstable.build/go-tui/term/emulator/util"
 	"unstable.build/go-tui/text"
 	"unstable.build/go-tui/text/clipboard"
 )

@@ -1,6 +1,7 @@
 package ide
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -22,6 +23,7 @@ import (
 	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/term"
+	"unstable.build/go-tui/term/emulator"
 	"unstable.build/go-tui/text"
 	texttest "unstable.build/go-tui/text/test"
 	testutil "unstable.build/go-tui/util/test"
@@ -87,6 +89,13 @@ func (w *testLoader) Stat(name string) (os.FileInfo, error) {
 func (w *testLoader) Open(
 	path string, flag int, perm os.FileMode,
 ) (workspaceapi.File, *workspaceapi.Error) {
+	panic("unimplemented")
+}
+func (w *testLoader) NewPty(context.Context) (workspaceapi.Pty, error) {
+	panic("unimplemented")
+}
+
+func (w *testLoader) SetPtySize(p workspaceapi.Pty, width, height int) error {
 	panic("unimplemented")
 }
 
@@ -777,7 +786,7 @@ func TestExKeySequence(t *testing.T) {
 		}
 		ex := new(ex)
 		require.NoError(t, ex.init(texttest.NopEditor(), &testLoader{}, document.NewInMemoryService(),
-			func(ev term.Event) bool {
+			emulator.Config{}, func(ev term.Event) bool {
 				// do not confuse interrupt from list with sequence re-issue commands
 				if ev.Type == term.EventInterrupt {
 					return true
@@ -939,7 +948,7 @@ func newExForTestingWithWorkspace(
 ) testEx {
 	ex := new(ex)
 	require.NoError(t, ex.init(ed, workspace, document.NewInMemoryService(),
-		publishEvent, opts...))
+		emulator.Config{}, publishEvent, opts...))
 	ex.subscribeCommands()
 	return testEx{ex}
 }

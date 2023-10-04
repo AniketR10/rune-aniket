@@ -21,6 +21,7 @@ import (
 	browsertest "unstable.build/go-tui/browser/test"
 	"unstable.build/go-tui/proto"
 	"unstable.build/go-tui/term"
+	"unstable.build/go-tui/term/emulator"
 	"unstable.build/go-tui/text"
 	texttest "unstable.build/go-tui/text/test"
 )
@@ -89,7 +90,7 @@ func newTestRPCBrowser(t *testing.T,
 	) {
 		ex := new(ex)
 		err := ex.init(ed, &testLoader{}, document.NewInMemoryService(),
-			nopPublishEvent, opts...)
+			emulator.Config{}, nopPublishEvent, opts...)
 		if err != nil {
 			return nil, nil, err
 		}

@@ -13,6 +13,7 @@ import (
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/term"
+	"unstable.build/go-tui/term/emulator"
 )
 
 var sampleConfig = `
@@ -124,6 +125,14 @@ workspace:
     wallpaper_background_attr:
         bg: white
 
+terminal:
+    shell: sh
+    attr:
+        fg: white
+        bg: yellow
+    selection_attr:
+        fg: green
+        bg: cyan
 `
 
 func assertDefaultConfig(t *testing.T, cfg *ideConfig) {
@@ -151,6 +160,7 @@ func assertDefaultConfig(t *testing.T, cfg *ideConfig) {
 	assert.Equal(t, browser.DefaultConfig().NonFocusTabAttr, cfg.nonFocusTabAttr())
 	assert.Equal(t, browser.DefaultConfig().WallpaperAttr, cfg.workspaceWallpaperAttr())
 	assert.Equal(t, browser.DefaultConfig().WallpaperBackgroundAttr, cfg.workspaceWallpaperBackgroundAttr())
+	assert.Equal(t, emulator.Config{}, cfg.terminalConfig())
 }
 
 func TestConfigDefault(t *testing.T) {
@@ -232,6 +242,12 @@ func TestConfigSetting(t *testing.T) {
 	assert.Equal(t, term.Attributes{Fg: term.ColorWhite}, cfg.nonFocusTabAttr())
 	assert.Equal(t, term.Attributes{Fg: term.ColorYellow, Bg: term.ColorWhite}, cfg.workspaceWallpaperAttr())
 	assert.Equal(t, term.Attributes{Bg: term.ColorWhite}, cfg.workspaceWallpaperBackgroundAttr())
+	expectedEmulatorConfig := emulator.Config{
+		Shell:               "sh",
+		Attributes:          term.Attributes{Fg: term.ColorWhite, Bg: term.ColorYellow},
+		SelectionAttributes: term.Attributes{Fg: term.ColorGreen, Bg: term.ColorCyan},
+	}
+	assert.Equal(t, expectedEmulatorConfig, cfg.terminalConfig())
 
 	expectedPrompt := browser.PromptConfig{
 		Width:         20,

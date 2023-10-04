@@ -1,24 +1,23 @@
-package extension
+package emulator
 
 import (
-	browserapi "unstable.build/go-tui/api/browser"
-	termutil "unstable.build/go-tui/cmd/extension_terminal/util"
+	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/component/notifications"
+	termutil "unstable.build/go-tui/term/emulator/util"
 )
 
 var _ termutil.WindowManipulator = (*windowManipulator)(nil)
 
 type windowManipulator struct {
 	width, height int
-	wm            browserapi.WindowManager
-	m             browserapi.Notifications
+	browser       browser.Browser
 	title         string
 }
 
 func newWindowManipulator(
-	wm browserapi.WindowManager,
+	browser browser.Browser,
 ) *windowManipulator {
-	return &windowManipulator{wm: wm}
+	return &windowManipulator{browser: browser}
 }
 
 func (w *windowManipulator) State() termutil.WindowState {
@@ -93,5 +92,5 @@ func (w *windowManipulator) RestoreTitleFromStack() {
 }
 
 func (w *windowManipulator) ReportError(err error) {
-	w.m.Notify(notifications.LevelError, "terminal: %s", err)
+	w.browser.Notify(notifications.LevelError, "terminal: %s", err)
 }

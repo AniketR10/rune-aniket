@@ -410,3 +410,14 @@ notifications:
     fg: default
     bg: default
   frame_charset: *frame_charset
+
+terminal:
+  # Default shell to use rather than what's provided by the OS via $SHELL.
+  #shell: bash
+  # Colors
+  attr:
+    bg: default
+    fg: default
+  selection_attr:
+    bg: reverse
+    fg: reverse

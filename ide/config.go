@@ -19,6 +19,7 @@ import (
 	extutil "unstable.build/go-tui/extension/util"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/term"
+	"unstable.build/go-tui/term/emulator"
 	"unstable.build/go-tui/text"
 	"unstable.build/go-tui/text/clipboard"
 	"unstable.build/go-tui/workspace"
@@ -920,6 +921,39 @@ func (c ideConfig) workspaceWallpaperAttr() term.Attributes {
 func (c ideConfig) workspaceWallpaperBackgroundAttr() term.Attributes {
 	return c.getConfigAttr("workspace", "wallpaper_background_attr",
 		browser.DefaultConfig().WallpaperBackgroundAttr)
+}
+
+func (c ideConfig) terminalDefaultAttr() term.Attributes {
+	return c.getConfigAttr("terminal", "attr", term.Attributes{})
+}
+
+func (c ideConfig) terminalSelectionAttr() term.Attributes {
+	return c.getConfigAttr("terminal", "selection_attr", term.Attributes{})
+}
+
+func (c ideConfig) terminalShell() (ret string) {
+	if c.cfg == nil {
+		return
+	}
+	cfg, ok := c.getConfig(config.MapConfig(c.cfg), "terminal")
+	if !ok {
+		return
+	}
+	ret, err := cfg.GetString("shell")
+	if err != nil {
+		if err != config.ErrNotFound {
+			c.errors["terminal.shell"] = err
+		}
+	}
+	return ret
+}
+
+func (c ideConfig) terminalConfig() emulator.Config {
+	return emulator.Config{
+		Attributes:          c.terminalDefaultAttr(),
+		SelectionAttributes: c.terminalSelectionAttr(),
+		Shell:               c.terminalShell(),
+	}
 }
 
 func decodeConfig(r io.Reader) (cfg map[string]interface{}, err error) {

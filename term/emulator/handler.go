@@ -1,4 +1,4 @@
-package extension
+package emulator
 
 import (
 	"fmt"
@@ -8,21 +8,23 @@ import (
 	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui"
-	browserapi "unstable.build/go-tui/api/browser"
+	schemeapi "unstable.build/go-tui/api/scheme"
 	workspaceapi "unstable.build/go-tui/api/workspace"
-	termutil "unstable.build/go-tui/cmd/extension_terminal/util"
+	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/term"
+	termutil "unstable.build/go-tui/term/emulator/util"
 	"unstable.build/go-tui/text"
 	"unstable.build/go-tui/text/clipboard"
 	sysclip "unstable.build/go-tui/text/clipboard/system"
 )
 
-type emulator struct {
-	wm browserapi.WindowManager
-	fs workspaceapi.FileSystem
-	p  browserapi.EventPublisher
-	m  browserapi.Notifications
+var _ tui.Handler = (*Handler)(nil)
+
+// Handler is a tui.Handler that implements a terminal emulator.
+type Handler struct {
+	browser browser.Browser
+	api     schemeapi.Terminal
 
 	mouse             *text.Mouse
 	mouseDriver       *mouseDriver
@@ -39,48 +41,44 @@ type emulator struct {
 	sema          chan struct{}
 }
 
-func newEmulator(
-	wm browserapi.WindowManager, tty workspaceapi.Terminal,
-	fs workspaceapi.FileSystem, p browserapi.EventPublisher,
-	m browserapi.Notifications,
-	shell string, initialCmd string,
-	defAttr, selectionAttr term.Attributes,
-) (*emulator, error) {
-	ret := new(emulator)
-	err := ret.init(wm, tty, fs, p, m, shell, initialCmd,
-		defAttr, selectionAttr)
+// New allocates storage for a new Handler and initializes it. See Handler.Init
+// for more details.
+func New(
+	browser browser.Browser, api schemeapi.Terminal,
+	config Config, initialCmd string,
+) (*Handler, error) {
+	ret := new(Handler)
+	err := ret.Init(browser, api, config, initialCmd)
 	if err != nil {
 		return nil, err
 	}
 	return ret, nil
 }
 
-func (e *emulator) init(
-	wm browserapi.WindowManager, tty workspaceapi.Terminal,
-	fs workspaceapi.FileSystem, p browserapi.EventPublisher,
-	m browserapi.Notifications, shell string, initialCmd string,
-	defAttr, selectionAttr term.Attributes,
+// Init initializes this handler with the given browser API,
+// shell, initialCmd, default attributes and selection attributes.
+func (e *Handler) Init(
+	browser browser.Browser, api schemeapi.Terminal,
+	config Config, initialCmd string,
 ) error {
-	e.wm = wm
-	e.fs = fs
-	e.p = p
-	e.defAttr = defAttr
-	e.selectAttr = selectionAttr
-	e.m = m
+	e.browser = browser
+	e.api = api
+	e.defAttr = config.Attributes
+	e.selectAttr = config.SelectionAttributes
 
-	e.theme = &termutil.Theme{Default: defAttr}
-	e.windowManipulator = newWindowManipulator(e.wm)
+	e.theme = &termutil.Theme{Default: config.Attributes}
+	e.windowManipulator = newWindowManipulator(e.browser)
 	opts := []termutil.Option{
 		termutil.WithTheme(e.theme),
 		termutil.WithWindowManipulator(e.windowManipulator),
 	}
-	if shell != "" {
-		opts = append(opts, termutil.WithShell(shell))
+	if config.Shell != "" {
+		opts = append(opts, termutil.WithShell(config.Shell))
 	}
 	if initialCmd != "" {
 		opts = append(opts, termutil.WithInitialCommand(initialCmd))
 	}
-	e.terminal = termutil.New(tty, opts...)
+	e.terminal = termutil.New(api, opts...)
 	_, err := e.terminal.CreatePty()
 	if err != nil {
 		return err
@@ -101,7 +99,7 @@ func (e *emulator) init(
 		if err := e.Close(); err != nil {
 			logErr = multierr.Append(logErr, err)
 		}
-		if err := e.p.PublishEventNone(); err != nil {
+		if err := e.browser.PublishEventNone(); err != nil {
 			err = fmt.Errorf("publish event: %s", err)
 			logErr = multierr.Append(logErr, err)
 		}
@@ -122,7 +120,7 @@ func (e *emulator) init(
 					return
 				}
 			}
-			err = e.p.Interrupt()
+			err = e.browser.Interrupt()
 			if err != nil {
 				log.Errorf("Interrupt: %s", err)
 			}
@@ -132,7 +130,8 @@ func (e *emulator) init(
 	return nil
 }
 
-func (e *emulator) Resize(width, height int) {
+// Resize satisfies tui.Component.
+func (e *Handler) Resize(width, height int) {
 	e.terminal.Lock()
 	defer e.terminal.Unlock()
 	// avoid SetSize error
@@ -148,13 +147,126 @@ func (e *emulator) Resize(width, height int) {
 	}
 }
 
-func (e *emulator) drawStr(str string, w term.Writer) {
+func (e *Handler) Draw(w term.Writer) {
+	if e.resizeErr != nil {
+		errStr := fmt.Sprintf("Error setting win size: %s", e.resizeErr)
+		log.Errorf("(%p).emulator.Draw: resize err: %s", e, e.resizeErr)
+		e.drawStr(errStr, w)
+		return
+	}
+
+	e.terminal.Lock()
+	defer e.terminal.Unlock()
+
+	e.drawContent(w)
+	e.drawSelection(w)
+}
+
+// Handle satisfies tui.Handler.
+func (e *Handler) Handle(ev term.Event) (exit, handled bool) {
+	exit, handled, raw := e.handleInput(ev)
+	if exit || handled || len(raw) == 0 {
+		return
+	}
+
+	e.sema <- struct{}{}
+	defer func() { <-e.sema }()
+
+	err := e.terminal.WriteToPty(raw)
+	if err != nil {
+		log.Errorf("(%p).emulator.Handle: %s", e, err)
+		return
+	}
+
+	timer := time.NewTimer(50 * time.Millisecond)
+	defer timer.Stop()
+
+	select {
+	case <-timer.C:
+	case _, ok := <-e.updateCh:
+		if !ok {
+			exit = true
+		}
+		handled = true
+	}
+	return
+}
+
+// Cursor satisfies tui.Handler.
+func (e *Handler) Cursor() (term.Coordinates, bool) {
+	e.terminal.Lock()
+	defer e.terminal.Unlock()
+
+	termbuf := e.terminal.GetActiveBuffer()
+
+	if !termbuf.IsCursorVisible() {
+		return term.Coordinates{}, false
+	}
+
+	return term.Coordinates{
+		X: int(math.Min(float64(termbuf.CursorColumn()), float64(e.width-1))),
+		Y: int(math.Min(float64(termbuf.CursorLine()), float64(e.height-1))),
+	}, true
+}
+
+// Man satisfies tui.Handler.
+func (e *Handler) Man() tui.Manual {
+	panic("TODO")
+}
+
+// URI returns the uri of the emulated terminal.
+func (e *Handler) URI() (workspaceapi.URI, error) {
+	var name string
+	func() {
+		e.terminal.Lock()
+		defer e.terminal.Unlock()
+		name = e.terminal.GetTitle()
+	}()
+
+	return workspaceapi.CurrentUserHostURI(name)
+}
+
+// Title returns the title of the emulated terminal.
+func (e *Handler) Title() string {
+	e.terminal.Lock()
+	defer e.terminal.Unlock()
+
+	return e.terminal.GetTitle()
+}
+
+// Close closes this terminal emulator and all the resources
+// associated with it.
+func (e *Handler) Close() error {
+	log.Tracef("(%p).emulator.Close", e)
+
+	e.terminal.Lock()
+	defer e.terminal.Unlock()
+
+	if e.closed || e.terminal == nil {
+		return nil
+	}
+
+	// undo circular dependency
+	e.mouseDriver.clipboard = nil
+	e.mouseDriver = nil
+	e.closed = true
+
+	var ret error
+	if err := e.terminal.Close(); err != nil {
+		ret = multierr.Append(ret, err)
+		log.Errorf("(%p).emulator.Close(Pty): %s", e, err)
+	}
+	// we can't remove /dev/pts files so leave it up to the system
+	return ret
+}
+
+func (e *Handler) drawStr(str string, w term.Writer) {
 	c := component.NewString(str)
 	c.Resize(e.width, e.height)
 	c.Draw(w)
 }
 
-func (e *emulator) drawRow(
+func (e *Handler) drawRow(
 	w term.Writer, termbuf *termutil.Buffer,
 	viewY int, defattr term.Attributes,
 ) {
@@ -177,7 +289,7 @@ func (e *emulator) drawRow(
 	}
 }
 
-func (e *emulator) drawContent(w term.Writer) {
+func (e *Handler) drawContent(w term.Writer) {
 	termbuf := e.terminal.GetActiveBuffer()
 	viewY := int(math.Min(float64(e.height), float64(termbuf.ViewHeight()))) - 1
 	for ; viewY >= 0; viewY-- {
@@ -185,7 +297,7 @@ func (e *emulator) drawContent(w term.Writer) {
 	}
 }
 
-func (e *emulator) drawSelection(w term.Writer) {
+func (e *Handler) drawSelection(w term.Writer) {
 	termbuf := e.terminal.GetActiveBuffer()
 	_, selection := termbuf.GetSelection()
 	if selection == nil {
@@ -214,22 +326,7 @@ func (e *emulator) drawSelection(w term.Writer) {
 	}
 }
 
-func (e *emulator) Draw(w term.Writer) {
-	if e.resizeErr != nil {
-		errStr := fmt.Sprintf("Error setting win size: %s", e.resizeErr)
-		log.Errorf("(%p).emulator.Draw: resize err: %s", e, e.resizeErr)
-		e.drawStr(errStr, w)
-		return
-	}
-
-	e.terminal.Lock()
-	defer e.terminal.Unlock()
-
-	e.drawContent(w)
-	e.drawSelection(w)
-}
-
-func (e *emulator) handleInput(ev term.Event) (exit, handled bool, raw []byte) {
+func (e *Handler) handleInput(ev term.Event) (exit, handled bool, raw []byte) {
 	e.terminal.Lock()
 	defer e.terminal.Unlock()
 
@@ -265,95 +362,4 @@ func (e *emulator) handleInput(ev term.Event) (exit, handled bool, raw []byte) {
 		raw = ev.Raw
 	}
 	return
-}
-
-func (e *emulator) Handle(ev term.Event) (exit, handled bool) {
-	exit, handled, raw := e.handleInput(ev)
-	if exit || handled || len(raw) == 0 {
-		return
-	}
-
-	e.sema <- struct{}{}
-	defer func() { <-e.sema }()
-
-	err := e.terminal.WriteToPty(raw)
-	if err != nil {
-		log.Errorf("(%p).emulator.Handle: %s", e, err)
-		return
-	}
-
-	timer := time.NewTimer(50 * time.Millisecond)
-	defer timer.Stop()
-
-	select {
-	case <-timer.C:
-	case _, ok := <-e.updateCh:
-		if !ok {
-			exit = true
-		}
-		handled = true
-	}
-	return
-}
-
-func (e *emulator) Cursor() (term.Coordinates, bool) {
-	e.terminal.Lock()
-	defer e.terminal.Unlock()
-
-	termbuf := e.terminal.GetActiveBuffer()
-
-	if !termbuf.IsCursorVisible() {
-		return term.Coordinates{}, false
-	}
-
-	return term.Coordinates{
-		X: int(math.Min(float64(termbuf.CursorColumn()), float64(e.width-1))),
-		Y: int(math.Min(float64(termbuf.CursorLine()), float64(e.height-1))),
-	}, true
-}
-
-func (e *emulator) Man() tui.Manual {
-	panic("TODO")
-}
-
-func (e *emulator) URI() (workspaceapi.URI, error) {
-	var name string
-	func() {
-		e.terminal.Lock()
-		defer e.terminal.Unlock()
-		name = e.terminal.GetTitle()
-	}()
-
-	return e.fs.URI(name)
-}
-
-func (e *emulator) Title() string {
-	e.terminal.Lock()
-	defer e.terminal.Unlock()
-
-	return e.terminal.GetTitle()
-}
-
-func (e *emulator) Close() error {
-	log.Tracef("(%p).emulator.Close", e)
-
-	e.terminal.Lock()
-	defer e.terminal.Unlock()
-
-	if e.closed || e.terminal == nil {
-		return nil
-	}
-
-	// undo circular dependency
-	e.mouseDriver.clipboard = nil
-	e.mouseDriver = nil
-	e.closed = true
-
-	var ret error
-	if err := e.terminal.Close(); err != nil {
-		ret = multierr.Append(ret, err)
-		log.Errorf("(%p).emulator.Close(Pty): %s", e, err)
-	}
-	// we can't remove /dev/pts files so leave it up to the system
-	return ret
 }

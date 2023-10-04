@@ -17,6 +17,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui"
 	browserapi "unstable.build/go-tui/api/browser"
+	schemeapi "unstable.build/go-tui/api/scheme"
 	textapi "unstable.build/go-tui/api/text"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/browser"
@@ -25,6 +26,7 @@ import (
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/handler/command"
 	"unstable.build/go-tui/term"
+	"unstable.build/go-tui/term/emulator"
 	"unstable.build/go-tui/text"
 	"unstable.build/go-tui/workspace"
 )
@@ -34,6 +36,8 @@ const (
 	reissuePadding            = 10 * time.Millisecond
 	cmdEdit                   = "edit"
 	cmdChangeSplitOrientation = "changeSplitOrientation"
+	cmdSplitWindowTerminal    = "splitWindowTerminal"
+	cmdTerminalTab            = "newTerminal"
 )
 
 var (
@@ -48,6 +52,8 @@ var (
 		"focusAboveWindow":       {},
 		"focusBelowWindow":       {},
 		"notificationsCloseAll":  {},
+		cmdSplitWindowTerminal:   {},
+		cmdTerminalTab:           {},
 		cmdSwitchToWorkspace:     {}, // workspace_handler
 	}
 	exCommands = map[string]func(*ex, ...string) error{
@@ -75,6 +81,8 @@ var (
 		"notificationsPauseAll":   (*ex).pauseNotifications,
 		"notificationsResumeAll":  (*ex).resumeNotifications,
 		"panic":                   (*ex).panic,
+		cmdSplitWindowTerminal:    (*ex).splitWindowTerminal,
+		cmdTerminalTab:            (*ex).newTerminalTab,
 	}
 	exDefaultBindings = map[term.KeyComb]string{
 		{Key: term.KeyCtrlW}: "bufferClose",
@@ -87,6 +95,7 @@ var (
 type workspaceLoader interface {
 	workspace.Loader
 	workspace.Directory
+	schemeapi.Terminal
 }
 
 // ex implements a tui.Handler by wrapping an editor.Component and
@@ -96,6 +105,7 @@ type ex struct {
 	comp                 text.Component
 	ed                   text.Editor
 	storage              document.Service
+	emulatorConfig       emulator.Config
 	workspace            workspaceLoader
 	sequencer            handler.Sequencer
 	publishEvent         func(term.Event) bool
@@ -115,11 +125,12 @@ type ex struct {
 func newEx(
 	ed text.Editor, m workspaceLoader,
 	storage document.Service,
+	emulatorConfig emulator.Config,
 	publishEvent func(term.Event) bool,
 	opts ...text.Option,
 ) (e *ex, err error) {
 	e = new(ex)
-	err = e.init(ed, m, storage, publishEvent, opts...)
+	err = e.init(ed, m, storage, emulatorConfig, publishEvent, opts...)
 	if err != nil {
 		return
 	}
@@ -132,10 +143,11 @@ func newEx(
 func (e *ex) init(
 	ed text.Editor, m workspaceLoader,
 	storage document.Service,
+	emulatorConfig emulator.Config,
 	publishEvent func(term.Event) bool,
 	opts ...text.Option,
 ) (err error) {
-	err = e.doInit(ed, m, storage, publishEvent, opts...)
+	err = e.doInit(ed, m, storage, emulatorConfig, publishEvent, opts...)
 	if err != nil {
 		return
 	}
@@ -237,12 +249,14 @@ func (e *ex) Interrupt() error {
 func (e *ex) doInit(
 	ed text.Editor, m workspaceLoader,
 	storage document.Service,
+	emulatorConfig emulator.Config,
 	publishEvent func(term.Event) bool,
 	opts ...text.Option,
 ) (err error) {
 	e.workspace = m
 	e.publishEvent = publishEvent
 	e.storage = storage
+	e.emulatorConfig = emulatorConfig
 
 	e.config = text.DefaultConfig()
 
@@ -519,6 +533,53 @@ func (e *ex) pauseNotifications(args ...string) error {
 
 func (e *ex) resumeNotifications(args ...string) error {
 	e.comp.ResumeNotifications()
+	return nil
+}
+
+func (e *ex) newEmulator(initialCmd string) (*browser.Tab, error) {
+	h, err := emulator.New(e.Browser(), e.workspace, e.emulatorConfig, initialCmd)
+	if err != nil {
+		err = fmt.Errorf("new emulator: %s", err)
+		return nil, err
+	}
+
+	uri, err := h.URI()
+	if err != nil {
+		_ = h.Close()
+		return nil, err
+	}
+	t, err := e.comp.Tab(uri, h.Title(), h)
+	if err != nil {
+		_ = h.Close()
+		return nil, fmt.Errorf("wm.Tab: %s", err)
+	}
+
+	return t.(*browser.Tab), nil
+}
+
+func (e *ex) splitWindowTerminal(args ...string) error {
+	t, err := e.newEmulator("")
+	if err != nil {
+		return err
+	}
+	win := e.invokeWindow()
+	if _, err := e.comp.Split(browserapi.OrientationDefault, win, t); err != nil {
+		_ = t.Close()
+		return err
+	}
+	return nil
+}
+
+func (e *ex) newTerminalTab(args ...string) error {
+	t, err := e.newEmulator("")
+	if err != nil {
+		return err
+	}
+	win := e.invokeWindow()
+	if err := win.SetContent(t); err != nil {
+		_ = t.Close()
+		return err
+	}
 	return nil
 }
 

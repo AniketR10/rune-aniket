@@ -2,6 +2,7 @@ package termutil
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -10,6 +11,7 @@ import (
 	"github.com/ernestrc/blue/logging"
 	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
+	schemeapi "unstable.build/go-tui/api/scheme"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 )
 
@@ -19,9 +21,10 @@ const (
 	InternalBuffer uint8 = 2
 )
 
-// Terminal communicates with the underlying terminal
+// Terminal represents the implementation of a terminal emulator.
 type Terminal struct {
-	workspace         workspaceapi.Terminal
+	// TODO conflate cleanup logic to use context cancelation.
+	workspace         schemeapi.Terminal
 	mu                sync.Mutex
 	pty               workspaceapi.Pty
 	windowManipulator WindowManipulator
@@ -37,10 +40,12 @@ type Terminal struct {
 	closed            bool
 	shell             string
 	initialCommand    string
+	ctx               context.Context
+	cancelCtx         func()
 }
 
-// NewTerminal creates a new terminal instance
-func New(w workspaceapi.Terminal, options ...Option) *Terminal {
+// New allocates storage for a new Terminal and initializes it.
+func New(w schemeapi.Terminal, options ...Option) *Terminal {
 	term := &Terminal{
 		closeChan: make(chan struct{}),
 		theme:     &Theme{},
@@ -56,12 +61,18 @@ func New(w workspaceapi.Terminal, options ...Option) *Terminal {
 	}
 	term.activeBuffer = term.buffers[0]
 	term.workspace = w
+	term.ctx, term.cancelCtx = context.WithCancel(context.Background())
 
 	return term
 }
 
+// CreatePty creates a new pty and sets it as this terminal's pty.
+// Calling this method twice panics.
 func (t *Terminal) CreatePty() (workspaceapi.Pty, error) {
-	pty, err := t.workspace.StartPty()
+	if t.pty != (workspaceapi.Pty{}) {
+		panic("called Terminal.CreatePty twice on the same instance")
+	}
+	pty, err := t.workspace.NewPty(t.ctx)
 	if err != nil {
 		return pty, err
 	}
@@ -273,18 +284,20 @@ func (t *Terminal) useAltBuffer() {
 	t.switchBuffer(AltBuffer)
 }
 
+// Lock acquires a mutex to this terminal's state.
 func (t *Terminal) Lock() {
 	t.mu.Lock()
 }
 
+// Unlock releases a mutex to this terminal's state.
 func (t *Terminal) Unlock() {
 	t.mu.Unlock()
 }
 
-// assumes lock has been acquired by caller
-// FIXME this doesn't remove any Ptys open
-// so woirkspace server leaks goroutines waiting on Read or Wait.
+// Close assumes lock has been acquired by caller
 func (t *Terminal) Close() (ret error) {
+	defer t.cancelCtx()
+
 	if t.closed {
 		return nil
 	}
