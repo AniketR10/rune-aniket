@@ -210,7 +210,7 @@ func (n *Container) Handle(ev term.Event) (exit, handled bool) {
 	}
 
 	switch ev.Key {
-	case term.MouseRight:
+	case term.MouseLeft:
 		n.closeNotification(el)
 	default:
 		n.pauseNotification(el)
