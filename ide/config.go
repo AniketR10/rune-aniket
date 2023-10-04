@@ -16,8 +16,8 @@ import (
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/component/notifications"
+	extutil "unstable.build/go-tui/extension/util"
 	"unstable.build/go-tui/handler"
-	plugutil "unstable.build/go-tui/plugin/util"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
 	"unstable.build/go-tui/text/clipboard"
@@ -51,7 +51,7 @@ var (
 	defaultWindowManagerConfig = handler.DefaultWindowManagerConfig()
 )
 
-type pluginConfig struct {
+type extensionConfig struct {
 	id     string
 	parent *ideConfig
 	cfg    config.Config
@@ -693,7 +693,7 @@ func (c ideConfig) viWrap() (ret bool) {
 
 func (c ideConfig) clipboard() clipboard.Register {
 	cfg := config.MapConfig(c.cfg)
-	ret, err := plugutil.Clipboard(cfg)
+	ret, err := extutil.Clipboard(cfg)
 	if err != nil {
 		if err != config.ErrNotFound {
 			c.errors["clipboard"] = err
@@ -853,25 +853,25 @@ func (c ideConfig) inputMode() term.InputMode {
 	return ret
 }
 
-func (c ideConfig) plugins() map[string]pluginConfig {
-	pConfigIfc, ok := c.cfg["plugins"]
+func (c ideConfig) extensions() map[string]extensionConfig {
+	pConfigIfc, ok := c.cfg["extensions"]
 	if !ok {
 		return nil
 	}
 	pConfigMap, ok := pConfigIfc.(map[string]interface{})
 	if !ok {
-		c.errors["plugins"] = errors.New("invalid type")
+		c.errors["extensions"] = errors.New("invalid type")
 		return nil
 	}
 
-	ret := make(map[string]pluginConfig)
+	ret := make(map[string]extensionConfig)
 	for id, pConfig := range pConfigMap {
 		pcfg, ok := pConfig.(map[string]interface{})
 		if !ok {
-			c.errors["plugins."+id] = errors.New("invalid type")
+			c.errors["extensions."+id] = errors.New("invalid type")
 			continue
 		}
-		ret[id] = pluginConfig{
+		ret[id] = extensionConfig{
 			id:     id,
 			parent: &c,
 			cfg:    config.MapConfig(pcfg),
@@ -881,7 +881,7 @@ func (c ideConfig) plugins() map[string]pluginConfig {
 	return ret
 }
 
-func (c pluginConfig) path() (string, bool) {
+func (c extensionConfig) path() (string, bool) {
 	path, err := c.cfg.GetString("path")
 	if err != nil {
 		return "", false
@@ -889,11 +889,11 @@ func (c pluginConfig) path() (string, bool) {
 	return path, true
 }
 
-func (c pluginConfig) config() (config.Config, bool) {
+func (c extensionConfig) config() (config.Config, bool) {
 	cfg, err := c.cfg.GetConfig("config")
 	if err != nil {
 		if err != config.ErrNotFound {
-			errorID := fmt.Sprintf("plugin.%s.config", c.id)
+			errorID := fmt.Sprintf("extension.%s.config", c.id)
 			c.parent.errors[errorID] = err
 		}
 		return nil, false

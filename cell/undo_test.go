@@ -193,7 +193,7 @@ public class Rotor {
 		newCells := buf.RawCells()
 		assert.Equal(t, "a\n\n", newString)
 		assert.Equal(t,
-			[][]term.Cell{{{Ch: 'a'}}, []term.Cell{}, []term.Cell{}}, newCells)
+			[][]term.Cell{{{Ch: 'a'}}, {}, {}}, newCells)
 
 		ok, _ := buf.Undo()
 		assert.True(t, ok)

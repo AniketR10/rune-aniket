@@ -16,9 +16,9 @@ import (
 )
 
 var sampleConfig = `
-plugins:
+extensions:
     fuzzy_file:
-        path: "/path/plugin_fuzzy_file"
+        path: "/path/extension_fuzzy_file"
         config:
             command: ag -g ""
 
@@ -127,7 +127,7 @@ workspace:
 `
 
 func assertDefaultConfig(t *testing.T, cfg *ideConfig) {
-	assert.Len(t, cfg.plugins(), 0)
+	assert.Len(t, cfg.extensions(), 0)
 	assert.Equal(t, 4, cfg.browserTabspaces())
 	assert.NotZero(t, cfg.wallpaper())
 	defWmConfig := handler.DefaultWindowManagerConfig()
@@ -198,21 +198,21 @@ func TestConfigSetting(t *testing.T) {
 	}
 	assert.Equal(t, expectedConfig, cfg.windowManagerConfig())
 
-	assert.Len(t, cfg.plugins(), 1)
-	pluginCfgStruct := cfg.plugins()["fuzzy_file"]
-	assert.Equal(t, "fuzzy_file", pluginCfgStruct.id)
-	assert.Equal(t, &cfg, pluginCfgStruct.parent)
+	assert.Len(t, cfg.extensions(), 1)
+	extensionCfgStruct := cfg.extensions()["fuzzy_file"]
+	assert.Equal(t, "fuzzy_file", extensionCfgStruct.id)
+	assert.Equal(t, &cfg, extensionCfgStruct.parent)
 
-	pluginCfg, ok := pluginCfgStruct.config()
+	extensionCfg, ok := extensionCfgStruct.config()
 	require.True(t, ok)
 
-	cmd, err := pluginCfg.GetString("command")
+	cmd, err := extensionCfg.GetString("command")
 	require.NoError(t, err)
 	assert.Equal(t, "ag -g \"\"", cmd)
 
 	expectedCommandAliases := map[string][]string{
-		"todo":   []string{"e file:///tmp/todo.md", "jenesaisquoi"},
-		"cherry": []string{"bomb"},
+		"todo":   {"e file:///tmp/todo.md", "jenesaisquoi"},
+		"cherry": {"bomb"},
 	}
 	assert.Equal(t, expectedCommandAliases, cfg.commandAliases())
 

@@ -680,7 +680,7 @@ func TestDispatchCommand(t *testing.T) {
 	t.Run("uses aliases from config to dispatch", func(t *testing.T) {
 		config := text.DefaultConfig()
 		config.CommandAliases = map[string][]string{
-			"workstation_layout": []string{
+			"workstation_layout": {
 				"newWindow",
 				"edit /tmp/todo.md",
 			},
@@ -879,7 +879,7 @@ func TestComponentCommands(t *testing.T) {
 	t.Run("returns configured aliases", func(t *testing.T) {
 		cfg := text.DefaultConfig()
 		cfg.CommandAliases = map[string][]string{
-			"blah": []string{},
+			"blah": {},
 		}
 		c, err := text.NewComponent(NopEditor(), &testLoader{}, cfg)
 		require.NoError(t, err)

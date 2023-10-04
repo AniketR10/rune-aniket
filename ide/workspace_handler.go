@@ -22,8 +22,8 @@ import (
 	textapi "unstable.build/go-tui/api/text"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/component/notifications"
+	"unstable.build/go-tui/extension"
 	"unstable.build/go-tui/handler"
-	"unstable.build/go-tui/plugin"
 	"unstable.build/go-tui/storage"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
@@ -51,20 +51,20 @@ var (
 )
 
 type workspaceManagerHandler struct {
-	mu               sync.Locker
-	exit             bool
-	cfg              ideConfig
-	ctxWithLocker    context.Context
-	storage          document.Service
-	workspace        workspace.WorkspaceManager
-	publishEvent     func(term.Event) bool
-	pluginRunner     PluginsRunner
-	sixDir           string
-	builtinPlugins   map[string]Plugin
-	configFilename   string
-	addWorkspacePath bool
-	userHome         string
-	history          *history
+	mu                sync.Locker
+	exit              bool
+	cfg               ideConfig
+	ctxWithLocker     context.Context
+	storage           document.Service
+	workspace         workspace.WorkspaceManager
+	publishEvent      func(term.Event) bool
+	extensionRunner   ExtensionsRunner
+	sixDir            string
+	builtinExtensions map[string]Extension
+	configFilename    string
+	addWorkspacePath  bool
+	userHome          string
+	history           *history
 
 	union          handler.FrameUnion
 	bar            handler.Tabs
@@ -80,14 +80,14 @@ func newWorkspaceManagerHandler(
 	initial workspaceapi.URI, manager workspace.WorkspaceManager,
 	cfg ideConfig, recfilename string, filenames []string,
 	sixDir string, publishEvent func(term.Event) bool,
-	pluginRunner PluginsRunner, locker sync.Locker,
-	builtinPlugins map[string]Plugin, configFilename string,
+	extensionRunner ExtensionsRunner, locker sync.Locker,
+	builtinExtensions map[string]Extension, configFilename string,
 ) (*workspaceManagerHandler, error) {
 	ret := new(workspaceManagerHandler)
 
 	err := ret.init(initial, manager,
 		cfg, recfilename, filenames, sixDir,
-		publishEvent, pluginRunner, locker, builtinPlugins,
+		publishEvent, extensionRunner, locker, builtinExtensions,
 		configFilename)
 	if err != nil {
 		return nil, err
@@ -109,8 +109,8 @@ func (h *workspaceManagerHandler) init(
 	cwd workspaceapi.URI, manager workspace.WorkspaceManager,
 	cfg ideConfig, recfilename string, filenames []string,
 	sixDir string, publishEvent func(term.Event) bool,
-	pluginRunner PluginsRunner, locker sync.Locker,
-	builtinPlugins map[string]Plugin, configFilename string,
+	extensionRunner ExtensionsRunner, locker sync.Locker,
+	builtinExtensions map[string]Extension, configFilename string,
 ) error {
 	h.mu = locker
 	h.workspaces = make([]*workspaceHandler, 10)
@@ -119,8 +119,8 @@ func (h *workspaceManagerHandler) init(
 	h.publishEvent = publishEvent
 	h.workspace = manager
 	h.sixDir = sixDir
-	h.pluginRunner = pluginRunner
-	h.builtinPlugins = builtinPlugins
+	h.extensionRunner = extensionRunner
+	h.builtinExtensions = builtinExtensions
 	h.ctxWithLocker = workspace.ContextWithLocker(context.Background(), h.mu)
 	storage, err := storage.New(h.ctxWithLocker, sixDir, toml.Marshaler())
 	if err != nil {
@@ -382,13 +382,13 @@ func (h *workspaceManagerHandler) Man() tui.Manual {
 	return h.focusHandler().Man()
 }
 
-func (h *workspaceManagerHandler) initPlugins(manager plugin.Runner, cfg ideConfig) {
+func (h *workspaceManagerHandler) initExtensions(manager extension.Runner, cfg ideConfig) {
 	var wg sync.WaitGroup
-	userPlugins := cfg.plugins()
+	userExtensions := cfg.extensions()
 
-	wg.Add(len(userPlugins) + len(h.builtinPlugins))
+	wg.Add(len(userExtensions) + len(h.builtinExtensions))
 
-	for id, p := range h.builtinPlugins {
+	for id, p := range h.builtinExtensions {
 		pconfig := p.Config
 		if pconfig == nil {
 			pconfig = config.MapConfig(make(map[string]interface{}))
@@ -397,12 +397,12 @@ func (h *workspaceManagerHandler) initPlugins(manager plugin.Runner, cfg ideConf
 			defer wg.Done()
 			err := manager.Run(id, path, pconfig)
 			if err != nil {
-				log.Errorf("failed to run built-in plugin with id %q: %v", id, err)
+				log.Errorf("failed to run built-in extension with id %q: %v", id, err)
 			}
 		}(id, p.Path, pconfig)
 	}
 
-	for id, p := range userPlugins {
+	for id, p := range userExtensions {
 		path, _ := p.path()
 		pconfig, ok := p.config()
 		if !ok {
@@ -412,7 +412,7 @@ func (h *workspaceManagerHandler) initPlugins(manager plugin.Runner, cfg ideConf
 			defer wg.Done()
 			err := manager.Run(id, path, pconfig)
 			if err != nil {
-				log.Errorf("failed to run plugin with id %q: %v", id, err)
+				log.Errorf("failed to run extension with id %q: %v", id, err)
 			}
 		}(id, path, pconfig)
 	}
@@ -463,13 +463,13 @@ func (h *workspaceManagerHandler) textOpts(cfg ideConfig) []text.Option {
 	return ret
 }
 
-// we have no conrol over what plugins are defining in configuration;
-// it could be secret keys or anything worth stealing for a malicious plugin
-// that gets granted plugin.PermissionConfig.
-func cleanedPluginConfig(cfg map[string]interface{}) map[string]interface{} {
+// we have no conrol over what extensions are defining in configuration;
+// it could be secret keys or anything worth stealing for a malicious extension
+// that gets granted extension.PermissionConfig.
+func cleanedExtensionConfig(cfg map[string]interface{}) map[string]interface{} {
 	m := make(map[string]interface{}, len(cfg))
 	for k, v := range cfg {
-		if k != "plugins" {
+		if k != "extensions" {
 			m[k] = v
 		}
 	}
@@ -530,25 +530,25 @@ func (h *workspaceManagerHandler) addWorkspace(
 		return err
 	}
 
-	res := plugin.BrowserResources(ex.Browser())
-	res = plugin.MergeResourceMap(res, plugin.EditorResources(ex.Editor()))
-	res = plugin.MergeResourceMap(res, plugin.WorkspaceResources(cwd))
-	// NOTE: plugins that register new schemes will fail for subsequent workspaces
-	res = plugin.MergeResourceMap(res, plugin.SchemeManagerResources(h.workspace))
-	res = plugin.MergeResourceMap(res, plugin.StorageResources(h.sixDir))
-	res = plugin.MergeResourceMap(res, plugin.ConfigResources(
-		config.MapConfig(cleanedPluginConfig(cfg.cfg))))
+	res := extension.BrowserResources(ex.Browser())
+	res = extension.MergeResourceMap(res, extension.EditorResources(ex.Editor()))
+	res = extension.MergeResourceMap(res, extension.WorkspaceResources(cwd))
+	// NOTE: extensions that register new schemes will fail for subsequent workspaces
+	res = extension.MergeResourceMap(res, extension.SchemeManagerResources(h.workspace))
+	res = extension.MergeResourceMap(res, extension.StorageResources(h.sixDir))
+	res = extension.MergeResourceMap(res, extension.ConfigResources(
+		config.MapConfig(cleanedExtensionConfig(cfg.cfg))))
 
-	dataDir := filepath.Join(h.sixDir, ".plugin")
+	dataDir := filepath.Join(h.sixDir, ".extension")
 	if err := os.MkdirAll(dataDir, 0777); err != nil {
-		return fmt.Errorf("mkdir .plugin: %v", err)
+		return fmt.Errorf("mkdir .extension: %v", err)
 	}
-	runner, err := h.pluginRunner.WorkspacePluginsRunner(h.mu, uri, res, dataDir, ex.Browser())
+	runner, err := h.extensionRunner.WorkspaceExtensionsRunner(h.mu, uri, res, dataDir, ex.Browser())
 	if err != nil {
-		return fmt.Errorf("error initializing plugin manager: %v", err)
+		return fmt.Errorf("error initializing extension manager: %v", err)
 	}
 
-	h.initPlugins(runner, cfg)
+	h.initExtensions(runner, cfg)
 
 	i, ok := h.nextAvailableWorkspace()
 	if !ok {
@@ -556,9 +556,9 @@ func (h *workspaceManagerHandler) addWorkspace(
 	}
 
 	h.workspaces[i] = &workspaceHandler{
-		uri:     uri,
-		ex:      ex,
-		Plugins: runner,
+		uri:        uri,
+		ex:         ex,
+		Extensions: runner,
 	}
 	h.workspaceCount++
 	h.switchToWorkspace(i)
@@ -744,15 +744,15 @@ func (h *workspaceManagerHandler) Close() (ret error) {
 
 type workspaceHandler struct {
 	*ex
-	uri     workspaceapi.URI
-	Plugins plugin.Runner
+	uri        workspaceapi.URI
+	Extensions extension.Runner
 }
 
 func (hm *workspaceHandler) Close() (ret error) {
 	if err := hm.ex.Close(); err != nil {
 		ret = multierr.Append(ret, err)
 	}
-	if err := hm.Plugins.Close(); err != nil {
+	if err := hm.Extensions.Close(); err != nil {
 		ret = multierr.Append(ret, err)
 	}
 	return

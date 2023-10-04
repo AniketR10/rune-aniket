@@ -663,10 +663,10 @@ func TestBufferInsertStringWithAttr(t *testing.T) {
 			term.Attributes{Fg: fg, Bg: bg})
 		row := buf.RawCells()[0]
 		assert.Equal(t, []term.Cell{
-			term.Cell{Ch: 'A', Fg: fg, Bg: bg},
-			term.Cell{Ch: 't', Fg: fg, Bg: bg},
-			term.Cell{Ch: 'z', Fg: fg, Bg: bg},
-			term.Cell{Ch: 'a', Fg: fg, Bg: bg},
+			{Ch: 'A', Fg: fg, Bg: bg},
+			{Ch: 't', Fg: fg, Bg: bg},
+			{Ch: 'z', Fg: fg, Bg: bg},
+			{Ch: 'a', Fg: fg, Bg: bg},
 		}, row)
 	})
 	t.Run("insert multi line string", func(t *testing.T) {
@@ -675,20 +675,20 @@ func TestBufferInsertStringWithAttr(t *testing.T) {
 			term.Attributes{Fg: fg, Bg: bg})
 		cells := buf.RawCells()
 		assert.Equal(t, [][]term.Cell{
-			[]term.Cell{
-				term.Cell{Ch: 'L', Fg: fg, Bg: bg},
-				term.Cell{Ch: 'o', Fg: fg, Bg: bg},
-				term.Cell{Ch: 'l', Fg: fg, Bg: bg},
-				term.Cell{Ch: 'a', Fg: fg, Bg: bg},
+			{
+				{Ch: 'L', Fg: fg, Bg: bg},
+				{Ch: 'o', Fg: fg, Bg: bg},
+				{Ch: 'l', Fg: fg, Bg: bg},
+				{Ch: 'a', Fg: fg, Bg: bg},
 			},
-			[]term.Cell{
-				term.Cell{Ch: 'G', Fg: fg, Bg: bg},
-				term.Cell{Ch: 'r', Fg: fg, Bg: bg},
-				term.Cell{Ch: 'a', Fg: fg, Bg: bg},
-				term.Cell{Ch: 'n', Fg: fg, Bg: bg},
-				term.Cell{Ch: 'o', Fg: fg, Bg: bg},
-				term.Cell{Ch: 'l', Fg: fg, Bg: bg},
-				term.Cell{Ch: 'a', Fg: fg, Bg: bg},
+			{
+				{Ch: 'G', Fg: fg, Bg: bg},
+				{Ch: 'r', Fg: fg, Bg: bg},
+				{Ch: 'a', Fg: fg, Bg: bg},
+				{Ch: 'n', Fg: fg, Bg: bg},
+				{Ch: 'o', Fg: fg, Bg: bg},
+				{Ch: 'l', Fg: fg, Bg: bg},
+				{Ch: 'a', Fg: fg, Bg: bg},
 			},
 		}, cells)
 	})

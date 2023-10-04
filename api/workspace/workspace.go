@@ -38,7 +38,7 @@ type Cmd struct {
 	Stderr  io.Writer
 	Watcher Watcher
 
-	// SysProcAttr is ignored if passed from a plugin.
+	// SysProcAttr is ignored if passed from a extension.
 	SysProcAttr *syscall.SysProcAttr
 }
 

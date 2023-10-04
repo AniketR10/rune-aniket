@@ -17,7 +17,7 @@ Best regards,
 
 ## Install
 Run `make config && make install`. This will copy the default configuration to $HOME/.sixrc,
-and a copy of `six`, the editor, and all its plugins to `/usr/local/bin`. If
+and a copy of `six`, the editor, and all its extensions to `/usr/local/bin`. If
 you prefer a different directory, you can do so with `make install TARGET=/other`.
 
 If you're on linux, please run `make install-linux`.

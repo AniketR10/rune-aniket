@@ -51,7 +51,7 @@ generate:
 	@ go generate ./...
 	@ mv browser/unstable.build/go-tui/browser/rpc/* browser/rpc
 	@ mv text/unstable.build/go-tui/text/rpc/* text/rpc
-	@ mv plugin/unstable.build/go-tui/plugin/rpc/* plugin/rpc
+	@ mv extension/unstable.build/go-tui/extension/rpc/* extension/rpc
 	@ mv workspace/unstable.build/go-tui/workspace/rpc/* workspace/rpc
 	@ mv term/unstable.build/go-tui/term/rpc/* term/rpc
 	@ mv handler/unstable.build/go-tui/handler/rpc/* handler/rpc

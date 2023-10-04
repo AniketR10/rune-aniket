@@ -11,7 +11,7 @@ import (
 	"unstable.build/go-tui/api/config"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/browser"
-	"unstable.build/go-tui/plugin"
+	"unstable.build/go-tui/extension"
 	"unstable.build/go-tui/term"
 )
 
@@ -35,7 +35,7 @@ func TestIDEInitializationIntegration(t *testing.T) {
 		err = i.init(cwdURI.String(), configFile.Name(), "",
 			dir, []string{file1.Name(), file2.Name()},
 			WithPublishEvent(nopPublishEvent),
-			WithPluginsRunner(FuncPluginsRunner(testRunnerFn)),
+			WithExtensionsRunner(FuncExtensionsRunner(testRunnerFn)),
 			WithLocker(new(sync.Mutex)))
 		require.NoError(t, err)
 
@@ -61,7 +61,7 @@ func TestIDEInitializationIntegration(t *testing.T) {
 		err = i.init(cwdURI.String(), configFile.Name(), "",
 			dir, []string{file1.Name()},
 			WithPublishEvent(nopPublishEvent),
-			WithPluginsRunner(FuncPluginsRunner(testRunnerFn)),
+			WithExtensionsRunner(FuncExtensionsRunner(testRunnerFn)),
 			WithLocker(new(sync.Mutex)))
 		require.NoError(t, err)
 
@@ -84,7 +84,7 @@ func TestIDEInitializationIntegration(t *testing.T) {
 		err = i.init(".", configFile.Name(), "",
 			dir, []string{file1.Name()},
 			WithPublishEvent(nopPublishEvent),
-			WithPluginsRunner(FuncPluginsRunner(testRunnerFn)),
+			WithExtensionsRunner(FuncExtensionsRunner(testRunnerFn)),
 			WithLocker(new(sync.Mutex)))
 		require.NoError(t, err)
 
@@ -117,7 +117,7 @@ func TestIDEInitializationIntegration(t *testing.T) {
 				published = true
 				return false
 			}),
-			WithPluginsRunner(FuncPluginsRunner(testRunnerFn)),
+			WithExtensionsRunner(FuncExtensionsRunner(testRunnerFn)),
 			WithLocker(new(sync.Mutex)))
 		require.NoError(t, err)
 
@@ -143,15 +143,15 @@ func makeTestFiles(t *testing.T) (*os.File, *os.File) {
 func testRunnerFn(
 	locker sync.Locker,
 	uri workspaceapi.URI,
-	res map[plugin.Permission]plugin.ResourceRegistrar,
-	dataDir string, n browser.Notifications) (plugin.Runner, error) {
+	res map[extension.Permission]extension.ResourceRegistrar,
+	dataDir string, n browser.Notifications) (extension.Runner, error) {
 	return testRunner{}, nil
 }
 
 type testRunner struct {
 }
 
-func (r testRunner) Run(pluginID, path string, config config.Config) error {
+func (r testRunner) Run(extensionID, path string, config config.Config) error {
 	return nil
 }
 

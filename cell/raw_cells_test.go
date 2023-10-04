@@ -66,8 +66,8 @@ func TestRawCellsPanicsNegativeCoordinates(t *testing.T) {
 	var c rawCells
 	c.init(4)
 	negativeCoords := []term.Coordinates{
-		term.Coordinates{X: -1, Y: 0},
-		term.Coordinates{X: 0, Y: -1},
+		{X: -1, Y: 0},
+		{X: 0, Y: -1},
 	}
 
 	for _, pos := range negativeCoords {
@@ -152,15 +152,15 @@ func TestRawCellsStringReadFrom(t *testing.T) {
 		in   string
 		want [][]term.Cell
 	}{
-		{"", [][]term.Cell{[]term.Cell{}}},
-		{"\n", [][]term.Cell{[]term.Cell{}, []term.Cell{}}},
-		{"\t\n", [][]term.Cell{[]term.Cell{{}, {}, {}, {Ch: '\t'}}, []term.Cell{}}},
-		{"\t", [][]term.Cell{[]term.Cell{{}, {}, {}, {Ch: '\t'}}}},
-		{"a", [][]term.Cell{[]term.Cell{{Ch: 'a'}}}},
-		{"\nb", [][]term.Cell{[]term.Cell{}, []term.Cell{{Ch: 'b'}}}},
-		{"c\n", [][]term.Cell{[]term.Cell{{Ch: 'c'}}, []term.Cell{}}},
-		{"\n\n\n", [][]term.Cell{[]term.Cell{}, []term.Cell{}, []term.Cell{}, []term.Cell{}}},
-		{"\n\n\na", [][]term.Cell{[]term.Cell{}, []term.Cell{}, []term.Cell{}, []term.Cell{{Ch: 'a'}}}},
+		{"", [][]term.Cell{{}}},
+		{"\n", [][]term.Cell{{}, {}}},
+		{"\t\n", [][]term.Cell{{{}, {}, {}, {Ch: '\t'}}, {}}},
+		{"\t", [][]term.Cell{{{}, {}, {}, {Ch: '\t'}}}},
+		{"a", [][]term.Cell{{{Ch: 'a'}}}},
+		{"\nb", [][]term.Cell{{}, {{Ch: 'b'}}}},
+		{"c\n", [][]term.Cell{{{Ch: 'c'}}, {}}},
+		{"\n\n\n", [][]term.Cell{{}, {}, {}, {}}},
+		{"\n\n\na", [][]term.Cell{{}, {}, {}, {{Ch: 'a'}}}},
 	}
 
 	for i, _tcase := range tsuite {
@@ -587,7 +587,7 @@ Love isn't love 'til you give it away.
 			overrideBaseRawCells:     "a\n",
 			expectedStr:              "a\n",
 			expectedRawCells:         "",
-			expectedRawCellsRawCells: [][]term.Cell{[]term.Cell{}},
+			expectedRawCellsRawCells: [][]term.Cell{{}},
 			inputFrom:                term.Coordinates{},
 			inputTo:                  term.Coordinates{Y: 1},
 		},

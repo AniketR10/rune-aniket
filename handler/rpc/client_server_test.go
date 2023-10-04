@@ -17,7 +17,7 @@ import (
 	testutil "unstable.build/go-tui/util/test"
 )
 
-const testHandlerManualDesc = "remote SUPER plugin"
+const testHandlerManualDesc = "remote SUPER extension"
 const drawDispatchWaitTime = 20 * time.Millisecond
 
 var testHandlerKeys tui.KeyMap

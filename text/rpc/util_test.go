@@ -19,7 +19,7 @@ func TestBufferEditRequest(t *testing.T) {
 			out: EditRequest{
 				ResourceName: &URI{Uri: ""},
 				Buffer: []*termpb.CellRow{
-					&termpb.CellRow{Cells: []*termpb.Cell{&termpb.Cell{Character: 'a'}}},
+					{Cells: []*termpb.Cell{{Character: 'a'}}},
 				},
 			},
 		},
@@ -28,9 +28,9 @@ func TestBufferEditRequest(t *testing.T) {
 			out: EditRequest{
 				ResourceName: &URI{Uri: ""},
 				Buffer: []*termpb.CellRow{
-					&termpb.CellRow{Cells: []*termpb.Cell{&termpb.Cell{Character: 'a'}}},
-					&termpb.CellRow{Cells: []*termpb.Cell{&termpb.Cell{Character: 'b'}, &termpb.Cell{Character: 'b'}}},
-					&termpb.CellRow{Cells: []*termpb.Cell{&termpb.Cell{Character: 'c'}, &termpb.Cell{Character: 'c'}, &termpb.Cell{Character: 'c'}}},
+					{Cells: []*termpb.Cell{{Character: 'a'}}},
+					{Cells: []*termpb.Cell{{Character: 'b'}, {Character: 'b'}}},
+					{Cells: []*termpb.Cell{{Character: 'c'}, {Character: 'c'}, {Character: 'c'}}},
 				},
 			},
 		},

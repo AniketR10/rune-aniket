@@ -8,28 +8,28 @@ import (
 	"unstable.build/go-tui/api/config"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/browser"
-	"unstable.build/go-tui/plugin"
+	"unstable.build/go-tui/extension"
 )
 
 // Option is a configuration option for an IDE.
 type Option func(*options)
 
-// Plugin represents a built-in plugin executable.
-type Plugin struct {
+// Extension represents a built-in extension executable.
+type Extension struct {
 	// ID should be a unique representation of the logical
-	// plugin.
+	// extension.
 	ID string
 
 	// Path is the path to the executable.
 	Path string
 
-	// Config is the configuration for the plugin.
+	// Config is the configuration for the extension.
 	Config config.Config
 }
 
 // WithLocker returns an option that sets locker
 // as the event loop locker to synchronize access
-// to resources against plugin goroutines.
+// to resources against extension goroutines.
 //
 // The default is nop locker, so no synchronization.
 func WithLocker(locker sync.Locker) Option {
@@ -46,21 +46,21 @@ func WithPublishEvent(p EventPublisher) Option {
 	}
 }
 
-// WithPluginsRunner sets the Plugins facility of this IDE.
-// The default is no plugin runner.
-func WithPluginsRunner(p PluginsRunner) Option {
+// WithExtensionsRunner sets the Extensions facility of this IDE.
+// The default is no extension runner.
+func WithExtensionsRunner(p ExtensionsRunner) Option {
 	return func(opts *options) {
-		opts.pluginRunner = p
+		opts.extensionRunner = p
 	}
 }
 
-// WithPlugin adds Plugin to the IDE's built-in plugins.
-func WithPlugin(p Plugin) Option {
+// WithExtension adds Extension to the IDE's built-in extensions.
+func WithExtension(p Extension) Option {
 	return func(opts *options) {
-		if _, ok := opts.plugins[p.ID]; ok {
-			panic("built-in plugin with same ID already registered")
+		if _, ok := opts.extensions[p.ID]; ok {
+			panic("built-in extension with same ID already registered")
 		}
-		opts.plugins[p.ID] = p
+		opts.extensions[p.ID] = p
 	}
 }
 
@@ -81,9 +81,9 @@ func WithDefaultWallpaper(wallpaper string) Option {
 
 type options struct {
 	publishEvent     EventPublisher
-	pluginRunner     PluginsRunner
+	extensionRunner  ExtensionsRunner
 	locker           sync.Locker
-	plugins          map[string]Plugin
+	extensions       map[string]Extension
 	configFilename   string
 	defaultWallpaper string
 }
@@ -91,34 +91,34 @@ type options struct {
 func defaultOptions() options {
 	return options{
 		publishEvent:     tui.PublishEvent,
-		pluginRunner:     nopPlugins{},
+		extensionRunner:  nopExtensions{},
 		locker:           nopLocker{},
-		plugins:          make(map[string]Plugin),
+		extensions:       make(map[string]Extension),
 		configFilename:   ".iderc",
 		defaultWallpaper: legacyDefaultWallpaper,
 	}
 }
 
-type nopPlugins struct {
+type nopExtensions struct {
 }
 
-func (n nopPlugins) WorkspacePluginsRunner(locker sync.Locker,
+func (n nopExtensions) WorkspaceExtensionsRunner(locker sync.Locker,
 	uri workspaceapi.URI,
-	res map[plugin.Permission]plugin.ResourceRegistrar,
-	dataDir string, notifications browser.Notifications) (plugin.Runner, error) {
-	return nopPluginsRunner{}, nil
+	res map[extension.Permission]extension.ResourceRegistrar,
+	dataDir string, notifications browser.Notifications) (extension.Runner, error) {
+	return nopExtensionsRunner{}, nil
 }
 
-type nopPluginsRunner struct {
+type nopExtensionsRunner struct {
 }
 
-func (n nopPluginsRunner) Run(pluginID, path string, config config.Config) error {
-	log.Warnf("attempting to run plugin %q but no "+
-		"plugins facility has been configured", pluginID)
+func (n nopExtensionsRunner) Run(extensionID, path string, config config.Config) error {
+	log.Warnf("attempting to run extension %q but no "+
+		"extensions facility has been configured", extensionID)
 	return nil
 }
 
-func (n nopPluginsRunner) Close() error {
+func (n nopExtensionsRunner) Close() error {
 	return nil
 }
 

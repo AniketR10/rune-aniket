@@ -10,9 +10,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"unstable.build/go-tui"
+	"unstable.build/go-tui/api/config"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/cell"
-	"unstable.build/go-tui/api/config"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text/vi"
 	"unstable.build/go-tui/workspace"
@@ -82,7 +82,7 @@ func TestLastEOLUndoFileIntegration(t *testing.T) {
 	newCells := buf.RawCells()
 	assert.Equal(t, "a\n", newString)
 	assert.Equal(t,
-		[][]term.Cell{{{Ch: 'a'}}, []term.Cell{}}, newCells)
+		[][]term.Cell{{{Ch: 'a'}}, {}}, newCells)
 
 	ok, _ := buf.Undo()
 	assert.True(t, ok)
@@ -96,7 +96,7 @@ func TestLastEOLUndoFileIntegration(t *testing.T) {
 	newCells = buf.RawCells()
 	assert.Equal(t, "a\n", newString)
 	assert.Equal(t,
-		[][]term.Cell{{{Ch: 'a'}}, []term.Cell{}}, newCells)
+		[][]term.Cell{{{Ch: 'a'}}, {}}, newCells)
 }
 
 func TestViIntegration(t *testing.T) {

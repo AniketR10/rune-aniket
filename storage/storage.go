@@ -9,8 +9,8 @@ import (
 	"github.com/ernestrc/blue/document"
 	"github.com/ernestrc/blue/document/firstmover"
 	"github.com/ernestrc/blue/encoding"
-	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/api/config"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	workdoc "unstable.build/go-tui/storage/workspace"
 	"unstable.build/go-tui/workspace"
 )

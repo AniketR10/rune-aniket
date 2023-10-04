@@ -13,7 +13,7 @@ import (
 	schemeapi "unstable.build/go-tui/api/scheme"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/browser"
-	"unstable.build/go-tui/plugin"
+	"unstable.build/go-tui/extension"
 	"unstable.build/go-tui/term"
 	testutil "unstable.build/go-tui/util/test"
 	"unstable.build/go-tui/workspace"
@@ -54,10 +54,10 @@ func TestWorkspaceConfig(t *testing.T) {
 	})
 }
 
-func TestWorkspacePlugins(t *testing.T) {
-	t.Run("calls plugin runner with user plugins", func(t *testing.T) {
+func TestWorkspaceExtensions(t *testing.T) {
+	t.Run("calls extension runner with user extensions", func(t *testing.T) {
 		cfg := ideConfig{cfg: map[string]interface{}{
-			"plugins": map[string]interface{}{
+			"extensions": map[string]interface{}{
 				"git": map[string]interface{}{
 					"path": "myPath",
 					"config": map[string]interface{}{
@@ -73,16 +73,16 @@ func TestWorkspacePlugins(t *testing.T) {
 		uri, err := workspaceapi.ParseURI("memory:///tmp")
 		require.NoError(t, err)
 
-		// plugin.Runner.Run is called asynchronously
+		// extension.Runner.Run is called asynchronously
 		var called string
 
-		runner := FuncPluginsRunner(
+		runner := FuncExtensionsRunner(
 			func(locker sync.Locker, _uri workspaceapi.URI,
-				res map[plugin.Permission]plugin.ResourceRegistrar, s string, n browser.Notifications,
-			) (plugin.Runner, error) {
+				res map[extension.Permission]extension.ResourceRegistrar, s string, n browser.Notifications,
+			) (extension.Runner, error) {
 				assert.Equal(t, uri, _uri)
-				return fnRunner{fn: func(pluginID, path string, cfg config.Config) error {
-					called = pluginID
+				return fnRunner{fn: func(extensionID, path string, cfg config.Config) error {
+					called = extensionID
 					assert.Equal(t, "myPath", path)
 					assert.Equal(t, config.MapConfig(map[string]interface{}{"a": "b"}), cfg)
 					return nil
@@ -91,14 +91,14 @@ func TestWorkspacePlugins(t *testing.T) {
 			})
 		dir, err := ioutil.TempDir("", "")
 		require.NoError(t, err)
-		m := newTestWorkspaceManagerHandlerWithManagerAndPlugins(t, manager,
+		m := newTestWorkspaceManagerHandlerWithManagerAndExtensions(t, manager,
 			uri, cfg, runner, nil, nil, dir)
 		defer m.Close()
 
 		assert.Equal(t, "git", called)
 	})
 
-	t.Run("calls plugin runner with built-in plugins", func(t *testing.T) {
+	t.Run("calls extension runner with built-in extensions", func(t *testing.T) {
 		dir, err := ioutil.TempDir("", "")
 		require.NoError(t, err)
 		cfg := ideConfig{cfg: map[string]interface{}{}}
@@ -109,31 +109,31 @@ func TestWorkspacePlugins(t *testing.T) {
 		uri, err := workspaceapi.ParseURI("memory:///tmp")
 		require.NoError(t, err)
 
-		plugins := map[string]Plugin{
-			"myID": Plugin{
+		extensions := map[string]Extension{
+			"myID": {
 				ID:     "myID",
 				Path:   "myPath2",
 				Config: config.MapConfig(map[string]interface{}{"a": "b"}),
 			},
 		}
 
-		// plugin.Runner.Run is called asynchronously
+		// extension.Runner.Run is called asynchronously
 		var called string
 
-		runner := FuncPluginsRunner(
+		runner := FuncExtensionsRunner(
 			func(locker sync.Locker, _uri workspaceapi.URI,
-				res map[plugin.Permission]plugin.ResourceRegistrar, s string, n browser.Notifications) (plugin.Runner, error) {
+				res map[extension.Permission]extension.ResourceRegistrar, s string, n browser.Notifications) (extension.Runner, error) {
 				assert.Equal(t, uri, _uri)
-				return fnRunner{fn: func(pluginID, path string, cfg config.Config) error {
-					called = pluginID
+				return fnRunner{fn: func(extensionID, path string, cfg config.Config) error {
+					called = extensionID
 					assert.Equal(t, "myPath2", path)
 					assert.Equal(t, config.MapConfig(map[string]interface{}{"a": "b"}), cfg)
 					return nil
 				},
 				}, nil
 			})
-		m := newTestWorkspaceManagerHandlerWithManagerAndPlugins(t, manager,
-			uri, cfg, runner, plugins, nil, dir)
+		m := newTestWorkspaceManagerHandlerWithManagerAndExtensions(t, manager,
+			uri, cfg, runner, extensions, nil, dir)
 		defer m.Close()
 
 		assert.Equal(t, "myID", called)
@@ -441,21 +441,21 @@ func newTestWorkspaceManagerHandlerWithManager(
 ) *testWorkspaceManagerHandler {
 	dir, err := ioutil.TempDir("", "")
 	require.NoError(t, err)
-	return newTestWorkspaceManagerHandlerWithManagerAndPlugins(t, manager,
-		uri, cfg, FuncPluginsRunner(testRunnerFn), nil, filenames, dir)
+	return newTestWorkspaceManagerHandlerWithManagerAndExtensions(t, manager,
+		uri, cfg, FuncExtensionsRunner(testRunnerFn), nil, filenames, dir)
 }
 
-func newTestWorkspaceManagerHandlerWithManagerAndPlugins(
+func newTestWorkspaceManagerHandlerWithManagerAndExtensions(
 	t *testing.T, manager *workspace.Manager,
-	uri workspaceapi.URI, cfg ideConfig, runner PluginsRunner,
-	plugins map[string]Plugin, files []string, dir string,
+	uri workspaceapi.URI, cfg ideConfig, runner ExtensionsRunner,
+	extensions map[string]Extension, files []string, dir string,
 ) *testWorkspaceManagerHandler {
 	m := new(testWorkspaceManagerHandler)
 	m.workspaceManagerHandler = new(workspaceManagerHandler)
 	err := m.workspaceManagerHandler.init(uri, manager, cfg, "", files,
 		dir, func(term.Event) bool {
 			return true
-		}, runner, new(sync.Mutex), plugins, ".sixrc")
+		}, runner, new(sync.Mutex), extensions, ".sixrc")
 	require.NoError(t, err)
 	return m
 }
@@ -471,8 +471,8 @@ func newTestWorkspaceManagerHandlerWithDir(
 
 	uri, err := workspaceapi.ParseURI("memory:///tmp")
 	require.NoError(t, err)
-	runner := FuncPluginsRunner(testRunnerFn)
-	return newTestWorkspaceManagerHandlerWithManagerAndPlugins(t, manager,
+	runner := FuncExtensionsRunner(testRunnerFn)
+	return newTestWorkspaceManagerHandlerWithManagerAndExtensions(t, manager,
 		uri, cc, runner, nil, filenames, dir)
 }
 
@@ -531,11 +531,11 @@ func defaultCfg() ideConfig {
 }
 
 type fnRunner struct {
-	fn func(pluginID, path string, config config.Config) error
+	fn func(extensionID, path string, config config.Config) error
 }
 
-func (f fnRunner) Run(pluginID, path string, config config.Config) error {
-	return f.fn(pluginID, path, config)
+func (f fnRunner) Run(extensionID, path string, config config.Config) error {
+	return f.fn(extensionID, path, config)
 }
 
 func (f fnRunner) Close() error {

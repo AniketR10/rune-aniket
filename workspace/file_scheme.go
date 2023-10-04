@@ -347,7 +347,7 @@ func (p *fileScheme) NewPty(ctx context.Context) (workspaceapi.Pty, error) {
 	}
 
 	// NOTE: consider setting a better default pty size
-	// so when we open a terminal there's no race between the plugin
+	// so when we open a terminal there's no race between the extension
 	// setting the size and the tui component drawing to the screen.
 	cmd.Stdout = tty
 	cmd.Stderr = tty

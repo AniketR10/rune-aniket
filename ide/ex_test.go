@@ -1062,8 +1062,8 @@ func TestCommandAliases(t *testing.T) {
 	opts := []text.Option{
 		text.WithCommandKey(testCommandKey),
 		text.WithCommandAliases(map[string][]string{
-			"todo": []string{"edit hello.go", "edit wi.go"},
-			"bp":   []string{"bufferNext"},
+			"todo": {"edit hello.go", "edit wi.go"},
+			"bp":   {"bufferNext"},
 		}),
 	}
 	b := newExForTesting(t, texttest.NopEditor(), opts...)

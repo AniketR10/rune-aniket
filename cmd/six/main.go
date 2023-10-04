@@ -24,9 +24,9 @@ import (
 	"unstable.build/go-tui/api/config"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/browser"
+	"unstable.build/go-tui/extension"
+	"unstable.build/go-tui/extension/process"
 	"unstable.build/go-tui/ide"
-	"unstable.build/go-tui/plugin"
-	"unstable.build/go-tui/plugin/process"
 	"unstable.build/go-tui/proto"
 	"unstable.build/go-tui/workspace"
 	workspacepb "unstable.build/go-tui/workspace/rpc"
@@ -198,21 +198,21 @@ func main() {
 	os.Exit(4)
 }
 
-func pluginRunner(
+func extensionRunner(
 	locker sync.Locker,
 	uri workspaceapi.URI,
-	res map[plugin.Permission]plugin.ResourceRegistrar,
+	res map[extension.Permission]extension.ResourceRegistrar,
 	dataDir string,
 	notifications browser.Notifications,
-) (plugin.Runner, error) {
+) (extension.Runner, error) {
 	notifications = &protectedNotifications{notifications: notifications, locker: locker}
-	pluginOpts := []process.Option{
+	extensionOpts := []process.Option{
 		process.WithLocker(locker),
 		process.WithWorkspace(uri),
 		process.WithDataDir(dataDir),
 		process.WithNotifications(notifications),
 	}
-	return process.NewManager(plugin.GrantAll(res), pluginOpts...)
+	return process.NewManager(extension.GrantAll(res), extensionOpts...)
 }
 
 func run() int {
@@ -269,7 +269,7 @@ func run() int {
 
 	var eventLoopMutex sync.Mutex
 	opts := []ide.Option{
-		ide.WithPluginsRunner(ide.FuncPluginsRunner(pluginRunner)),
+		ide.WithExtensionsRunner(ide.FuncExtensionsRunner(extensionRunner)),
 		ide.WithLocker(&eventLoopMutex),
 		ide.WithConfigFilename(configFilename),
 		ide.WithDefaultWallpaper(sixDefaultWallpaper),

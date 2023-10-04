@@ -2,7 +2,7 @@
 # Colors can be changed and range from 1 to 256.
 # To see the full list of colors and its values, use
 # the colorPalette command, provided by the 'colors'
-# plugin below, plugin_color_palette.
+# extension below, extension_color_palette.
 color_theme_1: &color1 29
 color_theme_2: &color2 95
 
@@ -48,13 +48,13 @@ vi:
   wrap: false # true for wrapping lines
 # the following keys are arbitrary, and for
 # identification purposes only. They contain the
-# path and configuration for each of the plugins
+# path and configuration for each of the extensions
 # that are to be run alongside the editor.
-plugins:
-  # This plugin is used for navigating the editor's issue
+extensions:
+  # This extension is used for navigating the editor's issue
   # tracker and creating new issues.
   rtc:
-    path: /usr/local/bin/plugin_rtc
+    path: /usr/local/bin/extension_rtc
     config:
       # Whether to capture and send ascii images in color
       color: true
@@ -64,7 +64,7 @@ plugins:
       # contrast should be increased to provide clearer frames.
       contrast: 0
   issues:
-    path: /usr/local/bin/plugin_issues
+    path: /usr/local/bin/extension_issues
     config:
       bluectl_config: ~/.bluectl/config
       templates:
@@ -77,47 +77,47 @@ plugins:
           metadata:
             bug: ""
             milestones: v0.1.0
-  # This plugin is used as a general purpose syntax highlighter.
+  # This extension is used as a general purpose syntax highlighter.
   # It's based off https://github.com/alecthomas/chroma.
   lexer:
-    path: /usr/local/bin/plugin_lexer
+    path: /usr/local/bin/extension_lexer
     config:
       set_background_attr: false
       # See https://github.com/alecthomas/chroma/tree/master/styles
       # for a full list of styles.
       default_style: six
       # override default style by file extension. 'disabled' disables
-      # this plugin for a file extension.
+      # this extension for a file extension.
       styles:
         .go: disabled
         .rb: tango
-  # This plugin is for simulating a plugin panic for debugging.
+  # This extension is for simulating a extension panic for debugging.
   panic:
-    path: /usr/local/bin/plugin_panic
-  # This plugin adds a new scheme "upspin" which implements
+    path: /usr/local/bin/extension_panic
+  # This extension adds a new scheme "upspin" which implements
   # e2e encrypted workspaces. If you're interested in this feature
   # please follow instructions here: https://upspin.io/doc/signup.md.
   upspin:
-    path: /usr/local/bin/plugin_upspin
-  # This plugin adds a command colorPalette which opens a new window
+    path: /usr/local/bin/extension_upspin
+  # This extension adds a command colorPalette which opens a new window
   # and shows all the colors available to configure in the various
   # styles thorought this configuration.
   color_palette:
-    path: /usr/local/bin/plugin_color_palette
-  # This plugin adds a command openFileUnderCursor, which does just that.
+    path: /usr/local/bin/extension_color_palette
+  # This extension adds a command openFileUnderCursor, which does just that.
   open_file_cursor:
-    path: /usr/local/bin/plugin_open_file_cursor
-  # This plugin adds a sed command to run sed scripts against the current file.
+    path: /usr/local/bin/extension_open_file_cursor
+  # This extension adds a sed command to run sed scripts against the current file.
   sed:
-    path: /usr/local/bin/plugin_sed
-  # This plugin enables visualizing log files with the log command. If command
+    path: /usr/local/bin/extension_sed
+  # This extension enables visualizing log files with the log command. If command
   # is passed without any arguments, the editor's log file is opened.
   logs:
-    path: /usr/local/bin/plugin_logs
-  # This plugin adds a terminal UI component to the editor. Open with newTerminal
+    path: /usr/local/bin/extension_logs
+  # This extension adds a terminal UI component to the editor. Open with newTerminal
   # or splitWindowTerminal commands.
   terminal:
-    path: /usr/local/bin/plugin_terminal
+    path: /usr/local/bin/extension_terminal
     config:
       # Default shell to use rather than what's provided by the OS via $SHELL.
       #shell: bash
@@ -130,9 +130,9 @@ plugins:
       selection_attr:
         bg: reverse
         fg: reverse
-  # This plugin adds a file information bar at the bottom.
+  # This extension adds a file information bar at the bottom.
   file_bar:
-    path: /usr/local/bin/plugin_file_bar
+    path: /usr/local/bin/extension_file_bar
     config:
       # Whether to show if a file has been modified.
       show_dirty: true
@@ -148,9 +148,9 @@ plugins:
       coordinates_attr:
         bg: default
         fg: default
-  # This plugin adds a git changes bar to the left of the open file.
+  # This extension adds a git changes bar to the left of the open file.
   git:
-    path: /usr/local/bin/plugin_git
+    path: /usr/local/bin/extension_git
     config:
       # Colors
       bar_attr:
@@ -160,7 +160,7 @@ plugins:
         bg: green
       del_attr:
         bg: red
-  # This plugin adds a fuzzy AST search component to the editor.
+  # This extension adds a fuzzy AST search component to the editor.
   # It adds searchSyntaxFunctions, searchSyntaxTypes and searchSyntaxTypes
   # commands, which use an abstraction layer to effectively query each file in the
   # workspace based on each of the programming languages supported.
@@ -168,12 +168,12 @@ plugins:
   # See https://tree-sitter.github.io/tree-sitter/using-parsers#query-syntax
   # for a tutorial on how to craft queries.
   fuzzy_syntax:
-    path: /usr/local/bin/plugin_fuzzy_syntax
+    path: /usr/local/bin/extension_fuzzy_syntax
     config: {}
-  # This plugin adds a fuzzy file search component to the editor. Open
+  # This extension adds a fuzzy file search component to the editor. Open
   # via searchFile command.
   fuzzy_file:
-    path: /usr/local/bin/plugin_fuzzy_file
+    path: /usr/local/bin/extension_fuzzy_file
     config:
       ## Command to use instead of native list files implementation.
       ## The recommended commands are the silver searcher and ripgrep.
@@ -196,10 +196,10 @@ plugins:
         fg: *color1
       focus_element_attr:
         fg: *color1
-  # This plugin adds a fuzzy file line search component to the editor. Open
+  # This extension adds a fuzzy file line search component to the editor. Open
   # via searchText command.
   fuzzy_line:
-    path: /usr/local/bin/plugin_fuzzy_line
+    path: /usr/local/bin/extension_fuzzy_line
     config:
       ## Command to use instead of native list files implementation.
       ## The recommended commands are the silver searcher and ripgrep.
@@ -226,13 +226,13 @@ plugins:
         fg:
           - *color1
           - bold
-  # This plugin adds LSP functionality (Language Server Protocol).
+  # This extension adds LSP functionality (Language Server Protocol).
   # This adds formatting, go to definition, search references, get
   # symbol documentation, and diagnostics in the form of errors and warnings.
   # Only go and C/C++ is supported for now, but you're welcome to try
   # LSP servers by adding new rows below in `exec`.
   lsp:
-    path: /usr/local/bin/plugin_lsp
+    path: /usr/local/bin/extension_lsp
     config:
       # References searching window colors
       references_window_attr:

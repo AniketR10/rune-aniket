@@ -17,17 +17,17 @@ func TestNewDrawResponse(t *testing.T) {
 			in: "a",
 			out: &DrawResponse{
 				Rows: []*termpb.CellRow{
-					&termpb.CellRow{Cells: []*termpb.Cell{&zeroCell, &zeroCell, &zeroCell, &zeroCell, &zeroCell}},
-					&termpb.CellRow{Cells: []*termpb.Cell{&zeroCell, &zeroCell, &zeroCell, &zeroCell, &zeroCell}},
-					&termpb.CellRow{Cells: []*termpb.Cell{
+					{Cells: []*termpb.Cell{&zeroCell, &zeroCell, &zeroCell, &zeroCell, &zeroCell}},
+					{Cells: []*termpb.Cell{&zeroCell, &zeroCell, &zeroCell, &zeroCell, &zeroCell}},
+					{Cells: []*termpb.Cell{
 						&zeroCell,
 						&zeroCell,
-						&termpb.Cell{Character: 'a'},
+						{Character: 'a'},
 						&zeroCell,
 						&zeroCell,
 					}},
-					&termpb.CellRow{Cells: []*termpb.Cell{&zeroCell, &zeroCell, &zeroCell, &zeroCell, &zeroCell}},
-					&termpb.CellRow{Cells: []*termpb.Cell{&zeroCell, &zeroCell, &zeroCell, &zeroCell, &zeroCell}},
+					{Cells: []*termpb.Cell{&zeroCell, &zeroCell, &zeroCell, &zeroCell, &zeroCell}},
+					{Cells: []*termpb.Cell{&zeroCell, &zeroCell, &zeroCell, &zeroCell, &zeroCell}},
 				},
 				Cursor: &DrawResponse_Cursor{Position: &termpb.Coordinates{}},
 			},
@@ -36,20 +36,20 @@ func TestNewDrawResponse(t *testing.T) {
 			in: "aaaaaa\naaaaaa\naaaaaa",
 			out: &DrawResponse{
 				Rows: []*termpb.CellRow{
-					&termpb.CellRow{Cells: []*termpb.Cell{&zeroCell, &zeroCell, &zeroCell, &zeroCell, &zeroCell}},
-					&termpb.CellRow{Cells: []*termpb.Cell{
-						&termpb.Cell{Character: 'a'}, &termpb.Cell{Character: 'a'}, &termpb.Cell{Character: 'a'},
-						&termpb.Cell{Character: 'a'}, &termpb.Cell{Character: 'a'},
+					{Cells: []*termpb.Cell{&zeroCell, &zeroCell, &zeroCell, &zeroCell, &zeroCell}},
+					{Cells: []*termpb.Cell{
+						{Character: 'a'}, {Character: 'a'}, {Character: 'a'},
+						{Character: 'a'}, {Character: 'a'},
 					}},
-					&termpb.CellRow{Cells: []*termpb.Cell{
-						&termpb.Cell{Character: 'a'}, &termpb.Cell{Character: 'a'}, &termpb.Cell{Character: 'a'},
-						&termpb.Cell{Character: 'a'}, &termpb.Cell{Character: 'a'},
+					{Cells: []*termpb.Cell{
+						{Character: 'a'}, {Character: 'a'}, {Character: 'a'},
+						{Character: 'a'}, {Character: 'a'},
 					}},
-					&termpb.CellRow{Cells: []*termpb.Cell{
-						&termpb.Cell{Character: 'a'}, &termpb.Cell{Character: 'a'}, &termpb.Cell{Character: 'a'},
-						&termpb.Cell{Character: 'a'}, &termpb.Cell{Character: 'a'},
+					{Cells: []*termpb.Cell{
+						{Character: 'a'}, {Character: 'a'}, {Character: 'a'},
+						{Character: 'a'}, {Character: 'a'},
 					}},
-					&termpb.CellRow{Cells: []*termpb.Cell{&zeroCell, &zeroCell, &zeroCell, &zeroCell, &zeroCell}},
+					{Cells: []*termpb.Cell{&zeroCell, &zeroCell, &zeroCell, &zeroCell, &zeroCell}},
 				},
 				Cursor: &DrawResponse_Cursor{Position: &termpb.Coordinates{}},
 			},

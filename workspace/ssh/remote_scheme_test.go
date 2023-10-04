@@ -12,10 +12,10 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	schemeapi "unstable.build/go-tui/api/scheme"
+	schemetest "unstable.build/go-tui/api/scheme/test"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	workspaceapitest "unstable.build/go-tui/api/workspace/test"
 	"unstable.build/go-tui/workspace"
-	schemetest "unstable.build/go-tui/api/scheme/test"
 )
 
 func expectSchemeAPISuccess(

@@ -13,7 +13,7 @@ import (
 	"unstable.build/go-tui/proto"
 )
 
-/* plugin side */
+/* extension side */
 
 // if we ever implement a keep alive mechanism for servers it should not
 // be added to this server, as clients are completely ephemeral and
@@ -64,7 +64,7 @@ func newProxySchemeServerImpl(
 func (s *proxySchemeServerImpl) serveScheme(scheme schemeapi.Scheme) (string, error) {
 	var srv proto.MuxServer
 	ctxWg := proto.WaitGroupFromContext(s.ctx)
-	// NOTE: scheme are usually served once for the lifecycle of the plugin.
+	// NOTE: scheme are usually served once for the lifecycle of the extension.
 	// If this ever changes, we should ensure that when scheme is closed,
 	// we stop the grpc server AND manage any cyclical references such that
 	// the runtime finalizer of the client can run.

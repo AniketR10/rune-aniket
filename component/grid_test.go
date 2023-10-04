@@ -32,9 +32,9 @@ func TestGridDraw(t *testing.T) {
 
 	t.Run("happy path", func(t *testing.T) {
 		l := Grid([][]tui.Component{
-			[]tui.Component{&TestComponent{Ch: 'a'}, &TestComponent{Ch: 'b'}},
-			[]tui.Component{&TestComponent{Ch: 'c'}, &TestComponent{Ch: 'd'}},
-			[]tui.Component{&TestComponent{Ch: 'e'}, &TestComponent{Ch: 'f'}},
+			{&TestComponent{Ch: 'a'}, &TestComponent{Ch: 'b'}},
+			{&TestComponent{Ch: 'c'}, &TestComponent{Ch: 'd'}},
+			{&TestComponent{Ch: 'e'}, &TestComponent{Ch: 'f'}},
 		})
 		l.Resize(20, 4)
 
@@ -81,9 +81,9 @@ eeeeeeeeeeffffffffff`,
 
 	t.Run("zero row", func(t *testing.T) {
 		l := Grid([][]tui.Component{
-			[]tui.Component{&TestComponent{Ch: 'a'}},
+			{&TestComponent{Ch: 'a'}},
 			nil,
-			[]tui.Component{&TestComponent{Ch: 'b'}},
+			{&TestComponent{Ch: 'b'}},
 		})
 		l.Resize(4, 4)
 		w := term.NewStringWriter(20, 9)

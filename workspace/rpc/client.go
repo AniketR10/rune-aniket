@@ -20,7 +20,7 @@ import (
 
 const defaultTimeout = 5 * time.Second
 
-// for plugin-side
+// for extension-side
 var _ workspaceapi.FileSystem = (*Client)(nil)
 var _ workspaceapi.Executor = (*Client)(nil)
 var _ workspaceapi.Terminal = (*Client)(nil)
