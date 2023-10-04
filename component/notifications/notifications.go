@@ -11,6 +11,8 @@ var _ component.Responsive = (*notificationComp)(nil)
 
 type notificationComp struct {
 	component.Responsive
+	cfg          Config
+	cancel       func()
 	width        int
 	height       int
 	duration     time.Duration
@@ -37,6 +39,7 @@ func newString(cfg Config, msg string) component.Responsive {
 
 func newNotification(
 	level Level, msg string, cfg Config, duration time.Duration,
+	cancel func(),
 ) *notificationComp {
 
 	var progressCell term.Cell
@@ -58,6 +61,8 @@ func newNotification(
 	end := start.Add(duration)
 	return &notificationComp{
 		Responsive:   newString(cfg, msg),
+		cfg:          cfg,
+		cancel:       cancel,
 		duration:     duration,
 		end:          end,
 		progressCell: progressCell,
@@ -73,7 +78,7 @@ func (n *notificationComp) Resize(width, height int) {
 func (n *notificationComp) Draw(w term.Writer) {
 	n.Responsive.Draw(w)
 
-	if n.width < 4 {
+	if !n.cfg.ProgressBar || n.width < 4 {
 		return
 	}
 

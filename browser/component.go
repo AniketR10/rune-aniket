@@ -832,6 +832,12 @@ func (c *Component) Handle(ev term.Event) (exit, handled bool) {
 			return
 		}
 	}
+	// container Handles only mouse events so it's not a full tui.Handler.
+	// try to handle first and if it doesn't fallback handling to union.
+	_, handled = c.container.Handle(ev)
+	if handled {
+		return
+	}
 	return c.union.Handle(ev)
 }
 

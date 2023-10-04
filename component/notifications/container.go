@@ -118,6 +118,7 @@ func (n *Container) Resize(width, height int) {
 	n.vlist.Resize(effectiveWidth, height)
 }
 
+// Notify creates a new notification with the given msg and level.
 func (n *Container) Notify(level Level, msg string) {
 	const baselineChars = len("this is a simple notification.")
 	duration := n.cfg.AutoClose
@@ -127,14 +128,8 @@ func (n *Container) Notify(level Level, msg string) {
 		duration = time.Duration(math.Max(float64(n.cfg.AutoClose), float64(duration)))
 	}
 
-	var comp component.Responsive
-	if n.cfg.ProgressBar {
-		comp = newNotification(level, msg, n.cfg, duration)
-	} else {
-		comp = newString(n.cfg, msg)
-	}
-
 	ctx, cancel := context.WithTimeout(n.ctx, duration)
+	comp := newNotification(level, msg, n.cfg, duration, cancel)
 
 	n.mu.Lock()
 	defer n.mu.Unlock()
@@ -160,8 +155,7 @@ func (n *Container) CloseAll() {
 
 	// clear out current notification, based on message equality, if it exists
 	for _, ticket := range n.notifications {
-		ticket.cancelCtx()
-		n.list.Remove(ticket.el)
+		n.closeNotification(ticket.el)
 	}
 	n.notifications = make(map[string]*notificationTicket)
 }
@@ -172,7 +166,7 @@ func (n *Container) PauseAll() {
 	defer n.mu.Unlock()
 	// clear out current notification, based on message equality, if it exists
 	for _, ticket := range n.notifications {
-		n.pauseNotification(ticket)
+		n.pauseNotification(ticket.el)
 	}
 }
 
@@ -181,9 +175,49 @@ func (n *Container) ResumeAll() {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 
+	n.resumeAll()
+}
+func (n *Container) resumeAll() {
 	for msg, ticket := range n.notifications {
 		n.resumeNotification(ticket, msg)
 	}
+}
+
+// Handle handles the given term.Event. It ignores anything
+// other than mouse events. It handles mouse events by pausing
+// notifications on hover.
+func (n *Container) Handle(ev term.Event) (exit, handled bool) {
+	if ev.Type != term.EventMouse {
+		return
+	}
+
+	pos := n.vlist.Position()
+	height := n.vlist.Height()
+	width := n.vlist.Width()
+	if ev.MouseX < pos.X || ev.MouseY < pos.Y ||
+		ev.MouseX >= pos.X+width || ev.MouseY >= pos.Y+height {
+		n.ResumeAll() // hover outside should resume all
+		return
+	}
+
+	n.mu.Lock()
+	defer n.mu.Unlock()
+
+	el, ok := n.list.ElementAt(term.Coordinates{X: ev.MouseX - pos.X, Y: ev.MouseY - pos.Y})
+	if !ok {
+		n.resumeAll()
+		return
+	}
+
+	switch ev.Key {
+	case term.MouseRight:
+		n.closeNotification(el)
+	default:
+		n.pauseNotification(el)
+	}
+
+	ok = true
+	return
 }
 
 // Close cancels all pending notifications and closes this
@@ -194,20 +228,26 @@ func (n *Container) Close() error {
 	return nil
 }
 
-func (n *Container) pauseNotification(t *notificationTicket) {
-	comp := t.el.Value().(*notificationComp)
-	if !comp.pausedAt.IsZero() {
+func (n *Container) closeNotification(el component.ListNode) {
+	el.Value().(*notificationComp).cancel()
+	n.list.Remove(el)
+}
+
+func (n *Container) pauseNotification(el component.ListNode) {
+	comp := el.Value().(*notificationComp)
+	if comp.pausedAt != (time.Time{}) {
 		return // resume is idempotent
 	}
 	// this prevents element from being removed
 	// and cancels fps interrupt goroutine.
-	t.cancelCtx()
-	t.el.Value().(*notificationComp).pausedAt = time.Now()
+	comp.pausedAt = time.Now()
+	comp.cancel()
+
 }
 
 func (n *Container) resumeNotification(t *notificationTicket, msg string) {
 	comp := t.el.Value().(*notificationComp)
-	if comp.pausedAt.IsZero() {
+	if comp.pausedAt == (time.Time{}) {
 		return // resume is idempotent
 	}
 	remaining := comp.end.Sub(comp.pausedAt)
@@ -217,6 +257,7 @@ func (n *Container) resumeNotification(t *notificationTicket, msg string) {
 
 	comp.end = newEnd
 	comp.pausedAt = time.Time{}
+	comp.cancel = cancelCtx
 
 	n.startAutoClose(ctx, cancelCtx, t.el, msg)
 }
