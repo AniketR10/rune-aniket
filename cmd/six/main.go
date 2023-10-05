@@ -91,8 +91,6 @@ func cwdURI() workspaceapi.URI {
 }
 
 func startWorkspaceServer() int {
-	l := log.New()
-
 	newScheme := workspace.NewFileScheme
 	if serverLogs := *flagWorkspaceServerLogFile; serverLogs != "" {
 		f, err := workspace.OpenFile(serverLogs,
@@ -100,9 +98,9 @@ func startWorkspaceServer() int {
 		if err != nil {
 			log.Fatal(err)
 		}
-		l.SetOutput(f)
-		l.SetLevel(log.TraceLevel)
-		l.SetFormatter(&logging.LogrusFormatter{})
+		log.SetOutput(f)
+		log.SetLevel(log.TraceLevel)
+		log.SetFormatter(&logging.LogrusFormatter{})
 		proto.EnableGRPCLogging(f, f, f)
 
 		defer f.Close()
@@ -111,12 +109,12 @@ func startWorkspaceServer() int {
 		newScheme = workspace.LoggingScheme("file", newScheme)
 
 	} else {
-		l.SetOutput(ioutil.Discard)
-		l.SetLevel(log.PanicLevel)
+		log.SetOutput(ioutil.Discard)
+		log.SetLevel(log.PanicLevel)
 		proto.DisableGRPCLogging()
 	}
 
-	l.Tracef("Initialized debug logger")
+	log.Tracef("Initialized debug logger")
 
 	// log unhandled signals for debugging
 	ch := make(chan os.Signal, 1)
@@ -134,15 +132,15 @@ func startWorkspaceServer() int {
 			case sig := <-ch:
 				switch sig {
 				case syscall.SIGTERM, syscall.SIGINT:
-					l.Infof("Received %v signal: cleaning up...", sig)
+					log.Infof("Received %v signal: cleaning up...", sig)
 					return
 				case syscall.SIGKILL:
-					l.Info("Received SIGKILL signal: exiting")
+					log.Info("Received SIGKILL signal: exiting")
 					os.Exit(1)
 				case syscall.SIGURG:
 					/* received when socket urgent data is ready to be read */
 				default:
-					l.Debugf("Received unhandled signal: %#v", sig)
+					log.Debugf("Received unhandled signal: %#v", sig)
 				}
 			case <-quitch:
 				return
@@ -152,12 +150,12 @@ func startWorkspaceServer() int {
 
 	uri, err := workspaceapi.CurrentUserHostURI(*flagWorkspaceServer)
 	if err != nil {
-		l.Error(err)
+		log.Error(err)
 		return 2
 	}
 	scheme, err := newScheme(context.Background(), config.NopConfig(), uri)
 	if err != nil {
-		l.Error(err)
+		log.Error(err)
 		return 3
 	}
 	defer scheme.Close()
@@ -165,12 +163,12 @@ func startWorkspaceServer() int {
 	server := workspacepb.NewServer(scheme, new(sync.Mutex))
 	defer server.Stop()
 
-	err = ssh.StartSchemeServer(l, server, grpcServer)
+	err = ssh.StartSchemeServer(log.StandardLogger(), server, grpcServer)
 	if err != nil {
-		l.Error(err)
+		log.Error(err)
 		return 4
 	}
-	l.Tracef("StartSchemeServer returned with no error")
+	log.Tracef("StartSchemeServer returned with no error")
 	return 0
 }
 
