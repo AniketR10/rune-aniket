@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"sync"
+	"syscall"
 
 	"github.com/ernestrc/blue/logging"
 	multierr "github.com/ernestrc/go-multierror"
@@ -24,7 +25,8 @@ const (
 // Terminal represents the implementation of a terminal emulator.
 type Terminal struct {
 	// TODO conflate cleanup logic to use context cancelation.
-	workspace         schemeapi.Terminal
+	terminal          schemeapi.Terminal
+	executor          schemeapi.Executor
 	mu                sync.Mutex
 	pty               workspaceapi.Pty
 	windowManipulator WindowManipulator
@@ -45,7 +47,7 @@ type Terminal struct {
 }
 
 // New allocates storage for a new Terminal and initializes it.
-func New(w schemeapi.Terminal, options ...Option) *Terminal {
+func New(t schemeapi.Terminal, e schemeapi.Executor, options ...Option) *Terminal {
 	term := &Terminal{
 		closeChan: make(chan struct{}),
 		theme:     &Theme{},
@@ -60,7 +62,8 @@ func New(w schemeapi.Terminal, options ...Option) *Terminal {
 		NewBuffer(1, 1, 0xffff, attr),
 	}
 	term.activeBuffer = term.buffers[0]
-	term.workspace = w
+	term.terminal = t
+	term.executor = e
 	term.ctx, term.cancelCtx = context.WithCancel(context.Background())
 
 	return term
@@ -72,13 +75,51 @@ func (t *Terminal) CreatePty() (workspaceapi.Pty, error) {
 	if t.pty != (workspaceapi.Pty{}) {
 		panic("called Terminal.CreatePty twice on the same instance")
 	}
-	pty, err := t.workspace.NewPty(t.ctx)
+	pty, err := t.terminal.NewPty(t.ctx)
 	if err != nil {
-		return pty, err
+		return pty, fmt.Errorf("new pty: %v", err)
+	}
+	shell := t.shell
+	if shell == "" {
+		shell = os.Getenv("SHELL")
+	}
+	if shell == "" {
+		shell = "sh"
+	}
+	// setup command
+	cmd := workspaceapi.Cmd{
+		Path: shell,
+		// NOTE: this should probably be an option
+		Env: []string{"TERM=xterm-256color"},
+		SysProcAttr: &syscall.SysProcAttr{
+			Setsid:  true,
+			Setctty: true,
+		},
+	}
+
+	// TODO configure watcher via options
+	cmd.Stdout = pty.Slave
+	cmd.Stderr = pty.Slave
+	cmd.Stdin = pty.Slave
+
+	_, retErr := t.executor.StartCommand(t.ctx, cmd)
+	if retErr != nil {
+		retErr = fmt.Errorf("start command: %v", retErr)
+		if err := pty.Master.Close(); err != nil {
+			err = fmt.Errorf("close pty: %v", err)
+			retErr = multierr.Append(retErr, err)
+		}
+	}
+	if err := pty.Slave.Close(); err != nil {
+		err = fmt.Errorf("close tty: %v", err)
+		retErr = multierr.Append(retErr, err)
+	}
+	if retErr != nil {
+		return workspaceapi.Pty{}, retErr
 	}
 	if t.initialCommand != "" {
 		if err := t.WriteToPty([]byte(t.initialCommand)); err != nil {
-			return pty, err
+			return pty, fmt.Errorf("write to pty: %v", err)
 		}
 	}
 	t.pty = pty
@@ -131,7 +172,7 @@ func (t *Terminal) SetSize(rows, cols uint16) error {
 
 	t.activeBuffer.resizeView(cols, rows)
 
-	err := t.workspace.SetPtySize(t.pty, int(cols), int(rows))
+	err := t.terminal.SetPtySize(t.pty, int(cols), int(rows))
 	if err != nil {
 		return err
 	}
@@ -151,10 +192,6 @@ func (t *Terminal) Run(updateChan chan struct{}) error {
 		if err == io.EOF {
 			break
 		}
-		render, exit := t.processSequence(MeasuredRune{Rune: r, Width: size})
-		if exit {
-			break
-		}
 		if err != nil {
 			t.mu.Lock()
 			closed := t.closed
@@ -163,6 +200,10 @@ func (t *Terminal) Run(updateChan chan struct{}) error {
 				return nil
 			}
 			return err
+		}
+		render, exit := t.processSequence(MeasuredRune{Rune: r, Width: size})
+		if exit {
+			break
 		}
 		if render {
 			t.requestRender()

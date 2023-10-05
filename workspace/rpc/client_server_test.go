@@ -199,14 +199,15 @@ func TestClientServer(t *testing.T) {
 			mockFile := workspaceapitest.NewMockFile(ctrl)
 			mockFile.EXPECT().Name().Return("bla").AnyTimes()
 			mockFile.EXPECT().Fd().Return(uintptr(99)).AnyTimes()
+			slaveMockFile := workspaceapitest.NewMockFile(ctrl)
+			slaveMockFile.EXPECT().Name().Return("blo").AnyTimes()
+			slaveMockFile.EXPECT().Fd().Return(uintptr(199)).AnyTimes()
 			s.s.(*workspacetest.MockWorkspace).EXPECT().
 				NewPty(gomock.Any()).
-				Return(workspaceapi.Pty{Pid: 1, Master: mockFile, Slave: "follower"}, nil)
+				Return(workspaceapi.Pty{Master: mockFile, Slave: slaveMockFile}, nil)
 
 			pty, err := c.NewPty(ctx)
 			require.NoError(t, err)
-			assert.Equal(t, workspaceapi.Pid(1), pty.Pid)
-			assert.Equal(t, "follower", pty.Slave)
 
 			s.s.(*workspacetest.MockWorkspace).EXPECT().
 				NewFile(gomock.Any(), gomock.Any()).
@@ -222,6 +223,11 @@ func TestClientServer(t *testing.T) {
 
 			mockFile.EXPECT().Close().Return(nil)
 			assert.NoError(t, pty.Master.Close())
+
+			// cannot test slave mock file due to having to intercept via
+			// MockWorkspace above. See AnyTimes() details.
+			// slaveMockFile.EXPECT().Close().Return(nil)
+			// assert.NoError(t, pty.Slave.Close())
 		}},
 		{"NewPty error", func(t *testing.T, mock *workspaceapitest.MockFile, c *Client, s *Server) {
 			s.s.(*workspacetest.MockWorkspace).EXPECT().
@@ -237,9 +243,12 @@ func TestClientServer(t *testing.T) {
 			mockFile := workspaceapitest.NewMockFile(ctrl)
 			mockFile.EXPECT().Name().Return("bla").AnyTimes()
 			mockFile.EXPECT().Fd().Return(uintptr(1)).AnyTimes()
+			slaveMockFile := workspaceapitest.NewMockFile(ctrl)
+			slaveMockFile.EXPECT().Name().Return("blo").AnyTimes()
+			slaveMockFile.EXPECT().Fd().Return(uintptr(2)).AnyTimes()
 			s.s.(*workspacetest.MockWorkspace).EXPECT().
 				NewPty(gomock.Any()).
-				Return(workspaceapi.Pty{Pid: 1, Slave: "one", Master: mockFile}, nil)
+				Return(workspaceapi.Pty{Slave: slaveMockFile, Master: mockFile}, nil)
 			pty, err := c.NewPty(ctx)
 			require.NoError(t, err)
 
@@ -250,8 +259,6 @@ func TestClientServer(t *testing.T) {
 			s.s.(*workspacetest.MockWorkspace).EXPECT().
 				SetPtySize(gomock.Any(), gomock.Eq(1), gomock.Eq(1)).
 				DoAndReturn(func(pty workspaceapi.Pty, width, height int) error {
-					assert.Equal(t, "one", pty.Slave)
-					assert.Equal(t, workspaceapi.Pid(1), pty.Pid)
 					assert.Equal(t, 1, width)
 					assert.Equal(t, 1, height)
 					// must be exact instance returned by underlying Scheme
@@ -267,9 +274,12 @@ func TestClientServer(t *testing.T) {
 			mockFile := workspaceapitest.NewMockFile(ctrl)
 			mockFile.EXPECT().Name().Return("bla").AnyTimes()
 			mockFile.EXPECT().Fd().Return(uintptr(1)).AnyTimes()
+			slaveMockFile := workspaceapitest.NewMockFile(ctrl)
+			slaveMockFile.EXPECT().Name().Return("blo").AnyTimes()
+			slaveMockFile.EXPECT().Fd().Return(uintptr(11)).AnyTimes()
 			s.s.(*workspacetest.MockWorkspace).EXPECT().
 				NewPty(gomock.Any()).
-				Return(workspaceapi.Pty{Master: mockFile}, nil)
+				Return(workspaceapi.Pty{Slave: slaveMockFile, Master: mockFile}, nil)
 			pty, err := c.NewPty(ctx)
 			require.NoError(t, err)
 

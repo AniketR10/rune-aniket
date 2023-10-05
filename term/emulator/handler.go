@@ -12,6 +12,7 @@ import (
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/component"
+	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/term"
 	termutil "unstable.build/go-tui/term/emulator/util"
 	"unstable.build/go-tui/text"
@@ -24,7 +25,6 @@ var _ tui.Handler = (*Handler)(nil)
 // Handler is a tui.Handler that implements a terminal emulator.
 type Handler struct {
 	browser browser.Browser
-	api     schemeapi.Terminal
 
 	mouse             *text.Mouse
 	mouseDriver       *mouseDriver
@@ -44,11 +44,12 @@ type Handler struct {
 // New allocates storage for a new Handler and initializes it. See Handler.Init
 // for more details.
 func New(
-	browser browser.Browser, api schemeapi.Terminal,
+	browser browser.Browser, terminal schemeapi.Terminal,
+	executor schemeapi.Executor,
 	config Config, initialCmd string,
 ) (*Handler, error) {
 	ret := new(Handler)
-	err := ret.Init(browser, api, config, initialCmd)
+	err := ret.Init(browser, terminal, executor, config, initialCmd)
 	if err != nil {
 		return nil, err
 	}
@@ -58,11 +59,11 @@ func New(
 // Init initializes this handler with the given browser API,
 // shell, initialCmd, default attributes and selection attributes.
 func (e *Handler) Init(
-	browser browser.Browser, api schemeapi.Terminal,
+	browser browser.Browser, terminal schemeapi.Terminal,
+	executor schemeapi.Executor,
 	config Config, initialCmd string,
 ) error {
 	e.browser = browser
-	e.api = api
 	e.defAttr = config.Attributes
 	e.selectAttr = config.SelectionAttributes
 
@@ -78,12 +79,12 @@ func (e *Handler) Init(
 	if initialCmd != "" {
 		opts = append(opts, termutil.WithInitialCommand(initialCmd))
 	}
-	e.terminal = termutil.New(api, opts...)
+	e.terminal = termutil.New(terminal, executor, opts...)
 	_, err := e.terminal.CreatePty()
 	if err != nil {
 		return err
 	}
-	e.windowManipulator.SetTitle(e.terminal.Pty().Slave)
+	e.windowManipulator.SetTitle(e.terminal.Pty().Slave.Name())
 	clip, err := sysclip.NewRegister()
 	if err != nil {
 		log.Warnf("system clipboard unsupported: %v", err)
@@ -104,9 +105,10 @@ func (e *Handler) Init(
 			logErr = multierr.Append(logErr, err)
 		}
 		if logErr != nil {
-			log.Errorf("(%p): %s", e, logErr)
+			log.Errorf("terminal run: %v", logErr)
+			e.browser.Notify(notifications.LevelError, "terminal run: %v", logErr)
 		} else {
-			log.Infof("(%p) terminal.Cmd.Wait: OK", e)
+			log.Debugf("terminal run: ok")
 		}
 	}()
 
@@ -143,7 +145,8 @@ func (e *Handler) Resize(width, height int) {
 	e.width, e.height = width, height
 	err := e.terminal.SetSize(uint16(height), uint16(width))
 	if err != nil {
-		log.Errorf("terminal.SetSize: %s", err)
+		log.Errorf("(%p).terminal.SetSize: %s", e, err)
+		e.browser.Notify(notifications.LevelError, "terminal set size: %v", err)
 	}
 }
 
@@ -151,6 +154,7 @@ func (e *Handler) Draw(w term.Writer) {
 	if e.resizeErr != nil {
 		errStr := fmt.Sprintf("Error setting win size: %s", e.resizeErr)
 		log.Errorf("(%p).emulator.Draw: resize err: %s", e, e.resizeErr)
+		e.browser.Notify(notifications.LevelError, "emulator draw: %v", errStr)
 		e.drawStr(errStr, w)
 		return
 	}
@@ -175,6 +179,7 @@ func (e *Handler) Handle(ev term.Event) (exit, handled bool) {
 	err := e.terminal.WriteToPty(raw)
 	if err != nil {
 		log.Errorf("(%p).emulator.Handle: %s", e, err)
+		e.browser.Notify(notifications.LevelError, "write to pty: %v", err)
 		return
 	}
 

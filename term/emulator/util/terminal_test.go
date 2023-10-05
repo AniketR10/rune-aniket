@@ -17,7 +17,7 @@ func BenchmarkProcessRunes10(b *testing.B) {
 }
 
 func benchmarkProcessRunes(b *testing.B, r ...MeasuredRune) {
-	t := New(nil)
+	t := New(nil, nil)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		_, _ = t.processRunes(r...)

@@ -78,12 +78,10 @@ type Terminal interface {
 
 // Pty is a pseudoterminal on a Workspace.
 type Pty struct {
-	// Pid of the underlying command.
-	Pid
 	// Master is the pty master device file.
 	Master File
 	// Slave is the pseudoterminal slave device path.
-	Slave string
+	Slave File
 }
 
 // File abstracts a subset of os.File

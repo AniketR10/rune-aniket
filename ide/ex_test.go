@@ -7,6 +7,7 @@ import (
 	"os"
 	"strconv"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 
@@ -57,6 +58,16 @@ type testLoader struct {
 
 func (w *testLoader) Remove(string) error {
 	return nil
+}
+func (w *testLoader) Close() error {
+	return nil
+}
+func (w *testLoader) StartCommand(ctx context.Context, cmd workspaceapi.Cmd) (workspaceapi.Pid, error) {
+	panic("unimplemented")
+}
+
+func (w *testLoader) Signal(workspaceapi.Pid, syscall.Signal) error {
+	panic("unimplemented")
 }
 
 func (w *testLoader) Load(

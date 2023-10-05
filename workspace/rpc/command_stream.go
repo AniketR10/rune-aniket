@@ -7,12 +7,14 @@ import (
 	"io"
 	"os"
 	"runtime"
+	"syscall"
 	"time"
 
 	"github.com/ernestrc/blue/logging"
 	bluenet "github.com/ernestrc/blue/net"
 	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
+	schemeapi "unstable.build/go-tui/api/scheme"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 )
 
@@ -28,6 +30,9 @@ type serverCommandStreamer struct {
 	stdinCh   chan bluenet.ReadResult
 	stdoutCh  chan bluenet.ReadResult
 	stderrCh  chan bluenet.ReadResult
+	stdinFd   uint32
+	stdoutFd  uint32
+	stderrFd  uint32
 	parentCtx context.Context
 	closers   []io.Closer
 }
@@ -37,7 +42,11 @@ func newServerCommandStreamer(
 	stream Executor_StartCommandServer,
 	path string, args, env []string,
 	stdinSet, stdoutSet, stderrSet bool,
-) *serverCommandStreamer {
+	stdinFd, stdoutFd, stderrFd uint32,
+	stdinName, stdoutName, stderrName string,
+	setsid, setctty bool,
+	scheme schemeapi.Scheme,
+) (*serverCommandStreamer, error) {
 	quitCh := make(chan struct{})
 	doneCh := make(chan error)
 
@@ -46,6 +55,9 @@ func newServerCommandStreamer(
 		Args:    args,
 		Env:     env,
 		Watcher: workspaceapi.ChanWatcher(doneCh),
+	}
+	if setsid || setctty {
+		cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: setsid, Setctty: setctty}
 	}
 
 	ret := new(serverCommandStreamer)
@@ -64,26 +76,50 @@ func newServerCommandStreamer(
 	ret.stderrCh = stderrCh
 
 	if stdinSet {
-		stdinOutCh := make(chan bluenet.ReadResult)
-		// use ChanConn as io.Writer and io.Reader,
-		// which means that addrs can be nil
-		stdin := bluenet.ChanConn(nil, nil /* addrs */, stdinCh, stdinOutCh)
-		cmd.Stdin = stdin
-		ret.closers = append(ret.closers, stdin)
+		if stdinFd != 0 {
+			cmd.Stdin = scheme.NewFile(uintptr(stdinFd), stdinName)
+			if cmd.Stdin == nil {
+				return nil, fmt.Errorf("invalid stdin file descriptor: %d", stdinFd)
+			}
+			ret.stdinFd = stdinFd
+		} else {
+			stdinOutCh := make(chan bluenet.ReadResult)
+			// use ChanConn as io.Writer and io.Reader,
+			// which means that addrs can be nil
+			stdin := bluenet.ChanConn(nil, nil /* addrs */, stdinCh, stdinOutCh)
+			cmd.Stdin = stdin
+			ret.closers = append(ret.closers, stdin)
+		}
 	}
 
 	if stdoutSet {
-		stdoutInCh := make(chan bluenet.ReadResult)
-		stdout := bluenet.ChanConn(nil, nil /* addrs */, stdoutInCh, stdoutCh)
-		cmd.Stdout = stdout
-		ret.closers = append(ret.closers, stdout)
+		if stdoutFd != 0 {
+			cmd.Stdout = scheme.NewFile(uintptr(stdoutFd), stdoutName)
+			if cmd.Stdout == nil {
+				return nil, fmt.Errorf("invalid stdout file descriptor: %d", stdoutFd)
+			}
+			ret.stdoutFd = stdoutFd
+		} else {
+			stdoutInCh := make(chan bluenet.ReadResult)
+			stdout := bluenet.ChanConn(nil, nil /* addrs */, stdoutInCh, stdoutCh)
+			cmd.Stdout = stdout
+			ret.closers = append(ret.closers, stdout)
+		}
 	}
 
 	if stderrSet {
-		stderrInCh := make(chan bluenet.ReadResult)
-		stderr := bluenet.ChanConn(nil, nil /* addrs */, stderrInCh, stderrCh)
-		cmd.Stderr = stderr
-		ret.closers = append(ret.closers, stderr)
+		if stderrFd != 0 {
+			cmd.Stderr = scheme.NewFile(uintptr(stderrFd), stderrName)
+			if cmd.Stderr == nil {
+				return nil, fmt.Errorf("invalid stderr file descriptor: %d", stderrFd)
+			}
+			ret.stderrFd = stderrFd
+		} else {
+			stderrInCh := make(chan bluenet.ReadResult)
+			stderr := bluenet.ChanConn(nil, nil /* addrs */, stderrInCh, stderrCh)
+			cmd.Stderr = stderr
+			ret.closers = append(ret.closers, stderr)
+		}
 	}
 
 	ret.cmd = cmd
@@ -93,7 +129,7 @@ func newServerCommandStreamer(
 
 	ret.parentCtx = parentCtx
 
-	return ret
+	return ret, nil
 }
 
 func (s *serverCommandStreamer) log(level log.Level, msg string, args ...interface{}) {
@@ -104,6 +140,12 @@ func (s *serverCommandStreamer) log(level log.Level, msg string, args ...interfa
 func (s *serverCommandStreamer) receiveCommandData() {
 	defer s.log(log.TraceLevel, "done receiving command data")
 	defer close(s.stdinCh)
+
+	if s.stdinFd != 0 {
+		s.log(log.DebugLevel, "not reading from stdin goroutine: remote file mode")
+		return
+	}
+
 	for {
 		var msg CommandPayload
 		err := s.stream.RecvMsg(&msg)
@@ -209,6 +251,11 @@ func (s *serverCommandStreamer) sendCommandData(pid workspaceapi.Pid) error {
 		case <-s.quitCh:
 			err = errors.New("called Close but command is not done")
 		case res, ok := <-s.stdoutCh:
+			if s.stdoutFd != 0 {
+				s.log(log.ErrorLevel, "read from stdout but using file mode: ok=%v, err=%v, data=%d",
+					ok, res.Error, len(res.Data))
+				return errors.New("unexpected data in stdout chan")
+			}
 			s.log(log.TraceLevel, "read from stdout: ok=%v, err=%v, data=%d",
 				ok, res.Error, len(res.Data))
 			if !ok {
@@ -216,6 +263,11 @@ func (s *serverCommandStreamer) sendCommandData(pid workspaceapi.Pid) error {
 			}
 			err = s.streamReadResult(res, CommandPayload_IO_TypeStdout)
 		case res, ok := <-s.stderrCh:
+			if s.stderrFd != 0 {
+				s.log(log.ErrorLevel, "read from stderr but using file mode: ok=%v, err=%v, data=%d",
+					ok, res.Error, len(res.Data))
+				return errors.New("unexpected data in stderr chan")
+			}
 			s.log(log.TraceLevel, "read from stderr: ok=%v, err=%v, data=%d",
 				ok, res.Error, len(res.Data))
 			if !ok {
@@ -262,6 +314,7 @@ func (s *serverCommandStreamer) Close() (ret error) {
 }
 
 type clientCommandStreamer struct {
+	req       *StartCommandRequest
 	cmd       workspaceapi.Cmd
 	stream    Executor_StartCommandClient
 	parentCtx context.Context
@@ -270,11 +323,13 @@ type clientCommandStreamer struct {
 
 func newClientCommandStreamer(
 	parentCtx context.Context,
+	req *StartCommandRequest,
 	cmd workspaceapi.Cmd,
 	stream Executor_StartCommandClient,
 ) *clientCommandStreamer {
 	ret := new(clientCommandStreamer)
 	ret.cmd = cmd
+	ret.req = req
 	ret.stream = stream
 	ret.parentCtx = parentCtx
 	ret.quitCh = make(chan struct{})
@@ -301,6 +356,11 @@ func (s *clientCommandStreamer) streamStdin() {
 
 	if s.cmd.Stdin == nil {
 		s.log(log.TraceLevel, "no stdin set in cmd, skipping streaming stdin")
+		return
+	}
+
+	if s.req.StdinFd != 0 {
+		s.log(log.TraceLevel, "stdin is a file on the remote server. skipping streaming stdin")
 		return
 	}
 
@@ -377,6 +437,10 @@ func (s *clientCommandStreamer) streamCommandData(client interface{}, cancelFn f
 					s.log(log.TraceLevel, "no stdout set in cmd, dropping data")
 					continue
 				}
+				if s.req.StdoutFd != 0 {
+					s.log(log.ErrorLevel, "stdout is a file on the remote server but received data over the stream")
+					return
+				}
 				if msg.GetIo().Data == nil {
 					s.log(log.WarnLevel, "stdout type without stdout data")
 					continue
@@ -390,6 +454,10 @@ func (s *clientCommandStreamer) streamCommandData(client interface{}, cancelFn f
 				if s.cmd.Stderr == nil {
 					s.log(log.TraceLevel, "no stderr set in cmd, dropping data")
 					continue
+				}
+				if s.req.StderrFd != 0 {
+					s.log(log.ErrorLevel, "stderr is a file on the remote server but received data over the stream")
+					return
 				}
 				if msg.GetIo().Data == nil {
 					s.log(log.WarnLevel, "stderr type without stderr data")

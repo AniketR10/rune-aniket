@@ -3,6 +3,7 @@ package ssh
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"runtime"
 	"sync"
@@ -240,6 +241,24 @@ func (s *remoteScheme) StartCommand(ctx context.Context, cmd workspaceapi.Cmd) (
 	var cancelFn func()
 	ctx, cancelFn = context.WithCancel(ctx)
 	cmd.Watcher = newWrapWatcher(cmd.Watcher, cancelFn)
+	if remoteFile, ok := cmd.Stdin.(*remoteFile); ok {
+		cmd.Stdin, err = remoteFile.newFile()
+		if err != nil {
+			return 0, fmt.Errorf("unwrap remote file: %v", err)
+		}
+	}
+	if remoteFile, ok := cmd.Stdout.(*remoteFile); ok {
+		cmd.Stdout, err = remoteFile.newFile()
+		if err != nil {
+			return 0, fmt.Errorf("unwrap remote file: %v", err)
+		}
+	}
+	if remoteFile, ok := cmd.Stderr.(*remoteFile); ok {
+		cmd.Stderr, err = remoteFile.newFile()
+		if err != nil {
+			return 0, fmt.Errorf("unwrap remote file: %v", err)
+		}
+	}
 	return scheme.StartCommand(bluectx.First(s.ctx, ctx), cmd)
 }
 
@@ -264,9 +283,14 @@ func (s *remoteScheme) NewPty(ctx context.Context) (workspaceapi.Pty, error) {
 	pty, err := scheme.NewPty(bluectx.First(s.ctx, ctx))
 	if err == nil {
 		runtime.SetFinalizer(pty.Master, nil)
-		f := newRemoteFile(s, pty.Master.Fd(), pty.Master.Name())
-		s.files.Store(f.Fd(), f)
-		pty.Master = f
+		master := newRemoteFile(s, pty.Master.Fd(), pty.Master.Name())
+		s.files.Store(master.Fd(), master)
+		pty.Master = master
+
+		runtime.SetFinalizer(pty.Slave, nil)
+		slave := newRemoteFile(s, pty.Slave.Fd(), pty.Slave.Name())
+		s.files.Store(slave.Fd(), slave)
+		pty.Slave = slave
 	}
 	return pty, err
 }
@@ -286,8 +310,10 @@ func (s *remoteScheme) SetPtySize(pty workspaceapi.Pty, width, height int) error
 	}
 	// unwrap for underlying scheme to avoid unexpected type assertions panics
 	pty.Master = scheme.NewFile(pty.Master.Fd(), pty.Master.Name())
+	pty.Slave = scheme.NewFile(pty.Slave.Fd(), pty.Slave.Name())
 	// file is transient, do not Close on GC
 	runtime.SetFinalizer(pty.Master, nil)
+	runtime.SetFinalizer(pty.Slave, nil)
 	return scheme.SetPtySize(pty, width, height)
 }
 

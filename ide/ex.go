@@ -96,6 +96,7 @@ type workspaceLoader interface {
 	workspace.Loader
 	workspace.Directory
 	schemeapi.Terminal
+	schemeapi.Executor
 }
 
 // ex implements a tui.Handler by wrapping an editor.Component and
@@ -537,7 +538,8 @@ func (e *ex) resumeNotifications(args ...string) error {
 }
 
 func (e *ex) newEmulator(initialCmd string) (*browser.Tab, error) {
-	h, err := emulator.New(e.Browser(), e.workspace, e.emulatorConfig, initialCmd)
+	h, err := emulator.New(e.Browser(), e.workspace, e.workspace,
+		e.emulatorConfig, initialCmd)
 	if err != nil {
 		err = fmt.Errorf("new emulator: %s", err)
 		return nil, err

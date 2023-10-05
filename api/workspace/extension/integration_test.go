@@ -113,7 +113,7 @@ func TestIntegrationRace(t *testing.T) {
 			t *workspaceapitest.MockTerminalMockRecorder,
 			exec *workspaceapitest.MockExecutorMockRecorder,
 		) *gomock.Call {
-			return t.StartPty().Return(workspaceapi.Pty{Master: mockFile}, nil)
+			return t.StartPty().Return(workspaceapi.Pty{Slave: mockFile, Master: mockFile}, nil)
 		}, func(ifc interface{}) error {
 			_, err := ifc.(workspaceapi.Terminal).StartPty()
 			return err

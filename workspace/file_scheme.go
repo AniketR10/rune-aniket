@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"os"
 	"os/exec"
@@ -15,7 +16,6 @@ import (
 
 	bluectx "github.com/ernestrc/blue/context"
 	"github.com/ernestrc/blue/logging"
-	multierr "github.com/ernestrc/go-multierror"
 	"github.com/ernestrc/sensible/find"
 	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui/api/config"
@@ -258,10 +258,17 @@ func (p *fileScheme) StartCommand(ctx context.Context, cmd workspaceapi.Cmd) (
 	stdcmd := exec.CommandContext(ctx, path, cmd.Args...)
 	stdcmd.Dir = p.workspace.Path()
 	stdcmd.Env = cmd.Env
-	stdcmd.Stdout = cmd.Stdout
-	stdcmd.Stderr = cmd.Stderr
-	stdcmd.Stdin = cmd.Stdin
 	stdcmd.SysProcAttr = cmd.SysProcAttr
+
+	// unwrap os.File if Stdout is a fileSchemeFile
+	// In principle, closing of files should be done by callers
+	// so it's fine to lose delete from map on close, as the stdcmd
+	// routine should not close them. This is necessary
+	// to allow the standard library to run its ioctl checks
+	// correctly, for example when running a process over a pty/tty.
+	stdcmd.Stdout = tryUnwrapFileWriter(cmd.Stdout)
+	stdcmd.Stderr = tryUnwrapFileWriter(cmd.Stderr)
+	stdcmd.Stdin = tryUnwrapFileReader(cmd.Stdin)
 
 	err = stdcmd.Start()
 	if err != nil {
@@ -318,71 +325,34 @@ func (p *fileScheme) Signal(pid workspaceapi.Pid, signal syscall.Signal) error {
 
 	err := syscall.Kill(int(pid), signal)
 	if err != nil {
-		return fmt.Errorf("syscall.Kill: %w", err)
+		return fmt.Errorf("syscall kill: %w", err)
 	}
 	return nil
 }
 
 func (p *fileScheme) NewPty(ctx context.Context) (workspaceapi.Pty, error) {
-	shell := os.Getenv("SHELL")
-	if shell == "" {
-		shell = "/bin/sh"
-	}
-
-	// setup command
-	cmd := workspaceapi.Cmd{
-		Path: shell,
-		// NOTE: this should probably be an option
-		Env: append(os.Environ(), "TERM=xterm-256color"),
-		SysProcAttr: &syscall.SysProcAttr{
-			Setsid:  true,
-			Setctty: true,
-		},
-	}
-
 	// open master/slave files
 	pty, tty, err := pty.Open()
 	if err != nil {
-		return workspaceapi.Pty{}, fmt.Errorf("pty.Open: %v", err)
+		return workspaceapi.Pty{}, fmt.Errorf("open pty: %v", err)
 	}
 
-	// NOTE: consider setting a better default pty size
-	// so when we open a terminal there's no race between the extension
-	// setting the size and the tui component drawing to the screen.
-	cmd.Stdout = tty
-	cmd.Stderr = tty
-	cmd.Stdin = tty
+	master := &fileSchemeFile{File: pty, p: p}
+	p.files.Store(pty.Fd(), master)
 
-	// start process
-	var retErr error
-	pid, err := p.StartCommand(ctx, cmd)
-	if err != nil {
-		retErr = multierr.Append(retErr, err)
-		if err := pty.Close(); err != nil {
-			retErr = multierr.Append(retErr, err)
-		}
-	}
-	if err := tty.Close(); err != nil {
-		retErr = multierr.Append(retErr, err)
-	}
-	if retErr != nil {
-		return workspaceapi.Pty{}, retErr
-	}
-
-	ret := &fileSchemeFile{File: pty, p: p}
-	p.files.Store(pty.Fd(), ret)
+	slave := &fileSchemeFile{File: tty, p: p}
+	p.files.Store(tty.Fd(), slave)
 
 	return workspaceapi.Pty{
-		Pid:    pid,
-		Master: ret,
-		Slave:  tty.Name(),
+		Master: master,
+		Slave:  slave,
 	}, nil
 }
 
 func (p *fileScheme) SetPtySize(pp workspaceapi.Pty, width, height int) error {
 	ptyFile, ok := pp.Master.(*fileSchemeFile)
 	if !ok {
-		return fmt.Errorf("extraneous Pty: %#v", pp)
+		return fmt.Errorf("extraneous pty: %+v", pp)
 	}
 
 	err := pty.Setsize(ptyFile.File, &pty.Winsize{
@@ -390,7 +360,7 @@ func (p *fileScheme) SetPtySize(pp workspaceapi.Pty, width, height int) error {
 		Cols: uint16(width),
 	})
 	if err != nil {
-		return fmt.Errorf("pty.Setsize: %v", err)
+		return fmt.Errorf("set pty size: %v", err)
 	}
 	return nil
 }
@@ -414,4 +384,18 @@ func (f *fileSchemeFile) Close() error {
 func makeLocalURI(path string) (workspaceapi.URI, error) {
 	uriStr := "file://" + path
 	return workspaceapi.ParseURI(uriStr)
+}
+
+func tryUnwrapFileWriter(f io.Writer) io.Writer {
+	if f, ok := f.(*fileSchemeFile); ok {
+		return f.File
+	}
+	return f
+}
+
+func tryUnwrapFileReader(f io.Reader) io.Reader {
+	if f, ok := f.(*fileSchemeFile); ok {
+		return f.File
+	}
+	return f
 }

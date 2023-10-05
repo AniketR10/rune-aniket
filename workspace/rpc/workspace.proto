@@ -138,6 +138,14 @@ message StartCommandRequest {
 	bool stdin = 4;
 	bool stdout = 5;
 	bool stderr = 6;
+	uint32 stdin_fd = 7;
+	uint32 stdout_fd = 8;
+	uint32 stderr_fd = 9;
+	string stdin_name = 10;
+	string stdout_name = 11;
+	string stderr_name = 12;
+	bool setsid = 13;
+	bool setctty = 14;
 }
 
 message SignalRequest {
@@ -177,17 +185,17 @@ message NewPtyRequest {
 }
 
 message NewPtyResponse {
-	int64 pid = 1;
-	string master = 2;
-	uint32 master_fd = 3;
-	string slave = 4;
+	string master = 1;
+	uint32 master_fd = 2;
+	string slave = 3;
+	uint32 slave_fd = 4;
 }
 
 message SetPtySizeRequest {
-	int64 pid = 1;
-	string master = 2;
-	uint32 master_fd = 3;
-	string slave = 4;
+	string master = 1;
+	uint32 master_fd = 2;
+	string slave = 3;
+	uint32 slave_fd = 4;
 	int32 height = 5;
 	int32 width = 6;
 }

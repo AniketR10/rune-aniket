@@ -233,18 +233,28 @@ func (c *Client) StartCommand(
 		cancelFn()
 		return 0, fmt.Errorf("new stream: %v", err)
 	}
+	var setsid, setctty bool
+	if cmd.SysProcAttr != nil {
+		setsid = cmd.SysProcAttr.Setsid
+		setctty = cmd.SysProcAttr.Setctty
+	}
 	req := CommandPayload{
 		Type: CommandPayload_TypeStart,
 		Start: &StartCommandRequest{
-			Name:   cmd.Path,
-			Args:   cmd.Args,
-			Env:    cmd.Env,
-			Stdin:  cmd.Stdin != nil,
-			Stdout: cmd.Stdout != nil,
-			Stderr: cmd.Stderr != nil,
+			Name:    cmd.Path,
+			Args:    cmd.Args,
+			Env:     cmd.Env,
+			Stdin:   cmd.Stdin != nil,
+			Stdout:  cmd.Stdout != nil,
+			Stderr:  cmd.Stderr != nil,
+			Setsid:  setsid,
+			Setctty: setctty,
 		},
 	}
-	streamer := newClientCommandStreamer(commandCtx, cmd, stream)
+	req.Start.StdinFd, req.Start.StdinName = tryUnwrapFile(cmd.Stdin)
+	req.Start.StdoutFd, req.Start.StdoutName = tryUnwrapFile(cmd.Stdout)
+	req.Start.StderrFd, req.Start.StderrName = tryUnwrapFile(cmd.Stderr)
+	streamer := newClientCommandStreamer(commandCtx, req.Start, cmd, stream)
 
 	type result struct {
 		pid workspaceapi.Pid
@@ -328,13 +338,13 @@ func (c *Client) NewPty(ctx context.Context) (workspaceapi.Pty, error) {
 	if err != nil {
 		return workspaceapi.Pty{}, err
 	}
-	pid := workspaceapi.Pid(resp.GetPid())
-	file := newFileClient(c.ctx, c, c.cc,
+	master := newFileClient(c.ctx, c, c.cc,
 		resp.GetMaster(), uintptr(resp.GetMasterFd()))
+	slave := newFileClient(c.ctx, c, c.cc,
+		resp.GetSlave(), uintptr(resp.GetSlaveFd()))
 	ret := workspaceapi.Pty{
-		Pid:    pid,
-		Master: file,
-		Slave:  resp.GetSlave(),
+		Master: master,
+		Slave:  slave,
 	}
 
 	return ret, nil
@@ -347,10 +357,10 @@ func (c *Client) SetPtySize(p workspaceapi.Pty, width, height int) error {
 	defer cleanup()
 
 	req := SetPtySizeRequest{
-		Pid:      int64(p.Pid),
 		Master:   p.Master.Name(),
 		MasterFd: uint32(p.Master.Fd()),
-		Slave:    p.Slave,
+		Slave:    p.Slave.Name(),
+		SlaveFd:  uint32(p.Slave.Fd()),
 		Width:    int32(width),
 		Height:   int32(height),
 	}
@@ -475,4 +485,12 @@ func ctxWithTimeout(resourceCtx context.Context) (context.Context, func()) {
 	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
 	ctx = bluectx.First(ctx, resourceCtx)
 	return ctx, cancel
+}
+
+func tryUnwrapFile(ifc interface{}) (uint32, string) {
+	fc, ok := ifc.(*FileClient)
+	if !ok {
+		return 0, ""
+	}
+	return uint32(fc.Fd()), fc.Name()
 }

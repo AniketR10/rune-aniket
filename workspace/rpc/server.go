@@ -62,10 +62,17 @@ func (s *Server) StartCommand(stream Executor_StartCommandServer) error {
 		return fmt.Errorf("unexpected first stream message: %v", req.Type)
 	}
 	start := req.Start
-	streamer := newServerCommandStreamer(
+	streamer, err := newServerCommandStreamer(
 		s.ctx, stream, start.GetName(), start.GetArgs(), start.GetEnv(),
 		start.GetStdin(), start.GetStdout(), start.GetStderr(),
+		start.GetStdinFd(), start.GetStdoutFd(), start.GetStderrFd(),
+		start.GetStdinName(), start.GetStdoutName(), start.GetStderrName(),
+		start.GetSetsid(), start.GetSetctty(),
+		s.s,
 	)
+	if err != nil {
+		return fmt.Errorf("new streamer: %v", err)
+	}
 	defer streamer.Close()
 
 	s.locker.Lock()
@@ -257,10 +264,10 @@ func (s *Server) NewPty(ctx context.Context, req *NewPtyRequest) (
 	}
 
 	ret := &NewPtyResponse{
-		Pid:      int64(pty.Pid),
 		Master:   pty.Master.Name(),
 		MasterFd: uint32(pty.Master.Fd()),
-		Slave:    pty.Slave,
+		Slave:    pty.Slave.Name(),
+		SlaveFd:  uint32(pty.Slave.Fd()),
 	}
 	return ret, nil
 }
@@ -272,14 +279,13 @@ func (s *Server) SetPtySize(ctx context.Context, req *SetPtySizeRequest) (
 	s.locker.Lock()
 	defer s.locker.Unlock()
 
-	f := s.s.NewFile(uintptr(req.GetMasterFd()), req.GetMaster())
-	if f == nil {
+	master := s.s.NewFile(uintptr(req.GetMasterFd()), req.GetMaster())
+	if master == nil {
 		return nil, errors.New("invalid master pty fd")
 	}
 	pty := workspaceapi.Pty{
-		Master: f,
-		Slave:  req.GetSlave(),
-		Pid:    workspaceapi.Pid(req.GetPid()),
+		Master: master,
+		// no need to set slave, as it's not used for setting the pty size
 	}
 	err := s.s.SetPtySize(pty, int(req.GetWidth()), int(req.GetHeight()))
 	if err != nil {
