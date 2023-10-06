@@ -290,22 +290,9 @@ func (n *Container) startAutoClose(
 		return
 	}
 
-	go func() {
-		const fps = 10
-		cadence := time.Duration(int(time.Second) / fps)
-		ticker := time.NewTicker(cadence)
-		defer ticker.Stop()
-
-		for {
-			select {
-			case <-ticker.C:
-				_ = n.cfg.Interrupter.Interrupt()
-			case <-ctx.Done():
-				return
-			}
-		}
-
-	}()
+	if n.cfg.Interrupter != nil {
+		go term.InterruptAt(ctx, n.cfg.Interrupter, 10)
+	}
 }
 
 type notificationTicket struct {
