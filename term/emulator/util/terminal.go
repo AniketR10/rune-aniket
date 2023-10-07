@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 	"sync"
 	"syscall"
 
@@ -24,7 +25,6 @@ const (
 
 // Terminal represents the implementation of a terminal emulator.
 type Terminal struct {
-	// TODO conflate cleanup logic to use context cancelation.
 	terminal          schemeapi.Terminal
 	executor          schemeapi.Executor
 	mu                sync.Mutex
@@ -32,7 +32,6 @@ type Terminal struct {
 	windowManipulator WindowManipulator
 	reader            *bufio.Reader
 	updateChan        chan struct{}
-	closeChan         chan struct{}
 	buffers           []*Buffer
 	activeBuffer      *Buffer
 	mouseMode         MouseMode
@@ -40,8 +39,9 @@ type Terminal struct {
 	logFile           *os.File
 	theme             *Theme
 	closed            bool
+	complete          bool
 	shell             string
-	initialCommand    string
+	watcher           workspaceapi.Watcher
 	ctx               context.Context
 	cancelCtx         func()
 }
@@ -49,8 +49,7 @@ type Terminal struct {
 // New allocates storage for a new Terminal and initializes it.
 func New(t schemeapi.Terminal, e schemeapi.Executor, options ...Option) *Terminal {
 	term := &Terminal{
-		closeChan: make(chan struct{}),
-		theme:     &Theme{},
+		theme: &Theme{},
 	}
 	for _, opt := range options {
 		opt(term)
@@ -86,18 +85,18 @@ func (t *Terminal) CreatePty() (workspaceapi.Pty, error) {
 	if shell == "" {
 		shell = "sh"
 	}
+	cmdAndArgs := strings.Split(shell, " ")
 	// setup command
 	cmd := workspaceapi.Cmd{
-		Path: shell,
-		// NOTE: this should probably be an option
-		Env: []string{"TERM=xterm-256color"},
+		Path: cmdAndArgs[0],
+		Args: cmdAndArgs[1:],
 		SysProcAttr: &syscall.SysProcAttr{
 			Setsid:  true,
 			Setctty: true,
 		},
+		Watcher: t.watcher,
 	}
 
-	// TODO configure watcher via options
 	cmd.Stdout = pty.Slave
 	cmd.Stderr = pty.Slave
 	cmd.Stdin = pty.Slave
@@ -110,17 +109,8 @@ func (t *Terminal) CreatePty() (workspaceapi.Pty, error) {
 			retErr = multierr.Append(retErr, err)
 		}
 	}
-	if err := pty.Slave.Close(); err != nil {
-		err = fmt.Errorf("close tty: %v", err)
-		retErr = multierr.Append(retErr, err)
-	}
 	if retErr != nil {
 		return workspaceapi.Pty{}, retErr
-	}
-	if t.initialCommand != "" {
-		if err := t.WriteToPty([]byte(t.initialCommand)); err != nil {
-			return pty, fmt.Errorf("write to pty: %v", err)
-		}
 	}
 	t.pty = pty
 	return pty, nil
@@ -159,10 +149,6 @@ func (t *Terminal) GetTitle() string {
 	return t.windowManipulator.GetTitle()
 }
 
-func (t *Terminal) Theme() *Theme {
-	return t.theme
-}
-
 func (t *Terminal) SetSize(rows, cols uint16) error {
 	if t.pty.Master == nil {
 		return fmt.Errorf("terminal is not running")
@@ -182,6 +168,13 @@ func (t *Terminal) SetSize(rows, cols uint16) error {
 
 // Run starts the terminal/shell proxying process
 func (t *Terminal) Run(updateChan chan struct{}) error {
+	defer func() {
+		t.mu.Lock()
+		defer t.mu.Unlock()
+		close(updateChan)
+		t.complete = true
+	}()
+
 	t.mu.Lock()
 	t.updateChan = updateChan
 	t.reader = bufio.NewReaderSize(t.pty.Master, 1024*1024)
@@ -189,10 +182,7 @@ func (t *Terminal) Run(updateChan chan struct{}) error {
 
 	for {
 		r, size, err := t.reader.ReadRune()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
+		if err != nil && err != io.EOF {
 			t.mu.Lock()
 			closed := t.closed
 			t.mu.Unlock()
@@ -202,21 +192,17 @@ func (t *Terminal) Run(updateChan chan struct{}) error {
 			return err
 		}
 		render, exit := t.processSequence(MeasuredRune{Rune: r, Width: size})
-		if exit {
-			break
+		if exit || err == io.EOF {
+			return nil
 		}
 		if render {
 			t.requestRender()
 		}
 	}
-	close(t.closeChan)
-	return nil
 }
 
 func (t *Terminal) requestRender() {
 	select {
-	case <-t.closeChan:
-		close(t.updateChan)
 	case t.updateChan <- struct{}{}:
 	default:
 	}
@@ -317,6 +303,16 @@ func (t *Terminal) GetActiveBuffer() *Buffer {
 	return t.activeBuffer
 }
 
+// Height returns the height of the underlying terminal buffer in lines.
+func (t *Terminal) Height() int {
+	return t.GetActiveBuffer().Height()
+}
+
+// MaxWidth returns the maximum width of the underlying terminal buffer in columns.
+func (t *Terminal) MaxWidth() int {
+	return t.GetActiveBuffer().MaxWidth()
+}
+
 func (t *Terminal) useMainBuffer() {
 	t.switchBuffer(MainBuffer)
 }
@@ -335,6 +331,12 @@ func (t *Terminal) Unlock() {
 	t.mu.Unlock()
 }
 
+// IsComplete returnes whether this terminal has stop processing
+// data from the pty file.
+func (t *Terminal) IsComplete() bool {
+	return t.complete
+}
+
 // Close assumes lock has been acquired by caller
 func (t *Terminal) Close() (ret error) {
 	defer t.cancelCtx()
@@ -343,6 +345,9 @@ func (t *Terminal) Close() (ret error) {
 		return nil
 	}
 	t.closed = true
+	if err := t.pty.Slave.Close(); err != nil {
+		ret = multierr.Append(ret, err)
+	}
 	if err := t.pty.Master.Close(); err != nil {
 		ret = multierr.Append(ret, err)
 	}

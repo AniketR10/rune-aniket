@@ -382,6 +382,7 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 	testutil.TestHandlerIsolated(t, fn, 20, 10, cases)
 }
 
+// FIXME this is a flaky test.
 func TestWorkspaceManagerHandlerDrawWithInitialFiles(t *testing.T) {
 	filenames := []string{"1234", "4567"}
 	// re-use storage

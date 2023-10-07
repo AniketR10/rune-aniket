@@ -25,6 +25,7 @@ import (
 	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/handler/command"
+	"unstable.build/go-tui/plugin"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/term/emulator"
 	"unstable.build/go-tui/text"
@@ -70,6 +71,7 @@ var (
 		"quit":                    (*ex).forceQuit,
 		cmdEdit:                   (*ex).editFiles,
 		"reloadFile":              (*ex).reloadFile,
+		"!":                       (*ex).executePlugin,
 		cmdChangeSplitOrientation: (*ex).splitDirectionChange,
 		"splitWindow":             (*ex).newWindow,
 		"newWindow":               (*ex).newWindow,
@@ -121,6 +123,7 @@ type ex struct {
 	cmdWin     browser.Window
 	quit       bool
 	height     int
+	width      int
 }
 
 func newEx(
@@ -537,11 +540,40 @@ func (e *ex) resumeNotifications(args ...string) error {
 	return nil
 }
 
-func (e *ex) newEmulator(initialCmd string) (*browser.Tab, error) {
-	h, err := emulator.New(e.Browser(), e.workspace, e.workspace,
-		e.emulatorConfig, initialCmd)
+func (e *ex) executePlugin(args ...string) error {
+	if len(args) == 0 {
+		return errors.New("missing argument with the program and arguments to execute")
+	}
+	h, err := plugin.Handler(e.Browser(), e.Browser(), e.workspace, e.workspace,
+		e.emulatorConfig, strings.Join(args, " "), e.width,
+		e.config.Frame, e.config.FocusFrameCharSet, e.config.FocusFrameAttr)
+	if err != nil {
+		return err
+	}
+	cfg := component.FloatingConfig{
+		Alignment: component.SpanAlignmentCentered,
+	}
+	if _, err := e.comp.Floating(h, cfg); err != nil {
+		_ = h.Close()
+		return err
+	}
+	return nil
+}
+
+func (e *ex) newEmulator(initialCmd string) (*emulator.Handler, error) {
+	cfg := e.emulatorConfig
+	h, err := emulator.New(e.Browser(), e.Browser(),
+		e.workspace, e.workspace, cfg, initialCmd)
 	if err != nil {
 		err = fmt.Errorf("new emulator: %s", err)
+		return nil, err
+	}
+	return h, nil
+}
+
+func (e *ex) newEmulatorTab(initialCmd string) (*browser.Tab, error) {
+	h, err := e.newEmulator(initialCmd)
+	if err != nil {
 		return nil, err
 	}
 
@@ -560,7 +592,7 @@ func (e *ex) newEmulator(initialCmd string) (*browser.Tab, error) {
 }
 
 func (e *ex) splitWindowTerminal(args ...string) error {
-	t, err := e.newEmulator("")
+	t, err := e.newEmulatorTab("")
 	if err != nil {
 		return err
 	}
@@ -573,7 +605,7 @@ func (e *ex) splitWindowTerminal(args ...string) error {
 }
 
 func (e *ex) newTerminalTab(args ...string) error {
-	t, err := e.newEmulator("")
+	t, err := e.newEmulatorTab("")
 	if err != nil {
 		return err
 	}
@@ -810,6 +842,7 @@ func (e *ex) Man() tui.Manual {
 // Resize satisfies tui.Component
 func (e *ex) Resize(width, height int) {
 	e.height = height
+	e.width = width
 	e.comp.Resize(width, height)
 	// if a top bar is added we don't reposition
 	// command window until the next resize, but that's

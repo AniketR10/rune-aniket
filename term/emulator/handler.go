@@ -11,7 +11,6 @@ import (
 	schemeapi "unstable.build/go-tui/api/scheme"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/browser"
-	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/term"
 	termutil "unstable.build/go-tui/term/emulator/util"
@@ -24,7 +23,8 @@ var _ tui.Handler = (*Handler)(nil)
 
 // Handler is a tui.Handler that implements a terminal emulator.
 type Handler struct {
-	browser browser.Browser
+	publisher     browser.EventPublisher
+	notifications browser.Notifications
 
 	mouse             *text.Mouse
 	mouseDriver       *mouseDriver
@@ -36,39 +36,37 @@ type Handler struct {
 
 	closed        bool
 	width, height int
-	resizeErr     error
 	updateCh      chan struct{}
 	sema          chan struct{}
 }
 
-// New allocates storage for a new Handler and initializes it. See Handler.Init
-// for more details.
+// New allocates storage for a new Handler and initializes it.
 func New(
-	browser browser.Browser, terminal schemeapi.Terminal,
-	executor schemeapi.Executor,
+	publisher browser.EventPublisher, n browser.Notifications,
+	terminal schemeapi.Terminal, executor schemeapi.Executor,
 	config Config, initialCmd string,
 ) (*Handler, error) {
 	ret := new(Handler)
-	err := ret.Init(browser, terminal, executor, config, initialCmd)
+	err := ret.Init(publisher, n, terminal, executor, config, initialCmd)
 	if err != nil {
 		return nil, err
 	}
 	return ret, nil
 }
 
-// Init initializes this handler with the given browser API,
-// shell, initialCmd, default attributes and selection attributes.
+// Init initializes this handler.
 func (e *Handler) Init(
-	browser browser.Browser, terminal schemeapi.Terminal,
-	executor schemeapi.Executor,
+	publisher browser.EventPublisher, n browser.Notifications,
+	terminal schemeapi.Terminal, executor schemeapi.Executor,
 	config Config, initialCmd string,
 ) error {
-	e.browser = browser
+	e.publisher = publisher
+	e.notifications = n
 	e.defAttr = config.Attributes
 	e.selectAttr = config.SelectionAttributes
 
 	e.theme = &termutil.Theme{Default: config.Attributes}
-	e.windowManipulator = newWindowManipulator(e.browser)
+	e.windowManipulator = newWindowManipulator(n)
 	opts := []termutil.Option{
 		termutil.WithTheme(e.theme),
 		termutil.WithWindowManipulator(e.windowManipulator),
@@ -76,13 +74,25 @@ func (e *Handler) Init(
 	if config.Shell != "" {
 		opts = append(opts, termutil.WithShell(config.Shell))
 	}
-	if initialCmd != "" {
-		opts = append(opts, termutil.WithInitialCommand(initialCmd))
+	if config.Watcher != nil {
+		opts = append(opts, termutil.WithWatcher(config.Watcher))
 	}
 	e.terminal = termutil.New(terminal, executor, opts...)
 	_, err := e.terminal.CreatePty()
 	if err != nil {
 		return err
+	}
+	// set size hint before running firsrt program so output is correctly captured
+	if config.WidthHint != 0 || config.HeightHint != 0 {
+		err := e.terminal.SetSize(uint16(config.HeightHint), uint16(config.WidthHint))
+		if err != nil {
+			return fmt.Errorf("set initial pty size: %v", err)
+		}
+	}
+	if initialCmd != "" {
+		if err := e.terminal.WriteToPty([]byte(initialCmd)); err != nil {
+			return fmt.Errorf("write to pty: %v", err)
+		}
 	}
 	e.windowManipulator.SetTitle(e.terminal.Pty().Slave.Name())
 	clip, err := sysclip.NewRegister()
@@ -97,16 +107,13 @@ func (e *Handler) Init(
 	e.sema = make(chan struct{})
 	go func() {
 		logErr := e.terminal.Run(e.updateCh)
-		if err := e.Close(); err != nil {
-			logErr = multierr.Append(logErr, err)
-		}
-		if err := e.browser.PublishEventNone(); err != nil {
+		if err := e.publisher.PublishEventNone(); err != nil {
 			err = fmt.Errorf("publish event: %s", err)
 			logErr = multierr.Append(logErr, err)
 		}
 		if logErr != nil {
 			log.Errorf("terminal run: %v", logErr)
-			e.browser.Notify(notifications.LevelError, "terminal run: %v", logErr)
+			e.notifications.Notify(notifications.LevelError, "terminal run: %v", logErr)
 		} else {
 			log.Debugf("terminal run: ok")
 		}
@@ -122,7 +129,7 @@ func (e *Handler) Init(
 					return
 				}
 			}
-			err = e.browser.Interrupt()
+			err = e.publisher.Interrupt()
 			if err != nil {
 				log.Errorf("Interrupt: %s", err)
 			}
@@ -136,29 +143,25 @@ func (e *Handler) Init(
 func (e *Handler) Resize(width, height int) {
 	e.terminal.Lock()
 	defer e.terminal.Unlock()
-	// avoid SetSize error
-	if e.closed {
+
+	// avoid divisions by 0 in terminal impl
+	if width == 0 || height == 0 {
 		return
 	}
+	e.width, e.height = width, height
 
 	e.windowManipulator.ResizeInChars(height, width)
-	e.width, e.height = width, height
 	err := e.terminal.SetSize(uint16(height), uint16(width))
 	if err != nil {
 		log.Errorf("(%p).terminal.SetSize: %s", e, err)
-		e.browser.Notify(notifications.LevelError, "terminal set size: %v", err)
+		// do not notify if already closed
+		if !e.closed {
+			e.notifications.Notify(notifications.LevelError, "terminal set size: %v", err)
+		}
 	}
 }
 
 func (e *Handler) Draw(w term.Writer) {
-	if e.resizeErr != nil {
-		errStr := fmt.Sprintf("Error setting win size: %s", e.resizeErr)
-		log.Errorf("(%p).emulator.Draw: resize err: %s", e, e.resizeErr)
-		e.browser.Notify(notifications.LevelError, "emulator draw: %v", errStr)
-		e.drawStr(errStr, w)
-		return
-	}
-
 	e.terminal.Lock()
 	defer e.terminal.Unlock()
 
@@ -173,13 +176,20 @@ func (e *Handler) Handle(ev term.Event) (exit, handled bool) {
 		return
 	}
 
-	e.sema <- struct{}{}
+	select {
+	case e.sema <- struct{}{}:
+	case _, ok := <-e.updateCh:
+		if !ok {
+			exit = true
+		}
+		return
+	}
 	defer func() { <-e.sema }()
 
 	err := e.terminal.WriteToPty(raw)
 	if err != nil {
 		log.Errorf("(%p).emulator.Handle: %s", e, err)
-		e.browser.Notify(notifications.LevelError, "write to pty: %v", err)
+		e.notifications.Notify(notifications.LevelError, "write to pty: %v", err)
 		return
 	}
 
@@ -195,6 +205,22 @@ func (e *Handler) Handle(ev term.Event) (exit, handled bool) {
 		handled = true
 	}
 	return
+}
+
+// Height returns the height of the underlying terminal buffer in lines.
+func (e *Handler) Height() int {
+	e.terminal.Lock()
+	defer e.terminal.Unlock()
+
+	return e.terminal.Height()
+}
+
+// MaxWidth returns the maximum width of the underlying terminal buffer in columns.
+func (e *Handler) MaxWidth() int {
+	e.terminal.Lock()
+	defer e.terminal.Unlock()
+
+	return e.terminal.MaxWidth()
 }
 
 // Cursor satisfies tui.Handler.
@@ -239,6 +265,70 @@ func (e *Handler) Title() string {
 	return e.terminal.GetTitle()
 }
 
+// IsComplete returns wether the underlying command has completed.
+func (e *Handler) IsComplete() bool {
+	e.terminal.Lock()
+	defer e.terminal.Unlock()
+
+	return e.terminal.IsComplete()
+}
+
+// ScrollUp scrolls the buffer down by number of lines.
+func (e *Handler) ScrollDown(lines int) bool {
+	if lines < 0 {
+		return e.ScrollUp(-lines)
+	}
+	e.terminal.Lock()
+	defer e.terminal.Unlock()
+
+	buffer := e.terminal.GetActiveBuffer()
+	offset := buffer.GetScrollOffset()
+	buffer.ScrollDown(uint(lines))
+	return offset != buffer.GetScrollOffset()
+}
+
+// ScrollUp scrolls the buffer up by number of lines.
+func (e *Handler) ScrollUp(lines int) bool {
+	if lines < 0 {
+		return e.ScrollDown(-lines)
+	}
+	e.terminal.Lock()
+	defer e.terminal.Unlock()
+
+	buffer := e.terminal.GetActiveBuffer()
+	offset := buffer.GetScrollOffset()
+	buffer.ScrollUp(uint(lines))
+	return offset != buffer.GetScrollOffset()
+}
+
+// ScrollTop scrolls to the top of the buffer.
+func (e *Handler) ScrollTop() bool {
+	e.terminal.Lock()
+	defer e.terminal.Unlock()
+
+	buffer := e.terminal.GetActiveBuffer()
+	var offset uint
+	for {
+		offset = buffer.GetScrollOffset()
+		buffer.ScrollUp(10)
+		if offset == buffer.GetScrollOffset() {
+			break
+		}
+	}
+	return offset != buffer.GetScrollOffset()
+}
+
+// ScrollBottom scrolls to the bottom of the buffer.
+func (e *Handler) ScrollBottom() bool {
+	e.terminal.Lock()
+	defer e.terminal.Unlock()
+
+	buffer := e.terminal.GetActiveBuffer()
+	offset := buffer.GetScrollOffset()
+	buffer.ScrollToEnd()
+	return offset != buffer.GetScrollOffset()
+}
+
 // Close closes this terminal emulator and all the resources
 // associated with it.
 func (e *Handler) Close() error {
@@ -247,7 +337,7 @@ func (e *Handler) Close() error {
 	e.terminal.Lock()
 	defer e.terminal.Unlock()
 
-	if e.closed || e.terminal == nil {
+	if e.closed {
 		return nil
 	}
 
@@ -263,12 +353,6 @@ func (e *Handler) Close() error {
 	}
 	// we can't remove /dev/pts files so leave it up to the system
 	return ret
-}
-
-func (e *Handler) drawStr(str string, w term.Writer) {
-	c := component.NewString(str)
-	c.Resize(e.width, e.height)
-	c.Draw(w)
 }
 
 func (e *Handler) drawRow(

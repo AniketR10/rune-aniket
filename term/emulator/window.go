@@ -10,14 +10,14 @@ var _ termutil.WindowManipulator = (*windowManipulator)(nil)
 
 type windowManipulator struct {
 	width, height int
-	browser       browser.Browser
+	notifications browser.Notifications
 	title         string
 }
 
 func newWindowManipulator(
-	browser browser.Browser,
+	n browser.Notifications,
 ) *windowManipulator {
-	return &windowManipulator{browser: browser}
+	return &windowManipulator{notifications: n}
 }
 
 func (w *windowManipulator) State() termutil.WindowState {
@@ -92,5 +92,5 @@ func (w *windowManipulator) RestoreTitleFromStack() {
 }
 
 func (w *windowManipulator) ReportError(err error) {
-	w.browser.Notify(notifications.LevelError, "terminal: %s", err)
+	w.notifications.Notify(notifications.LevelError, "terminal: %s", err)
 }

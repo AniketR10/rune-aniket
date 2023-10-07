@@ -4,7 +4,9 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"os"
+	"path/filepath"
 	"strconv"
 	"sync"
 	"syscall"
@@ -16,6 +18,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"unstable.build/go-tui"
 	browserapi "unstable.build/go-tui/api/browser"
+	"unstable.build/go-tui/api/config"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/browser"
 	browsertest "unstable.build/go-tui/browser/test"
@@ -952,7 +955,7 @@ func (t testEx) Handle(ev term.Event) (bool, bool) {
 }
 
 func newExForTestingWithWorkspace(
-	t *testing.T, workspace *testLoader,
+	t *testing.T, workspace workspaceLoader,
 	ed text.Editor,
 	publishEvent func(term.Event) bool,
 	opts ...text.Option,
@@ -1087,6 +1090,43 @@ func TestCommandAliases(t *testing.T) {
 		}),
 	}
 	b := newExForTesting(t, texttest.NopEditor(), opts...)
+	defer b.Close()
+
+	testutil.TestHandlerSequence(t, b, 20, 10, cases)
+}
+
+func TestEphemeralTerminal(t *testing.T) {
+	cases := []testutil.HandlerSequenceTestCase{
+		{":! sleep 5>",
+			`┌──────────────────┐
+│                  │
+├┌────────────────┐┤
+││ ⠃ sleep      0s││
+││────────────────││
+││                ││
+││                ││
+││                ││
+││                ││
+└└────────────────┘┘`,
+		},
+	}
+
+	opts := []text.Option{
+		text.WithCommandKey(testCommandKey),
+	}
+
+	tempDir, err := ioutil.TempDir("", "")
+	require.NoError(t, err)
+	uri, err := workspaceapi.ParseURI(filepath.Join("file://", tempDir))
+	require.NoError(t, err)
+	ctx := context.Background()
+	fileScheme, err := workspace.NewFileScheme(ctx, config.NopConfig(), uri)
+	require.NoError(t, err)
+	defer fileScheme.Close()
+
+	workspace := workspace.NewSchemeWorkspace(uri, fileScheme)
+	b := newExForTestingWithWorkspace(t, workspace,
+		texttest.NopEditor(), nopPublishEvent, opts...)
 	defer b.Close()
 
 	testutil.TestHandlerSequence(t, b, 20, 10, cases)

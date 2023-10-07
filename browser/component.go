@@ -907,6 +907,11 @@ func (c *Component) Close() (ret error) {
 	}
 	c.buffers = c.buffers[:0]
 	c.wm.UnsubscribeAll()
+
+	c.wm.Iterate(func(w handler.Window) {
+		// call Close on all browser handlers
+		_ = c.newWindow(w).Close()
+	})
 	return ret
 }
 

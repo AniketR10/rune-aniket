@@ -269,6 +269,15 @@ func (buffer *Buffer) Height() int {
 	return len(buffer.lines)
 }
 
+func (buffer *Buffer) MaxWidth() (ret int) {
+	for _, line := range buffer.lines {
+		if length := int(line.Len()); length > ret {
+			ret = length
+		}
+	}
+	return
+}
+
 func (buffer *Buffer) ViewHeight() uint16 {
 	return buffer.viewHeight
 }

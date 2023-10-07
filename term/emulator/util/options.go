@@ -2,6 +2,7 @@ package termutil
 
 import (
 	"os"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 )
 
 type Option func(t *Terminal)
@@ -28,9 +29,9 @@ func WithShell(shell string) Option {
 	}
 }
 
-func WithInitialCommand(cmd string) Option {
+func WithWatcher(watcher workspaceapi.Watcher) Option {
 	return func(t *Terminal) {
-		t.initialCommand = cmd + "\n"
+		t.watcher = watcher
 	}
 }
 
