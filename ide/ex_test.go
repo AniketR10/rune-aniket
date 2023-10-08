@@ -1132,6 +1132,55 @@ func TestEphemeralTerminal(t *testing.T) {
 	testutil.TestHandlerSequence(t, b, 20, 10, cases)
 }
 
+func TestFullScreen(t *testing.T) {
+	cases := []testutil.HandlerSequenceTestCase{
+		{":splitWindow>:edit aaa>:edit bbb>:toggleFullscreen>",
+			`AAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAA`,
+		},
+		{":toggleFullScreen>",
+			`┌──────────────────┐
+│aaa  bbb          │
+├────────┐┌────────┐
+│        ││AAAAAAAA│
+│        ││AAAAAAAA│
+│        ││AAAAAAAA│
+│        ││AAAAAAAA│
+│        ││AAAAAAAA│
+│        ││AAAAAAAA│
+└────────┘└────────┘`,
+		},
+	}
+
+	opts := []text.Option{
+		text.WithCommandKey(testCommandKey),
+	}
+
+	tempDir, err := ioutil.TempDir("", "")
+	require.NoError(t, err)
+	uri, err := workspaceapi.ParseURI(filepath.Join("file://", tempDir))
+	require.NoError(t, err)
+	ctx := context.Background()
+	fileScheme, err := workspace.NewFileScheme(ctx, config.NopConfig(), uri)
+	require.NoError(t, err)
+	defer fileScheme.Close()
+
+	workspace := workspace.NewSchemeWorkspace(uri, fileScheme)
+	b := newExForTestingWithWorkspace(t, workspace,
+		texttest.NopEditor(), nopPublishEvent, opts...)
+	defer b.Close()
+
+	testutil.TestHandlerSequence(t, b, 20, 10, cases)
+}
+
 func TestExposedRootNodeIssue(t *testing.T) {
 	notifications := browser.DefaultConfig().Notifications
 	notifications.ProgressBar = false // deterministic tests

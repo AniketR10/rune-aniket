@@ -52,7 +52,7 @@ var (
 		"focusPrevWindow":        {},
 		"focusAboveWindow":       {},
 		"focusBelowWindow":       {},
-		"notificationsCloseAll":  {},
+		"toggleFullscreen":       {},
 		cmdSplitWindowTerminal:   {},
 		cmdTerminalTab:           {},
 		cmdSwitchToWorkspace:     {}, // workspace_handler
@@ -79,6 +79,7 @@ var (
 		"focusPrevWindow":         (*ex).focusPrevWindow,
 		"focusAboveWindow":        (*ex).focusAboveWindow,
 		"focusBelowWindow":        (*ex).focusBelowWindow,
+		"toggleFullscreen":        (*ex).toggleFullscreen,
 		"notificationsCloseAll":   (*ex).closeNotifications,
 		"notificationsPauseAll":   (*ex).pauseNotifications,
 		"notificationsResumeAll":  (*ex).resumeNotifications,
@@ -121,6 +122,7 @@ type ex struct {
 	cmdBrowser browser.Component
 	cmdV       handler.Virtual
 	cmdWin     browser.Window
+	fullscreen browserapi.Handler
 	quit       bool
 	height     int
 	width      int
@@ -530,6 +532,21 @@ func (e *ex) closeNotifications(args ...string) error {
 	return nil
 }
 
+func (e *ex) toggleFullscreen(args ...string) error {
+	if e.fullscreen != nil {
+		e.fullscreen = nil
+		e.comp.Resize(e.width, e.height)
+		return nil
+	}
+	content, err := e.invokeWindow().Content()
+	if err != nil {
+		return fmt.Errorf("window get content: %v", err)
+	}
+	e.fullscreen = content
+	e.fullscreen.Resize(e.width, e.height)
+	return nil
+}
+
 func (e *ex) pauseNotifications(args ...string) error {
 	e.comp.PauseNotifications()
 	return nil
@@ -661,7 +678,11 @@ func (e *ex) handleEvent(ev term.Event) (
 	exit, handled bool,
 ) {
 	if ev.Type == term.EventMouse {
-		_, handled = e.comp.Browser().Handle(ev)
+		if e.fullscreen != nil {
+			_, handled = e.fullscreen.Handle(ev)
+		} else {
+			_, handled = e.comp.Browser().Handle(ev)
+		}
 		return
 	}
 
@@ -831,6 +852,9 @@ func (e *ex) Cursor() (pos term.Coordinates, show bool) {
 	if e.cmd != nil {
 		return e.cmdV.Cursor()
 	}
+	if e.fullscreen != nil {
+		return e.fullscreen.Cursor()
+	}
 	return e.comp.Browser().Cursor()
 }
 
@@ -844,6 +868,9 @@ func (e *ex) Resize(width, height int) {
 	e.height = height
 	e.width = width
 	e.comp.Resize(width, height)
+	if e.fullscreen != nil {
+		e.fullscreen.Resize(width, height)
+	}
 	// if a top bar is added we don't reposition
 	// command window until the next resize, but that's
 	// acceptable because bars are added once
@@ -866,13 +893,23 @@ func (e *ex) Draw(w term.Writer) {
 		defer e.comp.SetDim(prev)
 
 		if e.config.Config.Dim {
-			e.comp.Draw(term.DimWriter(w))
+			if e.fullscreen != nil {
+				e.fullscreen.Draw(term.DimWriter(w))
+			} else {
+				e.comp.Draw(term.DimWriter(w))
+			}
 		} else {
-			e.comp.Draw(w)
+			if e.fullscreen != nil {
+				e.fullscreen.Draw(w)
+			} else {
+				e.comp.Draw(w)
+			}
 		}
 		w = component.VirtualWriter(w,
 			e.cmdV.Position(), e.cmdV.Height(), e.cmdV.Width())
 		e.cmdBrowser.DrawWindow(e.cmdWin, w)
+	} else if e.fullscreen != nil {
+		e.fullscreen.Draw(w)
 	} else {
 		e.comp.Draw(w)
 	}

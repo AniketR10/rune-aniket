@@ -302,6 +302,7 @@ command:
     <c-x>v: changeSplitOrientation v
     <c-j>: lspNextDiagnostic
     <c-k>: lspPrevDiagnostic
+    <c-f>: toggleFullscreen
     <c-t>: lspHover
     <c-g>: lspGoToDefinition
     <c-b>: lspFormat
