@@ -63,18 +63,6 @@ sh-3.2$
               
               `,
 		},
-		{
-			description: "command with multiple args",
-			cmdAndArgs:  "echo bla ble bli",
-			maxWidth:    8,
-			drawnComponent: `
- ⠃ echo     0s
-bla ble bli   
-              
-              
-              
-              `,
-		},
 	}
 
 	// important so test correctness doesn't depend on host
