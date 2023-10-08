@@ -160,7 +160,8 @@ func assertDefaultConfig(t *testing.T, cfg *ideConfig) {
 	assert.Equal(t, browser.DefaultConfig().NonFocusTabAttr, cfg.nonFocusTabAttr())
 	assert.Equal(t, browser.DefaultConfig().WallpaperAttr, cfg.workspaceWallpaperAttr())
 	assert.Equal(t, browser.DefaultConfig().WallpaperBackgroundAttr, cfg.workspaceWallpaperBackgroundAttr())
-	assert.Equal(t, emulator.Config{}, cfg.terminalConfig())
+	selectAttr := term.Attributes{Bg: term.AttrReverse, Fg: term.AttrReverse}
+	assert.Equal(t, emulator.Config{SelectionAttributes: selectAttr}, cfg.terminalConfig())
 }
 
 func TestConfigDefault(t *testing.T) {

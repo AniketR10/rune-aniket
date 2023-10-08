@@ -928,7 +928,8 @@ func (c ideConfig) terminalDefaultAttr() term.Attributes {
 }
 
 func (c ideConfig) terminalSelectionAttr() term.Attributes {
-	return c.getConfigAttr("terminal", "selection_attr", term.Attributes{})
+	return c.getConfigAttr("terminal", "selection_attr",
+		term.Attributes{Bg: term.AttrReverse, Fg: term.AttrReverse})
 }
 
 func (c ideConfig) terminalShell() (ret string) {
