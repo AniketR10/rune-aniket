@@ -39,14 +39,6 @@ const (
 )
 
 var (
-	workspaceCommands = map[string]func(*workspaceManagerHandler, ...string) error{
-		cmdAddWorkspace:      (*workspaceManagerHandler).commandAddWorkspace,
-		cmdCloseWorkspace:    (*workspaceManagerHandler).commandCloseWorkspace,
-		cmdReloadWorkspace:   (*workspaceManagerHandler).commandReloadWorkspace,
-		cmdSwitchToWorkspace: (*workspaceManagerHandler).commandSwitchToWorkspace,
-		"quit":               (*workspaceManagerHandler).commandQuit,
-		"forceQuit!":         (*workspaceManagerHandler).commandQuit,
-	}
 	defaultCommandKey = term.KeyComb{Ch: ':'}
 )
 
@@ -130,10 +122,22 @@ func (h *workspaceManagerHandler) init(
 	h.storage = storage
 
 	globalOpts := h.textOpts(h.cfg)
-	// TODO could add workspace to open terminals on empty workspace
-	h.empty, _ = newEx(h.newEditor(cfg), nil, h.storage,
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("user home dir: %v", err)
+	}
+	homeDirUri, err := workspaceapi.CurrentUserHostURI(homeDir)
+	if err != nil {
+		return fmt.Errorf("home dir uri: %v", err)
+	}
+	homeWorkspace, err := h.workspace.AddWorkspace(h.ctxWithLocker, homeDirUri)
+	h.empty, _ = newEx(h.newEditor(cfg), homeWorkspace, h.storage,
 		cfg.terminalConfig(), h.publishEvent, globalOpts...)
-	err = h.subscribeAllWorkspaceCommands(h.empty)
+	err = h.empty.subscribeCommands()
+	if err != nil {
+		return err
+	}
+	err = h.subscribeActiveWorkspaceCommands(h.empty)
 	if err != nil {
 		return err
 	}
@@ -232,10 +236,6 @@ func (h *workspaceManagerHandler) initWithRestorePrompt(
 		},
 	)
 	return nil
-}
-
-func (h *workspaceManagerHandler) subscribeAllWorkspaceCommands(ex *ex) error {
-	return h.subscribeCommands(ex, workspaceCommands)
 }
 
 func (h *workspaceManagerHandler) subscribeActiveWorkspaceCommands(ex *ex) (ret error) {
