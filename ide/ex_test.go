@@ -153,6 +153,7 @@ func TestBrowserHandlerDraw(t *testing.T) {
 }
 
 func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
+	t.Parallel()
 	cases := []testutil.HandlerSequenceTestCase{
 		{"a",
 			`┌──────────────────┐
@@ -565,6 +566,7 @@ func assertHandled(
 }
 
 func TestBrowserHandlerInterrupts(t *testing.T) {
+	t.Parallel()
 	t.Run("Interrupt calls interrupt handle", func(t *testing.T) {
 		var wg sync.WaitGroup
 		opts := []text.Option{text.WithInterrupter(
@@ -595,6 +597,7 @@ func TestBrowserHandlerInterrupts(t *testing.T) {
 }
 
 func TestMultipleFilesStartup(t *testing.T) {
+	t.Parallel()
 	cases := []testutil.HandlerSequenceTestCase{
 		{"",
 			`┌──────────────────┐
@@ -653,7 +656,8 @@ func TestMultipleFilesStartup(t *testing.T) {
 	}
 	mockBuf := testFileBuffer{}
 	workspace := testLoader{buf: &mockBuf}
-	b := newExForTestingWithWorkspace(t, &workspace, texttest.NopEditor(), nopPublishEvent, opts...)
+	b := newExForTestingWithWorkspace(t, &workspace, texttest.NopEditor(),
+		emulator.Config{}, nopPublishEvent, opts...)
 	defer b.Close()
 
 	testutil.TestHandlerSequence(t, b, 20, 10, cases)
@@ -662,6 +666,7 @@ func TestMultipleFilesStartup(t *testing.T) {
 }
 
 func TestExCommandResponsive(t *testing.T) {
+	t.Parallel()
 	cases := []testutil.HandlerSequenceTestCase{
 		{":edit",
 			`                    
@@ -717,6 +722,7 @@ eeeeeeeeee▐
 }
 
 func TestExKeySequence(t *testing.T) {
+	t.Parallel()
 	cases := []testutil.HandlerSequenceTestCase{
 		{"zgl",
 			`┌──────────────────┐
@@ -957,21 +963,24 @@ func (t testEx) Handle(ev term.Event) (bool, bool) {
 func newExForTestingWithWorkspace(
 	t *testing.T, workspace workspaceLoader,
 	ed text.Editor,
+	emulatorCfg emulator.Config,
 	publishEvent func(term.Event) bool,
 	opts ...text.Option,
 ) testEx {
 	ex := new(ex)
 	require.NoError(t, ex.init(ed, workspace, document.NewInMemoryService(),
-		emulator.Config{}, publishEvent, opts...))
+		emulatorCfg, publishEvent, opts...))
 	ex.subscribeCommands()
 	return testEx{ex}
 }
 
 func newExForTesting(t *testing.T, ed text.Editor, opts ...text.Option) testEx {
-	return newExForTestingWithWorkspace(t, &testLoader{}, ed, nopPublishEvent, opts...)
+	return newExForTestingWithWorkspace(t, &testLoader{}, ed, emulator.Config{},
+		nopPublishEvent, opts...)
 }
 
 func TestNewWindow(t *testing.T) {
+	t.Parallel()
 	cases := []testutil.HandlerSequenceTestCase{
 		{":newWindow>:changeSplitOrientation h>:newWindow>",
 			`┌──────────────────┐
@@ -1022,6 +1031,7 @@ func TestNewWindow(t *testing.T) {
 }
 
 func TestCommandHistory(t *testing.T) {
+	t.Parallel()
 	cases := []testutil.HandlerSequenceTestCase{
 		{":e hello.go>:e wi.go>1234",
 			`┌──────────────────┐
@@ -1057,6 +1067,7 @@ func TestCommandHistory(t *testing.T) {
 }
 
 func TestCommandAliases(t *testing.T) {
+	t.Parallel()
 	cases := []testutil.HandlerSequenceTestCase{
 		{":todo>1234",
 			`┌──────────────────┐
@@ -1096,6 +1107,7 @@ func TestCommandAliases(t *testing.T) {
 }
 
 func TestEphemeralTerminal(t *testing.T) {
+	t.Parallel()
 	cases := []testutil.HandlerSequenceTestCase{
 		{":! sleep 5>",
 			`┌──────────────────┐
@@ -1126,13 +1138,106 @@ func TestEphemeralTerminal(t *testing.T) {
 
 	workspace := workspace.NewSchemeWorkspace(uri, fileScheme)
 	b := newExForTestingWithWorkspace(t, workspace,
-		texttest.NopEditor(), nopPublishEvent, opts...)
+		texttest.NopEditor(), emulator.Config{}, nopPublishEvent, opts...)
+	defer b.Close()
+
+	testutil.TestHandlerSequence(t, b, 20, 10, cases)
+}
+
+func TestCompanionTerminal(t *testing.T) {
+	t.Parallel()
+
+	cases := []testutil.HandlerSequenceTestCase{
+		{":!>_______",
+			`┌──────────────────┐
+│                  │
+├┌────────────────┐┤
+││sh-3.2$ ▐       ││
+││                ││
+││                ││
+││                ││
+││                ││
+││                ││
+└└────────────────┘┘`,
+		},
+		{"$",
+			`┌──────────────────┐
+│                  │
+├──────────────────┤
+│                  │
+│                  │
+│                  │
+│                  │
+│                  │
+│                  │
+└──────────────────┘`,
+		},
+		{":!>", // no need to wait now, it should pick previous session
+			`┌──────────────────┐
+│                  │
+├┌────────────────┐┤
+││sh-3.2$ ▐       ││
+││                ││
+││                ││
+││                ││
+││                ││
+││                ││
+└└────────────────┘┘`,
+		},
+		{"#",
+			`┌──────────────────┐
+│                  │
+├──────────────────┤
+│                  │
+│                  │
+│                  │
+│                  │
+│                  │
+│                  │
+└──────────────────┘`,
+		},
+		{":!>`", // ` simulates ctrl-v
+			`┌──────────────────┐
+│                  │
+├──────────────────┤
+│                  │
+│                  │
+│                  │
+│                  │
+│                  │
+│                  │
+└──────────────────┘`,
+		},
+	}
+
+	opts := []text.Option{
+		text.WithCommandKey(testCommandKey),
+		text.WithCommandKeyBinding(term.KeyComb{Key: term.KeyCtrlH}, []string{"closeWindow"}),
+		text.WithCommandKeyBinding(term.KeyComb{Key: term.KeyCtrlL}, []string{"nextBuffer"}),
+		text.WithCommandKeyBinding(term.KeyComb{Key: term.KeyCtrlV}, []string{"bufferClose"}),
+	}
+
+	tempDir, err := ioutil.TempDir("", "")
+	require.NoError(t, err)
+	uri, err := workspaceapi.ParseURI(filepath.Join("file://", tempDir))
+	require.NoError(t, err)
+	ctx := context.Background()
+	fileScheme, err := workspace.NewFileScheme(ctx, config.NopConfig(), uri)
+	require.NoError(t, err)
+	defer fileScheme.Close()
+
+	// do not depend on host shell, which can vary across hosts
+	cfg := emulator.Config{Shell: "sh"}
+	workspace := workspace.NewSchemeWorkspace(uri, fileScheme)
+	b := newExForTestingWithWorkspace(t, workspace,
+		texttest.NopEditor(), cfg, nopPublishEvent, opts...)
 	defer b.Close()
 
 	testutil.TestHandlerSequence(t, b, 20, 10, cases)
 }
 
 func TestFullScreen(t *testing.T) {
+	t.Parallel()
 	cases := []testutil.HandlerSequenceTestCase{
 		{":splitWindow>:edit aaa>:edit bbb>:toggleFullscreen>",
 			`AAAAAAAAAAAAAAAAAAAA
@@ -1175,13 +1280,14 @@ AAAAAAAAAAAAAAAAAAAA`,
 
 	workspace := workspace.NewSchemeWorkspace(uri, fileScheme)
 	b := newExForTestingWithWorkspace(t, workspace,
-		texttest.NopEditor(), nopPublishEvent, opts...)
+		texttest.NopEditor(), emulator.Config{}, nopPublishEvent, opts...)
 	defer b.Close()
 
 	testutil.TestHandlerSequence(t, b, 20, 10, cases)
 }
 
 func TestExposedRootNodeIssue(t *testing.T) {
+	t.Parallel()
 	notifications := browser.DefaultConfig().Notifications
 	notifications.ProgressBar = false // deterministic tests
 	notifications.Width = 20

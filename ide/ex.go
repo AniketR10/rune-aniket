@@ -126,6 +126,9 @@ type ex struct {
 	quit       bool
 	height     int
 	width      int
+
+	companionTerminal    *emulator.Handler
+	companionTerminalWin browser.Window
 }
 
 func newEx(
@@ -161,7 +164,7 @@ func (e *ex) init(
 	if err != nil {
 		return
 	}
-	return err
+	return
 }
 
 func (e *ex) subscribeCommands() error {
@@ -344,19 +347,29 @@ func (e *ex) moveFocusCursor(line int) error {
 
 func (e *ex) previousBuffer(args ...string) error {
 	b := e.comp.Browser()
+	if e.invokeWindow() == e.companionTerminalWin {
+		return e.toggleCompanionTerminal()
+	}
 	b.PreviousTab(e.invokeWindow())
 	return nil
 }
 
 func (e *ex) nextBuffer(args ...string) error {
 	b := e.comp.Browser()
+	if e.invokeWindow() == e.companionTerminalWin {
+		return e.toggleCompanionTerminal()
+	}
 	b.NextTab(e.invokeWindow())
 	return nil
 }
 
 func (e *ex) closeBuffer(args ...string) error {
 	b := e.comp.Browser()
-	b.RemoveWindowContent(e.invokeWindow())
+	win := e.invokeWindow()
+	if win == e.companionTerminalWin {
+		return e.toggleCompanionTerminal()
+	}
+	b.RemoveWindowContent(win)
 	return nil
 }
 
@@ -367,7 +380,11 @@ func (e *ex) closeAllBuffers(args ...string) error {
 }
 
 func (e *ex) closeFocusWindow(args ...string) error {
-	return e.invokeWindow().Close()
+	win := e.invokeWindow()
+	if win == e.companionTerminalWin {
+		return e.toggleCompanionTerminal()
+	}
+	return win.Close()
 }
 
 func (e *ex) flushCloseIgnoreNonFlushed(args ...string) error {
@@ -559,7 +576,7 @@ func (e *ex) resumeNotifications(args ...string) error {
 
 func (e *ex) executePlugin(args ...string) error {
 	if len(args) == 0 {
-		return errors.New("missing argument with the program and arguments to execute")
+		return e.toggleCompanionTerminal()
 	}
 	h, err := plugin.Handler(e.Browser(), e.Browser(), e.workspace, e.workspace,
 		e.emulatorConfig, strings.Join(args, " "), e.width,
@@ -577,8 +594,50 @@ func (e *ex) executePlugin(args ...string) error {
 	return nil
 }
 
-func (e *ex) newEmulator(initialCmd string) (*emulator.Handler, error) {
-	cfg := e.emulatorConfig
+func (e *ex) toggleCompanionTerminal() error {
+	// if window is open and shell didn't exit, then close. If shell exited
+	// then most likely what the user really wants is to open a new one
+	// and the reason why the companion terminal is not nil is because
+	// it wan't cleaned up properly.
+	if e.companionTerminalWin != nil && !e.companionTerminal.IsComplete() {
+		e.companionTerminalWin.Close()
+		e.companionTerminalWin = nil
+		return nil
+	}
+
+	width := int(float64(e.width) * 0.8)
+	height := int(float64(e.height) * 0.8)
+
+	if e.companionTerminal == nil || e.companionTerminal.IsComplete() {
+		// if user exits via 'exit' command, then we must close the previous
+		// terminal emulator and open a new one
+		if e.companionTerminal != nil && e.companionTerminal.IsComplete() {
+			_ = e.companionTerminal.Close()
+		}
+		var err error
+		cfg := e.emulatorConfig
+		cfg.WidthHint = width
+		cfg.HeightHint = width
+		e.companionTerminal, err = e.newEmulator("", cfg)
+		if err != nil {
+			return err
+		}
+	}
+	cfg := component.FloatingConfig{
+		Alignment: component.SpanAlignmentCentered,
+	}
+	// do not call Close on terminal when window is closed: session should remain
+	// open as long as this workspace is not closed.
+	floating := browser.StaticFloating(browser.NopHandler(e.companionTerminal), width, height)
+	win, err := e.comp.Floating(floating, cfg)
+	if err != nil {
+		return err
+	}
+	e.companionTerminalWin = win
+	return nil
+}
+
+func (e *ex) newEmulator(initialCmd string, cfg emulator.Config) (*emulator.Handler, error) {
 	h, err := emulator.New(e.Browser(), e.Browser(),
 		e.workspace, e.workspace, cfg, initialCmd)
 	if err != nil {
@@ -589,7 +648,8 @@ func (e *ex) newEmulator(initialCmd string) (*emulator.Handler, error) {
 }
 
 func (e *ex) newEmulatorTab(initialCmd string) (*browser.Tab, error) {
-	h, err := e.newEmulator(initialCmd)
+	cfg := e.emulatorConfig
+	h, err := e.newEmulator(initialCmd, cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -939,6 +999,11 @@ func (e *ex) Close() (ret error) {
 	if e.cancelPartialReissue != nil {
 		e.cancelPartialReissue()
 		e.cleanPartialReissueState()
+	}
+	// we do not call Close on terminal when window is closed
+	if e.companionTerminal != nil {
+		_ = e.companionTerminal.Close()
+		e.companionTerminal = nil
 	}
 	return
 }

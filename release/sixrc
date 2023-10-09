@@ -310,6 +310,7 @@ command:
     <c-\>: searchText
     # <c-x><enter>: newWindow
     <c-x><enter>: splitWindowTerminal
+    <c-enter>: ! # toggle companion terminal
     gf: openFileUnderCursor
     <c-x>1: switchToWorkspace 1
     <c-x>2: switchToWorkspace 2
