@@ -178,6 +178,7 @@ func authMethodsFromURI(config sshConfig, uri workspaceapi.URI) ([]ssh.AuthMetho
 	for _, key := range config.privateKeys {
 		signer, err := privateKeySigner(key)
 		if err != nil {
+			// TODO should notify via notifications and continue
 			return nil, err
 		}
 		auths = append(auths, ssh.PublicKeys(signer))
@@ -233,6 +234,7 @@ func currentHomePath() (string, error) {
 	return u.HomeDir, nil
 }
 
+// TODO improve collection of passhprase via secret prompt
 func readPassphrase(key string) (string, error) {
 	fmt.Fprintf(os.Stdout, "Key %s requires a passphrase: ", key)
 	bytePassword, err := term.ReadPassword(int(syscall.Stdin))
