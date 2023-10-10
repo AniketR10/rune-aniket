@@ -76,6 +76,19 @@ func TestWindowDraw(t *testing.T) {
 	}
 }
 
+func TestWindowClosedOnClose(t *testing.T) {
+	b := NewComponent(DefaultConfig())
+	h := newTestHandler()
+	var win Window
+	win = b.Floating(FuncFloatingHandler(h, func() error {
+		if !win.Closed() {
+			_ = win.Close()
+		}
+		return h.Close()
+	}), component.FloatingConfig{})
+	require.NoError(t, win.Close())
+}
+
 type nopHandler struct {
 	handler.TestHandler
 }

@@ -587,7 +587,18 @@ func (e *ex) executePlugin(args ...string) error {
 	cfg := component.FloatingConfig{
 		Alignment: component.SpanAlignmentCentered,
 	}
-	if _, err := e.comp.Floating(h, cfg); err != nil {
+	// there can be multiple floating windows open
+	// so instead of matching windows on bufferClose,
+	// we set a handler that closes the window if the handler
+	// is closed.
+	var win browser.Window
+	win, err = e.comp.Floating(browser.FuncFloatingHandler(h, func() error {
+		if !win.Closed() {
+			_ = win.Close()
+		}
+		return h.Close()
+	}), cfg)
+	if err != nil {
 		_ = h.Close()
 		return err
 	}

@@ -109,6 +109,9 @@ func (c *Component) closeWindow(win *browserWindow) error {
 
 	delete(c.windows, win.ID())
 
+	// ensure that if handler calls Closed to ensure that
+	// window is closed, the answer will be correct.
+	win.parent = nil
 	c.releaseHandler(content)
 	return nil
 }
