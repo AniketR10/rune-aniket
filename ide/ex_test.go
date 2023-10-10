@@ -19,6 +19,7 @@ import (
 	"unstable.build/go-tui"
 	browserapi "unstable.build/go-tui/api/browser"
 	"unstable.build/go-tui/api/config"
+	schemeapi "unstable.build/go-tui/api/scheme"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/browser"
 	browsertest "unstable.build/go-tui/browser/test"
@@ -1350,9 +1351,129 @@ func TestExposedRootNodeIssue(t *testing.T) {
 	testutil.TestHandlerSequence(t, b, 20, 10, cases)
 }
 
+func TestEditCompletion(t *testing.T) {
+	cases := []testutil.HandlerSequenceTestCase{
+		{":edit re",
+			`                    
+                    
+                    
+                    
+edit re▐            
+retalls             
+                    
+                    
+                    
+                    `},
+		{":edit dawo",
+			`                    
+                    
+                    
+                    
+edit dawo▐          
+daworg              
+                    
+                    
+                    
+                    `},
+		{":edit dawo✌re",
+			`                    
+                    
+                    
+                    
+edit daworg re▐     
+retalls             
+                    
+                    
+                    
+                    `},
+		{":edit dawo⬇✌re",
+			`                    
+                    
+                    
+                    
+edit daworg re▐     
+retalls             
+                    
+                    
+                    
+                    `},
+		{":edit dawo⬇✌re✌^^^^^^^^^^^",
+			`                    
+                    
+                    
+                    
+edit dawo▐          
+daworg              
+                    
+                    
+                    
+                    `},
+		{":edit dawo⬇✌re✌^^^^^^^^^^^✌re",
+			`                    
+                    
+                    
+                    
+edit daworg re▐     
+retalls             
+                    
+                    
+                    
+                    `},
+		{":edit dawo⬇✌re✌^^^^^^^^^^^^^^^^^",
+			`                    
+                    
+                    
+                    
+edi▐                
+edit                
+reloadFile          
+                    
+                    
+                    `},
+		{":edit dawo⬇✌re✌^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^",
+			`                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    `},
+	}
+
+	fn := func(t *testing.T) tui.Handler {
+		opts := []text.Option{
+			text.WithCommandKey(testCommandKey),
+			text.WithWindowManagerConfig(handler.WindowManagerConfig{
+				WindowManagerConfig: component.WindowManagerConfig{Frame: false}}),
+			text.WithCommandOverlayConfig(text.CommandOverlayConfig{}),
+		}
+		uri, err := workspaceapi.ParseURI("memory:///")
+		require.NoError(t, err)
+		scheme, err := workspace.NewMemoryScheme(context.Background(), config.NopConfig(), uri)
+		require.NoError(t, err)
+		touchTestFile(t, scheme, "daworg")
+		touchTestFile(t, scheme, "retalls")
+		b := newExForTestingWithWorkspace(t, workspace.NewSchemeWorkspace(uri, scheme),
+			texttest.NopEditor(), emulator.Config{}, nopPublishEvent, opts...)
+		t.Cleanup(func() { _ = b.Close() })
+		return b
+	}
+
+	testutil.TestHandlerIsolated(t, fn, 20, 10, cases)
+}
+
 func notificationsConfig() notifications.Config {
 	ret := browser.DefaultConfig().Notifications
 	ret.Width = 15
 	ret.ProgressBar = false // deterministic tests
 	return ret
+}
+
+func touchTestFile(t *testing.T, scheme schemeapi.Scheme, name string) {
+	f, werr := scheme.Open(name, os.O_CREATE, 0666)
+	require.Nil(t, werr)
+	require.NoError(t, f.Sync())
 }

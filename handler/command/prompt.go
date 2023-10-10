@@ -462,6 +462,9 @@ func (h *Prompt) setCompletionList(
 		h.log(log.TraceLevel, "completer returned updated last arg %v: %q -> %q",
 			cmdAndArgs, newCmdAndArgs[len(newCmdAndArgs)-1], newLastArg)
 		newCmdAndArgs[len(newCmdAndArgs)-1] = newLastArg
+		// NOTE: this method is prone to expose errors if newLastArg is incorrect
+		// ensure that all completer implementation use newLastArg sparingly
+		// and at some point a Delete+Insert option should be explored
 		h.buf.Replace(strings.Join(newCmdAndArgs, " "))
 		if persistLastArgUpdates {
 			h.commandAndArgs[len(h.commandAndArgs)-1] = newLastArg

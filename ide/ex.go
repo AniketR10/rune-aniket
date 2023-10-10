@@ -198,6 +198,7 @@ func (e *ex) completeEdit(
 		return it, "", nil
 	}
 
+	var modifiedLast string
 	last := args[len(args)-1]
 
 	// take ~ as the home of the user using the editor.
@@ -216,6 +217,7 @@ func (e *ex) completeEdit(
 		if err != nil {
 			return nil, "", fmt.Errorf("expand path: %v", err)
 		}
+		modifiedLast = last
 	}
 
 	uri, err := e.parseURIOrWorkspaceURI(last)
@@ -227,7 +229,7 @@ func (e *ex) completeEdit(
 	if err != nil {
 		return nil, "", err
 	}
-	return it, last, nil
+	return it, modifiedLast, nil
 }
 
 func (e *ex) log(level log.Level, msg string, args ...interface{}) {
