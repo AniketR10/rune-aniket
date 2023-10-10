@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/user"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"syscall"
@@ -269,6 +270,10 @@ func (m *memoryScheme) ReadDir(name string) (
 			filename: filename,
 		})
 	}
+	// deterministic output
+	sort.Slice(ret, func(i, j int) bool {
+		return ret[i].(memFileInfo).filename > ret[j].(memFileInfo).filename
+	})
 	return ret, nil
 }
 
