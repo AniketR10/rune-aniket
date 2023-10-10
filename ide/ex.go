@@ -867,14 +867,13 @@ func (e *ex) resetCommandList(cmd *command.Prompt) {
 }
 
 func (e *ex) openCommandPrompt() {
-	commandCfg := command.Config{
-		MaxHistory:       e.config.CommandMaxHistory,
-		HistoryKey:       e.config.CommandEvent,
-		MatchedTextAttr:  e.config.CommandOverlay.MatchedTextAttr,
-		FocusElementAttr: e.config.CommandOverlay.FocusElementAttr,
-		ElementAttr:      e.config.CommandOverlay.ElementAttr,
-		DocumentID:       commandHistoryDocumentID,
-	}
+	commandCfg := command.DefaultConfig()
+	commandCfg.MaxHistory = e.config.CommandMaxHistory
+	commandCfg.HistoryKey = e.config.CommandEvent
+	commandCfg.MatchedTextAttr = e.config.CommandOverlay.MatchedTextAttr
+	commandCfg.FocusElementAttr = e.config.CommandOverlay.FocusElementAttr
+	commandCfg.ElementAttr = e.config.CommandOverlay.ElementAttr
+	commandCfg.DocumentID = commandHistoryDocumentID
 	cmd := command.NewPrompt(e.storage, e, e, e, []string{}, commandCfg)
 
 	var commandHandler browser.Floating = cmd

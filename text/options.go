@@ -41,8 +41,9 @@ type Config struct {
 
 // DefaultCommandOverlayConfig returns the default Config's CommandOverlayConfig.
 func DefaultCommandOverlayConfig() (cfg CommandOverlayConfig) {
+	// NOTE: cannot use handler/command config: dependency cycle
 	cfg.MatchedTextAttr = term.Attributes{Fg: term.ColorRed}
-	cfg.FocusElementAttr = term.Attributes{Fg: term.AttrBold | term.ColorRed}
+	cfg.FocusElementAttr = term.Attributes{Fg: term.AttrBold | term.AttrUnderline | term.ColorRed}
 	cfg.ElementAttr = term.Attributes{}
 	return
 }
