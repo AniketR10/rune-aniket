@@ -425,7 +425,9 @@ func (h *Prompt) decArgsCompleteMode() bool {
 }
 
 func (h *Prompt) setCommandMode() {
+	h.mu.Lock()
 	h.mode = modeCommandPromptCommand
+	h.mu.Unlock()
 	h.list.Buffer().Replace(h.buf.String())
 	h.commandAndArgs = h.commandAndArgs[:0]
 	h.resetListWith(h.commandsBackup)
