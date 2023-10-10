@@ -153,7 +153,6 @@ func TestBrowserHandlerDraw(t *testing.T) {
 }
 
 func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
-	t.Parallel()
 	cases := []testutil.HandlerSequenceTestCase{
 		{"a",
 			`┌──────────────────┐
@@ -566,7 +565,6 @@ func assertHandled(
 }
 
 func TestBrowserHandlerInterrupts(t *testing.T) {
-	t.Parallel()
 	t.Run("Interrupt calls interrupt handle", func(t *testing.T) {
 		var wg sync.WaitGroup
 		opts := []text.Option{text.WithInterrupter(
@@ -597,7 +595,6 @@ func TestBrowserHandlerInterrupts(t *testing.T) {
 }
 
 func TestMultipleFilesStartup(t *testing.T) {
-	t.Parallel()
 	cases := []testutil.HandlerSequenceTestCase{
 		{"",
 			`┌──────────────────┐
@@ -666,7 +663,6 @@ func TestMultipleFilesStartup(t *testing.T) {
 }
 
 func TestExCommandResponsive(t *testing.T) {
-	t.Parallel()
 	cases := []testutil.HandlerSequenceTestCase{
 		{":edit",
 			`                    
@@ -722,7 +718,6 @@ eeeeeeeeee▐
 }
 
 func TestExKeySequence(t *testing.T) {
-	t.Parallel()
 	cases := []testutil.HandlerSequenceTestCase{
 		{"zgl",
 			`┌──────────────────┐
@@ -980,7 +975,6 @@ func newExForTesting(t *testing.T, ed text.Editor, opts ...text.Option) testEx {
 }
 
 func TestNewWindow(t *testing.T) {
-	t.Parallel()
 	cases := []testutil.HandlerSequenceTestCase{
 		{":newWindow>:changeSplitOrientation h>:newWindow>",
 			`┌──────────────────┐
@@ -1031,7 +1025,6 @@ func TestNewWindow(t *testing.T) {
 }
 
 func TestCommandHistory(t *testing.T) {
-	t.Parallel()
 	cases := []testutil.HandlerSequenceTestCase{
 		{":e hello.go>:e wi.go>1234",
 			`┌──────────────────┐
@@ -1067,7 +1060,6 @@ func TestCommandHistory(t *testing.T) {
 }
 
 func TestCommandAliases(t *testing.T) {
-	t.Parallel()
 	cases := []testutil.HandlerSequenceTestCase{
 		{":todo>1234",
 			`┌──────────────────┐
@@ -1107,7 +1099,6 @@ func TestCommandAliases(t *testing.T) {
 }
 
 func TestEphemeralTerminal(t *testing.T) {
-	t.Parallel()
 	cases := []testutil.HandlerSequenceTestCase{
 		{":! sleep 5>",
 			`┌──────────────────┐
@@ -1145,7 +1136,6 @@ func TestEphemeralTerminal(t *testing.T) {
 }
 
 func TestCompanionTerminal(t *testing.T) {
-	t.Parallel()
 
 	cases := []testutil.HandlerSequenceTestCase{
 		{":!>_______",
@@ -1237,7 +1227,6 @@ func TestCompanionTerminal(t *testing.T) {
 }
 
 func TestFullScreen(t *testing.T) {
-	t.Parallel()
 	cases := []testutil.HandlerSequenceTestCase{
 		{":splitWindow>:edit aaa>:edit bbb>:toggleFullscreen>",
 			`AAAAAAAAAAAAAAAAAAAA
@@ -1287,7 +1276,6 @@ AAAAAAAAAAAAAAAAAAAA`,
 }
 
 func TestExposedRootNodeIssue(t *testing.T) {
-	t.Parallel()
 	notifications := browser.DefaultConfig().Notifications
 	notifications.ProgressBar = false // deterministic tests
 	notifications.Width = 20
