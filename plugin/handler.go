@@ -67,13 +67,7 @@ func Handler(
 	topBar.leftMsgError = component.NewStringWithConfig(" 💥  "+cmdAndArgs, leftStrCfg)
 	topBar.leftMsgSuccess = component.NewStringWithConfig(" 🤘🏼 "+cmdAndArgs, leftStrCfg)
 	topBar.frameAttr = frameAttr
-	const animationStr = `⠃⠅⠆⠘⠨⠰⠉⠒⠤⠑⠡⠢⠊⠌⠔⠇⠸⠎⠱⠣⠜⠪⠕⠋⠙⠓⠚⠍⠩⠥⠬⠖⠲⠦⠴⠏⠹⠧⠼⠫⠝⠮⠵⠺⠗⠞⠳⠛⠭⠶⠟⠻⠷⠾⠯⠽⠿`
-	var seq []int
-	var frames []string
-	for i, ch := range []rune(animationStr) {
-		seq = append(seq, i)
-		frames = append(frames, string(ch))
-	}
+	frames, seq := component.ProgressAnimationFrames()
 	topBar.animation = component.NewAnimation(publisher, frames, seq, 10)
 	unionMain := h
 	union := handler.NewFrameUnion(unionMain)

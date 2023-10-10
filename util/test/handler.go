@@ -57,9 +57,9 @@ func handleTestCase(
 			h.Handle(term.Event{Key: term.KeyEsc, Type: term.EventKey})
 		case '✌':
 			h.Handle(term.Event{Key: term.KeyTab, Type: term.EventKey})
-       case '⬇':
+		case '⬇':
 			h.Handle(term.Event{Key: term.KeyArrowDown, Type: term.EventKey})
-       case '⬆':
+		case '⬆':
 			h.Handle(term.Event{Key: term.KeyArrowUp, Type: term.EventKey})
 		default:
 			h.Handle(term.Event{Ch: r, Type: term.EventKey})

@@ -32,7 +32,6 @@ func (i fnInterrupter) Interrupt() error {
 	return i.fn()
 }
 
-
 // InterruptAt interrupts the main event loop at the given fps, using the
 // given interrupter. This function only returns when context is canceled.
 func InterruptAt(ctx context.Context, interrupter Interrupter, fps int) {

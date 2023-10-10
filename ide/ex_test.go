@@ -681,19 +681,19 @@ edit
                     
                     
                     
-eeeeeeeeeeeeeeeeeeee
-eeeeeeeeeeeeeeeeeeee
-eeeeeeeeeeeeeeeeeee▐
-                    
-                    
-                    `},
+eeeeeeeeeeeeeeeee   
+eeeeeeeeeeeeeeeee   
+eeeeeeeeeeeeeeeee   
+eeeeeeeeeeeeeeeee   
+eeeeeeeeeeeeeeeee   
+eeeeeeeeeeeeeeee▐   `},
 		{":e eeeeeeeeeeeeeeeeeeeeeeeee",
 			`                    
                     
                     
                     
-edit eeeeeeeeeeeeeee
-eeeeeeeeee▐         
+edit eeeeeeeeeeee   
+eeeeeeeeeeeee▐      
                     
                     
                     

@@ -32,10 +32,11 @@ func NewPrompt(
 // Prompt is a tui.Handler that presents a command browsing prompt
 // with history scrolling and argument completion.
 type Prompt struct {
-	mode       commandPromptMode
-	config     Config
-	dispatcher Dispatcher
-	completer  Completer
+	mode        commandPromptMode
+	config      Config
+	dispatcher  Dispatcher
+	completer   Completer
+	interrupter term.Interrupter
 
 	height, width int
 	// overlay buffer over the search list so we can
@@ -58,6 +59,7 @@ type Prompt struct {
 
 	sync      bool
 	mu        sync.Mutex
+	animation component.Virtual
 	cancelFn  func()
 	cancelCtx context.Context
 }
@@ -69,6 +71,8 @@ const (
 	// modeCommandPromptArgs1
 	// modeCommandPromptArgs2
 	// ...
+
+	animationWidth = 3
 )
 
 // Init initializes this handler with the given storage, completer,
@@ -86,11 +90,11 @@ func (h *Prompt) Init(
 		FocusElementAttr: &config.FocusElementAttr,
 		ElementAttr:      &config.ElementAttr,
 	}
-	h.doInit(storage, completer, dispatcher, commands, config, cfg)
+	h.doInit(storage, completer, interrupter, dispatcher, commands, config, cfg)
 }
 
 func (h *Prompt) doInit(
-	storage document.Service, completer Completer,
+	storage document.Service, completer Completer, interrupter term.Interrupter,
 	dispatcher Dispatcher, commands []string, config Config,
 	listCfg search.ListConfig,
 ) {
@@ -98,6 +102,8 @@ func (h *Prompt) doInit(
 	h.config = config
 	h.dispatcher = dispatcher
 	h.completer = completer
+	h.interrupter = interrupter
+	h.animation.C = newNopAnimation(config)
 
 	h.buf.Init()
 	h.responsive = component.Buffer(&h.buf,
@@ -130,17 +136,12 @@ func (h *Prompt) doInit(
 	h.Reset(commands)
 }
 
-func (h *Prompt) resizeCommandOverlay() {
-	height := h.getCommandOverlayHeight(h.width)
-	// propagate local cmd+args buffer height to
-	// search list, which only has cmd, in case args alone span
-	// multiple lines
-	h.list.SetMinInputHeight(height)
-	h.responsive.Resize(h.width, height)
-}
-
 func (h *Prompt) getCommandOverlayHeight(width int) int {
-	height := h.responsive.Height(width)
+	leftWidgetWidth := h.width - animationWidth
+	if leftWidgetWidth <= 0 {
+		leftWidgetWidth = h.width
+	}
+	height := h.responsive.Height(leftWidgetWidth)
 	// set to min 1, as it's being used as input field
 	// and max to the height of the overlayed component
 	height = int(math.Max(1, float64(height)))
@@ -159,9 +160,36 @@ func (h *Prompt) Draw(w term.Writer) {
 	// resize on every draw because search.List uses a responsive
 	// input so local buffer changes must consider potential resize
 	// of search.List
-	h.resizeCommandOverlay()
+	bufHeight := h.getCommandOverlayHeight(h.width)
+
+	// propagate local cmd+args buffer height to
+	// search list, which only has cmd, in case args alone span
+	// multiple lines
+	h.list.SetMinInputHeight(bufHeight)
+
+	leftWidgetWidth := h.width - animationWidth
+	if leftWidgetWidth <= 0 {
+		h.list.Draw(w)
+		h.responsive.Resize(h.width, bufHeight)
+		h.responsive.Draw(w)
+		return
+	}
+
+	// needs to be dynamic because buffer can change height if prompt input
+	// exceeds max width.
+	var union component.FrameUnion
+	union.Init(h.responsive)
+	union.Frame = false
+
+	// animation could finish any time
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	union.UnionRight(&h.animation, animationWidth)
+	union.Resize(h.width, bufHeight)
+
 	h.list.Draw(w)
-	h.responsive.Draw(w)
+	union.Draw(w)
 }
 
 func (h *Prompt) handleLastCommand() {
@@ -553,6 +581,20 @@ func (h *Prompt) pushCompletionList(
 	defer close(ch)
 	defer cancel()
 
+	// draw progress animation while iterator is still returning results
+	frames, seq := component.ProgressAnimationFrames()
+	animation := component.NewAnimation(h.interrupter, frames, seq, 10)
+	defer func() {
+		_ = animation.Close()
+		h.mu.Lock()
+		h.animation.C = newNopAnimation(h.config)
+		h.mu.Unlock()
+	}()
+
+	h.mu.Lock()
+	h.animation.C = animation
+	h.mu.Unlock()
+
 	var i int
 	for ; ; i++ {
 		next, ok := it.Next()
@@ -629,11 +671,15 @@ func (h *Prompt) Cursor() (term.Coordinates, bool) {
 	if h.width == 0 {
 		return term.Coordinates{}, false
 	}
+	leftWidgetWidth := h.width - animationWidth
+	if leftWidgetWidth <= 0 {
+		leftWidgetWidth = h.width
+	}
 	var pos term.Coordinates
-	x := len(h.buf.String()) % h.width
-	y := len(h.buf.String()) / h.width
+	x := len(h.buf.String()) % leftWidgetWidth
+	y := len(h.buf.String()) / leftWidgetWidth
 	if y >= h.height {
-		pos.X += h.width - 1
+		pos.X += leftWidgetWidth - 1
 		pos.Y += h.height - 1
 	} else {
 		pos.X += x
@@ -711,4 +757,9 @@ func (h *Prompt) setUserScrolling(scrolling bool) {
 		h.list.SetFocusAttr(h.config.ElementAttr)
 	}
 
+}
+
+func newNopAnimation(cfg Config) tui.Component {
+	return component.WithBackground(component.Nop(),
+		term.Cell{Bg: cfg.ElementAttr.Bg, Fg: cfg.ElementAttr.Fg})
 }

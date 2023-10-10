@@ -396,8 +396,8 @@ rori myArg a▐
 		{"draw command from history no autocomplete",
 			"rori myArg>lorelai myArg>@ oArg", []string{"lane", "lorelai", "rori"},
 			nopComplete, expectDispatch("lorelai", "myArg"), `
-lorelai myArg oArg▐ 
-                    
+lorelai myArg oAr   
+g▐                  
                     
                     
                     
@@ -422,9 +422,9 @@ myArg
 		{"draw from history with autocomplete with expanded last arg",
 			"lo my✌>ro ~my✌>@", []string{"lane", "lorelai", "rori"},
 			completeWith("expanded/myArg"), expectDispatch("rori", "expanded/myArg"), `
-rori expanded/myArg▐
+rori expanded/myA   
+rg▐                 
 expanded/myArg      
-                    
                     
                     
                     
