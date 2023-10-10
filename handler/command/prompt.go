@@ -366,10 +366,9 @@ func (h *Prompt) completeTopList() bool {
 			h.list.Buffer().String())
 		return false
 	}
-	part := string(match.Data())
-	h.log(log.TraceLevel, "completeTopList: matched %q with %q",
-		h.list.Buffer().String(), part)
-	h.commandAndArgs = append(h.commandAndArgs, part)
+	// could have completed multiple arguments
+	parts := strings.Split(string(match.Data()), " ")
+	h.commandAndArgs = append(h.commandAndArgs, parts...)
 	newCmdAndArgs := strings.Join(h.commandAndArgs, " ")
 	h.buf.Replace(newCmdAndArgs + " ")
 
@@ -382,9 +381,13 @@ func (h *Prompt) log(level log.Level, msg string, args ...interface{}) {
 }
 
 func (h *Prompt) incArgsCompleteMode(complete bool) {
-	h.mode++
 	if !complete || !h.completeTopList() {
 		h.commandAndArgs = append(h.commandAndArgs, h.list.Buffer().String())
+	}
+	// mode needs to be at least the number of command and arguments that have
+	// been completed as per user request
+	for int(h.mode) < len(h.commandAndArgs) {
+		h.mode++
 	}
 	h.list.Buffer().Reset()
 	h.setCompletionList(true, h.commandAndArgs[0], h.commandAndArgs[1:]...)
@@ -446,17 +449,17 @@ func (h *Prompt) setCompletionList(
 	}
 
 	if h.sync {
-		h.pushCompletionListSync(ctx, cancel, cmdAndArgs[0], it)
+		h.pushCompletionListSync(ctx, cancel, cmdAndArgs, it)
 	} else {
 		ch := h.list.Push(ctx)
-		go h.pushCompletionList(ctx, ch, cancel, cmdAndArgs[0], it)
+		go h.pushCompletionList(ctx, ch, cancel, cmdAndArgs, it)
 	}
 }
 
 func (h *Prompt) pushCompletionListSync(
 	ctx context.Context,
 	cancel func(),
-	cmd string,
+	cmdAndArgs []string,
 	it iterator.Iterator[string],
 ) {
 	defer cancel()
@@ -471,32 +474,48 @@ func (h *Prompt) pushCompletionListSync(
 
 	if i == 0 {
 		// push args history if default completion iterator is empty
-		it, ok := h.commandArgsHistoryIterator(cmd)
+		it, ok := h.commandArgsHistoryIterator(cmdAndArgs)
 		if ok {
-			h.pushCompletionListSync(ctx, cancel, cmd, it)
+			h.pushCompletionListSync(ctx, cancel, cmdAndArgs, it)
 		}
 	}
 }
 
-func (h *Prompt) commandArgsHistoryIterator(cmd string) (iterator.Iterator[string], bool) {
+func (h *Prompt) commandArgsHistoryIterator(cmdAndArgs []string) (iterator.Iterator[string], bool) {
 
 	history := h.history.Slice()
 	it := iterator.FromSlice(history)
 
-	seen := make(map[string]struct{})
+	// cmdAndArgs is not orthogonal to how we want to handle them here
+	// essentially, we don't know by simply inspecting them, if we are
+	// at the start of a new arg, or at the end of the previous command
+	// as last space is handled ambigously.
+	cmdAndArgs = strings.Split(strings.Join(cmdAndArgs, " "), " ")
+	m := len(cmdAndArgs)
+	if int(h.mode) < len(cmdAndArgs) {
+		m = len(cmdAndArgs) - 1
+	}
+	queryMatch := strings.Join(cmdAndArgs[:m], " ")
+
+	h.log(log.TraceLevel, "filtering data with mode %d and cmdAndArgs: %+v, len(%d), filter: %+v",
+		h.mode, cmdAndArgs, len(cmdAndArgs), queryMatch)
+
 	filterNoArgs := iterator.Filter(it, func(query string) bool {
-		return strings.Contains(query, cmd) && strings.Count(query, " ") > 0
+		return strings.HasPrefix(query, queryMatch)
 	})
 	mapArgs := iterator.Map(filterNoArgs, func(query string) (args string) {
-		cmdAndArgs := strings.Split(query, " ")
-		return strings.Join(cmdAndArgs[1:], " ")
+		storedAndArgs := strings.Split(query, " ")
+		ret := strings.Join(storedAndArgs[m:], " ")
+		return ret
 	})
+	seen := make(map[string]struct{})
 	uniqueArgs := iterator.Filter(mapArgs, func(args string) bool {
-		_, is := seen[args]
-		if !is {
+		_, ok := seen[args]
+		if !ok {
 			seen[args] = struct{}{}
+			return args != ""
 		}
-		return !is
+		return false
 	})
 	return iterator.IsEmpty(uniqueArgs)
 }
@@ -504,7 +523,7 @@ func (h *Prompt) commandArgsHistoryIterator(cmd string) (iterator.Iterator[strin
 func (h *Prompt) pushCompletionList(
 	ctx context.Context,
 	ch chan<- []byte, cancel func(),
-	cmd string,
+	cmdAndArgs []string,
 	it iterator.Iterator[string],
 ) {
 	defer close(ch)
@@ -534,9 +553,9 @@ func (h *Prompt) pushCompletionList(
 	}
 
 	if i == 0 {
-		it, ok := h.commandArgsHistoryIterator(cmd)
+		it, ok := h.commandArgsHistoryIterator(cmdAndArgs)
 		if ok {
-			h.pushCompletionListSync(ctx, cancel, cmd, it)
+			h.pushCompletionListSync(ctx, cancel, cmdAndArgs, it)
 		}
 	}
 }

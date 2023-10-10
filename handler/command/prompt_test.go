@@ -492,24 +492,74 @@ oregano
                     
                     
                     `},
-		{"no completion uses historical args as completion list items",
-			"ro my✌>ro my✌gani✌", []string{"lane", "lorelai", "rori"},
+		{"no completion uses historical positional args as completion list items",
+			"ro myArg>ro my✌", []string{"lane", "lorelai", "rori"},
 			expectCompleteWith(
 				[][]string{
+					{}, {"m"}, {"my"}, {"myA"}, {"myAr"}, {"myArg"},
 					{}, {"m"}, {"my"}, {"myArg"},
-					{}, {"m"}, {"my"}, {"myArg"},
-					{"myArg", "g"}, {"myArg", "ga"}, {"myArg", "gan"}, {"myArg", "gani"},
-					{"myArg", "oregani"},
 				},
-				[][]string{
-					{"myArg"}, {"myArg"}, {"myArg"}, {"myArg"},
-					{"myArg"}, {"myArg"}, {"myArg"}, {"myArg"},
-					{"oregano", "oregani"}, {"oregano", "oregani"}, {"oregano", "oregani"}, {"oregani"},
-					{},
-				}),
+				[][]string{}),
 			expectDispatch("rori", "myArg"), `
-rori myArg oregani ▐
-myArg               
+rori myArg ▐        
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    `},
+		{"no completion uses historical positional args as completion list items (3rd argument)",
+			"ro myArg oro>ro myArg or", []string{"lane", "lorelai", "rori"},
+			expectCompleteWith(
+				[][]string{
+					{}, {"m"}, {"my"}, {"myA"}, {"myAr"}, {"myArg"}, {"myArg"}, {"myArg", "o"}, {"myArg", "or"}, {"myArg", "oro"},
+					{}, {"m"}, {"my"}, {"myA"}, {"myAr"}, {"myArg"}, {"myArg"}, {"myArg", "o"}, {"myArg", "or"},
+				},
+				[][]string{}),
+			expectDispatch("rori", "myArg", "oro"), `
+rori myArg or▐      
+oro                 
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    `},
+		{"no completion uses historical positional args as completion list items (3rd argument, tab)",
+			"ro myArg oro>ro myArg o✌", []string{"lane", "lorelai", "rori"},
+			expectCompleteWith(
+				[][]string{
+					{}, {"m"}, {"my"}, {"myA"}, {"myAr"}, {"myArg"}, {"myArg"}, {"myArg", "o"}, {"myArg", "or"}, {"myArg", "oro"},
+					{}, {"m"}, {"my"}, {"myA"}, {"myAr"}, {"myArg"}, {"myArg"}, {"myArg", "o"}, {"myArg", "oro"},
+				},
+				[][]string{}),
+			expectDispatch("rori", "myArg", "oro"), `
+rori myArg oro ▐    
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    `},
+		{"fuzzy complete tab expands from historical args",
+			"ro myArg oro>ro mo✌", []string{"lane", "lorelai", "rori"},
+			expectCompleteWith(
+				[][]string{
+					{}, {"m"}, {"my"}, {"myA"}, {"myAr"}, {"myArg"}, {"myArg"}, {"myArg", "o"}, {"myArg", "or"}, {"myArg", "oro"},
+					{}, {"m"}, {"mo"}, {"myArg", "oro"},
+				},
+				[][]string{}),
+			expectDispatch("rori", "myArg", "oro"), `
+rori myArg oro ▐    
+                    
                     
                     
                     
@@ -520,7 +570,7 @@ myArg
                     `},
 	}
 
-	log.SetLevel(log.TraceLevel)
+	log.SetLevel(log.InfoLevel)
 	for _, tcase := range tsuite {
 		tcase := tcase
 		t.Run(tcase.desc, func(t *testing.T) {
