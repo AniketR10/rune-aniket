@@ -48,6 +48,7 @@ type Prompt struct {
 
 	commandAndArgs []string
 	commandsBackup []string
+	userScrolling  bool
 
 	// used to signal across Handle calls that user
 	// is cyclying through commands, in particular
@@ -218,6 +219,9 @@ func (h *Prompt) dispatchCommand() (
 		quit = h.dispatcher.Dispatch(commandAndArgsString)
 	}
 
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
 	if commandAndArgsString != "" {
 		err := h.history.Add(commandAndArgsString)
 		if err != nil {
@@ -254,15 +258,25 @@ func (h *Prompt) handleCommon(ev *term.Event) (quit, handled bool) {
 	handled = true
 	switch ev.Key {
 	case term.KeyEnter:
+		if h.userScrolling {
+			h.incArgsCompleteMode(true)
+		}
 		quit, handled = h.dispatchCommand()
 		h.reset()
 	case term.KeyEsc:
 		quit = true
 		h.Cancel()
 	case term.KeyArrowDown, term.KeyCtrlJ:
-		h.list.FocusDown()
+		if h.userScrolling {
+			h.list.FocusDown()
+		} else {
+			h.setUserScrolling(true)
+		}
 	case term.KeyArrowUp, term.KeyCtrlK:
-		h.list.FocusUp()
+		ok := h.list.FocusUp()
+		if !ok {
+			h.setUserScrolling(false)
+		}
 	case term.KeyCtrlC:
 		h.cancelCompletionPush("received ctrl-c")
 	case term.KeyTab:
@@ -386,9 +400,11 @@ func (h *Prompt) incArgsCompleteMode(complete bool) {
 	}
 	// mode needs to be at least the number of command and arguments that have
 	// been completed as per user request
+	h.mu.Lock()
 	for int(h.mode) < len(h.commandAndArgs) {
 		h.mode++
 	}
+	h.mu.Unlock()
 	h.list.Buffer().Reset()
 	h.setCompletionList(true, h.commandAndArgs[0], h.commandAndArgs[1:]...)
 }
@@ -397,7 +413,9 @@ func (h *Prompt) decArgsCompleteMode() bool {
 	if h.mode == 1 {
 		return false
 	}
+	h.mu.Lock()
 	h.mode--
+	h.mu.Unlock()
 	lastIdx := len(h.commandAndArgs) - 1
 	last := h.commandAndArgs[lastIdx]
 	h.commandAndArgs = h.commandAndArgs[:lastIdx]
@@ -411,6 +429,7 @@ func (h *Prompt) setCommandMode() {
 	h.list.Buffer().Replace(h.buf.String())
 	h.commandAndArgs = h.commandAndArgs[:0]
 	h.resetListWith(h.commandsBackup)
+	h.setUserScrolling(true)
 }
 
 func (h *Prompt) setCompletionList(
@@ -428,6 +447,7 @@ func (h *Prompt) setCompletionList(
 	h.cancelCompletionPush("re set completion list")
 	h.cancelFn = cancel
 	h.cancelCtx = ctx
+	h.setUserScrolling(false)
 
 	// if user added any extra spaces, do not pass to completer
 	cmdAndArgs := h.trimmedCommandAndArgs(cmd, args...)
@@ -482,7 +502,6 @@ func (h *Prompt) pushCompletionListSync(
 }
 
 func (h *Prompt) commandArgsHistoryIterator(cmdAndArgs []string) (iterator.Iterator[string], bool) {
-
 	history := h.history.Slice()
 	it := iterator.FromSlice(history)
 
@@ -551,6 +570,9 @@ func (h *Prompt) pushCompletionList(
 		}
 		return
 	}
+
+	h.mu.Lock()
+	defer h.mu.Unlock()
 
 	if i == 0 {
 		it, ok := h.commandArgsHistoryIterator(cmdAndArgs)
@@ -674,4 +696,14 @@ func (h *Prompt) Close() error {
 
 	h.cancelCompletionPush("close")
 	return h.list.Close()
+}
+
+func (h *Prompt) setUserScrolling(scrolling bool) {
+	h.userScrolling = scrolling
+	if scrolling {
+		h.list.SetFocusAttr(h.config.FocusElementAttr)
+	} else {
+		h.list.SetFocusAttr(h.config.ElementAttr)
+	}
+
 }

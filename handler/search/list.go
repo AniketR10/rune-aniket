@@ -679,6 +679,15 @@ func (l *List) ElementAt(pos term.Coordinates) (Match, component.ListNode, bool)
 	return node.Value().(searchResultComponent).Match, node, true
 }
 
+// SetFocusAttr sets the attributes of the focus nodes.
+// The current focus node is changed and any future focused
+// nodes will inherit the given attr.
+func (l *List) SetFocusAttr(attr term.Attributes) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.list.SetFocusAttr(attr)
+}
+
 // Close closes all the resources associated with this List.
 func (l *List) Close() error {
 	l.mu.Lock()

@@ -20,7 +20,7 @@ func DefaultConfig() Config {
 		MaxHistory:       100,
 		HistoryKey:       term.KeyComb{Ch: ':'},
 		MatchedTextAttr:  term.Attributes{Fg: term.ColorRed},
-		FocusElementAttr: term.Attributes{Fg: term.AttrBold | term.ColorRed},
+		FocusElementAttr: term.Attributes{Fg: term.AttrBold | term.AttrUnderline | term.ColorRed},
 		ElementAttr:      term.Attributes{},
 		DocumentID:       "command-history",
 	}

@@ -74,6 +74,14 @@ func (l *FocusList) trySetFirstFocus(node ListNode) bool {
 	return false
 }
 
+// SetFocusAttr sets the attributes of the focus nodes.
+// The current focus node is changed and any future focused
+// nodes will inherit the given attr.
+func (l *FocusList) SetFocusAttr(attr term.Attributes) {
+	l.focusAttr = attr
+	l.switchFocus(l.focus)
+}
+
 // SetFocus sets the focus of this FocusList to node.
 func (l *FocusList) SetFocus(node ListNode) {
 	if node.l != l.list {

@@ -89,6 +89,18 @@ func TestCommandHandlerDispatch(t *testing.T) {
 		{"dispatch delete after load from history with autocomplete scroll through history",
 			"lo my#>ro my#>@@^^^^^oArg>", []string{"lane", "lorelai", "rori"},
 			completeWith("myArg"), expectDispatch("lorelai", "oArg")},
+		{"dispatch literal arg if history has option but user IS NOT scrolling",
+			"lo my#>ro my#>lo m>", []string{"lane", "lorelai", "rori"},
+			completeWith("myArg"), expectDispatch("lorelai", "m")},
+		{"dispatch complete arg if history has option but user IS scrolling",
+			"lo my#>ro my#>lo m*>", []string{"lane", "lorelai", "rori"},
+			completeWith("myArg"), expectDispatch("lorelai", "myArg")},
+		{"dispatch auto-complete with enter regardless of whether user IS scrolling",
+			"lo>", []string{"lane", "lorelai", "rori"},
+			completeWith("myArg"), expectDispatch("lorelai")},
+		{"dispatch auto-complete with tab and enter regardless of whether user IS scrolling",
+			"lo#>", []string{"lane", "lorelai", "rori"},
+			completeWith("myArg"), expectDispatch("lorelai")},
 	}
 
 	for _, tcase := range tsuite {
@@ -113,6 +125,8 @@ func TestCommandHandlerDispatch(t *testing.T) {
 				switch ch {
 				case '#':
 					b.Handle(term.Event{Type: term.EventKey, Key: term.KeyTab})
+				case '*':
+					b.Handle(term.Event{Type: term.EventKey, Key: term.KeyArrowDown})
 				case '>':
 					b.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
 				case '^':
