@@ -23,24 +23,6 @@ type CommandHandler interface {
 	)
 }
 
-type fnCommandHandler struct {
-	cb         func(context.Context, textapi.Command) (bool, error)
-	completeFn func(context.Context, []string) (iterator.Iterator[string], string, error)
-}
-
-func (f fnCommandHandler) HandleCommand(ctx context.Context, c textapi.Command) (bool, error) {
-	return f.cb(ctx, c)
-}
-
-func (f fnCommandHandler) Complete(ctx context.Context, args []string) (
-	iterator.Iterator[string], string, error,
-) {
-	if f.completeFn != nil {
-		return f.completeFn(ctx, args)
-	}
-	return iterator.FromSlice[string](nil), "", nil
-}
-
 // FuncCommandHandler returns an CommandHandler that calls fn
 // every time HandleCommand is invoked.
 func FuncCommandHandler(fn func(context.Context, textapi.Command) (bool, error)) CommandHandler {
@@ -60,4 +42,47 @@ func FuncCommandCompleter(
 		cb:         fn,
 		completeFn: completeFn,
 	}
+}
+
+// CommandManual represents a command's manual and documentation.
+// It adds an AliasOf field to textapi.CommandManual, something
+// we don't want to expose to external clients.
+type CommandManual struct {
+	Name string
+
+	// Summary is a short 80-100 character description.
+	Summary string
+
+	// Synopsis is a single line synopsis of how
+	// this CLI is to be used. It should ONLY include
+	// the semantic information about how arguments are parsed.
+	//
+	// Example: [<options>] [<revision-range>] [[--] <path>...]
+	Synopsis string
+
+	// Commands is a list of accepted commands or nil
+	// if no commands are expected.
+	Commands []textapi.CommandManual
+
+	// AliasOf defines this command as an alias of the
+	// given command or sequence of commands.
+	AliasOf []string
+}
+
+type fnCommandHandler struct {
+	cb         func(context.Context, textapi.Command) (bool, error)
+	completeFn func(context.Context, []string) (iterator.Iterator[string], string, error)
+}
+
+func (f fnCommandHandler) HandleCommand(ctx context.Context, c textapi.Command) (bool, error) {
+	return f.cb(ctx, c)
+}
+
+func (f fnCommandHandler) Complete(ctx context.Context, args []string) (
+	iterator.Iterator[string], string, error,
+) {
+	if f.completeFn != nil {
+		return f.completeFn(ctx, args)
+	}
+	return iterator.FromSlice[string](nil), "", nil
 }

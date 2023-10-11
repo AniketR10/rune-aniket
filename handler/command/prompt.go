@@ -12,6 +12,7 @@ import (
 	"github.com/ernestrc/blue/logging"
 	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui"
+	"unstable.build/go-tui/text"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/handler/search"
@@ -22,7 +23,7 @@ import (
 func NewPrompt(
 	storage document.Service, completer Completer,
 	dispatcher Dispatcher, interrupter term.Interrupter,
-	commands []string, config Config,
+	commands []text.CommandManual, config Config,
 ) *Prompt {
 	ret := new(Prompt)
 	ret.Init(storage, completer, dispatcher, interrupter, commands, config)
@@ -48,7 +49,7 @@ type Prompt struct {
 	history    search.History
 
 	commandAndArgs []string
-	commandsBackup []string
+	commandsBackup []text.CommandManual
 	userScrolling  bool
 
 	// used to signal across Handle calls that user
@@ -80,7 +81,7 @@ const (
 func (h *Prompt) Init(
 	storage document.Service, completer Completer,
 	dispatcher Dispatcher, interrupter term.Interrupter,
-	commands []string, config Config,
+	commands []text.CommandManual, config Config,
 ) {
 	cfg := search.ListConfig{
 		Algo:             search.FuzzyMatch,
@@ -95,7 +96,7 @@ func (h *Prompt) Init(
 
 func (h *Prompt) doInit(
 	storage document.Service, completer Completer, interrupter term.Interrupter,
-	dispatcher Dispatcher, commands []string, config Config,
+	dispatcher Dispatcher, commands []text.CommandManual, config Config,
 	listCfg search.ListConfig,
 ) {
 	h.mode = modeCommandPromptCommand
@@ -632,7 +633,7 @@ func (h *Prompt) pushCompletionList(
 // Reset resets the commands listed in this Prompt.
 // It should be called after initialization and every time
 // new commands are available.
-func (h *Prompt) Reset(commands []string) {
+func (h *Prompt) Reset(commands []text.CommandManual) {
 	h.setCommandMode()
 	h.buf.Reset()
 	h.list.Buffer().Reset()
@@ -647,7 +648,7 @@ func (h *Prompt) cancelCompletionPush(reason string) {
 	h.list.Cancel()
 }
 
-func (h *Prompt) resetListWith(items []string) {
+func (h *Prompt) resetListWith(items []text.CommandManual) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
@@ -655,7 +656,7 @@ func (h *Prompt) resetListWith(items []string) {
 
 	h.list.DataReset()
 	for _, item := range items {
-		h.list.PushSync([]byte(item))
+		h.list.PushSync([]byte(item.Name))
 	}
 }
 

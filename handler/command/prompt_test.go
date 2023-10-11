@@ -4,6 +4,7 @@ import (
 	"context"
 	"strconv"
 	"testing"
+	"time"
 
 	"github.com/ernestrc/blue/document"
 	"github.com/ernestrc/blue/iterator"
@@ -11,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"unstable.build/go-tui/term"
+	"unstable.build/go-tui/text"
 	testutil "unstable.build/go-tui/util/test"
 )
 
@@ -116,7 +118,7 @@ func TestCommandHandlerDispatch(t *testing.T) {
 			interrupter := term.NopInterrupter()
 			b := NewPrompt(
 				storage, FuncCompleter(completeFn), FuncDispatcher(dispatchFn),
-				interrupter, tcase.commands, cfg,
+				interrupter, testNoManualCommands(tcase.commands), cfg,
 			)
 			b.sync = true
 			defer b.Close()
@@ -597,7 +599,7 @@ rori myArg oro ▐
 			storage := document.NewInMemoryService()
 			b := NewPrompt(
 				storage, FuncCompleter(completeFn), FuncDispatcher(dispatchFn),
-				term.NopInterrupter(), tcase.commands, cfg,
+				term.NopInterrupter(), testNoManualCommands(tcase.commands), cfg,
 			)
 			b.sync = true
 			defer b.Close()
@@ -711,4 +713,11 @@ func expectDispatch(expectedCmd string, expectedArgs ...string) func() (func(str
 			assert.Equal(t, append([]string{}, expectedArgs...), append([]string{}, actualArgs...))
 		}
 	}
+}
+
+func testNoManualCommands(cmds []string) (ret []text.CommandManual) {
+	for _, cmd := range cmds {
+		ret = append(ret, text.CommandManual{Name: cmd})
+	}
+	return
 }

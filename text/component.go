@@ -318,107 +318,6 @@ func (c *Component) openFileTab(
 	return t, nil
 }
 
-func (c *Component) openAreYouSurePrompt(file workspaceapi.URI) {
-	const (
-		yesOpt = "Yes"
-		noOpt  = "No"
-	)
-
-	msg := fmt.Sprintf(`File %s
-has been updated since the last back up was created.
-Are you sure you want to recover it
-and lose all the new updates?`, file)
-
-	c.comp.Prompt(msg, []string{yesOpt, noOpt},
-		[]term.KeyComb{{Ch: 'Y'}, {Ch: 'N'}},
-		func(i int, opt string) {
-
-			var h browserapi.Handler
-			var err error
-
-			switch opt {
-			case yesOpt:
-				var swapDir, swapFile workspaceapi.URI
-				swapDir, err = c.getSwapDir(file)
-				if err == nil {
-					swapFile, err = workspace.DefaultSwapFile(swapDir, file)
-					if err == nil {
-						h, err = c.openFileTab(file, swapFile, false, true)
-					}
-				}
-			case noOpt:
-			}
-			if h != nil {
-				err = c.comp.Focus().SetContent(h)
-			}
-			if err != nil {
-				c.log(log.ErrorLevel, "recovery prompt: %v", err)
-				c.Notify(notifications.LevelError, "%v", err)
-				return
-			}
-		})
-}
-
-func (c *Component) openRecoveryPrompt(file workspaceapi.URI) {
-	const (
-		recoverOpt  = "Recover"
-		readOnlyOpt = "Open Read-Only"
-		editOpt     = "Force Edit"
-		skipOpt     = "Skip"
-	)
-
-	msg := fmt.Sprintf(`File %s is already
-open by another process or
-an edit session for this file crashed.`, file)
-
-	c.comp.Prompt(msg, []string{recoverOpt, readOnlyOpt, editOpt, skipOpt},
-		[]term.KeyComb{{Ch: 'R'}, {Ch: 'O'}, {Ch: 'E'}, {Ch: 'S'}},
-		func(i int, opt string) {
-
-			var h browserapi.Handler
-			var err error
-
-			switch opt {
-			case recoverOpt:
-				var swapDir, swapFile workspaceapi.URI
-				swapDir, err = c.getSwapDir(file)
-				if err == nil {
-					swapFile, err = workspace.DefaultSwapFile(swapDir, file)
-					if err == nil {
-						h, err = c.RecoverFileTab(file, swapFile, false)
-						if err == workspaceapi.ErrStaleData {
-							c.openAreYouSurePrompt(file)
-							return
-						}
-					}
-				}
-			case readOnlyOpt:
-				h, err = c.OpenFileTab(file, true)
-			case editOpt:
-				var swapDir, swapFile workspaceapi.URI
-				swapDir, err = c.getSwapDir(file)
-				if err == nil {
-					swapFile, err = workspace.DefaultSwapFile(swapDir, file)
-					if err == nil {
-						err = c.workspace.Remove(swapFile.Path())
-						if err == nil {
-							h, err = c.OpenFileTab(file, false)
-						}
-					}
-				}
-			case skipOpt:
-			}
-			if h != nil {
-				err = c.comp.Focus().SetContent(h)
-			}
-			if err != nil {
-				c.log(log.ErrorLevel, "recovery prompt: %v", err)
-				c.Notify(notifications.LevelError, "%v", err)
-				return
-			}
-		})
-}
-
 // Open opens the given file in a new browser tab. If file is already
 // open by another session or the last edit session crashed, it
 // will create a prompt for the user to decide what to do.
@@ -789,15 +688,23 @@ func (p *Component) UnsubscribeEvents(sub EventHandler) (ret bool, err error) {
 
 // Commands returns a list of commands registered via SubscribeCommand
 // or via Config.CommandAliases.
-func (c *Component) Commands() (ret []string) {
-	ret = make([]string, len(c.cmdSubscribers))
+func (c *Component) Commands() (ret []CommandManual) {
+	ret = make([]CommandManual, len(c.cmdSubscribers))
 	var i int
-	for cmd := range c.cmdSubscribers {
-		ret[i] = cmd
+	for _, cmd := range c.cmdSubscribers {
+		ret[i] = CommandManual{
+			Name:     cmd.man.Name,
+			Synopsis: cmd.man.Synopsis,
+			Summary:  cmd.man.Summary,
+			Commands: cmd.man.Commands,
+		}
 		i++
 	}
-	for k := range c.config.CommandAliases {
-		ret = append(ret, k)
+	for alias, aliasOf := range c.config.CommandAliases {
+		ret = append(ret, CommandManual{
+			Name:    alias,
+			AliasOf: aliasOf,
+		})
 	}
 	return ret
 }
@@ -809,7 +716,7 @@ func (c *Component) SubscribeCommand(cmd textapi.CommandManual, cm CommandHandle
 		return errors.New("command already registered")
 	}
 
-	c.cmdSubscribers[cmd.Name] = commandAll{cmd: cmd, handler: cm}
+	c.cmdSubscribers[cmd.Name] = commandAll{man: cmd, handler: cm}
 	return nil
 }
 
@@ -975,5 +882,5 @@ func (e *editorFlusherCloser) Close() error {
 
 type commandAll struct {
 	handler CommandHandler
-	cmd     textapi.CommandManual
+	man     textapi.CommandManual
 }
