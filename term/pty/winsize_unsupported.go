@@ -5,6 +5,8 @@ package pty
 
 import (
 	"os"
+
+	workspaceapi "unstable.build/go-tui/api/workspace"
 )
 
 // Winsize is a dummy struct to enable compilation on unsupported platforms.
@@ -13,11 +15,11 @@ type Winsize struct {
 }
 
 // Setsize resizes t to s.
-func Setsize(*os.File, *Winsize) error {
+func Setsize(workspaceapi.File, *Winsize) error {
 	return ErrUnsupported
 }
 
 // GetsizeFull returns the full terminal size description.
-func GetsizeFull(*os.File) (*Winsize, error) {
+func GetsizeFull(workspaceapi.File) (*Winsize, error) {
 	return nil, ErrUnsupported
 }

@@ -126,7 +126,7 @@ func (p *fileScheme) Open(path string, flag int, perm os.FileMode) (workspaceapi
 		}
 	}
 
-	ret := &fileSchemeFile{File: f, p: p}
+	ret := &fileSchemeFile{File: f, p: p, fd: f.Fd()}
 	p.files.Store(f.Fd(), ret)
 
 	return ret, nil
@@ -337,10 +337,10 @@ func (p *fileScheme) NewPty(ctx context.Context) (workspaceapi.Pty, error) {
 		return workspaceapi.Pty{}, fmt.Errorf("open pty: %v", err)
 	}
 
-	master := &fileSchemeFile{File: pty, p: p}
+	master := &fileSchemeFile{File: pty, p: p, fd: pty.Fd()}
 	p.files.Store(pty.Fd(), master)
 
-	slave := &fileSchemeFile{File: tty, p: p}
+	slave := &fileSchemeFile{File: tty, p: p, fd: pty.Fd()}
 	p.files.Store(tty.Fd(), slave)
 
 	return workspaceapi.Pty{
@@ -355,7 +355,7 @@ func (p *fileScheme) SetPtySize(pp workspaceapi.Pty, width, height int) error {
 		return fmt.Errorf("extraneous pty: %+v", pp)
 	}
 
-	err := pty.Setsize(ptyFile.File, &pty.Winsize{
+	err := pty.Setsize(ptyFile, &pty.Winsize{
 		Rows: uint16(height),
 		Cols: uint16(width),
 	})
@@ -374,6 +374,12 @@ func (p *fileScheme) Close() error {
 type fileSchemeFile struct {
 	*os.File
 	p *fileScheme
+	// cache fd so pty.SetSize doesn't cause races on fd destroy (on reads)
+	fd uintptr
+}
+
+func (f *fileSchemeFile) Fd() uintptr {
+	return f.fd
 }
 
 func (f *fileSchemeFile) Close() error {
