@@ -566,7 +566,18 @@ func testRegister(t *testing.T,
 		resource1, err := workspaceapi.ParseURI("file:///HERS")
 		require.NoError(t, err)
 		myArgs := []string{"a", "bbbbbbbbbbbbbbbbbbbbb"}
-		myCmd := "BUY"
+		myCmd := textapi.CommandManual{
+			Name:     "BUY",
+			Synopsis: "what",
+			Summary:  "It's prime day!",
+			Commands: []textapi.CommandManual{
+				{
+					Name:     "applycoupon",
+					Synopsis: "howmuch",
+					Summary:  "do it",
+				},
+			},
+		}
 		c, sut, err := constructor(texttest.NopEditor(), &mu, resource1)
 		require.NoError(t, err)
 
@@ -580,7 +591,7 @@ func testRegister(t *testing.T,
 		sut.SubscribeCommand(myCmd,
 			text.FuncCommandHandler(func(ctx context.Context, cmd textapi.Command) (bool, error) {
 				defer wg.Done()
-				assert.Equal(t, myCmd, cmd.Name)
+				assert.Equal(t, myCmd.Name, cmd.Name)
 				assert.Equal(t, myArgs, cmd.Args)
 				assert.NotNil(t, cmd.Window)
 				called++
@@ -594,7 +605,7 @@ func testRegister(t *testing.T,
 		cmd := textapi.Command{
 			Resource: h1,
 			URI:      resource1,
-			Name:     myCmd,
+			Name:     myCmd.Name,
 			Args:     myArgs,
 			Window:   win,
 		}

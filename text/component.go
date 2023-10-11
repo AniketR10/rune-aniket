@@ -40,44 +40,7 @@ type Component struct {
 	ed             Editor
 	config         Config
 	edSubscribers  map[textapi.EventType][]EventHandler
-	cmdSubscribers map[string]CommandHandler
-}
-
-// used to intercept calls to Close and Flush to dispatch
-// corresponding events to subscribers.
-type editorFlusherCloser struct {
-	parent    *Component
-	fc        workspace.FlusherCloser
-	h         Handler
-	uri       workspaceapi.URI
-	buf       *cell.Buffer
-	lastFlush string
-}
-
-func (c editorFlusherCloser) OnWillEdit(start, end term.Coordinates, str string) {
-}
-
-func (c editorFlusherCloser) OnDidEdit(from, to term.Coordinates, old string) {
-	c.parent.setTabAttr(c.uri, c.buf, c.lastFlush)
-}
-
-func (e *editorFlusherCloser) Flush() error {
-	content, err := e.parent.dispatchFlush(e.uri, e.h)
-	if err != nil {
-		return err
-	}
-	e.lastFlush = content
-	return e.fc.Flush()
-}
-
-func (e *editorFlusherCloser) Close() error {
-	ev := textapi.Event{
-		Type:     textapi.EventTypeClose,
-		URI:      e.uri,
-		Resource: e.h,
-	}
-	e.parent.dispatchEvent(ev)
-	return e.fc.Close()
+	cmdSubscribers map[string]commandAll
 }
 
 // NewComponent allocates storage for a new Component and initializes it.
@@ -172,7 +135,7 @@ func (c *Component) Init(ed Editor, w workspace.Loader, config Config) error {
 	c.ed = ed
 	c.workspace = w
 	c.edSubscribers = make(map[textapi.EventType][]EventHandler)
-	c.cmdSubscribers = make(map[string]CommandHandler)
+	c.cmdSubscribers = make(map[string]commandAll)
 
 	var first browserapi.Handler
 
@@ -501,13 +464,13 @@ func (c *Component) CompleteCommand(ctx context.Context, cmd string, args ...str
 		return iterator.FromSlice[string](nil), "", nil
 	}
 
-	commander, ok := c.cmdSubscribers[cmd]
+	man, ok := c.cmdSubscribers[cmd]
 	if !ok {
 		c.log(log.DebugLevel, "complete command %q: no subscribers", cmd)
 		return iterator.FromSlice[string](nil), "", nil
 	}
 
-	return commander.Complete(ctx, args)
+	return man.handler.Complete(ctx, args)
 }
 
 // DispatchCommand dispatches a EventTypeCommand with cmd to subscribers
@@ -531,18 +494,18 @@ func (c *Component) DispatchCommand(cmd textapi.Command) (handled bool, err erro
 		}
 		return handled, nil
 	}
-	commander, ok := c.cmdSubscribers[cmd.Name]
+	man, ok := c.cmdSubscribers[cmd.Name]
 	if !ok {
 		c.log(log.DebugLevel, "Dispatching command %q: no subscribers", cmd.Name)
 		return false, nil
 	}
 	c.log(log.DebugLevel, "Dispatching command %q with args %v", cmd.Name, cmd.Args)
-	exit, err := commander.HandleCommand(context.Background(), cmd)
+	exit, err := man.handler.HandleCommand(context.Background(), cmd)
 	if err != nil {
 		return true, err
 	}
 	if exit {
-		c.log(log.DebugLevel, "Removing command %q: returned exit=true: %#v", cmd.Name, commander)
+		c.log(log.DebugLevel, "Removing command %q: returned exit=true: %#v", cmd.Name, man)
 		delete(c.cmdSubscribers, cmd.Name)
 	}
 	return true, nil
@@ -841,12 +804,12 @@ func (c *Component) Commands() (ret []string) {
 
 // SubscribeCommand installs cm as a command handler of cmd or returns
 // an error if there's already a CommandHandler installed for this cmd.
-func (c *Component) SubscribeCommand(cmd string, cm CommandHandler) error {
-	if _, ok := c.cmdSubscribers[cmd]; ok {
+func (c *Component) SubscribeCommand(cmd textapi.CommandManual, cm CommandHandler) error {
+	if _, ok := c.cmdSubscribers[cmd.Name]; ok {
 		return errors.New("command already registered")
 	}
 
-	c.cmdSubscribers[cmd] = cm
+	c.cmdSubscribers[cmd.Name] = commandAll{cmd: cmd, handler: cm}
 	return nil
 }
 
@@ -971,4 +934,46 @@ func (c *Component) Close() error {
 		return err
 	}
 	return nil
+}
+
+// used to intercept calls to Close and Flush to dispatch
+// corresponding events to subscribers.
+type editorFlusherCloser struct {
+	parent    *Component
+	fc        workspace.FlusherCloser
+	h         Handler
+	uri       workspaceapi.URI
+	buf       *cell.Buffer
+	lastFlush string
+}
+
+func (c editorFlusherCloser) OnWillEdit(start, end term.Coordinates, str string) {
+}
+
+func (c editorFlusherCloser) OnDidEdit(from, to term.Coordinates, old string) {
+	c.parent.setTabAttr(c.uri, c.buf, c.lastFlush)
+}
+
+func (e *editorFlusherCloser) Flush() error {
+	content, err := e.parent.dispatchFlush(e.uri, e.h)
+	if err != nil {
+		return err
+	}
+	e.lastFlush = content
+	return e.fc.Flush()
+}
+
+func (e *editorFlusherCloser) Close() error {
+	ev := textapi.Event{
+		Type:     textapi.EventTypeClose,
+		URI:      e.uri,
+		Resource: e.h,
+	}
+	e.parent.dispatchEvent(ev)
+	return e.fc.Close()
+}
+
+type commandAll struct {
+	handler CommandHandler
+	cmd     textapi.CommandManual
 }

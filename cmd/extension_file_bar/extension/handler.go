@@ -35,7 +35,7 @@ func Grantee() (extension.Grantee, []extension.Permission) {
 var (
 	// FileBarHandlerCommands returns the commands that this extension is
 	// interested in registering.
-	FileBarHandlerCommands = []string{}
+	FileBarHandlerCommands = []textapi.CommandManual{}
 
 	// FileBarHandlerEvents returns the events that this extension is
 	// interested in subscribing to.

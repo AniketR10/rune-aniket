@@ -45,7 +45,16 @@ func Grantee() (extension.Grantee, []extension.Permission) {
 var (
 	// GitHandlerCommands returns the commands that this extension is
 	// interested in registering.
-	GitHandlerCommands = []string{commandNextChange, commandPrevChange}
+	GitHandlerCommands = []textapi.CommandManual{
+		{
+			Name:    commandNextChange,
+			Summary: "Moves cursor to the next diff hunk emitted by git.",
+		},
+		{
+			Name:    commandPrevChange,
+			Summary: "Moves cursor to the previous diff hunk emitted by git.",
+		},
+	}
 	// GitHandlerEvents returns the events that this extension is
 	// interested in subscribing to.
 	GitHandlerEvents = []textapi.EventType{

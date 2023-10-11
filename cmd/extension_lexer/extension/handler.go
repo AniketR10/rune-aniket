@@ -56,7 +56,13 @@ func Grantee() (extension.Grantee, []extension.Permission) {
 var (
 	// SyntaxHandlerCommands returns the commands that this extension is
 	// interested in registering.
-	SyntaxHandlerCommands = []string{cmdSyntaxQuery}
+	SyntaxHandlerCommands = []textapi.CommandManual{
+		{
+			Name:     cmdSyntaxQuery,
+			Summary:  "Fuzzy search custom symbols in the workspace's AST, using the given query. Check tree-sitter's manual for more details https://tree-sitter.github.io/tree-sitter/using-parsers#query-syntax.",
+			Synopsis: "query",
+		},
+	}
 
 	// SyntaxHandlerEvents returns the events that this extension is
 	// interested in subscribing to.

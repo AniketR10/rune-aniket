@@ -15,6 +15,12 @@ import (
 	"unstable.build/go-tui/term"
 )
 
+var colorPaletteCmd = textapi.CommandManual{
+	Name: "colorPalette",
+	Summary: "Opens a new window and displays all the color codes available " +
+		"to customize the UI via configuration.",
+}
+
 // Greantee returns this extension's extension.Grantee, and it required permissions.
 func Grantee() (extension.Grantee, []extension.Permission) {
 	return extutil.NewCommandSplitHandler(extutil.CommandSplitHandlerConfig{
@@ -23,7 +29,7 @@ func Grantee() (extension.Grantee, []extension.Permission) {
 			invokeWindow browserapi.Window, config config.Config) (browserapi.Handler, error) {
 			return new(colorPaletteHandler), nil
 		},
-		Command: "colorPalette",
+		Command: colorPaletteCmd,
 	})
 }
 

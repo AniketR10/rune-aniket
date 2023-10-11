@@ -49,7 +49,8 @@ func expectSubscribe(
 ) *proto.MockMuxConn {
 	conn := prototest.ExpectBrokerDial(t, ctrl, broker, token)
 	prototest.ExpectBrokerNewChannel(t, "1234", broker)
-	expected := textpb.RegisterCommandRequest{ChannelId: "1234", Command: cmd}
+	cmdRpc := textpb.CommandManual{Name: cmd}
+	expected := textpb.RegisterCommandRequest{ChannelId: "1234", Command: &cmdRpc}
 
 	conn.EXPECT().
 		Invoke(gomock.Any(),
@@ -105,7 +106,7 @@ func TestCommandSplitHandlerEmpty(t *testing.T) {
 	t.Run("subscribe to cmd event when subscriber permission is received", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
-		config := CommandSplitHandlerConfig{Command: "blah"}
+		config := CommandSplitHandlerConfig{Command: testCommand("blah")}
 		h := &cmdSplitHandler{config: config}
 		broker := expectInitialization(t, ctrl, h)
 
@@ -132,7 +133,7 @@ func TestCommandSplitHandlerEmpty(t *testing.T) {
 	t.Run("does nothing if shutdown is called when window not active", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
-		config := CommandSplitHandlerConfig{Command: "blah"}
+		config := CommandSplitHandlerConfig{Command: testCommand("blah")}
 		h := &cmdSplitHandler{config: config}
 		expectInitialization(t, ctrl, h)
 		h.Shutdown("you are being naughty")
@@ -143,7 +144,7 @@ func TestCommandSplitHandlerOpenWindow(t *testing.T) {
 	t.Run("open a split window if command received", func(t *testing.T) {
 		cmdName := "blah"
 		config := CommandSplitHandlerConfig{
-			Command:          cmdName,
+			Command:          testCommand(cmdName),
 			SplitOrientation: browserapi.OrientationLeft,
 		}
 
@@ -180,4 +181,10 @@ func testSplitWindow(
 		Split(gomock.Eq(cfg.SplitOrientation), gomock.Any(), gomock.Any()).
 		Return(nil, nil)
 	action(h)
+}
+
+func testCommand(cmd string) textapi.CommandManual {
+	return textapi.CommandManual{
+		Name: cmd,
+	}
 }

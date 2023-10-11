@@ -30,7 +30,7 @@ func (e *viEditor) Edit(file workspaceapi.URI, buf *cell.Buffer) (text.Handler, 
 }
 
 // SubscribeCommand is not supported.
-func (e *viEditor) SubscribeCommand(cmd string, h text.CommandHandler) error {
+func (e *viEditor) SubscribeCommand(cmd textapi.CommandManual, h text.CommandHandler) error {
 	return errors.New("not supported")
 }
 

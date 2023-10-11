@@ -48,7 +48,7 @@ type Editor interface {
 	Editor(workspaceapi.URI) (Handler, error)
 
 	// SubscribeCommand registers command to be dispatched to CommandHandler.
-	SubscribeCommand(string, CommandHandler) error
+	SubscribeCommand(textapi.CommandManual, CommandHandler) error
 
 	// UnsubscribeCommand un-registers command.
 	UnsubscribeCommand(string) error

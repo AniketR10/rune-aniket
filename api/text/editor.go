@@ -50,7 +50,7 @@ type Editor interface {
 	Editor(file workspaceapi.URI) (Handler, error)
 
 	// SubscribeCommand registers command to be dispatched to CommandHandler.
-	SubscribeCommand(string, CommandHandler) error
+	SubscribeCommand(CommandManual, CommandHandler) error
 
 	// SetLocationList sets the Handler's location list for users to
 	// navigate the code. See LocationList for more details.

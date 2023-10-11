@@ -75,7 +75,12 @@ func Grantee() (extension.Grantee, []extension.Permission) {
 			}
 			return browserapi.FuncHandler(handler.Nop(device), device.Close), nil
 		},
-		Command: "rtcGetUserMedia",
+		Command: textapi.CommandManual{
+			Name: "rtcGetUserMedia",
+			Summary: "Opens up a new window with an ASCII-encoded feed of the user's default" +
+				" video input device. This is a prototype that will be evolved into WebRTC " +
+				"peer-to-peer calling system.",
+		},
 	})
 	convertImageGrantee, _ := extutil.NewCommandSplitHandler(extutil.CommandSplitHandlerConfig{
 		SplitOrientation: browserapi.OrientationRight,
@@ -93,7 +98,12 @@ func Grantee() (extension.Grantee, []extension.Permission) {
 			scroll := component.NewScroll(buf)
 			return browserapi.NopHandler(handler.Nop(scroll)), nil
 		},
-		Command: "rtcConvertImageToASCII",
+		Command: textapi.CommandManual{
+			Name: "rtcConvertImageToASCII",
+			Summary: "Converts a local JPEG image to an 130x70 ASCII encoded image and opens" +
+				" up a window to display it.",
+			Synopsis: "image",
+		},
 	})
 
 	perms = append(perms, extension.PermissionBrowserEventPublisher)

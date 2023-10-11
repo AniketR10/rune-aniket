@@ -380,7 +380,7 @@ func (mr *MockEditorMockRecorder) SetLocationList(arg0, arg1, arg2, arg3 interfa
 }
 
 // SubscribeCommand mocks base method.
-func (m *MockEditor) SubscribeCommand(arg0 string, arg1 text.CommandHandler) error {
+func (m *MockEditor) SubscribeCommand(arg0 api.CommandManual, arg1 text.CommandHandler) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SubscribeCommand", arg0, arg1)
 	ret0, _ := ret[0].(error)

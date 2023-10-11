@@ -30,7 +30,7 @@ type CommandEventHandlerFacility func(textapi.Editor, []extension.Grant,
 // All granted permissions are returned in the fn callback. If one of the
 // permissions is denied, the extension will exit with an error.
 func NewEditorEventHandler(
-	cmds []string,
+	cmds []textapi.CommandManual,
 	fn CommandEventHandlerFacility,
 	events []textapi.EventType,
 	extraPerms ...extension.Permission,
@@ -49,7 +49,7 @@ type editorGrantee struct {
 	ed         textapi.Editor
 	handler    CommandEventHandler
 	newHandler func(textapi.Editor, []extension.Grant, proto.MuxBroker, config.Config) (CommandEventHandler, error)
-	cmds       []string
+	cmds       []textapi.CommandManual
 	pconfig    config.Config
 	err        error
 	evs        []textapi.EventType

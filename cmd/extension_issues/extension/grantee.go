@@ -37,6 +37,7 @@ import (
 const (
 	defaultMaxSubjectLen   = 50
 	defaultCreateIssueCmd  = "issueCreate"
+	issueRefreshCmd        = "issueRefresh"
 	initialEvictAllTimeout = 1 * time.Minute
 )
 
@@ -49,10 +50,23 @@ var (
 		extension.PermissionStorage,
 		extension.PermissionEditor,
 	}
-	defaultCommands = map[string]func(*issuesGrantee,
-		context.Context, textapi.Command) (bool, error){
-		defaultCreateIssueCmd: (*issuesGrantee).openEmptyIssueTemplate,
-		"issueRefresh":        (*issuesGrantee).issueRefresh,
+	defaultCommands = map[string]commandAll{
+		defaultCreateIssueCmd: {
+			man: textapi.CommandManual{
+				Summary: "Create an issue report using the default issues template. It opens " +
+					"up a new file tab with a yaml that must be filled in and saved to " +
+					"create issue. Closing the file before saving it cancels the creation " +
+					"of a new issue.",
+			},
+			handler: (*issuesGrantee).openEmptyIssueTemplate,
+		},
+		issueRefreshCmd: {
+			man: textapi.CommandManual{
+				Summary: "Refreshes the local issues cache. This is useful when user " +
+					"knows that out-of-band changes have been made to the issue tracker.",
+			},
+			handler: (*issuesGrantee).issueRefresh,
+		},
 	}
 	editorEvents = []textapi.EventType{textapi.EventTypeFlush, textapi.EventTypeClose}
 )
@@ -98,7 +112,7 @@ type issuesGrantee struct {
 	svcFn        func(config.Config) (document.Service, error)
 	scheme       string
 
-	cmds          map[string]func(*issuesGrantee, context.Context, textapi.Command) (bool, error)
+	cmds          map[string]commandAll
 	maxSubjectLen int
 	defTemplate   []byte
 
@@ -172,11 +186,18 @@ func (e *issuesGrantee) Connected(broker proto.MuxBroker, pconfig config.Config)
 	}
 
 	if disableDefaultCommands {
-		e.cmds = make(map[string]func(*issuesGrantee, context.Context, textapi.Command) (bool, error))
+		e.cmds = make(map[string]commandAll)
 	}
 
 	for cmd, template := range cmdToTemplates {
-		e.cmds[cmd] = e.openCustomIssueTemplate(template, cmd)
+		e.cmds[cmd] = commandAll{
+			man: textapi.CommandManual{
+				Name: cmd,
+				Summary: fmt.Sprintf("Create an issue report using a custom %q issue template. "+
+					"See %s for more details.", cmd, defaultCreateIssueCmd),
+			},
+			handler: e.openCustomIssueTemplate(template, cmd),
+		}
 	}
 
 	log.Debugf("extension connected and loaded config without any critical issues")
@@ -257,12 +278,13 @@ func (e *issuesGrantee) PermissionGranted(grants []extension.Grant) {
 					"Will not be able to create reports", err)
 				continue
 			}
-			for cmd, fn := range e.cmds {
+			for cmd, man := range e.cmds {
 				cmd := cmd
-				fn := fn
-				err = ed.SubscribeCommand(cmd, text.FuncCommandHandler(
+				man := man
+				man.man.Name = cmd
+				err = ed.SubscribeCommand(man.man, text.FuncCommandHandler(
 					func(ctx context.Context, cmd textapi.Command) (bool, error) {
-						return fn(e, ctx, cmd)
+						return man.handler(e, ctx, cmd)
 					}))
 				if err != nil {
 					log.Warnf("Could not subscribe command %q: %v", cmd, err)
@@ -499,4 +521,9 @@ func getDefaultAuthor() string {
 		h = "unknown-host"
 	}
 	return fmt.Sprintf("%s@%s", u.Username, h)
+}
+
+type commandAll struct {
+	man     textapi.CommandManual
+	handler func(*issuesGrantee, context.Context, textapi.Command) (bool, error)
 }

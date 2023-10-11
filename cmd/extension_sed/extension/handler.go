@@ -28,7 +28,18 @@ const (
 )
 
 var (
-	sedHandlerCommands    = []string{commandSed}
+	sedHandlerCommands = []textapi.CommandManual{
+		{
+			Name: commandSed,
+			Summary: "Reads the current file and modifies it as specified by the given " +
+				"sed command. Check Sed's manual via 'man sed' for more details on the " +
+				"command syntax. For instance 's/myFile/my_file/g' replaces all instances " +
+				"of 'myFile' text with 'my_file'. This is useful for easy variable and " +
+				"type name refactors. It requires Sed's executable to be available " +
+				"in the workspace's host computer.",
+			Synopsis: "command",
+		},
+	}
 	sedHandlerEvents      = []textapi.EventType{}
 	sedHandlerPermissions = []extension.Permission{
 		extension.Permission(extension.PermissionEditor),
@@ -135,7 +146,7 @@ func (h *sedEditorHandler) HandleCommand(
 	switch cmd.Name {
 	case commandSed:
 		if len(cmd.Args) != 1 {
-			err := errors.New("Usage: sed <script>")
+			err := errors.New("Usage: sed <command>")
 			return false, err
 		}
 		if cmd.Resource == nil {

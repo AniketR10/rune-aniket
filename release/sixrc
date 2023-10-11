@@ -293,6 +293,9 @@ command:
       - searchFile
   # Configure bindings from key combinations to commands.
   key_bindings:
+    <c-w>: tabClose
+    <c-l>: tabNext
+    <c-h>: tabPrev
     <c-x><c-h>: focusPrevWindow
     <c-x><c-l>: focusNextWindow
     <c-x><c-j>: focusBelowWindow

@@ -25,7 +25,22 @@ const (
 	defaultHistoryDocumentID = "extension-fuzzy-line-history"
 )
 
-var defaultHistoryKey = term.KeyComb{Key: term.KeyCtrlBackslash}
+var (
+	defaultHistoryKey = term.KeyComb{Key: term.KeyCtrlBackslash}
+	cmdSearchText     = textapi.CommandManual{
+		Name: "searchText",
+		Summary: "Opens a new window to perform a fuzzy search for file contents in the workspace. " +
+			"Results are sorted by match score in descending order. " +
+			"Arrow keys and <ctrl-k>/<ctrl-j> scroll up and down and <enter> opens up the selected file in a new tab. " +
+			"By default, a built-in implementation is used to scan for files in the workspace, but " +
+			"for very large workspaces, a program like ripgrep or the silver searcher " +
+			"can be used by adding the corresponding 'command' key in the extension's " +
+			"configuration (i.e. command: rg --color never -n --no-heading --max-columns 500 \"\"" +
+			"). To scroll back to previous searches, " +
+			`<ctrl-\> can be used by default or a 'history_key' can be set in the extension's ` +
+			"configuration. Ctrl-c can be used to cancel a scan in progress.",
+	}
+)
 
 // Grantee returns this extension's Grantee and the permissions required to run it.
 func Grantee() (extension.Grantee, []extension.Permission) {
@@ -33,7 +48,7 @@ func Grantee() (extension.Grantee, []extension.Permission) {
 		SplitOrientation: browserapi.OrientationBottom,
 		Handler:          newHandler,
 		Permissions:      finder.Permissions(),
-		Command:          "searchText",
+		Command:          cmdSearchText,
 	})
 }
 

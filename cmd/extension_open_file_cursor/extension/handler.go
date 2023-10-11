@@ -20,8 +20,12 @@ import (
 	"unstable.build/go-tui/text"
 )
 
-const (
-	commandOpenFileCursor = "openFileUnderCursor"
+var (
+	commandOpenFileCursor = textapi.CommandManual{
+		Name: "openFileUnderCursor",
+		Summary: "Edit the file whose name is under the cursor. If the file doesn't exist " +
+			"then this command opens a new file.",
+	}
 )
 
 // Grantee returns this extension's Grantee and the permissions required to run it.
@@ -31,7 +35,7 @@ func Grantee() (extension.Grantee, []extension.Permission) {
 }
 
 var (
-	gfHandlerCommands = []string{commandOpenFileCursor}
+	gfHandlerCommands = []textapi.CommandManual{commandOpenFileCursor}
 	gfHandlerEvents   = []textapi.EventType{
 		textapi.EventTypeOpen,
 		textapi.EventTypeClose,
@@ -148,7 +152,7 @@ func (h *gfEditorHandler) HandleCommand(ctx context.Context, cmd textapi.Command
 	}
 
 	switch cmd.Name {
-	case commandOpenFileCursor:
+	case commandOpenFileCursor.Name:
 		err = h.openFileUnderCursor(cmd.Window, cmd.URI)
 	}
 

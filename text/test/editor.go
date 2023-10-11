@@ -38,7 +38,7 @@ func (e EditorFromAPIEditor) Editor(file workspaceapi.URI) (text.Handler, error)
 	return e.Ed.Editor(file)
 }
 
-func (e EditorFromAPIEditor) SubscribeCommand(cmd string, h text.CommandHandler) error {
+func (e EditorFromAPIEditor) SubscribeCommand(cmd textapi.CommandManual, h text.CommandHandler) error {
 	return e.Ed.SubscribeCommand(cmd, h)
 }
 

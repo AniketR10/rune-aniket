@@ -31,6 +31,25 @@ type CommandHandler interface {
 	HandleCommand(context.Context, Command) (exit bool, err error)
 }
 
+// CommandManual represents a command's manual and documentation.
+type CommandManual struct {
+	Name string
+
+	// Summary is a short 80-100 character description.
+	Summary string
+
+	// Synopsis is a single line synopsis of how
+	// this CLI is to be used. It should ONLY include
+	// the semantic information about how arguments are parsed.
+	//
+	// Example: [<options>] [<revision-range>] [[--] <path>...]
+	Synopsis string
+
+	// Commands is a list of accepted commands or nil
+	// if no commands are expected.
+	Commands []CommandManual
+}
+
 type fnCommandHandler struct {
 	cb         func(context.Context, Command) (bool, error)
 	completeFn func(context.Context, []string) (iterator.Iterator[string], error)

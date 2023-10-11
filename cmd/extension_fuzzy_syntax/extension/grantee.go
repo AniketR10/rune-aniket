@@ -21,11 +21,24 @@ import (
 	"unstable.build/go-tui/workspace"
 )
 
-const (
-	cmdSearchTypes     = "searchSyntaxTypes"
-	cmdSearchVariables = "searchSyntaxVariables"
-	cmdSearchFunctions = "searchSyntaxFunctions"
-	cmdSearchSyntax    = "searchSyntax"
+var (
+	cmdSearchTypes = textapi.CommandManual{
+		Name:    "searchSyntaxTypes",
+		Summary: "Fuzzy search 'definition.type' symbols in the workspace's AST, using the detected programming language's default AST queries.",
+	}
+	cmdSearchVariables = textapi.CommandManual{
+		Name:    "searchSyntaxVariables",
+		Summary: "Fuzzy search 'definition.var' symbols in the workspace's AST, using the detected programming language's default AST queries.",
+	}
+	cmdSearchFunctions = textapi.CommandManual{
+		Name:    "searchSyntaxFunctions",
+		Summary: "Fuzzy search 'definition.function' symbols in the workspace's AST, using the detected programming language's default AST queries.",
+	}
+	cmdSearchSyntax = textapi.CommandManual{
+		Name:     "searchSyntax",
+		Summary:  "Fuzzy search custom symbols in the workspace's AST, using the given query. Check tree-sitter's manual for more details https://tree-sitter.github.io/tree-sitter/using-parsers#query-syntax",
+		Synopsis: "query",
+	}
 )
 
 // Grantee returns this extension's Grantee and the permissions required to run it.
@@ -149,13 +162,13 @@ func newHandler(
 
 	var qtype queryType
 	switch cmd.Name {
-	case cmdSearchTypes:
+	case cmdSearchTypes.Name:
 		qtype = queryTypeTypes
-	case cmdSearchVariables:
+	case cmdSearchVariables.Name:
 		qtype = queryTypeVariables
-	case cmdSearchFunctions:
+	case cmdSearchFunctions.Name:
 		qtype = queryTypeFunctions
-	case cmdSearchSyntax:
+	case cmdSearchSyntax.Name:
 		if len(cmd.Args) == 0 {
 			return nil, errors.New("expected source code matching query as command arguments")
 		}

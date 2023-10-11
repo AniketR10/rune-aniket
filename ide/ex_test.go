@@ -793,11 +793,11 @@ func TestExKeySequence(t *testing.T) {
 			text.WithCommandSequenceBinding(handler.Sequence{
 				First: term.KeyComb{Ch: 'g'},
 				Last:  term.KeyComb{Ch: 'l'},
-			}, []string{"bufferNext"}),
+			}, []string{"tabNext"}),
 			text.WithCommandSequenceBinding(handler.Sequence{
 				First: term.KeyComb{Ch: 'g'},
 				Last:  term.KeyComb{Ch: 'g'},
-			}, []string{"bufferCloseAll"}),
+			}, []string{"tabCloseAll"}),
 			text.WithSequencerTimeout(1 * time.Second),
 		}
 		ex := new(ex)
@@ -840,7 +840,7 @@ func TestExTabIntegration(t *testing.T) {
 │AAAAAAAAAAAAAAAAAA│
 │AAAAAAAAAAAAAAAAAA│
 └──────────────────┘`},
-		{":bufferCloseAll>",
+		{":tabCloseAll>",
 			`┌──────────────────┐
 │                  │
 ├──────────────────┤
@@ -1090,7 +1090,7 @@ func TestCommandAliases(t *testing.T) {
 		text.WithCommandKey(testCommandKey),
 		text.WithCommandAliases(map[string][]string{
 			"todo": {"edit hello.go", "edit wi.go"},
-			"bp":   {"bufferNext"},
+			"bp":   {"tabNext"},
 		}),
 	}
 	b := newExForTesting(t, texttest.NopEditor(), opts...)
@@ -1113,7 +1113,7 @@ func TestEphemeralTerminal(t *testing.T) {
 ││                ││
 └└────────────────┘┘`,
 		},
-		{":bufferClose>",
+		{":tabClose>",
 			`┌──────────────────┐
 │                  │
 ├──────────────────┤
@@ -1240,8 +1240,8 @@ func TestCompanionTerminal(t *testing.T) {
 	opts := []text.Option{
 		text.WithCommandKey(testCommandKey),
 		text.WithCommandKeyBinding(term.KeyComb{Key: term.KeyCtrlH}, []string{"closeWindow"}),
-		text.WithCommandKeyBinding(term.KeyComb{Key: term.KeyCtrlL}, []string{"nextBuffer"}),
-		text.WithCommandKeyBinding(term.KeyComb{Key: term.KeyCtrlV}, []string{"bufferClose"}),
+		text.WithCommandKeyBinding(term.KeyComb{Key: term.KeyCtrlL}, []string{"tabNext"}),
+		text.WithCommandKeyBinding(term.KeyComb{Key: term.KeyCtrlV}, []string{"tabClose"}),
 	}
 
 	tempDir, err := ioutil.TempDir("", "")

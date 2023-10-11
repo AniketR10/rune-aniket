@@ -133,15 +133,31 @@ func TestServerRegister(t *testing.T) {
 		channelID := "1234"
 		conn := prototest.ExpectBrokerDialChannel(t, ctrl, broker, channelID)
 
+		expectedMan := textapi.CommandManual{
+			Name:     "bla",
+			Synopsis: "[cmd]",
+			Summary:  "lots of talking",
+			Commands: []textapi.CommandManual{
+				{Name: "subbla", Synopsis: "[subcmd]", Summary: "sub talking"},
+			},
+		}
 		var wg sync.WaitGroup
-		mock.EXPECT().SubscribeCommand(gomock.Any(), gomock.Any()).
-			DoAndReturn(func(string, text.CommandHandler) error {
+		mock.EXPECT().SubscribeCommand(gomock.Eq(expectedMan), gomock.Any()).
+			DoAndReturn(func(textapi.CommandManual, text.CommandHandler) error {
 				wg.Done()
 				return nil
 			})
 
 		wg.Add(1)
-		req := RegisterCommandRequest{Command: "bla", ChannelId: channelID}
+		man := CommandManual{
+			Name:     "bla",
+			Synopsis: "[cmd]",
+			Summary:  "lots of talking",
+			Commands: []*CommandManual{
+				{Name: "subbla", Synopsis: "[subcmd]", Summary: "sub talking"},
+			},
+		}
+		req := RegisterCommandRequest{Command: &man, ChannelId: channelID}
 		res, err := s.Register(ctx, &req)
 		require.NoError(t, err)
 		require.NotNil(t, res)
@@ -167,15 +183,16 @@ func TestServerRegister(t *testing.T) {
 
 		var wg sync.WaitGroup
 		mock.EXPECT().SubscribeCommand(gomock.Any(), gomock.Any()).
-			DoAndReturn(func(string, text.CommandHandler) error {
+			DoAndReturn(func(textapi.CommandManual, text.CommandHandler) error {
 				wg.Done()
 				return errors.New("boom")
 			})
 
 		conn.EXPECT().Close().AnyTimes()
+		man := CommandManual{Name: "bla"}
 
 		wg.Add(1)
-		req := RegisterCommandRequest{Command: "bla", ChannelId: channelID}
+		req := RegisterCommandRequest{Command: &man, ChannelId: channelID}
 		res, err := s.Register(ctx, &req)
 		require.Error(t, err)
 		require.Nil(t, res)

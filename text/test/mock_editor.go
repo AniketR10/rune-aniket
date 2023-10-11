@@ -131,7 +131,7 @@ func (e *testEditor) CellView(h text.Handler) text.CellView {
 	return text.NewCellView(e.buf.View())
 }
 
-func (e *testEditor) SubscribeCommand(cmd string, h text.CommandHandler) error {
+func (e *testEditor) SubscribeCommand(cmd textapi.CommandManual, h text.CommandHandler) error {
 	return nil
 }
 

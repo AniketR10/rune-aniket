@@ -239,25 +239,51 @@ func (h *workspaceManagerHandler) initWithRestorePrompt(
 }
 
 func (h *workspaceManagerHandler) subscribeActiveWorkspaceCommands(ex *ex) (ret error) {
-	workspaceActiveCommands := map[string]func(*workspaceManagerHandler, ...string) error{
-		cmdAddWorkspace:      (*workspaceManagerHandler).commandAddWorkspace,
-		cmdCloseWorkspace:    (*workspaceManagerHandler).commandCloseWorkspace,
-		cmdReloadWorkspace:   (*workspaceManagerHandler).commandReloadWorkspace,
-		cmdSwitchToWorkspace: (*workspaceManagerHandler).commandSwitchToWorkspace,
+	workspaceActiveCommands := map[string]commandAllWorkspace{
+		cmdAddWorkspace: {
+			handler: (*workspaceManagerHandler).commandAddWorkspace,
+			man: textapi.CommandManual{
+				Summary: "Opens a new workspace as defined by the given URI, in the current " +
+					"active workspace, if its empty, or in the next available slot. " +
+					"If no scheme is defined the file:// scheme is assumed.",
+				Synopsis: "[scheme:][//[userinfo@]host][/]workspacepath",
+			},
+		},
+		cmdCloseWorkspace: {
+			handler: (*workspaceManagerHandler).commandCloseWorkspace,
+			man: textapi.CommandManual{
+				Summary: "Closes the current active workspace and switches " +
+					"the focus to the previous workspace.",
+			},
+		},
+		cmdReloadWorkspace: {
+			handler: (*workspaceManagerHandler).commandReloadWorkspace,
+			man: textapi.CommandManual{
+				Summary: "Reloads the current active workspace, along with all the extensions.",
+			},
+		},
+		cmdSwitchToWorkspace: {
+			handler: (*workspaceManagerHandler).commandSwitchToWorkspace,
+			man: textapi.CommandManual{
+				Summary:  "Switches the current active workspace to the workspace at the given index.",
+				Synopsis: "(1|2|3|4|5|6|7|8|9)",
+			},
+		},
 	}
 	return h.subscribeCommands(ex, workspaceActiveCommands)
 }
 
 func (h *workspaceManagerHandler) subscribeCommands(
 	ex *ex,
-	commands map[string]func(*workspaceManagerHandler, ...string) error,
+	commands map[string]commandAllWorkspace,
 ) (ret error) {
-	for cmd, fn := range commands {
-		fn := fn
+	for cmd, man := range commands {
+		man := man
 		cmd := cmd
-		err := ex.comp.SubscribeCommand(cmd,
+		man.man.Name = cmd
+		err := ex.comp.SubscribeCommand(man.man,
 			text.FuncCommandCompleter(func(ctx context.Context, cmd textapi.Command) (bool, error) {
-				return false, fn(h, cmd.Args...)
+				return false, man.handler(h, cmd.Args...)
 			}, func(ctx context.Context, args []string) (
 				iterator.Iterator[string], string, error,
 			) {
@@ -758,4 +784,9 @@ func (hm *workspaceHandler) Close() (ret error) {
 		ret = multierr.Append(ret, err)
 	}
 	return
+}
+
+type commandAllWorkspace struct {
+	man     textapi.CommandManual
+	handler func(*workspaceManagerHandler, ...string) error
 }

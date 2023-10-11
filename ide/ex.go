@@ -39,58 +39,18 @@ const (
 	cmdChangeSplitOrientation = "changeSplitOrientation"
 	cmdSplitWindowTerminal    = "splitWindowTerminal"
 	cmdTerminalTab            = "newTerminal"
+	cmdSplitWindow            = "splitWindow"
+	cmdNewWindow              = "newWindow"
 )
 
 var (
-	commandBarAttr        = term.Attributes{Bg: term.ColorWhite, Fg: term.ColorBlack}
-	errInvalidSetCursor   = errors.New("Cannot set cursor on this buffer")
-	windowControlCommands = map[string]struct{}{
-		"changeSplitOrientation": {},
-		"splitWindow":            {},
-		"newWindow":              {},
-		"focusNextWindow":        {},
-		"focusPrevWindow":        {},
-		"focusAboveWindow":       {},
-		"focusBelowWindow":       {},
-		"toggleFullscreen":       {},
-		cmdSplitWindowTerminal:   {},
-		cmdTerminalTab:           {},
-		cmdSwitchToWorkspace:     {}, // workspace_handler
-	}
-	exCommands = map[string]func(*ex, ...string) error{
-		"bufferPrev":              (*ex).previousBuffer,
-		"bufferNext":              (*ex).nextBuffer,
-		"bufferClose":             (*ex).closeBuffer,
-		"bufferCloseAll":          (*ex).closeAllBuffers,
-		"closeWindow":             (*ex).closeFocusWindow,
-		"writeQuit":               (*ex).flushCloseIgnoreNonFlushed,
-		"writeForceQuit!":         (*ex).flushCloseIgnoreNonFlushed,
-		"write":                   (*ex).forceFlush,
-		"forceWrite!":             (*ex).forceFlush,
-		"forceQuit!":              (*ex).forceQuit,
-		"quit":                    (*ex).forceQuit,
-		cmdEdit:                   (*ex).editFiles,
-		"reloadFile":              (*ex).reloadFile,
-		"!":                       (*ex).executePlugin,
-		cmdChangeSplitOrientation: (*ex).splitDirectionChange,
-		"splitWindow":             (*ex).newWindow,
-		"newWindow":               (*ex).newWindow,
-		"focusNextWindow":         (*ex).focusNextWindow,
-		"focusPrevWindow":         (*ex).focusPrevWindow,
-		"focusAboveWindow":        (*ex).focusAboveWindow,
-		"focusBelowWindow":        (*ex).focusBelowWindow,
-		"toggleFullscreen":        (*ex).toggleFullscreen,
-		"notificationsCloseAll":   (*ex).closeNotifications,
-		"notificationsPauseAll":   (*ex).pauseNotifications,
-		"notificationsResumeAll":  (*ex).resumeNotifications,
-		"panic":                   (*ex).panic,
-		cmdSplitWindowTerminal:    (*ex).splitWindowTerminal,
-		cmdTerminalTab:            (*ex).newTerminalTab,
-	}
+	commandBarAttr      = term.Attributes{Bg: term.ColorWhite, Fg: term.ColorBlack}
+	errInvalidSetCursor = errors.New("Cannot set cursor on this buffer")
+	// TODO remove all default bindings
 	exDefaultBindings = map[term.KeyComb]string{
-		{Key: term.KeyCtrlW}: "bufferClose",
-		{Key: term.KeyCtrlL}: "bufferNext",
-		{Key: term.KeyCtrlH}: "bufferPrev",
+		{Key: term.KeyCtrlW}: "tabClose",
+		{Key: term.KeyCtrlL}: "tabNext",
+		{Key: term.KeyCtrlH}: "tabPrev",
 	}
 	errEventStreamNotReady = errors.New("event stream not ready to publish")
 )
@@ -169,16 +129,18 @@ func (e *ex) init(
 
 func (e *ex) subscribeCommands() error {
 	var ret error
-	for cmd, fn := range exCommands {
-		cmd := cmd
-		fn := fn
-		err := e.comp.SubscribeCommand(cmd, text.FuncCommandCompleter(
+	for name, man := range exCommands {
+		name := name
+		man := man
+		// Name is only defined as a key to exCommands
+		man.man.Name = name
+		err := e.comp.SubscribeCommand(man.man, text.FuncCommandCompleter(
 			func(ctx context.Context, cmd textapi.Command) (bool, error) {
-				return false, fn(e, cmd.Args...)
+				return false, man.handler(e, cmd.Args...)
 			}, func(ctx context.Context, args []string) (
 				iterator.Iterator[string], string, error,
 			) {
-				return e.completeCommand(ctx, cmd, args)
+				return e.completeCommand(ctx, name, args)
 			}))
 		if err != nil {
 			ret = multierr.Append(ret, err)
@@ -243,6 +205,8 @@ func (e *ex) completeCommand(
 	switch cmd {
 	case cmdEdit:
 		return e.completeEdit(ctx, args)
+	case cmdSplitWindow, cmdNewWindow, cmdSplitWindowTerminal:
+		return iterator.FromSlice([]string{"right", "left", "top", "bottom"}), "", nil
 	case cmdChangeSplitOrientation:
 		return iterator.FromSlice([]string{"horizontal", "vertical"}), "", nil
 	default:
@@ -509,10 +473,10 @@ func (e *ex) splitDirectionChange(args ...string) error {
 	return nil
 }
 
-func (e *ex) newWindowHandler(h browserapi.Handler) {
+func (e *ex) newWindowHandler(h browserapi.Handler, orientation browserapi.Orientation) {
 	eb := e.comp.Browser()
 	win := e.invokeWindow()
-	eb.Split(browserapi.OrientationDefault, win, h)
+	eb.Split(orientation, win, h)
 }
 
 func (e *ex) onCloseCommandPrompt() error {
@@ -590,7 +554,7 @@ func (e *ex) executePlugin(args ...string) error {
 		Alignment: component.SpanAlignmentCentered,
 	}
 	// there can be multiple floating windows open
-	// so instead of matching windows on bufferClose,
+	// so instead of matching windows on tabClose,
 	// we set a handler that closes the window if the handler
 	// is closed.
 	var win browser.Window
@@ -682,12 +646,27 @@ func (e *ex) newEmulatorTab(initialCmd string) (*browser.Tab, error) {
 }
 
 func (e *ex) splitWindowTerminal(args ...string) error {
+	orientation := browserapi.OrientationDefault
+	if len(args) != 0 {
+		switch args[0] {
+		case "right":
+			orientation = browserapi.OrientationRight
+		case "bottom":
+			orientation = browserapi.OrientationBottom
+		case "left":
+			orientation = browserapi.OrientationLeft
+		case "top":
+			orientation = browserapi.OrientationTop
+		default:
+			return fmt.Errorf("invalid orientation argument %q", args[0])
+		}
+	}
 	t, err := e.newEmulatorTab("")
 	if err != nil {
 		return err
 	}
 	win := e.invokeWindow()
-	if _, err := e.comp.Split(browserapi.OrientationDefault, win, t); err != nil {
+	if _, err := e.comp.Split(orientation, win, t); err != nil {
 		_ = t.Close()
 		return err
 	}
@@ -712,7 +691,22 @@ func (e *ex) panic(args ...string) error {
 }
 
 func (e *ex) newWindow(args ...string) error {
-	e.newWindowHandler(nil)
+	orientation := browserapi.OrientationDefault
+	if len(args) != 0 {
+		switch args[0] {
+		case "right":
+			orientation = browserapi.OrientationRight
+		case "bottom":
+			orientation = browserapi.OrientationBottom
+		case "left":
+			orientation = browserapi.OrientationLeft
+		case "top":
+			orientation = browserapi.OrientationTop
+		default:
+			return fmt.Errorf("invalid orientation argument %q", args[0])
+		}
+	}
+	e.newWindowHandler(nil, orientation)
 	return nil
 }
 
@@ -1018,4 +1012,9 @@ func (e *ex) Close() (ret error) {
 		e.companionTerminal = nil
 	}
 	return
+}
+
+type commandAll struct {
+	man     textapi.CommandManual
+	handler func(*ex, ...string) error
 }

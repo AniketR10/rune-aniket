@@ -27,7 +27,7 @@ func (e *simpleEditor) Edit(file workspaceapi.URI, buf *cell.Buffer) (Handler, e
 	return e.pub.PublishEdit(file, buf, root, &root.cursor), nil
 }
 
-func (e *simpleEditor) SubscribeCommand(cmd string, h CommandHandler) error {
+func (e *simpleEditor) SubscribeCommand(cmd textapi.CommandManual, h CommandHandler) error {
 	return errors.New("not supported")
 }
 

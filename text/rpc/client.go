@@ -163,7 +163,7 @@ func (c *Client) SubscribeEvents(
 }
 
 // SubscribeCommandrequests the editor server to register cmd with h.
-func (c *Client) SubscribeCommand(cmd string, h textapi.CommandHandler) error {
+func (c *Client) SubscribeCommand(man textapi.CommandManual, h textapi.CommandHandler) error {
 	ctx, cancel := c.ctxWithTimeout()
 	defer cancel()
 
@@ -172,7 +172,8 @@ func (c *Client) SubscribeCommand(cmd string, h textapi.CommandHandler) error {
 		return fmt.Errorf("serve command handler: %w", err)
 	}
 
-	req := RegisterCommandRequest{Command: cmd, ChannelId: channelID}
+	rpcMan := makeProtoManual(man)
+	req := RegisterCommandRequest{Command: &rpcMan, ChannelId: channelID}
 	_, err = c.ed.Register(ctx, &req)
 	runtime.KeepAlive(c)
 	if err != nil {
@@ -331,4 +332,20 @@ func (c *Client) Close() (ret error) {
 func (c *Client) ctxWithTimeout() (context.Context, func()) {
 	ctx, cancel := context.WithTimeout(c.clientCtx, defaultTimeout)
 	return ctx, cancel
+}
+
+func makeProtoManual(man textapi.CommandManual) CommandManual {
+	var cmds []*CommandManual
+	for _, cmd := range man.Commands {
+		childManual := new(CommandManual)
+		*childManual = makeProtoManual(cmd)
+		cmds = append(cmds, childManual)
+	}
+	ret := CommandManual{
+		Name:     man.Name,
+		Summary:  man.Summary,
+		Synopsis: man.Synopsis,
+		Commands: cmds,
+	}
+	return ret
 }

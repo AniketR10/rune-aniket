@@ -74,10 +74,48 @@ func Grantee() (extension.Grantee, []extension.Permission) {
 var (
 	// LSPHandlerCommands returns the commands that this extension is
 	// interested in registering.
-	LSPHandlerCommands = []string{
-		commandNextDiagnostic, commandPrevDiagnostic,
-		commandHover, commandGoToDef, commandFormat, commandReferences,
-		commandAddWorkspace, commandRemoveWorkspace, commandOrganizeImports,
+	LSPHandlerCommands = []textapi.CommandManual{
+		{
+			Name: commandNextDiagnostic,
+			Summary: "Moves cursor to the next compiler error or warning emitted by " +
+				"the LSP server configured for the file's programming language.",
+		},
+		{
+			Name: commandPrevDiagnostic,
+			Summary: "Moves cursor to the previous compiler error or warning emitted by " +
+				"the LSP server configured for the file's programming language.",
+		},
+		{
+			Name: commandHover,
+			Summary: "Opens a tooltip with the documentation of the symbol whose name " +
+				"is under the cursor provided by the LSP server configured for the file's programming language.",
+		},
+		{
+			Name: commandGoToDef,
+			Summary: "Moves the cursor to the definition of the symbol whose name " +
+				"is under the cursor, opening a new file if the definition is in another file.",
+		},
+		{
+			Name:    commandFormat,
+			Summary: "Formats the whole file as per the LSP server's formatting capabilities.",
+		},
+		{
+			Name: commandReferences,
+			Summary: "Performs a usage lookup of the symbol whose name is under the cursor, using " +
+				"the LSP server configured for the file's programming language. It opens two" +
+				"tiled windows, one for preview and another one for fuzzy search over the " +
+				"files that make use of the given symbol. Standard fuzzy search key bindings apply.",
+		},
+		/*{ disabled now that we manage workspaces separately.
+			Name: commandAddWorkspace,
+		},
+		{
+			Name: commandRemoveWorkspace,
+		},*/
+		{
+			Name:    commandOrganizeImports,
+			Summary: "Formats the imports section of the file as per the LSP server's formatting capabilities.",
+		},
 	}
 
 	// LSPHandlerEvents returns the events that this extension is

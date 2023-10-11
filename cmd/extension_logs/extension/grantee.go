@@ -41,8 +41,18 @@ var (
 		extension.PermissionConfig,
 		extension.Permission(extension.PermissionEditor),
 	}
-	commands = []string{
-		cmdLogs,
+	commands = []textapi.CommandManual{
+		{
+			Name: cmdLogs,
+			Summary: "Opens a new window with a log viewer component, which " +
+				"consumes and displays a log file and streams any new data appended to it. " +
+				"Enter key can be used to highlight and wrap around individual log lines, " +
+				" and arrow keys, j/k/h/l keys can be used to scroll vertically or horizontall. " +
+				"Key / can be used to fuzzy search the contents of the file. " +
+				"If no log_file argument is given, then the internal logs of the " +
+				"editor are displayed. ",
+			Synopsis: "[log_file]",
+		},
 	}
 
 	retryStrategy = retry.ExponentialStrategy(10*time.Millisecond, 1*time.Second)
@@ -85,7 +95,7 @@ func (e *logsGrantee) Connected(broker proto.MuxBroker, pconfig config.Config) {
 	debug, err := pconfig.GetBool("debug")
 	if err != nil {
 		if err != config.ErrNotFound {
-			log.Errorf("failed to load 'case_sensitive' from config: %v", err)
+			log.Errorf("failed to load 'debug' from config: %v", err)
 		}
 	} else {
 		log.Debugf("set debug to %v", debug)

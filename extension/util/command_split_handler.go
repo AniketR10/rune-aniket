@@ -21,7 +21,7 @@ import (
 // for more details.
 type CommandSplitHandlerConfig struct {
 	// Command that triggers Split
-	Command string
+	Command textapi.CommandManual
 
 	// SplitOrientatio of the new split window.
 	SplitOrientation browserapi.Orientation
@@ -42,7 +42,7 @@ type CommandSplitHandlerConfig struct {
 // with a new handler when cmd event is fired or command called.
 // This function never returns.
 func NewCommandSplitHandler(config CommandSplitHandlerConfig) (extension.Grantee, []extension.Permission) {
-	if config.Handler == nil || config.Command == "" {
+	if config.Handler == nil || config.Command.Name == "" {
 		panic(fmt.Sprintf("invalid cmd split handler configuration: "+
 			"Handler and Command must be set: %#v", config))
 	}
@@ -166,7 +166,7 @@ func (t *cmdSplitHandler) openSplitWindow(cmd textapi.Command) error {
 }
 
 func (t *cmdSplitHandler) HandleCommand(ctx context.Context, cmd textapi.Command) (exit bool, err error) {
-	if cmd.Name == t.config.Command {
+	if cmd.Name == t.config.Command.Name {
 		err = t.openSplitWindow(cmd)
 		if err != nil {
 			log.Error(err)
@@ -189,7 +189,7 @@ func (t *cmdSplitHandler) PermissionGranted(grants []extension.Grant) {
 			t.wm, err = browserextension.WindowManager(g, t.broker)
 		case extension.PermissionEditor:
 			t.ed, err = textextension.Editor(g, t.broker)
-			if err == nil && t.config.Command != "" {
+			if err == nil {
 				err = t.ed.SubscribeCommand(t.config.Command, t)
 			}
 		}

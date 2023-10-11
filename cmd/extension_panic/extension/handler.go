@@ -20,7 +20,10 @@ func Grantee() (extension.Grantee, []extension.Permission) {
 			invokeWindow browserapi.Window, config config.Config) (browserapi.Handler, error) {
 			return new(panicHandler), nil
 		},
-		Command: "panicExtension",
+		Command: textapi.CommandManual{
+			Name:    "panicExtension",
+			Summary: "Causes the extension to panic. This is internal and for debugging purposes only.",
+		},
 	})
 }
 

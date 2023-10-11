@@ -690,19 +690,21 @@ func TestDispatchCommand(t *testing.T) {
 
 		var newWindowCalled, editCalled bool
 
-		c.SubscribeCommand("newWindow", text.FuncCommandHandler(func(ctx context.Context, cmd textapi.Command) (bool, error) {
-			newWindowCalled = true
-			assert.Equal(t, cmd.Name, "newWindow")
-			assert.Equal(t, cmd.Args, []string{})
-			return false, nil
-		}))
+		c.SubscribeCommand(testCommand("newWindow"),
+			text.FuncCommandHandler(func(ctx context.Context, cmd textapi.Command) (bool, error) {
+				newWindowCalled = true
+				assert.Equal(t, cmd.Name, "newWindow")
+				assert.Equal(t, cmd.Args, []string{})
+				return false, nil
+			}))
 
-		c.SubscribeCommand("edit", text.FuncCommandHandler(func(ctx context.Context, cmd textapi.Command) (bool, error) {
-			editCalled = true
-			assert.Equal(t, cmd.Name, "edit")
-			assert.Equal(t, cmd.Args, []string{"/tmp/todo.md"})
-			return false, nil
-		}))
+		c.SubscribeCommand(testCommand("edit"),
+			text.FuncCommandHandler(func(ctx context.Context, cmd textapi.Command) (bool, error) {
+				editCalled = true
+				assert.Equal(t, cmd.Name, "edit")
+				assert.Equal(t, cmd.Args, []string{"/tmp/todo.md"})
+				return false, nil
+			}))
 
 		cmd := textapi.Command{
 			Resource: NewTestHandler(),
@@ -720,9 +722,10 @@ func TestDispatchCommand(t *testing.T) {
 	t.Run("bubbles up HandleCommand errors", func(t *testing.T) {
 		c, _ := newTestComponent(t, NopEditor())
 		win, _ := c.Focus()
-		c.SubscribeCommand("bla", text.FuncCommandHandler(func(ctx context.Context, cmd textapi.Command) (bool, error) {
-			return false, errors.New("boom")
-		}))
+		c.SubscribeCommand(testCommand("bla"),
+			text.FuncCommandHandler(func(ctx context.Context, cmd textapi.Command) (bool, error) {
+				return false, errors.New("boom")
+			}))
 
 		cmd := textapi.Command{
 			Resource: NewTestHandler(),
@@ -813,12 +816,13 @@ func TestCompleteCommand(t *testing.T) {
 	t.Run("calls command handler Complete", func(t *testing.T) {
 		c, _ := newTestComponent(t, NopEditor())
 
-		c.SubscribeCommand("edit", text.FuncCommandCompleter(func(ctx context.Context, cmd textapi.Command) (bool, error) {
-			return false, nil
-		}, func(ctx context.Context, args []string) (iterator.Iterator[string], string, error) {
-			assert.Equal(t, []string{"letter", "number"}, args)
-			return iterator.FromSlice([]string{"one", "two"}), "2", nil
-		}))
+		c.SubscribeCommand(testCommand("edit"),
+			text.FuncCommandCompleter(func(ctx context.Context, cmd textapi.Command) (bool, error) {
+				return false, nil
+			}, func(ctx context.Context, args []string) (iterator.Iterator[string], string, error) {
+				assert.Equal(t, []string{"letter", "number"}, args)
+				return iterator.FromSlice([]string{"one", "two"}), "2", nil
+			}))
 
 		it, newLastArg, err := c.CompleteCommand(context.Background(), "edit", "letter", "number")
 		require.NoError(t, err)
@@ -869,9 +873,10 @@ func TestComponentCommands(t *testing.T) {
 
 	t.Run("returns registered commands", func(t *testing.T) {
 		c, _ := newTestComponent(t, NopEditor())
-		c.SubscribeCommand("myCmd", text.FuncCommandHandler(func(context.Context, textapi.Command) (bool, error) {
-			return true, nil
-		}))
+		c.SubscribeCommand(testCommand("myCmd"),
+			text.FuncCommandHandler(func(context.Context, textapi.Command) (bool, error) {
+				return true, nil
+			}))
 		cmds := c.Commands()
 		require.Len(t, cmds, 1)
 		assert.Equal(t, "myCmd", cmds[0])
@@ -908,13 +913,14 @@ func testRegister(t *testing.T,
 
 		var called int
 		var wg sync.WaitGroup
-		sut.SubscribeCommand(myCmd, text.FuncCommandHandler(func(ctx context.Context, cmd textapi.Command) (bool, error) {
-			defer wg.Done()
-			assert.Equal(t, myCmd, cmd.Name)
-			assert.Equal(t, myArgs, cmd.Args)
-			called++
-			return true, nil
-		}))
+		sut.SubscribeCommand(testCommand(myCmd),
+			text.FuncCommandHandler(func(ctx context.Context, cmd textapi.Command) (bool, error) {
+				defer wg.Done()
+				assert.Equal(t, myCmd, cmd.Name)
+				assert.Equal(t, myArgs, cmd.Args)
+				called++
+				return true, nil
+			}))
 
 		wg.Add(1)
 		mu.Lock()
@@ -956,10 +962,11 @@ func TestUnregisterCommand(t *testing.T) {
 	require.NoError(t, err)
 
 	var called int
-	c.SubscribeCommand(myCmd, text.FuncCommandHandler(func(ctx context.Context, cmd textapi.Command) (bool, error) {
-		called++
-		return false, nil
-	}))
+	c.SubscribeCommand(testCommand(myCmd),
+		text.FuncCommandHandler(func(ctx context.Context, cmd textapi.Command) (bool, error) {
+			called++
+			return false, nil
+		}))
 
 	cmd := textapi.Command{
 		Resource: h1,
@@ -1094,4 +1101,10 @@ func TestFlush(t *testing.T) {
 
 		require.Equal(t, textapi.ErrInvalidSave, c.Flush(win))
 	})
+}
+
+func testCommand(cmd string) textapi.CommandManual {
+	return textapi.CommandManual{
+		Name: cmd,
+	}
 }

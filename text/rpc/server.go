@@ -33,7 +33,7 @@ type Server struct {
 
 	// subscriptions, just to unsubscribe upon close
 	eventSub []text.EventHandler
-	cmdSub   []string
+	cmdSub   []textapi.CommandManual
 }
 
 // NewServer allocates storage for a new Server and initializes it.
@@ -165,15 +165,15 @@ func (s *Server) Register(ctx context.Context, in *RegisterCommandRequest) (
 		return nil, err
 	}
 
-	cmd := in.GetCommand()
+	man := makeStdMan(in.GetCommand())
 
 	s.editor.Lock()
-	err = s.editor.SubscribeCommand(cmd, commander)
+	err = s.editor.SubscribeCommand(man, commander)
 	if err != nil {
 		s.editor.Unlock()
 		return nil, err
 	}
-	s.cmdSub = append(s.cmdSub, cmd)
+	s.cmdSub = append(s.cmdSub, man)
 	s.editor.Unlock()
 
 	return new(RegisterCommandResponse), nil
@@ -383,7 +383,7 @@ func (s *Server) Close() (err error) {
 	// by this server. Some of these might already been unsubscribed,
 	// so this completes the cleanup for the ones that haven't.
 	for _, sub := range s.cmdSub {
-		_ = s.editor.UnsubscribeCommand(sub)
+		_ = s.editor.UnsubscribeCommand(sub.Name)
 	}
 	for _, sub := range s.eventSub {
 		_, _ = s.editor.UnsubscribeEvents(sub)
@@ -402,4 +402,17 @@ func (s *Server) getHandler(call string, uri *URI) (text.Handler, bool) {
 		"(%p editor.Server): %s: get handler with uri %s: %p %v",
 		s, call, uri, h, err)
 	return h, err == nil
+}
+
+func makeStdMan(rpcMan *CommandManual) textapi.CommandManual {
+	var cmds []textapi.CommandManual
+	for _, cmd := range rpcMan.GetCommands() {
+		cmds = append(cmds, makeStdMan(cmd))
+	}
+	return textapi.CommandManual{
+		Name:     rpcMan.GetName(),
+		Summary:  rpcMan.GetSummary(),
+		Synopsis: rpcMan.GetSynopsis(),
+		Commands: cmds,
+	}
 }
