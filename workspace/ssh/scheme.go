@@ -276,6 +276,8 @@ func (s *scheme) connectScheme(
 		grpc.WithStatsHandler(nil),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithContextDialer(func(_ context.Context, addr string) (net.Conn, error) {
+			// FIXME std conn is not goroutine-safe. Close causes *hook=nil to race
+			// with a second Close *hook.
 			return newStdConn(
 				log.StandardLogger(), stdoutRead, stdinWrite, false, /* stdio */
 				func() {
