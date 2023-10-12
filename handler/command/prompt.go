@@ -6,19 +6,22 @@ import (
 	"math"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/ernestrc/blue/document"
 	"github.com/ernestrc/blue/iterator"
 	"github.com/ernestrc/blue/logging"
 	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui"
-	"unstable.build/go-tui/text"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
+	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/handler/search"
 	"unstable.build/go-tui/term"
+	"unstable.build/go-tui/text"
 )
 
+// TODO take in manual provider and run --help or man for ! commands
 // NewPrompt allocates storage for a new Prompt and initializes it.
 func NewPrompt(
 	storage document.Service, completer Completer,
@@ -61,8 +64,15 @@ type Prompt struct {
 	sync      bool
 	mu        sync.Mutex
 	animation component.Virtual
-	cancelFn  func()
-	cancelCtx context.Context
+
+	shownWidth         int
+	manualComponent    component.Responsive
+	showManual         bool
+	resetManualTimeout chan struct{}
+	ctx                context.Context
+	cancelCtx          func()
+	completionCtx      context.Context // children of ctx
+	completionCancel   func()
 }
 
 type commandPromptMode uint
@@ -72,8 +82,13 @@ const (
 	// modeCommandPromptArgs1
 	// modeCommandPromptArgs2
 	// ...
+)
 
-	animationWidth = 3
+const (
+	animationWidth          = 3
+	defaultSeparatorHeight  = 1
+	minWidthManualComponent = 100
+	minListHeight           = 3
 )
 
 // Init initializes this handler with the given storage, completer,
@@ -105,6 +120,8 @@ func (h *Prompt) doInit(
 	h.completer = completer
 	h.interrupter = interrupter
 	h.animation.C = newNopAnimation(config)
+	h.ctx, h.cancelCtx = context.WithCancel(context.Background())
+	h.resetManualTimeout = make(chan struct{})
 
 	h.buf.Init()
 	h.responsive = component.Buffer(&h.buf,
@@ -128,13 +145,13 @@ func (h *Prompt) doInit(
 	}
 
 	// add a canceled cancelCtx so Wait never needs to check if cancelFn is nil
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(h.ctx)
 	cancel()
-
-	h.cancelCtx = ctx
-	h.cancelFn = func() {}
+	h.completionCtx = ctx
+	h.completionCancel = func() {}
 
 	h.Reset(commands)
+	h.startManualTimer()
 }
 
 func (h *Prompt) getCommandOverlayHeight(width int) int {
@@ -153,11 +170,52 @@ func (h *Prompt) getCommandOverlayHeight(width int) int {
 func (h *Prompt) Resize(width, height int) {
 	h.width = width
 	h.height = height
-	h.list.Resize(width, height)
+	if !h.showManual || h.manualComponent == nil {
+		h.list.Resize(width, height)
+		return
+	}
+	_, _, listHeight := h.calculateSplitHeights(width, height)
+	h.list.Resize(width, listHeight)
+}
+
+func (h *Prompt) calculateSplitHeights(width, height int) (int, int, int) {
+	separatorHeight := h.getSeparatorHeight()
+	manHeight := h.manualComponent.Height(width)
+	listHeight := height - manHeight - separatorHeight
+	if manHeight < 0 || listHeight < minListHeight {
+		return 0, 0, height
+	}
+	return manHeight, separatorHeight, listHeight
 }
 
 // Draw satisfies tui.Handler
 func (h *Prompt) Draw(w term.Writer) {
+	if h.showManual && h.manualComponent != nil {
+		manHeight, separatorHeight, listHeight := h.calculateSplitHeights(h.width, h.height)
+		if separatorHeight != 0 {
+			separatorOffset := term.Coordinates{Y: listHeight}
+			separatorWriter := component.VirtualWriter(w, separatorOffset, separatorHeight, h.width)
+			comp := component.TestComponent{
+				Ch:         h.config.FrameCharSet.HorizontalBottom,
+				Attributes: h.config.FrameAttr,
+			}
+			separator := handler.Nop(&comp)
+			separator.Resize(h.width, separatorHeight)
+			separator.Draw(separatorWriter)
+		}
+
+		if manHeight != 0 {
+			manOffset := term.Coordinates{Y: listHeight + separatorHeight}
+			manWriter := component.VirtualWriter(w, manOffset, manHeight, h.width)
+			h.manualComponent.Resize(h.width, manHeight)
+			h.manualComponent.Draw(manWriter)
+		}
+	}
+
+	h.drawPrompt(w)
+}
+
+func (h *Prompt) drawPrompt(w term.Writer) {
 	// resize on every draw because search.List uses a responsive
 	// input so local buffer changes must consider potential resize
 	// of search.List
@@ -201,7 +259,7 @@ func (h *Prompt) handleLastCommand() {
 	}
 	h.reset()
 	for _, ch := range cmd {
-		h.Handle(term.Event{Type: term.EventKey, Ch: ch})
+		h.handle(term.Event{Type: term.EventKey, Ch: ch})
 	}
 	h.log(log.TraceLevel, "done pushing history events")
 }
@@ -265,6 +323,23 @@ func (h *Prompt) dispatchCommand() (
 
 // Handle satisfies tui.Handler
 func (h *Prompt) Handle(ev term.Event) (quit, handled bool) {
+	quit, handled = h.handle(ev)
+	if handled && !quit {
+		select {
+		// reset manual display timeout
+		case h.resetManualTimeout <- struct{}{}:
+		default:
+		}
+	}
+	if handled {
+		h.mu.Lock()
+		h.manualComponent = h.buildManualComponent()
+		h.mu.Unlock()
+	}
+	return
+}
+
+func (h *Prompt) handle(ev term.Event) (quit, handled bool) {
 	switch h.mode {
 	case modeCommandPromptCommand:
 		return h.handleCommand(ev)
@@ -468,16 +543,15 @@ func (h *Prompt) setCompletionList(
 ) {
 	h.log(log.TraceLevel, "setCompletionList: %s %#v", cmd, args)
 
-	ctx := context.Background()
-	ctx, cancel := context.WithCancel(ctx)
+	ctx, cancel := context.WithCancel(h.ctx)
 
 	// cancel prev if there's any
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
 	h.cancelCompletionPush("re set completion list")
-	h.cancelFn = cancel
-	h.cancelCtx = ctx
+	h.completionCancel = cancel
+	h.completionCtx = ctx
 	h.setUserScrolling(false)
 
 	// if user added any extra spaces, do not pass to completer
@@ -500,6 +574,11 @@ func (h *Prompt) setCompletionList(
 		} else {
 			h.list.Buffer().Replace(newLastArg)
 		}
+	}
+
+	it, isEmpty := iterator.IsEmpty(it)
+	if isEmpty {
+		it = h.manualCompleter(ctx, cmdAndArgs[0], cmdAndArgs[1:]...)
 	}
 
 	if h.sync {
@@ -570,7 +649,8 @@ func (h *Prompt) commandArgsHistoryIterator(cmdAndArgs []string) (iterator.Itera
 		}
 		return false
 	})
-	return iterator.IsEmpty(uniqueArgs)
+	it, isEmpty := iterator.IsEmpty(uniqueArgs)
+	return it, !isEmpty
 }
 
 func (h *Prompt) pushCompletionList(
@@ -644,7 +724,7 @@ func (h *Prompt) Reset(commands []text.CommandManual) {
 // assumes holding lock
 func (h *Prompt) cancelCompletionPush(reason string) {
 	h.log(log.DebugLevel, "completion push to search list: %s", reason)
-	h.cancelFn()
+	h.completionCancel()
 	h.list.Cancel()
 }
 
@@ -698,10 +778,10 @@ func (h *Prompt) Man() tui.Manual {
 // or search to finish before it returns.
 func (h *Prompt) Wait() {
 	h.mu.Lock()
-	cancelCtx := h.cancelCtx
+	completionCtx := h.completionCtx
 	h.mu.Unlock()
 
-	<-cancelCtx.Done()
+	<-completionCtx.Done()
 	h.list.Wait()
 }
 
@@ -718,14 +798,21 @@ func (h *Prompt) Cancel() {
 func (h *Prompt) Dimensions() (width, height int) {
 	const (
 		matchPadding = 1
-		minWidth     = 50
 		maxWidth     = 100
-		minHeight    = 3
-		maxHeight    = 40
+		maxHeight    = 20
 	)
 
 	h.mu.Lock()
 	defer h.mu.Unlock()
+
+	minWidth := 50
+	if h.showManual && h.manualComponent != nil {
+		minWidth = minWidthManualComponent
+	}
+	// always set min width if show manual was triggered
+	// so user doesn't get confused if width goes back and forth
+	// as its tipying.
+	minWidth = int(math.Max(float64(minWidth), float64(h.shownWidth)))
 
 	maxWidthItems := minWidth
 	h.list.IterateVisible(func(m search.Match) {
@@ -737,12 +824,20 @@ func (h *Prompt) Dimensions() (width, height int) {
 	width = int(math.Min(float64(width), maxWidth))
 
 	bufHeight := h.getCommandOverlayHeight(width)
-	height = int(math.Min(math.Max(float64(h.list.MatchCount()+bufHeight), minHeight), maxHeight))
+	height = int(math.Min(math.Max(float64(h.list.MatchCount()+bufHeight), minListHeight), maxHeight))
+
+	if h.showManual && h.manualComponent != nil {
+		height += h.manualComponent.Height(width)
+		height += h.getSeparatorHeight()
+	}
+	h.shownWidth = width
 	return
 }
 
 // Close closes all resources associated with this Prompt.
 func (h *Prompt) Close() error {
+	defer h.cancelCtx()
+
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
@@ -758,6 +853,202 @@ func (h *Prompt) setUserScrolling(scrolling bool) {
 		h.list.SetFocusAttr(h.config.ElementAttr)
 	}
 
+}
+
+func (h *Prompt) startManualTimer() {
+	if h.config.ShowManualAfter == 0 {
+		h.manualComponent = h.buildManualComponent()
+		h.showManual = true
+		return
+	}
+
+	timer := time.NewTimer(h.config.ShowManualAfter)
+	h.log(log.DebugLevel, "showing manual for commands after %s",
+		h.config.ShowManualAfter)
+
+	go func() {
+		defer timer.Stop()
+		for {
+			select {
+			case <-h.resetManualTimeout:
+				if !timer.Stop() {
+					<-timer.C
+				}
+				timer.Reset(h.config.ShowManualAfter)
+				h.log(log.TraceLevel, "reseting timeout for showing manual")
+			case <-timer.C:
+				h.log(log.DebugLevel, "showing manual for commands")
+				h.mu.Lock()
+				h.manualComponent = h.buildManualComponent()
+				h.showManual = true
+				h.mu.Unlock()
+				h.interrupter.Interrupt()
+				return
+			case <-h.ctx.Done():
+				return
+			}
+		}
+	}()
+}
+
+func (h *Prompt) makeManualComponent(man text.CommandManual) component.Responsive {
+	// TODO should use go's templates
+	var builder strings.Builder
+	writeTemplate(&builder, man)
+	/*
+	if len(man.AliasOf) != 0 {
+		builder.WriteString(fmt.Sprintf(aliasTemplate, man.Name))
+		if len(man.AliasOf) == 1 {
+			builder.WriteString("Alias of ")
+			builder.WriteString(man.AliasOf[0])
+			builder.WriteString("\n")
+		} else {
+			builder.WriteString("Alias of the following sequence of commands: \n\n")
+			for _, cmd := range man.AliasOf {
+				builder.WriteString("- ")
+				builder.WriteString(cmd)
+				builder.WriteString("\n")
+			}
+		}
+	} else {
+		builder.WriteString(fmt.Sprintf(manTemplate, man.Name+" "+man.Synopsis, man.Summary))
+		if len(man.Commands) != 0 {
+			builder.WriteString("\n\nSUB-COMMANDS\n")
+			for _, cmd := range man.Commands {
+				builder.WriteString("- ")
+				builder.WriteString(cmd.Name)
+				builder.WriteString("\n")
+			}
+		}
+	}*/
+
+	minWidth := minWidthManualComponent
+	if h.config.FrameCharSet != (component.FrameCharSet{}) {
+		minWidth -= 2
+	}
+
+	str := builder.String()
+	ret := component.StringResponsive(str, component.StringResponsiveConfig{
+		NoSplitWords: true,
+		StringConfig: component.StringConfig{
+			Alignment:         component.SpanAlignmentCentered,
+			Attributes:        h.config.ElementAttr,
+			PaddingVertical:   2,
+			PaddingHorizontal: 2,
+			MinWidth:          minWidth,
+		},
+	})
+	return ret
+}
+
+func (h *Prompt) buildManualComponent() component.Responsive {
+	var man text.CommandManual
+	var ok bool
+	cmdAndArgs := strings.Split(strings.TrimSpace(h.buf.String()), " ")
+
+	if len(cmdAndArgs) < 2 {
+		// if input is something like "ed" or "" then
+		// find the manual of the top match of the search list
+		h.log(log.TraceLevel, "Length in words of input buffer is 0-1, "+
+			"using top of the search list as desired command.")
+		man, ok = h.getManualFromFocus()
+	} else if len(cmdAndArgs) == 2 && h.mode < 2 {
+		// if input is something like "edit " or "edit myFi" then
+		// find the manual of the first word in the input buffer
+		cmd := cmdAndArgs[0]
+		man, ok = h.getManualForCommand(cmd)
+	} else {
+		// if input is something like "edit myFile my" or "edit myFile myFile ..."
+		// find the manual of the first word in the input buffer, then try to find
+		// the manual of the last completed subcommand.
+		h.log(log.TraceLevel, "Length in words of input buffer is >1, "+
+			"using buffer to get man for command or sub-command.")
+		cmd := cmdAndArgs[0]
+		man, ok = h.getManualForCommand(cmd)
+		if !ok {
+			h.log(log.TraceLevel, "could not find manual for first word in input buffer %q", cmd)
+			return nil
+		}
+		// use mode to know if user has already completed
+		// last arg or not.
+		args := cmdAndArgs[1:]
+		if int(h.mode) < len(cmdAndArgs) {
+			// trim last argument, since it hasn't been completed yet
+			args = args[:len(args)-1]
+		}
+		subcmd, foundSubcommand := getSubcommandManual(man, args)
+		if foundSubcommand {
+			man = subcmd
+		} // else display parent command's manual
+	}
+
+	if ok {
+		return h.makeManualComponent(man)
+	}
+	return nil
+}
+
+func (h *Prompt) getManualFromFocus() (man text.CommandManual, ok bool) {
+	h.list.Wait()
+	m, ok := h.list.Focus()
+	if !ok {
+		h.log(log.TraceLevel, "could not get search list focus")
+		return
+	}
+	cmd := m.Data()
+	man, ok = h.getManualForCommand(string(cmd))
+	if !ok {
+		h.log(log.TraceLevel, "could not find manual for top of search list command %q", cmd)
+	}
+	return
+}
+
+func (h *Prompt) getManualForCommand(cmd string) (text.CommandManual, bool) {
+	for _, man := range h.commandsBackup {
+		if man.Name == cmd {
+			return man, true
+		}
+	}
+	return text.CommandManual{}, false
+}
+func (h *Prompt) manualCompleter(
+	ctx context.Context, cmd string, args ...string,
+) iterator.Iterator[string] {
+	man, ok := h.getManualForCommand(cmd)
+	if !ok || cmd == "" {
+		return iterator.FromSlice[string](nil)
+	}
+
+	args = strings.Split(strings.TrimSpace(strings.Join(args, " ")), " ")
+	// return iterator with submcommands,
+	// if first command hasn't been fully typed yet
+	if len(args) == 0 || (len(args) == 1 && h.mode < 2) {
+		return iterator.Map(iterator.FromSlice(man.Commands), manualToName)
+	}
+
+	// use mode to know if user has already completed
+	// last arg or not.
+	cmdAndArgsLen := len(args) + 1
+	if int(h.mode) < cmdAndArgsLen {
+		// trim last argument, since it hasn't been completed yet
+		args = args[:len(args)-1]
+	}
+
+	// if we find the last argument's subcommand manual,
+	// then use that as the completion args, otherwise just
+	// do not return any completion args.
+	lastArg := args[len(args)-1]
+	if man, ok := getSubcommandManual(man, args); ok && man.Name == lastArg {
+		return iterator.Map(iterator.FromSlice(man.Commands), manualToName)
+	}
+	return iterator.FromSlice[string](nil)
+}
+
+func (h *Prompt) getSeparatorHeight() int {
+	if h.config.FrameCharSet == (component.FrameCharSet{}) {
+		return 0
+	}
+	return defaultSeparatorHeight
 }
 
 func newNopAnimation(cfg Config) tui.Component {

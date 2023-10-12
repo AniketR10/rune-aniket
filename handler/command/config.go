@@ -1,6 +1,11 @@
 package command
 
-import "unstable.build/go-tui/term"
+import (
+	"time"
+
+	"unstable.build/go-tui/component"
+	"unstable.build/go-tui/term"
+)
 
 // Config represents the configuration needed to initialize a Handler.
 type Config struct {
@@ -12,6 +17,15 @@ type Config struct {
 	// DocumentID is the key used to store data in the underlying document.Service.
 	DocumentID string
 	MaxHistory int
+
+	// ShowManualAfter configures how long to sit idle until
+	// command manual is displayed.
+	ShowManualAfter time.Duration
+
+	// FrameCharSet is used to determine if a frame is to be used to separate manual from search list.
+	FrameCharSet component.FrameCharSet
+	// FrameAttr if a frame is to be used to separate manual from search list.
+	FrameAttr term.Attributes
 }
 
 // DefaultConfig returns a sane configuration for initializing a Handler.
@@ -23,5 +37,6 @@ func DefaultConfig() Config {
 		FocusElementAttr: term.Attributes{Fg: term.AttrBold | term.AttrUnderline | term.ColorRed},
 		ElementAttr:      term.Attributes{},
 		DocumentID:       "command-history",
+		ShowManualAfter:  1 * time.Second,
 	}
 }

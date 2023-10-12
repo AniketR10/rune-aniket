@@ -573,7 +573,9 @@ func TestBrowserHandlerInterrupts(t *testing.T) {
 				wg.Done()
 				return nil
 			}),
-		)}
+		),
+			text.WithCommandOverlayConfig(testCommandOverlayConfig()),
+		}
 		browser := newExForTesting(t, texttest.NopEditor(), opts...)
 		defer browser.Close()
 
@@ -584,7 +586,9 @@ func TestBrowserHandlerInterrupts(t *testing.T) {
 	})
 	t.Run("SendEventNone calls interrupt handle", func(t *testing.T) {
 		var wg sync.WaitGroup
-		opts := []text.Option{text.WithSendNone(wg.Done)}
+		opts := []text.Option{text.WithSendNone(wg.Done),
+			text.WithCommandOverlayConfig(testCommandOverlayConfig()),
+		}
 		browser := newExForTesting(t, texttest.NopEditor(), opts...)
 		defer browser.Close()
 
@@ -651,6 +655,7 @@ func TestMultipleFilesStartup(t *testing.T) {
 		text.WithFile(file1),
 		text.WithFile(file2),
 		text.WithCommandKey(testCommandKey),
+		text.WithCommandOverlayConfig(testCommandOverlayConfig()),
 	}
 	mockBuf := testFileBuffer{}
 	workspace := testLoader{buf: &mockBuf}
@@ -706,7 +711,7 @@ eeeeeeeeeeeee▐
 			text.WithCommandKey(testCommandKey),
 			text.WithWindowManagerConfig(handler.WindowManagerConfig{
 				WindowManagerConfig: component.WindowManagerConfig{Frame: false}}),
-			text.WithCommandOverlayConfig(text.CommandOverlayConfig{}),
+			text.WithCommandOverlayConfig(testCommandOverlayConfig()),
 		}
 		b := newExForTesting(t, texttest.NopEditor(), opts...)
 		closeFns = append(closeFns, b.Close)
@@ -799,6 +804,7 @@ func TestExKeySequence(t *testing.T) {
 				Last:  term.KeyComb{Ch: 'g'},
 			}, []string{"tabCloseAll"}),
 			text.WithSequencerTimeout(1 * time.Second),
+			text.WithCommandOverlayConfig(testCommandOverlayConfig()),
 		}
 		ex := new(ex)
 		require.NoError(t, ex.init(texttest.NopEditor(), &testLoader{}, document.NewInMemoryService(),
@@ -857,6 +863,7 @@ func TestExTabIntegration(t *testing.T) {
 	fn := func(t *testing.T) tui.Handler {
 		opts := []text.Option{
 			text.WithCommandKey(testCommandKey),
+			text.WithCommandOverlayConfig(testCommandOverlayConfig()),
 		}
 		b := newExForTesting(t, texttest.NopEditor(), opts...)
 		uri1, err := workspaceapi.ParseURI("file:///Fieshta")
@@ -891,6 +898,7 @@ func TestExExit(t *testing.T) {
 		t.Run(fmt.Sprintf("ex exits %s command is issued", cmd), func(t *testing.T) {
 			b := newExForTesting(t, texttest.NopEditor(),
 				text.WithCommandKey(testCommandKey),
+				text.WithCommandOverlayConfig(testCommandOverlayConfig()),
 			)
 			defer b.Close()
 
@@ -920,7 +928,9 @@ func TestExExit(t *testing.T) {
 	}
 
 	t.Run("ex does not exit when inner handler returns exit=true", func(t *testing.T) {
-		b := newExForTesting(t, texttest.NopEditor())
+		b := newExForTesting(t, texttest.NopEditor(),
+			text.WithCommandOverlayConfig(testCommandOverlayConfig()),
+		)
 		defer b.Close()
 
 		h := browsertest.NewTestHandler()
@@ -964,6 +974,8 @@ func newExForTestingWithWorkspace(
 	opts ...text.Option,
 ) testEx {
 	ex := new(ex)
+	// ensure show manual is never triggered
+	opts = append(opts, text.WithCommandOverlayConfig(testCommandOverlayConfig()))
 	require.NoError(t, ex.init(ed, workspace, document.NewInMemoryService(),
 		emulatorCfg, publishEvent, opts...))
 	ex.subscribeCommands()
@@ -1087,6 +1099,7 @@ func TestCommandAliases(t *testing.T) {
 	}
 
 	opts := []text.Option{
+		text.WithCommandOverlayConfig(testCommandOverlayConfig()),
 		text.WithCommandKey(testCommandKey),
 		text.WithCommandAliases(map[string][]string{
 			"todo": {"edit hello.go", "edit wi.go"},
@@ -1153,6 +1166,7 @@ func TestEphemeralTerminal(t *testing.T) {
 
 	opts := []text.Option{
 		text.WithCommandKey(testCommandKey),
+		text.WithCommandOverlayConfig(testCommandOverlayConfig()),
 	}
 
 	tempDir, err := ioutil.TempDir("", "")
@@ -1242,6 +1256,7 @@ func TestCompanionTerminal(t *testing.T) {
 		text.WithCommandKeyBinding(term.KeyComb{Key: term.KeyCtrlH}, []string{"closeWindow"}),
 		text.WithCommandKeyBinding(term.KeyComb{Key: term.KeyCtrlL}, []string{"tabNext"}),
 		text.WithCommandKeyBinding(term.KeyComb{Key: term.KeyCtrlV}, []string{"tabClose"}),
+		text.WithCommandOverlayConfig(testCommandOverlayConfig()),
 	}
 
 	tempDir, err := ioutil.TempDir("", "")
@@ -1293,6 +1308,7 @@ AAAAAAAAAAAAAAAAAAAA`,
 
 	opts := []text.Option{
 		text.WithCommandKey(testCommandKey),
+		text.WithCommandOverlayConfig(testCommandOverlayConfig()),
 	}
 
 	tempDir, err := ioutil.TempDir("", "")
@@ -1317,6 +1333,7 @@ func TestExposedRootNodeIssue(t *testing.T) {
 	notifications.ProgressBar = false // deterministic tests
 	notifications.Width = 20
 	opts := []text.Option{
+		text.WithCommandOverlayConfig(testCommandOverlayConfig()),
 		text.WithCommandKey(testCommandKey),
 		text.WithNotificationsConfig(notifications),
 		text.WithCommandAliases(map[string][]string{
@@ -1448,7 +1465,7 @@ reloadFile
 			text.WithCommandKey(testCommandKey),
 			text.WithWindowManagerConfig(handler.WindowManagerConfig{
 				WindowManagerConfig: component.WindowManagerConfig{Frame: false}}),
-			text.WithCommandOverlayConfig(text.CommandOverlayConfig{}),
+			text.WithCommandOverlayConfig(testCommandOverlayConfig()),
 		}
 		uri, err := workspaceapi.ParseURI("memory:///")
 		require.NoError(t, err)
@@ -1476,4 +1493,10 @@ func touchTestFile(t *testing.T, scheme schemeapi.Scheme, name string) {
 	f, werr := scheme.Open(name, os.O_CREATE, 0666)
 	require.Nil(t, werr)
 	require.NoError(t, f.Sync())
+}
+
+func testCommandOverlayConfig() text.CommandOverlayConfig {
+	return text.CommandOverlayConfig{
+		ShowManualAfter: 1 * time.Hour,
+	}
 }

@@ -11,14 +11,138 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
 	testutil "unstable.build/go-tui/util/test"
 )
 
+func TestCommandHandlerManualsDrawTooSmallForManual(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.ShowManualAfter = 0
+	cfg.HistoryKey = term.KeyComb{Ch: '@'}
+	cfg.FrameCharSet = component.FrameCharSetDefault()
+
+	tsuite := []struct {
+		desc         string
+		sequence     string
+		commands     []text.CommandManual
+		expectedDraw string
+	}{
+		{"initializes no commands empty", "", nil, `
+▐                   
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    `},
+		{"initializes no commands empty search yields 0", "a", nil, `
+a▐                  
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    `},
+		{"initializes with some commands", "", goodTestCommands,
+			`
+▐                   
+subaru              
+jeep                
+mercedes            
+gladiator           
+current             
+                    
+                    
+                    
+                    `},
+		{"initializes with some commands search match", "e", goodTestCommands,
+			`
+e▐                  
+jeep                
+mercedes            
+current             
+                    
+                    
+                    
+                    
+                    
+                    `},
+		{"initializes with lots of commands", "", goodLotsTestCommands,
+			`
+▐                   
+0                   
+1                   
+2                   
+3                   
+4                   
+5                   
+6                   
+7                   
+8                   `},
+		{"draw command NOT in list with no args",
+			"1", nil, `
+1▐                  
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    `},
+		{"draw fully typed command with args with auto-complete with expanded last arg and delete in the middle",
+			"merce ~^^^^^^^^^erce my", goodTestCommands, `
+mercedes my▐        
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    `},
+	}
+
+	log.SetLevel(log.InfoLevel)
+	for _, tcase := range tsuite {
+		tcase := tcase
+		t.Run(tcase.desc, func(t *testing.T) {
+			t.Parallel()
+			dispatchFn, cleanup := nopDispatch()
+			defer cleanup(t)
+
+			completeFn, cleanupComplete := nopComplete()
+			defer cleanupComplete(t)
+
+			storage := document.NewInMemoryService()
+			b := NewPrompt(
+				storage, FuncCompleter(completeFn), FuncDispatcher(dispatchFn),
+				term.NopInterrupter(), tcase.commands, cfg,
+			)
+			b.sync = true
+			defer b.Close()
+			cases := []testutil.HandlerSequenceTestCase{
+				{InputSequence: "_" + tcase.sequence + "_", Expected: tcase.expectedDraw[1:]},
+			}
+			testutil.TestHandlerSequence(t, testCommandHandler{b}, 20, 10, cases)
+		})
+	}
+}
+
 func TestCommandHandlerDispatch(t *testing.T) {
 	storage := document.NewInMemoryService()
 	cfg := DefaultConfig()
+	cfg.ShowManualAfter = 1 * time.Hour
 	cfg.HistoryKey = term.KeyComb{Ch: '@'}
 
 	tsuite := []struct {
@@ -143,6 +267,7 @@ func TestCommandHandlerDispatch(t *testing.T) {
 
 func TestCommandHandlerDraw(t *testing.T) {
 	cfg := DefaultConfig()
+	cfg.ShowManualAfter = 1 * time.Hour
 	cfg.HistoryKey = term.KeyComb{Ch: '@'}
 
 	tsuite := []struct {

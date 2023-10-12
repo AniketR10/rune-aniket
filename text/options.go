@@ -17,6 +17,7 @@ type CommandOverlayConfig struct {
 	MatchedTextAttr  term.Attributes
 	FocusElementAttr term.Attributes
 	ElementAttr      term.Attributes
+	ShowManualAfter  time.Duration
 }
 
 // Config holds configuration for an editor.Component.
@@ -45,6 +46,7 @@ func DefaultCommandOverlayConfig() (cfg CommandOverlayConfig) {
 	cfg.MatchedTextAttr = term.Attributes{Fg: term.ColorRed}
 	cfg.FocusElementAttr = term.Attributes{Fg: term.AttrBold | term.AttrUnderline | term.ColorRed}
 	cfg.ElementAttr = term.Attributes{}
+	cfg.ShowManualAfter = 1 * time.Second
 	return
 }
 

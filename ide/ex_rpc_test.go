@@ -88,6 +88,7 @@ func newTestRPCBrowser(t *testing.T,
 	return func(ed text.Editor, opts ...text.Option) (
 		tui.Handler, browser.Browser, error,
 	) {
+		opts = append(opts, text.WithCommandOverlayConfig(testCommandOverlayConfig()))
 		ex := new(ex)
 		err := ex.init(ed, &testLoader{}, document.NewInMemoryService(),
 			emulator.Config{}, nopPublishEvent, opts...)

@@ -883,6 +883,9 @@ func (e *ex) openCommandPrompt() {
 	commandCfg.FocusElementAttr = e.config.CommandOverlay.FocusElementAttr
 	commandCfg.ElementAttr = e.config.CommandOverlay.ElementAttr
 	commandCfg.DocumentID = commandHistoryDocumentID
+	commandCfg.FrameCharSet = e.config.FrameCharSet
+	commandCfg.FrameAttr = e.config.FrameAttr
+	commandCfg.ShowManualAfter = e.config.CommandOverlay.ShowManualAfter
 	cmd := command.NewPrompt(e.storage, e, e, e, []text.CommandManual{}, commandCfg)
 
 	var commandHandler browser.Floating = cmd
@@ -899,7 +902,7 @@ func (e *ex) openCommandPrompt() {
 
 	e.cmdWin = e.cmdBrowser.Floating(commandHandler,
 		component.FloatingConfig{
-			Offset:    term.Coordinates{Y: e.height / 4},
+			Offset:    term.Coordinates{Y: int(float64(e.height) * 0.2)},
 			Alignment: component.SpanAlignmentHorizontallyCentered,
 		})
 	e.cmd = cmd
@@ -1012,6 +1015,11 @@ func (e *ex) Close() (ret error) {
 	if e.companionTerminal != nil {
 		_ = e.companionTerminal.Close()
 		e.companionTerminal = nil
+	}
+	if e.cmd != nil {
+		if err := e.cmd.Close(); err != nil {
+			ret = multierr.Append(ret, err)
+		}
 	}
 	return
 }

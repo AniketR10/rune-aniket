@@ -12,6 +12,7 @@ import (
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/handler"
+	"unstable.build/go-tui/handler/command"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/term/emulator"
 )
@@ -41,6 +42,7 @@ input_mode:
 output_mode: color_256
 
 command:
+  show_manual_after: 2s
   aliases:
     cherry: bomb
     todo:
@@ -162,6 +164,7 @@ func assertDefaultConfig(t *testing.T, cfg *ideConfig) {
 	assert.Equal(t, browser.DefaultConfig().WallpaperBackgroundAttr, cfg.workspaceWallpaperBackgroundAttr())
 	selectAttr := term.Attributes{Bg: term.AttrReverse, Fg: term.AttrReverse}
 	assert.Equal(t, emulator.Config{SelectionAttributes: selectAttr}, cfg.terminalConfig())
+	assert.Equal(t, command.DefaultConfig().ShowManualAfter, cfg.commandOverlayShowManualAfter())
 }
 
 func TestConfigDefault(t *testing.T) {
@@ -226,6 +229,7 @@ func TestConfigSetting(t *testing.T) {
 		"cherry": {"bomb"},
 	}
 	assert.Equal(t, expectedCommandAliases, cfg.commandAliases())
+	assert.Equal(t, 2*time.Second, cfg.commandOverlayShowManualAfter())
 
 	expectedFUCs := component.FrameUnionCharSet{Left: '┣', Right: '┫', Top: '┫', Bottom: '┫'}
 	assert.Equal(t, expectedFUCs, cfg.frameUnionCharset())

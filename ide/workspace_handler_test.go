@@ -57,6 +57,8 @@ func TestWorkspaceConfig(t *testing.T) {
 func TestWorkspaceExtensions(t *testing.T) {
 	t.Run("calls extension runner with user extensions", func(t *testing.T) {
 		cfg := ideConfig{cfg: map[string]interface{}{
+			"command":           map[string]interface{}{},
+			"show_manual_after": "1h",
 			"extensions": map[string]interface{}{
 				"git": map[string]interface{}{
 					"path": "myPath",
@@ -452,6 +454,8 @@ func newTestWorkspaceManagerHandlerWithManagerAndExtensions(
 ) *testWorkspaceManagerHandler {
 	m := new(testWorkspaceManagerHandler)
 	m.workspaceManagerHandler = new(workspaceManagerHandler)
+	// ensure that command manual is never shown
+	cfg.cfg["command"] = defaultCfg().cfg["command"]
 	err := m.workspaceManagerHandler.init(uri, manager, cfg, "", files,
 		dir, func(term.Event) bool {
 			return true
@@ -504,7 +508,8 @@ func defaultCfg() ideConfig {
 	return ideConfig{cfg: map[string]interface{}{
 		"clipboard": "memory",
 		"command": map[string]interface{}{
-			"key": "<c-\\>", // see testutil.TestHandlerIsolated
+			"show_manual_after": "1h",
+			"key":               "<c-\\>", // see testutil.TestHandlerIsolated
 			"key_bindings": map[string]interface{}{
 				"1": "switchToWorkspace 1",
 				"2": "switchToWorkspace 2",
