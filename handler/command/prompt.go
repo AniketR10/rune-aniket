@@ -6,6 +6,7 @@ import (
 	"math"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/ernestrc/blue/document"
@@ -21,7 +22,6 @@ import (
 	"unstable.build/go-tui/text"
 )
 
-// TODO take in manual provider and run --help or man for ! commands
 // NewPrompt allocates storage for a new Prompt and initializes it.
 func NewPrompt(
 	storage document.Service, completer Completer,
@@ -61,9 +61,10 @@ type Prompt struct {
 	// as a character to be inserted in command input buffer
 	prevCommandCycle bool
 
-	sync      bool
-	mu        sync.Mutex
-	animation component.Virtual
+	inputString atomic.Value
+	sync        bool
+	mu          sync.Mutex
+	animation   component.Virtual
 
 	shownWidth         int
 	manualComponent    component.Responsive
@@ -124,6 +125,7 @@ func (h *Prompt) doInit(
 	h.resetManualTimeout = make(chan struct{})
 
 	h.buf.Init()
+	h.inputString.Store("")
 	h.responsive = component.Buffer(&h.buf,
 		component.StringResponsiveConfig{
 			StringConfig: component.StringConfig{
@@ -332,8 +334,10 @@ func (h *Prompt) Handle(ev term.Event) (quit, handled bool) {
 		}
 	}
 	if handled {
+		bufString := h.buf.String()
+		h.inputString.Store(bufString)
 		h.mu.Lock()
-		h.manualComponent = h.buildManualComponent()
+		h.manualComponent = h.buildManualComponent(bufString)
 		h.mu.Unlock()
 	}
 	return
@@ -857,7 +861,7 @@ func (h *Prompt) setUserScrolling(scrolling bool) {
 
 func (h *Prompt) startManualTimer() {
 	if h.config.ShowManualAfter == 0 {
-		h.manualComponent = h.buildManualComponent()
+		h.manualComponent = h.buildManualComponent(h.buf.String())
 		h.showManual = true
 		return
 	}
@@ -879,7 +883,7 @@ func (h *Prompt) startManualTimer() {
 			case <-timer.C:
 				h.log(log.DebugLevel, "showing manual for commands")
 				h.mu.Lock()
-				h.manualComponent = h.buildManualComponent()
+				h.manualComponent = h.buildManualComponent(h.inputString.Load().(string))
 				h.showManual = true
 				h.mu.Unlock()
 				h.interrupter.Interrupt()
@@ -891,60 +895,10 @@ func (h *Prompt) startManualTimer() {
 	}()
 }
 
-func (h *Prompt) makeManualComponent(man text.CommandManual) component.Responsive {
-	// TODO should use go's templates
-	var builder strings.Builder
-	writeTemplate(&builder, man)
-	/*
-	if len(man.AliasOf) != 0 {
-		builder.WriteString(fmt.Sprintf(aliasTemplate, man.Name))
-		if len(man.AliasOf) == 1 {
-			builder.WriteString("Alias of ")
-			builder.WriteString(man.AliasOf[0])
-			builder.WriteString("\n")
-		} else {
-			builder.WriteString("Alias of the following sequence of commands: \n\n")
-			for _, cmd := range man.AliasOf {
-				builder.WriteString("- ")
-				builder.WriteString(cmd)
-				builder.WriteString("\n")
-			}
-		}
-	} else {
-		builder.WriteString(fmt.Sprintf(manTemplate, man.Name+" "+man.Synopsis, man.Summary))
-		if len(man.Commands) != 0 {
-			builder.WriteString("\n\nSUB-COMMANDS\n")
-			for _, cmd := range man.Commands {
-				builder.WriteString("- ")
-				builder.WriteString(cmd.Name)
-				builder.WriteString("\n")
-			}
-		}
-	}*/
-
-	minWidth := minWidthManualComponent
-	if h.config.FrameCharSet != (component.FrameCharSet{}) {
-		minWidth -= 2
-	}
-
-	str := builder.String()
-	ret := component.StringResponsive(str, component.StringResponsiveConfig{
-		NoSplitWords: true,
-		StringConfig: component.StringConfig{
-			Alignment:         component.SpanAlignmentCentered,
-			Attributes:        h.config.ElementAttr,
-			PaddingVertical:   2,
-			PaddingHorizontal: 2,
-			MinWidth:          minWidth,
-		},
-	})
-	return ret
-}
-
-func (h *Prompt) buildManualComponent() component.Responsive {
+func (h *Prompt) buildManualComponent(bufString string) component.Responsive {
 	var man text.CommandManual
 	var ok bool
-	cmdAndArgs := strings.Split(strings.TrimSpace(h.buf.String()), " ")
+	cmdAndArgs := strings.Split(strings.TrimSpace(bufString), " ")
 
 	if len(cmdAndArgs) < 2 {
 		// if input is something like "ed" or "" then
@@ -983,7 +937,7 @@ func (h *Prompt) buildManualComponent() component.Responsive {
 	}
 
 	if ok {
-		return h.makeManualComponent(man)
+		return makeManualComponent(man, h.config.FrameCharSet, h.config.ElementAttr)
 	}
 	return nil
 }

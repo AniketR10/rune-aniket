@@ -3,9 +3,12 @@ package command
 import (
 	"fmt"
 	"io"
+	"strings"
 	"text/template"
 
 	textapi "unstable.build/go-tui/api/text"
+	"unstable.build/go-tui/component"
+	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
 )
 
@@ -28,6 +31,33 @@ var tmpl *template.Template
 
 func init() {
 	tmpl = template.Must(template.New("test").Parse(manualTemplate))
+}
+
+func makeManualComponent(
+	man text.CommandManual,
+	frameCharSet component.FrameCharSet,
+	attr term.Attributes,
+) component.Responsive {
+	var builder strings.Builder
+	writeTemplate(&builder, man)
+
+	minWidth := minWidthManualComponent
+	if frameCharSet != (component.FrameCharSet{}) {
+		minWidth -= 2
+	}
+
+	str := builder.String()
+	ret := component.StringResponsive(str, component.StringResponsiveConfig{
+		NoSplitWords: true,
+		StringConfig: component.StringConfig{
+			Alignment:         component.SpanAlignmentCentered,
+			Attributes:        attr,
+			PaddingVertical:   2,
+			PaddingHorizontal: 2,
+			MinWidth:          minWidth,
+		},
+	})
+	return ret
 }
 
 func writeTemplate(w io.Writer, m text.CommandManual) error {
