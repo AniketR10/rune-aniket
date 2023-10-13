@@ -261,8 +261,11 @@ func (h *Prompt) handleLastCommand() {
 	}
 	h.reset()
 	for _, ch := range cmd {
-		h.handle(term.Event{Type: term.EventKey, Ch: ch})
+		h.handle(term.Event{Type: term.EventKey, Ch: ch}, true)
 	}
+	h.mu.Lock()
+	h.manualComponent = h.buildManualComponent(h.buf.String())
+	h.mu.Unlock()
 	h.log(log.TraceLevel, "done pushing history events")
 }
 
@@ -325,7 +328,7 @@ func (h *Prompt) dispatchCommand() (
 
 // Handle satisfies tui.Handler
 func (h *Prompt) Handle(ev term.Event) (quit, handled bool) {
-	quit, handled = h.handle(ev)
+	quit, handled = h.handle(ev, h.sync)
 	if handled && !quit {
 		select {
 		// reset manual display timeout
@@ -343,16 +346,16 @@ func (h *Prompt) Handle(ev term.Event) (quit, handled bool) {
 	return
 }
 
-func (h *Prompt) handle(ev term.Event) (quit, handled bool) {
+func (h *Prompt) handle(ev term.Event, sync bool) (quit, handled bool) {
 	switch h.mode {
 	case modeCommandPromptCommand:
-		return h.handleCommand(ev)
+		return h.handleCommand(ev, sync)
 	default:
-		return h.handleCompleteArgs(ev)
+		return h.handleCompleteArgs(ev, sync)
 	}
 }
 
-func (h *Prompt) handleCommon(ev *term.Event) (quit, handled bool) {
+func (h *Prompt) handleCommon(ev *term.Event, sync bool) (quit, handled bool) {
 	key := ev.KeyComb()
 	if (key == h.config.HistoryKey && h.config.HistoryKey.Ch == 0) ||
 		(key == h.config.HistoryKey && h.buf.Columns(0) == 0) ||
@@ -367,7 +370,7 @@ func (h *Prompt) handleCommon(ev *term.Event) (quit, handled bool) {
 	switch ev.Key {
 	case term.KeyEnter:
 		if h.userScrolling {
-			h.incArgsCompleteMode(true)
+			h.incArgsCompleteMode(true, sync)
 		}
 		quit, handled = h.dispatchCommand()
 		h.reset()
@@ -388,7 +391,7 @@ func (h *Prompt) handleCommon(ev *term.Event) (quit, handled bool) {
 	case term.KeyCtrlC:
 		h.cancelCompletionPush("received ctrl-c")
 	case term.KeyTab:
-		h.incArgsCompleteMode(true)
+		h.incArgsCompleteMode(true, sync)
 	case term.KeySpace:
 		ev.Ch = ' '
 		handled = false
@@ -398,8 +401,8 @@ func (h *Prompt) handleCommon(ev *term.Event) (quit, handled bool) {
 	return
 }
 
-func (h *Prompt) handleCommand(ev term.Event) (quit, handled bool) {
-	quit, handled = h.handleCommon(&ev)
+func (h *Prompt) handleCommand(ev term.Event, sync bool) (quit, handled bool) {
+	quit, handled = h.handleCommon(&ev, sync)
 	if handled {
 		return
 	}
@@ -429,15 +432,15 @@ func (h *Prompt) handleCommand(ev term.Event) (quit, handled bool) {
 		// wait as commands are finite and muscle memory could beat
 		// the completing logic
 		h.Wait()
-		h.incArgsCompleteMode(true)
+		h.incArgsCompleteMode(true, sync)
 		return
 	}
 	h.list.Buffer().WriteString(string(ev.Ch))
 	return
 }
 
-func (h *Prompt) handleCompleteArgs(ev term.Event) (quit, handled bool) {
-	quit, handled = h.handleCommon(&ev)
+func (h *Prompt) handleCompleteArgs(ev term.Event, sync bool) (quit, handled bool) {
+	quit, handled = h.handleCommon(&ev, sync)
 	if handled {
 		return
 	}
@@ -449,10 +452,10 @@ func (h *Prompt) handleCompleteArgs(ev term.Event) (quit, handled bool) {
 			h.list.Buffer().DeleteCell(
 				term.Coordinates{X: h.list.Buffer().Columns(0) - 1},
 			)
-			h.setCompletionList(false, h.commandAndArgs[0], h.completionArgs()...)
+			h.setCompletionList(false, sync, h.commandAndArgs[0], h.completionArgs()...)
 			return
 		}
-		if !h.decArgsCompleteMode() {
+		if !h.decArgsCompleteMode(sync) {
 			h.setCommandMode()
 		}
 		return
@@ -467,11 +470,11 @@ func (h *Prompt) handleCompleteArgs(ev term.Event) (quit, handled bool) {
 	if ev.Ch == ' ' {
 		// do not wait here, as args are expected to be dynamic
 		// and fuzzy search is a guide for user to complete
-		h.incArgsCompleteMode(false)
+		h.incArgsCompleteMode(false, sync)
 		return
 	}
 	h.list.Buffer().WriteString(string(ev.Ch))
-	h.setCompletionList(false, h.commandAndArgs[0], h.completionArgs()...)
+	h.setCompletionList(false, sync, h.commandAndArgs[0], h.completionArgs()...)
 	return
 }
 
@@ -502,7 +505,7 @@ func (h *Prompt) log(level log.Level, msg string, args ...interface{}) {
 		Logf(level, msg, args...)
 }
 
-func (h *Prompt) incArgsCompleteMode(complete bool) {
+func (h *Prompt) incArgsCompleteMode(complete bool, sync bool) {
 	if !complete || !h.completeTopList() {
 		h.commandAndArgs = append(h.commandAndArgs, h.list.Buffer().String())
 	}
@@ -514,10 +517,10 @@ func (h *Prompt) incArgsCompleteMode(complete bool) {
 	}
 	h.mu.Unlock()
 	h.list.Buffer().Reset()
-	h.setCompletionList(true, h.commandAndArgs[0], h.commandAndArgs[1:]...)
+	h.setCompletionList(true, sync, h.commandAndArgs[0], h.commandAndArgs[1:]...)
 }
 
-func (h *Prompt) decArgsCompleteMode() bool {
+func (h *Prompt) decArgsCompleteMode(sync bool) bool {
 	if h.mode == 1 {
 		return false
 	}
@@ -528,7 +531,7 @@ func (h *Prompt) decArgsCompleteMode() bool {
 	last := h.commandAndArgs[lastIdx]
 	h.commandAndArgs = h.commandAndArgs[:lastIdx]
 	h.list.Buffer().Replace(last)
-	h.setCompletionList(true, h.commandAndArgs[0], h.commandAndArgs[1:]...)
+	h.setCompletionList(true, sync, h.commandAndArgs[0], h.commandAndArgs[1:]...)
 	return true
 }
 
@@ -543,7 +546,7 @@ func (h *Prompt) setCommandMode() {
 }
 
 func (h *Prompt) setCompletionList(
-	persistLastArgUpdates bool, cmd string, args ...string,
+	persistLastArgUpdates, sync bool, cmd string, args ...string,
 ) {
 	h.log(log.TraceLevel, "setCompletionList: %s %#v", cmd, args)
 
@@ -585,7 +588,7 @@ func (h *Prompt) setCompletionList(
 		it = h.manualCompleter(ctx, cmdAndArgs[0], cmdAndArgs[1:]...)
 	}
 
-	if h.sync {
+	if sync {
 		h.pushCompletionListSync(ctx, cancel, cmdAndArgs, it)
 	} else {
 		ch := h.list.Push(ctx)
