@@ -903,14 +903,14 @@ func (h *Prompt) buildManualComponent(bufString string) component.Responsive {
 	var ok bool
 	cmdAndArgs := strings.Split(strings.TrimSpace(bufString), " ")
 
-	if len(cmdAndArgs) < 2 {
+	if len(cmdAndArgs) == 0 || (len(cmdAndArgs) == 1 && int(h.mode) < 1) {
 		// if input is something like "ed" or "" then
-		// find the manual of the top match of the search list
+		// find the manual of the top match of the search list.
 		h.log(log.TraceLevel, "Length in words of input buffer is 0-1, "+
 			"using top of the search list as desired command.")
 		man, ok = h.getManualFromFocus()
-	} else if len(cmdAndArgs) == 2 && h.mode < 2 {
-		// if input is something like "edit " or "edit myFi" then
+	} else if len(cmdAndArgs) == 1 || (len(cmdAndArgs) == 2 && h.mode < 2) {
+		// if input is something like "edit " or "edit m" or "edit myFile " then
 		// find the manual of the first word in the input buffer
 		cmd := cmdAndArgs[0]
 		man, ok = h.getManualForCommand(cmd)
@@ -923,7 +923,8 @@ func (h *Prompt) buildManualComponent(bufString string) component.Responsive {
 		cmd := cmdAndArgs[0]
 		man, ok = h.getManualForCommand(cmd)
 		if !ok {
-			h.log(log.TraceLevel, "could not find manual for first word in input buffer %q", cmd)
+			h.log(log.TraceLevel, "could not find manual for first "+
+				"word in input buffer %q", cmd)
 			return nil
 		}
 		// use mode to know if user has already completed

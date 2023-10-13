@@ -227,6 +227,28 @@ SUB-COMMANDS
 - GL                                    
                                         
                                         `},
+		{"fully typed command with space, completed via manual",
+			"mercedes ", goodTestCommands, `
+mercedes ▐                              
+GL                                      
+                                        
+                                        
+                                        
+                                        
+                                        
+                                        
+────────────────────────────────────────
+                                        
+USAGE                                   
+mercedes GL 450                         
+                                        
+DESCRIPTION                             
+2014 old luxury car.                    
+                                        
+SUB-COMMANDS                            
+- GL                                    
+                                        
+                                        `},
 		{"fully typed command with partially typed subcommand, completed via manual",
 			"mercedes G", goodTestCommands, `
 mercedes G▐                             
