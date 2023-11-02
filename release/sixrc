@@ -39,6 +39,11 @@ frame_attr_theme: &frame_attr
 focus_frame_attr_theme: &focus_frame_attr
   fg: *color1
 
+# clipboard defines whether to use the system clipboard
+# or not ('system' vs 'memory'). If system is used, then
+# copy and paste functions are shared with the host system.
+clipboard: "system"
+
 log_path: ~/.six/debug.log
 log_level: info # error, debug, trace
 input_mode:

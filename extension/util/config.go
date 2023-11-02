@@ -1,6 +1,7 @@
 package util
 
 import (
+	"errors"
 	"fmt"
 
 	"unstable.build/go-tui/api/config"
@@ -73,11 +74,13 @@ func Clipboard(cfg config.Config) (clipboard.Register, error) {
 	switch sys {
 	case "memory":
 		return clipboard.NewInMemory(), nil
-	default:
+	case "system":
 		clip, err := sysclip.NewRegister()
 		if err != nil {
 			return clipboard.NewInMemory(), nil
 		}
 		return clip, nil
+	default:
+		return nil, errors.New("unknown clipboard")
 	}
 }
