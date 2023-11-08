@@ -15,18 +15,18 @@ type responsiveTestList struct {
 	*ResponsiveList
 }
 
-type testResponsive struct {
+type testListResponsive struct {
 	tui.Component
 	height *int
 }
 
-func (t *testResponsive) Height(width int) int {
+func (t *testListResponsive) Height(width int) int {
 	return *t.height
 }
 
 func (l *responsiveTestList) newTestResponsive(c tui.Component) Responsive {
 	// emulate List behaviour, and test max width default
-	v := &testResponsive{Component: c, height: &l.elementHeight}
+	v := &testListResponsive{Component: c, height: &l.elementHeight}
 	return v
 }
 
@@ -46,12 +46,12 @@ func (l *responsiveTestList) PushFront(c tui.Component) ListNode {
 }
 
 func (l *responsiveTestList) Remove(e ListNode) tui.Component {
-	return l.ResponsiveList.Remove(e).(*testResponsive).Component
+	return l.ResponsiveList.Remove(e).(*testListResponsive).Component
 }
 
 func (l *responsiveTestList) Sort(less func(a, b tui.Component) bool) {
 	l.ResponsiveList.Sort(func(a, b Responsive) bool {
-		return less(a.(*testResponsive).Component, b.(*testResponsive).Component)
+		return less(a.(*testListResponsive).Component, b.(*testListResponsive).Component)
 	})
 }
 

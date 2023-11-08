@@ -485,7 +485,7 @@ func getTestComponent(v tui.Component) *TestComponent {
 	if a, ok := v.(*compWithAttr); ok {
 		return a.Component.(*TestComponent)
 	}
-	if a, ok := v.(*testResponsive); ok {
+	if a, ok := v.(*testListResponsive); ok {
 		return a.Component.(*TestComponent)
 	}
 	return v.(*TestComponent)
