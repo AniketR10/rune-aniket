@@ -71,6 +71,11 @@ func Clipboard(cfg config.Config) (clipboard.Register, error) {
 		err = fmt.Errorf("failed to get 'tabspaces' from config: %v", err)
 		return nil, err
 	}
+
+	if err == config.ErrNotFound {
+		sys = "system"
+	}
+
 	switch sys {
 	case "memory":
 		return clipboard.NewInMemory(), nil
