@@ -16,6 +16,7 @@ type LessConfig struct {
 	Wrap    bool
 	ResAttr term.Attributes
 	Handler func(LessEvent)
+	NoBar   bool
 }
 
 // DefaultLessConfig is a sane configuration defaults for Less.
@@ -26,6 +27,7 @@ func DefaultLessConfig() LessConfig {
 			Fg: term.AttrReverse,
 			Bg: term.ColorDefault,
 		},
+		NoBar: false,
 	}
 }
 
@@ -244,10 +246,13 @@ func (l *Less) Resize(width, height int) {
 }
 
 func (l *Less) resize() {
-	cmdBarHeight := int(math.Max(float64(l.msg.Height(l.width)),
-		float64(l.msgAlt.Height(l.width))))
-	if l.height <= cmdBarHeight {
-		cmdBarHeight = 1
+	var cmdBarHeight int
+	if !l.config.NoBar {
+		cmdBarHeight = int(math.Max(float64(l.msg.Height(l.width)),
+			float64(l.msgAlt.Height(l.width))))
+		if l.height <= cmdBarHeight {
+			cmdBarHeight = 1
+		}
 	}
 	contentHeight := l.height - cmdBarHeight
 	l.scroll.Resize(l.width, contentHeight)
