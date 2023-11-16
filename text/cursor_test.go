@@ -44,7 +44,7 @@ diff_buf_adjust(win_T *win)
 	{
 		i = diff_buf_idx(win->w_buffer);
 		if (i != DB_COUNT)
-		{
+		{X
 		curtab->tp_diffbuf[i] = NULL;
 		curtab->tp_diff_invalid = TRUE;
 		diff_redraw(TRUE);
@@ -55,19 +55,23 @@ diff_buf_adjust(win_T *win)
 	diff_buf_add(win->w_buffer);
 } /* { */ `
 
-func setupCursorContent(t *testing.T, width, height int, cont string) (e *Cursor) {
+func setupCursorContent(t *testing.T, width, height int, cont string, wrap bool) (e *Cursor) {
 	scroll := component.NewScroll(cell.NewBuffer())
 	e = NewCursor(scroll)
+	scroll.Wrap = wrap
 	scroll.Buffer().ReadFrom(strings.NewReader(cont))
 	scroll.Resize(width, height)
 	require.Equal(t, e.scroll.Buffer(), scroll.Buffer())
 	require.Equal(t, e.subscriber.c, e)
-
+	if wrap {
+		// needed for wraps to be accounted for
+		e.scroll.Draw(term.NoopWriter{})
+	}
 	return
 }
 
-func setupCursor(t *testing.T, width, height int) *Cursor {
-	return setupCursorContent(t, width, height, sampleSnippet)
+func setupCursor(t *testing.T, width, height int, wrap bool) *Cursor {
+	return setupCursorContent(t, width, height, sampleSnippet, wrap)
 }
 
 func TestCursorSearch(t *testing.T) {
@@ -147,7 +151,7 @@ func TestCursorSearch(t *testing.T) {
 		tcase := _tcase
 
 		t.Run(tcase.desc, func(t *testing.T) {
-			e := setupCursor(t, tcase.width, tcase.height)
+			e := setupCursor(t, tcase.width, tcase.height, false)
 
 			require.Equal(t, tcase.results, e.Search(tcase.searchstring))
 			e.MoveToNextMatch() // backwards compat
@@ -171,7 +175,7 @@ func TestCursorSearch(t *testing.T) {
 	}
 
 	t.Run("clears results if search text is empty", func(t *testing.T) {
-		e := setupCursor(t, 100, 100)
+		e := setupCursor(t, 100, 100, false)
 
 		require.Equal(t, 2, e.Search("NULL"))
 		e.MoveToNextMatch()
@@ -237,13 +241,15 @@ func TestCursorMove(t *testing.T) {
 			"MoveEndLine should move to end of line if past the end of line",
 			10, 10,
 			func(t *testing.T, e *Cursor) {
+				if e.scroll.Wrap {
+					// in wrap mode, that would be a different scroll position
+					t.SkipNow()
+				}
 				e.scroll.SeekEndFile()
-				e.cursor.X = 9
-				e.cursor.Y = 0
-				e.scroll.SeekEndLine()
+				e.MoveToScroll(term.Coordinates{Y: 22, X: 10})
 				assert.True(t, e.MoveEndLine())
 			},
-			term.Coordinates{X: 8, Y: 22},
+			term.Coordinates{X: 9, Y: 22},
 		},
 		{
 			"MoveEndLine should move cursor to end of line",
@@ -261,10 +267,13 @@ func TestCursorMove(t *testing.T) {
 				e.cursor.Y = 2
 
 				assert.True(t, e.MoveEndLine())
-
+				if !e.scroll.Wrap {
+					assert.Equal(t, 76, e.scroll.Offset().X+e.cursor.X)
+				} else {
+					assert.Equal(t, 6, e.scroll.Offset().X+e.cursor.X)
+				}
 				c, _ := e.scroll.Buffer().Cell(e.cursorAtScroll())
-				assert.Equal(t, 76, e.scroll.Offset().X+e.cursor.X)
-				assert.Equal(t, 'f', c.Ch)
+				assert.Equal(t, 'f', c.Ch, string(c.Ch))
 			},
 			term.Coordinates{X: 76, Y: 2},
 		},
@@ -319,7 +328,9 @@ func TestCursorMove(t *testing.T) {
 				assert.True(t, e.MoveLastLine())
 
 				c, _ := e.scroll.Buffer().Cell(e.cursorAtScroll())
-				assert.Equal(t, 31, e.scroll.Offset().Y+e.cursor.Y)
+				if !e.scroll.Wrap {
+					assert.Equal(t, 31, e.scroll.Offset().Y+e.cursor.Y)
+				}
 				assert.Equal(t, '}', c.Ch)
 			},
 			term.Coordinates{X: 0, Y: 31},
@@ -328,8 +339,12 @@ func TestCursorMove(t *testing.T) {
 			"MoveDown should move the cursor position past the last line until end of window",
 			1000, 1000,
 			func(t *testing.T, e *Cursor) {
+				if e.scroll.Wrap {
+					// semantics past last content are different between wrap and non-wrap
+					t.Skip()
+				}
 				e.cursor.Y = 31
-				for i := 0; i < e.scroll.Height(); i++ {
+				for i := 0; i < e.scroll.SizeHeight(); i++ {
 					e.MoveDown()
 				}
 			},
@@ -337,7 +352,7 @@ func TestCursorMove(t *testing.T) {
 		},
 		{
 			"MoveDown should seek down if reached last line in window but not at last line",
-			10, 10,
+			100, 10, // avoid wraps in wrap mode
 			func(t *testing.T, e *Cursor) {
 				e.cursor.Y = 9
 				assert.True(t, e.MoveDown())
@@ -385,7 +400,7 @@ func TestCursorMove(t *testing.T) {
 		},
 		{
 			"MoveUp should seek up if not at first line and cursor is at first line of window",
-			10, 10,
+			100, 10, // avoid creating wraps in wrap mode
 			func(t *testing.T, e *Cursor) {
 				e.scroll.SeekEndFile()
 				offsetY := e.scroll.Offset().Y
@@ -449,7 +464,7 @@ func TestCursorMove(t *testing.T) {
 		},
 		{
 			"MoveRight should move cursor right",
-			2, 2,
+			10, 10,
 			func(t *testing.T, e *Cursor) {
 				e.cursor.Y = 2
 				e.cursor.X = 5
@@ -496,13 +511,12 @@ func TestCursorMove(t *testing.T) {
 			"MoveRightStartWord should move to the start of the next word",
 			10, 10,
 			func(t *testing.T, e *Cursor) {
-				e.cursor.Y = 2
-				e.cursor.X = 9
+				e.MoveToScroll(term.Coordinates{X: 9, Y: 2})
 
-				assert.True(t, e.MoveRightStartWord())
+				require.True(t, e.MoveRightStartWord())
 
 				c, _ := e.scroll.Buffer().Cell(e.cursorAtScroll())
-				assert.Equal(t, 't', c.Ch)
+				assert.Equal(t, 't', c.Ch, string(c.Ch))
 			},
 			term.Coordinates{X: 12, Y: 2},
 		},
@@ -560,19 +574,12 @@ func TestCursorMove(t *testing.T) {
 			"MoveToMatchingRune should move to the 'matching rune' forward",
 			10, 10,
 			func(t *testing.T, e *Cursor) {
-				e.MoveToMark(CursorMark{term.Coordinates{Y: 7}})
+				e.MoveToScroll(term.Coordinates{Y: 7})
 
 				c, _ := e.scroll.Buffer().Cell(e.cursorAtScroll())
-				assert.Equal(t, '{', c.Ch)
+				require.Equal(t, '{', c.Ch)
 
-				// scroll does not provide correct max y offsets
-				// if Draw hasn't been called yet so seek might fail
-				// if there are lots of wraps on an un-drawn scroll.
-				// At some point we might want to fix this by checking
-				// if wrapsLen == -1 or wraps == nil
-				e.scroll.Draw(term.NoopWriter{})
-
-				assert.True(t, e.MoveToMatchingRune())
+				require.True(t, e.MoveToMatchingRune())
 
 				c, _ = e.scroll.Buffer().Cell(e.cursorAtScroll())
 				assert.Equal(t, '}', c.Ch)
@@ -583,12 +590,12 @@ func TestCursorMove(t *testing.T) {
 			"MoveToMatchingRune should move to the 'matching rune' backwards",
 			10, 10,
 			func(t *testing.T, e *Cursor) {
-				e.MoveToMark(CursorMark{term.Coordinates{Y: 31}})
+				e.MoveToScroll(term.Coordinates{Y: 31})
 
 				c, _ := e.scroll.Buffer().Cell(e.cursorAtScroll())
-				assert.Equal(t, '}', c.Ch)
+				require.Equal(t, '}', c.Ch)
 
-				assert.True(t, e.MoveToMatchingRune())
+				require.True(t, e.MoveToMatchingRune())
 
 				c, _ = e.scroll.Buffer().Cell(e.cursorAtScroll())
 				assert.Equal(t, '{', c.Ch)
@@ -646,9 +653,13 @@ func TestCursorMove(t *testing.T) {
 			"MoveToNextChar should move the cursor to a matching character at the end of line",
 			10, 10,
 			func(t *testing.T, e *Cursor) {
-				e.MoveDown()
-				e.MoveDown()
-				e.MoveDown()
+				n := 3
+				if e.scroll.Wrap {
+					n += 7 // wraps
+				}
+				for i := 0; i < n; i++ {
+					e.MoveDown()
+				}
 				assert.True(t, e.MoveToNextChar('.'))
 
 				c, _ := e.scroll.Buffer().Cell(e.cursorAtScroll())
@@ -695,7 +706,7 @@ func TestCursorMove(t *testing.T) {
 		tcase := _tcase
 
 		t.Run(tcase.desc, func(t *testing.T) {
-			e := setupCursor(t, tcase.width, tcase.height)
+			e := setupCursor(t, tcase.width, tcase.height, false)
 
 			tcase.sut(t, e)
 
@@ -704,8 +715,7 @@ func TestCursorMove(t *testing.T) {
 		})
 
 		t.Run(tcase.desc+" (wrap mode on)", func(t *testing.T) {
-			e := setupCursor(t, tcase.width, tcase.height)
-			e.scroll.Wrap = true
+			e := setupCursor(t, tcase.width, tcase.height, true)
 
 			tcase.sut(t, e)
 
@@ -715,144 +725,328 @@ func TestCursorMove(t *testing.T) {
 	}
 }
 
-func TestCursorInsertRow(t *testing.T) {
-	e := setupCursor(t, 10, 10)
+func TestCursorInsertLine(t *testing.T) {
+	suite := []struct {
+		wrap bool
+	}{
+		{false}, {true},
+	}
+	for _, test := range suite {
+		t.Run(fmt.Sprintf("wrap: %v", test.wrap), func(t *testing.T) {
+			e := setupCursor(t, 10, 10, test.wrap)
 
-	assert.Equal(t, 32, e.scroll.Buffer().Rows())
-	assert.Equal(t, term.Coordinates{}, e.Coordinates())
-	assert.Equal(t, term.Coordinates{}, e.cursorAtScroll())
+			assert.Equal(t, 32, e.scroll.Buffer().Rows())
+			assert.Equal(t, term.Coordinates{}, e.Coordinates())
+			assert.Equal(t, term.Coordinates{}, e.cursorAtScroll())
 
-	e.InsertRowAbove()
-	assert.Equal(t, 0, len(e.scroll.Buffer().RawCells()[0]))
-	assert.Equal(t, 33, e.scroll.Buffer().Rows())
-	assert.Equal(t, term.Coordinates{}, e.Coordinates())
-	assert.Equal(t, term.Coordinates{}, e.cursorAtScroll())
+			e.InsertLineAbove()
+			assert.Equal(t, 0, len(e.scroll.Buffer().RawCells()[0]))
+			assert.Equal(t, 33, e.scroll.Buffer().Rows())
+			assert.Equal(t, term.Coordinates{}, e.Coordinates())
+			assert.Equal(t, term.Coordinates{}, e.cursorAtScroll())
 
-	e.scroll.SeekEndLine()
-	e.cursor.Y = 2
-	e.cursor.X = 9
+			e.scroll.SeekEndLine()
+			e.cursor.Y = 2
+			e.cursor.X = 9
 
-	e.InsertRowAbove()
-	assert.Equal(t, 0, len(e.scroll.Buffer().RawCells()[2]))
-	assert.Equal(t, 34, e.scroll.Buffer().Rows())
-	assert.Equal(t, term.Coordinates{Y: 2, X: 0}, e.Coordinates())
+			e.InsertLineAbove()
+			assert.Equal(t, 0, len(e.scroll.Buffer().RawCells()[2]))
+			assert.Equal(t, 34, e.scroll.Buffer().Rows())
+			assert.Equal(t, term.Coordinates{Y: 2, X: 0}, e.Coordinates())
 
-	e.MoveEndLine()
-	e.InsertRowBelow()
-	assert.Equal(t, 35, e.scroll.Buffer().Rows())
-	assert.Equal(t, term.Coordinates{Y: 3, X: 0}, e.Coordinates())
-	assert.Equal(t, term.Coordinates{Y: 3, X: 0}, e.cursorAtScroll())
+			e.MoveEndLine()
+			e.InsertLineBelow()
+			assert.Equal(t, 35, e.scroll.Buffer().Rows())
+			assert.Equal(t, term.Coordinates{Y: 3, X: 0}, e.cursorAtScroll())
 
-	e.MoveLastLine()
-	e.MoveStartLine()
-	assert.Equal(t, term.Coordinates{Y: 9, X: 0}, e.Coordinates())
-	assert.Equal(t, term.Coordinates{Y: 34}, e.cursorAtScroll())
+			e.MoveLastLine()
+			e.MoveStartLine()
+			assert.Equal(t, term.Coordinates{Y: 9, X: 0}, e.Coordinates())
+			assert.Equal(t, term.Coordinates{Y: 34}, e.cursorAtScroll())
 
-	e.InsertRowBelow()
-	assert.Equal(t, 36, e.scroll.Buffer().Rows())
-	assert.Equal(t, term.Coordinates{Y: 9, X: 0}, e.Coordinates())
-	assert.Equal(t, term.Coordinates{Y: 35}, e.cursorAtScroll())
+			e.InsertLineBelow()
+			assert.Equal(t, 36, e.scroll.Buffer().Rows())
+			assert.Equal(t, term.Coordinates{Y: 9, X: 0}, e.Coordinates())
+			assert.Equal(t, term.Coordinates{Y: 35}, e.cursorAtScroll())
+		})
+	}
 }
 
-func TestCursorInsertRowBelow(t *testing.T) {
-	scroll := component.NewScroll(cell.NewBuffer())
-	scroll.Resize(10, 10)
-	cursor := NewCursor(scroll)
-	in := scroll.Buffer()
-
-	content := `package main
+func TestCursorInsertLineBelow(t *testing.T) {
+	suite := []struct {
+		wrap bool
+	}{
+		{false}, {true},
+	}
+	for _, test := range suite {
+		t.Run(fmt.Sprintf("wrap: %v", test.wrap), func(t *testing.T) {
+			content := `package main
 func main() {
 }`
-	in.WriteString(content)
-	assert.Equal(t, in.String(), content)
+			cursor := setupCursorContent(t, 10, 10, content, test.wrap)
+			buf := cursor.scroll.Buffer()
+			assert.Equal(t, buf.String(), content)
 
-	require.True(t, cursor.MoveDown())
-	cursor.InsertRowBelow()
-	cursor.InsertRowBelow()
-	cursor.Insert('\t')
-	cursor.Insert('f')
-	cursor.Insert('m')
-	cursor.Insert('t')
-	cursor.Insert('.')
+			require.True(t, cursor.MoveLineDown())
+			cursor.InsertLineBelow()
+			cursor.InsertLineBelow()
+			cursor.Insert('\t')
+			cursor.Insert('f')
+			cursor.Insert('m')
+			cursor.Insert('t')
+			cursor.Insert('.')
 
-	assert.Equal(t, `package main
+			assert.Equal(t, `package main
 func main() {
 
 	fmt.
-}`, in.String())
+}`, buf.String())
 
-	require.True(t, cursor.MoveLastLine())
+			require.True(t, cursor.MoveLastLine())
 
-	cursor.InsertRowBelow()
-	cursor.InsertRowBelow()
-	cursor.Insert('i')
-	cursor.InsertRowBelow()
-	cursor.Insert('\t')
-	cursor.Insert('X')
-	cursor.InsertRowBelow()
-	cursor.Insert('}')
+			cursor.InsertLineBelow()
+			cursor.InsertLineBelow()
+			cursor.Insert('i')
+			cursor.InsertLineBelow()
+			cursor.Insert('\t')
+			cursor.InsertString("XXXXXXXXXXXXXXXXXXXXXXXX")
+			cursor.InsertLineBelow()
+			cursor.Insert('}')
 
-	assert.Equal(t, `package main
+			assert.Equal(t, `package main
 func main() {
 
 	fmt.
 }
 
 i
-	X
-}`, in.String())
+	XXXXXXXXXXXXXXXXXXXXXXXX
+}`, buf.String())
+
+			require.True(t, cursor.MoveLastLine())
+			require.True(t, cursor.MoveLineUp())
+			cursor.MoveStartLine()
+			require.True(t, cursor.MoveEndLine())
+			cursor.InsertLineBelow()
+			cursor.InsertString("hello")
+
+			assert.Equal(t, `package main
+func main() {
+
+	fmt.
+}
+
+i
+	XXXXXXXXXXXXXXXXXXXXXXXX
+hello
+}`, buf.String())
+		})
+	}
 
 }
 
-func TestCursorInsertDelete(t *testing.T) {
-	e := setupCursor(t, 10, 10)
-	str := e.scroll.Buffer().String()
-
-	e.Insert('p')
-	e.Insert('a')
-	e.Insert('c')
-	e.Insert('k')
-
-	for i := 0; i < 4; i++ {
-		e.MoveLeft()
-		e.Delete()
+func TestCursorInsertDeleteFirstEmptyLineEdgeCase(t *testing.T) {
+	suite := []struct {
+		wrap bool
+	}{
+		{true}, {false},
 	}
+	for _, test := range suite {
+		t.Run(fmt.Sprintf("Delete from end, wrap:%v", test.wrap), func(t *testing.T) {
+			e := setupCursorContent(t, 4, 4, "\n22222", test.wrap)
+			str := e.scroll.Buffer().String()
 
-	assert.Equal(t, str, e.scroll.Buffer().String())
+			e.Insert('p')
+			e.Insert('a')
+			e.Insert('c')
+			e.Insert('k')
+			e.Insert('X')
+			e.Insert('X')
+			e.Insert('X')
+			require.Equal(t, "packXXX\n22222", e.scroll.Buffer().String())
+
+			for i := 0; i < 7; i++ {
+				require.True(t, e.MoveLeft(), i)
+				e.Delete()
+			}
+
+			assert.Equal(t, str, e.scroll.Buffer().String())
+		})
+		t.Run(fmt.Sprintf("Delete from start, wrap:%v", test.wrap), func(t *testing.T) {
+			e := setupCursorContent(t, 4, 4, "\n22222", test.wrap)
+			str := e.scroll.Buffer().String()
+
+			e.Insert('p')
+			e.Insert('a')
+			e.Insert('c')
+			e.Insert('k')
+			e.Insert('X')
+			e.Insert('X')
+			e.Insert('X')
+			require.Equal(t, "packXXX\n22222", e.scroll.Buffer().String())
+
+			e.MoveFirstLine()
+			e.MoveStartLine()
+			for i := 0; i < 7; i++ {
+				e.Delete()
+			}
+
+			assert.Equal(t, str, e.scroll.Buffer().String())
+		})
+	}
+}
+
+func TestCursorInsertLongStream(t *testing.T) {
+	insertStr := func(c *Cursor, r rune) {
+		c.InsertString(string(r))
+	}
+	suite := []struct {
+		description string
+		wrap        bool
+		method      func(c *Cursor, r rune)
+	}{
+		{"Insert in wrap mode", true, (*Cursor).Insert},
+		{"Insert in non-wrap mode", false, (*Cursor).Insert},
+		{"InsertString in wrap mode", true, insertStr},
+		{"InsertString in non-wrap mode", false, insertStr},
+	}
+	for _, test := range suite {
+		t.Run(test.description, func(t *testing.T) {
+			width, height := 4, 4
+			e := setupCursorContent(t, width, height, "", test.wrap)
+			for i := 0; i < width*height; i++ {
+				test.method(e, rune(int('a')+i))
+			}
+			assert.Equal(t, "abcdefghijklmnop", e.scroll.Buffer().String())
+		})
+	}
 }
 
 func TestCursorBackspace(t *testing.T) {
-	e := setupCursor(t, 10, 10)
-	n := len(e.scroll.Buffer().String())
-
-	e.MoveLastLine()
-	e.MoveEndLine()
-	e.MoveRight()
-
-	for i := 0; i < n; i++ {
-		e.Backspace()
+	suite := []struct {
+		wrap bool
+	}{
+		{true}, {false},
 	}
+	for _, test := range suite {
+		t.Run(fmt.Sprintf("wrap:%v", test.wrap), func(t *testing.T) {
+			e := setupCursor(t, 10, 10, test.wrap)
+			n := len(e.scroll.Buffer().String())
 
-	assert.Equal(t, "", e.scroll.Buffer().String())
+			require.True(t, e.MoveLastLine())
+			require.True(t, e.MoveEndLine())
+			require.True(t, e.MoveRight())
+
+			for i := 0; i <= n; i++ {
+				e.Backspace()
+			}
+
+			assert.Equal(t, "", e.scroll.Buffer().String())
+		})
+	}
 }
 
 func TestCursorConflate(t *testing.T) {
-	e := setupCursor(t, 10, 10)
-	n := strings.Count(e.scroll.Buffer().String(), "\n")
-	rows := e.scroll.Buffer().Rows()
-	require.Equal(t, n+1, rows)
+	conflateAllRows := func(t *testing.T, c *Cursor) {
+		n := strings.Count(c.scroll.Buffer().String(), "\n")
+		rows := c.scroll.Buffer().Rows()
+		require.Equal(t, n+1, rows)
 
-	for i := 0; i < n; i++ {
-		e.Conflate()
+		for i := 0; i < n; i++ {
+			require.True(t, c.Conflate(), i) //, "cursor: %+v, %s", c.Coordinates(), c.scroll.Buffer().String())
+		}
+		require.Equal(t, 1, c.scroll.Buffer().Rows())
+		assert.Equal(t, 0, strings.Count(c.scroll.Buffer().String(), "\n"))
 	}
 
-	assert.Equal(t, 1, e.scroll.Buffer().Rows())
-	assert.Zero(t, strings.Count(e.scroll.Buffer().String(), "\n"))
+	suite := []struct {
+		description   string
+		width, height int
+		wrap          bool
+		sut           func(*testing.T, *Cursor)
+	}{
+		{"conflate all rows into one (wrap)", 10, 10, true,
+			conflateAllRows,
+		},
+		{"conflate all rows into one (wrap, no wraps)", 100, 100, true,
+			conflateAllRows,
+		},
+		{"conflate all rows into one (no wrap)", 10, 10, false,
+			conflateAllRows,
+		},
+	}
+	for _, test := range suite {
+		t.Run(test.description, func(t *testing.T) {
+			e := setupCursor(t, test.width, test.height, test.wrap)
+			test.sut(t, e)
+		})
+	}
+}
+
+func TestBackspaceViaConflate(t *testing.T) {
+	const (
+		str = `
+/*
+ * Check if the current buffer should be added to or removed from the list of
+ * diff buffers.
+ */
+	void
+diff_buf_adjust(win_T *win)
+{
+	win_T	*wp;
+	int		i;
+
+	if (!win->w_p_diff)
+	{
+	/* When there is no window showing a diff for this buffer, remove
+	 * it from the diffs. */
+	FOR_ALL_WINDOWS(wp)
+		if (wp->w_buffer == win->w_buffer && wp->w_p_diff)
+		break;
+	if (wp == NULL)
+	{
+		i = diff_buf_idx(win->w_buffer);
+		if (i != DB_COUNT)
+		{X
+`
+		expected = `
+/*
+ * Check if the current buffer should be added to or removed from the list of
+ * diff buffers.
+ */
+	void
+diff_buf_adjust(win_T *win)
+{
+	win_T	*wp;
+	int		i;
+
+	if (!win->w_p_diff)
+	{
+	/* When there is no window showing a diff for this buffer, remove
+	 * it from the diffs. */
+	FOR_ALL_WINDOWS(wp)
+		if (wp->w_buffer == win->w_buffer && wp->w_p_diff)
+		break;
+	if (wp == NULL)
+	{
+		i = diff_buf_idx(win->w_buffer);
+		if (i != DB_COUNT)
+		{`
+	)
+	e := setupCursorContent(t, 10, 10, str, true)
+	e.MoveLastLine()
+	e.MoveEndLine()
+
+	// sut
+	e.Backspace()
+	e.Backspace()
+
+	assert.Equal(t, expected, e.scroll.Buffer().String())
 }
 
 func testCursorSelect(t *testing.T, width, height int) {
 	makeSelect := func(t *testing.T) *Cursor {
-		e := setupCursor(t, width, height)
+		e := setupCursor(t, width, height, false)
 		str := e.scroll.Buffer().String()
 		assertBufferAttributes(t, e.buffer(), term.Attributes{})
 		assert.False(t, e.Unselect())
@@ -869,7 +1063,7 @@ func testCursorSelect(t *testing.T, width, height int) {
 	}
 
 	makeSelectLine := func(t *testing.T) *Cursor {
-		e := setupCursor(t, width, height)
+		e := setupCursor(t, width, height, false)
 		str := e.scroll.Buffer().String()
 		assertBufferAttributes(t, e.buffer(), term.Attributes{})
 		require.True(t, e.Select())
@@ -881,7 +1075,7 @@ func testCursorSelect(t *testing.T, width, height int) {
 	}
 
 	makeSelectBlock := func(t *testing.T) *Cursor {
-		e := setupCursor(t, width, height)
+		e := setupCursor(t, width, height, false)
 		assertBufferAttributes(t, e.buffer(), term.Attributes{})
 		require.True(t, e.SelectLine())
 		require.True(t, e.MoveLastLine())
@@ -942,7 +1136,7 @@ func testCursorSelect(t *testing.T, width, height int) {
 	})
 
 	t.Run("reverse coords Select/DeleteSelection selects from start to end", func(t *testing.T) {
-		e := setupCursor(t, width, height)
+		e := setupCursor(t, width, height, false)
 		str := e.scroll.Buffer().String()
 		assertBufferAttributes(t, e.buffer(), term.Attributes{})
 
@@ -1038,7 +1232,7 @@ func TestCursorSelect100(t *testing.T) {
 
 func testCursorUndoRedo(t *testing.T, moveBefore, moveAfter func(c *Cursor) bool, width, height int) {
 	const input = "Aleda"
-	e := setupCursor(t, width, height)
+	e := setupCursor(t, width, height, false)
 	str := e.scroll.Buffer().String()
 
 	moveBefore(e)
@@ -1213,7 +1407,7 @@ func testCursorDeleteSelection(t *testing.T, width, height int, typeSelect Selec
 				return
 			}
 
-			c := setupCursorContent(t, width, height, tcase.initialBuf)
+			c := setupCursorContent(t, width, height, tcase.initialBuf, false)
 			if tcase.initialPos != nil {
 				tcase.initialPos(c)
 			}
@@ -1330,7 +1524,7 @@ func TestCursorMoveToBounds(t *testing.T) {
 	}
 	for _, tcase := range tsuite {
 		t.Run(tcase.desc, func(t *testing.T) {
-			e := setupCursorContent(t, tcase.width, tcase.height, tcase.content)
+			e := setupCursorContent(t, tcase.width, tcase.height, tcase.content, false)
 			e.cursor = tcase.cursorWin
 			if tcase.offset != (term.Coordinates{}) {
 				require.True(t, e.scroll.SetOffset(tcase.offset))
@@ -1343,7 +1537,7 @@ func TestCursorMoveToBounds(t *testing.T) {
 }
 
 func TestCursorMoveToBoundsOld(t *testing.T) {
-	e := setupCursor(t, 100, 100)
+	e := setupCursor(t, 100, 100, false)
 
 	pos := e.Coordinates()
 	assert.Equal(t, term.Coordinates{}, pos)
@@ -1384,7 +1578,7 @@ func TestCursorMoveToBoundsOld(t *testing.T) {
 }
 
 func TestCursorSkipNulls(t *testing.T) {
-	e := setupCursor(t, 100, 100)
+	e := setupCursor(t, 100, 100, false)
 
 	assert.True(t, e.MoveRight())
 
@@ -1419,7 +1613,7 @@ func TestCursorSkipNulls(t *testing.T) {
 	assert.Equal(t, term.Coordinates{X: 7, Y: 16}, pos)
 
 	t.Run("does not infinite loop if cursor has negative coords", func(t *testing.T) {
-		e := setupCursor(t, 100, 100)
+		e := setupCursor(t, 100, 100, false)
 		e.cursor = term.Coordinates{X: -1}
 		e.MoveToNextNonNull()
 	})
@@ -1427,7 +1621,7 @@ func TestCursorSkipNulls(t *testing.T) {
 
 func TestCursorCell(t *testing.T) {
 	t.Run("does not panic if cursor has negative coords", func(t *testing.T) {
-		e := setupCursor(t, 100, 100)
+		e := setupCursor(t, 100, 100, false)
 		e.cursor = term.Coordinates{X: -1}
 		_, ok := e.Cell()
 		assert.False(t, ok)
@@ -1435,7 +1629,7 @@ func TestCursorCell(t *testing.T) {
 }
 
 func TestCursorShiftLine(t *testing.T) {
-	c := setupCursorContent(t, 10, 1, " blabla\nbleble")
+	c := setupCursorContent(t, 10, 1, " blabla\nbleble", false)
 	assert.True(t, c.ShiftLineLeft())
 	assert.False(t, c.ShiftLineLeft())
 	assert.Equal(t, term.Coordinates{}, c.cursor)
@@ -1456,7 +1650,7 @@ func TestCursorShiftLine(t *testing.T) {
 }
 
 func TestCursorShiftSelection(t *testing.T) {
-	c := setupCursorContent(t, 10, 10, " blabla\nbleble")
+	c := setupCursorContent(t, 10, 10, " blabla\nbleble", false)
 	require.True(t, c.Select())
 	require.True(t, c.MoveDown())
 
@@ -1493,31 +1687,31 @@ var (
 
 func TestCursorMoveLocationList(t *testing.T) {
 	t.Run("MoveToPrevLocation should return false and do nothing if location list is nil", func(t *testing.T) {
-		c := setupCursorContent(t, 10, 10, "")
+		c := setupCursorContent(t, 10, 10, "", false)
 		assert.False(t, c.MoveToPrevLocation(locID))
 	})
 
 	t.Run("MoveToNextLocation should return false and do nothing if location list is nil", func(t *testing.T) {
-		c := setupCursorContent(t, 10, 10, "")
+		c := setupCursorContent(t, 10, 10, "", false)
 		assert.False(t, c.MoveToNextLocation(locID))
 	})
 
 	t.Run("MoveToPrevLocation should return false and do nothing if already at start of location list", func(t *testing.T) {
-		c := setupCursorContent(t, 10, 10, "")
+		c := setupCursorContent(t, 10, 10, "", false)
 		locations := []textapi.Location{{}}
 		assert.Nil(t, c.SetLocationList(textapi.LocationPriorityInfo, locID, &testLocationList{locations: locations}))
 		assert.False(t, c.MoveToPrevLocation(locID))
 	})
 
 	t.Run("MoveToNextLocation should return false and do nothing if already at end of location list", func(t *testing.T) {
-		c := setupCursorContent(t, 10, 10, "")
+		c := setupCursorContent(t, 10, 10, "", false)
 		locations := []textapi.Location{{}}
 		assert.Nil(t, c.SetLocationList(textapi.LocationPriorityInfo, locID, &testLocationList{locations: locations}))
 		assert.False(t, c.MoveToNextLocation(locID))
 	})
 
 	t.Run("MoveToPrevLocation should return true and move cursor to earlier location", func(t *testing.T) {
-		c := setupCursorContent(t, 10, 10, " X")
+		c := setupCursorContent(t, 10, 10, " X", false)
 		require.True(t, c.MoveRight())
 
 		locations := []textapi.Location{{}}
@@ -1529,7 +1723,7 @@ func TestCursorMoveLocationList(t *testing.T) {
 	})
 
 	t.Run("MoveToNextLocation should wrap around to first location", func(t *testing.T) {
-		c := setupCursorContent(t, 10, 10, "\na\nb\nc \n")
+		c := setupCursorContent(t, 10, 10, "\na\nb\nc \n", false)
 		require.True(t, c.MoveLastLine())
 
 		assert.Nil(t, c.SetLocationList(textapi.LocationPriorityInfo, locID, &testLocationList{locations: abcLocations}))
@@ -1540,7 +1734,7 @@ func TestCursorMoveLocationList(t *testing.T) {
 	})
 
 	t.Run("MoveToPrevLocation should wrap around to last location", func(t *testing.T) {
-		c := setupCursorContent(t, 10, 10, "\na\nb\nc\n")
+		c := setupCursorContent(t, 10, 10, "\na\nb\nc\n", false)
 
 		assert.Nil(t, c.SetLocationList(textapi.LocationPriorityInfo, locID, &testLocationList{locations: abcLocations}))
 		assert.True(t, c.MoveToPrevLocation(locID))
@@ -1550,7 +1744,7 @@ func TestCursorMoveLocationList(t *testing.T) {
 	})
 
 	t.Run("MoveToNextLocation should wrap around to first location (special case)", func(t *testing.T) {
-		c := setupCursorContent(t, 10, 10, " X")
+		c := setupCursorContent(t, 10, 10, " X", false)
 		require.True(t, c.MoveRight())
 
 		locations := []textapi.Location{{}, {From: term.Coordinates{X: 1}}}
@@ -1562,7 +1756,7 @@ func TestCursorMoveLocationList(t *testing.T) {
 	})
 
 	t.Run("MoveToPrevLocation should wrap around to last location (special case)", func(t *testing.T) {
-		c := setupCursorContent(t, 10, 10, " X")
+		c := setupCursorContent(t, 10, 10, " X", false)
 
 		locations := []textapi.Location{{}, {From: term.Coordinates{X: 1}}}
 		assert.Nil(t, c.SetLocationList(textapi.LocationPriorityInfo, locID, &testLocationList{locations: locations}))
@@ -1573,7 +1767,7 @@ func TestCursorMoveLocationList(t *testing.T) {
 	})
 
 	t.Run("MoveToNextLocation should go to next location after cursor", func(t *testing.T) {
-		c := setupCursorContent(t, 10, 10, "\na\nb\nc \n")
+		c := setupCursorContent(t, 10, 10, "\na\nb\nc \n", false)
 		require.True(t, c.MoveDown())
 		require.True(t, c.MoveDown())
 
@@ -1585,7 +1779,7 @@ func TestCursorMoveLocationList(t *testing.T) {
 	})
 
 	t.Run("MoveToPrevLocation should go to prev location before location", func(t *testing.T) {
-		c := setupCursorContent(t, 10, 10, "\na\nb\nc\n")
+		c := setupCursorContent(t, 10, 10, "\na\nb\nc\n", false)
 		require.True(t, c.MoveDown())
 		require.True(t, c.MoveDown())
 
@@ -1599,7 +1793,7 @@ func TestCursorMoveLocationList(t *testing.T) {
 
 func TestCursorSetLocationListAttr(t *testing.T) {
 	t.Run("sets and clears location list attrs", func(t *testing.T) {
-		c := setupCursorContent(t, 10, 10, "\na\nb\nc\n")
+		c := setupCursorContent(t, 10, 10, "\na\nb\nc\n", false)
 		buf := c.scroll.Buffer()
 
 		expected := [][]term.Cell{
@@ -1705,7 +1899,7 @@ func TestCursorSetLocationListAttr(t *testing.T) {
 				Attr: term.Attributes{Fg: term.AttrUnderline, Bg: term.ColorBlack},
 			},
 		}
-		c := setupCursorContent(t, 10, 10, "\na\nb\nc\n")
+		c := setupCursorContent(t, 10, 10, "\na\nb\nc\n", false)
 		buf := c.scroll.Buffer()
 
 		expected := [][]term.Cell{
@@ -1758,7 +1952,7 @@ func TestCursorSetLocationListMessages(t *testing.T) {
 	}
 
 	t.Run("returns nil/false if cursor is not in from, to or in between", func(t *testing.T) {
-		c := setupCursorContent(t, 10, 2, content)
+		c := setupCursorContent(t, 10, 2, content, false)
 		abcList := &testLocationList{locations: messageLocations}
 		assert.Nil(t, c.SetLocationList(textapi.LocationPriorityInfo, locID, abcList))
 
@@ -1767,7 +1961,7 @@ func TestCursorSetLocationListMessages(t *testing.T) {
 	})
 
 	t.Run("return messages if cursor is at From", func(t *testing.T) {
-		c := setupCursorContent(t, 10, 2, content)
+		c := setupCursorContent(t, 10, 2, content, false)
 		abcList := &testLocationList{locations: messageLocations}
 		assert.Nil(t, c.SetLocationList(textapi.LocationPriorityInfo, locID, abcList))
 		require.True(t, c.MoveDown())
@@ -1776,7 +1970,7 @@ func TestCursorSetLocationListMessages(t *testing.T) {
 	})
 
 	t.Run("return messages if cursor between From/To", func(t *testing.T) {
-		c := setupCursorContent(t, 10, 2, content)
+		c := setupCursorContent(t, 10, 2, content, false)
 
 		abcList := &testLocationList{locations: messageLocations}
 
@@ -1788,7 +1982,7 @@ func TestCursorSetLocationListMessages(t *testing.T) {
 	})
 
 	t.Run("return messages if cursor is at To", func(t *testing.T) {
-		c := setupCursorContent(t, 10, 2, content)
+		c := setupCursorContent(t, 10, 2, content, false)
 
 		abcList := &testLocationList{locations: messageLocations}
 
@@ -1802,53 +1996,48 @@ func TestCursorSetLocationListMessages(t *testing.T) {
 }
 
 func TestCursorMoveToScroll(t *testing.T) {
-	t.Run("moves cursor to position within curr width,height", func(t *testing.T) {
-		e := setupCursor(t, 10, 10)
-		e.MoveToScroll(term.Coordinates{X: 1, Y: 3})
-		pos := e.Coordinates()
-		assert.Equal(t, term.Coordinates{Y: 3, X: 1}, pos)
-		pos = e.CursorAtScroll()
-		assert.Equal(t, term.Coordinates{Y: 3, X: 1}, pos)
-	})
-	t.Run("moves cursor to position past curr height", func(t *testing.T) {
-		e := setupCursor(t, 5, 5)
-		e.MoveToScroll(term.Coordinates{X: 0, Y: 6})
-		pos := e.CursorAtScroll()
-		assert.Equal(t, term.Coordinates{Y: 6, X: 0}, pos)
-	})
-	t.Run("moves cursor to position past curr width", func(t *testing.T) {
-		e := setupCursor(t, 5, 5)
-		e.MoveToScroll(term.Coordinates{X: 7, Y: 2})
-		pos := e.CursorAtScroll()
-		assert.Equal(t, term.Coordinates{Y: 2, X: 7}, pos)
-	})
+	for _, wrap := range []bool{true, false} {
+		t.Run(fmt.Sprintf("wrap=%v", wrap), func(t *testing.T) {
+			t.Run("moves cursor to position within curr width,height", func(t *testing.T) {
+				e := setupCursor(t, 10, 10, wrap)
+				e.MoveToScroll(term.Coordinates{X: 1, Y: 3})
+				pos := e.CursorAtScroll()
+				assert.Equal(t, term.Coordinates{Y: 3, X: 1}, pos)
+			})
+			t.Run("moves cursor to position past curr height", func(t *testing.T) {
+				e := setupCursor(t, 5, 5, wrap)
+				e.MoveToScroll(term.Coordinates{X: 0, Y: 6})
+				pos := e.CursorAtScroll()
+				assert.Equal(t, term.Coordinates{Y: 6, X: 0}, pos)
+			})
+			t.Run("moves cursor to position past curr width", func(t *testing.T) {
+				e := setupCursor(t, 5, 5, wrap)
+				e.MoveToScroll(term.Coordinates{X: 7, Y: 2})
+				pos := e.CursorAtScroll()
+				assert.Equal(t, term.Coordinates{Y: 2, X: 7}, pos)
+			})
+
+		})
+	}
 }
 
 func TestCursorWrap(t *testing.T) {
 	t.Run("takes wraps into consideration", func(t *testing.T) {
-		e := setupCursor(t, 10, 10)
-		e.scroll.Wrap = true
-		e.MoveToScroll(term.Coordinates{X: 76, Y: 2})
+		e := setupCursor(t, 10, 10, true)
+		_, ok := e.MoveToScroll(term.Coordinates{X: 76, Y: 2})
+		require.True(t, ok)
 		pos := e.Coordinates()
 		assert.Equal(t, term.Coordinates{Y: 9, X: 6}, pos)
 	})
 	t.Run("handles cursor.X past last row's column", func(t *testing.T) {
-		e := setupCursor(t, 10, 10)
-		e.scroll.Wrap = true
-		e.MoveToScroll(term.Coordinates{X: 77, Y: 2})
+		e := setupCursor(t, 10, 10, true)
+		_, ok := e.MoveToScroll(term.Coordinates{X: 77, Y: 2})
+		require.True(t, ok)
 		pos := e.Coordinates()
 		assert.Equal(t, term.Coordinates{Y: 9, X: 7}, pos)
 	})
-	t.Run("handles cursor.X == width", func(t *testing.T) {
-		e := setupCursor(t, 10, 10)
-		e.scroll.Wrap = true
-		e.cursor.X = e.scroll.Width()
-		pos := e.Coordinates()
-		assert.Equal(t, term.Coordinates{Y: 1}, pos)
-	})
 	t.Run("MoveRight moves cursor past the end of line of a wrapped line", func(t *testing.T) {
-		e := setupCursor(t, 10, 10)
-		e.scroll.Wrap = true
+		e := setupCursor(t, 10, 10, true)
 		e.MoveToScroll(term.Coordinates{X: 15, Y: 3})
 
 		require.True(t, e.MoveRight())
@@ -1858,7 +2047,7 @@ func TestCursorWrap(t *testing.T) {
 }
 
 func TestCursorSelectWordInsertWord(t *testing.T) {
-	e := setupCursorContent(t, 5, 5, sampleSnippet+"\n")
+	e := setupCursorContent(t, 5, 5, sampleSnippet+"\n", false)
 	require.True(t, e.MoveDown())
 	require.True(t, e.MoveDown())
 	require.True(t, e.MoveRightStartWord())
@@ -1875,7 +2064,7 @@ func TestCursorSelectWordInsertWord(t *testing.T) {
 }
 
 func TestCursorReplaceAllWithNewline(t *testing.T) {
-	e := setupCursorContent(t, 5, 5, sampleSnippet+"\n")
+	e := setupCursorContent(t, 5, 5, sampleSnippet+"\n", false)
 	require.True(t, e.SelectLine())
 	require.True(t, e.MoveLastLine())
 	require.True(t, e.DeleteSelection())
@@ -1921,13 +2110,13 @@ func TestFileCursorIntegration(t *testing.T) {
 		}},
 		{"is able to insert at last line + 1", false, func(t *testing.T, cursor *Cursor) {
 			assert.True(t, cursor.MoveLastLine())
-			cursor.InsertRowBelow()
+			cursor.InsertLineBelow()
 			assert.Equal(t, term.Coordinates{Y: 32}, cursor.CursorAtScroll())
 			assert.Equal(t, sampleSnippet+"\n", cursor.buffer().String())
 		}},
 		{"is able to insert at last EOL", true, func(t *testing.T, cursor *Cursor) {
 			assert.True(t, cursor.MoveLastLine())
-			cursor.InsertRowBelow()
+			cursor.InsertLineBelow()
 			assert.Equal(t, term.Coordinates{Y: 32}, cursor.CursorAtScroll())
 			assert.Equal(t, sampleSnippet+"\n", cursor.buffer().String())
 		}},
@@ -1976,6 +2165,16 @@ func TestFileCursorIntegration(t *testing.T) {
 }
 
 func TestCursorPaste(t *testing.T) {
+	/*
+	   z
+	   x
+	*/
+	/*
+		a
+		b
+		c
+		d
+	*/
 	const initialContent = "a\nb\nc\nd"
 	tsuite := []struct {
 		initialPosition     term.Coordinates
@@ -2032,7 +2231,7 @@ func TestCursorPaste(t *testing.T) {
 
 	for i, tcase := range tsuite {
 		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
-			c := setupCursorContent(t, 5, 5, initialContent)
+			c := setupCursorContent(t, 5, 5, initialContent, false)
 			c.MoveToScroll(tcase.initialPosition)
 			c.Paste(tcase.txt, tcase.mode, tcase.after)
 			assert.Equal(t, tcase.expectedBuffer, c.buffer().String())
@@ -2057,7 +2256,7 @@ func TestCursorInsertBlock(t *testing.T) {
 
 	for i, tcase := range tsuite {
 		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
-			c := setupCursorContent(t, 5, 5, initialContent)
+			c := setupCursorContent(t, 5, 5, initialContent, false)
 			c.MoveToScroll(tcase.initialPosition)
 			c.InsertBlock(tcase.txt)
 			assert.Equal(t, tcase.expected, c.buffer().String())

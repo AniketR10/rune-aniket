@@ -56,7 +56,7 @@ func main() {
 	assert.Equal(t, out.String(), content)
 
 	require.True(t, cursor.MoveDown())
-	cursor.InsertRowBelow()
+	cursor.InsertLineBelow()
 	cursor.Insert('\t')
 	cursor.Insert('f')
 	cursor.Insert('m')

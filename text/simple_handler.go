@@ -4,6 +4,7 @@ import (
 	"unstable.build/go-tui"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/cell"
+	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/term"
 )
@@ -13,18 +14,22 @@ type simpleEditorHandler struct {
 	less     handler.Less
 	resource workspaceapi.URI
 	cursor   Cursor
+	height   int
 }
 
-func newSimpleEditor(
-	buf *cell.Buffer, resource workspaceapi.URI, wrap bool,
-) *simpleEditorHandler {
+// NewSimpleHandler returns a modeless, simple-to-use text.Handler.
+func NewSimpleHandler(
+	buf *cell.Buffer, resource workspaceapi.URI,
+	wrap, commandBar bool,
+) (Handler, *component.Scroll, *Cursor) {
 	ret := new(simpleEditorHandler)
-	ret.init(buf, resource, wrap)
-	return ret
+	ret.init(buf, resource, wrap, commandBar)
+	return ret, ret.less.Scroll(), &ret.cursor
 }
 
 func (h *simpleEditorHandler) init(
-	buf *cell.Buffer, resource workspaceapi.URI, wrap bool,
+	buf *cell.Buffer, resource workspaceapi.URI,
+	wrap, commandBar bool,
 ) {
 	h.buf = buf
 	h.resource = resource
@@ -33,12 +38,14 @@ func (h *simpleEditorHandler) init(
 		// TODO expose via configuration
 		// Debug:   vi.config.debug,
 		// ResAttr: vi.config.resAttr,
+		NoBar: !commandBar,
 	})
 	h.cursor.Init(h.less.Scroll())
 }
 
 // Resize satisfies tui.Component
 func (h *simpleEditorHandler) Resize(width, height int) {
+	h.height = height
 	h.less.Resize(width, height)
 }
 
@@ -59,30 +66,32 @@ func (h *simpleEditorHandler) Handle(ev term.Event) (exit, handled bool) {
 	default:
 	}
 
-	handled = true
 	switch ev.Key {
 	case term.KeyArrowLeft:
 		if ev.Mod == term.ModAlt {
-			h.cursor.MoveLeftStartWord()
+			handled = h.cursor.MoveLeftStartWord()
 		} else {
-			h.cursor.MoveLeft()
+			handled = h.cursor.MoveLeft()
 		}
 	case term.KeyArrowRight:
 		if ev.Mod == term.ModAlt {
-			h.cursor.MoveRightStartWord()
+			handled = h.cursor.MoveRightStartWord()
 		} else {
-			h.cursor.MoveRight()
+			handled = h.cursor.MoveRight()
 		}
 	case term.KeyArrowUp:
-		h.cursor.MoveUp()
+		handled = h.cursor.MoveUp()
 	case term.KeyArrowDown:
-		h.cursor.MoveDown()
+		handled = h.cursor.MoveDown()
 	case term.KeyEnter:
 		h.cursor.Insert('\n')
+		handled = true
 	case term.KeySpace:
 		h.cursor.Insert(' ')
+		handled = true
 	case term.KeyTab:
 		h.cursor.Insert('\t')
+		handled = true
 	case term.KeyBackspace, term.KeyBackspace2:
 		if h.cursor.Selection() != "" {
 			handled = h.cursor.DeleteSelection()
@@ -90,22 +99,21 @@ func (h *simpleEditorHandler) Handle(ev term.Event) (exit, handled bool) {
 			handled = h.cursor.Backspace()
 		}
 	case term.KeyCtrlA:
-		h.cursor.MoveStartLine()
+		handled = h.cursor.MoveStartLine()
 	case term.KeyCtrlE:
-		h.cursor.MoveEndLine()
+		handled = h.cursor.MoveEndLine()
 	case term.KeyCtrlZ:
-		h.cursor.Undo()
+		handled = h.cursor.Undo()
 	case term.KeyCtrlR:
-		h.cursor.Redo()
+		handled = h.cursor.Redo()
 	case term.KeyCtrlF:
 		ev.Key = 0
 		ev.Ch = '/'
-		h.less.Handle(ev)
+		_, handled = h.less.Handle(ev)
 	default:
 		if ev.Ch != 0 {
 			h.cursor.Insert(ev.Ch)
-		} else {
-			handled = false
+			handled = true
 		}
 	}
 	return

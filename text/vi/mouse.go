@@ -92,5 +92,5 @@ func (d *mouseDelegate) Width() int {
 }
 
 func (d *mouseDelegate) Height() int {
-	return d.scroll().Height()
+	return d.scroll().SizeHeight()
 }

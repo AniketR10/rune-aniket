@@ -342,10 +342,10 @@ func (vi *viHandlerImpl) handleNormal(ev term.Event) (quit, handled bool) {
 			vi.cursor.MoveRight()
 		case 'O':
 			vi.setInsertMode()
-			vi.cursor.InsertRowAbove()
+			vi.cursor.InsertLineAbove()
 		case 'o':
 			vi.setInsertMode()
-			vi.cursor.InsertRowBelow()
+			vi.cursor.InsertLineBelow()
 		case 'i':
 			vi.setInsertMode()
 		case 'I':
@@ -572,7 +572,7 @@ func (vi *viHandlerImpl) handleReplace(ev term.Event) (quit, handled bool) {
 	if ev.Ch != 0 {
 		// do not delete column == len(row); it contains a newline
 		// and that would conflate the current row with the next
-		if vi.cursor.Column() < vi.less.Buffer().Columns(vi.cursor.Row()) {
+		if vi.cursor.Column() < vi.less.Buffer().Columns(vi.cursor.Line()) {
 			vi.cursor.Delete()
 		}
 		vi.cursor.Insert(ev.Ch)

@@ -40,8 +40,8 @@ func newScroll(tabspaces int, wrap bool, width, height int) (scroll *Scroll) {
 	buf := cell.NewBuffer()
 	buf.InitWithTabspaces(tabspaces)
 	scroll = NewScroll(buf)
-	scroll.Resize(width, height)
 	scroll.Wrap = wrap
+	scroll.Resize(width, height)
 	return
 }
 
@@ -135,6 +135,7 @@ func TestScrollDraw(t *testing.T) {
 		{func() { assert.True(t, scroll.SeekStartFile()) }, "ove in y\nove isn'"},
 		{func() { assert.True(t, scroll.SeekEndFile()) }, "ove isn'\n       -"},
 		{func() { assert.True(t, scroll.SeekStartLine()) }, "Love isn\n        "},
+		// 11
 		{func() { assert.True(t, scroll.SeekStartFile()) }, "Love in \nLove isn"},
 		{func() { scroll.Search("Love") }, "Love in \nLove isn"},
 		{func() { assert.False(t, scroll.SeekNextResult()) }, "Love in \nLove isn"},
@@ -145,6 +146,7 @@ func TestScrollDraw(t *testing.T) {
 		{func() { assert.True(t, scroll.SeekPrevResult()) }, " in your heart wasn'"},
 		{func() { assert.Equal(t, 1, scroll.Search("⌘⌘")); assert.True(t, scroll.SeekNextResult()) }, "Oscar Hammerstein ⌘⌘"},
 		{func() { assert.Equal(t, 2, scroll.Search("⌘")); assert.False(t, scroll.SeekNextResult()) }, "Oscar Hammerstein ⌘⌘"},
+		// 21
 		{func() { scroll.Search("Oscar"); assert.False(t, scroll.SeekNextResult()) }, "Oscar Hammerstein ⌘⌘"},
 		{func() { assert.True(t, scroll.SeekStartFile()); assert.True(t, scroll.SeekStartLine()) }, "Love in your heart w"},
 		{func() { scroll.Buffer().DeleteCell(term.Coordinates{X: 0, Y: 0}) }, "ove in your heart wa"},
@@ -172,7 +174,7 @@ func TestScrollDraw(t *testing.T) {
 		// {func() { scroll.Insert(term.Coordinates{X: 20, Y: 2}, '中') }, "rstein 中中           "},
 	}
 
-	for _, tcase := range tests {
+	for i, tcase := range tests {
 		w.Clear(term.Attributes{})
 		if tcase.Action != nil {
 			tcase.Action()
@@ -184,7 +186,7 @@ func TestScrollDraw(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		assert.Equal(t, tcase.Expected, w.String())
+		assert.Equal(t, tcase.Expected, w.String(), "test case %d", i)
 	}
 
 	assert.Equal(t, 16, dispatchedSubscribe)
@@ -206,13 +208,13 @@ func TestScrollDrawWrap(t *testing.T) {
 		{func() { scroll.SeekLeft() }, "Love in \nyour hea"},
 		{func() { scroll.SeekRight() }, "Love in \nyour hea"},
 		{func() { scroll.SeekLeft() }, "Love in \nyour hea"},
-		{func() { scroll.SeekDown() }, "Love isn\n't love "},
-		{func() { scroll.SeekDown() }, "        \n-- Oscar"},
-		{func() { scroll.SeekUp() }, "Love isn\n't love "},
-		{func() { scroll.SeekRight() }, "Love isn\n't love "},
+		{func() { scroll.SeekDown() }, "your hea\nrt wasn'"},
+		{func() { scroll.SeekDown() }, "rt wasn'\nt put th"},
+		{func() { scroll.SeekUp() }, "your hea\nrt wasn'"},
+		{func() { scroll.SeekRight() }, "your hea\nrt wasn'"},
 		{func() { scroll.SeekStartFile() }, "Love in \nyour hea"},
-		{func() { scroll.SeekEndFile() }, "        \n-- Oscar"},
-		{func() { scroll.SeekStartLine() }, "        \n-- Oscar"},
+		{func() { scroll.SeekEndFile() }, " Hammers\ntein ⌘⌘ "},
+		{func() { scroll.SeekStartLine() }, " Hammers\ntein ⌘⌘ "},
 		{func() { scroll.SeekStartFile() }, "Love in \nyour hea"},
 		{func() { scroll.Search("Love") }, "Love in \nyour hea"},
 		{func() { scroll.SeekNextResult() }, "Love in \nyour hea"},
@@ -325,47 +327,15 @@ func TestScrollWraps(t *testing.T) {
 		scroll, _ := newScrollWrapTestCase(t, 10, 10)
 		assert.Zero(t, nil, scroll.Wraps())
 	})
-	t.Run("returns only the visibly wrapped lines", func(t *testing.T) {
-		width, height := 51, 17
-		scroll, w := newScrollWrapTestCase(t, width, height)
-		expected := map[int]int{
-			8:  1,
-			9:  1,
-			10: 1,
-		}
+	t.Run("returns wrapped lines with at most 1 wrap", func(t *testing.T) {
+		scroll, w := newScrollWrapTestCase(t, 51, 17)
+		expected := []int{0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 1, 0}
 		scroll.Draw(w)
 		assert.Equal(t, expected, scroll.Wraps())
 	})
-	/*  +module github.com/er
-	    +nestrc/blue
-	    +
-	    +go 1.14
-	    +
-	    +require (
-	    +    cloud.google.com
-	    +/go v0.63.0 // indir
-	    +ect
-	    +    cloud.google.com
-	    +/go/firestore v1.2.0
-	    +    github.com/adria
-	    +nmo/go-nmea v1.2.0
-	    +    github.com/ernes
-	    +trc/go-multierror v1
-	    +.1.2 // indirect	    +    github.com/ernes
-	    +trc/logd-go v0.0.0-2
-	    +0180509171507-65871c
-	    +1d5504
-	*/
-	t.Run("returns number of wraps with each line", func(t *testing.T) {
+	t.Run("returns wrapped lines with more than 1 wrap", func(t *testing.T) {
 		scroll, w := newScrollWrapTestCase(t, 20, 20)
-		expected := map[int]int{
-			0: 1,
-			5: 2,
-			6: 1,
-			7: 1,
-			8: 2,
-			9: 3,
-		}
+		expected := []int{1, 0, 0, 0, 0, 2, 1, 1, 2, 3, 3, 1, 1, 1, 3, 0}
 		scroll.Draw(w)
 		assert.Equal(t, expected, scroll.Wraps())
 	})

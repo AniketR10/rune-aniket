@@ -23,7 +23,8 @@ func SimpleEditor(wrap bool) Editor {
 }
 
 func (e *simpleEditor) Edit(file workspaceapi.URI, buf *cell.Buffer) (Handler, error) {
-	root := newSimpleEditor(buf, file, e.wrap)
+	rootIfc, _, _ := NewSimpleHandler(buf, file, e.wrap, false)
+	root := rootIfc.(*simpleEditorHandler)
 	return e.pub.PublishEdit(file, buf, root, &root.cursor), nil
 }
 
