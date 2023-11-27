@@ -35,10 +35,6 @@ github.com/envoyproxy/go-control-plane v0.9.0/go.mod h1:YTl/9mNaCwkRvm6d1a2C3ymF
 github.com/envoyproxy/go-control-plane v0.9.1-0.20191026205805-5f8ba28d4473/go.mod h1:YTl/9mNaCwkRvm6d1a2C3ymFceY/DCBVvsKhRF0iEA4=
 github.com/envoyproxy/go-control-plane v0.9.4/go.mod h1:6rpuAdCZL397s3pYoYcLgu1mIlRU8Am5FuJP05cCM98=
 github.com/envoyproxy/protoc-gen-validate v0.1.0/go.mod h1:iSmxcyjqTsJpI2R4NaDN7+kN2VEUnK/pcBlmesArF7c=
-github.com/ernestrc/blue v1.37.3 h1:fuSgNPkdJ2qNE//xWosPRrMQJ0p3YnS8hTmgieRF+rk=
-github.com/ernestrc/blue v1.37.3/go.mod h1:J+HfO8HnK1KWATHWiYmrGHGIiGl5PDJ8Wuvr8HI05YE=
-github.com/ernestrc/blue v1.39.4 h1:pUrobe15XeC8chGJovmh2nfrU9YODQblccEDbSBpivE=
-github.com/ernestrc/blue v1.39.4/go.mod h1:J+HfO8HnK1KWATHWiYmrGHGIiGl5PDJ8Wuvr8HI05YE=
 github.com/ernestrc/blue v1.40.0 h1:lLgmEe+HPs/OYG6pS56ERwmt1f4VxX93Spxz7tl1HOY=
 github.com/ernestrc/blue v1.40.0/go.mod h1:J+HfO8HnK1KWATHWiYmrGHGIiGl5PDJ8Wuvr8HI05YE=
 github.com/ernestrc/dom v0.2.5-0.20201125033726-789c946aa938 h1:f/aC0hFDoMkao3chzwSlyBnwxcQj77I3i/D6HEbcuTE=
@@ -229,6 +225,8 @@ github.com/rivo/uniseg v0.4.2/go.mod h1:FN3SvrM+Zdj16jyLfmOkMNblXMcoc8DfTHruCPUc
 github.com/rogpeppe/go-internal v1.3.0/go.mod h1:M8bDsm7K2OlrFYOpmOWEs/qY81heoFRclV5y23lUDJ4=
 github.com/russross/blackfriday v0.0.0-20171011182219-6d1ef893fcb0/go.mod h1:JO/DiYxRf+HjHt06OyowR9PTA263kcR/rfWxYHBV53g=
 github.com/saracen/walker v0.1.1/go.mod h1:0oKYMsKVhSJ+ful4p/XbjvXbMgLEkLITZaxozsl4CGE=
+github.com/sashabaranov/go-openai v1.17.9 h1:QEoBiGKWW68W79YIfXWEFZ7l5cEgZBV4/Ow3uy+5hNY=
+github.com/sashabaranov/go-openai v1.17.9/go.mod h1:lj5b/K+zjTSFxVLijLSTDZuP7adOgerWeFyZLUhAKRg=
 github.com/sclevine/agouti v3.0.0+incompatible/go.mod h1:b4WX9W9L1sfQKXeJf1mUTLZKJ48R1S7H23Ji7oFO5Bw=
 github.com/shurcooL/go v0.0.0-20180423040247-9e1955d9fb6e/go.mod h1:TDJrrUr11Vxrven61rcy3hJMUqaf/CLWYhHNPmT14Lk=
 github.com/shurcooL/go-goon v0.0.0-20170922171312-37c2f522c041/go.mod h1:N5mDOmsrJOB+vfqUK+7DmDyjhSLIIBnXo9lvZJj3MWQ=

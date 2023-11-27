@@ -60,6 +60,8 @@ require (
 	gopkg.in/mgo.v2 v2.0.0-20190816093944-a6b53ec6cb22 // indirect
 )
 
+require github.com/sashabaranov/go-openai v1.17.9
+
 require (
 	cloud.google.com/go v0.110.0 // indirect
 	cloud.google.com/go/compute v1.19.1 // indirect
