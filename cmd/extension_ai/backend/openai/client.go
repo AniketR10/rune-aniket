@@ -139,15 +139,15 @@ func (a openaiClientAdapter) CreateChatCompletion(
 		if !errors.As(err, &apiErr) {
 			return false, err // do not retry unknown error
 		}
+		log.WithFields(log.Fields{
+			"call":           "CreateChatCompletion",
+			"attempt":        n,
+			"code":           apiErr.HTTPStatusCode,
+			logging.KeyError: err.Error(),
+			logging.KeyClass: "openai.Client",
+		}).Warn(apiErr.Message)
 		switch apiErr.HTTPStatusCode {
 		case 429, 500:
-			log.WithFields(log.Fields{
-				"call":           "CreateChatCompletion",
-				"attempt":        n,
-				"code":           apiErr.HTTPStatusCode,
-				logging.KeyError: err.Error(),
-				logging.KeyClass: "openai.Client",
-			}).Error(apiErr.Message)
 			return true, err // retry allowed codes
 		default:
 			return false, err // do not retry the rest
