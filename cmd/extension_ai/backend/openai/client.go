@@ -7,7 +7,10 @@ import (
 	"time"
 
 	"github.com/ernestrc/blue/iterator"
+	"github.com/ernestrc/blue/logging"
+	"github.com/ernestrc/blue/retry"
 	"github.com/sashabaranov/go-openai"
+	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui/cmd/extension_ai/backend"
 )
 
@@ -84,6 +87,13 @@ func NewClient(token string, config Config) backend.Service {
 	}
 }
 
+var (
+	retryStrategy = retry.CombinedStrategy(
+		retry.LimitStrategy(5),
+		retry.ExponentialStrategy(100*time.Millisecond, 2000*time.Millisecond),
+	)
+)
+
 type openaiClientAdapter struct {
 	tools  []openai.Tool
 	config Config
@@ -114,21 +124,36 @@ func (a openaiClientAdapter) CreateChatCompletion(
 		// which greatly simplifies the backend.Service interface.
 		// N:                1,
 	}
-	stream, err := a.client.CreateChatCompletionStream(ctx, req)
-	if err != nil {
-		var e = &openai.APIError{}
-		if errors.As(err, &e) {
-			switch e.HTTPStatusCode {
-			case 401:
-				// invalid auth or key (do not retry)
-			case 429:
-				// rate limiting or engine overload (wait and retry)
-			case 500:
-				// openai server error (retry)
-			default:
-				// unhandled
-			}
+
+	// see https://platform.openai.com/docs/guides/error-codes/api-errors
+	var stream *openai.ChatCompletionStream
+	var n int
+	err := retry.Retry(ctx, retryStrategy, func(ctx context.Context) (bool, error) {
+		n++
+		var err error
+		stream, err = a.client.CreateChatCompletionStream(ctx, req)
+		if err == nil {
+			return false, nil // done
 		}
+		apiErr := &openai.APIError{}
+		if !errors.As(err, &apiErr) {
+			return false, err // do not retry unknown error
+		}
+		switch apiErr.HTTPStatusCode {
+		case 429, 500:
+			log.WithFields(log.Fields{
+				"call":           "CreateChatCompletion",
+				"attempt":        n,
+				"code":           apiErr.HTTPStatusCode,
+				logging.KeyError: err.Error(),
+				logging.KeyClass: "openai.Client",
+			}).Error(apiErr.Message)
+			return true, err // retry allowed codes
+		default:
+			return false, err // do not retry the rest
+		}
+	})
+	if err != nil {
 		return nil, err
 	}
 	return &completionStreamIterator{stream: stream}, nil
