@@ -191,6 +191,9 @@ func (c *Cursor) MoveToScroll(pos term.Coordinates) (
 // the bounds of the current view, then underlying scroll is used
 // to seek to pos.
 func (c *Cursor) moveToScroll(pos term.Coordinates) {
+	if c.scroll.Width() == 0 {
+		return
+	}
 	c.setCursor(ScrollToWindowCoordinates(c.scroll, pos), true)
 }
 
@@ -1099,7 +1102,8 @@ func (c *Cursor) DeleteSelection() (ok bool) {
 // CopySelection copies the current text under selection and returns true
 // or does nothing and returns false.
 func (c *Cursor) CopySelection(registerID string, clip clipboard.Register) (ok bool, err error) {
-	if c.selection.mode == noSelection {
+	if c.selection.mode == noSelection ||
+		c.scroll.Width() == 0 {
 		return
 	}
 
@@ -1167,7 +1171,7 @@ func (c *Cursor) moveToChar(
 	end := term.Coordinates{Y: cursor.Y, X: lastPos}
 
 	cells, ok := c.buffer().Select(start, end)
-	if !ok || len(cells) == 0 {
+	if !ok || len(cells) == 0 || c.scroll.Width() == 0 {
 		return false
 	}
 
@@ -1526,6 +1530,9 @@ func (c *Cursor) ScrollCoordinates(pos term.Coordinates) term.Coordinates {
 
 // WindowCoordinates translates scroll coordinates to the window coordinates system.
 func (c *Cursor) WindowCoordinates(pos term.Coordinates) term.Coordinates {
+	if c.scroll.Width() == 0 {
+		return pos // avoid division by zero
+	}
 	return ScrollToWindowCoordinates(c.scroll, pos)
 }
 
@@ -1608,6 +1615,9 @@ func (c *Cursor) moveMatchRuneBackward(target, match rune) bool {
 }
 
 func (c *Cursor) setCursorAfterUpdate(atScroll term.Coordinates) {
+	if c.scroll.Width() == 0 {
+		return
+	}
 	c.scroll.RecalculateWraps()
 	var done bool
 	// the next position might be beyond the width of the current row
