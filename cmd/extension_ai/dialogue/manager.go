@@ -15,7 +15,8 @@ import (
 	"unstable.build/go-tui/cmd/extension_ai/backend/openai"
 )
 
-// Manager implements the ability to create chat completions.
+// Manager implements chat completion via a backend.Service.
+// It uses Store to persist context window across sessions.
 type Manager struct {
 	store Store
 	svc   backend.Service
@@ -24,8 +25,8 @@ type Manager struct {
 
 // NewManager initializes a Manager with the given auth token
 // model and Store.
-func NewManager(token string, model string, store Store) Manager {
-	client := openai.NewClient(token, openai.Config{
+func NewManager(openaiAuthToken string, model string, store Store) Manager {
+	client := openai.NewClient(openaiAuthToken, openai.Config{
 		Model: model,
 	})
 	return Manager{
@@ -73,9 +74,6 @@ func (m Manager) doCreateCompletion(
 		}
 	}
 
-	// TODO provide service that automatically trims top messages for clients
-	// of this backend.
-
 	var prompt []backend.ChatCompletionMessage
 	for _, msg := range input {
 		prompt = append(prompt,
@@ -89,6 +87,31 @@ func (m Manager) doCreateCompletion(
 	copy(totalMessages, dialogue.Messages)
 	copy(totalMessages[len(dialogue.Messages):], prompt)
 
+	// NOTE: reduce number of messages until it's below context window.
+	var exceedsContextWindow bool
+	for len(totalMessages) > 2 {
+		exceeds, err := m.svc.ExceedsContextWindow(totalMessages)
+		if err != nil {
+			return nil, 0, fmt.Errorf("could not verify context window: %v", err)
+		}
+		if !exceeds {
+			break
+		}
+		exceedsContextWindow = true
+		if len(dialogue.Messages) == 0 {
+			prompt = prompt[1:]
+			totalMessages = totalMessages[1:]
+		} else {
+			// -2 so we remove a single user/assistant interaction
+			totalMessages = totalMessages[2:]
+		}
+	}
+
+	// if len(totalMessages) is smaller than 2, but requests is
+	// still exceeding context window, something must be wrong
+	// with ExceedsContextWindow implementation so proceed and
+	// let CreateChatCompletion return the appropiate error.
+
 	req := backend.ChatCompletionRequest{
 		Messages: totalMessages,
 	}
@@ -100,24 +123,28 @@ func (m Manager) doCreateCompletion(
 
 	n = len(totalMessages)
 	ret = &completionStreamIterator{
-		dialogueID: dialogueID,
-		prompt:     prompt,
-		dialogue:   dialogue,
-		store:      m.store,
-		it:         it,
-		ctx:        ctx,
+		exceedsContextWindow: exceedsContextWindow,
+		totalMessages:        totalMessages,
+		dialogueID:           dialogueID,
+		userPrompt:           prompt,
+		dialogue:             dialogue,
+		store:                m.store,
+		it:                   it,
+		ctx:                  ctx,
 	}
 	return
 }
 
 // stores full message in store at the end of stream
 type completionStreamIterator struct {
-	ctx        context.Context
-	dialogueID string
-	prompt     []backend.ChatCompletionMessage
-	dialogue   Dialogue
-	store      Store
-	it         iterator.Iterator[backend.ChatCompletionResponse]
+	ctx                  context.Context
+	dialogueID           string
+	userPrompt           []backend.ChatCompletionMessage
+	totalMessages        []backend.ChatCompletionMessage
+	dialogue             Dialogue
+	exceedsContextWindow bool
+	store                Store
+	it                   iterator.Iterator[backend.ChatCompletionResponse]
 
 	response strings.Builder
 	err      error
@@ -133,15 +160,25 @@ func (s *completionStreamIterator) Next() (string, bool) {
 		s.err = err
 		return "", false
 	}
-	newMsgs := append(s.prompt, backend.ChatCompletionMessage{
+	response := backend.ChatCompletionMessage{
 		Role:    string(openai.RoleAssistant),
 		Content: s.response.String(),
 		// Metadata: ignore function calls for now
 		// Name: not usually defined for an assistant
-	})
+	}
+	newMsgs := append(s.userPrompt, response)
 	err := s.store.Create(s.ctx, s.dialogueID, newMsgs)
 	if errors.Is(err, document.ErrAlreadyExists) {
-		err = s.store.AppendMessages(s.ctx, s.dialogue, newMsgs)
+		// Calls to ExceedsContextWindow might be producing network requests
+		// so we must ensure that we also trim the messages persisted
+		// in store so next call to store.Get above gets the trimmed dialogue,
+		// and so we call ExceedsContextWindow at most twice.
+		if s.exceedsContextWindow {
+			totalMessages := append(s.totalMessages, response)
+			err = s.store.Set(s.ctx, s.dialogueID, totalMessages)
+		} else {
+			err = s.store.AppendMessages(s.ctx, s.dialogue, newMsgs)
+		}
 	}
 	if err != nil {
 		s.err = err

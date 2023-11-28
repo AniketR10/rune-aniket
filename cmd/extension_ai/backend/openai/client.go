@@ -84,6 +84,10 @@ func NewClient(token string, config Config) backend.Service {
 		})
 	}
 
+	if _, ok := modelContextWindow[config.Model]; !ok {
+		panic("model has no context mapping")
+	}
+
 	tkm, err := tiktoken.EncodingForModel(config.Model)
 	if err != nil {
 		panic(fmt.Errorf("encoding for model: %v", err))
@@ -149,6 +153,11 @@ func (a client) CreateChatCompletion(
 	for i, msg := range request.Messages {
 		messages[i] = openAIMessageFromModel(msg)
 	}
+
+	if exceeds, _ := a.ExceedsContextWindow(request.Messages); exceeds {
+		return nil, backend.ErrContextWindowExceeded
+	}
+
 	req := openai.ChatCompletionRequest{
 		Messages:         messages,
 		Model:            a.config.Model,
@@ -213,8 +222,12 @@ func (a client) CreateChatCompletion(
 	return &completionStreamIterator{stream: stream}, nil
 }
 
+func (a client) ExceedsContextWindow(messages []backend.ChatCompletionMessage) (bool, error) {
+	return a.countTokens(messages) > modelContextWindow[a.config.Model], nil
+}
+
 // OpenAI Cookbook: https://github.com/openai/openai-cookbook/blob/main/examples/How_to_count_tokens_with_tiktoken.ipynb
-func (a client) CountTokens(messages []backend.ChatCompletionMessage) (ret int) {
+func (a client) countTokens(messages []backend.ChatCompletionMessage) (ret int) {
 	for _, message := range messages {
 		ret += a.tokensPerMessage
 		ret += len(a.counter.Encode(message.Content, nil, nil))

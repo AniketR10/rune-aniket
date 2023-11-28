@@ -2,19 +2,31 @@ package backend
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/ernestrc/blue/iterator"
 )
 
+// ErrContextWindowExceeded is returned when the number of tokens in a request
+// exceeds the context window of a model. Users are encouraged to retry
+// with a reduced number of messages.
+var ErrContextWindowExceeded = errors.New("model context window exceeded")
+
 // Service encapsulates communications with an AI-capabilities provider.
 type Service interface {
+	// CreateChatCompletion attempts to complete the given chat completion request
+	// using the pre-configured model. This method should return ErrContextWindowExceeded
+	// if a request exceeds the context window. Clients can reduce the number of
+	// messages until ExceedsContextWindow returns false.
 	CreateChatCompletion(
 		ctx context.Context,
 		request ChatCompletionRequest,
 	) (iterator.Iterator[ChatCompletionResponse], error)
 
-	CountTokens(messages []ChatCompletionMessage) int
+	// ExceedsContextWindow returns true if the given message slice exceeds
+	// the pre-configured model's context window.
+	ExceedsContextWindow([]ChatCompletionMessage) (bool, error)
 }
 
 // ChatCompletionRequest represents a request structure for chat completion API.

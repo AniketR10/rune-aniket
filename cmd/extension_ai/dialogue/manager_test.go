@@ -108,25 +108,111 @@ func TestManager(t *testing.T) {
 			}
 		}
 	})
+
+	t.Run("trims messages if prompt with no history count of tokens is > context window", func(t *testing.T) {
+		contextWindow := 100
+		store := newTestStore(t)
+		client := testClient{
+			exceedsContextWindow: contextWindow,
+			streamRes: []backend.ChatCompletionResponse{
+				{Message: backend.ChatCompletionMessage{Content: "0"}},
+				{Message: backend.ChatCompletionMessage{Content: "1"}},
+				{Message: backend.ChatCompletionMessage{Content: "2"}},
+			},
+		}
+		input, _ := makeContentTokens(contextWindow)
+		manager := newTestManager(client, store)
+		it, err := manager.CreateCompletion(ctx, "myId", input)
+		require.NoError(t, err)
+		for i := 0; i < 3; i++ {
+			next, ok := it.Next()
+			require.True(t, ok)
+			assert.Equal(t, strconv.Itoa(i), next)
+		}
+
+		_, ok := it.Next()
+		require.False(t, ok)
+
+		err = it.Err()
+		require.NoError(t, err)
+
+		dialogue, err := store.Get(context.Background(), "myId")
+		require.NoError(t, err)
+
+		// 100-1 -> (below window) + 1 answer
+		require.Len(t, dialogue.Messages, 100)
+	})
+
+	t.Run("trims messages if prompt + history count of tokens is > context window", func(t *testing.T) {
+		contextWindow := 100
+		store := newTestStore(t)
+		client := testClient{
+			exceedsContextWindow: contextWindow,
+			streamRes: []backend.ChatCompletionResponse{
+				{Message: backend.ChatCompletionMessage{Content: "0"}},
+				{Message: backend.ChatCompletionMessage{Content: "1"}},
+				{Message: backend.ChatCompletionMessage{Content: "2"}},
+			},
+		}
+		manager := newTestManager(client, store)
+
+		var msgs []backend.ChatCompletionMessage
+		for {
+			exceeds, _ := client.ExceedsContextWindow(msgs)
+			if exceeds {
+				break
+			}
+			input, cmsgs := makeContentTokens(contextWindow / 8)
+			msgs = append(msgs, cmsgs...)
+			it, err := manager.CreateCompletion(ctx, "myId", input)
+			require.NoError(t, err)
+			for i := 0; i < 3; i++ {
+				next, ok := it.Next()
+				require.True(t, ok)
+				assert.Equal(t, strconv.Itoa(i), next)
+			}
+
+			_, ok := it.Next()
+			require.False(t, ok)
+
+			err = it.Err()
+			require.NoError(t, err)
+		}
+
+		dialogue, err := store.Get(context.Background(), "myId")
+		require.NoError(t, err)
+
+		// 100-2 -> (below window) + 1 answer
+		require.Len(t, dialogue.Messages, 99)
+	})
 }
 
 var _ backend.Service = testClient{}
 
 type testClient struct {
-	err       error
-	streamErr error
-	streamRes []backend.ChatCompletionResponse
+	exceedsContextWindow int
+	err                  error
+	streamErr            error
+	streamRes            []backend.ChatCompletionResponse
 }
 
 func (t testClient) CreateChatCompletion(
 	ctx context.Context,
 	request backend.ChatCompletionRequest,
 ) (iterator.Iterator[backend.ChatCompletionResponse], error) {
+	if exceeds, _ := t.ExceedsContextWindow(request.Messages); exceeds {
+		return nil, backend.ErrContextWindowExceeded
+	}
 	return &testStream{res: t.streamRes, err: t.streamErr}, t.err
 }
 
-func (t testClient) CountTokens([]backend.ChatCompletionMessage) int {
-	return 0
+func (t testClient) ExceedsContextWindow(
+	msgs []backend.ChatCompletionMessage,
+) (bool, error) {
+	if t.exceedsContextWindow == 0 {
+		return false, t.err
+	}
+	return len(msgs) >= t.exceedsContextWindow, t.err
 }
 
 type testStream struct {
@@ -165,4 +251,14 @@ func newTestManager(client backend.Service, store Store) Manager {
 		svc:   client,
 		model: "testModel",
 	}
+}
+
+func makeContentTokens(greaterThan int) ([]string, []backend.ChatCompletionMessage) {
+	var ret []string
+	var msgs []backend.ChatCompletionMessage
+	for i := 0; len(msgs) < greaterThan; i++ {
+		msgs = append(msgs, backend.ChatCompletionMessage{Content: strconv.Itoa(i)})
+		ret = append(ret, strconv.Itoa(i))
+	}
+	return ret, msgs
 }

@@ -3,6 +3,7 @@ package openai
 import (
 	"context"
 	"os"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -202,14 +203,53 @@ func TestCreateChatCompletion(t *testing.T) {
 	})
 }
 
+func TestContextWindows(t *testing.T) {
+	t.Run("CreateCompletionRequest errors with ErrContextWindowExceeded", func(t *testing.T) {
+		client := NewClient("", Config{
+			Model: GPT4,
+		}).(client)
+		ctx := context.Background()
+		msgs := makeMessageTokens(client, 8193)
+
+		// sut
+		req := backend.ChatCompletionRequest{Messages: msgs}
+		_, err := client.CreateChatCompletion(ctx, req)
+		require.Equal(t, backend.ErrContextWindowExceeded, err)
+	})
+
+	t.Run("ExceedsContextWindow", func(t *testing.T) {
+		client := NewClient("", Config{
+			Model: GPT4,
+		}).(client)
+		msgs := makeMessageTokens(client, 8193)
+
+		// sut
+		ok, err := client.ExceedsContextWindow(msgs)
+		require.NoError(t, err)
+		require.True(t, ok)
+
+		ok, err = client.ExceedsContextWindow(msgs[1:])
+		require.NoError(t, err)
+		require.False(t, ok)
+	})
+}
+
 func TestCountTokens(t *testing.T) {
-	for _, model := range []string{GPT4, GPT3Dot5Turbo} {
+	for model := range modelContextWindow {
 		t.Run(model, func(t *testing.T) {
 			client := NewClient("", Config{
 				Model: model,
-			})
+			}).(client)
 			text := "¡Hola mundo!"
-			assert.Equal(t, 10, client.CountTokens([]backend.ChatCompletionMessage{{Content: text}}))
+			assert.Equal(t, 10, client.countTokens([]backend.ChatCompletionMessage{{Content: text}}))
 		})
 	}
+}
+
+func makeMessageTokens(c client, greaterThan int) []backend.ChatCompletionMessage {
+	var msgs []backend.ChatCompletionMessage
+	for i := 0; c.countTokens(msgs) < greaterThan; i++ {
+		msgs = append(msgs, backend.ChatCompletionMessage{Content: strconv.Itoa(i), Role: "user"})
+	}
+	return msgs
 }
