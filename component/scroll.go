@@ -637,7 +637,10 @@ func (s *Scroll) Height(width int) int {
 	if !s.Wrap {
 		return rows
 	}
-	_, wrapsLen := doWrapdrawNoAttr(term.NoopWriter{}, s.buf, s.width, s.height, s.offset)
+	if width == 0 {
+		return 0
+	}
+	_, wrapsLen := doWrapdrawNoAttr(term.NoopWriter{}, s.buf, width, s.height, s.offset)
 	return rows + wrapsLen
 }
 

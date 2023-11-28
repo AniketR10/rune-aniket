@@ -367,6 +367,25 @@ func TestRowLastIndex(t *testing.T) {
 	}
 }
 
+func TestScrollHeightNoWrap(t *testing.T) {
+	scroll := newScroll(4, false, 20, 1)
+	_, err := scroll.Buffer().ReadFrom(strings.NewReader(fortune))
+	require.NoError(t, err)
+	for _, width := range []int{0, 1, 10, 100} {
+		assert.Equal(t, 3, scroll.Height(width))
+	}
+}
+
+func TestScrollHeightWrap(t *testing.T) {
+	scroll := newScroll(4, true, 20, 1)
+	_, err := scroll.Buffer().ReadFrom(strings.NewReader(fortune))
+	require.NoError(t, err)
+	assert.Equal(t, 0, scroll.Height(0))
+	assert.Equal(t, len(fortune), scroll.Height(1))
+	assert.Equal(t, 13, scroll.Height(10))
+	assert.Equal(t, 3, scroll.Height(100))
+}
+
 func TestScrollSeekTo(t *testing.T) {
 	scroll := newScroll(4, false, 20, 1)
 	_, err := scroll.Buffer().ReadFrom(strings.NewReader(fortune))
