@@ -179,15 +179,29 @@ func (a client) CreateChatCompletion(
 		if !errors.As(err, &apiErr) {
 			return false, err // do not retry unknown error
 		}
-		log.WithFields(log.Fields{
+		fields := log.Fields{
 			"call":           "CreateChatCompletion",
 			"attempt":        n,
 			"code":           apiErr.HTTPStatusCode,
 			logging.KeyError: err.Error(),
 			logging.KeyClass: "openai.Client",
-		}).Warn(apiErr.Message)
+		}
 		switch apiErr.HTTPStatusCode {
-		case 429, 500:
+		case 429:
+			// for now treat rate limit headers as just logging data
+			// If this impl proves to be insufficient for prod,
+			// we should use the max of reset requests and reset tokens time
+			// to dynamically provide a retry strategy.
+			headers := stream.GetRateLimitHeaders()
+			fields["headerLimitRequests"] = headers.LimitRequests
+			fields["headerLimitTokens"] = headers.LimitTokens
+			fields["headerRemainingRequests"] = headers.RemainingRequests
+			fields["headerRemainingTokens"] = headers.RemainingTokens
+			fields["headerResetRequests"] = headers.ResetRequests
+			fields["headerResetTokens"] = headers.ResetTokens
+			fallthrough
+		case 500, 503:
+			log.WithFields(fields).Warn(apiErr.Message)
 			return true, err // retry allowed codes
 		default:
 			return false, err // do not retry the rest
