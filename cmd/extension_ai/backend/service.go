@@ -21,7 +21,7 @@ type ChatCompletionRequest struct {
 	Messages []ChatCompletionMessage
 }
 
-// ChatCompletionMessage is
+// ChatCompletionMessage is a message in a chat with an assistant backend.
 type ChatCompletionMessage struct {
 	// The role of the author of this message.
 	Role string

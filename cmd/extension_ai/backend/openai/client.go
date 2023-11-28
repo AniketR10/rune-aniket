@@ -103,8 +103,6 @@ type openaiClientAdapter struct {
 func (a openaiClientAdapter) CreateChatCompletion(
 	ctx context.Context, request backend.ChatCompletionRequest,
 ) (iterator.Iterator[backend.ChatCompletionResponse], error) {
-	// TODO use https://github.com/pkoukk/tiktoken-go to count tokens
-	// and ensure that token limit is not reached for the given model.
 	messages := make([]openai.ChatCompletionMessage, len(request.Messages))
 	for i, msg := range request.Messages {
 		messages[i] = openAIMessageFromModel(msg)
