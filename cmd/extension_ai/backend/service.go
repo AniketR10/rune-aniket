@@ -13,6 +13,8 @@ type Service interface {
 		ctx context.Context,
 		request ChatCompletionRequest,
 	) (iterator.Iterator[ChatCompletionResponse], error)
+
+	CountTokens(messages []ChatCompletionMessage) int
 }
 
 // ChatCompletionRequest represents a request structure for chat completion API.

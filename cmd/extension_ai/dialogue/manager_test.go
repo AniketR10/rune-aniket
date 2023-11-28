@@ -125,6 +125,10 @@ func (t testClient) CreateChatCompletion(
 	return &testStream{res: t.streamRes, err: t.streamErr}, t.err
 }
 
+func (t testClient) CountTokens([]backend.ChatCompletionMessage) int {
+	return 0
+}
+
 type testStream struct {
 	err    error
 	res    []backend.ChatCompletionResponse

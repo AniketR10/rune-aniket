@@ -72,8 +72,7 @@ func (m Manager) doCreateCompletion(
 			return
 		}
 	}
-	// TODO use https://github.com/pkoukk/tiktoken-go to count tokens
-	// and ensure that token limit is not reached for the given model.
+
 	// TODO provide service that automatically trims top messages for clients
 	// of this backend.
 

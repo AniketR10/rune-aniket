@@ -3,12 +3,15 @@ package openai
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"time"
 
 	"github.com/ernestrc/blue/iterator"
 	"github.com/ernestrc/blue/logging"
 	"github.com/ernestrc/blue/retry"
+	"github.com/pkoukk/tiktoken-go"
+	tiktokenLoader "github.com/pkoukk/tiktoken-go-loader"
 	"github.com/sashabaranov/go-openai"
 	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui/cmd/extension_ai/backend"
@@ -80,11 +83,40 @@ func NewClient(token string, config Config) backend.Service {
 			},
 		})
 	}
-	return openaiClientAdapter{
-		tools:  tools,
-		config: config,
-		client: openai.NewClient(token),
+
+	tkm, err := tiktoken.EncodingForModel(config.Model)
+	if err != nil {
+		panic(fmt.Errorf("encoding for model: %v", err))
 	}
+
+	var tokensPerMessage, tokensPerName int
+	switch config.Model {
+	case "gpt-3.5-turbo-0301":
+		tokensPerMessage = 4 // every message follows <|start|>{role/name}\n{content}<|end|>\n
+		tokensPerName = -1   // if there's a name, the role is omitted
+	default:
+		tokensPerMessage = 3
+		tokensPerName = 1
+	}
+
+	return client{
+		tools:            tools,
+		config:           config,
+		client:           openai.NewClient(token),
+		counter:          tkm,
+		tokensPerMessage: tokensPerMessage,
+		tokensPerName:    tokensPerName,
+	}
+}
+
+func init() {
+	// NOTE: do not load bpe loader every time extension fires
+	// as it needs an environment variable to cache it and manage it.
+	// We should probably download dynamically and manage the cache
+	// manually via host storage service, so the extension binary size
+	// doesn't suffer from embeds, but for now it's fine since
+	// this should rarely change.
+	tiktoken.SetBpeLoader(tiktokenLoader.NewOfflineLoader())
 }
 
 var (
@@ -94,13 +126,23 @@ var (
 	)
 )
 
-type openaiClientAdapter struct {
-	tools  []openai.Tool
-	config Config
-	client *openai.Client
+type client struct {
+	tools            []openai.Tool
+	config           Config
+	client           *openai.Client
+	counter          *tiktoken.Tiktoken
+	tokensPerMessage int
+	tokensPerName    int
 }
 
-func (a openaiClientAdapter) CreateChatCompletion(
+func (a client) log(level log.Level, msg string, args ...any) {
+	log.WithFields(log.Fields{
+		logging.KeyClass: "openai.Client",
+		"model":          a.config.Model,
+	}).Logf(level, msg, args...)
+}
+
+func (a client) CreateChatCompletion(
 	ctx context.Context, request backend.ChatCompletionRequest,
 ) (iterator.Iterator[backend.ChatCompletionResponse], error) {
 	messages := make([]openai.ChatCompletionMessage, len(request.Messages))
@@ -155,6 +197,21 @@ func (a openaiClientAdapter) CreateChatCompletion(
 		return nil, err
 	}
 	return &completionStreamIterator{stream: stream}, nil
+}
+
+// OpenAI Cookbook: https://github.com/openai/openai-cookbook/blob/main/examples/How_to_count_tokens_with_tiktoken.ipynb
+func (a client) CountTokens(messages []backend.ChatCompletionMessage) (ret int) {
+	for _, message := range messages {
+		ret += a.tokensPerMessage
+		ret += len(a.counter.Encode(message.Content, nil, nil))
+		ret += len(a.counter.Encode(message.Role, nil, nil))
+		ret += len(a.counter.Encode(message.Name, nil, nil))
+		if message.Name != "" {
+			ret += a.tokensPerName
+		}
+	}
+	ret += 3
+	return
 }
 
 // wraps an openai.ChatCompletionStream to satisfy iterator.Iterator

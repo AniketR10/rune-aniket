@@ -60,7 +60,11 @@ require (
 	gopkg.in/mgo.v2 v2.0.0-20190816093944-a6b53ec6cb22 // indirect
 )
 
-require github.com/sashabaranov/go-openai v1.17.9
+require (
+	github.com/pkoukk/tiktoken-go v0.1.6
+	github.com/pkoukk/tiktoken-go-loader v0.0.1
+	github.com/sashabaranov/go-openai v1.17.9
+)
 
 require (
 	cloud.google.com/go v0.110.0 // indirect
@@ -70,7 +74,7 @@ require (
 	cloud.google.com/go/longrunning v0.4.1 // indirect
 	github.com/BurntSushi/toml v1.2.1 // indirect
 	github.com/blackjack/webcam v0.0.0-20230502173554-3b52e93e8607 // indirect
-	github.com/dlclark/regexp2 v1.4.0 // indirect
+	github.com/dlclark/regexp2 v1.10.0 // indirect
 	github.com/fatih/color v1.10.0 // indirect
 	github.com/gen2brain/malgo v0.11.10 // indirect
 	github.com/golang/groupcache v0.0.0-20200121045136-8c9f03a8e57e // indirect

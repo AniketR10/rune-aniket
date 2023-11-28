@@ -201,3 +201,15 @@ func TestCreateChatCompletion(t *testing.T) {
 }`, builder.String())
 	})
 }
+
+func TestCountTokens(t *testing.T) {
+	for _, model := range []string{GPT4, GPT3Dot5Turbo} {
+		t.Run(model, func(t *testing.T) {
+			client := NewClient("", Config{
+				Model: model,
+			})
+			text := "¡Hola mundo!"
+			assert.Equal(t, 10, client.CountTokens([]backend.ChatCompletionMessage{{Content: text}}))
+		})
+	}
+}
