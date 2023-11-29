@@ -67,10 +67,10 @@ func (r *Row) Draw(w term.Writer) {
 // Resize satisfies tui.Component.
 func (r *Row) Resize(width, height int) {
 	r.width, r.height = width, height
-	colWidth := float64(width) / float64(MaxCols)
+	colWidth := rowColWidth(width)
 	var offset int
 	for _, comp := range r.content {
-		compWidth := int(float64(comp.cols) * colWidth)
+		compWidth := rowCompWidth(colWidth, comp)
 		pos := term.Coordinates{X: offset}
 		comp.Virtual.Move(pos)
 		if offset == width {
@@ -87,11 +87,21 @@ func (r *Row) Resize(width, height int) {
 
 // Height satisfies component.Responsive.
 func (r *Row) Height(width int) (ret int) {
+	colWidth := rowColWidth(width)
 	for _, content := range r.content {
-		height := content.Virtual.C.(Responsive).Height(width)
+		compWidth := rowCompWidth(colWidth, content)
+		height := content.Virtual.C.(Responsive).Height(compWidth)
 		if height > ret {
 			ret = height
 		}
 	}
 	return
+}
+
+func rowColWidth(width int) float64 {
+	return float64(width) / float64(MaxCols)
+}
+
+func rowCompWidth(colWidth float64, content *rowComp) int {
+	return int(float64(content.cols) * colWidth)
 }
