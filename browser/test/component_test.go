@@ -532,14 +532,14 @@ func TestComponentNotify(t *testing.T) {
 	tests := []testutil.ComponentTestCase{
 		{
 			nil, `
-┌────│ wasup: hola │    
-│    └─────────────┘    
-├────┌─────────────┐    
+┌────┌─────────────┐    
+│    │ wasup: hola │    
+├────└─────────────┘    
+│    ┌─────────────┐    
 │    │ wasup:      │    
 │    │ holaaaaaaaa │    
 │    │ aaaaaaaaaaa │    
-│    │ aaaaaa      │    
-└────└─────────────┘    `,
+└────│ aaaaaa      │    `,
 		},
 	}
 

@@ -71,6 +71,17 @@ TT
 │TTTTTT┊ 
 └──────┘ 
          `,
+		}, {
+			func() {
+				f.FrameCharSet = FrameCharSetDefault()
+				f.SetContent(NewString("123"))
+				f.Resize(8, 1)
+			}, `
+123      
+         
+         
+         
+         `,
 		},
 	}
 

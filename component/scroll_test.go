@@ -420,6 +420,147 @@ func TestScrollDrawOffsetOOB(t *testing.T) {
 	scroll.Draw(w)
 }
 
+func TestScrollDrawWrapWithBufferUpdates(t *testing.T) {
+	buf := cell.NewBuffer()
+	b := NewScroll(buf)
+	b.Wrap = true
+	b.Resize(20, 4)
+
+	w := term.NewStringWriter(20, 9)
+
+	tests := []testutil.ComponentTestCase{
+		{
+			nil, `
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    `,
+		}, {
+			func() { b.Resize(20, 1) }, `
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    `,
+		}, {
+			func() { b.Resize(20, 9) }, `
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    `,
+		}, {
+			func() {
+				b.Buffer().WriteString("hello world")
+				b.Resize(20, 1)
+			}, `
+hello world         
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    `,
+		}, {
+			func() {
+				b.Resize(20, 9)
+				b.Buffer().WriteString(". Let's test its responsiveness")
+				b.Resize(20, 6)
+			}, `
+hello world. Let's t
+est its responsivene
+ss                  
+                    
+                    
+                    
+                    
+                    
+                    `,
+		}, {
+			func() {
+				b.Buffer().WriteString(". Let's test its responsiveness")
+				b.Resize(20, 8)
+			}, `
+hello world. Let's t
+est its responsivene
+ss. Let's test its r
+esponsiveness       
+                    
+                    
+                    
+                    
+                    `,
+		}, {
+			func() {
+				b.Buffer().WriteString(". Let's test its responsiveness")
+				b.Resize(20, 9)
+				b.Buffer().WriteString(". Let's test its scrolling. " +
+					"Let's make it overflow below and wrap," +
+					"which might just take a little bit of text.")
+			}, `
+hello world. Let's t
+est its responsivene
+ss. Let's test its r
+esponsiveness. Let's
+ test its responsive
+ness. Let's test its
+ scrolling. Let's ma
+ke it overflow below
+ and wrap,which migh`,
+		}, {
+			func() {
+				// NOTE: seek ops do not detect wraps without a call to draw
+				// between writing new data and attempting to seek.
+				handled := b.SeekDown()
+				require.True(t, handled)
+				handled = b.SeekDown()
+				require.True(t, handled)
+			}, `
+ss. Let's test its r
+esponsiveness. Let's
+ test its responsive
+ness. Let's test its
+ scrolling. Let's ma
+ke it overflow below
+ and wrap,which migh
+t just take a little
+ bit of text.       `,
+		}, {
+			func() {
+				handled := b.SeekUp()
+				require.True(t, handled)
+				handled = b.SeekUp()
+				require.True(t, handled)
+			}, `
+hello world. Let's t
+est its responsivene
+ss. Let's test its r
+esponsiveness. Let's
+ test its responsive
+ness. Let's test its
+ scrolling. Let's ma
+ke it overflow below
+ and wrap,which migh`,
+		},
+	}
+	testutil.TestComponent(t, b, w, tests)
+}
+
 func newBigScroll(fortunes int) (scroll *Scroll) {
 	scroll = NewScroll(cell.NewBuffer())
 	for i := 0; i < fortunes; i++ {

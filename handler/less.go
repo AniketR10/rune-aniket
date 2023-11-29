@@ -143,36 +143,38 @@ func (l *Less) searchHandleEvent(ev term.Event) (bool, bool) {
 func (l *Less) normalHandleEvent(ev term.Event) (exit, handled bool) {
 	switch ev.Type {
 	case term.EventKey:
-		handled = true
 		switch ev.Ch {
 		case 'q':
 			exit = true
+			handled = true
 		case 'N':
-			l.scroll.SeekPrevResult()
+			handled = l.scroll.SeekPrevResult()
 		case 'n':
-			l.scroll.SeekNextResult()
+			handled = l.scroll.SeekNextResult()
 		case '0':
-			l.scroll.SeekStartLine()
+			handled = l.scroll.SeekStartLine()
 		case '$':
-			l.scroll.SeekEndLine()
+			handled = l.scroll.SeekEndLine()
 		case 'g':
-			l.scroll.SeekStartFile()
+			handled = l.scroll.SeekStartFile()
 		case 'G':
-			l.scroll.SeekEndFile()
+			handled = l.scroll.SeekEndFile()
 		case 'j':
-			l.scroll.SeekDown()
+			handled = l.scroll.SeekDown()
 		case 'k':
-			l.scroll.SeekUp()
+			handled = l.scroll.SeekUp()
 		case 'h':
-			l.scroll.SeekLeft()
+			handled = l.scroll.SeekLeft()
 		case 'l':
-			l.scroll.SeekRight()
+			handled = l.scroll.SeekRight()
 		case '/':
 			l.SetSearchMode()
+			handled = true
 		default:
 			switch ev.Key {
 			case term.KeyEsc:
 				exit = true
+				handled = true
 			default:
 				handled = false
 			}

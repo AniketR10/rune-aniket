@@ -54,6 +54,17 @@ func TestBox(t *testing.T) {
 │                  │
 └──────────────────┘`,
 			}, {
+				func() { b.Resize(20, 1) }, `
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    `,
+			}, {
 				func() { b.Resize(20, 9) }, `
 ┌──────────────────┐
 │                  │
@@ -68,18 +79,20 @@ func TestBox(t *testing.T) {
 				func() {
 					writeBuffer(b, "hello world")
 					assert.Equal(t, 4, b.Height(20))
+					b.Resize(20, 1)
 				}, `
-┌──────────────────┐
-│hello world       │
-│                  │
-│                  │
-│                  │
-│                  │
-│                  │
-│                  │
-└──────────────────┘`,
+hello world         
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    `,
 			}, {
 				func() {
+					b.Resize(20, 9)
 					writeBuffer(b, ". Let's test its responsiveness")
 					require.Equal(t, 6, b.Height(20))
 					b.Resize(20, 6)
@@ -180,6 +193,17 @@ func TestBox(t *testing.T) {
 				func() { b.Resize(2, 2) }, `
 HE                  
 RE                  
+                    
+                    
+                    
+                    
+                    
+                    
+                    `,
+			}, {
+				func() { b.Resize(10, 2) }, `
+HERE...             
+                    
                     
                     
                     

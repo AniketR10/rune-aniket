@@ -257,6 +257,10 @@ func (f *Frame) Resize(width, height int) {
 
 // Draw draws this frame's border and contents to the given Writer.
 func (f *Frame) Draw(w term.Writer) {
+	if f.bwidth == 0 || f.bheight == 0 {
+		f.content.Draw(w)
+		return
+	}
 	limitX, limitY := f.width-1, f.height-1
 
 	for i := 0; i < limitX; i++ {

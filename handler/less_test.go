@@ -35,6 +35,143 @@ func setup(t *testing.T, less *Less, width, height int) (*Less, *term.StringWrit
 	return less, term.NewStringWriter(width, height)
 }
 
+func TestLessDrawNoBarWrap(t *testing.T) {
+	b := NewLess(LessConfig{Wrap: true, NoBar: true})
+	b.Resize(20, 4)
+
+	w := term.NewStringWriter(20, 9)
+
+	tests := []testutil.ComponentTestCase{
+		{
+			nil, `
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    `,
+		}, {
+			func() { b.Resize(20, 1) }, `
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    `,
+		}, {
+			func() { b.Resize(20, 9) }, `
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    `,
+		}, {
+			func() {
+				b.Buffer().WriteString("hello world")
+				b.Resize(20, 1)
+			}, `
+hello world         
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    `,
+		}, {
+			func() {
+				b.Resize(20, 9)
+				b.Buffer().WriteString(". Let's test its responsiveness")
+				b.Resize(20, 6)
+			}, `
+hello world. Let's t
+est its responsivene
+ss                  
+                    
+                    
+                    
+                    
+                    
+                    `,
+		}, {
+			func() {
+				b.Buffer().WriteString(". Let's test its responsiveness")
+				b.Resize(20, 8)
+			}, `
+hello world. Let's t
+est its responsivene
+ss. Let's test its r
+esponsiveness       
+                    
+                    
+                    
+                    
+                    `,
+		}, {
+			func() {
+				b.Buffer().WriteString(". Let's test its responsiveness")
+				b.Buffer().WriteString(". Let's test its scrolling. " +
+					"Let's make it overflow below and wrap," +
+					"which might just take a little bit of text.")
+				b.Resize(20, 9)
+			}, `
+hello world. Let's t
+est its responsivene
+ss. Let's test its r
+esponsiveness. Let's
+ test its responsive
+ness. Let's test its
+ scrolling. Let's ma
+ke it overflow below
+ and wrap,which migh`,
+		}, {
+			func() {
+				_, handled := b.Handle(term.Event{Type: term.EventKey, Ch: 'j'})
+				require.True(t, handled)
+				_, handled = b.Handle(term.Event{Type: term.EventKey, Ch: 'j'})
+				require.True(t, handled)
+			}, `
+ss. Let's test its r
+esponsiveness. Let's
+ test its responsive
+ness. Let's test its
+ scrolling. Let's ma
+ke it overflow below
+ and wrap,which migh
+t just take a little
+ bit of text.       `,
+		}, {
+			func() {
+				_, handled := b.Handle(term.Event{Type: term.EventKey, Ch: 'k'})
+				require.True(t, handled)
+				_, handled = b.Handle(term.Event{Type: term.EventKey, Ch: 'k'})
+				require.True(t, handled)
+			}, `
+hello world. Let's t
+est its responsivene
+ss. Let's test its r
+esponsiveness. Let's
+ test its responsive
+ness. Let's test its
+ scrolling. Let's ma
+ke it overflow below
+ and wrap,which migh`,
+		},
+	}
+	testutil.TestComponent(t, b, w, tests)
+}
+
 func TestLessHandle(t *testing.T) {
 	cases := getLessHandleTestFlow([19]term.Event{
 		{},
