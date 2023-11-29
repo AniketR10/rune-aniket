@@ -15,7 +15,12 @@ var _ tui.Handler = (*Box)(nil)
 
 // BoxConfig holds configuration for initializing an Box.
 type BoxConfig struct {
+	// MaxHeight defines the maximum height returned by Height.
+	// If not set, then there is no max height.
 	MaxHeight         int
+	// MinHeight defines the minimum height returned by Height.
+	// If not set, then there is no minimum height.
+	MinHeight         int
 	Placeholder       string
 	PlaceholderConfig component.StringConfig
 	DefaultFrameAttr  term.Attributes
@@ -29,8 +34,9 @@ type Box struct {
 	frame       *handler.Frame
 	placeholder *handler.Frame
 	// used to assist in calculate height
-	scroll *component.Scroll
-	cursor *text.Cursor
+	placeholderStr component.Responsive
+	scroll         *component.Scroll
+	cursor         *text.Cursor
 }
 
 // NewBox allocates storage for a new Box and
@@ -44,19 +50,25 @@ func NewBox(buf *cell.Buffer, cfg BoxConfig) *Box {
 // Init initializes this Box with the given config and cell.Buffer,
 // which is used to share the contents of the input box with clients.
 func (i *Box) Init(buf *cell.Buffer, cfg BoxConfig) {
+	if cfg.MaxHeight < cfg.MinHeight && cfg.MaxHeight != 0 {
+		panic("max height cannot be smaller than min height")
+	}
 	// do not expose StringResponsiveConfig in BoxConfig because simple editor is not capable
 	// of emulating NoSplitWords property.
 	ed, scroll, cursor := text.NewSimpleHandler(buf, workspaceapi.URI{}, true /* wrap */, false /*commandBar */)
 	frame := handler.NewFrame(ed)
 	frame.Attributes = cfg.DefaultFrameAttr
+
+	placeholderStr := component.StringResponsive(cfg.Placeholder,
+		component.StringResponsiveConfig{StringConfig: cfg.PlaceholderConfig})
 	placeholder := handler.NewFrame(
-		handler.Nop(component.StringResponsive(cfg.Placeholder,
-			component.StringResponsiveConfig{StringConfig: cfg.PlaceholderConfig})))
+		handler.Nop(placeholderStr))
 	placeholder.Attributes = cfg.DefaultFrameAttr
 
 	i.buf = buf
 	i.cfg = cfg
 	i.frame = frame
+	i.placeholderStr = placeholderStr
 	i.placeholder = placeholder
 	i.scroll = scroll
 	i.cursor = cursor
@@ -68,12 +80,33 @@ func (i *Box) SetFrameAttr(attr term.Attributes) {
 	i.placeholder.Attributes = attr
 }
 
+// Buffer returns this input.Box's underlying content buffer.
+func (r *Box) Buffer() *cell.Buffer {
+	return r.buf
+}
+
+// Reset resets this input box to its initial state.
+func (r *Box) Reset() {
+	r.cursor.MoveToScroll(term.Coordinates{})
+	r.buf.Reset()
+}
+
 // Height satisfies component.Responsive.
-func (i *Box) Height(width int) int {
-	ret := i.scroll.Height(width - 2)
-	ret += 2 + 1 // always leave one more for the cursor upon newline
+func (i *Box) Height(width int) (ret int) {
+	if width < 2 {
+		return 0
+	}
+	if i.buf.Size() == 0 {
+		ret = i.placeholderStr.Height(width - 2)
+	} else {
+		ret = i.scroll.Height(width - 2)
+	}
+	ret += 2 // always leave one more for the cursor upon newline
 	if ret > i.cfg.MaxHeight && i.cfg.MaxHeight != 0 {
 		ret = i.cfg.MaxHeight
+	}
+	if ret < i.cfg.MinHeight && i.cfg.MinHeight != 0 {
+		ret = i.cfg.MinHeight
 	}
 	return ret
 }
