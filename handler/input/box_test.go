@@ -271,6 +271,35 @@ HERE...
 │                  │
 │                  │
 └──────────────────┘`,
+			}, {
+				func() {
+					// last row full feature
+					writeBuffer(b, "xxxxxxx")
+					assert.Equal(t, 4, b.Height(20))
+				}, `
+┌──────────────────┐
+│hello worldxxxxxxx│
+│                  │
+│                  │
+│                  │
+│                  │
+│                  │
+│                  │
+└──────────────────┘`,
+			}, {
+				func() {
+					writeBuffer(b, "x")
+					assert.Equal(t, 4, b.Height(20))
+				}, `
+┌──────────────────┐
+│hello worldxxxxxxx│
+│x                 │
+│                  │
+│                  │
+│                  │
+│                  │
+│                  │
+└──────────────────┘`,
 			},
 		}
 		testutil.TestComponent(t, b, w, tests)
@@ -408,6 +437,21 @@ RE
 │hello worldhello w│
 │orldhelloworldhell│
 │oworld            │
+│                  │
+│                  │
+│                  │
+│                  │
+└──────────────────┘`,
+			}, {
+				func() {
+					// last row full feature is also capped by maxHeight
+					writeBuffer(b, "xxxxxxxxxxxx")
+					assert.Equal(t, 5, b.Height(20))
+				}, `
+┌──────────────────┐
+│hello worldhello w│
+│orldhelloworldhell│
+│oworldxxxxxxxxxxxx│
 │                  │
 │                  │
 │                  │

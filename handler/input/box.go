@@ -17,7 +17,7 @@ var _ tui.Handler = (*Box)(nil)
 type BoxConfig struct {
 	// MaxHeight defines the maximum height returned by Height.
 	// If not set, then there is no max height.
-	MaxHeight         int
+	MaxHeight int
 	// MinHeight defines the minimum height returned by Height.
 	// If not set, then there is no minimum height.
 	MinHeight         int
@@ -96,10 +96,20 @@ func (i *Box) Height(width int) (ret int) {
 	if width < 2 {
 		return 0
 	}
+	width -= 2 // frame
 	if i.buf.Size() == 0 {
-		ret = i.placeholderStr.Height(width - 2)
+		ret = i.placeholderStr.Height(width)
 	} else {
-		ret = i.scroll.Height(width - 2)
+		ret = i.scroll.Height(width)
+		rows := i.scroll.Buffer().Rows()
+		// if last visible row is "full", always return +1
+		// to allow for cursor to fall in an empty row but within bounds.
+		if rows > 0 {
+			lastRowCols := i.scroll.Buffer().View().Columns(rows - 1)
+			if lastRowCols != 0 && lastRowCols%width == 0 {
+				ret++
+			}
+		}
 	}
 	ret += 2 // always leave one more for the cursor upon newline
 	if ret > i.cfg.MaxHeight && i.cfg.MaxHeight != 0 {
