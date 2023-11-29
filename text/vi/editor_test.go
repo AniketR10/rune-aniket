@@ -2,6 +2,7 @@ package vi
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -118,25 +119,40 @@ func TestEditorSetCursor(t *testing.T) {
 	uri, err := workspaceapi.ParseURI("file:///tmp/zsh.sh")
 	require.NoError(t, err)
 
-	t.Run("does not return error if cursor already at position", func(t *testing.T) {
-		ed := Editor()
-		h, err := ed.Edit(uri, cell.NewBuffer())
-		require.NoError(t, err)
+	for _, wrap := range []bool{true, false} {
+		t.Run(fmt.Sprintf("wrap: %v, does not return error if cursor already at position", wrap),
+			func(t *testing.T) {
+				ed := Editor(WithWrap(wrap))
+				h, err := ed.Edit(uri, cell.NewBuffer())
+				require.NoError(t, err)
+				if wrap {
+					h.Resize(1, 1) // just not 0, 0
+				}
 
-		err = ed.SetCursor(h, term.Coordinates{})
-		require.NoError(t, err)
-	})
-	t.Run("sets cursor at position", func(t *testing.T) {
-		buf := cell.NewBuffer()
-		buf.WriteString("a")
-		ed := Editor()
-		h, err := ed.Edit(uri, buf)
-		require.NoError(t, err)
+				err = ed.SetCursor(h, term.Coordinates{})
+				require.NoError(t, err)
+			})
+		t.Run(fmt.Sprintf("wrap: %v, sets cursor at position", wrap),
+			func(t *testing.T) {
+				buf := cell.NewBuffer()
+				buf.WriteString("a")
+				ed := Editor(WithWrap(wrap))
+				h, err := ed.Edit(uri, buf)
+				require.NoError(t, err)
+				if wrap {
+					h.Resize(1, 1) // just not 0, 0
+				}
 
-		err = ed.SetCursor(h, term.Coordinates{X: 1})
-		require.NoError(t, err)
-		pos, err := ed.Cursor(h)
-		require.NoError(t, err)
-		assert.Equal(t, term.Coordinates{X: 1}, pos)
-	})
+				err = ed.SetCursor(h, term.Coordinates{X: 1})
+				require.NoError(t, err)
+				pos, err := ed.Cursor(h)
+				require.NoError(t, err)
+				if wrap {
+					// in wrap mode position is ambiguous
+					assert.Equal(t, term.Coordinates{Y: 1}, pos)
+				} else {
+					assert.Equal(t, term.Coordinates{X: 1}, pos)
+				}
+			})
+	}
 }
