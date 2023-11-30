@@ -183,8 +183,6 @@ func (l *ResponsiveList) Draw(w term.Writer) {
 	if l.list.dirty {
 		l.Resize(l.list.width, l.list.height)
 	}
-	// elements can be partially rendered
-	w = term.BoundsCheckWriter(l.list.width, l.list.height, w)
 	if l.Alignment == SpanAlignmentBottom {
 		l.drawBottom(w)
 	} else {
@@ -198,31 +196,10 @@ func (l *ResponsiveList) ElementAt(pos term.Coordinates) (ListNode, bool) {
 	if pos.X < 0 || pos.Y < 0 {
 		panic("negative coordinates")
 	}
-
-	var offseted int
-	for el, ok := l.list.Front(); ok; el, ok = el.Next() {
-		comp := el.el.Value.(*Virtual)
-		height := comp.C.(Responsive).Height(l.list.width)
-		if offseted < l.offset {
-			offseted += height
-			if offseted > l.offset {
-				pos.Y += offseted - l.offset
-				if pos.Y-height < 0 {
-					return el, true
-				}
-				pos.Y -= height
-			}
-			continue
-		}
-
-		if pos.Y-height < 0 {
-			return el, true
-		}
-
-		pos.Y -= height
+	if l.Alignment == SpanAlignmentBottom {
+		return l.elementAtBottom(pos)
 	}
-
-	return ListNode{}, false
+	return l.elementAtTop(pos)
 }
 
 // Sort sorts the elements of this list with the provided less function.
@@ -291,66 +268,53 @@ func (l *ResponsiveList) calculateTotalHeight() {
 }
 
 func (l *ResponsiveList) drawTop(w term.Writer) {
-	var pos term.Coordinates
-	var offseted int
-	for el, ok := l.list.Front(); ok; el, ok = el.Next() {
-		comp := el.el.Value.(*Virtual)
-		height := comp.C.(Responsive).Height(l.list.width)
-		if offseted < l.offset {
-			offseted += height
-			// draw end of current element partially if the next one
-			// would start past y = 0
-			if offseted > l.offset {
-				pos.Y -= offseted - l.offset
-				el.el.Value.(*Virtual).Move(pos)
-				el.el.Value.(*Virtual).Draw(w)
-				pos.Y += height
-			}
-			continue
-		}
-
-		el.el.Value.(*Virtual).Move(pos)
-		el.el.Value.(*Virtual).Draw(w)
-		pos.Y += height
-
-		if pos.Y >= l.list.height {
-			break
-		}
-	}
+	pos := term.Coordinates{Y: -l.offset}
+	l.doDraw(w, pos)
 }
 
 func (l *ResponsiveList) drawBottom(w term.Writer) {
-	back, ok := l.list.Back()
-	if !ok {
-		return
-	}
+	pos := term.Coordinates{Y: -l.MaxOffset() + l.offset}
+	l.doDraw(w, pos)
+}
 
-	comp := back.el.Value.(*Virtual)
-	lastHeight := comp.C.(Responsive).Height(l.list.width)
-	pos := term.Coordinates{Y: l.list.height - lastHeight}
-	var offseted int
-	for el, ok := back, true; ok; el, ok = el.Prev() {
+func (l *ResponsiveList) doDraw(w term.Writer, pos term.Coordinates) {
+	// elements could be partially drawn outside bounds
+	w = term.BoundsCheckWriter(l.list.width, l.list.height, w)
+	for el, ok := l.list.Front(); ok; el, ok = el.Next() {
 		comp := el.el.Value.(*Virtual)
 		height := comp.C.(Responsive).Height(l.list.width)
-		if offseted < l.offset {
-			offseted += height
-			// draw end of current element partially if the next one
-			// would start past y = 0
-			if offseted > l.offset {
-				pos.Y += offseted - l.offset
-				el.el.Value.(*Virtual).Move(pos)
-				el.el.Value.(*Virtual).Draw(w)
-				pos.Y -= height
-			}
+		nextY := pos.Y + height
+		if nextY < 0 {
+			pos.Y = nextY
 			continue
 		}
-
-		el.el.Value.(*Virtual).Move(pos)
-		el.el.Value.(*Virtual).Draw(w)
-		pos.Y -= height
-
-		if pos.Y < 0 {
+		comp.Move(pos)
+		comp.Draw(w)
+		if nextY >= l.list.height {
 			break
 		}
+		pos.Y = nextY
 	}
+}
+
+func (l *ResponsiveList) elementAtTop(target term.Coordinates) (ListNode, bool) {
+	start := term.Coordinates{Y: -l.offset}
+	return l.doElementAt(start, target)
+}
+
+func (l *ResponsiveList) elementAtBottom(target term.Coordinates) (ListNode, bool) {
+	start := term.Coordinates{Y: -l.MaxOffset() + l.offset}
+	return l.doElementAt(start, target)
+}
+
+func (l *ResponsiveList) doElementAt(pos, target term.Coordinates) (ListNode, bool) {
+	for el, ok := l.list.Front(); ok; el, ok = el.Next() {
+		comp := el.el.Value.(*Virtual)
+		height := comp.C.(Responsive).Height(l.list.width)
+		pos.Y += height
+		if pos.Y > target.Y {
+			return el, true
+		}
+	}
+	return ListNode{}, false
 }

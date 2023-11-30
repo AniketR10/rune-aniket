@@ -240,3 +240,174 @@ ZZZZZZZZ`,
 
 	testutil.TestComponent(t, l, w, tests)
 }
+
+func TestResponsiveListScroll(t *testing.T) {
+	l := NewResponsiveList()
+
+	w := term.NewStringWriter(8, 4)
+	l.PushBack(testResponsive('a', 2))
+	l.PushBack(testResponsive('b', 1))
+	l.PushBack(testResponsive('c', 3))
+	l.Resize(7, 3)
+
+	tests := []testutil.ComponentTestCase{
+		{
+			nil, `
+aaaaaaa 
+aaaaaaa 
+bbbbbbb 
+        `,
+		}, {
+			func() {
+				require.True(t, l.SeekDown())
+			}, `
+aaaaaaa 
+bbbbbbb 
+ccccccc 
+        `,
+		}, {
+			func() {
+				require.True(t, l.SeekDown())
+			}, `
+bbbbbbb 
+ccccccc 
+ccccccc 
+        `,
+		}, {
+			func() {
+				require.True(t, l.SeekDown())
+			}, `
+ccccccc 
+ccccccc 
+ccccccc 
+        `,
+		}, {
+			func() {
+				assert.False(t, l.SeekDown())
+				require.True(t, l.SeekUp())
+			}, `
+bbbbbbb 
+ccccccc 
+ccccccc 
+        `,
+		}, {
+			func() {
+				require.True(t, l.SeekUp())
+			}, `
+aaaaaaa 
+bbbbbbb 
+ccccccc 
+        `,
+		}, {
+			func() {
+				require.True(t, l.SeekUp())
+				assert.False(t, l.SeekUp())
+			}, `
+aaaaaaa 
+aaaaaaa 
+bbbbbbb 
+        `,
+		},
+	}
+
+	testutil.TestComponent(t, l, w, tests)
+}
+
+func TestResponsiveListScrollAlignmentBottom(t *testing.T) {
+	l := NewResponsiveList()
+	l.Alignment = SpanAlignmentBottom
+
+	w := term.NewStringWriter(8, 4)
+	l.PushBack(testResponsive('a', 2))
+	l.PushBack(testResponsive('b', 1))
+	l.PushBack(testResponsive('c', 3))
+	l.Resize(7, 3)
+
+	tests := []testutil.ComponentTestCase{
+		{
+			nil, `
+ccccccc 
+ccccccc 
+ccccccc 
+        `,
+		}, {
+			func() {
+				for y := 0; y < 3; y++ {
+					el, ok := l.ElementAt(term.Coordinates{Y: y})
+					require.True(t, ok, y)
+					v := el.Value().(*TestResponsive)
+					assert.Equal(t, 'c', v.Ch)
+				}
+				require.True(t, l.SeekUp())
+			}, `
+bbbbbbb 
+ccccccc 
+ccccccc 
+        `,
+		}, {
+			func() {
+				el, ok := l.ElementAt(term.Coordinates{Y: 0})
+				require.True(t, ok)
+				v := el.Value().(*TestResponsive)
+				assert.Equal(t, 'b', v.Ch)
+				el, ok = l.ElementAt(term.Coordinates{Y: 1})
+				require.True(t, ok)
+				v = el.Value().(*TestResponsive)
+				assert.Equal(t, 'c', v.Ch)
+				require.True(t, l.SeekUp())
+			}, `
+aaaaaaa 
+bbbbbbb 
+ccccccc 
+        `,
+		}, {
+			func() {
+				el, ok := l.ElementAt(term.Coordinates{Y: 0})
+				require.True(t, ok)
+				v := el.Value().(*TestResponsive)
+				assert.Equal(t, 'a', v.Ch)
+				require.True(t, l.SeekUp())
+			}, `
+aaaaaaa 
+aaaaaaa 
+bbbbbbb 
+        `,
+		}, {
+			func() {
+				assert.False(t, l.SeekUp())
+				require.True(t, l.SeekDown())
+				el, ok := l.ElementAt(term.Coordinates{Y: 0})
+				require.True(t, ok)
+				v := el.Value().(*TestResponsive)
+				assert.Equal(t, 'a', v.Ch)
+				el, ok = l.ElementAt(term.Coordinates{Y: 2})
+				require.True(t, ok)
+				v = el.Value().(*TestResponsive)
+				assert.Equal(t, 'c', v.Ch)
+			}, `
+aaaaaaa 
+bbbbbbb 
+ccccccc 
+        `,
+		}, {
+			func() {
+				require.True(t, l.SeekDown())
+			}, `
+bbbbbbb 
+ccccccc 
+ccccccc 
+        `,
+		}, {
+			func() {
+				require.True(t, l.SeekDown())
+				assert.False(t, l.SeekDown())
+			}, `
+ccccccc 
+ccccccc 
+ccccccc 
+        `,
+		},
+	}
+
+	testutil.TestComponent(t, l, w, tests)
+}
