@@ -244,8 +244,8 @@ func (h *workspaceManagerHandler) subscribeActiveWorkspaceCommands(ex *ex) (ret 
 			handler: (*workspaceManagerHandler).commandAddWorkspace,
 			man: textapi.CommandManual{
 				Summary: "Opens a new workspace as defined by the given URI, in the current " +
-					"active workspace, if its empty, or in the next available slot. " +
-					"If no scheme is defined the file:// scheme is assumed.",
+					"workspace slot if its empty, or in the next available slot if it's not. " +
+					"If no scheme is present in the URI, file:// is assumed.",
 				Synopsis: "[scheme:][//[userinfo@]host][/]workspacepath",
 			},
 		},
