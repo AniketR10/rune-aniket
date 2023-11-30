@@ -54,6 +54,21 @@ func NopResponsive() Responsive {
 	return Buffer(cell.NewBuffer(), StringResponsiveConfig{})
 }
 
+// FuncResponsive wraps a tui.Component that satisfies Responsive's Height
+// by calling heightFn.
+func FuncResponsive(c tui.Component, heightFn func(width int) int) Responsive {
+	return respFn{Component: c, heightFn: heightFn}
+}
+
+type respFn struct {
+	tui.Component
+	heightFn func(int) int
+}
+
+func (f respFn) Height(width int) int {
+	return f.heightFn(width)
+}
+
 type respStr struct {
 	cfg StringResponsiveConfig
 	in  [][]term.Cell
