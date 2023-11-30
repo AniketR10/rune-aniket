@@ -94,3 +94,18 @@ func TestComponentDimensions(t *testing.T) {
 	assert.Equal(t, 4, actualWidth)
 	assert.Equal(t, 4, actualHeight)
 }
+
+func TestFrameResponsive(t *testing.T) {
+	t.Run("adds frame height to content's Height", func(t *testing.T) {
+		f := NewFrame(testResponsive('a', 10))
+		assert.Equal(t, 12, f.Height(10))
+	})
+	t.Run("it's conistent with Resize with width < 3 behaviour", func(t *testing.T) {
+		f := NewFrame(testResponsive('a', 10))
+		assert.Equal(t, 10, f.Height(2))
+	})
+	t.Run("it's conistent with Resize with height < 3 behaviour", func(t *testing.T) {
+		f := NewFrame(testResponsive('a', 0))
+		assert.Equal(t, 3, f.Height(10))
+	})
+}

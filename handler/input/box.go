@@ -100,6 +100,8 @@ func (i *Box) Height(width int) (ret int) {
 	if i.buf.Size() == 0 {
 		ret = i.placeholderStr.Height(width)
 	} else {
+		// use scroll, rather than frame as Frame's content is the editor
+		// which doesn't satisfy component.Responsive.
 		ret = i.scroll.Height(width)
 		rows := i.scroll.Buffer().Rows()
 		// if last visible row is "full", always return +1

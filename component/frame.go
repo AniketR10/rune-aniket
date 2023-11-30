@@ -255,6 +255,23 @@ func (f *Frame) Resize(width, height int) {
 	f.width, f.height = width, height
 }
 
+// Height satisfies component.Responsive. It panics if underlying component is
+// not component.Responsive.
+func (f *Frame) Height(width int) int {
+	if width < 3 {
+		return f.content.C.(Responsive).Height(width)
+	}
+	ret := f.content.C.(Responsive).Height(width - 2)
+	// Ensure that Height is consistent with Resize
+	// behaviour on height or width < 3.
+	// This forces return height to at least be >= 3
+	if ret == 0 {
+		ret = 1
+	}
+	ret += 2
+	return ret
+}
+
 // Draw draws this frame's border and contents to the given Writer.
 func (f *Frame) Draw(w term.Writer) {
 	if f.bwidth == 0 || f.bheight == 0 {
