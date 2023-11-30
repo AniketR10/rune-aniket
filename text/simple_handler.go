@@ -15,6 +15,7 @@ type simpleEditorHandler struct {
 	resource workspaceapi.URI
 	cursor   Cursor
 	height   int
+	mouse    *Mouse
 }
 
 // NewSimpleHandler returns a modeless, simple-to-use text.Handler.
@@ -23,24 +24,22 @@ func NewSimpleHandler(
 	wrap, commandBar bool,
 ) (Handler, *component.Scroll, *Cursor) {
 	ret := new(simpleEditorHandler)
-	ret.init(buf, resource, wrap, commandBar)
+	ret.Init(buf, resource, wrap, commandBar)
 	return ret, ret.less.Scroll(), &ret.cursor
 }
 
-func (h *simpleEditorHandler) init(
+func (h *simpleEditorHandler) Init(
 	buf *cell.Buffer, resource workspaceapi.URI,
 	wrap, commandBar bool,
 ) {
 	h.buf = buf
 	h.resource = resource
 	h.less.InitWithBuffer(buf, handler.LessConfig{
-		Wrap: wrap,
-		// TODO expose via configuration
-		// Debug:   vi.config.debug,
-		// ResAttr: vi.config.resAttr,
+		Wrap:  wrap,
 		NoBar: !commandBar,
 	})
 	h.cursor.Init(h.less.Scroll())
+	h.mouse = NewMouse(CursorMouseDelegate(&h.cursor))
 }
 
 // Resize satisfies tui.Component
@@ -60,10 +59,8 @@ func (h *simpleEditorHandler) Draw(w term.Writer) {
 }
 
 func (h *simpleEditorHandler) Handle(ev term.Event) (exit, handled bool) {
-	switch ev.Type {
-	case term.EventMouse:
-		/* TODO */
-	default:
+	if ev.Type == term.EventMouse {
+		return h.mouse.Handle(ev)
 	}
 
 	switch ev.Key {
