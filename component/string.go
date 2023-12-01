@@ -1,6 +1,8 @@
 package component
 
 import (
+	"fmt"
+
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/term"
@@ -29,6 +31,7 @@ type String struct {
 
 var _ WithAttributes = (*String)(nil)
 var _ Floating = (*String)(nil)
+var _ fmt.Stringer = (*String)(nil)
 
 // NewStringWithConfig converts a string into a static tui.Compontent with
 // background/foreground attributes, content alignment and a frame,
@@ -123,12 +126,17 @@ type floatingWithAttributes interface {
 	tui.Component
 	Floating
 	WithAttributes
+	fmt.Stringer
 }
 
 type stringComp struct {
 	width, height int
 	cells         [][]term.Cell
 	attr          term.Attributes
+}
+
+func (s *stringComp) String() string {
+	return cell.CellsToString(s.cells)
 }
 
 func (s *stringComp) Resize(width, height int) {
@@ -178,14 +186,15 @@ type backgroundStrWrapper struct {
 }
 
 func (s backgroundStrWrapper) SetAttr(attr term.Attributes) term.Attributes {
+	return s.Background.SetAttr(attr)
+}
+
+func (s backgroundStrWrapper) String() string {
 	spanContent := s.Background.Content().(*Span).Content()
 	if s.frame {
-		if s.pad {
-			return spanContent.(*Frame).Content().(backgroundStrWrapper).SetAttr(attr)
-		}
-		return spanContent.(*Frame).Content().(*stringComp).SetAttr(attr)
+		return spanContent.(stringerFrame).String()
 	}
-	return spanContent.(*stringComp).SetAttr(attr)
+	return spanContent.(*stringComp).String()
 }
 
 func (s backgroundStrWrapper) Dimensions() (width, height int) {
@@ -245,8 +254,13 @@ func newStringComp(
 		frame := NewFrame(comp)
 		frame.Attributes = attr
 		frame.FrameCharSet = frameCharSet
-		comp = frame
+		comp = stringerFrame{Stringer: comp, Frame: frame}
 	}
 
 	return withBackgroundWrapper(comp, height, width, background, shouldFrame, shouldPad, alg)
+}
+
+type stringerFrame struct {
+	fmt.Stringer
+	*Frame
 }

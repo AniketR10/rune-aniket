@@ -1,6 +1,7 @@
 package component
 
 import (
+	"fmt"
 	"math"
 
 	"unstable.build/go-tui"
@@ -51,13 +52,21 @@ func Buffer(buf *cell.Buffer, cfg StringResponsiveConfig) Responsive {
 
 // NopResponsive returns a Responsive tui.Component that draws nothing.
 func NopResponsive() Responsive {
-	return Buffer(cell.NewBuffer(), StringResponsiveConfig{})
+	return nopResponsive{Component: Nop()}
 }
 
 // FuncResponsive wraps a tui.Component that satisfies Responsive's Height
 // by calling heightFn.
 func FuncResponsive(c tui.Component, heightFn func(width int) int) Responsive {
 	return respFn{Component: c, heightFn: heightFn}
+}
+
+type nopResponsive struct {
+	tui.Component
+}
+
+func (f nopResponsive) Height(width int) int {
+	return 0
 }
 
 type respFn struct {
@@ -72,10 +81,13 @@ func (f respFn) Height(width int) int {
 type respStr struct {
 	cfg    StringResponsiveConfig
 	in     [][]term.Cell
-	out    tui.Component
+	out    floatingWithAttributes
 	width  int
 	height int
 }
+
+var _ fmt.Stringer = (*respStr)(nil)
+var _ fmt.Stringer = (*respBuf)(nil)
 
 type respBuf struct {
 	buf           *cell.Buffer
@@ -160,4 +172,8 @@ func (s *respStr) massageInput(width int) [][]term.Cell {
 		}
 	}
 	return outRaw
+}
+
+func (s *respStr) String() string {
+	return s.out.String()
 }
