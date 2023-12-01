@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/term"
 	testutil "unstable.build/go-tui/util/test"
 )
@@ -125,4 +126,15 @@ func TestComponentInputPosition(t *testing.T) {
 	comp.Resize(20, 10)
 
 	assert.Equal(t, term.Coordinates{Y: 7, X: 1}, comp.InputPosition())
+}
+
+func TestComponentMessagesPosition(t *testing.T) {
+	comp := NewComponent(ComponentConfig{MessagesRowConfig: component.SpanConfig{
+		PadVertical:      2,
+		PadHorizontal:    2,
+		ContentAlignment: component.SpanAlignmentCentered,
+	}})
+	comp.Resize(20, 10)
+
+	assert.Equal(t, term.Coordinates{Y: 1, X: 1}, comp.MessagesPosition())
 }

@@ -37,13 +37,14 @@ type ComponentConfig struct {
 
 // Component implements a dialogue tui.Component.
 type Component struct {
-	cfg       ComponentConfig
-	messages  component.ResponsiveList
-	box       input.Box
-	container component.Container
-	inputRow  *component.Row
-	inputCol  *component.Virtual
-	height    int
+	cfg          ComponentConfig
+	messages     component.ResponsiveList
+	spanMessages component.Span
+	box          input.Box
+	container    component.Container
+	inputRow     *component.Row
+	inputCol     *component.Virtual
+	height       int
 
 	// stream back model results
 	msg  strings.Builder
@@ -69,8 +70,8 @@ func (c *Component) Init(cfg ComponentConfig) {
 
 	c.messages.Init()
 	c.messages.Alignment = component.SpanAlignmentBottom
-	spanMessages := component.NewSpan(&c.messages, c.cfg.MessagesRowConfig)
-	messagesResponsive := component.FuncResponsive(spanMessages, func(width int) int {
+	c.spanMessages.Init(&c.messages, c.cfg.MessagesRowConfig)
+	messagesResponsive := component.FuncResponsive(&c.spanMessages, func(width int) int {
 		// assumes c.height has been set prior to call to Container.Resize
 		return int(math.Max(float64(c.height-c.box.Height(c.boxWidth(width))), 0))
 	})
@@ -100,12 +101,16 @@ func (c *Component) Input() *input.Box {
 }
 
 // InputPosition returns the offset of the input component.
-// This does not return the cursor
 func (c *Component) InputPosition() term.Coordinates {
 	return term.Coordinates{
 		Y: c.inputRow.Position().Y,
 		X: c.inputCol.Position().X,
 	}
+}
+
+// MessagesPosition returns the offset of the messages component.
+func (c *Component) MessagesPosition() term.Coordinates {
+	return c.spanMessages.ContentOffset()
 }
 
 // InputSubmit submits the contents of the input buffer as a send message,
