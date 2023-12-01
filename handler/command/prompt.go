@@ -76,6 +76,8 @@ type Prompt struct {
 	completionCancel   func()
 }
 
+var _ component.Floating = (*Prompt)(nil)
+
 type commandPromptMode uint
 
 const (
@@ -802,6 +804,7 @@ func (h *Prompt) Cancel() {
 	h.list.Cancel()
 }
 
+// Dimensions satisfies component.Floating.
 func (h *Prompt) Dimensions() (width, height int) {
 	const (
 		matchPadding = 1

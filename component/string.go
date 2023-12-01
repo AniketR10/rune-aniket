@@ -28,6 +28,7 @@ type String struct {
 }
 
 var _ WithAttributes = (*String)(nil)
+var _ Floating = (*String)(nil)
 
 // NewStringWithConfig converts a string into a static tui.Compontent with
 // background/foreground attributes, content alignment and a frame,

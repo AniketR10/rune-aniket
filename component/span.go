@@ -59,6 +59,7 @@ type Span struct {
 
 var _ Responsive = (*Span)(nil)
 var _ WithAttributes = (*Span)(nil)
+var _ Floating = (*Span)(nil)
 
 // DefaultSpanConfig returns the default span configuration wich is no padding,
 // and content alignment centered.

@@ -203,6 +203,7 @@ type Frame struct {
 
 var _ WithAttributes = (*Frame)(nil)
 var _ Responsive = (*Frame)(nil)
+var _ Floating = (*Frame)(nil)
 
 // NewFrame allocates storage and initializes a new frame with the given
 // border attributes and underlying component.

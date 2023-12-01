@@ -12,6 +12,10 @@ type Background struct {
 	cell          term.Cell
 }
 
+var _ Floating = (*Background)(nil)
+var _ Responsive = (*Background)(nil)
+var _ WithAttributes = (*Background)(nil)
+
 // WithBackground wraps comp into a Background Component
 // which makes sure that all cells are reset to cell, before comp is drawn.
 func WithBackground(comp tui.Component, cell term.Cell) *Background {
@@ -46,4 +50,22 @@ func (b *Background) Draw(w term.Writer) {
 // Content returns the inner component.
 func (b *Background) Content() tui.Component {
 	return b.root
+}
+
+// Dimensions satisfies Floating if underlying tui.Component
+// satisfies Floating, or panics if it doesn't.
+func (s *Background) Dimensions() (width, height int) {
+	return s.root.(Floating).Dimensions()
+}
+
+// SetAttr satisfies WithAttributes if underlying tui.Component
+// satisfies WithAttributes, or panics if it doesn't.
+func (s *Background) SetAttr(attr term.Attributes) term.Attributes {
+	return s.root.(WithAttributes).SetAttr(attr)
+}
+
+// Height satisfies Responsive if underlying tui.Component
+// satisfies Responsive, or panics if it doesn't.
+func (s *Background) Height(width int) int {
+	return s.root.(Responsive).Height(width)
 }

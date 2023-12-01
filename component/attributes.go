@@ -18,6 +18,8 @@ type attributesAt struct {
 }
 
 var _ WithAttributes = (*AttrSetter)(nil)
+var _ Floating = (*AttrSetter)(nil)
+var _ Responsive = (*AttrSetter)(nil)
 
 // AttrSetter wraps another tui.Component to satisfy WithAttributes
 // and add the ability to set the Attributes of arbitrary cells.
@@ -47,6 +49,18 @@ func (s *AttrSetter) SetAttr(attr term.Attributes) (ret term.Attributes) {
 	ret = s.def
 	s.def = attr
 	return
+}
+
+// Dimensions satisfies Floating if underlying tui.Component
+// satisfies Floating, or panics if it doesn't.
+func (s *AttrSetter) Dimensions() (width, height int) {
+	return s.comp.(Floating).Dimensions()
+}
+
+// Height satisfies Responsive if underlying tui.Component
+// satisfies Responsive, or panics if it doesn't.
+func (s *AttrSetter) Height(width int) int {
+	return s.comp.(Responsive).Height(width)
 }
 
 // SetAttrAt sets the attributes at the given coordinates.
