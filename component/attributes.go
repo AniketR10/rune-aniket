@@ -9,13 +9,15 @@ import (
 // WithAttributes represents a tui.Component that can be set attributes.
 type WithAttributes interface {
 	tui.Component
-	SetAttr(term.Attributes)
+	SetAttr(term.Attributes) term.Attributes
 }
 
 type attributesAt struct {
 	term.Coordinates
 	term.Attributes
 }
+
+var _ WithAttributes = (*AttrSetter)(nil)
 
 // AttrSetter wraps another tui.Component to satisfy WithAttributes
 // and add the ability to set the Attributes of arbitrary cells.
@@ -41,8 +43,10 @@ func (s *AttrSetter) Reset() {
 
 // SetAttr sets the default attributes drawn by this component.
 // This attributes will be set in each of the final term.Cells drawn.
-func (s *AttrSetter) SetAttr(attr term.Attributes) {
+func (s *AttrSetter) SetAttr(attr term.Attributes) (ret term.Attributes) {
+	ret = s.def
 	s.def = attr
+	return
 }
 
 // SetAttrAt sets the attributes at the given coordinates.

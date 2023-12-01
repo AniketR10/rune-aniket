@@ -201,6 +201,9 @@ type Frame struct {
 	width, height   int
 }
 
+var _ WithAttributes = (*Frame)(nil)
+var _ Responsive = (*Frame)(nil)
+
 // NewFrame allocates storage and initializes a new frame with the given
 // border attributes and underlying component.
 func NewFrame(content tui.Component) (f *Frame) {
@@ -237,8 +240,10 @@ func (f *Frame) SetContent(content tui.Component) {
 }
 
 // SetAttr satisfies WithAttributes.
-func (f *Frame) SetAttr(attr term.Attributes) {
+func (f *Frame) SetAttr(attr term.Attributes) (ret term.Attributes) {
+	ret = f.Attributes
 	f.Attributes = attr
+	return
 }
 
 // Resize updates this frame with a new width and height. If width or height

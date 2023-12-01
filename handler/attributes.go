@@ -6,6 +6,8 @@ import (
 	"unstable.build/go-tui/term"
 )
 
+var _ component.WithAttributes = AttrSetter{}
+
 // AttrSetter provides an API like component.AttrSetter for a tui.Handler.
 type AttrSetter struct {
 	comp *component.AttrSetter
@@ -37,8 +39,8 @@ func (s AttrSetter) Reset() {
 
 // SetAttr sets the default attributes drawn by this component.
 // This attributes will be set in each of the final term.Cells drawn.
-func (s AttrSetter) SetAttr(attr term.Attributes) {
-	s.comp.SetAttr(attr)
+func (s AttrSetter) SetAttr(attr term.Attributes) term.Attributes {
+	return s.comp.SetAttr(attr)
 }
 
 // SetAttrAt sets the attributes at the given coordinates.

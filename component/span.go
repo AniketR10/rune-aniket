@@ -57,6 +57,9 @@ type Span struct {
 	cfg           SpanConfig
 }
 
+var _ Responsive = (*Span)(nil)
+var _ WithAttributes = (*Span)(nil)
+
 // DefaultSpanConfig returns the default span configuration wich is no padding,
 // and content alignment centered.
 func DefaultSpanConfig() (ret SpanConfig) {
@@ -207,7 +210,7 @@ func (s *Span) Height(width int) int {
 	return r.Height(width-hPadding) + vPadding
 }
 
-// Dimensions satisfies Floating by returning the undelrying component's Dimensions
+// Dimensions satisfies Floating by returning the underlying component's Dimensions
 // with added padding, or panics if the underlying component does not satisfy
 // Floating.
 func (s *Span) Dimensions() (width, height int) {
@@ -216,4 +219,10 @@ func (s *Span) Dimensions() (width, height int) {
 	width += hPadding
 	height += vPadding
 	return
+}
+
+// SetAttr satisfies WithAttributes if the underlying component
+// satisfies WithAttributes, otherwise it panics.
+func (s *Span) SetAttr(attr term.Attributes) term.Attributes {
+	return s.content.C.(WithAttributes).SetAttr(attr)
 }

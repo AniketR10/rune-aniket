@@ -70,9 +70,11 @@ func (f respFn) Height(width int) int {
 }
 
 type respStr struct {
-	cfg StringResponsiveConfig
-	in  [][]term.Cell
-	out tui.Component
+	cfg    StringResponsiveConfig
+	in     [][]term.Cell
+	out    tui.Component
+	width  int
+	height int
 }
 
 type respBuf struct {
@@ -111,6 +113,8 @@ func (s *respStr) Height(width int) int {
 
 // Resize satisfies tui.Component.
 func (s *respStr) Resize(width, height int) {
+	s.width = width
+	s.height = height
 	outRaw := s.massageInput(width)
 	s.out = newStringComp(outRaw, s.cfg.Attributes, 0,
 		s.cfg.BackgroundAttributes, s.cfg.FrameCharSet,

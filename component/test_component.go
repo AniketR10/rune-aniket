@@ -4,6 +4,8 @@ import (
 	"unstable.build/go-tui/term"
 )
 
+var _ WithAttributes = (*TestComponent)(nil)
+
 // TestComponent draws rune Ch, and attributes Bg, Fg on every cell
 // available. This component is used for testing or debugging.
 type TestComponent struct {
@@ -26,8 +28,10 @@ func (t *TestComponent) Draw(w term.Writer) {
 }
 
 // SetAttr satisfies WithAttributes
-func (t *TestComponent) SetAttr(attr term.Attributes) {
+func (t *TestComponent) SetAttr(attr term.Attributes) (ret term.Attributes) {
+	ret = t.Attributes
 	t.Attributes = attr
+	return
 }
 
 type TestResponsive struct {

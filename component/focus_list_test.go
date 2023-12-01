@@ -19,8 +19,10 @@ type compWithAttr struct {
 	attr term.Attributes
 }
 
-func (c *compWithAttr) SetAttr(attr term.Attributes) {
+func (c *compWithAttr) SetAttr(attr term.Attributes) (ret term.Attributes) {
+	ret = c.attr
 	c.attr = attr
+	return
 }
 
 func newCompWithAttr(c tui.Component) *compWithAttr {

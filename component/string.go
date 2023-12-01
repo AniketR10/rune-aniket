@@ -27,6 +27,8 @@ type String struct {
 	floatingWithAttributes
 }
 
+var _ WithAttributes = (*String)(nil)
+
 // NewStringWithConfig converts a string into a static tui.Compontent with
 // background/foreground attributes, content alignment and a frame,
 // all configurable through cfg. The returned component is significantly
@@ -73,6 +75,8 @@ type LazyBytes struct {
 	cells           []term.Cell
 }
 
+var _ WithAttributes = (*LazyBytes)(nil)
+
 // Resize is ignored.
 func (l *LazyBytes) Resize(width, height int) {
 }
@@ -80,11 +84,13 @@ func (l *LazyBytes) Resize(width, height int) {
 // SetAttr sets the default attributes of the next call to Draw.
 // If Draw has already been called, then this method is force all
 // cells to be re-computed, so it should be used with care.
-func (l *LazyBytes) SetAttr(attr term.Attributes) {
+func (l *LazyBytes) SetAttr(attr term.Attributes) (ret term.Attributes) {
+	ret = l.Attributes
 	l.Attributes = attr
 	if l.cells != nil {
 		l.build()
 	}
+	return ret
 }
 
 func (l *LazyBytes) build() {
@@ -146,8 +152,10 @@ func (s *stringComp) Draw(w term.Writer) {
 	}
 }
 
-func (s *stringComp) SetAttr(attr term.Attributes) {
+func (s *stringComp) SetAttr(attr term.Attributes) (ret term.Attributes) {
+	ret = s.attr
 	s.attr = attr
+	return
 }
 
 func (s *stringComp) Dimensions() (width, height int) {
@@ -168,17 +176,15 @@ type backgroundStrWrapper struct {
 	*Background
 }
 
-func (s backgroundStrWrapper) SetAttr(attr term.Attributes) {
+func (s backgroundStrWrapper) SetAttr(attr term.Attributes) term.Attributes {
 	spanContent := s.Background.Content().(*Span).Content()
 	if s.frame {
 		if s.pad {
-			spanContent.(*Frame).Content().(backgroundStrWrapper).SetAttr(attr)
-			return
+			return spanContent.(*Frame).Content().(backgroundStrWrapper).SetAttr(attr)
 		}
-		spanContent.(*Frame).Content().(*stringComp).SetAttr(attr)
-		return
+		return spanContent.(*Frame).Content().(*stringComp).SetAttr(attr)
 	}
-	spanContent.(*stringComp).SetAttr(attr)
+	return spanContent.(*stringComp).SetAttr(attr)
 }
 
 func (s backgroundStrWrapper) Dimensions() (width, height int) {
