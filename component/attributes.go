@@ -70,6 +70,11 @@ func (s *AttrSetter) SetAttrAt(at term.Coordinates, attr term.Attributes) {
 	s.attr = append(s.attr, attributesAt{at, attr})
 }
 
+// Content returns the underlying tui.Component of this AttrSetter.
+func (s *AttrSetter) Content() tui.Component {
+	return s.comp
+}
+
 // Resize satisfies tui.Component
 func (s *AttrSetter) Resize(width, height int) {
 	s.width, s.height = width, height

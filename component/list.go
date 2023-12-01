@@ -426,3 +426,13 @@ func (l *List) Sort(less func(a, b tui.Component) bool) {
 	l.offset.head, _ = l.Front()
 	l.dirty = true
 }
+
+// Height returns the height of this List, in the last call to Resize.
+func (l *List) Height() int {
+	return l.height
+}
+
+// Width returns the width of this List, in the last call to Resize.
+func (l *List) Width() int {
+	return l.width
+}

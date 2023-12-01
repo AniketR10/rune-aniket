@@ -135,6 +135,7 @@ func (c *Component) AddSendMessage(msg string) {
 			NoSplitWords: true,
 			StringConfig: c.cfg.SendMessageStringConfig,
 		})
+	strComp = component.WithAttrSetter(strComp)
 	strComp = component.NewSpan(strComp, c.cfg.SendMessageSpanConfig)
 	c.messages.PushBack(strComp)
 }
@@ -169,6 +170,7 @@ func (c *Component) AddReceiveMessageChunk(chunk string) {
 			NoSplitWords: true,
 			StringConfig: c.cfg.ReceiveMessageStringConfig,
 		})
+	strComp = component.WithAttrSetter(strComp)
 	strComp = component.NewSpan(strComp, c.cfg.ReceiveMessageSpanConfig)
 	*c.tail = c.messages.PushBack(strComp)
 }
