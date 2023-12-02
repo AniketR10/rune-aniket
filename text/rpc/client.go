@@ -38,6 +38,10 @@ func (t Token) Resource() workspaceapi.URI {
 func (t Token) SetWrap(wrap bool) {
 }
 
+// ShowCommandBar satisfies editor.Handler.
+func (t Token) ShowCommandBar(show bool) {
+}
+
 var _ textapi.Editor = (*Client)(nil)
 
 // Client satisfies text.Editor by calling a remote editor over grpc.

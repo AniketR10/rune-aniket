@@ -247,6 +247,12 @@ func (l *Less) Resize(width, height int) {
 	l.resize()
 }
 
+// ShowCommandBar determines whether the command bar should be
+// displayed or not.
+func (l *Less) ShowCommandBar(show bool) {
+	l.config.NoBar = !show
+}
+
 func (l *Less) resize() {
 	var cmdBarHeight int
 	if !l.config.NoBar {

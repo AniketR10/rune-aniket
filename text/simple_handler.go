@@ -140,3 +140,6 @@ func (h *simpleEditorHandler) Resource() workspaceapi.URI {
 func (h *simpleEditorHandler) SetWrap(wrap bool) {
 	h.less.Scroll().Wrap = wrap
 }
+func (t *simpleEditorHandler) ShowCommandBar(show bool) {
+	t.less.ShowCommandBar(show)
+}

@@ -87,3 +87,6 @@ type HandlerFromAPIHandler struct {
 
 func (w HandlerFromAPIHandler) SetWrap(wrap bool) {
 }
+
+func (w HandlerFromAPIHandler) ShowCommandBar(show bool) {
+}

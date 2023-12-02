@@ -306,6 +306,11 @@ func (vi *Vi) SetWrap(wrap bool) {
 	vi.less.Scroll().Wrap = wrap
 }
 
+// ShowCommandBar satisfies editor.Handler.
+func (vi *Vi) ShowCommandBar(show bool) {
+	vi.less.ShowCommandBar(show)
+}
+
 // SetDefaultAttributes sets the underlying's Scroll's default Attributes.
 func (e *Vi) SetDefaultAttributes(attrs term.Attributes) error {
 	e.less.Scroll().Attributes = attrs

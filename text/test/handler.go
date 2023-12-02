@@ -28,6 +28,10 @@ func (t *TestHandler) Resource() workspaceapi.URI {
 func (t *TestHandler) SetWrap(wrap bool) {
 }
 
+// ShowCommandBar satisfies editor.Handler.
+func (t *TestHandler) ShowCommandBar(show bool) {
+}
+
 func (t *TestHandler) Close() error {
 	return nil
 }

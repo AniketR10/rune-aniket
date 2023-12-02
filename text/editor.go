@@ -22,6 +22,10 @@ type Handler interface {
 	// SetWraps defines wheter editor handler should wrap that are longer than
 	// available width into the next line or simply truncate them in the view.
 	SetWrap(wrap bool)
+
+	// ShowCommandBar defines wheter editor handler should display command
+	// bar or not.
+	ShowCommandBar(show bool)
 }
 
 // CellEditor is a cell.Editor that can fail.

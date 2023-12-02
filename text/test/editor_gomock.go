@@ -147,6 +147,18 @@ func (mr *MockHandlerMockRecorder) SetWrap(wrap interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetWrap", reflect.TypeOf((*MockHandler)(nil).SetWrap), wrap)
 }
 
+// ShowCommandBar mocks base method.
+func (m *MockHandler) ShowCommandBar(show bool) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "ShowCommandBar", show)
+}
+
+// ShowCommandBar indicates an expected call of ShowCommandBar.
+func (mr *MockHandlerMockRecorder) ShowCommandBar(show interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ShowCommandBar", reflect.TypeOf((*MockHandler)(nil).ShowCommandBar), show)
+}
+
 // MockCellEditor is a mock of CellEditor interface.
 type MockCellEditor struct {
 	ctrl     *gomock.Controller
