@@ -2,6 +2,7 @@ package ide
 
 import (
 	"io/ioutil"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -28,12 +29,23 @@ log_path: "/tmp/debug.log"
 log_level: "trace"
 clipboard: memory
 
-vi:
-    search_attr:
-        bg: red
-        fg: 219
-    debug: true
-    wrap: true
+editor:
+    mode: virtual
+    modal:
+        search_attr:
+            bg: red
+            fg: 219
+        debug: true
+        wrap: true
+    virtual:
+        shell: bash
+        editor: vim
+        attr:
+            bg: red
+            fg: 219
+        selection_attr:
+            bg: green
+            fg: 218
 
 input_mode:
   - mouse
@@ -165,6 +177,14 @@ func assertDefaultConfig(t *testing.T, cfg *ideConfig) {
 	selectAttr := term.Attributes{Bg: term.AttrReverse, Fg: term.AttrReverse}
 	assert.Equal(t, emulator.Config{SelectionAttributes: selectAttr}, cfg.terminalConfig())
 	assert.Equal(t, command.DefaultConfig().ShowManualAfter, cfg.commandOverlayShowManualAfter())
+
+	assert.Equal(t, "modal", cfg.editorMode())
+	os.Setenv("SHELL", "fish")
+	assert.Equal(t, "", cfg.virtualEditorEditor())
+	assert.Equal(t, "fish", cfg.virtualEditorShell())
+	assert.Equal(t, term.Attributes{}, cfg.virtualEditorAttr())
+	assert.Equal(t, term.Attributes{Fg: term.AttrReverse, Bg: term.AttrReverse},
+		cfg.virtualEditorSelectionAttr())
 }
 
 func TestConfigDefault(t *testing.T) {
@@ -263,9 +283,19 @@ func TestConfigSetting(t *testing.T) {
 	assert.Equal(t, expectedPrompt, cfg.promptConfig())
 
 	assert.Equal(t, term.Attributes{Bg: term.ColorRed,
-		Fg: term.Attribute(219)}, cfg.viResultAttr())
-	assert.True(t, cfg.viDebug())
-	assert.True(t, cfg.viWrap())
+		Fg: term.Attribute(219)}, cfg.modalResultAttr())
+	assert.True(t, cfg.modalDebug())
+	assert.True(t, cfg.modalWrap())
+
+	assert.Equal(t, "virtual", cfg.editorMode())
+	os.Setenv("SHELL", "")
+	assert.Equal(t, "vim", cfg.virtualEditorEditor())
+	assert.Equal(t, "bash", cfg.virtualEditorShell())
+	assert.Equal(t, term.Attributes{Fg: term.Attribute(219), Bg: term.ColorRed},
+		cfg.virtualEditorAttr())
+	assert.Equal(t, term.Attributes{Fg: term.Attribute(218), Bg: term.ColorGreen},
+		cfg.virtualEditorSelectionAttr())
+
 	wantMappings := map[handler.Sequence][]string{
 		{First: term.KeyComb{Ch: 'f'}}:            {"searchFile"},
 		{First: term.KeyComb{Ch: 'l'}}:            {"searchText"},

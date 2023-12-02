@@ -87,11 +87,22 @@ func newWorkspaceManagerHandler(
 	return ret, nil
 }
 
-func (h *workspaceManagerHandler) newEditor(cfg ideConfig) text.Editor {
+func (h *workspaceManagerHandler) newEditor(cfg ideConfig) (text.Editor, error) {
+	switch h.cfg.editorMode() {
+	case editorModeModal:
+		return h.newBuiltinModalEditor(cfg), nil
+	case editorModeModeless:
+		return nil, errors.New("mode set to modeless but it's not implemented yet")
+	default:
+		panic("invalid editor mode")
+	}
+}
+
+func (h *workspaceManagerHandler) newBuiltinModalEditor(cfg ideConfig) text.Editor {
 	viOpts := append([]vi.Option{},
-		vi.WithResAttr(cfg.viResultAttr()),
-		vi.WithDebug(cfg.viDebug()),
-		vi.WithWrap(cfg.viWrap()),
+		vi.WithResAttr(cfg.modalResultAttr()),
+		vi.WithDebug(cfg.modalDebug()),
+		vi.WithWrap(cfg.modalWrap()),
 		vi.WithClipboard(cfg.clipboard()),
 	)
 	return vi.Editor(viOpts...)
@@ -122,6 +133,11 @@ func (h *workspaceManagerHandler) init(
 	h.storage = storage
 
 	globalOpts := h.textOpts(h.cfg)
+	ed, err := h.newEditor(h.cfg)
+	if err != nil {
+		return fmt.Errorf("new editor: %v", err)
+	}
+
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		return fmt.Errorf("user home dir: %v", err)
@@ -131,7 +147,7 @@ func (h *workspaceManagerHandler) init(
 		return fmt.Errorf("home dir uri: %v", err)
 	}
 	homeWorkspace, err := h.workspace.AddWorkspace(h.ctxWithLocker, homeDirUri)
-	h.empty, _ = newEx(h.newEditor(cfg), homeWorkspace, h.storage,
+	h.empty, _ = newEx(ed, homeWorkspace, h.storage,
 		cfg.terminalConfig(), h.publishEvent, globalOpts...)
 	err = h.empty.subscribeCommands()
 	if err != nil {
@@ -542,9 +558,14 @@ func (h *workspaceManagerHandler) addWorkspace(
 		textOpts = append(textOpts, text.WithFile(uri))
 	}
 
+	ed, err := h.newEditor(cfg)
+	if err != nil {
+		return err
+	}
+
 	// workspace capable of opening URIs other than the workspaceapi.URI
 	multicwd := workspace.Multi(h.ctxWithLocker, h.workspace, cwd, uri)
-	ex, err := newEx(h.newEditor(cfg), multicwd, h.storage, cfg.terminalConfig(),
+	ex, err := newEx(ed, multicwd, h.storage, cfg.terminalConfig(),
 		h.publishEvent, textOpts...)
 	if err != nil {
 		return err

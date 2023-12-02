@@ -46,6 +46,10 @@ const (
  / / /__\ \ \     
 / / /____\ \ \    
 \/__________\/    `
+
+	editorModeModal    = "modal"
+	editorModeModeless = "modeless"
+	editorModeVirtual  = "virtual"
 )
 
 var (
@@ -681,34 +685,165 @@ func (c ideConfig) browser() (config.Config, bool) {
 	return c.getConfig(config.MapConfig(c.cfg), "browser")
 }
 
-func (c ideConfig) vi() (config.Config, bool) {
+func (c ideConfig) editor() (config.Config, bool) {
 	if c.cfg == nil {
 		return nil, false
 	}
-	return c.getConfig(config.MapConfig(c.cfg), "vi")
+	return c.getConfig(config.MapConfig(c.cfg), "editor")
 }
 
-func (c ideConfig) viResultAttr() (attr term.Attributes) {
+func (c ideConfig) modal() (config.Config, bool) {
+	if c.cfg == nil {
+		return nil, false
+	}
+	b, ok := c.editor()
+	if !ok {
+		return nil, false
+	}
+	return c.getConfig(b, "modal")
+}
+
+func (c ideConfig) modeless() (config.Config, bool) {
+	if c.cfg == nil {
+		return nil, false
+	}
+	b, ok := c.editor()
+	if !ok {
+		return nil, false
+	}
+	return c.getConfig(b, "modeless")
+}
+
+func (c ideConfig) virtual() (config.Config, bool) {
+	if c.cfg == nil {
+		return nil, false
+	}
+	b, ok := c.editor()
+	if !ok {
+		return nil, false
+	}
+	return c.getConfig(b, "virtual")
+}
+
+func (c ideConfig) editorMode() (ret string) {
+	ret = "modal"
+	if c.cfg == nil {
+		return
+	}
+	e, ok := c.editor()
+	if !ok {
+		return
+	}
+	mode, err := e.GetString("mode")
+	if err != nil {
+		if err != config.ErrNotFound {
+			c.errors["editor.mode"] = err
+		}
+		return
+	}
+	switch mode {
+	case editorModeModal, editorModeModeless, editorModeVirtual:
+		ret = mode
+	}
+	return
+}
+
+func (c ideConfig) virtualEditorAttr() (ret term.Attributes) {
+	cfg, ok := c.virtual()
+	if !ok {
+		return
+	}
+	cfgAttr, err := config.GetAttributes(cfg, "attr")
+	if err != nil {
+		if err != config.ErrNotFound {
+			c.errors["editor.virtual.attr"] = err
+		}
+		return
+	}
+	ret = cfgAttr
+	return
+}
+
+func (c ideConfig) virtualEditorSelectionAttr() (ret term.Attributes) {
+	ret = term.Attributes{Bg: term.AttrReverse, Fg: term.AttrReverse}
+	cfg, ok := c.virtual()
+	if !ok {
+		return
+	}
+	cfgAttr, err := config.GetAttributes(cfg, "selection_attr")
+	if err != nil {
+		if err != config.ErrNotFound {
+			c.errors["editor.virtual.selection_attr"] = err
+		}
+		return
+	}
+	ret = cfgAttr
+	return
+}
+
+func (c ideConfig) virtualEditorShell() (ret string) {
+	ret = os.Getenv("SHELL")
+	if ret == "" {
+		ret = "sh"
+	}
+	if c.cfg == nil {
+		return
+	}
+	cfg, ok := c.virtual()
+	if !ok {
+		return
+	}
+	virtual, err := cfg.GetString("shell")
+	if err != nil {
+		if err != config.ErrNotFound {
+			c.errors["editor.virtual.shell"] = err
+		}
+		return
+	}
+	ret = virtual
+	return
+}
+
+func (c ideConfig) virtualEditorEditor() (ret string) {
+	if c.cfg == nil {
+		return
+	}
+	cfg, ok := c.virtual()
+	if !ok {
+		return
+	}
+	virtual, err := cfg.GetString("editor")
+	if err != nil {
+		if err != config.ErrNotFound {
+			c.errors["editor.virtual.editor"] = err
+		}
+		return
+	}
+	ret = virtual
+	return
+}
+
+func (c ideConfig) modalResultAttr() (attr term.Attributes) {
 	attr = term.Attributes{Bg: term.ColorYellow, Fg: term.ColorBlack}
-	cfg, ok := c.vi()
+	cfg, ok := c.modal()
 	if !ok {
 		return
 	}
 	attr, err := config.GetAttributes(cfg, "search_attr")
 	if err != nil {
 		if err != config.ErrNotFound {
-			c.errors["vi.search_attr"] = err
+			c.errors["editor.modal.search_attr"] = err
 		}
 	}
 	return attr
 }
 
-func (c ideConfig) viDebug() (ret bool) {
-	return c.viBool("debug")
+func (c ideConfig) modalDebug() (ret bool) {
+	return c.modalBool("debug")
 }
 
-func (c ideConfig) viWrap() (ret bool) {
-	return c.viBool("wrap")
+func (c ideConfig) modalWrap() (ret bool) {
+	return c.modalBool("wrap")
 }
 
 func (c ideConfig) clipboard() clipboard.Register {
@@ -723,15 +858,15 @@ func (c ideConfig) clipboard() clipboard.Register {
 	return ret
 }
 
-func (c ideConfig) viBool(name string) (ret bool) {
-	cfg, ok := c.vi()
+func (c ideConfig) modalBool(name string) (ret bool) {
+	cfg, ok := c.modal()
 	if !ok {
 		return
 	}
 	ret, err := cfg.GetBool(name)
 	if err != nil {
 		if err != config.ErrNotFound {
-			c.errors["vi."+name] = err
+			c.errors["editor.modal."+name] = err
 		}
 	}
 	return ret
