@@ -19,8 +19,13 @@ func NewTestHandler() (t *TestHandler) {
 	return t
 }
 
+// Resource satisfies text.Editor.
 func (t *TestHandler) Resource() workspaceapi.URI {
 	return t.URI
+}
+
+// SetWrap satisfies text.Editor.
+func (t *TestHandler) SetWrap(wrap bool) {
 }
 
 func (t *TestHandler) Close() error {

@@ -135,6 +135,18 @@ func (mr *MockHandlerMockRecorder) Resource() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Resource", reflect.TypeOf((*MockHandler)(nil).Resource))
 }
 
+// SetWrap mocks base method.
+func (m *MockHandler) SetWrap(wrap bool) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "SetWrap", wrap)
+}
+
+// SetWrap indicates an expected call of SetWrap.
+func (mr *MockHandlerMockRecorder) SetWrap(wrap interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetWrap", reflect.TypeOf((*MockHandler)(nil).SetWrap), wrap)
+}
+
 // MockCellEditor is a mock of CellEditor interface.
 type MockCellEditor struct {
 	ctrl     *gomock.Controller

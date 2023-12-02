@@ -18,6 +18,10 @@ type Handler interface {
 	// This is only used to differentiate editor.Handler from the rest
 	// of tui.Handler in a browser.Component.
 	Resource() workspaceapi.URI
+
+	// SetWraps defines wheter editor handler should wrap that are longer than
+	// available width into the next line or simply truncate them in the view.
+	SetWrap(wrap bool)
 }
 
 // CellEditor is a cell.Editor that can fail.

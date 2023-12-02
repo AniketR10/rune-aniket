@@ -301,6 +301,11 @@ func (vi *Vi) Resource() workspaceapi.URI {
 	return vi.resource
 }
 
+// SetWrap satisfies editor.Handler.
+func (vi *Vi) SetWrap(wrap bool) {
+	vi.less.Scroll().Wrap = wrap
+}
+
 // SetDefaultAttributes sets the underlying's Scroll's default Attributes.
 func (e *Vi) SetDefaultAttributes(attrs term.Attributes) error {
 	e.less.Scroll().Attributes = attrs

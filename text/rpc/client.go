@@ -34,6 +34,10 @@ func (t Token) Resource() workspaceapi.URI {
 	return t.URI
 }
 
+// SetWrap satisfies Handler
+func (t Token) SetWrap(wrap bool) {
+}
+
 var _ textapi.Editor = (*Client)(nil)
 
 // Client satisfies text.Editor by calling a remote editor over grpc.

@@ -21,7 +21,11 @@ func (e EditorFromAPIEditor) CellEditor(h text.Handler) text.CellEditor {
 	return e.Ed.CellEditor(h)
 }
 func (e EditorFromAPIEditor) Edit(file workspaceapi.URI, buf *cell.Buffer) (text.Handler, error) {
-	return e.Ed.Edit(file, buf)
+	ed, err := e.Ed.Edit(file, buf)
+	if err != nil {
+		return nil, err
+	}
+	return HandlerFromAPIHandler{ed}, nil
 }
 
 func (e EditorFromAPIEditor) SubscribeEvents(t []textapi.EventType, h text.EventHandler) error {
@@ -35,7 +39,11 @@ func (e EditorFromAPIEditor) UnsubscribeEvents(h text.EventHandler) (bool, error
 }
 
 func (e EditorFromAPIEditor) Editor(file workspaceapi.URI) (text.Handler, error) {
-	return e.Ed.Editor(file)
+	ed, err := e.Ed.Editor(file)
+	if err != nil {
+		return nil, err
+	}
+	return HandlerFromAPIHandler{ed}, nil
 }
 
 func (e EditorFromAPIEditor) SubscribeCommand(cmd textapi.CommandManual, h text.CommandHandler) error {
@@ -70,4 +78,12 @@ func (e EditorFromAPIEditor) SetCursor(h text.Handler, pos term.Coordinates) err
 
 func (e EditorFromAPIEditor) SetDefaultAttributes(h text.Handler, attr term.Attributes) error {
 	return e.Ed.SetDefaultAttributes(h, attr)
+}
+
+// HandlerFromAPIHandler adapts api Handler to text.Handler.
+type HandlerFromAPIHandler struct {
+	textapi.Handler
+}
+
+func (w HandlerFromAPIHandler) SetWrap(wrap bool) {
 }

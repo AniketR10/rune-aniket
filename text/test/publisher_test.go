@@ -38,7 +38,7 @@ func TestPublisher(t *testing.T) {
 		pub := text.NewPublisher()
 		content := "1. She interviews"
 
-		var eventHandler text.Handler
+		var eventHandler textapi.Handler
 		pub.SubscribeEvents([]textapi.EventType{textapi.EventTypeOpen},
 			text.FuncEventHandler(func(ctx context.Context, ev textapi.Event) bool {
 				assert.Equal(t, textapi.EventTypeOpen, ev.Type)
@@ -59,7 +59,7 @@ func TestPublisher(t *testing.T) {
 		pub := text.NewPublisher()
 		content := "2. She gets hired"
 
-		var eventHandler text.Handler
+		var eventHandler textapi.Handler
 		pub.SubscribeEvents([]textapi.EventType{textapi.EventTypeFocus},
 			text.FuncEventHandler(func(ctx context.Context, ev textapi.Event) bool {
 				assert.Equal(t, textapi.EventTypeFocus, ev.Type)
@@ -79,7 +79,7 @@ func TestPublisher(t *testing.T) {
 		pub := text.NewPublisher()
 		content := "3. SHE GOT HIRED, I KNEW IT!!!"
 
-		var eventHandler text.Handler
+		var eventHandler textapi.Handler
 		var fired int
 		pub.SubscribeEvents([]textapi.EventType{textapi.EventTypeOpen, textapi.EventTypeFocus},
 			text.FuncEventHandler(func(ctx context.Context, ev textapi.Event) bool {

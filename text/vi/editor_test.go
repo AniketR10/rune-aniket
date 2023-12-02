@@ -20,7 +20,7 @@ func TestEditorDispatchFocus(t *testing.T) {
 	uri, err := workspaceapi.ParseURI("file:///Jolie")
 	require.NoError(t, err)
 
-	var h text.Handler
+	var h textapi.Handler
 	ed.SubscribeEvents([]textapi.EventType{textapi.EventTypeOpen},
 		text.FuncEventHandler(func(ctx context.Context, ev textapi.Event) bool {
 			assert.Equal(t, textapi.EventTypeOpen, ev.Type)

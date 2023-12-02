@@ -69,6 +69,9 @@ func (e *TestEditorHandler) Resource() workspaceapi.URI {
 	return e.uri
 }
 
+func (e *TestEditorHandler) SetWrap(wrap bool) {
+}
+
 func (e *testEditor) Edit(resource workspaceapi.URI, buf *cell.Buffer) (text.Handler, error) {
 	e.uri = resource
 	e.buf = buf

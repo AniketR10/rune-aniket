@@ -135,3 +135,8 @@ func (h *simpleEditorHandler) Close() error {
 func (h *simpleEditorHandler) Resource() workspaceapi.URI {
 	return h.resource
 }
+
+// SetWrap satisfies editor.Handler.
+func (h *simpleEditorHandler) SetWrap(wrap bool) {
+	h.less.Scroll().Wrap = wrap
+}
