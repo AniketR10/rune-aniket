@@ -49,7 +49,6 @@ const (
 
 	editorModeModal    = "modal"
 	editorModeModeless = "modeless"
-	editorModeVirtual  = "virtual"
 )
 
 var (
@@ -742,7 +741,7 @@ func (c ideConfig) editorMode() (ret string) {
 		return
 	}
 	switch mode {
-	case editorModeModal, editorModeModeless, editorModeVirtual:
+	case editorModeModal, editorModeModeless:
 		ret = mode
 	}
 	return

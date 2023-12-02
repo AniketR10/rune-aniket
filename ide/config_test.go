@@ -30,7 +30,7 @@ log_level: "trace"
 clipboard: memory
 
 editor:
-    mode: virtual
+    mode: modal
     modal:
         search_attr:
             bg: red
@@ -287,7 +287,7 @@ func TestConfigSetting(t *testing.T) {
 	assert.True(t, cfg.modalDebug())
 	assert.True(t, cfg.modalWrap())
 
-	assert.Equal(t, "virtual", cfg.editorMode())
+	assert.Equal(t, "modal", cfg.editorMode())
 	os.Setenv("SHELL", "")
 	assert.Equal(t, "vim", cfg.virtualEditorEditor())
 	assert.Equal(t, "bash", cfg.virtualEditorShell())
