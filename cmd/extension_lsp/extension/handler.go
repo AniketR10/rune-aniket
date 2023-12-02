@@ -1681,7 +1681,7 @@ func (h *lspEditorHandler) browseLocations(
 	textToLocation := make(map[string]protocol.Location)
 	buf := cell.NewBuffer()
 	ed := vi.Editor()
-	edh, err := ed.Edit(workspaceapi.URI{}, buf)
+	edh, err := ed.Edit(workspaceapi.RandomURI("lsp"), buf)
 	if err != nil {
 		err = fmt.Errorf("ed.Edit: %s", err)
 		return err

@@ -2,6 +2,7 @@ package api
 
 import (
 	"fmt"
+	"math/rand"
 	"net/url"
 	"os"
 	"os/user"
@@ -215,6 +216,20 @@ func CurrentUserHostURI(path string) (URI, error) {
 func WithPath(u URI, path string) (URI, error) {
 	u.parsed.Path = path
 	return uriFromURL(&u.parsed)
+}
+
+// RandomURI generates a random URI with the given scheme.
+//
+// Under the hood it uses math.Rand so clients can manage
+// seeding the default rand.Source, if desired.
+func RandomURI(scheme string) URI {
+	ret, err := ParseURI(fmt.Sprintf("%s:///%d", scheme, rand.Int()))
+	if err != nil {
+		// this panic indicates a programmer error
+		// above when crafting URI
+		panic(err)
+	}
+	return ret
 }
 
 func uriFromURL(u *url.URL) (URI, error) {

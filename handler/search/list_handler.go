@@ -23,7 +23,7 @@ func Handler(l *List, fn func(string)) tui.Handler {
 	const wrap = true
 
 	buf := l.Buffer()
-	ed, _ := text.SimpleEditor(wrap).Edit(workspaceapi.URI{}, buf)
+	ed, _ := text.SimpleEditor(wrap).Edit(workspaceapi.RandomURI("search"), buf)
 	ret := simpleHandler{List: l, fn: fn, ed: ed}
 	return ret
 }

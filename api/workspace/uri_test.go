@@ -162,3 +162,15 @@ func TestRelPath(t *testing.T) {
 		})
 	}
 }
+
+func TestRandomURI(t *testing.T) {
+	uri := RandomURI("myscheme")
+	assert.Equal(t, "myscheme", uri.Scheme())
+	assert.NotZero(t, uri.Path())
+
+	uri2 := RandomURI("myscheme")
+	assert.NotEqual(t, uri2.Path(), uri.Path())
+
+	assert.False(t, uri.Equal(uri2))
+	assert.False(t, uri2.Equal(uri))
+}

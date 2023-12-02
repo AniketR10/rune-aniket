@@ -331,7 +331,7 @@ func (s *logsHandler) toggleCaseSensitivity() {
 }
 
 func (s *logsHandler) resetEd() {
-	s.ed, _ = text.SimpleEditor(true).Edit(workspaceapi.URI{}, s.l.Buffer())
+	s.ed, _ = text.SimpleEditor(true).Edit(workspaceapi.RandomURI("logs"), s.l.Buffer())
 }
 
 func (s *logsHandler) handleFilter(ev term.Event) (exit, handled bool) {

@@ -371,7 +371,7 @@ func (h *syntaxHandler) browseNodes(
 	textToLocation := make(map[string]*sitter.Node)
 	viewBuffer := cell.NewBuffer()
 	ed := vi.Editor()
-	edh, err := ed.Edit(workspaceapi.URI{}, viewBuffer)
+	edh, err := ed.Edit(workspaceapi.RandomURI("lexer"), viewBuffer)
 	if err != nil {
 		err = fmt.Errorf("edit temporary buffer: %s", err)
 		return err
