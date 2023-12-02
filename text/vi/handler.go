@@ -104,6 +104,14 @@ func (vi *viHandlerImpl) init(buf *cell.Buffer, opts ...Option) {
 // Resize : tui.Component
 func (vi *viHandlerImpl) Resize(width, height int) {
 	vi.less.Resize(width, height)
+
+	// scroll offset might > max new offset after resize
+	// this must be done here because cursor doesn't
+	// have a hook on Resize, and scroll cannot
+	// have access to a cursor.
+	pos := vi.cursor.CursorAtScroll()
+	vi.less.Scroll().SeekTo(vi.less.Scroll().Offset())
+	vi.cursor.MoveToScroll(pos)
 }
 
 func (vi *viHandlerImpl) setActiveLocationListMessage(locs map[string]textapi.Location) {

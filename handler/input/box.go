@@ -1,6 +1,8 @@
 package input
 
 import (
+	"fmt"
+
 	"unstable.build/go-tui"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/cell"
@@ -35,30 +37,48 @@ type Box struct {
 	placeholder *handler.Frame
 	// used to assist in calculate height
 	placeholderStr component.Responsive
-	scroll         *component.Scroll
-	cursor         *text.Cursor
+	editor         text.Editor
+	handler        text.Handler
+	// used just for Height calculation support
+	scroll component.Scroll
 }
 
 // NewBox allocates storage for a new Box and
 // initializes it.
-func NewBox(buf *cell.Buffer, cfg BoxConfig) *Box {
+func NewBox(buf *cell.Buffer, ed text.Editor, cfg BoxConfig) *Box {
 	ret := new(Box)
-	ret.Init(buf, cfg)
+	ret.Init(buf, ed, cfg)
 	return ret
 }
 
 // Init initializes this Box with the given config and cell.Buffer,
 // which is used to share the contents of the input box with clients.
-func (i *Box) Init(buf *cell.Buffer, cfg BoxConfig) {
+func (i *Box) Init(buf *cell.Buffer, ed text.Editor, cfg BoxConfig) {
 	if cfg.MaxHeight < cfg.MinHeight && cfg.MaxHeight != 0 {
 		panic("max height cannot be smaller than min height")
 	}
-	// do not expose StringResponsiveConfig in BoxConfig because simple editor is not capable
-	// of emulating NoSplitWords property.
-	ed, scroll, cursor := text.NewSimpleHandler(buf, workspaceapi.URI{}, true /* wrap */, false /*commandBar */)
-	frame := handler.NewFrame(ed)
+
+	uri := workspaceapi.RandomURI("inputbox")
+	edh, err := ed.Edit(uri, buf)
+	if err != nil {
+		// this should not really happen, as editor implementations
+		// passed to an input box should all be internal, and so
+		// no errors can occur.
+		panic(fmt.Errorf("editor edit: %v", err))
+	}
+
+	// wrap must be set to true for input box
+	// to work as expected by users.
+	edh.SetWrap(true)
+	// space is usually limited, so hide the text editor's
+	// command bar
+	edh.ShowCommandBar(false)
+
+	frame := handler.NewFrame(edh)
 	frame.Attributes = cfg.DefaultFrameAttr
 
+	// do not expose StringResponsiveConfig in BoxConfig because editor handlers are
+	// not capable of emulating NoSplitWords property.
 	placeholderStr := component.StringResponsive(cfg.Placeholder,
 		component.StringResponsiveConfig{StringConfig: cfg.PlaceholderConfig})
 	placeholder := handler.NewFrame(
@@ -70,8 +90,10 @@ func (i *Box) Init(buf *cell.Buffer, cfg BoxConfig) {
 	i.frame = frame
 	i.placeholderStr = placeholderStr
 	i.placeholder = placeholder
-	i.scroll = scroll
-	i.cursor = cursor
+	i.handler = edh
+	i.editor = ed
+	i.scroll.Init(i.buf)
+	i.scroll.Wrap = true
 }
 
 // SetFrameAttr overrides the default frame attributes passed via BoxConfig.
@@ -87,7 +109,7 @@ func (r *Box) Buffer() *cell.Buffer {
 
 // Reset resets this input box to its initial state.
 func (r *Box) Reset() {
-	r.cursor.MoveToScroll(term.Coordinates{})
+	_ = r.editor.SetCursor(r.handler, term.Coordinates{})
 	r.buf.Reset()
 }
 
@@ -103,11 +125,11 @@ func (i *Box) Height(width int) (ret int) {
 		// use scroll, rather than frame as Frame's content is the editor
 		// which doesn't satisfy component.Responsive.
 		ret = i.scroll.Height(width)
-		rows := i.scroll.Buffer().Rows()
+		rows := i.buf.Rows()
 		// if last visible row is "full", always return +1
 		// to allow for cursor to fall in an empty row but within bounds.
 		if rows > 0 {
-			lastRowCols := i.scroll.Buffer().View().Columns(rows - 1)
+			lastRowCols := i.buf.View().Columns(rows - 1)
 			if lastRowCols != 0 && lastRowCols%width == 0 {
 				ret++
 			}
@@ -127,13 +149,6 @@ func (i *Box) Height(width int) (ret int) {
 func (i *Box) Resize(width, height int) {
 	i.frame.Resize(width, height)
 	i.placeholder.Resize(width, height)
-	// due to the nature of responsive components:
-	// first we update, then we measure the new height,
-	// then we resize accordingly. The underlying scroll
-	// might have been scrolled due to the update.
-	pos := i.cursor.CursorAtScroll()
-	i.scroll.SeekTo(i.scroll.Offset())
-	i.cursor.MoveToScroll(pos)
 }
 
 // Draw satisfies tui.Component.

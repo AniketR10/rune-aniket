@@ -640,7 +640,10 @@ func (s *Scroll) Height(width int) int {
 	if width == 0 {
 		return 0
 	}
-	_, wrapsLen := doWrapdrawNoAttr(term.NoopWriter{}, s.buf, width, s.height, s.offset)
+	// NOTE: Height shouldn't rely on any internal mutable state
+	// except for the buffer.
+	_, wrapsLen := doWrapdrawNoAttr(term.NoopWriter{}, s.buf,
+		width, 0, term.Coordinates{})
 	return rows + wrapsLen
 }
 

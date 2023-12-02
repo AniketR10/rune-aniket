@@ -9,6 +9,7 @@ import (
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/handler/input"
 	"unstable.build/go-tui/term"
+	"unstable.build/go-tui/text"
 )
 
 // ComponentConfig holds configuration options for dialogue.Component.
@@ -33,6 +34,9 @@ type ComponentConfig struct {
 	ReceiveMessageSpanConfig component.SpanConfig
 	// InputConfig determines the configuration for the input prompt.
 	InputConfig input.BoxConfig
+	// InputEditor is the editor used by the input prompt.
+	// If not set, text.Simple is used.
+	InputEditor text.Editor
 }
 
 // Component implements a dialogue tui.Component.
@@ -66,6 +70,9 @@ func (c *Component) Init(cfg ComponentConfig) {
 	if cfg.InputRowColumns > component.MaxCols {
 		panic(fmt.Sprintf("InputRowColumns must be > 0 and <= %d", component.MaxCols))
 	}
+	if cfg.InputEditor == nil {
+		cfg.InputEditor = text.SimpleEditor(true)
+	}
 	c.cfg = cfg
 
 	c.messages.Init()
@@ -77,7 +84,7 @@ func (c *Component) Init(cfg ComponentConfig) {
 	})
 	c.container.AddRow().AddComponent(messagesResponsive, component.MaxCols)
 
-	c.box.Init(cell.NewBuffer(), c.cfg.InputConfig)
+	c.box.Init(cell.NewBuffer(), c.cfg.InputEditor, c.cfg.InputConfig)
 	c.inputRow = c.container.AddRow()
 	c.inputRow.AddComponent(component.NopResponsive(), (component.MaxCols-c.cfg.InputRowColumns)/2)
 	c.inputCol = c.inputRow.AddComponent(&c.box, c.boxWidth(component.MaxCols))

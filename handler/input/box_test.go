@@ -8,33 +8,35 @@ import (
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/term"
+	"unstable.build/go-tui/text"
 	testutil "unstable.build/go-tui/util/test"
 )
 
 func TestBox(t *testing.T) {
+	ed := text.SimpleEditor(true)
 	t.Run("min and max height passed are coherent or else it panics", func(t *testing.T) {
 		// ok
-		NewBox(cell.NewBuffer(), BoxConfig{})
+		NewBox(cell.NewBuffer(), ed, BoxConfig{})
 
 		// ok
-		NewBox(cell.NewBuffer(), BoxConfig{MinHeight: 1})
+		NewBox(cell.NewBuffer(), ed, BoxConfig{MinHeight: 1})
 
 		// ok
-		NewBox(cell.NewBuffer(), BoxConfig{MaxHeight: 1})
+		NewBox(cell.NewBuffer(), ed, BoxConfig{MaxHeight: 1})
 
 		// ok
-		NewBox(cell.NewBuffer(), BoxConfig{MaxHeight: 1, MinHeight: 1})
+		NewBox(cell.NewBuffer(), ed, BoxConfig{MaxHeight: 1, MinHeight: 1})
 
 		// ok
-		NewBox(cell.NewBuffer(), BoxConfig{MaxHeight: 2, MinHeight: 1})
+		NewBox(cell.NewBuffer(), ed, BoxConfig{MaxHeight: 2, MinHeight: 1})
 
 		assert.Panics(t, func() {
-			NewBox(cell.NewBuffer(), BoxConfig{MaxHeight: 1, MinHeight: 3})
+			NewBox(cell.NewBuffer(), ed, BoxConfig{MaxHeight: 1, MinHeight: 3})
 		})
 	})
 	t.Run("no placeholder", func(t *testing.T) {
 		buf := cell.NewBuffer()
-		b := NewBox(buf, BoxConfig{})
+		b := NewBox(buf, ed, BoxConfig{})
 		b.Resize(20, 4)
 
 		w := term.NewStringWriter(20, 9)
@@ -192,7 +194,7 @@ hello world
 	})
 	t.Run("with placeholder", func(t *testing.T) {
 		buf := cell.NewBuffer()
-		b := NewBox(buf, BoxConfig{Placeholder: "HERE..."})
+		b := NewBox(buf, ed, BoxConfig{Placeholder: "HERE..."})
 		b.Resize(20, 4)
 
 		w := term.NewStringWriter(20, 9)
@@ -307,7 +309,7 @@ HERE...
 
 	t.Run("with long placeholder", func(t *testing.T) {
 		buf := cell.NewBuffer()
-		b := NewBox(buf, BoxConfig{Placeholder: "please write to your great, lovely, assistant"})
+		b := NewBox(buf, ed, BoxConfig{Placeholder: "please write to your great, lovely, assistant"})
 		b.Resize(20, 4)
 
 		w := term.NewStringWriter(20, 9)
@@ -381,7 +383,7 @@ te to your
 	})
 	t.Run("with min, max height", func(t *testing.T) {
 		buf := cell.NewBuffer()
-		b := NewBox(buf, BoxConfig{MinHeight: 4, MaxHeight: 5, Placeholder: "HERE..."})
+		b := NewBox(buf, ed, BoxConfig{MinHeight: 4, MaxHeight: 5, Placeholder: "HERE..."})
 		b.Resize(20, 4)
 
 		w := term.NewStringWriter(20, 9)

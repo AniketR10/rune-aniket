@@ -4,7 +4,6 @@ import (
 	"unstable.build/go-tui"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/cell"
-	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/term"
 )
@@ -22,10 +21,10 @@ type simpleEditorHandler struct {
 func NewSimpleHandler(
 	buf *cell.Buffer, resource workspaceapi.URI,
 	wrap, commandBar bool,
-) (Handler, *component.Scroll, *Cursor) {
+) Handler {
 	ret := new(simpleEditorHandler)
 	ret.Init(buf, resource, wrap, commandBar)
-	return ret, ret.less.Scroll(), &ret.cursor
+	return ret
 }
 
 func (h *simpleEditorHandler) Init(
@@ -46,6 +45,14 @@ func (h *simpleEditorHandler) Init(
 func (h *simpleEditorHandler) Resize(width, height int) {
 	h.height = height
 	h.less.Resize(width, height)
+
+	// scroll offset might > max new offset after resize
+	// this must be done here because cursor doesn't
+	// have a hook on Resize, and scroll cannot
+	// have access to a cursor.
+	pos := h.cursor.CursorAtScroll()
+	h.less.Scroll().SeekTo(h.less.Scroll().Offset())
+	h.cursor.MoveToScroll(pos)
 }
 
 // Draw satisfies tui.Component
