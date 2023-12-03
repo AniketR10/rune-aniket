@@ -25,17 +25,17 @@ func NewContainer() *Container {
 }
 
 // AddRow appends a row to this Container.
-func (g *Container) AddRow() *Row {
+func (c *Container) AddRow() *Row {
 	row := NewRow()
-	g.rows = append(g.rows, row)
+	c.rows = append(c.rows, row)
 	return row
 }
 
 // Resize satisfies tui.Component.
-func (g *Container) Resize(width, height int) {
-	g.width, g.height = width, height
-	offset := -g.offset
-	for _, row := range g.rows {
+func (c *Container) Resize(width, height int) {
+	c.width, c.height = width, height
+	offset := -c.offset
+	for _, row := range c.rows {
 		rowHeight := row.Height(width)
 		pos := term.Coordinates{Y: offset}
 		row.Move(pos)
@@ -56,40 +56,48 @@ func (g *Container) Resize(width, height int) {
 }
 
 // Draw satisfies tui.Component.
-func (g *Container) Draw(w term.Writer) {
+func (c *Container) Draw(w term.Writer) {
 	// Height requirements could have changed
 	// and that's something that we cannot determine from here
 	// so it's better to always resize.
-	g.Resize(g.width, g.height)
+	c.Resize(c.width, c.height)
 
 	// provides additional SetCell clipping for components past height
-	vw := VirtualWriter(w, term.Coordinates{}, g.height, g.width)
-	for _, row := range g.rows {
+	vw := VirtualWriter(w, term.Coordinates{}, c.height, c.width)
+	for _, row := range c.rows {
 		row.Draw(vw)
 	}
 }
 
 // ScrollUp scrolls the contents of this container up.
-func (g *Container) ScrollUp() bool {
-	if g.offset == 0 {
+func (c *Container) ScrollUp() bool {
+	if c.offset == 0 {
 		return false
 	}
-	g.offset--
+	c.offset--
 	return true
 }
 
 // ScrollDown scrolls the contents of this container down.
-func (g *Container) ScrollDown() bool {
-	if g.offset == g.maxOffset() {
+func (c *Container) ScrollDown() bool {
+	if c.offset == c.maxOffset() {
 		return false
 	}
-	g.offset++
+	c.offset++
 	return true
 }
 
-func (g *Container) maxOffset() (ret int) {
-	for _, row := range g.rows {
-		rowHeight := row.Height(g.width)
+// Height satisfies component.Responsive.
+func (c *Container) Height(width int) (height int) {
+	for _, row := range c.rows {
+		height += row.Height(width)
+	}
+	return
+}
+
+func (c *Container) maxOffset() (ret int) {
+	for _, row := range c.rows {
+		rowHeight := row.Height(c.width)
 		ret += rowHeight
 	}
 	if ret > 0 {
