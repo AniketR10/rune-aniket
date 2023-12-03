@@ -107,7 +107,6 @@ func (s *dialogueHandler) Handle(ev term.Event) (exit, handled bool) {
 		handled = s.comp.SeekUp()
 		return
 	case term.KeyEsc:
-		handled = true
 		exit = true
 	case term.KeyEnter:
 		item, ok := s.comp.InputSubmit()
@@ -123,6 +122,9 @@ func (s *dialogueHandler) Handle(ev term.Event) (exit, handled bool) {
 		_, handled = s.comp.Input().Handle(ev)
 		if handled {
 			exit = false
+		}
+		if exit {
+			handled = true
 		}
 	}
 	return

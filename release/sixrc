@@ -81,6 +81,36 @@ editor:
 # path and configuration for each of the extensions
 # that are to be run alongside the editor.
 extensions:
+  # This extension adds AI assistant commands to the editor. Open a new
+  # dialogue with 'assistantChat' command or run a query through it directly
+  # with '?' command.
+  ai:
+    path: /usr/local/bin/extension_ai
+    config:
+      # default LLM used, unless specified in command
+      model: gpt-4
+      # OpenAI API key
+      # api_key: ""
+      # timeout to run completion queries.
+      rpc_timeout: 10s
+      # Colors
+      background_attr:
+        bg: default
+      user_msg_attr:
+        bg: default
+        fg: default
+      assistant_msg_attr:
+        bg: default
+        fg: 250
+      input_box_attr:
+        bg: default
+        fg: default
+      input_placeholder_attr:
+        bg: default
+        fg: 239
+      input_box_frame_attr:
+        bg: default
+        fg: default
   # This extension is used for navigating the editor's issue
   # tracker and creating new issues.
   rtc:
@@ -144,22 +174,6 @@ extensions:
   # is passed without any arguments, the editor's log file is opened.
   logs:
     path: /usr/local/bin/extension_logs
-  # This extension adds a terminal UI component to the editor. Open with newTerminal
-  # or splitWindowTerminal commands.
-  terminal:
-    path: /usr/local/bin/extension_terminal
-    config:
-      # Default shell to use rather than what's provided by the OS via $SHELL.
-      #shell: bash
-      ## Initial command to run. This is for advanced use cases only.
-      #cmd: echo "blabla"
-      # Colors
-      attr:
-        bg: default
-        fg: default
-      selection_attr:
-        bg: reverse
-        fg: reverse
   # This extension adds a file information bar at the bottom.
   file_bar:
     path: /usr/local/bin/extension_file_bar

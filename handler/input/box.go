@@ -26,7 +26,7 @@ type BoxConfig struct {
 	Placeholder       string
 	PlaceholderConfig component.StringConfig
 	DefaultFrameAttr  term.Attributes
-	ContentConfig     component.StringConfig
+	ContentConfig     term.Attributes
 }
 
 // Box is an input box that essentially collects user input.
@@ -73,6 +73,8 @@ func (i *Box) Init(buf *cell.Buffer, ed text.Editor, cfg BoxConfig) {
 	// space is usually limited, so hide the text editor's
 	// command bar
 	edh.ShowCommandBar(false)
+
+	_ = ed.SetDefaultAttributes(edh, cfg.ContentConfig)
 
 	frame := handler.NewFrame(edh)
 	frame.Attributes = cfg.DefaultFrameAttr

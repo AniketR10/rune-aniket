@@ -80,6 +80,7 @@ func (c *Component) Init(cfg ComponentConfig) {
 	c.messages.Alignment = component.SpanAlignmentBottom
 	c.spanMessages.Init(&c.messages, c.cfg.MessagesRowConfig)
 	messagesResponsive := component.FuncResponsive(&c.spanMessages, func(width int) int {
+		// do not use ResponsiveList.Height, otherwise it might not leave space for prompt
 		// assumes c.height has been set prior to call to Container.Resize
 		return int(math.Max(float64(c.height-c.box.Height(c.boxWidth(width))), 0))
 	})
@@ -191,6 +192,15 @@ func (c *Component) SeekDown() bool {
 // SeekUp seeks the history panel up.
 func (c *Component) SeekUp() bool {
 	return c.messages.SeekUp()
+}
+
+// Dimensions satisfies component.Responsive.
+func (c *Component) Height(width int) (height int) {
+	// do not use container.Height, as first row (messages) is designed
+	// to take the remaining space
+	height = c.box.Height(c.boxWidth(width))
+	height += c.spanMessages.Height(width)
+	return
 }
 
 func (c *Component) boxWidth(width int) int {

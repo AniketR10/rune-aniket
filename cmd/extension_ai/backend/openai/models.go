@@ -15,3 +15,12 @@ var modelContextWindow = map[string]int{
 	GPT4:          8192,
 	GPT3Dot5Turbo: 16385,
 }
+
+// AvailableModels returns a set with the available models.
+func AvailableModels() (ret map[string]struct{}) {
+	ret = make(map[string]struct{}, len(modelContextWindow))
+	for k := range modelContextWindow {
+		ret[k] = struct{}{}
+	}
+	return
+}
