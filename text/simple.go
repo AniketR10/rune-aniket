@@ -7,32 +7,39 @@ import (
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/term"
+	"unstable.build/go-tui/text/clipboard"
 )
+
+// DefaultSimpleEditor returns a simple to use Editor implementation.
+func DefaultSimpleEditor(clipboard clipboard.Register) Editor {
+	defaultAttr := term.Attributes{Fg: term.AttrReverse}
+	return NewSimpleEditor(clipboard, false, true, defaultAttr)
+}
+
+// NewSimpleEditor allocates storage for a new Editor and initializes it.
+func NewSimpleEditor(
+	clipboard clipboard.Register,
+	wrap, commandBar bool, resultsAttr term.Attributes,
+) Editor {
+	ret := new(simpleEditor)
+	ret.wrap = wrap
+	ret.commandBar = commandBar
+	ret.resAttr = resultsAttr
+	ret.clipboard = clipboard
+	ret.pub.Init()
+	return ret
+}
 
 type simpleEditor struct {
 	pub        Publisher
 	wrap       bool
 	commandBar bool
 	resAttr    term.Attributes
-}
-
-// DefaultSimpleEditor returns a simple to use Editor implementation.
-func DefaultSimpleEditor() Editor {
-	return NewSimpleEditor(false, true, term.Attributes{Fg: term.AttrReverse})
-}
-
-// NewSimpleEditor allocates storage for a new Editor and initializes it.
-func NewSimpleEditor(wrap, commandBar bool, resultsAttr term.Attributes) Editor {
-	ret := new(simpleEditor)
-	ret.wrap = wrap
-	ret.commandBar = commandBar
-	ret.resAttr = resultsAttr
-	ret.pub.Init()
-	return ret
+	clipboard  clipboard.Register
 }
 
 func (e *simpleEditor) Edit(file workspaceapi.URI, buf *cell.Buffer) (Handler, error) {
-	rootIfc := NewSimpleHandler(buf, file, e.wrap, e.commandBar, e.resAttr)
+	rootIfc := NewSimpleHandler(buf, file, e.wrap, e.commandBar, e.resAttr, e.clipboard)
 	root := rootIfc.(*simpleEditorHandler)
 	return e.pub.PublishEdit(file, buf, root, &root.cursor), nil
 }

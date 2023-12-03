@@ -9,11 +9,12 @@ import (
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
+	"unstable.build/go-tui/text/clipboard"
 	testutil "unstable.build/go-tui/util/test"
 )
 
 func TestBox(t *testing.T) {
-	ed := text.DefaultSimpleEditor()
+	ed := text.DefaultSimpleEditor(clipboard.NewInMemory())
 	t.Run("min and max height passed are coherent or else it panics", func(t *testing.T) {
 		// ok
 		NewBox(cell.NewBuffer(), ed, BoxConfig{})

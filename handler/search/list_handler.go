@@ -5,6 +5,7 @@ import (
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
+	"unstable.build/go-tui/text/clipboard"
 )
 
 type simpleHandler struct {
@@ -23,7 +24,8 @@ func Handler(l *List, fn func(string)) tui.Handler {
 	const wrap = true
 
 	buf := l.Buffer()
-	ed, _ := text.NewSimpleEditor(wrap, true, term.Attributes{}).
+	clipboard := clipboard.NewInMemory()
+	ed, _ := text.NewSimpleEditor(clipboard, wrap, true, term.Attributes{}).
 		Edit(workspaceapi.RandomURI("search"), buf)
 	ret := simpleHandler{List: l, fn: fn, ed: ed}
 	return ret

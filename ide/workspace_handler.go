@@ -109,7 +109,8 @@ func (h *workspaceManagerHandler) newBuiltinModalEditor(cfg ideConfig) text.Edit
 }
 
 func (h *workspaceManagerHandler) newBuiltinModelessEditor(cfg ideConfig) text.Editor {
-	return text.NewSimpleEditor(cfg.modelessWrap(), true, cfg.modelessResultAttr())
+	return text.NewSimpleEditor(
+		cfg.clipboard(), cfg.modelessWrap(), true, cfg.modelessResultAttr())
 }
 
 func (h *workspaceManagerHandler) init(

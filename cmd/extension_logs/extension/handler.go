@@ -10,6 +10,7 @@ import (
 	"unstable.build/go-tui/handler/search"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
+	"unstable.build/go-tui/text/clipboard"
 )
 
 type mode uint8
@@ -331,7 +332,9 @@ func (s *logsHandler) toggleCaseSensitivity() {
 }
 
 func (s *logsHandler) resetEd() {
-	s.ed, _ = text.DefaultSimpleEditor().Edit(workspaceapi.RandomURI("logs"), s.l.Buffer())
+	clipboard := clipboard.NewInMemory()
+	s.ed, _ = text.DefaultSimpleEditor(clipboard).
+		Edit(workspaceapi.RandomURI("logs"), s.l.Buffer())
 }
 
 func (s *logsHandler) handleFilter(ev term.Event) (exit, handled bool) {

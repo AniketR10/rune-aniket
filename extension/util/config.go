@@ -93,14 +93,14 @@ func Clipboard(cfg config.Config) (clipboard.Register, error) {
 }
 
 // Editor returns the editor implementation as configured.
-func Editor(cfg config.Config) (text.Editor, error) {
+func Editor(clipboard clipboard.Register, cfg config.Config) (text.Editor, error) {
 	edConfig, err := cfg.GetConfig("editor")
 	if err != nil {
 		if err != config.ErrNotFound {
 			err = fmt.Errorf("failed to get 'editor' from config: %v", err)
 			return nil, err
 		}
-		return text.DefaultSimpleEditor(), nil
+		return text.DefaultSimpleEditor(clipboard), nil
 	}
 
 	mode, err := edConfig.GetString("mode")
@@ -113,8 +113,8 @@ func Editor(cfg config.Config) (text.Editor, error) {
 	}
 	switch mode {
 	case "modal":
-		return vi.Editor(), nil
+		return vi.Editor(vi.WithClipboard(clipboard)), nil
 	default:
-		return text.DefaultSimpleEditor(), nil
+		return text.DefaultSimpleEditor(clipboard), nil
 	}
 }

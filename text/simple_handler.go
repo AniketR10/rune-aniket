@@ -1,35 +1,40 @@
 package text
 
 import (
+	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/term"
+	"unstable.build/go-tui/text/clipboard"
 )
 
 type simpleEditorHandler struct {
-	buf      *cell.Buffer
-	less     handler.Less
-	resource workspaceapi.URI
-	cursor   Cursor
-	height   int
-	mouse    *Mouse
+	buf       *cell.Buffer
+	less      handler.Less
+	resource  workspaceapi.URI
+	cursor    Cursor
+	height    int
+	mouse     *Mouse
+	clipboard clipboard.Register
 }
 
 // NewSimpleHandler returns a modeless, simple-to-use text.Handler.
 func NewSimpleHandler(
 	buf *cell.Buffer, resource workspaceapi.URI,
 	wrap, commandBar bool, resAttr term.Attributes,
+	clipboard clipboard.Register,
 ) Handler {
 	ret := new(simpleEditorHandler)
-	ret.Init(buf, resource, wrap, commandBar, resAttr)
+	ret.Init(buf, resource, wrap, commandBar, resAttr, clipboard)
 	return ret
 }
 
 func (h *simpleEditorHandler) Init(
 	buf *cell.Buffer, resource workspaceapi.URI,
 	wrap, commandBar bool, resAttr term.Attributes,
+	clipboard clipboard.Register,
 ) {
 	h.buf = buf
 	h.resource = resource
@@ -40,6 +45,7 @@ func (h *simpleEditorHandler) Init(
 	})
 	h.cursor.Init(h.less.Scroll())
 	h.mouse = NewMouse(CursorMouseDelegate(&h.cursor))
+	h.clipboard = clipboard
 }
 
 // Resize satisfies tui.Component
@@ -96,6 +102,18 @@ func (h *simpleEditorHandler) Handle(ev term.Event) (exit, handled bool) {
 		handled = true
 	case term.KeyTab:
 		h.cursor.Insert('\t')
+		handled = true
+	case term.KeyCtrlC:
+		h.cursor.CopySelection(clipboard.DefaultRegisterID, h.clipboard)
+		handled = true
+	case term.KeyCtrlV:
+		paste, err := h.clipboard.Paste(clipboard.DefaultRegisterID)
+		if err != nil {
+			log.Errorf("clipboard paste: %v", err)
+		} else {
+			str := paste.Text
+			h.cursor.Paste(str, StandardSelection, false)
+		}
 		handled = true
 	case term.KeyBackspace, term.KeyBackspace2:
 		if h.cursor.Selection() != "" {
