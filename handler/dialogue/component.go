@@ -71,7 +71,7 @@ func (c *Component) Init(cfg ComponentConfig) {
 		panic(fmt.Sprintf("InputRowColumns must be > 0 and <= %d", component.MaxCols))
 	}
 	if cfg.InputEditor == nil {
-		cfg.InputEditor = text.SimpleEditor(true)
+		cfg.InputEditor = text.DefaultSimpleEditor()
 	}
 	c.cfg = cfg
 

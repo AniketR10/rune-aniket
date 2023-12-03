@@ -37,6 +37,11 @@ editor:
             fg: 219
         debug: true
         wrap: true
+    modeless:
+        search_attr:
+            bg: red
+            fg: 229
+        wrap: false
     virtual:
         shell: bash
         editor: vim
@@ -178,6 +183,10 @@ func assertDefaultConfig(t *testing.T, cfg *ideConfig) {
 	assert.Equal(t, emulator.Config{SelectionAttributes: selectAttr}, cfg.terminalConfig())
 	assert.Equal(t, command.DefaultConfig().ShowManualAfter, cfg.commandOverlayShowManualAfter())
 
+	assert.Equal(t, term.Attributes{Fg: term.ColorBlack, Bg: term.ColorYellow},
+		cfg.modelessResultAttr())
+	assert.False(t, cfg.modelessWrap())
+
 	assert.Equal(t, "modal", cfg.editorMode())
 	os.Setenv("SHELL", "fish")
 	assert.Equal(t, "", cfg.virtualEditorEditor())
@@ -286,6 +295,10 @@ func TestConfigSetting(t *testing.T) {
 		Fg: term.Attribute(219)}, cfg.modalResultAttr())
 	assert.True(t, cfg.modalDebug())
 	assert.True(t, cfg.modalWrap())
+
+	assert.Equal(t, term.Attributes{Bg: term.ColorRed,
+		Fg: term.Attribute(229)}, cfg.modelessResultAttr())
+	assert.False(t, cfg.modelessWrap())
 
 	assert.Equal(t, "modal", cfg.editorMode())
 	os.Setenv("SHELL", "")

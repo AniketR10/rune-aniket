@@ -7,8 +7,10 @@ import (
 	"unstable.build/go-tui/api/config"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/cell"
+	"unstable.build/go-tui/text"
 	"unstable.build/go-tui/text/clipboard"
 	sysclip "unstable.build/go-tui/text/clipboard/system"
+	"unstable.build/go-tui/text/vi"
 )
 
 // Tabspaces extract browser.tabspaces from the given cfg.
@@ -87,5 +89,32 @@ func Clipboard(cfg config.Config) (clipboard.Register, error) {
 		return clip, nil
 	default:
 		return nil, errors.New("unknown clipboard")
+	}
+}
+
+// Editor returns the editor implementation as configured.
+func Editor(cfg config.Config) (text.Editor, error) {
+	edConfig, err := cfg.GetConfig("editor")
+	if err != nil {
+		if err != config.ErrNotFound {
+			err = fmt.Errorf("failed to get 'editor' from config: %v", err)
+			return nil, err
+		}
+		return text.DefaultSimpleEditor(), nil
+	}
+
+	mode, err := edConfig.GetString("mode")
+	if err != nil {
+		if err != config.ErrNotFound {
+			err = fmt.Errorf("failed to get 'mode' from editor config: %v", err)
+			return nil, err
+		}
+		mode = "modeless"
+	}
+	switch mode {
+	case "modal":
+		return vi.Editor(), nil
+	default:
+		return text.DefaultSimpleEditor(), nil
 	}
 }

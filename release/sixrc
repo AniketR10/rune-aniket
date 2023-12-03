@@ -49,9 +49,24 @@ log_level: info # error, debug, trace
 input_mode:
   - esc
   - mouse
-vi:
-  wrap: false # true for wrapping lines
-# the following keys are arbitrary, and for
+
+editor:
+  # mode determines what kind of editor to use. Options are
+  # 'modal', which simulates vi/vim and 'modeless' which
+  # works like the rest of text editors.
+  mode: modal
+  modal:
+    wrap: false # true for wrapping lines
+    search_attr:
+      bg: yellow
+      fg: black
+  modeless:
+    wrap: false # true for wrapping lines
+    search_attr:
+      bg: yellow
+      fg: black
+
+# the keys in 'extensions' are arbitrary and for
 # identification purposes only. They contain the
 # path and configuration for each of the extensions
 # that are to be run alongside the editor.

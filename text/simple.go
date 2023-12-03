@@ -10,20 +10,29 @@ import (
 )
 
 type simpleEditor struct {
-	pub  Publisher
-	wrap bool
+	pub        Publisher
+	wrap       bool
+	commandBar bool
+	resAttr    term.Attributes
 }
 
-// SimpleEditor returns a simple to use Editor implementation.
-func SimpleEditor(wrap bool) Editor {
+// DefaultSimpleEditor returns a simple to use Editor implementation.
+func DefaultSimpleEditor() Editor {
+	return NewSimpleEditor(false, true, term.Attributes{Fg: term.AttrReverse})
+}
+
+// NewSimpleEditor allocates storage for a new Editor and initializes it.
+func NewSimpleEditor(wrap, commandBar bool, resultsAttr term.Attributes) Editor {
 	ret := new(simpleEditor)
 	ret.wrap = wrap
+	ret.commandBar = commandBar
+	ret.resAttr = resultsAttr
 	ret.pub.Init()
 	return ret
 }
 
 func (e *simpleEditor) Edit(file workspaceapi.URI, buf *cell.Buffer) (Handler, error) {
-	rootIfc := NewSimpleHandler(buf, file, e.wrap, false)
+	rootIfc := NewSimpleHandler(buf, file, e.wrap, e.commandBar, e.resAttr)
 	root := rootIfc.(*simpleEditorHandler)
 	return e.pub.PublishEdit(file, buf, root, &root.cursor), nil
 }

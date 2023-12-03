@@ -92,7 +92,7 @@ func (h *workspaceManagerHandler) newEditor(cfg ideConfig) (text.Editor, error) 
 	case editorModeModal:
 		return h.newBuiltinModalEditor(cfg), nil
 	case editorModeModeless:
-		return nil, errors.New("mode set to modeless but it's not implemented yet")
+		return h.newBuiltinModelessEditor(cfg), nil
 	default:
 		panic("invalid editor mode")
 	}
@@ -106,6 +106,10 @@ func (h *workspaceManagerHandler) newBuiltinModalEditor(cfg ideConfig) text.Edit
 		vi.WithClipboard(cfg.clipboard()),
 	)
 	return vi.Editor(viOpts...)
+}
+
+func (h *workspaceManagerHandler) newBuiltinModelessEditor(cfg ideConfig) text.Editor {
+	return text.NewSimpleEditor(cfg.modelessWrap(), true, cfg.modelessResultAttr())
 }
 
 func (h *workspaceManagerHandler) init(

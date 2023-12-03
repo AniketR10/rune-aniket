@@ -13,7 +13,7 @@ import (
 )
 
 func TestBox(t *testing.T) {
-	ed := text.SimpleEditor(true)
+	ed := text.DefaultSimpleEditor()
 	t.Run("min and max height passed are coherent or else it panics", func(t *testing.T) {
 		// ok
 		NewBox(cell.NewBuffer(), ed, BoxConfig{})

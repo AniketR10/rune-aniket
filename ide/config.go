@@ -871,6 +871,39 @@ func (c ideConfig) modalBool(name string) (ret bool) {
 	return ret
 }
 
+func (c ideConfig) modelessResultAttr() (attr term.Attributes) {
+	attr = term.Attributes{Bg: term.ColorYellow, Fg: term.ColorBlack}
+	cfg, ok := c.modeless()
+	if !ok {
+		return
+	}
+	attr, err := config.GetAttributes(cfg, "search_attr")
+	if err != nil {
+		if err != config.ErrNotFound {
+			c.errors["editor.modeless.search_attr"] = err
+		}
+	}
+	return attr
+}
+
+func (c ideConfig) modelessWrap() (ret bool) {
+	return c.modelessBool("wrap")
+}
+
+func (c ideConfig) modelessBool(name string) (ret bool) {
+	cfg, ok := c.modeless()
+	if !ok {
+		return
+	}
+	ret, err := cfg.GetBool(name)
+	if err != nil {
+		if err != config.ErrNotFound {
+			c.errors["editor.modeless."+name] = err
+		}
+	}
+	return ret
+}
+
 func (c ideConfig) browserTabspaces() (tabs int) {
 	tabs = text.DefaultConfig().Tabspaces
 	cfg, ok := c.browser()
