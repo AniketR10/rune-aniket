@@ -83,9 +83,9 @@ func (d *mouseDelegate) SelectLine(y int) {
 }
 
 func (d *mouseDelegate) Width() int {
-	return d.list.Width()
+	return d.list.SizeWidth()
 }
 
 func (d *mouseDelegate) Height() int {
-	return d.list.Height()
+	return d.list.SizeHeight()
 }

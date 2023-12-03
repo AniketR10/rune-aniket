@@ -231,14 +231,22 @@ func (l *ResponsiveList) Len() int {
 	return l.list.Len()
 }
 
-// Height returns the height of this List, in the last call to Resize.
-func (l *ResponsiveList) Height() int {
+// SizeHeight returns the height of this List, in the last call to Resize.
+func (l *ResponsiveList) SizeHeight() int {
 	return l.list.Height()
 }
 
-// Width returns the width of this List, in the last call to Resize.
-func (l *ResponsiveList) Width() int {
+// SizeWidth returns the width of this List, in the last call to Resize.
+func (l *ResponsiveList) SizeWidth() int {
 	return l.list.Width()
+}
+
+// Height satisfies Responsive.
+func (l *ResponsiveList) Height(width int) (ret int) {
+	l.Iterate(func(r Responsive) {
+		ret += r.Height(width)
+	})
+	return
 }
 
 func (l *ResponsiveList) seekDown() bool {
