@@ -7,6 +7,7 @@ import (
 
 // viConfig holds configuration for Vi.
 type viConfig struct {
+	attr            term.Attributes
 	resAttr         term.Attributes
 	clipboard       clipboard.Register
 	defaultRegister string
@@ -21,6 +22,13 @@ type Option func(*viConfig)
 func WithResAttr(attr term.Attributes) Option {
 	return func(cfg *viConfig) {
 		cfg.resAttr = attr
+	}
+}
+
+// WithAttr sets the default cell attributes to be rendered.
+func WithAttr(attr term.Attributes) Option {
+	return func(cfg *viConfig) {
+		cfg.attr = attr
 	}
 }
 

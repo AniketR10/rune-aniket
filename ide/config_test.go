@@ -32,12 +32,18 @@ clipboard: memory
 editor:
     mode: modal
     modal:
+        attr:
+            bg: yellow
+            fg: 259
         search_attr:
             bg: red
             fg: 219
         debug: true
         wrap: true
     modeless:
+        attr:
+            bg: green
+            fg: 239
         search_attr:
             bg: red
             fg: 229
@@ -185,6 +191,8 @@ func assertDefaultConfig(t *testing.T, cfg *ideConfig) {
 
 	assert.Equal(t, term.Attributes{Fg: term.ColorBlack, Bg: term.ColorYellow},
 		cfg.modelessResultAttr())
+	assert.Equal(t, term.Attributes{}, cfg.modelessAttr())
+	assert.Equal(t, term.Attributes{}, cfg.modalAttr())
 	assert.False(t, cfg.modelessWrap())
 
 	assert.Equal(t, "modal", cfg.editorMode())
@@ -299,6 +307,11 @@ func TestConfigSetting(t *testing.T) {
 	assert.Equal(t, term.Attributes{Bg: term.ColorRed,
 		Fg: term.Attribute(229)}, cfg.modelessResultAttr())
 	assert.False(t, cfg.modelessWrap())
+
+	assert.Equal(t, term.Attributes{Bg: term.ColorGreen,
+		Fg: term.Attribute(239)}, cfg.modelessAttr())
+	assert.Equal(t, term.Attributes{Bg: term.ColorYellow,
+		Fg: term.Attribute(259)}, cfg.modalAttr())
 
 	assert.Equal(t, "modal", cfg.editorMode())
 	os.Setenv("SHELL", "")

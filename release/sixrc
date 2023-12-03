@@ -57,11 +57,21 @@ editor:
   mode: modal
   modal:
     wrap: false # true for wrapping lines
+    # default text attributes
+    attr:
+      bg: default
+      fg: default
+    # search results attributes
     search_attr:
       bg: yellow
       fg: black
   modeless:
     wrap: false # true for wrapping lines
+    # default text attributes
+    attr:
+      bg: default
+      fg: default
+    # search results attributes
     search_attr:
       bg: yellow
       fg: black

@@ -93,6 +93,9 @@ func (vi *viHandlerImpl) init(buf *cell.Buffer, opts ...Option) {
 		Debug:   vi.config.debug,
 		ResAttr: vi.config.resAttr,
 	})
+	scroll := vi.less.Scroll()
+	scroll.Attributes = vi.config.attr
+	scroll.ResultsAttr = vi.config.resAttr
 	vi.cursor.Init(vi.less.Scroll())
 	vi.repeater.Init(&vi.cursor, buf)
 

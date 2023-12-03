@@ -101,6 +101,7 @@ func (h *workspaceManagerHandler) newEditor(cfg ideConfig) (text.Editor, error) 
 func (h *workspaceManagerHandler) newBuiltinModalEditor(cfg ideConfig) text.Editor {
 	viOpts := append([]vi.Option{},
 		vi.WithResAttr(cfg.modalResultAttr()),
+		vi.WithAttr(cfg.modalAttr()),
 		vi.WithDebug(cfg.modalDebug()),
 		vi.WithWrap(cfg.modalWrap()),
 		vi.WithClipboard(cfg.clipboard()),
@@ -110,7 +111,9 @@ func (h *workspaceManagerHandler) newBuiltinModalEditor(cfg ideConfig) text.Edit
 
 func (h *workspaceManagerHandler) newBuiltinModelessEditor(cfg ideConfig) text.Editor {
 	return text.NewSimpleEditor(
-		cfg.clipboard(), cfg.modelessWrap(), true, cfg.modelessResultAttr())
+		cfg.clipboard(), cfg.modelessWrap(), true,
+		cfg.modelessAttr(),
+		cfg.modelessResultAttr())
 }
 
 func (h *workspaceManagerHandler) init(

@@ -12,34 +12,39 @@ import (
 
 // DefaultSimpleEditor returns a simple to use Editor implementation.
 func DefaultSimpleEditor(clipboard clipboard.Register) Editor {
-	defaultAttr := term.Attributes{Fg: term.AttrReverse}
-	return NewSimpleEditor(clipboard, false, true, defaultAttr)
+	searchAttr := term.Attributes{Fg: term.AttrReverse}
+	defaultAttr := term.Attributes{}
+	return NewSimpleEditor(clipboard, false, true,
+		defaultAttr, searchAttr)
 }
 
 // NewSimpleEditor allocates storage for a new Editor and initializes it.
 func NewSimpleEditor(
 	clipboard clipboard.Register,
-	wrap, commandBar bool, resultsAttr term.Attributes,
+	wrap, commandBar bool,
+	attr, searchAttr term.Attributes,
 ) Editor {
 	ret := new(simpleEditor)
 	ret.wrap = wrap
 	ret.commandBar = commandBar
-	ret.resAttr = resultsAttr
+	ret.resAttr = searchAttr
+	ret.attr = attr
 	ret.clipboard = clipboard
 	ret.pub.Init()
 	return ret
 }
 
 type simpleEditor struct {
-	pub        Publisher
-	wrap       bool
-	commandBar bool
-	resAttr    term.Attributes
-	clipboard  clipboard.Register
+	pub           Publisher
+	wrap          bool
+	commandBar    bool
+	attr, resAttr term.Attributes
+	clipboard     clipboard.Register
 }
 
 func (e *simpleEditor) Edit(file workspaceapi.URI, buf *cell.Buffer) (Handler, error) {
-	rootIfc := NewSimpleHandler(buf, file, e.wrap, e.commandBar, e.resAttr, e.clipboard)
+	rootIfc := NewSimpleHandler(e.clipboard, buf, file, e.wrap,
+		e.commandBar, e.attr, e.resAttr)
 	root := rootIfc.(*simpleEditorHandler)
 	return e.pub.PublishEdit(file, buf, root, &root.cursor), nil
 }

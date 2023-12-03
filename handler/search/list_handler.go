@@ -25,7 +25,8 @@ func Handler(l *List, fn func(string)) tui.Handler {
 
 	buf := l.Buffer()
 	clipboard := clipboard.NewInMemory()
-	ed, _ := text.NewSimpleEditor(clipboard, wrap, true, term.Attributes{}).
+	attr := term.Attributes{} // do not matter for Handler's purpouse
+	ed, _ := text.NewSimpleEditor(clipboard, wrap, true, attr, attr).
 		Edit(workspaceapi.RandomURI("search"), buf)
 	ret := simpleHandler{List: l, fn: fn, ed: ed}
 	return ret

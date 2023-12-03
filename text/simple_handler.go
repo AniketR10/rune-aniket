@@ -22,27 +22,31 @@ type simpleEditorHandler struct {
 
 // NewSimpleHandler returns a modeless, simple-to-use text.Handler.
 func NewSimpleHandler(
-	buf *cell.Buffer, resource workspaceapi.URI,
-	wrap, commandBar bool, resAttr term.Attributes,
 	clipboard clipboard.Register,
+	buf *cell.Buffer, resource workspaceapi.URI,
+	wrap, commandBar bool,
+	attr, resAttr term.Attributes,
 ) Handler {
 	ret := new(simpleEditorHandler)
-	ret.Init(buf, resource, wrap, commandBar, resAttr, clipboard)
+	ret.Init(clipboard, buf, resource, wrap, commandBar, attr, resAttr)
 	return ret
 }
 
 func (h *simpleEditorHandler) Init(
-	buf *cell.Buffer, resource workspaceapi.URI,
-	wrap, commandBar bool, resAttr term.Attributes,
 	clipboard clipboard.Register,
+	buf *cell.Buffer, resource workspaceapi.URI,
+	wrap, commandBar bool,
+	attr, resAttr term.Attributes,
 ) {
 	h.buf = buf
 	h.resource = resource
 	h.less.InitWithBuffer(buf, handler.LessConfig{
-		Wrap:    wrap,
-		NoBar:   !commandBar,
-		ResAttr: resAttr,
+		Wrap:  wrap,
+		NoBar: !commandBar,
 	})
+	scroll := h.less.Scroll()
+	scroll.Attributes = attr
+	scroll.ResultsAttr = resAttr
 	h.cursor.Init(h.less.Scroll())
 	h.mouse = NewMouse(CursorMouseDelegate(&h.cursor))
 	h.clipboard = clipboard
