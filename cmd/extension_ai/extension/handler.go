@@ -166,7 +166,6 @@ func CommandEventHandler(
 	}
 
 	ret.cfg = defaultComponentCfg
-	ret.cfg.InputEditor = ret.editor
 	backgroundAttr, err := configapi.GetAttributes(pconfig, "background_attr")
 	if err != nil {
 		if err != configapi.ErrNotFound {
@@ -262,7 +261,7 @@ func CommandEventHandler(
 				log.Warnf("Could not get editor.mode from config: "+
 					"%s.. Using 'modeless' editor.", err)
 			}
-
+			ret.cfg.InputEditor = ret.editor
 		}
 		if err != nil {
 			return nil, err
