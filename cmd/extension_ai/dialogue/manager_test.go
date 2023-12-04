@@ -249,7 +249,6 @@ func newTestManager(client backend.Service, store Store) Manager {
 	return Manager{
 		store: store,
 		svc:   client,
-		model: "testModel",
 	}
 }
 

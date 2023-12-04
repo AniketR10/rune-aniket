@@ -20,19 +20,14 @@ import (
 type Manager struct {
 	store Store
 	svc   backend.Service
-	model string
 }
 
 // NewManager initializes a Manager with the given auth token
 // model and Store.
-func NewManager(openaiAuthToken string, model string, store Store) Manager {
-	client := openai.NewClient(openaiAuthToken, openai.Config{
-		Model: model,
-	})
+func NewManager(svc backend.Service, store Store) Manager {
 	return Manager{
 		store: store,
-		svc:   client,
-		model: model,
+		svc:   svc,
 	}
 }
 
@@ -47,7 +42,6 @@ func (m Manager) CreateCompletion(
 		{Key: logging.KeyClass, Value: "dialogue.Manager"},
 		{Key: "DialogueID", Value: dialogueID},
 		{Key: "MessageCount", Value: strconv.Itoa(len(messages))},
-		{Key: "Model", Value: m.model},
 	}
 	attemptAt := logging.LogAttempt(traceID, "CreateCompletion", fields...)
 	ret, n, err := m.doCreateCompletion(ctx, dialogueID, messages)

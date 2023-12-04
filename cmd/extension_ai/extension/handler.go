@@ -111,27 +111,6 @@ var (
 	}
 )
 
-type aiEditorHandler struct {
-	apiKey         string
-	defaultModel   string
-	rpcTimeout     time.Duration
-	editor         text.Editor
-	cfg            dialogue.ComponentConfig
-	backgroundAttr term.Attributes
-
-	clip clipboard.Register
-	ed   textapi.Editor
-	wm   browserapi.WindowManager
-	n    browserapi.Notifications
-	o    browserapi.ResourceOpener
-	p    browserapi.EventPublisher
-	db   document.Service
-
-	ctx       context.Context
-	cancelCtx func()
-	exit      bool
-}
-
 // CommandEventHandler returns a plugutil.CommandEventHandler that manages
 // this extension's logic.
 func CommandEventHandler(
@@ -267,8 +246,31 @@ func CommandEventHandler(
 			return nil, err
 		}
 	}
+	ret.dialogueStore = aiDialogue.NewStore(ret.db)
 
 	return ret, nil
+}
+
+type aiEditorHandler struct {
+	apiKey         string
+	defaultModel   string
+	rpcTimeout     time.Duration
+	editor         text.Editor
+	cfg            dialogue.ComponentConfig
+	backgroundAttr term.Attributes
+	dialogueStore  aiDialogue.Store
+
+	clip clipboard.Register
+	ed   textapi.Editor
+	wm   browserapi.WindowManager
+	n    browserapi.Notifications
+	o    browserapi.ResourceOpener
+	p    browserapi.EventPublisher
+	db   document.Service
+
+	ctx       context.Context
+	cancelCtx func()
+	exit      bool
 }
 
 func (h *aiEditorHandler) Handle(ctx context.Context, ev textapi.Event) (exit bool) {
@@ -326,12 +328,14 @@ func (h *aiEditorHandler) handleChat(cmd textapi.Command) (bool, error) {
 	}
 
 	comp := h.newDialogueComponent()
-	dialogueStore := aiDialogue.NewStore(h.db)
-	dialogueManager := aiDialogue.NewManager(h.apiKey, model, dialogueStore)
+	backendService := openai.NewClient(h.apiKey, openai.Config{
+		Model: model,
+	})
+	dialogueManager := aiDialogue.NewManager(backendService, h.dialogueStore)
 	dhandler, tx, rx := dialogue.Handler(comp, h.p, h.clip)
 
 	ctx, cancel := context.WithCancel(h.ctx)
-	d, err := h.getDialogue(ctx, dialogueStore, cmd)
+	d, err := h.getDialogue(ctx, h.dialogueStore, cmd)
 	if err != nil {
 		cancel()
 		return false, err
@@ -370,8 +374,10 @@ func (h *aiEditorHandler) handleChat(cmd textapi.Command) (bool, error) {
 
 func (h *aiEditorHandler) handleQuery(cmd textapi.Command) (bool, error) {
 	comp := h.newDialogueComponent()
-	dialogueStore := aiDialogue.NewStore(h.db)
-	dialogueManager := aiDialogue.NewManager(h.apiKey, h.defaultModel, dialogueStore)
+	backendService := openai.NewClient(h.apiKey, openai.Config{
+		Model: h.defaultModel,
+	})
+	dialogueManager := aiDialogue.NewManager(backendService, h.dialogueStore)
 	dhandler, tx, rx := dialogue.Handler(comp, h.p, h.clip)
 
 	id := strconv.Itoa(rand.Int())
