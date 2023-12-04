@@ -116,12 +116,13 @@ var (
 func CommandEventHandler(
 	ed textapi.Editor, grants []extension.Grant,
 	broker proto.MuxBroker, pconfig configapi.Config,
-	svcFn func(model string) backend.Service,
+	svcFn func(c configapi.Config, model string) (backend.Service, error),
 ) (hret plugutil.CommandEventHandler, err error) {
 	ret := new(aiEditorHandler)
 	ret.ctx, ret.cancelCtx = context.WithCancel(context.Background())
 	ret.ed = ed
 	ret.svcFn = svcFn
+	ret.config = pconfig
 	ret.defaultModel, err = pconfig.GetString("model")
 	if err != nil {
 		if err != configapi.ErrNotFound {
@@ -256,14 +257,15 @@ type aiEditorHandler struct {
 	backgroundAttr term.Attributes
 	dialogueStore  aiDialogue.Store
 
-	clip  clipboard.Register
-	svcFn func(string) backend.Service
-	ed    textapi.Editor
-	wm    browserapi.WindowManager
-	n     browserapi.Notifications
-	o     browserapi.ResourceOpener
-	p     browserapi.EventPublisher
-	db    document.Service
+	clip   clipboard.Register
+	svcFn  func(configapi.Config, string) (backend.Service, error)
+	ed     textapi.Editor
+	wm     browserapi.WindowManager
+	n      browserapi.Notifications
+	o      browserapi.ResourceOpener
+	p      browserapi.EventPublisher
+	db     document.Service
+	config configapi.Config
 
 	ctx       context.Context
 	cancelCtx func()
@@ -325,7 +327,10 @@ func (h *aiEditorHandler) handleChat(cmd textapi.Command) (bool, error) {
 	}
 
 	comp := h.newDialogueComponent()
-	backendService := h.svcFn(model)
+	backendService, err := h.svcFn(h.config, model)
+	if err != nil {
+		return false, fmt.Errorf("new backend: %v", err)
+	}
 	dialogueManager := aiDialogue.NewManager(backendService, h.dialogueStore)
 	dhandler, tx, rx := dialogue.Handler(comp, h.p, h.clip)
 
@@ -369,7 +374,10 @@ func (h *aiEditorHandler) handleChat(cmd textapi.Command) (bool, error) {
 
 func (h *aiEditorHandler) handleQuery(cmd textapi.Command) (bool, error) {
 	comp := h.newDialogueComponent()
-	backendService := h.svcFn(h.defaultModel)
+	backendService, err := h.svcFn(h.config, h.defaultModel)
+	if err != nil {
+		return false, fmt.Errorf("new backend: %v", err)
+	}
 	dialogueManager := aiDialogue.NewManager(backendService, h.dialogueStore)
 	dhandler, tx, rx := dialogue.Handler(comp, h.p, h.clip)
 
@@ -420,7 +428,7 @@ func (h *aiEditorHandler) handleQuery(cmd textapi.Command) (bool, error) {
 	floatingConfig := component.FloatingConfig{
 		Alignment: component.SpanAlignmentCentered,
 	}
-	win, err := h.wm.Floating(floating, floatingConfig)
+	win, err = h.wm.Floating(floating, floatingConfig)
 	if err != nil {
 		return false, fmt.Errorf("floating window: %v", err)
 	}
