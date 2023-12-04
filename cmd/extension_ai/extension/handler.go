@@ -116,15 +116,12 @@ var (
 func CommandEventHandler(
 	ed textapi.Editor, grants []extension.Grant,
 	broker proto.MuxBroker, pconfig configapi.Config,
+	svcFn func(model string) backend.Service,
 ) (hret plugutil.CommandEventHandler, err error) {
 	ret := new(aiEditorHandler)
 	ret.ctx, ret.cancelCtx = context.WithCancel(context.Background())
 	ret.ed = ed
-	ret.apiKey, err = pconfig.GetString("api_key")
-	if err != nil {
-		err = fmt.Errorf("failed to get 'api_key' from config: %w", err)
-		return nil, err
-	}
+	ret.svcFn = svcFn
 	ret.defaultModel, err = pconfig.GetString("model")
 	if err != nil {
 		if err != configapi.ErrNotFound {
@@ -252,7 +249,6 @@ func CommandEventHandler(
 }
 
 type aiEditorHandler struct {
-	apiKey         string
 	defaultModel   string
 	rpcTimeout     time.Duration
 	editor         text.Editor
@@ -260,13 +256,14 @@ type aiEditorHandler struct {
 	backgroundAttr term.Attributes
 	dialogueStore  aiDialogue.Store
 
-	clip clipboard.Register
-	ed   textapi.Editor
-	wm   browserapi.WindowManager
-	n    browserapi.Notifications
-	o    browserapi.ResourceOpener
-	p    browserapi.EventPublisher
-	db   document.Service
+	clip  clipboard.Register
+	svcFn func(string) backend.Service
+	ed    textapi.Editor
+	wm    browserapi.WindowManager
+	n     browserapi.Notifications
+	o     browserapi.ResourceOpener
+	p     browserapi.EventPublisher
+	db    document.Service
 
 	ctx       context.Context
 	cancelCtx func()
@@ -328,9 +325,7 @@ func (h *aiEditorHandler) handleChat(cmd textapi.Command) (bool, error) {
 	}
 
 	comp := h.newDialogueComponent()
-	backendService := openai.NewClient(h.apiKey, openai.Config{
-		Model: model,
-	})
+	backendService := h.svcFn(model)
 	dialogueManager := aiDialogue.NewManager(backendService, h.dialogueStore)
 	dhandler, tx, rx := dialogue.Handler(comp, h.p, h.clip)
 
@@ -374,9 +369,7 @@ func (h *aiEditorHandler) handleChat(cmd textapi.Command) (bool, error) {
 
 func (h *aiEditorHandler) handleQuery(cmd textapi.Command) (bool, error) {
 	comp := h.newDialogueComponent()
-	backendService := openai.NewClient(h.apiKey, openai.Config{
-		Model: h.defaultModel,
-	})
+	backendService := h.svcFn(h.defaultModel)
 	dialogueManager := aiDialogue.NewManager(backendService, h.dialogueStore)
 	dhandler, tx, rx := dialogue.Handler(comp, h.p, h.clip)
 
