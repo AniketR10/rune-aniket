@@ -23,6 +23,7 @@ import (
 	"unstable.build/go-tui/cmd/extension_ai/backend/openai"
 	aiDialogue "unstable.build/go-tui/cmd/extension_ai/dialogue"
 	"unstable.build/go-tui/component"
+	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/extension"
 	plugutil "unstable.build/go-tui/extension/util"
 	"unstable.build/go-tui/handler"
@@ -121,7 +122,7 @@ type aiEditorHandler struct {
 	clip clipboard.Register
 	ed   textapi.Editor
 	wm   browserapi.WindowManager
-	m    browserapi.Notifications
+	n    browserapi.Notifications
 	o    browserapi.ResourceOpener
 	p    browserapi.EventPublisher
 	db   document.Service
@@ -249,7 +250,7 @@ func CommandEventHandler(
 		case extension.PermissionBrowserWindowManager:
 			ret.wm, err = browserextension.WindowManager(g, broker)
 		case extension.PermissionBrowserNotifications:
-			ret.m, err = browserextension.Notifications(g, broker)
+			ret.n, err = browserextension.Notifications(g, broker)
 		case extension.PermissionConfig:
 			config, err := configextension.FetchConfig(g, broker)
 			if err != nil {
@@ -378,21 +379,28 @@ func (h *aiEditorHandler) handleQuery(cmd textapi.Command) (bool, error) {
 	ctx, cancel := context.WithCancel(h.ctx)
 
 	query := strings.Join(cmd.Args, " ")
-
-	// manually add input and returned completion
 	msg := backend.ChatCompletionMessage{Content: query, Role: openai.RoleUser}
 	addMessage(comp, msg)
-	it, err := dialogueManager.CreateCompletion(ctx, id, []string{query})
-	if err != nil {
-		cancel()
-		if !errors.Is(err, context.Canceled) {
-			return false, fmt.Errorf("dialogue manager create completion: %v", err)
-		}
-		return false, err
-	}
-	drawMessage(ctx, it, tx)
 
-	go createCompletions(ctx, cancel, tx, rx, dialogueManager, id)
+	go func() {
+		// manually add input and returned completion
+		it, err := dialogueManager.CreateCompletion(ctx, id, []string{query})
+		if err != nil {
+			cancel()
+			if !errors.Is(err, context.Canceled) {
+				err := h.n.Notify(notifications.LevelError,
+					"create chat completion: %v", err)
+				if err != nil {
+					log.Errorf("notify: %v", err)
+				}
+			}
+			return
+		}
+		drawMessage(ctx, it, tx)
+
+		// resume creating completions upon further user input
+		createCompletions(ctx, cancel, tx, rx, dialogueManager, id)
+	}()
 
 	var win browserapi.Window
 	background := component.WithBackground(comp, term.Cell{
@@ -414,7 +422,7 @@ func (h *aiEditorHandler) handleQuery(cmd textapi.Command) (bool, error) {
 	floatingConfig := component.FloatingConfig{
 		Alignment: component.SpanAlignmentCentered,
 	}
-	win, err = h.wm.Floating(floating, floatingConfig)
+	win, err := h.wm.Floating(floating, floatingConfig)
 	if err != nil {
 		return false, fmt.Errorf("floating window: %v", err)
 	}
