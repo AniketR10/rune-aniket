@@ -11,13 +11,13 @@ require (
 	github.com/ernestrc/go-multierror v1.1.2
 	github.com/ernestrc/golang-internal-tools v0.0.0-20220317145801-f8b5a950857b
 	github.com/ernestrc/sensible v0.3.1
-	github.com/ernestrc/tcell/v2 v2.5.7-0.20230520012156-2af007dfa0cc
+	github.com/ernestrc/tcell/v2 v2.5.9
 	github.com/fsnotify/fsnotify v1.5.4
 	github.com/golang/mock v1.6.0
 	github.com/hashicorp/go-hclog v0.14.1
 	github.com/hashicorp/go-plugin v1.0.1
 	github.com/junegunn/fzf v0.0.0-20201216124428-ab3937ee5a62
-	github.com/mattn/go-runewidth v0.0.14
+	github.com/mattn/go-runewidth v0.0.15
 	github.com/pion/mediadevices v0.4.0
 	github.com/pion/webrtc/v3 v3.2.6
 	github.com/sirupsen/logrus v1.6.0
@@ -28,7 +28,7 @@ require (
 	go.uber.org/goleak v1.2.0
 	golang.org/x/crypto v0.9.0
 	golang.org/x/image v0.7.0
-	golang.org/x/term v0.8.0
+	golang.org/x/term v0.15.0
 	google.golang.org/grpc v1.54.0
 	google.golang.org/protobuf v1.30.0
 	gopkg.in/yaml.v3 v3.0.1
@@ -48,13 +48,13 @@ require (
 	github.com/mitchellh/go-testing-interface v1.0.0 // indirect
 	github.com/oklog/run v1.0.0 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
-	github.com/rivo/uniseg v0.4.2 // indirect
+	github.com/rivo/uniseg v0.4.4 // indirect
 	golang.org/x/lint v0.0.0-20210508222113-6edffad5e616 // indirect
 	golang.org/x/mod v0.10.0 // indirect
 	golang.org/x/net v0.10.0 // indirect
 	golang.org/x/sync v0.1.0 // indirect
-	golang.org/x/sys v0.8.0 // indirect
-	golang.org/x/text v0.9.0 // indirect
+	golang.org/x/sys v0.15.0 // indirect
+	golang.org/x/text v0.14.0 // indirect
 	golang.org/x/tools v0.8.0 // indirect
 	golang.org/x/xerrors v0.0.0-20220907171357-04be3eba64a2 // indirect
 	gopkg.in/mgo.v2 v2.0.0-20190816093944-a6b53ec6cb22 // indirect
