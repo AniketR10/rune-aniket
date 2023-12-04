@@ -65,7 +65,7 @@ func setupCursorContent(t *testing.T, width, height int, cont string, wrap bool)
 	require.Equal(t, e.subscriber.c, e)
 	if wrap {
 		// needed for wraps to be accounted for
-		e.scroll.Draw(term.NoopWriter{})
+		e.scroll.RecalculateWraps()
 	}
 	return
 }
@@ -2047,20 +2047,44 @@ func TestCursorWrap(t *testing.T) {
 }
 
 func TestCursorSelectWordInsertWord(t *testing.T) {
-	e := setupCursorContent(t, 5, 5, sampleSnippet+"\n", false)
-	require.True(t, e.MoveDown())
-	require.True(t, e.MoveDown())
-	require.True(t, e.MoveRightStartWord())
-	require.True(t, e.Select())
-	require.True(t, e.MoveRightStartWord())
-	require.True(t, e.DeleteSelection())
-	l := len(e.buffer().String())
-	e.Insert('h')
-	e.Insert('e')
-	e.Insert('l')
-	e.Insert('l')
-	e.Insert('o')
-	assert.Equal(t, l+5, len(e.buffer().String()))
+	for _, wrap := range []bool{false, true} {
+		t.Run(fmt.Sprintf("wrap:%v", wrap), func(t *testing.T) {
+			e := setupCursorContent(t, 5, 5, sampleSnippet+"\n", wrap)
+			require.True(t, e.MoveDown())
+			require.True(t, e.MoveDown())
+			require.True(t, e.MoveRightStartWord())
+			require.True(t, e.Select())
+			require.True(t, e.MoveRightStartWord())
+			require.True(t, e.DeleteSelection())
+			l := len(e.buffer().String())
+			e.Insert('h')
+			e.Insert('e')
+			e.Insert('l')
+			e.Insert('l')
+			e.Insert('o')
+			assert.Equal(t, l+5, len(e.buffer().String()))
+		})
+	}
+}
+
+func TestCursorInsertLimitedWidth(t *testing.T) {
+	for _, wrap := range []bool{false, true} {
+		t.Run(fmt.Sprintf("wrap:%v", wrap), func(t *testing.T) {
+			e := setupCursorContent(t, 3, 1, "", wrap)
+			e.Insert('h')
+			e.Insert('e')
+			e.Insert('l')
+			e.Insert('l')
+			e.Insert('o')
+			e.Insert(' ')
+			e.Insert('w')
+			e.Insert('o')
+			e.Insert('r')
+			e.Insert('l')
+			e.Insert('d')
+			assert.Equal(t, "hello world", e.buffer().String())
+		})
+	}
 }
 
 func TestCursorReplaceAllWithNewline(t *testing.T) {
@@ -2174,6 +2198,7 @@ func TestCursorPaste(t *testing.T) {
 		b
 		c
 		d
+
 	*/
 	const initialContent = "a\nb\nc\nd"
 	tsuite := []struct {
@@ -2229,14 +2254,16 @@ func TestCursorPaste(t *testing.T) {
 		// block selection is like standard but with InsertBlock so we test that instead
 	}
 
-	for i, tcase := range tsuite {
-		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
-			c := setupCursorContent(t, 5, 5, initialContent, false)
-			c.MoveToScroll(tcase.initialPosition)
-			c.Paste(tcase.txt, tcase.mode, tcase.after)
-			assert.Equal(t, tcase.expectedBuffer, c.buffer().String())
-			assert.Equal(t, tcase.expectedEndPosition, c.Coordinates())
-		})
+	for _, wrap := range []bool{false, true} {
+		for i, tcase := range tsuite {
+			t.Run(fmt.Sprintf("wrap: %v, %d", wrap, i), func(t *testing.T) {
+				c := setupCursorContent(t, 5, 5, initialContent, wrap)
+				c.MoveToScroll(tcase.initialPosition)
+				c.Paste(tcase.txt, tcase.mode, tcase.after)
+				assert.Equal(t, tcase.expectedBuffer, c.buffer().String())
+				assert.Equal(t, tcase.expectedEndPosition, c.Coordinates())
+			})
+		}
 	}
 }
 

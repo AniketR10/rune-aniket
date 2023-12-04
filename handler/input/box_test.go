@@ -136,11 +136,11 @@ hello world
 					b.Resize(20, 8)
 				}, `
 ┌──────────────────┐
-│hello world. Let's│
 │ test its responsi│
 │veness. Let's test│
 │ its responsivenes│
 │s                 │
+│                  │
 │                  │
 └──────────────────┘
                     `,
@@ -151,12 +151,12 @@ hello world
 					b.Resize(20, 9)
 				}, `
 ┌──────────────────┐
-│hello world. Let's│
 │ test its responsi│
 │veness. Let's test│
 │ its responsivenes│
 │s. Let's test its │
 │responsiveness    │
+│                  │
 │                  │
 └──────────────────┘`,
 			}, {
@@ -464,6 +464,22 @@ RE
 		}
 		testutil.TestComponent(t, b, w, tests)
 	})
+}
+
+func TestInsertIntegration(t *testing.T) {
+	ed := text.DefaultSimpleEditor(clipboard.NewInMemory())
+	buf := cell.NewBuffer()
+	b := NewBox(buf, ed, BoxConfig{MinHeight: 4, MaxHeight: 5, Placeholder: "HERE..."})
+	b.Resize(3, 3)
+
+	for _, r := range "hello world" {
+		// simulate real usage
+		b.Handle(term.Event{Type: term.EventKey, Ch: r})
+		b.Height(3)
+		b.Resize(3, 3)
+		b.Draw(term.NoopWriter{})
+	}
+	assert.Equal(t, "hello world", buf.String())
 }
 
 // we could write to cell.Buffer directly

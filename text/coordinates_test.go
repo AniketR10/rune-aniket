@@ -1,6 +1,7 @@
 package text
 
 import (
+	"strconv"
 	"strings"
 	"testing"
 
@@ -107,22 +108,24 @@ func TestWindowCoordinatesToScrollCoordinatesWrapLastLine(t *testing.T) {
 		{0, 0, term.Coordinates{Y: 5, X: 9}, term.Coordinates{Y: 3, X: 9}},
 		{0, 0, term.Coordinates{Y: 6, X: 0}, term.Coordinates{Y: 4, X: 0}},
 		{0, 0, term.Coordinates{Y: 7, X: 0}, term.Coordinates{Y: 4, X: 10}},
-		{0, 0, term.Coordinates{Y: 8, X: 0}, term.Coordinates{Y: 4, X: 14}},
-		{0, 0, term.Coordinates{Y: 9, X: 0}, term.Coordinates{Y: 4, X: 24}},
-		{0, 0, term.Coordinates{Y: 10, X: 0}, term.Coordinates{Y: 4, X: 34}},
+		{0, 0, term.Coordinates{Y: 8, X: 0}, term.Coordinates{Y: 5, X: 0}},
+		{0, 0, term.Coordinates{Y: 9, X: 0}, term.Coordinates{Y: 6, X: 0}},
+		{0, 0, term.Coordinates{Y: 10, X: 0}, term.Coordinates{Y: 7, X: 0}},
 
 		{1, 1, term.Coordinates{Y: 4, X: 8}, term.Coordinates{Y: 3, X: 9}},
 		{1, 1, term.Coordinates{Y: 5, X: -1}, term.Coordinates{Y: 4, X: 0}},
 		{1, 1, term.Coordinates{Y: 6, X: -1}, term.Coordinates{Y: 4, X: 10}},
-		{1, 1, term.Coordinates{Y: 7, X: -1}, term.Coordinates{Y: 4, X: 14}},
-		{1, 1, term.Coordinates{Y: 8, X: -1}, term.Coordinates{Y: 4, X: 24}},
-		{1, 1, term.Coordinates{Y: 9, X: -1}, term.Coordinates{Y: 4, X: 34}},
+		{1, 1, term.Coordinates{Y: 7, X: -1}, term.Coordinates{Y: 5, X: 0}},
+		{1, 1, term.Coordinates{Y: 8, X: -1}, term.Coordinates{Y: 6, X: 0}},
+		{1, 1, term.Coordinates{Y: 9, X: -1}, term.Coordinates{Y: 7, X: 0}},
 	}
 
-	for _, test := range suite {
-		scroll := makeScroll(true, 10, 3, test.yoffset, test.xoffset)(t)
-		actual := WindowToScrollCoordinates(scroll, test.wpos)
-		assert.Equal(t, test.spos, actual)
+	for i, test := range suite {
+		t.Run(strconv.Itoa(i), func(t *testing.T) {
+			scroll := makeScroll(true, 10, 3, test.yoffset, test.xoffset)(t)
+			actual := WindowToScrollCoordinates(scroll, test.wpos)
+			assert.Equal(t, test.spos, actual)
+		})
 	}
 }
 

@@ -56,14 +56,6 @@ func (h *simpleEditorHandler) Init(
 func (h *simpleEditorHandler) Resize(width, height int) {
 	h.height = height
 	h.less.Resize(width, height)
-
-	// scroll offset might > max new offset after resize
-	// this must be done here because cursor doesn't
-	// have a hook on Resize, and scroll cannot
-	// have access to a cursor.
-	pos := h.cursor.CursorAtScroll()
-	h.less.Scroll().SeekTo(h.less.Scroll().Offset())
-	h.cursor.MoveToScroll(pos)
 }
 
 // Draw satisfies tui.Component
