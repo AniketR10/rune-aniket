@@ -68,12 +68,12 @@ func (h *simpleEditorHandler) Resize(width, height int) {
 
 // Draw satisfies tui.Component
 func (h *simpleEditorHandler) Draw(w term.Writer) {
-	h.less.Draw(w)
 	locs, _ := h.cursor.Locations()
 	for _, loc := range locs {
 		h.less.Notify(loc.Message)
 		return
 	}
+	h.less.Draw(w)
 }
 
 func (h *simpleEditorHandler) Handle(ev term.Event) (exit, handled bool) {
