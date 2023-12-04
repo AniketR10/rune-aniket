@@ -126,6 +126,15 @@ func TestWindowCoordinatesToScrollCoordinatesWrapLastLine(t *testing.T) {
 	}
 }
 
+func TestWindowCoordinatesPanicDeleteRow(t *testing.T) {
+	scroll := makeScroll(true, 10, 3, 0, 0)(t)
+	scroll.Buffer().DeleteRow(0)
+	assert.NotPanics(t, func() {
+		WindowToScrollCoordinates(scroll, term.Coordinates{Y: 8, X: 0})
+		// do not assert result as it will always be incorrect
+	})
+}
+
 func makeScroll(wrap bool, width, height, offsetY, offsetX int) func(t *testing.T) *component.Scroll {
 	const content = `AAAAAAAAAAAAA
 BBBBBBB

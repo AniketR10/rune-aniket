@@ -416,8 +416,20 @@ func TestScrollDrawOffsetOOB(t *testing.T) {
 	assert.True(t, scroll.Buffer().TruncateFrom(term.Coordinates{}))
 
 	w := term.NewStringWriter(10, 10)
-	// this should not panic
-	scroll.Draw(w)
+	assert.NotPanics(t, func() {
+		// this should not panic
+		scroll.Draw(w)
+	})
+}
+
+func TestScrollDrawWrapZeroWidth(t *testing.T) {
+	scroll := newScroll(4, true, 0, 0)
+	_, err := scroll.Buffer().ReadFrom(strings.NewReader(fortune))
+	require.NoError(t, err)
+	w := term.NewStringWriter(10, 10)
+	assert.NotPanics(t, func() {
+		scroll.Draw(w)
+	})
 }
 
 func TestScrollDrawWrapWithBufferUpdates(t *testing.T) {

@@ -55,6 +55,10 @@ func WindowToScrollCoordinates(scroll *component.Scroll, pos term.Coordinates) t
 	// this is important for support of insert at x=width
 	rowsPastLastLine := ret.Y + 1 - len(wraps)
 	ret.Y -= rowsPastLastLine
-	ret.X = scroll.Buffer().Columns(ret.Y) + (rowsPastLastLine-1)*scroll.Width()
+	var cols int
+	if ret.Y < scroll.Buffer().Rows() {
+		cols = scroll.Buffer().Columns(ret.Y)
+	}
+	ret.X = cols + (rowsPastLastLine-1)*scroll.Width()
 	return ret
 }
