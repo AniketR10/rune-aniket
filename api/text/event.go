@@ -33,6 +33,8 @@ const (
 	EventTypeScroll
 
 	// EventTypeFocus is dispatched when an editor handler is on browser.Focus.
+	// Start contains the width (X) and height (Y) of the content in focus.
+	// If content is resized, EventTypeFocus is sent again, with the new dimensions.
 	EventTypeFocus
 
 	// EventTypeUnfocus is dispatched when an editor handler is not

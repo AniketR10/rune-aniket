@@ -28,7 +28,9 @@ type WindowManager struct {
 }
 
 // WindowSubscriber wraps the OnFocus callback used
-// to subscribe to window focus.
+// to subscribe to window focus. Upon calling Subscribe
+// the first OnFocus is dispatched, but prevFocus will
+// a zero Window, and so it should not be used.
 type WindowSubscriber interface {
 	OnFocus(prevFocus, newFocus Window)
 }
@@ -412,6 +414,7 @@ func (wm *WindowManager) dispatchOnFocus(prev, focus Window) {
 // Subscribe subscribes sub to window focus events.
 func (wm *WindowManager) Subscribe(sub WindowSubscriber) {
 	wm.subs = append(wm.subs, sub)
+	sub.OnFocus(Window{}, wm.focus)
 }
 
 // UnsubscribeAll unsubscribes all WindowSubscriber.

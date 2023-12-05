@@ -39,6 +39,7 @@ type Component struct {
 	workspace      workspace.Loader
 	ed             Editor
 	config         Config
+	focus          handler.Window
 	edSubscribers  map[textapi.EventType][]EventHandler
 	cmdSubscribers map[string]commandAll
 }
@@ -130,7 +131,7 @@ func (c *Component) Init(ed Editor, w workspace.Loader, config Config) error {
 	c.config = config
 
 	c.comp.Init(c.config.Config)
-	c.comp.Subscribe((*windowFocusSubscriber)(c))
+	c.comp.Subscribe(c)
 
 	c.ed = ed
 	c.workspace = w
@@ -185,14 +186,43 @@ func (c *Component) Init(ed Editor, w workspace.Loader, config Config) error {
 	return nil
 }
 
-type windowFocusSubscriber Component
-
-func (c *windowFocusSubscriber) OnFocus(old, focus handler.Window) {
-	c.tryDispatchEvent(old, textapi.EventTypeUnfocus)
-	c.tryDispatchEvent(focus, textapi.EventTypeFocus)
+func (c *Component) OnFocus(old, focus handler.Window) {
+	if old != (handler.Window{}) {
+		c.tryDispatchEvent(old, textapi.EventTypeUnfocus)
+	}
+	c.tryDispatchEventFocus(focus)
+	(*Component)(c).focus = focus
 }
 
-func (c *windowFocusSubscriber) tryDispatchEvent(win handler.Window, evType textapi.EventType) {
+func (c *Component) tryDispatchEventFocus(win handler.Window) {
+	content := win.Content()
+	t, ok := content.(*browser.Tab)
+	if !ok {
+		return
+	}
+	res, ok := t.Handler().(Handler)
+	if !ok {
+		return
+	}
+	(*Component)(c).dispatchEvent(textapi.Event{
+		Type:     textapi.EventTypeFocus,
+		URI:      t.URI(),
+		Resource: res,
+		Start:    c.getContentDimensions(win),
+	})
+}
+
+func (c *Component) getContentDimensions(win handler.Window) term.Coordinates {
+	width := win.Width()
+	height := win.Height()
+	if c.config.WindowManagerConfig.Frame {
+		width -= 2
+		height -= 2
+	}
+	return term.Coordinates{X: width, Y: height}
+}
+
+func (c *Component) tryDispatchEvent(win handler.Window, evType textapi.EventType) {
 	content := win.Content()
 	t, ok := content.(*browser.Tab)
 	if !ok {
@@ -240,10 +270,12 @@ func (s *compTabSubscriber) OnFocus(t *browser.Tab) {
 		// is not main window
 		return
 	}
+	dimensions := s.parent.getContentDimensions(s.parent.focus)
 	s.parent.dispatchEvent(textapi.Event{
 		Type:     textapi.EventTypeFocus,
 		URI:      t.URI(),
 		Resource: res,
+		Start:    dimensions,
 	})
 }
 
@@ -578,7 +610,7 @@ func (c *Component) getContent(h Handler) (string, error) {
 	return cell.CellsToString(cells), nil
 }
 
-func (c *Component) dispatchOpenTabs(h EventHandler) (error, bool) {
+func (c *Component) dispatchOpenUponSubscribe(h EventHandler) (error, bool) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -607,18 +639,20 @@ func (c *Component) dispatchOpenTabs(h EventHandler) (error, bool) {
 	return ret, false
 }
 
-func (c *Component) dispatchFocusTab(h EventHandler) bool {
+func (c *Component) dispatchFocusUponSubscribe(h EventHandler) bool {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	t, ok := c.comp.FocusTab()
 	if ok {
+		dimensions := c.getContentDimensions(c.focus)
 		resHandler, ok := t.Handler().(Handler)
 		if ok {
 			ev := textapi.Event{
 				Type:     textapi.EventTypeFocus,
 				URI:      t.URI(),
 				Resource: resHandler,
+				Start:    dimensions,
 			}
 			return h.Handle(ctx, ev)
 		}
@@ -634,7 +668,7 @@ func (c *Component) SubscribeEvents(evs []textapi.EventType, h EventHandler) err
 	for _, ev := range evs {
 		switch ev {
 		case textapi.EventTypeOpen:
-			err, exit := c.dispatchOpenTabs(h)
+			err, exit := c.dispatchOpenUponSubscribe(h)
 			if err != nil {
 				return err
 			}
@@ -642,7 +676,7 @@ func (c *Component) SubscribeEvents(evs []textapi.EventType, h EventHandler) err
 				return nil
 			}
 		case textapi.EventTypeFocus:
-			exit := c.dispatchFocusTab(h)
+			exit := c.dispatchFocusUponSubscribe(h)
 			if exit {
 				return nil
 			}
@@ -737,6 +771,9 @@ func (c *Component) Browser() *browser.Component {
 // Resize satisfies tui.Component.
 func (c *Component) Resize(width, height int) {
 	c.comp.Resize(width, height)
+	if c.focus != (handler.Window{}) {
+		c.tryDispatchEventFocus(c.focus)
+	}
 }
 
 // Draw satisfies tui.Component.

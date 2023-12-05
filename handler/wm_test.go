@@ -389,9 +389,12 @@ func TestWindowManagerSubscribe(t *testing.T) {
 	h2 := NewTestHandler()
 	wm := NewWindowManager(h1, DefaultWindowManagerConfig())
 	mock := new(testWindowSubscriber)
-	wm.Subscribe(mock)
 
 	w1 := wm.Focus()
+	wm.Subscribe(mock)
+	assert.Zero(t, mock.lastPrev)
+	assert.Equal(t, w1.ID(), mock.lastFocus.ID())
+
 	w2, ok := wm.SplitVertical(wm.Focus(), h2)
 	require.True(t, ok)
 	wm.SetFocus(w2)

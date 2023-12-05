@@ -123,14 +123,29 @@ func (w Window) Close() error {
 		w.wm.prevFocus = Window{}
 	}
 
-	if w.wm.focus == w {
-		w.wm.ShiftFocus()
-		w.wm.prevFocus = Window{}
+	// first find a candidate to be the next
+	// window in focus, prevFocus takes priority, otherwise
+	// find it via  wm.
+	isFocus := w.wm.focus == w
+	tile, ok := w.wm.Shiftable()
+	if isFocus && w.wm.prevFocus != (Window{}) {
+		ok = true
+		tile = w.wm.prevFocus
 	}
 
+	// then close the window, so parent's other
+	// window's are resized, and properties are reflected
+	// on dispatched OnFocus
 	err := w.Window.Close()
 	if err != nil {
 		return err
+	}
+
+	if isFocus && ok {
+		// finally change the focus, which triggers the OnFocus
+		// this should always
+		w.wm.SetFocus(w.wm.newNode(tile.Window))
+		w.wm.prevFocus = Window{}
 	}
 
 	// make sure that focus attrs are "reset" if wm size is 1

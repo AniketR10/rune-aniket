@@ -60,9 +60,10 @@ func (e *testEditor) dispatchEvent(ctx context.Context, ev textapi.Event) {
 
 type TestEditorHandler struct {
 	browsertest.TestHandler
-	LocationList text.LocationList
-	parent       *testEditor
-	uri          workspaceapi.URI
+	LocationList  text.LocationList
+	parent        *testEditor
+	uri           workspaceapi.URI
+	Width, Height int
 }
 
 func (e *TestEditorHandler) Resource() workspaceapi.URI {
@@ -110,6 +111,11 @@ func (e *TestEditorHandler) Handle(ev term.Event) (bool, bool) {
 		Resource: e,
 	})
 	return e.TestHandler.Handle(ev)
+}
+
+func (e *TestEditorHandler) Resize(width, height int) {
+	e.Width, e.Height = width, height
+	e.TestHandler.Resize(width, height)
 }
 
 func (e *testEditor) MoveToNextLocation(h text.Handler, ID string) error {

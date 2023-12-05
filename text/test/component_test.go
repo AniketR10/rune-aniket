@@ -569,27 +569,10 @@ func TestComponentEditorSubscriber(t *testing.T) {
 	})
 }
 
-func expectEvent(
-	t *testing.T, mock *MockEventHandler, uri workspaceapi.URI, tpe textapi.EventType,
-) {
-	mock.EXPECT().Handle(gomock.Any(), gomock.Any()).
-		DoAndReturn(func(_ context.Context, ev textapi.Event) bool {
-			if tpe == ev.Type {
-				assert.Equal(t, uri.String(), ev.URI.String())
-			}
-			return false
-		})
-}
-
 func TestEventTypeFocusIntegration(t *testing.T) {
-	// TODO for some reason when upgrading o mock 1.6.0
-	// and testify v1.8.1 this started failing
-	t.Skip()
-
 	ctrl := gomock.NewController(t)
-	c, _ := newTestComponent(t, NopEditor())
-	mock := NewMockEventHandler(ctrl)
-	c.SubscribeEvents([]textapi.EventType{textapi.EventTypeFocus, textapi.EventTypeUnfocus}, mock)
+	c, _ := newTestComponent(t, &testEditor{})
+	c.Resize(100, 100)
 
 	uri1, err := workspaceapi.ParseURI("file:///Elon.txt")
 	require.NoError(t, err)
@@ -606,56 +589,87 @@ func TestEventTypeFocusIntegration(t *testing.T) {
 	w1, err := c.Focus()
 	require.NoError(t, err)
 
-	// sut
-	expectEvent(t, mock, uri2, textapi.EventTypeUnfocus)
-	expectEvent(t, mock, uri1, textapi.EventTypeFocus)
-	require.NoError(t, c.Browser().Focus().SetContent(h1))
+	require.NoError(t, w1.SetContent(h2))
 
-	expectEvent(t, mock, uri1, textapi.EventTypeUnfocus)
-	expectEvent(t, mock, uri2, textapi.EventTypeFocus)
-	require.NoError(t, c.Browser().Focus().SetContent(h2))
+	mock := NewMockEventHandler(ctrl)
+	evs := []textapi.EventType{textapi.EventTypeFocus, textapi.EventTypeUnfocus}
 
-	expectEvent(t, mock, uri2, textapi.EventTypeUnfocus)
-	expectEvent(t, mock, uri1, textapi.EventTypeFocus)
-	focus, err := c.Focus()
-	require.NoError(t, err)
-	w2, err := c.Split(browserapi.OrientationRight, focus, h1)
-	require.NoError(t, err)
+	const (
+		frameWidth  = 2
+		tabBarWidth = 2
+	)
 
-	expectEvent(t, mock, uri1, textapi.EventTypeUnfocus)
-	expectEvent(t, mock, uri2, textapi.EventTypeFocus)
-	_, err = c.SetFocus(w1)
-	require.NoError(t, err)
+	expectedWidth := 100 - frameWidth
+	expectedHeight := 100 - frameWidth - tabBarWidth
 
-	expectEvent(t, mock, uri2, textapi.EventTypeUnfocus)
-	expectEvent(t, mock, uri1, textapi.EventTypeFocus)
-	_, err = c.SetFocus(w2)
-	require.NoError(t, err)
+	t.Run("dispatch focus event upon subscribe", func(t *testing.T) {
+		expectFocusEvent(t, mock, uri2, expectedWidth, expectedHeight)
+		require.NoError(t, c.SubscribeEvents(evs, mock))
+	})
 
-	ok := c.Browser().NextTab(w2)
-	require.False(t, ok)
+	t.Run("dispatch focus/unfocus events on focus window content changes", func(t *testing.T) {
+		expectFocusEvents(t, mock, uri1, uri2, expectedWidth, expectedHeight)
+		require.NoError(t, w1.SetContent(h1))
 
-	expectEvent(t, mock, uri1, textapi.EventTypeUnfocus)
-	expectEvent(t, mock, uri2, textapi.EventTypeFocus)
-	ok = c.Browser().ShiftFocus()
-	require.True(t, ok)
+		expectFocusEvents(t, mock, uri2, uri1, expectedWidth, expectedHeight)
+		require.NoError(t, c.Browser().Focus().SetContent(h2))
+	})
+	var w2 browser.Window
+	t.Run("dispatch focus/unfocus events upon creating a new window", func(t *testing.T) {
+		expectFocusEvents(t, mock, uri1, uri2, 50-frameWidth, expectedHeight)
+		w2, err = c.Split(browserapi.OrientationRight, w1, h1)
+		require.NoError(t, err)
+	})
 
-	expectEvent(t, mock, uri2, textapi.EventTypeUnfocus)
-	expectEvent(t, mock, uri1, textapi.EventTypeFocus)
-	ok = c.Browser().ShiftFocus()
-	require.True(t, ok)
+	t.Run("dispatch focus/unfocus events on changing window in focus", func(t *testing.T) {
+		expectFocusEvents(t, mock, uri2, uri1, 50-frameWidth, expectedHeight)
+		_, err = c.SetFocus(w1)
+		require.NoError(t, err)
 
-	expectEvent(t, mock, uri1, textapi.EventTypeUnfocus)
-	expectEvent(t, mock, uri2, textapi.EventTypeFocus)
-	require.NoError(t, w2.Close())
+		expectFocusEvents(t, mock, uri1, uri2, 50-frameWidth, expectedHeight)
+		_, err = c.SetFocus(w2)
+		require.NoError(t, err)
+	})
 
-	ok = c.Browser().NextTab(w2)
-	require.False(t, ok)
+	t.Run("do not dispatch focus/unfocus events on new tab", func(t *testing.T) {
+		ok := c.Browser().NextTab(w2)
+		require.False(t, ok)
+	})
 
-	expectEvent(t, mock, uri2, textapi.EventTypeUnfocus)
-	expectEvent(t, mock, uri1, textapi.EventTypeFocus)
-	ok = c.Browser().NextTab(w1)
-	require.True(t, ok)
+	t.Run("dispatch focus/unfocus events on window focus shift", func(t *testing.T) {
+		expectFocusEvents(t, mock, uri2, uri1, 50-frameWidth, expectedHeight)
+		ok := c.Browser().ShiftFocus()
+		require.True(t, ok)
+
+		expectFocusEvents(t, mock, uri1, uri2, 50-frameWidth, expectedHeight)
+		ok = c.Browser().ShiftFocus()
+		require.True(t, ok)
+	})
+
+	t.Run("dispatch focus/unfocus events on window in focus close", func(t *testing.T) {
+		expectFocusEvents(t, mock, uri2, uri1, expectedWidth, expectedHeight)
+		require.NoError(t, w2.Close())
+	})
+	
+	t.SkipNow()
+
+	t.Run("do not dispatch focus/unfocus events upon NextTab on window not in focus",
+		func(t *testing.T) {
+			ok := c.Browser().NextTab(w2)
+			require.False(t, ok)
+		})
+
+	t.Run("dispatch focus/unfocus events upon NextTab on window in focus",
+		func(t *testing.T) {
+			expectFocusEvents(t, mock, uri1, uri2, expectedWidth, expectedHeight)
+			ok := c.Browser().NextTab(w1)
+			require.True(t, ok)
+		})
+
+	t.Run("dispatch focus event on resize", func(t *testing.T) {
+		expectFocusEvent(t, mock, uri1, 8-frameWidth, 8-frameWidth-tabBarWidth)
+		c.Resize(8, 8)
+	})
 }
 
 func TestDispatchCommand(t *testing.T) {
@@ -1111,4 +1125,46 @@ func testCommand(cmd string, summary string, synopsis string) textapi.CommandMan
 		Synopsis: synopsis,
 		Summary:  summary,
 	}
+}
+
+func assertFocusWidthHeight(t *testing.T,
+	expectedWidth, expectedHeight int,
+	ev textapi.Event,
+) {
+	assert.Equal(t, term.Coordinates{
+		X: expectedWidth, Y: expectedHeight,
+	}, ev.Start)
+	edh, ok := ev.Resource.(*TestEditorHandler)
+	require.True(t, ok)
+	assert.Equal(t, expectedWidth, edh.Width)
+	assert.Equal(t, expectedHeight, edh.Height)
+}
+
+func expectFocusEvents(
+	t *testing.T, mock *MockEventHandler, focus, unfocus workspaceapi.URI,
+	expectedWidth, expectedHeight int,
+) {
+	mock.EXPECT().Handle(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, ev textapi.Event) bool {
+			if textapi.EventTypeFocus == ev.Type {
+				assert.Equal(t, focus.String(), ev.URI.String())
+				assertFocusWidthHeight(t, expectedWidth, expectedHeight, ev)
+			} else if textapi.EventTypeFocus == ev.Type {
+				assert.Equal(t, unfocus.String(), ev.URI.String())
+			}
+			return false
+		}).Times(2)
+}
+
+func expectFocusEvent(
+	t *testing.T, mock *MockEventHandler, uri workspaceapi.URI,
+	expectedWidth, expectedHeight int,
+) {
+	mock.EXPECT().Handle(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, ev textapi.Event) bool {
+			assert.Equal(t, textapi.EventTypeFocus, ev.Type)
+			assert.Equal(t, uri.String(), ev.URI.String())
+			assertFocusWidthHeight(t, expectedWidth, expectedHeight, ev)
+			return false
+		})
 }
