@@ -97,15 +97,6 @@ func (s *dialogueHandler) Handle(ev term.Event) (exit, handled bool) {
 	defer s.mu.Unlock()
 
 	switch ev.Key {
-	case term.KeyArrowDown, term.KeyCtrlJ:
-		handled = s.comp.SeekDown()
-		return
-	case term.KeyCtrlC:
-		handled = true
-		s.comp.Input().Reset()
-	case term.KeyArrowUp, term.KeyCtrlK:
-		handled = s.comp.SeekUp()
-		return
 	case term.KeyEsc:
 		exit = true
 	case term.KeyEnter:
@@ -126,6 +117,24 @@ func (s *dialogueHandler) Handle(ev term.Event) (exit, handled bool) {
 		if exit {
 			handled = true
 		}
+	}
+
+	if handled {
+		return
+	}
+
+	// the following might or might not be handled by input
+	// so we handle if and only if input has not handled them.
+	switch ev.Key {
+	case term.KeyArrowDown, term.KeyCtrlJ:
+		handled = s.comp.SeekDown()
+		return
+	case term.KeyCtrlC:
+		handled = true
+		s.comp.Input().Reset()
+	case term.KeyArrowUp, term.KeyCtrlK:
+		handled = s.comp.SeekUp()
+		return
 	}
 	return
 }
