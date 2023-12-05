@@ -29,9 +29,8 @@ func assertTileSize(t *testing.T, w *TileNode, width, height int) {
 }
 
 func assertTilePos(t *testing.T, tree *TileTree, node *TileNode, x, y int) {
-	if pos := tree.TilePosition(node); pos.X != x || pos.Y != y {
-		t.Errorf("position should be (x=%d,y=%d) but found %+v", x, y, pos)
-	}
+	expected := term.Coordinates{X: x, Y: y}
+	assert.Equal(t, expected, node.Position())
 }
 
 func TestStackWhenNoSpace(t *testing.T) {
@@ -514,4 +513,36 @@ func TestTiledIterateInit(t *testing.T) {
 		i++
 	})
 	assert.Equal(t, 3, i)
+}
+
+func TestTileDimensions(t *testing.T) {
+	tree, t1 := NewTileTree(&TestComponent{Ch: '1'})
+	t2 := tree.SplitVertical(t1, &TestComponent{Ch: '2'})
+	t3 := tree.SplitHorizontal(t2, &TestComponent{Ch: '3'})
+	t4 := tree.SplitVertical(t3, &TestComponent{Ch: '4'})
+	tree.Resize(8, 8)
+
+	assertDimensions(t, 4, 8, t1)
+	assertDimensions(t, 4, 4, t2)
+	assertDimensions(t, 2, 4, t3)
+	assertDimensions(t, 2, 4, t4)
+}
+
+func TestTilePosition(t *testing.T) {
+	tree, t1 := NewTileTree(&TestComponent{Ch: '1'})
+	t2 := tree.SplitVertical(t1, &TestComponent{Ch: '2'})
+	t3 := tree.SplitHorizontal(t2, &TestComponent{Ch: '3'})
+	t4 := tree.SplitVertical(t3, &TestComponent{Ch: '4'})
+	tree.Resize(8, 8)
+
+	assertTilePos(t, tree, t1, 0, 0)
+	assertTilePos(t, tree, t2, 4, 0)
+	assertTilePos(t, tree, t3, 4, 4)
+	assertTilePos(t, tree, t4, 6, 4)
+}
+
+func assertDimensions(t *testing.T, expectedWidth, expectedHeight int, tile *TileNode) {
+	actualWidth, actualHeight := tile.Width(), tile.Height()
+	assert.Equal(t, expectedWidth, actualWidth)
+	assert.Equal(t, expectedHeight, actualHeight)
 }

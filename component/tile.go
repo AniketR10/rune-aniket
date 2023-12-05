@@ -465,11 +465,11 @@ func (t *TileNode) tilePosition(child *TileNode, currOffset term.Coordinates) (
 
 	for _, c := range t.children {
 		offset = c.Position()
+		offset.X += currOffset.X
+		offset.Y += currOffset.Y
 
 		ok = (c.C == child)
 		if ok {
-			offset.X += currOffset.X
-			offset.Y += currOffset.Y
 			return
 		}
 
