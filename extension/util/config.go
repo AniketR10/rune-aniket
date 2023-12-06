@@ -94,22 +94,9 @@ func Clipboard(cfg config.Config) (clipboard.Register, error) {
 
 // Editor returns the editor implementation as configured.
 func Editor(clipboard clipboard.Register, cfg config.Config) (text.Editor, error) {
-	edConfig, err := cfg.GetConfig("editor")
+	mode, err := editorMode(cfg)
 	if err != nil {
-		if err != config.ErrNotFound {
-			err = fmt.Errorf("failed to get 'editor' from config: %v", err)
-			return nil, err
-		}
-		return text.DefaultSimpleEditor(clipboard), nil
-	}
-
-	mode, err := edConfig.GetString("mode")
-	if err != nil {
-		if err != config.ErrNotFound {
-			err = fmt.Errorf("failed to get 'mode' from editor config: %v", err)
-			return nil, err
-		}
-		mode = "modeless"
+		return nil, err
 	}
 	switch mode {
 	case "modal":
@@ -117,4 +104,61 @@ func Editor(clipboard clipboard.Register, cfg config.Config) (text.Editor, error
 	default:
 		return text.DefaultSimpleEditor(clipboard), nil
 	}
+}
+
+// Wrap returns the current editor implementation is configured with wrap mode.
+func Wrap(cfg config.Config) (bool, error) {
+	var def bool
+	edConfig, err := cfg.GetConfig("editor")
+	if err != nil {
+		if err != config.ErrNotFound {
+			err = fmt.Errorf("failed to get 'editor' from config: %v", err)
+			return false, err
+		}
+		return false, nil
+	}
+
+	mode, err := editorMode(cfg)
+	if err != nil {
+		return false, err
+	}
+	modeConfig, err := edConfig.GetConfig(mode)
+	if err != nil {
+		if err != config.ErrNotFound {
+			err = fmt.Errorf("failed to get '%s' from editor config: %v", mode, err)
+			return false, err
+		}
+		return def, nil
+	}
+
+	wrap, err := modeConfig.GetBool("wrap")
+	if err != nil {
+		if err != config.ErrNotFound {
+			err = fmt.Errorf("failed to get 'wrap' from editor config: %v", err)
+			return false, err
+		}
+	}
+	return wrap, nil
+}
+
+func editorMode(cfg config.Config) (string, error) {
+	def := "modeless"
+	edConfig, err := cfg.GetConfig("editor")
+	if err != nil {
+		if err != config.ErrNotFound {
+			err = fmt.Errorf("failed to get 'editor' from config: %v", err)
+			return "", err
+		}
+		return def, nil
+	}
+
+	mode, err := edConfig.GetString("mode")
+	if err != nil {
+		if err != config.ErrNotFound {
+			err = fmt.Errorf("failed to get 'mode' from editor config: %v", err)
+			return "", err
+		}
+		mode = def
+	}
+	return mode, nil
 }
