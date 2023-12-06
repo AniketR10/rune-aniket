@@ -236,19 +236,13 @@ func (s *Scroll) SeekTo(pos term.Coordinates) bool {
 	return s.seekTo(pos, 1, 1)
 }
 
-// SetOffset sets the underlying offset of this scroll. It returns
-// false if position is beyond the last seekable content.
+// SetOffset force-sets the underlying offset of this scroll.
+// It is up to the caller to ensure that pos is within the max
+// offset. Negative coordinates will trigger a panic.
 func (s *Scroll) SetOffset(pos term.Coordinates) bool {
 	if pos.X < 0 || pos.Y < 0 {
 		panic("invalid coordinates: negative")
 	}
-	if max := s.getMaxXOffset(); pos.X > max {
-		return false
-	}
-	if max := s.getMaxYOffset(); pos.Y > max {
-		return false
-	}
-
 	ok := pos != s.offset
 	if ok {
 		s.offset = pos

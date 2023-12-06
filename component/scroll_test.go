@@ -399,8 +399,8 @@ func TestScrollSetOffset(t *testing.T) {
 	scroll := newScroll(4, false, 20, 1)
 	_, err := scroll.Buffer().ReadFrom(strings.NewReader(fortune))
 	require.NoError(t, err)
-	assert.False(t, scroll.SetOffset(term.Coordinates{Y: 100}))
-	assert.Equal(t, term.Coordinates{}, scroll.Offset())
+	assert.True(t, scroll.SetOffset(term.Coordinates{Y: 100}))
+	assert.Equal(t, term.Coordinates{Y: 100}, scroll.Offset())
 
 	assert.True(t, scroll.SetOffset(term.Coordinates{Y: 2}))
 	assert.Equal(t, term.Coordinates{Y: scroll.Buffer().Rows() - 1}, scroll.Offset())
