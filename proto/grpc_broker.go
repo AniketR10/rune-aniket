@@ -50,7 +50,6 @@ func (t *grpcBroker) DialChannel(address string, tags ...string) (
 					return nil, err
 				}
 				var d net.Dialer
-				d.Deadline, _ = ctx.Deadline()
 				return d.Dial(addr.Network(), addr.String())
 			},
 		)}
