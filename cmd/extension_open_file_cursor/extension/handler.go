@@ -5,19 +5,19 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/ernestrc/blue/logging"
 	log "github.com/sirupsen/logrus"
 	browserapi "unstable.build/go-tui/api/browser"
 	browserextension "unstable.build/go-tui/api/browser/extension"
 	"unstable.build/go-tui/api/config"
+	configextension "unstable.build/go-tui/api/config/extension"
 	textapi "unstable.build/go-tui/api/text"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	workspaceextension "unstable.build/go-tui/api/workspace/extension"
-	"unstable.build/go-tui/cell"
-	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/extension"
 	extutil "unstable.build/go-tui/extension/util"
 	"unstable.build/go-tui/proto"
-	"unstable.build/go-tui/text"
+	"unstable.build/go-tui/term"
 )
 
 var (
@@ -41,19 +41,15 @@ var (
 		textapi.EventTypeClose,
 		textapi.EventTypeEdit,
 		textapi.EventTypeCursor,
+		textapi.EventTypeFocus, // needed in case wrap mode is set
 	}
 	gfHandlerPermissions = []extension.Permission{
-		extension.Permission(extension.PermissionFileSystem),
-		extension.Permission(extension.PermissionBrowserResourceOpener),
-		extension.Permission(extension.PermissionBrowserWindowManager),
+		extension.PermissionFileSystem,
+		extension.PermissionConfig,
+		extension.PermissionBrowserResourceOpener,
+		extension.PermissionBrowserWindowManager,
 	}
 )
-
-type file struct {
-	cell.Buffer
-	component.Scroll
-	text.Cursor
-}
 
 type gfEditorHandler struct {
 	ed textapi.Editor
@@ -61,16 +57,7 @@ type gfEditorHandler struct {
 	wm browserapi.WindowManager
 	fs workspaceapi.FileSystem
 
-	files map[string]*file
-}
-
-func newFile(content string) *file {
-	f := new(file)
-	f.Buffer.Init()
-	f.Scroll.Init(&f.Buffer)
-	f.Cursor.Init(&f.Scroll)
-	f.Buffer.WriteString(content)
-	return f
+	tracker extutil.ResourceTracker
 }
 
 func newGFHandler(
@@ -80,17 +67,33 @@ func newGFHandler(
 ) (extutil.CommandEventHandler, error) {
 	ret := new(gfEditorHandler)
 	ret.ed = ed
-	ret.files = make(map[string]*file)
 
 	var err error
 	for _, grant := range grants {
 		switch grant.Permission {
-		case extension.Permission(extension.PermissionFileSystem):
+		case extension.PermissionFileSystem:
 			ret.fs, err = workspaceextension.FileSystem(grant, broker)
-		case extension.Permission(extension.PermissionBrowserWindowManager):
+		case extension.PermissionBrowserWindowManager:
 			ret.wm, err = browserextension.WindowManager(grant, broker)
-		case extension.Permission(extension.PermissionBrowserResourceOpener):
+		case extension.PermissionBrowserResourceOpener:
 			ret.o, err = browserextension.ResourceOpener(grant, broker)
+		case extension.PermissionConfig:
+			cfg, err := configextension.FetchConfig(grant, broker)
+			if err != nil {
+				return nil, fmt.Errorf("fetch config: %v", err)
+			}
+			tabspaces, err := extutil.Tabspaces(cfg)
+			if err != nil {
+				return nil, fmt.Errorf("get configured tabspaces: %v", err)
+			}
+			wrap, err := extutil.Wrap(cfg)
+			if err != nil {
+				return nil, fmt.Errorf("get configured wrap mode: %v", err)
+			}
+			ret.tracker.Init(tabspaces, wrap)
+			ret.log(log.DebugLevel,
+				"initialized content tracker with tabspaces: %d and wrap mode: %v",
+				tabspaces, wrap)
 		}
 		if err != nil {
 			return nil, err
@@ -100,8 +103,49 @@ func newGFHandler(
 	return ret, nil
 }
 
-func (f *file) uriAtCursor() string {
-	_, _, uri := f.Scroll.TokenAt(f.CursorAtScroll(), func(r rune) bool {
+func (h *gfEditorHandler) HandleCommand(ctx context.Context, cmd textapi.Command) (
+	exit bool, err error,
+) {
+	if cmd.Resource == nil {
+		return
+	}
+
+	switch cmd.Name {
+	case commandOpenFileCursor.Name:
+		err = h.openFileUnderCursor(cmd.Window, cmd.URI)
+	}
+
+	return
+}
+
+func (h *gfEditorHandler) Handle(
+	ctx context.Context, ev textapi.Event,
+) (exit bool) {
+	var start time.Time
+	if log.IsLevelEnabled(log.TraceLevel) {
+		start = time.Now()
+		h.log(log.TraceLevel, "handle %v", ev.Type)
+	}
+
+	h.tracker.Handle(ctx, ev)
+
+	if log.IsLevelEnabled(log.TraceLevel) {
+		h.log(log.TraceLevel, "handle %v in %s", ev.Type, time.Since(start))
+	}
+	return
+}
+
+func (h *gfEditorHandler) Close() error {
+	return nil
+}
+
+type resource interface {
+	TokenAt(term.Coordinates, func(rune) bool) (term.Coordinates, term.Coordinates, string)
+	Cursor() term.Coordinates
+}
+
+func uriAtCursor(res resource) string {
+	_, _, uri := res.TokenAt(res.Cursor(), func(r rune) bool {
 		return (r >= 'A' && r <= 'Z') ||
 			(r >= 'a' && r <= 'z') || r == '_' ||
 			(r >= '0' && r <= '9') || r == ':' || r == '@' ||
@@ -111,18 +155,16 @@ func (f *file) uriAtCursor() string {
 }
 
 func (h *gfEditorHandler) openFileUnderCursor(win browserapi.Window, uri workspaceapi.URI) error {
-	f, ok := h.files[uri.String()]
+	res, ok := h.tracker.Resource(uri)
 	if !ok {
-		return fmt.Errorf("could not find buffer for file %s", uri.String())
+		return fmt.Errorf("could not find resource for uri %s", uri.String())
 	}
-
-	word := f.uriAtCursor()
+	word := uriAtCursor(res)
 	if word == "" {
-		err := fmt.Errorf("word under cursor is empty")
-		return err
+		return fmt.Errorf("no word under cursor")
 	}
 
-	log.Infof("trying to parse word %q under cursor", word)
+	h.log(log.DebugLevel, "attempting to parse word %q under cursor", word)
 
 	uri, err := workspaceapi.ParseURI(word)
 	if err != nil {
@@ -144,68 +186,8 @@ func (h *gfEditorHandler) openFileUnderCursor(win browserapi.Window, uri workspa
 	return nil
 }
 
-func (h *gfEditorHandler) HandleCommand(ctx context.Context, cmd textapi.Command) (
-	exit bool, err error,
-) {
-	if cmd.Resource == nil {
-		return
-	}
-
-	switch cmd.Name {
-	case commandOpenFileCursor.Name:
-		err = h.openFileUnderCursor(cmd.Window, cmd.URI)
-	}
-
-	return
-}
-
-func (h *gfEditorHandler) syncBuffers(ev textapi.Event) error {
-	switch ev.Type {
-	case textapi.EventTypeClose:
-		delete(h.files, ev.URI.String())
-	case textapi.EventTypeOpen:
-		h.files[ev.URI.String()] = newFile(ev.Content)
-	case textapi.EventTypeEdit:
-		f, ok := h.files[ev.URI.String()]
-		if !ok {
-			return fmt.Errorf("could not find buffer for file %s", ev.URI.String())
-		}
-		f.Edit(ev.Start, ev.End, ev.Content)
-	case textapi.EventTypeCursor:
-		f, ok := h.files[ev.URI.String()]
-		if !ok {
-			return fmt.Errorf("could not find buffer for file %s", ev.URI.String())
-		}
-		before := f.CursorAtScroll()
-		log.Tracef("MoveToScroll(%#v)", ev.From)
-		_, ok = f.MoveToScroll(ev.From)
-		if !ok && ev.From != before {
-			return fmt.Errorf("move to scroll coordinates %#v: %v", ev.From, ok)
-		}
-	}
-	return nil
-}
-
-func (h *gfEditorHandler) Handle(
-	ctx context.Context, ev textapi.Event,
-) (exit bool) {
-	var start time.Time
-	if log.IsLevelEnabled(log.TraceLevel) {
-		start = time.Now()
-		log.Tracef("Handle(%#v)", ev.Type)
-	}
-
-	err := h.syncBuffers(ev)
-	if err != nil {
-		err = fmt.Errorf("syncBuffers(%v): %s", ev.Type, err)
-		log.Error(err)
-	}
-	if log.IsLevelEnabled(log.TraceLevel) {
-		log.Tracef("Handle(%#v) in %s", ev.Type, time.Since(start))
-	}
-	return
-}
-
-func (h *gfEditorHandler) Close() error {
-	return nil
+func (h *gfEditorHandler) log(level log.Level, msg string, args ...any) {
+	log.WithFields(log.Fields{
+		logging.KeyClass: "extension.gfEditorHandler",
+	}).Logf(level, msg, args...)
 }

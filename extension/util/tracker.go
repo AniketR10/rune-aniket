@@ -16,6 +16,10 @@ import (
 //
 // It satisfies textapi.EventHandler so clients are
 // responsible for subscribing it to a textapi.Editor.
+//
+// Clients must subscribe to EventTypeFocus if
+// wrap mode is set, and cursor position needs
+// to be tracked.
 type ResourceTracker struct {
 	resources map[string]*TrackedResource
 	wrap      bool

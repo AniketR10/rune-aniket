@@ -5,7 +5,10 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"unstable.build/go-tui/cell"
+	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/term"
+	"unstable.build/go-tui/text"
 )
 
 func TestWordURI(t *testing.T) {
@@ -30,9 +33,23 @@ file://tato+a:pass@redbaycoffee.com/tmp/a
 
 	for i, tcase := range tsuite {
 		t.Run(fmt.Sprintf("test case %d: %v", i, tcase.in), func(t *testing.T) {
-			f := newFile(content)
-			f.MoveToScroll(tcase.in)
-			assert.Equal(t, tcase.wantOut, f.uriAtCursor())
+			buf := cell.NewBuffer()
+			buf.WriteString(content)
+
+			var f testResource
+			f.Scroll.Init(buf)
+			f.cursor.Init(&f.Scroll)
+			f.cursor.MoveToScroll(tcase.in)
+			assert.Equal(t, tcase.wantOut, uriAtCursor(&f))
 		})
 	}
+}
+
+type testResource struct {
+	component.Scroll
+	cursor text.Cursor
+}
+
+func (t *testResource) Cursor() term.Coordinates {
+	return t.cursor.CursorAtScroll()
 }
