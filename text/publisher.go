@@ -136,26 +136,37 @@ func (p *Publisher) Handle(ctx context.Context, ev textapi.Event) bool {
 	return false
 }
 
+// RecordCursorChange records a cursor change between this function call and
+// dispatchEvent being called. If there is a cursor position change,
+// then an EventTypeCursor is dispatched to subscribers.
+func (p *Publisher) RecordCursorChange(h Handler) (dispatchEvent func()) {
+	handler := h.(*cursorPublisher)
+	cursor0, _ := handler.Handler.Cursor()
+	cursorAtScroll0 := handler.cursor.CursorAtScroll()
+
+	return func() {
+		cursor1, _ := handler.Handler.Cursor()
+		cursorAtScroll1 := handler.cursor.CursorAtScroll()
+
+		if cursor0 != cursor1 || cursorAtScroll0 != cursorAtScroll1 {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			p.dispatchEvent(ctx, textapi.Event{
+				Type:     textapi.EventTypeCursor,
+				URI:      handler.uri,
+				Resource: h,
+				Start:    cursor1,
+				From:     cursorAtScroll1,
+			})
+		}
+	}
+}
+
 // Handle dispatchs cursor events if cursor has changed after
 // underlying handler has processed ev.
 func (p *cursorPublisher) Handle(ev term.Event) (bool, bool) {
-	cursor0, _ := p.Handler.Cursor()
-	cursorAtScroll0 := p.cursor.CursorAtScroll()
+	dispatch := p.parent.RecordCursorChange(p)
+	defer dispatch()
 
-	exit, handled := p.Handler.Handle(ev)
-	cursor1, _ := p.Handler.Cursor()
-	cursorAtScroll1 := p.cursor.CursorAtScroll()
-
-	if cursor0 != cursor1 || cursorAtScroll0 != cursorAtScroll1 {
-		ctx, cancel := context.WithCancel(context.Background())
-		defer cancel()
-		p.parent.dispatchEvent(ctx, textapi.Event{
-			Type:     textapi.EventTypeCursor,
-			URI:      p.uri,
-			Resource: p,
-			Start:    cursor1,
-			From:     cursorAtScroll1,
-		})
-	}
-	return exit, handled
+	return p.Handler.Handle(ev)
 }

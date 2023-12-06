@@ -71,11 +71,17 @@ func (e viEditor) SetLocationList(
 }
 
 func (e *viEditor) MoveToNextLocation(h text.Handler, ID string) error {
+	dispatch := e.Publisher.RecordCursorChange(h)
+	defer dispatch()
+
 	e.Publisher.Handler(h).(*Vi).MoveToNextLocation(ID)
 	return nil
 }
 
 func (e *viEditor) MoveToPrevLocation(h text.Handler, ID string) error {
+	dispatch := e.Publisher.RecordCursorChange(h)
+	defer dispatch()
+
 	e.Publisher.Handler(h).(*Vi).MoveToPrevLocation(ID)
 	return nil
 }
@@ -89,6 +95,9 @@ func (e *viEditor) CellEditor(h text.Handler) text.CellEditor {
 }
 
 func (e *viEditor) SetCursor(h text.Handler, pos term.Coordinates) error {
+	dispatch := e.Publisher.RecordCursorChange(h)
+	defer dispatch()
+
 	vi := e.Publisher.Handler(h).(*Vi)
 	ok := vi.SetCursorAtScroll(pos)
 	if !ok {

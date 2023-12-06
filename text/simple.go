@@ -79,11 +79,17 @@ func (e simpleEditor) SetLocationList(
 }
 
 func (e *simpleEditor) MoveToNextLocation(h Handler, ID string) error {
+	dispatch := e.pub.RecordCursorChange(h)
+	defer dispatch()
+
 	e.pub.Handler(h).(*simpleEditorHandler).cursor.MoveToNextLocation(ID)
 	return nil
 }
 
 func (e *simpleEditor) MoveToPrevLocation(h Handler, ID string) error {
+	dispatch := e.pub.RecordCursorChange(h)
+	defer dispatch()
+
 	e.pub.Handler(h).(*simpleEditorHandler).cursor.MoveToPrevLocation(ID)
 	return nil
 }
@@ -102,6 +108,9 @@ func (e *simpleEditor) SetDefaultAttributes(h Handler, attr term.Attributes) err
 }
 
 func (e *simpleEditor) SetCursor(h Handler, pos term.Coordinates) error {
+	dispatch := e.pub.RecordCursorChange(h)
+	defer dispatch()
+
 	_, ok := e.pub.Handler(h).(*simpleEditorHandler).cursor.MoveToScroll(pos)
 	if !ok {
 		return errors.New("MoveToScroll: invalid cursor position")

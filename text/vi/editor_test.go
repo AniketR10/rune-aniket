@@ -78,41 +78,83 @@ func TestEditorDispatchScroll(t *testing.T) {
 }
 
 func TestEditorDispatchCursor(t *testing.T) {
-	uri, err := workspaceapi.ParseURI("file:///tmp/zsh.sh")
-	require.NoError(t, err)
-	ed := Editor()
-	buf := cell.NewBuffer()
-	buf.WriteString("Matias\nGiordano\n")
-	h, err := ed.Edit(uri, buf)
-	require.NoError(t, err)
+	t.Run("regular handler-driven changes to cursor", func(t *testing.T) {
+		uri, err := workspaceapi.ParseURI("file:///tmp/zsh.sh")
+		require.NoError(t, err)
+		ed := Editor()
+		buf := cell.NewBuffer()
+		buf.WriteString("Matias\nGiordano\n")
+		h, err := ed.Edit(uri, buf)
+		require.NoError(t, err)
 
-	// should scroll as well, but changes in cursorAtScroll is what we are expecting
-	h.Resize(2, 2)
+		// should scroll as well, but changes in cursorAtScroll is what we are expecting
+		h.Resize(2, 2)
 
-	windowCursor := term.Coordinates{X: -1}
-	scrollCursor := term.Coordinates{X: -1}
-	ed.SubscribeEvents([]textapi.EventType{textapi.EventTypeCursor},
-		text.FuncEventHandler(func(ctx context.Context, ev textapi.Event) bool {
-			windowCursor = ev.Start
-			scrollCursor = ev.From
-			assert.Equal(t, ev.URI.String(), "file:///tmp/zsh.sh")
-			assert.Equal(t, ev.Resource, h)
-			return false
-		}))
+		windowCursor := term.Coordinates{X: -1}
+		scrollCursor := term.Coordinates{X: -1}
+		ed.SubscribeEvents([]textapi.EventType{textapi.EventTypeCursor},
+			text.FuncEventHandler(func(ctx context.Context, ev textapi.Event) bool {
+				windowCursor = ev.Start
+				scrollCursor = ev.From
+				assert.Equal(t, ev.URI.String(), "file:///tmp/zsh.sh")
+				assert.Equal(t, ev.Resource, h)
+				return false
+			}))
 
-	h.Handle(term.Event{Type: term.EventKey, Ch: 'k'})
-	assert.Equal(t, term.Coordinates{X: -1}, windowCursor)
-	assert.Equal(t, term.Coordinates{X: -1}, scrollCursor)
+		h.Handle(term.Event{Type: term.EventKey, Ch: 'k'})
+		assert.Equal(t, term.Coordinates{X: -1}, windowCursor)
+		assert.Equal(t, term.Coordinates{X: -1}, scrollCursor)
 
-	h.Handle(term.Event{Type: term.EventKey, Ch: 'j'})
-	assert.Equal(t, term.Coordinates{Y: 0}, windowCursor)
-	assert.Equal(t, term.Coordinates{Y: 1}, scrollCursor)
+		h.Handle(term.Event{Type: term.EventKey, Ch: 'j'})
+		assert.Equal(t, term.Coordinates{Y: 0}, windowCursor)
+		assert.Equal(t, term.Coordinates{Y: 1}, scrollCursor)
 
-	windowCursor = term.Coordinates{X: -1}
-	scrollCursor = term.Coordinates{X: -1}
-	h.Handle(term.Event{Type: term.EventKey, Ch: 'l'})
-	assert.Equal(t, term.Coordinates{X: 1}, windowCursor)
-	assert.Equal(t, term.Coordinates{Y: 1, X: 1}, scrollCursor)
+		windowCursor = term.Coordinates{X: -1}
+		scrollCursor = term.Coordinates{X: -1}
+		h.Handle(term.Event{Type: term.EventKey, Ch: 'l'})
+		assert.Equal(t, term.Coordinates{X: 1}, windowCursor)
+		assert.Equal(t, term.Coordinates{Y: 1, X: 1}, scrollCursor)
+	})
+
+	t.Run("api-driven changes to cursor", func(t *testing.T) {
+		uri, err := workspaceapi.ParseURI("file:///tmp/zsh.sh")
+		require.NoError(t, err)
+		ed := Editor()
+		buf := cell.NewBuffer()
+		buf.WriteString("Matias\nGiordano\n")
+		h, err := ed.Edit(uri, buf)
+		require.NoError(t, err)
+		h.Resize(2, 2)
+
+		windowCursor := term.Coordinates{X: -1}
+		scrollCursor := term.Coordinates{X: -1}
+		ed.SubscribeEvents([]textapi.EventType{textapi.EventTypeCursor},
+			text.FuncEventHandler(func(ctx context.Context, ev textapi.Event) bool {
+				windowCursor = ev.Start
+				scrollCursor = ev.From
+				assert.Equal(t, ev.URI.String(), "file:///tmp/zsh.sh")
+				assert.Equal(t, ev.Resource, h)
+				return false
+			}))
+
+		require.NoError(t, ed.SetCursor(h, term.Coordinates{Y: 1}))
+		assert.Equal(t, term.Coordinates{Y: 0}, windowCursor)
+		assert.Equal(t, term.Coordinates{Y: 1}, scrollCursor)
+
+		windowCursor = term.Coordinates{X: -1}
+		scrollCursor = term.Coordinates{X: -1}
+		ed.SetLocationList(h, textapi.LocationPriorityInfo, "id",
+			textapi.LocationSlice([]textapi.Location{{}, {From: term.Coordinates{Y: 1}}}))
+		require.NoError(t, ed.MoveToNextLocation(h, "id"))
+		assert.Equal(t, term.Coordinates{Y: 0}, windowCursor)
+		assert.Equal(t, term.Coordinates{Y: 0}, scrollCursor)
+
+		windowCursor = term.Coordinates{X: -1}
+		scrollCursor = term.Coordinates{X: -1}
+		require.NoError(t, ed.MoveToPrevLocation(h, "id"))
+		assert.Equal(t, term.Coordinates{Y: 0}, windowCursor)
+		assert.Equal(t, term.Coordinates{Y: 1}, scrollCursor)
+	})
 }
 
 func TestEditorSetCursor(t *testing.T) {
